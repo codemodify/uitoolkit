@@ -434,6 +434,13 @@ func (t *TableView) rowRect(i int) paintengine2d.Rect {
 	return paintengine2d.XYWH(0, y, t.LocalBounds().Dx(), rh)
 }
 
+// Invalidate drops retained row scenes so CellText / flag changes
+// repaint on the next frame (visualSig is an optimization, not the API).
+func (t *TableView) Invalidate() {
+	t.rows.reset()
+	t.Base.Invalidate()
+}
+
 func (t *TableView) invalidateRow(i int) {
 	if r := t.rowRect(i); !r.Empty() {
 		t.InvalidateRect(r.Inset(-1))

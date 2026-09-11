@@ -461,8 +461,17 @@ and the Wayland cursor `C.int` stride fix are **v0.10.7**.
 Popup menus size to the widest label and full item list (scroll if the
 screen clamps them); Mail hides the status bar and path strip, moves Quick
 Filter under the toolbar, and drops the VIP folder from the tree (**v0.10.8**).
+Mail thread columns are Topic / Who / When (no Size); ★ / 📎 paint after
+toggle via toolkit font fallbacks + TableView / CardList invalidation (**v0.10.9**).
 
 ## Version
+
+**0.10.9** — Mail list chrome: Topic / Who / When (Size column removed).
+Toolkit: Titillium has no ★/📎/●/🔇 gids — `style` rasterizes fallback
+paths into the atlas so those marks paint (engine already draws cells).
+Narrow `DrawTableCell` padding no longer Fits a glyph that fits the
+column. `TableView` / `CardList` `Invalidate` drop retained row scenes;
+CardList `visualSig` includes `Starred`. Still paintengine2d **v0.9.0**.
 
 **0.10.8** — Toolkit: `PopupMenu` / `PlacePopup` / `ShowContextMenu` /
 `ComboBox` measure with the host look (HiDPI + density). Width is

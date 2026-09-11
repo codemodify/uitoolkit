@@ -6,6 +6,7 @@ import (
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/layout"
 	"github.com/codemodify/uitoolkit/platform"
+	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
 )
 
@@ -46,6 +47,53 @@ func TestTableViewSelectSortKeys(t *testing.T) {
 	tv.KeyPress(widget.KeyEvent{Key: platform.KeyUp})
 	if tv.Selected != 6 {
 		t.Fatalf("up %d", tv.Selected)
+	}
+}
+
+func TestTableViewFlagCellRepaintsOnInvalidate(t *testing.T) {
+	star := ""
+	tv := NewTableView([]TableColumn{
+		{Title: "★", Width: 28, MinWidth: 24},
+		{Title: "Topic", MinWidth: 80},
+	}, 1, func(row, col int) string {
+		if col == 0 {
+			return star
+		}
+		return "hello"
+	}, nil)
+	tv.SetLook(style.DarkLook())
+	tv.SetHost(&host{})
+	tv.Arrange(paintengine2d.XYWH(0, 0, 240, 80))
+
+	paint := func() int {
+		rec := paintengine2d.NewRecorder(240, 80)
+		ctx := paintengine2d.NewContextDevice(rec)
+		tv.Paint(ctx)
+		return rec.Finish().Reused
+	}
+	if n := paint(); n != 0 {
+		t.Fatalf("first record reused=%d", n)
+	}
+	star = "★"
+	tv.Invalidate()
+	if n := paint(); n != 0 {
+		t.Fatalf("Invalidate after flag change reused stale row %d", n)
+	}
+
+	img := paintengine2d.NewImage(240, 80)
+	tv.Paint(paintengine2d.NewContext(img))
+	n := 0
+	hh := int(tv.headerH()) + 4
+	for y := hh; y < hh+20 && y < img.Height; y++ {
+		for x := 2; x < 26; x++ {
+			_, _, _, a := img.PremulAt(x, y)
+			if a > 20 {
+				n++
+			}
+		}
+	}
+	if n < 8 {
+		t.Fatalf("star cell empty after toggle+Invalidate, ink=%d", n)
 	}
 }
 

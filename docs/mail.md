@@ -1,6 +1,6 @@
 # Mail — mailclientd + mailclientui
 
-Thunderbird-chrome mail client on uitoolkit **v0.10.8**. Two processes:
+Thunderbird-chrome mail client on uitoolkit **v0.10.9**. Two processes:
 
 | Process | Role |
 | --- | --- |
@@ -315,7 +315,7 @@ Condition fields: `from`, `to`, `subject`, `body`, `attachment`, `unread`, `tag`
 Actions: `move` (`folder`), `tag`, `markRead`, `markUnread`, `delete`, `stop`.
 AND across conditions. Persist in MemoryStore or the disk cache. Tools → Message Filters.
 
-## UI features (v0.10.8)
+## UI features (v0.10.9)
 
 - **Empty by default** — no demo accounts unless `UITK_MAIL=memory`. First-run Yes/No is only “There are no accounts, want to add one?” Password / `0600` notes are on the Add Account form.
 - **Add account** — IMAP vs POP3 radios, domain auto-guess (including POP hosts), **Test connection** (and optional auto-detect after email+password), masked password field, or Sign in with Google / Microsoft (or device code; IMAP). Saved accounts show the protocol on Account Central and in Preferences. `passEnv` remains an optional fallback.
@@ -323,7 +323,8 @@ AND across conditions. Persist in MemoryStore or the disk cache. Tools → Messa
 - **Text-only Message tab** — prefer `text/plain`; HTML-only mail is tag-stripped. No HTML engine / no HTML tab. The Message/Source body is a read-only `TextView` (scroll + scrollbar; not editable). Compose/Write stays an editable `TextArea`.
 - **3-pane splitters** — dragging folder|list or list|preview keeps exclusive pane bounds; preview chrome cannot paint over the thread list.
 - **Overflow scrollbars** — thread list, folder tree, and long message bodies show a vertical track/thumb; wheel/trackpad still scroll; offset clamps at the last row. The thread table clips rows under the sticky header (flush at the top; no paint-through while scrolling).
-- **Card / Table** — View → Card view or the Cards toolbar toggle. Remembered in `~/.config/uitoolkit/mailui.json`.
+- **Thread columns** — ★, 📎, Topic, Who, When. No Size. View → Sort by Topic / Who / When.
+- **Card / Table** — View → Card view or the Cards toolbar toggle. Remembered in `~/.config/uitoolkit/mailui.json`. Star after Message → Star (or context menu) paints immediately.
 - **Density** — View → Compact / Default / Relaxed.
 - **Folder tree** — account folders, Tags, and Outbox. Unified Folders, Smart Folders, Categories, and VIP are not shown.
 - **Chrome** — no path/subtitle strip and no bottom status bar. Quick Filter (Unread / Starred / Attachment / From / To / Subject / Body) sits under the main toolbar.

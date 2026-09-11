@@ -191,10 +191,9 @@ func (s *session) build() widget.Component {
 	s.table = widgets.NewTableView([]widgets.TableColumn{
 		{Title: "★", Width: 28, MinWidth: 24, Sortable: true},
 		{Title: "📎", Width: 28, MinWidth: 24, Sortable: true},
-		{Title: "Subject", MinWidth: 180, Sortable: true},
-		{Title: "Correspondents", Width: 148, MinWidth: 110, Sortable: true},
-		{Title: "Date", Width: 108, MinWidth: 88, Sortable: true},
-		{Title: "Size", Width: 72, MinWidth: 60, Sortable: true, Align: style.AlignEnd},
+		{Title: "Topic", MinWidth: 180, Sortable: true},
+		{Title: "Who", Width: 148, MinWidth: 110, Sortable: true},
+		{Title: "When", Width: 108, MinWidth: 88, Sortable: true},
 	}, 0, s.cellText, func(i int) {
 		s.clickRow(i, false)
 	})
@@ -479,9 +478,9 @@ func (s *session) menuBar() *widgets.MenuBar {
 			widgets.CheckItem("&Default density", s.density == style.DensityDefault, func() { s.setDensity(style.DensityDefault) }),
 			widgets.CheckItem("&Relaxed", s.density == style.DensityRelaxed, func() { s.setDensity(style.DensityRelaxed) }),
 			widgets.Sep(),
-			widgets.Item("Sort by Date", func() { s.sortCol, s.sortAsc = 4, false; s.refreshList() }),
-			widgets.Item("Sort by Subject", func() { s.sortCol, s.sortAsc = 2, true; s.refreshList() }),
-			widgets.Item("Sort by Correspondent", func() { s.sortCol, s.sortAsc = 3, true; s.refreshList() }),
+			widgets.Item("Sort by When", func() { s.sortCol, s.sortAsc = 4, false; s.refreshList() }),
+			widgets.Item("Sort by Topic", func() { s.sortCol, s.sortAsc = 2, true; s.refreshList() }),
+			widgets.Item("Sort by Who", func() { s.sortCol, s.sortAsc = 3, true; s.refreshList() }),
 			widgets.CheckItem("&Threaded", s.threaded, func() {
 				s.threaded = !s.threaded
 				s.persistChrome()
@@ -664,8 +663,6 @@ func (s *session) cellText(row, col int) string {
 		return m.Correspondent(s.kind)
 	case 4:
 		return formatDate(m.Date, DemoNow)
-	case 5:
-		return formatSize(m.Size)
 	default:
 		return ""
 	}
