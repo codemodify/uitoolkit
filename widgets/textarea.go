@@ -9,27 +9,32 @@ import (
 )
 
 // TextArea is a multi-line editor with wrap (default) or horizontal scroll.
+// Set ReadOnly (or use NewTextView) for a scrollable message/log pane that
+// does not accept keyboard text input.
 type TextArea struct {
 	widget.Base
-	Text        string
-	Placeholder string
-	Wrap        bool
-	MinRows     int
-	OnChange    func(string)
-	OnFocusLost func()
-	Accept      func(string) bool
-	Mono        bool
-	caret       int
-	selA, selB  int
-	blinkOn     bool
-	dragging    bool
-	scrollX     float32
-	scrollY     float32
-	lines       []style.TextLine
-	preferX     float32
+	Text         string
+	Placeholder  string
+	Wrap         bool
+	ReadOnly     bool
+	MinRows      int
+	OnChange     func(string)
+	OnFocusLost  func()
+	Accept       func(string) bool
+	Mono         bool
+	caret        int
+	selA, selB   int
+	blinkOn      bool
+	dragging     bool
+	scrollX      float32
+	scrollY      float32
+	lines        []style.TextLine
+	preferX      float32
 	havePref     bool
 	preedit      string
 	preeditCaret int
+	vbar         scrollDrag
+	hbar         scrollDrag
 }
 
 // NewTextArea builds a wrapping multi-line field.
@@ -49,6 +54,23 @@ func NewMonoTextArea(text, placeholder string, on func(string)) *TextArea {
 	t.Mono = true
 	return t
 }
+
+// NewTextView is a wrapping, scrollable, read-only text pane (message view).
+func NewTextView(text, placeholder string) *TextArea {
+	t := NewTextArea(text, placeholder, nil)
+	t.ReadOnly = true
+	t.Wrap = true
+	return t
+}
+
+// NewMonoTextView is a read-only mono TextView (raw source, logs).
+func NewMonoTextView(text, placeholder string) *TextArea {
+	t := NewTextView(text, placeholder)
+	t.Mono = true
+	return t
+}
+
+func (t *TextArea) editable() bool { return t.Enabled() && !t.ReadOnly }
 
 func (t *TextArea) SetText(s string) {
 	if t.Text == s {
@@ -172,16 +194,12 @@ func (t *TextArea) contentH() float32 {
 }
 
 func (t *TextArea) maxScrollY() float32 {
-	mx := t.contentH() - t.inner().Dy()
-	if mx < 0 {
-		return 0
-	}
-	return mx
+	return layout.MaxScroll(t.contentH(), t.inner().Dy())
 }
 
-func (t *TextArea) maxScrollX() float32 {
+func (t *TextArea) contentW() float32 {
 	if t.Wrap {
-		return 0
+		return t.inner().Dx()
 	}
 	var w float32
 	f := t.font()
@@ -190,26 +208,44 @@ func (t *TextArea) maxScrollX() float32 {
 			w = adv
 		}
 	}
-	mx := w - t.inner().Dx()
-	if mx < 0 {
-		return 0
-	}
-	return mx
+	return w
 }
 
+func (t *TextArea) maxScrollX() float32 {
+	if t.Wrap {
+		return 0
+	}
+	return layout.MaxScroll(t.contentW(), t.inner().Dx())
+}
+
+// MaxOffset is the largest legal vertical scroll offset.
+func (t *TextArea) MaxOffset() float32 { return t.maxScrollY() }
+
 func (t *TextArea) clampScroll() {
-	if t.scrollY < 0 {
-		t.scrollY = 0
+	t.scrollY = layout.ClampScroll(t.scrollY, t.contentH(), t.inner().Dy())
+	t.scrollX = layout.ClampScroll(t.scrollX, t.contentW(), t.inner().Dx())
+}
+
+func (t *TextArea) scrollBy(dy, dx float32) {
+	t.scrollY += dy
+	if !t.Wrap {
+		t.scrollX += dx
 	}
-	if mx := t.maxScrollY(); t.scrollY > mx {
-		t.scrollY = mx
+	t.clampScroll()
+	t.Invalidate()
+}
+
+func (t *TextArea) scrollTrackV() (track, thumb paintengine2d.Rect) {
+	bar, gap := overflowBarSize(t.Look())
+	return vScrollThumb(t.LocalBounds(), t.contentH(), t.scrollY, bar, gap)
+}
+
+func (t *TextArea) scrollTrackH() (track, thumb paintengine2d.Rect) {
+	if t.Wrap {
+		return
 	}
-	if t.scrollX < 0 {
-		t.scrollX = 0
-	}
-	if mx := t.maxScrollX(); t.scrollX > mx {
-		t.scrollX = mx
-	}
+	bar, gap := overflowBarSize(t.Look())
+	return hScrollThumb(t.LocalBounds(), t.contentW(), t.scrollX, bar, gap)
 }
 
 func (t *TextArea) blink() bool {
@@ -226,6 +262,7 @@ func (t *TextArea) blink() bool {
 
 func (t *TextArea) Paint(ctx *paintengine2d.Context) {
 	t.relayout()
+	t.clampScroll()
 	text, caret, selA, selB := t.visual()
 	w := t.inner().Dx()
 	if !t.Wrap {
@@ -234,7 +271,16 @@ func (t *TextArea) Paint(ctx *paintengine2d.Context) {
 		w = 8
 	}
 	lines := layoutArea(t.font(), text, w, t.Wrap)
-	t.Look().DrawTextArea(ctx, t.LocalBounds(), t.State(), lines, caret, selA, selB, t.blink(), t.scrollX, t.scrollY, t.Placeholder, t.font())
+	blink := t.blink() && t.editable()
+	if t.ReadOnly {
+		caret = -1
+		blink = false
+	}
+	t.Look().DrawTextArea(ctx, t.LocalBounds(), t.State(), lines, caret, selA, selB, blink, t.scrollX, t.scrollY, t.Placeholder, t.font())
+	vt, vth := t.scrollTrackV()
+	paintOverflowBar(ctx, t.Look(), vt, vth, t.vbar.over, t.vbar.active)
+	ht, hth := t.scrollTrackH()
+	paintOverflowBar(ctx, t.Look(), ht, hth, t.hbar.over, t.hbar.active)
 }
 
 func (t *TextArea) visual() (text string, caret, selA, selB int) {
@@ -245,7 +291,7 @@ func (t *TextArea) visual() (text string, caret, selA, selB int) {
 }
 
 func (t *TextArea) IMEPreedit(s string, caret int) {
-	if !t.Enabled() {
+	if !t.editable() {
 		return
 	}
 	t.preedit = s
@@ -265,7 +311,7 @@ func (t *TextArea) IMEPreedit(s string, caret int) {
 func (t *TextArea) IMECommit(s string) {
 	t.preedit = ""
 	t.preeditCaret = 0
-	if s == "" {
+	if !t.editable() || s == "" {
 		t.Invalidate()
 		return
 	}
@@ -284,6 +330,9 @@ func (t *TextArea) IMEReset() {
 func (t *TextArea) IMEDeleteSurrounding(before, after int) {
 	t.preedit = ""
 	t.preeditCaret = 0
+	if !t.editable() {
+		return
+	}
 	s, caret := platform.DeleteSurroundingUTF8(t.Text, t.caret, before, after)
 	t.Text = s
 	t.caret = caret
@@ -403,7 +452,24 @@ func (t *TextArea) MousePress(e widget.MouseEvent) bool {
 		return false
 	}
 	t.RequestFocus()
+	vt, vth := t.scrollTrackV()
+	if off, ok := t.vbar.press(e.Pos, vt, vth, true, t.scrollY, t.maxScrollY(), t.inner().Dy()*0.9); ok {
+		t.scrollY = off
+		t.clampScroll()
+		t.Invalidate()
+		return true
+	}
+	ht, hth := t.scrollTrackH()
+	if off, ok := t.hbar.press(e.Pos, ht, hth, false, t.scrollX, t.maxScrollX(), t.inner().Dx()*0.9); ok {
+		t.scrollX = off
+		t.clampScroll()
+		t.Invalidate()
+		return true
+	}
 	if e.Button == platform.ButtonMiddle {
+		if !t.editable() {
+			return true
+		}
 		t.havePref = false
 		t.caret = t.indexAt(e.Pos.X, e.Pos.Y)
 		t.selA, t.selB = t.caret, t.caret
@@ -424,6 +490,28 @@ func (t *TextArea) MousePress(e widget.MouseEvent) bool {
 }
 
 func (t *TextArea) MouseMove(e widget.MouseEvent) bool {
+	vt, vth := t.scrollTrackV()
+	if off, apply, handled, dirty := t.vbar.move(e.Pos, vt, vth, true, t.maxScrollY()); apply || handled || dirty {
+		if apply {
+			t.scrollY = off
+			t.clampScroll()
+		}
+		t.Invalidate()
+		if apply || handled {
+			return true
+		}
+	}
+	ht, hth := t.scrollTrackH()
+	if off, apply, handled, dirty := t.hbar.move(e.Pos, ht, hth, false, t.maxScrollX()); apply || handled || dirty {
+		if apply {
+			t.scrollX = off
+			t.clampScroll()
+		}
+		t.Invalidate()
+		if apply || handled {
+			return true
+		}
+	}
 	if !t.dragging && e.Button != platform.ButtonLeft {
 		return false
 	}
@@ -436,7 +524,16 @@ func (t *TextArea) MouseMove(e widget.MouseEvent) bool {
 
 func (t *TextArea) MouseRelease(widget.MouseEvent) bool {
 	t.dragging = false
+	if t.vbar.release() || t.hbar.release() {
+		t.Invalidate()
+	}
 	return true
+}
+
+func (t *TextArea) MouseExit() {
+	t.vbar.over = false
+	t.hbar.over = false
+	t.Base.MouseExit()
 }
 
 func (t *TextArea) MouseWheel(e widget.MouseEvent) bool {
@@ -444,20 +541,12 @@ func (t *TextArea) MouseWheel(e widget.MouseEvent) bool {
 	if dy == 0 && e.Scroll.X == 0 {
 		return false
 	}
-	if dy > -8 && dy < 8 && dy != 0 {
-		dy *= t.lineH() * 3
-	}
-	t.scrollY += dy
-	if !t.Wrap {
-		t.scrollX += e.Scroll.X
-	}
-	t.clampScroll()
-	t.Invalidate()
+	t.scrollBy(wheelDelta(dy, t.lineH()), e.Scroll.X)
 	return true
 }
 
 func (t *TextArea) TextInput(r rune) bool {
-	if !t.Enabled() || r < 32 {
+	if !t.editable() || r < 32 {
 		return false
 	}
 	t.IMEReset()
@@ -472,6 +561,9 @@ func (t *TextArea) KeyPress(e widget.KeyEvent) bool {
 	if t.preedit != "" && e.Key == platform.KeyEscape {
 		t.IMEReset()
 		return true
+	}
+	if t.ReadOnly {
+		return t.readOnlyKey(e)
 	}
 	switch e.Key {
 	case platform.KeyBackspace:
@@ -674,7 +766,52 @@ func (t *TextArea) previewReplace(s string) string {
 	return string(runes[:a]) + s + string(runes[b:])
 }
 
+func (t *TextArea) readOnlyKey(e widget.KeyEvent) bool {
+	switch e.Key {
+	case platform.KeyDown:
+		t.scrollBy(t.lineH(), 0)
+		return true
+	case platform.KeyUp:
+		t.scrollBy(-t.lineH(), 0)
+		return true
+	case platform.KeyPageDown:
+		t.scrollBy(t.inner().Dy()*0.9, 0)
+		return true
+	case platform.KeyPageUp:
+		t.scrollBy(-t.inner().Dy()*0.9, 0)
+		return true
+	case platform.KeyHome:
+		if e.Mods.Ctrl() {
+			t.scrollBy(-t.scrollY, 0)
+			return true
+		}
+	case platform.KeyEnd:
+		if e.Mods.Ctrl() {
+			t.scrollBy(t.maxScrollY(), 0)
+			return true
+		}
+	case platform.KeyA:
+		if e.Mods.Ctrl() {
+			t.selA, t.selB = 0, runeCount(t.Text)
+			t.caret = t.selB
+			t.Invalidate()
+			return true
+		}
+	case platform.KeyC:
+		if e.Mods.Ctrl() {
+			if s := t.SelectedText(); s != "" {
+				platform.ClipboardSet(s)
+			}
+			return true
+		}
+	}
+	return false
+}
+
 func (t *TextArea) replaceSel(s string) {
+	if !t.editable() {
+		return
+	}
 	a, b := t.selA, t.selB
 	if a == b {
 		a, b = t.caret, t.caret

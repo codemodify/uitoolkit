@@ -7,7 +7,7 @@
 //	app       — event-driven run loop, retained scene (UITK_SCENE), windows, DPI, input routing
 //	widget    — Component tree, focus, hit-test, Invalidate / Damage
 //	layout    — row, column, stack, flex
-//	widgets   — Button, Label, TextField, TextArea, NumberField, Checkbox,
+//	widgets   — Button, Label, TextField, TextArea, TextView, NumberField, Checkbox,
 //	            Switch, Slider, ScrollView, MenuBar, TabView, TreeView,
 //	            TableView, CardList, StatusBar, ToolBar, ComboBox, ProgressBar,
 //	            RadioGroup, MessageBox, TitleBar, ListView, FileDialog,

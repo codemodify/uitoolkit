@@ -38,9 +38,9 @@ type (
 )
 
 const (
-	DensityDefault  = style.DensityDefault
-	DensityCompact  = style.DensityCompact
-	DensityRelaxed  = style.DensityRelaxed
+	DensityDefault = style.DensityDefault
+	DensityCompact = style.DensityCompact
+	DensityRelaxed = style.DensityRelaxed
 )
 
 func New(opts Options) *Application { return app.New(opts) }
@@ -53,8 +53,8 @@ func WithScale(look style.LookAndFeel, scale float32) style.LookAndFeel {
 func WithDensity(look style.LookAndFeel, d style.Density) style.LookAndFeel {
 	return style.WithDensity(look, d)
 }
-func Dark() style.Palette       { return style.Dark() }
-func Light() style.Palette      { return style.Light() }
+func Dark() style.Palette  { return style.Dark() }
+func Light() style.Palette { return style.Light() }
 
 func NewColumn(children ...widget.Component) *widgets.FlexBox {
 	return widgets.NewColumn(children...)
@@ -185,6 +185,12 @@ func NewTextArea(text, placeholder string, on func(string)) *widgets.TextArea {
 func NewMonoTextArea(text, placeholder string, on func(string)) *widgets.TextArea {
 	return widgets.NewMonoTextArea(text, placeholder, on)
 }
+func NewTextView(text, placeholder string) *widgets.TextArea {
+	return widgets.NewTextView(text, placeholder)
+}
+func NewMonoTextView(text, placeholder string) *widgets.TextArea {
+	return widgets.NewMonoTextView(text, placeholder)
+}
 
 const (
 	FamilyUI   = style.FamilyUI
@@ -197,6 +203,7 @@ const (
 	RoleUI   = style.RoleUI
 	RoleMono = style.RoleMono
 )
+
 func NewSwitch(text string, on bool, change func(bool)) *widgets.Switch {
 	return widgets.NewSwitch(text, on, change)
 }
