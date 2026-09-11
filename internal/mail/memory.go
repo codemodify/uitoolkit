@@ -483,7 +483,7 @@ func (s *MemoryStore) PutAccount(in AccountConfig) (Account, error) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	acct := Account{ID: a.ID, Name: a.Name, Address: a.Address, Transport: "memory"}
+	acct := accountFromConfig(a, "memory")
 	found := false
 	for i, x := range s.accounts {
 		if x.ID == a.ID {

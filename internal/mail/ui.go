@@ -1701,18 +1701,18 @@ func (s *session) refreshAccount() {
 	if s.acctTitle == nil {
 		return
 	}
-	name, addr := "Account", ""
+	name, addr, proto := "Account", "", "IMAP"
 	for _, a := range s.accounts() {
 		if a.ID == s.account {
-			name, addr = a.Name, a.Address
+			name, addr, proto = a.Name, a.Address, ProtocolLabel(a)
 			break
 		}
 	}
 	unread, _ := s.cli.UnreadTotal()
 	st, _ := s.cli.Status()
 	s.acctTitle.SetText(name)
-	s.acctBody.SetText(fmt.Sprintf("%s\n\nIdentity for this window.\nUnread (all folders): %d\nDaemon: %s  ·  %s\nSocket: %s\n\nGet Messages, Write, or open Inbox — IMAP stays in mailclientd.",
-		addr, unread, st.Backend, s.backendLabel(), s.cli.Socket))
+	s.acctBody.SetText(fmt.Sprintf("%s\n\nProtocol: %s\nIdentity for this window.\nUnread (all folders): %d\nDaemon: %s  ·  %s\nSocket: %s\n\nGet Messages, Write, or open Inbox — retrieve stays in mailclientd.",
+		addr, proto, unread, st.Backend, s.backendLabel(), s.cli.Socket))
 }
 
 func (s *session) openPrefs() {

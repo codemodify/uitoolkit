@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-// LocalStore is the production backend: on-disk cache + IMAP sync + SMTP.
+// LocalStore is the production backend: on-disk cache + IMAP or POP3 sync + SMTP.
 type LocalStore struct {
 	mu         sync.Mutex
 	dir        string
@@ -77,13 +77,15 @@ func (s *LocalStore) ensureAccount(a AccountConfig) {
 	found := false
 	for i, x := range s.accounts {
 		if x.ID == id {
-			s.accounts[i] = Account{ID: id, Name: a.Name, Address: a.Address, Transport: "imap"}
+			a.ID = id
+			s.accounts[i] = accountFromConfig(a, "")
 			found = true
 			break
 		}
 	}
 	if !found {
-		s.accounts = append(s.accounts, Account{ID: id, Name: a.Name, Address: a.Address, Transport: "imap"})
+		a.ID = id
+		s.accounts = append(s.accounts, accountFromConfig(a, ""))
 	}
 	if len(a.Identities) > 0 {
 		for _, idn := range a.Identities {
@@ -151,7 +153,7 @@ func (s *LocalStore) PutAccount(in AccountConfig) (Account, error) {
 			return x, nil
 		}
 	}
-	return Account{ID: a.ID, Name: a.Name, Address: a.Address, Transport: "imap"}, nil
+	return accountFromConfig(a, ""), nil
 }
 
 func (s *LocalStore) Accounts() []Account {
@@ -641,6 +643,9 @@ func (s *LocalStore) Sync(accountID string) (SyncResult, error) {
 }
 
 func (s *LocalStore) syncAccountLocked(accountID string) (int, error) {
+	if cfg, ok := s.accountCfg(accountID); ok && cfg.IsPOP3() {
+		return s.syncPOP3Locked(accountID)
+	}
 	cli, err := s.clientLocked(accountID)
 	if err != nil {
 		return 0, err
@@ -676,6 +681,104 @@ func (s *LocalStore) syncAccountLocked(accountID string) (int, error) {
 		added += n
 	}
 	return added, nil
+}
+
+func (s *LocalStore) syncPOP3Locked(accountID string) (int, error) {
+	cfg, ok := s.accountCfg(accountID)
+	if !ok {
+		return 0, fmt.Errorf("mail: no account %s", accountID)
+	}
+	in := cfg.Incoming()
+	if in.Host == "" {
+		return 0, fmt.Errorf("mail: no POP3 host for %s", accountID)
+	}
+	in.tokenKey = accountID
+	cli := newPOP3Client(in, cfg.Address)
+	if err := cli.connect(); err != nil {
+		return 0, err
+	}
+	defer cli.close()
+
+	s.ensureLocalSpecialsLocked(accountID)
+	inbox, ok := s.specialLocked(accountID, FolderInbox)
+	if !ok {
+		return 0, fmt.Errorf("mail: no inbox for %s", accountID)
+	}
+
+	uidls, err := cli.uidl()
+	if err != nil {
+		n, sterr := cli.stat()
+		if sterr != nil {
+			return 0, err
+		}
+		for i := 1; i <= n; i++ {
+			uidls = append(uidls, popUIDL{N: i, UIDL: fmt.Sprintf("n%d", i)})
+		}
+	}
+
+	haveRFC := map[string]bool{}
+	for _, m := range s.messages {
+		if m.AccountID == accountID && m.RFCMessageID != "" {
+			haveRFC[strings.TrimSpace(m.RFCMessageID)] = true
+		}
+	}
+
+	added := 0
+	for _, u := range uidls {
+		id := popMessageID(accountID, u.UIDL)
+		if _, exists := s.indexLocked(id); exists {
+			continue
+		}
+		raw, err := cli.retr(u.N)
+		if err != nil {
+			s.health = err
+			continue
+		}
+		msg, err := ParseRFC822(raw, inbox.ID, accountID)
+		if err != nil {
+			msg = Message{Folder: inbox.ID, AccountID: accountID, Body: string(raw), Size: len(raw)}
+		}
+		if mid := strings.TrimSpace(msg.RFCMessageID); mid != "" && haveRFC[mid] {
+			continue
+		}
+		msg.ID = id
+		msg.Folder = inbox.ID
+		msg.AccountID = accountID
+		if msg.Date.IsZero() {
+			msg.Date = s.now
+		}
+		if msg.ThreadID == "" {
+			msg.ThreadID = ThreadIDOf(msg)
+		}
+		if msg.Category == "" && s.feat != nil {
+			msg.Category = messageCategory(msg, s.feat.snap())
+		}
+		s.writeRawLocked(msg, raw)
+		s.messages = append(s.messages, msg)
+		if s.feat != nil && s.feat.index != nil {
+			s.feat.index.add(msg)
+		}
+		if msg.RFCMessageID != "" {
+			haveRFC[strings.TrimSpace(msg.RFCMessageID)] = true
+		}
+		added++
+	}
+	return added, nil
+}
+
+func (s *LocalStore) ensureLocalSpecialsLocked(accountID string) {
+	for _, spec := range defaultSpecials() {
+		id := FolderID(accountID + "/" + strings.ToLower(spec.Name))
+		if spec.Kind == FolderInbox {
+			id = FolderID(accountID + "/inbox")
+		}
+		if _, ok := s.folderLocked(id); ok {
+			continue
+		}
+		s.folders = append(s.folders, Folder{
+			ID: id, AccountID: accountID, Name: spec.Name, Kind: spec.Kind, Remote: spec.Remote,
+		})
+	}
 }
 
 func displayIMAPName(name, delim string) string {
@@ -1128,6 +1231,9 @@ func (s *LocalStore) clientLocked(accountID string) (*imapClient, error) {
 			cfg = a
 			break
 		}
+	}
+	if cfg.IsPOP3() {
+		return nil, fmt.Errorf("mail: account %s is POP3 (no IMAP session)", accountID)
 	}
 	if cfg.IMAP.Host == "" {
 		return nil, fmt.Errorf("mail: no IMAP host for %s", accountID)

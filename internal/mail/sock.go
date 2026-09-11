@@ -34,7 +34,7 @@ func DefaultSocket() string {
 	return filepath.Join(os.TempDir(), "mailclientd-"+strconv.Itoa(os.Getuid())+".sock")
 }
 
-// OpenStore selects the disk+IMAP LocalStore, or MemoryStore when asked.
+// OpenStore selects the disk+IMAP/POP3 LocalStore, or MemoryStore when asked.
 //
 //	UITK_MAIL=memory|demo|mem  — seeded in-memory dogfood (explicit only)
 //	UITK_MAIL=imap             — LocalStore from env and/or mail.json

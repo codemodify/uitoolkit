@@ -1,11 +1,11 @@
 # Mail — mailclientd + mailclientui
 
-Thunderbird-chrome mail client on uitoolkit **v0.10.2**. Two processes:
+Thunderbird-chrome mail client on uitoolkit **v0.10.3**. Two processes:
 
 | Process | Role |
 | --- | --- |
-| **mailclientd** | Owns accounts, IMAP/SMTP, OAuth tokens, local cache, folders, messages, tags, filters, identities, smart folders, VIP, categories, outbox, search, mutations. |
-| **mailclientui** | Renders chrome and sends JSON-RPC commands. **No IMAP, SMTP, or OAuth HTTP** in this process. |
+| **mailclientd** | Owns accounts, IMAP/POP3/SMTP, OAuth tokens, local cache, folders, messages, tags, filters, identities, smart folders, VIP, categories, outbox, search, mutations. |
+| **mailclientui** | Renders chrome and sends JSON-RPC commands. **No IMAP, POP3, SMTP, or OAuth HTTP** in this process. |
 
 Shared types and the RPC client/server live in [`internal/mail`](../internal/mail).
 
@@ -37,7 +37,7 @@ UITK_SCENE=auto go run ./examples/mail
 go run ./examples/mail -screenshot docs/screenshots
 ```
 
-## Real IMAP + SMTP (primary path)
+## Real IMAP or POP3 + SMTP (primary path)
 
 `mailclientd` is meant to be pointed at a real account. **Add Account** takes a typed (masked) password and writes it into `mail.json`. That file is **mode `0600`**. The password field is **temporary plaintext** until a secret store exists. OAuth (encrypted refresh token) and optional `passEnv` / `UITK_MAIL_PASS` still work when `password` is empty.
 
@@ -62,6 +62,7 @@ Example `mail.json` (written mode `0600`; `password` is temporary plaintext):
       "id": "home",
       "name": "Ada Lovelace",
       "address": "ada@example.com",
+      "protocol": "imap",
       "imap": {
         "host": "imap.example.com:993",
         "user": "ada@example.com",
@@ -99,13 +100,40 @@ export UITK_MAIL_NAME='Ada Lovelace'
 go run ./cmd/mailclientd
 ```
 
+POP3 account (inbox retrieve; SMTP still used to send):
+
+```json
+{
+  "id": "home-pop",
+  "name": "Ada Lovelace",
+  "address": "ada@example.com",
+  "protocol": "pop3",
+  "pop": {
+    "host": "pop.example.com:995",
+    "user": "ada@example.com",
+    "password": "your-app-password",
+    "tls": true
+  },
+  "smtp": {
+    "host": "smtp.example.com:587",
+    "user": "ada@example.com",
+    "password": "your-app-password",
+    "starttls": true
+  }
+}
+```
+
 Default when **no** config and `UITK_MAIL` is unset: **empty** LocalStore (no demo accounts). The UI asks *There are no accounts, want to add one?* and notes that the password is typed in the form and stored in `mail.json` (mode `0600`). Yes opens File → Add Account. No leaves empty chrome.
 
 `UITK_MAIL=memory` is the **only** way to load the seeded MemoryStore demo (and `examples/mail` / screenshots still use that on purpose).
 
 ### Add Account polish
 
-The wizard guesses IMAP/SMTP from the email domain (`gmail.com` → `imap.gmail.com:993` / `smtp.gmail.com:465`, Outlook/Hotmail, Yahoo, iCloud, Fastmail, Proton, else `imap.<domain>:993` / `smtp.<domain>:587`). You can still edit the hosts. Type the IMAP/SMTP password (masked field); **Save account** writes it into `mail.json` (`password` on both servers, file mode `0600`). `passEnv` is optional fallback only.
+The wizard has an explicit **IMAP** / **POP3** choice (default IMAP). It guesses hosts from the email domain (`gmail.com` → `imap.gmail.com:993` / `pop.gmail.com:995` / `smtp.gmail.com:465`, Outlook/Hotmail, Yahoo, iCloud, Fastmail, Proton, else `imap.<domain>:993` / `pop.<domain>:995` / `smtp.<domain>:587`). You can still edit the hosts.
+
+**Test connection** dials the typed user/password and reports success or failure (which protocol worked, `host:port`, TLS mode: `ssl` / `starttls` / `plain`). After email + password are entered, a background auto-detect may also probe common `imap.` / `pop.` / `mail.` names on 993/143/995/110 (timeout + status line; it does not freeze the form).
+
+Type the incoming/SMTP password (masked field); **Save account** writes `protocol` plus `password` into `mail.json` (file mode `0600`). `passEnv` is optional fallback only. Account Central and Preferences → Accounts show **IMAP** or **POP3** after save.
 
 ### Text-only message view
 
@@ -200,11 +228,12 @@ Message view stays **text-only**. The attachment list calls `messages.openPart`:
 
 Calendar / iTip is **not** in this release (Tier C later).
 
-## IMAP / SMTP status (honest)
+## IMAP / POP3 / SMTP status (honest)
 
 Implemented in mailclientd:
 
 - IMAP: CONNECT, implicit TLS (993) and STARTTLS (143), LOGIN, AUTH PLAIN, AUTH XOAUTH2 (env bearer **or** stored OAuth token), CAPABILITY, ENABLE QRESYNC/CONDSTORE, LIST/LSUB, SELECT/EXAMINE (+ QRESYNC), UID FETCH (ENVELOPE, FLAGS, BODYSTRUCTURE, BODY.PEEK[] / sections), UID STORE, UID SEARCH, UID COPY, UID MOVE (or COPY+\\Deleted+EXPUNGE), APPEND, EXPUNGE, IDLE (Inbox+Sent supervisor), CONDSTORE CHANGEDSINCE, VANISHED when QRESYNC.
+- POP3: CONNECT, implicit TLS (995) and STLS (110), USER/PASS, STAT, UIDL, RETR into the local Inbox (leave-on-server — no DELE). Incremental skip by UIDL (or RFC Message-ID if UIDL is missing). Local Drafts/Sent/Trash exist for compose.
 - Incremental cache: UIDVALIDITY wipe, UIDNEXT, highestmodseq. Raw `.eml` on disk after body fetch.
 - MIME: multipart (nested), text/plain + text/html, attachments, RFC 2047, charset via `golang.org/x/text`.
 - SMTP: implicit TLS (465), STARTTLS (587), AUTH PLAIN / LOGIN / XOAUTH2. Send then IMAP APPEND to Sent (or outbox if offline).
@@ -215,8 +244,9 @@ Known gaps:
 
 - BODYSTRUCTURE walker covers common multipart/alternative + mixed; exotic message/rfc822 nests may miss a part id.
 - HTML is **stripped to text** in the Message tab (no HTML engine, no HTML tab). Scripts/iframes never run.
-- OAuth needs **your** Google/Microsoft app registration (no bundled client IDs).
-- IDLE watches Inbox + Sent, not every mailbox (others poll).
+- OAuth needs **your** Google/Microsoft app registration (no bundled client IDs). OAuth accounts are **IMAP + SMTP** only (not POP3).
+- IDLE watches Inbox + Sent, not every mailbox (others poll). POP3 has no IDLE (Get Messages / periodic Sync).
+- **POP3** is inbox retrieve only: no server folders, no server-side flags (read/starred are local), no MOVE/APPEND on the server, deletes stay local (server copy remains), no TOP preview. Sent goes out SMTP and is filed locally.
 - Sieve is not implemented (local Sorting Office rules only).
 - Desktop notifications need `notify-send` + a display; otherwise they are a no-op.
 - iTip / Calendar is out of scope (Tier C).
@@ -233,11 +263,12 @@ Notifications (no `id`): `mail.changed`, `mail.fetched`, `mail.synced`, `mail.no
 | `status.get` | — |
 | `status.set` | `{online}` — Work Offline; going online flushes the outbox |
 | `accounts.list` | — |
-| `accounts.put` | AccountConfig (`password` stored in mail.json mode 0600; `passEnv` optional) |
+| `accounts.put` | AccountConfig (`protocol` `imap` or `pop3`; `password` stored in mail.json mode 0600; `passEnv` optional) |
 | `oauth.start` | `{provider, address, name?, clientId?, clientSecret?, flow?}` |
 | `oauth.poll` | `{sessionId}` |
 | `oauth.cancel` | `{sessionId}` |
-| `hosts.guess` | `{address}` → IMAP/SMTP guess |
+| `hosts.guess` | `{address}` → IMAP/POP3/SMTP guess |
+| `hosts.probe` / `accounts.test` | `{address, user?, password?, protocol?, host?, imap?, pop?, auto?, timeoutMs?}` → Test connection (`ok`, protocol, host, tlsMode) |
 | `folders.list` | `{accountId}` |
 | `folders.get` | `{id}` |
 | `folders.create` | `{accountId, name, parent?}` |
@@ -284,10 +315,10 @@ Condition fields: `from`, `to`, `subject`, `body`, `attachment`, `unread`, `tag`
 Actions: `move` (`folder`), `tag`, `markRead`, `markUnread`, `delete`, `stop`.
 AND across conditions. Persist in MemoryStore or the disk cache. Tools → Message Filters.
 
-## UI features (v0.10.2)
+## UI features (v0.10.3)
 
 - **Empty by default** — no demo accounts unless `UITK_MAIL=memory`. First-run: “There are no accounts, want to add one?” (typed password is saved in `mail.json`, mode `0600`).
-- **Add account** — domain auto-guess, masked password field, or Sign in with Google / Microsoft (or device code). `passEnv` remains an optional fallback.
+- **Add account** — IMAP vs POP3 radios, domain auto-guess (including POP hosts), **Test connection** (and optional auto-detect after email+password), masked password field, or Sign in with Google / Microsoft (or device code; IMAP). Saved accounts show the protocol on Account Central and in Preferences. `passEnv` remains an optional fallback.
 - **Text-only Message tab** — prefer `text/plain`; HTML-only mail is tag-stripped. No HTML engine / no HTML tab.
 - **Card / Table** — View → Card view or the Cards toolbar toggle. Remembered in `~/.config/uitoolkit/mailui.json`.
 - **Density** — View → Compact / Default / Relaxed.

@@ -294,6 +294,12 @@ func TestPutAccountWritesPasswordMode0600(t *testing.T) {
 	if file.Accounts[0].SMTP.Password() != "super secret password!!" {
 		t.Fatalf("SMTP should copy IMAP password %q", file.Accounts[0].SMTP.Password())
 	}
+	if file.Accounts[0].Protocol != ProtoIMAP {
+		t.Fatalf("default protocol %q", file.Accounts[0].Protocol)
+	}
+	if !strings.Contains(string(raw), `"protocol": "imap"`) {
+		t.Fatalf("protocol missing: %s", raw)
+	}
 }
 
 func TestServerConfigPasswordPrefersInline(t *testing.T) {
@@ -408,6 +414,46 @@ func TestFirstRunDialogYesNo(t *testing.T) {
 	}
 	if !foundAdd {
 		t.Fatal("Yes did not open add-account")
+	}
+	w.Close()
+}
+
+func TestAddAccountProtocolAndTestButton(t *testing.T) {
+	sock, stop, err := StartEmpty(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stop()
+	cli, err := DialWait(sock, 2*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cli.Close()
+
+	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true})
+	w, err := OpenAddAccount(a, cli, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.PumpOnce()
+	var imap, pop, test bool
+	widget.Walk(w.Content(), func(c widget.Component) {
+		switch x := c.(type) {
+		case *widgets.RadioButton:
+			if x.Text == "IMAP" {
+				imap = true
+			}
+			if x.Text == "POP3" {
+				pop = true
+			}
+		case *widgets.Button:
+			if x.Text == "Test connection" {
+				test = true
+			}
+		}
+	})
+	if !imap || !pop || !test {
+		t.Fatalf("add-account imap=%v pop=%v test=%v", imap, pop, test)
 	}
 	w.Close()
 }

@@ -475,7 +475,7 @@ func (s *IMAPStore) PutAccount(in AccountConfig) (Account, error) {
 	s.user = a.IMAP.Username(a.Address)
 	s.name = a.Name
 	s.health = nil
-	acct := Account{ID: a.ID, Name: a.Name, Address: a.Address, Transport: "imap"}
+	acct := accountFromConfig(a, ProtoIMAP)
 	s.accounts = []Account{acct}
 	return acct, nil
 }

@@ -17,22 +17,55 @@ const (
 	EnvXOAuth   = "UITK_MAIL_XOAUTH2"
 )
 
+// Incoming protocols persisted on each account.
+const (
+	ProtoIMAP = "imap"
+	ProtoPOP3 = "pop3"
+)
+
 // MailConfig is ~/.config/uitoolkit/mail.json (mode 0600).
-// IMAP/SMTP passwords may be stored in plaintext on each ServerConfig
+// IMAP/POP3/SMTP passwords may be stored in plaintext on each ServerConfig
 // for now (temporary; a secret store comes later).
 type MailConfig struct {
 	Accounts []AccountConfig `json:"accounts"`
 }
 
-// AccountConfig is one IMAP + SMTP login.
+// AccountConfig is one IMAP or POP3 login plus SMTP submission.
 type AccountConfig struct {
 	ID         string       `json:"id"`
 	Name       string       `json:"name"`
 	Address    string       `json:"address"`
+	Protocol   string       `json:"protocol,omitempty"` // "imap" (default) or "pop3"
 	IMAP       ServerConfig `json:"imap"`
+	POP        ServerConfig `json:"pop,omitempty"`
 	SMTP       ServerConfig `json:"smtp"`
 	Identities []Identity   `json:"identities,omitempty"`
 	Provider   string       `json:"provider,omitempty"` // google, microsoft, ""
+}
+
+// NormalizeProtocol maps pop/pop3 → pop3, everything else → imap.
+func NormalizeProtocol(s string) string {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "pop", "pop3":
+		return ProtoPOP3
+	default:
+		return ProtoIMAP
+	}
+}
+
+// IsPOP3 is true when the account retrieves via POP3.
+func (a AccountConfig) IsPOP3() bool {
+	return NormalizeProtocol(a.Protocol) == ProtoPOP3
+}
+
+// Incoming is the retrieve server (POP when protocol is pop3, else IMAP).
+func (a AccountConfig) Incoming() ServerConfig {
+	if a.IsPOP3() {
+		if strings.TrimSpace(a.POP.Host) != "" {
+			return a.POP
+		}
+	}
+	return a.IMAP
 }
 
 // ServerConfig is a host + how to get the password.
@@ -76,10 +109,10 @@ func (s ServerConfig) implicitTLS(defaultTLS bool) bool {
 		return *s.TLS
 	}
 	host := s.Host
-	if strings.HasSuffix(host, ":993") || strings.HasSuffix(host, ":465") {
+	if strings.HasSuffix(host, ":993") || strings.HasSuffix(host, ":465") || strings.HasSuffix(host, ":995") {
 		return true
 	}
-	if strings.HasSuffix(host, ":587") || strings.HasSuffix(host, ":143") || strings.HasSuffix(host, ":25") {
+	if strings.HasSuffix(host, ":587") || strings.HasSuffix(host, ":143") || strings.HasSuffix(host, ":25") || strings.HasSuffix(host, ":110") {
 		return false
 	}
 	return defaultTLS
@@ -89,7 +122,7 @@ func (s ServerConfig) useStartTLS() bool {
 	if s.StartTLS != nil {
 		return *s.StartTLS
 	}
-	return strings.HasSuffix(s.Host, ":587") || strings.HasSuffix(s.Host, ":143")
+	return strings.HasSuffix(s.Host, ":587") || strings.HasSuffix(s.Host, ":143") || strings.HasSuffix(s.Host, ":110")
 }
 
 // ConfigPath is the account file.
@@ -146,22 +179,42 @@ func SaveConfig(cfg MailConfig) error {
 // SanitizeAccountConfig fills defaults. Inline passwords are kept; passEnv
 // that is not a valid environment variable name is ignored.
 func SanitizeAccountConfig(a AccountConfig) (AccountConfig, error) {
+	a.Protocol = NormalizeProtocol(a.Protocol)
 	a.Address = strings.TrimSpace(a.Address)
 	a.Name = strings.TrimSpace(a.Name)
 	a.IMAP.Host = strings.TrimSpace(a.IMAP.Host)
+	a.POP.Host = strings.TrimSpace(a.POP.Host)
 	a.SMTP.Host = strings.TrimSpace(a.SMTP.Host)
 	a.IMAP.User = strings.TrimSpace(a.IMAP.User)
+	a.POP.User = strings.TrimSpace(a.POP.User)
 	a.SMTP.User = strings.TrimSpace(a.SMTP.User)
-	if a.Address == "" && a.IMAP.User == "" {
-		return a, fmt.Errorf("mail: address or IMAP user required")
+	if a.IsPOP3() && a.POP.Host == "" && a.IMAP.Host != "" {
+		a.POP = a.IMAP
+		a.POP.Host = strings.TrimSpace(a.IMAP.Host)
 	}
-	if a.IMAP.Host == "" {
+	in := a.Incoming()
+	if a.Address == "" && in.User == "" {
+		return a, fmt.Errorf("mail: address or incoming user required")
+	}
+	if a.IsPOP3() {
+		if a.POP.Host == "" {
+			return a, fmt.Errorf("mail: POP3 host required")
+		}
+	} else if a.IMAP.Host == "" {
 		return a, fmt.Errorf("mail: IMAP host required")
 	}
 	if a.Address == "" {
-		a.Address = a.IMAP.User
+		a.Address = in.User
 	}
-	if a.IMAP.User == "" {
+	if a.IsPOP3() {
+		if a.POP.User == "" {
+			a.POP.User = a.Address
+		}
+		if a.POP.Pass == "" && a.IMAP.Pass != "" {
+			a.POP.Pass = a.IMAP.Pass
+		}
+		sanitizeServerSecret(&a.POP)
+	} else if a.IMAP.User == "" {
 		a.IMAP.User = a.Address
 	}
 	if a.Name == "" {
@@ -171,18 +224,19 @@ func SanitizeAccountConfig(a AccountConfig) (AccountConfig, error) {
 		a.ID = slug(a.Address)
 	}
 	sanitizeServerSecret(&a.IMAP)
+	in = a.Incoming()
 	if a.SMTP.Host == "" {
-		a.SMTP.Host = guessSMTP(a.IMAP.Host)
+		a.SMTP.Host = guessSMTP(in.Host)
 	}
 	if a.SMTP.User == "" {
-		a.SMTP.User = a.IMAP.User
+		a.SMTP.User = in.User
 	}
-	if a.SMTP.Pass == "" && a.IMAP.Pass != "" {
-		a.SMTP.Pass = a.IMAP.Pass
+	if a.SMTP.Pass == "" && in.Pass != "" {
+		a.SMTP.Pass = in.Pass
 	}
 	sanitizeServerSecret(&a.SMTP)
-	if a.SMTP.PassEnv == "" && a.IMAP.PassEnv != "" {
-		a.SMTP.PassEnv = a.IMAP.PassEnv
+	if a.SMTP.PassEnv == "" && in.PassEnv != "" {
+		a.SMTP.PassEnv = in.PassEnv
 	}
 	if len(a.Identities) == 0 {
 		a.Identities = []Identity{{
@@ -237,8 +291,14 @@ func keepExistingSecrets(a AccountConfig, existing []AccountConfig) AccountConfi
 		if a.IMAP.Pass == "" {
 			a.IMAP.Pass = old.IMAP.Pass
 		}
+		if a.POP.Pass == "" {
+			a.POP.Pass = old.POP.Pass
+		}
 		if a.SMTP.Pass == "" {
 			a.SMTP.Pass = old.SMTP.Pass
+		}
+		if a.Protocol == "" {
+			a.Protocol = old.Protocol
 		}
 		break
 	}
@@ -293,7 +353,7 @@ func ConfigFromEnv() (MailConfig, error) {
 	}
 	id := "imap"
 	acc := AccountConfig{
-		ID: id, Name: name, Address: user,
+		ID: id, Name: name, Address: user, Protocol: ProtoIMAP,
 		IMAP: ServerConfig{Host: host, User: user, PassEnv: passEnv},
 		SMTP: ServerConfig{Host: smtpHost, User: user, PassEnv: passEnv},
 		Identities: []Identity{{
@@ -303,13 +363,25 @@ func ConfigFromEnv() (MailConfig, error) {
 	return MailConfig{Accounts: []AccountConfig{acc}}, nil
 }
 
-func guessSMTP(imapHost string) string {
-	host, _, _ := strings.Cut(imapHost, ":")
-	host = strings.TrimPrefix(host, "imap.")
-	if host == imapHost || host == "" {
-		return "smtp." + strings.TrimPrefix(imapHost, "imap.")
+func guessSMTP(incoming string) string {
+	host, _, _ := strings.Cut(incoming, ":")
+	stripped := host
+	for _, p := range []string{"imap.", "pop.", "pop3."} {
+		stripped = strings.TrimPrefix(stripped, p)
 	}
-	return "smtp." + host + ":587"
+	if stripped == host || stripped == "" {
+		base := strings.TrimPrefix(strings.TrimPrefix(incoming, "imap."), "pop.")
+		return "smtp." + base
+	}
+	return "smtp." + stripped + ":587"
+}
+
+func accountFromConfig(a AccountConfig, transport string) Account {
+	proto := NormalizeProtocol(a.Protocol)
+	if transport == "" || transport == ProtoIMAP {
+		transport = proto
+	}
+	return Account{ID: a.ID, Name: a.Name, Address: a.Address, Transport: transport, Protocol: proto}
 }
 
 func boolPtrVal(v bool) *bool { return &v }

@@ -147,7 +147,7 @@ paintengine2d with Titillium Web (and JetBrains Mono in code views).
 
 ![Mail empty](docs/screenshots/mail-empty.png)
 
-### Mail — Add Account (guess + OAuth)
+### Mail — Add Account (IMAP/POP3 + Test connection)
 
 ![Mail add account](docs/screenshots/mail-account.png)
 
@@ -336,7 +336,7 @@ container. Layout extras (`Stack`, `Pad`, `Overlay`) are in
 | `go run ./examples/notes` | A small real app: sortable table, textarea body, priority spinner, file stub, tooltips |
 | `go run ./examples/inspector` | Preferences inspector: table (JetBrains Mono), toolbar, tabs, message box |
 | `go run ./examples/files` | Files / Projects dogfood: tree, table, toolbar, menus, TextArea preview, dialogs |
-| `go run ./cmd/mailclientd` | Mail daemon: MemoryStore or skeleton IMAP, Unix JSON-RPC |
+| `go run ./cmd/mailclientd` | Mail daemon: MemoryStore or IMAP/POP3+SMTP cache, Unix JSON-RPC |
 | `go run ./cmd/mailclientui` | Thunderbird-chrome UI only — renders daemon state, no IMAP |
 | `go run ./examples/mail` | Convenience: in-process mailclientd + UI on a temp socket |
 
@@ -436,8 +436,17 @@ outbox, smart folders, threading/mute, VIP, notify, categories) is **v0.10.0**.
 Cross-toolkit widget name map + compare thumbs is **v0.10.1**.
 Wayland TextField typing (xkb `EventText` while text-input is idle) and
 Add Account typed passwords in `mail.json` (mode `0600`) are **v0.10.2**.
+Add Account IMAP vs POP3, Test connection / auto-detect, and POP3 inbox
+retrieve are **v0.10.3**.
 
 ## Version
+
+**0.10.3** — Mail: Add Account chooses **IMAP** or **POP3**, probes common
+`imap.`/`pop.`/`mail.` hosts (993/143/995/110, SSL or STARTTLS), and a
+**Test connection** button dials the typed user/password. `protocol` is
+stored in `mail.json`. POP3 accounts retrieve into the local Inbox
+(leave-on-server; honest gaps in [docs/mail.md](docs/mail.md)). Account
+Central and Preferences show the protocol. Still paintengine2d **v0.9.0**.
 
 **0.10.2** — Wayland: printable keys emit `EventText` unless IME preedit
 is active (Add Account / Quick Filter were untypeable when
