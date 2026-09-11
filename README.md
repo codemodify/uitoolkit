@@ -36,7 +36,7 @@ go get github.com/codemodify/paintengine2d@v0.9.0
 
 ## Screenshots
 
-Real frames from the gallery, Notes, Inspector, and Files, painted through
+Real frames from the gallery, Notes, Inspector, Files, and Mail, painted through
 paintengine2d with Titillium Web (and JetBrains Mono in code views).
 
 ### Widget gallery — dark
@@ -111,6 +111,22 @@ paintengine2d with Titillium Web (and JetBrains Mono in code views).
 
 ![Files](docs/screenshots/files.png)
 
+### Mail — Thunderbird 3-pane (dark)
+
+![Mail dark](docs/screenshots/mail-dark.png)
+
+### Mail — light LookAndFeel
+
+![Mail light](docs/screenshots/mail-light.png)
+
+### Mail — classic layout (preview below)
+
+![Mail classic](docs/screenshots/mail-classic.png)
+
+### Mail — compose window
+
+![Mail compose](docs/screenshots/mail-compose.png)
+
 ### Font roles — Titillium Web + JetBrains Mono
 
 ![Font roles](docs/screenshots/fonts.png)
@@ -122,6 +138,7 @@ Regenerate:
 
 ```bash
 go run ./examples/gallery -screenshot docs/screenshots
+go run ./examples/mail -screenshot docs/screenshots
 ```
 
 ## Quickstart
@@ -141,6 +158,10 @@ go run ./examples/notes
 go run ./examples/inspector
 go run ./examples/files
 go run ./examples/files -headless   # writes files.png
+UITK_SCENE=auto go run ./examples/mail
+go run ./examples/mail -headless    # writes mail.png
+go run ./examples/mail -classic     # preview below the thread list
+go run ./examples/mail -light
 ```
 
 Headless / CI paints into `paintengine2d.NewImage` and can `Window.WritePNG`.
@@ -229,9 +250,35 @@ never hard-code colors.
 | `go run ./examples/notes` | A small real app: sortable table, textarea body, priority spinner, file stub, tooltips |
 | `go run ./examples/inspector` | Preferences inspector: table (JetBrains Mono), toolbar, tabs, message box |
 | `go run ./examples/files` | Files / Projects dogfood: tree, table, toolbar, menus, TextArea preview, dialogs |
+| `go run ./examples/mail` | Thunderbird-chrome Mail: MenuBar, ToolBar, folder TreeView, thread TableView, Quick Filter, preview tabs, compose Window, MessageBox. In-memory `Store` (IMAP later) |
 
 ```bash
 go run ./examples/gallery -screenshot docs/screenshots
+go run ./examples/mail -screenshot docs/screenshots
+```
+
+### Mail — demo Store vs future IMAP
+
+`go run ./examples/mail` is toolkit dogfood, not a Mozilla clone of every
+protocol quirk. Chrome matches classic Thunderbird: MenuBar
+(File / Edit / View / Go / Message / Tools / Help), Get Messages / Write /
+Tag / Quick Filter toolbar, account → folder TreeView, thread TableView
+(star, attachment, subject, correspondent, date, size), message preview
+(or classic preview-below), status unread + online, and a second Write
+window (To / Cc / Bcc / Subject / TextArea).
+
+**Demo (v1):** `internal/mail.MemoryStore` — two accounts, special-use
+folders, ~150 in-memory messages. Get Messages injects a few arrivals.
+Send files to Sent; Save Draft writes Drafts. No sockets.
+
+**Later IMAP/SMTP:** implement `mail.Store` (LIST / FETCH / STORE / MOVE /
+APPEND / IDLE). SMTP is `Send` then Append to Sent. The 3-pane does not
+need a rewrite — see the interface comment in
+[`internal/mail/store.go`](internal/mail/store.go).
+
+```bash
+UITK_SCENE=auto go run ./examples/mail
+go run ./examples/mail -classic -light
 ```
 
 ## Tests
@@ -251,7 +298,7 @@ dismiss order, textarea newline/wrap/nav, switch toggle (including
 disabled), accordion exclusive expand and focus yield, expander
 relayout, separator and spacer measure, IME preedit/commit on text
 widgets, and an offscreen paint that produces real pixels.
-`go test ./examples/gallery` regenerates the nineteen PNGs and fails if
+`go test ./examples/gallery` regenerates the twenty-three PNGs and fails if
 any two share a blob.
 
 Keyboard map: [docs/keyboard.md](docs/keyboard.md). **Esc** closes
@@ -291,8 +338,16 @@ X11 and Wayland as of **v0.3.0**. GPU present (`UITK_PAINT=auto`) is **v0.5.0**.
 Event-driven `Run` (wait on the display fd) is **v0.5.1**.
 Retained scene graph (Qt Quick / GSK lite) is **v0.6.0**.
 Virtualized list/table/tree row reuse is **v0.6.1**.
+Mail (Thunderbird 3-pane dogfood) is **v0.7.0**.
 
 ## Version
+
+**0.7.0** — `examples/mail`: Thunderbird-chrome 3-pane client (MenuBar
+File/Edit/View/Go/Message/Tools/Help, Mail toolbar, folder TreeView,
+thread TableView, Quick Filter, message preview + Source tab, compose
+Window, status unread/online). In-memory maildir-ish `Store` with a
+documented IMAP/SMTP seam (`internal/mail`). Screenshots
+`docs/screenshots/mail-*.png`. Still paintengine2d **v0.9.0**.
 
 **0.6.1** — ListView, TableView, and TreeView keep per-row scene groups
 and scroll with a content-root translation (no full row rebuild). Hover
