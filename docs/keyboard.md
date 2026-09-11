@@ -1,6 +1,6 @@
 # Keyboard map
 
-Focus and shortcuts for uitoolkit **v0.1.5**. Esc always tears down
+Focus and shortcuts for uitoolkit **v0.1.6**. Esc always tears down
 floating chrome in one order, everywhere: **tooltip → popup → overlay**.
 
 ## Global
@@ -24,6 +24,17 @@ NumberField still steps while its inner TextField has focus).
 | Home / End | Line start / end |
 | Ctrl+A / C / X / V | Select all, copy, cut, paste (in-process clipboard stub) |
 | Return | `OnSubmit` |
+
+## TextArea
+
+Same as TextField, except **Return** inserts a newline (no `OnSubmit`).
+
+| Key | Action |
+| --- | --- |
+| Up / Down | Previous / next visual line (wrap-aware); **Shift** extends |
+| Home / End | Visual line start / end; **Ctrl** is document start / end |
+| PageUp / PageDown | Jump by a viewport of lines |
+| Wheel | Scroll; unwrapped areas also take horizontal wheel |
 
 ## NumberField / Spinner
 
@@ -51,14 +62,15 @@ Non-numeric input is rejected. `Decimals == 0` rejects a decimal point.
 TableView: click a **sortable** header to sort (click again to reverse).
 The widget reports `OnSort`; the app reorders `CellText`.
 
-## Buttons, checkbox, radio, slider
+## Buttons, checkbox, switch, radio, slider, accordion
 
 | Key | Action |
 | --- | --- |
-| Return / Space | Activate button, toggle checkbox, select radio |
+| Return / Space | Activate button, toggle checkbox or switch, select radio, toggle expander |
 | Left / Right / Up / Down (slider) | Nudge; **Shift** is finer |
 | Home / End (slider) | Min / max |
 | Up / Down (radio group) | Previous / next exclusive choice |
+| Left / Right (expander) | Collapse / expand |
 
 ## MenuBar, PopupMenu, ComboBox, ToolBar, TabBar
 

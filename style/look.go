@@ -861,6 +861,191 @@ func (l *Classic) DrawSpinner(ctx *paintengine2d.Context, b paintengine2d.Rect, 
 	ctx.DrawPath(dnC, paintengine2d.Fill(col))
 }
 
+func (l *Classic) DrawTextArea(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, lines []TextLine, caret, selA, selB int, blink bool, scrollX, scrollY float32, placeholder string) {
+	p := l.palette
+	m := l.metrics
+	r := m.RadiusSmall
+	ctx.DrawRoundRect(b, r, r, paintengine2d.Fill(p.Field))
+	border := p.FieldBorder
+	if st.Focused() {
+		border = p.Focus
+	} else if st.Hovered() {
+		border = p.Border
+	}
+	ctx.DrawRoundRect(b.Inset(0.5), r, r, paintengine2d.StrokePaint(border, m.Border+float32(btoi(st.Focused()))))
+	if st.Focused() {
+		l.DrawFocusRing(ctx, b.Inset(-2))
+	}
+	pad := m.FieldPad
+	if pad <= 0 {
+		pad = 8
+	}
+	inner := paintengine2d.XYWH(b.Min.X+pad, b.Min.Y+pad, b.Dx()-pad*2, b.Dy()-pad*2)
+	ctx.Save()
+	ctx.ClipRect(inner)
+	f := l.body
+	lh := f.Height() + 2
+	empty := len(lines) == 0 || (len(lines) == 1 && lines[0].Text == "" && lines[0].End <= lines[0].Start)
+	if empty && placeholder != "" && !st.Focused() {
+		l.muted.Draw(ctx, placeholder, paintengine2d.Pt(inner.Min.X, inner.Min.Y), p.TextMuted)
+		ctx.Restore()
+		return
+	}
+	if selA > selB {
+		selA, selB = selB, selA
+	}
+	for i, line := range lines {
+		y := inner.Min.Y + float32(i)*lh - scrollY
+		if y+lh < inner.Min.Y || y > inner.Max.Y {
+			continue
+		}
+		ox := inner.Min.X - scrollX
+		if selA != selB && selB > line.Start && selA < line.End {
+			a := selA
+			if a < line.Start {
+				a = line.Start
+			}
+			b0 := selB
+			if b0 > line.End {
+				b0 = line.End
+			}
+			col0 := a - line.Start
+			col1 := b0 - line.Start
+			if col0 < 0 {
+				col0 = 0
+			}
+			n := 0
+			for range line.Text {
+				n++
+			}
+			x0 := ox + f.CaretX(line.Text, col0)
+			x1 := ox + f.CaretX(line.Text, col1)
+			if col1 > n || selB > line.Start+n {
+				x1 = inner.Max.X
+			}
+			if x1 < x0 {
+				x1 = x0
+			}
+			if x1-x0 < 3 && selB > line.End-1 {
+				x1 = inner.Max.X
+			}
+			ctx.DrawRect(paintengine2d.XYWH(x0, y+1, x1-x0, f.Height()-2), paintengine2d.Fill(p.Selection))
+		}
+		if line.Text != "" {
+			f.Draw(ctx, line.Text, paintengine2d.Pt(ox, y), p.Text)
+		}
+		if st.Focused() && blink && caret >= line.Start && caret <= line.End {
+			onThis := caret < line.End || i == len(lines)-1
+			if caret == line.End && i < len(lines)-1 && lines[i+1].Start == line.End {
+				onThis = false
+			}
+			if onThis {
+				col := caret - line.Start
+				if col < 0 {
+					col = 0
+				}
+				cx := ox + f.CaretX(line.Text, col)
+				ctx.DrawRect(paintengine2d.XYWH(cx, y+1, 1.6, f.Height()-2), paintengine2d.Fill(p.Accent))
+			}
+		}
+	}
+	ctx.Restore()
+}
+
+func (l *Classic) DrawSwitch(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, on bool, label string) {
+	p := l.palette
+	m := l.metrics
+	tw, th := m.SwitchW, m.SwitchH
+	if tw <= 0 {
+		tw = 42
+	}
+	if th <= 0 {
+		th = 22
+	}
+	track := paintengine2d.XYWH(b.Min.X, b.Min.Y+(b.Dy()-th)*0.5, tw, th)
+	fill := p.Track
+	if on {
+		fill = p.Accent
+	}
+	if st.Hovered() && !st.Disabled() {
+		fill = fill.Lerp(p.AccentHover, 0.28)
+	}
+	if st.Disabled() {
+		fill = p.Surface
+	}
+	rr := th * 0.5
+	ctx.DrawRoundRect(track, rr, rr, paintengine2d.Fill(fill))
+	ctx.DrawRoundRect(track.Inset(0.5), rr, rr, paintengine2d.StrokePaint(p.FieldBorder.WithAlpha(0.7), 1))
+	pad := float32(2.4)
+	kr := th*0.5 - pad
+	kx := track.Min.X + pad + kr
+	if on {
+		kx = track.Max.X - pad - kr
+	}
+	cy := (track.Min.Y + track.Max.Y) * 0.5
+	knob := p.TextOnAccent
+	if !on {
+		knob = p.SurfaceAlt
+	}
+	if st.Disabled() {
+		knob = p.Thumb
+	}
+	ctx.DrawCircle(paintengine2d.Pt(kx, cy+0.6), kr+0.6, paintengine2d.Fill(p.Shadow))
+	ctx.DrawCircle(paintengine2d.Pt(kx, cy), kr, paintengine2d.Fill(knob))
+	if st.Focused() {
+		l.DrawFocusRing(ctx, track.Inset(-3))
+	}
+	if label != "" {
+		f := l.body
+		if st.Disabled() {
+			f = l.muted
+		}
+		f.Draw(ctx, label, paintengine2d.Pt(track.Max.X+8, b.Min.Y+(b.Dy()-f.Height())*0.5), p.Text)
+	}
+}
+
+func (l *Classic) DrawAccordionHeader(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, title string, expanded bool) {
+	p := l.palette
+	if st.Pressed() {
+		ctx.DrawRect(b, paintengine2d.Fill(p.Accent.WithAlpha(0.22)))
+	} else if st.Hovered() && !st.Disabled() {
+		ctx.DrawRect(b, paintengine2d.Fill(p.Highlight))
+	} else {
+		ctx.DrawRect(b, paintengine2d.Fill(p.SurfaceAlt))
+	}
+	ctx.DrawRect(paintengine2d.XYWH(b.Min.X, b.Max.Y-1, b.Dx(), 1), paintengine2d.Fill(p.Divider))
+	x := b.Min.X + 10
+	cy := (b.Min.Y + b.Max.Y) * 0.5
+	chev := paintengine2d.NewPath()
+	if expanded {
+		chev.MoveTo(x, cy-3)
+		chev.LineTo(x+8, cy-3)
+		chev.LineTo(x+4, cy+4)
+		chev.Close()
+	} else {
+		chev.MoveTo(x, cy-5)
+		chev.LineTo(x+7, cy)
+		chev.LineTo(x, cy+5)
+		chev.Close()
+	}
+	ctx.DrawPath(chev, paintengine2d.Fill(p.TextMuted))
+	l.body.Draw(ctx, title, paintengine2d.Pt(x+16, b.Min.Y+(b.Dy()-l.body.Height())*0.5), p.Text)
+	if st.Focused() {
+		l.DrawFocusRing(ctx, b.Inset(1))
+	}
+}
+
+func (l *Classic) DrawSeparator(ctx *paintengine2d.Context, b paintengine2d.Rect, vertical bool) {
+	p := l.palette
+	if vertical {
+		x := (b.Min.X + b.Max.X) * 0.5
+		ctx.DrawRect(paintengine2d.XYWH(x, b.Min.Y+4, 1, b.Dy()-8), paintengine2d.Fill(p.Divider))
+		return
+	}
+	y := (b.Min.Y + b.Max.Y) * 0.5
+	ctx.DrawRect(paintengine2d.XYWH(b.Min.X, y, b.Dx(), 1), paintengine2d.Fill(p.Divider))
+}
+
 func (l *Classic) DrawTooltip(ctx *paintengine2d.Context, b paintengine2d.Rect, text string) {
 	p := l.palette
 	m := l.metrics

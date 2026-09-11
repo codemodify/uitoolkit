@@ -119,6 +119,9 @@ type Metrics struct {
 	HeaderH     float32
 	SpinnerW    float32
 	TooltipPad  float32
+	SwitchW     float32
+	SwitchH     float32
+	AccordionH  float32
 }
 
 // DefaultMetrics is dense but finger-friendly at 1× scale.
@@ -153,6 +156,9 @@ func DefaultMetrics() Metrics {
 		HeaderH:     28,
 		SpinnerW:    22,
 		TooltipPad:  8,
+		SwitchW:     42,
+		SwitchH:     22,
+		AccordionH:  30,
 	}
 }
 

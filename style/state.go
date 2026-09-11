@@ -62,6 +62,17 @@ type LookAndFeel interface {
 	DrawTableCell(ctx *paintengine2d.Context, b paintengine2d.Rect, selected, hovered bool, label string, align Align)
 	DrawSpinner(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, upHover, downHover, upPress, downPress bool)
 	DrawTooltip(ctx *paintengine2d.Context, b paintengine2d.Rect, text string)
+	DrawTextArea(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, lines []TextLine, caret, selA, selB int, blink bool, scrollX, scrollY float32, placeholder string)
+	DrawSwitch(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, on bool, label string)
+	DrawAccordionHeader(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, title string, expanded bool)
+	DrawSeparator(ctx *paintengine2d.Context, b paintengine2d.Rect, vertical bool)
+}
+
+// TextLine is one visual line of a TextArea (hard break or wrap).
+type TextLine struct {
+	Text  string
+	Start int // inclusive rune index into the source
+	End   int // exclusive rune index into the source
 }
 
 // Theme is a LookAndFeel plus a display scale (DPI).

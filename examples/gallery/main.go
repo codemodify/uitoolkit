@@ -94,6 +94,25 @@ func buildGallery(a *app.Application, win *app.Window, light bool) widget.Compon
 		widgets.NewCheckbox("Launch at login", false, nil),
 		widgets.NewCheckbox("Hardware acceleration", true, nil),
 	).WithGap(4)
+	toggles := widgets.NewColumn(
+		widgets.NewSwitch("Dark chrome", !light, nil),
+		widgets.NewSwitch("Compact layout", false, nil),
+	).WithGap(4)
+	blurb := widgets.NewTextArea(
+		"Multi-line TextArea.\nWrap or scroll; Return inserts a line.",
+		"Notes",
+		func(s string) { status.Set(0, "TextArea edited") },
+	)
+	blurb.MinRows = 3
+	more := widgets.NewExpander("Advanced", false, widgets.NewColumn(
+		widgets.NewSwitch("Diagnostic overlay", false, nil),
+		widgets.NewLabel("Hidden until the header is expanded."),
+	).WithGap(6))
+	session := widgets.NewExpander("Session", true, widgets.NewColumn(
+		widgets.NewSwitch("Autosave", true, nil),
+		widgets.NewLabel("Writes a sidecar next to the project."),
+	).WithGap(6))
+	formAcc := widgets.NewAccordion(true, session, more)
 
 	clicks := 0
 	clickLbl := widgets.NewLabel("Clicked 0 times")
@@ -189,6 +208,11 @@ func buildGallery(a *app.Application, win *app.Window, light bool) widget.Compon
 		busy,
 		widgets.NewLabel("Options"),
 		checks,
+		widgets.NewSeparator(),
+		widgets.NewLabel("Toggles"),
+		toggles,
+		widgets.NewLabel("Notes"),
+		blurb,
 		openFile,
 	)
 
@@ -364,14 +388,33 @@ func buildGallery(a *app.Application, win *app.Window, light bool) widget.Compon
 	tablePane := widgets.NewColumn(tableSel, table).WithGap(6)
 	tablePane.AddFlex(table, 1)
 
+	formNotes := widgets.NewTextArea(
+		"Form tab notes.\nAccordion below; this field wraps.",
+		"Form notes",
+		nil,
+	)
+	formNotes.MinRows = 4
+	form := widgets.NewPanel("Form",
+		widgets.NewLabel("TextArea, accordion, switch, separator, spacer."),
+		formNotes,
+		widgets.NewSeparator(),
+		widgets.NewRow(
+			widgets.NewSwitch("Live preview", true, nil),
+			widgets.NewVSeparator(),
+			widgets.NewLabel("v"+uitoolkit.Version),
+		).WithGap(8),
+		formAcc,
+		widgets.NewSpacerSize(0, 4),
+	)
 	tabs := widgets.NewTabView(
 		widgets.Tab{Title: "Scroll", Content: widgets.NewPanel("ScrollView", scroll)},
 		widgets.Tab{Title: "List", Content: widgets.NewPanel("ListView", listPane)},
 		widgets.Tab{Title: "Tree", Content: widgets.NewPanel("TreeView", treePane)},
 		widgets.Tab{Title: "Table", Content: widgets.NewPanel("TableView", tablePane)},
+		widgets.Tab{Title: "Form", Content: form},
 	)
 	tabs.OnChange = func(i int) {
-		names := []string{"Scroll", "List", "Tree", "Table"}
+		names := []string{"Scroll", "List", "Tree", "Table", "Form"}
 		if i >= 0 && i < len(names) {
 			status.Set(0, "Tab: "+names[i])
 		}
@@ -537,6 +580,14 @@ func writeScreenshots(dir string) error {
 				w.RevealTooltip()
 			},
 		},
+		{
+			name: "gallery-accordion.png",
+			look: style.LightLook(),
+			setup: func(a *app.Application, w *app.Window) {
+				selectGalleryTab(w, 4)
+				openGalleryAccordion(w, 1)
+			},
+		},
 	}
 	for _, s := range shots {
 		a := uitoolkit.New(uitoolkit.Options{Look: s.look, Headless: true})
@@ -568,6 +619,12 @@ func writeScreenshots(dir string) error {
 	if err := writeToolbarShot(filepath.Join(dir, "gallery-toolbar.png")); err != nil {
 		return err
 	}
+	if err := writeTextAreaShot(filepath.Join(dir, "gallery-textarea.png")); err != nil {
+		return err
+	}
+	if err := writeInspectorShot(filepath.Join(dir, "inspector.png")); err != nil {
+		return err
+	}
 	return verifyDistinctPNGs(dir, screenshotNames)
 }
 
@@ -576,7 +633,8 @@ var screenshotNames = []string{
 	"gallery-scroll.png", "gallery-menu.png", "gallery-tree.png",
 	"gallery-toolbar.png", "gallery-combo.png", "gallery-message.png",
 	"gallery-table.png", "gallery-file.png", "gallery-tooltip.png",
-	"notes.png", "widgets.png",
+	"gallery-textarea.png", "gallery-accordion.png",
+	"notes.png", "inspector.png", "widgets.png",
 }
 
 func selectGalleryTab(w *app.Window, i int) {
@@ -623,6 +681,17 @@ func openGalleryCombo(w *app.Window) {
 	widget.Walk(w.Content(), func(c widget.Component) {
 		if cb, ok := c.(*widgets.ComboBox); ok {
 			cb.Open()
+		}
+	})
+}
+
+func openGalleryAccordion(w *app.Window, i int) {
+	widget.Walk(w.Content(), func(c widget.Component) {
+		if acc, ok := c.(*widgets.Accordion); ok {
+			secs := acc.Sections()
+			if i >= 0 && i < len(secs) {
+				secs[i].SetExpanded(true)
+			}
 		}
 	})
 }
@@ -709,7 +778,7 @@ func writeNotesShot(path string) error {
 func writeWidgetsCloseup(path string) error {
 	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true})
 	w, err := a.NewWindow(platform.WindowOptions{
-		Title: "Controls", Width: 520, Height: 520, Headless: true,
+		Title: "Controls", Width: 520, Height: 620, Headless: true,
 	})
 	if err != nil {
 		return err
@@ -721,6 +790,8 @@ func writeWidgetsCloseup(path string) error {
 	radios := widgets.NewRadioGroup([]string{"UTF-8", "Latin-1"}, 0, nil)
 	bar := widgets.NewProgressBar(0.68)
 	spin := widgets.NewNumberField(0, 24, 14, 1, nil)
+	area := widgets.NewTextArea("Remembered draft\nSecond line.", "Notes", nil)
+	area.MinRows = 2
 	w.SetContent(widgets.NewPanel("Themed controls",
 		widgets.NewRow(primary, widgets.NewButton("Cancel", nil)).WithGap(10),
 		field,
@@ -729,8 +800,11 @@ func writeWidgetsCloseup(path string) error {
 		widgets.NewSlider(0, 100, 72, nil),
 		bar,
 		radios,
+		widgets.NewSwitch("Dark chrome", true, nil),
 		widgets.NewCheckbox("Remember window size", true, nil),
 		widgets.NewCheckbox("Show hidden files", false, nil),
+		widgets.NewSeparator(),
+		area,
 	))
 	a.PumpOnce()
 	w.RequestFocus(field)
@@ -775,6 +849,80 @@ func writeToolbarShot(path string) error {
 	).WithGap(0))
 	a.PumpOnce()
 	bar.Hover(2)
+	a.PumpOnce()
+	if err := w.WritePNG(path); err != nil {
+		return err
+	}
+	fmt.Println("wrote", path)
+	w.Close()
+	return nil
+}
+
+func writeTextAreaShot(path string) error {
+	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{
+		Title: "TextArea", Width: 560, Height: 380, Headless: true,
+	})
+	if err != nil {
+		return err
+	}
+	area := widgets.NewTextArea(
+		"Ship notes for v0.1.6.\nTextArea wraps this paragraph onto the next visual line and scrolls when the body is taller than the field.\nReturn inserts a newline.",
+		"Write something…",
+		nil,
+	)
+	area.MinRows = 8
+	w.SetContent(widgets.NewPanel("TextArea",
+		widgets.NewLabel("Multi-line edit  ·  wrap  ·  selection"),
+		widgets.NewRow(
+			widgets.NewSwitch("Word wrap", true, nil),
+			widgets.NewVSeparator(),
+			widgets.NewLabel("Ln 2, Col 8"),
+		).WithGap(10),
+		area,
+	))
+	a.PumpOnce()
+	w.RequestFocus(area)
+	area.SetSelection(0, 21) // "Ship notes for v0.1.6"
+	area.SetCaretBlink(true)
+	a.PumpOnce()
+	if err := w.WritePNG(path); err != nil {
+		return err
+	}
+	fmt.Println("wrote", path)
+	w.Close()
+	return nil
+}
+
+func writeInspectorShot(path string) error {
+	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{
+		Title: "Inspector", Width: 860, Height: 580, Headless: true,
+	})
+	if err != nil {
+		return err
+	}
+	w.SetContent(demo.InspectorApp(w))
+	a.PumpOnce()
+	widget.Walk(w.Content(), func(c widget.Component) {
+		if tv, ok := c.(*widgets.TabView); ok {
+			tv.Select(1)
+		}
+	})
+	a.PumpOnce()
+	widget.Walk(w.Content(), func(c widget.Component) {
+		if tv, ok := c.(*widgets.TableView); ok {
+			tv.Selected = 2
+			if tv.OnSelect != nil {
+				tv.OnSelect(2)
+			}
+			tv.Invalidate()
+		}
+		if ta, ok := c.(*widgets.TextArea); ok {
+			w.RequestFocus(ta)
+			ta.SetSelection(0, 14)
+		}
+	})
 	a.PumpOnce()
 	if err := w.WritePNG(path); err != nil {
 		return err

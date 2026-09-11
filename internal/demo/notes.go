@@ -24,7 +24,7 @@ type Note struct {
 // NotesApp is a small real desktop app: a filterable note list + editor.
 func NotesApp(win *app.Window) widget.Component {
 	notes := []Note{
-		{Title: "Ship v0.1.5", Body: "TableView, NumberField, tooltip, file picker stub.", Done: false, Priority: 1},
+		{Title: "Ship v0.1.6", Body: "TextArea, Switch, Accordion, Inspector sample.", Done: false, Priority: 1},
 		{Title: "Damage pass", Body: "Resize should only present dirty rects.", Done: true, Priority: 3},
 		{Title: "Theme polish", Body: "Check light theme contrast on sliders.", Done: false, Priority: 2},
 		{Title: "X11 present", Body: "XPutImage dirty boxes; fallback offscreen.", Done: true, Priority: 4},
@@ -34,7 +34,8 @@ func NotesApp(win *app.Window) widget.Component {
 	filter := ""
 
 	title := widgets.NewTextField(notes[0].Title, "Title", nil)
-	body := widgets.NewTextField(notes[0].Body, "Body", nil)
+	body := widgets.NewTextArea(notes[0].Body, "Body", nil)
+	body.MinRows = 4
 	done := widgets.NewCheckbox("Done", notes[0].Done, nil)
 	status := widgets.NewLabel(fmt.Sprintf("%d notes", len(notes)))
 	priority := widgets.NewNumberField(1, 9, float64(notes[0].Priority), 1, nil)
@@ -289,7 +290,7 @@ func NotesApp(win *app.Window) widget.Component {
 		widgets.NewLabel("Priority"),
 		priority,
 		done,
-		widgets.NewLabel("A small desktop app on uitoolkit — table, spinner, file stub, tooltips."),
+		widgets.NewLabel("A small desktop app on uitoolkit — table, textarea, spinner, file stub."),
 	)
 	right := widgets.NewPad(8, editor)
 	split := widgets.NewSplitter(true, sidebar, right)

@@ -155,6 +155,24 @@ func NewSpinner(min, max, value, step float64, on func(float64)) *widgets.Number
 func NewTip(text string, child widget.Component) *widgets.TipWrap {
 	return widgets.NewTip(text, child)
 }
+func NewTextArea(text, placeholder string, on func(string)) *widgets.TextArea {
+	return widgets.NewTextArea(text, placeholder, on)
+}
+func NewSwitch(text string, on bool, change func(bool)) *widgets.Switch {
+	return widgets.NewSwitch(text, on, change)
+}
+func NewExpander(title string, expanded bool, child widget.Component) *widgets.Expander {
+	return widgets.NewExpander(title, expanded, child)
+}
+func NewAccordion(exclusive bool, items ...*widgets.Expander) *widgets.Accordion {
+	return widgets.NewAccordion(exclusive, items...)
+}
+func NewSeparator() *widgets.Separator  { return widgets.NewSeparator() }
+func NewVSeparator() *widgets.Separator { return widgets.NewVSeparator() }
+func NewSpacer() *widgets.Spacer        { return widgets.NewSpacer() }
+func NewSpacerSize(w, h float32) *widgets.Spacer {
+	return widgets.NewSpacerSize(w, h)
+}
 func NewFileDialog(opts widgets.FileDialogOptions) *widgets.FileDialog {
 	return widgets.NewFileDialog(opts)
 }
