@@ -10,6 +10,21 @@ const (
 	CursorText
 )
 
+func (c Cursor) String() string {
+	switch c {
+	case CursorDefault:
+		return "default"
+	case CursorColResize:
+		return "col-resize"
+	case CursorRowResize:
+		return "row-resize"
+	case CursorText:
+		return "text"
+	default:
+		return "unknown"
+	}
+}
+
 // CursorSurface is implemented by backends that can change the pointer shape.
 type CursorSurface interface {
 	SetCursor(c Cursor)

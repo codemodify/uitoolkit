@@ -110,6 +110,29 @@ func (t *TableView) scrollTrack() (track, thumb paintengine2d.Rect) {
 	return vScrollThumb(body, t.contentH(), t.OffsetY, bar, gap)
 }
 
+// VisibleRange is the half-open [lo, hi) window of body rows that Paint draws.
+func (t *TableView) VisibleRange() (lo, hi int) { return t.visibleRange() }
+
+// HeaderHeight is the sticky header band (device pixels).
+func (t *TableView) HeaderHeight() float32 { return t.headerH() }
+
+// BodyHeight is the viewport under the sticky header.
+func (t *TableView) BodyHeight() float32 { return t.bodyH() }
+
+// ScrollTrack is the overflow bar geometry in local coordinates.
+func (t *TableView) ScrollTrack() (track, thumb paintengine2d.Rect) { return t.scrollTrack() }
+
+// RowBounds is the current on-screen rect of row i (may sit above the header
+// in local space; Paint clips it to the body).
+func (t *TableView) RowBounds(i int) paintengine2d.Rect { return t.rowRect(i) }
+
+// ScrollTo sets OffsetY (clamped) without requiring a wheel event.
+func (t *TableView) ScrollTo(y float32) {
+	t.OffsetY = y
+	t.clamp()
+	t.Invalidate()
+}
+
 func (t *TableView) bodyH() float32 {
 	h := t.LocalBounds().Dy() - t.headerH()
 	if h < 0 {

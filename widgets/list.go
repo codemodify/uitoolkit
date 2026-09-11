@@ -64,6 +64,19 @@ func (l *ListView) scrollTrack() (track, thumb paintengine2d.Rect) {
 	return vScrollThumb(l.LocalBounds(), l.contentH(), l.OffsetY, bar, gap)
 }
 
+// VisibleRange is the half-open [lo, hi) window of rows that Paint draws.
+func (l *ListView) VisibleRange() (lo, hi int) { return l.visibleRange() }
+
+// ScrollTrack is the overflow bar geometry (empty thumb when content fits).
+func (l *ListView) ScrollTrack() (track, thumb paintengine2d.Rect) { return l.scrollTrack() }
+
+// ScrollTo sets OffsetY (clamped) without requiring a wheel event.
+func (l *ListView) ScrollTo(y float32) {
+	l.OffsetY = y
+	l.clamp()
+	l.Invalidate()
+}
+
 func (l *ListView) visibleRange() (lo, hi int) {
 	rh := l.rowH()
 	if rh <= 0 {

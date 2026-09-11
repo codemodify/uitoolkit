@@ -178,6 +178,7 @@ go run ./examples/mail -screenshot docs/screenshots
 git clone https://github.com/codemodify/uitoolkit.git
 cd uitoolkit
 CGO_ENABLED=0 go test ./...
+go run ./cmd/uitest-driver -short    # headless gallery + fake Mail
 go run ./examples/gallery            # Wayland if WAYLAND_DISPLAY, else X11
 UITK_BACKEND=x11 go run ./examples/gallery
 UITK_BACKEND=wayland go run ./examples/gallery
@@ -197,7 +198,20 @@ go run ./examples/mail -classic     # preview below the thread list
 go run ./examples/mail -light
 ```
 
-Headless / CI paints into `paintengine2d.NewImage` and can `Window.WritePNG`.
+## Testing
+
+See **[docs/testing.md](docs/testing.md)** for how to run the suite, what
+the app driver covers, and the **Mail safety** rule (never point tests at
+a live IMAP account or `mail.json`).
+
+```bash
+CGO_ENABLED=0 go test ./...
+go run ./cmd/uitest-driver           # gallery + in-memory Mail
+CGO_ENABLED=1 go build ./cmd/mailclientui   # Linux CGO / Wayland
+```
+
+When you fix a UI bug, add a regression test. Headless / CI paints into
+`paintengine2d.NewImage` and can `Window.WritePNG`.
 `UITK_PAINT=auto` (default) tries paintengine2d **GPUDevice** (Linux EGL/GLES2)
 and falls back to CPU. On Linux with CGO a GPU window presents with
 **eglSwapBuffers** (`wl_egl_window` on Wayland, EGL window on X11). If EGL
@@ -442,9 +456,16 @@ chrome and message open no longer rebuilds the list (**v0.10.4**).
 Splitter pane clip, overflow scrollbars, scroll clamp, and read-only
 `TextView` are **v0.10.5**. Table/list body clip (flush under the header,
 rows stay visible past the first page) and restoring the pointer after a
-splitter drag are **v0.10.6**.
+splitter drag are **v0.10.6**. Headless widget contracts, `uitest-driver`,
+and the Wayland cursor `C.int` stride fix are **v0.10.7**.
 
 ## Version
+
+**0.10.7** — Testing: `internal/uitest` (Measure/Arrange + injected input +
+paint/geometry asserts), `internal/apptest` / `cmd/uitest-driver` (scripted
+gallery + **in-memory** Mail only), and `docs/testing.md`. Wayland cursor
+shm path casts `stride`/`size` to `C.int` so `CGO_ENABLED=1 go build
+./cmd/mailclientui` succeeds. Still paintengine2d **v0.9.0**.
 
 **0.10.6** — Toolkit: virtualized `TableView` / `ListView` / `CardList` /
 `TreeView` paint rows in the viewport and clip the body below a sticky

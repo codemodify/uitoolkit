@@ -128,6 +128,12 @@ func (s *ScrollView) thumb() (track, thumb paintengine2d.Rect) {
 	return vScrollThumb(s.LocalBounds(), s.content.Y, s.OffsetY, bar, gap)
 }
 
+// ScrollTrack is the overflow bar geometry (empty thumb when content fits).
+func (s *ScrollView) ScrollTrack() (track, thumb paintengine2d.Rect) { return s.thumb() }
+
+// ContentHeight is the arranged child height used for clamp / thumb.
+func (s *ScrollView) ContentHeight() float32 { return s.content.Y }
+
 func (s *ScrollView) SceneChild() widget.Component { return s.child }
 
 func (s *ScrollView) RetainScene() (paintengine2d.Matrix, bool) {

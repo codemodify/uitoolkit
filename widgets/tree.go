@@ -96,6 +96,34 @@ func (t *TreeView) scrollTrack() (track, thumb paintengine2d.Rect) {
 	return vScrollThumb(t.LocalBounds(), t.contentH(), t.OffsetY, bar, gap)
 }
 
+// VisibleRange is the half-open [lo, hi) window of flattened rows Paint draws.
+func (t *TreeView) VisibleRange() (lo, hi int) {
+	rows := t.flatten()
+	rh := t.rowH()
+	if rh <= 0 {
+		return 0, 0
+	}
+	lo = int(t.OffsetY / rh)
+	hi = int((t.OffsetY+t.LocalBounds().Dy())/rh) + 1
+	if lo < 0 {
+		lo = 0
+	}
+	if hi > len(rows) {
+		hi = len(rows)
+	}
+	return
+}
+
+// ScrollTrack is the overflow bar geometry (empty thumb when content fits).
+func (t *TreeView) ScrollTrack() (track, thumb paintengine2d.Rect) { return t.scrollTrack() }
+
+// ScrollTo sets OffsetY (clamped) without requiring a wheel event.
+func (t *TreeView) ScrollTo(y float32) {
+	t.OffsetY = y
+	t.clamp()
+	t.Invalidate()
+}
+
 func (t *TreeView) Measure(c layout.Constraints) paintengine2d.Point {
 	h := t.contentH()
 	if h < 80 {

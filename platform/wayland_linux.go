@@ -1257,7 +1257,7 @@ func (c *wlConn) ensureCursorBuf(cur Cursor) *wlCursorBuf {
 	}
 	pix := unsafe.Slice((*byte)(mem), size)
 	hx, hy := drawCursorARGB(pix, n, stride, cur)
-	buf := C.ui_wl_argb_buffer(c.shm, C.int(fd), n, n, stride, C.size_t(size))
+	buf := C.ui_wl_argb_buffer(c.shm, C.int(fd), C.int(n), C.int(n), C.int(stride), C.size_t(size))
 	if buf == nil {
 		C.ui_wl_munmap(mem, C.size_t(size))
 		C.ui_wl_close_fd(C.int(fd))
@@ -1368,7 +1368,7 @@ func (c *wlConn) applyCursorLocked() {
 		return
 	}
 	C.ui_wl_attach(c.curSurf, slot.buf)
-	C.ui_wl_damage(c.curSurf, 0, 0, wlCursorSize, wlCursorSize)
+	C.ui_wl_damage(c.curSurf, C.int(0), C.int(0), C.int(wlCursorSize), C.int(wlCursorSize))
 	C.ui_wl_commit(c.curSurf)
 	C.ui_wl_set_cursor(c.pointer, C.uint32_t(c.ptrSerial), c.curSurf, C.int32_t(slot.hx), C.int32_t(slot.hy))
 	C.ui_wl_flush(c.dpy)
