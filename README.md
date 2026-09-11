@@ -363,11 +363,11 @@ go run ./examples/mail -screenshot docs/screenshots
 
 `go run ./cmd/mailclientui` is toolkit dogfood, not a Mozilla clone.
 **mailclientd** owns the store (accounts, folders, search, mutations).
-**mailclientui** is Thunderbird chrome only: identity picker, Account
-Central, folder TreeView with unread badges, thread TableView (Quick
-Filter is a `messages.list` RPC), preview + attachment list, compose
-and Preferences windows. Keyboard: n/p next/prev, # delete, r reply,
-f forward, c compose — see [docs/mail.md](docs/mail.md).
+**mailclientui** is Thunderbird chrome only: folder TreeView with unread
+badges, thread TableView (Quick Filter is a `messages.list` RPC),
+preview + attachment list, compose and Preferences windows. Account
+add/remove/central stay on the File menu. Keyboard: n/p next/prev,
+# delete, r reply, f forward, c compose — see [docs/mail.md](docs/mail.md).
 
 **Demo:** MemoryStore in the daemon (two accounts, ~150 messages). The
 UI always talks JSON-RPC on a Unix socket (`$XDG_RUNTIME_DIR/mailclientd.sock`
@@ -463,8 +463,21 @@ screen clamps them); Mail hides the status bar and path strip, moves Quick
 Filter under the toolbar, and drops the VIP folder from the tree (**v0.10.8**).
 Mail thread columns are Topic / Who / When (no Size); ★ / 📎 paint after
 toggle via toolkit font fallbacks + TableView / CardList invalidation (**v0.10.9**).
+Mail drops the sidebar Account ComboBox, Folders section header, and
+the active-filter banner above the thread list; Quick Filter pins and
+File account menus remain (**v0.10.10**).
 
 ## Version
+
+**0.10.10** — Mail chrome: drop the sidebar `Account` header, identity
+ComboBox, and `Folders` section title (the tree — including Tags —
+starts at the top of the pane). File → Add/Remove Account / Account
+Central plus folder-tree account roots still switch and manage stores.
+Remove the `Filter on · N shown` / `Clear filter` strip above the
+thread list (it reserved a row even when hidden). Quick Filter under
+the toolbar still narrows the list; clear by emptying the field or
+turning off Unread / Starred / Attachment pins. Still paintengine2d
+**v0.9.0**.
 
 **0.10.9** — Mail list chrome: Topic / Who / When (Size column removed).
 Toolkit: Titillium has no ★/📎/●/🔇 gids — `style` rasterizes fallback

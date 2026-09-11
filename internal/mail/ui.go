@@ -94,7 +94,6 @@ type session struct {
 	status                                     *widgets.StatusBar
 	qf                                         *widgets.TextField
 	qfBar                                      widget.Component
-	identity                                   *widgets.ComboBox
 	unreadTg                                   *widgets.ToolItem
 	starTg                                     *widgets.ToolItem
 	attachTg                                   *widgets.ToolItem
@@ -105,9 +104,6 @@ type session struct {
 	acctBody                                   *widgets.Label
 	thread                                     widget.Component
 	center                                     *widgets.Stack
-	listHint                                   *widgets.Label
-	clearFilt                                  *widgets.Button
-	hintRow                                    widget.Component
 }
 
 func newSession(a *app.Application, win *app.Window, cli *Client, opts AppOptions) *session {
@@ -358,30 +354,15 @@ func (s *session) build() widget.Component {
 	s.table.SetVisible(!s.cardView)
 	s.cards.SetVisible(s.cardView)
 	s.listStack = widgets.NewStack(s.table, s.cards)
-	s.listHint = widgets.NewLabel("")
-	s.clearFilt = widgets.NewButton("Clear filter", s.clearQuickFilter)
-	s.hintRow = widgets.NewRow(s.listHint, widgets.NewSpacer(), s.clearFilt).WithGap(8)
-	s.hintRow.SetVisible(false)
-	thread := widgets.NewColumn(s.hintRow, s.listStack).WithGap(6).WithPad(8)
+	thread := widgets.NewColumn(s.listStack).WithGap(0).WithPad(8)
 	thread.AddFlex(s.listStack, 1)
 	s.thread = thread
 	s.acctPanel = s.buildAccountCentral()
 	s.acctPanel.SetVisible(false)
 	s.center = widgets.NewStack(thread, s.acctPanel)
 
-	idents := s.identityLabels()
-	s.identity = widgets.NewComboBox(idents, s.identityIndex(), func(i int) {
-		accts := s.accounts()
-		if i >= 0 && i < len(accts) {
-			s.showAccountCentral(accts[i].ID)
-		}
-	})
-
 	s.applyRowMetrics()
 	sidebar := widgets.NewColumn(
-		widgets.NewTitle("Account"),
-		s.identity,
-		widgets.NewTitle("Folders"),
 		s.tree,
 		s.folderL,
 	).WithGap(4).WithPad(6)
@@ -418,6 +399,11 @@ func (s *session) menuBar() *widgets.MenuBar {
 			widgets.Item("New &Folder…", s.newFolder),
 			widgets.Item("Add &Account…", s.openAddAccount),
 			widgets.Item("Remove &Account…", s.removeCurrentAccount),
+			widgets.Item("Account Central", func() {
+				if id := s.accountID(); id != "" {
+					s.showAccountCentral(id)
+				}
+			}),
 			widgets.Sep(),
 			widgets.ItemAccel("&Get New Messages", "F5", s.getMessages),
 			widgets.Item("Get Messages for Current Account", s.getMessages),
@@ -747,7 +733,6 @@ func (s *session) refreshList() {
 		s.cards.SetVisible(s.cardView)
 		s.cards.Invalidate()
 	}
-	s.updateFilterHint()
 	s.loadPreview()
 	s.refreshStatus()
 }
@@ -1585,28 +1570,6 @@ func (s *session) accounts() []Account {
 	return a
 }
 
-func (s *session) identityLabels() []string {
-	accts := s.accounts()
-	out := make([]string, 0, len(accts))
-	for _, a := range accts {
-		out = append(out, fmt.Sprintf("%s <%s>", a.Name, a.Address))
-	}
-	if len(out) == 0 {
-		out = []string{"(no account)"}
-	}
-	return out
-}
-
-func (s *session) identityIndex() int {
-	accts := s.accounts()
-	for i, a := range accts {
-		if a.ID == s.account {
-			return i
-		}
-	}
-	return 0
-}
-
 func (s *session) backendLabel() string {
 	if s.backend == "" {
 		return "mailclientd"
@@ -1667,67 +1630,6 @@ func (s *session) openAccountInbox(acct string) {
 	s.refreshAll()
 }
 
-func (s *session) updateFilterHint() {
-	if s.hintRow == nil || s.listHint == nil {
-		return
-	}
-	active := s.filter.Active()
-	switch {
-	case len(s.rows) == 0 && active:
-		s.listHint.SetText("No messages match this filter.")
-		if s.clearFilt != nil {
-			s.clearFilt.SetVisible(true)
-		}
-		s.hintRow.SetVisible(true)
-	case len(s.rows) == 0:
-		s.listHint.SetText("This folder is empty.")
-		if s.clearFilt != nil {
-			s.clearFilt.SetVisible(false)
-		}
-		s.hintRow.SetVisible(true)
-	case active:
-		s.listHint.SetText(fmt.Sprintf("Filter on · %d shown", len(s.rows)))
-		if s.clearFilt != nil {
-			s.clearFilt.SetVisible(true)
-		}
-		s.hintRow.SetVisible(true)
-	default:
-		s.hintRow.SetVisible(false)
-	}
-	if s.win != nil {
-		s.win.RequestLayout()
-	}
-}
-
-func (s *session) clearQuickFilter() {
-	s.filter = Filter{}
-	if s.qf != nil {
-		s.qf.SetText("")
-	}
-	if s.unreadTg != nil {
-		s.unreadTg.Down = false
-	}
-	if s.starTg != nil {
-		s.starTg.Down = false
-	}
-	if s.attachTg != nil {
-		s.attachTg.Down = false
-	}
-	if s.senderTg != nil {
-		s.senderTg.Down = false
-	}
-	if s.recipTg != nil {
-		s.recipTg.Down = false
-	}
-	if s.subjTg != nil {
-		s.subjTg.Down = false
-	}
-	if s.bodyTg != nil {
-		s.bodyTg.Down = false
-	}
-	s.refreshList()
-}
-
 func (s *session) showCenter() {
 	if s.thread != nil {
 		s.thread.SetVisible(!s.central)
@@ -1742,7 +1644,7 @@ func (s *session) showCenter() {
 
 func (s *session) buildAccountCentral() widget.Component {
 	s.acctTitle = widgets.NewTitle("Account Central")
-	s.acctBody = widgets.NewLabel("Select an identity in the picker or folder tree.")
+	s.acctBody = widgets.NewLabel("Use File → Add Account or Remove Account to manage stores. Open Inbox or pick a folder in the tree.")
 	get := widgets.NewButton("Get Messages", s.getMessages)
 	write := widgets.NewButton("Write", s.write)
 	prefs := widgets.NewButton("Account Settings", s.openPrefs)
@@ -1756,11 +1658,6 @@ func (s *session) buildAccountCentral() widget.Component {
 }
 
 func (s *session) refreshAccount() {
-	if s.identity != nil {
-		s.identity.Items = s.identityLabels()
-		s.identity.Selected = s.identityIndex()
-		s.identity.Invalidate()
-	}
 	if s.acctTitle == nil {
 		return
 	}
