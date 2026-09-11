@@ -405,6 +405,9 @@ func TestFirstRunDialogYesNo(t *testing.T) {
 	if ov == nil {
 		t.Fatal("expected first-run Yes/No overlay")
 	}
+	if FirstRunPrompt != "There are no accounts, want to add one?" {
+		t.Fatalf("FirstRunPrompt %q", FirstRunPrompt)
+	}
 	var yes, no bool
 	var prompt bool
 	widget.Walk(ov, func(c widget.Component) {
@@ -417,7 +420,10 @@ func TestFirstRunDialogYesNo(t *testing.T) {
 				no = true
 			}
 		case *widgets.Label:
-			if strings.Contains(x.Text, "There are no accounts") {
+			if strings.Contains(x.Text, "mail.json") || strings.Contains(x.Text, "0600") || strings.Contains(x.Text, "password") {
+				t.Fatalf("first-run dialog must not mention password/storage: %q", x.Text)
+			}
+			if x.Text == FirstRunPrompt {
 				prompt = true
 			}
 		}
