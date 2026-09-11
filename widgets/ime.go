@@ -5,14 +5,17 @@ import (
 	"github.com/codemodify/uitoolkit/style"
 )
 
-func drawPreeditBar(ctx *paintengine2d.Context, look style.LookAndFeel, b paintengine2d.Rect, pad float32, text string, a, b0 int, scrollX float32, multiline bool) {
+func drawPreeditBar(ctx *paintengine2d.Context, look style.LookAndFeel, b paintengine2d.Rect, pad float32, text string, a, b0 int, scrollX float32, multiline bool, face *style.Font) {
 	if a == b0 || look == nil {
 		return
 	}
 	if a > b0 {
 		a, b0 = b0, a
 	}
-	f := look.Font()
+	f := face
+	if f == nil {
+		f = look.Font()
+	}
 	inner := paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad*2, b.Dy())
 	if multiline {
 		inner = paintengine2d.XYWH(b.Min.X+pad, b.Min.Y+pad, b.Dx()-pad*2, b.Dy()-pad*2)

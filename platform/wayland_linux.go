@@ -4,7 +4,7 @@ package platform
 
 /*
 #cgo linux pkg-config: wayland-client xkbcommon
-#cgo linux CFLAGS: -I${SRCDIR}
+#cgo linux CFLAGS: -I${SRCDIR} -I/usr/include/drm
 #define _GNU_SOURCE
 #include <wayland-client.h>
 #include <xkbcommon/xkbcommon.h>
@@ -24,6 +24,7 @@ package platform
 #include "fractional-scale-v1-client-protocol.h"
 #include "viewporter-client-protocol.h"
 #include "wayland_dmabuf.h"
+#include "wayland_sync.h"
 
 extern void uitkWlRegistryGlobal(uintptr_t id, struct wl_registry *reg, uint32_t name, char *iface, uint32_t ver);
 extern void uitkWlPing(uintptr_t id, struct xdg_wm_base *wm, uint32_t serial);
@@ -43,6 +44,7 @@ extern void uitkWlKey(uintptr_t id, uint32_t key, uint32_t state, uint32_t seria
 extern void uitkWlKeyMods(uintptr_t id, uint32_t depressed, uint32_t latched, uint32_t locked, uint32_t group);
 extern void uitkWlKeyRepeat(uintptr_t id, int32_t rate, int32_t delay);
 extern void uitkWlBufRelease(uintptr_t sid, int slot);
+extern void uitkWlExplicitRelease(uintptr_t sid, int slot);
 extern void uitkWlOutputScale(uintptr_t id, int32_t factor);
 extern void uitkWlDataOffer(uintptr_t id, struct wl_data_offer *offer);
 extern void uitkWlDataOfferMime(uintptr_t id, struct wl_data_offer *offer, char *mime);
@@ -780,6 +782,7 @@ func (WaylandBackend) NewSurface(opts WindowOptions) (Surface, error) {
 	if c.viewporter != nil && s.surf != nil {
 		s.viewport = C.ui_wl_viewport(c.viewporter, s.surf)
 	}
+	s.bindExplicitSync()
 	C.ui_wl_commit(s.surf)
 	wlMu.Unlock()
 	C.ui_wl_roundtrip(c.dpy)
@@ -857,6 +860,9 @@ type wlConn struct {
 	dmaSwizzle bool
 	dmaAlloc   string
 
+	explicitSync unsafe.Pointer // *zwp_linux_explicit_synchronization_v1
+	drmSyncobj   unsafe.Pointer // *wp_linux_drm_syncobj_manager_v1
+
 	repeatRate  int
 	repeatDelay int
 	repeatKey   uint32
@@ -898,6 +904,8 @@ type wlSurface struct {
 	viewport   *C.struct_wp_viewport
 	fracObj    *C.struct_wp_fractional_scale_v1
 	deco       *C.struct_zxdg_toplevel_decoration_v1
+	surfSync   unsafe.Pointer // *zwp_linux_surface_synchronization_v1
+	timeline   unsafe.Pointer // *ui_drm_timeline
 }
 
 var (
@@ -1005,6 +1013,14 @@ func (c *wlConn) closeLocked() {
 		c.primMan = nil
 	}
 	c.destroyDmabufLocked()
+	if c.explicitSync != nil {
+		C.ui_wl_explicit_destroy((*C.struct_zwp_linux_explicit_synchronization_v1)(c.explicitSync))
+		c.explicitSync = nil
+	}
+	if c.drmSyncobj != nil {
+		C.ui_wl_drm_syncobj_destroy((*C.struct_wp_linux_drm_syncobj_manager_v1)(c.drmSyncobj))
+		c.drmSyncobj = nil
+	}
 	if c.decoMan != nil {
 		C.ui_wl_deco_man_destroy(c.decoMan)
 		c.decoMan = nil
@@ -1195,6 +1211,9 @@ func (s *wlSurface) Present(dirty []paintengine2d.Rect) error {
 		C.ui_wl_set_buf_scale(s.surf, C.int32_t(int(s.deviceScale()+0.1)))
 	}
 	slot := s.pickSlot()
+	if s.timeline != nil {
+		C.ui_drm_timeline_wait_slot((*C.struct_ui_drm_timeline)(s.timeline), C.int(slot))
+	}
 	if err := s.ensureSlot(slot, s.img.Width, s.img.Height); err != nil {
 		if s.conn.useDmabuf {
 			s.conn.useDmabuf = false
@@ -1205,6 +1224,10 @@ func (s *wlSurface) Present(dirty []paintengine2d.Rect) error {
 		} else {
 			return err
 		}
+	}
+	dmaFD := s.slots[slot].fd
+	if s.slots[slot].dma != nil && dmaFD >= 0 {
+		C.ui_dmabuf_cpu_begin(C.int(dmaFD))
 	}
 	if len(dirty) == 0 {
 		dirty = []paintengine2d.Rect{paintengine2d.XYWH(0, 0, float32(s.img.Width), float32(s.img.Height))}
@@ -1229,21 +1252,78 @@ func (s *wlSurface) Present(dirty []paintengine2d.Rect) error {
 		}
 		C.ui_wl_damage(s.surf, C.int(x0), C.int(y0), C.int(x1-x0), C.int(y1-y0))
 	}
+	if s.slots[slot].dma != nil && dmaFD >= 0 {
+		C.ui_dmabuf_cpu_end(C.int(dmaFD))
+	}
 	C.ui_wl_attach(s.surf, s.slots[slot].buf)
+	s.markAcquire(slot, dmaFD)
 	C.ui_wl_commit(s.surf)
 	s.slots[slot].busy = true
 	C.ui_wl_flush(s.conn.dpy)
 	return nil
 }
 
-func (s *wlSurface) pickSlot() int {
-	for i := range s.slots {
-		if s.slots[i].buf != nil && !s.slots[i].busy {
-			return i
+func (s *wlSurface) bindExplicitSync() {
+	if s == nil || s.conn == nil || s.surf == nil {
+		return
+	}
+	if s.conn.drmSyncobj != nil {
+		fd := int(C.ui_dmabuf_drm_fd())
+		if fd >= 0 {
+			tl := C.ui_drm_timeline_setup(
+				(*C.struct_wp_linux_drm_syncobj_manager_v1)(s.conn.drmSyncobj),
+				s.surf, C.int(fd))
+			if tl != nil {
+				s.timeline = unsafe.Pointer(tl)
+				return
+			}
 		}
 	}
+	if s.conn.explicitSync != nil {
+		sync := C.ui_wl_explicit_get_sync(
+			(*C.struct_zwp_linux_explicit_synchronization_v1)(s.conn.explicitSync),
+			s.surf)
+		if sync != nil {
+			s.surfSync = unsafe.Pointer(sync)
+		}
+	}
+}
+
+func (s *wlSurface) markAcquire(slot, dmaFD int) {
+	if s.timeline != nil && s.slots[slot].dma != nil {
+		C.ui_drm_timeline_set_points((*C.struct_ui_drm_timeline)(s.timeline), C.int(slot))
+		return
+	}
+	if s.surfSync == nil || s.slots[slot].dma == nil || dmaFD < 0 {
+		return
+	}
+	fence := int(C.ui_dmabuf_export_sync_file(C.int(dmaFD)))
+	if fence >= 0 {
+		C.ui_wl_explicit_set_acquire((*C.struct_zwp_linux_surface_synchronization_v1)(s.surfSync), C.int(fence))
+		C.ui_wl_close_fd(C.int(fence))
+	}
+	C.ui_wl_explicit_get_release((*C.struct_zwp_linux_surface_synchronization_v1)(s.surfSync), C.uintptr_t(s.id), C.int(slot))
+}
+
+func (s *wlSurface) pickSlot() int {
+	for attempt := 0; attempt < 24; attempt++ {
+		for i := range s.slots {
+			if s.slots[i].buf != nil && !s.slots[i].busy {
+				return i
+			}
+		}
+		for i := range s.slots {
+			if s.slots[i].buf == nil {
+				return i
+			}
+		}
+		if s.conn == nil || s.conn.dpy == nil {
+			break
+		}
+		C.ui_wl_roundtrip(s.conn.dpy)
+	}
 	for i := range s.slots {
-		if s.slots[i].buf == nil {
+		if !s.slots[i].busy {
 			return i
 		}
 	}
@@ -1387,6 +1467,14 @@ func (s *wlSurface) Close() error {
 	wlMu.Unlock()
 	s.destroySlot(0)
 	s.destroySlot(1)
+	if s.timeline != nil {
+		C.ui_drm_timeline_destroy((*C.struct_ui_drm_timeline)(s.timeline))
+		s.timeline = nil
+	}
+	if s.surfSync != nil {
+		C.ui_wl_explicit_sync_destroy((*C.struct_zwp_linux_surface_synchronization_v1)(s.surfSync))
+		s.surfSync = nil
+	}
 	if s.fracObj != nil {
 		C.ui_wl_frac_destroy(s.fracObj)
 		s.fracObj = nil
@@ -1513,6 +1601,22 @@ func uitkWlRegistryGlobal(id C.uintptr_t, reg *C.struct_wl_registry, name C.uint
 		c.fracMan = (*C.struct_wp_fractional_scale_manager_v1)(C.ui_wl_bind(reg, name, C.ui_wl_frac_man_iface(), 1))
 	case "wp_viewporter":
 		c.viewporter = (*C.struct_wp_viewporter)(C.ui_wl_bind(reg, name, C.ui_wl_viewporter_iface(), 1))
+	case "zwp_linux_explicit_synchronization_v1":
+		v := ver
+		if v > 2 {
+			v = 2
+		}
+		if v >= 1 {
+			c.explicitSync = unsafe.Pointer(C.ui_wl_bind(reg, name, C.ui_wl_explicit_sync_iface(), v))
+		}
+	case "wp_linux_drm_syncobj_v1":
+		v := ver
+		if v > 1 {
+			v = 1
+		}
+		if v >= 1 {
+			c.drmSyncobj = unsafe.Pointer(C.ui_wl_bind(reg, name, C.ui_wl_drm_syncobj_iface(), v))
+		}
 	case "zwp_linux_dmabuf_v1":
 		if WaylandPresentPref() == WaylandPresentSHM {
 			break
@@ -1828,6 +1932,11 @@ func uitkWlKeyMods(id C.uintptr_t, dep, lat, lock, group C.uint32_t) {
 	}
 	C.ui_xkb_update_mask(c.xkbState, dep, lat, lock, group)
 	c.mods = wlMods(c)
+}
+
+//export uitkWlExplicitRelease
+func uitkWlExplicitRelease(sid C.uintptr_t, slot C.int) {
+	uitkWlBufRelease(sid, slot)
 }
 
 //export uitkWlBufRelease

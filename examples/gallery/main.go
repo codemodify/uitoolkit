@@ -626,6 +626,9 @@ func writeScreenshots(dir string) error {
 	if err := writeInspectorShot(filepath.Join(dir, "inspector.png")); err != nil {
 		return err
 	}
+	if err := writeFilesShot(filepath.Join(dir, "files.png")); err != nil {
+		return err
+	}
 	return verifyDistinctPNGs(dir, screenshotNames)
 }
 
@@ -635,7 +638,7 @@ var screenshotNames = []string{
 	"gallery-toolbar.png", "gallery-combo.png", "gallery-message.png",
 	"gallery-table.png", "gallery-file.png", "gallery-tooltip.png",
 	"gallery-textarea.png", "gallery-accordion.png",
-	"notes.png", "inspector.png", "widgets.png",
+	"notes.png", "inspector.png", "files.png", "widgets.png",
 }
 
 func selectGalleryTab(w *app.Window, i int) {
@@ -886,6 +889,38 @@ func writeTextAreaShot(path string) error {
 	w.RequestFocus(area)
 	area.SetSelection(0, 21) // "Ship notes for v0.1.7"
 	area.SetCaretBlink(true)
+	a.PumpOnce()
+	if err := w.WritePNG(path); err != nil {
+		return err
+	}
+	fmt.Println("wrote", path)
+	w.Close()
+	return nil
+}
+
+func writeFilesShot(path string) error {
+	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{
+		Title: "Files", Width: 1040, Height: 680, Headless: true,
+	})
+	if err != nil {
+		return err
+	}
+	w.SetContent(demo.FilesApp(w))
+	a.PumpOnce()
+	widget.Walk(w.Content(), func(c widget.Component) {
+		if tv, ok := c.(*widgets.TabView); ok {
+			tv.Select(0)
+		}
+		if table, ok := c.(*widgets.TableView); ok && len(table.Columns) >= 3 {
+			table.Selected = 0
+			if table.OnSelect != nil {
+				table.OnSelect(0)
+			}
+		}
+	})
+	a.PumpOnce()
+	openGalleryMenu(w, 0)
 	a.PumpOnce()
 	if err := w.WritePNG(path); err != nil {
 		return err

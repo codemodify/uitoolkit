@@ -31,13 +31,14 @@ type LookAndFeel interface {
 	TitleFont() *Font
 	MutedFont() *Font
 	OnAccentFont() *Font
+	MonoFont() *Font
 
 	DrawPanel(ctx *paintengine2d.Context, b paintengine2d.Rect, raised bool)
 	DrawButton(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string)
 	DrawLabel(ctx *paintengine2d.Context, b paintengine2d.Rect, text string, col paintengine2d.Color, align Align)
 	DrawCheckbox(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, checked bool, label string)
 	DrawSlider(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, t float32)
-	DrawTextField(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, text, placeholder string, caret, selA, selB int, blink bool, scrollX float32)
+	DrawTextField(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, text, placeholder string, caret, selA, selB int, blink bool, scrollX float32, face *Font)
 	DrawScrollBar(ctx *paintengine2d.Context, track, thumb paintengine2d.Rect, st ControlState)
 	DrawFocusRing(ctx *paintengine2d.Context, b paintengine2d.Rect)
 	DrawSplitter(ctx *paintengine2d.Context, b paintengine2d.Rect, vertical bool, st ControlState)
@@ -59,10 +60,10 @@ type LookAndFeel interface {
 	DrawTitleBar(ctx *paintengine2d.Context, b paintengine2d.Rect, title, subtitle string)
 	DrawMessageIcon(ctx *paintengine2d.Context, b paintengine2d.Rect, icon ToolIcon)
 	DrawTableHeader(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, sorted, asc bool)
-	DrawTableCell(ctx *paintengine2d.Context, b paintengine2d.Rect, selected, hovered bool, label string, align Align)
+	DrawTableCell(ctx *paintengine2d.Context, b paintengine2d.Rect, selected, hovered bool, label string, align Align, face *Font)
 	DrawSpinner(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, upHover, downHover, upPress, downPress bool)
 	DrawTooltip(ctx *paintengine2d.Context, b paintengine2d.Rect, text string)
-	DrawTextArea(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, lines []TextLine, caret, selA, selB int, blink bool, scrollX, scrollY float32, placeholder string)
+	DrawTextArea(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, lines []TextLine, caret, selA, selB int, blink bool, scrollX, scrollY float32, placeholder string, face *Font)
 	DrawSwitch(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, on bool, label string)
 	DrawAccordionHeader(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, title string, expanded bool)
 	DrawSeparator(ctx *paintengine2d.Context, b paintengine2d.Rect, vertical bool)

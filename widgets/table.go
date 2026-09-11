@@ -29,6 +29,7 @@ type TableView struct {
 	OnSelect  func(row int)
 	OnSort    func(col int, asc bool)
 	OnContext func(row int, windowPos paintengine2d.Point)
+	Mono      bool
 	OffsetY   float32
 	hovered   int
 	hoverCol  int
@@ -208,7 +209,11 @@ func (t *TableView) Paint(ctx *paintengine2d.Context) {
 			if t.CellText != nil {
 				label = t.CellText(row, col)
 			}
-			lk.DrawTableCell(ctx, cell, row == t.Selected, row == t.hovered, label, t.Columns[col].Align)
+			face := lk.Font()
+			if t.Mono {
+				face = lk.MonoFont()
+			}
+			lk.DrawTableCell(ctx, cell, row == t.Selected, row == t.hovered, label, t.Columns[col].Align, face)
 			cx += w
 		}
 	}

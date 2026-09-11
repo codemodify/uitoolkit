@@ -18,6 +18,7 @@ type TextArea struct {
 	OnChange    func(string)
 	OnFocusLost func()
 	Accept      func(string) bool
+	Mono        bool
 	caret       int
 	selA, selB  int
 	blinkOn     bool
@@ -101,8 +102,15 @@ func (t *TextArea) fieldPad() float32 {
 	return p
 }
 
+func (t *TextArea) font() *style.Font {
+	if t.Mono {
+		return t.Look().MonoFont()
+	}
+	return t.Look().Font()
+}
+
 func (t *TextArea) lineH() float32 {
-	h := t.Look().Font().Height() + 2
+	h := t.font().Height() + 2
 	if h < 12 {
 		h = 18
 	}
@@ -144,7 +152,7 @@ func (t *TextArea) relayout() {
 	} else if w < 8 {
 		w = 8
 	}
-	t.lines = layoutArea(t.Look().Font(), t.Text, w, t.Wrap)
+	t.lines = layoutArea(t.font(), t.Text, w, t.Wrap)
 }
 
 func (t *TextArea) contentH() float32 {
@@ -168,7 +176,7 @@ func (t *TextArea) maxScrollX() float32 {
 		return 0
 	}
 	var w float32
-	f := t.Look().Font()
+	f := t.font()
 	for _, ln := range t.lines {
 		if adv := f.Advance(ln.Text); adv > w {
 			w = adv
@@ -217,8 +225,8 @@ func (t *TextArea) Paint(ctx *paintengine2d.Context) {
 	} else if w < 8 {
 		w = 8
 	}
-	lines := layoutArea(t.Look().Font(), text, w, t.Wrap)
-	t.Look().DrawTextArea(ctx, t.LocalBounds(), t.State(), lines, caret, selA, selB, t.blink(), t.scrollX, t.scrollY, t.Placeholder)
+	lines := layoutArea(t.font(), text, w, t.Wrap)
+	t.Look().DrawTextArea(ctx, t.LocalBounds(), t.State(), lines, caret, selA, selB, t.blink(), t.scrollX, t.scrollY, t.Placeholder, t.font())
 }
 
 func (t *TextArea) visual() (text string, caret, selA, selB int) {
@@ -291,7 +299,7 @@ func (t *TextArea) IMECaretRect() paintengine2d.Rect {
 	cx := float32(0)
 	if li >= 0 && li < len(t.lines) {
 		ln := t.lines[li]
-		cx = t.Look().Font().CaretX(ln.Text, t.caret-ln.Start) - t.scrollX
+		cx = t.font().CaretX(ln.Text, t.caret-ln.Start) - t.scrollX
 	}
 	return paintengine2d.XYWH(inner.Min.X+cx, y, 2, t.lineH())
 }
@@ -339,7 +347,7 @@ func (t *TextArea) indexAt(x, y float32) int {
 		li = len(t.lines) - 1
 	}
 	ln := t.lines[li]
-	col := t.Look().Font().IndexAt(ln.Text, x-inner.Min.X+t.scrollX)
+	col := t.font().IndexAt(ln.Text, x-inner.Min.X+t.scrollX)
 	n := runeCount(ln.Text)
 	if col > n {
 		col = n
@@ -371,7 +379,7 @@ func (t *TextArea) ensureCaretVisible() {
 	}
 	if !t.Wrap && li >= 0 && li < len(t.lines) {
 		ln := t.lines[li]
-		cx := t.Look().Font().CaretX(ln.Text, t.caret-ln.Start)
+		cx := t.font().CaretX(ln.Text, t.caret-ln.Start)
 		if cx-t.scrollX > inner.Dx()-2 {
 			t.scrollX = cx - inner.Dx() + 2
 		}
@@ -583,7 +591,7 @@ func (t *TextArea) moveVert(dir int, extend bool) {
 	li := t.lineIndexOf(t.caret)
 	ln := t.lines[li]
 	if !t.havePref {
-		t.preferX = t.Look().Font().CaretX(ln.Text, t.caret-ln.Start)
+		t.preferX = t.font().CaretX(ln.Text, t.caret-ln.Start)
 		t.havePref = true
 	}
 	next := li + dir
@@ -593,7 +601,7 @@ func (t *TextArea) moveVert(dir int, extend bool) {
 		t.caret = runeCount(t.Text)
 	} else {
 		dst := t.lines[next]
-		col := t.Look().Font().IndexAt(dst.Text, t.preferX)
+		col := t.font().IndexAt(dst.Text, t.preferX)
 		n := runeCount(dst.Text)
 		if col > n {
 			col = n

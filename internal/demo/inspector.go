@@ -73,6 +73,7 @@ func InspectorApp(win *app.Window) widget.Component {
 		}
 	})
 	table.Selected = 0
+	table.Mono = true
 	table.OnSort = func(col int, asc bool) {
 		sort.SliceStable(prefs, func(i, j int) bool {
 			var less bool
@@ -166,10 +167,11 @@ func InspectorApp(win *app.Window) widget.Component {
 	).WithGap(10).WithPad(8))
 
 	notes := widgets.NewTextArea(
-		"Override notes for this project.\nWrap is on; Return inserts a line.",
+		"// inspector — JetBrains Mono\noverride wrap = true\nfont.size = 16\n",
 		"Notes",
 		func(string) { mark("Notes edited") },
 	)
+	notes.Mono = true
 	notes.MinRows = 5
 	editorBody := widgets.NewColumn(
 		table,
@@ -188,7 +190,7 @@ func InspectorApp(win *app.Window) widget.Component {
 		widgets.NewSeparator(),
 		widgets.NewButton("License…", func() {
 			widgets.Info(win.Content(), "License",
-				"MIT. Paints only with paintengine2d v0.7.2.", nil)
+				"MIT. Paints only with paintengine2d. UI: Titillium Web.", nil)
 		}),
 		widgets.NewSpacer(),
 	).WithGap(10).WithPad(16)

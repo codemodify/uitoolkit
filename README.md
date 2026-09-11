@@ -3,8 +3,10 @@
 **Pure-Go desktop UI toolkit.** Retained widget tree, layout, themes, and
 X11 and Wayland window backends. Every pixel is painted with
 [`github.com/codemodify/paintengine2d`](https://github.com/codemodify/paintengine2d)
-(v0.7.2+). Labels share a white glyph atlas and theme through `Paint.Color`
-tint. There is no second rasterizer, no Skia, no Gio renderer, and no Electron.
+(v0.7.2+). Default UI is **Titillium Web**; mono / code is **JetBrains Mono**
+(OFL, embedded). Outlines are rasterized through paintengine2d into a white
+atlas and tinted with `Paint.Color`. There is no second rasterizer, no Skia,
+no Gio renderer, and no Electron.
 
 ```go
 app := uitoolkit.New(uitoolkit.Options{Look: uitoolkit.DarkLook()})
@@ -25,14 +27,15 @@ go get github.com/codemodify/paintengine2d@v0.7.2
 | --- | --- |
 | Language | Go 1.22+ |
 | Paint | paintengine2d **v0.7.2** (`02b2939`; `Context`, `Damage`, `DrawGlyphs` Color tint) |
-| Windowing | Linux X11 + Wayland (`linux-dmabuf` / `wl_shm`); offscreen always |
+| Fonts | Titillium Web (UI) + JetBrains Mono (code), OpenType → atlas |
+| Windowing | Linux X11 + Wayland (`linux-dmabuf` + explicit sync / `wl_shm`); offscreen always |
 | CGO | optional — tests and screenshots are `CGO_ENABLED=0` |
 | License | MIT |
 
 ## Screenshots
 
-Real frames from the gallery, Notes, and Inspector, painted through
-paintengine2d and written as PNG (no placeholders).
+Real frames from the gallery, Notes, Inspector, and Files, painted through
+paintengine2d with Titillium Web (and JetBrains Mono in code views).
 
 ### Widget gallery — dark
 
@@ -102,6 +105,10 @@ paintengine2d and written as PNG (no placeholders).
 
 ![Inspector](docs/screenshots/inspector.png)
 
+### Files — projects dogfood
+
+![Files](docs/screenshots/files.png)
+
 Regenerate:
 
 ```bash
@@ -120,6 +127,8 @@ UITK_BACKEND=wayland go run ./examples/gallery
 go run ./examples/gallery -headless  # writes gallery.png
 go run ./examples/notes
 go run ./examples/inspector
+go run ./examples/files
+go run ./examples/files -headless   # writes files.png
 ```
 
 Headless / CI paints into `paintengine2d.NewImage` and can `Window.WritePNG`.
@@ -156,10 +165,12 @@ Desktop app
             → CPU scanline AA pixmap
 ```
 
-If the engine is missing a primitive (nine-patch, SaveLayer, OpenType), the
-fix belongs in paintengine2d — not a second painter here. **v0.7.2 blit RGB
-tint** is required. One white atlas per size is shared; `DrawGlyphs` receives
-the theme Color. `style.GlyphTint` asserts the engine actually multiplies RGB.
+Default chrome uses Titillium Web outlines (not the old 5×7 bitmap atlas).
+Inspector tables and code previews use JetBrains Mono. **v0.7.2 blit RGB
+tint** is required. One white atlas per family+weight+size is shared;
+`DrawGlyphs` receives the theme Color. `style.GlyphTint` asserts the engine
+actually multiplies RGB. `TestDefaultFontsRender` draws both families and
+fails if the TTFs are missing or the ink is chunky 1-bit.
 
 ## Architecture
 
@@ -194,7 +205,8 @@ never hard-code colors.
 | --- | --- |
 | `go run ./examples/gallery` | Stock controls, table, textarea, switch, accordion, spinner, tooltip, file stub, toolbar, combo, radio, progress, menus, tabs, tree, themes, scroll, list, message box |
 | `go run ./examples/notes` | A small real app: sortable table, textarea body, priority spinner, file stub, tooltips |
-| `go run ./examples/inspector` | Preferences inspector: table, toolbar, tabs, message box, switch, accordion |
+| `go run ./examples/inspector` | Preferences inspector: table (JetBrains Mono), toolbar, tabs, message box |
+| `go run ./examples/files` | Files / Projects dogfood: tree, table, toolbar, menus, TextArea preview, dialogs |
 
 ```bash
 go run ./examples/gallery -screenshot docs/screenshots
@@ -217,7 +229,7 @@ dismiss order, textarea newline/wrap/nav, switch toggle (including
 disabled), accordion exclusive expand and focus yield, expander
 relayout, separator and spacer measure, IME preedit/commit on text
 widgets, and an offscreen paint that produces real pixels.
-`go test ./examples/gallery` regenerates the seventeen PNGs and fails if
+`go test ./examples/gallery` regenerates the eighteen PNGs and fails if
 any two share a blob.
 
 Keyboard map: [docs/keyboard.md](docs/keyboard.md). **Esc** closes
@@ -248,9 +260,8 @@ Documented on purpose — do not expect these yet:
 - Full accessibility (AT-SPI / VoiceOver)
 - IME candidate-window theming (ibus / fcitx / compositor draw their own)
 - Mobile and webview
-- Wayland explicit sync (dmabuf present uses implicit reservation)
 - Win32 and AppKit backends (interfaces + stubs only)
-- OpenType / HarfBuzz (engine text hook only)
+- HarfBuzz / complex shaping (NullShaper + OpenType outlines)
 
 See [docs/platform.md](docs/platform.md) for X11 vs Wayland vs offscreen.
 Linux desktop clipboard, IME preedit, and HiDPI are implemented on both
@@ -258,6 +269,12 @@ X11 and Wayland as of **v0.3.0**. Wayland **linux-dmabuf** present
 (with `wl_shm` fallback) is **v0.3.1**.
 
 ## Version
+
+**0.4.0** — Default UI is Titillium Web; mono is JetBrains Mono (OFL,
+embedded, rasterized at runtime). Files / Projects sample app. Wayland
+dmabuf **explicit sync** (`zwp_linux_explicit_synchronization_v1` and
+`wp_linux_drm_syncobj_v1` timeline when a DRM fd is available), still
+falling back to implicit + `wl_shm`. Still paintengine2d **v0.7.2**.
 
 **0.3.1** — Wayland present prefers `zwp_linux_dmabuf_v1` (feedback +
 ARGB8888/XRGB8888, GBM or memfd/dma-heap/udmabuf) and falls back to

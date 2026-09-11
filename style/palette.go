@@ -105,6 +105,8 @@ type Metrics struct {
 	TitleBar    float32
 	FontSize    float32
 	TitleSize   float32
+	FontFamily  string
+	MonoFamily  string
 	Stroke      float32
 	FieldPad    float32
 	MenuBarH    float32
@@ -190,6 +192,8 @@ func DefaultMetrics() Metrics {
 		TitleBar:    36,
 		FontSize:    16,
 		TitleSize:   22,
+		FontFamily:  DefaultFontFamily,
+		MonoFamily:  DefaultMonoFamily,
 		Stroke:      1.7,
 		FieldPad:    10,
 		MenuBarH:    30,
