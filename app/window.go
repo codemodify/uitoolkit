@@ -56,6 +56,12 @@ func (w *Window) SurfaceSize() (int, int)   { return w.surf.Size() }
 
 func (w *Window) SetTitle(s string) { w.surf.SetTitle(s) }
 
+// SetFullscreen asks the native backend (EWMH / xdg-shell) when available.
+func (w *Window) SetFullscreen(on bool) { platform.SetFullscreen(w.surf, on) }
+
+// SetMaximized asks the native backend when available.
+func (w *Window) SetMaximized(on bool) { platform.SetMaximized(w.surf, on) }
+
 func (w *Window) SetContent(c widget.Component) {
 	w.root = c
 	if c != nil {
@@ -181,12 +187,36 @@ func (w *Window) RequestFocus(c widget.Component) {
 		return
 	}
 	if w.focus != nil {
+		if t, ok := w.focus.(widget.IMETarget); ok {
+			t.IMEReset()
+		}
 		w.focus.FocusLost()
 	}
 	w.focus = c
 	if c != nil {
 		c.FocusGained()
 	}
+	w.syncIMECursor()
+}
+
+func (w *Window) resetIME() {
+	if t, ok := w.focus.(widget.IMETarget); ok {
+		t.IMEReset()
+	}
+}
+
+func (w *Window) syncIMECursor() {
+	s, ok := w.surf.(platform.IMESurface)
+	if !ok {
+		return
+	}
+	if t, ok := w.focus.(widget.IMETarget); ok {
+		r := t.IMECaretRect()
+		o := widget.DeviceOrigin(w.focus)
+		s.SetIMECursor(int(o.X+r.Min.X), int(o.Y+r.Min.Y), int(r.Dx()), int(r.Dy()))
+		return
+	}
+	s.SetIMECursor(0, 0, 0, 0)
 }
 
 // RequestLayout marks the tree dirty so the next frame Measure/Arranges.
@@ -229,9 +259,34 @@ func (w *Window) dispatch(ev platform.Event) {
 	case platform.EventExpose:
 		w.dirty.Add(paintengine2d.XYWH(ev.Pos.X, ev.Pos.Y, float32(ev.Width), float32(ev.Height)))
 	case platform.EventFocusOut:
+		w.resetIME()
 		w.HideTooltip()
 		w.capture = nil
 	case platform.EventFocusIn:
+		w.syncIMECursor()
+	case platform.EventIMEPreedit:
+		if t, ok := w.focus.(widget.IMETarget); ok {
+			t.IMEPreedit(ev.Text, ev.IMECaret)
+			w.syncIMECursor()
+		}
+	case platform.EventIMECommit:
+		if t, ok := w.focus.(widget.IMETarget); ok {
+			if ev.IMEDelBefore > 0 || ev.IMEDelAfter > 0 {
+				t.IMEDeleteSurrounding(ev.IMEDelBefore, ev.IMEDelAfter)
+			}
+			if ev.Text != "" {
+				t.IMECommit(ev.Text)
+			}
+			w.syncIMECursor()
+		} else if w.focus != nil {
+			for _, r := range ev.Text {
+				if r >= 32 && r != 127 {
+					w.focus.TextInput(r)
+				}
+			}
+		}
+	case platform.EventIMECancel:
+		w.resetIME()
 	case platform.EventMouseDown:
 		w.mouseDown(ev)
 	case platform.EventMouseUp:

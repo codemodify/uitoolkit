@@ -57,6 +57,52 @@ func TestDefaultPrefersWayland(t *testing.T) {
 	}
 }
 
+func TestWaylandClipboardRoundtrip(t *testing.T) {
+	if os.Getenv("WAYLAND_DISPLAY") == "" || !waylandProbe() {
+		t.Skip("no Wayland compositor")
+	}
+	b := WaylandBackend{}
+	s, err := b.NewSurface(WindowOptions{Title: "clip", Width: 120, Height: 80})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	_ = s.Present(nil)
+	_ = s.Poll()
+	want := "uitoolkit-wl-clip-0.3.0"
+	ClipboardSet(want)
+	got := ClipboardGet()
+	if got != want {
+		t.Fatalf("CLIPBOARD %q want %q", got, want)
+	}
+	if prim := ClipboardPrimaryGet(); prim != want && prim != "" {
+		// Primary is optional; Weston usually supports it.
+		t.Logf("PRIMARY %q", prim)
+	}
+}
+
+func TestWaylandDesktopChrome(t *testing.T) {
+	if os.Getenv("WAYLAND_DISPLAY") == "" || !waylandProbe() {
+		t.Skip("no Wayland compositor")
+	}
+	b := WaylandBackend{}
+	s, err := b.NewSurface(WindowOptions{Title: "chrome", Width: 140, Height: 90})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	_ = s.Present(nil)
+	SetFullscreen(s, true)
+	SetMaximized(s, true)
+	SetFullscreen(s, false)
+	if ime, ok := s.(IMESurface); ok {
+		ime.SetIMECursor(8, 12, 2, 16)
+	}
+	if s.Scale() < 0.75 || s.Scale() > 4 {
+		t.Fatalf("scale %v", s.Scale())
+	}
+}
+
 func TestSelectWaylandFallsBack(t *testing.T) {
 	t.Setenv("WAYLAND_DISPLAY", "")
 	t.Setenv("DISPLAY", "")

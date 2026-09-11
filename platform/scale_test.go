@@ -47,4 +47,10 @@ func TestScaleFromEnvUITK(t *testing.T) {
 	if ScaleFromEnv() != 3 {
 		t.Fatalf("GDK %v", ScaleFromEnv())
 	}
+	t.Setenv("GDK_SCALE", "")
+	t.Setenv("QT_SCALE_FACTOR", "")
+	t.Setenv("GDK_DPI_SCALE", "1.5")
+	if ScaleFromEnv() != 1.5 {
+		t.Fatalf("GDK_DPI_SCALE %v", ScaleFromEnv())
+	}
 }

@@ -121,6 +121,9 @@ const (
 	EventExpose
 	EventFocusIn
 	EventFocusOut
+	EventIMEPreedit
+	EventIMECommit
+	EventIMECancel
 )
 
 // Event is a platform-translated input or window event.
@@ -132,8 +135,12 @@ type Event struct {
 	Key    Key
 	Rune   rune
 	Mods   Modifiers
-	Width  int
-	Height int
+	Width    int
+	Height   int
+	Text         string // IME preedit or commit (UTF-8)
+	IMECaret     int    // caret within EventIMEPreedit text
+	IMEDelBefore int    // text-input-v3 delete_surrounding bytes before caret
+	IMEDelAfter  int    // text-input-v3 delete_surrounding bytes after caret
 }
 
 // WindowOptions configure a native or offscreen surface.

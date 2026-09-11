@@ -3,20 +3,33 @@
 package platform
 
 /*
-#cgo linux LDFLAGS: -lX11
+#cgo linux LDFLAGS: -lX11 -lXext -lXrandr
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <X11/Xatom.h>
 #include <X11/Xresource.h>
+#include <X11/XKBlib.h>
 #include <X11/keysym.h>
+#include <X11/extensions/XShm.h>
+#include <X11/extensions/Xrandr.h>
 #include <locale.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/ipc.h>
 #include <sys/select.h>
+#include <sys/shm.h>
 #include <sys/time.h>
 #include <unistd.h>
 
-static void ui_threads(void) { XInitThreads(); }
+static void ui_threads(void) {
+	XInitThreads();
+}
+
+static void ui_detectable_repeat(Display* d) {
+	int supported = 0;
+	if (d) XkbSetDetectableAutoRepeat(d, True, &supported);
+}
 
 static void ui_init_locale(void) {
 	setlocale(LC_CTYPE, "");
@@ -302,6 +315,170 @@ static double ui_screen_dpi(Display* d) {
 	if (hmm <= 0 || hpx <= 0) return 0;
 	return (double)hpx * 25.4 / (double)hmm;
 }
+
+static double ui_randr_dpi(Display* d) {
+	int evb = 0, erb = 0;
+	if (!d || !XRRQueryExtension(d, &evb, &erb)) return 0;
+	XRRScreenResources* res = XRRGetScreenResourcesCurrent(d, DefaultRootWindow(d));
+	if (!res) return 0;
+	double best = 0;
+	for (int i = 0; i < res->noutput; i++) {
+		XRROutputInfo* oi = XRRGetOutputInfo(d, res, res->outputs[i]);
+		if (!oi) continue;
+		if (oi->connection == RR_Connected && oi->crtc && oi->mm_height > 0) {
+			XRRCrtcInfo* ci = XRRGetCrtcInfo(d, res, oi->crtc);
+			if (ci && ci->height > 0) {
+				double dpi = (double)ci->height * 25.4 / (double)oi->mm_height;
+				if (dpi > best) best = dpi;
+			}
+			if (ci) XRRFreeCrtcInfo(ci);
+		}
+		XRRFreeOutputInfo(oi);
+	}
+	XRRFreeScreenResources(res);
+	return best;
+}
+
+static void ui_select_randr(Display* d) {
+	int evb = 0, erb = 0;
+	if (!d || !XRRQueryExtension(d, &evb, &erb)) return;
+	XRRSelectInput(d, DefaultRootWindow(d), RRScreenChangeNotifyMask);
+}
+
+static long ui_max_req(Display* d) {
+	if (!d) return 0;
+	return (long)XMaxRequestSize(d) * 4;
+}
+
+static int ui_prop_state(XEvent* e) { return e->xproperty.state; }
+static Atom ui_prop_atom(XEvent* e) { return e->xproperty.atom; }
+static Window ui_prop_window(XEvent* e) { return e->xproperty.window; }
+
+static void ui_select_prop(Display* d, Window w) {
+	XSelectInput(d, w, PropertyChangeMask);
+}
+
+static void ui_delete_prop(Display* d, Window w, Atom prop) {
+	XDeleteProperty(d, w, prop);
+}
+
+static void ui_resize_win(Display* d, Window w, int width, int height) {
+	XResizeWindow(d, w, (unsigned)width, (unsigned)height);
+	XFlush(d);
+}
+
+static void ui_ewmh_state(Display* d, Window w, long action, Atom a, Atom b) {
+	XEvent ev;
+	memset(&ev, 0, sizeof(ev));
+	ev.xclient.type = ClientMessage;
+	ev.xclient.window = w;
+	ev.xclient.message_type = XInternAtom(d, "_NET_WM_STATE", False);
+	ev.xclient.format = 32;
+	ev.xclient.data.l[0] = action;
+	ev.xclient.data.l[1] = (long)a;
+	ev.xclient.data.l[2] = (long)b;
+	ev.xclient.data.l[3] = 1;
+	XSendEvent(d, DefaultRootWindow(d), False, SubstructureRedirectMask|SubstructureNotifyMask, &ev);
+	XFlush(d);
+}
+
+static int uitk_xerr = 0;
+static int uitk_on_xerr(Display* d, XErrorEvent* e) {
+	(void)d;
+	uitk_xerr = e->error_code;
+	return 0;
+}
+
+static int ui_shm_query(Display* d) {
+	int ev = 0, err = 0, major = 0, minor = 0, pix = 0;
+	if (!d || !XShmQueryExtension(d)) return 0;
+	if (!XShmQueryVersion(d, &major, &minor, &pix)) return 0;
+	return 1;
+}
+
+static XImage* ui_shm_image(Display* d, int w, int h, void** info_out, void** addr) {
+	XShmSegmentInfo* info = (XShmSegmentInfo*)calloc(1, sizeof(XShmSegmentInfo));
+	if (!info) return NULL;
+	Visual* v = DefaultVisual(d, DefaultScreen(d));
+	int depth = DefaultDepth(d, DefaultScreen(d));
+	XImage* img = XShmCreateImage(d, v, (unsigned)depth, ZPixmap, NULL, info, (unsigned)w, (unsigned)h);
+	if (!img) {
+		free(info);
+		return NULL;
+	}
+	info->shmid = shmget(IPC_PRIVATE, (size_t)img->bytes_per_line * (size_t)h, IPC_CREAT | 0600);
+	if (info->shmid < 0) {
+		img->data = NULL;
+		XDestroyImage(img);
+		free(info);
+		return NULL;
+	}
+	info->shmaddr = (char*)shmat(info->shmid, NULL, 0);
+	shmctl(info->shmid, IPC_RMID, NULL);
+	if (info->shmaddr == (char*)(-1) || info->shmaddr == NULL) {
+		img->data = NULL;
+		XDestroyImage(img);
+		free(info);
+		return NULL;
+	}
+	info->readOnly = False;
+	img->data = info->shmaddr;
+	{
+		XErrorHandler prev = XSetErrorHandler(uitk_on_xerr);
+		uitk_xerr = 0;
+		if (!XShmAttach(d, info)) {
+			uitk_xerr = 1;
+		}
+		XSync(d, False);
+		XSetErrorHandler(prev);
+	}
+	if (uitk_xerr) {
+		shmdt(info->shmaddr);
+		img->data = NULL;
+		XDestroyImage(img);
+		free(info);
+		return NULL;
+	}
+	*info_out = info;
+	*addr = info->shmaddr;
+	return img;
+}
+
+static void ui_shm_put(Display* d, Window w, GC gc, XImage* img, int sx, int sy, int dx, int dy, unsigned pw, unsigned ph) {
+	XShmPutImage(d, w, gc, img, sx, sy, dx, dy, pw, ph, False);
+}
+
+static void ui_shm_destroy(Display* d, XImage* img, void* info_ptr) {
+	XShmSegmentInfo* info = (XShmSegmentInfo*)info_ptr;
+	if (d && info) {
+		XShmDetach(d, info);
+	}
+	if (info && info->shmaddr && info->shmaddr != (char*)(-1)) {
+		shmdt(info->shmaddr);
+	}
+	if (img) {
+		img->data = NULL;
+		XDestroyImage(img);
+	}
+	free(info);
+}
+
+static char* ui_reset_ic(XIC ic) {
+	if (!ic) return NULL;
+	return XmbResetIC(ic);
+}
+
+static void ui_set_spot(XIC ic, int x, int y) {
+	XPoint pt;
+	if (!ic) return;
+	pt.x = (short)x;
+	pt.y = (short)y;
+	XVaNestedList a = XVaCreateNestedList(0, XNSpotLocation, &pt, NULL);
+	if (a) {
+		XSetICValues(ic, XNPreeditAttributes, a, NULL);
+		XFree(a);
+	}
+}
 */
 import "C"
 
@@ -355,13 +532,14 @@ func (X11Backend) NewSurface(opts WindowOptions) (Surface, error) {
 		C.ui_resize_hints(c.dpy, win, C.int(mw), C.int(mh))
 	}
 	gc := C.ui_gc(c.dpy, win)
-	ic := C.ui_create_ic(c.im, win)
+	ic, cbs := x11CreateIC(c.im, win)
 	s := &x11Surface{
 		conn:  c,
 		win:   win,
 		gc:    gc,
-		ic:    ic,
-		title: title,
+		ic:     ic,
+		ximCbs: cbs,
+		title:  title,
 		img:   paintengine2d.NewImage(w, h),
 		rmask: uint32(C.ui_red_mask(c.dpy)),
 		gmask: uint32(C.ui_green_mask(c.dpy)),
@@ -391,6 +569,10 @@ type x11Conn struct {
 	atomINCR      C.Atom
 	atomProp      C.Atom
 	atomString    C.Atom
+	atomNetState  C.Atom
+	atomMaxVert   C.Atom
+	atomMaxHorz   C.Atom
+	atomFullscr   C.Atom
 
 	clipText  string
 	ownClip   bool
@@ -398,6 +580,9 @@ type x11Conn struct {
 	pasteText string
 	pasteDone bool
 	pasteWant C.Atom
+	incrRecv  incrRecvState
+	incrSends []incrSendState
+	maxReq    int
 }
 
 type x11Surface struct {
@@ -414,8 +599,14 @@ type x11Surface struct {
 	rmask  uint32
 	gmask  uint32
 	bmask  uint32
-	mapped bool
-	closed bool
+	mapped   bool
+	closed   bool
+	shm      bool
+	shmInfo  unsafe.Pointer
+	imeSpotX   int
+	imeSpotY   int
+	preeditBuf string
+	ximCbs     unsafe.Pointer
 }
 
 var (
@@ -452,7 +643,17 @@ func x11OpenLocked() (*x11Conn, error) {
 	c.atomINCR = internAtom(d, "INCR")
 	c.atomProp = internAtom(d, "UITK_CLIP")
 	c.atomString = C.XA_STRING
+	c.atomNetState = internAtom(d, "_NET_WM_STATE")
+	c.atomMaxVert = internAtom(d, "_NET_WM_STATE_MAXIMIZED_VERT")
+	c.atomMaxHorz = internAtom(d, "_NET_WM_STATE_MAXIMIZED_HORZ")
+	c.atomFullscr = internAtom(d, "_NET_WM_STATE_FULLSCREEN")
+	c.maxReq = int(C.ui_max_req(d))
+	C.ui_detectable_repeat(d)
+	C.ui_select_randr(d)
 	dpi := float32(C.ui_xft_dpi(d))
+	if dpi <= 0 {
+		dpi = float32(C.ui_randr_dpi(d))
+	}
 	if dpi <= 0 {
 		dpi = float32(C.ui_screen_dpi(d))
 	}
@@ -526,6 +727,9 @@ func (c *x11Conn) unregister(win C.Window) {
 }
 
 func nativeDetectScale() float32 {
+	if s := waylandDetectScale(); s > 0 {
+		return s
+	}
 	if os.Getenv("DISPLAY") == "" {
 		return 0
 	}
@@ -542,6 +746,9 @@ func nativeDetectScale() float32 {
 		return 0
 	}
 	dpi := float32(C.ui_xft_dpi(d))
+	if dpi <= 0 {
+		dpi = float32(C.ui_randr_dpi(d))
+	}
 	if dpi <= 0 {
 		dpi = float32(C.ui_screen_dpi(d))
 	}
@@ -593,6 +800,9 @@ func (s *x11Surface) Resize(w, h int) error {
 	s.img = paintengine2d.NewImage(w, h)
 	x11Mu.Lock()
 	s.rebuildImageLocked()
+	if s.conn != nil && s.conn.dpy != nil && s.win != 0 {
+		C.ui_resize_win(s.conn.dpy, s.win, C.int(w), C.int(h))
+	}
 	x11Mu.Unlock()
 	return nil
 }
@@ -601,11 +811,29 @@ func (s *x11Surface) rebuildImageLocked() {
 	if s.conn == nil || s.conn.dpy == nil {
 		return
 	}
-	if s.ximg != nil {
-		C.ui_destroy_image(s.ximg)
-		s.ximg = nil
-	}
+	s.destroyImageLocked()
 	w, h := s.img.Width, s.img.Height
+	if C.ui_shm_query(s.conn.dpy) != 0 {
+		var info, addr unsafe.Pointer
+		img := C.ui_shm_image(s.conn.dpy, C.int(w), C.int(h), &info, &addr)
+		if img != nil && addr != nil {
+			s.ximg = img
+			s.shm = true
+			s.shmInfo = info
+			s.stride = int(C.ui_img_bpl(img))
+			s.msb = C.ui_img_msb(img) != 0
+			need := s.stride * h
+			if need < w*h*4 {
+				need = w * h * 4
+			}
+			s.xbuf = unsafe.Slice((*byte)(addr), need)
+			if s.stride < w*4 {
+				s.stride = w * 4
+			}
+			return
+		}
+	}
+	s.shm = false
 	s.xbuf = make([]byte, w*h*4+64)
 	s.ximg = C.ui_image(s.conn.dpy, C.int(w), C.int(h), (*C.char)(unsafe.Pointer(&s.xbuf[0])))
 	if s.ximg != nil {
@@ -624,6 +852,26 @@ func (s *x11Surface) rebuildImageLocked() {
 	if s.stride < w*4 {
 		s.stride = w * 4
 	}
+}
+
+func (s *x11Surface) destroyImageLocked() {
+	if s.ximg != nil && s.shm {
+		var dpy *C.Display
+		if s.conn != nil {
+			dpy = s.conn.dpy
+		}
+		C.ui_shm_destroy(dpy, s.ximg, s.shmInfo)
+		s.ximg = nil
+		s.shmInfo = nil
+		s.shm = false
+		s.xbuf = nil
+		return
+	}
+	if s.ximg != nil {
+		C.ui_destroy_image(s.ximg)
+		s.ximg = nil
+	}
+	s.xbuf = nil
 }
 
 func (s *x11Surface) copyRect(r paintengine2d.Rect) {
@@ -690,7 +938,11 @@ func (s *x11Surface) Present(dirty []paintengine2d.Rect) error {
 		if x0 >= x1 || y0 >= y1 {
 			continue
 		}
-		C.ui_put(s.conn.dpy, s.win, s.gc, s.ximg, C.int(x0), C.int(y0), C.int(x0), C.int(y0), C.uint(x1-x0), C.uint(y1-y0))
+		if s.shm {
+			C.ui_shm_put(s.conn.dpy, s.win, s.gc, s.ximg, C.int(x0), C.int(y0), C.int(x0), C.int(y0), C.uint(x1-x0), C.uint(y1-y0))
+		} else {
+			C.ui_put(s.conn.dpy, s.win, s.gc, s.ximg, C.int(x0), C.int(y0), C.int(x0), C.int(y0), C.uint(x1-x0), C.uint(y1-y0))
+		}
 	}
 	if !s.mapped {
 		C.ui_map(s.conn.dpy, s.win)
@@ -737,6 +989,9 @@ func (c *x11Conn) drainLocked() {
 			continue
 		case C.SelectionNotify:
 			c.handleSelNotify(&xe)
+			continue
+		case C.PropertyNotify:
+			c.handleProperty(&xe)
 			continue
 		case C.MappingNotify:
 			C.ui_refresh_mapping(&xe)
@@ -831,7 +1086,16 @@ func (s *x11Surface) translate(xe *C.XEvent) []Event {
 		return []Event{{Kind: EventFocusIn}}
 	case C.FocusOut:
 		C.ui_unset_ic_focus(s.ic)
-		return []Event{{Kind: EventFocusOut}}
+		if leftover := C.ui_reset_ic(s.ic); leftover != nil {
+			txt := C.GoString(leftover)
+			C.ui_xfree(unsafe.Pointer(leftover))
+			out := []Event{{Kind: EventFocusOut}, {Kind: EventIMECancel}}
+			if txt != "" {
+				out = append(out, Event{Kind: EventIMECommit, Text: txt})
+			}
+			return out
+		}
+		return []Event{{Kind: EventFocusOut}, {Kind: EventIMECancel}}
 	case C.DestroyNotify:
 		s.closed = true
 		return []Event{{Kind: EventClose}}
@@ -872,10 +1136,11 @@ func (s *x11Surface) Close() error {
 		C.ui_destroy_ic(s.ic)
 		s.ic = nil
 	}
-	if s.ximg != nil {
-		C.ui_destroy_image(s.ximg)
-		s.ximg = nil
+	if s.ximCbs != nil {
+		x11FreeCbs(s.ximCbs)
+		s.ximCbs = nil
 	}
+	s.destroyImageLocked()
 	if s.conn != nil && s.conn.dpy != nil {
 		C.ui_destroy_win(s.conn.dpy, s.win, s.gc)
 		s.win = 0
@@ -886,186 +1151,6 @@ func (s *x11Surface) Close() error {
 		s.conn.release()
 	}
 	return nil
-}
-
-func (c *x11Conn) handleSelReq(xe *C.XEvent) {
-	req := C.ui_sr_requestor(xe)
-	target := C.ui_sr_target(xe)
-	prop := C.ui_sr_property(xe)
-	if prop == 0 {
-		prop = target
-	}
-	sel := C.ui_sr_selection(xe)
-	if (sel == c.atomClipboard && !c.ownClip) || (sel == c.atomPrimary && !c.ownPrim) {
-		C.ui_send_sel_notify(c.dpy, xe, 0)
-		return
-	}
-	data := c.clipText
-	switch target {
-	case c.atomTargets:
-		atoms := []C.ulong{C.ulong(c.atomTargets), C.ulong(c.atomUTF8), C.ulong(c.atomString), C.ulong(c.atomText)}
-		C.ui_change_prop32(c.dpy, req, prop, C.XA_ATOM, &atoms[0], C.int(len(atoms)))
-		C.ui_send_sel_notify(c.dpy, xe, prop)
-	case c.atomUTF8, c.atomString, c.atomText:
-		ct := C.CString(data)
-		C.ui_change_prop8(c.dpy, req, prop, target, ct, C.int(len(data)))
-		C.free(unsafe.Pointer(ct))
-		C.ui_send_sel_notify(c.dpy, xe, prop)
-	default:
-		C.ui_send_sel_notify(c.dpy, xe, 0)
-	}
-}
-
-func (c *x11Conn) handleSelClear(xe *C.XEvent) {
-	sel := C.ui_sc_selection(xe)
-	if sel == c.atomClipboard {
-		c.ownClip = false
-	}
-	if sel == c.atomPrimary {
-		c.ownPrim = false
-	}
-	if !c.ownClip && !c.ownPrim {
-		c.keep = false
-	}
-}
-
-func (c *x11Conn) handleSelNotify(xe *C.XEvent) {
-	prop := C.ui_sn_property(xe)
-	if prop == 0 {
-		c.pasteDone = true
-		c.pasteText = ""
-		return
-	}
-	var data *C.uchar
-	var n C.ulong
-	var typ C.Atom
-	fmtb := C.ui_get_prop(c.dpy, C.ui_sn_requestor(xe), prop, &data, &n, &typ)
-	if data == nil || n == 0 {
-		c.pasteDone = true
-		c.pasteText = ""
-		return
-	}
-	defer C.ui_xfree(unsafe.Pointer(data))
-	if typ == c.atomINCR {
-		// Large incremental transfers are not implemented (documented gap).
-		c.pasteDone = true
-		c.pasteText = ""
-		return
-	}
-	if fmtb == 8 {
-		c.pasteText = C.GoStringN((*C.char)(unsafe.Pointer(data)), C.int(n))
-	}
-	c.pasteDone = true
-}
-
-func (c *x11Conn) setClipboard(s string) {
-	x11Mu.Lock()
-	defer x11Mu.Unlock()
-	if c.dpy == nil || c.helper == 0 {
-		return
-	}
-	c.clipText = s
-	C.ui_set_owner(c.dpy, c.helper, c.atomClipboard)
-	C.ui_set_owner(c.dpy, c.helper, c.atomPrimary)
-	c.ownClip = C.ui_owner(c.dpy, c.atomClipboard) == c.helper
-	c.ownPrim = C.ui_owner(c.dpy, c.atomPrimary) == c.helper
-	c.keep = c.ownClip || c.ownPrim
-	C.ui_flush(c.dpy)
-}
-
-func (c *x11Conn) readSelection(sel C.Atom, timeout time.Duration) (string, bool) {
-	x11Mu.Lock()
-	if c.dpy == nil || c.helper == 0 {
-		x11Mu.Unlock()
-		return "", false
-	}
-	if sel == c.atomClipboard && c.ownClip {
-		s := c.clipText
-		x11Mu.Unlock()
-		return s, true
-	}
-	if sel == c.atomPrimary && c.ownPrim {
-		s := c.clipText
-		x11Mu.Unlock()
-		return s, true
-	}
-	c.pasteDone = false
-	c.pasteText = ""
-	c.pasteWant = sel
-	C.ui_convert(c.dpy, c.helper, sel, c.atomUTF8, c.atomProp)
-	C.ui_flush(c.dpy)
-	deadline := time.Now().Add(timeout)
-	for !c.pasteDone && time.Now().Before(deadline) {
-		c.drainLocked()
-		if c.pasteDone {
-			break
-		}
-		x11Mu.Unlock()
-		C.ui_wait(c.dpy, 20)
-		x11Mu.Lock()
-		if c.dpy == nil {
-			x11Mu.Unlock()
-			return "", false
-		}
-	}
-	if !c.pasteDone && c.dpy != nil {
-		// Retry as XA_STRING for older owners.
-		c.pasteDone = false
-		C.ui_convert(c.dpy, c.helper, sel, c.atomString, c.atomProp)
-		C.ui_flush(c.dpy)
-		end := time.Now().Add(timeout / 2)
-		for !c.pasteDone && time.Now().Before(end) {
-			c.drainLocked()
-			if c.pasteDone {
-				break
-			}
-			x11Mu.Unlock()
-			C.ui_wait(c.dpy, 20)
-			x11Mu.Lock()
-			if c.dpy == nil {
-				x11Mu.Unlock()
-				return "", false
-			}
-		}
-	}
-	s := c.pasteText
-	ok := c.pasteDone
-	x11Mu.Unlock()
-	return s, ok
-}
-
-func clipboardNativeSet(s string) {
-	if os.Getenv("DISPLAY") == "" {
-		return
-	}
-	c, err := x11Get()
-	if err != nil {
-		return
-	}
-	c.setClipboard(s)
-}
-
-func clipboardNativeGet() (string, bool) {
-	return clipboardRead(false)
-}
-
-func clipboardNativePrimaryGet() (string, bool) {
-	return clipboardRead(true)
-}
-
-func clipboardRead(primary bool) (string, bool) {
-	if os.Getenv("DISPLAY") == "" {
-		return "", false
-	}
-	c, err := x11Get()
-	if err != nil {
-		return "", false
-	}
-	sel := c.atomClipboard
-	if primary {
-		sel = c.atomPrimary
-	}
-	return c.readSelection(sel, 250*time.Millisecond)
 }
 
 func xbutton(b int) MouseButton {
@@ -1215,3 +1300,319 @@ func xkey(ks C.KeySym) Key {
 
 // MapXKeySym is exported for X11-tagged tests.
 func MapXKeySym(ks uint64) Key { return xkey(C.KeySym(ks)) }
+
+type incrRecvState struct {
+	active bool
+	win    C.Window
+	prop   C.Atom
+	buf    []byte
+}
+
+type incrSendState struct {
+	requestor C.Window
+	prop      C.Atom
+	typ       C.Atom
+	data      []byte
+	off       int
+	chunk     int
+}
+
+func (c *x11Conn) handleSelReq(xe *C.XEvent) {
+	req := C.ui_sr_requestor(xe)
+	target := C.ui_sr_target(xe)
+	prop := C.ui_sr_property(xe)
+	if prop == 0 {
+		prop = target
+	}
+	sel := C.ui_sr_selection(xe)
+	if (sel == c.atomClipboard && !c.ownClip) || (sel == c.atomPrimary && !c.ownPrim) {
+		C.ui_send_sel_notify(c.dpy, xe, 0)
+		return
+	}
+	data := c.clipText
+	switch target {
+	case c.atomTargets:
+		atoms := []C.ulong{
+			C.ulong(c.atomTargets), C.ulong(c.atomUTF8), C.ulong(c.atomString),
+			C.ulong(c.atomText), C.ulong(c.atomINCR),
+		}
+		C.ui_change_prop32(c.dpy, req, prop, C.XA_ATOM, &atoms[0], C.int(len(atoms)))
+		C.ui_send_sel_notify(c.dpy, xe, prop)
+	case c.atomUTF8, c.atomString, c.atomText:
+		raw := []byte(data)
+		thr := INCRThreshold(c.maxReq)
+		if len(raw) > thr {
+			C.ui_select_prop(c.dpy, req)
+			sz := []C.ulong{C.ulong(len(raw))}
+			C.ui_change_prop32(c.dpy, req, prop, c.atomINCR, &sz[0], 1)
+			C.ui_send_sel_notify(c.dpy, xe, prop)
+			c.incrSends = append(c.incrSends, incrSendState{
+				requestor: req,
+				prop:      prop,
+				typ:       target,
+				data:      raw,
+				chunk:     INCRChunkSize(thr),
+			})
+			c.keep = true
+			return
+		}
+		ct := C.CString(data)
+		C.ui_change_prop8(c.dpy, req, prop, target, ct, C.int(len(data)))
+		C.free(unsafe.Pointer(ct))
+		C.ui_send_sel_notify(c.dpy, xe, prop)
+	default:
+		C.ui_send_sel_notify(c.dpy, xe, 0)
+	}
+}
+
+func (c *x11Conn) handleSelClear(xe *C.XEvent) {
+	sel := C.ui_sc_selection(xe)
+	if sel == c.atomClipboard {
+		c.ownClip = false
+	}
+	if sel == c.atomPrimary {
+		c.ownPrim = false
+	}
+	if !c.ownClip && !c.ownPrim && len(c.incrSends) == 0 {
+		c.keep = false
+	}
+}
+
+func (c *x11Conn) handleSelNotify(xe *C.XEvent) {
+	prop := C.ui_sn_property(xe)
+	if prop == 0 {
+		c.pasteDone = true
+		c.pasteText = ""
+		return
+	}
+	var data *C.uchar
+	var n C.ulong
+	var typ C.Atom
+	fmtb := C.ui_get_prop(c.dpy, C.ui_sn_requestor(xe), prop, &data, &n, &typ)
+	if typ == c.atomINCR {
+		if data != nil {
+			C.ui_xfree(unsafe.Pointer(data))
+		}
+		c.incrRecv = incrRecvState{active: true, win: C.ui_sn_requestor(xe), prop: prop}
+		return
+	}
+	if data == nil || n == 0 {
+		c.pasteDone = true
+		c.pasteText = ""
+		return
+	}
+	defer C.ui_xfree(unsafe.Pointer(data))
+	if fmtb == 8 {
+		c.pasteText = C.GoStringN((*C.char)(unsafe.Pointer(data)), C.int(n))
+	}
+	c.pasteDone = true
+}
+
+func (c *x11Conn) handleProperty(xe *C.XEvent) {
+	win := C.ui_prop_window(xe)
+	atom := C.ui_prop_atom(xe)
+	state := C.ui_prop_state(xe)
+	const propertyNewValue = 0
+	const propertyDelete = 1
+	if c.incrRecv.active && win == c.incrRecv.win && atom == c.incrRecv.prop && state == propertyNewValue {
+		var data *C.uchar
+		var n C.ulong
+		var typ C.Atom
+		fmtb := C.ui_get_prop(c.dpy, win, atom, &data, &n, &typ)
+		_ = typ
+		var piece []byte
+		if data != nil && n > 0 && fmtb == 8 {
+			piece = C.GoBytes(unsafe.Pointer(data), C.int(n))
+			C.ui_xfree(unsafe.Pointer(data))
+		} else if data != nil {
+			C.ui_xfree(unsafe.Pointer(data))
+		}
+		var done bool
+		c.incrRecv.buf, done = AppendINCRPiece(c.incrRecv.buf, piece)
+		if done {
+			c.pasteText = string(c.incrRecv.buf)
+			c.pasteDone = true
+			c.incrRecv = incrRecvState{}
+		}
+		return
+	}
+	if state != propertyDelete {
+		return
+	}
+	for i := 0; i < len(c.incrSends); i++ {
+		s := &c.incrSends[i]
+		if s.requestor != win || s.prop != atom {
+			continue
+		}
+		if s.off >= len(s.data) {
+			C.ui_change_prop8(c.dpy, s.requestor, s.prop, s.typ, (*C.char)(nil), 0)
+			c.incrSends = append(c.incrSends[:i], c.incrSends[i+1:]...)
+			if !c.ownClip && !c.ownPrim && len(c.incrSends) == 0 {
+				c.keep = false
+			}
+			return
+		}
+		end := s.off + s.chunk
+		if end > len(s.data) {
+			end = len(s.data)
+		}
+		chunk := s.data[s.off:end]
+		s.off = end
+		var ptr *C.char
+		if len(chunk) > 0 {
+			ptr = (*C.char)(unsafe.Pointer(&chunk[0]))
+		}
+		C.ui_change_prop8(c.dpy, s.requestor, s.prop, s.typ, ptr, C.int(len(chunk)))
+		return
+	}
+}
+
+func (c *x11Conn) setClipboard(s string) {
+	x11Mu.Lock()
+	defer x11Mu.Unlock()
+	if c.dpy == nil || c.helper == 0 {
+		return
+	}
+	c.clipText = s
+	C.ui_set_owner(c.dpy, c.helper, c.atomClipboard)
+	C.ui_set_owner(c.dpy, c.helper, c.atomPrimary)
+	c.ownClip = C.ui_owner(c.dpy, c.atomClipboard) == c.helper
+	c.ownPrim = C.ui_owner(c.dpy, c.atomPrimary) == c.helper
+	c.keep = c.ownClip || c.ownPrim
+	C.ui_flush(c.dpy)
+}
+
+func (c *x11Conn) readSelection(sel C.Atom, timeout time.Duration) (string, bool) {
+	x11Mu.Lock()
+	if c.dpy == nil || c.helper == 0 {
+		x11Mu.Unlock()
+		return "", false
+	}
+	if sel == c.atomClipboard && c.ownClip {
+		s := c.clipText
+		x11Mu.Unlock()
+		return s, true
+	}
+	if sel == c.atomPrimary && c.ownPrim {
+		s := c.clipText
+		x11Mu.Unlock()
+		return s, true
+	}
+	c.pasteDone = false
+	c.pasteText = ""
+	c.pasteWant = sel
+	c.incrRecv = incrRecvState{}
+	C.ui_convert(c.dpy, c.helper, sel, c.atomUTF8, c.atomProp)
+	C.ui_flush(c.dpy)
+	deadline := time.Now().Add(timeout)
+	for !c.pasteDone && time.Now().Before(deadline) {
+		c.drainLocked()
+		if c.pasteDone {
+			break
+		}
+		x11Mu.Unlock()
+		C.ui_wait(c.dpy, 20)
+		x11Mu.Lock()
+		if c.dpy == nil {
+			x11Mu.Unlock()
+			return "", false
+		}
+	}
+	if !c.pasteDone && c.dpy != nil && !c.incrRecv.active {
+		c.pasteDone = false
+		C.ui_convert(c.dpy, c.helper, sel, c.atomString, c.atomProp)
+		C.ui_flush(c.dpy)
+		end := time.Now().Add(timeout / 2)
+		for !c.pasteDone && time.Now().Before(end) {
+			c.drainLocked()
+			if c.pasteDone {
+				break
+			}
+			x11Mu.Unlock()
+			C.ui_wait(c.dpy, 20)
+			x11Mu.Lock()
+			if c.dpy == nil {
+				x11Mu.Unlock()
+				return "", false
+			}
+		}
+	}
+	s := c.pasteText
+	ok := c.pasteDone
+	x11Mu.Unlock()
+	return s, ok
+}
+
+func x11ClipSet(s string) {
+	c, err := x11Get()
+	if err != nil {
+		return
+	}
+	c.setClipboard(s)
+}
+
+func x11ClipGet(primary bool) (string, bool) {
+	c, err := x11Get()
+	if err != nil {
+		return "", false
+	}
+	sel := c.atomClipboard
+	if primary {
+		sel = c.atomPrimary
+	}
+	timeout := 250 * time.Millisecond
+	if INCRThreshold(c.maxReq) < 1024 {
+		timeout = 2 * time.Second
+	}
+	return c.readSelection(sel, timeout)
+}
+
+func x11Live() bool {
+	x11Mu.Lock()
+	defer x11Mu.Unlock()
+	return x11c != nil && x11c.dpy != nil
+}
+
+func (s *x11Surface) SetFullscreen(on bool) {
+	if s.conn == nil || s.conn.dpy == nil || s.win == 0 {
+		return
+	}
+	action := C.long(0)
+	if on {
+		action = 1
+	}
+	x11Mu.Lock()
+	C.ui_ewmh_state(s.conn.dpy, s.win, action, s.conn.atomFullscr, 0)
+	x11Mu.Unlock()
+}
+
+func (s *x11Surface) SetMaximized(on bool) {
+	if s.conn == nil || s.conn.dpy == nil || s.win == 0 {
+		return
+	}
+	action := C.long(0)
+	if on {
+		action = 1
+	}
+	x11Mu.Lock()
+	C.ui_ewmh_state(s.conn.dpy, s.win, action, s.conn.atomMaxVert, s.conn.atomMaxHorz)
+	x11Mu.Unlock()
+}
+
+func (s *x11Surface) SetIMECursor(x, y, w, h int) {
+	_ = w
+	if s.ic == nil {
+		return
+	}
+	if x == s.imeSpotX && y == s.imeSpotY {
+		return
+	}
+	s.imeSpotX, s.imeSpotY = x, y
+	spotY := y + h
+	if spotY < y {
+		spotY = y
+	}
+	x11Mu.Lock()
+	C.ui_set_spot(s.ic, C.int(x), C.int(spotY))
+	x11Mu.Unlock()
+}

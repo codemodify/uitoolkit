@@ -22,7 +22,7 @@ func DetectScale() float32 {
 // ScaleFromEnv reads UITK_SCALE, then GDK_SCALE, then QT_SCALE_FACTOR.
 // Returns 0 when none are set or parseable.
 func ScaleFromEnv() float32 {
-	for _, key := range []string{"UITK_SCALE", "GDK_SCALE", "QT_SCALE_FACTOR"} {
+	for _, key := range []string{"UITK_SCALE", "GDK_SCALE", "QT_SCALE_FACTOR", "GDK_DPI_SCALE"} {
 		if s := parseScale(os.Getenv(key)); s > 0 {
 			return s
 		}

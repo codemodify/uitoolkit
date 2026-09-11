@@ -26,7 +26,9 @@ type TextArea struct {
 	scrollY     float32
 	lines       []style.TextLine
 	preferX     float32
-	havePref    bool
+	havePref     bool
+	preedit      string
+	preeditCaret int
 }
 
 // NewTextArea builds a wrapping multi-line field.
@@ -208,8 +210,93 @@ func (t *TextArea) blink() bool {
 
 func (t *TextArea) Paint(ctx *paintengine2d.Context) {
 	t.relayout()
-	t.Look().DrawTextArea(ctx, t.LocalBounds(), t.State(), t.lines, t.caret, t.selA, t.selB, t.blink(), t.scrollX, t.scrollY, t.Placeholder)
+	text, caret, selA, selB := t.visual()
+	w := t.inner().Dx()
+	if !t.Wrap {
+		w = 1e6
+	} else if w < 8 {
+		w = 8
+	}
+	lines := layoutArea(t.Look().Font(), text, w, t.Wrap)
+	t.Look().DrawTextArea(ctx, t.LocalBounds(), t.State(), lines, caret, selA, selB, t.blink(), t.scrollX, t.scrollY, t.Placeholder)
 }
+
+func (t *TextArea) visual() (text string, caret, selA, selB int) {
+	if t.preedit == "" {
+		return t.Text, t.caret, t.selA, t.selB
+	}
+	return platform.ComposeVisual(t.Text, t.caret, t.preedit, t.preeditCaret)
+}
+
+func (t *TextArea) IMEPreedit(s string, caret int) {
+	if !t.Enabled() {
+		return
+	}
+	t.preedit = s
+	n := runeCount(s)
+	if caret < 0 {
+		caret = n
+	}
+	if caret > n {
+		caret = n
+	}
+	t.preeditCaret = caret
+	t.relayout()
+	t.ensureCaretVisible()
+	t.Invalidate()
+}
+
+func (t *TextArea) IMECommit(s string) {
+	t.preedit = ""
+	t.preeditCaret = 0
+	if s == "" {
+		t.Invalidate()
+		return
+	}
+	t.replaceSel(s)
+}
+
+func (t *TextArea) IMEReset() {
+	if t.preedit == "" {
+		return
+	}
+	t.preedit = ""
+	t.preeditCaret = 0
+	t.Invalidate()
+}
+
+func (t *TextArea) IMEDeleteSurrounding(before, after int) {
+	t.preedit = ""
+	t.preeditCaret = 0
+	s, caret := platform.DeleteSurroundingUTF8(t.Text, t.caret, before, after)
+	t.Text = s
+	t.caret = caret
+	t.selA, t.selB = caret, caret
+	t.changed()
+}
+
+func (t *TextArea) IMESurrounding() (text string, cursor, anchor int) {
+	a, b := t.selA, t.selB
+	if a > b {
+		a, b = b, a
+	}
+	return t.Text, t.caret, b
+}
+
+func (t *TextArea) IMECaretRect() paintengine2d.Rect {
+	t.relayout()
+	inner := t.inner()
+	li := t.lineIndexOf(t.caret)
+	y := inner.Min.Y + float32(li)*t.lineH() - t.scrollY
+	cx := float32(0)
+	if li >= 0 && li < len(t.lines) {
+		ln := t.lines[li]
+		cx = t.Look().Font().CaretX(ln.Text, t.caret-ln.Start) - t.scrollX
+	}
+	return paintengine2d.XYWH(inner.Min.X+cx, y, 2, t.lineH())
+}
+
+func (t *TextArea) Preedit() string { return t.preedit }
 
 func (t *TextArea) FocusGained() {
 	t.blinkOn = true
@@ -217,6 +304,7 @@ func (t *TextArea) FocusGained() {
 }
 
 func (t *TextArea) FocusLost() {
+	t.IMEReset()
 	t.Invalidate()
 	if t.OnFocusLost != nil {
 		t.OnFocusLost()
@@ -356,6 +444,7 @@ func (t *TextArea) TextInput(r rune) bool {
 	if !t.Enabled() || r < 32 {
 		return false
 	}
+	t.IMEReset()
 	t.replaceSel(string(r))
 	return true
 }
@@ -363,6 +452,10 @@ func (t *TextArea) TextInput(r rune) bool {
 func (t *TextArea) KeyPress(e widget.KeyEvent) bool {
 	if !t.Enabled() {
 		return false
+	}
+	if t.preedit != "" && e.Key == platform.KeyEscape {
+		t.IMEReset()
+		return true
 	}
 	switch e.Key {
 	case platform.KeyBackspace:
