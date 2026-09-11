@@ -1,6 +1,10 @@
 package platform
 
-import "github.com/codemodify/paintengine2d"
+import (
+	"time"
+
+	"github.com/codemodify/paintengine2d"
+)
 
 // Offscreen is a pixmap surface with no OS window. Used for tests,
 // screenshots, and Application.Headless.
@@ -66,6 +70,20 @@ func (o *Offscreen) Poll() []Event {
 	ev := o.queue
 	o.queue = nil
 	return ev
+}
+
+func (o *Offscreen) Wait(timeout time.Duration) bool {
+	if o != nil && len(o.queue) > 0 {
+		return true
+	}
+	if timeout == 0 {
+		return false
+	}
+	if timeout < 0 || timeout > 50*time.Millisecond {
+		timeout = 50 * time.Millisecond
+	}
+	time.Sleep(timeout)
+	return o != nil && len(o.queue) > 0
 }
 
 func (o *Offscreen) Close() error {

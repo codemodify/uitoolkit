@@ -1552,6 +1552,26 @@ func (s *wlSurface) Poll() []Event {
 	return ev
 }
 
+func (s *wlSurface) Wait(timeout time.Duration) bool {
+	if s == nil || s.closed || s.conn == nil || s.conn.dpy == nil {
+		return false
+	}
+	n := C.ui_wl_wait(s.conn.dpy, C.int(waitMillis(timeout)))
+	return n != 0
+}
+
+func (s *wlSurface) WakeAt() time.Time {
+	if s == nil || s.conn == nil {
+		return time.Time{}
+	}
+	wlMu.Lock()
+	defer wlMu.Unlock()
+	if !s.conn.heldDown || s.conn.repeatKey == 0 || s.conn.repeatRate <= 0 {
+		return time.Time{}
+	}
+	return s.conn.repeatNext
+}
+
 func (c *wlConn) flushRepeatLocked() {
 	if !c.heldDown || c.repeatKey == 0 || c.repeatRate <= 0 {
 		return

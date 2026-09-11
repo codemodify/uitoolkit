@@ -149,6 +149,8 @@ XRGB8888** on Wayland (`UITK_WAYLAND_PRESENT=auto|shm`).
 `UITK_WAYLAND_PRESENT=dmabuf` opts into linux-dmabuf on the CPU path.
 `UITK_PAINT=cpu` forces the CPU painter. If a Wayland window is fully
 transparent, set `UITK_PAINT=cpu` and/or `UITK_WAYLAND_PRESENT=shm`.
+`Application.Run` waits on the display fd (not a 16 ms ticker) and skips
+`Present` when damage is empty — see [docs/platform.md](docs/platform.md).
 Auto-select is `WAYLAND_DISPLAY` → `DISPLAY` → offscreen. Scale comes from
 `UITK_SCALE` / `GDK_SCALE` / `QT_SCALE_FACTOR` / `GDK_DPI_SCALE`, else
 Xft.dpi / RandR on X11 or `wl_output` / fractional-scale on Wayland.
@@ -163,7 +165,7 @@ uitoolkit does not rasterize. A window paints through paintengine2d
 `Context` → `Device`. `UITK_PAINT=auto` binds `GPUDevice` to the native
 window when EGL works; otherwise the window owns a premul RGBA pixmap.
 
-Each frame:
+When damage is non-empty:
 
 1. Widgets call `Invalidate` → dirty boxes land in `paintengine2d.Damage`.
 2. `Context` is created on the Device; `QuickReject` / clip skip clean regions.
@@ -281,8 +283,18 @@ Documented on purpose — do not expect these yet:
 See [docs/platform.md](docs/platform.md) for X11 vs Wayland vs offscreen.
 Linux desktop clipboard, IME preedit, and HiDPI are implemented on both
 X11 and Wayland as of **v0.3.0**. GPU present (`UITK_PAINT=auto`) is **v0.5.0**.
+Event-driven `Run` (wait on the display fd) is **v0.5.1**.
 
 ## Version
+
+**0.5.1** — Event-driven `Application.Run`: poll/epoll the Wayland or X11
+fd and wake only for caret blink, tooltip delay, key repeat, or
+`Window.RequestAnim`. `frame` / `Present` / `eglSwapBuffers` run only when
+damage is non-empty. Hover on lists, tables, trees, toolbars, menus, and
+tabs dirties the old/new row (not the whole window). Consumes
+paintengine2d **v0.8.0** (same Device seam). Pair with paintengine2d
+**v0.8.1** when published for GPU flatten cache + atlas epoch.
+`UITK_PAINT` is unchanged (`auto` tries GPU, `cpu` forces the pixmap path).
 
 **0.5.0** — Consumes paintengine2d **v0.8.0**. Default `UITK_PAINT=auto`
 tries `GPUDevice` (Linux EGL/GLES2): Wayland `wl_egl_window` +

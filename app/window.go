@@ -33,8 +33,9 @@ type Window struct {
 	tipSince time.Time
 	tipPos   paintengine2d.Point
 	tipDelay time.Duration
-	clock    func() time.Time
-	lastTip  string
+	clock      func() time.Time
+	lastTip    string
+	animPeriod time.Duration
 }
 
 func newWindow(a *Application, surf platform.Surface, opts platform.WindowOptions) *Window {
@@ -121,11 +122,15 @@ func (w *Window) DismissPopup() {
 }
 
 func (w *Window) SetTooltip(c widget.Component) {
+	old := w.tooltip
 	w.tooltip = c
 	if c != nil {
 		c.SetHost(w)
+		w.Invalidate(c, c.LocalBounds())
 	}
-	w.fullInvalidate()
+	if old != nil && old != c {
+		w.Invalidate(old, old.LocalBounds())
+	}
 }
 
 func (w *Window) Tooltip() widget.Component { return w.tooltip }
@@ -134,9 +139,10 @@ func (w *Window) HideTooltip() {
 	if w.tooltip == nil {
 		return
 	}
+	old := w.tooltip
 	w.tooltip = nil
 	w.tipSince = w.now()
-	w.fullInvalidate()
+	w.Invalidate(old, old.LocalBounds())
 }
 
 // SetTooltipDelay overrides the hover rest time. Zero keeps the default 450ms.
@@ -234,12 +240,42 @@ func (w *Window) fullInvalidate() {
 
 func (w *Window) toggleBlink() {
 	w.blink = !w.blink
-	if w.focus != nil {
-		if b, ok := w.focus.(interface{ SetCaretBlink(bool) }); ok {
-			b.SetCaretBlink(w.blink)
-		}
+	if w.focus == nil {
+		return
+	}
+	if b, ok := w.focus.(interface{ SetCaretBlink(bool) }); ok {
+		b.SetCaretBlink(w.blink)
 		w.focus.Invalidate()
 	}
+}
+
+func (w *Window) wantsBlink() bool {
+	if w == nil || w.focus == nil {
+		return false
+	}
+	_, ok := w.focus.(interface{ SetCaretBlink(bool) })
+	return ok
+}
+
+func (w *Window) needsPaint() bool {
+	if w == nil || w.closed {
+		return false
+	}
+	return !w.laid || w.full || !w.dirty.Empty()
+}
+
+// RequestAnim asks Run to wake at least every d (busy indicators).
+// d <= 0 clears the request so idle can sleep on the display fd.
+func (w *Window) RequestAnim(d time.Duration) { w.animPeriod = d }
+
+func (w *Window) tipDeadline(_ time.Time) (time.Time, bool) {
+	if w.popup != nil || w.overlay != nil || w.tooltip != nil || w.tipHover == nil {
+		return time.Time{}, false
+	}
+	if widget.TooltipText(w.tipHover) == "" {
+		return time.Time{}, false
+	}
+	return w.tipSince.Add(w.tipDelay), true
 }
 
 func (w *Window) pump() {

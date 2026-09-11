@@ -77,12 +77,22 @@ func (t *ToolBar) ItemCenter(i int) paintengine2d.Point {
 }
 
 // Hover highlights item i (screenshots / tests). i < 0 clears.
+func (t *ToolBar) invalidateItem(i int) {
+	rects := t.itemRects()
+	if i < 0 || i >= len(rects) {
+		return
+	}
+	t.InvalidateRect(rects[i].Inset(-1))
+}
+
 func (t *ToolBar) Hover(i int) {
 	if t.hover == i {
 		return
 	}
+	old := t.hover
 	t.hover = i
-	t.Invalidate()
+	t.invalidateItem(old)
+	t.invalidateItem(i)
 }
 
 func firstTool(items []*ToolItem) int {
@@ -192,8 +202,10 @@ func (t *ToolBar) Paint(ctx *paintengine2d.Context) {
 func (t *ToolBar) MouseMove(e widget.MouseEvent) bool {
 	i := t.itemAt(e.Pos)
 	if i != t.hover {
+		old := t.hover
 		t.hover = i
-		t.Invalidate()
+		t.invalidateItem(old)
+		t.invalidateItem(i)
 	}
 	return true
 }

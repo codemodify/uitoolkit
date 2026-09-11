@@ -54,6 +54,9 @@ static int ui_wait(Display* d, int ms) {
 	fd_set fds;
 	FD_ZERO(&fds);
 	FD_SET(fd, &fds);
+	if (ms < 0) {
+		return select(fd + 1, &fds, NULL, NULL, NULL);
+	}
 	struct timeval tv;
 	tv.tv_sec = ms / 1000;
 	tv.tv_usec = (ms % 1000) * 1000;
@@ -1018,6 +1021,14 @@ func (s *x11Surface) Poll() []Event {
 	s.conn.queues[s.win] = nil
 	x11Mu.Unlock()
 	return ev
+}
+
+func (s *x11Surface) Wait(timeout time.Duration) bool {
+	if s == nil || s.closed || s.conn == nil || s.conn.dpy == nil {
+		return false
+	}
+	n := C.ui_wait(s.conn.dpy, C.int(waitMillis(timeout)))
+	return n > 0
 }
 
 func (c *x11Conn) drain() {

@@ -235,30 +235,67 @@ func (t *TableView) indexAt(y float32) int {
 	return i
 }
 
+func (t *TableView) rowRect(i int) paintengine2d.Rect {
+	if i < 0 {
+		return paintengine2d.Rect{}
+	}
+	rh := t.rowH()
+	y := t.headerH() + float32(i)*rh - t.OffsetY
+	return paintengine2d.XYWH(0, y, t.LocalBounds().Dx(), rh)
+}
+
+func (t *TableView) invalidateRow(i int) {
+	if r := t.rowRect(i); !r.Empty() {
+		t.InvalidateRect(r.Inset(-1))
+	}
+}
+
+func (t *TableView) invalidateHeader() {
+	hh := t.headerH()
+	if hh <= 0 {
+		return
+	}
+	t.InvalidateRect(paintengine2d.XYWH(0, 0, t.LocalBounds().Dx(), hh).Inset(-1))
+}
+
+func (t *TableView) MouseEnter() {}
+
 func (t *TableView) MouseMove(e widget.MouseEvent) bool {
 	if e.Pos.Y < t.headerH() {
 		c := t.colAt(e.Pos.X)
 		if c != t.hoverCol || t.hovered != -1 {
+			oldRow := t.hovered
 			t.hoverCol = c
 			t.hovered = -1
-			t.Invalidate()
+			t.invalidateRow(oldRow)
+			t.invalidateHeader()
 		}
 		return true
 	}
 	h := t.indexAt(e.Pos.Y)
 	if h != t.hovered || t.hoverCol != -1 {
+		oldRow, oldCol := t.hovered, t.hoverCol
 		t.hovered = h
 		t.hoverCol = -1
-		t.Invalidate()
+		t.invalidateRow(oldRow)
+		t.invalidateRow(h)
+		if oldCol != -1 {
+			t.invalidateHeader()
+		}
 	}
 	return true
 }
 
 func (t *TableView) MouseExit() {
+	oldRow := t.hovered
+	hadCol := t.hoverCol != -1
 	t.hovered = -1
 	t.hoverCol = -1
 	t.pressCol = -1
-	t.Invalidate()
+	t.invalidateRow(oldRow)
+	if hadCol {
+		t.invalidateHeader()
+	}
 }
 
 func (t *TableView) MousePress(e widget.MouseEvent) bool {
