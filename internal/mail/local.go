@@ -392,6 +392,20 @@ func (s *LocalStore) GetMessage(id MessageID) (Message, bool) {
 }
 
 func (s *LocalStore) fetchBodyLocked(m *Message) {
+	if m == nil {
+		return
+	}
+	if raw := s.readRawLocked(*m); len(raw) > 0 {
+		if parsed, err := ParseRFC822(raw, m.Folder, m.AccountID); err == nil {
+			parsed.ID = m.ID
+			parsed.UID = m.UID
+			parsed.Read = m.Read
+			parsed.Starred = m.Starred
+			parsed.Tags = m.Tags
+			*m = parsed
+		}
+		return
+	}
 	cli, err := s.clientLocked(m.AccountID)
 	if err != nil {
 		return
@@ -1004,9 +1018,25 @@ func (s *LocalStore) dropFolderMessagesLocked(id FolderID) {
 }
 
 func (s *LocalStore) Unread(folder FolderID) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	n := 0
-	for _, m := range s.ListMessages(folder) {
-		if !m.Read {
+	for _, m := range s.messages {
+		if m.Read {
+			continue
+		}
+		f, ok := s.folderLocked(m.Folder)
+		kind := FolderCustom
+		if ok {
+			kind = f.Kind
+		}
+		if IsVirtual(folder) {
+			if matchVirtual(folder, m, f, kind, s.feat.snap()) {
+				n++
+			}
+			continue
+		}
+		if m.Folder == folder {
 			n++
 		}
 	}

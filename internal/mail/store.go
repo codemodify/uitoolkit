@@ -198,6 +198,10 @@ type Message struct {
 	Attachments   []string
 }
 
+func messageHasBody(m Message) bool {
+	return m.Body != "" || m.HTML != ""
+}
+
 // Clone returns a shallow copy (tags / attachments copied).
 func (m Message) Clone() Message {
 	out := m

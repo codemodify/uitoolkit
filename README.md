@@ -437,9 +437,19 @@ Cross-toolkit widget name map + compare thumbs is **v0.10.1**.
 Wayland TextField typing (xkb `EventText` while text-input is idle) and
 Add Account typed passwords in `mail.json` (mode `0600`) are **v0.10.2**.
 Add Account IMAP vs POP3, Test connection / auto-detect, and POP3 inbox
-retrieve are **v0.10.3**.
+retrieve are **v0.10.3**. Mail folder tree drops Unified / Smart / Categories
+chrome and message open no longer rebuilds the list (**v0.10.4**).
 
 ## Version
+
+**0.10.4** — Mail: folder tree is account folders + Tags + VIP/Outbox.
+**Unified Folders**, **Smart Folders**, and **Categories** are gone from the
+tree and from menus that only existed for them. Selecting an account opens
+its Inbox (the list no longer vanishes into Account Central or an empty
+virtual view). Clicking a message marks it read in place — no full
+list/tree rebuild. `messages.get` reuses a cached body (disk raw in
+mailclientd, then the UI client). Quick Filter empty results show **Clear
+filter**. First-run Yes/No copy is unchanged. Still paintengine2d **v0.9.0**.
 
 **0.10.3** — Mail: Add Account chooses **IMAP** or **POP3**, probes common
 `imap.`/`pop.`/`mail.` hosts (993/143/995/110, SSL or STARTTLS), and a

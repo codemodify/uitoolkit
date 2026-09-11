@@ -21,6 +21,9 @@ type Client struct {
 	nextID  atomic.Uint64
 	onEvent func(Event)
 	closed  atomic.Bool
+
+	bodyMu sync.Mutex
+	bodies map[MessageID]Message
 }
 
 // Dial connects to mailclientd at socket.
@@ -259,11 +262,15 @@ func (c *Client) ListMessages(folder FolderID, filter Filter) ([]Message, error)
 }
 
 func (c *Client) GetMessage(id MessageID) (Message, bool, error) {
+	if m, ok := c.cachedBody(id); ok {
+		return m, true, nil
+	}
 	var m Message
 	err := c.call(MethodMessagesGet, messageIDParams{ID: id}, &m)
 	if err != nil {
 		return Message{}, false, err
 	}
+	c.rememberBody(m)
 	return m, m.ID != "", nil
 }
 
@@ -277,15 +284,27 @@ func (c *Client) Search(q SearchQuery) ([]Message, error) {
 }
 
 func (c *Client) SetFlags(id MessageID, patch FlagPatch) error {
-	return c.call(MethodMessagesFlags, setFlagsParams{ID: id, Patch: patchToWire(patch)}, nil)
+	err := c.call(MethodMessagesFlags, setFlagsParams{ID: id, Patch: patchToWire(patch)}, nil)
+	if err == nil {
+		c.patchCachedBody(id, patch)
+	}
+	return err
 }
 
 func (c *Client) Move(ids []MessageID, dest FolderID) error {
-	return c.call(MethodMessagesMove, moveParams{IDs: ids, Dest: dest}, nil)
+	err := c.call(MethodMessagesMove, moveParams{IDs: ids, Dest: dest}, nil)
+	if err == nil {
+		c.dropCachedBodies(ids...)
+	}
+	return err
 }
 
 func (c *Client) Delete(ids []MessageID) error {
-	return c.call(MethodMessagesDelete, deleteParams{IDs: ids}, nil)
+	err := c.call(MethodMessagesDelete, deleteParams{IDs: ids}, nil)
+	if err == nil {
+		c.dropCachedBodies(ids...)
+	}
+	return err
 }
 
 func (c *Client) Append(folder FolderID, msg Message) (MessageID, error) {
@@ -557,4 +576,53 @@ func (c *Client) ProbeHosts(req ProbeRequest) (ProbeResult, error) {
 func filterEmpty(f Filter) bool {
 	return f.Query == "" && !f.Unread && !f.Starred && !f.Attachment && f.Tag == "" &&
 		!f.Sender && !f.Recipients && !f.SubjectOnly && !f.Body
+}
+
+func (c *Client) cachedBody(id MessageID) (Message, bool) {
+	c.bodyMu.Lock()
+	defer c.bodyMu.Unlock()
+	m, ok := c.bodies[id]
+	if !ok || !messageHasBody(m) {
+		return Message{}, false
+	}
+	return m.Clone(), true
+}
+
+func (c *Client) rememberBody(m Message) {
+	if m.ID == "" || !messageHasBody(m) {
+		return
+	}
+	c.bodyMu.Lock()
+	defer c.bodyMu.Unlock()
+	if c.bodies == nil {
+		c.bodies = map[MessageID]Message{}
+	}
+	c.bodies[m.ID] = m.Clone()
+}
+
+func (c *Client) patchCachedBody(id MessageID, patch FlagPatch) {
+	c.bodyMu.Lock()
+	defer c.bodyMu.Unlock()
+	m, ok := c.bodies[id]
+	if !ok {
+		return
+	}
+	if patch.Read != nil {
+		m.Read = *patch.Read
+	}
+	if patch.Starred != nil {
+		m.Starred = *patch.Starred
+	}
+	if patch.Tags != nil {
+		m.Tags = append([]string(nil), (*patch.Tags)...)
+	}
+	c.bodies[id] = m
+}
+
+func (c *Client) dropCachedBodies(ids ...MessageID) {
+	c.bodyMu.Lock()
+	defer c.bodyMu.Unlock()
+	for _, id := range ids {
+		delete(c.bodies, id)
+	}
 }

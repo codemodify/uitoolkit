@@ -230,6 +230,9 @@ func (s *IMAPStore) ListMessages(folder FolderID) []Message {
 func (s *IMAPStore) GetMessage(id MessageID) (Message, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if m, ok := s.cache[id]; ok && messageHasBody(m) {
+		return m.Clone(), true
+	}
 	seq, ok := s.seq[id]
 	if !ok {
 		if m, ok := s.cache[id]; ok {
