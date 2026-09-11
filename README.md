@@ -467,9 +467,25 @@ Mail drops the sidebar Account ComboBox, Folders section header, and
 the active-filter banner above the thread list; preview attachments
 gain Open / Save As (click selects, double-click opens). MenuBar popups
 shift horizontally at the window edge instead of cropping labels
-(**v0.10.10**).
+(**v0.10.10**). Preview attachment **Open** / **Save As** sit inline on
+each row; the shared pair is replaced by **Save All** (one folder pick,
+then write every attachment). Tag / Archive / Junk / Delete sit above
+the thread header; Quick Filter moves into the main toolbar after
+Classic (**v0.10.11**).
 
 ## Version
+
+**0.10.11** — Mail chrome: each preview attachment row shows the
+filename plus inline toolkit `Button` **Open** and **Save As**. Single
+click still selects only; Open is the row button or a double-click
+(`messages.openPart`). The former shared Open/Save As pair is gone.
+**Save All** occupies that toolbar slot and writes every attachment on
+the current message after one folder pick (file-dialog path treated as
+a directory; collision names `name-2.ext`; mode `0600`). Tag / Archive
+/ Junk / Delete move to a small toolbar above the Topic / Who / When
+header. Main toolbar drops Reply / Forward and hosts Quick Filter in
+the same row after Classic (left cluster, flex spacer, filter
+right-aligned) — no second filter strip. Still paintengine2d **v0.9.0**.
 
 **0.10.10** — Mail chrome: drop the sidebar `Account` header, identity
 ComboBox, and `Folders` section title (the tree — including Tags —

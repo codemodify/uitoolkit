@@ -2,6 +2,7 @@ package mail
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit"
+	"github.com/codemodify/uitoolkit/app"
 	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
@@ -550,7 +552,164 @@ func TestMailChromeHidesStatusBarAndVIPFolder(t *testing.T) {
 	if qfInSplit != nil {
 		t.Fatal("quick filter still lives above the message list inside the splitter")
 	}
+	assertMailToolChrome(t, w.Content(), qf)
 	w.Close()
+}
+
+func TestMailToolBarChrome(t *testing.T) {
+	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{
+		Title: "Mail", Width: 1280, Height: 800, Headless: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.SetContent(MailApp(a, w))
+	a.PumpOnce()
+	var qf *widgets.TextField
+	widget.Walk(w.Content(), func(c widget.Component) {
+		if v, ok := c.(*widgets.TextField); ok && strings.Contains(v.Placeholder, "Quick Filter") && qf == nil {
+			qf = v
+		}
+	})
+	if qf == nil {
+		t.Fatal("quick filter field missing")
+	}
+	assertMailToolChrome(t, w.Content(), qf)
+	w.Close()
+}
+
+func assertMailToolChrome(t *testing.T, root widget.Component, qf widget.Component) {
+	t.Helper()
+	var split *widgets.Splitter
+	var table *widgets.TableView
+	var mainBar, listBar *widgets.ToolBar
+	widget.Walk(root, func(c widget.Component) {
+		switch v := c.(type) {
+		case *widgets.Splitter:
+			if split == nil {
+				split = v
+			}
+		case *widgets.TableView:
+			if table == nil && len(v.Columns) >= 5 {
+				table = v
+			}
+		case *widgets.ToolBar:
+			texts := toolTexts(v)
+			if texts["Classic"] || texts["Get Messages"] || texts["Write"] {
+				mainBar = v
+			}
+			if texts["Tag"] && texts["Archive"] && texts["Junk"] && texts["Delete"] {
+				listBar = v
+			}
+		}
+	})
+	if mainBar == nil {
+		t.Fatal("main toolbar")
+	}
+	if listBar == nil {
+		t.Fatal("list toolbar (Tag / Archive / Junk / Delete)")
+	}
+	if split == nil || table == nil {
+		t.Fatal("splitter/table")
+	}
+	main := toolTexts(mainBar)
+	for _, name := range []string{"Reply", "Forward", "Tag", "Archive", "Junk", "Delete"} {
+		if main[name] {
+			t.Fatalf("main toolbar still has %s", name)
+		}
+	}
+	if !main["Write"] || !main["Classic"] {
+		t.Fatalf("main toolbar missing Write/Classic: %v", main)
+	}
+	if widget.Contains(mainBar, qf) {
+		t.Fatal("filter field should sit in the flex slot after Classic, not inside the left tool cluster")
+	}
+	if !widget.Contains(split, listBar) {
+		t.Fatal("list toolbar should sit in the thread pane")
+	}
+	if widget.Contains(split, qf) {
+		t.Fatal("quick filter still in the splitter")
+	}
+	if !filterAfterClassic(root, qf) {
+		t.Fatal("quick filter should share the main toolbar row after Classic (right-aligned)")
+	}
+	if separateFilterRow(root) {
+		t.Fatal("separate Quick Filter row still under the main toolbar")
+	}
+}
+
+func toolTexts(bar *widgets.ToolBar) map[string]bool {
+	out := map[string]bool{}
+	if bar == nil {
+		return out
+	}
+	for _, it := range bar.Items() {
+		if it != nil && it.Text != "" {
+			out[it.Text] = true
+		}
+	}
+	return out
+}
+
+func filterAfterClassic(root, qf widget.Component) bool {
+	var row *widgets.FlexBox
+	widget.Walk(root, func(c widget.Component) {
+		f, ok := c.(*widgets.FlexBox)
+		if !ok || row != nil {
+			return
+		}
+		var hasClassic, hasQF bool
+		widget.Walk(f, func(ch widget.Component) {
+			if bar, ok := ch.(*widgets.ToolBar); ok && toolTexts(bar)["Classic"] {
+				hasClassic = true
+			}
+			if ch == qf {
+				hasQF = true
+			}
+		})
+		if hasClassic && hasQF {
+			row = f
+		}
+	})
+	return row != nil
+}
+
+func separateFilterRow(root widget.Component) bool {
+	var col *widgets.FlexBox
+	widget.Walk(root, func(c widget.Component) {
+		f, ok := c.(*widgets.FlexBox)
+		if !ok || col != nil {
+			return
+		}
+		var hasMenu, hasSplit bool
+		for _, ch := range f.Children() {
+			if _, ok := ch.(*widgets.MenuBar); ok {
+				hasMenu = true
+			}
+			if _, ok := ch.(*widgets.Splitter); ok {
+				hasSplit = true
+			}
+		}
+		if hasMenu && hasSplit {
+			col = f
+		}
+	})
+	if col == nil {
+		return true
+	}
+	chs := col.Children()
+	if len(chs) < 3 {
+		return true
+	}
+	if _, ok := chs[0].(*widgets.MenuBar); !ok {
+		return true
+	}
+	if _, ok := chs[2].(*widgets.Splitter); !ok {
+		return true
+	}
+	// A leftover filter strip would be a sibling between the main row and the split.
+	return len(chs) > 3
 }
 
 func TestMailChromeHasNoSidebarAccountPicker(t *testing.T) {
@@ -864,64 +1023,145 @@ func TestMailAttachmentSelectOpenSaveAs(t *testing.T) {
 	w.SetContent(MailApp(a, w))
 	a.PumpOnce()
 
-	var list *widgets.ListView
-	var open, save *widgets.Button
-	widget.Walk(w.Content(), func(c widget.Component) {
-		switch v := c.(type) {
-		case *widgets.ListView:
-			if v.ItemText != nil && v.Count > 0 && strings.Contains(v.ItemText(0), "📎") && list == nil {
-				list = v
-			}
-		case *widgets.Button:
-			switch v.Text {
-			case "Open":
-				open = v
-			case "Save As":
-				save = v
-			}
+	hits, opens, saves, saveAll := findAttachChrome(w.Content())
+	if len(hits) < 2 || len(opens) < 2 || len(saves) < 2 {
+		t.Fatalf("per-row chrome hits=%d open=%d saveAs=%d", len(hits), len(opens), len(saves))
+	}
+	if saveAll == nil || !saveAll.Enabled() || saveAll.OnClick == nil {
+		t.Fatal("Save All should sit in the attachment toolbar and be enabled")
+	}
+	for i, b := range opens {
+		if !b.Enabled() {
+			t.Fatalf("row Open %d should be enabled without a shared selection", i)
 		}
-	})
-	if list == nil {
-		t.Fatal("attachment list")
 	}
-	if open == nil || save == nil {
-		t.Fatal("Open / Save As buttons")
-	}
-	if open.Enabled() || save.Enabled() {
-		t.Fatal("Open / Save As should stay disabled until a row is selected")
+	for i, b := range saves {
+		if !b.Enabled() {
+			t.Fatalf("row Save As %d should be enabled without a shared selection", i)
+		}
 	}
 
 	before := globMailOpenDirs()
-	if list.OnSelect == nil {
-		t.Fatal("attachment OnSelect")
+	if hits[0].OnPress == nil {
+		t.Fatal("attachment row press")
 	}
-	list.OnSelect(0)
+	hits[0].OnPress()
 	a.PumpOnce()
-	if !open.Enabled() || !save.Enabled() {
-		t.Fatal("Open / Save As should enable after a single click")
-	}
-	if list.Selected != 0 {
-		t.Fatalf("selected=%d", list.Selected)
+	if !hits[0].Selected || hits[1].Selected {
+		t.Fatal("single click should select that row only")
 	}
 	if n := globMailOpenDirs(); len(n) != len(before) {
 		t.Fatalf("single click opened a part: before=%d after=%d", len(before), len(n))
 	}
 
-	list.OnSelect(0)
+	hits[0].OnPress()
 	a.PumpOnce()
 	afterOpen := globMailOpenDirs()
 	if len(afterOpen) <= len(before) {
 		t.Fatal("double click should Open (messages.openPart cache)")
 	}
 
+	beforeBtn := globMailOpenDirs()
+	if opens[1].OnClick == nil {
+		t.Fatal("row Open")
+	}
+	opens[1].OnClick()
+	a.PumpOnce()
+	if n := globMailOpenDirs(); len(n) <= len(beforeBtn) {
+		t.Fatal("row Open should call messages.openPart")
+	}
+
 	dest := filepath.Join(t.TempDir(), "mail-shortcuts.txt")
-	if save.OnClick == nil {
+	if saves[0].OnClick == nil {
 		t.Fatal("Save As")
 	}
-	save.OnClick()
+	saves[0].OnClick()
 	a.PumpOnce()
+	if err := confirmFileDialog(t, w, dest); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(dest)
+	if err != nil {
+		t.Fatalf("saved file: %v", err)
+	}
+	if !strings.Contains(string(raw), "mail-shortcuts.txt") {
+		t.Fatalf("saved bytes %q", raw)
+	}
+
+	dir := t.TempDir()
+	saveAll.OnClick()
+	a.PumpOnce()
+	if err := confirmFileDialog(t, w, dir); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"mail-shortcuts.txt", "uitoolkit-v080.png"} {
+		p := filepath.Join(dir, name)
+		b, err := os.ReadFile(p)
+		if err != nil {
+			t.Fatalf("Save All %s: %v", name, err)
+		}
+		if !strings.Contains(string(b), name) {
+			t.Fatalf("Save All bytes %s %q", name, b)
+		}
+	}
+	w.Close()
+}
+
+func TestAttachFileNameHelpers(t *testing.T) {
+	if got := attachFileName("../x/mail-shortcuts.txt"); got != "mail-shortcuts.txt" {
+		t.Fatalf("base %q", got)
+	}
+	if got := attachFileName(".."); got != "attachment" {
+		t.Fatalf("dotdot %q", got)
+	}
+	used := map[string]int{}
+	if got := uniqueFileName("a.txt", used); got != "a.txt" {
+		t.Fatalf("first %q", got)
+	}
+	if got := uniqueFileName("a.txt", used); got != "a-2.txt" {
+		t.Fatalf("second %q", got)
+	}
+	dir := t.TempDir()
+	got, err := saveAllDir(filepath.Join(dir, "nested-folder"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st, err := os.Stat(got); err != nil || !st.IsDir() {
+		t.Fatalf("saveAllDir create: %s %v", got, err)
+	}
+	file := filepath.Join(dir, "note.txt")
+	if err := os.WriteFile(file, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	parent, err := saveAllDir(file)
+	if err != nil || parent != dir {
+		t.Fatalf("saveAllDir file -> parent: %q %v", parent, err)
+	}
+}
+
+func findAttachChrome(root widget.Component) (hits []*attachHit, opens, saves []*widgets.Button, saveAll *widgets.Button) {
+	widget.Walk(root, func(c widget.Component) {
+		switch v := c.(type) {
+		case *attachHit:
+			hits = append(hits, v)
+		case *widgets.Button:
+			switch v.Text {
+			case "Open":
+				opens = append(opens, v)
+			case "Save As":
+				saves = append(saves, v)
+			case "Save All":
+				saveAll = v
+			}
+		}
+	})
+	return
+}
+
+func confirmFileDialog(t *testing.T, w *app.Window, path string) error {
+	t.Helper()
 	if w.Overlay() == nil {
-		t.Fatal("Save As file dialog")
+		return fmt.Errorf("file dialog overlay")
 	}
 	var pathField *widgets.TextField
 	var confirm *widgets.Button
@@ -938,19 +1178,11 @@ func TestMailAttachmentSelectOpenSaveAs(t *testing.T) {
 		}
 	})
 	if pathField == nil || confirm == nil || confirm.OnClick == nil {
-		t.Fatal("Save As dialog path/Save")
+		return fmt.Errorf("dialog path/Save")
 	}
-	pathField.SetText(dest)
+	pathField.SetText(path)
 	confirm.OnClick()
-	a.PumpOnce()
-	raw, err := os.ReadFile(dest)
-	if err != nil {
-		t.Fatalf("saved file: %v", err)
-	}
-	if !strings.Contains(string(raw), "mail-shortcuts.txt") {
-		t.Fatalf("saved bytes %q", raw)
-	}
-	w.Close()
+	return nil
 }
 
 func globMailOpenDirs() []string {
