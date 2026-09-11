@@ -3,6 +3,7 @@
 package platform
 
 import (
+	"bytes"
 	"os"
 	"testing"
 
@@ -108,4 +109,54 @@ func TestX11DetectScalePositive(t *testing.T) {
 	if s < 0.75 || s > 4 {
 		t.Fatalf("scale %v", s)
 	}
+}
+
+func TestX11INCRClipboardRoundtrip(t *testing.T) {
+	if os.Getenv("DISPLAY") == "" {
+		t.Skip("no DISPLAY")
+	}
+	t.Setenv("UITK_X11_INCR_THRESHOLD", "128")
+	want := string(bytes.Repeat([]byte("incr-"), 80))
+	ClipboardSet(want)
+	got := ClipboardGet()
+	if got != want {
+		t.Fatalf("INCR CLIPBOARD len=%d want %d", len(got), len(want))
+	}
+	if prim := ClipboardPrimaryGet(); prim != want {
+		t.Fatalf("INCR PRIMARY len=%d", len(prim))
+	}
+}
+
+func TestX11EWMHAndIMECursor(t *testing.T) {
+	if os.Getenv("DISPLAY") == "" {
+		t.Skip("no DISPLAY")
+	}
+	b := X11Backend{}
+	s, err := b.NewSurface(WindowOptions{Title: "ewmh", Width: 180, Height: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	_ = s.Present(nil)
+	SetFullscreen(s, true)
+	SetMaximized(s, true)
+	SetFullscreen(s, false)
+	SetMaximized(s, false)
+	if ime, ok := s.(IMESurface); ok {
+		ime.SetIMECursor(10, 20, 2, 16)
+	}
+}
+
+func TestX11IMEEventsOnFocusOut(t *testing.T) {
+	if os.Getenv("DISPLAY") == "" {
+		t.Skip("no DISPLAY")
+	}
+	b := X11Backend{}
+	s, err := b.NewSurface(WindowOptions{Title: "ime", Width: 160, Height: 90})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	_ = s.Present(nil)
+	_ = s.Poll()
 }

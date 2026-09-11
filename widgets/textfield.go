@@ -7,8 +7,8 @@ import (
 	"github.com/codemodify/uitoolkit/widget"
 )
 
-// TextField is a single-line editor. X11 uses XIM for compose / dead
-// keys; CJK preedit UI is not implemented.
+// TextField is a single-line editor. Platform IME (XIM / text-input-v3)
+// feeds preedit and commit through IMETarget.
 type TextField struct {
 	widget.Base
 	Text        string
@@ -22,6 +22,8 @@ type TextField struct {
 	blinkOn     bool
 	dragging    bool
 	scrollX     float32
+	preedit     string
+	preeditCaret int
 }
 
 func NewTextField(text, placeholder string, on func(string)) *TextField {
@@ -106,8 +108,87 @@ func (t *TextField) blink() bool {
 }
 
 func (t *TextField) Paint(ctx *paintengine2d.Context) {
-	t.Look().DrawTextField(ctx, t.LocalBounds(), t.State(), t.Text, t.Placeholder, t.caret, t.selA, t.selB, t.blink(), t.scrollX)
+	text, caret, selA, selB := t.visual()
+	t.Look().DrawTextField(ctx, t.LocalBounds(), t.State(), text, t.Placeholder, caret, selA, selB, t.blink(), t.scrollX)
+	if t.preedit != "" {
+		drawPreeditBar(ctx, t.Look(), t.LocalBounds(), t.fieldPad(), text, selA, selB, t.scrollX, false)
+	}
 }
+
+func (t *TextField) visual() (text string, caret, selA, selB int) {
+	if t.preedit == "" {
+		return t.Text, t.caret, t.selA, t.selB
+	}
+	return platform.ComposeVisual(t.Text, t.caret, t.preedit, t.preeditCaret)
+}
+
+func (t *TextField) IMEPreedit(s string, caret int) {
+	if !t.Enabled() {
+		return
+	}
+	t.preedit = s
+	n := runeCount(s)
+	if caret < 0 {
+		caret = n
+	}
+	if caret > n {
+		caret = n
+	}
+	t.preeditCaret = caret
+	t.ensureCaretVisible()
+	t.Invalidate()
+}
+
+func (t *TextField) IMECommit(s string) {
+	t.preedit = ""
+	t.preeditCaret = 0
+	if s == "" {
+		t.Invalidate()
+		return
+	}
+	t.replaceSel(s)
+}
+
+func (t *TextField) IMEReset() {
+	if t.preedit == "" {
+		return
+	}
+	t.preedit = ""
+	t.preeditCaret = 0
+	t.Invalidate()
+}
+
+func (t *TextField) IMEDeleteSurrounding(before, after int) {
+	t.preedit = ""
+	t.preeditCaret = 0
+	s, caret := platform.DeleteSurroundingUTF8(t.Text, t.caret, before, after)
+	t.Text = s
+	t.caret = caret
+	t.selA, t.selB = caret, caret
+	t.changed()
+}
+
+func (t *TextField) IMESurrounding() (text string, cursor, anchor int) {
+	a, b := t.selA, t.selB
+	if a > b {
+		a, b = b, a
+	}
+	return t.Text, t.caret, b
+}
+
+func (t *TextField) IMECaretRect() paintengine2d.Rect {
+	f := t.Look().Font()
+	text, caret, _, _ := t.visual()
+	pad := t.fieldPad()
+	cx := f.CaretX(text, caret) - t.scrollX
+	h := t.LocalBounds().Dy()
+	if h < 8 {
+		h = f.Height()
+	}
+	return paintengine2d.XYWH(pad+cx, 2, 2, h-4)
+}
+
+func (t *TextField) Preedit() string { return t.preedit }
 
 func (t *TextField) FocusGained() {
 	t.blinkOn = true
@@ -115,6 +196,7 @@ func (t *TextField) FocusGained() {
 }
 
 func (t *TextField) FocusLost() {
+	t.IMEReset()
 	t.Invalidate()
 	if t.OnFocusLost != nil {
 		t.OnFocusLost()
@@ -188,6 +270,7 @@ func (t *TextField) TextInput(r rune) bool {
 	if !t.Enabled() || r < 32 {
 		return false
 	}
+	t.IMEReset()
 	t.replaceSel(string(r))
 	return true
 }
@@ -195,6 +278,10 @@ func (t *TextField) TextInput(r rune) bool {
 func (t *TextField) KeyPress(e widget.KeyEvent) bool {
 	if !t.Enabled() {
 		return false
+	}
+	if t.preedit != "" && e.Key == platform.KeyEscape {
+		t.IMEReset()
+		return true
 	}
 	switch e.Key {
 	case platform.KeyBackspace:

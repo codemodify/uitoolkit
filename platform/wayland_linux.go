@@ -8,6 +8,7 @@ package platform
 #define _GNU_SOURCE
 #include <wayland-client.h>
 #include <xkbcommon/xkbcommon.h>
+#include <xkbcommon/xkbcommon-compose.h>
 #include <fcntl.h>
 #include <poll.h>
 #include <stdint.h>
@@ -17,24 +18,47 @@ package platform
 #include <sys/mman.h>
 #include <unistd.h>
 #include "xdg-shell-client-protocol.h"
+#include "text-input-unstable-v3-client-protocol.h"
+#include "primary-selection-unstable-v1-client-protocol.h"
+#include "xdg-decoration-unstable-v1-client-protocol.h"
+#include "fractional-scale-v1-client-protocol.h"
+#include "viewporter-client-protocol.h"
 
 extern void uitkWlRegistryGlobal(uintptr_t id, struct wl_registry *reg, uint32_t name, char *iface, uint32_t ver);
 extern void uitkWlPing(uintptr_t id, struct xdg_wm_base *wm, uint32_t serial);
 extern void uitkWlXdgConfigure(uintptr_t sid, struct xdg_surface *surf, uint32_t serial);
-extern void uitkWlTopConfigure(uintptr_t sid, struct xdg_toplevel *top, int32_t w, int32_t h);
+extern void uitkWlTopConfigure(uintptr_t sid, struct xdg_toplevel *top, int32_t w, int32_t h, uint32_t flags);
 extern void uitkWlTopClose(uintptr_t sid);
 extern void uitkWlSeatCaps(uintptr_t id, struct wl_seat *seat, uint32_t caps);
 extern void uitkWlPtrEnter(uintptr_t id, struct wl_surface *surf, wl_fixed_t x, wl_fixed_t y);
 extern void uitkWlPtrLeave(uintptr_t id);
 extern void uitkWlPtrMotion(uintptr_t id, wl_fixed_t x, wl_fixed_t y);
-extern void uitkWlPtrButton(uintptr_t id, uint32_t button, uint32_t state);
+extern void uitkWlPtrButton(uintptr_t id, uint32_t button, uint32_t state, uint32_t serial);
 extern void uitkWlPtrAxis(uintptr_t id, uint32_t axis, wl_fixed_t value);
 extern void uitkWlKeymap(uintptr_t id, uint32_t format, int32_t fd, uint32_t size);
-extern void uitkWlKeyEnter(uintptr_t id, struct wl_surface *surf);
+extern void uitkWlKeyEnter(uintptr_t id, struct wl_surface *surf, uint32_t serial);
 extern void uitkWlKeyLeave(uintptr_t id);
-extern void uitkWlKey(uintptr_t id, uint32_t key, uint32_t state);
+extern void uitkWlKey(uintptr_t id, uint32_t key, uint32_t state, uint32_t serial);
 extern void uitkWlKeyMods(uintptr_t id, uint32_t depressed, uint32_t latched, uint32_t locked, uint32_t group);
+extern void uitkWlKeyRepeat(uintptr_t id, int32_t rate, int32_t delay);
 extern void uitkWlBufRelease(uintptr_t sid, int slot);
+extern void uitkWlOutputScale(uintptr_t id, int32_t factor);
+extern void uitkWlDataOffer(uintptr_t id, struct wl_data_offer *offer);
+extern void uitkWlDataOfferMime(uintptr_t id, struct wl_data_offer *offer, char *mime);
+extern void uitkWlSelection(uintptr_t id, struct wl_data_offer *offer);
+extern void uitkWlDataSend(uintptr_t id, int fd);
+extern void uitkWlDataCancelled(uintptr_t id);
+extern void uitkWlPrimOffer(uintptr_t id, struct zwp_primary_selection_offer_v1 *offer);
+extern void uitkWlPrimOfferMime(uintptr_t id, struct zwp_primary_selection_offer_v1 *offer, char *mime);
+extern void uitkWlPrimSelection(uintptr_t id, struct zwp_primary_selection_offer_v1 *offer);
+extern void uitkWlPrimSend(uintptr_t id, int fd);
+extern void uitkWlTIEnter(uintptr_t id, struct wl_surface *surf);
+extern void uitkWlTILeave(uintptr_t id);
+extern void uitkWlTIPreedit(uintptr_t id, char *text, int32_t begin, int32_t end);
+extern void uitkWlTICommit(uintptr_t id, char *text);
+extern void uitkWlTIDelete(uintptr_t id, uint32_t before, uint32_t after);
+extern void uitkWlTIDone(uintptr_t id);
+extern void uitkWlFracScale(uintptr_t sid, uint32_t scale_120);
 
 static int ui_wl_probe(void) {
 	struct wl_display *d = wl_display_connect(NULL);
@@ -108,8 +132,17 @@ static void ui_wl_xdg_listen(struct xdg_surface *s, uintptr_t sid) {
 }
 
 static void uitk_top_cfg(void *data, struct xdg_toplevel *top, int32_t w, int32_t h, struct wl_array *states) {
-	(void)states;
-	uitkWlTopConfigure((uintptr_t)data, top, w, h);
+	uint32_t flags = 0;
+	if (states) {
+		uint32_t *p;
+		wl_array_for_each(p, states) {
+			if (*p == XDG_TOPLEVEL_STATE_MAXIMIZED) flags |= 1;
+			if (*p == XDG_TOPLEVEL_STATE_FULLSCREEN) flags |= 2;
+			if (*p == XDG_TOPLEVEL_STATE_RESIZING) flags |= 4;
+			if (*p == XDG_TOPLEVEL_STATE_ACTIVATED) flags |= 8;
+		}
+	}
+	uitkWlTopConfigure((uintptr_t)data, top, w, h, flags);
 }
 static void uitk_top_close(void *data, struct xdg_toplevel *top) {
 	(void)top;
@@ -160,8 +193,8 @@ static void uitk_ptr_motion(void *data, struct wl_pointer *p, uint32_t time, wl_
 	uitkWlPtrMotion((uintptr_t)data, x, y);
 }
 static void uitk_ptr_button(void *data, struct wl_pointer *p, uint32_t serial, uint32_t time, uint32_t button, uint32_t state) {
-	(void)p; (void)serial; (void)time;
-	uitkWlPtrButton((uintptr_t)data, button, state);
+	(void)p; (void)time;
+	uitkWlPtrButton((uintptr_t)data, button, state, serial);
 }
 static void uitk_ptr_axis(void *data, struct wl_pointer *p, uint32_t time, uint32_t axis, wl_fixed_t value) {
 	(void)p; (void)time;
@@ -195,23 +228,24 @@ static void uitk_kb_map(void *data, struct wl_keyboard *k, uint32_t format, int3
 	uitkWlKeymap((uintptr_t)data, format, fd, size);
 }
 static void uitk_kb_enter(void *data, struct wl_keyboard *k, uint32_t serial, struct wl_surface *surf, struct wl_array *keys) {
-	(void)k; (void)serial; (void)keys;
-	uitkWlKeyEnter((uintptr_t)data, surf);
+	(void)k; (void)keys;
+	uitkWlKeyEnter((uintptr_t)data, surf, serial);
 }
 static void uitk_kb_leave(void *data, struct wl_keyboard *k, uint32_t serial, struct wl_surface *surf) {
 	(void)k; (void)serial; (void)surf;
 	uitkWlKeyLeave((uintptr_t)data);
 }
 static void uitk_kb_key(void *data, struct wl_keyboard *k, uint32_t serial, uint32_t time, uint32_t key, uint32_t state) {
-	(void)k; (void)serial; (void)time;
-	uitkWlKey((uintptr_t)data, key, state);
+	(void)k; (void)time;
+	uitkWlKey((uintptr_t)data, key, state, serial);
 }
 static void uitk_kb_mods(void *data, struct wl_keyboard *k, uint32_t serial, uint32_t dep, uint32_t lat, uint32_t lock, uint32_t group) {
 	(void)k; (void)serial;
 	uitkWlKeyMods((uintptr_t)data, dep, lat, lock, group);
 }
 static void uitk_kb_repeat(void *data, struct wl_keyboard *k, int32_t rate, int32_t delay) {
-	(void)data; (void)k; (void)rate; (void)delay;
+	(void)k;
+	uitkWlKeyRepeat((uintptr_t)data, rate, delay);
 }
 static const struct wl_keyboard_listener uitk_kb_listener = {
 	.keymap = uitk_kb_map,
@@ -329,13 +363,322 @@ static int ui_xkb_mod(struct xkb_state *s, const char *name) {
 	if (!s) return 0;
 	return xkb_state_mod_name_is_active(s, name, XKB_STATE_MODS_EFFECTIVE) > 0;
 }
+
+static struct xkb_compose_table *ui_xkb_compose_table(struct xkb_context *ctx) {
+	const char *loc = getenv("LC_ALL");
+	if (!loc || !loc[0]) loc = getenv("LC_CTYPE");
+	if (!loc || !loc[0]) loc = getenv("LANG");
+	if (!loc || !loc[0]) loc = "C";
+	return xkb_compose_table_new_from_locale(ctx, loc, XKB_COMPOSE_COMPILE_NO_FLAGS);
+}
+static void ui_xkb_compose_table_unref(struct xkb_compose_table *t) { if (t) xkb_compose_table_unref(t); }
+static struct xkb_compose_state *ui_xkb_compose_state(struct xkb_compose_table *t) {
+	return t ? xkb_compose_state_new(t, XKB_COMPOSE_STATE_NO_FLAGS) : NULL;
+}
+static void ui_xkb_compose_state_unref(struct xkb_compose_state *s) { if (s) xkb_compose_state_unref(s); }
+static int ui_xkb_compose_feed(struct xkb_compose_state *s, uint32_t sym) {
+	if (!s) return XKB_COMPOSE_NOTHING;
+	return xkb_compose_state_feed(s, (xkb_keysym_t)sym);
+}
+static int ui_xkb_compose_status(struct xkb_compose_state *s) {
+	return s ? xkb_compose_state_get_status(s) : XKB_COMPOSE_NOTHING;
+}
+static int ui_xkb_compose_utf8(struct xkb_compose_state *s, char *buf, int n) {
+	if (!s) return 0;
+	return xkb_compose_state_get_utf8(s, buf, (size_t)n);
+}
+static void ui_xkb_compose_reset(struct xkb_compose_state *s) { if (s) xkb_compose_state_reset(s); }
+
+static const struct wl_interface *ui_wl_data_man_iface(void) { return &wl_data_device_manager_interface; }
+static const struct wl_interface *ui_wl_output_iface(void) { return &wl_output_interface; }
+static const struct wl_interface *ui_wl_ti_man_iface(void) { return &zwp_text_input_manager_v3_interface; }
+static const struct wl_interface *ui_wl_prim_man_iface(void) { return &zwp_primary_selection_device_manager_v1_interface; }
+static const struct wl_interface *ui_wl_deco_man_iface(void) { return &zxdg_decoration_manager_v1_interface; }
+static const struct wl_interface *ui_wl_frac_man_iface(void) { return &wp_fractional_scale_manager_v1_interface; }
+static const struct wl_interface *ui_wl_viewporter_iface(void) { return &wp_viewporter_interface; }
+
+static struct wl_data_device *ui_wl_data_device(struct wl_data_device_manager *m, struct wl_seat *s) {
+	return wl_data_device_manager_get_data_device(m, s);
+}
+static struct wl_data_source *ui_wl_data_source(struct wl_data_device_manager *m) {
+	return wl_data_device_manager_create_data_source(m);
+}
+static void ui_wl_data_offer_mime(struct wl_data_source *s, const char *m) { wl_data_source_offer(s, m); }
+static void ui_wl_set_selection(struct wl_data_device *d, struct wl_data_source *s, uint32_t serial) {
+	wl_data_device_set_selection(d, s, serial);
+}
+static void ui_wl_data_receive(struct wl_data_offer *o, const char *mime, int fd) { wl_data_offer_receive(o, mime, fd); }
+static void ui_wl_data_offer_destroy(struct wl_data_offer *o) { if (o) wl_data_offer_destroy(o); }
+static void ui_wl_data_source_destroy(struct wl_data_source *s) { if (s) wl_data_source_destroy(s); }
+static void ui_wl_data_device_destroy(struct wl_data_device *d) { if (d) wl_data_device_destroy(d); }
+static void ui_wl_data_man_destroy(struct wl_data_device_manager *m) { if (m) wl_data_device_manager_destroy(m); }
+
+static void uitk_doffer_offer(void *data, struct wl_data_offer *o, const char *mime) {
+	uitkWlDataOfferMime((uintptr_t)data, o, (char*)mime);
+}
+static void uitk_doffer_src(void *data, struct wl_data_offer *o, uint32_t src) { (void)data; (void)o; (void)src; }
+static void uitk_doffer_action(void *data, struct wl_data_offer *o, uint32_t dnd) {
+	(void)data; (void)o; (void)dnd;
+}
+static const struct wl_data_offer_listener uitk_doffer_listener = {
+	.offer = uitk_doffer_offer,
+	.source_actions = uitk_doffer_src,
+	.action = uitk_doffer_action,
+};
+static void ui_wl_doffer_listen(struct wl_data_offer *o, uintptr_t id) {
+	wl_data_offer_add_listener(o, &uitk_doffer_listener, (void*)id);
+}
+
+static void uitk_ddev_offer(void *data, struct wl_data_device *d, struct wl_data_offer *o) {
+	(void)d;
+	uitkWlDataOffer((uintptr_t)data, o);
+}
+static void uitk_ddev_enter(void *data, struct wl_data_device *d, uint32_t serial, struct wl_surface *s, wl_fixed_t x, wl_fixed_t y, struct wl_data_offer *o) {
+	(void)data; (void)d; (void)serial; (void)s; (void)x; (void)y; (void)o;
+}
+static void uitk_ddev_leave(void *data, struct wl_data_device *d) { (void)data; (void)d; }
+static void uitk_ddev_motion(void *data, struct wl_data_device *d, uint32_t time, wl_fixed_t x, wl_fixed_t y) {
+	(void)data; (void)d; (void)time; (void)x; (void)y;
+}
+static void uitk_ddev_drop(void *data, struct wl_data_device *d) { (void)data; (void)d; }
+static void uitk_ddev_sel(void *data, struct wl_data_device *d, struct wl_data_offer *o) {
+	(void)d;
+	uitkWlSelection((uintptr_t)data, o);
+}
+static const struct wl_data_device_listener uitk_ddev_listener = {
+	.data_offer = uitk_ddev_offer,
+	.enter = uitk_ddev_enter,
+	.leave = uitk_ddev_leave,
+	.motion = uitk_ddev_motion,
+	.drop = uitk_ddev_drop,
+	.selection = uitk_ddev_sel,
+};
+static void ui_wl_ddev_listen(struct wl_data_device *d, uintptr_t id) {
+	wl_data_device_add_listener(d, &uitk_ddev_listener, (void*)id);
+}
+
+static void uitk_dsrc_target(void *data, struct wl_data_source *s, const char *mime) { (void)data; (void)s; (void)mime; }
+static void uitk_dsrc_send(void *data, struct wl_data_source *s, const char *mime, int32_t fd) {
+	(void)s; (void)mime;
+	uitkWlDataSend((uintptr_t)data, fd);
+}
+static void uitk_dsrc_cancelled(void *data, struct wl_data_source *s) {
+	(void)s;
+	uitkWlDataCancelled((uintptr_t)data);
+}
+static void uitk_dsrc_dnd_drop(void *data, struct wl_data_source *s) { (void)data; (void)s; }
+static void uitk_dsrc_dnd_finish(void *data, struct wl_data_source *s) { (void)data; (void)s; }
+static void uitk_dsrc_action(void *data, struct wl_data_source *s, uint32_t a) { (void)data; (void)s; (void)a; }
+static const struct wl_data_source_listener uitk_dsrc_listener = {
+	.target = uitk_dsrc_target,
+	.send = uitk_dsrc_send,
+	.cancelled = uitk_dsrc_cancelled,
+	.dnd_drop_performed = uitk_dsrc_dnd_drop,
+	.dnd_finished = uitk_dsrc_dnd_finish,
+	.action = uitk_dsrc_action,
+};
+static void ui_wl_dsrc_listen(struct wl_data_source *s, uintptr_t id) {
+	wl_data_source_add_listener(s, &uitk_dsrc_listener, (void*)id);
+}
+
+static struct zwp_primary_selection_device_v1 *ui_wl_prim_device(struct zwp_primary_selection_device_manager_v1 *m, struct wl_seat *s) {
+	return zwp_primary_selection_device_manager_v1_get_device(m, s);
+}
+static struct zwp_primary_selection_source_v1 *ui_wl_prim_source(struct zwp_primary_selection_device_manager_v1 *m) {
+	return zwp_primary_selection_device_manager_v1_create_source(m);
+}
+static void ui_wl_prim_offer_mime(struct zwp_primary_selection_source_v1 *s, const char *m) {
+	zwp_primary_selection_source_v1_offer(s, m);
+}
+static void ui_wl_prim_set(struct zwp_primary_selection_device_v1 *d, struct zwp_primary_selection_source_v1 *s, uint32_t serial) {
+	zwp_primary_selection_device_v1_set_selection(d, s, serial);
+}
+static void ui_wl_prim_receive(struct zwp_primary_selection_offer_v1 *o, const char *mime, int fd) {
+	zwp_primary_selection_offer_v1_receive(o, mime, fd);
+}
+static void ui_wl_prim_offer_destroy(struct zwp_primary_selection_offer_v1 *o) {
+	if (o) zwp_primary_selection_offer_v1_destroy(o);
+}
+static void ui_wl_prim_source_destroy(struct zwp_primary_selection_source_v1 *s) {
+	if (s) zwp_primary_selection_source_v1_destroy(s);
+}
+static void ui_wl_prim_dev_destroy(struct zwp_primary_selection_device_v1 *d) {
+	if (d) zwp_primary_selection_device_v1_destroy(d);
+}
+static void ui_wl_prim_man_destroy(struct zwp_primary_selection_device_manager_v1 *m) {
+	if (m) zwp_primary_selection_device_manager_v1_destroy(m);
+}
+
+static void uitk_poffer_offer(void *data, struct zwp_primary_selection_offer_v1 *o, const char *mime) {
+	uitkWlPrimOfferMime((uintptr_t)data, o, (char*)mime);
+}
+static const struct zwp_primary_selection_offer_v1_listener uitk_poffer_listener = { .offer = uitk_poffer_offer };
+static void ui_wl_poffer_listen(struct zwp_primary_selection_offer_v1 *o, uintptr_t id) {
+	zwp_primary_selection_offer_v1_add_listener(o, &uitk_poffer_listener, (void*)id);
+}
+static void uitk_pdev_offer(void *data, struct zwp_primary_selection_device_v1 *d, struct zwp_primary_selection_offer_v1 *o) {
+	(void)d;
+	uitkWlPrimOffer((uintptr_t)data, o);
+}
+static void uitk_pdev_sel(void *data, struct zwp_primary_selection_device_v1 *d, struct zwp_primary_selection_offer_v1 *o) {
+	(void)d;
+	uitkWlPrimSelection((uintptr_t)data, o);
+}
+static const struct zwp_primary_selection_device_v1_listener uitk_pdev_listener = {
+	.data_offer = uitk_pdev_offer,
+	.selection = uitk_pdev_sel,
+};
+static void ui_wl_pdev_listen(struct zwp_primary_selection_device_v1 *d, uintptr_t id) {
+	zwp_primary_selection_device_v1_add_listener(d, &uitk_pdev_listener, (void*)id);
+}
+static void uitk_psrc_send(void *data, struct zwp_primary_selection_source_v1 *s, const char *mime, int32_t fd) {
+	(void)s; (void)mime;
+	uitkWlPrimSend((uintptr_t)data, fd);
+}
+static void uitk_psrc_cancelled(void *data, struct zwp_primary_selection_source_v1 *s) { (void)data; (void)s; }
+static const struct zwp_primary_selection_source_v1_listener uitk_psrc_listener = {
+	.send = uitk_psrc_send,
+	.cancelled = uitk_psrc_cancelled,
+};
+static void ui_wl_psrc_listen(struct zwp_primary_selection_source_v1 *s, uintptr_t id) {
+	zwp_primary_selection_source_v1_add_listener(s, &uitk_psrc_listener, (void*)id);
+}
+
+static struct zwp_text_input_v3 *ui_wl_text_input(struct zwp_text_input_manager_v3 *m, struct wl_seat *s) {
+	return zwp_text_input_manager_v3_get_text_input(m, s);
+}
+static void ui_wl_ti_enable(struct zwp_text_input_v3 *t) { if (t) zwp_text_input_v3_enable(t); }
+static void ui_wl_ti_disable(struct zwp_text_input_v3 *t) { if (t) zwp_text_input_v3_disable(t); }
+static void ui_wl_ti_commit(struct zwp_text_input_v3 *t) { if (t) zwp_text_input_v3_commit(t); }
+static void ui_wl_ti_cursor(struct zwp_text_input_v3 *t, int x, int y, int w, int h) {
+	if (t) zwp_text_input_v3_set_cursor_rectangle(t, x, y, w, h);
+}
+static void ui_wl_ti_surround(struct zwp_text_input_v3 *t, const char *text, int32_t cursor, int32_t anchor) {
+	if (t) zwp_text_input_v3_set_surrounding_text(t, text, cursor, anchor);
+}
+static void ui_wl_ti_destroy(struct zwp_text_input_v3 *t) { if (t) zwp_text_input_v3_destroy(t); }
+static void ui_wl_ti_man_destroy(struct zwp_text_input_manager_v3 *m) { if (m) zwp_text_input_manager_v3_destroy(m); }
+
+static void uitk_ti_enter(void *data, struct zwp_text_input_v3 *t, struct wl_surface *s) {
+	(void)t;
+	uitkWlTIEnter((uintptr_t)data, s);
+}
+static void uitk_ti_leave(void *data, struct zwp_text_input_v3 *t, struct wl_surface *s) {
+	(void)t; (void)s;
+	uitkWlTILeave((uintptr_t)data);
+}
+static void uitk_ti_preedit(void *data, struct zwp_text_input_v3 *t, const char *text, int32_t begin, int32_t end) {
+	(void)t;
+	uitkWlTIPreedit((uintptr_t)data, (char*)text, begin, end);
+}
+static void uitk_ti_commit(void *data, struct zwp_text_input_v3 *t, const char *text) {
+	(void)t;
+	uitkWlTICommit((uintptr_t)data, (char*)text);
+}
+static void uitk_ti_delete(void *data, struct zwp_text_input_v3 *t, uint32_t before, uint32_t after) {
+	(void)t;
+	uitkWlTIDelete((uintptr_t)data, before, after);
+}
+static void uitk_ti_done(void *data, struct zwp_text_input_v3 *t, uint32_t serial) {
+	(void)t; (void)serial;
+	uitkWlTIDone((uintptr_t)data);
+}
+static const struct zwp_text_input_v3_listener uitk_ti_listener = {
+	.enter = uitk_ti_enter,
+	.leave = uitk_ti_leave,
+	.preedit_string = uitk_ti_preedit,
+	.commit_string = uitk_ti_commit,
+	.delete_surrounding_text = uitk_ti_delete,
+	.done = uitk_ti_done,
+};
+static void ui_wl_ti_listen(struct zwp_text_input_v3 *t, uintptr_t id) {
+	zwp_text_input_v3_add_listener(t, &uitk_ti_listener, (void*)id);
+}
+
+static void uitk_out_geom(void *data, struct wl_output *o, int32_t x, int32_t y, int32_t pw, int32_t ph, int32_t sub, const char *make, const char *model, int32_t transform) {
+	(void)data; (void)o; (void)x; (void)y; (void)pw; (void)ph; (void)sub; (void)make; (void)model; (void)transform;
+}
+static void uitk_out_mode(void *data, struct wl_output *o, uint32_t flags, int32_t w, int32_t h, int32_t refresh) {
+	(void)data; (void)o; (void)flags; (void)w; (void)h; (void)refresh;
+}
+static void uitk_out_done(void *data, struct wl_output *o) { (void)data; (void)o; }
+static void uitk_out_scale(void *data, struct wl_output *o, int32_t factor) {
+	(void)o;
+	uitkWlOutputScale((uintptr_t)data, factor);
+}
+static void uitk_out_name(void *data, struct wl_output *o, const char *n) { (void)data; (void)o; (void)n; }
+static void uitk_out_desc(void *data, struct wl_output *o, const char *n) { (void)data; (void)o; (void)n; }
+static const struct wl_output_listener uitk_out_listener = {
+	.geometry = uitk_out_geom,
+	.mode = uitk_out_mode,
+	.done = uitk_out_done,
+	.scale = uitk_out_scale,
+	.name = uitk_out_name,
+	.description = uitk_out_desc,
+};
+static void ui_wl_out_listen(struct wl_output *o, uintptr_t id) {
+	wl_output_add_listener(o, &uitk_out_listener, (void*)id);
+}
+static void ui_wl_out_destroy(struct wl_output *o) { if (o) wl_output_destroy(o); }
+
+static void ui_wl_set_buf_scale(struct wl_surface *s, int32_t scale) {
+	if (s && wl_surface_get_version(s) >= 3) wl_surface_set_buffer_scale(s, scale);
+}
+static void ui_wl_set_max(struct xdg_toplevel *t) { if (t) xdg_toplevel_set_maximized(t); }
+static void ui_wl_unset_max(struct xdg_toplevel *t) { if (t) xdg_toplevel_unset_maximized(t); }
+static void ui_wl_set_full(struct xdg_toplevel *t) { if (t) xdg_toplevel_set_fullscreen(t, NULL); }
+static void ui_wl_unset_full(struct xdg_toplevel *t) { if (t) xdg_toplevel_unset_fullscreen(t); }
+
+static struct zxdg_toplevel_decoration_v1 *ui_wl_deco(struct zxdg_decoration_manager_v1 *m, struct xdg_toplevel *t) {
+	return zxdg_decoration_manager_v1_get_toplevel_decoration(m, t);
+}
+static void ui_wl_deco_ssd(struct zxdg_toplevel_decoration_v1 *d) {
+	if (d) zxdg_toplevel_decoration_v1_set_mode(d, ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
+}
+static void ui_wl_deco_destroy(struct zxdg_toplevel_decoration_v1 *d) {
+	if (d) zxdg_toplevel_decoration_v1_destroy(d);
+}
+static void ui_wl_deco_man_destroy(struct zxdg_decoration_manager_v1 *m) {
+	if (m) zxdg_decoration_manager_v1_destroy(m);
+}
+
+static struct wp_fractional_scale_v1 *ui_wl_frac(struct wp_fractional_scale_manager_v1 *m, struct wl_surface *s) {
+	return wp_fractional_scale_manager_v1_get_fractional_scale(m, s);
+}
+static void uitk_frac_pref(void *data, struct wp_fractional_scale_v1 *f, uint32_t scale) {
+	(void)f;
+	uitkWlFracScale((uintptr_t)data, scale);
+}
+static const struct wp_fractional_scale_v1_listener uitk_frac_listener = { .preferred_scale = uitk_frac_pref };
+static void ui_wl_frac_listen(struct wp_fractional_scale_v1 *f, uintptr_t sid) {
+	wp_fractional_scale_v1_add_listener(f, &uitk_frac_listener, (void*)sid);
+}
+static void ui_wl_frac_destroy(struct wp_fractional_scale_v1 *f) { if (f) wp_fractional_scale_v1_destroy(f); }
+static void ui_wl_frac_man_destroy(struct wp_fractional_scale_manager_v1 *m) {
+	if (m) wp_fractional_scale_manager_v1_destroy(m);
+}
+
+static struct wp_viewport *ui_wl_viewport(struct wp_viewporter *v, struct wl_surface *s) {
+	return wp_viewporter_get_viewport(v, s);
+}
+static void ui_wl_viewport_dest(struct wp_viewport *v, int w, int h) {
+	if (v) wp_viewport_set_destination(v, w, h);
+}
+static void ui_wl_viewport_destroy(struct wp_viewport *v) { if (v) wp_viewport_destroy(v); }
+static void ui_wl_viewporter_destroy(struct wp_viewporter *v) { if (v) wp_viewporter_destroy(v); }
+
+static int ui_wl_pipe(int fds[2]) { return pipe(fds); }
+static ssize_t ui_wl_write(int fd, const char *p, size_t n) { return write(fd, p, n); }
+static ssize_t ui_wl_read(int fd, char *p, size_t n) { return read(fd, p, n); }
 */
 import "C"
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"sync"
+	"time"
 	"unsafe"
 
 	"github.com/codemodify/paintengine2d"
@@ -374,12 +717,20 @@ func (WaylandBackend) NewSurface(opts WindowOptions) (Surface, error) {
 		title = "uitoolkit"
 	}
 	s := &wlSurface{
-		conn:  c,
-		title: title,
-		img:   paintengine2d.NewImage(w, h),
-		wantW: w,
-		wantH: h,
+		conn:     c,
+		title:    title,
+		logicalW: w,
+		logicalH: h,
+		wantW:    w,
+		wantH:    h,
+		bufScale: 1,
 	}
+	bw, bh := w, h
+	if sc := int(c.outScale + 0.1); sc > 1 {
+		s.bufScale = sc
+		bw, bh = w*sc, h*sc
+	}
+	s.img = paintengine2d.NewImage(bw, bh)
 	wlMu.Lock()
 	wlNextSurf++
 	s.id = wlNextSurf
@@ -412,6 +763,21 @@ func (WaylandBackend) NewSurface(opts WindowOptions) (Surface, error) {
 		mh = 120
 	}
 	C.ui_wl_set_min(s.top, C.int(mw), C.int(mh))
+	if c.decoMan != nil && s.top != nil {
+		s.deco = C.ui_wl_deco(c.decoMan, s.top)
+		if s.deco != nil {
+			C.ui_wl_deco_ssd(s.deco)
+		}
+	}
+	if c.fracMan != nil && s.surf != nil {
+		s.fracObj = C.ui_wl_frac(c.fracMan, s.surf)
+		if s.fracObj != nil {
+			C.ui_wl_frac_listen(s.fracObj, C.uintptr_t(s.id))
+		}
+	}
+	if c.viewporter != nil && s.surf != nil {
+		s.viewport = C.ui_wl_viewport(c.viewporter, s.surf)
+	}
 	C.ui_wl_commit(s.surf)
 	wlMu.Unlock()
 	C.ui_wl_roundtrip(c.dpy)
@@ -434,11 +800,57 @@ type wlConn struct {
 	xkbCtx     *C.struct_xkb_context
 	xkbMap     *C.struct_xkb_keymap
 	xkbState   *C.struct_xkb_state
+	composeTbl *C.struct_xkb_compose_table
+	compose    *C.struct_xkb_compose_state
 	refs       int
 	ptrSurf    int
 	keySurf    int
 	px, py     float32
 	mods       Modifiers
+	serial     uint32
+	outScale   float32
+
+	dataMan    *C.struct_wl_data_device_manager
+	dataDev    *C.struct_wl_data_device
+	dataSrc    *C.struct_wl_data_source
+	clipOffer  *C.struct_wl_data_offer
+	clipMime   string
+	clipText   string
+	pendingOff *C.struct_wl_data_offer
+	pendingMime string
+
+	primMan    *C.struct_zwp_primary_selection_device_manager_v1
+	primDev    *C.struct_zwp_primary_selection_device_v1
+	primSrc    *C.struct_zwp_primary_selection_source_v1
+	primOffer  *C.struct_zwp_primary_selection_offer_v1
+	primMime   string
+	primText   string
+	pendPrim   *C.struct_zwp_primary_selection_offer_v1
+	pendPrimMime string
+
+	textMan    *C.struct_zwp_text_input_manager_v3
+	textIn     *C.struct_zwp_text_input_v3
+	textActive bool
+	tiSurf     int
+	imePre     string
+	imeCommit  string
+	imeDelB    int
+	imeDelA    int
+	imeBegin   int
+	imeEnd     int
+
+	decoMan    *C.struct_zxdg_decoration_manager_v1
+	fracMan    *C.struct_wp_fractional_scale_manager_v1
+	viewporter *C.struct_wp_viewporter
+	output     *C.struct_wl_output
+
+	repeatRate  int
+	repeatDelay int
+	repeatKey   uint32
+	repeatNext  time.Time
+	heldKey     uint32
+	heldDown    bool
+	clipKeep    bool
 }
 
 type wlSlot struct {
@@ -461,9 +873,16 @@ type wlSurface struct {
 	slots      [2]wlSlot
 	wantW      int
 	wantH      int
+	logicalW   int
+	logicalH   int
+	bufScale   int
+	frac       float32
 	configured bool
 	closed     bool
 	queue      []Event
+	viewport   *C.struct_wp_viewport
+	fracObj    *C.struct_wp_fractional_scale_v1
+	deco       *C.struct_zxdg_toplevel_decoration_v1
 }
 
 var (
@@ -509,7 +928,7 @@ func (c *wlConn) release() {
 	wlMu.Lock()
 	defer wlMu.Unlock()
 	c.refs--
-	if c.refs <= 0 {
+	if c.refs <= 0 && !c.clipKeep {
 		c.closeLocked()
 	}
 }
@@ -523,14 +942,73 @@ func (c *wlConn) closeLocked() {
 		C.ui_wl_ptr_destroy(c.pointer)
 		c.pointer = nil
 	}
+	if c.textIn != nil {
+		C.ui_wl_ti_destroy(c.textIn)
+		c.textIn = nil
+	}
+	if c.textMan != nil {
+		C.ui_wl_ti_man_destroy(c.textMan)
+		c.textMan = nil
+	}
+	if c.dataSrc != nil {
+		C.ui_wl_data_source_destroy(c.dataSrc)
+		c.dataSrc = nil
+	}
+	if c.clipOffer != nil {
+		C.ui_wl_data_offer_destroy(c.clipOffer)
+		c.clipOffer = nil
+	}
+	if c.dataDev != nil {
+		C.ui_wl_data_device_destroy(c.dataDev)
+		c.dataDev = nil
+	}
+	if c.dataMan != nil {
+		C.ui_wl_data_man_destroy(c.dataMan)
+		c.dataMan = nil
+	}
+	if c.primSrc != nil {
+		C.ui_wl_prim_source_destroy(c.primSrc)
+		c.primSrc = nil
+	}
+	if c.primOffer != nil {
+		C.ui_wl_prim_offer_destroy(c.primOffer)
+		c.primOffer = nil
+	}
+	if c.primDev != nil {
+		C.ui_wl_prim_dev_destroy(c.primDev)
+		c.primDev = nil
+	}
+	if c.primMan != nil {
+		C.ui_wl_prim_man_destroy(c.primMan)
+		c.primMan = nil
+	}
+	if c.decoMan != nil {
+		C.ui_wl_deco_man_destroy(c.decoMan)
+		c.decoMan = nil
+	}
+	if c.fracMan != nil {
+		C.ui_wl_frac_man_destroy(c.fracMan)
+		c.fracMan = nil
+	}
+	if c.viewporter != nil {
+		C.ui_wl_viewporter_destroy(c.viewporter)
+		c.viewporter = nil
+	}
+	if c.output != nil {
+		C.ui_wl_out_destroy(c.output)
+		c.output = nil
+	}
 	if c.seat != nil {
 		C.ui_wl_seat_destroy(c.seat)
 		c.seat = nil
 	}
+	C.ui_xkb_compose_state_unref(c.compose)
+	C.ui_xkb_compose_table_unref(c.composeTbl)
 	C.ui_xkb_state_unref(c.xkbState)
 	C.ui_xkb_map_unref(c.xkbMap)
 	C.ui_xkb_ctx_unref(c.xkbCtx)
 	c.xkbState, c.xkbMap, c.xkbCtx = nil, nil, nil
+	c.compose, c.composeTbl = nil, nil
 	if c.wm != nil {
 		C.ui_wl_wm_destroy(c.wm)
 		c.wm = nil
@@ -561,7 +1039,60 @@ func (s *wlSurface) Title() string                { return s.title }
 func (s *wlSurface) Size() (w, h int)             { return s.img.Width, s.img.Height }
 func (s *wlSurface) Buffer() *paintengine2d.Image { return s.img }
 func (s *wlSurface) Closed() bool                 { return s.closed }
-func (s *wlSurface) Scale() float32               { return 1 }
+func (s *wlSurface) Scale() float32 { return s.deviceScale() }
+
+func (s *wlSurface) deviceScale() float32 {
+	if s.frac > 1 {
+		return s.frac
+	}
+	if s.bufScale > 1 {
+		return float32(s.bufScale)
+	}
+	if s.conn != nil && s.conn.outScale > 1 {
+		return s.conn.outScale
+	}
+	return 1
+}
+
+func (s *wlSurface) toDevice(x, y float32) (float32, float32) {
+	sc := s.deviceScale()
+	return x * sc, y * sc
+}
+
+func (s *wlSurface) SetFullscreen(on bool) {
+	if s.top == nil {
+		return
+	}
+	if on {
+		C.ui_wl_set_full(s.top)
+	} else {
+		C.ui_wl_unset_full(s.top)
+	}
+}
+
+func (s *wlSurface) SetMaximized(on bool) {
+	if s.top == nil {
+		return
+	}
+	if on {
+		C.ui_wl_set_max(s.top)
+	} else {
+		C.ui_wl_unset_max(s.top)
+	}
+}
+
+func (s *wlSurface) SetIMECursor(x, y, w, h int) {
+	if s.conn == nil || s.conn.textIn == nil || !s.conn.textActive {
+		return
+	}
+	sc := s.deviceScale()
+	if sc < 1 {
+		sc = 1
+	}
+	// text-input cursor rect is in surface-local (logical) units
+	C.ui_wl_ti_cursor(s.conn.textIn, C.int(float32(x)/sc), C.int(float32(y)/sc), C.int(float32(w)/sc+0.5), C.int(float32(h)/sc+0.5))
+	C.ui_wl_ti_commit(s.conn.textIn)
+}
 
 func (s *wlSurface) SetTitle(title string) {
 	s.title = title
@@ -580,11 +1111,40 @@ func (s *wlSurface) Resize(w, h int) error {
 	if h < 1 {
 		h = 1
 	}
-	if s.img.Width == w && s.img.Height == h {
+	s.logicalW, s.logicalH = w, h
+	s.wantW, s.wantH = w, h
+	bw, bh := s.bufferWH()
+	if s.img.Width == bw && s.img.Height == bh {
 		return nil
 	}
-	s.img = paintengine2d.NewImage(w, h)
+	s.img = paintengine2d.NewImage(bw, bh)
 	return nil
+}
+
+func (s *wlSurface) bufferWH() (int, int) {
+	lw, lh := s.logicalW, s.logicalH
+	if lw < 1 {
+		lw = s.wantW
+	}
+	if lh < 1 {
+		lh = s.wantH
+	}
+	if lw < 1 {
+		lw = 1
+	}
+	if lh < 1 {
+		lh = 1
+	}
+	sc := s.deviceScale()
+	w := int(math.Ceil(float64(float32(lw) * sc)))
+	h := int(math.Ceil(float64(float32(lh) * sc)))
+	if w < 1 {
+		w = 1
+	}
+	if h < 1 {
+		h = 1
+	}
+	return w, h
 }
 
 func (s *wlSurface) Present(dirty []paintengine2d.Rect) error {
@@ -594,9 +1154,22 @@ func (s *wlSurface) Present(dirty []paintengine2d.Rect) error {
 	if !s.configured {
 		return nil
 	}
-	if s.wantW > 0 && s.wantH > 0 && (s.wantW != s.img.Width || s.wantH != s.img.Height) {
-		s.img = paintengine2d.NewImage(s.wantW, s.wantH)
-		s.queue = append(s.queue, Event{Kind: EventResize, Width: s.wantW, Height: s.wantH})
+	if s.wantW > 0 {
+		s.logicalW = s.wantW
+	}
+	if s.wantH > 0 {
+		s.logicalH = s.wantH
+	}
+	bw, bh := s.bufferWH()
+	if s.img.Width != bw || s.img.Height != bh {
+		s.img = paintengine2d.NewImage(bw, bh)
+		s.queue = append(s.queue, Event{Kind: EventResize, Width: bw, Height: bh})
+	}
+	if s.frac > 1 && s.viewport != nil {
+		C.ui_wl_set_buf_scale(s.surf, 1)
+		C.ui_wl_viewport_dest(s.viewport, C.int(s.logicalW), C.int(s.logicalH))
+	} else if s.deviceScale() > 1 {
+		C.ui_wl_set_buf_scale(s.surf, C.int32_t(int(s.deviceScale()+0.1)))
 	}
 	slot := s.pickSlot()
 	if err := s.ensureSlot(slot, s.img.Width, s.img.Height); err != nil {
@@ -724,10 +1297,47 @@ func (s *wlSurface) Poll() []Event {
 	}
 	C.ui_wl_pump(s.conn.dpy)
 	wlMu.Lock()
+	s.conn.flushRepeatLocked()
 	ev := s.queue
 	s.queue = nil
 	wlMu.Unlock()
 	return ev
+}
+
+func (c *wlConn) flushRepeatLocked() {
+	if !c.heldDown || c.repeatKey == 0 || c.repeatRate <= 0 {
+		return
+	}
+	s := wlSurfaces[c.keySurf]
+	if s == nil {
+		return
+	}
+	now := time.Now()
+	if now.Before(c.repeatNext) {
+		return
+	}
+	interval := time.Second / time.Duration(c.repeatRate)
+	if interval < time.Millisecond {
+		interval = 25 * time.Millisecond
+	}
+	for !c.repeatNext.After(now) {
+		ks := uint64(C.ui_xkb_sym(c.xkbState, C.uint32_t(c.repeatKey)))
+		s.push(Event{Kind: EventKeyDown, Key: KeyFromKeysym(ks), Mods: c.mods})
+		if !c.textActive && !c.mods.Ctrl() {
+			var buf [64]C.char
+			n := int(C.ui_xkb_utf8(c.xkbState, C.uint32_t(c.repeatKey), &buf[0], 64))
+			if n > 0 {
+				for _, te := range textEvents(C.GoBytes(unsafe.Pointer(&buf[0]), C.int(n)), c.mods) {
+					s.push(te)
+				}
+			}
+		}
+		c.repeatNext = c.repeatNext.Add(interval)
+		if c.repeatNext.Before(now.Add(-250 * time.Millisecond)) {
+			c.repeatNext = now.Add(interval)
+			break
+		}
+	}
 }
 
 func (s *wlSurface) Close() error {
@@ -743,6 +1353,18 @@ func (s *wlSurface) Close() error {
 	wlMu.Unlock()
 	s.destroySlot(0)
 	s.destroySlot(1)
+	if s.fracObj != nil {
+		C.ui_wl_frac_destroy(s.fracObj)
+		s.fracObj = nil
+	}
+	if s.viewport != nil {
+		C.ui_wl_viewport_destroy(s.viewport)
+		s.viewport = nil
+	}
+	if s.deco != nil {
+		C.ui_wl_deco_destroy(s.deco)
+		s.deco = nil
+	}
 	if s.top != nil {
 		C.ui_wl_top_destroy(s.top)
 		s.top = nil
@@ -824,6 +1446,62 @@ func uitkWlRegistryGlobal(id C.uintptr_t, reg *C.struct_wl_registry, name C.uint
 		c.seat = (*C.struct_wl_seat)(C.ui_wl_bind(reg, name, C.ui_wl_seat_iface(), v))
 		if c.seat != nil {
 			C.ui_wl_seat_listen(c.seat, id)
+			c.bindSeatExtras()
+		}
+	case "wl_data_device_manager":
+		v := ver
+		if v > 3 {
+			v = 3
+		}
+		c.dataMan = (*C.struct_wl_data_device_manager)(C.ui_wl_bind(reg, name, C.ui_wl_data_man_iface(), v))
+		c.bindSeatExtras()
+	case "wl_output":
+		v := ver
+		if v > 4 {
+			v = 4
+		}
+		if v < 2 {
+			v = 2
+		}
+		c.output = (*C.struct_wl_output)(C.ui_wl_bind(reg, name, C.ui_wl_output_iface(), v))
+		if c.output != nil {
+			C.ui_wl_out_listen(c.output, id)
+		}
+	case "zwp_text_input_manager_v3":
+		c.textMan = (*C.struct_zwp_text_input_manager_v3)(C.ui_wl_bind(reg, name, C.ui_wl_ti_man_iface(), 1))
+		c.bindSeatExtras()
+	case "zwp_primary_selection_device_manager_v1":
+		c.primMan = (*C.struct_zwp_primary_selection_device_manager_v1)(C.ui_wl_bind(reg, name, C.ui_wl_prim_man_iface(), 1))
+		c.bindSeatExtras()
+	case "zxdg_decoration_manager_v1":
+		c.decoMan = (*C.struct_zxdg_decoration_manager_v1)(C.ui_wl_bind(reg, name, C.ui_wl_deco_man_iface(), 1))
+	case "wp_fractional_scale_manager_v1":
+		c.fracMan = (*C.struct_wp_fractional_scale_manager_v1)(C.ui_wl_bind(reg, name, C.ui_wl_frac_man_iface(), 1))
+	case "wp_viewporter":
+		c.viewporter = (*C.struct_wp_viewporter)(C.ui_wl_bind(reg, name, C.ui_wl_viewporter_iface(), 1))
+	}
+}
+
+func (c *wlConn) bindSeatExtras() {
+	if c.seat == nil {
+		return
+	}
+	if c.dataMan != nil && c.dataDev == nil {
+		c.dataDev = C.ui_wl_data_device(c.dataMan, c.seat)
+		if c.dataDev != nil {
+			C.ui_wl_ddev_listen(c.dataDev, C.uintptr_t(c.id))
+		}
+	}
+	if c.primMan != nil && c.primDev == nil {
+		c.primDev = C.ui_wl_prim_device(c.primMan, c.seat)
+		if c.primDev != nil {
+			C.ui_wl_pdev_listen(c.primDev, C.uintptr_t(c.id))
+		}
+	}
+	if c.textMan != nil && c.textIn == nil {
+		c.textIn = C.ui_wl_text_input(c.textMan, c.seat)
+		if c.textIn != nil {
+			C.ui_wl_ti_listen(c.textIn, C.uintptr_t(c.id))
 		}
 	}
 }
@@ -848,7 +1526,7 @@ func uitkWlXdgConfigure(sid C.uintptr_t, surf *C.struct_xdg_surface, serial C.ui
 }
 
 //export uitkWlTopConfigure
-func uitkWlTopConfigure(sid C.uintptr_t, top *C.struct_xdg_toplevel, w, h C.int32_t) {
+func uitkWlTopConfigure(sid C.uintptr_t, top *C.struct_xdg_toplevel, w, h C.int32_t, flags C.uint32_t) {
 	_ = top
 	s := wlSurfBy(sid)
 	if s == nil {
@@ -856,10 +1534,13 @@ func uitkWlTopConfigure(sid C.uintptr_t, top *C.struct_xdg_toplevel, w, h C.int3
 	}
 	if w > 0 && h > 0 {
 		s.wantW, s.wantH = int(w), int(h)
-		if s.img != nil && (s.img.Width != s.wantW || s.img.Height != s.wantH) {
-			s.push(Event{Kind: EventResize, Width: s.wantW, Height: s.wantH})
+		s.logicalW, s.logicalH = int(w), int(h)
+		bw, bh := s.bufferWH()
+		if s.img != nil && (s.img.Width != bw || s.img.Height != bh) {
+			s.push(Event{Kind: EventResize, Width: bw, Height: bh})
 		}
 	}
+	_ = flags
 }
 
 //export uitkWlTopClose
@@ -906,7 +1587,8 @@ func uitkWlPtrEnter(id C.uintptr_t, surf *C.struct_wl_surface, x, y C.wl_fixed_t
 	c.py = float32(C.ui_wl_fixed(y))
 	if s := wlSurfNative(surf); s != nil {
 		c.ptrSurf = s.id
-		s.push(Event{Kind: EventMouseMove, Pos: paintengine2d.Pt(c.px, c.py), Mods: c.mods})
+		dx, dy := s.toDevice(c.px, c.py)
+		s.push(Event{Kind: EventMouseMove, Pos: paintengine2d.Pt(dx, dy), Mods: c.mods})
 	}
 }
 
@@ -927,16 +1609,18 @@ func uitkWlPtrMotion(id C.uintptr_t, x, y C.wl_fixed_t) {
 	c.px = float32(C.ui_wl_fixed(x))
 	c.py = float32(C.ui_wl_fixed(y))
 	if s := wlSurfaces[c.ptrSurf]; s != nil {
-		s.push(Event{Kind: EventMouseMove, Pos: paintengine2d.Pt(c.px, c.py), Mods: c.mods})
+		dx, dy := s.toDevice(c.px, c.py)
+		s.push(Event{Kind: EventMouseMove, Pos: paintengine2d.Pt(dx, dy), Mods: c.mods})
 	}
 }
 
 //export uitkWlPtrButton
-func uitkWlPtrButton(id C.uintptr_t, button, state C.uint32_t) {
+func uitkWlPtrButton(id C.uintptr_t, button, state, serial C.uint32_t) {
 	c := wlConnBy(id)
 	if c == nil {
 		return
 	}
+	c.serial = uint32(serial)
 	s := wlSurfaces[c.ptrSurf]
 	if s == nil {
 		return
@@ -945,7 +1629,8 @@ func uitkWlPtrButton(id C.uintptr_t, button, state C.uint32_t) {
 	if state == 1 {
 		kind = EventMouseDown
 	}
-	s.push(Event{Kind: kind, Pos: paintengine2d.Pt(c.px, c.py), Button: wlButton(uint32(button)), Mods: c.mods})
+	dx, dy := s.toDevice(c.px, c.py)
+	s.push(Event{Kind: kind, Pos: paintengine2d.Pt(dx, dy), Button: wlButton(uint32(button)), Mods: c.mods})
 }
 
 //export uitkWlPtrAxis
@@ -959,7 +1644,11 @@ func uitkWlPtrAxis(id C.uintptr_t, axis C.uint32_t, value C.wl_fixed_t) {
 		return
 	}
 	v := float32(C.ui_wl_fixed(value)) * 4
-	ev := Event{Kind: EventScroll, Pos: paintengine2d.Pt(c.px, c.py), Mods: c.mods}
+	dx, dy := float32(0), float32(0)
+	if s != nil {
+		dx, dy = s.toDevice(c.px, c.py)
+	}
+	ev := Event{Kind: EventScroll, Pos: paintengine2d.Pt(dx, dy), Mods: c.mods}
 	if axis == 0 {
 		ev.Scroll = paintengine2d.Pt(0, v)
 	} else {
@@ -983,17 +1672,23 @@ func uitkWlKeymap(id C.uintptr_t, format C.uint32_t, fd C.int32_t, size C.uint32
 	C.ui_xkb_map_unref(c.xkbMap)
 	c.xkbMap = C.ui_xkb_map(c.xkbCtx, fd, size)
 	c.xkbState = C.ui_xkb_state(c.xkbMap)
+	C.ui_xkb_compose_state_unref(c.compose)
+	C.ui_xkb_compose_table_unref(c.composeTbl)
+	c.composeTbl = C.ui_xkb_compose_table(c.xkbCtx)
+	c.compose = C.ui_xkb_compose_state(c.composeTbl)
 }
 
 //export uitkWlKeyEnter
-func uitkWlKeyEnter(id C.uintptr_t, surf *C.struct_wl_surface) {
+func uitkWlKeyEnter(id C.uintptr_t, surf *C.struct_wl_surface, serial C.uint32_t) {
 	c := wlConnBy(id)
 	if c == nil {
 		return
 	}
+	c.serial = uint32(serial)
 	if s := wlSurfNative(surf); s != nil {
 		c.keySurf = s.id
 		s.push(Event{Kind: EventFocusIn})
+		wlEnableTextInput(c, s)
 	}
 }
 
@@ -1005,16 +1700,20 @@ func uitkWlKeyLeave(id C.uintptr_t) {
 	}
 	if s := wlSurfaces[c.keySurf]; s != nil {
 		s.push(Event{Kind: EventFocusOut})
+		s.push(Event{Kind: EventIMECancel})
 	}
 	c.keySurf = 0
+	c.heldDown = false
+	wlDisableTextInput(c)
 }
 
 //export uitkWlKey
-func uitkWlKey(id C.uintptr_t, key, state C.uint32_t) {
+func uitkWlKey(id C.uintptr_t, key, state, serial C.uint32_t) {
 	c := wlConnBy(id)
 	if c == nil {
 		return
 	}
+	c.serial = uint32(serial)
 	s := wlSurfaces[c.keySurf]
 	if s == nil {
 		return
@@ -1026,15 +1725,47 @@ func uitkWlKey(id C.uintptr_t, key, state C.uint32_t) {
 	ev := Event{Kind: EventKeyUp, Key: KeyFromKeysym(ks), Mods: c.mods}
 	if pressed {
 		ev.Kind = EventKeyDown
+		c.heldKey = uint32(key)
+		c.heldDown = true
+		if c.repeatDelay > 0 && c.repeatRate > 0 {
+			c.repeatKey = uint32(key)
+			c.repeatNext = time.Now().Add(time.Duration(c.repeatDelay) * time.Millisecond)
+		}
+	} else if c.heldKey == uint32(key) {
+		c.heldDown = false
+		c.repeatKey = 0
 	}
 	s.push(ev)
-	if pressed && !c.mods.Ctrl() {
-		var buf [64]C.char
-		n := int(C.ui_xkb_utf8(c.xkbState, key, &buf[0], 64))
-		if n > 0 {
-			for _, te := range textEvents(C.GoBytes(unsafe.Pointer(&buf[0]), C.int(n)), c.mods) {
-				s.push(te)
+	if !pressed || c.mods.Ctrl() || c.textActive {
+		return
+	}
+	// Dead keys / compose when no text-input IME is driving the surface.
+	if c.compose != nil {
+		st := C.ui_xkb_compose_feed(c.compose, C.uint32_t(ks))
+		_ = st
+		switch C.ui_xkb_compose_status(c.compose) {
+		case C.XKB_COMPOSE_COMPOSING:
+			return
+		case C.XKB_COMPOSE_COMPOSED:
+			var buf [64]C.char
+			n := int(C.ui_xkb_compose_utf8(c.compose, &buf[0], 64))
+			C.ui_xkb_compose_reset(c.compose)
+			if n > 0 {
+				for _, te := range textEvents(C.GoBytes(unsafe.Pointer(&buf[0]), C.int(n)), c.mods) {
+					s.push(te)
+				}
 			}
+			return
+		case C.XKB_COMPOSE_CANCELLED:
+			C.ui_xkb_compose_reset(c.compose)
+			return
+		}
+	}
+	var buf [64]C.char
+	n := int(C.ui_xkb_utf8(c.xkbState, key, &buf[0], 64))
+	if n > 0 {
+		for _, te := range textEvents(C.GoBytes(unsafe.Pointer(&buf[0]), C.int(n)), c.mods) {
+			s.push(te)
 		}
 	}
 }
@@ -1107,3 +1838,404 @@ func btoi(v bool) int {
 	}
 	return 0
 }
+
+func waylandLive() bool {
+	wlMu.Lock()
+	defer wlMu.Unlock()
+	return wlc != nil && wlc.dpy != nil
+}
+
+func waylandDetectScale() float32 {
+	wlMu.Lock()
+	if wlc != nil && wlc.outScale > 0 {
+		s := wlc.outScale
+		wlMu.Unlock()
+		return s
+	}
+	wlMu.Unlock()
+	return 0
+}
+
+//export uitkWlKeyRepeat
+func uitkWlKeyRepeat(id C.uintptr_t, rate, delay C.int32_t) {
+	c := wlConnBy(id)
+	if c == nil {
+		return
+	}
+	c.repeatRate = int(rate)
+	c.repeatDelay = int(delay)
+}
+
+//export uitkWlOutputScale
+func uitkWlOutputScale(id C.uintptr_t, factor C.int32_t) {
+	c := wlConnBy(id)
+	if c == nil {
+		return
+	}
+	if factor > 0 {
+		c.outScale = float32(factor)
+	}
+}
+
+//export uitkWlFracScale
+func uitkWlFracScale(sid C.uintptr_t, scale120 C.uint32_t) {
+	s := wlSurfBy(sid)
+	if s == nil || scale120 == 0 {
+		return
+	}
+	s.frac = float32(scale120) / 120
+	if s.frac < 1 {
+		s.frac = 1
+	}
+}
+
+//export uitkWlDataOffer
+func uitkWlDataOffer(id C.uintptr_t, offer *C.struct_wl_data_offer) {
+	c := wlConnBy(id)
+	if c == nil || offer == nil {
+		return
+	}
+	c.pendingOff = offer
+	c.pendingMime = ""
+	C.ui_wl_doffer_listen(offer, id)
+}
+
+//export uitkWlDataOfferMime
+func uitkWlDataOfferMime(id C.uintptr_t, offer *C.struct_wl_data_offer, mime *C.char) {
+	c := wlConnBy(id)
+	if c == nil || mime == nil {
+		return
+	}
+	m := C.GoString(mime)
+	if preferMime(c.pendingMime, m) {
+		c.pendingMime = m
+	}
+	_ = offer
+}
+
+//export uitkWlSelection
+func uitkWlSelection(id C.uintptr_t, offer *C.struct_wl_data_offer) {
+	c := wlConnBy(id)
+	if c == nil {
+		return
+	}
+	if c.clipOffer != nil && c.clipOffer != offer {
+		C.ui_wl_data_offer_destroy(c.clipOffer)
+	}
+	c.clipOffer = offer
+	c.clipMime = c.pendingMime
+	if offer == c.pendingOff {
+		c.pendingOff = nil
+	}
+}
+
+//export uitkWlDataSend
+func uitkWlDataSend(id C.uintptr_t, fd C.int) {
+	c := wlConnBy(id)
+	if c == nil {
+		C.ui_wl_close_fd(fd)
+		return
+	}
+	b := []byte(c.clipText)
+	if len(b) > 0 {
+		C.ui_wl_write(fd, (*C.char)(unsafe.Pointer(&b[0])), C.size_t(len(b)))
+	}
+	C.ui_wl_close_fd(fd)
+}
+
+//export uitkWlDataCancelled
+func uitkWlDataCancelled(id C.uintptr_t) {
+	c := wlConnBy(id)
+	if c == nil {
+		return
+	}
+	if c.dataSrc != nil {
+		C.ui_wl_data_source_destroy(c.dataSrc)
+		c.dataSrc = nil
+	}
+}
+
+//export uitkWlPrimOffer
+func uitkWlPrimOffer(id C.uintptr_t, offer *C.struct_zwp_primary_selection_offer_v1) {
+	c := wlConnBy(id)
+	if c == nil || offer == nil {
+		return
+	}
+	c.pendPrim = offer
+	c.pendPrimMime = ""
+	C.ui_wl_poffer_listen(offer, id)
+}
+
+//export uitkWlPrimOfferMime
+func uitkWlPrimOfferMime(id C.uintptr_t, offer *C.struct_zwp_primary_selection_offer_v1, mime *C.char) {
+	c := wlConnBy(id)
+	if c == nil || mime == nil {
+		return
+	}
+	m := C.GoString(mime)
+	if preferMime(c.pendPrimMime, m) {
+		c.pendPrimMime = m
+	}
+	_ = offer
+}
+
+//export uitkWlPrimSelection
+func uitkWlPrimSelection(id C.uintptr_t, offer *C.struct_zwp_primary_selection_offer_v1) {
+	c := wlConnBy(id)
+	if c == nil {
+		return
+	}
+	if c.primOffer != nil && c.primOffer != offer {
+		C.ui_wl_prim_offer_destroy(c.primOffer)
+	}
+	c.primOffer = offer
+	c.primMime = c.pendPrimMime
+}
+
+//export uitkWlPrimSend
+func uitkWlPrimSend(id C.uintptr_t, fd C.int) {
+	c := wlConnBy(id)
+	if c == nil {
+		C.ui_wl_close_fd(fd)
+		return
+	}
+	b := []byte(c.primText)
+	if len(b) == 0 {
+		b = []byte(c.clipText)
+	}
+	if len(b) > 0 {
+		C.ui_wl_write(fd, (*C.char)(unsafe.Pointer(&b[0])), C.size_t(len(b)))
+	}
+	C.ui_wl_close_fd(fd)
+}
+
+//export uitkWlTIEnter
+func uitkWlTIEnter(id C.uintptr_t, surf *C.struct_wl_surface) {
+	c := wlConnBy(id)
+	if c == nil {
+		return
+	}
+	c.textActive = true
+	if s := wlSurfNative(surf); s != nil {
+		c.tiSurf = s.id
+	}
+}
+
+//export uitkWlTILeave
+func uitkWlTILeave(id C.uintptr_t) {
+	c := wlConnBy(id)
+	if c == nil {
+		return
+	}
+	c.textActive = false
+	c.tiSurf = 0
+	if s := wlSurfaces[c.keySurf]; s != nil {
+		s.push(Event{Kind: EventIMECancel})
+	}
+}
+
+//export uitkWlTIPreedit
+func uitkWlTIPreedit(id C.uintptr_t, text *C.char, begin, end C.int32_t) {
+	c := wlConnBy(id)
+	if c == nil {
+		return
+	}
+	if text != nil {
+		c.imePre = C.GoString(text)
+	} else {
+		c.imePre = ""
+	}
+	c.imeBegin, c.imeEnd = int(begin), int(end)
+}
+
+//export uitkWlTICommit
+func uitkWlTICommit(id C.uintptr_t, text *C.char) {
+	c := wlConnBy(id)
+	if c == nil {
+		return
+	}
+	if text != nil {
+		c.imeCommit = C.GoString(text)
+	}
+}
+
+//export uitkWlTIDelete
+func uitkWlTIDelete(id C.uintptr_t, before, after C.uint32_t) {
+	c := wlConnBy(id)
+	if c == nil {
+		return
+	}
+	c.imeDelB, c.imeDelA = int(before), int(after)
+}
+
+//export uitkWlTIDone
+func uitkWlTIDone(id C.uintptr_t) {
+	c := wlConnBy(id)
+	if c == nil {
+		return
+	}
+	s := wlSurfaces[c.keySurf]
+	if s == nil {
+		s = wlSurfaces[c.tiSurf]
+	}
+	if s == nil {
+		return
+	}
+	if c.imePre != "" || (c.imeCommit == "" && c.imeDelB == 0 && c.imeDelA == 0) {
+		caret := runeCountStr(c.imePre)
+		if c.imeEnd >= 0 && c.imeEnd < caret {
+			caret = c.imeEnd
+		}
+		s.push(Event{Kind: EventIMEPreedit, Text: c.imePre, IMECaret: caret})
+	}
+	if c.imeDelB > 0 || c.imeDelA > 0 || c.imeCommit != "" {
+		s.push(Event{Kind: EventIMECommit, Text: c.imeCommit, IMEDelBefore: c.imeDelB, IMEDelAfter: c.imeDelA})
+	}
+	c.imePre, c.imeCommit = "", ""
+	c.imeDelB, c.imeDelA = 0, 0
+}
+
+func runeCountStr(s string) int { return len([]rune(s)) }
+
+func preferMime(cur, next string) bool {
+	if cur == "" {
+		return next != ""
+	}
+	rank := func(m string) int {
+		switch m {
+		case "text/plain;charset=utf-8":
+			return 3
+		case "text/plain":
+			return 2
+		case "UTF8_STRING", "TEXT":
+			return 1
+		}
+		return 0
+	}
+	return rank(next) > rank(cur)
+}
+
+func wlEnableTextInput(c *wlConn, s *wlSurface) {
+	if c == nil || c.textIn == nil || s == nil {
+		return
+	}
+	C.ui_wl_ti_enable(c.textIn)
+	C.ui_wl_ti_cursor(c.textIn, 0, 0, 1, 1)
+	C.ui_wl_ti_commit(c.textIn)
+}
+
+func wlDisableTextInput(c *wlConn) {
+	if c == nil || c.textIn == nil {
+		return
+	}
+	C.ui_wl_ti_disable(c.textIn)
+	C.ui_wl_ti_commit(c.textIn)
+	c.textActive = false
+}
+
+func wlClipSet(s string) bool {
+	c, err := wlRetain()
+	if err != nil || c == nil || c.dataDev == nil || c.dataMan == nil {
+		if c != nil {
+			c.release()
+		}
+		return false
+	}
+	wlMu.Lock()
+	c.clipText = s
+	c.primText = s
+	c.clipKeep = true
+	if c.dataSrc != nil {
+		C.ui_wl_data_source_destroy(c.dataSrc)
+		c.dataSrc = nil
+	}
+	src := C.ui_wl_data_source(c.dataMan)
+	if src == nil {
+		wlMu.Unlock()
+		c.release()
+		return false
+	}
+	c.dataSrc = src
+	C.ui_wl_dsrc_listen(src, C.uintptr_t(c.id))
+	utf := C.CString("text/plain;charset=utf-8")
+	plain := C.CString("text/plain")
+	C.ui_wl_data_offer_mime(src, utf)
+	C.ui_wl_data_offer_mime(src, plain)
+	C.free(unsafe.Pointer(utf))
+	C.free(unsafe.Pointer(plain))
+	C.ui_wl_set_selection(c.dataDev, src, C.uint32_t(c.serial))
+	if c.primMan != nil && c.primDev != nil {
+		if c.primSrc != nil {
+			C.ui_wl_prim_source_destroy(c.primSrc)
+			c.primSrc = nil
+		}
+		ps := C.ui_wl_prim_source(c.primMan)
+		if ps != nil {
+			c.primSrc = ps
+			C.ui_wl_psrc_listen(ps, C.uintptr_t(c.id))
+			utf2 := C.CString("text/plain;charset=utf-8")
+			C.ui_wl_prim_offer_mime(ps, utf2)
+			C.free(unsafe.Pointer(utf2))
+			C.ui_wl_prim_set(c.primDev, ps, C.uint32_t(c.serial))
+		}
+	}
+	C.ui_wl_flush(c.dpy)
+	wlMu.Unlock()
+	c.release()
+	return true
+}
+
+func wlClipGet(primary bool) (string, bool) {
+	c, err := wlRetain()
+	if err != nil || c == nil {
+		return "", false
+	}
+	defer c.release()
+	if primary {
+		if c.primText != "" {
+			return c.primText, true
+		}
+		if c.primOffer == nil || c.primMime == "" {
+			return "", false
+		}
+		return wlReadFD(c, func(fd int) {
+			cm := C.CString(c.primMime)
+			C.ui_wl_prim_receive(c.primOffer, cm, C.int(fd))
+			C.free(unsafe.Pointer(cm))
+		})
+	}
+	if c.clipText != "" {
+		return c.clipText, true
+	}
+	if c.clipOffer == nil || c.clipMime == "" {
+		return "", false
+	}
+	return wlReadFD(c, func(fd int) {
+		cm := C.CString(c.clipMime)
+		C.ui_wl_data_receive(c.clipOffer, cm, C.int(fd))
+		C.free(unsafe.Pointer(cm))
+	})
+}
+
+func wlReadFD(c *wlConn, request func(fd int)) (string, bool) {
+	var fds [2]C.int
+	if C.ui_wl_pipe(&fds[0]) != 0 {
+		return "", false
+	}
+	request(int(fds[1]))
+	C.ui_wl_close_fd(fds[1])
+	C.ui_wl_flush(c.dpy)
+	C.ui_wl_roundtrip(c.dpy)
+	var out []byte
+	var buf [4096]byte
+	for {
+		n := int(C.ui_wl_read(fds[0], (*C.char)(unsafe.Pointer(&buf[0])), 4096))
+		if n <= 0 {
+			break
+		}
+		out = append(out, buf[:n]...)
+	}
+	C.ui_wl_close_fd(fds[0])
+	return string(out), true
+}
+

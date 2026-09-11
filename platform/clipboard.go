@@ -3,8 +3,9 @@ package platform
 import "sync"
 
 // In-memory clipboard, always updated by ClipboardSet. On Linux with CGO
-// and a live X11 display this also owns the CLIPBOARD and PRIMARY
-// selections so Ctrl+C/X/V and middle-click talk to the OS.
+// this also owns the OS selection: Wayland wl_data_device (and primary
+// when offered) or X11 CLIPBOARD + PRIMARY, so Ctrl+C/X/V and
+// middle-click talk to the session.
 var (
 	clipMu sync.Mutex
 	clip   string
