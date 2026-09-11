@@ -14,6 +14,8 @@ type TextField struct {
 	Placeholder string
 	OnChange    func(string)
 	OnSubmit    func(string)
+	OnFocusLost func()
+	Accept      func(string) bool
 	caret       int
 	selA, selB  int
 	blinkOn     bool
@@ -109,6 +111,13 @@ func (t *TextField) Paint(ctx *paintengine2d.Context) {
 func (t *TextField) FocusGained() {
 	t.blinkOn = true
 	t.Invalidate()
+}
+
+func (t *TextField) FocusLost() {
+	t.Invalidate()
+	if t.OnFocusLost != nil {
+		t.OnFocusLost()
+	}
 }
 
 func (t *TextField) indexAt(x float32) int {
@@ -298,6 +307,24 @@ func (t *TextField) SelectedText() string {
 	return string(runes[a:b])
 }
 
+func (t *TextField) previewReplace(s string) string {
+	a, b := t.selA, t.selB
+	if a == b {
+		a, b = t.caret, t.caret
+	}
+	if a > b {
+		a, b = b, a
+	}
+	runes := []rune(t.Text)
+	if a < 0 {
+		a = 0
+	}
+	if b > len(runes) {
+		b = len(runes)
+	}
+	return string(runes[:a]) + s + string(runes[b:])
+}
+
 func (t *TextField) replaceSel(s string) {
 	a, b := t.selA, t.selB
 	if a == b {
@@ -307,6 +334,9 @@ func (t *TextField) replaceSel(s string) {
 		a, b = b, a
 	}
 	if a == b && s == "" {
+		return
+	}
+	if t.Accept != nil && !t.Accept(t.previewReplace(s)) {
 		return
 	}
 	runes := []rune(t.Text)

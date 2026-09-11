@@ -16,6 +16,7 @@ type ToolItem struct {
 	Toggle   bool
 	Down     bool
 	Sep      bool
+	Tip      string
 	OnClick  func()
 }
 
@@ -56,6 +57,24 @@ func NewToolBar(items ...*ToolItem) *ToolBar {
 
 // Items returns the tool buttons.
 func (t *ToolBar) Items() []*ToolItem { return t.items }
+
+// Tooltip is the hovered tool button's tip, if any.
+func (t *ToolBar) Tooltip() string {
+	if t.hover >= 0 && t.hover < len(t.items) && t.items[t.hover] != nil {
+		return t.items[t.hover].Tip
+	}
+	return ""
+}
+
+// ItemCenter is the local midpoint of item i.
+func (t *ToolBar) ItemCenter(i int) paintengine2d.Point {
+	rects := t.itemRects()
+	if i < 0 || i >= len(rects) {
+		return paintengine2d.Point{}
+	}
+	r := rects[i]
+	return paintengine2d.Pt((r.Min.X+r.Max.X)*0.5, (r.Min.Y+r.Max.Y)*0.5)
+}
 
 // Hover highlights item i (screenshots / tests). i < 0 clears.
 func (t *ToolBar) Hover(i int) {

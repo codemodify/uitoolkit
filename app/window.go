@@ -8,29 +8,40 @@ import (
 	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
+	"github.com/codemodify/uitoolkit/widgets"
 )
 
 // Window is a widget host that paints into a platform.Surface.
 type Window struct {
-	app     *Application
-	surf    platform.Surface
-	root    widget.Component
-	overlay widget.Component
-	popup   widget.Component
-	look    style.LookAndFeel
-	dirty   paintengine2d.Damage
-	full    bool
-	focus   widget.Component
-	hover   widget.Component
-	capture widget.Component
-	closed  bool
-	blink   bool
-	laid    bool
-	scale   float32
+	app      *Application
+	surf     platform.Surface
+	root     widget.Component
+	overlay  widget.Component
+	popup    widget.Component
+	tooltip  widget.Component
+	look     style.LookAndFeel
+	dirty    paintengine2d.Damage
+	full     bool
+	focus    widget.Component
+	hover    widget.Component
+	capture  widget.Component
+	closed   bool
+	blink    bool
+	laid     bool
+	scale    float32
+	tipHover widget.Component
+	tipSince time.Time
+	tipPos   paintengine2d.Point
+	tipDelay time.Duration
+	clock    func() time.Time
+	lastTip  string
 }
 
 func newWindow(a *Application, surf platform.Surface, opts platform.WindowOptions) *Window {
-	w := &Window{app: a, surf: surf, look: a.look, scale: a.scale, full: true}
+	w := &Window{
+		app: a, surf: surf, look: a.look, scale: a.scale, full: true,
+		tipDelay: 450 * time.Millisecond,
+	}
 	w.dirty.Pad = 1
 	_ = opts
 	return w
@@ -85,6 +96,7 @@ func (w *Window) SetPopup(c widget.Component) {
 	w.popup = c
 	if c != nil {
 		c.SetHost(w)
+		w.HideTooltip()
 	}
 	w.fullInvalidate()
 }
@@ -100,6 +112,55 @@ func (w *Window) DismissPopup() {
 	}
 	w.popup = nil
 	w.fullInvalidate()
+}
+
+func (w *Window) SetTooltip(c widget.Component) {
+	w.tooltip = c
+	if c != nil {
+		c.SetHost(w)
+	}
+	w.fullInvalidate()
+}
+
+func (w *Window) Tooltip() widget.Component { return w.tooltip }
+
+func (w *Window) HideTooltip() {
+	if w.tooltip == nil {
+		return
+	}
+	w.tooltip = nil
+	w.tipSince = w.now()
+	w.fullInvalidate()
+}
+
+// SetTooltipDelay overrides the hover rest time. Zero keeps the default 450ms.
+func (w *Window) SetTooltipDelay(d time.Duration) {
+	if d <= 0 {
+		d = 450 * time.Millisecond
+	}
+	w.tipDelay = d
+}
+
+// SetClock injects time for tooltip tests. nil uses time.Now.
+func (w *Window) SetClock(now func() time.Time) { w.clock = now }
+
+func (w *Window) now() time.Time {
+	if w.clock != nil {
+		return w.clock()
+	}
+	return time.Now()
+}
+
+// RevealTooltip shows the current hover tip immediately (screenshots / tests).
+func (w *Window) RevealTooltip() {
+	if w.hover == nil {
+		return
+	}
+	text := widget.TooltipText(w.hover)
+	if text == "" {
+		return
+	}
+	w.showTip(text, w.tipPos)
 }
 
 func (w *Window) Invalidate(c widget.Component, local paintengine2d.Rect) {
@@ -175,12 +236,7 @@ func (w *Window) dispatch(ev platform.Event) {
 			return
 		}
 		if ev.Key == platform.KeyEscape {
-			if w.popup != nil {
-				w.DismissPopup()
-				return
-			}
-			if w.overlay != nil {
-				w.SetOverlay(nil)
+			if w.dismissEscape() {
 				return
 			}
 		}
@@ -194,9 +250,7 @@ func (w *Window) dispatch(ev platform.Event) {
 				return
 			}
 		}
-		if w.focus != nil {
-			w.focus.KeyPress(widget.KeyEvent{Key: ev.Key, Mods: ev.Mods})
-		}
+		w.bubbleKey(widget.KeyEvent{Key: ev.Key, Mods: ev.Mods})
 	case platform.EventKeyUp:
 		if w.focus != nil {
 			w.focus.KeyRelease(widget.KeyEvent{Key: ev.Key, Mods: ev.Mods})
@@ -260,7 +314,71 @@ func local(c widget.Component, p paintengine2d.Point) paintengine2d.Point {
 	return paintengine2d.Pt(p.X-o.X, p.Y-o.Y)
 }
 
+func (w *Window) dismissEscape() bool {
+	if w.tooltip != nil {
+		w.HideTooltip()
+		return true
+	}
+	if w.popup != nil {
+		w.DismissPopup()
+		return true
+	}
+	if w.overlay != nil {
+		w.SetOverlay(nil)
+		return true
+	}
+	return false
+}
+
+func (w *Window) bubbleKey(e widget.KeyEvent) {
+	for c := w.focus; c != nil; c = c.Parent() {
+		if c.KeyPress(e) {
+			return
+		}
+	}
+}
+
+func (w *Window) showTip(text string, pos paintengine2d.Point) {
+	if text == "" {
+		return
+	}
+	bubble := widgets.NewTooltipBubble(text)
+	bubble.SetHost(w)
+	sz := bubble.Measure(layout.Loose(360, 80))
+	origin := paintengine2d.Pt(pos.X+12, pos.Y+18)
+	bubble.Arrange(paintengine2d.XYWH(origin.X, origin.Y, sz.X, sz.Y))
+	widget.ClampToSurface(w.root, bubble)
+	if w.root == nil && w.overlay != nil {
+		widget.ClampToSurface(w.overlay, bubble)
+	}
+	w.SetTooltip(bubble)
+}
+
+func (w *Window) tickTips() {
+	if w.popup != nil || w.overlay != nil {
+		if w.tooltip != nil {
+			w.HideTooltip()
+		}
+		return
+	}
+	if w.tooltip != nil {
+		return
+	}
+	if w.tipHover == nil {
+		return
+	}
+	text := widget.TooltipText(w.tipHover)
+	if text == "" {
+		return
+	}
+	if w.now().Sub(w.tipSince) < w.tipDelay {
+		return
+	}
+	w.showTip(text, w.tipPos)
+}
+
 func (w *Window) mouseDown(ev platform.Event) {
+	w.HideTooltip()
 	if w.popup != nil {
 		if widget.HitRoot(w.popup, ev.Pos) == nil {
 			under := w.hitContent(ev.Pos)
@@ -306,9 +424,22 @@ func (w *Window) mouseMove(ev platform.Event) {
 		if t != nil {
 			t.MouseEnter()
 		}
+		w.HideTooltip()
+		w.tipHover = t
+		w.tipSince = w.now()
 	}
+	w.tipPos = ev.Pos
 	if t != nil {
 		t.MouseMove(widget.MouseEvent{Pos: local(t, ev.Pos), Button: ev.Button, Mods: ev.Mods})
+		text := widget.TooltipText(t)
+		if text != w.lastTip {
+			w.HideTooltip()
+			w.tipHover = t
+			w.tipSince = w.now()
+			w.lastTip = text
+		}
+	} else {
+		w.lastTip = ""
 	}
 }
 
@@ -370,6 +501,7 @@ func (w *Window) frame() {
 		w.layout()
 		w.fullInvalidate()
 	}
+	w.tickTips()
 	if w.dirty.Empty() && !w.full {
 		return
 	}
@@ -400,6 +532,9 @@ func (w *Window) frame() {
 	}
 	if w.popup != nil {
 		widget.PaintTree(w.popup, ctx, nil)
+	}
+	if w.tooltip != nil {
+		widget.PaintTree(w.tooltip, ctx, nil)
 	}
 	rects := append([]paintengine2d.Rect(nil), w.dirty.Rects...)
 	if w.full {

@@ -28,6 +28,10 @@ type (
 	MessageButtons    = widgets.MessageButtons
 	MessageResult     = widgets.MessageResult
 	MessageBoxOptions = widgets.MessageBoxOptions
+	TableColumn       = widgets.TableColumn
+	FileInfo          = widgets.FileInfo
+	FileDialogMode    = widgets.FileDialogMode
+	FileDialogOptions = widgets.FileDialogOptions
 )
 
 func New(opts Options) *Application { return app.New(opts) }
@@ -139,6 +143,27 @@ func Confirm(from widget.Component, title, message string, on func(bool)) *widge
 func Warn(from widget.Component, title, message string, on func()) *widgets.MessageBox {
 	return widgets.Warn(from, title, message, on)
 }
+func NewTableView(cols []widgets.TableColumn, rows int, cell func(row, col int) string, on func(int)) *widgets.TableView {
+	return widgets.NewTableView(cols, rows, cell, on)
+}
+func NewNumberField(min, max, value, step float64, on func(float64)) *widgets.NumberField {
+	return widgets.NewNumberField(min, max, value, step, on)
+}
+func NewSpinner(min, max, value, step float64, on func(float64)) *widgets.NumberField {
+	return widgets.NewSpinner(min, max, value, step, on)
+}
+func NewTip(text string, child widget.Component) *widgets.TipWrap {
+	return widgets.NewTip(text, child)
+}
+func NewFileDialog(opts widgets.FileDialogOptions) *widgets.FileDialog {
+	return widgets.NewFileDialog(opts)
+}
+func ShowFileDialog(from widget.Component, opts widgets.FileDialogOptions) *widgets.FileDialog {
+	return widgets.ShowFileDialog(from, opts)
+}
+func ReadDirEntries(path string) ([]widgets.FileInfo, error) {
+	return widgets.ReadDirEntries(path)
+}
 
 const (
 	IconNone     = style.IconNone
@@ -171,6 +196,9 @@ const (
 	ResultCancel = widgets.ResultCancel
 	ResultYes    = widgets.ResultYes
 	ResultNo     = widgets.ResultNo
+
+	FileOpen = widgets.FileOpen
+	FileSave = widgets.FileSave
 )
 
 // Layout constants.

@@ -74,6 +74,18 @@ and written as PNG (no placeholders).
 
 ![MessageBox](docs/screenshots/gallery-message.png)
 
+### TableView
+
+![TableView](docs/screenshots/gallery-table.png)
+
+### File picker stub
+
+![File dialog](docs/screenshots/gallery-file.png)
+
+### Tooltip
+
+![Tooltip](docs/screenshots/gallery-tooltip.png)
+
 ### Notes — a small desktop app
 
 ![Notes](docs/screenshots/notes.png)
@@ -136,10 +148,10 @@ app        Application run loop, windows,         DPI/scale, input routing
 widget     retained Component: bounds, children,  HitTest, focus, Invalidate
            Paint(ctx *paintengine2d.Context)
 layout     Measure / Arrange                      row, column, stack, flex
-widgets    Button, Label, TextField, Checkbox,    ScrollView, ListView
+widgets    Button, Label, TextField, NumberField  ScrollView, ListView, TableView
            Slider, Panel, Splitter, Overlay       MenuBar, TabView, TreeView
            StatusBar, ToolBar, ComboBox           ProgressBar, RadioGroup
-           MessageBox, TitleBar, context menus    (virtualized rows)
+           MessageBox, FileDialog stub, Tooltip   TitleBar, context menus
 style      LookAndFeel + Palette + Metrics        Dark / Light Classic
 ```
 
@@ -150,8 +162,8 @@ never hard-code colors.
 
 | Command | What it proves |
 | --- | --- |
-| `go run ./examples/gallery` | Stock controls, toolbar, combo, radio, progress, menus, tabs, tree, themes, scroll, list, message box, second window |
-| `go run ./examples/notes` | A small real app: filterable list, editor, add/delete, context menu |
+| `go run ./examples/gallery` | Stock controls, table, spinner, tooltip, file stub, toolbar, combo, radio, progress, menus, tabs, tree, themes, scroll, list, message box |
+| `go run ./examples/notes` | A small real app: sortable table, priority spinner, file stub, tooltips, editor |
 
 ```bash
 go run ./examples/gallery -screenshot docs/screenshots
@@ -168,9 +180,14 @@ z-order, focus tab order (including MenuBar / TabBar / TreeView),
 checkbox/slider/text/button interaction, virtual list range, scroll-wheel
 bubbling, scrollbar track hits, text selection and copy/paste stubs, menu
 and tab swap, tree expand/select, context-menu dispatch, toolbar and
-combo, radio groups, progress clamp, message-box results, and an offscreen
-paint that produces real pixels. `go test ./examples/gallery` regenerates
-the eleven PNGs and fails if any two share a blob.
+combo, radio groups, progress clamp, message-box results, table sort,
+number-field step/filter, file-dialog stub, delayed tooltips, Esc
+dismiss order, and an offscreen paint that produces real pixels.
+`go test ./examples/gallery` regenerates the fourteen PNGs and fails if
+any two share a blob.
+
+Keyboard map: [docs/keyboard.md](docs/keyboard.md). **Esc** closes
+tooltip → popup → overlay, everywhere.
 
 ## Positioning
 
@@ -201,9 +218,10 @@ Documented on purpose — do not expect these yet:
 
 ## Version
 
-**0.1.4** — ToolBar (icon or text), MessageBox helpers (Info / Warn / Confirm),
-ComboBox, ProgressBar, RadioGroup, optional TitleBar chrome, looser default
-metrics. Requires `github.com/codemodify/paintengine2d@v0.7.2` (`02b2939`).
+**0.1.5** — TableView (columns, row select, optional sort header),
+NumberField / Spinner, delayed Tooltip, FileDialog stub (modal list + path;
+native picker later), keyboard map, Esc dismisses tooltip → popup → overlay.
+Requires `github.com/codemodify/paintengine2d@v0.7.2` (`02b2939`).
 
 ## License
 

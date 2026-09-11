@@ -3,14 +3,17 @@ package widgets
 import (
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/layout"
+	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/widget"
 )
 
 // Overlay is a dimmed full-window layer with a centered card (dialog pattern).
 type Overlay struct {
 	widget.Base
-	Card    widget.Component
-	OnClose func()
+	Card     widget.Component
+	OnClose  func()
+	MinCardW float32
+	MinCardH float32
 }
 
 func NewOverlay(card widget.Component) *Overlay {
@@ -35,11 +38,24 @@ func (o *Overlay) Arrange(r paintengine2d.Rect) {
 		return
 	}
 	cs := o.Card.Measure(layout.Loose(r.Dx()*0.8, r.Dy()*0.8))
-	if cs.X < 280 {
-		cs.X = 280
+	minW, minH := o.MinCardW, o.MinCardH
+	if minW < 280 {
+		minW = 280
 	}
-	if cs.Y < 140 {
-		cs.Y = 140
+	if minH < 140 {
+		minH = 140
+	}
+	if cs.X < minW {
+		cs.X = minW
+	}
+	if cs.Y < minH {
+		cs.Y = minH
+	}
+	if cs.X > r.Dx()*0.92 {
+		cs.X = r.Dx() * 0.92
+	}
+	if cs.Y > r.Dy()*0.88 {
+		cs.Y = r.Dy() * 0.88
 	}
 	x := (r.Dx() - cs.X) * 0.5
 	y := (r.Dy() - cs.Y) * 0.5
@@ -56,6 +72,14 @@ func (o *Overlay) MousePress(e widget.MouseEvent) bool {
 	}
 	widget.DismissOverlay(o)
 	return true
+}
+
+func (o *Overlay) KeyPress(e widget.KeyEvent) bool {
+	if e.Key == platform.KeyEscape {
+		widget.DismissOverlay(o)
+		return true
+	}
+	return false
 }
 
 func (o *Overlay) Dismissed() {

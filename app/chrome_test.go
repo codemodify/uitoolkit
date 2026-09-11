@@ -2,6 +2,7 @@ package app
 
 import (
 	"testing"
+	"time"
 
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/platform"
@@ -184,6 +185,95 @@ func TestEscapeDismissesMessageBox(t *testing.T) {
 	}
 	if w.Overlay() != nil {
 		t.Fatal("overlay")
+	}
+}
+
+func TestTooltipDelayAndEscape(t *testing.T) {
+	a := New(Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{Width: 400, Height: 200, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	btn := widgets.NewButton("Save", nil)
+	btn.Tip = "Write the file"
+	w.SetContent(widgets.NewPad(20, btn))
+	a.PumpOnce()
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	w.SetClock(func() time.Time { return now })
+	w.SetTooltipDelay(400 * time.Millisecond)
+	bb := btn.Bounds()
+	pos := paintengine2d.Pt(20+bb.Min.X+8, 20+bb.Min.Y+8)
+	w.dispatch(platform.Event{Kind: platform.EventMouseMove, Pos: pos})
+	a.PumpOnce()
+	if w.Tooltip() != nil {
+		t.Fatal("tooltip too early")
+	}
+	now = now.Add(500 * time.Millisecond)
+	a.PumpOnce()
+	if w.Tooltip() == nil {
+		t.Fatal("expected tooltip")
+	}
+	w.dispatch(platform.Event{Kind: platform.EventKeyDown, Key: platform.KeyEscape})
+	if w.Tooltip() != nil {
+		t.Fatal("esc should hide tooltip")
+	}
+}
+
+func TestEscapeClosesPopupThenOverlay(t *testing.T) {
+	a := New(Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{Width: 480, Height: 320, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.SetContent(widgets.NewLabel("host"))
+	a.PumpOnce()
+	cancelled := 0
+	widgets.ShowFileDialog(w.Content(), widgets.FileDialogOptions{
+		Title: "Open", Path: "/stub", Entries: []widgets.FileInfo{{Name: "a.go"}},
+		OnCancel: func() { cancelled++ },
+	})
+	a.PumpOnce()
+	if w.Overlay() == nil {
+		t.Fatal("overlay")
+	}
+	cb := widgets.NewComboBox([]string{"A", "B"}, 0, nil)
+	// popup on top of overlay should still dismiss first
+	widgets.ShowContextMenu(w.Content(), paintengine2d.Pt(40, 40), widgets.Item("X", nil))
+	a.PumpOnce()
+	if w.Popup() == nil {
+		t.Fatal("popup")
+	}
+	w.dispatch(platform.Event{Kind: platform.EventKeyDown, Key: platform.KeyEscape})
+	if w.Popup() != nil {
+		t.Fatal("esc popup")
+	}
+	if w.Overlay() == nil {
+		t.Fatal("overlay should remain")
+	}
+	w.dispatch(platform.Event{Kind: platform.EventKeyDown, Key: platform.KeyEscape})
+	a.PumpOnce()
+	if w.Overlay() != nil {
+		t.Fatal("esc overlay")
+	}
+	if cancelled != 1 {
+		t.Fatalf("cancel %d", cancelled)
+	}
+	_ = cb
+}
+
+func TestNumberFieldKeysBubbleFromInnerField(t *testing.T) {
+	a := New(Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{Width: 360, Height: 160, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	nf := widgets.NewNumberField(0, 20, 5, 1, nil)
+	w.SetContent(widgets.NewPad(16, nf))
+	a.PumpOnce()
+	w.RequestFocus(nf.Field())
+	w.dispatch(platform.Event{Kind: platform.EventKeyDown, Key: platform.KeyUp})
+	if nf.Value != 6 {
+		t.Fatalf("bubble up %v", nf.Value)
 	}
 }
 
