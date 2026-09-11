@@ -84,8 +84,8 @@ type session struct {
 	tree                                       *widgets.TreeView
 	preview                                    *widgets.TextArea
 	source                                     *widgets.TextArea
-	htmlView                                   *widgets.TextArea
 	attachList                                 *widgets.ListView
+	askedEmpty                                 bool
 	hdrFrom, hdrSubj, hdrDate, hdrTo, hdrExtra *widgets.Label
 	status                                     *widgets.StatusBar
 	qf                                         *widgets.TextField
@@ -168,15 +168,12 @@ func (s *session) build() widget.Component {
 	s.hdrTo = widgets.NewLabel("")
 	s.hdrExtra = widgets.NewLabel("")
 	s.folderL = widgets.NewLabel("Folders")
-	s.preview = widgets.NewTextArea("", "Select a message", nil)
+	s.preview = widgets.NewTextArea("", "Select a message (plain text)", nil)
 	s.preview.MinRows = 8
 	s.preview.Wrap = true
 	s.source = widgets.NewMonoTextArea("", "Raw source", nil)
 	s.source.MinRows = 8
 	s.source.Wrap = false
-	s.htmlView = widgets.NewTextArea("", "HTML alternative (sanitized text — no HTML engine)", nil)
-	s.htmlView.MinRows = 8
-	s.htmlView.Wrap = true
 
 	s.table = widgets.NewTableView([]widgets.TableColumn{
 		{Title: "★", Width: 28, MinWidth: 24, Sortable: true},
@@ -317,10 +314,8 @@ func (s *session) build() widget.Component {
 
 	previewTab := widgets.NewPad(8, s.preview)
 	sourceTab := widgets.NewPad(8, s.source)
-	htmlTab := widgets.NewPad(8, s.htmlView)
 	tabs := widgets.NewTabView(
 		widgets.Tab{Title: "Message", Content: previewTab},
-		widgets.Tab{Title: "HTML", Content: htmlTab},
 		widgets.Tab{Title: "Source", Content: sourceTab},
 	)
 	tabs.OnChange = func(i int) {
@@ -396,7 +391,7 @@ func (s *session) build() widget.Component {
 	root := widgets.NewColumn(s.menuBar(), s.toolBar(), s.chrome, split, s.status).WithGap(0)
 	root.AddFlex(split, 1)
 	s.refreshAll()
-	return wrapShortcuts(root, s.handleKey)
+	return wrapShortcutsReady(root, s.handleKey, s.maybeAskAddAccount)
 }
 
 func (s *session) menuBar() *widgets.MenuBar {
@@ -405,6 +400,7 @@ func (s *session) menuBar() *widgets.MenuBar {
 		widgets.NewMenu("&File",
 			widgets.ItemAccel("&New Message", "Ctrl+N", s.write),
 			widgets.Item("New &Folder…", s.newFolder),
+			widgets.Item("Add &Account…", s.openAddAccount),
 			widgets.Sep(),
 			widgets.ItemAccel("&Get New Messages", "F5", s.getMessages),
 			widgets.Item("Get Messages for Current Account", s.getMessages),
@@ -865,9 +861,6 @@ func (s *session) loadPreview() {
 		if s.source != nil {
 			s.source.SetText("")
 		}
-		if s.htmlView != nil {
-			s.htmlView.SetText("")
-		}
 		if s.hdrSubj != nil {
 			s.hdrSubj.SetText("No message selected")
 			s.hdrFrom.SetText("")
@@ -909,18 +902,7 @@ func (s *session) loadPreview() {
 		s.attachList.Invalidate()
 	}
 	if s.preview != nil {
-		body := m.Body
-		if body == "" && m.HTML != "" {
-			body = HTMLToText(m.HTML)
-		}
-		s.preview.SetText(body)
-	}
-	if s.htmlView != nil {
-		html := m.HTML
-		if html == "" && m.Body != "" {
-			html = "(no HTML alternative)"
-		}
-		s.htmlView.SetText(html)
+		s.preview.SetText(DisplayBody(m))
 	}
 	if s.source != nil {
 		s.source.SetText(rawSource(m))
@@ -1239,10 +1221,43 @@ func (s *session) about() {
 	widgets.Info(s.win.Content(), "About Mail",
 		"Mail — Thunderbird chrome on uitoolkit "+uitoolkit.Version+".\n"+
 			"mailclientui talks JSON-RPC to mailclientd (Unix socket).\n"+
-			"No IMAP/SMTP in this process. MemoryStore demo or IMAP+SMTP cache.\n\n"+
+			"No IMAP/SMTP in this process. Empty until you add an account.\n"+
+			"MemoryStore dogfood: UITK_MAIL=memory.\n\n"+
+			"Message view is plain text only (HTML is stripped).\n"+
 			"UI: Titillium Web. Source tab: JetBrains Mono.\n"+
 			"See docs/mail.md",
 		nil)
+}
+
+func (s *session) maybeAskAddAccount(from widget.Component) {
+	if s.askedEmpty {
+		return
+	}
+	accts, err := s.cli.Accounts()
+	if err != nil || len(accts) > 0 {
+		return
+	}
+	s.askedEmpty = true
+	widgets.Confirm(from, "Mail", FirstRunPrompt, func(yes bool) {
+		if yes {
+			s.openAddAccount()
+		}
+	})
+}
+
+func (s *session) openAddAccount() {
+	if _, err := OpenAddAccount(s.app, s.cli, func() {
+		s.account = firstAccountID(s.cli)
+		if inbox, ok := specialFolderClient(s.cli, s.account, FolderInbox); ok {
+			s.folder = inbox.ID
+		}
+		s.refreshAll()
+		s.mark("Account saved — set " + EnvPass + " then Get Messages")
+	}); err != nil {
+		widgets.Warn(s.win.Content(), "Add account", err.Error(), nil)
+		return
+	}
+	s.mark("Add account")
 }
 
 func (s *session) cardAt(i int) widgets.CardContent {

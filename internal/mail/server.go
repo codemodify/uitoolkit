@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 )
 
 // Server is mailclientd: one Store, many Unix-socket JSON-RPC clients.
@@ -36,7 +37,7 @@ func (c *rpcConn) send(v any) error {
 // NewServer owns store and advertises socket in status.get.
 func NewServer(store Store, socket string) *Server {
 	if store == nil {
-		store = NewDemoStore()
+		store = NewMemoryStore(time.Time{})
 	}
 	if socket == "" {
 		socket = DefaultSocket()
@@ -161,6 +162,17 @@ func (s *Server) dispatch(req Request) Response {
 		result, err = s.status()
 	case MethodAccountsList:
 		result = s.Store.Accounts()
+	case MethodAccountsPut:
+		var p AccountConfig
+		p, err = decodeParams[AccountConfig](req.Params)
+		if err == nil {
+			var acct Account
+			acct, err = s.Store.PutAccount(p)
+			if err == nil {
+				result = acct
+				s.broadcast(EventChanged, eventParams{Reason: "account"})
+			}
+		}
 	case MethodFoldersList:
 		var p folderListParams
 		p, err = decodeParams[folderListParams](req.Params)
@@ -196,12 +208,16 @@ func (s *Server) dispatch(req Request) Response {
 				var hit []Message
 				for _, m := range all {
 					if p.Filter.Match(m) {
-						hit = append(hit, m)
+						hit = append(hit, plainMessage(m))
 					}
 				}
 				result = hit
 			} else {
-				result = all
+				out := make([]Message, len(all))
+				for i, m := range all {
+					out[i] = plainMessage(m)
+				}
+				result = out
 			}
 		}
 	case MethodMessagesGet:
@@ -212,7 +228,7 @@ func (s *Server) dispatch(req Request) Response {
 			if !ok {
 				err = fmt.Errorf("mail: no message %s", p.ID)
 			} else {
-				result = m
+				result = plainMessage(m)
 			}
 		}
 	case MethodMessagesSearch:

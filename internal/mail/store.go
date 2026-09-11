@@ -1,9 +1,6 @@
-// Package mail is the Thunderbird-chrome Mail dogfood example:
-// a pluggable Store plus the 3-pane desktop UI.
-//
-// v1 ships MemoryStore (in-memory, maildir-ish flags). A future IMAP
-// backend can implement Store without rewriting the chrome — see the
-// IMAP notes on Store.
+// Package mail is the Thunderbird-chrome Mail client: a pluggable Store
+// plus the 3-pane desktop UI. The default backend is an empty LocalStore
+// (IMAP+SMTP + disk cache). Seeded MemoryStore is UITK_MAIL=memory only.
 package mail
 
 import (
@@ -240,8 +237,8 @@ type DaemonStatus struct {
 	Health   string `json:"health,omitempty"`
 }
 
-// Store is the mailclientd backend. MemoryStore is the offline demo.
-// mailclientui never calls this — it talks JSON-RPC to the daemon.
+// Store is the mailclientd backend. LocalStore is the default (IMAP+SMTP).
+// MemoryStore is UITK_MAIL=memory only. mailclientui never calls this.
 //
 // IMAP mapping (IMAPStore skeleton, UITK_MAIL=imap):
 //
@@ -302,6 +299,9 @@ type Store interface {
 	GetPart(id MessageID, partID string) (PartData, error)
 	OpenPart(id MessageID, partID string) (PartData, error)
 	Sync(accountID string) (SyncResult, error)
+
+	// PutAccount writes IMAP/SMTP settings (passEnv only — never a password).
+	PutAccount(AccountConfig) (Account, error)
 }
 
 func boolPtr(v bool) *bool { return &v }

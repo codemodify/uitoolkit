@@ -1,7 +1,7 @@
 // Command mailclientui is the Thunderbird-chrome Mail UI. It connects to
 // mailclientd over a Unix socket and never speaks IMAP.
 //
-//	go run ./cmd/mailclientd          # other terminal
+//	go run ./cmd/mailclientd          # other terminal (empty until add-account)
 //	go run ./cmd/mailclientui
 //
 //	UITK_MAIL_SOCK=/tmp/mail.sock go run ./cmd/mailclientui

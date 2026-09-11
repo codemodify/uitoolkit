@@ -438,6 +438,56 @@ func (s *MemoryStore) Count() int {
 	return len(s.messages)
 }
 
+func (s *MemoryStore) PutAccount(in AccountConfig) (Account, error) {
+	a, err := SanitizeAccountConfig(in)
+	if err != nil {
+		return Account{}, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	acct := Account{ID: a.ID, Name: a.Name, Address: a.Address, Transport: "memory"}
+	found := false
+	for i, x := range s.accounts {
+		if x.ID == a.ID {
+			s.accounts[i] = acct
+			found = true
+			break
+		}
+	}
+	if !found {
+		s.accounts = append(s.accounts, acct)
+	}
+	for _, idn := range a.Identities {
+		idn.AccountID = a.ID
+		s.identities = upsertIdentity(s.identities, idn)
+	}
+	s.ensureSpecialsLocked(a.ID)
+	return acct, nil
+}
+
+func (s *MemoryStore) ensureSpecialsLocked(accountID string) {
+	for _, spec := range defaultSpecials() {
+		if _, ok := s.specialLocked(accountID, spec.Kind); ok {
+			continue
+		}
+		id := FolderID(accountID + "/" + strings.ToLower(spec.Name))
+		s.folders = append(s.folders, Folder{
+			ID: id, AccountID: accountID, Name: spec.Name, Kind: spec.Kind, Remote: spec.Remote,
+		})
+	}
+}
+
+func defaultSpecials() []Folder {
+	return []Folder{
+		{Name: "Inbox", Kind: FolderInbox, Remote: "INBOX"},
+		{Name: "Drafts", Kind: FolderDrafts, Remote: "Drafts"},
+		{Name: "Sent", Kind: FolderSent, Remote: "Sent"},
+		{Name: "Junk", Kind: FolderJunk, Remote: "Junk"},
+		{Name: "Trash", Kind: FolderTrash, Remote: "Trash"},
+		{Name: "Archives", Kind: FolderArchive, Remote: "Archives"},
+	}
+}
+
 func (s *MemoryStore) Identities(accountID string) []Identity {
 	s.mu.Lock()
 	defer s.mu.Unlock()

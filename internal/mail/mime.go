@@ -224,6 +224,38 @@ func containsStr(in []string, s string) bool {
 	return false
 }
 
+// DisplayBody is the text-only message view: prefer text/plain, else strip
+// HTML tags. There is no HTML engine — the UI never paints markup.
+func DisplayBody(m Message) string {
+	if m.Body != "" && !looksLikeHTML(m.Body) {
+		return m.Body
+	}
+	if m.HTML != "" {
+		return HTMLToText(m.HTML)
+	}
+	if m.Body != "" {
+		return HTMLToText(m.Body)
+	}
+	return ""
+}
+
+func looksLikeHTML(s string) bool {
+	low := strings.ToLower(s)
+	return strings.Contains(low, "<html") || strings.Contains(low, "<body") ||
+		strings.Contains(low, "<div") || strings.Contains(low, "<p>") ||
+		strings.Contains(low, "<br") || strings.Contains(low, "<span") ||
+		strings.Contains(low, "<table") || strings.Contains(low, "<!doctype")
+}
+
+func plainMessage(m Message) Message {
+	m.Body = DisplayBody(m)
+	m.HTML = ""
+	if m.Snippet == "" {
+		m.Snippet = snippetOf(m.Body)
+	}
+	return m
+}
+
 // HTMLToText is a conservative tag stripper (no JS execution).
 func HTMLToText(html string) string {
 	html = stripBlocks(html, "script")
@@ -257,8 +289,8 @@ func HTMLToText(html string) string {
 	return strings.TrimSpace(s)
 }
 
-// SanitizeHTML drops script/style/iframe and on* handlers. The UI paints
-// the result as text (no HTML engine in uitoolkit).
+// SanitizeHTML drops script/style/iframe and on* handlers. Used only when
+// caching a MIME part; the message view always uses DisplayBody / HTMLToText.
 func SanitizeHTML(html string) string {
 	html = stripBlocks(html, "script")
 	html = stripBlocks(html, "style")

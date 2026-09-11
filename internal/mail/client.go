@@ -214,6 +214,12 @@ func (c *Client) Accounts() ([]Account, error) {
 	return out, err
 }
 
+func (c *Client) PutAccount(cfg AccountConfig) (Account, error) {
+	var out Account
+	err := c.call(MethodAccountsPut, cfg, &out)
+	return out, err
+}
+
 func (c *Client) ListFolders(accountID string) ([]Folder, error) {
 	var out []Folder
 	err := c.call(MethodFoldersList, folderListParams{AccountID: accountID}, &out)

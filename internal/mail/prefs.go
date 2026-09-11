@@ -33,7 +33,7 @@ func PrefsApp(a *app.Application, win *app.Window, cli *Client) widget.Component
 	st, _ := cli.Status()
 	status := widgets.NewStatusBar("mailclientd settings.", st.Backend, "v"+uitoolkit.Version)
 
-	accountsTab := prefsAccounts(cli, st)
+	accountsTab := prefsAccounts(a, cli, st)
 	identsTab := prefsIdentities(cli)
 	filtersTab := prefsFilters(cli, win)
 	tagsTab := prefsTags(cli)
@@ -51,11 +51,10 @@ func PrefsApp(a *app.Application, win *app.Window, cli *Client) widget.Component
 	chrome := widgets.NewTitleBar("Preferences", "accounts · identities · filters · tags · v"+uitoolkit.Version)
 	root := widgets.NewColumn(chrome, tabs, tools, status).WithGap(0)
 	root.AddFlex(tabs, 1)
-	_ = a
 	return root
 }
 
-func prefsAccounts(cli *Client, st DaemonStatus) widget.Component {
+func prefsAccounts(a *app.Application, cli *Client, st DaemonStatus) widget.Component {
 	accounts, _ := cli.Accounts()
 	table := widgets.NewTableView([]widgets.TableColumn{
 		{Title: "Name", Width: 160, Sortable: true},
@@ -90,9 +89,12 @@ func prefsAccounts(cli *Client, st DaemonStatus) widget.Component {
 		"Backend: %s   Socket: %s\nHealth: %s   Accounts: %d\nConfig: %s\nPasswords come from passEnv (never stored). See docs/mail.md.",
 		st.Backend, cli.Socket, health, st.Accounts, ConfigPath(),
 	))
+	add := widgets.NewButton("Add account…", func() {
+		_, _ = OpenAddAccount(a, cli, nil)
+	})
 	return widgets.NewColumn(
 		widgets.NewTitle("Accounts (stores / transports)"),
-		info, table,
+		info, table, add,
 	).WithGap(8)
 }
 
