@@ -1,0 +1,9 @@
+*.exe
+*.test
+*.out
+/bin/
+dist/
+.DS_Store
+examples/gallery/gallery
+examples/notes/notes
+/tmp/
