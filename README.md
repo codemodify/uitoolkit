@@ -197,8 +197,10 @@ bubbling, scrollbar track hits, text selection and copy/paste stubs, menu
 and tab swap, tree expand/select, context-menu dispatch, toolbar and
 combo, radio groups, progress clamp, message-box results, table sort,
 number-field step/filter, file-dialog stub, delayed tooltips, Esc
-dismiss order, textarea wrap/nav, accordion exclusive expand, separator
-and spacer measure, and an offscreen paint that produces real pixels.
+dismiss order, textarea newline/wrap/nav, switch toggle (including
+disabled), accordion exclusive expand and focus yield, expander
+relayout, separator and spacer measure, and an offscreen paint that
+produces real pixels.
 `go test ./examples/gallery` regenerates the seventeen PNGs and fails if
 any two share a blob.
 
@@ -207,19 +209,20 @@ tooltip → popup → overlay, everywhere.
 
 ## Positioning
 
-**uitoolkit** is a desktop widget kit on **your own Go paint engine**. It is
-not Fyne (GL + batteries), not Gio (ops + GPU), not a webview.
+**uitoolkit** is a desktop widget kit on **your own Go paint engine**:
+pure Go, retained tree, paintengine2d pixels, X11-first. It is not
+Fyne (GL + batteries), not Gio (ops + GPU), not Wails (Go + webview).
 
-| | Paint | Windowing | Widgets | CGO |
+| | Paint | Windowing | Model | CGO |
 | --- | --- | --- | --- | --- |
 | **uitoolkit** | paintengine2d (own CPU AA) | X11 + offscreen | Retained, themed | Optional (X11) |
-| [Fyne](https://fyne.io) | Own + OpenGL | Cross-platform | Yes | Yes (GL) |
-| [Gio](https://gioui.org) | Own ops renderer | Cross-platform | Immediate + widgets | Optional |
-| Electron | Browser (Skia) | Chromium | HTML/CSS | Native binary |
+| [Fyne](https://fyne.io) | Own + OpenGL | Cross-platform | Retained | Yes (GL) |
+| [Gio](https://gioui.org) | Own ops renderer | Cross-platform | Immediate | Optional |
+| [Wails](https://wails.io) | Browser / WebView | Cross-platform | HTML/CSS + Go | Yes (webview) |
 
 Choose uitoolkit when you want **pure Go pixels you own**, a retained tree
-with damage, and no browser runtime. Choose Fyne/Gio when you need mature
-cross-platform backends today.
+with damage, and no browser runtime. Choose Fyne or Gio for mature
+cross-platform backends today; choose Wails when the UI should be a webview.
 
 ## v0.1 out of scope
 
@@ -234,10 +237,13 @@ Documented on purpose — do not expect these yet:
 
 ## Version
 
+**0.1.7** — Harden 0.1.6: Accordion exclusive + layout/focus, TextArea
+newline and Switch toggle regressions, gallery metrics polish, comparison
+vs Fyne / Gio / Wails. Still paintengine2d **v0.7.2** (`02b2939`).
+
 **0.1.6** — TextArea (wrap or scroll, multi-line caret), Switch, Accordion /
 Expander, first-class Separator and Spacer, Inspector sample (table +
 toolbar + tabs + message box). Keyboard map covers the new controls.
-Requires `github.com/codemodify/paintengine2d@v0.7.2` (`02b2939`).
 
 ## License
 

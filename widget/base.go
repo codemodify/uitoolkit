@@ -227,6 +227,17 @@ func (b *Base) RequestFocus() {
 	}
 }
 
+// RequestLayout asks the host to Measure/Arrange before the next paint.
+func (b *Base) RequestLayout() {
+	h := b.host
+	if h == nil && b.parent != nil {
+		h = b.parent.Host()
+	}
+	if h != nil {
+		h.RequestLayout()
+	}
+}
+
 func (b *Base) Focused() bool {
 	h := b.host
 	if h == nil && b.parent != nil {
@@ -273,6 +284,22 @@ func Walk(c Component, fn func(Component)) {
 	for _, ch := range c.Children() {
 		Walk(ch, fn)
 	}
+}
+
+// Contains reports whether target is root or a descendant (ignores visibility).
+func Contains(root, target Component) bool {
+	if root == nil || target == nil {
+		return false
+	}
+	if root == target {
+		return true
+	}
+	for _, ch := range root.Children() {
+		if Contains(ch, target) {
+			return true
+		}
+	}
+	return false
 }
 
 // Focusables returns tab-order candidates (visible, enabled, wants focus).

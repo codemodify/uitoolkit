@@ -40,11 +40,25 @@ func (e *Expander) SetExpanded(v bool) {
 	}
 	e.Expanded = v
 	if e.body != nil {
+		if !v {
+			e.yieldFocusFromBody()
+		}
 		e.body.SetVisible(v)
 	}
 	e.Invalidate()
+	e.RequestLayout()
 	if e.OnToggle != nil {
 		e.OnToggle(v)
+	}
+}
+
+func (e *Expander) yieldFocusFromBody() {
+	h := e.Host()
+	if h == nil || e.body == nil || e.head == nil {
+		return
+	}
+	if widget.Contains(e.body, h.Focus()) {
+		e.head.RequestFocus()
 	}
 }
 
@@ -140,11 +154,7 @@ func (a *Accordion) AddSection(e *Expander) {
 	prev := e.OnToggle
 	e.OnToggle = func(open bool) {
 		if a.Exclusive && open {
-			for _, o := range a.items {
-				if o != e && o.Expanded {
-					o.SetExpanded(false)
-				}
-			}
+			a.closeOthers(e)
 		}
 		if prev != nil {
 			prev(open)
@@ -152,6 +162,17 @@ func (a *Accordion) AddSection(e *Expander) {
 	}
 	a.items = append(a.items, e)
 	a.col.Add(e)
+	if a.Exclusive && e.Expanded {
+		a.closeOthers(e)
+	}
+}
+
+func (a *Accordion) closeOthers(keep *Expander) {
+	for _, o := range a.items {
+		if o != keep && o.Expanded {
+			o.SetExpanded(false)
+		}
+	}
 }
 
 func (a *Accordion) Measure(c layout.Constraints) paintengine2d.Point {

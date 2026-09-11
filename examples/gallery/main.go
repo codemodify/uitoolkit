@@ -171,7 +171,8 @@ func buildGallery(a *app.Application, win *app.Window, light bool) widget.Compon
 	buttons := widgets.NewPanel("Buttons",
 		widgets.NewRow(primary, plain, disabled).WithGap(10),
 		widgets.NewRow(about, ask, warn).WithGap(10),
-		widgets.NewRow(other, themeBtn, clickLbl).WithGap(10),
+		widgets.NewRow(other, themeBtn).WithGap(10),
+		clickLbl,
 	)
 
 	openFile := widgets.NewButton("Open file…", func() {
@@ -867,7 +868,7 @@ func writeTextAreaShot(path string) error {
 		return err
 	}
 	area := widgets.NewTextArea(
-		"Ship notes for v0.1.6.\nTextArea wraps this paragraph onto the next visual line and scrolls when the body is taller than the field.\nReturn inserts a newline.",
+		"Ship notes for v0.1.7.\nTextArea wraps this paragraph onto the next visual line and scrolls when the body is taller than the field.\nReturn inserts a newline.",
 		"Write something…",
 		nil,
 	)
@@ -883,7 +884,7 @@ func writeTextAreaShot(path string) error {
 	))
 	a.PumpOnce()
 	w.RequestFocus(area)
-	area.SetSelection(0, 21) // "Ship notes for v0.1.6"
+	area.SetSelection(0, 21) // "Ship notes for v0.1.7"
 	area.SetCaretBlink(true)
 	a.PumpOnce()
 	if err := w.WritePNG(path); err != nil {

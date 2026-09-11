@@ -59,13 +59,14 @@ type Component interface {
 	InvalidateRect(r paintengine2d.Rect)
 }
 
-// Host is implemented by app.Window: damage, focus, scale.
+// Host is implemented by app.Window: damage, focus, scale, layout.
 type Host interface {
 	Invalidate(c Component, local paintengine2d.Rect)
 	RequestFocus(c Component)
 	Focus() Component
 	Scale() float32
 	Look() style.LookAndFeel
+	RequestLayout()
 }
 
 // Self is used so an embedded Base can return the outer Component.

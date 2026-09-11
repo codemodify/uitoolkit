@@ -19,6 +19,7 @@ func (h *host) RequestFocus(c widget.Component)                 { h.focus = c }
 func (h *host) Focus() widget.Component                         { return h.focus }
 func (h *host) Scale() float32                                  { return 1 }
 func (h *host) Look() style.LookAndFeel                         { return style.DarkLook() }
+func (h *host) RequestLayout()                                  {}
 
 func TestCheckboxToggle(t *testing.T) {
 	h := &host{}
