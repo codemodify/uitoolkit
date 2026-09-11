@@ -107,26 +107,21 @@ func (f *Font) Draw(ctx *paintengine2d.Context, text string, origin paintengine2
 	if col == (paintengine2d.Color{}) {
 		col = f.Color
 	}
-	if !GlyphTint() {
-		// Atlas cells are already theme-colored; modulate alpha only.
-		col = paintengine2d.Color{R: 1, G: 1, B: 1, A: col.A}
-		if col.A <= 0 {
-			col.A = 1
-		}
+	if col == (paintengine2d.Color{}) {
+		col = paintengine2d.White
 	}
 	run := paintengine2d.NullShaper{}.Shape(text, f.Atlas)
 	ctx.DrawGlyphs(run, origin, paintengine2d.Paint{Color: col, Filter: paintengine2d.FilterNearest})
 }
 
 type fontKey struct {
-	size       int
-	r, g, b, a uint16
+	size int
 }
 
 var fontCache sync.Map
 
-// BakeFont scales paintengine2d's 5×7 UI atlas (plus a few extra punct cells)
-// with nearest-neighbor so labels stay on the engine's glyph path.
+// BakeFont scales paintengine2d's 5×7 UI atlas (plus extra punct) to a shared
+// white sheet. Theme color is applied at draw time via Paint.Color (v0.7.2 tint).
 func BakeFont(size float32, col paintengine2d.Color) *Font {
 	if size < 8 {
 		size = 8
@@ -139,23 +134,12 @@ func BakeFont(size float32, col paintengine2d.Color) *Font {
 		scale = 4
 	}
 	key := fontKey{size: scale}
-	if !GlyphTint() {
-		key.r = uint16(col.R * 1000)
-		key.g = uint16(col.G * 1000)
-		key.b = uint16(col.B * 1000)
-		key.a = uint16(col.A * 1000)
-	}
 	if v, ok := fontCache.Load(key); ok {
 		f := *v.(*Font)
 		f.Color = col
 		return &f
 	}
-	atlasCol := col
-	if GlyphTint() {
-		atlasCol = paintengine2d.White
-	}
-	f := bakeScaled(scale, atlasCol)
-	f.Color = col
+	f := bakeScaled(scale, paintengine2d.White)
 	fontCache.Store(key, f)
 	out := *f
 	out.Color = col
@@ -277,7 +261,7 @@ var (
 )
 
 // GlyphTint reports whether paintengine2d blits apply RGB Color as a tint
-// (v0.7.2+). Until that ships, atlases are baked in the theme color.
+// (v0.7.2+). uitoolkit requires this for themed white atlases.
 func GlyphTint() bool {
 	tintOnce.Do(func() {
 		atlas := paintengine2d.NewBitmapAtlas(paintengine2d.White)

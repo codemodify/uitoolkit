@@ -3,8 +3,8 @@
 **Pure-Go desktop UI toolkit.** Retained widget tree, layout, themes, and
 an X11 window backend. Every pixel is painted with
 [`github.com/codemodify/paintengine2d`](https://github.com/codemodify/paintengine2d)
-(v0.7.1+; white-atlas Color tint when the engine publishes v0.7.2). There is no
-second rasterizer, no Skia, no Gio renderer, and no Electron.
+(v0.7.2+). Labels share a white glyph atlas and theme through `Paint.Color`
+tint. There is no second rasterizer, no Skia, no Gio renderer, and no Electron.
 
 ```go
 app := uitoolkit.New(uitoolkit.Options{Look: uitoolkit.DarkLook()})
@@ -23,7 +23,7 @@ go get github.com/codemodify/uitoolkit@dev
 | | |
 | --- | --- |
 | Language | Go 1.22+ |
-| Paint | paintengine2d only (`Context`, `Damage`, `WrapImage`, `DrawGlyphs`) |
+| Paint | paintengine2d 0.7.2 (`Context`, `Damage`, `DrawGlyphs` Color tint) |
 | Windowing | Linux X11 first (CGO + libX11); offscreen always |
 | CGO | optional — tests and screenshots are `CGO_ENABLED=0` |
 | License | MIT |
@@ -87,7 +87,7 @@ Each frame:
 1. Widgets call `Invalidate` → dirty boxes land in `paintengine2d.Damage`.
 2. `Context` is created on the pixmap; `QuickReject` / clip skip clean regions.
 3. Each component `Paint`s with `DrawRoundRect`, `Fill`, `Stroke`, gradients,
-   and `DrawGlyphs` (scaled `NewBitmapAtlas` + extra punct).
+   and `DrawGlyphs` (shared white atlas, themed with `Paint.Color` tint).
 4. `Damage.Rects` are presented to X11. Offscreen present is a no-op.
 
 ```
@@ -99,9 +99,8 @@ Desktop app
 
 If the engine is missing a primitive (nine-patch, SaveLayer, OpenType), the
 fix belongs in paintengine2d — not a second painter here. **v0.7.2 blit RGB
-tint** is detected at runtime (`style.GlyphTint`). Until that engine tag is
-published, atlases are still baked in the theme color; when tint works, one
-white atlas is shared and `DrawGlyphs` receives the theme Color.
+tint** is required. One white atlas per size is shared; `DrawGlyphs` receives
+the theme Color. `style.GlyphTint` asserts the engine actually multiplies RGB.
 
 ## Architecture
 
@@ -176,9 +175,8 @@ Documented on purpose — do not expect these yet:
 
 ## Version
 
-**0.1.1** — desktop polish on 0.1.0: distinct gallery shots, scroll physics,
-caret/selection, focus rings, keyboard nav. Still paintengine2d 0.7.1+
-(v0.7.2 tint is used automatically when the engine provides it).
+**0.1.2** — paintengine2d **0.7.2** (`02b2939`): shared white glyph atlas +
+`Paint.Color` tint. Keeps 0.1.1 screenshot and input hardening.
 
 ## License
 
