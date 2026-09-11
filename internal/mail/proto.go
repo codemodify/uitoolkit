@@ -24,13 +24,27 @@ import "encoding/json"
 //	messages.update     {id, message}
 //	messages.fetch      {accountId}     // Get Messages
 //	unread.get          {folderId?}     // omit folderId → total
-//	compose.send        {accountId, message}
+//	compose.send        {accountId, identityId?, message, attachPaths?}
 //	compose.saveDraft   {accountId, message, id?}
+//	identities.list     {accountId?}
+//	identities.put      Identity
+//	identities.delete   {id}
+//	tags.list
+//	tags.put            {name, color}
+//	folders.virtual
+//	filters.list
+//	filters.put         FilterRule
+//	filters.delete      {id}
+//	filters.apply       {folderId?}
+//	messages.getPart    {id, partId}
+//	messages.openPart   {id, partId}
+//	sync.run            {accountId?}
 //
 // Events (server → client, no id):
 //
 //	mail.changed        {folderId, reason}
 //	mail.fetched        {accountId, count}
+//	mail.synced         {accountId, count}
 
 const RPCVersion = "2.0"
 
@@ -54,9 +68,23 @@ const (
 	MethodUnreadGet      = "unread.get"
 	MethodComposeSend    = "compose.send"
 	MethodComposeDraft   = "compose.saveDraft"
+	MethodIdentitiesList = "identities.list"
+	MethodIdentitiesPut  = "identities.put"
+	MethodIdentitiesDel  = "identities.delete"
+	MethodTagsList       = "tags.list"
+	MethodTagsPut        = "tags.put"
+	MethodFoldersVirtual = "folders.virtual"
+	MethodFiltersList    = "filters.list"
+	MethodFiltersPut     = "filters.put"
+	MethodFiltersDel     = "filters.delete"
+	MethodFiltersApply   = "filters.apply"
+	MethodMessagesPart   = "messages.getPart"
+	MethodMessagesOpen   = "messages.openPart"
+	MethodSyncRun        = "sync.run"
 
 	EventChanged = "mail.changed"
 	EventFetched = "mail.fetched"
+	EventSynced  = "mail.synced"
 )
 
 // Request is a JSON-RPC 2.0 request.
@@ -174,9 +202,36 @@ type unreadParams struct {
 }
 
 type composeParams struct {
-	AccountID string    `json:"accountId"`
-	Message   Message   `json:"message"`
-	ID        MessageID `json:"id,omitempty"`
+	AccountID   string    `json:"accountId"`
+	IdentityID  string    `json:"identityId,omitempty"`
+	Message     Message   `json:"message"`
+	ID          MessageID `json:"id,omitempty"`
+	AttachPaths []string  `json:"attachPaths,omitempty"`
+}
+
+type identityListParams struct {
+	AccountID string `json:"accountId,omitempty"`
+}
+
+type identityIDParams struct {
+	ID string `json:"id"`
+}
+
+type ruleIDParams struct {
+	ID string `json:"id"`
+}
+
+type applyRulesParams struct {
+	FolderID FolderID `json:"folderId,omitempty"`
+}
+
+type partParams struct {
+	ID     MessageID `json:"id"`
+	PartID string    `json:"partId,omitempty"`
+}
+
+type applyResult struct {
+	Count int `json:"count"`
 }
 
 type unreadResult struct {

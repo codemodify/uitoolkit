@@ -32,6 +32,15 @@ type (
 	FileInfo          = widgets.FileInfo
 	FileDialogMode    = widgets.FileDialogMode
 	FileDialogOptions = widgets.FileDialogOptions
+	Density           = style.Density
+	CardContent       = widgets.CardContent
+	CardBadge         = widgets.CardBadge
+)
+
+const (
+	DensityDefault  = style.DensityDefault
+	DensityCompact  = style.DensityCompact
+	DensityRelaxed  = style.DensityRelaxed
 )
 
 func New(opts Options) *Application { return app.New(opts) }
@@ -40,6 +49,9 @@ func DarkLook() *style.Classic  { return style.DarkLook() }
 func LightLook() *style.Classic { return style.LightLook() }
 func WithScale(look style.LookAndFeel, scale float32) style.LookAndFeel {
 	return style.WithScale(look, scale)
+}
+func WithDensity(look style.LookAndFeel, d style.Density) style.LookAndFeel {
+	return style.WithDensity(look, d)
 }
 func Dark() style.Palette       { return style.Dark() }
 func Light() style.Palette      { return style.Light() }
@@ -77,6 +89,9 @@ func NewScrollView(child widget.Component) *widgets.ScrollView {
 }
 func NewListView(count int, text func(int) string, on func(int)) *widgets.ListView {
 	return widgets.NewListView(count, text, on)
+}
+func NewCardList(count int, card func(int) widgets.CardContent, on func(int)) *widgets.CardList {
+	return widgets.NewCardList(count, card, on)
 }
 func NewSplitter(vertical bool, a, b widget.Component) *widgets.Splitter {
 	return widgets.NewSplitter(vertical, a, b)

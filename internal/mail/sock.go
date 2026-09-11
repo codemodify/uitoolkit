@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -33,22 +34,39 @@ func DefaultSocket() string {
 	return filepath.Join(os.TempDir(), "mailclientd-"+strconv.Itoa(os.Getuid())+".sock")
 }
 
-// OpenStore selects MemoryStore (default) or the IMAP skeleton.
+// OpenStore selects MemoryStore (offline demo) or the disk+IMAP LocalStore.
+//
+//	UITK_MAIL=memory|demo|mem  — in-memory dogfood (default when no config)
+//	UITK_MAIL=imap             — LocalStore from env and/or mail.json
+//	unset + config file        — LocalStore (real accounts)
 func OpenStore() (Store, error) {
-	switch os.Getenv(EnvMail) {
-	case "", "memory", "demo", "mem":
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvMail))) {
+	case "memory", "demo", "mem":
 		return NewDemoStore(), nil
 	case "imap":
-		s := NewIMAPStoreFromEnv()
-		if err := s.Health(); err != nil {
+		cfg, err := ConfigFromEnv()
+		if err != nil {
+			if file, ferr := LoadConfig(); ferr == nil && len(file.Accounts) > 0 {
+				cfg = file
+				err = nil
+			}
+		}
+		if err != nil {
+			s := NewIMAPStoreFromEnv()
 			return s, err
 		}
-		if err := s.Connect(); err != nil {
-			return s, err
+		if file, ferr := LoadConfig(); ferr == nil && len(file.Accounts) > 0 {
+			cfg.Accounts = append(file.Accounts, cfg.Accounts...)
 		}
-		return s, nil
+		return NewLocalStore(cfg)
 	default:
-		return nil, fmt.Errorf("UITK_MAIL=%s: want memory or imap", os.Getenv(EnvMail))
+		if cfg, err := LoadConfig(); err == nil && len(cfg.Accounts) > 0 {
+			return NewLocalStore(cfg)
+		}
+		if os.Getenv(EnvMail) != "" {
+			return nil, fmt.Errorf("UITK_MAIL=%s: want memory or imap", os.Getenv(EnvMail))
+		}
+		return NewDemoStore(), nil
 	}
 }
 

@@ -1,5 +1,114 @@
 package style
 
+// Density is chrome spacing: Compact / Default / Relaxed (v0.9).
+// It is independent of display scale (HiDPI); apply density first, then scale.
+type Density int
+
+const (
+	DensityDefault Density = iota
+	DensityCompact
+	DensityRelaxed
+)
+
+func (d Density) String() string {
+	switch d {
+	case DensityCompact:
+		return "compact"
+	case DensityRelaxed:
+		return "relaxed"
+	default:
+		return "default"
+	}
+}
+
+// ParseDensity accepts compact / default / relaxed (empty → default).
+func ParseDensity(s string) Density {
+	switch s {
+	case "compact", "Compact":
+		return DensityCompact
+	case "relaxed", "Relaxed", "comfortable":
+		return DensityRelaxed
+	default:
+		return DensityDefault
+	}
+}
+
+// ApplyDensity rewrites 1× metrics for the chosen chrome density.
+// Compact keeps a 14px body; Default and Relaxed stay at 16px.
+func ApplyDensity(m Metrics, d Density) Metrics {
+	switch d {
+	case DensityCompact:
+		m.Pad = 8
+		m.Gap = 6
+		m.ControlH = 28
+		m.TitleBar = 30
+		m.FontSize = 14
+		m.TitleSize = 18
+		m.FieldPad = 6
+		m.MenuBarH = 26
+		m.MenuItemH = 24
+		m.TabH = 28
+		m.StatusBarH = 24
+		m.ToolBarH = 30
+		m.ToolBtn = 26
+		m.HeaderH = 24
+		m.AccordionH = 26
+		m.RowH = 20
+		m.RowPad = 4
+	case DensityRelaxed:
+		m.Pad = 16
+		m.Gap = 14
+		m.ControlH = 40
+		m.TitleBar = 42
+		m.FontSize = 16
+		m.TitleSize = 24
+		m.FieldPad = 12
+		m.MenuBarH = 36
+		m.MenuItemH = 34
+		m.TabH = 38
+		m.StatusBarH = 32
+		m.ToolBarH = 44
+		m.ToolBtn = 36
+		m.HeaderH = 34
+		m.AccordionH = 36
+		m.RowH = 32
+		m.RowPad = 10
+	default:
+		// DefaultMetrics values for density-sensitive fields.
+		m.Pad = 12
+		m.Gap = 10
+		m.ControlH = 34
+		m.TitleBar = 36
+		m.FontSize = 16
+		m.TitleSize = 22
+		m.FieldPad = 10
+		m.MenuBarH = 30
+		m.MenuItemH = 28
+		m.TabH = 32
+		m.StatusBarH = 28
+		m.ToolBarH = 36
+		m.ToolBtn = 30
+		m.HeaderH = 28
+		m.AccordionH = 30
+		m.RowH = 24
+		m.RowPad = 6
+	}
+	return m
+}
+
+// WithDensity rebuilds a Classic look at 1× density. Application.SetLook
+// still applies display scale afterward.
+func WithDensity(look LookAndFeel, d Density) LookAndFeel {
+	if look == nil {
+		return look
+	}
+	c, ok := look.(*Classic)
+	if !ok {
+		return look
+	}
+	return NewClassic(c.Name(), c.Palette(), ApplyDensity(DefaultMetrics(), d))
+}
+
 // BaseFontSize is the unscaled Classic body size (1× design pixels).
 const BaseFontSize = 16
 

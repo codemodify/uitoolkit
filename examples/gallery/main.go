@@ -288,8 +288,17 @@ func buildGallery(a *app.Application, win *app.Window, light bool) widget.Compon
 			widgets.Item("Reveal in list", nil),
 		)
 	}
-	listPane := widgets.NewColumn(selected, list).WithGap(6)
+	cardDemo := widgets.NewCardList(4, func(i int) widgets.CardContent {
+		return widgets.CardContent{
+			Title: files[i%len(files)], Subtitle: "CardList row",
+			Meta: "now", Snippet: "Thunderbird-style multi-line card",
+			Bold: i == 0,
+		}
+	}, nil)
+	cardDemo.CardHeight = 56
+	listPane := widgets.NewColumn(selected, list, widgets.NewLabel("Cards"), cardDemo).WithGap(6)
 	listPane.AddFlex(list, 1)
+	listPane.AddFlex(cardDemo, 1)
 
 	treeSel := widgets.NewLabel("Selected: src")
 	srcApp := widgets.NewTreeNode("app",
@@ -647,6 +656,7 @@ var screenshotNames = []string{
 	"gallery-textarea.png", "gallery-accordion.png",
 	"notes.png", "inspector.png", "files.png", "widgets.png", "fonts.png",
 	"mail-dark.png", "mail-light.png", "mail-classic.png", "mail-compose.png", "mail-prefs.png",
+	"mail-cards.png", "mail-compact.png", "mail-filters.png",
 }
 
 func selectGalleryTab(w *app.Window, i int) {

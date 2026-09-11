@@ -307,8 +307,14 @@ func (c *Client) UnreadTotal() (int, error) {
 }
 
 func (c *Client) Send(accountID string, msg Message, draftID MessageID) (MessageID, error) {
+	return c.SendIdent(accountID, "", msg, draftID, nil)
+}
+
+func (c *Client) SendIdent(accountID, identityID string, msg Message, draftID MessageID, attachPaths []string) (MessageID, error) {
 	var r appendResult
-	err := c.call(MethodComposeSend, composeParams{AccountID: accountID, Message: msg, ID: draftID}, &r)
+	err := c.call(MethodComposeSend, composeParams{
+		AccountID: accountID, IdentityID: identityID, Message: msg, ID: draftID, AttachPaths: attachPaths,
+	}, &r)
 	return r.ID, err
 }
 
@@ -316,6 +322,92 @@ func (c *Client) SaveDraft(accountID string, msg Message, draftID MessageID) (Me
 	var r appendResult
 	err := c.call(MethodComposeDraft, composeParams{AccountID: accountID, Message: msg, ID: draftID}, &r)
 	return r.ID, err
+}
+
+func (c *Client) Identities(accountID string) ([]Identity, error) {
+	var out []Identity
+	err := c.call(MethodIdentitiesList, identityListParams{AccountID: accountID}, &out)
+	if out == nil {
+		out = []Identity{}
+	}
+	return out, err
+}
+
+func (c *Client) PutIdentity(id Identity) (Identity, error) {
+	var out Identity
+	err := c.call(MethodIdentitiesPut, id, &out)
+	return out, err
+}
+
+func (c *Client) DeleteIdentity(id string) error {
+	return c.call(MethodIdentitiesDel, identityIDParams{ID: id}, nil)
+}
+
+func (c *Client) Tags() ([]Tag, error) {
+	var out []Tag
+	err := c.call(MethodTagsList, nil, &out)
+	if out == nil {
+		out = []Tag{}
+	}
+	return out, err
+}
+
+func (c *Client) PutTag(t Tag) (Tag, error) {
+	var out Tag
+	err := c.call(MethodTagsPut, t, &out)
+	return out, err
+}
+
+func (c *Client) VirtualFolders() ([]Folder, error) {
+	var out []Folder
+	err := c.call(MethodFoldersVirtual, nil, &out)
+	if out == nil {
+		out = []Folder{}
+	}
+	return out, err
+}
+
+func (c *Client) Rules() ([]FilterRule, error) {
+	var out []FilterRule
+	err := c.call(MethodFiltersList, nil, &out)
+	if out == nil {
+		out = []FilterRule{}
+	}
+	return out, err
+}
+
+func (c *Client) PutRule(r FilterRule) (FilterRule, error) {
+	var out FilterRule
+	err := c.call(MethodFiltersPut, r, &out)
+	return out, err
+}
+
+func (c *Client) DeleteRule(id string) error {
+	return c.call(MethodFiltersDel, ruleIDParams{ID: id}, nil)
+}
+
+func (c *Client) ApplyRules(folder FolderID) (int, error) {
+	var r applyResult
+	err := c.call(MethodFiltersApply, applyRulesParams{FolderID: folder}, &r)
+	return r.Count, err
+}
+
+func (c *Client) GetPart(id MessageID, partID string) (PartData, error) {
+	var p PartData
+	err := c.call(MethodMessagesPart, partParams{ID: id, PartID: partID}, &p)
+	return p, err
+}
+
+func (c *Client) OpenPart(id MessageID, partID string) (PartData, error) {
+	var p PartData
+	err := c.call(MethodMessagesOpen, partParams{ID: id, PartID: partID}, &p)
+	return p, err
+}
+
+func (c *Client) Sync(accountID string) (SyncResult, error) {
+	var r SyncResult
+	err := c.call(MethodSyncRun, fetchParams{AccountID: accountID}, &r)
+	return r, err
 }
 
 func filterEmpty(f Filter) bool {

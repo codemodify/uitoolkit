@@ -1,11 +1,11 @@
 // Command mailclientd is the Mail daemon: accounts, folders, messages,
-// MemoryStore (default) or a skeleton IMAP backend. It listens on a Unix
-// socket and speaks JSON-RPC 2.0 (NDJSON). See docs/mail.md.
+// MemoryStore (UITK_MAIL=memory) or IMAP+SMTP with an on-disk cache.
+// It listens on a Unix socket and speaks JSON-RPC 2.0 (NDJSON).
+// See docs/mail.md.
 //
 //	UITK_MAIL=memory go run ./cmd/mailclientd
-//	UITK_MAIL=imap UITK_MAIL_HOST=imap.example.com:993 \
-//	  UITK_MAIL_USER=you@example.com UITK_MAIL_PASS=secret \
-//	  go run ./cmd/mailclientd
+//	# real account: write ~/.config/uitoolkit/mail.json and
+//	UITK_MAIL=imap UITK_MAIL_PASS=secret go run ./cmd/mailclientd
 package main
 
 import (

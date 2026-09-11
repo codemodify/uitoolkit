@@ -88,11 +88,11 @@ func applyScale(look style.LookAndFeel, scale float32) style.LookAndFeel {
 	if look == nil || scale <= 0 || scale == 1 {
 		return look
 	}
-	c, ok := look.(*style.Classic)
-	if !ok {
+	if _, ok := look.(*style.Classic); !ok {
 		return look
 	}
-	if c.Metrics().FontSize != style.DefaultMetrics().FontSize {
+	// Already HiDPI-scaled (density may have changed the 1× font size).
+	if style.LookScale(look) > 1.01 {
 		return look
 	}
 	return style.WithScale(look, scale)

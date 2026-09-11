@@ -303,6 +303,86 @@ func (s *Server) dispatch(req Request) Response {
 		if err == nil {
 			result, err = s.saveDraft(p)
 		}
+	case MethodIdentitiesList:
+		var p identityListParams
+		p, err = decodeParams[identityListParams](req.Params)
+		if err == nil {
+			result = s.Store.Identities(p.AccountID)
+		}
+	case MethodIdentitiesPut:
+		var id Identity
+		id, err = decodeParams[Identity](req.Params)
+		if err == nil {
+			result, err = s.Store.PutIdentity(id)
+			if err == nil {
+				s.broadcast(EventChanged, eventParams{Reason: "identity"})
+			}
+		}
+	case MethodIdentitiesDel:
+		var p identityIDParams
+		p, err = decodeParams[identityIDParams](req.Params)
+		if err == nil {
+			err = s.Store.DeleteIdentity(p.ID)
+		}
+	case MethodTagsList:
+		result = s.Store.ListTags()
+	case MethodTagsPut:
+		var t Tag
+		t, err = decodeParams[Tag](req.Params)
+		if err == nil {
+			result, err = s.Store.PutTag(t)
+		}
+	case MethodFoldersVirtual:
+		result = s.Store.VirtualFolders()
+	case MethodFiltersList:
+		result = s.Store.ListRules()
+	case MethodFiltersPut:
+		var r FilterRule
+		r, err = decodeParams[FilterRule](req.Params)
+		if err == nil {
+			result, err = s.Store.PutRule(r)
+		}
+	case MethodFiltersDel:
+		var p ruleIDParams
+		p, err = decodeParams[ruleIDParams](req.Params)
+		if err == nil {
+			err = s.Store.DeleteRule(p.ID)
+		}
+	case MethodFiltersApply:
+		var p applyRulesParams
+		p, err = decodeParams[applyRulesParams](req.Params)
+		if err == nil {
+			var n int
+			n, err = s.Store.ApplyRules(p.FolderID)
+			if err == nil {
+				result = applyResult{Count: n}
+				s.broadcast(EventChanged, eventParams{FolderID: p.FolderID, Reason: "filters"})
+			}
+		}
+	case MethodMessagesPart:
+		var p partParams
+		p, err = decodeParams[partParams](req.Params)
+		if err == nil {
+			result, err = s.Store.GetPart(p.ID, p.PartID)
+		}
+	case MethodMessagesOpen:
+		var p partParams
+		p, err = decodeParams[partParams](req.Params)
+		if err == nil {
+			result, err = s.Store.OpenPart(p.ID, p.PartID)
+		}
+	case MethodSyncRun:
+		var p fetchParams
+		p, err = decodeParams[fetchParams](req.Params)
+		if err == nil {
+			var r SyncResult
+			r, err = s.Store.Sync(p.AccountID)
+			if err == nil {
+				result = r
+				s.broadcast(EventSynced, eventParams{AccountID: p.AccountID, Count: r.New, Reason: "sync"})
+				s.broadcast(EventFetched, eventParams{AccountID: p.AccountID, Count: r.New})
+			}
+		}
 	default:
 		err = fmt.Errorf("unknown method %s", req.Method)
 	}
@@ -331,12 +411,65 @@ func (s *Server) status() (DaemonStatus, error) {
 }
 
 func (s *Server) send(p composeParams) (appendResult, error) {
-	sent, ok := specialFolder(s.Store, p.AccountID, FolderSent)
-	if !ok {
-		return appendResult{}, fmt.Errorf("mail: no Sent folder for %s", p.AccountID)
+	accountID := p.AccountID
+	var ident Identity
+	if p.IdentityID != "" {
+		for _, id := range s.Store.Identities("") {
+			if id.ID == p.IdentityID {
+				ident = id
+				if id.AccountID != "" {
+					accountID = id.AccountID
+				}
+				break
+			}
+		}
+	}
+	if ident.ID == "" {
+		ids := s.Store.Identities(accountID)
+		for _, id := range ids {
+			if id.Default || ident.ID == "" {
+				ident = id
+			}
+		}
 	}
 	msg := p.Message
+	if msg.From == "" && ident.Address != "" {
+		msg.From = ident.DisplayFrom()
+	}
+	if ident.Signature != "" && !strings.Contains(msg.Body, ident.Signature) {
+		msg.Body = strings.TrimRight(msg.Body, "\n") + "\n\n-- \n" + ident.Signature + "\n"
+	}
+	msg.IdentityID = ident.ID
 	msg.Read = true
+	var files []AttachedFile
+	for _, path := range p.AttachPaths {
+		b, err := os.ReadFile(path)
+		if err != nil {
+			return appendResult{}, fmt.Errorf("attach %s: %w", path, err)
+		}
+		name := path
+		if i := strings.LastIndex(path, "/"); i >= 0 {
+			name = path[i+1:]
+		}
+		files = append(files, AttachedFile{Name: name, MIME: guessMIME(name), Data: b})
+		msg.HasAttach = true
+		msg.Attachments = append(msg.Attachments, name)
+	}
+	if ls, ok := s.Store.(*LocalStore); ok && len(ls.cfg.Accounts) > 0 {
+		id, err := ls.SendViaSMTP(accountID, ident.ID, msg, files)
+		if err != nil {
+			return appendResult{}, err
+		}
+		if p.ID != "" {
+			_ = s.Store.Delete([]MessageID{p.ID})
+		}
+		s.broadcast(EventChanged, eventParams{Reason: "send"})
+		return appendResult{ID: id}, nil
+	}
+	sent, ok := specialFolder(s.Store, accountID, FolderSent)
+	if !ok {
+		return appendResult{}, fmt.Errorf("mail: no Sent folder for %s", accountID)
+	}
 	id, err := s.Store.Append(sent.ID, msg)
 	if err != nil {
 		return appendResult{}, err

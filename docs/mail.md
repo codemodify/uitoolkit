@@ -1,11 +1,11 @@
 # Mail — mailclientd + mailclientui
 
-Thunderbird-chrome dogfood on uitoolkit **v0.8.2**. Two processes:
+Thunderbird-chrome mail client on uitoolkit **v0.9.0**. Two processes:
 
 | Process | Role |
 | --- | --- |
-| **mailclientd** | Owns accounts, folders, messages, search, mutations. MemoryStore (default) or a skeleton IMAP backend. |
-| **mailclientui** | Renders chrome and sends JSON-RPC commands. **No IMAP** in this process. |
+| **mailclientd** | Owns accounts, IMAP/SMTP, local cache, folders, messages, tags, filters, identities, search, mutations. |
+| **mailclientui** | Renders chrome and sends JSON-RPC commands. **No IMAP or SMTP** in this process. |
 
 Shared types and the RPC client/server live in [`internal/mail`](../internal/mail).
 
@@ -19,7 +19,7 @@ Default socket:
 
 ```bash
 # Terminal 1 — daemon (offline demo MemoryStore)
-go run ./cmd/mailclientd
+UITK_MAIL=memory go run ./cmd/mailclientd
 
 # Terminal 2 — Thunderbird UI
 UITK_SCENE=auto go run ./cmd/mailclientui
@@ -34,23 +34,112 @@ UITK_SCENE=auto go run ./examples/mail
 go run ./examples/mail -screenshot docs/screenshots
 ```
 
+## Real IMAP + SMTP (primary path)
+
+`mailclientd` is meant to be pointed at a real account. **Never put a password in the config file.** Use `passEnv` (an environment variable name).
+
+Config file (first existing wins):
+
+- `$UITK_MAIL_CONFIG`
+- `$XDG_CONFIG_HOME/uitoolkit/mail.json`
+- `~/.config/uitoolkit/mail.json`
+
+Cache / offline store:
+
+- `$UITK_MAIL_DATA`
+- `$XDG_DATA_HOME/uitoolkit/mail`
+- `~/.local/share/uitoolkit/mail`
+
+Example `mail.json` (mode `0600` recommended):
+
+```json
+{
+  "accounts": [
+    {
+      "id": "home",
+      "name": "Ada Lovelace",
+      "address": "ada@example.com",
+      "imap": {
+        "host": "imap.example.com:993",
+        "user": "ada@example.com",
+        "passEnv": "UITK_MAIL_PASS",
+        "tls": true
+      },
+      "smtp": {
+        "host": "smtp.example.com:587",
+        "user": "ada@example.com",
+        "passEnv": "UITK_MAIL_PASS",
+        "starttls": true
+      },
+      "identities": [
+        {
+          "id": "home-default",
+          "accountId": "home",
+          "name": "Ada Lovelace",
+          "address": "ada@example.com",
+          "signature": "Ada",
+          "default": true
+        },
+        {
+          "id": "home-alias",
+          "accountId": "home",
+          "name": "Ada L.",
+          "address": "ada.lovelace@example.com"
+        }
+      ]
+    }
+  ]
+}
+```
+
+```bash
+export UITK_MAIL_PASS='your-app-password'
+UITK_MAIL=imap go run ./cmd/mailclientd
+go run ./cmd/mailclientui
+```
+
+Single-account env (no file) still works:
+
+```bash
+export UITK_MAIL=imap
+export UITK_MAIL_HOST=imap.example.com:993
+export UITK_MAIL_USER=you@example.com
+export UITK_MAIL_PASS=secret
+export UITK_MAIL_SMTP=smtp.example.com:587   # optional; guessed from IMAP host
+export UITK_MAIL_NAME='Ada Lovelace'
+go run ./cmd/mailclientd
+```
+
+Default when **no** config and `UITK_MAIL` is unset: MemoryStore demo (offline dogfood).
+
+`UITK_MAIL=memory` forces the demo even if a config file exists.
+
+### IMAP / SMTP status (honest)
+
+Implemented in mailclientd:
+
+- IMAP: CONNECT, implicit TLS (993) and STARTTLS (143), LOGIN, AUTH PLAIN, AUTH XOAUTH2 stub (`UITK_MAIL_XOAUTH2` bearer), CAPABILITY, LIST/LSUB, SELECT/EXAMINE, UID FETCH (ENVELOPE, FLAGS, BODYSTRUCTURE, BODY.PEEK[] / sections), UID STORE, UID SEARCH, UID COPY, UID MOVE (or COPY+\\Deleted+EXPUNGE), APPEND, EXPUNGE, IDLE (wake on EXISTS/FETCH/EXPUNGE), CONDSTORE CHANGEDSINCE when advertised.
+- Incremental cache: UIDVALIDITY wipe, UIDNEXT, highestmodseq when present. Raw `.eml` on disk after body fetch.
+- MIME: multipart (nested), text/plain + text/html, attachments, RFC 2047, charset via `golang.org/x/text`.
+- SMTP: implicit TLS (465), STARTTLS (587), AUTH PLAIN / LOGIN fallback. Send then IMAP APPEND to Sent.
+- Multiple accounts in one config; folder tree mirrors LIST + local specials.
+- Offline read of anything already synced.
+
+Known gaps (not production-complete):
+
+- No QRESYNC / vanished vanishing; flag refresh is FLAGS FETCH (+ CHANGEDSINCE when CONDSTORE).
+- BODYSTRUCTURE walker covers common multipart/alternative + mixed; exotic message/rfc822 nests may miss a part id.
+- HTML is **sanitized and shown as text** (no HTML engine in uitoolkit). Scripts/iframes/on* stripped.
+- XOAUTH2 is a token-passthrough stub (no OAuth browser flow).
+- IDLE is one mailbox at a time after sync, not a permanent supervisor yet.
+- Sieve is not implemented (local Sorting Office rules only).
+- Attachment “Open” writes a cache file; the UI does not spawn `xdg-open` (daemon returns the path).
+
 ## Protocol
 
 Unix domain socket, **JSON-RPC 2.0**, one JSON object per line (NDJSON).
 
-Request:
-
-```json
-{"jsonrpc":"2.0","id":1,"method":"messages.list","params":{"folderId":"ada/inbox","filter":{"unread":true}}}
-```
-
-Response:
-
-```json
-{"jsonrpc":"2.0","id":1,"result":[...]}
-```
-
-Notifications (no `id`): `mail.changed`, `mail.fetched`.
+Notifications (no `id`): `mail.changed`, `mail.fetched`, `mail.synced`.
 
 | Method | Params |
 | --- | --- |
@@ -60,37 +149,59 @@ Notifications (no `id`): `mail.changed`, `mail.fetched`.
 | `folders.list` | `{accountId}` |
 | `folders.get` | `{id}` |
 | `folders.create` | `{accountId, name, parent?}` |
-| `messages.list` | `{folderId, filter?}` |
-| `messages.get` | `{id}` |
+| `folders.virtual` | — Unified Inbox / Unread / Starred / tag folders |
+| `messages.list` | `{folderId, filter?}` (virtual ids ok) |
+| `messages.get` | `{id}` (fetches MIME body if needed) |
 | `messages.search` | `{accountId?, folderId?, filter}` |
 | `messages.setFlags` | `{id, patch}` |
 | `messages.move` | `{ids, dest}` |
 | `messages.delete` | `{ids}` |
 | `messages.append` | `{folderId, message}` |
 | `messages.update` | `{id, message}` |
+| `messages.getPart` | `{id, partId}` |
+| `messages.openPart` | `{id, partId}` → `{path}` on disk |
 | `messages.fetch` | `{accountId}` |
+| `sync.run` | `{accountId?}` |
 | `unread.get` | `{folderId?}` |
-| `compose.send` | `{accountId, message, id?}` |
+| `compose.send` | `{accountId, identityId?, message, attachPaths?, id?}` |
 | `compose.saveDraft` | `{accountId, message, id?}` |
+| `identities.list` | `{accountId?}` |
+| `identities.put` | Identity |
+| `identities.delete` | `{id}` |
+| `tags.list` | — |
+| `tags.put` | `{name, color}` |
+| `filters.list` | — |
+| `filters.put` | FilterRule |
+| `filters.delete` | `{id}` |
+| `filters.apply` | `{folderId?}` |
 
-Quick Filter in the UI calls `messages.list` with the pin/query filter so the TableView is daemon-filtered.
+Quick Filter in the UI calls `messages.list` with the pin/query filter so the list is daemon-filtered.
 
-## IMAP status (demo vs live)
+### Filter rules (Sorting Office)
 
-**Default is always the offline MemoryStore.** Two demo accounts, ~150 messages, Get Messages injects arrivals. No sockets except the local RPC.
-
-**Skeleton IMAP** (`UITK_MAIL=imap`) lives only in mailclientd:
-
-```bash
-export UITK_MAIL=imap
-export UITK_MAIL_HOST=imap.example.com:993
-export UITK_MAIL_USER=you@example.com
-export UITK_MAIL_PASS=secret
-# UITK_MAIL_TLS=1 by default on :993; set 0 for a local fake
-go run ./cmd/mailclientd
+```json
+{
+  "id": "rule-01",
+  "name": "Tag invoices",
+  "enabled": true,
+  "stop": false,
+  "conditions": [{"field": "subject", "op": "contains", "value": "Invoice"}],
+  "actions": [{"type": "tag", "tag": "Work"}]
+}
 ```
 
-Implemented: CONNECT, LOGIN, LIST, SELECT, FETCH (flags/size/headers/text), STORE, APPEND, CREATE, COPY+EXPUNGE as MOVE. Not production: MIME trees, IDLE, UTF-7 names, SMTP submission, robust literal parsing. Missing env vars return a **clear Health() error**; the UI still starts and shows the error on `status.get`.
+Condition fields: `from`, `to`, `subject`, `body`, `attachment`, `unread`, `tag`.
+Actions: `move` (`folder`), `tag`, `markRead`, `markUnread`, `delete`, `stop`.
+AND across conditions. Persist in MemoryStore or the disk cache. Tools → Message Filters.
+
+## UI features (v0.9)
+
+- **Card / Table** — View → Card view or the Cards toolbar toggle. Remembered in `~/.config/uitoolkit/mailui.json`.
+- **Density** — View → Compact / Default / Relaxed (extends v0.8.1 row metrics). Same prefs file.
+- **Unified Inbox** — folder pane “Unified Folders” (Inbox / Unread / Starred across accounts).
+- **Colored tags** — Message → Tag; Tags section in the folder tree; Quick Filter tag combo.
+- **Identities** — compose From picker is not 1:1 with accounts; Preferences → Identities.
+- **Filters** — Tools → Message Filters (works on MemoryStore and the disk store).
 
 ## Keyboard (Thunderbird-like)
 
@@ -104,8 +215,8 @@ Documented in Help → Keyboard and [keyboard.md](keyboard.md). When the thread 
 | **f** | Forward |
 | **c** | Compose |
 | **m** | Mark as read |
-| **F5** | Get Messages |
-| **Ctrl+,** | Preferences (accounts list stub) |
+| **F5** | Get Messages / sync |
+| **Ctrl+,** | Preferences |
 
 ## Screenshots
 
@@ -113,4 +224,4 @@ Documented in Help → Keyboard and [keyboard.md](keyboard.md). When the thread 
 go run ./examples/mail -screenshot docs/screenshots
 ```
 
-Writes `mail-dark.png`, `mail-light.png`, `mail-classic.png`, `mail-compose.png`, `mail-prefs.png`.
+Writes `mail-dark.png`, `mail-light.png`, `mail-classic.png`, `mail-compose.png`, `mail-prefs.png`, `mail-cards.png`, `mail-compact.png`, `mail-filters.png`.

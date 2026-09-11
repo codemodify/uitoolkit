@@ -16,6 +16,7 @@ type TreeNode struct {
 	Children []*TreeNode
 	Expanded bool
 	Bold     bool
+	Color    paintengine2d.Color // optional tag swatch
 	Data     any
 }
 
@@ -143,12 +144,17 @@ func (t *TreeView) Paint(ctx *paintengine2d.Context) {
 				if n.Bold {
 					extra |= 4
 				}
+				if n.Color != (paintengine2d.Color{}) {
+					extra |= 8
+				}
 				return visualSig(n == t.Selected, n == t.hover, extra, n.Label)
 			},
 			func(i int) {
 				n := rows[i].node
 				y := float32(i) * rh
-				lk.DrawTreeRow(ctx, paintengine2d.XYWH(0, y, b.Dx(), rh), n == t.Selected, n == t.hover, n.Expanded, n.Leaf(), rows[i].depth, n.Label, n.Bold)
+				row := paintengine2d.XYWH(0, y, b.Dx(), rh)
+				lk.DrawTreeRow(ctx, row, n == t.Selected, n == t.hover, n.Expanded, n.Leaf(), rows[i].depth, n.Label, n.Bold)
+				paintTreeSwatch(ctx, row, n.Color)
 			},
 		)
 	} else {
@@ -157,12 +163,29 @@ func (t *TreeView) Paint(ctx *paintengine2d.Context) {
 			row := paintengine2d.XYWH(0, y, b.Dx(), rh)
 			n := rows[i].node
 			lk.DrawTreeRow(ctx, row, n == t.Selected, n == t.hover, n.Expanded, n.Leaf(), rows[i].depth, n.Label, n.Bold)
+			paintTreeSwatch(ctx, row, n.Color)
 		}
 	}
 	ctx.Restore()
 	if t.Focused() {
 		lk.DrawFocusRing(ctx, b.Inset(-2))
 	}
+}
+
+func paintTreeSwatch(ctx *paintengine2d.Context, row paintengine2d.Rect, col paintengine2d.Color) {
+	if col == (paintengine2d.Color{}) {
+		return
+	}
+	side := float32(8)
+	if side > row.Dy()-6 {
+		side = row.Dy() - 6
+	}
+	if side < 5 {
+		return
+	}
+	cx := row.Max.X - 12
+	cy := (row.Min.Y + row.Max.Y) * 0.5
+	ctx.DrawCircle(paintengine2d.Pt(cx, cy), side*0.5, paintengine2d.Fill(col))
 }
 
 func (t *TreeView) rowAt(y float32) int {
