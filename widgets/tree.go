@@ -6,6 +6,7 @@ import (
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/layout"
 	"github.com/codemodify/uitoolkit/platform"
+	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
 )
 
@@ -56,10 +57,7 @@ func NewTreeView(roots ...*TreeNode) *TreeView {
 }
 
 func (t *TreeView) rowH() float32 {
-	if t.RowHeight <= 0 {
-		return 26
-	}
-	return t.RowHeight
+	return style.FittedRowHeight(t.Look(), t.RowHeight)
 }
 
 func (t *TreeView) flatten() []treeRow {
@@ -130,7 +128,7 @@ func (t *TreeView) Paint(ctx *paintengine2d.Context) {
 	}
 	if rec, ok := ctx.Device().(*paintengine2d.Recorder); ok {
 		ob := t.Bounds()
-		t.rows.ready(ob.Min.X, ob.Min.Y, b.Dx(), rh)
+		t.rows.ready(ob.Min.X, ob.Min.Y, b.Dx(), rh, lookSig(lk))
 		recordScrollingRows(rec, &t.rows, t.ID()^(1<<32), t.OffsetY, 0, lo, hi,
 			func(i int) uint64 { return t.ID()<<32 | uint64(i) + 1 },
 			func(i int) uint64 {
@@ -188,12 +186,21 @@ func (t *TreeView) expanderHit(e widget.MouseEvent, n *TreeNode, depth int) bool
 	if n == nil || n.Leaf() {
 		return false
 	}
-	indent := t.Look().Metrics().TreeIndent
+	m := t.Look().Metrics()
+	indent := m.TreeIndent
 	if indent <= 0 {
 		indent = 16
 	}
-	x := float32(8) + float32(depth)*indent
-	return e.Pos.X >= x-2 && e.Pos.X <= x+14
+	pad := float32(8)
+	if m.RowPad > 0 {
+		pad = m.RowPad + 2
+	}
+	x := pad + float32(depth)*indent
+	hit := indent * 0.45
+	if hit < 12 {
+		hit = 12
+	}
+	return e.Pos.X >= x-2 && e.Pos.X <= x+hit
 }
 
 func (t *TreeView) invalidateNode(n *TreeNode) {

@@ -42,6 +42,21 @@ func TestBakeFontDrawsKnownGlyphs(t *testing.T) {
 	}
 }
 
+func TestSpaceAdvanceKeepsWordGap(t *testing.T) {
+	f := BakeFont(16, paintengine2d.White)
+	space := f.Advance(" ")
+	if space < 3 {
+		t.Fatalf("space advance %v is effectively missing", space)
+	}
+	hello := f.Advance("Hello")
+	world := f.Advance("World")
+	phrase := f.Advance("Hello World")
+	gap := phrase - hello - world
+	if gap < space*0.8 {
+		t.Fatalf("word gap %v (space=%v hello=%v world=%v phrase=%v)", gap, space, hello, world, phrase)
+	}
+}
+
 func TestBakeFontTintAppliesThemeColor(t *testing.T) {
 	red := BakeFont(16, paintengine2d.RGB(1, 0, 0))
 	blue := BakeFont(16, paintengine2d.RGB(0.2, 0.5, 1))

@@ -287,5 +287,5 @@ What is real in v0.8
 What is demo
   • Default backend is in-memory. UITK_MAIL=imap is a skeleton, not production.
 
-— Mail on uitoolkit v0.8.0
+— Mail on uitoolkit v0.8.1
 `

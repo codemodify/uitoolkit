@@ -124,6 +124,8 @@ type Metrics struct {
 	SwitchW     float32
 	SwitchH     float32
 	AccordionH  float32
+	RowH        float32 // list / table / tree row
+	RowPad      float32 // ink padding inside a row
 }
 
 // ScaleMetrics multiplies spatial LookAndFeel metrics by display scale.
@@ -171,6 +173,8 @@ func ScaleMetrics(m Metrics, scale float32) Metrics {
 	m.SwitchW = s(m.SwitchW)
 	m.SwitchH = s(m.SwitchH)
 	m.AccordionH = s(m.AccordionH)
+	m.RowH = s(m.RowH)
+	m.RowPad = s(m.RowPad)
 	return m
 }
 
@@ -211,6 +215,8 @@ func DefaultMetrics() Metrics {
 		SwitchW:     42,
 		SwitchH:     22,
 		AccordionH:  30,
+		RowH:        24,
+		RowPad:      6,
 	}
 }
 

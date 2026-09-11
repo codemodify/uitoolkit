@@ -74,16 +74,16 @@ func (t *TableView) Measure(c layout.Constraints) paintengine2d.Point {
 func (t *TableView) Arrange(r paintengine2d.Rect) { t.SetBounds(r); t.clamp() }
 
 func (t *TableView) rowH() float32 {
-	if t.RowHeight <= 0 {
-		return 28
-	}
-	return t.RowHeight
+	return style.FittedRowHeight(t.Look(), t.RowHeight)
 }
 
 func (t *TableView) headerH() float32 {
 	h := t.Look().Metrics().HeaderH
 	if h <= 0 {
-		return 28
+		h = 28
+	}
+	if rh := t.rowH(); rh > h {
+		h = rh
 	}
 	return h
 }
@@ -120,10 +120,11 @@ func (t *TableView) colWidths() []float32 {
 	total := t.LocalBounds().Dx()
 	fixed := float32(0)
 	flex := 0
+	lk := t.Look()
 	for i, c := range t.Columns {
 		if c.Width > 0 {
-			out[i] = c.Width
-			fixed += c.Width
+			out[i] = style.Dip(lk, c.Width)
+			fixed += out[i]
 		} else {
 			flex++
 		}
@@ -203,7 +204,7 @@ func (t *TableView) Paint(ctx *paintengine2d.Context) {
 	lo, hi := t.visibleRange()
 	if rec, ok := ctx.Device().(*paintengine2d.Recorder); ok {
 		ob := t.Bounds()
-		t.rows.ready(ob.Min.X, ob.Min.Y, b.Dx(), rh)
+		t.rows.ready(ob.Min.X, ob.Min.Y, b.Dx(), rh, lookSig(lk))
 		recordScrollingRows(rec, &t.rows, t.ID()^(1<<32), t.OffsetY, hh, lo, hi,
 			func(i int) uint64 { return t.ID()<<32 | uint64(i) + 1 },
 			func(i int) uint64 {
@@ -238,7 +239,7 @@ func (t *TableView) Paint(ctx *paintengine2d.Context) {
 						face = lk.MonoFont()
 					}
 					if t.CellBold != nil && t.CellBold(i, col) {
-						face = lk.TitleFont()
+						face = lk.BoldFont()
 					}
 					lk.DrawTableCell(ctx, cell, i == t.Selected, i == t.hovered, label, t.Columns[col].Align, face)
 					cx += w
@@ -261,7 +262,7 @@ func (t *TableView) Paint(ctx *paintengine2d.Context) {
 					face = lk.MonoFont()
 				}
 				if t.CellBold != nil && t.CellBold(row, col) {
-					face = lk.TitleFont()
+					face = lk.BoldFont()
 				}
 				lk.DrawTableCell(ctx, cell, row == t.Selected, row == t.hovered, label, t.Columns[col].Align, face)
 				cx += w

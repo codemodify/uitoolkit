@@ -138,9 +138,9 @@ func (s *session) build() widget.Component {
 		{Title: "★", Width: 36, Sortable: true},
 		{Title: "📎", Width: 36, Sortable: true},
 		{Title: "Subject", Sortable: true},
-		{Title: "Correspondents", Width: 168, Sortable: true},
-		{Title: "Date", Width: 96, Sortable: true},
-		{Title: "Size", Width: 64, Sortable: true, Align: style.AlignEnd},
+		{Title: "Correspondents", Width: 180, Sortable: true},
+		{Title: "Date", Width: 112, Sortable: true},
+		{Title: "Size", Width: 72, Sortable: true, Align: style.AlignEnd},
 	}, 0, s.cellText, func(i int) {
 		s.clickRow(i, false)
 	})
@@ -284,11 +284,11 @@ func (s *session) build() widget.Component {
 	})
 	s.attachList.RowHeight = 24
 	s.attachList.SetVisible(false)
-	headCol := widgets.NewColumn(s.hdrSubj, s.hdrFrom, s.hdrTo, s.hdrDate, s.hdrExtra, s.attachList).WithGap(2).WithPad(8)
+	headCol := widgets.NewColumn(s.hdrSubj, s.hdrFrom, s.hdrTo, s.hdrDate, s.hdrExtra, s.attachList).WithGap(3).WithPad(10)
 	previewCol := widgets.NewColumn(headCol, widgets.NewSeparator(), tabs).WithGap(0)
 	previewCol.AddFlex(tabs, 1)
 
-	thread := widgets.NewColumn(s.qfBar, s.table).WithGap(6).WithPad(6)
+	thread := widgets.NewColumn(s.qfBar, s.table).WithGap(6).WithPad(8)
 	thread.AddFlex(s.table, 1)
 	s.thread = thread
 	s.acctPanel = s.buildAccountCentral()
@@ -309,7 +309,7 @@ func (s *session) build() widget.Component {
 		widgets.NewTitle("Folders"),
 		s.tree,
 		s.folderL,
-	).WithGap(8).WithPad(10)
+	).WithGap(6).WithPad(8)
 	sidebar.AddFlex(s.tree, 1)
 
 	var split *widgets.Splitter

@@ -54,3 +54,18 @@ func TestScaleFromEnvUITK(t *testing.T) {
 		t.Fatalf("GDK_DPI_SCALE %v", ScaleFromEnv())
 	}
 }
+
+func TestFitLogicalSizeRejectsBufferEcho(t *testing.T) {
+	lw, lh := fitLogicalSize(2000, 1400, 1000, 700, 2)
+	if lw != 1000 || lh != 700 {
+		t.Fatalf("buffer echo became logical %dx%d", lw, lh)
+	}
+	lw, lh = fitLogicalSize(900, 600, 1000, 700, 2)
+	if lw != 900 || lh != 600 {
+		t.Fatalf("real logical resize %dx%d", lw, lh)
+	}
+	lw, lh = fitLogicalSize(800, 500, 800, 500, 1)
+	if lw != 800 || lh != 500 {
+		t.Fatalf("1x %dx%d", lw, lh)
+	}
+}

@@ -70,15 +70,32 @@ func New(opts Options) *Application {
 func (a *Application) Look() style.LookAndFeel { return a.look }
 
 // SetLook swaps the theme on the app and every open window.
+// Unscaled Classic looks are rebuilt with the application display scale
+// so theme toggles do not drop HiDPI metrics.
 func (a *Application) SetLook(l style.LookAndFeel) {
 	if l == nil {
 		return
 	}
+	l = applyScale(l, a.scale)
 	a.look = l
 	for _, w := range a.windows {
 		w.look = l
-		w.fullInvalidate()
+		w.RequestLayout()
 	}
+}
+
+func applyScale(look style.LookAndFeel, scale float32) style.LookAndFeel {
+	if look == nil || scale <= 0 || scale == 1 {
+		return look
+	}
+	c, ok := look.(*style.Classic)
+	if !ok {
+		return look
+	}
+	if c.Metrics().FontSize != style.DefaultMetrics().FontSize {
+		return look
+	}
+	return style.WithScale(look, scale)
 }
 
 // Scale is the display scale applied to layout metrics at the window.

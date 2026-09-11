@@ -347,8 +347,17 @@ Event-driven `Run` (wait on the display fd) is **v0.5.1**.
 Retained scene graph (Qt Quick / GSK lite) is **v0.6.0**.
 Virtualized list/table/tree row reuse is **v0.6.1**.
 Mail process split (mailclientd + mailclientui) is **v0.8.0**.
+HiDPI-stable list/table/tree rows and Wayland resize are **v0.8.1**.
 
 ## Version
+
+**0.8.1** — HiDPI-safe layout: list/table/tree row heights and column
+widths follow scaled fonts (unread/bold uses a body-size face, not
+TitleFont). Wayland resize no longer treats buffer pixels as a new
+logical size, so window chrome does not explode on drag-resize.
+`Application.SetLook` keeps the display scale. Outline glyphs blit with
+bilinear filtering. Mail chrome spacing tightened toward Thunderbird
+density. Still paintengine2d **v0.9.0**.
 
 **0.8.0** — Mail splits into **mailclientd** (Unix JSON-RPC daemon,
 MemoryStore default, skeleton IMAP behind `UITK_MAIL=imap`) and

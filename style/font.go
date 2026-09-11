@@ -11,15 +11,15 @@ import (
 // Default UI/mono faces are OpenType outlines (Titillium Web / JetBrains Mono)
 // rasterized with the engine's scanline AA into a white sheet; Paint.Color tints.
 type Font struct {
-	Atlas    *paintengine2d.FontAtlas
-	Size     float32
-	Ascent   float32
-	Descent  float32
-	Color    paintengine2d.Color
-	Family   string
-	Weight   Weight
-	Outline  bool // true when built from TTF outlines (not the 5×7 bitmap)
-	ot       *otAtlas
+	Atlas   *paintengine2d.FontAtlas
+	Size    float32
+	Ascent  float32
+	Descent float32
+	Color   paintengine2d.Color
+	Family  string
+	Weight  Weight
+	Outline bool // true when built from TTF outlines (not the 5×7 bitmap)
+	ot      *otAtlas
 }
 
 func (f *Font) Measure(text string) paintengine2d.Point {
@@ -134,7 +134,11 @@ func (f *Font) Draw(ctx *paintengine2d.Context, text string, origin paintengine2
 		col = paintengine2d.White
 	}
 	run := paintengine2d.NullShaper{}.Shape(text, f.Atlas)
-	ctx.DrawGlyphs(run, origin, paintengine2d.Paint{Color: col, Filter: paintengine2d.FilterNearest})
+	filter := paintengine2d.FilterNearest
+	if f.Outline {
+		filter = paintengine2d.FilterBilinear
+	}
+	ctx.DrawGlyphs(run, origin, paintengine2d.Paint{Color: col, Filter: filter})
 }
 
 type fontKey struct {

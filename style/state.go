@@ -29,6 +29,7 @@ type LookAndFeel interface {
 	Metrics() Metrics
 	Font() *Font
 	TitleFont() *Font
+	BoldFont() *Font
 	MutedFont() *Font
 	OnAccentFont() *Font
 	MonoFont() *Font
