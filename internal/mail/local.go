@@ -127,6 +127,30 @@ func upsertIdentity(list []Identity, id Identity) []Identity {
 	return append(list, id)
 }
 
+func (s *LocalStore) PutAccount(in AccountConfig) (Account, error) {
+	a, err := SanitizeAccountConfig(in)
+	if err != nil {
+		return Account{}, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	file, _ := LoadConfig()
+	file.Accounts = upsertAccountConfig(file.Accounts, a)
+	if err := SaveConfig(file); err != nil {
+		return Account{}, err
+	}
+	s.cfg.Accounts = upsertAccountConfig(s.cfg.Accounts, a)
+	s.ensureAccount(a)
+	s.health = nil
+	s.saveLocked()
+	for _, x := range s.accounts {
+		if x.ID == a.ID {
+			return x, nil
+		}
+	}
+	return Account{ID: a.ID, Name: a.Name, Address: a.Address, Transport: "imap"}, nil
+}
+
 func (s *LocalStore) Accounts() []Account {
 	s.mu.Lock()
 	defer s.mu.Unlock()

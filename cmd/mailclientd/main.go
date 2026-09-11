@@ -1,11 +1,13 @@
 // Command mailclientd is the Mail daemon: accounts, folders, messages,
-// MemoryStore (UITK_MAIL=memory) or IMAP+SMTP with an on-disk cache.
+// IMAP+SMTP with an on-disk cache. No config means an empty store
+// (first-run add-account). MemoryStore is explicit UITK_MAIL=memory.
 // It listens on a Unix socket and speaks JSON-RPC 2.0 (NDJSON).
 // See docs/mail.md.
 //
-//	UITK_MAIL=memory go run ./cmd/mailclientd
-//	# real account: write ~/.config/uitoolkit/mail.json and
-//	UITK_MAIL=imap UITK_MAIL_PASS=secret go run ./cmd/mailclientd
+//	go run ./cmd/mailclientd
+//	UITK_MAIL=memory go run ./cmd/mailclientd   # seeded demo
+//	# real account: File → Add Account, or ~/.config/uitoolkit/mail.json
+//	UITK_MAIL_PASS=secret go run ./cmd/mailclientd
 package main
 
 import (

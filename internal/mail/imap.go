@@ -25,7 +25,7 @@ import (
 // This is a skeleton: CONNECT + LOGIN + LIST + SELECT + FETCH + STORE +
 // APPEND. MIME trees, IDLE, UTF-7 mailbox names, and MOVE are not
 // production-complete. Missing config returns a clear Health() error and
-// the offline MemoryStore remains the default demo.
+// MemoryStore is available only when UITK_MAIL=memory.
 
 // IMAPStore is a single-account IMAP backend for mailclientd.
 type IMAPStore struct {
@@ -457,6 +457,27 @@ func (s *IMAPStore) OpenPart(id MessageID, partID string) (PartData, error) {
 func (s *IMAPStore) Sync(accountID string) (SyncResult, error) {
 	n, err := s.Fetch(accountID)
 	return SyncResult{AccountID: accountID, New: n}, err
+}
+
+func (s *IMAPStore) PutAccount(in AccountConfig) (Account, error) {
+	a, err := SanitizeAccountConfig(in)
+	if err != nil {
+		return Account{}, err
+	}
+	file, _ := LoadConfig()
+	file.Accounts = upsertAccountConfig(file.Accounts, a)
+	if err := SaveConfig(file); err != nil {
+		return Account{}, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.host = a.IMAP.Host
+	s.user = a.IMAP.Username(a.Address)
+	s.name = a.Name
+	s.health = nil
+	acct := Account{ID: a.ID, Name: a.Name, Address: a.Address, Transport: "imap"}
+	s.accounts = []Account{acct}
+	return acct, nil
 }
 
 func (s *IMAPStore) selectLocked(mbox string) error {

@@ -12,7 +12,7 @@ import (
 
 // Env vars for mailclientd / mailclientui.
 const (
-	EnvMail   = "UITK_MAIL"      // memory (default) | imap
+	EnvMail   = "UITK_MAIL"      // unset: empty LocalStore | memory | imap
 	EnvSock   = "UITK_MAIL_SOCK" // Unix socket path
 	EnvHost   = "UITK_MAIL_HOST"
 	EnvUser   = "UITK_MAIL_USER"
@@ -34,11 +34,12 @@ func DefaultSocket() string {
 	return filepath.Join(os.TempDir(), "mailclientd-"+strconv.Itoa(os.Getuid())+".sock")
 }
 
-// OpenStore selects MemoryStore (offline demo) or the disk+IMAP LocalStore.
+// OpenStore selects the disk+IMAP LocalStore, or MemoryStore when asked.
 //
-//	UITK_MAIL=memory|demo|mem  — in-memory dogfood (default when no config)
+//	UITK_MAIL=memory|demo|mem  — seeded in-memory dogfood (explicit only)
 //	UITK_MAIL=imap             — LocalStore from env and/or mail.json
 //	unset + config file        — LocalStore (real accounts)
+//	unset + no config          — empty LocalStore (no demo accounts)
 func OpenStore() (Store, error) {
 	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvMail))) {
 	case "memory", "demo", "mem":
@@ -66,13 +67,22 @@ func OpenStore() (Store, error) {
 		if os.Getenv(EnvMail) != "" {
 			return nil, fmt.Errorf("UITK_MAIL=%s: want memory or imap", os.Getenv(EnvMail))
 		}
-		return NewDemoStore(), nil
+		return NewLocalStore(MailConfig{})
 	}
 }
 
-// StartDemo runs mailclientd in-process on a temp socket with MemoryStore.
-// The UI must still Dial — this is not an in-memory Store shortcut.
+// StartDemo runs mailclientd in-process on a temp socket with the seeded
+// MemoryStore (screenshots / UITK_MAIL=memory dogfood).
 func StartDemo(ctx context.Context) (socket string, stop func(), err error) {
+	return startStore(ctx, NewDemoStore())
+}
+
+// StartEmpty runs mailclientd with an empty MemoryStore (no demo accounts).
+func StartEmpty(ctx context.Context) (socket string, stop func(), err error) {
+	return startStore(ctx, NewMemoryStore(time.Time{}))
+}
+
+func startStore(ctx context.Context, store Store) (socket string, stop func(), err error) {
 	dir, err := os.MkdirTemp("", "mailclientd-")
 	if err != nil {
 		return "", nil, err
@@ -81,7 +91,7 @@ func StartDemo(ctx context.Context) (socket string, stop func(), err error) {
 	ctx, cancel := context.WithCancel(ctx)
 	done := make(chan error, 1)
 	go func() {
-		done <- ListenAndServe(ctx, socket, NewDemoStore())
+		done <- ListenAndServe(ctx, socket, store)
 	}()
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {

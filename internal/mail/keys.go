@@ -21,11 +21,17 @@ import (
 
 type shortcutRoot struct {
 	widget.Base
-	onKey func(widget.KeyEvent) bool
+	onKey   func(widget.KeyEvent) bool
+	onReady func(widget.Component)
+	ready   bool
 }
 
 func wrapShortcuts(col *widgets.FlexBox, on func(widget.KeyEvent) bool) widget.Component {
-	s := &shortcutRoot{onKey: on}
+	return wrapShortcutsReady(col, on, nil)
+}
+
+func wrapShortcutsReady(col *widgets.FlexBox, on func(widget.KeyEvent) bool, ready func(widget.Component)) widget.Component {
+	s := &shortcutRoot{onKey: on, onReady: ready}
 	s.Init(s)
 	if col != nil {
 		s.Add(col)
@@ -44,6 +50,10 @@ func (s *shortcutRoot) Arrange(r paintengine2d.Rect) {
 	s.SetBounds(r)
 	if len(s.Children()) > 0 {
 		s.Children()[0].Arrange(paintengine2d.XYWH(0, 0, r.Dx(), r.Dy()))
+	}
+	if !s.ready && s.Host() != nil && s.onReady != nil {
+		s.ready = true
+		s.onReady(s)
 	}
 }
 

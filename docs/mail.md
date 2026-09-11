@@ -1,6 +1,6 @@
 # Mail — mailclientd + mailclientui
 
-Thunderbird-chrome mail client on uitoolkit **v0.9.0**. Two processes:
+Thunderbird-chrome mail client on uitoolkit **v0.9.1**. Two processes:
 
 | Process | Role |
 | --- | --- |
@@ -18,13 +18,16 @@ Default socket:
 - else `/tmp/mailclientd-<uid>.sock`
 
 ```bash
-# Terminal 1 — daemon (offline demo MemoryStore)
-UITK_MAIL=memory go run ./cmd/mailclientd
+# Terminal 1 — daemon (empty until you add an account)
+go run ./cmd/mailclientd
 
-# Terminal 2 — Thunderbird UI
+# Terminal 2 — Thunderbird UI (first-run Yes/No if no accounts)
 UITK_SCENE=auto go run ./cmd/mailclientui
 go run ./cmd/mailclientui -classic -light
 go run ./cmd/mailclientui -headless    # writes mail.png
+
+# Seeded MemoryStore dogfood / screenshots only:
+UITK_MAIL=memory go run ./cmd/mailclientd
 ```
 
 Convenience (same architecture, one process: daemon goroutine + UI client on a temp socket):
@@ -110,9 +113,13 @@ export UITK_MAIL_NAME='Ada Lovelace'
 go run ./cmd/mailclientd
 ```
 
-Default when **no** config and `UITK_MAIL` is unset: MemoryStore demo (offline dogfood).
+Default when **no** config and `UITK_MAIL` is unset: **empty** LocalStore (no demo accounts). The UI asks *There are no accounts, want to add one?* Yes opens File → Add Account (writes `mail.json` with `passEnv` only). No leaves empty chrome.
 
-`UITK_MAIL=memory` forces the demo even if a config file exists.
+`UITK_MAIL=memory` is the **only** way to load the seeded MemoryStore demo (and `examples/mail` / screenshots still use that on purpose).
+
+### Text-only message view
+
+The Message tab is **plain text**. mailclientd prefers the `text/plain` part; if the message is HTML-only, tags are stripped (`HTMLToText`). There is no HTML engine and no HTML tab. The Source tab still shows raw RFC822 when cached.
 
 ### IMAP / SMTP status (honest)
 
@@ -129,7 +136,7 @@ Known gaps (not production-complete):
 
 - No QRESYNC / vanished vanishing; flag refresh is FLAGS FETCH (+ CHANGEDSINCE when CONDSTORE).
 - BODYSTRUCTURE walker covers common multipart/alternative + mixed; exotic message/rfc822 nests may miss a part id.
-- HTML is **sanitized and shown as text** (no HTML engine in uitoolkit). Scripts/iframes/on* stripped.
+- HTML is **stripped to text** in the Message tab (no HTML engine, no HTML tab). Scripts/iframes never run.
 - XOAUTH2 is a token-passthrough stub (no OAuth browser flow).
 - IDLE is one mailbox at a time after sync, not a permanent supervisor yet.
 - Sieve is not implemented (local Sorting Office rules only).
@@ -146,6 +153,7 @@ Notifications (no `id`): `mail.changed`, `mail.fetched`, `mail.synced`.
 | `ping` | — |
 | `status.get` | — |
 | `accounts.list` | — |
+| `accounts.put` | AccountConfig (`passEnv` only; never a password) |
 | `folders.list` | `{accountId}` |
 | `folders.get` | `{id}` |
 | `folders.create` | `{accountId, name, parent?}` |
@@ -194,8 +202,11 @@ Condition fields: `from`, `to`, `subject`, `body`, `attachment`, `unread`, `tag`
 Actions: `move` (`folder`), `tag`, `markRead`, `markUnread`, `delete`, `stop`.
 AND across conditions. Persist in MemoryStore or the disk cache. Tools → Message Filters.
 
-## UI features (v0.9)
+## UI features (v0.9.1)
 
+- **Empty by default** — no demo accounts unless `UITK_MAIL=memory`. First-run: “There are no accounts, want to add one?”
+- **Add account** — File → Add Account (or Yes on first-run). Writes `passEnv` only.
+- **Text-only Message tab** — prefer `text/plain`; HTML-only mail is tag-stripped. No HTML engine / no HTML tab.
 - **Card / Table** — View → Card view or the Cards toolbar toggle. Remembered in `~/.config/uitoolkit/mailui.json`.
 - **Density** — View → Compact / Default / Relaxed (extends v0.8.1 row metrics). Same prefs file.
 - **Unified Inbox** — folder pane “Unified Folders” (Inbox / Unread / Starred across accounts).
@@ -224,4 +235,4 @@ Documented in Help → Keyboard and [keyboard.md](keyboard.md). When the thread 
 go run ./examples/mail -screenshot docs/screenshots
 ```
 
-Writes `mail-dark.png`, `mail-light.png`, `mail-classic.png`, `mail-compose.png`, `mail-prefs.png`, `mail-cards.png`, `mail-compact.png`, `mail-filters.png`.
+Writes `mail-dark.png`, `mail-light.png`, `mail-classic.png`, `mail-compose.png`, `mail-prefs.png`, `mail-cards.png`, `mail-compact.png`, `mail-filters.png`, `mail-empty.png` (first-run dialog).

@@ -113,6 +113,101 @@ func DataDir() string {
 	return filepath.Join(os.TempDir(), "uitoolkit-mail")
 }
 
+// SaveConfig writes mail.json (mode 0600). Passwords are never stored —
+// only passEnv names (UITK_MAIL_PASS by default).
+func SaveConfig(cfg MailConfig) error {
+	for i := range cfg.Accounts {
+		a, err := SanitizeAccountConfig(cfg.Accounts[i])
+		if err != nil {
+			return err
+		}
+		cfg.Accounts[i] = a
+	}
+	path := ConfigPath()
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	b, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, b, 0o600)
+}
+
+// SanitizeAccountConfig fills defaults and rejects a password-looking passEnv.
+func SanitizeAccountConfig(a AccountConfig) (AccountConfig, error) {
+	a.Address = strings.TrimSpace(a.Address)
+	a.Name = strings.TrimSpace(a.Name)
+	a.IMAP.Host = strings.TrimSpace(a.IMAP.Host)
+	a.SMTP.Host = strings.TrimSpace(a.SMTP.Host)
+	a.IMAP.User = strings.TrimSpace(a.IMAP.User)
+	a.SMTP.User = strings.TrimSpace(a.SMTP.User)
+	if a.Address == "" && a.IMAP.User == "" {
+		return a, fmt.Errorf("mail: address or IMAP user required")
+	}
+	if a.IMAP.Host == "" {
+		return a, fmt.Errorf("mail: IMAP host required")
+	}
+	if a.Address == "" {
+		a.Address = a.IMAP.User
+	}
+	if a.IMAP.User == "" {
+		a.IMAP.User = a.Address
+	}
+	if a.Name == "" {
+		a.Name = DisplayName(a.Address)
+	}
+	if a.ID == "" {
+		a.ID = slug(a.Address)
+	}
+	a.IMAP.PassEnv = envVarName(a.IMAP.PassEnv)
+	if a.SMTP.Host == "" {
+		a.SMTP.Host = guessSMTP(a.IMAP.Host)
+	}
+	if a.SMTP.User == "" {
+		a.SMTP.User = a.IMAP.User
+	}
+	a.SMTP.PassEnv = envVarName(a.SMTP.PassEnv)
+	if a.SMTP.PassEnv == EnvPass && a.IMAP.PassEnv != EnvPass {
+		a.SMTP.PassEnv = a.IMAP.PassEnv
+	}
+	if len(a.Identities) == 0 {
+		a.Identities = []Identity{{
+			ID: a.ID + "-default", AccountID: a.ID, Name: a.Name, Address: a.Address, Default: true,
+		}}
+	}
+	for i := range a.Identities {
+		if a.Identities[i].AccountID == "" {
+			a.Identities[i].AccountID = a.ID
+		}
+	}
+	return a, nil
+}
+
+func envVarName(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return EnvPass
+	}
+	for i, c := range s {
+		ok := c == '_' || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (i > 0 && c >= '0' && c <= '9')
+		if !ok {
+			return EnvPass
+		}
+	}
+	return s
+}
+
+func upsertAccountConfig(list []AccountConfig, a AccountConfig) []AccountConfig {
+	for i, x := range list {
+		if x.ID == a.ID {
+			list[i] = a
+			return list
+		}
+	}
+	return append(list, a)
+}
+
 // LoadConfig reads the JSON file. Missing file is not an error (empty config).
 func LoadConfig() (MailConfig, error) {
 	path := ConfigPath()

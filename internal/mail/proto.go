@@ -11,6 +11,7 @@ import "encoding/json"
 //	ping
 //	status.get
 //	accounts.list
+//	accounts.put        AccountConfig (passEnv only)
 //	folders.list        {accountId}
 //	folders.get         {id}
 //	folders.create      {accountId, name, parent?}
@@ -53,6 +54,7 @@ const (
 	MethodPing           = "ping"
 	MethodStatusGet      = "status.get"
 	MethodAccountsList   = "accounts.list"
+	MethodAccountsPut    = "accounts.put"
 	MethodFoldersList    = "folders.list"
 	MethodFoldersGet     = "folders.get"
 	MethodFoldersCreate  = "folders.create"

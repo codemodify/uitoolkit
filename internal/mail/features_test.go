@@ -8,7 +8,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/codemodify/uitoolkit"
+	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
+	"github.com/codemodify/uitoolkit/widget"
+	"github.com/codemodify/uitoolkit/widgets"
 )
 
 func TestUnifiedInboxAggregates(t *testing.T) {
@@ -197,6 +201,179 @@ func TestLocalStoreDiskRoundTrip(t *testing.T) {
 	if len(s2.ListTags()) < 1 {
 		t.Fatal("tags persist")
 	}
+}
+
+func TestDisplayBodyPrefersPlainAndStripsHTML(t *testing.T) {
+	plain := DisplayBody(Message{Body: "hello", HTML: "<b>nope</b>"})
+	if plain != "hello" {
+		t.Fatalf("prefer plain %q", plain)
+	}
+	only := DisplayBody(Message{HTML: `<p>Hi</p><script>alert(1)</script>`})
+	if strings.Contains(only, "<") || strings.Contains(only, "script") || !strings.Contains(only, "Hi") {
+		t.Fatalf("strip html %q", only)
+	}
+	tagged := DisplayBody(Message{Body: "<div>Only HTML</div>"})
+	if strings.Contains(tagged, "<div") || !strings.Contains(tagged, "Only HTML") {
+		t.Fatalf("body-as-html %q", tagged)
+	}
+}
+
+func TestOpenStoreEmptyByDefault(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	t.Setenv("XDG_DATA_HOME", dir)
+	t.Setenv(EnvMail, "")
+	t.Setenv(EnvHost, "")
+	t.Setenv(EnvUser, "")
+	t.Setenv(EnvConfig, filepath.Join(dir, "no-such-mail.json"))
+	t.Setenv(EnvData, filepath.Join(dir, "data"))
+	s, err := OpenStore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Backend() != "imap" {
+		t.Fatalf("backend %s", s.Backend())
+	}
+	if n := len(s.Accounts()); n != 0 {
+		t.Fatalf("expected no accounts, got %d %+v", n, s.Accounts())
+	}
+}
+
+func TestOpenStoreMemoryStillDemo(t *testing.T) {
+	t.Setenv(EnvMail, "memory")
+	s, err := OpenStore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Backend() != "memory" || len(s.Accounts()) < 2 {
+		t.Fatalf("demo %+v %s", s.Accounts(), s.Backend())
+	}
+}
+
+func TestPutAccountWritesConfigWithoutSecrets(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv(EnvConfig, filepath.Join(dir, "mail.json"))
+	t.Setenv(EnvData, filepath.Join(dir, "data"))
+	s, err := NewLocalStoreDir(MailConfig{}, filepath.Join(dir, "data"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	acct, err := s.PutAccount(AccountConfig{
+		Name: "Ada", Address: "ada@example.com",
+		IMAP: ServerConfig{Host: "imap.example.com:993", User: "ada@example.com", PassEnv: "UITK_MAIL_PASS"},
+		SMTP: ServerConfig{Host: "smtp.example.com:587", PassEnv: "super secret password!!"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if acct.Address != "ada@example.com" {
+		t.Fatal(acct)
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, "mail.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "super secret") || strings.Contains(string(raw), `"password"`) {
+		t.Fatalf("secret leaked: %s", raw)
+	}
+	if !strings.Contains(string(raw), "UITK_MAIL_PASS") {
+		t.Fatalf("passEnv missing: %s", raw)
+	}
+}
+
+func TestRPCPutAccountAndEmptyFirstRun(t *testing.T) {
+	sock, stop, err := StartEmpty(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stop()
+	cli, err := DialWait(sock, 2*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cli.Close()
+	accts, err := cli.Accounts()
+	if err != nil || len(accts) != 0 {
+		t.Fatalf("empty start %v %v", accts, err)
+	}
+	dir := t.TempDir()
+	t.Setenv(EnvConfig, filepath.Join(dir, "mail.json"))
+	got, err := cli.PutAccount(AccountConfig{
+		Name: "Ada", Address: "ada@example.com",
+		IMAP: ServerConfig{Host: "imap.example.com:993"},
+	})
+	if err != nil || got.ID == "" {
+		t.Fatal(err, got)
+	}
+	accts, err = cli.Accounts()
+	if err != nil || len(accts) != 1 {
+		t.Fatalf("after put %v %v", accts, err)
+	}
+}
+
+func TestFirstRunDialogYesNo(t *testing.T) {
+	sock, stop, err := StartEmpty(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stop()
+	cli, err := DialWait(sock, 2*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cli.Close()
+
+	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{
+		Title: "Mail", Width: 1280, Height: 800, Headless: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.SetContent(Open(a, w, cli, AppOptions{ShowFilter: true}))
+	a.PumpOnce()
+	ov := w.Overlay()
+	if ov == nil {
+		t.Fatal("expected first-run Yes/No overlay")
+	}
+	var yes, no bool
+	var prompt bool
+	widget.Walk(ov, func(c widget.Component) {
+		switch x := c.(type) {
+		case *widgets.Button:
+			if x.Text == "Yes" {
+				yes = true
+			}
+			if x.Text == "No" {
+				no = true
+			}
+		case *widgets.Label:
+			if strings.Contains(x.Text, FirstRunPrompt) {
+				prompt = true
+			}
+		}
+	})
+	if !yes || !no || !prompt {
+		t.Fatalf("dialog yes=%v no=%v prompt=%v", yes, no, prompt)
+	}
+
+	widget.Walk(ov, func(c widget.Component) {
+		if b, ok := c.(*widgets.Button); ok && b.Text == "Yes" && b.OnClick != nil {
+			b.OnClick()
+		}
+	})
+	a.PumpOnce()
+	foundAdd := false
+	for _, win := range a.Windows() {
+		if strings.Contains(win.Title(), "Add account") {
+			foundAdd = true
+			win.Close()
+		}
+	}
+	if !foundAdd {
+		t.Fatal("Yes did not open add-account")
+	}
+	w.Close()
 }
 
 func TestConfigFromEnv(t *testing.T) {

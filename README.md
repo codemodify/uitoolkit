@@ -143,6 +143,10 @@ paintengine2d with Titillium Web (and JetBrains Mono in code views).
 
 ![Mail filters](docs/screenshots/mail-filters.png)
 
+### Mail — first-run (no accounts)
+
+![Mail empty](docs/screenshots/mail-empty.png)
+
 ### Font roles — Titillium Web + JetBrains Mono
 
 ![Font roles](docs/screenshots/fonts.png)
@@ -362,9 +366,15 @@ Mail process split (mailclientd + mailclientui) is **v0.8.0**.
 HiDPI-stable list/table/tree rows and Wayland resize are **v0.8.1**.
 Mail thread-list column flex (readable subjects) is **v0.8.2**.
 Mail cards / density / Unified Inbox / tags / filters / identities and
-IMAP+SMTP with an on-disk cache are **v0.9.0**.
+IMAP+SMTP with an on-disk cache are **v0.9.0**. Empty-by-default first-run
+and text-only message view are **v0.9.1**.
 
 ## Version
+
+**0.9.1** — Fresh install is empty (no silent MemoryStore demo). UI shows
+“There are no accounts, want to add one?” and Yes opens Add Account
+(`passEnv` only). Message view is plain text (HTML stripped). MemoryStore
+remains `UITK_MAIL=memory` / `examples/mail`. See [docs/mail.md](docs/mail.md).
 
 **0.9.0** — Mail dogfood becomes a real client path: mailclientd speaks
 IMAP (UID FETCH/STORE/SEARCH/MOVE, IDLE, MIME) and SMTP, with a local
