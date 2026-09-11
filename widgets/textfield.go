@@ -17,6 +17,8 @@ type TextField struct {
 	caret       int
 	selA, selB  int
 	blinkOn     bool
+	dragging    bool
+	scrollX     float32
 }
 
 func NewTextField(text, placeholder string, on func(string)) *TextField {
@@ -38,11 +40,40 @@ func (t *TextField) SetText(s string) {
 		t.caret = n
 	}
 	t.selA, t.selB = t.caret, t.caret
+	t.ensureCaretVisible()
 	t.Invalidate()
 	if t.OnChange != nil {
 		t.OnChange(s)
 	}
 }
+
+// SetSelection sets the caret and the [a,b] rune range (order independent).
+func (t *TextField) SetSelection(a, b int) {
+	n := runeCount(t.Text)
+	if a < 0 {
+		a = 0
+	}
+	if b < 0 {
+		b = 0
+	}
+	if a > n {
+		a = n
+	}
+	if b > n {
+		b = n
+	}
+	t.selA, t.selB, t.caret = a, b, b
+	t.ensureCaretVisible()
+	t.Invalidate()
+}
+
+// Caret is the rune index of the insertion point.
+func (t *TextField) Caret() int { return t.caret }
+
+// Selection returns the unordered selection anchors.
+func (t *TextField) Selection() (a, b int) { return t.selA, t.selB }
+
+func (t *TextField) SetCaretBlink(on bool) { t.blinkOn = on }
 
 func (t *TextField) Measure(c layout.Constraints) paintengine2d.Point {
 	h := t.Look().Metrics().ControlH
@@ -51,8 +82,28 @@ func (t *TextField) Measure(c layout.Constraints) paintengine2d.Point {
 
 func (t *TextField) Arrange(r paintengine2d.Rect) { t.SetBounds(r) }
 
+func (t *TextField) fieldPad() float32 {
+	p := t.Look().Metrics().FieldPad
+	if p <= 0 {
+		p = 8
+	}
+	return p
+}
+
+func (t *TextField) blink() bool {
+	if !t.Focused() {
+		return false
+	}
+	if h := t.Host(); h != nil {
+		if b, ok := h.(interface{ CaretBlink() bool }); ok {
+			return b.CaretBlink()
+		}
+	}
+	return t.blinkOn
+}
+
 func (t *TextField) Paint(ctx *paintengine2d.Context) {
-	t.Look().DrawTextField(ctx, t.LocalBounds(), t.State(), t.Text, t.Placeholder, t.caret, t.selA, t.selB, t.blinkOn && t.Focused())
+	t.Look().DrawTextField(ctx, t.LocalBounds(), t.State(), t.Text, t.Placeholder, t.caret, t.selA, t.selB, t.blink(), t.scrollX)
 }
 
 func (t *TextField) FocusGained() {
@@ -60,31 +111,62 @@ func (t *TextField) FocusGained() {
 	t.Invalidate()
 }
 
+func (t *TextField) indexAt(x float32) int {
+	f := t.Look().Font()
+	return f.IndexAt(t.Text, x-t.fieldPad()+t.scrollX)
+}
+
+func (t *TextField) ensureCaretVisible() {
+	f := t.Look().Font()
+	pad := t.fieldPad()
+	inner := t.LocalBounds().Dx() - pad*2
+	if inner <= 0 {
+		return
+	}
+	cx := f.CaretX(t.Text, t.caret)
+	if cx-t.scrollX > inner-2 {
+		t.scrollX = cx - inner + 2
+	}
+	if cx-t.scrollX < 0 {
+		t.scrollX = cx
+	}
+	if t.scrollX < 0 {
+		t.scrollX = 0
+	}
+}
+
 func (t *TextField) MousePress(e widget.MouseEvent) bool {
 	if !t.Enabled() {
 		return false
 	}
 	t.RequestFocus()
-	f := t.Look().Font()
-	x := e.Pos.X - 8
-	t.caret = f.IndexAt(t.Text, x)
-	t.selA, t.selB = t.caret, t.caret
+	t.dragging = true
+	t.caret = t.indexAt(e.Pos.X)
+	if e.Mods.Shift() {
+		t.selB = t.caret
+	} else {
+		t.selA, t.selB = t.caret, t.caret
+	}
+	t.ensureCaretVisible()
 	t.Invalidate()
 	return true
 }
 
 func (t *TextField) MouseMove(e widget.MouseEvent) bool {
-	if e.Button == platform.ButtonLeft || t.selDragging(e) {
-		f := t.Look().Font()
-		t.selB = f.IndexAt(t.Text, e.Pos.X-8)
-		t.caret = t.selB
-		t.Invalidate()
-		return true
+	if !t.dragging && e.Button != platform.ButtonLeft {
+		return false
 	}
-	return false
+	t.selB = t.indexAt(e.Pos.X)
+	t.caret = t.selB
+	t.ensureCaretVisible()
+	t.Invalidate()
+	return true
 }
 
-func (t *TextField) selDragging(e widget.MouseEvent) bool { return false }
+func (t *TextField) MouseRelease(widget.MouseEvent) bool {
+	t.dragging = false
+	return true
+}
 
 func (t *TextField) TextInput(r rune) bool {
 	if !t.Enabled() || r < 32 {
@@ -122,44 +204,32 @@ func (t *TextField) KeyPress(e widget.KeyEvent) bool {
 		}
 		return true
 	case platform.KeyLeft:
-		if t.caret > 0 {
+		if e.Mods.Ctrl() {
+			t.caret = wordBoundary(t.Text, t.caret, -1)
+		} else if t.hasSel() && !e.Mods.Shift() {
+			t.caret = selMin(t.selA, t.selB)
+		} else if t.caret > 0 {
 			t.caret--
 		}
-		if !e.Mods.Shift() {
-			t.selA, t.selB = t.caret, t.caret
-		} else {
-			t.selB = t.caret
-		}
-		t.Invalidate()
+		t.applyNav(e.Mods.Shift())
 		return true
 	case platform.KeyRight:
-		if t.caret < runeCount(t.Text) {
+		if e.Mods.Ctrl() {
+			t.caret = wordBoundary(t.Text, t.caret, 1)
+		} else if t.hasSel() && !e.Mods.Shift() {
+			t.caret = selMax(t.selA, t.selB)
+		} else if t.caret < runeCount(t.Text) {
 			t.caret++
 		}
-		if !e.Mods.Shift() {
-			t.selA, t.selB = t.caret, t.caret
-		} else {
-			t.selB = t.caret
-		}
-		t.Invalidate()
+		t.applyNav(e.Mods.Shift())
 		return true
 	case platform.KeyHome:
 		t.caret = 0
-		if !e.Mods.Shift() {
-			t.selA, t.selB = 0, 0
-		} else {
-			t.selB = 0
-		}
-		t.Invalidate()
+		t.applyNav(e.Mods.Shift())
 		return true
 	case platform.KeyEnd:
 		t.caret = runeCount(t.Text)
-		if !e.Mods.Shift() {
-			t.selA, t.selB = t.caret, t.caret
-		} else {
-			t.selB = t.caret
-		}
-		t.Invalidate()
+		t.applyNav(e.Mods.Shift())
 		return true
 	case platform.KeyA:
 		if e.Mods.Ctrl() {
@@ -175,6 +245,16 @@ func (t *TextField) KeyPress(e widget.KeyEvent) bool {
 		return true
 	}
 	return false
+}
+
+func (t *TextField) applyNav(extend bool) {
+	if !extend {
+		t.selA, t.selB = t.caret, t.caret
+	} else {
+		t.selB = t.caret
+	}
+	t.ensureCaretVisible()
+	t.Invalidate()
 }
 
 func (t *TextField) hasSel() bool { return t.selA != t.selB }
@@ -204,6 +284,7 @@ func (t *TextField) replaceSel(s string) {
 }
 
 func (t *TextField) changed() {
+	t.ensureCaretVisible()
 	t.Invalidate()
 	if t.OnChange != nil {
 		t.OnChange(t.Text)
@@ -218,4 +299,50 @@ func dropRune(s string, i int) string {
 		return s
 	}
 	return string(append(r[:i], r[i+1:]...))
+}
+
+func selMin(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func selMax(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func wordBoundary(s string, i, dir int) int {
+	r := []rune(s)
+	n := len(r)
+	if n == 0 {
+		return 0
+	}
+	if dir < 0 {
+		if i <= 0 {
+			return 0
+		}
+		i--
+		for i > 0 && isWordSep(r[i]) {
+			i--
+		}
+		for i > 0 && !isWordSep(r[i-1]) {
+			i--
+		}
+		return i
+	}
+	for i < n && !isWordSep(r[i]) {
+		i++
+	}
+	for i < n && isWordSep(r[i]) {
+		i++
+	}
+	return i
+}
+
+func isWordSep(r rune) bool {
+	return r == ' ' || r == '\t' || r == '/' || r == '-' || r == '_' || r == '.' || r == ','
 }

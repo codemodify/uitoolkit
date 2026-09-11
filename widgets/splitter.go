@@ -3,6 +3,7 @@ package widgets
 import (
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/layout"
+	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
 )
 
@@ -83,13 +84,16 @@ func (s *Splitter) divider() paintengine2d.Rect {
 func (s *Splitter) Paint(ctx *paintengine2d.Context) {
 	st := s.State()
 	if s.hovered || s.drag {
-		st |= 2 // hovered
+		st |= style.StateHovered
+	}
+	if s.drag {
+		st |= style.StatePressed
 	}
 	s.Look().DrawSplitter(ctx, s.divider(), s.Vertical, st)
 }
 
-func (s *Splitter) MouseEnter() { s.hovered = true; s.Invalidate() }
-func (s *Splitter) MouseExit()  { s.hovered = false; s.Invalidate() }
+func (s *Splitter) MouseEnter() { s.hovered = true; s.Base.MouseEnter() }
+func (s *Splitter) MouseExit()  { s.hovered = false; s.Base.MouseExit() }
 
 func (s *Splitter) MousePress(e widget.MouseEvent) bool {
 	if s.divider().Contains(e.Pos) {

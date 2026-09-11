@@ -3,6 +3,7 @@ package widgets
 import (
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/layout"
+	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/widget"
 )
 
@@ -130,8 +131,73 @@ func (l *ListView) MousePress(e widget.MouseEvent) bool {
 }
 
 func (l *ListView) MouseWheel(e widget.MouseEvent) bool {
-	l.OffsetY += e.Scroll.Y
+	dy := e.Scroll.Y
+	if dy > -8 && dy < 8 && dy != 0 {
+		dy *= l.rowH() * 3
+	}
+	l.OffsetY += dy
 	l.clamp()
 	l.Invalidate()
 	return true
+}
+
+func (l *ListView) KeyPress(e widget.KeyEvent) bool {
+	if !l.Enabled() || l.Count <= 0 {
+		return false
+	}
+	next := l.Selected
+	page := int(l.LocalBounds().Dy()/l.rowH()) - 1
+	if page < 1 {
+		page = 1
+	}
+	switch e.Key {
+	case platform.KeyDown:
+		next++
+	case platform.KeyUp:
+		next--
+	case platform.KeyPageDown:
+		next += page
+	case platform.KeyPageUp:
+		next -= page
+	case platform.KeyHome:
+		next = 0
+	case platform.KeyEnd:
+		next = l.Count - 1
+	case platform.KeyReturn, platform.KeySpace:
+		if l.Selected >= 0 && l.OnSelect != nil {
+			l.OnSelect(l.Selected)
+		}
+		return true
+	default:
+		return false
+	}
+	if next < 0 {
+		next = 0
+	}
+	if next >= l.Count {
+		next = l.Count - 1
+	}
+	if next != l.Selected {
+		l.Selected = next
+		l.ensureVisible(next)
+		l.Invalidate()
+		if l.OnSelect != nil {
+			l.OnSelect(next)
+		}
+	}
+	return true
+}
+
+func (l *ListView) ensureVisible(i int) {
+	rh := l.rowH()
+	top := float32(i) * rh
+	bot := top + rh
+	view := l.LocalBounds().Dy()
+	if top < l.OffsetY {
+		l.OffsetY = top
+	}
+	if bot > l.OffsetY+view {
+		l.OffsetY = bot - view
+	}
+	l.clamp()
 }

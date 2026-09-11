@@ -3,6 +3,7 @@ package widgets
 import (
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/layout"
+	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
 )
@@ -68,12 +69,47 @@ func (s *Slider) Paint(ctx *paintengine2d.Context) {
 	s.Look().DrawSlider(ctx, s.LocalBounds(), st, s.t())
 }
 
-func (s *Slider) MouseEnter() { s.hovered = true; s.Invalidate() }
+func (s *Slider) MouseEnter() { s.hovered = true; s.Base.MouseEnter() }
 func (s *Slider) MouseExit() {
 	s.hovered = false
 	if !s.drag {
-		s.Invalidate()
+		s.Base.MouseExit()
 	}
+}
+
+func (s *Slider) KeyPress(e widget.KeyEvent) bool {
+	if !s.Enabled() {
+		return false
+	}
+	span := s.Max - s.Min
+	step := span / 20
+	if e.Mods.Shift() {
+		step = span / 80
+	}
+	if step == 0 {
+		step = 1
+	}
+	switch e.Key {
+	case platform.KeyLeft, platform.KeyDown:
+		s.SetValue(s.Value - step)
+		return true
+	case platform.KeyRight, platform.KeyUp:
+		s.SetValue(s.Value + step)
+		return true
+	case platform.KeyPageDown:
+		s.SetValue(s.Value - span*0.1)
+		return true
+	case platform.KeyPageUp:
+		s.SetValue(s.Value + span*0.1)
+		return true
+	case platform.KeyHome:
+		s.SetValue(s.Min)
+		return true
+	case platform.KeyEnd:
+		s.SetValue(s.Max)
+		return true
+	}
+	return false
 }
 
 func (s *Slider) MousePress(e widget.MouseEvent) bool {

@@ -31,4 +31,8 @@ func TestBakeFontDrawsKnownGlyphs(t *testing.T) {
 	if n < 10 {
 		t.Fatalf("expected glyph pixels, n=%d", n)
 	}
+	if f.Height() <= f.Ascent {
+		t.Fatalf("height %v ascent %v", f.Height(), f.Ascent)
+	}
+	_ = GlyphTint()
 }

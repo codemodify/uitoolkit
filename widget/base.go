@@ -22,6 +22,7 @@ type Base struct {
 	visible  bool
 	enabled  bool
 	focus    bool
+	hovered  bool
 	manages  bool
 	look     style.LookAndFeel
 	host     Host
@@ -182,14 +183,25 @@ func (b *Base) HitTest(local paintengine2d.Point) Component {
 func (b *Base) MousePress(MouseEvent) bool   { return false }
 func (b *Base) MouseRelease(MouseEvent) bool { return false }
 func (b *Base) MouseMove(MouseEvent) bool    { return false }
-func (b *Base) MouseEnter()                  {}
-func (b *Base) MouseExit()                   {}
-func (b *Base) MouseWheel(MouseEvent) bool   { return false }
-func (b *Base) KeyPress(KeyEvent) bool       { return false }
-func (b *Base) KeyRelease(KeyEvent) bool     { return false }
-func (b *Base) TextInput(rune) bool          { return false }
-func (b *Base) FocusGained()                 { b.Invalidate() }
-func (b *Base) FocusLost()                   { b.Invalidate() }
+func (b *Base) MouseEnter() {
+	if !b.hovered {
+		b.hovered = true
+		b.Invalidate()
+	}
+}
+func (b *Base) MouseExit() {
+	if b.hovered {
+		b.hovered = false
+		b.Invalidate()
+	}
+}
+func (b *Base) MouseWheel(MouseEvent) bool { return false }
+func (b *Base) Hovered() bool              { return b.hovered }
+func (b *Base) KeyPress(KeyEvent) bool     { return false }
+func (b *Base) KeyRelease(KeyEvent) bool   { return false }
+func (b *Base) TextInput(rune) bool        { return false }
+func (b *Base) FocusGained()               { b.Invalidate() }
+func (b *Base) FocusLost()                 { b.Invalidate() }
 
 func (b *Base) Invalidate() {
 	b.InvalidateRect(b.LocalBounds())
@@ -231,7 +243,25 @@ func (b *Base) State() style.ControlState {
 	if b.Focused() {
 		s |= style.StateFocused
 	}
+	if b.hovered {
+		s |= style.StateHovered
+	}
 	return s
+}
+
+// Find returns the first pre-order node of type T, if any.
+func Find[T Component](root Component) (T, bool) {
+	var found T
+	ok := false
+	Walk(root, func(c Component) {
+		if ok {
+			return
+		}
+		if v, yes := c.(T); yes {
+			found, ok = v, true
+		}
+	})
+	return found, ok
 }
 
 // Walk pre-order visits c and descendants.

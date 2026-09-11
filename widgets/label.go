@@ -60,11 +60,23 @@ func (l *Label) Arrange(r paintengine2d.Rect) { l.SetBounds(r) }
 
 func (l *Label) Paint(ctx *paintengine2d.Context) {
 	lk := l.Look()
+	f := l.font()
 	col := l.Color
 	if col == (paintengine2d.Color{}) {
 		col = lk.Palette().Text
 	}
-	lk.DrawLabel(ctx, l.LocalBounds(), l.Text, col, l.Align)
+	b := l.LocalBounds()
+	tw := f.Advance(l.Text)
+	th := f.Height()
+	x := b.Min.X
+	switch l.Align {
+	case style.AlignCenter:
+		x = b.Min.X + (b.Dx()-tw)*0.5
+	case style.AlignEnd:
+		x = b.Max.X - tw - 2
+	}
+	y := b.Min.Y + (b.Dy()-th)*0.5
+	f.Draw(ctx, l.Text, paintengine2d.Pt(x, y), col)
 }
 
 func near(a, b paintengine2d.Color) bool {

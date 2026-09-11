@@ -2,8 +2,10 @@
 package main
 
 import (
+	"crypto/md5"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -212,11 +214,12 @@ func writeScreenshots(dir string) error {
 			name: "gallery-scroll.png",
 			look: style.DarkLook(),
 			setup: func(a *app.Application, w *app.Window) {
-				// Wheel the right-hand list/scroll so thumbs move.
+				scrollGallery(w)
+				// Wheel over the ScrollView (right column, upper pane).
 				w.Inject(platform.Event{
 					Kind:   platform.EventScroll,
-					Pos:    paintengine2d.Pt(720, 280),
-					Scroll: paintengine2d.Pt(0, 220),
+					Pos:    paintengine2d.Pt(720, 220),
+					Scroll: paintengine2d.Pt(0, 80),
 				})
 			},
 		},
@@ -245,7 +248,65 @@ func writeScreenshots(dir string) error {
 	if err := writeNotesShot(filepath.Join(dir, "notes.png")); err != nil {
 		return err
 	}
-	return writeWidgetsCloseup(filepath.Join(dir, "widgets.png"))
+	if err := writeWidgetsCloseup(filepath.Join(dir, "widgets.png")); err != nil {
+		return err
+	}
+	return verifyDistinctPNGs(dir, []string{
+		"gallery-dark.png", "gallery-light.png", "gallery-dialog.png",
+		"gallery-scroll.png", "notes.png", "widgets.png",
+	})
+}
+
+func scrollGallery(w *app.Window) {
+	widget.Walk(w.Content(), func(c widget.Component) {
+		switch v := c.(type) {
+		case *widgets.ScrollView:
+			v.ScrollTo(v.MaxOffset() * 0.48)
+		case *widgets.ListView:
+			if v.Count > 10 {
+				rh := v.RowHeight
+				if rh <= 0 {
+					rh = 28
+				}
+				v.OffsetY = rh * 5
+				sel := 7
+				v.Selected = sel
+				if v.OnSelect != nil {
+					v.OnSelect(sel)
+				}
+				v.Invalidate()
+			}
+		}
+	})
+}
+
+func verifyDistinctPNGs(dir string, names []string) error {
+	seen := map[string]string{}
+	for _, name := range names {
+		path := filepath.Join(dir, name)
+		sum, err := fileMD5(path)
+		if err != nil {
+			return err
+		}
+		if other, ok := seen[sum]; ok {
+			return fmt.Errorf("screenshot %s is a duplicate of %s", name, other)
+		}
+		seen[sum] = name
+	}
+	return nil
+}
+
+func fileMD5(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	h := md5.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%x", h.Sum(nil)), nil
 }
 
 func writeNotesShot(path string) error {
@@ -276,13 +337,18 @@ func writeWidgetsCloseup(path string) error {
 	}
 	primary := widgets.NewButton("Save changes", nil)
 	primary.Primary = true
+	field := widgets.NewTextField("Search toolkit…", "Placeholder", nil)
 	w.SetContent(widgets.NewPanel("Themed controls",
 		widgets.NewRow(primary, widgets.NewButton("Cancel", nil)).WithGap(10),
-		widgets.NewTextField("Search toolkit…", "Placeholder", nil),
+		field,
 		widgets.NewSlider(0, 100, 72, nil),
 		widgets.NewCheckbox("Remember window size", true, nil),
 		widgets.NewCheckbox("Show hidden files", false, nil),
 	))
+	a.PumpOnce()
+	w.RequestFocus(field)
+	field.SetSelection(7, 14) // "toolkit"
+	primary.MouseEnter()
 	a.PumpOnce()
 	if err := w.WritePNG(path); err != nil {
 		return err

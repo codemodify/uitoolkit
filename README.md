@@ -3,8 +3,8 @@
 **Pure-Go desktop UI toolkit.** Retained widget tree, layout, themes, and
 an X11 window backend. Every pixel is painted with
 [`github.com/codemodify/paintengine2d`](https://github.com/codemodify/paintengine2d)
-(v0.7.1+). There is no second rasterizer, no Skia, no Gio renderer, and no
-Electron.
+(v0.7.1+; white-atlas Color tint when the engine publishes v0.7.2). There is no
+second rasterizer, no Skia, no Gio renderer, and no Electron.
 
 ```go
 app := uitoolkit.New(uitoolkit.Options{Look: uitoolkit.DarkLook()})
@@ -99,8 +99,9 @@ Desktop app
 
 If the engine is missing a primitive (nine-patch, SaveLayer, OpenType), the
 fix belongs in paintengine2d — not a second painter here. **v0.7.2 blit RGB
-tint** was implemented for themed white atlases; this module still works on
-**v0.7.1** by baking atlases in the theme color.
+tint** is detected at runtime (`style.GlyphTint`). Until that engine tag is
+published, atlases are still baked in the theme color; when tint works, one
+white atlas is shared and `DrawGlyphs` receives the theme Color.
 
 ## Architecture
 
@@ -142,7 +143,9 @@ CGO_ENABLED=0 go test ./...
 
 Coverage includes flex Measure/Arrange (parent-local coords), hit-test
 z-order, focus tab order, checkbox/slider/text/button interaction, virtual
-list range, and an offscreen paint that produces real pixels.
+list range, scroll-wheel bubbling, scrollbar track hits, text selection,
+and an offscreen paint that produces real pixels. `go test ./examples/gallery`
+regenerates the six PNGs and fails if any two share a blob.
 
 ## Positioning
 
@@ -173,7 +176,9 @@ Documented on purpose — do not expect these yet:
 
 ## Version
 
-**0.1.0** — first production-shaped release on paintengine2d 0.7.1+.
+**0.1.1** — desktop polish on 0.1.0: distinct gallery shots, scroll physics,
+caret/selection, focus rings, keyboard nav. Still paintengine2d 0.7.1+
+(v0.7.2 tint is used automatically when the engine provides it).
 
 ## License
 
