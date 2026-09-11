@@ -4,6 +4,7 @@ import (
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/layout"
 	"github.com/codemodify/uitoolkit/platform"
+	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
 )
 
@@ -17,6 +18,7 @@ type TextField struct {
 	OnSubmit    func(string)
 	OnFocusLost func()
 	Accept      func(string) bool
+	Mono        bool
 	caret       int
 	selA, selB  int
 	blinkOn     bool
@@ -32,6 +34,14 @@ func NewTextField(text, placeholder string, on func(string)) *TextField {
 	t.SetWantsFocus(true)
 	t.caret = runeCount(text)
 	t.selA, t.selB = t.caret, t.caret
+	return t
+}
+
+// NewMonoTextField is a single-line editor in the LookAndFeel mono role
+// (JetBrains Mono). Use for paths, logs, and code-ish values.
+func NewMonoTextField(text, placeholder string, on func(string)) *TextField {
+	t := NewTextField(text, placeholder, on)
+	t.Mono = true
 	return t
 }
 
@@ -109,10 +119,17 @@ func (t *TextField) blink() bool {
 
 func (t *TextField) Paint(ctx *paintengine2d.Context) {
 	text, caret, selA, selB := t.visual()
-	t.Look().DrawTextField(ctx, t.LocalBounds(), t.State(), text, t.Placeholder, caret, selA, selB, t.blink(), t.scrollX)
+	t.Look().DrawTextField(ctx, t.LocalBounds(), t.State(), text, t.Placeholder, caret, selA, selB, t.blink(), t.scrollX, t.font())
 	if t.preedit != "" {
-		drawPreeditBar(ctx, t.Look(), t.LocalBounds(), t.fieldPad(), text, selA, selB, t.scrollX, false)
+		drawPreeditBar(ctx, t.Look(), t.LocalBounds(), t.fieldPad(), text, selA, selB, t.scrollX, false, t.font())
 	}
+}
+
+func (t *TextField) font() *style.Font {
+	if t.Mono {
+		return t.Look().MonoFont()
+	}
+	return t.Look().Font()
 }
 
 func (t *TextField) visual() (text string, caret, selA, selB int) {
@@ -177,7 +194,7 @@ func (t *TextField) IMESurrounding() (text string, cursor, anchor int) {
 }
 
 func (t *TextField) IMECaretRect() paintengine2d.Rect {
-	f := t.Look().Font()
+	f := t.font()
 	text, caret, _, _ := t.visual()
 	pad := t.fieldPad()
 	cx := f.CaretX(text, caret) - t.scrollX
@@ -204,12 +221,12 @@ func (t *TextField) FocusLost() {
 }
 
 func (t *TextField) indexAt(x float32) int {
-	f := t.Look().Font()
+	f := t.font()
 	return f.IndexAt(t.Text, x-t.fieldPad()+t.scrollX)
 }
 
 func (t *TextField) ensureCaretVisible() {
-	f := t.Look().Font()
+	f := t.font()
 	pad := t.fieldPad()
 	inner := t.LocalBounds().Dx() - pad*2
 	if inner <= 0 {

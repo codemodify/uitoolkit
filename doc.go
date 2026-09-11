@@ -12,7 +12,7 @@
 //	            TableView, StatusBar, ToolBar, ComboBox, ProgressBar,
 //	            RadioGroup, MessageBox, TitleBar, ListView, FileDialog,
 //	            Tooltip, Accordion, Expander, Separator, Spacer, …
-//	style     — LookAndFeel themes (colors, radii, baked glyph atlases)
+//	style     — LookAndFeel themes (Titillium Web + JetBrains Mono OpenType atlases)
 //
 // All pixels go through paintengine2d.Context. There is no second rasterizer.
 package uitoolkit

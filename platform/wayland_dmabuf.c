@@ -9,9 +9,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <unistd.h>
+#include <linux/dma-buf.h>
 
 #ifndef MFD_CLOEXEC
 #define MFD_CLOEXEC 0x0001U
@@ -374,6 +376,52 @@ void ui_dmabuf_free(struct ui_dmabuf_bo *bo) {
 	}
 	memset(bo, 0, sizeof(*bo));
 	bo->fd = -1;
+}
+
+int ui_dmabuf_drm_fd(void) { return g_drm_fd; }
+
+#ifndef DMA_BUF_SYNC_READ
+#define DMA_BUF_SYNC_READ (1 << 0)
+#define DMA_BUF_SYNC_WRITE (1 << 1)
+#define DMA_BUF_SYNC_START (1 << 2)
+#define DMA_BUF_SYNC_END (1 << 3)
+#endif
+#ifndef DMA_BUF_BASE
+#define DMA_BUF_BASE 'b'
+#endif
+#ifndef DMA_BUF_IOCTL_SYNC
+struct dma_buf_sync {
+	uint64_t flags;
+};
+#define DMA_BUF_IOCTL_SYNC _IOW(DMA_BUF_BASE, 0, struct dma_buf_sync)
+#endif
+#ifndef DMA_BUF_IOCTL_EXPORT_SYNC_FILE
+struct dma_buf_export_sync_file {
+	uint32_t flags;
+	int32_t fd;
+};
+#define DMA_BUF_IOCTL_EXPORT_SYNC_FILE _IOWR(DMA_BUF_BASE, 2, struct dma_buf_export_sync_file)
+#endif
+
+int ui_dmabuf_cpu_begin(int fd) {
+	if (fd < 0) return -1;
+	struct dma_buf_sync s = { .flags = DMA_BUF_SYNC_START | DMA_BUF_SYNC_WRITE };
+	return ioctl(fd, DMA_BUF_IOCTL_SYNC, &s);
+}
+
+int ui_dmabuf_cpu_end(int fd) {
+	if (fd < 0) return -1;
+	struct dma_buf_sync s = { .flags = DMA_BUF_SYNC_END | DMA_BUF_SYNC_WRITE };
+	return ioctl(fd, DMA_BUF_IOCTL_SYNC, &s);
+}
+
+int ui_dmabuf_export_sync_file(int fd) {
+	if (fd < 0) return -1;
+	struct dma_buf_export_sync_file exp = { .flags = DMA_BUF_SYNC_READ, .fd = -1 };
+	if (ioctl(fd, DMA_BUF_IOCTL_EXPORT_SYNC_FILE, &exp) != 0) {
+		return -1;
+	}
+	return exp.fd;
 }
 
 int ui_dmabuf_probe(char *name, int n) {

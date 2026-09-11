@@ -1,19 +1,25 @@
 package style
 
 import (
+	"fmt"
 	"sync"
 
 	"github.com/codemodify/paintengine2d"
 )
 
-// Font is a baked glyph atlas painted through paintengine2d. Glyph ink is
-// produced by the engine (bitmap atlas + nearest blit), not a second rasterizer.
+// Font is a baked glyph atlas painted through paintengine2d.
+// Default UI/mono faces are OpenType outlines (Titillium Web / JetBrains Mono)
+// rasterized with the engine's scanline AA into a white sheet; Paint.Color tints.
 type Font struct {
-	Atlas   *paintengine2d.FontAtlas
-	Size    float32
-	Ascent  float32
-	Descent float32
-	Color   paintengine2d.Color
+	Atlas    *paintengine2d.FontAtlas
+	Size     float32
+	Ascent   float32
+	Descent  float32
+	Color    paintengine2d.Color
+	Family   string
+	Weight   Weight
+	Outline  bool // true when built from TTF outlines (not the 5×7 bitmap)
+	ot       *otAtlas
 }
 
 func (f *Font) Measure(text string) paintengine2d.Point {
@@ -37,6 +43,7 @@ func (f *Font) Advance(text string) float32 {
 	if f == nil || f.Atlas == nil {
 		return 0
 	}
+	f.ensure(text)
 	run := paintengine2d.NullShaper{}.Shape(text, f.Atlas)
 	var w float32
 	for _, g := range run.Glyphs {
@@ -74,6 +81,7 @@ func (f *Font) runeAdvance(r rune) float32 {
 	if f == nil || f.Atlas == nil {
 		return 0
 	}
+	f.ensure(string(r))
 	if cell, ok := f.Atlas.Cell(paintengine2d.GlyphID(r)); ok {
 		if cell.Advance > 0 {
 			return cell.Advance
@@ -99,10 +107,25 @@ func (f *Font) CaretX(text string, i int) float32 {
 	return acc
 }
 
+func (f *Font) ensure(text string) {
+	if f == nil || f.ot == nil || f.Atlas == nil || text == "" {
+		return
+	}
+	f.ot.mu.Lock()
+	defer f.ot.mu.Unlock()
+	for _, r := range text {
+		if _, ok := f.Atlas.Cells[paintengine2d.GlyphID(r)]; ok {
+			continue
+		}
+		_, _ = f.ot.rasterize(f.Atlas, r)
+	}
+}
+
 func (f *Font) Draw(ctx *paintengine2d.Context, text string, origin paintengine2d.Point, tint paintengine2d.Color) {
 	if f == nil || f.Atlas == nil || text == "" {
 		return
 	}
+	f.ensure(text)
 	col := tint
 	if col == (paintengine2d.Color{}) {
 		col = f.Color
@@ -115,35 +138,95 @@ func (f *Font) Draw(ctx *paintengine2d.Context, text string, origin paintengine2
 }
 
 type fontKey struct {
-	size int
+	family string
+	weight Weight
+	size   int
 }
 
 var fontCache sync.Map
 
-// BakeFont scales paintengine2d's 5×7 UI atlas (plus extra punct) to a shared
-// white sheet. Theme color is applied at draw time via Paint.Color (v0.7.2 tint).
+// BakeFont builds the default UI face (Titillium Web Regular) at size.
+// Glyphs are OpenType outlines rasterized through paintengine2d — not the
+// 5×7 bitmap atlas. Theme color is applied at draw time via Paint.Color.
 func BakeFont(size float32, col paintengine2d.Color) *Font {
+	return BakeFamily(FamilyUI, WeightRegular, size, col)
+}
+
+// BakeTitleFont is Titillium Web Bold at size.
+func BakeTitleFont(size float32, col paintengine2d.Color) *Font {
+	return BakeFamily(FamilyUI, WeightBold, size, col)
+}
+
+// BakeMonoFont is JetBrains Mono Regular at size (LookAndFeel mono role).
+func BakeMonoFont(size float32, col paintengine2d.Color) *Font {
+	return BakeFamily(FamilyMono, WeightRegular, size, col)
+}
+
+// BakeMonoBoldFont is JetBrains Mono Bold at size.
+func BakeMonoBoldFont(size float32, col paintengine2d.Color) *Font {
+	return BakeFamily(FamilyMono, WeightBold, size, col)
+}
+
+// BakeBitmapFont is the legacy 5×7 nearest-neighbor atlas. Default UI and
+// mono faces never use this when the bundled OFL TTFs are present.
+func BakeBitmapFont(scale int, col paintengine2d.Color) *Font {
+	if scale < 1 {
+		scale = 1
+	}
+	f := bakeScaled(scale, col)
+	f.Family = "bitmap"
+	f.Outline = false
+	return f
+}
+
+// BakeFamily rasterizes a bundled OFL face. It panics only if the embedded
+// TTF is missing or unloadable — that is a packaging bug, not a runtime
+// fallback to the bitmap atlas.
+func BakeFamily(family string, weight Weight, size float32, col paintengine2d.Color) *Font {
 	if size < 8 {
 		size = 8
 	}
-	scale := int(size/8 + 0.5)
-	if scale < 2 {
-		scale = 2
-	}
-	if scale > 4 {
-		scale = 4
-	}
-	key := fontKey{size: scale}
+	key := fontKey{family: family, weight: weight, size: int(size*4 + 0.5)}
 	if v, ok := fontCache.Load(key); ok {
 		f := *v.(*Font)
 		f.Color = col
 		return &f
 	}
-	f := bakeScaled(scale, paintengine2d.White)
+	f, err := bakeOutline(family, weight, size)
+	if err != nil {
+		panic(err)
+	}
 	fontCache.Store(key, f)
 	out := *f
 	out.Color = col
 	return &out
+}
+
+func bakeOutline(family string, weight Weight, size float32) (*Font, error) {
+	face, err := faceFor(family, weight)
+	if err != nil {
+		return nil, err
+	}
+	ascent, descent := face.metrics(size)
+	ot := newOTAtlas(face, size)
+	ot.ascent = ascent
+	atlas, err := ot.bake(otPreload)
+	if err != nil {
+		return nil, err
+	}
+	if _, ok := atlas.Cell(paintengine2d.GlyphID('A')); !ok {
+		return nil, fmt.Errorf("style: %s did not rasterize A", family)
+	}
+	return &Font{
+		Atlas:   atlas,
+		Size:    size,
+		Ascent:  ascent,
+		Descent: descent,
+		Family:  family,
+		Weight:  weight,
+		Outline: true,
+		ot:      ot,
+	}, nil
 }
 
 func bakeScaled(scale int, col paintengine2d.Color) *Font {

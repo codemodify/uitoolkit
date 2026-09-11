@@ -626,6 +626,12 @@ func writeScreenshots(dir string) error {
 	if err := writeInspectorShot(filepath.Join(dir, "inspector.png")); err != nil {
 		return err
 	}
+	if err := writeFilesShot(filepath.Join(dir, "files.png")); err != nil {
+		return err
+	}
+	if err := writeFontsShot(filepath.Join(dir, "fonts.png")); err != nil {
+		return err
+	}
 	return verifyDistinctPNGs(dir, screenshotNames)
 }
 
@@ -635,7 +641,7 @@ var screenshotNames = []string{
 	"gallery-toolbar.png", "gallery-combo.png", "gallery-message.png",
 	"gallery-table.png", "gallery-file.png", "gallery-tooltip.png",
 	"gallery-textarea.png", "gallery-accordion.png",
-	"notes.png", "inspector.png", "widgets.png",
+	"notes.png", "inspector.png", "files.png", "widgets.png", "fonts.png",
 }
 
 func selectGalleryTab(w *app.Window, i int) {
@@ -793,9 +799,11 @@ func writeWidgetsCloseup(path string) error {
 	spin := widgets.NewNumberField(0, 24, 14, 1, nil)
 	area := widgets.NewTextArea("Remembered draft\nSecond line.", "Notes", nil)
 	area.MinRows = 2
+	logField := widgets.NewMonoTextField("/var/log/uitoolkit.log", "log path", nil)
 	w.SetContent(widgets.NewPanel("Themed controls",
 		widgets.NewRow(primary, widgets.NewButton("Cancel", nil)).WithGap(10),
 		field,
+		logField,
 		combo,
 		spin,
 		widgets.NewSlider(0, 100, 72, nil),
@@ -886,6 +894,78 @@ func writeTextAreaShot(path string) error {
 	w.RequestFocus(area)
 	area.SetSelection(0, 21) // "Ship notes for v0.1.7"
 	area.SetCaretBlink(true)
+	a.PumpOnce()
+	if err := w.WritePNG(path); err != nil {
+		return err
+	}
+	fmt.Println("wrote", path)
+	w.Close()
+	return nil
+}
+
+func writeFontsShot(path string) error {
+	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{
+		Title: "Fonts", Width: 640, Height: 420, Headless: true,
+	})
+	if err != nil {
+		return err
+	}
+	uiField := widgets.NewTextField("Search toolkit…", "Titillium Web", nil)
+	monoField := widgets.NewMonoTextField("/work/projects/uitoolkit", "path", nil)
+	code := widgets.NewMonoTextArea(
+		"func main() {\n    fmt.Println(\"JetBrains Mono\")\n}\n",
+		"code",
+		nil,
+	)
+	code.MinRows = 4
+	code.Wrap = false
+	uiLbl := widgets.NewLabel("UI role  ·  Titillium Web")
+	monoLbl := widgets.NewLabel("Mono role  ·  JetBrains Mono")
+	monoLbl.Mono = true
+	w.SetContent(widgets.NewPanel("LookAndFeel typefaces",
+		uiLbl,
+		uiField,
+		widgets.NewSeparator(),
+		monoLbl,
+		monoField,
+		code,
+	))
+	a.PumpOnce()
+	w.RequestFocus(code)
+	code.SetSelection(0, 11) // "func main()"
+	a.PumpOnce()
+	if err := w.WritePNG(path); err != nil {
+		return err
+	}
+	fmt.Println("wrote", path)
+	w.Close()
+	return nil
+}
+
+func writeFilesShot(path string) error {
+	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{
+		Title: "Files", Width: 1040, Height: 680, Headless: true,
+	})
+	if err != nil {
+		return err
+	}
+	w.SetContent(demo.FilesApp(w))
+	a.PumpOnce()
+	widget.Walk(w.Content(), func(c widget.Component) {
+		if tv, ok := c.(*widgets.TabView); ok {
+			tv.Select(0)
+		}
+		if table, ok := c.(*widgets.TableView); ok && len(table.Columns) >= 3 {
+			table.Selected = 0
+			if table.OnSelect != nil {
+				table.OnSelect(0)
+			}
+		}
+	})
+	a.PumpOnce()
+	openGalleryMenu(w, 0)
 	a.PumpOnce()
 	if err := w.WritePNG(path); err != nil {
 		return err
