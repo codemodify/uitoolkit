@@ -11,7 +11,7 @@ import "encoding/json"
 //	ping
 //	status.get
 //	accounts.list
-//	accounts.put        AccountConfig (passEnv only)
+//	accounts.put        AccountConfig (password and/or passEnv)
 //	folders.list        {accountId}
 //	folders.get         {id}
 //	folders.create      {accountId, name, parent?}
@@ -183,7 +183,7 @@ type searchParams struct {
 }
 
 type setFlagsParams struct {
-	ID    MessageID    `json:"id"`
+	ID    MessageID     `json:"id"`
 	Patch wireFlagPatch `json:"patch"`
 }
 

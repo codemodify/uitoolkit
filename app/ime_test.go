@@ -32,3 +32,20 @@ func TestWindowDispatchesIME(t *testing.T) {
 		t.Fatal("cancel")
 	}
 }
+
+func TestWindowDispatchesEventText(t *testing.T) {
+	a := New(Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{Width: 320, Height: 120, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tf := widgets.NewTextField("", "", nil)
+	w.SetContent(tf)
+	a.PumpOnce()
+	w.RequestFocus(tf)
+	w.dispatch(platform.Event{Kind: platform.EventText, Rune: 'A'})
+	w.dispatch(platform.Event{Kind: platform.EventText, Rune: 'b'})
+	if tf.Text != "Ab" {
+		t.Fatalf("EventText %q", tf.Text)
+	}
+}

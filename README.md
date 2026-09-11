@@ -434,8 +434,17 @@ IMAP+SMTP with an on-disk cache are **v0.9.0**. Empty-by-default first-run
 and text-only message view are **v0.9.1**. Mail Tier A+B (OAuth, IDLE/QRESYNC,
 outbox, smart folders, threading/mute, VIP, notify, categories) is **v0.10.0**.
 Cross-toolkit widget name map + compare thumbs is **v0.10.1**.
+Wayland TextField typing (xkb `EventText` while text-input is idle) and
+Add Account typed passwords in `mail.json` (mode `0600`) are **v0.10.2**.
 
 ## Version
+
+**0.10.2** — Wayland: printable keys emit `EventText` unless IME preedit
+is active (Add Account / Quick Filter were untypeable when
+`zwp_text_input_v3` entered without commit). Text-input enable follows
+text-field focus. Add Account takes a masked password and stores it in
+`mail.json` (mode `0600`, temporary plaintext; `passEnv` / OAuth remain).
+`NewPasswordField`. Still paintengine2d **v0.9.0**.
 
 **0.10.1** — Docs: widget comparison vs Qt, GTK 4, Avalonia, Fyne, WinForms,
 WPF, AppKit, and SwiftUI ([docs/widgets.md](docs/widgets.md)), with isolated

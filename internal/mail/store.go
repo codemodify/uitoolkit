@@ -306,7 +306,7 @@ type Store interface {
 	OpenPart(id MessageID, partID string) (PartData, error)
 	Sync(accountID string) (SyncResult, error)
 
-	// PutAccount writes IMAP/SMTP settings (passEnv only — never a password).
+	// PutAccount writes IMAP/SMTP settings (inline password and/or passEnv).
 	PutAccount(AccountConfig) (Account, error)
 }
 

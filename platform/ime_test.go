@@ -54,3 +54,74 @@ func TestInsertAtRune(t *testing.T) {
 		t.Fatal("empty")
 	}
 }
+
+func TestShouldEmitXKBText(t *testing.T) {
+	// Regression: text-input-v3 "active" must not starve EventText.
+	// The old uitkWlKey gate was: !pressed || Ctrl || textActive → return.
+	if !ShouldEmitXKBText(true, false, false) {
+		t.Fatal("printable key with idle IME must emit EventText")
+	}
+	if ShouldEmitXKBText(false, false, false) {
+		t.Fatal("key-up")
+	}
+	if ShouldEmitXKBText(true, true, false) {
+		t.Fatal("Ctrl is a shortcut, not text")
+	}
+	if ShouldEmitXKBText(true, false, true) {
+		t.Fatal("active preedit: IME owns the key")
+	}
+}
+
+func TestPairXKBAndIMECommit(t *testing.T) {
+	// Latin compositor: xkb utf8 first, then IME commit of the same rune.
+	emit, lastX, lastI := PairXKBText("a", "")
+	if emit != "a" || lastX != "a" || lastI != "" {
+		t.Fatalf("xkb first %#v %#v %#v", emit, lastX, lastI)
+	}
+	emit, lastX, lastI = PairIMECommit("a", lastX)
+	if emit != "" || lastX != "" || lastI != "" {
+		t.Fatalf("dedupe IME %#v %#v %#v", emit, lastX, lastI)
+	}
+
+	// Reverse order: IME commit first, then xkb of the same rune.
+	emit, lastX, lastI = PairIMECommit("a", "")
+	if emit != "a" || lastX != "" || lastI != "a" {
+		t.Fatalf("IME first %#v %#v %#v", emit, lastX, lastI)
+	}
+	emit, lastX, lastI = PairXKBText("a", lastI)
+	if emit != "" || lastX != "" || lastI != "" {
+		t.Fatalf("dedupe xkb %#v %#v %#v", emit, lastX, lastI)
+	}
+
+	// Repeated same letter: second key must still insert.
+	emit, lastX, lastI = PairXKBText("a", "")
+	if emit != "a" {
+		t.Fatal("first a")
+	}
+	emit, lastX, lastI = PairXKBText("a", lastI)
+	if emit != "a" || lastX != "a" {
+		t.Fatalf("second a must not be eaten by previous xkb pair %#v %#v", emit, lastX)
+	}
+
+	// CJK commit after xkb Latin must still land (preedit path skips xkb).
+	emit, lastX, lastI = PairXKBText("a", "")
+	emit, lastX, lastI = PairIMECommit("あ", lastX)
+	if emit != "あ" || lastI != "あ" {
+		t.Fatalf("distinct IME commit %#v %#v", emit, lastI)
+	}
+
+	emit, lastX, lastI = PairIMECommit("", "a")
+	if emit != "" || lastX != "a" || lastI != "" {
+		t.Fatalf("empty commit keeps last xkb %#v %#v %#v", emit, lastX, lastI)
+	}
+}
+
+func TestTextEventsPrintable(t *testing.T) {
+	evs := textEvents([]byte("ab\x7f\n!"), 0)
+	if len(evs) != 3 || evs[0].Rune != 'a' || evs[1].Rune != 'b' || evs[2].Rune != '!' {
+		t.Fatalf("%+v", evs)
+	}
+	if evs[0].Kind != EventText {
+		t.Fatal("kind")
+	}
+}

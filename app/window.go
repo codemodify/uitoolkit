@@ -228,11 +228,13 @@ func (w *Window) syncIMECursor() {
 		return
 	}
 	if t, ok := w.focus.(widget.IMETarget); ok {
+		s.SetIMEEnabled(true)
 		r := t.IMECaretRect()
 		o := widget.DeviceOrigin(w.focus)
 		s.SetIMECursor(int(o.X+r.Min.X), int(o.Y+r.Min.Y), int(r.Dx()), int(r.Dy()))
 		return
 	}
+	s.SetIMEEnabled(false)
 	s.SetIMECursor(0, 0, 0, 0)
 }
 

@@ -93,7 +93,7 @@ func prefsAccounts(a *app.Application, cli *Client, st DaemonStatus) widget.Comp
 		health = "ok"
 	}
 	info := widgets.NewLabel(fmt.Sprintf(
-		"Backend: %s   Socket: %s\nHealth: %s   Accounts: %d\nConfig: %s\nPasswords come from passEnv (never stored). See docs/mail.md.",
+		"Backend: %s   Socket: %s\nHealth: %s   Accounts: %d\nConfig: %s\nPasswords: mail.json (mode 0600, temporary plaintext) or passEnv / OAuth. See docs/mail.md.",
 		st.Backend, cli.Socket, health, st.Accounts, ConfigPath(),
 	))
 	add := widgets.NewButton("Add account…", func() {

@@ -1,6 +1,8 @@
 package widgets
 
 import (
+	"strings"
+
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/layout"
 	"github.com/codemodify/uitoolkit/platform"
@@ -12,19 +14,20 @@ import (
 // feeds preedit and commit through IMETarget.
 type TextField struct {
 	widget.Base
-	Text        string
-	Placeholder string
-	OnChange    func(string)
-	OnSubmit    func(string)
-	OnFocusLost func()
-	Accept      func(string) bool
-	Mono        bool
-	caret       int
-	selA, selB  int
-	blinkOn     bool
-	dragging    bool
-	scrollX     float32
-	preedit     string
+	Text         string
+	Placeholder  string
+	OnChange     func(string)
+	OnSubmit     func(string)
+	OnFocusLost  func()
+	Accept       func(string) bool
+	Mono         bool
+	Password     bool // paint bullets; Text stays the real value
+	caret        int
+	selA, selB   int
+	blinkOn      bool
+	dragging     bool
+	scrollX      float32
+	preedit      string
 	preeditCaret int
 }
 
@@ -42,6 +45,13 @@ func NewTextField(text, placeholder string, on func(string)) *TextField {
 func NewMonoTextField(text, placeholder string, on func(string)) *TextField {
 	t := NewTextField(text, placeholder, on)
 	t.Mono = true
+	return t
+}
+
+// NewPasswordField is a single-line editor that paints a bullet per rune.
+func NewPasswordField(placeholder string, on func(string)) *TextField {
+	t := NewTextField("", placeholder, on)
+	t.Password = true
 	return t
 }
 
@@ -132,11 +142,31 @@ func (t *TextField) font() *style.Font {
 	return t.Look().Font()
 }
 
-func (t *TextField) visual() (text string, caret, selA, selB int) {
-	if t.preedit == "" {
-		return t.Text, t.caret, t.selA, t.selB
+func (t *TextField) displayText() string {
+	if !t.Password {
+		return t.Text
 	}
-	return platform.ComposeVisual(t.Text, t.caret, t.preedit, t.preeditCaret)
+	return maskSecret(t.Text)
+}
+
+func maskSecret(s string) string {
+	n := runeCount(s)
+	if n == 0 {
+		return ""
+	}
+	return strings.Repeat("•", n)
+}
+
+func (t *TextField) visual() (text string, caret, selA, selB int) {
+	base := t.displayText()
+	if t.preedit == "" {
+		return base, t.caret, t.selA, t.selB
+	}
+	pre := t.preedit
+	if t.Password {
+		pre = maskSecret(t.preedit)
+	}
+	return platform.ComposeVisual(base, t.caret, pre, t.preeditCaret)
 }
 
 func (t *TextField) IMEPreedit(s string, caret int) {
@@ -222,7 +252,7 @@ func (t *TextField) FocusLost() {
 
 func (t *TextField) indexAt(x float32) int {
 	f := t.font()
-	return f.IndexAt(t.Text, x-t.fieldPad()+t.scrollX)
+	return f.IndexAt(t.displayText(), x-t.fieldPad()+t.scrollX)
 }
 
 func (t *TextField) ensureCaretVisible() {
@@ -232,7 +262,7 @@ func (t *TextField) ensureCaretVisible() {
 	if inner <= 0 {
 		return
 	}
-	cx := f.CaretX(t.Text, t.caret)
+	cx := f.CaretX(t.displayText(), t.caret)
 	if cx-t.scrollX > inner-2 {
 		t.scrollX = cx - inner + 2
 	}
