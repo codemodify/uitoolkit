@@ -503,6 +503,53 @@ func (s *MemoryStore) PutAccount(in AccountConfig) (Account, error) {
 	return acct, nil
 }
 
+func (s *MemoryStore) DeleteAccount(id string) error {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return fmt.Errorf("mail: account id required")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	found := false
+	accts := s.accounts[:0]
+	for _, a := range s.accounts {
+		if a.ID == id {
+			found = true
+			continue
+		}
+		accts = append(accts, a)
+	}
+	if !found {
+		return fmt.Errorf("mail: no account %s", id)
+	}
+	s.accounts = accts
+	idents := s.identities[:0]
+	for _, idn := range s.identities {
+		if idn.AccountID != id {
+			idents = append(idents, idn)
+		}
+	}
+	s.identities = idents
+	folders := s.folders[:0]
+	for _, f := range s.folders {
+		if f.AccountID != id {
+			folders = append(folders, f)
+		}
+	}
+	s.folders = folders
+	msgs := s.messages[:0]
+	for _, m := range s.messages {
+		if m.AccountID != id {
+			msgs = append(msgs, m)
+		}
+	}
+	s.messages = msgs
+	if s.feat != nil && s.feat.index != nil {
+		s.feat.index.rebuild(s.messages)
+	}
+	return nil
+}
+
 func (s *MemoryStore) ensureSpecialsLocked(accountID string) {
 	for _, spec := range defaultSpecials() {
 		if _, ok := s.specialLocked(accountID, spec.Kind); ok {

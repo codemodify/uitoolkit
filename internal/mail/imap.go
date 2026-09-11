@@ -480,6 +480,40 @@ func (s *IMAPStore) PutAccount(in AccountConfig) (Account, error) {
 	return acct, nil
 }
 
+func (s *IMAPStore) DeleteAccount(id string) error {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return fmt.Errorf("mail: account id required")
+	}
+	file, _ := LoadConfig()
+	file.Accounts = dropAccountConfig(file.Accounts, id)
+	if err := SaveConfig(file); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	found := false
+	out := s.accounts[:0]
+	for _, a := range s.accounts {
+		if a.ID == id {
+			found = true
+			continue
+		}
+		out = append(out, a)
+	}
+	if !found && (id == "imap" || id == s.user || slug(s.user) == id) {
+		found = true
+		out = nil
+	}
+	if !found {
+		return fmt.Errorf("mail: no account %s", id)
+	}
+	s.accounts = out
+	s.closeLocked()
+	s.health = fmt.Errorf("imap: account removed")
+	return nil
+}
+
 func (s *IMAPStore) selectLocked(mbox string) error {
 	if err := s.connectLocked(); err != nil {
 		return err

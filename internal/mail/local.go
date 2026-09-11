@@ -156,6 +156,110 @@ func (s *LocalStore) PutAccount(in AccountConfig) (Account, error) {
 	return accountFromConfig(a, ""), nil
 }
 
+func (s *LocalStore) DeleteAccount(id string) error {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return fmt.Errorf("mail: account id required")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	addr := ""
+	found := false
+	for _, a := range s.accounts {
+		if a.ID == id {
+			found, addr = true, a.Address
+			break
+		}
+	}
+	if !found {
+		for _, a := range s.cfg.Accounts {
+			aid := a.ID
+			if aid == "" {
+				aid = slug(a.Address)
+			}
+			if aid == id || slug(a.Address) == id {
+				found, id, addr = true, aid, a.Address
+				break
+			}
+		}
+	}
+	if !found {
+		return fmt.Errorf("mail: no account %s", id)
+	}
+	if c := s.clients[id]; c != nil {
+		c.close()
+		delete(s.clients, id)
+	}
+	file, _ := LoadConfig()
+	file.Accounts = dropAccountConfig(file.Accounts, id)
+	if err := SaveConfig(file); err != nil {
+		return err
+	}
+	s.cfg.Accounts = dropAccountConfig(s.cfg.Accounts, id)
+	s.dropAccountLocked(id)
+	_ = DefaultTokenStore().Delete(id)
+	if addr != "" {
+		_ = DefaultTokenStore().Delete(addr)
+	}
+	if len(s.accounts) == 0 {
+		s.health = fmt.Errorf("mail: no accounts in %s", ConfigPath())
+	}
+	s.saveLocked()
+	return nil
+}
+
+func (s *LocalStore) dropAccountLocked(id string) {
+	accts := s.accounts[:0]
+	for _, a := range s.accounts {
+		if a.ID != id {
+			accts = append(accts, a)
+		}
+	}
+	s.accounts = accts
+	idents := s.identities[:0]
+	for _, idn := range s.identities {
+		if idn.AccountID != id {
+			idents = append(idents, idn)
+		}
+	}
+	s.identities = idents
+	var drop []FolderID
+	folders := s.folders[:0]
+	for _, f := range s.folders {
+		if f.AccountID == id {
+			drop = append(drop, f.ID)
+			continue
+		}
+		folders = append(folders, f)
+	}
+	s.folders = folders
+	msgs := s.messages[:0]
+	for _, m := range s.messages {
+		if m.AccountID == id {
+			if s.feat != nil && s.feat.index != nil {
+				s.feat.index.remove(m.ID)
+			}
+			continue
+		}
+		msgs = append(msgs, m)
+	}
+	s.messages = msgs
+	if s.feat != nil {
+		ops := s.feat.outbox[:0]
+		for _, op := range s.feat.outbox {
+			if op.AccountID == id {
+				continue
+			}
+			ops = append(ops, op)
+		}
+		s.feat.outbox = ops
+	}
+	_ = os.RemoveAll(filepath.Join(s.dir, "raw", id))
+	for _, fid := range drop {
+		_ = os.Remove(filepath.Join(s.dir, "meta", slug(string(fid))+".json"))
+	}
+}
+
 func (s *LocalStore) Accounts() []Account {
 	s.mu.Lock()
 	defer s.mu.Unlock()

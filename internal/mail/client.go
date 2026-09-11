@@ -220,6 +220,10 @@ func (c *Client) PutAccount(cfg AccountConfig) (Account, error) {
 	return out, err
 }
 
+func (c *Client) DeleteAccount(id string) error {
+	return c.call(MethodAccountsDel, accountDelParams{ID: id}, nil)
+}
+
 func (c *Client) ListFolders(accountID string) ([]Folder, error) {
 	var out []Folder
 	err := c.call(MethodFoldersList, folderListParams{AccountID: accountID}, &out)

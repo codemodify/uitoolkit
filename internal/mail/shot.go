@@ -212,7 +212,7 @@ func writeComposeShot(cli *Client, path string) error {
 
 func writePrefsShot(cli *Client, path string, tab int) error {
 	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true})
-	w, err := OpenPrefs(a, cli)
+	w, err := OpenPrefs(a, cli, nil)
 	if err != nil {
 		return err
 	}

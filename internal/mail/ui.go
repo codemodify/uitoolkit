@@ -250,6 +250,7 @@ func (s *session) build() widget.Component {
 		widgets.ShowContextMenu(s.tree, p,
 			widgets.Item("Get Messages", s.getMessages),
 			widgets.Item("New Folder…", s.newFolder),
+			widgets.Item("Remove Account…", s.removeCurrentAccount),
 			widgets.Sep(),
 			widgets.Item("Empty Trash", s.emptyTrash),
 			widgets.Item("Compact Folders", func() { s.mark("Compact Folders (stub)") }),
@@ -408,6 +409,7 @@ func (s *session) menuBar() *widgets.MenuBar {
 			widgets.ItemAccel("&New Message", "Ctrl+N", s.write),
 			widgets.Item("New &Folder…", s.newFolder),
 			widgets.Item("Add &Account…", s.openAddAccount),
+			widgets.Item("Remove &Account…", s.removeCurrentAccount),
 			widgets.Sep(),
 			widgets.ItemAccel("&Get New Messages", "F5", s.getMessages),
 			widgets.Item("Get Messages for Current Account", s.getMessages),
@@ -1687,8 +1689,9 @@ func (s *session) buildAccountCentral() widget.Component {
 	inbox := widgets.NewButton("Open Inbox", func() {
 		s.goKind(FolderInbox)
 	})
+	remove := widgets.NewButton("Remove account…", s.removeCurrentAccount)
 	return widgets.NewColumn(s.acctTitle, s.acctBody, widgets.NewSeparator(),
-		widgets.NewRow(get, write, inbox, prefs).WithGap(8),
+		widgets.NewRow(get, write, inbox, prefs, remove).WithGap(8),
 	).WithGap(10).WithPad(16)
 }
 
@@ -1716,11 +1719,66 @@ func (s *session) refreshAccount() {
 }
 
 func (s *session) openPrefs() {
-	if _, err := OpenPrefs(s.app, s.cli); err != nil {
+	if _, err := OpenPrefs(s.app, s.cli, s.afterAccountsChanged); err != nil {
 		widgets.Warn(s.win.Content(), "Preferences", err.Error(), nil)
 		return
 	}
 	s.mark("Preferences")
+}
+
+func (s *session) removeCurrentAccount() {
+	id := s.account
+	var acct Account
+	for _, a := range s.accounts() {
+		if a.ID == id {
+			acct = a
+			break
+		}
+	}
+	if acct.ID == "" {
+		list := s.accounts()
+		if len(list) > 0 {
+			acct = list[0]
+		}
+	}
+	if acct.ID == "" {
+		widgets.Warn(s.win.Content(), "Remove account", "There is no account to remove.", nil)
+		return
+	}
+	confirmRemoveAccount(s.win.Content(), acct, func() {
+		if err := s.cli.DeleteAccount(acct.ID); err != nil {
+			widgets.Warn(s.win.Content(), "Remove account", err.Error(), nil)
+			return
+		}
+		s.afterAccountsChanged()
+		s.mark("Account removed")
+	})
+}
+
+func (s *session) afterAccountsChanged() {
+	accts := s.accounts()
+	still := false
+	for _, a := range accts {
+		if a.ID == s.account {
+			still = true
+			break
+		}
+	}
+	if !still {
+		s.account = firstAccountID(s.cli)
+		s.selected = nil
+		if inbox, ok := specialFolderClient(s.cli, s.account, FolderInbox); ok {
+			s.folder = inbox.ID
+			s.central = false
+		} else {
+			s.folder = ""
+		}
+	}
+	s.refreshAll()
+	if len(accts) == 0 {
+		s.askedEmpty = false
+		s.maybeAskAddAccount(s.win.Content())
+	}
 }
 
 func (s *session) handleKey(e widget.KeyEvent) bool {

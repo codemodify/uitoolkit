@@ -327,6 +327,8 @@ type Store interface {
 
 	// PutAccount writes IMAP/POP3/SMTP settings (inline password and/or passEnv).
 	PutAccount(AccountConfig) (Account, error)
+	// DeleteAccount drops the account from config and the local cache.
+	DeleteAccount(id string) error
 }
 
 // ExtraStore is Tier A/B state (OAuth tokens live beside it). MemoryStore

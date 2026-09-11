@@ -300,6 +300,22 @@ func TestPutAccountWritesPasswordMode0600(t *testing.T) {
 	if !strings.Contains(string(raw), `"protocol": "imap"`) {
 		t.Fatalf("protocol missing: %s", raw)
 	}
+	rawDir := filepath.Join(dir, "data", "raw", acct.ID)
+	_ = os.MkdirAll(rawDir, 0o700)
+	_ = os.WriteFile(filepath.Join(rawDir, "x.eml"), []byte("From: x\r\n\r\n"), 0o600)
+	if err := s.DeleteAccount(acct.ID); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(s.Accounts()); n != 0 {
+		t.Fatalf("store still has %d accounts", n)
+	}
+	file, err = LoadConfig()
+	if err != nil || len(file.Accounts) != 0 {
+		t.Fatalf("mail.json after delete %+v %v", file, err)
+	}
+	if _, err := os.Stat(rawDir); !os.IsNotExist(err) {
+		t.Fatalf("raw cache still present: %v", err)
+	}
 }
 
 func TestServerConfigPasswordPrefersInline(t *testing.T) {
@@ -350,6 +366,17 @@ func TestRPCPutAccountAndEmptyFirstRun(t *testing.T) {
 	accts, err = cli.Accounts()
 	if err != nil || len(accts) != 1 {
 		t.Fatalf("after put %v %v", accts, err)
+	}
+	if err := cli.DeleteAccount(got.ID); err != nil {
+		t.Fatal(err)
+	}
+	accts, err = cli.Accounts()
+	if err != nil || len(accts) != 0 {
+		t.Fatalf("after delete %v %v", accts, err)
+	}
+	file, err := LoadConfig()
+	if err != nil || len(file.Accounts) != 0 {
+		t.Fatalf("config after delete %+v %v", file, err)
 	}
 }
 
@@ -455,6 +482,104 @@ func TestAddAccountProtocolAndTestButton(t *testing.T) {
 	if !imap || !pop || !test {
 		t.Fatalf("add-account imap=%v pop=%v test=%v", imap, pop, test)
 	}
+	w.Close()
+}
+
+func TestRemoveAccountMenuAndFirstRunAgain(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv(EnvConfig, filepath.Join(dir, "mail.json"))
+	t.Setenv(EnvData, filepath.Join(dir, "data"))
+	sock, stop, err := StartEmpty(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stop()
+	cli, err := DialWait(sock, 2*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cli.Close()
+	if _, err := cli.PutAccount(AccountConfig{
+		Name: "Ada", Address: "ada@example.com",
+		IMAP: ServerConfig{Host: "imap.example.com:993"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{
+		Title: "Mail", Width: 1280, Height: 800, Headless: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.SetContent(Open(a, w, cli, AppOptions{ShowFilter: true}))
+	a.PumpOnce()
+	if w.Overlay() != nil {
+		t.Fatal("first-run should not open when an account exists")
+	}
+	var remove *widgets.MenuItem
+	widget.Walk(w.Content(), func(c widget.Component) {
+		mb, ok := c.(*widgets.MenuBar)
+		if !ok {
+			return
+		}
+		for _, m := range mb.Menus() {
+			for _, it := range m.Items {
+				if strings.Contains(it.Text, "Remove") && strings.Contains(it.Text, "Account") {
+					remove = it
+				}
+			}
+		}
+	})
+	if remove == nil || remove.OnClick == nil {
+		t.Fatal("File → Remove Account missing")
+	}
+	remove.OnClick()
+	a.PumpOnce()
+	ov := w.Overlay()
+	if ov == nil {
+		t.Fatal("expected Remove account confirm")
+	}
+	widget.Walk(ov, func(c widget.Component) {
+		if b, ok := c.(*widgets.Button); ok && b.Text == "Yes" && b.OnClick != nil {
+			b.OnClick()
+		}
+	})
+	a.PumpOnce()
+	accts, err := cli.Accounts()
+	if err != nil || len(accts) != 0 {
+		t.Fatalf("after remove %v %v", accts, err)
+	}
+	ov = w.Overlay()
+	if ov == nil {
+		t.Fatal("expected first-run prompt after last account")
+	}
+	prompt := false
+	widget.Walk(ov, func(c widget.Component) {
+		if x, ok := c.(*widgets.Label); ok && strings.Contains(x.Text, "There are no accounts") {
+			prompt = true
+		}
+	})
+	if !prompt {
+		t.Fatal("first-run copy missing after delete")
+	}
+
+	pw, err := OpenPrefs(a, cli, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.PumpOnce()
+	var prefsRemove bool
+	widget.Walk(pw.Content(), func(c widget.Component) {
+		if b, ok := c.(*widgets.Button); ok && strings.Contains(b.Text, "Remove account") {
+			prefsRemove = true
+		}
+	})
+	if !prefsRemove {
+		t.Fatal("Preferences missing Remove account")
+	}
+	pw.Close()
 	w.Close()
 }
 

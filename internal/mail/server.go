@@ -177,6 +177,16 @@ func (s *Server) dispatch(req Request) Response {
 				s.broadcast(EventChanged, eventParams{Reason: "account"})
 			}
 		}
+	case MethodAccountsDel:
+		var p accountDelParams
+		p, err = decodeParams[accountDelParams](req.Params)
+		if err == nil {
+			err = s.Store.DeleteAccount(p.id())
+			if err == nil {
+				result = map[string]bool{"ok": true}
+				s.broadcast(EventChanged, eventParams{Reason: "account"})
+			}
+		}
 	case MethodFoldersList:
 		var p folderListParams
 		p, err = decodeParams[folderListParams](req.Params)
