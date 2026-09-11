@@ -36,12 +36,15 @@ type Window struct {
 	clock      func() time.Time
 	lastTip    string
 	animPeriod time.Duration
+	layers     *widget.SceneCache
+	scene      *paintengine2d.Scene
 }
 
 func newWindow(a *Application, surf platform.Surface, opts platform.WindowOptions) *Window {
 	w := &Window{
 		app: a, surf: surf, look: a.look, scale: a.scale, full: true,
 		tipDelay: 450 * time.Millisecond,
+		layers:   widget.NewSceneCache(),
 	}
 	w.dirty.Pad = 1
 	_ = opts
@@ -186,6 +189,14 @@ func (w *Window) Invalidate(c widget.Component, local paintengine2d.Rect) {
 		r = dev
 	}
 	w.dirty.Add(r.Inset(-1))
+	if w.layers != nil {
+		w.layers.Invalidate(c.ID())
+	}
+	for p := c.Parent(); p != nil; p = p.Parent() {
+		if sl, ok := p.(widget.SceneLayer); ok && sl.SceneChild() != nil {
+			sl.MarkSceneChildDirty()
+		}
+	}
 }
 
 func (w *Window) RequestFocus(c widget.Component) {
@@ -236,6 +247,9 @@ func (w *Window) fullInvalidate() {
 	w.dirty.Reset()
 	w.dirty.Add(paintengine2d.XYWH(0, 0, float32(ww), float32(hh)))
 	w.full = true
+	if w.layers != nil {
+		w.layers.Reset()
+	}
 }
 
 func (w *Window) toggleBlink() {
@@ -606,6 +620,22 @@ func (w *Window) frame() {
 	if w.dirty.Empty() && !w.full {
 		return
 	}
+	if platform.WantScene() {
+		w.frameScene()
+	} else {
+		w.frameImmediate()
+	}
+	rects := append([]paintengine2d.Rect(nil), w.dirty.Rects...)
+	if w.full {
+		ww, hh := w.surf.Size()
+		rects = []paintengine2d.Rect{paintengine2d.XYWH(0, 0, float32(ww), float32(hh))}
+	}
+	_ = w.surf.Present(rects)
+	w.dirty.Reset()
+	w.full = false
+}
+
+func (w *Window) frameImmediate() {
 	ctx := platform.NewPaintContext(w.surf)
 	if ctx == nil {
 		return
@@ -616,7 +646,6 @@ func (w *Window) frame() {
 		paintDirty = nil
 	} else {
 		paintDirty = &w.dirty
-		// Clear each dirty box so leftover pixels do not ghost.
 		for _, r := range w.dirty.Rects {
 			ctx.Save()
 			ctx.ClipRect(r)
@@ -636,15 +665,39 @@ func (w *Window) frame() {
 	if w.tooltip != nil {
 		widget.PaintTree(w.tooltip, ctx, nil)
 	}
-	rects := append([]paintengine2d.Rect(nil), w.dirty.Rects...)
-	if w.full {
-		ww, hh := w.surf.Size()
-		rects = []paintengine2d.Rect{paintengine2d.XYWH(0, 0, float32(ww), float32(hh))}
-	}
-	_ = w.surf.Present(rects)
-	w.dirty.Reset()
-	w.full = false
 }
+
+func (w *Window) frameScene() {
+	ww, hh := w.surf.Size()
+	rec := paintengine2d.NewRecorder(ww, hh)
+	rec.Clear(w.look.Palette().Background)
+	ctx := paintengine2d.NewContextDevice(rec)
+	var paintDirty *paintengine2d.Damage
+	if !w.full {
+		paintDirty = &w.dirty
+	}
+	if w.root != nil {
+		widget.RecordTree(w.root, rec, ctx, paintDirty, w.layers, false)
+	}
+	if w.overlay != nil {
+		widget.RecordTree(w.overlay, rec, ctx, nil, w.layers, true)
+	}
+	if w.popup != nil {
+		widget.RecordTree(w.popup, rec, ctx, nil, w.layers, true)
+	}
+	if w.tooltip != nil {
+		widget.RecordTree(w.tooltip, rec, ctx, nil, w.layers, true)
+	}
+	w.scene = rec.Finish()
+	dev := platform.SurfaceDevice(w.surf)
+	if dev == nil {
+		return
+	}
+	paintengine2d.DrawScene(w.scene, dev)
+}
+
+// Scene is the last retained graph (tests / inspector).
+func (w *Window) Scene() *paintengine2d.Scene { return w.scene }
 
 // Capture paints a full frame and returns a clone of the pixmap.
 func (w *Window) Capture() *paintengine2d.Image {

@@ -17,7 +17,11 @@ type ScrollView struct {
 	drag    bool
 	grab    float32
 	overBar bool
+	sceneOff     float32
+	contentDirty bool
 }
+
+var _ widget.SceneLayer = (*ScrollView)(nil)
 
 func NewScrollView(child widget.Component) *ScrollView {
 	s := &ScrollView{}
@@ -155,16 +159,34 @@ func (s *ScrollView) thumb() (track, thumb paintengine2d.Rect) {
 	return
 }
 
+func (s *ScrollView) SceneChild() widget.Component { return s.child }
+
+func (s *ScrollView) RetainScene() (paintengine2d.Matrix, bool) {
+	if s.contentDirty || s.child == nil {
+		return paintengine2d.Identity(), false
+	}
+	return paintengine2d.Translation(0, s.sceneOff-s.OffsetY), true
+}
+
+func (s *ScrollView) MarkSceneChildDirty() { s.contentDirty = true }
+
+func (s *ScrollView) NoteSceneRecorded() {
+	s.sceneOff = s.OffsetY
+	s.contentDirty = false
+}
+
 func (s *ScrollView) Paint(ctx *paintengine2d.Context) {
 	b := s.LocalBounds()
 	lk := s.Look()
 	ctx.DrawRect(b, paintengine2d.Fill(lk.Palette().Background.WithAlpha(0.15)))
-	ctx.Save()
-	ctx.ClipRect(b)
-	if s.child != nil {
-		widget.PaintTree(s.child, ctx, nil)
+	if !widget.Recording(ctx) {
+		ctx.Save()
+		ctx.ClipRect(b)
+		if s.child != nil {
+			widget.PaintTree(s.child, ctx, nil)
+		}
+		ctx.Restore()
 	}
-	ctx.Restore()
 	track, thumb := s.thumb()
 	if !thumb.Empty() {
 		st := s.State()

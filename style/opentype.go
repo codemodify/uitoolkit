@@ -281,6 +281,7 @@ func (a *otAtlas) rasterize(atlas *paintengine2d.FontAtlas, r rune) (paintengine
 		return paintengine2d.AtlasCell{}, fmt.Errorf("atlas full for %q", string(r))
 	}
 	blitGlyph(atlas.Image, ax, ay, tmp)
+	atlas.Image.Bump()
 	cell := paintengine2d.AtlasCell{
 		Src:     paintengine2d.XYWH(float32(ax), float32(ay), float32(gw), float32(gh)),
 		Bearing: paintengine2d.Pt(xmin-pad, a.ascent+ymin-pad),

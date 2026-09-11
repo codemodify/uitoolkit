@@ -1,6 +1,11 @@
 package platform
 
-import "github.com/codemodify/paintengine2d"
+import (
+	"os"
+	"strings"
+
+	"github.com/codemodify/paintengine2d"
+)
 
 // EnvPaint is UITK_PAINT — the paintengine2d cpu|gpu|auto selector.
 const EnvPaint = paintengine2d.EnvPaint
@@ -52,4 +57,36 @@ func NewPaintContext(s Surface) *paintengine2d.Context {
 func SurfaceUsesGPU(s Surface) bool {
 	g, ok := s.(gpuSurface)
 	return ok && g.UsesGPU()
+}
+
+// SurfaceDevice is the live paint [paintengine2d.Device] for s.
+func SurfaceDevice(s Surface) paintengine2d.Device {
+	if s == nil {
+		return nil
+	}
+	if p, ok := s.(paintDevicer); ok {
+		if d := p.PaintDevice(); d != nil {
+			return d
+		}
+	}
+	img := s.Buffer()
+	if img == nil {
+		return nil
+	}
+	return paintengine2d.NewCPUDevice(img)
+}
+
+// EnvScene is UITK_SCENE — retained graph (default) or immediate paint.
+const EnvScene = "UITK_SCENE"
+
+// WantScene reports whether windows should record a retained scene
+// (Qt Quick / GSK model). UITK_SCENE=off|0|immediate uses the v0.5
+// immediate Fill path.
+func WantScene() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvScene))) {
+	case "0", "off", "false", "immediate":
+		return false
+	default:
+		return true
+	}
 }

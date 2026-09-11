@@ -20,13 +20,13 @@ _ = app.Run()
 
 ```bash
 go get github.com/codemodify/uitoolkit@dev
-go get github.com/codemodify/paintengine2d@v0.8.0
+go get github.com/codemodify/paintengine2d@v0.9.0
 ```
 
 | | |
 | --- | --- |
 | Language | Go 1.22+ |
-| Paint | paintengine2d **v0.8.0** (`b220e31`; `GPUDevice` EGL/GLES2, `UITK_PAINT`, `OpenSurface`) |
+| Paint | paintengine2d **v0.9.0** (`Scene` / `Recorder` / GPU rect batches; flatten cache) |
 | Fonts | Titillium Web (UI) + JetBrains Mono (code), OpenType → atlas |
 | Windowing | Linux X11 + Wayland (`wl_egl_window` / eglSwapBuffers, else `wl_shm` / `XPutImage`); offscreen always |
 | CGO | optional — tests and screenshots are `CGO_ENABLED=0` |
@@ -133,6 +133,7 @@ UITK_BACKEND=x11 go run ./examples/gallery
 UITK_BACKEND=wayland go run ./examples/gallery
 UITK_PAINT=auto go run ./examples/gallery   # default: GPU if EGL works
 UITK_PAINT=cpu go run ./examples/gallery    # v0.4.1 CPU present
+UITK_SCENE=off go run ./examples/gallery    # v0.5 immediate paint (no scene graph)
 go run ./examples/gallery -headless  # writes gallery.png
 go run ./examples/notes
 go run ./examples/inspector
@@ -150,7 +151,9 @@ XRGB8888** on Wayland (`UITK_WAYLAND_PRESENT=auto|shm`).
 `UITK_PAINT=cpu` forces the CPU painter. If a Wayland window is fully
 transparent, set `UITK_PAINT=cpu` and/or `UITK_WAYLAND_PRESENT=shm`.
 `Application.Run` waits on the display fd (not a 16 ms ticker) and skips
-`Present` when damage is empty — see [docs/platform.md](docs/platform.md).
+`Present` when damage is empty. Default `UITK_SCENE` records a retained
+graph (`Recorder` / `DrawScene`); `UITK_SCENE=off` is the immediate path.
+See [docs/platform.md](docs/platform.md).
 Auto-select is `WAYLAND_DISPLAY` → `DISPLAY` → offscreen. Scale comes from
 `UITK_SCALE` / `GDK_SCALE` / `QT_SCALE_FACTOR` / `GDK_DPI_SCALE`, else
 Xft.dpi / RandR on X11 or `wl_output` / fractional-scale on Wayland.
@@ -284,8 +287,15 @@ See [docs/platform.md](docs/platform.md) for X11 vs Wayland vs offscreen.
 Linux desktop clipboard, IME preedit, and HiDPI are implemented on both
 X11 and Wayland as of **v0.3.0**. GPU present (`UITK_PAINT=auto`) is **v0.5.0**.
 Event-driven `Run` (wait on the display fd) is **v0.5.1**.
+Retained scene graph (Qt Quick / GSK lite) is **v0.6.0**.
 
 ## Version
+
+**0.6.0** — Retained scene: widgets record into paintengine2d `Scene`
+nodes (`Recorder` + `DrawScene`). The compositor batches opaque rects
+and reuses scroll content with a transform root (`UITK_SCENE=off` for
+the v0.5 immediate path). Still event-driven `Run`. Consumes
+paintengine2d **v0.9.0**.
 
 **0.5.1** — Event-driven `Application.Run`: poll/epoll the Wayland or X11
 fd and wake only for caret blink, tooltip delay, key repeat, or

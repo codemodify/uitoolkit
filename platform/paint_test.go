@@ -31,6 +31,21 @@ func TestPaintPrefDefaultAuto(t *testing.T) {
 	}
 }
 
+func TestWantSceneDefaultOn(t *testing.T) {
+	t.Setenv(EnvScene, "")
+	if !WantScene() {
+		t.Fatal("default scene on")
+	}
+	t.Setenv(EnvScene, "off")
+	if WantScene() {
+		t.Fatal("off")
+	}
+	t.Setenv(EnvScene, "immediate")
+	if WantScene() {
+		t.Fatal("immediate")
+	}
+}
+
 func TestNewPaintContextOffscreen(t *testing.T) {
 	s := NewOffscreen(WindowOptions{Width: 16, Height: 12})
 	ctx := NewPaintContext(s)

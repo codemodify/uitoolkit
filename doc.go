@@ -4,7 +4,7 @@
 // Layers:
 //
 //	platform  — window, event pump, present, OS clipboard, IME (X11 and Wayland on Linux; stubs elsewhere)
-//	app       — event-driven run loop (wait on display fd), windows, DPI, input routing
+//	app       — event-driven run loop, retained scene (UITK_SCENE), windows, DPI, input routing
 //	widget    — Component tree, focus, hit-test, Invalidate / Damage
 //	layout    — row, column, stack, flex
 //	widgets   — Button, Label, TextField, TextArea, NumberField, Checkbox,

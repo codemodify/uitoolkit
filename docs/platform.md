@@ -74,6 +74,35 @@ needs EGL / GLES2. `CGO_ENABLED=0` never needs those libraries.
   then Xft.dpi, then RandR output mm vs CRTC pixels, then screen mm.
   Buffer and event coordinates stay device pixels; metrics grow with scale.
 
+## Scene graph (0.6.0)
+
+`UITK_SCENE` (default on) records each dirty widget into a retained
+`paintengine2d.Scene` (Qt Quick QSG / GTK GSK lite): rects, paths,
+glyph/image blits, and transform groups. `DrawScene` presents the graph
+(GPU batches opaque axis-aligned rects; CPU rasterizes nodes).
+`ScrollView` keeps a child group and only updates a translation when
+the offset changes.
+
+```bash
+UITK_SCENE=auto go run ./examples/gallery   # default: retained scene
+UITK_SCENE=off  go run ./examples/gallery   # v0.5 immediate Fill path
+```
+
+### Idle CPU on Wayland gallery
+
+```bash
+UITK_PAINT=auto UITK_SCENE=auto go run ./examples/gallery
+# another terminal:
+pidof gallery   # or: pgrep -f 'examples/gallery'
+top -p "$(pgrep -n -f 'examples/gallery')"
+# or: pidstat -p "$(pgrep -n -f 'examples/gallery')" 1
+```
+
+Idle (no mouse, no focused text field): the process should sit near **0%**
+CPU — `Run` is blocked on `wl_display` / X11 fd, and `eglSwapBuffers` is
+not called. Moving the mouse should stay responsive; CPU rises only while
+events/damage arrive. A focused TextField wakes ~2 Hz for caret blink.
+
 ## Run loop (0.5.1)
 
 `Application.Run` is event-driven. It blocks on the Wayland (`wl_display_get_fd`)
