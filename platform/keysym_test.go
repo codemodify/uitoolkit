@@ -15,4 +15,7 @@ func TestKeyFromKeysym(t *testing.T) {
 	if KeyFromKeysym(0x20) != KeySpace {
 		t.Fatal("space")
 	}
+	if KeyFromKeysym(0x33) != Key3 || KeyFromKeysym(0x23) != KeyHash {
+		t.Fatal("hash")
+	}
 }

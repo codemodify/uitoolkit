@@ -1,6 +1,6 @@
 # Keyboard map
 
-Focus and shortcuts for uitoolkit **v0.7.0**. Esc always tears down
+Focus and shortcuts for uitoolkit **v0.8.0**. Esc always tears down
 floating chrome in one order, everywhere: **tooltip → popup → overlay**.
 
 ## Global
@@ -84,6 +84,22 @@ The widget reports `OnSort`; the app reorders `CellText`.
 | Return / Space | Activate |
 | Esc | Close the open menu / combo (also handled globally) |
 | Letter | Mnemonic or first-letter match inside a popup |
+
+## Mail (mailclientui)
+
+Single-letter Thunderbird bindings apply when focus is **not** a TextField / TextArea (Quick Filter and compose stay typeable). See [mail.md](mail.md).
+
+| Key | Action |
+| --- | --- |
+| **n** / **p** | Next / previous message |
+| **#** (Shift+3) | Delete |
+| **r** | Reply |
+| **f** | Forward |
+| **c** | Compose |
+| **m** | Mark as read |
+| **F5** | Get Messages |
+| **Ctrl+F** | Quick Filter |
+| **Ctrl+,** | Preferences |
 
 ## FileDialog (stub)
 

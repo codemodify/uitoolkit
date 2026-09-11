@@ -3,6 +3,7 @@ package mail
 import (
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -35,6 +36,10 @@ func NewDemoStore() *MemoryStore {
 	return s
 }
 
+func (s *MemoryStore) Backend() string { return "memory" }
+
+func (s *MemoryStore) Health() error { return nil }
+
 func (s *MemoryStore) Accounts() []Account {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -43,7 +48,7 @@ func (s *MemoryStore) Accounts() []Account {
 	return out
 }
 
-func (s *MemoryStore) Folders(accountID string) []Folder {
+func (s *MemoryStore) ListFolders(accountID string) []Folder {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var out []Folder
@@ -62,7 +67,7 @@ func (s *MemoryStore) Folders(accountID string) []Folder {
 	return out
 }
 
-func (s *MemoryStore) Folder(id FolderID) (Folder, bool) {
+func (s *MemoryStore) GetFolder(id FolderID) (Folder, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.folderLocked(id)
@@ -77,7 +82,7 @@ func (s *MemoryStore) folderLocked(id FolderID) (Folder, bool) {
 	return Folder{}, false
 }
 
-func (s *MemoryStore) List(folder FolderID) []Message {
+func (s *MemoryStore) ListMessages(folder FolderID) []Message {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var out []Message
@@ -89,7 +94,7 @@ func (s *MemoryStore) List(folder FolderID) []Message {
 	return out
 }
 
-func (s *MemoryStore) Get(id MessageID) (Message, bool) {
+func (s *MemoryStore) GetMessage(id MessageID) (Message, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, m := range s.messages {
@@ -269,6 +274,64 @@ func (s *MemoryStore) UnreadTotal() int {
 	}
 	return n
 }
+
+func (s *MemoryStore) MessageCount(folder FolderID) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := 0
+	for _, m := range s.messages {
+		if m.Folder == folder {
+			n++
+		}
+	}
+	return n
+}
+
+func (s *MemoryStore) CreateFolder(accountID, name string, parent FolderID) (Folder, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	name = strings.TrimSpace(name)
+	if accountID == "" || name == "" {
+		return Folder{}, fmt.Errorf("mail: account and folder name required")
+	}
+	slug := strings.ToLower(strings.ReplaceAll(name, " ", "-"))
+	id := FolderID(accountID + "/" + slug)
+	if parent != "" {
+		id = parent + "/" + FolderID(slug)
+	}
+	for _, f := range s.folders {
+		if f.ID == id {
+			return Folder{}, fmt.Errorf("mail: folder %s exists", id)
+		}
+	}
+	f := Folder{ID: id, AccountID: accountID, Name: name, Kind: FolderCustom, Parent: parent}
+	s.folders = append(s.folders, f)
+	return f, nil
+}
+
+func (s *MemoryStore) Search(q SearchQuery) []Message {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []Message
+	for _, m := range s.messages {
+		if q.AccountID != "" && m.AccountID != q.AccountID {
+			continue
+		}
+		if q.Folder != "" && m.Folder != q.Folder {
+			continue
+		}
+		if q.Filter.Match(m) {
+			out = append(out, m.Clone())
+		}
+	}
+	return out
+}
+
+// Folders / Folder / List / Get are aliases for older call sites.
+func (s *MemoryStore) Folders(accountID string) []Folder { return s.ListFolders(accountID) }
+func (s *MemoryStore) Folder(id FolderID) (Folder, bool) { return s.GetFolder(id) }
+func (s *MemoryStore) List(folder FolderID) []Message    { return s.ListMessages(folder) }
+func (s *MemoryStore) Get(id MessageID) (Message, bool)  { return s.GetMessage(id) }
 
 func (s *MemoryStore) indexLocked(id MessageID) (int, bool) {
 	for i, m := range s.messages {

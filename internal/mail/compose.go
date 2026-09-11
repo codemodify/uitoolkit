@@ -21,7 +21,7 @@ type ComposeOptions struct {
 }
 
 // OpenCompose opens a second Window. Headless apps still get a surface.
-func OpenCompose(a *app.Application, store Store, opts ComposeOptions) (*app.Window, error) {
+func OpenCompose(a *app.Application, cli *Client, opts ComposeOptions) (*app.Window, error) {
 	title := "Write: (no subject)"
 	if opts.ReplyTo != nil && strings.TrimSpace(opts.ReplyTo.Subject) != "" {
 		title = "Write: Re: " + stripRe(opts.ReplyTo.Subject)
@@ -36,13 +36,16 @@ func OpenCompose(a *app.Application, store Store, opts ComposeOptions) (*app.Win
 	if err != nil {
 		return nil, err
 	}
-	win.SetContent(ComposeApp(a, win, store, opts))
+	win.SetContent(ComposeApp(a, win, cli, opts))
 	return win, nil
 }
 
 // ComposeApp is the Write window: From / To / Cc / Bcc / Subject / body.
-func ComposeApp(a *app.Application, win *app.Window, store Store, opts ComposeOptions) widget.Component {
-	accounts := store.Accounts()
+func ComposeApp(a *app.Application, win *app.Window, cli *Client, opts ComposeOptions) widget.Component {
+	accounts, err := cli.Accounts()
+	if err != nil {
+		accounts = nil
+	}
 	fromItems := make([]string, 0, len(accounts))
 	for _, acct := range accounts {
 		fromItems = append(fromItems, fmt.Sprintf("%s <%s>", acct.Name, acct.Address))
@@ -126,22 +129,13 @@ func ComposeApp(a *app.Application, win *app.Window, store Store, opts ComposeOp
 			widgets.Warn(win.Content(), "Save Draft", "No account is configured.", nil)
 			return
 		}
-		drafts, ok := specialFolder(store, acct, FolderDrafts)
-		if !ok {
-			widgets.Warn(win.Content(), "Save Draft", "This account has no Drafts folder.", nil)
-			return
-		}
 		msg := collect()
-		var err error
-		if draftID != "" {
-			err = store.Update(draftID, msg)
-		} else {
-			draftID, err = store.Append(drafts.ID, msg)
-		}
+		id, err := cli.SaveDraft(acct, msg, draftID)
 		if err != nil {
 			widgets.Warn(win.Content(), "Save Draft", err.Error(), nil)
 			return
 		}
+		draftID = id
 		status.Set(0, "Saved draft")
 		if opts.OnChange != nil {
 			opts.OnChange()
@@ -154,24 +148,16 @@ func ComposeApp(a *app.Application, win *app.Window, store Store, opts ComposeOp
 			return
 		}
 		acct := accountID()
-		sent, ok := specialFolder(store, acct, FolderSent)
-		if !ok {
-			widgets.Warn(win.Content(), "Send", "This account has no Sent folder.", nil)
-			return
-		}
 		msg := collect()
-		if _, err := store.Append(sent.ID, msg); err != nil {
+		if _, err := cli.Send(acct, msg, draftID); err != nil {
 			widgets.Warn(win.Content(), "Send", err.Error(), nil)
 			return
-		}
-		if draftID != "" {
-			_ = store.Delete([]MessageID{draftID})
 		}
 		if opts.OnChange != nil {
 			opts.OnChange()
 		}
 		widgets.Info(win.Content(), "Sent",
-			"Message filed in Sent (demo Store — no SMTP).\nIMAP/SMTP can implement Store.Send later.",
+			"Message filed in Sent via mailclientd (no SMTP on the wire in demo).\nIMAP/SMTP live in the daemon, not this window.",
 			func() { win.Close() })
 	}
 
@@ -244,21 +230,12 @@ func ComposeApp(a *app.Application, win *app.Window, store Store, opts ComposeOp
 		labeled("Subject", subject),
 	).WithGap(6).WithPad(10)
 
-	chrome := widgets.NewTitleBar("Write", "compose  ·  Titillium Web  ·  v"+uitoolkit.Version)
+	chrome := widgets.NewTitleBar("Write", "compose  ·  mailclientd  ·  v"+uitoolkit.Version)
 	bodyPad := widgets.NewPad(8, body)
 	root := widgets.NewColumn(menubar, tools, chrome, fields, bodyPad, status).WithGap(0)
 	root.AddFlex(bodyPad, 1)
 	_ = a
 	return root
-}
-
-func specialFolder(store Store, accountID string, kind FolderKind) (Folder, bool) {
-	for _, f := range store.Folders(accountID) {
-		if f.Kind == kind && f.Parent == "" {
-			return f, true
-		}
-	}
-	return Folder{}, false
 }
 
 func stripRe(s string) string {

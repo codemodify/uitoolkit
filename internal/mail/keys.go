@@ -1,0 +1,92 @@
+package mail
+
+import (
+	"github.com/codemodify/paintengine2d"
+	"github.com/codemodify/uitoolkit/layout"
+	"github.com/codemodify/uitoolkit/platform"
+	"github.com/codemodify/uitoolkit/widget"
+	"github.com/codemodify/uitoolkit/widgets"
+)
+
+// Thunderbird-like shortcuts (when focus is not a text field):
+//
+//	n / p     next / previous message
+//	#         delete (Shift+3 or KeyHash)
+//	r         reply
+//	f         forward
+//	c         compose
+//	m         mark read
+//
+// Ctrl+N / Ctrl+R / Del / F5 / F7 / F8 stay in the MenuBar hints.
+
+type shortcutRoot struct {
+	widget.Base
+	onKey func(widget.KeyEvent) bool
+}
+
+func wrapShortcuts(col *widgets.FlexBox, on func(widget.KeyEvent) bool) widget.Component {
+	s := &shortcutRoot{onKey: on}
+	s.Init(s)
+	if col != nil {
+		s.Add(col)
+	}
+	return s
+}
+
+func (s *shortcutRoot) Measure(c layout.Constraints) paintengine2d.Point {
+	if len(s.Children()) == 0 {
+		return paintengine2d.Point{}
+	}
+	return s.Children()[0].Measure(c)
+}
+
+func (s *shortcutRoot) Arrange(r paintengine2d.Rect) {
+	s.SetBounds(r)
+	if len(s.Children()) > 0 {
+		s.Children()[0].Arrange(paintengine2d.XYWH(0, 0, r.Dx(), r.Dy()))
+	}
+}
+
+func (s *shortcutRoot) Paint(*paintengine2d.Context) {}
+
+func (s *shortcutRoot) KeyPress(e widget.KeyEvent) bool {
+	if s.onKey != nil && s.onKey(e) {
+		return true
+	}
+	return false
+}
+
+func isTextFocus(c widget.Component) bool {
+	switch c.(type) {
+	case *widgets.TextField, *widgets.TextArea, *widgets.NumberField:
+		return true
+	default:
+		return false
+	}
+}
+
+func isHashDelete(e widget.KeyEvent) bool {
+	if e.Key == platform.KeyHash {
+		return true
+	}
+	return e.Key == platform.Key3 && e.Mods.Shift() && !e.Mods.Ctrl()
+}
+
+// ShortcutHelp is shown in Help → Keyboard and docs/mail.md.
+const ShortcutHelp = `Thunderbird-like (thread list focused, not a text field)
+  n / p     next / previous message
+  #         delete (also Del)
+  r         reply
+  f         forward
+  c         compose (Write)
+  m         mark as read
+
+Menus
+  F5        Get Messages
+  Ctrl+N    Write
+  Ctrl+R    Reply
+  Ctrl+L    Forward
+  Ctrl+F    Quick Filter
+  Ctrl+,    Preferences
+  F7 / F8   previous / next
+  Esc       tooltip → popup → overlay`

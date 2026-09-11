@@ -130,36 +130,53 @@ type FlagPatch struct {
 	Tags    *[]string
 }
 
-// Store is the mail backend. MemoryStore is the v1 demo.
-//
-// Plugging in IMAP later (do not rewrite the UI):
-//
-//	type IMAPStore struct {
-//	    // github.com/emersion/go-imap/v2 client, one selected mailbox, …
-//	}
-//
-//	Accounts  — LOGIN + identity from the settings UI
-//	Folders   — LIST / XLIST / SPECIAL-USE; map \Inbox \Sent \Trash \Junk \Drafts
-//	List      — SELECT + FETCH 1:* (FLAGS ENVELOPE RFC822.SIZE)
-//	Get       — FETCH BODY.PEEK[] or BODY[TEXT] (decode MIME)
-//	SetFlags  — STORE +FLAGS.SILENT (\Seen \Flagged) / keywords for tags
-//	Move      — MOVE (RFC 6851) or COPY + STORE \Deleted + EXPUNGE
-//	Delete    — MOVE to \Trash, or EXPUNGE when already in Trash
-//	Append    — APPEND to \Drafts / \Sent (maildir: new/ + flags file)
-//	Update    — replace a draft (IMAP: APPEND + delete old UID)
-//	Fetch     — NOOP or IDLE, then FETCH unseen; SMTP is separate
-//	Send      — net/smtp or AUTH submission, then Append to Sent
-//
-// Maildir mapping (if you persist MemoryStore later): one directory per
-// Folder, filename flags `:2,S` (Seen) and `:2,F` (Flagged), optional
-// `cur/` / `new/` split. The UI only talks to this interface.
-type Store interface {
-	Accounts() []Account
-	Folders(accountID string) []Folder
-	Folder(id FolderID) (Folder, bool)
+// SearchQuery is a daemon-side scan (Quick Filter or global search).
+type SearchQuery struct {
+	AccountID string
+	Folder    FolderID // empty = all folders (optionally scoped by AccountID)
+	Filter    Filter
+}
 
-	List(folder FolderID) []Message
-	Get(id MessageID) (Message, bool)
+// DaemonStatus is what mailclientd reports on status.get.
+type DaemonStatus struct {
+	Backend  string `json:"backend"` // "memory" or "imap"
+	Socket   string `json:"socket"`
+	Online   bool   `json:"online"`
+	Accounts int    `json:"accounts"`
+	Health   string `json:"health,omitempty"`
+}
+
+// Store is the mailclientd backend. MemoryStore is the offline demo.
+// mailclientui never calls this — it talks JSON-RPC to the daemon.
+//
+// IMAP mapping (IMAPStore skeleton, UITK_MAIL=imap):
+//
+//	Accounts     — LOGIN identity (UITK_MAIL_USER) + settings UI
+//	ListFolders  — LIST / SPECIAL-USE; map \Inbox \Sent \Trash \Junk \Drafts
+//	ListMessages — SELECT + FETCH 1:* (FLAGS RFC822.SIZE headers)
+//	GetMessage   — FETCH BODY.PEEK[HEADER] BODY.PEEK[TEXT]
+//	SetFlags     — STORE +FLAGS.SILENT (\Seen \Flagged)
+//	Move         — MOVE (RFC 6851) or COPY + STORE \Deleted + EXPUNGE
+//	Delete       — MOVE to \Trash, or EXPUNGE when already in Trash
+//	Append       — APPEND to \Drafts / \Sent
+//	Update       — APPEND replacement + delete old UID
+//	Fetch        — NOOP or IDLE, then FETCH unseen
+//	Search       — IMAP SEARCH / local Filter.Match
+//	CreateFolder — CREATE
+//
+// SMTP is compose.send: submission then Append to Sent.
+type Store interface {
+	Backend() string
+	Health() error
+
+	Accounts() []Account
+	ListFolders(accountID string) []Folder
+	GetFolder(id FolderID) (Folder, bool)
+	CreateFolder(accountID, name string, parent FolderID) (Folder, error)
+
+	ListMessages(folder FolderID) []Message
+	GetMessage(id MessageID) (Message, bool)
+	Search(q SearchQuery) []Message
 
 	SetFlags(id MessageID, patch FlagPatch) error
 	Move(ids []MessageID, dest FolderID) error
@@ -167,12 +184,12 @@ type Store interface {
 	Append(folder FolderID, msg Message) (MessageID, error)
 	Update(id MessageID, msg Message) error
 
-	// Fetch is “Get Messages”. MemoryStore injects a couple of demo
-	// arrivals; IMAP would poll or IDLE.
+	// Fetch is “Get Messages”. MemoryStore injects demo arrivals.
 	Fetch(accountID string) (newCount int, err error)
 
 	Unread(folder FolderID) int
 	UnreadTotal() int
+	MessageCount(folder FolderID) int
 }
 
 func boolPtr(v bool) *bool { return &v }

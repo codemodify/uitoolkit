@@ -400,7 +400,7 @@ func (l *Classic) DrawTab(ctx *paintengine2d.Context, b paintengine2d.Rect, st C
 	}
 }
 
-func (l *Classic) DrawTreeRow(ctx *paintengine2d.Context, b paintengine2d.Rect, selected, hovered, expanded, leaf bool, depth int, label string) {
+func (l *Classic) DrawTreeRow(ctx *paintengine2d.Context, b paintengine2d.Rect, selected, hovered, expanded, leaf bool, depth int, label string, bold bool) {
 	p := l.palette
 	m := l.metrics
 	if selected {
@@ -434,7 +434,11 @@ func (l *Classic) DrawTreeRow(ctx *paintengine2d.Context, b paintengine2d.Rect, 
 		}
 		ctx.DrawPath(chev, paintengine2d.Fill(p.TextMuted))
 	}
-	l.body.Draw(ctx, label, paintengine2d.Pt(x+14, b.Min.Y+(b.Dy()-l.body.Height())*0.5), p.Text)
+	face := l.body
+	if bold {
+		face = l.title
+	}
+	face.Draw(ctx, label, paintengine2d.Pt(x+14, b.Min.Y+(b.Dy()-face.Height())*0.5), p.Text)
 }
 
 func (l *Classic) DrawStatusBar(ctx *paintengine2d.Context, b paintengine2d.Rect, parts []string) {

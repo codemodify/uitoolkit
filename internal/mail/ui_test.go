@@ -1,9 +1,11 @@
 package mail
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/codemodify/uitoolkit"
 	"github.com/codemodify/uitoolkit/platform"
@@ -69,8 +71,19 @@ func TestMailAppPaints(t *testing.T) {
 }
 
 func TestComposeAppPaints(t *testing.T) {
+	sock, stop, err := StartDemo(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stop()
+	cli, err := DialWait(sock, 2*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cli.Close()
+
 	a := uitoolkit.New(uitoolkit.Options{Look: style.LightLook(), Headless: true})
-	w, err := OpenCompose(a, NewDemoStore(), ComposeOptions{})
+	w, err := OpenCompose(a, cli, ComposeOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}

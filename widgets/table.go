@@ -26,6 +26,7 @@ type TableView struct {
 	SortCol   int
 	SortAsc   bool
 	CellText  func(row, col int) string
+	CellBold  func(row, col int) bool
 	OnSelect  func(row int)
 	OnSort    func(col int, asc bool)
 	OnContext func(row int, windowPos paintengine2d.Point)
@@ -210,6 +211,9 @@ func (t *TableView) Paint(ctx *paintengine2d.Context) {
 				if t.Mono {
 					extra ^= 0x4d
 				}
+				if t.CellBold != nil && t.CellBold(i, 0) {
+					extra ^= 0xb01d
+				}
 				parts := make([]string, len(t.Columns))
 				for col := range t.Columns {
 					if t.CellText != nil {
@@ -233,6 +237,9 @@ func (t *TableView) Paint(ctx *paintengine2d.Context) {
 					if t.Mono {
 						face = lk.MonoFont()
 					}
+					if t.CellBold != nil && t.CellBold(i, col) {
+						face = lk.TitleFont()
+					}
 					lk.DrawTableCell(ctx, cell, i == t.Selected, i == t.hovered, label, t.Columns[col].Align, face)
 					cx += w
 				}
@@ -252,6 +259,9 @@ func (t *TableView) Paint(ctx *paintengine2d.Context) {
 				face := lk.Font()
 				if t.Mono {
 					face = lk.MonoFont()
+				}
+				if t.CellBold != nil && t.CellBold(row, col) {
+					face = lk.TitleFont()
 				}
 				lk.DrawTableCell(ctx, cell, row == t.Selected, row == t.hovered, label, t.Columns[col].Align, face)
 				cx += w
