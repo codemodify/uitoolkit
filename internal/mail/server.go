@@ -576,6 +576,12 @@ func (s *Server) dispatch(req Request) Response {
 		if err == nil {
 			result = GuessMailHosts(p.Address)
 		}
+	case MethodHostsProbe, MethodAccountsTest:
+		var p ProbeRequest
+		p, err = decodeParams[ProbeRequest](req.Params)
+		if err == nil {
+			result = ProbeAccount(p)
+		}
 	default:
 		err = fmt.Errorf("unknown method %s", req.Method)
 	}

@@ -59,7 +59,7 @@ func (s *LocalStore) idleAccount(ctx context.Context, accountID string) {
 		}
 	}
 	s.mu.Unlock()
-	if !ok || cfg.IMAP.Host == "" {
+	if !ok || cfg.IsPOP3() || cfg.IMAP.Host == "" {
 		return
 	}
 	cfg.IMAP.tokenKey = accountID

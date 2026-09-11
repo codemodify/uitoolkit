@@ -43,7 +43,7 @@ import "encoding/json"
 //	status.set          {online}
 //	outbox.list / outbox.flush
 //	smart.* / threads.mute / vip.* / notify.*
-//	senders.setCategory / oauth.* / hosts.guess
+//	senders.setCategory / oauth.* / hosts.guess / hosts.probe / accounts.test
 //
 // Events (server → client, no id):
 //
@@ -107,6 +107,8 @@ const (
 	MethodOAuthPoll      = "oauth.poll"
 	MethodOAuthCancel    = "oauth.cancel"
 	MethodHostsGuess     = "hosts.guess"
+	MethodHostsProbe     = "hosts.probe"
+	MethodAccountsTest   = "accounts.test"
 
 	EventChanged = "mail.changed"
 	EventFetched = "mail.fetched"

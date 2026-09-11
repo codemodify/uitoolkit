@@ -22,7 +22,7 @@ func TestGuessMailHosts(t *testing.T) {
 		t.Fatalf("%+v", g)
 	}
 	g = GuessMailHosts("ada@example.org")
-	if g.IMAP != "imap.example.org:993" || g.SMTP != "smtp.example.org:587" {
+	if g.IMAP != "imap.example.org:993" || g.SMTP != "smtp.example.org:587" || g.POP != "pop.example.org:995" {
 		t.Fatalf("%+v", g)
 	}
 }

@@ -201,14 +201,14 @@ func (s *oauthSession) finishOK(tok TokenBlob) {
 		}
 	}
 	cfg := AccountConfig{
-		ID: id, Name: name, Address: addr, Provider: s.req.Provider,
+		ID: id, Name: name, Address: addr, Provider: s.req.Provider, Protocol: ProtoIMAP,
 		IMAP: ServerConfig{Host: hosts.IMAP, User: addr, Auth: "xoauth2", TLS: boolPtrVal(true)},
 		SMTP: ServerConfig{Host: hosts.SMTP, User: addr, Auth: "xoauth2"},
 	}
 	tok.Provider = s.req.Provider
 	_ = DefaultTokenStore().Put(id, tok)
 	_ = DefaultTokenStore().Put(addr, tok)
-	s.account = Account{ID: id, Name: name, Address: addr, Transport: "imap"}
+	s.account = accountFromConfig(cfg, ProtoIMAP)
 	s.cfg = cfg
 	s.closeDone()
 }

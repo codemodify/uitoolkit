@@ -66,7 +66,7 @@ func prefsAccounts(a *app.Application, cli *Client, st DaemonStatus) widget.Comp
 	table := widgets.NewTableView([]widgets.TableColumn{
 		{Title: "Name", Width: 160, Sortable: true},
 		{Title: "Address", Sortable: true},
-		{Title: "Transport", Width: 90, Sortable: true},
+		{Title: "Protocol", Width: 100, Sortable: true},
 		{Title: "ID", Width: 80, Sortable: true},
 	}, len(accounts), func(row, col int) string {
 		if row < 0 || row >= len(accounts) {
@@ -77,6 +77,9 @@ func prefsAccounts(a *app.Application, cli *Client, st DaemonStatus) widget.Comp
 		case 1:
 			return a.Address
 		case 2:
+			if lab := ProtocolLabel(a); lab != "" {
+				return lab
+			}
 			if a.Transport == "" {
 				return st.Backend
 			}
@@ -132,7 +135,7 @@ func prefsIdentities(cli *Client) widget.Component {
 		}
 	}, nil)
 	table.Selected = 0
-	note := widgets.NewLabel("Identities are From personas. Compose picks one; the account maps IMAP/SMTP.")
+	note := widgets.NewLabel("Identities are From personas. Compose picks one; the account maps IMAP or POP3 + SMTP.")
 	return widgets.NewColumn(widgets.NewTitle("Identities"), note, table).WithGap(8)
 }
 

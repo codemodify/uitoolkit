@@ -538,6 +538,18 @@ func (c *Client) GuessHosts(address string) (GuessedHosts, error) {
 	return out, err
 }
 
+func (c *Client) TestAccount(req ProbeRequest) (ProbeResult, error) {
+	var out ProbeResult
+	err := c.call(MethodAccountsTest, req, &out)
+	return out, err
+}
+
+func (c *Client) ProbeHosts(req ProbeRequest) (ProbeResult, error) {
+	var out ProbeResult
+	err := c.call(MethodHostsProbe, req, &out)
+	return out, err
+}
+
 func filterEmpty(f Filter) bool {
 	return f.Query == "" && !f.Unread && !f.Starred && !f.Attachment && f.Tag == "" &&
 		!f.Sender && !f.Recipients && !f.SubjectOnly && !f.Body

@@ -1,6 +1,6 @@
 // Package mail is the Thunderbird-chrome Mail client: a pluggable Store
 // plus the 3-pane desktop UI. The default backend is an empty LocalStore
-// (IMAP+SMTP + disk cache). Seeded MemoryStore is UITK_MAIL=memory only.
+// (IMAP or POP3 + SMTP + disk cache). Seeded MemoryStore is UITK_MAIL=memory only.
 package mail
 
 import (
@@ -47,13 +47,32 @@ func (k FolderKind) String() string {
 	}
 }
 
-// Account is one store/transport (IMAP mailbox + SMTP submission).
+// Account is one store/transport (IMAP or POP3 mailbox + SMTP submission).
 // Identities (From name/address/signature) are separate — see Identity.
 type Account struct {
 	ID        string `json:"id"`
 	Name      string `json:"name"`
 	Address   string `json:"address"`
-	Transport string `json:"transport,omitempty"` // "memory" or "imap"
+	Transport string `json:"transport,omitempty"` // "memory", "imap", or "pop3"
+	Protocol  string `json:"protocol,omitempty"`  // "imap" or "pop3" (user-visible)
+}
+
+// ProtocolLabel is IMAP / POP3 for chrome (prefs, account central).
+func ProtocolLabel(a Account) string {
+	p := NormalizeProtocol(a.Protocol)
+	if a.Protocol == "" && (a.Transport == "pop3" || a.Transport == "pop") {
+		p = ProtoPOP3
+	}
+	if a.Transport == "memory" {
+		if p == ProtoPOP3 {
+			return "POP3 (demo)"
+		}
+		return "IMAP (demo)"
+	}
+	if p == ProtoPOP3 {
+		return "POP3"
+	}
+	return "IMAP"
 }
 
 // Identity is a KMail-style From persona. Many identities can share one Account.
@@ -306,7 +325,7 @@ type Store interface {
 	OpenPart(id MessageID, partID string) (PartData, error)
 	Sync(accountID string) (SyncResult, error)
 
-	// PutAccount writes IMAP/SMTP settings (inline password and/or passEnv).
+	// PutAccount writes IMAP/POP3/SMTP settings (inline password and/or passEnv).
 	PutAccount(AccountConfig) (Account, error)
 }
 
