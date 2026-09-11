@@ -3,6 +3,8 @@ package mail
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -60,19 +62,21 @@ type session struct {
 	cli  *Client
 	opts AppOptions
 
-	folder    FolderID
-	account   string
-	central   bool // Account Central instead of the thread list
-	selected  []MessageID
-	filter    Filter
-	sortCol   int
-	sortAsc   bool
-	online    bool
-	rows      []Message
-	kind      FolderKind
-	backend   string
-	attachSel int
-	attNames  []string
+	folder       FolderID
+	account      string
+	central      bool // Account Central instead of the thread list
+	selected     []MessageID
+	filter       Filter
+	sortCol      int
+	sortAsc      bool
+	online       bool
+	rows         []Message
+	kind         FolderKind
+	backend      string
+	attachSel    int
+	attNames     []string
+	attachClickI int
+	attachClickT time.Time
 
 	chromePrefs ChromePrefs
 	cardView    bool
@@ -89,6 +93,10 @@ type session struct {
 	preview                                    *widgets.TextArea
 	source                                     *widgets.TextArea
 	attachList                                 *widgets.ListView
+	attachOpen                                 *widgets.Button
+	attachSave                                 *widgets.Button
+	attachBtns                                 widget.Component
+	attachPane                                 *widgets.FlexBox
 	askedEmpty                                 bool
 	hdrFrom, hdrSubj, hdrDate, hdrTo, hdrExtra *widgets.Label
 	status                                     *widgets.StatusBar
@@ -110,6 +118,7 @@ func newSession(a *app.Application, win *app.Window, cli *Client, opts AppOption
 	s := &session{
 		app: a, win: win, cli: cli, opts: opts,
 		sortCol: 4, sortAsc: false, online: true,
+		attachSel: -1, attachClickI: -1,
 	}
 	p := loadChromePrefs()
 	s.chromePrefs = p
@@ -335,19 +344,16 @@ func (s *session) build() widget.Component {
 			return ""
 		}
 		return "📎  " + s.attNames[i]
-	}, func(i int) {
-		s.attachSel = i
-		if i >= 0 && i < len(s.attNames) {
-			s.mark("Attachment: " + s.attNames[i] + " (demo)")
-		}
-	})
-	s.attachList.OnSelect = func(i int) {
-		s.attachSel = i
-		s.openAttachment(i)
-	}
+	}, s.selectAttachment)
+	s.attachOpen = widgets.NewButton("Open", s.openSelectedAttachment)
+	s.attachSave = widgets.NewButton("Save As", s.saveSelectedAttachment)
+	s.attachOpen.SetEnabled(false)
+	s.attachSave.SetEnabled(false)
+	s.attachBtns = widgets.NewRow(s.attachOpen, s.attachSave).WithGap(8)
+	s.attachPane = widgets.NewColumn(s.attachList).WithGap(4)
 	s.applyRowMetrics()
 	s.attachList.SetVisible(false)
-	headCol := widgets.NewColumn(s.hdrSubj, s.hdrFrom, s.hdrTo, s.hdrDate, s.hdrExtra, s.attachList).WithGap(3).WithPad(10)
+	headCol := widgets.NewColumn(s.hdrSubj, s.hdrFrom, s.hdrTo, s.hdrDate, s.hdrExtra, s.attachPane).WithGap(3).WithPad(10)
 	previewCol := widgets.NewColumn(headCol, widgets.NewSeparator(), tabs).WithGap(0)
 	previewCol.AddFlex(tabs, 1)
 
@@ -918,10 +924,7 @@ func (s *session) loadPreview() {
 			s.hdrExtra.SetText("")
 		}
 		s.attNames = nil
-		if s.attachList != nil {
-			s.attachList.Count = 0
-			s.attachList.SetVisible(false)
-		}
+		s.syncAttachPane()
 		return
 	}
 	if s.hdrSubj != nil {
@@ -942,11 +945,7 @@ func (s *session) loadPreview() {
 		s.hdrExtra.SetText(extra)
 	}
 	s.attNames = append([]string(nil), m.Attachments...)
-	if s.attachList != nil {
-		s.attachList.Count = len(s.attNames)
-		s.attachList.SetVisible(len(s.attNames) > 0)
-		s.attachList.Invalidate()
-	}
+	s.syncAttachPane()
 	if s.preview != nil {
 		s.preview.SetText(DisplayBody(m))
 	}
@@ -1514,16 +1513,83 @@ func (s *session) tagNames() []string {
 	return out
 }
 
+const attachActivateWindow = 400 * time.Millisecond
+
+func (s *session) syncAttachPane() {
+	has := len(s.attNames) > 0
+	if s.attachList != nil {
+		s.attachList.Count = len(s.attNames)
+		s.attachList.Selected = -1
+		s.attachList.SetVisible(has)
+		s.attachList.Invalidate()
+	}
+	s.attachSel = -1
+	s.attachClickI = -1
+	s.attachClickT = time.Time{}
+	if s.attachPane != nil && s.attachBtns != nil {
+		if has && s.attachBtns.Parent() == nil {
+			s.attachPane.Add(s.attachBtns)
+		}
+		if !has && s.attachBtns.Parent() != nil {
+			s.attachPane.Remove(s.attachBtns)
+		}
+	}
+	s.syncAttachActions()
+	if s.win != nil {
+		s.win.RequestLayout()
+	}
+}
+
+func (s *session) syncAttachActions() {
+	on := s.attachSel >= 0 && s.attachSel < len(s.attNames)
+	if s.attachOpen != nil {
+		s.attachOpen.SetEnabled(on)
+	}
+	if s.attachSave != nil {
+		s.attachSave.SetEnabled(on)
+	}
+}
+
+func (s *session) selectAttachment(i int) {
+	now := time.Now()
+	activate := i >= 0 && i == s.attachClickI && !s.attachClickT.IsZero() && now.Sub(s.attachClickT) < attachActivateWindow
+	s.attachSel = i
+	s.attachClickI = i
+	s.attachClickT = now
+	if s.attachList != nil {
+		s.attachList.Selected = i
+	}
+	s.syncAttachActions()
+	if activate {
+		s.openAttachment(i)
+		return
+	}
+	if i >= 0 && i < len(s.attNames) {
+		s.mark("Attachment: " + s.attNames[i])
+	}
+}
+
+func (s *session) attachPartID(m Message, i int) string {
+	if i >= 0 && i < len(m.Parts) && m.Parts[i].ID != "" {
+		return m.Parts[i].ID
+	}
+	return fmt.Sprintf("att-%d", i+1)
+}
+
+func (s *session) openSelectedAttachment() {
+	s.openAttachment(s.attachSel)
+}
+
+func (s *session) saveSelectedAttachment() {
+	s.saveAttachment(s.attachSel)
+}
+
 func (s *session) openAttachment(i int) {
 	m, ok := s.primary()
 	if !ok || i < 0 || i >= len(s.attNames) {
 		return
 	}
-	partID := fmt.Sprintf("att-%d", i+1)
-	if i < len(m.Parts) {
-		partID = m.Parts[i].ID
-	}
-	p, err := s.cli.OpenPart(m.ID, partID)
+	p, err := s.cli.OpenPart(m.ID, s.attachPartID(m, i))
 	if err != nil {
 		s.mark("Attachment: " + s.attNames[i] + " (demo)")
 		return
@@ -1533,6 +1599,57 @@ func (s *session) openAttachment(i int) {
 		return
 	}
 	s.mark("Attachment: " + s.attNames[i])
+}
+
+func (s *session) saveAttachment(i int) {
+	m, ok := s.primary()
+	if !ok || i < 0 || i >= len(s.attNames) || s.win == nil {
+		return
+	}
+	p, err := s.cli.GetPart(m.ID, s.attachPartID(m, i))
+	if err != nil {
+		s.mark("Save As: " + err.Error())
+		return
+	}
+	name := filepath.Base(s.attNames[i])
+	if name == "" || name == "." || name == ".." {
+		name = "attachment"
+	}
+	data := p.Data
+	if len(data) == 0 && p.Path != "" {
+		if raw, rerr := os.ReadFile(p.Path); rerr == nil {
+			data = raw
+		}
+	}
+	widgets.ShowFileDialog(s.win.Content(), widgets.FileDialogOptions{
+		Title: "Save As",
+		Mode:  widgets.FileSave,
+		Path:  filepath.Join(os.TempDir(), name),
+		OnNavigate: func(path string) []widgets.FileInfo {
+			ents, err := os.ReadDir(path)
+			if err != nil {
+				return nil
+			}
+			out := make([]widgets.FileInfo, 0, len(ents))
+			for _, e := range ents {
+				out = append(out, widgets.FileInfo{Name: e.Name(), Dir: e.IsDir()})
+			}
+			return out
+		},
+		OnPick: func(path string) {
+			if path == "" {
+				return
+			}
+			if st, err := os.Stat(path); err == nil && st.IsDir() {
+				path = filepath.Join(path, name)
+			}
+			if err := os.WriteFile(path, data, 0o600); err != nil {
+				s.mark("Save As: " + err.Error())
+				return
+			}
+			s.mark("Saved " + path)
+		},
+	})
 }
 
 func (s *session) openFilters() {
