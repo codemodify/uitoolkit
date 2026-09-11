@@ -32,6 +32,59 @@ func (b *overflowBox) Paint(ctx *paintengine2d.Context) {
 	ctx.DrawRect(paintengine2d.XYWH(-800, -80, 2400, 400), paintengine2d.Fill(b.col))
 }
 
+type cursorHost struct {
+	host
+	cursor platform.Cursor
+	n      int
+}
+
+func (h *cursorHost) SetCursor(c platform.Cursor) {
+	h.cursor = c
+	h.n++
+}
+
+func TestSplitterRestoresPointerCursor(t *testing.T) {
+	h := &cursorHost{}
+	split := NewSplitter(true, NewLabel("A"), NewLabel("B"))
+	split.Ratio = 0.5
+	split.SetHost(h)
+	split.Arrange(paintengine2d.XYWH(0, 0, 400, 200))
+	div := split.divider()
+	sash := paintengine2d.Pt(div.Min.X+1, 20)
+	if split.CursorAt(sash) != platform.CursorColResize {
+		t.Fatal("sash should be col-resize")
+	}
+	if split.CursorAt(paintengine2d.Pt(8, 20)) != platform.CursorDefault {
+		t.Fatal("pane should be default pointer")
+	}
+	split.MousePress(widget.MouseEvent{Pos: sash, Button: platform.ButtonLeft})
+	if h.cursor != platform.CursorColResize {
+		t.Fatalf("drag start cursor=%v", h.cursor)
+	}
+	split.MouseMove(widget.MouseEvent{Pos: paintengine2d.Pt(280, 20), Button: platform.ButtonLeft})
+	if h.cursor != platform.CursorColResize {
+		t.Fatalf("drag cursor=%v", h.cursor)
+	}
+	split.MouseExit()
+	if !split.drag {
+		t.Fatal("exit during drag should keep dragging")
+	}
+	if h.cursor != platform.CursorColResize {
+		t.Fatalf("exit during drag must keep resize cursor, got %v", h.cursor)
+	}
+	split.MouseRelease(widget.MouseEvent{Pos: paintengine2d.Pt(40, 20)})
+	if h.cursor != platform.CursorDefault {
+		t.Fatalf("release must restore pointer, got %v", h.cursor)
+	}
+	horiz := NewSplitter(false, NewLabel("A"), NewLabel("B"))
+	horiz.SetHost(h)
+	horiz.Arrange(paintengine2d.XYWH(0, 0, 200, 300))
+	hd := horiz.divider()
+	if horiz.CursorAt(paintengine2d.Pt(8, hd.Min.Y+1)) != platform.CursorRowResize {
+		t.Fatal("horizontal sash should be row-resize")
+	}
+}
+
 func TestSplitterArrangeAfterDragExclusive(t *testing.T) {
 	left := NewLabel("Date Size columns live here")
 	right := NewLabel("Subject: a very long preview header that must not paint over the list")

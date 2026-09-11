@@ -10,6 +10,7 @@ package platform
 #include <X11/Xresource.h>
 #include <X11/XKBlib.h>
 #include <X11/keysym.h>
+#include <X11/cursorfont.h>
 #include <X11/extensions/XShm.h>
 #include <X11/extensions/Xrandr.h>
 #include <locale.h>
@@ -370,6 +371,19 @@ static void ui_resize_win(Display* d, Window w, int width, int height) {
 	XFlush(d);
 }
 
+static Cursor ui_font_cursor(Display* d, unsigned int shape) {
+	if (!d) return None;
+	return XCreateFontCursor(d, shape);
+}
+static void ui_define_cursor(Display* d, Window w, Cursor c) {
+	if (!d || !w) return;
+	XDefineCursor(d, w, c);
+	XFlush(d);
+}
+static void ui_free_cursor(Display* d, Cursor c) {
+	if (d && c) XFreeCursor(d, c);
+}
+
 static void ui_ewmh_state(Display* d, Window w, long action, Atom a, Atom b) {
 	XEvent ev;
 	memset(&ev, 0, sizeof(ev));
@@ -588,6 +602,11 @@ type x11Conn struct {
 	incrRecv  incrRecvState
 	incrSends []incrSendState
 	maxReq    int
+
+	curDefault C.Cursor
+	curCol     C.Cursor
+	curRow     C.Cursor
+	curText    C.Cursor
 }
 
 type x11Surface struct {
@@ -708,6 +727,24 @@ func (c *x11Conn) release() {
 }
 
 func (c *x11Conn) closeLocked() {
+	if c.dpy != nil {
+		if c.curDefault != 0 {
+			C.ui_free_cursor(c.dpy, c.curDefault)
+			c.curDefault = 0
+		}
+		if c.curCol != 0 {
+			C.ui_free_cursor(c.dpy, c.curCol)
+			c.curCol = 0
+		}
+		if c.curRow != 0 {
+			C.ui_free_cursor(c.dpy, c.curRow)
+			c.curRow = 0
+		}
+		if c.curText != 0 {
+			C.ui_free_cursor(c.dpy, c.curText)
+			c.curText = 0
+		}
+	}
 	if c.im != nil {
 		C.XCloseIM(c.im)
 		c.im = nil
@@ -1634,6 +1671,43 @@ func x11Live() bool {
 	x11Mu.Lock()
 	defer x11Mu.Unlock()
 	return x11c != nil && x11c.dpy != nil
+}
+
+func (c *x11Conn) xcursor(cur Cursor) C.Cursor {
+	if c == nil || c.dpy == nil {
+		return 0
+	}
+	switch cur {
+	case CursorColResize:
+		if c.curCol == 0 {
+			c.curCol = C.ui_font_cursor(c.dpy, C.XC_sb_h_double_arrow)
+		}
+		return c.curCol
+	case CursorRowResize:
+		if c.curRow == 0 {
+			c.curRow = C.ui_font_cursor(c.dpy, C.XC_sb_v_double_arrow)
+		}
+		return c.curRow
+	case CursorText:
+		if c.curText == 0 {
+			c.curText = C.ui_font_cursor(c.dpy, C.XC_xterm)
+		}
+		return c.curText
+	default:
+		if c.curDefault == 0 {
+			c.curDefault = C.ui_font_cursor(c.dpy, C.XC_left_ptr)
+		}
+		return c.curDefault
+	}
+}
+
+func (s *x11Surface) SetCursor(cur Cursor) {
+	if s == nil || s.conn == nil || s.conn.dpy == nil || s.win == 0 {
+		return
+	}
+	x11Mu.Lock()
+	C.ui_define_cursor(s.conn.dpy, s.win, s.conn.xcursor(cur))
+	x11Mu.Unlock()
 }
 
 func (s *x11Surface) SetFullscreen(on bool) {

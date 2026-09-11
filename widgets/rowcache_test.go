@@ -8,7 +8,7 @@ import (
 
 func TestRecordScrollingRowsReuses(t *testing.T) {
 	cache := &rowSceneCache{}
-	cache.ready(0, 0, 80, 20, 1)
+	cache.ready(0, 0, 80, 20, 0, 1)
 
 	paint := func(rec *paintengine2d.Recorder, off float32) *paintengine2d.Scene {
 		ctx := paintengine2d.NewContextDevice(rec)
@@ -19,7 +19,7 @@ func TestRecordScrollingRowsReuses(t *testing.T) {
 			func(i int) uint64 { return uint64(i + 1) },
 			func(i int) uint64 { return visualSig(false, false, 0, "row") },
 			func(i int) {
-				ctx.DrawRect(paintengine2d.XYWH(0, float32(i)*20, 80, 20), paintengine2d.Fill(paintengine2d.White))
+				ctx.DrawRect(paintengine2d.XYWH(0, float32(i)*20-off, 80, 20), paintengine2d.Fill(paintengine2d.White))
 			},
 		)
 		return rec.Finish()
@@ -29,9 +29,14 @@ func TestRecordScrollingRowsReuses(t *testing.T) {
 	if s0.Reused != 0 {
 		t.Fatalf("first record reused=%d", s0.Reused)
 	}
-	s1 := paint(paintengine2d.NewRecorder(80, 80), 40)
-	if s1.Reused < 2 {
-		t.Fatalf("scroll should reuse overlapping rows, reused=%d", s1.Reused)
+	s1 := paint(paintengine2d.NewRecorder(80, 80), 0)
+	if s1.Reused < 4 {
+		t.Fatalf("same offset should reuse rows, reused=%d", s1.Reused)
+	}
+	cache.ready(0, 0, 80, 20, 40, 1)
+	s2 := paint(paintengine2d.NewRecorder(80, 80), 40)
+	if s2.Reused != 0 {
+		t.Fatalf("new offset must not attach stale viewport rows, reused=%d", s2.Reused)
 	}
 }
 

@@ -98,6 +98,8 @@ func TestWaylandDesktopChrome(t *testing.T) {
 	if ime, ok := s.(IMESurface); ok {
 		ime.SetIMECursor(8, 12, 2, 16)
 	}
+	SetCursor(s, CursorColResize)
+	SetCursor(s, CursorDefault)
 	if s.Scale() < 0.75 || s.Scale() > 4 {
 		t.Fatalf("scale %v", s.Scale())
 	}

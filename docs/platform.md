@@ -4,12 +4,12 @@ uitoolkit paints only through paintengine2d. The platform layer maps that
 Device onto a window and translates input. `UITK_PAINT=auto` (default)
 tries `GPUDevice` and falls back to the CPU pixmap.
 
-| Backend | When | Present | Clipboard | Scale | IME |
-| --- | --- | --- | --- | --- | --- |
-| **offscreen** | `Headless`, `UITK_BACKEND=offscreen`, or no display | no-op | in-process | env or 1 | n/a |
-| **Wayland** | Linux + CGO + `WAYLAND_DISPLAY` | **`wl_egl_window` + `eglSwapBuffers`** when `UITK_PAINT=auto\|gpu` and EGL works; else v0.4.1 **`wl_shm` XRGB8888** (opaque). **linux-dmabuf** only if `UITK_WAYLAND_PRESENT=dmabuf` on the CPU path | `wl_data_device` + primary when the compositor offers it | `wl_output` scale, `wp_fractional_scale_v1` + viewporter, env | `zwp_text_input_v3` preedit / commit |
-| **X11** | Linux + CGO + `DISPLAY` | **EGL window + `eglSwapBuffers`** when EGL works; else dirty-rect `XPutImage` / MIT-SHM | CLIPBOARD + PRIMARY, ICCCM **INCR** | Xft.dpi, RandR mm, screen mm, env | XIM preedit callbacks + compose / dead keys |
-| Win32 / AppKit | stub | — | — | — | — |
+| Backend | When | Present | Clipboard | Scale | IME | Cursor |
+| --- | --- | --- | --- | --- | --- | --- |
+| **offscreen** | `Headless`, `UITK_BACKEND=offscreen`, or no display | no-op | in-process | env or 1 | n/a | last `SetCursor` |
+| **Wayland** | Linux + CGO + `WAYLAND_DISPLAY` | **`wl_egl_window` + `eglSwapBuffers`** when `UITK_PAINT=auto\|gpu` and EGL works; else v0.4.1 **`wl_shm` XRGB8888** (opaque). **linux-dmabuf** only if `UITK_WAYLAND_PRESENT=dmabuf` on the CPU path | `wl_data_device` + primary when the compositor offers it | `wl_output` scale, `wp_fractional_scale_v1` + viewporter, env | `zwp_text_input_v3` preedit / commit | `wl_pointer_set_cursor` (enter serial + ARGB shm); re-applied on pointer enter |
+| **X11** | Linux + CGO + `DISPLAY` | **EGL window + `eglSwapBuffers`** when EGL works; else dirty-rect `XPutImage` / MIT-SHM | CLIPBOARD + PRIMARY, ICCCM **INCR** | Xft.dpi, RandR mm, screen mm, env | XIM preedit callbacks + compose / dead keys | `XDefineCursor` + `XFlush` (font cursors) |
+| Win32 / AppKit | stub | — | — | — | — | — |
 
 Auto-select: Wayland if `WAYLAND_DISPLAY` is set **and** a compositor
 accepts the connection, else X11 if `DISPLAY` is set, else offscreen.
@@ -81,9 +81,11 @@ needs EGL / GLES2. `CGO_ENABLED=0` never needs those libraries.
 glyph/image blits, and transform groups. `DrawScene` presents the graph
 (GPU batches opaque axis-aligned rects; CPU rasterizes nodes).
 `ScrollView` keeps a child group and only updates a translation when
-the offset changes. `ListView` / `TableView` / `TreeView` keep per-row
-groups and translate the content root on scroll; hover and selection
-re-record only rows whose visual signature changed.
+the offset changes. `ListView` / `TableView` / `TreeView` / `CardList`
+keep per-row groups and paint visible rows in viewport space under a
+body clip (below a sticky table header) so `DrawScene` cannot shift the
+clip with the content. Hover and selection re-record rows whose visual
+signature changed.
 
 ```bash
 UITK_SCENE=auto go run ./examples/gallery   # default: retained scene

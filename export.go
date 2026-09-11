@@ -35,12 +35,17 @@ type (
 	Density           = style.Density
 	CardContent       = widgets.CardContent
 	CardBadge         = widgets.CardBadge
+	Cursor            = platform.Cursor
 )
 
 const (
-	DensityDefault = style.DensityDefault
-	DensityCompact = style.DensityCompact
-	DensityRelaxed = style.DensityRelaxed
+	DensityDefault  = style.DensityDefault
+	DensityCompact  = style.DensityCompact
+	DensityRelaxed  = style.DensityRelaxed
+	CursorDefault   = platform.CursorDefault
+	CursorColResize = platform.CursorColResize
+	CursorRowResize = platform.CursorRowResize
+	CursorText      = platform.CursorText
 )
 
 func New(opts Options) *Application { return app.New(opts) }

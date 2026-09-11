@@ -125,12 +125,17 @@ func TestListScrollReusesRows(t *testing.T) {
 	list.OffsetY += 56
 	list.Invalidate()
 	a.PumpOnce()
-	if w.Scene() == nil || w.Scene().Reused < 1 {
-		t.Fatalf("list scroll should reuse row nodes, reused=%v scene=%+v", w.Scene().Reused, w.Scene())
+	if w.Scene() == nil || w.Scene().Nodes < 4 {
+		t.Fatalf("scrolled list scene %+v", w.Scene())
 	}
 	img := w.Capture()
 	if countOpaque(img, 20) < 200 {
-		t.Fatal("list scene should still paint")
+		t.Fatal("list scene should still paint past the first page")
+	}
+	list.Invalidate()
+	a.PumpOnce()
+	if w.Scene() == nil || w.Scene().Reused < 1 {
+		t.Fatalf("same offset should reuse row nodes, reused=%v scene=%+v", w.Scene().Reused, w.Scene())
 	}
 }
 

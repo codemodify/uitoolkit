@@ -13,17 +13,17 @@ const rowCacheCap = 256
 // rowSceneCache keeps recorded virtualized rows so scroll can change a
 // parent transform without re-recording every visible row (Qt Quick ListView).
 type rowSceneCache struct {
-	nodes        map[uint64]*paintengine2d.GroupNode
-	sig          map[uint64]uint64
-	ox, oy, w, h float32
-	look         uint64
+	nodes             map[uint64]*paintengine2d.GroupNode
+	sig               map[uint64]uint64
+	ox, oy, w, h, off float32
+	look              uint64
 }
 
-func (c *rowSceneCache) ready(ox, oy, w, h float32, look uint64) {
-	if c.nodes == nil || c.ox != ox || c.oy != oy || c.w != w || c.h != h || c.look != look {
+func (c *rowSceneCache) ready(ox, oy, w, h, off float32, look uint64) {
+	if c.nodes == nil || c.ox != ox || c.oy != oy || c.w != w || c.h != h || c.off != off || c.look != look {
 		c.nodes = make(map[uint64]*paintengine2d.GroupNode)
 		c.sig = make(map[uint64]uint64)
-		c.ox, c.oy, c.w, c.h = ox, oy, w, h
+		c.ox, c.oy, c.w, c.h, c.off = ox, oy, w, h, off
 		c.look = look
 	}
 }
@@ -95,8 +95,12 @@ func lookSig(lk style.LookAndFeel) uint64 {
 	return h
 }
 
-// recordScrollingRows paints visible rows in content space (y = i*rowH)
-// under Translation(0, y0-offsetY). Unchanged rows are Attached.
+// recordScrollingRows paints visible rows in viewport space
+// (y = y0 + i*rowH − offsetY). The parent group is Identity so
+// device-space clips (table body below a sticky header) stay put.
+// paintengine2d.DrawScene mapClip would otherwise translate that clip
+// with the content: a gap at scrollY=0, rows over the header, and an
+// empty viewport after the first page.
 func recordScrollingRows(
 	rec *paintengine2d.Recorder,
 	cache *rowSceneCache,
@@ -110,8 +114,10 @@ func recordScrollingRows(
 	if rec == nil || cache == nil || lo >= hi {
 		return
 	}
+	_ = offsetY
+	_ = y0
 	keep := make(map[uint64]struct{}, hi-lo)
-	rec.BeginGroup(groupID, paintengine2d.Translation(0, y0-offsetY))
+	rec.BeginGroup(groupID, paintengine2d.Identity())
 	for i := lo; i < hi; i++ {
 		id := rowID(i)
 		keep[id] = struct{}{}

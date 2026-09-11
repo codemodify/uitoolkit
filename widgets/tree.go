@@ -132,7 +132,7 @@ func (t *TreeView) Paint(ctx *paintengine2d.Context) {
 	}
 	if rec, ok := ctx.Device().(*paintengine2d.Recorder); ok {
 		ob := t.Bounds()
-		t.rows.ready(ob.Min.X, ob.Min.Y, b.Dx(), rh, lookSig(lk))
+		t.rows.ready(ob.Min.X, ob.Min.Y, b.Dx(), rh, t.OffsetY, lookSig(lk))
 		recordScrollingRows(rec, &t.rows, t.ID()^(1<<32), t.OffsetY, 0, lo, hi,
 			func(i int) uint64 { return t.ID()<<32 | uint64(i) + 1 },
 			func(i int) uint64 {
@@ -154,7 +154,7 @@ func (t *TreeView) Paint(ctx *paintengine2d.Context) {
 			},
 			func(i int) {
 				n := rows[i].node
-				y := float32(i) * rh
+				y := float32(i)*rh - t.OffsetY
 				row := paintengine2d.XYWH(0, y, b.Dx(), rh)
 				lk.DrawTreeRow(ctx, row, n == t.Selected, n == t.hover, n.Expanded, n.Leaf(), rows[i].depth, n.Label, n.Bold)
 				paintTreeSwatch(ctx, row, n.Color)
