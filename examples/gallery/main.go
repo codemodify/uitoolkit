@@ -23,7 +23,7 @@ import (
 
 func main() {
 	shot := flag.String("screenshot", "", "write PNG gallery into this directory and exit")
-	headless := flag.Bool("headless", false, "paint offscreen (no X11)")
+	headless := flag.Bool("headless", false, "paint offscreen (no X11/Wayland)")
 	flag.Parse()
 
 	if *shot != "" {

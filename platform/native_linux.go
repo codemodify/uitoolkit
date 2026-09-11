@@ -11,6 +11,9 @@ func x11Available() Backend {
 	return X11Backend{}
 }
 
-// waylandBackend is provided by wayland_linux.go when the Wayland CGO
-// backend is compiled; this stub keeps X11+offscreen working until then.
-func waylandBackend() Backend { return nil }
+func waylandBackend() Backend {
+	if !waylandProbe() {
+		return nil
+	}
+	return WaylandBackend{}
+}
