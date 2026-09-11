@@ -61,3 +61,27 @@ func clampScale(s float32) float32 {
 	}
 	return s
 }
+
+// fitLogicalSize maps a resize event to logical surface units.
+// Wayland configure is logical; older present/configure paths echoed
+// buffer pixels (logical*scale). Treating those as a new logical size
+// re-applies scale and blows up layout on every resize.
+func fitLogicalSize(inW, inH, logicalW, logicalH int, scale float32) (lw, lh int) {
+	if inW < 1 {
+		inW = 1
+	}
+	if inH < 1 {
+		inH = 1
+	}
+	if scale <= 0 {
+		scale = 1
+	}
+	if logicalW > 0 && logicalH > 0 && scale > 1.01 {
+		bw := int(float32(logicalW)*scale + 0.999)
+		bh := int(float32(logicalH)*scale + 0.999)
+		if inW == bw && inH == bh {
+			return logicalW, logicalH
+		}
+	}
+	return inW, inH
+}

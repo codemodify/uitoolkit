@@ -4,6 +4,7 @@ import (
 	"math"
 
 	"github.com/codemodify/paintengine2d"
+	"github.com/codemodify/uitoolkit/style"
 )
 
 // rowCacheCap drops off-screen row groups once the map grows past this.
@@ -15,13 +16,15 @@ type rowSceneCache struct {
 	nodes        map[uint64]*paintengine2d.GroupNode
 	sig          map[uint64]uint64
 	ox, oy, w, h float32
+	look         uint64
 }
 
-func (c *rowSceneCache) ready(ox, oy, w, h float32) {
-	if c.nodes == nil || c.ox != ox || c.oy != oy || c.w != w || c.h != h {
+func (c *rowSceneCache) ready(ox, oy, w, h float32, look uint64) {
+	if c.nodes == nil || c.ox != ox || c.oy != oy || c.w != w || c.h != h || c.look != look {
 		c.nodes = make(map[uint64]*paintengine2d.GroupNode)
 		c.sig = make(map[uint64]uint64)
 		c.ox, c.oy, c.w, c.h = ox, oy, w, h
+		c.look = look
 	}
 }
 
@@ -80,6 +83,17 @@ func visualSig(selected, hovered bool, extra uint64, parts ...string) uint64 {
 }
 
 func bits32(f float32) uint64 { return uint64(math.Float32bits(f)) }
+
+func lookSig(lk style.LookAndFeel) uint64 {
+	if lk == nil {
+		return 0
+	}
+	h := bits32(lk.Metrics().FontSize) ^ bits32(lk.Metrics().RowH)
+	for i, c := range lk.Name() {
+		h ^= uint64(c) << uint(i%8)
+	}
+	return h
+}
 
 // recordScrollingRows paints visible rows in content space (y = i*rowH)
 // under Translation(0, y0-offsetY). Unchanged rows are Attached.

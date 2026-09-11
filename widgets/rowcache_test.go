@@ -8,7 +8,7 @@ import (
 
 func TestRecordScrollingRowsReuses(t *testing.T) {
 	cache := &rowSceneCache{}
-	cache.ready(0, 0, 80, 20)
+	cache.ready(0, 0, 80, 20, 1)
 
 	paint := func(rec *paintengine2d.Recorder, off float32) *paintengine2d.Scene {
 		ctx := paintengine2d.NewContextDevice(rec)

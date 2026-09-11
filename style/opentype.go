@@ -248,6 +248,9 @@ func (a *otAtlas) rasterize(atlas *paintengine2d.FontAtlas, r rune) (paintengine
 		return paintengine2d.AtlasCell{}, err
 	}
 	advance := fx32(adv)
+	if r == ' ' && advance < a.size*0.2 {
+		advance = a.size * 0.3
+	}
 	if len(segs) == 0 {
 		cell := paintengine2d.AtlasCell{Advance: advance}
 		atlas.Cells[paintengine2d.GlyphID(r)] = cell

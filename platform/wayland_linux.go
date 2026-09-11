@@ -1202,10 +1202,17 @@ func (s *wlSurface) Resize(w, h int) error {
 	if h < 1 {
 		h = 1
 	}
+	w, h = fitLogicalSize(w, h, s.logicalW, s.logicalH, s.deviceScale())
+	if s.img != nil && s.img.Width == w && s.img.Height == h {
+		// Caller passed current buffer pixels; keep logical, just sync.
+		if bw, bh := s.bufferWH(); bw == w && bh == h {
+			return nil
+		}
+	}
 	s.logicalW, s.logicalH = w, h
 	s.wantW, s.wantH = w, h
 	bw, bh := s.bufferWH()
-	if s.img.Width == bw && s.img.Height == bh {
+	if s.img != nil && s.img.Width == bw && s.img.Height == bh {
 		return nil
 	}
 	s.img = paintengine2d.NewImage(bw, bh)
@@ -1257,7 +1264,7 @@ func (s *wlSurface) Present(dirty []paintengine2d.Rect) error {
 	bw, bh := s.bufferWH()
 	if s.img.Width != bw || s.img.Height != bh {
 		s.img = paintengine2d.NewImage(bw, bh)
-		s.queue = append(s.queue, Event{Kind: EventResize, Width: bw, Height: bh})
+		s.queue = append(s.queue, Event{Kind: EventResize, Width: s.logicalW, Height: s.logicalH})
 		if s.gpu != nil {
 			s.resizeGPU(bw, bh)
 		}
@@ -1853,7 +1860,7 @@ func uitkWlTopConfigure(sid C.uintptr_t, top *C.struct_xdg_toplevel, w, h C.int3
 		s.logicalW, s.logicalH = int(w), int(h)
 		bw, bh := s.bufferWH()
 		if s.img != nil && (s.img.Width != bw || s.img.Height != bh) {
-			s.push(Event{Kind: EventResize, Width: bw, Height: bh})
+			s.push(Event{Kind: EventResize, Width: int(w), Height: int(h)})
 		}
 	}
 	_ = flags

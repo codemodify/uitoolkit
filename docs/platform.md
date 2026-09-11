@@ -240,9 +240,12 @@ atlases grow.
 On **X11** the window buffer is the pixel size the WM gave; scale only
 grows metrics. On **Wayland** configure size is logical and the shm
 buffer is scaled; pointer events are multiplied so hit-testing matches
-the pixmap. Set `UITK_SCALE` to the compositor scale (often `2`) so
-metrics and buffer scale agree. EGL, dmabuf, and shm share that scale;
-CPU present still uses damage / attach / commit.
+the pixmap. Resize events stay in **logical** units — feeding buffer
+pixels back through `Resize` would re-apply scale and blow up layout.
+Set `UITK_SCALE` to the compositor scale (often `2`) so metrics and
+buffer scale agree. List/table/tree rows and fixed column widths are
+design pixels that grow with the look. EGL, dmabuf, and shm share that
+scale; CPU present still uses damage / attach / commit.
 
 ## Deferred
 

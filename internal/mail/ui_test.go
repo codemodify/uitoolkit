@@ -70,6 +70,56 @@ func TestMailAppPaints(t *testing.T) {
 	w.Close()
 }
 
+func TestMailHiDPIResizeStable(t *testing.T) {
+	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Scale: 2, Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{
+		Title: "Mail", Width: 1280, Height: 800, Headless: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.SetContent(MailApp(a, w))
+	a.PumpOnce()
+
+	var table *widgets.TableView
+	var tree *widgets.TreeView
+	widget.Walk(w.Content(), func(c widget.Component) {
+		if tv, ok := c.(*widgets.TableView); ok && table == nil {
+			table = tv
+		}
+		if tr, ok := c.(*widgets.TreeView); ok && tree == nil {
+			tree = tr
+		}
+	})
+	if table == nil || tree == nil {
+		t.Fatal("missing table/tree")
+	}
+	font0 := table.Look().Font().Size
+	row0 := table.Look().Metrics().RowH
+	fit := style.FittedRowHeight(table.Look(), table.RowHeight)
+	if font0 < 20 || fit < table.Look().Font().Height() {
+		t.Fatalf("hidpi font %v row metric %v fitted %v", font0, row0, fit)
+	}
+
+	w.Inject(platform.Event{Kind: platform.EventResize, Width: 900, Height: 620})
+	a.PumpOnce()
+	w.Inject(platform.Event{Kind: platform.EventResize, Width: 1400, Height: 900})
+	a.PumpOnce()
+	w.Inject(platform.Event{Kind: platform.EventResize, Width: 1100, Height: 700})
+	a.PumpOnce()
+
+	if table.Look().Font().Size != font0 {
+		t.Fatalf("font exploded %v -> %v", font0, table.Look().Font().Size)
+	}
+	if table.Look().Metrics().RowH != row0 {
+		t.Fatalf("row metric %v -> %v", row0, table.Look().Metrics().RowH)
+	}
+	if tree.Look().Font().Size != font0 {
+		t.Fatalf("tree font exploded %v", tree.Look().Font().Size)
+	}
+	w.Close()
+}
+
 func TestComposeAppPaints(t *testing.T) {
 	sock, stop, err := StartDemo(context.Background())
 	if err != nil {

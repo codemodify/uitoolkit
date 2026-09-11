@@ -25,3 +25,14 @@ func TestApplicationExplicitOffscreenBackend(t *testing.T) {
 		t.Fatalf("backend %q", a.BackendName())
 	}
 }
+
+func TestSetLookKeepsDisplayScale(t *testing.T) {
+	a := New(Options{Look: style.DarkLook(), Scale: 2, Headless: true})
+	a.SetLook(style.LightLook())
+	if a.Look().Metrics().FontSize != style.DefaultMetrics().FontSize*2 {
+		t.Fatalf("theme swap dropped scale, font %v", a.Look().Metrics().FontSize)
+	}
+	if a.Look().Name() != "light" {
+		t.Fatalf("look %q", a.Look().Name())
+	}
+}

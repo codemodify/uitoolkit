@@ -9,6 +9,7 @@ type Classic struct {
 	name    string
 	body    *Font
 	title   *Font
+	bold    *Font
 	muted   *Font
 	onAcc   *Font
 	mono    *Font
@@ -30,6 +31,7 @@ func NewClassic(name string, p Palette, m Metrics) *Classic {
 		// OpenType atlases (Titillium / JetBrains Mono); Color tints at draw.
 		body:  BakeFont(m.FontSize, p.Text),
 		title: BakeTitleFont(m.TitleSize, p.Text),
+		bold:  BakeFamily(FamilyUI, WeightBold, m.FontSize, p.Text),
 		muted: BakeFont(m.FontSize, p.TextMuted),
 		onAcc: BakeFont(m.FontSize, p.TextOnAccent),
 		mono:  BakeMonoFont(m.FontSize, p.Text),
@@ -55,11 +57,17 @@ func WithScale(look LookAndFeel, scale float32) LookAndFeel {
 	return NewClassic(c.Name(), c.Palette(), ScaleMetrics(c.Metrics(), scale))
 }
 
-func (l *Classic) Name() string        { return l.name }
-func (l *Classic) Palette() Palette    { return l.palette }
-func (l *Classic) Metrics() Metrics    { return l.metrics }
-func (l *Classic) Font() *Font         { return l.body }
-func (l *Classic) TitleFont() *Font    { return l.title }
+func (l *Classic) Name() string     { return l.name }
+func (l *Classic) Palette() Palette { return l.palette }
+func (l *Classic) Metrics() Metrics { return l.metrics }
+func (l *Classic) Font() *Font      { return l.body }
+func (l *Classic) TitleFont() *Font { return l.title }
+func (l *Classic) BoldFont() *Font {
+	if l.bold != nil {
+		return l.bold
+	}
+	return l.body
+}
 func (l *Classic) MutedFont() *Font    { return l.muted }
 func (l *Classic) OnAccentFont() *Font { return l.onAcc }
 func (l *Classic) MonoFont() *Font     { return l.mono }
@@ -412,33 +420,47 @@ func (l *Classic) DrawTreeRow(ctx *paintengine2d.Context, b paintengine2d.Rect, 
 	if indent <= 0 {
 		indent = 16
 	}
-	x := b.Min.X + 8 + float32(depth)*indent
+	pad := float32(8)
+	if m.RowPad > 0 {
+		pad = m.RowPad + 2
+	}
+	x := b.Min.X + pad + float32(depth)*indent
 	cy := (b.Min.Y + b.Max.Y) * 0.5
 	guide := p.Divider.WithAlpha(0.85)
 	for d := 0; d < depth; d++ {
-		gx := b.Min.X + 8 + float32(d)*indent + 3
+		gx := b.Min.X + pad + float32(d)*indent + 3
 		ctx.DrawRect(paintengine2d.XYWH(gx, b.Min.Y, 1, b.Dy()), paintengine2d.Fill(guide))
 	}
 	if !leaf {
+		u := indent * 0.45
+		if u < 6 {
+			u = 6
+		}
+		if u > 12 {
+			u = 12
+		}
 		chev := paintengine2d.NewPath()
 		if expanded {
-			chev.MoveTo(x, cy-3)
-			chev.LineTo(x+8, cy-3)
-			chev.LineTo(x+4, cy+4)
+			chev.MoveTo(x, cy-u*0.35)
+			chev.LineTo(x+u, cy-u*0.35)
+			chev.LineTo(x+u*0.5, cy+u*0.45)
 			chev.Close()
 		} else {
-			chev.MoveTo(x, cy-5)
-			chev.LineTo(x+7, cy)
-			chev.LineTo(x, cy+5)
+			chev.MoveTo(x, cy-u*0.55)
+			chev.LineTo(x+u*0.85, cy)
+			chev.LineTo(x, cy+u*0.55)
 			chev.Close()
 		}
 		ctx.DrawPath(chev, paintengine2d.Fill(p.TextMuted))
 	}
 	face := l.body
 	if bold {
-		face = l.title
+		face = l.bold
 	}
+	ctx.Save()
+	ctx.ClipRect(b)
 	face.Draw(ctx, label, paintengine2d.Pt(x+14, b.Min.Y+(b.Dy()-face.Height())*0.5), p.Text)
+	ctx.Restore()
 }
 
 func (l *Classic) DrawStatusBar(ctx *paintengine2d.Context, b paintengine2d.Rect, parts []string) {

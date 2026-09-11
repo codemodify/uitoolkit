@@ -4,6 +4,7 @@ import (
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/layout"
 	"github.com/codemodify/uitoolkit/platform"
+	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
 )
 
@@ -43,10 +44,7 @@ func (l *ListView) Measure(c layout.Constraints) paintengine2d.Point {
 func (l *ListView) Arrange(r paintengine2d.Rect) { l.SetBounds(r); l.clamp() }
 
 func (l *ListView) rowH() float32 {
-	if l.RowHeight <= 0 {
-		return 28
-	}
-	return l.RowHeight
+	return style.FittedRowHeight(l.Look(), l.RowHeight)
 }
 
 func (l *ListView) contentH() float32 { return float32(l.Count) * l.rowH() }
@@ -90,7 +88,7 @@ func (l *ListView) Paint(ctx *paintengine2d.Context) {
 	lo, hi := l.visibleRange()
 	if rec, ok := ctx.Device().(*paintengine2d.Recorder); ok {
 		ob := l.Bounds()
-		l.rows.ready(ob.Min.X, ob.Min.Y, b.Dx(), rh)
+		l.rows.ready(ob.Min.X, ob.Min.Y, b.Dx(), rh, lookSig(lk))
 		recordScrollingRows(rec, &l.rows, l.ID()^(1<<32), l.OffsetY, 0, lo, hi,
 			func(i int) uint64 { return l.ID()<<32 | uint64(i) + 1 },
 			func(i int) uint64 {
