@@ -40,14 +40,12 @@ func PrefsApp(a *app.Application, win *app.Window, cli *Client, onChange func())
 	appearTab := prefsAppearance(a, win)
 
 	vipTab := prefsVIP(cli)
-	smartTab := prefsSmart(cli, win)
 	notifyTab := prefsNotify(cli)
 
 	tabs := widgets.NewTabView(
 		widgets.Tab{Title: "Accounts", Content: widgets.NewPad(10, accountsTab)},
 		widgets.Tab{Title: "Identities", Content: widgets.NewPad(10, identsTab)},
 		widgets.Tab{Title: "Filters", Content: widgets.NewPad(10, filtersTab)},
-		widgets.Tab{Title: "Smart", Content: widgets.NewPad(10, smartTab)},
 		widgets.Tab{Title: "VIP", Content: widgets.NewPad(10, vipTab)},
 		widgets.Tab{Title: "Notify", Content: widgets.NewPad(10, notifyTab)},
 		widgets.Tab{Title: "Tags", Content: widgets.NewPad(10, tagsTab)},
@@ -55,7 +53,7 @@ func PrefsApp(a *app.Application, win *app.Window, cli *Client, onChange func())
 	)
 	closeBtn := widgets.NewButton("Close", func() { win.Close() })
 	tools := widgets.NewRow(widgets.NewSpacer(), closeBtn).WithGap(8)
-	chrome := widgets.NewTitleBar("Preferences", "accounts · smart · VIP · notify · v"+uitoolkit.Version)
+	chrome := widgets.NewTitleBar("Preferences", "accounts · VIP · notify · v"+uitoolkit.Version)
 	root := widgets.NewColumn(chrome, tabs, tools, status).WithGap(0)
 	root.AddFlex(tabs, 1)
 	return root
@@ -298,45 +296,8 @@ func prefsVIP(cli *Client) widget.Component {
 	}, nil)
 	return widgets.NewColumn(
 		widgets.NewTitle("VIP senders"),
-		widgets.NewLabel("VIP mail lands in Unified Folders → VIP and can drive VIP-only notifications."),
+		widgets.NewLabel("VIP mail lands in the VIP folder and can drive VIP-only notifications."),
 		table,
-	).WithGap(8)
-}
-
-func prefsSmart(cli *Client, win *app.Window) widget.Component {
-	smart, _ := cli.SmartFolders()
-	var table *widgets.TableView
-	refresh := func() {
-		smart, _ = cli.SmartFolders()
-		if table != nil {
-			table.RowCount = len(smart)
-			table.Invalidate()
-		}
-	}
-	table = widgets.NewTableView([]widgets.TableColumn{
-		{Title: "Name", Sortable: true},
-		{Title: "Query", Width: 220},
-	}, len(smart), func(row, col int) string {
-		if row < 0 || row >= len(smart) {
-			return ""
-		}
-		if col == 1 {
-			return smart[row].Filter.Query
-		}
-		return smart[row].Name
-	}, nil)
-	del := widgets.NewButton("Delete selected", func() {
-		i := table.Selected
-		if i < 0 || i >= len(smart) {
-			return
-		}
-		_ = cli.DeleteSmartFolder(smart[i].ID)
-		refresh()
-	})
-	return widgets.NewColumn(
-		widgets.NewTitle("Smart / Search folders"),
-		widgets.NewLabel("Saved criteria appear in the folder tree. File → New Smart Folder to add one."),
-		table, del,
 	).WithGap(8)
 }
 

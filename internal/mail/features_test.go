@@ -174,6 +174,43 @@ func TestMIMEParseAndSanitize(t *testing.T) {
 	}
 }
 
+func TestGetMessageUsesDiskRawWithoutNetwork(t *testing.T) {
+	dir := t.TempDir()
+	cfg := MailConfig{Accounts: []AccountConfig{{
+		ID: "home", Name: "Ada", Address: "ada@example.com",
+		Identities: []Identity{{ID: "home-1", Name: "Ada", Address: "ada@example.com", Default: true}},
+	}}}
+	s, err := NewLocalStoreDir(cfg, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	inbox, err := s.CreateFolder("home", "Inbox", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := s.Append(inbox.ID, Message{Subject: "Cached", From: "kai@example.com", To: "ada@example.com", Body: "hello from disk raw"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range s.messages {
+		if s.messages[i].ID == id {
+			s.messages[i].Body = ""
+			s.messages[i].HTML = ""
+		}
+	}
+	m, ok := s.GetMessage(id)
+	if !ok {
+		t.Fatal("missing")
+	}
+	if !strings.Contains(m.Body, "hello from disk raw") {
+		t.Fatalf("body from disk %q", m.Body)
+	}
+	m2, ok := s.GetMessage(id)
+	if !ok || !strings.Contains(m2.Body, "hello from disk raw") {
+		t.Fatalf("second get %q ok=%v", m2.Body, ok)
+	}
+}
+
 func TestLocalStoreDiskRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	cfg := MailConfig{Accounts: []AccountConfig{{

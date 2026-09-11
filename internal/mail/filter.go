@@ -15,6 +15,11 @@ type Filter struct {
 	Body        bool   `json:"body,omitempty"`
 }
 
+// Active reports whether any pin or query is on (the list may look empty).
+func (f Filter) Active() bool {
+	return !filterEmpty(f)
+}
+
 // Match reports whether m passes the Quick Filter pins and query.
 func (f Filter) Match(m Message) bool {
 	if f.Unread && m.Read {

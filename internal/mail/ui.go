@@ -105,6 +105,9 @@ type session struct {
 	acctBody                                   *widgets.Label
 	thread                                     widget.Component
 	center                                     *widgets.Stack
+	listHint                                   *widgets.Label
+	clearFilt                                  *widgets.Button
+	hintRow                                    widget.Component
 }
 
 func newSession(a *app.Application, win *app.Window, cli *Client, opts AppOptions) *session {
@@ -224,20 +227,16 @@ func (s *session) build() widget.Component {
 		if n == nil {
 			return
 		}
-		id, ok := n.Data.(FolderID)
-		if !ok || id == "" {
-			if acct, ok := n.Data.(string); ok {
-				if acct == AccountUnified || acct == AccountTags || acct == AccountSmart || acct == AccountCategories {
-					return
-				}
-				s.showAccountCentral(acct)
-			}
+		if id, ok := n.Data.(FolderID); ok && id != "" {
+			s.selectFolder(id)
 			return
 		}
-		s.central = false
-		s.folder = id
-		s.selected = nil
-		s.refreshAll()
+		if acct, ok := n.Data.(string); ok && acct != "" {
+			if acct == AccountTags || acct == AccountUnified || acct == AccountSmart || acct == AccountCategories {
+				return
+			}
+			s.openAccountInbox(acct)
+		}
 	}
 	s.tree.OnContext = func(n *widgets.TreeNode, p paintengine2d.Point) {
 		if n != nil {
@@ -357,7 +356,11 @@ func (s *session) build() widget.Component {
 	s.table.SetVisible(!s.cardView)
 	s.cards.SetVisible(s.cardView)
 	s.listStack = widgets.NewStack(s.table, s.cards)
-	thread := widgets.NewColumn(s.qfBar, s.listStack).WithGap(6).WithPad(8)
+	s.listHint = widgets.NewLabel("")
+	s.clearFilt = widgets.NewButton("Clear filter", s.clearQuickFilter)
+	s.hintRow = widgets.NewRow(s.listHint, widgets.NewSpacer(), s.clearFilt).WithGap(8)
+	s.hintRow.SetVisible(false)
+	thread := widgets.NewColumn(s.qfBar, s.hintRow, s.listStack).WithGap(6).WithPad(8)
 	thread.AddFlex(s.listStack, 1)
 	s.thread = thread
 	s.acctPanel = s.buildAccountCentral()
@@ -415,7 +418,6 @@ func (s *session) menuBar() *widgets.MenuBar {
 			widgets.Item("Get Messages for Current Account", s.getMessages),
 			widgets.Sep(),
 			widgets.Item("Work Offline", s.toggleOnline),
-			widgets.Item("New Smart Folder…", s.newSmartFolder),
 			widgets.Item("Compact Folders", func() { s.mark("Compact Folders (stub)") }),
 			widgets.Item("Empty Trash", s.emptyTrash),
 			widgets.Sep(),
@@ -499,12 +501,6 @@ func (s *session) menuBar() *widgets.MenuBar {
 			widgets.ItemAccel("Previous Message", "p", func() { s.moveSel(-1) }),
 			widgets.Item("Next Unread Message", s.nextUnread),
 			widgets.Sep(),
-			widgets.Item("Unified Inbox", func() {
-				s.central = false
-				s.folder = FolderUnifiedInbox
-				s.selected = nil
-				s.refreshAll()
-			}),
 			widgets.Item("VIP", func() {
 				s.central = false
 				s.folder = FolderVIP
@@ -536,8 +532,6 @@ func (s *session) menuBar() *widgets.MenuBar {
 			widgets.Item("Mute Thread", func() { s.muteThread(true) }),
 			widgets.Item("Unmute Thread", func() { s.muteThread(false) }),
 			widgets.Item("Add sender to VIP", s.addVIP),
-			widgets.Item("Move sender to Primary", func() { s.recategorize(CatPrimary) }),
-			widgets.Item("Move sender to Other", func() { s.recategorize(CatOther) }),
 			widgets.Sep(),
 			widgets.ItemAccel("&Delete", "#", s.deleteSel),
 		),
@@ -545,7 +539,6 @@ func (s *session) menuBar() *widgets.MenuBar {
 			widgets.ItemAccel("Account Settings", "Ctrl+,", s.openPrefs),
 			widgets.Item("Preferences", s.openPrefs),
 			widgets.Item("Message Filters", s.openFilters),
-			widgets.Item("Smart Folders", s.openSmartFolders),
 			widgets.Item("Apply Filters Now", func() {
 				n, err := s.cli.ApplyRules(s.folder)
 				if err != nil {
@@ -679,6 +672,15 @@ func (s *session) cellText(row, col int) string {
 }
 
 func (s *session) visible() []Message {
+	all, err := s.loadVisible()
+	if err != nil {
+		s.mark(err.Error())
+		return nil
+	}
+	return all
+}
+
+func (s *session) loadVisible() ([]Message, error) {
 	f, ok, _ := s.cli.GetFolder(s.folder)
 	kind := FolderInbox
 	if ok {
@@ -687,8 +689,7 @@ func (s *session) visible() []Message {
 	s.kind = kind
 	all, err := s.cli.ListMessages(s.folder, s.filter)
 	if err != nil {
-		s.mark(err.Error())
-		return nil
+		return nil, err
 	}
 	if ids, err := s.cli.MutedThreads(); err == nil {
 		s.muted = map[string]bool{}
@@ -706,13 +707,14 @@ func (s *session) visible() []Message {
 		all = keep
 	}
 	if s.threaded {
-		return groupThreaded(all, kind, s.sortCol, s.sortAsc)
+		return groupThreaded(all, kind, s.sortCol, s.sortAsc), nil
 	}
 	sortMessages(all, s.sortCol, s.sortAsc, kind)
-	return all
+	return all, nil
 }
 
 func (s *session) refreshAll() {
+	s.ensureUsableFolder()
 	s.rebuildTree()
 	s.refreshList()
 	s.refreshAccount()
@@ -721,8 +723,17 @@ func (s *session) refreshAll() {
 }
 
 func (s *session) refreshList() {
-	s.rows = s.visible()
+	s.ensureUsableFolder()
+	rows, err := s.loadVisible()
+	if err != nil {
+		s.mark(err.Error())
+	} else {
+		s.rows = rows
+	}
 	if len(s.selected) == 0 && len(s.rows) > 0 {
+		s.selected = []MessageID{s.rows[0].ID}
+	}
+	if s.primaryIndex() < 0 && len(s.rows) > 0 {
 		s.selected = []MessageID{s.rows[0].ID}
 	}
 	if s.table != nil {
@@ -739,6 +750,7 @@ func (s *session) refreshList() {
 		s.cards.SetVisible(s.cardView)
 		s.cards.Invalidate()
 	}
+	s.updateFilterHint()
 	s.loadPreview()
 	s.refreshStatus()
 }
@@ -753,80 +765,27 @@ func (s *session) rebuildTree() {
 	var roots []*widgets.TreeNode
 	var selected *widgets.TreeNode
 
-	unified := widgets.NewTreeNode("Unified Folders")
-	unified.Data = AccountUnified
-	unified.Expanded = true
+	addVirtual := func(f Folder) {
+		label := f.Name
+		nUnread, _ := s.cli.Unread(f.ID)
+		if nUnread > 0 {
+			label = fmt.Sprintf("%s (%d)", f.Name, nUnread)
+		}
+		n := widgets.NewTreeNode(label)
+		n.Data = f.ID
+		n.Bold = nUnread > 0
+		roots = append(roots, n)
+		if f.ID == s.folder && !s.central {
+			selected = n
+		}
+	}
 	if vfs, err := s.cli.VirtualFolders(); err == nil {
 		for _, f := range vfs {
-			if f.AccountID != AccountUnified {
-				continue
-			}
-			label := f.Name
-			nUnread, _ := s.cli.Unread(f.ID)
-			if nUnread > 0 {
-				label = fmt.Sprintf("%s (%d)", f.Name, nUnread)
-			}
-			n := widgets.NewTreeNode(label)
-			n.Data = f.ID
-			n.Bold = nUnread > 0
-			unified.Children = append(unified.Children, n)
-			if f.ID == s.folder && !s.central {
-				selected = n
+			if f.ID == FolderVIP || f.ID == FolderOutbox {
+				addVirtual(f)
 			}
 		}
 	}
-	roots = append(roots, unified)
-
-	smart := widgets.NewTreeNode("Smart Folders")
-	smart.Data = AccountSmart
-	smart.Expanded = true
-	if sfs, err := s.cli.SmartFolders(); err == nil {
-		for _, sf := range sfs {
-			fid := sf.FolderIDFor()
-			label := sf.Name
-			nUnread, _ := s.cli.Unread(fid)
-			if nUnread > 0 {
-				label = fmt.Sprintf("%s (%d)", sf.Name, nUnread)
-			}
-			n := widgets.NewTreeNode(label)
-			n.Data = fid
-			n.Bold = nUnread > 0
-			smart.Children = append(smart.Children, n)
-			if fid == s.folder && !s.central {
-				selected = n
-			}
-		}
-	}
-	if len(smart.Children) == 0 {
-		n := widgets.NewTreeNode("New…")
-		n.Data = FolderID("")
-		smart.Children = append(smart.Children, n)
-	}
-	roots = append(roots, smart)
-
-	cats := widgets.NewTreeNode("Categories")
-	cats.Data = AccountCategories
-	cats.Expanded = true
-	if vfs, err := s.cli.VirtualFolders(); err == nil {
-		for _, f := range vfs {
-			if f.AccountID != AccountCategories {
-				continue
-			}
-			label := f.Name
-			nUnread, _ := s.cli.Unread(f.ID)
-			if nUnread > 0 {
-				label = fmt.Sprintf("%s (%d)", f.Name, nUnread)
-			}
-			n := widgets.NewTreeNode(label)
-			n.Data = f.ID
-			n.Bold = nUnread > 0
-			cats.Children = append(cats.Children, n)
-			if f.ID == s.folder && !s.central {
-				selected = n
-			}
-		}
-	}
-	roots = append(roots, cats)
 
 	acctUnread := 0
 	for _, acct := range s.accounts() {
@@ -913,10 +872,15 @@ func (s *session) clickRow(i int, add bool) {
 		s.cards.Selected = i
 		s.cards.Invalidate()
 	}
-	if m, ok, _ := s.cli.GetMessage(id); ok && !m.Read {
+	if !s.rows[i].Read {
 		_ = s.cli.SetFlags(id, FlagPatch{Read: boolPtr(true)})
-		s.rows = s.visible()
-		s.rebuildTree()
+		s.rows[i].Read = true
+		if s.table != nil {
+			s.table.Invalidate()
+		}
+		if s.cards != nil {
+			s.cards.Invalidate()
+		}
 	}
 	s.loadPreview()
 	s.refreshStatus()
@@ -1248,8 +1212,20 @@ func (s *session) openSmartFolders() {
 func (s *session) setRead(read bool) {
 	for _, id := range s.ids() {
 		_ = s.cli.SetFlags(id, FlagPatch{Read: boolPtr(read)})
+		for i := range s.rows {
+			if s.rows[i].ID == id {
+				s.rows[i].Read = read
+			}
+		}
 	}
-	s.refreshAll()
+	if s.table != nil {
+		s.table.Invalidate()
+	}
+	if s.cards != nil {
+		s.cards.Invalidate()
+	}
+	s.loadPreview()
+	s.refreshStatus()
 }
 
 func (s *session) toggleStar() {
@@ -1260,8 +1236,20 @@ func (s *session) toggleStar() {
 	star := !m.Starred
 	for _, id := range s.ids() {
 		_ = s.cli.SetFlags(id, FlagPatch{Starred: boolPtr(star)})
+		for i := range s.rows {
+			if s.rows[i].ID == id {
+				s.rows[i].Starred = star
+			}
+		}
 	}
-	s.refreshAll()
+	if s.table != nil {
+		s.table.Invalidate()
+	}
+	if s.cards != nil {
+		s.cards.Invalidate()
+	}
+	s.loadPreview()
+	s.refreshStatus()
 }
 
 func (s *session) toggleTag(tag string) {
@@ -1666,6 +1654,109 @@ func (s *session) showAccountCentral(acct string) {
 	s.selected = nil
 	s.refreshAll()
 	s.showCenter()
+}
+
+func syntheticAccount(id string) bool {
+	return id == AccountUnified || id == AccountTags || id == AccountSmart || id == AccountCategories
+}
+
+func (s *session) ensureUsableFolder() {
+	if s.folder != "" && !HiddenFromFolderTree(s.folder) {
+		if _, ok, err := s.cli.GetFolder(s.folder); err == nil && ok {
+			return
+		}
+	}
+	if inbox, ok := specialFolderClient(s.cli, s.accountID(), FolderInbox); ok {
+		s.folder = inbox.ID
+		s.central = false
+	}
+}
+
+func (s *session) selectFolder(id FolderID) {
+	if HiddenFromFolderTree(id) {
+		s.openAccountInbox(s.accountID())
+		return
+	}
+	s.central = false
+	s.folder = id
+	if f, ok, _ := s.cli.GetFolder(id); ok && f.AccountID != "" && !syntheticAccount(f.AccountID) {
+		s.account = f.AccountID
+	}
+	s.selected = nil
+	s.refreshAll()
+}
+
+func (s *session) openAccountInbox(acct string) {
+	if acct != "" {
+		s.account = acct
+	}
+	s.central = false
+	s.selected = nil
+	if inbox, ok := specialFolderClient(s.cli, s.account, FolderInbox); ok {
+		s.folder = inbox.ID
+	}
+	s.refreshAll()
+}
+
+func (s *session) updateFilterHint() {
+	if s.hintRow == nil || s.listHint == nil {
+		return
+	}
+	active := s.filter.Active()
+	switch {
+	case len(s.rows) == 0 && active:
+		s.listHint.SetText("No messages match this filter.")
+		if s.clearFilt != nil {
+			s.clearFilt.SetVisible(true)
+		}
+		s.hintRow.SetVisible(true)
+	case len(s.rows) == 0:
+		s.listHint.SetText("This folder is empty.")
+		if s.clearFilt != nil {
+			s.clearFilt.SetVisible(false)
+		}
+		s.hintRow.SetVisible(true)
+	case active:
+		s.listHint.SetText(fmt.Sprintf("Filter on · %d shown", len(s.rows)))
+		if s.clearFilt != nil {
+			s.clearFilt.SetVisible(true)
+		}
+		s.hintRow.SetVisible(true)
+	default:
+		s.hintRow.SetVisible(false)
+	}
+	if s.win != nil {
+		s.win.RequestLayout()
+	}
+}
+
+func (s *session) clearQuickFilter() {
+	s.filter = Filter{}
+	if s.qf != nil {
+		s.qf.SetText("")
+	}
+	if s.unreadTg != nil {
+		s.unreadTg.Down = false
+	}
+	if s.starTg != nil {
+		s.starTg.Down = false
+	}
+	if s.attachTg != nil {
+		s.attachTg.Down = false
+	}
+	if s.senderTg != nil {
+		s.senderTg.Down = false
+	}
+	if s.recipTg != nil {
+		s.recipTg.Down = false
+	}
+	if s.subjTg != nil {
+		s.subjTg.Down = false
+	}
+	if s.bodyTg != nil {
+		s.bodyTg.Down = false
+	}
+	s.refreshList()
 }
 
 func (s *session) showCenter() {

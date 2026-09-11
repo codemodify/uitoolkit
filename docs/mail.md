@@ -1,6 +1,6 @@
 # Mail — mailclientd + mailclientui
 
-Thunderbird-chrome mail client on uitoolkit **v0.10.3**. Two processes:
+Thunderbird-chrome mail client on uitoolkit **v0.10.4**. Two processes:
 
 | Process | Role |
 | --- | --- |
@@ -189,7 +189,7 @@ Work Offline (`status.set`) stops treating the transport as reachable; mutations
 
 ## Offline outbox
 
-While offline (or after a transport error), **send / move / delete / flag** apply to the local cache immediately and enqueue an `OutboxOp`. Unified Folders → **Outbox** lists queued sends.
+While offline (or after a transport error), **send / move / delete / flag** apply to the local cache immediately and enqueue an `OutboxOp`. The folder tree **Outbox** node lists queued sends.
 
 Flush: File → Work Offline (toggle back on), Get Messages, or `outbox.flush`.
 
@@ -203,7 +203,7 @@ Conflict-safe cache:
 
 Daemon-side inverted index over subject / from / to / body (AND of tokens). Quick Filter and `messages.search` use it when a query is present, then apply pins.
 
-**Smart / Search folders:** File → New Smart Folder (or Tools → Smart Folders). Saved name + query + current unread/starred/attachment pins become a virtual folder under **Smart Folders**. Editable (put the same id) and deletable from Preferences → Smart.
+**Smart / Search folders:** still exist on the daemon (`smart.*` RPC) but are **not shown** in the folder tree or File/Tools menus as of v0.10.4. Use Quick Filter for ad-hoc search.
 
 ## Threading + mute
 
@@ -212,7 +212,6 @@ Conversations group by `In-Reply-To` / `References` when Message-IDs exist, othe
 **Message → Mute Thread** (and Unmute). Muted threads:
 
 - stay in normal folders with a 🔇 marker
-- drop out of Unified Unread
 - do not drive notifications
 - View → Hide muted threads removes them from the list
 
@@ -222,9 +221,9 @@ Message view stays **text-only**. The attachment list calls `messages.openPart`:
 
 ## VIP, notifications, categories
 
-- **VIP** senders (Message → Add sender to VIP). Unified Folders → **VIP** + unread badge.
+- **VIP** senders (Message → Add sender to VIP). Folder tree → **VIP** + unread badge.
 - **Notification rules** (Preferences → Notify): new mail, optional VIP-only, optional `notify-send` on Linux. No display / no `notify-send` → stub (RPC event `mail.notify` still fires). `UITK_MAIL_NO_NOTIFY=1` disables the desktop helper.
-- **Categories** (Gmail-lite, local): Primary / Transactions / Updates / Promotions / Other. Simple word rules plus a per-sender override (`senders.setCategory` / Message → Move sender to Primary/Other). Folder tree → **Categories**.
+- **Categories** (Gmail-lite, local) still classify on the daemon; they are **not** a folder-tree section as of v0.10.4.
 
 Calendar / iTip is **not** in this release (Tier C later).
 
@@ -273,9 +272,9 @@ Notifications (no `id`): `mail.changed`, `mail.fetched`, `mail.synced`, `mail.no
 | `folders.list` | `{accountId}` |
 | `folders.get` | `{id}` |
 | `folders.create` | `{accountId, name, parent?}` |
-| `folders.virtual` | — Unified / VIP / Outbox / categories / smart / tags |
+| `folders.virtual` | — VIP / Outbox / (hidden unified / categories / smart) / tags |
 | `messages.list` | `{folderId, filter?}` (virtual ids ok) |
-| `messages.get` | `{id}` (fetches MIME body if needed) |
+| `messages.get` | `{id}` (disk raw / in-memory body if already fetched; no extra IMAP) |
 | `messages.search` | `{accountId?, folderId?, filter}` |
 | `messages.setFlags` | `{id, patch}` |
 | `messages.move` | `{ids, dest}` |
@@ -316,7 +315,7 @@ Condition fields: `from`, `to`, `subject`, `body`, `attachment`, `unread`, `tag`
 Actions: `move` (`folder`), `tag`, `markRead`, `markUnread`, `delete`, `stop`.
 AND across conditions. Persist in MemoryStore or the disk cache. Tools → Message Filters.
 
-## UI features (v0.10.3)
+## UI features (v0.10.4)
 
 - **Empty by default** — no demo accounts unless `UITK_MAIL=memory`. First-run Yes/No is only “There are no accounts, want to add one?” Password / `0600` notes are on the Add Account form.
 - **Add account** — IMAP vs POP3 radios, domain auto-guess (including POP hosts), **Test connection** (and optional auto-detect after email+password), masked password field, or Sign in with Google / Microsoft (or device code; IMAP). Saved accounts show the protocol on Account Central and in Preferences. `passEnv` remains an optional fallback.
@@ -324,9 +323,9 @@ AND across conditions. Persist in MemoryStore or the disk cache. Tools → Messa
 - **Text-only Message tab** — prefer `text/plain`; HTML-only mail is tag-stripped. No HTML engine / no HTML tab.
 - **Card / Table** — View → Card view or the Cards toolbar toggle. Remembered in `~/.config/uitoolkit/mailui.json`.
 - **Density** — View → Compact / Default / Relaxed.
-- **Unified Inbox** — plus VIP and Outbox.
-- **Smart Folders** and **Categories** in the folder tree.
+- **Folder tree** — account folders, Tags, VIP, and Outbox. Unified Folders, Smart Folders, and Categories are not shown.
 - **Threaded** view and **Mute Thread**.
+- **Snappy open** — unread click patches the row; preview uses a cached `messages.get` body.
 - **Colored tags**, identities, Sorting Office filters — unchanged.
 
 ## Keyboard (Thunderbird-like)
@@ -351,7 +350,6 @@ UITK_MAIL=memory go run ./cmd/mailclientd
 UITK_SCENE=auto go run ./cmd/mailclientui
 ```
 
-- **Smart folders** — tree → Smart Folders → Invoices (or File → New Smart Folder).
 - **VIP** — open a Kai / Thunderbird Team message → Message → Add sender to VIP; tree → VIP.
 - **Threading** — View → Threaded; look for “Thread: lunch plans (3)”. Message → Mute Thread.
 - **OAuth** — File → Add Account, enter a Gmail/Outlook address (hosts fill in), paste your client id, Sign in with Google / Microsoft. Approve in the browser (or use Device code). Then Get Messages.
@@ -362,4 +360,4 @@ UITK_SCENE=auto go run ./cmd/mailclientui
 go run ./examples/mail -screenshot docs/screenshots
 ```
 
-Writes `mail-dark.png`, `mail-light.png`, `mail-classic.png`, `mail-compose.png`, `mail-prefs.png`, `mail-cards.png`, `mail-compact.png`, `mail-filters.png`, `mail-empty.png` (first-run dialog), `mail-account.png` (Add Account), `mail-smart.png` (Invoices smart folder).
+Writes `mail-dark.png`, `mail-light.png`, `mail-classic.png`, `mail-compose.png`, `mail-prefs.png`, `mail-cards.png`, `mail-compact.png`, `mail-filters.png`, `mail-empty.png` (first-run dialog), `mail-account.png` (Add Account), `mail-smart.png` (daemon saved-search view; not a tree section).

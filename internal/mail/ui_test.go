@@ -216,3 +216,166 @@ func TestWriteScreenshotsDistinct(t *testing.T) {
 		seen[st.Size()] = name
 	}
 }
+
+func TestFolderTreeOmitsVirtualSections(t *testing.T) {
+	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{
+		Title: "Mail", Width: 1280, Height: 800, Headless: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.SetContent(MailApp(a, w))
+	a.PumpOnce()
+
+	var tree *widgets.TreeView
+	widget.Walk(w.Content(), func(c widget.Component) {
+		if tr, ok := c.(*widgets.TreeView); ok && tree == nil {
+			tree = tr
+		}
+	})
+	if tree == nil {
+		t.Fatal("missing tree")
+	}
+	var walk func([]*widgets.TreeNode)
+	walk = func(nodes []*widgets.TreeNode) {
+		for _, n := range nodes {
+			if n == nil {
+				continue
+			}
+			if n.Label == "Unified Folders" || n.Label == "Smart Folders" || n.Label == "Categories" {
+				t.Fatalf("removed section still in tree: %q", n.Label)
+			}
+			walk(n.Children)
+		}
+	}
+	walk(tree.Roots)
+
+	banned := []string{"Unified Inbox", "New Smart Folder", "Smart Folders", "Move sender to Primary"}
+	widget.Walk(w.Content(), func(c widget.Component) {
+		mb, ok := c.(*widgets.MenuBar)
+		if !ok {
+			return
+		}
+		for _, m := range mb.Menus() {
+			for _, it := range m.Items {
+				for _, bad := range banned {
+					if it.Text == bad {
+						t.Fatalf("menu still has %q", bad)
+					}
+				}
+			}
+		}
+	})
+	w.Close()
+}
+
+func TestSelectAccountKeepsInboxList(t *testing.T) {
+	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{
+		Title: "Mail", Width: 1280, Height: 800, Headless: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.SetContent(MailApp(a, w))
+	a.PumpOnce()
+
+	var tree *widgets.TreeView
+	var table *widgets.TableView
+	widget.Walk(w.Content(), func(c widget.Component) {
+		if tr, ok := c.(*widgets.TreeView); ok && tree == nil {
+			tree = tr
+		}
+		if tv, ok := c.(*widgets.TableView); ok && table == nil {
+			table = tv
+		}
+	})
+	if tree == nil || table == nil {
+		t.Fatal("missing table/tree")
+	}
+	if table.RowCount < 1 {
+		t.Fatal("inbox should show messages")
+	}
+	var acct *widgets.TreeNode
+	for _, n := range tree.Roots {
+		if n == nil {
+			continue
+		}
+		if id, ok := n.Data.(string); ok && id != "" && id != AccountTags {
+			acct = n
+			break
+		}
+	}
+	if acct == nil {
+		t.Fatal("no account node")
+	}
+	before := table.RowCount
+	if tree.OnSelect != nil {
+		tree.OnSelect(acct)
+	}
+	a.PumpOnce()
+	if table.RowCount == 0 {
+		t.Fatalf("selecting account wiped the list (had %d)", before)
+	}
+	if !table.Visible() {
+		t.Fatal("thread list hidden after account select")
+	}
+	w.Close()
+}
+
+func TestClickUnreadKeepsList(t *testing.T) {
+	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{
+		Title: "Mail", Width: 1280, Height: 800, Headless: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.SetContent(MailApp(a, w))
+	a.PumpOnce()
+
+	var table *widgets.TableView
+	widget.Walk(w.Content(), func(c widget.Component) {
+		if tv, ok := c.(*widgets.TableView); ok && table == nil {
+			table = tv
+		}
+	})
+	if table == nil || table.RowCount < 1 {
+		t.Fatal("thread table")
+	}
+	unread := -1
+	for i := 0; i < table.RowCount; i++ {
+		if table.CellBold != nil && table.CellBold(i, 2) {
+			unread = i
+			break
+		}
+	}
+	if unread < 0 {
+		unread = 0
+	}
+	before := table.RowCount
+	if table.OnSelect != nil {
+		table.OnSelect(unread)
+	}
+	a.PumpOnce()
+	if table.RowCount == 0 {
+		t.Fatal("clicking a message wiped the list")
+	}
+	if table.RowCount != before {
+		t.Fatalf("row count %d -> %d after click", before, table.RowCount)
+	}
+	w.Close()
+}
+
+func TestHiddenFromFolderTree(t *testing.T) {
+	if !HiddenFromFolderTree(FolderUnifiedInbox) || !HiddenFromFolderTree(FolderUnifiedUnread) {
+		t.Fatal("unified")
+	}
+	if !HiddenFromFolderTree(FolderCatPrimary) || !HiddenFromFolderTree(FolderID("smart/sf-invoices")) {
+		t.Fatal("cat/smart")
+	}
+	if HiddenFromFolderTree(FolderVIP) || HiddenFromFolderTree(FolderOutbox) || HiddenFromFolderTree(TagFolderID("Work")) {
+		t.Fatal("vip/outbox/tag should stay")
+	}
+}
