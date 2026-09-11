@@ -714,9 +714,10 @@ import (
 	"github.com/codemodify/paintengine2d"
 )
 
-// WaylandBackend presents paintengine2d pixmaps through wl_shm XRGB8888
-// by default. linux-dmabuf is opt-in (UITK_WAYLAND_PRESENT=dmabuf) until
-// that path is proven opaque on real compositors.
+// WaylandBackend presents through paintengine2d. When UITK_PAINT=auto|gpu
+// and EGL init works, each window is a wl_egl_window + eglSwapBuffers.
+// Otherwise it keeps the v0.4.1 opaque wl_shm XRGB8888 path. linux-dmabuf
+// is opt-in (UITK_WAYLAND_PRESENT=dmabuf) on the CPU present path.
 type WaylandBackend struct{}
 
 func (WaylandBackend) Name() string { return "wayland" }
@@ -819,6 +820,7 @@ func (WaylandBackend) NewSurface(opts WindowOptions) (Surface, error) {
 	if !s.configured {
 		C.ui_wl_roundtrip(c.dpy)
 	}
+	s.tryBindGPU()
 	return s, nil
 }
 
@@ -939,6 +941,8 @@ type wlSurface struct {
 	deco       *C.struct_zxdg_toplevel_decoration_v1
 	surfSync   unsafe.Pointer // *zwp_linux_surface_synchronization_v1
 	timeline   unsafe.Pointer // *ui_drm_timeline
+	gpu        *paintengine2d.GPUDevice
+	eglWin     unsafe.Pointer // *wl_egl_window
 }
 
 var (
@@ -1107,11 +1111,26 @@ func (c *wlConn) closeLocked() {
 	}
 }
 
-func (s *wlSurface) Title() string                { return s.title }
-func (s *wlSurface) Size() (w, h int)             { return s.img.Width, s.img.Height }
-func (s *wlSurface) Buffer() *paintengine2d.Image { return s.img }
-func (s *wlSurface) Closed() bool                 { return s.closed }
-func (s *wlSurface) Scale() float32               { return s.deviceScale() }
+func (s *wlSurface) Title() string { return s.title }
+func (s *wlSurface) Size() (w, h int) {
+	if s.gpu != nil {
+		return s.gpu.Size()
+	}
+	if s.img != nil {
+		return s.img.Width, s.img.Height
+	}
+	return s.bufferWH()
+}
+func (s *wlSurface) Buffer() *paintengine2d.Image {
+	if s.gpu != nil {
+		if img := s.gpu.Image(); img != nil {
+			return img
+		}
+	}
+	return s.img
+}
+func (s *wlSurface) Closed() bool   { return s.closed }
+func (s *wlSurface) Scale() float32 { return s.deviceScale() }
 
 func (s *wlSurface) deviceScale() float32 {
 	if s.frac > 1 {
@@ -1190,6 +1209,9 @@ func (s *wlSurface) Resize(w, h int) error {
 		return nil
 	}
 	s.img = paintengine2d.NewImage(bw, bh)
+	if s.gpu != nil {
+		s.resizeGPU(bw, bh)
+	}
 	return nil
 }
 
@@ -1236,6 +1258,9 @@ func (s *wlSurface) Present(dirty []paintengine2d.Rect) error {
 	if s.img.Width != bw || s.img.Height != bh {
 		s.img = paintengine2d.NewImage(bw, bh)
 		s.queue = append(s.queue, Event{Kind: EventResize, Width: bw, Height: bh})
+		if s.gpu != nil {
+			s.resizeGPU(bw, bh)
+		}
 	}
 	if s.frac > 1 && s.viewport != nil {
 		if s.scaleSet != 1 {
@@ -1253,6 +1278,15 @@ func (s *wlSurface) Present(dirty []paintengine2d.Rect) error {
 		(s.opaqueW != s.logicalW || s.opaqueH != s.logicalH) {
 		C.ui_wl_opaque(s.conn.compositor, s.surf, C.int(s.logicalW), C.int(s.logicalH))
 		s.opaqueW, s.opaqueH = s.logicalW, s.logicalH
+	}
+	if s.gpu != nil {
+		if err := s.presentGPU(); err == nil {
+			C.ui_wl_flush(s.conn.dpy)
+			return nil
+		}
+		// EGL failed this frame — keep the last GPU frame on the CPU
+		// pixmap and fall back to v0.4.1 opaque shm.
+		s.abandonGPU()
 	}
 	if len(dirty) == 0 {
 		dirty = []paintengine2d.Rect{paintengine2d.XYWH(0, 0, float32(s.img.Width), float32(s.img.Height))}
@@ -1559,6 +1593,7 @@ func (s *wlSurface) Close() error {
 		return nil
 	}
 	s.closed = true
+	s.closeGPU()
 	wlMu.Lock()
 	delete(wlSurfaces, s.id)
 	if s.surf != nil {

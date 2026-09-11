@@ -493,7 +493,9 @@ import (
 	"github.com/codemodify/paintengine2d"
 )
 
-// X11Backend opens Xlib windows and presents premul RGBA via XPutImage.
+// X11Backend presents through paintengine2d. UITK_PAINT=auto|gpu binds
+// GPUDevice to the X window (eglSwapBuffers) when EGL works; otherwise
+// present is dirty-rect XPutImage / MIT-SHM.
 type X11Backend struct{}
 
 func (X11Backend) Name() string { return "x11" }
@@ -534,20 +536,21 @@ func (X11Backend) NewSurface(opts WindowOptions) (Surface, error) {
 	gc := C.ui_gc(c.dpy, win)
 	ic, cbs := x11CreateIC(c.im, win)
 	s := &x11Surface{
-		conn:  c,
-		win:   win,
-		gc:    gc,
+		conn:   c,
+		win:    win,
+		gc:     gc,
 		ic:     ic,
 		ximCbs: cbs,
 		title:  title,
-		img:   paintengine2d.NewImage(w, h),
-		rmask: uint32(C.ui_red_mask(c.dpy)),
-		gmask: uint32(C.ui_green_mask(c.dpy)),
-		bmask: uint32(C.ui_blue_mask(c.dpy)),
+		img:    paintengine2d.NewImage(w, h),
+		rmask:  uint32(C.ui_red_mask(c.dpy)),
+		gmask:  uint32(C.ui_green_mask(c.dpy)),
+		bmask:  uint32(C.ui_blue_mask(c.dpy)),
 	}
 	s.rebuildImageLocked()
 	c.surfaces[win] = s
 	x11Mu.Unlock()
+	s.tryBindGPU()
 	return s, nil
 }
 
@@ -586,27 +589,28 @@ type x11Conn struct {
 }
 
 type x11Surface struct {
-	conn   *x11Conn
-	win    C.Window
-	gc     C.GC
-	ic     C.XIC
-	ximg   *C.XImage
-	title  string
-	img    *paintengine2d.Image
-	xbuf   []byte
-	stride int
-	msb    bool
-	rmask  uint32
-	gmask  uint32
-	bmask  uint32
-	mapped   bool
-	closed   bool
-	shm      bool
-	shmInfo  unsafe.Pointer
+	conn       *x11Conn
+	win        C.Window
+	gc         C.GC
+	ic         C.XIC
+	ximg       *C.XImage
+	title      string
+	img        *paintengine2d.Image
+	xbuf       []byte
+	stride     int
+	msb        bool
+	rmask      uint32
+	gmask      uint32
+	bmask      uint32
+	mapped     bool
+	closed     bool
+	shm        bool
+	shmInfo    unsafe.Pointer
 	imeSpotX   int
 	imeSpotY   int
 	preeditBuf string
 	ximCbs     unsafe.Pointer
+	gpu        *paintengine2d.GPUDevice
 }
 
 var (
@@ -756,10 +760,25 @@ func nativeDetectScale() float32 {
 	return scaleFromDPI(dpi)
 }
 
-func (s *x11Surface) Title() string                { return s.title }
-func (s *x11Surface) Size() (w, h int)             { return s.img.Width, s.img.Height }
-func (s *x11Surface) Buffer() *paintengine2d.Image { return s.img }
-func (s *x11Surface) Closed() bool                 { return s.closed }
+func (s *x11Surface) Title() string { return s.title }
+func (s *x11Surface) Size() (w, h int) {
+	if s.gpu != nil {
+		return s.gpu.Size()
+	}
+	if s.img != nil {
+		return s.img.Width, s.img.Height
+	}
+	return 0, 0
+}
+func (s *x11Surface) Buffer() *paintengine2d.Image {
+	if s.gpu != nil {
+		if img := s.gpu.Image(); img != nil {
+			return img
+		}
+	}
+	return s.img
+}
+func (s *x11Surface) Closed() bool { return s.closed }
 func (s *x11Surface) Scale() float32 {
 	if s.conn != nil && s.conn.scale > 0 {
 		return s.conn.scale
@@ -799,7 +818,12 @@ func (s *x11Surface) Resize(w, h int) error {
 	}
 	s.img = paintengine2d.NewImage(w, h)
 	x11Mu.Lock()
-	s.rebuildImageLocked()
+	if s.gpu != nil {
+		s.resizeGPU(w, h)
+	}
+	if s.gpu == nil {
+		s.rebuildImageLocked()
+	}
 	if s.conn != nil && s.conn.dpy != nil && s.win != 0 {
 		C.ui_resize_win(s.conn.dpy, s.win, C.int(w), C.int(h))
 	}
@@ -916,7 +940,32 @@ func (s *x11Surface) copyRect(r paintengine2d.Rect) {
 }
 
 func (s *x11Surface) Present(dirty []paintengine2d.Rect) error {
-	if s.closed || s.conn == nil || s.conn.dpy == nil || s.ximg == nil {
+	if s.closed || s.conn == nil || s.conn.dpy == nil {
+		return nil
+	}
+	if s.gpu != nil {
+		if err := s.presentGPU(); err == nil {
+			x11Mu.Lock()
+			if !s.mapped && s.conn.dpy != nil && s.win != 0 {
+				C.ui_map(s.conn.dpy, s.win)
+				s.mapped = true
+			}
+			if s.conn.dpy != nil {
+				C.ui_flush(s.conn.dpy)
+			}
+			x11Mu.Unlock()
+			return nil
+		}
+		// EGL failed this frame — keep the last GPU frame and fall
+		// back to XPutImage / MIT-SHM.
+		s.abandonGPU()
+		x11Mu.Lock()
+		if s.ximg == nil {
+			s.rebuildImageLocked()
+		}
+		x11Mu.Unlock()
+	}
+	if s.ximg == nil {
 		return nil
 	}
 	if len(dirty) == 0 {
@@ -1028,7 +1077,12 @@ func (s *x11Surface) translate(xe *C.XEvent) []Event {
 				h = 1
 			}
 			s.img = paintengine2d.NewImage(w, h)
-			s.rebuildImageLocked()
+			if s.gpu != nil {
+				s.resizeGPU(w, h)
+			}
+			if s.gpu == nil {
+				s.rebuildImageLocked()
+			}
 			return []Event{{Kind: EventResize, Width: w, Height: h}}
 		}
 	case C.ButtonPress, C.ButtonRelease:
@@ -1135,6 +1189,7 @@ func (s *x11Surface) Close() error {
 		return nil
 	}
 	s.closed = true
+	s.closeGPU()
 	if s.conn != nil {
 		s.conn.unregister(s.win)
 	}

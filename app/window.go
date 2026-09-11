@@ -570,11 +570,10 @@ func (w *Window) frame() {
 	if w.dirty.Empty() && !w.full {
 		return
 	}
-	img := w.surf.Buffer()
-	if img == nil {
+	ctx := platform.NewPaintContext(w.surf)
+	if ctx == nil {
 		return
 	}
-	ctx := paintengine2d.NewContext(img)
 	var paintDirty *paintengine2d.Damage
 	if w.full {
 		ctx.Clear(w.look.Palette().Background)
@@ -603,7 +602,7 @@ func (w *Window) frame() {
 	}
 	rects := append([]paintengine2d.Rect(nil), w.dirty.Rects...)
 	if w.full {
-		ww, hh := img.Width, img.Height
+		ww, hh := w.surf.Size()
 		rects = []paintengine2d.Rect{paintengine2d.XYWH(0, 0, float32(ww), float32(hh))}
 	}
 	_ = w.surf.Present(rects)

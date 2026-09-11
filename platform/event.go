@@ -128,15 +128,15 @@ const (
 
 // Event is a platform-translated input or window event.
 type Event struct {
-	Kind   EventKind
-	Pos    paintengine2d.Point
-	Button MouseButton
-	Scroll paintengine2d.Point
-	Key    Key
-	Rune   rune
-	Mods   Modifiers
-	Width    int
-	Height   int
+	Kind         EventKind
+	Pos          paintengine2d.Point
+	Button       MouseButton
+	Scroll       paintengine2d.Point
+	Key          Key
+	Rune         rune
+	Mods         Modifiers
+	Width        int
+	Height       int
 	Text         string // IME preedit or commit (UTF-8)
 	IMECaret     int    // caret within EventIMEPreedit text
 	IMEDelBefore int    // text-input-v3 delete_surrounding bytes before caret
@@ -155,8 +155,8 @@ type WindowOptions struct {
 	BackgroundPixel uint32
 }
 
-// Surface is the OS (or offscreen) window seam. The toolkit paints into
-// Buffer via paintengine2d.WrapImage / NewImage and calls Present.
+// Surface is the OS (or offscreen) window seam. The toolkit paints with
+// NewPaintContext (GPUDevice when EGL is bound, else Buffer) and calls Present.
 type Surface interface {
 	Title() string
 	SetTitle(title string)

@@ -35,7 +35,7 @@ func TestX11SurfacePresentAndClose(t *testing.T) {
 	if img == nil || img.Width != 160 {
 		t.Fatalf("buffer %+v", img)
 	}
-	ctx := paintengine2d.NewContext(img)
+	ctx := NewPaintContext(s)
 	ctx.Clear(paintengine2d.RGB(0.2, 0.4, 0.8))
 	if err := s.Present(nil); err != nil {
 		t.Fatal(err)
@@ -144,6 +144,32 @@ func TestX11EWMHAndIMECursor(t *testing.T) {
 	SetMaximized(s, false)
 	if ime, ok := s.(IMESurface); ok {
 		ime.SetIMECursor(10, 20, 2, 16)
+	}
+}
+
+func TestX11EGLOrCPUFallback(t *testing.T) {
+	if os.Getenv("DISPLAY") == "" {
+		t.Skip("no DISPLAY")
+	}
+	t.Setenv(EnvPaint, paintengine2d.PaintAuto)
+	b := X11Backend{}
+	s, err := b.NewSurface(WindowOptions{Title: "uitoolkit-x11-egl", Width: 160, Height: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ctx := NewPaintContext(s)
+	if ctx == nil {
+		t.Fatal("paint context")
+	}
+	ctx.Clear(paintengine2d.RGB(0.2, 0.3, 0.5))
+	if err := s.Present(nil); err != nil {
+		t.Fatal(err)
+	}
+	if SurfaceUsesGPU(s) {
+		t.Log("present: X11 EGL + eglSwapBuffers")
+	} else {
+		t.Log("present: XPutImage (EGL unavailable)")
 	}
 }
 

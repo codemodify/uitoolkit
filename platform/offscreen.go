@@ -48,6 +48,15 @@ func (o *Offscreen) Resize(w, h int) error {
 	return nil
 }
 
+func (o *Offscreen) PaintDevice() paintengine2d.Device {
+	if o == nil || o.img == nil {
+		return nil
+	}
+	return paintengine2d.NewCPUDevice(o.img)
+}
+
+func (o *Offscreen) UsesGPU() bool { return false }
+
 func (o *Offscreen) Present(dirty []paintengine2d.Rect) error {
 	_ = dirty
 	return nil

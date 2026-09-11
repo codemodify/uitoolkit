@@ -33,7 +33,7 @@ func TestWaylandSurfacePresent(t *testing.T) {
 	if s.Buffer() == nil || s.Buffer().Width != 160 {
 		t.Fatalf("buffer %+v", s.Buffer())
 	}
-	ctx := paintengine2d.NewContext(s.Buffer())
+	ctx := NewPaintContext(s)
 	ctx.Clear(paintengine2d.RGB(0.1, 0.3, 0.6))
 	if err := s.Present(nil); err != nil {
 		t.Fatal(err)
@@ -107,6 +107,7 @@ func TestWaylandAutoPresentIsSHM(t *testing.T) {
 	if os.Getenv("WAYLAND_DISPLAY") == "" || !waylandProbe() {
 		t.Skip("no Wayland compositor")
 	}
+	t.Setenv(EnvPaint, paintengine2d.PaintCPU)
 	t.Setenv(EnvWaylandPresent, WaylandPresentAuto)
 	b := WaylandBackend{}
 	s, err := b.NewSurface(WindowOptions{Title: "uitoolkit-wl-auto", Width: 120, Height: 80})
@@ -114,10 +115,13 @@ func TestWaylandAutoPresentIsSHM(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
-	ctx := paintengine2d.NewContext(s.Buffer())
+	ctx := NewPaintContext(s)
 	ctx.Clear(paintengine2d.RGB(0.3, 0.2, 0.1))
 	if err := s.Present(nil); err != nil {
 		t.Fatal(err)
+	}
+	if SurfaceUsesGPU(s) {
+		t.Fatal("UITK_PAINT=cpu must not bind EGL")
 	}
 	if waylandUsingDmabuf() {
 		t.Fatal("auto must present via wl_shm (dmabuf is opt-in)")
@@ -128,6 +132,7 @@ func TestWaylandPresentOpaqueColor(t *testing.T) {
 	if os.Getenv("WAYLAND_DISPLAY") == "" || !waylandProbe() {
 		t.Skip("no Wayland compositor")
 	}
+	t.Setenv(EnvPaint, paintengine2d.PaintCPU)
 	t.Setenv(EnvWaylandPresent, WaylandPresentSHM)
 	b := WaylandBackend{}
 	s, err := b.NewSurface(WindowOptions{Title: "uitoolkit-wl-opaque", Width: 64, Height: 48})
@@ -139,7 +144,7 @@ func TestWaylandPresentOpaqueColor(t *testing.T) {
 	if !ok {
 		t.Fatal("wlSurface")
 	}
-	ctx := paintengine2d.NewContext(s.Buffer())
+	ctx := NewPaintContext(s)
 	ctx.Clear(paintengine2d.RGB(0.25, 0.50, 1.0))
 	if err := s.Present(nil); err != nil {
 		t.Fatal(err)
@@ -185,6 +190,7 @@ func TestWaylandPresentSHMOverride(t *testing.T) {
 	if os.Getenv("WAYLAND_DISPLAY") == "" || !waylandProbe() {
 		t.Skip("no Wayland compositor")
 	}
+	t.Setenv(EnvPaint, paintengine2d.PaintCPU)
 	t.Setenv(EnvWaylandPresent, WaylandPresentSHM)
 	// Force a fresh connection so the env is honored.
 	if waylandLive() {
@@ -196,7 +202,7 @@ func TestWaylandPresentSHMOverride(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
-	ctx := paintengine2d.NewContext(s.Buffer())
+	ctx := NewPaintContext(s)
 	ctx.Clear(paintengine2d.RGB(0.2, 0.4, 0.1))
 	if err := s.Present(nil); err != nil {
 		t.Fatal(err)
@@ -215,6 +221,7 @@ func TestWaylandDmabufPathOrSkip(t *testing.T) {
 		t.Skip("no local dmabuf allocator")
 	}
 	t.Logf("dmabuf allocator: %s", dmabufAllocatorName())
+	t.Setenv(EnvPaint, paintengine2d.PaintCPU)
 	t.Setenv(EnvWaylandPresent, WaylandPresentDmabuf)
 	b := WaylandBackend{}
 	s, err := b.NewSurface(WindowOptions{Title: "uitoolkit-wl-dmabuf", Width: 140, Height: 90})
@@ -222,7 +229,7 @@ func TestWaylandDmabufPathOrSkip(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
-	ctx := paintengine2d.NewContext(s.Buffer())
+	ctx := NewPaintContext(s)
 	ctx.Clear(paintengine2d.RGB(0.5, 0.1, 0.2))
 	if err := s.Present(nil); err != nil {
 		t.Fatal(err)
@@ -230,7 +237,7 @@ func TestWaylandDmabufPathOrSkip(t *testing.T) {
 	if err := s.Resize(160, 100); err != nil {
 		t.Fatal(err)
 	}
-	ctx = paintengine2d.NewContext(s.Buffer())
+	ctx = NewPaintContext(s)
 	ctx.Clear(paintengine2d.RGB(0.1, 0.5, 0.3))
 	if err := s.Present(nil); err != nil {
 		t.Fatal(err)
@@ -248,6 +255,40 @@ func TestWaylandDmabufAllocatorProbe(t *testing.T) {
 		return
 	}
 	t.Log("dmabuf allocator unavailable (no GBM/DRM, dma-heap, or udmabuf); present will use wl_shm")
+}
+
+func TestWaylandEGLOrCPUFallback(t *testing.T) {
+	if os.Getenv("WAYLAND_DISPLAY") == "" || !waylandProbe() {
+		t.Skip("no Wayland compositor")
+	}
+	t.Setenv(EnvPaint, paintengine2d.PaintAuto)
+	b := WaylandBackend{}
+	s, err := b.NewSurface(WindowOptions{Title: "uitoolkit-wl-egl", Width: 140, Height: 90})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ctx := NewPaintContext(s)
+	if ctx == nil {
+		t.Fatal("paint context")
+	}
+	ctx.Clear(paintengine2d.RGB(0.15, 0.35, 0.55))
+	if err := s.Present(nil); err != nil {
+		t.Fatal(err)
+	}
+	if SurfaceUsesGPU(s) {
+		t.Log("present: wl_egl_window + eglSwapBuffers")
+	} else {
+		t.Log("present: v0.4.1 opaque wl_shm (EGL unavailable)")
+	}
+	if err := s.Resize(160, 100); err != nil {
+		t.Fatal(err)
+	}
+	ctx = NewPaintContext(s)
+	ctx.Clear(paintengine2d.RGB(0.4, 0.2, 0.1))
+	if err := s.Present(nil); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestSelectWaylandFallsBack(t *testing.T) {
