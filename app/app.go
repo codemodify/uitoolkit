@@ -118,22 +118,23 @@ func (a *Application) Windows() []*Window {
 	return out
 }
 
-// Run pumps events until Quit or the last window closes.
+const caretBlinkPeriod = 530 * time.Millisecond
+
+// Run waits on the display connection and paints only when a window is
+// dirty, a caret blinks, a tooltip is due, or (on Wayland) a key repeat
+// fires. Idle gallery no longer wakes at 60 Hz.
 func (a *Application) Run() error {
 	if len(a.windows) == 0 {
 		return fmt.Errorf("uitoolkit: Run with no windows")
 	}
-	ticker := time.NewTicker(16 * time.Millisecond)
-	defer ticker.Stop()
-	blink := time.NewTicker(530 * time.Millisecond)
-	defer blink.Stop()
+	var nextBlink time.Time
 	for !a.quit {
-		select {
-		case <-blink.C:
+		now := time.Now()
+		if a.anyCaret() && (nextBlink.IsZero() || !now.Before(nextBlink)) {
 			for _, w := range a.Windows() {
 				w.toggleBlink()
 			}
-		case <-ticker.C:
+			nextBlink = now.Add(caretBlinkPeriod)
 		}
 		alive := 0
 		for _, w := range a.Windows() {
@@ -148,12 +149,86 @@ func (a *Application) Run() error {
 		a.reap()
 		if alive == 0 {
 			a.quit = true
+			break
 		}
+		if a.quit {
+			break
+		}
+		timeout := a.waitTimeout(time.Now(), nextBlink)
+		if a.anyNeedsPaint() {
+			timeout = 0
+		}
+		a.waitDisplay(timeout)
 	}
 	if a.onQuit != nil {
 		a.onQuit()
 	}
 	return nil
+}
+
+func (a *Application) anyCaret() bool {
+	for _, w := range a.Windows() {
+		if w.wantsBlink() {
+			return true
+		}
+	}
+	return false
+}
+
+func (a *Application) anyNeedsPaint() bool {
+	for _, w := range a.Windows() {
+		if w.needsPaint() {
+			return true
+		}
+	}
+	return false
+}
+
+func (a *Application) waitTimeout(now, nextBlink time.Time) time.Duration {
+	var deadline time.Time
+	if a.anyCaret() {
+		if nextBlink.IsZero() {
+			deadline = now.Add(caretBlinkPeriod)
+		} else {
+			deadline = nextBlink
+		}
+	}
+	for _, w := range a.Windows() {
+		if d, ok := w.tipDeadline(now); ok {
+			if deadline.IsZero() || d.Before(deadline) {
+				deadline = d
+			}
+		}
+		if t := platform.SurfaceWakeAt(w.surf); !t.IsZero() {
+			if deadline.IsZero() || t.Before(deadline) {
+				deadline = t
+			}
+		}
+		if w.animPeriod > 0 {
+			t := now.Add(w.animPeriod)
+			if deadline.IsZero() || t.Before(deadline) {
+				deadline = t
+			}
+		}
+	}
+	if deadline.IsZero() {
+		return -1
+	}
+	wait := deadline.Sub(now)
+	if wait < 0 {
+		return 0
+	}
+	return wait
+}
+
+func (a *Application) waitDisplay(timeout time.Duration) {
+	for _, w := range a.Windows() {
+		if _, ok := w.surf.(platform.DisplayWaiter); ok {
+			platform.WaitDisplay(w.surf, timeout)
+			return
+		}
+	}
+	platform.WaitDisplay(nil, timeout)
 }
 
 // PumpOnce processes one frame on every window (tests / screenshots).

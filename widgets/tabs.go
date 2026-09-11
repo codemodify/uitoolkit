@@ -91,11 +91,21 @@ func (t *TabBar) Paint(ctx *paintengine2d.Context) {
 	}
 }
 
+func (t *TabBar) invalidateTab(i int) {
+	rects := t.tabRects()
+	if i < 0 || i >= len(rects) {
+		return
+	}
+	t.InvalidateRect(rects[i].Inset(-1))
+}
+
 func (t *TabBar) MouseMove(e widget.MouseEvent) bool {
 	i := t.indexAt(e.Pos.X)
 	if i != t.hover {
+		old := t.hover
 		t.hover = i
-		t.Invalidate()
+		t.invalidateTab(old)
+		t.invalidateTab(i)
 	}
 	return true
 }

@@ -167,16 +167,39 @@ func (t *TreeView) expanderHit(e widget.MouseEvent, n *TreeNode, depth int) bool
 	return e.Pos.X >= x-2 && e.Pos.X <= x+14
 }
 
+func (t *TreeView) invalidateNode(n *TreeNode) {
+	if n == nil {
+		return
+	}
+	rows := t.flatten()
+	rh := t.rowH()
+	for i, row := range rows {
+		if row.node == n {
+			y := float32(i)*rh - t.OffsetY
+			t.InvalidateRect(paintengine2d.XYWH(0, y, t.LocalBounds().Dx(), rh).Inset(-1))
+			return
+		}
+	}
+}
+
+func (t *TreeView) MouseEnter() {}
+
 func (t *TreeView) MouseMove(e widget.MouseEvent) bool {
 	n := t.nodeAt(e.Pos.Y)
 	if n != t.hover {
+		old := t.hover
 		t.hover = n
-		t.Invalidate()
+		t.invalidateNode(old)
+		t.invalidateNode(n)
 	}
 	return true
 }
 
-func (t *TreeView) MouseExit() { t.hover = nil; t.Invalidate() }
+func (t *TreeView) MouseExit() {
+	old := t.hover
+	t.hover = nil
+	t.invalidateNode(old)
+}
 
 func (t *TreeView) MousePress(e widget.MouseEvent) bool {
 	if !t.Enabled() {

@@ -132,11 +132,21 @@ func (m *MenuBar) Paint(ctx *paintengine2d.Context) {
 	}
 }
 
+func (m *MenuBar) invalidateTitle(i int) {
+	rects := m.titleRects()
+	if i < 0 || i >= len(rects) {
+		return
+	}
+	m.InvalidateRect(rects[i].Inset(-1))
+}
+
 func (m *MenuBar) MouseMove(e widget.MouseEvent) bool {
 	i := m.titleAt(e.Pos.X)
 	if i != m.hover {
+		old := m.hover
 		m.hover = i
-		m.Invalidate()
+		m.invalidateTitle(old)
+		m.invalidateTitle(i)
 	}
 	if m.open >= 0 && i >= 0 && i != m.open {
 		m.Open(i)
@@ -378,14 +388,23 @@ func (p *PopupMenu) Paint(ctx *paintengine2d.Context) {
 	}
 }
 
+func (p *PopupMenu) invalidateRow(i int) {
+	r := p.rowBounds(i)
+	if !r.Empty() {
+		p.InvalidateRect(r.Inset(-1))
+	}
+}
+
 func (p *PopupMenu) MouseMove(e widget.MouseEvent) bool {
 	i := p.rowAt(e.Pos.Y)
 	if i != p.hover {
+		old := p.hover
 		p.hover = i
 		if i >= 0 && p.Items[i] != nil && !p.Items[i].Separator {
 			p.focus = i
 		}
-		p.Invalidate()
+		p.invalidateRow(old)
+		p.invalidateRow(i)
 	}
 	return true
 }

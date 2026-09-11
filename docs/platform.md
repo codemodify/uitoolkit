@@ -74,9 +74,23 @@ needs EGL / GLES2. `CGO_ENABLED=0` never needs those libraries.
   then Xft.dpi, then RandR output mm vs CRTC pixels, then screen mm.
   Buffer and event coordinates stay device pixels; metrics grow with scale.
 
-## Paint backend (0.5.0)
+## Run loop (0.5.1)
 
-`UITK_PAINT` is defined by paintengine2d and honored here:
+`Application.Run` is event-driven. It blocks on the Wayland (`wl_display_get_fd`)
+or X11 (`ConnectionNumber`) file descriptor with `poll` / `select`. A timeout
+is used only for caret blink (530 ms, text fields only), tooltip delay,
+Wayland key repeat, or `Window.RequestAnim`. Idle gallery should nearly
+sleep: no 16 ms ticker, and `Present` / `eglSwapBuffers` run only when
+`Damage` is non-empty.
+
+Hover on virtualized rows (list / table / tree) and chrome strips
+(toolbar / menubar / tabs) invalidates the old and new item, not the
+whole window.
+
+## Paint backend (0.5.0 / 0.5.1)
+
+`UITK_PAINT` is defined by paintengine2d and honored here. It selects the
+**paint device**, not the event loop:
 
 | Value | Window paint | Present |
 | --- | --- | --- |
@@ -93,6 +107,11 @@ opaque UI cannot present as a fully transparent ARGB surface.
 `platform.NewPaintContext` is the toolkit paint seam: `GPUDevice` when
 bound, otherwise a CPU device wrapping `Surface.Buffer`. Offscreen and
 `CGO_ENABLED=0` stay on the CPU path.
+
+A transparent Wayland window is a present-path bug, not an idle-loop
+bug. If a window is fully transparent, set `UITK_PAINT=cpu` and/or
+`UITK_WAYLAND_PRESENT=shm` (opaque `XRGB8888`). GPU window configs still
+request `EGL_ALPHA_SIZE` 0.
 
 ## Wayland notes (0.4.1 / 0.5.0)
 

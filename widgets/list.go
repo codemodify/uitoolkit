@@ -110,16 +110,39 @@ func (l *ListView) indexAt(y float32) int {
 	return i
 }
 
+func (l *ListView) rowRect(i int) paintengine2d.Rect {
+	if i < 0 {
+		return paintengine2d.Rect{}
+	}
+	rh := l.rowH()
+	y := float32(i)*rh - l.OffsetY
+	return paintengine2d.XYWH(0, y, l.LocalBounds().Dx(), rh)
+}
+
+func (l *ListView) invalidateRow(i int) {
+	if r := l.rowRect(i); !r.Empty() {
+		l.InvalidateRect(r.Inset(-1))
+	}
+}
+
+func (l *ListView) MouseEnter() {}
+
 func (l *ListView) MouseMove(e widget.MouseEvent) bool {
 	h := l.indexAt(e.Pos.Y)
 	if h != l.hovered {
+		old := l.hovered
 		l.hovered = h
-		l.Invalidate()
+		l.invalidateRow(old)
+		l.invalidateRow(h)
 	}
 	return true
 }
 
-func (l *ListView) MouseExit() { l.hovered = -1; l.Invalidate() }
+func (l *ListView) MouseExit() {
+	old := l.hovered
+	l.hovered = -1
+	l.invalidateRow(old)
+}
 
 func (l *ListView) MousePress(e widget.MouseEvent) bool {
 	l.RequestFocus()
