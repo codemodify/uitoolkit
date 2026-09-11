@@ -862,7 +862,13 @@ func (l *Classic) DrawTableHeader(ctx *paintengine2d.Context, b paintengine2d.Re
 		chevW = 14
 	}
 	ty := b.Min.Y + (b.Dy()-l.body.Height())*0.5
-	inner := paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad-chevW-4, b.Dy())
+	tw := l.body.Advance(label)
+	innerW := b.Dx() - pad - chevW - 4
+	if tw > 0 && tw <= b.Dx()-chevW-4 && innerW < tw {
+		pad = 2
+		innerW = b.Dx() - pad - chevW - 4
+	}
+	inner := paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, innerW, b.Dy())
 	ctx.Save()
 	ctx.ClipRect(inner)
 	l.body.Draw(ctx, l.body.Fit(label, inner.Dx()), paintengine2d.Pt(inner.Min.X, ty), p.Text)
@@ -893,7 +899,7 @@ func (l *Classic) DrawTableCell(ctx *paintengine2d.Context, b paintengine2d.Rect
 		ctx.DrawRect(b, paintengine2d.Fill(p.Highlight))
 	}
 	f := l.faceOrBody(face)
-	pad := float32(8)
+	pad := tableCellPad(b.Dx(), f.Advance(label))
 	avail := b.Dx() - pad*2
 	if avail < 4 {
 		avail = 4
@@ -913,6 +919,20 @@ func (l *Classic) DrawTableCell(ctx *paintengine2d.Context, b paintengine2d.Rect
 	f.Draw(ctx, label, paintengine2d.Pt(x, ty), p.Text)
 	ctx.Restore()
 	ctx.DrawRect(paintengine2d.XYWH(b.Max.X-1, b.Min.Y, 1, b.Dy()), paintengine2d.Fill(p.Divider.WithAlpha(0.55)))
+}
+
+// tableCellPad keeps the default 8px inset unless the full label already
+// fits the cell with a tighter pad (28px ★/📎 columns). Fit must not
+// replace a glyph that the column can show.
+func tableCellPad(cellW, textW float32) float32 {
+	pad := float32(8)
+	if textW > 0 && textW <= cellW-4 && cellW-pad*2 < textW {
+		pad = (cellW - textW) * 0.5
+		if pad < 2 {
+			pad = 2
+		}
+	}
+	return pad
 }
 
 func (l *Classic) DrawSpinner(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, upHover, downHover, upPress, downPress bool) {

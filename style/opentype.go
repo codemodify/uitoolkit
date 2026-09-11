@@ -233,6 +233,9 @@ func (a *otAtlas) rasterize(atlas *paintengine2d.FontAtlas, r rune) (paintengine
 	}
 	if gid == 0 && r != ' ' && r != 0 {
 		tf.mu.Unlock()
+		if p, adv := symbolFallback(r, a.size); p != nil {
+			return a.blitPath(atlas, r, p, adv)
+		}
 		if r > 127 {
 			return paintengine2d.AtlasCell{}, nil
 		}
@@ -252,11 +255,19 @@ func (a *otAtlas) rasterize(atlas *paintengine2d.FontAtlas, r rune) (paintengine
 		advance = a.size * 0.3
 	}
 	if len(segs) == 0 {
+		return a.blitPath(atlas, r, nil, advance)
+	}
+	return a.blitPath(atlas, r, segmentsPath(segs), advance)
+}
+
+// blitPath rasterizes p into the white atlas. Font space is baseline origin,
+// Y down (same as sfnt). Engine DrawPath does the AA; we only pack the sheet.
+func (a *otAtlas) blitPath(atlas *paintengine2d.FontAtlas, r rune, p *paintengine2d.Path, advance float32) (paintengine2d.AtlasCell, error) {
+	if p == nil || p.Empty() {
 		cell := paintengine2d.AtlasCell{Advance: advance}
 		atlas.Cells[paintengine2d.GlyphID(r)] = cell
 		return cell, nil
 	}
-	p := segmentsPath(segs)
 	b := p.Bounds()
 	xmin, ymin, xmax, ymax := b.Min.X, b.Min.Y, b.Max.X, b.Max.Y
 	if xmax <= xmin {

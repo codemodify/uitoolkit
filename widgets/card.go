@@ -163,7 +163,7 @@ func (l *CardList) Paint(ctx *paintengine2d.Context) {
 			func(i int) uint64 {
 				c := l.cardAt(i)
 				return visualSig(i == l.Selected, i == l.hovered, bits32(b.Dx()),
-					c.Title, c.Subtitle, c.Meta, c.Snippet)
+					cardSigParts(c)...)
 			},
 			func(i int) {
 				y := float32(i)*rh - l.OffsetY
@@ -182,6 +182,20 @@ func (l *CardList) Paint(ctx *paintengine2d.Context) {
 	if l.Focused() {
 		lk.DrawFocusRing(ctx, b.Inset(-2))
 	}
+}
+
+func cardSigParts(c CardContent) []string {
+	parts := []string{c.Title, c.Subtitle, c.Meta, c.Snippet}
+	if c.Starred {
+		parts = append(parts, "★")
+	}
+	if c.Bold {
+		parts = append(parts, "B")
+	}
+	for _, b := range c.Badges {
+		parts = append(parts, b.Label)
+	}
+	return parts
 }
 
 func paintCard(lk style.LookAndFeel, ctx *paintengine2d.Context, b paintengine2d.Rect, c CardContent, selected, hovered bool) {
@@ -283,6 +297,13 @@ func (l *CardList) rowRect(i int) paintengine2d.Rect {
 	rh := l.rowH()
 	y := float32(i)*rh - l.OffsetY
 	return paintengine2d.XYWH(0, y, l.LocalBounds().Dx(), rh)
+}
+
+// Invalidate drops retained card scenes so Starred / text changes
+// repaint on the next frame.
+func (l *CardList) Invalidate() {
+	l.rows.reset()
+	l.Base.Invalidate()
 }
 
 func (l *CardList) invalidateRow(i int) {

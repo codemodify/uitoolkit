@@ -103,3 +103,30 @@ func TestBakeFontTintAppliesThemeColor(t *testing.T) {
 		t.Fatal("expected red-tinted glyph pixels from white atlas")
 	}
 }
+
+func TestUISymbolFallbacksPaint(t *testing.T) {
+	f := BakeFont(13, paintengine2d.White)
+	for _, s := range []string{"★", "📎", "●", "🔇"} {
+		if f.Advance(s) < 4 {
+			t.Fatalf("%q advance %v (Titillium has no gid; fallback must measure)", s, f.Advance(s))
+		}
+		if _, ok := f.Atlas.Cell(paintengine2d.GlyphID([]rune(s)[0])); !ok {
+			t.Fatalf("%q missing from atlas after Advance", s)
+		}
+		img := paintengine2d.NewImage(36, 24)
+		ctx := paintengine2d.NewContext(img)
+		f.Draw(ctx, s, paintengine2d.Pt(4, 4), paintengine2d.White)
+		n := 0
+		for y := 0; y < img.Height; y++ {
+			for x := 0; x < img.Width; x++ {
+				_, _, _, a := img.PremulAt(x, y)
+				if a > 20 {
+					n++
+				}
+			}
+		}
+		if n < 8 {
+			t.Fatalf("%q drew no ink (n=%d); ASCII works, UI marks must too", s, n)
+		}
+	}
+}

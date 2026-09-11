@@ -27,3 +27,31 @@ func TestCardListPaints(t *testing.T) {
 	ctx := paintengine2d.NewContext(img)
 	cards.Paint(ctx)
 }
+
+func TestCardListStarredBustsRowCache(t *testing.T) {
+	look := style.DarkLook()
+	starred := false
+	cards := NewCardList(1, func(i int) CardContent {
+		return CardContent{Title: "Ada", Subtitle: "Welcome", Starred: starred}
+	}, nil)
+	cards.SetLook(look)
+	cards.SetHost(&host{})
+	cards.Arrange(paintengine2d.XYWH(0, 0, 280, 90))
+
+	paint := func() int {
+		rec := paintengine2d.NewRecorder(280, 90)
+		ctx := paintengine2d.NewContextDevice(rec)
+		cards.Paint(ctx)
+		return rec.Finish().Reused
+	}
+	if n := paint(); n != 0 {
+		t.Fatalf("first record reused=%d", n)
+	}
+	if n := paint(); n < 1 {
+		t.Fatalf("unchanged card should reuse, reused=%d", n)
+	}
+	starred = true
+	if n := paint(); n != 0 {
+		t.Fatalf("Starred toggle reused stale row %d", n)
+	}
+}

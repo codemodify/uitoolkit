@@ -137,7 +137,7 @@ func TestMailSubjectColumnFillsThreadPane(t *testing.T) {
 	a.PumpOnce()
 	var table *widgets.TableView
 	widget.Walk(w.Content(), func(c widget.Component) {
-		if tv, ok := c.(*widgets.TableView); ok && len(tv.Columns) >= 6 && table == nil {
+		if tv, ok := c.(*widgets.TableView); ok && len(tv.Columns) >= 5 && table == nil {
 			table = tv
 		}
 	})
@@ -145,12 +145,12 @@ func TestMailSubjectColumnFillsThreadPane(t *testing.T) {
 		t.Fatal("thread table")
 	}
 	ws := table.ColumnWidths()
-	if len(ws) < 6 {
+	if len(ws) != 5 {
 		t.Fatalf("cols %v", ws)
 	}
 	subj := ws[2]
 	if subj < 200 {
-		t.Fatalf("subject column too narrow at 1280: %v (all %v) table=%v", subj, ws, table.LocalBounds().Dx())
+		t.Fatalf("topic column too narrow at 1280: %v (all %v) table=%v", subj, ws, table.LocalBounds().Dx())
 	}
 	sum := float32(0)
 	for _, x := range ws {
@@ -163,7 +163,7 @@ func TestMailSubjectColumnFillsThreadPane(t *testing.T) {
 	a.PumpOnce()
 	ws = table.ColumnWidths()
 	if ws[2] < 160 {
-		t.Fatalf("subject after resize %v (all %v)", ws[2], ws)
+		t.Fatalf("topic after resize %v (all %v)", ws[2], ws)
 	}
 	w.Close()
 }
@@ -551,4 +551,147 @@ func TestMailChromeHidesStatusBarAndVIPFolder(t *testing.T) {
 		t.Fatal("quick filter still lives above the message list inside the splitter")
 	}
 	w.Close()
+}
+
+func TestMailColumnsTopicWhoWhen(t *testing.T) {
+	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{
+		Title: "Mail", Width: 1280, Height: 800, Headless: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.SetContent(MailApp(a, w))
+	a.PumpOnce()
+	var table *widgets.TableView
+	var sortWhen, sortTopic, sortWho, sortSize bool
+	widget.Walk(w.Content(), func(c widget.Component) {
+		if tv, ok := c.(*widgets.TableView); ok && table == nil {
+			table = tv
+		}
+		if mb, ok := c.(*widgets.MenuBar); ok {
+			for _, m := range mb.Menus() {
+				for _, it := range m.Items {
+					if it == nil {
+						continue
+					}
+					switch it.Text {
+					case "Sort by When":
+						sortWhen = true
+					case "Sort by Topic":
+						sortTopic = true
+					case "Sort by Who":
+						sortWho = true
+					case "Sort by Size", "Sort by Date", "Sort by Subject", "Sort by Correspondent":
+						sortSize = true
+					}
+				}
+			}
+		}
+	})
+	if table == nil {
+		t.Fatal("thread table")
+	}
+	want := []string{"★", "📎", "Topic", "Who", "When"}
+	if len(table.Columns) != len(want) {
+		t.Fatalf("columns %d %v", len(table.Columns), titlesOf(table))
+	}
+	for i, title := range want {
+		if table.Columns[i].Title != title {
+			t.Fatalf("col %d %q want %q", i, table.Columns[i].Title, title)
+		}
+	}
+	if !sortWhen || !sortTopic || !sortWho {
+		t.Fatalf("view sort labels when=%v topic=%v who=%v", sortWhen, sortTopic, sortWho)
+	}
+	if sortSize {
+		t.Fatal("old Size/Date/Subject/Correspondent sort labels still present")
+	}
+	w.Close()
+}
+
+func titlesOf(tv *widgets.TableView) []string {
+	out := make([]string, len(tv.Columns))
+	for i, c := range tv.Columns {
+		out[i] = c.Title
+	}
+	return out
+}
+
+func TestMailStarRendersAfterToggle(t *testing.T) {
+	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{
+		Title: "Mail", Width: 1280, Height: 800, Headless: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.SetContent(MailApp(a, w))
+	a.PumpOnce()
+	var table *widgets.TableView
+	var star func()
+	widget.Walk(w.Content(), func(c widget.Component) {
+		if tv, ok := c.(*widgets.TableView); ok && table == nil {
+			table = tv
+		}
+		if mb, ok := c.(*widgets.MenuBar); ok {
+			for _, m := range mb.Menus() {
+				for _, it := range m.Items {
+					if it != nil && it.Text == "Star" && it.OnClick != nil {
+						star = it.OnClick
+					}
+				}
+			}
+		}
+	})
+	if table == nil || table.CellText == nil || table.RowCount < 1 {
+		t.Fatal("thread table")
+	}
+	if star == nil {
+		t.Fatal("Message → Star")
+	}
+	row := -1
+	for i := 0; i < table.RowCount; i++ {
+		if table.CellText(i, 0) == "" {
+			row = i
+			break
+		}
+	}
+	if row < 0 {
+		t.Fatal("no unstarred row")
+	}
+	table.Selected = row
+	if table.OnSelect != nil {
+		table.OnSelect(row)
+	}
+	star()
+	a.PumpOnce()
+	if got := table.CellText(row, 0); got != "★" {
+		t.Fatalf("after star CellText=%q", got)
+	}
+	img := paintengine2d.NewImage(32, 28)
+	ctx := paintengine2d.NewContext(img)
+	table.Look().DrawTableCell(ctx, paintengine2d.XYWH(0, 0, 28, 28), true, false, "★", style.AlignStart, table.Look().Font())
+	if ink := cellInk(img, 0, 26); ink < 8 {
+		t.Fatalf("star glyph missing in 28px cell, ink=%d", ink)
+	}
+	star()
+	a.PumpOnce()
+	if got := table.CellText(row, 0); got != "" {
+		t.Fatalf("after unstar CellText=%q", got)
+	}
+	w.Close()
+}
+
+func cellInk(img *paintengine2d.Image, x0, x1 int) int {
+	n := 0
+	for y := 0; y < img.Height; y++ {
+		for x := x0; x < x1 && x < img.Width; x++ {
+			_, _, _, a := img.PremulAt(x, y)
+			if a > 20 {
+				n++
+			}
+		}
+	}
+	return n
 }

@@ -82,8 +82,6 @@ func sortMessages(msgs []Message, col int, asc bool, kind FolderKind) {
 			ok = strings.ToLower(a.Correspondent(kind)) < strings.ToLower(b.Correspondent(kind))
 		case 4:
 			ok = a.Date.Before(b.Date)
-		case 5:
-			ok = a.Size < b.Size
 		default:
 			ok = a.Date.Before(b.Date)
 		}
@@ -114,8 +112,6 @@ func equalCol(a, b Message, col int, kind FolderKind) bool {
 		return a.Correspondent(kind) == b.Correspondent(kind)
 	case 4:
 		return a.Date.Equal(b.Date)
-	case 5:
-		return a.Size == b.Size
 	default:
 		return a.Date.Equal(b.Date)
 	}
