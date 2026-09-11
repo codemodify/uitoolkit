@@ -1,6 +1,6 @@
 # Keyboard map
 
-Focus and shortcuts for uitoolkit **v0.2.0**. Esc always tears down
+Focus and shortcuts for uitoolkit **v0.3.0**. Esc always tears down
 floating chrome in one order, everywhere: **tooltip → popup → overlay**.
 
 ## Global
@@ -22,8 +22,9 @@ NumberField still steps while its inner TextField has focus).
 | Backspace / Delete | Delete backward / forward, or the selection |
 | Left / Right | Move caret; **Ctrl** jumps words; **Shift** extends selection |
 | Home / End | Line start / end |
-| Ctrl+A / C / X / V | Select all, copy, cut, paste (OS CLIPBOARD on X11; in-process otherwise) |
-| Middle-click | Paste PRIMARY (X11) or the in-process buffer |
+| Ctrl+A / C / X / V | Select all, copy, cut, paste (OS CLIPBOARD on X11 and Wayland) |
+| Middle-click | Paste PRIMARY (X11 / Wayland primary-selection) or the in-process buffer |
+| IME | Preedit is underlined in the field; commit inserts the phrase. Esc cancels composition. |
 | Return | `OnSubmit` |
 
 ## TextArea

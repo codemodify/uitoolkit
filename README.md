@@ -126,9 +126,12 @@ Headless / CI paints into `paintengine2d.NewImage` and can `Window.WritePNG`.
 On Linux with CGO the same buffer is presented with dirty rects from
 `paintengine2d.Damage`: **XPutImage** on X11, **wl_shm** on Wayland.
 Auto-select is `WAYLAND_DISPLAY` → `DISPLAY` → offscreen. Scale comes from
-`UITK_SCALE` / `GDK_SCALE` / `QT_SCALE_FACTOR`, else Xft.dpi on X11.
-Ctrl+C/X/V and middle-click use the OS CLIPBOARD and PRIMARY selections
-on X11; Wayland still uses the in-process clipboard.
+`UITK_SCALE` / `GDK_SCALE` / `QT_SCALE_FACTOR` / `GDK_DPI_SCALE`, else
+Xft.dpi / RandR on X11 or `wl_output` / fractional-scale on Wayland.
+Ctrl+C/X/V and middle-click use the **OS clipboard** on both X11
+(CLIPBOARD + PRIMARY, including INCR) and Wayland (`wl_data_device`,
+plus primary when the compositor supports it). CJK IME preedit is wired
+through XIM callbacks and `text-input-v3` into TextField / TextArea.
 
 ## How it uses paintengine2d
 
@@ -140,7 +143,8 @@ Each frame:
 2. `Context` is created on the pixmap; `QuickReject` / clip skip clean regions.
 3. Each component `Paint`s with `DrawRoundRect`, `Fill`, `Stroke`, gradients,
    and `DrawGlyphs` (shared white atlas, themed with `Paint.Color` tint).
-4. `Damage.Rects` are presented to X11. Offscreen present is a no-op.
+4. `Damage.Rects` are presented to X11 (`XPutImage` / MIT-SHM) or
+   Wayland (`wl_shm`). Offscreen present is a no-op.
 
 ```
 Desktop app
@@ -208,8 +212,8 @@ combo, radio groups, progress clamp, message-box results, table sort,
 number-field step/filter, file-dialog stub, delayed tooltips, Esc
 dismiss order, textarea newline/wrap/nav, switch toggle (including
 disabled), accordion exclusive expand and focus yield, expander
-relayout, separator and spacer measure, and an offscreen paint that
-produces real pixels.
+relayout, separator and spacer measure, IME preedit/commit on text
+widgets, and an offscreen paint that produces real pixels.
 `go test ./examples/gallery` regenerates the seventeen PNGs and fails if
 any two share a blob.
 
@@ -239,19 +243,22 @@ cross-platform backends today; choose Wails when the UI should be a webview.
 Documented on purpose — do not expect these yet:
 
 - Full accessibility (AT-SPI / VoiceOver)
-- Production CJK IME (preedit / candidate UI). X11 uses XIM
-  (`XIMPreeditNothing`) so compose and dead keys work; filtered keys
-  and UTF-8 `Xutf8LookupString` feed `EventText`.
-- Incremental (INCR) X11 clipboard for huge pastes
+- IME candidate-window theming (ibus / fcitx / compositor draw their own)
 - Mobile and webview
-- Wayland IME, clipboard, and fractional HiDPI (present + pointer/keyboard work)
+- Wayland dmabuf / explicit sync
 - Win32 and AppKit backends (interfaces + stubs only)
 - OpenType / HarfBuzz (engine text hook only)
 
-See [docs/platform.md](docs/platform.md) for X11 vs Wayland vs offscreen
-and remaining IME / clipboard / HiDPI gaps.
+See [docs/platform.md](docs/platform.md) for X11 vs Wayland vs offscreen.
+Linux desktop clipboard, IME preedit, and HiDPI are implemented on both
+X11 and Wayland as of **v0.3.0**.
 
 ## Version
+
+**0.3.0** — Production Linux windowing: X11 INCR clipboard, XIM preedit,
+RandR/Xft HiDPI, EWMH fullscreen/maximize, MIT-SHM present; Wayland
+`wl_data_device` + primary, `text-input-v3` IME, output / fractional
+scale, xdg-shell states and SSD. Still paintengine2d **v0.7.2**.
 
 **0.2.0** — Wayland `wl_shm` + xdg-shell toplevel, seat pointer/keyboard
 (xkbcommon), auto-select `WAYLAND_DISPLAY` then `DISPLAY` then offscreen.
