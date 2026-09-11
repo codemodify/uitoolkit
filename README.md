@@ -25,7 +25,7 @@ go get github.com/codemodify/paintengine2d@v0.7.2
 | --- | --- |
 | Language | Go 1.22+ |
 | Paint | paintengine2d **v0.7.2** (`02b2939`; `Context`, `Damage`, `DrawGlyphs` Color tint) |
-| Windowing | Linux X11 + Wayland (`wl_shm`); offscreen always |
+| Windowing | Linux X11 + Wayland (`linux-dmabuf` / `wl_shm`); offscreen always |
 | CGO | optional — tests and screenshots are `CGO_ENABLED=0` |
 | License | MIT |
 
@@ -124,7 +124,10 @@ go run ./examples/inspector
 
 Headless / CI paints into `paintengine2d.NewImage` and can `Window.WritePNG`.
 On Linux with CGO the same buffer is presented with dirty rects from
-`paintengine2d.Damage`: **XPutImage** on X11, **wl_shm** on Wayland.
+`paintengine2d.Damage`: **XPutImage** on X11, **linux-dmabuf** (else
+**wl_shm**) on Wayland. `UITK_WAYLAND_PRESENT=shm|dmabuf|auto` selects
+the Wayland path (`auto` prefers dmabuf when the compositor and
+GBM/dma-heap/udmabuf allow it).
 Auto-select is `WAYLAND_DISPLAY` → `DISPLAY` → offscreen. Scale comes from
 `UITK_SCALE` / `GDK_SCALE` / `QT_SCALE_FACTOR` / `GDK_DPI_SCALE`, else
 Xft.dpi / RandR on X11 or `wl_output` / fractional-scale on Wayland.
@@ -144,7 +147,7 @@ Each frame:
 3. Each component `Paint`s with `DrawRoundRect`, `Fill`, `Stroke`, gradients,
    and `DrawGlyphs` (shared white atlas, themed with `Paint.Color` tint).
 4. `Damage.Rects` are presented to X11 (`XPutImage` / MIT-SHM) or
-   Wayland (`wl_shm`). Offscreen present is a no-op.
+   Wayland (`zwp_linux_dmabuf_v1` or `wl_shm`). Offscreen present is a no-op.
 
 ```
 Desktop app
@@ -165,9 +168,9 @@ retained tree (ideas only — no copied code).
 
 ```
 platform   window + event pump + present          Linux X11 (CLIPBOARD+PRIMARY,
-           (thin OS glue)                         XIM) and Wayland (wl_shm,
-                                                  xdg-shell, seat); Win / macOS
-                                                  stubs
+           (thin OS glue)                         XIM) and Wayland (dmabuf /
+                                                  wl_shm, xdg-shell, seat);
+                                                  Win / macOS stubs
 app        Application run loop, windows,         DPI/scale, backend select,
                                                   input routing
            capture / WritePNG
@@ -245,15 +248,21 @@ Documented on purpose — do not expect these yet:
 - Full accessibility (AT-SPI / VoiceOver)
 - IME candidate-window theming (ibus / fcitx / compositor draw their own)
 - Mobile and webview
-- Wayland dmabuf / explicit sync
+- Wayland explicit sync (dmabuf present uses implicit reservation)
 - Win32 and AppKit backends (interfaces + stubs only)
 - OpenType / HarfBuzz (engine text hook only)
 
 See [docs/platform.md](docs/platform.md) for X11 vs Wayland vs offscreen.
 Linux desktop clipboard, IME preedit, and HiDPI are implemented on both
-X11 and Wayland as of **v0.3.0**.
+X11 and Wayland as of **v0.3.0**. Wayland **linux-dmabuf** present
+(with `wl_shm` fallback) is **v0.3.1**.
 
 ## Version
+
+**0.3.1** — Wayland present prefers `zwp_linux_dmabuf_v1` (feedback +
+ARGB8888/XRGB8888, GBM or memfd/dma-heap/udmabuf) and falls back to
+`wl_shm`. `UITK_WAYLAND_PRESENT=shm|dmabuf|auto`. Still paintengine2d
+**v0.7.2** (`Image.Pix` / `RowStride` export).
 
 **0.3.0** — Production Linux windowing: X11 INCR clipboard, XIM preedit,
 RandR/Xft HiDPI, EWMH fullscreen/maximize, MIT-SHM present; Wayland

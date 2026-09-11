@@ -6,7 +6,7 @@ CPU pixmap onto a window and translates input.
 | Backend | When | Present | Clipboard | Scale | IME |
 | --- | --- | --- | --- | --- | --- |
 | **offscreen** | `Headless`, `UITK_BACKEND=offscreen`, or no display | no-op | in-process | env or 1 | n/a |
-| **Wayland** | Linux + CGO + `WAYLAND_DISPLAY` | `wl_shm` ARGB8888, damage, integer / fractional buffer scale | `wl_data_device` + primary when the compositor offers it | `wl_output` scale, `wp_fractional_scale_v1` + viewporter, env | `zwp_text_input_v3` preedit / commit |
+| **Wayland** | Linux + CGO + `WAYLAND_DISPLAY` | **linux-dmabuf** (`zwp_linux_dmabuf_v1`) when advertised + GBM/dma-heap/udmabuf works, else `wl_shm` ARGB8888; damage; integer / fractional buffer scale | `wl_data_device` + primary when the compositor offers it | `wl_output` scale, `wp_fractional_scale_v1` + viewporter, env | `zwp_text_input_v3` preedit / commit |
 | **X11** | Linux + CGO + `DISPLAY` | dirty-rect `XPutImage`, MIT-SHM when the server allows it | CLIPBOARD + PRIMARY, ICCCM **INCR** | Xft.dpi, RandR mm, screen mm, env | XIM preedit callbacks + compose / dead keys |
 | Win32 / AppKit | stub | — | — | — | — |
 
@@ -61,24 +61,38 @@ and `libxkbcommon`. `CGO_ENABLED=0` never needs those libraries.
   then Xft.dpi, then RandR output mm vs CRTC pixels, then screen mm.
   Buffer and event coordinates stay device pixels; metrics grow with scale.
 
-## Wayland notes (0.3.0)
+## Wayland notes (0.3.1)
 
 - `wl_display_connect` → registry bind of `wl_compositor`, `wl_shm`,
   `xdg_wm_base`, `wl_seat`, `wl_data_device_manager`, `wl_output`, and
-  optional `zwp_text_input_manager_v3`,
+  optional `zwp_linux_dmabuf_v1`, `zwp_text_input_manager_v3`,
   `zwp_primary_selection_device_manager_v1`,
   `zxdg_decoration_manager_v1`, `wp_fractional_scale_manager_v1`,
   `wp_viewporter`.
 - Each window is an `xdg_toplevel`. Configure width/height are
-  surface-local (logical); the shm buffer is `ceil(logical * scale)`.
+  surface-local (logical); the present buffer is `ceil(logical * scale)`.
   States maximized / fullscreen / resizing / activated are parsed.
   `xdg_toplevel.close` is `EventClose`. Server-side decorations are
   requested when `xdg-decoration` is present.
-- Present: two `wl_shm` pools (memfd-style temp files), ARGB8888
-  (little-endian B,G,R,A), `wl_surface_damage_buffer` (or
-  `wl_surface_damage` on compositor v3), attach, commit.
-  Integer `wl_surface.set_buffer_scale` or fractional-scale + viewport
-  destination. dmabuf / GPU compositors are deferred.
+- Present prefers **linux-dmabuf** when all of the following hold:
+  1. `UITK_WAYLAND_PRESENT` is `auto` (default) or `dmabuf` (not `shm`)
+  2. The compositor advertises `zwp_linux_dmabuf_v1` (v2+) and a
+     CPU-linear format: `DRM_FORMAT_ARGB8888` / `XRGB8888` (also
+     `ABGR8888` / `XBGR8888` if offered), via `format`/`modifier`
+     events or `get_default_feedback` (protocol v4+)
+  3. A local dmabuf can be created: **GBM/DRM** linear BO
+     (`libgbm.so` + `/dev/dri/renderD*` or `card*`), else
+     `/dev/dma_heap/system`, else memfd + `/dev/udmabuf`
+- Otherwise present uses the existing two `wl_shm` pools (memfd-style
+  temp files). Xvfb, Weston headless without GBM, missing protocols,
+  and `UITK_WAYLAND_PRESENT=shm` always land on shm. A failed dmabuf
+  import on the first buffer falls back to shm for that connection.
+- Both paths attach premul 8-bit pixels from `paintengine2d.Image.Pix`
+  (`RowStride`). ARGB8888/XRGB8888 swizzle RGBA→BGRA; ABGR8888 is a
+  row copy. Then `wl_surface_damage_buffer` (or `wl_surface_damage`),
+  attach, commit. Integer `wl_surface.set_buffer_scale` or
+  fractional-scale + viewport destination. Resize rebuilds both
+  pixmap and the free present slots so attach/damage stay aligned.
 - Seat: pointer (motion, buttons, axis) with coordinates multiplied by
   buffer scale; keyboard via **xkbcommon** (keymap, mods, UTF-8,
   compose / dead keys) plus compositor `repeat_info`.
@@ -103,7 +117,15 @@ wayland-scanner private-code \
   /usr/share/wayland-protocols/stable/xdg-shell/xdg-shell.xml \
   platform/xdg-shell-protocol.c
 # same for text-input-unstable-v3, primary-selection-unstable-v1,
-# xdg-decoration-unstable-v1, fractional-scale-v1, viewporter
+# xdg-decoration-unstable-v1, fractional-scale-v1, viewporter,
+# linux-dmabuf-unstable-v1
+```
+
+```bash
+# Force present path (Wayland + CGO only)
+UITK_WAYLAND_PRESENT=auto go run ./examples/gallery    # dmabuf if possible
+UITK_WAYLAND_PRESENT=shm go run ./examples/gallery     # always wl_shm
+UITK_WAYLAND_PRESENT=dmabuf go run ./examples/gallery  # prefer dmabuf, shm fallback
 ```
 
 ## HiDPI
@@ -117,12 +139,13 @@ On **X11** the window buffer is the pixel size the WM gave; scale only
 grows metrics. On **Wayland** configure size is logical and the shm
 buffer is scaled; pointer events are multiplied so hit-testing matches
 the pixmap. Set `UITK_SCALE` to the compositor scale (often `2`) so
-metrics and buffer scale agree.
+metrics and buffer scale agree. dmabuf and shm share that scale /
+damage / attach / commit path.
 
 ## Deferred
 
 - AT-SPI / accessibility
 - IME candidate-window theming (the IM draws its own window)
-- Wayland dmabuf / explicit sync
+- Wayland explicit sync (implicit dma-buf reservation only)
 - Client-side decoration chrome beyond the existing TitleBar widget
 - Win32 and AppKit

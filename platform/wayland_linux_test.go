@@ -103,6 +103,75 @@ func TestWaylandDesktopChrome(t *testing.T) {
 	}
 }
 
+func TestWaylandPresentSHMOverride(t *testing.T) {
+	if os.Getenv("WAYLAND_DISPLAY") == "" || !waylandProbe() {
+		t.Skip("no Wayland compositor")
+	}
+	t.Setenv(EnvWaylandPresent, WaylandPresentSHM)
+	// Force a fresh connection so the env is honored.
+	if waylandLive() {
+		t.Log("existing Wayland connection; present path may already be chosen")
+	}
+	b := WaylandBackend{}
+	s, err := b.NewSurface(WindowOptions{Title: "uitoolkit-wl-shm", Width: 120, Height: 80})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ctx := paintengine2d.NewContext(s.Buffer())
+	ctx.Clear(paintengine2d.RGB(0.2, 0.4, 0.1))
+	if err := s.Present(nil); err != nil {
+		t.Fatal(err)
+	}
+	if waylandUsingDmabuf() {
+		t.Fatal("UITK_WAYLAND_PRESENT=shm must not use dmabuf")
+	}
+}
+
+func TestWaylandDmabufPathOrSkip(t *testing.T) {
+	if os.Getenv("WAYLAND_DISPLAY") == "" || !waylandProbe() {
+		t.Skip("no Wayland compositor")
+	}
+	if !dmabufAllocatorOK() {
+		t.Log("dmabuf allocator unavailable (no GBM/DRM, dma-heap, or udmabuf); shm fallback")
+		t.Skip("no local dmabuf allocator")
+	}
+	t.Logf("dmabuf allocator: %s", dmabufAllocatorName())
+	t.Setenv(EnvWaylandPresent, WaylandPresentDmabuf)
+	b := WaylandBackend{}
+	s, err := b.NewSurface(WindowOptions{Title: "uitoolkit-wl-dmabuf", Width: 140, Height: 90})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ctx := paintengine2d.NewContext(s.Buffer())
+	ctx.Clear(paintengine2d.RGB(0.5, 0.1, 0.2))
+	if err := s.Present(nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Resize(160, 100); err != nil {
+		t.Fatal(err)
+	}
+	ctx = paintengine2d.NewContext(s.Buffer())
+	ctx.Clear(paintengine2d.RGB(0.1, 0.5, 0.3))
+	if err := s.Present(nil); err != nil {
+		t.Fatal(err)
+	}
+	if !waylandUsingDmabuf() {
+		t.Log("compositor did not advertise a usable linux-dmabuf format; shm fallback")
+	}
+}
+
+func TestWaylandDmabufAllocatorProbe(t *testing.T) {
+	ok := dmabufAllocatorOK()
+	name := dmabufAllocatorName()
+	if ok {
+		t.Logf("dmabuf allocator works: %s", name)
+		return
+	}
+	t.Log("dmabuf allocator unavailable (no GBM/DRM, dma-heap, or udmabuf); present will use wl_shm")
+}
+
 func TestSelectWaylandFallsBack(t *testing.T) {
 	t.Setenv("WAYLAND_DISPLAY", "")
 	t.Setenv("DISPLAY", "")
