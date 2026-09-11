@@ -286,9 +286,20 @@ static int ui_wl_memfd(size_t size, void **map) {
 static struct wl_buffer *ui_wl_buffer(struct wl_shm *shm, int fd, int w, int h, int stride, size_t size) {
 	struct wl_shm_pool *pool = wl_shm_create_pool(shm, fd, (int32_t)size);
 	if (!pool) return NULL;
-	struct wl_buffer *buf = wl_shm_pool_create_buffer(pool, 0, w, h, stride, WL_SHM_FORMAT_ARGB8888);
+	// XRGB8888: compositor ignores alpha. ARGB8888 + empty/wrong A
+	// composites as a fully transparent window on Mutter/Weston.
+	struct wl_buffer *buf = wl_shm_pool_create_buffer(pool, 0, w, h, stride, WL_SHM_FORMAT_XRGB8888);
 	wl_shm_pool_destroy(pool);
 	return buf;
+}
+
+static void ui_wl_opaque(struct wl_compositor *c, struct wl_surface *s, int w, int h) {
+	if (!c || !s || w < 1 || h < 1) return;
+	struct wl_region *r = wl_compositor_create_region(c);
+	if (!r) return;
+	wl_region_add(r, 0, 0, w, h);
+	wl_surface_set_opaque_region(s, r);
+	wl_region_destroy(r);
 }
 
 static void uitk_buf_rel(void *data, struct wl_buffer *buf) {
@@ -314,6 +325,22 @@ static void ui_wl_shm_destroy(struct wl_shm *s) { if (s) wl_shm_destroy(s); }
 static void ui_wl_comp_destroy(struct wl_compositor *c) { if (c) wl_compositor_destroy(c); }
 static void ui_wl_wm_destroy(struct xdg_wm_base *w) { if (w) xdg_wm_base_destroy(w); }
 static void ui_wl_reg_destroy(struct wl_registry *r) { if (r) wl_registry_destroy(r); }
+
+static int ui_wl_wait(struct wl_display *d, int ms) {
+	if (!d) return -1;
+	if (wl_display_prepare_read(d) != 0) {
+		return wl_display_dispatch_pending(d);
+	}
+	wl_display_flush(d);
+	struct pollfd pfd = { .fd = wl_display_get_fd(d), .events = POLLIN };
+	int n = poll(&pfd, 1, ms);
+	if (n > 0) {
+		wl_display_read_events(d);
+	} else {
+		wl_display_cancel_read(d);
+	}
+	return wl_display_dispatch_pending(d);
+}
 
 static int ui_wl_pump(struct wl_display *d) {
 	if (!d) return -1;
@@ -687,9 +714,9 @@ import (
 	"github.com/codemodify/paintengine2d"
 )
 
-// WaylandBackend presents paintengine2d pixmaps through linux-dmabuf
-// (zwp_linux_dmabuf_v1) when the compositor and a local allocator allow
-// it, otherwise wl_shm. Override with UITK_WAYLAND_PRESENT=shm|dmabuf|auto.
+// WaylandBackend presents paintengine2d pixmaps through wl_shm XRGB8888
+// by default. linux-dmabuf is opt-in (UITK_WAYLAND_PRESENT=dmabuf) until
+// that path is proven opaque on real compositors.
 type WaylandBackend struct{}
 
 func (WaylandBackend) Name() string { return "wayland" }
@@ -782,7 +809,10 @@ func (WaylandBackend) NewSurface(opts WindowOptions) (Surface, error) {
 	if c.viewporter != nil && s.surf != nil {
 		s.viewport = C.ui_wl_viewport(c.viewporter, s.surf)
 	}
-	s.bindExplicitSync()
+	// Do not bind drm-syncobj / explicit-sync on the surface here.
+	// Those protocols require acquire fences on every later commit; an
+	// unsignaled fence (CPU write not in the implicit reservation)
+	// leaves the compositor waiting and the window fully transparent.
 	C.ui_wl_commit(s.surf)
 	wlMu.Unlock()
 	C.ui_wl_roundtrip(c.dpy)
@@ -891,13 +921,16 @@ type wlSurface struct {
 	top        *C.struct_xdg_toplevel
 	title      string
 	img        *paintengine2d.Image
-	slots      [2]wlSlot
+	slots      [4]wlSlot
 	wantW      int
 	wantH      int
 	logicalW   int
 	logicalH   int
 	bufScale   int
 	frac       float32
+	opaqueW    int
+	opaqueH    int
+	scaleSet   int
 	configured bool
 	closed     bool
 	queue      []Event
@@ -939,7 +972,7 @@ func wlRetain() (*wlConn, error) {
 	wlMu.Unlock()
 	C.ui_wl_roundtrip(dpy)
 	C.ui_wl_roundtrip(dpy)
-	if c.dmabuf != nil && c.dmabufVer >= 4 && WaylandPresentPref() != WaylandPresentSHM {
+	if c.dmabuf != nil && c.dmabufVer >= 4 && waylandWantDmabuf() {
 		wlMu.Lock()
 		c.requestDmabufFeedback()
 		wlMu.Unlock()
@@ -1205,15 +1238,26 @@ func (s *wlSurface) Present(dirty []paintengine2d.Rect) error {
 		s.queue = append(s.queue, Event{Kind: EventResize, Width: bw, Height: bh})
 	}
 	if s.frac > 1 && s.viewport != nil {
-		C.ui_wl_set_buf_scale(s.surf, 1)
+		if s.scaleSet != 1 {
+			C.ui_wl_set_buf_scale(s.surf, 1)
+			s.scaleSet = 1
+		}
 		C.ui_wl_viewport_dest(s.viewport, C.int(s.logicalW), C.int(s.logicalH))
-	} else if s.deviceScale() > 1 {
-		C.ui_wl_set_buf_scale(s.surf, C.int32_t(int(s.deviceScale()+0.1)))
+	} else if sc := int(s.deviceScale() + 0.1); sc > 1 {
+		if s.scaleSet != sc {
+			C.ui_wl_set_buf_scale(s.surf, C.int32_t(sc))
+			s.scaleSet = sc
+		}
+	}
+	if s.conn.compositor != nil && s.logicalW > 0 && s.logicalH > 0 &&
+		(s.opaqueW != s.logicalW || s.opaqueH != s.logicalH) {
+		C.ui_wl_opaque(s.conn.compositor, s.surf, C.int(s.logicalW), C.int(s.logicalH))
+		s.opaqueW, s.opaqueH = s.logicalW, s.logicalH
+	}
+	if len(dirty) == 0 {
+		dirty = []paintengine2d.Rect{paintengine2d.XYWH(0, 0, float32(s.img.Width), float32(s.img.Height))}
 	}
 	slot := s.pickSlot()
-	if s.timeline != nil {
-		C.ui_drm_timeline_wait_slot((*C.struct_ui_drm_timeline)(s.timeline), C.int(slot))
-	}
 	if err := s.ensureSlot(slot, s.img.Width, s.img.Height); err != nil {
 		if s.conn.useDmabuf {
 			s.conn.useDmabuf = false
@@ -1225,13 +1269,26 @@ func (s *wlSurface) Present(dirty []paintengine2d.Rect) error {
 			return err
 		}
 	}
-	dmaFD := s.slots[slot].fd
-	if s.slots[slot].dma != nil && dmaFD >= 0 {
-		C.ui_dmabuf_cpu_begin(C.int(dmaFD))
+	s.blitDirty(slot, dirty)
+	if s.dmabufUploadBlank(slot) {
+		s.finishDMAWrite(slot)
+		s.conn.useDmabuf = false
+		s.destroySlot(slot)
+		if err := s.ensureSlot(slot, s.img.Width, s.img.Height); err != nil {
+			return err
+		}
+		s.blitDirty(slot, dirty)
 	}
-	if len(dirty) == 0 {
-		dirty = []paintengine2d.Rect{paintengine2d.XYWH(0, 0, float32(s.img.Width), float32(s.img.Height))}
-	}
+	s.finishDMAWrite(slot)
+	C.ui_wl_attach(s.surf, s.slots[slot].buf)
+	C.ui_wl_commit(s.surf)
+	s.slots[slot].busy = true
+	C.ui_wl_flush(s.conn.dpy)
+	return nil
+}
+
+func (s *wlSurface) blitDirty(slot int, dirty []paintengine2d.Rect) {
+	s.beginDMAWrite(slot)
 	for _, r := range dirty {
 		s.copyRect(slot, r)
 		x0, y0, x1, y1 := r.IntBounds()
@@ -1252,15 +1309,42 @@ func (s *wlSurface) Present(dirty []paintengine2d.Rect) error {
 		}
 		C.ui_wl_damage(s.surf, C.int(x0), C.int(y0), C.int(x1-x0), C.int(y1-y0))
 	}
-	if s.slots[slot].dma != nil && dmaFD >= 0 {
-		C.ui_dmabuf_cpu_end(C.int(dmaFD))
+}
+
+func (s *wlSurface) beginDMAWrite(slot int) {
+	if slot < 0 || slot >= len(s.slots) {
+		return
 	}
-	C.ui_wl_attach(s.surf, s.slots[slot].buf)
-	s.markAcquire(slot, dmaFD)
-	C.ui_wl_commit(s.surf)
-	s.slots[slot].busy = true
-	C.ui_wl_flush(s.conn.dpy)
-	return nil
+	fd := s.slots[slot].fd
+	if s.slots[slot].dma != nil && fd >= 0 {
+		C.ui_dmabuf_cpu_begin(C.int(fd))
+	}
+}
+
+func (s *wlSurface) finishDMAWrite(slot int) {
+	if slot < 0 || slot >= len(s.slots) {
+		return
+	}
+	fd := s.slots[slot].fd
+	if s.slots[slot].dma != nil && fd >= 0 {
+		C.ui_dmabuf_cpu_end(C.int(fd))
+	}
+}
+
+func (s *wlSurface) dmabufUploadBlank(slot int) bool {
+	if s.conn == nil || !s.conn.useDmabuf || slot < 0 || slot >= len(s.slots) {
+		return false
+	}
+	sl := s.slots[slot]
+	if sl.dma == nil || sl.mem == nil || !pixmapHasOpaque(s.img) {
+		return false
+	}
+	dst := unsafe.Slice((*byte)(sl.mem), sl.size)
+	n := sl.stride
+	if n < 64 {
+		n = sl.size
+	}
+	return destAlphaAllZero(dst, n)
 }
 
 func (s *wlSurface) bindExplicitSync() {
@@ -1306,28 +1390,33 @@ func (s *wlSurface) markAcquire(slot, dmaFD int) {
 }
 
 func (s *wlSurface) pickSlot() int {
-	for attempt := 0; attempt < 24; attempt++ {
-		for i := range s.slots {
-			if s.slots[i].buf != nil && !s.slots[i].busy {
-				return i
-			}
-		}
-		for i := range s.slots {
-			if s.slots[i].buf == nil {
-				return i
-			}
-		}
-		if s.conn == nil || s.conn.dpy == nil {
-			break
-		}
-		C.ui_wl_roundtrip(s.conn.dpy)
+	if i, ok := s.freeSlot(); ok {
+		return i
 	}
-	for i := range s.slots {
-		if !s.slots[i].busy {
-			return i
-		}
+	// All four slots are in flight. Wait briefly for a release —
+	// not a 24× wl_display_roundtrip storm (~55ms/frame at 1000×760).
+	if s.conn != nil && s.conn.dpy != nil {
+		C.ui_wl_wait(s.conn.dpy, 8)
+	}
+	if i, ok := s.freeSlot(); ok {
+		return i
+	}
+	if s.conn != nil && s.conn.dpy != nil {
+		C.ui_wl_wait(s.conn.dpy, 8)
+	}
+	if i, ok := s.freeSlot(); ok {
+		return i
 	}
 	return 0
+}
+
+func (s *wlSurface) freeSlot() (int, bool) {
+	for i := range s.slots {
+		if !s.slots[i].busy {
+			return i, true
+		}
+	}
+	return 0, false
 }
 
 func (s *wlSurface) ensureSlot(i, w, h int) error {
@@ -1388,6 +1477,17 @@ func (s *wlSurface) destroySlot(i int) {
 	*sl = wlSlot{}
 }
 
+func (s *wlSurface) slotBGRA(slot int) []byte {
+	if slot < 0 || slot >= len(s.slots) {
+		return nil
+	}
+	sl := s.slots[slot]
+	if sl.mem == nil || sl.size < 4 {
+		return nil
+	}
+	return unsafe.Slice((*byte)(sl.mem), sl.size)
+}
+
 func (s *wlSurface) copyRect(slot int, r paintengine2d.Rect) {
 	sl := s.slots[slot]
 	if sl.mem == nil {
@@ -1402,7 +1502,7 @@ func (s *wlSurface) copyRect(slot int, r paintengine2d.Rect) {
 	if sl.dma != nil && s.conn != nil {
 		swizzle = s.conn.dmaSwizzle
 	}
-	copyImageRect(dst, stride, s.img, r, swizzle)
+	copyImageRect(dst, stride, s.img, r, swizzle, true)
 }
 
 func (s *wlSurface) Poll() []Event {
@@ -1465,8 +1565,9 @@ func (s *wlSurface) Close() error {
 		delete(wlByNative, uintptr(unsafe.Pointer(s.surf)))
 	}
 	wlMu.Unlock()
-	s.destroySlot(0)
-	s.destroySlot(1)
+	for i := range s.slots {
+		s.destroySlot(i)
+	}
 	if s.timeline != nil {
 		C.ui_drm_timeline_destroy((*C.struct_ui_drm_timeline)(s.timeline))
 		s.timeline = nil
@@ -1602,6 +1703,9 @@ func uitkWlRegistryGlobal(id C.uintptr_t, reg *C.struct_wl_registry, name C.uint
 	case "wp_viewporter":
 		c.viewporter = (*C.struct_wp_viewporter)(C.ui_wl_bind(reg, name, C.ui_wl_viewporter_iface(), 1))
 	case "zwp_linux_explicit_synchronization_v1":
+		if !waylandWantDmabuf() {
+			break
+		}
 		v := ver
 		if v > 2 {
 			v = 2
@@ -1610,6 +1714,9 @@ func uitkWlRegistryGlobal(id C.uintptr_t, reg *C.struct_wl_registry, name C.uint
 			c.explicitSync = unsafe.Pointer(C.ui_wl_bind(reg, name, C.ui_wl_explicit_sync_iface(), v))
 		}
 	case "wp_linux_drm_syncobj_v1":
+		if !waylandWantDmabuf() {
+			break
+		}
 		v := ver
 		if v > 1 {
 			v = 1
@@ -1618,7 +1725,7 @@ func uitkWlRegistryGlobal(id C.uintptr_t, reg *C.struct_wl_registry, name C.uint
 			c.drmSyncobj = unsafe.Pointer(C.ui_wl_bind(reg, name, C.ui_wl_drm_syncobj_iface(), v))
 		}
 	case "zwp_linux_dmabuf_v1":
-		if WaylandPresentPref() == WaylandPresentSHM {
+		if !waylandWantDmabuf() {
 			break
 		}
 		v := ver

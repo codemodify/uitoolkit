@@ -103,6 +103,84 @@ func TestWaylandDesktopChrome(t *testing.T) {
 	}
 }
 
+func TestWaylandAutoPresentIsSHM(t *testing.T) {
+	if os.Getenv("WAYLAND_DISPLAY") == "" || !waylandProbe() {
+		t.Skip("no Wayland compositor")
+	}
+	t.Setenv(EnvWaylandPresent, WaylandPresentAuto)
+	b := WaylandBackend{}
+	s, err := b.NewSurface(WindowOptions{Title: "uitoolkit-wl-auto", Width: 120, Height: 80})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ctx := paintengine2d.NewContext(s.Buffer())
+	ctx.Clear(paintengine2d.RGB(0.3, 0.2, 0.1))
+	if err := s.Present(nil); err != nil {
+		t.Fatal(err)
+	}
+	if waylandUsingDmabuf() {
+		t.Fatal("auto must present via wl_shm (dmabuf is opt-in)")
+	}
+}
+
+func TestWaylandPresentOpaqueColor(t *testing.T) {
+	if os.Getenv("WAYLAND_DISPLAY") == "" || !waylandProbe() {
+		t.Skip("no Wayland compositor")
+	}
+	t.Setenv(EnvWaylandPresent, WaylandPresentSHM)
+	b := WaylandBackend{}
+	s, err := b.NewSurface(WindowOptions{Title: "uitoolkit-wl-opaque", Width: 64, Height: 48})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ws, ok := s.(*wlSurface)
+	if !ok {
+		t.Fatal("wlSurface")
+	}
+	ctx := paintengine2d.NewContext(s.Buffer())
+	ctx.Clear(paintengine2d.RGB(0.25, 0.50, 1.0))
+	if err := s.Present(nil); err != nil {
+		t.Fatal(err)
+	}
+	_ = s.Poll()
+	var pix []byte
+	for i := 0; i < 2; i++ {
+		if p := ws.slotBGRA(i); len(p) >= 4 && p[3] != 0 {
+			pix = p
+			break
+		}
+	}
+	if len(pix) < 4 {
+		// Slot may still be the one just attached; read whichever is mapped.
+		pix = ws.slotBGRA(0)
+		if len(pix) < 4 {
+			pix = ws.slotBGRA(1)
+		}
+	}
+	if len(pix) < 4 {
+		t.Fatal("no present slot")
+	}
+	if destAlphaAllZero(pix, ws.slots[0].stride) && destAlphaAllZero(ws.slotBGRA(1), 64) {
+		t.Fatal("presented buffer has zero alpha — compositor would draw a transparent window")
+	}
+	found := false
+	limit := len(pix)
+	if limit > 256 {
+		limit = 256
+	}
+	for i := 3; i < limit; i += 4 {
+		if pix[i] == 0xff && (pix[i-3] != 0 || pix[i-2] != 0 || pix[i-1] != 0) {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected opaque XRGB pixels, first=%v", pix[:4])
+	}
+}
+
 func TestWaylandPresentSHMOverride(t *testing.T) {
 	if os.Getenv("WAYLAND_DISPLAY") == "" || !waylandProbe() {
 		t.Skip("no Wayland compositor")

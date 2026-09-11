@@ -6,7 +6,7 @@ CPU pixmap onto a window and translates input.
 | Backend | When | Present | Clipboard | Scale | IME |
 | --- | --- | --- | --- | --- | --- |
 | **offscreen** | `Headless`, `UITK_BACKEND=offscreen`, or no display | no-op | in-process | env or 1 | n/a |
-| **Wayland** | Linux + CGO + `WAYLAND_DISPLAY` | **linux-dmabuf** (`zwp_linux_dmabuf_v1`) when advertised + GBM/dma-heap/udmabuf works, else `wl_shm` ARGB8888; **explicit sync** when the compositor advertises it; damage; integer / fractional buffer scale | `wl_data_device` + primary when the compositor offers it | `wl_output` scale, `wp_fractional_scale_v1` + viewporter, env | `zwp_text_input_v3` preedit / commit |
+| **Wayland** | Linux + CGO + `WAYLAND_DISPLAY` | **`wl_shm` XRGB8888** (opaque) by default; **linux-dmabuf** only if `UITK_WAYLAND_PRESENT=dmabuf` and a linear XRGB/XBGR (else ARGB) allocator works; damage-only upload; `wl_surface.set_opaque_region` | `wl_data_device` + primary when the compositor offers it | `wl_output` scale, `wp_fractional_scale_v1` + viewporter, env | `zwp_text_input_v3` preedit / commit |
 | **X11** | Linux + CGO + `DISPLAY` | dirty-rect `XPutImage`, MIT-SHM when the server allows it | CLIPBOARD + PRIMARY, ICCCM **INCR** | Xft.dpi, RandR mm, screen mm, env | XIM preedit callbacks + compose / dead keys |
 | Win32 / AppKit | stub | — | — | — | — |
 
@@ -38,8 +38,10 @@ and `libxkbcommon`. `CGO_ENABLED=0` never needs those libraries.
 - One shared `Display` for all windows. Destroying a window frees its
   `XImage` / MIT-SHM segment, GC, XIC, and `XID`; the connection closes
   when the last surface is gone and no selection is owned.
-- Present copies premul RGBA into a 32-bit ZPixmap using the visual
-  masks and `XImage` byte order / `bytes_per_line`. MIT-SHM
+- Present copies premul RGBA into a 32-bit ZPixmap. Typical LE
+  TrueColor (`red 0xff0000`) uses the same damage-rect uint32
+  RGBA→BGRA upload as Wayland; unusual visuals still pack via masks
+  and `XImage` byte order / `bytes_per_line`. MIT-SHM
   (`XShmPutImage`) is used when `XShmAttach` succeeds; Xvfb, SSH, and
   locked-down servers fall back to `XPutImage` of each damage rect.
 - Resize uses `NorthWestGravity`, `XResizeWindow`, and a rebuilt pixmap;
@@ -61,7 +63,7 @@ and `libxkbcommon`. `CGO_ENABLED=0` never needs those libraries.
   then Xft.dpi, then RandR output mm vs CRTC pixels, then screen mm.
   Buffer and event coordinates stay device pixels; metrics grow with scale.
 
-## Wayland notes (0.4.0)
+## Wayland notes (0.4.1)
 
 - `wl_display_connect` → registry bind of `wl_compositor`, `wl_shm`,
   `xdg_wm_base`, `wl_seat`, `wl_data_device_manager`, `wl_output`, and
@@ -75,36 +77,35 @@ and `libxkbcommon`. `CGO_ENABLED=0` never needs those libraries.
   States maximized / fullscreen / resizing / activated are parsed.
   `xdg_toplevel.close` is `EventClose`. Server-side decorations are
   requested when `xdg-decoration` is present.
-- Present prefers **linux-dmabuf** when all of the following hold:
-  1. `UITK_WAYLAND_PRESENT` is `auto` (default) or `dmabuf` (not `shm`)
-  2. The compositor advertises `zwp_linux_dmabuf_v1` (v2+) and a
-     CPU-linear format: `DRM_FORMAT_ARGB8888` / `XRGB8888` (also
-     `ABGR8888` / `XBGR8888` if offered), via `format`/`modifier`
-     events or `get_default_feedback` (protocol v4+)
-  3. A local dmabuf can be created: **GBM/DRM** linear BO
+- Present defaults to **`wl_shm` `XRGB8888`** (opaque). `auto` and `shm`
+  are the same path. **Do not use ARGB8888 for opaque UI**: paintengine2d
+  is premul RGBA; a wrong swizzle or an empty GBM map leaves alpha=0 and
+  Mutter/Weston draw a fully transparent window. Workaround if a build
+  still prefers dmabuf: `UITK_WAYLAND_PRESENT=shm`.
+- **linux-dmabuf** is opt-in (`UITK_WAYLAND_PRESENT=dmabuf`) when:
+  1. The compositor advertises `zwp_linux_dmabuf_v1` (v2+) and a
+     CPU-linear **opaque** format first: `DRM_FORMAT_XRGB8888` /
+     `XBGR8888`, then `ARGB8888` / `ABGR8888`
+  2. A local dmabuf can be created: **GBM/DRM** linear BO
      (`libgbm.so` + `/dev/dri/renderD*` or `card*`), else
      `/dev/dma_heap/system`, else memfd + `/dev/udmabuf`
-- Otherwise present uses the existing two `wl_shm` pools (memfd-style
-  temp files). Xvfb, Weston headless without GBM, missing protocols,
-  and `UITK_WAYLAND_PRESENT=shm` always land on shm. A failed dmabuf
-  import on the first buffer falls back to shm for that connection.
+  A failed import **or a blank first upload** (destination alpha still
+  zero after an opaque source blit) falls back to shm for that
+  connection. Explicit acquire fences (`zwp_linux_explicit_synchronization_v1`
+  / `wp_linux_drm_syncobj_v1`) are **not** attached on present: an
+  unsignaled fence leaves the compositor waiting on an invisible surface.
+  Implicit reservation + `DMA_BUF_IOCTL_SYNC` + `wl_buffer.release` remain.
 - Both paths attach premul 8-bit pixels from `paintengine2d.Image.Pix`
-  (`RowStride`). ARGB8888/XRGB8888 swizzle RGBA→BGRA; ABGR8888 is a
-  row copy. Then `wl_surface_damage_buffer` (or `wl_surface_damage`),
-  attach, commit. After a CPU write to a dmabuf, present issues
-  `DMA_BUF_IOCTL_SYNC` END and, when the kernel allows it, exports a
-  sync_file (`DMA_BUF_IOCTL_EXPORT_SYNC_FILE`) as the acquire fence.
-  If the compositor binds `wp_linux_drm_syncobj_v1` **and** a DRM fd is
-  available from GBM, present uses a **timeline** (`set_acquire_point` /
-  `set_release_point`) and waits the previous release point before
-  rewriting a slot. Else if `zwp_linux_explicit_synchronization_v1` is
-  advertised, present calls `set_acquire_fence` + `get_release`.
-  Otherwise implicit reservation + `wl_buffer.release` remains. A busy
-  slot is never overwritten: `pickSlot` round-trips until a buffer is
-  free. Missing protocols are ignored (shm and implicit dmabuf still
-  work). Integer `wl_surface.set_buffer_scale` or fractional-scale +
-  viewport destination. Resize rebuilds both pixmap and the free present
-  slots so attach/damage stay aligned.
+  (`RowStride`) with a **single** damage-rect uint32 swizzle: XRGB/ARGB
+  RGBA→BGRA and force A/X=0xFF; XBGR/ABGR is a row copy with A=0xFF.
+  Then `wl_surface.set_opaque_region` (once per size), damage, attach,
+  commit. Four present slots pipeline frames so a tight capture loop
+  does not `wl_display_roundtrip` every present (two slots + 24
+  roundtrips was ~55ms/frame at 1000×760). If every slot is busy,
+  `pickSlot` blocks on **one** `wl_display_dispatch` for a release —
+  not a sync-object wait. Integer `wl_surface.set_buffer_scale` or
+  fractional-scale + viewport destination (set when scale changes).
+  Resize rebuilds the pixmap and free present slots.
 - Seat: pointer (motion, buttons, axis) with coordinates multiplied by
   buffer scale; keyboard via **xkbcommon** (keymap, mods, UTF-8,
   compose / dead keys) plus compositor `repeat_info`.
@@ -136,9 +137,9 @@ wayland-scanner private-code \
 
 ```bash
 # Force present path (Wayland + CGO only)
-UITK_WAYLAND_PRESENT=auto go run ./examples/gallery    # dmabuf if possible
-UITK_WAYLAND_PRESENT=shm go run ./examples/gallery     # always wl_shm
-UITK_WAYLAND_PRESENT=dmabuf go run ./examples/gallery  # prefer dmabuf, shm fallback
+UITK_WAYLAND_PRESENT=auto go run ./examples/gallery    # wl_shm XRGB8888 (default)
+UITK_WAYLAND_PRESENT=shm go run ./examples/gallery     # same as auto; workaround if a window is transparent
+UITK_WAYLAND_PRESENT=dmabuf go run ./examples/gallery  # experimental; falls back to shm if the upload is blank
 ```
 
 ## HiDPI
