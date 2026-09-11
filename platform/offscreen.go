@@ -13,6 +13,7 @@ type Offscreen struct {
 	img    *paintengine2d.Image
 	closed bool
 	queue  []Event
+	cursor Cursor
 }
 
 // NewOffscreen allocates a CPU pixmap of the requested size.
@@ -36,6 +37,8 @@ func (o *Offscreen) Size() (w, h int)             { return o.img.Width, o.img.He
 func (o *Offscreen) Buffer() *paintengine2d.Image { return o.img }
 func (o *Offscreen) Closed() bool                 { return o.closed }
 func (o *Offscreen) Scale() float32               { return 1 }
+func (o *Offscreen) SetCursor(c Cursor)           { o.cursor = c }
+func (o *Offscreen) Cursor() Cursor               { return o.cursor }
 
 func (o *Offscreen) Resize(w, h int) error {
 	if w < 1 {

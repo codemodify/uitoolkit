@@ -144,7 +144,7 @@ func (l *CardList) Paint(ctx *paintengine2d.Context) {
 	lo, hi := l.visibleRange()
 	if rec, ok := ctx.Device().(*paintengine2d.Recorder); ok {
 		ob := l.Bounds()
-		l.rows.ready(ob.Min.X, ob.Min.Y, b.Dx(), rh, lookSig(lk))
+		l.rows.ready(ob.Min.X, ob.Min.Y, b.Dx(), rh, l.OffsetY, lookSig(lk))
 		recordScrollingRows(rec, &l.rows, l.ID()^(3<<32), l.OffsetY, 0, lo, hi,
 			func(i int) uint64 { return l.ID()<<32 | uint64(i) + 1 },
 			func(i int) uint64 {
@@ -153,7 +153,7 @@ func (l *CardList) Paint(ctx *paintengine2d.Context) {
 					c.Title, c.Subtitle, c.Meta, c.Snippet)
 			},
 			func(i int) {
-				y := float32(i) * rh
+				y := float32(i)*rh - l.OffsetY
 				paintCard(lk, ctx, paintengine2d.XYWH(0, y, b.Dx(), rh), l.cardAt(i), i == l.Selected, i == l.hovered)
 			},
 		)

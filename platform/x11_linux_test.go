@@ -145,6 +145,8 @@ func TestX11EWMHAndIMECursor(t *testing.T) {
 	if ime, ok := s.(IMESurface); ok {
 		ime.SetIMECursor(10, 20, 2, 16)
 	}
+	SetCursor(s, CursorColResize)
+	SetCursor(s, CursorDefault)
 }
 
 func TestX11EGLOrCPUFallback(t *testing.T) {

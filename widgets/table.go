@@ -279,6 +279,46 @@ func (t *TableView) colAt(x float32) int {
 	return -1
 }
 
+func (t *TableView) paintHeader(ctx *paintengine2d.Context, lk style.LookAndFeel, widths []float32, hh float32) {
+	x := float32(0)
+	for i, col := range t.Columns {
+		w := widths[i]
+		hb := paintengine2d.XYWH(x, 0, w, hh)
+		st := t.State()
+		if i != t.hoverCol {
+			st &^= style.StateHovered
+		} else {
+			st |= style.StateHovered
+		}
+		if i == t.pressCol {
+			st |= style.StatePressed
+		}
+		lk.DrawTableHeader(ctx, hb, st, col.Title, t.SortCol == i, t.SortAsc)
+		x += w
+	}
+}
+
+func (t *TableView) paintRow(ctx *paintengine2d.Context, lk style.LookAndFeel, widths []float32, row int, y, rh float32) {
+	cx := float32(0)
+	for col := range t.Columns {
+		w := widths[col]
+		cell := paintengine2d.XYWH(cx, y, w, rh)
+		label := ""
+		if t.CellText != nil {
+			label = t.CellText(row, col)
+		}
+		face := lk.Font()
+		if t.Mono {
+			face = lk.MonoFont()
+		}
+		if t.CellBold != nil && t.CellBold(row, col) {
+			face = lk.BoldFont()
+		}
+		lk.DrawTableCell(ctx, cell, row == t.Selected, row == t.hovered, label, t.Columns[col].Align, face)
+		cx += w
+	}
+}
+
 func (t *TableView) visibleRange() (lo, hi int) {
 	rh := t.rowH()
 	if rh <= 0 {
@@ -302,22 +342,6 @@ func (t *TableView) Paint(ctx *paintengine2d.Context) {
 	hh := t.headerH()
 	ctx.DrawRect(b, paintengine2d.Fill(lk.Palette().Field))
 	widths := t.colWidths()
-	x := float32(0)
-	for i, col := range t.Columns {
-		w := widths[i]
-		hb := paintengine2d.XYWH(x, 0, w, hh)
-		st := t.State()
-		if i != t.hoverCol {
-			st &^= style.StateHovered
-		} else {
-			st |= style.StateHovered
-		}
-		if i == t.pressCol {
-			st |= style.StatePressed
-		}
-		lk.DrawTableHeader(ctx, hb, st, col.Title, t.SortCol == i, t.SortAsc)
-		x += w
-	}
 	body := paintengine2d.XYWH(0, hh, b.Dx(), b.Dy()-hh)
 	ctx.Save()
 	ctx.ClipRect(body)
@@ -325,7 +349,7 @@ func (t *TableView) Paint(ctx *paintengine2d.Context) {
 	lo, hi := t.visibleRange()
 	if rec, ok := ctx.Device().(*paintengine2d.Recorder); ok {
 		ob := t.Bounds()
-		t.rows.ready(ob.Min.X, ob.Min.Y, b.Dx(), rh, lookSig(lk))
+		t.rows.ready(ob.Min.X, ob.Min.Y, b.Dx(), rh, t.OffsetY, lookSig(lk))
 		recordScrollingRows(rec, &t.rows, t.ID()^(1<<32), t.OffsetY, hh, lo, hi,
 			func(i int) uint64 { return t.ID()<<32 | uint64(i) + 1 },
 			func(i int) uint64 {
@@ -346,51 +370,19 @@ func (t *TableView) Paint(ctx *paintengine2d.Context) {
 				return visualSig(i == t.Selected, i == t.hovered, extra, parts...)
 			},
 			func(i int) {
-				y := float32(i) * rh
-				cx := float32(0)
-				for col := range t.Columns {
-					w := widths[col]
-					cell := paintengine2d.XYWH(cx, y, w, rh)
-					label := ""
-					if t.CellText != nil {
-						label = t.CellText(i, col)
-					}
-					face := lk.Font()
-					if t.Mono {
-						face = lk.MonoFont()
-					}
-					if t.CellBold != nil && t.CellBold(i, col) {
-						face = lk.BoldFont()
-					}
-					lk.DrawTableCell(ctx, cell, i == t.Selected, i == t.hovered, label, t.Columns[col].Align, face)
-					cx += w
-				}
+				y := hh + float32(i)*rh - t.OffsetY
+				t.paintRow(ctx, lk, widths, i, y, rh)
 			},
 		)
 	} else {
 		for row := lo; row < hi; row++ {
 			y := hh + float32(row)*rh - t.OffsetY
-			cx := float32(0)
-			for col := range t.Columns {
-				w := widths[col]
-				cell := paintengine2d.XYWH(cx, y, w, rh)
-				label := ""
-				if t.CellText != nil {
-					label = t.CellText(row, col)
-				}
-				face := lk.Font()
-				if t.Mono {
-					face = lk.MonoFont()
-				}
-				if t.CellBold != nil && t.CellBold(row, col) {
-					face = lk.BoldFont()
-				}
-				lk.DrawTableCell(ctx, cell, row == t.Selected, row == t.hovered, label, t.Columns[col].Align, face)
-				cx += w
-			}
+			t.paintRow(ctx, lk, widths, row, y, rh)
 		}
 	}
 	ctx.Restore()
+	// Sticky header after the body so a leaked row cannot cover the labels.
+	t.paintHeader(ctx, lk, widths, hh)
 	track, thumb := t.scrollTrack()
 	paintOverflowBar(ctx, lk, track, thumb, t.vbar.over, t.vbar.active)
 	if t.Focused() {

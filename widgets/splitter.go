@@ -3,6 +3,7 @@ package widgets
 import (
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/layout"
+	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
 )
@@ -194,12 +195,39 @@ func (s *Splitter) HitTest(local paintengine2d.Point) widget.Component {
 	return s
 }
 
+func (s *Splitter) resizeCursor() platform.Cursor {
+	if s.Vertical {
+		return platform.CursorColResize
+	}
+	return platform.CursorRowResize
+}
+
+// CursorAt is col-resize / row-resize on the sash (and while dragging).
+func (s *Splitter) CursorAt(local paintengine2d.Point) platform.Cursor {
+	if s.drag || s.divider().Contains(local) {
+		return s.resizeCursor()
+	}
+	return platform.CursorDefault
+}
+
+func (s *Splitter) applyCursor(local paintengine2d.Point) {
+	widget.ApplyCursor(s.Host(), s.CursorAt(local))
+}
+
 func (s *Splitter) MouseEnter() { s.hovered = true; s.Base.MouseEnter() }
-func (s *Splitter) MouseExit()  { s.hovered = false; s.Base.MouseExit() }
+
+func (s *Splitter) MouseExit() {
+	s.hovered = false
+	if !s.drag {
+		widget.ApplyCursor(s.Host(), platform.CursorDefault)
+	}
+	s.Base.MouseExit()
+}
 
 func (s *Splitter) MousePress(e widget.MouseEvent) bool {
 	if s.divider().Contains(e.Pos) {
 		s.drag = true
+		s.applyCursor(e.Pos)
 		s.Invalidate()
 		return true
 	}
@@ -207,8 +235,14 @@ func (s *Splitter) MousePress(e widget.MouseEvent) bool {
 }
 
 func (s *Splitter) MouseMove(e widget.MouseEvent) bool {
+	over := s.divider().Contains(e.Pos)
+	if over != s.hovered {
+		s.hovered = over
+		s.Invalidate()
+	}
 	if !s.drag {
-		return false
+		s.applyCursor(e.Pos)
+		return over
 	}
 	b := s.LocalBounds()
 	bar := s.bar()
@@ -226,12 +260,14 @@ func (s *Splitter) MouseMove(e widget.MouseEvent) bool {
 	s.clampRatio()
 	s.Arrange(s.Bounds())
 	s.RequestLayout()
+	s.applyCursor(e.Pos)
 	s.Invalidate()
 	return true
 }
 
-func (s *Splitter) MouseRelease(widget.MouseEvent) bool {
+func (s *Splitter) MouseRelease(e widget.MouseEvent) bool {
 	s.drag = false
+	s.applyCursor(e.Pos)
 	s.Invalidate()
 	return true
 }

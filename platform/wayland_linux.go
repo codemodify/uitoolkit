@@ -32,7 +32,7 @@ extern void uitkWlXdgConfigure(uintptr_t sid, struct xdg_surface *surf, uint32_t
 extern void uitkWlTopConfigure(uintptr_t sid, struct xdg_toplevel *top, int32_t w, int32_t h, uint32_t flags);
 extern void uitkWlTopClose(uintptr_t sid);
 extern void uitkWlSeatCaps(uintptr_t id, struct wl_seat *seat, uint32_t caps);
-extern void uitkWlPtrEnter(uintptr_t id, struct wl_surface *surf, wl_fixed_t x, wl_fixed_t y);
+extern void uitkWlPtrEnter(uintptr_t id, uint32_t serial, struct wl_surface *surf, wl_fixed_t x, wl_fixed_t y);
 extern void uitkWlPtrLeave(uintptr_t id);
 extern void uitkWlPtrMotion(uintptr_t id, wl_fixed_t x, wl_fixed_t y);
 extern void uitkWlPtrButton(uintptr_t id, uint32_t button, uint32_t state, uint32_t serial);
@@ -184,8 +184,19 @@ static struct wl_pointer *ui_wl_pointer(struct wl_seat *s) { return wl_seat_get_
 static struct wl_keyboard *ui_wl_keyboard(struct wl_seat *s) { return wl_seat_get_keyboard(s); }
 
 static void uitk_ptr_enter(void *data, struct wl_pointer *p, uint32_t serial, struct wl_surface *surf, wl_fixed_t x, wl_fixed_t y) {
-	(void)p; (void)serial;
-	uitkWlPtrEnter((uintptr_t)data, surf, x, y);
+	(void)p;
+	uitkWlPtrEnter((uintptr_t)data, serial, surf, x, y);
+}
+static void ui_wl_set_cursor(struct wl_pointer *p, uint32_t serial, struct wl_surface *surf, int32_t hx, int32_t hy) {
+	if (p) wl_pointer_set_cursor(p, serial, surf, hx, hy);
+}
+static struct wl_buffer *ui_wl_argb_buffer(struct wl_shm *shm, int fd, int w, int h, int stride, size_t size) {
+	if (!shm) return NULL;
+	struct wl_shm_pool *pool = wl_shm_create_pool(shm, fd, (int32_t)size);
+	if (!pool) return NULL;
+	struct wl_buffer *buf = wl_shm_pool_create_buffer(pool, 0, w, h, stride, WL_SHM_FORMAT_ARGB8888);
+	wl_shm_pool_destroy(pool);
+	return buf;
 }
 static void uitk_ptr_leave(void *data, struct wl_pointer *p, uint32_t serial, struct wl_surface *surf) {
 	(void)p; (void)serial; (void)surf;
@@ -845,6 +856,10 @@ type wlConn struct {
 	px, py     float32
 	mods       Modifiers
 	serial     uint32
+	ptrSerial  uint32
+	cursor     Cursor
+	curSurf    *C.struct_wl_surface
+	curSlot    [4]wlCursorBuf
 	outScale   float32
 
 	dataMan     *C.struct_wl_data_device_manager
@@ -970,6 +985,9 @@ func wlRetain() (*wlConn, error) {
 		return nil, fmt.Errorf("platform: wl_display_connect failed (set WAYLAND_DISPLAY or use headless)")
 	}
 	c := &wlConn{dpy: dpy, refs: 1, xkbCtx: C.ui_xkb_ctx()}
+	for i := range c.curSlot {
+		c.curSlot[i].fd = -1
+	}
 	wlNext++
 	c.id = wlNext
 	wlConns[c.id] = c
@@ -1008,6 +1026,7 @@ func (c *wlConn) closeLocked() {
 		C.ui_wl_kb_destroy(c.keyboard)
 		c.keyboard = nil
 	}
+	c.destroyCursorsLocked()
 	if c.pointer != nil {
 		C.ui_wl_ptr_destroy(c.pointer)
 		c.pointer = nil
@@ -1173,6 +1192,186 @@ func (s *wlSurface) SetMaximized(on bool) {
 	} else {
 		C.ui_wl_unset_max(s.top)
 	}
+}
+
+func (s *wlSurface) SetCursor(cur Cursor) {
+	if s == nil || s.conn == nil {
+		return
+	}
+	wlMu.Lock()
+	s.conn.cursor = cur
+	s.conn.applyCursorLocked()
+	wlMu.Unlock()
+}
+
+type wlCursorBuf struct {
+	buf    *C.struct_wl_buffer
+	mem    unsafe.Pointer
+	fd     int
+	size   int
+	hx, hy int
+	ready  bool
+}
+
+const wlCursorSize = 24
+
+func (c *wlConn) destroyCursorsLocked() {
+	if c.curSurf != nil {
+		C.ui_wl_surface_destroy(c.curSurf)
+		c.curSurf = nil
+	}
+	for i := range c.curSlot {
+		s := &c.curSlot[i]
+		if s.buf != nil {
+			C.ui_wl_buf_destroy(s.buf)
+			s.buf = nil
+		}
+		if s.mem != nil {
+			C.ui_wl_munmap(s.mem, C.size_t(s.size))
+			s.mem = nil
+		}
+		if s.ready && s.fd >= 0 {
+			C.ui_wl_close_fd(C.int(s.fd))
+		}
+		s.fd = -1
+		s.ready = false
+	}
+}
+
+func (c *wlConn) ensureCursorBuf(cur Cursor) *wlCursorBuf {
+	idx := int(cur)
+	if idx < 0 || idx >= len(c.curSlot) {
+		idx = 0
+	}
+	slot := &c.curSlot[idx]
+	if slot.ready && slot.buf != nil {
+		return slot
+	}
+	const n = wlCursorSize
+	stride := n * 4
+	size := stride * n
+	var mem unsafe.Pointer
+	fd := int(C.ui_wl_memfd(C.size_t(size), &mem))
+	if fd < 0 || mem == nil {
+		return nil
+	}
+	pix := unsafe.Slice((*byte)(mem), size)
+	hx, hy := drawCursorARGB(pix, n, stride, cur)
+	buf := C.ui_wl_argb_buffer(c.shm, C.int(fd), n, n, stride, C.size_t(size))
+	if buf == nil {
+		C.ui_wl_munmap(mem, C.size_t(size))
+		C.ui_wl_close_fd(C.int(fd))
+		return nil
+	}
+	slot.buf, slot.mem, slot.fd, slot.size = buf, mem, fd, size
+	slot.hx, slot.hy, slot.ready = hx, hy, true
+	return slot
+}
+
+func putARGB(pix []byte, stride, x, y int, r, g, b, a byte) {
+	if x < 0 || y < 0 {
+		return
+	}
+	off := y*stride + x*4
+	if off < 0 || off+3 >= len(pix) {
+		return
+	}
+	// WL_SHM_FORMAT_ARGB8888 little-endian: B, G, R, A
+	pix[off+0] = b
+	pix[off+1] = g
+	pix[off+2] = r
+	pix[off+3] = a
+}
+
+func drawCursorARGB(pix []byte, n, stride int, cur Cursor) (hx, hy int) {
+	for i := range pix {
+		pix[i] = 0
+	}
+	dot := func(x, y int, on bool) {
+		if on {
+			putARGB(pix, stride, x, y, 0, 0, 0, 255)
+		} else {
+			putARGB(pix, stride, x, y, 255, 255, 255, 255)
+		}
+	}
+	switch cur {
+	case CursorColResize:
+		cy := n / 2
+		for x := 3; x < n-3; x++ {
+			dot(x, cy, true)
+			dot(x, cy-1, false)
+			dot(x, cy+1, false)
+		}
+		for i := 0; i < 5; i++ {
+			dot(3+i, cy-i, true)
+			dot(3+i, cy+i, true)
+			dot(n-4-i, cy-i, true)
+			dot(n-4-i, cy+i, true)
+		}
+		return n / 2, cy
+	case CursorRowResize:
+		cx := n / 2
+		for y := 3; y < n-3; y++ {
+			dot(cx, y, true)
+			dot(cx-1, y, false)
+			dot(cx+1, y, false)
+		}
+		for i := 0; i < 5; i++ {
+			dot(cx-i, 3+i, true)
+			dot(cx+i, 3+i, true)
+			dot(cx-i, n-4-i, true)
+			dot(cx+i, n-4-i, true)
+		}
+		return cx, n / 2
+	case CursorText:
+		cx := n / 2
+		for y := 4; y < n-4; y++ {
+			dot(cx, y, true)
+			dot(cx-1, y, false)
+			dot(cx+1, y, false)
+		}
+		for x := cx - 3; x <= cx+3; x++ {
+			dot(x, 4, true)
+			dot(x, n-5, true)
+		}
+		return cx, n / 2
+	default:
+		// left-pointing arrow
+		for y := 1; y < 16; y++ {
+			w := y
+			if w > 10 {
+				w = 10
+			}
+			if y > 12 {
+				w = 16 - y
+			}
+			for x := 1; x <= w; x++ {
+				dot(x, y, x == 1 || x == w || y == 1)
+			}
+		}
+		return 1, 1
+	}
+}
+
+func (c *wlConn) applyCursorLocked() {
+	if c == nil || c.pointer == nil || c.compositor == nil || c.shm == nil || c.dpy == nil {
+		return
+	}
+	if c.curSurf == nil {
+		c.curSurf = C.ui_wl_surface(c.compositor)
+	}
+	slot := c.ensureCursorBuf(c.cursor)
+	if slot == nil && c.cursor != CursorDefault {
+		slot = c.ensureCursorBuf(CursorDefault)
+	}
+	if slot == nil || slot.buf == nil || c.curSurf == nil {
+		return
+	}
+	C.ui_wl_attach(c.curSurf, slot.buf)
+	C.ui_wl_damage(c.curSurf, 0, 0, wlCursorSize, wlCursorSize)
+	C.ui_wl_commit(c.curSurf)
+	C.ui_wl_set_cursor(c.pointer, C.uint32_t(c.ptrSerial), c.curSurf, C.int32_t(slot.hx), C.int32_t(slot.hy))
+	C.ui_wl_flush(c.dpy)
 }
 
 func (s *wlSurface) SetIMEEnabled(on bool) {
@@ -1914,11 +2113,13 @@ func uitkWlSeatCaps(id C.uintptr_t, seat *C.struct_wl_seat, caps C.uint32_t) {
 }
 
 //export uitkWlPtrEnter
-func uitkWlPtrEnter(id C.uintptr_t, surf *C.struct_wl_surface, x, y C.wl_fixed_t) {
+func uitkWlPtrEnter(id C.uintptr_t, serial C.uint32_t, surf *C.struct_wl_surface, x, y C.wl_fixed_t) {
 	c := wlConnBy(id)
 	if c == nil {
 		return
 	}
+	c.serial = uint32(serial)
+	c.ptrSerial = uint32(serial)
 	c.px = float32(C.ui_wl_fixed(x))
 	c.py = float32(C.ui_wl_fixed(y))
 	if s := wlSurfNative(surf); s != nil {
@@ -1926,6 +2127,9 @@ func uitkWlPtrEnter(id C.uintptr_t, surf *C.struct_wl_surface, x, y C.wl_fixed_t
 		dx, dy := s.toDevice(c.px, c.py)
 		s.push(Event{Kind: EventMouseMove, Pos: paintengine2d.Pt(dx, dy), Mods: c.mods})
 	}
+	wlMu.Lock()
+	c.applyCursorLocked()
+	wlMu.Unlock()
 }
 
 //export uitkWlPtrLeave

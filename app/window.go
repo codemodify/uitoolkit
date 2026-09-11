@@ -13,31 +13,32 @@ import (
 
 // Window is a widget host that paints into a platform.Surface.
 type Window struct {
-	app      *Application
-	surf     platform.Surface
-	root     widget.Component
-	overlay  widget.Component
-	popup    widget.Component
-	tooltip  widget.Component
-	look     style.LookAndFeel
-	dirty    paintengine2d.Damage
-	full     bool
-	focus    widget.Component
-	hover    widget.Component
-	capture  widget.Component
-	closed   bool
-	blink    bool
-	laid     bool
-	scale    float32
-	tipHover widget.Component
-	tipSince time.Time
-	tipPos   paintengine2d.Point
-	tipDelay time.Duration
+	app        *Application
+	surf       platform.Surface
+	root       widget.Component
+	overlay    widget.Component
+	popup      widget.Component
+	tooltip    widget.Component
+	look       style.LookAndFeel
+	dirty      paintengine2d.Damage
+	full       bool
+	focus      widget.Component
+	hover      widget.Component
+	capture    widget.Component
+	closed     bool
+	blink      bool
+	laid       bool
+	scale      float32
+	tipHover   widget.Component
+	tipSince   time.Time
+	tipPos     paintengine2d.Point
+	tipDelay   time.Duration
 	clock      func() time.Time
 	lastTip    string
 	animPeriod time.Duration
 	layers     *widget.SceneCache
 	scene      *paintengine2d.Scene
+	cursor     platform.Cursor
 }
 
 func newWindow(a *Application, surf platform.Surface, opts platform.WindowOptions) *Window {
@@ -65,6 +66,28 @@ func (w *Window) SetFullscreen(on bool) { platform.SetFullscreen(w.surf, on) }
 
 // SetMaximized asks the native backend when available.
 func (w *Window) SetMaximized(on bool) { platform.SetMaximized(w.surf, on) }
+
+// SetCursor applies the pointer shape on X11 / Wayland / offscreen.
+func (w *Window) SetCursor(c platform.Cursor) {
+	if w == nil {
+		return
+	}
+	w.cursor = c
+	platform.SetCursor(w.surf, c)
+}
+
+// Cursor is the last shape passed to SetCursor.
+func (w *Window) Cursor() platform.Cursor { return w.cursor }
+
+func (w *Window) syncCursor(target widget.Component, local paintengine2d.Point) {
+	cur := platform.CursorDefault
+	if target != nil {
+		if h, ok := target.(widget.CursorHint); ok {
+			cur = h.CursorAt(local)
+		}
+	}
+	w.SetCursor(cur)
+}
 
 func (w *Window) SetContent(c widget.Component) {
 	w.root = c
@@ -513,7 +536,9 @@ func (w *Window) mouseDown(ev platform.Event) {
 		// click on inert chrome keeps focus unless it is the overlay dimmer
 	}
 	if t != nil {
-		t.MousePress(widget.MouseEvent{Pos: local(t, ev.Pos), Button: ev.Button, Mods: ev.Mods})
+		lp := local(t, ev.Pos)
+		t.MousePress(widget.MouseEvent{Pos: lp, Button: ev.Button, Mods: ev.Mods})
+		w.syncCursor(t, lp)
 	}
 }
 
@@ -523,9 +548,16 @@ func (w *Window) mouseUp(ev platform.Event) {
 		t = w.hit(ev.Pos)
 	}
 	if t != nil {
-		t.MouseRelease(widget.MouseEvent{Pos: local(t, ev.Pos), Button: ev.Button, Mods: ev.Mods})
+		lp := local(t, ev.Pos)
+		t.MouseRelease(widget.MouseEvent{Pos: lp, Button: ev.Button, Mods: ev.Mods})
 	}
 	w.capture = nil
+	hit := w.hit(ev.Pos)
+	if hit != nil {
+		w.syncCursor(hit, local(hit, ev.Pos))
+	} else {
+		w.SetCursor(platform.CursorDefault)
+	}
 }
 
 func (w *Window) mouseMove(ev platform.Event) {
@@ -547,7 +579,9 @@ func (w *Window) mouseMove(ev platform.Event) {
 	}
 	w.tipPos = ev.Pos
 	if t != nil {
-		t.MouseMove(widget.MouseEvent{Pos: local(t, ev.Pos), Button: ev.Button, Mods: ev.Mods})
+		lp := local(t, ev.Pos)
+		t.MouseMove(widget.MouseEvent{Pos: lp, Button: ev.Button, Mods: ev.Mods})
+		w.syncCursor(t, lp)
 		text := widget.TooltipText(t)
 		if text != w.lastTip {
 			w.HideTooltip()
@@ -557,6 +591,7 @@ func (w *Window) mouseMove(ev platform.Event) {
 		}
 	} else {
 		w.lastTip = ""
+		w.SetCursor(platform.CursorDefault)
 	}
 }
 

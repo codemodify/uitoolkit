@@ -440,9 +440,19 @@ Add Account IMAP vs POP3, Test connection / auto-detect, and POP3 inbox
 retrieve are **v0.10.3**. Mail folder tree drops Unified / Smart / Categories
 chrome and message open no longer rebuilds the list (**v0.10.4**).
 Splitter pane clip, overflow scrollbars, scroll clamp, and read-only
-`TextView` are **v0.10.5**.
+`TextView` are **v0.10.5**. Table/list body clip (flush under the header,
+rows stay visible past the first page) and restoring the pointer after a
+splitter drag are **v0.10.6**.
 
 ## Version
+
+**0.10.6** — Toolkit: virtualized `TableView` / `ListView` / `CardList` /
+`TreeView` paint rows in the viewport and clip the body below a sticky
+header, so scrollY=0 sits flush, scrolling down cannot paint through the
+labels, and the first page is not the only page that draws. `Splitter`
+shows a resize cursor on the sash and restores the default pointer on
+release / leave (`Window.SetCursor` on X11 and Wayland). Still
+paintengine2d **v0.9.0**.
 
 **0.10.5** — Toolkit: `Splitter` arranges exclusive A/B panes and clips
 children on paint/hit-test so a drag cannot leave sibling chrome overlapping.
