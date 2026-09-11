@@ -2,6 +2,8 @@ package demo
 
 import (
 	"fmt"
+	"path/filepath"
+	"sort"
 
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/app"
@@ -13,19 +15,20 @@ import (
 
 // Note is one row in the sample notes app.
 type Note struct {
-	Title string
-	Body  string
-	Done  bool
+	Title    string
+	Body     string
+	Done     bool
+	Priority int
 }
 
 // NotesApp is a small real desktop app: a filterable note list + editor.
 func NotesApp(win *app.Window) widget.Component {
 	notes := []Note{
-		{Title: "Ship v0.1", Body: "Write README, screenshots, and tag the module.", Done: false},
-		{Title: "Damage pass", Body: "Resize should only present dirty rects.", Done: true},
-		{Title: "Theme polish", Body: "Check light theme contrast on sliders.", Done: false},
-		{Title: "X11 present", Body: "XPutImage dirty boxes; fallback offscreen.", Done: true},
-		{Title: "Grocery", Body: "Coffee, oats, lemons, bread.", Done: false},
+		{Title: "Ship v0.1.5", Body: "TableView, NumberField, tooltip, file picker stub.", Done: false, Priority: 1},
+		{Title: "Damage pass", Body: "Resize should only present dirty rects.", Done: true, Priority: 3},
+		{Title: "Theme polish", Body: "Check light theme contrast on sliders.", Done: false, Priority: 2},
+		{Title: "X11 present", Body: "XPutImage dirty boxes; fallback offscreen.", Done: true, Priority: 4},
+		{Title: "Grocery", Body: "Coffee, oats, lemons, bread.", Done: false, Priority: 5},
 	}
 	sel := 0
 	filter := ""
@@ -34,6 +37,8 @@ func NotesApp(win *app.Window) widget.Component {
 	body := widgets.NewTextField(notes[0].Body, "Body", nil)
 	done := widgets.NewCheckbox("Done", notes[0].Done, nil)
 	status := widgets.NewLabel(fmt.Sprintf("%d notes", len(notes)))
+	priority := widgets.NewNumberField(1, 9, float64(notes[0].Priority), 1, nil)
+	priority.Tip = "Lower number is sooner"
 
 	match := func(n Note) bool {
 		if filter == "" {
@@ -51,49 +56,107 @@ func NotesApp(win *app.Window) widget.Component {
 		return idx
 	}
 
-	var list *widgets.ListView
+	var table *widgets.TableView
+	loadEditor := func() {
+		if sel < 0 || sel >= len(notes) {
+			return
+		}
+		title.SetText(notes[sel].Title)
+		body.SetText(notes[sel].Body)
+		done.SetChecked(notes[sel].Done)
+		priority.SetValue(float64(notes[sel].Priority))
+	}
 	refresh := func() {
 		vis := visible()
-		list.Count = len(vis)
+		table.RowCount = len(vis)
 		if sel >= len(notes) {
 			sel = len(notes) - 1
 		}
-		list.Selected = indexOf(vis, sel)
-		list.Invalidate()
+		table.Selected = indexOf(vis, sel)
+		table.Invalidate()
 		status.SetText(fmt.Sprintf("%d notes  ·  %d shown", len(notes), len(vis)))
 	}
 
-	list = widgets.NewListView(len(notes), func(i int) string {
+	table = widgets.NewTableView([]widgets.TableColumn{
+		{Title: "Title", Sortable: true},
+		{Title: "Pri", Width: 48, Sortable: true, Align: style.AlignCenter},
+		{Title: "Done", Width: 56, Sortable: true, Align: style.AlignCenter},
+	}, len(notes), func(i, col int) string {
 		vis := visible()
 		if i < 0 || i >= len(vis) {
 			return ""
 		}
 		n := notes[vis[i]]
-		mark := "·"
-		if n.Done {
-			mark = "+"
+		switch col {
+		case 1:
+			return fmt.Sprintf("%d", n.Priority)
+		case 2:
+			if n.Done {
+				return "yes"
+			}
+			return "no"
+		default:
+			return n.Title
 		}
-		return mark + "  " + n.Title
 	}, func(i int) {
 		vis := visible()
 		if i < 0 || i >= len(vis) {
 			return
 		}
 		sel = vis[i]
-		title.SetText(notes[sel].Title)
-		body.SetText(notes[sel].Body)
-		done.SetChecked(notes[sel].Done)
+		loadEditor()
 	})
-	list.Selected = 0
-	list.OnContext = func(i int, p paintengine2d.Point) {
+	table.Selected = 0
+	table.OnSort = func(col int, asc bool) {
+		vis := visible()
+		sort.SliceStable(vis, func(i, j int) bool {
+			a, b := notes[vis[i]], notes[vis[j]]
+			var less bool
+			switch col {
+			case 1:
+				less = a.Priority < b.Priority
+			case 2:
+				less = !a.Done && b.Done
+			default:
+				less = a.Title < b.Title
+			}
+			if !asc {
+				return !less
+			}
+			return less
+		})
+		reordered := make([]Note, 0, len(notes))
+		seen := map[int]bool{}
+		for _, i := range vis {
+			reordered = append(reordered, notes[i])
+			seen[i] = true
+		}
+		for i, n := range notes {
+			if !seen[i] {
+				reordered = append(reordered, n)
+			}
+		}
+		if sel >= 0 && sel < len(notes) {
+			cur := notes[sel]
+			notes = reordered
+			for i, n := range notes {
+				if n.Title == cur.Title && n.Body == cur.Body {
+					sel = i
+					break
+				}
+			}
+		} else {
+			notes = reordered
+		}
+		refresh()
+	}
+	table.OnContext = func(i int, p paintengine2d.Point) {
 		vis := visible()
 		if i >= 0 && i < len(vis) {
 			sel = vis[i]
-			title.SetText(notes[sel].Title)
-			body.SetText(notes[sel].Body)
-			done.SetChecked(notes[sel].Done)
+			loadEditor()
 		}
-		widgets.ShowContextMenu(list, p,
+		widgets.ShowContextMenu(table, p,
 			widgets.Item("Toggle done", func() {
 				if sel >= 0 && sel < len(notes) {
 					notes[sel].Done = !notes[sel].Done
@@ -118,11 +181,9 @@ func NotesApp(win *app.Window) widget.Component {
 			}),
 			widgets.Sep(),
 			widgets.Item("New note", func() {
-				notes = append(notes, Note{Title: "Untitled", Body: ""})
+				notes = append(notes, Note{Title: "Untitled", Body: "", Priority: 3})
 				sel = len(notes) - 1
-				title.SetText("Untitled")
-				body.SetText("")
-				done.SetChecked(false)
+				loadEditor()
 				refresh()
 			}),
 		)
@@ -145,6 +206,12 @@ func NotesApp(win *app.Window) widget.Component {
 			refresh()
 		}
 	}
+	priority.OnChange = func(v float64) {
+		if sel >= 0 && sel < len(notes) {
+			notes[sel].Priority = int(v)
+			refresh()
+		}
+	}
 
 	search := widgets.NewTextField("", "Filter notes", func(s string) {
 		filter = s
@@ -152,14 +219,13 @@ func NotesApp(win *app.Window) widget.Component {
 	})
 
 	add := widgets.NewButton("New note", func() {
-		notes = append(notes, Note{Title: "Untitled", Body: ""})
+		notes = append(notes, Note{Title: "Untitled", Body: "", Priority: 3})
 		sel = len(notes) - 1
-		title.SetText("Untitled")
-		body.SetText("")
-		done.SetChecked(false)
+		loadEditor()
 		refresh()
 	})
 	add.Primary = true
+	add.Tip = "Create an empty note"
 
 	del := widgets.NewButton("Delete", func() {
 		if len(notes) == 0 {
@@ -170,37 +236,60 @@ func NotesApp(win *app.Window) widget.Component {
 			sel = len(notes) - 1
 		}
 		if sel >= 0 {
-			title.SetText(notes[sel].Title)
-			body.SetText(notes[sel].Body)
-			done.SetChecked(notes[sel].Done)
+			loadEditor()
 		}
 		refresh()
 	})
+	del.Tip = "Remove the selected note"
 
-	tools := widgets.NewToolBar(
-		widgets.ToolIconBtn(style.IconNew, "New", func() { add.OnClick() }),
-		widgets.ToolIconBtn(style.IconOpen, "", func() {}),
-		widgets.ToolDivider(),
-		widgets.ToolIconBtn(style.IconCut, "", func() { del.OnClick() }),
-	)
+	openNote := func() {
+		widgets.ShowFileDialog(win.Content(), widgets.FileDialogOptions{
+			Title:  "Open note file",
+			Path:   ".",
+			Filter: "*.md",
+			Entries: []widgets.FileInfo{
+				{Name: "docs", Dir: true},
+				{Name: "inbox.md"},
+				{Name: "ship-v015.md"},
+				{Name: "theme-polish.md"},
+			},
+			OnPick: func(p string) {
+				base := filepath.Base(p)
+				notes = append(notes, Note{Title: base, Body: "Imported from " + p, Priority: 2})
+				sel = len(notes) - 1
+				loadEditor()
+				refresh()
+			},
+		})
+	}
+
+	newItem := widgets.ToolIconBtn(style.IconNew, "New", func() { add.OnClick() })
+	newItem.Tip = "New note"
+	openItem := widgets.ToolIconBtn(style.IconOpen, "", openNote)
+	openItem.Tip = "Open a file (stub picker)"
+	cutItem := widgets.ToolIconBtn(style.IconCut, "", func() { del.OnClick() })
+	cutItem.Tip = "Delete note"
+	tools := widgets.NewToolBar(newItem, openItem, widgets.ToolDivider(), cutItem)
 
 	sidebar := widgets.NewColumn(
 		widgets.NewTitle("Notes"),
 		tools,
 		search,
-		list,
+		table,
 		widgets.NewRow(add, del).WithGap(8),
 		status,
 	).WithGap(8).WithPad(12)
-	sidebar.AddFlex(list, 1)
+	sidebar.AddFlex(table, 1)
 
 	editor := widgets.NewPanel("Editor",
 		widgets.NewLabel("Title"),
 		title,
 		widgets.NewLabel("Body"),
 		body,
+		widgets.NewLabel("Priority"),
+		priority,
 		done,
-		widgets.NewLabel("A small desktop app on uitoolkit — list, filter, editor, actions."),
+		widgets.NewLabel("A small desktop app on uitoolkit — table, spinner, file stub, tooltips."),
 	)
 	right := widgets.NewPad(8, editor)
 	split := widgets.NewSplitter(true, sidebar, right)

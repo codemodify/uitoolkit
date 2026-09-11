@@ -116,6 +116,9 @@ type Metrics struct {
 	ToolBtn     float32
 	ProgressH   float32
 	Radio       float32
+	HeaderH     float32
+	SpinnerW    float32
+	TooltipPad  float32
 }
 
 // DefaultMetrics is dense but finger-friendly at 1× scale.
@@ -147,6 +150,9 @@ func DefaultMetrics() Metrics {
 		ToolBtn:     30,
 		ProgressH:   14,
 		Radio:       18,
+		HeaderH:     28,
+		SpinnerW:    22,
+		TooltipPad:  8,
 	}
 }
 

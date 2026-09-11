@@ -767,6 +767,115 @@ func (l *Classic) drawToolIcon(ctx *paintengine2d.Context, b paintengine2d.Rect,
 	}
 }
 
+func (l *Classic) DrawTableHeader(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, sorted, asc bool) {
+	p := l.palette
+	ctx.DrawRect(b, paintengine2d.Fill(p.SurfaceAlt))
+	if st.Pressed() {
+		ctx.DrawRect(b.Inset(1), paintengine2d.Fill(p.Accent.WithAlpha(0.22)))
+	} else if st.Hovered() && !st.Disabled() {
+		ctx.DrawRect(b.Inset(1), paintengine2d.Fill(p.Highlight))
+	}
+	ctx.DrawRect(paintengine2d.XYWH(b.Max.X-1, b.Min.Y+6, 1, b.Dy()-12), paintengine2d.Fill(p.Divider))
+	ctx.DrawRect(paintengine2d.XYWH(b.Min.X, b.Max.Y-1, b.Dx(), 1), paintengine2d.Fill(p.Divider))
+	pad := float32(8)
+	ty := b.Min.Y + (b.Dy()-l.body.Height())*0.5
+	l.body.Draw(ctx, label, paintengine2d.Pt(b.Min.X+pad, ty), p.Text)
+	if sorted {
+		cx := b.Max.X - 12
+		cy := (b.Min.Y + b.Max.Y) * 0.5
+		chev := paintengine2d.NewPath()
+		if asc {
+			chev.MoveTo(cx-3.5, cy+2)
+			chev.LineTo(cx+3.5, cy+2)
+			chev.LineTo(cx, cy-3)
+		} else {
+			chev.MoveTo(cx-3.5, cy-2)
+			chev.LineTo(cx+3.5, cy-2)
+			chev.LineTo(cx, cy+3)
+		}
+		chev.Close()
+		ctx.DrawPath(chev, paintengine2d.Fill(p.Accent))
+	}
+}
+
+func (l *Classic) DrawTableCell(ctx *paintengine2d.Context, b paintengine2d.Rect, selected, hovered bool, label string, align Align) {
+	p := l.palette
+	if selected {
+		ctx.DrawRect(b, paintengine2d.Fill(p.Accent.WithAlpha(0.28)))
+	} else if hovered {
+		ctx.DrawRect(b, paintengine2d.Fill(p.Highlight))
+	}
+	f := l.body
+	tw := f.Advance(label)
+	x := b.Min.X + 8
+	switch align {
+	case AlignCenter:
+		x = b.Min.X + (b.Dx()-tw)*0.5
+	case AlignEnd:
+		x = b.Max.X - tw - 8
+	}
+	ty := b.Min.Y + (b.Dy()-f.Height())*0.5
+	ctx.Save()
+	ctx.ClipRect(b.Inset(1))
+	f.Draw(ctx, label, paintengine2d.Pt(x, ty), p.Text)
+	ctx.Restore()
+	ctx.DrawRect(paintengine2d.XYWH(b.Max.X-1, b.Min.Y, 1, b.Dy()), paintengine2d.Fill(p.Divider.WithAlpha(0.55)))
+}
+
+func (l *Classic) DrawSpinner(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, upHover, downHover, upPress, downPress bool) {
+	p := l.palette
+	m := l.metrics
+	r := m.RadiusSmall
+	ctx.DrawRoundRect(b, r, r, paintengine2d.Fill(p.SurfaceAlt))
+	ctx.DrawRoundRect(b.Inset(0.5), r, r, paintengine2d.StrokePaint(p.FieldBorder, 1))
+	mid := (b.Min.Y + b.Max.Y) * 0.5
+	up := paintengine2d.XYWH(b.Min.X, b.Min.Y, b.Dx(), mid-b.Min.Y)
+	down := paintengine2d.XYWH(b.Min.X, mid, b.Dx(), b.Max.Y-mid)
+	if upPress {
+		ctx.DrawRect(up.Inset(1), paintengine2d.Fill(p.Accent.WithAlpha(0.30)))
+	} else if upHover && !st.Disabled() {
+		ctx.DrawRect(up.Inset(1), paintengine2d.Fill(p.Highlight))
+	}
+	if downPress {
+		ctx.DrawRect(down.Inset(1), paintengine2d.Fill(p.Accent.WithAlpha(0.30)))
+	} else if downHover && !st.Disabled() {
+		ctx.DrawRect(down.Inset(1), paintengine2d.Fill(p.Highlight))
+	}
+	ctx.DrawRect(paintengine2d.XYWH(b.Min.X+3, mid, b.Dx()-6, 1), paintengine2d.Fill(p.Divider))
+	cx := (b.Min.X + b.Max.X) * 0.5
+	upC := paintengine2d.NewPath()
+	upC.MoveTo(cx-3.2, mid-3)
+	upC.LineTo(cx+3.2, mid-3)
+	upC.LineTo(cx, b.Min.Y+4)
+	upC.Close()
+	dnC := paintengine2d.NewPath()
+	dnC.MoveTo(cx-3.2, mid+3)
+	dnC.LineTo(cx+3.2, mid+3)
+	dnC.LineTo(cx, b.Max.Y-4)
+	dnC.Close()
+	col := p.TextMuted
+	if st.Disabled() {
+		col = p.Divider
+	}
+	ctx.DrawPath(upC, paintengine2d.Fill(col))
+	ctx.DrawPath(dnC, paintengine2d.Fill(col))
+}
+
+func (l *Classic) DrawTooltip(ctx *paintengine2d.Context, b paintengine2d.Rect, text string) {
+	p := l.palette
+	m := l.metrics
+	r := m.RadiusSmall
+	ctx.DrawRoundRect(b.Translate(paintengine2d.Pt(1.5, 2)), r, r, paintengine2d.Fill(p.Shadow))
+	ctx.DrawRoundRect(b, r, r, paintengine2d.Fill(p.SurfaceAlt))
+	ctx.DrawRoundRect(b.Inset(0.5), r, r, paintengine2d.StrokePaint(p.Border, m.Border))
+	pad := m.TooltipPad
+	if pad <= 0 {
+		pad = 8
+	}
+	ty := b.Min.Y + (b.Dy()-l.body.Height())*0.5
+	l.body.Draw(ctx, text, paintengine2d.Pt(b.Min.X+pad, ty), p.Text)
+}
+
 func (l *Classic) drawLabeled(ctx *paintengine2d.Context, f *Font, text string, underline int, b paintengine2d.Rect, col paintengine2d.Color) {
 	if f == nil || text == "" {
 		return

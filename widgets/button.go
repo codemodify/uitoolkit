@@ -13,10 +13,13 @@ type Button struct {
 	widget.Base
 	Text    string
 	Primary bool
+	Tip     string
 	OnClick func()
 	hovered bool
 	pressed bool
 }
+
+func (b *Button) Tooltip() string { return b.Tip }
 
 func NewButton(text string, onClick func()) *Button {
 	b := &Button{Text: text, OnClick: onClick}
