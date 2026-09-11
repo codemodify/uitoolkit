@@ -11,6 +11,7 @@ import (
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit"
 	"github.com/codemodify/uitoolkit/app"
+	"github.com/codemodify/uitoolkit/layout"
 	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
@@ -92,12 +93,14 @@ type session struct {
 	tree                                       *widgets.TreeView
 	preview                                    *widgets.TextArea
 	source                                     *widgets.TextArea
-	attachList                                 *widgets.ListView
-	attachOpen                                 *widgets.Button
-	attachSave                                 *widgets.Button
-	attachBtns                                 widget.Component
+	attachHits                                 []*attachHit
+	attachAll                                  *widgets.Button
+	attachBar                                  widget.Component
+	attachRows                                 *widgets.FlexBox
 	attachPane                                 *widgets.FlexBox
 	askedEmpty                                 bool
+	mainBar                                    widget.Component
+	listBar                                    *widgets.ToolBar
 	hdrFrom, hdrSubj, hdrDate, hdrTo, hdrExtra *widgets.Label
 	status                                     *widgets.StatusBar
 	qf                                         *widgets.TextField
@@ -339,20 +342,14 @@ func (s *session) build() widget.Component {
 			s.mark("Source  ·  JetBrains Mono")
 		}
 	}
-	s.attachList = widgets.NewListView(0, func(i int) string {
-		if i < 0 || i >= len(s.attNames) {
-			return ""
-		}
-		return "📎  " + s.attNames[i]
-	}, s.selectAttachment)
-	s.attachOpen = widgets.NewButton("Open", s.openSelectedAttachment)
-	s.attachSave = widgets.NewButton("Save As", s.saveSelectedAttachment)
-	s.attachOpen.SetEnabled(false)
-	s.attachSave.SetEnabled(false)
-	s.attachBtns = widgets.NewRow(s.attachOpen, s.attachSave).WithGap(8)
-	s.attachPane = widgets.NewColumn(s.attachList).WithGap(4)
+	s.attachAll = widgets.NewButton("Save All", s.saveAllAttachments)
+	s.attachAll.SetEnabled(false)
+	s.attachBar = widgets.NewRow(s.attachAll).WithGap(8)
+	s.attachBar.SetVisible(false)
+	s.attachRows = widgets.NewColumn().WithGap(4)
+	s.attachPane = widgets.NewColumn(s.attachBar, s.attachRows).WithGap(4)
+	s.attachPane.SetVisible(false)
 	s.applyRowMetrics()
-	s.attachList.SetVisible(false)
 	headCol := widgets.NewColumn(s.hdrSubj, s.hdrFrom, s.hdrTo, s.hdrDate, s.hdrExtra, s.attachPane).WithGap(3).WithPad(10)
 	previewCol := widgets.NewColumn(headCol, widgets.NewSeparator(), tabs).WithGap(0)
 	previewCol.AddFlex(tabs, 1)
@@ -360,7 +357,8 @@ func (s *session) build() widget.Component {
 	s.table.SetVisible(!s.cardView)
 	s.cards.SetVisible(s.cardView)
 	s.listStack = widgets.NewStack(s.table, s.cards)
-	thread := widgets.NewColumn(s.listStack).WithGap(0).WithPad(8)
+	s.listBar = s.listToolBar()
+	thread := widgets.NewColumn(s.listBar, s.listStack).WithGap(0).WithPad(8)
 	thread.AddFlex(s.listStack, 1)
 	s.thread = thread
 	s.acctPanel = s.buildAccountCentral()
@@ -387,7 +385,8 @@ func (s *session) build() widget.Component {
 		split.Ratio = 0.17
 	}
 
-	chrome := []widget.Component{s.menuBar(), s.toolBar(), s.qfBar, split}
+	s.mainBar = s.toolBar()
+	chrome := []widget.Component{s.menuBar(), s.mainBar, split}
 	if s.status != nil {
 		chrome = append(chrome, s.status)
 	}
@@ -554,28 +553,13 @@ func (s *session) menuBar() *widgets.MenuBar {
 	)
 }
 
-func (s *session) toolBar() *widgets.ToolBar {
+func (s *session) toolBar() widget.Component {
 	get := widgets.ToolIconBtn(style.IconOpen, "Get Messages", s.getMessages)
 	get.Tip = "Get new messages for this account (demo Fetch)"
 	write := widgets.ToolIconBtn(style.IconNew, "Write", s.write)
 	write.Tip = "Write a new message"
-	reply := widgets.ToolIconBtn(style.IconUndo, "Reply", s.reply)
-	reply.Tip = "Reply"
-	fwd := widgets.ToolIconBtn(style.IconRedo, "Forward", s.forward)
-	fwd.Tip = "Forward"
-	tag := widgets.ToolText("Tag", func() {
-		o := widget.DeviceOrigin(s.win.Content())
-		s.tagPopup(s.win.Content(), paintengine2d.Pt(o.X+220, o.Y+72))
-	})
-	tag.Tip = "Tag the selection"
-	junk := widgets.ToolText("Junk", s.junk)
-	junk.Tip = "Mark as junk"
-	arch := widgets.ToolText("Archive", s.archive)
-	arch.Tip = "Archive"
-	del := widgets.ToolIconBtn(style.IconCut, "Delete", s.deleteSel)
-	del.Tip = "Delete (move to Trash)"
 	qf := widgets.ToolToggle("Quick Filter", s.opts.ShowFilter, s.toggleFilter)
-	qf.Tip = "Show the Quick Filter bar"
+	qf.Tip = "Show Quick Filter on the right of this toolbar"
 	cards := widgets.ToolToggle("Cards", s.cardView, func() { s.setCardView(!s.cardView) })
 	cards.Tip = "Toggle card vs table thread list"
 	lay := widgets.ToolToggle("Classic", s.opts.Layout == LayoutClassic, func() {
@@ -587,12 +571,38 @@ func (s *session) toolBar() *widgets.ToolBar {
 		s.rebuild()
 	})
 	lay.Tip = "Toggle classic vs vertical 3-pane"
-	return widgets.NewToolBar(
+	left := widgets.NewToolBar(
 		get, write, widgets.ToolDivider(),
-		reply, fwd, tag, widgets.ToolDivider(),
-		arch, junk, del, widgets.ToolDivider(),
 		qf, cards, lay,
 	)
+	spacer := widgets.NewRow()
+	bar := widgets.NewRow(left, spacer, s.qfBar).WithGap(8).WithPadding(4, 0, 8, 0).WithAlign(layout.AlignCenter)
+	bar.AddFlex(spacer, 1)
+	return bar
+}
+
+func (s *session) listToolBar() *widgets.ToolBar {
+	tag := widgets.ToolText("Tag", func() {
+		from := widget.Component(s.listBar)
+		if from == nil {
+			from = s.win.Content()
+		}
+		o := widget.DeviceOrigin(from)
+		x := float32(24)
+		if s.listBar != nil {
+			c := s.listBar.ItemCenter(0)
+			x = c.X
+		}
+		s.tagPopup(from, paintengine2d.Pt(o.X+x, o.Y+from.Bounds().Dy()))
+	})
+	tag.Tip = "Tag the selection"
+	arch := widgets.ToolText("Archive", s.archive)
+	arch.Tip = "Archive"
+	junk := widgets.ToolText("Junk", s.junk)
+	junk.Tip = "Mark as junk"
+	del := widgets.ToolIconBtn(style.IconCut, "Delete", s.deleteSel)
+	del.Tip = "Delete (move to Trash)"
+	return widgets.NewToolBar(tag, arch, junk, del)
 }
 
 func (s *session) tagPopup(from widget.Component, p paintengine2d.Point) {
@@ -1481,9 +1491,6 @@ func (s *session) applyRowMetrics() {
 	if s.tree != nil {
 		s.tree.RowHeight = treeH
 	}
-	if s.attachList != nil {
-		s.attachList.RowHeight = treeH
-	}
 }
 
 func densityRows(d style.Density) (table, card, tree float32) {
@@ -1517,36 +1524,58 @@ const attachActivateWindow = 400 * time.Millisecond
 
 func (s *session) syncAttachPane() {
 	has := len(s.attNames) > 0
-	if s.attachList != nil {
-		s.attachList.Count = len(s.attNames)
-		s.attachList.Selected = -1
-		s.attachList.SetVisible(has)
-		s.attachList.Invalidate()
-	}
 	s.attachSel = -1
 	s.attachClickI = -1
 	s.attachClickT = time.Time{}
-	if s.attachPane != nil && s.attachBtns != nil {
-		if has && s.attachBtns.Parent() == nil {
-			s.attachPane.Add(s.attachBtns)
-		}
-		if !has && s.attachBtns.Parent() != nil {
-			s.attachPane.Remove(s.attachBtns)
-		}
+	s.rebuildAttachRows()
+	if s.attachPane != nil {
+		s.attachPane.SetVisible(has)
 	}
-	s.syncAttachActions()
+	if s.attachBar != nil {
+		s.attachBar.SetVisible(has)
+	}
+	if s.attachAll != nil {
+		s.attachAll.SetEnabled(has)
+	}
+	s.paintAttachSelection()
 	if s.win != nil {
 		s.win.RequestLayout()
 	}
 }
 
-func (s *session) syncAttachActions() {
-	on := s.attachSel >= 0 && s.attachSel < len(s.attNames)
-	if s.attachOpen != nil {
-		s.attachOpen.SetEnabled(on)
+func (s *session) rebuildAttachRows() {
+	if s.attachRows == nil {
+		return
 	}
-	if s.attachSave != nil {
-		s.attachSave.SetEnabled(on)
+	s.attachRows.ClearChildren()
+	s.attachHits = s.attachHits[:0]
+	for i, name := range s.attNames {
+		i, name := i, name
+		hit := newAttachHit("📎  "+name, func() { s.selectAttachment(i) })
+		open := widgets.NewButton("Open", func() {
+			s.attachSel = i
+			s.paintAttachSelection()
+			s.openAttachment(i)
+		})
+		save := widgets.NewButton("Save As", func() {
+			s.attachSel = i
+			s.paintAttachSelection()
+			s.saveAttachment(i)
+		})
+		row := widgets.NewRow(hit, open, save).WithGap(8)
+		row.AddFlex(hit, 1)
+		s.attachRows.Add(row)
+		s.attachHits = append(s.attachHits, hit)
+	}
+}
+
+func (s *session) paintAttachSelection() {
+	for i, h := range s.attachHits {
+		sel := i == s.attachSel
+		if h.Selected != sel {
+			h.Selected = sel
+			h.Invalidate()
+		}
 	}
 }
 
@@ -1556,10 +1585,7 @@ func (s *session) selectAttachment(i int) {
 	s.attachSel = i
 	s.attachClickI = i
 	s.attachClickT = now
-	if s.attachList != nil {
-		s.attachList.Selected = i
-	}
-	s.syncAttachActions()
+	s.paintAttachSelection()
 	if activate {
 		s.openAttachment(i)
 		return
@@ -1574,14 +1600,6 @@ func (s *session) attachPartID(m Message, i int) string {
 		return m.Parts[i].ID
 	}
 	return fmt.Sprintf("att-%d", i+1)
-}
-
-func (s *session) openSelectedAttachment() {
-	s.openAttachment(s.attachSel)
-}
-
-func (s *session) saveSelectedAttachment() {
-	s.saveAttachment(s.attachSel)
 }
 
 func (s *session) openAttachment(i int) {
@@ -1606,36 +1624,17 @@ func (s *session) saveAttachment(i int) {
 	if !ok || i < 0 || i >= len(s.attNames) || s.win == nil {
 		return
 	}
-	p, err := s.cli.GetPart(m.ID, s.attachPartID(m, i))
+	data, err := s.attachmentBytes(m, i)
 	if err != nil {
 		s.mark("Save As: " + err.Error())
 		return
 	}
-	name := filepath.Base(s.attNames[i])
-	if name == "" || name == "." || name == ".." {
-		name = "attachment"
-	}
-	data := p.Data
-	if len(data) == 0 && p.Path != "" {
-		if raw, rerr := os.ReadFile(p.Path); rerr == nil {
-			data = raw
-		}
-	}
+	name := attachFileName(s.attNames[i])
 	widgets.ShowFileDialog(s.win.Content(), widgets.FileDialogOptions{
-		Title: "Save As",
-		Mode:  widgets.FileSave,
-		Path:  filepath.Join(os.TempDir(), name),
-		OnNavigate: func(path string) []widgets.FileInfo {
-			ents, err := os.ReadDir(path)
-			if err != nil {
-				return nil
-			}
-			out := make([]widgets.FileInfo, 0, len(ents))
-			for _, e := range ents {
-				out = append(out, widgets.FileInfo{Name: e.Name(), Dir: e.IsDir()})
-			}
-			return out
-		},
+		Title:      "Save As",
+		Mode:       widgets.FileSave,
+		Path:       filepath.Join(os.TempDir(), name),
+		OnNavigate: mailDirEntries,
 		OnPick: func(path string) {
 			if path == "" {
 				return
@@ -1650,6 +1649,159 @@ func (s *session) saveAttachment(i int) {
 			s.mark("Saved " + path)
 		},
 	})
+}
+
+// saveAllAttachments picks one folder (FileDialog path treated as a directory:
+// an existing file uses its parent; a missing path with no extension is created)
+// then writes every attachment for the current message there (mode 0600).
+func (s *session) saveAllAttachments() {
+	m, ok := s.primary()
+	if !ok || len(s.attNames) == 0 || s.win == nil {
+		return
+	}
+	items := make([]attachBlob, 0, len(s.attNames))
+	for i := range s.attNames {
+		data, err := s.attachmentBytes(m, i)
+		if err != nil {
+			s.mark("Save All: " + err.Error())
+			return
+		}
+		items = append(items, attachBlob{Name: attachFileName(s.attNames[i]), Data: data})
+	}
+	widgets.ShowFileDialog(s.win.Content(), widgets.FileDialogOptions{
+		Title:      "Save All",
+		Mode:       widgets.FileSave,
+		Path:       os.TempDir(),
+		OnNavigate: mailDirEntries,
+		OnPick: func(path string) {
+			dir, err := saveAllDir(path)
+			if err != nil {
+				s.mark("Save All: " + err.Error())
+				return
+			}
+			used := map[string]int{}
+			for _, it := range items {
+				dest := filepath.Join(dir, uniqueFileName(it.Name, used))
+				if err := os.WriteFile(dest, it.Data, 0o600); err != nil {
+					s.mark("Save All: " + err.Error())
+					return
+				}
+			}
+			s.mark(fmt.Sprintf("Saved %d attachment(s) to %s", len(items), dir))
+		},
+	})
+}
+
+func (s *session) attachmentBytes(m Message, i int) ([]byte, error) {
+	p, err := s.cli.GetPart(m.ID, s.attachPartID(m, i))
+	if err != nil {
+		return nil, err
+	}
+	if len(p.Data) == 0 && p.Path != "" {
+		return os.ReadFile(p.Path)
+	}
+	return p.Data, nil
+}
+
+type attachBlob struct {
+	Name string
+	Data []byte
+}
+
+// attachHit is the clickable name on an attachment row (select; double-click opens).
+type attachHit struct {
+	widget.Base
+	Text     string
+	Selected bool
+	OnPress  func()
+}
+
+func newAttachHit(text string, on func()) *attachHit {
+	h := &attachHit{Text: text, OnPress: on}
+	h.Init(h)
+	return h
+}
+
+func (h *attachHit) Measure(c layout.Constraints) paintengine2d.Point {
+	f := h.Look().Font()
+	sz := f.Measure(h.Text)
+	sz.X += 12
+	sz.Y += 6
+	return c.Constrain(sz)
+}
+
+func (h *attachHit) Arrange(r paintengine2d.Rect) { h.SetBounds(r) }
+
+func (h *attachHit) Paint(ctx *paintengine2d.Context) {
+	h.Look().DrawListRow(ctx, h.LocalBounds(), h.Selected, h.Hovered(), h.Text)
+}
+
+func (h *attachHit) MousePress(widget.MouseEvent) bool {
+	if h.OnPress != nil {
+		h.OnPress()
+	}
+	return true
+}
+
+func attachFileName(name string) string {
+	name = filepath.Base(strings.TrimSpace(name))
+	if name == "" || name == "." || name == ".." {
+		return "attachment"
+	}
+	return name
+}
+
+func uniqueFileName(name string, used map[string]int) string {
+	name = attachFileName(name)
+	if used[name] == 0 {
+		used[name] = 1
+		return name
+	}
+	ext := filepath.Ext(name)
+	stem := strings.TrimSuffix(name, ext)
+	for i := 2; ; i++ {
+		cand := fmt.Sprintf("%s-%d%s", stem, i, ext)
+		if used[cand] == 0 {
+			used[cand] = 1
+			return cand
+		}
+	}
+}
+
+func saveAllDir(path string) (string, error) {
+	if path == "" {
+		return "", fmt.Errorf("empty path")
+	}
+	st, err := os.Stat(path)
+	if err == nil {
+		if st.IsDir() {
+			return path, nil
+		}
+		return filepath.Dir(path), nil
+	}
+	if filepath.Ext(path) != "" {
+		dir := filepath.Dir(path)
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			return "", err
+		}
+		return dir, nil
+	}
+	if err := os.MkdirAll(path, 0o700); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+func mailDirEntries(path string) []widgets.FileInfo {
+	ents, err := os.ReadDir(path)
+	if err != nil {
+		return nil
+	}
+	out := make([]widgets.FileInfo, 0, len(ents))
+	for _, e := range ents {
+		out = append(out, widgets.FileInfo{Name: e.Name(), Dir: e.IsDir()})
+	}
+	return out
 }
 
 func (s *session) openFilters() {
