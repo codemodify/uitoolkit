@@ -15,6 +15,7 @@ import (
 	"github.com/codemodify/uitoolkit"
 	"github.com/codemodify/uitoolkit/app"
 	"github.com/codemodify/uitoolkit/internal/demo"
+	"github.com/codemodify/uitoolkit/internal/mail"
 	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
@@ -632,6 +633,9 @@ func writeScreenshots(dir string) error {
 	if err := writeFontsShot(filepath.Join(dir, "fonts.png")); err != nil {
 		return err
 	}
+	if err := mail.WriteScreenshots(dir); err != nil {
+		return err
+	}
 	return verifyDistinctPNGs(dir, screenshotNames)
 }
 
@@ -642,6 +646,7 @@ var screenshotNames = []string{
 	"gallery-table.png", "gallery-file.png", "gallery-tooltip.png",
 	"gallery-textarea.png", "gallery-accordion.png",
 	"notes.png", "inspector.png", "files.png", "widgets.png", "fonts.png",
+	"mail-dark.png", "mail-light.png", "mail-classic.png", "mail-compose.png",
 }
 
 func selectGalleryTab(w *app.Window, i int) {
