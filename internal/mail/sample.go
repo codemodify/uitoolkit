@@ -33,8 +33,15 @@ const (
 )
 
 func seedDemo(s *MemoryStore) {
-	s.addAccount(Account{ID: AcctAda, Name: "Ada Lovelace", Address: "ada@example.com"})
-	s.addAccount(Account{ID: AcctWork, Name: "Ada (work)", Address: "ada@codemodify.com"})
+	s.addAccount(Account{ID: AcctAda, Name: "Ada Lovelace", Address: "ada@example.com", Transport: "memory"})
+	s.addAccount(Account{ID: AcctWork, Name: "Ada (work)", Address: "ada@codemodify.com", Transport: "memory"})
+	s.identities = []Identity{
+		{ID: "ada-home", AccountID: AcctAda, Name: "Ada Lovelace", Address: "ada@example.com", Signature: "Ada Lovelace\nMathematical scientist", Default: true},
+		{ID: "ada-alias", AccountID: AcctAda, Name: "Ada L.", Address: "ada.lovelace@example.com", Signature: "— Ada"},
+		{ID: "ada-work", AccountID: AcctWork, Name: "Ada (work)", Address: "ada@codemodify.com", Signature: "Ada\ncodemodify", Default: true},
+	}
+	s.tags = DefaultTags()
+	s.rules = demoRules()
 
 	addSpecial := func(acct string, id FolderID, kind FolderKind, parent FolderID, name string) {
 		if name == "" {
@@ -279,13 +286,14 @@ const welcomeBody = `Hi Ada,
 This is the uitoolkit Mail dogfood — Thunderbird’s classic 3-pane chrome
 on a retained scene (UITK_SCENE=auto), not a Mozilla protocol clone.
 
-What is real in v0.8
-  • mailclientd owns the Store (MemoryStore demo, IMAP skeleton)
+What is real in v0.9
+  • mailclientd: MemoryStore demo or IMAP+SMTP with an on-disk cache
   • mailclientui is Thunderbird chrome over a Unix JSON-RPC socket
-  • Quick Filter (daemon-side), unread bold, attachments, prefs stub
+  • Card/table, density, Unified Inbox, tags, filters, identities
 
 What is demo
-  • Default backend is in-memory. UITK_MAIL=imap is a skeleton, not production.
+  • This welcome lives in MemoryStore (UITK_MAIL=memory). Point a config
+    file at a real IMAP/SMTP account — see docs/mail.md.
 
-— Mail on uitoolkit v0.8.2
+— Mail on uitoolkit v0.9.0
 `

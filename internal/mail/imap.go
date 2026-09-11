@@ -424,6 +424,41 @@ func (s *IMAPStore) MessageCount(folder FolderID) int {
 	return len(s.ListMessages(folder))
 }
 
+func (s *IMAPStore) Identities(accountID string) []Identity {
+	var out []Identity
+	for _, a := range s.Accounts() {
+		if accountID != "" && a.ID != accountID {
+			continue
+		}
+		out = append(out, Identity{ID: a.ID + "-default", AccountID: a.ID, Name: a.Name, Address: a.Address, Default: true})
+	}
+	return out
+}
+func (s *IMAPStore) PutIdentity(id Identity) (Identity, error) { return id, nil }
+func (s *IMAPStore) DeleteIdentity(id string) error            { return nil }
+func (s *IMAPStore) ListTags() []Tag                           { return DefaultTags() }
+func (s *IMAPStore) PutTag(t Tag) (Tag, error)                 { return t, nil }
+func (s *IMAPStore) VirtualFolders() []Folder                  { return defaultVirtualFolders() }
+func (s *IMAPStore) ListRules() []FilterRule                   { return nil }
+func (s *IMAPStore) PutRule(r FilterRule) (FilterRule, error)  { return r, nil }
+func (s *IMAPStore) DeleteRule(id string) error                { return nil }
+func (s *IMAPStore) ApplyRules(folder FolderID) (int, error)   { return 0, nil }
+
+func (s *IMAPStore) GetPart(id MessageID, partID string) (PartData, error) {
+	m, ok := s.GetMessage(id)
+	if !ok {
+		return PartData{}, fmt.Errorf("imap: no message %s", id)
+	}
+	return PartData{Part: Part{ID: partID, MIMEType: "text/plain"}, Data: []byte(m.Body)}, nil
+}
+func (s *IMAPStore) OpenPart(id MessageID, partID string) (PartData, error) {
+	return s.GetPart(id, partID)
+}
+func (s *IMAPStore) Sync(accountID string) (SyncResult, error) {
+	n, err := s.Fetch(accountID)
+	return SyncResult{AccountID: accountID, New: n}, err
+}
+
 func (s *IMAPStore) selectLocked(mbox string) error {
 	if err := s.connectLocked(); err != nil {
 		return err

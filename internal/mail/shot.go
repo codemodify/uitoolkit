@@ -10,11 +10,15 @@ import (
 	"github.com/codemodify/uitoolkit"
 	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
+	"github.com/codemodify/uitoolkit/widget"
+	"github.com/codemodify/uitoolkit/widgets"
 )
 
 // ScreenshotNames are the Mail PNGs written by WriteScreenshots.
 var ScreenshotNames = []string{
-	"mail-dark.png", "mail-light.png", "mail-classic.png", "mail-compose.png", "mail-prefs.png",
+	"mail-dark.png", "mail-light.png", "mail-classic.png",
+	"mail-compose.png", "mail-prefs.png",
+	"mail-cards.png", "mail-compact.png", "mail-filters.png",
 }
 
 // WriteScreenshots paints the Mail dogfood frames into dir.
@@ -33,26 +37,36 @@ func WriteScreenshots(dir string) error {
 	}
 	defer cli.Close()
 
-	if err := writeMailShot(cli, filepath.Join(dir, "mail-dark.png"), false, LayoutVertical, -1); err != nil {
+	if err := writeMailShot(cli, filepath.Join(dir, "mail-dark.png"), false, LayoutVertical, false, style.DensityDefault, -1); err != nil {
 		return err
 	}
-	if err := writeMailShot(cli, filepath.Join(dir, "mail-light.png"), true, LayoutVertical, -1); err != nil {
+	if err := writeMailShot(cli, filepath.Join(dir, "mail-light.png"), true, LayoutVertical, false, style.DensityDefault, -1); err != nil {
 		return err
 	}
-	if err := writeMailShot(cli, filepath.Join(dir, "mail-classic.png"), false, LayoutClassic, 0); err != nil {
+	if err := writeMailShot(cli, filepath.Join(dir, "mail-classic.png"), false, LayoutClassic, false, style.DensityDefault, 0); err != nil {
+		return err
+	}
+	if err := writeMailShot(cli, filepath.Join(dir, "mail-cards.png"), false, LayoutVertical, true, style.DensityDefault, -1); err != nil {
+		return err
+	}
+	if err := writeMailShot(cli, filepath.Join(dir, "mail-compact.png"), false, LayoutVertical, false, style.DensityCompact, -1); err != nil {
 		return err
 	}
 	if err := writeComposeShot(cli, filepath.Join(dir, "mail-compose.png")); err != nil {
 		return err
 	}
-	return writePrefsShot(cli, filepath.Join(dir, "mail-prefs.png"))
+	if err := writePrefsShot(cli, filepath.Join(dir, "mail-prefs.png"), 0); err != nil {
+		return err
+	}
+	return writePrefsShot(cli, filepath.Join(dir, "mail-filters.png"), 2)
 }
 
-func writeMailShot(cli *Client, path string, light bool, layout LayoutMode, menu int) error {
-	look := style.DarkLook()
+func writeMailShot(cli *Client, path string, light bool, layout LayoutMode, cards bool, dens style.Density, menu int) error {
+	var look style.LookAndFeel = style.DarkLook()
 	if light {
 		look = style.LightLook()
 	}
+	look = style.WithDensity(look, dens)
 	a := uitoolkit.New(uitoolkit.Options{Look: look, Headless: true})
 	w, err := a.NewWindow(platform.WindowOptions{
 		Title: "Mail", Width: 1280, Height: 800, Headless: true,
@@ -61,10 +75,13 @@ func writeMailShot(cli *Client, path string, light bool, layout LayoutMode, menu
 		return err
 	}
 	w.SetContent(Open(a, w, cli, AppOptions{
-		Light: light, Layout: layout, ShowFilter: true,
+		Light: light, Layout: layout, ShowFilter: true, CardView: cards, Density: dens,
 	}))
 	a.PumpOnce()
 	PrepareShot(w, menu)
+	if cards {
+		PrepareShotCards(w)
+	}
 	a.PumpOnce()
 	if err := w.WritePNG(path); err != nil {
 		return err
@@ -89,13 +106,21 @@ func writeComposeShot(cli *Client, path string) error {
 	return nil
 }
 
-func writePrefsShot(cli *Client, path string) error {
+func writePrefsShot(cli *Client, path string, tab int) error {
 	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true})
 	w, err := OpenPrefs(a, cli)
 	if err != nil {
 		return err
 	}
 	a.PumpOnce()
+	if tab > 0 {
+		widget.Walk(w.Content(), func(c widget.Component) {
+			if tv, ok := c.(*widgets.TabView); ok {
+				tv.Select(tab)
+			}
+		})
+		a.PumpOnce()
+	}
 	if err := w.WritePNG(path); err != nil {
 		return err
 	}

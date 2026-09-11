@@ -131,6 +131,18 @@ paintengine2d with Titillium Web (and JetBrains Mono in code views).
 
 ![Mail prefs](docs/screenshots/mail-prefs.png)
 
+### Mail — card view
+
+![Mail cards](docs/screenshots/mail-cards.png)
+
+### Mail — compact density
+
+![Mail compact](docs/screenshots/mail-compact.png)
+
+### Mail — message filters
+
+![Mail filters](docs/screenshots/mail-filters.png)
+
 ### Font roles — Titillium Web + JetBrains Mono
 
 ![Font roles](docs/screenshots/fonts.png)
@@ -349,8 +361,18 @@ Virtualized list/table/tree row reuse is **v0.6.1**.
 Mail process split (mailclientd + mailclientui) is **v0.8.0**.
 HiDPI-stable list/table/tree rows and Wayland resize are **v0.8.1**.
 Mail thread-list column flex (readable subjects) is **v0.8.2**.
+Mail cards / density / Unified Inbox / tags / filters / identities and
+IMAP+SMTP with an on-disk cache are **v0.9.0**.
 
 ## Version
+
+**0.9.0** — Mail dogfood becomes a real client path: mailclientd speaks
+IMAP (UID FETCH/STORE/SEARCH/MOVE, IDLE, MIME) and SMTP, with a local
+disk cache. UI: Thunderbird card/table toggle, Compact/Default/Relaxed
+density (extends v0.8.1 metrics), Unified Inbox + tag pane, Sorting
+Office filters, KMail-style identities. MemoryStore remains the offline
+demo (`UITK_MAIL=memory`). CardList is a toolkit widget. See
+[docs/mail.md](docs/mail.md). Still paintengine2d **v0.9.0**.
 
 **0.8.2** — TableView flex columns take leftover width and shrink
 preferred columns to MinWidth instead of starving Subject to ~40px.

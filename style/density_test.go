@@ -37,6 +37,28 @@ func TestFittedRowHeightHiDPI(t *testing.T) {
 	}
 }
 
+func TestApplyDensityRowHeights(t *testing.T) {
+	def := ApplyDensity(DefaultMetrics(), DensityDefault)
+	cmp := ApplyDensity(DefaultMetrics(), DensityCompact)
+	rel := ApplyDensity(DefaultMetrics(), DensityRelaxed)
+	if cmp.RowH >= def.RowH {
+		t.Fatalf("compact row %v >= default %v", cmp.RowH, def.RowH)
+	}
+	if rel.RowH <= def.RowH {
+		t.Fatalf("relaxed row %v <= default %v", rel.RowH, def.RowH)
+	}
+	if ParseDensity("compact") != DensityCompact || DensityRelaxed.String() != "relaxed" {
+		t.Fatal("parse/string")
+	}
+	look := WithDensity(DarkLook(), DensityCompact)
+	if look.Metrics().RowH != cmp.RowH {
+		t.Fatalf("look row %v", look.Metrics().RowH)
+	}
+	if look.Font() == nil || look.Font().Size < 12 {
+		t.Fatal("compact font")
+	}
+}
+
 func TestBoldFontMatchesBodySize(t *testing.T) {
 	for _, lk := range []LookAndFeel{DarkLook(), WithScale(DarkLook(), 2)} {
 		if lk.BoldFont() == nil || lk.BoldFont().Weight != WeightBold {

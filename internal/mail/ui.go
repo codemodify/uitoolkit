@@ -30,6 +30,8 @@ type AppOptions struct {
 	Light      bool
 	Layout     LayoutMode
 	ShowFilter bool
+	CardView   bool
+	Density    style.Density
 }
 
 // MailApp starts an in-process mailclientd (MemoryStore) and the UI client.
@@ -71,10 +73,18 @@ type session struct {
 	attachSel int
 	attNames  []string
 
+	chromePrefs ChromePrefs
+	cardView    bool
+	density     style.Density
+	tags        []Tag
+
 	table                                      *widgets.TableView
+	cards                                      *widgets.CardList
+	listStack                                  *widgets.Stack
 	tree                                       *widgets.TreeView
 	preview                                    *widgets.TextArea
 	source                                     *widgets.TextArea
+	htmlView                                   *widgets.TextArea
 	attachList                                 *widgets.ListView
 	hdrFrom, hdrSubj, hdrDate, hdrTo, hdrExtra *widgets.Label
 	status                                     *widgets.StatusBar
@@ -99,9 +109,19 @@ func newSession(a *app.Application, win *app.Window, cli *Client, opts AppOption
 		app: a, win: win, cli: cli, opts: opts,
 		sortCol: 4, sortAsc: false, online: true,
 	}
+	p := loadChromePrefs()
+	s.chromePrefs = p
+	s.cardView = opts.CardView || p.CardView
+	s.density = opts.Density
+	if s.density == style.DensityDefault && p.Density != "" {
+		s.density = p.density()
+	}
 	if st, err := cli.Status(); err == nil {
 		s.backend = st.Backend
 		s.online = st.Online
+	}
+	if tags, err := cli.Tags(); err == nil {
+		s.tags = tags
 	}
 	s.account = firstAccountID(cli)
 	if inbox, ok := specialFolderClient(cli, s.account, FolderInbox); ok {
@@ -110,16 +130,37 @@ func newSession(a *app.Application, win *app.Window, cli *Client, opts AppOption
 	return s
 }
 
-func (s *session) rebuild() {
-	if s.opts.Light {
-		s.app.SetLook(style.LightLook())
+func (s *session) persistChrome() {
+	s.chromePrefs.CardView = s.cardView
+	s.chromePrefs.Density = s.density.String()
+	if s.opts.Layout == LayoutClassic {
+		s.chromePrefs.Layout = "classic"
 	} else {
-		s.app.SetLook(style.DarkLook())
+		s.chromePrefs.Layout = "vertical"
 	}
+	s.chromePrefs.Light = s.opts.Light
+	saveChromePrefs(s.chromePrefs)
+}
+
+func (s *session) applyLook() {
+	var look style.LookAndFeel
+	if s.opts.Light {
+		look = style.LightLook()
+	} else {
+		look = style.DarkLook()
+	}
+	look = style.WithDensity(look, s.density)
+	s.app.SetLook(look)
+}
+
+func (s *session) rebuild() {
+	s.persistChrome()
+	s.applyLook()
 	s.win.SetContent(s.build())
 }
 
 func (s *session) build() widget.Component {
+	s.applyLook()
 	s.status = widgets.NewStatusBar("Ready.", "", "Offline demo", "v"+uitoolkit.Version)
 	s.hdrFrom = widgets.NewLabel("")
 	s.hdrSubj = widgets.NewTitle("")
@@ -133,6 +174,9 @@ func (s *session) build() widget.Component {
 	s.source = widgets.NewMonoTextArea("", "Raw source", nil)
 	s.source.MinRows = 8
 	s.source.Wrap = false
+	s.htmlView = widgets.NewTextArea("", "HTML alternative (sanitized text — no HTML engine)", nil)
+	s.htmlView.MinRows = 8
+	s.htmlView.Wrap = true
 
 	s.table = widgets.NewTableView([]widgets.TableColumn{
 		{Title: "★", Width: 28, MinWidth: 24, Sortable: true},
@@ -160,6 +204,15 @@ func (s *session) build() widget.Component {
 		}
 		s.messageMenu(s.table, p)
 	}
+	s.cards = widgets.NewCardList(0, s.cardAt, func(i int) {
+		s.clickRow(i, false)
+	})
+	s.cards.OnContext = func(i int, p paintengine2d.Point) {
+		if i >= 0 && i < len(s.rows) {
+			s.clickRow(i, false)
+		}
+		s.messageMenu(s.cards, p)
+	}
 
 	s.tree = widgets.NewTreeView()
 	s.rebuildTree()
@@ -170,6 +223,9 @@ func (s *session) build() widget.Component {
 		id, ok := n.Data.(FolderID)
 		if !ok || id == "" {
 			if acct, ok := n.Data.(string); ok {
+				if acct == AccountUnified || acct == AccountTags {
+					return
+				}
 				s.showAccountCentral(acct)
 			}
 			return
@@ -242,11 +298,12 @@ func (s *session) build() widget.Component {
 		s.refreshList()
 	})
 	s.bodyTg.Tip = "Search body"
-	tagCombo := widgets.NewComboBox(append([]string{"Tags"}, demoTags()...), 0, func(i int) {
+	tagNames := s.tagNames()
+	tagCombo := widgets.NewComboBox(append([]string{"Tags"}, tagNames...), 0, func(i int) {
 		if i <= 0 {
 			s.filter.Tag = ""
 		} else {
-			s.filter.Tag = demoTags()[i-1]
+			s.filter.Tag = tagNames[i-1]
 		}
 		s.refreshList()
 	})
@@ -260,8 +317,10 @@ func (s *session) build() widget.Component {
 
 	previewTab := widgets.NewPad(8, s.preview)
 	sourceTab := widgets.NewPad(8, s.source)
+	htmlTab := widgets.NewPad(8, s.htmlView)
 	tabs := widgets.NewTabView(
 		widgets.Tab{Title: "Message", Content: previewTab},
+		widgets.Tab{Title: "HTML", Content: htmlTab},
 		widgets.Tab{Title: "Source", Content: sourceTab},
 	)
 	tabs.OnChange = func(i int) {
@@ -282,14 +341,21 @@ func (s *session) build() widget.Component {
 			s.mark("Attachment: " + s.attNames[i] + " (demo)")
 		}
 	})
-	s.attachList.RowHeight = 24
+	s.attachList.OnSelect = func(i int) {
+		s.attachSel = i
+		s.openAttachment(i)
+	}
+	s.applyRowMetrics()
 	s.attachList.SetVisible(false)
 	headCol := widgets.NewColumn(s.hdrSubj, s.hdrFrom, s.hdrTo, s.hdrDate, s.hdrExtra, s.attachList).WithGap(3).WithPad(10)
 	previewCol := widgets.NewColumn(headCol, widgets.NewSeparator(), tabs).WithGap(0)
 	previewCol.AddFlex(tabs, 1)
 
-	thread := widgets.NewColumn(s.qfBar, s.table).WithGap(6).WithPad(8)
-	thread.AddFlex(s.table, 1)
+	s.table.SetVisible(!s.cardView)
+	s.cards.SetVisible(s.cardView)
+	s.listStack = widgets.NewStack(s.table, s.cards)
+	thread := widgets.NewColumn(s.qfBar, s.listStack).WithGap(6).WithPad(8)
+	thread.AddFlex(s.listStack, 1)
 	s.thread = thread
 	s.acctPanel = s.buildAccountCentral()
 	s.acctPanel.SetVisible(false)
@@ -303,7 +369,7 @@ func (s *session) build() widget.Component {
 		}
 	})
 
-	s.tree.RowHeight = 24
+	s.applyRowMetrics()
 	sidebar := widgets.NewColumn(
 		widgets.NewTitle("Account"),
 		s.identity,
@@ -396,6 +462,13 @@ func (s *session) menuBar() *widgets.MenuBar {
 				s.rebuild()
 			}),
 			widgets.Sep(),
+			widgets.CheckItem("&Table view", !s.cardView, func() { s.setCardView(false) }),
+			widgets.CheckItem("C&ard view", s.cardView, func() { s.setCardView(true) }),
+			widgets.Sep(),
+			widgets.CheckItem("&Compact", s.density == style.DensityCompact, func() { s.setDensity(style.DensityCompact) }),
+			widgets.CheckItem("&Default density", s.density == style.DensityDefault, func() { s.setDensity(style.DensityDefault) }),
+			widgets.CheckItem("&Relaxed", s.density == style.DensityRelaxed, func() { s.setDensity(style.DensityRelaxed) }),
+			widgets.Sep(),
 			widgets.Item("Sort by Date", func() { s.sortCol, s.sortAsc = 4, false; s.refreshList() }),
 			widgets.Item("Sort by Subject", func() { s.sortCol, s.sortAsc = 2, true; s.refreshList() }),
 			widgets.Item("Sort by Correspondent", func() { s.sortCol, s.sortAsc = 3, true; s.refreshList() }),
@@ -414,6 +487,12 @@ func (s *session) menuBar() *widgets.MenuBar {
 			widgets.ItemAccel("Previous Message", "p", func() { s.moveSel(-1) }),
 			widgets.Item("Next Unread Message", s.nextUnread),
 			widgets.Sep(),
+			widgets.Item("Unified Inbox", func() {
+				s.central = false
+				s.folder = FolderUnifiedInbox
+				s.selected = nil
+				s.refreshAll()
+			}),
 			widgets.Item("Inbox", func() { s.goKind(FolderInbox) }),
 			widgets.Item("Drafts", func() { s.goKind(FolderDrafts) }),
 			widgets.Item("Sent", func() { s.goKind(FolderSent) }),
@@ -441,6 +520,16 @@ func (s *session) menuBar() *widgets.MenuBar {
 		widgets.NewMenu("&Tools",
 			widgets.ItemAccel("Account Settings", "Ctrl+,", s.openPrefs),
 			widgets.Item("Preferences", s.openPrefs),
+			widgets.Item("Message Filters", s.openFilters),
+			widgets.Item("Apply Filters Now", func() {
+				n, err := s.cli.ApplyRules(s.folder)
+				if err != nil {
+					s.mark(err.Error())
+					return
+				}
+				s.refreshAll()
+				s.mark(fmt.Sprintf("Filters applied (%d)", n))
+			}),
 			widgets.Item("Add-ons and Themes", func() {
 				widgets.Info(s.win.Content(), "Add-ons", "LookAndFeel is Dark / Light Classic. No XPI store.", nil)
 			}),
@@ -478,6 +567,8 @@ func (s *session) toolBar() *widgets.ToolBar {
 	del.Tip = "Delete (move to Trash)"
 	qf := widgets.ToolToggle("Quick Filter", s.opts.ShowFilter, s.toggleFilter)
 	qf.Tip = "Show the Quick Filter bar"
+	cards := widgets.ToolToggle("Cards", s.cardView, func() { s.setCardView(!s.cardView) })
+	cards.Tip = "Toggle card vs table thread list"
 	lay := widgets.ToolToggle("Classic", s.opts.Layout == LayoutClassic, func() {
 		if s.opts.Layout == LayoutClassic {
 			s.opts.Layout = LayoutVertical
@@ -491,13 +582,14 @@ func (s *session) toolBar() *widgets.ToolBar {
 		get, write, widgets.ToolDivider(),
 		reply, fwd, tag, widgets.ToolDivider(),
 		arch, junk, del, widgets.ToolDivider(),
-		qf, lay,
+		qf, cards, lay,
 	)
 }
 
 func (s *session) tagPopup(from widget.Component, p paintengine2d.Point) {
-	items := make([]*widgets.MenuItem, 0, len(demoTags()))
-	for _, t := range demoTags() {
+	names := s.tagNames()
+	items := make([]*widgets.MenuItem, 0, len(names))
+	for _, t := range names {
 		tag := t
 		items = append(items, widgets.Item(tag, func() { s.toggleTag(tag) }))
 	}
@@ -590,7 +682,14 @@ func (s *session) refreshList() {
 		s.table.SortCol = s.sortCol
 		s.table.SortAsc = s.sortAsc
 		s.table.Selected = s.primaryIndex()
+		s.table.SetVisible(!s.cardView)
 		s.table.Invalidate()
+	}
+	if s.cards != nil {
+		s.cards.Count = len(s.rows)
+		s.cards.Selected = s.primaryIndex()
+		s.cards.SetVisible(s.cardView)
+		s.cards.Invalidate()
 	}
 	s.loadPreview()
 	s.refreshStatus()
@@ -600,8 +699,36 @@ func (s *session) rebuildTree() {
 	if s.tree == nil {
 		return
 	}
+	if tags, err := s.cli.Tags(); err == nil {
+		s.tags = tags
+	}
 	var roots []*widgets.TreeNode
 	var selected *widgets.TreeNode
+
+	unified := widgets.NewTreeNode("Unified Folders")
+	unified.Data = AccountUnified
+	unified.Expanded = true
+	if vfs, err := s.cli.VirtualFolders(); err == nil {
+		for _, f := range vfs {
+			if f.AccountID != AccountUnified {
+				continue
+			}
+			label := f.Name
+			nUnread, _ := s.cli.Unread(f.ID)
+			if nUnread > 0 {
+				label = fmt.Sprintf("%s (%d)", f.Name, nUnread)
+			}
+			n := widgets.NewTreeNode(label)
+			n.Data = f.ID
+			n.Bold = nUnread > 0
+			unified.Children = append(unified.Children, n)
+			if f.ID == s.folder && !s.central {
+				selected = n
+			}
+		}
+	}
+	roots = append(roots, unified)
+
 	acctUnread := 0
 	for _, acct := range s.accounts() {
 		node := widgets.NewTreeNode(acct.Address)
@@ -640,6 +767,28 @@ func (s *session) rebuildTree() {
 		roots = append(roots, node)
 		acctUnread = 0
 	}
+
+	tagsNode := widgets.NewTreeNode("Tags")
+	tagsNode.Data = AccountTags
+	tagsNode.Expanded = true
+	for _, t := range s.tags {
+		label := t.Name
+		fid := TagFolderID(t.Name)
+		nUnread, _ := s.cli.Unread(fid)
+		if nUnread > 0 {
+			label = fmt.Sprintf("%s (%d)", t.Name, nUnread)
+		}
+		n := widgets.NewTreeNode(label)
+		n.Data = fid
+		n.Bold = nUnread > 0
+		n.Color = ParseHexColor(t.Color)
+		tagsNode.Children = append(tagsNode.Children, n)
+		if fid == s.folder && !s.central {
+			selected = n
+		}
+	}
+	roots = append(roots, tagsNode)
+
 	s.tree.Roots = roots
 	s.tree.Selected = selected
 	s.tree.Invalidate()
@@ -660,6 +809,10 @@ func (s *session) clickRow(i int, add bool) {
 	if s.table != nil {
 		s.table.Selected = i
 		s.table.Invalidate()
+	}
+	if s.cards != nil {
+		s.cards.Selected = i
+		s.cards.Invalidate()
 	}
 	if m, ok, _ := s.cli.GetMessage(id); ok && !m.Read {
 		_ = s.cli.SetFlags(id, FlagPatch{Read: boolPtr(true)})
@@ -712,6 +865,9 @@ func (s *session) loadPreview() {
 		if s.source != nil {
 			s.source.SetText("")
 		}
+		if s.htmlView != nil {
+			s.htmlView.SetText("")
+		}
 		if s.hdrSubj != nil {
 			s.hdrSubj.SetText("No message selected")
 			s.hdrFrom.SetText("")
@@ -753,7 +909,18 @@ func (s *session) loadPreview() {
 		s.attachList.Invalidate()
 	}
 	if s.preview != nil {
-		s.preview.SetText(m.Body)
+		body := m.Body
+		if body == "" && m.HTML != "" {
+			body = HTMLToText(m.HTML)
+		}
+		s.preview.SetText(body)
+	}
+	if s.htmlView != nil {
+		html := m.HTML
+		if html == "" && m.Body != "" {
+			html = "(no HTML alternative)"
+		}
+		s.htmlView.SetText(html)
 	}
 	if s.source != nil {
 		s.source.SetText(rawSource(m))
@@ -771,6 +938,9 @@ func (s *session) refreshStatus() {
 	name := string(s.folder)
 	if f, ok, _ := s.cli.GetFolder(s.folder); ok {
 		name = f.Name
+		if f.Virtual {
+			name = "Virtual · " + f.Name
+		}
 	}
 	sel := ""
 	if n := len(s.selected); n > 1 {
@@ -861,17 +1031,21 @@ func (s *session) forward() {
 
 func (s *session) getMessages() {
 	acct := s.accountID()
-	n, err := s.cli.Fetch(acct)
+	res, err := s.cli.Sync(acct)
 	if err != nil {
-		widgets.Warn(s.win.Content(), "Get Messages", err.Error(), nil)
-		return
+		n, ferr := s.cli.Fetch(acct)
+		if ferr != nil {
+			widgets.Warn(s.win.Content(), "Get Messages", err.Error(), nil)
+			return
+		}
+		res.New = n
 	}
 	s.refreshAll()
-	if n == 0 {
+	if res.New == 0 {
 		s.mark("No new messages on " + acct)
 		return
 	}
-	s.mark(fmt.Sprintf("Downloaded %d message(s)", n))
+	s.mark(fmt.Sprintf("Downloaded %d message(s)", res.New))
 }
 
 func (s *session) setRead(read bool) {
@@ -1065,10 +1239,136 @@ func (s *session) about() {
 	widgets.Info(s.win.Content(), "About Mail",
 		"Mail — Thunderbird chrome on uitoolkit "+uitoolkit.Version+".\n"+
 			"mailclientui talks JSON-RPC to mailclientd (Unix socket).\n"+
-			"No IMAP in this process. Demo backend is MemoryStore.\n\n"+
+			"No IMAP/SMTP in this process. MemoryStore demo or IMAP+SMTP cache.\n\n"+
 			"UI: Titillium Web. Source tab: JetBrains Mono.\n"+
 			"See docs/mail.md",
 		nil)
+}
+
+func (s *session) cardAt(i int) widgets.CardContent {
+	if i < 0 || i >= len(s.rows) {
+		return widgets.CardContent{}
+	}
+	m := s.rows[i]
+	snip := m.Snippet
+	if snip == "" {
+		snip = snippetOf(m.Body)
+	}
+	var badges []widgets.CardBadge
+	for _, name := range m.Tags {
+		col := paintengine2d.RGB(0.5, 0.5, 0.55)
+		if t, ok := tagByName(s.tags, name); ok {
+			col = ParseHexColor(t.Color)
+		}
+		badges = append(badges, widgets.CardBadge{Label: name, Color: col})
+	}
+	return widgets.CardContent{
+		Title:    m.Correspondent(s.kind),
+		Subtitle: m.Subject,
+		Meta:     formatDate(m.Date, DemoNow),
+		Snippet:  snip,
+		Badges:   badges,
+		Bold:     !m.Read,
+		Starred:  m.Starred,
+	}
+}
+
+func (s *session) setCardView(on bool) {
+	s.cardView = on
+	s.persistChrome()
+	if s.table != nil {
+		s.table.SetVisible(!on)
+	}
+	if s.cards != nil {
+		s.cards.SetVisible(on)
+	}
+	if s.win != nil {
+		s.win.RequestLayout()
+	}
+	s.refreshList()
+	if on {
+		s.mark("Card view")
+	} else {
+		s.mark("Table view")
+	}
+}
+
+func (s *session) setDensity(d style.Density) {
+	s.density = d
+	s.persistChrome()
+	s.rebuild()
+}
+
+func (s *session) applyRowMetrics() {
+	rh, cardH, treeH := densityRows(s.density)
+	if s.table != nil {
+		s.table.RowHeight = rh
+	}
+	if s.cards != nil {
+		s.cards.CardHeight = cardH
+	}
+	if s.tree != nil {
+		s.tree.RowHeight = treeH
+	}
+	if s.attachList != nil {
+		s.attachList.RowHeight = treeH
+	}
+}
+
+func densityRows(d style.Density) (table, card, tree float32) {
+	switch d {
+	case style.DensityCompact:
+		return 22, 56, 20
+	case style.DensityRelaxed:
+		return 36, 88, 32
+	default:
+		return 28, 68, 24
+	}
+}
+
+func (s *session) tagNames() []string {
+	if len(s.tags) == 0 {
+		if tags, err := s.cli.Tags(); err == nil {
+			s.tags = tags
+		}
+	}
+	out := make([]string, 0, len(s.tags))
+	for _, t := range s.tags {
+		out = append(out, t.Name)
+	}
+	if len(out) == 0 {
+		return demoTags()
+	}
+	return out
+}
+
+func (s *session) openAttachment(i int) {
+	m, ok := s.primary()
+	if !ok || i < 0 || i >= len(s.attNames) {
+		return
+	}
+	partID := fmt.Sprintf("att-%d", i+1)
+	if i < len(m.Parts) {
+		partID = m.Parts[i].ID
+	}
+	p, err := s.cli.OpenPart(m.ID, partID)
+	if err != nil {
+		s.mark("Attachment: " + s.attNames[i] + " (demo)")
+		return
+	}
+	if p.Path != "" {
+		s.mark("Saved " + p.Path)
+		return
+	}
+	s.mark("Attachment: " + s.attNames[i])
+}
+
+func (s *session) openFilters() {
+	if _, err := OpenFilters(s.app, s.cli); err != nil {
+		widgets.Warn(s.win.Content(), "Filters", err.Error(), nil)
+		return
+	}
+	s.mark("Message Filters")
 }
 
 func (s *session) accountID() string {
@@ -1285,8 +1585,34 @@ func PrepareShot(w *app.Window, openMenu int) {
 			}
 			tv.Invalidate()
 		}
+		if cl, ok := c.(*widgets.CardList); ok && cl.Count > 0 {
+			cl.Selected = 0
+			if cl.OnSelect != nil {
+				cl.OnSelect(0)
+			}
+			cl.Invalidate()
+		}
 		if mb, ok := c.(*widgets.MenuBar); ok && openMenu >= 0 {
 			mb.Open(openMenu)
+		}
+	})
+}
+
+// PrepareShotCards forces card view for screenshots.
+func PrepareShotCards(w *app.Window) {
+	widget.Walk(w.Content(), func(c widget.Component) {
+		if cl, ok := c.(*widgets.CardList); ok {
+			cl.SetVisible(true)
+			if cl.Count > 0 {
+				cl.Selected = 0
+				if cl.OnSelect != nil {
+					cl.OnSelect(0)
+				}
+			}
+			cl.Invalidate()
+		}
+		if tv, ok := c.(*widgets.TableView); ok && len(tv.Columns) >= 5 {
+			tv.SetVisible(false)
 		}
 	})
 }

@@ -2,6 +2,7 @@ package mail
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/codemodify/uitoolkit"
@@ -42,16 +43,19 @@ func OpenCompose(a *app.Application, cli *Client, opts ComposeOptions) (*app.Win
 
 // ComposeApp is the Write window: From / To / Cc / Bcc / Subject / body.
 func ComposeApp(a *app.Application, win *app.Window, cli *Client, opts ComposeOptions) widget.Component {
-	accounts, err := cli.Accounts()
-	if err != nil {
-		accounts = nil
+	idents, err := cli.Identities("")
+	if err != nil || len(idents) == 0 {
+		accts, _ := cli.Accounts()
+		for _, a := range accts {
+			idents = append(idents, Identity{ID: a.ID, AccountID: a.ID, Name: a.Name, Address: a.Address})
+		}
 	}
-	fromItems := make([]string, 0, len(accounts))
-	for _, acct := range accounts {
-		fromItems = append(fromItems, fmt.Sprintf("%s <%s>", acct.Name, acct.Address))
+	fromItems := make([]string, 0, len(idents))
+	for _, id := range idents {
+		fromItems = append(fromItems, id.DisplayFrom())
 	}
 	if len(fromItems) == 0 {
-		fromItems = []string{"(no account)"}
+		fromItems = []string{"(no identity)"}
 	}
 
 	to0, cc0, bcc0, subj0, body0 := "", "", "", "", ""
@@ -94,13 +98,24 @@ func ComposeApp(a *app.Application, win *app.Window, cli *Client, opts ComposeOp
 	body.MinRows = 10
 	body.Wrap = true
 
+	var attachPaths []string
 	accountID := func() string {
 		i := from.Selected
-		if i >= 0 && i < len(accounts) {
-			return accounts[i].ID
+		if i >= 0 && i < len(idents) {
+			if idents[i].AccountID != "" {
+				return idents[i].AccountID
+			}
+			return idents[i].ID
 		}
-		if len(accounts) > 0 {
-			return accounts[0].ID
+		if len(idents) > 0 {
+			return idents[0].AccountID
+		}
+		return ""
+	}
+	identityID := func() string {
+		i := from.Selected
+		if i >= 0 && i < len(idents) {
+			return idents[i].ID
 		}
 		return ""
 	}
@@ -130,6 +145,9 @@ func ComposeApp(a *app.Application, win *app.Window, cli *Client, opts ComposeOp
 			return
 		}
 		msg := collect()
+		if ident := identityID(); ident != "" && msg.From == "" {
+			msg.From = fromText()
+		}
 		id, err := cli.SaveDraft(acct, msg, draftID)
 		if err != nil {
 			widgets.Warn(win.Content(), "Save Draft", err.Error(), nil)
@@ -149,7 +167,7 @@ func ComposeApp(a *app.Application, win *app.Window, cli *Client, opts ComposeOp
 		}
 		acct := accountID()
 		msg := collect()
-		if _, err := cli.Send(acct, msg, draftID); err != nil {
+		if _, err := cli.SendIdent(acct, identityID(), msg, draftID, attachPaths); err != nil {
 			widgets.Warn(win.Content(), "Send", err.Error(), nil)
 			return
 		}
@@ -211,7 +229,25 @@ func ComposeApp(a *app.Application, win *app.Window, cli *Client, opts ComposeOp
 	draftBtn := widgets.ToolIconBtn(style.IconSave, "Save", saveDraft)
 	draftBtn.Tip = "Save as Draft"
 	attachBtn := widgets.ToolIconBtn(style.IconOpen, "Attach", func() {
-		widgets.Info(win.Content(), "Attach", "Attachment picker is a stub. Use the demo store’s HasAttach flag.", nil)
+		widgets.ShowFileDialog(win.Content(), widgets.FileDialogOptions{
+			Title: "Attach file",
+			Path:  ".",
+			OnNavigate: func(path string) []widgets.FileInfo {
+				ents, err := os.ReadDir(path)
+				if err != nil {
+					return nil
+				}
+				var out []widgets.FileInfo
+				for _, e := range ents {
+					out = append(out, widgets.FileInfo{Name: e.Name(), Dir: e.IsDir()})
+				}
+				return out
+			},
+			OnPick: func(path string) {
+				attachPaths = append(attachPaths, path)
+				status.Set(0, "Attached "+path)
+			},
+		})
 	})
 	attachBtn.Tip = "Attach file (stub)"
 	tools := widgets.NewToolBar(sendBtn, draftBtn, widgets.ToolDivider(), attachBtn)

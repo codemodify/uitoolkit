@@ -50,20 +50,106 @@ func (k FolderKind) String() string {
 	}
 }
 
-// Account is one identity (From: address). IMAP would be one server login.
+// Account is one store/transport (IMAP mailbox + SMTP submission).
+// Identities (From name/address/signature) are separate — see Identity.
 type Account struct {
-	ID      string
-	Name    string
-	Address string
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Address   string `json:"address"`
+	Transport string `json:"transport,omitempty"` // "memory" or "imap"
+}
+
+// Identity is a KMail-style From persona. Many identities can share one Account.
+type Identity struct {
+	ID        string `json:"id"`
+	AccountID string `json:"accountId"`
+	Name      string `json:"name"`
+	Address   string `json:"address"`
+	Signature string `json:"signature,omitempty"`
+	Default   bool   `json:"default,omitempty"`
+}
+
+// DisplayFrom is `Name <Address>`.
+func (id Identity) DisplayFrom() string {
+	name := strings.TrimSpace(id.Name)
+	addr := strings.TrimSpace(id.Address)
+	if name == "" {
+		return addr
+	}
+	if addr == "" {
+		return name
+	}
+	return name + " <" + addr + ">"
+}
+
+// Tag is a colored keyword (Thunderbird-style).
+type Tag struct {
+	Name  string `json:"name"`
+	Color string `json:"color"` // #rrggbb
+}
+
+// Part is one MIME part (attachment or alternative).
+type Part struct {
+	ID       string `json:"id"`
+	MIMEType string `json:"mimeType"`
+	Filename string `json:"filename,omitempty"`
+	Size     int    `json:"size,omitempty"`
+	Charset  string `json:"charset,omitempty"`
+	Inline   bool   `json:"inline,omitempty"`
+}
+
+// PartData is a downloaded MIME section.
+type PartData struct {
+	Part
+	Data []byte `json:"data,omitempty"`
+	Path string `json:"path,omitempty"`
+}
+
+// FilterRule is one Sorting Office / Outlook-style rule.
+type FilterRule struct {
+	ID         string          `json:"id"`
+	Name       string          `json:"name"`
+	Enabled    bool            `json:"enabled"`
+	Stop       bool            `json:"stop"`
+	Conditions []RuleCondition `json:"conditions,omitempty"`
+	Actions    []RuleAction    `json:"actions,omitempty"`
+}
+
+// RuleCondition is a match clause (AND together).
+type RuleCondition struct {
+	Field string `json:"field"` // from, to, subject, body, attachment, unread, tag
+	Op    string `json:"op"`    // contains, is, equals (default contains)
+	Value string `json:"value,omitempty"`
+}
+
+// RuleAction runs when all conditions match.
+type RuleAction struct {
+	Type   string   `json:"type"` // move, tag, markRead, markUnread, delete, stop
+	Folder FolderID `json:"folder,omitempty"`
+	Tag    string   `json:"tag,omitempty"`
+}
+
+// SyncResult is what sync.run / Fetch reports.
+type SyncResult struct {
+	AccountID string `json:"accountId,omitempty"`
+	New       int    `json:"new"`
+	Updated   int    `json:"updated,omitempty"`
+	Folders   int    `json:"folders,omitempty"`
+	Error     string `json:"error,omitempty"`
 }
 
 // Folder is one mailbox under an account. Parent is empty for top-level.
+// Virtual folders (Unified Inbox, tag views) have Virtual set.
 type Folder struct {
-	ID        FolderID
-	AccountID string
-	Name      string
-	Kind      FolderKind
-	Parent    FolderID
+	ID        FolderID   `json:"id"`
+	AccountID string     `json:"accountId"`
+	Name      string     `json:"name"`
+	Kind      FolderKind `json:"kind"`
+	Parent    FolderID   `json:"parent,omitempty"`
+	Virtual   bool       `json:"virtual,omitempty"`
+	MatchKind FolderKind `json:"matchKind,omitempty"`
+	Tag       string     `json:"tag,omitempty"`
+	Remote    string     `json:"remote,omitempty"` // IMAP mailbox name
 }
 
 // Message is a full RFC-822-ish record. Body is plain text (no MIME tree).
@@ -83,6 +169,11 @@ type Message struct {
 	HasAttach   bool
 	Tags        []string
 	Body        string
+	HTML        string `json:"html,omitempty"`
+	Snippet     string `json:"snippet,omitempty"`
+	UID         uint32 `json:"uid,omitempty"`
+	Parts       []Part `json:"parts,omitempty"`
+	IdentityID  string `json:"identityId,omitempty"`
 	Attachments []string
 }
 
@@ -94,6 +185,9 @@ func (m Message) Clone() Message {
 	}
 	if m.Attachments != nil {
 		out.Attachments = append([]string(nil), m.Attachments...)
+	}
+	if m.Parts != nil {
+		out.Parts = append([]Part(nil), m.Parts...)
 	}
 	return out
 }
@@ -190,6 +284,24 @@ type Store interface {
 	Unread(folder FolderID) int
 	UnreadTotal() int
 	MessageCount(folder FolderID) int
+
+	Identities(accountID string) []Identity
+	PutIdentity(Identity) (Identity, error)
+	DeleteIdentity(id string) error
+
+	ListTags() []Tag
+	PutTag(Tag) (Tag, error)
+
+	VirtualFolders() []Folder
+
+	ListRules() []FilterRule
+	PutRule(FilterRule) (FilterRule, error)
+	DeleteRule(id string) error
+	ApplyRules(folder FolderID) (int, error)
+
+	GetPart(id MessageID, partID string) (PartData, error)
+	OpenPart(id MessageID, partID string) (PartData, error)
+	Sync(accountID string) (SyncResult, error)
 }
 
 func boolPtr(v bool) *bool { return &v }

@@ -2,6 +2,8 @@ package mail
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -11,13 +13,16 @@ import (
 // MemoryStore is an in-memory, maildir-ish Store. Safe for the UI thread
 // plus tests. Not a network client.
 type MemoryStore struct {
-	mu       sync.Mutex
-	accounts []Account
-	folders  []Folder
-	messages []Message
-	nextID   int
-	fetches  map[string]int
-	now      time.Time
+	mu         sync.Mutex
+	accounts   []Account
+	folders    []Folder
+	messages   []Message
+	identities []Identity
+	tags       []Tag
+	rules      []FilterRule
+	nextID     int
+	fetches    map[string]int
+	now        time.Time
 }
 
 // NewMemoryStore builds an empty store. now is used for Fetch timestamps
@@ -26,7 +31,10 @@ func NewMemoryStore(now time.Time) *MemoryStore {
 	if now.IsZero() {
 		now = time.Now()
 	}
-	return &MemoryStore{nextID: 1, fetches: map[string]int{}, now: now}
+	return &MemoryStore{
+		nextID: 1, fetches: map[string]int{}, now: now,
+		tags: DefaultTags(),
+	}
 }
 
 // NewDemoStore returns a seeded two-account mailbox (50–200 messages).
@@ -70,6 +78,9 @@ func (s *MemoryStore) ListFolders(accountID string) []Folder {
 func (s *MemoryStore) GetFolder(id FolderID) (Folder, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if f, ok := virtualFolderByID(id); ok {
+		return f, true
+	}
 	return s.folderLocked(id)
 }
 
@@ -85,8 +96,23 @@ func (s *MemoryStore) folderLocked(id FolderID) (Folder, bool) {
 func (s *MemoryStore) ListMessages(folder FolderID) []Message {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.listLocked(folder)
+}
+
+func (s *MemoryStore) listLocked(folder FolderID) []Message {
 	var out []Message
 	for _, m := range s.messages {
+		f, ok := s.folderLocked(m.Folder)
+		kind := FolderCustom
+		if ok {
+			kind = f.Kind
+		}
+		if IsVirtual(folder) {
+			if matchVirtual(folder, m, f, kind) {
+				out = append(out, m.Clone())
+			}
+			continue
+		}
 		if m.Folder == folder {
 			out = append(out, m.Clone())
 		}
@@ -247,6 +273,7 @@ func (s *MemoryStore) Fetch(accountID string) (int, error) {
 		Body:      "This arrival was injected by MemoryStore.Fetch.\nIMAP would FETCH unseen here.\n",
 	}
 	msg.Size = len(msg.Subject) + len(msg.Body) + 80
+	s.applyRulesOnLocked(&msg)
 	s.messages = append(s.messages, msg)
 	return 1, nil
 }
@@ -255,8 +282,8 @@ func (s *MemoryStore) Unread(folder FolderID) int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	n := 0
-	for _, m := range s.messages {
-		if m.Folder == folder && !m.Read {
+	for _, m := range s.listLocked(folder) {
+		if !m.Read {
 			n++
 		}
 	}
@@ -317,8 +344,19 @@ func (s *MemoryStore) Search(q SearchQuery) []Message {
 		if q.AccountID != "" && m.AccountID != q.AccountID {
 			continue
 		}
-		if q.Folder != "" && m.Folder != q.Folder {
-			continue
+		if q.Folder != "" {
+			f, ok := s.folderLocked(m.Folder)
+			kind := FolderCustom
+			if ok {
+				kind = f.Kind
+			}
+			if IsVirtual(q.Folder) {
+				if !matchVirtual(q.Folder, m, f, kind) {
+					continue
+				}
+			} else if m.Folder != q.Folder {
+				continue
+			}
 		}
 		if q.Filter.Match(m) {
 			out = append(out, m.Clone())
@@ -398,4 +436,205 @@ func (s *MemoryStore) Count() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return len(s.messages)
+}
+
+func (s *MemoryStore) Identities(accountID string) []Identity {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []Identity
+	for _, id := range s.identities {
+		if accountID == "" || id.AccountID == accountID {
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
+func (s *MemoryStore) PutIdentity(id Identity) (Identity, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if id.ID == "" {
+		id.ID = fmt.Sprintf("id-%d", len(s.identities)+1)
+	}
+	s.identities = upsertIdentity(s.identities, id)
+	return id, nil
+}
+
+func (s *MemoryStore) DeleteIdentity(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := s.identities[:0]
+	for _, x := range s.identities {
+		if x.ID != id {
+			out = append(out, x)
+		}
+	}
+	s.identities = out
+	return nil
+}
+
+func (s *MemoryStore) ListTags() []Tag {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.tags) == 0 {
+		s.tags = DefaultTags()
+	}
+	return cloneTags(s.tags)
+}
+
+func (s *MemoryStore) PutTag(t Tag) (Tag, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.tags = upsertTag(s.tags, t)
+	return t, nil
+}
+
+func (s *MemoryStore) VirtualFolders() []Folder {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := defaultVirtualFolders()
+	for _, t := range s.tags {
+		out = append(out, Folder{
+			ID: TagFolderID(t.Name), AccountID: AccountTags, Name: t.Name,
+			Kind: FolderCustom, Virtual: true, Tag: t.Name,
+		})
+	}
+	return out
+}
+
+func (s *MemoryStore) ListRules() []FilterRule {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return cloneRules(s.rules)
+}
+
+func (s *MemoryStore) PutRule(r FilterRule) (FilterRule, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if r.ID == "" {
+		r.ID = nextRuleID(s.rules)
+	}
+	found := false
+	for i, x := range s.rules {
+		if x.ID == r.ID {
+			s.rules[i] = r
+			found = true
+			break
+		}
+	}
+	if !found {
+		s.rules = append(s.rules, r)
+	}
+	return r, nil
+}
+
+func (s *MemoryStore) DeleteRule(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := s.rules[:0]
+	for _, r := range s.rules {
+		if r.ID != id {
+			out = append(out, r)
+		}
+	}
+	s.rules = out
+	return nil
+}
+
+func (s *MemoryStore) ApplyRules(folder FolderID) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := 0
+	for i := range s.messages {
+		if folder != "" && !IsVirtual(folder) && s.messages[i].Folder != folder {
+			continue
+		}
+		if s.applyRulesOnLocked(&s.messages[i]) {
+			n++
+		}
+	}
+	return n, nil
+}
+
+func (s *MemoryStore) applyRulesOnLocked(m *Message) bool {
+	changed := false
+	for _, r := range s.rules {
+		if !r.match(*m) {
+			continue
+		}
+		stop, err := applyRuleActions(s, m, r.Actions)
+		if err == nil {
+			changed = true
+		}
+		if stop || r.Stop {
+			break
+		}
+	}
+	return changed
+}
+
+func (s *MemoryStore) deleteOne(id MessageID) error {
+	i, ok := s.indexLocked(id)
+	if !ok {
+		return fmt.Errorf("mail: no message %s", id)
+	}
+	s.messages = append(s.messages[:i], s.messages[i+1:]...)
+	return nil
+}
+
+func (s *MemoryStore) moveOne(id MessageID, dest FolderID) error {
+	i, ok := s.indexLocked(id)
+	if !ok {
+		return fmt.Errorf("mail: no message %s", id)
+	}
+	s.messages[i].Folder = dest
+	return nil
+}
+
+func (s *MemoryStore) indexOf(id MessageID) (int, bool) { return s.indexLocked(id) }
+func (s *MemoryStore) messageAt(i int) *Message         { return &s.messages[i] }
+
+func (s *MemoryStore) GetPart(id MessageID, partID string) (PartData, error) {
+	m, ok := s.GetMessage(id)
+	if !ok {
+		return PartData{}, fmt.Errorf("mail: no message %s", id)
+	}
+	if partID == "" || partID == "1" {
+		return PartData{Part: Part{ID: "1", MIMEType: "text/plain", Size: len(m.Body)}, Data: []byte(m.Body)}, nil
+	}
+	if strings.EqualFold(partID, "html") || partID == "1.2" {
+		return PartData{Part: Part{ID: partID, MIMEType: "text/html", Size: len(m.HTML)}, Data: []byte(m.HTML)}, nil
+	}
+	for i, name := range m.Attachments {
+		if fmt.Sprintf("att-%d", i+1) == partID || name == partID {
+			return PartData{Part: Part{ID: partID, MIMEType: "application/octet-stream", Filename: name}, Data: []byte(name + " (demo attachment)\n")}, nil
+		}
+	}
+	return PartData{Part: Part{ID: partID}, Data: []byte(m.Body)}, nil
+}
+
+func (s *MemoryStore) OpenPart(id MessageID, partID string) (PartData, error) {
+	p, err := s.GetPart(id, partID)
+	if err != nil {
+		return p, err
+	}
+	name := p.Filename
+	if name == "" {
+		name = string(id) + "-" + partID + ".txt"
+	}
+	dir, err := os.MkdirTemp("", "uitk-mail-")
+	if err != nil {
+		return p, err
+	}
+	path := filepath.Join(dir, filepath.Base(name))
+	if err := os.WriteFile(path, p.Data, 0o600); err != nil {
+		return p, err
+	}
+	p.Path = path
+	return p, nil
+}
+
+func (s *MemoryStore) Sync(accountID string) (SyncResult, error) {
+	n, err := s.Fetch(accountID)
+	return SyncResult{AccountID: accountID, New: n}, err
 }

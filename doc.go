@@ -9,7 +9,7 @@
 //	layout    — row, column, stack, flex
 //	widgets   — Button, Label, TextField, TextArea, NumberField, Checkbox,
 //	            Switch, Slider, ScrollView, MenuBar, TabView, TreeView,
-//	            TableView, StatusBar, ToolBar, ComboBox, ProgressBar,
+//	            TableView, CardList, StatusBar, ToolBar, ComboBox, ProgressBar,
 //	            RadioGroup, MessageBox, TitleBar, ListView, FileDialog,
 //	            Tooltip, Accordion, Expander, Separator, Spacer, …
 //	style     — LookAndFeel themes (Titillium Web + JetBrains Mono OpenType atlases)
