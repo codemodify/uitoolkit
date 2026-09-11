@@ -71,6 +71,33 @@ func TestHitRoutesToButton(t *testing.T) {
 	}
 }
 
+func TestScrollWheelBubblesFromChild(t *testing.T) {
+	a := New(Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{Width: 280, Height: 200, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	col := widgets.NewColumn()
+	for i := 0; i < 40; i++ {
+		col.Add(widgets.NewLabel("Row content for scroll"))
+	}
+	sv := widgets.NewScrollView(col)
+	w.SetContent(sv)
+	a.PumpOnce()
+	if sv.OffsetY != 0 {
+		t.Fatalf("start offset %v", sv.OffsetY)
+	}
+	w.Inject(platform.Event{
+		Kind:   platform.EventScroll,
+		Pos:    paintengine2d.Pt(80, 80),
+		Scroll: paintengine2d.Pt(0, 140),
+	})
+	a.PumpOnce()
+	if sv.OffsetY < 40 {
+		t.Fatalf("wheel should bubble to ScrollView, offset=%v", sv.OffsetY)
+	}
+}
+
 func name(c widget.Component) string {
 	if c == nil {
 		return "<nil>"

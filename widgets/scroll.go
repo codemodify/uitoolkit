@@ -3,6 +3,7 @@ package widgets
 import (
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/layout"
+	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
 )
@@ -14,13 +15,15 @@ type ScrollView struct {
 	child   widget.Component
 	content paintengine2d.Point
 	drag    bool
-	hovered bool
+	grab    float32
+	overBar bool
 }
 
 func NewScrollView(child widget.Component) *ScrollView {
 	s := &ScrollView{}
 	s.Init(s)
 	s.SetManagesChildren(true)
+	s.SetWantsFocus(true)
 	if child != nil {
 		s.SetChild(child)
 	}
@@ -35,11 +38,35 @@ func (s *ScrollView) SetChild(c widget.Component) {
 	}
 }
 
-func (s *ScrollView) Measure(c layout.Constraints) paintengine2d.Point {
-	if s.child != nil {
-		s.content = s.child.Measure(layout.Constraints{MaxW: c.MaxW, MaxH: -1})
+// MaxOffset is the largest legal OffsetY.
+func (s *ScrollView) MaxOffset() float32 { return s.maxOff() }
+
+// ScrollTo sets OffsetY (clamped) and relayouts the child.
+func (s *ScrollView) ScrollTo(y float32) {
+	s.OffsetY = y
+	s.clamp()
+	if !s.Bounds().Empty() {
+		s.Arrange(s.Bounds())
 	}
-	w, h := s.content.X+12, float32(160)
+	s.Invalidate()
+}
+
+// ScrollBy adds dy pixels to the offset.
+func (s *ScrollView) ScrollBy(dy float32) { s.ScrollTo(s.OffsetY + dy) }
+
+func (s *ScrollView) Measure(c layout.Constraints) paintengine2d.Point {
+	bar, gap := s.barGap()
+	if s.child != nil {
+		cw := c.MaxW
+		if c.HasMaxW() {
+			cw = c.MaxW - bar - gap
+			if cw < 0 {
+				cw = 0
+			}
+		}
+		s.content = s.child.Measure(layout.Constraints{MaxW: cw, MaxH: -1})
+	}
+	w, h := s.content.X+bar+gap, float32(160)
 	if c.HasMaxH() {
 		h = c.MaxH
 	}
@@ -54,8 +81,8 @@ func (s *ScrollView) Arrange(r paintengine2d.Rect) {
 	if s.child == nil {
 		return
 	}
-	bar := s.Look().Metrics().Scroll
-	cw := r.Dx() - bar
+	bar, gap := s.barGap()
+	cw := r.Dx() - bar - gap
 	if cw < 0 {
 		cw = 0
 	}
@@ -65,6 +92,11 @@ func (s *ScrollView) Arrange(r paintengine2d.Rect) {
 	}
 	s.clamp()
 	s.child.Arrange(paintengine2d.XYWH(0, -s.OffsetY, cw, s.content.Y))
+}
+
+func (s *ScrollView) barGap() (bar, gap float32) {
+	bar = s.Look().Metrics().Scroll
+	return bar, 2
 }
 
 func (s *ScrollView) maxOff() float32 {
@@ -84,10 +116,26 @@ func (s *ScrollView) clamp() {
 	}
 }
 
+func (s *ScrollView) lineStep() float32 {
+	h := s.Look().Font().Height()
+	if h < 12 {
+		h = 18
+	}
+	return h + 4
+}
+
+func (s *ScrollView) pageStep() float32 {
+	h := s.LocalBounds().Dy() * 0.9
+	if h < 24 {
+		h = 24
+	}
+	return h
+}
+
 func (s *ScrollView) thumb() (track, thumb paintengine2d.Rect) {
 	b := s.LocalBounds()
-	w := s.Look().Metrics().Scroll
-	track = paintengine2d.XYWH(b.Max.X-w-2, 4, w, b.Dy()-8)
+	bar, gap := s.barGap()
+	track = paintengine2d.XYWH(b.Max.X-bar-gap, 4, bar, b.Dy()-8)
 	if s.content.Y <= b.Dy() {
 		return track, paintengine2d.Rect{}
 	}
@@ -96,8 +144,11 @@ func (s *ScrollView) thumb() (track, thumb paintengine2d.Rect) {
 	if th < 24 {
 		th = 24
 	}
+	if th > track.Dy() {
+		th = track.Dy()
+	}
 	ty := track.Min.Y
-	if mx := s.maxOff(); mx > 0 {
+	if mx := s.maxOff(); mx > 0 && track.Dy() > th {
 		ty += (track.Dy() - th) * (s.OffsetY / mx)
 	}
 	thumb = paintengine2d.XYWH(track.Min.X, ty, track.Dx(), th)
@@ -116,8 +167,8 @@ func (s *ScrollView) Paint(ctx *paintengine2d.Context) {
 	ctx.Restore()
 	track, thumb := s.thumb()
 	if !thumb.Empty() {
-		st := style.StateNone
-		if s.hovered {
+		st := s.State()
+		if s.overBar {
 			st |= style.StateHovered
 		}
 		if s.drag {
@@ -125,14 +176,17 @@ func (s *ScrollView) Paint(ctx *paintengine2d.Context) {
 		}
 		lk.DrawScrollBar(ctx, track, thumb, st)
 	}
+	if s.Focused() {
+		lk.DrawFocusRing(ctx, b.Inset(-2))
+	}
 }
 
 func (s *ScrollView) HitTest(local paintengine2d.Point) widget.Component {
 	if !s.Visible() || !s.LocalBounds().Contains(local) {
 		return nil
 	}
-	_, thumb := s.thumb()
-	if !thumb.Empty() && thumb.Contains(local) {
+	track, _ := s.thumb()
+	if !track.Empty() && track.Contains(local) {
 		return s
 	}
 	if s.child != nil {
@@ -146,33 +200,58 @@ func (s *ScrollView) HitTest(local paintengine2d.Point) widget.Component {
 }
 
 func (s *ScrollView) MouseWheel(e widget.MouseEvent) bool {
-	s.OffsetY += e.Scroll.Y
-	s.clamp()
-	s.Arrange(s.Bounds())
-	s.Invalidate()
+	dy := e.Scroll.Y
+	if dy == 0 && e.Scroll.X == 0 {
+		return false
+	}
+	// Notch-sized deltas (typical ±1) become a few lines.
+	if dy > -8 && dy < 8 && dy != 0 {
+		dy *= s.lineStep() * 3
+	}
+	s.ScrollBy(dy)
 	return true
 }
 
 func (s *ScrollView) MousePress(e widget.MouseEvent) bool {
-	_, thumb := s.thumb()
+	if !s.Enabled() {
+		return false
+	}
+	track, thumb := s.thumb()
 	if thumb.Contains(e.Pos) {
+		s.RequestFocus()
 		s.drag = true
+		s.grab = e.Pos.Y - thumb.Min.Y
 		s.Invalidate()
+		return true
+	}
+	if track.Contains(e.Pos) {
+		s.RequestFocus()
+		page := s.pageStep()
+		if e.Pos.Y < thumb.Min.Y {
+			s.ScrollBy(-page)
+		} else {
+			s.ScrollBy(page)
+		}
 		return true
 	}
 	return false
 }
 
 func (s *ScrollView) MouseMove(e widget.MouseEvent) bool {
-	if !s.drag {
-		return false
-	}
 	track, thumb := s.thumb()
+	over := track.Contains(e.Pos)
+	if over != s.overBar {
+		s.overBar = over
+		s.Invalidate()
+	}
+	if !s.drag {
+		return over
+	}
 	span := track.Dy() - thumb.Dy()
 	if span <= 0 {
 		return true
 	}
-	ty := e.Pos.Y - thumb.Dy()*0.5
+	ty := e.Pos.Y - s.grab
 	t := (ty - track.Min.Y) / span
 	if t < 0 {
 		t = 0
@@ -180,14 +259,47 @@ func (s *ScrollView) MouseMove(e widget.MouseEvent) bool {
 	if t > 1 {
 		t = 1
 	}
-	s.OffsetY = t * s.maxOff()
-	s.Arrange(s.Bounds())
-	s.Invalidate()
+	s.ScrollTo(t * s.maxOff())
 	return true
 }
 
 func (s *ScrollView) MouseRelease(widget.MouseEvent) bool {
+	if !s.drag {
+		return false
+	}
 	s.drag = false
 	s.Invalidate()
 	return true
+}
+
+func (s *ScrollView) MouseExit() {
+	s.overBar = false
+	s.Base.MouseExit()
+}
+
+func (s *ScrollView) KeyPress(e widget.KeyEvent) bool {
+	if !s.Enabled() {
+		return false
+	}
+	switch e.Key {
+	case platform.KeyDown:
+		s.ScrollBy(s.lineStep())
+		return true
+	case platform.KeyUp:
+		s.ScrollBy(-s.lineStep())
+		return true
+	case platform.KeyPageDown:
+		s.ScrollBy(s.pageStep())
+		return true
+	case platform.KeyPageUp:
+		s.ScrollBy(-s.pageStep())
+		return true
+	case platform.KeyHome:
+		s.ScrollTo(0)
+		return true
+	case platform.KeyEnd:
+		s.ScrollTo(s.maxOff())
+		return true
+	}
+	return false
 }

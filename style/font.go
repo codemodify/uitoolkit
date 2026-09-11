@@ -9,10 +9,11 @@ import (
 // Font is a baked glyph atlas painted through paintengine2d. Glyph ink is
 // produced by the engine (bitmap atlas + nearest blit), not a second rasterizer.
 type Font struct {
-	Atlas  *paintengine2d.FontAtlas
-	Size   float32
-	Ascent float32
-	Color  paintengine2d.Color
+	Atlas   *paintengine2d.FontAtlas
+	Size    float32
+	Ascent  float32
+	Descent float32
+	Color   paintengine2d.Color
 }
 
 func (f *Font) Measure(text string) paintengine2d.Point {
@@ -26,7 +27,10 @@ func (f *Font) Height() float32 {
 	if f == nil {
 		return 0
 	}
-	return f.Size + 6
+	if f.Descent > 0 {
+		return f.Ascent + f.Descent
+	}
+	return f.Size + 2
 }
 
 func (f *Font) Advance(text string) float32 {
@@ -99,9 +103,19 @@ func (f *Font) Draw(ctx *paintengine2d.Context, text string, origin paintengine2
 	if f == nil || f.Atlas == nil || text == "" {
 		return
 	}
-	_ = tint
+	col := tint
+	if col == (paintengine2d.Color{}) {
+		col = f.Color
+	}
+	if !GlyphTint() {
+		// Atlas cells are already theme-colored; modulate alpha only.
+		col = paintengine2d.Color{R: 1, G: 1, B: 1, A: col.A}
+		if col.A <= 0 {
+			col.A = 1
+		}
+	}
 	run := paintengine2d.NullShaper{}.Shape(text, f.Atlas)
-	ctx.DrawGlyphs(run, origin, paintengine2d.Paint{Color: paintengine2d.White, Filter: paintengine2d.FilterNearest})
+	ctx.DrawGlyphs(run, origin, paintengine2d.Paint{Color: col, Filter: paintengine2d.FilterNearest})
 }
 
 type fontKey struct {
@@ -124,13 +138,28 @@ func BakeFont(size float32, col paintengine2d.Color) *Font {
 	if scale > 4 {
 		scale = 4
 	}
-	key := fontKey{size: scale, r: uint16(col.R * 1000), g: uint16(col.G * 1000), b: uint16(col.B * 1000), a: uint16(col.A * 1000)}
-	if v, ok := fontCache.Load(key); ok {
-		return v.(*Font)
+	key := fontKey{size: scale}
+	if !GlyphTint() {
+		key.r = uint16(col.R * 1000)
+		key.g = uint16(col.G * 1000)
+		key.b = uint16(col.B * 1000)
+		key.a = uint16(col.A * 1000)
 	}
-	f := bakeScaled(scale, col)
+	if v, ok := fontCache.Load(key); ok {
+		f := *v.(*Font)
+		f.Color = col
+		return &f
+	}
+	atlasCol := col
+	if GlyphTint() {
+		atlasCol = paintengine2d.White
+	}
+	f := bakeScaled(scale, atlasCol)
+	f.Color = col
 	fontCache.Store(key, f)
-	return f
+	out := *f
+	out.Color = col
+	return &out
 }
 
 func bakeScaled(scale int, col paintengine2d.Color) *Font {
@@ -184,10 +213,11 @@ func bakeScaled(scale int, col paintengine2d.Color) *Font {
 		}
 	}
 	return &Font{
-		Atlas:  &paintengine2d.FontAtlas{Image: img, Cells: cells},
-		Size:   float32(dstH),
-		Ascent: float32(7 * scale),
-		Color:  col,
+		Atlas:   &paintengine2d.FontAtlas{Image: img, Cells: cells},
+		Size:    float32(dstH),
+		Ascent:  float32(7 * scale),
+		Descent: float32(scale + 2),
+		Color:   col,
 	}
 }
 
@@ -239,4 +269,34 @@ func extraPunctAtlas(fg paintengine2d.Color) *paintengine2d.FontAtlas {
 		i++
 	}
 	return &paintengine2d.FontAtlas{Image: img, Cells: cells}
+}
+
+var (
+	tintOnce sync.Once
+	tintOK   bool
+)
+
+// GlyphTint reports whether paintengine2d blits apply RGB Color as a tint
+// (v0.7.2+). Until that ships, atlases are baked in the theme color.
+func GlyphTint() bool {
+	tintOnce.Do(func() {
+		atlas := paintengine2d.NewBitmapAtlas(paintengine2d.White)
+		img := paintengine2d.NewImage(20, 16)
+		ctx := paintengine2d.NewContext(img)
+		run := paintengine2d.NullShaper{}.Shape("I", atlas)
+		ctx.DrawGlyphs(run, paintengine2d.Pt(1, 1), paintengine2d.Paint{
+			Color:  paintengine2d.RGB(1, 0, 0),
+			Filter: paintengine2d.FilterNearest,
+		})
+		for y := 0; y < img.Height; y++ {
+			for x := 0; x < img.Width; x++ {
+				r, g, b, a := img.PremulAt(x, y)
+				if a > 20 && int(r) > int(g)+24 && int(r) > int(b)+24 {
+					tintOK = true
+					return
+				}
+			}
+		}
+	})
+	return tintOK
 }

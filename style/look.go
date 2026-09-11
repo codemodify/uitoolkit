@@ -95,7 +95,7 @@ func (l *Classic) DrawButton(ctx *paintengine2d.Context, b paintengine2d.Rect, s
 	}
 	ctx.DrawRoundRect(b.Inset(0.5), r, r, paintengine2d.StrokePaint(border, m.Border))
 	if st.Focused() {
-		l.DrawFocusRing(ctx, b.Inset(-3))
+		l.DrawFocusRing(ctx, b.Inset(-2))
 	}
 	l.drawCentered(ctx, fg, label, b)
 }
@@ -112,6 +112,9 @@ func (l *Classic) DrawLabel(ctx *paintengine2d.Context, b paintengine2d.Rect, te
 		x = b.Max.X - tw - 2
 	}
 	y := b.Min.Y + (b.Dy()-th)*0.5
+	if y < b.Min.Y {
+		y = b.Min.Y
+	}
 	f.Draw(ctx, text, paintengine2d.Pt(x, y), col)
 }
 
@@ -141,7 +144,7 @@ func (l *Classic) DrawCheckbox(ctx *paintengine2d.Context, b paintengine2d.Rect,
 		})
 	}
 	if st.Focused() {
-		l.DrawFocusRing(ctx, box.Inset(-3))
+		l.DrawFocusRing(ctx, box.Inset(-2))
 	}
 	if label != "" {
 		f := l.body
@@ -183,11 +186,11 @@ func (l *Classic) DrawSlider(ctx *paintengine2d.Context, b paintengine2d.Rect, s
 	ctx.DrawCircle(paintengine2d.Pt(tx, cy), rad, paintengine2d.Fill(col))
 	ctx.DrawCircle(paintengine2d.Pt(tx-rad*0.25, cy-rad*0.25), rad*0.35, paintengine2d.Fill(p.Highlight))
 	if st.Focused() {
-		l.DrawFocusRing(ctx, paintengine2d.XYWH(tx-rad-4, cy-rad-4, rad*2+8, rad*2+8))
+		l.DrawFocusRing(ctx, paintengine2d.XYWH(tx-rad-3, cy-rad-3, rad*2+6, rad*2+6))
 	}
 }
 
-func (l *Classic) DrawTextField(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, text, placeholder string, caret, selA, selB int, blink bool) {
+func (l *Classic) DrawTextField(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, text, placeholder string, caret, selA, selB int, blink bool, scrollX float32) {
 	p := l.palette
 	m := l.metrics
 	r := m.RadiusSmall
@@ -195,12 +198,17 @@ func (l *Classic) DrawTextField(ctx *paintengine2d.Context, b paintengine2d.Rect
 	border := p.FieldBorder
 	if st.Focused() {
 		border = p.Focus
+	} else if st.Hovered() {
+		border = p.Border
 	}
 	ctx.DrawRoundRect(b.Inset(0.5), r, r, paintengine2d.StrokePaint(border, m.Border+float32(btoi(st.Focused()))))
 	if st.Focused() {
-		l.DrawFocusRing(ctx, b.Inset(-3))
+		l.DrawFocusRing(ctx, b.Inset(-2))
 	}
-	pad := float32(8)
+	pad := m.FieldPad
+	if pad <= 0 {
+		pad = 8
+	}
 	inner := paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad*2, b.Dy())
 	ctx.Save()
 	ctx.ClipRect(inner)
@@ -212,18 +220,19 @@ func (l *Classic) DrawTextField(ctx *paintengine2d.Context, b paintengine2d.Rect
 		font = l.muted
 	}
 	ty := inner.Min.Y + (inner.Dy()-font.Height())*0.5
+	ox := inner.Min.X - scrollX
 	if selA != selB && text != "" {
 		if selA > selB {
 			selA, selB = selB, selA
 		}
-		x0 := inner.Min.X + f.CaretX(text, selA)
-		x1 := inner.Min.X + f.CaretX(text, selB)
+		x0 := ox + f.CaretX(text, selA)
+		x1 := ox + f.CaretX(text, selB)
 		ctx.DrawRect(paintengine2d.XYWH(x0, ty+1, x1-x0, f.Height()-2), paintengine2d.Fill(p.Selection))
 	}
-	font.Draw(ctx, show, paintengine2d.Pt(inner.Min.X, ty), p.Text)
+	font.Draw(ctx, show, paintengine2d.Pt(ox, ty), p.Text)
 	if st.Focused() && blink && text == show {
-		cx := inner.Min.X + f.CaretX(text, caret)
-		ctx.DrawRect(paintengine2d.XYWH(cx, ty+2, 1.5, f.Height()-4), paintengine2d.Fill(p.Accent))
+		cx := ox + f.CaretX(text, caret)
+		ctx.DrawRect(paintengine2d.XYWH(cx, ty+2, 1.6, f.Height()-4), paintengine2d.Fill(p.Accent))
 	}
 	ctx.Restore()
 }
@@ -241,7 +250,8 @@ func (l *Classic) DrawScrollBar(ctx *paintengine2d.Context, track, thumb painten
 func (l *Classic) DrawFocusRing(ctx *paintengine2d.Context, b paintengine2d.Rect) {
 	p := l.palette
 	m := l.metrics
-	ctx.DrawRoundRect(b, m.Radius, m.Radius, paintengine2d.StrokePaint(p.Focus.WithAlpha(0.85), m.FocusWidth))
+	ctx.DrawRoundRect(b, m.Radius, m.Radius, paintengine2d.StrokePaint(p.Focus.WithAlpha(0.40), m.FocusWidth+1.5))
+	ctx.DrawRoundRect(b.Inset(1.25), m.RadiusSmall+1, m.RadiusSmall+1, paintengine2d.StrokePaint(p.Focus.WithAlpha(0.92), 1.15))
 }
 
 func (l *Classic) DrawSplitter(ctx *paintengine2d.Context, b paintengine2d.Rect, vertical bool, st ControlState) {
@@ -279,7 +289,11 @@ func (l *Classic) drawCentered(ctx *paintengine2d.Context, f *Font, text string,
 	}
 	tw := f.Advance(text)
 	th := f.Height()
-	f.Draw(ctx, text, paintengine2d.Pt(b.Min.X+(b.Dx()-tw)*0.5, b.Min.Y+(b.Dy()-th)*0.5), f.Color)
+	col := f.Color
+	if col == (paintengine2d.Color{}) {
+		col = l.palette.Text
+	}
+	f.Draw(ctx, text, paintengine2d.Pt(b.Min.X+(b.Dx()-tw)*0.5, b.Min.Y+(b.Dy()-th)*0.5), col)
 }
 
 func (l *Classic) fontFor(col paintengine2d.Color) *Font {

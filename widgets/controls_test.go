@@ -85,6 +85,100 @@ func TestColumnLayoutTwoKids(t *testing.T) {
 	}
 }
 
+func TestTextFieldSelectionAndNav(t *testing.T) {
+	tf := NewTextField("Ada Lovelace", "", nil)
+	tf.SetHost(&host{})
+	tf.Arrange(paintengine2d.XYWH(0, 0, 220, 32))
+	tf.SetSelection(0, 3)
+	a, b := tf.Selection()
+	if a != 0 || b != 3 {
+		t.Fatalf("sel %d %d", a, b)
+	}
+	tf.KeyPress(widget.KeyEvent{Key: platform.KeyDelete})
+	if tf.Text != " Lovelace" {
+		t.Fatalf("delete sel %q", tf.Text)
+	}
+	tf.SetText("one two three")
+	tf.SetSelection(13, 13)
+	tf.KeyPress(widget.KeyEvent{Key: platform.KeyLeft, Mods: platform.ModCtrl})
+	if tf.Caret() != 8 {
+		t.Fatalf("ctrl-left caret %d", tf.Caret())
+	}
+	tf.KeyPress(widget.KeyEvent{Key: platform.KeyLeft, Mods: platform.ModShift})
+	a, b = tf.Selection()
+	if a == b {
+		t.Fatal("shift-left should extend selection")
+	}
+	tf.MousePress(widget.MouseEvent{Pos: paintengine2d.Pt(20, 16)})
+	tf.MouseMove(widget.MouseEvent{Pos: paintengine2d.Pt(80, 16), Button: platform.ButtonLeft})
+	tf.MouseRelease(widget.MouseEvent{})
+	a, b = tf.Selection()
+	if a == b {
+		t.Fatalf("drag should select, got %d %d caret=%d", a, b, tf.Caret())
+	}
+}
+
+func TestSliderKeys(t *testing.T) {
+	s := NewSlider(0, 100, 50, nil)
+	s.SetHost(&host{})
+	s.Arrange(paintengine2d.XYWH(0, 0, 200, 28))
+	s.KeyPress(widget.KeyEvent{Key: platform.KeyRight})
+	if s.Value <= 50 {
+		t.Fatalf("right %v", s.Value)
+	}
+	s.KeyPress(widget.KeyEvent{Key: platform.KeyHome})
+	if s.Value != 0 {
+		t.Fatalf("home %v", s.Value)
+	}
+	s.KeyPress(widget.KeyEvent{Key: platform.KeyEnd})
+	if s.Value != 100 {
+		t.Fatalf("end %v", s.Value)
+	}
+}
+
+func TestListViewKeys(t *testing.T) {
+	n := -1
+	lv := NewListView(20, func(i int) string { return "x" }, func(i int) { n = i })
+	lv.RowHeight = 20
+	lv.SetHost(&host{})
+	lv.Arrange(paintengine2d.XYWH(0, 0, 120, 80))
+	lv.Selected = 0
+	lv.KeyPress(widget.KeyEvent{Key: platform.KeyDown})
+	if lv.Selected != 1 || n != 1 {
+		t.Fatalf("down sel=%d n=%d", lv.Selected, n)
+	}
+	lv.KeyPress(widget.KeyEvent{Key: platform.KeyEnd})
+	if lv.Selected != 19 {
+		t.Fatalf("end %d", lv.Selected)
+	}
+}
+
+func TestScrollTrackHitAndPage(t *testing.T) {
+	col := NewColumn()
+	for i := 0; i < 40; i++ {
+		col.Add(NewLabel("row"))
+	}
+	sv := NewScrollView(col)
+	sv.SetHost(&host{})
+	sv.Arrange(paintengine2d.XYWH(0, 0, 160, 120))
+	track, thumb := sv.thumb()
+	if thumb.Empty() {
+		t.Fatal("expected thumb")
+	}
+	hit := sv.HitTest(paintengine2d.Pt(track.Min.X+1, track.Min.Y+4))
+	if hit != sv {
+		t.Fatalf("track should hit ScrollView, got %T", hit)
+	}
+	below := paintengine2d.Pt(track.Min.X+1, thumb.Max.Y+8)
+	if !track.Contains(below) {
+		below = paintengine2d.Pt(track.Min.X+1, track.Max.Y-4)
+	}
+	sv.MousePress(widget.MouseEvent{Pos: below})
+	if sv.OffsetY <= 0 {
+		t.Fatalf("track page should scroll, offset=%v thumb=%+v track=%+v", sv.OffsetY, thumb, track)
+	}
+}
+
 func TestListViewVirtualRange(t *testing.T) {
 	lv := NewListView(1000, func(i int) string { return "x" }, nil)
 	lv.RowHeight = 20

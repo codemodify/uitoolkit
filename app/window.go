@@ -100,6 +100,9 @@ func (w *Window) fullInvalidate() {
 func (w *Window) toggleBlink() {
 	w.blink = !w.blink
 	if w.focus != nil {
+		if b, ok := w.focus.(interface{ SetCaretBlink(bool) }); ok {
+			b.SetCaretBlink(w.blink)
+		}
 		w.focus.Invalidate()
 	}
 }
@@ -127,10 +130,7 @@ func (w *Window) dispatch(ev platform.Event) {
 	case platform.EventMouseMove:
 		w.mouseMove(ev)
 	case platform.EventScroll:
-		t := w.hit(ev.Pos)
-		if t != nil {
-			t.MouseWheel(widget.MouseEvent{Pos: local(t, ev.Pos), Scroll: ev.Scroll, Mods: ev.Mods})
-		}
+		w.bubbleWheel(ev)
 	case platform.EventKeyDown:
 		if ev.Key == platform.KeyTab {
 			w.tab(!ev.Mods.Shift())
@@ -150,6 +150,20 @@ func (w *Window) dispatch(ev platform.Event) {
 	case platform.EventText:
 		if w.focus != nil {
 			w.focus.TextInput(ev.Rune)
+		}
+	}
+}
+
+// CaretBlink is the current caret pulse (tests / themed fields).
+func (w *Window) CaretBlink() bool { return w.blink }
+
+func (w *Window) bubbleWheel(ev platform.Event) {
+	for c := w.hit(ev.Pos); c != nil; c = c.Parent() {
+		if !c.Enabled() || !c.Visible() {
+			continue
+		}
+		if c.MouseWheel(widget.MouseEvent{Pos: local(c, ev.Pos), Scroll: ev.Scroll, Mods: ev.Mods}) {
+			return
 		}
 	}
 }
