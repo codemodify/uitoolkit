@@ -81,6 +81,32 @@ func TestDefaultFontsRender(t *testing.T) {
 	}
 }
 
+func TestLookAndFeelRoles(t *testing.T) {
+	if FamilyFor(RoleUI) != "Titillium Web" || FamilyFor(RoleMono) != "JetBrains Mono" {
+		t.Fatalf("locked families %q / %q", FamilyFor(RoleUI), FamilyFor(RoleMono))
+	}
+	m := DefaultMetrics()
+	m.FontFamily = "mononoki"
+	m.MonoFamily = "mononoki"
+	look := NewClassic("dark", Dark(), m)
+	if look.Font().Family != FamilyUI {
+		t.Fatalf("UI role leaked %q (mononoki is not default)", look.Font().Family)
+	}
+	if look.MonoFont().Family != FamilyMono {
+		t.Fatalf("mono role leaked %q (mononoki is not default)", look.MonoFont().Family)
+	}
+	if look.Metrics().FontFamily != FamilyUI || look.Metrics().MonoFamily != FamilyMono {
+		t.Fatalf("metrics families %q / %q", look.Metrics().FontFamily, look.Metrics().MonoFamily)
+	}
+	if FontFor(look, RoleUI).Family != FamilyUI || FontFor(look, RoleMono).Family != FamilyMono {
+		t.Fatal("FontFor roles")
+	}
+	bold := BakeMonoBoldFont(16, paintengine2d.White)
+	if bold.Family != FamilyMono || bold.Weight != WeightBold || !bold.Outline {
+		t.Fatalf("mono bold %q w=%d outline=%v", bold.Family, bold.Weight, bold.Outline)
+	}
+}
+
 func TestBitmapFallbackIsNotDefault(t *testing.T) {
 	ui := BakeFont(16, paintengine2d.White)
 	bit := BakeBitmapFont(2, paintengine2d.White)

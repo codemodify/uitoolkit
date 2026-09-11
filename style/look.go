@@ -19,6 +19,10 @@ func NewClassic(name string, p Palette, m Metrics) *Classic {
 	if m.FontSize < 8 {
 		m = DefaultMetrics()
 	}
+	// Lock-in: Classic always ships Titillium Web + JetBrains Mono.
+	// Metrics.FontFamily cannot select mononoki (or any other face).
+	m.FontFamily = DefaultFontFamily
+	m.MonoFamily = DefaultMonoFamily
 	return &Classic{
 		palette: p,
 		metrics: m,

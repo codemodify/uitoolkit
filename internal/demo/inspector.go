@@ -166,12 +166,11 @@ func InspectorApp(win *app.Window) widget.Component {
 		widgets.NewSpacerSize(0, 8),
 	).WithGap(10).WithPad(8))
 
-	notes := widgets.NewTextArea(
+	notes := widgets.NewMonoTextArea(
 		"// inspector — JetBrains Mono\noverride wrap = true\nfont.size = 16\n",
 		"Notes",
 		func(string) { mark("Notes edited") },
 	)
-	notes.Mono = true
 	notes.MinRows = 5
 	editorBody := widgets.NewColumn(
 		table,

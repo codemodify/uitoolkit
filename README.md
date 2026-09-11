@@ -109,6 +109,13 @@ paintengine2d with Titillium Web (and JetBrains Mono in code views).
 
 ![Files](docs/screenshots/files.png)
 
+### Font roles — Titillium Web + JetBrains Mono
+
+![Font roles](docs/screenshots/fonts.png)
+
+LookAndFeel locks **UI → Titillium Web** and **Mono → JetBrains Mono**
+(OFL, embedded). mononoki is not the default mono face.
+
 Regenerate:
 
 ```bash
@@ -229,7 +236,7 @@ dismiss order, textarea newline/wrap/nav, switch toggle (including
 disabled), accordion exclusive expand and focus yield, expander
 relayout, separator and spacer measure, IME preedit/commit on text
 widgets, and an offscreen paint that produces real pixels.
-`go test ./examples/gallery` regenerates the eighteen PNGs and fails if
+`go test ./examples/gallery` regenerates the nineteen PNGs and fails if
 any two share a blob.
 
 Keyboard map: [docs/keyboard.md](docs/keyboard.md). **Esc** closes

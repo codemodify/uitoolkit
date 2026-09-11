@@ -1,7 +1,9 @@
 // Package fonts embeds the OFL UI typefaces shipped with uitoolkit.
 //
-//	Titillium Web  — default UI (labels, buttons, menus, fields)
-//	JetBrains Mono — mono / code (Inspector, file preview)
+//	Titillium Web  — LookAndFeel UI role (labels, buttons, menus, fields)
+//	JetBrains Mono — LookAndFeel mono role (code, Inspector, logs, mono fields)
+//
+// mononoki is not bundled and is not a default role.
 package fonts
 
 import (

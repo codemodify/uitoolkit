@@ -23,11 +23,41 @@ const (
 const (
 	FamilyUI   = fonts.FamilyUI
 	FamilyMono = fonts.FamilyMono
-	// DefaultFontFamily is the LookAndFeel UI face.
+	// DefaultFontFamily is the LookAndFeel UI face (Titillium Web).
 	DefaultFontFamily = FamilyUI
-	// DefaultMonoFamily is the LookAndFeel mono / code face.
+	// DefaultMonoFamily is the LookAndFeel mono / code face (JetBrains Mono).
+	// mononoki is not a default role — optional later theme only.
 	DefaultMonoFamily = FamilyMono
 )
+
+// FontRole is a LookAndFeel typeface slot.
+type FontRole int
+
+const (
+	// RoleUI is labels, buttons, menus, and proportional fields (Titillium Web).
+	RoleUI FontRole = iota
+	// RoleMono is code, Inspector, logs, and monospace fields (JetBrains Mono).
+	RoleMono
+)
+
+// FamilyFor returns the locked family name for a role.
+func FamilyFor(role FontRole) string {
+	if role == RoleMono {
+		return FamilyMono
+	}
+	return FamilyUI
+}
+
+// FontFor returns Classic's UI or mono face. Other looks fall back to Font().
+func FontFor(l LookAndFeel, role FontRole) *Font {
+	if l == nil {
+		return nil
+	}
+	if role == RoleMono {
+		return l.MonoFont()
+	}
+	return l.Font()
+}
 
 // otFace is a parsed bundled TTF used to rasterize glyphs into a white atlas.
 type otFace struct {

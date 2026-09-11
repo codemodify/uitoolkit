@@ -37,6 +37,14 @@ func NewTextField(text, placeholder string, on func(string)) *TextField {
 	return t
 }
 
+// NewMonoTextField is a single-line editor in the LookAndFeel mono role
+// (JetBrains Mono). Use for paths, logs, and code-ish values.
+func NewMonoTextField(text, placeholder string, on func(string)) *TextField {
+	t := NewTextField(text, placeholder, on)
+	t.Mono = true
+	return t
+}
+
 func (t *TextField) SetText(s string) {
 	if t.Text == s {
 		return

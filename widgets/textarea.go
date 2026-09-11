@@ -42,6 +42,14 @@ func NewTextArea(text, placeholder string, on func(string)) *TextArea {
 	return t
 }
 
+// NewMonoTextArea is a multi-line editor in the LookAndFeel mono role
+// (JetBrains Mono). Use for code, Inspector dumps, and logs.
+func NewMonoTextArea(text, placeholder string, on func(string)) *TextArea {
+	t := NewTextArea(text, placeholder, on)
+	t.Mono = true
+	return t
+}
+
 func (t *TextArea) SetText(s string) {
 	if t.Text == s {
 		return

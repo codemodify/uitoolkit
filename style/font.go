@@ -157,9 +157,14 @@ func BakeTitleFont(size float32, col paintengine2d.Color) *Font {
 	return BakeFamily(FamilyUI, WeightBold, size, col)
 }
 
-// BakeMonoFont is JetBrains Mono Regular at size.
+// BakeMonoFont is JetBrains Mono Regular at size (LookAndFeel mono role).
 func BakeMonoFont(size float32, col paintengine2d.Color) *Font {
 	return BakeFamily(FamilyMono, WeightRegular, size, col)
+}
+
+// BakeMonoBoldFont is JetBrains Mono Bold at size.
+func BakeMonoBoldFont(size float32, col paintengine2d.Color) *Font {
+	return BakeFamily(FamilyMono, WeightBold, size, col)
 }
 
 // BakeBitmapFont is the legacy 5×7 nearest-neighbor atlas. Default UI and
