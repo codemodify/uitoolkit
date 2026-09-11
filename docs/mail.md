@@ -1,6 +1,6 @@
 # Mail — mailclientd + mailclientui
 
-Thunderbird-chrome mail client on uitoolkit **v0.10.6**. Two processes:
+Thunderbird-chrome mail client on uitoolkit **v0.10.8**. Two processes:
 
 | Process | Role |
 | --- | --- |
@@ -221,7 +221,7 @@ Message view stays **text-only**. The attachment list calls `messages.openPart`:
 
 ## VIP, notifications, categories
 
-- **VIP** senders (Message → Add sender to VIP). Folder tree → **VIP** + unread badge.
+- **VIP** senders (Message → Add sender to VIP). The VIP smart folder is **not** shown in the sidebar; Preferences still lists VIP contacts, and VIP-only notifications still work.
 - **Notification rules** (Preferences → Notify): new mail, optional VIP-only, optional `notify-send` on Linux. No display / no `notify-send` → stub (RPC event `mail.notify` still fires). `UITK_MAIL_NO_NOTIFY=1` disables the desktop helper.
 - **Categories** (Gmail-lite, local) still classify on the daemon; they are **not** a folder-tree section as of v0.10.4.
 
@@ -272,7 +272,7 @@ Notifications (no `id`): `mail.changed`, `mail.fetched`, `mail.synced`, `mail.no
 | `folders.list` | `{accountId}` |
 | `folders.get` | `{id}` |
 | `folders.create` | `{accountId, name, parent?}` |
-| `folders.virtual` | — VIP / Outbox / (hidden unified / categories / smart) / tags |
+| `folders.virtual` | — Outbox / (hidden unified / categories / smart / VIP) / tags |
 | `messages.list` | `{folderId, filter?}` (virtual ids ok) |
 | `messages.get` | `{id}` (disk raw / in-memory body if already fetched; no extra IMAP) |
 | `messages.search` | `{accountId?, folderId?, filter}` |
@@ -315,7 +315,7 @@ Condition fields: `from`, `to`, `subject`, `body`, `attachment`, `unread`, `tag`
 Actions: `move` (`folder`), `tag`, `markRead`, `markUnread`, `delete`, `stop`.
 AND across conditions. Persist in MemoryStore or the disk cache. Tools → Message Filters.
 
-## UI features (v0.10.6)
+## UI features (v0.10.8)
 
 - **Empty by default** — no demo accounts unless `UITK_MAIL=memory`. First-run Yes/No is only “There are no accounts, want to add one?” Password / `0600` notes are on the Add Account form.
 - **Add account** — IMAP vs POP3 radios, domain auto-guess (including POP hosts), **Test connection** (and optional auto-detect after email+password), masked password field, or Sign in with Google / Microsoft (or device code; IMAP). Saved accounts show the protocol on Account Central and in Preferences. `passEnv` remains an optional fallback.
@@ -325,7 +325,8 @@ AND across conditions. Persist in MemoryStore or the disk cache. Tools → Messa
 - **Overflow scrollbars** — thread list, folder tree, and long message bodies show a vertical track/thumb; wheel/trackpad still scroll; offset clamps at the last row. The thread table clips rows under the sticky header (flush at the top; no paint-through while scrolling).
 - **Card / Table** — View → Card view or the Cards toolbar toggle. Remembered in `~/.config/uitoolkit/mailui.json`.
 - **Density** — View → Compact / Default / Relaxed.
-- **Folder tree** — account folders, Tags, VIP, and Outbox. Unified Folders, Smart Folders, and Categories are not shown.
+- **Folder tree** — account folders, Tags, and Outbox. Unified Folders, Smart Folders, Categories, and VIP are not shown.
+- **Chrome** — no path/subtitle strip and no bottom status bar. Quick Filter (Unread / Starred / Attachment / From / To / Subject / Body) sits under the main toolbar.
 - **Threaded** view and **Mute Thread**.
 - **Snappy open** — unread click patches the row; preview uses a cached `messages.get` body.
 - **Colored tags**, identities, Sorting Office filters — unchanged.
@@ -352,7 +353,7 @@ UITK_MAIL=memory go run ./cmd/mailclientd
 UITK_SCENE=auto go run ./cmd/mailclientui
 ```
 
-- **VIP** — open a Kai / Thunderbird Team message → Message → Add sender to VIP; tree → VIP.
+- **VIP** — open a Kai / Thunderbird Team message → Message → Add sender to VIP (Preferences → VIP lists senders; no VIP folder in the tree).
 - **Threading** — View → Threaded; look for “Thread: lunch plans (3)”. Message → Mute Thread.
 - **OAuth** — File → Add Account, enter a Gmail/Outlook address (hosts fill in), paste your client id, Sign in with Google / Microsoft. Approve in the browser (or use Device code). Then Get Messages.
 

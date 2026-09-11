@@ -7,6 +7,7 @@ import (
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/internal/uitest"
 	"github.com/codemodify/uitoolkit/platform"
+	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
 	"github.com/codemodify/uitoolkit/widgets"
 )
@@ -21,6 +22,9 @@ import (
 //	stuck resize cursor     TestSplitterRestoresPointerCursor, TestSplitterCursorReturnsAfterDrag
 //	unclamped scroll        TestScrollClampWheelStopsAtEnd, TestScrollersClampOffset
 //	type into read-only     TestTextViewReadOnlyAndScrollbar, TestTextAreaReadOnlyRejectsInput
+//	menu clip / truncate    TestPopupMenuFitsLongLabelsAndManyItems,
+//	                        TestMenuBarDropdownFitsLabelsAndShortcuts
+//	combo overlap / clip    TestComboBoxPopupClearsFieldAndFitsLabels
 
 func TestSplitterPanesExclusiveAtRatios(t *testing.T) {
 	left := widgets.NewLabel("AAAA pane A chrome")
@@ -255,6 +259,148 @@ func TestTextAreaReadOnlyRejectsInput(t *testing.T) {
 	s.Type("ok")
 	if edit.Text != "hello!ok" {
 		t.Fatalf("editable %q", edit.Text)
+	}
+}
+
+func testLook(scale float32) style.LookAndFeel {
+	look := style.LookAndFeel(style.DarkLook())
+	if scale > 1 {
+		look = style.WithScale(look, scale)
+	}
+	return look
+}
+
+func TestPopupMenuFitsLongLabelsAndManyItems(t *testing.T) {
+	items := []*widgets.MenuItem{
+		widgets.Item("Reply", nil),
+		widgets.Item("Forward", nil),
+		widgets.Sep(),
+		widgets.Item("Mark as Read", nil),
+		widgets.Item("Mark as Unread", nil),
+		widgets.Item("Star", nil),
+		widgets.Sep(),
+		widgets.Item("Tag · Important", nil),
+		widgets.Item("Mute Thread", nil),
+		widgets.Item("Add sender to VIP", nil),
+		widgets.Item("Archive", nil),
+		widgets.Item("Junk", nil),
+		widgets.Item("Delete", nil),
+	}
+	for _, scale := range []float32{1, 2} {
+		h := uitest.NewHost()
+		h.SetLook(testLook(scale))
+		h.SetScale(scale)
+		root := widgets.NewLabel("anchor")
+		_ = uitest.MountHost(h, root, paintengine2d.XYWH(0, 0, 640, 480))
+		pop := widgets.ShowContextMenu(root, paintengine2d.Pt(40, 40), items...)
+		if pop == nil {
+			t.Fatalf("scale %v: ShowContextMenu failed", scale)
+		}
+		if err := uitest.CheckMenuFitsItems(pop); err != nil {
+			t.Fatalf("scale %v: %v bounds=%+v content=%+v", scale, err, pop.Bounds(), pop.ContentSize())
+		}
+		f := pop.Look().Font()
+		for _, label := range []string{"Mark as Read", "Mark as Unread", "Tag · Important"} {
+			need := f.Advance(label) + 44
+			if pop.LocalBounds().Dx()+0.5 < need {
+				t.Fatalf("scale %v width %v truncates %q need %v", scale, pop.LocalBounds().Dx(), label, need)
+			}
+		}
+		last := pop.ItemBounds(len(pop.Items) - 1)
+		if pop.MaxOffset() <= 0 && last.Max.Y > pop.LocalBounds().Dy()+1 {
+			t.Fatalf("scale %v last item clipped %+v menuH=%v", scale, last, pop.LocalBounds().Dy())
+		}
+	}
+}
+
+func TestMenuBarDropdownFitsLabelsAndShortcuts(t *testing.T) {
+	mb := widgets.NewMenuBar(widgets.NewMenu("&Message",
+		widgets.ItemAccel("&New Message", "c", nil),
+		widgets.ItemAccel("&Reply", "r", nil),
+		widgets.ItemAccel("&Forward", "f", nil),
+		widgets.Sep(),
+		widgets.ItemAccel("Mark as Read", "M", nil),
+		widgets.Item("Mark as Unread", nil),
+		widgets.Item("Tag · Important", nil),
+	))
+	for _, scale := range []float32{1, 2} {
+		h := uitest.NewHost()
+		h.SetLook(testLook(scale))
+		h.SetScale(scale)
+		_ = uitest.MountHost(h, mb, paintengine2d.XYWH(0, 0, 900, 500))
+		mb.Open(0)
+		pop, ok := h.Popup().(*widgets.PopupMenu)
+		if !ok || pop == nil {
+			t.Fatalf("scale %v: menubar popup %T", scale, h.Popup())
+		}
+		if err := uitest.CheckMenuFitsItems(pop); err != nil {
+			t.Fatalf("scale %v: %v", scale, err)
+		}
+		f := pop.Look().Font()
+		for i, it := range pop.Items {
+			if it == nil || it.Separator {
+				continue
+			}
+			label, _, _ := widgets.ParseMnemonic(it.Text)
+			lb := pop.LabelBounds(i)
+			if f.Advance(label) > lb.Dx()+0.5 {
+				t.Fatalf("scale %v label %q clipped in %+v", scale, label, lb)
+			}
+			if it.Shortcut == "" {
+				continue
+			}
+			sb := pop.ShortcutBounds(i)
+			if sb.Empty() || f.Advance(it.Shortcut) > sb.Dx()+0.5 {
+				t.Fatalf("scale %v shortcut %q %+v", scale, it.Shortcut, sb)
+			}
+			if err := uitest.CheckExclusive(lb.Inset(0.5), sb.Inset(0.5)); err != nil {
+				t.Fatalf("scale %v overlap %q / %q: %v", scale, label, it.Shortcut, err)
+			}
+		}
+		widget.DismissPopup(mb)
+	}
+}
+
+func TestComboBoxPopupClearsFieldAndFitsLabels(t *testing.T) {
+	cb := widgets.NewComboBox([]string{
+		"QQ <j9@nchip.com>",
+		"Work <you@example.com>",
+		"+plus checked-looking label",
+	}, 0, nil)
+	root := widgets.NewPad(24, cb)
+	for _, scale := range []float32{1, 2} {
+		h := uitest.NewHost()
+		h.SetLook(testLook(scale))
+		h.SetScale(scale)
+		s := uitest.MountHost(h, root, paintengine2d.XYWH(0, 0, 640, 400))
+		s.Layout()
+		cb.Open()
+		pop, ok := h.Popup().(*widgets.PopupMenu)
+		if !ok || pop == nil || !cb.Opened() {
+			t.Fatalf("scale %v: combo popup", scale)
+		}
+		field := widget.DeviceBounds(cb)
+		pb := pop.Bounds()
+		if pb.Min.Y < field.Max.Y-0.5 && pb.Max.Y > field.Min.Y+0.5 {
+			t.Fatalf("scale %v popup %+v overlaps field %+v", scale, pb, field)
+		}
+		if pb.Dx()+0.5 < field.Dx() {
+			t.Fatalf("scale %v popup width %v < field %v", scale, pb.Dx(), field.Dx())
+		}
+		if err := uitest.CheckMenuFitsItems(pop); err != nil {
+			t.Fatalf("scale %v: %v", scale, err)
+		}
+		f := pop.Look().Font()
+		for i, it := range pop.Items {
+			r := pop.ItemBounds(i)
+			if r.Dy()+0.5 < f.Height() {
+				t.Fatalf("scale %v row %d height %v < font %v", scale, i, r.Dy(), f.Height())
+			}
+			if it != nil && f.Advance(it.Text) > pop.LabelBounds(i).Dx()+0.5 {
+				t.Fatalf("scale %v combo label %q clipped", scale, it.Text)
+			}
+		}
+		cb.Close()
 	}
 }
 

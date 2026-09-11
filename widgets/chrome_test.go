@@ -1,6 +1,7 @@
 package widgets
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/codemodify/paintengine2d"
@@ -157,6 +158,73 @@ func TestListViewContext(t *testing.T) {
 	}
 	if lv.Selected < 0 {
 		t.Fatal("right-click should select")
+	}
+}
+
+func mailLikeMenuItems() []*MenuItem {
+	return []*MenuItem{
+		Item("Reply", nil),
+		Item("Forward", nil),
+		Sep(),
+		Item("Mark as Read", nil),
+		Item("Mark as Unread", nil),
+		Item("Star", nil),
+		Sep(),
+		Item("Tag · Important", nil),
+		Item("Mute Thread", nil),
+		Item("Add sender to VIP", nil),
+		Item("Archive", nil),
+		Item("Junk", nil),
+		Item("Delete", nil),
+	}
+}
+
+func TestPopupMenuMeasureFitsLongestLabel(t *testing.T) {
+	pop := NewPopupMenu(mailLikeMenuItems()...)
+	pop.SetHost(&host{})
+	sz := pop.Measure(layout.Unbounded())
+	pop.Arrange(paintengine2d.XYWH(0, 0, sz.X, sz.Y))
+	f := pop.Look().Font()
+	longest := "Add sender to VIP"
+	need := f.Advance(longest) + float32(menuPadL+menuCheckCol+menuPadR)
+	if sz.X+0.5 < need {
+		t.Fatalf("width %v < need %v for %q", sz.X, need, longest)
+	}
+	last := pop.ItemBounds(len(pop.Items) - 1)
+	if last.Empty() || last.Max.Y > sz.Y+1 {
+		t.Fatalf("last item %+v clipped by height %v", last, sz.Y)
+	}
+	if pop.MaxOffset() != 0 {
+		t.Fatalf("intrinsic size should not scroll, max=%v", pop.MaxOffset())
+	}
+}
+
+func TestPopupMenuScrollsWhenClampedShort(t *testing.T) {
+	items := make([]*MenuItem, 0, 24)
+	for i := 0; i < 20; i++ {
+		items = append(items, Item(fmt.Sprintf("Item %02d with a long label", i), nil))
+	}
+	pop := NewPopupMenu(items...)
+	pop.SetHost(&host{})
+	full := pop.Measure(layout.Unbounded())
+	pop.Arrange(paintengine2d.XYWH(0, 0, full.X, 90))
+	if pop.MaxOffset() <= 0 {
+		t.Fatalf("expected scroll when height 90 < content %v", full.Y)
+	}
+	if pop.ItemBounds(0).Min.Y > 8 {
+		t.Fatalf("first row should be visible %+v", pop.ItemBounds(0))
+	}
+	pop.MouseWheel(widget.MouseEvent{Scroll: paintengine2d.Pt(0, 400)})
+	if pop.OffsetY <= 0 {
+		t.Fatal("wheel should scroll")
+	}
+	pop.MouseWheel(widget.MouseEvent{Scroll: paintengine2d.Pt(0, 4000)})
+	if pop.OffsetY != pop.MaxOffset() {
+		t.Fatalf("wheel to end offset=%v max=%v", pop.OffsetY, pop.MaxOffset())
+	}
+	last := pop.ItemBounds(len(items) - 1)
+	if last.Max.Y < 80 {
+		t.Fatalf("scrolled last item still hidden %+v", last)
 	}
 }
 

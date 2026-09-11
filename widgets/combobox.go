@@ -180,15 +180,11 @@ func (c *ComboBox) Open() {
 			c.Invalidate()
 		}
 	}
-	origin := widget.DeviceOrigin(c)
+	o := widget.DeviceOrigin(c)
 	b := c.LocalBounds()
-	sz := pop.Measure(layout.Loose(360, 400))
-	if sz.X < b.Dx() {
-		sz.X = b.Dx()
-	}
-	pop.Arrange(paintengine2d.XYWH(origin.X, origin.Y+b.Dy()-1, sz.X, sz.Y))
+	anchor := paintengine2d.XYWH(o.X, o.Y, b.Dx(), b.Dy())
+	widget.PlacePopupForAnchor(c, pop, anchor, b.Dx(), 2)
 	if widget.ShowPopup(c, pop) {
-		widget.ClampToSurface(c, pop)
 		c.open = true
 		c.Invalidate()
 		pop.RequestFocus()

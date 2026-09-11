@@ -458,8 +458,20 @@ Splitter pane clip, overflow scrollbars, scroll clamp, and read-only
 rows stay visible past the first page) and restoring the pointer after a
 splitter drag are **v0.10.6**. Headless widget contracts, `uitest-driver`,
 and the Wayland cursor `C.int` stride fix are **v0.10.7**.
+Popup menus size to the widest label and full item list (scroll if the
+screen clamps them); Mail hides the status bar and path strip, moves Quick
+Filter under the toolbar, and drops the VIP folder from the tree (**v0.10.8**).
 
 ## Version
+
+**0.10.8** — Toolkit: `PopupMenu` / `PlacePopup` / `ShowContextMenu` /
+`ComboBox` measure with the host look (HiDPI + density). Width is
+max(labels) + gap + max(shortcuts) + padding so accelerators never sit
+on clipped text; height is every row + separators. ComboBox and MenuBar
+drop below the anchor (flip or scroll at the screen edge) without
+overlapping the closed control. Mail chrome: no bottom status bar, no
+path/subtitle `TitleBar`, Quick Filter under the toolbar, VIP folder
+removed from the sidebar (VIP APIs unchanged). Still paintengine2d **v0.9.0**.
 
 **0.10.7** — Testing: `internal/uitest` (Measure/Arrange + injected input +
 paint/geometry asserts), `internal/apptest` / `cmd/uitest-driver` (scripted

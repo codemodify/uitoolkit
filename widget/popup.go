@@ -111,28 +111,190 @@ type SurfaceSizer interface {
 	SurfaceSize() (int, int)
 }
 
-// PlacePopup sizes popup and positions its top-left at origin (window space).
-func PlacePopup(popup Component, origin paintengine2d.Point, maxW, maxH float32) {
-	if popup == nil {
+// PreparePopup attaches from's host (look, scale, popup layer) before Measure.
+func PreparePopup(from, popup Component) {
+	if from == nil || popup == nil {
 		return
 	}
+	if h := from.Host(); h != nil {
+		popup.SetHost(h)
+	}
+}
+
+func popupSurface(c Component) (SurfaceSizer, bool) {
+	if c == nil {
+		return nil, false
+	}
+	h := c.Host()
+	if h == nil {
+		return nil, false
+	}
+	sz, ok := h.(SurfaceSizer)
+	return sz, ok
+}
+
+func popupCap(popup Component, maxW, maxH float32) (float32, float32) {
 	if maxW <= 0 {
 		maxW = 320
 	}
 	if maxH <= 0 {
 		maxH = 480
 	}
-	sz := popup.Measure(layout.Loose(maxW, maxH))
-	popup.Arrange(paintengine2d.XYWH(origin.X, origin.Y, sz.X, sz.Y))
+	if sz, ok := popupSurface(popup); ok {
+		ww, hh := sz.SurfaceSize()
+		if ww > 8 {
+			maxW = float32(ww) - 8
+		}
+		if hh > 8 {
+			maxH = float32(hh) - 8
+		}
+	}
+	return maxW, maxH
 }
 
-// ClampToSurface shifts popup so it stays inside the host surface.
+// PlacePopupForAnchor sizes popup (host look already applied) and places it
+// below anchor, or above when the surface has more room that way. minW is
+// typically the closed ComboBox width. gap is space between anchor and
+// popup (0 = flush, never overlapping).
+func PlacePopupForAnchor(from, popup Component, anchor paintengine2d.Rect, minW, gap float32) {
+	if popup == nil {
+		return
+	}
+	PreparePopup(from, popup)
+	if gap < 0 {
+		gap = 0
+	}
+	intrinsic := popup.Measure(layout.Unbounded())
+	w, h := intrinsic.X, intrinsic.Y
+	if w < minW {
+		w = minW
+	}
+	inset := float32(4)
+	surfW, surfH := float32(0), float32(0)
+	if sz, ok := popupSurface(popup); ok {
+		ww, hh := sz.SurfaceSize()
+		if ww > 8 {
+			surfW = float32(ww)
+		}
+		if hh > 8 {
+			surfH = float32(hh)
+		}
+	}
+
+	maxX := surfW - inset
+	if surfW <= 0 {
+		maxX = w + inset
+	}
+	availW := maxX - inset
+	if surfW > 0 && w > availW && availW > 1 {
+		w = availW
+	}
+	x := anchor.Min.X
+	if x+w > maxX {
+		x = maxX - w
+	}
+	if x < inset {
+		x = inset
+	}
+
+	below, above := float32(1e9), float32(1e9)
+	if surfH > 0 {
+		below = surfH - inset - (anchor.Max.Y + gap)
+		above = anchor.Min.Y - gap - inset
+		if below < 0 {
+			below = 0
+		}
+		if above < 0 {
+			above = 0
+		}
+	}
+	placeBelow := true
+	if h > below && above > below {
+		placeBelow = false
+	}
+	availH := below
+	if !placeBelow {
+		availH = above
+	}
+	if surfH > 0 && h > availH && availH >= 1 {
+		h = availH
+		sz := popup.Measure(layout.Constraints{MaxW: -1, MaxH: h})
+		if sz.X > w {
+			w = sz.X
+			if surfW > 0 && w > availW {
+				w = availW
+			}
+		}
+		if sz.Y > 0 && sz.Y < h {
+			h = sz.Y
+		}
+	}
+
+	y := anchor.Max.Y + gap
+	if !placeBelow {
+		y = anchor.Min.Y - gap - h
+	}
+	if y < inset {
+		y = inset
+	}
+	if surfH > 0 && y+h > surfH-inset {
+		y = surfH - inset - h
+		if y < inset {
+			y = inset
+		}
+	}
+	popup.Arrange(paintengine2d.XYWH(x, y, w, h))
+}
+
+// PlacePopup sizes popup to its intrinsic Measure and positions its top-left
+// at origin (window space). maxW/maxH are fallbacks when the host surface
+// size is unknown; a known surface wins so HiDPI menus are not capped at
+// 1× design pixels.
+func PlacePopup(popup Component, origin paintengine2d.Point, maxW, maxH float32) {
+	if popup == nil {
+		return
+	}
+	intrinsic := popup.Measure(layout.Unbounded())
+	w, h := intrinsic.X, intrinsic.Y
+	capW, capH := popupCap(popup, maxW, maxH)
+	shrink := false
+	if w > capW {
+		w = capW
+		shrink = true
+	}
+	if h > capH {
+		h = capH
+		shrink = true
+	}
+	if shrink {
+		cons := layout.Loose(w, h)
+		if intrinsic.X <= capW {
+			cons.MaxW = -1
+		}
+		sz := popup.Measure(cons)
+		w, h = sz.X, sz.Y
+		if w > capW {
+			w = capW
+		}
+		if h > capH {
+			h = capH
+		}
+	}
+	popup.Arrange(paintengine2d.XYWH(origin.X, origin.Y, w, h))
+}
+
+// ClampToSurface keeps popup inside the host surface. It repositions first
+// (prefer full intrinsic size). Only if the popup is larger than the
+// surface does it shrink the arranged box — the popup should then scroll
+// rather than crop rows.
 func ClampToSurface(from, popup Component) {
 	if from == nil || popup == nil {
 		return
 	}
-	h := from.Host()
-	sz, ok := h.(SurfaceSizer)
+	sz, ok := popupSurface(from)
+	if !ok {
+		sz, ok = popupSurface(popup)
+	}
 	if !ok {
 		return
 	}
@@ -140,21 +302,38 @@ func ClampToSurface(from, popup Component) {
 	if ww < 1 || hh < 1 {
 		return
 	}
+	inset := float32(4)
+	maxX := float32(ww) - inset
+	maxY := float32(hh) - inset
+	availW := maxX - inset
+	availH := maxY - inset
+	if availW < 1 {
+		availW = 1
+	}
+	if availH < 1 {
+		availH = 1
+	}
+
 	b := popup.Bounds()
-	dx, dy := float32(0), float32(0)
-	if b.Max.X > float32(ww)-4 {
-		dx = float32(ww) - 4 - b.Max.X
+	w, h := b.Dx(), b.Dy()
+	if w > availW {
+		w = availW
 	}
-	if b.Max.Y > float32(hh)-4 {
-		dy = float32(hh) - 4 - b.Max.Y
+	if h > availH {
+		h = availH
 	}
-	if b.Min.X+dx < 4 {
-		dx = 4 - b.Min.X
+	x, y := b.Min.X, b.Min.Y
+	if x+w > maxX {
+		x = maxX - w
 	}
-	if b.Min.Y+dy < 4 {
-		dy = 4 - b.Min.Y
+	if y+h > maxY {
+		y = maxY - h
 	}
-	if dx != 0 || dy != 0 {
-		popup.Arrange(b.Translate(paintengine2d.Pt(dx, dy)))
+	if x < inset {
+		x = inset
 	}
+	if y < inset {
+		y = inset
+	}
+	popup.Arrange(paintengine2d.XYWH(x, y, w, h))
 }

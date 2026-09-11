@@ -349,9 +349,11 @@ func (l *Classic) DrawMenuTitle(ctx *paintengine2d.Context, b paintengine2d.Rect
 func (l *Classic) DrawMenuFrame(ctx *paintengine2d.Context, b paintengine2d.Rect) {
 	p := l.palette
 	m := l.metrics
-	ctx.DrawRoundRect(b.Translate(paintengine2d.Pt(2, 3)), m.RadiusSmall, m.RadiusSmall, paintengine2d.Fill(p.Shadow))
-	ctx.DrawRoundRect(b, m.RadiusSmall, m.RadiusSmall, paintengine2d.Fill(p.SurfaceAlt))
-	ctx.DrawRoundRect(b.Inset(0.5), m.RadiusSmall, m.RadiusSmall, paintengine2d.StrokePaint(p.Border, m.Border+0.4))
+	// Keep the drop shadow inside the arranged box so PaintTree clip
+	// cannot leave a sliver artifact under the last row.
+	ctx.DrawRoundRect(b.Inset(1).Translate(paintengine2d.Pt(1, 2)), m.RadiusSmall, m.RadiusSmall, paintengine2d.Fill(p.Shadow))
+	ctx.DrawRoundRect(b.Inset(1), m.RadiusSmall, m.RadiusSmall, paintengine2d.Fill(p.SurfaceAlt))
+	ctx.DrawRoundRect(b.Inset(1.5), m.RadiusSmall, m.RadiusSmall, paintengine2d.StrokePaint(p.Border, m.Border+0.4))
 }
 
 func (l *Classic) DrawMenuItem(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label, shortcut string, underline int, sep, checked bool) {
@@ -362,10 +364,16 @@ func (l *Classic) DrawMenuItem(ctx *paintengine2d.Context, b paintengine2d.Rect,
 		return
 	}
 	if (st.Hovered() || st.Pressed()) && !st.Disabled() {
-		ctx.DrawRoundRect(b.Inset(3), 4, 4, paintengine2d.Fill(p.Accent.WithAlpha(0.30)))
+		ctx.DrawRoundRect(b.Inset(2), 4, 4, paintengine2d.Fill(p.Accent.WithAlpha(0.30)))
 	}
-	pad := float32(10)
+	const (
+		pad = float32(10)
+		gap = float32(16)
+	)
 	ty := b.Min.Y + (b.Dy()-l.body.Height())*0.5
+	if ty < b.Min.Y {
+		ty = b.Min.Y
+	}
 	fg := p.Text
 	font := l.body
 	if st.Disabled() {
@@ -375,11 +383,21 @@ func (l *Classic) DrawMenuItem(ctx *paintengine2d.Context, b paintengine2d.Rect,
 	if checked {
 		font.Draw(ctx, "+", paintengine2d.Pt(b.Min.X+6, ty), fg)
 	}
-	l.drawTextUnderline(ctx, font, label, underline, paintengine2d.Pt(b.Min.X+pad+10, ty), fg)
+	labelRight := b.Max.X - pad
 	if shortcut != "" {
 		tw := l.muted.Advance(shortcut)
-		l.muted.Draw(ctx, shortcut, paintengine2d.Pt(b.Max.X-pad-tw, ty), p.TextMuted)
+		sx := b.Max.X - pad - tw
+		l.muted.Draw(ctx, shortcut, paintengine2d.Pt(sx, ty), p.TextMuted)
+		labelRight = sx - gap
 	}
+	lx := b.Min.X + pad + 10
+	if labelRight < lx {
+		labelRight = lx
+	}
+	ctx.Save()
+	ctx.ClipRect(paintengine2d.XYWH(lx, b.Min.Y, labelRight-lx, b.Dy()))
+	l.drawTextUnderline(ctx, font, label, underline, paintengine2d.Pt(lx, ty), fg)
+	ctx.Restore()
 }
 
 func (l *Classic) DrawTabBar(ctx *paintengine2d.Context, b paintengine2d.Rect) {

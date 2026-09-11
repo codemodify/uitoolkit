@@ -145,9 +145,90 @@ func TreeInvariants(root widget.Component) []error {
 			if err := CheckClamped(v.OffsetY(), v.MaxOffset()); err != nil {
 				errs = append(errs, fmt.Errorf("textarea: %w", err))
 			}
+		case *widgets.PopupMenu:
+			if err := CheckMenuFitsItems(v); err != nil {
+				errs = append(errs, fmt.Errorf("menu: %w", err))
+			}
 		}
 	})
 	return errs
+}
+
+// CheckMenuFitsItems reports when a popup is narrower than its labels or
+// crops rows without offering scroll.
+func CheckMenuFitsItems(p *widgets.PopupMenu) error {
+	if p == nil || len(p.Items) == 0 {
+		return nil
+	}
+	if err := CheckClamped(p.OffsetY, p.MaxOffset()); err != nil {
+		return err
+	}
+	if err := CheckThumbInTrack(p.ScrollTrack()); err != nil {
+		return fmt.Errorf("thumb: %w", err)
+	}
+	box := p.LocalBounds()
+	cs := p.ContentSize()
+	if box.Dx()+1 < cs.X {
+		return fmt.Errorf("menu width %v < content %v (labels truncated)", box.Dx(), cs.X)
+	}
+	if cs.Y > box.Dy()+1 && p.MaxOffset() <= 0 {
+		return fmt.Errorf("menu height %v < content %v and no scroll", box.Dy(), cs.Y)
+	}
+	f := p.Look().Font()
+	for i, it := range p.Items {
+		if it == nil || it.Separator {
+			continue
+		}
+		r := p.ItemBounds(i)
+		if r.Empty() {
+			return fmt.Errorf("item %d %q empty bounds", i, it.Text)
+		}
+		label, _, _ := widgets.ParseMnemonic(it.Text)
+		lb := p.LabelBounds(i)
+		if f != nil {
+			if adv := f.Advance(label); adv > 0 && lb.Dx()+0.5 < adv {
+				return fmt.Errorf("label column %v < %q advance %v", lb.Dx(), label, adv)
+			}
+		}
+		if sb := p.ShortcutBounds(i); !sb.Empty() {
+			if err := CheckExclusive(lb.Inset(0.5), sb.Inset(0.5)); err != nil {
+				return fmt.Errorf("label/shortcut overlap %q %q: %w", label, it.Shortcut, err)
+			}
+			if f != nil {
+				if adv := f.Advance(it.Shortcut); adv > 0 && sb.Dx()+0.5 < adv {
+					return fmt.Errorf("shortcut column %v < %q advance %v", sb.Dx(), it.Shortcut, adv)
+				}
+			}
+			if sb.Max.X > box.Max.X+1 {
+				return fmt.Errorf("shortcut %q escapes menu %+v", it.Shortcut, sb)
+			}
+		}
+		if p.MaxOffset() <= 0 {
+			if r.Min.Y < box.Min.Y-1 || r.Max.Y > box.Max.Y+1 {
+				return fmt.Errorf("item %d %q %+v clipped by menu %+v", i, label, r, box)
+			}
+		}
+	}
+	if p.MaxOffset() <= 0 {
+		last := lastMenuItem(p)
+		if last >= 0 {
+			r := p.ItemBounds(last)
+			if r.Max.Y > box.Max.Y+1 {
+				return fmt.Errorf("last item clipped maxY=%v menu=%v", r.Max.Y, box.Max.Y)
+			}
+		}
+	}
+	return nil
+}
+
+func lastMenuItem(p *widgets.PopupMenu) int {
+	for i := len(p.Items) - 1; i >= 0; i-- {
+		it := p.Items[i]
+		if it != nil && !it.Separator {
+			return i
+		}
+	}
+	return -1
 }
 
 // ColorNear reports whether img at (x,y) is within slop of want (0–255).

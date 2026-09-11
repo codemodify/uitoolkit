@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -52,8 +53,11 @@ func TestMailAppPaints(t *testing.T) {
 			}
 		}
 	})
-	if tables < 1 || trees < 1 || areas < 1 || bars < 1 || menus < 1 {
+	if tables < 1 || trees < 1 || areas < 1 || menus < 1 {
 		t.Fatalf("chrome table=%d tree=%d area=%d status=%d menu=%d", tables, trees, areas, bars, menus)
+	}
+	if bars != 0 {
+		t.Fatalf("status bar should be hidden, got %d", bars)
 	}
 
 	dir := t.TempDir()
@@ -473,7 +477,78 @@ func TestHiddenFromFolderTree(t *testing.T) {
 	if !HiddenFromFolderTree(FolderCatPrimary) || !HiddenFromFolderTree(FolderID("smart/sf-invoices")) {
 		t.Fatal("cat/smart")
 	}
-	if HiddenFromFolderTree(FolderVIP) || HiddenFromFolderTree(FolderOutbox) || HiddenFromFolderTree(TagFolderID("Work")) {
-		t.Fatal("vip/outbox/tag should stay")
+	if !HiddenFromFolderTree(FolderVIP) {
+		t.Fatal("VIP folder should be hidden from the tree")
 	}
+	if HiddenFromFolderTree(FolderOutbox) || HiddenFromFolderTree(TagFolderID("Work")) {
+		t.Fatal("outbox/tag should stay")
+	}
+}
+
+func TestMailChromeHidesStatusBarAndVIPFolder(t *testing.T) {
+	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{
+		Title: "Mail", Width: 1280, Height: 800, Headless: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.SetContent(MailApp(a, w))
+	a.PumpOnce()
+	var bars, titles int
+	var vipNode bool
+	var qf, qfInSplit widget.Component
+	var split *widgets.Splitter
+	widget.Walk(w.Content(), func(c widget.Component) {
+		switch v := c.(type) {
+		case *widgets.StatusBar:
+			bars++
+		case *widgets.TitleBar:
+			titles++
+		case *widgets.Splitter:
+			if split == nil {
+				split = v
+			}
+		case *widgets.TextField:
+			if strings.Contains(v.Placeholder, "Quick Filter") && qf == nil {
+				qf = v
+			}
+		case *widgets.TreeView:
+			var walk func([]*widgets.TreeNode)
+			walk = func(nodes []*widgets.TreeNode) {
+				for _, n := range nodes {
+					if n == nil {
+						continue
+					}
+					if id, ok := n.Data.(FolderID); ok && id == FolderVIP {
+						vipNode = true
+					}
+					if n.Label == "VIP" || strings.HasPrefix(n.Label, "VIP (") {
+						vipNode = true
+					}
+					walk(n.Children)
+				}
+			}
+			walk(v.Roots)
+		}
+	})
+	if qf != nil && split != nil && widget.Contains(split, qf) {
+		qfInSplit = qf
+	}
+	if bars != 0 {
+		t.Fatalf("status bar widgets=%d", bars)
+	}
+	if titles != 0 {
+		t.Fatalf("path/subtitle TitleBar should be gone, got %d", titles)
+	}
+	if vipNode {
+		t.Fatal("VIP folder still in the sidebar tree")
+	}
+	if qf == nil {
+		t.Fatal("quick filter field missing")
+	}
+	if qfInSplit != nil {
+		t.Fatal("quick filter still lives above the message list inside the splitter")
+	}
+	w.Close()
 }
