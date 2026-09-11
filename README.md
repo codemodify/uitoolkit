@@ -446,7 +446,9 @@ retrieve are **v0.10.3**.
 **Test connection** button dials the typed user/password. `protocol` is
 stored in `mail.json`. POP3 accounts retrieve into the local Inbox
 (leave-on-server; honest gaps in [docs/mail.md](docs/mail.md)). Account
-Central and Preferences show the protocol. Still paintengine2d **v0.9.0**.
+Central and Preferences show the protocol. **Remove account** (File /
+Account Central / Preferences) deletes config + local cache and returns
+to the first-run prompt when none remain. Still paintengine2d **v0.9.0**.
 
 **0.10.2** — Wayland: printable keys emit `EventText` unless IME preedit
 is active (Add Account / Quick Filter were untypeable when

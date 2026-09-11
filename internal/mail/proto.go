@@ -12,6 +12,7 @@ import "encoding/json"
 //	status.get
 //	accounts.list
 //	accounts.put        AccountConfig (password and/or passEnv)
+//	accounts.delete     {id}
 //	folders.list        {accountId}
 //	folders.get         {id}
 //	folders.create      {accountId, name, parent?}
@@ -44,6 +45,7 @@ import "encoding/json"
 //	outbox.list / outbox.flush
 //	smart.* / threads.mute / vip.* / notify.*
 //	senders.setCategory / oauth.* / hosts.guess / hosts.probe / accounts.test
+//	accounts.delete
 //
 // Events (server → client, no id):
 //
@@ -60,6 +62,7 @@ const (
 	MethodStatusGet      = "status.get"
 	MethodAccountsList   = "accounts.list"
 	MethodAccountsPut    = "accounts.put"
+	MethodAccountsDel    = "accounts.delete"
 	MethodFoldersList    = "folders.list"
 	MethodFoldersGet     = "folders.get"
 	MethodFoldersCreate  = "folders.create"
@@ -244,6 +247,18 @@ type identityListParams struct {
 
 type identityIDParams struct {
 	ID string `json:"id"`
+}
+
+type accountDelParams struct {
+	ID        string `json:"id"`
+	AccountID string `json:"accountId,omitempty"`
+}
+
+func (p accountDelParams) id() string {
+	if p.ID != "" {
+		return p.ID
+	}
+	return p.AccountID
 }
 
 type ruleIDParams struct {

@@ -264,6 +264,7 @@ Notifications (no `id`): `mail.changed`, `mail.fetched`, `mail.synced`, `mail.no
 | `status.set` | `{online}` — Work Offline; going online flushes the outbox |
 | `accounts.list` | — |
 | `accounts.put` | AccountConfig (`protocol` `imap` or `pop3`; `password` stored in mail.json mode 0600; `passEnv` optional) |
+| `accounts.delete` | `{id}` — remove account from mail.json and the local cache (server mail is kept) |
 | `oauth.start` | `{provider, address, name?, clientId?, clientSecret?, flow?}` |
 | `oauth.poll` | `{sessionId}` |
 | `oauth.cancel` | `{sessionId}` |
@@ -319,6 +320,7 @@ AND across conditions. Persist in MemoryStore or the disk cache. Tools → Messa
 
 - **Empty by default** — no demo accounts unless `UITK_MAIL=memory`. First-run: “There are no accounts, want to add one?” (typed password is saved in `mail.json`, mode `0600`).
 - **Add account** — IMAP vs POP3 radios, domain auto-guess (including POP hosts), **Test connection** (and optional auto-detect after email+password), masked password field, or Sign in with Google / Microsoft (or device code; IMAP). Saved accounts show the protocol on Account Central and in Preferences. `passEnv` remains an optional fallback.
+- **Remove account** — File menu, Account Central, and Preferences → Accounts. Confirm, then drop the account from `mail.json` and the local cache. The folder tree refreshes; if none remain, the first-run “add one?” prompt returns.
 - **Text-only Message tab** — prefer `text/plain`; HTML-only mail is tag-stripped. No HTML engine / no HTML tab.
 - **Card / Table** — View → Card view or the Cards toolbar toggle. Remembered in `~/.config/uitoolkit/mailui.json`.
 - **Density** — View → Compact / Default / Relaxed.

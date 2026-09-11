@@ -303,3 +303,17 @@ func AddAccountApp(win *app.Window, cli *Client, onSaved func()) widget.Componen
 func labeled(title string, field widget.Component) widget.Component {
 	return widgets.NewColumn(widgets.NewLabel(title), field).WithGap(2)
 }
+
+func confirmRemoveAccount(from widget.Component, acct Account, do func()) {
+	if from == nil || acct.ID == "" {
+		return
+	}
+	widgets.Confirm(from, "Remove account?",
+		fmt.Sprintf("Remove %s <%s> (%s)?\n\nThis deletes the account from mail.json and the local cache. Messages on the server are not deleted.",
+			acct.Name, acct.Address, ProtocolLabel(acct)),
+		func(yes bool) {
+			if yes && do != nil {
+				do()
+			}
+		})
+}

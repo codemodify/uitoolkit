@@ -12,28 +12,28 @@ import (
 )
 
 // OpenPrefs opens Account Settings / Filters / Appearance.
-func OpenPrefs(a *app.Application, cli *Client) (*app.Window, error) {
+func OpenPrefs(a *app.Application, cli *Client, onChange func()) (*app.Window, error) {
 	win, err := a.NewWindow(platform.WindowOptions{
 		Title: "Preferences", Width: 720, Height: 560, MinWidth: 480, MinHeight: 360,
 	})
 	if err != nil {
 		return nil, err
 	}
-	win.SetContent(PrefsApp(a, win, cli))
+	win.SetContent(PrefsApp(a, win, cli, onChange))
 	return win, nil
 }
 
 // OpenFilters is Tools → Message Filters (same window, Filters tab).
 func OpenFilters(a *app.Application, cli *Client) (*app.Window, error) {
-	return OpenPrefs(a, cli)
+	return OpenPrefs(a, cli, nil)
 }
 
 // PrefsApp is tabbed: Accounts, Identities, Filters, Tags, Appearance.
-func PrefsApp(a *app.Application, win *app.Window, cli *Client) widget.Component {
+func PrefsApp(a *app.Application, win *app.Window, cli *Client, onChange func()) widget.Component {
 	st, _ := cli.Status()
 	status := widgets.NewStatusBar("mailclientd settings.", st.Backend, "v"+uitoolkit.Version)
 
-	accountsTab := prefsAccounts(a, cli, st)
+	accountsTab := prefsAccounts(a, win, cli, st, onChange)
 	identsTab := prefsIdentities(cli)
 	filtersTab := prefsFilters(cli, win)
 	tagsTab := prefsTags(cli)
@@ -61,9 +61,20 @@ func PrefsApp(a *app.Application, win *app.Window, cli *Client) widget.Component
 	return root
 }
 
-func prefsAccounts(a *app.Application, cli *Client, st DaemonStatus) widget.Component {
+func prefsAccounts(a *app.Application, win *app.Window, cli *Client, st DaemonStatus, onChange func()) widget.Component {
 	accounts, _ := cli.Accounts()
-	table := widgets.NewTableView([]widgets.TableColumn{
+	var table *widgets.TableView
+	refresh := func() {
+		accounts, _ = cli.Accounts()
+		if table != nil {
+			table.RowCount = len(accounts)
+			if table.Selected >= len(accounts) {
+				table.Selected = 0
+			}
+			table.Invalidate()
+		}
+	}
+	table = widgets.NewTableView([]widgets.TableColumn{
 		{Title: "Name", Width: 160, Sortable: true},
 		{Title: "Address", Sortable: true},
 		{Title: "Protocol", Width: 100, Sortable: true},
@@ -100,11 +111,34 @@ func prefsAccounts(a *app.Application, cli *Client, st DaemonStatus) widget.Comp
 		st.Backend, cli.Socket, health, st.Accounts, ConfigPath(),
 	))
 	add := widgets.NewButton("Add account…", func() {
-		_, _ = OpenAddAccount(a, cli, nil)
+		_, _ = OpenAddAccount(a, cli, func() {
+			refresh()
+			if onChange != nil {
+				onChange()
+			}
+		})
+	})
+	remove := widgets.NewButton("Remove account…", func() {
+		i := table.Selected
+		if i < 0 || i >= len(accounts) {
+			widgets.Warn(win.Content(), "Remove account", "Select an account first.", nil)
+			return
+		}
+		acct := accounts[i]
+		confirmRemoveAccount(win.Content(), acct, func() {
+			if err := cli.DeleteAccount(acct.ID); err != nil {
+				widgets.Warn(win.Content(), "Remove account", err.Error(), nil)
+				return
+			}
+			refresh()
+			if onChange != nil {
+				onChange()
+			}
+		})
 	})
 	return widgets.NewColumn(
 		widgets.NewTitle("Accounts (stores / transports)"),
-		info, table, add,
+		info, table, widgets.NewRow(add, remove).WithGap(8),
 	).WithGap(8)
 }
 

@@ -315,6 +315,17 @@ func upsertAccountConfig(list []AccountConfig, a AccountConfig) []AccountConfig 
 	return append(list, a)
 }
 
+func dropAccountConfig(list []AccountConfig, id string) []AccountConfig {
+	out := list[:0]
+	for _, x := range list {
+		if x.ID == id || (id != "" && slug(x.Address) == id) {
+			continue
+		}
+		out = append(out, x)
+	}
+	return out
+}
+
 // LoadConfig reads the JSON file. Missing file is not an error (empty config).
 func LoadConfig() (MailConfig, error) {
 	path := ConfigPath()
