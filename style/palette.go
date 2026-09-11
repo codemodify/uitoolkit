@@ -124,6 +124,54 @@ type Metrics struct {
 	AccordionH  float32
 }
 
+// ScaleMetrics multiplies spatial LookAndFeel metrics by display scale.
+// Font sizes, padding, and control heights grow; hairline strokes stay ≥ 1.
+func ScaleMetrics(m Metrics, scale float32) Metrics {
+	if scale <= 0 || scale == 1 {
+		return m
+	}
+	s := func(v float32) float32 { return v * scale }
+	m.Radius = s(m.Radius)
+	m.RadiusSmall = s(m.RadiusSmall)
+	m.Pad = s(m.Pad)
+	m.Gap = s(m.Gap)
+	m.Border = s(m.Border)
+	if m.Border < 1 {
+		m.Border = 1
+	}
+	m.FocusWidth = s(m.FocusWidth)
+	m.ControlH = s(m.ControlH)
+	m.Checkbox = s(m.Checkbox)
+	m.SliderH = s(m.SliderH)
+	m.Thumb = s(m.Thumb)
+	m.Scroll = s(m.Scroll)
+	m.Splitter = s(m.Splitter)
+	m.TitleBar = s(m.TitleBar)
+	m.FontSize = s(m.FontSize)
+	m.TitleSize = s(m.TitleSize)
+	m.Stroke = s(m.Stroke)
+	if m.Stroke < 1 {
+		m.Stroke = 1
+	}
+	m.FieldPad = s(m.FieldPad)
+	m.MenuBarH = s(m.MenuBarH)
+	m.MenuItemH = s(m.MenuItemH)
+	m.TabH = s(m.TabH)
+	m.TreeIndent = s(m.TreeIndent)
+	m.StatusBarH = s(m.StatusBarH)
+	m.ToolBarH = s(m.ToolBarH)
+	m.ToolBtn = s(m.ToolBtn)
+	m.ProgressH = s(m.ProgressH)
+	m.Radio = s(m.Radio)
+	m.HeaderH = s(m.HeaderH)
+	m.SpinnerW = s(m.SpinnerW)
+	m.TooltipPad = s(m.TooltipPad)
+	m.SwitchW = s(m.SwitchW)
+	m.SwitchH = s(m.SwitchH)
+	m.AccordionH = s(m.AccordionH)
+	return m
+}
+
 // DefaultMetrics is dense but finger-friendly at 1× scale.
 func DefaultMetrics() Metrics {
 	return Metrics{

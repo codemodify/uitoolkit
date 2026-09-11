@@ -6,40 +6,83 @@ package platform
 #cgo linux LDFLAGS: -lX11
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
+#include <X11/Xatom.h>
+#include <X11/Xresource.h>
 #include <X11/keysym.h>
+#include <locale.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/select.h>
+#include <sys/time.h>
+#include <unistd.h>
 
-static Display* ui_open(void) {
-	return XOpenDisplay(NULL);
+static void ui_threads(void) { XInitThreads(); }
+
+static void ui_init_locale(void) {
+	setlocale(LC_CTYPE, "");
+	if (XSupportsLocale()) {
+		XSetLocaleModifiers("");
+	}
 }
+
+static Display* ui_open(void) { return XOpenDisplay(NULL); }
 
 static int ui_pending(Display* d) { return XPending(d); }
 
 static void ui_next(Display* d, XEvent* e) { XNextEvent(d, e); }
 
-static unsigned long ui_black(Display* d) {
-	return BlackPixel(d, DefaultScreen(d));
+static int ui_filter(Display* d, XEvent* e) { return XFilterEvent(e, None); }
+
+static int ui_fd(Display* d) { return ConnectionNumber(d); }
+
+static int ui_wait(Display* d, int ms) {
+	int fd = ConnectionNumber(d);
+	if (XPending(d)) return 1;
+	fd_set fds;
+	FD_ZERO(&fds);
+	FD_SET(fd, &fds);
+	struct timeval tv;
+	tv.tv_sec = ms / 1000;
+	tv.tv_usec = (ms % 1000) * 1000;
+	return select(fd + 1, &fds, NULL, NULL, &tv);
 }
 
 static Window ui_create(Display* d, int w, int h, const char* title) {
 	int s = DefaultScreen(d);
-	Window win = XCreateSimpleWindow(d, RootWindow(d, s), 40, 40, (unsigned)w, (unsigned)h, 0,
-		BlackPixel(d, s), BlackPixel(d, s));
+	XSetWindowAttributes swa;
+	memset(&swa, 0, sizeof(swa));
+	swa.background_pixel = BlackPixel(d, s);
+	swa.border_pixel = BlackPixel(d, s);
+	swa.bit_gravity = NorthWestGravity;
+	swa.colormap = DefaultColormap(d, s);
+	swa.event_mask = ExposureMask|KeyPressMask|KeyReleaseMask|ButtonPressMask|ButtonReleaseMask|
+		PointerMotionMask|StructureNotifyMask|FocusChangeMask|PropertyChangeMask;
+	Window win = XCreateWindow(d, RootWindow(d, s), 40, 40, (unsigned)w, (unsigned)h, 0,
+		DefaultDepth(d, s), InputOutput, DefaultVisual(d, s),
+		CWBackPixel|CWBorderPixel|CWBitGravity|CWColormap|CWEventMask, &swa);
 	XStoreName(d, win, title);
-	XSelectInput(d, win, ExposureMask|KeyPressMask|KeyReleaseMask|ButtonPressMask|ButtonReleaseMask|
-		PointerMotionMask|StructureNotifyMask|FocusChangeMask);
+	Atom net = XInternAtom(d, "_NET_WM_NAME", False);
+	Atom utf8 = XInternAtom(d, "UTF8_STRING", False);
+	XChangeProperty(d, win, net, utf8, 8, PropModeReplace, (const unsigned char*)title, (int)strlen(title));
 	Atom proto = XInternAtom(d, "WM_DELETE_WINDOW", False);
 	XSetWMProtocols(d, win, &proto, 1);
+	XClassHint ch;
+	ch.res_name = "uitoolkit";
+	ch.res_class = "Uitoolkit";
+	XSetClassHint(d, win, &ch);
 	XSizeHints hints;
 	memset(&hints, 0, sizeof(hints));
 	hints.flags = PMinSize;
 	hints.min_width = 200;
 	hints.min_height = 120;
 	XSetWMNormalHints(d, win, &hints);
-	XMapWindow(d, win);
 	XFlush(d);
 	return win;
+}
+
+static void ui_map(Display* d, Window w) {
+	XMapWindow(d, w);
+	XFlush(d);
 }
 
 static void ui_resize_hints(Display* d, Window w, int minw, int minh) {
@@ -51,9 +94,7 @@ static void ui_resize_hints(Display* d, Window w, int minw, int minh) {
 	XSetWMNormalHints(d, w, &hints);
 }
 
-static GC ui_gc(Display* d, Window w) {
-	return XCreateGC(d, w, 0, NULL);
-}
+static GC ui_gc(Display* d, Window w) { return XCreateGC(d, w, 0, NULL); }
 
 static void ui_put(Display* d, Window w, GC gc, XImage* img, int sx, int sy, int dx, int dy, unsigned pw, unsigned ph) {
 	XPutImage(d, w, gc, img, sx, sy, dx, dy, pw, ph);
@@ -74,7 +115,14 @@ static XImage* ui_image(Display* d, int w, int h, char* data) {
 	return XCreateImage(d, v, (unsigned)depth, ZPixmap, 0, data, (unsigned)w, (unsigned)h, 32, 0);
 }
 
+static int ui_img_bpl(XImage* img) { return img ? img->bytes_per_line : 0; }
+static int ui_img_msb(XImage* img) { return img && img->byte_order == MSBFirst; }
+static unsigned long ui_red_mask(Display* d) { return DefaultVisual(d, DefaultScreen(d))->red_mask; }
+static unsigned long ui_green_mask(Display* d) { return DefaultVisual(d, DefaultScreen(d))->green_mask; }
+static unsigned long ui_blue_mask(Display* d) { return DefaultVisual(d, DefaultScreen(d))->blue_mask; }
+
 static int ui_event_type(XEvent* e) { return e->type; }
+static Window ui_event_window(XEvent* e) { return e->xany.window; }
 
 static int ui_expose_x(XEvent* e) { return e->xexpose.x; }
 static int ui_expose_y(XEvent* e) { return e->xexpose.y; }
@@ -101,9 +149,29 @@ static KeySym ui_lookup(Display* d, XEvent* e, char* buf, int n, int* len) {
 	return ks;
 }
 
-static Atom ui_delete_atom(Display* d) {
-	return XInternAtom(d, "WM_DELETE_WINDOW", False);
+#ifdef X_HAVE_UTF8_STRING
+static int ui_lookup_im(XIC ic, Display* d, XEvent* e, char* buf, int n, KeySym* ks) {
+	*ks = 0;
+	if (ic) {
+		Status st = 0;
+		int len = Xutf8LookupString(ic, &e->xkey, buf, n, ks, &st);
+		if (st == XBufferOverflow) {
+			return -len;
+		}
+		return len;
+	}
+	return XLookupString(&e->xkey, buf, n, ks, NULL);
 }
+#else
+static int ui_lookup_im(XIC ic, Display* d, XEvent* e, char* buf, int n, KeySym* ks) {
+	(void)ic;
+	(void)d;
+	*ks = 0;
+	return XLookupString(&e->xkey, buf, n, ks, NULL);
+}
+#endif
+
+static Atom ui_delete_atom(Display* d) { return XInternAtom(d, "WM_DELETE_WINDOW", False); }
 
 static int ui_is_delete(Display* d, XEvent* e) {
 	if (e->type != ClientMessage) return 0;
@@ -111,16 +179,137 @@ static int ui_is_delete(Display* d, XEvent* e) {
 	return (Atom)e->xclient.data.l[0] == del;
 }
 
-static void ui_close(Display* d, Window w, GC gc) {
+static void ui_destroy_win(Display* d, Window w, GC gc) {
 	if (gc) XFreeGC(d, gc);
 	if (w) XDestroyWindow(d, w);
-	if (d) XCloseDisplay(d);
+	if (d) XFlush(d);
+}
+
+static XIM ui_open_im(Display* d) {
+	if (!d) return NULL;
+	return XOpenIM(d, NULL, NULL, NULL);
+}
+
+static XIC ui_create_ic(XIM im, Window w) {
+	if (!im || !w) return NULL;
+	return XCreateIC(im, XNInputStyle, XIMPreeditNothing | XIMStatusNothing,
+		XNClientWindow, w, XNFocusWindow, w, NULL);
+}
+
+static void ui_set_ic_focus(XIC ic) { if (ic) XSetICFocus(ic); }
+static void ui_unset_ic_focus(XIC ic) { if (ic) XUnsetICFocus(ic); }
+static void ui_destroy_ic(XIC ic) { if (ic) XDestroyIC(ic); }
+
+static Window ui_helper(Display* d) {
+	int s = DefaultScreen(d);
+	Window w = XCreateSimpleWindow(d, RootWindow(d, s), -64, -64, 1, 1, 0,
+		BlackPixel(d, s), BlackPixel(d, s));
+	XSelectInput(d, w, PropertyChangeMask);
+	return w;
+}
+
+static Atom ui_atom(Display* d, const char* n) { return XInternAtom(d, n, False); }
+
+static void ui_set_owner(Display* d, Window w, Atom sel) {
+	XSetSelectionOwner(d, sel, w, CurrentTime);
+}
+
+static Window ui_owner(Display* d, Atom sel) { return XGetSelectionOwner(d, sel); }
+
+static void ui_convert(Display* d, Window w, Atom sel, Atom target, Atom prop) {
+	XConvertSelection(d, sel, target, prop, w, CurrentTime);
+}
+
+static Window ui_sr_requestor(XEvent* e) { return e->xselectionrequest.requestor; }
+static Atom ui_sr_selection(XEvent* e) { return e->xselectionrequest.selection; }
+static Atom ui_sr_target(XEvent* e) { return e->xselectionrequest.target; }
+static Atom ui_sr_property(XEvent* e) { return e->xselectionrequest.property; }
+
+static Atom ui_sc_selection(XEvent* e) { return e->xselectionclear.selection; }
+
+static Atom ui_sn_property(XEvent* e) { return e->xselection.property; }
+static Atom ui_sn_target(XEvent* e) { return e->xselection.target; }
+static Window ui_sn_requestor(XEvent* e) { return e->xselection.requestor; }
+
+static void ui_send_sel_notify(Display* d, XEvent* req, Atom prop) {
+	XEvent ev;
+	memset(&ev, 0, sizeof(ev));
+	ev.xselection.type = SelectionNotify;
+	ev.xselection.display = d;
+	ev.xselection.requestor = req->xselectionrequest.requestor;
+	ev.xselection.selection = req->xselectionrequest.selection;
+	ev.xselection.target = req->xselectionrequest.target;
+	ev.xselection.property = prop;
+	ev.xselection.time = req->xselectionrequest.time;
+	XSendEvent(d, req->xselectionrequest.requestor, False, NoEventMask, &ev);
+}
+
+static void ui_change_prop8(Display* d, Window w, Atom prop, Atom type, const char* data, int n) {
+	XChangeProperty(d, w, prop, type, 8, PropModeReplace, (const unsigned char*)data, n);
+}
+
+static void ui_change_prop32(Display* d, Window w, Atom prop, Atom type, unsigned long* data, int n) {
+	XChangeProperty(d, w, prop, type, 32, PropModeReplace, (const unsigned char*)data, n);
+}
+
+static int ui_get_prop(Display* d, Window w, Atom prop, unsigned char** data, unsigned long* nitems, Atom* type) {
+	Atom actual = 0;
+	int fmt = 0;
+	unsigned long n = 0, rem = 0;
+	unsigned char* p = NULL;
+	int st = XGetWindowProperty(d, w, prop, 0L, 256 * 1024, True, AnyPropertyType,
+		&actual, &fmt, &n, &rem, &p);
+	if (st != Success || p == NULL) {
+		*data = NULL;
+		*nitems = 0;
+		*type = None;
+		return 0;
+	}
+	*type = actual;
+	*nitems = n;
+	*data = p;
+	return fmt;
+}
+
+static void ui_xfree(void* p) { if (p) XFree(p); }
+
+static void ui_refresh_mapping(XEvent* e) {
+	if (e->type == MappingNotify) {
+		XRefreshKeyboardMapping(&e->xmapping);
+	}
+}
+
+static double ui_xft_dpi(Display* d) {
+	char* rms = XResourceManagerString(d);
+	if (!rms) return 0;
+	XrmInitialize();
+	XrmDatabase db = XrmGetStringDatabase(rms);
+	if (!db) return 0;
+	char* type = NULL;
+	XrmValue val;
+	double dpi = 0;
+	if (XrmGetResource(db, "Xft.dpi", "Xft.Dpi", &type, &val) && val.addr) {
+		dpi = atof((char*)val.addr);
+	}
+	XrmDestroyDatabase(db);
+	return dpi;
+}
+
+static double ui_screen_dpi(Display* d) {
+	int s = DefaultScreen(d);
+	int hmm = DisplayHeightMM(d, s);
+	int hpx = DisplayHeight(d, s);
+	if (hmm <= 0 || hpx <= 0) return 0;
+	return (double)hpx * 25.4 / (double)hmm;
 }
 */
 import "C"
 
 import (
 	"fmt"
+	"os"
+	"sync"
+	"time"
 	"unicode/utf8"
 	"unsafe"
 
@@ -136,9 +325,9 @@ func (X11Backend) NewSurface(opts WindowOptions) (Surface, error) {
 	if opts.Headless {
 		return NewOffscreen(opts), nil
 	}
-	d := C.ui_open()
-	if d == nil {
-		return nil, fmt.Errorf("platform: XOpenDisplay failed (set DISPLAY or use headless)")
+	c, err := x11Retain()
+	if err != nil {
+		return nil, err
 	}
 	w, h := opts.Width, opts.Height
 	if w < 1 {
@@ -153,7 +342,8 @@ func (X11Backend) NewSurface(opts WindowOptions) (Surface, error) {
 	}
 	ctitle := C.CString(title)
 	defer C.free(unsafe.Pointer(ctitle))
-	win := C.ui_create(d, C.int(w), C.int(h), ctitle)
+	x11Mu.Lock()
+	win := C.ui_create(c.dpy, C.int(w), C.int(h), ctitle)
 	if opts.MinWidth > 0 || opts.MinHeight > 0 {
 		mw, mh := opts.MinWidth, opts.MinHeight
 		if mw < 1 {
@@ -162,45 +352,232 @@ func (X11Backend) NewSurface(opts WindowOptions) (Surface, error) {
 		if mh < 1 {
 			mh = 1
 		}
-		C.ui_resize_hints(d, win, C.int(mw), C.int(mh))
+		C.ui_resize_hints(c.dpy, win, C.int(mw), C.int(mh))
 	}
-	gc := C.ui_gc(d, win)
+	gc := C.ui_gc(c.dpy, win)
+	ic := C.ui_create_ic(c.im, win)
 	s := &x11Surface{
-		dpy:   d,
+		conn:  c,
 		win:   win,
 		gc:    gc,
+		ic:    ic,
 		title: title,
 		img:   paintengine2d.NewImage(w, h),
-		xbuf:  make([]byte, w*h*4),
+		rmask: uint32(C.ui_red_mask(c.dpy)),
+		gmask: uint32(C.ui_green_mask(c.dpy)),
+		bmask: uint32(C.ui_blue_mask(c.dpy)),
 	}
-	s.rebuildImage()
+	s.rebuildImageLocked()
+	c.surfaces[win] = s
+	x11Mu.Unlock()
 	return s, nil
 }
 
+type x11Conn struct {
+	dpy      *C.Display
+	im       C.XIM
+	helper   C.Window
+	refs     int
+	keep     bool
+	scale    float32
+	surfaces map[C.Window]*x11Surface
+	queues   map[C.Window][]Event
+
+	atomClipboard C.Atom
+	atomPrimary   C.Atom
+	atomUTF8      C.Atom
+	atomTargets   C.Atom
+	atomText      C.Atom
+	atomINCR      C.Atom
+	atomProp      C.Atom
+	atomString    C.Atom
+
+	clipText  string
+	ownClip   bool
+	ownPrim   bool
+	pasteText string
+	pasteDone bool
+	pasteWant C.Atom
+}
+
 type x11Surface struct {
-	dpy    *C.Display
+	conn   *x11Conn
 	win    C.Window
 	gc     C.GC
+	ic     C.XIC
 	ximg   *C.XImage
 	title  string
 	img    *paintengine2d.Image
 	xbuf   []byte
+	stride int
+	msb    bool
+	rmask  uint32
+	gmask  uint32
+	bmask  uint32
+	mapped bool
 	closed bool
+}
+
+var (
+	x11Mu   sync.Mutex
+	x11Once sync.Once
+	x11c    *x11Conn
+)
+
+func x11InitOnce() {
+	x11Once.Do(func() {
+		C.ui_threads()
+		C.ui_init_locale()
+	})
+}
+
+func x11OpenLocked() (*x11Conn, error) {
+	x11InitOnce()
+	d := C.ui_open()
+	if d == nil {
+		return nil, fmt.Errorf("platform: XOpenDisplay failed (set DISPLAY or use headless)")
+	}
+	c := &x11Conn{
+		dpy:      d,
+		surfaces: make(map[C.Window]*x11Surface),
+		queues:   make(map[C.Window][]Event),
+	}
+	c.im = C.ui_open_im(d)
+	c.helper = C.ui_helper(d)
+	c.atomClipboard = internAtom(d, "CLIPBOARD")
+	c.atomPrimary = C.XA_PRIMARY
+	c.atomUTF8 = internAtom(d, "UTF8_STRING")
+	c.atomTargets = internAtom(d, "TARGETS")
+	c.atomText = internAtom(d, "TEXT")
+	c.atomINCR = internAtom(d, "INCR")
+	c.atomProp = internAtom(d, "UITK_CLIP")
+	c.atomString = C.XA_STRING
+	dpi := float32(C.ui_xft_dpi(d))
+	if dpi <= 0 {
+		dpi = float32(C.ui_screen_dpi(d))
+	}
+	c.scale = scaleFromDPI(dpi)
+	if c.scale <= 0 {
+		c.scale = 1
+	}
+	x11c = c
+	return c, nil
+}
+
+func x11Retain() (*x11Conn, error) {
+	x11Mu.Lock()
+	defer x11Mu.Unlock()
+	if x11c == nil {
+		if _, err := x11OpenLocked(); err != nil {
+			return nil, err
+		}
+	}
+	x11c.refs++
+	return x11c, nil
+}
+
+func x11Get() (*x11Conn, error) {
+	x11Mu.Lock()
+	defer x11Mu.Unlock()
+	if x11c != nil {
+		return x11c, nil
+	}
+	if os.Getenv("DISPLAY") == "" {
+		return nil, fmt.Errorf("platform: no DISPLAY")
+	}
+	return x11OpenLocked()
+}
+
+func (c *x11Conn) release() {
+	x11Mu.Lock()
+	defer x11Mu.Unlock()
+	c.refs--
+	if c.refs < 0 {
+		c.refs = 0
+	}
+	if c.refs == 0 && !c.keep {
+		c.closeLocked()
+	}
+}
+
+func (c *x11Conn) closeLocked() {
+	if c.im != nil {
+		C.XCloseIM(c.im)
+		c.im = nil
+	}
+	if c.helper != 0 && c.dpy != nil {
+		C.XDestroyWindow(c.dpy, c.helper)
+		c.helper = 0
+	}
+	if c.dpy != nil {
+		C.XCloseDisplay(c.dpy)
+		c.dpy = nil
+	}
+	if x11c == c {
+		x11c = nil
+	}
+}
+
+func (c *x11Conn) unregister(win C.Window) {
+	x11Mu.Lock()
+	defer x11Mu.Unlock()
+	delete(c.surfaces, win)
+	delete(c.queues, win)
+}
+
+func nativeDetectScale() float32 {
+	if os.Getenv("DISPLAY") == "" {
+		return 0
+	}
+	x11Mu.Lock()
+	if x11c != nil && x11c.scale > 0 {
+		s := x11c.scale
+		x11Mu.Unlock()
+		return s
+	}
+	x11Mu.Unlock()
+	x11InitOnce()
+	d := C.ui_open()
+	if d == nil {
+		return 0
+	}
+	dpi := float32(C.ui_xft_dpi(d))
+	if dpi <= 0 {
+		dpi = float32(C.ui_screen_dpi(d))
+	}
+	C.XCloseDisplay(d)
+	return scaleFromDPI(dpi)
 }
 
 func (s *x11Surface) Title() string                { return s.title }
 func (s *x11Surface) Size() (w, h int)             { return s.img.Width, s.img.Height }
 func (s *x11Surface) Buffer() *paintengine2d.Image { return s.img }
 func (s *x11Surface) Closed() bool                 { return s.closed }
+func (s *x11Surface) Scale() float32 {
+	if s.conn != nil && s.conn.scale > 0 {
+		return s.conn.scale
+	}
+	return 1
+}
 
 func (s *x11Surface) SetTitle(title string) {
 	s.title = title
-	if s.dpy == nil {
+	if s.conn == nil || s.conn.dpy == nil {
 		return
 	}
 	ct := C.CString(title)
-	C.XStoreName(s.dpy, s.win, ct)
-	C.free(unsafe.Pointer(ct))
+	defer C.free(unsafe.Pointer(ct))
+	x11Mu.Lock()
+	C.XStoreName(s.conn.dpy, s.win, ct)
+	net := internAtom(s.conn.dpy, "_NET_WM_NAME")
+	C.ui_change_prop8(s.conn.dpy, s.win, net, s.conn.atomUTF8, ct, C.int(len(title)))
+	x11Mu.Unlock()
+}
+
+func internAtom(d *C.Display, name string) C.Atom {
+	cn := C.CString(name)
+	defer C.free(unsafe.Pointer(cn))
+	return C.ui_atom(d, cn)
 }
 
 func (s *x11Surface) Resize(w, h int) error {
@@ -214,20 +591,39 @@ func (s *x11Surface) Resize(w, h int) error {
 		return nil
 	}
 	s.img = paintengine2d.NewImage(w, h)
-	s.xbuf = make([]byte, w*h*4)
-	s.rebuildImage()
+	x11Mu.Lock()
+	s.rebuildImageLocked()
+	x11Mu.Unlock()
 	return nil
 }
 
-func (s *x11Surface) rebuildImage() {
-	if s.dpy == nil {
+func (s *x11Surface) rebuildImageLocked() {
+	if s.conn == nil || s.conn.dpy == nil {
 		return
 	}
 	if s.ximg != nil {
 		C.ui_destroy_image(s.ximg)
 		s.ximg = nil
 	}
-	s.ximg = C.ui_image(s.dpy, C.int(s.img.Width), C.int(s.img.Height), (*C.char)(unsafe.Pointer(&s.xbuf[0])))
+	w, h := s.img.Width, s.img.Height
+	s.xbuf = make([]byte, w*h*4+64)
+	s.ximg = C.ui_image(s.conn.dpy, C.int(w), C.int(h), (*C.char)(unsafe.Pointer(&s.xbuf[0])))
+	if s.ximg != nil {
+		s.stride = int(C.ui_img_bpl(s.ximg))
+		s.msb = C.ui_img_msb(s.ximg) != 0
+		need := s.stride * h
+		if need > len(s.xbuf) {
+			s.xbuf = make([]byte, need)
+			C.ui_destroy_image(s.ximg)
+			s.ximg = C.ui_image(s.conn.dpy, C.int(w), C.int(h), (*C.char)(unsafe.Pointer(&s.xbuf[0])))
+			if s.ximg != nil {
+				s.stride = int(C.ui_img_bpl(s.ximg))
+			}
+		}
+	}
+	if s.stride < w*4 {
+		s.stride = w * 4
+	}
 }
 
 func (s *x11Surface) copyRect(r paintengine2d.Rect) {
@@ -247,24 +643,34 @@ func (s *x11Surface) copyRect(r paintengine2d.Rect) {
 	if x0 >= x1 || y0 >= y1 {
 		return
 	}
+	stride := s.stride
+	if stride < s.img.Width*4 {
+		stride = s.img.Width * 4
+	}
 	for y := y0; y < y1; y++ {
+		row := y * stride
 		for x := x0; x < x1; x++ {
 			n := s.img.NRGBAAt(x, y)
-			i := (y*s.img.Width + x) * 4
-			s.xbuf[i+0] = n.B
-			s.xbuf[i+1] = n.G
-			s.xbuf[i+2] = n.R
-			s.xbuf[i+3] = n.A
+			i := row + x*4
+			if i+4 > len(s.xbuf) {
+				return
+			}
+			packXPixel(s.xbuf[i:], n.R, n.G, n.B, n.A, s.msb, s.rmask, s.gmask, s.bmask)
 		}
 	}
 }
 
 func (s *x11Surface) Present(dirty []paintengine2d.Rect) error {
-	if s.closed || s.dpy == nil || s.ximg == nil {
+	if s.closed || s.conn == nil || s.conn.dpy == nil || s.ximg == nil {
 		return nil
 	}
 	if len(dirty) == 0 {
 		dirty = []paintengine2d.Rect{paintengine2d.XYWH(0, 0, float32(s.img.Width), float32(s.img.Height))}
+	}
+	x11Mu.Lock()
+	defer x11Mu.Unlock()
+	if s.closed || s.conn.dpy == nil || s.ximg == nil {
+		return nil
 	}
 	for _, r := range dirty {
 		s.copyRect(r)
@@ -284,23 +690,65 @@ func (s *x11Surface) Present(dirty []paintengine2d.Rect) error {
 		if x0 >= x1 || y0 >= y1 {
 			continue
 		}
-		C.ui_put(s.dpy, s.win, s.gc, s.ximg, C.int(x0), C.int(y0), C.int(x0), C.int(y0), C.uint(x1-x0), C.uint(y1-y0))
+		C.ui_put(s.conn.dpy, s.win, s.gc, s.ximg, C.int(x0), C.int(y0), C.int(x0), C.int(y0), C.uint(x1-x0), C.uint(y1-y0))
 	}
-	C.ui_flush(s.dpy)
+	if !s.mapped {
+		C.ui_map(s.conn.dpy, s.win)
+		s.mapped = true
+	}
+	C.ui_flush(s.conn.dpy)
 	return nil
 }
 
 func (s *x11Surface) Poll() []Event {
-	if s.closed || s.dpy == nil {
+	if s.closed || s.conn == nil {
 		return nil
 	}
-	var out []Event
-	for C.ui_pending(s.dpy) != 0 {
-		var xe C.XEvent
-		C.ui_next(s.dpy, &xe)
-		out = append(out, s.translate(&xe)...)
+	s.conn.drain()
+	x11Mu.Lock()
+	ev := s.conn.queues[s.win]
+	s.conn.queues[s.win] = nil
+	x11Mu.Unlock()
+	return ev
+}
+
+func (c *x11Conn) drain() {
+	x11Mu.Lock()
+	defer x11Mu.Unlock()
+	c.drainLocked()
+}
+
+func (c *x11Conn) drainLocked() {
+	if c.dpy == nil {
+		return
 	}
-	return out
+	for C.ui_pending(c.dpy) != 0 {
+		var xe C.XEvent
+		C.ui_next(c.dpy, &xe)
+		if C.ui_filter(c.dpy, &xe) != 0 {
+			continue
+		}
+		switch C.ui_event_type(&xe) {
+		case C.SelectionRequest:
+			c.handleSelReq(&xe)
+			continue
+		case C.SelectionClear:
+			c.handleSelClear(&xe)
+			continue
+		case C.SelectionNotify:
+			c.handleSelNotify(&xe)
+			continue
+		case C.MappingNotify:
+			C.ui_refresh_mapping(&xe)
+			continue
+		}
+		win := C.ui_event_window(&xe)
+		s := c.surfaces[win]
+		if s == nil {
+			continue
+		}
+		c.queues[win] = append(c.queues[win], s.translate(&xe)...)
+	}
 }
 
 func (s *x11Surface) translate(xe *C.XEvent) []Event {
@@ -311,7 +759,14 @@ func (s *x11Surface) translate(xe *C.XEvent) []Event {
 	case C.ConfigureNotify:
 		w, h := int(C.ui_cfg_w(xe)), int(C.ui_cfg_h(xe))
 		if w != s.img.Width || h != s.img.Height {
-			_ = s.Resize(w, h)
+			if w < 1 {
+				w = 1
+			}
+			if h < 1 {
+				h = 1
+			}
+			s.img = paintengine2d.NewImage(w, h)
+			s.rebuildImageLocked()
 			return []Event{{Kind: EventResize, Width: w, Height: h}}
 		}
 	case C.ButtonPress, C.ButtonRelease:
@@ -344,29 +799,44 @@ func (s *x11Surface) translate(xe *C.XEvent) []Event {
 			Mods: xmods(uint(C.ui_mot_state(xe))),
 		}}
 	case C.KeyPress, C.KeyRelease:
-		var buf [16]C.char
-		var n C.int
-		ks := C.ui_lookup(s.dpy, xe, &buf[0], 16, &n)
 		kind := EventKeyDown
 		if C.ui_event_type(xe) == C.KeyRelease {
 			kind = EventKeyUp
 		}
+		var buf [128]C.char
+		var ks C.KeySym
+		n := int(C.ui_lookup_im(s.ic, s.conn.dpy, xe, &buf[0], 128, &ks))
+		if n < 0 {
+			need := -n
+			if need > 8 && need < 4096 {
+				big := make([]C.char, need+1)
+				n = int(C.ui_lookup_im(s.ic, s.conn.dpy, xe, &big[0], C.int(need+1), &ks))
+				ev := Event{Kind: kind, Key: xkey(ks), Mods: xmods(uint(C.ui_key_state(xe)))}
+				out := []Event{ev}
+				if kind == EventKeyDown && n > 0 && !ev.Mods.Ctrl() {
+					out = append(out, textEvents(C.GoBytes(unsafe.Pointer(&big[0]), C.int(n)), ev.Mods)...)
+				}
+				return out
+			}
+			n = 0
+		}
 		ev := Event{Kind: kind, Key: xkey(ks), Mods: xmods(uint(C.ui_key_state(xe)))}
 		out := []Event{ev}
-		if kind == EventKeyDown && n > 0 {
-			b := C.GoBytes(unsafe.Pointer(&buf[0]), n)
-			r, _ := utf8.DecodeRune(b)
-			if r >= 32 && r != 127 {
-				out = append(out, Event{Kind: EventText, Rune: r, Mods: ev.Mods})
-			}
+		if kind == EventKeyDown && n > 0 && !ev.Mods.Ctrl() {
+			out = append(out, textEvents(C.GoBytes(unsafe.Pointer(&buf[0]), C.int(n)), ev.Mods)...)
 		}
 		return out
 	case C.FocusIn:
+		C.ui_set_ic_focus(s.ic)
 		return []Event{{Kind: EventFocusIn}}
 	case C.FocusOut:
+		C.ui_unset_ic_focus(s.ic)
 		return []Event{{Kind: EventFocusOut}}
+	case C.DestroyNotify:
+		s.closed = true
+		return []Event{{Kind: EventClose}}
 	case C.ClientMessage:
-		if C.ui_is_delete(s.dpy, xe) != 0 {
+		if C.ui_is_delete(s.conn.dpy, xe) != 0 {
 			s.closed = true
 			return []Event{{Kind: EventClose}}
 		}
@@ -374,20 +844,228 @@ func (s *x11Surface) translate(xe *C.XEvent) []Event {
 	return nil
 }
 
+func textEvents(b []byte, mods Modifiers) []Event {
+	var out []Event
+	for len(b) > 0 {
+		r, size := utf8.DecodeRune(b)
+		if r >= 32 && r != 127 {
+			out = append(out, Event{Kind: EventText, Rune: r, Mods: mods})
+		}
+		if size < 1 {
+			break
+		}
+		b = b[size:]
+	}
+	return out
+}
+
 func (s *x11Surface) Close() error {
-	if s.closed && s.dpy == nil {
+	if s.closed && (s.conn == nil || s.conn.dpy == nil) {
 		return nil
 	}
 	s.closed = true
+	if s.conn != nil {
+		s.conn.unregister(s.win)
+	}
+	x11Mu.Lock()
+	if s.ic != nil {
+		C.ui_destroy_ic(s.ic)
+		s.ic = nil
+	}
 	if s.ximg != nil {
 		C.ui_destroy_image(s.ximg)
 		s.ximg = nil
 	}
-	if s.dpy != nil {
-		C.ui_close(s.dpy, s.win, s.gc)
-		s.dpy = nil
+	if s.conn != nil && s.conn.dpy != nil {
+		C.ui_destroy_win(s.conn.dpy, s.win, s.gc)
+		s.win = 0
+		s.gc = nil
+	}
+	x11Mu.Unlock()
+	if s.conn != nil {
+		s.conn.release()
 	}
 	return nil
+}
+
+func (c *x11Conn) handleSelReq(xe *C.XEvent) {
+	req := C.ui_sr_requestor(xe)
+	target := C.ui_sr_target(xe)
+	prop := C.ui_sr_property(xe)
+	if prop == 0 {
+		prop = target
+	}
+	sel := C.ui_sr_selection(xe)
+	if (sel == c.atomClipboard && !c.ownClip) || (sel == c.atomPrimary && !c.ownPrim) {
+		C.ui_send_sel_notify(c.dpy, xe, 0)
+		return
+	}
+	data := c.clipText
+	switch target {
+	case c.atomTargets:
+		atoms := []C.ulong{C.ulong(c.atomTargets), C.ulong(c.atomUTF8), C.ulong(c.atomString), C.ulong(c.atomText)}
+		C.ui_change_prop32(c.dpy, req, prop, C.XA_ATOM, &atoms[0], C.int(len(atoms)))
+		C.ui_send_sel_notify(c.dpy, xe, prop)
+	case c.atomUTF8, c.atomString, c.atomText:
+		ct := C.CString(data)
+		C.ui_change_prop8(c.dpy, req, prop, target, ct, C.int(len(data)))
+		C.free(unsafe.Pointer(ct))
+		C.ui_send_sel_notify(c.dpy, xe, prop)
+	default:
+		C.ui_send_sel_notify(c.dpy, xe, 0)
+	}
+}
+
+func (c *x11Conn) handleSelClear(xe *C.XEvent) {
+	sel := C.ui_sc_selection(xe)
+	if sel == c.atomClipboard {
+		c.ownClip = false
+	}
+	if sel == c.atomPrimary {
+		c.ownPrim = false
+	}
+	if !c.ownClip && !c.ownPrim {
+		c.keep = false
+	}
+}
+
+func (c *x11Conn) handleSelNotify(xe *C.XEvent) {
+	prop := C.ui_sn_property(xe)
+	if prop == 0 {
+		c.pasteDone = true
+		c.pasteText = ""
+		return
+	}
+	var data *C.uchar
+	var n C.ulong
+	var typ C.Atom
+	fmtb := C.ui_get_prop(c.dpy, C.ui_sn_requestor(xe), prop, &data, &n, &typ)
+	if data == nil || n == 0 {
+		c.pasteDone = true
+		c.pasteText = ""
+		return
+	}
+	defer C.ui_xfree(unsafe.Pointer(data))
+	if typ == c.atomINCR {
+		// Large incremental transfers are not implemented (documented gap).
+		c.pasteDone = true
+		c.pasteText = ""
+		return
+	}
+	if fmtb == 8 {
+		c.pasteText = C.GoStringN((*C.char)(unsafe.Pointer(data)), C.int(n))
+	}
+	c.pasteDone = true
+}
+
+func (c *x11Conn) setClipboard(s string) {
+	x11Mu.Lock()
+	defer x11Mu.Unlock()
+	if c.dpy == nil || c.helper == 0 {
+		return
+	}
+	c.clipText = s
+	C.ui_set_owner(c.dpy, c.helper, c.atomClipboard)
+	C.ui_set_owner(c.dpy, c.helper, c.atomPrimary)
+	c.ownClip = C.ui_owner(c.dpy, c.atomClipboard) == c.helper
+	c.ownPrim = C.ui_owner(c.dpy, c.atomPrimary) == c.helper
+	c.keep = c.ownClip || c.ownPrim
+	C.ui_flush(c.dpy)
+}
+
+func (c *x11Conn) readSelection(sel C.Atom, timeout time.Duration) (string, bool) {
+	x11Mu.Lock()
+	if c.dpy == nil || c.helper == 0 {
+		x11Mu.Unlock()
+		return "", false
+	}
+	if sel == c.atomClipboard && c.ownClip {
+		s := c.clipText
+		x11Mu.Unlock()
+		return s, true
+	}
+	if sel == c.atomPrimary && c.ownPrim {
+		s := c.clipText
+		x11Mu.Unlock()
+		return s, true
+	}
+	c.pasteDone = false
+	c.pasteText = ""
+	c.pasteWant = sel
+	C.ui_convert(c.dpy, c.helper, sel, c.atomUTF8, c.atomProp)
+	C.ui_flush(c.dpy)
+	deadline := time.Now().Add(timeout)
+	for !c.pasteDone && time.Now().Before(deadline) {
+		c.drainLocked()
+		if c.pasteDone {
+			break
+		}
+		x11Mu.Unlock()
+		C.ui_wait(c.dpy, 20)
+		x11Mu.Lock()
+		if c.dpy == nil {
+			x11Mu.Unlock()
+			return "", false
+		}
+	}
+	if !c.pasteDone && c.dpy != nil {
+		// Retry as XA_STRING for older owners.
+		c.pasteDone = false
+		C.ui_convert(c.dpy, c.helper, sel, c.atomString, c.atomProp)
+		C.ui_flush(c.dpy)
+		end := time.Now().Add(timeout / 2)
+		for !c.pasteDone && time.Now().Before(end) {
+			c.drainLocked()
+			if c.pasteDone {
+				break
+			}
+			x11Mu.Unlock()
+			C.ui_wait(c.dpy, 20)
+			x11Mu.Lock()
+			if c.dpy == nil {
+				x11Mu.Unlock()
+				return "", false
+			}
+		}
+	}
+	s := c.pasteText
+	ok := c.pasteDone
+	x11Mu.Unlock()
+	return s, ok
+}
+
+func clipboardNativeSet(s string) {
+	if os.Getenv("DISPLAY") == "" {
+		return
+	}
+	c, err := x11Get()
+	if err != nil {
+		return
+	}
+	c.setClipboard(s)
+}
+
+func clipboardNativeGet() (string, bool) {
+	return clipboardRead(false)
+}
+
+func clipboardNativePrimaryGet() (string, bool) {
+	return clipboardRead(true)
+}
+
+func clipboardRead(primary bool) (string, bool) {
+	if os.Getenv("DISPLAY") == "" {
+		return "", false
+	}
+	c, err := x11Get()
+	if err != nil {
+		return "", false
+	}
+	sel := c.atomClipboard
+	if primary {
+		sel = c.atomPrimary
+	}
+	return c.readSelection(sel, 250*time.Millisecond)
 }
 
 func xbutton(b int) MouseButton {
@@ -534,3 +1212,6 @@ func xkey(ks C.KeySym) Key {
 	}
 	return KeyUnknown
 }
+
+// MapXKeySym is exported for X11-tagged tests.
+func MapXKeySym(ks uint64) Key { return xkey(C.KeySym(ks)) }

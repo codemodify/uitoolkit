@@ -3,7 +3,7 @@
 //
 // Layers:
 //
-//	platform  — window, event pump, present (X11 on Linux; stubs elsewhere)
+//	platform  — window, event pump, present (X11 on Linux; Wayland later; stubs elsewhere)
 //	app       — run loop, windows, DPI, input routing
 //	widget    — Component tree, focus, hit-test, Invalidate / Damage
 //	layout    — row, column, stack, flex

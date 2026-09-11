@@ -14,6 +14,10 @@ type Options struct {
 	Look     style.LookAndFeel
 	Scale    float32
 	Headless bool
+	// Backend is "x11", "wayland", "offscreen", or "" for auto
+	// (WAYLAND_DISPLAY → DISPLAY → offscreen). Headless always
+	// uses offscreen. Unavailable names fall through.
+	Backend string
 }
 
 // Application owns the run loop and open windows.
@@ -29,18 +33,36 @@ type Application struct {
 }
 
 // New constructs an application. Default look is dark Classic.
+// Scale <= 0 means detect (env, then Xft.dpi on X11). Headless
+// stays 1× unless UITK_SCALE / GDK_SCALE / QT_SCALE_FACTOR is set.
 func New(opts Options) *Application {
 	if opts.Look == nil {
 		opts.Look = style.DarkLook()
 	}
+	var backend platform.Backend
+	if opts.Backend != "" {
+		backend = platform.Select(opts.Backend, opts.Headless)
+	} else {
+		backend = platform.Default(opts.Headless)
+	}
 	if opts.Scale <= 0 {
-		opts.Scale = 1
+		if opts.Headless {
+			opts.Scale = 1
+			if s := platform.ScaleFromEnv(); s > 0 {
+				opts.Scale = s
+			}
+		} else {
+			opts.Scale = platform.DetectScale()
+		}
+	}
+	if opts.Scale != 1 {
+		opts.Look = style.WithScale(opts.Look, opts.Scale)
 	}
 	return &Application{
 		look:     opts.Look,
 		scale:    opts.Scale,
 		headless: opts.Headless,
-		backend:  platform.Default(opts.Headless),
+		backend:  backend,
 	}
 }
 
@@ -62,7 +84,7 @@ func (a *Application) SetLook(l style.LookAndFeel) {
 // Scale is the display scale applied to layout metrics at the window.
 func (a *Application) Scale() float32 { return a.scale }
 
-// BackendName is "x11", "offscreen", or a stub.
+// BackendName is "x11", "wayland", "offscreen", or a stub.
 func (a *Application) BackendName() string { return a.backend.Name() }
 
 // NewWindow opens a surface and attaches a retained widget host.

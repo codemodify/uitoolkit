@@ -7,7 +7,8 @@ import (
 	"github.com/codemodify/uitoolkit/widget"
 )
 
-// TextField is a single-line editor (IME is out of scope for v0.1).
+// TextField is a single-line editor. X11 uses XIM for compose / dead
+// keys; CJK preedit UI is not implemented.
 type TextField struct {
 	widget.Base
 	Text        string
@@ -149,6 +150,12 @@ func (t *TextField) MousePress(e widget.MouseEvent) bool {
 		return false
 	}
 	t.RequestFocus()
+	if e.Button == platform.ButtonMiddle {
+		t.caret = t.indexAt(e.Pos.X)
+		t.selA, t.selB = t.caret, t.caret
+		t.replaceSel(platform.ClipboardPrimaryGet())
+		return true
+	}
 	t.dragging = true
 	t.caret = t.indexAt(e.Pos.X)
 	if e.Mods.Shift() {

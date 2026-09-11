@@ -38,6 +38,9 @@ func New(opts Options) *Application { return app.New(opts) }
 
 func DarkLook() *style.Classic  { return style.DarkLook() }
 func LightLook() *style.Classic { return style.LightLook() }
+func WithScale(look style.LookAndFeel, scale float32) style.LookAndFeel {
+	return style.WithScale(look, scale)
+}
 func Dark() style.Palette       { return style.Dark() }
 func Light() style.Palette      { return style.Light() }
 
