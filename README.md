@@ -62,6 +62,18 @@ and written as PNG (no placeholders).
 
 ![TreeView](docs/screenshots/gallery-tree.png)
 
+### ToolBar
+
+![ToolBar](docs/screenshots/gallery-toolbar.png)
+
+### ComboBox drop-down
+
+![ComboBox](docs/screenshots/gallery-combo.png)
+
+### MessageBox
+
+![MessageBox](docs/screenshots/gallery-message.png)
+
 ### Notes — a small desktop app
 
 ![Notes](docs/screenshots/notes.png)
@@ -126,7 +138,8 @@ widget     retained Component: bounds, children,  HitTest, focus, Invalidate
 layout     Measure / Arrange                      row, column, stack, flex
 widgets    Button, Label, TextField, Checkbox,    ScrollView, ListView
            Slider, Panel, Splitter, Overlay       MenuBar, TabView, TreeView
-           StatusBar, context menus               (virtualized rows)
+           StatusBar, ToolBar, ComboBox           ProgressBar, RadioGroup
+           MessageBox, TitleBar, context menus    (virtualized rows)
 style      LookAndFeel + Palette + Metrics        Dark / Light Classic
 ```
 
@@ -137,7 +150,7 @@ never hard-code colors.
 
 | Command | What it proves |
 | --- | --- |
-| `go run ./examples/gallery` | Stock controls, menus, tabs, tree, themes, scroll, list, dialog, second window |
+| `go run ./examples/gallery` | Stock controls, toolbar, combo, radio, progress, menus, tabs, tree, themes, scroll, list, message box, second window |
 | `go run ./examples/notes` | A small real app: filterable list, editor, add/delete, context menu |
 
 ```bash
@@ -154,9 +167,10 @@ Coverage includes flex Measure/Arrange (parent-local coords), hit-test
 z-order, focus tab order (including MenuBar / TabBar / TreeView),
 checkbox/slider/text/button interaction, virtual list range, scroll-wheel
 bubbling, scrollbar track hits, text selection and copy/paste stubs, menu
-and tab swap, tree expand/select, context-menu dispatch, and an offscreen
+and tab swap, tree expand/select, context-menu dispatch, toolbar and
+combo, radio groups, progress clamp, message-box results, and an offscreen
 paint that produces real pixels. `go test ./examples/gallery` regenerates
-the eight PNGs and fails if any two share a blob.
+the eleven PNGs and fails if any two share a blob.
 
 ## Positioning
 
@@ -187,10 +201,9 @@ Documented on purpose — do not expect these yet:
 
 ## Version
 
-**0.1.3** — MenuBar / Menu / MenuItem, TabBar + TabPage / TabView, TreeView,
-StatusBar, ListView context menus, TextField copy/cut/paste stubs (in-memory
-clipboard; OS clipboard still out of scope). Requires
-`github.com/codemodify/paintengine2d@v0.7.2` (`02b2939`).
+**0.1.4** — ToolBar (icon or text), MessageBox helpers (Info / Warn / Confirm),
+ComboBox, ProgressBar, RadioGroup, optional TitleBar chrome, looser default
+metrics. Requires `github.com/codemodify/paintengine2d@v0.7.2` (`02b2939`).
 
 ## License
 

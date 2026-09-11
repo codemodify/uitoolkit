@@ -14,7 +14,6 @@ import (
 	"github.com/codemodify/uitoolkit"
 	"github.com/codemodify/uitoolkit/app"
 	"github.com/codemodify/uitoolkit/internal/demo"
-	"github.com/codemodify/uitoolkit/layout"
 	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
@@ -34,7 +33,7 @@ func main() {
 	}
 	a := uitoolkit.New(uitoolkit.Options{Look: uitoolkit.DarkLook(), Headless: *headless})
 	win, err := a.NewWindow(platform.WindowOptions{
-		Title: "uitoolkit gallery", Width: 960, Height: 720, MinWidth: 640, MinHeight: 420,
+		Title: "uitoolkit gallery", Width: 1000, Height: 760, MinWidth: 720, MinHeight: 480,
 	})
 	if err != nil {
 		log.Fatal(err)
@@ -52,6 +51,7 @@ func main() {
 
 func buildGallery(a *app.Application, win *app.Window, light bool) widget.Component {
 	status := widgets.NewStatusBar("Ready.", "Ln 1, Col 1", "v"+uitoolkit.Version)
+	chrome := widgets.NewTitleBar("Widget gallery", "v"+uitoolkit.Version)
 
 	volume := widgets.NewLabel("Volume  60%")
 	slider := widgets.NewSlider(0, 100, 60, func(v float32) {
@@ -59,6 +59,31 @@ func buildGallery(a *app.Application, win *app.Window, light bool) widget.Compon
 	})
 
 	name := widgets.NewTextField("Ada Lovelace", "Display name", nil)
+	engine := widgets.NewComboBox([]string{
+		"paintengine2d", "Software raster", "Offscreen pixmap",
+	}, 0, func(i int) {
+		names := []string{"paintengine2d", "Software raster", "Offscreen pixmap"}
+		if i >= 0 && i < len(names) {
+			status.Set(0, "Engine: "+names[i])
+		}
+	})
+	engine.Placeholder = "Paint engine"
+
+	progress := widgets.NewProgressBar(0.42)
+	progressLbl := widgets.NewLabel("Build  42%")
+	busy := widgets.NewBusyBar(0.35)
+
+	radios := widgets.NewRadioGroup([]string{"Dark graphite", "Light paper", "System follow"}, 0, func(i int) {
+		switch i {
+		case 1:
+			status.Set(0, "Radio: Light paper")
+		case 2:
+			status.Set(0, "Radio: System follow")
+		default:
+			status.Set(0, "Radio: Dark graphite")
+		}
+	})
+
 	checks := widgets.NewColumn(
 		widgets.NewCheckbox("Enable notifications", true, nil),
 		widgets.NewCheckbox("Launch at login", false, nil),
@@ -79,17 +104,23 @@ func buildGallery(a *app.Application, win *app.Window, light bool) widget.Compon
 	disabled.SetEnabled(false)
 
 	about := widgets.NewButton("About…", func() {
-		var overlay *widgets.Overlay
-		closeBtn := widgets.NewButton("Close", func() { win.SetOverlay(nil) })
-		closeBtn.Primary = true
-		card := widgets.DialogCard(
-			"About uitoolkit",
-			"Pure Go desktop UI. Paints only with paintengine2d.",
-			closeBtn,
-		)
-		overlay = widgets.NewOverlay(card)
-		overlay.OnClose = func() { win.SetOverlay(nil) }
-		win.SetOverlay(overlay)
+		widgets.Info(win.Content(), "About uitoolkit",
+			"Pure Go desktop UI. Paints only with paintengine2d.", nil)
+	})
+	ask := widgets.NewButton("Confirm…", func() {
+		widgets.Confirm(win.Content(), "Quit gallery?",
+			"Close the showcase window and leave the run loop.",
+			func(yes bool) {
+				if yes {
+					status.Set(0, "Confirmed")
+				} else {
+					status.Set(0, "Cancelled")
+				}
+			})
+	})
+	warn := widgets.NewButton("Warn…", func() {
+		widgets.Warn(win.Content(), "Unsaved changes",
+			"The current theme preset is not written to disk.", nil)
 	})
 
 	other := widgets.NewButton("Window", func() {
@@ -114,18 +145,47 @@ func buildGallery(a *app.Application, win *app.Window, light bool) widget.Compon
 	})
 
 	buttons := widgets.NewPanel("Buttons",
-		widgets.NewRow(primary, plain).WithGap(10),
-		widgets.NewRow(disabled, clickLbl).WithGap(10),
-		widgets.NewRow(about, other, themeBtn).WithGap(10),
+		widgets.NewRow(primary, plain, disabled).WithGap(10),
+		widgets.NewRow(about, ask, warn).WithGap(10),
+		widgets.NewRow(other, themeBtn, clickLbl).WithGap(10),
 	)
 
 	fields := widgets.NewPanel("Fields",
 		widgets.NewLabel("Name"),
 		name,
+		widgets.NewLabel("Paint engine"),
+		engine,
+		widgets.NewLabel("Theme preset"),
+		radios,
 		volume,
 		slider,
+		progressLbl,
+		progress,
+		widgets.NewLabel("Busy"),
+		busy,
 		widgets.NewLabel("Options"),
 		checks,
+	)
+
+	toolbar := widgets.NewToolBar(
+		widgets.ToolIconBtn(style.IconNew, "", func() { status.Set(0, "New") }),
+		widgets.ToolIconBtn(style.IconOpen, "", func() { status.Set(0, "Open") }),
+		widgets.ToolIconBtn(style.IconSave, "", func() { status.Set(0, "Save") }),
+		widgets.ToolDivider(),
+		widgets.ToolIconBtn(style.IconCut, "", func() { status.Set(0, "Cut") }),
+		widgets.ToolIconBtn(style.IconCopy, "", func() {
+			if s := name.SelectedText(); s != "" {
+				platform.ClipboardSet(s)
+			}
+			status.Set(0, "Copy")
+		}),
+		widgets.ToolIconBtn(style.IconPaste, "", func() {
+			name.SetText(name.Text + platform.ClipboardGet())
+			status.Set(0, "Paste")
+		}),
+		widgets.ToolDivider(),
+		widgets.ToolText("About", func() { about.OnClick() }),
+		widgets.ToolToggle("Snap", true, func() { status.Set(0, "Snap toggled") }),
 	)
 
 	long := widgets.NewColumn()
@@ -259,26 +319,20 @@ func buildGallery(a *app.Application, win *app.Window, light bool) widget.Compon
 		),
 	)
 
-	left := widgets.NewColumn(
+	leftCol := widgets.NewColumn(
 		widgets.NewTitle("uitoolkit"),
 		widgets.NewLabel("paintengine2d  ·  v"+uitoolkit.Version),
 		buttons,
 		fields,
 	).WithGap(10).WithPad(12)
-	left.AddFlex(buttons, 0)
-	left.AddFlex(fields, 1)
+	left := widgets.NewScrollView(leftCol)
 
 	right := widgets.NewPad(10, tabs)
 
 	split := widgets.NewSplitter(true, left, right)
 	split.Ratio = 0.46
 
-	header := widgets.NewRow(
-		widgets.NewTitle("Widget gallery"),
-		widgets.NewLabel("menus  ·  tabs  ·  tree  ·  focus"),
-	).WithGap(16).WithPad(12).WithAlign(layout.AlignCenter)
-
-	root := widgets.NewColumn(menubar, header, split, status).WithGap(0)
+	root := widgets.NewColumn(menubar, chrome, toolbar, split, status).WithGap(0)
 	root.AddFlex(split, 1)
 	_ = light
 	return root
@@ -306,14 +360,27 @@ func writeScreenshots(dir string) error {
 			name: "gallery-dialog.png",
 			look: style.DarkLook(),
 			setup: func(a *app.Application, w *app.Window) {
-				closeBtn := widgets.NewButton("Close", func() {})
-				closeBtn.Primary = true
-				card := widgets.DialogCard(
-					"About uitoolkit",
-					"Pure Go desktop UI. Paints only with paintengine2d.",
-					closeBtn,
-				)
-				w.SetOverlay(widgets.NewOverlay(card))
+				widgets.Info(w.Content(), "About uitoolkit",
+					"Pure Go desktop UI. Paints only with paintengine2d.", nil)
+			},
+		},
+		{
+			name: "gallery-combo.png",
+			look: style.DarkLook(),
+			setup: func(a *app.Application, w *app.Window) {
+				openGalleryCombo(w)
+			},
+		},
+		{
+			name: "gallery-message.png",
+			look: style.DarkLook(),
+			setup: func(a *app.Application, w *app.Window) {
+				widgets.ShowMessageBox(w.Content(), widgets.MessageBoxOptions{
+					Title:   "Unsaved changes",
+					Message: "Discard the draft theme and revert to Dark graphite?",
+					Kind:    widgets.MessageWarning,
+					Buttons: widgets.ButtonsYesNoCancel,
+				})
 			},
 		},
 		{
@@ -347,7 +414,7 @@ func writeScreenshots(dir string) error {
 	for _, s := range shots {
 		a := uitoolkit.New(uitoolkit.Options{Look: s.look, Headless: true})
 		w, err := a.NewWindow(platform.WindowOptions{
-			Title: "uitoolkit gallery", Width: 960, Height: 720, Headless: true,
+			Title: "uitoolkit gallery", Width: 1000, Height: 760, Headless: true,
 		})
 		if err != nil {
 			return err
@@ -371,12 +438,16 @@ func writeScreenshots(dir string) error {
 	if err := writeWidgetsCloseup(filepath.Join(dir, "widgets.png")); err != nil {
 		return err
 	}
+	if err := writeToolbarShot(filepath.Join(dir, "gallery-toolbar.png")); err != nil {
+		return err
+	}
 	return verifyDistinctPNGs(dir, screenshotNames)
 }
 
 var screenshotNames = []string{
 	"gallery-dark.png", "gallery-light.png", "gallery-dialog.png",
 	"gallery-scroll.png", "gallery-menu.png", "gallery-tree.png",
+	"gallery-toolbar.png", "gallery-combo.png", "gallery-message.png",
 	"notes.png", "widgets.png",
 }
 
@@ -392,6 +463,14 @@ func openGalleryMenu(w *app.Window, i int) {
 	widget.Walk(w.Content(), func(c widget.Component) {
 		if mb, ok := c.(*widgets.MenuBar); ok {
 			mb.Open(i)
+		}
+	})
+}
+
+func openGalleryCombo(w *app.Window) {
+	widget.Walk(w.Content(), func(c widget.Component) {
+		if cb, ok := c.(*widgets.ComboBox); ok {
+			cb.Open()
 		}
 	})
 }
@@ -478,7 +557,7 @@ func writeNotesShot(path string) error {
 func writeWidgetsCloseup(path string) error {
 	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true})
 	w, err := a.NewWindow(platform.WindowOptions{
-		Title: "Controls", Width: 520, Height: 360, Headless: true,
+		Title: "Controls", Width: 520, Height: 520, Headless: true,
 	})
 	if err != nil {
 		return err
@@ -486,10 +565,16 @@ func writeWidgetsCloseup(path string) error {
 	primary := widgets.NewButton("Save changes", nil)
 	primary.Primary = true
 	field := widgets.NewTextField("Search toolkit…", "Placeholder", nil)
+	combo := widgets.NewComboBox([]string{"Dark", "Light", "High contrast"}, 0, nil)
+	radios := widgets.NewRadioGroup([]string{"UTF-8", "Latin-1"}, 0, nil)
+	bar := widgets.NewProgressBar(0.68)
 	w.SetContent(widgets.NewPanel("Themed controls",
 		widgets.NewRow(primary, widgets.NewButton("Cancel", nil)).WithGap(10),
 		field,
+		combo,
 		widgets.NewSlider(0, 100, 72, nil),
+		bar,
+		radios,
 		widgets.NewCheckbox("Remember window size", true, nil),
 		widgets.NewCheckbox("Show hidden files", false, nil),
 	))
@@ -497,6 +582,45 @@ func writeWidgetsCloseup(path string) error {
 	w.RequestFocus(field)
 	field.SetSelection(7, 14) // "toolkit"
 	primary.MouseEnter()
+	a.PumpOnce()
+	if err := w.WritePNG(path); err != nil {
+		return err
+	}
+	fmt.Println("wrote", path)
+	w.Close()
+	return nil
+}
+
+func writeToolbarShot(path string) error {
+	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{
+		Title: "Toolbar", Width: 640, Height: 220, Headless: true,
+	})
+	if err != nil {
+		return err
+	}
+	bar := widgets.NewToolBar(
+		widgets.ToolIconBtn(style.IconNew, "New", nil),
+		widgets.ToolIconBtn(style.IconOpen, "Open", nil),
+		widgets.ToolIconBtn(style.IconSave, "Save", nil),
+		widgets.ToolDivider(),
+		widgets.ToolIconBtn(style.IconCut, "", nil),
+		widgets.ToolIconBtn(style.IconCopy, "", nil),
+		widgets.ToolIconBtn(style.IconPaste, "", nil),
+		widgets.ToolDivider(),
+		widgets.ToolToggle("Snap", true, nil),
+		widgets.ToolText("Inspect", nil),
+	)
+	w.SetContent(widgets.NewColumn(
+		widgets.NewTitleBar("Project", "toolbar  ·  icon and text"),
+		bar,
+		widgets.NewPad(16, widgets.NewColumn(
+			widgets.NewLabel("Stock ToolBar — icon buttons, text, separators, toggle."),
+			widgets.NewProgressBar(0.55),
+		).WithGap(10)),
+	).WithGap(0))
+	a.PumpOnce()
+	bar.Hover(2)
 	a.PumpOnce()
 	if err := w.WritePNG(path); err != nil {
 		return err

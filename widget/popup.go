@@ -13,6 +13,13 @@ type PopupHost interface {
 	DismissPopup()
 }
 
+// OverlayHost is implemented by app.Window: modal dimmed dialogs.
+type OverlayHost interface {
+	Host
+	SetOverlay(c Component)
+	Overlay() Component
+}
+
 // PointerRetain is chrome that should receive the click that would otherwise
 // only dismiss a popup (MenuBar titles).
 type PointerRetain interface {
@@ -54,6 +61,38 @@ func DismissPopup(from Component) {
 	}
 	if ph, ok := h.(PopupHost); ok {
 		ph.DismissPopup()
+	}
+}
+
+// ShowOverlay places c on the window overlay layer.
+func ShowOverlay(from Component, overlay Component) bool {
+	if from == nil || overlay == nil {
+		return false
+	}
+	h := from.Host()
+	if h == nil {
+		return false
+	}
+	oh, ok := h.(OverlayHost)
+	if !ok {
+		return false
+	}
+	overlay.SetHost(h)
+	oh.SetOverlay(overlay)
+	return true
+}
+
+// DismissOverlay closes the window overlay layer, if any.
+func DismissOverlay(from Component) {
+	if from == nil {
+		return
+	}
+	h := from.Host()
+	if h == nil {
+		return
+	}
+	if oh, ok := h.(OverlayHost); ok {
+		oh.SetOverlay(nil)
 	}
 }
 
