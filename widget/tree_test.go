@@ -93,3 +93,21 @@ func TestHiddenSkipsHit(t *testing.T) {
 		t.Fatal("hidden child should be ignored")
 	}
 }
+
+func TestWalkSkipsInvisible(t *testing.T) {
+	root := &Base{}
+	root.Init(root)
+	a := &Base{}
+	a.Init(a)
+	a.SetWantsFocus(true)
+	b := &Base{}
+	b.Init(b)
+	b.SetWantsFocus(true)
+	b.SetVisible(false)
+	root.Add(a)
+	root.Add(b)
+	got := Focusables(root)
+	if len(got) != 1 || got[0] != a {
+		t.Fatalf("%v", got)
+	}
+}

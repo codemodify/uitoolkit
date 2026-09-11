@@ -284,6 +284,165 @@ func (l *Classic) DrawOverlay(ctx *paintengine2d.Context, b paintengine2d.Rect) 
 	ctx.DrawRect(b, paintengine2d.Fill(l.palette.Overlay))
 }
 
+func (l *Classic) DrawMenuBar(ctx *paintengine2d.Context, b paintengine2d.Rect) {
+	p := l.palette
+	ctx.DrawRect(b, paintengine2d.Fill(p.SurfaceAlt))
+	ctx.DrawRect(paintengine2d.XYWH(b.Min.X, b.Max.Y-1, b.Dx(), 1), paintengine2d.Fill(p.Divider))
+}
+
+func (l *Classic) DrawMenuTitle(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, underline int, open bool) {
+	p := l.palette
+	if open || st.Pressed() {
+		ctx.DrawRoundRect(b.Inset(2), 4, 4, paintengine2d.Fill(p.Accent.WithAlpha(0.28)))
+	} else if st.Hovered() && !st.Disabled() {
+		ctx.DrawRoundRect(b.Inset(2), 4, 4, paintengine2d.Fill(p.Highlight))
+	}
+	l.drawLabeled(ctx, l.body, label, underline, b, p.Text)
+	if st.Focused() && !open {
+		l.DrawFocusRing(ctx, b.Inset(1))
+	}
+}
+
+func (l *Classic) DrawMenuFrame(ctx *paintengine2d.Context, b paintengine2d.Rect) {
+	p := l.palette
+	m := l.metrics
+	ctx.DrawRoundRect(b.Translate(paintengine2d.Pt(2, 3)), m.RadiusSmall, m.RadiusSmall, paintengine2d.Fill(p.Shadow))
+	ctx.DrawRoundRect(b, m.RadiusSmall, m.RadiusSmall, paintengine2d.Fill(p.SurfaceAlt))
+	ctx.DrawRoundRect(b.Inset(0.5), m.RadiusSmall, m.RadiusSmall, paintengine2d.StrokePaint(p.Border, m.Border+0.4))
+}
+
+func (l *Classic) DrawMenuItem(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label, shortcut string, underline int, sep, checked bool) {
+	p := l.palette
+	if sep {
+		y := (b.Min.Y + b.Max.Y) * 0.5
+		ctx.DrawRect(paintengine2d.XYWH(b.Min.X+8, y, b.Dx()-16, 1), paintengine2d.Fill(p.Divider))
+		return
+	}
+	if (st.Hovered() || st.Pressed()) && !st.Disabled() {
+		ctx.DrawRoundRect(b.Inset(3), 4, 4, paintengine2d.Fill(p.Accent.WithAlpha(0.30)))
+	}
+	pad := float32(10)
+	ty := b.Min.Y + (b.Dy()-l.body.Height())*0.5
+	fg := p.Text
+	font := l.body
+	if st.Disabled() {
+		fg = p.TextMuted
+		font = l.muted
+	}
+	if checked {
+		font.Draw(ctx, "+", paintengine2d.Pt(b.Min.X+6, ty), fg)
+	}
+	l.drawTextUnderline(ctx, font, label, underline, paintengine2d.Pt(b.Min.X+pad+10, ty), fg)
+	if shortcut != "" {
+		tw := l.muted.Advance(shortcut)
+		l.muted.Draw(ctx, shortcut, paintengine2d.Pt(b.Max.X-pad-tw, ty), p.TextMuted)
+	}
+}
+
+func (l *Classic) DrawTabBar(ctx *paintengine2d.Context, b paintengine2d.Rect) {
+	p := l.palette
+	ctx.DrawRect(b, paintengine2d.Fill(p.SurfaceAlt))
+	ctx.DrawRect(paintengine2d.XYWH(b.Min.X, b.Max.Y-1, b.Dx(), 1), paintengine2d.Fill(p.Divider))
+}
+
+func (l *Classic) DrawTab(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, selected bool) {
+	p := l.palette
+	if selected {
+		ctx.DrawRoundRect(paintengine2d.XYWH(b.Min.X+2, b.Min.Y+4, b.Dx()-4, b.Dy()-4), 5, 5, paintengine2d.Fill(p.Surface))
+		ctx.DrawRect(paintengine2d.XYWH(b.Min.X+6, b.Max.Y-3, b.Dx()-12, 3), paintengine2d.Fill(p.Accent))
+	} else if st.Pressed() {
+		ctx.DrawRoundRect(b.Inset(3), 5, 5, paintengine2d.Fill(p.Surface))
+	} else if st.Hovered() && !st.Disabled() {
+		ctx.DrawRoundRect(b.Inset(3), 5, 5, paintengine2d.Fill(p.Highlight))
+	}
+	font := l.body
+	if !selected {
+		font = l.muted
+	}
+	l.drawCentered(ctx, font, label, b)
+	if st.Focused() {
+		l.DrawFocusRing(ctx, b.Inset(2))
+	}
+}
+
+func (l *Classic) DrawTreeRow(ctx *paintengine2d.Context, b paintengine2d.Rect, selected, hovered, expanded, leaf bool, depth int, label string) {
+	p := l.palette
+	m := l.metrics
+	if selected {
+		ctx.DrawRoundRect(b.Inset(2), 5, 5, paintengine2d.Fill(p.Accent.WithAlpha(0.28)))
+	} else if hovered {
+		ctx.DrawRoundRect(b.Inset(2), 5, 5, paintengine2d.Fill(p.Highlight))
+	}
+	indent := m.TreeIndent
+	if indent <= 0 {
+		indent = 16
+	}
+	x := b.Min.X + 8 + float32(depth)*indent
+	cy := (b.Min.Y + b.Max.Y) * 0.5
+	if !leaf {
+		chev := paintengine2d.NewPath()
+		if expanded {
+			chev.MoveTo(x, cy-3)
+			chev.LineTo(x+8, cy-3)
+			chev.LineTo(x+4, cy+4)
+			chev.Close()
+		} else {
+			chev.MoveTo(x, cy-5)
+			chev.LineTo(x+7, cy)
+			chev.LineTo(x, cy+5)
+			chev.Close()
+		}
+		ctx.DrawPath(chev, paintengine2d.Fill(p.TextMuted))
+	}
+	l.body.Draw(ctx, label, paintengine2d.Pt(x+14, b.Min.Y+(b.Dy()-l.body.Height())*0.5), p.Text)
+}
+
+func (l *Classic) DrawStatusBar(ctx *paintengine2d.Context, b paintengine2d.Rect, parts []string) {
+	p := l.palette
+	ctx.DrawRect(b, paintengine2d.Fill(p.SurfaceAlt))
+	ctx.DrawRect(paintengine2d.XYWH(b.Min.X, b.Min.Y, b.Dx(), 1), paintengine2d.Fill(p.Divider))
+	if len(parts) == 0 {
+		return
+	}
+	n := float32(len(parts))
+	slot := b.Dx() / n
+	ty := b.Min.Y + (b.Dy()-l.body.Height())*0.5
+	for i, s := range parts {
+		x := b.Min.X + slot*float32(i)
+		if i > 0 {
+			ctx.DrawRect(paintengine2d.XYWH(x, b.Min.Y+6, 1, b.Dy()-12), paintengine2d.Fill(p.Divider))
+		}
+		l.body.Draw(ctx, s, paintengine2d.Pt(x+8, ty), p.TextMuted)
+	}
+}
+
+func (l *Classic) drawLabeled(ctx *paintengine2d.Context, f *Font, text string, underline int, b paintengine2d.Rect, col paintengine2d.Color) {
+	if f == nil || text == "" {
+		return
+	}
+	tw := f.Advance(text)
+	th := f.Height()
+	origin := paintengine2d.Pt(b.Min.X+(b.Dx()-tw)*0.5, b.Min.Y+(b.Dy()-th)*0.5)
+	l.drawTextUnderline(ctx, f, text, underline, origin, col)
+}
+
+func (l *Classic) drawTextUnderline(ctx *paintengine2d.Context, f *Font, text string, underline int, origin paintengine2d.Point, col paintengine2d.Color) {
+	if f == nil || text == "" {
+		return
+	}
+	f.Draw(ctx, text, origin, col)
+	if underline < 0 || underline >= len([]rune(text)) {
+		return
+	}
+	x0 := origin.X + f.CaretX(text, underline)
+	x1 := origin.X + f.CaretX(text, underline+1)
+	if x1-x0 < 4 {
+		x1 = x0 + 6
+	}
+	y := origin.Y + f.Height() - 2
+	ctx.DrawRect(paintengine2d.XYWH(x0, y, x1-x0, 1.2), paintengine2d.Fill(col))
+}
+
 func (l *Classic) drawCentered(ctx *paintengine2d.Context, f *Font, text string, b paintengine2d.Rect) {
 	if f == nil || text == "" {
 		return

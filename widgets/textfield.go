@@ -238,6 +238,26 @@ func (t *TextField) KeyPress(e widget.KeyEvent) bool {
 			t.Invalidate()
 			return true
 		}
+	case platform.KeyC:
+		if e.Mods.Ctrl() {
+			if s := t.SelectedText(); s != "" {
+				platform.ClipboardSet(s)
+			}
+			return true
+		}
+	case platform.KeyX:
+		if e.Mods.Ctrl() {
+			if s := t.SelectedText(); s != "" {
+				platform.ClipboardSet(s)
+				t.replaceSel("")
+			}
+			return true
+		}
+	case platform.KeyV:
+		if e.Mods.Ctrl() {
+			t.replaceSel(platform.ClipboardGet())
+			return true
+		}
 	case platform.KeyReturn:
 		if t.OnSubmit != nil {
 			t.OnSubmit(t.Text)
@@ -258,6 +278,25 @@ func (t *TextField) applyNav(extend bool) {
 }
 
 func (t *TextField) hasSel() bool { return t.selA != t.selB }
+
+// SelectedText is the current selection, or empty if the caret is collapsed.
+func (t *TextField) SelectedText() string {
+	if !t.hasSel() {
+		return ""
+	}
+	a, b := t.selA, t.selB
+	if a > b {
+		a, b = b, a
+	}
+	runes := []rune(t.Text)
+	if a < 0 {
+		a = 0
+	}
+	if b > len(runes) {
+		b = len(runes)
+	}
+	return string(runes[a:b])
+}
 
 func (t *TextField) replaceSel(s string) {
 	a, b := t.selA, t.selB

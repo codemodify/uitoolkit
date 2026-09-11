@@ -264,9 +264,9 @@ func Find[T Component](root Component) (T, bool) {
 	return found, ok
 }
 
-// Walk pre-order visits c and descendants.
+// Walk pre-order visits c and visible descendants.
 func Walk(c Component, fn func(Component)) {
-	if c == nil {
+	if c == nil || !c.Visible() {
 		return
 	}
 	fn(c)

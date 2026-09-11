@@ -3,6 +3,7 @@ package demo
 import (
 	"fmt"
 
+	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/app"
 	"github.com/codemodify/uitoolkit/layout"
 	"github.com/codemodify/uitoolkit/widget"
@@ -83,6 +84,48 @@ func NotesApp(win *app.Window) widget.Component {
 		done.SetChecked(notes[sel].Done)
 	})
 	list.Selected = 0
+	list.OnContext = func(i int, p paintengine2d.Point) {
+		vis := visible()
+		if i >= 0 && i < len(vis) {
+			sel = vis[i]
+			title.SetText(notes[sel].Title)
+			body.SetText(notes[sel].Body)
+			done.SetChecked(notes[sel].Done)
+		}
+		widgets.ShowContextMenu(list, p,
+			widgets.Item("Toggle done", func() {
+				if sel >= 0 && sel < len(notes) {
+					notes[sel].Done = !notes[sel].Done
+					done.SetChecked(notes[sel].Done)
+					refresh()
+				}
+			}),
+			widgets.Item("Delete", func() {
+				if len(notes) == 0 {
+					return
+				}
+				notes = append(notes[:sel], notes[sel+1:]...)
+				if sel >= len(notes) {
+					sel = len(notes) - 1
+				}
+				if sel >= 0 {
+					title.SetText(notes[sel].Title)
+					body.SetText(notes[sel].Body)
+					done.SetChecked(notes[sel].Done)
+				}
+				refresh()
+			}),
+			widgets.Sep(),
+			widgets.Item("New note", func() {
+				notes = append(notes, Note{Title: "Untitled", Body: ""})
+				sel = len(notes) - 1
+				title.SetText("Untitled")
+				body.SetText("")
+				done.SetChecked(false)
+				refresh()
+			}),
+		)
+	}
 
 	title.OnChange = func(s string) {
 		if sel >= 0 && sel < len(notes) {

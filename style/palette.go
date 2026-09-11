@@ -107,6 +107,11 @@ type Metrics struct {
 	TitleSize   float32
 	Stroke      float32
 	FieldPad    float32
+	MenuBarH    float32
+	MenuItemH   float32
+	TabH        float32
+	TreeIndent  float32
+	StatusBarH  float32
 }
 
 // DefaultMetrics is dense but finger-friendly at 1× scale.
@@ -129,6 +134,11 @@ func DefaultMetrics() Metrics {
 		TitleSize:   24,
 		Stroke:      1.7,
 		FieldPad:    8,
+		MenuBarH:    28,
+		MenuItemH:   26,
+		TabH:        30,
+		TreeIndent:  16,
+		StatusBarH:  26,
 	}
 }
 

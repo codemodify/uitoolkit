@@ -19,6 +19,10 @@ type (
 	LookAndFeel   = style.LookAndFeel
 	Palette       = style.Palette
 	Component     = widget.Component
+	Menu          = widgets.Menu
+	MenuItem      = widgets.MenuItem
+	Tab           = widgets.Tab
+	TreeNode      = widgets.TreeNode
 )
 
 func New(opts Options) *Application { return app.New(opts) }
@@ -66,6 +70,27 @@ func NewOverlay(card widget.Component) *widgets.Overlay { return widgets.NewOver
 func DialogCard(title, body string, actions ...widget.Component) *widgets.Panel {
 	return widgets.DialogCard(title, body, actions...)
 }
+func NewMenuBar(menus ...*widgets.Menu) *widgets.MenuBar { return widgets.NewMenuBar(menus...) }
+func NewMenu(title string, items ...*widgets.MenuItem) *widgets.Menu {
+	return widgets.NewMenu(title, items...)
+}
+func NewMenuItem(text string, on func()) *widgets.MenuItem { return widgets.Item(text, on) }
+func MenuSep() *widgets.MenuItem                           { return widgets.Sep() }
+func NewPopupMenu(items ...*widgets.MenuItem) *widgets.PopupMenu {
+	return widgets.NewPopupMenu(items...)
+}
+func NewTabBar(titles ...string) *widgets.TabBar { return widgets.NewTabBar(titles...) }
+func NewTabPage(child widget.Component) *widgets.TabPage {
+	return widgets.NewTabPage(child)
+}
+func NewTabView(tabs ...widgets.Tab) *widgets.TabView { return widgets.NewTabView(tabs...) }
+func NewTreeNode(label string, kids ...*widgets.TreeNode) *widgets.TreeNode {
+	return widgets.NewTreeNode(label, kids...)
+}
+func NewTreeView(roots ...*widgets.TreeNode) *widgets.TreeView {
+	return widgets.NewTreeView(roots...)
+}
+func NewStatusBar(parts ...string) *widgets.StatusBar { return widgets.NewStatusBar(parts...) }
 
 // Layout constants.
 const (

@@ -457,12 +457,54 @@ func xkey(ks C.KeySym) Key {
 		return KeySpace
 	case C.XK_a, C.XK_A:
 		return KeyA
+	case C.XK_b, C.XK_B:
+		return KeyB
 	case C.XK_c, C.XK_C:
 		return KeyC
+	case C.XK_d, C.XK_D:
+		return KeyD
+	case C.XK_e, C.XK_E:
+		return KeyE
+	case C.XK_f, C.XK_F:
+		return KeyF
+	case C.XK_g, C.XK_G:
+		return KeyG
+	case C.XK_h, C.XK_H:
+		return KeyH
+	case C.XK_i, C.XK_I:
+		return KeyI
+	case C.XK_j, C.XK_J:
+		return KeyJ
+	case C.XK_k, C.XK_K:
+		return KeyK
+	case C.XK_l, C.XK_L:
+		return KeyL
+	case C.XK_m, C.XK_M:
+		return KeyM
+	case C.XK_n, C.XK_N:
+		return KeyN
+	case C.XK_o, C.XK_O:
+		return KeyO
+	case C.XK_p, C.XK_P:
+		return KeyP
+	case C.XK_q, C.XK_Q:
+		return KeyQ
+	case C.XK_r, C.XK_R:
+		return KeyR
+	case C.XK_s, C.XK_S:
+		return KeyS
+	case C.XK_t, C.XK_T:
+		return KeyT
+	case C.XK_u, C.XK_U:
+		return KeyU
 	case C.XK_v, C.XK_V:
 		return KeyV
+	case C.XK_w, C.XK_W:
+		return KeyW
 	case C.XK_x, C.XK_X:
 		return KeyX
+	case C.XK_y, C.XK_Y:
+		return KeyY
 	case C.XK_z, C.XK_Z:
 		return KeyZ
 	case C.XK_F1:

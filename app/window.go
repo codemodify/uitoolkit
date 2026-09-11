@@ -16,6 +16,7 @@ type Window struct {
 	surf    platform.Surface
 	root    widget.Component
 	overlay widget.Component
+	popup   widget.Component
 	look    style.LookAndFeel
 	dirty   paintengine2d.Damage
 	full    bool
@@ -63,6 +64,32 @@ func (w *Window) SetOverlay(c widget.Component) {
 }
 
 func (w *Window) Overlay() widget.Component { return w.overlay }
+
+func (w *Window) SetPopup(c widget.Component) {
+	if w.popup != nil && w.popup != c {
+		if d, ok := w.popup.(widget.Dismisser); ok {
+			d.Dismissed()
+		}
+	}
+	w.popup = c
+	if c != nil {
+		c.SetHost(w)
+	}
+	w.fullInvalidate()
+}
+
+func (w *Window) Popup() widget.Component { return w.popup }
+
+func (w *Window) DismissPopup() {
+	if w.popup == nil {
+		return
+	}
+	if d, ok := w.popup.(widget.Dismisser); ok {
+		d.Dismissed()
+	}
+	w.popup = nil
+	w.fullInvalidate()
+}
 
 func (w *Window) Invalidate(c widget.Component, local paintengine2d.Rect) {
 	if c == nil {
@@ -136,9 +163,25 @@ func (w *Window) dispatch(ev platform.Event) {
 			w.tab(!ev.Mods.Shift())
 			return
 		}
-		if ev.Key == platform.KeyEscape && w.overlay != nil {
-			w.SetOverlay(nil)
-			return
+		if ev.Key == platform.KeyEscape {
+			if w.popup != nil {
+				w.DismissPopup()
+				return
+			}
+			if w.overlay != nil {
+				w.SetOverlay(nil)
+				return
+			}
+		}
+		if ev.Mods.Alt() && w.root != nil {
+			if handleAlt(w.root, ev.Key) {
+				return
+			}
+		}
+		if w.popup != nil {
+			if w.popup.KeyPress(widget.KeyEvent{Key: ev.Key, Mods: ev.Mods}) {
+				return
+			}
 		}
 		if w.focus != nil {
 			w.focus.KeyPress(widget.KeyEvent{Key: ev.Key, Mods: ev.Mods})
@@ -169,6 +212,15 @@ func (w *Window) bubbleWheel(ev platform.Event) {
 }
 
 func (w *Window) hit(p paintengine2d.Point) widget.Component {
+	if w.popup != nil {
+		if h := widget.HitRoot(w.popup, p); h != nil {
+			return h
+		}
+	}
+	return w.hitContent(p)
+}
+
+func (w *Window) hitContent(p paintengine2d.Point) widget.Component {
 	if w.overlay != nil {
 		if h := widget.HitRoot(w.overlay, p); h != nil {
 			return h
@@ -177,12 +229,36 @@ func (w *Window) hit(p paintengine2d.Point) widget.Component {
 	return widget.HitRoot(w.root, p)
 }
 
+func handleAlt(root widget.Component, key platform.Key) bool {
+	handled := false
+	widget.Walk(root, func(c widget.Component) {
+		if handled {
+			return
+		}
+		if a, ok := c.(interface{ HandleAlt(platform.Key) bool }); ok {
+			if a.HandleAlt(key) {
+				handled = true
+			}
+		}
+	})
+	return handled
+}
+
 func local(c widget.Component, p paintengine2d.Point) paintengine2d.Point {
 	o := widget.DeviceOrigin(c)
 	return paintengine2d.Pt(p.X-o.X, p.Y-o.Y)
 }
 
 func (w *Window) mouseDown(ev platform.Event) {
+	if w.popup != nil {
+		if widget.HitRoot(w.popup, ev.Pos) == nil {
+			under := w.hitContent(ev.Pos)
+			if !widget.Retains(under) {
+				w.DismissPopup()
+				return
+			}
+		}
+	}
 	t := w.hit(ev.Pos)
 	w.capture = t
 	if t != nil && t.WantsFocus() {
@@ -229,6 +305,9 @@ func (w *Window) tab(forward bool) {
 	root := w.root
 	if w.overlay != nil {
 		root = w.overlay
+	}
+	if w.popup != nil {
+		root = w.popup
 	}
 	list := widget.Focusables(root)
 	if len(list) == 0 {
@@ -307,6 +386,9 @@ func (w *Window) frame() {
 	}
 	if w.overlay != nil {
 		widget.PaintTree(w.overlay, ctx, nil)
+	}
+	if w.popup != nil {
+		widget.PaintTree(w.popup, ctx, nil)
 	}
 	rects := append([]paintengine2d.Rect(nil), w.dirty.Rects...)
 	if w.full {
