@@ -553,6 +553,175 @@ func TestMailChromeHidesStatusBarAndVIPFolder(t *testing.T) {
 	w.Close()
 }
 
+func TestMailChromeHasNoSidebarAccountPicker(t *testing.T) {
+	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{
+		Title: "Mail", Width: 1280, Height: 800, Headless: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.SetContent(MailApp(a, w))
+	a.PumpOnce()
+
+	var split *widgets.Splitter
+	var tree *widgets.TreeView
+	var addAcct, removeAcct, acctCentral bool
+	widget.Walk(w.Content(), func(c widget.Component) {
+		switch v := c.(type) {
+		case *widgets.Splitter:
+			if split == nil {
+				split = v
+			}
+		case *widgets.TreeView:
+			if tree == nil {
+				tree = v
+			}
+		case *widgets.Label:
+			if v.Title && (v.Text == "Folders" || v.Text == "Account" || v.Text == "Tags") {
+				t.Fatalf("sidebar section header still present: %q", v.Text)
+			}
+		case *widgets.MenuBar:
+			for _, m := range v.Menus() {
+				for _, it := range m.Items {
+					if it == nil {
+						continue
+					}
+					switch it.Text {
+					case "Add Account…", "Add &Account…":
+						addAcct = true
+					case "Remove Account…", "Remove &Account…":
+						removeAcct = true
+					case "Account Central":
+						acctCentral = true
+					}
+				}
+			}
+		}
+	})
+	if split == nil {
+		t.Fatal("splitter")
+	}
+	widget.Walk(split, func(c widget.Component) {
+		if _, ok := c.(*widgets.ComboBox); ok {
+			t.Fatal("account ComboBox still in the sidebar splitter")
+		}
+	})
+	if tree == nil {
+		t.Fatal("folder tree")
+	}
+	var acctNode, tagsNode bool
+	for _, n := range tree.Roots {
+		if n == nil {
+			continue
+		}
+		if id, ok := n.Data.(string); ok && id != "" && id != AccountTags {
+			acctNode = true
+		}
+		if n.Label == "Tags" || n.Data == AccountTags {
+			tagsNode = true
+		}
+	}
+	if !acctNode {
+		t.Fatal("account folders missing from the tree")
+	}
+	if !tagsNode {
+		t.Fatal("Tags missing from the tree")
+	}
+	if !addAcct || !removeAcct || !acctCentral {
+		t.Fatalf("account menus add=%v remove=%v central=%v", addAcct, removeAcct, acctCentral)
+	}
+	w.Close()
+}
+
+func TestMailChromeHasNoActiveFilterBanner(t *testing.T) {
+	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{
+		Title: "Mail", Width: 1280, Height: 800, Headless: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.SetContent(MailApp(a, w))
+	a.PumpOnce()
+
+	var qf *widgets.TextField
+	var unread *widgets.ToolItem
+	var table *widgets.TableView
+	widget.Walk(w.Content(), func(c widget.Component) {
+		switch v := c.(type) {
+		case *widgets.TextField:
+			if strings.Contains(v.Placeholder, "Quick Filter") && qf == nil {
+				qf = v
+			}
+		case *widgets.TableView:
+			if table == nil {
+				table = v
+			}
+		case *widgets.ToolBar:
+			for _, it := range v.Items() {
+				if it != nil && it.Text == "Unread" && unread == nil {
+					unread = it
+				}
+			}
+		}
+	})
+	if qf == nil {
+		t.Fatal("quick filter field missing")
+	}
+	if table == nil {
+		t.Fatal("thread table")
+	}
+	assertNoFilterBanner(t, w.Content())
+
+	before := table.RowCount
+	qf.SetText("lunch")
+	a.PumpOnce()
+	assertNoFilterBanner(t, w.Content())
+	if table.RowCount <= 0 || table.RowCount > before {
+		t.Fatalf("quick filter should narrow the list, rows=%d before=%d", table.RowCount, before)
+	}
+
+	qf.SetText("")
+	a.PumpOnce()
+	assertNoFilterBanner(t, w.Content())
+	if table.RowCount != before {
+		t.Fatalf("emptying quick filter should restore the list, rows=%d want %d", table.RowCount, before)
+	}
+
+	if unread == nil || unread.OnClick == nil {
+		t.Fatal("Unread pin missing")
+	}
+	unread.OnClick()
+	a.PumpOnce()
+	assertNoFilterBanner(t, w.Content())
+	if table.RowCount <= 0 || table.RowCount > before {
+		t.Fatalf("Unread pin should narrow the list, rows=%d before=%d", table.RowCount, before)
+	}
+	unread.OnClick()
+	a.PumpOnce()
+	assertNoFilterBanner(t, w.Content())
+	w.Close()
+}
+
+func assertNoFilterBanner(t *testing.T, root widget.Component) {
+	t.Helper()
+	widget.Walk(root, func(c widget.Component) {
+		switch v := c.(type) {
+		case *widgets.Button:
+			if v.Text == "Clear filter" {
+				t.Fatal("Clear filter button still above the message list")
+			}
+		case *widgets.Label:
+			if strings.Contains(v.Text, "Filter on") ||
+				strings.Contains(v.Text, "No messages match this filter") ||
+				v.Text == "This folder is empty." {
+				t.Fatalf("active-filter banner still present: %q", v.Text)
+			}
+		}
+	})
+}
+
 func TestMailColumnsTopicWhoWhen(t *testing.T) {
 	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true})
 	w, err := a.NewWindow(platform.WindowOptions{
@@ -681,6 +850,112 @@ func TestMailStarRendersAfterToggle(t *testing.T) {
 		t.Fatalf("after unstar CellText=%q", got)
 	}
 	w.Close()
+}
+
+func TestMailAttachmentSelectOpenSaveAs(t *testing.T) {
+	t.Setenv("UITK_MAIL_NO_OPEN", "1")
+	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{
+		Title: "Mail", Width: 1280, Height: 800, Headless: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.SetContent(MailApp(a, w))
+	a.PumpOnce()
+
+	var list *widgets.ListView
+	var open, save *widgets.Button
+	widget.Walk(w.Content(), func(c widget.Component) {
+		switch v := c.(type) {
+		case *widgets.ListView:
+			if v.ItemText != nil && v.Count > 0 && strings.Contains(v.ItemText(0), "📎") && list == nil {
+				list = v
+			}
+		case *widgets.Button:
+			switch v.Text {
+			case "Open":
+				open = v
+			case "Save As":
+				save = v
+			}
+		}
+	})
+	if list == nil {
+		t.Fatal("attachment list")
+	}
+	if open == nil || save == nil {
+		t.Fatal("Open / Save As buttons")
+	}
+	if open.Enabled() || save.Enabled() {
+		t.Fatal("Open / Save As should stay disabled until a row is selected")
+	}
+
+	before := globMailOpenDirs()
+	if list.OnSelect == nil {
+		t.Fatal("attachment OnSelect")
+	}
+	list.OnSelect(0)
+	a.PumpOnce()
+	if !open.Enabled() || !save.Enabled() {
+		t.Fatal("Open / Save As should enable after a single click")
+	}
+	if list.Selected != 0 {
+		t.Fatalf("selected=%d", list.Selected)
+	}
+	if n := globMailOpenDirs(); len(n) != len(before) {
+		t.Fatalf("single click opened a part: before=%d after=%d", len(before), len(n))
+	}
+
+	list.OnSelect(0)
+	a.PumpOnce()
+	afterOpen := globMailOpenDirs()
+	if len(afterOpen) <= len(before) {
+		t.Fatal("double click should Open (messages.openPart cache)")
+	}
+
+	dest := filepath.Join(t.TempDir(), "mail-shortcuts.txt")
+	if save.OnClick == nil {
+		t.Fatal("Save As")
+	}
+	save.OnClick()
+	a.PumpOnce()
+	if w.Overlay() == nil {
+		t.Fatal("Save As file dialog")
+	}
+	var pathField *widgets.TextField
+	var confirm *widgets.Button
+	widget.Walk(w.Overlay(), func(c widget.Component) {
+		switch v := c.(type) {
+		case *widgets.TextField:
+			if pathField == nil {
+				pathField = v
+			}
+		case *widgets.Button:
+			if v.Text == "Save" {
+				confirm = v
+			}
+		}
+	})
+	if pathField == nil || confirm == nil || confirm.OnClick == nil {
+		t.Fatal("Save As dialog path/Save")
+	}
+	pathField.SetText(dest)
+	confirm.OnClick()
+	a.PumpOnce()
+	raw, err := os.ReadFile(dest)
+	if err != nil {
+		t.Fatalf("saved file: %v", err)
+	}
+	if !strings.Contains(string(raw), "mail-shortcuts.txt") {
+		t.Fatalf("saved bytes %q", raw)
+	}
+	w.Close()
+}
+
+func globMailOpenDirs() []string {
+	matches, _ := filepath.Glob(filepath.Join(os.TempDir(), "uitk-mail-*"))
+	return matches
 }
 
 func cellInk(img *paintengine2d.Image, x0, x1 int) int {

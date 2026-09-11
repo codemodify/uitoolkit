@@ -23,7 +23,8 @@ import (
 //	unclamped scroll        TestScrollClampWheelStopsAtEnd, TestScrollersClampOffset
 //	type into read-only     TestTextViewReadOnlyAndScrollbar, TestTextAreaReadOnlyRejectsInput
 //	menu clip / truncate    TestPopupMenuFitsLongLabelsAndManyItems,
-//	                        TestMenuBarDropdownFitsLabelsAndShortcuts
+//	                        TestMenuBarDropdownFitsLabelsAndShortcuts,
+//	                        TestMenuBarHelpNearRightEdgeFitsAboutMail
 //	combo overlap / clip    TestComboBoxPopupClearsFieldAndFitsLabels
 
 func TestSplitterPanesExclusiveAtRatios(t *testing.T) {
@@ -356,6 +357,75 @@ func TestMenuBarDropdownFitsLabelsAndShortcuts(t *testing.T) {
 			if err := uitest.CheckExclusive(lb.Inset(0.5), sb.Inset(0.5)); err != nil {
 				t.Fatalf("scale %v overlap %q / %q: %v", scale, label, it.Shortcut, err)
 			}
+		}
+		widget.DismissPopup(mb)
+	}
+}
+
+func TestMenuBarHelpNearRightEdgeFitsAboutMail(t *testing.T) {
+	mb := widgets.NewMenuBar(
+		widgets.NewMenu("&File", widgets.Item("Quit", nil)),
+		widgets.NewMenu("&Edit", widgets.Item("Copy", nil)),
+		widgets.NewMenu("&View", widgets.Item("Layout", nil)),
+		widgets.NewMenu("&Go", widgets.Item("Inbox", nil)),
+		widgets.NewMenu("&Message", widgets.Item("Reply", nil)),
+		widgets.NewMenu("&Tools", widgets.Item("Prefs", nil)),
+		widgets.NewMenu("&Help",
+			widgets.Item("Keyboard", nil),
+			widgets.Item("About Mail", nil),
+		),
+	)
+	for _, scale := range []float32{1, 2} {
+		h := uitest.NewHost()
+		h.SetLook(testLook(scale))
+		h.SetScale(scale)
+		const winW, winH float32 = 360, 240
+		_ = uitest.MountHost(h, mb, paintengine2d.XYWH(0, 0, winW, winH))
+		help := len(mb.Menus()) - 1
+		f := mb.Look().Font()
+		tx := float32(4)
+		var helpMinX float32
+		for i, menu := range mb.Menus() {
+			label, _, _ := widgets.ParseMnemonic(menu.Title)
+			tw := f.Advance(label) + 20
+			if i == help {
+				helpMinX = tx
+			}
+			tx += tw
+		}
+		mb.Open(help)
+		pop, ok := h.Popup().(*widgets.PopupMenu)
+		if !ok || pop == nil {
+			t.Fatalf("scale %v: Help popup %T", scale, h.Popup())
+		}
+		if err := uitest.CheckMenuFitsItems(pop); err != nil {
+			t.Fatalf("scale %v: %v bounds=%+v", scale, err, pop.Bounds())
+		}
+		about := -1
+		for i, it := range pop.Items {
+			if it != nil && it.Text == "About Mail" {
+				about = i
+				break
+			}
+		}
+		if about < 0 {
+			t.Fatal("About Mail item")
+		}
+		lb := pop.LabelBounds(about)
+		need := pop.Look().Font().Advance("About Mail")
+		if need > lb.Dx()+0.5 {
+			t.Fatalf("scale %v About Mail clipped in %+v need %v popup=%+v", scale, lb, need, pop.Bounds())
+		}
+		pb := pop.Bounds()
+		if pb.Max.X > winW+0.5 {
+			t.Fatalf("scale %v popup %+v past window width %v", scale, pb, winW)
+		}
+		remain := winW - (widget.DeviceOrigin(mb).X + helpMinX)
+		if pb.Dx()+1 < need+30 {
+			t.Fatalf("scale %v popup width %v cropped to the right-edge remainder %v", scale, pb.Dx(), remain)
+		}
+		if pb.Min.X > helpMinX+1 && pb.Max.X > winW-8 {
+			t.Fatalf("scale %v popup should shift left of Help title x=%v, got %+v", scale, helpMinX, pb)
 		}
 		widget.DismissPopup(mb)
 	}

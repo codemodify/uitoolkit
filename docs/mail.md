@@ -1,6 +1,6 @@
 # Mail — mailclientd + mailclientui
 
-Thunderbird-chrome mail client on uitoolkit **v0.10.9**. Two processes:
+Thunderbird-chrome mail client on uitoolkit **v0.10.10**. Two processes:
 
 | Process | Role |
 | --- | --- |
@@ -217,7 +217,7 @@ Conversations group by `In-Reply-To` / `References` when Message-IDs exist, othe
 
 ## Attachments
 
-Message view stays **text-only**. The attachment list calls `messages.openPart`: mailclientd writes a cache file under the data dir (`open/` or a temp file for MemoryStore) and launches `xdg-open` (or `open` on macOS) when a display is available. `UITK_MAIL_NO_OPEN=1` skips the spawn (tests / headless).
+Message view stays **text-only**. The preview lists attachments with **Open** and **Save As** (enabled after a row is selected). A single click selects only; a double click — or **Open** — calls `messages.openPart`: mailclientd writes a cache file under the data dir (`open/` or a temp file for MemoryStore) and launches `xdg-open` (or `open` on macOS) when a display is available. `UITK_MAIL_NO_OPEN=1` skips the spawn (tests / headless). **Save As** uses the toolkit file dialog and writes `messages.part` bytes to the chosen path (mode `0600`).
 
 ## VIP, notifications, categories
 
@@ -315,7 +315,7 @@ Condition fields: `from`, `to`, `subject`, `body`, `attachment`, `unread`, `tag`
 Actions: `move` (`folder`), `tag`, `markRead`, `markUnread`, `delete`, `stop`.
 AND across conditions. Persist in MemoryStore or the disk cache. Tools → Message Filters.
 
-## UI features (v0.10.9)
+## UI features (v0.10.10)
 
 - **Empty by default** — no demo accounts unless `UITK_MAIL=memory`. First-run Yes/No is only “There are no accounts, want to add one?” Password / `0600` notes are on the Add Account form.
 - **Add account** — IMAP vs POP3 radios, domain auto-guess (including POP hosts), **Test connection** (and optional auto-detect after email+password), masked password field, or Sign in with Google / Microsoft (or device code; IMAP). Saved accounts show the protocol on Account Central and in Preferences. `passEnv` remains an optional fallback.
@@ -326,9 +326,10 @@ AND across conditions. Persist in MemoryStore or the disk cache. Tools → Messa
 - **Thread columns** — ★, 📎, Topic, Who, When. No Size. View → Sort by Topic / Who / When.
 - **Card / Table** — View → Card view or the Cards toolbar toggle. Remembered in `~/.config/uitoolkit/mailui.json`. Star after Message → Star (or context menu) paints immediately.
 - **Density** — View → Compact / Default / Relaxed.
-- **Folder tree** — account folders, Tags, and Outbox. Unified Folders, Smart Folders, Categories, and VIP are not shown.
-- **Chrome** — no path/subtitle strip and no bottom status bar. Quick Filter (Unread / Starred / Attachment / From / To / Subject / Body) sits under the main toolbar.
+- **Folder tree** — account folders, Tags, and Outbox. Unified Folders, Smart Folders, Categories, and VIP are not shown. Click an account root to open that Inbox.
+- **Chrome** — no path/subtitle strip, no bottom status bar, no sidebar Account / Folders section headers, no identity ComboBox, and no active-filter banner (`Filter on · N shown` / `Clear filter`) above the thread list. The folder tree (including Tags) starts at the top of the sidebar. Quick Filter (Unread / Starred / Attachment / From / To / Subject / Body) sits under the main toolbar; clear by emptying the field or turning pins off. File → Add Account / Remove Account / Account Central still manage stores.
 - **Threaded** view and **Mute Thread**.
+- **Attachments** — Open / Save As under the preview list; single click selects, double click opens.
 - **Snappy open** — unread click patches the row; preview uses a cached `messages.get` body.
 - **Colored tags**, identities, Sorting Office filters — unchanged.
 
