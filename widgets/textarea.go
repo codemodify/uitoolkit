@@ -299,6 +299,13 @@ func (t *TextArea) MousePress(e widget.MouseEvent) bool {
 		return false
 	}
 	t.RequestFocus()
+	if e.Button == platform.ButtonMiddle {
+		t.havePref = false
+		t.caret = t.indexAt(e.Pos.X, e.Pos.Y)
+		t.selA, t.selB = t.caret, t.caret
+		t.replaceSel(platform.ClipboardPrimaryGet())
+		return true
+	}
 	t.dragging = true
 	t.havePref = false
 	t.caret = t.indexAt(e.Pos.X, e.Pos.Y)

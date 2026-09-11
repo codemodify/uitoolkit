@@ -160,6 +160,7 @@ type Surface interface {
 	Poll() []Event
 	Close() error
 	Closed() bool
+	Scale() float32
 }
 
 // Backend opens surfaces. Linux ships X11 (CGO) plus a always-on offscreen

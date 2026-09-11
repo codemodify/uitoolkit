@@ -36,6 +36,19 @@ func DarkLook() *Classic { return NewClassic("dark", Dark(), DefaultMetrics()) }
 // LightLook is the paper skin.
 func LightLook() *Classic { return NewClassic("light", Light(), DefaultMetrics()) }
 
+// WithScale rebuilds a Classic look with scaled metrics and glyph atlases.
+// Other LookAndFeel implementations are returned unchanged.
+func WithScale(look LookAndFeel, scale float32) LookAndFeel {
+	if look == nil || scale <= 0 || scale == 1 {
+		return look
+	}
+	c, ok := look.(*Classic)
+	if !ok {
+		return look
+	}
+	return NewClassic(c.Name(), c.Palette(), ScaleMetrics(c.Metrics(), scale))
+}
+
 func (l *Classic) Name() string        { return l.name }
 func (l *Classic) Palette() Palette    { return l.palette }
 func (l *Classic) Metrics() Metrics    { return l.metrics }

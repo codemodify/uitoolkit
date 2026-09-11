@@ -228,6 +228,10 @@ func (w *Window) dispatch(ev platform.Event) {
 		w.fullInvalidate()
 	case platform.EventExpose:
 		w.dirty.Add(paintengine2d.XYWH(ev.Pos.X, ev.Pos.Y, float32(ev.Width), float32(ev.Height)))
+	case platform.EventFocusOut:
+		w.HideTooltip()
+		w.capture = nil
+	case platform.EventFocusIn:
 	case platform.EventMouseDown:
 		w.mouseDown(ev)
 	case platform.EventMouseUp:

@@ -31,6 +31,7 @@ func (o *Offscreen) SetTitle(title string)        { o.title = title }
 func (o *Offscreen) Size() (w, h int)             { return o.img.Width, o.img.Height }
 func (o *Offscreen) Buffer() *paintengine2d.Image { return o.img }
 func (o *Offscreen) Closed() bool                 { return o.closed }
+func (o *Offscreen) Scale() float32               { return 1 }
 
 func (o *Offscreen) Resize(w, h int) error {
 	if w < 1 {

@@ -25,7 +25,7 @@ go get github.com/codemodify/paintengine2d@v0.7.2
 | --- | --- |
 | Language | Go 1.22+ |
 | Paint | paintengine2d **v0.7.2** (`02b2939`; `Context`, `Damage`, `DrawGlyphs` Color tint) |
-| Windowing | Linux X11 first (CGO + libX11); offscreen always |
+| Windowing | Linux X11 (CGO + libX11); offscreen always; Wayland stub |
 | CGO | optional — tests and screenshots are `CGO_ENABLED=0` |
 | License | MIT |
 
@@ -115,6 +115,7 @@ git clone https://github.com/codemodify/uitoolkit.git
 cd uitoolkit
 CGO_ENABLED=0 go test ./...
 go run ./examples/gallery            # X11 when DISPLAY is set
+UITK_BACKEND=x11 go run ./examples/gallery
 go run ./examples/gallery -headless  # writes gallery.png
 go run ./examples/notes
 go run ./examples/inspector
@@ -122,7 +123,10 @@ go run ./examples/inspector
 
 Headless / CI paints into `paintengine2d.NewImage` and can `Window.WritePNG`.
 On Linux with `DISPLAY` and CGO, the same buffer is presented with XPutImage
-and dirty rects from `paintengine2d.Damage`.
+and dirty rects from `paintengine2d.Damage`. Scale comes from `UITK_SCALE` /
+`GDK_SCALE` / `QT_SCALE_FACTOR`, else Xft.dpi (or screen mm) so LookAndFeel
+metrics grow on HiDPI. Ctrl+C/X/V and middle-click use the OS CLIPBOARD and
+PRIMARY selections.
 
 ## How it uses paintengine2d
 
@@ -138,7 +142,7 @@ Each frame:
 
 ```
 Desktop app
-    → uitoolkit (widgets, layout, focus, X11/offscreen)
+    → uitoolkit (widgets, layout, focus, X11 / offscreen)
         → paintengine2d.Context / Device / Damage / FontAtlas
             → CPU scanline AA pixmap
 ```
@@ -154,9 +158,11 @@ Inspired by JUCE `Component` + `LookAndFeel`, Evas damage, and Avalonia’s
 retained tree (ideas only — no copied code).
 
 ```
-platform   window + event pump + present          Linux X11; stubs for
-           (thin OS glue)                         Wayland / Win / macOS
-app        Application run loop, windows,         DPI/scale, input routing
+platform   window + event pump + present          Linux X11 (shared display,
+           (thin OS glue)                         CLIPBOARD+PRIMARY, XIM);
+                                                  Wayland / Win / macOS stubs
+app        Application run loop, windows,         DPI/scale, backend select,
+                                                  input routing
            capture / WritePNG
 widget     retained Component: bounds, children,  HitTest, focus, Invalidate
            Paint(ctx *paintengine2d.Context)
@@ -193,7 +199,7 @@ CGO_ENABLED=0 go test ./...
 Coverage includes flex Measure/Arrange (parent-local coords), hit-test
 z-order, focus tab order (including MenuBar / TabBar / TreeView),
 checkbox/slider/text/button/switch interaction, virtual list range, scroll-wheel
-bubbling, scrollbar track hits, text selection and copy/paste stubs, menu
+bubbling, scrollbar track hits, text selection and copy/paste (in-process, plus OS clipboard on X11), menu
 and tab swap, tree expand/select, context-menu dispatch, toolbar and
 combo, radio groups, progress clamp, message-box results, table sort,
 number-field step/filter, file-dialog stub, delayed tooltips, Esc
@@ -229,13 +235,22 @@ cross-platform backends today; choose Wails when the UI should be a webview.
 Documented on purpose — do not expect these yet:
 
 - Full accessibility (AT-SPI / VoiceOver)
-- Production IME / CJK composition
+- Production CJK IME (preedit / candidate UI). X11 uses XIM
+  (`XIMPreeditNothing`) so compose and dead keys work; filtered keys
+  and UTF-8 `Xutf8LookupString` feed `EventText`.
+- Incremental (INCR) X11 clipboard for huge pastes
 - Mobile and webview
 - Wayland, Win32, and AppKit backends (interfaces + stubs only)
 - OpenType / HarfBuzz (engine text hook only)
-- System clipboard
+
+See [docs/platform.md](docs/platform.md) for X11 vs offscreen and IME gaps.
 
 ## Version
+
+**0.1.8** — Harden X11: shared display and multi-window destroy, OS
+CLIPBOARD + PRIMARY (TextField / TextArea Ctrl+C/X/V and middle-click),
+Xft.dpi / env scale into LookAndFeel metrics, XIM compose/dead keys,
+stride- and mask-correct `XPutImage`. Still paintengine2d **v0.7.2**.
 
 **0.1.7** — Harden 0.1.6: Accordion exclusive + layout/focus, TextArea
 newline and Switch toggle regressions, gallery metrics polish, comparison
