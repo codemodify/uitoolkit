@@ -20,4 +20,13 @@ func TestWriteScreenshotsDistinct(t *testing.T) {
 			t.Fatalf("%s too small: %d", name, st.Size())
 		}
 	}
+	for _, name := range compareThumbNames {
+		st, err := os.Stat(filepath.Join(dir, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if st.Size() < 200 {
+			t.Fatalf("%s too small: %d", name, st.Size())
+		}
+	}
 }

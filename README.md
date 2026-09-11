@@ -162,6 +162,9 @@ paintengine2d with Titillium Web (and JetBrains Mono in code views).
 LookAndFeel locks **UI → Titillium Web** and **Mono → JetBrains Mono**
 (OFL, embedded). mononoki is not the default mono face.
 
+Name-by-name map vs Qt / GTK / Avalonia / Fyne / WinForms / WPF / Apple:
+[Widget comparison](#widget-comparison) · [docs/widgets.md](docs/widgets.md).
+
 Regenerate:
 
 ```bash
@@ -266,11 +269,64 @@ widgets    Button, Label, TextField, TextArea     ScrollView, ListView, TableVie
            Panel, Splitter, Overlay, Separator    StatusBar, ToolBar, ComboBox
            Accordion, Expander, Spacer            ProgressBar, RadioGroup
            MessageBox, FileDialog stub, Tooltip   TitleBar, context menus
+           CardList
 style      LookAndFeel + Palette + Metrics        Dark / Light Classic
 ```
 
 Swap the skin with `Application.SetLook(uitoolkit.LightLook())`. Controls
 never hard-code colors.
+
+## Widget comparison
+
+Public controls from [`export.go`](export.go), matched **by name** to stock
+widgets in other desktop kits. This is a name map, not feature parity.
+**≈** = not 1:1. **—** = no stock equivalent.
+
+Full notes, layout primitives, and official doc links:
+**[docs/widgets.md](docs/widgets.md)**.
+
+Thumbs are uitoolkit (MIT), from `docs/screenshots/compare/` plus the
+gallery. Other-toolkit screenshots are **not** embedded (proprietary /
+unclear docs licenses) — follow the doc links in `docs/widgets.md`.
+
+Apple columns are names only (AppKit/SwiftUI backends are still stubs).
+
+| Widget | uitoolkit | Qt (Widgets / Quick) | GTK 4 | Avalonia | Fyne | WinForms | WPF | AppKit | SwiftUI | Screenshot |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Label | `Label` / `Title` | `QLabel` / `Text` | `GtkLabel` | `TextBlock` | `widget.Label` | `Label` | `TextBlock` | `NSTextField` | `Text` | <img src="docs/screenshots/compare/label.png" width="160" alt="Label"> |
+| Button | `Button` | `QPushButton` / `Button` | `GtkButton` | `Button` | `widget.Button` | `Button` | `Button` | `NSButton` | `Button` | <img src="docs/screenshots/compare/button.png" width="160" alt="Button"> |
+| Checkbox | `Checkbox` | `QCheckBox` / `CheckBox` | `GtkCheckButton` | `CheckBox` | `widget.Check` | `CheckBox` | `CheckBox` | `NSButton` (checkbox) | `Toggle` ≈ | <img src="docs/screenshots/compare/checkbox.png" width="160" alt="Checkbox"> |
+| Switch | `Switch` | `Switch` (Quick); Widgets ≈ | `GtkSwitch` | `ToggleSwitch` | `widget.Check` ≈ | — | `ToggleButton` ≈ | `NSSwitch` | `Toggle` | <img src="docs/screenshots/compare/switch.png" width="160" alt="Switch"> |
+| Radio | `RadioButton` / `RadioGroup` | `QRadioButton` / `RadioButton` | `GtkCheckButton` (group) | `RadioButton` | `widget.RadioGroup` | `RadioButton` | `RadioButton` | `NSButton` (radio) | `Picker` ≈ | <img src="docs/screenshots/compare/radio.png" width="160" alt="Radio"> |
+| Slider | `Slider` | `QSlider` / `Slider` | `GtkScale` | `Slider` | `widget.Slider` | `TrackBar` | `Slider` | `NSSlider` | `Slider` | <img src="docs/screenshots/compare/slider.png" width="160" alt="Slider"> |
+| Text field | `TextField` | `QLineEdit` / `TextField` | `GtkEntry` | `TextBox` | `widget.Entry` | `TextBox` | `TextBox` | `NSTextField` | `TextField` | <img src="docs/screenshots/compare/textfield.png" width="160" alt="TextField"> |
+| Text area | `TextArea` | `QTextEdit` / `TextArea` | `GtkTextView` | `TextBox` ≈ | `widget.Entry` (MultiLine) | `TextBox` (Multiline) | `TextBox` | `NSTextView` | `TextEditor` | <img src="docs/screenshots/compare/textarea.png" width="160" alt="TextArea"> |
+| Spinner | `NumberField` / `Spinner` | `QSpinBox` / `SpinBox` | `GtkSpinButton` | `NumericUpDown` | — | `NumericUpDown` | — | `NSStepper` + field | `Stepper` | <img src="docs/screenshots/compare/numberfield.png" width="160" alt="NumberField"> |
+| Combo box | `ComboBox` | `QComboBox` / `ComboBox` | `GtkDropDown` | `ComboBox` | `widget.Select` | `ComboBox` | `ComboBox` | `NSComboBox` | `Picker` | <img src="docs/screenshots/compare/combobox.png" width="160" alt="ComboBox"> |
+| Progress | `ProgressBar` / `BusyBar` | `QProgressBar` / `ProgressBar` | `GtkProgressBar` | `ProgressBar` | `widget.ProgressBar` | `ProgressBar` | `ProgressBar` | `NSProgressIndicator` | `ProgressView` | <img src="docs/screenshots/compare/progress.png" width="160" alt="ProgressBar"> |
+| List | `ListView` | `QListView` / `ListView` | `GtkListView` | `ListBox` | `widget.List` | `ListBox` | `ListBox` | `NSTableView` | `List` | <img src="docs/screenshots/compare/listview.png" width="160" alt="ListView"> |
+| Cards | `CardList` | `QListView` (delegate) ≈ | `GtkListBox` ≈ | `ItemsControl` ≈ | `widget.List` ≈ | — | `ItemsControl` ≈ | `NSCollectionView` ≈ | `List` ≈ | <img src="docs/screenshots/compare/cardlist.png" width="160" alt="CardList"> |
+| Table | `TableView` | `QTableView` / `TableView` | `GtkColumnView` | `DataGrid` | `widget.Table` | `DataGridView` | `DataGrid` | `NSTableView` | `Table` | <img src="docs/screenshots/compare/tableview.png" width="160" alt="TableView"> |
+| Tree | `TreeView` | `QTreeView` / `TreeView` | `GtkListView` / `GtkTreeView` | `TreeView` | `widget.Tree` | `TreeView` | `TreeView` | `NSOutlineView` | `OutlineGroup` | <img src="docs/screenshots/compare/treeview.png" width="160" alt="TreeView"> |
+| Tabs | `TabView` / `TabBar` | `QTabWidget` / `TabBar` | `GtkNotebook` | `TabControl` | `container.AppTabs` | `TabControl` | `TabControl` | `NSTabView` | `TabView` | <img src="docs/screenshots/compare/tabview.png" width="160" alt="TabView"> |
+| Menu bar | `MenuBar` | `QMenuBar` / `MenuBar` | `GtkPopoverMenuBar` | `Menu` | `fyne.MainMenu` | `MenuStrip` | `Menu` | `NSMenu` | `Menu` | <img src="docs/screenshots/compare/menubar.png" width="160" alt="MenuBar"> |
+| Context menu | `PopupMenu` | `QMenu` / `Menu` | `GtkPopoverMenu` | `ContextMenu` | `widget.PopUpMenu` | `ContextMenuStrip` | `ContextMenu` | `NSMenu` | `contextMenu` | <img src="docs/screenshots/compare/popupmenu.png" width="160" alt="PopupMenu"> |
+| Tool bar | `ToolBar` | `QToolBar` / `ToolBar` | `GtkBox` ≈ | `CommandBar` ≈ | `widget.Toolbar` | `ToolStrip` | `ToolBar` | `NSToolbar` | `ToolbarItem` | <img src="docs/screenshots/compare/toolbar.png" width="160" alt="ToolBar"> |
+| Status bar | `StatusBar` | `QStatusBar` / `StatusBar` | `GtkStatusbar` ≈ | — | — | `StatusStrip` | `StatusBar` | — | — | <img src="docs/screenshots/compare/statusbar.png" width="160" alt="StatusBar"> |
+| Title bar | `TitleBar` | custom ≈ | `GtkHeaderBar` ≈ | chrome ≈ | window title ≈ | `Form.Text` ≈ | chrome ≈ | window title | `navigationTitle` | <img src="docs/screenshots/compare/titlebar.png" width="160" alt="TitleBar"> |
+| Scroll | `ScrollView` | `QScrollArea` / `ScrollView` | `GtkScrolledWindow` | `ScrollViewer` | `container.Scroll` | `AutoScroll` | `ScrollViewer` | `NSScrollView` | `ScrollView` | <img src="docs/screenshots/compare/scrollview.png" width="160" alt="ScrollView"> |
+| Splitter | `Splitter` | `QSplitter` / `SplitView` | `GtkPaned` | `GridSplitter` | `container.Split` | `SplitContainer` | `GridSplitter` | `NSSplitView` | `HSplitView` | <img src="docs/screenshots/compare/splitter.png" width="160" alt="Splitter"> |
+| Panel | `Panel` | `QGroupBox` / `GroupBox` | `GtkFrame` | headered ≈ | `widget.Card` ≈ | `GroupBox` | `GroupBox` | `NSBox` | `GroupBox` | <img src="docs/screenshots/compare/panel.png" width="160" alt="Panel"> |
+| Accordion | `Accordion` / `Expander` | `QToolBox` ≈ | `GtkExpander` | `Expander` | `widget.Accordion` | — | `Expander` | disclosure ≈ | `DisclosureGroup` | <img src="docs/screenshots/compare/accordion.png" width="160" alt="Accordion"> |
+| Message box | `MessageBox` | `QMessageBox` / `MessageDialog` | `GtkAlertDialog` | dialog ≈ | `dialog.NewInformation` | `MessageBox` | `MessageBox` | `NSAlert` | `alert` | <img src="docs/screenshots/compare/messagebox.png" width="160" alt="MessageBox"> |
+| File picker | `FileDialog` (stub) | `QFileDialog` / `FileDialog` | `GtkFileDialog` | `OpenFileDialog` | `dialog.NewFileOpen` | `OpenFileDialog` | `OpenFileDialog` | `NSOpenPanel` | `fileImporter` | <img src="docs/screenshots/compare/filedialog.png" width="160" alt="FileDialog"> |
+| Tooltip | `Tip` | `QToolTip` / `ToolTip` | tooltip | `ToolTip` | tooltip | `ToolTip` | `ToolTip` | tooltip | `.help()` | <img src="docs/screenshots/compare/tooltip.png" width="160" alt="Tooltip"> |
+| Flex / rules | `Column` `Row` `Separator` `Spacer` | box layout / `QFrame` | `GtkBox` / `GtkSeparator` | `StackPanel` / `Separator` | `VBox` / `Separator` | layout panels | `StackPanel` / `Separator` | `NSStackView` | `VStack` / `Divider` / `Spacer` | <img src="docs/screenshots/compare/layout.png" width="160" alt="Layout"> |
+
+`FileDialog` is an in-process stub (list + path), not a native portal.
+`CardList` is the Mail-style virtualized multi-line row, not a generic card
+container. Layout extras (`Stack`, `Pad`, `Overlay`) are in
+[docs/widgets.md](docs/widgets.md).
 
 ## Examples
 
@@ -330,8 +386,8 @@ dismiss order, textarea newline/wrap/nav, switch toggle (including
 disabled), accordion exclusive expand and focus yield, expander
 relayout, separator and spacer measure, IME preedit/commit on text
 widgets, and an offscreen paint that produces real pixels.
-`go test ./examples/gallery` regenerates the twenty-four PNGs and fails if
-any two share a blob.
+`go test ./examples/gallery` regenerates the gallery, mail, and compare
+thumbs and fails if any two share a blob.
 
 Keyboard map: [docs/keyboard.md](docs/keyboard.md). **Esc** closes
 tooltip → popup → overlay, everywhere.
@@ -377,8 +433,13 @@ Mail cards / density / Unified Inbox / tags / filters / identities and
 IMAP+SMTP with an on-disk cache are **v0.9.0**. Empty-by-default first-run
 and text-only message view are **v0.9.1**. Mail Tier A+B (OAuth, IDLE/QRESYNC,
 outbox, smart folders, threading/mute, VIP, notify, categories) is **v0.10.0**.
+Cross-toolkit widget name map + compare thumbs is **v0.10.1**.
 
 ## Version
+
+**0.10.1** — Docs: widget comparison vs Qt, GTK 4, Avalonia, Fyne, WinForms,
+WPF, AppKit, and SwiftUI ([docs/widgets.md](docs/widgets.md)), with isolated
+gallery thumbs in `docs/screenshots/compare/`. Still paintengine2d **v0.9.0**.
 
 **0.10.0** — Mail daily-driver + Apple-style comfort: Google/Microsoft OAuth
 (loopback or device; encrypted refresh tokens), multi-folder IDLE + QRESYNC
