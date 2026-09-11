@@ -1,0 +1,115 @@
+//go:build linux && cgo
+
+package platform
+
+/*
+#cgo linux pkg-config: wayland-egl wayland-client
+#include <wayland-client.h>
+#include <wayland-egl.h>
+
+static struct wl_egl_window *ui_wl_egl_create(struct wl_surface *s, int w, int h) {
+	if (!s || w < 1 || h < 1) return NULL;
+	return wl_egl_window_create(s, w, h);
+}
+static void ui_wl_egl_resize(struct wl_egl_window *win, int w, int h) {
+	if (win) wl_egl_window_resize(win, w, h, 0, 0);
+}
+static void ui_wl_egl_destroy(struct wl_egl_window *win) {
+	if (win) wl_egl_window_destroy(win);
+}
+*/
+import "C"
+
+import (
+	"unsafe"
+
+	"github.com/codemodify/paintengine2d"
+)
+
+func (s *wlSurface) tryBindGPU() {
+	if s == nil || s.gpu != nil || s.surf == nil || s.conn == nil || s.conn.dpy == nil {
+		return
+	}
+	if !WantGPU() {
+		return
+	}
+	bw, bh := s.bufferWH()
+	win := C.ui_wl_egl_create(s.surf, C.int(bw), C.int(bh))
+	if win == nil {
+		return
+	}
+	dev, err := paintengine2d.NewGPUDeviceEGL(paintengine2d.EGLNative{
+		Display:  uintptr(unsafe.Pointer(s.conn.dpy)),
+		Window:   uintptr(unsafe.Pointer(win)),
+		Platform: paintengine2d.EGLPlatformWayland,
+		Width:    bw,
+		Height:   bh,
+	})
+	if err != nil {
+		C.ui_wl_egl_destroy(win)
+		return
+	}
+	s.eglWin = unsafe.Pointer(win)
+	s.gpu = dev
+}
+
+func (s *wlSurface) closeGPU() {
+	if s == nil {
+		return
+	}
+	if s.gpu != nil {
+		_ = s.gpu.Close()
+		s.gpu = nil
+	}
+	if s.eglWin != nil {
+		C.ui_wl_egl_destroy((*C.struct_wl_egl_window)(s.eglWin))
+		s.eglWin = nil
+	}
+}
+
+func (s *wlSurface) resizeGPU(w, h int) {
+	if s == nil || s.gpu == nil {
+		return
+	}
+	if w < 1 {
+		w = 1
+	}
+	if h < 1 {
+		h = 1
+	}
+	if s.eglWin != nil {
+		C.ui_wl_egl_resize((*C.struct_wl_egl_window)(s.eglWin), C.int(w), C.int(h))
+	}
+	if err := s.gpu.Resize(w, h); err != nil {
+		s.closeGPU()
+	}
+}
+
+func (s *wlSurface) presentGPU() error {
+	if s == nil || s.gpu == nil {
+		return paintengine2d.ErrGPUUnavailable
+	}
+	return s.gpu.Present()
+}
+
+func (s *wlSurface) abandonGPU() {
+	if s == nil || s.gpu == nil {
+		return
+	}
+	if snap := s.gpu.Image(); snap != nil {
+		s.img = snap.Clone()
+	}
+	s.closeGPU()
+}
+
+func (s *wlSurface) UsesGPU() bool { return s != nil && s.gpu != nil }
+
+func (s *wlSurface) PaintDevice() paintengine2d.Device {
+	if s != nil && s.gpu != nil {
+		return s.gpu
+	}
+	if s != nil && s.img != nil {
+		return paintengine2d.NewCPUDevice(s.img)
+	}
+	return nil
+}

@@ -1,13 +1,14 @@
 # Platform backends
 
 uitoolkit paints only through paintengine2d. The platform layer maps that
-CPU pixmap onto a window and translates input.
+Device onto a window and translates input. `UITK_PAINT=auto` (default)
+tries `GPUDevice` and falls back to the CPU pixmap.
 
 | Backend | When | Present | Clipboard | Scale | IME |
 | --- | --- | --- | --- | --- | --- |
 | **offscreen** | `Headless`, `UITK_BACKEND=offscreen`, or no display | no-op | in-process | env or 1 | n/a |
-| **Wayland** | Linux + CGO + `WAYLAND_DISPLAY` | **`wl_shm` XRGB8888** (opaque) by default; **linux-dmabuf** only if `UITK_WAYLAND_PRESENT=dmabuf` and a linear XRGB/XBGR (else ARGB) allocator works; damage-only upload; `wl_surface.set_opaque_region` | `wl_data_device` + primary when the compositor offers it | `wl_output` scale, `wp_fractional_scale_v1` + viewporter, env | `zwp_text_input_v3` preedit / commit |
-| **X11** | Linux + CGO + `DISPLAY` | dirty-rect `XPutImage`, MIT-SHM when the server allows it | CLIPBOARD + PRIMARY, ICCCM **INCR** | Xft.dpi, RandR mm, screen mm, env | XIM preedit callbacks + compose / dead keys |
+| **Wayland** | Linux + CGO + `WAYLAND_DISPLAY` | **`wl_egl_window` + `eglSwapBuffers`** when `UITK_PAINT=auto\|gpu` and EGL works; else v0.4.1 **`wl_shm` XRGB8888** (opaque). **linux-dmabuf** only if `UITK_WAYLAND_PRESENT=dmabuf` on the CPU path | `wl_data_device` + primary when the compositor offers it | `wl_output` scale, `wp_fractional_scale_v1` + viewporter, env | `zwp_text_input_v3` preedit / commit |
+| **X11** | Linux + CGO + `DISPLAY` | **EGL window + `eglSwapBuffers`** when EGL works; else dirty-rect `XPutImage` / MIT-SHM | CLIPBOARD + PRIMARY, ICCCM **INCR** | Xft.dpi, RandR mm, screen mm, env | XIM preedit callbacks + compose / dead keys |
 | Win32 / AppKit | stub | — | — | — | — |
 
 Auto-select: Wayland if `WAYLAND_DISPLAY` is set **and** a compositor
@@ -28,13 +29,23 @@ UITK_BACKEND=x11 go run ./examples/notes
 # Offscreen / CI
 go run ./examples/gallery -headless
 CGO_ENABLED=0 go test ./...
+
+# Paint backend (honors paintengine2d UITK_PAINT)
+UITK_PAINT=auto go run ./examples/gallery   # default: GPU if EGL works
+UITK_PAINT=cpu  go run ./examples/gallery   # force CPU + shm / XPutImage
+UITK_PAINT=gpu  go run ./examples/gallery   # prefer EGL; CPU if init fails
 ```
 
 CGO Linux links `libX11`, `libXext`, `libXrandr`, `libwayland-client`,
-and `libxkbcommon`. `CGO_ENABLED=0` never needs those libraries.
+`libwayland-egl`, and `libxkbcommon`. paintengine2d's GPUDevice also
+needs EGL / GLES2. `CGO_ENABLED=0` never needs those libraries.
 
-## X11 notes (0.3.0)
+## X11 notes (0.3.0 / 0.5.0)
 
+- When `UITK_PAINT=auto|gpu` and EGL init succeeds, present is an EGL
+  window surface + `eglSwapBuffers` (`NewGPUDeviceEGL` with
+  `EGLPlatformX11`). A failed swap rebuilds the CPU `XImage` and falls
+  back to `XPutImage`.
 - One shared `Display` for all windows. Destroying a window frees its
   `XImage` / MIT-SHM segment, GC, XIC, and `XID`; the connection closes
   when the last surface is gone and no selection is owned.
@@ -63,7 +74,27 @@ and `libxkbcommon`. `CGO_ENABLED=0` never needs those libraries.
   then Xft.dpi, then RandR output mm vs CRTC pixels, then screen mm.
   Buffer and event coordinates stay device pixels; metrics grow with scale.
 
-## Wayland notes (0.4.1)
+## Paint backend (0.5.0)
+
+`UITK_PAINT` is defined by paintengine2d and honored here:
+
+| Value | Window paint | Present |
+| --- | --- | --- |
+| **auto** (default, unset) | `NewGPUDeviceEGL` when EGL init works, else CPU pixmap | `eglSwapBuffers`, else shm / `XPutImage` |
+| **gpu** | same try-EGL | same; CPU fallback if the native window cannot bind |
+| **cpu** | CPU pixmap (`NewContext` on `Buffer`) | v0.4.1 opaque `wl_shm` / `XPutImage` |
+
+Wayland GPU present creates a `wl_egl_window` on the `wl_surface` and
+passes `wl_display*` + `wl_egl_window*` to `NewGPUDeviceEGL`
+(`EGLPlatformWayland`). X11 passes `Display*` + `Window`
+(`EGLPlatformX11`). GPU window configs request `EGL_ALPHA_SIZE` 0 so an
+opaque UI cannot present as a fully transparent ARGB surface.
+
+`platform.NewPaintContext` is the toolkit paint seam: `GPUDevice` when
+bound, otherwise a CPU device wrapping `Surface.Buffer`. Offscreen and
+`CGO_ENABLED=0` stay on the CPU path.
+
+## Wayland notes (0.4.1 / 0.5.0)
 
 - `wl_display_connect` → registry bind of `wl_compositor`, `wl_shm`,
   `xdg_wm_base`, `wl_seat`, `wl_data_device_manager`, `wl_output`, and
@@ -77,8 +108,13 @@ and `libxkbcommon`. `CGO_ENABLED=0` never needs those libraries.
   States maximized / fullscreen / resizing / activated are parsed.
   `xdg_toplevel.close` is `EventClose`. Server-side decorations are
   requested when `xdg-decoration` is present.
-- Present defaults to **`wl_shm` `XRGB8888`** (opaque). `auto` and `shm`
-  are the same path. **Do not use ARGB8888 for opaque UI**: paintengine2d
+- When `UITK_PAINT=auto|gpu` and EGL init succeeds, present is
+  **`wl_egl_window` + `eglSwapBuffers`** (paintengine2d `GPUDevice`).
+  Resize calls `wl_egl_window_resize` and `GPUDevice.Resize`. A failed
+  swap drops GPU for that surface and falls back to shm.
+- CPU present (no EGL, or `UITK_PAINT=cpu`) defaults to **`wl_shm`
+  `XRGB8888`** (opaque). `UITK_WAYLAND_PRESENT=auto` and `shm` are the
+  same path. **Do not use ARGB8888 for opaque UI**: paintengine2d
   is premul RGBA; a wrong swizzle or an empty GBM map leaves alpha=0 and
   Mutter/Weston draw a fully transparent window. Workaround if a build
   still prefers dmabuf: `UITK_WAYLAND_PRESENT=shm`.
@@ -136,10 +172,12 @@ wayland-scanner private-code \
 ```
 
 ```bash
-# Force present path (Wayland + CGO only)
-UITK_WAYLAND_PRESENT=auto go run ./examples/gallery    # wl_shm XRGB8888 (default)
+# Paint + present (Linux + CGO)
+UITK_PAINT=auto go run ./examples/gallery              # GPU if EGL works, else CPU
+UITK_PAINT=cpu go run ./examples/gallery               # CPU pixmap + shm / XPutImage
+UITK_WAYLAND_PRESENT=auto go run ./examples/gallery    # CPU path: wl_shm XRGB8888
 UITK_WAYLAND_PRESENT=shm go run ./examples/gallery     # same as auto; workaround if a window is transparent
-UITK_WAYLAND_PRESENT=dmabuf go run ./examples/gallery  # experimental; falls back to shm if the upload is blank
+UITK_WAYLAND_PRESENT=dmabuf go run ./examples/gallery  # CPU path experimental; shm if the upload is blank
 ```
 
 ## HiDPI
@@ -153,8 +191,8 @@ On **X11** the window buffer is the pixel size the WM gave; scale only
 grows metrics. On **Wayland** configure size is logical and the shm
 buffer is scaled; pointer events are multiplied so hit-testing matches
 the pixmap. Set `UITK_SCALE` to the compositor scale (often `2`) so
-metrics and buffer scale agree. dmabuf and shm share that scale /
-damage / attach / commit path.
+metrics and buffer scale agree. EGL, dmabuf, and shm share that scale;
+CPU present still uses damage / attach / commit.
 
 ## Deferred
 

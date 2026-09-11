@@ -3,7 +3,7 @@
 **Pure-Go desktop UI toolkit.** Retained widget tree, layout, themes, and
 X11 and Wayland window backends. Every pixel is painted with
 [`github.com/codemodify/paintengine2d`](https://github.com/codemodify/paintengine2d)
-(v0.7.2+). Default UI is **Titillium Web**; mono / code is **JetBrains Mono**
+(v0.8.0+). Default UI is **Titillium Web**; mono / code is **JetBrains Mono**
 (OFL, embedded). Outlines are rasterized through paintengine2d into a white
 atlas and tinted with `Paint.Color`. There is no second rasterizer, no Skia,
 no Gio renderer, and no Electron.
@@ -20,15 +20,15 @@ _ = app.Run()
 
 ```bash
 go get github.com/codemodify/uitoolkit@dev
-go get github.com/codemodify/paintengine2d@v0.7.2
+go get github.com/codemodify/paintengine2d@v0.8.0
 ```
 
 | | |
 | --- | --- |
 | Language | Go 1.22+ |
-| Paint | paintengine2d **v0.7.2** (`02b2939`; `Context`, `Damage`, `DrawGlyphs` Color tint) |
+| Paint | paintengine2d **v0.8.0** (`b220e31`; `GPUDevice` EGL/GLES2, `UITK_PAINT`, `OpenSurface`) |
 | Fonts | Titillium Web (UI) + JetBrains Mono (code), OpenType → atlas |
-| Windowing | Linux X11 + Wayland (`wl_shm` XRGB8888; opt-in `linux-dmabuf`); offscreen always |
+| Windowing | Linux X11 + Wayland (`wl_egl_window` / eglSwapBuffers, else `wl_shm` / `XPutImage`); offscreen always |
 | CGO | optional — tests and screenshots are `CGO_ENABLED=0` |
 | License | MIT |
 
@@ -131,6 +131,8 @@ CGO_ENABLED=0 go test ./...
 go run ./examples/gallery            # Wayland if WAYLAND_DISPLAY, else X11
 UITK_BACKEND=x11 go run ./examples/gallery
 UITK_BACKEND=wayland go run ./examples/gallery
+UITK_PAINT=auto go run ./examples/gallery   # default: GPU if EGL works
+UITK_PAINT=cpu go run ./examples/gallery    # v0.4.1 CPU present
 go run ./examples/gallery -headless  # writes gallery.png
 go run ./examples/notes
 go run ./examples/inspector
@@ -139,11 +141,14 @@ go run ./examples/files -headless   # writes files.png
 ```
 
 Headless / CI paints into `paintengine2d.NewImage` and can `Window.WritePNG`.
-On Linux with CGO the same buffer is presented with dirty rects from
-`paintengine2d.Damage`: **XPutImage** on X11, **wl_shm XRGB8888** on
-Wayland (`UITK_WAYLAND_PRESENT=auto|shm`). `UITK_WAYLAND_PRESENT=dmabuf`
-opts into linux-dmabuf (falls back to shm if the upload is blank). If a
-Wayland window is fully transparent, set `UITK_WAYLAND_PRESENT=shm`.
+`UITK_PAINT=auto` (default) tries paintengine2d **GPUDevice** (Linux EGL/GLES2)
+and falls back to CPU. On Linux with CGO a GPU window presents with
+**eglSwapBuffers** (`wl_egl_window` on Wayland, EGL window on X11). If EGL
+fails, present is the v0.4.1 CPU path: **XPutImage** on X11, **wl_shm
+XRGB8888** on Wayland (`UITK_WAYLAND_PRESENT=auto|shm`).
+`UITK_WAYLAND_PRESENT=dmabuf` opts into linux-dmabuf on the CPU path.
+`UITK_PAINT=cpu` forces the CPU painter. If a Wayland window is fully
+transparent, set `UITK_PAINT=cpu` and/or `UITK_WAYLAND_PRESENT=shm`.
 Auto-select is `WAYLAND_DISPLAY` → `DISPLAY` → offscreen. Scale comes from
 `UITK_SCALE` / `GDK_SCALE` / `QT_SCALE_FACTOR` / `GDK_DPI_SCALE`, else
 Xft.dpi / RandR on X11 or `wl_output` / fractional-scale on Wayland.
@@ -154,27 +159,29 @@ through XIM callbacks and `text-input-v3` into TextField / TextArea.
 
 ## How it uses paintengine2d
 
-uitoolkit does not rasterize. A window owns a premul RGBA pixmap
-(`NewImage` or, on X11, the same CPU buffer then copied to the X image).
+uitoolkit does not rasterize. A window paints through paintengine2d
+`Context` → `Device`. `UITK_PAINT=auto` binds `GPUDevice` to the native
+window when EGL works; otherwise the window owns a premul RGBA pixmap.
+
 Each frame:
 
 1. Widgets call `Invalidate` → dirty boxes land in `paintengine2d.Damage`.
-2. `Context` is created on the pixmap; `QuickReject` / clip skip clean regions.
+2. `Context` is created on the Device; `QuickReject` / clip skip clean regions.
 3. Each component `Paint`s with `DrawRoundRect`, `Fill`, `Stroke`, gradients,
    and `DrawGlyphs` (shared white atlas, themed with `Paint.Color` tint).
-4. `Damage.Rects` are presented to X11 (`XPutImage` / MIT-SHM) or
-   Wayland (`zwp_linux_dmabuf_v1` or `wl_shm`). Offscreen present is a no-op.
+4. Present is **eglSwapBuffers** on a GPU window, else X11 `XPutImage` /
+   MIT-SHM or Wayland `wl_shm` (opt-in dmabuf). Offscreen present is a no-op.
 
 ```
 Desktop app
     → uitoolkit (widgets, layout, focus, X11 / Wayland / offscreen)
         → paintengine2d.Context / Device / Damage / FontAtlas
-            → CPU scanline AA pixmap
+            → GPUDevice (EGL/GLES2) or CPU scanline AA pixmap
 ```
 
 Default chrome uses Titillium Web outlines (not the old 5×7 bitmap atlas).
-Inspector tables and code previews use JetBrains Mono. **v0.7.2 blit RGB
-tint** is required. One white atlas per family+weight+size is shared;
+Inspector tables and code previews use JetBrains Mono. **v0.7.2+ blit RGB
+tint** is required. **v0.8.0** adds the GPU Device. One white atlas per family+weight+size is shared;
 `DrawGlyphs` receives the theme Color. `style.GlyphTint` asserts the engine
 actually multiplies RGB. `TestDefaultFontsRender` draws both families and
 fails if the TTFs are missing or the ink is chunky 1-bit.
@@ -185,9 +192,10 @@ Inspired by JUCE `Component` + `LookAndFeel`, Evas damage, and Avalonia’s
 retained tree (ideas only — no copied code).
 
 ```
-platform   window + event pump + present          Linux X11 (CLIPBOARD+PRIMARY,
-           (thin OS glue)                         XIM) and Wayland (wl_shm
-                                                  XRGB8888, xdg-shell, seat);
+platform   window + event pump + present          Linux X11 (EGL or XPutImage,
+           (thin OS glue)                         CLIPBOARD+PRIMARY, XIM) and
+                                                  Wayland (wl_egl_window or
+                                                  wl_shm, xdg-shell, seat);
                                                   Win / macOS stubs
 app        Application run loop, windows,         DPI/scale, backend select,
                                                   input routing
@@ -250,7 +258,7 @@ Fyne (GL + batteries), not Gio (ops + GPU), not Wails (Go + webview).
 
 | | Paint | Windowing | Model | CGO |
 | --- | --- | --- | --- | --- |
-| **uitoolkit** | paintengine2d (own CPU AA) | X11 + Wayland + offscreen | Retained, themed | Optional (X11/Wayland) |
+| **uitoolkit** | paintengine2d (CPU AA + Linux EGL/GLES2) | X11 + Wayland + offscreen | Retained, themed | Optional (X11/Wayland/EGL) |
 | [Fyne](https://fyne.io) | Own + OpenGL | Cross-platform | Retained | Yes (GL) |
 | [Gio](https://gioui.org) | Own ops renderer | Cross-platform | Immediate | Optional |
 | [Wails](https://wails.io) | Browser / WebView | Cross-platform | HTML/CSS + Go | Yes (webview) |
@@ -272,10 +280,15 @@ Documented on purpose — do not expect these yet:
 
 See [docs/platform.md](docs/platform.md) for X11 vs Wayland vs offscreen.
 Linux desktop clipboard, IME preedit, and HiDPI are implemented on both
-X11 and Wayland as of **v0.3.0**. Wayland **linux-dmabuf** present
-(with `wl_shm` fallback) is **v0.3.1**.
+X11 and Wayland as of **v0.3.0**. GPU present (`UITK_PAINT=auto`) is **v0.5.0**.
 
 ## Version
+
+**0.5.0** — Consumes paintengine2d **v0.8.0**. Default `UITK_PAINT=auto`
+tries `GPUDevice` (Linux EGL/GLES2): Wayland `wl_egl_window` +
+`eglSwapBuffers`, X11 EGL window + `eglSwapBuffers`. If EGL init fails,
+present is the v0.4.1 CPU path (opaque `wl_shm` / `XPutImage`).
+`UITK_PAINT=cpu` forces CPU; `gpu` prefers EGL.
 
 **0.4.1** — Wayland present is opaque again: default `auto` is `wl_shm`
 `XRGB8888` + `set_opaque_region` (damage-only uint32 RGBA→BGRA, forced

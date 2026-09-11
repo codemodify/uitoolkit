@@ -14,5 +14,6 @@
 //	            Tooltip, Accordion, Expander, Separator, Spacer, …
 //	style     — LookAndFeel themes (Titillium Web + JetBrains Mono OpenType atlases)
 //
-// All pixels go through paintengine2d.Context. There is no second rasterizer.
+// All pixels go through paintengine2d.Context (CPU scanline or Linux
+// EGL/GLES2 GPUDevice). There is no second rasterizer.
 package uitoolkit
