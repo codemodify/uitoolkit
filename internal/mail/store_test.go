@@ -8,7 +8,7 @@ import (
 
 func TestInboxNewestIsWelcome(t *testing.T) {
 	s := NewDemoStore()
-	all := s.List(FolderAdaInbox)
+	all := s.ListMessages(FolderAdaInbox)
 	sortMessages(all, 4, false, FolderInbox)
 	if len(all) == 0 {
 		t.Fatal("empty")
@@ -28,7 +28,7 @@ func TestDemoStoreSize(t *testing.T) {
 	if len(accts) != 2 {
 		t.Fatalf("accounts %d", len(accts))
 	}
-	inbox, ok := s.Folder(FolderAdaInbox)
+	inbox, ok := s.GetFolder(FolderAdaInbox)
 	if !ok || inbox.Kind != FolderInbox {
 		t.Fatal("ada inbox")
 	}
@@ -39,7 +39,7 @@ func TestDemoStoreSize(t *testing.T) {
 
 func TestMemoryStoreFlagsMoveDelete(t *testing.T) {
 	s := NewDemoStore()
-	list := s.List(FolderAdaInbox)
+	list := s.ListMessages(FolderAdaInbox)
 	if len(list) < 2 {
 		t.Fatal("inbox empty")
 	}
@@ -47,7 +47,7 @@ func TestMemoryStoreFlagsMoveDelete(t *testing.T) {
 	if err := s.SetFlags(id, FlagPatch{Read: boolPtr(true), Starred: boolPtr(true)}); err != nil {
 		t.Fatal(err)
 	}
-	m, ok := s.Get(id)
+	m, ok := s.GetMessage(id)
 	if !ok || !m.Read || !m.Starred {
 		t.Fatalf("flags %+v", m)
 	}
@@ -58,11 +58,11 @@ func TestMemoryStoreFlagsMoveDelete(t *testing.T) {
 	if err := s.Move([]MessageID{id}, FolderAdaProjects); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := s.Get(id); !ok {
+	if _, ok := s.GetMessage(id); !ok {
 		t.Fatal("missing after move")
 	}
 	found := false
-	for _, m := range s.List(FolderAdaProjects) {
+	for _, m := range s.ListMessages(FolderAdaProjects) {
 		if m.ID == id {
 			found = true
 		}
@@ -73,14 +73,14 @@ func TestMemoryStoreFlagsMoveDelete(t *testing.T) {
 	if err := s.Delete([]MessageID{id}); err != nil {
 		t.Fatal(err)
 	}
-	m, ok = s.Get(id)
+	m, ok = s.GetMessage(id)
 	if !ok || m.Folder != FolderAdaTrash {
 		t.Fatalf("delete should trash, got %+v ok=%v", m, ok)
 	}
 	if err := s.Delete([]MessageID{id}); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := s.Get(id); ok {
+	if _, ok := s.GetMessage(id); ok {
 		t.Fatal("expunge from trash")
 	}
 }
@@ -96,7 +96,7 @@ func TestMemoryStoreAppendSendDraftFetch(t *testing.T) {
 	if err := s.Update(id, Message{To: "kai@paintengine.example", Subject: "hello draft", Body: "edited"}); err != nil {
 		t.Fatal(err)
 	}
-	m, ok := s.Get(id)
+	m, ok := s.GetMessage(id)
 	if !ok || m.Body != "edited" {
 		t.Fatalf("update %+v", m)
 	}
@@ -126,7 +126,7 @@ func TestMemoryStoreAppendSendDraftFetch(t *testing.T) {
 
 func TestQuickFilterAndSort(t *testing.T) {
 	s := NewDemoStore()
-	all := s.List(FolderAdaInbox)
+	all := s.ListMessages(FolderAdaInbox)
 	f := Filter{Unread: true}
 	unread := 0
 	for _, m := range all {

@@ -646,7 +646,7 @@ var screenshotNames = []string{
 	"gallery-table.png", "gallery-file.png", "gallery-tooltip.png",
 	"gallery-textarea.png", "gallery-accordion.png",
 	"notes.png", "inspector.png", "files.png", "widgets.png", "fonts.png",
-	"mail-dark.png", "mail-light.png", "mail-classic.png", "mail-compose.png",
+	"mail-dark.png", "mail-light.png", "mail-classic.png", "mail-compose.png", "mail-prefs.png",
 }
 
 func selectGalleryTab(w *app.Window, i int) {

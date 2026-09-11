@@ -1291,6 +1291,12 @@ func xkey(ks C.KeySym) Key {
 		return KeyPageDown
 	case C.XK_space:
 		return KeySpace
+	case C.XK_3:
+		return Key3
+	case C.XK_numbersign:
+		return KeyHash
+	case C.XK_comma:
+		return KeyComma
 	case C.XK_a, C.XK_A:
 		return KeyA
 	case C.XK_b, C.XK_B:

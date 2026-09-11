@@ -1,17 +1,13 @@
-// Command mail is a convenience launcher: in-process mailclientd
-// (MemoryStore) plus mailclientui on a temp Unix socket. Prefer the split
-// binaries for a real two-process run:
+// Command mailclientui is the Thunderbird-chrome Mail UI. It connects to
+// mailclientd over a Unix socket and never speaks IMAP.
 //
-//	go run ./cmd/mailclientd
+//	go run ./cmd/mailclientd          # other terminal
 //	go run ./cmd/mailclientui
 //
-//	UITK_SCENE=auto go run ./examples/mail
-//	go run ./examples/mail -headless
-//	go run ./examples/mail -screenshot docs/screenshots
+//	UITK_MAIL_SOCK=/tmp/mail.sock go run ./cmd/mailclientui
 package main
 
 import (
-	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -28,6 +24,7 @@ func main() {
 	shot := flag.String("screenshot", "", "write mail-*.png into this directory and exit")
 	light := flag.Bool("light", false, "start with LightLook")
 	classic := flag.Bool("classic", false, "classic layout (preview below the thread list)")
+	sock := flag.String("socket", mail.DefaultSocket(), "mailclientd Unix socket")
 	flag.Parse()
 
 	if *shot != "" {
@@ -37,14 +34,9 @@ func main() {
 		return
 	}
 
-	sock, stop, err := mail.StartDemo(context.Background())
+	cli, err := mail.DialWait(*sock, 3*time.Second)
 	if err != nil {
-		log.Fatal(err)
-	}
-	defer stop()
-	cli, err := mail.DialWait(sock, 2*time.Second)
-	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("%v\nStart the daemon first: go run ./cmd/mailclientd", err)
 	}
 	defer cli.Close()
 

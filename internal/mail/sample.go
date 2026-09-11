@@ -68,9 +68,11 @@ func seedDemo(s *MemoryStore) {
 		Subject:   "Welcome to Mail on uitoolkit",
 		Date:      DemoNow.Add(-34 * time.Minute),
 		Read:      false,
-		Starred:   true,
-		Tags:      []string{"Important"},
-		Body:      welcomeBody,
+		Starred:     true,
+		HasAttach:   true,
+		Tags:        []string{"Important"},
+		Body:        welcomeBody,
+		Attachments: []string{"mail-shortcuts.txt", "uitoolkit-v080.png"},
 	})
 
 	people := [][2]string{
@@ -277,14 +279,13 @@ const welcomeBody = `Hi Ada,
 This is the uitoolkit Mail dogfood — Thunderbird’s classic 3-pane chrome
 on a retained scene (UITK_SCENE=auto), not a Mozilla protocol clone.
 
-What is real in v1
-  • Folder TreeView, thread TableView, message preview, compose Window
-  • Quick Filter, tags, star, junk, trash, Get Messages (demo arrivals)
-  • Dark / light LookAndFeel — Titillium Web + JetBrains Mono (Source)
+What is real in v0.8
+  • mailclientd owns the Store (MemoryStore demo, IMAP skeleton)
+  • mailclientui is Thunderbird chrome over a Unix JSON-RPC socket
+  • Quick Filter (daemon-side), unread bold, attachments, prefs stub
 
 What is demo
-  • In-memory Store (maildir-ish flags). No IMAP/SMTP on the wire.
-  • Plug in IMAP later by implementing mail.Store — the UI stays.
+  • Default backend is in-memory. UITK_MAIL=imap is a skeleton, not production.
 
-— Mail on uitoolkit v0.7.0
+— Mail on uitoolkit v0.8.0
 `

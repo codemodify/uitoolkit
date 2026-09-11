@@ -127,6 +127,10 @@ paintengine2d with Titillium Web (and JetBrains Mono in code views).
 
 ![Mail compose](docs/screenshots/mail-compose.png)
 
+### Mail — preferences (accounts stub)
+
+![Mail prefs](docs/screenshots/mail-prefs.png)
+
 ### Font roles — Titillium Web + JetBrains Mono
 
 ![Font roles](docs/screenshots/fonts.png)
@@ -158,7 +162,9 @@ go run ./examples/notes
 go run ./examples/inspector
 go run ./examples/files
 go run ./examples/files -headless   # writes files.png
-UITK_SCENE=auto go run ./examples/mail
+go run ./cmd/mailclientd            # Unix socket JSON-RPC daemon
+UITK_SCENE=auto go run ./cmd/mailclientui
+go run ./examples/mail              # in-process daemon + UI (same protocol)
 go run ./examples/mail -headless    # writes mail.png
 go run ./examples/mail -classic     # preview below the thread list
 go run ./examples/mail -light
@@ -250,34 +256,36 @@ never hard-code colors.
 | `go run ./examples/notes` | A small real app: sortable table, textarea body, priority spinner, file stub, tooltips |
 | `go run ./examples/inspector` | Preferences inspector: table (JetBrains Mono), toolbar, tabs, message box |
 | `go run ./examples/files` | Files / Projects dogfood: tree, table, toolbar, menus, TextArea preview, dialogs |
-| `go run ./examples/mail` | Thunderbird-chrome Mail: MenuBar, ToolBar, folder TreeView, thread TableView, Quick Filter, preview tabs, compose Window, MessageBox. In-memory `Store` (IMAP later) |
+| `go run ./cmd/mailclientd` | Mail daemon: MemoryStore or skeleton IMAP, Unix JSON-RPC |
+| `go run ./cmd/mailclientui` | Thunderbird-chrome UI only — renders daemon state, no IMAP |
+| `go run ./examples/mail` | Convenience: in-process mailclientd + UI on a temp socket |
 
 ```bash
 go run ./examples/gallery -screenshot docs/screenshots
 go run ./examples/mail -screenshot docs/screenshots
 ```
 
-### Mail — demo Store vs future IMAP
+### Mail — mailclientd + mailclientui
 
-`go run ./examples/mail` is toolkit dogfood, not a Mozilla clone of every
-protocol quirk. Chrome matches classic Thunderbird: MenuBar
-(File / Edit / View / Go / Message / Tools / Help), Get Messages / Write /
-Tag / Quick Filter toolbar, account → folder TreeView, thread TableView
-(star, attachment, subject, correspondent, date, size), message preview
-(or classic preview-below), status unread + online, and a second Write
-window (To / Cc / Bcc / Subject / TextArea).
+`go run ./cmd/mailclientui` is toolkit dogfood, not a Mozilla clone.
+**mailclientd** owns the store (accounts, folders, search, mutations).
+**mailclientui** is Thunderbird chrome only: identity picker, Account
+Central, folder TreeView with unread badges, thread TableView (Quick
+Filter is a `messages.list` RPC), preview + attachment list, compose
+and Preferences windows. Keyboard: n/p next/prev, # delete, r reply,
+f forward, c compose — see [docs/mail.md](docs/mail.md).
 
-**Demo (v1):** `internal/mail.MemoryStore` — two accounts, special-use
-folders, ~150 in-memory messages. Get Messages injects a few arrivals.
-Send files to Sent; Save Draft writes Drafts. No sockets.
+**Demo:** MemoryStore in the daemon (two accounts, ~150 messages). The
+UI always talks JSON-RPC on a Unix socket (`$XDG_RUNTIME_DIR/mailclientd.sock`
+or `/tmp/mailclientd-<uid>.sock`).
 
-**Later IMAP/SMTP:** implement `mail.Store` (LIST / FETCH / STORE / MOVE /
-APPEND / IDLE). SMTP is `Send` then Append to Sent. The 3-pane does not
-need a rewrite — see the interface comment in
-[`internal/mail/store.go`](internal/mail/store.go).
+**IMAP:** skeleton in mailclientd only (`UITK_MAIL=imap` + `UITK_MAIL_HOST` /
+`USER` / `PASS`). CONNECT/LOGIN/SELECT/FETCH/STORE. Not production.
+Missing env → clear Health error. SMTP is still “file in Sent”.
 
 ```bash
-UITK_SCENE=auto go run ./examples/mail
+go run ./cmd/mailclientd
+UITK_SCENE=auto go run ./cmd/mailclientui
 go run ./examples/mail -classic -light
 ```
 
@@ -298,7 +306,7 @@ dismiss order, textarea newline/wrap/nav, switch toggle (including
 disabled), accordion exclusive expand and focus yield, expander
 relayout, separator and spacer measure, IME preedit/commit on text
 widgets, and an offscreen paint that produces real pixels.
-`go test ./examples/gallery` regenerates the twenty-three PNGs and fails if
+`go test ./examples/gallery` regenerates the twenty-four PNGs and fails if
 any two share a blob.
 
 Keyboard map: [docs/keyboard.md](docs/keyboard.md). **Esc** closes
@@ -338,9 +346,17 @@ X11 and Wayland as of **v0.3.0**. GPU present (`UITK_PAINT=auto`) is **v0.5.0**.
 Event-driven `Run` (wait on the display fd) is **v0.5.1**.
 Retained scene graph (Qt Quick / GSK lite) is **v0.6.0**.
 Virtualized list/table/tree row reuse is **v0.6.1**.
-Mail (Thunderbird 3-pane dogfood) is **v0.7.0**.
+Mail process split (mailclientd + mailclientui) is **v0.8.0**.
 
 ## Version
+
+**0.8.0** — Mail splits into **mailclientd** (Unix JSON-RPC daemon,
+MemoryStore default, skeleton IMAP behind `UITK_MAIL=imap`) and
+**mailclientui** (Thunderbird chrome only). Quick Filter is
+daemon-side, unread bold + folder badges, attachment list, Account
+Central / identity picker, Preferences stub, n/p/#/r/f/c shortcuts.
+Docs: [docs/mail.md](docs/mail.md). Screenshots `mail-*.png` including
+`mail-prefs.png`. Still paintengine2d **v0.9.0**.
 
 **0.7.0** — `examples/mail`: Thunderbird-chrome 3-pane client (MenuBar
 File/Edit/View/Go/Message/Tools/Help, Mail toolbar, folder TreeView,

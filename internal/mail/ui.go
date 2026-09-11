@@ -1,12 +1,15 @@
 package mail
 
 import (
+	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit"
 	"github.com/codemodify/uitoolkit/app"
+	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
 	"github.com/codemodify/uitoolkit/widgets"
@@ -29,53 +32,79 @@ type AppOptions struct {
 	ShowFilter bool
 }
 
-// MailApp is the Thunderbird-chrome 3-pane on a demo Store.
+// MailApp starts an in-process mailclientd (MemoryStore) and the UI client.
 func MailApp(a *app.Application, win *app.Window) widget.Component {
-	return Open(a, win, NewDemoStore(), AppOptions{ShowFilter: true})
+	sock, _, err := StartDemo(context.Background())
+	if err != nil {
+		return widgets.NewLabel("mailclientd: " + err.Error())
+	}
+	cli, err := DialWait(sock, 2*time.Second)
+	if err != nil {
+		return widgets.NewLabel(err.Error())
+	}
+	return Open(a, win, cli, AppOptions{ShowFilter: true})
 }
 
-// Open builds the Mail chrome against any Store.
-func Open(a *app.Application, win *app.Window, store Store, opts AppOptions) widget.Component {
-	s := newSession(a, win, store, opts)
+// Open builds the Mail chrome against a mailclientd Client (no Store / IMAP).
+func Open(a *app.Application, win *app.Window, cli *Client, opts AppOptions) widget.Component {
+	s := newSession(a, win, cli, opts)
 	return s.build()
 }
 
 type session struct {
-	app   *app.Application
-	win   *app.Window
-	store Store
-	opts  AppOptions
+	app  *app.Application
+	win  *app.Window
+	cli  *Client
+	opts AppOptions
 
-	folder   FolderID
-	selected []MessageID
-	filter   Filter
-	sortCol  int
-	sortAsc  bool
-	online   bool
-	rows     []Message
-	kind     FolderKind
+	folder    FolderID
+	account   string
+	central   bool // Account Central instead of the thread list
+	selected  []MessageID
+	filter    Filter
+	sortCol   int
+	sortAsc   bool
+	online    bool
+	rows      []Message
+	kind      FolderKind
+	backend   string
+	attachSel int
+	attNames  []string
 
 	table                                      *widgets.TableView
 	tree                                       *widgets.TreeView
 	preview                                    *widgets.TextArea
 	source                                     *widgets.TextArea
+	attachList                                 *widgets.ListView
 	hdrFrom, hdrSubj, hdrDate, hdrTo, hdrExtra *widgets.Label
 	status                                     *widgets.StatusBar
 	qf                                         *widgets.TextField
 	qfBar                                      widget.Component
+	identity                                   *widgets.ComboBox
 	unreadTg                                   *widgets.ToolItem
 	starTg                                     *widgets.ToolItem
 	attachTg                                   *widgets.ToolItem
+	senderTg, recipTg, subjTg, bodyTg          *widgets.ToolItem
 	chrome                                     *widgets.TitleBar
 	folderL                                    *widgets.Label
+	acctPanel                                  widget.Component
+	acctTitle                                  *widgets.Label
+	acctBody                                   *widgets.Label
+	thread                                     widget.Component
+	center                                     *widgets.Stack
 }
 
-func newSession(a *app.Application, win *app.Window, store Store, opts AppOptions) *session {
+func newSession(a *app.Application, win *app.Window, cli *Client, opts AppOptions) *session {
 	s := &session{
-		app: a, win: win, store: store, opts: opts,
+		app: a, win: win, cli: cli, opts: opts,
 		sortCol: 4, sortAsc: false, online: true,
 	}
-	if inbox, ok := specialFolder(store, firstAccountID(store), FolderInbox); ok {
+	if st, err := cli.Status(); err == nil {
+		s.backend = st.Backend
+		s.online = st.Online
+	}
+	s.account = firstAccountID(cli)
+	if inbox, ok := specialFolderClient(cli, s.account, FolderInbox); ok {
 		s.folder = inbox.ID
 	}
 	return s
@@ -115,6 +144,12 @@ func (s *session) build() widget.Component {
 	}, 0, s.cellText, func(i int) {
 		s.clickRow(i, false)
 	})
+	s.table.CellBold = func(row, col int) bool {
+		if row < 0 || row >= len(s.rows) {
+			return false
+		}
+		return !s.rows[row].Read
+	}
 	s.table.OnSort = func(col int, asc bool) {
 		s.sortCol, s.sortAsc = col, asc
 		s.refreshList()
@@ -135,14 +170,11 @@ func (s *session) build() widget.Component {
 		id, ok := n.Data.(FolderID)
 		if !ok || id == "" {
 			if acct, ok := n.Data.(string); ok {
-				if inbox, ok := specialFolder(s.store, acct, FolderInbox); ok {
-					s.folder = inbox.ID
-					s.selected = nil
-					s.refreshAll()
-				}
+				s.showAccountCentral(acct)
 			}
 			return
 		}
+		s.central = false
 		s.folder = id
 		s.selected = nil
 		s.refreshAll()
@@ -186,6 +218,30 @@ func (s *session) build() widget.Component {
 		s.refreshList()
 	})
 	s.attachTg.Tip = "Show only with attachment"
+	s.senderTg = widgets.ToolToggle("From", s.filter.Sender, func() {
+		s.filter.Sender = !s.filter.Sender
+		s.senderTg.Down = s.filter.Sender
+		s.refreshList()
+	})
+	s.senderTg.Tip = "Search From"
+	s.recipTg = widgets.ToolToggle("To", s.filter.Recipients, func() {
+		s.filter.Recipients = !s.filter.Recipients
+		s.recipTg.Down = s.filter.Recipients
+		s.refreshList()
+	})
+	s.recipTg.Tip = "Search To / Cc"
+	s.subjTg = widgets.ToolToggle("Subject", s.filter.SubjectOnly, func() {
+		s.filter.SubjectOnly = !s.filter.SubjectOnly
+		s.subjTg.Down = s.filter.SubjectOnly
+		s.refreshList()
+	})
+	s.subjTg.Tip = "Search Subject"
+	s.bodyTg = widgets.ToolToggle("Body", s.filter.Body, func() {
+		s.filter.Body = !s.filter.Body
+		s.bodyTg.Down = s.filter.Body
+		s.refreshList()
+	})
+	s.bodyTg.Tip = "Search body"
 	tagCombo := widgets.NewComboBox(append([]string{"Tags"}, demoTags()...), 0, func(i int) {
 		if i <= 0 {
 			s.filter.Tag = ""
@@ -194,7 +250,7 @@ func (s *session) build() widget.Component {
 		}
 		s.refreshList()
 	})
-	pins := widgets.NewToolBar(s.unreadTg, s.starTg, s.attachTg)
+	pins := widgets.NewToolBar(s.unreadTg, s.starTg, s.attachTg, widgets.ToolDivider(), s.senderTg, s.recipTg, s.subjTg, s.bodyTg)
 	s.qfBar = widgets.NewRow(s.qf, pins, tagCombo).WithGap(8)
 	row, _ := s.qfBar.(*widgets.FlexBox)
 	if row != nil {
@@ -215,14 +271,41 @@ func (s *session) build() widget.Component {
 			s.mark("Source  ·  JetBrains Mono")
 		}
 	}
-	headCol := widgets.NewColumn(s.hdrSubj, s.hdrFrom, s.hdrTo, s.hdrDate, s.hdrExtra).WithGap(2).WithPad(8)
+	s.attachList = widgets.NewListView(0, func(i int) string {
+		if i < 0 || i >= len(s.attNames) {
+			return ""
+		}
+		return "📎  " + s.attNames[i]
+	}, func(i int) {
+		s.attachSel = i
+		if i >= 0 && i < len(s.attNames) {
+			s.mark("Attachment: " + s.attNames[i] + " (demo)")
+		}
+	})
+	s.attachList.RowHeight = 24
+	s.attachList.SetVisible(false)
+	headCol := widgets.NewColumn(s.hdrSubj, s.hdrFrom, s.hdrTo, s.hdrDate, s.hdrExtra, s.attachList).WithGap(2).WithPad(8)
 	previewCol := widgets.NewColumn(headCol, widgets.NewSeparator(), tabs).WithGap(0)
 	previewCol.AddFlex(tabs, 1)
 
 	thread := widgets.NewColumn(s.qfBar, s.table).WithGap(6).WithPad(6)
 	thread.AddFlex(s.table, 1)
+	s.thread = thread
+	s.acctPanel = s.buildAccountCentral()
+	s.acctPanel.SetVisible(false)
+	s.center = widgets.NewStack(thread, s.acctPanel)
+
+	idents := s.identityLabels()
+	s.identity = widgets.NewComboBox(idents, s.identityIndex(), func(i int) {
+		accts := s.accounts()
+		if i >= 0 && i < len(accts) {
+			s.showAccountCentral(accts[i].ID)
+		}
+	})
 
 	sidebar := widgets.NewColumn(
+		widgets.NewTitle("Account"),
+		s.identity,
 		widgets.NewTitle("Folders"),
 		s.tree,
 		s.folderL,
@@ -231,12 +314,12 @@ func (s *session) build() widget.Component {
 
 	var split *widgets.Splitter
 	if s.opts.Layout == LayoutClassic {
-		right := widgets.NewSplitter(false, thread, previewCol)
+		right := widgets.NewSplitter(false, s.center, previewCol)
 		right.Ratio = 0.42
 		split = widgets.NewSplitter(true, sidebar, right)
 		split.Ratio = 0.22
 	} else {
-		mid := widgets.NewSplitter(true, thread, previewCol)
+		mid := widgets.NewSplitter(true, s.center, previewCol)
 		mid.Ratio = 0.48
 		split = widgets.NewSplitter(true, sidebar, mid)
 		split.Ratio = 0.20
@@ -246,7 +329,7 @@ func (s *session) build() widget.Component {
 	root := widgets.NewColumn(s.menuBar(), s.toolBar(), s.chrome, split, s.status).WithGap(0)
 	root.AddFlex(split, 1)
 	s.refreshAll()
-	return root
+	return wrapShortcuts(root, s.handleKey)
 }
 
 func (s *session) menuBar() *widgets.MenuBar {
@@ -287,13 +370,15 @@ func (s *session) menuBar() *widgets.MenuBar {
 			widgets.ItemAccel("Select &All", "Ctrl+A", s.selectAll),
 			widgets.Sep(),
 			widgets.Item("Folder Properties", func() {
-				f, ok := s.store.Folder(s.folder)
-				if !ok {
+				f, ok, err := s.cli.GetFolder(s.folder)
+				if err != nil || !ok {
 					s.mark("No folder")
 					return
 				}
+				unread, _ := s.cli.Unread(f.ID)
+				list, _ := s.cli.ListMessages(f.ID, Filter{})
 				widgets.Info(s.win.Content(), "Folder Properties",
-					fmt.Sprintf("%s\n%s\n%d messages  ·  %d unread", f.Name, f.ID, len(s.store.List(f.ID)), s.store.Unread(f.ID)),
+					fmt.Sprintf("%s\n%s\n%d messages  ·  %d unread", f.Name, f.ID, len(list), unread),
 					nil)
 			}),
 		),
@@ -324,8 +409,8 @@ func (s *session) menuBar() *widgets.MenuBar {
 			}),
 		),
 		widgets.NewMenu("&Go",
-			widgets.ItemAccel("Next Message", "F8", func() { s.moveSel(1) }),
-			widgets.ItemAccel("Previous Message", "F7", func() { s.moveSel(-1) }),
+			widgets.ItemAccel("Next Message", "n", func() { s.moveSel(1) }),
+			widgets.ItemAccel("Previous Message", "p", func() { s.moveSel(-1) }),
 			widgets.Item("Next Unread Message", s.nextUnread),
 			widgets.Sep(),
 			widgets.Item("Inbox", func() { s.goKind(FolderInbox) }),
@@ -335,10 +420,10 @@ func (s *session) menuBar() *widgets.MenuBar {
 			widgets.Item("Trash", func() { s.goKind(FolderTrash) }),
 		),
 		widgets.NewMenu("&Message",
-			widgets.ItemAccel("&New Message", "Ctrl+N", s.write),
-			widgets.ItemAccel("&Reply", "Ctrl+R", s.reply),
+			widgets.ItemAccel("&New Message", "c", s.write),
+			widgets.ItemAccel("&Reply", "r", s.reply),
 			widgets.Item("Reply All", s.reply),
-			widgets.ItemAccel("&Forward", "Ctrl+L", s.forward),
+			widgets.ItemAccel("&Forward", "f", s.forward),
 			widgets.Sep(),
 			widgets.Item("Archive", s.archive),
 			widgets.ItemAccel("Mark as Read", "M", func() { s.setRead(true) }),
@@ -350,18 +435,11 @@ func (s *session) menuBar() *widgets.MenuBar {
 			widgets.Item("Tag · Personal", func() { s.toggleTag("Personal") }),
 			widgets.Item("Tag · To Do", func() { s.toggleTag("To Do") }),
 			widgets.Sep(),
-			widgets.ItemAccel("&Delete", "Del", s.deleteSel),
+			widgets.ItemAccel("&Delete", "#", s.deleteSel),
 		),
 		widgets.NewMenu("&Tools",
-			widgets.Item("Account Settings", func() {
-				var b strings.Builder
-				b.WriteString("Demo accounts (not IMAP):\n\n")
-				for _, a := range s.store.Accounts() {
-					fmt.Fprintf(&b, "  %s  <%s>\n", a.Name, a.Address)
-				}
-				b.WriteString("\nImplement Store on an IMAP client to wire this dialog.")
-				widgets.Info(s.win.Content(), "Account Settings", b.String(), nil)
-			}),
+			widgets.ItemAccel("Account Settings", "Ctrl+,", s.openPrefs),
+			widgets.Item("Preferences", s.openPrefs),
 			widgets.Item("Add-ons and Themes", func() {
 				widgets.Info(s.win.Content(), "Add-ons", "LookAndFeel is Dark / Light Classic. No XPI store.", nil)
 			}),
@@ -370,8 +448,7 @@ func (s *session) menuBar() *widgets.MenuBar {
 		),
 		widgets.NewMenu("&Help",
 			widgets.Item("Keyboard", func() {
-				widgets.Info(s.win.Content(), "Keyboard",
-					"F5 Get Messages · Ctrl+N Write · Ctrl+R Reply · Del Delete\nCtrl+F Quick Filter · F7 / F8 previous / next\nEsc closes tooltip → popup → overlay.", nil)
+				widgets.Info(s.win.Content(), "Keyboard", ShortcutHelp, nil)
 			}),
 			widgets.Item("About Mail", s.about),
 		),
@@ -479,26 +556,26 @@ func (s *session) cellText(row, col int) string {
 }
 
 func (s *session) visible() []Message {
-	f, ok := s.store.Folder(s.folder)
+	f, ok, _ := s.cli.GetFolder(s.folder)
 	kind := FolderInbox
 	if ok {
 		kind = f.Kind
 	}
 	s.kind = kind
-	all := s.store.List(s.folder)
-	out := make([]Message, 0, len(all))
-	for _, m := range all {
-		if s.filter.Match(m) {
-			out = append(out, m)
-		}
+	all, err := s.cli.ListMessages(s.folder, s.filter)
+	if err != nil {
+		s.mark(err.Error())
+		return nil
 	}
-	sortMessages(out, s.sortCol, s.sortAsc, kind)
-	return out
+	sortMessages(all, s.sortCol, s.sortAsc, kind)
+	return all
 }
 
 func (s *session) refreshAll() {
 	s.rebuildTree()
 	s.refreshList()
+	s.refreshAccount()
+	s.showCenter()
 	s.refreshStatus()
 }
 
@@ -524,33 +601,43 @@ func (s *session) rebuildTree() {
 	}
 	var roots []*widgets.TreeNode
 	var selected *widgets.TreeNode
-	for _, acct := range s.store.Accounts() {
+	acctUnread := 0
+	for _, acct := range s.accounts() {
 		node := widgets.NewTreeNode(acct.Address)
 		node.Data = acct.ID
 		node.Expanded = true
 		byParent := map[FolderID][]Folder{}
-		for _, f := range s.store.Folders(acct.ID) {
+		folders, _ := s.cli.ListFolders(acct.ID)
+		for _, f := range folders {
 			byParent[f.Parent] = append(byParent[f.Parent], f)
 		}
 		var addKids func(parent *widgets.TreeNode, pid FolderID)
 		addKids = func(parent *widgets.TreeNode, pid FolderID) {
 			for _, f := range byParent[pid] {
 				label := f.Name
-				if n := s.store.Unread(f.ID); n > 0 {
-					label = fmt.Sprintf("%s (%d)", f.Name, n)
+				nUnread, _ := s.cli.Unread(f.ID)
+				if nUnread > 0 {
+					label = fmt.Sprintf("%s (%d)", f.Name, nUnread)
+					acctUnread += nUnread
 				}
 				n := widgets.NewTreeNode(label)
 				n.Data = f.ID
+				n.Bold = nUnread > 0
 				n.Expanded = f.Kind == FolderArchive || len(byParent[f.ID]) > 0
 				addKids(n, f.ID)
 				parent.Children = append(parent.Children, n)
-				if f.ID == s.folder {
+				if f.ID == s.folder && !s.central {
 					selected = n
 				}
 			}
 		}
 		addKids(node, "")
+		node.Bold = acctUnread > 0
+		if s.central && s.account == acct.ID {
+			selected = node
+		}
 		roots = append(roots, node)
+		acctUnread = 0
 	}
 	s.tree.Roots = roots
 	s.tree.Selected = selected
@@ -573,8 +660,8 @@ func (s *session) clickRow(i int, add bool) {
 		s.table.Selected = i
 		s.table.Invalidate()
 	}
-	if m, ok := s.store.Get(id); ok && !m.Read {
-		_ = s.store.SetFlags(id, FlagPatch{Read: boolPtr(true)})
+	if m, ok, _ := s.cli.GetMessage(id); ok && !m.Read {
+		_ = s.cli.SetFlags(id, FlagPatch{Read: boolPtr(true)})
 		s.rows = s.visible()
 		s.rebuildTree()
 	}
@@ -608,7 +695,11 @@ func (s *session) primary() (Message, bool) {
 	if len(s.selected) == 0 {
 		return Message{}, false
 	}
-	return s.store.Get(s.selected[len(s.selected)-1])
+	m, ok, err := s.cli.GetMessage(s.selected[len(s.selected)-1])
+	if err != nil {
+		return Message{}, false
+	}
+	return m, ok
 }
 
 func (s *session) loadPreview() {
@@ -627,6 +718,11 @@ func (s *session) loadPreview() {
 			s.hdrDate.SetText("")
 			s.hdrExtra.SetText("")
 		}
+		s.attNames = nil
+		if s.attachList != nil {
+			s.attachList.Count = 0
+			s.attachList.SetVisible(false)
+		}
 		if s.chrome != nil {
 			s.chrome.SetSubtitle(s.subtitle())
 		}
@@ -641,17 +737,19 @@ func (s *session) loadPreview() {
 		if len(m.Tags) > 0 {
 			extra = "Tags: " + strings.Join(m.Tags, ", ")
 		}
+		if m.HasAttach && extra != "" {
+			extra += "  ·  "
+		}
 		if m.HasAttach {
-			att := strings.Join(m.Attachments, ", ")
-			if att == "" {
-				att = "yes"
-			}
-			if extra != "" {
-				extra += "  ·  "
-			}
-			extra += "Attachments: " + att
+			extra += fmt.Sprintf("%d attachment(s)", len(m.Attachments))
 		}
 		s.hdrExtra.SetText(extra)
+	}
+	s.attNames = append([]string(nil), m.Attachments...)
+	if s.attachList != nil {
+		s.attachList.Count = len(s.attNames)
+		s.attachList.SetVisible(len(s.attNames) > 0)
+		s.attachList.Invalidate()
 	}
 	if s.preview != nil {
 		s.preview.SetText(m.Body)
@@ -668,9 +766,9 @@ func (s *session) refreshStatus() {
 	if s.status == nil {
 		return
 	}
-	unread := s.store.UnreadTotal()
+	unread, _ := s.cli.UnreadTotal()
 	name := string(s.folder)
-	if f, ok := s.store.Folder(s.folder); ok {
+	if f, ok, _ := s.cli.GetFolder(s.folder); ok {
 		name = f.Name
 	}
 	sel := ""
@@ -680,9 +778,9 @@ func (s *session) refreshStatus() {
 	s.status.Set(0, fmt.Sprintf("%d unread%s", unread, sel))
 	s.status.Set(1, fmt.Sprintf("%s  ·  %d shown", name, len(s.rows)))
 	if s.online {
-		s.status.Set(2, "Online")
+		s.status.Set(2, "Online · "+s.backendLabel())
 	} else {
-		s.status.Set(2, "Offline")
+		s.status.Set(2, "Offline · "+s.backendLabel())
 	}
 	s.status.Set(3, "v"+uitoolkit.Version)
 	if s.folderL != nil {
@@ -691,12 +789,12 @@ func (s *session) refreshStatus() {
 }
 
 func (s *session) subtitle() string {
-	f, ok := s.store.Folder(s.folder)
+	f, ok, _ := s.cli.GetFolder(s.folder)
 	folder := "Mail"
 	acct := ""
 	if ok {
 		folder = f.Name
-		for _, a := range s.store.Accounts() {
+		for _, a := range s.accounts() {
 			if a.ID == f.AccountID {
 				acct = a.Address
 			}
@@ -726,7 +824,7 @@ func (s *session) ids() []MessageID {
 }
 
 func (s *session) write() {
-	_, err := OpenCompose(s.app, s.store, ComposeOptions{OnChange: s.refreshAll})
+	_, err := OpenCompose(s.app, s.cli, ComposeOptions{OnChange: s.refreshAll})
 	if err != nil {
 		widgets.Warn(s.win.Content(), "Write", err.Error(), nil)
 		return
@@ -741,7 +839,7 @@ func (s *session) reply() {
 		return
 	}
 	cp := m.Clone()
-	_, err := OpenCompose(s.app, s.store, ComposeOptions{ReplyTo: &cp, OnChange: s.refreshAll})
+	_, err := OpenCompose(s.app, s.cli, ComposeOptions{ReplyTo: &cp, OnChange: s.refreshAll})
 	if err != nil {
 		widgets.Warn(s.win.Content(), "Reply", err.Error(), nil)
 	}
@@ -754,7 +852,7 @@ func (s *session) forward() {
 		return
 	}
 	cp := m.Clone()
-	_, err := OpenCompose(s.app, s.store, ComposeOptions{Forward: &cp, OnChange: s.refreshAll})
+	_, err := OpenCompose(s.app, s.cli, ComposeOptions{Forward: &cp, OnChange: s.refreshAll})
 	if err != nil {
 		widgets.Warn(s.win.Content(), "Forward", err.Error(), nil)
 	}
@@ -762,7 +860,7 @@ func (s *session) forward() {
 
 func (s *session) getMessages() {
 	acct := s.accountID()
-	n, err := s.store.Fetch(acct)
+	n, err := s.cli.Fetch(acct)
 	if err != nil {
 		widgets.Warn(s.win.Content(), "Get Messages", err.Error(), nil)
 		return
@@ -777,7 +875,7 @@ func (s *session) getMessages() {
 
 func (s *session) setRead(read bool) {
 	for _, id := range s.ids() {
-		_ = s.store.SetFlags(id, FlagPatch{Read: boolPtr(read)})
+		_ = s.cli.SetFlags(id, FlagPatch{Read: boolPtr(read)})
 	}
 	s.refreshAll()
 }
@@ -789,7 +887,7 @@ func (s *session) toggleStar() {
 	}
 	star := !m.Starred
 	for _, id := range s.ids() {
-		_ = s.store.SetFlags(id, FlagPatch{Starred: boolPtr(star)})
+		_ = s.cli.SetFlags(id, FlagPatch{Starred: boolPtr(star)})
 	}
 	s.refreshAll()
 }
@@ -800,12 +898,12 @@ func (s *session) toggleTag(tag string) {
 		return
 	}
 	for _, id := range s.ids() {
-		m, ok := s.store.Get(id)
-		if !ok {
+		m, ok, err := s.cli.GetMessage(id)
+		if err != nil || !ok {
 			continue
 		}
 		next := toggleTag(m.Tags, tag)
-		_ = s.store.SetFlags(id, FlagPatch{Tags: &next})
+		_ = s.cli.SetFlags(id, FlagPatch{Tags: &next})
 	}
 	s.refreshAll()
 	s.mark("Tag " + tag)
@@ -816,7 +914,7 @@ func (s *session) deleteSel() {
 	if len(ids) == 0 {
 		return
 	}
-	if err := s.store.Delete(ids); err != nil {
+	if err := s.cli.Delete(ids); err != nil {
 		widgets.Warn(s.win.Content(), "Delete", err.Error(), nil)
 		return
 	}
@@ -830,12 +928,12 @@ func (s *session) junk() {
 	if len(ids) == 0 {
 		return
 	}
-	junk, ok := specialFolder(s.store, s.accountID(), FolderJunk)
+	junk, ok := specialFolderClient(s.cli, s.accountID(), FolderJunk)
 	if !ok {
 		s.mark("No Junk folder")
 		return
 	}
-	if err := s.store.Move(ids, junk.ID); err != nil {
+	if err := s.cli.Move(ids, junk.ID); err != nil {
 		widgets.Warn(s.win.Content(), "Junk", err.Error(), nil)
 		return
 	}
@@ -849,12 +947,12 @@ func (s *session) archive() {
 	if len(ids) == 0 {
 		return
 	}
-	arch, ok := specialFolder(s.store, s.accountID(), FolderArchive)
+	arch, ok := specialFolderClient(s.cli, s.accountID(), FolderArchive)
 	if !ok {
 		s.mark("No Archives folder")
 		return
 	}
-	if err := s.store.Move(ids, arch.ID); err != nil {
+	if err := s.cli.Move(ids, arch.ID); err != nil {
 		widgets.Warn(s.win.Content(), "Archive", err.Error(), nil)
 		return
 	}
@@ -864,12 +962,12 @@ func (s *session) archive() {
 }
 
 func (s *session) emptyTrash() {
-	trash, ok := specialFolder(s.store, s.accountID(), FolderTrash)
+	trash, ok := specialFolderClient(s.cli, s.accountID(), FolderTrash)
 	if !ok {
 		s.mark("No Trash")
 		return
 	}
-	list := s.store.List(trash.ID)
+	list, _ := s.cli.ListMessages(trash.ID, Filter{})
 	if len(list) == 0 {
 		s.mark("Trash is empty")
 		return
@@ -885,7 +983,7 @@ func (s *session) emptyTrash() {
 			for i, m := range list {
 				ids[i] = m.ID
 			}
-			_ = s.store.Delete(ids)
+			_ = s.cli.Delete(ids)
 			s.selected = nil
 			s.refreshAll()
 			s.mark("Trash emptied")
@@ -894,18 +992,15 @@ func (s *session) emptyTrash() {
 
 func (s *session) newFolder() {
 	acct := s.accountID()
-	ms, ok := s.store.(*MemoryStore)
-	if !ok {
-		widgets.Info(s.win.Content(), "New Folder",
-			"MemoryStore can add folders in-process. An IMAP Store would send CREATE.", nil)
+	folders, _ := s.cli.ListFolders(acct)
+	name := fmt.Sprintf("New Folder %d", len(folders)+1)
+	f, err := s.cli.CreateFolder(acct, name, "")
+	if err != nil {
+		widgets.Warn(s.win.Content(), "New Folder", err.Error(), nil)
 		return
 	}
-	name := fmt.Sprintf("New Folder %d", len(ms.Folders(acct))+1)
-	ms.mu.Lock()
-	id := FolderID(fmt.Sprintf("%s/%s", acct, strings.ToLower(strings.ReplaceAll(name, " ", "-"))))
-	ms.folders = append(ms.folders, Folder{ID: id, AccountID: acct, Name: name, Kind: FolderCustom})
-	ms.mu.Unlock()
-	s.folder = id
+	s.central = false
+	s.folder = f.ID
 	s.selected = nil
 	s.refreshAll()
 	s.mark("Created " + name)
@@ -948,7 +1043,8 @@ func (s *session) nextUnread() {
 }
 
 func (s *session) goKind(k FolderKind) {
-	if f, ok := specialFolder(s.store, s.accountID(), k); ok {
+	if f, ok := specialFolderClient(s.cli, s.accountID(), k); ok {
+		s.central = false
 		s.folder = f.ID
 		s.selected = nil
 		s.refreshAll()
@@ -967,27 +1063,186 @@ func (s *session) toggleFilter() {
 func (s *session) about() {
 	widgets.Info(s.win.Content(), "About Mail",
 		"Mail — Thunderbird chrome on uitoolkit "+uitoolkit.Version+".\n"+
-			"Dogfood: MenuBar, ToolBar, TreeView, TableView, Splitter,\n"+
-			"TabView, TextArea, MessageBox, tooltips, retained scene.\n\n"+
-			"Demo Store is in-memory (maildir-ish flags).\n"+
-			"IMAP/SMTP: implement mail.Store — see internal/mail/store.go.\n\n"+
-			"UI: Titillium Web. Source tab: JetBrains Mono.",
+			"mailclientui talks JSON-RPC to mailclientd (Unix socket).\n"+
+			"No IMAP in this process. Demo backend is MemoryStore.\n\n"+
+			"UI: Titillium Web. Source tab: JetBrains Mono.\n"+
+			"See docs/mail.md",
 		nil)
 }
 
 func (s *session) accountID() string {
-	if f, ok := s.store.Folder(s.folder); ok {
+	if s.account != "" {
+		return s.account
+	}
+	if f, ok, _ := s.cli.GetFolder(s.folder); ok {
 		return f.AccountID
 	}
-	return firstAccountID(s.store)
+	return firstAccountID(s.cli)
 }
 
-func firstAccountID(store Store) string {
-	accts := store.Accounts()
-	if len(accts) == 0 {
+func firstAccountID(cli *Client) string {
+	accts, err := cli.Accounts()
+	if err != nil || len(accts) == 0 {
 		return ""
 	}
 	return accts[0].ID
+}
+
+func (s *session) accounts() []Account {
+	a, err := s.cli.Accounts()
+	if err != nil {
+		s.mark(err.Error())
+		return nil
+	}
+	return a
+}
+
+func (s *session) identityLabels() []string {
+	accts := s.accounts()
+	out := make([]string, 0, len(accts))
+	for _, a := range accts {
+		out = append(out, fmt.Sprintf("%s <%s>", a.Name, a.Address))
+	}
+	if len(out) == 0 {
+		out = []string{"(no account)"}
+	}
+	return out
+}
+
+func (s *session) identityIndex() int {
+	accts := s.accounts()
+	for i, a := range accts {
+		if a.ID == s.account {
+			return i
+		}
+	}
+	return 0
+}
+
+func (s *session) backendLabel() string {
+	if s.backend == "" {
+		return "mailclientd"
+	}
+	return s.backend
+}
+
+func (s *session) showAccountCentral(acct string) {
+	s.account = acct
+	s.central = true
+	if inbox, ok := specialFolderClient(s.cli, acct, FolderInbox); ok {
+		s.folder = inbox.ID
+	}
+	s.selected = nil
+	s.refreshAll()
+	s.showCenter()
+}
+
+func (s *session) showCenter() {
+	if s.thread != nil {
+		s.thread.SetVisible(!s.central)
+	}
+	if s.acctPanel != nil {
+		s.acctPanel.SetVisible(s.central)
+	}
+	if s.win != nil {
+		s.win.RequestLayout()
+	}
+}
+
+func (s *session) buildAccountCentral() widget.Component {
+	s.acctTitle = widgets.NewTitle("Account Central")
+	s.acctBody = widgets.NewLabel("Select an identity in the picker or folder tree.")
+	get := widgets.NewButton("Get Messages", s.getMessages)
+	write := widgets.NewButton("Write", s.write)
+	prefs := widgets.NewButton("Account Settings", s.openPrefs)
+	inbox := widgets.NewButton("Open Inbox", func() {
+		s.goKind(FolderInbox)
+	})
+	return widgets.NewColumn(s.acctTitle, s.acctBody, widgets.NewSeparator(),
+		widgets.NewRow(get, write, inbox, prefs).WithGap(8),
+	).WithGap(10).WithPad(16)
+}
+
+func (s *session) refreshAccount() {
+	if s.identity != nil {
+		s.identity.Items = s.identityLabels()
+		s.identity.Selected = s.identityIndex()
+		s.identity.Invalidate()
+	}
+	if s.acctTitle == nil {
+		return
+	}
+	name, addr := "Account", ""
+	for _, a := range s.accounts() {
+		if a.ID == s.account {
+			name, addr = a.Name, a.Address
+			break
+		}
+	}
+	unread, _ := s.cli.UnreadTotal()
+	st, _ := s.cli.Status()
+	s.acctTitle.SetText(name)
+	s.acctBody.SetText(fmt.Sprintf("%s\n\nIdentity for this window.\nUnread (all folders): %d\nDaemon: %s  ·  %s\nSocket: %s\n\nGet Messages, Write, or open Inbox — IMAP stays in mailclientd.",
+		addr, unread, st.Backend, s.backendLabel(), s.cli.Socket))
+}
+
+func (s *session) openPrefs() {
+	if _, err := OpenPrefs(s.app, s.cli); err != nil {
+		widgets.Warn(s.win.Content(), "Preferences", err.Error(), nil)
+		return
+	}
+	s.mark("Preferences")
+}
+
+func (s *session) handleKey(e widget.KeyEvent) bool {
+	if isTextFocus(s.win.Focus()) {
+		return false
+	}
+	if e.Mods.Ctrl() || e.Mods.Alt() {
+		if e.Mods.Ctrl() && e.Key == platform.KeyComma {
+			s.openPrefs()
+			return true
+		}
+		return false
+	}
+	if isHashDelete(e) || e.Key == platform.KeyDelete {
+		s.deleteSel()
+		return true
+	}
+	switch e.Key {
+	case platform.KeyN:
+		s.moveSel(1)
+		return true
+	case platform.KeyP:
+		s.moveSel(-1)
+		return true
+	case platform.KeyR:
+		s.reply()
+		return true
+	case platform.KeyF:
+		s.forward()
+		return true
+	case platform.KeyC:
+		s.write()
+		return true
+	case platform.KeyM:
+		s.setRead(true)
+		return true
+	}
+	return false
+}
+
+func specialFolderClient(cli *Client, accountID string, kind FolderKind) (Folder, bool) {
+	folders, err := cli.ListFolders(accountID)
+	if err != nil {
+		return Folder{}, false
+	}
+	for _, f := range folders {
+		if f.Kind == kind && f.Parent == "" {
+			return f, true
+		}
+	}
+	return Folder{}, false
 }
 
 func demoTags() []string {

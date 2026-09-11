@@ -31,6 +31,12 @@ func KeyFromKeysym(ks uint64) Key {
 		return KeyPageDown
 	case 0x0020:
 		return KeySpace
+	case 0x0033:
+		return Key3
+	case 0x0023:
+		return KeyHash
+	case 0x002c:
+		return KeyComma
 	case 0xffbe:
 		return KeyF1
 	case 0xffbf:

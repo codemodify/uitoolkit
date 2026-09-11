@@ -31,6 +31,9 @@ const (
 	KeyPageUp
 	KeyPageDown
 	KeySpace
+	Key3
+	KeyHash
+	KeyComma
 	KeyA
 	KeyB
 	KeyC

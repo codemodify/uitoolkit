@@ -14,6 +14,7 @@ type TreeNode struct {
 	Label    string
 	Children []*TreeNode
 	Expanded bool
+	Bold     bool
 	Data     any
 }
 
@@ -141,12 +142,15 @@ func (t *TreeView) Paint(ctx *paintengine2d.Context) {
 				if n.Leaf() {
 					extra |= 2
 				}
+				if n.Bold {
+					extra |= 4
+				}
 				return visualSig(n == t.Selected, n == t.hover, extra, n.Label)
 			},
 			func(i int) {
 				n := rows[i].node
 				y := float32(i) * rh
-				lk.DrawTreeRow(ctx, paintengine2d.XYWH(0, y, b.Dx(), rh), n == t.Selected, n == t.hover, n.Expanded, n.Leaf(), rows[i].depth, n.Label)
+				lk.DrawTreeRow(ctx, paintengine2d.XYWH(0, y, b.Dx(), rh), n == t.Selected, n == t.hover, n.Expanded, n.Leaf(), rows[i].depth, n.Label, n.Bold)
 			},
 		)
 	} else {
@@ -154,7 +158,7 @@ func (t *TreeView) Paint(ctx *paintengine2d.Context) {
 			y := float32(i)*rh - t.OffsetY
 			row := paintengine2d.XYWH(0, y, b.Dx(), rh)
 			n := rows[i].node
-			lk.DrawTreeRow(ctx, row, n == t.Selected, n == t.hover, n.Expanded, n.Leaf(), rows[i].depth, n.Label)
+			lk.DrawTreeRow(ctx, row, n == t.Selected, n == t.hover, n.Expanded, n.Leaf(), rows[i].depth, n.Label, n.Bold)
 		}
 	}
 	ctx.Restore()
