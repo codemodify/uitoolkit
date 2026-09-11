@@ -839,8 +839,16 @@ func (l *Classic) DrawTableHeader(ctx *paintengine2d.Context, b paintengine2d.Re
 	ctx.DrawRect(paintengine2d.XYWH(b.Max.X-1, b.Min.Y+6, 1, b.Dy()-12), paintengine2d.Fill(p.Divider))
 	ctx.DrawRect(paintengine2d.XYWH(b.Min.X, b.Max.Y-1, b.Dx(), 1), paintengine2d.Fill(p.Divider))
 	pad := float32(8)
+	chevW := float32(0)
+	if sorted {
+		chevW = 14
+	}
 	ty := b.Min.Y + (b.Dy()-l.body.Height())*0.5
-	l.body.Draw(ctx, label, paintengine2d.Pt(b.Min.X+pad, ty), p.Text)
+	inner := paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad-chevW-4, b.Dy())
+	ctx.Save()
+	ctx.ClipRect(inner)
+	l.body.Draw(ctx, l.body.Fit(label, inner.Dx()), paintengine2d.Pt(inner.Min.X, ty), p.Text)
+	ctx.Restore()
 	if sorted {
 		cx := b.Max.X - 12
 		cy := (b.Min.Y + b.Max.Y) * 0.5
@@ -867,13 +875,19 @@ func (l *Classic) DrawTableCell(ctx *paintengine2d.Context, b paintengine2d.Rect
 		ctx.DrawRect(b, paintengine2d.Fill(p.Highlight))
 	}
 	f := l.faceOrBody(face)
+	pad := float32(8)
+	avail := b.Dx() - pad*2
+	if avail < 4 {
+		avail = 4
+	}
+	label = f.Fit(label, avail)
 	tw := f.Advance(label)
-	x := b.Min.X + 8
+	x := b.Min.X + pad
 	switch align {
 	case AlignCenter:
 		x = b.Min.X + (b.Dx()-tw)*0.5
 	case AlignEnd:
-		x = b.Max.X - tw - 8
+		x = b.Max.X - tw - pad
 	}
 	ty := b.Min.Y + (b.Dy()-f.Height())*0.5
 	ctx.Save()

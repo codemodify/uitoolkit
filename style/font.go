@@ -22,6 +22,39 @@ type Font struct {
 	ot      *otAtlas
 }
 
+// Fit returns text, or a prefix plus an ellipsis, that fits in maxW.
+func (f *Font) Fit(text string, maxW float32) string {
+	if f == nil || text == "" {
+		return ""
+	}
+	if maxW <= 0 {
+		return ""
+	}
+	if f.Advance(text) <= maxW {
+		return text
+	}
+	const ell = "…"
+	ew := f.Advance(ell)
+	if maxW <= ew {
+		return ell
+	}
+	budget := maxW - ew
+	n := 0
+	var acc float32
+	for _, r := range text {
+		adv := f.runeAdvance(r)
+		if acc+adv > budget {
+			break
+		}
+		acc += adv
+		n++
+	}
+	if n <= 0 {
+		return ell
+	}
+	return string([]rune(text)[:n]) + ell
+}
+
 func (f *Font) Measure(text string) paintengine2d.Point {
 	if f == nil {
 		return paintengine2d.Point{}

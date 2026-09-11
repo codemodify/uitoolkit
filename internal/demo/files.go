@@ -352,7 +352,7 @@ func main() {
 				{Name: "export.go", Kind: "Go", Size: "9 KB", Modified: "Today", Body: "package uitoolkit\n\n// public widgets\n"},
 				{Name: "README.md", Kind: "Markdown", Size: "8 KB", Modified: "Today", Body: readme},
 				{Name: "go.mod", Kind: "Go module", Size: "120 B", Modified: "Tue", Body: "module github.com/codemodify/uitoolkit\n\ngo 1.22.2\n"},
-				{Name: "version.go", Kind: "Go", Size: "80 B", Modified: "Today", Body: "package uitoolkit\n\nconst Version = \"0.8.1\"\n"},
+				{Name: "version.go", Kind: "Go", Size: "80 B", Modified: "Today", Body: "package uitoolkit\n\nconst Version = \"0.8.2\"\n"},
 			},
 		},
 		{

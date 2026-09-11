@@ -1,6 +1,6 @@
 # Keyboard map
 
-Focus and shortcuts for uitoolkit **v0.8.1**. Esc always tears down
+Focus and shortcuts for uitoolkit **v0.8.2**. Esc always tears down
 floating chrome in one order, everywhere: **tooltip → popup → overlay**.
 
 ## Global

@@ -42,6 +42,30 @@ func TestBakeFontDrawsKnownGlyphs(t *testing.T) {
 	}
 }
 
+func TestFontFitEllipsis(t *testing.T) {
+	f := BakeFont(16, paintengine2d.White)
+	full := "Welcome to Mail on uitoolkit"
+	if got := f.Fit(full, f.Advance(full)+1); got != full {
+		t.Fatalf("wide fit %q", got)
+	}
+	got := f.Fit(full, f.Advance("Welcome to Mail"))
+	if got == full || got == "" {
+		t.Fatalf("should truncate, got %q", got)
+	}
+	if got[len(got)-3:] != "…" && !containsEllipsis(got) {
+		t.Fatalf("missing ellipsis %q", got)
+	}
+}
+
+func containsEllipsis(s string) bool {
+	for _, r := range s {
+		if r == '…' {
+			return true
+		}
+	}
+	return false
+}
+
 func TestSpaceAdvanceKeepsWordGap(t *testing.T) {
 	f := BakeFont(16, paintengine2d.White)
 	space := f.Advance(" ")

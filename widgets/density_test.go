@@ -77,6 +77,49 @@ func TestTableTreeRowsFitScaledFont(t *testing.T) {
 	tree.Paint(ctx)
 }
 
+func TestTableFlexSubjectGetsLeftover(t *testing.T) {
+	tv := NewTableView([]TableColumn{
+		{Title: "★", Width: 28, MinWidth: 24},
+		{Title: "📎", Width: 28, MinWidth: 24},
+		{Title: "Subject", MinWidth: 180},
+		{Title: "Correspondents", Width: 148, MinWidth: 110},
+		{Title: "Date", Width: 108, MinWidth: 88},
+		{Title: "Size", Width: 72, MinWidth: 60},
+	}, 4, func(row, col int) string { return "x" }, nil)
+	tv.SetHost(&host{})
+	tv.Arrange(paintengine2d.XYWH(0, 0, 640, 200))
+	w := tv.ColumnWidths()
+	if len(w) != 6 {
+		t.Fatalf("cols %d", len(w))
+	}
+	sum := float32(0)
+	for _, x := range w {
+		sum += x
+	}
+	if sum < 639 || sum > 641 {
+		t.Fatalf("widths must fill row: %v sum=%v", w, sum)
+	}
+	if w[2] < 220 {
+		t.Fatalf("subject should flex, got %v (all %v)", w[2], w)
+	}
+	if w[3] < 110 || w[3] > 160 {
+		t.Fatalf("correspondents %v", w[3])
+	}
+
+	tv.Arrange(paintengine2d.XYWH(0, 0, 480, 200))
+	w = tv.ColumnWidths()
+	if w[2] < 160 {
+		t.Fatalf("narrow subject starved: %v", w)
+	}
+	sum = 0
+	for _, x := range w {
+		sum += x
+	}
+	if sum < 479 || sum > 481 {
+		t.Fatalf("narrow sum %v %v", sum, w)
+	}
+}
+
 func TestTableBoldUsesBodySizeNotTitle(t *testing.T) {
 	look := style.DarkLook()
 	if look.BoldFont().Size != look.Font().Size {
