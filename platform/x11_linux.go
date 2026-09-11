@@ -895,6 +895,13 @@ func (s *x11Surface) copyRect(r paintengine2d.Rect) {
 	if stride < s.img.Width*4 {
 		stride = s.img.Width * 4
 	}
+	// Typical LE TrueColor (red 0xff0000) is the same BGRA layout as
+	// Wayland XRGB8888 — one damage-rect swizzle, not NRGBAAt+pack
+	// per pixel (that path was ~70ms/frame at 1000×760).
+	if !s.msb && s.rmask == 0x00ff0000 && s.gmask == 0x0000ff00 && s.bmask == 0x000000ff {
+		copyImageRect(s.xbuf, stride, s.img, r, true, true)
+		return
+	}
 	for y := y0; y < y1; y++ {
 		row := y * stride
 		for x := x0; x < x1; x++ {

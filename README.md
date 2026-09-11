@@ -28,7 +28,7 @@ go get github.com/codemodify/paintengine2d@v0.7.2
 | Language | Go 1.22+ |
 | Paint | paintengine2d **v0.7.2** (`02b2939`; `Context`, `Damage`, `DrawGlyphs` Color tint) |
 | Fonts | Titillium Web (UI) + JetBrains Mono (code), OpenType → atlas |
-| Windowing | Linux X11 + Wayland (`linux-dmabuf` + explicit sync / `wl_shm`); offscreen always |
+| Windowing | Linux X11 + Wayland (`wl_shm` XRGB8888; opt-in `linux-dmabuf`); offscreen always |
 | CGO | optional — tests and screenshots are `CGO_ENABLED=0` |
 | License | MIT |
 
@@ -140,10 +140,10 @@ go run ./examples/files -headless   # writes files.png
 
 Headless / CI paints into `paintengine2d.NewImage` and can `Window.WritePNG`.
 On Linux with CGO the same buffer is presented with dirty rects from
-`paintengine2d.Damage`: **XPutImage** on X11, **linux-dmabuf** (else
-**wl_shm**) on Wayland. `UITK_WAYLAND_PRESENT=shm|dmabuf|auto` selects
-the Wayland path (`auto` prefers dmabuf when the compositor and
-GBM/dma-heap/udmabuf allow it).
+`paintengine2d.Damage`: **XPutImage** on X11, **wl_shm XRGB8888** on
+Wayland (`UITK_WAYLAND_PRESENT=auto|shm`). `UITK_WAYLAND_PRESENT=dmabuf`
+opts into linux-dmabuf (falls back to shm if the upload is blank). If a
+Wayland window is fully transparent, set `UITK_WAYLAND_PRESENT=shm`.
 Auto-select is `WAYLAND_DISPLAY` → `DISPLAY` → offscreen. Scale comes from
 `UITK_SCALE` / `GDK_SCALE` / `QT_SCALE_FACTOR` / `GDK_DPI_SCALE`, else
 Xft.dpi / RandR on X11 or `wl_output` / fractional-scale on Wayland.
@@ -186,8 +186,8 @@ retained tree (ideas only — no copied code).
 
 ```
 platform   window + event pump + present          Linux X11 (CLIPBOARD+PRIMARY,
-           (thin OS glue)                         XIM) and Wayland (dmabuf /
-                                                  wl_shm, xdg-shell, seat);
+           (thin OS glue)                         XIM) and Wayland (wl_shm
+                                                  XRGB8888, xdg-shell, seat);
                                                   Win / macOS stubs
 app        Application run loop, windows,         DPI/scale, backend select,
                                                   input routing
@@ -276,6 +276,14 @@ X11 and Wayland as of **v0.3.0**. Wayland **linux-dmabuf** present
 (with `wl_shm` fallback) is **v0.3.1**.
 
 ## Version
+
+**0.4.1** — Wayland present is opaque again: default `auto` is `wl_shm`
+`XRGB8888` + `set_opaque_region` (damage-only uint32 RGBA→BGRA, forced
+alpha, four present slots, no explicit-sync wait). `UITK_WAYLAND_PRESENT=dmabuf`
+is opt-in and falls back to shm on a blank upload. X11 LE TrueColor
+uses the same fast upload (no per-pixel `NRGBAAt`). Workaround for a
+transparent window: `UITK_WAYLAND_PRESENT=shm`. Still paintengine2d
+**v0.7.2**.
 
 **0.4.0** — Default UI is Titillium Web; mono is JetBrains Mono (OFL,
 embedded, rasterized at runtime). Files / Projects sample app. Wayland

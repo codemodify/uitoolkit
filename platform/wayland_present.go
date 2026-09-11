@@ -3,16 +3,18 @@ package platform
 import (
 	"os"
 	"strings"
+	"unsafe"
 
 	"github.com/codemodify/paintengine2d"
 )
 
 // UITK_WAYLAND_PRESENT selects the Wayland buffer import path.
 //
-//	auto   (default) — linux-dmabuf when the compositor advertises a usable
-//	                   format and a local allocator works; otherwise wl_shm
-//	dmabuf           — same preference as auto (still falls back to wl_shm)
+//	auto   (default) — wl_shm XRGB8888 (opaque). linux-dmabuf is opt-in until
+//	                   the GBM/heap upload is proven opaque on Mutter/Weston.
 //	shm              — force wl_shm
+//	dmabuf           — try linux-dmabuf (XRGB/XBGR when advertised); fall back
+//	                   to wl_shm on alloc failure or a blank first upload
 const (
 	EnvWaylandPresent    = "UITK_WAYLAND_PRESENT"
 	WaylandPresentAuto   = "auto"
@@ -69,11 +71,24 @@ func modifierCPUFriendly(mod uint64) bool {
 	return mod == drmModLinear || mod == drmModInvalid
 }
 
+func dmabufFormatOpaque(fmt uint32) bool {
+	return fmt == drmFormatXRGB8888 || fmt == drmFormatXBGR8888
+}
+
+// waylandWantDmabuf is true only for the explicit opt-in. auto equals shm
+// (v0.4.1): default/auto dmabuf presented a fully transparent window on
+// real compositors while UITK_WAYLAND_PRESENT=shm painted correctly.
+func waylandWantDmabuf() bool {
+	return WaylandPresentPref() == WaylandPresentDmabuf
+}
+
 func pickDmabufFormat(pairs []dmaFmtMod) (format uint32, modifier uint64, ok bool) {
 	if len(pairs) == 0 {
 		return 0, 0, false
 	}
-	order := []uint32{drmFormatARGB8888, drmFormatXRGB8888, drmFormatABGR8888, drmFormatXBGR8888}
+	// Opaque fourccs first: ARGB with alpha=0 (empty GBM map or wrong
+	// swizzle) composites as a fully transparent window.
+	order := []uint32{drmFormatXRGB8888, drmFormatXBGR8888, drmFormatARGB8888, drmFormatABGR8888}
 	for _, fmt := range order {
 		var linear, invalid bool
 		found := false
@@ -113,9 +128,12 @@ func imageRaw(img *paintengine2d.Image) (pix []byte, w, h, stride int) {
 }
 
 // copyImageRect copies a damage rect from a paintengine2d pixmap into a
-// 32-bit destination. swizzleRB true converts premul RGBA → BGRA (DRM
-// ARGB8888 / XRGB8888). false is a row memcpy (ABGR8888 / XBGR8888).
-func copyImageRect(dst []byte, dstStride int, img *paintengine2d.Image, r paintengine2d.Rect, swizzleRB bool) {
+// 32-bit destination. One pass only (no intermediate buffer, no second
+// swizzle). swizzleRB true converts premul RGBA → BGRA (DRM / wl_shm
+// XRGB8888 and ARGB8888). false is a row memcpy (XBGR8888 / ABGR8888).
+// opaque true forces destination A/X to 0xFF so an opaque UI cannot
+// present as a fully transparent ARGB window.
+func copyImageRect(dst []byte, dstStride int, img *paintengine2d.Image, r paintengine2d.Rect, swizzleRB, opaque bool) {
 	if img == nil || len(dst) == 0 {
 		return
 	}
@@ -152,17 +170,83 @@ func copyImageRect(dst []byte, dstStride int, img *paintengine2d.Image, r painte
 		if si+rowBytes > len(pix) || di+rowBytes > len(dst) {
 			return
 		}
-		if !swizzleRB {
-			copy(dst[di:di+rowBytes], pix[si:si+rowBytes])
-			continue
-		}
 		src := pix[si : si+rowBytes]
 		out := dst[di : di+rowBytes]
-		for i := 0; i < rowBytes; i += 4 {
-			out[i+0] = src[i+2] // B
-			out[i+1] = src[i+1] // G
-			out[i+2] = src[i+0] // R
-			out[i+3] = src[i+3] // A
+		copyPresentRow(out, src, swizzleRB, opaque)
+	}
+}
+
+// copyPresentRow is one pass over a tightly packed 32-bit row (no
+// intermediate buffer). Little-endian uint32: RGBA 0xAABBGGRR → BGRA
+// 0xAARRGGBB; opaque forces A/X to 0xFF.
+func copyPresentRow(dst, src []byte, swizzleRB, opaque bool) {
+	n := len(src) / 4
+	if n == 0 || len(dst) < n*4 {
+		return
+	}
+	if !swizzleRB && !opaque {
+		copy(dst, src[:n*4])
+		return
+	}
+	sp := unsafe.Slice((*uint32)(unsafe.Pointer(&src[0])), n)
+	dp := unsafe.Slice((*uint32)(unsafe.Pointer(&dst[0])), n)
+	if swizzleRB && opaque {
+		for i, p := range sp {
+			dp[i] = p&0x0000ff00 | (p&0x000000ff)<<16 | (p&0x00ff0000)>>16 | 0xff000000
+		}
+		return
+	}
+	if swizzleRB {
+		for i, p := range sp {
+			dp[i] = p&0xff00ff00 | (p&0x000000ff)<<16 | (p&0x00ff0000)>>16
+		}
+		return
+	}
+	// memcpy + force opaque X/A
+	for i, p := range sp {
+		dp[i] = p | 0xff000000
+	}
+}
+
+func pixmapHasOpaque(img *paintengine2d.Image) bool {
+	if img == nil {
+		return false
+	}
+	pix := img.Pix
+	if len(pix) >= 4 && pix[3] != 0 {
+		return true
+	}
+	// Sample a handful of pixels — do not walk a 1080p frame on present.
+	step := 64 * 4
+	if step < 4 {
+		step = 4
+	}
+	for i := 3; i < len(pix); i += step {
+		if pix[i] != 0 {
+			return true
 		}
 	}
+	if len(pix) >= 4 && pix[len(pix)-1] != 0 {
+		return true
+	}
+	return false
+}
+
+// destAlphaAllZero reports whether the first n bytes of a 32-bit buffer
+// have a zero alpha/padding byte in every pixel (typical empty GBM map).
+func destAlphaAllZero(dst []byte, n int) bool {
+	if n > len(dst) {
+		n = len(dst)
+	}
+	if n < 4 {
+		return true
+	}
+	any := false
+	for i := 3; i < n; i += 4 {
+		any = true
+		if dst[i] != 0 {
+			return false
+		}
+	}
+	return any
 }

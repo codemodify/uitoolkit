@@ -30,9 +30,9 @@ func (c *wlConn) chooseWaylandPresent() {
 	if c == nil {
 		return
 	}
-	if WaylandPresentPref() == WaylandPresentSHM {
-		c.useDmabuf = false
-		c.dmaAlloc = ""
+	c.useDmabuf = false
+	c.dmaAlloc = ""
+	if !waylandWantDmabuf() {
 		return
 	}
 	if c.dmabuf == nil || c.dmabufVer < 2 {
