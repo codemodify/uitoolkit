@@ -439,8 +439,19 @@ Add Account typed passwords in `mail.json` (mode `0600`) are **v0.10.2**.
 Add Account IMAP vs POP3, Test connection / auto-detect, and POP3 inbox
 retrieve are **v0.10.3**. Mail folder tree drops Unified / Smart / Categories
 chrome and message open no longer rebuilds the list (**v0.10.4**).
+Splitter pane clip, overflow scrollbars, scroll clamp, and read-only
+`TextView` are **v0.10.5**.
 
 ## Version
+
+**0.10.5** — Toolkit: `Splitter` arranges exclusive A/B panes and clips
+children on paint/hit-test so a drag cannot leave sibling chrome overlapping.
+`ScrollView`, `ListView`, `TableView`, `TreeView`, `CardList`, and `TextArea`
+clamp scroll to `max(0, content − viewport)` (no infinite empty past-end)
+and paint a classic vertical scrollbar (track + thumb; drag/page) when
+content overflows. `NewTextView` / `NewMonoTextView` (`TextArea.ReadOnly`)
+is the non-editable wrapping view; Mail’s Message/Source tabs use it.
+Compose stays an editable `TextArea`. Still paintengine2d **v0.9.0**.
 
 **0.10.4** — Mail: folder tree is account folders + Tags + VIP/Outbox.
 **Unified Folders**, **Smart Folders**, and **Categories** are gone from the

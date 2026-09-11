@@ -178,10 +178,9 @@ func (s *session) build() widget.Component {
 	s.hdrTo = widgets.NewLabel("")
 	s.hdrExtra = widgets.NewLabel("")
 	s.folderL = widgets.NewLabel("Folders")
-	s.preview = widgets.NewTextArea("", "Select a message (plain text)", nil)
+	s.preview = widgets.NewTextView("", "Select a message (plain text)")
 	s.preview.MinRows = 8
-	s.preview.Wrap = true
-	s.source = widgets.NewMonoTextArea("", "Raw source", nil)
+	s.source = widgets.NewMonoTextView("", "Raw source")
 	s.source.MinRows = 8
 	s.source.Wrap = false
 

@@ -46,6 +46,7 @@ type TreeView struct {
 	hover     *TreeNode
 	lastClick *TreeNode
 	lastAt    time.Time
+	vbar      scrollDrag
 	rows      rowSceneCache
 }
 
@@ -81,17 +82,18 @@ func (t *TreeView) flatten() []treeRow {
 
 func (t *TreeView) contentH() float32 { return float32(len(t.flatten())) * t.rowH() }
 
+// MaxOffset is max(0, content − viewport).
+func (t *TreeView) MaxOffset() float32 {
+	return layout.MaxScroll(t.contentH(), t.LocalBounds().Dy())
+}
+
 func (t *TreeView) clamp() {
-	mx := t.contentH() - t.LocalBounds().Dy()
-	if mx < 0 {
-		mx = 0
-	}
-	if t.OffsetY < 0 {
-		t.OffsetY = 0
-	}
-	if t.OffsetY > mx {
-		t.OffsetY = mx
-	}
+	t.OffsetY = layout.ClampScroll(t.OffsetY, t.contentH(), t.LocalBounds().Dy())
+}
+
+func (t *TreeView) scrollTrack() (track, thumb paintengine2d.Rect) {
+	bar, gap := overflowBarSize(t.Look())
+	return vScrollThumb(t.LocalBounds(), t.contentH(), t.OffsetY, bar, gap)
 }
 
 func (t *TreeView) Measure(c layout.Constraints) paintengine2d.Point {
@@ -112,6 +114,7 @@ func (t *TreeView) Measure(c layout.Constraints) paintengine2d.Point {
 func (t *TreeView) Arrange(r paintengine2d.Rect) { t.SetBounds(r); t.clamp() }
 
 func (t *TreeView) Paint(ctx *paintengine2d.Context) {
+	t.clamp()
 	b := t.LocalBounds()
 	lk := t.Look()
 	ctx.DrawRect(b, paintengine2d.Fill(lk.Palette().Field))
@@ -167,6 +170,8 @@ func (t *TreeView) Paint(ctx *paintengine2d.Context) {
 		}
 	}
 	ctx.Restore()
+	track, thumb := t.scrollTrack()
+	paintOverflowBar(ctx, lk, track, thumb, t.vbar.over, t.vbar.active)
 	if t.Focused() {
 		lk.DrawFocusRing(ctx, b.Inset(-2))
 	}
@@ -244,6 +249,17 @@ func (t *TreeView) invalidateNode(n *TreeNode) {
 func (t *TreeView) MouseEnter() {}
 
 func (t *TreeView) MouseMove(e widget.MouseEvent) bool {
+	track, thumb := t.scrollTrack()
+	if off, apply, handled, dirty := t.vbar.move(e.Pos, track, thumb, true, t.MaxOffset()); apply || handled || dirty {
+		if apply {
+			t.OffsetY = off
+			t.clamp()
+		}
+		t.Invalidate()
+		if apply || handled {
+			return true
+		}
+	}
 	n := t.nodeAt(e.Pos.Y)
 	if n != t.hover {
 		old := t.hover
@@ -257,6 +273,7 @@ func (t *TreeView) MouseMove(e widget.MouseEvent) bool {
 func (t *TreeView) MouseExit() {
 	old := t.hover
 	t.hover = nil
+	t.vbar.over = false
 	t.invalidateNode(old)
 }
 
@@ -265,6 +282,13 @@ func (t *TreeView) MousePress(e widget.MouseEvent) bool {
 		return false
 	}
 	t.RequestFocus()
+	track, thumb := t.scrollTrack()
+	if off, ok := t.vbar.press(e.Pos, track, thumb, true, t.OffsetY, t.MaxOffset(), t.LocalBounds().Dy()*0.9); ok {
+		t.OffsetY = off
+		t.clamp()
+		t.Invalidate()
+		return true
+	}
 	i := t.rowAt(e.Pos.Y)
 	if i < 0 {
 		return true
@@ -294,12 +318,16 @@ func (t *TreeView) MousePress(e widget.MouseEvent) bool {
 	return true
 }
 
-func (t *TreeView) MouseWheel(e widget.MouseEvent) bool {
-	dy := e.Scroll.Y
-	if dy > -8 && dy < 8 && dy != 0 {
-		dy *= t.rowH() * 3
+func (t *TreeView) MouseRelease(widget.MouseEvent) bool {
+	if t.vbar.release() {
+		t.Invalidate()
+		return true
 	}
-	t.OffsetY += dy
+	return false
+}
+
+func (t *TreeView) MouseWheel(e widget.MouseEvent) bool {
+	t.OffsetY += wheelDelta(e.Scroll.Y, t.rowH())
 	t.clamp()
 	t.Invalidate()
 	return true

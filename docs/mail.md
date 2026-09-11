@@ -1,6 +1,6 @@
 # Mail — mailclientd + mailclientui
 
-Thunderbird-chrome mail client on uitoolkit **v0.10.4**. Two processes:
+Thunderbird-chrome mail client on uitoolkit **v0.10.5**. Two processes:
 
 | Process | Role |
 | --- | --- |
@@ -315,12 +315,14 @@ Condition fields: `from`, `to`, `subject`, `body`, `attachment`, `unread`, `tag`
 Actions: `move` (`folder`), `tag`, `markRead`, `markUnread`, `delete`, `stop`.
 AND across conditions. Persist in MemoryStore or the disk cache. Tools → Message Filters.
 
-## UI features (v0.10.4)
+## UI features (v0.10.5)
 
 - **Empty by default** — no demo accounts unless `UITK_MAIL=memory`. First-run Yes/No is only “There are no accounts, want to add one?” Password / `0600` notes are on the Add Account form.
 - **Add account** — IMAP vs POP3 radios, domain auto-guess (including POP hosts), **Test connection** (and optional auto-detect after email+password), masked password field, or Sign in with Google / Microsoft (or device code; IMAP). Saved accounts show the protocol on Account Central and in Preferences. `passEnv` remains an optional fallback.
 - **Remove account** — File menu, Account Central, and Preferences → Accounts. Confirm, then drop the account from `mail.json` and the local cache. The folder tree refreshes; if none remain, the first-run “add one?” prompt returns.
-- **Text-only Message tab** — prefer `text/plain`; HTML-only mail is tag-stripped. No HTML engine / no HTML tab.
+- **Text-only Message tab** — prefer `text/plain`; HTML-only mail is tag-stripped. No HTML engine / no HTML tab. The Message/Source body is a read-only `TextView` (scroll + scrollbar; not editable). Compose/Write stays an editable `TextArea`.
+- **3-pane splitters** — dragging folder|list or list|preview keeps exclusive pane bounds; preview chrome cannot paint over the thread list.
+- **Overflow scrollbars** — thread list, folder tree, and long message bodies show a vertical track/thumb; wheel/trackpad still scroll; offset clamps at the last row.
 - **Card / Table** — View → Card view or the Cards toolbar toggle. Remembered in `~/.config/uitoolkit/mailui.json`.
 - **Density** — View → Compact / Default / Relaxed.
 - **Folder tree** — account folders, Tags, VIP, and Outbox. Unified Folders, Smart Folders, and Categories are not shown.

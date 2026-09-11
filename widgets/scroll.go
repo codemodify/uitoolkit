@@ -4,19 +4,18 @@ import (
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/layout"
 	"github.com/codemodify/uitoolkit/platform"
-	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
 )
 
 // ScrollView clips a larger child and paints a vertical scrollbar.
 type ScrollView struct {
 	widget.Base
-	OffsetY float32
-	child   widget.Component
-	content paintengine2d.Point
-	drag    bool
-	grab    float32
-	overBar bool
+	OffsetY      float32
+	child        widget.Component
+	content      paintengine2d.Point
+	drag         bool
+	grab         float32
+	overBar      bool
 	sceneOff     float32
 	contentDirty bool
 }
@@ -98,26 +97,14 @@ func (s *ScrollView) Arrange(r paintengine2d.Rect) {
 	s.child.Arrange(paintengine2d.XYWH(0, -s.OffsetY, cw, s.content.Y))
 }
 
-func (s *ScrollView) barGap() (bar, gap float32) {
-	bar = s.Look().Metrics().Scroll
-	return bar, 2
-}
+func (s *ScrollView) barGap() (bar, gap float32) { return overflowBarSize(s.Look()) }
 
 func (s *ScrollView) maxOff() float32 {
-	m := s.LocalBounds().Dy()
-	if s.content.Y <= m {
-		return 0
-	}
-	return s.content.Y - m
+	return layout.MaxScroll(s.content.Y, s.LocalBounds().Dy())
 }
 
 func (s *ScrollView) clamp() {
-	if s.OffsetY < 0 {
-		s.OffsetY = 0
-	}
-	if mx := s.maxOff(); s.OffsetY > mx {
-		s.OffsetY = mx
-	}
+	s.OffsetY = layout.ClampScroll(s.OffsetY, s.content.Y, s.LocalBounds().Dy())
 }
 
 func (s *ScrollView) lineStep() float32 {
@@ -137,26 +124,8 @@ func (s *ScrollView) pageStep() float32 {
 }
 
 func (s *ScrollView) thumb() (track, thumb paintengine2d.Rect) {
-	b := s.LocalBounds()
 	bar, gap := s.barGap()
-	track = paintengine2d.XYWH(b.Max.X-bar-gap, 4, bar, b.Dy()-8)
-	if s.content.Y <= b.Dy() {
-		return track, paintengine2d.Rect{}
-	}
-	frac := b.Dy() / s.content.Y
-	th := track.Dy() * frac
-	if th < 24 {
-		th = 24
-	}
-	if th > track.Dy() {
-		th = track.Dy()
-	}
-	ty := track.Min.Y
-	if mx := s.maxOff(); mx > 0 && track.Dy() > th {
-		ty += (track.Dy() - th) * (s.OffsetY / mx)
-	}
-	thumb = paintengine2d.XYWH(track.Min.X, ty, track.Dx(), th)
-	return
+	return vScrollThumb(s.LocalBounds(), s.content.Y, s.OffsetY, bar, gap)
 }
 
 func (s *ScrollView) SceneChild() widget.Component { return s.child }
@@ -188,16 +157,7 @@ func (s *ScrollView) Paint(ctx *paintengine2d.Context) {
 		ctx.Restore()
 	}
 	track, thumb := s.thumb()
-	if !thumb.Empty() {
-		st := s.State()
-		if s.overBar {
-			st |= style.StateHovered
-		}
-		if s.drag {
-			st |= style.StatePressed
-		}
-		lk.DrawScrollBar(ctx, track, thumb, st)
-	}
+	paintOverflowBar(ctx, lk, track, thumb, s.overBar, s.drag)
 	if s.Focused() {
 		lk.DrawFocusRing(ctx, b.Inset(-2))
 	}
@@ -226,11 +186,7 @@ func (s *ScrollView) MouseWheel(e widget.MouseEvent) bool {
 	if dy == 0 && e.Scroll.X == 0 {
 		return false
 	}
-	// Notch-sized deltas (typical ±1) become a few lines.
-	if dy > -8 && dy < 8 && dy != 0 {
-		dy *= s.lineStep() * 3
-	}
-	s.ScrollBy(dy)
+	s.ScrollBy(wheelDelta(dy, s.lineStep()))
 	return true
 }
 

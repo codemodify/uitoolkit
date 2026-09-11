@@ -67,9 +67,11 @@ func (s *shortcutRoot) KeyPress(e widget.KeyEvent) bool {
 }
 
 func isTextFocus(c widget.Component) bool {
-	switch c.(type) {
-	case *widgets.TextField, *widgets.TextArea, *widgets.NumberField:
+	switch t := c.(type) {
+	case *widgets.TextField, *widgets.NumberField:
 		return true
+	case *widgets.TextArea:
+		return !t.ReadOnly
 	default:
 		return false
 	}

@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit"
 	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
@@ -181,6 +182,18 @@ func TestComposeAppPaints(t *testing.T) {
 		t.Fatal(err)
 	}
 	a.PumpOnce()
+	var body *widgets.TextArea
+	widget.Walk(w.Content(), func(c widget.Component) {
+		if ta, ok := c.(*widgets.TextArea); ok && !ta.ReadOnly {
+			body = ta
+		}
+	})
+	if body == nil {
+		t.Fatal("compose body should be an editable TextArea")
+	}
+	if body.ReadOnly {
+		t.Fatal("compose must stay editable")
+	}
 	dir := t.TempDir()
 	path := filepath.Join(dir, "compose.png")
 	if err := w.WritePNG(path); err != nil {
@@ -192,6 +205,91 @@ func TestComposeAppPaints(t *testing.T) {
 	}
 	if st.Size() < 1000 {
 		t.Fatalf("compose png too small: %d", st.Size())
+	}
+	w.Close()
+}
+
+func TestMailPreviewReadOnlyAndListClamp(t *testing.T) {
+	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{
+		Title: "Mail", Width: 1280, Height: 800, Headless: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.SetContent(MailApp(a, w))
+	a.PumpOnce()
+	PrepareShot(w, -1)
+	a.PumpOnce()
+
+	var table *widgets.TableView
+	var views []*widgets.TextArea
+	var splits []*widgets.Splitter
+	widget.Walk(w.Content(), func(c widget.Component) {
+		switch t := c.(type) {
+		case *widgets.TableView:
+			if len(t.Columns) >= 5 && table == nil {
+				table = t
+			}
+		case *widgets.TextArea:
+			views = append(views, t)
+		case *widgets.Splitter:
+			splits = append(splits, t)
+		}
+	})
+	if table == nil {
+		t.Fatal("thread table")
+	}
+	if len(views) < 1 {
+		t.Fatal("message TextView")
+	}
+	for _, ta := range views {
+		if !ta.ReadOnly {
+			t.Fatalf("mail view TextArea must be ReadOnly, got editable %q", ta.Placeholder)
+		}
+		before := ta.Text
+		if ta.TextInput('Z') {
+			t.Fatal("preview accepted typing")
+		}
+		if ta.Text != before {
+			t.Fatalf("preview mutated %q -> %q", before, ta.Text)
+		}
+	}
+
+	for i := 0; i < 80; i++ {
+		table.MouseWheel(widget.MouseEvent{Scroll: paintengine2d.Pt(0, 40)})
+	}
+	if table.OffsetY > table.MaxOffset()+0.5 {
+		t.Fatalf("thread list scrolled past end offset=%v max=%v", table.OffsetY, table.MaxOffset())
+	}
+	if table.MaxOffset() > 0 && table.OffsetY != table.MaxOffset() {
+		t.Fatalf("wheel spam should pin to max, offset=%v max=%v", table.OffsetY, table.MaxOffset())
+	}
+
+	if len(splits) == 0 {
+		t.Fatal("expected splitters")
+	}
+	for _, s := range splits {
+		a, b := s.PaneA(), s.PaneB()
+		if a.Overlaps(b) {
+			t.Fatalf("splitter panes overlap A=%+v B=%+v", a, b)
+		}
+		pa, pb := s.PaneA(), s.PaneB()
+		var sash, mid paintengine2d.Point
+		if s.Vertical {
+			sash = paintengine2d.Pt((pa.Max.X+pb.Min.X)*0.5, 8)
+			mid = paintengine2d.Pt(s.LocalBounds().Dx()*0.75, 8)
+		} else {
+			sash = paintengine2d.Pt(8, (pa.Max.Y+pb.Min.Y)*0.5)
+			mid = paintengine2d.Pt(8, s.LocalBounds().Dy()*0.75)
+		}
+		s.MousePress(widget.MouseEvent{Pos: sash, Button: platform.ButtonLeft})
+		s.MouseMove(widget.MouseEvent{Pos: mid, Button: platform.ButtonLeft})
+		s.MouseRelease(widget.MouseEvent{Pos: mid})
+		a, b = s.PaneA(), s.PaneB()
+		if a.Overlaps(b) {
+			t.Fatalf("after drag overlap A=%+v B=%+v", a, b)
+		}
 	}
 	w.Close()
 }
