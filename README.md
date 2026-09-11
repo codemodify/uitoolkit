@@ -348,8 +348,15 @@ Retained scene graph (Qt Quick / GSK lite) is **v0.6.0**.
 Virtualized list/table/tree row reuse is **v0.6.1**.
 Mail process split (mailclientd + mailclientui) is **v0.8.0**.
 HiDPI-stable list/table/tree rows and Wayland resize are **v0.8.1**.
+Mail thread-list column flex (readable subjects) is **v0.8.2**.
 
 ## Version
+
+**0.8.2** — TableView flex columns take leftover width and shrink
+preferred columns to MinWidth instead of starving Subject to ~40px.
+Headers clip/ellipsis with the cells. Mail 3-pane gives the thread list
+more of a 1280 window; folder tree is a bit denser. Still paintengine2d
+**v0.9.0**.
 
 **0.8.1** — HiDPI-safe layout: list/table/tree row heights and column
 widths follow scaled fonts (unread/bold uses a body-size face, not

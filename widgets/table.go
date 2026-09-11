@@ -8,10 +8,13 @@ import (
 	"github.com/codemodify/uitoolkit/widget"
 )
 
-// TableColumn describes one header cell. Width 0 shares leftover space.
+// TableColumn describes one header cell.
+// Width 0 shares leftover space (flex). Width > 0 is a preferred size
+// that may shrink to MinWidth when the row is tight.
 type TableColumn struct {
 	Title    string
 	Width    float32
+	MinWidth float32
 	Sortable bool
 	Align    style.Align
 }
@@ -111,6 +114,9 @@ func (t *TableView) bodyH() float32 {
 	return h
 }
 
+// ColumnWidths is the current header/cell layout in device pixels.
+func (t *TableView) ColumnWidths() []float32 { return t.colWidths() }
+
 func (t *TableView) colWidths() []float32 {
 	n := len(t.Columns)
 	out := make([]float32, n)
@@ -118,34 +124,144 @@ func (t *TableView) colWidths() []float32 {
 		return out
 	}
 	total := t.LocalBounds().Dx()
-	fixed := float32(0)
-	flex := 0
+	if total < 1 {
+		return out
+	}
 	lk := t.Look()
-	for i, c := range t.Columns {
-		if c.Width > 0 {
-			out[i] = style.Dip(lk, c.Width)
-			fixed += out[i]
-		} else {
-			flex++
-		}
-	}
-	remain := total - fixed
-	if remain < 0 {
-		remain = 0
-	}
-	share := remain
-	if flex > 0 {
-		share = remain / float32(flex)
-	}
+	min := make([]float32, n)
+	flex := make([]bool, n)
+	nflex := 0
 	for i, c := range t.Columns {
 		if c.Width <= 0 {
-			out[i] = share
-			if out[i] < 40 {
-				out[i] = 40
+			flex[i] = true
+			nflex++
+			floor := c.MinWidth
+			if floor <= 0 {
+				floor = 80
+			}
+			min[i] = style.Dip(lk, floor)
+			out[i] = min[i]
+			continue
+		}
+		pref := style.Dip(lk, c.Width)
+		floor := c.MinWidth
+		if floor <= 0 {
+			floor = c.Width
+		}
+		min[i] = style.Dip(lk, floor)
+		if min[i] > pref {
+			min[i] = pref
+		}
+		if min[i] < 1 {
+			min[i] = 1
+		}
+		out[i] = pref
+	}
+	used := float32(0)
+	for _, w := range out {
+		used += w
+	}
+	remain := total - used
+	if remain > 0 && nflex > 0 {
+		share := remain / float32(nflex)
+		for i := range out {
+			if flex[i] {
+				out[i] += share
+			}
+		}
+	} else if remain > 0 {
+		out[n-1] += remain
+	} else if remain < 0 {
+		shrinkBy(out, min, -remain, flex, false)
+		used = 0
+		for _, w := range out {
+			used += w
+		}
+		if used > total {
+			shrinkBy(out, min, used-total, flex, true)
+		}
+		used = 0
+		for _, w := range out {
+			used += w
+		}
+		if used > total {
+			scale := total / used
+			for i := range out {
+				out[i] *= scale
 			}
 		}
 	}
+	used = 0
+	for _, w := range out {
+		used += w
+	}
+	if drift := total - used; drift != 0 {
+		give := 0
+		for i, f := range flex {
+			if f {
+				give = i
+				break
+			}
+		}
+		if !flex[give] {
+			give = n - 1
+		}
+		out[give] += drift
+		if out[give] < 1 {
+			out[give] = 1
+		}
+	}
 	return out
+}
+
+// shrinkBy removes deficit from columns, preferring non-flex first, then
+// flex, never going below min unless force.
+func shrinkBy(out, min []float32, deficit float32, flex []bool, force bool) {
+	if deficit <= 0 {
+		return
+	}
+	pass := func(wantFlex bool) {
+		if deficit <= 0 {
+			return
+		}
+		slack := float32(0)
+		for i := range out {
+			if flex[i] != wantFlex {
+				continue
+			}
+			s := out[i] - min[i]
+			if force {
+				s = out[i] - 1
+			}
+			if s > 0 {
+				slack += s
+			}
+		}
+		if slack <= 0 {
+			return
+		}
+		take := deficit
+		if take > slack {
+			take = slack
+		}
+		for i := range out {
+			if flex[i] != wantFlex {
+				continue
+			}
+			s := out[i] - min[i]
+			if force {
+				s = out[i] - 1
+			}
+			if s <= 0 {
+				continue
+			}
+			cut := take * (s / slack)
+			out[i] -= cut
+			deficit -= cut
+		}
+	}
+	pass(false)
+	pass(true)
 }
 
 func (t *TableView) colAt(x float32) int {

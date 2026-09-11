@@ -203,7 +203,7 @@ func DefaultMetrics() Metrics {
 		MenuBarH:    30,
 		MenuItemH:   28,
 		TabH:        32,
-		TreeIndent:  18,
+		TreeIndent:  16,
 		StatusBarH:  28,
 		ToolBarH:    36,
 		ToolBtn:     30,

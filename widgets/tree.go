@@ -50,7 +50,7 @@ type TreeView struct {
 
 // NewTreeView constructs a tree.
 func NewTreeView(roots ...*TreeNode) *TreeView {
-	t := &TreeView{Roots: roots, RowHeight: 26}
+	t := &TreeView{Roots: roots, RowHeight: 24}
 	t.Init(t)
 	t.SetWantsFocus(true)
 	return t

@@ -120,6 +120,49 @@ func TestMailHiDPIResizeStable(t *testing.T) {
 	w.Close()
 }
 
+func TestMailSubjectColumnFillsThreadPane(t *testing.T) {
+	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{
+		Title: "Mail", Width: 1280, Height: 800, Headless: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.SetContent(MailApp(a, w))
+	a.PumpOnce()
+	var table *widgets.TableView
+	widget.Walk(w.Content(), func(c widget.Component) {
+		if tv, ok := c.(*widgets.TableView); ok && len(tv.Columns) >= 6 && table == nil {
+			table = tv
+		}
+	})
+	if table == nil {
+		t.Fatal("thread table")
+	}
+	ws := table.ColumnWidths()
+	if len(ws) < 6 {
+		t.Fatalf("cols %v", ws)
+	}
+	subj := ws[2]
+	if subj < 200 {
+		t.Fatalf("subject column too narrow at 1280: %v (all %v) table=%v", subj, ws, table.LocalBounds().Dx())
+	}
+	sum := float32(0)
+	for _, x := range ws {
+		sum += x
+	}
+	if d := sum - table.LocalBounds().Dx(); d > 1 || d < -1 {
+		t.Fatalf("columns %v sum %v != table %v", ws, sum, table.LocalBounds().Dx())
+	}
+	w.Inject(platform.Event{Kind: platform.EventResize, Width: 1100, Height: 720})
+	a.PumpOnce()
+	ws = table.ColumnWidths()
+	if ws[2] < 160 {
+		t.Fatalf("subject after resize %v (all %v)", ws[2], ws)
+	}
+	w.Close()
+}
+
 func TestComposeAppPaints(t *testing.T) {
 	sock, stop, err := StartDemo(context.Background())
 	if err != nil {

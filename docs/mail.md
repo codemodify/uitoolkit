@@ -1,6 +1,6 @@
 # Mail — mailclientd + mailclientui
 
-Thunderbird-chrome dogfood on uitoolkit **v0.8.1**. Two processes:
+Thunderbird-chrome dogfood on uitoolkit **v0.8.2**. Two processes:
 
 | Process | Role |
 | --- | --- |

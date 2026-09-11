@@ -135,12 +135,12 @@ func (s *session) build() widget.Component {
 	s.source.Wrap = false
 
 	s.table = widgets.NewTableView([]widgets.TableColumn{
-		{Title: "★", Width: 36, Sortable: true},
-		{Title: "📎", Width: 36, Sortable: true},
-		{Title: "Subject", Sortable: true},
-		{Title: "Correspondents", Width: 180, Sortable: true},
-		{Title: "Date", Width: 112, Sortable: true},
-		{Title: "Size", Width: 72, Sortable: true, Align: style.AlignEnd},
+		{Title: "★", Width: 28, MinWidth: 24, Sortable: true},
+		{Title: "📎", Width: 28, MinWidth: 24, Sortable: true},
+		{Title: "Subject", MinWidth: 180, Sortable: true},
+		{Title: "Correspondents", Width: 148, MinWidth: 110, Sortable: true},
+		{Title: "Date", Width: 108, MinWidth: 88, Sortable: true},
+		{Title: "Size", Width: 72, MinWidth: 60, Sortable: true, Align: style.AlignEnd},
 	}, 0, s.cellText, func(i int) {
 		s.clickRow(i, false)
 	})
@@ -303,26 +303,27 @@ func (s *session) build() widget.Component {
 		}
 	})
 
+	s.tree.RowHeight = 24
 	sidebar := widgets.NewColumn(
 		widgets.NewTitle("Account"),
 		s.identity,
 		widgets.NewTitle("Folders"),
 		s.tree,
 		s.folderL,
-	).WithGap(6).WithPad(8)
+	).WithGap(4).WithPad(6)
 	sidebar.AddFlex(s.tree, 1)
 
 	var split *widgets.Splitter
 	if s.opts.Layout == LayoutClassic {
 		right := widgets.NewSplitter(false, s.center, previewCol)
-		right.Ratio = 0.42
+		right.Ratio = 0.46
 		split = widgets.NewSplitter(true, sidebar, right)
-		split.Ratio = 0.22
+		split.Ratio = 0.18
 	} else {
 		mid := widgets.NewSplitter(true, s.center, previewCol)
-		mid.Ratio = 0.48
+		mid.Ratio = 0.58
 		split = widgets.NewSplitter(true, sidebar, mid)
-		split.Ratio = 0.20
+		split.Ratio = 0.17
 	}
 
 	s.chrome = widgets.NewTitleBar("Mail", s.subtitle())
