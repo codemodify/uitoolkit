@@ -18,6 +18,12 @@ func TestTextAreaNewlineAndNav(t *testing.T) {
 	if ta.Text != "hello\n" {
 		t.Fatalf("return %q", ta.Text)
 	}
+	if ta.Caret() != runeCount("hello\n") {
+		t.Fatalf("caret after return %d", ta.Caret())
+	}
+	if n := len(ta.Lines()); n != 2 {
+		t.Fatalf("lines after return %d", n)
+	}
 	ta.TextInput('w')
 	ta.TextInput('o')
 	if ta.Text != "hello\nwo" {
@@ -42,6 +48,28 @@ func TestTextAreaNewlineAndNav(t *testing.T) {
 	ta.KeyPress(widget.KeyEvent{Key: platform.KeyC, Mods: platform.ModCtrl})
 	if platform.ClipboardGet() != "hello" {
 		t.Fatalf("copy %q", platform.ClipboardGet())
+	}
+}
+
+func TestTextAreaNewlineMidAndReplaceSel(t *testing.T) {
+	ta := NewTextArea("hello", "", nil)
+	ta.SetHost(&host{})
+	ta.Arrange(paintengine2d.XYWH(0, 0, 240, 90))
+	ta.SetSelection(2, 2)
+	ta.KeyPress(widget.KeyEvent{Key: platform.KeyReturn})
+	if ta.Text != "he\nllo" {
+		t.Fatalf("mid return %q", ta.Text)
+	}
+	if ta.Caret() != 3 {
+		t.Fatalf("caret after mid return %d", ta.Caret())
+	}
+	ta.SetSelection(0, runeCount(ta.Text))
+	ta.KeyPress(widget.KeyEvent{Key: platform.KeyReturn})
+	if ta.Text != "\n" {
+		t.Fatalf("replace sel %q", ta.Text)
+	}
+	if ta.Caret() != 1 {
+		t.Fatalf("caret after replace %d", ta.Caret())
 	}
 }
 
@@ -86,21 +114,30 @@ func TestTextAreaScroll(t *testing.T) {
 }
 
 func TestSwitchToggle(t *testing.T) {
-	n := 0
-	s := NewSwitch("Dark", false, func(v bool) {
-		if v {
-			n++
-		}
-	})
+	var got []bool
+	s := NewSwitch("Dark", false, func(v bool) { got = append(got, v) })
 	s.SetHost(&host{})
 	s.Arrange(paintengine2d.XYWH(0, 0, 140, 32))
 	s.MousePress(widget.MouseEvent{Pos: paintengine2d.Pt(8, 16)})
-	if !s.On || n != 1 {
-		t.Fatalf("on=%v n=%d", s.On, n)
+	if !s.On {
+		t.Fatal("click should turn on")
 	}
 	s.KeyPress(widget.KeyEvent{Key: platform.KeySpace})
 	if s.On {
 		t.Fatal("space should toggle off")
+	}
+	s.KeyPress(widget.KeyEvent{Key: platform.KeyReturn})
+	if !s.On {
+		t.Fatal("return should toggle on")
+	}
+	if len(got) != 3 || !got[0] || got[1] || !got[2] {
+		t.Fatalf("onchange %v", got)
+	}
+	s.SetEnabled(false)
+	s.MousePress(widget.MouseEvent{Pos: paintengine2d.Pt(8, 16)})
+	s.KeyPress(widget.KeyEvent{Key: platform.KeySpace})
+	if !s.On || len(got) != 3 {
+		t.Fatalf("disabled toggled on=%v got=%v", s.On, got)
 	}
 }
 
@@ -144,6 +181,58 @@ func TestAccordionExclusive(t *testing.T) {
 	}
 	if a.Expanded {
 		t.Fatal("exclusive should close A")
+	}
+	if a.Content() != nil && a.Content().Visible() {
+		t.Fatal("closed section body still visible")
+	}
+}
+
+func TestAccordionExclusiveConstruct(t *testing.T) {
+	a := NewExpander("A", true, NewLabel("aa"))
+	b := NewExpander("B", true, NewLabel("bb"))
+	acc := NewAccordion(true, a, b)
+	if len(acc.Sections()) != 2 {
+		t.Fatalf("sections %d", len(acc.Sections()))
+	}
+	if a.Expanded {
+		t.Fatal("exclusive construct should close earlier sections")
+	}
+	if !b.Expanded {
+		t.Fatal("last open section should stay open")
+	}
+	c := NewExpander("C", false, NewLabel("cc"))
+	d := NewExpander("D", false, NewLabel("dd"))
+	open := NewAccordion(false, c, d)
+	c.SetExpanded(true)
+	d.SetExpanded(true)
+	if !c.Expanded || !d.Expanded {
+		t.Fatal("non-exclusive should allow both")
+	}
+	_ = open
+}
+
+func TestAccordionExclusiveYieldsFocus(t *testing.T) {
+	h := &host{}
+	inner := NewSwitch("Hidden", true, nil)
+	a := NewExpander("A", true, inner)
+	b := NewExpander("B", false, NewLabel("bb"))
+	acc := NewAccordion(true, a, b)
+	acc.SetHost(h)
+	sz := acc.Measure(layout.Loose(220, 300))
+	acc.Arrange(paintengine2d.XYWH(0, 0, 220, sz.Y))
+	inner.RequestFocus()
+	if h.Focus() != inner {
+		t.Fatal("inner should have focus")
+	}
+	b.SetExpanded(true)
+	if h.Focus() == inner {
+		t.Fatal("focus stuck in collapsed body")
+	}
+	if h.Focus() != a.head {
+		t.Fatalf("focus %T", h.Focus())
+	}
+	if inner.Visible() && a.Content() != nil && a.Content().Visible() {
+		t.Fatal("A should be collapsed")
 	}
 }
 

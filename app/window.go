@@ -189,6 +189,12 @@ func (w *Window) RequestFocus(c widget.Component) {
 	}
 }
 
+// RequestLayout marks the tree dirty so the next frame Measure/Arranges.
+func (w *Window) RequestLayout() {
+	w.laid = false
+	w.fullInvalidate()
+}
+
 func (w *Window) fullInvalidate() {
 	ww, hh := w.surf.Size()
 	w.dirty.Reset()

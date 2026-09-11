@@ -24,7 +24,7 @@ type Note struct {
 // NotesApp is a small real desktop app: a filterable note list + editor.
 func NotesApp(win *app.Window) widget.Component {
 	notes := []Note{
-		{Title: "Ship v0.1.6", Body: "TextArea, Switch, Accordion, Inspector sample.", Done: false, Priority: 1},
+		{Title: "Ship v0.1.7", Body: "Harden TextArea newline, Switch, Accordion exclusive.", Done: false, Priority: 1},
 		{Title: "Damage pass", Body: "Resize should only present dirty rects.", Done: true, Priority: 3},
 		{Title: "Theme polish", Body: "Check light theme contrast on sliders.", Done: false, Priority: 2},
 		{Title: "X11 present", Body: "XPutImage dirty boxes; fallback offscreen.", Done: true, Priority: 4},
@@ -251,7 +251,7 @@ func NotesApp(win *app.Window) widget.Component {
 			Entries: []widgets.FileInfo{
 				{Name: "docs", Dir: true},
 				{Name: "inbox.md"},
-				{Name: "ship-v015.md"},
+				{Name: "ship-v017.md"},
 				{Name: "theme-polish.md"},
 			},
 			OnPick: func(p string) {
@@ -290,7 +290,7 @@ func NotesApp(win *app.Window) widget.Component {
 		widgets.NewLabel("Priority"),
 		priority,
 		done,
-		widgets.NewLabel("A small desktop app on uitoolkit — table, textarea, spinner, file stub."),
+		widgets.NewLabel("Table, textarea, spinner, file stub."),
 	)
 	right := widgets.NewPad(8, editor)
 	split := widgets.NewSplitter(true, sidebar, right)

@@ -282,7 +282,11 @@ func (t *TabView) Select(i int) {
 		return
 	}
 	if t.selected >= 0 && t.selected < len(t.tabs) && t.tabs[t.selected].Content != nil {
-		t.tabs[t.selected].Content.SetVisible(false)
+		old := t.tabs[t.selected].Content
+		if h := t.Host(); h != nil && widget.Contains(old, h.Focus()) {
+			t.bar.RequestFocus()
+		}
+		old.SetVisible(false)
 	}
 	t.selected = i
 	t.bar.Selected = i
@@ -290,6 +294,7 @@ func (t *TabView) Select(i int) {
 		t.tabs[i].Content.SetVisible(true)
 	}
 	t.Invalidate()
+	t.RequestLayout()
 	if t.OnChange != nil {
 		t.OnChange(i)
 	}

@@ -277,6 +277,84 @@ func TestNumberFieldKeysBubbleFromInnerField(t *testing.T) {
 	}
 }
 
+func TestExpanderRequestsLayout(t *testing.T) {
+	a := New(Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{Width: 320, Height: 240, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	child := widgets.NewLabel("secret")
+	exp := widgets.NewExpander("More", false, child)
+	w.SetContent(widgets.NewPad(8, exp))
+	a.PumpOnce()
+	if child.Bounds().Dy() > 1 {
+		t.Fatalf("collapsed body should be empty, got %v", child.Bounds().Dy())
+	}
+	exp.SetExpanded(true)
+	a.PumpOnce()
+	if child.Bounds().Dy() <= 1 {
+		t.Fatalf("expand should relayout body, got %v", child.Bounds().Dy())
+	}
+	if !child.Visible() {
+		t.Fatal("expanded child hidden")
+	}
+}
+
+func TestAccordionExclusiveYieldsWindowFocus(t *testing.T) {
+	a := New(Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{Width: 360, Height: 280, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	inner := widgets.NewSwitch("Hidden", true, nil)
+	secA := widgets.NewExpander("A", true, inner)
+	secB := widgets.NewExpander("B", false, widgets.NewLabel("bb"))
+	w.SetContent(widgets.NewAccordion(true, secA, secB))
+	a.PumpOnce()
+	w.RequestFocus(inner)
+	if w.Focus() != inner {
+		t.Fatal("inner focus")
+	}
+	secB.SetExpanded(true)
+	a.PumpOnce()
+	if w.Focus() == inner {
+		t.Fatal("focus stuck in collapsed accordion body")
+	}
+	if secA.Expanded {
+		t.Fatal("exclusive should close A")
+	}
+}
+
+func TestTabOrderIncludesTextAreaSwitchAccordion(t *testing.T) {
+	a := New(Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{Width: 400, Height: 320, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ta := widgets.NewTextArea("x", "", nil)
+	sw := widgets.NewSwitch("On", false, nil)
+	inner := widgets.NewSwitch("Nested", true, nil)
+	acc := widgets.NewAccordion(true, widgets.NewExpander("More", true, inner))
+	w.SetContent(widgets.NewColumn(ta, sw, acc))
+	a.PumpOnce()
+	var kinds []string
+	for _, c := range widget.Focusables(w.Content()) {
+		switch c.(type) {
+		case *widgets.TextArea:
+			kinds = append(kinds, "area")
+		case *widgets.Switch:
+			kinds = append(kinds, "switch")
+		}
+	}
+	joined := ""
+	for _, k := range kinds {
+		joined += k + ","
+	}
+	if joined != "area,switch,switch," {
+		t.Fatalf("tab order %s", joined)
+	}
+}
+
 func TestAltOpensMenu(t *testing.T) {
 	a := New(Options{Look: style.DarkLook(), Headless: true})
 	w, err := a.NewWindow(platform.WindowOptions{Width: 400, Height: 200, Headless: true})

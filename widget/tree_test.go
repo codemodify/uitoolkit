@@ -18,6 +18,7 @@ func (h *stubHost) Invalidate(Component, paintengine2d.Rect) { h.n++ }
 func (h *stubHost) RequestFocus(c Component)                 { h.focus = c }
 func (h *stubHost) Focus() Component                         { return h.focus }
 func (h *stubHost) Scale() float32                           { return 1 }
+func (h *stubHost) RequestLayout()                           {}
 func (h *stubHost) Look() style.LookAndFeel {
 	if h.look != nil {
 		return h.look
@@ -109,5 +110,8 @@ func TestWalkSkipsInvisible(t *testing.T) {
 	got := Focusables(root)
 	if len(got) != 1 || got[0] != a {
 		t.Fatalf("%v", got)
+	}
+	if !Contains(root, b) || !Contains(root, a) || Contains(a, b) {
+		t.Fatal("Contains should ignore visibility")
 	}
 }
