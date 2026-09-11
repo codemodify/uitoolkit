@@ -31,8 +31,8 @@ go get github.com/codemodify/paintengine2d@v0.7.2
 
 ## Screenshots
 
-Real frames from the gallery and the Notes app, painted through paintengine2d
-and written as PNG (no placeholders).
+Real frames from the gallery, Notes, and Inspector, painted through
+paintengine2d and written as PNG (no placeholders).
 
 ### Widget gallery — dark
 
@@ -86,9 +86,21 @@ and written as PNG (no placeholders).
 
 ![Tooltip](docs/screenshots/gallery-tooltip.png)
 
+### TextArea
+
+![TextArea](docs/screenshots/gallery-textarea.png)
+
+### Accordion / Switch
+
+![Accordion](docs/screenshots/gallery-accordion.png)
+
 ### Notes — a small desktop app
 
 ![Notes](docs/screenshots/notes.png)
+
+### Inspector — preferences sample
+
+![Inspector](docs/screenshots/inspector.png)
 
 Regenerate:
 
@@ -105,6 +117,7 @@ CGO_ENABLED=0 go test ./...
 go run ./examples/gallery            # X11 when DISPLAY is set
 go run ./examples/gallery -headless  # writes gallery.png
 go run ./examples/notes
+go run ./examples/inspector
 ```
 
 Headless / CI paints into `paintengine2d.NewImage` and can `Window.WritePNG`.
@@ -148,9 +161,10 @@ app        Application run loop, windows,         DPI/scale, input routing
 widget     retained Component: bounds, children,  HitTest, focus, Invalidate
            Paint(ctx *paintengine2d.Context)
 layout     Measure / Arrange                      row, column, stack, flex
-widgets    Button, Label, TextField, NumberField  ScrollView, ListView, TableView
-           Slider, Panel, Splitter, Overlay       MenuBar, TabView, TreeView
-           StatusBar, ToolBar, ComboBox           ProgressBar, RadioGroup
+widgets    Button, Label, TextField, TextArea     ScrollView, ListView, TableView
+           NumberField, Checkbox, Switch, Slider  MenuBar, TabView, TreeView
+           Panel, Splitter, Overlay, Separator    StatusBar, ToolBar, ComboBox
+           Accordion, Expander, Spacer            ProgressBar, RadioGroup
            MessageBox, FileDialog stub, Tooltip   TitleBar, context menus
 style      LookAndFeel + Palette + Metrics        Dark / Light Classic
 ```
@@ -162,8 +176,9 @@ never hard-code colors.
 
 | Command | What it proves |
 | --- | --- |
-| `go run ./examples/gallery` | Stock controls, table, spinner, tooltip, file stub, toolbar, combo, radio, progress, menus, tabs, tree, themes, scroll, list, message box |
-| `go run ./examples/notes` | A small real app: sortable table, priority spinner, file stub, tooltips, editor |
+| `go run ./examples/gallery` | Stock controls, table, textarea, switch, accordion, spinner, tooltip, file stub, toolbar, combo, radio, progress, menus, tabs, tree, themes, scroll, list, message box |
+| `go run ./examples/notes` | A small real app: sortable table, textarea body, priority spinner, file stub, tooltips |
+| `go run ./examples/inspector` | Preferences inspector: table, toolbar, tabs, message box, switch, accordion |
 
 ```bash
 go run ./examples/gallery -screenshot docs/screenshots
@@ -177,13 +192,14 @@ CGO_ENABLED=0 go test ./...
 
 Coverage includes flex Measure/Arrange (parent-local coords), hit-test
 z-order, focus tab order (including MenuBar / TabBar / TreeView),
-checkbox/slider/text/button interaction, virtual list range, scroll-wheel
+checkbox/slider/text/button/switch interaction, virtual list range, scroll-wheel
 bubbling, scrollbar track hits, text selection and copy/paste stubs, menu
 and tab swap, tree expand/select, context-menu dispatch, toolbar and
 combo, radio groups, progress clamp, message-box results, table sort,
 number-field step/filter, file-dialog stub, delayed tooltips, Esc
-dismiss order, and an offscreen paint that produces real pixels.
-`go test ./examples/gallery` regenerates the fourteen PNGs and fails if
+dismiss order, textarea wrap/nav, accordion exclusive expand, separator
+and spacer measure, and an offscreen paint that produces real pixels.
+`go test ./examples/gallery` regenerates the seventeen PNGs and fails if
 any two share a blob.
 
 Keyboard map: [docs/keyboard.md](docs/keyboard.md). **Esc** closes
@@ -218,9 +234,9 @@ Documented on purpose — do not expect these yet:
 
 ## Version
 
-**0.1.5** — TableView (columns, row select, optional sort header),
-NumberField / Spinner, delayed Tooltip, FileDialog stub (modal list + path;
-native picker later), keyboard map, Esc dismisses tooltip → popup → overlay.
+**0.1.6** — TextArea (wrap or scroll, multi-line caret), Switch, Accordion /
+Expander, first-class Separator and Spacer, Inspector sample (table +
+toolbar + tabs + message box). Keyboard map covers the new controls.
 Requires `github.com/codemodify/paintengine2d@v0.7.2` (`02b2939`).
 
 ## License
