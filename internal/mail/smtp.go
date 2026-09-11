@@ -63,9 +63,14 @@ func SendSMTP(cfg ServerConfig, from string, to []string, raw []byte) error {
 	defer client.Close()
 
 	if authName == "xoauth2" {
-		return fmt.Errorf("smtp: AUTH=XOAUTH2 is a documented stub — use PLAIN for now")
-	}
-	if user != "" && pass != "" {
+		token, err := resolveAccessToken(cfg, user)
+		if err != nil {
+			return err
+		}
+		if err := client.Auth(smtpXOAuth2{user: user, token: token}); err != nil {
+			return fmt.Errorf("smtp: AUTH XOAUTH2: %w", err)
+		}
+	} else if user != "" && pass != "" {
 		if err := client.Auth(smtp.PlainAuth("", user, pass, serverName)); err != nil {
 			// Some servers want LOGIN; retry via AUTH PLAIN raw is enough for most.
 			if err2 := client.Auth(smtpLogin{user, pass}); err2 != nil {
@@ -96,6 +101,20 @@ func SendSMTP(cfg ServerConfig, from string, to []string, raw []byte) error {
 		return err
 	}
 	return client.Quit()
+}
+
+type smtpXOAuth2 struct{ user, token string }
+
+func (a smtpXOAuth2) Start(server *smtp.ServerInfo) (string, []byte, error) {
+	raw := "user=" + a.user + "\x01auth=Bearer " + a.token + "\x01\x01"
+	return "XOAUTH2", []byte(raw), nil
+}
+
+func (a smtpXOAuth2) Next(fromServer []byte, more bool) ([]byte, error) {
+	if more {
+		return []byte{}, fmt.Errorf("smtp: XOAUTH2 rejected: %s", string(fromServer))
+	}
+	return nil, nil
 }
 
 type smtpLogin struct{ user, pass string }

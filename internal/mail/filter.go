@@ -4,15 +4,15 @@ import "strings"
 
 // Filter is the Thunderbird Quick Filter bar: a query plus pin buttons.
 type Filter struct {
-	Query       string
-	Unread      bool
-	Starred     bool
-	Attachment  bool
-	Tag         string
-	Sender      bool
-	Recipients  bool
-	SubjectOnly bool
-	Body        bool
+	Query       string `json:"query,omitempty"`
+	Unread      bool   `json:"unread,omitempty"`
+	Starred     bool   `json:"starred,omitempty"`
+	Attachment  bool   `json:"attachment,omitempty"`
+	Tag         string `json:"tag,omitempty"`
+	Sender      bool   `json:"sender,omitempty"`
+	Recipients  bool   `json:"recipients,omitempty"`
+	SubjectOnly bool   `json:"subjectOnly,omitempty"`
+	Body        bool   `json:"body,omitempty"`
 }
 
 // Match reports whether m passes the Quick Filter pins and query.

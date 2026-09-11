@@ -14,6 +14,8 @@ type ChromePrefs struct {
 	Density  string `json:"density"`
 	Layout   string `json:"layout,omitempty"`
 	Light    bool   `json:"light,omitempty"`
+	Threaded bool   `json:"threaded,omitempty"`
+	HideMute bool   `json:"hideMuted,omitempty"`
 }
 
 func chromePrefsPath() string {

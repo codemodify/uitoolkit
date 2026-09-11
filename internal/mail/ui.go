@@ -77,6 +77,9 @@ type session struct {
 	cardView    bool
 	density     style.Density
 	tags        []Tag
+	threaded    bool
+	hideMuted   bool
+	muted       map[string]bool
 
 	table                                      *widgets.TableView
 	cards                                      *widgets.CardList
@@ -112,6 +115,8 @@ func newSession(a *app.Application, win *app.Window, cli *Client, opts AppOption
 	p := loadChromePrefs()
 	s.chromePrefs = p
 	s.cardView = opts.CardView || p.CardView
+	s.threaded = p.Threaded
+	s.hideMuted = p.HideMute
 	s.density = opts.Density
 	if s.density == style.DensityDefault && p.Density != "" {
 		s.density = p.density()
@@ -132,6 +137,8 @@ func newSession(a *app.Application, win *app.Window, cli *Client, opts AppOption
 
 func (s *session) persistChrome() {
 	s.chromePrefs.CardView = s.cardView
+	s.chromePrefs.Threaded = s.threaded
+	s.chromePrefs.HideMute = s.hideMuted
 	s.chromePrefs.Density = s.density.String()
 	if s.opts.Layout == LayoutClassic {
 		s.chromePrefs.Layout = "classic"
@@ -220,7 +227,7 @@ func (s *session) build() widget.Component {
 		id, ok := n.Data.(FolderID)
 		if !ok || id == "" {
 			if acct, ok := n.Data.(string); ok {
-				if acct == AccountUnified || acct == AccountTags {
+				if acct == AccountUnified || acct == AccountTags || acct == AccountSmart || acct == AccountCategories {
 					return
 				}
 				s.showAccountCentral(acct)
@@ -405,11 +412,8 @@ func (s *session) menuBar() *widgets.MenuBar {
 			widgets.ItemAccel("&Get New Messages", "F5", s.getMessages),
 			widgets.Item("Get Messages for Current Account", s.getMessages),
 			widgets.Sep(),
-			widgets.Item("Work Offline", func() {
-				s.online = !s.online
-				s.refreshStatus()
-				s.mark("Online state toggled")
-			}),
+			widgets.Item("Work Offline", s.toggleOnline),
+			widgets.Item("New Smart Folder…", s.newSmartFolder),
 			widgets.Item("Compact Folders", func() { s.mark("Compact Folders (stub)") }),
 			widgets.Item("Empty Trash", s.emptyTrash),
 			widgets.Sep(),
@@ -468,6 +472,16 @@ func (s *session) menuBar() *widgets.MenuBar {
 			widgets.Item("Sort by Date", func() { s.sortCol, s.sortAsc = 4, false; s.refreshList() }),
 			widgets.Item("Sort by Subject", func() { s.sortCol, s.sortAsc = 2, true; s.refreshList() }),
 			widgets.Item("Sort by Correspondent", func() { s.sortCol, s.sortAsc = 3, true; s.refreshList() }),
+			widgets.CheckItem("&Threaded", s.threaded, func() {
+				s.threaded = !s.threaded
+				s.persistChrome()
+				s.refreshList()
+			}),
+			widgets.CheckItem("Hide muted threads", s.hideMuted, func() {
+				s.hideMuted = !s.hideMuted
+				s.persistChrome()
+				s.refreshList()
+			}),
 			widgets.Sep(),
 			widgets.CheckItem("&Dark", !s.opts.Light, func() {
 				s.opts.Light = false
@@ -486,6 +500,12 @@ func (s *session) menuBar() *widgets.MenuBar {
 			widgets.Item("Unified Inbox", func() {
 				s.central = false
 				s.folder = FolderUnifiedInbox
+				s.selected = nil
+				s.refreshAll()
+			}),
+			widgets.Item("VIP", func() {
+				s.central = false
+				s.folder = FolderVIP
 				s.selected = nil
 				s.refreshAll()
 			}),
@@ -511,12 +531,19 @@ func (s *session) menuBar() *widgets.MenuBar {
 			widgets.Item("Tag · Personal", func() { s.toggleTag("Personal") }),
 			widgets.Item("Tag · To Do", func() { s.toggleTag("To Do") }),
 			widgets.Sep(),
+			widgets.Item("Mute Thread", func() { s.muteThread(true) }),
+			widgets.Item("Unmute Thread", func() { s.muteThread(false) }),
+			widgets.Item("Add sender to VIP", s.addVIP),
+			widgets.Item("Move sender to Primary", func() { s.recategorize(CatPrimary) }),
+			widgets.Item("Move sender to Other", func() { s.recategorize(CatOther) }),
+			widgets.Sep(),
 			widgets.ItemAccel("&Delete", "#", s.deleteSel),
 		),
 		widgets.NewMenu("&Tools",
 			widgets.ItemAccel("Account Settings", "Ctrl+,", s.openPrefs),
 			widgets.Item("Preferences", s.openPrefs),
 			widgets.Item("Message Filters", s.openFilters),
+			widgets.Item("Smart Folders", s.openSmartFolders),
 			widgets.Item("Apply Filters Now", func() {
 				n, err := s.cli.ApplyRules(s.folder)
 				if err != nil {
@@ -602,6 +629,8 @@ func (s *session) messageMenu(from widget.Component, p paintengine2d.Point) {
 		widgets.Item("Star", s.toggleStar),
 		widgets.Sep(),
 		widgets.Item("Tag · Important", func() { s.toggleTag("Important") }),
+		widgets.Item("Mute Thread", func() { s.muteThread(true) }),
+		widgets.Item("Add sender to VIP", s.addVIP),
 		widgets.Item("Archive", s.archive),
 		widgets.Item("Junk", s.junk),
 		widgets.Item("Delete", s.deleteSel),
@@ -629,6 +658,9 @@ func (s *session) cellText(row, col int) string {
 		if strings.TrimSpace(sub) == "" {
 			sub = "(no subject)"
 		}
+		if m.ThreadID != "" && s.muted[m.ThreadID] {
+			sub = "🔇 " + sub
+		}
 		if !m.Read {
 			return "● " + sub
 		}
@@ -655,6 +687,24 @@ func (s *session) visible() []Message {
 	if err != nil {
 		s.mark(err.Error())
 		return nil
+	}
+	if ids, err := s.cli.MutedThreads(); err == nil {
+		s.muted = map[string]bool{}
+		for _, id := range ids {
+			s.muted[id] = true
+		}
+	}
+	if s.hideMuted && len(s.muted) > 0 {
+		var keep []Message
+		for _, m := range all {
+			if m.ThreadID == "" || !s.muted[m.ThreadID] {
+				keep = append(keep, m)
+			}
+		}
+		all = keep
+	}
+	if s.threaded {
+		return groupThreaded(all, kind, s.sortCol, s.sortAsc)
 	}
 	sortMessages(all, s.sortCol, s.sortAsc, kind)
 	return all
@@ -724,6 +774,57 @@ func (s *session) rebuildTree() {
 		}
 	}
 	roots = append(roots, unified)
+
+	smart := widgets.NewTreeNode("Smart Folders")
+	smart.Data = AccountSmart
+	smart.Expanded = true
+	if sfs, err := s.cli.SmartFolders(); err == nil {
+		for _, sf := range sfs {
+			fid := sf.FolderIDFor()
+			label := sf.Name
+			nUnread, _ := s.cli.Unread(fid)
+			if nUnread > 0 {
+				label = fmt.Sprintf("%s (%d)", sf.Name, nUnread)
+			}
+			n := widgets.NewTreeNode(label)
+			n.Data = fid
+			n.Bold = nUnread > 0
+			smart.Children = append(smart.Children, n)
+			if fid == s.folder && !s.central {
+				selected = n
+			}
+		}
+	}
+	if len(smart.Children) == 0 {
+		n := widgets.NewTreeNode("New…")
+		n.Data = FolderID("")
+		smart.Children = append(smart.Children, n)
+	}
+	roots = append(roots, smart)
+
+	cats := widgets.NewTreeNode("Categories")
+	cats.Data = AccountCategories
+	cats.Expanded = true
+	if vfs, err := s.cli.VirtualFolders(); err == nil {
+		for _, f := range vfs {
+			if f.AccountID != AccountCategories {
+				continue
+			}
+			label := f.Name
+			nUnread, _ := s.cli.Unread(f.ID)
+			if nUnread > 0 {
+				label = fmt.Sprintf("%s (%d)", f.Name, nUnread)
+			}
+			n := widgets.NewTreeNode(label)
+			n.Data = f.ID
+			n.Bold = nUnread > 0
+			cats.Children = append(cats.Children, n)
+			if f.ID == s.folder && !s.central {
+				selected = n
+			}
+		}
+	}
+	roots = append(roots, cats)
 
 	acctUnread := 0
 	for _, acct := range s.accounts() {
@@ -930,10 +1031,14 @@ func (s *session) refreshStatus() {
 	}
 	s.status.Set(0, fmt.Sprintf("%d unread%s", unread, sel))
 	s.status.Set(1, fmt.Sprintf("%s  ·  %d shown", name, len(s.rows)))
+	line := s.backendLabel()
+	if ops, err := s.cli.Outbox(); err == nil && len(ops) > 0 {
+		line += fmt.Sprintf(" · %d queued", len(ops))
+	}
 	if s.online {
-		s.status.Set(2, "Online · "+s.backendLabel())
+		s.status.Set(2, "Online · "+line)
 	} else {
-		s.status.Set(2, "Offline · "+s.backendLabel())
+		s.status.Set(2, "Offline · "+line)
 	}
 	s.status.Set(3, "v"+uitoolkit.Version)
 	if s.folderL != nil {
@@ -1028,6 +1133,114 @@ func (s *session) getMessages() {
 		return
 	}
 	s.mark(fmt.Sprintf("Downloaded %d message(s)", res.New))
+}
+
+func (s *session) toggleOnline() {
+	s.online = !s.online
+	n, err := s.cli.SetOnline(s.online)
+	if err != nil {
+		s.mark(err.Error())
+	}
+	s.refreshStatus()
+	if s.online {
+		s.mark(fmt.Sprintf("Online · flushed %d queued op(s)", n))
+		s.refreshAll()
+		return
+	}
+	s.mark("Working offline · send/move/delete/flag queue in the Outbox")
+}
+
+func (s *session) muteThread(muted bool) {
+	m, ok := s.primary()
+	if !ok {
+		s.mark("No message")
+		return
+	}
+	tid := m.ThreadID
+	if tid == "" {
+		tid = ThreadIDOf(m)
+	}
+	if err := s.cli.MuteThread(tid, muted); err != nil {
+		s.mark(err.Error())
+		return
+	}
+	if muted {
+		s.mark("Muted thread")
+	} else {
+		s.mark("Unmuted thread")
+	}
+	s.refreshList()
+	s.rebuildTree()
+}
+
+func (s *session) addVIP() {
+	m, ok := s.primary()
+	if !ok {
+		s.mark("No message")
+		return
+	}
+	v, err := s.cli.PutVIP(VIP{Address: extractAddr(m.From), Name: DisplayName(m.From)})
+	if err != nil {
+		s.mark(err.Error())
+		return
+	}
+	s.mark("VIP: " + v.Address)
+	s.rebuildTree()
+}
+
+func (s *session) recategorize(cat string) {
+	m, ok := s.primary()
+	if !ok {
+		s.mark("No message")
+		return
+	}
+	if err := s.cli.SetSenderCategory(extractAddr(m.From), cat); err != nil {
+		s.mark(err.Error())
+		return
+	}
+	s.mark("Sender → " + cat)
+	s.refreshAll()
+}
+
+func (s *session) newSmartFolder() {
+	win, err := s.app.NewWindow(platform.WindowOptions{
+		Title: "Smart Folder", Width: 420, Height: 280, MinWidth: 320, MinHeight: 220,
+	})
+	if err != nil {
+		s.mark(err.Error())
+		return
+	}
+	name := widgets.NewTextField("", "Folder name", nil)
+	query := widgets.NewTextField(s.filter.Query, "Search query", nil)
+	save := widgets.NewButton("Save", func() {
+		sf, err := s.cli.PutSmartFolder(SmartFolder{
+			Name:   strings.TrimSpace(name.Text),
+			Filter: Filter{Query: strings.TrimSpace(query.Text), Unread: s.filter.Unread, Starred: s.filter.Starred, Attachment: s.filter.Attachment},
+		})
+		if err != nil {
+			widgets.Warn(win.Content(), "Smart Folder", err.Error(), nil)
+			return
+		}
+		s.folder = sf.FolderIDFor()
+		s.central = false
+		s.refreshAll()
+		s.mark("Smart folder: " + sf.Name)
+		win.Close()
+	})
+	save.Primary = true
+	cancel := widgets.NewButton("Cancel", func() { win.Close() })
+	form := widgets.NewColumn(
+		widgets.NewTitle("Saved search"),
+		widgets.NewLabel("Name"), name,
+		widgets.NewLabel("Query"), query,
+		widgets.NewLabel("Unread / starred / attachment pins on the Quick Filter are included."),
+		widgets.NewRow(widgets.NewSpacer(), cancel, save).WithGap(8),
+	).WithGap(8)
+	win.SetContent(widgets.NewPad(12, form))
+}
+
+func (s *session) openSmartFolders() {
+	s.newSmartFolder()
 }
 
 func (s *session) setRead(read bool) {
@@ -1372,7 +1585,7 @@ func (s *session) openAttachment(i int) {
 		return
 	}
 	if p.Path != "" {
-		s.mark("Saved " + p.Path)
+		s.mark("Opened " + p.Path + " (xdg-open)")
 		return
 	}
 	s.mark("Attachment: " + s.attNames[i])

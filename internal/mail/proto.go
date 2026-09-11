@@ -40,12 +40,17 @@ import "encoding/json"
 //	messages.getPart    {id, partId}
 //	messages.openPart   {id, partId}
 //	sync.run            {accountId?}
+//	status.set          {online}
+//	outbox.list / outbox.flush
+//	smart.* / threads.mute / vip.* / notify.*
+//	senders.setCategory / oauth.* / hosts.guess
 //
 // Events (server → client, no id):
 //
 //	mail.changed        {folderId, reason}
 //	mail.fetched        {accountId, count}
 //	mail.synced         {accountId, count}
+//	mail.notify         {title, body, vip, count}
 
 const RPCVersion = "2.0"
 
@@ -83,10 +88,30 @@ const (
 	MethodMessagesPart   = "messages.getPart"
 	MethodMessagesOpen   = "messages.openPart"
 	MethodSyncRun        = "sync.run"
+	MethodStatusSet      = "status.set"
+	MethodOutboxList     = "outbox.list"
+	MethodOutboxFlush    = "outbox.flush"
+	MethodSmartList      = "smart.list"
+	MethodSmartPut       = "smart.put"
+	MethodSmartDel       = "smart.delete"
+	MethodThreadMute     = "threads.mute"
+	MethodThreadMuted    = "threads.muted"
+	MethodVIPList        = "vip.list"
+	MethodVIPPut         = "vip.put"
+	MethodVIPDel         = "vip.delete"
+	MethodNotifyGet      = "notify.get"
+	MethodNotifyPut      = "notify.put"
+	MethodCategorySet    = "senders.setCategory"
+	MethodCategoryList   = "senders.categories"
+	MethodOAuthStart     = "oauth.start"
+	MethodOAuthPoll      = "oauth.poll"
+	MethodOAuthCancel    = "oauth.cancel"
+	MethodHostsGuess     = "hosts.guess"
 
 	EventChanged = "mail.changed"
 	EventFetched = "mail.fetched"
 	EventSynced  = "mail.synced"
+	EventNotify  = "mail.notify"
 )
 
 // Request is a JSON-RPC 2.0 request.
@@ -253,6 +278,35 @@ type eventParams struct {
 	Reason    string   `json:"reason,omitempty"`
 	AccountID string   `json:"accountId,omitempty"`
 	Count     int      `json:"count,omitempty"`
+	Title     string   `json:"title,omitempty"`
+	Body      string   `json:"body,omitempty"`
+	VIP       bool     `json:"vip,omitempty"`
+}
+
+type onlineParams struct {
+	Online bool `json:"online"`
+}
+
+type muteParams struct {
+	ThreadID string `json:"threadId"`
+	Muted    bool   `json:"muted"`
+}
+
+type vipDelParams struct {
+	Address string `json:"address"`
+}
+
+type categoryParams struct {
+	Address  string `json:"address"`
+	Category string `json:"category"`
+}
+
+type oauthPollParams struct {
+	SessionID string `json:"sessionId"`
+}
+
+type guessParams struct {
+	Address string `json:"address"`
 }
 
 func decodeParams[T any](raw json.RawMessage) (T, error) {

@@ -1,11 +1,11 @@
 # Mail — mailclientd + mailclientui
 
-Thunderbird-chrome mail client on uitoolkit **v0.9.1**. Two processes:
+Thunderbird-chrome mail client on uitoolkit **v0.10.0**. Two processes:
 
 | Process | Role |
 | --- | --- |
-| **mailclientd** | Owns accounts, IMAP/SMTP, local cache, folders, messages, tags, filters, identities, search, mutations. |
-| **mailclientui** | Renders chrome and sends JSON-RPC commands. **No IMAP or SMTP** in this process. |
+| **mailclientd** | Owns accounts, IMAP/SMTP, OAuth tokens, local cache, folders, messages, tags, filters, identities, smart folders, VIP, categories, outbox, search, mutations. |
+| **mailclientui** | Renders chrome and sends JSON-RPC commands. **No IMAP, SMTP, or OAuth HTTP** in this process. |
 
 Shared types and the RPC client/server live in [`internal/mail`](../internal/mail).
 
@@ -39,7 +39,7 @@ go run ./examples/mail -screenshot docs/screenshots
 
 ## Real IMAP + SMTP (primary path)
 
-`mailclientd` is meant to be pointed at a real account. **Never put a password in the config file.** Use `passEnv` (an environment variable name).
+`mailclientd` is meant to be pointed at a real account. **Never put a password in the config file.** Use `passEnv` (an environment variable name) **or** OAuth (encrypted refresh token — see below).
 
 Config file (first existing wins):
 
@@ -73,23 +73,7 @@ Example `mail.json` (mode `0600` recommended):
         "user": "ada@example.com",
         "passEnv": "UITK_MAIL_PASS",
         "starttls": true
-      },
-      "identities": [
-        {
-          "id": "home-default",
-          "accountId": "home",
-          "name": "Ada Lovelace",
-          "address": "ada@example.com",
-          "signature": "Ada",
-          "default": true
-        },
-        {
-          "id": "home-alias",
-          "accountId": "home",
-          "name": "Ada L.",
-          "address": "ada.lovelace@example.com"
-        }
-      ]
+      }
     }
   ]
 }
@@ -113,51 +97,149 @@ export UITK_MAIL_NAME='Ada Lovelace'
 go run ./cmd/mailclientd
 ```
 
-Default when **no** config and `UITK_MAIL` is unset: **empty** LocalStore (no demo accounts). The UI asks *There are no accounts, want to add one?* Yes opens File → Add Account (writes `mail.json` with `passEnv` only). No leaves empty chrome.
+Default when **no** config and `UITK_MAIL` is unset: **empty** LocalStore (no demo accounts). The UI asks *There are no accounts, want to add one?* Yes opens File → Add Account. No leaves empty chrome.
 
 `UITK_MAIL=memory` is the **only** way to load the seeded MemoryStore demo (and `examples/mail` / screenshots still use that on purpose).
+
+### Add Account polish
+
+The wizard guesses IMAP/SMTP from the email domain (`gmail.com` → `imap.gmail.com:993` / `smtp.gmail.com:465`, Outlook/Hotmail, Yahoo, iCloud, Fastmail, Proton, else `imap.<domain>:993` / `smtp.<domain>:587`). You can still edit the hosts. App-password / `passEnv` remains the default save path.
 
 ### Text-only message view
 
 The Message tab is **plain text**. mailclientd prefers the `text/plain` part; if the message is HTML-only, tags are stripped (`HTMLToText`). There is no HTML engine and no HTML tab. The Source tab still shows raw RFC822 when cached.
 
-### IMAP / SMTP status (honest)
+## OAuth (Google + Microsoft)
+
+Real **authorization-code + PKCE loopback** (`http://127.0.0.1:<port>/oauth/callback`) or **device code** flow. IMAP/SMTP then use **AUTH XOAUTH2**. The `UITK_MAIL_XOAUTH2` bearer passthrough and `passEnv` app-password path still work.
+
+**Honest gap:** uitoolkit does **not** ship Google or Microsoft client IDs. You must register an app and supply credentials:
+
+| Provider | Register | Env (or wizard fields) |
+| --- | --- | --- |
+| Google | [Google Cloud Console](https://console.cloud.google.com/apis/credentials) — OAuth client (Desktop or Web). Redirect: `http://127.0.0.1:<port>/oauth/callback`. Scope: `https://mail.google.com/` | `UITK_MAIL_OAUTH_GOOGLE_CLIENT_ID`, `UITK_MAIL_OAUTH_GOOGLE_CLIENT_SECRET` |
+| Microsoft | [Azure AD app registration](https://portal.azure.com/) — public client is fine. Redirect same loopback URL, or device code (no redirect). Scopes: `offline_access`, `https://outlook.office.com/IMAP.AccessAsUser.All`, `https://outlook.office.com/SMTP.Send` | `UITK_MAIL_OAUTH_MS_CLIENT_ID`, `UITK_MAIL_OAUTH_MS_CLIENT_SECRET` (secret optional for public clients) |
+
+```bash
+export UITK_MAIL_OAUTH_GOOGLE_CLIENT_ID='….apps.googleusercontent.com'
+export UITK_MAIL_OAUTH_GOOGLE_CLIENT_SECRET='…'   # if the client is confidential
+go run ./cmd/mailclientd
+# UI: File → Add Account → Sign in with Google
+```
+
+Device flow: **Device code…** on the same dialog (useful when loopback cannot bind or the app only allows device).
+
+### Token storage
+
+Refresh/access tokens are **never** written to `mail.json`. They live under `$XDG_DATA_HOME/uitoolkit/mail/secrets/` (or `$UITK_MAIL_DATA/secrets/`):
+
+- `*.tok` — AES-256-GCM (random nonce prefix)
+- `master.key` — 32 random bytes, mode `0600`, used when libsecret is unavailable
+- If `secret-tool` is on `PATH`, the master key is also stored as `service=uitoolkit-mail`
+
+This is an encrypted file (plus optional OS keyring), **not** a TPM-backed vault. Backup the `secrets/` directory with the same care as an SSH key.
+
+Expired access tokens are refreshed with the stored refresh token.
+
+## Sync (IDLE / QRESYNC / CONDSTORE)
+
+After listen, LocalStore starts a **push supervisor**:
+
+- **IDLE** on **Inbox and Sent** (one IMAP connection per watched mailbox; IMAP allows only one selected mailbox per connection).
+- IDLE wake (EXISTS / FETCH / EXPUNGE / RECENT) → incremental sync of that folder.
+- **QRESYNC** when the server advertises it (`ENABLE QRESYNC`): `SELECT … (QRESYNC (uidvalidity highestmodseq))`, apply `VANISHED`, then flag refresh.
+- Else **CONDSTORE** `UID FETCH … (CHANGEDSINCE highestmodseq)` for flags.
+- Else a full `UID FETCH 1:* (UID FLAGS)`.
+- Other folders: CONDSTORE/FLAGS poll about every **2 minutes**, plus File → Get Messages.
+- `UIDVALIDITY` change still wipes that folder’s cache.
+
+Manual Get Messages / `sync.run` always does a full account pass (LIST + incremental UID FETCH).
+
+Work Offline (`status.set`) stops treating the transport as reachable; mutations go to the outbox (below). Going online flushes the queue.
+
+## Offline outbox
+
+While offline (or after a transport error), **send / move / delete / flag** apply to the local cache immediately and enqueue an `OutboxOp`. Unified Folders → **Outbox** lists queued sends.
+
+Flush: File → Work Offline (toggle back on), Get Messages, or `outbox.flush`.
+
+Conflict-safe cache:
+
+- Pending ops skip CONDSTORE/QRESYNC flag overwrite for that UID (local mutation wins until flush).
+- Flush of a vanished UID is a no-op (dropped).
+- `UIDVALIDITY` change drops stale UIDs; the user re-syncs.
+
+## Fast search + Smart folders
+
+Daemon-side inverted index over subject / from / to / body (AND of tokens). Quick Filter and `messages.search` use it when a query is present, then apply pins.
+
+**Smart / Search folders:** File → New Smart Folder (or Tools → Smart Folders). Saved name + query + current unread/starred/attachment pins become a virtual folder under **Smart Folders**. Editable (put the same id) and deletable from Preferences → Smart.
+
+## Threading + mute
+
+Conversations group by `In-Reply-To` / `References` when Message-IDs exist, otherwise a normalized subject key. View → **Threaded** nests replies (`↳`) and shows a count on the root.
+
+**Message → Mute Thread** (and Unmute). Muted threads:
+
+- stay in normal folders with a 🔇 marker
+- drop out of Unified Unread
+- do not drive notifications
+- View → Hide muted threads removes them from the list
+
+## Attachments
+
+Message view stays **text-only**. The attachment list calls `messages.openPart`: mailclientd writes a cache file under the data dir (`open/` or a temp file for MemoryStore) and launches `xdg-open` (or `open` on macOS) when a display is available. `UITK_MAIL_NO_OPEN=1` skips the spawn (tests / headless).
+
+## VIP, notifications, categories
+
+- **VIP** senders (Message → Add sender to VIP). Unified Folders → **VIP** + unread badge.
+- **Notification rules** (Preferences → Notify): new mail, optional VIP-only, optional `notify-send` on Linux. No display / no `notify-send` → stub (RPC event `mail.notify` still fires). `UITK_MAIL_NO_NOTIFY=1` disables the desktop helper.
+- **Categories** (Gmail-lite, local): Primary / Transactions / Updates / Promotions / Other. Simple word rules plus a per-sender override (`senders.setCategory` / Message → Move sender to Primary/Other). Folder tree → **Categories**.
+
+Calendar / iTip is **not** in this release (Tier C later).
+
+## IMAP / SMTP status (honest)
 
 Implemented in mailclientd:
 
-- IMAP: CONNECT, implicit TLS (993) and STARTTLS (143), LOGIN, AUTH PLAIN, AUTH XOAUTH2 stub (`UITK_MAIL_XOAUTH2` bearer), CAPABILITY, LIST/LSUB, SELECT/EXAMINE, UID FETCH (ENVELOPE, FLAGS, BODYSTRUCTURE, BODY.PEEK[] / sections), UID STORE, UID SEARCH, UID COPY, UID MOVE (or COPY+\\Deleted+EXPUNGE), APPEND, EXPUNGE, IDLE (wake on EXISTS/FETCH/EXPUNGE), CONDSTORE CHANGEDSINCE when advertised.
-- Incremental cache: UIDVALIDITY wipe, UIDNEXT, highestmodseq when present. Raw `.eml` on disk after body fetch.
+- IMAP: CONNECT, implicit TLS (993) and STARTTLS (143), LOGIN, AUTH PLAIN, AUTH XOAUTH2 (env bearer **or** stored OAuth token), CAPABILITY, ENABLE QRESYNC/CONDSTORE, LIST/LSUB, SELECT/EXAMINE (+ QRESYNC), UID FETCH (ENVELOPE, FLAGS, BODYSTRUCTURE, BODY.PEEK[] / sections), UID STORE, UID SEARCH, UID COPY, UID MOVE (or COPY+\\Deleted+EXPUNGE), APPEND, EXPUNGE, IDLE (Inbox+Sent supervisor), CONDSTORE CHANGEDSINCE, VANISHED when QRESYNC.
+- Incremental cache: UIDVALIDITY wipe, UIDNEXT, highestmodseq. Raw `.eml` on disk after body fetch.
 - MIME: multipart (nested), text/plain + text/html, attachments, RFC 2047, charset via `golang.org/x/text`.
-- SMTP: implicit TLS (465), STARTTLS (587), AUTH PLAIN / LOGIN fallback. Send then IMAP APPEND to Sent.
-- Multiple accounts in one config; folder tree mirrors LIST + local specials.
-- Offline read of anything already synced.
+- SMTP: implicit TLS (465), STARTTLS (587), AUTH PLAIN / LOGIN / XOAUTH2. Send then IMAP APPEND to Sent (or outbox if offline).
+- Multiple accounts in one config; folder tree mirrors LIST + local specials + virtuals.
+- Offline read of anything already synced; queued mutations.
 
-Known gaps (not production-complete):
+Known gaps:
 
-- No QRESYNC / vanished vanishing; flag refresh is FLAGS FETCH (+ CHANGEDSINCE when CONDSTORE).
 - BODYSTRUCTURE walker covers common multipart/alternative + mixed; exotic message/rfc822 nests may miss a part id.
 - HTML is **stripped to text** in the Message tab (no HTML engine, no HTML tab). Scripts/iframes never run.
-- XOAUTH2 is a token-passthrough stub (no OAuth browser flow).
-- IDLE is one mailbox at a time after sync, not a permanent supervisor yet.
+- OAuth needs **your** Google/Microsoft app registration (no bundled client IDs).
+- IDLE watches Inbox + Sent, not every mailbox (others poll).
 - Sieve is not implemented (local Sorting Office rules only).
-- Attachment “Open” writes a cache file; the UI does not spawn `xdg-open` (daemon returns the path).
+- Desktop notifications need `notify-send` + a display; otherwise they are a no-op.
+- iTip / Calendar is out of scope (Tier C).
 
 ## Protocol
 
 Unix domain socket, **JSON-RPC 2.0**, one JSON object per line (NDJSON).
 
-Notifications (no `id`): `mail.changed`, `mail.fetched`, `mail.synced`.
+Notifications (no `id`): `mail.changed`, `mail.fetched`, `mail.synced`, `mail.notify`.
 
 | Method | Params |
 | --- | --- |
 | `ping` | — |
 | `status.get` | — |
+| `status.set` | `{online}` — Work Offline; going online flushes the outbox |
 | `accounts.list` | — |
 | `accounts.put` | AccountConfig (`passEnv` only; never a password) |
+| `oauth.start` | `{provider, address, name?, clientId?, clientSecret?, flow?}` |
+| `oauth.poll` | `{sessionId}` |
+| `oauth.cancel` | `{sessionId}` |
+| `hosts.guess` | `{address}` → IMAP/SMTP guess |
 | `folders.list` | `{accountId}` |
 | `folders.get` | `{id}` |
 | `folders.create` | `{accountId, name, parent?}` |
-| `folders.virtual` | — Unified Inbox / Unread / Starred / tag folders |
+| `folders.virtual` | — Unified / VIP / Outbox / categories / smart / tags |
 | `messages.list` | `{folderId, filter?}` (virtual ids ok) |
 | `messages.get` | `{id}` (fetches MIME body if needed) |
 | `messages.search` | `{accountId?, folderId?, filter}` |
@@ -167,21 +249,19 @@ Notifications (no `id`): `mail.changed`, `mail.fetched`, `mail.synced`.
 | `messages.append` | `{folderId, message}` |
 | `messages.update` | `{id, message}` |
 | `messages.getPart` | `{id, partId}` |
-| `messages.openPart` | `{id, partId}` → `{path}` on disk |
+| `messages.openPart` | `{id, partId}` → `{path}` on disk + `xdg-open` |
 | `messages.fetch` | `{accountId}` |
 | `sync.run` | `{accountId?}` |
 | `unread.get` | `{folderId?}` |
 | `compose.send` | `{accountId, identityId?, message, attachPaths?, id?}` |
 | `compose.saveDraft` | `{accountId, message, id?}` |
-| `identities.list` | `{accountId?}` |
-| `identities.put` | Identity |
-| `identities.delete` | `{id}` |
-| `tags.list` | — |
-| `tags.put` | `{name, color}` |
-| `filters.list` | — |
-| `filters.put` | FilterRule |
-| `filters.delete` | `{id}` |
-| `filters.apply` | `{folderId?}` |
+| `outbox.list` / `outbox.flush` | queued send/move/delete/flag |
+| `smart.list` / `smart.put` / `smart.delete` | saved search folders |
+| `threads.mute` / `threads.muted` | conversation mute |
+| `vip.list` / `vip.put` / `vip.delete` | VIP senders |
+| `notify.get` / `notify.put` | `{enabled, vipOnly, desktop}` |
+| `senders.setCategory` / `senders.categories` | Primary/Other/… override |
+| `identities.*` / `tags.*` / `filters.*` | unchanged from v0.9 |
 
 Quick Filter in the UI calls `messages.list` with the pin/query filter so the list is daemon-filtered.
 
@@ -202,17 +282,17 @@ Condition fields: `from`, `to`, `subject`, `body`, `attachment`, `unread`, `tag`
 Actions: `move` (`folder`), `tag`, `markRead`, `markUnread`, `delete`, `stop`.
 AND across conditions. Persist in MemoryStore or the disk cache. Tools → Message Filters.
 
-## UI features (v0.9.1)
+## UI features (v0.10.0)
 
 - **Empty by default** — no demo accounts unless `UITK_MAIL=memory`. First-run: “There are no accounts, want to add one?”
-- **Add account** — File → Add Account (or Yes on first-run). Writes `passEnv` only.
+- **Add account** — domain auto-guess, Sign in with Google / Microsoft (or device code), or `passEnv`.
 - **Text-only Message tab** — prefer `text/plain`; HTML-only mail is tag-stripped. No HTML engine / no HTML tab.
 - **Card / Table** — View → Card view or the Cards toolbar toggle. Remembered in `~/.config/uitoolkit/mailui.json`.
-- **Density** — View → Compact / Default / Relaxed (extends v0.8.1 row metrics). Same prefs file.
-- **Unified Inbox** — folder pane “Unified Folders” (Inbox / Unread / Starred across accounts).
-- **Colored tags** — Message → Tag; Tags section in the folder tree; Quick Filter tag combo.
-- **Identities** — compose From picker is not 1:1 with accounts; Preferences → Identities.
-- **Filters** — Tools → Message Filters (works on MemoryStore and the disk store).
+- **Density** — View → Compact / Default / Relaxed.
+- **Unified Inbox** — plus VIP and Outbox.
+- **Smart Folders** and **Categories** in the folder tree.
+- **Threaded** view and **Mute Thread**.
+- **Colored tags**, identities, Sorting Office filters — unchanged.
 
 ## Keyboard (Thunderbird-like)
 
@@ -229,10 +309,22 @@ Documented in Help → Keyboard and [keyboard.md](keyboard.md). When the thread 
 | **F5** | Get Messages / sync |
 | **Ctrl+,** | Preferences |
 
+## How to try (dogfood)
+
+```bash
+UITK_MAIL=memory go run ./cmd/mailclientd
+UITK_SCENE=auto go run ./cmd/mailclientui
+```
+
+- **Smart folders** — tree → Smart Folders → Invoices (or File → New Smart Folder).
+- **VIP** — open a Kai / Thunderbird Team message → Message → Add sender to VIP; tree → VIP.
+- **Threading** — View → Threaded; look for “Thread: lunch plans (3)”. Message → Mute Thread.
+- **OAuth** — File → Add Account, enter a Gmail/Outlook address (hosts fill in), paste your client id, Sign in with Google / Microsoft. Approve in the browser (or use Device code). Then Get Messages.
+
 ## Screenshots
 
 ```bash
 go run ./examples/mail -screenshot docs/screenshots
 ```
 
-Writes `mail-dark.png`, `mail-light.png`, `mail-classic.png`, `mail-compose.png`, `mail-prefs.png`, `mail-cards.png`, `mail-compact.png`, `mail-filters.png`, `mail-empty.png` (first-run dialog).
+Writes `mail-dark.png`, `mail-light.png`, `mail-classic.png`, `mail-compose.png`, `mail-prefs.png`, `mail-cards.png`, `mail-compact.png`, `mail-filters.png`, `mail-empty.png` (first-run dialog), `mail-account.png` (Add Account), `mail-smart.png` (Invoices smart folder).

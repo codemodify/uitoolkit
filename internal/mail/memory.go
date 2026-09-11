@@ -23,6 +23,7 @@ type MemoryStore struct {
 	nextID     int
 	fetches    map[string]int
 	now        time.Time
+	feat       *featureHost
 }
 
 // NewMemoryStore builds an empty store. now is used for Fetch timestamps
@@ -33,7 +34,7 @@ func NewMemoryStore(now time.Time) *MemoryStore {
 	}
 	return &MemoryStore{
 		nextID: 1, fetches: map[string]int{}, now: now,
-		tags: DefaultTags(),
+		tags: DefaultTags(), feat: newFeatureHost(),
 	}
 }
 
@@ -78,10 +79,21 @@ func (s *MemoryStore) ListFolders(accountID string) []Folder {
 func (s *MemoryStore) GetFolder(id FolderID) (Folder, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if f, ok := virtualFolderByID(id); ok {
+	if f, ok := s.liveVirtual(id); ok {
 		return f, true
 	}
 	return s.folderLocked(id)
+}
+
+func (s *MemoryStore) liveVirtual(id FolderID) (Folder, bool) {
+	if sid := SmartFolderID(id); sid != "" && s.feat != nil {
+		for _, sf := range s.feat.ListSmartFolders() {
+			if sf.ID == sid {
+				return Folder{ID: id, AccountID: AccountSmart, Name: sf.Name, Kind: FolderCustom, Virtual: true}, true
+			}
+		}
+	}
+	return virtualFolderByID(id)
 }
 
 func (s *MemoryStore) folderLocked(id FolderID) (Folder, bool) {
@@ -108,7 +120,7 @@ func (s *MemoryStore) listLocked(folder FolderID) []Message {
 			kind = f.Kind
 		}
 		if IsVirtual(folder) {
-			if matchVirtual(folder, m, f, kind) {
+			if matchVirtual(folder, m, f, kind, s.feat.snap()) {
 				out = append(out, m.Clone())
 			}
 			continue
@@ -146,6 +158,11 @@ func (s *MemoryStore) SetFlags(id MessageID, patch FlagPatch) error {
 	}
 	if patch.Tags != nil {
 		s.messages[i].Tags = append([]string(nil), (*patch.Tags)...)
+	}
+	if s.feat != nil && !s.feat.Online() {
+		s.feat.mu.Lock()
+		s.feat.enqueueLocked(OutboxOp{Kind: "flag", MessageID: id, Patch: patch, AccountID: s.messages[i].AccountID})
+		s.feat.mu.Unlock()
 	}
 	return nil
 }
@@ -208,7 +225,16 @@ func (s *MemoryStore) Append(folder FolderID, msg Message) (MessageID, error) {
 	msg.ID = MessageID(fmt.Sprintf("m-%04d", s.nextID))
 	msg.Folder = folder
 	msg.AccountID = f.AccountID
+	if msg.ThreadID == "" {
+		msg.ThreadID = ThreadIDOf(msg)
+	}
+	if msg.Category == "" && s.feat != nil {
+		msg.Category = messageCategory(msg, s.feat.snap())
+	}
 	s.messages = append(s.messages, msg)
+	if s.feat != nil && s.feat.index != nil {
+		s.feat.index.add(msg)
+	}
 	return msg.ID, nil
 }
 
@@ -339,27 +365,30 @@ func (s *MemoryStore) CreateFolder(accountID, name string, parent FolderID) (Fol
 func (s *MemoryStore) Search(q SearchQuery) []Message {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	snap := s.feat.snap()
+	var idx *searchIndex
+	if s.feat != nil {
+		idx = s.feat.index
+	}
+	hits := searchMessages(s.messages, SearchQuery{AccountID: q.AccountID, Filter: q.Filter}, idx)
+	if q.Folder == "" {
+		return hits
+	}
 	var out []Message
-	for _, m := range s.messages {
-		if q.AccountID != "" && m.AccountID != q.AccountID {
+	for _, m := range hits {
+		f, ok := s.folderLocked(m.Folder)
+		kind := FolderCustom
+		if ok {
+			kind = f.Kind
+		}
+		if IsVirtual(q.Folder) {
+			if matchVirtual(q.Folder, m, f, kind, snap) {
+				out = append(out, m)
+			}
 			continue
 		}
-		if q.Folder != "" {
-			f, ok := s.folderLocked(m.Folder)
-			kind := FolderCustom
-			if ok {
-				kind = f.Kind
-			}
-			if IsVirtual(q.Folder) {
-				if !matchVirtual(q.Folder, m, f, kind) {
-					continue
-				}
-			} else if m.Folder != q.Folder {
-				continue
-			}
-		}
-		if q.Filter.Match(m) {
-			out = append(out, m.Clone())
+		if m.Folder == q.Folder {
+			out = append(out, m)
 		}
 	}
 	return out
@@ -404,7 +433,16 @@ func (s *MemoryStore) addMessage(m Message) {
 			m.Size += 24 * 1024
 		}
 	}
+	if m.ThreadID == "" {
+		m.ThreadID = ThreadIDOf(m)
+	}
+	if m.Category == "" && s.feat != nil {
+		m.Category = messageCategory(m, s.feat.snap())
+	}
 	s.messages = append(s.messages, m)
+	if s.feat != nil && s.feat.index != nil {
+		s.feat.index.add(m)
+	}
 }
 
 func folderRank(k FolderKind) int {
@@ -543,6 +581,15 @@ func (s *MemoryStore) VirtualFolders() []Folder {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	out := defaultVirtualFolders()
+	if s.feat != nil {
+		// defaultVirtualFolders already includes empty extras; replace with live smart folders
+		base := []Folder{
+			{ID: FolderUnifiedInbox, AccountID: AccountUnified, Name: "Unified Inbox", Kind: FolderInbox, Virtual: true, MatchKind: FolderInbox},
+			{ID: FolderUnifiedUnread, AccountID: AccountUnified, Name: "Unread", Kind: FolderCustom, Virtual: true},
+			{ID: FolderUnifiedStarred, AccountID: AccountUnified, Name: "Starred", Kind: FolderCustom, Virtual: true},
+		}
+		out = append(base, extraVirtualFolders(s.feat.snap())...)
+	}
 	for _, t := range s.tags {
 		out = append(out, Folder{
 			ID: TagFolderID(t.Name), AccountID: AccountTags, Name: t.Name,
@@ -681,10 +728,74 @@ func (s *MemoryStore) OpenPart(id MessageID, partID string) (PartData, error) {
 		return p, err
 	}
 	p.Path = path
+	openCachedFile(path)
 	return p, nil
 }
 
 func (s *MemoryStore) Sync(accountID string) (SyncResult, error) {
 	n, err := s.Fetch(accountID)
+	if s.feat != nil && s.feat.Online() {
+		_, _ = s.FlushOutbox()
+	}
 	return SyncResult{AccountID: accountID, New: n}, err
+}
+
+func (s *MemoryStore) extras() *featureHost {
+	if s.feat == nil {
+		s.feat = newFeatureHost()
+	}
+	return s.feat
+}
+
+func (s *MemoryStore) SetOnline(v bool)          { s.extras().SetOnline(v) }
+func (s *MemoryStore) Online() bool              { return s.extras().Online() }
+func (s *MemoryStore) ListOutbox() []OutboxOp    { return s.extras().ListOutbox() }
+func (s *MemoryStore) ListSmartFolders() []SmartFolder {
+	return s.extras().ListSmartFolders()
+}
+func (s *MemoryStore) PutSmartFolder(sf SmartFolder) (SmartFolder, error) {
+	return s.extras().PutSmartFolder(sf)
+}
+func (s *MemoryStore) DeleteSmartFolder(id string) error { return s.extras().DeleteSmartFolder(id) }
+func (s *MemoryStore) MuteThread(id string, muted bool) error {
+	return s.extras().MuteThread(id, muted)
+}
+func (s *MemoryStore) MutedThreads() []string { return s.extras().MutedThreads() }
+func (s *MemoryStore) ListVIPs() []VIP       { return s.extras().ListVIPs() }
+func (s *MemoryStore) PutVIP(v VIP) (VIP, error) {
+	return s.extras().PutVIP(v)
+}
+func (s *MemoryStore) DeleteVIP(address string) error { return s.extras().DeleteVIP(address) }
+func (s *MemoryStore) NotifyPrefs() NotifyPrefs       { return s.extras().NotifyPrefs() }
+func (s *MemoryStore) PutNotifyPrefs(p NotifyPrefs) NotifyPrefs {
+	return s.extras().PutNotifyPrefs(p)
+}
+func (s *MemoryStore) SetSenderCategory(address, category string) error {
+	err := s.extras().SetSenderCategory(address, category)
+	if err != nil {
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	cat := category
+	for i := range s.messages {
+		if canonAddr(s.messages[i].From) == canonAddr(address) {
+			s.messages[i].Category = cat
+		}
+	}
+	return nil
+}
+func (s *MemoryStore) ListSenderCategories() []SenderCat {
+	return s.extras().ListSenderCategories()
+}
+
+func (s *MemoryStore) FlushOutbox() (int, error) {
+	if s.feat == nil {
+		return 0, nil
+	}
+	s.feat.mu.Lock()
+	n := len(s.feat.outbox)
+	s.feat.outbox = nil
+	s.feat.mu.Unlock()
+	return n, nil
 }

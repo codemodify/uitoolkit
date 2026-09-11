@@ -30,6 +30,7 @@ type AccountConfig struct {
 	IMAP       ServerConfig     `json:"imap"`
 	SMTP       ServerConfig     `json:"smtp"`
 	Identities []Identity       `json:"identities,omitempty"`
+	Provider   string           `json:"provider,omitempty"` // google, microsoft, ""
 }
 
 // ServerConfig is a host + how to get the password.
@@ -45,6 +46,7 @@ type ServerConfig struct {
 	TLS      *bool  `json:"tls,omitempty"`
 	StartTLS *bool  `json:"starttls,omitempty"`
 	Auth     string `json:"auth,omitempty"` // plain (default), login, xoauth2
+	tokenKey string // runtime; account id for the encrypted token store
 }
 
 func (s ServerConfig) Username(fallback string) string {

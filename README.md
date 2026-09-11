@@ -147,6 +147,14 @@ paintengine2d with Titillium Web (and JetBrains Mono in code views).
 
 ![Mail empty](docs/screenshots/mail-empty.png)
 
+### Mail — Add Account (guess + OAuth)
+
+![Mail add account](docs/screenshots/mail-account.png)
+
+### Mail — Smart folder (Invoices)
+
+![Mail smart folder](docs/screenshots/mail-smart.png)
+
 ### Font roles — Titillium Web + JetBrains Mono
 
 ![Font roles](docs/screenshots/fonts.png)
@@ -367,9 +375,17 @@ HiDPI-stable list/table/tree rows and Wayland resize are **v0.8.1**.
 Mail thread-list column flex (readable subjects) is **v0.8.2**.
 Mail cards / density / Unified Inbox / tags / filters / identities and
 IMAP+SMTP with an on-disk cache are **v0.9.0**. Empty-by-default first-run
-and text-only message view are **v0.9.1**.
+and text-only message view are **v0.9.1**. Mail Tier A+B (OAuth, IDLE/QRESYNC,
+outbox, smart folders, threading/mute, VIP, notify, categories) is **v0.10.0**.
 
 ## Version
+
+**0.10.0** — Mail daily-driver + Apple-style comfort: Google/Microsoft OAuth
+(loopback or device; encrypted refresh tokens), multi-folder IDLE + QRESYNC
+or CONDSTORE, offline outbox, fast search and user Smart folders, conversation
+threading + mute, `xdg-open` attachments (text-only view stays default), VIP,
+notification rules, Primary/Other-style categories, and a guessed Add Account
+wizard. Calendar/iTip is not in this release. See [docs/mail.md](docs/mail.md).
 
 **0.9.1** — Fresh install is empty (no silent MemoryStore demo). UI shows
 “There are no accounts, want to add one?” and Yes opens Add Account

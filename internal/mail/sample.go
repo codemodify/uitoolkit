@@ -42,6 +42,7 @@ func seedDemo(s *MemoryStore) {
 	}
 	s.tags = DefaultTags()
 	s.rules = demoRules()
+	s.feat = demoExtras()
 
 	addSpecial := func(acct string, id FolderID, kind FolderKind, parent FolderID, name string) {
 		if name == "" {
@@ -279,6 +280,34 @@ func seedDemo(s *MemoryStore) {
 	for i := 0; i < 11; i++ {
 		add(FolderWorkClients, AcctWork, i+4, i%3 != 0, i == 2, i%4 == 0, []string{"Important"}, -time.Duration(i*16+5)*time.Hour, "client:")
 	}
+
+	s.addMessage(Message{
+		Folder: FolderAdaInbox, AccountID: AcctAda,
+		From: "Kai Nakamura <kai@paintengine.example>", To: "Ada Lovelace <ada@example.com>",
+		Subject: "Thread: lunch plans", RFCMessageID: "<lunch-1@example.com>",
+		Date: DemoNow.Add(-2 * time.Hour), Read: false, Starred: true,
+		Body: "Are you free around 12:30?\n",
+	})
+	s.addMessage(Message{
+		Folder: FolderAdaInbox, AccountID: AcctAda,
+		From: "Ada Lovelace <ada@example.com>", To: "Kai Nakamura <kai@paintengine.example>",
+		Subject: "Re: Thread: lunch plans", RFCMessageID: "<lunch-2@example.com>",
+		InReplyTo: "<lunch-1@example.com>", References: "<lunch-1@example.com>",
+		Date: DemoNow.Add(-90 * time.Minute), Read: true,
+		Body: "Yes — the usual place.\n",
+	})
+	s.addMessage(Message{
+		Folder: FolderAdaInbox, AccountID: AcctAda,
+		From: "Kai Nakamura <kai@paintengine.example>", To: "Ada Lovelace <ada@example.com>",
+		Subject: "Re: Thread: lunch plans", RFCMessageID: "<lunch-3@example.com>",
+		InReplyTo: "<lunch-2@example.com>", References: "<lunch-1@example.com> <lunch-2@example.com>",
+		Date: DemoNow.Add(-40 * time.Minute), Read: false,
+		Body: "See you there.\n",
+	})
+	assignThreadIDs(s.messages)
+	if s.feat != nil && s.feat.index != nil {
+		s.feat.index.rebuild(s.messages)
+	}
 }
 
 const welcomeBody = `Hi Ada,
@@ -286,14 +315,14 @@ const welcomeBody = `Hi Ada,
 This is the uitoolkit Mail dogfood — Thunderbird’s classic 3-pane chrome
 on a retained scene (UITK_SCENE=auto), not a Mozilla protocol clone.
 
-What is real in v0.9
+What is real in v0.10
   • mailclientd: MemoryStore demo or IMAP+SMTP with an on-disk cache
-  • mailclientui is Thunderbird chrome over a Unix JSON-RPC socket
-  • Card/table, density, Unified Inbox, tags, filters, identities
+  • OAuth (Google / Microsoft) + passEnv, VIP, smart folders, threading
+  • Offline outbox, IDLE/QRESYNC push, text-only Message tab
 
 What is demo
   • This welcome lives in MemoryStore (UITK_MAIL=memory). Point a config
     file at a real IMAP/SMTP account — see docs/mail.md.
 
-— Mail on uitoolkit v0.9.0
+— Mail on uitoolkit v0.10.0
 `
