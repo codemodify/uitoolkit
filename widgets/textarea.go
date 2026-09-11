@@ -221,6 +221,16 @@ func (t *TextArea) maxScrollX() float32 {
 // MaxOffset is the largest legal vertical scroll offset.
 func (t *TextArea) MaxOffset() float32 { return t.maxScrollY() }
 
+// OffsetY is the current vertical scroll (clamped on Arrange / input).
+func (t *TextArea) OffsetY() float32 { return t.scrollY }
+
+// ScrollTo sets the vertical offset (clamped).
+func (t *TextArea) ScrollTo(y float32) {
+	t.scrollY = y
+	t.clampScroll()
+	t.Invalidate()
+}
+
 func (t *TextArea) clampScroll() {
 	t.scrollY = layout.ClampScroll(t.scrollY, t.contentH(), t.inner().Dy())
 	t.scrollX = layout.ClampScroll(t.scrollX, t.contentW(), t.inner().Dx())

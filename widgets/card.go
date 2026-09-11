@@ -110,6 +110,19 @@ func (l *CardList) scrollTrack() (track, thumb paintengine2d.Rect) {
 	return vScrollThumb(l.LocalBounds(), l.contentH(), l.OffsetY, bar, gap)
 }
 
+// VisibleRange is the half-open [lo, hi) window of cards that Paint draws.
+func (l *CardList) VisibleRange() (lo, hi int) { return l.visibleRange() }
+
+// ScrollTrack is the overflow bar geometry (empty thumb when content fits).
+func (l *CardList) ScrollTrack() (track, thumb paintengine2d.Rect) { return l.scrollTrack() }
+
+// ScrollTo sets OffsetY (clamped) without requiring a wheel event.
+func (l *CardList) ScrollTo(y float32) {
+	l.OffsetY = y
+	l.clamp()
+	l.Invalidate()
+}
+
 func (l *CardList) visibleRange() (lo, hi int) {
 	rh := l.rowH()
 	if rh <= 0 {
