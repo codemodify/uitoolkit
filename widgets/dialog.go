@@ -37,6 +37,7 @@ func (o *Overlay) Arrange(r paintengine2d.Rect) {
 	if o.Card == nil {
 		return
 	}
+	cs := o.Card.Measure(layout.Loose(r.Dx()*0.8, r.Dy()*0.8))
 	minW, minH := o.MinCardW, o.MinCardH
 	if minW < 280 {
 		minW = 280
@@ -44,22 +45,6 @@ func (o *Overlay) Arrange(r paintengine2d.Rect) {
 	if minH < 140 {
 		minH = 140
 	}
-	maxW := r.Dx() * 0.8
-	if maxW < minW {
-		maxW = minW
-	}
-	if maxW > r.Dx()*0.92 {
-		maxW = r.Dx() * 0.92
-	}
-	cs := o.Card.Measure(layout.Loose(maxW, r.Dy()*0.8))
-	if cs.X < minW {
-		cs.X = minW
-	}
-	if cs.X > r.Dx()*0.92 {
-		cs.X = r.Dx() * 0.92
-	}
-	// Re-measure at the chosen width so wrapping labels grow in height.
-	cs = o.Card.Measure(layout.Constraints{MinW: 0, MaxW: cs.X, MaxH: r.Dy() * 0.8})
 	if cs.X < minW {
 		cs.X = minW
 	}
@@ -107,7 +92,7 @@ func (o *Overlay) Dismissed() {
 func DialogCard(title, body string, actions ...widget.Component) *Panel {
 	col := NewColumn(
 		NewTitle(title),
-		NewLabel(body).WithWrap(420),
+		NewLabel(body),
 		NewRow(actions...).WithGap(8).WithJustify(layout.JustifyEnd),
 	).WithGap(12).WithPad(4)
 	p := NewPanel("", col)

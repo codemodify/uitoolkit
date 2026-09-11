@@ -1,7 +1,6 @@
 package widgets
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/codemodify/paintengine2d"
@@ -133,95 +132,6 @@ func TestTitleBarMeasure(t *testing.T) {
 	tb.SetTitle("Other")
 	if tb.Title != "Other" {
 		t.Fatal(tb.Title)
-	}
-}
-
-func TestLabelHonorsNewlinesAndWraps(t *testing.T) {
-	hard := NewLabel("one\ntwo\nthree")
-	sz := hard.Measure(layout.Unbounded())
-	one := NewLabel("one").Measure(layout.Unbounded())
-	if sz.Y < one.Y*2.5 {
-		t.Fatalf("newline height %v want > %v", sz.Y, one.Y*2.5)
-	}
-	lines := hard.VisualLines(400)
-	if len(lines) != 3 || lines[0].Text != "one" || lines[2].Text != "three" {
-		t.Fatalf("hard lines %+v", lines)
-	}
-
-	long := "There are no accounts, want to add one? Type the IMAP/SMTP password in the form until a secret store exists and this sentence must wrap."
-	body := NewLabel(long).WithWrap(180)
-	ws := body.Measure(layout.Loose(180, 800))
-	if ws.X > 182 {
-		t.Fatalf("wrapped width %v", ws.X)
-	}
-	if ws.Y <= one.Y+4 {
-		t.Fatalf("expected wrap height, got %v", ws.Y)
-	}
-	wl := body.VisualLines(180)
-	if len(wl) < 3 {
-		t.Fatalf("expected several wrap lines, got %+v", wl)
-	}
-	f := body.font()
-	for _, ln := range wl {
-		if strings.Contains(ln.Text, "\n") {
-			t.Fatalf("newline leaked into visual line %q", ln.Text)
-		}
-		if adv := f.Advance(ln.Text); adv > 181 {
-			t.Fatalf("line overflows %q adv=%v", ln.Text, adv)
-		}
-	}
-}
-
-func TestMessageBoxBodyWrapsAndHonorsNewlines(t *testing.T) {
-	msg := "There are no accounts, want to add one?\n\nType the IMAP/SMTP password in the form. It is saved in mail.json (mode 0600) until a secret store exists."
-	mb := NewMessageBox(MessageBoxOptions{
-		Title: "Mail", Message: msg, Kind: MessageQuestion, Buttons: ButtonsYesNo,
-	})
-	ov := mb.Overlay()
-	if ov == nil {
-		t.Fatal("overlay")
-	}
-	ov.Arrange(paintengine2d.XYWH(0, 0, 480, 400))
-	var body *Label
-	widget.Walk(ov, func(c widget.Component) {
-		if l, ok := c.(*Label); ok && strings.Contains(l.Text, "mail.json") {
-			body = l
-		}
-	})
-	if body == nil || !body.Wrap {
-		t.Fatal("body label")
-	}
-	bw := body.Bounds().Dx()
-	if bw < 80 {
-		t.Fatalf("body width %v", body.Bounds())
-	}
-	lines := body.VisualLines(0)
-	if len(lines) < 4 {
-		t.Fatalf("expected wrap + blank line, got %d %+v", len(lines), lines)
-	}
-	var blank bool
-	f := body.font()
-	joined := ""
-	for _, ln := range lines {
-		if ln.Text == "" {
-			blank = true
-		}
-		if strings.Contains(ln.Text, "\n") {
-			t.Fatalf("newline in visual line %q", ln.Text)
-		}
-		if adv := f.Advance(ln.Text); adv > bw+1 {
-			t.Fatalf("clipped line %q adv=%v width=%v", ln.Text, adv, bw)
-		}
-		joined += ln.Text
-	}
-	if !blank {
-		t.Fatal("\\n\\n should yield an empty visual line")
-	}
-	if !strings.Contains(joined, "There are no accounts") || !strings.Contains(joined, "mail.json") {
-		t.Fatalf("lost text %q", joined)
-	}
-	if body.Bounds().Dy() <= f.Height()+6 {
-		t.Fatalf("dialog body still one line: %v", body.Bounds())
 	}
 }
 

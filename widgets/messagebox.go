@@ -95,7 +95,7 @@ func NewMessageBox(opts MessageBoxOptions) *MessageBox {
 
 	body := NewColumn(
 		NewTitle(opts.Title),
-		NewLabel(opts.Message).WithWrap(420),
+		NewLabel(opts.Message),
 	).WithGap(8)
 
 	head := NewRow(icon, body).WithGap(12).WithAlign(layout.AlignStart)
