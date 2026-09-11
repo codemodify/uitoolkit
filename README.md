@@ -1,7 +1,7 @@
 # uitoolkit
 
 **Pure-Go desktop UI toolkit.** Retained widget tree, layout, themes, and
-an X11 window backend. Every pixel is painted with
+X11 and Wayland window backends. Every pixel is painted with
 [`github.com/codemodify/paintengine2d`](https://github.com/codemodify/paintengine2d)
 (v0.7.2+). Labels share a white glyph atlas and theme through `Paint.Color`
 tint. There is no second rasterizer, no Skia, no Gio renderer, and no Electron.
@@ -25,7 +25,7 @@ go get github.com/codemodify/paintengine2d@v0.7.2
 | --- | --- |
 | Language | Go 1.22+ |
 | Paint | paintengine2d **v0.7.2** (`02b2939`; `Context`, `Damage`, `DrawGlyphs` Color tint) |
-| Windowing | Linux X11 (CGO + libX11); offscreen always; Wayland stub |
+| Windowing | Linux X11 + Wayland (`wl_shm`); offscreen always |
 | CGO | optional — tests and screenshots are `CGO_ENABLED=0` |
 | License | MIT |
 
@@ -114,19 +114,21 @@ go run ./examples/gallery -screenshot docs/screenshots
 git clone https://github.com/codemodify/uitoolkit.git
 cd uitoolkit
 CGO_ENABLED=0 go test ./...
-go run ./examples/gallery            # X11 when DISPLAY is set
+go run ./examples/gallery            # Wayland if WAYLAND_DISPLAY, else X11
 UITK_BACKEND=x11 go run ./examples/gallery
+UITK_BACKEND=wayland go run ./examples/gallery
 go run ./examples/gallery -headless  # writes gallery.png
 go run ./examples/notes
 go run ./examples/inspector
 ```
 
 Headless / CI paints into `paintengine2d.NewImage` and can `Window.WritePNG`.
-On Linux with `DISPLAY` and CGO, the same buffer is presented with XPutImage
-and dirty rects from `paintengine2d.Damage`. Scale comes from `UITK_SCALE` /
-`GDK_SCALE` / `QT_SCALE_FACTOR`, else Xft.dpi (or screen mm) so LookAndFeel
-metrics grow on HiDPI. Ctrl+C/X/V and middle-click use the OS CLIPBOARD and
-PRIMARY selections.
+On Linux with CGO the same buffer is presented with dirty rects from
+`paintengine2d.Damage`: **XPutImage** on X11, **wl_shm** on Wayland.
+Auto-select is `WAYLAND_DISPLAY` → `DISPLAY` → offscreen. Scale comes from
+`UITK_SCALE` / `GDK_SCALE` / `QT_SCALE_FACTOR`, else Xft.dpi on X11.
+Ctrl+C/X/V and middle-click use the OS CLIPBOARD and PRIMARY selections
+on X11; Wayland still uses the in-process clipboard.
 
 ## How it uses paintengine2d
 
@@ -142,7 +144,7 @@ Each frame:
 
 ```
 Desktop app
-    → uitoolkit (widgets, layout, focus, X11 / offscreen)
+    → uitoolkit (widgets, layout, focus, X11 / Wayland / offscreen)
         → paintengine2d.Context / Device / Damage / FontAtlas
             → CPU scanline AA pixmap
 ```
@@ -158,9 +160,10 @@ Inspired by JUCE `Component` + `LookAndFeel`, Evas damage, and Avalonia’s
 retained tree (ideas only — no copied code).
 
 ```
-platform   window + event pump + present          Linux X11 (shared display,
-           (thin OS glue)                         CLIPBOARD+PRIMARY, XIM);
-                                                  Wayland / Win / macOS stubs
+platform   window + event pump + present          Linux X11 (CLIPBOARD+PRIMARY,
+           (thin OS glue)                         XIM) and Wayland (wl_shm,
+                                                  xdg-shell, seat); Win / macOS
+                                                  stubs
 app        Application run loop, windows,         DPI/scale, backend select,
                                                   input routing
            capture / WritePNG
@@ -216,21 +219,22 @@ tooltip → popup → overlay, everywhere.
 ## Positioning
 
 **uitoolkit** is a desktop widget kit on **your own Go paint engine**:
-pure Go, retained tree, paintengine2d pixels, X11-first. It is not
+pure Go, retained tree, paintengine2d pixels, Linux X11 and Wayland. It is not
 Fyne (GL + batteries), not Gio (ops + GPU), not Wails (Go + webview).
 
 | | Paint | Windowing | Model | CGO |
 | --- | --- | --- | --- | --- |
-| **uitoolkit** | paintengine2d (own CPU AA) | X11 + offscreen | Retained, themed | Optional (X11) |
+| **uitoolkit** | paintengine2d (own CPU AA) | X11 + Wayland + offscreen | Retained, themed | Optional (X11/Wayland) |
 | [Fyne](https://fyne.io) | Own + OpenGL | Cross-platform | Retained | Yes (GL) |
 | [Gio](https://gioui.org) | Own ops renderer | Cross-platform | Immediate | Optional |
 | [Wails](https://wails.io) | Browser / WebView | Cross-platform | HTML/CSS + Go | Yes (webview) |
 
 Choose uitoolkit when you want **pure Go pixels you own**, a retained tree
-with damage, and no browser runtime. Choose Fyne or Gio for mature
+with damage, and no browser runtime. Linux windowing is X11 or Wayland;
+Win32 and AppKit are still stubs. Choose Fyne or Gio for mature
 cross-platform backends today; choose Wails when the UI should be a webview.
 
-## v0.1 out of scope
+## Out of scope
 
 Documented on purpose — do not expect these yet:
 
@@ -240,12 +244,18 @@ Documented on purpose — do not expect these yet:
   and UTF-8 `Xutf8LookupString` feed `EventText`.
 - Incremental (INCR) X11 clipboard for huge pastes
 - Mobile and webview
-- Wayland, Win32, and AppKit backends (interfaces + stubs only)
+- Wayland IME, clipboard, and fractional HiDPI (present + pointer/keyboard work)
+- Win32 and AppKit backends (interfaces + stubs only)
 - OpenType / HarfBuzz (engine text hook only)
 
-See [docs/platform.md](docs/platform.md) for X11 vs offscreen and IME gaps.
+See [docs/platform.md](docs/platform.md) for X11 vs Wayland vs offscreen
+and remaining IME / clipboard / HiDPI gaps.
 
 ## Version
+
+**0.2.0** — Wayland `wl_shm` + xdg-shell toplevel, seat pointer/keyboard
+(xkbcommon), auto-select `WAYLAND_DISPLAY` then `DISPLAY` then offscreen.
+X11 harden from 0.1.8 kept. Still paintengine2d **v0.7.2**.
 
 **0.1.8** — Harden X11: shared display and multi-window destroy, OS
 CLIPBOARD + PRIMARY (TextField / TextArea Ctrl+C/X/V and middle-click),
