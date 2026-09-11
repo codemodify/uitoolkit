@@ -37,6 +37,9 @@ func TestBakeFontDrawsKnownGlyphs(t *testing.T) {
 	if !GlyphTint() {
 		t.Fatal("paintengine2d v0.7.2+ blit RGB tint is required")
 	}
+	if !f.Outline || f.Family != FamilyUI {
+		t.Fatalf("BakeFont must be Titillium outline, got family=%q outline=%v", f.Family, f.Outline)
+	}
 }
 
 func TestBakeFontTintAppliesThemeColor(t *testing.T) {

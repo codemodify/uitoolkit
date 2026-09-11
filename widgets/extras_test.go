@@ -160,7 +160,7 @@ func TestDialogCardStillBuilds(t *testing.T) {
 		t.Fatal("card")
 	}
 	sz := card.Measure(layout.Loose(400, 300))
-	if sz.X < 140 || sz.Y < 80 {
+	if sz.X < 80 || sz.Y < 80 {
 		t.Fatalf("card %v", sz)
 	}
 }

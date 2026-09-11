@@ -11,6 +11,7 @@ type Classic struct {
 	title   *Font
 	muted   *Font
 	onAcc   *Font
+	mono    *Font
 }
 
 // NewClassic builds fonts for p. Name is "dark" or "light" typically.
@@ -18,15 +19,20 @@ func NewClassic(name string, p Palette, m Metrics) *Classic {
 	if m.FontSize < 8 {
 		m = DefaultMetrics()
 	}
+	// Lock-in: Classic always ships Titillium Web + JetBrains Mono.
+	// Metrics.FontFamily cannot select mononoki (or any other face).
+	m.FontFamily = DefaultFontFamily
+	m.MonoFamily = DefaultMonoFamily
 	return &Classic{
 		palette: p,
 		metrics: m,
 		name:    name,
-		// One white atlas per size; Color tints at DrawGlyphs time.
+		// OpenType atlases (Titillium / JetBrains Mono); Color tints at draw.
 		body:  BakeFont(m.FontSize, p.Text),
-		title: BakeFont(m.TitleSize, p.Text),
+		title: BakeTitleFont(m.TitleSize, p.Text),
 		muted: BakeFont(m.FontSize, p.TextMuted),
 		onAcc: BakeFont(m.FontSize, p.TextOnAccent),
+		mono:  BakeMonoFont(m.FontSize, p.Text),
 	}
 }
 
@@ -56,6 +62,21 @@ func (l *Classic) Font() *Font         { return l.body }
 func (l *Classic) TitleFont() *Font    { return l.title }
 func (l *Classic) MutedFont() *Font    { return l.muted }
 func (l *Classic) OnAccentFont() *Font { return l.onAcc }
+func (l *Classic) MonoFont() *Font     { return l.mono }
+
+func (l *Classic) faceOrBody(face *Font) *Font {
+	if face != nil {
+		return face
+	}
+	return l.body
+}
+
+func (l *Classic) mutedFor(face *Font) *Font {
+	if face != nil && face.Family == FamilyMono {
+		return BakeMonoFont(face.Size, l.palette.TextMuted)
+	}
+	return l.muted
+}
 
 func (l *Classic) DrawPanel(ctx *paintengine2d.Context, b paintengine2d.Rect, raised bool) {
 	p := l.palette
@@ -204,7 +225,7 @@ func (l *Classic) DrawSlider(ctx *paintengine2d.Context, b paintengine2d.Rect, s
 	}
 }
 
-func (l *Classic) DrawTextField(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, text, placeholder string, caret, selA, selB int, blink bool, scrollX float32) {
+func (l *Classic) DrawTextField(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, text, placeholder string, caret, selA, selB int, blink bool, scrollX float32, face *Font) {
 	p := l.palette
 	m := l.metrics
 	r := m.RadiusSmall
@@ -226,12 +247,13 @@ func (l *Classic) DrawTextField(ctx *paintengine2d.Context, b paintengine2d.Rect
 	inner := paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad*2, b.Dy())
 	ctx.Save()
 	ctx.ClipRect(inner)
-	f := l.body
+	f := l.faceOrBody(face)
+	muted := l.mutedFor(face)
 	show := text
 	font := f
 	if text == "" && placeholder != "" && !st.Focused() {
 		show = placeholder
-		font = l.muted
+		font = muted
 	}
 	ty := inner.Min.Y + (inner.Dy()-font.Height())*0.5
 	ox := inner.Min.X - scrollX
@@ -811,14 +833,14 @@ func (l *Classic) DrawTableHeader(ctx *paintengine2d.Context, b paintengine2d.Re
 	}
 }
 
-func (l *Classic) DrawTableCell(ctx *paintengine2d.Context, b paintengine2d.Rect, selected, hovered bool, label string, align Align) {
+func (l *Classic) DrawTableCell(ctx *paintengine2d.Context, b paintengine2d.Rect, selected, hovered bool, label string, align Align, face *Font) {
 	p := l.palette
 	if selected {
 		ctx.DrawRect(b, paintengine2d.Fill(p.Accent.WithAlpha(0.28)))
 	} else if hovered {
 		ctx.DrawRect(b, paintengine2d.Fill(p.Highlight))
 	}
-	f := l.body
+	f := l.faceOrBody(face)
 	tw := f.Advance(label)
 	x := b.Min.X + 8
 	switch align {
@@ -874,7 +896,7 @@ func (l *Classic) DrawSpinner(ctx *paintengine2d.Context, b paintengine2d.Rect, 
 	ctx.DrawPath(dnC, paintengine2d.Fill(col))
 }
 
-func (l *Classic) DrawTextArea(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, lines []TextLine, caret, selA, selB int, blink bool, scrollX, scrollY float32, placeholder string) {
+func (l *Classic) DrawTextArea(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, lines []TextLine, caret, selA, selB int, blink bool, scrollX, scrollY float32, placeholder string, face *Font) {
 	p := l.palette
 	m := l.metrics
 	r := m.RadiusSmall
@@ -896,11 +918,12 @@ func (l *Classic) DrawTextArea(ctx *paintengine2d.Context, b paintengine2d.Rect,
 	inner := paintengine2d.XYWH(b.Min.X+pad, b.Min.Y+pad, b.Dx()-pad*2, b.Dy()-pad*2)
 	ctx.Save()
 	ctx.ClipRect(inner)
-	f := l.body
+	f := l.faceOrBody(face)
+	muted := l.mutedFor(face)
 	lh := f.Height() + 2
 	empty := len(lines) == 0 || (len(lines) == 1 && lines[0].Text == "" && lines[0].End <= lines[0].Start)
 	if empty && placeholder != "" && !st.Focused() {
-		l.muted.Draw(ctx, placeholder, paintengine2d.Pt(inner.Min.X, inner.Min.Y), p.TextMuted)
+		muted.Draw(ctx, placeholder, paintengine2d.Pt(inner.Min.X, inner.Min.Y), p.TextMuted)
 		ctx.Restore()
 		return
 	}

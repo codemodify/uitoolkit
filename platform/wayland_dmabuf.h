@@ -42,6 +42,10 @@ struct wl_buffer *ui_wl_dmabuf_buffer(struct zwp_linux_dmabuf_v1 *dmabuf, int fd
 int ui_dmabuf_alloc(struct ui_dmabuf_bo *out, int w, int h, uint32_t format);
 void ui_dmabuf_free(struct ui_dmabuf_bo *bo);
 int ui_dmabuf_probe(char *name, int n);
+int ui_dmabuf_drm_fd(void);
+int ui_dmabuf_cpu_begin(int fd);
+int ui_dmabuf_cpu_end(int fd);
+int ui_dmabuf_export_sync_file(int fd);
 
 #ifdef __cplusplus
 }

@@ -69,6 +69,9 @@ func NewSlider(min, max, value float32, on func(float32)) *widgets.Slider {
 func NewTextField(text, placeholder string, on func(string)) *widgets.TextField {
 	return widgets.NewTextField(text, placeholder, on)
 }
+func NewMonoTextField(text, placeholder string, on func(string)) *widgets.TextField {
+	return widgets.NewMonoTextField(text, placeholder, on)
+}
 func NewScrollView(child widget.Component) *widgets.ScrollView {
 	return widgets.NewScrollView(child)
 }
@@ -161,6 +164,21 @@ func NewTip(text string, child widget.Component) *widgets.TipWrap {
 func NewTextArea(text, placeholder string, on func(string)) *widgets.TextArea {
 	return widgets.NewTextArea(text, placeholder, on)
 }
+func NewMonoTextArea(text, placeholder string, on func(string)) *widgets.TextArea {
+	return widgets.NewMonoTextArea(text, placeholder, on)
+}
+
+const (
+	FamilyUI   = style.FamilyUI
+	FamilyMono = style.FamilyMono
+)
+
+type FontRole = style.FontRole
+
+const (
+	RoleUI   = style.RoleUI
+	RoleMono = style.RoleMono
+)
 func NewSwitch(text string, on bool, change func(bool)) *widgets.Switch {
 	return widgets.NewSwitch(text, on, change)
 }

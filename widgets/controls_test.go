@@ -61,6 +61,17 @@ func TestTextFieldEdit(t *testing.T) {
 	}
 }
 
+func TestMonoFieldConstructors(t *testing.T) {
+	tf := NewMonoTextField("/tmp/log", "path", nil)
+	if !tf.Mono {
+		t.Fatal("NewMonoTextField must set Mono (JetBrains Mono role)")
+	}
+	ta := NewMonoTextArea("fn()", "code", nil)
+	if !ta.Mono {
+		t.Fatal("NewMonoTextArea must set Mono (JetBrains Mono role)")
+	}
+}
+
 func TestButtonClick(t *testing.T) {
 	n := 0
 	b := NewButton("Go", func() { n++ })

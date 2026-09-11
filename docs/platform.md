@@ -6,7 +6,7 @@ CPU pixmap onto a window and translates input.
 | Backend | When | Present | Clipboard | Scale | IME |
 | --- | --- | --- | --- | --- | --- |
 | **offscreen** | `Headless`, `UITK_BACKEND=offscreen`, or no display | no-op | in-process | env or 1 | n/a |
-| **Wayland** | Linux + CGO + `WAYLAND_DISPLAY` | **linux-dmabuf** (`zwp_linux_dmabuf_v1`) when advertised + GBM/dma-heap/udmabuf works, else `wl_shm` ARGB8888; damage; integer / fractional buffer scale | `wl_data_device` + primary when the compositor offers it | `wl_output` scale, `wp_fractional_scale_v1` + viewporter, env | `zwp_text_input_v3` preedit / commit |
+| **Wayland** | Linux + CGO + `WAYLAND_DISPLAY` | **linux-dmabuf** (`zwp_linux_dmabuf_v1`) when advertised + GBM/dma-heap/udmabuf works, else `wl_shm` ARGB8888; **explicit sync** when the compositor advertises it; damage; integer / fractional buffer scale | `wl_data_device` + primary when the compositor offers it | `wl_output` scale, `wp_fractional_scale_v1` + viewporter, env | `zwp_text_input_v3` preedit / commit |
 | **X11** | Linux + CGO + `DISPLAY` | dirty-rect `XPutImage`, MIT-SHM when the server allows it | CLIPBOARD + PRIMARY, ICCCM **INCR** | Xft.dpi, RandR mm, screen mm, env | XIM preedit callbacks + compose / dead keys |
 | Win32 / AppKit | stub | — | — | — | — |
 
@@ -61,11 +61,12 @@ and `libxkbcommon`. `CGO_ENABLED=0` never needs those libraries.
   then Xft.dpi, then RandR output mm vs CRTC pixels, then screen mm.
   Buffer and event coordinates stay device pixels; metrics grow with scale.
 
-## Wayland notes (0.3.1)
+## Wayland notes (0.4.0)
 
 - `wl_display_connect` → registry bind of `wl_compositor`, `wl_shm`,
   `xdg_wm_base`, `wl_seat`, `wl_data_device_manager`, `wl_output`, and
-  optional `zwp_linux_dmabuf_v1`, `zwp_text_input_manager_v3`,
+  optional `zwp_linux_dmabuf_v1`, `zwp_linux_explicit_synchronization_v1`,
+  `wp_linux_drm_syncobj_v1`, `zwp_text_input_manager_v3`,
   `zwp_primary_selection_device_manager_v1`,
   `zxdg_decoration_manager_v1`, `wp_fractional_scale_manager_v1`,
   `wp_viewporter`.
@@ -90,9 +91,20 @@ and `libxkbcommon`. `CGO_ENABLED=0` never needs those libraries.
 - Both paths attach premul 8-bit pixels from `paintengine2d.Image.Pix`
   (`RowStride`). ARGB8888/XRGB8888 swizzle RGBA→BGRA; ABGR8888 is a
   row copy. Then `wl_surface_damage_buffer` (or `wl_surface_damage`),
-  attach, commit. Integer `wl_surface.set_buffer_scale` or
-  fractional-scale + viewport destination. Resize rebuilds both
-  pixmap and the free present slots so attach/damage stay aligned.
+  attach, commit. After a CPU write to a dmabuf, present issues
+  `DMA_BUF_IOCTL_SYNC` END and, when the kernel allows it, exports a
+  sync_file (`DMA_BUF_IOCTL_EXPORT_SYNC_FILE`) as the acquire fence.
+  If the compositor binds `wp_linux_drm_syncobj_v1` **and** a DRM fd is
+  available from GBM, present uses a **timeline** (`set_acquire_point` /
+  `set_release_point`) and waits the previous release point before
+  rewriting a slot. Else if `zwp_linux_explicit_synchronization_v1` is
+  advertised, present calls `set_acquire_fence` + `get_release`.
+  Otherwise implicit reservation + `wl_buffer.release` remains. A busy
+  slot is never overwritten: `pickSlot` round-trips until a buffer is
+  free. Missing protocols are ignored (shm and implicit dmabuf still
+  work). Integer `wl_surface.set_buffer_scale` or fractional-scale +
+  viewport destination. Resize rebuilds both pixmap and the free present
+  slots so attach/damage stay aligned.
 - Seat: pointer (motion, buttons, axis) with coordinates multiplied by
   buffer scale; keyboard via **xkbcommon** (keymap, mods, UTF-8,
   compose / dead keys) plus compositor `repeat_info`.
@@ -118,7 +130,8 @@ wayland-scanner private-code \
   platform/xdg-shell-protocol.c
 # same for text-input-unstable-v3, primary-selection-unstable-v1,
 # xdg-decoration-unstable-v1, fractional-scale-v1, viewporter,
-# linux-dmabuf-unstable-v1
+# linux-dmabuf-unstable-v1, linux-explicit-synchronization-unstable-v1,
+# linux-drm-syncobj-v1
 ```
 
 ```bash
@@ -146,6 +159,5 @@ damage / attach / commit path.
 
 - AT-SPI / accessibility
 - IME candidate-window theming (the IM draws its own window)
-- Wayland explicit sync (implicit dma-buf reservation only)
 - Client-side decoration chrome beyond the existing TitleBar widget
 - Win32 and AppKit

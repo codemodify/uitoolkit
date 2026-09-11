@@ -14,6 +14,7 @@ type Label struct {
 	Color    paintengine2d.Color
 	Align    style.Align
 	Title    bool
+	Mono     bool
 	wrapHint float32
 }
 
@@ -41,6 +42,9 @@ func (l *Label) font() *style.Font {
 	lk := l.Look()
 	if l.Title {
 		return lk.TitleFont()
+	}
+	if l.Mono {
+		return lk.MonoFont()
 	}
 	if l.Color != (paintengine2d.Color{}) && near(l.Color, lk.Palette().TextMuted) {
 		return lk.MutedFont()
