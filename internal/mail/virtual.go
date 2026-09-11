@@ -18,12 +18,12 @@ func IsVirtual(id FolderID) bool {
 	return strings.HasPrefix(s, "virtual/") || strings.HasPrefix(s, "tag/") || strings.HasPrefix(s, "smart/")
 }
 
-// HiddenFromFolderTree is Unified Inbox/Unread/Starred, Smart Folders, and
-// Categories — those sections are no longer in the folder tree. VIP, Outbox,
-// and tag views stay.
+// HiddenFromFolderTree is Unified Inbox/Unread/Starred, Smart Folders,
+// Categories, and the VIP smart folder — those are no longer in the folder
+// tree. Outbox and tag views stay. VIP sender APIs are unchanged.
 func HiddenFromFolderTree(id FolderID) bool {
 	switch id {
-	case FolderUnifiedInbox, FolderUnifiedUnread, FolderUnifiedStarred:
+	case FolderUnifiedInbox, FolderUnifiedUnread, FolderUnifiedStarred, FolderVIP:
 		return true
 	}
 	if SmartFolderID(id) != "" {

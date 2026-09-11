@@ -27,6 +27,7 @@ func MountHost(h *Host, root widget.Component, box paintengine2d.Rect) *Session 
 		h = NewHost()
 	}
 	s := &Session{Host: h, Root: root, Box: box}
+	h.SetSurfaceSize(int(box.Dx()), int(box.Dy()))
 	if root != nil {
 		root.SetHost(h)
 	}
@@ -46,12 +47,25 @@ func (s *Session) Layout() {
 // Relayout assigns a new box and Measure/Arranges.
 func (s *Session) Relayout(box paintengine2d.Rect) {
 	s.Box = box
+	if s.Host != nil {
+		s.Host.SetSurfaceSize(int(box.Dx()), int(box.Dy()))
+	}
 	s.Layout()
 }
 
 // Hit is HitRoot in session (root-local) coordinates.
 func (s *Session) Hit(p paintengine2d.Point) widget.Component {
-	if s == nil || s.Root == nil {
+	if s == nil {
+		return nil
+	}
+	if s.Host != nil {
+		if pop := s.Host.Popup(); pop != nil {
+			if h := widget.HitRoot(pop, p); h != nil {
+				return h
+			}
+		}
+	}
+	if s.Root == nil {
 		return nil
 	}
 	return widget.HitRoot(s.Root, p)
@@ -218,6 +232,11 @@ func (s *Session) Paint() *paintengine2d.Image {
 	if s.Root != nil {
 		widget.PaintTree(s.Root, ctx, nil)
 	}
+	if s.Host != nil {
+		if pop := s.Host.Popup(); pop != nil {
+			widget.PaintTree(pop, ctx, nil)
+		}
+	}
 	return img
 }
 
@@ -235,6 +254,11 @@ func (s *Session) Record() *paintengine2d.Scene {
 	ctx := paintengine2d.NewContextDevice(rec)
 	if s.Root != nil {
 		widget.PaintTree(s.Root, ctx, nil)
+	}
+	if s.Host != nil {
+		if pop := s.Host.Popup(); pop != nil {
+			widget.PaintTree(pop, ctx, nil)
+		}
 	}
 	return rec.Finish()
 }

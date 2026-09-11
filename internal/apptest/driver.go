@@ -86,6 +86,19 @@ func checkTree(root widget.Component) error {
 	return nil
 }
 
+func checkPopup(w *app.Window) error {
+	if w == nil || w.Popup() == nil {
+		return nil
+	}
+	if errs := uitest.TreeInvariants(w.Popup()); len(errs) > 0 {
+		return errs[0]
+	}
+	if pop, ok := w.Popup().(*widgets.PopupMenu); ok {
+		return uitest.CheckMenuFitsItems(pop)
+	}
+	return nil
+}
+
 func runGallery(opts Options) []Result {
 	var out []Result
 	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true})
@@ -100,6 +113,7 @@ func runGallery(opts Options) []Result {
 	a.PumpOnce()
 
 	step(&out, "gallery", "construct", func() error { return checkTree(w.Content()) })
+	step(&out, "gallery", "combo-popup", func() error { return openGalleryCombo(a, w) })
 	sizes := [][2]int{{1000, 760}, {860, 560}}
 	if !opts.Short {
 		sizes = append(sizes, [2]int{1200, 800})
@@ -179,6 +193,7 @@ func runMail(opts Options) []Result {
 	step(&out, "mail", "drag-splitters", func() error { return dragSplitters(a, w) })
 	step(&out, "mail", "scroll-lists", func() error { return scrollCollections(a, w, opts.Short) })
 	step(&out, "mail", "select-rows", func() error { return selectRows(a, w) })
+	step(&out, "mail", "context-menu", func() error { return openMailContextMenu(a, w) })
 	step(&out, "mail", "readonly-preview", func() error { return typeIntoReadOnlyViews(a, w) })
 	if !opts.Short {
 		step(&out, "mail", "compose-editable", func() error {
@@ -333,6 +348,67 @@ func selectRows(a *app.Application, w *app.Window) error {
 		last = err
 	}
 	return last
+}
+
+func openGalleryCombo(a *app.Application, w *app.Window) error {
+	var cb *widgets.ComboBox
+	widget.Walk(w.Content(), func(c widget.Component) {
+		if v, ok := c.(*widgets.ComboBox); ok && cb == nil && len(v.Items) > 0 {
+			cb = v
+		}
+	})
+	if cb == nil {
+		return fmt.Errorf("gallery has no ComboBox")
+	}
+	cb.Open()
+	a.PumpOnce()
+	pop, ok := w.Popup().(*widgets.PopupMenu)
+	if !ok || pop == nil {
+		return fmt.Errorf("expected combo popup, got %T", w.Popup())
+	}
+	field := widget.DeviceBounds(cb)
+	pb := pop.Bounds()
+	if pb.Min.Y < field.Max.Y-0.5 && pb.Max.Y > field.Min.Y+0.5 {
+		return fmt.Errorf("combo popup %+v overlaps field %+v", pb, field)
+	}
+	if err := uitest.CheckMenuFitsItems(pop); err != nil {
+		return err
+	}
+	cb.Close()
+	a.PumpOnce()
+	return nil
+}
+
+func openMailContextMenu(a *app.Application, w *app.Window) error {
+	var table *widgets.TableView
+	widget.Walk(w.Content(), func(c widget.Component) {
+		if tv, ok := c.(*widgets.TableView); ok && table == nil && tv.RowCount > 0 {
+			table = tv
+		}
+	})
+	if table == nil {
+		return fmt.Errorf("no thread table with rows")
+	}
+	o := widget.DeviceOrigin(table)
+	p := paintengine2d.Pt(o.X+48, o.Y+table.HeaderHeight()+10)
+	w.Inject(platform.Event{Kind: platform.EventMouseDown, Pos: p, Button: platform.ButtonRight})
+	a.PumpOnce()
+	pop, ok := w.Popup().(*widgets.PopupMenu)
+	if !ok || pop == nil {
+		return fmt.Errorf("expected mail context menu, got %T", w.Popup())
+	}
+	if err := uitest.CheckMenuFitsItems(pop); err != nil {
+		return err
+	}
+	if err := checkPopup(w); err != nil {
+		return err
+	}
+	w.Inject(platform.Event{Kind: platform.EventKeyDown, Key: platform.KeyEscape})
+	a.PumpOnce()
+	if w.Popup() != nil {
+		return fmt.Errorf("escape should dismiss context menu")
+	}
+	return nil
 }
 
 func typeIntoReadOnlyViews(a *app.Application, w *app.Window) error {

@@ -8,7 +8,7 @@ import (
 )
 
 // Host is a widget.Host for tests (no display). It records focus, damage,
-// layout requests, and the last pointer cursor.
+// layout requests, and the last pointer cursor. It also hosts popups.
 type Host struct {
 	focus    widget.Component
 	look     style.LookAndFeel
@@ -17,10 +17,13 @@ type Host struct {
 	layoutN  int
 	damageN  int
 	lastRect paintengine2d.Rect
+	popup    widget.Component
+	surfW    int
+	surfH    int
 }
 
 // NewHost builds a dark, 1× host unless look/scale are set later.
-func NewHost() *Host { return &Host{scale: 1} }
+func NewHost() *Host { return &Host{scale: 1, surfW: 800, surfH: 600} }
 
 func (h *Host) Invalidate(_ widget.Component, r paintengine2d.Rect) {
 	h.damageN++
@@ -51,5 +54,40 @@ func (h *Host) Cursor() platform.Cursor     { return h.cursor }
 func (h *Host) LayoutCount() int { return h.layoutN }
 func (h *Host) DamageCount() int { return h.damageN }
 
+func (h *Host) SetSurfaceSize(w, hh int) { h.surfW, h.surfH = w, hh }
+func (h *Host) SurfaceSize() (int, int) {
+	if h.surfW < 1 {
+		h.surfW = 800
+	}
+	if h.surfH < 1 {
+		h.surfH = 600
+	}
+	return h.surfW, h.surfH
+}
+
+func (h *Host) SetPopup(c widget.Component) {
+	if h.popup != nil && h.popup != c {
+		if d, ok := h.popup.(widget.Dismisser); ok {
+			d.Dismissed()
+		}
+	}
+	h.popup = c
+	if c != nil {
+		c.SetHost(h)
+	}
+}
+func (h *Host) Popup() widget.Component { return h.popup }
+func (h *Host) DismissPopup() {
+	if h.popup == nil {
+		return
+	}
+	if d, ok := h.popup.(widget.Dismisser); ok {
+		d.Dismissed()
+	}
+	h.popup = nil
+}
+
 var _ widget.Host = (*Host)(nil)
 var _ widget.CursorHost = (*Host)(nil)
+var _ widget.PopupHost = (*Host)(nil)
+var _ widget.SurfaceSizer = (*Host)(nil)

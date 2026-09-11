@@ -27,11 +27,12 @@ const (
 
 // AppOptions tweak the first build (theme, layout, Quick Filter visibility).
 type AppOptions struct {
-	Light      bool
-	Layout     LayoutMode
-	ShowFilter bool
-	CardView   bool
-	Density    style.Density
+	Light         bool
+	Layout        LayoutMode
+	ShowFilter    bool
+	ShowStatusBar bool // default off: no reserved bottom strip
+	CardView      bool
+	Density       style.Density
 }
 
 // MailApp starts an in-process mailclientd (MemoryStore) and the UI client.
@@ -98,7 +99,6 @@ type session struct {
 	starTg                                     *widgets.ToolItem
 	attachTg                                   *widgets.ToolItem
 	senderTg, recipTg, subjTg, bodyTg          *widgets.ToolItem
-	chrome                                     *widgets.TitleBar
 	folderL                                    *widgets.Label
 	acctPanel                                  widget.Component
 	acctTitle                                  *widgets.Label
@@ -171,7 +171,11 @@ func (s *session) rebuild() {
 
 func (s *session) build() widget.Component {
 	s.applyLook()
-	s.status = widgets.NewStatusBar("Ready.", "", "Offline demo", "v"+uitoolkit.Version)
+	if s.opts.ShowStatusBar {
+		s.status = widgets.NewStatusBar("Ready.", "", "Offline demo", "v"+uitoolkit.Version)
+	} else {
+		s.status = nil
+	}
 	s.hdrFrom = widgets.NewLabel("")
 	s.hdrSubj = widgets.NewTitle("")
 	s.hdrDate = widgets.NewLabel("")
@@ -311,7 +315,7 @@ func (s *session) build() widget.Component {
 		s.refreshList()
 	})
 	pins := widgets.NewToolBar(s.unreadTg, s.starTg, s.attachTg, widgets.ToolDivider(), s.senderTg, s.recipTg, s.subjTg, s.bodyTg)
-	s.qfBar = widgets.NewRow(s.qf, pins, tagCombo).WithGap(8)
+	s.qfBar = widgets.NewRow(s.qf, pins, tagCombo).WithGap(8).WithPadding(8, 4, 8, 4)
 	row, _ := s.qfBar.(*widgets.FlexBox)
 	if row != nil {
 		row.AddFlex(s.qf, 1)
@@ -359,7 +363,7 @@ func (s *session) build() widget.Component {
 	s.clearFilt = widgets.NewButton("Clear filter", s.clearQuickFilter)
 	s.hintRow = widgets.NewRow(s.listHint, widgets.NewSpacer(), s.clearFilt).WithGap(8)
 	s.hintRow.SetVisible(false)
-	thread := widgets.NewColumn(s.qfBar, s.hintRow, s.listStack).WithGap(6).WithPad(8)
+	thread := widgets.NewColumn(s.hintRow, s.listStack).WithGap(6).WithPad(8)
 	thread.AddFlex(s.listStack, 1)
 	s.thread = thread
 	s.acctPanel = s.buildAccountCentral()
@@ -397,8 +401,11 @@ func (s *session) build() widget.Component {
 		split.Ratio = 0.17
 	}
 
-	s.chrome = widgets.NewTitleBar("Mail", s.subtitle())
-	root := widgets.NewColumn(s.menuBar(), s.toolBar(), s.chrome, split, s.status).WithGap(0)
+	chrome := []widget.Component{s.menuBar(), s.toolBar(), s.qfBar, split}
+	if s.status != nil {
+		chrome = append(chrome, s.status)
+	}
+	root := widgets.NewColumn(chrome...).WithGap(0)
 	root.AddFlex(split, 1)
 	s.refreshAll()
 	return wrapShortcutsReady(root, s.handleKey, s.maybeAskAddAccount)
@@ -500,12 +507,6 @@ func (s *session) menuBar() *widgets.MenuBar {
 			widgets.ItemAccel("Previous Message", "p", func() { s.moveSel(-1) }),
 			widgets.Item("Next Unread Message", s.nextUnread),
 			widgets.Sep(),
-			widgets.Item("VIP", func() {
-				s.central = false
-				s.folder = FolderVIP
-				s.selected = nil
-				s.refreshAll()
-			}),
 			widgets.Item("Inbox", func() { s.goKind(FolderInbox) }),
 			widgets.Item("Drafts", func() { s.goKind(FolderDrafts) }),
 			widgets.Item("Sent", func() { s.goKind(FolderSent) }),
@@ -780,7 +781,7 @@ func (s *session) rebuildTree() {
 	}
 	if vfs, err := s.cli.VirtualFolders(); err == nil {
 		for _, f := range vfs {
-			if f.ID == FolderVIP || f.ID == FolderOutbox {
+			if f.ID == FolderOutbox {
 				addVirtual(f)
 			}
 		}
@@ -939,9 +940,6 @@ func (s *session) loadPreview() {
 			s.attachList.Count = 0
 			s.attachList.SetVisible(false)
 		}
-		if s.chrome != nil {
-			s.chrome.SetSubtitle(s.subtitle())
-		}
 		return
 	}
 	if s.hdrSubj != nil {
@@ -973,16 +971,16 @@ func (s *session) loadPreview() {
 	if s.source != nil {
 		s.source.SetText(rawSource(m))
 	}
-	if s.chrome != nil {
-		s.chrome.SetSubtitle(s.subtitle())
-	}
 }
 
 func (s *session) refreshStatus() {
+	unread, _ := s.cli.UnreadTotal()
+	if s.folderL != nil {
+		s.folderL.SetText(fmt.Sprintf("%d unread in all folders", unread))
+	}
 	if s.status == nil {
 		return
 	}
-	unread, _ := s.cli.UnreadTotal()
 	name := string(s.folder)
 	if f, ok, _ := s.cli.GetFolder(s.folder); ok {
 		name = f.Name
@@ -1006,31 +1004,6 @@ func (s *session) refreshStatus() {
 		s.status.Set(2, "Offline · "+line)
 	}
 	s.status.Set(3, "v"+uitoolkit.Version)
-	if s.folderL != nil {
-		s.folderL.SetText(fmt.Sprintf("%d unread in all folders", unread))
-	}
-}
-
-func (s *session) subtitle() string {
-	f, ok, _ := s.cli.GetFolder(s.folder)
-	folder := "Mail"
-	acct := ""
-	if ok {
-		folder = f.Name
-		for _, a := range s.accounts() {
-			if a.ID == f.AccountID {
-				acct = a.Address
-			}
-		}
-	}
-	layout := "vertical"
-	if s.opts.Layout == LayoutClassic {
-		layout = "classic"
-	}
-	if acct == "" {
-		return fmt.Sprintf("%s  ·  %s  ·  Titillium Web  ·  v%s", folder, layout, uitoolkit.Version)
-	}
-	return fmt.Sprintf("%s  ·  %s  ·  %s  ·  v%s", acct, folder, layout, uitoolkit.Version)
 }
 
 func (s *session) mark(msg string) {

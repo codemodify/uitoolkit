@@ -84,14 +84,16 @@ After each scripted step it runs `uitest.TreeInvariants` (exclusive
 splitter panes, scroll clamp, thumb-in-track, non-empty visible-row
 window when content remains, table first-row flush under the header).
 
-**Gallery** (`internal/demo.Gallery`): construct, resize, drag every
+**Gallery** (`internal/demo.Gallery`): construct, open a ComboBox and
+assert the popup clears the field and fits labels, resize, drag every
 splitter to several ratios, scroll lists/tables/trees/cards/ScrollViews
 to top / mid / end and back, select rows.
 
 **Mail** (in-process `StartDemo` only): same geometry/scroll/splitter
-passes, select a thread row, focus the message `TextView` and type
-(must fail), and (unless `-short`) open compose and type into the
-editable body. No Delete / Junk / Send / Move.
+passes, select a thread row, open the message context menu (full labels
++ all items), focus the message `TextView` and type (must fail), and
+(unless `-short`) open compose and type into the editable body. No
+Delete / Junk / Send / Move.
 
 ## Adding a regression test
 
@@ -104,5 +106,9 @@ broken code:
   comment at the top of `widgets/contract_test.go`.
 - If the bug only shows up in a real app, add a driver step in
   `internal/apptest` with an invariant check after the action.
+- Context-menu / MenuBar clip: `TestPopupMenuFitsLongLabelsAndManyItems`,
+  `TestMenuBarDropdownFitsLabelsAndShortcuts`, Mail driver `context-menu`.
+- ComboBox overlap / clipped rows: `TestComboBoxPopupClearsFieldAndFitsLabels`
+  plus the gallery driver `combo-popup` step.
 
 Do not land a “looks fine on my machine” fix without a test.

@@ -256,9 +256,9 @@ func (m *MenuBar) Open(i int) {
 	}
 	origin := widget.DeviceOrigin(m)
 	tb := rects[i]
-	widget.PlacePopup(pop, paintengine2d.Pt(origin.X+tb.Min.X, origin.Y+tb.Max.Y-1), 360, 480)
+	anchor := paintengine2d.XYWH(origin.X+tb.Min.X, origin.Y+tb.Min.Y, tb.Dx(), tb.Dy())
+	widget.PlacePopupForAnchor(m, pop, anchor, 0, 1)
 	if widget.ShowPopup(m, pop) {
-		widget.ClampToSurface(m, pop)
 		m.open = i
 		m.Invalidate()
 		pop.RequestFocus()
@@ -278,9 +278,11 @@ type PopupMenu struct {
 	Items     []*MenuItem
 	OnPick    func(*MenuItem)
 	OnDismiss func()
+	OffsetY   float32
 	hover     int
 	press     int
 	focus     int
+	vbar      scrollDrag
 }
 
 // NewPopupMenu builds a popup from items.
@@ -301,9 +303,17 @@ func firstEnabled(items []*MenuItem) int {
 }
 
 func (p *PopupMenu) itemH() float32 {
-	h := p.Look().Metrics().MenuItemH
-	if h <= 0 {
-		h = 26
+	lk := p.Look()
+	h := float32(28)
+	if lk != nil && lk.Metrics().MenuItemH > 0 {
+		h = lk.Metrics().MenuItemH
+	}
+	if lk != nil {
+		if f := lk.Font(); f != nil {
+			if min := f.Height() + 16; min > h {
+				h = min
+			}
+		}
 	}
 	return h
 }
@@ -315,34 +325,130 @@ func (p *PopupMenu) rowH(it *MenuItem) float32 {
 	return p.itemH()
 }
 
-func (p *PopupMenu) Measure(c layout.Constraints) paintengine2d.Point {
-	f := p.Look().Font()
-	var w, h float32
-	w = 160
+const (
+	menuPadL     = 8
+	menuPadR     = 10
+	menuPadT     = 6
+	menuPadB     = 8
+	menuCheckCol = 20 // DrawMenuItem: pad 10 + check/label gutter 10
+	menuAccelGap = 20
+)
+
+func menuTextAdvance(f *style.Font, text string) float32 {
+	if text == "" {
+		return 0
+	}
+	if f != nil {
+		if w := f.Advance(text); w > 0 {
+			return w
+		}
+		if em := f.Size; em > 0 {
+			return float32(len([]rune(text))) * em * 0.62
+		}
+	}
+	return float32(len([]rune(text))) * 10
+}
+
+func (p *PopupMenu) contentSize() paintengine2d.Point {
+	f := (*style.Font)(nil)
+	if lk := p.Look(); lk != nil {
+		f = lk.Font()
+	}
+	var maxLabel, maxAccel float32
+	h := float32(menuPadT + menuPadB)
 	for _, it := range p.Items {
+		h += p.rowH(it)
 		if it == nil || it.Separator {
-			h += p.rowH(it)
 			continue
 		}
 		label, _, _ := ParseMnemonic(it.Text)
-		tw := f.Advance(label) + 36
+		if tw := menuTextAdvance(f, label); tw > maxLabel {
+			maxLabel = tw
+		}
 		if it.Shortcut != "" {
-			tw += f.Advance(it.Shortcut) + 24
+			if tw := menuTextAdvance(f, it.Shortcut); tw > maxAccel {
+				maxAccel = tw
+			}
 		}
-		if tw > w {
-			w = tw
-		}
-		h += p.rowH(it)
 	}
-	h += 8
-	w += 8
-	return c.Constrain(paintengine2d.Pt(w, h))
+	w := float32(menuPadL+menuCheckCol) + maxLabel + menuPadR
+	if maxAccel > 0 {
+		w += menuAccelGap + maxAccel
+	}
+	if w < 80 {
+		w = 80
+	}
+	return paintengine2d.Pt(w, h)
 }
 
-func (p *PopupMenu) Arrange(r paintengine2d.Rect) { p.SetBounds(r) }
+// ContentSize is the intrinsic box for all items + separators + frame pad.
+func (p *PopupMenu) ContentSize() paintengine2d.Point { return p.contentSize() }
+
+func (p *PopupMenu) Measure(c layout.Constraints) paintengine2d.Point {
+	sz := p.contentSize()
+	if c.HasMaxH() && sz.Y > c.MaxH {
+		bar, gap := overflowBarSize(p.Look())
+		sz.X += bar + gap
+	}
+	out := c.Constrain(sz)
+	if out.Y+0.5 < sz.Y && out.X < sz.X {
+		out.X = sz.X
+		if c.HasMaxW() && out.X > c.MaxW {
+			out.X = c.MaxW
+		}
+	}
+	return out
+}
+
+func (p *PopupMenu) Arrange(r paintengine2d.Rect) {
+	p.SetBounds(r)
+	p.clamp()
+}
+
+func (p *PopupMenu) contentH() float32 { return p.contentSize().Y }
+
+// MaxOffset is max(0, content − viewport) when the popup was clamped.
+func (p *PopupMenu) MaxOffset() float32 {
+	return layout.MaxScroll(p.contentH(), p.LocalBounds().Dy())
+}
+
+func (p *PopupMenu) clamp() {
+	p.OffsetY = layout.ClampScroll(p.OffsetY, p.contentH(), p.LocalBounds().Dy())
+}
+
+func (p *PopupMenu) scrollTrack() (track, thumb paintengine2d.Rect) {
+	bar, gap := overflowBarSize(p.Look())
+	return vScrollThumb(p.LocalBounds(), p.contentH(), p.OffsetY, bar, gap)
+}
+
+// ScrollTrack is the overflow bar (empty thumb when every item fits).
+func (p *PopupMenu) ScrollTrack() (track, thumb paintengine2d.Rect) { return p.scrollTrack() }
+
+func (p *PopupMenu) innerWidth() float32 {
+	w := p.LocalBounds().Dx() - menuPadL - menuPadR
+	if p.MaxOffset() > 0 {
+		bar, gap := overflowBarSize(p.Look())
+		w -= bar + gap
+	}
+	if w < 0 {
+		w = 0
+	}
+	return w
+}
+
+func (p *PopupMenu) rowTop(i int) float32 {
+	cur := float32(menuPadT)
+	for n, it := range p.Items {
+		if n == i {
+			return cur
+		}
+		cur += p.rowH(it)
+	}
+	return cur
+}
 
 func (p *PopupMenu) rowAt(y float32) int {
-	cur := float32(4)
+	cur := float32(menuPadT) - p.OffsetY
 	for i, it := range p.Items {
 		rh := p.rowH(it)
 		if y >= cur && y < cur+rh {
@@ -354,21 +460,75 @@ func (p *PopupMenu) rowAt(y float32) int {
 }
 
 func (p *PopupMenu) rowBounds(i int) paintengine2d.Rect {
-	cur := float32(4)
-	b := p.LocalBounds()
-	for n, it := range p.Items {
-		rh := p.rowH(it)
-		if n == i {
-			return paintengine2d.XYWH(4, cur, b.Dx()-8, rh)
-		}
-		cur += rh
+	if i < 0 || i >= len(p.Items) {
+		return paintengine2d.Rect{}
 	}
-	return paintengine2d.Rect{}
+	return paintengine2d.XYWH(menuPadL, p.rowTop(i)-p.OffsetY, p.innerWidth(), p.rowH(p.Items[i]))
+}
+
+// ItemBounds is the arranged row in popup-local coordinates (scroll applied).
+func (p *PopupMenu) ItemBounds(i int) paintengine2d.Rect { return p.rowBounds(i) }
+
+// LabelBounds is the text column for item i (excludes the shortcut column).
+func (p *PopupMenu) LabelBounds(i int) paintengine2d.Rect {
+	row := p.rowBounds(i)
+	if row.Empty() || i < 0 || i >= len(p.Items) || p.Items[i] == nil {
+		return paintengine2d.Rect{}
+	}
+	x0 := row.Min.X + menuCheckCol
+	x1 := row.Max.X
+	if r := p.ShortcutBounds(i); !r.Empty() {
+		x1 = r.Min.X - menuAccelGap
+	}
+	if x1 < x0 {
+		x1 = x0
+	}
+	return paintengine2d.XYWH(x0, row.Min.Y, x1-x0, row.Dy())
+}
+
+// ShortcutBounds is the right-aligned accelerator column, or empty.
+func (p *PopupMenu) ShortcutBounds(i int) paintengine2d.Rect {
+	if i < 0 || i >= len(p.Items) || p.Items[i] == nil || p.Items[i].Shortcut == "" {
+		return paintengine2d.Rect{}
+	}
+	row := p.rowBounds(i)
+	if row.Empty() {
+		return paintengine2d.Rect{}
+	}
+	f := (*style.Font)(nil)
+	if lk := p.Look(); lk != nil {
+		f = lk.Font()
+	}
+	tw := menuTextAdvance(f, p.Items[i].Shortcut)
+	return paintengine2d.XYWH(row.Max.X-tw, row.Min.Y, tw, row.Dy())
+}
+
+func (p *PopupMenu) ensureItemVisible(i int) {
+	if i < 0 || i >= len(p.Items) {
+		return
+	}
+	top := p.rowTop(i)
+	bot := top + p.rowH(p.Items[i])
+	view := p.LocalBounds().Dy()
+	if view <= 0 {
+		return
+	}
+	if top < p.OffsetY+menuPadT {
+		p.OffsetY = top - menuPadT
+	}
+	if bot > p.OffsetY+view-menuPadB {
+		p.OffsetY = bot - view + menuPadB
+	}
+	p.clamp()
 }
 
 func (p *PopupMenu) Paint(ctx *paintengine2d.Context) {
+	p.clamp()
 	lk := p.Look()
-	lk.DrawMenuFrame(ctx, p.LocalBounds())
+	b := p.LocalBounds()
+	lk.DrawMenuFrame(ctx, b)
+	ctx.Save()
+	ctx.ClipRect(b.Inset(2))
 	for i, it := range p.Items {
 		if it == nil {
 			continue
@@ -386,6 +546,9 @@ func (p *PopupMenu) Paint(ctx *paintengine2d.Context) {
 		label, _, idx := ParseMnemonic(it.Text)
 		lk.DrawMenuItem(ctx, p.rowBounds(i), st, label, it.Shortcut, idx, it.Separator, it.Checked)
 	}
+	ctx.Restore()
+	track, thumb := p.scrollTrack()
+	paintOverflowBar(ctx, lk, track, thumb, p.vbar.over, p.vbar.active)
 }
 
 func (p *PopupMenu) invalidateRow(i int) {
@@ -396,6 +559,17 @@ func (p *PopupMenu) invalidateRow(i int) {
 }
 
 func (p *PopupMenu) MouseMove(e widget.MouseEvent) bool {
+	track, thumb := p.scrollTrack()
+	if off, apply, handled, hoverDirty := p.vbar.move(e.Pos, track, thumb, true, p.MaxOffset()); handled {
+		if apply {
+			p.OffsetY = off
+			p.clamp()
+		}
+		if apply || hoverDirty {
+			p.Invalidate()
+		}
+		return true
+	}
 	i := p.rowAt(e.Pos.Y)
 	if i != p.hover {
 		old := p.hover
@@ -415,18 +589,40 @@ func (p *PopupMenu) MouseExit() {
 }
 
 func (p *PopupMenu) MousePress(e widget.MouseEvent) bool {
+	track, thumb := p.scrollTrack()
+	if off, ok := p.vbar.press(e.Pos, track, thumb, true, p.OffsetY, p.MaxOffset(), p.LocalBounds().Dy()*0.9); ok {
+		p.OffsetY = off
+		p.clamp()
+		p.Invalidate()
+		return true
+	}
 	p.press = p.rowAt(e.Pos.Y)
 	p.Invalidate()
 	return true
 }
 
 func (p *PopupMenu) MouseRelease(e widget.MouseEvent) bool {
+	if p.vbar.release() {
+		p.press = -1
+		p.Invalidate()
+		return true
+	}
 	i := p.rowAt(e.Pos.Y)
 	p.press = -1
 	p.Invalidate()
 	if i >= 0 && i < len(p.Items) {
 		p.activate(i)
 	}
+	return true
+}
+
+func (p *PopupMenu) MouseWheel(e widget.MouseEvent) bool {
+	if p.MaxOffset() <= 0 {
+		return false
+	}
+	p.OffsetY += wheelDelta(e.Scroll.Y, p.itemH())
+	p.clamp()
+	p.Invalidate()
 	return true
 }
 
@@ -518,6 +714,7 @@ func (p *PopupMenu) moveFocus(dir int) {
 		if it != nil && !it.Separator && !it.Disabled {
 			p.focus = i
 			p.hover = i
+			p.ensureItemVisible(i)
 			p.Invalidate()
 			return
 		}
@@ -551,6 +748,7 @@ func (p *PopupMenu) Dismissed() {
 // ShowContextMenu opens a popup at window-space origin.
 func ShowContextMenu(from widget.Component, origin paintengine2d.Point, items ...*MenuItem) *PopupMenu {
 	pop := NewPopupMenu(items...)
+	widget.PreparePopup(from, pop)
 	widget.PlacePopup(pop, origin, 360, 480)
 	if widget.ShowPopup(from, pop) {
 		widget.ClampToSurface(from, pop)

@@ -296,7 +296,7 @@ func prefsVIP(cli *Client) widget.Component {
 	}, nil)
 	return widgets.NewColumn(
 		widgets.NewTitle("VIP senders"),
-		widgets.NewLabel("VIP mail lands in the VIP folder and can drive VIP-only notifications."),
+		widgets.NewLabel("VIP senders can drive VIP-only notifications."),
 		table,
 	).WithGap(8)
 }
