@@ -7,7 +7,8 @@
 //	app       — run loop, windows, DPI, input routing
 //	widget    — Component tree, focus, hit-test, Invalidate / Damage
 //	layout    — row, column, stack, flex
-//	widgets   — Button, Label, TextField, Checkbox, Slider, ScrollView, …
+//	widgets   — Button, Label, TextField, Checkbox, Slider, ScrollView,
+//	            MenuBar, TabView, TreeView, StatusBar, ListView, …
 //	style     — LookAndFeel themes (colors, radii, baked glyph atlases)
 //
 // All pixels go through paintengine2d.Context. There is no second rasterizer.

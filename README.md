@@ -18,12 +18,13 @@ _ = app.Run()
 
 ```bash
 go get github.com/codemodify/uitoolkit@dev
+go get github.com/codemodify/paintengine2d@v0.7.2
 ```
 
 | | |
 | --- | --- |
 | Language | Go 1.22+ |
-| Paint | paintengine2d 0.7.2 (`Context`, `Damage`, `DrawGlyphs` Color tint) |
+| Paint | paintengine2d **v0.7.2** (`02b2939`; `Context`, `Damage`, `DrawGlyphs` Color tint) |
 | Windowing | Linux X11 first (CGO + libX11); offscreen always |
 | CGO | optional — tests and screenshots are `CGO_ENABLED=0` |
 | License | MIT |
@@ -52,6 +53,14 @@ and written as PNG (no placeholders).
 ### Dialog overlay
 
 ![About dialog](docs/screenshots/gallery-dialog.png)
+
+### MenuBar drop-down
+
+![File menu](docs/screenshots/gallery-menu.png)
+
+### TreeView
+
+![TreeView](docs/screenshots/gallery-tree.png)
 
 ### Notes — a small desktop app
 
@@ -116,7 +125,8 @@ widget     retained Component: bounds, children,  HitTest, focus, Invalidate
            Paint(ctx *paintengine2d.Context)
 layout     Measure / Arrange                      row, column, stack, flex
 widgets    Button, Label, TextField, Checkbox,    ScrollView, ListView
-           Slider, Panel, Splitter, Overlay       (virtualized rows)
+           Slider, Panel, Splitter, Overlay       MenuBar, TabView, TreeView
+           StatusBar, context menus               (virtualized rows)
 style      LookAndFeel + Palette + Metrics        Dark / Light Classic
 ```
 
@@ -127,8 +137,8 @@ never hard-code colors.
 
 | Command | What it proves |
 | --- | --- |
-| `go run ./examples/gallery` | Every stock control, themes, scroll, list, dialog overlay, second window |
-| `go run ./examples/notes` | A small real app: filterable list, editor, add/delete |
+| `go run ./examples/gallery` | Stock controls, menus, tabs, tree, themes, scroll, list, dialog, second window |
+| `go run ./examples/notes` | A small real app: filterable list, editor, add/delete, context menu |
 
 ```bash
 go run ./examples/gallery -screenshot docs/screenshots
@@ -141,10 +151,12 @@ CGO_ENABLED=0 go test ./...
 ```
 
 Coverage includes flex Measure/Arrange (parent-local coords), hit-test
-z-order, focus tab order, checkbox/slider/text/button interaction, virtual
-list range, scroll-wheel bubbling, scrollbar track hits, text selection,
-and an offscreen paint that produces real pixels. `go test ./examples/gallery`
-regenerates the six PNGs and fails if any two share a blob.
+z-order, focus tab order (including MenuBar / TabBar / TreeView),
+checkbox/slider/text/button interaction, virtual list range, scroll-wheel
+bubbling, scrollbar track hits, text selection and copy/paste stubs, menu
+and tab swap, tree expand/select, context-menu dispatch, and an offscreen
+paint that produces real pixels. `go test ./examples/gallery` regenerates
+the eight PNGs and fails if any two share a blob.
 
 ## Positioning
 
@@ -175,8 +187,10 @@ Documented on purpose — do not expect these yet:
 
 ## Version
 
-**0.1.2** — paintengine2d **0.7.2** (`02b2939`): shared white glyph atlas +
-`Paint.Color` tint. Keeps 0.1.1 screenshot and input hardening.
+**0.1.3** — MenuBar / Menu / MenuItem, TabBar + TabPage / TabView, TreeView,
+StatusBar, ListView context menus, TextField copy/cut/paste stubs (in-memory
+clipboard; OS clipboard still out of scope). Requires
+`github.com/codemodify/paintengine2d@v0.7.2` (`02b2939`).
 
 ## License
 
