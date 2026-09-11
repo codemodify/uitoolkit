@@ -553,6 +553,175 @@ func TestMailChromeHidesStatusBarAndVIPFolder(t *testing.T) {
 	w.Close()
 }
 
+func TestMailChromeHasNoSidebarAccountPicker(t *testing.T) {
+	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{
+		Title: "Mail", Width: 1280, Height: 800, Headless: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.SetContent(MailApp(a, w))
+	a.PumpOnce()
+
+	var split *widgets.Splitter
+	var tree *widgets.TreeView
+	var addAcct, removeAcct, acctCentral bool
+	widget.Walk(w.Content(), func(c widget.Component) {
+		switch v := c.(type) {
+		case *widgets.Splitter:
+			if split == nil {
+				split = v
+			}
+		case *widgets.TreeView:
+			if tree == nil {
+				tree = v
+			}
+		case *widgets.Label:
+			if v.Title && (v.Text == "Folders" || v.Text == "Account" || v.Text == "Tags") {
+				t.Fatalf("sidebar section header still present: %q", v.Text)
+			}
+		case *widgets.MenuBar:
+			for _, m := range v.Menus() {
+				for _, it := range m.Items {
+					if it == nil {
+						continue
+					}
+					switch it.Text {
+					case "Add Account…", "Add &Account…":
+						addAcct = true
+					case "Remove Account…", "Remove &Account…":
+						removeAcct = true
+					case "Account Central":
+						acctCentral = true
+					}
+				}
+			}
+		}
+	})
+	if split == nil {
+		t.Fatal("splitter")
+	}
+	widget.Walk(split, func(c widget.Component) {
+		if _, ok := c.(*widgets.ComboBox); ok {
+			t.Fatal("account ComboBox still in the sidebar splitter")
+		}
+	})
+	if tree == nil {
+		t.Fatal("folder tree")
+	}
+	var acctNode, tagsNode bool
+	for _, n := range tree.Roots {
+		if n == nil {
+			continue
+		}
+		if id, ok := n.Data.(string); ok && id != "" && id != AccountTags {
+			acctNode = true
+		}
+		if n.Label == "Tags" || n.Data == AccountTags {
+			tagsNode = true
+		}
+	}
+	if !acctNode {
+		t.Fatal("account folders missing from the tree")
+	}
+	if !tagsNode {
+		t.Fatal("Tags missing from the tree")
+	}
+	if !addAcct || !removeAcct || !acctCentral {
+		t.Fatalf("account menus add=%v remove=%v central=%v", addAcct, removeAcct, acctCentral)
+	}
+	w.Close()
+}
+
+func TestMailChromeHasNoActiveFilterBanner(t *testing.T) {
+	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{
+		Title: "Mail", Width: 1280, Height: 800, Headless: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.SetContent(MailApp(a, w))
+	a.PumpOnce()
+
+	var qf *widgets.TextField
+	var unread *widgets.ToolItem
+	var table *widgets.TableView
+	widget.Walk(w.Content(), func(c widget.Component) {
+		switch v := c.(type) {
+		case *widgets.TextField:
+			if strings.Contains(v.Placeholder, "Quick Filter") && qf == nil {
+				qf = v
+			}
+		case *widgets.TableView:
+			if table == nil {
+				table = v
+			}
+		case *widgets.ToolBar:
+			for _, it := range v.Items() {
+				if it != nil && it.Text == "Unread" && unread == nil {
+					unread = it
+				}
+			}
+		}
+	})
+	if qf == nil {
+		t.Fatal("quick filter field missing")
+	}
+	if table == nil {
+		t.Fatal("thread table")
+	}
+	assertNoFilterBanner(t, w.Content())
+
+	before := table.RowCount
+	qf.SetText("lunch")
+	a.PumpOnce()
+	assertNoFilterBanner(t, w.Content())
+	if table.RowCount <= 0 || table.RowCount > before {
+		t.Fatalf("quick filter should narrow the list, rows=%d before=%d", table.RowCount, before)
+	}
+
+	qf.SetText("")
+	a.PumpOnce()
+	assertNoFilterBanner(t, w.Content())
+	if table.RowCount != before {
+		t.Fatalf("emptying quick filter should restore the list, rows=%d want %d", table.RowCount, before)
+	}
+
+	if unread == nil || unread.OnClick == nil {
+		t.Fatal("Unread pin missing")
+	}
+	unread.OnClick()
+	a.PumpOnce()
+	assertNoFilterBanner(t, w.Content())
+	if table.RowCount <= 0 || table.RowCount > before {
+		t.Fatalf("Unread pin should narrow the list, rows=%d before=%d", table.RowCount, before)
+	}
+	unread.OnClick()
+	a.PumpOnce()
+	assertNoFilterBanner(t, w.Content())
+	w.Close()
+}
+
+func assertNoFilterBanner(t *testing.T, root widget.Component) {
+	t.Helper()
+	widget.Walk(root, func(c widget.Component) {
+		switch v := c.(type) {
+		case *widgets.Button:
+			if v.Text == "Clear filter" {
+				t.Fatal("Clear filter button still above the message list")
+			}
+		case *widgets.Label:
+			if strings.Contains(v.Text, "Filter on") ||
+				strings.Contains(v.Text, "No messages match this filter") ||
+				v.Text == "This folder is empty." {
+				t.Fatalf("active-filter banner still present: %q", v.Text)
+			}
+		}
+	})
+}
+
 func TestMailColumnsTopicWhoWhen(t *testing.T) {
 	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true})
 	w, err := a.NewWindow(platform.WindowOptions{
