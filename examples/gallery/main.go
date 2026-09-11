@@ -645,6 +645,9 @@ func writeScreenshots(dir string) error {
 	if err := mail.WriteScreenshots(dir); err != nil {
 		return err
 	}
+	if err := writeCompareThumbs(dir); err != nil {
+		return err
+	}
 	return verifyDistinctPNGs(dir, screenshotNames)
 }
 
