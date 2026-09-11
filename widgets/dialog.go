@@ -54,10 +54,14 @@ func (o *Overlay) MousePress(e widget.MouseEvent) bool {
 	if o.Card != nil && o.Card.Bounds().Contains(e.Pos) {
 		return false
 	}
+	widget.DismissOverlay(o)
+	return true
+}
+
+func (o *Overlay) Dismissed() {
 	if o.OnClose != nil {
 		o.OnClose()
 	}
-	return true
 }
 
 // DialogCard is a titled panel with a message and action row.

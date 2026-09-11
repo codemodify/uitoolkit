@@ -56,7 +56,6 @@ func (p *Panel) Paint(ctx *paintengine2d.Context) {
 	if p.Title != "" {
 		m := lk.Metrics()
 		bar := paintengine2d.XYWH(0, 0, p.LocalBounds().Dx(), m.TitleBar)
-		lk.TitleFont().Draw(ctx, p.Title, paintengine2d.Pt(m.Pad, (m.TitleBar-lk.TitleFont().Height())*0.5), lk.Palette().Text)
-		_ = bar
+		lk.DrawTitleBar(ctx, bar, p.Title, "")
 	}
 }

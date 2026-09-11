@@ -12,17 +12,22 @@ import (
 // Re-exported types so a typical app imports this module once.
 
 type (
-	Application   = app.Application
-	Options       = app.Options
-	Window        = app.Window
-	WindowOptions = platform.WindowOptions
-	LookAndFeel   = style.LookAndFeel
-	Palette       = style.Palette
-	Component     = widget.Component
-	Menu          = widgets.Menu
-	MenuItem      = widgets.MenuItem
-	Tab           = widgets.Tab
-	TreeNode      = widgets.TreeNode
+	Application       = app.Application
+	Options           = app.Options
+	Window            = app.Window
+	WindowOptions     = platform.WindowOptions
+	LookAndFeel       = style.LookAndFeel
+	Palette           = style.Palette
+	Component         = widget.Component
+	Menu              = widgets.Menu
+	MenuItem          = widgets.MenuItem
+	Tab               = widgets.Tab
+	TreeNode          = widgets.TreeNode
+	ToolItem          = widgets.ToolItem
+	MessageKind       = widgets.MessageKind
+	MessageButtons    = widgets.MessageButtons
+	MessageResult     = widgets.MessageResult
+	MessageBoxOptions = widgets.MessageBoxOptions
 )
 
 func New(opts Options) *Application { return app.New(opts) }
@@ -94,6 +99,79 @@ func NewTreeView(roots ...*widgets.TreeNode) *widgets.TreeView {
 	return widgets.NewTreeView(roots...)
 }
 func NewStatusBar(parts ...string) *widgets.StatusBar { return widgets.NewStatusBar(parts...) }
+func NewToolBar(items ...*widgets.ToolItem) *widgets.ToolBar {
+	return widgets.NewToolBar(items...)
+}
+func ToolText(text string, on func()) *widgets.ToolItem { return widgets.ToolText(text, on) }
+func ToolIconBtn(icon style.ToolIcon, text string, on func()) *widgets.ToolItem {
+	return widgets.ToolIconBtn(icon, text, on)
+}
+func ToolToggle(text string, down bool, on func()) *widgets.ToolItem {
+	return widgets.ToolToggle(text, down, on)
+}
+func ToolDivider() *widgets.ToolItem { return widgets.ToolDivider() }
+func NewComboBox(items []string, selected int, on func(int)) *widgets.ComboBox {
+	return widgets.NewComboBox(items, selected, on)
+}
+func NewProgressBar(value float32) *widgets.ProgressBar { return widgets.NewProgressBar(value) }
+func NewBusyBar(phase float32) *widgets.ProgressBar     { return widgets.NewBusyBar(phase) }
+func NewRadio(text string, selected bool, on func(bool)) *widgets.RadioButton {
+	return widgets.NewRadio(text, selected, on)
+}
+func NewRadioGroup(labels []string, selected int, on func(int)) *widgets.RadioGroup {
+	return widgets.NewRadioGroup(labels, selected, on)
+}
+func NewTitleBar(title, subtitle string) *widgets.TitleBar {
+	return widgets.NewTitleBar(title, subtitle)
+}
+func NewMessageBox(opts widgets.MessageBoxOptions) *widgets.MessageBox {
+	return widgets.NewMessageBox(opts)
+}
+func ShowMessageBox(from widget.Component, opts widgets.MessageBoxOptions) *widgets.MessageBox {
+	return widgets.ShowMessageBox(from, opts)
+}
+func Info(from widget.Component, title, message string, on func()) *widgets.MessageBox {
+	return widgets.Info(from, title, message, on)
+}
+func Confirm(from widget.Component, title, message string, on func(bool)) *widgets.MessageBox {
+	return widgets.Confirm(from, title, message, on)
+}
+func Warn(from widget.Component, title, message string, on func()) *widgets.MessageBox {
+	return widgets.Warn(from, title, message, on)
+}
+
+const (
+	IconNone     = style.IconNone
+	IconNew      = style.IconNew
+	IconOpen     = style.IconOpen
+	IconSave     = style.IconSave
+	IconCut      = style.IconCut
+	IconCopy     = style.IconCopy
+	IconPaste    = style.IconPaste
+	IconUndo     = style.IconUndo
+	IconRedo     = style.IconRedo
+	IconSearch   = style.IconSearch
+	IconInfo     = style.IconInfo
+	IconWarning  = style.IconWarning
+	IconError    = style.IconError
+	IconQuestion = style.IconQuestion
+
+	MessageInfo     = widgets.MessageInfo
+	MessageWarning  = widgets.MessageWarning
+	MessageError    = widgets.MessageError
+	MessageQuestion = widgets.MessageQuestion
+
+	ButtonsOK          = widgets.ButtonsOK
+	ButtonsOKCancel    = widgets.ButtonsOKCancel
+	ButtonsYesNo       = widgets.ButtonsYesNo
+	ButtonsYesNoCancel = widgets.ButtonsYesNoCancel
+
+	ResultNone   = widgets.ResultNone
+	ResultOK     = widgets.ResultOK
+	ResultCancel = widgets.ResultCancel
+	ResultYes    = widgets.ResultYes
+	ResultNo     = widgets.ResultNo
+)
 
 // Layout constants.
 const (

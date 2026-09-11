@@ -8,7 +8,8 @@
 //	widget    — Component tree, focus, hit-test, Invalidate / Damage
 //	layout    — row, column, stack, flex
 //	widgets   — Button, Label, TextField, Checkbox, Slider, ScrollView,
-//	            MenuBar, TabView, TreeView, StatusBar, ListView, …
+//	            MenuBar, TabView, TreeView, StatusBar, ToolBar, ComboBox,
+//	            ProgressBar, RadioGroup, MessageBox, TitleBar, ListView, …
 //	style     — LookAndFeel themes (colors, radii, baked glyph atlases)
 //
 // All pixels go through paintengine2d.Context. There is no second rasterizer.

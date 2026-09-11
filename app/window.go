@@ -57,10 +57,20 @@ func (w *Window) SetContent(c widget.Component) {
 func (w *Window) Content() widget.Component { return w.root }
 
 func (w *Window) SetOverlay(c widget.Component) {
+	if w.overlay == c {
+		return
+	}
+	old := w.overlay
 	w.overlay = c
 	if c != nil {
 		c.SetHost(w)
 	}
+	if old != nil {
+		if d, ok := old.(widget.Dismisser); ok {
+			d.Dismissed()
+		}
+	}
+	w.laid = false
 	w.fullInvalidate()
 }
 

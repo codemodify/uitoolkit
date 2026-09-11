@@ -112,33 +112,41 @@ type Metrics struct {
 	TabH        float32
 	TreeIndent  float32
 	StatusBarH  float32
+	ToolBarH    float32
+	ToolBtn     float32
+	ProgressH   float32
+	Radio       float32
 }
 
 // DefaultMetrics is dense but finger-friendly at 1× scale.
 func DefaultMetrics() Metrics {
 	return Metrics{
-		Radius:      7,
-		RadiusSmall: 4,
-		Pad:         10,
-		Gap:         8,
+		Radius:      8,
+		RadiusSmall: 5,
+		Pad:         12,
+		Gap:         10,
 		Border:      1,
 		FocusWidth:  2,
-		ControlH:    32,
+		ControlH:    34,
 		Checkbox:    18,
 		SliderH:     28,
 		Thumb:       16,
 		Scroll:      10,
 		Splitter:    6,
-		TitleBar:    34,
+		TitleBar:    36,
 		FontSize:    16,
-		TitleSize:   24,
+		TitleSize:   22,
 		Stroke:      1.7,
-		FieldPad:    8,
-		MenuBarH:    28,
-		MenuItemH:   26,
-		TabH:        30,
-		TreeIndent:  16,
-		StatusBarH:  26,
+		FieldPad:    10,
+		MenuBarH:    30,
+		MenuItemH:   28,
+		TabH:        32,
+		TreeIndent:  18,
+		StatusBarH:  28,
+		ToolBarH:    36,
+		ToolBtn:     30,
+		ProgressH:   14,
+		Radio:       18,
 	}
 }
 

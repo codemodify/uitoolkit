@@ -94,6 +94,99 @@ func TestTabOrderIncludesNewChrome(t *testing.T) {
 	}
 }
 
+func TestMessageBoxResult(t *testing.T) {
+	a := New(Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{Width: 480, Height: 320, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.SetContent(widgets.NewLabel("host"))
+	a.PumpOnce()
+	got := widgets.ResultNone
+	mb := widgets.ShowMessageBox(w.Content(), widgets.MessageBoxOptions{
+		Title: "Confirm", Message: "Proceed?", Kind: widgets.MessageQuestion,
+		Buttons: widgets.ButtonsYesNo, OnResult: func(r widgets.MessageResult) { got = r },
+	})
+	a.PumpOnce()
+	if w.Overlay() == nil {
+		t.Fatal("expected overlay")
+	}
+	var yes *widgets.Button
+	widget.Walk(w.Overlay(), func(c widget.Component) {
+		if b, ok := c.(*widgets.Button); ok && b.Text == "Yes" {
+			yes = b
+		}
+	})
+	if yes == nil {
+		t.Fatal("yes")
+	}
+	yes.MousePress(widget.MouseEvent{Pos: paintengine2d.Pt(8, 8)})
+	yes.MouseRelease(widget.MouseEvent{Pos: paintengine2d.Pt(8, 8)})
+	a.PumpOnce()
+	if got != widgets.ResultYes {
+		t.Fatalf("got %v", got)
+	}
+	if w.Overlay() != nil {
+		t.Fatal("overlay should close")
+	}
+	_ = mb
+}
+
+func TestComboBoxOpensPopup(t *testing.T) {
+	a := New(Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{Width: 400, Height: 240, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := -1
+	cb := widgets.NewComboBox([]string{"Alpha", "Beta", "Gamma"}, 0, func(i int) { n = i })
+	w.SetContent(widgets.NewPad(20, cb))
+	a.PumpOnce()
+	cb.Open()
+	a.PumpOnce()
+	if w.Popup() == nil || !cb.Opened() {
+		t.Fatal("expected combo popup")
+	}
+	pop, ok := w.Popup().(*widgets.PopupMenu)
+	if !ok {
+		t.Fatalf("popup %T", w.Popup())
+	}
+	w.RequestFocus(pop)
+	pop.KeyPress(widget.KeyEvent{Key: platform.KeyDown})
+	pop.KeyPress(widget.KeyEvent{Key: platform.KeyReturn})
+	a.PumpOnce()
+	if n != 1 || cb.Text() != "Beta" {
+		t.Fatalf("n=%d text=%q", n, cb.Text())
+	}
+	if w.Popup() != nil {
+		t.Fatal("popup should close")
+	}
+}
+
+func TestEscapeDismissesMessageBox(t *testing.T) {
+	a := New(Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{Width: 400, Height: 240, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.SetContent(widgets.NewLabel("host"))
+	a.PumpOnce()
+	got := widgets.ResultNone
+	widgets.ShowMessageBox(w.Content(), widgets.MessageBoxOptions{
+		Title: "X", Message: "Y", Buttons: widgets.ButtonsOKCancel,
+		OnResult: func(r widgets.MessageResult) { got = r },
+	})
+	a.PumpOnce()
+	w.dispatch(platform.Event{Kind: platform.EventKeyDown, Key: platform.KeyEscape})
+	a.PumpOnce()
+	if got != widgets.ResultCancel {
+		t.Fatalf("escape %v", got)
+	}
+	if w.Overlay() != nil {
+		t.Fatal("overlay")
+	}
+}
+
 func TestAltOpensMenu(t *testing.T) {
 	a := New(Options{Look: style.DarkLook(), Headless: true})
 	w, err := a.NewWindow(platform.WindowOptions{Width: 400, Height: 200, Headless: true})

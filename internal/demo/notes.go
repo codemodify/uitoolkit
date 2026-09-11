@@ -6,6 +6,7 @@ import (
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/app"
 	"github.com/codemodify/uitoolkit/layout"
+	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
 	"github.com/codemodify/uitoolkit/widgets"
 )
@@ -176,8 +177,16 @@ func NotesApp(win *app.Window) widget.Component {
 		refresh()
 	})
 
+	tools := widgets.NewToolBar(
+		widgets.ToolIconBtn(style.IconNew, "New", func() { add.OnClick() }),
+		widgets.ToolIconBtn(style.IconOpen, "", func() {}),
+		widgets.ToolDivider(),
+		widgets.ToolIconBtn(style.IconCut, "", func() { del.OnClick() }),
+	)
+
 	sidebar := widgets.NewColumn(
 		widgets.NewTitle("Notes"),
+		tools,
 		search,
 		list,
 		widgets.NewRow(add, del).WithGap(8),

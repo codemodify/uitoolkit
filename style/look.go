@@ -417,7 +417,353 @@ func (l *Classic) DrawStatusBar(ctx *paintengine2d.Context, b paintengine2d.Rect
 		if i > 0 {
 			ctx.DrawRect(paintengine2d.XYWH(x, b.Min.Y+6, 1, b.Dy()-12), paintengine2d.Fill(p.Divider))
 		}
-		l.body.Draw(ctx, s, paintengine2d.Pt(x+8, ty), p.TextMuted)
+		l.body.Draw(ctx, s, paintengine2d.Pt(x+10, ty), p.TextMuted)
+	}
+}
+
+func (l *Classic) DrawToolBar(ctx *paintengine2d.Context, b paintengine2d.Rect) {
+	p := l.palette
+	ctx.DrawRect(b, paintengine2d.Fill(p.SurfaceAlt))
+	ctx.DrawRect(paintengine2d.XYWH(b.Min.X, b.Max.Y-1, b.Dx(), 1), paintengine2d.Fill(p.Divider))
+}
+
+func (l *Classic) DrawToolButton(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, icon ToolIcon) {
+	p := l.palette
+	r := l.metrics.RadiusSmall
+	if st.Pressed() || st.Checked() {
+		ctx.DrawRoundRect(b.Inset(2), r, r, paintengine2d.Fill(p.Accent.WithAlpha(0.28)))
+	} else if st.Hovered() && !st.Disabled() {
+		ctx.DrawRoundRect(b.Inset(2), r, r, paintengine2d.Fill(p.Highlight))
+	}
+	if st.Focused() {
+		l.DrawFocusRing(ctx, b.Inset(1))
+	}
+	fg := p.Text
+	font := l.body
+	if st.Disabled() {
+		fg = p.TextMuted
+		font = l.muted
+	}
+	pad := float32(8)
+	x := b.Min.X + pad
+	if icon != IconNone {
+		side := b.Dy() - 10
+		if side < 14 {
+			side = 14
+		}
+		if side > 20 {
+			side = 20
+		}
+		ib := paintengine2d.XYWH(x, b.Min.Y+(b.Dy()-side)*0.5, side, side)
+		if label == "" {
+			ib = paintengine2d.XYWH(b.Min.X+(b.Dx()-side)*0.5, b.Min.Y+(b.Dy()-side)*0.5, side, side)
+		}
+		l.drawToolIcon(ctx, ib, icon, fg)
+		x = ib.Max.X + 6
+	}
+	if label != "" {
+		font.Draw(ctx, label, paintengine2d.Pt(x, b.Min.Y+(b.Dy()-font.Height())*0.5), fg)
+	}
+}
+
+func (l *Classic) DrawProgressBar(ctx *paintengine2d.Context, b paintengine2d.Rect, t float32, indeterminate bool, phase float32) {
+	p := l.palette
+	m := l.metrics
+	if t < 0 {
+		t = 0
+	}
+	if t > 1 {
+		t = 1
+	}
+	if phase < 0 {
+		phase = 0
+	}
+	phase = phase - float32(int(phase))
+	if phase < 0 {
+		phase += 1
+	}
+	r := m.RadiusSmall
+	if r > b.Dy()*0.5 {
+		r = b.Dy() * 0.5
+	}
+	ctx.DrawRoundRect(b, r, r, paintengine2d.Fill(p.Track))
+	ctx.DrawRoundRect(b.Inset(0.5), r, r, paintengine2d.StrokePaint(p.Border.WithAlpha(0.55), 1))
+	inner := b.Inset(2)
+	if inner.Empty() {
+		return
+	}
+	if indeterminate {
+		span := inner.Dx() * 0.34
+		x := inner.Min.X + (inner.Dx()+span)*phase - span
+		fill := paintengine2d.XYWH(x, inner.Min.Y, span, inner.Dy())
+		if fill.Min.X < inner.Min.X {
+			fill.Min.X = inner.Min.X
+		}
+		if fill.Max.X > inner.Max.X {
+			fill.Max.X = inner.Max.X
+		}
+		if fill.Dx() > 1 {
+			ctx.DrawRoundRect(fill, r-1, r-1, paintengine2d.Fill(p.Accent))
+		}
+		return
+	}
+	w := inner.Dx() * t
+	if w > 1 {
+		ctx.DrawRoundRect(paintengine2d.XYWH(inner.Min.X, inner.Min.Y, w, inner.Dy()), r-1, r-1, paintengine2d.Fill(p.Accent))
+	}
+}
+
+func (l *Classic) DrawRadio(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, selected bool, label string) {
+	p := l.palette
+	m := l.metrics
+	side := m.Radio
+	if side <= 0 {
+		side = m.Checkbox
+	}
+	if side <= 0 {
+		side = 18
+	}
+	cx := b.Min.X + side*0.5
+	cy := (b.Min.Y + b.Max.Y) * 0.5
+	fill := p.Field
+	if selected {
+		fill = p.Accent
+	}
+	if st.Hovered() && !st.Disabled() {
+		fill = fill.Lerp(p.AccentHover, 0.25)
+	}
+	ctx.DrawCircle(paintengine2d.Pt(cx, cy), side*0.5, paintengine2d.Fill(fill))
+	ctx.DrawCircle(paintengine2d.Pt(cx, cy), side*0.5-0.5, paintengine2d.StrokePaint(p.FieldBorder, 1))
+	if selected {
+		ctx.DrawCircle(paintengine2d.Pt(cx, cy), side*0.18+1.2, paintengine2d.Fill(p.TextOnAccent))
+	}
+	if st.Focused() {
+		l.DrawFocusRing(ctx, paintengine2d.XYWH(cx-side*0.5-2, cy-side*0.5-2, side+4, side+4))
+	}
+	if label != "" {
+		f := l.body
+		if st.Disabled() {
+			f = l.muted
+		}
+		f.Draw(ctx, label, paintengine2d.Pt(b.Min.X+side+8, b.Min.Y+(b.Dy()-f.Height())*0.5), p.Text)
+	}
+}
+
+func (l *Classic) DrawComboBox(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, text string, open bool) {
+	p := l.palette
+	m := l.metrics
+	r := m.RadiusSmall
+	ctx.DrawRoundRect(b, r, r, paintengine2d.Fill(p.Field))
+	border := p.FieldBorder
+	if st.Focused() || open {
+		border = p.Focus
+	} else if st.Hovered() {
+		border = p.Border
+	}
+	ctx.DrawRoundRect(b.Inset(0.5), r, r, paintengine2d.StrokePaint(border, m.Border+float32(btoi(st.Focused() || open))))
+	if st.Focused() && !open {
+		l.DrawFocusRing(ctx, b.Inset(-2))
+	}
+	if open {
+		ctx.DrawRoundRect(b.Inset(1), r, r, paintengine2d.Fill(p.Highlight))
+	}
+	pad := m.FieldPad
+	if pad <= 0 {
+		pad = 8
+	}
+	chevW := float32(22)
+	inner := paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad-chevW, b.Dy())
+	f := l.body
+	col := p.Text
+	if text == "" {
+		f = l.muted
+		col = p.TextMuted
+	}
+	if st.Disabled() {
+		f = l.muted
+		col = p.TextMuted
+	}
+	ty := inner.Min.Y + (inner.Dy()-f.Height())*0.5
+	ctx.Save()
+	ctx.ClipRect(inner)
+	if text != "" {
+		f.Draw(ctx, text, paintengine2d.Pt(inner.Min.X, ty), col)
+	}
+	ctx.Restore()
+	cx := b.Max.X - chevW*0.5
+	cy := (b.Min.Y + b.Max.Y) * 0.5
+	chev := paintengine2d.NewPath()
+	if open {
+		chev.MoveTo(cx-4.5, cy+2)
+		chev.LineTo(cx+4.5, cy+2)
+		chev.LineTo(cx, cy-4)
+		chev.Close()
+	} else {
+		chev.MoveTo(cx-4.5, cy-2)
+		chev.LineTo(cx+4.5, cy-2)
+		chev.LineTo(cx, cy+4)
+		chev.Close()
+	}
+	ctx.DrawPath(chev, paintengine2d.Fill(p.TextMuted))
+}
+
+func (l *Classic) DrawTitleBar(ctx *paintengine2d.Context, b paintengine2d.Rect, title, subtitle string) {
+	p := l.palette
+	ctx.DrawRect(b, paintengine2d.Fill(p.SurfaceAlt))
+	ctx.DrawRect(paintengine2d.XYWH(b.Min.X, b.Max.Y-1, b.Dx(), 1), paintengine2d.Fill(p.Divider))
+	pad := l.metrics.Pad
+	if pad <= 0 {
+		pad = 12
+	}
+	x := b.Min.X + pad
+	if title == "" && subtitle == "" {
+		return
+	}
+	f := l.body
+	if subtitle == "" && b.Dy() >= l.title.Height()+12 {
+		f = l.title
+	}
+	ty := b.Min.Y + (b.Dy()-f.Height())*0.5
+	if title != "" {
+		f.Draw(ctx, title, paintengine2d.Pt(x, ty), p.Text)
+		x += f.Advance(title) + 16
+	}
+	if subtitle != "" {
+		l.muted.Draw(ctx, subtitle, paintengine2d.Pt(x, b.Min.Y+(b.Dy()-l.muted.Height())*0.5), p.TextMuted)
+	}
+}
+
+func (l *Classic) DrawMessageIcon(ctx *paintengine2d.Context, b paintengine2d.Rect, icon ToolIcon) {
+	if icon == IconNone {
+		return
+	}
+	l.drawToolIcon(ctx, b, icon, l.messageIconColor(icon))
+}
+
+func (l *Classic) messageIconColor(icon ToolIcon) paintengine2d.Color {
+	switch icon {
+	case IconWarning:
+		return l.palette.Warning
+	case IconError:
+		return l.palette.Danger
+	case IconQuestion:
+		return l.palette.Accent
+	case IconInfo:
+		return l.palette.Accent
+	default:
+		return l.palette.Text
+	}
+}
+
+func (l *Classic) drawToolIcon(ctx *paintengine2d.Context, b paintengine2d.Rect, icon ToolIcon, col paintengine2d.Color) {
+	if icon == IconNone || b.Empty() {
+		return
+	}
+	stroke := paintengine2d.Paint{
+		Color:  col,
+		Style:  paintengine2d.StyleStroke,
+		Stroke: paintengine2d.Stroke{Width: 1.6, Cap: paintengine2d.CapRound, Join: paintengine2d.JoinRound, MiterLimit: 4},
+	}
+	fill := paintengine2d.Fill(col)
+	cx := (b.Min.X + b.Max.X) * 0.5
+	cy := (b.Min.Y + b.Max.Y) * 0.5
+	w, h := b.Dx(), b.Dy()
+	switch icon {
+	case IconNew:
+		page := paintengine2d.XYWH(b.Min.X+w*0.22, b.Min.Y+h*0.12, w*0.50, h*0.72)
+		ctx.DrawRoundRect(page, 2, 2, paintengine2d.StrokePaint(col, 1.5))
+		ctx.DrawRect(paintengine2d.XYWH(cx-2.4, cy-1, 4.8, 1.6), fill)
+		ctx.DrawRect(paintengine2d.XYWH(cx-0.8, cy-3.2, 1.6, 4.8), fill)
+	case IconOpen:
+		p := paintengine2d.NewPath()
+		p.MoveTo(b.Min.X+2, b.Max.Y-2.5)
+		p.LineTo(b.Min.X+2, b.Min.Y+6)
+		p.LineTo(b.Min.X+7, b.Min.Y+6)
+		p.LineTo(b.Min.X+9.5, b.Min.Y+2.5)
+		p.LineTo(b.Max.X-2, b.Min.Y+2.5)
+		p.LineTo(b.Max.X-2, b.Max.Y-2.5)
+		p.Close()
+		ctx.DrawPath(p, stroke)
+	case IconSave:
+		box := b.Inset(2)
+		ctx.DrawRoundRect(box, 2, 2, paintengine2d.StrokePaint(col, 1.5))
+		ctx.DrawRect(paintengine2d.XYWH(box.Min.X+3, box.Min.Y, box.Dx()-6, 5), paintengine2d.StrokePaint(col, 1.2))
+		ctx.DrawRect(paintengine2d.XYWH(box.Min.X+4, box.Max.Y-7, box.Dx()-8, 5), paintengine2d.StrokePaint(col, 1.2))
+	case IconCut:
+		ctx.DrawCircle(paintengine2d.Pt(b.Min.X+5, b.Max.Y-5), 2.4, stroke)
+		ctx.DrawCircle(paintengine2d.Pt(b.Max.X-5, b.Max.Y-5), 2.4, stroke)
+		p := paintengine2d.NewPath()
+		p.MoveTo(b.Min.X+6, b.Max.Y-6)
+		p.LineTo(b.Max.X-3, b.Min.Y+3)
+		p.MoveTo(b.Max.X-6, b.Max.Y-6)
+		p.LineTo(b.Min.X+3, b.Min.Y+3)
+		ctx.DrawPath(p, stroke)
+	case IconCopy:
+		ctx.DrawRoundRect(paintengine2d.XYWH(b.Min.X+1.5, b.Min.Y+4, w*0.62, h*0.62), 2, 2, paintengine2d.StrokePaint(col, 1.4))
+		ctx.DrawRoundRect(paintengine2d.XYWH(b.Min.X+6, b.Min.Y+1.5, w*0.62, h*0.62), 2, 2, paintengine2d.StrokePaint(col, 1.4))
+	case IconPaste:
+		ctx.DrawRoundRect(b.Inset(2.2), 2, 2, paintengine2d.StrokePaint(col, 1.5))
+		ctx.DrawRoundRect(paintengine2d.XYWH(cx-4, b.Min.Y+1.2, 8, 4.2), 1.5, 1.5, fill)
+	case IconUndo:
+		p := paintengine2d.NewPath()
+		p.MoveTo(b.Max.X-3, b.Min.Y+5)
+		p.LineTo(b.Min.X+4, b.Min.Y+5)
+		p.LineTo(b.Min.X+4, b.Max.Y-4)
+		ctx.DrawPath(p, stroke)
+		a := paintengine2d.NewPath()
+		a.MoveTo(b.Min.X+1.5, b.Min.Y+5)
+		a.LineTo(b.Min.X+5.5, b.Min.Y+2)
+		a.LineTo(b.Min.X+5.5, b.Min.Y+8)
+		a.Close()
+		ctx.DrawPath(a, fill)
+	case IconRedo:
+		p := paintengine2d.NewPath()
+		p.MoveTo(b.Min.X+3, b.Min.Y+5)
+		p.LineTo(b.Max.X-4, b.Min.Y+5)
+		p.LineTo(b.Max.X-4, b.Max.Y-4)
+		ctx.DrawPath(p, stroke)
+		a := paintengine2d.NewPath()
+		a.MoveTo(b.Max.X-1.5, b.Min.Y+5)
+		a.LineTo(b.Max.X-5.5, b.Min.Y+2)
+		a.LineTo(b.Max.X-5.5, b.Min.Y+8)
+		a.Close()
+		ctx.DrawPath(a, fill)
+	case IconSearch:
+		ctx.DrawCircle(paintengine2d.Pt(cx-1.5, cy-1.5), w*0.28, stroke)
+		p := paintengine2d.NewPath()
+		p.MoveTo(cx+2.2, cy+2.2)
+		p.LineTo(b.Max.X-1.5, b.Max.Y-1.5)
+		ctx.DrawPath(p, stroke)
+	case IconInfo:
+		ctx.DrawCircle(paintengine2d.Pt(cx, cy), w*0.42, stroke)
+		ctx.DrawCircle(paintengine2d.Pt(cx, b.Min.Y+h*0.32), 1.15, fill)
+		ctx.DrawRect(paintengine2d.XYWH(cx-0.85, b.Min.Y+h*0.44, 1.7, h*0.32), fill)
+	case IconWarning:
+		tri := paintengine2d.NewPath()
+		tri.MoveTo(cx, b.Min.Y+1.5)
+		tri.LineTo(b.Max.X-1.2, b.Max.Y-1.5)
+		tri.LineTo(b.Min.X+1.2, b.Max.Y-1.5)
+		tri.Close()
+		ctx.DrawPath(tri, stroke)
+		ctx.DrawRect(paintengine2d.XYWH(cx-0.85, b.Min.Y+h*0.38, 1.7, h*0.28), fill)
+		ctx.DrawCircle(paintengine2d.Pt(cx, b.Max.Y-4.2), 1.1, fill)
+	case IconError:
+		ctx.DrawCircle(paintengine2d.Pt(cx, cy), w*0.42, stroke)
+		x := paintengine2d.NewPath()
+		x.MoveTo(cx-3.2, cy-3.2)
+		x.LineTo(cx+3.2, cy+3.2)
+		x.MoveTo(cx+3.2, cy-3.2)
+		x.LineTo(cx-3.2, cy+3.2)
+		ctx.DrawPath(x, stroke)
+	case IconQuestion:
+		ctx.DrawCircle(paintengine2d.Pt(cx, cy), w*0.42, stroke)
+		q := paintengine2d.NewPath()
+		q.MoveTo(cx-2.4, cy-2.6)
+		q.LineTo(cx-0.4, cy-3.6)
+		q.LineTo(cx+2.2, cy-2.2)
+		q.LineTo(cx, cy+0.2)
+		ctx.DrawPath(q, stroke)
+		ctx.DrawCircle(paintengine2d.Pt(cx, cy+3.4), 1.05, fill)
 	}
 }
 
