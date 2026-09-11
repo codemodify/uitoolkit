@@ -317,7 +317,7 @@ on a retained scene (UITK_SCENE=auto), not a Mozilla protocol clone.
 
 What is real in v0.10
   • mailclientd: MemoryStore demo or IMAP+SMTP with an on-disk cache
-  • OAuth (Google / Microsoft) + passEnv, VIP, smart folders, threading
+  • OAuth (Google / Microsoft) + typed password, VIP, smart folders, threading
   • Offline outbox, IDLE/QRESYNC push, text-only Message tab
 
 What is demo

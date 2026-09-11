@@ -56,7 +56,7 @@ func GuessMailHosts(address string) GuessedHosts {
 	return GuessedHosts{
 		IMAP: "imap." + host + ":993",
 		SMTP: "smtp." + host + ":587",
-		AuthHint: "App password via passEnv, or OAuth if the host is Google/Microsoft",
+		AuthHint: "Type an app password, or OAuth if the host is Google/Microsoft",
 	}
 }
 

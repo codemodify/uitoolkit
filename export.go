@@ -84,6 +84,9 @@ func NewTextField(text, placeholder string, on func(string)) *widgets.TextField 
 func NewMonoTextField(text, placeholder string, on func(string)) *widgets.TextField {
 	return widgets.NewMonoTextField(text, placeholder, on)
 }
+func NewPasswordField(placeholder string, on func(string)) *widgets.TextField {
+	return widgets.NewPasswordField(placeholder, on)
+}
 func NewScrollView(child widget.Component) *widgets.ScrollView {
 	return widgets.NewScrollView(child)
 }

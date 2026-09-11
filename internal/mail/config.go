@@ -17,31 +17,35 @@ const (
 	EnvXOAuth   = "UITK_MAIL_XOAUTH2"
 )
 
-// MailConfig is ~/.config/uitoolkit/mail.json (never store raw secrets).
+// MailConfig is ~/.config/uitoolkit/mail.json (mode 0600).
+// IMAP/SMTP passwords may be stored in plaintext on each ServerConfig
+// for now (temporary; a secret store comes later).
 type MailConfig struct {
 	Accounts []AccountConfig `json:"accounts"`
 }
 
 // AccountConfig is one IMAP + SMTP login.
 type AccountConfig struct {
-	ID         string           `json:"id"`
-	Name       string           `json:"name"`
-	Address    string           `json:"address"`
-	IMAP       ServerConfig     `json:"imap"`
-	SMTP       ServerConfig     `json:"smtp"`
-	Identities []Identity       `json:"identities,omitempty"`
-	Provider   string           `json:"provider,omitempty"` // google, microsoft, ""
+	ID         string       `json:"id"`
+	Name       string       `json:"name"`
+	Address    string       `json:"address"`
+	IMAP       ServerConfig `json:"imap"`
+	SMTP       ServerConfig `json:"smtp"`
+	Identities []Identity   `json:"identities,omitempty"`
+	Provider   string       `json:"provider,omitempty"` // google, microsoft, ""
 }
 
 // ServerConfig is a host + how to get the password.
 //
-//	"passEnv": "UITK_MAIL_PASS"  reads os.Getenv
+//	"password" is stored in mail.json (mode 0600) — temporary plaintext
+//	"passEnv": "UITK_MAIL_PASS"  reads os.Getenv when password is empty
 //	"user" may differ from the From address
 //
 // tls: implicit TLS (993 / 465). starttls: upgrade after connect (587 / 143).
 type ServerConfig struct {
 	Host     string `json:"host"`
 	User     string `json:"user,omitempty"`
+	Pass     string `json:"password,omitempty"`
 	PassEnv  string `json:"passEnv,omitempty"`
 	TLS      *bool  `json:"tls,omitempty"`
 	StartTLS *bool  `json:"starttls,omitempty"`
@@ -57,6 +61,9 @@ func (s ServerConfig) Username(fallback string) string {
 }
 
 func (s ServerConfig) Password() string {
+	if p := s.Pass; p != "" {
+		return p
+	}
 	name := strings.TrimSpace(s.PassEnv)
 	if name == "" {
 		name = EnvPass
@@ -115,8 +122,8 @@ func DataDir() string {
 	return filepath.Join(os.TempDir(), "uitoolkit-mail")
 }
 
-// SaveConfig writes mail.json (mode 0600). Passwords are never stored —
-// only passEnv names (UITK_MAIL_PASS by default).
+// SaveConfig writes mail.json with mode 0600 (owner-only). Inline
+// passwords are written as-is until a secret store exists.
 func SaveConfig(cfg MailConfig) error {
 	for i := range cfg.Accounts {
 		a, err := SanitizeAccountConfig(cfg.Accounts[i])
@@ -136,7 +143,8 @@ func SaveConfig(cfg MailConfig) error {
 	return os.WriteFile(path, b, 0o600)
 }
 
-// SanitizeAccountConfig fills defaults and rejects a password-looking passEnv.
+// SanitizeAccountConfig fills defaults. Inline passwords are kept; passEnv
+// that is not a valid environment variable name is ignored.
 func SanitizeAccountConfig(a AccountConfig) (AccountConfig, error) {
 	a.Address = strings.TrimSpace(a.Address)
 	a.Name = strings.TrimSpace(a.Name)
@@ -162,15 +170,18 @@ func SanitizeAccountConfig(a AccountConfig) (AccountConfig, error) {
 	if a.ID == "" {
 		a.ID = slug(a.Address)
 	}
-	a.IMAP.PassEnv = envVarName(a.IMAP.PassEnv)
+	sanitizeServerSecret(&a.IMAP)
 	if a.SMTP.Host == "" {
 		a.SMTP.Host = guessSMTP(a.IMAP.Host)
 	}
 	if a.SMTP.User == "" {
 		a.SMTP.User = a.IMAP.User
 	}
-	a.SMTP.PassEnv = envVarName(a.SMTP.PassEnv)
-	if a.SMTP.PassEnv == EnvPass && a.IMAP.PassEnv != EnvPass {
+	if a.SMTP.Pass == "" && a.IMAP.Pass != "" {
+		a.SMTP.Pass = a.IMAP.Pass
+	}
+	sanitizeServerSecret(&a.SMTP)
+	if a.SMTP.PassEnv == "" && a.IMAP.PassEnv != "" {
 		a.SMTP.PassEnv = a.IMAP.PassEnv
 	}
 	if len(a.Identities) == 0 {
@@ -186,6 +197,24 @@ func SanitizeAccountConfig(a AccountConfig) (AccountConfig, error) {
 	return a, nil
 }
 
+func sanitizeServerSecret(s *ServerConfig) {
+	if s == nil {
+		return
+	}
+	if s.Pass != "" {
+		if s.PassEnv == "" || s.PassEnv == EnvPass {
+			s.PassEnv = ""
+			return
+		}
+		s.PassEnv = envVarName(s.PassEnv)
+		if s.PassEnv == EnvPass {
+			s.PassEnv = ""
+		}
+		return
+	}
+	s.PassEnv = envVarName(s.PassEnv)
+}
+
 func envVarName(s string) string {
 	s = strings.TrimSpace(s)
 	if s == "" {
@@ -198,6 +227,22 @@ func envVarName(s string) string {
 		}
 	}
 	return s
+}
+
+func keepExistingSecrets(a AccountConfig, existing []AccountConfig) AccountConfig {
+	for _, old := range existing {
+		if old.ID != a.ID {
+			continue
+		}
+		if a.IMAP.Pass == "" {
+			a.IMAP.Pass = old.IMAP.Pass
+		}
+		if a.SMTP.Pass == "" {
+			a.SMTP.Pass = old.SMTP.Pass
+		}
+		break
+	}
+	return a
 }
 
 func upsertAccountConfig(list []AccountConfig, a AccountConfig) []AccountConfig {

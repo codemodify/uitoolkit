@@ -1465,7 +1465,7 @@ func (s *session) openAddAccount() {
 			s.folder = inbox.ID
 		}
 		s.refreshAll()
-		s.mark("Account saved — set " + EnvPass + " then Get Messages")
+		s.mark("Account saved — Get Messages to connect")
 	}); err != nil {
 		widgets.Warn(s.win.Content(), "Add account", err.Error(), nil)
 		return
