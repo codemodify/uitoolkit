@@ -81,7 +81,9 @@ needs EGL / GLES2. `CGO_ENABLED=0` never needs those libraries.
 glyph/image blits, and transform groups. `DrawScene` presents the graph
 (GPU batches opaque axis-aligned rects; CPU rasterizes nodes).
 `ScrollView` keeps a child group and only updates a translation when
-the offset changes.
+the offset changes. `ListView` / `TableView` / `TreeView` keep per-row
+groups and translate the content root on scroll; hover and selection
+re-record only rows whose visual signature changed.
 
 ```bash
 UITK_SCENE=auto go run ./examples/gallery   # default: retained scene

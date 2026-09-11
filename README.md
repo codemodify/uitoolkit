@@ -3,7 +3,7 @@
 **Pure-Go desktop UI toolkit.** Retained widget tree, layout, themes, and
 X11 and Wayland window backends. Every pixel is painted with
 [`github.com/codemodify/paintengine2d`](https://github.com/codemodify/paintengine2d)
-(v0.8.0+). Default UI is **Titillium Web**; mono / code is **JetBrains Mono**
+(v0.9.0+). Default UI is **Titillium Web**; mono / code is **JetBrains Mono**
 (OFL, embedded). Outlines are rasterized through paintengine2d into a white
 atlas and tinted with `Paint.Color`. There is no second rasterizer, no Skia,
 no Gio renderer, and no Electron.
@@ -21,6 +21,8 @@ _ = app.Run()
 ```bash
 go get github.com/codemodify/uitoolkit@dev
 go get github.com/codemodify/paintengine2d@v0.9.0
+# if v0.9.0 is not on GitHub yet (local engine checkout):
+# go mod edit -replace=github.com/codemodify/paintengine2d=/path/to/paintengine2d
 ```
 
 | | |
@@ -288,8 +290,14 @@ Linux desktop clipboard, IME preedit, and HiDPI are implemented on both
 X11 and Wayland as of **v0.3.0**. GPU present (`UITK_PAINT=auto`) is **v0.5.0**.
 Event-driven `Run` (wait on the display fd) is **v0.5.1**.
 Retained scene graph (Qt Quick / GSK lite) is **v0.6.0**.
+Virtualized list/table/tree row reuse is **v0.6.1**.
 
 ## Version
+
+**0.6.1** — ListView, TableView, and TreeView keep per-row scene groups
+and scroll with a content-root translation (no full row rebuild). Hover
+and selection re-record only rows whose visual signature changed.
+Still paintengine2d **v0.9.0**.
 
 **0.6.0** — Retained scene: widgets record into paintengine2d `Scene`
 nodes (`Recorder` + `DrawScene`). The compositor batches opaque rects

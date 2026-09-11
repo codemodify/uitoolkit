@@ -110,6 +110,30 @@ func TestSceneScrollReusesChild(t *testing.T) {
 	}
 }
 
+func TestListScrollReusesRows(t *testing.T) {
+	a := New(Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{Width: 280, Height: 200, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	list := widgets.NewListView(80, func(i int) string { return "row content for list reuse" }, nil)
+	w.SetContent(list)
+	a.PumpOnce()
+	if w.Scene() == nil || w.Scene().Nodes < 4 {
+		t.Fatalf("first list scene %+v", w.Scene())
+	}
+	list.OffsetY += 56
+	list.Invalidate()
+	a.PumpOnce()
+	if w.Scene() == nil || w.Scene().Reused < 1 {
+		t.Fatalf("list scroll should reuse row nodes, reused=%v scene=%+v", w.Scene().Reused, w.Scene())
+	}
+	img := w.Capture()
+	if countOpaque(img, 20) < 200 {
+		t.Fatal("list scene should still paint")
+	}
+}
+
 func TestWaitTimeoutHonorsCaret(t *testing.T) {
 	a := New(Options{Look: style.DarkLook(), Headless: true})
 	w, err := a.NewWindow(platform.WindowOptions{Width: 200, Height: 60, Headless: true})
