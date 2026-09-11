@@ -83,6 +83,33 @@ func TestListHoverDoesNotFullInvalidate(t *testing.T) {
 	}
 }
 
+func TestSceneScrollReusesChild(t *testing.T) {
+	a := New(Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{Width: 280, Height: 160, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	col := widgets.NewColumn()
+	for i := 0; i < 24; i++ {
+		col.Add(widgets.NewLabel("row content for scroll reuse"))
+	}
+	sv := widgets.NewScrollView(col)
+	w.SetContent(sv)
+	a.PumpOnce()
+	if w.Scene() == nil || w.Scene().Nodes < 4 {
+		t.Fatalf("first scene %+v", w.Scene())
+	}
+	sv.ScrollBy(48)
+	a.PumpOnce()
+	if w.Scene() == nil || w.Scene().Reused < 1 {
+		t.Fatalf("scroll should reuse child nodes, reused=%v scene=%+v", w.Scene().Reused, w.Scene())
+	}
+	img := w.Capture()
+	if countOpaque(img, 20) < 200 {
+		t.Fatal("scroll scene should still paint")
+	}
+}
+
 func TestWaitTimeoutHonorsCaret(t *testing.T) {
 	a := New(Options{Look: style.DarkLook(), Headless: true})
 	w, err := a.NewWindow(platform.WindowOptions{Width: 200, Height: 60, Headless: true})
