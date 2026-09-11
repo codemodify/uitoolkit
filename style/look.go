@@ -22,10 +22,11 @@ func NewClassic(name string, p Palette, m Metrics) *Classic {
 		palette: p,
 		metrics: m,
 		name:    name,
-		body:    BakeFont(m.FontSize, p.Text),
-		title:   BakeFont(m.TitleSize, p.Text),
-		muted:   BakeFont(m.FontSize, p.TextMuted),
-		onAcc:   BakeFont(m.FontSize, p.TextOnAccent),
+		// One white atlas per size; Color tints at DrawGlyphs time.
+		body:  BakeFont(m.FontSize, p.Text),
+		title: BakeFont(m.TitleSize, p.Text),
+		muted: BakeFont(m.FontSize, p.TextMuted),
+		onAcc: BakeFont(m.FontSize, p.TextOnAccent),
 	}
 }
 
