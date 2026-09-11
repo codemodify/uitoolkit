@@ -195,6 +195,22 @@ func buildGallery(a *app.Application, win *app.Window, light bool) widget.Compon
 			status.Set(1, n.Label)
 		}
 	}
+	tree.OnContext = func(n *widgets.TreeNode, p paintengine2d.Point) {
+		if n == nil {
+			return
+		}
+		items := []*widgets.MenuItem{
+			widgets.Item("Select "+n.Label, func() { tree.OnSelect(n) }),
+		}
+		if !n.Leaf() {
+			label := "Expand"
+			if n.Expanded {
+				label = "Collapse"
+			}
+			items = append(items, widgets.Item(label, func() { tree.Toggle(n) }))
+		}
+		widgets.ShowContextMenu(tree, p, items...)
+	}
 	treePane := widgets.NewColumn(treeSel, tree).WithGap(6)
 	treePane.AddFlex(tree, 1)
 
@@ -212,28 +228,31 @@ func buildGallery(a *app.Application, win *app.Window, light bool) widget.Compon
 
 	menubar := widgets.NewMenuBar(
 		widgets.NewMenu("&File",
-			widgets.Item("About…", func() { about.OnClick() }),
+			widgets.ItemAccel("&New window", "Ctrl+N", func() { other.OnClick() }),
+			widgets.ItemAccel("&About", "F1", func() { about.OnClick() }),
 			widgets.Sep(),
-			widgets.Item("Quit", func() { a.Quit() }),
+			widgets.ItemAccel("&Quit", "Ctrl+Q", func() { a.Quit() }),
 		),
 		widgets.NewMenu("&Edit",
-			widgets.Item("Copy", func() {
+			widgets.ItemAccel("&Copy", "Ctrl+C", func() {
 				if s := name.SelectedText(); s != "" {
 					platform.ClipboardSet(s)
 					status.Set(0, "Copied")
 				}
 			}),
-			widgets.Item("Paste", func() {
+			widgets.ItemAccel("&Paste", "Ctrl+V", func() {
 				name.SetText(name.Text + platform.ClipboardGet())
 				status.Set(0, "Pasted")
 			}),
+			widgets.Sep(),
+			&widgets.MenuItem{Text: "Undo", Shortcut: "Ctrl+Z", Disabled: true},
 		),
 		widgets.NewMenu("&View",
-			widgets.Item("Dark theme", func() {
+			widgets.CheckItem("&Dark", !light, func() {
 				a.SetLook(style.DarkLook())
 				win.SetContent(buildGallery(a, win, false))
 			}),
-			widgets.Item("Light theme", func() {
+			widgets.CheckItem("&Light", light, func() {
 				a.SetLook(style.LightLook())
 				win.SetContent(buildGallery(a, win, true))
 			}),

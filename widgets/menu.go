@@ -21,6 +21,11 @@ type MenuItem struct {
 // Item is an enabled command row.
 func Item(text string, on func()) *MenuItem { return &MenuItem{Text: text, OnClick: on} }
 
+// ItemAccel is a command row with a shortcut hint (display only).
+func ItemAccel(text, shortcut string, on func()) *MenuItem {
+	return &MenuItem{Text: text, Shortcut: shortcut, OnClick: on}
+}
+
 // Sep is a horizontal rule between items.
 func Sep() *MenuItem { return &MenuItem{Separator: true} }
 
@@ -243,6 +248,7 @@ func (m *MenuBar) Open(i int) {
 	tb := rects[i]
 	widget.PlacePopup(pop, paintengine2d.Pt(origin.X+tb.Min.X, origin.Y+tb.Max.Y-1), 360, 480)
 	if widget.ShowPopup(m, pop) {
+		widget.ClampToSurface(m, pop)
 		m.open = i
 		m.Invalidate()
 		pop.RequestFocus()
@@ -361,7 +367,7 @@ func (p *PopupMenu) Paint(ctx *paintengine2d.Context) {
 		if it.Disabled {
 			st |= style.StateDisabled
 		}
-		if i == p.hover {
+		if i == p.hover || i == p.focus {
 			st |= style.StateHovered
 		}
 		if i == p.press {
@@ -430,7 +436,47 @@ func (p *PopupMenu) KeyPress(e widget.KeyEvent) bool {
 		widget.DismissPopup(p)
 		return true
 	}
+	if i := p.indexForKey(e.Key); i >= 0 {
+		p.activate(i)
+		return true
+	}
 	return false
+}
+
+func (p *PopupMenu) indexForKey(key platform.Key) int {
+	r, ok := platform.KeyRune(key)
+	if !ok {
+		return -1
+	}
+	mnemonic := -1
+	letter := -1
+	for i, it := range p.Items {
+		if it == nil || it.Separator || it.Disabled {
+			continue
+		}
+		label, k, _ := ParseMnemonic(it.Text)
+		if k == key {
+			if mnemonic >= 0 {
+				return -1
+			}
+			mnemonic = i
+		}
+		runes := []rune(label)
+		if letter < 0 && len(runes) > 0 && foldLetter(runes[0]) == r {
+			letter = i
+		}
+	}
+	if mnemonic >= 0 {
+		return mnemonic
+	}
+	return letter
+}
+
+func foldLetter(r rune) rune {
+	if r >= 'A' && r <= 'Z' {
+		return r - 'A' + 'a'
+	}
+	return r
 }
 
 func lastEnabled(items []*MenuItem) int {
@@ -488,6 +534,7 @@ func ShowContextMenu(from widget.Component, origin paintengine2d.Point, items ..
 	pop := NewPopupMenu(items...)
 	widget.PlacePopup(pop, origin, 360, 480)
 	if widget.ShowPopup(from, pop) {
+		widget.ClampToSurface(from, pop)
 		pop.RequestFocus()
 		return pop
 	}

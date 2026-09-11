@@ -18,12 +18,13 @@ _ = app.Run()
 
 ```bash
 go get github.com/codemodify/uitoolkit@dev
+go get github.com/codemodify/paintengine2d@v0.7.2
 ```
 
 | | |
 | --- | --- |
 | Language | Go 1.22+ |
-| Paint | paintengine2d 0.7.2 (`Context`, `Damage`, `DrawGlyphs` Color tint) |
+| Paint | paintengine2d **v0.7.2** (`02b2939`; `Context`, `Damage`, `DrawGlyphs` Color tint) |
 | Windowing | Linux X11 first (CGO + libX11); offscreen always |
 | CGO | optional — tests and screenshots are `CGO_ENABLED=0` |
 | License | MIT |
@@ -188,7 +189,8 @@ Documented on purpose — do not expect these yet:
 
 **0.1.3** — MenuBar / Menu / MenuItem, TabBar + TabPage / TabView, TreeView,
 StatusBar, ListView context menus, TextField copy/cut/paste stubs (in-memory
-clipboard; OS clipboard still out of scope). paintengine2d **0.7.2** tint.
+clipboard; OS clipboard still out of scope). Requires
+`github.com/codemodify/paintengine2d@v0.7.2` (`02b2939`).
 
 ## License
 

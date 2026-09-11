@@ -41,6 +41,7 @@ func (w *Window) Scale() float32            { return w.scale }
 func (w *Window) Focus() widget.Component   { return w.focus }
 func (w *Window) Surface() platform.Surface { return w.surf }
 func (w *Window) Title() string             { return w.surf.Title() }
+func (w *Window) SurfaceSize() (int, int)   { return w.surf.Size() }
 
 func (w *Window) SetTitle(s string) { w.surf.SetTitle(s) }
 

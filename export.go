@@ -75,7 +75,10 @@ func NewMenu(title string, items ...*widgets.MenuItem) *widgets.Menu {
 	return widgets.NewMenu(title, items...)
 }
 func NewMenuItem(text string, on func()) *widgets.MenuItem { return widgets.Item(text, on) }
-func MenuSep() *widgets.MenuItem                           { return widgets.Sep() }
+func NewMenuItemAccel(text, shortcut string, on func()) *widgets.MenuItem {
+	return widgets.ItemAccel(text, shortcut, on)
+}
+func MenuSep() *widgets.MenuItem { return widgets.Sep() }
 func NewPopupMenu(items ...*widgets.MenuItem) *widgets.PopupMenu {
 	return widgets.NewPopupMenu(items...)
 }

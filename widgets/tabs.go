@@ -49,14 +49,17 @@ func (t *TabBar) tabRects() []paintengine2d.Rect {
 	if n == 0 {
 		return nil
 	}
-	b := t.LocalBounds()
-	slot := b.Dx() / float32(n)
-	if slot < 48 {
-		slot = 48
-	}
+	f := t.Look().Font()
+	h := t.LocalBounds().Dy()
+	x := float32(4)
 	out := make([]paintengine2d.Rect, n)
-	for i := range t.Titles {
-		out[i] = paintengine2d.XYWH(b.Min.X+float32(i)*slot, 0, slot, b.Dy())
+	for i, title := range t.Titles {
+		w := f.Advance(title) + 28
+		if w < 56 {
+			w = 56
+		}
+		out[i] = paintengine2d.XYWH(x, 0, w, h)
+		x += w
 	}
 	return out
 }
@@ -122,6 +125,18 @@ func (t *TabBar) MouseRelease(e widget.MouseEvent) bool {
 	}
 	t.Invalidate()
 	return true
+}
+
+func (t *TabBar) MouseWheel(e widget.MouseEvent) bool {
+	if e.Scroll.Y > 0 {
+		t.Select(t.Selected + 1)
+		return true
+	}
+	if e.Scroll.Y < 0 {
+		t.Select(t.Selected - 1)
+		return true
+	}
+	return false
 }
 
 func (t *TabBar) KeyPress(e widget.KeyEvent) bool {

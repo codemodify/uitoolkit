@@ -67,6 +67,11 @@ func Retains(c Component) bool {
 	return false
 }
 
+// SurfaceSizer is implemented by app.Window so popups can stay on-screen.
+type SurfaceSizer interface {
+	SurfaceSize() (int, int)
+}
+
 // PlacePopup sizes popup and positions its top-left at origin (window space).
 func PlacePopup(popup Component, origin paintengine2d.Point, maxW, maxH float32) {
 	if popup == nil {
@@ -80,4 +85,37 @@ func PlacePopup(popup Component, origin paintengine2d.Point, maxW, maxH float32)
 	}
 	sz := popup.Measure(layout.Loose(maxW, maxH))
 	popup.Arrange(paintengine2d.XYWH(origin.X, origin.Y, sz.X, sz.Y))
+}
+
+// ClampToSurface shifts popup so it stays inside the host surface.
+func ClampToSurface(from, popup Component) {
+	if from == nil || popup == nil {
+		return
+	}
+	h := from.Host()
+	sz, ok := h.(SurfaceSizer)
+	if !ok {
+		return
+	}
+	ww, hh := sz.SurfaceSize()
+	if ww < 1 || hh < 1 {
+		return
+	}
+	b := popup.Bounds()
+	dx, dy := float32(0), float32(0)
+	if b.Max.X > float32(ww)-4 {
+		dx = float32(ww) - 4 - b.Max.X
+	}
+	if b.Max.Y > float32(hh)-4 {
+		dy = float32(hh) - 4 - b.Max.Y
+	}
+	if b.Min.X+dx < 4 {
+		dx = 4 - b.Min.X
+	}
+	if b.Min.Y+dy < 4 {
+		dy = 4 - b.Min.Y
+	}
+	if dx != 0 || dy != 0 {
+		popup.Arrange(b.Translate(paintengine2d.Pt(dx, dy)))
+	}
 }

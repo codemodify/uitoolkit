@@ -83,10 +83,19 @@ func TestTabBarKeysAndPress(t *testing.T) {
 	if bar.Selected != 1 || n != 1 {
 		t.Fatalf("right sel=%d n=%d", bar.Selected, n)
 	}
-	bar.MousePress(widget.MouseEvent{Pos: paintengine2d.Pt(250, 15), Button: platform.ButtonLeft})
-	bar.MouseRelease(widget.MouseEvent{Pos: paintengine2d.Pt(250, 15), Button: platform.ButtonLeft})
+	rects := bar.tabRects()
+	if len(rects) < 3 {
+		t.Fatal("tab rects")
+	}
+	pt := paintengine2d.Pt((rects[2].Min.X+rects[2].Max.X)*0.5, 15)
+	bar.MousePress(widget.MouseEvent{Pos: pt, Button: platform.ButtonLeft})
+	bar.MouseRelease(widget.MouseEvent{Pos: pt, Button: platform.ButtonLeft})
 	if bar.Selected != 2 {
 		t.Fatalf("click %d", bar.Selected)
+	}
+	bar.MouseWheel(widget.MouseEvent{Scroll: paintengine2d.Pt(0, -1)})
+	if bar.Selected != 1 {
+		t.Fatalf("wheel %d", bar.Selected)
 	}
 }
 
@@ -179,5 +188,38 @@ func TestMenuBarMnemonic(t *testing.T) {
 	// without a PopupHost the drop-down cannot mount, but index is tracked
 	if mb.focus != 0 {
 		t.Fatalf("focus %d", mb.focus)
+	}
+}
+
+func TestPopupMenuMnemonicKey(t *testing.T) {
+	n := 0
+	pop := NewPopupMenu(
+		ItemAccel("&New", "Ctrl+N", nil),
+		ItemAccel("&Quit", "Ctrl+Q", func() { n++ }),
+	)
+	pop.SetHost(&host{})
+	pop.Arrange(paintengine2d.XYWH(0, 0, 180, 70))
+	if !pop.KeyPress(widget.KeyEvent{Key: platform.KeyQ}) {
+		t.Fatal("q should hit Quit")
+	}
+	if n != 1 {
+		t.Fatalf("quit n=%d", n)
+	}
+}
+
+func TestTreeViewPageKeys(t *testing.T) {
+	var kids []*TreeNode
+	for i := 0; i < 20; i++ {
+		kids = append(kids, NewTreeNode("leaf"))
+	}
+	root := NewTreeNode("root", kids...)
+	root.Expanded = true
+	tree := NewTreeView(root)
+	tree.SetHost(&host{})
+	tree.Arrange(paintengine2d.XYWH(0, 0, 200, 80))
+	tree.Selected = root
+	tree.KeyPress(widget.KeyEvent{Key: platform.KeyPageDown})
+	if tree.Selected == root {
+		t.Fatal("page down should move")
 	}
 }

@@ -379,6 +379,11 @@ func (l *Classic) DrawTreeRow(ctx *paintengine2d.Context, b paintengine2d.Rect, 
 	}
 	x := b.Min.X + 8 + float32(depth)*indent
 	cy := (b.Min.Y + b.Max.Y) * 0.5
+	guide := p.Divider.WithAlpha(0.85)
+	for d := 0; d < depth; d++ {
+		gx := b.Min.X + 8 + float32(d)*indent + 3
+		ctx.DrawRect(paintengine2d.XYWH(gx, b.Min.Y, 1, b.Dy()), paintengine2d.Fill(guide))
+	}
 	if !leaf {
 		chev := paintengine2d.NewPath()
 		if expanded {

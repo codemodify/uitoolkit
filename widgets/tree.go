@@ -1,6 +1,8 @@
 package widgets
 
 import (
+	"time"
+
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/layout"
 	"github.com/codemodify/uitoolkit/platform"
@@ -37,7 +39,10 @@ type TreeView struct {
 	OffsetY   float32
 	OnSelect  func(*TreeNode)
 	OnToggle  func(*TreeNode)
+	OnContext func(*TreeNode, paintengine2d.Point)
 	hover     *TreeNode
+	lastClick *TreeNode
+	lastAt    time.Time
 }
 
 // NewTreeView constructs a tree.
@@ -184,10 +189,25 @@ func (t *TreeView) MousePress(e widget.MouseEvent) bool {
 	}
 	rows := t.flatten()
 	n := rows[i].node
+	if e.Button == platform.ButtonRight {
+		t.selectNode(n)
+		if t.OnContext != nil {
+			o := widget.DeviceOrigin(t)
+			t.OnContext(n, paintengine2d.Pt(o.X+e.Pos.X, o.Y+e.Pos.Y))
+		}
+		return true
+	}
 	if t.expanderHit(e, n, rows[i].depth) {
 		t.Toggle(n)
 		return true
 	}
+	if n == t.lastClick && time.Since(t.lastAt) < 400*time.Millisecond {
+		t.Toggle(n)
+		t.lastClick = nil
+		return true
+	}
+	t.lastClick = n
+	t.lastAt = time.Now()
 	t.selectNode(n)
 	return true
 }
@@ -234,6 +254,28 @@ func (t *TreeView) KeyPress(e widget.KeyEvent) bool {
 		return true
 	case platform.KeyEnd:
 		t.selectNode(rows[len(rows)-1].node)
+		return true
+	case platform.KeyPageDown:
+		page := int(t.LocalBounds().Dy()/t.rowH()) - 1
+		if page < 1 {
+			page = 1
+		}
+		next := idx + page
+		if next >= len(rows) {
+			next = len(rows) - 1
+		}
+		t.selectNode(rows[next].node)
+		return true
+	case platform.KeyPageUp:
+		page := int(t.LocalBounds().Dy()/t.rowH()) - 1
+		if page < 1 {
+			page = 1
+		}
+		next := idx - page
+		if next < 0 {
+			next = 0
+		}
+		t.selectNode(rows[next].node)
 		return true
 	case platform.KeyRight:
 		if t.Selected != nil && !t.Selected.Leaf() {
