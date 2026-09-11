@@ -137,6 +137,7 @@ func (s *LocalStore) PutAccount(in AccountConfig) (Account, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	file, _ := LoadConfig()
+	a = keepExistingSecrets(a, file.Accounts)
 	file.Accounts = upsertAccountConfig(file.Accounts, a)
 	if err := SaveConfig(file); err != nil {
 		return Account{}, err
@@ -1364,7 +1365,7 @@ func (s *LocalStore) MuteThread(id string, muted bool) error {
 	return err
 }
 func (s *LocalStore) MutedThreads() []string { return s.extras().MutedThreads() }
-func (s *LocalStore) ListVIPs() []VIP       { return s.extras().ListVIPs() }
+func (s *LocalStore) ListVIPs() []VIP        { return s.extras().ListVIPs() }
 func (s *LocalStore) PutVIP(v VIP) (VIP, error) {
 	out, err := s.extras().PutVIP(v)
 	s.mu.Lock()

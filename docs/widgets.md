@@ -40,7 +40,7 @@ stub; there is no native AppKit/SwiftUI control host.
 | Switch | `Switch` | `Switch` (Quick); Widgets ≈ `QCheckBox` | `GtkSwitch` | `ToggleSwitch` | `widget.Check` ≈ | — (`CheckBox` ≈) | `ToggleButton` ≈ | `NSSwitch` | `Toggle` | [thumb](screenshots/compare/switch.png) |
 | Radio | `RadioButton` / `RadioGroup` | `QRadioButton` / `RadioButton` | `GtkCheckButton` (group) | `RadioButton` | `widget.RadioGroup` | `RadioButton` | `RadioButton` | `NSButton` (radio) | `Picker` ≈ | [thumb](screenshots/compare/radio.png) |
 | Slider | `Slider` | `QSlider` / `Slider` | `GtkScale` | `Slider` | `widget.Slider` | `TrackBar` | `Slider` | `NSSlider` | `Slider` | [thumb](screenshots/compare/slider.png) |
-| Text field | `TextField` / `MonoTextField` | `QLineEdit` / `TextField` | `GtkEntry` | `TextBox` | `widget.Entry` | `TextBox` | `TextBox` | `NSTextField` | `TextField` | [thumb](screenshots/compare/textfield.png) |
+| Text field | `TextField` / `MonoTextField` / `PasswordField` | `QLineEdit` / `TextField` | `GtkEntry` | `TextBox` | `widget.Entry` | `TextBox` | `PasswordBox` / `TextBox` | `NSSecureTextField` / `NSTextField` | `SecureField` / `TextField` | [thumb](screenshots/compare/textfield.png) |
 | Text area | `TextArea` / `MonoTextArea` | `QTextEdit` / `TextArea` | `GtkTextView` | `TextBox` (AcceptsReturn) | `widget.Entry` (MultiLine) | `TextBox` (Multiline) | `TextBox` | `NSTextView` | `TextEditor` | [thumb](screenshots/compare/textarea.png) · [gallery](screenshots/gallery-textarea.png) |
 | Number / spinner | `NumberField` / `Spinner` | `QSpinBox` / `SpinBox` | `GtkSpinButton` | `NumericUpDown` | — (`Entry` ≈) | `NumericUpDown` | — (toolkit ≈) | `NSStepper` + field | `Stepper` | [thumb](screenshots/compare/numberfield.png) |
 | Combo box | `ComboBox` | `QComboBox` / `ComboBox` | `GtkDropDown` | `ComboBox` | `widget.Select` | `ComboBox` | `ComboBox` | `NSComboBox` / `NSPopUpButton` | `Picker` | [thumb](screenshots/compare/combobox.png) · [gallery](screenshots/gallery-combo.png) |
@@ -114,6 +114,7 @@ Aliases:
 - `NewSpinner` → `*NumberField`
 - `NewBusyBar` → `*ProgressBar` with `Indeterminate`
 - `NewMonoTextField` / `NewMonoTextArea` → same types, mono font role
+- `NewPasswordField` → `*TextField` with `Password` (bullets)
 
 Regenerate thumbs and gallery frames:
 

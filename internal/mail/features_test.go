@@ -250,9 +250,10 @@ func TestOpenStoreMemoryStillDemo(t *testing.T) {
 	}
 }
 
-func TestPutAccountWritesConfigWithoutSecrets(t *testing.T) {
+func TestPutAccountWritesPasswordMode0600(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv(EnvConfig, filepath.Join(dir, "mail.json"))
+	path := filepath.Join(dir, "mail.json")
+	t.Setenv(EnvConfig, path)
 	t.Setenv(EnvData, filepath.Join(dir, "data"))
 	s, err := NewLocalStoreDir(MailConfig{}, filepath.Join(dir, "data"))
 	if err != nil {
@@ -260,8 +261,8 @@ func TestPutAccountWritesConfigWithoutSecrets(t *testing.T) {
 	}
 	acct, err := s.PutAccount(AccountConfig{
 		Name: "Ada", Address: "ada@example.com",
-		IMAP: ServerConfig{Host: "imap.example.com:993", User: "ada@example.com", PassEnv: "UITK_MAIL_PASS"},
-		SMTP: ServerConfig{Host: "smtp.example.com:587", PassEnv: "super secret password!!"},
+		IMAP: ServerConfig{Host: "imap.example.com:993", User: "ada@example.com", Pass: "super secret password!!"},
+		SMTP: ServerConfig{Host: "smtp.example.com:587"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -269,15 +270,50 @@ func TestPutAccountWritesConfigWithoutSecrets(t *testing.T) {
 	if acct.Address != "ada@example.com" {
 		t.Fatal(acct)
 	}
-	raw, err := os.ReadFile(filepath.Join(dir, "mail.json"))
+	st, err := os.Stat(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(raw), "super secret") || strings.Contains(string(raw), `"password"`) {
-		t.Fatalf("secret leaked: %s", raw)
+	if st.Mode().Perm() != 0o600 {
+		t.Fatalf("mail.json mode %o want 0600", st.Mode().Perm())
 	}
-	if !strings.Contains(string(raw), "UITK_MAIL_PASS") {
-		t.Fatalf("passEnv missing: %s", raw)
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), "super secret password!!") || !strings.Contains(string(raw), `"password"`) {
+		t.Fatalf("password missing: %s", raw)
+	}
+	file, err := LoadConfig()
+	if err != nil || len(file.Accounts) != 1 {
+		t.Fatal(err, file)
+	}
+	if file.Accounts[0].IMAP.Password() != "super secret password!!" {
+		t.Fatalf("IMAP password %q", file.Accounts[0].IMAP.Password())
+	}
+	if file.Accounts[0].SMTP.Password() != "super secret password!!" {
+		t.Fatalf("SMTP should copy IMAP password %q", file.Accounts[0].SMTP.Password())
+	}
+}
+
+func TestServerConfigPasswordPrefersInline(t *testing.T) {
+	t.Setenv(EnvPass, "from-env")
+	if got := (ServerConfig{}).Password(); got != "from-env" {
+		t.Fatalf("default env %q", got)
+	}
+	if got := (ServerConfig{Pass: "inline"}).Password(); got != "inline" {
+		t.Fatalf("inline %q", got)
+	}
+	t.Setenv("UITK_MAIL_CUSTOM_PASS", "custom")
+	if got := (ServerConfig{PassEnv: "UITK_MAIL_CUSTOM_PASS"}).Password(); got != "custom" {
+		t.Fatalf("passEnv %q", got)
+	}
+	a := keepExistingSecrets(
+		AccountConfig{ID: "home", IMAP: ServerConfig{Host: "imap.example.com:993"}},
+		[]AccountConfig{{ID: "home", IMAP: ServerConfig{Pass: "kept"}, SMTP: ServerConfig{Pass: "kept-smtp"}}},
+	)
+	if a.IMAP.Pass != "kept" || a.SMTP.Pass != "kept-smtp" {
+		t.Fatalf("keep %+v", a)
 	}
 }
 
@@ -348,7 +384,7 @@ func TestFirstRunDialogYesNo(t *testing.T) {
 				no = true
 			}
 		case *widgets.Label:
-			if strings.Contains(x.Text, FirstRunPrompt) {
+			if strings.Contains(x.Text, "There are no accounts") {
 				prompt = true
 			}
 		}

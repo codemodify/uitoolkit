@@ -1,6 +1,6 @@
 # Mail — mailclientd + mailclientui
 
-Thunderbird-chrome mail client on uitoolkit **v0.10.0**. Two processes:
+Thunderbird-chrome mail client on uitoolkit **v0.10.2**. Two processes:
 
 | Process | Role |
 | --- | --- |
@@ -39,7 +39,7 @@ go run ./examples/mail -screenshot docs/screenshots
 
 ## Real IMAP + SMTP (primary path)
 
-`mailclientd` is meant to be pointed at a real account. **Never put a password in the config file.** Use `passEnv` (an environment variable name) **or** OAuth (encrypted refresh token — see below).
+`mailclientd` is meant to be pointed at a real account. **Add Account** takes a typed (masked) password and writes it into `mail.json`. That file is **mode `0600`**. The password field is **temporary plaintext** until a secret store exists. OAuth (encrypted refresh token) and optional `passEnv` / `UITK_MAIL_PASS` still work when `password` is empty.
 
 Config file (first existing wins):
 
@@ -53,7 +53,7 @@ Cache / offline store:
 - `$XDG_DATA_HOME/uitoolkit/mail`
 - `~/.local/share/uitoolkit/mail`
 
-Example `mail.json` (mode `0600` recommended):
+Example `mail.json` (written mode `0600`; `password` is temporary plaintext):
 
 ```json
 {
@@ -65,13 +65,13 @@ Example `mail.json` (mode `0600` recommended):
       "imap": {
         "host": "imap.example.com:993",
         "user": "ada@example.com",
-        "passEnv": "UITK_MAIL_PASS",
+        "password": "your-app-password",
         "tls": true
       },
       "smtp": {
         "host": "smtp.example.com:587",
         "user": "ada@example.com",
-        "passEnv": "UITK_MAIL_PASS",
+        "password": "your-app-password",
         "starttls": true
       }
     }
@@ -80,10 +80,12 @@ Example `mail.json` (mode `0600` recommended):
 ```
 
 ```bash
-export UITK_MAIL_PASS='your-app-password'
-UITK_MAIL=imap go run ./cmd/mailclientd
+# File → Add Account, type the password, Save account
+go run ./cmd/mailclientd
 go run ./cmd/mailclientui
 ```
+
+Optional env fallback when `password` is omitted: `"passEnv": "UITK_MAIL_PASS"` and `export UITK_MAIL_PASS='…'`.
 
 Single-account env (no file) still works:
 
@@ -97,13 +99,13 @@ export UITK_MAIL_NAME='Ada Lovelace'
 go run ./cmd/mailclientd
 ```
 
-Default when **no** config and `UITK_MAIL` is unset: **empty** LocalStore (no demo accounts). The UI asks *There are no accounts, want to add one?* Yes opens File → Add Account. No leaves empty chrome.
+Default when **no** config and `UITK_MAIL` is unset: **empty** LocalStore (no demo accounts). The UI asks *There are no accounts, want to add one?* and notes that the password is typed in the form and stored in `mail.json` (mode `0600`). Yes opens File → Add Account. No leaves empty chrome.
 
 `UITK_MAIL=memory` is the **only** way to load the seeded MemoryStore demo (and `examples/mail` / screenshots still use that on purpose).
 
 ### Add Account polish
 
-The wizard guesses IMAP/SMTP from the email domain (`gmail.com` → `imap.gmail.com:993` / `smtp.gmail.com:465`, Outlook/Hotmail, Yahoo, iCloud, Fastmail, Proton, else `imap.<domain>:993` / `smtp.<domain>:587`). You can still edit the hosts. App-password / `passEnv` remains the default save path.
+The wizard guesses IMAP/SMTP from the email domain (`gmail.com` → `imap.gmail.com:993` / `smtp.gmail.com:465`, Outlook/Hotmail, Yahoo, iCloud, Fastmail, Proton, else `imap.<domain>:993` / `smtp.<domain>:587`). You can still edit the hosts. Type the IMAP/SMTP password (masked field); **Save account** writes it into `mail.json` (`password` on both servers, file mode `0600`). `passEnv` is optional fallback only.
 
 ### Text-only message view
 
@@ -111,7 +113,7 @@ The Message tab is **plain text**. mailclientd prefers the `text/plain` part; if
 
 ## OAuth (Google + Microsoft)
 
-Real **authorization-code + PKCE loopback** (`http://127.0.0.1:<port>/oauth/callback`) or **device code** flow. IMAP/SMTP then use **AUTH XOAUTH2**. The `UITK_MAIL_XOAUTH2` bearer passthrough and `passEnv` app-password path still work.
+Real **authorization-code + PKCE loopback** (`http://127.0.0.1:<port>/oauth/callback`) or **device code** flow. IMAP/SMTP then use **AUTH XOAUTH2**. The `UITK_MAIL_XOAUTH2` bearer passthrough, inline `password`, and `passEnv` / `UITK_MAIL_PASS` still work.
 
 **Honest gap:** uitoolkit does **not** ship Google or Microsoft client IDs. You must register an app and supply credentials:
 
@@ -231,7 +233,7 @@ Notifications (no `id`): `mail.changed`, `mail.fetched`, `mail.synced`, `mail.no
 | `status.get` | — |
 | `status.set` | `{online}` — Work Offline; going online flushes the outbox |
 | `accounts.list` | — |
-| `accounts.put` | AccountConfig (`passEnv` only; never a password) |
+| `accounts.put` | AccountConfig (`password` stored in mail.json mode 0600; `passEnv` optional) |
 | `oauth.start` | `{provider, address, name?, clientId?, clientSecret?, flow?}` |
 | `oauth.poll` | `{sessionId}` |
 | `oauth.cancel` | `{sessionId}` |
@@ -282,10 +284,10 @@ Condition fields: `from`, `to`, `subject`, `body`, `attachment`, `unread`, `tag`
 Actions: `move` (`folder`), `tag`, `markRead`, `markUnread`, `delete`, `stop`.
 AND across conditions. Persist in MemoryStore or the disk cache. Tools → Message Filters.
 
-## UI features (v0.10.0)
+## UI features (v0.10.2)
 
-- **Empty by default** — no demo accounts unless `UITK_MAIL=memory`. First-run: “There are no accounts, want to add one?”
-- **Add account** — domain auto-guess, Sign in with Google / Microsoft (or device code), or `passEnv`.
+- **Empty by default** — no demo accounts unless `UITK_MAIL=memory`. First-run: “There are no accounts, want to add one?” (typed password is saved in `mail.json`, mode `0600`).
+- **Add account** — domain auto-guess, masked password field, or Sign in with Google / Microsoft (or device code). `passEnv` remains an optional fallback.
 - **Text-only Message tab** — prefer `text/plain`; HTML-only mail is tag-stripped. No HTML engine / no HTML tab.
 - **Card / Table** — View → Card view or the Cards toolbar toggle. Remembered in `~/.config/uitoolkit/mailui.json`.
 - **Density** — View → Compact / Default / Relaxed.

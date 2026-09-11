@@ -199,11 +199,15 @@ request `EGL_ALPHA_SIZE` 0.
   Primary selection when the compositor binds
   `zwp_primary_selection_v1` (Weston does). Middle-click paste uses
   `ClipboardPrimaryGet`.
-- IME: `zwp_text_input_v3` enable on keyboard enter; `preedit_string`,
-  `commit_string`, and `delete_surrounding_text` become `EventIME*`.
-  Cursor rectangle is updated from the focused TextField / TextArea.
-  When text-input has entered the surface, printable UTF-8 from xkb is
-  suppressed so commit is not doubled.
+- IME: `zwp_text_input_v3` is enabled when a TextField / TextArea has
+  focus (`IMESurface.SetIMEEnabled`), not on every keyboard enter.
+  `preedit_string`, `commit_string`, and `delete_surrounding_text`
+  become `EventIME*`. Cursor rectangle is updated from the focused
+  field. Printable UTF-8 from xkb/compose still becomes `EventText`
+  unless an **active preedit** is in progress — compositors that enter
+  text-input without committing must not starve Latin typing (Add
+  Account, Quick Filter). Matching IME commit + xkb utf8 for the same
+  key is deduped.
 
 xdg-shell and the optional protocols are generated from
 wayland-protocols and committed:

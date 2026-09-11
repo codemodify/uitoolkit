@@ -865,16 +865,19 @@ type wlConn struct {
 	pendPrim     *C.struct_zwp_primary_selection_offer_v1
 	pendPrimMime string
 
-	textMan    *C.struct_zwp_text_input_manager_v3
-	textIn     *C.struct_zwp_text_input_v3
-	textActive bool
-	tiSurf     int
-	imePre     string
-	imeCommit  string
-	imeDelB    int
-	imeDelA    int
-	imeBegin   int
-	imeEnd     int
+	textMan     *C.struct_zwp_text_input_manager_v3
+	textIn      *C.struct_zwp_text_input_v3
+	textActive  bool
+	tiWanted    bool // app focused an IMETarget; enable only then
+	tiSurf      int
+	imePre      string
+	imeCommit   string
+	imeDelB     int
+	imeDelA     int
+	imeBegin    int
+	imeEnd      int
+	lastXkbText string
+	lastIMEText string
 
 	decoMan    *C.struct_zxdg_decoration_manager_v1
 	fracMan    *C.struct_wp_fractional_scale_manager_v1
@@ -1170,6 +1173,24 @@ func (s *wlSurface) SetMaximized(on bool) {
 	} else {
 		C.ui_wl_unset_max(s.top)
 	}
+}
+
+func (s *wlSurface) SetIMEEnabled(on bool) {
+	if s.conn == nil || s.conn.textIn == nil {
+		return
+	}
+	if s.conn.tiWanted == on {
+		if on && !s.conn.textActive {
+			wlEnableTextInput(s.conn, s)
+		}
+		return
+	}
+	s.conn.tiWanted = on
+	if on {
+		wlEnableTextInput(s.conn, s)
+		return
+	}
+	wlDisableTextInput(s.conn)
 }
 
 func (s *wlSurface) SetIMECursor(x, y, w, h int) {
@@ -1598,15 +1619,7 @@ func (c *wlConn) flushRepeatLocked() {
 	for !c.repeatNext.After(now) {
 		ks := uint64(C.ui_xkb_sym(c.xkbState, C.uint32_t(c.repeatKey)))
 		s.push(Event{Kind: EventKeyDown, Key: KeyFromKeysym(ks), Mods: c.mods})
-		if !c.textActive && !c.mods.Ctrl() {
-			var buf [64]C.char
-			n := int(C.ui_xkb_utf8(c.xkbState, C.uint32_t(c.repeatKey), &buf[0], 64))
-			if n > 0 {
-				for _, te := range textEvents(C.GoBytes(unsafe.Pointer(&buf[0]), C.int(n)), c.mods) {
-					s.push(te)
-				}
-			}
-		}
+		c.pushXKBText(s, C.uint32_t(c.repeatKey), ks)
 		c.repeatNext = c.repeatNext.Add(interval)
 		if c.repeatNext.Before(now.Add(-250 * time.Millisecond)) {
 			c.repeatNext = now.Add(interval)
@@ -2011,7 +2024,9 @@ func uitkWlKeyEnter(id C.uintptr_t, surf *C.struct_wl_surface, serial C.uint32_t
 	if s := wlSurfNative(surf); s != nil {
 		c.keySurf = s.id
 		s.push(Event{Kind: EventFocusIn})
-		wlEnableTextInput(c, s)
+		if c.tiWanted {
+			wlEnableTextInput(c, s)
+		}
 	}
 }
 
@@ -2059,13 +2074,22 @@ func uitkWlKey(id C.uintptr_t, key, state, serial C.uint32_t) {
 		c.repeatKey = 0
 	}
 	s.push(ev)
-	if !pressed || c.mods.Ctrl() || c.textActive {
+	if !pressed {
 		return
 	}
-	// Dead keys / compose when no text-input IME is driving the surface.
+	c.pushXKBText(s, key, ks)
+}
+
+// pushXKBText emits EventText from xkb/compose unless IME preedit owns the key.
+// textActive alone must not suppress text: compositors often enter
+// zwp_text_input_v3 without ever sending commit or preedit.
+func (c *wlConn) pushXKBText(s *wlSurface, key C.uint32_t, ks uint64) {
+	if s == nil || !ShouldEmitXKBText(true, c.mods.Ctrl(), c.imePre != "") {
+		return
+	}
+	var raw []byte
 	if c.compose != nil {
-		st := C.ui_xkb_compose_feed(c.compose, C.uint32_t(ks))
-		_ = st
+		_ = C.ui_xkb_compose_feed(c.compose, C.uint32_t(ks))
 		switch C.ui_xkb_compose_status(c.compose) {
 		case C.XKB_COMPOSE_COMPOSING:
 			return
@@ -2074,22 +2098,30 @@ func uitkWlKey(id C.uintptr_t, key, state, serial C.uint32_t) {
 			n := int(C.ui_xkb_compose_utf8(c.compose, &buf[0], 64))
 			C.ui_xkb_compose_reset(c.compose)
 			if n > 0 {
-				for _, te := range textEvents(C.GoBytes(unsafe.Pointer(&buf[0]), C.int(n)), c.mods) {
-					s.push(te)
-				}
+				raw = C.GoBytes(unsafe.Pointer(&buf[0]), C.int(n))
 			}
-			return
 		case C.XKB_COMPOSE_CANCELLED:
 			C.ui_xkb_compose_reset(c.compose)
 			return
 		}
 	}
-	var buf [64]C.char
-	n := int(C.ui_xkb_utf8(c.xkbState, key, &buf[0], 64))
-	if n > 0 {
-		for _, te := range textEvents(C.GoBytes(unsafe.Pointer(&buf[0]), C.int(n)), c.mods) {
-			s.push(te)
+	if raw == nil {
+		var buf [64]C.char
+		n := int(C.ui_xkb_utf8(c.xkbState, key, &buf[0], 64))
+		if n > 0 {
+			raw = C.GoBytes(unsafe.Pointer(&buf[0]), C.int(n))
 		}
+	}
+	if len(raw) == 0 {
+		return
+	}
+	emit, lastX, lastI := PairXKBText(string(raw), c.lastIMEText)
+	c.lastXkbText, c.lastIMEText = lastX, lastI
+	if emit == "" {
+		return
+	}
+	for _, te := range textEvents([]byte(emit), c.mods) {
+		s.push(te)
 	}
 }
 
@@ -2416,6 +2448,9 @@ func uitkWlTIDone(id C.uintptr_t) {
 		}
 		s.push(Event{Kind: EventIMEPreedit, Text: c.imePre, IMECaret: caret})
 	}
+	emit, lastX, lastI := PairIMECommit(c.imeCommit, c.lastXkbText)
+	c.lastXkbText, c.lastIMEText = lastX, lastI
+	c.imeCommit = emit
 	if c.imeDelB > 0 || c.imeDelA > 0 || c.imeCommit != "" {
 		s.push(Event{Kind: EventIMECommit, Text: c.imeCommit, IMEDelBefore: c.imeDelB, IMEDelAfter: c.imeDelA})
 	}

@@ -139,7 +139,7 @@ func (c *imapClient) loginLocked() error {
 		}
 	}
 	if pass == "" {
-		return fmt.Errorf("imap: empty password (set %s or passEnv)", EnvPass)
+		return fmt.Errorf("imap: empty password (set imap.password in mail.json, or %s / passEnv)", EnvPass)
 	}
 	_, err := c.cmdLocked("LOGIN %s %s", imapQuote(c.user), imapQuote(pass))
 	return err

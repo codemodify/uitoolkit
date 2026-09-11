@@ -10,6 +10,11 @@ type IMECaretRect struct {
 // IMESurface is implemented by backends that drive an OS input method.
 type IMESurface interface {
 	SetIMECursor(x, y, w, h int)
+	// SetIMEEnabled turns the OS IME on when a text widget has focus.
+	// Wayland uses this for zwp_text_input_v3 enable/disable instead of
+	// enabling on every keyboard enter (which starved EventText on
+	// compositors that enter text-input without ever committing).
+	SetIMEEnabled(on bool)
 }
 
 // DesktopSurface is optional chrome control (EWMH / xdg-shell).
@@ -125,4 +130,53 @@ func InsertAtRune(text string, i int, s string) string {
 		i = len(runes)
 	}
 	return string(runes[:i]) + s + string(runes[i:])
+}
+
+// ShouldEmitXKBText reports whether a Wayland key should produce EventText
+// from xkb/compose. zwp_text_input_v3 being entered (textActive) is not a
+// reason to suppress: many compositors never send commit or preedit for
+// Latin, which left TextFields with KeyDown only (Add Account, Quick Filter).
+// Skip only while an IME preedit is in progress, or for key-up / Ctrl.
+func ShouldEmitXKBText(pressed, ctrl, imeComposing bool) bool {
+	return pressed && !ctrl && !imeComposing
+}
+
+// PairXKBText records xkb UTF-8 and drops it when IME already committed the
+// same string for this key (IME-then-key order).
+func PairXKBText(utf8, lastIME string) (emit, lastXKB, lastIMEOut string) {
+	if utf8 == "" {
+		return "", "", lastIME
+	}
+	if utf8 == lastIME {
+		return "", "", ""
+	}
+	return utf8, utf8, ""
+}
+
+// PairIMECommit drops IME commit text that xkb already inserted as EventText
+// (key-then-IME order on Latin compositors that both emit utf8 and commit).
+func PairIMECommit(commit, lastXKB string) (emit, lastXKBOut, lastIME string) {
+	if commit == "" {
+		return "", lastXKB, ""
+	}
+	if commit == lastXKB {
+		return "", "", ""
+	}
+	return commit, "", commit
+}
+
+// textEvents turns UTF-8 bytes into EventText for each printable rune.
+func textEvents(b []byte, mods Modifiers) []Event {
+	var out []Event
+	for len(b) > 0 {
+		r, size := utf8.DecodeRune(b)
+		if r >= 32 && r != 127 {
+			out = append(out, Event{Kind: EventText, Rune: r, Mods: mods})
+		}
+		if size < 1 {
+			break
+		}
+		b = b[size:]
+	}
+	return out
 }

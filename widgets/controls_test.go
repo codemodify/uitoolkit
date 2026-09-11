@@ -61,6 +61,25 @@ func TestTextFieldEdit(t *testing.T) {
 	}
 }
 
+func TestPasswordFieldMasksDisplay(t *testing.T) {
+	tf := NewPasswordField("password", nil)
+	if !tf.Password {
+		t.Fatal("Password")
+	}
+	tf.SetHost(&host{})
+	tf.Arrange(paintengine2d.XYWH(0, 0, 160, 32))
+	tf.TextInput('s')
+	tf.TextInput('e')
+	tf.TextInput('c')
+	if tf.Text != "sec" {
+		t.Fatalf("stored %q", tf.Text)
+	}
+	vis, caret, _, _ := tf.visual()
+	if vis != "•••" || caret != 3 {
+		t.Fatalf("masked vis=%q caret=%d", vis, caret)
+	}
+}
+
 func TestMonoFieldConstructors(t *testing.T) {
 	tf := NewMonoTextField("/tmp/log", "path", nil)
 	if !tf.Mono {

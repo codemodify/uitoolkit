@@ -490,7 +490,6 @@ import (
 	"os"
 	"sync"
 	"time"
-	"unicode/utf8"
 	"unsafe"
 
 	"github.com/codemodify/paintengine2d"
@@ -1180,21 +1179,6 @@ func (s *x11Surface) translate(xe *C.XEvent) []Event {
 	return nil
 }
 
-func textEvents(b []byte, mods Modifiers) []Event {
-	var out []Event
-	for len(b) > 0 {
-		r, size := utf8.DecodeRune(b)
-		if r >= 32 && r != 127 {
-			out = append(out, Event{Kind: EventText, Rune: r, Mods: mods})
-		}
-		if size < 1 {
-			break
-		}
-		b = b[size:]
-	}
-	return out
-}
-
 func (s *x11Surface) Close() error {
 	if s.closed && (s.conn == nil || s.conn.dpy == nil) {
 		return nil
@@ -1676,6 +1660,11 @@ func (s *x11Surface) SetMaximized(on bool) {
 	x11Mu.Lock()
 	C.ui_ewmh_state(s.conn.dpy, s.win, action, s.conn.atomMaxVert, s.conn.atomMaxHorz)
 	x11Mu.Unlock()
+}
+
+func (s *x11Surface) SetIMEEnabled(on bool) {
+	// XIC is created with the window; focus is enough for XIM.
+	_ = on
 }
 
 func (s *x11Surface) SetIMECursor(x, y, w, h int) {

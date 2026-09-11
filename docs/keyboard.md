@@ -1,6 +1,6 @@
 # Keyboard map
 
-Focus and shortcuts for uitoolkit **v0.10.1**. Esc always tears down
+Focus and shortcuts for uitoolkit **v0.10.2**. Esc always tears down
 floating chrome in one order, everywhere: **tooltip → popup → overlay**.
 
 ## Global
@@ -24,7 +24,8 @@ NumberField still steps while its inner TextField has focus).
 | Home / End | Line start / end |
 | Ctrl+A / C / X / V | Select all, copy, cut, paste (OS CLIPBOARD on X11 and Wayland) |
 | Middle-click | Paste PRIMARY (X11 / Wayland primary-selection) or the in-process buffer |
-| IME | Preedit is underlined in the field; commit inserts the phrase. Esc cancels composition. |
+| IME | Preedit is underlined in the field; commit inserts the phrase. Esc cancels composition. On Wayland, Latin keys still emit `EventText` when text-input-v3 is idle (no preedit). |
+| Password | Same keys; the field paints bullets. `NewPasswordField` / `TextField.Password`. |
 | Return | `OnSubmit` |
 
 ## TextArea
@@ -109,6 +110,7 @@ Open/Save confirms the selected row or the path field.
 
 ## Out of scope (v0.1)
 
-CJK preedit / candidate windows, INCR clipboard, and platform
-accelerators beyond the in-window map above. X11 XIM compose and
-dead keys are supported; see [platform.md](platform.md).
+CJK candidate windows, INCR clipboard, and platform accelerators
+beyond the in-window map above. X11 XIM compose / dead keys and
+Wayland xkb compose plus text-input-v3 preedit are supported; see
+[platform.md](platform.md).
