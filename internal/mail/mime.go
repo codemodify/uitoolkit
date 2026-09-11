@@ -61,9 +61,13 @@ func ParseRFC822(raw []byte, folder FolderID, accountID string) (Message, error)
 		To:        decodeRFC2047(h.Get("To")),
 		Cc:        decodeRFC2047(h.Get("Cc")),
 		Bcc:       decodeRFC2047(h.Get("Bcc")),
-		Subject:   decodeRFC2047(h.Get("Subject")),
-		Size:      len(raw),
+		Subject:      decodeRFC2047(h.Get("Subject")),
+		Size:         len(raw),
+		RFCMessageID: h.Get("Message-Id"),
+		InReplyTo:    h.Get("In-Reply-To"),
+		References:   h.Get("References"),
 	}
+	out.ThreadID = ThreadIDOf(out)
 	if t, err := mail.ParseDate(h.Get("Date")); err == nil {
 		out.Date = t
 	}
@@ -427,6 +431,13 @@ func BuildRFC822(msg Message, ident Identity, files []AttachedFile) []byte {
 		date = time.Now()
 	}
 	hdr("Date", date.Format(time.RFC1123Z))
+	mid := strings.TrimSpace(msg.RFCMessageID)
+	if mid == "" {
+		mid = fmt.Sprintf("<%d.%s@uitoolkit>", date.UnixNano(), slug(ident.Address))
+	}
+	hdr("Message-ID", mid)
+	hdr("In-Reply-To", msg.InReplyTo)
+	hdr("References", msg.References)
 	hdr("MIME-Version", "1.0")
 	if len(files) == 0 {
 		hdr("Content-Type", `text/plain; charset="utf-8"`)

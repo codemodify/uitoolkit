@@ -166,12 +166,17 @@ type Message struct {
 	HasAttach   bool
 	Tags        []string
 	Body        string
-	HTML        string `json:"html,omitempty"`
-	Snippet     string `json:"snippet,omitempty"`
-	UID         uint32 `json:"uid,omitempty"`
-	Parts       []Part `json:"parts,omitempty"`
-	IdentityID  string `json:"identityId,omitempty"`
-	Attachments []string
+	HTML          string `json:"html,omitempty"`
+	Snippet       string `json:"snippet,omitempty"`
+	UID           uint32 `json:"uid,omitempty"`
+	Parts         []Part `json:"parts,omitempty"`
+	IdentityID    string `json:"identityId,omitempty"`
+	RFCMessageID  string `json:"rfcMessageId,omitempty"`
+	InReplyTo     string `json:"inReplyTo,omitempty"`
+	References    string `json:"references,omitempty"`
+	ThreadID      string `json:"threadId,omitempty"`
+	Category      string `json:"category,omitempty"`
+	Attachments   []string
 }
 
 // Clone returns a shallow copy (tags / attachments copied).
@@ -216,9 +221,9 @@ func firstAddr(s string) string {
 
 // FlagPatch is a partial flag update (nil pointer = leave unchanged).
 type FlagPatch struct {
-	Read    *bool
-	Starred *bool
-	Tags    *[]string
+	Read    *bool    `json:"read,omitempty"`
+	Starred *bool    `json:"starred,omitempty"`
+	Tags    *[]string `json:"tags,omitempty"`
 }
 
 // SearchQuery is a daemon-side scan (Quick Filter or global search).
@@ -235,6 +240,7 @@ type DaemonStatus struct {
 	Online   bool   `json:"online"`
 	Accounts int    `json:"accounts"`
 	Health   string `json:"health,omitempty"`
+	Outbox   int    `json:"outbox,omitempty"`
 }
 
 // Store is the mailclientd backend. LocalStore is the default (IMAP+SMTP).
@@ -302,6 +308,39 @@ type Store interface {
 
 	// PutAccount writes IMAP/SMTP settings (passEnv only — never a password).
 	PutAccount(AccountConfig) (Account, error)
+}
+
+// ExtraStore is Tier A/B state (OAuth tokens live beside it). MemoryStore
+// and LocalStore implement this; the IMAP skeleton does not.
+type ExtraStore interface {
+	SetOnline(bool)
+	Online() bool
+	ListOutbox() []OutboxOp
+	FlushOutbox() (int, error)
+
+	ListSmartFolders() []SmartFolder
+	PutSmartFolder(SmartFolder) (SmartFolder, error)
+	DeleteSmartFolder(id string) error
+
+	MuteThread(threadID string, muted bool) error
+	MutedThreads() []string
+
+	ListVIPs() []VIP
+	PutVIP(VIP) (VIP, error)
+	DeleteVIP(address string) error
+
+	NotifyPrefs() NotifyPrefs
+	PutNotifyPrefs(NotifyPrefs) NotifyPrefs
+
+	SetSenderCategory(address, category string) error
+	ListSenderCategories() []SenderCat
+}
+
+func asExtra(s Store) ExtraStore {
+	if e, ok := s.(ExtraStore); ok {
+		return e
+	}
+	return nil
 }
 
 func boolPtr(v bool) *bool { return &v }

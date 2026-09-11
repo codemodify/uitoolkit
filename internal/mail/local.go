@@ -26,6 +26,8 @@ type LocalStore struct {
 	nextID     int
 	health     error
 	now        time.Time
+	feat       *featureHost
+	pushCancel func()
 }
 
 type folderMeta struct {
@@ -46,7 +48,7 @@ func NewLocalStoreDir(cfg MailConfig, dir string) (*LocalStore, error) {
 	}
 	s := &LocalStore{
 		dir: dir, cfg: cfg, clients: map[string]*imapClient{},
-		tags: DefaultTags(), nextID: 1, now: time.Now(),
+		tags: DefaultTags(), nextID: 1, now: time.Now(), feat: newFeatureHost(),
 	}
 	s.loadLocked()
 	for _, a := range cfg.Accounts {
@@ -181,6 +183,13 @@ func (s *LocalStore) ListFolders(accountID string) []Folder {
 func (s *LocalStore) GetFolder(id FolderID) (Folder, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if sid := SmartFolderID(id); sid != "" && s.feat != nil {
+		for _, sf := range s.feat.ListSmartFolders() {
+			if sf.ID == sid {
+				return Folder{ID: id, AccountID: AccountSmart, Name: sf.Name, Kind: FolderCustom, Virtual: true}, true
+			}
+		}
+	}
 	if f, ok := virtualFolderByID(id); ok {
 		return f, true
 	}
@@ -236,7 +245,7 @@ func (s *LocalStore) listLocked(folder FolderID) []Message {
 			kind = f.Kind
 		}
 		if IsVirtual(folder) {
-			if matchVirtual(folder, m, f, kind) {
+			if matchVirtual(folder, m, f, kind, s.feat.snap()) {
 				out = append(out, m.Clone())
 			}
 			continue
@@ -309,27 +318,30 @@ func (s *LocalStore) fetchBodyLocked(m *Message) {
 func (s *LocalStore) Search(q SearchQuery) []Message {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	snap := s.feat.snap()
+	var idx *searchIndex
+	if s.feat != nil {
+		idx = s.feat.index
+	}
+	hits := searchMessages(s.messages, SearchQuery{AccountID: q.AccountID, Filter: q.Filter}, idx)
+	if q.Folder == "" {
+		return hits
+	}
 	var out []Message
-	for _, m := range s.messages {
-		if q.AccountID != "" && m.AccountID != q.AccountID {
+	for _, m := range hits {
+		f, ok := s.folderLocked(m.Folder)
+		kind := FolderCustom
+		if ok {
+			kind = f.Kind
+		}
+		if IsVirtual(q.Folder) {
+			if matchVirtual(q.Folder, m, f, kind, snap) {
+				out = append(out, m)
+			}
 			continue
 		}
-		if q.Folder != "" {
-			f, ok := s.folderLocked(m.Folder)
-			kind := FolderCustom
-			if ok {
-				kind = f.Kind
-			}
-			if IsVirtual(q.Folder) {
-				if !matchVirtual(q.Folder, m, f, kind) {
-					continue
-				}
-			} else if m.Folder != q.Folder {
-				continue
-			}
-		}
-		if q.Filter.Match(m) {
-			out = append(out, m.Clone())
+		if m.Folder == q.Folder {
+			out = append(out, m)
 		}
 	}
 	return out
@@ -365,6 +377,13 @@ func (s *LocalStore) SetFlags(id MessageID, patch FlagPatch) error {
 		for _, t := range m.Tags {
 			add = append(add, imapSafeKeyword(t))
 		}
+	}
+	if s.feat != nil && !s.feat.Online() {
+		s.feat.mu.Lock()
+		s.feat.enqueueLocked(OutboxOp{Kind: "flag", MessageID: id, Patch: patch, AccountID: m.AccountID, UID: m.UID})
+		s.feat.mu.Unlock()
+		s.saveLocked()
+		return nil
 	}
 	s.pushFlagsLocked(*m, add, rem)
 	s.saveLocked()
@@ -411,6 +430,13 @@ func (s *LocalStore) Move(ids []MessageID, dest FolderID) error {
 			return fmt.Errorf("mail: no message %s", id)
 		}
 		m := s.messages[i]
+		if s.feat != nil && !s.feat.Online() {
+			s.feat.mu.Lock()
+			s.feat.enqueueLocked(OutboxOp{Kind: "move", MessageID: id, Dest: dest, AccountID: m.AccountID, UID: m.UID})
+			s.feat.mu.Unlock()
+			s.messages[i].Folder = dest
+			continue
+		}
 		if m.UID != 0 {
 			if cli, err := s.clientLocked(m.AccountID); err == nil {
 				sf, _ := s.folderLocked(m.Folder)
@@ -423,7 +449,11 @@ func (s *LocalStore) Move(ids []MessageID, dest FolderID) error {
 					dremote = df.Name
 				}
 				if _, err := cli.selectBox(remote, false); err == nil {
-					_ = cli.uidMove(m.UID, dremote)
+					if err := cli.uidMove(m.UID, dremote); err != nil {
+						s.feat.mu.Lock()
+						s.feat.enqueueLocked(OutboxOp{Kind: "move", MessageID: id, Dest: dest, AccountID: m.AccountID, UID: m.UID, Error: err.Error()})
+						s.feat.mu.Unlock()
+					}
 				}
 			}
 		}
@@ -445,8 +475,15 @@ func (s *LocalStore) Delete(ids []MessageID) error {
 		if !ok {
 			return fmt.Errorf("mail: no folder for %s", id)
 		}
+		if s.feat != nil && !s.feat.Online() {
+			s.feat.mu.Lock()
+			s.feat.enqueueLocked(OutboxOp{Kind: "delete", MessageID: id, AccountID: s.messages[i].AccountID, UID: s.messages[i].UID})
+			s.feat.mu.Unlock()
+		}
 		if cur.Kind == FolderTrash {
-			s.expungeLocked(s.messages[i])
+			if s.feat == nil || s.feat.Online() {
+				s.expungeLocked(s.messages[i])
+			}
 			s.messages = append(s.messages[:i], s.messages[i+1:]...)
 			continue
 		}
@@ -514,6 +551,12 @@ func (s *LocalStore) Append(folder FolderID, msg Message) (MessageID, error) {
 	msg.ID = MessageID(fmt.Sprintf("%s-m-%04d", f.AccountID, s.nextID))
 	msg.Folder = folder
 	msg.AccountID = f.AccountID
+	if msg.ThreadID == "" {
+		msg.ThreadID = ThreadIDOf(msg)
+	}
+	if msg.Category == "" && s.feat != nil {
+		msg.Category = messageCategory(msg, s.feat.snap())
+	}
 	if msg.Size <= 0 {
 		msg.Size = len(msg.Subject) + len(msg.Body) + 80
 	}
@@ -528,6 +571,9 @@ func (s *LocalStore) Append(folder FolderID, msg Message) (MessageID, error) {
 		_ = cli.appendRaw(remote, raw, `\Seen`)
 	}
 	s.messages = append(s.messages, msg)
+	if s.feat != nil && s.feat.index != nil {
+		s.feat.index.add(msg)
+	}
 	s.saveLocked()
 	return msg.ID, nil
 }
@@ -657,10 +703,11 @@ func (s *LocalStore) syncFolderLocked(cli *imapClient, f Folder) (int, error) {
 	if remote == "" {
 		remote = f.Name
 	}
-	st, err := cli.selectBox(remote, true)
+	st, vanished, err := cli.selectSync(remote, true, s.loadFolderMeta(f.ID))
 	if err != nil {
 		return 0, err
 	}
+	_ = vanished
 	meta := s.loadFolderMeta(f.ID)
 	if meta.UIDValidity != 0 && st.UIDValidity != 0 && meta.UIDValidity != st.UIDValidity {
 		s.dropFolderMessagesLocked(f.ID)
@@ -693,6 +740,11 @@ func (s *LocalStore) syncFolderLocked(cli *imapClient, f Folder) (int, error) {
 			Date: im.Date, Size: im.Size, UID: im.UID,
 			Read: imapFlagSeen(im.Flags), Starred: imapFlagStar(im.Flags),
 			Tags: imapKeywords(im.Flags), Parts: im.Parts,
+			RFCMessageID: im.RFCMessageID, InReplyTo: im.InReplyTo,
+		}
+		m.ThreadID = ThreadIDOf(m)
+		if s.feat != nil {
+			m.Category = messageCategory(m, s.feat.snap())
 		}
 		for _, p := range im.Parts {
 			if p.Filename != "" {
@@ -704,9 +756,23 @@ func (s *LocalStore) syncFolderLocked(cli *imapClient, f Folder) (int, error) {
 		s.applyRulesOnLocked(&s.messages[len(s.messages)-1])
 		added++
 	}
+	if vanished, err := cli.uidVanished(meta); err == nil {
+		for _, uid := range vanished {
+			id := MessageID(fmt.Sprintf("%s:%d", f.ID, uid))
+			if s.feat != nil && s.feat.pendingFor(id) {
+				continue
+			}
+			if i, ok := s.indexLocked(id); ok {
+				s.messages = append(s.messages[:i], s.messages[i+1:]...)
+			}
+		}
+	}
 	if flags, err := cli.uidFetchFlags(1, meta.HighestMod); err == nil {
 		for _, im := range flags {
 			id := MessageID(fmt.Sprintf("%s:%d", f.ID, im.UID))
+			if s.feat != nil && s.feat.pendingFor(id) {
+				continue
+			}
 			if i, ok := s.indexLocked(id); ok {
 				s.messages[i].Read = imapFlagSeen(im.Flags)
 				s.messages[i].Starred = imapFlagStar(im.Flags)
@@ -809,7 +875,12 @@ func (s *LocalStore) PutTag(t Tag) (Tag, error) {
 func (s *LocalStore) VirtualFolders() []Folder {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	out := defaultVirtualFolders()
+	base := []Folder{
+		{ID: FolderUnifiedInbox, AccountID: AccountUnified, Name: "Unified Inbox", Kind: FolderInbox, Virtual: true, MatchKind: FolderInbox},
+		{ID: FolderUnifiedUnread, AccountID: AccountUnified, Name: "Unread", Kind: FolderCustom, Virtual: true},
+		{ID: FolderUnifiedStarred, AccountID: AccountUnified, Name: "Starred", Kind: FolderCustom, Virtual: true},
+	}
+	out := append(base, extraVirtualFolders(s.feat.snap())...)
 	for _, t := range s.tags {
 		out = append(out, Folder{
 			ID: TagFolderID(t.Name), AccountID: AccountTags, Name: t.Name,
@@ -999,6 +1070,7 @@ func (s *LocalStore) OpenPart(id MessageID, partID string) (PartData, error) {
 		}
 	}
 	p.Path = path
+	openCachedFile(path)
 	return p, nil
 }
 
@@ -1059,6 +1131,7 @@ func (s *LocalStore) clientLocked(accountID string) (*imapClient, error) {
 	if cfg.IMAP.Host == "" {
 		return nil, fmt.Errorf("mail: no IMAP host for %s", accountID)
 	}
+	cfg.IMAP.tokenKey = accountID
 	c := newIMAPClient(cfg.IMAP, cfg.Address)
 	if err := c.connect(); err != nil {
 		s.health = err
@@ -1088,8 +1161,21 @@ func (s *LocalStore) loadLocked() {
 	_ = readJSONFile(filepath.Join(s.dir, "messages.json"), &s.messages)
 	_ = readJSONFile(filepath.Join(s.dir, "tags.json"), &s.tags)
 	_ = readJSONFile(filepath.Join(s.dir, "rules.json"), &s.rules)
+	if s.feat == nil {
+		s.feat = newFeatureHost()
+	}
+	_ = readJSONFile(filepath.Join(s.dir, "smart.json"), &s.feat.smart)
+	_ = readJSONFile(filepath.Join(s.dir, "vip.json"), &s.feat.vips)
+	_ = readJSONFile(filepath.Join(s.dir, "muted.json"), &s.feat.muted)
+	_ = readJSONFile(filepath.Join(s.dir, "categories.json"), &s.feat.cats)
+	_ = readJSONFile(filepath.Join(s.dir, "notify.json"), &s.feat.notify)
+	_ = readJSONFile(filepath.Join(s.dir, "outbox.json"), &s.feat.outbox)
 	if len(s.tags) == 0 {
 		s.tags = DefaultTags()
+	}
+	assignThreadIDs(s.messages)
+	if s.feat.index != nil {
+		s.feat.index.rebuild(s.messages)
 	}
 	for _, m := range s.messages {
 		if n := idSeq(m.ID); n >= s.nextID {
@@ -1105,6 +1191,14 @@ func (s *LocalStore) saveLocked() {
 	_ = writeJSONFile(filepath.Join(s.dir, "messages.json"), s.messages)
 	_ = writeJSONFile(filepath.Join(s.dir, "tags.json"), s.tags)
 	_ = writeJSONFile(filepath.Join(s.dir, "rules.json"), s.rules)
+	if s.feat != nil {
+		_ = writeJSONFile(filepath.Join(s.dir, "smart.json"), s.feat.smart)
+		_ = writeJSONFile(filepath.Join(s.dir, "vip.json"), s.feat.vips)
+		_ = writeJSONFile(filepath.Join(s.dir, "muted.json"), s.feat.muted)
+		_ = writeJSONFile(filepath.Join(s.dir, "categories.json"), s.feat.cats)
+		_ = writeJSONFile(filepath.Join(s.dir, "notify.json"), s.feat.notify)
+		_ = writeJSONFile(filepath.Join(s.dir, "outbox.json"), s.feat.outbox)
+	}
 }
 
 func (s *LocalStore) rawPath(m Message) string {
@@ -1199,7 +1293,33 @@ func (s *LocalStore) SendViaSMTP(accountID, identityID string, msg Message, file
 	raw := BuildRFC822(msg, ident, files)
 	rcpts := append(splitAddrs(msg.To), splitAddrs(msg.Cc)...)
 	rcpts = append(rcpts, splitAddrs(msg.Bcc)...)
+	cfg.SMTP.tokenKey = accountID
+	if s.feat != nil && !s.feat.Online() {
+		id, err := s.Append(FolderOutbox, msg)
+		if err != nil {
+			// no physical outbox folder — keep the draft in memory list via a queued send
+			s.mu.Lock()
+			s.nextID++
+			id = MessageID(fmt.Sprintf("%s-out-%04d", accountID, s.nextID))
+			msg.ID = id
+			msg.AccountID = accountID
+			s.messages = append(s.messages, msg)
+			s.mu.Unlock()
+		}
+		s.feat.mu.Lock()
+		cp := msg.Clone()
+		s.feat.enqueueLocked(OutboxOp{Kind: "send", AccountID: accountID, MessageID: id, Message: &cp})
+		s.feat.mu.Unlock()
+		s.mu.Lock()
+		s.saveLocked()
+		s.mu.Unlock()
+		return id, nil
+	}
 	if err := SendSMTP(cfg.SMTP, extractAddr(msg.From), rcpts, raw); err != nil {
+		s.feat.mu.Lock()
+		cp := msg.Clone()
+		s.feat.enqueueLocked(OutboxOp{Kind: "send", AccountID: accountID, Message: &cp, Error: err.Error()})
+		s.feat.mu.Unlock()
 		return "", err
 	}
 	sent, ok := specialFolder(s, accountID, FolderSent)
@@ -1207,4 +1327,156 @@ func (s *LocalStore) SendViaSMTP(accountID, identityID string, msg Message, file
 		return "", nil
 	}
 	return s.Append(sent.ID, msg)
+}
+
+func (s *LocalStore) extras() *featureHost {
+	if s.feat == nil {
+		s.feat = newFeatureHost()
+	}
+	return s.feat
+}
+
+func (s *LocalStore) SetOnline(v bool)       { s.extras().SetOnline(v) }
+func (s *LocalStore) Online() bool           { return s.extras().Online() }
+func (s *LocalStore) ListOutbox() []OutboxOp { return s.extras().ListOutbox() }
+func (s *LocalStore) ListSmartFolders() []SmartFolder {
+	return s.extras().ListSmartFolders()
+}
+func (s *LocalStore) PutSmartFolder(sf SmartFolder) (SmartFolder, error) {
+	out, err := s.extras().PutSmartFolder(sf)
+	s.mu.Lock()
+	s.saveLocked()
+	s.mu.Unlock()
+	return out, err
+}
+func (s *LocalStore) DeleteSmartFolder(id string) error {
+	err := s.extras().DeleteSmartFolder(id)
+	s.mu.Lock()
+	s.saveLocked()
+	s.mu.Unlock()
+	return err
+}
+func (s *LocalStore) MuteThread(id string, muted bool) error {
+	err := s.extras().MuteThread(id, muted)
+	s.mu.Lock()
+	s.saveLocked()
+	s.mu.Unlock()
+	return err
+}
+func (s *LocalStore) MutedThreads() []string { return s.extras().MutedThreads() }
+func (s *LocalStore) ListVIPs() []VIP       { return s.extras().ListVIPs() }
+func (s *LocalStore) PutVIP(v VIP) (VIP, error) {
+	out, err := s.extras().PutVIP(v)
+	s.mu.Lock()
+	s.saveLocked()
+	s.mu.Unlock()
+	return out, err
+}
+func (s *LocalStore) DeleteVIP(address string) error {
+	err := s.extras().DeleteVIP(address)
+	s.mu.Lock()
+	s.saveLocked()
+	s.mu.Unlock()
+	return err
+}
+func (s *LocalStore) NotifyPrefs() NotifyPrefs { return s.extras().NotifyPrefs() }
+func (s *LocalStore) PutNotifyPrefs(p NotifyPrefs) NotifyPrefs {
+	out := s.extras().PutNotifyPrefs(p)
+	s.mu.Lock()
+	s.saveLocked()
+	s.mu.Unlock()
+	return out
+}
+func (s *LocalStore) SetSenderCategory(address, category string) error {
+	err := s.extras().SetSenderCategory(address, category)
+	if err != nil {
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.messages {
+		if canonAddr(s.messages[i].From) == canonAddr(address) {
+			s.messages[i].Category = category
+		}
+	}
+	s.saveLocked()
+	return nil
+}
+func (s *LocalStore) ListSenderCategories() []SenderCat {
+	return s.extras().ListSenderCategories()
+}
+
+func (s *LocalStore) FlushOutbox() (int, error) {
+	if s.feat == nil {
+		return 0, nil
+	}
+	s.feat.mu.Lock()
+	ops := append([]OutboxOp(nil), s.feat.outbox...)
+	s.feat.mu.Unlock()
+	flushed := 0
+	var last error
+	for _, op := range ops {
+		if err := s.flushOne(op); err != nil {
+			last = err
+			s.feat.mu.Lock()
+			for i := range s.feat.outbox {
+				if s.feat.outbox[i].ID == op.ID {
+					s.feat.outbox[i].Error = err.Error()
+					s.feat.outbox[i].Tries++
+				}
+			}
+			s.feat.mu.Unlock()
+			continue
+		}
+		s.feat.mu.Lock()
+		s.feat.dropOutboxLocked(op.ID)
+		s.feat.mu.Unlock()
+		flushed++
+	}
+	s.mu.Lock()
+	s.saveLocked()
+	s.mu.Unlock()
+	return flushed, last
+}
+
+func (s *LocalStore) flushOne(op OutboxOp) error {
+	switch op.Kind {
+	case "flag":
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		i, ok := s.indexLocked(op.MessageID)
+		if !ok {
+			return nil // vanished; drop
+		}
+		s.pushFlagsLocked(s.messages[i], nil, nil)
+		var add, rem []string
+		if op.Patch.Read != nil {
+			if *op.Patch.Read {
+				add = append(add, `\Seen`)
+			} else {
+				rem = append(rem, `\Seen`)
+			}
+		}
+		if op.Patch.Starred != nil {
+			if *op.Patch.Starred {
+				add = append(add, `\Flagged`)
+			} else {
+				rem = append(rem, `\Flagged`)
+			}
+		}
+		s.pushFlagsLocked(s.messages[i], add, rem)
+		return nil
+	case "move":
+		return s.Move([]MessageID{op.MessageID}, op.Dest)
+	case "delete":
+		return s.Delete([]MessageID{op.MessageID})
+	case "send":
+		if op.Message == nil {
+			return nil
+		}
+		_, err := s.SendViaSMTP(op.AccountID, "", *op.Message, nil)
+		return err
+	default:
+		return nil
+	}
 }

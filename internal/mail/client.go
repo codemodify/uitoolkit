@@ -416,6 +416,128 @@ func (c *Client) Sync(accountID string) (SyncResult, error) {
 	return r, err
 }
 
+func (c *Client) SetOnline(online bool) (int, error) {
+	var r fetchResult
+	err := c.call(MethodStatusSet, onlineParams{Online: online}, &r)
+	return r.Count, err
+}
+
+func (c *Client) Outbox() ([]OutboxOp, error) {
+	var out []OutboxOp
+	err := c.call(MethodOutboxList, nil, &out)
+	if out == nil {
+		out = []OutboxOp{}
+	}
+	return out, err
+}
+
+func (c *Client) FlushOutbox() (int, error) {
+	var r fetchResult
+	err := c.call(MethodOutboxFlush, nil, &r)
+	return r.Count, err
+}
+
+func (c *Client) SmartFolders() ([]SmartFolder, error) {
+	var out []SmartFolder
+	err := c.call(MethodSmartList, nil, &out)
+	if out == nil {
+		out = []SmartFolder{}
+	}
+	return out, err
+}
+
+func (c *Client) PutSmartFolder(sf SmartFolder) (SmartFolder, error) {
+	var out SmartFolder
+	err := c.call(MethodSmartPut, sf, &out)
+	return out, err
+}
+
+func (c *Client) DeleteSmartFolder(id string) error {
+	return c.call(MethodSmartDel, ruleIDParams{ID: id}, nil)
+}
+
+func (c *Client) MuteThread(threadID string, muted bool) error {
+	return c.call(MethodThreadMute, muteParams{ThreadID: threadID, Muted: muted}, nil)
+}
+
+func (c *Client) MutedThreads() ([]string, error) {
+	var out []string
+	err := c.call(MethodThreadMuted, nil, &out)
+	if out == nil {
+		out = []string{}
+	}
+	return out, err
+}
+
+func (c *Client) VIPs() ([]VIP, error) {
+	var out []VIP
+	err := c.call(MethodVIPList, nil, &out)
+	if out == nil {
+		out = []VIP{}
+	}
+	return out, err
+}
+
+func (c *Client) PutVIP(v VIP) (VIP, error) {
+	var out VIP
+	err := c.call(MethodVIPPut, v, &out)
+	return out, err
+}
+
+func (c *Client) DeleteVIP(address string) error {
+	return c.call(MethodVIPDel, vipDelParams{Address: address}, nil)
+}
+
+func (c *Client) NotifyPrefs() (NotifyPrefs, error) {
+	var p NotifyPrefs
+	err := c.call(MethodNotifyGet, nil, &p)
+	return p, err
+}
+
+func (c *Client) PutNotifyPrefs(p NotifyPrefs) (NotifyPrefs, error) {
+	var out NotifyPrefs
+	err := c.call(MethodNotifyPut, p, &out)
+	return out, err
+}
+
+func (c *Client) SetSenderCategory(address, category string) error {
+	return c.call(MethodCategorySet, categoryParams{Address: address, Category: category}, nil)
+}
+
+func (c *Client) SenderCategories() ([]SenderCat, error) {
+	var out []SenderCat
+	err := c.call(MethodCategoryList, nil, &out)
+	if out == nil {
+		out = []SenderCat{}
+	}
+	return out, err
+}
+
+func (c *Client) StartOAuth(provider, address, name, clientID, clientSecret, flow string) (OAuthStart, error) {
+	var out OAuthStart
+	err := c.call(MethodOAuthStart, oauthReq{
+		Provider: provider, Address: address, Name: name,
+		ClientID: clientID, ClientSecret: clientSecret, Flow: flow,
+	}, &out)
+	return out, err
+}
+
+func (c *Client) PollOAuth(sessionID string) (OAuthPoll, error) {
+	var out OAuthPoll
+	err := c.call(MethodOAuthPoll, oauthPollParams{SessionID: sessionID}, &out)
+	return out, err
+}
+
+func (c *Client) CancelOAuth(sessionID string) error {
+	return c.call(MethodOAuthCancel, oauthPollParams{SessionID: sessionID}, nil)
+}
+
+func (c *Client) GuessHosts(address string) (GuessedHosts, error) {
+	var out GuessedHosts
+	err := c.call(MethodHostsGuess, guessParams{Address: address}, &out)
+	return out, err
+}
+
 func filterEmpty(f Filter) bool {
 	return f.Query == "" && !f.Unread && !f.Starred && !f.Attachment && f.Tag == "" &&
 		!f.Sender && !f.Recipients && !f.SubjectOnly && !f.Body

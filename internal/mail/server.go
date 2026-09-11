@@ -20,6 +20,7 @@ type Server struct {
 	mu      sync.Mutex
 	conns   map[*rpcConn]struct{}
 	serving bool
+	oauth   *oauthHub
 }
 
 type rpcConn struct {
@@ -42,7 +43,7 @@ func NewServer(store Store, socket string) *Server {
 	if socket == "" {
 		socket = DefaultSocket()
 	}
-	return &Server{Store: store, Socket: socket, conns: map[*rpcConn]struct{}{}}
+	return &Server{Store: store, Socket: socket, conns: map[*rpcConn]struct{}{}, oauth: newOAuthHub()}
 }
 
 // ListenAndServe binds a Unix socket and serves until ctx is cancelled.
@@ -59,6 +60,9 @@ func ListenAndServe(ctx context.Context, socket string, store Store) error {
 		_ = ln.Close()
 	}()
 	srv := NewServer(store, socket)
+	if ls, ok := store.(*LocalStore); ok {
+		ls.StartPush(ctx)
+	}
 	return srv.Serve(ln)
 }
 
@@ -397,7 +401,180 @@ func (s *Server) dispatch(req Request) Response {
 				result = r
 				s.broadcast(EventSynced, eventParams{AccountID: p.AccountID, Count: r.New, Reason: "sync"})
 				s.broadcast(EventFetched, eventParams{AccountID: p.AccountID, Count: r.New})
+				s.maybeNotify(p.AccountID, r.New)
 			}
+		}
+	case MethodStatusSet:
+		var p onlineParams
+		p, err = decodeParams[onlineParams](req.Params)
+		if err == nil {
+			if ex := asExtra(s.Store); ex != nil {
+				ex.SetOnline(p.Online)
+				if p.Online {
+					n, ferr := ex.FlushOutbox()
+					result = fetchResult{Count: n}
+					if ferr != nil && err == nil {
+						err = ferr
+					}
+				} else {
+					result = map[string]bool{"online": false}
+				}
+			} else {
+				result = map[string]bool{"online": p.Online}
+			}
+		}
+	case MethodOutboxList:
+		if ex := asExtra(s.Store); ex != nil {
+			result = ex.ListOutbox()
+		} else {
+			result = []OutboxOp{}
+		}
+	case MethodOutboxFlush:
+		if ex := asExtra(s.Store); ex != nil {
+			var n int
+			n, err = ex.FlushOutbox()
+			result = fetchResult{Count: n}
+		} else {
+			result = fetchResult{}
+		}
+	case MethodSmartList:
+		if ex := asExtra(s.Store); ex != nil {
+			result = ex.ListSmartFolders()
+		} else {
+			result = []SmartFolder{}
+		}
+	case MethodSmartPut:
+		var sf SmartFolder
+		sf, err = decodeParams[SmartFolder](req.Params)
+		if err == nil {
+			if ex := asExtra(s.Store); ex != nil {
+				result, err = ex.PutSmartFolder(sf)
+				if err == nil {
+					s.broadcast(EventChanged, eventParams{Reason: "smart"})
+				}
+			} else {
+				err = fmt.Errorf("mail: smart folders not supported")
+			}
+		}
+	case MethodSmartDel:
+		var p ruleIDParams
+		p, err = decodeParams[ruleIDParams](req.Params)
+		if err == nil {
+			if ex := asExtra(s.Store); ex != nil {
+				err = ex.DeleteSmartFolder(p.ID)
+			}
+		}
+	case MethodThreadMute:
+		var p muteParams
+		p, err = decodeParams[muteParams](req.Params)
+		if err == nil {
+			if ex := asExtra(s.Store); ex != nil {
+				err = ex.MuteThread(p.ThreadID, p.Muted)
+			} else {
+				err = fmt.Errorf("mail: mute not supported")
+			}
+		}
+	case MethodThreadMuted:
+		if ex := asExtra(s.Store); ex != nil {
+			result = ex.MutedThreads()
+		} else {
+			result = []string{}
+		}
+	case MethodVIPList:
+		if ex := asExtra(s.Store); ex != nil {
+			result = ex.ListVIPs()
+		} else {
+			result = []VIP{}
+		}
+	case MethodVIPPut:
+		var v VIP
+		v, err = decodeParams[VIP](req.Params)
+		if err == nil {
+			if ex := asExtra(s.Store); ex != nil {
+				result, err = ex.PutVIP(v)
+				if err == nil {
+					s.broadcast(EventChanged, eventParams{Reason: "vip"})
+				}
+			} else {
+				err = fmt.Errorf("mail: VIP not supported")
+			}
+		}
+	case MethodVIPDel:
+		var p vipDelParams
+		p, err = decodeParams[vipDelParams](req.Params)
+		if err == nil {
+			if ex := asExtra(s.Store); ex != nil {
+				err = ex.DeleteVIP(p.Address)
+			}
+		}
+	case MethodNotifyGet:
+		if ex := asExtra(s.Store); ex != nil {
+			result = ex.NotifyPrefs()
+		} else {
+			result = NotifyPrefs{}
+		}
+	case MethodNotifyPut:
+		var p NotifyPrefs
+		p, err = decodeParams[NotifyPrefs](req.Params)
+		if err == nil {
+			if ex := asExtra(s.Store); ex != nil {
+				result = ex.PutNotifyPrefs(p)
+			} else {
+				result = p
+			}
+		}
+	case MethodCategorySet:
+		var p categoryParams
+		p, err = decodeParams[categoryParams](req.Params)
+		if err == nil {
+			if ex := asExtra(s.Store); ex != nil {
+				err = ex.SetSenderCategory(p.Address, p.Category)
+			} else {
+				err = fmt.Errorf("mail: categories not supported")
+			}
+		}
+	case MethodCategoryList:
+		if ex := asExtra(s.Store); ex != nil {
+			result = ex.ListSenderCategories()
+		} else {
+			result = []SenderCat{}
+		}
+	case MethodOAuthStart:
+		var p oauthReq
+		p, err = decodeParams[oauthReq](req.Params)
+		if err == nil {
+			result, err = s.oauth.start(p)
+		}
+	case MethodOAuthPoll:
+		var p oauthPollParams
+		p, err = decodeParams[oauthPollParams](req.Params)
+		if err == nil {
+			var poll OAuthPoll
+			poll, err = s.oauth.poll(p.SessionID)
+			if err == nil && poll.Done && poll.Error == "" {
+				if cfg, ok := s.oauth.takeConfig(p.SessionID); ok {
+					var acct Account
+					acct, err = s.Store.PutAccount(cfg)
+					if err == nil {
+						poll.Account = acct
+						s.broadcast(EventChanged, eventParams{Reason: "account"})
+					}
+				}
+			}
+			result = poll
+		}
+	case MethodOAuthCancel:
+		var p oauthPollParams
+		p, err = decodeParams[oauthPollParams](req.Params)
+		if err == nil {
+			s.oauth.cancel(p.SessionID)
+			result = map[string]bool{"ok": true}
+		}
+	case MethodHostsGuess:
+		var p guessParams
+		p, err = decodeParams[guessParams](req.Params)
+		if err == nil {
+			result = GuessMailHosts(p.Address)
 		}
 	default:
 		err = fmt.Errorf("unknown method %s", req.Method)
@@ -419,11 +596,41 @@ func (s *Server) status() (DaemonStatus, error) {
 		Online:   true,
 		Accounts: len(s.Store.Accounts()),
 	}
+	if ex := asExtra(s.Store); ex != nil {
+		st.Online = ex.Online()
+		st.Outbox = len(ex.ListOutbox())
+	}
 	if err := s.Store.Health(); err != nil {
-		st.Online = false
+		if st.Online {
+			st.Online = false
+		}
 		st.Health = err.Error()
 	}
 	return st, nil
+}
+
+func (s *Server) maybeNotify(accountID string, n int) {
+	if n <= 0 {
+		return
+	}
+	ex := asExtra(s.Store)
+	if ex == nil {
+		return
+	}
+	p := ex.NotifyPrefs()
+	if !p.Enabled {
+		return
+	}
+	title := "New mail"
+	body := itoa(n) + " new message(s)"
+	vip := p.VIPOnly
+	if vip {
+		title = "VIP mail"
+	}
+	if p.Desktop {
+		notifyDesktop(title, body)
+	}
+	s.broadcast(EventNotify, eventParams{AccountID: accountID, Count: n, Title: title, Body: body, VIP: vip})
 }
 
 func (s *Server) send(p composeParams) (appendResult, error) {

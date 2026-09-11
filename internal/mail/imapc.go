@@ -8,7 +8,6 @@ import (
 	"io"
 	"net"
 	"net/mail"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -30,7 +29,8 @@ type imapClient struct {
 	uidnext  uint32
 	exists   int
 	modseq   uint64
-	idle     bool
+	idle         bool
+	lastVanished []uint32
 }
 
 func newIMAPClient(cfg ServerConfig, address string) *imapClient {
@@ -102,6 +102,10 @@ func (c *imapClient) connectLocked() error {
 		return err
 	}
 	_ = c.capabilityLocked()
+	if c.has("QRESYNC") || c.has("ENABLE") {
+		_, _ = c.cmdLocked("ENABLE QRESYNC CONDSTORE")
+		_ = c.capabilityLocked()
+	}
 	return nil
 }
 
@@ -117,13 +121,13 @@ func (c *imapClient) loginLocked() error {
 		auth = "plain"
 	}
 	if auth == "xoauth2" {
-		token := strings.TrimSpace(os.Getenv(EnvXOAuth))
-		if token == "" {
-			return fmt.Errorf("imap: AUTH=XOAUTH2 needs %s (documented stub)", EnvXOAuth)
+		token, err := resolveAccessToken(c.cfg, c.user)
+		if err != nil {
+			return err
 		}
 		raw := fmt.Sprintf("user=%s\x01auth=Bearer %s\x01\x01", c.user, token)
 		b64 := base64.StdEncoding.EncodeToString([]byte(raw))
-		_, err := c.cmdLocked("AUTHENTICATE XOAUTH2 %s", b64)
+		_, err = c.cmdLocked("AUTHENTICATE XOAUTH2 %s", b64)
 		return err
 	}
 	if c.caps["AUTH=PLAIN"] || auth == "plain" {
@@ -326,7 +330,83 @@ func (c *imapClient) selectBox(name string, examine bool) (imapSelect, error) {
 	c.uidval = st.UIDValidity
 	c.uidnext = st.UIDNext
 	c.modseq = st.HighestMod
+	c.lastVanished = parseVanished(lines)
 	return st, nil
+}
+
+// selectSync uses QRESYNC when the server advertised it and we have a prior modseq.
+func (c *imapClient) selectSync(name string, examine bool, meta folderMeta) (imapSelect, []uint32, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if err := c.connectLocked(); err != nil {
+		return imapSelect{}, nil, err
+	}
+	cmd := "SELECT"
+	if examine {
+		cmd = "EXAMINE"
+	}
+	var lines []string
+	var err error
+	if (c.has("QRESYNC") || c.has("ENABLE")) && meta.UIDValidity != 0 && meta.HighestMod != 0 {
+		lines, err = c.cmdLocked("%s %s (QRESYNC (%d %d))", cmd, imapQuote(name), meta.UIDValidity, meta.HighestMod)
+		if err != nil {
+			lines, err = c.cmdLocked("%s %s", cmd, imapQuote(name))
+		}
+	} else {
+		lines, err = c.cmdLocked("%s %s", cmd, imapQuote(name))
+	}
+	if err != nil {
+		return imapSelect{}, nil, err
+	}
+	c.selected = name
+	st := parseSelect(lines)
+	c.exists = st.Exists
+	c.uidval = st.UIDValidity
+	c.uidnext = st.UIDNext
+	c.modseq = st.HighestMod
+	c.lastVanished = parseVanished(lines)
+	return st, c.lastVanished, nil
+}
+
+func (c *imapClient) uidVanished(meta folderMeta) ([]uint32, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return append([]uint32(nil), c.lastVanished...), nil
+}
+
+func parseVanished(lines []string) []uint32 {
+	var out []uint32
+	for _, ln := range lines {
+		u := strings.ToUpper(ln)
+		i := strings.Index(u, "VANISHED")
+		if i < 0 {
+			continue
+		}
+		rest := strings.TrimSpace(ln[i+len("VANISHED"):])
+		if strings.HasPrefix(strings.ToUpper(rest), "(EARLIER)") {
+			rest = strings.TrimSpace(rest[len("(EARLIER)"):])
+		}
+		for _, part := range strings.Split(rest, ",") {
+			part = strings.TrimSpace(part)
+			if part == "" {
+				continue
+			}
+			if a, b, ok := strings.Cut(part, ":"); ok {
+				lo, hi := atoi(a), atoi(b)
+				if hi-lo > 100000 {
+					continue
+				}
+				for n := lo; n <= hi; n++ {
+					out = append(out, uint32(n))
+				}
+				continue
+			}
+			if n := atoi(part); n > 0 {
+				out = append(out, uint32(n))
+			}
+		}
+	}
+	return out
 }
 
 func parseSelect(lines []string) imapSelect {
@@ -364,15 +444,17 @@ func atoi(s string) int {
 }
 
 type imapMeta struct {
-	UID     uint32
-	Flags   []string
-	Size    int
-	From    string
-	To      string
-	Cc      string
-	Subject string
-	Date    time.Time
-	Parts   []Part
+	UID          uint32
+	Flags        []string
+	Size         int
+	From         string
+	To           string
+	Cc           string
+	Subject      string
+	Date         time.Time
+	Parts        []Part
+	RFCMessageID string
+	InReplyTo    string
 }
 
 func (c *imapClient) uidFetchMeta(fromUID uint32) ([]imapMeta, error) {
@@ -871,6 +953,12 @@ func applyEnvelope(m *imapMeta, env sexp) {
 	m.To = formatAddrList(env.List[5])
 	if len(env.List) > 6 {
 		m.Cc = formatAddrList(env.List[6])
+	}
+	if len(env.List) > 8 {
+		m.InReplyTo = env.List[8].Str
+	}
+	if len(env.List) > 9 {
+		m.RFCMessageID = env.List[9].Str
 	}
 }
 

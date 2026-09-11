@@ -1,5 +1,5 @@
 // Command mailclientd is the Mail daemon: accounts, folders, messages,
-// IMAP+SMTP with an on-disk cache. No config means an empty store
+// IMAP+SMTP+OAuth with an on-disk cache. No config means an empty store
 // (first-run add-account). MemoryStore is explicit UITK_MAIL=memory.
 // It listens on a Unix socket and speaks JSON-RPC 2.0 (NDJSON).
 // See docs/mail.md.

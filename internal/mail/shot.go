@@ -19,7 +19,7 @@ var ScreenshotNames = []string{
 	"mail-dark.png", "mail-light.png", "mail-classic.png",
 	"mail-compose.png", "mail-prefs.png",
 	"mail-cards.png", "mail-compact.png", "mail-filters.png",
-	"mail-empty.png",
+	"mail-empty.png", "mail-account.png", "mail-smart.png",
 }
 
 // WriteScreenshots paints the Mail dogfood frames into dir.
@@ -62,7 +62,79 @@ func WriteScreenshots(dir string) error {
 	if err := writePrefsShot(cli, filepath.Join(dir, "mail-filters.png"), 2); err != nil {
 		return err
 	}
-	return writeEmptyShot(filepath.Join(dir, "mail-empty.png"))
+	if err := writeMailFolderShot(cli, filepath.Join(dir, "mail-smart.png"), FolderID("smart/sf-invoices")); err != nil {
+		return err
+	}
+	if err := writeEmptyShot(filepath.Join(dir, "mail-empty.png")); err != nil {
+		return err
+	}
+	return writeAccountShot(filepath.Join(dir, "mail-account.png"))
+}
+
+func writeMailFolderShot(cli *Client, path string, folder FolderID) error {
+	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{
+		Title: "Mail", Width: 1280, Height: 800, Headless: true,
+	})
+	if err != nil {
+		return err
+	}
+	root := Open(a, w, cli, AppOptions{ShowFilter: true})
+	w.SetContent(root)
+	a.PumpOnce()
+	widget.Walk(root, func(c widget.Component) {
+		if tv, ok := c.(*widgets.TreeView); ok {
+			var hit *widgets.TreeNode
+			var walk func([]*widgets.TreeNode)
+			walk = func(nodes []*widgets.TreeNode) {
+				for _, n := range nodes {
+					if id, ok := n.Data.(FolderID); ok && id == folder {
+						hit = n
+					}
+					walk(n.Children)
+				}
+			}
+			walk(tv.Roots)
+			if hit != nil {
+				tv.Selected = hit
+				if tv.OnSelect != nil {
+					tv.OnSelect(hit)
+				}
+			}
+		}
+	})
+	a.PumpOnce()
+	if err := w.WritePNG(path); err != nil {
+		return err
+	}
+	fmt.Println("wrote", path)
+	w.Close()
+	return nil
+}
+
+func writeAccountShot(path string) error {
+	sock, stop, err := StartEmpty(context.Background())
+	if err != nil {
+		return err
+	}
+	defer stop()
+	cli, err := DialWait(sock, 2*time.Second)
+	if err != nil {
+		return err
+	}
+	defer cli.Close()
+	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true})
+	w, err := OpenAddAccount(a, cli, nil)
+	if err != nil {
+		return err
+	}
+	a.PumpOnce()
+	if err := w.WritePNG(path); err != nil {
+		return err
+	}
+	fmt.Println("wrote", path)
+	w.Close()
+	return nil
 }
 
 func writeEmptyShot(path string) error {

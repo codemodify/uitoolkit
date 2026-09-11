@@ -3,6 +3,7 @@ package mail
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/codemodify/uitoolkit"
 	"github.com/codemodify/uitoolkit/app"
@@ -14,11 +15,10 @@ import (
 // FirstRunPrompt is the empty-account modal copy (Yes / No).
 const FirstRunPrompt = "There are no accounts, want to add one?"
 
-// OpenAddAccount opens the IMAP/SMTP setup window. Secrets are not written:
-// passEnv names an environment variable (default UITK_MAIL_PASS).
+// OpenAddAccount opens the IMAP/SMTP / OAuth setup window.
 func OpenAddAccount(a *app.Application, cli *Client, onSaved func()) (*app.Window, error) {
 	win, err := a.NewWindow(platform.WindowOptions{
-		Title: "Add account", Width: 560, Height: 520, MinWidth: 420, MinHeight: 400,
+		Title: "Add account", Width: 600, Height: 640, MinWidth: 460, MinHeight: 480,
 	})
 	if err != nil {
 		return nil, err
@@ -35,14 +35,44 @@ func AddAccountApp(win *app.Window, cli *Client, onSaved func()) widget.Componen
 	smtpHost := widgets.NewTextField("smtp.example.com:587", "smtp.host:587", nil)
 	user := widgets.NewTextField("", "IMAP/SMTP username (defaults to address)", nil)
 	passEnv := widgets.NewTextField(EnvPass, "Env var holding the password (not the password)", nil)
-	note := widgets.NewLabel(
-		"Passwords are never stored in mail.json.\n" +
-			"Set the environment variable named above (default UITK_MAIL_PASS),\n" +
-			"then Get Messages. Config: " + ConfigPath(),
+	clientID := widgets.NewTextField("", "OAuth client id (required for Google/Microsoft)", nil)
+	clientSecret := widgets.NewTextField("", "OAuth client secret (optional for public clients)", nil)
+	hint := widgets.NewLabel("Type an email — IMAP/SMTP are guessed from the domain when possible.")
+	oauthNote := widgets.NewLabel(
+		"OAuth: register your own Google Cloud / Azure app.\n" +
+			"Redirect: http://127.0.0.1:<port>/oauth/callback (loopback) or device code.\n" +
+			"Or set UITK_MAIL_OAUTH_GOOGLE_CLIENT_ID / UITK_MAIL_OAUTH_MS_CLIENT_ID.\n" +
+			"Tokens: encrypted files under the data dir (AES-GCM; secret-tool if present).",
 	)
-	status := widgets.NewStatusBar("IMAP + SMTP account.", ConfigPath(), "v"+uitoolkit.Version)
+	status := widgets.NewStatusBar("IMAP + SMTP · OAuth or passEnv", ConfigPath(), "v"+uitoolkit.Version)
 
-	save := widgets.NewButton("Save", func() {
+	applyGuess := func(email string) {
+		g := GuessMailHosts(email)
+		if g.IMAP != "" {
+			imapHost.SetText(g.IMAP)
+		}
+		if g.SMTP != "" {
+			smtpHost.SetText(g.SMTP)
+		}
+		msg := "Guessed " + g.IMAP + " / " + g.SMTP
+		if g.AuthHint != "" {
+			msg += "\n" + g.AuthHint
+		}
+		if g.Provider != "" {
+			msg += "  ·  provider " + g.Provider
+		}
+		hint.SetText(msg)
+		if win != nil {
+			win.RequestLayout()
+		}
+	}
+	addr.OnChange = func(s string) {
+		if strings.Contains(s, "@") {
+			applyGuess(s)
+		}
+	}
+
+	savePass := func() {
 		cfg := AccountConfig{
 			Name:    strings.TrimSpace(name.Text),
 			Address: strings.TrimSpace(addr.Text),
@@ -69,7 +99,65 @@ func AddAccountApp(win *app.Window, cli *Client, onSaved func()) widget.Componen
 			fmt.Sprintf("%s <%s>\n\nSet %s in the environment, restart mailclientd if it was started without it, then Get Messages.",
 				acct.Name, acct.Address, envVarName(cfg.IMAP.PassEnv)),
 			func() { win.Close() })
+	}
+
+	runOAuth := func(provider, flow string) {
+		email := strings.TrimSpace(addr.Text)
+		if email == "" {
+			widgets.Warn(win.Content(), "OAuth", "Enter the email address first.", nil)
+			return
+		}
+		st, err := cli.StartOAuth(provider, email, strings.TrimSpace(name.Text),
+			strings.TrimSpace(clientID.Text), strings.TrimSpace(clientSecret.Text), flow)
+		if err != nil {
+			widgets.Warn(win.Content(), "OAuth", err.Error()+"\n\nSee docs/mail.md — you must register an app and supply a client id.", nil)
+			return
+		}
+		hint.SetText(st.Message + "\n" + st.AuthURL)
+		status.Set(0, "Waiting for "+provider+"…")
+		go func() {
+			deadline := time.Now().Add(3 * time.Minute)
+			for time.Now().Before(deadline) {
+				poll, err := cli.PollOAuth(st.SessionID)
+				if err != nil {
+					return
+				}
+				if poll.Pending {
+					time.Sleep(800 * time.Millisecond)
+					continue
+				}
+				if poll.Error != "" {
+					return
+				}
+				if poll.Done {
+					if onSaved != nil {
+						onSaved()
+					}
+					return
+				}
+			}
+		}()
+		msg := st.Message
+		if st.UserCode != "" {
+			msg += "\nUser code: " + st.UserCode
+		}
+		widgets.Info(win.Content(), "Sign in with "+provider, msg+"\n\n"+st.AuthURL, func() {
+			if onSaved != nil {
+				onSaved()
+			}
+		})
+	}
+
+	google := widgets.NewButton("Sign in with Google", func() { runOAuth("google", "loopback") })
+	ms := widgets.NewButton("Sign in with Microsoft", func() { runOAuth("microsoft", "loopback") })
+	device := widgets.NewButton("Device code…", func() {
+		p := providerForAddress(addr.Text)
+		if p == "" {
+			p = "google"
+		}
+		runOAuth(p, "device")
 	})
+	save := widgets.NewButton("Save passEnv account", savePass)
 	save.Primary = true
 	cancel := widgets.NewButton("Cancel", func() { win.Close() })
 
@@ -77,14 +165,18 @@ func AddAccountApp(win *app.Window, cli *Client, onSaved func()) widget.Componen
 		widgets.NewTitle("Add account"),
 		labeled("Name", name),
 		labeled("Email", addr),
+		hint,
 		labeled("IMAP host", imapHost),
 		labeled("SMTP host", smtpHost),
 		labeled("Username", user),
 		labeled("Password env var", passEnv),
-		note,
-	).WithGap(8)
-	tools := widgets.NewRow(widgets.NewSpacer(), cancel, save).WithGap(8)
-	chrome := widgets.NewTitleBar("Add account", "passEnv · no secrets in the file")
+		widgets.NewLabel("OAuth (Google / Microsoft) — your client id, not ours"),
+		labeled("OAuth client id", clientID),
+		labeled("OAuth client secret", clientSecret),
+		oauthNote,
+	).WithGap(6)
+	tools := widgets.NewRow(google, ms, device, widgets.NewSpacer(), cancel, save).WithGap(8)
+	chrome := widgets.NewTitleBar("Add account", "auto-guess · OAuth or passEnv · no secrets in mail.json")
 	pad := widgets.NewPad(12, form)
 	root := widgets.NewColumn(chrome, pad, tools, status).WithGap(0)
 	root.AddFlex(pad, 1)
