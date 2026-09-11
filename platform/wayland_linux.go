@@ -23,6 +23,7 @@ package platform
 #include "xdg-decoration-unstable-v1-client-protocol.h"
 #include "fractional-scale-v1-client-protocol.h"
 #include "viewporter-client-protocol.h"
+#include "wayland_dmabuf.h"
 
 extern void uitkWlRegistryGlobal(uintptr_t id, struct wl_registry *reg, uint32_t name, char *iface, uint32_t ver);
 extern void uitkWlPing(uintptr_t id, struct xdg_wm_base *wm, uint32_t serial);
@@ -684,8 +685,9 @@ import (
 	"github.com/codemodify/paintengine2d"
 )
 
-// WaylandBackend presents paintengine2d pixmaps through wl_shm and
-// xdg-shell toplevels.
+// WaylandBackend presents paintengine2d pixmaps through linux-dmabuf
+// (zwp_linux_dmabuf_v1) when the compositor and a local allocator allow
+// it, otherwise wl_shm. Override with UITK_WAYLAND_PRESENT=shm|dmabuf|auto.
 type WaylandBackend struct{}
 
 func (WaylandBackend) Name() string { return "wayland" }
@@ -810,22 +812,22 @@ type wlConn struct {
 	serial     uint32
 	outScale   float32
 
-	dataMan    *C.struct_wl_data_device_manager
-	dataDev    *C.struct_wl_data_device
-	dataSrc    *C.struct_wl_data_source
-	clipOffer  *C.struct_wl_data_offer
-	clipMime   string
-	clipText   string
-	pendingOff *C.struct_wl_data_offer
+	dataMan     *C.struct_wl_data_device_manager
+	dataDev     *C.struct_wl_data_device
+	dataSrc     *C.struct_wl_data_source
+	clipOffer   *C.struct_wl_data_offer
+	clipMime    string
+	clipText    string
+	pendingOff  *C.struct_wl_data_offer
 	pendingMime string
 
-	primMan    *C.struct_zwp_primary_selection_device_manager_v1
-	primDev    *C.struct_zwp_primary_selection_device_v1
-	primSrc    *C.struct_zwp_primary_selection_source_v1
-	primOffer  *C.struct_zwp_primary_selection_offer_v1
-	primMime   string
-	primText   string
-	pendPrim   *C.struct_zwp_primary_selection_offer_v1
+	primMan      *C.struct_zwp_primary_selection_device_manager_v1
+	primDev      *C.struct_zwp_primary_selection_device_v1
+	primSrc      *C.struct_zwp_primary_selection_source_v1
+	primOffer    *C.struct_zwp_primary_selection_offer_v1
+	primMime     string
+	primText     string
+	pendPrim     *C.struct_zwp_primary_selection_offer_v1
 	pendPrimMime string
 
 	textMan    *C.struct_zwp_text_input_manager_v3
@@ -844,6 +846,17 @@ type wlConn struct {
 	viewporter *C.struct_wp_viewporter
 	output     *C.struct_wl_output
 
+	dmabuf     unsafe.Pointer // *zwp_linux_dmabuf_v1
+	dmabufFB   unsafe.Pointer // *zwp_linux_dmabuf_feedback_v1
+	dmabufVer  int
+	dmaPairs   []dmaFmtMod
+	dmaTable   []dmaFmtMod
+	useDmabuf  bool
+	dmaFmt     uint32
+	dmaMod     uint64
+	dmaSwizzle bool
+	dmaAlloc   string
+
 	repeatRate  int
 	repeatDelay int
 	repeatKey   uint32
@@ -854,12 +867,14 @@ type wlConn struct {
 }
 
 type wlSlot struct {
-	buf  *C.struct_wl_buffer
-	mem  unsafe.Pointer
-	size int
-	fd   int
-	w, h int
-	busy bool
+	buf    *C.struct_wl_buffer
+	mem    unsafe.Pointer
+	size   int
+	fd     int
+	w, h   int
+	stride int
+	busy   bool
+	dma    unsafe.Pointer // *ui_dmabuf_bo
 }
 
 type wlSurface struct {
@@ -916,7 +931,14 @@ func wlRetain() (*wlConn, error) {
 	wlMu.Unlock()
 	C.ui_wl_roundtrip(dpy)
 	C.ui_wl_roundtrip(dpy)
+	if c.dmabuf != nil && c.dmabufVer >= 4 && WaylandPresentPref() != WaylandPresentSHM {
+		wlMu.Lock()
+		c.requestDmabufFeedback()
+		wlMu.Unlock()
+		C.ui_wl_roundtrip(dpy)
+	}
 	wlMu.Lock()
+	c.chooseWaylandPresent()
 	if c.compositor == nil || c.shm == nil || c.wm == nil {
 		c.closeLocked()
 		return nil, fmt.Errorf("platform: Wayland registry missing compositor/shm/xdg-shell")
@@ -982,6 +1004,7 @@ func (c *wlConn) closeLocked() {
 		C.ui_wl_prim_man_destroy(c.primMan)
 		c.primMan = nil
 	}
+	c.destroyDmabufLocked()
 	if c.decoMan != nil {
 		C.ui_wl_deco_man_destroy(c.decoMan)
 		c.decoMan = nil
@@ -1039,7 +1062,7 @@ func (s *wlSurface) Title() string                { return s.title }
 func (s *wlSurface) Size() (w, h int)             { return s.img.Width, s.img.Height }
 func (s *wlSurface) Buffer() *paintengine2d.Image { return s.img }
 func (s *wlSurface) Closed() bool                 { return s.closed }
-func (s *wlSurface) Scale() float32 { return s.deviceScale() }
+func (s *wlSurface) Scale() float32               { return s.deviceScale() }
 
 func (s *wlSurface) deviceScale() float32 {
 	if s.frac > 1 {
@@ -1173,7 +1196,15 @@ func (s *wlSurface) Present(dirty []paintengine2d.Rect) error {
 	}
 	slot := s.pickSlot()
 	if err := s.ensureSlot(slot, s.img.Width, s.img.Height); err != nil {
-		return err
+		if s.conn.useDmabuf {
+			s.conn.useDmabuf = false
+			s.destroySlot(slot)
+			if err2 := s.ensureSlot(slot, s.img.Width, s.img.Height); err2 != nil {
+				return err
+			}
+		} else {
+			return err
+		}
 	}
 	if len(dirty) == 0 {
 		dirty = []paintengine2d.Rect{paintengine2d.XYWH(0, 0, float32(s.img.Width), float32(s.img.Height))}
@@ -1225,6 +1256,19 @@ func (s *wlSurface) ensureSlot(i, w, h int) error {
 		return nil
 	}
 	s.destroySlot(i)
+	if s.conn != nil && s.conn.useDmabuf {
+		if err := s.ensureDmabufSlot(i, w, h); err == nil {
+			if s.slots[i].buf != nil {
+				C.ui_wl_buf_listen(s.slots[i].buf, C.uintptr_t(s.id), C.int(i))
+			}
+			return nil
+		}
+		s.conn.useDmabuf = false
+	}
+	return s.ensureShmSlot(i, w, h)
+}
+
+func (s *wlSurface) ensureShmSlot(i, w, h int) error {
 	stride := w * 4
 	size := stride * h
 	if size < 4 {
@@ -1242,7 +1286,7 @@ func (s *wlSurface) ensureSlot(i, w, h int) error {
 		return fmt.Errorf("platform: wl_shm_pool_create_buffer failed")
 	}
 	C.ui_wl_buf_listen(buf, C.uintptr_t(s.id), C.int(i))
-	s.slots[i] = wlSlot{buf: buf, mem: mem, size: size, fd: -1, w: w, h: h}
+	s.slots[i] = wlSlot{buf: buf, mem: mem, size: size, fd: -1, w: w, h: h, stride: stride}
 	return nil
 }
 
@@ -1251,6 +1295,11 @@ func (s *wlSurface) destroySlot(i int) {
 	if sl.buf != nil {
 		C.ui_wl_buf_destroy(sl.buf)
 		sl.buf = nil
+	}
+	if sl.dma != nil {
+		s.freeDmabufSlot(i)
+		*sl = wlSlot{}
+		return
 	}
 	if sl.mem != nil {
 		C.ui_wl_munmap(sl.mem, C.size_t(sl.size))
@@ -1264,31 +1313,16 @@ func (s *wlSurface) copyRect(slot int, r paintengine2d.Rect) {
 	if sl.mem == nil {
 		return
 	}
-	x0, y0, x1, y1 := r.IntBounds()
-	if x0 < 0 {
-		x0 = 0
-	}
-	if y0 < 0 {
-		y0 = 0
-	}
-	if x1 > s.img.Width {
-		x1 = s.img.Width
-	}
-	if y1 > s.img.Height {
-		y1 = s.img.Height
-	}
-	if x0 >= x1 || y0 >= y1 {
-		return
-	}
 	dst := unsafe.Slice((*byte)(sl.mem), sl.size)
-	stride := sl.w * 4
-	for y := y0; y < y1; y++ {
-		row := y * stride
-		for x := x0; x < x1; x++ {
-			n := s.img.NRGBAAt(x, y)
-			packXPixel(dst[row+x*4:], n.R, n.G, n.B, n.A, false, 0x00ff0000, 0x0000ff00, 0x000000ff)
-		}
+	stride := sl.stride
+	if stride < sl.w*4 {
+		stride = sl.w * 4
 	}
+	swizzle := true
+	if sl.dma != nil && s.conn != nil {
+		swizzle = s.conn.dmaSwizzle
+	}
+	copyImageRect(dst, stride, s.img, r, swizzle)
 }
 
 func (s *wlSurface) Poll() []Event {
@@ -1479,6 +1513,22 @@ func uitkWlRegistryGlobal(id C.uintptr_t, reg *C.struct_wl_registry, name C.uint
 		c.fracMan = (*C.struct_wp_fractional_scale_manager_v1)(C.ui_wl_bind(reg, name, C.ui_wl_frac_man_iface(), 1))
 	case "wp_viewporter":
 		c.viewporter = (*C.struct_wp_viewporter)(C.ui_wl_bind(reg, name, C.ui_wl_viewporter_iface(), 1))
+	case "zwp_linux_dmabuf_v1":
+		if WaylandPresentPref() == WaylandPresentSHM {
+			break
+		}
+		v := ver
+		if v > 5 {
+			v = 5
+		}
+		if v >= 1 {
+			d := C.ui_wl_bind(reg, name, C.ui_wl_dmabuf_iface(), v)
+			if d != nil {
+				c.dmabuf = d
+				c.dmabufVer = int(v)
+				C.ui_wl_dmabuf_listen((*C.struct_zwp_linux_dmabuf_v1)(d), C.uintptr_t(c.id))
+			}
+		}
 	}
 }
 
@@ -2238,4 +2288,3 @@ func wlReadFD(c *wlConn, request func(fd int)) (string, bool) {
 	C.ui_wl_close_fd(fds[0])
 	return string(out), true
 }
-
