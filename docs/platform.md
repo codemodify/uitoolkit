@@ -6,8 +6,8 @@ CPU pixmap onto a window and translates input.
 | Backend | When | Present | Clipboard | Scale | IME |
 | --- | --- | --- | --- | --- | --- |
 | **offscreen** | `Headless`, `UITK_BACKEND=offscreen`, or no display | no-op | in-process | env or 1 | n/a |
-| **Wayland** | Linux + CGO + `WAYLAND_DISPLAY` | `wl_shm` ARGB8888 | in-process only | env only | none (no text-input-v3) |
-| **X11** | Linux + CGO + `DISPLAY` | dirty-rect `XPutImage` | CLIPBOARD + PRIMARY | Xft.dpi, screen mm, env | XIM compose / dead keys |
+| **Wayland** | Linux + CGO + `WAYLAND_DISPLAY` | `wl_shm` ARGB8888, damage, integer / fractional buffer scale | `wl_data_device` + primary when the compositor offers it | `wl_output` scale, `wp_fractional_scale_v1` + viewporter, env | `zwp_text_input_v3` preedit / commit |
+| **X11** | Linux + CGO + `DISPLAY` | dirty-rect `XPutImage`, MIT-SHM when the server allows it | CLIPBOARD + PRIMARY, ICCCM **INCR** | Xft.dpi, RandR mm, screen mm, env | XIM preedit callbacks + compose / dead keys |
 | Win32 / AppKit | stub | — | — | — | — |
 
 Auto-select: Wayland if `WAYLAND_DISPLAY` is set **and** a compositor
@@ -30,45 +30,70 @@ go run ./examples/gallery -headless
 CGO_ENABLED=0 go test ./...
 ```
 
-CGO Linux links `libX11`, `libwayland-client`, and `libxkbcommon`.
-`CGO_ENABLED=0` never needs those libraries.
+CGO Linux links `libX11`, `libXext`, `libXrandr`, `libwayland-client`,
+and `libxkbcommon`. `CGO_ENABLED=0` never needs those libraries.
 
-## X11 notes (0.1.8+)
+## X11 notes (0.3.0)
 
 - One shared `Display` for all windows. Destroying a window frees its
-  `XImage`, GC, XIC, and `XID`; the connection closes when the last
-  surface is gone and no selection is owned.
+  `XImage` / MIT-SHM segment, GC, XIC, and `XID`; the connection closes
+  when the last surface is gone and no selection is owned.
 - Present copies premul RGBA into a 32-bit ZPixmap using the visual
-  masks and `XImage` byte order / `bytes_per_line`, then `XPutImage`
-  of each damage rect. MIT-SHM is not used.
-- Resize uses `NorthWestGravity` and rebuilds the pixmap; the toolkit
-  full-repaints so expose after configure is not garbage.
+  masks and `XImage` byte order / `bytes_per_line`. MIT-SHM
+  (`XShmPutImage`) is used when `XShmAttach` succeeds; Xvfb, SSH, and
+  locked-down servers fall back to `XPutImage` of each damage rect.
+- Resize uses `NorthWestGravity`, `XResizeWindow`, and a rebuilt pixmap;
+  the toolkit full-repaints so expose after configure is not garbage.
+- EWMH: `Window.SetFullscreen` / `SetMaximized` send `_NET_WM_STATE`.
+  Close is `WM_DELETE_WINDOW`.
 - `ClipboardSet` owns **CLIPBOARD** and **PRIMARY**. `ClipboardGet`
-  converts UTF8_STRING (then XA_STRING). INCR (very large pastes) is
-  not implemented.
-- Input: `XFilterEvent` + `Xutf8LookupString` on an XIC created with
-  `XIMPreeditNothing | XIMStatusNothing`. Dead keys and compose work.
-  **Not implemented:** on-the-spot / over-the-spot preedit, candidate
-  windows, or CJK composition UI.
+  converts UTF8_STRING (then XA_STRING). Transfers larger than
+  `UITK_X11_INCR_THRESHOLD` (default 16KiB, or ¼ of `XMaxRequestSize`)
+  use the ICCCM **INCR** protocol in both directions.
+- Input: `XkbSetDetectableAutoRepeat`, `XFilterEvent`, and
+  `Xutf8LookupString` on an XIC. The IC is created with
+  `XIMPreeditCallbacks | XIMStatusNothing` when the IM accepts it
+  (fallback: `XIMPreeditNothing`). Preedit draw/caret callbacks become
+  `EventIMEPreedit` and land in TextField / TextArea as underlined
+  composition. Candidate windows stay with the IM (ibus / fcitx / XIM).
+  Focus-out calls `XmbResetIC` and `EventIMECancel`.
+- Scale: `UITK_SCALE` / `GDK_SCALE` / `QT_SCALE_FACTOR` / `GDK_DPI_SCALE`,
+  then Xft.dpi, then RandR output mm vs CRTC pixels, then screen mm.
+  Buffer and event coordinates stay device pixels; metrics grow with scale.
 
-## Wayland notes (0.2.0)
+## Wayland notes (0.3.0)
 
 - `wl_display_connect` → registry bind of `wl_compositor`, `wl_shm`,
-  `xdg_wm_base`, `wl_seat`. Each window is an `xdg_toplevel`.
+  `xdg_wm_base`, `wl_seat`, `wl_data_device_manager`, `wl_output`, and
+  optional `zwp_text_input_manager_v3`,
+  `zwp_primary_selection_device_manager_v1`,
+  `zxdg_decoration_manager_v1`, `wp_fractional_scale_manager_v1`,
+  `wp_viewporter`.
+- Each window is an `xdg_toplevel`. Configure width/height are
+  surface-local (logical); the shm buffer is `ceil(logical * scale)`.
+  States maximized / fullscreen / resizing / activated are parsed.
+  `xdg_toplevel.close` is `EventClose`. Server-side decorations are
+  requested when `xdg-decoration` is present.
 - Present: two `wl_shm` pools (memfd-style temp files), ARGB8888
   (little-endian B,G,R,A), `wl_surface_damage_buffer` (or
-  `wl_surface_damage` on compositor v3), attach, commit. dmabuf / GPU
-  compositors are deferred.
-- Seat: pointer (motion, buttons, axis) and keyboard via **xkbcommon**
-  (keymap fd, keysyms, UTF-8). Mapped onto the existing `Event` types.
-- Configure / close: `xdg_toplevel.configure` resizes the pixmap;
-  `xdg_toplevel.close` is `EventClose`. First commit waits for
-  configure before attaching a buffer.
-- **Gaps:** no `zwp_text_input_v3` IME, no `wl_data_device` clipboard,
-  no `wp_fractional_scale` / buffer scale (use `UITK_SCALE`), no
-  decorations protocol (the compositor draws CSD/SSD).
+  `wl_surface_damage` on compositor v3), attach, commit.
+  Integer `wl_surface.set_buffer_scale` or fractional-scale + viewport
+  destination. dmabuf / GPU compositors are deferred.
+- Seat: pointer (motion, buttons, axis) with coordinates multiplied by
+  buffer scale; keyboard via **xkbcommon** (keymap, mods, UTF-8,
+  compose / dead keys) plus compositor `repeat_info`.
+- Clipboard: `wl_data_device` copy/paste (`text/plain;charset=utf-8`).
+  Primary selection when the compositor binds
+  `zwp_primary_selection_v1` (Weston does). Middle-click paste uses
+  `ClipboardPrimaryGet`.
+- IME: `zwp_text_input_v3` enable on keyboard enter; `preedit_string`,
+  `commit_string`, and `delete_surrounding_text` become `EventIME*`.
+  Cursor rectangle is updated from the focused TextField / TextArea.
+  When text-input has entered the surface, printable UTF-8 from xkb is
+  suppressed so commit is not doubled.
 
-xdg-shell C is generated from wayland-protocols and committed:
+xdg-shell and the optional protocols are generated from
+wayland-protocols and committed:
 
 ```bash
 wayland-scanner client-header \
@@ -77,12 +102,27 @@ wayland-scanner client-header \
 wayland-scanner private-code \
   /usr/share/wayland-protocols/stable/xdg-shell/xdg-shell.xml \
   platform/xdg-shell-protocol.c
+# same for text-input-unstable-v3, primary-selection-unstable-v1,
+# xdg-decoration-unstable-v1, fractional-scale-v1, viewporter
 ```
 
 ## HiDPI
 
 `Options.Scale <= 0` detects scale (`UITK_SCALE`, `GDK_SCALE`,
-`QT_SCALE_FACTOR`, then Xft.dpi / 96 on X11). The Classic look is
+`QT_SCALE_FACTOR`, `GDK_DPI_SCALE`, then native). The Classic look is
 rebuilt with `style.ScaleMetrics` so control heights and baked glyph
-atlases grow. Logical-pixel windows are not used; the buffer stays
-device pixels. Wayland does not yet read compositor scale.
+atlases grow.
+
+On **X11** the window buffer is the pixel size the WM gave; scale only
+grows metrics. On **Wayland** configure size is logical and the shm
+buffer is scaled; pointer events are multiplied so hit-testing matches
+the pixmap. Set `UITK_SCALE` to the compositor scale (often `2`) so
+metrics and buffer scale agree.
+
+## Deferred
+
+- AT-SPI / accessibility
+- IME candidate-window theming (the IM draws its own window)
+- Wayland dmabuf / explicit sync
+- Client-side decoration chrome beyond the existing TitleBar widget
+- Win32 and AppKit
