@@ -43,6 +43,7 @@ type TreeView struct {
 	hover     *TreeNode
 	lastClick *TreeNode
 	lastAt    time.Time
+	rows      rowSceneCache
 }
 
 // NewTreeView constructs a tree.
@@ -126,11 +127,35 @@ func (t *TreeView) Paint(ctx *paintengine2d.Context) {
 	if hi > len(rows) {
 		hi = len(rows)
 	}
-	for i := lo; i < hi; i++ {
-		y := float32(i)*rh - t.OffsetY
-		row := paintengine2d.XYWH(0, y, b.Dx(), rh)
-		n := rows[i].node
-		lk.DrawTreeRow(ctx, row, n == t.Selected, n == t.hover, n.Expanded, n.Leaf(), rows[i].depth, n.Label)
+	if rec, ok := ctx.Device().(*paintengine2d.Recorder); ok {
+		ob := t.Bounds()
+		t.rows.ready(ob.Min.X, ob.Min.Y, b.Dx(), rh)
+		recordScrollingRows(rec, &t.rows, t.ID()^(1<<32), t.OffsetY, 0, lo, hi,
+			func(i int) uint64 { return t.ID()<<32 | uint64(i) + 1 },
+			func(i int) uint64 {
+				n := rows[i].node
+				extra := uint64(rows[i].depth+1) << 8
+				if n.Expanded {
+					extra |= 1
+				}
+				if n.Leaf() {
+					extra |= 2
+				}
+				return visualSig(n == t.Selected, n == t.hover, extra, n.Label)
+			},
+			func(i int) {
+				n := rows[i].node
+				y := float32(i) * rh
+				lk.DrawTreeRow(ctx, paintengine2d.XYWH(0, y, b.Dx(), rh), n == t.Selected, n == t.hover, n.Expanded, n.Leaf(), rows[i].depth, n.Label)
+			},
+		)
+	} else {
+		for i := lo; i < hi; i++ {
+			y := float32(i)*rh - t.OffsetY
+			row := paintengine2d.XYWH(0, y, b.Dx(), rh)
+			n := rows[i].node
+			lk.DrawTreeRow(ctx, row, n == t.Selected, n == t.hover, n.Expanded, n.Leaf(), rows[i].depth, n.Label)
+		}
 	}
 	ctx.Restore()
 	if t.Focused() {
@@ -359,6 +384,7 @@ func (t *TreeView) Toggle(n *TreeNode) {
 		return
 	}
 	n.Expanded = !n.Expanded
+	t.rows.reset()
 	t.clamp()
 	t.Invalidate()
 	if t.OnToggle != nil {

@@ -18,6 +18,7 @@ type ListView struct {
 	OnContext func(i int, windowPos paintengine2d.Point)
 	OffsetY   float32
 	hovered   int
+	rows      rowSceneCache
 }
 
 func NewListView(count int, text func(int) string, on func(int)) *ListView {
@@ -87,14 +88,37 @@ func (l *ListView) Paint(ctx *paintengine2d.Context) {
 	ctx.ClipRect(b)
 	rh := l.rowH()
 	lo, hi := l.visibleRange()
-	for i := lo; i < hi; i++ {
-		y := float32(i)*rh - l.OffsetY
-		row := paintengine2d.XYWH(0, y, b.Dx(), rh)
-		label := ""
-		if l.ItemText != nil {
-			label = l.ItemText(i)
+	if rec, ok := ctx.Device().(*paintengine2d.Recorder); ok {
+		ob := l.Bounds()
+		l.rows.ready(ob.Min.X, ob.Min.Y, b.Dx(), rh)
+		recordScrollingRows(rec, &l.rows, l.ID()^(1<<32), l.OffsetY, 0, lo, hi,
+			func(i int) uint64 { return l.ID()<<32 | uint64(i) + 1 },
+			func(i int) uint64 {
+				label := ""
+				if l.ItemText != nil {
+					label = l.ItemText(i)
+				}
+				return visualSig(i == l.Selected, i == l.hovered, bits32(b.Dx()), label)
+			},
+			func(i int) {
+				label := ""
+				if l.ItemText != nil {
+					label = l.ItemText(i)
+				}
+				y := float32(i) * rh
+				lk.DrawListRow(ctx, paintengine2d.XYWH(0, y, b.Dx(), rh), i == l.Selected, i == l.hovered, label)
+			},
+		)
+	} else {
+		for i := lo; i < hi; i++ {
+			y := float32(i)*rh - l.OffsetY
+			row := paintengine2d.XYWH(0, y, b.Dx(), rh)
+			label := ""
+			if l.ItemText != nil {
+				label = l.ItemText(i)
+			}
+			lk.DrawListRow(ctx, row, i == l.Selected, i == l.hovered, label)
 		}
-		lk.DrawListRow(ctx, row, i == l.Selected, i == l.hovered, label)
 	}
 	ctx.Restore()
 	if l.Focused() {

@@ -34,6 +34,7 @@ type TableView struct {
 	hovered   int
 	hoverCol  int
 	pressCol  int
+	rows      rowSceneCache
 }
 
 // NewTableView builds a table. selected starts at -1.
@@ -199,22 +200,62 @@ func (t *TableView) Paint(ctx *paintengine2d.Context) {
 	ctx.ClipRect(body)
 	rh := t.rowH()
 	lo, hi := t.visibleRange()
-	for row := lo; row < hi; row++ {
-		y := hh + float32(row)*rh - t.OffsetY
-		cx := float32(0)
-		for col := range t.Columns {
-			w := widths[col]
-			cell := paintengine2d.XYWH(cx, y, w, rh)
-			label := ""
-			if t.CellText != nil {
-				label = t.CellText(row, col)
+	if rec, ok := ctx.Device().(*paintengine2d.Recorder); ok {
+		ob := t.Bounds()
+		t.rows.ready(ob.Min.X, ob.Min.Y, b.Dx(), rh)
+		recordScrollingRows(rec, &t.rows, t.ID()^(1<<32), t.OffsetY, hh, lo, hi,
+			func(i int) uint64 { return t.ID()<<32 | uint64(i) + 1 },
+			func(i int) uint64 {
+				extra := bits32(b.Dx())
+				if t.Mono {
+					extra ^= 0x4d
+				}
+				parts := make([]string, len(t.Columns))
+				for col := range t.Columns {
+					if t.CellText != nil {
+						parts[col] = t.CellText(i, col)
+					}
+					extra ^= bits32(widths[col]) << uint(col%16)
+				}
+				return visualSig(i == t.Selected, i == t.hovered, extra, parts...)
+			},
+			func(i int) {
+				y := float32(i) * rh
+				cx := float32(0)
+				for col := range t.Columns {
+					w := widths[col]
+					cell := paintengine2d.XYWH(cx, y, w, rh)
+					label := ""
+					if t.CellText != nil {
+						label = t.CellText(i, col)
+					}
+					face := lk.Font()
+					if t.Mono {
+						face = lk.MonoFont()
+					}
+					lk.DrawTableCell(ctx, cell, i == t.Selected, i == t.hovered, label, t.Columns[col].Align, face)
+					cx += w
+				}
+			},
+		)
+	} else {
+		for row := lo; row < hi; row++ {
+			y := hh + float32(row)*rh - t.OffsetY
+			cx := float32(0)
+			for col := range t.Columns {
+				w := widths[col]
+				cell := paintengine2d.XYWH(cx, y, w, rh)
+				label := ""
+				if t.CellText != nil {
+					label = t.CellText(row, col)
+				}
+				face := lk.Font()
+				if t.Mono {
+					face = lk.MonoFont()
+				}
+				lk.DrawTableCell(ctx, cell, row == t.Selected, row == t.hovered, label, t.Columns[col].Align, face)
+				cx += w
 			}
-			face := lk.Font()
-			if t.Mono {
-				face = lk.MonoFont()
-			}
-			lk.DrawTableCell(ctx, cell, row == t.Selected, row == t.hovered, label, t.Columns[col].Align, face)
-			cx += w
 		}
 	}
 	ctx.Restore()
