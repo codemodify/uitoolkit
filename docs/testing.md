@@ -107,7 +107,8 @@ broken code:
 - If the bug only shows up in a real app, add a driver step in
   `internal/apptest` with an invariant check after the action.
 - Context-menu / MenuBar clip: `TestPopupMenuFitsLongLabelsAndManyItems`,
-  `TestMenuBarDropdownFitsLabelsAndShortcuts`, Mail driver `context-menu`.
+  `TestMenuBarDropdownFitsLabelsAndShortcuts`,
+  `TestMenuBarHelpNearRightEdgeFitsAboutMail`, Mail driver `context-menu`.
 - ComboBox overlap / clipped rows: `TestComboBoxPopupClearsFieldAndFitsLabels`
   plus the gallery driver `combo-popup` step.
 

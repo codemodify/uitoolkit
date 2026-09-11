@@ -170,33 +170,10 @@ func PlacePopupForAnchor(from, popup Component, anchor paintengine2d.Rect, minW,
 		w = minW
 	}
 	inset := float32(4)
-	surfW, surfH := float32(0), float32(0)
-	if sz, ok := popupSurface(popup); ok {
-		ww, hh := sz.SurfaceSize()
-		if ww > 8 {
-			surfW = float32(ww)
-		}
-		if hh > 8 {
-			surfH = float32(hh)
-		}
-	}
+	surfW, surfH := popupSurfaceWH(popup)
 
-	maxX := surfW - inset
-	if surfW <= 0 {
-		maxX = w + inset
-	}
-	availW := maxX - inset
-	if surfW > 0 && w > availW && availW > 1 {
-		w = availW
-	}
-	x := anchor.Min.X
-	if x+w > maxX {
-		x = maxX - w
-	}
-	if x < inset {
-		x = inset
-	}
-
+	// Vertical: flip or scroll (v0.10.8). Height may shrink; width must not
+	// be reduced to the leftover strip beside the anchor.
 	below, above := float32(1e9), float32(1e9)
 	if surfH > 0 {
 		below = surfH - inset - (anchor.Max.Y + gap)
@@ -221,28 +198,24 @@ func PlacePopupForAnchor(from, popup Component, anchor paintengine2d.Rect, minW,
 		sz := popup.Measure(layout.Constraints{MaxW: -1, MaxH: h})
 		if sz.X > w {
 			w = sz.X
-			if surfW > 0 && w > availW {
-				w = availW
-			}
 		}
 		if sz.Y > 0 && sz.Y < h {
 			h = sz.Y
 		}
+		if w < minW {
+			w = minW
+		}
+		if w < intrinsic.X {
+			w = intrinsic.X
+		}
 	}
 
+	x, w := shiftPopupX(anchor.Min.X, w, surfW, inset)
 	y := anchor.Max.Y + gap
 	if !placeBelow {
 		y = anchor.Min.Y - gap - h
 	}
-	if y < inset {
-		y = inset
-	}
-	if surfH > 0 && y+h > surfH-inset {
-		y = surfH - inset - h
-		if y < inset {
-			y = inset
-		}
-	}
+	y, h = shiftPopupY(y, h, surfH, inset)
 	popup.Arrange(paintengine2d.XYWH(x, y, w, h))
 }
 
@@ -256,31 +229,22 @@ func PlacePopup(popup Component, origin paintengine2d.Point, maxW, maxH float32)
 	}
 	intrinsic := popup.Measure(layout.Unbounded())
 	w, h := intrinsic.X, intrinsic.Y
-	capW, capH := popupCap(popup, maxW, maxH)
-	shrink := false
-	if w > capW {
-		w = capW
-		shrink = true
-	}
+	_, capH := popupCap(popup, maxW, maxH)
+	surfW, surfH := popupSurfaceWH(popup)
 	if h > capH {
-		h = capH
-		shrink = true
-	}
-	if shrink {
-		cons := layout.Loose(w, h)
-		if intrinsic.X <= capW {
-			cons.MaxW = -1
-		}
-		sz := popup.Measure(cons)
+		sz := popup.Measure(layout.Constraints{MaxW: -1, MaxH: capH})
 		w, h = sz.X, sz.Y
-		if w > capW {
-			w = capW
+		if w < intrinsic.X {
+			w = intrinsic.X
 		}
 		if h > capH {
 			h = capH
 		}
 	}
-	popup.Arrange(paintengine2d.XYWH(origin.X, origin.Y, w, h))
+	inset := float32(4)
+	x, w := shiftPopupX(origin.X, w, surfW, inset)
+	y, h := shiftPopupY(origin.Y, h, surfH, inset)
+	popup.Arrange(paintengine2d.XYWH(x, y, w, h))
 }
 
 // ClampToSurface keeps popup inside the host surface. It repositions first
@@ -303,37 +267,58 @@ func ClampToSurface(from, popup Component) {
 		return
 	}
 	inset := float32(4)
-	maxX := float32(ww) - inset
-	maxY := float32(hh) - inset
-	availW := maxX - inset
-	availH := maxY - inset
-	if availW < 1 {
-		availW = 1
-	}
-	if availH < 1 {
-		availH = 1
-	}
-
 	b := popup.Bounds()
 	w, h := b.Dx(), b.Dy()
-	if w > availW {
-		w = availW
-	}
-	if h > availH {
-		h = availH
-	}
-	x, y := b.Min.X, b.Min.Y
-	if x+w > maxX {
-		x = maxX - w
-	}
-	if y+h > maxY {
-		y = maxY - h
-	}
-	if x < inset {
-		x = inset
-	}
-	if y < inset {
-		y = inset
-	}
+	x, w := shiftPopupX(b.Min.X, w, float32(ww), inset)
+	y, h := shiftPopupY(b.Min.Y, h, float32(hh), inset)
 	popup.Arrange(paintengine2d.XYWH(x, y, w, h))
+}
+
+func popupSurfaceWH(c Component) (w, h float32) {
+	sz, ok := popupSurface(c)
+	if !ok {
+		return 0, 0
+	}
+	ww, hh := sz.SurfaceSize()
+	if ww > 8 {
+		w = float32(ww)
+	}
+	if hh > 8 {
+		h = float32(hh)
+	}
+	return w, h
+}
+
+// shiftPopupX translates so the full width stays on-screen. Width is only
+// reduced when the popup is wider than the surface itself — never to squeeze
+// into the leftover strip beside a right-edge anchor.
+func shiftPopupX(x, w, surfW, inset float32) (float32, float32) {
+	return shiftPopupAxis(x, w, surfW, inset)
+}
+
+func shiftPopupY(y, h, surfH, inset float32) (float32, float32) {
+	return shiftPopupAxis(y, h, surfH, inset)
+}
+
+func shiftPopupAxis(pos, size, surf, inset float32) (float32, float32) {
+	if surf <= 0 {
+		return pos, size
+	}
+	if inset < 0 {
+		inset = 0
+	}
+	max := surf - inset
+	if pos+size > max {
+		pos = max - size
+	}
+	if pos < inset {
+		pos = inset
+	}
+	if pos+size > max {
+		size = max - pos
+		if size < 1 {
+			size = 1
+		}
+	}
+	return pos, size
 }

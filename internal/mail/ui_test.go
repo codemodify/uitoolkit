@@ -852,6 +852,112 @@ func TestMailStarRendersAfterToggle(t *testing.T) {
 	w.Close()
 }
 
+func TestMailAttachmentSelectOpenSaveAs(t *testing.T) {
+	t.Setenv("UITK_MAIL_NO_OPEN", "1")
+	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{
+		Title: "Mail", Width: 1280, Height: 800, Headless: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.SetContent(MailApp(a, w))
+	a.PumpOnce()
+
+	var list *widgets.ListView
+	var open, save *widgets.Button
+	widget.Walk(w.Content(), func(c widget.Component) {
+		switch v := c.(type) {
+		case *widgets.ListView:
+			if v.ItemText != nil && v.Count > 0 && strings.Contains(v.ItemText(0), "📎") && list == nil {
+				list = v
+			}
+		case *widgets.Button:
+			switch v.Text {
+			case "Open":
+				open = v
+			case "Save As":
+				save = v
+			}
+		}
+	})
+	if list == nil {
+		t.Fatal("attachment list")
+	}
+	if open == nil || save == nil {
+		t.Fatal("Open / Save As buttons")
+	}
+	if open.Enabled() || save.Enabled() {
+		t.Fatal("Open / Save As should stay disabled until a row is selected")
+	}
+
+	before := globMailOpenDirs()
+	if list.OnSelect == nil {
+		t.Fatal("attachment OnSelect")
+	}
+	list.OnSelect(0)
+	a.PumpOnce()
+	if !open.Enabled() || !save.Enabled() {
+		t.Fatal("Open / Save As should enable after a single click")
+	}
+	if list.Selected != 0 {
+		t.Fatalf("selected=%d", list.Selected)
+	}
+	if n := globMailOpenDirs(); len(n) != len(before) {
+		t.Fatalf("single click opened a part: before=%d after=%d", len(before), len(n))
+	}
+
+	list.OnSelect(0)
+	a.PumpOnce()
+	afterOpen := globMailOpenDirs()
+	if len(afterOpen) <= len(before) {
+		t.Fatal("double click should Open (messages.openPart cache)")
+	}
+
+	dest := filepath.Join(t.TempDir(), "mail-shortcuts.txt")
+	if save.OnClick == nil {
+		t.Fatal("Save As")
+	}
+	save.OnClick()
+	a.PumpOnce()
+	if w.Overlay() == nil {
+		t.Fatal("Save As file dialog")
+	}
+	var pathField *widgets.TextField
+	var confirm *widgets.Button
+	widget.Walk(w.Overlay(), func(c widget.Component) {
+		switch v := c.(type) {
+		case *widgets.TextField:
+			if pathField == nil {
+				pathField = v
+			}
+		case *widgets.Button:
+			if v.Text == "Save" {
+				confirm = v
+			}
+		}
+	})
+	if pathField == nil || confirm == nil || confirm.OnClick == nil {
+		t.Fatal("Save As dialog path/Save")
+	}
+	pathField.SetText(dest)
+	confirm.OnClick()
+	a.PumpOnce()
+	raw, err := os.ReadFile(dest)
+	if err != nil {
+		t.Fatalf("saved file: %v", err)
+	}
+	if !strings.Contains(string(raw), "mail-shortcuts.txt") {
+		t.Fatalf("saved bytes %q", raw)
+	}
+	w.Close()
+}
+
+func globMailOpenDirs() []string {
+	matches, _ := filepath.Glob(filepath.Join(os.TempDir(), "uitk-mail-*"))
+	return matches
+}
+
 func cellInk(img *paintengine2d.Image, x0, x1 int) int {
 	n := 0
 	for y := 0; y < img.Height; y++ {

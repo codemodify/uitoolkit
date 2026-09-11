@@ -464,8 +464,10 @@ Filter under the toolbar, and drops the VIP folder from the tree (**v0.10.8**).
 Mail thread columns are Topic / Who / When (no Size); ★ / 📎 paint after
 toggle via toolkit font fallbacks + TableView / CardList invalidation (**v0.10.9**).
 Mail drops the sidebar Account ComboBox, Folders section header, and
-the active-filter banner above the thread list; Quick Filter pins and
-File account menus remain (**v0.10.10**).
+the active-filter banner above the thread list; preview attachments
+gain Open / Save As (click selects, double-click opens). MenuBar popups
+shift horizontally at the window edge instead of cropping labels
+(**v0.10.10**).
 
 ## Version
 
@@ -476,8 +478,14 @@ Central plus folder-tree account roots still switch and manage stores.
 Remove the `Filter on · N shown` / `Clear filter` strip above the
 thread list (it reserved a row even when hidden). Quick Filter under
 the toolbar still narrows the list; clear by emptying the field or
-turning off Unread / Starred / Attachment pins. Still paintengine2d
-**v0.9.0**.
+turning off Unread / Starred / Attachment pins. Preview attachments:
+Open / Save As (enabled when a row is selected); single click selects,
+double click opens (`messages.openPart`); Save As writes part bytes
+through the toolkit file dialog. Toolkit: `PlacePopup` /
+`PlacePopupForAnchor` keep intrinsic menu width (labels + shortcuts)
+and **translate** X at the window edge so Help → About Mail is not
+cropped to “About Mai…”. Height still flips or scrolls (v0.10.8).
+Still paintengine2d **v0.9.0**.
 
 **0.10.9** — Mail list chrome: Topic / Who / When (Size column removed).
 Toolkit: Titillium has no ★/📎/●/🔇 gids — `style` rasterizes fallback
