@@ -32,9 +32,30 @@ const (
 	KeyPageDown
 	KeySpace
 	KeyA
+	KeyB
 	KeyC
+	KeyD
+	KeyE
+	KeyF
+	KeyG
+	KeyH
+	KeyI
+	KeyJ
+	KeyK
+	KeyL
+	KeyM
+	KeyN
+	KeyO
+	KeyP
+	KeyQ
+	KeyR
+	KeyS
+	KeyT
+	KeyU
 	KeyV
+	KeyW
 	KeyX
+	KeyY
 	KeyZ
 	KeyF1
 	KeyF2
@@ -63,6 +84,25 @@ const (
 func (m Modifiers) Shift() bool { return m&ModShift != 0 }
 func (m Modifiers) Ctrl() bool  { return m&ModCtrl != 0 }
 func (m Modifiers) Alt() bool   { return m&ModAlt != 0 }
+
+// LetterKey maps a/A..z/Z to KeyA..KeyZ.
+func LetterKey(r rune) Key {
+	if r >= 'A' && r <= 'Z' {
+		r = r - 'A' + 'a'
+	}
+	if r >= 'a' && r <= 'z' {
+		return KeyA + Key(r-'a')
+	}
+	return KeyUnknown
+}
+
+// KeyRune returns the lowercase letter for KeyA..KeyZ.
+func KeyRune(k Key) (rune, bool) {
+	if k >= KeyA && k <= KeyZ {
+		return rune('a' + (k - KeyA)), true
+	}
+	return 0, false
+}
 
 // EventKind classifies a window event.
 type EventKind int

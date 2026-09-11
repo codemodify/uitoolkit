@@ -34,7 +34,7 @@ func main() {
 	}
 	a := uitoolkit.New(uitoolkit.Options{Look: uitoolkit.DarkLook(), Headless: *headless})
 	win, err := a.NewWindow(platform.WindowOptions{
-		Title: "uitoolkit gallery", Width: 960, Height: 680, MinWidth: 640, MinHeight: 420,
+		Title: "uitoolkit gallery", Width: 960, Height: 720, MinWidth: 640, MinHeight: 420,
 	})
 	if err != nil {
 		log.Fatal(err)
@@ -51,8 +51,7 @@ func main() {
 }
 
 func buildGallery(a *app.Application, win *app.Window, light bool) widget.Component {
-	status := widgets.NewLabel("Ready.")
-	status.Color = win.Look().Palette().TextMuted
+	status := widgets.NewStatusBar("Ready.", "Ln 1, Col 1", "v"+uitoolkit.Version)
 
 	volume := widgets.NewLabel("Volume  60%")
 	slider := widgets.NewSlider(0, 100, 60, func(v float32) {
@@ -74,7 +73,7 @@ func buildGallery(a *app.Application, win *app.Window, light bool) widget.Compon
 	})
 	primary.Primary = true
 	plain := widgets.NewButton("Secondary", func() {
-		status.SetText("Secondary clicked")
+		status.Set(0, "Secondary clicked")
 	})
 	disabled := widgets.NewButton("Disabled", nil)
 	disabled.SetEnabled(false)
@@ -93,10 +92,10 @@ func buildGallery(a *app.Application, win *app.Window, light bool) widget.Compon
 		win.SetOverlay(overlay)
 	})
 
-	other := widgets.NewButton("New window", func() {
+	other := widgets.NewButton("Window", func() {
 		w2, err := a.NewWindow(platform.WindowOptions{Title: "Second window", Width: 420, Height: 280})
 		if err != nil {
-			status.SetText(err.Error())
+			status.Set(0, err.Error())
 			return
 		}
 		w2.SetContent(widgets.NewPanel("Dialog window",
@@ -105,19 +104,18 @@ func buildGallery(a *app.Application, win *app.Window, light bool) widget.Compon
 		))
 	})
 
-	themeBtn := widgets.NewButton("Toggle theme", func() {
+	themeBtn := widgets.NewButton("Theme", func() {
 		if win.Look().Name() == "dark" {
 			a.SetLook(style.LightLook())
 		} else {
 			a.SetLook(style.DarkLook())
 		}
 		win.SetContent(buildGallery(a, win, win.Look().Name() == "light"))
-		status.SetText("Theme: " + win.Look().Name())
 	})
 
 	buttons := widgets.NewPanel("Buttons",
-		widgets.NewRow(primary, plain, disabled).WithGap(10),
-		clickLbl,
+		widgets.NewRow(primary, plain).WithGap(10),
+		widgets.NewRow(disabled, clickLbl).WithGap(10),
 		widgets.NewRow(about, other, themeBtn).WithGap(10),
 	)
 
@@ -149,8 +147,117 @@ func buildGallery(a *app.Application, win *app.Window, light bool) widget.Compon
 		selected.SetText("Selected: " + files[i])
 	})
 	list.Selected = 0
+	list.OnContext = func(i int, p paintengine2d.Point) {
+		if i >= 0 && i < len(files) {
+			status.Set(0, "Context: "+files[i])
+			selected.SetText("Selected: " + files[i])
+		}
+		widgets.ShowContextMenu(list, p,
+			widgets.Item("Open", func() {
+				if i >= 0 && i < len(files) {
+					status.Set(0, "Open "+files[i])
+				}
+			}),
+			widgets.Item("Copy path", func() {
+				if i >= 0 && i < len(files) {
+					platform.ClipboardSet(files[i])
+					status.Set(0, "Copied "+files[i])
+				}
+			}),
+			widgets.Sep(),
+			widgets.Item("Reveal in list", nil),
+		)
+	}
 	listPane := widgets.NewColumn(selected, list).WithGap(6)
 	listPane.AddFlex(list, 1)
+
+	treeSel := widgets.NewLabel("Selected: src")
+	srcApp := widgets.NewTreeNode("app",
+		widgets.NewTreeNode("app.go"),
+		widgets.NewTreeNode("window.go"),
+	)
+	srcWidgets := widgets.NewTreeNode("widgets",
+		widgets.NewTreeNode("menu.go"),
+		widgets.NewTreeNode("tabs.go"),
+		widgets.NewTreeNode("tree.go"),
+	)
+	srcWidgets.Expanded = true
+	src := widgets.NewTreeNode("src", srcApp, srcWidgets)
+	src.Expanded = true
+	docs := widgets.NewTreeNode("docs", widgets.NewTreeNode("screenshots"))
+	rootNode := widgets.NewTreeNode("uitoolkit", src, docs, widgets.NewTreeNode("go.mod"))
+	rootNode.Expanded = true
+	tree := widgets.NewTreeView(rootNode)
+	tree.Selected = src
+	tree.OnSelect = func(n *widgets.TreeNode) {
+		if n != nil {
+			treeSel.SetText("Selected: " + n.Label)
+			status.Set(1, n.Label)
+		}
+	}
+	tree.OnContext = func(n *widgets.TreeNode, p paintengine2d.Point) {
+		if n == nil {
+			return
+		}
+		items := []*widgets.MenuItem{
+			widgets.Item("Select "+n.Label, func() { tree.OnSelect(n) }),
+		}
+		if !n.Leaf() {
+			label := "Expand"
+			if n.Expanded {
+				label = "Collapse"
+			}
+			items = append(items, widgets.Item(label, func() { tree.Toggle(n) }))
+		}
+		widgets.ShowContextMenu(tree, p, items...)
+	}
+	treePane := widgets.NewColumn(treeSel, tree).WithGap(6)
+	treePane.AddFlex(tree, 1)
+
+	tabs := widgets.NewTabView(
+		widgets.Tab{Title: "Scroll", Content: widgets.NewPanel("ScrollView", scroll)},
+		widgets.Tab{Title: "List", Content: widgets.NewPanel("ListView", listPane)},
+		widgets.Tab{Title: "Tree", Content: widgets.NewPanel("TreeView", treePane)},
+	)
+	tabs.OnChange = func(i int) {
+		names := []string{"Scroll", "List", "Tree"}
+		if i >= 0 && i < len(names) {
+			status.Set(0, "Tab: "+names[i])
+		}
+	}
+
+	menubar := widgets.NewMenuBar(
+		widgets.NewMenu("&File",
+			widgets.ItemAccel("&New window", "Ctrl+N", func() { other.OnClick() }),
+			widgets.ItemAccel("&About", "F1", func() { about.OnClick() }),
+			widgets.Sep(),
+			widgets.ItemAccel("&Quit", "Ctrl+Q", func() { a.Quit() }),
+		),
+		widgets.NewMenu("&Edit",
+			widgets.ItemAccel("&Copy", "Ctrl+C", func() {
+				if s := name.SelectedText(); s != "" {
+					platform.ClipboardSet(s)
+					status.Set(0, "Copied")
+				}
+			}),
+			widgets.ItemAccel("&Paste", "Ctrl+V", func() {
+				name.SetText(name.Text + platform.ClipboardGet())
+				status.Set(0, "Pasted")
+			}),
+			widgets.Sep(),
+			&widgets.MenuItem{Text: "Undo", Shortcut: "Ctrl+Z", Disabled: true},
+		),
+		widgets.NewMenu("&View",
+			widgets.CheckItem("&Dark", !light, func() {
+				a.SetLook(style.DarkLook())
+				win.SetContent(buildGallery(a, win, false))
+			}),
+			widgets.CheckItem("&Light", light, func() {
+				a.SetLook(style.LightLook())
+				win.SetContent(buildGallery(a, win, true))
+			}),
+		),
+	)
 
 	left := widgets.NewColumn(
 		widgets.NewTitle("uitoolkit"),
@@ -161,24 +268,17 @@ func buildGallery(a *app.Application, win *app.Window, light bool) widget.Compon
 	left.AddFlex(buttons, 0)
 	left.AddFlex(fields, 1)
 
-	right := widgets.NewColumn(
-		widgets.NewPanel("ScrollView", scroll),
-		widgets.NewPanel("ListView", listPane),
-		status,
-	).WithGap(10).WithPad(12)
-	// give scroll room
-	right.AddFlex(right.Children()[0], 1)
-	right.AddFlex(right.Children()[1], 1)
+	right := widgets.NewPad(10, tabs)
 
 	split := widgets.NewSplitter(true, left, right)
 	split.Ratio = 0.46
 
 	header := widgets.NewRow(
 		widgets.NewTitle("Widget gallery"),
-		widgets.NewLabel("Linux X11  ·  damage  ·  focus  ·  themes"),
+		widgets.NewLabel("menus  ·  tabs  ·  tree  ·  focus"),
 	).WithGap(16).WithPad(12).WithAlign(layout.AlignCenter)
 
-	root := widgets.NewColumn(header, split).WithGap(0)
+	root := widgets.NewColumn(menubar, header, split, status).WithGap(0)
 	root.AddFlex(split, 1)
 	_ = light
 	return root
@@ -195,7 +295,13 @@ func writeScreenshots(dir string) error {
 	}
 	shots := []shot{
 		{name: "gallery-dark.png", look: style.DarkLook(), setup: nil},
-		{name: "gallery-light.png", look: style.LightLook(), setup: nil},
+		{
+			name: "gallery-light.png",
+			look: style.LightLook(),
+			setup: func(a *app.Application, w *app.Window) {
+				selectGalleryTab(w, 1)
+			},
+		},
 		{
 			name: "gallery-dialog.png",
 			look: style.DarkLook(),
@@ -214,20 +320,34 @@ func writeScreenshots(dir string) error {
 			name: "gallery-scroll.png",
 			look: style.DarkLook(),
 			setup: func(a *app.Application, w *app.Window) {
+				selectGalleryTab(w, 0)
 				scrollGallery(w)
-				// Wheel over the ScrollView (right column, upper pane).
 				w.Inject(platform.Event{
 					Kind:   platform.EventScroll,
-					Pos:    paintengine2d.Pt(720, 220),
+					Pos:    paintengine2d.Pt(720, 280),
 					Scroll: paintengine2d.Pt(0, 80),
 				})
+			},
+		},
+		{
+			name: "gallery-menu.png",
+			look: style.DarkLook(),
+			setup: func(a *app.Application, w *app.Window) {
+				openGalleryMenu(w, 0)
+			},
+		},
+		{
+			name: "gallery-tree.png",
+			look: style.DarkLook(),
+			setup: func(a *app.Application, w *app.Window) {
+				selectGalleryTab(w, 2)
 			},
 		},
 	}
 	for _, s := range shots {
 		a := uitoolkit.New(uitoolkit.Options{Look: s.look, Headless: true})
 		w, err := a.NewWindow(platform.WindowOptions{
-			Title: "uitoolkit gallery", Width: 960, Height: 680, Headless: true,
+			Title: "uitoolkit gallery", Width: 960, Height: 720, Headless: true,
 		})
 		if err != nil {
 			return err
@@ -251,9 +371,28 @@ func writeScreenshots(dir string) error {
 	if err := writeWidgetsCloseup(filepath.Join(dir, "widgets.png")); err != nil {
 		return err
 	}
-	return verifyDistinctPNGs(dir, []string{
-		"gallery-dark.png", "gallery-light.png", "gallery-dialog.png",
-		"gallery-scroll.png", "notes.png", "widgets.png",
+	return verifyDistinctPNGs(dir, screenshotNames)
+}
+
+var screenshotNames = []string{
+	"gallery-dark.png", "gallery-light.png", "gallery-dialog.png",
+	"gallery-scroll.png", "gallery-menu.png", "gallery-tree.png",
+	"notes.png", "widgets.png",
+}
+
+func selectGalleryTab(w *app.Window, i int) {
+	widget.Walk(w.Content(), func(c widget.Component) {
+		if tv, ok := c.(*widgets.TabView); ok {
+			tv.Select(i)
+		}
+	})
+}
+
+func openGalleryMenu(w *app.Window, i int) {
+	widget.Walk(w.Content(), func(c widget.Component) {
+		if mb, ok := c.(*widgets.MenuBar); ok {
+			mb.Open(i)
+		}
 	})
 }
 
@@ -318,6 +457,15 @@ func writeNotesShot(path string) error {
 		return err
 	}
 	w.SetContent(demo.NotesApp(w))
+	a.PumpOnce()
+	widget.Walk(w.Content(), func(c widget.Component) {
+		if lv, ok := c.(*widgets.ListView); ok {
+			lv.MousePress(widget.MouseEvent{
+				Pos:    paintengine2d.Pt(72, 16),
+				Button: platform.ButtonRight,
+			})
+		}
+	})
 	a.PumpOnce()
 	if err := w.WritePNG(path); err != nil {
 		return err

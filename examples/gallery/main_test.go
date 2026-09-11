@@ -11,10 +11,7 @@ func TestWriteScreenshotsDistinct(t *testing.T) {
 	if err := writeScreenshots(dir); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{
-		"gallery-dark.png", "gallery-light.png", "gallery-dialog.png",
-		"gallery-scroll.png", "notes.png", "widgets.png",
-	} {
+	for _, name := range screenshotNames {
 		st, err := os.Stat(filepath.Join(dir, name))
 		if err != nil {
 			t.Fatal(err)

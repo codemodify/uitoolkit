@@ -43,6 +43,14 @@ type LookAndFeel interface {
 	DrawSplitter(ctx *paintengine2d.Context, b paintengine2d.Rect, vertical bool, st ControlState)
 	DrawListRow(ctx *paintengine2d.Context, b paintengine2d.Rect, selected, hovered bool, label string)
 	DrawOverlay(ctx *paintengine2d.Context, b paintengine2d.Rect)
+	DrawMenuBar(ctx *paintengine2d.Context, b paintengine2d.Rect)
+	DrawMenuTitle(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, underline int, open bool)
+	DrawMenuFrame(ctx *paintengine2d.Context, b paintengine2d.Rect)
+	DrawMenuItem(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label, shortcut string, underline int, sep, checked bool)
+	DrawTabBar(ctx *paintengine2d.Context, b paintengine2d.Rect)
+	DrawTab(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, selected bool)
+	DrawTreeRow(ctx *paintengine2d.Context, b paintengine2d.Rect, selected, hovered, expanded, leaf bool, depth int, label string)
+	DrawStatusBar(ctx *paintengine2d.Context, b paintengine2d.Rect, parts []string)
 }
 
 // Theme is a LookAndFeel plus a display scale (DPI).

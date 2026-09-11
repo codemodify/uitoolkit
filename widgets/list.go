@@ -15,6 +15,7 @@ type ListView struct {
 	Selected  int
 	ItemText  func(i int) string
 	OnSelect  func(i int)
+	OnContext func(i int, windowPos paintengine2d.Point)
 	OffsetY   float32
 	hovered   int
 }
@@ -96,6 +97,9 @@ func (l *ListView) Paint(ctx *paintengine2d.Context) {
 		lk.DrawListRow(ctx, row, i == l.Selected, i == l.hovered, label)
 	}
 	ctx.Restore()
+	if l.Focused() {
+		lk.DrawFocusRing(ctx, b.Inset(-2))
+	}
 }
 
 func (l *ListView) indexAt(y float32) int {
@@ -126,6 +130,10 @@ func (l *ListView) MousePress(e widget.MouseEvent) bool {
 		if l.OnSelect != nil {
 			l.OnSelect(i)
 		}
+	}
+	if e.Button == platform.ButtonRight && l.OnContext != nil {
+		o := widget.DeviceOrigin(l)
+		l.OnContext(i, paintengine2d.Pt(o.X+e.Pos.X, o.Y+e.Pos.Y))
 	}
 	return true
 }
