@@ -14,7 +14,7 @@ import (
 )
 
 // FirstRunPrompt is the empty-account modal copy (Yes / No).
-const FirstRunPrompt = "There are no accounts, want to add one?\n\nChoose IMAP or POP3 (or Test connection). Type the password in the form. It is saved in mail.json (mode 0600) until a secret store exists."
+const FirstRunPrompt = "There are no accounts, want to add one?"
 
 // OpenAddAccount opens the IMAP/POP3 / SMTP / OAuth setup window.
 func OpenAddAccount(a *app.Application, cli *Client, onSaved func()) (*app.Window, error) {

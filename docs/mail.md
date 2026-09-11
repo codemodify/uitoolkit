@@ -123,7 +123,7 @@ POP3 account (inbox retrieve; SMTP still used to send):
 }
 ```
 
-Default when **no** config and `UITK_MAIL` is unset: **empty** LocalStore (no demo accounts). The UI asks *There are no accounts, want to add one?* and notes that the password is typed in the form and stored in `mail.json` (mode `0600`). Yes opens File → Add Account. No leaves empty chrome.
+Default when **no** config and `UITK_MAIL` is unset: **empty** LocalStore (no demo accounts). The UI asks *There are no accounts, want to add one?* Yes opens File → Add Account. No leaves empty chrome. Password / `mail.json` mode `0600` notes live on the Add Account form, not that Yes/No dialog.
 
 `UITK_MAIL=memory` is the **only** way to load the seeded MemoryStore demo (and `examples/mail` / screenshots still use that on purpose).
 
@@ -318,7 +318,7 @@ AND across conditions. Persist in MemoryStore or the disk cache. Tools → Messa
 
 ## UI features (v0.10.3)
 
-- **Empty by default** — no demo accounts unless `UITK_MAIL=memory`. First-run: “There are no accounts, want to add one?” (typed password is saved in `mail.json`, mode `0600`).
+- **Empty by default** — no demo accounts unless `UITK_MAIL=memory`. First-run Yes/No is only “There are no accounts, want to add one?” Password / `0600` notes are on the Add Account form.
 - **Add account** — IMAP vs POP3 radios, domain auto-guess (including POP hosts), **Test connection** (and optional auto-detect after email+password), masked password field, or Sign in with Google / Microsoft (or device code; IMAP). Saved accounts show the protocol on Account Central and in Preferences. `passEnv` remains an optional fallback.
 - **Remove account** — File menu, Account Central, and Preferences → Accounts. Confirm, then drop the account from `mail.json` and the local cache. The folder tree refreshes; if none remain, the first-run “add one?” prompt returns.
 - **Text-only Message tab** — prefer `text/plain`; HTML-only mail is tag-stripped. No HTML engine / no HTML tab.
