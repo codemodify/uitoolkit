@@ -174,6 +174,8 @@ func applyScrollHover(d *scrollDrag, pos paintengine2d.Point, track, thumb paint
 		if setOff != nil {
 			setOff(off)
 		}
+		// setOff owns invalidation when the widget blits (List/Table/Tree/
+		// TextArea). CardList and other fallbacks still pass invalidateAll.
 		if invalidateAll != nil {
 			invalidateAll()
 		}
@@ -188,6 +190,18 @@ func invalidateOverflowTrack(c interface{ InvalidateRect(paintengine2d.Rect) }, 
 		return
 	}
 	c.InvalidateRect(track.Inset(-2))
+}
+
+func invalidateOverflowThumbs(c interface{ InvalidateRect(paintengine2d.Rect) }, oldThumb, newThumb paintengine2d.Rect) {
+	if c == nil {
+		return
+	}
+	if !oldThumb.Empty() {
+		c.InvalidateRect(oldThumb.Inset(-2))
+	}
+	if !newThumb.Empty() && (newThumb.Min != oldThumb.Min || newThumb.Max != oldThumb.Max) {
+		c.InvalidateRect(newThumb.Inset(-2))
+	}
 }
 
 func (d *scrollDrag) release() bool {

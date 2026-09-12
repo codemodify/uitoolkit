@@ -69,6 +69,14 @@ type Host interface {
 	RequestLayout()
 }
 
+// PixelScroller is an optional Host assertion (app.Window). Scrolling
+// widgets blit the viewport with paintengine2d.Context.Scroll, then only
+// paint the newly exposed strip. Test hosts omit it and fall back to a
+// full Invalidate.
+type PixelScroller interface {
+	ScrollPixels(c Component, local paintengine2d.Rect, dx, dy float32) bool
+}
+
 // Self is used so an embedded Base can return the outer Component.
 type Self interface {
 	Component

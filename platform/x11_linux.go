@@ -983,7 +983,7 @@ func (s *x11Surface) Present(dirty []paintengine2d.Rect) error {
 		return nil
 	}
 	if s.gpu != nil {
-		if err := s.presentGPU(); err == nil {
+		if err := s.presentGPU(dirty); err == nil {
 			x11Mu.Lock()
 			if !s.mapped && s.conn.dpy != nil && s.win != 0 {
 				C.ui_map(s.conn.dpy, s.win)
