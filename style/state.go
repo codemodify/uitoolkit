@@ -57,7 +57,7 @@ type LookAndFeel interface {
 	DrawStatusBar(ctx *paintengine2d.Context, b paintengine2d.Rect, parts []string)
 	DrawToolBar(ctx *paintengine2d.Context, b paintengine2d.Rect)
 	DrawToolButton(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, icon ToolIcon)
-	DrawProgressBar(ctx *paintengine2d.Context, b paintengine2d.Rect, t float32, indeterminate bool, phase float32)
+	DrawProgressBar(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, t float32, indeterminate bool, phase float32)
 	DrawRadio(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, selected bool, label string)
 	DrawComboBox(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, text string, open bool)
 	DrawTitleBar(ctx *paintengine2d.Context, b paintengine2d.Rect, title, subtitle string)

@@ -64,7 +64,12 @@ nodes per present. v0.15.0 attaches the recorded root.
    in v0.9.0, so recorders are not pooled. Present stays `nil`
    (no `[]Rect` copies).
 
-## Hard ban (until golden 1× / 2× tests exist)
+## Hard ban (until 1× + 2× goldens exist for the *changed* path)
+
+`internal/uitest.TestChromeStripGolden` locks a button + checkbox +
+menu-bar strip at **1× and 2×** (`testdata/chrome-strip-1x.png`,
+`chrome-strip-2x.png`, plus `PaintHash`). That is a *control-strip*
+guard, not a license to bring back dirty-rect present.
 
 Do **not** ship again:
 
@@ -72,4 +77,8 @@ Do **not** ship again:
 - `DrawSceneDamage` that skips ops
 - skipping `Surface.Present` on GPU
 - ClearRect of a hover box that contains static text, unless a golden
-  test at 1× and 2× shows identical glyphs vs a full paint
+  test at 1× **and** 2× shows identical glyphs vs a full paint
+
+Dirty-rect / `DrawSceneDamage` / pixel scroll stay banned until those
+full-frame 1×+2× goldens exist for the scene they would clip. Update
+strip goldens with `UITK_UPDATE_GOLDEN=1`.

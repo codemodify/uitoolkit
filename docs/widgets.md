@@ -53,7 +53,7 @@ stub; there is no native AppKit/SwiftUI control host.
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | List | `ListView` | `QListView` / `ListView` | `GtkListView` | `ListBox` | `widget.List` | `ListBox` | `ListBox` | `NSTableView` | `List` | [thumb](screenshots/compare/listview.png) |
 | Card list | `CardList` | `QListView` (delegate) ≈ | `GtkListBox` ≈ | `ItemsControl` ≈ | `widget.List` ≈ | — | `ItemsControl` ≈ | `NSCollectionView` ≈ | `List` ≈ | [thumb](screenshots/compare/cardlist.png) · [mail](screenshots/mail-cards.png) |
-| Table | `TableView` | `QTableView` / `TableView` | `GtkColumnView` | `DataGrid` | `widget.Table` | `DataGridView` | `DataGrid` | `NSTableView` | `Table` | [thumb](screenshots/compare/tableview.png) · [gallery](screenshots/gallery-table.png) |
+| Table | `TableView` (sticky header, column-resize) | `QTableView` / `TableView` | `GtkColumnView` | `DataGrid` | `widget.Table` | `DataGridView` | `DataGrid` | `NSTableView` | `Table` | [thumb](screenshots/compare/tableview.png) · [gallery](screenshots/gallery-table.png) |
 | Tree | `TreeView` | `QTreeView` / `TreeView` | `GtkListView` (tree) / `GtkTreeView` | `TreeView` | `widget.Tree` | `TreeView` | `TreeView` | `NSOutlineView` | `OutlineGroup` / `List` | [thumb](screenshots/compare/treeview.png) · [gallery](screenshots/gallery-tree.png) |
 | Tabs | `TabView` / `TabBar` / `TabPage` | `QTabWidget` / `TabBar` | `GtkNotebook` | `TabControl` | `container.AppTabs` | `TabControl` | `TabControl` | `NSTabView` | `TabView` | [thumb](screenshots/compare/tabview.png) |
 

@@ -510,6 +510,13 @@ are independent look.json fields again; compound pack names migrate
 
 ## Version
 
+**0.18.0** — **Desktop chrome hardness.** New `ChromeNorms` lock
+ScrollView thumbs, List/Table clip + header flush, TableView column
+resize, Splitter clip/cursor, ComboBox/NumberField/`FieldHeight`,
+focus-visible on Combo/Slider/Tabs, Switch/Slider/Progress/Tab/dialog
+click models, and menu gutter/on-screen clamp. 1×+2× chrome-strip
+goldens (`docs/perf.md`). Toolkit fixes, not Mail workarounds.
+
 **0.17.1** — CGO preamble fix: no nested `*/` inside `wayland_linux.go`
 (that closed the Go `/*` block and broke `CGO_ENABLED=1` builds).
 

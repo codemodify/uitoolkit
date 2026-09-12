@@ -213,7 +213,13 @@ func (l *Classic) DrawCheckbox(ctx *paintengine2d.Context, b paintengine2d.Rect,
 	if checked {
 		fill = p.Accent
 	}
-	if st.Hovered() && !st.Disabled() {
+	if st.Disabled() {
+		if checked {
+			fill = p.Divider
+		} else {
+			fill = p.Surface
+		}
+	} else if st.Hovered() {
 		fill = fill.Lerp(p.AccentHover, 0.25)
 	}
 	cr := l.rx(4)
@@ -261,23 +267,33 @@ func (l *Classic) DrawSlider(ctx *paintengine2d.Context, b paintengine2d.Rect, s
 	x1 := b.Max.X - m.Thumb*0.5
 	track := paintengine2d.XYWH(x0, cy-2, x1-x0, 4)
 	tr := l.rx(2)
-	ctx.DrawRoundRect(track, tr, tr, paintengine2d.Fill(p.Track))
+	trackCol := p.Track
+	fillCol := p.Accent
+	if st.Disabled() {
+		trackCol = p.Surface
+		fillCol = p.Divider
+	}
+	ctx.DrawRoundRect(track, tr, tr, paintengine2d.Fill(trackCol))
 	fillW := (x1 - x0) * t
-	ctx.DrawRoundRect(paintengine2d.XYWH(x0, cy-2, fillW, 4), tr, tr, paintengine2d.Fill(p.Accent))
+	ctx.DrawRoundRect(paintengine2d.XYWH(x0, cy-2, fillW, 4), tr, tr, paintengine2d.Fill(fillCol))
 	tx := x0 + (x1-x0)*t
 	rad := m.Thumb * 0.5
-	if st.Hovered() || st.Pressed() {
+	if !st.Disabled() && (st.Hovered() || st.Pressed()) {
 		rad += 1
 	}
 	ctx.DrawCircle(paintengine2d.Pt(tx, cy+1), rad+1, paintengine2d.Fill(p.Shadow))
-	col := p.Accent
-	if st.Pressed() {
-		col = p.AccentPress
-	} else if st.Hovered() {
-		col = p.AccentHover
+	col := fillCol
+	if !st.Disabled() {
+		if st.Pressed() {
+			col = p.AccentPress
+		} else if st.Hovered() {
+			col = p.AccentHover
+		}
 	}
 	ctx.DrawCircle(paintengine2d.Pt(tx, cy), rad, paintengine2d.Fill(col))
-	ctx.DrawCircle(paintengine2d.Pt(tx-rad*0.25, cy-rad*0.25), rad*0.35, paintengine2d.Fill(p.Highlight))
+	if !st.Disabled() {
+		ctx.DrawCircle(paintengine2d.Pt(tx-rad*0.25, cy-rad*0.25), rad*0.35, paintengine2d.Fill(p.Highlight))
+	}
 	if st.Focused() {
 		l.DrawFocusRing(ctx, paintengine2d.XYWH(tx-rad-3, cy-rad-3, rad*2+6, rad*2+6))
 	}
@@ -287,15 +303,21 @@ func (l *Classic) DrawTextField(ctx *paintengine2d.Context, b paintengine2d.Rect
 	p := l.palette
 	m := l.metrics
 	r := m.RadiusSmall
-	ctx.DrawRoundRect(b, r, r, paintengine2d.Fill(p.Field))
+	field := p.Field
+	if st.Disabled() {
+		field = p.Surface
+	}
+	ctx.DrawRoundRect(b, r, r, paintengine2d.Fill(field))
 	border := p.FieldBorder
-	if st.Focused() {
+	if st.Disabled() {
+		border = p.Divider
+	} else if st.Focused() {
 		border = p.Focus
 	} else if st.Hovered() {
 		border = p.Border
 	}
-	ctx.DrawRoundRect(b.Inset(0.5), r, r, paintengine2d.StrokePaint(border, m.Border+float32(btoi(st.Focused()))))
-	if st.Focused() {
+	ctx.DrawRoundRect(b.Inset(0.5), r, r, paintengine2d.StrokePaint(border, m.Border+float32(btoi(st.Focused() && !st.Disabled()))))
+	if st.Focused() && !st.Disabled() {
 		l.DrawFocusRing(ctx, b.Inset(-2))
 	}
 	pad := m.FieldPad
@@ -747,7 +769,7 @@ func (l *Classic) DrawToolButton(ctx *paintengine2d.Context, b paintengine2d.Rec
 	}
 }
 
-func (l *Classic) DrawProgressBar(ctx *paintengine2d.Context, b paintengine2d.Rect, t float32, indeterminate bool, phase float32) {
+func (l *Classic) DrawProgressBar(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, t float32, indeterminate bool, phase float32) {
 	p := l.palette
 	m := l.metrics
 	if t < 0 {
@@ -767,7 +789,13 @@ func (l *Classic) DrawProgressBar(ctx *paintengine2d.Context, b paintengine2d.Re
 	if r > b.Dy()*0.5 {
 		r = b.Dy() * 0.5
 	}
-	ctx.DrawRoundRect(b, r, r, paintengine2d.Fill(p.Track))
+	track := p.Track
+	fillCol := p.Accent
+	if st.Disabled() {
+		track = p.Surface
+		fillCol = p.Divider
+	}
+	ctx.DrawRoundRect(b, r, r, paintengine2d.Fill(track))
 	ctx.DrawRoundRect(b.Inset(0.5), r, r, paintengine2d.StrokePaint(p.Border.WithAlpha(0.55), 1))
 	inner := b.Inset(2)
 	if inner.Empty() {
@@ -784,13 +812,13 @@ func (l *Classic) DrawProgressBar(ctx *paintengine2d.Context, b paintengine2d.Re
 			fill.Max.X = inner.Max.X
 		}
 		if fill.Dx() > 1 {
-			ctx.DrawRoundRect(fill, r-1, r-1, paintengine2d.Fill(p.Accent))
+			ctx.DrawRoundRect(fill, r-1, r-1, paintengine2d.Fill(fillCol))
 		}
 		return
 	}
 	w := inner.Dx() * t
 	if w > 1 {
-		ctx.DrawRoundRect(paintengine2d.XYWH(inner.Min.X, inner.Min.Y, w, inner.Dy()), r-1, r-1, paintengine2d.Fill(p.Accent))
+		ctx.DrawRoundRect(paintengine2d.XYWH(inner.Min.X, inner.Min.Y, w, inner.Dy()), r-1, r-1, paintengine2d.Fill(fillCol))
 	}
 }
 
@@ -810,7 +838,13 @@ func (l *Classic) DrawRadio(ctx *paintengine2d.Context, b paintengine2d.Rect, st
 	if selected {
 		fill = p.Accent
 	}
-	if st.Hovered() && !st.Disabled() {
+	if st.Disabled() {
+		if selected {
+			fill = p.Divider
+		} else {
+			fill = p.Surface
+		}
+	} else if st.Hovered() {
 		fill = fill.Lerp(p.AccentHover, 0.25)
 	}
 	ctx.DrawCircle(paintengine2d.Pt(cx, cy), side*0.5, paintengine2d.Fill(fill))
@@ -835,9 +869,15 @@ func (l *Classic) DrawComboBox(ctx *paintengine2d.Context, b paintengine2d.Rect,
 	p := l.palette
 	m := l.metrics
 	r := m.RadiusSmall
-	ctx.DrawRoundRect(b, r, r, paintengine2d.Fill(p.Field))
+	field := p.Field
+	if st.Disabled() {
+		field = p.Surface
+	}
+	ctx.DrawRoundRect(b, r, r, paintengine2d.Fill(field))
 	border := p.FieldBorder
-	if st.Focused() || open {
+	if st.Disabled() {
+		border = p.Divider
+	} else if st.Focused() || open {
 		border = p.Focus
 	} else if st.Hovered() {
 		border = p.Border

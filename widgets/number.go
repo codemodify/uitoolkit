@@ -37,7 +37,8 @@ func NewNumberField(min, max, value, step float64, on func(float64)) *NumberFiel
 		n.Decimals = 2
 	}
 	n.Init(n)
-	n.SetWantsFocus(true)
+	// One tab stop: the inner editor. Spinner keys bubble from the field.
+	n.SetWantsFocus(false)
 	n.field = NewTextField(n.format(n.Value), "", n.onField)
 	n.field.Accept = n.accept
 	n.field.OnSubmit = func(string) { n.commit() }
@@ -55,6 +56,13 @@ func (n *NumberField) Tooltip() string { return n.Tip }
 
 // Field is the inner editor.
 func (n *NumberField) Field() *TextField { return n.field }
+
+func (n *NumberField) SetEnabled(v bool) {
+	n.Base.SetEnabled(v)
+	if n.field != nil {
+		n.field.SetEnabled(v)
+	}
+}
 
 func (n *NumberField) SetValue(v float64) {
 	v = clamp64(v, n.Min, n.Max)
@@ -146,7 +154,12 @@ func (n *NumberField) MousePress(e widget.MouseEvent) bool {
 	if !n.Enabled() {
 		return false
 	}
-	n.RequestFocus()
+	n.MarkPointerFocus()
+	if n.field != nil {
+		n.field.RequestFocus()
+	} else {
+		n.RequestFocus()
+	}
 	sb := n.spinnerBox()
 	if !sb.Contains(e.Pos) {
 		return true

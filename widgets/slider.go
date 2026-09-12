@@ -23,6 +23,7 @@ func NewSlider(min, max, value float32, on func(float32)) *Slider {
 	s := &Slider{Min: min, Max: max, Value: value, OnChange: on}
 	s.Init(s)
 	s.SetWantsFocus(true)
+	s.SetFocusVisibleOnly(true)
 	s.SetPreferred(160, 28)
 	return s
 }
@@ -81,6 +82,7 @@ func (s *Slider) KeyPress(e widget.KeyEvent) bool {
 	if !s.Enabled() {
 		return false
 	}
+	s.MarkKeyboardFocus()
 	span := s.Max - s.Min
 	step := span / 20
 	if e.Mods.Shift() {
@@ -116,6 +118,7 @@ func (s *Slider) MousePress(e widget.MouseEvent) bool {
 	if !s.Enabled() {
 		return false
 	}
+	s.MarkPointerFocus()
 	s.RequestFocus()
 	s.drag = true
 	s.setFromX(e.Pos.X)

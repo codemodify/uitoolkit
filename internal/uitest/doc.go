@@ -6,7 +6,8 @@
 // (headless layout + input). Prefer paint-op / hit-test / rect
 // assertions over screenshots.
 //
-// ChromeNorms / CompareReport map Button, ToolBar, Menu, ComboBox, and
-// related controls to Avalonia / Qt / GTK / Office XP menu chrome
-// (docs/compare.md).
+// ChromeNorms / CompareReport map Button, ToolBar, Menu, ComboBox,
+// ScrollView, Splitter, TableView, Switch, Slider, Tabs, and dialog
+// chrome to Avalonia / Qt / GTK / Office XP (docs/compare.md).
+// ChromeStrip + testdata/chrome-strip-{1,2}x.png guard full-frame paint.
 package uitest

@@ -27,6 +27,7 @@ func NewScrollView(child widget.Component) *ScrollView {
 	s.Init(s)
 	s.SetManagesChildren(true)
 	s.SetWantsFocus(true)
+	s.SetFocusVisibleOnly(true)
 	if child != nil {
 		s.SetChild(child)
 	}
@@ -164,7 +165,7 @@ func (s *ScrollView) Paint(ctx *paintengine2d.Context) {
 	}
 	track, thumb := s.thumb()
 	paintOverflowBar(ctx, lk, track, thumb, s.overBar, s.drag)
-	if s.Focused() {
+	if s.State().Focused() {
 		lk.DrawFocusRing(ctx, b.Inset(-2))
 	}
 }
@@ -202,6 +203,7 @@ func (s *ScrollView) MousePress(e widget.MouseEvent) bool {
 	}
 	track, thumb := s.thumb()
 	if thumb.Contains(e.Pos) {
+		s.MarkPointerFocus()
 		s.RequestFocus()
 		s.drag = true
 		s.grab = e.Pos.Y - thumb.Min.Y
@@ -209,6 +211,7 @@ func (s *ScrollView) MousePress(e widget.MouseEvent) bool {
 		return true
 	}
 	if track.Contains(e.Pos) {
+		s.MarkPointerFocus()
 		s.RequestFocus()
 		page := s.pageStep()
 		if e.Pos.Y < thumb.Min.Y {
@@ -265,6 +268,7 @@ func (s *ScrollView) KeyPress(e widget.KeyEvent) bool {
 	if !s.Enabled() {
 		return false
 	}
+	s.MarkKeyboardFocus()
 	switch e.Key {
 	case platform.KeyDown:
 		s.ScrollBy(s.lineStep())

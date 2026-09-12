@@ -59,7 +59,7 @@ func (p *ProgressBar) Measure(c layout.Constraints) paintengine2d.Point {
 func (p *ProgressBar) Arrange(r paintengine2d.Rect) { p.SetBounds(r) }
 
 func (p *ProgressBar) Paint(ctx *paintengine2d.Context) {
-	p.Look().DrawProgressBar(ctx, p.LocalBounds(), p.Value, p.Indeterminate, p.Phase)
+	p.Look().DrawProgressBar(ctx, p.LocalBounds(), p.State(), p.Value, p.Indeterminate, p.Phase)
 }
 
 func clamp01(v float32) float32 {

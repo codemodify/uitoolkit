@@ -124,6 +124,96 @@ func ChromeNorms() []Norm {
 			Want:  "popup sits below the field and fits long labels",
 			Check: checkComboPopup,
 		},
+		{
+			ID: "scroll-overflow-thumb", Control: "ScrollView",
+			Peer:  "Qt QScrollBar · GTK GtkScrolledWindow · Avalonia ScrollViewer",
+			Want:  "overflow shows a thumb in-track; fitting content hides it; wheel clamps",
+			Check: checkScrollOverflow,
+		},
+		{
+			ID: "list-scroll-clip", Control: "ListView",
+			Peer:  "Qt QListView · GTK GtkListView · Avalonia ListBox",
+			Want:  "scrolled rows clip to the viewport (no header/body bleed)",
+			Check: checkListScrollClip,
+		},
+		{
+			ID: "table-header-flush", Control: "TableView",
+			Peer:  "Qt QTableView · GTK GtkColumnView · Avalonia DataGrid",
+			Want:  "first row flush under sticky header; scroll does not bleed into header",
+			Check: checkTableHeaderFlush,
+		},
+		{
+			ID: "table-column-resize", Control: "TableView",
+			Peer:  "Qt QHeaderView resize · GTK GtkColumnView · Avalonia DataGrid",
+			Want:  "header divider drag resizes a column and restores the pointer",
+			Check: checkTableColumnResize,
+		},
+		{
+			ID: "splitter-clip-cursor", Control: "Splitter",
+			Peer:  "Qt QSplitter · GTK GtkPaned · Avalonia GridSplitter",
+			Want:  "exclusive panes; children clipped; cursor returns to pointer after drag",
+			Check: checkSplitterClipCursor,
+		},
+		{
+			ID: "combo-field-height", Control: "ComboBox",
+			Peer:  "Qt QComboBox · GTK GtkDropDown · Avalonia ComboBox",
+			Want:  "closed height is ComboH; Escape dismisses; Down opens and navigates",
+			Check: checkComboKeyboard,
+		},
+		{
+			ID: "field-toolbar-height", Control: "TextField",
+			Peer:  "Qt QLineEdit · GTK GtkEntry · Avalonia TextBox",
+			Want:  "TextField / NumberField measure FieldHeight (ComboH); spinner is one tab stop",
+			Check: checkFieldHeights,
+		},
+		{
+			ID: "combo-focus-visible", Control: "ComboBox",
+			Peer:  "GTK :focus-visible · Avalonia :focus-visible",
+			Want:  "mouse click does not leave a focus ring; Tab does",
+			Check: checkComboFocusVisible,
+		},
+		{
+			ID: "switch-click-release", Control: "Switch",
+			Peer:  "GTK GtkSwitch · Qt Quick Switch · Avalonia ToggleSwitch",
+			Want:  "toggle on release inside bounds; drag-off cancels; disabled ignores keys",
+			Check: checkSwitchClick,
+		},
+		{
+			ID: "slider-click-disabled", Control: "Slider",
+			Peer:  "Qt QSlider · GTK GtkScale · Avalonia Slider",
+			Want:  "click sets value; clamp at ends; disabled ignores drag; focus-visible; muted chrome",
+			Check: checkSliderChrome,
+		},
+		{
+			ID: "progress-metrics", Control: "ProgressBar",
+			Peer:  "Qt QProgressBar · GTK GtkProgressBar · Avalonia ProgressBar",
+			Want:  "value clamped 0..1; height is ProgressH; disabled fill is muted",
+			Check: checkProgressChrome,
+		},
+		{
+			ID: "tabs-click-focus", Control: "TabBar",
+			Peer:  "Qt QTabBar · GTK GtkNotebook · Avalonia TabControl",
+			Want:  "select on release; disabled ignores keys; mouse click clears focus ring",
+			Check: checkTabBarChrome,
+		},
+		{
+			ID: "dialog-buttons", Control: "MessageBox",
+			Peer:  "Qt QMessageBox · GTK GtkAlertDialog · Avalonia dialog",
+			Want:  "primary Yes/OK; Escape cancels; click-release on Yes",
+			Check: checkDialogButtons,
+		},
+		{
+			ID: "menu-gutter-icons", Control: "PopupMenu",
+			Peer:  "Office XP gutter · Qt QMenu · GTK menu",
+			Want:  "icons and checks paint in the gutter; width follows the widest label",
+			Check: checkMenuGutterIcons,
+		},
+		{
+			ID: "menu-onscreen-clamp", Control: "PopupMenu",
+			Peer:  "Qt QMenu · GTK GtkPopover · Avalonia ContextMenu",
+			Want:  "right-edge / Help-near-edge menus stay on-screen at intrinsic width",
+			Check: checkMenuOnScreen,
+		},
 	}
 }
 
