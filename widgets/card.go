@@ -320,15 +320,11 @@ func (l *CardList) MouseEnter() {}
 
 func (l *CardList) MouseMove(e widget.MouseEvent) bool {
 	track, thumb := l.scrollTrack()
-	if off, apply, handled, dirty := l.vbar.move(e.Pos, track, thumb, true, l.MaxOffset()); apply || handled || dirty {
-		if apply {
-			l.OffsetY = off
-			l.clamp()
-		}
-		l.Invalidate()
-		if apply || handled {
-			return true
-		}
+	if applyScrollHover(&l.vbar, e.Pos, track, thumb, true, l.MaxOffset(), func(off float32) {
+		l.OffsetY = off
+		l.clamp()
+	}, l.Invalidate, func() { invalidateOverflowTrack(l, track) }) {
+		return true
 	}
 	h := l.indexAt(e.Pos.Y)
 	if h != l.hovered {

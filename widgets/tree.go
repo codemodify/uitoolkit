@@ -48,6 +48,8 @@ type TreeView struct {
 	lastAt    time.Time
 	vbar      scrollDrag
 	rows      rowSceneCache
+	flat      []treeRow
+	flatOK    bool
 }
 
 // NewTreeView constructs a tree.
@@ -63,6 +65,9 @@ func (t *TreeView) rowH() float32 {
 }
 
 func (t *TreeView) flatten() []treeRow {
+	if t.flatOK {
+		return t.flat
+	}
 	var out []treeRow
 	var walk func([]*TreeNode, int)
 	walk = func(nodes []*TreeNode, depth int) {
@@ -77,7 +82,9 @@ func (t *TreeView) flatten() []treeRow {
 		}
 	}
 	walk(t.Roots, 0)
-	return out
+	t.flat = out
+	t.flatOK = true
+	return t.flat
 }
 
 func (t *TreeView) contentH() float32 { return float32(len(t.flatten())) * t.rowH() }
@@ -233,6 +240,7 @@ func (t *TreeView) rowAt(y float32) int {
 // and rebuilds cannot paint stale Y slots.
 func (t *TreeView) SetRoots(roots []*TreeNode) {
 	t.Roots = roots
+	t.flatOK = false
 	t.rows.reset()
 	t.clamp()
 	t.Invalidate()
@@ -286,15 +294,11 @@ func (t *TreeView) MouseEnter() {}
 
 func (t *TreeView) MouseMove(e widget.MouseEvent) bool {
 	track, thumb := t.scrollTrack()
-	if off, apply, handled, dirty := t.vbar.move(e.Pos, track, thumb, true, t.MaxOffset()); apply || handled || dirty {
-		if apply {
-			t.OffsetY = off
-			t.clamp()
-		}
-		t.Invalidate()
-		if apply || handled {
-			return true
-		}
+	if applyScrollHover(&t.vbar, e.Pos, track, thumb, true, t.MaxOffset(), func(off float32) {
+		t.OffsetY = off
+		t.clamp()
+	}, t.Invalidate, func() { invalidateOverflowTrack(t, track) }) {
+		return true
 	}
 	n := t.nodeAt(e.Pos.Y)
 	if n != t.hover {
@@ -482,6 +486,7 @@ func (t *TreeView) Toggle(n *TreeNode) {
 		return
 	}
 	n.Expanded = !n.Expanded
+	t.flatOK = false
 	t.rows.reset()
 	t.clamp()
 	t.Invalidate()
@@ -494,9 +499,16 @@ func (t *TreeView) selectNode(n *TreeNode) {
 	if n == nil {
 		return
 	}
+	old := t.Selected
+	off := t.OffsetY
 	t.Selected = n
 	t.ensureVisible(n)
-	t.Invalidate()
+	if t.OffsetY != off {
+		t.Invalidate()
+	} else {
+		t.invalidateNode(old)
+		t.invalidateNode(n)
+	}
 	if t.OnSelect != nil {
 		t.OnSelect(n)
 	}

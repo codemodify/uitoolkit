@@ -94,6 +94,10 @@ records the retained graph for reuse/inspector, then **paints and
 presents the dirty union** (`frameImmediate` + clip). Overlay / popup /
 tooltip receive the same `Damage` (they used to paint with `dirty=nil`).
 Chrome `Paint` methods `QuickReject` rows outside the clip.
+Splitter drag Arranges the sash locally (no window `RequestLayout`).
+List/tree/table scrollbar hover dirties the track; caret blink dirties
+the caret. `SetPopup` / `DismissPopup` dirty the popup box. Tree flatten
+is cached. `WatchLook` Stats look.json and reads only on size/mtime change.
 
 paintengine2d follow-ups (do not fix in uitoolkit):
 

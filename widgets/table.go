@@ -462,15 +462,11 @@ func (t *TableView) MouseEnter() {}
 
 func (t *TableView) MouseMove(e widget.MouseEvent) bool {
 	track, thumb := t.scrollTrack()
-	if off, apply, handled, dirty := t.vbar.move(e.Pos, track, thumb, true, t.MaxOffset()); apply || handled || dirty {
-		if apply {
-			t.OffsetY = off
-			t.clamp()
-		}
-		t.Invalidate()
-		if apply || handled {
-			return true
-		}
+	if applyScrollHover(&t.vbar, e.Pos, track, thumb, true, t.MaxOffset(), func(off float32) {
+		t.OffsetY = off
+		t.clamp()
+	}, t.Invalidate, func() { invalidateOverflowTrack(t, track) }) {
+		return true
 	}
 	if e.Pos.Y < t.headerH() {
 		c := t.colAt(e.Pos.X)
@@ -530,8 +526,10 @@ func (t *TableView) MousePress(e widget.MouseEvent) bool {
 	}
 	i := t.indexAt(e.Pos.Y)
 	if i >= 0 {
+		old := t.Selected
 		t.Selected = i
-		t.Invalidate()
+		t.invalidateRow(old)
+		t.invalidateRow(i)
 		if t.OnSelect != nil {
 			t.OnSelect(i)
 		}
@@ -610,9 +608,16 @@ func (t *TableView) KeyPress(e widget.KeyEvent) bool {
 		next = t.RowCount - 1
 	}
 	if next != t.Selected {
+		old := t.Selected
+		off := t.OffsetY
 		t.Selected = next
 		t.ensureVisible(next)
-		t.Invalidate()
+		if t.OffsetY != off {
+			t.Invalidate()
+		} else {
+			t.invalidateRow(old)
+			t.invalidateRow(next)
+		}
 		if t.OnSelect != nil {
 			t.OnSelect(next)
 		}
