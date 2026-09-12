@@ -106,6 +106,49 @@ func TestCloseHidesKeepsWindow(t *testing.T) {
 	}
 }
 
+func fakeStatus(item platform.StatusItem) *platform.FakeStatusItem {
+	if f, ok := item.(*platform.FakeStatusItem); ok {
+		return f
+	}
+	if t, ok := item.(*trackingStatusItem); ok {
+		if f, ok := t.StatusItem.(*platform.FakeStatusItem); ok {
+			return f
+		}
+	}
+	return nil
+}
+
+func TestHostMenuDoesNotOpenToolkitPopup(t *testing.T) {
+	t.Setenv("UITK_TRAY", "fake")
+	a := New(Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{Width: 400, Height: 240, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.SetContent(widgets.NewLabel("mail"))
+	a.PumpOnce()
+	item, err := a.NewStatusItem(platform.StatusItemOptions{
+		Title:      "Mail",
+		MenuChrome: platform.HostMenu,
+		Menu: []platform.StatusMenuItem{
+			{Text: "Show Mail"},
+			{Separator: true},
+			{Text: "Quit"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fake := fakeStatus(item)
+	if fake == nil {
+		t.Fatalf("backend %T", item)
+	}
+	fake.ContextClick(80, 80)
+	if a.statusMenu != nil {
+		t.Fatal("HostMenu must not open a toolkit popup")
+	}
+}
+
 func TestTrayContextMenuIsToolkitPopup(t *testing.T) {
 	t.Setenv("UITK_TRAY", "fake")
 	a := New(Options{Look: style.DarkLook(), Headless: true})
@@ -117,7 +160,8 @@ func TestTrayContextMenuIsToolkitPopup(t *testing.T) {
 	a.PumpOnce()
 	picked := 0
 	item, err := a.NewStatusItem(platform.StatusItemOptions{
-		Title: "Mail",
+		Title:      "Mail",
+		MenuChrome: platform.ToolkitMenu,
 		Menu: []platform.StatusMenuItem{
 			{Text: "Show Mail", Icon: style.IconMail, OnClick: func() { picked++ }},
 			{Separator: true},
@@ -127,9 +171,9 @@ func TestTrayContextMenuIsToolkitPopup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	fake, ok := item.(*platform.FakeStatusItem)
-	if !ok {
-		t.Fatalf("backend %s", item.Backend())
+	fake := fakeStatus(item)
+	if fake == nil {
+		t.Fatalf("backend %T %s", item, item.Backend())
 	}
 	w.Hide()
 	fake.ContextClick(380, 8)
@@ -160,8 +204,11 @@ func TestTrayContextMenuIsToolkitPopup(t *testing.T) {
 	if picked != 1 {
 		t.Fatalf("popup activate %d", picked)
 	}
-	if !menu.Closed() {
-		t.Fatal("activate should dismiss the status-menu window")
+	if menu.Closed() {
+		t.Fatal("activate must hide, not destroy, the status-menu window")
+	}
+	if menu.Visible() {
+		t.Fatal("activate should hide the status-menu window")
 	}
 	if w.Visible() {
 		t.Fatal("activating Show Mail test hook must not show main")
@@ -242,11 +289,112 @@ func TestStatusMenuEscapeDismissesWindow(t *testing.T) {
 		t.Fatal("status menu")
 	}
 	menu.dispatch(platform.Event{Kind: platform.EventKeyDown, Key: platform.KeyEscape})
-	if !menu.Closed() || a.statusMenu != nil {
-		t.Fatal("Escape should close the status-menu window")
+	if menu.Closed() {
+		t.Fatal("Escape should hide, not destroy, the status-menu window")
+	}
+	if menu.Visible() {
+		t.Fatal("Escape should hide the status-menu window")
+	}
+	if a.statusMenu != menu {
+		t.Fatal("status-menu window should be reused")
 	}
 	if w.Visible() {
 		t.Fatal("main window must stay hidden")
+	}
+}
+
+func TestShowStatusMenuReusesWindow(t *testing.T) {
+	t.Setenv("UITK_TRAY", "fake")
+	a := New(Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{Width: 400, Height: 240, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.SetContent(widgets.NewLabel("mail"))
+	a.PumpOnce()
+	before := len(a.Windows())
+	rows := []platform.StatusMenuItem{{Text: "Show Mail"}, {Separator: true}, {Text: "Quit"}}
+	a.ShowStatusMenu(80, 80, rows)
+	first := a.statusMenu
+	if first == nil || first.Closed() {
+		t.Fatal("first ShowStatusMenu")
+	}
+	afterFirst := len(a.Windows())
+	if afterFirst != before+1 {
+		t.Fatalf("windows %d → %d", before, afterFirst)
+	}
+	a.hideStatusMenu()
+	if first.Closed() || first.Visible() {
+		t.Fatal("hide must keep the window, unmapped")
+	}
+	a.ShowStatusMenu(90, 90, rows)
+	if a.statusMenu != first {
+		t.Fatal("second ShowStatusMenu must reuse the window")
+	}
+	if len(a.Windows()) != afterFirst {
+		t.Fatalf("window leak: %d vs %d", len(a.Windows()), afterFirst)
+	}
+	if !first.Visible() {
+		t.Fatal("reused menu must be visible")
+	}
+}
+
+func TestStatusMenuFocusOutIgnoresUntilArmed(t *testing.T) {
+	t.Setenv("UITK_TRAY", "fake")
+	a := New(Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{Width: 400, Height: 240, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.SetContent(widgets.NewLabel("mail"))
+	a.PumpOnce()
+	a.ShowStatusMenu(80, 80, []platform.StatusMenuItem{{Text: "Quit"}})
+	menu := a.statusMenu
+	if menu == nil {
+		t.Fatal("status menu")
+	}
+	menu.dispatch(platform.Event{Kind: platform.EventFocusOut})
+	if !menu.Visible() || menu.Closed() {
+		t.Fatal("FocusOut before arm must not dismiss")
+	}
+	menu.statusMenuArmed = true
+	menu.dispatch(platform.Event{Kind: platform.EventFocusOut})
+	if menu.Visible() {
+		t.Fatal("FocusOut after arm should hide")
+	}
+	if menu.Closed() {
+		t.Fatal("FocusOut must not destroy the reused window")
+	}
+}
+
+func TestApplicationPostWakesDisplay(t *testing.T) {
+	a := New(Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{Width: 80, Height: 40, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.SetContent(widgets.NewLabel("x"))
+	a.PumpOnce()
+	o, ok := w.Surface().(*platform.Offscreen)
+	if !ok {
+		t.Fatalf("surface %T", w.Surface())
+	}
+	a.mu.Lock()
+	a.looping = true
+	a.mu.Unlock()
+	beforeSurf := o.Wakes()
+	beforeLoop := platform.LoopWakes()
+	ran := 0
+	a.Post(func() { ran++ })
+	if ran != 0 {
+		t.Fatal("Post during loop must queue")
+	}
+	if o.Wakes() <= beforeSurf && platform.LoopWakes() <= beforeLoop {
+		t.Fatal("Post should wake the display")
+	}
+	a.runPosted()
+	if ran != 1 {
+		t.Fatalf("runPosted %d", ran)
 	}
 }
 

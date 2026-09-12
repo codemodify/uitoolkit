@@ -13,36 +13,37 @@ import (
 
 // Window is a widget host that paints into a platform.Surface.
 type Window struct {
-	app        *Application
-	surf       platform.Surface
-	root       widget.Component
-	overlay    widget.Component
-	popup      widget.Component
-	tooltip    widget.Component
-	look       style.LookAndFeel
-	dirty      paintengine2d.Damage
-	full       bool
-	focus      widget.Component
-	hover      widget.Component
-	capture    widget.Component
-	closed     bool
-	blink      bool
-	laid       bool
-	scale      float32
-	tipHover   widget.Component
-	tipSince   time.Time
-	tipPos     paintengine2d.Point
-	tipDelay   time.Duration
-	clock      func() time.Time
-	lastTip    string
-	animPeriod time.Duration
-	layers     *widget.SceneCache
-	scene      *paintengine2d.Scene
-	cursor     platform.Cursor
+	app             *Application
+	surf            platform.Surface
+	root            widget.Component
+	overlay         widget.Component
+	popup           widget.Component
+	tooltip         widget.Component
+	look            style.LookAndFeel
+	dirty           paintengine2d.Damage
+	full            bool
+	focus           widget.Component
+	hover           widget.Component
+	capture         widget.Component
+	closed          bool
+	blink           bool
+	laid            bool
+	scale           float32
+	tipHover        widget.Component
+	tipSince        time.Time
+	tipPos          paintengine2d.Point
+	tipDelay        time.Duration
+	clock           func() time.Time
+	lastTip         string
+	animPeriod      time.Duration
+	layers          *widget.SceneCache
+	scene           *paintengine2d.Scene
+	cursor          platform.Cursor
 	paints          int
 	closeHides      bool
 	statusMenu      bool
 	statusMenuArmed bool
+	statusMenuArmAt time.Time
 }
 
 func newWindow(a *Application, surf platform.Surface, opts platform.WindowOptions) *Window {
@@ -329,6 +330,7 @@ func (w *Window) tipDeadline(_ time.Time) (time.Time, bool) {
 const pumpBurstCap = 64
 
 func (w *Window) pump() {
+	w.armStatusMenuIfDue()
 	for i := 0; i < pumpBurstCap; i++ {
 		evs := w.surf.Poll()
 		if len(evs) == 0 {
@@ -340,13 +342,25 @@ func (w *Window) pump() {
 	}
 }
 
+const statusMenuArmDelay = 180 * time.Millisecond
+
+func (w *Window) armStatusMenuIfDue() {
+	if w == nil || !w.statusMenu || w.statusMenuArmed || w.statusMenuArmAt.IsZero() {
+		return
+	}
+	if !time.Now().Before(w.statusMenuArmAt) {
+		w.statusMenuArmed = true
+	}
+}
+
 func (w *Window) dispatch(ev platform.Event) {
 	switch ev.Kind {
 	case platform.EventClose:
 		if w.statusMenu {
-			w.DismissPopup()
-			if !w.closed {
-				w.Close()
+			if w.app != nil {
+				w.app.hideStatusMenu()
+			} else {
+				w.Hide()
 			}
 			return
 		}
@@ -365,16 +379,17 @@ func (w *Window) dispatch(ev platform.Event) {
 		w.resetIME()
 		w.HideTooltip()
 		w.capture = nil
+		w.armStatusMenuIfDue()
 		if w.statusMenu && w.statusMenuArmed {
-			w.DismissPopup()
-			if !w.closed {
-				w.Close()
+			if w.app != nil {
+				w.app.hideStatusMenu()
+			} else {
+				w.Hide()
 			}
 		}
 	case platform.EventFocusIn:
-		if w.statusMenu {
-			w.statusMenuArmed = true
-		}
+		// Toolkit status menus arm FocusOut-dismiss after a short delay
+		// so map/focus churn on Wayland does not kill the first frame.
 		w.syncIMECursor()
 	case platform.EventIMEPreedit:
 		if t, ok := w.focus.(widget.IMETarget); ok {

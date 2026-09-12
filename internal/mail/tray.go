@@ -13,10 +13,11 @@ func (s *session) attachTray() {
 	}
 	look := s.app.Look()
 	item, err := s.app.NewStatusItem(platform.StatusItemOptions{
-		ID:      "mailclientui",
-		Title:   "Mail",
-		Tooltip: "Mail",
-		Icon:    app.StatusIconFromTool(style.IconMail, look, 22),
+		ID:         "mailclientui",
+		Title:      "Mail",
+		Tooltip:    "Mail",
+		MenuChrome: platform.HostMenu,
+		Icon:       app.StatusIconFromTool(style.IconMail, look, 22),
 		Menu: app.StatusMenuFromItems([]*widgets.MenuItem{
 			widgets.ItemIcon(style.IconMail, "Show Mail", s.showMain),
 			widgets.Sep(),

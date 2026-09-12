@@ -510,6 +510,13 @@ are independent look.json fields again; compound pack names migrate
 
 ## Version
 
+**0.17.0** — **Robust StatusItem.** Default **HostMenu** exports a real
+`com.canonical.dbusmenu` at `Menu=/MenuBar` so Plasma / AppIndicator /
+Waybar draw the native tray menu (QSystemTrayIcon / KStatusNotifierItem /
+Electron Tray). Opt-in **ToolkitMenu** uses `Menu=/NO_DBUSMENU`, reuses
+one popup window, delays FocusOut-dismiss, and wakes `Application.Post`
+via eventfd on Wayland. Mail uses HostMenu. See `docs/tray.md`.
+
 **0.16.4** — **Plasma tray right-click shows the toolkit menu.** SNI
 `Menu` is `/` (the spec empty path). `/NO_DBUSMENU` is a non-`/`
 object path, so Plasma imported dbusmenu there and never called

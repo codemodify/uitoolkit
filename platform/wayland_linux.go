@@ -339,20 +339,40 @@ static void ui_wl_comp_destroy(struct wl_compositor *c) { if (c) wl_compositor_d
 static void ui_wl_wm_destroy(struct xdg_wm_base *w) { if (w) xdg_wm_base_destroy(w); }
 static void ui_wl_reg_destroy(struct wl_registry *r) { if (r) wl_registry_destroy(r); }
 
-static int ui_wl_wait(struct wl_display *d, int ms) {
+static int ui_wl_wait_fds(struct wl_display *d, int extra_fd, int ms) {
 	if (!d) return -1;
 	if (wl_display_prepare_read(d) != 0) {
 		return wl_display_dispatch_pending(d);
 	}
 	wl_display_flush(d);
-	struct pollfd pfd = { .fd = wl_display_get_fd(d), .events = POLLIN };
-	int n = poll(&pfd, 1, ms);
-	if (n > 0) {
+	struct pollfd pfds[2];
+	int nfd = 1;
+	pfds[0].fd = wl_display_get_fd(d);
+	pfds[0].events = POLLIN;
+	pfds[0].revents = 0;
+	if (extra_fd >= 0) {
+		pfds[1].fd = extra_fd;
+		pfds[1].events = POLLIN;
+		pfds[1].revents = 0;
+		nfd = 2;
+	}
+	int n = poll(pfds, nfd, ms);
+	if (n > 0 && (pfds[0].revents & POLLIN)) {
 		wl_display_read_events(d);
 	} else {
 		wl_display_cancel_read(d);
 	}
+	if (extra_fd >= 0 && n > 0 && nfd > 1 && (pfds[1].revents & POLLIN)) {
+		uint64_t buf = 0;
+		if (read(extra_fd, &buf, sizeof(buf)) < 0) {
+			/* EAGAIN is fine; the wake already unblocked poll. */
+		}
+	}
 	return wl_display_dispatch_pending(d);
+}
+
+static int ui_wl_wait(struct wl_display *d, int ms) {
+	return ui_wl_wait_fds(d, -1, ms);
 }
 
 static int ui_wl_pump(struct wl_display *d) {
@@ -1941,8 +1961,12 @@ func (s *wlSurface) Wait(timeout time.Duration) bool {
 	if s == nil || s.closed || s.conn == nil || s.conn.dpy == nil {
 		return false
 	}
-	n := C.ui_wl_wait(s.conn.dpy, C.int(waitMillis(timeout)))
+	n := C.ui_wl_wait_fds(s.conn.dpy, C.int(loopWakeFD()), C.int(waitMillis(timeout)))
 	return n != 0
+}
+
+func (s *wlSurface) Wake() {
+	WakeLoop()
 }
 
 func (s *wlSurface) WakeAt() time.Time {

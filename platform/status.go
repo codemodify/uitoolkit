@@ -3,16 +3,20 @@ package platform
 import (
 	"log"
 	"os"
+	"runtime"
 	"strings"
 
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/style"
 )
 
-// StatusItem is a cross-platform tray / menu-bar / notification-area icon.
+// StatusItem is a cross-platform tray / menu-bar / notification-area icon
+// (QSystemTrayIcon / KStatusNotifierItem / Electron Tray).
 //
 //	Linux:   StatusNotifierItem (KDE / AppIndicator / Waybar) + freedesktop
-//	         desktop notifications. X11, Xlibre, and Wayland share this path.
+//	         desktop notifications. HostMenu (default) exports dbusmenu at
+//	         /MenuBar; ToolkitMenu uses Menu=/NO_DBUSMENU + ContextMenu.
+//	         X11, Xlibre, and Wayland share this path.
 //	Windows: Shell_NotifyIcon (notification area + balloon).
 //	macOS:   NSStatusItem (menu bar) when built with CGO.
 //
@@ -50,6 +54,25 @@ type StatusMenuItem struct {
 	OnClick   func()
 }
 
+// StatusMenuChrome selects who draws the tray context menu.
+//
+// HostMenu (default) matches QSystemTrayIcon, KStatusNotifierItem, and
+// Electron Tray: Linux exports a real com.canonical.dbusmenu at the SNI
+// Menu path and the host draws the menu. ToolkitMenu is opt-in Office XP
+// chrome via a reused toolkit PopupMenu and SNI Menu=/NO_DBUSMENU.
+type StatusMenuChrome int
+
+const (
+	// HostMenu lets the desktop draw a native tray menu (Linux dbusmenu).
+	// Windows still uses the toolkit popup (no HMENU); macOS uses the OS
+	// menu-bar item. This is the default and the robust Plasma path.
+	HostMenu StatusMenuChrome = iota
+	// ToolkitMenu shows a uitoolkit PopupMenu (Office XP chrome). Linux
+	// sets Menu=/NO_DBUSMENU so Plasma calls ContextMenu instead of
+	// importing dbusmenu.
+	ToolkitMenu
+)
+
 // StatusItemOptions configure [NewStatusItem].
 type StatusItemOptions struct {
 	// ID is the D-Bus / app id (default "uitoolkit").
@@ -59,12 +82,19 @@ type StatusItemOptions struct {
 	Tooltip string
 	Icon    StatusIcon
 	Menu    []StatusMenuItem
+	// MenuChrome is HostMenu (default, native host chrome) or ToolkitMenu
+	// (opt-in toolkit PopupMenu). See [StatusMenuChrome].
+	MenuChrome StatusMenuChrome
+	// ItemIsMenu, when true, advertises SNI ItemIsMenu so left-click is
+	// treated as “menu only” by hosts. Default false: left-click is Activate.
+	ItemIsMenu bool
 	// OnClick is the primary (left) click. Apps typically Show/Raise a window.
 	OnClick func()
 	// OnNotifyClick is invoked when the user activates a desktop notification.
 	OnNotifyClick func()
-	// OnMenu is the context / right-click handler. Application.NewStatusItem
-	// sets this to open a toolkit PopupMenu (same chrome as app menus).
+	// OnMenu is the context / right-click handler used by ToolkitMenu
+	// (and by Windows, which has no dbusmenu). Application.NewStatusItem
+	// sets this to ShowStatusMenu when toolkit chrome is selected.
 	// x, y are SNI root coordinates; 0,0 means "near the window".
 	OnMenu func(x, y int32)
 	// Dispatch runs tray callbacks (Activate, dbusmenu Event, notify
@@ -153,4 +183,25 @@ func copyMenu(in []StatusMenuItem) []StatusMenuItem {
 	out := make([]StatusMenuItem, len(in))
 	copy(out, in)
 	return out
+}
+
+func menuRowsEqual(a, b []StatusMenuItem) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i].Text != b[i].Text || a[i].Disabled != b[i].Disabled ||
+			a[i].Separator != b[i].Separator || a[i].Checked != b[i].Checked ||
+			a[i].Icon != b[i].Icon {
+			return false
+		}
+	}
+	return true
+}
+
+// HostMenuNative reports whether this OS draws a native tray menu for
+// HostMenu (Linux StatusNotifier dbusmenu). Other OSes keep the existing
+// toolkit or AppKit path.
+func HostMenuNative() bool {
+	return runtime.GOOS == "linux"
 }

@@ -32,20 +32,21 @@ type Options struct {
 
 // Application owns the run loop and open windows.
 type Application struct {
-	mu        sync.Mutex
-	look      style.LookAndFeel
-	scale     float32
-	headless  bool
-	backend   platform.Backend
-	windows   []*Window
-	quit      bool
-	onQuit    func()
-	watchLook bool
-	lookWatch *lookFileStamp
-	trays      []platform.StatusItem
-	looping    bool
-	posted     []func()
-	statusMenu *Window
+	mu               sync.Mutex
+	look             style.LookAndFeel
+	scale            float32
+	headless         bool
+	backend          platform.Backend
+	windows          []*Window
+	quit             bool
+	onQuit           func()
+	watchLook        bool
+	lookWatch        *lookFileStamp
+	trays            []platform.StatusItem
+	looping          bool
+	posted           []func()
+	statusMenu       *Window
+	hidingStatusMenu bool
 }
 
 // New constructs an application. Default look is PreferredLook
@@ -188,6 +189,7 @@ func (a *Application) Post(fn func()) {
 
 func (a *Application) wakeUI() {
 	if a == nil {
+		platform.WakeLoop()
 		return
 	}
 	for _, w := range a.Windows() {
@@ -196,6 +198,7 @@ func (a *Application) wakeUI() {
 			return
 		}
 	}
+	platform.WakeLoop()
 }
 
 func (a *Application) runPosted() {

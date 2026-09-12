@@ -21,26 +21,21 @@ func WaitDisplay(s Surface, timeout time.Duration) bool {
 	if w, ok := s.(DisplayWaiter); ok {
 		return w.Wait(timeout)
 	}
-	if timeout == 0 {
-		return false
-	}
-	if timeout < 0 || timeout > 50*time.Millisecond {
-		// Offscreen / stub: never block forever (Quit from another goroutine).
-		timeout = 50 * time.Millisecond
-	}
-	time.Sleep(timeout)
-	return false
+	return waitOrSleep(timeout)
 }
 
 // DisplayWaker can interrupt a blocking [DisplayWaiter.Wait] so queued
-// Application.Post work (SNI ContextMenu) runs without waiting out the
-// tray 100ms cap.
+// Application.Post work (SNI ContextMenu / dbusmenu Event) runs without
+// waiting out the tray 100ms cap. Wayland polls an eventfd with
+// wl_display; X11 uses the helper property.
 type DisplayWaker interface {
 	Wake()
 }
 
-// WakeSurface pokes s so the UI loop leaves Wait. No-op when unsupported.
+// WakeSurface pokes s so the UI loop leaves Wait. Also signals the
+// process-wide [WakeLoop] fd so a tray-only wait (no surface) wakes.
 func WakeSurface(s Surface) {
+	WakeLoop()
 	if s == nil {
 		return
 	}

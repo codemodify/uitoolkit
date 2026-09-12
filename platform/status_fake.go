@@ -100,6 +100,13 @@ func (f *FakeStatusItem) Menu() []StatusMenuItem {
 	return copyMenu(f.menu)
 }
 
+// MenuChrome is the chrome selected at construction (tests).
+func (f *FakeStatusItem) MenuChrome() StatusMenuChrome {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.opts.MenuChrome
+}
+
 func (f *FakeStatusItem) Closed() bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()

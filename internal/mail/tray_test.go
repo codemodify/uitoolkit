@@ -11,7 +11,6 @@ import (
 	"github.com/codemodify/uitoolkit/app"
 	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
-	"github.com/codemodify/uitoolkit/widgets"
 )
 
 func TestMailTrayFakeClickRaises(t *testing.T) {
@@ -71,18 +70,13 @@ func TestMailTrayFakeClickRaises(t *testing.T) {
 	if w.Visible() {
 		t.Fatal("tray context click must not raise Mail (left-click does)")
 	}
-	var menu *app.Window
 	for _, win := range a.Windows() {
 		if win != nil && win != w && !win.Closed() && win.Visible() {
-			menu = win
-			break
+			t.Fatal("HostMenu Mail must not open a toolkit popup window")
 		}
 	}
-	if menu == nil {
-		t.Fatal("tray context should open a visible status-menu window")
-	}
-	if _, ok := menu.Popup().(*widgets.PopupMenu); !ok {
-		t.Fatalf("tray context should be toolkit PopupMenu, got %T", menu.Popup())
+	if tray.MenuChrome() != platform.HostMenu {
+		t.Fatalf("Mail tray chrome %v want HostMenu", tray.MenuChrome())
 	}
 }
 

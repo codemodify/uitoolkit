@@ -40,6 +40,7 @@ type (
 	StatusItemOptions = platform.StatusItemOptions
 	StatusIcon        = platform.StatusIcon
 	StatusMenuItem    = platform.StatusMenuItem
+	StatusMenuChrome  = platform.StatusMenuChrome
 	Notification      = platform.Notification
 	Appearance        = style.Appearance
 	ThemeName         = style.ThemeName
@@ -76,6 +77,8 @@ const (
 	ThemeSourceBuiltin     = style.ThemeSourceBuiltin
 	ThemeSourceUser        = style.ThemeSourceUser
 	DefaultThemeName       = style.DefaultThemeName
+	HostMenu               = platform.HostMenu
+	ToolkitMenu            = platform.ToolkitMenu
 )
 
 func New(opts Options) *Application { return app.New(opts) }

@@ -102,10 +102,26 @@ func TestOffscreenHostWindow(t *testing.T) {
 
 func TestWakeSurfaceOffscreenNoPanic(t *testing.T) {
 	o := NewOffscreen(WindowOptions{Width: 40, Height: 20})
+	before := o.Wakes()
 	WakeSurface(o)
+	if o.Wakes() <= before {
+		t.Fatal("WakeSurface should count on Offscreen")
+	}
 	WakeSurface(nil)
 	MoveSurface(o, 10, 20)
 	MoveSurface(nil, 0, 0)
+}
+
+func TestMenuRowsEqual(t *testing.T) {
+	a := []StatusMenuItem{{Text: "Show"}, {Separator: true}, {Text: "Quit"}}
+	b := []StatusMenuItem{{Text: "Show"}, {Separator: true}, {Text: "Quit"}}
+	if !menuRowsEqual(a, b) {
+		t.Fatal("equal")
+	}
+	b[0].Text = "Show Mail"
+	if menuRowsEqual(a, b) {
+		t.Fatal("text change")
+	}
 }
 
 func TestShowRaiseAfterHideMakesVisible(t *testing.T) {

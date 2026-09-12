@@ -1,45 +1,47 @@
 # Status item (system tray)
 
-**v0.16.0** adds `StatusItem`: a cross-platform tray / menu-bar /
-notification-area icon plus a desktop toast. Mail dogfoods it; any
-uitoolkit app can open one.
+`StatusItem` is a first-class toolkit API in the same role as Qt
+`QSystemTrayIcon`, KDE `KStatusNotifierItem`, and Electron `Tray`: a
+cross-platform notification-area / menu-bar icon, a context menu, and a
+desktop toast. Mail only calls toolkit APIs (`app.NewStatusItem` /
+`platform.StatusItem`).
 
-**v0.16.4** Plasma right-click: SNI `Menu` is the spec empty path `/`
-(not `/NO_DBUSMENU`). Plasma treats any other object path as dbusmenu
-and never calls `ContextMenu`. `ItemIsMenu=false`. The toolkit menu is
-a dedicated top-level popup window (X11 override-redirect /
-`_NET_WM_WINDOW_TYPE_POPUP_MENU` at the SNI root `(x,y)`; Wayland
-maps a small undecorated toplevel). The main Mail window stays hidden
-when it was closed to the tray. `UITK_TRAY_DEBUG=1` logs
-`ContextMenu` vs dbusmenu, the Menu property, and whether the popup
-window was shown. Left-click / `Activate` still Show/Raise Mail.
+**v0.17.0** makes the Linux path robust. The default is **HostMenu**:
+advertise `Menu=/MenuBar` with a real `com.canonical.dbusmenu` layout
+and let Plasma / AppIndicator / Waybar draw the menu. Opt-in
+**ToolkitMenu** uses the official KDE sentinel `Menu=/NO_DBUSMENU` and a
+reused toolkit `PopupMenu` (Office XP chrome).
 
-**v0.16.3** tried `Menu=/NO_DBUSMENU` and a window-corner popup on the
-main surface. Plasma imported that path as dbusmenu, so a real
-right-click never reached `ContextMenu` (synthetic `busctl call`
-still did).
+## Why HostMenu is the default
 
-**v0.16.2** Mail tray: `IconMail` (not `IconInfo`); Wayland Show/Raise
-remaps the toplevel after close-to-tray and activates via
-`xdg_activation_v1` when the compositor has it. The tray **context
-menu is a toolkit `PopupMenu`** (Office XP chrome), not Plasma’s
-native dbusmenu. Left-click is still SNI `Activate` → Show Mail.
-Callbacks run on the UI thread.
+Hosts expect a real dbusmenu at the SNI `Menu` path and **draw the menu
+themselves**. Electron’s docs (`tray.setContextMenu`) and field fixes
+are explicit: `right-click` + a custom popup is unreliable on Linux
+SNI.
 
-**v0.16.1** fixes a startup panic on KDE Plasma. `com.canonical.dbusmenu.GetLayout`
-must return D-Bus type `(ia{sv}av)` — children are an array of variants,
-not a recursive Go struct. v0.16.0 exported `Children []dbusMenuLayout`,
-so godbus `getSignature` panicked (`container nesting too deep`) when
-`org.kde.StatusNotifierWatcher` called `GetLayout` after
-`RegisterStatusNotifierItem`. The UI process now also recovers tray
-export / register failures and keeps the window on a stub item.
+Plasma (`statusnotifieritemsource.cpp`):
+
+| SNI `Menu` | Plasma |
+| --- | --- |
+| `/MenuBar` (or any real object path except the sentinel) | Import dbusmenu; host draws the menu |
+| `/NO_DBUSMENU` | Official KDE / `KStatusNotifierItem` hack: **disable** dbusmenu and call SNI `ContextMenu(x,y)` |
+| `/` | Spec “empty” path — **not** the KDE sentinel. Not a reliable ContextMenu fallback |
+
+v0.16.4 advertised `Menu=/` and opened a new top-level toolkit window
+on every right-click. First click was delayed (`Application.Post` often
+waited out the 100ms tray poll on Wayland); the second click often did
+nothing (FocusOut / unmap / create races left an invisible surface over
+the panel).
+
+## HostMenu vs ToolkitMenu
 
 ```go
 item, _ := app.NewStatusItem(uitoolkit.StatusItemOptions{
-    ID:      "myapp",
-    Title:   "My App",
-    Tooltip: "My App",
-    Icon:    uitoolkit.StatusIconFromTool(uitoolkit.IconMail, app.Look(), 22),
+    ID:         "myapp",
+    Title:      "My App",
+    Tooltip:    "My App",
+    MenuChrome: uitoolkit.HostMenu, // default; omit for the same effect
+    Icon:       uitoolkit.StatusIconFromTool(uitoolkit.IconMail, app.Look(), 22),
     Menu: uitoolkit.StatusMenuFromItems([]*uitoolkit.MenuItem{
         uitoolkit.NewMenuItem("Show", win.Raise),
         uitoolkit.MenuSep(),
@@ -50,18 +52,48 @@ item, _ := app.NewStatusItem(uitoolkit.StatusItemOptions{
 _ = item.Notify(uitoolkit.Notification{Title: "Hello", Body: "Ready."})
 ```
 
-Headless apps and missing hosts get a **stub** (methods succeed, no
-window chrome). `UITK_TRAY=fake` records calls for tests.
-`UITK_TRAY=stub` forces the no-op.
+| | **HostMenu** (default) | **ToolkitMenu** |
+| --- | --- | --- |
+| Linux `Menu` | `/MenuBar` — real dbusmenu rows | `/NO_DBUSMENU` exactly |
+| Who draws | Plasma / GNOME AppIndicator / Waybar | Toolkit `PopupMenu` |
+| `ItemIsMenu` | `false` unless `StatusItemOptions.ItemIsMenu` | `false` unless set |
+| Left-click | SNI `Activate` → `OnClick` (show window) | Same |
+| Right-click | Host menu every time | `ContextMenu` / `SecondaryActivate` → reused popup |
+| `SetMenu` | `LayoutUpdated` (deduped; no spam) | Updates next popup |
+| UI thread | dbusmenu `Event("clicked")` via `Dispatch` / `Post` | `OnMenu` via `Dispatch` / `Post` |
+
+`GetLayout` stays **flat** (`(ia{sv}av)` children as `[]dbus.Variant` of
+a distinct leaf type). Do not nest the same Go struct — that is the
+v0.16.1 godbus `container nesting too deep` panic.
+
+If `org.kde.StatusNotifierWatcher` restarts, the item watches
+`NameOwnerChanged` and calls `RegisterStatusNotifierItem` again.
+
+### ToolkitMenu robustness
+
+Set `MenuChrome: uitoolkit.ToolkitMenu` to dogfood Office XP chrome:
+
+- **One** status-menu window, reused (`Hide` / `Show` + rebind). No
+  create/destroy per click.
+- FocusOut-dismiss is armed only after ~180ms so map/focus churn does
+  not kill the first frame.
+- Dismiss **Hides and unmaps** fully. Never leave an invisible surface
+  over the panel.
+- Prefer screen `(x,y)` on **X11**. On **Wayland** the compositor owns
+  toplevel placement; the menu is still mapped and visible every time.
+- `Application.Post` wakes the display promptly (Linux `eventfd` polled
+  with `wl_display`; X11 helper property). The 100ms tray wait cap is a
+  fallback, not the wake path.
 
 ## API
 
 | Type / func | Role |
 | --- | --- |
 | `StatusItem` | `SetIcon` / `SetTooltip` / `SetTitle` / `SetMenu` / `Notify` / `Close` / `Backend` / `Alive` |
-| `StatusItemOptions` | ID, title, tooltip, icon, menu, `OnClick`, `OnNotifyClick`, `OnMenu`, `Stub` |
+| `StatusItemOptions` | ID, title, tooltip, icon, menu, `MenuChrome`, `ItemIsMenu`, `OnClick`, `OnNotifyClick`, `OnMenu`, `Stub` |
+| `StatusMenuChrome` | `HostMenu` (default) or `ToolkitMenu` |
 | `StatusIcon` | `Image` (paintengine2d), `Path` (PNG), or `Name` (freedesktop / theme) |
-| `StatusMenuItem` | text, separator, check, `OnClick` — map from `widgets.MenuItem` |
+| `StatusMenuItem` | text, separator, check, icon, `OnClick` — map from `widgets.MenuItem` |
 | `Notification` | title + body (+ optional icon / click) |
 | `Application.NewStatusItem` | owns the item; a live item keeps `Run` after the last window closes |
 | `Window.SetCloseHides` | WM close hides (close-to-tray) instead of destroy |
@@ -69,54 +101,45 @@ window chrome). `UITK_TRAY=fake` records calls for tests.
 
 `Backend()` is `sni`, `win32`, `appkit`, `fdo-notify`, `fake`, or `stub`.
 
-## Backends
+Headless apps and missing hosts get a **stub**. `UITK_TRAY=fake` records
+calls for tests. `UITK_TRAY=stub` forces the no-op.
+`UITK_TRAY_DEBUG=1` logs Activate / ContextMenu / dbusmenu / Post.
+
+## Per-OS behavior
 
 ### Linux (X11, Xlibre, Wayland)
 
 One D-Bus path for every Linux display server. No extra CGO.
 
-| Piece | Bus name | Needs |
-| --- | --- | --- |
-| Tray icon | `org.kde.StatusNotifierItem` + `RegisterStatusNotifierItem` on `org.kde.StatusNotifierWatcher` | A StatusNotifier host |
-| Context menu | SNI `ContextMenu(x,y)` → toolkit `PopupMenu` on a status-menu window | Same host (right-click) |
-| dbusmenu stub | `com.canonical.dbusmenu` at `/MenuBar`; `Menu=/` | Hosts that probe the iface; cannot win over Plasma `ContextMenu` |
-| Toast | `org.freedesktop.Notifications` | notification daemon (almost always present) |
-
-**Tray menu chrome**
-
-Linux SNI `Menu` is `/` (empty path) with `ItemIsMenu=false`. That is
-the StatusNotifierItem sentinel for “no dbusmenu”: Plasma calls
-`ContextMenu` instead of importing a menu object. `/MenuBar` remains a
-stub so hosts that probe `com.canonical.dbusmenu` do not panic; it
-must not be advertised as `Menu` or Plasma never calls `ContextMenu`.
-`ShowStatusMenu` opens the same `PopupMenu` / `MenuItem` chrome as
-in-app menus on a dedicated popup window sized to the items, dismissed
-on Escape, item activate, or click-away (`FocusOut`). Left-click stays
-`Activate`. `AboutToShow` / stub `Event("clicked")` also open the
-toolkit menu if a host still talks dbusmenu. `Application.Post` wakes
-the UI loop (X11 helper property; tray wait is still capped at 100ms).
-
-| Environment | Icon | Toolkit popup | Notes |
+| Piece | Bus name | HostMenu | ToolkitMenu |
 | --- | --- | --- | --- |
-| KDE Plasma | yes (SNI) | yes (`ContextMenu`) | Native dbusmenu is **not** used for chrome |
-| GNOME 45+ | AppIndicator extension | only if the host calls `ContextMenu` | Extension often expects dbusmenu; right-click may no-op |
-| Sway / Hyprland + Waybar | tray module | if Waybar sends `ContextMenu` | dbusmenu-only modules get the stub |
-| Xfce / Cinnamon / MATE | usually SNI | if the host calls `ContextMenu` | |
-| Xlibre | same as X11 | same | |
-| Windows | `Shell_NotifyIcon` | yes (`OnMenu` on right-click) when a window exists | No Win32 `HMENU` |
-| macOS (`CGO`) | `NSStatusItem` | not wired | OS menu-bar click is native; toolkit popup not used |
-| No session bus / SSH | stub | stub | |
+| Tray icon | `org.kde.StatusNotifierItem` + `RegisterStatusNotifierItem` | same | same |
+| Context menu | `com.canonical.dbusmenu` at `/MenuBar` | host draws | unused |
+| SNI `Menu` | object path | `/MenuBar` | `/NO_DBUSMENU` |
+| Fallback | SNI `ContextMenu(x,y)` | not used | toolkit popup |
+| Toast | `org.freedesktop.Notifications` | same | same |
 
-**Compositor / desktop (toasts):**
+| Environment | Icon | HostMenu | ToolkitMenu | Notes |
+| --- | --- | --- | --- | --- |
+| KDE Plasma | yes (SNI) | native dbusmenu | `ContextMenu` popup | Prefer HostMenu |
+| GNOME 45+ | AppIndicator extension | native dbusmenu | only if host calls `ContextMenu` | Extension expects dbusmenu |
+| Sway / Hyprland + Waybar | tray module | dbusmenu | if Waybar sends `ContextMenu` | |
+| Xfce / Cinnamon / MATE | usually SNI | dbusmenu | if host calls `ContextMenu` | |
+| Xlibre | same as X11 | same | same | |
+| No session bus / SSH | stub | stub | stub | |
 
-| Environment | Toast |
-| --- | --- |
-| KDE Plasma | yes |
-| GNOME 45+ | yes (extension only needed for the icon) |
-| Sway / Hyprland | Mako / Dunst / fnott |
-| Xfce / Cinnamon / MATE | yes |
-| Xlibre | yes |
-| No session bus / SSH | stub |
+**Wayland:** clients cannot place a toplevel at SNI `(x,y)`. HostMenu
+avoids that (the panel draws the menu). ToolkitMenu still shows a
+visible popup; the compositor chooses where. Close-to-tray Hide drops
+the `xdg_toplevel` role; Show remaps and requests `xdg_activation_v1`
+when available.
+
+**X11:** ToolkitMenu places the popup at root `(x,y)` (typically above
+a bottom panel). `Window.Raise` sends `_NET_ACTIVE_WINDOW`.
+
+XEmbed `_NET_SYSTEM_TRAY` is **not** implemented. Portal
+`org.freedesktop.portal.Notification` is not used (SNI + fdo cover the
+same toasts outside a sandbox).
 
 ```bash
 # Debian/Ubuntu
@@ -124,25 +147,25 @@ sudo apt install gnome-shell-extension-appindicator   # GNOME tray
 # or
 sudo apt install xfce4-indicator-plugin               # Xfce
 
-# Session bus is required (normal desktop login).
 echo "$DBUS_SESSION_BUS_ADDRESS"
 ```
 
-XEmbed `_NET_SYSTEM_TRAY` is **not** implemented. Portal
-`org.freedesktop.portal.Notification` is not used (SNI + fdo cover
-the same toasts outside a sandbox).
+Verify Mail on abox / Plasma (HostMenu):
 
-`Window.Raise` on X11 maps the window and sends `_NET_ACTIVE_WINDOW`.
-On Wayland, Hide drops the `xdg_toplevel` role (after `set_minimized`);
-Show remaps it and requests `xdg_activation_v1` when available.
+```bash
+busctl --user get-property \
+  "$(busctl --user tree --list | grep -i StatusNotifierItem | head -1)" \
+  /StatusNotifierItem org.kde.StatusNotifierItem Menu
+# expect: o "/MenuBar"
+```
 
 ### Windows
 
-`GOOS=windows`: `Shell_NotifyIconW` (notification area) plus `NIF_INFO`
-balloons. Left-click fires `OnClick`; right-click fires `OnMenu` (toolkit
-`PopupMenu` when a toolkit window exists). Balloon click fires
-`OnNotifyClick`. Windowing (HWND app windows) is still a stub — only
-the tray landed.
+`GOOS=windows`: `Shell_NotifyIconW` plus `NIF_INFO` balloons. There is
+no Win32 `HMENU` yet, so both HostMenu and ToolkitMenu use `OnMenu` →
+toolkit `PopupMenu` when a toolkit window exists. Left-click is
+`OnClick`; balloon click is `OnNotifyClick`. HWND app windows are still
+a stub — only the tray landed.
 
 ```bat
 go build ./cmd/mailclientui
@@ -153,12 +176,22 @@ mailclientui.exe
 
 `GOOS=darwin` **and** `CGO_ENABLED=1`: `NSStatusItem` on the menu bar
 and `NSUserNotification` toasts. The OS owns the menu-bar click;
-toolkit `PopupMenu` is not used on macOS. Without CGO the item is a stub.
-AppKit windows are still a stub.
+toolkit `PopupMenu` is not used. Without CGO the item is a stub. AppKit
+windows are still a stub.
 
 ```bash
 CGO_ENABLED=1 go build ./cmd/mailclientui
 ```
+
+## History
+
+**v0.16.1** — `GetLayout` must return D-Bus `(ia{sv}av)`. v0.16.0
+exported a recursive Go struct; godbus panicked (`container nesting too
+deep`) when Plasma’s watcher called `GetLayout`.
+
+**v0.16.2–0.16.4** — Toolkit-only popup experiments (`/NO_DBUSMENU`,
+then `Menu=/`, new window per click). Unreliable on Plasma/Wayland;
+superseded by v0.17.0 HostMenu.
 
 ## Build / run
 
@@ -168,12 +201,11 @@ CGO_ENABLED=0 go test ./...
 UITK_TRAY=fake go test ./platform ./app ./internal/mail
 
 # Linux desktop
-go run ./cmd/mailclientui          # UI owns the tray
+go run ./cmd/mailclientui          # UI owns the tray (HostMenu)
 go run ./examples/mail             # in-process daemon + UI
 
-# Force backends
 UITK_TRAY=stub go run ./cmd/mailclientui
-UITK_TRAY=fake go run ./cmd/mailclientui   # no icon; recorded API
+UITK_TRAY=fake go run ./cmd/mailclientui
 ```
 
 Dependency: [`github.com/godbus/dbus/v5`](https://github.com/godbus/dbus) on
