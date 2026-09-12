@@ -565,14 +565,13 @@ func (p *PopupMenu) rowTop(i int) float32 {
 }
 
 func (p *PopupMenu) rowAt(y float32) int {
-	ch := p.chrome()
-	cur := ch.PadT - p.OffsetY
-	for i, it := range p.Items {
-		rh := p.rowH(it)
-		if y >= cur && y < cur+rh {
+	// Same boxes Paint uses (PadT / rowH / OffsetY). Do not invent a
+	// parallel Y walk — scale, gutter, and padding must stay aligned.
+	for i := range p.Items {
+		r := p.rowBounds(i)
+		if !r.Empty() && y >= r.Min.Y && y < r.Max.Y {
 			return i
 		}
-		cur += rh
 	}
 	return -1
 }
@@ -691,11 +690,11 @@ func (p *PopupMenu) Paint(ctx *paintengine2d.Context) {
 	paintOverflowBar(ctx, lk, track, thumb, p.vbar.over, p.vbar.active)
 }
 
-func (p *PopupMenu) invalidateRow(i int) {
-	r := p.rowBounds(i)
-	if !r.Empty() {
-		p.InvalidateRect(r.Inset(-1))
-	}
+// invalidateHover repaints the whole popup. DrawMenuItem's XP highlight
+// extends into the icon gutter (left of rowBounds); two-row dirty left
+// the previous fill on Wayland/HiDPI (v0.14.4 Help menu).
+func (p *PopupMenu) invalidateHover() {
+	p.Invalidate()
 }
 
 func (p *PopupMenu) MouseMove(e widget.MouseEvent) bool {
@@ -715,13 +714,11 @@ func (p *PopupMenu) MouseMove(e widget.MouseEvent) bool {
 	p.keyNav = false
 	i := p.rowAt(e.Pos.Y)
 	if i != p.hover {
-		old := p.hover
 		p.hover = i
 		if i >= 0 && p.Items[i] != nil && !p.Items[i].Separator {
 			p.focus = i
 		}
-		p.invalidateRow(old)
-		p.invalidateRow(i)
+		p.invalidateHover()
 	}
 	return true
 }
@@ -729,10 +726,9 @@ func (p *PopupMenu) MouseMove(e widget.MouseEvent) bool {
 func (p *PopupMenu) MouseEnter() { p.SetHovered(true) }
 
 func (p *PopupMenu) MouseExit() {
-	old := p.hover
 	p.hover = -1
 	p.SetHovered(false)
-	p.invalidateRow(old)
+	p.invalidateHover()
 }
 
 // HighlightedIndex is the pointer-hot or keyboard-current row, or -1.
@@ -853,7 +849,6 @@ func foldLetter(r rune) rune {
 }
 
 func (p *PopupMenu) setHoverFocus(i int) {
-	old := p.hover
 	off := p.OffsetY
 	p.focus = i
 	p.hover = i
@@ -862,8 +857,7 @@ func (p *PopupMenu) setHoverFocus(i int) {
 		p.Invalidate()
 		return
 	}
-	p.invalidateRow(old)
-	p.invalidateRow(i)
+	p.invalidateHover()
 }
 
 func lastEnabled(items []*MenuItem) int {
