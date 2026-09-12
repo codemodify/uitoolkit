@@ -1,14 +1,13 @@
 # Settings
 
-`cmd/uitksettings` is the toolkit appearance editor. It does not invent a
-second theme system: it selects a **named theme pack** and an **icon set**
-on top of that pack. Other apps apply both with `Application.SetLook` /
-`PreferredLook`.
+`cmd/uitksettings` is the toolkit appearance editor. Theme (palette),
+**corners**, and **icons** are three independent prefs. Other apps apply
+them with `Application.SetLook` / `PreferredLook`.
 
-Theme packs are GTK/KDE-like look files (palette + corners). Chrome
-`ToolIcon`s come from a **PNG** file set under `~/.config/uitoolkit/icons/`
-when one is selected. Packs may still list a default `icons` field
-(`classic` / `sharp`); `look.json` `"icons"` overrides it.
+A theme is a color scheme only (`dark`, `light`, or a user-exported
+palette). Control shape is the Corners radio (Round / Square →
+`Metrics.Radius`). Chrome `ToolIcon`s come from `look.json` `"icons"`
+(a PNG set under `~/.config/uitoolkit/icons/`, or drawn classic/sharp).
 
 ## Run
 
@@ -22,18 +21,19 @@ Linux X11 or Wayland (same backends as gallery / Mail). Headless uses the
 offscreen surface.
 
 There is no menu bar. **Apply** is the only persist action for
-`look.json`. **Export current look…** writes a user pack.
+`look.json`. **Export current theme…** writes a user color theme
+(palette only).
 
 ## What it sets
 
 | Control | LookAndFeel | Values |
 | --- | --- | --- |
-| Theme picker | named pack → `Classic` | embedded starters + exported user packs |
-| Icon picker | PNG set or drawn fallback | classic / sharp + `icons/<set>/` |
-| Export | `themes/<name>/theme.json` | current (staged) look, asked for a name |
+| Theme | palette pack → `Classic` | Built-in `dark` / `light` + exported user palettes |
+| Corners | `Metrics.Radius` | Round / Square |
+| Icons | PNG set or drawn fallback | Built-in (classic/sharp + premiere names when copied) + User folders |
+| Export | `themes/<name>/theme.json` | current palette only; corners/icons stay prefs |
 
-Corners stay inside the selected pack. Icons are chosen **on top of**
-the pack.
+Theme and Icons lists use the same **Built-in** / **User** grouping.
 
 The pickers update a **staged** appearance and preview it in the
 Settings window (`Application.SetLook`) without touching disk. **Apply**
@@ -50,41 +50,38 @@ $XDG_CONFIG_HOME/uitoolkit/look.json
 
 ```json
 {
-  "theme": "dark-round-classic",
+  "theme": "dark",
+  "corners": "square",
   "icons": "lucide"
 }
 ```
 
-`theme` is the pack name. `icons` is the chrome set (`classic`, `sharp`,
-or an installed directory such as `lucide`). Corners are not stored
-here.
+`theme` is the color theme name. `corners` is `round` or `square`.
+`icons` is the chrome set (`classic`, `sharp`, or an installed
+directory such as `lucide`).
 
-Mode `0600`. Missing or invalid files yield `dark-round-classic`.
+Mode `0600`. Missing or invalid files yield `dark` + `round` +
+`classic`.
 
-A legacy v0.11.0 / v0.11.1 file with `theme` / `corners` / `icons` is
-migrated on load to the matching starter (`light` + `square` + `sharp`
-→ `light-square-sharp`). A bare `"theme": "dark"` or `"light"` (no
-corners/icons) becomes `dark-round-classic` or `light-round-classic`,
-unless a user pack of that exact name exists.
+Compound v0.11–v0.12.1 theme ids migrate on load:
+
+| Old `theme` | Becomes |
+| --- | --- |
+| `dark-round-classic` / `dark-round-sharp` / `dark-round` | `theme: dark`, `corners: round` |
+| `light-square-sharp` / `light-square-classic` / `light-square` | `theme: light`, `corners: square` |
+| `dark` / `light` (already palette-only) | same name; corners from the `corners` field or `round` |
+
+An explicit `"corners"` field wins over corners parsed from a compound
+name. `"icons"` is always the chrome set (never inferred from
+`-classic` / `-sharp` suffixes).
 
 ## Theme packs
 
-Eight **embedded starters** cover dark/light × round/square ×
-classic/sharp. They ship in the binary (`style/themes/*/theme.json`) and
-are **not** auto-written to disk.
+Two **embedded starters** (`dark`, `light`) ship in the binary
+(`style/themes/*/theme.json`) and are **not** auto-written to disk.
 
-| Name | Palette | Corners | Icons |
-| --- | --- | --- | --- |
-| `dark-round-classic` | dark | round | classic |
-| `dark-round-sharp` | dark | round | sharp |
-| `dark-square-classic` | dark | square | classic |
-| `dark-square-sharp` | dark | square | sharp |
-| `light-round-classic` | light | round | classic |
-| `light-round-sharp` | light | round | sharp |
-| `light-square-classic` | light | square | classic |
-| `light-square-sharp` | light | square | sharp |
-
-User packs:
+Settings lists them under **Built-in**. User exports live under
+**User**.
 
 ```
 $XDG_CONFIG_HOME/uitoolkit/themes/<name>/theme.json
@@ -94,24 +91,18 @@ $XDG_CONFIG_HOME/uitoolkit/themes/<name>/theme.json
 ```json
 {
   "label": "ocean",
-  "palette": "dark",
-  "corners": "round",
-  "icons": "classic"
+  "palette": "dark"
 }
 ```
 
-JSON only. Edit the file to tweak palette or corners. The pack `icons`
-field (`classic` / `sharp`) is a **fallback default** used only when
-`look.json` has no `"icons"`. When Settings Apply writes `"icons"`, that
-value owns chrome ToolIcons.
+JSON only. Pack-level `corners` / `icons` fields are ignored.
+**Export current theme…** asks for a name and writes the staged
+**palette**. Corners and icons stay in `look.json`.
 
-**Export current look…** asks for a name and writes this file from the
-staged look.
-
-`ListThemes` lists **user packs first** (sorted by name), then builtins
-that are not shadowed. `LoadTheme(name)` **prefers the user pack** when
-both exist — a user `dark-round-classic` overrides the embedded starter
-of the same name and is listed once (as exported).
+`ListThemes` lists Built-in starters (not shadowed) then user packs
+(sorted by name). `LoadTheme(name)` **prefers the user pack** when both
+exist — a user `dark` overrides the embedded starter and is listed once
+under User. Legacy compound ids map to `dark` / `light`.
 
 ## Icon sets (PNG files)
 
@@ -126,11 +117,17 @@ cp -R icons/lucide icons/phosphor icons/tabler icons/heroicons icons/material-sy
 ```
 
 See [icons/README.md](../icons/README.md) for licenses, attribution,
-and the `@2x` convention. Settings lists `classic` / `sharp` (drawn)
-plus every `icons/<set>/` directory that contains at least one
-ToolIcon PNG. A missing file falls back to the drawn classic glyph.
-The toolkit tints monochrome/alpha PNGs with the Look foreground /
-icon color.
+and the `@2x` convention.
+
+Settings groups icon sets the same way as themes:
+
+- **Built-in** — drawn `classic` / `sharp`, plus the five premiere
+  names when those folders are present under `icons/`
+- **User** — any other `icons/<name>/` folder that contains at least
+  one ToolIcon PNG
+
+A missing file falls back to the drawn classic glyph. The toolkit tints
+monochrome/alpha PNGs with the Look foreground / icon color.
 
 The v0.12.0 `filled` / `outline` / `duotone` SVG folders are removed.
 
@@ -147,7 +144,7 @@ and, on change, reloads prefs and calls
 app.SetLook(style.WithAppearance(app.Look(), style.LoadAppearance()))
 ```
 
-so the selected pack updates without a restart. Display scale and
+so theme, corners, and icons update without a restart. Display scale and
 density on the current look are kept.
 
 `Application.New` enables the watcher **by default when `Options.Look` is
@@ -178,32 +175,34 @@ Mail, gallery, Files, Notes, and Inspector start from `PreferredLook`
 and watch the file. Mail chrome persist (`mailui.json` density / layout)
 does **not** rewrite `look.json`. `applyLook` applies `PreferredLook`
 plus Mail density and syncs the View menu checkmark from the loaded
-pack. View → Dark / Light is the only Mail write: `SaveAppearance` of
-`WithPalette` (same corners/icons, opposite palette). Gallery /
+palette. View → Dark / Light is the only Mail write: `SaveAppearance` of
+`WithPalette` (same corners/icons, opposite palette starter). Gallery /
 screenshot fixtures keep explicit `DarkLook` / `LightLook`.
 
 Helpers for a live look:
 
 ```go
-uitoolkit.LoadTheme("light-square-sharp")
+uitoolkit.LoadTheme("light")
 uitoolkit.ListThemes()
 uitoolkit.WithTheme(look, uitoolkit.ThemeLight)
 uitoolkit.WithCorners(look, uitoolkit.CornersSquare)
-uitoolkit.WithIcons(look, uitoolkit.IconSetSharp)
-uitoolkit.WithAppearance(look, uitoolkit.Appearance{Name: "ocean"})
+uitoolkit.WithIcons(look, uitoolkit.IconSetLucide)
+uitoolkit.WithAppearance(look, uitoolkit.Appearance{Name: "ocean", Corners: uitoolkit.CornersSquare})
 ```
 
-`PreferredLook` is `LoadAppearance().Look()`. `LoadAppearance` reads the
-pack name and optional `"icons"` from `look.json`, resolves the pack
-with `LoadTheme` (user pack, then builtin), and overlays the icon set.
+`PreferredLook` is `LoadAppearance().Look()`. `LoadAppearance` reads
+`theme`, `corners`, and `icons` from `look.json`, resolves the color
+theme with `LoadTheme` (user pack, then builtin), and applies corners
+and the icon set on top.
 
 ## API
 
 | Symbol | Package |
 | --- | --- |
-| `ThemePack`, `ListThemes`, `LoadTheme`, `ExportTheme` | `style` / `uitoolkit` |
+| `ThemePack`, `ListThemes`, `ListBuiltinThemes`, `ListUserThemes` | `style` / `uitoolkit` |
+| `LoadTheme`, `ExportTheme`, `SplitLookThemeName` | `style` / `uitoolkit` |
 | `Appearance`, `ThemeName`, `CornerStyle`, `IconSetName` | `style` / `uitoolkit` |
-| `IconSetInfo`, `ListIconSets`, `IconsDir` | `style` / `uitoolkit` |
+| `IconSetInfo`, `ListIconSets`, `ListBuiltinIconSets`, `ListUserIconSets` | `style` / `uitoolkit` |
 | `LoadAppearance`, `SaveAppearance`, `AppearancePath` | `style` / `uitoolkit` |
 | `ThemesDir`, `StarterName`, `DefaultThemeName` | `style` / `uitoolkit` |
 | `PreferredLook`, `LookAppearance` | `style` / `uitoolkit` |

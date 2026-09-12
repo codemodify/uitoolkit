@@ -13,7 +13,7 @@ import (
 const lookWatchInterval = 300 * time.Millisecond
 
 // lookFileStamp is the last-seen contents of look.json. Size+mtime is not
-// enough: dark/round/classic and light/square/sharp JSON can be the same
+// enough: dark/round and light/square JSON can be the same
 // length, and overlay clocks may not bump mtime.
 type lookFileStamp struct {
 	path string

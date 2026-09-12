@@ -12,13 +12,13 @@ const appearanceFile = "look.json"
 // appearanceFileJSON is the on-disk XDG document. Other apps (Mail, gallery)
 // read the same file via LoadAppearance / PreferredLook.
 //
-// Current format stores the theme pack name plus the chrome icon set:
+// Current format stores theme, corners, and icons independently:
 //
-//	{ "theme": "dark-round-classic", "icons": "lucide" }
+//	{ "theme": "dark", "corners": "square", "icons": "lucide" }
 //
-// A pack's icons field is ignored when look.json "icons" is set.
-// A legacy v0.11.0/0.11.1 triad (theme + corners + icons) is migrated
-// to the matching starter; file icon names in that triad overlay the pack.
+// Compound v0.11–v0.12.1 theme ids (dark-round-classic, light-square-sharp,
+// dark-round, …) migrate to palette + corners. Pack-level corners/icons
+// are ignored.
 type appearanceFileJSON struct {
 	Theme   string `json:"theme"`
 	Corners string `json:"corners,omitempty"`
@@ -63,31 +63,36 @@ func writeJSONFile(path string, v any) error {
 	return nil
 }
 
-func resolveLookThemeName(raw appearanceFileJSON) string {
-	// Corners in the file means the v0.11 triad (theme/corners/icons).
-	if raw.Corners != "" {
-		return StarterName(ParseTheme(raw.Theme), ParseCorners(raw.Corners), FallbackIcons(ParseIconSet(raw.Icons)))
+func resolveAppearance(raw appearanceFileJSON) Appearance {
+	a := DefaultAppearance()
+	packName, cornersFromName, hasCorners := SplitLookThemeName(raw.Theme)
+	if pack, ok := LoadTheme(strings.TrimSpace(raw.Theme)); ok {
+		a.Name = pack.Name
+		a.Theme = pack.Palette
+	} else if pack, ok := LoadTheme(packName); ok {
+		a.Name = pack.Name
+		a.Theme = pack.Palette
+	} else if packName == "light" {
+		a.Name = StarterName(ThemeLight)
+		a.Theme = ThemeLight
+	} else if packName != "" && packName != "dark" {
+		a.Name = packName
+		a.Theme = ParseTheme(packName)
 	}
-	name := strings.TrimSpace(raw.Theme)
-	if name == "" {
-		return DefaultThemeName
+	if strings.TrimSpace(raw.Corners) != "" {
+		a.Corners = ParseCorners(raw.Corners)
+	} else if hasCorners {
+		a.Corners = cornersFromName
 	}
-	if _, ok := LoadTheme(name); ok {
-		return name
+	if strings.TrimSpace(raw.Icons) != "" {
+		a.Icons = ParseIconSet(raw.Icons)
 	}
-	switch name {
-	case "dark", "Dark":
-		return DefaultThemeName
-	case "light", "Light", "paper":
-		return StarterName(ThemeLight, CornersRound, IconSetClassic)
-	default:
-		return name
-	}
+	return a.Normalize()
 }
 
 // LoadAppearance reads XDG look.json. Missing or invalid files yield defaults.
-// A legacy triad (theme + corners + icons) maps to the matching starter pack.
-// When "icons" is set (new format or overlay), it wins over the pack default.
+// Compound theme ids and a legacy triad both resolve to independent
+// theme / corners / icons fields.
 func LoadAppearance() Appearance {
 	b, err := os.ReadFile(AppearancePath())
 	if err != nil {
@@ -97,22 +102,15 @@ func LoadAppearance() Appearance {
 	if json.Unmarshal(b, &raw) != nil {
 		return DefaultAppearance()
 	}
-	name := resolveLookThemeName(raw)
-	a := DefaultAppearance()
-	if pack, ok := LoadTheme(name); ok {
-		a = pack.Appearance()
-	}
-	if strings.TrimSpace(raw.Icons) != "" {
-		a.Icons = ParseIconSet(raw.Icons)
-	}
-	return a.Normalize()
+	return resolveAppearance(raw)
 }
 
-// SaveAppearance writes look.json with theme pack + icon set (mode 0600).
+// SaveAppearance writes look.json with theme, corners, and icons (mode 0600).
 func SaveAppearance(a Appearance) error {
 	a = a.Normalize()
 	return writeJSONFile(AppearancePath(), appearanceFileJSON{
-		Theme: a.Name,
-		Icons: string(a.Icons),
+		Theme:   a.Name,
+		Corners: string(a.Corners),
+		Icons:   string(a.Icons),
 	})
 }

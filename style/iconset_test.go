@@ -49,15 +49,42 @@ func TestListIconSetsListsInstalled(t *testing.T) {
 	resetIconCache()
 	listed := ListIconSets()
 	if len(listed) != 2 || listed[0].Name != IconSetClassic || listed[1].Name != IconSetSharp {
-		t.Fatalf("builtins only: %+v", listed)
+		t.Fatalf("drawn builtins only: %+v", listed)
+	}
+	if listed[0].Source != ThemeSourceBuiltin || listed[1].Source != ThemeSourceBuiltin {
+		t.Fatalf("drawn source %+v", listed)
 	}
 	installRepoIconSet(t, "lucide")
 	listed = ListIconSets()
-	if len(listed) != 3 || listed[2].Name != IconSetLucide || listed[2].Source != "user" {
-		t.Fatalf("installed %+v", listed)
+	if len(listed) != 3 || listed[2].Name != IconSetLucide || listed[2].Source != ThemeSourceBuiltin {
+		t.Fatalf("premiere should be builtin: %+v", listed)
 	}
-	if listed[2].Label != "Lucide  · installed" {
+	if listed[2].Label != "Lucide" {
 		t.Fatalf("label %q", listed[2].Label)
+	}
+	if len(ListBuiltinIconSets()) != 3 || len(ListUserIconSets()) != 0 {
+		t.Fatalf("split builtin=%d user=%d", len(ListBuiltinIconSets()), len(ListUserIconSets()))
+	}
+
+	dst := filepath.Join(IconsDir(), "my-set")
+	if err := os.MkdirAll(dst, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	src := filepath.Join("..", "icons", "lucide", "search.png")
+	b, err := os.ReadFile(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dst, "search.png"), b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	listed = ListIconSets()
+	users := ListUserIconSets()
+	if len(users) != 1 || users[0].Name != IconSetName("my-set") || users[0].Source != ThemeSourceUser {
+		t.Fatalf("custom user set %+v listed %+v", users, listed)
+	}
+	if users[0].Label != "my-set" {
+		t.Fatalf("user label %q", users[0].Label)
 	}
 }
 
@@ -150,7 +177,7 @@ func TestFileIconPicksHiDPI(t *testing.T) {
 
 func TestLookJSONThemeAndIcons(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	want := Appearance{Name: "dark-round-classic", Theme: ThemeDark, Corners: CornersRound, Icons: IconSetLucide}
+	want := Appearance{Name: "dark", Theme: ThemeDark, Corners: CornersRound, Icons: IconSetLucide}
 	if err := SaveAppearance(want); err != nil {
 		t.Fatal(err)
 	}
@@ -158,7 +185,7 @@ func TestLookJSONThemeAndIcons(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !containsAll(string(raw), `"theme": "dark-round-classic"`, `"icons": "lucide"`) {
+	if !containsAll(string(raw), `"theme": "dark"`, `"corners": "round"`, `"icons": "lucide"`) {
 		t.Fatalf("look.json: %s", raw)
 	}
 	got := LoadAppearance()
@@ -166,7 +193,7 @@ func TestLookJSONThemeAndIcons(t *testing.T) {
 		t.Fatalf("got %+v want %+v", got, want.Normalize())
 	}
 	look := PreferredLook().(*Classic)
-	if look.Pack() != "dark-round-classic" || look.Icons() != IconSetLucide {
+	if look.Pack() != "dark" || look.Icons() != IconSetLucide {
 		t.Fatalf("preferred %+v", LookAppearance(look))
 	}
 }
@@ -181,7 +208,7 @@ func TestLoadAppearanceIconsOverlayPackDefault(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := LoadAppearance()
-	if got.Name != "light-square-sharp" || got.Theme != ThemeLight || got.Corners != CornersSquare || got.Icons != IconSetPhosphor {
+	if got.Name != "light" || got.Theme != ThemeLight || got.Corners != CornersSquare || got.Icons != IconSetPhosphor {
 		t.Fatalf("%+v", got)
 	}
 }

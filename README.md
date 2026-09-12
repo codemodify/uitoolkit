@@ -107,7 +107,7 @@ paintengine2d with Titillium Web (and JetBrains Mono in code views).
 
 ![Inspector](docs/screenshots/inspector.png)
 
-### Settings — theme packs and icon sets
+### Settings — theme, corners, and icon sets
 
 ![Settings](docs/screenshots/settings.png)
 
@@ -291,8 +291,8 @@ widgets    Button, Label, TextField, TextArea     ScrollView, ListView, TableVie
            Accordion, Expander, Spacer            ProgressBar, RadioGroup
            MessageBox, FileDialog stub, Tooltip   TitleBar, context menus
            CardList
-style      LookAndFeel + Palette + Metrics        Named theme packs +
-                                                  file SVG icon sets
+style      LookAndFeel + Palette + Metrics        Color themes + corners +
+                                                  PNG icon sets
                                                   (~/.config/uitoolkit/icons/)
 ```
 
@@ -500,9 +500,21 @@ prefs no longer rewrite `look.json`; Settings → Apply updates a running
 Mail with `WatchLook` (**v0.11.3**). File SVG icon sets (`filled` /
 `outline` / `duotone`) lived in the repo and were copied by hand into
 `~/.config/uitoolkit/icons/<set>/` (**v0.12.0**). Those SVGs are
-replaced by premiere PNG packs (**v0.12.1**).
+replaced by premiere PNG packs (**v0.12.1**). Theme, corners, and icons
+are independent look.json fields again; compound pack names migrate
+(**v0.12.2**).
 
 ## Version
+
+**0.12.2** — Theme is palette only (`dark`, `light`, plus user color
+themes). Corners (round / square) and icons are separate Settings
+controls, stored independently in `look.json`:
+`{ "theme": "dark", "corners": "square", "icons": "lucide" }`.
+Compound v0.11–v0.12.1 names (`dark-round-classic`, `light-square-sharp`,
+`dark-round`, …) migrate on load. Settings lists **Built-in** vs
+**User** for themes and icon sets (premiere PNG names stay Built-in
+after a manual copy; any other `icons/` folder is User). Export writes
+the color theme only. Still paintengine2d **v0.9.0**.
 
 **0.12.1** — Premiere PNG icon packs. Lucide (ISC), Phosphor regular
 (MIT), Tabler outline (MIT), Heroicons outline (MIT), and Material
