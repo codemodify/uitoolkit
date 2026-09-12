@@ -449,10 +449,10 @@ func (l *Classic) menuItemHighlightBounds(item paintengine2d.Rect) paintengine2d
 	return paintengine2d.XYWH(item.Min.X-ch.PadL+2, item.Min.Y+1, item.Dx()+ch.PadL+ch.PadR-4, item.Dy()-2)
 }
 
-func (l *Classic) DrawMenuItem(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label, shortcut string, underline int, sep, checked bool) {
+func (l *Classic) DrawMenuItem(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, row MenuRow) {
 	p := l.palette
 	ch := MenuChromeFor(l)
-	if sep {
+	if row.Separator {
 		y := (b.Min.Y + b.Max.Y) * 0.5
 		x0 := b.Min.X + ch.CheckCol()
 		if w := b.Max.X - 8 - x0; w > 0 {
@@ -473,9 +473,8 @@ func (l *Classic) DrawMenuItem(ctx *paintengine2d.Context, b paintengine2d.Rect,
 		fg = p.TextMuted
 		font = l.muted
 	}
-	if checked {
-		font.Draw(ctx, "+", paintengine2d.Pt(b.Min.X+6, ty), fg)
-	}
+	l.drawMenuGutter(ctx, b, ch, row, fg)
+	label, shortcut, underline := row.Label, row.Shortcut, row.Underline
 	// Clip to the item (and shortcut column), never tighter than the
 	// reserved label box — glyph bearing may use the trailing item pad.
 	labelRight := b.Max.X
@@ -496,6 +495,61 @@ func (l *Classic) DrawMenuItem(ctx *paintengine2d.Context, b paintengine2d.Rect,
 	ctx.ClipRect(paintengine2d.XYWH(lx, b.Min.Y, labelRight-lx, b.Dy()))
 	l.drawTextUnderline(ctx, font, label, underline, paintengine2d.Pt(lx, ty), fg)
 	ctx.Restore()
+}
+
+func (l *Classic) drawMenuGutter(ctx *paintengine2d.Context, b paintengine2d.Rect, ch MenuChrome, row MenuRow, fg paintengine2d.Color) {
+	side := IconSizePixels(l.IconSize())
+	if s := LookScale(l); s > 1.01 {
+		side *= s
+	}
+	gw := ch.CheckCol()
+	if side > gw-2 {
+		side = gw - 2
+	}
+	if side < 10 {
+		side = 10
+	}
+	ib := paintengine2d.XYWH(b.Min.X+(gw-side)*0.5, b.Min.Y+(b.Dy()-side)*0.5, side, side)
+	// Office XP: check/radio takes the gutter when present; otherwise the action icon.
+	if row.Radio {
+		drawMenuRadio(ctx, ib, row.Checked, fg)
+		return
+	}
+	if row.Checked {
+		drawMenuCheck(ctx, ib, fg)
+		return
+	}
+	if row.Icon != IconNone {
+		l.drawToolIcon(ctx, ib, row.Icon, fg)
+	}
+}
+
+func drawMenuCheck(ctx *paintengine2d.Context, b paintengine2d.Rect, col paintengine2d.Color) {
+	if ctx == nil || b.Empty() {
+		return
+	}
+	p := paintengine2d.NewPath()
+	p.MoveTo(b.Min.X+b.Dx()*0.16, b.Min.Y+b.Dy()*0.52)
+	p.LineTo(b.Min.X+b.Dx()*0.40, b.Min.Y+b.Dy()*0.78)
+	p.LineTo(b.Min.X+b.Dx()*0.86, b.Min.Y+b.Dy()*0.20)
+	ctx.DrawPath(p, iconStroke(col, 1.85, paintengine2d.CapRound, paintengine2d.JoinRound))
+}
+
+func drawMenuRadio(ctx *paintengine2d.Context, b paintengine2d.Rect, on bool, col paintengine2d.Color) {
+	if ctx == nil || b.Empty() {
+		return
+	}
+	cx := (b.Min.X + b.Max.X) * 0.5
+	cy := (b.Min.Y + b.Max.Y) * 0.5
+	rad := b.Dx()
+	if b.Dy() < rad {
+		rad = b.Dy()
+	}
+	rad *= 0.30
+	ctx.DrawCircle(paintengine2d.Pt(cx, cy), rad, paintengine2d.StrokePaint(col, 1.35))
+	if on {
+		ctx.DrawCircle(paintengine2d.Pt(cx, cy), rad*0.48, paintengine2d.Fill(col))
+	}
 }
 
 func (l *Classic) DrawTabBar(ctx *paintengine2d.Context, b paintengine2d.Rect) {

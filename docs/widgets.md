@@ -64,7 +64,7 @@ It is not a generic Material “card” container.
 
 | Widget | uitoolkit | Qt (Widgets / Quick) | GTK 4 | Avalonia | Fyne | WinForms | WPF | AppKit | SwiftUI | Screenshot |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Menu bar | `MenuBar` / `Menu` / `MenuItem` | `QMenuBar` / `MenuBar` | `GtkPopoverMenuBar` | `Menu` / `NativeMenu` | `fyne.MainMenu` | `MenuStrip` | `Menu` | `NSMenu` | `commands` / `Menu` | [thumb](screenshots/compare/menubar.png) · [gallery](screenshots/gallery-menu.png) |
+| Menu bar | `MenuBar` / `Menu` / `MenuItem` (`Icon`, `Checkable`, `RadioGroup`) | `QMenuBar` / `MenuBar` | `GtkPopoverMenuBar` | `Menu` / `NativeMenu` | `fyne.MainMenu` | `MenuStrip` | `Menu` | `NSMenu` | `commands` / `Menu` | [thumb](screenshots/compare/menubar.png) · [gallery](screenshots/gallery-menu.png) |
 | Context menu | `PopupMenu` | `QMenu` / `Menu` | `GtkPopoverMenu` | `ContextMenu` | `widget.PopUpMenu` | `ContextMenuStrip` | `ContextMenu` | `NSMenu` | `contextMenu` | [thumb](screenshots/compare/popupmenu.png) |
 | Tool bar | `ToolBar` / `ToolToggle` / `ToolButton` | `QToolBar` + checkable `QToolButton` | `GtkBox` ≈ + `GtkToggleButton` | `CommandBar` ≈ + `ToggleButton` | `widget.Toolbar` | `ToolStrip` | `ToolBar` | `NSToolbar` | `ToolbarItem` | [thumb](screenshots/compare/toolbar.png) · [gallery](screenshots/gallery-toolbar.png) |
 | Status bar | `StatusBar` | `QStatusBar` / `StatusBar` | `GtkStatusbar` ≈ | — | — | `StatusStrip` | `StatusBar` | — | — | [thumb](screenshots/compare/statusbar.png) |

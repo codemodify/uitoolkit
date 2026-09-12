@@ -50,7 +50,7 @@ type LookAndFeel interface {
 	DrawMenuBar(ctx *paintengine2d.Context, b paintengine2d.Rect)
 	DrawMenuTitle(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, underline int, open bool)
 	DrawMenuFrame(ctx *paintengine2d.Context, b paintengine2d.Rect)
-	DrawMenuItem(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label, shortcut string, underline int, sep, checked bool)
+	DrawMenuItem(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, row MenuRow)
 	DrawTabBar(ctx *paintengine2d.Context, b paintengine2d.Rect)
 	DrawTab(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, selected bool)
 	DrawTreeRow(ctx *paintengine2d.Context, b paintengine2d.Rect, selected, hovered, expanded, leaf bool, depth int, label string, bold bool)

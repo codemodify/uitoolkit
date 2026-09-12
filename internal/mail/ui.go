@@ -417,7 +417,7 @@ func (s *session) menuBar() *widgets.MenuBar {
 	layoutClassic := s.opts.Layout == LayoutClassic
 	return widgets.NewMenuBar(
 		widgets.NewMenu("&File",
-			widgets.ItemAccel("&New Message", "Ctrl+N", s.write),
+			widgets.ItemIconAccel(style.IconNew, "&New Message", "Ctrl+N", s.write),
 			widgets.Item("New &Folder…", s.newFolder),
 			widgets.Item("Add &Account…", s.openAddAccount),
 			widgets.Item("Remove &Account…", s.removeCurrentAccount),
@@ -427,7 +427,7 @@ func (s *session) menuBar() *widgets.MenuBar {
 				}
 			}),
 			widgets.Sep(),
-			widgets.ItemAccel("&Get New Messages", "F5", s.getMessages),
+			widgets.ItemIconAccel(style.IconOpen, "&Get New Messages", "F5", s.getMessages),
 			widgets.Item("Get Messages for Current Account", s.getMessages),
 			widgets.Sep(),
 			widgets.Item("Work Offline", s.toggleOnline),
@@ -440,7 +440,7 @@ func (s *session) menuBar() *widgets.MenuBar {
 		widgets.NewMenu("&Edit",
 			&widgets.MenuItem{Text: "Undo", Shortcut: "Ctrl+Z", Disabled: true},
 			widgets.Sep(),
-			widgets.ItemAccel("&Find", "Ctrl+F", func() {
+			widgets.ItemIconAccel(style.IconSearch, "&Find", "Ctrl+F", func() {
 				s.opts.ShowFilter = true
 				if s.qfBar != nil {
 					s.qfBar.SetVisible(true)
@@ -470,21 +470,21 @@ func (s *session) menuBar() *widgets.MenuBar {
 			widgets.CheckItem("Mail Toolbar", true, func() { s.mark("Mail Toolbar") }),
 			widgets.CheckItem("Quick Filter Bar", s.opts.ShowFilter, s.toggleFilter),
 			widgets.Sep(),
-			widgets.CheckItem("&Vertical (3-pane)", !layoutClassic, func() {
+			widgets.RadioItem("&Vertical (3-pane)", "layout", !layoutClassic, func() {
 				s.opts.Layout = LayoutVertical
 				s.rebuild()
 			}),
-			widgets.CheckItem("&Classic (preview below)", layoutClassic, func() {
+			widgets.RadioItem("&Classic (preview below)", "layout", layoutClassic, func() {
 				s.opts.Layout = LayoutClassic
 				s.rebuild()
 			}),
 			widgets.Sep(),
-			widgets.CheckItem("&Table view", !s.cardView, func() { s.setCardView(false) }),
-			widgets.CheckItem("C&ard view", s.cardView, func() { s.setCardView(true) }),
+			widgets.RadioItem("&Table view", "list", !s.cardView, func() { s.setCardView(false) }),
+			widgets.RadioItem("C&ard view", "list", s.cardView, func() { s.setCardView(true) }),
 			widgets.Sep(),
-			widgets.CheckItem("&Compact", s.density == style.DensityCompact, func() { s.setDensity(style.DensityCompact) }),
-			widgets.CheckItem("&Default density", s.density == style.DensityDefault, func() { s.setDensity(style.DensityDefault) }),
-			widgets.CheckItem("&Relaxed", s.density == style.DensityRelaxed, func() { s.setDensity(style.DensityRelaxed) }),
+			widgets.RadioItem("&Compact", "density", s.density == style.DensityCompact, func() { s.setDensity(style.DensityCompact) }),
+			widgets.RadioItem("&Default density", "density", s.density == style.DensityDefault, func() { s.setDensity(style.DensityDefault) }),
+			widgets.RadioItem("&Relaxed", "density", s.density == style.DensityRelaxed, func() { s.setDensity(style.DensityRelaxed) }),
 			widgets.Sep(),
 			widgets.Item("Sort by When", func() { s.sortCol, s.sortAsc = 4, false; s.refreshList() }),
 			widgets.Item("Sort by Topic", func() { s.sortCol, s.sortAsc = 2, true; s.refreshList() }),
@@ -500,8 +500,8 @@ func (s *session) menuBar() *widgets.MenuBar {
 				s.refreshList()
 			}),
 			widgets.Sep(),
-			widgets.CheckItem("&Dark", !s.opts.Light, func() { s.setPalette(false) }),
-			widgets.CheckItem("&Light", s.opts.Light, func() { s.setPalette(true) }),
+			widgets.RadioItem("&Dark", "palette", !s.opts.Light, func() { s.setPalette(false) }),
+			widgets.RadioItem("&Light", "palette", s.opts.Light, func() { s.setPalette(true) }),
 			widgets.Sep(),
 			widgets.ItemAccel("Message &Source", "Ctrl+U", s.viewSource),
 		),
@@ -517,7 +517,7 @@ func (s *session) menuBar() *widgets.MenuBar {
 			widgets.Item("Trash", func() { s.goKind(FolderTrash) }),
 		),
 		widgets.NewMenu("&Message",
-			widgets.ItemAccel("&New Message", "c", s.write),
+			widgets.ItemIconAccel(style.IconNew, "&New Message", "c", s.write),
 			widgets.ItemAccel("&Reply", "r", s.reply),
 			widgets.Item("Reply All", s.reply),
 			widgets.ItemAccel("&Forward", "f", s.forward),
@@ -536,7 +536,7 @@ func (s *session) menuBar() *widgets.MenuBar {
 			widgets.Item("Unmute Thread", func() { s.muteThread(false) }),
 			widgets.Item("Add sender to VIP", s.addVIP),
 			widgets.Sep(),
-			widgets.ItemAccel("&Delete", "#", s.deleteSel),
+			widgets.ItemIconAccel(style.IconCut, "&Delete", "#", s.deleteSel),
 			widgets.Sep(),
 			widgets.ItemAccel("Message &Source", "Ctrl+U", s.viewSource),
 		),
@@ -642,9 +642,9 @@ func (s *session) messageMenu(from widget.Component, p paintengine2d.Point) {
 		widgets.Item("Add sender to VIP", s.addVIP),
 		widgets.Item("Archive", s.archive),
 		widgets.Item("Junk", s.junk),
-		widgets.Item("Delete", s.deleteSel),
+		widgets.ItemIcon(style.IconCut, "Delete", s.deleteSel),
 		widgets.Sep(),
-		widgets.Item("View Source", s.viewSource),
+		widgets.ItemIcon(style.IconInfo, "View Source", s.viewSource),
 	)
 }
 

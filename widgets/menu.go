@@ -8,14 +8,17 @@ import (
 	"github.com/codemodify/uitoolkit/widget"
 )
 
-// MenuItem is one row in a Menu / PopupMenu.
+// MenuItem is one row in a Menu / PopupMenu (dropdown and context share this).
 type MenuItem struct {
-	Text      string
-	Shortcut  string
-	Disabled  bool
-	Separator bool
-	Checked   bool
-	OnClick   func()
+	Text       string
+	Shortcut   string
+	Disabled   bool
+	Separator  bool
+	Icon       style.ToolIcon // optional gutter glyph; check/radio wins when on
+	Checkable  bool           // click / keyboard toggles Checked
+	Checked    bool
+	RadioGroup string // exclusive with siblings that share the name
+	OnClick    func()
 }
 
 // Item is an enabled command row.
@@ -26,12 +29,35 @@ func ItemAccel(text, shortcut string, on func()) *MenuItem {
 	return &MenuItem{Text: text, Shortcut: shortcut, OnClick: on}
 }
 
+// ItemIcon is a command row with a leading gutter icon.
+func ItemIcon(icon style.ToolIcon, text string, on func()) *MenuItem {
+	return &MenuItem{Icon: icon, Text: text, OnClick: on}
+}
+
+// ItemIconAccel is ItemIcon plus a shortcut hint.
+func ItemIconAccel(icon style.ToolIcon, text, shortcut string, on func()) *MenuItem {
+	return &MenuItem{Icon: icon, Text: text, Shortcut: shortcut, OnClick: on}
+}
+
 // Sep is a horizontal rule between items.
 func Sep() *MenuItem { return &MenuItem{Separator: true} }
 
-// CheckItem is a toggleable row.
+// CheckItem is a checkable row (click / Return / Space toggles Checked).
 func CheckItem(text string, checked bool, on func()) *MenuItem {
-	return &MenuItem{Text: text, Checked: checked, OnClick: on}
+	return &MenuItem{Text: text, Checkable: true, Checked: checked, OnClick: on}
+}
+
+// RadioItem is an exclusive choice in group (empty group is still exclusive
+// among other empty-group radios in the same popup — prefer a named group).
+func RadioItem(text, group string, checked bool, on func()) *MenuItem {
+	if group == "" {
+		group = "radio"
+	}
+	return &MenuItem{Text: text, RadioGroup: group, Checked: checked, OnClick: on}
+}
+
+func (it *MenuItem) isRadio() bool {
+	return it != nil && it.RadioGroup != ""
 }
 
 // Menu is a titled drop-down attached to a MenuBar.
@@ -601,7 +627,10 @@ func (p *PopupMenu) Paint(ctx *paintengine2d.Context) {
 			st |= style.StatePressed
 		}
 		label, _, idx := ParseMnemonic(it.Text)
-		lk.DrawMenuItem(ctx, p.rowBounds(i), st, label, it.Shortcut, idx, it.Separator, it.Checked)
+		lk.DrawMenuItem(ctx, p.rowBounds(i), st, style.MenuRow{
+			Label: label, Shortcut: it.Shortcut, Underline: idx,
+			Separator: it.Separator, Checked: it.Checked, Radio: it.isRadio(), Icon: it.Icon,
+		})
 	}
 	ctx.Restore()
 	track, thumb := p.scrollTrack()
@@ -794,6 +823,23 @@ func (p *PopupMenu) moveFocus(dir int) {
 	}
 }
 
+func (p *PopupMenu) applyCheck(it *MenuItem) {
+	if it == nil {
+		return
+	}
+	if it.RadioGroup != "" {
+		for _, o := range p.Items {
+			if o != nil && o.RadioGroup == it.RadioGroup {
+				o.Checked = o == it
+			}
+		}
+		return
+	}
+	if it.Checkable {
+		it.Checked = !it.Checked
+	}
+}
+
 func (p *PopupMenu) activate(i int) {
 	if i < 0 || i >= len(p.Items) {
 		return
@@ -802,6 +848,7 @@ func (p *PopupMenu) activate(i int) {
 	if it == nil || it.Separator || it.Disabled {
 		return
 	}
+	p.applyCheck(it)
 	if p.OnPick != nil {
 		p.OnPick(it)
 		return

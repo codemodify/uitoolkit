@@ -1,5 +1,15 @@
 package style
 
+// MenuRow is the LookAndFeel paint input for one popup / context row.
+type MenuRow struct {
+	Label, Shortcut string
+	Underline       int
+	Separator       bool
+	Checked         bool
+	Radio           bool
+	Icon            ToolIcon
+}
+
 // MenuChrome is the shared measure/paint box for a PopupMenu row.
 // Lengths are host pixels (Look scale and density already applied).
 type MenuChrome struct {
@@ -64,6 +74,14 @@ func MenuChromeFor(lk LookAndFeel) MenuChrome {
 		c.CheckGutter = 8 * s
 	case IconSizeLarge:
 		c.CheckGutter = 14 * s
+	}
+	// Gutter must fit a ToolIcon (or check/radio) at the look's icon size.
+	need := IconSizePixels(LookIconSize(lk))*s + 4*s
+	if c.CheckCol() < need {
+		c.CheckGutter = need - c.ItemPad
+		if c.CheckGutter < 8*s {
+			c.CheckGutter = 8 * s
+		}
 	}
 	m := lk.Metrics()
 	if m.RowPad > c.ItemPad {
