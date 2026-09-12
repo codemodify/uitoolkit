@@ -502,6 +502,8 @@ func (s *session) menuBar() *widgets.MenuBar {
 			widgets.Sep(),
 			widgets.CheckItem("&Dark", !s.opts.Light, func() { s.setPalette(false) }),
 			widgets.CheckItem("&Light", s.opts.Light, func() { s.setPalette(true) }),
+			widgets.Sep(),
+			widgets.ItemAccel("Message &Source", "Ctrl+U", s.viewSource),
 		),
 		widgets.NewMenu("&Go",
 			widgets.ItemAccel("Next Message", "n", func() { s.moveSel(1) }),
@@ -535,6 +537,8 @@ func (s *session) menuBar() *widgets.MenuBar {
 			widgets.Item("Add sender to VIP", s.addVIP),
 			widgets.Sep(),
 			widgets.ItemAccel("&Delete", "#", s.deleteSel),
+			widgets.Sep(),
+			widgets.ItemAccel("Message &Source", "Ctrl+U", s.viewSource),
 		),
 		widgets.NewMenu("&Tools",
 			widgets.ItemAccel("Account Settings", "Ctrl+,", s.openPrefs),
@@ -639,6 +643,8 @@ func (s *session) messageMenu(from widget.Component, p paintengine2d.Point) {
 		widgets.Item("Archive", s.archive),
 		widgets.Item("Junk", s.junk),
 		widgets.Item("Delete", s.deleteSel),
+		widgets.Sep(),
+		widgets.Item("View Source", s.viewSource),
 	)
 }
 
@@ -1015,7 +1021,11 @@ func (s *session) loadPreview() {
 		s.preview.SetText(DisplayBody(m))
 	}
 	if s.source != nil {
-		s.source.SetText(rawSource(m))
+		if raw, err := s.cli.GetSource(m.ID); err == nil {
+			s.source.SetText(raw)
+		} else {
+			s.source.SetText("")
+		}
 	}
 }
 
@@ -2063,6 +2073,10 @@ func (s *session) afterAccountsChanged() {
 }
 
 func (s *session) handleKey(e widget.KeyEvent) bool {
+	if e.Mods.Ctrl() && e.Key == platform.KeyU {
+		s.viewSource()
+		return true
+	}
 	if isTextFocus(s.win.Focus()) {
 		return false
 	}
@@ -2117,30 +2131,23 @@ func demoTags() []string {
 	return []string{"Important", "Work", "Personal", "To Do", "Later"}
 }
 
-func rawSource(m Message) string {
-	var b strings.Builder
-	fmt.Fprintf(&b, "From: %s\n", m.From)
-	fmt.Fprintf(&b, "To: %s\n", m.To)
-	if m.Cc != "" {
-		fmt.Fprintf(&b, "Cc: %s\n", m.Cc)
+func (s *session) viewSource() {
+	m, ok := s.primary()
+	if !ok {
+		s.mark("No message")
+		return
 	}
-	fmt.Fprintf(&b, "Date: %s\n", m.Date.Format(timeRFC))
-	fmt.Fprintf(&b, "Subject: %s\n", m.Subject)
-	if m.Starred {
-		b.WriteString("X-Flag: flagged\n")
+	raw, err := s.cli.GetSource(m.ID)
+	if err != nil {
+		widgets.Warn(s.win.Content(), "Message Source", err.Error(), nil)
+		return
 	}
-	if !m.Read {
-		b.WriteString("X-Flag: unseen\n")
+	if _, err := OpenMessageSource(s.app, m, raw); err != nil {
+		widgets.Warn(s.win.Content(), "Message Source", err.Error(), nil)
+		return
 	}
-	if len(m.Tags) > 0 {
-		fmt.Fprintf(&b, "X-Tags: %s\n", strings.Join(m.Tags, ", "))
-	}
-	b.WriteByte('\n')
-	b.WriteString(m.Body)
-	return b.String()
+	s.mark("Message Source")
 }
-
-const timeRFC = "Mon, 02 Jan 2006 15:04:05 -0700"
 
 // PrepareShot selects Ada’s Inbox welcome message and optionally opens File.
 func PrepareShot(w *app.Window, openMenu int) {

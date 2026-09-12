@@ -24,6 +24,7 @@ type MemoryStore struct {
 	fetches    map[string]int
 	now        time.Time
 	feat       *featureHost
+	raw        map[MessageID][]byte
 }
 
 // NewMemoryStore builds an empty store. now is used for Fetch timestamps
@@ -35,6 +36,7 @@ func NewMemoryStore(now time.Time) *MemoryStore {
 	return &MemoryStore{
 		nextID: 1, fetches: map[string]int{}, now: now,
 		tags: DefaultTags(), feat: newFeatureHost(),
+		raw: map[MessageID][]byte{},
 	}
 }
 
@@ -143,6 +145,45 @@ func (s *MemoryStore) GetMessage(id MessageID) (Message, bool) {
 	return Message{}, false
 }
 
+func (s *MemoryStore) GetRaw(id MessageID) ([]byte, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	i, ok := s.indexLocked(id)
+	if !ok {
+		return nil, fmt.Errorf("mail: no message %s", id)
+	}
+	s.storeRawLocked(s.messages[i])
+	b := s.raw[id]
+	out := make([]byte, len(b))
+	copy(out, b)
+	return out, nil
+}
+
+func (s *MemoryStore) storeRawLocked(m Message) {
+	if s.raw == nil {
+		s.raw = map[MessageID][]byte{}
+	}
+	if len(s.raw[m.ID]) > 0 || m.ID == "" {
+		return
+	}
+	ident := Identity{Address: m.From, Name: m.From}
+	for _, id := range s.identities {
+		if id.AccountID == m.AccountID && (id.Default || ident.Address == m.From) {
+			ident = id
+			if id.Default {
+				break
+			}
+		}
+	}
+	var files []AttachedFile
+	for _, name := range m.Attachments {
+		files = append(files, AttachedFile{
+			Name: name, MIME: "application/octet-stream", Data: []byte(name),
+		})
+	}
+	s.raw[m.ID] = BuildRFC822(m, ident, files)
+}
+
 func (s *MemoryStore) SetFlags(id MessageID, patch FlagPatch) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -232,6 +273,7 @@ func (s *MemoryStore) Append(folder FolderID, msg Message) (MessageID, error) {
 		msg.Category = messageCategory(msg, s.feat.snap())
 	}
 	s.messages = append(s.messages, msg)
+	s.storeRawLocked(msg)
 	if s.feat != nil && s.feat.index != nil {
 		s.feat.index.add(msg)
 	}
@@ -301,6 +343,7 @@ func (s *MemoryStore) Fetch(accountID string) (int, error) {
 	msg.Size = len(msg.Subject) + len(msg.Body) + 80
 	s.applyRulesOnLocked(&msg)
 	s.messages = append(s.messages, msg)
+	s.storeRawLocked(msg)
 	return 1, nil
 }
 
@@ -440,6 +483,7 @@ func (s *MemoryStore) addMessage(m Message) {
 		m.Category = messageCategory(m, s.feat.snap())
 	}
 	s.messages = append(s.messages, m)
+	s.storeRawLocked(m)
 	if s.feat != nil && s.feat.index != nil {
 		s.feat.index.add(m)
 	}
@@ -794,9 +838,9 @@ func (s *MemoryStore) extras() *featureHost {
 	return s.feat
 }
 
-func (s *MemoryStore) SetOnline(v bool)          { s.extras().SetOnline(v) }
-func (s *MemoryStore) Online() bool              { return s.extras().Online() }
-func (s *MemoryStore) ListOutbox() []OutboxOp    { return s.extras().ListOutbox() }
+func (s *MemoryStore) SetOnline(v bool)       { s.extras().SetOnline(v) }
+func (s *MemoryStore) Online() bool           { return s.extras().Online() }
+func (s *MemoryStore) ListOutbox() []OutboxOp { return s.extras().ListOutbox() }
 func (s *MemoryStore) ListSmartFolders() []SmartFolder {
 	return s.extras().ListSmartFolders()
 }
@@ -808,7 +852,7 @@ func (s *MemoryStore) MuteThread(id string, muted bool) error {
 	return s.extras().MuteThread(id, muted)
 }
 func (s *MemoryStore) MutedThreads() []string { return s.extras().MutedThreads() }
-func (s *MemoryStore) ListVIPs() []VIP       { return s.extras().ListVIPs() }
+func (s *MemoryStore) ListVIPs() []VIP        { return s.extras().ListVIPs() }
 func (s *MemoryStore) PutVIP(v VIP) (VIP, error) {
 	return s.extras().PutVIP(v)
 }

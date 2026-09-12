@@ -47,6 +47,18 @@ func decodeRFC2047(s string) string {
 	return out
 }
 
+// rawAsText is RFC822 bytes as a TextArea string (UTF-8, else Latin-1).
+func rawAsText(raw []byte) string {
+	if utf8.Valid(raw) {
+		return string(raw)
+	}
+	runes := make([]rune, len(raw))
+	for i, c := range raw {
+		runes[i] = rune(c)
+	}
+	return string(runes)
+}
+
 // ParseRFC822 fills a Message from a raw message. Attachments stay as Parts.
 func ParseRFC822(raw []byte, folder FolderID, accountID string) (Message, error) {
 	msg, err := mail.ReadMessage(bytes.NewReader(raw))
@@ -55,12 +67,12 @@ func ParseRFC822(raw []byte, folder FolderID, accountID string) (Message, error)
 	}
 	h := msg.Header
 	out := Message{
-		Folder:    folder,
-		AccountID: accountID,
-		From:      decodeRFC2047(h.Get("From")),
-		To:        decodeRFC2047(h.Get("To")),
-		Cc:        decodeRFC2047(h.Get("Cc")),
-		Bcc:       decodeRFC2047(h.Get("Bcc")),
+		Folder:       folder,
+		AccountID:    accountID,
+		From:         decodeRFC2047(h.Get("From")),
+		To:           decodeRFC2047(h.Get("To")),
+		Cc:           decodeRFC2047(h.Get("Cc")),
+		Bcc:          decodeRFC2047(h.Get("Bcc")),
 		Subject:      decodeRFC2047(h.Get("Subject")),
 		Size:         len(raw),
 		RFCMessageID: h.Get("Message-Id"),
@@ -497,4 +509,3 @@ func guessMIME(name string) string {
 	}
 	return "application/octet-stream"
 }
-

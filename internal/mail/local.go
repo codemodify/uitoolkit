@@ -391,6 +391,24 @@ func (s *LocalStore) GetMessage(id MessageID) (Message, bool) {
 	return m, true
 }
 
+func (s *LocalStore) GetRaw(id MessageID) ([]byte, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	i, ok := s.indexLocked(id)
+	if !ok {
+		return nil, fmt.Errorf("mail: no message %s", id)
+	}
+	m := s.messages[i]
+	if raw := s.readRawLocked(m); len(raw) > 0 {
+		return append([]byte(nil), raw...), nil
+	}
+	s.fetchBodyLocked(&s.messages[i])
+	if raw := s.readRawLocked(s.messages[i]); len(raw) > 0 {
+		return append([]byte(nil), raw...), nil
+	}
+	return nil, fmt.Errorf("mail: no raw source for %s", id)
+}
+
 func (s *LocalStore) fetchBodyLocked(m *Message) {
 	if m == nil {
 		return

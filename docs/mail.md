@@ -137,7 +137,7 @@ Type the incoming/SMTP password (masked field); **Save account** writes `protoco
 
 ### Text-only message view
 
-The Message tab is **plain text**. mailclientd prefers the `text/plain` part; if the message is HTML-only, tags are stripped (`HTMLToText`). There is no HTML engine and no HTML tab. The Source tab still shows raw RFC822 when cached.
+The Message tab is **plain text**. mailclientd prefers the `text/plain` part; if the message is HTML-only, tags are stripped (`HTMLToText`). There is no HTML engine and no HTML tab. **View → Message Source** (also Message → Message Source, context menu, **Ctrl+U**) opens a read-only JetBrains Mono window of the stored RFC822 (`messages.getSource`). The Source tab in the preview pane uses the same daemon bytes — not a reconstructed header dump.
 
 ## OAuth (Google + Microsoft)
 

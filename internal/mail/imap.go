@@ -263,6 +263,39 @@ func (s *IMAPStore) GetMessage(id MessageID) (Message, bool) {
 	return m.Clone(), true
 }
 
+func (s *IMAPStore) GetRaw(id MessageID) ([]byte, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	m, ok := s.cache[id]
+	seq, okSeq := s.seq[id]
+	if !ok || !okSeq {
+		return nil, fmt.Errorf("mail: no message %s", id)
+	}
+	remote := "INBOX"
+	for _, f := range s.folders {
+		if f.ID == m.Folder {
+			if f.Remote != "" {
+				remote = f.Remote
+			} else if f.Name != "" {
+				remote = f.Name
+			}
+			break
+		}
+	}
+	if err := s.selectLocked(remote); err != nil {
+		return nil, err
+	}
+	lines, err := s.cmdLocked("FETCH %d (BODY.PEEK[])", seq)
+	if err != nil {
+		return nil, err
+	}
+	raw := extractLiteralBody(lines)
+	if len(raw) == 0 {
+		return nil, fmt.Errorf("mail: empty RFC822 for %s", id)
+	}
+	return raw, nil
+}
+
 func (s *IMAPStore) Search(q SearchQuery) []Message {
 	var all []Message
 	if q.Folder != "" {
@@ -367,7 +400,7 @@ func (s *IMAPStore) Append(folder FolderID, msg Message) (MessageID, error) {
 	if err := s.connectLocked(); err != nil {
 		return "", err
 	}
-	raw := rawSource(msg)
+	raw := string(BuildRFC822(msg, Identity{Address: msg.From, Name: msg.From}, nil))
 	if _, err := s.cmdLiteralLocked(fmt.Sprintf("APPEND %s {%d}", imapQuote(string(folder)), len(raw)), raw); err != nil {
 		return "", err
 	}

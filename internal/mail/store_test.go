@@ -6,6 +6,25 @@ import (
 	"time"
 )
 
+func TestMemoryStoreGetRawRFC822(t *testing.T) {
+	s := NewDemoStore()
+	all := s.ListMessages(FolderAdaInbox)
+	if len(all) == 0 {
+		t.Fatal("empty")
+	}
+	raw, err := s.GetRaw(all[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(raw)
+	if !strings.Contains(text, "MIME-Version:") || !strings.Contains(text, "Content-Type:") {
+		t.Fatalf("stored raw is not RFC822:\n%s", text)
+	}
+	if strings.Contains(text, "X-Flag:") {
+		t.Fatal("GetRaw must not invent X-Flag headers")
+	}
+}
+
 func TestInboxNewestIsWelcome(t *testing.T) {
 	s := NewDemoStore()
 	all := s.ListMessages(FolderAdaInbox)

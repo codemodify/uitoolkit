@@ -170,32 +170,32 @@ type Folder struct {
 
 // Message is a full RFC-822-ish record. Body is plain text (no MIME tree).
 type Message struct {
-	ID          MessageID
-	Folder      FolderID
-	AccountID   string
-	From        string
-	To          string
-	Cc          string
-	Bcc         string
-	Subject     string
-	Date        time.Time
-	Size        int
-	Read        bool
-	Starred     bool
-	HasAttach   bool
-	Tags        []string
-	Body        string
-	HTML          string `json:"html,omitempty"`
-	Snippet       string `json:"snippet,omitempty"`
-	UID           uint32 `json:"uid,omitempty"`
-	Parts         []Part `json:"parts,omitempty"`
-	IdentityID    string `json:"identityId,omitempty"`
-	RFCMessageID  string `json:"rfcMessageId,omitempty"`
-	InReplyTo     string `json:"inReplyTo,omitempty"`
-	References    string `json:"references,omitempty"`
-	ThreadID      string `json:"threadId,omitempty"`
-	Category      string `json:"category,omitempty"`
-	Attachments   []string
+	ID           MessageID
+	Folder       FolderID
+	AccountID    string
+	From         string
+	To           string
+	Cc           string
+	Bcc          string
+	Subject      string
+	Date         time.Time
+	Size         int
+	Read         bool
+	Starred      bool
+	HasAttach    bool
+	Tags         []string
+	Body         string
+	HTML         string `json:"html,omitempty"`
+	Snippet      string `json:"snippet,omitempty"`
+	UID          uint32 `json:"uid,omitempty"`
+	Parts        []Part `json:"parts,omitempty"`
+	IdentityID   string `json:"identityId,omitempty"`
+	RFCMessageID string `json:"rfcMessageId,omitempty"`
+	InReplyTo    string `json:"inReplyTo,omitempty"`
+	References   string `json:"references,omitempty"`
+	ThreadID     string `json:"threadId,omitempty"`
+	Category     string `json:"category,omitempty"`
+	Attachments  []string
 }
 
 func messageHasBody(m Message) bool {
@@ -244,8 +244,8 @@ func firstAddr(s string) string {
 
 // FlagPatch is a partial flag update (nil pointer = leave unchanged).
 type FlagPatch struct {
-	Read    *bool    `json:"read,omitempty"`
-	Starred *bool    `json:"starred,omitempty"`
+	Read    *bool     `json:"read,omitempty"`
+	Starred *bool     `json:"starred,omitempty"`
 	Tags    *[]string `json:"tags,omitempty"`
 }
 
@@ -296,6 +296,8 @@ type Store interface {
 
 	ListMessages(folder FolderID) []Message
 	GetMessage(id MessageID) (Message, bool)
+	// GetRaw is the on-disk / IMAP RFC822 bytes (Thunderbird message source).
+	GetRaw(id MessageID) ([]byte, error)
 	Search(q SearchQuery) []Message
 
 	SetFlags(id MessageID, patch FlagPatch) error
