@@ -297,8 +297,9 @@ style      LookAndFeel + Palette + Metrics        Dark / Light Classic,
 ```
 
 Swap the skin with `Application.SetLook(uitoolkit.LightLook())` or
-`PreferredLook()` (XDG `look.json` from **Settings**). Controls
-never hard-code colors. See [docs/settings.md](docs/settings.md).
+`PreferredLook()` (XDG `look.json` from **Settings**). `New` watches
+that file when Look is omitted so Apply updates running apps.
+Controls never hard-code colors. See [docs/settings.md](docs/settings.md).
 
 ## Widget comparison
 
@@ -488,8 +489,19 @@ check column, padding, and frame so “Add sender to VIP” is not clipped
 (**v0.10.13**). Settings (`cmd/uitksettings`) is a first-class Appearance
 editor: Dark / Light, round / square corners, Classic / Sharp icon sets,
 persisted as `$XDG_CONFIG_HOME/uitoolkit/look.json` (**v0.11.0**).
+Settings has no menu bar; radios preview locally and **Apply** writes
+the file. Running apps that use `PreferredLook` (default `New`) watch
+`look.json` and `SetLook` without a restart (**v0.11.1**).
 
 ## Version
+
+**0.11.1** — Settings Apply + live look reload. The Settings window
+drops the menu bar. Theme / corners / icons stage in-process until
+**Apply** writes `$XDG_CONFIG_HOME/uitoolkit/look.json` (close without
+Apply discards). `Application.New` watches that file when `Look` is
+nil (`PreferredLook`) or `WatchLook` is set, then
+`SetLook(WithAppearance(...))` so Mail, gallery, Files, Notes, and
+Inspector update live. Still paintengine2d **v0.9.0**.
 
 **0.11.0** — Toolkit Settings app (`go run ./cmd/uitksettings`). Theme,
 corner policy, and icon set are LookAndFeel settings (`Appearance`,

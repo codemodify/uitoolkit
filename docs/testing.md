@@ -76,9 +76,13 @@ CGO_ENABLED=1 go build ./cmd/mailclientd
 CGO_ENABLED=0 go build ./cmd/uitksettings
 ```
 
-Settings (`cmd/uitksettings`) writes `$XDG_CONFIG_HOME/uitoolkit/look.json`.
-Widget tests that persist appearance should point `XDG_CONFIG_HOME` at a
-temp dir (same isolation idea as Mail chrome prefs).
+Settings (`cmd/uitksettings`) **Apply** writes `$XDG_CONFIG_HOME/uitoolkit/look.json`.
+Radios preview only; close without Apply discards. `Application` watches
+that file when Look came from `PreferredLook` (`Look == nil` or
+`WatchLook: true`). Widget tests that persist appearance should point
+`XDG_CONFIG_HOME` at a temp dir (same isolation idea as Mail chrome prefs).
+Tests that pass `DarkLook` / `LightLook` do not watch unless they set
+`WatchLook`.
 
 A display is **not** required for `go test` or `uitest-driver`. Native
 backends stay behind `CGO` build tags; headless contracts always run.

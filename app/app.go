@@ -18,27 +18,45 @@ type Options struct {
 	// (WAYLAND_DISPLAY → DISPLAY → offscreen). Headless always
 	// uses offscreen. Unavailable names fall through.
 	Backend string
+	// WatchLook reloads $XDG_CONFIG_HOME/uitoolkit/look.json when the
+	// file changes and applies it with SetLook(WithAppearance(...)).
+	// New turns this on automatically when Look is nil (PreferredLook).
+	// Set true when passing PreferredLook() explicitly so Mail / gallery
+	// pick up Settings → Apply without a restart. Tests that pass
+	// DarkLook / LightLook stay static unless this is set.
+	WatchLook bool
+	// DisableLookWatch skips the default watcher (Look == nil). Settings
+	// uses this so radio changes preview locally until Apply writes.
+	DisableLookWatch bool
 }
 
 // Application owns the run loop and open windows.
 type Application struct {
-	mu       sync.Mutex
-	look     style.LookAndFeel
-	scale    float32
-	headless bool
-	backend  platform.Backend
-	windows  []*Window
-	quit     bool
-	onQuit   func()
+	mu        sync.Mutex
+	look      style.LookAndFeel
+	scale     float32
+	headless  bool
+	backend   platform.Backend
+	windows   []*Window
+	quit      bool
+	onQuit    func()
+	watchLook bool
+	lookWatch *lookFileStamp
 }
 
 // New constructs an application. Default look is PreferredLook
-// (XDG appearance, else dark Classic).
+// (XDG appearance, else dark Classic). When Look is nil, New also
+// watches look.json so Settings → Apply updates running windows.
 // Scale <= 0 means detect (env, then Xft.dpi on X11). Headless
 // stays 1× unless UITK_SCALE / GDK_SCALE / QT_SCALE_FACTOR is set.
 func New(opts Options) *Application {
+	watch := opts.WatchLook
 	if opts.Look == nil {
 		opts.Look = style.PreferredLook()
+		watch = true
+	}
+	if opts.DisableLookWatch {
+		watch = false
 	}
 	var backend platform.Backend
 	if opts.Backend != "" {
@@ -59,12 +77,17 @@ func New(opts Options) *Application {
 	if opts.Scale != 1 {
 		opts.Look = style.WithScale(opts.Look, opts.Scale)
 	}
-	return &Application{
-		look:     opts.Look,
-		scale:    opts.Scale,
-		headless: opts.Headless,
-		backend:  backend,
+	a := &Application{
+		look:      opts.Look,
+		scale:     opts.Scale,
+		headless:  opts.Headless,
+		backend:   backend,
+		watchLook: watch,
 	}
+	if watch {
+		a.lookWatch = newLookFileStamp()
+	}
+	return a
 }
 
 // Look is the default theme for new windows.
@@ -147,6 +170,7 @@ func (a *Application) Run() error {
 	}
 	var nextBlink time.Time
 	for !a.quit {
+		a.pollLookFile()
 		now := time.Now()
 		if a.anyCaret() && (nextBlink.IsZero() || !now.Before(nextBlink)) {
 			for _, w := range a.Windows() {
@@ -229,6 +253,12 @@ func (a *Application) waitTimeout(now, nextBlink time.Time) time.Duration {
 			}
 		}
 	}
+	if a.watchLook {
+		t := now.Add(lookWatchInterval)
+		if deadline.IsZero() || t.Before(deadline) {
+			deadline = t
+		}
+	}
 	if deadline.IsZero() {
 		return -1
 	}
@@ -251,6 +281,7 @@ func (a *Application) waitDisplay(timeout time.Duration) {
 
 // PumpOnce processes one frame on every window (tests / screenshots).
 func (a *Application) PumpOnce() {
+	a.pollLookFile()
 	for _, w := range a.Windows() {
 		w.pump()
 		w.frame()

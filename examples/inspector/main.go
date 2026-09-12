@@ -15,7 +15,7 @@ func main() {
 	headless := flag.Bool("headless", false, "paint offscreen and write inspector.png")
 	flag.Parse()
 
-	a := uitoolkit.New(uitoolkit.Options{Look: uitoolkit.PreferredLook(), Headless: *headless})
+	a := uitoolkit.New(uitoolkit.Options{Headless: *headless})
 	win, err := a.NewWindow(platform.WindowOptions{
 		Title: "Inspector", Width: 860, Height: 580, MinWidth: 560, MinHeight: 400,
 	})
