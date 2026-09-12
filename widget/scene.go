@@ -38,12 +38,21 @@ func (c *SceneCache) Invalidate(id uint64) {
 }
 
 // Reset drops every cached group (resize / theme / full invalidate).
+// Maps are cleared in place so a full paint does not reallocate buckets.
 func (c *SceneCache) Reset() {
 	if c == nil {
 		return
 	}
-	c.Layers = make(map[uint64]*paintengine2d.GroupNode)
-	c.Dirty = make(map[uint64]bool)
+	if c.Layers != nil {
+		clear(c.Layers)
+	} else {
+		c.Layers = make(map[uint64]*paintengine2d.GroupNode)
+	}
+	if c.Dirty != nil {
+		clear(c.Dirty)
+	} else {
+		c.Dirty = make(map[uint64]bool)
+	}
 	c.Reused = 0
 }
 

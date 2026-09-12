@@ -76,9 +76,9 @@ needs EGL / GLES2. `CGO_ENABLED=0` never needs those libraries.
 
 ## Scene graph (0.6.0)
 
-**v0.14.7:** the v0.14.0–v0.14.6 dirty-paint sweep is reverted. Scene
-present is full `DrawScene` + full `Surface.Present` (v0.13.8). See
-[perf.md](perf.md).
+**v0.15.0:** still full `DrawScene` + full `Surface.Present` (v0.13.8 /
+v0.14.7). A full present keeps recorded groups; layout and look still
+re-record. See [perf.md](perf.md).
 
 `UITK_SCENE` (default on) records each dirty widget into a retained
 `paintengine2d.Scene` (Qt Quick QSG / GTK GSK lite): rects, paths,

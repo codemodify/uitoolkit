@@ -182,6 +182,55 @@ func TestRunIdlePollsLookFile(t *testing.T) {
 	}
 }
 
+func BenchmarkLookWatchSettled(b *testing.B) {
+	b.Setenv("XDG_CONFIG_HOME", b.TempDir())
+	if err := style.SaveAppearance(style.DefaultAppearance()); err != nil {
+		b.Fatal(err)
+	}
+	s := newLookFileStamp()
+	past := time.Now().Add(-2 * time.Second)
+	if err := os.Chtimes(s.path, past, past); err != nil {
+		b.Fatal(err)
+	}
+	s.refreshMeta()
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if s.changed() {
+			b.Fatal("settled file reported change")
+		}
+	}
+}
+
+func TestLookWatchStatFirstSkipsSettledFile(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if err := style.SaveAppearance(style.DefaultAppearance()); err != nil {
+		t.Fatal(err)
+	}
+	a := New(Options{Headless: true, Scale: 1})
+	w, err := a.NewWindow(platform.WindowOptions{Width: 200, Height: 80, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+	w.SetContent(widgets.NewLabel("stat"))
+	a.PumpOnce()
+	if a.lookWatch == nil {
+		t.Fatal("expected watcher")
+	}
+	path := style.AppearancePath()
+	past := time.Now().Add(-2 * time.Second)
+	if err := os.Chtimes(path, past, past); err != nil {
+		t.Fatal(err)
+	}
+	a.lookWatch.refreshMeta()
+	n := a.lookWatch.reads
+	a.PumpOnce()
+	if a.lookWatch.reads != n {
+		t.Fatalf("settled size+mtime must not ReadFile, reads %d→%d", n, a.lookWatch.reads)
+	}
+}
+
 func TestSecondAppSeesApplyWithoutRestart(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	if err := style.SaveAppearance(style.DefaultAppearance()); err != nil {

@@ -52,6 +52,9 @@ Headless widget + driver suite (no display, no CGO):
 CGO_ENABLED=0 go test ./...
 ```
 
+Full-paint benches (Mail / gallery / list) live in `internal/apptest`.
+See [perf.md](perf.md) for the v0.15.0 command line and numbers.
+
 Skip the slower driver compose pass:
 
 ```bash

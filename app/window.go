@@ -39,6 +39,7 @@ type Window struct {
 	layers     *widget.SceneCache
 	scene      *paintengine2d.Scene
 	cursor     platform.Cursor
+	paints     int
 }
 
 func newWindow(a *Application, surf platform.Surface, opts platform.WindowOptions) *Window {
@@ -272,6 +273,11 @@ func (w *Window) fullInvalidate() {
 	w.dirty.Reset()
 	w.dirty.Add(paintengine2d.XYWH(0, 0, float32(ww), float32(hh)))
 	w.full = true
+}
+
+// dropScene forgets retained groups. Layout, look, and a new content
+// tree must re-record; a full present of an unchanged tree must not.
+func (w *Window) dropScene() {
 	if w.layers != nil {
 		w.layers.Reset()
 	}
@@ -317,9 +323,17 @@ func (w *Window) tipDeadline(_ time.Time) (time.Time, bool) {
 	return w.tipSince.Add(w.tipDelay), true
 }
 
+const pumpBurstCap = 64
+
 func (w *Window) pump() {
-	for _, ev := range w.surf.Poll() {
-		w.dispatch(ev)
+	for i := 0; i < pumpBurstCap; i++ {
+		evs := w.surf.Poll()
+		if len(evs) == 0 {
+			return
+		}
+		for _, ev := range evs {
+			w.dispatch(ev)
+		}
 	}
 }
 
@@ -652,6 +666,7 @@ func (w *Window) frame() {
 	}
 	if !w.laid {
 		w.layout()
+		w.dropScene()
 		w.fullInvalidate()
 	}
 	w.tickTips()
@@ -666,6 +681,7 @@ func (w *Window) frame() {
 	// Full present. DrawScene already painted the whole graph; partial
 	// PresentRects left stale Wayland tiles in v0.14.x.
 	_ = w.surf.Present(nil)
+	w.paints++
 	w.dirty.Reset()
 	w.full = false
 }

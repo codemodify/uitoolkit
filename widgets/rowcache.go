@@ -2,10 +2,15 @@ package widgets
 
 import (
 	"math"
+	"sync"
 
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/style"
 )
+
+var rowKeepPool = sync.Pool{
+	New: func() any { return make(map[uint64]struct{}, 32) },
+}
 
 // rowCacheCap drops off-screen row groups once the map grows past this.
 const rowCacheCap = 256
@@ -129,7 +134,12 @@ func recordScrollingRows(
 	}
 	_ = offsetY
 	_ = y0
-	keep := make(map[uint64]struct{}, hi-lo)
+	keep := rowKeepPool.Get().(map[uint64]struct{})
+	clear(keep)
+	defer func() {
+		clear(keep)
+		rowKeepPool.Put(keep)
+	}()
 	rec.BeginGroup(groupID, paintengine2d.Identity())
 	for i := lo; i < hi; i++ {
 		id := rowID(i)

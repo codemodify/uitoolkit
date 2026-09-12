@@ -509,6 +509,17 @@ are independent look.json fields again; compound pack names migrate
 
 ## Version
 
+**0.15.0** — Safer second-pass paint perf on the v0.13.8 / v0.14.7 model
+(full `DrawScene`, full `Surface.Present`, paintengine2d **v0.9.0**).
+A full present of an unchanged tree **keeps** retained scene groups
+(layout / look still drop them). Repeated labels reuse shaped glyph
+runs. Idle `WatchLook` is Stat-first again. The run loop drains an
+event burst, then paints once. Headless Mail full-paint allocs drop
+from ~8555 to ~87/op; `Font.Advance` of a warm string goes from 6
+allocs to 0. Hard ban unchanged: no pixel Scroll, no strip
+`DrawSceneDamage`, no skipped Present, no text ClearRect fast path
+(see `docs/perf.md`).
+
 **0.14.7** — **REVERT** of the v0.14.0–v0.14.6 dirty-paint perf sweep
 (pixel Scroll, strip `DrawSceneDamage`, partial present, hover-dirty
 ClearRect). Those paths were faster but caused black windows, scale
