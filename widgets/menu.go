@@ -74,12 +74,14 @@ func NewMenu(title string, items ...*MenuItem) *Menu {
 // MenuBar is a horizontal strip of menu titles.
 type MenuBar struct {
 	widget.Base
-	menus  []*Menu
-	open   int
-	hover  int
-	press  int
-	focus  int
-	keyNav bool
+	menus     []*Menu
+	open      int
+	hover     int
+	press     int
+	focus     int
+	keyNav    bool
+	titleBox  []paintengine2d.Rect
+	titleBoxB paintengine2d.Rect
 }
 
 // NewMenuBar constructs a menu bar.
@@ -136,8 +138,12 @@ func (m *MenuBar) Measure(c layout.Constraints) paintengine2d.Point {
 func (m *MenuBar) Arrange(r paintengine2d.Rect) { m.SetBounds(r) }
 
 func (m *MenuBar) titleRects() []paintengine2d.Rect {
+	b := m.LocalBounds()
+	if len(m.titleBox) == len(m.menus) && m.titleBoxB == b {
+		return m.titleBox
+	}
 	f := m.Look().Font()
-	h := m.LocalBounds().Dy()
+	h := b.Dy()
 	x := float32(4)
 	out := make([]paintengine2d.Rect, len(m.menus))
 	for i, menu := range m.menus {
@@ -146,6 +152,8 @@ func (m *MenuBar) titleRects() []paintengine2d.Rect {
 		out[i] = paintengine2d.XYWH(x, 0, tw, h)
 		x += tw
 	}
+	m.titleBox = out
+	m.titleBoxB = b
 	return out
 }
 
@@ -165,6 +173,9 @@ func (m *MenuBar) Paint(ctx *paintengine2d.Context) {
 	ctx.ClipRect(m.LocalBounds())
 	rects := m.titleRects()
 	for i, menu := range m.menus {
+		if ctx.QuickReject(rects[i]) {
+			continue
+		}
 		// The bar's widget StateHovered is true for any pointer on the
 		// strip (including empty space). Titles must not inherit it or
 		// every label paints the XP fill — a full-bar wash.
@@ -221,10 +232,14 @@ func (m *MenuBar) MouseMove(e widget.MouseEvent) bool {
 	return true
 }
 
+func (m *MenuBar) MouseEnter() { m.SetHovered(true) }
+
 func (m *MenuBar) MouseExit() {
+	old := m.hover
 	m.hover = -1
 	m.press = -1
-	m.Base.MouseExit()
+	m.SetHovered(false)
+	m.invalidateTitle(old)
 }
 
 func (m *MenuBar) FocusLost() {
@@ -370,6 +385,10 @@ type PopupMenu struct {
 	focus     int
 	keyNav    bool
 	vbar      scrollDrag
+	ch        style.MenuChrome
+	chOK      bool
+	sz        paintengine2d.Point
+	szOK      bool
 }
 
 // NewPopupMenu builds a popup from items.
@@ -413,7 +432,12 @@ func (p *PopupMenu) rowH(it *MenuItem) float32 {
 }
 
 func (p *PopupMenu) chrome() style.MenuChrome {
-	return style.MenuChromeFor(p.Look())
+	if p.chOK {
+		return p.ch
+	}
+	p.ch = style.MenuChromeFor(p.Look())
+	p.chOK = true
+	return p.ch
 }
 
 func menuTextWidth(f *style.Font, text string) float32 {
@@ -435,8 +459,11 @@ func menuTextWidth(f *style.Font, text string) float32 {
 }
 
 func (p *PopupMenu) contentSize() paintengine2d.Point {
+	if p.szOK {
+		return p.sz
+	}
 	lk := p.Look()
-	ch := style.MenuChromeFor(lk)
+	ch := p.chrome()
 	f := (*style.Font)(nil)
 	if lk != nil {
 		f = lk.Font()
@@ -462,7 +489,9 @@ func (p *PopupMenu) contentSize() paintengine2d.Point {
 	if min := style.Dip(lk, 80); w < min {
 		w = min
 	}
-	return paintengine2d.Pt(w, h)
+	p.sz = paintengine2d.Pt(w, h)
+	p.szOK = true
+	return p.sz
 }
 
 // ContentSize is the intrinsic box for all items + separators + frame pad.
@@ -486,6 +515,8 @@ func (p *PopupMenu) Measure(c layout.Constraints) paintengine2d.Point {
 
 func (p *PopupMenu) Arrange(r paintengine2d.Rect) {
 	p.SetBounds(r)
+	p.chOK = false
+	p.szOK = false
 	p.clamp()
 }
 
@@ -616,11 +647,26 @@ func (p *PopupMenu) Paint(ctx *paintengine2d.Context) {
 	p.clamp()
 	lk := p.Look()
 	b := p.LocalBounds()
-	lk.DrawMenuFrame(ctx, b)
+	if clip := ctx.LocalClipBounds(); clip.Empty() ||
+		clip.Min.X <= b.Min.X+3 || clip.Max.X >= b.Max.X-3 ||
+		clip.Min.Y <= b.Min.Y+3 || clip.Max.Y >= b.Max.Y-3 {
+		lk.DrawMenuFrame(ctx, b)
+	} else {
+		pal := lk.Palette()
+		ch := p.chrome()
+		ctx.DrawRect(clip, paintengine2d.Fill(pal.SurfaceAlt))
+		if gw := ch.GutterW() - 1; gw > 2 {
+			ctx.DrawRect(paintengine2d.XYWH(b.Min.X+1, clip.Min.Y, gw, clip.Dy()), paintengine2d.Fill(pal.MenuGutter))
+		}
+	}
 	ctx.Save()
 	ctx.ClipRect(b.Inset(2))
 	for i, it := range p.Items {
 		if it == nil {
+			continue
+		}
+		row := p.rowBounds(i)
+		if ctx.QuickReject(row) {
 			continue
 		}
 		st := style.StateNone
@@ -634,7 +680,7 @@ func (p *PopupMenu) Paint(ctx *paintengine2d.Context) {
 			st |= style.StatePressed
 		}
 		label, _, idx := ParseMnemonic(it.Text)
-		lk.DrawMenuItem(ctx, p.rowBounds(i), st, style.MenuRow{
+		lk.DrawMenuItem(ctx, row, st, style.MenuRow{
 			Label: label, Shortcut: it.Shortcut, Underline: idx,
 			Separator: it.Separator, Checked: it.Checked, Radio: it.isRadio(), Icon: it.Icon,
 		})
@@ -677,9 +723,13 @@ func (p *PopupMenu) MouseMove(e widget.MouseEvent) bool {
 	return true
 }
 
+func (p *PopupMenu) MouseEnter() { p.SetHovered(true) }
+
 func (p *PopupMenu) MouseExit() {
+	old := p.hover
 	p.hover = -1
-	p.Invalidate()
+	p.SetHovered(false)
+	p.invalidateRow(old)
 }
 
 // HighlightedIndex is the pointer-hot or keyboard-current row, or -1.
@@ -744,14 +794,10 @@ func (p *PopupMenu) KeyPress(e widget.KeyEvent) bool {
 		p.moveFocus(1)
 		return true
 	case platform.KeyHome:
-		p.focus = firstEnabled(p.Items)
-		p.hover = p.focus
-		p.Invalidate()
+		p.setHoverFocus(firstEnabled(p.Items))
 		return true
 	case platform.KeyEnd:
-		p.focus = lastEnabled(p.Items)
-		p.hover = p.focus
-		p.Invalidate()
+		p.setHoverFocus(lastEnabled(p.Items))
 		return true
 	case platform.KeyReturn, platform.KeySpace:
 		p.activate(p.focus)
@@ -803,6 +849,20 @@ func foldLetter(r rune) rune {
 	return r
 }
 
+func (p *PopupMenu) setHoverFocus(i int) {
+	old := p.hover
+	off := p.OffsetY
+	p.focus = i
+	p.hover = i
+	p.ensureItemVisible(i)
+	if p.OffsetY != off {
+		p.Invalidate()
+		return
+	}
+	p.invalidateRow(old)
+	p.invalidateRow(i)
+}
+
 func lastEnabled(items []*MenuItem) int {
 	for i := len(items) - 1; i >= 0; i-- {
 		if items[i] != nil && !items[i].Separator && !items[i].Disabled {
@@ -821,10 +881,7 @@ func (p *PopupMenu) moveFocus(dir int) {
 		i = (i + dir + len(p.Items)) % len(p.Items)
 		it := p.Items[i]
 		if it != nil && !it.Separator && !it.Disabled {
-			p.focus = i
-			p.hover = i
-			p.ensureItemVisible(i)
-			p.Invalidate()
+			p.setHoverFocus(i)
 			return
 		}
 	}

@@ -509,6 +509,13 @@ are independent look.json fields again; compound pack names migrate
 
 ## Version
 
+**0.14.0** — Menu / toolbar / list hover is dirty-rect only: previous + new
+row (and the open title) invalidate; dirty frames clip paint and do **not**
+`Clear` + `DrawScene` the whole window. Popup, overlay, and tooltip honor
+the same damage. `BenchmarkMenuHover` guards the path. paintengine2d is
+still **v0.9.0** — it has no dirty-rect `DrawScene` (see
+`docs/platform.md`).
+
 **0.13.8** — Mail sidebar pins **Outbox** to the bottom of the folder pane
 (own one-row tree + separator) so it is not the last sibling under
 Filters. The `N unread in all folders` footer label is gone. TreeView

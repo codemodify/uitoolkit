@@ -1615,6 +1615,49 @@ func TestMailFolderTreePutsOutboxLast(t *testing.T) {
 	w.Close()
 }
 
+func TestMailMenuHoverDoesNotRebuildTree(t *testing.T) {
+	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{
+		Title: "Mail", Width: 1280, Height: 800, Headless: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.SetContent(MailApp(a, w))
+	a.PumpOnce()
+	var mb *widgets.MenuBar
+	var folder *widgets.TreeView
+	widget.Walk(w.Content(), func(c widget.Component) {
+		if m, ok := c.(*widgets.MenuBar); ok && mb == nil {
+			mb = m
+		}
+	})
+	folder, _ = mailSidebarTrees(w.Content())
+	if mb == nil || folder == nil {
+		t.Fatal("mail chrome")
+	}
+	roots := folder.Roots
+	mb.Open(0)
+	a.PumpOnce()
+	pop, ok := w.Popup().(*widgets.PopupMenu)
+	if !ok || pop == nil || len(pop.Items) < 3 {
+		t.Fatal("file menu")
+	}
+	for i := 0; i < 3; i++ {
+		r := pop.ItemBounds(i)
+		o := widget.DeviceOrigin(pop)
+		w.Inject(platform.Event{
+			Kind: platform.EventMouseMove,
+			Pos:  paintengine2d.Pt(o.X+(r.Min.X+r.Max.X)*0.5, o.Y+(r.Min.Y+r.Max.Y)*0.5),
+		})
+		a.PumpOnce()
+	}
+	if folder.Roots[0] != roots[0] {
+		t.Fatal("menu hover rebuilt the folder tree")
+	}
+	w.Close()
+}
+
 func mailSidebarTrees(root widget.Component) (folder, outbox *widgets.TreeView) {
 	widget.Walk(root, func(c widget.Component) {
 		tv, ok := c.(*widgets.TreeView)

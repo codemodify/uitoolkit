@@ -192,6 +192,9 @@ func (t *TreeView) Paint(ctx *paintengine2d.Context) {
 		for i := lo; i < hi; i++ {
 			y := float32(i)*rh - t.OffsetY
 			row := paintengine2d.XYWH(0, y, b.Dx(), rh)
+			if ctx.QuickReject(row) {
+				continue
+			}
 			n := rows[i].node
 			lk.DrawTreeRow(ctx, row, n == t.Selected, n == t.hover, n.Expanded, n.Leaf(), rows[i].depth, n.Label, n.Bold)
 			paintTreeSwatch(ctx, row, n.Color)

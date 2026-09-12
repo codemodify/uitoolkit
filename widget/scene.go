@@ -109,6 +109,12 @@ func recordNode(c Component, rec *paintengine2d.Recorder, ctx *paintengine2d.Con
 	ctx.Translate(b.Min.X, b.Min.Y)
 	ctx.ClipRect(local)
 	if ctx.ClipEmpty() || (!fullContent && ctx.QuickReject(local)) {
+		// Outside the dirty clip: keep the last group so the retained
+		// scene stays complete, but do not re-Paint.
+		if cache != nil && cache.Layers[c.ID()] != nil && !subtreeDirty(c, cache) && !cache.dirtyID(c.ID()) {
+			rec.Attach(cache.Layers[c.ID()])
+			cache.Reused++
+		}
 		ctx.Restore()
 		return
 	}

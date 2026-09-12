@@ -124,3 +124,43 @@ func TestMenuItemIconPaintsGutter(t *testing.T) {
 		t.Fatal("icon gutter empty")
 	}
 }
+
+func TestPopupMenuHoverInvalidatesTwoRows(t *testing.T) {
+	items := make([]*widgets.MenuItem, 12)
+	for i := range items {
+		items[i] = widgets.Item("Command", nil)
+	}
+	pop := widgets.NewPopupMenu(items...)
+	s := uitest.Mount(pop, paintengine2d.XYWH(0, 0, 240, 420))
+	mid := func(i int) paintengine2d.Point {
+		r := pop.ItemBounds(i)
+		return paintengine2d.Pt((r.Min.X+r.Max.X)*0.5, (r.Min.Y+r.Max.Y)*0.5)
+	}
+	pop.MouseMove(widget.MouseEvent{Pos: mid(0)})
+	n := s.Host.DamageCount()
+	pop.MouseMove(widget.MouseEvent{Pos: mid(4)})
+	if got := s.Host.DamageCount() - n; got != 2 {
+		t.Fatalf("hover invalidations %d, want 2 (old+new row)", got)
+	}
+	same := s.Host.DamageCount()
+	pop.MouseMove(widget.MouseEvent{Pos: mid(4)})
+	if s.Host.DamageCount() != same {
+		t.Fatal("same-row move must not invalidate")
+	}
+}
+
+func BenchmarkPopupMenuHover(b *testing.B) {
+	items := make([]*widgets.MenuItem, 20)
+	for i := range items {
+		items[i] = widgets.Item("Command", nil)
+	}
+	pop := widgets.NewPopupMenu(items...)
+	s := uitest.Mount(pop, paintengine2d.XYWH(0, 0, 260, 640))
+	_ = s
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		r := pop.ItemBounds(i % 20)
+		pop.MouseMove(widget.MouseEvent{Pos: paintengine2d.Pt((r.Min.X+r.Max.X)*0.5, (r.Min.Y+r.Max.Y)*0.5)})
+	}
+}

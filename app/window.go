@@ -658,9 +658,16 @@ func (w *Window) frame() {
 	if w.dirty.Empty() && !w.full {
 		return
 	}
-	if platform.WantScene() {
-		w.frameScene()
+	// paintengine2d.DrawScene always Clear+replays the whole graph. Hover
+	// (and other dirty-rect frames) must present through the immediate
+	// clip path so only the previous+new chrome rasters.
+	if platform.WantScene() && w.full {
+		w.recordScene()
+		w.presentScene()
 	} else {
+		if platform.WantScene() && w.sceneWorthRecording() {
+			w.recordScene()
+		}
 		w.frameImmediate()
 	}
 	rects := append([]paintengine2d.Rect(nil), w.dirty.Rects...)
@@ -673,62 +680,95 @@ func (w *Window) frame() {
 	w.full = false
 }
 
+func (w *Window) paintLayers(ctx *paintengine2d.Context, dirty *paintengine2d.Damage) {
+	if w.root != nil {
+		widget.PaintTree(w.root, ctx, dirty)
+	}
+	if w.overlay != nil {
+		widget.PaintTree(w.overlay, ctx, dirty)
+	}
+	if w.popup != nil {
+		widget.PaintTree(w.popup, ctx, dirty)
+	}
+	if w.tooltip != nil {
+		widget.PaintTree(w.tooltip, ctx, dirty)
+	}
+}
+
 func (w *Window) frameImmediate() {
 	ctx := platform.NewPaintContext(w.surf)
 	if ctx == nil {
 		return
 	}
-	var paintDirty *paintengine2d.Damage
+	bg := w.look.Palette().Background
 	if w.full {
-		ctx.Clear(w.look.Palette().Background)
-		paintDirty = nil
-	} else {
+		ctx.Clear(bg)
+		w.paintLayers(ctx, nil)
+		return
+	}
+	u := w.dirty.Bounds()
+	if u.Empty() {
+		return
+	}
+	// Keep the clip live through Paint so chrome QuickRejects rows
+	// outside the dirty union (old+new hover). Overlay/popup/tooltip
+	// used to paint with dirty=nil — a full menu raster every move.
+	ctx.Save()
+	ctx.ClipRect(u)
+	ctx.DrawRect(u, paintengine2d.Fill(bg))
+	w.paintLayers(ctx, &w.dirty)
+	ctx.Restore()
+}
+
+// sceneWorthRecording is true when the dirty union is large enough that
+// retained-layer reuse matters (scroll / full widget). Hover-sized boxes
+// skip the recorder so the hot path is clip + two rows only.
+func (w *Window) sceneWorthRecording() bool {
+	if w.full || w.layers == nil {
+		return true
+	}
+	ww, hh := w.surf.Size()
+	full := float32(ww * hh)
+	if full <= 0 {
+		return false
+	}
+	u := w.dirty.Bounds()
+	return u.Dx()*u.Dy() > full*0.12
+}
+
+func (w *Window) recordScene() {
+	ww, hh := w.surf.Size()
+	rec := paintengine2d.NewRecorder(ww, hh)
+	if w.full {
+		rec.Clear(w.look.Palette().Background)
+	}
+	ctx := paintengine2d.NewContextDevice(rec)
+	var paintDirty *paintengine2d.Damage
+	fullContent := w.full
+	if !w.full {
 		paintDirty = &w.dirty
-		for _, r := range w.dirty.Rects {
-			ctx.Save()
-			ctx.ClipRect(r)
-			ctx.DrawRect(r, paintengine2d.Fill(w.look.Palette().Background))
-			ctx.Restore()
+		if u := w.dirty.Bounds(); !u.Empty() {
+			ctx.ClipRect(u)
 		}
 	}
 	if w.root != nil {
-		widget.PaintTree(w.root, ctx, paintDirty)
+		widget.RecordTree(w.root, rec, ctx, paintDirty, w.layers, fullContent)
 	}
 	if w.overlay != nil {
-		widget.PaintTree(w.overlay, ctx, nil)
+		widget.RecordTree(w.overlay, rec, ctx, paintDirty, w.layers, fullContent)
 	}
 	if w.popup != nil {
-		widget.PaintTree(w.popup, ctx, nil)
+		widget.RecordTree(w.popup, rec, ctx, paintDirty, w.layers, fullContent)
 	}
 	if w.tooltip != nil {
-		widget.PaintTree(w.tooltip, ctx, nil)
-	}
-}
-
-func (w *Window) frameScene() {
-	ww, hh := w.surf.Size()
-	rec := paintengine2d.NewRecorder(ww, hh)
-	rec.Clear(w.look.Palette().Background)
-	ctx := paintengine2d.NewContextDevice(rec)
-	var paintDirty *paintengine2d.Damage
-	if !w.full {
-		paintDirty = &w.dirty
-	}
-	if w.root != nil {
-		widget.RecordTree(w.root, rec, ctx, paintDirty, w.layers, false)
-	}
-	if w.overlay != nil {
-		widget.RecordTree(w.overlay, rec, ctx, nil, w.layers, true)
-	}
-	if w.popup != nil {
-		widget.RecordTree(w.popup, rec, ctx, nil, w.layers, true)
-	}
-	if w.tooltip != nil {
-		widget.RecordTree(w.tooltip, rec, ctx, nil, w.layers, true)
+		widget.RecordTree(w.tooltip, rec, ctx, paintDirty, w.layers, fullContent)
 	}
 	w.scene = rec.Finish()
+}
+
+func (w *Window) presentScene() {
 	dev := platform.SurfaceDevice(w.surf)
-	if dev == nil {
+	if dev == nil || w.scene == nil {
 		return
 	}
 	paintengine2d.DrawScene(w.scene, dev)

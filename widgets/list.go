@@ -127,6 +127,9 @@ func (l *ListView) Paint(ctx *paintengine2d.Context) {
 		for i := lo; i < hi; i++ {
 			y := float32(i)*rh - l.OffsetY
 			row := paintengine2d.XYWH(0, y, b.Dx(), rh)
+			if ctx.QuickReject(row) {
+				continue
+			}
 			label := ""
 			if l.ItemText != nil {
 				label = l.ItemText(i)

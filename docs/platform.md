@@ -87,6 +87,24 @@ body clip (below a sticky table header) so `DrawScene` cannot shift the
 clip with the content. Hover and selection re-record rows whose visual
 signature changed.
 
+**0.14.0 dirty present:** `DrawScene` in paintengine2d v0.9.0 always
+emits `opClear` (full device) and replays every attached group. A menu
+hover that only dirties two rows must not take that path — the window
+records the retained graph for reuse/inspector, then **paints and
+presents the dirty union** (`frameImmediate` + clip). Overlay / popup /
+tooltip receive the same `Damage` (they used to paint with `dirty=nil`).
+Chrome `Paint` methods `QuickReject` rows outside the clip.
+
+paintengine2d follow-ups (do not fix in uitoolkit):
+
+| Hotspot | What v0.9.0 does | What hover needs |
+| --- | --- | --- |
+| `DrawScene` | Full `Clear` + walk every node | `DrawScene(s, dev, dirty *Damage)` that skips ops whose bounds miss dirty |
+| `Recorder.Clear` / `opClear` | Whole-device reset | Dirty-rect clear, or omit clear when compositing over a live buffer |
+| Glyph / `Draw` text | Per-call shape + blit | Warm-path glyph run reuse for unchanged menu labels |
+| `DrawRoundRect` menu frame | Flatten + stroke each hover | Retain frame path; only highlight rects change |
+| GPU `eglSwapBuffers` | Full buffer present | Damage/partial swap or keep CPU dirty `XPutImage` / shm blit for hover |
+
 ```bash
 UITK_SCENE=auto go run ./examples/gallery   # default: retained scene
 UITK_SCENE=off  go run ./examples/gallery   # v0.5 immediate Fill path
