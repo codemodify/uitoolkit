@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/layout"
@@ -14,8 +15,10 @@ import (
 )
 
 // NewStatusItem opens a tray / menu-bar icon owned by this application.
-// Headless apps get a stub unless UITK_TRAY=fake (tests). A live item
-// keeps Run going after the last window is destroyed until Close.
+// Default chrome is HostMenu (native dbusmenu on Linux). ToolkitMenu
+// attaches OnMenu → ShowStatusMenu. Headless apps get a stub unless
+// UITK_TRAY=fake (tests). A live item keeps Run going after the last
+// window is destroyed until Close.
 func (a *Application) NewStatusItem(opts platform.StatusItemOptions) (item platform.StatusItem, err error) {
 	defer func() {
 		if recover() != nil {
@@ -25,12 +28,13 @@ func (a *Application) NewStatusItem(opts platform.StatusItemOptions) (item platf
 	if a != nil && a.headless && strings.ToLower(strings.TrimSpace(os.Getenv("UITK_TRAY"))) != "fake" {
 		opts.Stub = true
 	}
+	var holder *statusMenuHolder
 	if a != nil {
 		opts.Dispatch = a.Post
-		if opts.OnMenu == nil && hasStatusMenu(opts.Menu) {
-			menu := platformCopyMenu(opts.Menu)
+		if opts.OnMenu == nil && hasStatusMenu(opts.Menu) && wantsToolkitStatusMenu(opts) {
+			holder = &statusMenuHolder{items: platformCopyMenu(opts.Menu)}
 			opts.OnMenu = func(x, y int32) {
-				a.ShowStatusMenu(x, y, menu)
+				a.ShowStatusMenu(x, y, holder.Items())
 			}
 		}
 	}
@@ -39,12 +43,53 @@ func (a *Application) NewStatusItem(opts platform.StatusItemOptions) (item platf
 		item, err = platform.NewStatusItem(platform.StatusItemOptions{Stub: true, ID: opts.ID, Title: opts.Title})
 		return item, err
 	}
+	if holder != nil {
+		item = &trackingStatusItem{StatusItem: item, holder: holder}
+	}
 	if a != nil {
 		a.mu.Lock()
 		a.trays = append(a.trays, item)
 		a.mu.Unlock()
 	}
 	return item, nil
+}
+
+func wantsToolkitStatusMenu(opts platform.StatusItemOptions) bool {
+	if opts.MenuChrome == platform.ToolkitMenu {
+		return true
+	}
+	// HostMenu on Linux is dbusmenu. Windows still uses OnMenu (no HMENU).
+	return !platform.HostMenuNative()
+}
+
+type statusMenuHolder struct {
+	items []platform.StatusMenuItem
+}
+
+func (h *statusMenuHolder) Items() []platform.StatusMenuItem {
+	if h == nil {
+		return nil
+	}
+	return platformCopyMenu(h.items)
+}
+
+func (h *statusMenuHolder) Set(items []platform.StatusMenuItem) {
+	if h == nil {
+		return
+	}
+	h.items = platformCopyMenu(items)
+}
+
+type trackingStatusItem struct {
+	platform.StatusItem
+	holder *statusMenuHolder
+}
+
+func (t *trackingStatusItem) SetMenu(items []platform.StatusMenuItem) error {
+	if t.holder != nil {
+		t.holder.Set(items)
+	}
+	return t.StatusItem.SetMenu(items)
 }
 
 // StatusItems is the tray icons still tracked by this application.
@@ -142,10 +187,11 @@ func StatusMenuToItems(items []platform.StatusMenuItem) []*widgets.MenuItem {
 }
 
 // ShowStatusMenu opens a toolkit PopupMenu on a dedicated top-level
-// status-menu window so the menu is visible when the main window is
-// hidden or minimized to the tray. x,y are SNI root/screen coordinates;
-// X11 places the popup there (typically above a bottom panel). Wayland
-// cannot position a toplevel; the compositor still maps a small window.
+// status-menu window (ToolkitMenu chrome). The window is reused: Hide/Show
+// + rebind, never create/destroy per click. x,y are SNI root/screen
+// coordinates; X11 places the popup there (typically above a bottom
+// panel). Wayland cannot position a toplevel; the compositor still maps
+// a visible menu.
 func (a *Application) ShowStatusMenu(x, y int32, items []platform.StatusMenuItem) {
 	if a == nil {
 		return
@@ -154,45 +200,59 @@ func (a *Application) ShowStatusMenu(x, y int32, items []platform.StatusMenuItem
 	if len(rows) == 0 {
 		return
 	}
-	a.dismissStatusMenu()
 	mw, mh := measureStatusMenu(a.Look(), a.Scale(), rows)
 	px, py := statusMenuScreenPos(x, y, mw, mh)
-	opts := platform.WindowOptions{
-		Title:     " ",
-		Width:     mw,
-		Height:    mh,
-		MinWidth:  1,
-		MinHeight: 1,
-		Popup:     true,
-		X:         px,
-		Y:         py,
+	w := a.statusMenu
+	if w == nil || w.Closed() {
+		opts := platform.WindowOptions{
+			Title:     " ",
+			Width:     mw,
+			Height:    mh,
+			MinWidth:  1,
+			MinHeight: 1,
+			Popup:     true,
+			X:         px,
+			Y:         py,
+		}
+		var err error
+		w, err = a.NewWindow(opts)
+		if err != nil || w == nil {
+			a.showStatusMenuOnPreferred(x, y, rows)
+			return
+		}
+		w.statusMenu = true
+		a.statusMenu = w
+	} else if err := w.Surface().Resize(mw, mh); err != nil {
+		trayStatusLog("ShowStatusMenu resize: %v", err)
 	}
-	w, err := a.NewWindow(opts)
-	if err != nil || w == nil {
+	if !a.bindStatusMenu(w, rows, mw, mh, px, py) {
 		a.showStatusMenuOnPreferred(x, y, rows)
-		return
 	}
+}
+
+func (a *Application) bindStatusMenu(w *Window, rows []*widgets.MenuItem, mw, mh, px, py int) bool {
+	if w == nil || w.Closed() {
+		return false
+	}
+	if pop, ok := w.Popup().(*widgets.PopupMenu); ok && pop != nil {
+		pop.OnDismiss = nil
+	}
+	w.DismissPopup()
 	w.statusMenu = true
-	a.statusMenu = w
+	w.statusMenuArmed = false
+	w.statusMenuArmAt = time.Now().Add(statusMenuArmDelay)
 	from := widgets.NewLabel("")
 	w.SetContent(from)
 	pop := widgets.NewPopupMenu(rows...)
 	pop.OnDismiss = func() {
-		if a.statusMenu == w {
-			a.statusMenu = nil
-		}
-		if !w.Closed() {
-			w.Close()
-		}
+		a.hideStatusMenu()
 	}
 	widget.PreparePopup(from, pop)
 	pop.Arrange(paintengine2d.XYWH(0, 0, float32(mw), float32(mh)))
 	if !widget.ShowPopup(from, pop) {
 		trayStatusLog("ShowStatusMenu popup layer failed; falling back to main window")
-		w.Close()
-		a.statusMenu = nil
-		a.showStatusMenuOnPreferred(x, y, rows)
-		return
+		a.hideStatusMenu()
+		return false
 	}
 	pop.RequestFocus()
 	w.Show()
@@ -200,8 +260,9 @@ func (a *Application) ShowStatusMenu(x, y int32, items []platform.StatusMenuItem
 	if px != 0 || py != 0 {
 		platform.MoveSurface(w.Surface(), px, py)
 	}
-	trayStatusLog("ShowStatusMenu screen=%d,%d place=%d,%d size=%dx%d popupWin visible=%v",
-		x, y, px, py, mw, mh, w.Visible())
+	trayStatusLog("ShowStatusMenu place=%d,%d size=%dx%d popupWin visible=%v reused",
+		px, py, mw, mh, w.Visible())
+	return true
 }
 
 func (a *Application) showStatusMenuOnPreferred(x, y int32, rows []*widgets.MenuItem) {
@@ -225,20 +286,26 @@ func (a *Application) showStatusMenuOnPreferred(x, y int32, rows []*widgets.Menu
 	widgets.ShowContextMenu(from, origin, rows...)
 }
 
-func (a *Application) dismissStatusMenu() {
-	if a == nil {
+func (a *Application) hideStatusMenu() {
+	if a == nil || a.hidingStatusMenu {
 		return
 	}
 	w := a.statusMenu
-	a.statusMenu = nil
 	if w == nil || w.Closed() {
 		return
+	}
+	a.hidingStatusMenu = true
+	defer func() { a.hidingStatusMenu = false }()
+	w.statusMenuArmed = false
+	w.statusMenuArmAt = time.Time{}
+	if pop, ok := w.Popup().(*widgets.PopupMenu); ok && pop != nil {
+		pop.OnDismiss = nil
 	}
 	if w.Popup() != nil {
 		w.DismissPopup()
 	}
-	if !w.Closed() {
-		w.Close()
+	if w.Visible() {
+		w.Hide()
 	}
 }
 
@@ -262,8 +329,8 @@ type statusMeasureHost struct {
 }
 
 func (h *statusMeasureHost) Invalidate(widget.Component, paintengine2d.Rect) {}
-func (h *statusMeasureHost) RequestFocus(widget.Component)                  {}
-func (h *statusMeasureHost) Focus() widget.Component                        { return nil }
+func (h *statusMeasureHost) RequestFocus(widget.Component)                   {}
+func (h *statusMeasureHost) Focus() widget.Component                         { return nil }
 func (h *statusMeasureHost) Scale() float32 {
 	if h == nil || h.scale <= 0 {
 		return 1

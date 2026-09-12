@@ -75,15 +75,67 @@ func TestGetLayoutReplySignatureNoPanic(t *testing.T) {
 	if derr != nil {
 		t.Fatal(derr)
 	}
-	if rev != 3 || layout.ID != 0 || len(layout.Children) != 1 {
-		t.Fatalf("stub layout rev=%d children=%d", rev, len(layout.Children))
+	if rev != 3 || layout.ID != 0 || len(layout.Children) != 3 {
+		t.Fatalf("HostMenu layout rev=%d children=%d", rev, len(layout.Children))
 	}
 	_ = dbus.SignatureOf(rev, layout)
 	_, leaf, derr := s.GetLayout(1, 0, nil)
 	if derr != nil || leaf.ID != 1 || len(leaf.Children) != 0 {
 		t.Fatalf("leaf %+v %v", leaf, derr)
 	}
+	if leaf.Properties["label"].Value() != "Show Mail" {
+		t.Fatalf("leaf label %+v", leaf.Properties)
+	}
 	_ = dbus.SignatureOf(rev, leaf)
+}
+
+func TestHostMenuGetLayoutHasRealRows(t *testing.T) {
+	s := &linuxStatusItem{
+		opts: StatusItemOptions{MenuChrome: HostMenu},
+		menu: []StatusMenuItem{
+			{Text: "Show Mail", Icon: 0},
+			{Separator: true},
+			{Text: "Quit", Checked: true},
+		},
+		menuRev: 2,
+	}
+	rev, layout, err := s.GetLayout(0, -1, nil)
+	if err != nil || rev != 2 || len(layout.Children) != 3 {
+		t.Fatalf("rev=%d children=%d %v", rev, len(layout.Children), err)
+	}
+	labels := make([]string, 0, 3)
+	for _, child := range layout.Children {
+		leaf, ok := child.Value().(dbusMenuLeaf)
+		if !ok {
+			t.Fatalf("child type %T", child.Value())
+		}
+		if leaf.ID < 1 {
+			t.Fatalf("id %d", leaf.ID)
+		}
+		if tpe, ok := leaf.Properties["type"]; ok && tpe.Value() == "separator" {
+			labels = append(labels, "-")
+			continue
+		}
+		lab, _ := leaf.Properties["label"].Value().(string)
+		labels = append(labels, lab)
+	}
+	if labels[0] != "Show Mail" || labels[1] != "-" || labels[2] != "Quit" {
+		t.Fatalf("labels %v", labels)
+	}
+}
+
+func TestToolkitMenuGetLayoutEmptyAndPath(t *testing.T) {
+	s := &linuxStatusItem{
+		opts: StatusItemOptions{MenuChrome: ToolkitMenu},
+		menu: []StatusMenuItem{{Text: "Show Mail"}, {Separator: true}, {Text: "Quit"}},
+	}
+	if s.menuPath() != sniMenuNone || sniMenuNone != dbus.ObjectPath("/NO_DBUSMENU") {
+		t.Fatalf("ToolkitMenu path %q", s.menuPath())
+	}
+	_, layout, err := s.GetLayout(0, -1, nil)
+	if err != nil || len(layout.Children) != 0 {
+		t.Fatalf("ToolkitMenu must not export rows, children=%d %v", len(layout.Children), err)
+	}
 }
 
 func TestLinuxContextMenuInvokesOnMenu(t *testing.T) {
@@ -91,6 +143,7 @@ func TestLinuxContextMenuInvokesOnMenu(t *testing.T) {
 	var gx, gy int32
 	s := &linuxStatusItem{
 		opts: StatusItemOptions{
+			MenuChrome: ToolkitMenu,
 			OnMenu: func(x, y int32) {
 				n++
 				gx, gy = x, y
@@ -126,7 +179,15 @@ func TestLinuxContextMenuInvokesOnMenu(t *testing.T) {
 
 func TestDbusMenuEventInvokesOnClick(t *testing.T) {
 	n := 0
+	dispatched := 0
 	s := &linuxStatusItem{
+		opts: StatusItemOptions{
+			MenuChrome: HostMenu,
+			Dispatch: func(fn func()) {
+				dispatched++
+				fn()
+			},
+		},
 		menu: []StatusMenuItem{
 			{Text: "Show Mail", OnClick: func() { n++ }},
 			{Separator: true},
@@ -136,8 +197,8 @@ func TestDbusMenuEventInvokesOnClick(t *testing.T) {
 	if err := s.Event(1, "clicked", dbus.MakeVariant(""), 0); err != nil {
 		t.Fatal(err)
 	}
-	if n != 1 {
-		t.Fatalf("Event clicked %d", n)
+	if n != 1 || dispatched != 1 {
+		t.Fatalf("Event clicked n=%d dispatched=%d", n, dispatched)
 	}
 	ids, err := s.EventGroup([]dbusMenuEvent{
 		{ID: 3, EventID: "clicked"},
@@ -152,6 +213,38 @@ func TestDbusMenuEventInvokesOnClick(t *testing.T) {
 	if err != nil || need {
 		t.Fatalf("AboutToShow %v %v", need, err)
 	}
+	opened := 0
+	s.opts.OnMenu = func(x, y int32) { opened++ }
+	need, err = s.AboutToShow(0)
+	if err != nil || need || opened != 0 {
+		t.Fatalf("HostMenu AboutToShow must not open toolkit menu, opened=%d", opened)
+	}
+}
+
+func TestSetMenuDedupesLayoutUpdated(t *testing.T) {
+	s := &linuxStatusItem{
+		menu:    []StatusMenuItem{{Text: "Show"}, {Separator: true}, {Text: "Quit"}},
+		menuRev: 4,
+	}
+	if err := s.SetMenu([]StatusMenuItem{{Text: "Show"}, {Separator: true}, {Text: "Quit"}}); err != nil {
+		t.Fatal(err)
+	}
+	if s.menuRev != 4 {
+		t.Fatalf("identical SetMenu must not bump rev, got %d", s.menuRev)
+	}
+	if err := s.SetMenu([]StatusMenuItem{{Text: "Show Mail"}, {Separator: true}, {Text: "Quit"}}); err != nil {
+		t.Fatal(err)
+	}
+	if s.menuRev != 5 {
+		t.Fatalf("changed SetMenu rev %d", s.menuRev)
+	}
+}
+
+func TestWatcherOwnerChangedReregisters(t *testing.T) {
+	s := &linuxStatusItem{}
+	s.onWatcherOwnerChanged("org.freedesktop.Notifications", ":1.2")
+	s.onWatcherOwnerChanged(sniWatcher, "")
+	s.onWatcherOwnerChanged(sniWatcher, ":1.9")
 }
 
 func TestNewStatusItemNeverPanics(t *testing.T) {
@@ -222,8 +315,8 @@ func TestExportGetLayoutNoNestingPanic(t *testing.T) {
 	if err := call.Store(&rev, &layout); err != nil {
 		t.Fatalf("GetLayout over bus: %v", err)
 	}
-	if len(layout.Children) > 1 {
-		t.Fatalf("stub layout should not export real rows, children %d", len(layout.Children))
+	if len(layout.Children) != 3 {
+		t.Fatalf("HostMenu GetLayout children %d want 3", len(layout.Children))
 	}
 	_ = dbus.SignatureOf(rev, layout)
 	menuVar, derr := s.props.Get(sniInterface, "Menu")
@@ -231,14 +324,41 @@ func TestExportGetLayoutNoNestingPanic(t *testing.T) {
 		t.Fatal(derr)
 	}
 	path, _ := menuVar.Value().(dbus.ObjectPath)
-	if path != "/" {
-		t.Fatalf("Menu %q want / (spec empty path, not /NO_DBUSMENU)", path)
+	if path != dbus.ObjectPath(dbusMenuPath) {
+		t.Fatalf("Menu %q want %s", path, dbusMenuPath)
 	}
 }
 
-func TestSNIMenuPathIsSpecEmpty(t *testing.T) {
-	if sniMenuNone != dbus.ObjectPath("/") {
-		t.Fatalf("sniMenuNone %q want /", sniMenuNone)
+func TestSNIMenuNoneIsKDESentinel(t *testing.T) {
+	if sniMenuNone != dbus.ObjectPath("/NO_DBUSMENU") {
+		t.Fatalf("sniMenuNone %q want /NO_DBUSMENU", sniMenuNone)
+	}
+}
+
+func TestToolkitMenuExportsNoDbusmenuPath(t *testing.T) {
+	_ = sessionBusOrSkip(t)
+	os.Unsetenv("UITK_TRAY")
+	item, err := newNativeStatusItem(StatusItemOptions{
+		ID:         "uitoolkit-toolkitmenu-test",
+		Title:      "Mail",
+		MenuChrome: ToolkitMenu,
+		Menu:       []StatusMenuItem{{Text: "Show Mail"}, {Separator: true}, {Text: "Quit"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = item.Close() })
+	s, ok := item.(*linuxStatusItem)
+	if !ok {
+		t.Skip("native export fell back to stub")
+	}
+	menuVar, derr := s.props.Get(sniInterface, "Menu")
+	if derr != nil {
+		t.Fatal(derr)
+	}
+	path, _ := menuVar.Value().(dbus.ObjectPath)
+	if path != sniMenuNone {
+		t.Fatalf("ToolkitMenu Menu %q want %s", path, sniMenuNone)
 	}
 }
 
@@ -287,8 +407,8 @@ func TestSurviveStatusNotifierWatcherGetLayout(t *testing.T) {
 		if err != nil {
 			t.Fatalf("GetLayout after watcher: %v", err)
 		}
-		if len(layout.Children) > 1 {
-			t.Fatalf("stub layout children %d", len(layout.Children))
+		if len(layout.Children) != 3 {
+			t.Fatalf("HostMenu layout children %d", len(layout.Children))
 		}
 	}
 	if !item.Alive() && item.Backend() == "stub" {

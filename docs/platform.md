@@ -257,12 +257,18 @@ buffer scale agree. List/table/tree rows and fixed column widths are
 design pixels that grow with the look. EGL, dmabuf, and shm share that
 scale; CPU present still uses damage / attach / commit.
 
-## Status item / tray (0.16.0, 0.16.1)
+## Status item / tray (0.16.0, 0.17.0)
 
 `StatusItem` is a tray icon + desktop toast. Linux uses StatusNotifierItem
 and freedesktop Notifications over the session bus (X11, Xlibre, and
 Wayland). Windows uses `Shell_NotifyIcon`; macOS (`CGO`) uses
 `NSStatusItem`. See [tray.md](tray.md).
+
+**0.17.0:** default **HostMenu** (`Menu=/MenuBar`, real dbusmenu rows).
+**ToolkitMenu** is `Menu=/NO_DBUSMENU` plus a reused toolkit popup.
+`Application.Post` wakes via eventfd on Wayland. `GetLayout` stays a
+finite `(ia{sv}av)` (v0.16.1). Watcher `NameOwnerChanged` re-registers
+the item.
 
 **0.16.1:** dbusmenu `GetLayout` uses a finite `(ia{sv}av)` signature so
 Plasma's StatusNotifierWatcher does not panic the app. Tray setup
