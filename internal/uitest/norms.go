@@ -89,6 +89,12 @@ func ChromeNorms() []Norm {
 			Check: checkPopupLeave,
 		},
 		{
+			ID: "menu-hover-bordered", Control: "PopupMenu",
+			Peer:  "Office XP / Win32 menu hot-track · Qt QMenu highlight · GTK menu prelight",
+			Want:  "hover highlight is a bordered fill across icon gutter + label, not text invert",
+			Check: checkMenuHoverBordered,
+		},
+		{
 			ID: "textfield-inactive-sel", Control: "TextField",
 			Peer:  "Qt QLineEdit inactive · GTK GtkEntry · Avalonia TextBox",
 			Want:  "unfocused selection is de-emphasized vs the live accent band",
@@ -241,6 +247,97 @@ func checkMenuBarDismiss() error {
 	}
 	_ = s
 	return nil
+}
+
+func checkMenuHoverBordered() error {
+	if err := checkMenuHoverOnLook(style.DarkLook()); err != nil {
+		return fmt.Errorf("dark: %w", err)
+	}
+	if err := checkMenuHoverOnLook(style.LightLook()); err != nil {
+		return fmt.Errorf("light: %w", err)
+	}
+	return checkMenuBarOpenTitle(style.DarkLook())
+}
+
+func checkMenuHoverOnLook(lk style.LookAndFeel) error {
+	h := NewHost()
+	h.SetLook(lk)
+	disabled := widgets.Item("Disabled", nil)
+	disabled.Disabled = true
+	pop := widgets.NewPopupMenu(
+		widgets.Item("Paragraph…", nil),
+		disabled,
+		widgets.Sep(),
+		widgets.Item("Two", nil),
+	)
+	s := MountHost(h, pop, paintengine2d.XYWH(0, 0, 220, 120))
+	idle := s.Paint()
+	p := style.ResolveMenuChrome(lk.Palette())
+	row0 := menuRowDevice(pop, 0)
+	ch := style.MenuChromeFor(lk)
+	gx := int(row0.Min.X + ch.CheckCol()*0.45)
+	gy := int((row0.Min.Y + row0.Max.Y) * 0.5)
+	if ColorDist(idle, gx, gy, p.MenuGutter) >= ColorDist(idle, gx, gy, p.MenuHover) {
+		return fmt.Errorf("idle gutter %d,%d looks like MenuHover", gx, gy)
+	}
+	if ColorDist(idle, gx, gy, p.MenuGutter) >= ColorDist(idle, gx, gy, p.SurfaceAlt) {
+		return fmt.Errorf("idle gutter %d,%d matches menu body", gx, gy)
+	}
+	pt := paintengine2d.Pt((row0.Min.X+row0.Max.X)*0.5, (row0.Min.Y+row0.Max.Y)*0.5)
+	s.MouseMove(pt)
+	if pop.HighlightedIndex() != 0 {
+		return fmt.Errorf("hover index %d", pop.HighlightedIndex())
+	}
+	hot := s.Paint()
+	if err := CheckMenuHoverBordered(hot, row0, lk); err != nil {
+		return err
+	}
+	if ColorDiff(idle, hot, 28) < 20 {
+		return fmt.Errorf("hover paint matches idle (text invert?)")
+	}
+	row1 := menuRowDevice(pop, 1)
+	s.MouseMove(paintengine2d.Pt((row1.Min.X+row1.Max.X)*0.5, (row1.Min.Y+row1.Max.Y)*0.5))
+	off := s.Paint()
+	dx := int(row1.Min.X + ch.CheckCol()*0.45)
+	dy := int((row1.Min.Y + row1.Max.Y) * 0.5)
+	if ColorDist(off, dx, dy, p.MenuHover) <= ColorDist(off, dx, dy, p.MenuGutter) {
+		return fmt.Errorf("disabled gutter %d,%d closer to MenuHover than MenuGutter", dx, dy)
+	}
+	return nil
+}
+
+func checkMenuBarOpenTitle(lk style.LookAndFeel) error {
+	h := NewHost()
+	h.SetLook(lk)
+	mb := widgets.NewMenuBar(widgets.NewMenu("&Format", widgets.Item("Paragraph…", nil)))
+	root := widgets.NewColumn(mb)
+	s := MountHost(h, root, paintengine2d.XYWH(0, 0, 420, 240))
+	mb.Open(0)
+	img := s.Paint()
+	tr := mb.TitleRect(0)
+	if tr.Empty() {
+		return fmt.Errorf("empty title")
+	}
+	box := tr.Translate(widget.DeviceOrigin(mb))
+	if err := CheckMenuHoverBordered(img, box, lk); err != nil {
+		return fmt.Errorf("open title: %w", err)
+	}
+	pop, ok := h.Popup().(*widgets.PopupMenu)
+	if !ok || pop == nil {
+		return fmt.Errorf("no dropdown")
+	}
+	if pop.Bounds().Min.Y > box.Max.Y+1.5 {
+		return fmt.Errorf("dropdown %+v not attached to title %+v", pop.Bounds(), box)
+	}
+	_ = s
+	return nil
+}
+
+func menuRowDevice(p *widgets.PopupMenu, i int) paintengine2d.Rect {
+	if p == nil {
+		return paintengine2d.Rect{}
+	}
+	return p.ItemBounds(i).Translate(widget.DeviceOrigin(p))
 }
 
 func checkPopupLeave() error {

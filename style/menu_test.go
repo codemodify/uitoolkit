@@ -1,6 +1,10 @@
 package style
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/codemodify/paintengine2d"
+)
 
 func TestMenuChromeForScalesWithLook(t *testing.T) {
 	lo := MenuChromeFor(DarkLook())
@@ -16,6 +20,41 @@ func TestMenuChromeForScalesWithLook(t *testing.T) {
 	if w2+1 < w1*1.8 {
 		t.Fatalf("scaled frame width 1x=%v 2x=%v", w1, w2)
 	}
+}
+
+func TestMenuPaletteHasHoverChrome(t *testing.T) {
+	for _, p := range []Palette{Dark(), Light()} {
+		p := ResolveMenuChrome(p)
+		if sameRGB(p.MenuHover, p.SurfaceAlt) {
+			t.Fatalf("MenuHover matches SurfaceAlt %+v", p.MenuHover)
+		}
+		if sameRGB(p.MenuHover, p.MenuHoverBorder) {
+			t.Fatalf("MenuHover matches border %+v", p.MenuHover)
+		}
+		if sameRGB(p.MenuGutter, p.SurfaceAlt) {
+			t.Fatalf("MenuGutter matches SurfaceAlt %+v", p.MenuGutter)
+		}
+	}
+}
+
+func TestResolveMenuChromeTintsFromAccent(t *testing.T) {
+	p := Palette{
+		SurfaceAlt: paintengine2d.RGB(0.9, 0.9, 0.9),
+		Background: paintengine2d.RGB(0.8, 0.8, 0.8),
+		Accent:     paintengine2d.RGB(0.1, 0.4, 0.9),
+		Border:     paintengine2d.RGB(0.5, 0.5, 0.5),
+	}
+	got := ResolveMenuChrome(p)
+	if colorUnset(got.MenuHover) || colorUnset(got.MenuHoverBorder) || colorUnset(got.MenuGutter) {
+		t.Fatalf("unresolved %+v", got)
+	}
+	if sameRGB(got.MenuHover, p.SurfaceAlt) {
+		t.Fatalf("derived hover should tint toward Accent")
+	}
+}
+
+func sameRGB(a, b paintengine2d.Color) bool {
+	return a.R == b.R && a.G == b.G && a.B == b.B
 }
 
 func TestMenuChromeFrameWidthIncludesItemPad(t *testing.T) {

@@ -13,6 +13,9 @@ type MenuChrome struct {
 // CheckCol is the label origin relative to the item rect (pad + gutter).
 func (c MenuChrome) CheckCol() float32 { return c.ItemPad + c.CheckGutter }
 
+// GutterW is the icon column from the popup's left edge to the label origin.
+func (c MenuChrome) GutterW() float32 { return c.PadL + c.CheckCol() }
+
 // LabelMinX is the painted label origin inside an arranged item row.
 func (c MenuChrome) LabelMinX(rowMinX float32) float32 { return rowMinX + c.CheckCol() }
 

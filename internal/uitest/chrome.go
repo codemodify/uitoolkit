@@ -83,6 +83,37 @@ func ColorDiff(a, b *paintengine2d.Image, slop int) int {
 	return n
 }
 
+// CheckMenuHoverBordered reports when a hovered menu row is only inverted
+// text instead of an Office XP bordered fill (gutter + label).
+func CheckMenuHoverBordered(img *paintengine2d.Image, row paintengine2d.Rect, lk style.LookAndFeel) error {
+	if img == nil || lk == nil || row.Empty() {
+		return fmt.Errorf("empty menu hover sample")
+	}
+	p := style.ResolveMenuChrome(lk.Palette())
+	inner := row.Inset(3)
+	if inner.Empty() {
+		inner = row.Inset(1)
+	}
+	hr, hg, hb := RGB8(p.MenuHover)
+	br, bg, bb := RGB8(p.MenuHoverBorder)
+	fill := countNearRGB(img, inner, hr, hg, hb, 48)
+	if fill < 8 {
+		return fmt.Errorf("hovered row %+v lacks MenuHover fill (near=%d)", row, fill)
+	}
+	border := countNearRGB(img, row, br, bg, bb, 42)
+	if border < 4 {
+		return fmt.Errorf("hovered row %+v lacks MenuHoverBorder (near=%d)", row, border)
+	}
+	// A text-invert highlight would not paint the icon gutter.
+	ch := style.MenuChromeFor(lk)
+	gx := int(row.Min.X + ch.CheckCol()*0.45)
+	gy := int((row.Min.Y + row.Max.Y) * 0.5)
+	if ColorDist(img, gx, gy, p.MenuHover) >= ColorDist(img, gx, gy, p.MenuGutter) {
+		return fmt.Errorf("icon gutter %d,%d is not MenuHover fill", gx, gy)
+	}
+	return nil
+}
+
 // CountFocusPixels counts pixels near Palette.Focus in r.
 func CountFocusPixels(img *paintengine2d.Image, r paintengine2d.Rect, lk style.LookAndFeel) int {
 	if img == nil || lk == nil {

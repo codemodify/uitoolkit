@@ -69,8 +69,8 @@ go run ./cmd/uitest-driver -compare
 ```
 
 Chrome vs Avalonia / Qt / GTK (focus-visible, toolbar gaps, toggle
-chrome, menu dismiss, label clip) is `TestDesktopChromeNorms` and
-`-compare`. See [compare.md](compare.md).
+chrome, menu dismiss, Office XP menu hover, label clip) is
+`TestDesktopChromeNorms` and `-compare`. See [compare.md](compare.md).
 
 Linux CGO build (Wayland/X11) — required on a real desktop, not just
 `CGO_ENABLED=0 go test`:
