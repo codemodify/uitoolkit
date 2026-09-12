@@ -69,10 +69,10 @@ type Host interface {
 	RequestLayout()
 }
 
-// PixelScroller is an optional Host assertion (app.Window). Scrolling
-// widgets blit the viewport with paintengine2d.Context.Scroll, then only
-// paint the newly exposed strip. Test hosts omit it and fall back to a
-// full Invalidate.
+// PixelScroller is an optional Host assertion (app.Window). The blit
+// path is disabled (v0.14.4) until Context.Scroll + strip damage is
+// proven on Wayland/HiDPI; hosts should return false so widgets
+// Invalidate the full viewport. Hover still uses small dirty rects.
 type PixelScroller interface {
 	ScrollPixels(c Component, local paintengine2d.Rect, dx, dy float32) bool
 }

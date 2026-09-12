@@ -220,11 +220,40 @@ func (w *Window) RevealTooltip() {
 	w.showTip(text, w.tipPos)
 }
 
-// ScrollPixels implements widget.PixelScroller: Context.Scroll the local
-// view (integer axis-aligned blit), ClearRect the vacated strip, and
-// record the moved view for PresentRects. Paint dirty stays the strip
-// only so frameImmediate does not Clear+repaint the blit.
+// pixelScrollEnabled is the Window-side kill switch for Context.Scroll.
+// Must stay false with widgets.pixelScrollEnabled until the blit is proven.
+const pixelScrollEnabled = false
+
+// chromeThin is the max extent of a hover/caret/bar dirty box on both
+// axes. A scroll/content invalidate is a large 2-D viewport and must
+// full-replay so DrawSceneDamage cannot skip the middle.
+const chromeThin = 96
+
+// chromeDamageOnly is true for thin hover/caret/bar dirty (keep
+// DrawSceneDamage). A large 2-D box is a scroll/content invalidate.
+func chromeDamageOnly(d *paintengine2d.Damage) bool {
+	if d == nil || d.Empty() || len(d.Rects) > 8 {
+		return false
+	}
+	for _, r := range d.Rects {
+		if r.Empty() {
+			continue
+		}
+		if r.Dx() > chromeThin && r.Dy() > chromeThin {
+			return false
+		}
+	}
+	return true
+}
+
+// ScrollPixels implements widget.PixelScroller. The blit is disabled
+// (v0.14.4): Context.Scroll + strip damage left vacated holes and
+// jumping rows on Wayland/HiDPI. Callers fall back to a full viewport
+// Invalidate. Hover still uses small dirty rects.
 func (w *Window) ScrollPixels(c widget.Component, local paintengine2d.Rect, dx, dy float32) bool {
+	if !pixelScrollEnabled {
+		return false
+	}
 	if w == nil || w.surf == nil || c == nil || local.Empty() {
 		return false
 	}
@@ -777,13 +806,17 @@ func (w *Window) frame() {
 		// DrawSceneDamage with a non-nil empty Damage is a no-op and
 		// tells GPU Present to skip the swap — that is the black first
 		// frame. Until a real buffer has been presented, pass nil.
+		// Large dirty (scroll/content) also passes nil: strip-only
+		// replay after a failed blit left vacated holes in v0.14.1–3.
 		if !w.needsFullPaint() && !w.dirty.Empty() {
-			dirty = &w.dirty
 			if ctx := platform.NewPaintContext(w.surf); ctx != nil {
 				bg := w.look.Palette().Background
 				for _, r := range w.dirty.Rects {
 					ctx.ClearRect(r, bg)
 				}
+			}
+			if chromeDamageOnly(&w.dirty) {
+				dirty = &w.dirty
 			}
 		}
 		w.presentScene(dirty)
@@ -901,10 +934,10 @@ func (w *Window) presentScene(dirty *paintengine2d.Damage) {
 
 func (w *Window) presentBuffer() {
 	var rects []paintengine2d.Rect
-	if w.needsFullPaint() {
+	if w.needsFullPaint() || !chromeDamageOnly(&w.dirty) {
 		// nil → platform Present covers the whole buffer (and sets
-		// Wayland buffer_scale / viewport). A 0×0 Size() rect would
-		// blit nothing.
+		// Wayland buffer_scale / viewport). Scroll/content dirty is
+		// a full present so partial GPU tiles cannot stay stale.
 		rects = nil
 	} else {
 		rects = append(rects, w.dirty.Rects...)

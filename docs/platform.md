@@ -87,6 +87,14 @@ body clip (below a sticky table header) so `DrawScene` cannot shift the
 clip with the content. Hover and selection re-record rows whose visual
 signature changed.
 
+**0.14.4 scroll holes (Wayland / HiDPI):** v0.14.1 blit + v0.14.2
+`DrawSceneDamage` of only the exposed strip left a white hole in the
+middle of Mail lists (and a clipped leftover row). The blit vacated
+pixels the damage clip then skipped. Pixel scroll is off; scroll
+invalidates the full viewport; dirty larger than chrome (hover/caret)
+uses `DrawSceneDamage(nil)` and a full `Surface.Present`. Hover dirty
+is unchanged. paintengine2d stays v0.10.0.
+
 **0.14.3 first frame (Wayland GPU):** v0.14.2 called `ctx.Present()` and
 skipped `Surface.Present` on GPU. That omitted `wl_surface` buffer_scale,
 viewport, and the configure gate — first `eglSwapBuffers` hit an

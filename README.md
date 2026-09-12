@@ -509,6 +509,12 @@ are independent look.json fields again; compound pack names migrate
 
 ## Version
 
+**0.14.4** — Fix vacated list holes and jumping rows after the
+v0.14.1–v0.14.3 Scroll / DrawSceneDamage work. `Context.Scroll` +
+strip-only damage is disabled (Wayland/HiDPI blit is unproven); scroll
+full-invalidates the viewport and large dirty full-replays the scene.
+Hover still uses small dirty rects. paintengine2d stays **v0.10.0**.
+
 **0.14.3** — Fix black first frame and huge startup scale on Wayland
 after v0.14.2. The first present is always a full paint
 (`DrawSceneDamage` with nil dirty) through `Surface.Present` (sets

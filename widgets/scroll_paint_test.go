@@ -231,3 +231,43 @@ func TestCardListScenePaintsPastFirstPage(t *testing.T) {
 		t.Fatalf("card list empty after first page, lo=%d hi=%d", lo, hi)
 	}
 }
+
+func TestVisibleRowsCoverViewportAfterScroll(t *testing.T) {
+	look := style.DarkLook()
+	lv := NewListView(80, func(i int) string { return fmt.Sprintf("item-%03d", i) }, nil)
+	lv.SetLook(look)
+	lv.SetHost(&host{})
+	lv.Arrange(paintengine2d.XYWH(0, 0, 200, 160))
+	lv.ScrollTo(48)
+	lo, hi := lv.VisibleRange()
+	if hi-lo < 3 {
+		t.Fatalf("visible %d..%d", lo, hi)
+	}
+	view := lv.LocalBounds()
+	var covered float32
+	prev := view.Min.Y
+	for i := lo; i < hi; i++ {
+		r := lv.rowRect(i)
+		if r.Max.Y <= view.Min.Y || r.Min.Y >= view.Max.Y {
+			continue
+		}
+		top := r.Min.Y
+		if top < view.Min.Y {
+			top = view.Min.Y
+		}
+		if top > prev+1.5 {
+			t.Fatalf("gap before row %d: prev=%v top=%v", i, prev, top)
+		}
+		bot := r.Max.Y
+		if bot > view.Max.Y {
+			bot = view.Max.Y
+		}
+		if bot > prev {
+			covered += bot - prev
+			prev = bot
+		}
+	}
+	if covered < view.Dy()*0.85 {
+		t.Fatalf("rows cover %v of viewport %v (lo=%d hi=%d off=%v)", covered, view.Dy(), lo, hi, lv.OffsetY)
+	}
+}

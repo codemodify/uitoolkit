@@ -174,8 +174,8 @@ func applyScrollHover(d *scrollDrag, pos paintengine2d.Point, track, thumb paint
 		if setOff != nil {
 			setOff(off)
 		}
-		// setOff owns invalidation when the widget blits (List/Table/Tree/
-		// TextArea). CardList and other fallbacks still pass invalidateAll.
+		// setOff owns invalidation (List/Table/Tree/TextArea full-viewport
+		// fallback). CardList still passes invalidateAll.
 		if invalidateAll != nil {
 			invalidateAll()
 		}
