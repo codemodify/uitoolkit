@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"sync"
-	"time"
 
 	"github.com/godbus/dbus/v5"
 	"github.com/godbus/dbus/v5/introspect"
@@ -31,6 +30,7 @@ type linuxStatusItem struct {
 	tooltip  string
 	title    string
 	menu     []StatusMenuItem
+	menuRev  uint32
 	conn     *dbus.Conn
 	props    *prop.Properties
 	name     string
@@ -40,27 +40,38 @@ type linuxStatusItem struct {
 	noteFn   map[uint32]func()
 }
 
-func newNativeStatusItem(opts StatusItemOptions) (StatusItem, error) {
+func newNativeStatusItem(opts StatusItemOptions) (item StatusItem, err error) {
+	var s *linuxStatusItem
+	defer func() {
+		if recover() != nil {
+			if s != nil {
+				_ = s.Close()
+			}
+			item = newStubStatusItem(opts)
+			err = nil
+		}
+	}()
 	conn, err := dbus.ConnectSessionBus()
 	if err != nil {
 		return newStubStatusItem(opts), nil
 	}
-	item := &linuxStatusItem{
+	s = &linuxStatusItem{
 		opts:    opts,
 		icon:    opts.Icon,
 		tooltip: opts.Tooltip,
 		title:   opts.Title,
 		menu:    copyMenu(opts.Menu),
+		menuRev: 1,
 		conn:    conn,
 		noteFn:  map[uint32]func(){},
 	}
-	if err := item.export(); err != nil {
+	if err := s.export(); err != nil {
 		_ = conn.Close()
 		return newStubStatusItem(opts), nil
 	}
-	item.registerSNI()
-	item.listenNotifyActions()
-	return item, nil
+	s.registerSNI()
+	s.listenNotifyActions()
+	return s, nil
 }
 
 func nativeStatusItemAvailable() bool {
@@ -113,13 +124,32 @@ func (s *linuxStatusItem) export() error {
 	}
 	s.props = props
 
-	if err := s.conn.Export(s, sniPath, sniInterface); err != nil {
+	if err := assertFiniteMenuSignature(); err != nil {
+		return err
+	}
+	// Export only the SNI / dbusmenu methods. Exporting the whole
+	// linuxStatusItem on both paths would advertise GetLayout on the
+	// StatusNotifierItem interface (and vice versa).
+	if err := s.conn.ExportMethodTable(map[string]interface{}{
+		"ContextMenu":       s.ContextMenu,
+		"Activate":          s.Activate,
+		"SecondaryActivate": s.SecondaryActivate,
+		"Scroll":            s.Scroll,
+	}, sniPath, sniInterface); err != nil {
 		return err
 	}
 	if err := s.conn.Export(introspect.Introspectable(sniIntrospect), sniPath, "org.freedesktop.DBus.Introspectable"); err != nil {
 		return err
 	}
-	if err := s.conn.Export(s, dbusMenuPath, dbusMenuIface); err != nil {
+	if err := s.conn.ExportMethodTable(map[string]interface{}{
+		"GetLayout":          s.GetLayout,
+		"GetGroupProperties": s.GetGroupProperties,
+		"GetProperty":        s.GetProperty,
+		"Event":              s.Event,
+		"EventGroup":         s.EventGroup,
+		"AboutToShow":        s.AboutToShow,
+		"AboutToShowGroup":   s.AboutToShowGroup,
+	}, dbusMenuPath, dbusMenuIface); err != nil {
 		return err
 	}
 	_ = s.conn.Export(introspect.Introspectable(dbusMenuIntrospect), dbusMenuPath, "org.freedesktop.DBus.Introspectable")
@@ -128,6 +158,7 @@ func (s *linuxStatusItem) export() error {
 }
 
 func (s *linuxStatusItem) registerSNI() {
+	defer func() { recover() }()
 	obj := s.conn.Object(sniWatcher, sniWatcherPath)
 	call := obj.Call(sniWatcher+".RegisterStatusNotifierItem", 0, s.name)
 	if call.Err != nil {
@@ -145,6 +176,7 @@ func (s *linuxStatusItem) listenNotifyActions() {
 	ch := make(chan *dbus.Signal, 8)
 	s.conn.Signal(ch)
 	go func() {
+		defer func() { recover() }()
 		for sig := range ch {
 			if sig == nil || sig.Name != fdoNotify+".ActionInvoked" || len(sig.Body) < 1 {
 				continue
@@ -241,9 +273,11 @@ func (s *linuxStatusItem) SetTitle(text string) error {
 func (s *linuxStatusItem) SetMenu(items []StatusMenuItem) error {
 	s.mu.Lock()
 	s.menu = copyMenu(items)
+	s.menuRev++
+	rev := s.menuRev
 	s.mu.Unlock()
 	if s.conn != nil {
-		_ = s.conn.Emit(dbusMenuPath, dbusMenuIface+".LayoutUpdated", uint32(time.Now().Unix()), int32(0))
+		_ = s.conn.Emit(dbusMenuPath, dbusMenuIface+".LayoutUpdated", rev, int32(0))
 	}
 	return nil
 }
@@ -342,37 +376,34 @@ func (s *linuxStatusItem) Scroll(delta int32, orientation string) *dbus.Error {
 }
 
 // GetLayout implements com.canonical.dbusmenu.
-func (s *linuxStatusItem) GetLayout(parentID int32, recursionDepth int32, properties []string) (uint32, dbusMenuLayout, *dbus.Error) {
-	_, _, _ = parentID, recursionDepth, properties
+//
+// The layout type is D-Bus (ia{sv}av). Children are []dbus.Variant wrapping
+// leaf nodes — never a recursive Go struct. A []T of the same T makes
+// godbus getSignature panic ("container nesting too deep") when Plasma's
+// StatusNotifierWatcher calls GetLayout after RegisterStatusNotifierItem.
+func (s *linuxStatusItem) GetLayout(parentID int32, recursionDepth int32, properties []string) (rev uint32, layout dbusMenuNode, derr *dbus.Error) {
+	defer func() {
+		if recover() != nil {
+			rev = 1
+			layout = emptyMenuLayout()
+			derr = nil
+		}
+	}()
+	_, _ = recursionDepth, properties
 	s.mu.Lock()
 	items := copyMenu(s.menu)
+	rev = s.menuRev
 	s.mu.Unlock()
-	children := make([]dbusMenuLayout, 0, len(items))
-	for i, it := range items {
-		props := map[string]dbus.Variant{}
-		if it.Separator {
-			props["type"] = dbus.MakeVariant("separator")
-		} else {
-			props["label"] = dbus.MakeVariant(it.Text)
-			if it.Disabled {
-				props["enabled"] = dbus.MakeVariant(false)
-			}
-			if it.Checked {
-				props["toggle-type"] = dbus.MakeVariant("checkmark")
-				props["toggle-state"] = dbus.MakeVariant(int32(1))
-			}
+	if rev == 0 {
+		rev = 1
+	}
+	if parentID > 0 {
+		i := int(parentID) - 1
+		if i >= 0 && i < len(items) {
+			return rev, dbusMenuLeafNode(int32(i+1), items[i]), nil
 		}
-		children = append(children, dbusMenuLayout{
-			ID:         int32(i + 1),
-			Properties: props,
-		})
 	}
-	root := dbusMenuLayout{
-		ID:         0,
-		Properties: map[string]dbus.Variant{"children-display": dbus.MakeVariant("submenu")},
-		Children:   children,
-	}
-	return uint32(time.Now().Unix()), root, nil
+	return rev, buildMenuLayout(items), nil
 }
 
 // GetGroupProperties implements com.canonical.dbusmenu.
@@ -426,10 +457,104 @@ func (s *linuxStatusItem) AboutToShowGroup(ids []int32) ([]int32, []int32, *dbus
 	return nil, nil, nil
 }
 
-type dbusMenuLayout struct {
+// dbusMenuNode is the dbusmenu layout struct: D-Bus type (ia{sv}av).
+// Children must be []dbus.Variant (typically dbusMenuLeaf values), not
+// []dbusMenuNode — that recursive Go type has no finite signature.
+type dbusMenuNode struct {
 	ID         int32
 	Properties map[string]dbus.Variant
-	Children   []dbusMenuLayout
+	Children   []dbus.Variant
+}
+
+// dbusMenuLeaf is one child row. Same wire type (ia{sv}av) as the root,
+// but a distinct Go type so SignatureOf cannot recurse even if someone
+// later puts leaves in a typed slice.
+type dbusMenuLeaf struct {
+	ID         int32
+	Properties map[string]dbus.Variant
+	Children   []dbus.Variant
+}
+
+const dbusMenuLayoutSig = "(ia{sv}av)"
+const dbusMenuGetLayoutSig = "u(ia{sv}av)"
+
+func emptyMenuLayout() dbusMenuNode {
+	return dbusMenuNode{
+		ID:         0,
+		Properties: map[string]dbus.Variant{"children-display": dbus.MakeVariant("submenu")},
+		Children:   []dbus.Variant{},
+	}
+}
+
+func menuItemProps(it StatusMenuItem) map[string]dbus.Variant {
+	props := map[string]dbus.Variant{}
+	if it.Separator {
+		props["type"] = dbus.MakeVariant("separator")
+		return props
+	}
+	props["label"] = dbus.MakeVariant(it.Text)
+	if it.Disabled {
+		props["enabled"] = dbus.MakeVariant(false)
+	}
+	if it.Checked {
+		props["toggle-type"] = dbus.MakeVariant("checkmark")
+		props["toggle-state"] = dbus.MakeVariant(int32(1))
+	}
+	return props
+}
+
+func dbusMenuLeafNode(id int32, it StatusMenuItem) dbusMenuNode {
+	return dbusMenuNode{
+		ID:         id,
+		Properties: menuItemProps(it),
+		Children:   []dbus.Variant{},
+	}
+}
+
+func buildMenuLayout(items []StatusMenuItem) dbusMenuNode {
+	root := emptyMenuLayout()
+	if len(items) == 0 {
+		return root
+	}
+	children := make([]dbus.Variant, 0, len(items))
+	for i, it := range items {
+		children = append(children, dbus.MakeVariant(dbusMenuLeaf{
+			ID:         int32(i + 1),
+			Properties: menuItemProps(it),
+			Children:   []dbus.Variant{},
+		}))
+	}
+	root.Children = children
+	return root
+}
+
+// assertFiniteMenuSignature is called before Export so a recursive layout
+// type fails export (stub fallback) instead of panicking later in
+// godbus (*Conn).handleCall when Plasma invokes GetLayout.
+func assertFiniteMenuSignature() (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("dbusmenu layout signature: %v", r)
+		}
+	}()
+	node := dbus.SignatureOf(dbusMenuNode{})
+	leaf := dbus.SignatureOf(dbusMenuLeaf{})
+	if node.String() != dbusMenuLayoutSig {
+		return fmt.Errorf("dbusmenu node signature %s, want %s", node, dbusMenuLayoutSig)
+	}
+	if leaf.String() != dbusMenuLayoutSig {
+		return fmt.Errorf("dbusmenu leaf signature %s, want %s", leaf, dbusMenuLayoutSig)
+	}
+	layout := buildMenuLayout([]StatusMenuItem{
+		{Text: "Show"},
+		{Separator: true},
+		{Text: "Quit", Checked: true},
+	})
+	got := dbus.SignatureOf(uint32(1), layout)
+	if got.String() != dbusMenuGetLayoutSig {
+		return fmt.Errorf("GetLayout signature %s, want %s", got, dbusMenuGetLayoutSig)
+	}
+	return nil
 }
 
 type dbusMenuProps struct {

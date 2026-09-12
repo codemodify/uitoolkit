@@ -257,12 +257,16 @@ buffer scale agree. List/table/tree rows and fixed column widths are
 design pixels that grow with the look. EGL, dmabuf, and shm share that
 scale; CPU present still uses damage / attach / commit.
 
-## Status item / tray (0.16.0)
+## Status item / tray (0.16.0, 0.16.1)
 
 `StatusItem` is a tray icon + desktop toast. Linux uses StatusNotifierItem
 and freedesktop Notifications over the session bus (X11, Xlibre, and
 Wayland). Windows uses `Shell_NotifyIcon`; macOS (`CGO`) uses
 `NSStatusItem`. See [tray.md](tray.md).
+
+**0.16.1:** dbusmenu `GetLayout` uses a finite `(ia{sv}av)` signature so
+Plasma's StatusNotifierWatcher does not panic the app. Tray setup
+failures fall back to a stub.
 
 `Window.Show` / `Hide` / `Raise` map the surface (X11 `_NET_ACTIVE_WINDOW`;
 Wayland minimize). Offscreen tracks a visibility flag.

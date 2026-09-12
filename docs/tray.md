@@ -4,6 +4,14 @@
 notification-area icon plus a desktop toast. Mail dogfoods it; any
 uitoolkit app can open one.
 
+**v0.16.1** fixes a startup panic on KDE Plasma. `com.canonical.dbusmenu.GetLayout`
+must return D-Bus type `(ia{sv}av)` — children are an array of variants,
+not a recursive Go struct. v0.16.0 exported `Children []dbusMenuLayout`,
+so godbus `getSignature` panicked (`container nesting too deep`) when
+`org.kde.StatusNotifierWatcher` called `GetLayout` after
+`RegisterStatusNotifierItem`. The UI process now also recovers tray
+export / register failures and keeps the window on a stub item.
+
 ```go
 item, _ := app.NewStatusItem(uitoolkit.StatusItemOptions{
     ID:      "myapp",

@@ -52,7 +52,7 @@ type StatusItemOptions struct {
 	// ID is the D-Bus / app id (default "uitoolkit").
 	ID string
 	// Title is the status item label (macOS extra text; SNI Title).
-	Title string
+	Title   string
 	Tooltip string
 	Icon    StatusIcon
 	Menu    []StatusMenuItem
@@ -74,8 +74,15 @@ type Notification struct {
 }
 
 // NewStatusItem opens a tray icon. It never panics: unsupported hosts
-// return a stub whose methods succeed as no-ops.
-func NewStatusItem(opts StatusItemOptions) (StatusItem, error) {
+// and tray-register / export failures return a stub whose methods
+// succeed as no-ops so the app window still opens.
+func NewStatusItem(opts StatusItemOptions) (item StatusItem, err error) {
+	defer func() {
+		if recover() != nil {
+			item = newStubStatusItem(opts)
+			err = nil
+		}
+	}()
 	if opts.ID == "" {
 		opts.ID = "uitoolkit"
 	}
@@ -91,7 +98,7 @@ func NewStatusItem(opts StatusItemOptions) (StatusItem, error) {
 	case "stub", "off", "none":
 		return newStubStatusItem(opts), nil
 	}
-	item, err := newNativeStatusItem(opts)
+	item, err = newNativeStatusItem(opts)
 	if err != nil || item == nil {
 		return newStubStatusItem(opts), nil
 	}
