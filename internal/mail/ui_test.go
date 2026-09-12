@@ -512,10 +512,6 @@ func TestMailChromeHidesStatusBarAndVIPFolder(t *testing.T) {
 			if split == nil {
 				split = v
 			}
-		case *widgets.TextField:
-			if strings.Contains(v.Placeholder, "Quick Filter") && qf == nil {
-				qf = v
-			}
 		case *widgets.TreeView:
 			var walk func([]*widgets.TreeNode)
 			walk = func(nodes []*widgets.TreeNode) {
@@ -544,8 +540,12 @@ func TestMailChromeHidesStatusBarAndVIPFolder(t *testing.T) {
 	if vipNode {
 		t.Fatal("VIP folder still in the sidebar tree")
 	}
+	qf = findQuickFilter(w.Content())
 	if qf == nil {
 		t.Fatal("quick filter field missing")
+	}
+	if qf.Visible() {
+		t.Fatal("quick filter field should stay hidden until the Filter icon or Ctrl+F")
 	}
 	if split == nil || !widget.Contains(split, qf) {
 		t.Fatal("quick filter should sit on the list toolbar row inside the splitter")
@@ -564,12 +564,7 @@ func TestMailToolBarChrome(t *testing.T) {
 	}
 	w.SetContent(MailApp(a, w))
 	a.PumpOnce()
-	var qf *widgets.TextField
-	widget.Walk(w.Content(), func(c widget.Component) {
-		if v, ok := c.(*widgets.TextField); ok && strings.Contains(v.Placeholder, "Quick Filter") && qf == nil {
-			qf = v
-		}
-	})
+	qf := findQuickFilter(w.Content())
 	if qf == nil {
 		t.Fatal("quick filter field missing")
 	}
@@ -577,11 +572,160 @@ func TestMailToolBarChrome(t *testing.T) {
 	w.Close()
 }
 
+func TestMailFilterIconTogglesField(t *testing.T) {
+	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{
+		Title: "Mail", Width: 1280, Height: 800, Headless: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.SetContent(MailApp(a, w))
+	a.PumpOnce()
+	qf := findQuickFilter(w.Content())
+	var btn *widgets.ToolItem
+	widget.Walk(w.Content(), func(c widget.Component) {
+		if v, ok := c.(*widgets.ToolBar); ok {
+			if it := filterIconItem(v); it != nil {
+				btn = it
+			}
+		}
+	})
+	if qf == nil || btn == nil || btn.OnClick == nil {
+		t.Fatal("filter icon / field")
+	}
+	if qf.Visible() {
+		t.Fatal("field should start hidden")
+	}
+	qf.SetText("lunch")
+	btn.OnClick()
+	a.PumpOnce()
+	if !qf.Visible() {
+		t.Fatal("Filter icon should reveal the field")
+	}
+	if qf.Text != "lunch" {
+		t.Fatalf("should keep filter text, got %q", qf.Text)
+	}
+	if qf.Bounds().Dx() <= 100 {
+		t.Fatalf("opened field crushed: width=%v", qf.Bounds().Dx())
+	}
+	if qf.OnEscape == nil {
+		t.Fatal("Escape should hide the field")
+	}
+	qf.OnEscape()
+	a.PumpOnce()
+	if qf.Visible() {
+		t.Fatal("Escape should hide the field")
+	}
+	if qf.Text != "lunch" {
+		t.Fatalf("hide should keep text, got %q", qf.Text)
+	}
+	w.Close()
+}
+
+func TestMailCollapsedFiltersDoesNotStealOutbox(t *testing.T) {
+	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{
+		Title: "Mail", Width: 1280, Height: 800, Headless: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.SetContent(MailApp(a, w))
+	a.PumpOnce()
+	var tree *widgets.TreeView
+	widget.Walk(w.Content(), func(c widget.Component) {
+		if v, ok := c.(*widgets.TreeView); ok && tree == nil {
+			tree = v
+		}
+	})
+	if tree == nil {
+		t.Fatal("folder tree")
+	}
+	filters := findTreeLabel(tree.Roots, "Filters")
+	if filters == nil {
+		t.Fatal("Filters")
+	}
+	tree.Toggle(filters)
+	if filters.Expanded {
+		t.Fatal("Filters should collapse")
+	}
+	rows := visibleTreeRows(tree.Roots)
+	idx := -1
+	for i, n := range rows {
+		if n != nil && strings.HasPrefix(n.Label, "Outbox") {
+			idx = i
+		}
+	}
+	if idx < 0 {
+		t.Fatal("Outbox not visible after collapsing Filters")
+	}
+	rh := tree.RowHeight
+	if rh <= 0 {
+		rh = 24
+	}
+	y := float32(idx)*rh + rh*0.5
+	tree.MousePress(widget.MouseEvent{Pos: paintengine2d.Pt(100, y), Button: platform.ButtonLeft})
+	a.PumpOnce()
+	filters = findTreeLabel(tree.Roots, "Filters")
+	if filters == nil {
+		t.Fatal("Filters after rebuild")
+	}
+	if filters.Expanded {
+		t.Fatal("Outbox click re-opened Filters (rebuild lost collapse, or hit-test stole the row)")
+	}
+	if tree.Selected == nil || !strings.HasPrefix(tree.Selected.Label, "Outbox") {
+		label := ""
+		if tree.Selected != nil {
+			label = tree.Selected.Label
+		}
+		t.Fatalf("selected %q want Outbox", label)
+	}
+	w.Close()
+}
+
+func findTreeLabel(nodes []*widgets.TreeNode, label string) *widgets.TreeNode {
+	var found *widgets.TreeNode
+	var walk func([]*widgets.TreeNode)
+	walk = func(ns []*widgets.TreeNode) {
+		for _, n := range ns {
+			if n == nil || found != nil {
+				continue
+			}
+			if n.Label == label {
+				found = n
+				return
+			}
+			walk(n.Children)
+		}
+	}
+	walk(nodes)
+	return found
+}
+
+func visibleTreeRows(roots []*widgets.TreeNode) []*widgets.TreeNode {
+	var out []*widgets.TreeNode
+	var walk func([]*widgets.TreeNode)
+	walk = func(nodes []*widgets.TreeNode) {
+		for _, n := range nodes {
+			if n == nil {
+				continue
+			}
+			out = append(out, n)
+			if n.Expanded {
+				walk(n.Children)
+			}
+		}
+	}
+	walk(roots)
+	return out
+}
+
 func assertMailToolChrome(t *testing.T, root widget.Component, qf widget.Component) {
 	t.Helper()
 	var split *widgets.Splitter
 	var table *widgets.TableView
-	var mainBar, listBar *widgets.ToolBar
+	var mainBar, listBar, filterBar *widgets.ToolBar
 	var tree *widgets.TreeView
 	widget.Walk(root, func(c widget.Component) {
 		switch v := c.(type) {
@@ -605,6 +749,9 @@ func assertMailToolChrome(t *testing.T, root widget.Component, qf widget.Compone
 			if texts["Tag"] && texts["Archive"] && texts["Junk"] && texts["Delete"] {
 				listBar = v
 			}
+			if filterIconItem(v) != nil {
+				filterBar = v
+			}
 			for _, name := range []string{"Unread", "Starred", "Attachment", "From", "To", "Subject", "Body"} {
 				if texts[name] {
 					t.Fatalf("filter pin %q still on a toolbar", name)
@@ -619,6 +766,9 @@ func assertMailToolChrome(t *testing.T, root widget.Component, qf widget.Compone
 	}
 	if listBar == nil {
 		t.Fatal("list toolbar (Tag / Archive / Junk / Delete)")
+	}
+	if filterBar == nil {
+		t.Fatal("icon-only Filter button missing after Delete")
 	}
 	if split == nil || table == nil {
 		t.Fatal("splitter/table")
@@ -638,11 +788,11 @@ func assertMailToolChrome(t *testing.T, root widget.Component, qf widget.Compone
 	if !widget.Contains(split, listBar) {
 		t.Fatal("list toolbar should sit in the thread pane")
 	}
-	if !widget.Contains(split, qf) {
-		t.Fatal("quick filter should sit on the list toolbar row inside the splitter")
+	if !widget.Contains(split, qf) || !widget.Contains(split, filterBar) {
+		t.Fatal("quick filter chrome should sit on the list toolbar row inside the splitter")
 	}
-	if !filterAfterListActions(root, qf) {
-		t.Fatal("quick filter should share the list toolbar row after Delete (right-aligned)")
+	if !filterAfterListActions(root, filterBar) {
+		t.Fatal("Filter button should share the list toolbar row after Delete (right-aligned)")
 	}
 	if separateFilterRow(root) {
 		t.Fatal("separate Quick Filter row still under the main toolbar")
@@ -651,15 +801,48 @@ func assertMailToolChrome(t *testing.T, root widget.Component, qf widget.Compone
 		t.Fatal("left Quick Filter visibility toggle should be gone (View menu / Ctrl+F)")
 	}
 	barOrigin := widget.DeviceOrigin(listBar)
-	qfOrigin := widget.DeviceOrigin(qf)
-	if qfOrigin.X+0.5 < barOrigin.X+listBar.Bounds().Dx() {
-		t.Fatalf("filter should sit after Delete: bar=%v..%v qf=%v",
-			barOrigin.X, barOrigin.X+listBar.Bounds().Dx(), qfOrigin.X)
+	iconOrigin := widget.DeviceOrigin(filterBar)
+	if iconOrigin.X+0.5 < barOrigin.X+listBar.Bounds().Dx() {
+		t.Fatalf("Filter icon should sit after Delete: bar=%v..%v icon=%v",
+			barOrigin.X, barOrigin.X+listBar.Bounds().Dx(), iconOrigin.X)
 	}
-	if qf.Bounds().Dx() <= 100 {
-		t.Fatalf("quick filter crushed: width=%v listBar=%v", qf.Bounds().Dx(), listBar.Bounds().Dx())
+	if qf.Visible() {
+		t.Fatal("quick filter field should be hidden until the Filter icon opens it")
 	}
 	assertFiltersTree(t, tree)
+}
+
+func findQuickFilter(root widget.Component) *widgets.TextField {
+	var qf *widgets.TextField
+	walkAll(root, func(c widget.Component) {
+		v, ok := c.(*widgets.TextField)
+		if ok && qf == nil && strings.Contains(v.Placeholder, "Quick Filter") {
+			qf = v
+		}
+	})
+	return qf
+}
+
+func walkAll(c widget.Component, fn func(widget.Component)) {
+	if c == nil {
+		return
+	}
+	fn(c)
+	for _, ch := range c.Children() {
+		walkAll(ch, fn)
+	}
+}
+
+func filterIconItem(bar *widgets.ToolBar) *widgets.ToolItem {
+	if bar == nil {
+		return nil
+	}
+	for _, it := range bar.Items() {
+		if it != nil && it.Text == "" && it.Icon == style.IconSearch {
+			return it
+		}
+	}
+	return nil
 }
 
 func toolTexts(bar *widgets.ToolBar) map[string]bool {
@@ -721,20 +904,35 @@ func assertFiltersTree(t *testing.T, tree *widgets.TreeView) {
 	if filters == nil || filters.Label != "Filters" {
 		t.Fatal("Filters missing from the tree")
 	}
-	want := []string{"Unread", "Starred", "Attachment", "From", "To", "Subject", "Body"}
+	want := []string{"Unread", "Starred", "Attachment"}
+	ban := []string{"From", "To", "Subject", "Body", "Work", "Personal", "Later"}
 	got := map[string]bool{}
+	var important bool
 	for _, n := range filters.Children {
 		if n == nil {
 			continue
 		}
-		if _, ok := n.Data.(filterPin); ok {
-			got[strings.TrimPrefix(n.Label, "✓ ")] = true
+		label := strings.TrimPrefix(n.Label, "✓ ")
+		if i := strings.Index(label, " ("); i > 0 {
+			label = label[:i]
+		}
+		got[label] = true
+		if label == "Important" {
+			important = true
 		}
 	}
 	for _, name := range want {
 		if !got[name] {
 			t.Fatalf("Filters tree missing pin %q", name)
 		}
+	}
+	for _, name := range ban {
+		if got[name] {
+			t.Fatalf("Filters tree still has %q", name)
+		}
+	}
+	if !important {
+		t.Fatal("Filters tree missing Important")
 	}
 }
 
@@ -870,15 +1068,11 @@ func TestMailChromeHasNoActiveFilterBanner(t *testing.T) {
 	w.SetContent(MailApp(a, w))
 	a.PumpOnce()
 
-	var qf *widgets.TextField
+	qf := findQuickFilter(w.Content())
 	var tree *widgets.TreeView
 	var table *widgets.TableView
 	widget.Walk(w.Content(), func(c widget.Component) {
 		switch v := c.(type) {
-		case *widgets.TextField:
-			if strings.Contains(v.Placeholder, "Quick Filter") && qf == nil {
-				qf = v
-			}
 		case *widgets.TableView:
 			if table == nil {
 				table = v

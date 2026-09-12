@@ -84,6 +84,19 @@ func visualSig(selected, hovered bool, extra uint64, parts ...string) uint64 {
 
 func bits32(f float32) uint64 { return uint64(math.Float32bits(f)) }
 
+// rowIndexAt maps a local Y onto a painted virtual row (same formula as Paint:
+// row i occupies [i*rowH − offsetY, (i+1)*rowH − offsetY)).
+func rowIndexAt(y, offsetY, rowH float32, count int) int {
+	if rowH <= 0 || count <= 0 {
+		return -1
+	}
+	i := int(math.Floor(float64((y + offsetY) / rowH)))
+	if i < 0 || i >= count {
+		return -1
+	}
+	return i
+}
+
 func lookSig(lk style.LookAndFeel) uint64 {
 	if lk == nil {
 		return 0

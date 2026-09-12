@@ -36,10 +36,6 @@ const (
 	pinUnread     filterPin = "unread"
 	pinStarred    filterPin = "starred"
 	pinAttachment filterPin = "attachment"
-	pinFrom       filterPin = "from"
-	pinTo         filterPin = "to"
-	pinSubject    filterPin = "subject"
-	pinBody       filterPin = "body"
 )
 
 // AppOptions tweak the first build (theme, layout, Quick Filter visibility).
@@ -62,7 +58,7 @@ func MailApp(a *app.Application, win *app.Window) widget.Component {
 	if err != nil {
 		return widgets.NewLabel(err.Error())
 	}
-	return Open(a, win, cli, AppOptions{ShowFilter: true})
+	return Open(a, win, cli, AppOptions{ShowFilter: false})
 }
 
 // Open builds the Mail chrome against a mailclientd Client (no Store / IMAP).
@@ -118,6 +114,7 @@ type session struct {
 	hdrFrom, hdrSubj, hdrDate, hdrTo, hdrExtra *widgets.Label
 	status                                     *widgets.StatusBar
 	qf                                         *widgets.TextField
+	qfBtn                                      *widgets.ToolItem
 	folderL                                    *widgets.Label
 	acctPanel                                  widget.Component
 	acctTitle                                  *widgets.Label
@@ -299,6 +296,7 @@ func (s *session) build() widget.Component {
 		s.filter.Query = q
 		s.refreshList()
 	})
+	s.qf.OnEscape = func() { s.showFilter(false) }
 	s.qf.SetVisible(s.opts.ShowFilter)
 
 	previewTab := widgets.NewPad(8, s.preview)
@@ -330,8 +328,13 @@ func (s *session) build() widget.Component {
 	s.cards.SetVisible(s.cardView)
 	s.listStack = widgets.NewStack(s.table, s.cards)
 	s.listBar = s.listToolBar()
+	s.qfBtn = widgets.ToolIconBtn(style.IconSearch, "", s.toggleFilter)
+	s.qfBtn.Tip = "Quick Filter"
+	s.qfBtn.Toggle = true
+	s.qfBtn.Down = s.opts.ShowFilter
+	qfTools := widgets.NewToolBar(s.qfBtn)
 	qfSlot := widgets.NewRow()
-	listChrome := widgets.NewRow(s.listBar, qfSlot, s.qf).WithGap(8).WithAlign(layout.AlignCenter)
+	listChrome := widgets.NewRow(s.listBar, qfSlot, s.qf, qfTools).WithGap(8).WithAlign(layout.AlignCenter)
 	listChrome.AddFlex(qfSlot, 1)
 	thread := widgets.NewColumn(listChrome, s.listStack).WithGap(0).WithPad(8)
 	thread.AddFlex(s.listStack, 1)
@@ -399,12 +402,7 @@ func (s *session) menuBar() *widgets.MenuBar {
 			&widgets.MenuItem{Text: "Undo", Shortcut: "Ctrl+Z", Disabled: true},
 			widgets.Sep(),
 			widgets.ItemIconAccel(style.IconSearch, "&Find", "Ctrl+F", func() {
-				s.opts.ShowFilter = true
-				if s.qf != nil {
-					s.qf.SetVisible(true)
-					s.win.RequestFocus(s.qf)
-				}
-				s.win.RequestLayout()
+				s.showFilter(true)
 				s.mark("Quick Filter")
 			}),
 			widgets.ItemAccel("Select &All", "Ctrl+A", s.selectAll),
@@ -727,6 +725,7 @@ func (s *session) rebuildTree() {
 	if tags, err := s.cli.Tags(); err == nil {
 		s.tags = tags
 	}
+	was := treeExpandState(s.tree.Roots)
 	var roots []*widgets.TreeNode
 	var selected *widgets.TreeNode
 
@@ -758,7 +757,7 @@ func (s *session) rebuildTree() {
 	for _, acct := range s.accounts() {
 		node := widgets.NewTreeNode(acct.Address)
 		node.Data = acct.ID
-		node.Expanded = true
+		applyTreeExpand(node, was, true)
 		byParent := map[FolderID][]Folder{}
 		folders, _ := s.cli.ListFolders(acct.ID)
 		for _, f := range folders {
@@ -780,6 +779,7 @@ func (s *session) rebuildTree() {
 				n.Data = f.ID
 				n.Bold = nUnread > 0
 				n.Expanded = f.Kind == FolderArchive || len(byParent[f.ID]) > 0
+				applyTreeExpand(n, was, n.Expanded)
 				addKids(n, f.ID)
 				parent.Children = append(parent.Children, n)
 				if f.ID == s.folder && !s.central {
@@ -798,7 +798,7 @@ func (s *session) rebuildTree() {
 
 	filtersNode := widgets.NewTreeNode("Filters")
 	filtersNode.Data = AccountTags
-	filtersNode.Expanded = true
+	applyTreeExpand(filtersNode, was, true)
 	for _, pin := range []struct {
 		label string
 		id    filterPin
@@ -807,10 +807,6 @@ func (s *session) rebuildTree() {
 		{"Unread", pinUnread, s.filter.Unread},
 		{"Starred", pinStarred, s.filter.Starred},
 		{"Attachment", pinAttachment, s.filter.Attachment},
-		{"From", pinFrom, s.filter.Sender},
-		{"To", pinTo, s.filter.Recipients},
-		{"Subject", pinSubject, s.filter.SubjectOnly},
-		{"Body", pinBody, s.filter.Body},
 	} {
 		n := widgets.NewTreeNode(filterPinLabel(pin.label, pin.on))
 		n.Data = pin.id
@@ -818,6 +814,9 @@ func (s *session) rebuildTree() {
 		filtersNode.Children = append(filtersNode.Children, n)
 	}
 	for _, t := range s.tags {
+		if hideFilterTag(t.Name) {
+			continue
+		}
 		label := t.Name
 		fid := TagFolderID(t.Name)
 		nUnread, _ := s.cli.Unread(fid)
@@ -838,9 +837,63 @@ func (s *session) rebuildTree() {
 		addVirtual(*outbox)
 	}
 
-	s.tree.Roots = roots
+	s.tree.SetRoots(roots)
 	s.tree.Selected = selected
 	s.tree.Invalidate()
+}
+
+func hideFilterTag(name string) bool {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "work", "personal", "later":
+		return true
+	default:
+		return false
+	}
+}
+
+func treeNodeKey(n *widgets.TreeNode) (string, bool) {
+	if n == nil {
+		return "", false
+	}
+	switch d := n.Data.(type) {
+	case FolderID:
+		return "folder:" + string(d), true
+	case string:
+		return "id:" + d, true
+	default:
+		return "", false
+	}
+}
+
+func treeExpandState(roots []*widgets.TreeNode) map[string]bool {
+	out := map[string]bool{}
+	var walk func([]*widgets.TreeNode)
+	walk = func(nodes []*widgets.TreeNode) {
+		for _, n := range nodes {
+			if n == nil {
+				continue
+			}
+			if k, ok := treeNodeKey(n); ok {
+				out[k] = n.Expanded
+			}
+			walk(n.Children)
+		}
+	}
+	walk(roots)
+	return out
+}
+
+func applyTreeExpand(n *widgets.TreeNode, was map[string]bool, def bool) {
+	if n == nil {
+		return
+	}
+	if k, ok := treeNodeKey(n); ok {
+		if v, ok := was[k]; ok {
+			n.Expanded = v
+			return
+		}
+	}
+	n.Expanded = def
 }
 
 func isOutboxFolder(f Folder) bool {
@@ -1410,15 +1463,24 @@ func (s *session) goKind(k FolderKind) {
 }
 
 func (s *session) toggleFilter() {
-	s.opts.ShowFilter = !s.opts.ShowFilter
+	s.showFilter(!s.opts.ShowFilter)
+	s.mark("Quick Filter")
+}
+
+func (s *session) showFilter(on bool) {
+	s.opts.ShowFilter = on
 	if s.qf != nil {
-		s.qf.SetVisible(s.opts.ShowFilter)
-		if s.opts.ShowFilter {
+		s.qf.SetVisible(on)
+		if on && s.win != nil {
 			s.win.RequestFocus(s.qf)
 		}
+	}
+	if s.qfBtn != nil {
+		s.qfBtn.Down = on
+	}
+	if s.win != nil {
 		s.win.RequestLayout()
 	}
-	s.mark("Quick Filter")
 }
 
 func (s *session) toggleFilterPin(p filterPin) {
@@ -1429,14 +1491,6 @@ func (s *session) toggleFilterPin(p filterPin) {
 		s.filter.Starred = !s.filter.Starred
 	case pinAttachment:
 		s.filter.Attachment = !s.filter.Attachment
-	case pinFrom:
-		s.filter.Sender = !s.filter.Sender
-	case pinTo:
-		s.filter.Recipients = !s.filter.Recipients
-	case pinSubject:
-		s.filter.SubjectOnly = !s.filter.SubjectOnly
-	case pinBody:
-		s.filter.Body = !s.filter.Body
 	default:
 		return
 	}

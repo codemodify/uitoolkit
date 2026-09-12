@@ -40,4 +40,7 @@ func TestComboHeightMatchesToolbarNotControl(t *testing.T) {
 	if ComboHeight(scaled) != scaled.ComboH {
 		t.Fatalf("scaled ComboHeight %v want %v", ComboHeight(scaled), scaled.ComboH)
 	}
+	if FieldHeight(m) != ComboHeight(m) {
+		t.Fatalf("FieldHeight %v ComboHeight %v", FieldHeight(m), ComboHeight(m))
+	}
 }

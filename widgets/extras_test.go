@@ -68,6 +68,20 @@ func TestRadioStandalone(t *testing.T) {
 	}
 }
 
+func TestTextFieldMeasuresToolbarHeight(t *testing.T) {
+	tf := NewTextField("", "Quick Filter", nil)
+	tf.SetHost(&host{})
+	sz := tf.Measure(layout.Loose(400, 200))
+	m := style.DarkLook().Metrics()
+	want := style.FieldHeight(m)
+	if sz.Y != want {
+		t.Fatalf("field height %v want FieldHeight %v (ComboH %v ControlH %v)", sz.Y, want, m.ComboH, m.ControlH)
+	}
+	if want >= m.ControlH {
+		t.Fatalf("FieldHeight %v should be shorter than ControlH %v", want, m.ControlH)
+	}
+}
+
 func TestComboBoxMeasuresToolbarHeight(t *testing.T) {
 	c := NewComboBox([]string{"Inbox", "Sent"}, 0, nil)
 	c.SetHost(&host{})

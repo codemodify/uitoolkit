@@ -18,6 +18,7 @@ type TextField struct {
 	Placeholder  string
 	OnChange     func(string)
 	OnSubmit     func(string)
+	OnEscape     func()
 	OnFocusLost  func()
 	Accept       func(string) bool
 	Mono         bool
@@ -101,7 +102,7 @@ func (t *TextField) Selection() (a, b int) { return t.selA, t.selB }
 func (t *TextField) SetCaretBlink(on bool) { t.blinkOn = on }
 
 func (t *TextField) Measure(c layout.Constraints) paintengine2d.Point {
-	h := t.Look().Metrics().ControlH
+	h := style.FieldHeight(t.Look().Metrics())
 	return c.Constrain(paintengine2d.Pt(180, h))
 }
 
@@ -342,6 +343,12 @@ func (t *TextField) KeyPress(e widget.KeyEvent) bool {
 		return true
 	}
 	switch e.Key {
+	case platform.KeyEscape:
+		if t.OnEscape != nil {
+			t.OnEscape()
+			return true
+		}
+		return false
 	case platform.KeyBackspace:
 		if t.hasSel() {
 			t.replaceSel("")

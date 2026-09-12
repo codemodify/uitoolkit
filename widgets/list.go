@@ -143,11 +143,7 @@ func (l *ListView) Paint(ctx *paintengine2d.Context) {
 }
 
 func (l *ListView) indexAt(y float32) int {
-	i := int((y + l.OffsetY) / l.rowH())
-	if i < 0 || i >= l.Count {
-		return -1
-	}
-	return i
+	return rowIndexAt(y, l.OffsetY, l.rowH(), l.Count)
 }
 
 func (l *ListView) rowRect(i int) paintengine2d.Rect {

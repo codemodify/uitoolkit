@@ -81,14 +81,30 @@ func (f *FlexBox) AddFlex(child widget.Component, weight float32) {
 }
 
 func (f *FlexBox) Measure(c layout.Constraints) paintengine2d.Point {
-	f.syncItems()
-	return f.Spec.Measure(c, f.items)
+	return f.Spec.Measure(c, f.visibleItems(false))
 }
 
 func (f *FlexBox) Arrange(r paintengine2d.Rect) {
 	f.SetBounds(r)
+	f.Spec.Arrange(r, f.visibleItems(true))
+}
+
+func (f *FlexBox) visibleItems(collapseHidden bool) []layout.Item {
 	f.syncItems()
-	f.Spec.Arrange(r, f.items)
+	chs := f.Children()
+	var out []layout.Item
+	for i, ch := range chs {
+		if ch == nil || !ch.Visible() {
+			if collapseHidden && ch != nil {
+				ch.Arrange(paintengine2d.Rect{})
+			}
+			continue
+		}
+		if i < len(f.items) {
+			out = append(out, f.items[i])
+		}
+	}
+	return out
 }
 
 func (f *FlexBox) syncItems() {
