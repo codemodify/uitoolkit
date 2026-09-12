@@ -53,11 +53,11 @@ func (b *Button) Paint(ctx *paintengine2d.Context) {
 	b.Look().DrawButton(ctx, b.LocalBounds(), st, b.Text)
 }
 
-func (b *Button) MouseEnter() { b.hovered = true; b.Base.MouseEnter() }
+func (b *Button) MouseEnter() { b.hovered = true; b.Invalidate() }
 func (b *Button) MouseExit() {
 	b.hovered = false
 	b.pressed = false
-	b.Base.MouseExit()
+	b.Invalidate()
 }
 
 func (b *Button) MousePress(e widget.MouseEvent) bool {

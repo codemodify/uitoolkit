@@ -62,11 +62,11 @@ func (s *Switch) Paint(ctx *paintengine2d.Context) {
 	s.Look().DrawSwitch(ctx, s.LocalBounds(), st, s.On, s.Text)
 }
 
-func (s *Switch) MouseEnter() { s.hovered = true; s.Base.MouseEnter() }
+func (s *Switch) MouseEnter() { s.hovered = true; s.Invalidate() }
 func (s *Switch) MouseExit() {
 	s.hovered = false
 	s.pressed = false
-	s.Base.MouseExit()
+	s.Invalidate()
 }
 
 func (s *Switch) MousePress(widget.MouseEvent) bool {

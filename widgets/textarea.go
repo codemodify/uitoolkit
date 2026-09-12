@@ -554,9 +554,16 @@ func (t *TextArea) MouseRelease(widget.MouseEvent) bool {
 }
 
 func (t *TextArea) MouseExit() {
+	was := t.vbar.over || t.hbar.over
 	t.vbar.over = false
 	t.hbar.over = false
-	t.Base.MouseExit()
+	if !was {
+		return
+	}
+	vt, _ := t.scrollTrackV()
+	ht, _ := t.scrollTrackH()
+	invalidateOverflowTrack(t, vt)
+	invalidateOverflowTrack(t, ht)
 }
 
 func (t *TextArea) MouseWheel(e widget.MouseEvent) bool {
