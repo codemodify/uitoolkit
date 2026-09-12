@@ -18,7 +18,13 @@ type Splitter struct {
 	A, B     widget.Component
 	drag     bool
 	hovered  bool
+	paneA    *paintengine2d.GroupNode
+	paneB    *paintengine2d.GroupNode
+	bakedA   paintengine2d.Rect
+	bakedB   paintengine2d.Rect
 }
+
+var _ widget.SceneBaker = (*Splitter)(nil)
 
 func NewSplitter(vertical bool, a, b widget.Component) *Splitter {
 	s := &Splitter{Vertical: vertical, Ratio: 0.4, A: a, B: b}
@@ -133,6 +139,100 @@ func (s *Splitter) divider() paintengine2d.Rect {
 	return d
 }
 
+func (s *Splitter) paneIDs() (idA, idB uint64) {
+	return s.ID() ^ (1 << 32), s.ID() ^ (2 << 32)
+}
+
+// HasBakedPanes reports whether both occupied panes have a BakeGroup layer
+// (splitter drag blits these instead of re-walking children).
+func (s *Splitter) HasBakedPanes() bool { return s.canBlitPanes() }
+
+// BakedPaneLayers is the last BakeGroup pixmap for each pane (tests).
+func (s *Splitter) BakedPaneLayers() (a, b *paintengine2d.Image) {
+	if s.paneA != nil {
+		a = s.paneA.Layer
+	}
+	if s.paneB != nil {
+		b = s.paneB.Layer
+	}
+	return a, b
+}
+
+func (s *Splitter) canBlitPanes() bool {
+	if s.A != nil && (s.paneA == nil || !s.paneA.HasLayer()) {
+		return false
+	}
+	if s.B != nil && (s.paneB == nil || !s.paneB.HasLayer()) {
+		return false
+	}
+	return s.paneA != nil || s.paneB != nil
+}
+
+func (s *Splitter) applyPaneXforms() {
+	a, _, b := s.panes(s.LocalBounds())
+	if s.paneA != nil {
+		s.paneA.Xform = paintengine2d.Translation(a.Min.X-s.bakedA.Min.X, a.Min.Y-s.bakedA.Min.Y)
+	}
+	if s.paneB != nil {
+		s.paneB.Xform = paintengine2d.Translation(b.Min.X-s.bakedB.Min.X, b.Min.Y-s.bakedB.Min.Y)
+	}
+}
+
+func (s *Splitter) dropBakedPanes() {
+	if s.paneA != nil {
+		s.paneA.InvalidateLayer()
+	}
+	if s.paneB != nil {
+		s.paneB.InvalidateLayer()
+	}
+	s.paneA, s.paneB = nil, nil
+	s.bakedA, s.bakedB = paintengine2d.Rect{}, paintengine2d.Rect{}
+}
+
+func (s *Splitter) recordPane(rec *paintengine2d.Recorder, ctx *paintengine2d.Context, cache *widget.SceneCache, child widget.Component, pane paintengine2d.Rect, id uint64) *paintengine2d.GroupNode {
+	if rec == nil || child == nil || !child.Visible() || pane.Empty() {
+		return nil
+	}
+	g := rec.BeginGroup(id, paintengine2d.Identity())
+	ctx.Save()
+	ctx.ClipRect(pane)
+	widget.RecordSubtree(child, rec, ctx, cache)
+	ctx.Restore()
+	rec.EndGroup()
+	return g
+}
+
+// RecordBaked implements widget.SceneBaker. Drag frames Attach baked
+// pane groups and only change Xform; the first drag frame BakeGroups.
+func (s *Splitter) RecordBaked(rec *paintengine2d.Recorder, ctx *paintengine2d.Context, cache *widget.SceneCache) {
+	if rec == nil || ctx == nil {
+		return
+	}
+	a, _, b := s.panes(s.LocalBounds())
+	idA, idB := s.paneIDs()
+	if s.drag && s.canBlitPanes() {
+		s.applyPaneXforms()
+		if s.paneA != nil {
+			rec.Attach(s.paneA)
+		}
+		if s.paneB != nil {
+			rec.Attach(s.paneB)
+		}
+		return
+	}
+	s.paneA = s.recordPane(rec, ctx, cache, s.A, a, idA)
+	s.paneB = s.recordPane(rec, ctx, cache, s.B, b, idB)
+	s.bakedA, s.bakedB = a, b
+	if s.drag {
+		if s.paneA != nil {
+			paintengine2d.BakeGroup(s.paneA)
+		}
+		if s.paneB != nil {
+			paintengine2d.BakeGroup(s.paneB)
+		}
+	}
+}
+
 func (s *Splitter) paintPane(ctx *paintengine2d.Context, child widget.Component, pane paintengine2d.Rect) {
 	if ctx == nil || child == nil || !child.Visible() || pane.Empty() {
 		return
@@ -146,13 +246,15 @@ func (s *Splitter) paintPane(ctx *paintengine2d.Context, child widget.Component,
 }
 
 func (s *Splitter) Paint(ctx *paintengine2d.Context) {
-	a, _, b := s.panes(s.LocalBounds())
-	clip := ctx.LocalClipBounds()
-	if clip.Empty() || clip.Overlaps(a) {
-		s.paintPane(ctx, s.A, a)
-	}
-	if clip.Empty() || clip.Overlaps(b) {
-		s.paintPane(ctx, s.B, b)
+	if !widget.Recording(ctx) {
+		a, _, b := s.panes(s.LocalBounds())
+		clip := ctx.LocalClipBounds()
+		if clip.Empty() || clip.Overlaps(a) {
+			s.paintPane(ctx, s.A, a)
+		}
+		if clip.Empty() || clip.Overlaps(b) {
+			s.paintPane(ctx, s.B, b)
+		}
 	}
 	st := s.State()
 	if s.hovered || s.drag {
@@ -241,8 +343,9 @@ func (s *Splitter) MouseExit() {
 func (s *Splitter) MousePress(e widget.MouseEvent) bool {
 	if s.divider().Contains(e.Pos) {
 		s.drag = true
+		s.dropBakedPanes()
 		s.applyCursor(e.Pos)
-		s.Invalidate()
+		s.invalidateSash()
 		return true
 	}
 	return false
@@ -258,30 +361,52 @@ func (s *Splitter) MouseMove(e widget.MouseEvent) bool {
 		s.applyCursor(e.Pos)
 		return over
 	}
-	b := s.LocalBounds()
+	oldA, _, _ := s.panes(s.LocalBounds())
+	box := s.LocalBounds()
 	bar := s.bar()
 	if s.Vertical {
-		usable := b.Dx() - bar
+		usable := box.Dx() - bar
 		if usable > 0 {
 			s.Ratio = (e.Pos.X - bar*0.5) / usable
 		}
 	} else {
-		usable := b.Dy() - bar
+		usable := box.Dy() - bar
 		if usable > 0 {
 			s.Ratio = (e.Pos.Y - bar*0.5) / usable
 		}
 	}
 	s.clampRatio()
 	// Arrange this splitter only. RequestLayout full-Measures the window
-	// and full-invalidates every pixel of the drag.
+	// and full-invalidates every pixel of the drag. Baked panes keep
+	// their layers; only Xform and the sash/sliver are dirtied.
 	s.Arrange(s.Bounds())
+	s.applyPaneXforms()
 	s.applyCursor(e.Pos)
-	s.Invalidate()
+	s.invalidateSash()
+	a, _, _ := s.panes(s.LocalBounds())
+	if s.Vertical {
+		x0, x1 := oldA.Max.X, a.Max.X
+		if x1 < x0 {
+			x0, x1 = x1, x0
+		}
+		if x1 > x0 {
+			s.InvalidateRect(paintengine2d.XYWH(x0, 0, x1-x0, box.Dy()).Inset(-1))
+		}
+	} else {
+		y0, y1 := oldA.Max.Y, a.Max.Y
+		if y1 < y0 {
+			y0, y1 = y1, y0
+		}
+		if y1 > y0 {
+			s.InvalidateRect(paintengine2d.XYWH(0, y0, box.Dx(), y1-y0).Inset(-1))
+		}
+	}
 	return true
 }
 
 func (s *Splitter) MouseRelease(e widget.MouseEvent) bool {
 	s.drag = false
+	s.dropBakedPanes()
 	s.applyCursor(e.Pos)
 	s.Invalidate()
 	return true

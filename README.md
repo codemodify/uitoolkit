@@ -3,7 +3,7 @@
 **Pure-Go desktop UI toolkit.** Retained widget tree, layout, themes, and
 X11 and Wayland window backends. Every pixel is painted with
 [`github.com/codemodify/paintengine2d`](https://github.com/codemodify/paintengine2d)
-(v0.9.2+). Default UI is **Titillium Web**; mono / code is **JetBrains Mono**
+(v0.10.0+). Default UI is **Titillium Web**; mono / code is **JetBrains Mono**
 (OFL, embedded). Outlines are rasterized through paintengine2d into a white
 atlas and tinted with `Paint.Color`. There is no second rasterizer, no Skia,
 no Gio renderer, and no Electron.
@@ -20,15 +20,15 @@ _ = app.Run()
 
 ```bash
 go get github.com/codemodify/uitoolkit@dev
-go get github.com/codemodify/paintengine2d@v0.9.2
-# if v0.9.2 is not on GitHub yet (local engine checkout):
+go get github.com/codemodify/paintengine2d@v0.10.0
+# if v0.10.0 is not on GitHub yet (local engine checkout):
 # go mod edit -replace=github.com/codemodify/paintengine2d=/path/to/paintengine2d
 ```
 
 | | |
 | --- | --- |
 | Language | Go 1.22+ |
-| Paint | paintengine2d **v0.9.2** (`Scroll` / `ClearRect` / `PresentRects` / `TouchRect`; `Scene` / GPU) |
+| Paint | paintengine2d **v0.10.0** (`DrawSceneDamage` / `BakeGroup` / `Present` damage; `Scroll` / `TouchRect`) |
 | Fonts | Titillium Web (UI) + JetBrains Mono (code), OpenType → atlas |
 | Windowing | Linux X11 + Wayland (`wl_egl_window` / eglSwapBuffers, else `wl_shm` / `XPutImage`); offscreen always |
 | CGO | optional — tests and screenshots are `CGO_ENABLED=0` |
@@ -508,6 +508,12 @@ are independent look.json fields again; compound pack names migrate
 (**v0.12.2**).
 
 ## Version
+
+**0.14.2** — paintengine2d **v0.10.0**. Dirty frames present with
+`DrawSceneDamage` (not `Clear` + full `DrawScene`). GPU `ctx.Present()`
+uses the damage list (`eglSetDamageRegionKHR` / preserved buffer).
+Splitter `BakeGroup`s each pane on drag start; subsequent pixels only
+update `Xform`. `UITK_SCENE=off` keeps the immediate CPU path.
 
 **0.14.1** — paintengine2d **v0.9.2**. ListView / TableView (body) / TreeView /
 TextArea wheel and thumb-drag blit with `Context.Scroll`, `ClearRect` the

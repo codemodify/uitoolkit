@@ -87,6 +87,14 @@ body clip (below a sticky table header) so `DrawScene` cannot shift the
 clip with the content. Hover and selection re-record rows whose visual
 signature changed.
 
+**0.14.2 dirty DrawScene + baked splitter (paintengine2d v0.10.0):**
+`DrawSceneDamage(scene, dev, &dirty)` replays hover/scroll strips
+without a full `Clear`. `ctx.Present()` / `SetPresentDamage` is the GPU
+swap (preserved buffer / `eglSetDamageRegionKHR`), not a blind
+`eglSwapBuffers`. Splitter panes `BakeGroup` on drag start; drag
+frames change `GroupNode.Xform` only. `UITK_SCENE=off` is still
+`frameImmediate` + dirty `PresentRects`.
+
 **0.14.1 scroll + dirty present (paintengine2d v0.9.2):** ListView,
 TableView (body under the sticky header), TreeView, and TextArea scroll
 with `Context.Scroll` + `ClearRect` of the vacated strip, then paint
@@ -108,15 +116,9 @@ List/tree/table scrollbar hover dirties the track; caret blink dirties
 the caret. `SetPopup` / `DismissPopup` dirty the popup box. Tree flatten
 is cached. `WatchLook` Stats look.json and reads only on size/mtime change.
 
-paintengine2d follow-ups still open (`DrawScene` has no dirty argument):
-
-| Hotspot | What v0.9.2 does | What hover needs |
-| --- | --- | --- |
-| `DrawScene` | Full `Clear` + walk every node | `DrawScene(s, dev, dirty *Damage)` that skips ops whose bounds miss dirty |
-| `Recorder.Clear` / `opClear` | Whole-device reset | Dirty-rect clear, or omit clear when compositing over a live buffer |
-| Glyph / `Draw` text | Shaped-run LRU + `TouchRect` | Warm-path reuse for unchanged menu labels |
-| `DrawRoundRect` menu frame | Flatten + stroke each hover | Retain frame path; only highlight rects change |
-| GPU present | `PresentRects` / swap-with-damage when EGL preserves | uitoolkit now passes dirty boxes |
+v0.10.0 closed the dirty-`DrawScene` / partial-swap / pane-layer gaps
+documented in 0.14.0. Remaining polish (shaped-run reuse for unchanged
+menu labels, retained menu-frame paths) is optional.
 
 ```bash
 UITK_SCENE=auto go run ./examples/gallery   # default: retained scene

@@ -11,6 +11,18 @@ type SceneLayer interface {
 	NoteSceneRecorded()
 }
 
+// SceneBaker records child groups that [paintengine2d.BakeGroup] can
+// snapshot. Splitter drag updates [paintengine2d.GroupNode.Xform] and
+// does not re-walk pane children.
+type SceneBaker interface {
+	RecordBaked(rec *paintengine2d.Recorder, ctx *paintengine2d.Context, cache *SceneCache)
+}
+
+// RecordSubtree records c into an already-open recorder group (pane wrap).
+func RecordSubtree(c Component, rec *paintengine2d.Recorder, ctx *paintengine2d.Context, cache *SceneCache) {
+	recordNode(c, rec, ctx, nil, cache, true)
+}
+
 // SceneCache stores recorded widget groups between frames.
 type SceneCache struct {
 	Layers map[uint64]*paintengine2d.GroupNode
@@ -127,7 +139,9 @@ func recordNode(c Component, rec *paintengine2d.Recorder, ctx *paintengine2d.Con
 
 	g := rec.BeginGroup(c.ID(), paintengine2d.Identity())
 	c.Paint(ctx)
-	if sl, ok := c.(SceneLayer); ok {
+	if baker, ok := c.(SceneBaker); ok {
+		baker.RecordBaked(rec, ctx, cache)
+	} else if sl, ok := c.(SceneLayer); ok {
 		if ch := sl.SceneChild(); ch != nil {
 			ctx.Save()
 			ctx.ClipRect(local)
