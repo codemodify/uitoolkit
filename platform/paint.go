@@ -59,6 +59,23 @@ func SurfaceUsesGPU(s Surface) bool {
 	return ok && g.UsesGPU()
 }
 
+type presentReadier interface {
+	PresentReady() bool
+}
+
+// SurfaceReady reports whether s can commit a real first frame.
+// Wayland is false until xdg configure; others are ready once they have a size.
+func SurfaceReady(s Surface) bool {
+	if s == nil || s.Closed() {
+		return false
+	}
+	if r, ok := s.(presentReadier); ok {
+		return r.PresentReady()
+	}
+	w, h := s.Size()
+	return w > 0 && h > 0
+}
+
 // SurfaceDevice is the live paint [paintengine2d.Device] for s.
 func SurfaceDevice(s Surface) paintengine2d.Device {
 	if s == nil {
