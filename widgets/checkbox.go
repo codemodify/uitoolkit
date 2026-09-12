@@ -15,12 +15,14 @@ type Checkbox struct {
 	Checked  bool
 	OnChange func(bool)
 	hovered  bool
+	pressed  bool
 }
 
 func NewCheckbox(text string, checked bool, on func(bool)) *Checkbox {
 	c := &Checkbox{Text: text, Checked: checked, OnChange: on}
 	c.Init(c)
 	c.SetWantsFocus(true)
+	c.SetFocusVisibleOnly(true)
 	return c
 }
 
@@ -53,18 +55,38 @@ func (c *Checkbox) Paint(ctx *paintengine2d.Context) {
 }
 
 func (c *Checkbox) MouseEnter() { c.hovered = true; c.Base.MouseEnter() }
-func (c *Checkbox) MouseExit()  { c.hovered = false; c.Base.MouseExit() }
+func (c *Checkbox) MouseExit() {
+	c.hovered = false
+	c.pressed = false
+	c.Base.MouseExit()
+}
 
-func (c *Checkbox) MousePress(e widget.MouseEvent) bool {
+func (c *Checkbox) MousePress(widget.MouseEvent) bool {
 	if !c.Enabled() {
 		return false
 	}
+	c.MarkPointerFocus()
 	c.RequestFocus()
-	c.SetChecked(!c.Checked)
+	c.pressed = true
+	c.Invalidate()
+	return true
+}
+
+func (c *Checkbox) MouseRelease(e widget.MouseEvent) bool {
+	was := c.pressed
+	c.pressed = false
+	c.Invalidate()
+	if was && c.Enabled() && c.LocalBounds().Contains(e.Pos) {
+		c.SetChecked(!c.Checked)
+	}
 	return true
 }
 
 func (c *Checkbox) KeyPress(e widget.KeyEvent) bool {
+	if !c.Enabled() {
+		return false
+	}
+	c.MarkKeyboardFocus()
 	if e.Key == platform.KeySpace || e.Key == platform.KeyReturn {
 		c.SetChecked(!c.Checked)
 		return true

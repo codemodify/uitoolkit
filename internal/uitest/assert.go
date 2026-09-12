@@ -149,6 +149,10 @@ func TreeInvariants(root widget.Component) []error {
 			if err := CheckMenuFitsItems(v); err != nil {
 				errs = append(errs, fmt.Errorf("menu: %w", err))
 			}
+		case *widgets.ToolBar:
+			if err := CheckToolBarGaps(v); err != nil {
+				errs = append(errs, fmt.Errorf("toolbar: %w", err))
+			}
 		}
 	})
 	return errs

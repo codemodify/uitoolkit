@@ -80,7 +80,25 @@ func (l *Label) Paint(ctx *paintengine2d.Context) {
 		x = b.Max.X - tw - 2
 	}
 	y := b.Min.Y + (b.Dy()-th)*0.5
-	f.Draw(ctx, l.Text, paintengine2d.Pt(x, y), col)
+	ctx.Save()
+	ctx.ClipRect(b)
+	show := l.Text
+	maxW := b.Dx() - 2
+	if maxW < 4 {
+		maxW = 4
+	}
+	if f.Advance(show) > maxW {
+		show = f.Fit(show, maxW)
+		tw = f.Advance(show)
+		switch l.Align {
+		case style.AlignCenter:
+			x = b.Min.X + (b.Dx()-tw)*0.5
+		case style.AlignEnd:
+			x = b.Max.X - tw - 2
+		}
+	}
+	f.Draw(ctx, show, paintengine2d.Pt(x, y), col)
+	ctx.Restore()
 }
 
 func near(a, b paintengine2d.Color) bool {

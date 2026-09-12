@@ -5,4 +5,7 @@
 // GTK (fixtures + wait-for-draw + adjustment checks), and Avalonia
 // (headless layout + input). Prefer paint-op / hit-test / rect
 // assertions over screenshots.
+//
+// ChromeNorms / CompareReport map Button, ToolBar, Menu, ComboBox, and
+// related controls to Avalonia / Qt / GTK behavior (docs/compare.md).
 package uitest

@@ -39,6 +39,7 @@ func TestRadioGroupExclusive(t *testing.T) {
 		t.Fatal("initial")
 	}
 	g.Buttons()[2].MousePress(widget.MouseEvent{Pos: paintengine2d.Pt(8, 8)})
+	g.Buttons()[2].MouseRelease(widget.MouseEvent{Pos: paintengine2d.Pt(8, 8)})
 	if g.Selected() != 2 || n != 2 {
 		t.Fatalf("sel=%d n=%d", g.Selected(), n)
 	}
@@ -56,10 +57,12 @@ func TestRadioStandalone(t *testing.T) {
 	r.SetHost(&host{})
 	r.Arrange(paintengine2d.XYWH(0, 0, 120, 32))
 	r.MousePress(widget.MouseEvent{Pos: paintengine2d.Pt(8, 16)})
+	r.MouseRelease(widget.MouseEvent{Pos: paintengine2d.Pt(8, 16)})
 	if !r.Selected {
 		t.Fatal("should select")
 	}
 	r.MousePress(widget.MouseEvent{Pos: paintengine2d.Pt(8, 16)})
+	r.MouseRelease(widget.MouseEvent{Pos: paintengine2d.Pt(8, 16)})
 	if !r.Selected {
 		t.Fatal("radio stays selected")
 	}

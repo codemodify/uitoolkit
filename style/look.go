@@ -195,20 +195,7 @@ func (l *Classic) DrawButton(ctx *paintengine2d.Context, b paintengine2d.Rect, s
 
 func (l *Classic) DrawLabel(ctx *paintengine2d.Context, b paintengine2d.Rect, text string, col paintengine2d.Color, align Align) {
 	f := l.fontFor(col)
-	tw := f.Advance(text)
-	th := f.Height()
-	x := b.Min.X
-	switch align {
-	case AlignCenter:
-		x = b.Min.X + (b.Dx()-tw)*0.5
-	case AlignEnd:
-		x = b.Max.X - tw - 2
-	}
-	y := b.Min.Y + (b.Dy()-th)*0.5
-	if y < b.Min.Y {
-		y = b.Min.Y
-	}
-	f.Draw(ctx, text, paintengine2d.Pt(x, y), col)
+	l.drawFittedText(ctx, f, text, b, col, align, 2)
 }
 
 func (l *Classic) DrawCheckbox(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, checked bool, label string) {
@@ -249,7 +236,8 @@ func (l *Classic) DrawCheckbox(ctx *paintengine2d.Context, b paintengine2d.Rect,
 		if st.Disabled() {
 			f = l.muted
 		}
-		f.Draw(ctx, label, paintengine2d.Pt(box.Max.X+8, b.Min.Y+(b.Dy()-f.Height())*0.5), p.Text)
+		lb := paintengine2d.XYWH(box.Max.X+8, b.Min.Y, b.Max.X-(box.Max.X+8), b.Dy())
+		l.drawFittedText(ctx, f, label, lb, p.Text, AlignStart, 0)
 	}
 }
 
@@ -327,7 +315,11 @@ func (l *Classic) DrawTextField(ctx *paintengine2d.Context, b paintengine2d.Rect
 		}
 		x0 := ox + f.CaretX(text, selA)
 		x1 := ox + f.CaretX(text, selB)
-		ctx.DrawRect(paintengine2d.XYWH(x0, ty+1, x1-x0, f.Height()-2), paintengine2d.Fill(p.Selection))
+		sel := p.Selection
+		if !st.Focused() {
+			sel = p.Selection.WithAlpha(0.14)
+		}
+		ctx.DrawRect(paintengine2d.XYWH(x0, ty+1, x1-x0, f.Height()-2), paintengine2d.Fill(sel))
 	}
 	font.Draw(ctx, show, paintengine2d.Pt(ox, ty), p.Text)
 	if st.Focused() && blink && text == show {
@@ -383,7 +375,8 @@ func (l *Classic) DrawListRow(ctx *paintengine2d.Context, b paintengine2d.Rect, 
 	} else if hovered {
 		ctx.DrawRoundRect(b.Inset(2), r, r, paintengine2d.Fill(p.Highlight))
 	}
-	l.body.Draw(ctx, label, paintengine2d.Pt(b.Min.X+10, b.Min.Y+(b.Dy()-l.body.Height())*0.5), p.Text)
+	lb := paintengine2d.XYWH(b.Min.X+10, b.Min.Y, b.Dx()-14, b.Dy())
+	l.drawFittedText(ctx, l.body, label, lb, p.Text, AlignStart, 0)
 }
 
 func (l *Classic) DrawOverlay(ctx *paintengine2d.Context, b paintengine2d.Rect) {
@@ -732,7 +725,8 @@ func (l *Classic) DrawRadio(ctx *paintengine2d.Context, b paintengine2d.Rect, st
 		if st.Disabled() {
 			f = l.muted
 		}
-		f.Draw(ctx, label, paintengine2d.Pt(b.Min.X+side+8, b.Min.Y+(b.Dy()-f.Height())*0.5), p.Text)
+		lb := paintengine2d.XYWH(b.Min.X+side+8, b.Min.Y, b.Max.X-(b.Min.X+side+8), b.Dy())
+		l.drawFittedText(ctx, f, label, lb, p.Text, AlignStart, 0)
 	}
 }
 
@@ -774,7 +768,8 @@ func (l *Classic) DrawComboBox(ctx *paintengine2d.Context, b paintengine2d.Rect,
 	ctx.Save()
 	ctx.ClipRect(inner)
 	if text != "" {
-		f.Draw(ctx, text, paintengine2d.Pt(inner.Min.X, ty), col)
+		show := f.Fit(text, inner.Dx())
+		f.Draw(ctx, show, paintengine2d.Pt(inner.Min.X, ty), col)
 	}
 	ctx.Restore()
 	cx := b.Max.X - chevW*0.5
@@ -1139,7 +1134,8 @@ func (l *Classic) DrawSwitch(ctx *paintengine2d.Context, b paintengine2d.Rect, s
 		if st.Disabled() {
 			f = l.muted
 		}
-		f.Draw(ctx, label, paintengine2d.Pt(track.Max.X+8, b.Min.Y+(b.Dy()-f.Height())*0.5), p.Text)
+		lb := paintengine2d.XYWH(track.Max.X+8, b.Min.Y, b.Max.X-(track.Max.X+8), b.Dy())
+		l.drawFittedText(ctx, f, label, lb, p.Text, AlignStart, 0)
 	}
 }
 
@@ -1231,13 +1227,42 @@ func (l *Classic) drawCentered(ctx *paintengine2d.Context, f *Font, text string,
 	if f == nil || text == "" {
 		return
 	}
-	tw := f.Advance(text)
-	th := f.Height()
 	col := f.Color
 	if col == (paintengine2d.Color{}) {
 		col = l.palette.Text
 	}
-	f.Draw(ctx, text, paintengine2d.Pt(b.Min.X+(b.Dx()-tw)*0.5, b.Min.Y+(b.Dy()-th)*0.5), col)
+	l.drawFittedText(ctx, f, text, b, col, AlignCenter, 8)
+}
+
+func (l *Classic) drawFittedText(ctx *paintengine2d.Context, f *Font, text string, b paintengine2d.Rect, col paintengine2d.Color, align Align, pad float32) {
+	if f == nil || text == "" || b.Empty() {
+		return
+	}
+	ctx.Save()
+	ctx.ClipRect(b)
+	maxW := b.Dx() - pad
+	if maxW < 4 {
+		maxW = 4
+	}
+	show := text
+	if f.Advance(show) > maxW {
+		show = f.Fit(show, maxW)
+	}
+	tw := f.Advance(show)
+	th := f.Height()
+	x := b.Min.X
+	switch align {
+	case AlignCenter:
+		x = b.Min.X + (b.Dx()-tw)*0.5
+	case AlignEnd:
+		x = b.Max.X - tw - 2
+	}
+	y := b.Min.Y + (b.Dy()-th)*0.5
+	if y < b.Min.Y {
+		y = b.Min.Y
+	}
+	f.Draw(ctx, show, paintengine2d.Pt(x, y), col)
+	ctx.Restore()
 }
 
 func (l *Classic) fontFor(col paintengine2d.Color) *Font {

@@ -66,14 +66,15 @@ It is not a generic Material “card” container.
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Menu bar | `MenuBar` / `Menu` / `MenuItem` | `QMenuBar` / `MenuBar` | `GtkPopoverMenuBar` | `Menu` / `NativeMenu` | `fyne.MainMenu` | `MenuStrip` | `Menu` | `NSMenu` | `commands` / `Menu` | [thumb](screenshots/compare/menubar.png) · [gallery](screenshots/gallery-menu.png) |
 | Context menu | `PopupMenu` | `QMenu` / `Menu` | `GtkPopoverMenu` | `ContextMenu` | `widget.PopUpMenu` | `ContextMenuStrip` | `ContextMenu` | `NSMenu` | `contextMenu` | [thumb](screenshots/compare/popupmenu.png) |
-| Tool bar | `ToolBar` | `QToolBar` / `ToolBar` | `GtkBox` ≈ | `CommandBar` ≈ | `widget.Toolbar` | `ToolStrip` | `ToolBar` | `NSToolbar` | `ToolbarItem` | [thumb](screenshots/compare/toolbar.png) · [gallery](screenshots/gallery-toolbar.png) |
+| Tool bar | `ToolBar` / `ToolToggle` / `ToolButton` | `QToolBar` + checkable `QToolButton` | `GtkBox` ≈ + `GtkToggleButton` | `CommandBar` ≈ + `ToggleButton` | `widget.Toolbar` | `ToolStrip` | `ToolBar` | `NSToolbar` | `ToolbarItem` | [thumb](screenshots/compare/toolbar.png) · [gallery](screenshots/gallery-toolbar.png) |
 | Status bar | `StatusBar` | `QStatusBar` / `StatusBar` | `GtkStatusbar` ≈ | — | — | `StatusStrip` | `StatusBar` | — | — | [thumb](screenshots/compare/statusbar.png) |
 | Title bar | `TitleBar` | custom chrome ≈ | `GtkHeaderBar` ≈ | window chrome ≈ | window title ≈ | `Form.Text` ≈ | window chrome ≈ | `NSWindow` title | `navigationTitle` | [thumb](screenshots/compare/titlebar.png) |
 
 `TitleBar` is optional **client-side** caption + subtitle, not an OS CSD
 replacement. Avalonia has no stock `ToolBar`/`StatusBar` (use `CommandBar` or
-layout). `GtkStatusbar` still exists in GTK 4 but is no longer the preferred
-pattern.
+layout; SourceGit uses `ToggleButton` for view modes). `GtkStatusbar` still
+exists in GTK 4 but is no longer the preferred pattern. Behavior (not just
+names) is in [compare.md](compare.md).
 
 ## Layout and structure
 

@@ -65,7 +65,12 @@ go run ./cmd/uitest-driver
 go run ./cmd/uitest-driver -short
 go run ./cmd/uitest-driver -app=gallery
 go run ./cmd/uitest-driver -app=mail
+go run ./cmd/uitest-driver -compare
 ```
+
+Chrome vs Avalonia / Qt / GTK (focus-visible, toolbar gaps, toggle
+chrome, menu dismiss, label clip) is `TestDesktopChromeNorms` and
+`-compare`. See [compare.md](compare.md).
 
 Linux CGO build (Wayland/X11) — required on a real desktop, not just
 `CGO_ENABLED=0 go test`:
@@ -115,8 +120,8 @@ Delete / Junk / Send / Move.
 When you fix a UI bug, add a `go test` that would have failed on the
 broken code:
 
-- Prefer `internal/uitest` (geometry, hit-test, paint-pixel counts)
-  over screenshots.
+- Prefer `internal/uitest` (geometry, hit-test, paint-pixel counts,
+  `ChromeNorms`) over screenshots.
 - Put widget contracts in `widgets/*_test.go`. Map the bug in the
   comment at the top of `widgets/contract_test.go`.
 - If the bug only shows up in a real app, add a driver step in

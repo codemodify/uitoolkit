@@ -629,6 +629,7 @@ func (w *Window) tab(forward bool) {
 		}
 	}
 	w.RequestFocus(list[idx])
+	widget.MarkKeyboardFocus(list[idx])
 }
 
 func (w *Window) layout() {

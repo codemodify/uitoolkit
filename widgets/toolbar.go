@@ -67,6 +67,20 @@ func (t *ToolBar) Tooltip() string {
 	return ""
 }
 
+// ItemRect is the local box of item i.
+func (t *ToolBar) ItemRect(i int) paintengine2d.Rect {
+	rects := t.itemRects()
+	if i < 0 || i >= len(rects) {
+		return paintengine2d.Rect{}
+	}
+	return rects[i]
+}
+
+// KeyboardChrome is true when a tool is painting a keyboard focus ring.
+func (t *ToolBar) KeyboardChrome() bool {
+	return t.keyNav && t.focus >= 0
+}
+
 // ItemCenter is the local midpoint of item i.
 func (t *ToolBar) ItemCenter(i int) paintengine2d.Point {
 	rects := t.itemRects()
