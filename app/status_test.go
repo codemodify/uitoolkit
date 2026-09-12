@@ -150,6 +150,45 @@ func TestTrayContextMenuIsToolkitPopup(t *testing.T) {
 	}
 }
 
+func TestShowStatusMenuLargeScreenCoordsStayInside(t *testing.T) {
+	t.Setenv("UITK_TRAY", "fake")
+	a := New(Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{Width: 400, Height: 240, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.SetContent(widgets.NewLabel("mail"))
+	a.PumpOnce()
+	a.ShowStatusMenu(3840, 2160, []platform.StatusMenuItem{
+		{Text: "Show Mail"},
+		{Separator: true},
+		{Text: "Quit"},
+	})
+	pop, ok := w.Popup().(*widgets.PopupMenu)
+	if !ok || pop == nil {
+		t.Fatalf("popup %T", w.Popup())
+	}
+	b := pop.Bounds()
+	ww, hh := w.SurfaceSize()
+	if b.Min.X < 0 || b.Min.Y < 0 || b.Max.X > float32(ww)+1 || b.Max.Y > float32(hh)+1 {
+		t.Fatalf("popup %v outside %dx%d", b, ww, hh)
+	}
+	if b.Dx() < 8 || b.Dy() < 8 {
+		t.Fatalf("invisible popup %v", b)
+	}
+}
+
+func TestStatusMenuOriginIgnoresScreenCoords(t *testing.T) {
+	p := statusMenuOrigin(400, 240, 3840, 2160)
+	if p.X < 0 || p.Y < 0 || p.X > 400 || p.Y > 240 {
+		t.Fatalf("origin %+v", p)
+	}
+	local := statusMenuOrigin(400, 240, 40, 20)
+	if local.X != 40 || local.Y != 20 {
+		t.Fatalf("in-window coords should stay, got %+v", local)
+	}
+}
+
 func TestStatusMenuFromItems(t *testing.T) {
 	n := 0
 	got := StatusMenuFromItems([]*widgets.MenuItem{

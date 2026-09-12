@@ -272,9 +272,12 @@ failures fall back to a stub.
 Wayland remaps `xdg_toplevel` + `xdg_activation_v1`). Offscreen tracks a
 visibility flag.
 
+**0.16.3:** SNI `Menu=/NO_DBUSMENU`; toolkit popup ignores out-of-window
+screen coords (bottom-right anchor).
+
 **0.16.2:** Mail tray uses `IconMail`. Wayland close-to-tray can restore
 (the protocol has no unset_minimized). Tray context menu is a toolkit
-`PopupMenu` via SNI `ContextMenu` (`Menu=/`). Callbacks post to the UI loop.
+`PopupMenu` via SNI `ContextMenu`. Callbacks post to the UI loop.
 
 ## Deferred
 

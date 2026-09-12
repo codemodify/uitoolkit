@@ -21,6 +21,11 @@ const (
 	fdoNotifyPath  = "/org/freedesktop/Notifications"
 	dbusMenuPath   = "/MenuBar"
 	dbusMenuIface  = "com.canonical.dbusmenu"
+	// sniMenuNone is the StatusNotifierItem sentinel that tells Plasma /
+	// ayatana to call ContextMenu instead of treating Menu as a dbusmenu
+	// object. "/" is a valid path and hosts will try (and fail) dbusmenu
+	// on the root instead of falling back to ContextMenu.
+	sniMenuNone = dbus.ObjectPath("/NO_DBUSMENU")
 )
 
 type linuxStatusItem struct {
@@ -115,8 +120,7 @@ func (s *linuxStatusItem) export() error {
 			"AttentionMovieName":  {Value: "", Writable: false, Emit: prop.EmitFalse},
 			"ToolTip":             {Value: s.toolTip(), Writable: false, Emit: prop.EmitTrue},
 			"ItemIsMenu":          {Value: false, Writable: false, Emit: prop.EmitFalse},
-			// "/" so Plasma calls ContextMenu instead of drawing dbusmenu.
-			"Menu": {Value: dbus.ObjectPath("/"), Writable: false, Emit: prop.EmitFalse},
+			"Menu":                {Value: sniMenuNone, Writable: false, Emit: prop.EmitFalse},
 		},
 	}
 	props, err := prop.Export(s.conn, sniPath, propsSpec)
@@ -357,29 +361,32 @@ func (s *linuxStatusItem) Activate(x, y int32) *dbus.Error {
 	return nil
 }
 
-// SecondaryActivate implements StatusNotifierItem.SecondaryActivate.
-func (s *linuxStatusItem) SecondaryActivate(x, y int32) *dbus.Error {
+func (s *linuxStatusItem) invokeOnMenu(x, y int32, via string) bool {
 	s.mu.Lock()
 	fn := s.opts.OnMenu
 	dispatch := s.opts.Dispatch
 	s.mu.Unlock()
-	if fn != nil {
-		invokeStatus(dispatch, func() { fn(x, y) })
+	if fn == nil {
+		return false
+	}
+	trayDebug("%s → OnMenu(%d,%d)", via, x, y)
+	invokeStatus(dispatch, func() { fn(x, y) })
+	return true
+}
+
+// SecondaryActivate implements StatusNotifierItem.SecondaryActivate
+// (middle-click; some hosts also use this for right-click).
+func (s *linuxStatusItem) SecondaryActivate(x, y int32) *dbus.Error {
+	if s.invokeOnMenu(x, y, "SecondaryActivate") {
 		return nil
 	}
 	return s.Activate(x, y)
 }
 
 // ContextMenu implements StatusNotifierItem.ContextMenu (right-click).
-// Plasma is pointed at Menu="/" so it calls this instead of dbusmenu.
+// Menu=/NO_DBUSMENU + ItemIsMenu=false is what makes Plasma call this.
 func (s *linuxStatusItem) ContextMenu(x, y int32) *dbus.Error {
-	s.mu.Lock()
-	fn := s.opts.OnMenu
-	dispatch := s.opts.Dispatch
-	s.mu.Unlock()
-	if fn != nil {
-		invokeStatus(dispatch, func() { fn(x, y) })
-	}
+	_ = s.invokeOnMenu(x, y, "ContextMenu")
 	return nil
 }
 
@@ -411,13 +418,12 @@ func (s *linuxStatusItem) GetLayout(parentID int32, recursionDepth int32, proper
 	if rev == 0 {
 		rev = 1
 	}
+	_ = items
 	if parentID > 0 {
-		i := int(parentID) - 1
-		if i >= 0 && i < len(items) {
-			return rev, dbusMenuLeafNode(int32(i+1), items[i]), nil
-		}
+		return rev, dbusMenuStubLeaf(), nil
 	}
-	return rev, buildMenuLayout(items), nil
+	// Do not export real rows: Plasma would draw a native dbusmenu.
+	return rev, dbusMenuStubLayout(), nil
 }
 
 // GetGroupProperties implements com.canonical.dbusmenu.
@@ -436,6 +442,11 @@ func (s *linuxStatusItem) GetProperty(id int32, name string) (dbus.Variant, *dbu
 func (s *linuxStatusItem) Event(id int32, eventID string, data dbus.Variant, timestamp uint32) *dbus.Error {
 	_, _ = data, timestamp
 	if eventID != "clicked" {
+		return nil
+	}
+	// Root / synthetic stub (id 0 or 1): open the toolkit menu. Hosts that
+	// ignore /NO_DBUSMENU still land here instead of ContextMenu.
+	if id <= 1 && s.invokeOnMenu(0, 0, "dbusmenu.Event") {
 		return nil
 	}
 	s.mu.Lock()
@@ -460,6 +471,7 @@ func (s *linuxStatusItem) EventGroup(events []dbusMenuEvent) ([]int32, *dbus.Err
 
 // AboutToShow implements com.canonical.dbusmenu.AboutToShow.
 func (s *linuxStatusItem) AboutToShow(id int32) (bool, *dbus.Error) {
+	_ = s.invokeOnMenu(0, 0, "dbusmenu.AboutToShow")
 	_ = id
 	return false, nil
 }
@@ -497,6 +509,24 @@ func emptyMenuLayout() dbusMenuNode {
 		Properties: map[string]dbus.Variant{"children-display": dbus.MakeVariant("submenu")},
 		Children:   []dbus.Variant{},
 	}
+}
+
+func dbusMenuStubLeaf() dbusMenuNode {
+	return dbusMenuNode{
+		ID:         1,
+		Properties: map[string]dbus.Variant{"label": dbus.MakeVariant("Mail")},
+		Children:   []dbus.Variant{},
+	}
+}
+
+func dbusMenuStubLayout() dbusMenuNode {
+	root := emptyMenuLayout()
+	root.Children = []dbus.Variant{dbus.MakeVariant(dbusMenuLeaf{
+		ID:         1,
+		Properties: map[string]dbus.Variant{"label": dbus.MakeVariant("Mail")},
+		Children:   []dbus.Variant{},
+	})}
+	return root
 }
 
 func menuItemProps(it StatusMenuItem) map[string]dbus.Variant {
