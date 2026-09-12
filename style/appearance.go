@@ -18,7 +18,9 @@ const (
 	CornersSquare CornerStyle = "square"
 )
 
-// IconSetName selects the vector ToolIcon glyph set Classic draws.
+// IconSetName selects chrome ToolIcons. classic / sharp are drawn in
+// process. Any other sanitized name is a file set under
+// ~/.config/uitoolkit/icons/<name>/ (filled, outline, duotone, …).
 type IconSetName string
 
 const (
@@ -26,11 +28,17 @@ const (
 	IconSetClassic IconSetName = "classic"
 	// IconSetSharp is an angular, square-cap set (CapSquare / JoinMiter).
 	IconSetSharp IconSetName = "sharp"
+	// IconSetFilled is the shipped solid SVG set (install from repo icons/).
+	IconSetFilled IconSetName = "filled"
+	// IconSetOutline is the shipped stroke SVG set.
+	IconSetOutline IconSetName = "outline"
+	// IconSetDuotone is the shipped two-layer SVG set.
+	IconSetDuotone IconSetName = "duotone"
 )
 
 // Appearance is the resolved toolkit skin. Name is the theme pack
-// (look.json "theme"). Theme / Corners / Icons come from that pack and
-// are not stored as independent prefs.
+// (look.json "theme"). Icons is chosen on top of the pack and stored
+// in look.json; the pack's icons field is only a fallback default.
 type Appearance struct {
 	Name    string // pack id: "dark-round-classic" or a user export
 	Theme   ThemeName
@@ -68,24 +76,38 @@ func ParseCorners(s string) CornerStyle {
 	}
 }
 
-// ParseIconSet accepts classic / sharp (empty → classic).
+// ParseIconSet accepts classic / sharp / filled / outline / duotone
+// or any sanitized file-set directory name (empty → classic).
 func ParseIconSet(s string) IconSetName {
+	s = strings.TrimSpace(s)
 	switch s {
 	case "sharp", "Sharp", "geometric":
 		return IconSetSharp
+	case "filled", "Filled":
+		return IconSetFilled
+	case "outline", "Outline":
+		return IconSetOutline
+	case "duotone", "Duotone":
+		return IconSetDuotone
+	case "", "classic", "Classic":
+		return IconSetClassic
 	default:
+		if name, err := SanitizeIconSetName(s); err == nil {
+			return IconSetName(name)
+		}
 		return IconSetClassic
 	}
 }
 
 // Normalize fills empty fields with defaults. An empty Name becomes the
 // matching embedded starter (dark-round-classic, light-square-sharp, …).
+// File icon sets do not change the starter name (icons live in look.json).
 func (a Appearance) Normalize() Appearance {
 	a.Theme = ParseTheme(string(a.Theme))
 	a.Corners = ParseCorners(string(a.Corners))
 	a.Icons = ParseIconSet(string(a.Icons))
 	if strings.TrimSpace(a.Name) == "" {
-		a.Name = StarterName(a.Theme, a.Corners, a.Icons)
+		a.Name = StarterName(a.Theme, a.Corners, FallbackIcons(a.Icons))
 	}
 	return a
 }
@@ -100,7 +122,7 @@ func (a Appearance) String() string {
 func (a Appearance) WithPalette(theme ThemeName) Appearance {
 	a = a.Normalize()
 	a.Theme = ParseTheme(string(theme))
-	a.Name = StarterName(a.Theme, a.Corners, a.Icons)
+	a.Name = StarterName(a.Theme, a.Corners, FallbackIcons(a.Icons))
 	return a
 }
 
@@ -180,7 +202,7 @@ func WithTheme(look LookAndFeel, theme ThemeName) LookAndFeel {
 		p = Light()
 	}
 	return newClassic(name, p, c.Metrics(), c.Corners(), c.Icons()).
-		setPack(StarterName(theme, c.Corners(), c.Icons()))
+		setPack(StarterName(theme, c.Corners(), FallbackIcons(c.Icons())))
 }
 
 // WithCorners rebuilds a Classic look with a new radius policy.
@@ -192,10 +214,11 @@ func WithCorners(look LookAndFeel, corners CornerStyle) LookAndFeel {
 	corners = ParseCorners(string(corners))
 	m := ApplyCorners(c.Metrics(), corners)
 	return newClassic(c.Name(), c.Palette(), m, corners, c.Icons()).
-		setPack(StarterName(ParseTheme(c.Name()), corners, c.Icons()))
+		setPack(StarterName(ParseTheme(c.Name()), corners, FallbackIcons(c.Icons())))
 }
 
-// WithIcons rebuilds a Classic look with a new ToolIcon glyph set.
+// WithIcons rebuilds a Classic look with a new ToolIcon set (file or
+// drawn). The theme pack name is kept; icons are independent of the pack.
 func WithIcons(look LookAndFeel, icons IconSetName) LookAndFeel {
 	c, ok := classicOf(look)
 	if !ok {
@@ -203,7 +226,7 @@ func WithIcons(look LookAndFeel, icons IconSetName) LookAndFeel {
 	}
 	icons = ParseIconSet(string(icons))
 	return newClassic(c.Name(), c.Palette(), c.Metrics(), c.Corners(), icons).
-		setPack(StarterName(ParseTheme(c.Name()), c.Corners(), icons))
+		setPack(c.Pack())
 }
 
 // WithAppearance applies all three settings to an existing Classic look,
@@ -219,11 +242,11 @@ func WithAppearance(look LookAndFeel, a Appearance) LookAndFeel {
 	a = a.Normalize()
 	pack := a.Name
 	if loaded, ok := LoadTheme(pack); ok {
-		if loaded.Palette != a.Theme || loaded.Corners != a.Corners || loaded.Icons != a.Icons {
-			pack = StarterName(a.Theme, a.Corners, a.Icons)
+		if loaded.Palette != a.Theme || loaded.Corners != a.Corners {
+			pack = StarterName(a.Theme, a.Corners, FallbackIcons(a.Icons))
 		}
 	} else {
-		pack = StarterName(a.Theme, a.Corners, a.Icons)
+		pack = StarterName(a.Theme, a.Corners, FallbackIcons(a.Icons))
 	}
 	name := string(a.Theme)
 	p := Dark()

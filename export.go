@@ -42,6 +42,7 @@ type (
 	IconSetName       = style.IconSetName
 	ThemePack         = style.ThemePack
 	ThemeSource       = style.ThemeSource
+	IconSetInfo       = style.IconSetInfo
 )
 
 const (
@@ -58,6 +59,9 @@ const (
 	CornersSquare      = style.CornersSquare
 	IconSetClassic     = style.IconSetClassic
 	IconSetSharp       = style.IconSetSharp
+	IconSetFilled      = style.IconSetFilled
+	IconSetOutline     = style.IconSetOutline
+	IconSetDuotone     = style.IconSetDuotone
 	ThemeSourceBuiltin = style.ThemeSourceBuiltin
 	ThemeSourceUser    = style.ThemeSourceUser
 	DefaultThemeName   = style.DefaultThemeName
@@ -77,6 +81,10 @@ func SaveAppearance(a style.Appearance) error {
 func AppearancePath() string { return style.AppearancePath() }
 func ConfigDir() string      { return style.ConfigDir() }
 func ThemesDir() string      { return style.ThemesDir() }
+func IconsDir() string       { return style.IconsDir() }
+func ListIconSets() []style.IconSetInfo {
+	return style.ListIconSets()
+}
 func ListThemes() []style.ThemePack {
 	return style.ListThemes()
 }

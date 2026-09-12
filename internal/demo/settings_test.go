@@ -2,6 +2,7 @@ package demo
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -174,6 +175,87 @@ func TestSettingsExportThemeByName(t *testing.T) {
 	}
 }
 
+func TestSettingsIconSetApplyWritesLookJSON(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	if err := style.SaveAppearance(style.DefaultAppearance()); err != nil {
+		t.Fatal(err)
+	}
+	installSettingsIconSet(t, dir, "outline")
+	a := uitoolkit.New(uitoolkit.Options{Headless: true, Scale: 1, DisableLookWatch: true})
+	w, err := a.NewWindow(platform.WindowOptions{Title: "settings", Width: 960, Height: 780, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+	w.SetContent(SettingsApp(a, w))
+	a.PumpOnce()
+	if findIconList(w.Content()) == nil {
+		t.Fatal("missing icon picker")
+	}
+	clickIconSet(t, w, "outline")
+	a.PumpOnce()
+	if style.LookAppearance(a.Look()).Icons != style.IconSetOutline {
+		t.Fatalf("preview icons %+v", style.LookAppearance(a.Look()))
+	}
+	if style.LoadAppearance().Icons != style.IconSetClassic {
+		t.Fatal("unapplied icon change leaked")
+	}
+	clickApply(t, w)
+	a.PumpOnce()
+	got := style.LoadAppearance()
+	if got.Name != style.DefaultThemeName || got.Icons != style.IconSetOutline {
+		t.Fatalf("applied %+v", got)
+	}
+	raw, err := os.ReadFile(style.AppearancePath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), `"icons": "outline"`) {
+		t.Fatalf("look.json: %s", raw)
+	}
+}
+
+func installSettingsIconSet(t *testing.T, xdg, name string) {
+	t.Helper()
+	src := filepath.Join("..", "..", "icons", name)
+	dst := filepath.Join(xdg, "uitoolkit", "icons", name)
+	if err := os.MkdirAll(dst, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := os.ReadDir(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		b, err := os.ReadFile(filepath.Join(src, e.Name()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dst, e.Name()), b, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func clickIconSet(t *testing.T, w *app.Window, name string) {
+	t.Helper()
+	list := findIconList(w.Content())
+	if list == nil || list.OnSelect == nil {
+		t.Fatal("no icon picker")
+	}
+	for i := 0; i < list.Count; i++ {
+		if strings.Contains(list.ItemText(i), name) {
+			list.OnSelect(i)
+			return
+		}
+	}
+	t.Fatalf("no icon set %q", name)
+}
+
 func TestSettingsAppPaintsPreview(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true, Scale: 1})
@@ -207,6 +289,9 @@ func TestSettingsAppPaintsPreview(t *testing.T) {
 	}
 	if findThemeList(w.Content()) == nil {
 		t.Fatal("missing theme picker")
+	}
+	if findIconList(w.Content()) == nil {
+		t.Fatal("missing icon picker")
 	}
 }
 
@@ -247,8 +332,28 @@ func findRadio(root widget.Component, label string) *widgets.RadioButton {
 func findThemeList(root widget.Component) *widgets.ListView {
 	var list *widgets.ListView
 	widget.Walk(root, func(c widget.Component) {
-		if l, ok := c.(*widgets.ListView); ok && l.Count >= 8 {
-			list = l
+		if l, ok := c.(*widgets.ListView); ok && l.ItemText != nil && l.Count >= 8 {
+			for i := 0; i < l.Count; i++ {
+				if strings.Contains(l.ItemText(i), "Dark ·") {
+					list = l
+					return
+				}
+			}
+		}
+	})
+	return list
+}
+
+func findIconList(root widget.Component) *widgets.ListView {
+	var list *widgets.ListView
+	widget.Walk(root, func(c widget.Component) {
+		if l, ok := c.(*widgets.ListView); ok && l.ItemText != nil {
+			for i := 0; i < l.Count; i++ {
+				if strings.Contains(l.ItemText(i), "Classic  · builtin") {
+					list = l
+					return
+				}
+			}
 		}
 	})
 	return list

@@ -30,8 +30,9 @@ const (
 	ThemeSourceUser ThemeSource = "user"
 )
 
-// ThemePack is a named installable look (GTK/KDE-like). Corners and icons
-// live inside the pack; look.json stores only the pack name.
+// ThemePack is a named installable look (GTK/KDE-like). Corners live
+// inside the pack. The pack may keep an icons field (classic/sharp) as
+// a default; look.json "icons" overrides it for chrome ToolIcons.
 type ThemePack struct {
 	Name    string
 	Label   string
@@ -67,9 +68,11 @@ func ThemeFile(name string) string {
 	return filepath.Join(ThemesDir(), name, "theme.json")
 }
 
-// StarterName is the embedded pack id for a palette × corners × icons combo.
+// StarterName is the embedded pack id for a palette × corners × drawn-icons
+// combo. File icon sets (outline, …) map to classic so pack names stay in
+// the eight-starter matrix.
 func StarterName(theme ThemeName, corners CornerStyle, icons IconSetName) string {
-	return string(ParseTheme(string(theme))) + "-" + string(ParseCorners(string(corners))) + "-" + string(ParseIconSet(string(icons)))
+	return string(ParseTheme(string(theme))) + "-" + string(ParseCorners(string(corners))) + "-" + string(FallbackIcons(icons))
 }
 
 // SanitizeThemeName lowercases and accepts [a-z][a-z0-9_-]{0,63}.
