@@ -18,6 +18,7 @@ type Host struct {
 	damageN  int
 	lastRect paintengine2d.Rect
 	popup    widget.Component
+	overlay  widget.Component
 	surfW    int
 	surfH    int
 }
@@ -87,7 +88,26 @@ func (h *Host) DismissPopup() {
 	h.popup = nil
 }
 
+func (h *Host) SetOverlay(c widget.Component) {
+	if h.overlay == c {
+		return
+	}
+	old := h.overlay
+	h.overlay = c
+	if c != nil {
+		c.SetHost(h)
+	}
+	if old != nil && old != c {
+		if d, ok := old.(widget.Dismisser); ok {
+			d.Dismissed()
+		}
+	}
+}
+
+func (h *Host) Overlay() widget.Component { return h.overlay }
+
 var _ widget.Host = (*Host)(nil)
 var _ widget.CursorHost = (*Host)(nil)
 var _ widget.PopupHost = (*Host)(nil)
+var _ widget.OverlayHost = (*Host)(nil)
 var _ widget.SurfaceSizer = (*Host)(nil)

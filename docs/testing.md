@@ -75,8 +75,11 @@ go run ./cmd/uitest-driver -compare
 ```
 
 Chrome vs Avalonia / Qt / GTK (focus-visible, toolbar gaps, toggle
-chrome, menu dismiss, Office XP menu hover, label clip) is
+chrome, menu dismiss, Office XP menu hover, scroll/splitter/table,
+combo/field heights, switch/slider/tabs/dialog) is
 `TestDesktopChromeNorms` and `-compare`. See [compare.md](compare.md).
+`TestChromeStripGolden` is the 1×/2× paint-hash guard
+(`UITK_UPDATE_GOLDEN=1` rewrites `internal/uitest/testdata`).
 
 Linux CGO build (Wayland/X11) — required on a real desktop, not just
 `CGO_ENABLED=0 go test`:

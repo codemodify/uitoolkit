@@ -27,6 +27,7 @@ func NewComboBox(items []string, selected int, on func(int)) *ComboBox {
 	c := &ComboBox{Items: items, Selected: selected, OnChange: on}
 	c.Init(c)
 	c.SetWantsFocus(true)
+	c.SetFocusVisibleOnly(true)
 	return c
 }
 
@@ -106,6 +107,7 @@ func (c *ComboBox) MousePress(e widget.MouseEvent) bool {
 	if !c.Enabled() || e.Button == platform.ButtonRight {
 		return false
 	}
+	c.MarkPointerFocus()
 	c.RequestFocus()
 	if c.open {
 		c.Close()
@@ -119,6 +121,7 @@ func (c *ComboBox) KeyPress(e widget.KeyEvent) bool {
 	if !c.Enabled() {
 		return false
 	}
+	c.MarkKeyboardFocus()
 	switch e.Key {
 	case platform.KeyDown, platform.KeySpace:
 		if !c.open {

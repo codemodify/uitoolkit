@@ -17,27 +17,57 @@ import (
 //
 //	blank-after-first-page  TestListViewScenePaintsPastFirstPage, TestTableViewHeaderFlushAndClip,
 //	                        TestCardListScenePaintsPastFirstPage, TestTreeViewPaintsAfterFirstPage
-//	header overlap scroll   TestTableViewHeaderFlushAndClip, TestTableViewHeaderClipsBodyWhenScrolled
+//	header overlap scroll   TestTableViewHeaderFlushAndClip, TestTableViewHeaderClipsBodyWhenScrolled,
+//	                        TestDesktopChromeNorms/table-header-flush, list-scroll-clip
 //	header gap at top       TestTableViewHeaderFlushAndClip, TestTableViewFirstRowFlushUnderHeader
+//	column resize           TestTableViewColumnResize, TestDesktopChromeNorms/table-column-resize
 //	splitter overlap        TestSplitterArrangeAfterDragExclusive, TestSplitterPanesExclusiveAtRatios
 //	stuck resize cursor     TestSplitterRestoresPointerCursor, TestSplitterCursorReturnsAfterDrag
-//	unclamped scroll        TestScrollClampWheelStopsAtEnd, TestScrollersClampOffset
+//	unclamped scroll        TestScrollClampWheelStopsAtEnd, TestScrollersClampOffset,
+//	                        TestDesktopChromeNorms/scroll-overflow-thumb
 //	type into read-only     TestTextViewReadOnlyAndScrollbar, TestTextAreaReadOnlyRejectsInput
 //	menu clip / truncate    TestPopupMenuFitsLongLabelsAndManyItems,
 //	                        TestPopupMenuVIPLabelNotClipped,
 //	                        TestMenuBarDropdownFitsLabelsAndShortcuts,
 //	                        TestMenuBarHelpNearRightEdgeFitsAboutMail
-//	combo overlap / clip    TestComboBoxPopupClearsFieldAndFitsLabels
+//	combo overlap / clip    TestComboBoxPopupClearsFieldAndFitsLabels,
+//	                        TestDesktopChromeNorms/combo-popup-clear, combo-field-height
 //	toolbar steals MaxW     TestToolBarLeavesRoomForFlexSibling
 //	focus-visible / chrome  internal/uitest.TestDesktopChromeNorms (docs/compare.md)
 //	label/button clip       TestDesktopChromeNorms/label-clip, button-label-clip
 //	toggle vs action        TestDesktopChromeNorms/toggle-vs-action
+//	switch / slider / tabs  TestDesktopChromeNorms/switch-click-release, slider-click-disabled,
+//	                        tabs-click-focus, progress-metrics, dialog-buttons
 //	menu leftover focus     TestDesktopChromeNorms/menubar-dismiss-focus, popup-leave-highlight
 //	menu XP hover fill      TestDesktopChromeNorms/menu-hover-bordered,
 //	                        TestDesktopChromeNorms/menubar-title-hover
 //	menu icon / toggle      TestMenuItemCheckableTogglesOnActivate,
 //	                        TestMenuItemRadioGroupExclusive,
-//	                        TestMenuItemCheckedPaintsGutter, TestMenuItemGutterFitsIcon
+//	                        TestMenuItemCheckedPaintsGutter, TestMenuItemGutterFitsIcon,
+//	                        TestDesktopChromeNorms/menu-gutter-icons, menu-onscreen-clamp
+
+func TestTableViewColumnResize(t *testing.T) {
+	tv := widgets.NewTableView([]widgets.TableColumn{
+		{Title: "Name", Width: 100, MinWidth: 40},
+		{Title: "Size", Width: 80, MinWidth: 32},
+	}, 8, func(row, col int) string { return "cell" }, nil)
+	s := uitest.Mount(tv, paintengine2d.XYWH(0, 0, 280, 160))
+	w0 := tv.ColumnWidths()
+	edge := w0[0]
+	pt := paintengine2d.Pt(edge, tv.HeaderHeight()*0.45)
+	if tv.ColumnDividerAt(pt.X) != 0 {
+		t.Fatalf("divider x=%v col=%d", pt.X, tv.ColumnDividerAt(pt.X))
+	}
+	s.Drag(pt, paintengine2d.Pt(edge+36, pt.Y))
+	w1 := tv.ColumnWidths()
+	if w1[0] < w0[0]+16 {
+		t.Fatalf("col0 %v -> %v", w0[0], w1[0])
+	}
+	s.MouseMove(paintengine2d.Pt(16, tv.HeaderHeight()+24))
+	if s.Cursor() != platform.CursorDefault {
+		t.Fatalf("cursor %v", s.Cursor())
+	}
+}
 
 func TestSplitterPanesExclusiveAtRatios(t *testing.T) {
 	left := widgets.NewLabel("AAAA pane A chrome")

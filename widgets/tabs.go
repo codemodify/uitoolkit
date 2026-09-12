@@ -23,6 +23,7 @@ func NewTabBar(titles ...string) *TabBar {
 	t := &TabBar{Titles: titles, hover: -1, press: -1}
 	t.Init(t)
 	t.SetWantsFocus(true)
+	t.SetFocusVisibleOnly(true)
 	return t
 }
 
@@ -120,6 +121,7 @@ func (t *TabBar) MousePress(e widget.MouseEvent) bool {
 	if !t.Enabled() {
 		return false
 	}
+	t.MarkPointerFocus()
 	t.RequestFocus()
 	t.press = t.indexAt(e.Pos.X)
 	t.Invalidate()
@@ -138,6 +140,9 @@ func (t *TabBar) MouseRelease(e widget.MouseEvent) bool {
 }
 
 func (t *TabBar) MouseWheel(e widget.MouseEvent) bool {
+	if !t.Enabled() {
+		return false
+	}
 	if e.Scroll.Y > 0 {
 		t.Select(t.Selected + 1)
 		return true
@@ -150,6 +155,10 @@ func (t *TabBar) MouseWheel(e widget.MouseEvent) bool {
 }
 
 func (t *TabBar) KeyPress(e widget.KeyEvent) bool {
+	if !t.Enabled() {
+		return false
+	}
+	t.MarkKeyboardFocus()
 	switch e.Key {
 	case platform.KeyLeft:
 		t.Select(t.Selected - 1)
@@ -169,6 +178,9 @@ func (t *TabBar) KeyPress(e widget.KeyEvent) bool {
 
 // Select changes the current tab.
 func (t *TabBar) Select(i int) {
+	if !t.Enabled() {
+		return
+	}
 	if i < 0 {
 		i = 0
 	}

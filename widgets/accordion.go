@@ -193,6 +193,7 @@ func newExpanderHead(owner *Expander) *expanderHead {
 	h := &expanderHead{owner: owner}
 	h.Init(h)
 	h.SetWantsFocus(true)
+	h.SetFocusVisibleOnly(true)
 	return h
 }
 
@@ -216,6 +217,7 @@ func (h *expanderHead) MousePress(widget.MouseEvent) bool {
 	if !h.Enabled() {
 		return false
 	}
+	h.MarkPointerFocus()
 	h.RequestFocus()
 	h.owner.SetExpanded(!h.owner.Expanded)
 	return true
@@ -225,6 +227,7 @@ func (h *expanderHead) KeyPress(e widget.KeyEvent) bool {
 	if !h.Enabled() {
 		return false
 	}
+	h.MarkKeyboardFocus()
 	switch e.Key {
 	case platform.KeySpace, platform.KeyReturn:
 		h.owner.SetExpanded(!h.owner.Expanded)

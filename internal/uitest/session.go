@@ -42,6 +42,12 @@ func (s *Session) Layout() {
 	}
 	_ = s.Root.Measure(layout.Tight(s.Box.Dx(), s.Box.Dy()))
 	s.Root.Arrange(s.Box)
+	if s.Host != nil {
+		if ov := s.Host.Overlay(); ov != nil {
+			_ = ov.Measure(layout.Tight(s.Box.Dx(), s.Box.Dy()))
+			ov.Arrange(s.Box)
+		}
+	}
 }
 
 // Relayout assigns a new box and Measure/Arranges.
@@ -61,6 +67,11 @@ func (s *Session) Hit(p paintengine2d.Point) widget.Component {
 	if s.Host != nil {
 		if pop := s.Host.Popup(); pop != nil {
 			if h := widget.HitRoot(pop, p); h != nil {
+				return h
+			}
+		}
+		if ov := s.Host.Overlay(); ov != nil {
+			if h := widget.HitRoot(ov, p); h != nil {
 				return h
 			}
 		}
@@ -217,6 +228,8 @@ func (s *Session) Tab(forward bool) {
 	root := s.Root
 	if pop := s.Host.Popup(); pop != nil {
 		root = pop
+	} else if ov := s.Host.Overlay(); ov != nil {
+		root = ov
 	}
 	list := widget.Focusables(root)
 	if len(list) == 0 {
@@ -272,6 +285,9 @@ func (s *Session) Paint() *paintengine2d.Image {
 		widget.PaintTree(s.Root, ctx, nil)
 	}
 	if s.Host != nil {
+		if ov := s.Host.Overlay(); ov != nil {
+			widget.PaintTree(ov, ctx, nil)
+		}
 		if pop := s.Host.Popup(); pop != nil {
 			widget.PaintTree(pop, ctx, nil)
 		}
@@ -295,6 +311,9 @@ func (s *Session) Record() *paintengine2d.Scene {
 		widget.PaintTree(s.Root, ctx, nil)
 	}
 	if s.Host != nil {
+		if ov := s.Host.Overlay(); ov != nil {
+			widget.PaintTree(ov, ctx, nil)
+		}
 		if pop := s.Host.Popup(); pop != nil {
 			widget.PaintTree(pop, ctx, nil)
 		}

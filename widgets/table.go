@@ -38,6 +38,9 @@ type TableView struct {
 	hovered   int
 	hoverCol  int
 	pressCol  int
+	resizeCol int
+	resizeX   float32
+	resizeW   float32
 	vbar      scrollDrag
 	rows      rowSceneCache
 }
@@ -47,7 +50,7 @@ func NewTableView(cols []TableColumn, rows int, cell func(row, col int) string, 
 	t := &TableView{
 		Columns: cols, RowCount: rows, RowHeight: 28, Selected: -1,
 		SortCol: -1, SortAsc: true, CellText: cell, OnSelect: on,
-		hovered: -1, hoverCol: -1, pressCol: -1,
+		hovered: -1, hoverCol: -1, pressCol: -1, resizeCol: -1,
 	}
 	t.Init(t)
 	t.SetWantsFocus(true)
@@ -302,6 +305,74 @@ func (t *TableView) colAt(x float32) int {
 	return -1
 }
 
+const colResizeHit = 5
+
+func (t *TableView) colEdgeAt(x float32) int {
+	acc := float32(0)
+	for i, w := range t.colWidths() {
+		acc += w
+		if x >= acc-colResizeHit && x < acc+colResizeHit {
+			return i
+		}
+	}
+	return -1
+}
+
+// ColumnDividerAt is the column whose right edge is near x, or -1.
+func (t *TableView) ColumnDividerAt(x float32) int { return t.colEdgeAt(x) }
+
+// ResizingColumn is the header divider being dragged, or -1.
+func (t *TableView) ResizingColumn() int { return t.resizeCol }
+
+// CursorAt is col-resize on a header divider (and while dragging).
+func (t *TableView) CursorAt(local paintengine2d.Point) platform.Cursor {
+	if t.resizeCol >= 0 {
+		return platform.CursorColResize
+	}
+	if local.Y >= 0 && local.Y < t.headerH() && t.colEdgeAt(local.X) >= 0 {
+		return platform.CursorColResize
+	}
+	return platform.CursorDefault
+}
+
+func (t *TableView) applyCursor(local paintengine2d.Point) {
+	widget.ApplyCursor(t.Host(), t.CursorAt(local))
+}
+
+func (t *TableView) minColPx(i int) float32 {
+	if i < 0 || i >= len(t.Columns) {
+		return 24
+	}
+	floor := t.Columns[i].MinWidth
+	if floor <= 0 {
+		floor = 40
+	}
+	px := style.Dip(t.Look(), floor)
+	if px < 24 {
+		px = 24
+	}
+	return px
+}
+
+func (t *TableView) setColWidthPx(i int, px float32) {
+	if i < 0 || i >= len(t.Columns) {
+		return
+	}
+	if min := t.minColPx(i); px < min {
+		px = min
+	}
+	scale := style.LookScale(t.Look())
+	if scale < 0.01 {
+		scale = 1
+	}
+	if t.Columns[i].Width == px/scale {
+		return
+	}
+	t.Columns[i].Width = px / scale
+	t.rows.reset()
+	t.Invalidate()
+}
+
 func (t *TableView) paintHeader(ctx *paintengine2d.Context, lk style.LookAndFeel, widths []float32, hh float32) {
 	x := float32(0)
 	for i, col := range t.Columns {
@@ -458,6 +529,11 @@ func (t *TableView) invalidateHeader() {
 func (t *TableView) MouseEnter() {}
 
 func (t *TableView) MouseMove(e widget.MouseEvent) bool {
+	if t.resizeCol >= 0 {
+		t.setColWidthPx(t.resizeCol, t.resizeW+(e.Pos.X-t.resizeX))
+		t.applyCursor(e.Pos)
+		return true
+	}
 	track, thumb := t.scrollTrack()
 	if off, apply, handled, dirty := t.vbar.move(e.Pos, track, thumb, true, t.MaxOffset()); apply || handled || dirty {
 		if apply {
@@ -470,6 +546,7 @@ func (t *TableView) MouseMove(e widget.MouseEvent) bool {
 		}
 	}
 	if e.Pos.Y < t.headerH() {
+		t.applyCursor(e.Pos)
 		c := t.colAt(e.Pos.X)
 		if c != t.hoverCol || t.hovered != -1 {
 			oldRow := t.hovered
@@ -501,6 +578,9 @@ func (t *TableView) MouseExit() {
 	t.hoverCol = -1
 	t.pressCol = -1
 	t.vbar.over = false
+	if t.resizeCol < 0 {
+		widget.ApplyCursor(t.Host(), platform.CursorDefault)
+	}
 	t.invalidateRow(oldRow)
 	if hadCol {
 		t.invalidateHeader()
@@ -517,6 +597,16 @@ func (t *TableView) MousePress(e widget.MouseEvent) bool {
 		return true
 	}
 	if e.Pos.Y < t.headerH() {
+		if edge := t.colEdgeAt(e.Pos.X); edge >= 0 {
+			widths := t.colWidths()
+			t.resizeCol = edge
+			t.resizeX = e.Pos.X
+			t.resizeW = widths[edge]
+			t.pressCol = -1
+			t.applyCursor(e.Pos)
+			t.Invalidate()
+			return true
+		}
 		c := t.colAt(e.Pos.X)
 		t.pressCol = c
 		if c >= 0 && c < len(t.Columns) && t.Columns[c].Sortable {
@@ -540,8 +630,14 @@ func (t *TableView) MousePress(e widget.MouseEvent) bool {
 	return true
 }
 
-func (t *TableView) MouseRelease(widget.MouseEvent) bool {
+func (t *TableView) MouseRelease(e widget.MouseEvent) bool {
 	t.pressCol = -1
+	if t.resizeCol >= 0 {
+		t.resizeCol = -1
+		t.applyCursor(e.Pos)
+		t.Invalidate()
+		return true
+	}
 	if t.vbar.release() {
 		t.Invalidate()
 		return true
