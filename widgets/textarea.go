@@ -231,9 +231,7 @@ func (t *TextArea) OffsetY() float32 { return t.scrollY }
 
 // ScrollTo sets the vertical offset (clamped).
 func (t *TextArea) ScrollTo(y float32) {
-	t.scrollY = y
-	t.clampScroll()
-	t.Invalidate()
+	t.setScroll(t.scrollX, y)
 }
 
 func (t *TextArea) clampScroll() {
@@ -241,13 +239,34 @@ func (t *TextArea) clampScroll() {
 	t.scrollX = layout.ClampScroll(t.scrollX, t.contentW(), t.inner().Dx())
 }
 
-func (t *TextArea) scrollBy(dy, dx float32) {
-	t.scrollY += dy
-	if !t.Wrap {
-		t.scrollX += dx
+func (t *TextArea) scrollView() paintengine2d.Rect {
+	inner := t.inner()
+	vt, _ := t.scrollTrackV()
+	ht, _ := t.scrollTrackH()
+	return contentViewMinusHBar(contentViewMinusVBar(inner, vt), ht)
+}
+
+func (t *TextArea) setScroll(x, y float32) {
+	oldX, oldY := t.scrollX, t.scrollY
+	_, oldVT := t.scrollTrackV()
+	_, oldHT := t.scrollTrackH()
+	commitScrollXY(t, t.scrollView(), oldX, oldY, x, y, t.maxScrollX(), t.maxScrollY(), func(nx, ny float32) {
+		t.scrollX, t.scrollY = nx, ny
+	})
+	if t.scrollX != oldX || t.scrollY != oldY {
+		_, newVT := t.scrollTrackV()
+		_, newHT := t.scrollTrackH()
+		invalidateOverflowThumbs(t, oldVT, newVT)
+		invalidateOverflowThumbs(t, oldHT, newHT)
 	}
-	t.clampScroll()
-	t.Invalidate()
+}
+
+func (t *TextArea) scrollBy(dy, dx float32) {
+	nx, ny := t.scrollX, t.scrollY+dy
+	if !t.Wrap {
+		nx += dx
+	}
+	t.setScroll(nx, ny)
 }
 
 func (t *TextArea) scrollTrackV() (track, thumb paintengine2d.Rect) {
@@ -469,16 +488,12 @@ func (t *TextArea) MousePress(e widget.MouseEvent) bool {
 	t.RequestFocus()
 	vt, vth := t.scrollTrackV()
 	if off, ok := t.vbar.press(e.Pos, vt, vth, true, t.scrollY, t.maxScrollY(), t.inner().Dy()*0.9); ok {
-		t.scrollY = off
-		t.clampScroll()
-		t.Invalidate()
+		t.setScroll(t.scrollX, off)
 		return true
 	}
 	ht, hth := t.scrollTrackH()
 	if off, ok := t.hbar.press(e.Pos, ht, hth, false, t.scrollX, t.maxScrollX(), t.inner().Dx()*0.9); ok {
-		t.scrollX = off
-		t.clampScroll()
-		t.Invalidate()
+		t.setScroll(off, t.scrollY)
 		return true
 	}
 	if e.Button == platform.ButtonMiddle {
@@ -507,16 +522,14 @@ func (t *TextArea) MousePress(e widget.MouseEvent) bool {
 func (t *TextArea) MouseMove(e widget.MouseEvent) bool {
 	vt, vth := t.scrollTrackV()
 	if applyScrollHover(&t.vbar, e.Pos, vt, vth, true, t.maxScrollY(), func(off float32) {
-		t.scrollY = off
-		t.clampScroll()
-	}, t.Invalidate, func() { invalidateOverflowTrack(t, vt) }) {
+		t.setScroll(t.scrollX, off)
+	}, nil, func() { invalidateOverflowTrack(t, vt) }) {
 		return true
 	}
 	ht, hth := t.scrollTrackH()
 	if applyScrollHover(&t.hbar, e.Pos, ht, hth, false, t.maxScrollX(), func(off float32) {
-		t.scrollX = off
-		t.clampScroll()
-	}, t.Invalidate, func() { invalidateOverflowTrack(t, ht) }) {
+		t.setScroll(off, t.scrollY)
+	}, nil, func() { invalidateOverflowTrack(t, ht) }) {
 		return true
 	}
 	if !t.dragging && e.Button != platform.ButtonLeft {
@@ -532,7 +545,10 @@ func (t *TextArea) MouseMove(e widget.MouseEvent) bool {
 func (t *TextArea) MouseRelease(widget.MouseEvent) bool {
 	t.dragging = false
 	if t.vbar.release() || t.hbar.release() {
-		t.Invalidate()
+		vt, _ := t.scrollTrackV()
+		ht, _ := t.scrollTrackH()
+		invalidateOverflowTrack(t, vt)
+		invalidateOverflowTrack(t, ht)
 	}
 	return true
 }

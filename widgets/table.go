@@ -110,6 +110,23 @@ func (t *TableView) scrollTrack() (track, thumb paintengine2d.Rect) {
 	return vScrollThumb(body, t.contentH(), t.OffsetY, bar, gap)
 }
 
+func (t *TableView) scrollView() paintengine2d.Rect {
+	b := t.LocalBounds()
+	body := paintengine2d.XYWH(0, t.headerH(), b.Dx(), t.bodyH())
+	track, _ := t.scrollTrack()
+	return contentViewMinusVBar(body, track)
+}
+
+func (t *TableView) setOffsetY(y float32) {
+	old := t.OffsetY
+	_, oldThumb := t.scrollTrack()
+	commitAxisScroll(t, t.scrollView(), old, y, t.MaxOffset(), func(v float32) { t.OffsetY = v }, true)
+	if t.OffsetY != old {
+		_, newThumb := t.scrollTrack()
+		invalidateOverflowThumbs(t, oldThumb, newThumb)
+	}
+}
+
 // VisibleRange is the half-open [lo, hi) window of body rows that Paint draws.
 func (t *TableView) VisibleRange() (lo, hi int) { return t.visibleRange() }
 
@@ -128,9 +145,7 @@ func (t *TableView) RowBounds(i int) paintengine2d.Rect { return t.rowRect(i) }
 
 // ScrollTo sets OffsetY (clamped) without requiring a wheel event.
 func (t *TableView) ScrollTo(y float32) {
-	t.OffsetY = y
-	t.clamp()
-	t.Invalidate()
+	t.setOffsetY(y)
 }
 
 func (t *TableView) bodyH() float32 {
@@ -463,9 +478,8 @@ func (t *TableView) MouseEnter() {}
 func (t *TableView) MouseMove(e widget.MouseEvent) bool {
 	track, thumb := t.scrollTrack()
 	if applyScrollHover(&t.vbar, e.Pos, track, thumb, true, t.MaxOffset(), func(off float32) {
-		t.OffsetY = off
-		t.clamp()
-	}, t.Invalidate, func() { invalidateOverflowTrack(t, track) }) {
+		t.setOffsetY(off)
+	}, nil, func() { invalidateOverflowTrack(t, track) }) {
 		return true
 	}
 	if e.Pos.Y < t.headerH() {
@@ -510,9 +524,7 @@ func (t *TableView) MousePress(e widget.MouseEvent) bool {
 	t.RequestFocus()
 	track, thumb := t.scrollTrack()
 	if off, ok := t.vbar.press(e.Pos, track, thumb, true, t.OffsetY, t.MaxOffset(), t.bodyH()*0.9); ok {
-		t.OffsetY = off
-		t.clamp()
-		t.Invalidate()
+		t.setOffsetY(off)
 		return true
 	}
 	if e.Pos.Y < t.headerH() {
@@ -544,7 +556,8 @@ func (t *TableView) MousePress(e widget.MouseEvent) bool {
 func (t *TableView) MouseRelease(widget.MouseEvent) bool {
 	t.pressCol = -1
 	if t.vbar.release() {
-		t.Invalidate()
+		track, _ := t.scrollTrack()
+		invalidateOverflowTrack(t, track)
 		return true
 	}
 	t.Invalidate()
@@ -565,9 +578,7 @@ func (t *TableView) sortBy(col int) {
 }
 
 func (t *TableView) MouseWheel(e widget.MouseEvent) bool {
-	t.OffsetY += wheelDelta(e.Scroll.Y, t.rowH())
-	t.clamp()
-	t.Invalidate()
+	t.setOffsetY(t.OffsetY + wheelDelta(e.Scroll.Y, t.rowH()))
 	return true
 }
 
@@ -609,15 +620,10 @@ func (t *TableView) KeyPress(e widget.KeyEvent) bool {
 	}
 	if next != t.Selected {
 		old := t.Selected
-		off := t.OffsetY
 		t.Selected = next
 		t.ensureVisible(next)
-		if t.OffsetY != off {
-			t.Invalidate()
-		} else {
-			t.invalidateRow(old)
-			t.invalidateRow(next)
-		}
+		t.invalidateRow(old)
+		t.invalidateRow(next)
 		if t.OnSelect != nil {
 			t.OnSelect(next)
 		}
@@ -630,11 +636,10 @@ func (t *TableView) ensureVisible(i int) {
 	top := float32(i) * rh
 	bot := top + rh
 	view := t.bodyH()
-	if top < t.OffsetY {
-		t.OffsetY = top
+	switch {
+	case top < t.OffsetY:
+		t.setOffsetY(top)
+	case bot > t.OffsetY+view:
+		t.setOffsetY(bot - view)
 	}
-	if bot > t.OffsetY+view {
-		t.OffsetY = bot - view
-	}
-	t.clamp()
 }

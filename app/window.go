@@ -13,32 +13,34 @@ import (
 
 // Window is a widget host that paints into a platform.Surface.
 type Window struct {
-	app        *Application
-	surf       platform.Surface
-	root       widget.Component
-	overlay    widget.Component
-	popup      widget.Component
-	tooltip    widget.Component
-	look       style.LookAndFeel
-	dirty      paintengine2d.Damage
-	full       bool
-	focus      widget.Component
-	hover      widget.Component
-	capture    widget.Component
-	closed     bool
-	blink      bool
-	laid       bool
-	scale      float32
-	tipHover   widget.Component
-	tipSince   time.Time
-	tipPos     paintengine2d.Point
-	tipDelay   time.Duration
-	clock      func() time.Time
-	lastTip    string
-	animPeriod time.Duration
-	layers     *widget.SceneCache
-	scene      *paintengine2d.Scene
-	cursor     platform.Cursor
+	app          *Application
+	surf         platform.Surface
+	root         widget.Component
+	overlay      widget.Component
+	popup        widget.Component
+	tooltip      widget.Component
+	look         style.LookAndFeel
+	dirty        paintengine2d.Damage
+	presentExtra paintengine2d.Damage
+	needSyncSize bool
+	full         bool
+	focus        widget.Component
+	hover        widget.Component
+	capture      widget.Component
+	closed       bool
+	blink        bool
+	laid         bool
+	scale        float32
+	tipHover     widget.Component
+	tipSince     time.Time
+	tipPos       paintengine2d.Point
+	tipDelay     time.Duration
+	clock        func() time.Time
+	lastTip      string
+	animPeriod   time.Duration
+	layers       *widget.SceneCache
+	scene        *paintengine2d.Scene
+	cursor       platform.Cursor
 }
 
 func newWindow(a *Application, surf platform.Surface, opts platform.WindowOptions) *Window {
@@ -217,6 +219,63 @@ func (w *Window) RevealTooltip() {
 	w.showTip(text, w.tipPos)
 }
 
+// ScrollPixels implements widget.PixelScroller: Context.Scroll the local
+// view (integer axis-aligned blit), ClearRect the vacated strip, and
+// record the moved view for PresentRects. Paint dirty stays the strip
+// only so frameImmediate does not Clear+repaint the blit.
+func (w *Window) ScrollPixels(c widget.Component, local paintengine2d.Rect, dx, dy float32) bool {
+	if w == nil || w.surf == nil || c == nil || local.Empty() {
+		return false
+	}
+	if dx == 0 && dy == 0 {
+		return true
+	}
+	ctx := platform.NewPaintContext(w.surf)
+	if ctx == nil {
+		return false
+	}
+	if _, ok := ctx.Device().(interface {
+		Scroll(dx, dy int, r paintengine2d.Rect)
+	}); !ok {
+		return false
+	}
+	origin := widget.DeviceOrigin(c)
+	ctx.Translate(origin.X, origin.Y)
+	ctx.Scroll(dx, dy, local)
+	var exposed paintengine2d.Rect
+	switch {
+	case dy < 0:
+		h := -dy
+		if h > local.Dy() {
+			h = local.Dy()
+		}
+		exposed = paintengine2d.XYWH(local.Min.X, local.Max.Y-h, local.Dx(), h)
+	case dy > 0:
+		h := dy
+		if h > local.Dy() {
+			h = local.Dy()
+		}
+		exposed = paintengine2d.XYWH(local.Min.X, local.Min.Y, local.Dx(), h)
+	case dx < 0:
+		wd := -dx
+		if wd > local.Dx() {
+			wd = local.Dx()
+		}
+		exposed = paintengine2d.XYWH(local.Max.X-wd, local.Min.Y, wd, local.Dy())
+	case dx > 0:
+		wd := dx
+		if wd > local.Dx() {
+			wd = local.Dx()
+		}
+		exposed = paintengine2d.XYWH(local.Min.X, local.Min.Y, wd, local.Dy())
+	}
+	if !exposed.Empty() {
+		ctx.ClearRect(exposed, w.look.Palette().Background)
+	}
+	w.presentExtra.Add(local.Translate(origin))
+	return true
+}
+
 func (w *Window) Invalidate(c widget.Component, local paintengine2d.Rect) {
 	if c == nil {
 		w.fullInvalidate()
@@ -286,6 +345,7 @@ func (w *Window) RequestLayout() {
 func (w *Window) fullInvalidate() {
 	ww, hh := w.surf.Size()
 	w.dirty.Reset()
+	w.presentExtra.Reset()
 	w.dirty.Add(paintengine2d.XYWH(0, 0, float32(ww), float32(hh)))
 	w.full = true
 	if w.layers != nil {
@@ -320,7 +380,7 @@ func (w *Window) needsPaint() bool {
 	if w == nil || w.closed {
 		return false
 	}
-	return !w.laid || w.full || !w.dirty.Empty()
+	return !w.laid || w.full || !w.dirty.Empty() || !w.presentExtra.Empty()
 }
 
 // RequestAnim asks Run to wake at least every d (busy indicators).
@@ -349,6 +409,7 @@ func (w *Window) dispatch(ev platform.Event) {
 		w.Close()
 	case platform.EventResize:
 		_ = w.surf.Resize(ev.Width, ev.Height)
+		w.needSyncSize = true
 		w.laid = false
 		w.fullInvalidate()
 	case platform.EventExpose:
@@ -675,8 +736,13 @@ func (w *Window) frame() {
 		w.fullInvalidate()
 	}
 	w.tickTips()
-	if w.dirty.Empty() && !w.full {
+	if w.dirty.Empty() && !w.full && w.presentExtra.Empty() {
 		return
+	}
+	if w.needSyncSize {
+		if ctx := platform.NewPaintContext(w.surf); ctx != nil {
+			ctx.SyncSize()
+		}
 	}
 	// paintengine2d.DrawScene always Clear+replays the whole graph. Hover
 	// (and other dirty-rect frames) must present through the immediate
@@ -691,13 +757,16 @@ func (w *Window) frame() {
 		w.frameImmediate()
 	}
 	rects := append([]paintengine2d.Rect(nil), w.dirty.Rects...)
+	rects = append(rects, w.presentExtra.Rects...)
 	if w.full {
 		ww, hh := w.surf.Size()
 		rects = []paintengine2d.Rect{paintengine2d.XYWH(0, 0, float32(ww), float32(hh))}
 	}
 	_ = w.surf.Present(rects)
 	w.dirty.Reset()
+	w.presentExtra.Reset()
 	w.full = false
+	w.needSyncSize = false
 }
 
 func (w *Window) paintLayers(ctx *paintengine2d.Context, dirty *paintengine2d.Damage) {
@@ -720,24 +789,43 @@ func (w *Window) frameImmediate() {
 	if ctx == nil {
 		return
 	}
+	if w.needSyncSize {
+		ctx.SyncSize()
+		w.needSyncSize = false
+	}
 	bg := w.look.Palette().Background
 	if w.full {
 		ctx.Clear(bg)
 		w.paintLayers(ctx, nil)
 		return
 	}
-	u := w.dirty.Bounds()
-	if u.Empty() {
+	if w.dirty.Empty() {
 		return
 	}
-	// Keep the clip live through Paint so chrome QuickRejects rows
-	// outside the dirty union (old+new hover). Overlay/popup/tooltip
-	// used to paint with dirty=nil — a full menu raster every move.
-	ctx.Save()
-	ctx.ClipRect(u)
-	ctx.DrawRect(u, paintengine2d.Fill(bg))
-	w.paintLayers(ctx, &w.dirty)
-	ctx.Restore()
+	// Paint each dirty box. Clip/Clear of dirty.Bounds() would erase the
+	// L-union of a scroll strip + scrollbar and undo Context.Scroll.
+	// Hover still ClearRects only the row boxes — never Context.Clear.
+	var one paintengine2d.Damage
+	one.Pad = w.dirty.Pad
+	for _, r := range w.dirty.Rects {
+		if r.Empty() {
+			continue
+		}
+		one.Reset()
+		one.Add(r)
+		ctx.Save()
+		ctx.SetDamage(&one)
+		ctx.ClipRect(r)
+		if _, ok := ctx.Device().(interface {
+			ClearRect(paintengine2d.Rect, paintengine2d.Color)
+		}); ok {
+			ctx.ClearRect(r, bg)
+		} else {
+			ctx.DrawRect(r, paintengine2d.Fill(bg))
+		}
+		w.paintLayers(ctx, &one)
+		ctx.Restore()
+	}
 }
 
 // sceneWorthRecording is true when the dirty union is large enough that

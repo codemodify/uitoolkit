@@ -1507,7 +1507,7 @@ func (s *wlSurface) Present(dirty []paintengine2d.Rect) error {
 		s.opaqueW, s.opaqueH = s.logicalW, s.logicalH
 	}
 	if s.gpu != nil {
-		if err := s.presentGPU(); err == nil {
+		if err := s.presentGPU(dirty); err == nil {
 			C.ui_wl_flush(s.conn.dpy)
 			return nil
 		}

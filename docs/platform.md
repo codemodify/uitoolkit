@@ -87,27 +87,36 @@ body clip (below a sticky table header) so `DrawScene` cannot shift the
 clip with the content. Hover and selection re-record rows whose visual
 signature changed.
 
-**0.14.0 dirty present:** `DrawScene` in paintengine2d v0.9.0 always
-emits `opClear` (full device) and replays every attached group. A menu
-hover that only dirties two rows must not take that path — the window
-records the retained graph for reuse/inspector, then **paints and
-presents the dirty union** (`frameImmediate` + clip). Overlay / popup /
-tooltip receive the same `Damage` (they used to paint with `dirty=nil`).
+**0.14.1 scroll + dirty present (paintengine2d v0.9.2):** ListView,
+TableView (body under the sticky header), TreeView, and TextArea scroll
+with `Context.Scroll` + `ClearRect` of the vacated strip, then paint
+only the newly visible rows. The compositor still gets the moved view
+via `PresentRects` (`presentExtra` ∪ dirty). `frameImmediate` paints
+each dirty box (not the L-union) so a strip + scrollbar cannot undo the
+blit. `EventResize` calls `ctx.SyncSize()`. Glyph atlas pack uses
+`Image.TouchRect` of the cell. Hover still never `Clear`s the surface.
+
+**0.14.0 dirty present:** `DrawScene` still emits `opClear` (full device)
+and replays every attached group. A menu hover that only dirties two
+rows must not take that path — the window records the retained graph
+for reuse/inspector, then **paints and presents the dirty boxes**
+(`frameImmediate` + per-rect `ClearRect`). Overlay / popup / tooltip
+receive the same `Damage` (they used to paint with `dirty=nil`).
 Chrome `Paint` methods `QuickReject` rows outside the clip.
 Splitter drag Arranges the sash locally (no window `RequestLayout`).
 List/tree/table scrollbar hover dirties the track; caret blink dirties
 the caret. `SetPopup` / `DismissPopup` dirty the popup box. Tree flatten
 is cached. `WatchLook` Stats look.json and reads only on size/mtime change.
 
-paintengine2d follow-ups (do not fix in uitoolkit):
+paintengine2d follow-ups still open (`DrawScene` has no dirty argument):
 
-| Hotspot | What v0.9.0 does | What hover needs |
+| Hotspot | What v0.9.2 does | What hover needs |
 | --- | --- | --- |
 | `DrawScene` | Full `Clear` + walk every node | `DrawScene(s, dev, dirty *Damage)` that skips ops whose bounds miss dirty |
 | `Recorder.Clear` / `opClear` | Whole-device reset | Dirty-rect clear, or omit clear when compositing over a live buffer |
-| Glyph / `Draw` text | Per-call shape + blit | Warm-path glyph run reuse for unchanged menu labels |
+| Glyph / `Draw` text | Shaped-run LRU + `TouchRect` | Warm-path reuse for unchanged menu labels |
 | `DrawRoundRect` menu frame | Flatten + stroke each hover | Retain frame path; only highlight rects change |
-| GPU `eglSwapBuffers` | Full buffer present | Damage/partial swap or keep CPU dirty `XPutImage` / shm blit for hover |
+| GPU present | `PresentRects` / swap-with-damage when EGL preserves | uitoolkit now passes dirty boxes |
 
 ```bash
 UITK_SCENE=auto go run ./examples/gallery   # default: retained scene
