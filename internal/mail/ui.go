@@ -158,23 +158,33 @@ func (s *session) persistChrome() {
 	}
 	s.chromePrefs.Light = s.opts.Light
 	saveChromePrefs(s.chromePrefs)
+	// Density / layout live in mailui.json only. look.json is Settings’
+	// file; persist must not SaveAppearance or rewrite theme packs.
+}
+
+func (s *session) applyLook() {
 	ap := style.LoadAppearance()
-	if s.opts.Light {
+	if s.app != nil && !s.app.WatchingLook() && s.app.Look() != nil {
+		// Screenshot / DarkLook fixtures stay static. WatchLook Mail
+		// follows look.json (PreferredLook), never opts.Light.
+		ap = style.LookAppearance(s.app.Look())
+	}
+	s.opts.Light = ap.Theme == style.ThemeLight
+	s.app.SetLook(style.WithDensity(ap.Look(), s.density))
+}
+
+// setPalette is View → Dark / Light: flip the starter pack palette,
+// keep corners/icons, and write look.json only on this explicit toggle.
+func (s *session) setPalette(light bool) {
+	ap := style.LoadAppearance()
+	if light {
 		ap = ap.WithPalette(style.ThemeLight)
 	} else {
 		ap = ap.WithPalette(style.ThemeDark)
 	}
 	_ = style.SaveAppearance(ap)
-}
-
-func (s *session) applyLook() {
-	ap := style.LoadAppearance()
-	if s.opts.Light {
-		ap = ap.WithPalette(style.ThemeLight)
-	} else {
-		ap = ap.WithPalette(style.ThemeDark)
-	}
-	s.app.SetLook(style.WithDensity(ap.Look(), s.density))
+	s.opts.Light = light
+	s.rebuild()
 }
 
 func (s *session) rebuild() {
@@ -489,14 +499,8 @@ func (s *session) menuBar() *widgets.MenuBar {
 				s.refreshList()
 			}),
 			widgets.Sep(),
-			widgets.CheckItem("&Dark", !s.opts.Light, func() {
-				s.opts.Light = false
-				s.rebuild()
-			}),
-			widgets.CheckItem("&Light", s.opts.Light, func() {
-				s.opts.Light = true
-				s.rebuild()
-			}),
+			widgets.CheckItem("&Dark", !s.opts.Light, func() { s.setPalette(false) }),
+			widgets.CheckItem("&Light", s.opts.Light, func() { s.setPalette(true) }),
 		),
 		widgets.NewMenu("&Go",
 			widgets.ItemAccel("Next Message", "n", func() { s.moveSel(1) }),

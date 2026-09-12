@@ -140,10 +140,12 @@ app := uitoolkit.New(uitoolkit.Options{DisableLookWatch: true})
 so gallery screenshot pixels stay deterministic.
 
 Mail, gallery, Files, Notes, and Inspector start from `PreferredLook`
-and watch the file. Mail’s View → Dark / Light switches to the matching
-starter (same corners/icons, opposite palette) and writes that pack name
-to `look.json` (its own `mailui.json` light flag stays in sync). Gallery
-/ screenshot fixtures keep explicit `DarkLook` / `LightLook`.
+and watch the file. Mail chrome persist (`mailui.json` density / layout)
+does **not** rewrite `look.json`. `applyLook` applies `PreferredLook`
+plus Mail density and syncs the View menu checkmark from the loaded
+pack. View → Dark / Light is the only Mail write: `SaveAppearance` of
+`WithPalette` (same corners/icons, opposite palette). Gallery /
+screenshot fixtures keep explicit `DarkLook` / `LightLook`.
 
 Helpers for a live look:
 

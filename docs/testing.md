@@ -84,6 +84,10 @@ came from `PreferredLook` (`Look == nil` or `WatchLook: true`). Widget
 tests that persist appearance should point `XDG_CONFIG_HOME` at a temp
 dir (same isolation idea as Mail chrome prefs). Tests that pass
 `DarkLook` / `LightLook` do not watch unless they set `WatchLook`.
+`Application.Run` (Wayland / X11 / offscreen) calls `pollLookFile` on
+each idle wake (`waitTimeout` ≤ 300 ms when `WatchLook` is on). Mail
+rebuild / `persistChrome` must not change `look.json`; Settings Apply
+must update a running Mail look via that watcher.
 
 A display is **not** required for `go test` or `uitest-driver`. Native
 backends stay behind `CGO` build tags; headless contracts always run.
