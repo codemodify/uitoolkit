@@ -173,6 +173,93 @@ func TestSplitterDragDoesNotRequestLayout(t *testing.T) {
 	}
 }
 
+func TestSplitterDragKeepsBakedLayers(t *testing.T) {
+	a := New(Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{Width: 640, Height: 400, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	split := widgets.NewSplitter(true,
+		widgets.NewListView(40, func(i int) string { return fmt.Sprintf("L%d", i) }, nil),
+		widgets.NewListView(40, func(i int) string { return fmt.Sprintf("R%d", i) }, nil),
+	)
+	split.Ratio = 0.4
+	w.SetContent(split)
+	a.PumpOnce()
+	o := widget.DeviceOrigin(split)
+	sashX := split.PaneA().Max.X + 1
+	w.dispatch(platform.Event{Kind: platform.EventMouseDown, Pos: paintengine2d.Pt(o.X+sashX, o.Y+40), Button: platform.ButtonLeft})
+	a.PumpOnce()
+	if !split.HasBakedPanes() {
+		t.Fatal("first drag frame should BakeGroup both panes")
+	}
+	a0, b0 := split.BakedPaneLayers()
+	w.dispatch(platform.Event{Kind: platform.EventMouseMove, Pos: paintengine2d.Pt(o.X+280, o.Y+40), Button: platform.ButtonLeft})
+	if w.full {
+		t.Fatal("splitter drag must not full-invalidate")
+	}
+	a.PumpOnce()
+	if !split.HasBakedPanes() {
+		t.Fatal("drag should keep baked layers")
+	}
+	a1, b1 := split.BakedPaneLayers()
+	if a0 != a1 || b0 != b1 {
+		t.Fatal("drag re-baked panes (should Xform only)")
+	}
+	_ = a
+}
+
+func TestHoverUsesDrawSceneDamage(t *testing.T) {
+	a, w, mb, _ := hoverChromeWindow(t, 720, 480)
+	mb.Open(0)
+	a.PumpOnce()
+	pop, ok := w.Popup().(*widgets.PopupMenu)
+	if !ok || pop == nil {
+		t.Fatal("popup")
+	}
+	before := cloneSurface(w)
+	w.dispatch(platform.Event{Kind: platform.EventMouseMove, Pos: popupItemPos(pop, 1)})
+	if w.full {
+		t.Fatal("hover must not full-invalidate")
+	}
+	if w.scene == nil {
+		t.Fatal("WantScene should keep a retained graph")
+	}
+	dirty := append([]paintengine2d.Rect(nil), w.dirty.Rects...)
+	a.PumpOnce()
+	after := cloneSurface(w)
+	if before == nil || after == nil {
+		t.Fatal("buffer")
+	}
+	var d paintengine2d.Damage
+	d.Pad = 2
+	for _, r := range dirty {
+		d.Add(r.Inset(-2))
+	}
+	changed := 0
+	outside := 0
+	for y := 0; y < before.Height && y < after.Height; y++ {
+		for x := 0; x < before.Width && x < after.Width; x++ {
+			ar, ag, ab, aa := before.PremulAt(x, y)
+			br, bg, bb, ba := after.PremulAt(x, y)
+			if ar == br && ag == bg && ab == bb && aa == ba {
+				continue
+			}
+			if d.Overlaps(paintengine2d.XYWH(float32(x), float32(y), 1, 1)) {
+				changed++
+				continue
+			}
+			outside++
+		}
+	}
+	if changed == 0 {
+		t.Fatal("hover should repaint the dirty rows")
+	}
+	if outside > 40 {
+		t.Fatalf("DrawSceneDamage leaked %d px outside dirty", outside)
+	}
+}
+
 func TestListScrollbarHoverDirtiesBar(t *testing.T) {
 	a := New(Options{Look: style.DarkLook(), Headless: true})
 	w, err := a.NewWindow(platform.WindowOptions{Width: 280, Height: 220, Headless: true})

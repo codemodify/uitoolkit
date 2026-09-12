@@ -744,25 +744,25 @@ func (w *Window) frame() {
 			ctx.SyncSize()
 		}
 	}
-	// paintengine2d.DrawScene always Clear+replays the whole graph. Hover
-	// (and other dirty-rect frames) must present through the immediate
-	// clip path so only the previous+new chrome rasters.
-	if platform.WantScene() && w.full {
+	sceneDamage := false
+	if platform.WantScene() {
 		w.recordScene()
-		w.presentScene()
-	} else {
-		if platform.WantScene() && w.sceneWorthRecording() {
-			w.recordScene()
+		var dirty *paintengine2d.Damage
+		if !w.full {
+			dirty = &w.dirty
+			if ctx := platform.NewPaintContext(w.surf); ctx != nil {
+				bg := w.look.Palette().Background
+				for _, r := range w.dirty.Rects {
+					ctx.ClearRect(r, bg)
+				}
+			}
 		}
+		w.presentScene(dirty)
+		sceneDamage = true
+	} else {
 		w.frameImmediate()
 	}
-	rects := append([]paintengine2d.Rect(nil), w.dirty.Rects...)
-	rects = append(rects, w.presentExtra.Rects...)
-	if w.full {
-		ww, hh := w.surf.Size()
-		rects = []paintengine2d.Rect{paintengine2d.XYWH(0, 0, float32(ww), float32(hh))}
-	}
-	_ = w.surf.Present(rects)
+	w.presentBuffer(sceneDamage)
 	w.dirty.Reset()
 	w.presentExtra.Reset()
 	w.full = false
@@ -828,22 +828,6 @@ func (w *Window) frameImmediate() {
 	}
 }
 
-// sceneWorthRecording is true when the dirty union is large enough that
-// retained-layer reuse matters (scroll / full widget). Hover-sized boxes
-// skip the recorder so the hot path is clip + two rows only.
-func (w *Window) sceneWorthRecording() bool {
-	if w.full || w.layers == nil {
-		return true
-	}
-	ww, hh := w.surf.Size()
-	full := float32(ww * hh)
-	if full <= 0 {
-		return false
-	}
-	u := w.dirty.Bounds()
-	return u.Dx()*u.Dy() > full*0.12
-}
-
 func (w *Window) recordScene() {
 	ww, hh := w.surf.Size()
 	rec := paintengine2d.NewRecorder(ww, hh)
@@ -851,13 +835,12 @@ func (w *Window) recordScene() {
 		rec.Clear(w.look.Palette().Background)
 	}
 	ctx := paintengine2d.NewContextDevice(rec)
+	// Do not clip the recorder on dirty frames: cached groups must stay
+	// complete so a later DrawSceneDamage of another rect is valid.
 	var paintDirty *paintengine2d.Damage
-	fullContent := w.full
+	fullContent := true
 	if !w.full {
 		paintDirty = &w.dirty
-		if u := w.dirty.Bounds(); !u.Empty() {
-			ctx.ClipRect(u)
-		}
 	}
 	if w.root != nil {
 		widget.RecordTree(w.root, rec, ctx, paintDirty, w.layers, fullContent)
@@ -874,12 +857,45 @@ func (w *Window) recordScene() {
 	w.scene = rec.Finish()
 }
 
-func (w *Window) presentScene() {
+func (w *Window) presentScene(dirty *paintengine2d.Damage) {
 	dev := platform.SurfaceDevice(w.surf)
 	if dev == nil || w.scene == nil {
 		return
 	}
-	paintengine2d.DrawScene(w.scene, dev)
+	paintengine2d.DrawSceneDamage(w.scene, dev, dirty)
+}
+
+type presentDamager interface {
+	SetPresentDamage([]paintengine2d.Rect)
+}
+
+func (w *Window) presentBuffer(sceneDamage bool) {
+	rects := append([]paintengine2d.Rect(nil), w.dirty.Rects...)
+	rects = append(rects, w.presentExtra.Rects...)
+	if w.full {
+		ww, hh := w.surf.Size()
+		rects = []paintengine2d.Rect{paintengine2d.XYWH(0, 0, float32(ww), float32(hh))}
+	}
+	ctx := platform.NewPaintContext(w.surf)
+	if ctx != nil {
+		if p, ok := ctx.Device().(presentDamager); ok {
+			switch {
+			case sceneDamage && w.full:
+				// DrawSceneDamage(nil) already asked for a full present.
+			case sceneDamage && !w.presentExtra.Empty():
+				p.SetPresentDamage(rects)
+			case !sceneDamage && w.full:
+				p.SetPresentDamage(nil)
+			case !sceneDamage:
+				p.SetPresentDamage(rects)
+			}
+		}
+		_ = ctx.Present()
+	}
+	if platform.SurfaceUsesGPU(w.surf) {
+		return
+	}
+	_ = w.surf.Present(rects)
 }
 
 // Scene is the last retained graph (tests / inspector).
