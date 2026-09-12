@@ -42,9 +42,10 @@ type Application struct {
 	onQuit    func()
 	watchLook bool
 	lookWatch *lookFileStamp
-	trays     []platform.StatusItem
-	looping   bool
-	posted    []func()
+	trays      []platform.StatusItem
+	looping    bool
+	posted     []func()
+	statusMenu *Window
 }
 
 // New constructs an application. Default look is PreferredLook
@@ -182,6 +183,19 @@ func (a *Application) Post(fn func()) {
 	}
 	a.posted = append(a.posted, fn)
 	a.mu.Unlock()
+	a.wakeUI()
+}
+
+func (a *Application) wakeUI() {
+	if a == nil {
+		return
+	}
+	for _, w := range a.Windows() {
+		if w != nil && !w.closed {
+			platform.WakeSurface(w.surf)
+			return
+		}
+	}
 }
 
 func (a *Application) runPosted() {

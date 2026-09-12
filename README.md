@@ -510,13 +510,18 @@ are independent look.json fields again; compound pack names migrate
 
 ## Version
 
-**0.16.3** — **Plasma tray menu actually appears.** SNI `Menu` is
-`/NO_DBUSMENU` (not `/`, which hosts treat as a real dbusmenu path).
-`ShowStatusMenu` ignores SNI root/screen coordinates that fall outside
-the window and anchors the toolkit popup to the bottom-right.
-`ContextMenu`, `SecondaryActivate`, dbusmenu `AboutToShow`, and
-`Event("clicked")` on the stub root all open the same menu.
-`UITK_TRAY_DEBUG` logs the path. See `docs/tray.md`.
+**0.16.4** — **Plasma tray right-click shows the toolkit menu.** SNI
+`Menu` is `/` (the spec empty path). `/NO_DBUSMENU` is a non-`/`
+object path, so Plasma imported dbusmenu there and never called
+`ContextMenu`. `ShowStatusMenu` opens a dedicated top-level popup
+window (Office XP chrome) at the SNI root `(x,y)` on X11; the main
+window stays hidden after close-to-tray. Left-click is still
+`Activate`. `UITK_TRAY_DEBUG` logs `ContextMenu` vs dbusmenu, Menu,
+and popup visibility. See `docs/tray.md`.
+
+**0.16.3** — Plasma tray menu: `Menu=/NO_DBUSMENU` and a window-corner
+popup. Real Plasma right-click still showed nothing (synthetic
+`busctl call ContextMenu` worked). See `docs/tray.md`.
 
 **0.16.2** — **Mail tray polish.** Tray uses `IconMail` (envelope; premiere
 `mail` / `inbox` / `mail-open` PNGs; SNI theme name `mail-unread`).

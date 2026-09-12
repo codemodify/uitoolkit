@@ -39,8 +39,10 @@ type Window struct {
 	layers     *widget.SceneCache
 	scene      *paintengine2d.Scene
 	cursor     platform.Cursor
-	paints     int
-	closeHides bool
+	paints          int
+	closeHides      bool
+	statusMenu      bool
+	statusMenuArmed bool
 }
 
 func newWindow(a *Application, surf platform.Surface, opts platform.WindowOptions) *Window {
@@ -341,6 +343,13 @@ func (w *Window) pump() {
 func (w *Window) dispatch(ev platform.Event) {
 	switch ev.Kind {
 	case platform.EventClose:
+		if w.statusMenu {
+			w.DismissPopup()
+			if !w.closed {
+				w.Close()
+			}
+			return
+		}
 		if w.closeHides {
 			w.Hide()
 			return
@@ -356,7 +365,16 @@ func (w *Window) dispatch(ev platform.Event) {
 		w.resetIME()
 		w.HideTooltip()
 		w.capture = nil
+		if w.statusMenu && w.statusMenuArmed {
+			w.DismissPopup()
+			if !w.closed {
+				w.Close()
+			}
+		}
 	case platform.EventFocusIn:
+		if w.statusMenu {
+			w.statusMenuArmed = true
+		}
 		w.syncIMECursor()
 	case platform.EventIMEPreedit:
 		if t, ok := w.focus.(widget.IMETarget); ok {
@@ -662,6 +680,9 @@ func (w *Window) layout() {
 		_ = w.overlay.Measure(layout.Tight(box.Dx(), box.Dy()))
 		w.overlay.Arrange(box)
 	}
+	if w.statusMenu && w.popup != nil {
+		w.popup.Arrange(box)
+	}
 	w.laid = true
 }
 
@@ -798,8 +819,14 @@ func (w *Window) Close() {
 		return
 	}
 	w.closed = true
+	if w.app != nil && w.app.statusMenu == w {
+		w.app.statusMenu = nil
+	}
+	w.popup = nil
 	_ = w.surf.Close()
-	w.app.remove(w)
+	if w.app != nil {
+		w.app.remove(w)
+	}
 }
 
 // Closed reports whether Close has run.

@@ -73,6 +73,10 @@ func (o *Offscreen) Present(dirty []paintengine2d.Rect) error {
 func (o *Offscreen) Raise() { o.hidden = false }
 func (o *Offscreen) Show()  { o.hidden = false }
 func (o *Offscreen) Hide()  { o.hidden = true }
+func (o *Offscreen) Move(x, y int) {
+	_, _ = x, y
+}
+func (o *Offscreen) Wake() {}
 func (o *Offscreen) Visible() bool {
 	return o != nil && !o.closed && !o.hidden
 }

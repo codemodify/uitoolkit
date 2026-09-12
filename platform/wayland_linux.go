@@ -792,11 +792,20 @@ func (WaylandBackend) NewSurface(opts WindowOptions) (Surface, error) {
 		title = "uitoolkit"
 	}
 	mw, mh := opts.MinWidth, opts.MinHeight
-	if mw < 1 {
-		mw = 200
-	}
-	if mh < 1 {
-		mh = 120
+	if opts.Popup {
+		if mw < 1 {
+			mw = 1
+		}
+		if mh < 1 {
+			mh = 1
+		}
+	} else {
+		if mw < 1 {
+			mw = 200
+		}
+		if mh < 1 {
+			mh = 120
+		}
 	}
 	s := &wlSurface{
 		conn:     c,
@@ -809,6 +818,7 @@ func (WaylandBackend) NewSurface(opts WindowOptions) (Surface, error) {
 		wantW:    w,
 		wantH:    h,
 		bufScale: 1,
+		popup:    opts.Popup,
 	}
 	bw, bh := w, h
 	if sc := int(c.outScale + 0.1); sc > 1 {
@@ -984,6 +994,7 @@ type wlSurface struct {
 	timeline   unsafe.Pointer // *ui_drm_timeline
 	gpu        *paintengine2d.GPUDevice
 	eglWin     unsafe.Pointer // *wl_egl_window
+	popup      bool
 }
 
 var (
@@ -1275,7 +1286,7 @@ func (s *wlSurface) bindToplevelLocked() {
 		C.ui_wl_set_app_id(s.top, app)
 		C.free(unsafe.Pointer(app))
 		C.ui_wl_set_min(s.top, C.int(s.minW), C.int(s.minH))
-		if s.conn.decoMan != nil {
+		if s.conn.decoMan != nil && !s.popup {
 			s.deco = C.ui_wl_deco(s.conn.decoMan, s.top)
 			if s.deco != nil {
 				C.ui_wl_deco_ssd(s.deco)

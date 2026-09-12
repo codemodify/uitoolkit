@@ -12,6 +12,12 @@ type HostWindow interface {
 	Visible() bool
 }
 
+// HostMover is an optional Surface capability: move the native window
+// in root/screen coordinates (X11). Wayland and offscreen no-op.
+type HostMover interface {
+	Move(x, y int)
+}
+
 // RaiseSurface shows and raises s when it implements [HostWindow].
 func RaiseSurface(s Surface) {
 	if s == nil {
@@ -42,4 +48,14 @@ func SurfaceVisible(s Surface) bool {
 		return h.Visible()
 	}
 	return !s.Closed()
+}
+
+// MoveSurface places s at root/screen (x, y) when the backend can.
+func MoveSurface(s Surface, x, y int) {
+	if s == nil {
+		return
+	}
+	if m, ok := s.(HostMover); ok {
+		m.Move(x, y)
+	}
 }

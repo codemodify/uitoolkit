@@ -156,6 +156,13 @@ type WindowOptions struct {
 	Resizable       bool
 	Headless        bool
 	BackgroundPixel uint32
+	// X, Y are root/screen coordinates. Used when Popup is set (X11
+	// override-redirect / _NET_WM_WINDOW_TYPE_POPUP_MENU). Wayland
+	// toplevels cannot be placed by the client.
+	X, Y int
+	// Popup requests a short-lived menu surface: no taskbar, no
+	// decorations when the backend can, positioned at X,Y on X11.
+	Popup bool
 }
 
 // Surface is the OS (or offscreen) window seam. The toolkit paints with
