@@ -84,6 +84,9 @@ func StatusItemAvailable() bool { return platform.StatusItemAvailable() }
 func StatusMenuFromItems(items []*widgets.MenuItem) []platform.StatusMenuItem {
 	return app.StatusMenuFromItems(items)
 }
+func StatusMenuToItems(items []platform.StatusMenuItem) []*widgets.MenuItem {
+	return app.StatusMenuToItems(items)
+}
 func StatusIconFromTool(icon style.ToolIcon, look style.LookAndFeel, size int) platform.StatusIcon {
 	return app.StatusIconFromTool(icon, look, size)
 }

@@ -86,6 +86,31 @@ func TestGetLayoutReplySignatureNoPanic(t *testing.T) {
 	_ = dbus.SignatureOf(rev, leaf)
 }
 
+func TestLinuxContextMenuInvokesOnMenu(t *testing.T) {
+	n := 0
+	var gx, gy int32
+	s := &linuxStatusItem{
+		opts: StatusItemOptions{
+			OnMenu: func(x, y int32) {
+				n++
+				gx, gy = x, y
+			},
+		},
+	}
+	if err := s.ContextMenu(12, 34); err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 || gx != 12 || gy != 34 {
+		t.Fatalf("ContextMenu n=%d %d,%d", n, gx, gy)
+	}
+	if err := s.SecondaryActivate(5, 6); err != nil {
+		t.Fatal(err)
+	}
+	if n != 2 || gx != 5 || gy != 6 {
+		t.Fatalf("SecondaryActivate n=%d %d,%d", n, gx, gy)
+	}
+}
+
 func TestDbusMenuEventInvokesOnClick(t *testing.T) {
 	n := 0
 	s := &linuxStatusItem{

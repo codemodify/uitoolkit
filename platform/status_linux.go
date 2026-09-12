@@ -115,7 +115,8 @@ func (s *linuxStatusItem) export() error {
 			"AttentionMovieName":  {Value: "", Writable: false, Emit: prop.EmitFalse},
 			"ToolTip":             {Value: s.toolTip(), Writable: false, Emit: prop.EmitTrue},
 			"ItemIsMenu":          {Value: false, Writable: false, Emit: prop.EmitFalse},
-			"Menu":                {Value: dbus.ObjectPath(dbusMenuPath), Writable: false, Emit: prop.EmitFalse},
+			// "/" so Plasma calls ContextMenu instead of drawing dbusmenu.
+			"Menu": {Value: dbus.ObjectPath("/"), Writable: false, Emit: prop.EmitFalse},
 		},
 	}
 	props, err := prop.Export(s.conn, sniPath, propsSpec)
@@ -358,12 +359,27 @@ func (s *linuxStatusItem) Activate(x, y int32) *dbus.Error {
 
 // SecondaryActivate implements StatusNotifierItem.SecondaryActivate.
 func (s *linuxStatusItem) SecondaryActivate(x, y int32) *dbus.Error {
+	s.mu.Lock()
+	fn := s.opts.OnMenu
+	dispatch := s.opts.Dispatch
+	s.mu.Unlock()
+	if fn != nil {
+		invokeStatus(dispatch, func() { fn(x, y) })
+		return nil
+	}
 	return s.Activate(x, y)
 }
 
-// ContextMenu implements StatusNotifierItem.ContextMenu.
+// ContextMenu implements StatusNotifierItem.ContextMenu (right-click).
+// Plasma is pointed at Menu="/" so it calls this instead of dbusmenu.
 func (s *linuxStatusItem) ContextMenu(x, y int32) *dbus.Error {
-	_, _ = x, y
+	s.mu.Lock()
+	fn := s.opts.OnMenu
+	dispatch := s.opts.Dispatch
+	s.mu.Unlock()
+	if fn != nil {
+		invokeStatus(dispatch, func() { fn(x, y) })
+	}
 	return nil
 }
 

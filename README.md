@@ -513,9 +513,9 @@ are independent look.json fields again; compound pack names migrate
 **0.16.2** — **Mail tray polish.** Tray uses `IconMail` (envelope; premiere
 `mail` / `inbox` / `mail-open` PNGs; SNI theme name `mail-unread`).
 Wayland Show/Raise remaps the `xdg_toplevel` after close-to-tray
-(minimize is not reversible) and requests `xdg_activation_v1` when
-present. Tray Activate / dbusmenu clicks run on the UI thread via
-`Application.Post`. See `docs/tray.md`.
+and requests `xdg_activation_v1`. The tray context menu is a toolkit
+`PopupMenu` (Plasma is not given a dbusmenu to draw). Left-click is
+SNI `Activate`. Callbacks run on the UI thread. See `docs/tray.md`.
 
 **0.16.1** — **Plasma StatusNotifier / dbusmenu panic.** `GetLayout`
 exports a finite `(ia{sv}av)` menu layout (children are variants, not a

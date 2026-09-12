@@ -273,7 +273,8 @@ Wayland remaps `xdg_toplevel` + `xdg_activation_v1`). Offscreen tracks a
 visibility flag.
 
 **0.16.2:** Mail tray uses `IconMail`. Wayland close-to-tray can restore
-(the protocol has no unset_minimized). Tray callbacks post to the UI loop.
+(the protocol has no unset_minimized). Tray context menu is a toolkit
+`PopupMenu` via SNI `ContextMenu` (`Menu=/`). Callbacks post to the UI loop.
 
 ## Deferred
 

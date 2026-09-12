@@ -9,19 +9,19 @@ import (
 )
 
 const (
-	nimAdd    = 0x00000000
-	nimModify = 0x00000001
-	nimDelete = 0x00000002
-	nifMessage = 0x00000001
-	nifIcon    = 0x00000002
-	nifTip     = 0x00000004
-	nifInfo    = 0x00000010
-	nisHidden  = 0x00000001
-	wmApp      = 0x8000
-	wmLButtonUp = 0x0202
-	wmRButtonUp = 0x0205
+	nimAdd              = 0x00000000
+	nimModify           = 0x00000001
+	nimDelete           = 0x00000002
+	nifMessage          = 0x00000001
+	nifIcon             = 0x00000002
+	nifTip              = 0x00000004
+	nifInfo             = 0x00000010
+	nisHidden           = 0x00000001
+	wmApp               = 0x8000
+	wmLButtonUp         = 0x0202
+	wmRButtonUp         = 0x0205
 	ninBalloonUserClick = wmApp + 5
-	hwndMessage = ^uintptr(2) // HWND_MESSAGE = -3
+	hwndMessage         = ^uintptr(2) // HWND_MESSAGE = -3
 )
 
 var (
@@ -52,17 +52,17 @@ type winStatusItem struct {
 }
 
 type notifyIconData struct {
-	Size     uint32
-	Wnd      uintptr
-	ID       uint32
-	Flags    uint32
-	Callback uint32
-	Icon     uintptr
-	Tip      [128]uint16
-	State    uint32
+	Size      uint32
+	Wnd       uintptr
+	ID        uint32
+	Flags     uint32
+	Callback  uint32
+	Icon      uintptr
+	Tip       [128]uint16
+	State     uint32
 	StateMask uint32
-	Info     [256]uint16
-	Timeout  uint32
+	Info      [256]uint16
+	Timeout   uint32
 	InfoTitle [64]uint16
 	InfoFlags uint32
 }
@@ -157,10 +157,16 @@ func (w *winStatusItem) wndProc(hwnd, msg, wparam, lparam uintptr) uintptr {
 			}
 		case wmRButtonUp:
 			w.mu.Lock()
+			menuFn := w.opts.OnMenu
+			dispatch := w.opts.Dispatch
 			items := copyMenu(w.menu)
 			w.mu.Unlock()
+			if menuFn != nil {
+				invokeStatus(dispatch, func() { menuFn(0, 0) })
+				break
+			}
 			if len(items) > 0 && items[0].OnClick != nil && !items[0].Separator {
-				items[0].OnClick()
+				invokeStatus(dispatch, items[0].OnClick)
 			}
 		case ninBalloonUserClick:
 			w.mu.Lock()

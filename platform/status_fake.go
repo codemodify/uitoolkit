@@ -132,6 +132,17 @@ func (f *FakeStatusItem) ClickNotify() {
 	invokeStatus(f.opts.Dispatch, fn)
 }
 
+// ContextClick is a tray right-click (StatusNotifierItem.ContextMenu).
+func (f *FakeStatusItem) ContextClick(x, y int32) {
+	f.mu.Lock()
+	fn := f.opts.OnMenu
+	f.mu.Unlock()
+	if fn == nil {
+		return
+	}
+	invokeStatus(f.opts.Dispatch, func() { fn(x, y) })
+}
+
 // ClickMenu activates menu row i.
 func (f *FakeStatusItem) ClickMenu(i int) {
 	f.mu.Lock()
