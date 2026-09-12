@@ -12,9 +12,9 @@ import (
 )
 
 // SettingsApp is the toolkit appearance editor. Theme (palette), corners,
-// and icon set are independent. Picker changes preview locally via
-// Application.SetLook. Apply writes look.json {theme, corners, icons}.
-// Closing the window without Apply discards staged changes.
+// icon set, and icon size are independent. Picker changes preview locally
+// via Application.SetLook. Apply writes look.json
+// {theme, corners, icons, iconSize}. Closing without Apply discards staged changes.
 func SettingsApp(a *app.Application, win *app.Window) widget.Component {
 	saved := style.LoadAppearance().Normalize()
 	return buildSettings(a, win, saved, saved, 0)
@@ -27,12 +27,12 @@ func buildSettings(a *app.Application, win *app.Window, saved, staged style.Appe
 		section = 0
 	}
 
-	st := staged.Name + " · " + string(staged.Corners) + " · " + string(staged.Icons)
+	st := staged.Name + " · " + string(staged.Corners) + " · " + string(staged.Icons) + " · " + string(staged.IconSize)
 	if staged != saved {
 		st += " · unapplied"
 	}
 	status := widgets.NewStatusBar(st, style.AppearancePath(), "v"+uitoolkit.Version)
-	chrome := widgets.NewTitleBar("Settings", "Theme, corners, and icon sets for every uitoolkit app")
+	chrome := widgets.NewTitleBar("Settings", "Theme, corners, icons, and icon size for every uitoolkit app")
 
 	preview := func(next style.Appearance) {
 		next = next.Normalize()
@@ -174,6 +174,27 @@ func buildSettings(a *app.Application, win *app.Window, saved, staged style.Appe
 	})
 	cornerCol := widgets.NewColumn(widgets.NewLabel("Corners"), corners).WithGap(4)
 
+	sizeSel := 1
+	switch staged.IconSize {
+	case style.IconSizeSmall:
+		sizeSel = 0
+	case style.IconSizeLarge:
+		sizeSel = 2
+	}
+	sizes := widgets.NewRadioGroup([]string{"Small", "Medium", "Large"}, sizeSel, func(i int) {
+		next := staged
+		switch i {
+		case 0:
+			next.IconSize = style.IconSizeSmall
+		case 2:
+			next.IconSize = style.IconSizeLarge
+		default:
+			next.IconSize = style.IconSizeMedium
+		}
+		preview(next)
+	})
+	sizeCol := widgets.NewColumn(widgets.NewLabel("Icon size"), sizes).WithGap(4)
+
 	var exportHost widget.Component
 	exportBtn := widgets.NewButton("Export current theme…", func() {
 		promptExportName(exportHost, func(name string) {
@@ -196,8 +217,9 @@ func buildSettings(a *app.Application, win *app.Window, saved, staged style.Appe
 		widgets.NewLabel("Palette  "+string(staged.Theme)),
 		widgets.NewLabel("Corners  "+string(staged.Corners)),
 		widgets.NewLabel("Icons  "+string(staged.Icons)),
-		widgets.NewLabel("look.json stores theme, corners, and icons independently."),
-		widgets.NewLabel("Export writes the color theme only; corners and icons stay prefs."),
+		widgets.NewLabel("Icon size  "+string(staged.IconSize)+" ("+fmt.Sprintf("%.0f", style.IconSizePixels(staged.IconSize))+"px)"),
+		widgets.NewLabel("look.json stores theme, corners, icons, and iconSize independently."),
+		widgets.NewLabel("Export writes the color theme only; corners, icons, and size stay prefs."),
 		widgets.NewLabel("Built-in vs User: stock dark/light and premiere icon names, then custom folders."),
 		widgets.NewLabel("Delete (under User) removes that pack from disk after confirm."),
 		widgets.NewRow(exportBtn).WithGap(8),
@@ -212,9 +234,10 @@ func buildSettings(a *app.Application, win *app.Window, saved, staged style.Appe
 	if len(iconUser) > 0 {
 		iconCol.AddFlex(userIcons, 1)
 	}
-	choices := widgets.NewRow(pickerCol, cornerCol, iconCol, detail).WithGap(16)
+	choices := widgets.NewRow(pickerCol, cornerCol, sizeCol, iconCol, detail).WithGap(16)
 	choices.AddFlex(pickerCol, 3)
 	choices.AddFlex(cornerCol, 1)
+	choices.AddFlex(sizeCol, 1)
 	choices.AddFlex(iconCol, 2)
 	choices.AddFlex(detail, 2)
 
@@ -284,13 +307,13 @@ func buildSettings(a *app.Application, win *app.Window, saved, staged style.Appe
 		widgets.NewTitle("About"),
 		widgets.NewLabel("uitoolkit v"+uitoolkit.Version),
 		widgets.NewLabel("LookAndFeel Classic — Titillium Web + JetBrains Mono."),
-		widgets.NewLabel("Prefs file (theme + corners + icons, written on Apply):"),
+		widgets.NewLabel("Prefs file (theme + corners + icons + iconSize, written on Apply):"),
 		aboutPath,
 		widgets.NewLabel("User color themes (exported palette; listed under User; Delete removes the folder after confirm):"),
 		themesPath,
 		widgets.NewLabel("Icon sets: Built-in = lucide/phosphor/tabler/heroicons/material-symbols when copied, plus drawn classic/sharp. User = any other folder:"),
 		iconsPath,
-		widgets.NewLabel("Two starter palettes are embedded (dark, light). Corners and icons are separate prefs."),
+		widgets.NewLabel("Two starter palettes are embedded (dark, light). Corners, icons, and icon size are separate prefs."),
 		widgets.NewLabel("Other apps watch look.json and call SetLook(PreferredLook())."),
 		widgets.NewButton("Open appearance", func() {
 			win.SetContent(buildSettings(a, win, saved, staged, 0))
@@ -325,7 +348,7 @@ func buildSettings(a *app.Application, win *app.Window, saved, staged style.Appe
 	if staged == saved {
 		applyBtn.SetEnabled(false)
 	}
-	hint := widgets.NewLabel("Apply writes theme, corners, and icons to look.json. Close without Apply discards staged changes.")
+	hint := widgets.NewLabel("Apply writes theme, corners, icons, and iconSize to look.json. Close without Apply discards staged changes.")
 	actions := widgets.NewRow(applyBtn, hint).WithGap(12).WithPad(8)
 
 	root := widgets.NewColumn(chrome, split, actions, status)
@@ -382,7 +405,7 @@ func promptExportName(from widget.Component, on func(string)) {
 	ok.Primary = true
 	field.OnSubmit = func(string) { finish(true) }
 	card := widgets.NewPanel("Export theme",
-		widgets.NewLabel("Name the color theme (palette only). Written to ~/.config/uitoolkit/themes/<name>/theme.json. Corners and icons stay in look.json."),
+		widgets.NewLabel("Name the color theme (palette only). Written to ~/.config/uitoolkit/themes/<name>/theme.json. Corners, icons, and icon size stay in look.json."),
 		field,
 		widgets.NewRow(cancel, ok).WithGap(8),
 	)

@@ -40,23 +40,36 @@ const (
 	IconSetMaterialSymbols IconSetName = "material-symbols"
 )
 
+// IconSize is the chrome ToolIcon draw size (look.json "iconSize").
+// Named values map to 1× pixels; HiDPI still picks name@2x.png when
+// the destination is large enough — packs are not re-exported per size.
+type IconSize string
+
+const (
+	IconSizeSmall  IconSize = "small"  // 16×16
+	IconSizeMedium IconSize = "medium" // 24×24 (1× PNG / default)
+	IconSizeLarge  IconSize = "large"  // 32×32
+)
+
 // Appearance is the resolved toolkit skin. Name is the color theme
-// (look.json "theme": dark, light, or a user export). Corners and
-// icons are independent prefs in the same file.
+// (look.json "theme": dark, light, or a user export). Corners, icons,
+// and icon size are independent prefs in the same file.
 type Appearance struct {
-	Name    string // pack id: "dark", "light", or a user export
-	Theme   ThemeName
-	Corners CornerStyle
-	Icons   IconSetName
+	Name     string // pack id: "dark", "light", or a user export
+	Theme    ThemeName
+	Corners  CornerStyle
+	Icons    IconSetName
+	IconSize IconSize
 }
 
 // DefaultAppearance is the embedded dark palette, round corners, classic icons.
 func DefaultAppearance() Appearance {
 	return Appearance{
-		Name:    DefaultThemeName,
-		Theme:   ThemeDark,
-		Corners: CornersRound,
-		Icons:   IconSetClassic,
+		Name:     DefaultThemeName,
+		Theme:    ThemeDark,
+		Corners:  CornersRound,
+		Icons:    IconSetClassic,
+		IconSize: IconSizeMedium,
 	}
 }
 
@@ -108,13 +121,39 @@ func ParseIconSet(s string) IconSetName {
 	}
 }
 
+// ParseIconSize accepts small / medium / large or 16 / 24 / 32
+// (empty → medium).
+func ParseIconSize(s string) IconSize {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "small", "16", "sm":
+		return IconSizeSmall
+	case "large", "32", "lg":
+		return IconSizeLarge
+	default:
+		return IconSizeMedium
+	}
+}
+
+// IconSizePixels is the 1× destination side for sz (16 / 24 / 32).
+func IconSizePixels(sz IconSize) float32 {
+	switch ParseIconSize(string(sz)) {
+	case IconSizeSmall:
+		return 16
+	case IconSizeLarge:
+		return 32
+	default:
+		return 24
+	}
+}
+
 // Normalize fills empty fields with defaults. An empty Name becomes the
-// matching embedded palette starter (dark / light). Corners and icons
-// do not change the theme name.
+// matching embedded palette starter (dark / light). Corners, icons, and
+// icon size do not change the theme name.
 func (a Appearance) Normalize() Appearance {
 	a.Theme = ParseTheme(string(a.Theme))
 	a.Corners = ParseCorners(string(a.Corners))
 	a.Icons = ParseIconSet(string(a.Icons))
+	a.IconSize = ParseIconSize(string(a.IconSize))
 	if strings.TrimSpace(a.Name) == "" {
 		a.Name = StarterName(a.Theme)
 	}
@@ -157,7 +196,25 @@ func ApplyCorners(m Metrics, c CornerStyle) Metrics {
 	return m
 }
 
-// Look builds a Classic LookAndFeel from the three settings (1× metrics).
+// ApplyIconSize grows toolbar metrics so ToolIcons of sz fit. It never
+// shrinks density/scale values already on m.
+func ApplyIconSize(m Metrics, sz IconSize) Metrics {
+	s := float32(1)
+	def := DefaultMetrics()
+	if def.FontSize > 0 && m.FontSize > 0 {
+		s = m.FontSize / def.FontSize
+	}
+	px := IconSizePixels(sz) * s
+	if m.ToolBtn < px+10*s {
+		m.ToolBtn = px + 10*s
+	}
+	if m.ToolBarH < px+14*s {
+		m.ToolBarH = px + 14*s
+	}
+	return m
+}
+
+// Look builds a Classic LookAndFeel from the appearance prefs (1× metrics).
 // Application.SetLook still applies display scale afterward.
 func (a Appearance) Look() *Classic {
 	a = a.Normalize()
@@ -166,8 +223,8 @@ func (a Appearance) Look() *Classic {
 	if a.Theme == ThemeLight {
 		p = Light()
 	}
-	m := ApplyCorners(DefaultMetrics(), a.Corners)
-	return newClassic(name, p, m, a.Corners, a.Icons).setPack(a.Name)
+	m := ApplyIconSize(ApplyCorners(DefaultMetrics(), a.Corners), a.IconSize)
+	return newClassic(name, p, m, a.Corners, a.Icons, a.IconSize).setPack(a.Name)
 }
 
 // PreferredLook loads XDG appearance prefs (or defaults) as a LookAndFeel.
@@ -175,7 +232,7 @@ func PreferredLook() LookAndFeel {
 	return LoadAppearance().Look()
 }
 
-// LookAppearance reads pack name / palette / corners / icons from a live look.
+// LookAppearance reads pack name / palette / corners / icons / size from a live look.
 func LookAppearance(l LookAndFeel) Appearance {
 	a := DefaultAppearance()
 	if l == nil {
@@ -185,6 +242,7 @@ func LookAppearance(l LookAndFeel) Appearance {
 		a.Theme = ParseTheme(c.Name())
 		a.Corners = c.Corners()
 		a.Icons = c.Icons()
+		a.IconSize = c.IconSize()
 		a.Name = c.Pack()
 		return a.Normalize()
 	}
@@ -195,6 +253,14 @@ func LookAppearance(l LookAndFeel) Appearance {
 	}
 	a.Name = ""
 	return a.Normalize()
+}
+
+// LookIconSize is the chrome icon size on a Classic look (medium otherwise).
+func LookIconSize(l LookAndFeel) IconSize {
+	if c, ok := l.(*Classic); ok {
+		return c.IconSize()
+	}
+	return IconSizeMedium
 }
 
 // WithTheme rebuilds a Classic look with a new palette, keeping metrics,
@@ -210,7 +276,7 @@ func WithTheme(look LookAndFeel, theme ThemeName) LookAndFeel {
 	if theme == ThemeLight {
 		p = Light()
 	}
-	return newClassic(name, p, c.Metrics(), c.Corners(), c.Icons()).
+	return newClassic(name, p, c.Metrics(), c.Corners(), c.Icons(), c.IconSize()).
 		setPack(StarterName(theme))
 }
 
@@ -222,7 +288,7 @@ func WithCorners(look LookAndFeel, corners CornerStyle) LookAndFeel {
 	}
 	corners = ParseCorners(string(corners))
 	m := ApplyCorners(c.Metrics(), corners)
-	return newClassic(c.Name(), c.Palette(), m, corners, c.Icons()).
+	return newClassic(c.Name(), c.Palette(), m, corners, c.Icons(), c.IconSize()).
 		setPack(c.Pack())
 }
 
@@ -234,7 +300,19 @@ func WithIcons(look LookAndFeel, icons IconSetName) LookAndFeel {
 		return look
 	}
 	icons = ParseIconSet(string(icons))
-	return newClassic(c.Name(), c.Palette(), c.Metrics(), c.Corners(), icons).
+	return newClassic(c.Name(), c.Palette(), c.Metrics(), c.Corners(), icons, c.IconSize()).
+		setPack(c.Pack())
+}
+
+// WithIconSize rebuilds a Classic look with a new ToolIcon draw size.
+func WithIconSize(look LookAndFeel, sz IconSize) LookAndFeel {
+	c, ok := classicOf(look)
+	if !ok {
+		return look
+	}
+	sz = ParseIconSize(string(sz))
+	m := ApplyIconSize(c.Metrics(), sz)
+	return newClassic(c.Name(), c.Palette(), m, c.Corners(), c.Icons(), sz).
 		setPack(c.Pack())
 }
 
@@ -258,8 +336,8 @@ func WithAppearance(look LookAndFeel, a Appearance) LookAndFeel {
 	if a.Theme == ThemeLight {
 		p = Light()
 	}
-	m := ApplyCorners(c.Metrics(), a.Corners)
-	return newClassic(name, p, m, a.Corners, a.Icons).setPack(pack)
+	m := ApplyIconSize(ApplyCorners(c.Metrics(), a.Corners), a.IconSize)
+	return newClassic(name, p, m, a.Corners, a.Icons, a.IconSize).setPack(pack)
 }
 
 func classicOf(look LookAndFeel) (*Classic, bool) {

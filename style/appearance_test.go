@@ -47,11 +47,23 @@ func TestWithAppearancePreservesScale(t *testing.T) {
 	}
 }
 
+func TestWithAppearanceAppliesIconSize(t *testing.T) {
+	hi := WithScale(DarkLook(), 2)
+	next := WithAppearance(hi, Appearance{Theme: ThemeLight, IconSize: IconSizeLarge})
+	c := next.(*Classic)
+	if c.IconSize() != IconSizeLarge {
+		t.Fatal(c.IconSize())
+	}
+	if next.Metrics().FontSize != hi.Metrics().FontSize {
+		t.Fatal("scale")
+	}
+}
+
 func TestWithDensityKeepsCornersAndIcons(t *testing.T) {
-	look := Appearance{Theme: ThemeDark, Corners: CornersSquare, Icons: IconSetSharp}.Look()
+	look := Appearance{Theme: ThemeDark, Corners: CornersSquare, Icons: IconSetSharp, IconSize: IconSizeLarge}.Look()
 	d := WithDensity(look, DensityCompact)
 	c := d.(*Classic)
-	if c.Corners() != CornersSquare || c.Icons() != IconSetSharp {
+	if c.Corners() != CornersSquare || c.Icons() != IconSetSharp || c.IconSize() != IconSizeLarge {
 		t.Fatalf("lost appearance %+v", LookAppearance(d))
 	}
 	if d.Metrics().Radius != 0 {
@@ -109,10 +121,56 @@ func TestIconSetsPaintDistinctInk(t *testing.T) {
 	_ = same
 }
 
+func TestParseIconSize(t *testing.T) {
+	if ParseIconSize("") != IconSizeMedium || ParseIconSize("24") != IconSizeMedium {
+		t.Fatal("default")
+	}
+	if ParseIconSize("small") != IconSizeSmall || ParseIconSize("16") != IconSizeSmall {
+		t.Fatal("small")
+	}
+	if ParseIconSize("LARGE") != IconSizeLarge || ParseIconSize("32") != IconSizeLarge {
+		t.Fatal("large")
+	}
+	if IconSizePixels(IconSizeSmall) != 16 || IconSizePixels(IconSizeMedium) != 24 || IconSizePixels(IconSizeLarge) != 32 {
+		t.Fatal("pixels")
+	}
+}
+
+func TestAppearanceNormalizesIconSize(t *testing.T) {
+	got := Appearance{}.Normalize()
+	if got.IconSize != IconSizeMedium {
+		t.Fatalf("%+v", got)
+	}
+	if (Appearance{IconSize: "16"}).Normalize().IconSize != IconSizeSmall {
+		t.Fatal("16")
+	}
+}
+
+func TestWithIconSizeGrowsToolbar(t *testing.T) {
+	med := DarkLook()
+	lg := WithIconSize(med, IconSizeLarge).(*Classic)
+	if lg.IconSize() != IconSizeLarge {
+		t.Fatal(lg.IconSize())
+	}
+	if lg.Metrics().ToolBarH <= med.Metrics().ToolBarH {
+		t.Fatalf("large bar %v vs medium %v", lg.Metrics().ToolBarH, med.Metrics().ToolBarH)
+	}
+	_, sideM, _ := ToolButtonChromeFor(med, med.Metrics().ToolBtn)
+	_, sideL, _ := ToolButtonChromeFor(lg, lg.Metrics().ToolBtn)
+	if sideL <= sideM {
+		t.Fatalf("icon side large %v medium %v", sideL, sideM)
+	}
+	sm := WithIconSize(med, IconSizeSmall).(*Classic)
+	_, sideS, _ := ToolButtonChromeFor(sm, sm.Metrics().ToolBtn)
+	if sideS >= sideM {
+		t.Fatalf("small %v >= medium %v", sideS, sideM)
+	}
+}
+
 func TestAppearancePrefsRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", dir)
-	want := Appearance{Theme: ThemeLight, Corners: CornersSquare, Icons: IconSetSharp}
+	want := Appearance{Theme: ThemeLight, Corners: CornersSquare, Icons: IconSetSharp, IconSize: IconSizeLarge}
 	if err := SaveAppearance(want); err != nil {
 		t.Fatal(err)
 	}
@@ -132,7 +190,7 @@ func TestAppearancePrefsRoundTrip(t *testing.T) {
 		t.Fatalf("mode %o", st.Mode().Perm())
 	}
 	look := PreferredLook().(*Classic)
-	if look.Name() != "light" || look.Corners() != CornersSquare || look.Icons() != IconSetSharp {
+	if look.Name() != "light" || look.Corners() != CornersSquare || look.Icons() != IconSetSharp || look.IconSize() != IconSizeLarge {
 		t.Fatalf("preferred %+v", LookAppearance(look))
 	}
 }

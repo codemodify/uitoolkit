@@ -40,6 +40,9 @@ func TestSettingsAppAppliesAndPersists(t *testing.T) {
 	if findRadio(w.Content(), "Round") == nil || findRadio(w.Content(), "Square") == nil {
 		t.Fatal("corners should be a separate Round / Square control")
 	}
+	if findRadio(w.Content(), "Small") == nil || findRadio(w.Content(), "Medium") == nil || findRadio(w.Content(), "Large") == nil {
+		t.Fatal("icon size should be a separate Small / Medium / Large control")
+	}
 	if !findLabel(w.Content(), "Built-in") || !findLabel(w.Content(), "User") {
 		t.Fatal("Theme and Icons lists should split Built-in vs User")
 	}
@@ -311,6 +314,42 @@ func TestSettingsIconSetApplyWritesLookJSON(t *testing.T) {
 	}
 }
 
+func TestSettingsIconSizeApplyWritesLookJSON(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if err := style.SaveAppearance(style.DefaultAppearance()); err != nil {
+		t.Fatal(err)
+	}
+	a := uitoolkit.New(uitoolkit.Options{Headless: true, Scale: 1, DisableLookWatch: true})
+	w, err := a.NewWindow(platform.WindowOptions{Title: "settings", Width: 960, Height: 780, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+	w.SetContent(SettingsApp(a, w))
+	a.PumpOnce()
+	clickIconSize(t, w, "Large")
+	a.PumpOnce()
+	if style.LookAppearance(a.Look()).IconSize != style.IconSizeLarge {
+		t.Fatalf("preview size %+v", style.LookAppearance(a.Look()))
+	}
+	if style.LoadAppearance().IconSize != style.IconSizeMedium {
+		t.Fatal("unapplied icon size leaked")
+	}
+	clickApply(t, w)
+	a.PumpOnce()
+	got := style.LoadAppearance()
+	if got.IconSize != style.IconSizeLarge || got.Icons != style.IconSetClassic {
+		t.Fatalf("applied %+v", got)
+	}
+	raw, err := os.ReadFile(style.AppearancePath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), `"iconSize": "large"`) {
+		t.Fatalf("look.json: %s", raw)
+	}
+}
+
 func installSettingsIconSet(t *testing.T, xdg, name string) {
 	t.Helper()
 	src := filepath.Join("..", "..", "icons", name)
@@ -488,6 +527,16 @@ func clickTheme(t *testing.T, w *app.Window, label string) {
 		t.Fatalf("no theme %q", label)
 	}
 	found.OnSelect(idx)
+}
+
+func clickIconSize(t *testing.T, w *app.Window, label string) {
+	t.Helper()
+	rb := findRadio(w.Content(), label)
+	if rb == nil {
+		t.Fatalf("no icon size radio %q", label)
+	}
+	rb.MousePress(widget.MouseEvent{})
+	rb.MouseRelease(widget.MouseEvent{})
 }
 
 func clickCorners(t *testing.T, w *app.Window, label string) {

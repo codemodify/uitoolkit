@@ -5,18 +5,19 @@ import "github.com/codemodify/paintengine2d"
 // Classic is the stock LookAndFeel (graphite chrome + blue accent).
 // Theme, corner policy, and icon set are first-class (see Appearance).
 type Classic struct {
-	palette Palette
-	metrics Metrics
-	name    string
-	pack    string
-	corners CornerStyle
-	icons   IconSetName
-	body    *Font
-	title   *Font
-	bold    *Font
-	muted   *Font
-	onAcc   *Font
-	mono    *Font
+	palette  Palette
+	metrics  Metrics
+	name     string
+	pack     string
+	corners  CornerStyle
+	icons    IconSetName
+	iconSize IconSize
+	body     *Font
+	title    *Font
+	bold     *Font
+	muted    *Font
+	onAcc    *Font
+	mono     *Font
 }
 
 // NewClassic builds fonts for p. Name is "dark" or "light" typically.
@@ -26,31 +27,34 @@ func NewClassic(name string, p Palette, m Metrics) *Classic {
 	if m.FontSize >= 8 && m.Radius <= 0 && m.RadiusSmall <= 0 {
 		corners = CornersSquare
 	}
-	return newClassic(name, p, m, corners, IconSetClassic)
+	return newClassic(name, p, m, corners, IconSetClassic, IconSizeMedium)
 }
 
-func newClassic(name string, p Palette, m Metrics, corners CornerStyle, icons IconSetName) *Classic {
+func newClassic(name string, p Palette, m Metrics, corners CornerStyle, icons IconSetName, iconSize IconSize) *Classic {
 	if m.FontSize < 8 {
 		m = DefaultMetrics()
 	}
 	corners = ParseCorners(string(corners))
 	icons = ParseIconSet(string(icons))
+	iconSize = ParseIconSize(string(iconSize))
 	if corners == CornersSquare {
 		m.Radius = 0
 		m.RadiusSmall = 0
 	}
+	m = ApplyIconSize(m, iconSize)
 	// Lock-in: Classic always ships Titillium Web + JetBrains Mono.
 	// Metrics.FontFamily cannot select mononoki (or any other face).
 	m.FontFamily = DefaultFontFamily
 	m.MonoFamily = DefaultMonoFamily
 	p = ResolveMenuChrome(p)
 	return &Classic{
-		palette: p,
-		metrics: m,
-		name:    name,
-		pack:    StarterName(ParseTheme(name)),
-		corners: corners,
-		icons:   icons,
+		palette:  p,
+		metrics:  m,
+		name:     name,
+		pack:     StarterName(ParseTheme(name)),
+		corners:  corners,
+		icons:    icons,
+		iconSize: iconSize,
 		// OpenType atlases (Titillium / JetBrains Mono); Color tints at draw.
 		body:  BakeFont(m.FontSize, p.Text),
 		title: BakeTitleFont(m.TitleSize, p.Text),
@@ -77,7 +81,7 @@ func WithScale(look LookAndFeel, scale float32) LookAndFeel {
 	if !ok {
 		return look
 	}
-	return newClassic(c.Name(), c.Palette(), ScaleMetrics(c.Metrics(), scale), c.Corners(), c.Icons()).setPack(c.Pack())
+	return newClassic(c.Name(), c.Palette(), ScaleMetrics(c.Metrics(), scale), c.Corners(), c.Icons(), c.IconSize()).setPack(c.Pack())
 }
 
 func (l *Classic) Name() string           { return l.name }
@@ -85,6 +89,7 @@ func (l *Classic) Palette() Palette       { return l.palette }
 func (l *Classic) Metrics() Metrics       { return l.metrics }
 func (l *Classic) Corners() CornerStyle   { return ParseCorners(string(l.corners)) }
 func (l *Classic) Icons() IconSetName     { return ParseIconSet(string(l.icons)) }
+func (l *Classic) IconSize() IconSize     { return ParseIconSize(string(l.iconSize)) }
 func (l *Classic) Appearance() Appearance { return LookAppearance(l) }
 
 // Pack is the color theme name (look.json "theme"). Empty falls back
@@ -608,18 +613,27 @@ const ToolItemGap = float32(8)
 // button of height h. Measure and paint share this so labels cannot
 // run into the next icon.
 func ToolButtonChrome(h float32) (pad, iconSide, iconGap float32) {
+	return ToolButtonChromeFor(nil, h)
+}
+
+// ToolButtonChromeFor is ToolButtonChrome using the look's iconSize
+// (small 16 / medium 24 / large 32), scaled on HiDPI.
+func ToolButtonChromeFor(lk LookAndFeel, h float32) (pad, iconSide, iconGap float32) {
 	pad = 10
 	iconGap = 8
-	iconSide = h - 10
-	if iconSide < 16 {
-		iconSide = 16
+	iconSide = IconSizePixels(LookIconSize(lk))
+	if s := LookScale(lk); s > 1.01 {
+		iconSide *= s
 	}
-	max := float32(24)
-	if h >= 56 {
-		max = 48
+	max := h - 8
+	if max < 8 {
+		max = 8
 	}
 	if iconSide > max {
 		iconSide = max
+	}
+	if iconSide < 8 {
+		iconSide = 8
 	}
 	return pad, iconSide, iconGap
 }
@@ -657,7 +671,7 @@ func (l *Classic) DrawToolButton(ctx *paintengine2d.Context, b paintengine2d.Rec
 		fg = p.TextMuted
 		font = l.muted
 	}
-	pad, iconSide, iconGap := ToolButtonChrome(b.Dy())
+	pad, iconSide, iconGap := ToolButtonChromeFor(l, b.Dy())
 	x := b.Min.X + pad
 	if icon != IconNone {
 		ib := paintengine2d.XYWH(x, b.Min.Y+(b.Dy()-iconSide)*0.5, iconSide, iconSide)

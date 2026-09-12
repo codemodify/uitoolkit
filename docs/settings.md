@@ -1,8 +1,8 @@
 # Settings
 
 `cmd/uitksettings` is the toolkit appearance editor. Theme (palette),
-**corners**, and **icons** are three independent prefs. Other apps apply
-them with `Application.SetLook` / `PreferredLook`.
+**corners**, **icons**, and **icon size** are independent prefs. Other
+apps apply them with `Application.SetLook` / `PreferredLook`.
 
 A theme is a color scheme only (`dark`, `light`, or a user-exported
 palette). Control shape is the Corners radio (Round / Square →
@@ -31,7 +31,8 @@ There is no menu bar. **Apply** is the only persist action for
 | Theme | palette pack → `Classic` | Built-in `dark` / `light` + exported user palettes |
 | Corners | `Metrics.Radius` | Round / Square |
 | Icons | PNG set or drawn fallback | Built-in (classic/sharp + premiere names when copied) + User folders |
-| Export | `themes/<name>/theme.json` | current palette only; corners/icons stay prefs |
+| Icon size | ToolIcon destination side | Small (16) / Medium (24) / Large (32); HiDPI still uses `@2x` |
+| Export | `themes/<name>/theme.json` | current palette only; corners/icons/size stay prefs |
 
 Theme and Icons lists use the same **Built-in** / **User** grouping.
 
@@ -52,16 +53,19 @@ $XDG_CONFIG_HOME/uitoolkit/look.json
 {
   "theme": "dark",
   "corners": "square",
-  "icons": "lucide"
+  "icons": "lucide",
+  "iconSize": "medium"
 }
 ```
 
 `theme` is the color theme name. `corners` is `round` or `square`.
 `icons` is the chrome set (`classic`, `sharp`, or an installed
-directory such as `lucide`).
+directory such as `lucide`). `iconSize` is `small` (16px), `medium`
+(24px, default), or `large` (32px). Numeric aliases `16` / `24` / `32`
+are accepted on load.
 
 Mode `0600`. Missing or invalid files yield `dark` + `round` +
-`classic`.
+`classic` + `medium`. A file without `iconSize` migrates to medium.
 
 Compound v0.11–v0.12.1 theme ids migrate on load:
 
@@ -97,7 +101,7 @@ $XDG_CONFIG_HOME/uitoolkit/themes/<name>/theme.json
 
 JSON only. Pack-level `corners` / `icons` fields are ignored.
 **Export current theme…** asks for a name and writes the staged
-**palette**. Corners and icons stay in `look.json`.
+**palette**. Corners, icons, and icon size stay in `look.json`.
 
 When a **User** theme is selected, **Delete** under that list confirms
 (Yes/No) then removes `themes/<name>/` from disk. Built-in `dark` /
@@ -153,8 +157,8 @@ and, on change, reloads prefs and calls
 app.SetLook(style.WithAppearance(app.Look(), style.LoadAppearance()))
 ```
 
-so theme, corners, and icons update without a restart. Display scale and
-density on the current look are kept.
+so theme, corners, icons, and icon size update without a restart. Display
+scale and density on the current look are kept.
 
 `Application.New` enables the watcher **by default when `Options.Look` is
 nil** (that path already uses `PreferredLook()`). This is the least
@@ -196,13 +200,14 @@ uitoolkit.ListThemes()
 uitoolkit.WithTheme(look, uitoolkit.ThemeLight)
 uitoolkit.WithCorners(look, uitoolkit.CornersSquare)
 uitoolkit.WithIcons(look, uitoolkit.IconSetLucide)
-uitoolkit.WithAppearance(look, uitoolkit.Appearance{Name: "ocean", Corners: uitoolkit.CornersSquare})
+uitoolkit.WithIconSize(look, uitoolkit.IconSizeLarge)
+uitoolkit.WithAppearance(look, uitoolkit.Appearance{Name: "ocean", Corners: uitoolkit.CornersSquare, IconSize: uitoolkit.IconSizeLarge})
 ```
 
 `PreferredLook` is `LoadAppearance().Look()`. `LoadAppearance` reads
-`theme`, `corners`, and `icons` from `look.json`, resolves the color
-theme with `LoadTheme` (user pack, then builtin), and applies corners
-and the icon set on top.
+`theme`, `corners`, `icons`, and `iconSize` from `look.json`, resolves
+the color theme with `LoadTheme` (user pack, then builtin), and applies
+corners, the icon set, and icon size on top.
 
 ## API
 
@@ -210,11 +215,11 @@ and the icon set on top.
 | --- | --- |
 | `ThemePack`, `ListThemes`, `ListBuiltinThemes`, `ListUserThemes` | `style` / `uitoolkit` |
 | `LoadTheme`, `ExportTheme`, `SplitLookThemeName` | `style` / `uitoolkit` |
-| `Appearance`, `ThemeName`, `CornerStyle`, `IconSetName` | `style` / `uitoolkit` |
+| `Appearance`, `ThemeName`, `CornerStyle`, `IconSetName`, `IconSize` | `style` / `uitoolkit` |
 | `IconSetInfo`, `ListIconSets`, `ListBuiltinIconSets`, `ListUserIconSets` | `style` / `uitoolkit` |
 | `LoadAppearance`, `SaveAppearance`, `AppearancePath` | `style` / `uitoolkit` |
 | `ThemesDir`, `StarterName`, `DefaultThemeName` | `style` / `uitoolkit` |
-| `PreferredLook`, `LookAppearance` | `style` / `uitoolkit` |
+| `PreferredLook`, `LookAppearance`, `WithIconSize`, `IconSizePixels` | `style` / `uitoolkit` |
 | `Options.WatchLook`, `Options.DisableLookWatch` | `app` / `uitoolkit` |
 | `Application.WatchingLook`, `Application.ReloadPreferredLook` | `app` |
 | `DrawToolIcon`, `DrawFileToolIcon` | `style` |
