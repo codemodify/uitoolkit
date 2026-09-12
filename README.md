@@ -509,6 +509,12 @@ are independent look.json fields again; compound pack names migrate
 
 ## Version
 
+**0.13.8** — Mail sidebar pins **Outbox** to the bottom of the folder pane
+(own one-row tree + separator) so it is not the last sibling under
+Filters. The `N unread in all folders` footer label is gone. TreeView
+measure uses content height when it has rows (empty trees still keep a
+drop target). Still paintengine2d **v0.9.0**.
+
 **0.13.7** — MenuBar titles no longer inherit the strip’s `StateHovered`,
 so only the hovered or open title paints the XP highlight (siblings stay
 idle; empty-bar hover is not a full wash). Dropdown / context rows gain

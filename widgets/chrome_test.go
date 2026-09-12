@@ -100,6 +100,23 @@ func TestTabBarKeysAndPress(t *testing.T) {
 	}
 }
 
+func TestTreeViewMeasureFitsVisibleRows(t *testing.T) {
+	n := NewTreeNode("Outbox")
+	tree := NewTreeView(n)
+	tree.SetHost(&host{})
+	sz := tree.Measure(layout.Loose(200, 400))
+	rh := tree.rowH()
+	if sz.Y < rh-0.5 || sz.Y > rh+2 {
+		t.Fatalf("one-row tree height %v want ~%v (not the empty-tree min)", sz.Y, rh)
+	}
+	empty := NewTreeView()
+	empty.SetHost(&host{})
+	ez := empty.Measure(layout.Loose(200, 400))
+	if ez.Y < 40 {
+		t.Fatalf("empty tree should keep a drop target, got %v", ez.Y)
+	}
+}
+
 func TestTreeViewCollapsedParentDoesNotStealNextRow(t *testing.T) {
 	child := NewTreeNode("Unread")
 	parent := NewTreeNode("Filters", child)
