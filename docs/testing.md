@@ -55,6 +55,9 @@ CGO_ENABLED=0 go test ./...
 Full-paint benches (Mail / gallery / list) live in `internal/apptest`.
 See [perf.md](perf.md) for the v0.15.0 command line and numbers.
 
+Tray tests use `UITK_TRAY=fake` or the stub (`docs/tray.md`). Do not
+expect a real StatusNotifier host in CI.
+
 Skip the slower driver compose pass:
 
 ```bash

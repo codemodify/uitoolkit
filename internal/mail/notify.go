@@ -1,6 +1,7 @@
 package mail
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"strings"
@@ -29,6 +30,53 @@ func shouldNotify(p NotifyPrefs, m Message, vips map[string]bool) bool {
 		return false
 	}
 	return true
+}
+
+func formatNewMailNotice(store Store, accountID string, n int, vipOnly bool) (title, body string) {
+	title = "New mail"
+	if vipOnly {
+		title = "VIP mail"
+	}
+	body = fmt.Sprintf("%d new message(s)", n)
+	if n != 1 || store == nil {
+		return title, body
+	}
+	var inbox Folder
+	found := false
+	for _, f := range store.ListFolders(accountID) {
+		if f.Kind == FolderInbox {
+			inbox = f
+			found = true
+			break
+		}
+	}
+	if !found {
+		return title, body
+	}
+	msgs := store.ListMessages(inbox.ID)
+	var latest Message
+	ok := false
+	for _, m := range msgs {
+		if m.Read {
+			continue
+		}
+		if !ok || m.Date.After(latest.Date) {
+			latest = m
+			ok = true
+		}
+	}
+	if !ok {
+		return title, body
+	}
+	who := strings.TrimSpace(latest.From)
+	if who == "" {
+		who = "New mail"
+	}
+	subj := strings.TrimSpace(latest.Subject)
+	if subj == "" {
+		subj = "(no subject)"
+	}
+	return who, subj
 }
 
 func notifyDesktop(title, body string) {

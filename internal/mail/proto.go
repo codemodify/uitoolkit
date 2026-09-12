@@ -156,6 +156,9 @@ type Event struct {
 	Reason string
 	Folder FolderID
 	Count  int
+	Title  string
+	Body   string
+	VIP    bool
 }
 
 // Wire params.

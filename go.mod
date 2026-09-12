@@ -8,3 +8,5 @@ require (
 )
 
 require golang.org/x/text v0.16.0
+
+require github.com/godbus/dbus/v5 v5.1.0

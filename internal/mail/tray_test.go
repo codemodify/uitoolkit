@@ -1,0 +1,116 @@
+package mail
+
+import (
+	"context"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/codemodify/uitoolkit"
+	"github.com/codemodify/uitoolkit/platform"
+	"github.com/codemodify/uitoolkit/style"
+)
+
+func TestMailTrayFakeClickRaises(t *testing.T) {
+	IsolateTestEnvTB(t)
+	t.Setenv("UITK_TRAY", "fake")
+	sock, stop, err := StartDemo(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stop()
+	cli, err := DialWait(sock, 2*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cli.Close()
+
+	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{Title: "Mail", Width: 640, Height: 400, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.SetContent(Open(a, w, cli, AppOptions{}))
+	a.PumpOnce()
+
+	var tray *platform.FakeStatusItem
+	for _, it := range a.StatusItems() {
+		if f, ok := it.(*platform.FakeStatusItem); ok {
+			tray = f
+		}
+	}
+	if tray == nil {
+		t.Fatal("Open should create a fake StatusItem when UITK_TRAY=fake")
+	}
+	w.Hide()
+	tray.Click()
+	if !w.Visible() {
+		t.Fatal("tray click should show Mail")
+	}
+}
+
+func TestMailNotifyEventShowsToast(t *testing.T) {
+	IsolateTestEnvTB(t)
+	t.Setenv("UITK_TRAY", "fake")
+	sock, stop, err := StartDemo(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stop()
+	cli, err := DialWait(sock, 2*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cli.Close()
+
+	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{Title: "Mail", Width: 640, Height: 400, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.SetContent(Open(a, w, cli, AppOptions{}))
+	a.PumpOnce()
+
+	var tray *platform.FakeStatusItem
+	for _, it := range a.StatusItems() {
+		if f, ok := it.(*platform.FakeStatusItem); ok {
+			tray = f
+		}
+	}
+	if tray == nil {
+		t.Fatal("missing tray")
+	}
+	accts, err := cli.Accounts()
+	if err != nil || len(accts) == 0 {
+		t.Fatalf("accounts %v %d", err, len(accts))
+	}
+	if _, err := cli.Fetch(accts[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		if len(tray.Notes) > 0 {
+			if tray.Notes[0].Title == "" {
+				t.Fatal("empty toast title")
+			}
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("mail.notify should toast on the tray")
+}
+
+func TestFormatNewMailNoticeUsesSender(t *testing.T) {
+	s := NewDemoStore()
+	accts := s.Accounts()
+	if len(accts) == 0 {
+		t.Fatal("demo accounts")
+	}
+	title, body := formatNewMailNotice(s, accts[0].ID, 1, false)
+	if title == "" || body == "" {
+		t.Fatalf("empty notice %q %q", title, body)
+	}
+	if title == "New mail" && strings.Contains(body, "new message") {
+		t.Fatalf("demo inbox should yield sender/subject, got %q %q", title, body)
+	}
+}

@@ -399,6 +399,25 @@ static void ui_ewmh_state(Display* d, Window w, long action, Atom a, Atom b) {
 	XFlush(d);
 }
 
+static void ui_raise(Display* d, Window w) {
+	XMapRaised(d, w);
+	XEvent ev;
+	memset(&ev, 0, sizeof(ev));
+	ev.xclient.type = ClientMessage;
+	ev.xclient.window = w;
+	ev.xclient.message_type = XInternAtom(d, "_NET_ACTIVE_WINDOW", False);
+	ev.xclient.format = 32;
+	ev.xclient.data.l[0] = 1;
+	ev.xclient.data.l[1] = CurrentTime;
+	XSendEvent(d, DefaultRootWindow(d), False, SubstructureRedirectMask|SubstructureNotifyMask, &ev);
+	XFlush(d);
+}
+
+static void ui_unmap(Display* d, Window w) {
+	XUnmapWindow(d, w);
+	XFlush(d);
+}
+
 static int uitk_xerr = 0;
 static int uitk_on_xerr(Display* d, XErrorEvent* e) {
 	(void)d;
@@ -1708,6 +1727,35 @@ func (s *x11Surface) SetCursor(cur Cursor) {
 	x11Mu.Lock()
 	C.ui_define_cursor(s.conn.dpy, s.win, s.conn.xcursor(cur))
 	x11Mu.Unlock()
+}
+
+func (s *x11Surface) Raise() {
+	if s.conn == nil || s.conn.dpy == nil || s.win == 0 {
+		return
+	}
+	x11Mu.Lock()
+	C.ui_raise(s.conn.dpy, s.win)
+	s.mapped = true
+	x11Mu.Unlock()
+}
+
+func (s *x11Surface) Show() { s.Raise() }
+
+func (s *x11Surface) Hide() {
+	if s.conn == nil || s.conn.dpy == nil || s.win == 0 {
+		return
+	}
+	x11Mu.Lock()
+	C.ui_unmap(s.conn.dpy, s.win)
+	s.mapped = false
+	x11Mu.Unlock()
+}
+
+func (s *x11Surface) Visible() bool {
+	if s == nil || s.closed {
+		return false
+	}
+	return s.mapped
 }
 
 func (s *x11Surface) SetFullscreen(on bool) {

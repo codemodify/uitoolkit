@@ -31,6 +31,7 @@ go get github.com/codemodify/paintengine2d@v0.9.0
 | Paint | paintengine2d **v0.9.0** (`Scene` / `Recorder` / GPU rect batches; flatten cache) |
 | Fonts | Titillium Web (UI) + JetBrains Mono (code), OpenType → atlas |
 | Windowing | Linux X11 + Wayland (`wl_egl_window` / eglSwapBuffers, else `wl_shm` / `XPutImage`); offscreen always |
+| Tray | `StatusItem` — Linux SNI + fdo notifications; Win32 notify area; macOS `NSStatusItem` (CGO) |
 | CGO | optional — tests and screenshots are `CGO_ENABLED=0` |
 | License | MIT |
 
@@ -508,6 +509,15 @@ are independent look.json fields again; compound pack names migrate
 (**v0.12.2**).
 
 ## Version
+
+**0.16.0** — **Status item / system tray.** `StatusItem` is a toolkit
+tray icon (click, tooltip, optional `MenuItem` menu) plus a desktop
+toast. Linux uses StatusNotifierItem + freedesktop Notifications on
+the session bus (X11, Xlibre, Wayland). Windows uses `Shell_NotifyIcon`;
+macOS (`CGO`) uses `NSStatusItem`. Headless / missing hosts are stubs;
+`UITK_TRAY=fake` is for tests. Mail shows a tray while it runs: click
+raises the window (close-to-tray); `mail.notify` from the daemon becomes
+a toast (sender + subject). See `docs/tray.md`.
 
 **0.15.0** — Safer second-pass paint perf on the v0.13.8 / v0.14.7 model
 (full `DrawScene`, full `Surface.Present`, paintengine2d **v0.9.0**).

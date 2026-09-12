@@ -92,6 +92,12 @@ func (s *Server) ctxClosed(err error) bool {
 	return err != nil && (isClosed(err) || !s.isServing())
 }
 
+func (s *Server) clientCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.conns)
+}
+
 func (s *Server) isServing() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -319,6 +325,7 @@ func (s *Server) dispatch(req Request) Response {
 			if err == nil {
 				result = fetchResult{Count: n}
 				s.broadcast(EventFetched, eventParams{AccountID: p.AccountID, Count: n})
+				s.maybeNotify(p.AccountID, n)
 			}
 		}
 	case MethodUnreadGet:
@@ -647,13 +654,9 @@ func (s *Server) maybeNotify(accountID string, n int) {
 	if !p.Enabled {
 		return
 	}
-	title := "New mail"
-	body := itoa(n) + " new message(s)"
+	title, body := formatNewMailNotice(s.Store, accountID, n, p.VIPOnly)
 	vip := p.VIPOnly
-	if vip {
-		title = "VIP mail"
-	}
-	if p.Desktop {
+	if p.Desktop && s.clientCount() == 0 {
 		notifyDesktop(title, body)
 	}
 	s.broadcast(EventNotify, eventParams{AccountID: accountID, Count: n, Title: title, Body: body, VIP: vip})

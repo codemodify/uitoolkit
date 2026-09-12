@@ -7,6 +7,35 @@ import "github.com/codemodify/paintengine2d"
 // user dirs) load a tinted PNG from ~/.config/uitoolkit/icons/<set>/<action>.png
 // (or name@2x.png). Missing files fall back to the drawn classic set.
 // Classic / Sharp stay in-process vectors.
+// DrawToolIconImage rasterizes icon onto a square pixmap (tray / SNI).
+func DrawToolIconImage(icon ToolIcon, look LookAndFeel, size int) *paintengine2d.Image {
+	if size < 16 {
+		size = 22
+	}
+	img := paintengine2d.NewImage(size, size)
+	ctx := paintengine2d.NewContext(img)
+	plate := paintengine2d.RGB(0.18, 0.20, 0.24)
+	ink := paintengine2d.RGB(0.92, 0.93, 0.95)
+	set := IconSetClassic
+	if look != nil {
+		plate = look.Palette().Accent
+		ink = look.Palette().TextOnAccent
+		if ink == (paintengine2d.Color{}) {
+			ink = paintengine2d.White
+		}
+		if c, ok := look.(*Classic); ok {
+			set = c.Icons()
+		}
+	}
+	b := paintengine2d.XYWH(0, 0, float32(size), float32(size))
+	ctx.DrawRoundRect(b.Inset(1), 4, 4, paintengine2d.Fill(plate))
+	if icon == IconNone {
+		icon = IconInfo
+	}
+	DrawToolIcon(ctx, b.Inset(3), icon, ink, set)
+	return img
+}
+
 func DrawToolIcon(ctx *paintengine2d.Context, b paintengine2d.Rect, icon ToolIcon, col paintengine2d.Color, set IconSetName) {
 	if icon == IconNone || b.Empty() || ctx == nil {
 		return

@@ -40,6 +40,7 @@ type Window struct {
 	scene      *paintengine2d.Scene
 	cursor     platform.Cursor
 	paints     int
+	closeHides bool
 }
 
 func newWindow(a *Application, surf platform.Surface, opts platform.WindowOptions) *Window {
@@ -340,6 +341,10 @@ func (w *Window) pump() {
 func (w *Window) dispatch(ev platform.Event) {
 	switch ev.Kind {
 	case platform.EventClose:
+		if w.closeHides {
+			w.Hide()
+			return
+		}
 		w.Close()
 	case platform.EventResize:
 		_ = w.surf.Resize(ev.Width, ev.Height)
@@ -795,6 +800,45 @@ func (w *Window) Close() {
 	w.closed = true
 	_ = w.surf.Close()
 	w.app.remove(w)
+}
+
+// Closed reports whether Close has run.
+func (w *Window) Closed() bool { return w == nil || w.closed }
+
+// SetCloseHides maps the window-manager close button to Hide (close-to-tray).
+func (w *Window) SetCloseHides(on bool) { w.closeHides = on }
+
+// Raise maps and activates the native window (X11 _NET_ACTIVE_WINDOW).
+func (w *Window) Raise() {
+	if w == nil || w.closed {
+		return
+	}
+	platform.RaiseSurface(w.surf)
+	w.fullInvalidate()
+}
+
+// Show maps a hidden window.
+func (w *Window) Show() {
+	if w == nil || w.closed {
+		return
+	}
+	platform.RaiseSurface(w.surf)
+}
+
+// Hide unmaps / minimizes without destroying the surface.
+func (w *Window) Hide() {
+	if w == nil || w.closed {
+		return
+	}
+	platform.HideSurface(w.surf)
+}
+
+// Visible reports whether the surface is mapped.
+func (w *Window) Visible() bool {
+	if w == nil || w.closed {
+		return false
+	}
+	return platform.SurfaceVisible(w.surf)
 }
 
 // Idle is used by tests that want a timestamp.

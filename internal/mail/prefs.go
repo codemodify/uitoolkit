@@ -311,13 +311,13 @@ func prefsNotify(cli *Client) widget.Component {
 		p.VIPOnly = v
 		_, _ = cli.PutNotifyPrefs(p)
 	})
-	desk := widgets.NewCheckbox("Desktop notifications (notify-send on Linux)", p.Desktop, func(v bool) {
+	desk := widgets.NewCheckbox("Desktop notifications when no UI is connected", p.Desktop, func(v bool) {
 		p.Desktop = v
 		_, _ = cli.PutNotifyPrefs(p)
 	})
 	return widgets.NewColumn(
 		widgets.NewTitle("Notification rules"),
-		widgets.NewLabel("mailclientd emits mail.notify and tries notify-send when a display is available."),
+		widgets.NewLabel("mailclientui owns the tray icon. The daemon broadcasts mail.notify; the UI shows a desktop toast. notify-send is only used when no UI is connected."),
 		en, vip, desk,
 	).WithGap(8)
 }
