@@ -114,7 +114,7 @@ func (s *linuxStatusItem) export() error {
 			"Title":               {Value: s.title, Writable: false, Emit: prop.EmitTrue},
 			"Status":              {Value: "Active", Writable: false, Emit: prop.EmitTrue},
 			"WindowId":            {Value: int32(0), Writable: false, Emit: prop.EmitFalse},
-			"IconName":            {Value: s.icon.Name, Writable: false, Emit: prop.EmitTrue},
+			"IconName":            {Value: statusIconName(s.icon), Writable: false, Emit: prop.EmitTrue},
 			"IconPixmap":          {Value: s.iconPixmaps(), Writable: false, Emit: prop.EmitTrue},
 			"OverlayIconName":     {Value: "", Writable: false, Emit: prop.EmitFalse},
 			"OverlayIconPixmap":   {Value: []sniPixmap{}, Writable: false, Emit: prop.EmitFalse},
@@ -149,8 +149,9 @@ func (s *linuxStatusItem) export() error {
 	if err := s.conn.Export(introspect.Introspectable(sniIntrospect), sniPath, "org.freedesktop.DBus.Introspectable"); err != nil {
 		return err
 	}
-	// /MenuBar stays a stub for hosts that probe dbusmenu regardless of
-	// Menu. Plasma keys off Menu="/" and must call ContextMenu instead.
+	// /MenuBar is the HostMenu dbusmenu. ToolkitMenu still exports the
+	// methods so probing hosts do not error; GetLayout is empty and SNI
+	// Menu is /NO_DBUSMENU so Plasma calls ContextMenu instead.
 	if err := s.conn.ExportMethodTable(map[string]interface{}{
 		"GetLayout":          s.GetLayout,
 		"GetGroupProperties": s.GetGroupProperties,
@@ -162,15 +163,32 @@ func (s *linuxStatusItem) export() error {
 	}, dbusMenuPath, dbusMenuIface); err != nil {
 		return err
 	}
+	if _, err := prop.Export(s.conn, dbusMenuPath, map[string]map[string]*prop.Prop{
+		dbusMenuIface: {
+			"Version":       {Value: uint32(3), Writable: false, Emit: prop.EmitFalse},
+			"TextDirection": {Value: "ltr", Writable: false, Emit: prop.EmitFalse},
+			"Status":        {Value: "normal", Writable: false, Emit: prop.EmitFalse},
+			"IconThemePath": {Value: []string{}, Writable: false, Emit: prop.EmitFalse},
+		},
+	}); err != nil {
+		return err
+	}
 	_ = s.conn.Export(introspect.Introspectable(dbusMenuIntrospect), dbusMenuPath, "org.freedesktop.DBus.Introspectable")
 	s.sni = true
-	trayDebug("export name=%s Menu=%s ItemIsMenu=false (ContextMenu → toolkit popup)", s.name, sniMenuNone)
+	trayDebug("export name=%s Menu=%s ItemIsMenu=%v hostMenu=%v", s.name, s.menuPath(), s.opts.ItemIsMenu, s.hostMenu())
 	return nil
 }
 
 func (s *linuxStatusItem) registerSNI() {
 	defer func() { recover() }()
-	obj := s.conn.Object(sniWatcher, sniWatcherPath)
+	s.mu.Lock()
+	conn := s.conn
+	closed := s.closed
+	s.mu.Unlock()
+	if closed || conn == nil {
+		return
+	}
+	obj := conn.Object(sniWatcher, sniWatcherPath)
 	call := obj.Call(sniWatcher+".RegisterStatusNotifierItem", 0, s.name)
 	if call.Err != nil {
 		_ = obj.Call(sniWatcher+".RegisterStatusNotifierItem", 0, sniPath)
@@ -268,7 +286,7 @@ func (s *linuxStatusItem) iconPixmaps() []sniPixmap {
 
 func (s *linuxStatusItem) toolTip() sniToolTip {
 	return sniToolTip{
-		IconName: s.icon.Name,
+		IconName: statusIconName(s.icon),
 		Pixmaps:  s.iconPixmaps(),
 		Title:    s.title,
 		Text:     s.tooltip,
@@ -287,7 +305,7 @@ func (s *linuxStatusItem) SetIcon(icon StatusIcon) error {
 	s.icon = icon
 	s.mu.Unlock()
 	if s.props != nil {
-		s.props.SetMust(sniInterface, "IconName", icon.Name)
+		s.props.SetMust(sniInterface, "IconName", statusIconName(icon))
 		s.props.SetMust(sniInterface, "IconPixmap", s.iconPixmaps())
 	}
 	s.emit("NewIcon")
@@ -338,10 +356,7 @@ func (s *linuxStatusItem) Notify(n Notification) error {
 	}
 	icon := n.Icon.Name
 	if icon == "" {
-		icon = s.icon.Name
-	}
-	if icon == "" {
-		icon = "mail-unread"
+		icon = statusIconName(s.icon)
 	}
 	hints := map[string]dbus.Variant{
 		"desktop-entry": dbus.MakeVariant(s.opts.ID),
@@ -403,7 +418,12 @@ func (s *linuxStatusItem) Activate(x, y int32) *dbus.Error {
 	fn := s.opts.OnClick
 	dispatch := s.opts.Dispatch
 	s.mu.Unlock()
-	if menuOnly && s.invokeOnMenu(x, y, "Activate") {
+	if menuOnly {
+		if s.invokeOnMenu(x, y, "Activate") {
+			return nil
+		}
+		// HostMenu: the host draws dbusmenu. Do not also fire OnClick.
+		trayDebug("Activate ignored (ItemIsMenu)")
 		return nil
 	}
 	invokeStatus(dispatch, fn)
@@ -424,12 +444,15 @@ func (s *linuxStatusItem) invokeOnMenu(x, y int32, via string) bool {
 }
 
 // SecondaryActivate implements StatusNotifierItem.SecondaryActivate
-// (middle-click; some hosts also use this for right-click).
+// (middle-click). ToolkitMenu opens the popup. HostMenu does not
+// fall through to Activate — some hosts emit this on right-click
+// while also showing dbusmenu.
 func (s *linuxStatusItem) SecondaryActivate(x, y int32) *dbus.Error {
 	if s.invokeOnMenu(x, y, "SecondaryActivate") {
 		return nil
 	}
-	return s.Activate(x, y)
+	trayDebug("SecondaryActivate ignored (no OnMenu)")
+	return nil
 }
 
 // ContextMenu implements StatusNotifierItem.ContextMenu (right-click).
@@ -482,7 +505,7 @@ func (s *linuxStatusItem) GetLayout(parentID int32, recursionDepth int32, proper
 		if i >= 0 && i < len(items) {
 			return rev, dbusMenuLeafNode(parentID, items[i]), nil
 		}
-		return rev, emptyMenuLayout(), nil
+		return rev, unknownMenuNode(parentID), nil
 	}
 	return rev, buildMenuLayout(items), nil
 }
@@ -540,7 +563,7 @@ func (s *linuxStatusItem) Event(id int32, eventID string, data dbus.Variant, tim
 	s.mu.Lock()
 	var fn func()
 	i := int(id) - 1
-	if i >= 0 && i < len(s.menu) {
+	if i >= 0 && i < len(s.menu) && menuItemClickable(s.menu[i]) {
 		fn = s.menu[i].OnClick
 	}
 	dispatch := s.opts.Dispatch
@@ -554,10 +577,19 @@ func (s *linuxStatusItem) Event(id int32, eventID string, data dbus.Variant, tim
 
 // EventGroup implements com.canonical.dbusmenu.EventGroup.
 func (s *linuxStatusItem) EventGroup(events []dbusMenuEvent) ([]int32, *dbus.Error) {
+	s.mu.Lock()
+	n := len(s.menu)
+	s.mu.Unlock()
+	var unknown []int32
 	for _, ev := range events {
+		i := int(ev.ID) - 1
+		if ev.ID < 1 || i >= n {
+			unknown = append(unknown, ev.ID)
+			continue
+		}
 		_ = s.Event(ev.ID, ev.EventID, ev.Data, ev.Timestamp)
 	}
-	return nil, nil
+	return unknown, nil
 }
 
 // AboutToShow implements com.canonical.dbusmenu.AboutToShow.
@@ -604,22 +636,12 @@ func emptyMenuLayout() dbusMenuNode {
 	}
 }
 
-func dbusMenuStubLeaf() dbusMenuNode {
+func unknownMenuNode(id int32) dbusMenuNode {
 	return dbusMenuNode{
-		ID:         1,
-		Properties: map[string]dbus.Variant{"label": dbus.MakeVariant("Mail")},
+		ID:         id,
+		Properties: map[string]dbus.Variant{},
 		Children:   []dbus.Variant{},
 	}
-}
-
-func dbusMenuStubLayout() dbusMenuNode {
-	root := emptyMenuLayout()
-	root.Children = []dbus.Variant{dbus.MakeVariant(dbusMenuLeaf{
-		ID:         1,
-		Properties: map[string]dbus.Variant{"label": dbus.MakeVariant("Mail")},
-		Children:   []dbus.Variant{},
-	})}
-	return root
 }
 
 func menuItemProps(it StatusMenuItem) map[string]dbus.Variant {
@@ -762,6 +784,19 @@ const dbusMenuIntrospect = `
       <arg name="id" type="i" direction="in"/>
       <arg name="needUpdate" type="b" direction="out"/>
     </method>
+    <method name="EventGroup">
+      <arg name="events" type="a(isvu)" direction="in"/>
+      <arg name="idErrors" type="ai" direction="out"/>
+    </method>
+    <method name="AboutToShowGroup">
+      <arg name="ids" type="ai" direction="in"/>
+      <arg name="updatesNeeded" type="ai" direction="out"/>
+      <arg name="idErrors" type="ai" direction="out"/>
+    </method>
+    <property name="Version" type="u" access="read"/>
+    <property name="TextDirection" type="s" access="read"/>
+    <property name="Status" type="s" access="read"/>
+    <property name="IconThemePath" type="as" access="read"/>
     <signal name="LayoutUpdated">
       <arg name="revision" type="u"/>
       <arg name="parent" type="i"/>

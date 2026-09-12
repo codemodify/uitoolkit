@@ -257,12 +257,15 @@ buffer scale agree. List/table/tree rows and fixed column widths are
 design pixels that grow with the look. EGL, dmabuf, and shm share that
 scale; CPU present still uses damage / attach / commit.
 
-## Status item / tray (0.16.0, 0.17.0)
+## Status item / tray (0.16.0, 0.17.0, 0.18.1)
 
 `StatusItem` is a tray icon + desktop toast. Linux uses StatusNotifierItem
 and freedesktop Notifications over the session bus (X11, Xlibre, and
 Wayland). Windows uses `Shell_NotifyIcon`; macOS (`CGO`) uses
 `NSStatusItem`. See [tray.md](tray.md).
+
+**0.18.1:** HostMenu empty-menu / `ItemIsMenu` / `SecondaryActivate` /
+`IconName` fallback / dbusmenu `Version=3`. See [tray.md](tray.md).
 
 **0.17.0:** default **HostMenu** (`Menu=/MenuBar`, real dbusmenu rows).
 **ToolkitMenu** is `Menu=/NO_DBUSMENU` plus a reused toolkit popup.

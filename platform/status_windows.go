@@ -151,10 +151,9 @@ func (w *winStatusItem) wndProc(hwnd, msg, wparam, lparam uintptr) uintptr {
 		case wmLButtonUp:
 			w.mu.Lock()
 			fn := w.opts.OnClick
+			dispatch := w.opts.Dispatch
 			w.mu.Unlock()
-			if fn != nil {
-				fn()
-			}
+			invokeStatus(dispatch, fn)
 		case wmRButtonUp:
 			w.mu.Lock()
 			menuFn := w.opts.OnMenu
@@ -165,7 +164,7 @@ func (w *winStatusItem) wndProc(hwnd, msg, wparam, lparam uintptr) uintptr {
 				invokeStatus(dispatch, func() { menuFn(0, 0) })
 				break
 			}
-			if len(items) > 0 && items[0].OnClick != nil && !items[0].Separator {
+			if len(items) > 0 && menuItemClickable(items[0]) {
 				invokeStatus(dispatch, items[0].OnClick)
 			}
 		case ninBalloonUserClick:
@@ -174,10 +173,9 @@ func (w *winStatusItem) wndProc(hwnd, msg, wparam, lparam uintptr) uintptr {
 			if fn == nil {
 				fn = w.opts.OnClick
 			}
+			dispatch := w.opts.Dispatch
 			w.mu.Unlock()
-			if fn != nil {
-				fn()
-			}
+			invokeStatus(dispatch, fn)
 		}
 		return 0
 	}

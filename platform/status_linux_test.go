@@ -221,6 +221,132 @@ func TestDbusMenuEventInvokesOnClick(t *testing.T) {
 	}
 }
 
+func TestHostMenuGetLayoutEmptyAndUnknownParent(t *testing.T) {
+	s := &linuxStatusItem{
+		opts:    StatusItemOptions{MenuChrome: HostMenu},
+		menuRev: 1,
+	}
+	rev, layout, err := s.GetLayout(0, -1, nil)
+	if err != nil || rev != 1 || layout.ID != 0 || len(layout.Children) != 0 {
+		t.Fatalf("empty HostMenu layout rev=%d id=%d children=%d %v", rev, layout.ID, len(layout.Children), err)
+	}
+	if _, ok := layout.Properties["children-display"]; !ok {
+		t.Fatal("empty root must keep children-display=submenu")
+	}
+	_, missing, err := s.GetLayout(4, 0, nil)
+	if err != nil || missing.ID != 4 || len(missing.Children) != 0 {
+		t.Fatalf("unknown parent %+v %v", missing, err)
+	}
+	if err := s.SetMenu(nil); err != nil {
+		t.Fatal(err)
+	}
+	if s.menuRev != 1 {
+		t.Fatalf("empty→empty SetMenu must not churn rev, got %d", s.menuRev)
+	}
+}
+
+func TestItemIsMenuActivateDoesNotClick(t *testing.T) {
+	n := 0
+	opened := 0
+	s := &linuxStatusItem{
+		opts: StatusItemOptions{
+			MenuChrome: HostMenu,
+			ItemIsMenu: true,
+			OnClick:    func() { n++ },
+		},
+	}
+	if err := s.Activate(1, 2); err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Fatalf("HostMenu ItemIsMenu Activate must not fire OnClick, n=%d", n)
+	}
+	s.opts.OnMenu = func(x, y int32) { opened++ }
+	s.opts.MenuChrome = ToolkitMenu
+	if err := s.Activate(3, 4); err != nil {
+		t.Fatal(err)
+	}
+	if opened != 1 || n != 0 {
+		t.Fatalf("ToolkitMenu ItemIsMenu should OnMenu, opened=%d n=%d", opened, n)
+	}
+}
+
+func TestSecondaryActivateHostMenuDoesNotRaise(t *testing.T) {
+	n := 0
+	s := &linuxStatusItem{
+		opts: StatusItemOptions{
+			MenuChrome: HostMenu,
+			OnClick:    func() { n++ },
+		},
+	}
+	if err := s.SecondaryActivate(8, 9); err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Fatalf("HostMenu SecondaryActivate must not Activate, n=%d", n)
+	}
+	if err := s.Activate(8, 9); err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Fatalf("plain Activate still raises, n=%d", n)
+	}
+}
+
+func TestDbusMenuEventIgnoresDisabledAndSeparator(t *testing.T) {
+	n := 0
+	s := &linuxStatusItem{
+		opts: StatusItemOptions{MenuChrome: HostMenu},
+		menu: []StatusMenuItem{
+			{Text: "Show", OnClick: func() { n++ }},
+			{Separator: true, OnClick: func() { n += 10 }},
+			{Text: "Later", Disabled: true, OnClick: func() { n += 100 }},
+		},
+	}
+	if err := s.Event(2, "clicked", dbus.MakeVariant(""), 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Event(3, "clicked", dbus.MakeVariant(""), 0); err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Fatalf("separator/disabled Event must not click, n=%d", n)
+	}
+	if err := s.Event(1, "clicked", dbus.MakeVariant(""), 0); err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Fatalf("enabled Event n=%d", n)
+	}
+	ids, err := s.EventGroup([]dbusMenuEvent{
+		{ID: 1, EventID: "clicked"},
+		{ID: 99, EventID: "clicked"},
+		{ID: 0, EventID: "clicked"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ids) != 2 || ids[0] != 99 || ids[1] != 0 {
+		t.Fatalf("unknown EventGroup ids %v", ids)
+	}
+	if n != 2 {
+		t.Fatalf("EventGroup valid click n=%d", n)
+	}
+}
+
+func TestStatusIconNameFallback(t *testing.T) {
+	if got := statusIconName(StatusIcon{Name: "mail-unread"}); got != "mail-unread" {
+		t.Fatalf("named %q", got)
+	}
+	if got := statusIconName(StatusIcon{}); got != "application-default-icon" {
+		t.Fatalf("empty fallback %q", got)
+	}
+	s := &linuxStatusItem{icon: StatusIcon{}}
+	if s.toolTip().IconName != "application-default-icon" {
+		t.Fatalf("tooltip IconName %q", s.toolTip().IconName)
+	}
+}
+
 func TestSetMenuDedupesLayoutUpdated(t *testing.T) {
 	s := &linuxStatusItem{
 		menu:    []StatusMenuItem{{Text: "Show"}, {Separator: true}, {Text: "Quit"}},
@@ -237,6 +363,18 @@ func TestSetMenuDedupesLayoutUpdated(t *testing.T) {
 	}
 	if s.menuRev != 5 {
 		t.Fatalf("changed SetMenu rev %d", s.menuRev)
+	}
+	if err := s.SetMenu(nil); err != nil {
+		t.Fatal(err)
+	}
+	if s.menuRev != 6 {
+		t.Fatalf("clearing the menu must bump rev, got %d", s.menuRev)
+	}
+	if err := s.SetMenu(nil); err != nil {
+		t.Fatal(err)
+	}
+	if s.menuRev != 6 {
+		t.Fatalf("second empty SetMenu must not churn, got %d", s.menuRev)
 	}
 }
 
@@ -326,6 +464,29 @@ func TestExportGetLayoutNoNestingPanic(t *testing.T) {
 	path, _ := menuVar.Value().(dbus.ObjectPath)
 	if path != dbus.ObjectPath(dbusMenuPath) {
 		t.Fatalf("Menu %q want %s", path, dbusMenuPath)
+	}
+	itemIsMenu, derr := s.props.Get(sniInterface, "ItemIsMenu")
+	if derr != nil {
+		t.Fatal(derr)
+	}
+	if on, _ := itemIsMenu.Value().(bool); on {
+		t.Fatal("default ItemIsMenu must be false")
+	}
+	iconName, derr := s.props.Get(sniInterface, "IconName")
+	if derr != nil {
+		t.Fatal(derr)
+	}
+	if name, _ := iconName.Value().(string); name != "application-default-icon" {
+		t.Fatalf("empty IconName fallback %q", name)
+	}
+	var ver dbus.Variant
+	if err := s.conn.Object(s.name, dbusMenuPath).Call(
+		"org.freedesktop.DBus.Properties.Get", 0, dbusMenuIface, "Version",
+	).Store(&ver); err != nil {
+		t.Fatalf("dbusmenu Version: %v", err)
+	}
+	if u, _ := ver.Value().(uint32); u != 3 {
+		t.Fatalf("dbusmenu Version %v want 3", ver.Value())
 	}
 }
 

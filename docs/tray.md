@@ -6,6 +6,13 @@ cross-platform notification-area / menu-bar icon, a context menu, and a
 desktop toast. Mail only calls toolkit APIs (`app.NewStatusItem` /
 `platform.StatusItem`).
 
+**v0.18.1** hardens the v0.17 HostMenu path: empty `GetLayout` stays a
+valid root, `SetMenu` still dedupes `LayoutUpdated`, SNI `IconName`
+falls back to `application-default-icon` (toasts no longer hardcode
+`mail-unread`), `ItemIsMenu` is menu-only (no extra `OnClick`),
+`SecondaryActivate` does not raise on HostMenu, dbusmenu exports
+`Version=3`, and `Event` ignores separator / disabled rows.
+
 **v0.17.0** makes the Linux path robust. The default is **HostMenu**:
 advertise `Menu=/MenuBar` with a real `com.canonical.dbusmenu` layout
 and let Plasma / AppIndicator / Waybar draw the menu. Opt-in
@@ -56,8 +63,9 @@ _ = item.Notify(uitoolkit.Notification{Title: "Hello", Body: "Ready."})
 | --- | --- | --- |
 | Linux `Menu` | `/MenuBar` — real dbusmenu rows | `/NO_DBUSMENU` exactly |
 | Who draws | Plasma / GNOME AppIndicator / Waybar | Toolkit `PopupMenu` |
-| `ItemIsMenu` | `false` unless `StatusItemOptions.ItemIsMenu` | `false` unless set |
-| Left-click | SNI `Activate` → `OnClick` (show window) | Same |
+| `ItemIsMenu` | Advertised; left-click is host menu only (`Activate` does not `OnClick`) | Advertised; `Activate` → `OnMenu` |
+| Left-click | SNI `Activate` → `OnClick` (show window) unless `ItemIsMenu` | Same unless `ItemIsMenu` |
+| Middle-click | Ignored (some hosts also fire this on right-click) | `SecondaryActivate` → reused popup |
 | Right-click | Host menu every time | `ContextMenu` / `SecondaryActivate` → reused popup |
 | `SetMenu` | `LayoutUpdated` (deduped; no spam) | Updates next popup |
 | UI thread | dbusmenu `Event("clicked")` via `Dispatch` / `Post` | `OnMenu` via `Dispatch` / `Post` |
@@ -184,6 +192,12 @@ CGO_ENABLED=1 go build ./cmd/mailclientui
 ```
 
 ## History
+
+**v0.18.1** — HostMenu robustness: empty menu layout, `IconName`
+fallback, `ItemIsMenu` / `SecondaryActivate` vs docs, dbusmenu
+`Version=3`, `Event` skips inert rows. ToolkitMenu stays opt-in
+(`/NO_DBUSMENU` + reused popup). CGO preambles stay free of nested
+`*/`.
 
 **v0.16.1** — `GetLayout` must return D-Bus `(ia{sv}av)`. v0.16.0
 exported a recursive Go struct; godbus panicked (`container nesting too

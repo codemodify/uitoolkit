@@ -40,8 +40,9 @@ go run ./examples/mail -screenshot docs/screenshots
 ## Tray and new-mail toasts (0.16.0, 0.16.1)
 
 `mailclientui` opens a toolkit `StatusItem` while it runs
-(v0.17.0: **HostMenu** — Plasma/AppIndicator draw the native menu from
-`Menu=/MenuBar`. Left-click / notify-click still raise the window.
+(v0.17.0 / v0.18.1: **HostMenu** — Plasma/AppIndicator draw the native
+menu from `Menu=/MenuBar`. Left-click / notify-click still raise the
+window. Middle-click does not.
 Toolkit chrome is `StatusItemOptions.MenuChrome = ToolkitMenu`.
 v0.16.4: `Menu=/` + toolkit popup was unreliable on Plasma.
 v0.16.2: envelope tray icon; Wayland Show Mail remaps after
