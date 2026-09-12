@@ -68,6 +68,20 @@ func TestRadioStandalone(t *testing.T) {
 	}
 }
 
+func TestComboBoxMeasuresToolbarHeight(t *testing.T) {
+	c := NewComboBox([]string{"Inbox", "Sent"}, 0, nil)
+	c.SetHost(&host{})
+	sz := c.Measure(layout.Loose(400, 200))
+	m := style.DarkLook().Metrics()
+	want := style.ComboHeight(m)
+	if sz.Y != want {
+		t.Fatalf("combo height %v want ComboHeight %v (ComboH %v ControlH %v)", sz.Y, want, m.ComboH, m.ControlH)
+	}
+	if want >= m.ControlH {
+		t.Fatalf("ComboHeight %v should be shorter than ControlH %v", want, m.ControlH)
+	}
+}
+
 func TestComboBoxSelect(t *testing.T) {
 	n := -2
 	c := NewComboBox([]string{"One", "Two", "Three"}, 0, func(i int) { n = i })

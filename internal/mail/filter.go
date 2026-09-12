@@ -2,7 +2,7 @@ package mail
 
 import "strings"
 
-// Filter is the Thunderbird Quick Filter bar: a query plus pin buttons.
+// Filter is the Thunderbird Quick Filter: a query plus Filters-tree pins.
 type Filter struct {
 	Query       string `json:"query,omitempty"`
 	Unread      bool   `json:"unread,omitempty"`

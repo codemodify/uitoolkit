@@ -150,6 +150,7 @@ type Metrics struct {
 	StatusBarH  float32
 	ToolBarH    float32
 	ToolBtn     float32
+	ComboH      float32 // closed ComboBox; toolbar-friendly, not grown with icon size
 	ProgressH   float32
 	Radio       float32
 	HeaderH     float32
@@ -199,6 +200,7 @@ func ScaleMetrics(m Metrics, scale float32) Metrics {
 	m.StatusBarH = s(m.StatusBarH)
 	m.ToolBarH = s(m.ToolBarH)
 	m.ToolBtn = s(m.ToolBtn)
+	m.ComboH = s(m.ComboH)
 	m.ProgressH = s(m.ProgressH)
 	m.Radio = s(m.Radio)
 	m.HeaderH = s(m.HeaderH)
@@ -241,6 +243,7 @@ func DefaultMetrics() Metrics {
 		StatusBarH:  28,
 		ToolBarH:    36,
 		ToolBtn:     30,
+		ComboH:      30,
 		ProgressH:   14,
 		Radio:       18,
 		HeaderH:     28,
@@ -252,6 +255,19 @@ func DefaultMetrics() Metrics {
 		RowH:        24,
 		RowPad:      6,
 	}
+}
+
+// ComboHeight is the closed ComboBox row. ComboH (else ToolBtn) stays
+// flush with toolbar chrome and is not grown by icon-size ToolBtn bumps;
+// ControlH stays the taller standalone button/field.
+func ComboHeight(m Metrics) float32 {
+	if m.ComboH > 0 {
+		return m.ComboH
+	}
+	if m.ToolBtn > 0 {
+		return m.ToolBtn
+	}
+	return m.ControlH
 }
 
 // Align is a 2D alignment hint for labels and flex cross-axis.

@@ -82,7 +82,7 @@ func (c *ComboBox) Measure(cons layout.Constraints) paintengine2d.Point {
 			w = tw
 		}
 	}
-	return cons.Constrain(paintengine2d.Pt(w, m.ControlH))
+	return cons.Constrain(paintengine2d.Pt(w, style.ComboHeight(m)))
 }
 
 func (c *ComboBox) Arrange(r paintengine2d.Rect) { c.SetBounds(r) }

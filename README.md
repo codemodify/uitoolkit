@@ -509,6 +509,15 @@ are independent look.json fields again; compound pack names migrate
 
 ## Version
 
+**0.13.5** — Mail Filters chrome: the sidebar **Tags** group is **Filters**.
+Pin toggles (Unread, Starred, Attachment, From, To, Subject, Body) live
+as checkable rows there with the existing tag folders; the old filter
+toolbar and Tags ComboBox are gone. The Quick Filter field sits on the
+list action row after Delete, right-aligned. Toolkit: closed `ComboBox`
+measures `style.ComboHeight` (`Metrics.ComboH`, default 30 — toolbar
+height, not `ControlH` 34, and not grown by icon-size `ToolBtn`). Still
+paintengine2d **v0.9.0**.
+
 **0.13.4** — Menu / context items gain **icons** and **toggles**.
 `MenuItem` has `Icon`, `Checkable`, and `RadioGroup`; click and keyboard
 activate the same. The XP gutter paints a check, radio, or ToolIcon

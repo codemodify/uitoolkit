@@ -51,6 +51,7 @@ func ApplyDensity(m Metrics, d Density) Metrics {
 		m.StatusBarH = 24
 		m.ToolBarH = 30
 		m.ToolBtn = 26
+		m.ComboH = 26
 		m.HeaderH = 24
 		m.AccordionH = 26
 		m.RowH = 20
@@ -69,6 +70,7 @@ func ApplyDensity(m Metrics, d Density) Metrics {
 		m.StatusBarH = 32
 		m.ToolBarH = 44
 		m.ToolBtn = 36
+		m.ComboH = 36
 		m.HeaderH = 34
 		m.AccordionH = 36
 		m.RowH = 32
@@ -88,6 +90,7 @@ func ApplyDensity(m Metrics, d Density) Metrics {
 		m.StatusBarH = 28
 		m.ToolBarH = 36
 		m.ToolBtn = 30
+		m.ComboH = 30
 		m.HeaderH = 28
 		m.AccordionH = 30
 		m.RowH = 24

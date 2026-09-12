@@ -22,3 +22,22 @@ func TestWithScaleRebuildsClassic(t *testing.T) {
 		t.Fatal("scale 1")
 	}
 }
+
+func TestComboHeightMatchesToolbarNotControl(t *testing.T) {
+	m := DefaultMetrics()
+	h := ComboHeight(m)
+	if h != m.ComboH || h != 30 {
+		t.Fatalf("ComboHeight %v want ComboH 30", h)
+	}
+	if h >= m.ControlH {
+		t.Fatalf("ComboHeight %v should be shorter than ControlH %v", h, m.ControlH)
+	}
+	look := DarkLook().Metrics()
+	if ComboHeight(look) != 30 {
+		t.Fatalf("DarkLook ComboHeight %v; icon-size ToolBtn %v must not grow combo", ComboHeight(look), look.ToolBtn)
+	}
+	scaled := ScaleMetrics(m, 2)
+	if ComboHeight(scaled) != scaled.ComboH {
+		t.Fatalf("scaled ComboHeight %v want %v", ComboHeight(scaled), scaled.ComboH)
+	}
+}
