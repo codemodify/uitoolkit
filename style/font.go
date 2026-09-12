@@ -20,6 +20,26 @@ type Font struct {
 	Weight  Weight
 	Outline bool // true when built from TTF outlines (not the 5×7 bitmap)
 	ot      *otAtlas
+	shaped  *shapeCache
+}
+
+// shapeCacheCap drops shaped runs once the map grows past this. Labels
+// and menu titles reuse the same strings; list rows with unique text miss.
+const shapeCacheCap = 512
+
+type shapeCache struct {
+	mu sync.Mutex
+	m  map[string]shapedRun
+}
+
+type shapedRun struct {
+	run paintengine2d.GlyphRun
+	adv float32
+	ink float32
+}
+
+func newShapeCache() *shapeCache {
+	return &shapeCache{m: make(map[string]shapedRun, 32)}
 }
 
 // Fit returns text, or a prefix plus an ellipsis, that fits in maxW.
@@ -76,40 +96,19 @@ func (f *Font) Advance(text string) float32 {
 	if f == nil || f.Atlas == nil {
 		return 0
 	}
-	f.ensure(text)
-	run := paintengine2d.NullShaper{}.Shape(text, f.Atlas)
-	var w float32
-	for _, g := range run.Glyphs {
-		if cell, ok := f.Atlas.Cell(g.ID); ok {
-			adv := cell.Advance
-			if adv <= 0 {
-				adv = cell.Src.Dx()
-			}
-			if g.X+adv > w {
-				w = g.X + adv
-			}
-		}
-	}
-	return w
+	return f.shapeOf(text).adv
 }
 
 // InkWidth is the painted AABB width of text (advance plus last-glyph
 // bearing / atlas pad). Menus use this so DrawGlyphs cannot clip a stem.
 func (f *Font) InkWidth(text string) float32 {
-	adv := f.Advance(text)
 	if f == nil || f.Atlas == nil || text == "" {
-		return adv
+		if f == nil {
+			return 0
+		}
+		return f.Advance(text)
 	}
-	f.ensure(text)
-	run := paintengine2d.NullShaper{}.Shape(text, f.Atlas)
-	ink := run.Bounds(paintengine2d.Pt(0, 0))
-	if ink.Empty() {
-		return adv
-	}
-	if ink.Max.X > adv {
-		return ink.Max.X
-	}
-	return adv
+	return f.shapeOf(text).ink
 }
 
 func (f *Font) IndexAt(text string, x float32) int {
@@ -173,11 +172,65 @@ func (f *Font) ensure(text string) {
 	}
 }
 
+func (f *Font) shapeOf(text string) shapedRun {
+	if f == nil || f.Atlas == nil {
+		return shapedRun{}
+	}
+	if text == "" {
+		return shapedRun{}
+	}
+	f.ensure(text)
+	if f.shaped == nil {
+		return measureShaped(paintengine2d.NullShaper{}.Shape(text, f.Atlas), f.Atlas)
+	}
+	f.shaped.mu.Lock()
+	if hit, ok := f.shaped.m[text]; ok {
+		f.shaped.mu.Unlock()
+		return hit
+	}
+	run := paintengine2d.NullShaper{}.Shape(text, f.Atlas)
+	hit := measureShaped(run, f.Atlas)
+	if f.shaped.m == nil {
+		f.shaped.m = make(map[string]shapedRun, 32)
+	}
+	if len(f.shaped.m) >= shapeCacheCap {
+		clear(f.shaped.m)
+	}
+	f.shaped.m[text] = hit
+	f.shaped.mu.Unlock()
+	return hit
+}
+
+func measureShaped(run paintengine2d.GlyphRun, atlas *paintengine2d.FontAtlas) shapedRun {
+	var w float32
+	for _, g := range run.Glyphs {
+		if atlas == nil {
+			break
+		}
+		cell, ok := atlas.Cell(g.ID)
+		if !ok {
+			continue
+		}
+		adv := cell.Advance
+		if adv <= 0 {
+			adv = cell.Src.Dx()
+		}
+		if g.X+adv > w {
+			w = g.X + adv
+		}
+	}
+	inkW := w
+	ink := run.Bounds(paintengine2d.Pt(0, 0))
+	if !ink.Empty() && ink.Max.X > w {
+		inkW = ink.Max.X
+	}
+	return shapedRun{run: run, adv: w, ink: inkW}
+}
+
 func (f *Font) Draw(ctx *paintengine2d.Context, text string, origin paintengine2d.Point, tint paintengine2d.Color) {
 	if f == nil || f.Atlas == nil || text == "" {
 		return
 	}
-	f.ensure(text)
 	col := tint
 	if col == (paintengine2d.Color{}) {
 		col = f.Color
@@ -185,7 +238,7 @@ func (f *Font) Draw(ctx *paintengine2d.Context, text string, origin paintengine2
 	if col == (paintengine2d.Color{}) {
 		col = paintengine2d.White
 	}
-	run := paintengine2d.NullShaper{}.Shape(text, f.Atlas)
+	run := f.shapeOf(text).run
 	filter := paintengine2d.FilterNearest
 	if f.Outline {
 		filter = paintengine2d.FilterBilinear
@@ -282,6 +335,7 @@ func bakeOutline(family string, weight Weight, size float32) (*Font, error) {
 		Weight:  weight,
 		Outline: true,
 		ot:      ot,
+		shaped:  newShapeCache(),
 	}, nil
 }
 
@@ -341,6 +395,7 @@ func bakeScaled(scale int, col paintengine2d.Color) *Font {
 		Ascent:  float32(7 * scale),
 		Descent: float32(scale + 2),
 		Color:   col,
+		shaped:  newShapeCache(),
 	}
 }
 

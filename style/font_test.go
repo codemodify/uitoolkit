@@ -66,6 +66,47 @@ func containsEllipsis(s string) bool {
 	return false
 }
 
+func TestShapedTextReuseMatchesFreshShape(t *testing.T) {
+	f := BakeFont(16, paintengine2d.White)
+	for _, s := range []string{"OK", "About Mail", "Welcome to Mail on uitoolkit"} {
+		a1 := f.Advance(s)
+		a2 := f.Advance(s)
+		if a1 != a2 || a1 < 8 {
+			t.Fatalf("%q advance %v / %v", s, a1, a2)
+		}
+		ink1, ink2 := f.InkWidth(s), f.InkWidth(s)
+		if ink1 != ink2 || ink1+0.01 < a1 {
+			t.Fatalf("%q ink %v / %v adv %v", s, ink1, ink2, a1)
+		}
+	}
+	img := paintengine2d.NewImage(160, 24)
+	ctx := paintengine2d.NewContext(img)
+	f.Draw(ctx, "About Mail", paintengine2d.Pt(2, 4), paintengine2d.White)
+	n := 0
+	for y := 0; y < img.Height; y++ {
+		for x := 0; x < img.Width; x++ {
+			_, _, _, a := img.PremulAt(x, y)
+			if a > 20 {
+				n++
+			}
+		}
+	}
+	if n < 10 {
+		t.Fatalf("cached draw left no ink n=%d", n)
+	}
+}
+
+func BenchmarkFontAdvanceCached(b *testing.B) {
+	f := BakeFont(16, paintengine2d.White)
+	s := "Welcome to Mail on uitoolkit"
+	_ = f.Advance(s)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = f.Advance(s)
+	}
+}
+
 func TestFontInkWidthCoversAdvance(t *testing.T) {
 	f := BakeFont(16, paintengine2d.White)
 	for _, s := range []string{"P", "Add sender to VIP", "About Mail"} {

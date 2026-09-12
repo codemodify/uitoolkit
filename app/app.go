@@ -181,14 +181,22 @@ func (a *Application) Run() error {
 			nextBlink = now.Add(caretBlinkPeriod)
 		}
 		alive := 0
-		for _, w := range a.Windows() {
+		wins := a.Windows()
+		for _, w := range wins {
 			if w.surf.Closed() {
 				w.Close()
 				continue
 			}
 			w.pump()
-			w.frame()
 			alive++
+		}
+		// One frame per event burst: drain every surface first, then
+		// paint. Per-window pump+frame used to present mid-burst.
+		for _, w := range a.Windows() {
+			if w.closed {
+				continue
+			}
+			w.frame()
 		}
 		a.reap()
 		if alive == 0 {
@@ -281,11 +289,14 @@ func (a *Application) waitDisplay(timeout time.Duration) {
 	platform.WaitDisplay(nil, timeout)
 }
 
-// PumpOnce processes one frame on every window (tests / screenshots).
+// PumpOnce processes one event burst then one frame on every window
+// (tests / screenshots).
 func (a *Application) PumpOnce() {
 	a.pollLookFile()
 	for _, w := range a.Windows() {
 		w.pump()
+	}
+	for _, w := range a.Windows() {
 		w.frame()
 	}
 }
