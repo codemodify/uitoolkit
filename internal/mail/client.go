@@ -261,6 +261,15 @@ func (c *Client) ListMessages(folder FolderID, filter Filter) ([]Message, error)
 	return out, err
 }
 
+func (c *Client) GetSource(id MessageID) (string, error) {
+	var r sourceResult
+	err := c.call(MethodMessagesSource, messageIDParams{ID: id}, &r)
+	if err != nil {
+		return "", err
+	}
+	return r.RFC822, nil
+}
+
 func (c *Client) GetMessage(id MessageID) (Message, bool, error) {
 	if m, ok := c.cachedBody(id); ok {
 		return m, true, nil

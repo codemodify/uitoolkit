@@ -1233,6 +1233,108 @@ func TestOrderFolderChildrenOutboxLast(t *testing.T) {
 	}
 }
 
+func TestMailMessageSourceShowsRFC822(t *testing.T) {
+	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{
+		Title: "Mail", Width: 1280, Height: 800, Headless: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.SetContent(MailApp(a, w))
+	a.PumpOnce()
+	PrepareShot(w, -1)
+	a.PumpOnce()
+
+	var tabs *widgets.TabView
+	widget.Walk(w.Content(), func(c widget.Component) {
+		if tv, ok := c.(*widgets.TabView); ok && tabs == nil {
+			tabs = tv
+		}
+	})
+	if tabs == nil {
+		t.Fatal("preview tabs")
+	}
+	tabs.Select(1)
+	a.PumpOnce()
+	var sourceTab *widgets.TextArea
+	widget.Walk(w.Content(), func(c widget.Component) {
+		if ta, ok := c.(*widgets.TextArea); ok && ta.Mono && ta.ReadOnly {
+			sourceTab = ta
+		}
+	})
+	if sourceTab == nil || !strings.Contains(sourceTab.Text, "MIME-Version:") {
+		t.Fatalf("Source tab missing RFC822: %q", textPreview(sourceTab))
+	}
+	if strings.Contains(sourceTab.Text, "X-Flag:") {
+		t.Fatal("Source tab used reconstructed headers")
+	}
+
+	var open func()
+	widget.Walk(w.Content(), func(c widget.Component) {
+		mb, ok := c.(*widgets.MenuBar)
+		if !ok {
+			return
+		}
+		for _, m := range mb.Menus() {
+			for _, it := range m.Items {
+				if it == nil {
+					continue
+				}
+				label, _, _ := widgets.ParseMnemonic(it.Text)
+				if label == "Message Source" && it.OnClick != nil {
+					open = it.OnClick
+				}
+			}
+		}
+	})
+	if open == nil {
+		t.Fatal("View/Message Source menu missing")
+	}
+	open()
+	a.PumpOnce()
+	var srcWin *app.Window
+	for _, win := range a.Windows() {
+		if win == w {
+			continue
+		}
+		var body *widgets.TextArea
+		widget.Walk(win.Content(), func(c widget.Component) {
+			if ta, ok := c.(*widgets.TextArea); ok && ta.Mono && strings.Contains(ta.Text, "MIME-Version:") {
+				body = ta
+			}
+		})
+		if body != nil {
+			srcWin = win
+			break
+		}
+	}
+	if srcWin == nil {
+		t.Fatal("source window not opened")
+	}
+	var body *widgets.TextArea
+	widget.Walk(srcWin.Content(), func(c widget.Component) {
+		if ta, ok := c.(*widgets.TextArea); ok && ta.Mono {
+			body = ta
+		}
+	})
+	if body == nil || !body.ReadOnly || !strings.Contains(body.Text, "MIME-Version:") {
+		t.Fatalf("source window body %q", textPreview(body))
+	}
+	srcWin.Close()
+	w.Close()
+}
+
+func textPreview(ta *widgets.TextArea) string {
+	if ta == nil {
+		return "<nil>"
+	}
+	if len(ta.Text) > 200 {
+		return ta.Text[:200]
+	}
+	return ta.Text
+}
+
 func TestMailFolderTreePutsOutboxLast(t *testing.T) {
 	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true})
 	w, err := a.NewWindow(platform.WindowOptions{

@@ -2,6 +2,7 @@ package mail
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 )
@@ -106,6 +107,38 @@ func TestRPCMutations(t *testing.T) {
 	n, err := cli.Fetch(AcctAda)
 	if err != nil || n != 1 {
 		t.Fatalf("fetch %d %v", n, err)
+	}
+}
+
+func TestRPCGetSourceReturnsRFC822(t *testing.T) {
+	sock, stop, err := StartDemo(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stop()
+	cli, err := DialWait(sock, 2*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cli.Close()
+
+	inbox, ok := specialFolderClient(cli, AcctAda, FolderInbox)
+	if !ok {
+		t.Fatal("inbox")
+	}
+	list, err := cli.ListMessages(inbox.ID, Filter{})
+	if err != nil || len(list) < 1 {
+		t.Fatal(err)
+	}
+	raw, err := cli.GetSource(list[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(raw, "MIME-Version:") || !strings.Contains(raw, "From:") {
+		t.Fatalf("not RFC822:\n%s", raw)
+	}
+	if strings.Contains(raw, "X-Flag:") {
+		t.Fatal("source must be stored RFC822, not a reconstructed header dump")
 	}
 }
 

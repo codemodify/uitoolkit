@@ -18,6 +18,7 @@ import "encoding/json"
 //	folders.create      {accountId, name, parent?}
 //	messages.list       {folderId, filter?}
 //	messages.get        {id}
+//	messages.getSource  {id}            // raw RFC822 / .eml bytes
 //	messages.search     {accountId?, folderId?, filter}
 //	messages.setFlags   {id, patch}
 //	messages.move       {ids, dest}
@@ -68,6 +69,7 @@ const (
 	MethodFoldersCreate  = "folders.create"
 	MethodMessagesList   = "messages.list"
 	MethodMessagesGet    = "messages.get"
+	MethodMessagesSource = "messages.getSource"
 	MethodMessagesSearch = "messages.search"
 	MethodMessagesFlags  = "messages.setFlags"
 	MethodMessagesMove   = "messages.move"
@@ -272,6 +274,11 @@ type applyRulesParams struct {
 type partParams struct {
 	ID     MessageID `json:"id"`
 	PartID string    `json:"partId,omitempty"`
+}
+
+type sourceResult struct {
+	ID     MessageID `json:"id"`
+	RFC822 string    `json:"rfc822"`
 }
 
 type applyResult struct {

@@ -245,6 +245,16 @@ func (s *Server) dispatch(req Request) Response {
 				result = plainMessage(m)
 			}
 		}
+	case MethodMessagesSource:
+		var p messageIDParams
+		p, err = decodeParams[messageIDParams](req.Params)
+		if err == nil {
+			var raw []byte
+			raw, err = s.Store.GetRaw(p.ID)
+			if err == nil {
+				result = sourceResult{ID: p.ID, RFC822: rawAsText(raw)}
+			}
+		}
 	case MethodMessagesSearch:
 		var p searchParams
 		p, err = decodeParams[searchParams](req.Params)

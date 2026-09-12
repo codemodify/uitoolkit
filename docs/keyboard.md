@@ -101,6 +101,7 @@ Single-letter Thunderbird bindings apply when focus is **not** a TextField / Tex
 | **F5** | Get Messages |
 | **Ctrl+F** | Quick Filter |
 | **Ctrl+,** | Preferences |
+| **Ctrl+U** | Message Source (raw RFC822) |
 
 ## FileDialog (stub)
 

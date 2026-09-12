@@ -509,6 +509,13 @@ are independent look.json fields again; compound pack names migrate
 
 ## Version
 
+**0.13.1** — Mail **View → Message Source** (also Message menu, context
+menu, **Ctrl+U**) opens a read-only JetBrains Mono window of the
+stored RFC822. `mailclientd` exposes `messages.getSource`; MemoryStore
+keeps seeded `.eml`-equivalent bytes, LocalStore reads `raw/*.eml`
+(IMAP FETCH if needed). The preview Source tab uses the same daemon
+bytes — it does not reconstruct headers. Still paintengine2d **v0.9.0**.
+
 **0.13.0** — Deep chrome polish plus comparison tooling. Buttons,
 checkboxes, radios, and switches use GTK/Avalonia **focus-visible**
 (no leftover ring after a mouse click; Tab still shows it) and
