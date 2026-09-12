@@ -43,6 +43,7 @@ func newClassic(name string, p Palette, m Metrics, corners CornerStyle, icons Ic
 	// Metrics.FontFamily cannot select mononoki (or any other face).
 	m.FontFamily = DefaultFontFamily
 	m.MonoFamily = DefaultMonoFamily
+	p = ResolveMenuChrome(p)
 	return &Classic{
 		palette: p,
 		metrics: m,
@@ -391,11 +392,13 @@ func (l *Classic) DrawMenuBar(ctx *paintengine2d.Context, b paintengine2d.Rect) 
 
 func (l *Classic) DrawMenuTitle(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, underline int, open bool) {
 	p := l.palette
-	r := l.rx(4)
-	if open || st.Pressed() {
-		ctx.DrawRoundRect(b.Inset(2), r, r, paintengine2d.Fill(p.Accent.WithAlpha(0.28)))
-	} else if st.Hovered() && !st.Disabled() {
-		ctx.DrawRoundRect(b.Inset(2), r, r, paintengine2d.Fill(p.Highlight))
+	if open || st.Pressed() || (st.Hovered() && !st.Disabled()) {
+		// Open titles drop the bottom stroke so the popup shares an edge.
+		hl := b.Inset(1)
+		if open {
+			hl.Max.Y = b.Max.Y
+		}
+		l.drawMenuHighlight(ctx, hl, open)
 	}
 	l.drawLabeled(ctx, l.body, label, underline, b, p.Text)
 	if st.Focused() && !open {
@@ -410,21 +413,51 @@ func (l *Classic) DrawMenuFrame(ctx *paintengine2d.Context, b paintengine2d.Rect
 	// cannot leave a sliver artifact under the last row.
 	ctx.DrawRoundRect(b.Inset(1).Translate(paintengine2d.Pt(1, 2)), m.RadiusSmall, m.RadiusSmall, paintengine2d.Fill(p.Shadow))
 	ctx.DrawRoundRect(b.Inset(1), m.RadiusSmall, m.RadiusSmall, paintengine2d.Fill(p.SurfaceAlt))
+	// Classic XP icon gutter: a slightly darker strip to the label origin.
+	ch := MenuChromeFor(l)
+	inner := b.Inset(1)
+	gw := ch.GutterW() - 1
+	if gw > 2 && gw < inner.Dx()*0.55 {
+		ctx.DrawRect(paintengine2d.XYWH(inner.Min.X, inner.Min.Y, gw, inner.Dy()), paintengine2d.Fill(p.MenuGutter))
+	}
 	ctx.DrawRoundRect(b.Inset(1.5), m.RadiusSmall, m.RadiusSmall, paintengine2d.StrokePaint(p.Border, m.Border+0.4))
+}
+
+func (l *Classic) drawMenuHighlight(ctx *paintengine2d.Context, b paintengine2d.Rect, attachBottom bool) {
+	if b.Dx() < 2 || b.Dy() < 2 {
+		return
+	}
+	p := l.palette
+	// Flat Office XP hot-track (1px border). Square looks stay square;
+	// round themes get a 1px radius so the chrome is not a Win95 bevel.
+	r := l.rx(1)
+	ctx.DrawRoundRect(b, r, r, paintengine2d.Fill(p.MenuHover))
+	ctx.DrawRoundRect(b, r, r, paintengine2d.StrokePaint(p.MenuHoverBorder, 1))
+	if attachBottom {
+		ctx.DrawRect(paintengine2d.XYWH(b.Min.X+1, b.Max.Y-1, b.Dx()-2, 1), paintengine2d.Fill(p.MenuHover))
+	}
+}
+
+func (l *Classic) menuItemHighlightBounds(item paintengine2d.Rect) paintengine2d.Rect {
+	ch := MenuChromeFor(l)
+	// Full row (icon gutter + label), 1px inside the popup frame / clip.
+	return paintengine2d.XYWH(item.Min.X-ch.PadL+2, item.Min.Y+1, item.Dx()+ch.PadL+ch.PadR-4, item.Dy()-2)
 }
 
 func (l *Classic) DrawMenuItem(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label, shortcut string, underline int, sep, checked bool) {
 	p := l.palette
+	ch := MenuChromeFor(l)
 	if sep {
 		y := (b.Min.Y + b.Max.Y) * 0.5
-		ctx.DrawRect(paintengine2d.XYWH(b.Min.X+8, y, b.Dx()-16, 1), paintengine2d.Fill(p.Divider))
+		x0 := b.Min.X + ch.CheckCol()
+		if w := b.Max.X - 8 - x0; w > 0 {
+			ctx.DrawRect(paintengine2d.XYWH(x0, y, w, 1), paintengine2d.Fill(p.Divider))
+		}
 		return
 	}
 	if (st.Hovered() || st.Pressed()) && !st.Disabled() {
-		r := l.rx(4)
-		ctx.DrawRoundRect(b.Inset(2), r, r, paintengine2d.Fill(p.Accent.WithAlpha(0.30)))
+		l.drawMenuHighlight(ctx, l.menuItemHighlightBounds(b), false)
 	}
-	ch := MenuChromeFor(l)
 	ty := b.Min.Y + (b.Dy()-l.body.Height())*0.5
 	if ty < b.Min.Y {
 		ty = b.Min.Y

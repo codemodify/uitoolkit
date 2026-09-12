@@ -307,7 +307,8 @@ func (m *MenuBar) Open(i int) {
 	origin := widget.DeviceOrigin(m)
 	tb := rects[i]
 	anchor := paintengine2d.XYWH(origin.X+tb.Min.X, origin.Y+tb.Min.Y, tb.Dx(), tb.Dy())
-	widget.PlacePopupForAnchor(m, pop, anchor, 0, 1)
+	// Flush under the title so DrawMenuTitle(open) shares an edge with the popup.
+	widget.PlacePopupForAnchor(m, pop, anchor, 0, 0)
 	if widget.ShowPopup(m, pop) {
 		m.open = i
 		m.Invalidate()

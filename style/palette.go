@@ -27,64 +27,98 @@ type Palette struct {
 	Selection    paintengine2d.Color
 	Shadow       paintengine2d.Color
 	Highlight    paintengine2d.Color
+	// Menu hover chrome (Office XP hot-track). Themes tint these;
+	// zero channels fall back to Accent / SurfaceAlt via ResolveMenuChrome.
+	MenuHover       paintengine2d.Color
+	MenuHoverBorder paintengine2d.Color
+	MenuGutter      paintengine2d.Color
 }
 
 // Dark is the default night theme (cool graphite + blue accent).
 func Dark() Palette {
 	return Palette{
-		Background:   paintengine2d.RGB(0.10, 0.11, 0.14),
-		Surface:      paintengine2d.RGB(0.14, 0.16, 0.20),
-		SurfaceAlt:   paintengine2d.RGB(0.18, 0.20, 0.25),
-		Overlay:      paintengine2d.RGBA(0.04, 0.05, 0.07, 0.55),
-		Border:       paintengine2d.RGB(0.28, 0.31, 0.38),
-		Divider:      paintengine2d.RGB(0.22, 0.24, 0.30),
-		Text:         paintengine2d.RGB(0.91, 0.93, 0.96),
-		TextMuted:    paintengine2d.RGB(0.62, 0.66, 0.73),
-		TextOnAccent: paintengine2d.RGB(0.98, 0.99, 1.00),
-		Accent:       paintengine2d.RGB(0.29, 0.56, 0.95),
-		AccentHover:  paintengine2d.RGB(0.38, 0.64, 0.98),
-		AccentPress:  paintengine2d.RGB(0.22, 0.44, 0.82),
-		Danger:       paintengine2d.RGB(0.90, 0.32, 0.36),
-		Success:      paintengine2d.RGB(0.30, 0.72, 0.50),
-		Warning:      paintengine2d.RGB(0.93, 0.72, 0.28),
-		Track:        paintengine2d.RGB(0.22, 0.24, 0.30),
-		Thumb:        paintengine2d.RGB(0.42, 0.46, 0.54),
-		Field:        paintengine2d.RGB(0.11, 0.12, 0.16),
-		FieldBorder:  paintengine2d.RGB(0.32, 0.35, 0.42),
-		Focus:        paintengine2d.RGB(0.45, 0.70, 1.00),
-		Selection:    paintengine2d.RGBA(0.29, 0.56, 0.95, 0.38),
-		Shadow:       paintengine2d.RGBA(0, 0, 0, 0.35),
-		Highlight:    paintengine2d.RGBA(1, 1, 1, 0.08),
+		Background:      paintengine2d.RGB(0.10, 0.11, 0.14),
+		Surface:         paintengine2d.RGB(0.14, 0.16, 0.20),
+		SurfaceAlt:      paintengine2d.RGB(0.18, 0.20, 0.25),
+		Overlay:         paintengine2d.RGBA(0.04, 0.05, 0.07, 0.55),
+		Border:          paintengine2d.RGB(0.28, 0.31, 0.38),
+		Divider:         paintengine2d.RGB(0.22, 0.24, 0.30),
+		Text:            paintengine2d.RGB(0.91, 0.93, 0.96),
+		TextMuted:       paintengine2d.RGB(0.62, 0.66, 0.73),
+		TextOnAccent:    paintengine2d.RGB(0.98, 0.99, 1.00),
+		Accent:          paintengine2d.RGB(0.29, 0.56, 0.95),
+		AccentHover:     paintengine2d.RGB(0.38, 0.64, 0.98),
+		AccentPress:     paintengine2d.RGB(0.22, 0.44, 0.82),
+		Danger:          paintengine2d.RGB(0.90, 0.32, 0.36),
+		Success:         paintengine2d.RGB(0.30, 0.72, 0.50),
+		Warning:         paintengine2d.RGB(0.93, 0.72, 0.28),
+		Track:           paintengine2d.RGB(0.22, 0.24, 0.30),
+		Thumb:           paintengine2d.RGB(0.42, 0.46, 0.54),
+		Field:           paintengine2d.RGB(0.11, 0.12, 0.16),
+		FieldBorder:     paintengine2d.RGB(0.32, 0.35, 0.42),
+		Focus:           paintengine2d.RGB(0.45, 0.70, 1.00),
+		Selection:       paintengine2d.RGBA(0.29, 0.56, 0.95, 0.38),
+		Shadow:          paintengine2d.RGBA(0, 0, 0, 0.35),
+		Highlight:       paintengine2d.RGBA(1, 1, 1, 0.08),
+		MenuHover:       paintengine2d.RGB(0.22, 0.34, 0.52),
+		MenuHoverBorder: paintengine2d.RGB(0.38, 0.58, 0.88),
+		MenuGutter:      paintengine2d.RGB(0.14, 0.16, 0.20),
 	}
 }
 
 // Light is a paper / ink theme with the same accent family.
 func Light() Palette {
 	return Palette{
-		Background:   paintengine2d.RGB(0.93, 0.94, 0.96),
-		Surface:      paintengine2d.RGB(0.99, 0.99, 1.00),
-		SurfaceAlt:   paintengine2d.RGB(0.90, 0.92, 0.95),
-		Overlay:      paintengine2d.RGBA(0.12, 0.14, 0.18, 0.35),
-		Border:       paintengine2d.RGB(0.72, 0.75, 0.80),
-		Divider:      paintengine2d.RGB(0.82, 0.84, 0.88),
-		Text:         paintengine2d.RGB(0.12, 0.14, 0.18),
-		TextMuted:    paintengine2d.RGB(0.38, 0.42, 0.48),
-		TextOnAccent: paintengine2d.RGB(1, 1, 1),
-		Accent:       paintengine2d.RGB(0.18, 0.42, 0.86),
-		AccentHover:  paintengine2d.RGB(0.24, 0.50, 0.92),
-		AccentPress:  paintengine2d.RGB(0.14, 0.32, 0.70),
-		Danger:       paintengine2d.RGB(0.78, 0.18, 0.22),
-		Success:      paintengine2d.RGB(0.16, 0.58, 0.38),
-		Warning:      paintengine2d.RGB(0.78, 0.54, 0.10),
-		Track:        paintengine2d.RGB(0.80, 0.82, 0.86),
-		Thumb:        paintengine2d.RGB(0.48, 0.52, 0.58),
-		Field:        paintengine2d.RGB(1, 1, 1),
-		FieldBorder:  paintengine2d.RGB(0.68, 0.72, 0.78),
-		Focus:        paintengine2d.RGB(0.18, 0.42, 0.86),
-		Selection:    paintengine2d.RGBA(0.18, 0.42, 0.86, 0.28),
-		Shadow:       paintengine2d.RGBA(0.10, 0.12, 0.16, 0.18),
-		Highlight:    paintengine2d.RGBA(1, 1, 1, 0.55),
+		Background:      paintengine2d.RGB(0.93, 0.94, 0.96),
+		Surface:         paintengine2d.RGB(0.99, 0.99, 1.00),
+		SurfaceAlt:      paintengine2d.RGB(0.90, 0.92, 0.95),
+		Overlay:         paintengine2d.RGBA(0.12, 0.14, 0.18, 0.35),
+		Border:          paintengine2d.RGB(0.72, 0.75, 0.80),
+		Divider:         paintengine2d.RGB(0.82, 0.84, 0.88),
+		Text:            paintengine2d.RGB(0.12, 0.14, 0.18),
+		TextMuted:       paintengine2d.RGB(0.38, 0.42, 0.48),
+		TextOnAccent:    paintengine2d.RGB(1, 1, 1),
+		Accent:          paintengine2d.RGB(0.18, 0.42, 0.86),
+		AccentHover:     paintengine2d.RGB(0.24, 0.50, 0.92),
+		AccentPress:     paintengine2d.RGB(0.14, 0.32, 0.70),
+		Danger:          paintengine2d.RGB(0.78, 0.18, 0.22),
+		Success:         paintengine2d.RGB(0.16, 0.58, 0.38),
+		Warning:         paintengine2d.RGB(0.78, 0.54, 0.10),
+		Track:           paintengine2d.RGB(0.80, 0.82, 0.86),
+		Thumb:           paintengine2d.RGB(0.48, 0.52, 0.58),
+		Field:           paintengine2d.RGB(1, 1, 1),
+		FieldBorder:     paintengine2d.RGB(0.68, 0.72, 0.78),
+		Focus:           paintengine2d.RGB(0.18, 0.42, 0.86),
+		Selection:       paintengine2d.RGBA(0.18, 0.42, 0.86, 0.28),
+		Shadow:          paintengine2d.RGBA(0.10, 0.12, 0.16, 0.18),
+		Highlight:       paintengine2d.RGBA(1, 1, 1, 0.55),
+		MenuHover:       paintengine2d.RGB(0.68, 0.80, 0.95),
+		MenuHoverBorder: paintengine2d.RGB(0.19, 0.42, 0.77),
+		MenuGutter:      paintengine2d.RGB(0.86, 0.86, 0.88),
 	}
+}
+
+// colorUnset is the zero Color (user palettes that omit a field).
+func colorUnset(c paintengine2d.Color) bool {
+	return c.R == 0 && c.G == 0 && c.B == 0 && c.A == 0
+}
+
+// ResolveMenuChrome fills MenuHover / MenuHoverBorder / MenuGutter when
+// unset so a custom Accent still tints Office XP menu chrome.
+func ResolveMenuChrome(p Palette) Palette {
+	if colorUnset(p.MenuHover) {
+		p.MenuHover = p.SurfaceAlt.Lerp(p.Accent, 0.42)
+		p.MenuHover.A = 1
+	}
+	if colorUnset(p.MenuHoverBorder) {
+		p.MenuHoverBorder = p.Accent.Lerp(p.Border, 0.22)
+		p.MenuHoverBorder.A = 1
+	}
+	if colorUnset(p.MenuGutter) {
+		p.MenuGutter = p.SurfaceAlt.Lerp(p.Background, 0.38)
+		p.MenuGutter.A = 1
+	}
+	return p
 }
 
 // Metrics is the geometric skin (radii, paddings). Apps swap LookAndFeel,

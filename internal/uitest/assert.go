@@ -268,6 +268,19 @@ func abs(v int) int {
 	return v
 }
 
+// ColorDist is the RGB L1 distance from img[x,y] to col (0–255).
+func ColorDist(img *paintengine2d.Image, x, y int, col paintengine2d.Color) int {
+	if img == nil || x < 0 || y < 0 || x >= img.Width || y >= img.Height {
+		return 999
+	}
+	wr, wg, wb := RGB8(col)
+	r, g, b, a := img.PremulAt(x, y)
+	if a < 20 {
+		return 999
+	}
+	return abs(int(r)-wr) + abs(int(g)-wg) + abs(int(b)-wb)
+}
+
 // RGB8 is Palette color as 8-bit channels (opaque).
 func RGB8(c paintengine2d.Color) (r, g, b int) {
 	return int(c.R*255 + 0.5), int(c.G*255 + 0.5), int(c.B*255 + 0.5)

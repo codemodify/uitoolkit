@@ -32,6 +32,7 @@ cover scroll, splitter, table header, and menu geometry.
 | `toolbar-mouse-focus` | ToolBar | no lingering `:focus` after click | no keyboard frame after click | no `:focus-visible` after click | `keyNav` false after mouse |
 | `menubar-dismiss-focus` | MenuBar | Menu overlay close | `QMenuBar` unhighlight | popover dismiss | `Close` / pick / dismiss clear `keyNav` |
 | `popup-leave-highlight` | PopupMenu | hover ends on leave | active item vs hover | prelight clears on leave | highlight = hover or keyboard `focus` |
+| `menu-hover-bordered` | PopupMenu / MenuBar | Office XP hot-track (bordered fill) | `QMenu` highlight rect | menu prelight | `MenuHover` + 1px `MenuHoverBorder` across gutter + label |
 | `textfield-inactive-sel` | TextField | inactive selection brush | `QLineEdit` inactive | `GtkEntry` unfocused | selection alpha drops when `!Focused` |
 | `label-clip` | Label | `TextBlock` clip / trim | `QLabel` elide | `GtkLabel` ellipsize | `ClipRect` + `Font.Fit` |
 | `button-label-clip` | Button | content clip | clip to contents rect | clip | fitted + clipped label |
@@ -45,6 +46,7 @@ cover scroll, splitter, table header, and menu geometry.
 | `style.ToolButtonChrome` | pad 10, icon→label 8 | Fluent / Adwaita toolbutton padding |
 | Focus ring | `Palette.Focus` stroke | GTK focus ring / Avalonia focus adorner |
 | Inactive selection | `Selection` @ 0.14 | Qt inactive highlight |
+| Menu hot-track | `MenuHover` + `MenuHoverBorder` + `MenuGutter` | Office XP / Win32 menu highlight |
 
 ## Adding a row
 

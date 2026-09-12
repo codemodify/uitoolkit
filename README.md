@@ -509,6 +509,16 @@ are independent look.json fields again; compound pack names migrate
 
 ## Version
 
+**0.13.2** — Office XP menu hot-track. Hovered `Menu` / `MenuBar`
+dropdown rows and `PopupMenu` context items share a Look paint path:
+pale `MenuHover` fill across the icon gutter + label, a 1px
+`MenuHoverBorder`, and a slightly darker `MenuGutter` strip. Open
+MenuBar titles use the same chrome and sit flush on the popup (no
+leftover focus ring). Themes tint the new Palette fields;
+`ResolveMenuChrome` derives them from Accent when unset. Widgets only
+flush the dropdown (`PlacePopupForAnchor` gap 0). Still paintengine2d
+**v0.9.0**.
+
 **0.13.1** — Mail **View → Message Source** (also Message menu, context
 menu, **Ctrl+U**) opens a read-only JetBrains Mono window of the
 stored RFC822. `mailclientd` exposes `messages.getSource`; MemoryStore

@@ -33,6 +33,7 @@ import (
 //	label/button clip       TestDesktopChromeNorms/label-clip, button-label-clip
 //	toggle vs action        TestDesktopChromeNorms/toggle-vs-action
 //	menu leftover focus     TestDesktopChromeNorms/menubar-dismiss-focus, popup-leave-highlight
+//	menu XP hover fill      TestDesktopChromeNorms/menu-hover-bordered
 
 func TestSplitterPanesExclusiveAtRatios(t *testing.T) {
 	left := widgets.NewLabel("AAAA pane A chrome")

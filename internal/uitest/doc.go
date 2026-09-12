@@ -7,5 +7,6 @@
 // assertions over screenshots.
 //
 // ChromeNorms / CompareReport map Button, ToolBar, Menu, ComboBox, and
-// related controls to Avalonia / Qt / GTK behavior (docs/compare.md).
+// related controls to Avalonia / Qt / GTK / Office XP menu chrome
+// (docs/compare.md).
 package uitest
