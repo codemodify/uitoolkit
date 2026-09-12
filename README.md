@@ -509,6 +509,11 @@ are independent look.json fields again; compound pack names migrate
 
 ## Version
 
+**0.14.6** — Hovering panes no longer restyles static text. Labels,
+pads, layout columns, and the message preview do not Invalidate on
+MouseEnter; ClearRect + DrawSceneDamage of those boxes dropped glyph
+weight (bold → thin). Hover chrome stays on buttons/lists/tabs.
+
 **0.14.5** — Menu hover highlight tracks the row under the pointer.
 Leaving a row clears it (Help: Keyboard no longer stays hot when the
 pointer is on About Mail). Popup hover invalidates the full popup —

@@ -87,6 +87,13 @@ body clip (below a sticky table header) so `DrawScene` cannot shift the
 clip with the content. Hover and selection re-record rows whose visual
 signature changed.
 
+**0.14.6 pane hover (dirty text):** `Base.MouseEnter` used to Invalidate
+every widget. Hovering a Mail header, pad, or preview ClearRect'd the
+box and `DrawSceneDamage` redrew glyphs without the title weight (and
+punched holes in the body). Static widgets no longer dirty on enter;
+controls that paint `StateHovered` still Invalidate themselves.
+ScrollView / TextArea only dirty the overflow track on bar hover.
+
 **0.14.5 menu hover (Wayland / HiDPI):** `DrawMenuItem` paints the XP
 hot-track into the icon gutter, left of `rowBounds`. Two-row dirty
 cleared only the label strip, so the previous row kept its fill

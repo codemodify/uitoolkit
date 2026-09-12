@@ -421,3 +421,60 @@ func BenchmarkMenuHoverFullScene(b *testing.B) {
 		a.PumpOnce()
 	}
 }
+
+func TestPaneHoverDoesNotRestyleText(t *testing.T) {
+	a := New(Options{Look: style.LightLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{Width: 480, Height: 360, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	title := widgets.NewTitle("YOU NEED TO SEE THESE NEW PRICES")
+	from := widgets.NewLabel("From: shop@example.com")
+	body := widgets.NewTextView("Generation 6 — Unbelievable New Prices\n\nLOWER. MUCH LOWER.", "")
+	tabs := widgets.NewTabView(
+		widgets.Tab{Title: "Message", Content: widgets.NewPad(8, body)},
+		widgets.Tab{Title: "Source", Content: widgets.NewLabel("raw")},
+	)
+	w.SetContent(widgets.NewColumn(title, from, tabs))
+	a.PumpOnce()
+	before := cloneSurface(w)
+	if before == nil {
+		t.Fatal("buffer")
+	}
+	hover := func(c widget.Component) {
+		o := widget.DeviceOrigin(c)
+		b := c.LocalBounds()
+		w.dispatch(platform.Event{Kind: platform.EventMouseMove, Pos: paintengine2d.Pt(o.X+b.Dx()*0.5, o.Y+b.Dy()*0.5)})
+	}
+	hover(title)
+	if !w.dirty.Empty() {
+		t.Fatal("subject hover must not dirty static title text")
+	}
+	hover(from)
+	hover(body)
+	hover(tabs)
+	if !w.dirty.Empty() && w.full {
+		t.Fatal("pane hover must not full-invalidate")
+	}
+	// TabBar may dirty the tab strip (hover chrome). Subject/body must not.
+	a.PumpOnce()
+	after := cloneSurface(w)
+	o := widget.DeviceOrigin(title)
+	tb := title.LocalBounds()
+	diff := 0
+	for y := int(o.Y + 2); y < int(o.Y+tb.Dy()-2); y++ {
+		for x := int(o.X + 2); x < int(o.X+tb.Dx()-2) && x < before.Width; x++ {
+			if y < 0 || y >= before.Height {
+				continue
+			}
+			ar, ag, ab, aa := before.PremulAt(x, y)
+			br, bg, bb, ba := after.PremulAt(x, y)
+			if ar != br || ag != bg || ab != bb || aa != ba {
+				diff++
+			}
+		}
+	}
+	if diff > 0 {
+		t.Fatalf("subject pixels changed on pane hover (%d) — bold/coverage artifact", diff)
+	}
+}

@@ -69,11 +69,11 @@ func (s *Slider) Paint(ctx *paintengine2d.Context) {
 	s.Look().DrawSlider(ctx, s.LocalBounds(), st, s.t())
 }
 
-func (s *Slider) MouseEnter() { s.hovered = true; s.Base.MouseEnter() }
+func (s *Slider) MouseEnter() { s.hovered = true; s.Invalidate() }
 func (s *Slider) MouseExit() {
 	s.hovered = false
 	if !s.drag {
-		s.Base.MouseExit()
+		s.Invalidate()
 	}
 }
 
