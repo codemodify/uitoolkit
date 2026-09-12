@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/codemodify/paintengine2d"
+	"github.com/codemodify/uitoolkit/internal/uitest"
 	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
@@ -62,21 +63,56 @@ func TestMenuHoverDoesNotFullInvalidate(t *testing.T) {
 	w.dispatch(platform.Event{Kind: platform.EventMouseMove, Pos: popupItemPos(pop, 0)})
 	a.PumpOnce()
 	w.dispatch(platform.Event{Kind: platform.EventMouseMove, Pos: popupItemPos(pop, 1)})
+	if pop.HighlightedIndex() != 1 {
+		t.Fatalf("hover index %d want 1", pop.HighlightedIndex())
+	}
 	if w.full {
-		t.Fatal("menu hover must not full-invalidate")
+		t.Fatal("menu hover must not full-invalidate the window")
 	}
 	if w.dirty.Empty() {
-		t.Fatal("menu hover should dirty the old and new row")
+		t.Fatal("menu hover should dirty the popup")
 	}
-	ww, hh := w.surf.Size()
-	full := float32(ww * hh)
-	area := dirtyArea(w)
-	if area > full/8 {
-		t.Fatalf("menu hover dirty area %v of %v", area, full)
+	pb := pop.Bounds()
+	if dirtyArea(w) < pb.Dx()*pb.Dy()*0.8 {
+		t.Fatalf("hover dirty %v must cover the popup %v", dirtyArea(w), pb.Dx()*pb.Dy())
 	}
-	row := pop.ItemBounds(0)
-	if area > row.Dx()*row.Dy()*5 {
-		t.Fatalf("menu hover dirty %v larger than ~2 rows (row %v×%v)", area, row.Dx(), row.Dy())
+}
+
+func TestMenuHoverPaintFollowsPointer(t *testing.T) {
+	a, w, mb, _ := hoverChromeWindow(t, 720, 480)
+	mb.Open(0)
+	a.PumpOnce()
+	pop, ok := w.Popup().(*widgets.PopupMenu)
+	if !ok || pop == nil {
+		t.Fatal("popup")
+	}
+	w.dispatch(platform.Event{Kind: platform.EventMouseMove, Pos: popupItemPos(pop, 0)})
+	if pop.HighlightedIndex() != 0 {
+		t.Fatalf("hover 0: %d", pop.HighlightedIndex())
+	}
+	a.PumpOnce()
+	w.dispatch(platform.Event{Kind: platform.EventMouseMove, Pos: popupItemPos(pop, 1)})
+	if pop.HighlightedIndex() != 1 {
+		t.Fatalf("item0 → item1: %d", pop.HighlightedIndex())
+	}
+	a.PumpOnce()
+	img := w.surf.Buffer()
+	if img == nil {
+		t.Fatal("buffer")
+	}
+	lk := pop.Look()
+	o := widget.DeviceOrigin(pop)
+	r0 := pop.ItemBounds(0).Translate(o)
+	r1 := pop.ItemBounds(1).Translate(o)
+	if err := uitest.CheckMenuHoverBordered(img, r1, lk); err != nil {
+		t.Fatalf("item1 highlight after dirty present: %v", err)
+	}
+	p := style.ResolveMenuChrome(lk.Palette())
+	ch := style.MenuChromeFor(lk)
+	gx := int(r0.Min.X + ch.CheckCol()*0.45)
+	gy := int((r0.Min.Y + r0.Max.Y) * 0.5)
+	if uitest.ColorDist(img, gx, gy, p.MenuHover) <= uitest.ColorDist(img, gx, gy, p.MenuGutter) {
+		t.Fatal("item0 kept MenuHover after moving to item1 (stale dirty row)")
 	}
 }
 
@@ -210,17 +246,31 @@ func TestSplitterDragKeepsBakedLayers(t *testing.T) {
 }
 
 func TestHoverUsesDrawSceneDamage(t *testing.T) {
-	a, w, mb, _ := hoverChromeWindow(t, 720, 480)
-	mb.Open(0)
-	a.PumpOnce()
-	pop, ok := w.Popup().(*widgets.PopupMenu)
-	if !ok || pop == nil {
-		t.Fatal("popup")
+	a := New(Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{Width: 280, Height: 220, Headless: true})
+	if err != nil {
+		t.Fatal(err)
 	}
+	list := widgets.NewListView(40, func(i int) string { return fmt.Sprintf("row %02d", i) }, nil)
+	w.SetContent(list)
+	a.PumpOnce()
+	o := widget.DeviceOrigin(list)
+	rh := list.RowHeight
+	if rh < 8 {
+		rh = 28
+	}
+	rowPos := func(i int) paintengine2d.Point {
+		return paintengine2d.Pt(o.X+40, o.Y+rh*float32(i)+rh*0.5)
+	}
+	w.dispatch(platform.Event{Kind: platform.EventMouseMove, Pos: rowPos(0)})
+	a.PumpOnce()
 	before := cloneSurface(w)
-	w.dispatch(platform.Event{Kind: platform.EventMouseMove, Pos: popupItemPos(pop, 1)})
+	w.dispatch(platform.Event{Kind: platform.EventMouseMove, Pos: rowPos(1)})
 	if w.full {
-		t.Fatal("hover must not full-invalidate")
+		t.Fatal("list hover must not full-invalidate")
+	}
+	if !chromeDamageOnly(&w.dirty) {
+		t.Fatal("list row hover must stay on the dirty DrawSceneDamage path")
 	}
 	if w.scene == nil {
 		t.Fatal("WantScene should keep a retained graph")

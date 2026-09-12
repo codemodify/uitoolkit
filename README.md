@@ -509,6 +509,11 @@ are independent look.json fields again; compound pack names migrate
 
 ## Version
 
+**0.14.5** — Menu hover highlight tracks the row under the pointer.
+Leaving a row clears it (Help: Keyboard no longer stays hot when the
+pointer is on About Mail). Popup hover invalidates the full popup —
+two-row dirty missed the XP gutter highlight on Wayland/HiDPI.
+
 **0.14.4** — Fix vacated list holes and jumping rows after the
 v0.14.1–v0.14.3 Scroll / DrawSceneDamage work. `Context.Scroll` +
 strip-only damage is disabled (Wayland/HiDPI blit is unproven); scroll

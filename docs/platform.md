@@ -87,6 +87,12 @@ body clip (below a sticky table header) so `DrawScene` cannot shift the
 clip with the content. Hover and selection re-record rows whose visual
 signature changed.
 
+**0.14.5 menu hover (Wayland / HiDPI):** `DrawMenuItem` paints the XP
+hot-track into the icon gutter, left of `rowBounds`. Two-row dirty
+cleared only the label strip, so the previous row kept its fill
+(Help → Keyboard vs About Mail). Hover now invalidates the full popup.
+`rowAt` uses the same `rowBounds` as Paint.
+
 **0.14.4 scroll holes (Wayland / HiDPI):** v0.14.1 blit + v0.14.2
 `DrawSceneDamage` of only the exposed strip left a white hole in the
 middle of Mail lists (and a clipped leftover row). The blit vacated

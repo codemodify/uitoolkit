@@ -125,27 +125,62 @@ func TestMenuItemIconPaintsGutter(t *testing.T) {
 	}
 }
 
-func TestPopupMenuHoverInvalidatesTwoRows(t *testing.T) {
-	items := make([]*widgets.MenuItem, 12)
-	for i := range items {
-		items[i] = widgets.Item("Command", nil)
-	}
-	pop := widgets.NewPopupMenu(items...)
-	s := uitest.Mount(pop, paintengine2d.XYWH(0, 0, 240, 420))
+func TestPopupMenuHoverFollowsPointer(t *testing.T) {
+	pop := widgets.NewPopupMenu(
+		widgets.Item("Keyboard", nil),
+		widgets.Item("About Mail", nil),
+		widgets.Item("Third", nil),
+	)
+	s := uitest.Mount(pop, paintengine2d.XYWH(0, 0, 240, 160))
 	mid := func(i int) paintengine2d.Point {
 		r := pop.ItemBounds(i)
 		return paintengine2d.Pt((r.Min.X+r.Max.X)*0.5, (r.Min.Y+r.Max.Y)*0.5)
 	}
+	for i := 0; i < 3; i++ {
+		r := pop.ItemBounds(i)
+		if pop.HitTest(paintengine2d.Pt(r.Min.X+4, (r.Min.Y+r.Max.Y)*0.5)) != pop {
+			t.Fatalf("hit-test missed row %d bounds %+v", i, r)
+		}
+		pop.MouseMove(widget.MouseEvent{Pos: mid(i)})
+		if pop.HighlightedIndex() != i {
+			t.Fatalf("hover index %d want %d", pop.HighlightedIndex(), i)
+		}
+	}
 	pop.MouseMove(widget.MouseEvent{Pos: mid(0)})
+	if pop.HighlightedIndex() != 0 {
+		t.Fatalf("back to item0: %d", pop.HighlightedIndex())
+	}
 	n := s.Host.DamageCount()
-	pop.MouseMove(widget.MouseEvent{Pos: mid(4)})
-	if got := s.Host.DamageCount() - n; got != 2 {
-		t.Fatalf("hover invalidations %d, want 2 (old+new row)", got)
+	pop.MouseMove(widget.MouseEvent{Pos: mid(1)})
+	if pop.HighlightedIndex() != 1 {
+		t.Fatalf("item0 → item1 hover %d", pop.HighlightedIndex())
+	}
+	if s.Host.DamageCount() <= n {
+		t.Fatal("hover change must invalidate the popup")
+	}
+	img := s.Paint()
+	lk := pop.Look()
+	r0 := pop.ItemBounds(0).Translate(widget.DeviceOrigin(pop))
+	r1 := pop.ItemBounds(1).Translate(widget.DeviceOrigin(pop))
+	if err := uitest.CheckMenuHoverBordered(img, r1, lk); err != nil {
+		t.Fatalf("item1 should be highlighted: %v", err)
+	}
+	p := style.ResolveMenuChrome(lk.Palette())
+	ch := style.MenuChromeFor(lk)
+	gx := int(r0.Min.X + ch.CheckCol()*0.45)
+	gy := int((r0.Min.Y + r0.Max.Y) * 0.5)
+	if uitest.ColorDist(img, gx, gy, p.MenuHover) <= uitest.ColorDist(img, gx, gy, p.MenuGutter) {
+		t.Fatal("item0 kept MenuHover after moving to item1")
+	}
+	pop.MouseExit()
+	if pop.HighlightedIndex() >= 0 {
+		t.Fatalf("leave left highlight %d", pop.HighlightedIndex())
 	}
 	same := s.Host.DamageCount()
-	pop.MouseMove(widget.MouseEvent{Pos: mid(4)})
-	if s.Host.DamageCount() != same {
-		t.Fatal("same-row move must not invalidate")
+	pop.MouseMove(widget.MouseEvent{Pos: mid(1)})
+	pop.MouseMove(widget.MouseEvent{Pos: mid(1)})
+	if s.Host.DamageCount() != same+1 {
+		t.Fatalf("same-row move must not re-invalidate, extra=%d", s.Host.DamageCount()-(same+1))
 	}
 }
 
