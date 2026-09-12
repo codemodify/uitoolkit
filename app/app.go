@@ -26,7 +26,7 @@ type Options struct {
 	// DarkLook / LightLook stay static unless this is set.
 	WatchLook bool
 	// DisableLookWatch skips the default watcher (Look == nil). Settings
-	// uses this so radio changes preview locally until Apply writes.
+	// uses this so picker changes preview locally until Apply writes.
 	DisableLookWatch bool
 }
 

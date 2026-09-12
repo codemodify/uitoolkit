@@ -4,10 +4,11 @@
 //	go run ./cmd/uitksettings -headless          # writes settings.png
 //	go run ./cmd/uitksettings -screenshot docs/screenshots
 //
-// Theme, corner policy, and icon set preview in this window. Apply
-// writes $XDG_CONFIG_HOME/uitoolkit/look.json and running apps that
-// watch the file (Application default when Look is PreferredLook)
-// reload without a restart. Close without Apply discards staged
+// The theme picker previews embedded starters and exported user packs.
+// Apply writes the theme name to $XDG_CONFIG_HOME/uitoolkit/look.json
+// and running apps that watch the file (Application default when Look
+// is PreferredLook) reload without a restart. Export writes
+// themes/<name>/theme.json. Close without Apply discards staged
 // changes. See docs/settings.md.
 package main
 

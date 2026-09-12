@@ -1,6 +1,8 @@
 package demo
 
 import (
+	"os"
+	"strings"
 	"testing"
 
 	"github.com/codemodify/uitoolkit"
@@ -31,6 +33,9 @@ func TestSettingsAppAppliesAndPersists(t *testing.T) {
 	if findMenuBar(w.Content()) {
 		t.Fatal("settings must not have a menu bar")
 	}
+	if findRadio(w.Content(), "Dark graphite") != nil || findRadio(w.Content(), "Round corners") != nil {
+		t.Fatal("theme/corners/icons triad must be replaced by a theme picker")
+	}
 	got := style.LookAppearance(a.Look())
 	if got.Theme != style.ThemeLight || got.Corners != style.CornersSquare || got.Icons != style.IconSetSharp {
 		t.Fatalf("look %+v", got)
@@ -39,10 +44,13 @@ func TestSettingsAppAppliesAndPersists(t *testing.T) {
 		t.Fatalf("prefs %+v", style.LoadAppearance())
 	}
 
-	clickRadio(t, w, "Dark graphite")
+	clickTheme(t, w, "Dark · Square · Sharp")
 	a.PumpOnce()
 	if a.Look().Name() != "dark" {
 		t.Fatalf("preview theme %s", a.Look().Name())
+	}
+	if style.LookAppearance(a.Look()).Name != "dark-square-sharp" {
+		t.Fatalf("preview pack %+v", style.LookAppearance(a.Look()))
 	}
 	if style.LoadAppearance() != want.Normalize() {
 		t.Fatalf("toggle must not write prefs: %+v", style.LoadAppearance())
@@ -54,7 +62,7 @@ func TestSettingsAppAppliesAndPersists(t *testing.T) {
 	clickApply(t, w)
 	a.PumpOnce()
 	saved := style.LoadAppearance()
-	if saved.Theme != style.ThemeDark || saved.Corners != style.CornersSquare || saved.Icons != style.IconSetSharp {
+	if saved.Name != "dark-square-sharp" || saved.Theme != style.ThemeDark || saved.Corners != style.CornersSquare || saved.Icons != style.IconSetSharp {
 		t.Fatalf("applied prefs %+v", saved)
 	}
 	if findApply(w.Content()).Enabled() {
@@ -88,7 +96,7 @@ func TestSettingsApplyNotifiesOtherApp(t *testing.T) {
 		t.Fatalf("listener start %s", listener.Look().Name())
 	}
 
-	clickRadio(t, sw, "Light paper")
+	clickTheme(t, sw, "Light · Round · Classic")
 	settingsApp.PumpOnce()
 	listener.PumpOnce()
 	if style.LoadAppearance().Theme != style.ThemeDark {
@@ -101,11 +109,68 @@ func TestSettingsApplyNotifiesOtherApp(t *testing.T) {
 	clickApply(t, sw)
 	settingsApp.PumpOnce()
 	listener.PumpOnce()
-	if style.LoadAppearance().Theme != style.ThemeLight {
+	if style.LoadAppearance().Name != "light-round-classic" || style.LoadAppearance().Theme != style.ThemeLight {
 		t.Fatalf("apply wrote %+v", style.LoadAppearance())
 	}
 	if listener.Look().Name() != "light" {
 		t.Fatalf("listener after apply %s", listener.Look().Name())
+	}
+}
+
+func TestSettingsExportThemeByName(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	if err := style.SaveAppearance(style.Appearance{Theme: style.ThemeLight, Corners: style.CornersRound, Icons: style.IconSetClassic}); err != nil {
+		t.Fatal(err)
+	}
+	a := uitoolkit.New(uitoolkit.Options{Headless: true, Scale: 1, DisableLookWatch: true})
+	w, err := a.NewWindow(platform.WindowOptions{Title: "settings", Width: 960, Height: 780, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+	w.SetContent(SettingsApp(a, w))
+	a.PumpOnce()
+
+	clickExportLook(t, w)
+	a.PumpOnce()
+	if w.Overlay() == nil {
+		t.Fatal("export should ask for a name")
+	}
+	field := findOverlayField(w)
+	if field == nil {
+		t.Fatal("missing name field")
+	}
+	field.SetText("ocean")
+	clickNamed(t, w.Overlay(), "Export")
+	a.PumpOnce()
+
+	raw, err := os.ReadFile(style.ThemeFile("ocean"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), `"palette": "light"`) {
+		t.Fatalf("exported pack: %s", raw)
+	}
+	pack, ok := style.LoadTheme("ocean")
+	if !ok || pack.Source != style.ThemeSourceUser || pack.Palette != style.ThemeLight {
+		t.Fatalf("load exported %+v ok=%v", pack, ok)
+	}
+	if findThemeList(w.Content()) == nil {
+		t.Fatal("theme picker missing after export")
+	}
+	listed := false
+	widget.Walk(w.Content(), func(c widget.Component) {
+		if l, ok := c.(*widgets.ListView); ok && l.Count >= 8 && l.ItemText != nil {
+			for i := 0; i < l.Count; i++ {
+				if strings.Contains(l.ItemText(i), "ocean") {
+					listed = true
+				}
+			}
+		}
+	})
+	if !listed {
+		t.Fatal("exported pack not listed")
 	}
 }
 
@@ -140,6 +205,9 @@ func TestSettingsAppPaintsPreview(t *testing.T) {
 	if findApply(w.Content()) == nil {
 		t.Fatal("missing Apply")
 	}
+	if findThemeList(w.Content()) == nil {
+		t.Fatal("missing theme picker")
+	}
 }
 
 func findMenuBar(root widget.Component) bool {
@@ -153,27 +221,83 @@ func findMenuBar(root widget.Component) bool {
 }
 
 func findApply(root widget.Component) *widgets.Button {
-	var apply *widgets.Button
-	widget.Walk(root, func(c widget.Component) {
-		if b, ok := c.(*widgets.Button); ok && b.Text == "Apply" {
-			apply = b
-		}
-	})
-	return apply
+	return findButton(root, "Apply")
 }
 
-func clickRadio(t *testing.T, w *app.Window, label string) {
-	t.Helper()
+func findButton(root widget.Component, text string) *widgets.Button {
+	var btn *widgets.Button
+	widget.Walk(root, func(c widget.Component) {
+		if b, ok := c.(*widgets.Button); ok && b.Text == text {
+			btn = b
+		}
+	})
+	return btn
+}
+
+func findRadio(root widget.Component, label string) *widgets.RadioButton {
 	var rb *widgets.RadioButton
-	widget.Walk(w.Content(), func(c widget.Component) {
+	widget.Walk(root, func(c widget.Component) {
 		if r, ok := c.(*widgets.RadioButton); ok && r.Text == label {
 			rb = r
 		}
 	})
-	if rb == nil {
-		t.Fatalf("no radio %q", label)
+	return rb
+}
+
+func findThemeList(root widget.Component) *widgets.ListView {
+	var list *widgets.ListView
+	widget.Walk(root, func(c widget.Component) {
+		if l, ok := c.(*widgets.ListView); ok && l.Count >= 8 {
+			list = l
+		}
+	})
+	return list
+}
+
+func clickTheme(t *testing.T, w *app.Window, label string) {
+	t.Helper()
+	list := findThemeList(w.Content())
+	if list == nil || list.ItemText == nil || list.OnSelect == nil {
+		t.Fatal("no theme picker")
 	}
-	rb.MousePress(widget.MouseEvent{})
+	for i := 0; i < list.Count; i++ {
+		if strings.Contains(list.ItemText(i), label) {
+			list.OnSelect(i)
+			return
+		}
+	}
+	t.Fatalf("no theme %q", label)
+}
+
+func clickExportLook(t *testing.T, w *app.Window) {
+	t.Helper()
+	btn := findButton(w.Content(), "Export current look…")
+	if btn == nil || btn.OnClick == nil {
+		t.Fatal("no Export current look…")
+	}
+	btn.OnClick()
+}
+
+func clickNamed(t *testing.T, root widget.Component, text string) {
+	t.Helper()
+	btn := findButton(root, text)
+	if btn == nil || btn.OnClick == nil {
+		t.Fatalf("no button %q", text)
+	}
+	btn.OnClick()
+}
+
+func findOverlayField(w *app.Window) *widgets.TextField {
+	var field *widgets.TextField
+	if w.Overlay() == nil {
+		return nil
+	}
+	widget.Walk(w.Overlay(), func(c widget.Component) {
+		if tf, ok := c.(*widgets.TextField); ok {
+			field = tf
+		}
+	})
+	return field
 }
 
 func clickApply(t *testing.T, w *app.Window) {

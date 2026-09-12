@@ -40,22 +40,27 @@ type (
 	ThemeName         = style.ThemeName
 	CornerStyle       = style.CornerStyle
 	IconSetName       = style.IconSetName
+	ThemePack         = style.ThemePack
+	ThemeSource       = style.ThemeSource
 )
 
 const (
-	DensityDefault  = style.DensityDefault
-	DensityCompact  = style.DensityCompact
-	DensityRelaxed  = style.DensityRelaxed
-	CursorDefault   = platform.CursorDefault
-	CursorColResize = platform.CursorColResize
-	CursorRowResize = platform.CursorRowResize
-	CursorText      = platform.CursorText
-	ThemeDark       = style.ThemeDark
-	ThemeLight      = style.ThemeLight
-	CornersRound    = style.CornersRound
-	CornersSquare   = style.CornersSquare
-	IconSetClassic  = style.IconSetClassic
-	IconSetSharp    = style.IconSetSharp
+	DensityDefault     = style.DensityDefault
+	DensityCompact     = style.DensityCompact
+	DensityRelaxed     = style.DensityRelaxed
+	CursorDefault      = platform.CursorDefault
+	CursorColResize    = platform.CursorColResize
+	CursorRowResize    = platform.CursorRowResize
+	CursorText         = platform.CursorText
+	ThemeDark          = style.ThemeDark
+	ThemeLight         = style.ThemeLight
+	CornersRound       = style.CornersRound
+	CornersSquare      = style.CornersSquare
+	IconSetClassic     = style.IconSetClassic
+	IconSetSharp       = style.IconSetSharp
+	ThemeSourceBuiltin = style.ThemeSourceBuiltin
+	ThemeSourceUser    = style.ThemeSourceUser
+	DefaultThemeName   = style.DefaultThemeName
 )
 
 func New(opts Options) *Application { return app.New(opts) }
@@ -70,6 +75,23 @@ func SaveAppearance(a style.Appearance) error {
 	return style.SaveAppearance(a)
 }
 func AppearancePath() string { return style.AppearancePath() }
+func ConfigDir() string      { return style.ConfigDir() }
+func ThemesDir() string      { return style.ThemesDir() }
+func ListThemes() []style.ThemePack {
+	return style.ListThemes()
+}
+func LoadTheme(name string) (style.ThemePack, bool) {
+	return style.LoadTheme(name)
+}
+func ExportTheme(name string, look style.LookAndFeel) (style.ThemePack, error) {
+	return style.ExportTheme(name, look)
+}
+func ExportAppearance(name string, a style.Appearance) (style.ThemePack, error) {
+	return style.ExportAppearance(name, a)
+}
+func StarterName(theme style.ThemeName, corners style.CornerStyle, icons style.IconSetName) string {
+	return style.StarterName(theme, corners, icons)
+}
 func LookAppearance(look style.LookAndFeel) style.Appearance {
 	return style.LookAppearance(look)
 }

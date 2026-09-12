@@ -107,7 +107,7 @@ paintengine2d with Titillium Web (and JetBrains Mono in code views).
 
 ![Inspector](docs/screenshots/inspector.png)
 
-### Settings — theme, corners, icon set
+### Settings — named theme packs
 
 ![Settings](docs/screenshots/settings.png)
 
@@ -201,7 +201,7 @@ go run ./examples/mail              # in-process daemon + UI (same protocol)
 go run ./examples/mail -headless    # writes mail.png
 go run ./examples/mail -classic     # preview below the thread list
 go run ./examples/mail -light
-go run ./cmd/uitksettings           # theme, corners, icon set (XDG look.json)
+go run ./cmd/uitksettings           # theme packs (XDG look.json + themes/<name>/)
 go run ./cmd/uitksettings -headless # writes settings.png
 ```
 
@@ -291,14 +291,14 @@ widgets    Button, Label, TextField, TextArea     ScrollView, ListView, TableVie
            Accordion, Expander, Spacer            ProgressBar, RadioGroup
            MessageBox, FileDialog stub, Tooltip   TitleBar, context menus
            CardList
-style      LookAndFeel + Palette + Metrics        Dark / Light Classic,
-                                                  round / square corners,
-                                                  Classic / Sharp icons
+style      LookAndFeel + Palette + Metrics        Named theme packs
+                                                  (embedded dark/light ×
+                                                  round/square × classic/sharp)
 ```
 
 Swap the skin with `Application.SetLook(uitoolkit.LightLook())` or
-`PreferredLook()` (XDG `look.json` from **Settings**). `New` watches
-that file when Look is omitted so Apply updates running apps.
+`PreferredLook()` (XDG `look.json` theme name from **Settings**). `New`
+watches that file when Look is omitted so Apply updates running apps.
 Controls never hard-code colors. See [docs/settings.md](docs/settings.md).
 
 ## Widget comparison
@@ -491,9 +491,23 @@ editor: Dark / Light, round / square corners, Classic / Sharp icon sets,
 persisted as `$XDG_CONFIG_HOME/uitoolkit/look.json` (**v0.11.0**).
 Settings has no menu bar; radios preview locally and **Apply** writes
 the file. Running apps that use `PreferredLook` (default `New`) watch
-`look.json` and `SetLook` without a restart (**v0.11.1**).
+`look.json` and `SetLook` without a restart (**v0.11.1**). Named
+installable theme packs replace the Theme / Corners / Icons triad:
+`look.json` stores a pack name, eight starters are embedded, and
+Settings can export the current look to
+`~/.config/uitoolkit/themes/<name>/theme.json` (**v0.11.2**).
 
 ## Version
+
+**0.11.2** — Named theme packages. Settings is a theme picker (embedded
+starters + exported user packs). **Apply** writes only the pack name to
+`look.json`. Corners and icons live inside the pack. Eight dark/light ×
+round/square × classic/sharp starters ship in the binary (not copied to
+disk). **Export current look…** asks for a name and writes
+`$XDG_CONFIG_HOME/uitoolkit/themes/<name>/theme.json`. A user pack with
+the same name as a builtin wins. Legacy look.json triad files migrate
+to the matching starter. Live reload from v0.11.1 is unchanged. Still
+paintengine2d **v0.9.0**.
 
 **0.11.1** — Settings Apply + live look reload. The Settings window
 drops the menu bar. Theme / corners / icons stage in-process until

@@ -2,6 +2,7 @@ package demo
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/codemodify/uitoolkit"
 	"github.com/codemodify/uitoolkit/app"
@@ -10,9 +11,9 @@ import (
 	"github.com/codemodify/uitoolkit/widgets"
 )
 
-// SettingsApp is the toolkit appearance editor (theme, corners, icon set).
-// Radio changes preview locally via Application.SetLook. Apply writes
-// look.json (the source of truth) so other apps watching the file reload.
+// SettingsApp is the toolkit appearance editor (named theme packs).
+// Picker changes preview locally via Application.SetLook. Apply writes
+// look.json (theme name only) so other apps watching the file reload.
 // Closing the window without Apply discards staged changes.
 func SettingsApp(a *app.Application, win *app.Window) widget.Component {
 	saved := style.LoadAppearance().Normalize()
@@ -31,7 +32,7 @@ func buildSettings(a *app.Application, win *app.Window, saved, staged style.Appe
 		st += " · unapplied"
 	}
 	status := widgets.NewStatusBar(st, style.AppearancePath(), "v"+uitoolkit.Version)
-	chrome := widgets.NewTitleBar("Settings", "Appearance for every uitoolkit app")
+	chrome := widgets.NewTitleBar("Settings", "Named theme packs for every uitoolkit app")
 
 	preview := func(next style.Appearance) {
 		next = next.Normalize()
@@ -48,47 +49,55 @@ func buildSettings(a *app.Application, win *app.Window, saved, staged style.Appe
 		win.SetContent(buildSettings(a, win, next, next, section))
 	}
 
-	themeSel := 0
-	if staged.Theme == style.ThemeLight {
-		themeSel = 1
-	}
-	theme := widgets.NewRadioGroup([]string{"Dark graphite", "Light paper"}, themeSel, func(i int) {
-		next := staged
-		if i == 1 {
-			next.Theme = style.ThemeLight
-		} else {
-			next.Theme = style.ThemeDark
+	themes := style.ListThemes()
+	sel := 0
+	for i, p := range themes {
+		if p.Name == staged.Name {
+			sel = i
+			break
 		}
-		preview(next)
+	}
+	picker := widgets.NewListView(len(themes), func(i int) string {
+		if i < 0 || i >= len(themes) {
+			return ""
+		}
+		return themes[i].Display()
+	}, func(i int) {
+		if i < 0 || i >= len(themes) {
+			return
+		}
+		preview(themes[i].Appearance())
 	})
+	picker.Selected = sel
+	picker.RowHeight = 28
 
-	cornerSel := 0
-	if staged.Corners == style.CornersSquare {
-		cornerSel = 1
-	}
-	corners := widgets.NewRadioGroup([]string{"Round corners", "Square corners"}, cornerSel, func(i int) {
-		next := staged
-		if i == 1 {
-			next.Corners = style.CornersSquare
-		} else {
-			next.Corners = style.CornersRound
-		}
-		preview(next)
+	var exportHost widget.Component
+	exportBtn := widgets.NewButton("Export current look…", func() {
+		promptExportName(exportHost, func(name string) {
+			name = strings.TrimSpace(name)
+			pack, err := style.ExportAppearance(name, staged)
+			if err != nil {
+				status.Set(0, err.Error())
+				return
+			}
+			preview(pack.Appearance())
+		})
 	})
+	exportHost = exportBtn
 
-	iconSel := 0
-	if staged.Icons == style.IconSetSharp {
-		iconSel = 1
-	}
-	icons := widgets.NewRadioGroup([]string{"Classic (rounded stroke)", "Sharp (geometric)"}, iconSel, func(i int) {
-		next := staged
-		if i == 1 {
-			next.Icons = style.IconSetSharp
-		} else {
-			next.Icons = style.IconSetClassic
-		}
-		preview(next)
-	})
+	detail := widgets.NewColumn(
+		widgets.NewLabel("Pack  "+staged.Name),
+		widgets.NewLabel("Palette  "+string(staged.Theme)),
+		widgets.NewLabel("Corners  "+string(staged.Corners)),
+		widgets.NewLabel("Icons  "+string(staged.Icons)),
+		widgets.NewLabel("User packs override builtins of the same name."),
+		widgets.NewRow(exportBtn).WithGap(8),
+	).WithGap(6)
+	pickerCol := widgets.NewColumn(widgets.NewLabel("Theme"), picker).WithGap(4)
+	pickerCol.AddFlex(picker, 1)
+	choices := widgets.NewRow(pickerCol, detail).WithGap(20)
+	choices.AddFlex(pickerCol, 3)
+	choices.AddFlex(detail, 2)
 
 	primary := widgets.NewButton("Primary action", func() { status.Set(0, "Primary") })
 	primary.Primary = true
@@ -135,30 +144,30 @@ func buildSettings(a *app.Application, win *app.Window, saved, staged style.Appe
 		slider,
 	)
 
-	themeCol := widgets.NewColumn(widgets.NewLabel("Theme"), theme).WithGap(4)
-	cornerCol := widgets.NewColumn(widgets.NewLabel("Corners"), corners).WithGap(4)
-	iconCol := widgets.NewColumn(widgets.NewLabel("Icon set"), icons).WithGap(4)
-	choices := widgets.NewRow(themeCol, cornerCol, iconCol).WithGap(24)
-	choices.AddFlex(themeCol, 1)
-	choices.AddFlex(cornerCol, 1)
-	choices.AddFlex(iconCol, 1)
 	appearance := widgets.NewColumn(
 		widgets.NewTitle("Appearance"),
 		widgets.NewLabel("Shared by Mail, gallery, and any app that calls PreferredLook()."),
 		choices,
 		previewPane,
 	).WithGap(10).WithPad(4)
+	appearance.AddFlex(choices, 1)
 
 	aboutPath := widgets.NewMonoTextView(style.AppearancePath(), "")
 	aboutPath.MinRows = 2
 	aboutPath.Wrap = true
+	themesPath := widgets.NewMonoTextView(style.ThemesDir()+"/<name>/theme.json", "")
+	themesPath.MinRows = 2
+	themesPath.Wrap = true
 	about := widgets.NewColumn(
 		widgets.NewTitle("About"),
 		widgets.NewLabel("uitoolkit v"+uitoolkit.Version),
 		widgets.NewLabel("LookAndFeel Classic — Titillium Web + JetBrains Mono."),
-		widgets.NewLabel("Prefs file (written on Apply):"),
+		widgets.NewLabel("Prefs file (theme name, written on Apply):"),
 		aboutPath,
-		widgets.NewLabel("Other apps watch this file and call SetLook(PreferredLook())."),
+		widgets.NewLabel("User theme packs (exported; override builtins by name):"),
+		themesPath,
+		widgets.NewLabel("Eight starter packs are embedded in the binary, not written to disk."),
+		widgets.NewLabel("Other apps watch look.json and call SetLook(PreferredLook())."),
 		widgets.NewButton("Open appearance", func() {
 			win.SetContent(buildSettings(a, win, saved, staged, 0))
 		}),
@@ -192,10 +201,38 @@ func buildSettings(a *app.Application, win *app.Window, saved, staged style.Appe
 	if staged == saved {
 		applyBtn.SetEnabled(false)
 	}
-	hint := widgets.NewLabel("Apply writes look.json. Close without Apply discards staged changes.")
+	hint := widgets.NewLabel("Apply writes the theme name to look.json. Close without Apply discards staged changes.")
 	actions := widgets.NewRow(applyBtn, hint).WithGap(12).WithPad(8)
 
 	root := widgets.NewColumn(chrome, split, actions, status)
 	root.AddFlex(split, 1)
 	return root
+}
+
+func promptExportName(from widget.Component, on func(string)) {
+	if from == nil {
+		return
+	}
+	field := widgets.NewTextField("", "theme name", nil)
+	var overlay *widgets.Overlay
+	finish := func(ok bool) {
+		name := strings.TrimSpace(field.Text)
+		widget.DismissOverlay(overlay)
+		if ok && on != nil {
+			on(name)
+		}
+	}
+	cancel := widgets.NewButton("Cancel", func() { finish(false) })
+	ok := widgets.NewButton("Export", func() { finish(true) })
+	ok.Primary = true
+	field.OnSubmit = func(string) { finish(true) }
+	card := widgets.NewPanel("Export theme",
+		widgets.NewLabel("Name the pack. Written to ~/.config/uitoolkit/themes/<name>/theme.json so you can tweak it."),
+		field,
+		widgets.NewRow(cancel, ok).WithGap(8),
+	)
+	card.Raised = true
+	overlay = widgets.NewOverlay(card)
+	overlay.MinCardH = 200
+	widget.ShowOverlay(from, overlay)
 }
