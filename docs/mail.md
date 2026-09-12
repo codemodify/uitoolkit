@@ -5,7 +5,7 @@ Thunderbird-chrome mail client on uitoolkit **v0.10.13**. Two processes:
 | Process | Role |
 | --- | --- |
 | **mailclientd** | Owns accounts, IMAP/POP3/SMTP, OAuth tokens, local cache, folders, messages, tags, filters, identities, smart folders, VIP, categories, outbox, search, mutations. |
-| **mailclientui** | Renders chrome and sends JSON-RPC commands. **No IMAP, POP3, SMTP, or OAuth HTTP** in this process. |
+| **mailclientui** | Renders chrome, owns the **status item / tray**, and sends JSON-RPC commands. **No IMAP, POP3, SMTP, or OAuth HTTP** in this process. |
 
 Shared types and the RPC client/server live in [`internal/mail`](../internal/mail).
 
@@ -36,6 +36,22 @@ Convenience (same architecture, one process: daemon goroutine + UI client on a t
 UITK_SCENE=auto go run ./examples/mail
 go run ./examples/mail -screenshot docs/screenshots
 ```
+
+## Tray and new-mail toasts (0.16.0)
+
+`mailclientui` opens a toolkit `StatusItem` while it runs:
+
+- **Click** the tray (or the toast) → show / raise / focus the Mail window
+  (create it if it was closed). The window-manager close button **hides**
+  to the tray while the item is alive; **Quit** on the tray menu exits.
+- **New mail** → daemon broadcasts `mail.notify` `{title, body, count}`.
+  The UI shows a desktop notification (sender + subject when there is one
+  message). The main window does not need to be visible.
+- `notify-send` stays as a daemon fallback only when **no UI client** is
+  connected. Prefs → Notify still gates `Enabled` / VIP-only / that fallback.
+
+Linux tray hosts: see [tray.md](tray.md) (KDE SNI, GNOME AppIndicator,
+Waybar, …). Headless / `CGO_ENABLED=0` tests use a stub or `UITK_TRAY=fake`.
 
 ## Real IMAP or POP3 + SMTP (primary path)
 

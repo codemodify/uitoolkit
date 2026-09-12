@@ -36,6 +36,11 @@ type (
 	CardContent       = widgets.CardContent
 	CardBadge         = widgets.CardBadge
 	Cursor            = platform.Cursor
+	StatusItem        = platform.StatusItem
+	StatusItemOptions = platform.StatusItemOptions
+	StatusIcon        = platform.StatusIcon
+	StatusMenuItem    = platform.StatusMenuItem
+	Notification      = platform.Notification
 	Appearance        = style.Appearance
 	ThemeName         = style.ThemeName
 	CornerStyle       = style.CornerStyle
@@ -74,6 +79,14 @@ const (
 )
 
 func New(opts Options) *Application { return app.New(opts) }
+
+func StatusItemAvailable() bool { return platform.StatusItemAvailable() }
+func StatusMenuFromItems(items []*widgets.MenuItem) []platform.StatusMenuItem {
+	return app.StatusMenuFromItems(items)
+}
+func StatusIconFromTool(icon style.ToolIcon, look style.LookAndFeel, size int) platform.StatusIcon {
+	return app.StatusIconFromTool(icon, look, size)
+}
 
 func DarkLook() *style.Classic  { return style.DarkLook() }
 func LightLook() *style.Classic { return style.LightLook() }

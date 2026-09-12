@@ -9,11 +9,12 @@ import (
 // Offscreen is a pixmap surface with no OS window. Used for tests,
 // screenshots, and Application.Headless.
 type Offscreen struct {
-	title  string
-	img    *paintengine2d.Image
-	closed bool
-	queue  []Event
-	cursor Cursor
+	title   string
+	img     *paintengine2d.Image
+	closed  bool
+	hidden  bool
+	queue   []Event
+	cursor  Cursor
 }
 
 // NewOffscreen allocates a CPU pixmap of the requested size.
@@ -67,6 +68,13 @@ func (o *Offscreen) UsesGPU() bool { return false }
 func (o *Offscreen) Present(dirty []paintengine2d.Rect) error {
 	_ = dirty
 	return nil
+}
+
+func (o *Offscreen) Raise() { o.hidden = false }
+func (o *Offscreen) Show()  { o.hidden = false }
+func (o *Offscreen) Hide()  { o.hidden = true }
+func (o *Offscreen) Visible() bool {
+	return o != nil && !o.closed && !o.hidden
 }
 
 func (o *Offscreen) Poll() []Event {

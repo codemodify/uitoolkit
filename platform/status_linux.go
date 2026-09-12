@@ -1,0 +1,504 @@
+//go:build linux
+
+package platform
+
+import (
+	"fmt"
+	"os"
+	"sync"
+	"time"
+
+	"github.com/godbus/dbus/v5"
+	"github.com/godbus/dbus/v5/introspect"
+	"github.com/godbus/dbus/v5/prop"
+)
+
+const (
+	sniPath       = "/StatusNotifierItem"
+	sniInterface  = "org.kde.StatusNotifierItem"
+	sniWatcher    = "org.kde.StatusNotifierWatcher"
+	sniWatcherPath = "/StatusNotifierWatcher"
+	fdoNotify     = "org.freedesktop.Notifications"
+	fdoNotifyPath = "/org/freedesktop/Notifications"
+	dbusMenuPath  = "/MenuBar"
+	dbusMenuIface = "com.canonical.dbusmenu"
+)
+
+type linuxStatusItem struct {
+	mu       sync.Mutex
+	opts     StatusItemOptions
+	icon     StatusIcon
+	tooltip  string
+	title    string
+	menu     []StatusMenuItem
+	conn     *dbus.Conn
+	props    *prop.Properties
+	name     string
+	sni      bool
+	closed   bool
+	notifyID uint32
+	noteFn   map[uint32]func()
+}
+
+func newNativeStatusItem(opts StatusItemOptions) (StatusItem, error) {
+	conn, err := dbus.ConnectSessionBus()
+	if err != nil {
+		return newStubStatusItem(opts), nil
+	}
+	item := &linuxStatusItem{
+		opts:    opts,
+		icon:    opts.Icon,
+		tooltip: opts.Tooltip,
+		title:   opts.Title,
+		menu:    copyMenu(opts.Menu),
+		conn:    conn,
+		noteFn:  map[uint32]func(){},
+	}
+	if err := item.export(); err != nil {
+		_ = conn.Close()
+		return newStubStatusItem(opts), nil
+	}
+	item.registerSNI()
+	item.listenNotifyActions()
+	return item, nil
+}
+
+func nativeStatusItemAvailable() bool {
+	conn, err := dbus.ConnectSessionBus()
+	if err != nil {
+		return false
+	}
+	_ = conn.Close()
+	return true
+}
+
+func (s *linuxStatusItem) export() error {
+	id := s.opts.ID
+	if id == "" {
+		id = "uitoolkit"
+	}
+	name := fmt.Sprintf("org.freedesktop.StatusNotifierItem-%d-1", os.Getpid())
+	reply, err := s.conn.RequestName(name, dbus.NameFlagDoNotQueue)
+	if err != nil || reply != dbus.RequestNameReplyPrimaryOwner {
+		name = fmt.Sprintf("org.kde.StatusNotifierItem-%d-1", os.Getpid())
+		reply, err = s.conn.RequestName(name, dbus.NameFlagDoNotQueue)
+		if err != nil || reply != dbus.RequestNameReplyPrimaryOwner {
+			return fmt.Errorf("status: request name: %v", err)
+		}
+	}
+	s.name = name
+
+	propsSpec := map[string]map[string]*prop.Prop{
+		sniInterface: {
+			"Category":           {Value: "ApplicationStatus", Writable: false, Emit: prop.EmitFalse},
+			"Id":                 {Value: id, Writable: false, Emit: prop.EmitFalse},
+			"Title":              {Value: s.title, Writable: false, Emit: prop.EmitTrue},
+			"Status":             {Value: "Active", Writable: false, Emit: prop.EmitTrue},
+			"WindowId":           {Value: int32(0), Writable: false, Emit: prop.EmitFalse},
+			"IconName":           {Value: s.icon.Name, Writable: false, Emit: prop.EmitTrue},
+			"IconPixmap":         {Value: s.iconPixmaps(), Writable: false, Emit: prop.EmitTrue},
+			"OverlayIconName":    {Value: "", Writable: false, Emit: prop.EmitFalse},
+			"OverlayIconPixmap":  {Value: []sniPixmap{}, Writable: false, Emit: prop.EmitFalse},
+			"AttentionIconName":  {Value: "", Writable: false, Emit: prop.EmitFalse},
+			"AttentionIconPixmap": {Value: []sniPixmap{}, Writable: false, Emit: prop.EmitFalse},
+			"AttentionMovieName": {Value: "", Writable: false, Emit: prop.EmitFalse},
+			"ToolTip":            {Value: s.toolTip(), Writable: false, Emit: prop.EmitTrue},
+			"ItemIsMenu":         {Value: false, Writable: false, Emit: prop.EmitFalse},
+			"Menu":               {Value: dbus.ObjectPath(dbusMenuPath), Writable: false, Emit: prop.EmitFalse},
+		},
+	}
+	props, err := prop.Export(s.conn, sniPath, propsSpec)
+	if err != nil {
+		return err
+	}
+	s.props = props
+
+	if err := s.conn.Export(s, sniPath, sniInterface); err != nil {
+		return err
+	}
+	if err := s.conn.Export(introspect.Introspectable(sniIntrospect), sniPath, "org.freedesktop.DBus.Introspectable"); err != nil {
+		return err
+	}
+	if err := s.conn.Export(s, dbusMenuPath, dbusMenuIface); err != nil {
+		return err
+	}
+	_ = s.conn.Export(introspect.Introspectable(dbusMenuIntrospect), dbusMenuPath, "org.freedesktop.DBus.Introspectable")
+	s.sni = true
+	return nil
+}
+
+func (s *linuxStatusItem) registerSNI() {
+	obj := s.conn.Object(sniWatcher, sniWatcherPath)
+	call := obj.Call(sniWatcher+".RegisterStatusNotifierItem", 0, s.name)
+	if call.Err != nil {
+		_ = obj.Call(sniWatcher+".RegisterStatusNotifierItem", 0, sniPath)
+	}
+}
+
+func (s *linuxStatusItem) listenNotifyActions() {
+	if err := s.conn.AddMatchSignal(
+		dbus.WithMatchInterface(fdoNotify),
+		dbus.WithMatchMember("ActionInvoked"),
+	); err != nil {
+		return
+	}
+	ch := make(chan *dbus.Signal, 8)
+	s.conn.Signal(ch)
+	go func() {
+		for sig := range ch {
+			if sig == nil || sig.Name != fdoNotify+".ActionInvoked" || len(sig.Body) < 1 {
+				continue
+			}
+			id, _ := sig.Body[0].(uint32)
+			s.mu.Lock()
+			fn := s.noteFn[id]
+			if fn == nil {
+				fn = s.opts.OnNotifyClick
+			}
+			if fn == nil {
+				fn = s.opts.OnClick
+			}
+			s.mu.Unlock()
+			if fn != nil {
+				fn()
+			}
+		}
+	}()
+}
+
+type sniPixmap struct {
+	W    int32
+	H    int32
+	Data []byte
+}
+
+type sniToolTip struct {
+	IconName string
+	Pixmaps  []sniPixmap
+	Title    string
+	Text     string
+}
+
+func (s *linuxStatusItem) iconPixmaps() []sniPixmap {
+	img := resolveStatusImage(s.icon, 22)
+	w, h, pix := sniARGB(img)
+	if w == 0 {
+		return []sniPixmap{}
+	}
+	return []sniPixmap{{W: int32(w), H: int32(h), Data: pix}}
+}
+
+func (s *linuxStatusItem) toolTip() sniToolTip {
+	return sniToolTip{
+		IconName: s.icon.Name,
+		Pixmaps:  s.iconPixmaps(),
+		Title:    s.title,
+		Text:     s.tooltip,
+	}
+}
+
+func (s *linuxStatusItem) emit(member string) {
+	if s.conn == nil {
+		return
+	}
+	_ = s.conn.Emit(sniPath, sniInterface+"."+member)
+}
+
+func (s *linuxStatusItem) SetIcon(icon StatusIcon) error {
+	s.mu.Lock()
+	s.icon = icon
+	s.mu.Unlock()
+	if s.props != nil {
+		s.props.SetMust(sniInterface, "IconName", icon.Name)
+		s.props.SetMust(sniInterface, "IconPixmap", s.iconPixmaps())
+	}
+	s.emit("NewIcon")
+	return nil
+}
+
+func (s *linuxStatusItem) SetTooltip(text string) error {
+	s.mu.Lock()
+	s.tooltip = text
+	s.mu.Unlock()
+	if s.props != nil {
+		s.props.SetMust(sniInterface, "ToolTip", s.toolTip())
+	}
+	s.emit("NewToolTip")
+	return nil
+}
+
+func (s *linuxStatusItem) SetTitle(text string) error {
+	s.mu.Lock()
+	s.title = text
+	s.mu.Unlock()
+	if s.props != nil {
+		s.props.SetMust(sniInterface, "Title", text)
+	}
+	s.emit("NewTitle")
+	return nil
+}
+
+func (s *linuxStatusItem) SetMenu(items []StatusMenuItem) error {
+	s.mu.Lock()
+	s.menu = copyMenu(items)
+	s.mu.Unlock()
+	if s.conn != nil {
+		_ = s.conn.Emit(dbusMenuPath, dbusMenuIface+".LayoutUpdated", uint32(time.Now().Unix()), int32(0))
+	}
+	return nil
+}
+
+func (s *linuxStatusItem) Notify(n Notification) error {
+	if s.conn == nil {
+		return nil
+	}
+	icon := n.Icon.Name
+	if icon == "" {
+		icon = s.icon.Name
+	}
+	if icon == "" {
+		icon = "mail-unread"
+	}
+	hints := map[string]dbus.Variant{
+		"desktop-entry": dbus.MakeVariant(s.opts.ID),
+		"urgency":       dbus.MakeVariant(byte(1)),
+	}
+	obj := s.conn.Object(fdoNotify, fdoNotifyPath)
+	var id uint32
+	err := obj.Call(fdoNotify+".Notify", 0,
+		s.opts.Title, s.notifyID, icon, n.Title, n.Body,
+		[]string{"default", "Open"}, hints, int32(8000),
+	).Store(&id)
+	if err != nil {
+		return err
+	}
+	s.mu.Lock()
+	s.notifyID = id
+	if n.OnClick != nil {
+		s.noteFn[id] = n.OnClick
+	}
+	s.mu.Unlock()
+	return nil
+}
+
+func (s *linuxStatusItem) Close() error {
+	s.mu.Lock()
+	s.closed = true
+	conn := s.conn
+	s.conn = nil
+	s.sni = false
+	s.mu.Unlock()
+	if conn != nil {
+		_ = conn.Close()
+	}
+	return nil
+}
+
+func (s *linuxStatusItem) Backend() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.sni {
+		return "sni"
+	}
+	if s.conn != nil {
+		return "fdo-notify"
+	}
+	return "stub"
+}
+
+func (s *linuxStatusItem) Alive() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return !s.closed && s.conn != nil
+}
+
+// Activate implements StatusNotifierItem.Activate (primary click).
+func (s *linuxStatusItem) Activate(x, y int32) *dbus.Error {
+	_, _ = x, y
+	s.mu.Lock()
+	fn := s.opts.OnClick
+	s.mu.Unlock()
+	if fn != nil {
+		fn()
+	}
+	return nil
+}
+
+// SecondaryActivate implements StatusNotifierItem.SecondaryActivate.
+func (s *linuxStatusItem) SecondaryActivate(x, y int32) *dbus.Error {
+	return s.Activate(x, y)
+}
+
+// ContextMenu implements StatusNotifierItem.ContextMenu.
+func (s *linuxStatusItem) ContextMenu(x, y int32) *dbus.Error {
+	_, _ = x, y
+	return nil
+}
+
+// Scroll implements StatusNotifierItem.Scroll.
+func (s *linuxStatusItem) Scroll(delta int32, orientation string) *dbus.Error {
+	_, _ = delta, orientation
+	return nil
+}
+
+// GetLayout implements com.canonical.dbusmenu.
+func (s *linuxStatusItem) GetLayout(parentID int32, recursionDepth int32, properties []string) (uint32, dbusMenuLayout, *dbus.Error) {
+	_, _, _ = parentID, recursionDepth, properties
+	s.mu.Lock()
+	items := copyMenu(s.menu)
+	s.mu.Unlock()
+	children := make([]dbusMenuLayout, 0, len(items))
+	for i, it := range items {
+		props := map[string]dbus.Variant{}
+		if it.Separator {
+			props["type"] = dbus.MakeVariant("separator")
+		} else {
+			props["label"] = dbus.MakeVariant(it.Text)
+			if it.Disabled {
+				props["enabled"] = dbus.MakeVariant(false)
+			}
+			if it.Checked {
+				props["toggle-type"] = dbus.MakeVariant("checkmark")
+				props["toggle-state"] = dbus.MakeVariant(int32(1))
+			}
+		}
+		children = append(children, dbusMenuLayout{
+			ID:         int32(i + 1),
+			Properties: props,
+		})
+	}
+	root := dbusMenuLayout{
+		ID:         0,
+		Properties: map[string]dbus.Variant{"children-display": dbus.MakeVariant("submenu")},
+		Children:   children,
+	}
+	return uint32(time.Now().Unix()), root, nil
+}
+
+// GetGroupProperties implements com.canonical.dbusmenu.
+func (s *linuxStatusItem) GetGroupProperties(ids []int32, properties []string) ([]dbusMenuProps, *dbus.Error) {
+	_, _ = ids, properties
+	return nil, nil
+}
+
+// GetProperty implements com.canonical.dbusmenu.GetProperty.
+func (s *linuxStatusItem) GetProperty(id int32, name string) (dbus.Variant, *dbus.Error) {
+	_, _ = id, name
+	return dbus.MakeVariant(""), nil
+}
+
+// Event implements com.canonical.dbusmenu.Event.
+func (s *linuxStatusItem) Event(id int32, eventID string, data dbus.Variant, timestamp uint32) *dbus.Error {
+	_, _ = data, timestamp
+	if eventID != "clicked" {
+		return nil
+	}
+	s.mu.Lock()
+	var fn func()
+	i := int(id) - 1
+	if i >= 0 && i < len(s.menu) {
+		fn = s.menu[i].OnClick
+	}
+	s.mu.Unlock()
+	if fn != nil {
+		fn()
+	}
+	return nil
+}
+
+// EventGroup implements com.canonical.dbusmenu.EventGroup.
+func (s *linuxStatusItem) EventGroup(events []dbusMenuEvent) ([]int32, *dbus.Error) {
+	for _, ev := range events {
+		_ = s.Event(ev.ID, ev.EventID, ev.Data, ev.Timestamp)
+	}
+	return nil, nil
+}
+
+// AboutToShow implements com.canonical.dbusmenu.AboutToShow.
+func (s *linuxStatusItem) AboutToShow(id int32) (bool, *dbus.Error) {
+	_ = id
+	return false, nil
+}
+
+// AboutToShowGroup implements com.canonical.dbusmenu.AboutToShowGroup.
+func (s *linuxStatusItem) AboutToShowGroup(ids []int32) ([]int32, []int32, *dbus.Error) {
+	_ = ids
+	return nil, nil, nil
+}
+
+type dbusMenuLayout struct {
+	ID         int32
+	Properties map[string]dbus.Variant
+	Children   []dbusMenuLayout
+}
+
+type dbusMenuProps struct {
+	ID         int32
+	Properties map[string]dbus.Variant
+}
+
+type dbusMenuEvent struct {
+	ID        int32
+	EventID   string
+	Data      dbus.Variant
+	Timestamp uint32
+}
+
+const sniIntrospect = `
+<node>
+  <interface name="org.kde.StatusNotifierItem">
+    <method name="ContextMenu"><arg name="x" type="i" direction="in"/><arg name="y" type="i" direction="in"/></method>
+    <method name="Activate"><arg name="x" type="i" direction="in"/><arg name="y" type="i" direction="in"/></method>
+    <method name="SecondaryActivate"><arg name="x" type="i" direction="in"/><arg name="y" type="i" direction="in"/></method>
+    <method name="Scroll"><arg name="delta" type="i" direction="in"/><arg name="orientation" type="s" direction="in"/></method>
+    <property name="Category" type="s" access="read"/>
+    <property name="Id" type="s" access="read"/>
+    <property name="Title" type="s" access="read"/>
+    <property name="Status" type="s" access="read"/>
+    <property name="WindowId" type="i" access="read"/>
+    <property name="IconName" type="s" access="read"/>
+    <property name="IconPixmap" type="a(iiay)" access="read"/>
+    <property name="ToolTip" type="(sa(iiay)ss)" access="read"/>
+    <property name="ItemIsMenu" type="b" access="read"/>
+    <property name="Menu" type="o" access="read"/>
+    <signal name="NewTitle"/><signal name="NewIcon"/><signal name="NewToolTip"/><signal name="NewStatus"><arg name="status" type="s"/></signal>
+  </interface>
+  ` + introspect.IntrospectDataString + `
+</node>`
+
+const dbusMenuIntrospect = `
+<node>
+  <interface name="com.canonical.dbusmenu">
+    <method name="GetLayout">
+      <arg name="parentId" type="i" direction="in"/>
+      <arg name="recursionDepth" type="i" direction="in"/>
+      <arg name="propertyNames" type="as" direction="in"/>
+      <arg name="revision" type="u" direction="out"/>
+      <arg name="layout" type="(ia{sv}av)" direction="out"/>
+    </method>
+    <method name="GetGroupProperties">
+      <arg name="ids" type="ai" direction="in"/>
+      <arg name="propertyNames" type="as" direction="in"/>
+      <arg name="properties" type="a(ia{sv})" direction="out"/>
+    </method>
+    <method name="GetProperty">
+      <arg name="id" type="i" direction="in"/>
+      <arg name="name" type="s" direction="in"/>
+      <arg name="value" type="v" direction="out"/>
+    </method>
+    <method name="Event">
+      <arg name="id" type="i" direction="in"/>
+      <arg name="eventId" type="s" direction="in"/>
+      <arg name="data" type="v" direction="in"/>
+      <arg name="timestamp" type="u" direction="in"/>
+    </method>
+    <method name="AboutToShow">
+      <arg name="id" type="i" direction="in"/>
+      <arg name="needUpdate" type="b" direction="out"/>
+    </method>
+    <signal name="LayoutUpdated">
+      <arg name="revision" type="u"/>
+      <arg name="parent" type="i"/>
+    </signal>
+  </interface>
+</node>`

@@ -64,7 +64,9 @@ func MailApp(a *app.Application, win *app.Window) widget.Component {
 // Open builds the Mail chrome against a mailclientd Client (no Store / IMAP).
 func Open(a *app.Application, win *app.Window, cli *Client, opts AppOptions) widget.Component {
 	s := newSession(a, win, cli, opts)
-	return s.build()
+	root := s.build()
+	s.attachTray()
+	return root
 }
 
 type session struct {
@@ -110,6 +112,7 @@ type session struct {
 	attachRows                                 *widgets.FlexBox
 	attachPane                                 *widgets.FlexBox
 	askedEmpty                                 bool
+	tray                                       platform.StatusItem
 	mainBar                                    widget.Component
 	listBar                                    *widgets.ToolBar
 	hdrFrom, hdrSubj, hdrDate, hdrTo, hdrExtra *widgets.Label

@@ -42,6 +42,7 @@ type Application struct {
 	onQuit    func()
 	watchLook bool
 	lookWatch *lookFileStamp
+	trays     []platform.StatusItem
 }
 
 // New constructs an application. Default look is PreferredLook
@@ -165,7 +166,7 @@ const caretBlinkPeriod = 530 * time.Millisecond
 // dirty, a caret blinks, a tooltip is due, or (on Wayland) a key repeat
 // fires. Idle gallery no longer wakes at 60 Hz.
 func (a *Application) Run() error {
-	if len(a.windows) == 0 {
+	if len(a.windows) == 0 && !a.trayHolds() {
 		return fmt.Errorf("uitoolkit: Run with no windows")
 	}
 	var nextBlink time.Time
@@ -200,6 +201,14 @@ func (a *Application) Run() error {
 		}
 		a.reap()
 		if alive == 0 {
+			if a.trayHolds() {
+				timeout := a.waitTimeout(time.Now(), nextBlink)
+				if timeout < 0 || timeout > 100*time.Millisecond {
+					timeout = 100 * time.Millisecond
+				}
+				a.waitDisplay(timeout)
+				continue
+			}
 			a.quit = true
 			break
 		}
@@ -209,6 +218,9 @@ func (a *Application) Run() error {
 		timeout := a.waitTimeout(time.Now(), nextBlink)
 		if a.anyNeedsPaint() {
 			timeout = 0
+		}
+		if a.trayHolds() && (timeout < 0 || timeout > 100*time.Millisecond) {
+			timeout = 100 * time.Millisecond
 		}
 		a.waitDisplay(timeout)
 	}

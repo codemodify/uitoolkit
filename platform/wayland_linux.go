@@ -669,6 +669,7 @@ static void ui_wl_set_max(struct xdg_toplevel *t) { if (t) xdg_toplevel_set_maxi
 static void ui_wl_unset_max(struct xdg_toplevel *t) { if (t) xdg_toplevel_unset_maximized(t); }
 static void ui_wl_set_full(struct xdg_toplevel *t) { if (t) xdg_toplevel_set_fullscreen(t, NULL); }
 static void ui_wl_unset_full(struct xdg_toplevel *t) { if (t) xdg_toplevel_unset_fullscreen(t); }
+static void ui_wl_set_minimized(struct xdg_toplevel *t) { if (t) xdg_toplevel_set_minimized(t); }
 
 static struct zxdg_toplevel_decoration_v1 *ui_wl_deco(struct zxdg_decoration_manager_v1 *m, struct xdg_toplevel *t) {
 	return zxdg_decoration_manager_v1_get_toplevel_decoration(m, t);
@@ -953,6 +954,7 @@ type wlSurface struct {
 	scaleSet   int
 	configured bool
 	closed     bool
+	hidden     bool
 	queue      []Event
 	viewport   *C.struct_wp_viewport
 	fracObj    *C.struct_wp_fractional_scale_v1
@@ -1192,6 +1194,29 @@ func (s *wlSurface) SetMaximized(on bool) {
 	} else {
 		C.ui_wl_unset_max(s.top)
 	}
+}
+
+func (s *wlSurface) Raise() {
+	s.hidden = false
+	if s.conn != nil && s.conn.dpy != nil {
+		C.ui_wl_flush(s.conn.dpy)
+	}
+}
+
+func (s *wlSurface) Show() { s.Raise() }
+
+func (s *wlSurface) Hide() {
+	s.hidden = true
+	if s.top != nil {
+		C.ui_wl_set_minimized(s.top)
+	}
+	if s.conn != nil && s.conn.dpy != nil {
+		C.ui_wl_flush(s.conn.dpy)
+	}
+}
+
+func (s *wlSurface) Visible() bool {
+	return s != nil && !s.closed && !s.hidden
 }
 
 func (s *wlSurface) SetCursor(cur Cursor) {

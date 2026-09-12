@@ -9,7 +9,7 @@ tries `GPUDevice` and falls back to the CPU pixmap.
 | **offscreen** | `Headless`, `UITK_BACKEND=offscreen`, or no display | no-op | in-process | env or 1 | n/a | last `SetCursor` |
 | **Wayland** | Linux + CGO + `WAYLAND_DISPLAY` | **`wl_egl_window` + `eglSwapBuffers`** when `UITK_PAINT=auto\|gpu` and EGL works; else v0.4.1 **`wl_shm` XRGB8888** (opaque). **linux-dmabuf** only if `UITK_WAYLAND_PRESENT=dmabuf` on the CPU path | `wl_data_device` + primary when the compositor offers it | `wl_output` scale, `wp_fractional_scale_v1` + viewporter, env | `zwp_text_input_v3` preedit / commit | `wl_pointer_set_cursor` (enter serial + ARGB shm); re-applied on pointer enter |
 | **X11** | Linux + CGO + `DISPLAY` | **EGL window + `eglSwapBuffers`** when EGL works; else dirty-rect `XPutImage` / MIT-SHM | CLIPBOARD + PRIMARY, ICCCM **INCR** | Xft.dpi, RandR mm, screen mm, env | XIM preedit callbacks + compose / dead keys | `XDefineCursor` + `XFlush` (font cursors) |
-| Win32 / AppKit | stub | — | — | — | — | — |
+| Win32 / AppKit | stub windows; **tray** is `Shell_NotifyIcon` / `NSStatusItem` | — | — | — | — | — |
 
 Auto-select: Wayland if `WAYLAND_DISPLAY` is set **and** a compositor
 accepts the connection, else X11 if `DISPLAY` is set, else offscreen.
@@ -257,9 +257,19 @@ buffer scale agree. List/table/tree rows and fixed column widths are
 design pixels that grow with the look. EGL, dmabuf, and shm share that
 scale; CPU present still uses damage / attach / commit.
 
+## Status item / tray (0.16.0)
+
+`StatusItem` is a tray icon + desktop toast. Linux uses StatusNotifierItem
+and freedesktop Notifications over the session bus (X11, Xlibre, and
+Wayland). Windows uses `Shell_NotifyIcon`; macOS (`CGO`) uses
+`NSStatusItem`. See [tray.md](tray.md).
+
+`Window.Show` / `Hide` / `Raise` map the surface (X11 `_NET_ACTIVE_WINDOW`;
+Wayland minimize). Offscreen tracks a visibility flag.
+
 ## Deferred
 
 - AT-SPI / accessibility
 - IME candidate-window theming (the IM draws its own window)
 - Client-side decoration chrome beyond the existing TitleBar widget
-- Win32 and AppKit
+- Win32 and AppKit **windows** (tray landed in 0.16.0)

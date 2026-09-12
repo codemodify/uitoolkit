@@ -115,6 +115,9 @@ func (c *Client) readLoop() {
 			ev.Folder = p.FolderID
 			ev.Reason = p.Reason
 			ev.Count = p.Count
+			ev.Title = p.Title
+			ev.Body = p.Body
+			ev.VIP = p.VIP
 		}
 		c.mu.Lock()
 		fn := c.onEvent
