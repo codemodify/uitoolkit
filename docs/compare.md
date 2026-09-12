@@ -33,6 +33,7 @@ cover scroll, splitter, table header, and menu geometry.
 | `menubar-dismiss-focus` | MenuBar | Menu overlay close | `QMenuBar` unhighlight | popover dismiss | `Close` / pick / dismiss clear `keyNav` |
 | `popup-leave-highlight` | PopupMenu | hover ends on leave | active item vs hover | prelight clears on leave | highlight = hover or keyboard `focus` |
 | `menu-hover-bordered` | PopupMenu / MenuBar | Office XP hot-track (bordered fill) | `QMenu` highlight rect | menu prelight | `MenuHover` + 1px `MenuHoverBorder` across gutter + label |
+| `menubar-title-hover` | MenuBar | only the hot title highlights | `QMenuBar` item hover | menubar prelight | bar `StateHovered` is not inherited by sibling titles |
 | `textfield-inactive-sel` | TextField | inactive selection brush | `QLineEdit` inactive | `GtkEntry` unfocused | selection alpha drops when `!Focused` |
 | `label-clip` | Label | `TextBlock` clip / trim | `QLabel` elide | `GtkLabel` ellipsize | `ClipRect` + `Font.Fit` |
 | `button-label-clip` | Button | content clip | clip to contents rect | clip | fitted + clipped label |

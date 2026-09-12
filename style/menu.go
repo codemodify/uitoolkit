@@ -15,7 +15,8 @@ type MenuRow struct {
 type MenuChrome struct {
 	PadL, PadR, PadT, PadB float32
 	ItemPad                float32 // DrawMenuItem inner pad (check side + label trailing)
-	CheckGutter            float32 // space between check/icon and label
+	CheckGutter            float32 // check/icon column after ItemPad (gray gutter)
+	LabelGap               float32 // body space after the gray gutter before text
 	AccelGap               float32
 	Border                 float32 // frame/clip so the last glyph is not bitten
 }
@@ -23,18 +24,20 @@ type MenuChrome struct {
 // CheckCol is the label origin relative to the item rect (pad + gutter).
 func (c MenuChrome) CheckCol() float32 { return c.ItemPad + c.CheckGutter }
 
-// GutterW is the icon column from the popup's left edge to the label origin.
+// GutterW is the gray icon column from the popup's left edge (not the label).
 func (c MenuChrome) GutterW() float32 { return c.PadL + c.CheckCol() }
 
 // LabelMinX is the painted label origin inside an arranged item row.
-func (c MenuChrome) LabelMinX(rowMinX float32) float32 { return rowMinX + c.CheckCol() }
+func (c MenuChrome) LabelMinX(rowMinX float32) float32 {
+	return rowMinX + c.CheckCol() + c.LabelGap
+}
 
 // LabelMaxX is the reserved advance right edge (item pad stays free for ink).
 func (c MenuChrome) LabelMaxX(rowMaxX float32) float32 { return rowMaxX - c.ItemPad }
 
 // FrameWidth is the intrinsic menu width for the widest label/shortcut.
 func (c MenuChrome) FrameWidth(maxLabel, maxAccel float32) float32 {
-	w := c.PadL + c.CheckCol() + maxLabel + c.ItemPad + c.PadR + c.Border
+	w := c.PadL + c.CheckCol() + c.LabelGap + maxLabel + c.ItemPad + c.PadR + c.Border
 	if maxAccel > 0 {
 		w += c.AccelGap + maxAccel
 	}
@@ -51,6 +54,7 @@ func MenuChromeFor(lk LookAndFeel) MenuChrome {
 		PadB:        8,
 		ItemPad:     10,
 		CheckGutter: 10,
+		LabelGap:    8,
 		AccelGap:    20,
 		Border:      2,
 	}
@@ -67,6 +71,7 @@ func MenuChromeFor(lk LookAndFeel) MenuChrome {
 	c.PadB *= s
 	c.ItemPad *= s
 	c.CheckGutter *= s
+	c.LabelGap *= s
 	c.AccelGap *= s
 	c.Border *= s
 	switch LookIconSize(lk) {
