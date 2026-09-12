@@ -41,13 +41,11 @@ func ToolDivider() *ToolItem { return &ToolItem{Sep: true} }
 // ToolBar is a horizontal strip of tool buttons.
 type ToolBar struct {
 	widget.Base
-	items    []*ToolItem
-	hover    int
-	press    int
-	focus    int
-	keyNav   bool
-	itemBox  []paintengine2d.Rect
-	itemBoxB paintengine2d.Rect
+	items  []*ToolItem
+	hover  int
+	press  int
+	focus  int
+	keyNav bool
 }
 
 // NewToolBar constructs a toolbar.
@@ -188,11 +186,7 @@ func (t *ToolBar) Measure(c layout.Constraints) paintengine2d.Point {
 func (t *ToolBar) Arrange(r paintengine2d.Rect) { t.SetBounds(r) }
 
 func (t *ToolBar) itemRects() []paintengine2d.Rect {
-	b := t.LocalBounds()
-	if len(t.itemBox) == len(t.items) && t.itemBoxB == b {
-		return t.itemBox
-	}
-	h := b.Dy()
+	h := t.LocalBounds().Dy()
 	btn := t.toolBtnW(h)
 	x := float32(6)
 	y := (h - btn) * 0.5
@@ -211,8 +205,6 @@ func (t *ToolBar) itemRects() []paintengine2d.Rect {
 		out[i] = paintengine2d.XYWH(x, y, w, btn)
 		x += w + style.ToolItemGap
 	}
-	t.itemBox = out
-	t.itemBoxB = b
 	return out
 }
 
@@ -231,9 +223,6 @@ func (t *ToolBar) Paint(ctx *paintengine2d.Context) {
 	rects := t.itemRects()
 	for i, it := range t.items {
 		if it == nil {
-			continue
-		}
-		if ctx.QuickReject(rects[i]) {
 			continue
 		}
 		if it.Sep {
@@ -276,14 +265,10 @@ func (t *ToolBar) MouseMove(e widget.MouseEvent) bool {
 	return true
 }
 
-func (t *ToolBar) MouseEnter() { t.SetHovered(true) }
-
 func (t *ToolBar) MouseExit() {
-	old := t.hover
 	t.hover = -1
 	t.press = -1
-	t.SetHovered(false)
-	t.invalidateItem(old)
+	t.Base.MouseExit()
 }
 
 func (t *ToolBar) FocusLost() {

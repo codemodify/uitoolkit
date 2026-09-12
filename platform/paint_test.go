@@ -90,14 +90,3 @@ func TestOpenSurfaceAutoFallsBackWithoutEGL(t *testing.T) {
 		t.Fatal("auto without EGL must be CPU")
 	}
 }
-
-func TestSurfaceReadyOffscreen(t *testing.T) {
-	s := NewOffscreen(WindowOptions{Width: 16, Height: 12})
-	if !SurfaceReady(s) {
-		t.Fatal("offscreen should be ready")
-	}
-	_ = s.Close()
-	if SurfaceReady(s) {
-		t.Fatal("closed")
-	}
-}

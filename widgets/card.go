@@ -173,11 +173,7 @@ func (l *CardList) Paint(ctx *paintengine2d.Context) {
 	} else {
 		for i := lo; i < hi; i++ {
 			y := float32(i)*rh - l.OffsetY
-			row := paintengine2d.XYWH(0, y, b.Dx(), rh)
-			if ctx.QuickReject(row) {
-				continue
-			}
-			paintCard(lk, ctx, row, l.cardAt(i), i == l.Selected, i == l.hovered)
+			paintCard(lk, ctx, paintengine2d.XYWH(0, y, b.Dx(), rh), l.cardAt(i), i == l.Selected, i == l.hovered)
 		}
 	}
 	ctx.Restore()
@@ -320,11 +316,15 @@ func (l *CardList) MouseEnter() {}
 
 func (l *CardList) MouseMove(e widget.MouseEvent) bool {
 	track, thumb := l.scrollTrack()
-	if applyScrollHover(&l.vbar, e.Pos, track, thumb, true, l.MaxOffset(), func(off float32) {
-		l.OffsetY = off
-		l.clamp()
-	}, l.Invalidate, func() { invalidateOverflowTrack(l, track) }) {
-		return true
+	if off, apply, handled, dirty := l.vbar.move(e.Pos, track, thumb, true, l.MaxOffset()); apply || handled || dirty {
+		if apply {
+			l.OffsetY = off
+			l.clamp()
+		}
+		l.Invalidate()
+		if apply || handled {
+			return true
+		}
 	}
 	h := l.indexAt(e.Pos.Y)
 	if h != l.hovered {

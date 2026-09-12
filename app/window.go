@@ -13,35 +13,32 @@ import (
 
 // Window is a widget host that paints into a platform.Surface.
 type Window struct {
-	app          *Application
-	surf         platform.Surface
-	root         widget.Component
-	overlay      widget.Component
-	popup        widget.Component
-	tooltip      widget.Component
-	look         style.LookAndFeel
-	dirty        paintengine2d.Damage
-	presentExtra paintengine2d.Damage
-	needSyncSize bool
-	full         bool
-	focus        widget.Component
-	hover        widget.Component
-	capture      widget.Component
-	closed       bool
-	blink        bool
-	laid         bool
-	scale        float32
-	tipHover     widget.Component
-	tipSince     time.Time
-	tipPos       paintengine2d.Point
-	tipDelay     time.Duration
-	clock        func() time.Time
-	lastTip      string
-	animPeriod   time.Duration
-	layers       *widget.SceneCache
-	scene        *paintengine2d.Scene
-	cursor       platform.Cursor
-	everPainted  bool
+	app        *Application
+	surf       platform.Surface
+	root       widget.Component
+	overlay    widget.Component
+	popup      widget.Component
+	tooltip    widget.Component
+	look       style.LookAndFeel
+	dirty      paintengine2d.Damage
+	full       bool
+	focus      widget.Component
+	hover      widget.Component
+	capture    widget.Component
+	closed     bool
+	blink      bool
+	laid       bool
+	scale      float32
+	tipHover   widget.Component
+	tipSince   time.Time
+	tipPos     paintengine2d.Point
+	tipDelay   time.Duration
+	clock      func() time.Time
+	lastTip    string
+	animPeriod time.Duration
+	layers     *widget.SceneCache
+	scene      *paintengine2d.Scene
+	cursor     platform.Cursor
 }
 
 func newWindow(a *Application, surf platform.Surface, opts platform.WindowOptions) *Window {
@@ -124,9 +121,8 @@ func (w *Window) SetOverlay(c widget.Component) {
 func (w *Window) Overlay() widget.Component { return w.overlay }
 
 func (w *Window) SetPopup(c widget.Component) {
-	old := w.popup
-	if old != nil && old != c {
-		if d, ok := old.(widget.Dismisser); ok {
+	if w.popup != nil && w.popup != c {
+		if d, ok := w.popup.(widget.Dismisser); ok {
 			d.Dismissed()
 		}
 	}
@@ -135,21 +131,7 @@ func (w *Window) SetPopup(c widget.Component) {
 		c.SetHost(w)
 		w.HideTooltip()
 	}
-	if old != c {
-		w.dirtyLayer(old)
-	}
-	w.dirtyLayer(c)
-}
-
-func (w *Window) dirtyLayer(c widget.Component) {
-	if c == nil {
-		return
-	}
-	r := c.LocalBounds()
-	if r.Empty() {
-		r = c.Bounds()
-	}
-	w.Invalidate(c, r.Inset(-4))
+	w.fullInvalidate()
 }
 
 func (w *Window) Popup() widget.Component { return w.popup }
@@ -158,12 +140,11 @@ func (w *Window) DismissPopup() {
 	if w.popup == nil {
 		return
 	}
-	old := w.popup
-	if d, ok := old.(widget.Dismisser); ok {
+	if d, ok := w.popup.(widget.Dismisser); ok {
 		d.Dismissed()
 	}
 	w.popup = nil
-	w.dirtyLayer(old)
+	w.fullInvalidate()
 }
 
 func (w *Window) SetTooltip(c widget.Component) {
@@ -218,92 +199,6 @@ func (w *Window) RevealTooltip() {
 		return
 	}
 	w.showTip(text, w.tipPos)
-}
-
-// pixelScrollEnabled is the Window-side kill switch for Context.Scroll.
-// Must stay false with widgets.pixelScrollEnabled until the blit is proven.
-const pixelScrollEnabled = false
-
-// chromeThin is the max extent of a hover/caret/bar dirty box on both
-// axes. A scroll/content invalidate is a large 2-D viewport and must
-// full-replay so DrawSceneDamage cannot skip the middle.
-const chromeThin = 96
-
-// chromeDamageOnly is true for thin hover/caret/bar dirty (keep
-// DrawSceneDamage). A large 2-D box is a scroll/content invalidate.
-func chromeDamageOnly(d *paintengine2d.Damage) bool {
-	if d == nil || d.Empty() || len(d.Rects) > 8 {
-		return false
-	}
-	for _, r := range d.Rects {
-		if r.Empty() {
-			continue
-		}
-		if r.Dx() > chromeThin && r.Dy() > chromeThin {
-			return false
-		}
-	}
-	return true
-}
-
-// ScrollPixels implements widget.PixelScroller. The blit is disabled
-// (v0.14.4): Context.Scroll + strip damage left vacated holes and
-// jumping rows on Wayland/HiDPI. Callers fall back to a full viewport
-// Invalidate. Hover still uses small dirty rects.
-func (w *Window) ScrollPixels(c widget.Component, local paintengine2d.Rect, dx, dy float32) bool {
-	if !pixelScrollEnabled {
-		return false
-	}
-	if w == nil || w.surf == nil || c == nil || local.Empty() {
-		return false
-	}
-	if dx == 0 && dy == 0 {
-		return true
-	}
-	ctx := platform.NewPaintContext(w.surf)
-	if ctx == nil {
-		return false
-	}
-	if _, ok := ctx.Device().(interface {
-		Scroll(dx, dy int, r paintengine2d.Rect)
-	}); !ok {
-		return false
-	}
-	origin := widget.DeviceOrigin(c)
-	ctx.Translate(origin.X, origin.Y)
-	ctx.Scroll(dx, dy, local)
-	var exposed paintengine2d.Rect
-	switch {
-	case dy < 0:
-		h := -dy
-		if h > local.Dy() {
-			h = local.Dy()
-		}
-		exposed = paintengine2d.XYWH(local.Min.X, local.Max.Y-h, local.Dx(), h)
-	case dy > 0:
-		h := dy
-		if h > local.Dy() {
-			h = local.Dy()
-		}
-		exposed = paintengine2d.XYWH(local.Min.X, local.Min.Y, local.Dx(), h)
-	case dx < 0:
-		wd := -dx
-		if wd > local.Dx() {
-			wd = local.Dx()
-		}
-		exposed = paintengine2d.XYWH(local.Max.X-wd, local.Min.Y, wd, local.Dy())
-	case dx > 0:
-		wd := dx
-		if wd > local.Dx() {
-			wd = local.Dx()
-		}
-		exposed = paintengine2d.XYWH(local.Min.X, local.Min.Y, wd, local.Dy())
-	}
-	if !exposed.Empty() {
-		ctx.ClearRect(exposed, w.look.Palette().Background)
-	}
-	w.presentExtra.Add(local.Translate(origin))
-	return true
 }
 
 func (w *Window) Invalidate(c widget.Component, local paintengine2d.Rect) {
@@ -375,7 +270,6 @@ func (w *Window) RequestLayout() {
 func (w *Window) fullInvalidate() {
 	ww, hh := w.surf.Size()
 	w.dirty.Reset()
-	w.presentExtra.Reset()
 	w.dirty.Add(paintengine2d.XYWH(0, 0, float32(ww), float32(hh)))
 	w.full = true
 	if w.layers != nil {
@@ -390,11 +284,7 @@ func (w *Window) toggleBlink() {
 	}
 	if b, ok := w.focus.(interface{ SetCaretBlink(bool) }); ok {
 		b.SetCaretBlink(w.blink)
-		if c, ok := w.focus.(interface{ InvalidateCaret() }); ok {
-			c.InvalidateCaret()
-		} else {
-			w.focus.Invalidate()
-		}
+		w.focus.Invalidate()
 	}
 }
 
@@ -410,7 +300,7 @@ func (w *Window) needsPaint() bool {
 	if w == nil || w.closed {
 		return false
 	}
-	return !w.laid || w.full || !w.dirty.Empty() || !w.presentExtra.Empty()
+	return !w.laid || w.full || !w.dirty.Empty()
 }
 
 // RequestAnim asks Run to wake at least every d (busy indicators).
@@ -439,8 +329,6 @@ func (w *Window) dispatch(ev platform.Event) {
 		w.Close()
 	case platform.EventResize:
 		_ = w.surf.Resize(ev.Width, ev.Height)
-		w.syncScaleFromSurface()
-		w.needSyncSize = true
 		w.laid = false
 		w.fullInvalidate()
 	case platform.EventExpose:
@@ -758,28 +646,6 @@ func (w *Window) layout() {
 	w.laid = true
 }
 
-func (w *Window) syncScaleFromSurface() {
-	if w == nil || w.surf == nil {
-		return
-	}
-	if w.app != nil {
-		w.app.adoptSurfaceScale(w.surf)
-		w.scale = w.app.scale
-		w.look = w.app.look
-		return
-	}
-	next := platform.AdoptDisplayScale(w.scale, platform.SurfaceScale(w.surf))
-	if next == w.scale {
-		return
-	}
-	w.scale = next
-	w.look = applyScale(w.look, next)
-}
-
-func (w *Window) needsFullPaint() bool {
-	return w.full || !w.everPainted || !platform.SurfaceReady(w.surf)
-}
-
 func (w *Window) frame() {
 	if w.closed {
 		return
@@ -789,66 +655,19 @@ func (w *Window) frame() {
 		w.fullInvalidate()
 	}
 	w.tickTips()
-	if w.needsFullPaint() {
-		w.fullInvalidate()
-	}
-	if w.dirty.Empty() && !w.full && w.presentExtra.Empty() {
+	if w.dirty.Empty() && !w.full {
 		return
 	}
-	if w.needSyncSize {
-		if ctx := platform.NewPaintContext(w.surf); ctx != nil {
-			ctx.SyncSize()
-		}
-	}
 	if platform.WantScene() {
-		w.recordScene()
-		var dirty *paintengine2d.Damage
-		// DrawSceneDamage with a non-nil empty Damage is a no-op and
-		// tells GPU Present to skip the swap — that is the black first
-		// frame. Until a real buffer has been presented, pass nil.
-		// Large dirty (scroll/content) also passes nil: strip-only
-		// replay after a failed blit left vacated holes in v0.14.1–3.
-		if !w.needsFullPaint() && !w.dirty.Empty() {
-			if ctx := platform.NewPaintContext(w.surf); ctx != nil {
-				bg := w.look.Palette().Background
-				for _, r := range w.dirty.Rects {
-					ctx.ClearRect(r, bg)
-				}
-			}
-			if chromeDamageOnly(&w.dirty) {
-				dirty = &w.dirty
-			}
-		}
-		w.presentScene(dirty)
+		w.frameScene()
 	} else {
-		if w.needsFullPaint() {
-			w.full = true
-		}
 		w.frameImmediate()
 	}
-	w.presentBuffer()
-	if platform.SurfaceReady(w.surf) {
-		w.everPainted = true
-	}
+	// Full present. DrawScene already painted the whole graph; partial
+	// PresentRects left stale Wayland tiles in v0.14.x.
+	_ = w.surf.Present(nil)
 	w.dirty.Reset()
-	w.presentExtra.Reset()
 	w.full = false
-	w.needSyncSize = false
-}
-
-func (w *Window) paintLayers(ctx *paintengine2d.Context, dirty *paintengine2d.Damage) {
-	if w.root != nil {
-		widget.PaintTree(w.root, ctx, dirty)
-	}
-	if w.overlay != nil {
-		widget.PaintTree(w.overlay, ctx, dirty)
-	}
-	if w.popup != nil {
-		widget.PaintTree(w.popup, ctx, dirty)
-	}
-	if w.tooltip != nil {
-		widget.PaintTree(w.tooltip, ctx, dirty)
-	}
 }
 
 func (w *Window) frameImmediate() {
@@ -856,98 +675,61 @@ func (w *Window) frameImmediate() {
 	if ctx == nil {
 		return
 	}
-	if w.needSyncSize {
-		ctx.SyncSize()
-		w.needSyncSize = false
-	}
-	bg := w.look.Palette().Background
+	var paintDirty *paintengine2d.Damage
 	if w.full {
-		ctx.Clear(bg)
-		w.paintLayers(ctx, nil)
-		return
-	}
-	if w.dirty.Empty() {
-		return
-	}
-	// Paint each dirty box. Clip/Clear of dirty.Bounds() would erase the
-	// L-union of a scroll strip + scrollbar and undo Context.Scroll.
-	// Hover still ClearRects only the row boxes — never Context.Clear.
-	var one paintengine2d.Damage
-	one.Pad = w.dirty.Pad
-	for _, r := range w.dirty.Rects {
-		if r.Empty() {
-			continue
+		ctx.Clear(w.look.Palette().Background)
+		paintDirty = nil
+	} else {
+		paintDirty = &w.dirty
+		for _, r := range w.dirty.Rects {
+			ctx.Save()
+			ctx.ClipRect(r)
+			ctx.DrawRect(r, paintengine2d.Fill(w.look.Palette().Background))
+			ctx.Restore()
 		}
-		one.Reset()
-		one.Add(r)
-		ctx.Save()
-		ctx.SetDamage(&one)
-		ctx.ClipRect(r)
-		if _, ok := ctx.Device().(interface {
-			ClearRect(paintengine2d.Rect, paintengine2d.Color)
-		}); ok {
-			ctx.ClearRect(r, bg)
-		} else {
-			ctx.DrawRect(r, paintengine2d.Fill(bg))
-		}
-		w.paintLayers(ctx, &one)
-		ctx.Restore()
+	}
+	if w.root != nil {
+		widget.PaintTree(w.root, ctx, paintDirty)
+	}
+	if w.overlay != nil {
+		widget.PaintTree(w.overlay, ctx, nil)
+	}
+	if w.popup != nil {
+		widget.PaintTree(w.popup, ctx, nil)
+	}
+	if w.tooltip != nil {
+		widget.PaintTree(w.tooltip, ctx, nil)
 	}
 }
 
-func (w *Window) recordScene() {
+func (w *Window) frameScene() {
 	ww, hh := w.surf.Size()
 	rec := paintengine2d.NewRecorder(ww, hh)
-	if w.needsFullPaint() {
-		rec.Clear(w.look.Palette().Background)
-	}
+	rec.Clear(w.look.Palette().Background)
 	ctx := paintengine2d.NewContextDevice(rec)
-	// Do not clip the recorder on dirty frames: cached groups must stay
-	// complete so a later DrawSceneDamage of another rect is valid.
 	var paintDirty *paintengine2d.Damage
-	fullContent := true
-	if !w.needsFullPaint() {
+	if !w.full {
 		paintDirty = &w.dirty
 	}
 	if w.root != nil {
-		widget.RecordTree(w.root, rec, ctx, paintDirty, w.layers, fullContent)
+		widget.RecordTree(w.root, rec, ctx, paintDirty, w.layers, false)
 	}
 	if w.overlay != nil {
-		widget.RecordTree(w.overlay, rec, ctx, paintDirty, w.layers, fullContent)
+		widget.RecordTree(w.overlay, rec, ctx, nil, w.layers, true)
 	}
 	if w.popup != nil {
-		widget.RecordTree(w.popup, rec, ctx, paintDirty, w.layers, fullContent)
+		widget.RecordTree(w.popup, rec, ctx, nil, w.layers, true)
 	}
 	if w.tooltip != nil {
-		widget.RecordTree(w.tooltip, rec, ctx, paintDirty, w.layers, fullContent)
+		widget.RecordTree(w.tooltip, rec, ctx, nil, w.layers, true)
 	}
 	w.scene = rec.Finish()
-}
-
-func (w *Window) presentScene(dirty *paintengine2d.Damage) {
 	dev := platform.SurfaceDevice(w.surf)
-	if dev == nil || w.scene == nil {
+	if dev == nil {
 		return
 	}
-	paintengine2d.DrawSceneDamage(w.scene, dev, dirty)
-}
-
-func (w *Window) presentBuffer() {
-	var rects []paintengine2d.Rect
-	if w.needsFullPaint() || !chromeDamageOnly(&w.dirty) {
-		// nil → platform Present covers the whole buffer (and sets
-		// Wayland buffer_scale / viewport). Scroll/content dirty is
-		// a full present so partial GPU tiles cannot stay stale.
-		rects = nil
-	} else {
-		rects = append(rects, w.dirty.Rects...)
-		rects = append(rects, w.presentExtra.Rects...)
-	}
-	// Always go through Surface.Present so Wayland/X11 can set
-	// buffer_scale, viewport, and flush. Skipping it on GPU (v0.14.2)
-	// left the first eglSwapBuffers on an unconfigured 1× surface —
-	// black window and oversized chrome. GPU swap is presentGPU inside.
-	_ = w.surf.Present(rects)
+	// Full replay (v0.13.8). Do not call DrawSceneDamage / strip present.
+	paintengine2d.DrawScene(w.scene, dev)
 }
 
 // Scene is the last retained graph (tests / inspector).

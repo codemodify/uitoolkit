@@ -76,11 +76,7 @@ func (t *TabBar) indexAt(x float32) int {
 func (t *TabBar) Paint(ctx *paintengine2d.Context) {
 	lk := t.Look()
 	lk.DrawTabBar(ctx, t.LocalBounds())
-	rects := t.tabRects()
 	for i, title := range t.Titles {
-		if ctx.QuickReject(rects[i]) {
-			continue
-		}
 		st := t.State()
 		if i == t.hover {
 			st |= style.StateHovered
@@ -91,7 +87,7 @@ func (t *TabBar) Paint(ctx *paintengine2d.Context) {
 		if i != t.Selected {
 			st &^= style.StateFocused
 		}
-		lk.DrawTab(ctx, rects[i], st, title, i == t.Selected)
+		lk.DrawTab(ctx, t.tabRects()[i], st, title, i == t.Selected)
 	}
 }
 
@@ -114,14 +110,10 @@ func (t *TabBar) MouseMove(e widget.MouseEvent) bool {
 	return true
 }
 
-func (t *TabBar) MouseEnter() { t.SetHovered(true) }
-
 func (t *TabBar) MouseExit() {
-	old := t.hover
 	t.hover = -1
 	t.press = -1
-	t.SetHovered(false)
-	t.invalidateTab(old)
+	t.Base.MouseExit()
 }
 
 func (t *TabBar) MousePress(e widget.MouseEvent) bool {

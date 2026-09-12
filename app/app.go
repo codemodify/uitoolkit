@@ -125,18 +125,6 @@ func applyScale(look style.LookAndFeel, scale float32) style.LookAndFeel {
 // Scale is the display scale applied to layout metrics at the window.
 func (a *Application) Scale() float32 { return a.scale }
 
-func (a *Application) adoptSurfaceScale(surf platform.Surface) {
-	if a == nil || surf == nil {
-		return
-	}
-	next := platform.AdoptDisplayScale(a.scale, platform.SurfaceScale(surf))
-	if next == a.scale {
-		return
-	}
-	a.scale = next
-	a.look = applyScale(a.look, next)
-}
-
 // BackendName is "x11", "wayland", "offscreen", or a stub.
 func (a *Application) BackendName() string { return a.backend.Name() }
 
@@ -155,11 +143,6 @@ func (a *Application) NewWindow(opts platform.WindowOptions) (*Window, error) {
 	if err != nil {
 		return nil, err
 	}
-	// New() may have guessed 1× before the display connection existed.
-	// After the first surface (Wayland roundtrip / X11 DPI) adopt the
-	// real factor so the first layout is not 1× metrics in a 2× buffer
-	// or 2× metrics in a still-unscaled buffer.
-	a.adoptSurfaceScale(surf)
 	w := newWindow(a, surf, opts)
 	a.mu.Lock()
 	a.windows = append(a.windows, w)

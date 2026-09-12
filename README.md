@@ -3,7 +3,7 @@
 **Pure-Go desktop UI toolkit.** Retained widget tree, layout, themes, and
 X11 and Wayland window backends. Every pixel is painted with
 [`github.com/codemodify/paintengine2d`](https://github.com/codemodify/paintengine2d)
-(v0.10.0+). Default UI is **Titillium Web**; mono / code is **JetBrains Mono**
+(v0.9.0+). Default UI is **Titillium Web**; mono / code is **JetBrains Mono**
 (OFL, embedded). Outlines are rasterized through paintengine2d into a white
 atlas and tinted with `Paint.Color`. There is no second rasterizer, no Skia,
 no Gio renderer, and no Electron.
@@ -20,15 +20,15 @@ _ = app.Run()
 
 ```bash
 go get github.com/codemodify/uitoolkit@dev
-go get github.com/codemodify/paintengine2d@v0.10.0
-# if v0.10.0 is not on GitHub yet (local engine checkout):
+go get github.com/codemodify/paintengine2d@v0.9.0
+# if v0.9.0 is not on GitHub yet (local engine checkout):
 # go mod edit -replace=github.com/codemodify/paintengine2d=/path/to/paintengine2d
 ```
 
 | | |
 | --- | --- |
 | Language | Go 1.22+ |
-| Paint | paintengine2d **v0.10.0** (`DrawSceneDamage` / `BakeGroup` / `Present` damage; `Scroll` / `TouchRect`) |
+| Paint | paintengine2d **v0.9.0** (`Scene` / `Recorder` / GPU rect batches; flatten cache) |
 | Fonts | Titillium Web (UI) + JetBrains Mono (code), OpenType → atlas |
 | Windowing | Linux X11 + Wayland (`wl_egl_window` / eglSwapBuffers, else `wl_shm` / `XPutImage`); offscreen always |
 | CGO | optional — tests and screenshots are `CGO_ENABLED=0` |
@@ -509,51 +509,15 @@ are independent look.json fields again; compound pack names migrate
 
 ## Version
 
-**0.14.6** — Hovering panes no longer restyles static text. Labels,
-pads, layout columns, and the message preview do not Invalidate on
-MouseEnter; ClearRect + DrawSceneDamage of those boxes dropped glyph
-weight (bold → thin). Hover chrome stays on buttons/lists/tabs.
-
-**0.14.5** — Menu hover highlight tracks the row under the pointer.
-Leaving a row clears it (Help: Keyboard no longer stays hot when the
-pointer is on About Mail). Popup hover invalidates the full popup —
-two-row dirty missed the XP gutter highlight on Wayland/HiDPI.
-
-**0.14.4** — Fix vacated list holes and jumping rows after the
-v0.14.1–v0.14.3 Scroll / DrawSceneDamage work. `Context.Scroll` +
-strip-only damage is disabled (Wayland/HiDPI blit is unproven); scroll
-full-invalidates the viewport and large dirty full-replays the scene.
-Hover still uses small dirty rects. paintengine2d stays **v0.10.0**.
-
-**0.14.3** — Fix black first frame and huge startup scale on Wayland
-after v0.14.2. The first present is always a full paint
-(`DrawSceneDamage` with nil dirty) through `Surface.Present` (sets
-`buffer_scale` / viewport). GPU no longer skips that path with a lone
-`ctx.Present()`. Window scale at open matches the surface (adopts
-output/frac scale after the first connect; never shrinks `UITK_SCALE`).
-
-**0.14.2** — paintengine2d **v0.10.0**. Dirty frames present with
-`DrawSceneDamage` (not `Clear` + full `DrawScene`). GPU `ctx.Present()`
-uses the damage list (`eglSetDamageRegionKHR` / preserved buffer).
-Splitter `BakeGroup`s each pane on drag start; subsequent pixels only
-update `Xform`. `UITK_SCENE=off` keeps the immediate CPU path.
-
-**0.14.1** — paintengine2d **v0.9.2**. ListView / TableView (body) / TreeView /
-TextArea wheel and thumb-drag blit with `Context.Scroll`, `ClearRect` the
-exposed strip, and paint only newly visible rows (CPU fallback is still a
-full Invalidate). After `Surface.Resize`, `ctx.SyncSize()`. Dirty frames
-`ClearRect` each box (no hover `Clear`). GPU present uses `PresentRects`.
-Glyph pack calls `TouchRect` of the cell, not atlas `Bump`.
-
-**0.14.0** — Dirty-rect chrome vs KDE/Qt: menu hover (previous + new row)
-does **not** `Clear` + `DrawScene` the window. Splitter drag Arranges
-locally (no per-pixel `RequestLayout`). Scrollbar-track hover dirties
-the bar only; list/tree/table selection dirties two rows. Caret blink
-invalidates the caret, not the field. Opening a popup dirties the popup
-box, not the full window. Tree flatten is cached; look.json idle poll
-is Stat-first. `BenchmarkMenuHover` / `BenchmarkSplitterDrag` guard the
-paths. paintengine2d is still **v0.9.0** (no dirty `DrawScene`; see
-`docs/platform.md`).
+**0.14.7** — **REVERT** of the v0.14.0–v0.14.6 dirty-paint perf sweep
+(pixel Scroll, strip `DrawSceneDamage`, partial present, hover-dirty
+ClearRect). Those paths were faster but caused black windows, scale
+blow-up, list holes, menu highlight glitches, and bold→thin text.
+Painting is the **v0.13.8** model again: retained scene, full
+`DrawScene`, full `Surface.Present`. paintengine2d is pinned to
+**v0.9.0**. Mail UI from 0.13.x is unchanged. Next perf work is caches
+and less work per full paint — not incorrect dirty clipping
+(see `docs/perf.md`).
 
 **0.13.8** — Mail sidebar pins **Outbox** to the bottom of the folder pane
 (own one-row tree + separator) so it is not the last sibling under

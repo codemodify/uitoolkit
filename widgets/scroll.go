@@ -226,7 +226,7 @@ func (s *ScrollView) MouseMove(e widget.MouseEvent) bool {
 	over := track.Contains(e.Pos)
 	if over != s.overBar {
 		s.overBar = over
-		invalidateOverflowTrack(s, track)
+		s.Invalidate()
 	}
 	if !s.drag {
 		return over
@@ -257,12 +257,8 @@ func (s *ScrollView) MouseRelease(widget.MouseEvent) bool {
 }
 
 func (s *ScrollView) MouseExit() {
-	if !s.overBar {
-		return
-	}
 	s.overBar = false
-	track, _ := s.thumb()
-	invalidateOverflowTrack(s, track)
+	s.Base.MouseExit()
 }
 
 func (s *ScrollView) KeyPress(e widget.KeyEvent) bool {

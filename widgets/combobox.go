@@ -99,8 +99,8 @@ func (c *ComboBox) Paint(ctx *paintengine2d.Context) {
 	c.Look().DrawComboBox(ctx, c.LocalBounds(), st, show, c.open)
 }
 
-func (c *ComboBox) MouseEnter() { c.hovered = true; c.Invalidate() }
-func (c *ComboBox) MouseExit()  { c.hovered = false; c.Invalidate() }
+func (c *ComboBox) MouseEnter() { c.hovered = true; c.Base.MouseEnter() }
+func (c *ComboBox) MouseExit()  { c.hovered = false; c.Base.MouseExit() }
 
 func (c *ComboBox) MousePress(e widget.MouseEvent) bool {
 	if !c.Enabled() || e.Button == platform.ButtonRight {
