@@ -510,6 +510,13 @@ are independent look.json fields again; compound pack names migrate
 
 ## Version
 
+**0.16.1** — **Plasma StatusNotifier / dbusmenu panic.** `GetLayout`
+exports a finite `(ia{sv}av)` menu layout (children are variants, not a
+recursive Go struct). godbus no longer panics with `container nesting
+too deep` when KDE's StatusNotifierWatcher introspects the tray. Tray
+register / export failure falls back to a stub so `mailclientui` keeps
+its window. See `docs/tray.md`.
+
 **0.16.0** — **Status item / system tray.** `StatusItem` is a toolkit
 tray icon (click, tooltip, optional `MenuItem` menu) plus a desktop
 toast. Linux uses StatusNotifierItem + freedesktop Notifications on

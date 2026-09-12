@@ -12,12 +12,18 @@ import (
 // NewStatusItem opens a tray / menu-bar icon owned by this application.
 // Headless apps get a stub unless UITK_TRAY=fake (tests). A live item
 // keeps Run going after the last window is destroyed until Close.
-func (a *Application) NewStatusItem(opts platform.StatusItemOptions) (platform.StatusItem, error) {
+func (a *Application) NewStatusItem(opts platform.StatusItemOptions) (item platform.StatusItem, err error) {
+	defer func() {
+		if recover() != nil {
+			item, err = platform.NewStatusItem(platform.StatusItemOptions{Stub: true, ID: opts.ID, Title: opts.Title})
+		}
+	}()
 	if a != nil && a.headless && strings.ToLower(strings.TrimSpace(os.Getenv("UITK_TRAY"))) != "fake" {
 		opts.Stub = true
 	}
-	item, err := platform.NewStatusItem(opts)
-	if err != nil {
+	item, err = platform.NewStatusItem(opts)
+	if err != nil || item == nil {
+		item, err = platform.NewStatusItem(platform.StatusItemOptions{Stub: true, ID: opts.ID, Title: opts.Title})
 		return item, err
 	}
 	if a != nil {

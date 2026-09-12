@@ -2,11 +2,13 @@ package mail
 
 import (
 	"context"
+	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/codemodify/uitoolkit"
+	"github.com/codemodify/uitoolkit/app"
 	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
 )
@@ -98,6 +100,38 @@ func TestMailNotifyEventShowsToast(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	t.Fatal("mail.notify should toast on the tray")
+}
+
+func TestMailTrayNativeNeverPanics(t *testing.T) {
+	IsolateTestEnvTB(t)
+	os.Unsetenv("UITK_TRAY")
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("Mail StatusItem panicked: %v", r)
+		}
+	}()
+	// Same options attachTray uses (without a headless Application, which
+	// would force a stub and hide the Plasma GetLayout path).
+	item, err := platform.NewStatusItem(platform.StatusItemOptions{
+		ID:      "mailclientui",
+		Title:   "Mail",
+		Tooltip: "Mail",
+		Icon:    app.StatusIconFromTool(style.IconInfo, style.DarkLook(), 22),
+		Menu: []platform.StatusMenuItem{
+			{Text: "Show Mail"},
+			{Separator: true},
+			{Text: "Quit"},
+		},
+		OnClick:       func() {},
+		OnNotifyClick: func() {},
+	})
+	if err != nil || item == nil {
+		t.Fatalf("NewStatusItem %v %v", item, err)
+	}
+	t.Cleanup(func() { _ = item.Close() })
+	if item.Backend() == "" {
+		t.Fatal("empty backend")
+	}
 }
 
 func TestFormatNewMailNoticeUsesSender(t *testing.T) {
