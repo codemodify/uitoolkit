@@ -34,3 +34,12 @@ func TestPixelDeltaOK(t *testing.T) {
 		t.Fatal("fractional delta must fall back")
 	}
 }
+
+func TestPixelScrollDisabled(t *testing.T) {
+	if pixelScrollEnabled {
+		t.Fatal("Context.Scroll blit must stay off until Wayland/HiDPI is proven")
+	}
+	if tryPixelScroll(nil, paintengine2d.XYWH(0, 0, 80, 80), 0, 16) {
+		t.Fatal("tryPixelScroll must refuse")
+	}
+}

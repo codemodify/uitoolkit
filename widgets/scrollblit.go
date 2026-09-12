@@ -21,8 +21,15 @@ func contentViewMinusHBar(b, track paintengine2d.Rect) paintengine2d.Rect {
 	return b
 }
 
-// commitAxisScroll applies a clamped offset and, when the host can blit,
-// Context.Scrolls the view and dirties only the exposed strip.
+// pixelScrollEnabled gates Context.Scroll + strip-only damage.
+// v0.14.1–v0.14.3 left vacated holes on Wayland/HiDPI (logical vs
+// buffer px, GPU present tiles, DrawSceneDamage skipping the blit
+// middle). Keep off until a scaled blit + strip replay is proven.
+const pixelScrollEnabled = false
+
+// commitAxisScroll applies a clamped offset. The pixel-scroll blit is
+// disabled; the viewport is fully invalidated so the next frame
+// repaints every visible row (hover still uses small dirty rects).
 func commitAxisScroll(c widget.Component, view paintengine2d.Rect, old, want, max float32, apply func(float32), vertical bool) {
 	want = clampOff(want, max)
 	if want == old {
@@ -70,6 +77,9 @@ func commitScrollXY(c widget.Component, view paintengine2d.Rect, oldX, oldY, wan
 }
 
 func tryPixelScroll(c widget.Component, view paintengine2d.Rect, dx, dy float32) bool {
+	if !pixelScrollEnabled {
+		return false
+	}
 	if c == nil || view.Empty() {
 		return false
 	}

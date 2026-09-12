@@ -30,65 +30,168 @@ func cloneSurface(w *Window) *paintengine2d.Image {
 	return img.Clone()
 }
 
-func pixelShiftMatch(before, after *paintengine2d.Image, x, y0, y1, dy int) int {
-	if before == nil || after == nil {
+func bandInk(img *paintengine2d.Image, y0, y1, x0, x1 int) int {
+	if img == nil || y1 <= y0 || x1 <= x0 {
 		return 0
 	}
-	match := 0
+	if y0 < 0 {
+		y0 = 0
+	}
+	if x0 < 0 {
+		x0 = 0
+	}
+	if y1 > img.Height {
+		y1 = img.Height
+	}
+	if x1 > img.Width {
+		x1 = img.Width
+	}
+	n := 0
 	for y := y0; y < y1; y++ {
-		sy := y + dy
-		if y < 0 || sy < 0 || y >= after.Height || sy >= before.Height {
-			continue
-		}
-		if x < 0 || x >= before.Width || x >= after.Width {
-			continue
-		}
-		ar, ag, ab, aa := after.PremulAt(x, y)
-		br, bg, bb, ba := before.PremulAt(x, sy)
-		if ar == br && ag == bg && ab == bb && aa == ba {
-			match++
+		for x := x0; x < x1; x++ {
+			r, g, b, a := img.PremulAt(x, y)
+			if a > 8 && int(r)+int(g)+int(b) > 40 {
+				n++
+			}
 		}
 	}
-	return match
+	return n
 }
 
-func TestListScrollBlitsAndDirtiesStrip(t *testing.T) {
+func bandContrast(img *paintengine2d.Image, y0, y1, x0, x1 int) int {
+	if img == nil || y1 <= y0 || x1 <= x0 {
+		return 0
+	}
+	if y0 < 0 {
+		y0 = 0
+	}
+	if x0 < 0 {
+		x0 = 0
+	}
+	if y1 > img.Height {
+		y1 = img.Height
+	}
+	if x1 > img.Width {
+		x1 = img.Width
+	}
+	minS, maxS := 255*3, 0
+	n := 0
+	for y := y0; y < y1; y++ {
+		for x := x0; x < x1; x++ {
+			r, g, b, a := img.PremulAt(x, y)
+			if a < 8 {
+				continue
+			}
+			s := int(r) + int(g) + int(b)
+			if s < minS {
+				minS = s
+			}
+			if s > maxS {
+				maxS = s
+			}
+			n++
+		}
+	}
+	if n == 0 {
+		return 0
+	}
+	return maxS - minS
+}
+
+func assertViewportFilled(t *testing.T, img *paintengine2d.Image, o paintengine2d.Point, view paintengine2d.Rect) {
+	t.Helper()
+	if img == nil {
+		t.Fatal("buffer")
+	}
+	x0 := int(o.X + view.Min.X + 8)
+	x1 := int(o.X + view.Max.X - 16)
+	if x1 <= x0 {
+		x1 = x0 + 8
+	}
+	yTop := int(o.Y + view.Min.Y + 2)
+	yBot := int(o.Y + view.Max.Y - 2)
+	ink := bandInk(img, yTop, yBot, x0, x1)
+	if ink < 40 {
+		t.Fatalf("viewport empty after scroll, ink=%d", ink)
+	}
+	// Sliding windows catch a vacated hole (Mail: white middle + orphan
+	// bottom row) without depending on fitted row height. One flat
+	// window can be padding; three in a row is a missing strip.
+	const step = 16
+	consec, maxConsec, painted := 0, 0, 0
+	for y := yTop; y+8 < yBot; y += step {
+		if bandContrast(img, y, y+step, x0, x1) < 25 {
+			consec++
+			if consec > maxConsec {
+				maxConsec = consec
+			}
+			continue
+		}
+		painted++
+		consec = 0
+	}
+	if painted < 3 {
+		t.Fatalf("expected painted row bands, got %d", painted)
+	}
+	if maxConsec >= 3 {
+		t.Fatalf("unpainted gap %d×%d px in viewport (scroll hole)", maxConsec, step)
+	}
+}
+
+func TestChromeDamageOnly(t *testing.T) {
+	var hover paintengine2d.Damage
+	hover.Add(paintengine2d.XYWH(10, 40, 400, 28))
+	if !chromeDamageOnly(&hover) {
+		t.Fatal("row hover must stay on the dirty path")
+	}
+	var bar paintengine2d.Damage
+	bar.Add(paintengine2d.XYWH(260, 8, 12, 200))
+	if !chromeDamageOnly(&bar) {
+		t.Fatal("scrollbar track is thin chrome")
+	}
+	var list paintengine2d.Damage
+	list.Add(paintengine2d.XYWH(200, 80, 400, 360))
+	if chromeDamageOnly(&list) {
+		t.Fatal("list viewport must full-replay")
+	}
+	if chromeDamageOnly(nil) {
+		t.Fatal("empty damage is not chrome")
+	}
+}
+
+func TestListScrollFillsViewport(t *testing.T) {
 	a, w := scrollHeadless(t, 280, 220)
-	list := widgets.NewListView(80, func(i int) string { return fmt.Sprintf("row %02d unique", i) }, nil)
+	list := widgets.NewListView(80, func(i int) string { return fmt.Sprintf("row %02d unique text", i) }, nil)
 	w.SetContent(list)
 	a.PumpOnce()
-	before := cloneSurface(w)
-	o := widget.DeviceOrigin(list)
 	const dy = 40
 	list.ScrollTo(dy)
 	if list.OffsetY != dy {
 		t.Fatalf("offset %v", list.OffsetY)
 	}
-	if w.full {
-		t.Fatal("list scroll must not full-invalidate")
+	if !w.presentExtra.Empty() {
+		t.Fatal("pixel scroll blit must stay off")
 	}
-	if w.presentExtra.Empty() {
-		t.Fatal("Scroll should present the moved view")
-	}
-	area := dirtyArea(w)
 	lb := list.Bounds()
-	if area <= 0 {
-		t.Fatal("scroll should dirty the exposed strip")
+	area := dirtyArea(w)
+	if area < lb.Dx()*lb.Dy()*0.8 {
+		t.Fatalf("scroll dirty %v must cover the list viewport %v", area, lb.Dx()*lb.Dy())
 	}
-	if area > lb.Dx()*lb.Dy()*0.7 {
-		t.Fatalf("scroll dirty %v of list %v (want strip, not full list)", area, lb.Dx()*lb.Dy())
+	if chromeDamageOnly(&w.dirty) {
+		t.Fatal("list scroll dirty must take the full-replay path")
 	}
 	a.PumpOnce()
-	after := cloneSurface(w)
-	x := int(o.X + 24)
-	y0 := int(o.Y + 8)
-	y1 := int(o.Y + lb.Dy() - dy - 8)
-	if got := pixelShiftMatch(before, after, x, y0, y1, dy); got < (y1-y0)*3/4 {
-		t.Fatalf("blit match %d/%d at x=%d", got, y1-y0, x)
+	o := widget.DeviceOrigin(list)
+	assertViewportFilled(t, w.surf.Buffer(), o, list.LocalBounds())
+	off := list.OffsetY
+	a.PumpOnce()
+	if list.OffsetY != off {
+		t.Fatalf("offset jumped %v → %v", off, list.OffsetY)
 	}
+	assertViewportFilled(t, w.surf.Buffer(), o, list.LocalBounds())
 }
 
-func TestTableScrollKeepsHeaderAndDirtiesBody(t *testing.T) {
+func TestTableScrollFillsBody(t *testing.T) {
 	a, w := scrollHeadless(t, 360, 240)
 	tv := widgets.NewTableView([]widgets.TableColumn{{Title: "HHHHHHHHHH", Width: 220}}, 60,
 		func(row, col int) string { return fmt.Sprintf("====ROW %02d====", row) }, nil)
@@ -100,16 +203,12 @@ func TestTableScrollKeepsHeaderAndDirtiesBody(t *testing.T) {
 	if tv.OffsetY != dy {
 		t.Fatalf("offset %v", tv.OffsetY)
 	}
-	if w.full {
-		t.Fatal("table scroll must not full-invalidate")
+	if !w.presentExtra.Empty() {
+		t.Fatal("table pixel scroll blit must stay off")
 	}
-	if w.presentExtra.Empty() {
-		t.Fatal("table Scroll should present the body")
-	}
-	area := dirtyArea(w)
-	body := tv.Bounds().Dy() - tv.HeaderHeight()
-	if area > tv.Bounds().Dx()*body*0.85 {
-		t.Fatalf("table scroll dirty %v of body %v", area, tv.Bounds().Dx()*body)
+	body := tv.Bounds().Dx() * tv.BodyHeight()
+	if dirtyArea(w) < body*0.7 {
+		t.Fatalf("table scroll dirty %v must cover the body %v", dirtyArea(w), body)
 	}
 	a.PumpOnce()
 	after := cloneSurface(w)
@@ -126,11 +225,37 @@ func TestTableScrollKeepsHeaderAndDirtiesBody(t *testing.T) {
 		}
 	}
 	if diff > 30 {
-		t.Fatalf("sticky header moved on Scroll: %d px", diff)
+		t.Fatalf("sticky header moved on scroll: %d px", diff)
 	}
+	bodyView := paintengine2d.XYWH(0, tv.HeaderHeight(), tv.LocalBounds().Dx(), tv.BodyHeight())
+	assertViewportFilled(t, after, o, bodyView)
 }
 
-func TestTreeScrollBlitsStrip(t *testing.T) {
+func TestCardScrollFillsViewport(t *testing.T) {
+	a, w := scrollHeadless(t, 320, 280)
+	cards := widgets.NewCardList(40, func(i int) widgets.CardContent {
+		return widgets.CardContent{
+			Title: fmt.Sprintf("from-%02d correspondent", i), Subtitle: "subject line", Meta: "now",
+		}
+	}, nil)
+	w.SetContent(cards)
+	a.PumpOnce()
+	cards.ScrollTo(72)
+	if cards.OffsetY != 72 {
+		t.Fatalf("offset %v", cards.OffsetY)
+	}
+	if !w.presentExtra.Empty() {
+		t.Fatal("card scroll must not blit")
+	}
+	b := cards.Bounds()
+	if dirtyArea(w) < b.Dx()*b.Dy()*0.8 {
+		t.Fatalf("card scroll dirty %v must cover the viewport %v", dirtyArea(w), b.Dx()*b.Dy())
+	}
+	a.PumpOnce()
+	assertViewportFilled(t, w.surf.Buffer(), widget.DeviceOrigin(cards), cards.LocalBounds())
+}
+
+func TestTreeScrollDirtiesViewport(t *testing.T) {
 	a, w := scrollHeadless(t, 260, 200)
 	root := widgets.NewTreeNode("root")
 	root.Expanded = true
@@ -145,20 +270,18 @@ func TestTreeScrollBlitsStrip(t *testing.T) {
 	if tree.OffsetY != dy {
 		t.Fatalf("offset %v", tree.OffsetY)
 	}
-	if w.full {
-		t.Fatal("tree scroll must not full-invalidate")
+	if !w.presentExtra.Empty() {
+		t.Fatal("tree pixel scroll blit must stay off")
 	}
-	if w.presentExtra.Empty() {
-		t.Fatal("tree Scroll should present the moved view")
-	}
-	area := dirtyArea(w)
 	b := tree.Bounds()
-	if area > b.Dx()*b.Dy()*0.7 {
-		t.Fatalf("tree scroll dirty %v of %v", area, b.Dx()*b.Dy())
+	if dirtyArea(w) < b.Dx()*b.Dy()*0.8 {
+		t.Fatalf("tree scroll dirty %v must cover %v", dirtyArea(w), b.Dx()*b.Dy())
 	}
+	a.PumpOnce()
+	assertViewportFilled(t, w.surf.Buffer(), widget.DeviceOrigin(tree), tree.LocalBounds())
 }
 
-func TestTextAreaScrollBlitsStrip(t *testing.T) {
+func TestTextAreaScrollDirtiesViewport(t *testing.T) {
 	a, w := scrollHeadless(t, 280, 180)
 	var b strings.Builder
 	for i := 0; i < 40; i++ {
@@ -172,17 +295,15 @@ func TestTextAreaScrollBlitsStrip(t *testing.T) {
 	if ta.OffsetY() != dy {
 		t.Fatalf("offset %v", ta.OffsetY())
 	}
-	if w.full {
-		t.Fatal("textarea scroll must not full-invalidate")
+	if !w.presentExtra.Empty() {
+		t.Fatal("textarea pixel scroll blit must stay off")
 	}
-	if w.presentExtra.Empty() {
-		t.Fatal("textarea Scroll should present the moved view")
-	}
-	area := dirtyArea(w)
 	box := ta.Bounds()
-	if area > box.Dx()*box.Dy()*0.75 {
-		t.Fatalf("textarea scroll dirty %v of %v", area, box.Dx()*box.Dy())
+	if dirtyArea(w) < box.Dx()*box.Dy()*0.8 {
+		t.Fatalf("textarea scroll dirty %v must cover %v", dirtyArea(w), box.Dx()*box.Dy())
 	}
+	a.PumpOnce()
+	assertViewportFilled(t, w.surf.Buffer(), widget.DeviceOrigin(ta), ta.LocalBounds())
 }
 
 func TestResizeSetsSyncSize(t *testing.T) {
@@ -199,7 +320,7 @@ func TestResizeSetsSyncSize(t *testing.T) {
 	}
 }
 
-func TestListWheelScrollsViaScroll(t *testing.T) {
+func TestListWheelScrollsFullViewport(t *testing.T) {
 	a, w := scrollHeadless(t, 280, 220)
 	list := widgets.NewListView(80, func(i int) string { return fmt.Sprintf("row %02d", i) }, nil)
 	w.SetContent(list)
@@ -213,11 +334,21 @@ func TestListWheelScrollsViaScroll(t *testing.T) {
 	if list.OffsetY <= 0 {
 		t.Fatal("wheel should move offset")
 	}
-	if w.full {
-		t.Fatal("wheel must not full-invalidate when Scroll blits")
+	if !w.presentExtra.Empty() {
+		t.Fatal("wheel must not Context.Scroll")
 	}
-	if w.presentExtra.Empty() {
-		t.Fatal("wheel should Context.Scroll the view")
+	lb := list.Bounds()
+	if dirtyArea(w) < lb.Dx()*lb.Dy()*0.8 {
+		t.Fatalf("wheel dirty %v must cover the list", dirtyArea(w))
+	}
+	a.PumpOnce()
+	assertViewportFilled(t, w.surf.Buffer(), widget.DeviceOrigin(list), list.LocalBounds())
+}
+
+func TestScrollPixelsDisabled(t *testing.T) {
+	_, w := scrollHeadless(t, 200, 160)
+	if w.ScrollPixels(widgets.NewLabel("x"), paintengine2d.XYWH(0, 0, 80, 80), 0, 16) {
+		t.Fatal("ScrollPixels must refuse the blit")
 	}
 }
 
