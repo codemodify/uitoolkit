@@ -40,6 +40,7 @@ type (
 	ThemeName         = style.ThemeName
 	CornerStyle       = style.CornerStyle
 	IconSetName       = style.IconSetName
+	IconSize          = style.IconSize
 	ThemePack         = style.ThemePack
 	ThemeSource       = style.ThemeSource
 	IconSetInfo       = style.IconSetInfo
@@ -64,6 +65,9 @@ const (
 	IconSetTabler          = style.IconSetTabler
 	IconSetHeroicons       = style.IconSetHeroicons
 	IconSetMaterialSymbols = style.IconSetMaterialSymbols
+	IconSizeSmall          = style.IconSizeSmall
+	IconSizeMedium         = style.IconSizeMedium
+	IconSizeLarge          = style.IconSizeLarge
 	ThemeSourceBuiltin     = style.ThemeSourceBuiltin
 	ThemeSourceUser        = style.ThemeSourceUser
 	DefaultThemeName       = style.DefaultThemeName
@@ -149,6 +153,12 @@ func WithCorners(look style.LookAndFeel, corners style.CornerStyle) style.LookAn
 }
 func WithIcons(look style.LookAndFeel, icons style.IconSetName) style.LookAndFeel {
 	return style.WithIcons(look, icons)
+}
+func WithIconSize(look style.LookAndFeel, sz style.IconSize) style.LookAndFeel {
+	return style.WithIconSize(look, sz)
+}
+func IconSizePixels(sz style.IconSize) float32 {
+	return style.IconSizePixels(sz)
 }
 func WithAppearance(look style.LookAndFeel, a style.Appearance) style.LookAndFeel {
 	return style.WithAppearance(look, a)

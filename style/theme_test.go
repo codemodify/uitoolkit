@@ -80,7 +80,7 @@ func TestLoadThemeMapsLegacyStarterNames(t *testing.T) {
 
 func TestSaveAppearanceWritesTriad(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	want := Appearance{Theme: ThemeLight, Corners: CornersSquare, Icons: IconSetSharp}
+	want := Appearance{Theme: ThemeLight, Corners: CornersSquare, Icons: IconSetSharp, IconSize: IconSizeSmall}
 	if err := SaveAppearance(want); err != nil {
 		t.Fatal(err)
 	}
@@ -101,6 +101,9 @@ func TestSaveAppearanceWritesTriad(t *testing.T) {
 	if doc["icons"] != "sharp" {
 		t.Fatalf("icons %v", doc["icons"])
 	}
+	if doc["iconSize"] != "small" {
+		t.Fatalf("iconSize %v", doc["iconSize"])
+	}
 	got := LoadAppearance()
 	if got != want.Normalize() {
 		t.Fatalf("got %+v want %+v", got, want.Normalize())
@@ -118,7 +121,7 @@ func TestLoadAppearanceReadsTriad(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := LoadAppearance()
-	want := Appearance{Name: "light", Theme: ThemeLight, Corners: CornersSquare, Icons: IconSetSharp}
+	want := Appearance{Name: "light", Theme: ThemeLight, Corners: CornersSquare, Icons: IconSetSharp, IconSize: IconSizeMedium}
 	if got != want {
 		t.Fatalf("got %+v want %+v", got, want)
 	}
@@ -138,10 +141,10 @@ func TestLoadAppearanceMigratesCompoundNames(t *testing.T) {
 		raw  string
 		want Appearance
 	}{
-		{`{"theme":"light-square-sharp","icons":"phosphor"}`, Appearance{Name: "light", Theme: ThemeLight, Corners: CornersSquare, Icons: IconSetPhosphor}},
-		{`{"theme":"dark-round-classic","icons":"lucide"}`, Appearance{Name: "dark", Theme: ThemeDark, Corners: CornersRound, Icons: IconSetLucide}},
-		{`{"theme":"dark-round"}`, Appearance{Name: "dark", Theme: ThemeDark, Corners: CornersRound, Icons: IconSetClassic}},
-		{`{"theme":"light-square","corners":"round","icons":"sharp"}`, Appearance{Name: "light", Theme: ThemeLight, Corners: CornersRound, Icons: IconSetSharp}},
+		{`{"theme":"light-square-sharp","icons":"phosphor"}`, Appearance{Name: "light", Theme: ThemeLight, Corners: CornersSquare, Icons: IconSetPhosphor, IconSize: IconSizeMedium}},
+		{`{"theme":"dark-round-classic","icons":"lucide"}`, Appearance{Name: "dark", Theme: ThemeDark, Corners: CornersRound, Icons: IconSetLucide, IconSize: IconSizeMedium}},
+		{`{"theme":"dark-round"}`, Appearance{Name: "dark", Theme: ThemeDark, Corners: CornersRound, Icons: IconSetClassic, IconSize: IconSizeMedium}},
+		{`{"theme":"light-square","corners":"round","icons":"sharp"}`, Appearance{Name: "light", Theme: ThemeLight, Corners: CornersRound, Icons: IconSetSharp, IconSize: IconSizeMedium}},
 	}
 	for _, tc := range cases {
 		if err := os.WriteFile(path, []byte(tc.raw+"\n"), 0o600); err != nil {
@@ -151,6 +154,25 @@ func TestLoadAppearanceMigratesCompoundNames(t *testing.T) {
 		if got != tc.want {
 			t.Fatalf("%s → %+v want %+v", tc.raw, got, tc.want)
 		}
+	}
+}
+
+func TestLoadAppearanceReadsIconSize(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	path := AppearancePath()
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(`{"theme":"dark","iconSize":"32"}`+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got := LoadAppearance()
+	if got.IconSize != IconSizeLarge {
+		t.Fatalf("%+v", got)
+	}
+	look := PreferredLook().(*Classic)
+	if look.IconSize() != IconSizeLarge {
+		t.Fatal(look.IconSize())
 	}
 }
 

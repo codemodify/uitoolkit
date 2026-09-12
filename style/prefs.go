@@ -12,17 +12,18 @@ const appearanceFile = "look.json"
 // appearanceFileJSON is the on-disk XDG document. Other apps (Mail, gallery)
 // read the same file via LoadAppearance / PreferredLook.
 //
-// Current format stores theme, corners, and icons independently:
+// Current format stores theme, corners, icons, and icon size independently:
 //
-//	{ "theme": "dark", "corners": "square", "icons": "lucide" }
+//	{ "theme": "dark", "corners": "square", "icons": "lucide", "iconSize": "medium" }
 //
 // Compound v0.11–v0.12.1 theme ids (dark-round-classic, light-square-sharp,
 // dark-round, …) migrate to palette + corners. Pack-level corners/icons
 // are ignored.
 type appearanceFileJSON struct {
-	Theme   string `json:"theme"`
-	Corners string `json:"corners,omitempty"`
-	Icons   string `json:"icons,omitempty"`
+	Theme    string `json:"theme"`
+	Corners  string `json:"corners,omitempty"`
+	Icons    string `json:"icons,omitempty"`
+	IconSize string `json:"iconSize,omitempty"`
 }
 
 // ConfigDir is $XDG_CONFIG_HOME/uitoolkit (or ~/.config/uitoolkit).
@@ -87,6 +88,9 @@ func resolveAppearance(raw appearanceFileJSON) Appearance {
 	if strings.TrimSpace(raw.Icons) != "" {
 		a.Icons = ParseIconSet(raw.Icons)
 	}
+	if strings.TrimSpace(raw.IconSize) != "" {
+		a.IconSize = ParseIconSize(raw.IconSize)
+	}
 	return a.Normalize()
 }
 
@@ -105,12 +109,13 @@ func LoadAppearance() Appearance {
 	return resolveAppearance(raw)
 }
 
-// SaveAppearance writes look.json with theme, corners, and icons (mode 0600).
+// SaveAppearance writes look.json with theme, corners, icons, and iconSize (mode 0600).
 func SaveAppearance(a Appearance) error {
 	a = a.Normalize()
 	return writeJSONFile(AppearancePath(), appearanceFileJSON{
-		Theme:   a.Name,
-		Corners: string(a.Corners),
-		Icons:   string(a.Icons),
+		Theme:    a.Name,
+		Corners:  string(a.Corners),
+		Icons:    string(a.Icons),
+		IconSize: string(a.IconSize),
 	})
 }

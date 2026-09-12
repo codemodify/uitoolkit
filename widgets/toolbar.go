@@ -142,7 +142,7 @@ func (t *ToolBar) itemBoxW(it *ToolItem, btn float32) float32 {
 	if it == nil || it.Sep {
 		return 8
 	}
-	pad, iconSide, iconGap := style.ToolButtonChrome(btn)
+	pad, iconSide, iconGap := style.ToolButtonChromeFor(t.Look(), btn)
 	if it.Text == "" {
 		if it.Icon != style.IconNone {
 			w := pad*2 + iconSide

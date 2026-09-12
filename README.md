@@ -509,6 +509,13 @@ are independent look.json fields again; compound pack names migrate
 
 ## Version
 
+**0.13.3** — Settings **Icon size** (Small / Medium / Large → 16 / 24 /
+32 px). `look.json` stores `"iconSize"` next to theme, corners, and
+icons. `PreferredLook` / `WatchLook` apply it toolkit-wide: ToolBar
+chrome uses `ToolButtonChromeFor`, PNG packs tint+scale (24 and `@2x`
+48, no re-export). Missing key migrates to medium. Still paintengine2d
+**v0.9.0**.
+
 **0.13.2** — Office XP menu hot-track. Hovered `Menu` / `MenuBar`
 dropdown rows and `PopupMenu` context items share a Look paint path:
 pale `MenuHover` fill across the icon gutter + label, a 1px
@@ -598,7 +605,7 @@ to the matching starter. Live reload from v0.11.1 is unchanged. Still
 paintengine2d **v0.9.0**.
 
 **0.11.1** — Settings Apply + live look reload. The Settings window
-drops the menu bar. Theme / corners / icons stage in-process until
+drops the menu bar. Theme / corners / icons / icon size stage in-process until
 **Apply** writes `$XDG_CONFIG_HOME/uitoolkit/look.json` (close without
 Apply discards). `Application.New` watches that file when `Look` is
 nil (`PreferredLook`) or `WatchLook` is set, then

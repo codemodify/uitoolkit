@@ -59,6 +59,12 @@ func MenuChromeFor(lk LookAndFeel) MenuChrome {
 	c.CheckGutter *= s
 	c.AccelGap *= s
 	c.Border *= s
+	switch LookIconSize(lk) {
+	case IconSizeSmall:
+		c.CheckGutter = 8 * s
+	case IconSizeLarge:
+		c.CheckGutter = 14 * s
+	}
 	m := lk.Metrics()
 	if m.RowPad > c.ItemPad {
 		c.ItemPad = m.RowPad

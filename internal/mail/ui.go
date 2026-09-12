@@ -175,7 +175,7 @@ func (s *session) applyLook() {
 }
 
 // setPalette is View → Dark / Light: flip the starter pack palette,
-// keep corners/icons, and write look.json only on this explicit toggle.
+// keep corners/icons/iconSize, and write look.json only on this explicit toggle.
 func (s *session) setPalette(light bool) {
 	ap := style.LoadAppearance()
 	if light {
