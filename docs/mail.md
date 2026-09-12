@@ -40,8 +40,9 @@ go run ./examples/mail -screenshot docs/screenshots
 ## Tray and new-mail toasts (0.16.0, 0.16.1)
 
 `mailclientui` opens a toolkit `StatusItem` while it runs
-(v0.16.1: Plasma `GetLayout` no longer panics the UI; tray setup
-failure keeps the window on a stub):
+(v0.16.2: envelope tray icon; Wayland Show Mail remaps/activates after
+close-to-tray. v0.16.1: Plasma `GetLayout` no longer panics the UI; tray
+setup failure keeps the window on a stub):
 
 - **Click** the tray (or the toast) → show / raise / focus the Mail window
   (create it if it was closed). The window-manager close button **hides**

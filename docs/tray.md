@@ -4,6 +4,11 @@
 notification-area icon plus a desktop toast. Mail dogfoods it; any
 uitoolkit app can open one.
 
+**v0.16.2** Mail tray: `IconMail` (not `IconInfo`); Wayland Show/Raise
+remaps the toplevel after close-to-tray and activates via
+`xdg_activation_v1` when the compositor has it. D-Bus Activate /
+dbusmenu `Event("clicked")` (and `EventGroup`) run on the UI thread.
+
 **v0.16.1** fixes a startup panic on KDE Plasma. `com.canonical.dbusmenu.GetLayout`
 must return D-Bus type `(ia{sv}av)` — children are an array of variants,
 not a recursive Go struct. v0.16.0 exported `Children []dbusMenuLayout`,
@@ -17,7 +22,7 @@ item, _ := app.NewStatusItem(uitoolkit.StatusItemOptions{
     ID:      "myapp",
     Title:   "My App",
     Tooltip: "My App",
-    Icon:    uitoolkit.StatusIconFromTool(uitoolkit.IconInfo, app.Look(), 22),
+    Icon:    uitoolkit.StatusIconFromTool(uitoolkit.IconMail, app.Look(), 22),
     Menu: uitoolkit.StatusMenuFromItems([]*uitoolkit.MenuItem{
         uitoolkit.NewMenuItem("Show", win.Raise),
         uitoolkit.MenuSep(),

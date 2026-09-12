@@ -112,9 +112,7 @@ func (f *FakeStatusItem) Click() {
 	f.Clicks++
 	fn := f.opts.OnClick
 	f.mu.Unlock()
-	if fn != nil {
-		fn()
-	}
+	invokeStatus(f.opts.Dispatch, fn)
 }
 
 // ClickNotify activates the last notification.
@@ -131,9 +129,7 @@ func (f *FakeStatusItem) ClickNotify() {
 		fn = f.opts.OnClick
 	}
 	f.mu.Unlock()
-	if fn != nil {
-		fn()
-	}
+	invokeStatus(f.opts.Dispatch, fn)
 }
 
 // ClickMenu activates menu row i.
@@ -144,7 +140,5 @@ func (f *FakeStatusItem) ClickMenu(i int) {
 		fn = f.menu[i].OnClick
 	}
 	f.mu.Unlock()
-	if fn != nil {
-		fn()
-	}
+	invokeStatus(f.opts.Dispatch, fn)
 }

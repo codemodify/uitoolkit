@@ -44,6 +44,16 @@ func checkPNG(t *testing.T, path string, size int) {
 	}
 }
 
+func TestRepoIconSetsShipMailAliases(t *testing.T) {
+	root := filepath.Join("..", "icons")
+	for _, set := range shippedIconSets {
+		for _, name := range []string{"mail", "inbox", "mail-open"} {
+			checkPNG(t, filepath.Join(root, set, name+".png"), 24)
+			checkPNG(t, filepath.Join(root, set, name+"@2x.png"), 48)
+		}
+	}
+}
+
 func TestListIconSetsListsInstalled(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	resetIconCache()

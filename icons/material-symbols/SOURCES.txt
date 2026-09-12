@@ -16,3 +16,6 @@ info       info
 warning    warning
 error      error
 question   help
+mail       mail
+inbox      inbox
+mail-open  drafts

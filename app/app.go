@@ -43,6 +43,8 @@ type Application struct {
 	watchLook bool
 	lookWatch *lookFileStamp
 	trays     []platform.StatusItem
+	looping   bool
+	posted    []func()
 }
 
 // New constructs an application. Default look is PreferredLook
@@ -165,15 +167,56 @@ const caretBlinkPeriod = 530 * time.Millisecond
 // Run waits on the display connection and paints only when a window is
 // dirty, a caret blinks, a tooltip is due, or (on Wayland) a key repeat
 // fires. Idle gallery no longer wakes at 60 Hz.
+// Post runs fn on the UI thread. During Run the func is queued and
+// drained before the next pump; otherwise it runs immediately so tests
+// and startup paths stay synchronous.
+func (a *Application) Post(fn func()) {
+	if a == nil || fn == nil {
+		return
+	}
+	a.mu.Lock()
+	if !a.looping {
+		a.mu.Unlock()
+		fn()
+		return
+	}
+	a.posted = append(a.posted, fn)
+	a.mu.Unlock()
+}
+
+func (a *Application) runPosted() {
+	if a == nil {
+		return
+	}
+	a.mu.Lock()
+	fns := a.posted
+	a.posted = nil
+	a.mu.Unlock()
+	for _, fn := range fns {
+		if fn != nil {
+			fn()
+		}
+	}
+}
+
 func (a *Application) Run() error {
 	if len(a.windows) == 0 && !a.trayHolds() {
 		return fmt.Errorf("uitoolkit: Run with no windows")
 	}
+	a.mu.Lock()
+	a.looping = true
+	a.mu.Unlock()
+	defer func() {
+		a.mu.Lock()
+		a.looping = false
+		a.mu.Unlock()
+	}()
 	var nextBlink time.Time
 	for !a.quit {
 		// Wayland / X11 / offscreen: poll look.json on every idle wake
 		// (waitTimeout ≤ lookWatchInterval when WatchLook is on).
 		a.pollLookFile()
+		a.runPosted()
 		now := time.Now()
 		if a.anyCaret() && (nextBlink.IsZero() || !now.Before(nextBlink)) {
 			for _, w := range a.Windows() {
@@ -305,6 +348,7 @@ func (a *Application) waitDisplay(timeout time.Duration) {
 // (tests / screenshots).
 func (a *Application) PumpOnce() {
 	a.pollLookFile()
+	a.runPosted()
 	for _, w := range a.Windows() {
 		w.pump()
 	}

@@ -97,7 +97,10 @@ pack lucide "$LUCIDE_BASE" "$LUCIDE_LICENSE" \
 	info info \
 	warning triangle-alert \
 	error circle-x \
-	question circle-question-mark
+	question circle-question-mark \
+	mail mail \
+	inbox inbox \
+	mail-open mail-open
 
 write_sources "$ROOT/lucide" \
 	"Lucide Icons — ISC. https://lucide.dev  https://github.com/lucide-icons/lucide" \
@@ -115,7 +118,10 @@ write_sources "$ROOT/lucide" \
 	"info       info" \
 	"warning    triangle-alert" \
 	"error      circle-x" \
-	"question   circle-question-mark"
+	"question   circle-question-mark" \
+	"mail       mail" \
+	"inbox      inbox" \
+	"mail-open  mail-open"
 
 pack phosphor "$PHOS_BASE" "$PHOS_LICENSE" \
 	new file-plus \
@@ -130,7 +136,10 @@ pack phosphor "$PHOS_BASE" "$PHOS_LICENSE" \
 	info info \
 	warning warning \
 	error x-circle \
-	question question
+	question question \
+	mail envelope \
+	inbox tray \
+	mail-open envelope-open
 
 write_sources "$ROOT/phosphor" \
 	"Phosphor Icons — MIT. https://phosphoricons.com  https://github.com/phosphor-icons/core" \
@@ -148,7 +157,10 @@ write_sources "$ROOT/phosphor" \
 	"info       info" \
 	"warning    warning" \
 	"error      x-circle" \
-	"question   question"
+	"question   question" \
+	"mail       envelope" \
+	"inbox      tray" \
+	"mail-open  envelope-open"
 
 pack tabler "$TABLER_BASE" "$TABLER_LICENSE" \
 	new file-plus \
@@ -163,7 +175,10 @@ pack tabler "$TABLER_BASE" "$TABLER_LICENSE" \
 	info info-circle \
 	warning alert-triangle \
 	error circle-x \
-	question help
+	question help \
+	mail mail \
+	inbox inbox \
+	mail-open mail-opened
 
 write_sources "$ROOT/tabler" \
 	"Tabler Icons — MIT. https://tabler.io/icons  https://github.com/tabler/tabler-icons" \
@@ -181,7 +196,10 @@ write_sources "$ROOT/tabler" \
 	"info       info-circle" \
 	"warning    alert-triangle" \
 	"error      circle-x" \
-	"question   help"
+	"question   help" \
+	"mail       mail" \
+	"inbox      inbox" \
+	"mail-open  mail-opened"
 
 pack heroicons "$HERO_BASE" "$HERO_LICENSE" \
 	new document-plus \
@@ -196,7 +214,10 @@ pack heroicons "$HERO_BASE" "$HERO_LICENSE" \
 	info information-circle \
 	warning exclamation-triangle \
 	error x-circle \
-	question question-mark-circle
+	question question-mark-circle \
+	mail envelope \
+	inbox inbox \
+	mail-open envelope-open
 
 write_sources "$ROOT/heroicons" \
 	"Heroicons — MIT. https://heroicons.com  https://github.com/tailwindlabs/heroicons" \
@@ -214,7 +235,10 @@ write_sources "$ROOT/heroicons" \
 	"info       information-circle" \
 	"warning    exclamation-triangle" \
 	"error      x-circle" \
-	"question   question-mark-circle"
+	"question   question-mark-circle" \
+	"mail       envelope" \
+	"inbox      inbox" \
+	"mail-open  envelope-open"
 
 pack material-symbols "$MAT_BASE" "$MAT_LICENSE" \
 	new note_add \
@@ -229,7 +253,10 @@ pack material-symbols "$MAT_BASE" "$MAT_LICENSE" \
 	info info \
 	warning warning \
 	error error \
-	question help
+	question help \
+	mail mail \
+	inbox inbox \
+	mail-open drafts
 
 write_sources "$ROOT/material-symbols" \
 	"Material Symbols — Apache-2.0. https://fonts.google.com/icons" \
@@ -249,6 +276,9 @@ write_sources "$ROOT/material-symbols" \
 	"info       info" \
 	"warning    warning" \
 	"error      error" \
-	"question   help"
+	"question   help" \
+	"mail       mail" \
+	"inbox      inbox" \
+	"mail-open  drafts"
 
 echo "rendered packs in $ROOT"

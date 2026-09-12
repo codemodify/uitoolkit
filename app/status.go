@@ -21,6 +21,9 @@ func (a *Application) NewStatusItem(opts platform.StatusItemOptions) (item platf
 	if a != nil && a.headless && strings.ToLower(strings.TrimSpace(os.Getenv("UITK_TRAY"))) != "fake" {
 		opts.Stub = true
 	}
+	if a != nil {
+		opts.Dispatch = a.Post
+	}
 	item, err = platform.NewStatusItem(opts)
 	if err != nil || item == nil {
 		item, err = platform.NewStatusItem(platform.StatusItemOptions{Stub: true, ID: opts.ID, Title: opts.Title})
@@ -86,9 +89,5 @@ func StatusIconFromTool(icon style.ToolIcon, look style.LookAndFeel, size int) p
 		size = 22
 	}
 	img := style.DrawToolIconImage(icon, look, size)
-	name := style.ToolIconName(icon)
-	if name == "" {
-		name = "application-default-icon"
-	}
-	return platform.StatusIcon{Name: name, Image: img}
+	return platform.StatusIcon{Name: style.ToolIconThemeName(icon), Image: img}
 }

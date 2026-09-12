@@ -21,6 +21,7 @@ const (
 	IconWarning
 	IconError
 	IconQuestion
+	IconMail
 )
 
 // toolIconFiles maps each chrome action to its PNG basename (no extension).
@@ -41,6 +42,7 @@ var toolIconFiles = []struct {
 	{IconWarning, "warning"},
 	{IconError, "error"},
 	{IconQuestion, "question"},
+	{IconMail, "mail"},
 }
 
 // AllToolIcons is every ToolIcon that has a file name (not IconNone).
@@ -83,15 +85,35 @@ func ToolIconHiDPIFileName(icon ToolIcon) string {
 const iconHiDPIMin = 36
 
 func toolIconFileCandidates(icon ToolIcon, destW float32) []string {
-	lo := ToolIconFileName(icon)
-	hi := ToolIconHiDPIFileName(icon)
-	if lo == "" {
-		return nil
+	stems := []string{ToolIconName(icon)}
+	if icon == IconMail {
+		stems = append(stems, "inbox", "mail-open")
 	}
-	if destW >= iconHiDPIMin {
-		return []string{hi, lo}
+	var out []string
+	for _, name := range stems {
+		if name == "" {
+			continue
+		}
+		lo, hi := name+".png", name+"@2x.png"
+		if destW >= iconHiDPIMin {
+			out = append(out, hi, lo)
+		} else {
+			out = append(out, lo, hi)
+		}
 	}
-	return []string{lo, hi}
+	return out
+}
+
+// ToolIconThemeName is a freedesktop icon-theme name for tray / SNI
+// (IconName). File sets still use ToolIconName ("mail.png").
+func ToolIconThemeName(icon ToolIcon) string {
+	if icon == IconMail {
+		return "mail-unread"
+	}
+	if name := ToolIconName(icon); name != "" {
+		return name
+	}
+	return "application-default-icon"
 }
 
 // ToolIconByName maps a file stem ("open") to a ToolIcon.

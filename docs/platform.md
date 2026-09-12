@@ -228,7 +228,7 @@ wayland-scanner private-code \
 # same for text-input-unstable-v3, primary-selection-unstable-v1,
 # xdg-decoration-unstable-v1, fractional-scale-v1, viewporter,
 # linux-dmabuf-unstable-v1, linux-explicit-synchronization-unstable-v1,
-# linux-drm-syncobj-v1
+# linux-drm-syncobj-v1, xdg-activation-v1
 ```
 
 ```bash
@@ -269,7 +269,11 @@ Plasma's StatusNotifierWatcher does not panic the app. Tray setup
 failures fall back to a stub.
 
 `Window.Show` / `Hide` / `Raise` map the surface (X11 `_NET_ACTIVE_WINDOW`;
-Wayland minimize). Offscreen tracks a visibility flag.
+Wayland remaps `xdg_toplevel` + `xdg_activation_v1`). Offscreen tracks a
+visibility flag.
+
+**0.16.2:** Mail tray uses `IconMail`. Wayland close-to-tray can restore
+(the protocol has no unset_minimized). Tray callbacks post to the UI loop.
 
 ## Deferred
 

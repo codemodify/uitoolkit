@@ -44,10 +44,26 @@ func TestMailTrayFakeClickRaises(t *testing.T) {
 	if tray == nil {
 		t.Fatal("Open should create a fake StatusItem when UITK_TRAY=fake")
 	}
+	mailIcon := app.StatusIconFromTool(style.IconMail, style.DarkLook(), 22)
+	infoIcon := app.StatusIconFromTool(style.IconInfo, style.DarkLook(), 22)
+	if tray.Icon().Name != mailIcon.Name || tray.Icon().Name == infoIcon.Name {
+		t.Fatalf("tray icon %q want mail %q not info %q", tray.Icon().Name, mailIcon.Name, infoIcon.Name)
+	}
+	if tray.Icon().Name != "mail-unread" {
+		t.Fatalf("freedesktop name %q", tray.Icon().Name)
+	}
 	w.Hide()
+	if w.Visible() {
+		t.Fatal("close-to-tray hide")
+	}
 	tray.Click()
 	if !w.Visible() {
 		t.Fatal("tray click should show Mail")
+	}
+	w.Hide()
+	tray.ClickMenu(0)
+	if !w.Visible() {
+		t.Fatal("Show Mail menu should raise")
 	}
 }
 
@@ -116,7 +132,7 @@ func TestMailTrayNativeNeverPanics(t *testing.T) {
 		ID:      "mailclientui",
 		Title:   "Mail",
 		Tooltip: "Mail",
-		Icon:    app.StatusIconFromTool(style.IconInfo, style.DarkLook(), 22),
+		Icon:    app.StatusIconFromTool(style.IconMail, style.DarkLook(), 22),
 		Menu: []platform.StatusMenuItem{
 			{Text: "Show Mail"},
 			{Separator: true},

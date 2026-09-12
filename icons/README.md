@@ -82,7 +82,9 @@ and paints with the Look icon / foreground color (same intent as SVG
 One stem per toolkit action / `style.Icon*` id:
 
 `new` `open` `save` `cut` `copy` `paste` `undo` `redo` `search`
-`info` `warning` `error` `question`
+`info` `warning` `error` `question` `mail`
+
+Extra mail-themed files (not ToolIcon ids): `inbox` `mail-open`.
 
 A missing file falls back to the drawn **classic** set. `classic` and
 `sharp` remain built-in vector fallbacks and do not need files.

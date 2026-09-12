@@ -86,6 +86,36 @@ func TestGetLayoutReplySignatureNoPanic(t *testing.T) {
 	_ = dbus.SignatureOf(rev, leaf)
 }
 
+func TestDbusMenuEventInvokesOnClick(t *testing.T) {
+	n := 0
+	s := &linuxStatusItem{
+		menu: []StatusMenuItem{
+			{Text: "Show Mail", OnClick: func() { n++ }},
+			{Separator: true},
+			{Text: "Quit", OnClick: func() { n += 4 }},
+		},
+	}
+	if err := s.Event(1, "clicked", dbus.MakeVariant(""), 0); err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Fatalf("Event clicked %d", n)
+	}
+	ids, err := s.EventGroup([]dbusMenuEvent{
+		{ID: 3, EventID: "clicked"},
+	})
+	if err != nil || ids != nil {
+		t.Fatalf("EventGroup %v %v", ids, err)
+	}
+	if n != 5 {
+		t.Fatalf("EventGroup clicked %d", n)
+	}
+	need, err := s.AboutToShow(0)
+	if err != nil || need {
+		t.Fatalf("AboutToShow %v %v", need, err)
+	}
+}
+
 func TestNewStatusItemNeverPanics(t *testing.T) {
 	os.Unsetenv("UITK_TRAY")
 	defer func() {
