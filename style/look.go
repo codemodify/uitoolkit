@@ -8,6 +8,7 @@ type Classic struct {
 	palette Palette
 	metrics Metrics
 	name    string
+	pack    string
 	corners CornerStyle
 	icons   IconSetName
 	body    *Font
@@ -46,6 +47,7 @@ func newClassic(name string, p Palette, m Metrics, corners CornerStyle, icons Ic
 		palette: p,
 		metrics: m,
 		name:    name,
+		pack:    StarterName(ParseTheme(name), corners, icons),
 		corners: corners,
 		icons:   icons,
 		// OpenType atlases (Titillium / JetBrains Mono); Color tints at draw.
@@ -74,7 +76,7 @@ func WithScale(look LookAndFeel, scale float32) LookAndFeel {
 	if !ok {
 		return look
 	}
-	return newClassic(c.Name(), c.Palette(), ScaleMetrics(c.Metrics(), scale), c.Corners(), c.Icons())
+	return newClassic(c.Name(), c.Palette(), ScaleMetrics(c.Metrics(), scale), c.Corners(), c.Icons()).setPack(c.Pack())
 }
 
 func (l *Classic) Name() string           { return l.name }
@@ -83,8 +85,30 @@ func (l *Classic) Metrics() Metrics       { return l.metrics }
 func (l *Classic) Corners() CornerStyle   { return ParseCorners(string(l.corners)) }
 func (l *Classic) Icons() IconSetName     { return ParseIconSet(string(l.icons)) }
 func (l *Classic) Appearance() Appearance { return LookAppearance(l) }
-func (l *Classic) Font() *Font            { return l.body }
-func (l *Classic) TitleFont() *Font       { return l.title }
+
+// Pack is the theme package name (look.json "theme"). Empty falls back
+// to the embedded starter matching palette × corners × icons.
+func (l *Classic) Pack() string {
+	if l == nil {
+		return DefaultThemeName
+	}
+	if l.pack != "" {
+		return l.pack
+	}
+	return StarterName(ParseTheme(l.name), l.Corners(), l.Icons())
+}
+
+func (l *Classic) setPack(name string) *Classic {
+	if l == nil {
+		return l
+	}
+	if name != "" {
+		l.pack = name
+	}
+	return l
+}
+func (l *Classic) Font() *Font      { return l.body }
+func (l *Classic) TitleFont() *Font { return l.title }
 func (l *Classic) BoldFont() *Font {
 	if l.bold != nil {
 		return l.bold

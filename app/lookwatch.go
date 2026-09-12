@@ -46,8 +46,8 @@ func (s *lookFileStamp) changed() bool {
 // WatchingLook reports whether this application reloads look.json at runtime.
 func (a *Application) WatchingLook() bool { return a.watchLook }
 
-// ReloadPreferredLook applies XDG look.json onto the current look, keeping
-// display scale and density (WithAppearance). Used by the look-file watcher.
+// ReloadPreferredLook applies XDG look.json (theme pack name) onto the
+// current look, keeping display scale and density (WithAppearance).
 func (a *Application) ReloadPreferredLook() {
 	if a == nil || a.look == nil {
 		return

@@ -13,7 +13,8 @@
 //	            RadioGroup, MessageBox, TitleBar, ListView, FileDialog,
 //	            Tooltip, Accordion, Expander, Separator, Spacer, …
 //	style     — LookAndFeel themes (Titillium Web + JetBrains Mono OpenType atlases),
-//	            Appearance prefs (theme / corners / icon set; XDG look.json + live watch)
+//	            named theme packs (embedded starters + XDG themes/<name>/theme.json;
+//	            look.json stores the pack name; live watch)
 //
 // All pixels go through paintengine2d.Context (CPU scanline or Linux
 // EGL/GLES2 GPUDevice). There is no second rasterizer.

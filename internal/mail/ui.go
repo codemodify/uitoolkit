@@ -160,9 +160,9 @@ func (s *session) persistChrome() {
 	saveChromePrefs(s.chromePrefs)
 	ap := style.LoadAppearance()
 	if s.opts.Light {
-		ap.Theme = style.ThemeLight
+		ap = ap.WithPalette(style.ThemeLight)
 	} else {
-		ap.Theme = style.ThemeDark
+		ap = ap.WithPalette(style.ThemeDark)
 	}
 	_ = style.SaveAppearance(ap)
 }
@@ -170,9 +170,9 @@ func (s *session) persistChrome() {
 func (s *session) applyLook() {
 	ap := style.LoadAppearance()
 	if s.opts.Light {
-		ap.Theme = style.ThemeLight
+		ap = ap.WithPalette(style.ThemeLight)
 	} else {
-		ap.Theme = style.ThemeDark
+		ap = ap.WithPalette(style.ThemeDark)
 	}
 	s.app.SetLook(style.WithDensity(ap.Look(), s.density))
 }
@@ -545,7 +545,7 @@ func (s *session) menuBar() *widgets.MenuBar {
 				s.mark(fmt.Sprintf("Filters applied (%d)", n))
 			}),
 			widgets.Item("Add-ons and Themes", func() {
-				widgets.Info(s.win.Content(), "Add-ons", "LookAndFeel is Dark / Light Classic (corners and icons from Settings). No XPI store.", nil)
+				widgets.Info(s.win.Content(), "Add-ons", "LookAndFeel is a named theme pack from Settings (embedded starters or ~/.config/uitoolkit/themes). No XPI store.", nil)
 			}),
 			widgets.Item("Error Console", func() { s.mark("Error Console (stub)") }),
 			widgets.Item("Activity Manager", func() { s.mark("Activity Manager (stub)") }),

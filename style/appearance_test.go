@@ -10,14 +10,14 @@ import (
 
 func TestAppearanceLookThemeAndCorners(t *testing.T) {
 	dark := Appearance{Theme: ThemeDark, Corners: CornersRound, Icons: IconSetClassic}.Look()
-	if dark.Name() != "dark" || dark.Corners() != CornersRound {
+	if dark.Name() != "dark" || dark.Corners() != CornersRound || dark.Pack() != DefaultThemeName {
 		t.Fatalf("dark %+v", LookAppearance(dark))
 	}
 	if dark.Metrics().Radius < 4 || dark.Metrics().RadiusSmall < 2 {
 		t.Fatalf("round radii %+v", dark.Metrics())
 	}
 	sq := Appearance{Theme: ThemeLight, Corners: CornersSquare, Icons: IconSetSharp}.Look()
-	if sq.Name() != "light" || sq.Corners() != CornersSquare || sq.Icons() != IconSetSharp {
+	if sq.Name() != "light" || sq.Corners() != CornersSquare || sq.Icons() != IconSetSharp || sq.Pack() != "light-square-sharp" {
 		t.Fatalf("square %+v", LookAppearance(sq))
 	}
 	if sq.Metrics().Radius != 0 || sq.Metrics().RadiusSmall != 0 {

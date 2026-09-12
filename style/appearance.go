@@ -1,5 +1,7 @@
 package style
 
+import "strings"
+
 // ThemeName is a Classic palette preset. LookAndFeel.Name() matches these.
 type ThemeName string
 
@@ -26,17 +28,20 @@ const (
 	IconSetSharp IconSetName = "sharp"
 )
 
-// Appearance is the first-class toolkit skin: theme, corner policy, icon set.
-// Apps apply it with Look() / Application.SetLook — not a parallel theme.
+// Appearance is the resolved toolkit skin. Name is the theme pack
+// (look.json "theme"). Theme / Corners / Icons come from that pack and
+// are not stored as independent prefs.
 type Appearance struct {
+	Name    string // pack id: "dark-round-classic" or a user export
 	Theme   ThemeName
 	Corners CornerStyle
 	Icons   IconSetName
 }
 
-// DefaultAppearance is Dark + rounded Classic chrome + classic icons.
+// DefaultAppearance is the embedded dark-round-classic starter.
 func DefaultAppearance() Appearance {
 	return Appearance{
+		Name:    DefaultThemeName,
 		Theme:   ThemeDark,
 		Corners: CornersRound,
 		Icons:   IconSetClassic,
@@ -73,17 +78,30 @@ func ParseIconSet(s string) IconSetName {
 	}
 }
 
-// Normalize fills empty fields with defaults.
+// Normalize fills empty fields with defaults. An empty Name becomes the
+// matching embedded starter (dark-round-classic, light-square-sharp, …).
 func (a Appearance) Normalize() Appearance {
 	a.Theme = ParseTheme(string(a.Theme))
 	a.Corners = ParseCorners(string(a.Corners))
 	a.Icons = ParseIconSet(string(a.Icons))
+	if strings.TrimSpace(a.Name) == "" {
+		a.Name = StarterName(a.Theme, a.Corners, a.Icons)
+	}
 	return a
 }
 
 func (a Appearance) String() string {
 	a = a.Normalize()
-	return string(a.Theme) + " / " + string(a.Corners) + " / " + string(a.Icons)
+	return a.Name
+}
+
+// WithPalette switches to the embedded starter that keeps corners/icons
+// and uses the given palette (Mail View → Dark / Light).
+func (a Appearance) WithPalette(theme ThemeName) Appearance {
+	a = a.Normalize()
+	a.Theme = ParseTheme(string(theme))
+	a.Name = StarterName(a.Theme, a.Corners, a.Icons)
+	return a
 }
 
 // ApplyCorners rewrites 1× (or already-scaled) radii for the corner policy.
@@ -118,7 +136,7 @@ func (a Appearance) Look() *Classic {
 		p = Light()
 	}
 	m := ApplyCorners(DefaultMetrics(), a.Corners)
-	return newClassic(name, p, m, a.Corners, a.Icons)
+	return newClassic(name, p, m, a.Corners, a.Icons).setPack(a.Name)
 }
 
 // PreferredLook loads XDG appearance prefs (or defaults) as a LookAndFeel.
@@ -126,7 +144,7 @@ func PreferredLook() LookAndFeel {
 	return LoadAppearance().Look()
 }
 
-// LookAppearance reads theme / corners / icons from a live look.
+// LookAppearance reads pack name / palette / corners / icons from a live look.
 func LookAppearance(l LookAndFeel) Appearance {
 	a := DefaultAppearance()
 	if l == nil {
@@ -136,14 +154,16 @@ func LookAppearance(l LookAndFeel) Appearance {
 		a.Theme = ParseTheme(c.Name())
 		a.Corners = c.Corners()
 		a.Icons = c.Icons()
-		return a
+		a.Name = c.Pack()
+		return a.Normalize()
 	}
 	a.Theme = ParseTheme(l.Name())
 	m := l.Metrics()
 	if m.Radius <= 0 && m.RadiusSmall <= 0 {
 		a.Corners = CornersSquare
 	}
-	return a
+	a.Name = ""
+	return a.Normalize()
 }
 
 // WithTheme rebuilds a Classic look with a new palette, keeping metrics,
@@ -159,7 +179,8 @@ func WithTheme(look LookAndFeel, theme ThemeName) LookAndFeel {
 	if theme == ThemeLight {
 		p = Light()
 	}
-	return newClassic(name, p, c.Metrics(), c.Corners(), c.Icons())
+	return newClassic(name, p, c.Metrics(), c.Corners(), c.Icons()).
+		setPack(StarterName(theme, c.Corners(), c.Icons()))
 }
 
 // WithCorners rebuilds a Classic look with a new radius policy.
@@ -170,7 +191,8 @@ func WithCorners(look LookAndFeel, corners CornerStyle) LookAndFeel {
 	}
 	corners = ParseCorners(string(corners))
 	m := ApplyCorners(c.Metrics(), corners)
-	return newClassic(c.Name(), c.Palette(), m, corners, c.Icons())
+	return newClassic(c.Name(), c.Palette(), m, corners, c.Icons()).
+		setPack(StarterName(ParseTheme(c.Name()), corners, c.Icons()))
 }
 
 // WithIcons rebuilds a Classic look with a new ToolIcon glyph set.
@@ -180,7 +202,8 @@ func WithIcons(look LookAndFeel, icons IconSetName) LookAndFeel {
 		return look
 	}
 	icons = ParseIconSet(string(icons))
-	return newClassic(c.Name(), c.Palette(), c.Metrics(), c.Corners(), icons)
+	return newClassic(c.Name(), c.Palette(), c.Metrics(), c.Corners(), icons).
+		setPack(StarterName(ParseTheme(c.Name()), c.Corners(), icons))
 }
 
 // WithAppearance applies all three settings to an existing Classic look,
@@ -194,13 +217,21 @@ func WithAppearance(look LookAndFeel, a Appearance) LookAndFeel {
 		return look
 	}
 	a = a.Normalize()
+	pack := a.Name
+	if loaded, ok := LoadTheme(pack); ok {
+		if loaded.Palette != a.Theme || loaded.Corners != a.Corners || loaded.Icons != a.Icons {
+			pack = StarterName(a.Theme, a.Corners, a.Icons)
+		}
+	} else {
+		pack = StarterName(a.Theme, a.Corners, a.Icons)
+	}
 	name := string(a.Theme)
 	p := Dark()
 	if a.Theme == ThemeLight {
 		p = Light()
 	}
 	m := ApplyCorners(c.Metrics(), a.Corners)
-	return newClassic(name, p, m, a.Corners, a.Icons)
+	return newClassic(name, p, m, a.Corners, a.Icons).setPack(pack)
 }
 
 func classicOf(look LookAndFeel) (*Classic, bool) {

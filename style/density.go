@@ -107,7 +107,7 @@ func WithDensity(look LookAndFeel, d Density) LookAndFeel {
 		return look
 	}
 	m := ApplyCorners(ApplyDensity(DefaultMetrics(), d), c.Corners())
-	return newClassic(c.Name(), c.Palette(), m, c.Corners(), c.Icons())
+	return newClassic(c.Name(), c.Palette(), m, c.Corners(), c.Icons()).setPack(c.Pack())
 }
 
 // BaseFontSize is the unscaled Classic body size (1× design pixels).
