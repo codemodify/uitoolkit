@@ -209,6 +209,45 @@ func (s *Session) Focus(c widget.Component) {
 	}
 }
 
+// Tab moves keyboard focus forward or backward (Qt / GTK / Avalonia Tab).
+func (s *Session) Tab(forward bool) {
+	if s == nil || s.Host == nil || s.Root == nil {
+		return
+	}
+	root := s.Root
+	if pop := s.Host.Popup(); pop != nil {
+		root = pop
+	}
+	list := widget.Focusables(root)
+	if len(list) == 0 {
+		return
+	}
+	idx := -1
+	cur := s.Host.Focus()
+	for i, c := range list {
+		if c == cur {
+			idx = i
+			break
+		}
+	}
+	if forward {
+		idx++
+		if idx >= len(list) {
+			idx = 0
+		}
+	} else {
+		if idx < 0 {
+			idx = 0
+		}
+		idx--
+		if idx < 0 {
+			idx = len(list) - 1
+		}
+	}
+	s.Host.RequestFocus(list[idx])
+	widget.MarkKeyboardFocus(list[idx])
+}
+
 // Cursor is the last pointer shape published to the host.
 func (s *Session) Cursor() platform.Cursor {
 	if s == nil || s.Host == nil {

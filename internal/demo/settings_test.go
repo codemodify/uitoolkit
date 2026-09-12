@@ -497,6 +497,7 @@ func clickCorners(t *testing.T, w *app.Window, label string) {
 		t.Fatalf("no corners radio %q", label)
 	}
 	rb.MousePress(widget.MouseEvent{})
+	rb.MouseRelease(widget.MouseEvent{})
 }
 
 func clickExportLook(t *testing.T, w *app.Window) {

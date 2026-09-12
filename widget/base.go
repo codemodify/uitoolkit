@@ -12,20 +12,22 @@ var nextID uint64
 
 // Base is the embeddable Component implementation.
 type Base struct {
-	self     Component
-	id       uint64
-	name     string
-	parent   Component
-	children []Component
-	bounds   paintengine2d.Rect
-	pref     paintengine2d.Point
-	visible  bool
-	enabled  bool
-	focus    bool
-	hovered  bool
-	manages  bool
-	look     style.LookAndFeel
-	host     Host
+	self             Component
+	id               uint64
+	name             string
+	parent           Component
+	children         []Component
+	bounds           paintengine2d.Rect
+	pref             paintengine2d.Point
+	visible          bool
+	enabled          bool
+	focus            bool
+	hovered          bool
+	manages          bool
+	keyNav           bool
+	focusVisibleOnly bool
+	look             style.LookAndFeel
+	host             Host
 }
 
 // Init binds the outer Component so HitTest / Invalidate return the concrete type.
@@ -201,7 +203,37 @@ func (b *Base) KeyPress(KeyEvent) bool     { return false }
 func (b *Base) KeyRelease(KeyEvent) bool   { return false }
 func (b *Base) TextInput(rune) bool        { return false }
 func (b *Base) FocusGained()               { b.Invalidate() }
-func (b *Base) FocusLost()                 { b.Invalidate() }
+
+func (b *Base) FocusLost() {
+	b.keyNav = false
+	b.Invalidate()
+}
+
+// SetFocusVisibleOnly paints StateFocused only after keyboard navigation
+// (GTK :focus-visible / Qt WA_KeyboardFocusChange). Editors leave this off.
+func (b *Base) SetFocusVisibleOnly(v bool) { b.focusVisibleOnly = v }
+
+// FocusVisibleOnly reports the keyboard-only focus-ring policy.
+func (b *Base) FocusVisibleOnly() bool { return b.focusVisibleOnly }
+
+// KeyNav is true after Tab / arrow / mnemonic until pointer activation.
+func (b *Base) KeyNav() bool { return b.keyNav }
+
+// MarkKeyboardFocus records that focus arrived from the keyboard.
+func (b *Base) MarkKeyboardFocus() {
+	if !b.keyNav {
+		b.keyNav = true
+		b.Invalidate()
+	}
+}
+
+// MarkPointerFocus records that focus arrived from the pointer.
+func (b *Base) MarkPointerFocus() {
+	if b.keyNav {
+		b.keyNav = false
+		b.Invalidate()
+	}
+}
 
 func (b *Base) Invalidate() {
 	b.InvalidateRect(b.LocalBounds())
@@ -251,7 +283,7 @@ func (b *Base) State() style.ControlState {
 	if !b.enabled {
 		s |= style.StateDisabled
 	}
-	if b.Focused() {
+	if b.Focused() && (!b.focusVisibleOnly || b.keyNav) {
 		s |= style.StateFocused
 	}
 	if b.hovered {

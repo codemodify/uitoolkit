@@ -168,6 +168,9 @@ LookAndFeel locks **UI → Titillium Web** and **Mono → JetBrains Mono**
 
 Name-by-name map vs Qt / GTK / Avalonia / Fyne / WinForms / WPF / Apple:
 [Widget comparison](#widget-comparison) · [docs/widgets.md](docs/widgets.md).
+Chrome behavior (focus-visible, toolbar gaps, toggle vs action, menu
+dismiss) vs Avalonia / Qt / GTK: [docs/compare.md](docs/compare.md)
+(`go run ./cmd/uitest-driver -compare`).
 
 Regenerate:
 
@@ -336,7 +339,7 @@ Apple columns are names only (AppKit/SwiftUI backends are still stubs).
 | Tabs | `TabView` / `TabBar` | `QTabWidget` / `TabBar` | `GtkNotebook` | `TabControl` | `container.AppTabs` | `TabControl` | `TabControl` | `NSTabView` | `TabView` | <img src="docs/screenshots/compare/tabview.png" width="160" alt="TabView"> |
 | Menu bar | `MenuBar` | `QMenuBar` / `MenuBar` | `GtkPopoverMenuBar` | `Menu` | `fyne.MainMenu` | `MenuStrip` | `Menu` | `NSMenu` | `Menu` | <img src="docs/screenshots/compare/menubar.png" width="160" alt="MenuBar"> |
 | Context menu | `PopupMenu` | `QMenu` / `Menu` | `GtkPopoverMenu` | `ContextMenu` | `widget.PopUpMenu` | `ContextMenuStrip` | `ContextMenu` | `NSMenu` | `contextMenu` | <img src="docs/screenshots/compare/popupmenu.png" width="160" alt="PopupMenu"> |
-| Tool bar | `ToolBar` | `QToolBar` / `ToolBar` | `GtkBox` ≈ | `CommandBar` ≈ | `widget.Toolbar` | `ToolStrip` | `ToolBar` | `NSToolbar` | `ToolbarItem` | <img src="docs/screenshots/compare/toolbar.png" width="160" alt="ToolBar"> |
+| Tool bar | `ToolBar` / `ToolToggle` | `QToolBar` + checkable tool | `GtkBox` ≈ + `GtkToggleButton` | `CommandBar` ≈ + `ToggleButton` | `widget.Toolbar` | `ToolStrip` | `ToolBar` | `NSToolbar` | `ToolbarItem` | <img src="docs/screenshots/compare/toolbar.png" width="160" alt="ToolBar"> |
 | Status bar | `StatusBar` | `QStatusBar` / `StatusBar` | `GtkStatusbar` ≈ | — | — | `StatusStrip` | `StatusBar` | — | — | <img src="docs/screenshots/compare/statusbar.png" width="160" alt="StatusBar"> |
 | Title bar | `TitleBar` | custom ≈ | `GtkHeaderBar` ≈ | chrome ≈ | window title ≈ | `Form.Text` ≈ | chrome ≈ | window title | `navigationTitle` | <img src="docs/screenshots/compare/titlebar.png" width="160" alt="TitleBar"> |
 | Scroll | `ScrollView` | `QScrollArea` / `ScrollView` | `GtkScrolledWindow` | `ScrollViewer` | `container.Scroll` | `AutoScroll` | `ScrollViewer` | `NSScrollView` | `ScrollView` | <img src="docs/screenshots/compare/scrollview.png" width="160" alt="ScrollView"> |
@@ -506,7 +509,17 @@ are independent look.json fields again; compound pack names migrate
 
 ## Version
 
-**0.12.4** — Mail keeps **Outbox** last in the folder sidebar (after
+**0.13.0** — Deep chrome polish plus comparison tooling. Buttons,
+checkboxes, radios, and switches use GTK/Avalonia **focus-visible**
+(no leftover ring after a mouse click; Tab still shows it) and
+activate on click-release. Labels, buttons, list rows, and combo
+fields clip / fit overflow. Unfocused text selection is muted.
+Popup menus drop hover highlight when the pointer leaves. A runnable
+Avalonia / Qt / GTK checklist lives in `internal/uitest` and
+`go run ./cmd/uitest-driver -compare` ([docs/compare.md](docs/compare.md)).
+Still paintengine2d **v0.9.0**.
+
+**0.12.4** — Mail keeps **Outbox** last in the folder sidebar (after)
 Trash / Junk / Archive, and after Tags for the virtual mailbox).
 ToolBar Measure and paint share pad, icon size, and gaps so a label
 cannot collide with the next tool’s icon. MenuBar and ToolBar drop

@@ -32,6 +32,7 @@ func TestCheckboxToggle(t *testing.T) {
 	c.SetHost(h)
 	c.Arrange(paintengine2d.XYWH(0, 0, 120, 32))
 	c.MousePress(widget.MouseEvent{Pos: paintengine2d.Pt(8, 16)})
+	c.MouseRelease(widget.MouseEvent{Pos: paintengine2d.Pt(8, 16)})
 	if !c.Checked || n != 1 {
 		t.Fatalf("checked=%v n=%d", c.Checked, n)
 	}

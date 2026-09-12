@@ -15,6 +15,7 @@ type RadioButton struct {
 	Selected bool
 	OnChange func(bool)
 	hovered  bool
+	pressed  bool
 	group    *RadioGroup
 	index    int
 }
@@ -24,6 +25,7 @@ func NewRadio(text string, selected bool, on func(bool)) *RadioButton {
 	r := &RadioButton{Text: text, Selected: selected, OnChange: on, index: -1}
 	r.Init(r)
 	r.SetWantsFocus(true)
+	r.SetFocusVisibleOnly(true)
 	return r
 }
 
@@ -60,14 +62,30 @@ func (r *RadioButton) Paint(ctx *paintengine2d.Context) {
 }
 
 func (r *RadioButton) MouseEnter() { r.hovered = true; r.Base.MouseEnter() }
-func (r *RadioButton) MouseExit()  { r.hovered = false; r.Base.MouseExit() }
+func (r *RadioButton) MouseExit() {
+	r.hovered = false
+	r.pressed = false
+	r.Base.MouseExit()
+}
 
-func (r *RadioButton) MousePress(e widget.MouseEvent) bool {
+func (r *RadioButton) MousePress(widget.MouseEvent) bool {
 	if !r.Enabled() {
 		return false
 	}
+	r.MarkPointerFocus()
 	r.RequestFocus()
-	r.choose()
+	r.pressed = true
+	r.Invalidate()
+	return true
+}
+
+func (r *RadioButton) MouseRelease(e widget.MouseEvent) bool {
+	was := r.pressed
+	r.pressed = false
+	r.Invalidate()
+	if was && r.Enabled() && r.LocalBounds().Contains(e.Pos) {
+		r.choose()
+	}
 	return true
 }
 
@@ -75,6 +93,7 @@ func (r *RadioButton) KeyPress(e widget.KeyEvent) bool {
 	if !r.Enabled() {
 		return false
 	}
+	r.MarkKeyboardFocus()
 	switch e.Key {
 	case platform.KeySpace, platform.KeyReturn:
 		r.choose()

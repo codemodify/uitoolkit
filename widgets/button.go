@@ -25,6 +25,7 @@ func NewButton(text string, onClick func()) *Button {
 	b := &Button{Text: text, OnClick: onClick}
 	b.Init(b)
 	b.SetWantsFocus(true)
+	b.SetFocusVisibleOnly(true)
 	return b
 }
 
@@ -63,6 +64,7 @@ func (b *Button) MousePress(e widget.MouseEvent) bool {
 	if !b.Enabled() {
 		return false
 	}
+	b.MarkPointerFocus()
 	b.RequestFocus()
 	b.pressed = true
 	b.Invalidate()
@@ -80,6 +82,10 @@ func (b *Button) MouseRelease(e widget.MouseEvent) bool {
 }
 
 func (b *Button) KeyPress(e widget.KeyEvent) bool {
+	if !b.Enabled() {
+		return false
+	}
+	b.MarkKeyboardFocus()
 	if e.Key == platform.KeyReturn || e.Key == platform.KeySpace {
 		if b.OnClick != nil && b.Enabled() {
 			b.OnClick()

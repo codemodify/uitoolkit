@@ -15,6 +15,7 @@ type Switch struct {
 	On       bool
 	OnChange func(bool)
 	hovered  bool
+	pressed  bool
 }
 
 // NewSwitch builds a toggle. on is the initial value.
@@ -22,6 +23,7 @@ func NewSwitch(text string, on bool, change func(bool)) *Switch {
 	s := &Switch{Text: text, On: on, OnChange: change}
 	s.Init(s)
 	s.SetWantsFocus(true)
+	s.SetFocusVisibleOnly(true)
 	return s
 }
 
@@ -61,14 +63,30 @@ func (s *Switch) Paint(ctx *paintengine2d.Context) {
 }
 
 func (s *Switch) MouseEnter() { s.hovered = true; s.Base.MouseEnter() }
-func (s *Switch) MouseExit()  { s.hovered = false; s.Base.MouseExit() }
+func (s *Switch) MouseExit() {
+	s.hovered = false
+	s.pressed = false
+	s.Base.MouseExit()
+}
 
 func (s *Switch) MousePress(widget.MouseEvent) bool {
 	if !s.Enabled() {
 		return false
 	}
+	s.MarkPointerFocus()
 	s.RequestFocus()
-	s.SetOn(!s.On)
+	s.pressed = true
+	s.Invalidate()
+	return true
+}
+
+func (s *Switch) MouseRelease(e widget.MouseEvent) bool {
+	was := s.pressed
+	s.pressed = false
+	s.Invalidate()
+	if was && s.Enabled() && s.LocalBounds().Contains(e.Pos) {
+		s.SetOn(!s.On)
+	}
 	return true
 }
 
@@ -76,6 +94,7 @@ func (s *Switch) KeyPress(e widget.KeyEvent) bool {
 	if !s.Enabled() {
 		return false
 	}
+	s.MarkKeyboardFocus()
 	if e.Key == platform.KeySpace || e.Key == platform.KeyReturn {
 		s.SetOn(!s.On)
 		return true

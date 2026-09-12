@@ -80,8 +80,24 @@ func (m *MenuBar) barH() float32 {
 	return h
 }
 
+func (m *MenuBar) titlesWidth() float32 {
+	f := m.Look().Font()
+	x := float32(8)
+	for _, menu := range m.menus {
+		if menu == nil {
+			continue
+		}
+		label, _, _ := ParseMnemonic(menu.Title)
+		x += f.Advance(label) + 20
+	}
+	return x
+}
+
 func (m *MenuBar) Measure(c layout.Constraints) paintengine2d.Point {
-	w := float32(200)
+	w := m.titlesWidth()
+	if w < 200 {
+		w = 200
+	}
 	if c.HasMaxW() {
 		w = c.MaxW
 	}
@@ -116,6 +132,8 @@ func (m *MenuBar) titleAt(x float32) int {
 func (m *MenuBar) Paint(ctx *paintengine2d.Context) {
 	lk := m.Look()
 	lk.DrawMenuBar(ctx, m.LocalBounds())
+	ctx.Save()
+	ctx.ClipRect(m.LocalBounds())
 	rects := m.titleRects()
 	for i, menu := range m.menus {
 		st := m.State()
@@ -131,6 +149,21 @@ func (m *MenuBar) Paint(ctx *paintengine2d.Context) {
 		label, _, idx := ParseMnemonic(menu.Title)
 		lk.DrawMenuTitle(ctx, rects[i], st, label, idx, i == m.open)
 	}
+	ctx.Restore()
+}
+
+// KeyboardChrome is true when a title is painting a keyboard focus ring.
+func (m *MenuBar) KeyboardChrome() bool {
+	return m.keyNav && m.focus >= 0 && m.open < 0
+}
+
+// TitleRect is the local box of menu title i.
+func (m *MenuBar) TitleRect(i int) paintengine2d.Rect {
+	rects := m.titleRects()
+	if i < 0 || i >= len(rects) {
+		return paintengine2d.Rect{}
+	}
+	return rects[i]
 }
 
 func (m *MenuBar) invalidateTitle(i int) {
@@ -301,6 +334,7 @@ type PopupMenu struct {
 	hover     int
 	press     int
 	focus     int
+	keyNav    bool
 	vbar      scrollDrag
 }
 
@@ -559,7 +593,7 @@ func (p *PopupMenu) Paint(ctx *paintengine2d.Context) {
 		if it.Disabled {
 			st |= style.StateDisabled
 		}
-		if i == p.hover || i == p.focus {
+		if i == p.hover || (p.keyNav && i == p.focus) {
 			st |= style.StateHovered
 		}
 		if i == p.press {
@@ -592,6 +626,7 @@ func (p *PopupMenu) MouseMove(e widget.MouseEvent) bool {
 		}
 		return true
 	}
+	p.keyNav = false
 	i := p.rowAt(e.Pos.Y)
 	if i != p.hover {
 		old := p.hover
@@ -608,6 +643,17 @@ func (p *PopupMenu) MouseMove(e widget.MouseEvent) bool {
 func (p *PopupMenu) MouseExit() {
 	p.hover = -1
 	p.Invalidate()
+}
+
+// HighlightedIndex is the pointer-hot or keyboard-current row, or -1.
+func (p *PopupMenu) HighlightedIndex() int {
+	if p.hover >= 0 {
+		return p.hover
+	}
+	if p.keyNav {
+		return p.focus
+	}
+	return -1
 }
 
 func (p *PopupMenu) MousePress(e widget.MouseEvent) bool {
@@ -649,6 +695,10 @@ func (p *PopupMenu) MouseWheel(e widget.MouseEvent) bool {
 }
 
 func (p *PopupMenu) KeyPress(e widget.KeyEvent) bool {
+	p.keyNav = true
+	if p.focus < 0 {
+		p.focus = firstEnabled(p.Items)
+	}
 	switch e.Key {
 	case platform.KeyUp:
 		p.moveFocus(-1)

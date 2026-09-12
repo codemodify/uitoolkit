@@ -29,6 +29,10 @@ import (
 //	                        TestMenuBarHelpNearRightEdgeFitsAboutMail
 //	combo overlap / clip    TestComboBoxPopupClearsFieldAndFitsLabels
 //	toolbar steals MaxW     TestToolBarLeavesRoomForFlexSibling
+//	focus-visible / chrome  internal/uitest.TestDesktopChromeNorms (docs/compare.md)
+//	label/button clip       TestDesktopChromeNorms/label-clip, button-label-clip
+//	toggle vs action        TestDesktopChromeNorms/toggle-vs-action
+//	menu leftover focus     TestDesktopChromeNorms/menubar-dismiss-focus, popup-leave-highlight
 
 func TestSplitterPanesExclusiveAtRatios(t *testing.T) {
 	left := widgets.NewLabel("AAAA pane A chrome")

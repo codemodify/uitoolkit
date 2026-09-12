@@ -119,6 +119,7 @@ func TestSwitchToggle(t *testing.T) {
 	s.SetHost(&host{})
 	s.Arrange(paintengine2d.XYWH(0, 0, 140, 32))
 	s.MousePress(widget.MouseEvent{Pos: paintengine2d.Pt(8, 16)})
+	s.MouseRelease(widget.MouseEvent{Pos: paintengine2d.Pt(8, 16)})
 	if !s.On {
 		t.Fatal("click should turn on")
 	}
@@ -135,6 +136,7 @@ func TestSwitchToggle(t *testing.T) {
 	}
 	s.SetEnabled(false)
 	s.MousePress(widget.MouseEvent{Pos: paintengine2d.Pt(8, 16)})
+	s.MouseRelease(widget.MouseEvent{Pos: paintengine2d.Pt(8, 16)})
 	s.KeyPress(widget.KeyEvent{Key: platform.KeySpace})
 	if !s.On || len(got) != 3 {
 		t.Fatalf("disabled toggled on=%v got=%v", s.On, got)

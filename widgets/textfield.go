@@ -272,6 +272,17 @@ func (t *TextField) ensureCaretVisible() {
 	if t.scrollX < 0 {
 		t.scrollX = 0
 	}
+	maxX := f.Advance(t.displayText())
+	if cx > maxX {
+		maxX = cx
+	}
+	maxScroll := maxX - inner + 2
+	if maxScroll < 0 {
+		maxScroll = 0
+	}
+	if t.scrollX > maxScroll {
+		t.scrollX = maxScroll
+	}
 }
 
 func (t *TextField) MousePress(e widget.MouseEvent) bool {
