@@ -93,6 +93,25 @@ func (f *Font) Advance(text string) float32 {
 	return w
 }
 
+// InkWidth is the painted AABB width of text (advance plus last-glyph
+// bearing / atlas pad). Menus use this so DrawGlyphs cannot clip a stem.
+func (f *Font) InkWidth(text string) float32 {
+	adv := f.Advance(text)
+	if f == nil || f.Atlas == nil || text == "" {
+		return adv
+	}
+	f.ensure(text)
+	run := paintengine2d.NullShaper{}.Shape(text, f.Atlas)
+	ink := run.Bounds(paintengine2d.Pt(0, 0))
+	if ink.Empty() {
+		return adv
+	}
+	if ink.Max.X > adv {
+		return ink.Max.X
+	}
+	return adv
+}
+
 func (f *Font) IndexAt(text string, x float32) int {
 	if f == nil || x <= 0 {
 		return 0

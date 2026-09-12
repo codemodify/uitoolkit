@@ -174,6 +174,7 @@ func CheckMenuFitsItems(p *widgets.PopupMenu) error {
 	if cs.Y > box.Dy()+1 && p.MaxOffset() <= 0 {
 		return fmt.Errorf("menu height %v < content %v and no scroll", box.Dy(), cs.Y)
 	}
+	ch := style.MenuChromeFor(p.Look())
 	f := p.Look().Font()
 	for i, it := range p.Items {
 		if it == nil || it.Separator {
@@ -185,10 +186,26 @@ func CheckMenuFitsItems(p *widgets.PopupMenu) error {
 		}
 		label, _, _ := widgets.ParseMnemonic(it.Text)
 		lb := p.LabelBounds(i)
+		adv := float32(0)
 		if f != nil {
-			if adv := f.Advance(label); adv > 0 && lb.Dx()+0.5 < adv {
-				return fmt.Errorf("label column %v < %q advance %v", lb.Dx(), label, adv)
+			adv = f.Advance(label)
+			if ink := f.InkWidth(label); ink > adv {
+				adv = ink
 			}
+		}
+		if adv > 0 && lb.Dx()+0.5 < adv {
+			return fmt.Errorf("label column %v < %q advance %v", lb.Dx(), label, adv)
+		}
+		textMax := lb.Min.X + adv
+		if adv > 0 && textMax > r.Max.X+0.5 {
+			return fmt.Errorf("label %q text maxX %v exceeds item %+v", label, textMax, r)
+		}
+		if adv > 0 && textMax > box.Max.X+0.5 {
+			return fmt.Errorf("label %q text maxX %v exceeds menu %+v", label, textMax, box)
+		}
+		need := adv + ch.PadL + ch.CheckCol() + ch.ItemPad + ch.PadR
+		if adv > 0 && box.Dx()+0.5 < need {
+			return fmt.Errorf("menu width %v < %q advance+pad %v", box.Dx(), label, need)
 		}
 		if sb := p.ShortcutBounds(i); !sb.Empty() {
 			if err := CheckExclusive(lb.Inset(0.5), sb.Inset(0.5)); err != nil {

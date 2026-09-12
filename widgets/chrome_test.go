@@ -186,9 +186,27 @@ func TestPopupMenuMeasureFitsLongestLabel(t *testing.T) {
 	pop.Arrange(paintengine2d.XYWH(0, 0, sz.X, sz.Y))
 	f := pop.Look().Font()
 	longest := "Add sender to VIP"
-	need := f.Advance(longest) + float32(menuPadL+menuCheckCol+menuPadR)
+	ch := pop.chrome()
+	need := f.Advance(longest) + ch.PadL + ch.CheckCol() + ch.ItemPad + ch.PadR
 	if sz.X+0.5 < need {
 		t.Fatalf("width %v < need %v for %q", sz.X, need, longest)
+	}
+	vip := -1
+	for i, it := range pop.Items {
+		if it != nil && it.Text == longest {
+			vip = i
+			break
+		}
+	}
+	if vip < 0 {
+		t.Fatal("missing VIP item")
+	}
+	lb := pop.LabelBounds(vip)
+	item := pop.ItemBounds(vip)
+	if adv := f.Advance(longest); adv > lb.Dx()+0.5 {
+		t.Fatalf("label column %+v < advance %v", lb, adv)
+	} else if lb.Min.X+adv > item.Max.X+0.5 {
+		t.Fatalf("text maxX %v exceeds item %+v", lb.Min.X+adv, item)
 	}
 	last := pop.ItemBounds(len(pop.Items) - 1)
 	if last.Empty() || last.Max.Y > sz.Y+1 {

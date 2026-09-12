@@ -366,10 +366,7 @@ func (l *Classic) DrawMenuItem(ctx *paintengine2d.Context, b paintengine2d.Rect,
 	if (st.Hovered() || st.Pressed()) && !st.Disabled() {
 		ctx.DrawRoundRect(b.Inset(2), 4, 4, paintengine2d.Fill(p.Accent.WithAlpha(0.30)))
 	}
-	const (
-		pad = float32(10)
-		gap = float32(16)
-	)
+	ch := MenuChromeFor(l)
 	ty := b.Min.Y + (b.Dy()-l.body.Height())*0.5
 	if ty < b.Min.Y {
 		ty = b.Min.Y
@@ -383,14 +380,19 @@ func (l *Classic) DrawMenuItem(ctx *paintengine2d.Context, b paintengine2d.Rect,
 	if checked {
 		font.Draw(ctx, "+", paintengine2d.Pt(b.Min.X+6, ty), fg)
 	}
-	labelRight := b.Max.X - pad
+	// Clip to the item (and shortcut column), never tighter than the
+	// reserved label box — glyph bearing may use the trailing item pad.
+	labelRight := b.Max.X
 	if shortcut != "" {
-		tw := l.muted.Advance(shortcut)
-		sx := b.Max.X - pad - tw
+		tw := l.muted.InkWidth(shortcut)
+		if tw <= 0 {
+			tw = l.muted.Advance(shortcut)
+		}
+		sx := ch.LabelMaxX(b.Max.X) - tw
 		l.muted.Draw(ctx, shortcut, paintengine2d.Pt(sx, ty), p.TextMuted)
-		labelRight = sx - gap
+		labelRight = sx - ch.AccelGap
 	}
-	lx := b.Min.X + pad + 10
+	lx := ch.LabelMinX(b.Min.X)
 	if labelRight < lx {
 		labelRight = lx
 	}

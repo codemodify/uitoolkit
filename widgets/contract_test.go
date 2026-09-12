@@ -24,6 +24,7 @@ import (
 //	unclamped scroll        TestScrollClampWheelStopsAtEnd, TestScrollersClampOffset
 //	type into read-only     TestTextViewReadOnlyAndScrollbar, TestTextAreaReadOnlyRejectsInput
 //	menu clip / truncate    TestPopupMenuFitsLongLabelsAndManyItems,
+//	                        TestPopupMenuVIPLabelNotClipped,
 //	                        TestMenuBarDropdownFitsLabelsAndShortcuts,
 //	                        TestMenuBarHelpNearRightEdgeFitsAboutMail
 //	combo overlap / clip    TestComboBoxPopupClearsFieldAndFitsLabels
@@ -303,8 +304,9 @@ func TestPopupMenuFitsLongLabelsAndManyItems(t *testing.T) {
 			t.Fatalf("scale %v: %v bounds=%+v content=%+v", scale, err, pop.Bounds(), pop.ContentSize())
 		}
 		f := pop.Look().Font()
-		for _, label := range []string{"Mark as Read", "Mark as Unread", "Tag · Important"} {
-			need := f.Advance(label) + 44
+		ch := style.MenuChromeFor(pop.Look())
+		for _, label := range []string{"Mark as Read", "Mark as Unread", "Tag · Important", "Add sender to VIP"} {
+			need := f.Advance(label) + ch.PadL + ch.CheckCol() + ch.ItemPad + ch.PadR
 			if pop.LocalBounds().Dx()+0.5 < need {
 				t.Fatalf("scale %v width %v truncates %q need %v", scale, pop.LocalBounds().Dx(), label, need)
 			}
@@ -313,6 +315,138 @@ func TestPopupMenuFitsLongLabelsAndManyItems(t *testing.T) {
 		if pop.MaxOffset() <= 0 && last.Max.Y > pop.LocalBounds().Dy()+1 {
 			t.Fatalf("scale %v last item clipped %+v menuH=%v", scale, last, pop.LocalBounds().Dy())
 		}
+	}
+}
+
+func TestPopupMenuVIPLabelNotClipped(t *testing.T) {
+	const vip = "Add sender to VIP"
+	items := []*widgets.MenuItem{
+		widgets.Item("Reply", nil),
+		widgets.Item("Forward", nil),
+		widgets.Sep(),
+		widgets.Item("Mark as Read", nil),
+		widgets.Item("Tag · Important", nil),
+		widgets.Item("Mute Thread", nil),
+		widgets.Item(vip, nil),
+		widgets.Item("Archive", nil),
+		widgets.Item("Junk", nil),
+		widgets.Item("Delete", nil),
+	}
+	for _, scale := range []float32{1, 2} {
+		for _, dens := range []style.Density{style.DensityDefault, style.DensityCompact, style.DensityRelaxed} {
+			h := uitest.NewHost()
+			look := style.WithDensity(style.DarkLook(), dens)
+			if scale > 1 {
+				look = style.WithScale(look, scale)
+			}
+			h.SetLook(look)
+			h.SetScale(scale)
+			root := widgets.NewLabel("host")
+			s := uitest.MountHost(h, root, paintengine2d.XYWH(0, 0, 720, 520))
+			pop := widgets.ShowContextMenu(root, paintengine2d.Pt(24, 24), items...)
+			if pop == nil {
+				t.Fatalf("scale %v density %s: no popup", scale, dens)
+			}
+			if err := uitest.CheckMenuFitsItems(pop); err != nil {
+				t.Fatalf("scale %v density %s: %v", scale, dens, err)
+			}
+			idx := -1
+			for i, it := range pop.Items {
+				if it != nil && it.Text == vip {
+					idx = i
+					break
+				}
+			}
+			if idx < 0 {
+				t.Fatal(vip)
+			}
+			f := pop.Look().Font()
+			ch := style.MenuChromeFor(pop.Look())
+			adv := f.Advance(vip)
+			ink := f.InkWidth(vip)
+			if ink > adv {
+				adv = ink
+			}
+			need := adv + ch.PadL + ch.CheckCol() + ch.ItemPad + ch.PadR + ch.Border
+			if pop.LocalBounds().Dx()+0.5 < need {
+				t.Fatalf("scale %v density %s width %v < need %v", scale, dens, pop.LocalBounds().Dx(), need)
+			}
+			lb := pop.LabelBounds(idx)
+			item := pop.ItemBounds(idx)
+			textMax := lb.Min.X + adv
+			if lb.Dx()+0.5 < adv {
+				t.Fatalf("scale %v density %s label col %v < advance %v", scale, dens, lb.Dx(), adv)
+			}
+			if textMax > item.Max.X+0.5 {
+				t.Fatalf("scale %v density %s text maxX %v exceeds item %+v", scale, dens, textMax, item)
+			}
+			if textMax > pop.LocalBounds().Max.X+0.5 {
+				t.Fatalf("scale %v density %s text maxX %v exceeds menu %+v", scale, dens, textMax, pop.LocalBounds())
+			}
+			img := s.Paint()
+			if img == nil {
+				t.Fatal("paint")
+			}
+			origin := widget.DeviceOrigin(pop)
+			prefix := f.Advance("Add sender to VI")
+			x0 := int(origin.X + lb.Min.X + prefix + 0.5)
+			x1 := int(origin.X + textMax + 0.5)
+			y0 := int(origin.Y + item.Min.Y + 2)
+			y1 := int(origin.Y + item.Max.Y - 2)
+			if x1 <= x0 {
+				x1 = x0 + 1
+			}
+			inkN := 0
+			for y := y0; y < y1 && y < img.Height; y++ {
+				if y < 0 {
+					continue
+				}
+				for x := x0; x < x1 && x < img.Width; x++ {
+					if x < 0 {
+						continue
+					}
+					_, _, _, a := img.PremulAt(x, y)
+					if a > 20 {
+						inkN++
+					}
+				}
+			}
+			if inkN < 4 {
+				t.Fatalf("scale %v density %s: %q last glyph has no ink in x[%d,%d] y[%d,%d] (clipped?)", scale, dens, vip, x0, x1, y0, y1)
+			}
+			widget.DismissPopup(root)
+		}
+	}
+}
+
+func TestPopupMenuAtRightEdgeKeepsIntrinsicWidth(t *testing.T) {
+	items := []*widgets.MenuItem{
+		widgets.Item("Reply", nil),
+		widgets.Item("Add sender to VIP", nil),
+		widgets.Item("Delete", nil),
+	}
+	const winW, winH float32 = 360, 280
+	h := uitest.NewHost()
+	h.SetLook(style.DarkLook())
+	root := widgets.NewLabel("anchor")
+	_ = uitest.MountHost(h, root, paintengine2d.XYWH(0, 0, winW, winH))
+	pop := widgets.ShowContextMenu(root, paintengine2d.Pt(winW-8, 40), items...)
+	if pop == nil {
+		t.Fatal("ShowContextMenu")
+	}
+	if err := uitest.CheckMenuFitsItems(pop); err != nil {
+		t.Fatal(err)
+	}
+	want := pop.ContentSize().X
+	got := pop.Bounds().Dx()
+	if got+0.5 < want {
+		t.Fatalf("right-edge placement shrank width %v < intrinsic %v bounds=%+v", got, want, pop.Bounds())
+	}
+	if pop.Bounds().Max.X > winW-3 {
+		t.Fatalf("popup %+v past window %v", pop.Bounds(), winW)
+	}
+	if pop.Bounds().Min.X >= winW-8-0.5 {
+		t.Fatalf("popup should translate left of cursor, got %+v", pop.Bounds())
 	}
 }
 
