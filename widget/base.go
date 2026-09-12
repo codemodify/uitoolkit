@@ -197,6 +197,10 @@ func (b *Base) MouseExit() {
 		b.Invalidate()
 	}
 }
+
+// SetHovered records the pointer-hover bit without invalidating.
+// MenuBar / PopupMenu / ToolBar / TabBar dirty only the old and new item.
+func (b *Base) SetHovered(v bool)          { b.hovered = v }
 func (b *Base) MouseWheel(MouseEvent) bool { return false }
 func (b *Base) Hovered() bool              { return b.hovered }
 func (b *Base) KeyPress(KeyEvent) bool     { return false }

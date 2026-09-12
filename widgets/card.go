@@ -173,7 +173,11 @@ func (l *CardList) Paint(ctx *paintengine2d.Context) {
 	} else {
 		for i := lo; i < hi; i++ {
 			y := float32(i)*rh - l.OffsetY
-			paintCard(lk, ctx, paintengine2d.XYWH(0, y, b.Dx(), rh), l.cardAt(i), i == l.Selected, i == l.hovered)
+			row := paintengine2d.XYWH(0, y, b.Dx(), rh)
+			if ctx.QuickReject(row) {
+				continue
+			}
+			paintCard(lk, ctx, row, l.cardAt(i), i == l.Selected, i == l.hovered)
 		}
 	}
 	ctx.Restore()

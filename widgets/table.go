@@ -400,6 +400,9 @@ func (t *TableView) Paint(ctx *paintengine2d.Context) {
 	} else {
 		for row := lo; row < hi; row++ {
 			y := hh + float32(row)*rh - t.OffsetY
+			if ctx.QuickReject(paintengine2d.XYWH(0, y, b.Dx(), rh)) {
+				continue
+			}
 			t.paintRow(ctx, lk, widths, row, y, rh)
 		}
 	}
