@@ -133,20 +133,38 @@ func TestTrayContextMenuIsToolkitPopup(t *testing.T) {
 	}
 	w.Hide()
 	fake.ContextClick(380, 8)
-	if !w.Visible() {
-		t.Fatal("context menu should show a hidden window")
+	if w.Visible() {
+		t.Fatal("context menu must not raise the main window")
 	}
-	pop, ok := w.Popup().(*widgets.PopupMenu)
+	menu := a.statusMenu
+	if menu == nil || menu.Closed() || !menu.Visible() {
+		t.Fatalf("want visible status-menu window, got %+v", menu)
+	}
+	pop, ok := menu.Popup().(*widgets.PopupMenu)
 	if !ok || pop == nil {
-		t.Fatalf("want toolkit PopupMenu, got %T", w.Popup())
+		t.Fatalf("want toolkit PopupMenu, got %T", menu.Popup())
 	}
 	if len(pop.Items) != 3 || pop.Items[0].Text != "Show Mail" || pop.Items[0].Icon != style.IconMail {
 		t.Fatalf("popup items %+v", pop.Items)
 	}
-	w.RequestFocus(pop)
-	w.dispatch(platform.Event{Kind: platform.EventKeyDown, Key: platform.KeyReturn})
+	b := pop.Bounds()
+	mw, mh := menu.SurfaceSize()
+	if b.Min.X < 0 || b.Min.Y < 0 || b.Max.X > float32(mw)+1 || b.Max.Y > float32(mh)+1 {
+		t.Fatalf("popup %v outside %dx%d", b, mw, mh)
+	}
+	if b.Dx() < 8 || b.Dy() < 8 {
+		t.Fatalf("invisible popup %v", b)
+	}
+	menu.RequestFocus(pop)
+	menu.dispatch(platform.Event{Kind: platform.EventKeyDown, Key: platform.KeyReturn})
 	if picked != 1 {
 		t.Fatalf("popup activate %d", picked)
+	}
+	if !menu.Closed() {
+		t.Fatal("activate should dismiss the status-menu window")
+	}
+	if w.Visible() {
+		t.Fatal("activating Show Mail test hook must not show main")
 	}
 }
 
@@ -159,17 +177,25 @@ func TestShowStatusMenuLargeScreenCoordsStayInside(t *testing.T) {
 	}
 	w.SetContent(widgets.NewLabel("mail"))
 	a.PumpOnce()
+	w.Hide()
 	a.ShowStatusMenu(3840, 2160, []platform.StatusMenuItem{
 		{Text: "Show Mail"},
 		{Separator: true},
 		{Text: "Quit"},
 	})
-	pop, ok := w.Popup().(*widgets.PopupMenu)
+	if w.Visible() {
+		t.Fatal("large screen coords must not show the main window")
+	}
+	menu := a.statusMenu
+	if menu == nil || !menu.Visible() {
+		t.Fatal("status-menu window must be visible")
+	}
+	pop, ok := menu.Popup().(*widgets.PopupMenu)
 	if !ok || pop == nil {
-		t.Fatalf("popup %T", w.Popup())
+		t.Fatalf("popup %T", menu.Popup())
 	}
 	b := pop.Bounds()
-	ww, hh := w.SurfaceSize()
+	ww, hh := menu.SurfaceSize()
 	if b.Min.X < 0 || b.Min.Y < 0 || b.Max.X > float32(ww)+1 || b.Max.Y > float32(hh)+1 {
 		t.Fatalf("popup %v outside %dx%d", b, ww, hh)
 	}
@@ -186,6 +212,41 @@ func TestStatusMenuOriginIgnoresScreenCoords(t *testing.T) {
 	local := statusMenuOrigin(400, 240, 40, 20)
 	if local.X != 40 || local.Y != 20 {
 		t.Fatalf("in-window coords should stay, got %+v", local)
+	}
+}
+
+func TestStatusMenuScreenPosAbovePanel(t *testing.T) {
+	x, y := statusMenuScreenPos(100, 1060, 160, 80)
+	if x != 100 || y != 980 {
+		t.Fatalf("want 100,980 got %d,%d", x, y)
+	}
+	zx, zy := statusMenuScreenPos(0, 0, 160, 80)
+	if zx != 0 || zy != 0 {
+		t.Fatalf("0,0 means unset, got %d,%d", zx, zy)
+	}
+}
+
+func TestStatusMenuEscapeDismissesWindow(t *testing.T) {
+	t.Setenv("UITK_TRAY", "fake")
+	a := New(Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{Width: 400, Height: 240, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.SetContent(widgets.NewLabel("mail"))
+	a.PumpOnce()
+	w.Hide()
+	a.ShowStatusMenu(80, 80, []platform.StatusMenuItem{{Text: "Quit"}})
+	menu := a.statusMenu
+	if menu == nil {
+		t.Fatal("status menu")
+	}
+	menu.dispatch(platform.Event{Kind: platform.EventKeyDown, Key: platform.KeyEscape})
+	if !menu.Closed() || a.statusMenu != nil {
+		t.Fatal("Escape should close the status-menu window")
+	}
+	if w.Visible() {
+		t.Fatal("main window must stay hidden")
 	}
 }
 

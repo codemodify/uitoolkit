@@ -21,11 +21,11 @@ const (
 	fdoNotifyPath  = "/org/freedesktop/Notifications"
 	dbusMenuPath   = "/MenuBar"
 	dbusMenuIface  = "com.canonical.dbusmenu"
-	// sniMenuNone is the StatusNotifierItem sentinel that tells Plasma /
-	// ayatana to call ContextMenu instead of treating Menu as a dbusmenu
-	// object. "/" is a valid path and hosts will try (and fail) dbusmenu
-	// on the root instead of falling back to ContextMenu.
-	sniMenuNone = dbus.ObjectPath("/NO_DBUSMENU")
+	// sniMenuNone is the StatusNotifierItem empty Menu path. The spec
+	// sentinel for “no dbusmenu — call ContextMenu” is object path "/".
+	// Any other non-empty path (including "/NO_DBUSMENU") is imported as
+	// dbusmenu; Plasma then never calls ContextMenu.
+	sniMenuNone = dbus.ObjectPath("/")
 )
 
 type linuxStatusItem struct {
@@ -146,6 +146,8 @@ func (s *linuxStatusItem) export() error {
 	if err := s.conn.Export(introspect.Introspectable(sniIntrospect), sniPath, "org.freedesktop.DBus.Introspectable"); err != nil {
 		return err
 	}
+	// /MenuBar stays a stub for hosts that probe dbusmenu regardless of
+	// Menu. Plasma keys off Menu="/" and must call ContextMenu instead.
 	if err := s.conn.ExportMethodTable(map[string]interface{}{
 		"GetLayout":          s.GetLayout,
 		"GetGroupProperties": s.GetGroupProperties,
@@ -159,6 +161,7 @@ func (s *linuxStatusItem) export() error {
 	}
 	_ = s.conn.Export(introspect.Introspectable(dbusMenuIntrospect), dbusMenuPath, "org.freedesktop.DBus.Introspectable")
 	s.sni = true
+	trayDebug("export name=%s Menu=%s ItemIsMenu=false (ContextMenu → toolkit popup)", s.name, sniMenuNone)
 	return nil
 }
 
@@ -384,7 +387,7 @@ func (s *linuxStatusItem) SecondaryActivate(x, y int32) *dbus.Error {
 }
 
 // ContextMenu implements StatusNotifierItem.ContextMenu (right-click).
-// Menu=/NO_DBUSMENU + ItemIsMenu=false is what makes Plasma call this.
+// Menu="/" + ItemIsMenu=false is what makes Plasma call this.
 func (s *linuxStatusItem) ContextMenu(x, y int32) *dbus.Error {
 	_ = s.invokeOnMenu(x, y, "ContextMenu")
 	return nil
@@ -419,10 +422,12 @@ func (s *linuxStatusItem) GetLayout(parentID int32, recursionDepth int32, proper
 		rev = 1
 	}
 	_ = items
+	trayDebug("dbusmenu.GetLayout parent=%d (stub only; Menu=/ so Plasma should use ContextMenu)", parentID)
 	if parentID > 0 {
 		return rev, dbusMenuStubLeaf(), nil
 	}
-	// Do not export real rows: Plasma would draw a native dbusmenu.
+	// Do not export real rows: a host that ignores Menu=/ would otherwise
+	// draw a native dbusmenu instead of calling ContextMenu.
 	return rev, dbusMenuStubLayout(), nil
 }
 
@@ -445,7 +450,7 @@ func (s *linuxStatusItem) Event(id int32, eventID string, data dbus.Variant, tim
 		return nil
 	}
 	// Root / synthetic stub (id 0 or 1): open the toolkit menu. Hosts that
-	// ignore /NO_DBUSMENU still land here instead of ContextMenu.
+	// ignore Menu=/ still land here instead of ContextMenu.
 	if id <= 1 && s.invokeOnMenu(0, 0, "dbusmenu.Event") {
 		return nil
 	}

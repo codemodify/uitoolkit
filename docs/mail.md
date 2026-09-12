@@ -40,8 +40,9 @@ go run ./examples/mail -screenshot docs/screenshots
 ## Tray and new-mail toasts (0.16.0, 0.16.1)
 
 `mailclientui` opens a toolkit `StatusItem` while it runs
-(v0.16.3: Plasma right-click uses `Menu=/NO_DBUSMENU` and a window-corner
-toolkit popup. v0.16.2: envelope tray icon; Wayland Show Mail remaps
+(v0.16.4: Plasma right-click uses `Menu=/` and a dedicated toolkit
+popup window. v0.16.3: `Menu=/NO_DBUSMENU` did not make Plasma call
+`ContextMenu`. v0.16.2: envelope tray icon; Wayland Show Mail remaps
 after close-to-tray. v0.16.1: Plasma `GetLayout` no longer panics):
 
 - **Click** the tray (or the toast) → show / raise / focus the Mail window

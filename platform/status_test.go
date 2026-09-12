@@ -100,6 +100,14 @@ func TestOffscreenHostWindow(t *testing.T) {
 	}
 }
 
+func TestWakeSurfaceOffscreenNoPanic(t *testing.T) {
+	o := NewOffscreen(WindowOptions{Width: 40, Height: 20})
+	WakeSurface(o)
+	WakeSurface(nil)
+	MoveSurface(o, 10, 20)
+	MoveSurface(nil, 0, 0)
+}
+
 func TestShowRaiseAfterHideMakesVisible(t *testing.T) {
 	o := NewOffscreen(WindowOptions{Width: 80, Height: 40})
 	HideSurface(o)

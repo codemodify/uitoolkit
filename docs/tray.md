@@ -4,11 +4,20 @@
 notification-area icon plus a desktop toast. Mail dogfoods it; any
 uitoolkit app can open one.
 
-**v0.16.3** Plasma right-click: `Menu=/NO_DBUSMENU` so the host calls
-`ContextMenu` (a path of `/` is valid and hosts try dbusmenu on the
-root instead). Toolkit popup is anchored to a window corner — SNI
-`(x,y)` are screen/root, not window-local. `UITK_TRAY_DEBUG=1` logs
-which method opened the menu.
+**v0.16.4** Plasma right-click: SNI `Menu` is the spec empty path `/`
+(not `/NO_DBUSMENU`). Plasma treats any other object path as dbusmenu
+and never calls `ContextMenu`. `ItemIsMenu=false`. The toolkit menu is
+a dedicated top-level popup window (X11 override-redirect /
+`_NET_WM_WINDOW_TYPE_POPUP_MENU` at the SNI root `(x,y)`; Wayland
+maps a small undecorated toplevel). The main Mail window stays hidden
+when it was closed to the tray. `UITK_TRAY_DEBUG=1` logs
+`ContextMenu` vs dbusmenu, the Menu property, and whether the popup
+window was shown. Left-click / `Activate` still Show/Raise Mail.
+
+**v0.16.3** tried `Menu=/NO_DBUSMENU` and a window-corner popup on the
+main surface. Plasma imported that path as dbusmenu, so a real
+right-click never reached `ContextMenu` (synthetic `busctl call`
+still did).
 
 **v0.16.2** Mail tray: `IconMail` (not `IconInfo`); Wayland Show/Raise
 remaps the toplevel after close-to-tray and activates via
@@ -69,18 +78,23 @@ One D-Bus path for every Linux display server. No extra CGO.
 | Piece | Bus name | Needs |
 | --- | --- | --- |
 | Tray icon | `org.kde.StatusNotifierItem` + `RegisterStatusNotifierItem` on `org.kde.StatusNotifierWatcher` | A StatusNotifier host |
-| Context menu | SNI `ContextMenu(x,y)` → toolkit `PopupMenu` | Same host (right-click) |
-| dbusmenu stub | `com.canonical.dbusmenu` at `/MenuBar`; `Menu=/NO_DBUSMENU` | Hosts that probe the iface |
+| Context menu | SNI `ContextMenu(x,y)` → toolkit `PopupMenu` on a status-menu window | Same host (right-click) |
+| dbusmenu stub | `com.canonical.dbusmenu` at `/MenuBar`; `Menu=/` | Hosts that probe the iface; cannot win over Plasma `ContextMenu` |
 | Toast | `org.freedesktop.Notifications` | notification daemon (almost always present) |
 
 **Tray menu chrome**
 
-Linux SNI `Menu` is `/NO_DBUSMENU` with `ItemIsMenu=false`. Plasma
-then calls `ContextMenu` instead of drawing a native dbusmenu. The
-app opens the same `PopupMenu` / `MenuItem` path as in-window context
-menus (gutter icons, checks, Look fonts). Left-click stays `Activate`.
-`AboutToShow` / stub `Event("clicked")` also open the toolkit menu if
-a host still talks dbusmenu.
+Linux SNI `Menu` is `/` (empty path) with `ItemIsMenu=false`. That is
+the StatusNotifierItem sentinel for “no dbusmenu”: Plasma calls
+`ContextMenu` instead of importing a menu object. `/MenuBar` remains a
+stub so hosts that probe `com.canonical.dbusmenu` do not panic; it
+must not be advertised as `Menu` or Plasma never calls `ContextMenu`.
+`ShowStatusMenu` opens the same `PopupMenu` / `MenuItem` chrome as
+in-app menus on a dedicated popup window sized to the items, dismissed
+on Escape, item activate, or click-away (`FocusOut`). Left-click stays
+`Activate`. `AboutToShow` / stub `Event("clicked")` also open the
+toolkit menu if a host still talks dbusmenu. `Application.Post` wakes
+the UI loop (X11 helper property; tray wait is still capped at 100ms).
 
 | Environment | Icon | Toolkit popup | Notes |
 | --- | --- | --- | --- |

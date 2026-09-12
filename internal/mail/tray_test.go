@@ -68,11 +68,21 @@ func TestMailTrayFakeClickRaises(t *testing.T) {
 	}
 	w.Hide()
 	tray.ContextClick(600, 10)
-	if !w.Visible() {
-		t.Fatal("tray context click should show Mail")
+	if w.Visible() {
+		t.Fatal("tray context click must not raise Mail (left-click does)")
 	}
-	if _, ok := w.Popup().(*widgets.PopupMenu); !ok {
-		t.Fatalf("tray context should be toolkit PopupMenu, got %T", w.Popup())
+	var menu *app.Window
+	for _, win := range a.Windows() {
+		if win != nil && win != w && !win.Closed() && win.Visible() {
+			menu = win
+			break
+		}
+	}
+	if menu == nil {
+		t.Fatal("tray context should open a visible status-menu window")
+	}
+	if _, ok := menu.Popup().(*widgets.PopupMenu); !ok {
+		t.Fatalf("tray context should be toolkit PopupMenu, got %T", menu.Popup())
 	}
 }
 

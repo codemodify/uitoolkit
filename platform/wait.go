@@ -32,6 +32,23 @@ func WaitDisplay(s Surface, timeout time.Duration) bool {
 	return false
 }
 
+// DisplayWaker can interrupt a blocking [DisplayWaiter.Wait] so queued
+// Application.Post work (SNI ContextMenu) runs without waiting out the
+// tray 100ms cap.
+type DisplayWaker interface {
+	Wake()
+}
+
+// WakeSurface pokes s so the UI loop leaves Wait. No-op when unsupported.
+func WakeSurface(s Surface) {
+	if s == nil {
+		return
+	}
+	if w, ok := s.(DisplayWaker); ok {
+		w.Wake()
+	}
+}
+
 // SurfaceWakeAt is the next extra wake from s, or zero.
 func SurfaceWakeAt(s Surface) time.Time {
 	if w, ok := s.(WakeScheduler); ok {

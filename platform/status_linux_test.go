@@ -231,8 +231,14 @@ func TestExportGetLayoutNoNestingPanic(t *testing.T) {
 		t.Fatal(derr)
 	}
 	path, _ := menuVar.Value().(dbus.ObjectPath)
-	if path != sniMenuNone {
-		t.Fatalf("Menu %q want %s", path, sniMenuNone)
+	if path != "/" {
+		t.Fatalf("Menu %q want / (spec empty path, not /NO_DBUSMENU)", path)
+	}
+}
+
+func TestSNIMenuPathIsSpecEmpty(t *testing.T) {
+	if sniMenuNone != dbus.ObjectPath("/") {
+		t.Fatalf("sniMenuNone %q want /", sniMenuNone)
 	}
 }
 

@@ -64,7 +64,7 @@ static int ui_wait(Display* d, int ms) {
 	return select(fd + 1, &fds, NULL, NULL, &tv);
 }
 
-static Window ui_create(Display* d, int w, int h, const char* title) {
+static Window ui_create(Display* d, int x, int y, int w, int h, const char* title, int popup) {
 	int s = DefaultScreen(d);
 	XSetWindowAttributes swa;
 	memset(&swa, 0, sizeof(swa));
@@ -72,11 +72,20 @@ static Window ui_create(Display* d, int w, int h, const char* title) {
 	swa.border_pixel = BlackPixel(d, s);
 	swa.bit_gravity = NorthWestGravity;
 	swa.colormap = DefaultColormap(d, s);
+	swa.override_redirect = popup ? True : False;
 	swa.event_mask = ExposureMask|KeyPressMask|KeyReleaseMask|ButtonPressMask|ButtonReleaseMask|
 		PointerMotionMask|StructureNotifyMask|FocusChangeMask|PropertyChangeMask;
-	Window win = XCreateWindow(d, RootWindow(d, s), 40, 40, (unsigned)w, (unsigned)h, 0,
+	unsigned long mask = CWBackPixel|CWBorderPixel|CWBitGravity|CWColormap|CWEventMask;
+	if (popup) {
+		mask |= CWOverrideRedirect;
+	}
+	if (!popup && x == 0 && y == 0) {
+		x = 40;
+		y = 40;
+	}
+	Window win = XCreateWindow(d, RootWindow(d, s), x, y, (unsigned)w, (unsigned)h, 0,
 		DefaultDepth(d, s), InputOutput, DefaultVisual(d, s),
-		CWBackPixel|CWBorderPixel|CWBitGravity|CWColormap|CWEventMask, &swa);
+		mask, &swa);
 	XStoreName(d, win, title);
 	Atom net = XInternAtom(d, "_NET_WM_NAME", False);
 	Atom utf8 = XInternAtom(d, "UTF8_STRING", False);
@@ -90,11 +99,43 @@ static Window ui_create(Display* d, int w, int h, const char* title) {
 	XSizeHints hints;
 	memset(&hints, 0, sizeof(hints));
 	hints.flags = PMinSize;
-	hints.min_width = 200;
-	hints.min_height = 120;
+	hints.min_width = popup ? 1 : 200;
+	hints.min_height = popup ? 1 : 120;
+	if (popup || x != 40 || y != 40) {
+		hints.flags |= USPosition | PPosition;
+		hints.x = x;
+		hints.y = y;
+	}
 	XSetWMNormalHints(d, win, &hints);
+	if (popup) {
+		Atom wtype = XInternAtom(d, "_NET_WM_WINDOW_TYPE", False);
+		Atom menu = XInternAtom(d, "_NET_WM_WINDOW_TYPE_POPUP_MENU", False);
+		XChangeProperty(d, win, wtype, XA_ATOM, 32, PropModeReplace, (unsigned char*)&menu, 1);
+		Atom state = XInternAtom(d, "_NET_WM_STATE", False);
+		Atom skipTask = XInternAtom(d, "_NET_WM_STATE_SKIP_TASKBAR", False);
+		Atom skipPager = XInternAtom(d, "_NET_WM_STATE_SKIP_PAGER", False);
+		Atom above = XInternAtom(d, "_NET_WM_STATE_ABOVE", False);
+		Atom states[3] = {skipTask, skipPager, above};
+		XChangeProperty(d, win, state, XA_ATOM, 32, PropModeReplace, (unsigned char*)states, 3);
+	}
 	XFlush(d);
 	return win;
+}
+
+static void ui_move(Display* d, Window w, int x, int y) {
+	XMoveWindow(d, w, x, y);
+	XFlush(d);
+}
+
+static void ui_focus(Display* d, Window w) {
+	XSetInputFocus(d, w, RevertToParent, CurrentTime);
+	XFlush(d);
+}
+
+static void ui_wake(Display* d, Window helper) {
+	if (!d || !helper) return;
+	XChangeProperty(d, helper, XA_WM_NAME, XA_STRING, 8, PropModeReplace, (const unsigned char*)"w", 1);
+	XFlush(d);
 }
 
 static void ui_map(Display* d, Window w) {
@@ -557,7 +598,12 @@ func (X11Backend) NewSurface(opts WindowOptions) (Surface, error) {
 	ctitle := C.CString(title)
 	defer C.free(unsafe.Pointer(ctitle))
 	x11Mu.Lock()
-	win := C.ui_create(c.dpy, C.int(w), C.int(h), ctitle)
+	x, y := opts.X, opts.Y
+	popup := 0
+	if opts.Popup {
+		popup = 1
+	}
+	win := C.ui_create(c.dpy, C.int(x), C.int(y), C.int(w), C.int(h), ctitle, C.int(popup))
 	if opts.MinWidth > 0 || opts.MinHeight > 0 {
 		mw, mh := opts.MinWidth, opts.MinHeight
 		if mw < 1 {
@@ -581,6 +627,7 @@ func (X11Backend) NewSurface(opts WindowOptions) (Surface, error) {
 		rmask:  uint32(C.ui_red_mask(c.dpy)),
 		gmask:  uint32(C.ui_green_mask(c.dpy)),
 		bmask:  uint32(C.ui_blue_mask(c.dpy)),
+		popup:  opts.Popup,
 	}
 	s.rebuildImageLocked()
 	c.surfaces[win] = s
@@ -651,6 +698,7 @@ type x11Surface struct {
 	preeditBuf string
 	ximCbs     unsafe.Pointer
 	gpu        *paintengine2d.GPUDevice
+	popup      bool
 }
 
 var (
@@ -1735,7 +1783,28 @@ func (s *x11Surface) Raise() {
 	}
 	x11Mu.Lock()
 	C.ui_raise(s.conn.dpy, s.win)
+	if s.popup {
+		C.ui_focus(s.conn.dpy, s.win)
+	}
 	s.mapped = true
+	x11Mu.Unlock()
+}
+
+func (s *x11Surface) Move(x, y int) {
+	if s == nil || s.conn == nil || s.conn.dpy == nil || s.win == 0 {
+		return
+	}
+	x11Mu.Lock()
+	C.ui_move(s.conn.dpy, s.win, C.int(x), C.int(y))
+	x11Mu.Unlock()
+}
+
+func (s *x11Surface) Wake() {
+	if s == nil || s.conn == nil || s.conn.dpy == nil || s.conn.helper == 0 {
+		return
+	}
+	x11Mu.Lock()
+	C.ui_wake(s.conn.dpy, s.conn.helper)
 	x11Mu.Unlock()
 }
 
