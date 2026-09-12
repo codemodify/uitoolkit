@@ -87,13 +87,20 @@ body clip (below a sticky table header) so `DrawScene` cannot shift the
 clip with the content. Hover and selection re-record rows whose visual
 signature changed.
 
+**0.14.3 first frame (Wayland GPU):** v0.14.2 called `ctx.Present()` and
+skipped `Surface.Present` on GPU. That omitted `wl_surface` buffer_scale,
+viewport, and the configure gate — first `eglSwapBuffers` hit an
+unconfigured 1× surface (black window, oversized chrome). First present
+is `DrawSceneDamage(nil)` + `Surface.Present(nil)` (full buffer). Empty
+non-nil `Damage` is never passed (engine no-op + skip swap). Scale is
+adopted from the surface after the first connect.
+
 **0.14.2 dirty DrawScene + baked splitter (paintengine2d v0.10.0):**
 `DrawSceneDamage(scene, dev, &dirty)` replays hover/scroll strips
-without a full `Clear`. `ctx.Present()` / `SetPresentDamage` is the GPU
-swap (preserved buffer / `eglSetDamageRegionKHR`), not a blind
-`eglSwapBuffers`. Splitter panes `BakeGroup` on drag start; drag
-frames change `GroupNode.Xform` only. `UITK_SCENE=off` is still
-`frameImmediate` + dirty `PresentRects`.
+without a full `Clear`. GPU swap is `Surface.Present` → `PresentRects`
+/ `Present` (preserved buffer / `eglSetDamageRegionKHR`). Splitter
+panes `BakeGroup` on drag start; drag frames change `GroupNode.Xform`
+only. `UITK_SCENE=off` is still `frameImmediate` + dirty `PresentRects`.
 
 **0.14.1 scroll + dirty present (paintengine2d v0.9.2):** ListView,
 TableView (body under the sticky header), TreeView, and TextArea scroll

@@ -825,6 +825,10 @@ func (s *x11Surface) Scale() float32 {
 	return 1
 }
 
+func (s *x11Surface) PresentReady() bool {
+	return s != nil && !s.closed && s.img != nil && s.img.Width > 0 && s.img.Height > 0
+}
+
 func (s *x11Surface) SetTitle(title string) {
 	s.title = title
 	if s.conn == nil || s.conn.dpy == nil {

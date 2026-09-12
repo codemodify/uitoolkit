@@ -10,6 +10,41 @@ import (
 	"github.com/codemodify/uitoolkit/widgets"
 )
 
+func TestFirstFrameIsFullPaint(t *testing.T) {
+	a := New(Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{Width: 320, Height: 200, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.SetContent(widgets.NewPanel("Test", widgets.NewLabel("Hello"), widgets.NewButton("OK", nil)))
+	if !w.full || w.everPainted {
+		t.Fatal("new window must start unpainted and fully dirty")
+	}
+	if !w.needsFullPaint() {
+		t.Fatal("first frame must take the full DrawSceneDamage(nil) path")
+	}
+	a.PumpOnce()
+	if !w.everPainted {
+		t.Fatal("first present should mark the buffer as having content")
+	}
+	img := w.Surface().Buffer()
+	if img == nil || countOpaque(img, 20) < 200 {
+		t.Fatalf("first present left the buffer empty/black, ink=%d", countOpaque(img, 20))
+	}
+	// A subsequent empty dirty + full=false must not skip if we reset
+	// everPainted (the v0.14.2 DrawSceneDamage(empty) black path).
+	w.everPainted = false
+	w.full = false
+	w.dirty.Reset()
+	w.frame()
+	if !w.everPainted {
+		t.Fatal("forced full paint after reset")
+	}
+	if countOpaque(w.Surface().Buffer(), 20) < 200 {
+		t.Fatal("recovery frame was black")
+	}
+}
+
 func TestOffscreenGalleryPaints(t *testing.T) {
 	a := New(Options{Look: style.DarkLook(), Headless: true})
 	w, err := a.NewWindow(platform.WindowOptions{Width: 320, Height: 200, Headless: true})

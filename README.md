@@ -509,6 +509,13 @@ are independent look.json fields again; compound pack names migrate
 
 ## Version
 
+**0.14.3** — Fix black first frame and huge startup scale on Wayland
+after v0.14.2. The first present is always a full paint
+(`DrawSceneDamage` with nil dirty) through `Surface.Present` (sets
+`buffer_scale` / viewport). GPU no longer skips that path with a lone
+`ctx.Present()`. Window scale at open matches the surface (adopts
+output/frac scale after the first connect; never shrinks `UITK_SCALE`).
+
 **0.14.2** — paintengine2d **v0.10.0**. Dirty frames present with
 `DrawSceneDamage` (not `Clear` + full `DrawScene`). GPU `ctx.Present()`
 uses the damage list (`eglSetDamageRegionKHR` / preserved buffer).

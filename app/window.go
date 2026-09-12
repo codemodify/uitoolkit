@@ -41,6 +41,7 @@ type Window struct {
 	layers       *widget.SceneCache
 	scene        *paintengine2d.Scene
 	cursor       platform.Cursor
+	everPainted  bool
 }
 
 func newWindow(a *Application, surf platform.Surface, opts platform.WindowOptions) *Window {
@@ -409,6 +410,7 @@ func (w *Window) dispatch(ev platform.Event) {
 		w.Close()
 	case platform.EventResize:
 		_ = w.surf.Resize(ev.Width, ev.Height)
+		w.syncScaleFromSurface()
 		w.needSyncSize = true
 		w.laid = false
 		w.fullInvalidate()
@@ -727,6 +729,28 @@ func (w *Window) layout() {
 	w.laid = true
 }
 
+func (w *Window) syncScaleFromSurface() {
+	if w == nil || w.surf == nil {
+		return
+	}
+	if w.app != nil {
+		w.app.adoptSurfaceScale(w.surf)
+		w.scale = w.app.scale
+		w.look = w.app.look
+		return
+	}
+	next := platform.AdoptDisplayScale(w.scale, platform.SurfaceScale(w.surf))
+	if next == w.scale {
+		return
+	}
+	w.scale = next
+	w.look = applyScale(w.look, next)
+}
+
+func (w *Window) needsFullPaint() bool {
+	return w.full || !w.everPainted || !platform.SurfaceReady(w.surf)
+}
+
 func (w *Window) frame() {
 	if w.closed {
 		return
@@ -736,6 +760,9 @@ func (w *Window) frame() {
 		w.fullInvalidate()
 	}
 	w.tickTips()
+	if w.needsFullPaint() {
+		w.fullInvalidate()
+	}
 	if w.dirty.Empty() && !w.full && w.presentExtra.Empty() {
 		return
 	}
@@ -744,11 +771,13 @@ func (w *Window) frame() {
 			ctx.SyncSize()
 		}
 	}
-	sceneDamage := false
 	if platform.WantScene() {
 		w.recordScene()
 		var dirty *paintengine2d.Damage
-		if !w.full {
+		// DrawSceneDamage with a non-nil empty Damage is a no-op and
+		// tells GPU Present to skip the swap — that is the black first
+		// frame. Until a real buffer has been presented, pass nil.
+		if !w.needsFullPaint() && !w.dirty.Empty() {
 			dirty = &w.dirty
 			if ctx := platform.NewPaintContext(w.surf); ctx != nil {
 				bg := w.look.Palette().Background
@@ -758,11 +787,16 @@ func (w *Window) frame() {
 			}
 		}
 		w.presentScene(dirty)
-		sceneDamage = true
 	} else {
+		if w.needsFullPaint() {
+			w.full = true
+		}
 		w.frameImmediate()
 	}
-	w.presentBuffer(sceneDamage)
+	w.presentBuffer()
+	if platform.SurfaceReady(w.surf) {
+		w.everPainted = true
+	}
 	w.dirty.Reset()
 	w.presentExtra.Reset()
 	w.full = false
@@ -831,7 +865,7 @@ func (w *Window) frameImmediate() {
 func (w *Window) recordScene() {
 	ww, hh := w.surf.Size()
 	rec := paintengine2d.NewRecorder(ww, hh)
-	if w.full {
+	if w.needsFullPaint() {
 		rec.Clear(w.look.Palette().Background)
 	}
 	ctx := paintengine2d.NewContextDevice(rec)
@@ -839,7 +873,7 @@ func (w *Window) recordScene() {
 	// complete so a later DrawSceneDamage of another rect is valid.
 	var paintDirty *paintengine2d.Damage
 	fullContent := true
-	if !w.full {
+	if !w.needsFullPaint() {
 		paintDirty = &w.dirty
 	}
 	if w.root != nil {
@@ -865,36 +899,21 @@ func (w *Window) presentScene(dirty *paintengine2d.Damage) {
 	paintengine2d.DrawSceneDamage(w.scene, dev, dirty)
 }
 
-type presentDamager interface {
-	SetPresentDamage([]paintengine2d.Rect)
-}
-
-func (w *Window) presentBuffer(sceneDamage bool) {
-	rects := append([]paintengine2d.Rect(nil), w.dirty.Rects...)
-	rects = append(rects, w.presentExtra.Rects...)
-	if w.full {
-		ww, hh := w.surf.Size()
-		rects = []paintengine2d.Rect{paintengine2d.XYWH(0, 0, float32(ww), float32(hh))}
+func (w *Window) presentBuffer() {
+	var rects []paintengine2d.Rect
+	if w.needsFullPaint() {
+		// nil → platform Present covers the whole buffer (and sets
+		// Wayland buffer_scale / viewport). A 0×0 Size() rect would
+		// blit nothing.
+		rects = nil
+	} else {
+		rects = append(rects, w.dirty.Rects...)
+		rects = append(rects, w.presentExtra.Rects...)
 	}
-	ctx := platform.NewPaintContext(w.surf)
-	if ctx != nil {
-		if p, ok := ctx.Device().(presentDamager); ok {
-			switch {
-			case sceneDamage && w.full:
-				// DrawSceneDamage(nil) already asked for a full present.
-			case sceneDamage && !w.presentExtra.Empty():
-				p.SetPresentDamage(rects)
-			case !sceneDamage && w.full:
-				p.SetPresentDamage(nil)
-			case !sceneDamage:
-				p.SetPresentDamage(rects)
-			}
-		}
-		_ = ctx.Present()
-	}
-	if platform.SurfaceUsesGPU(w.surf) {
-		return
-	}
+	// Always go through Surface.Present so Wayland/X11 can set
+	// buffer_scale, viewport, and flush. Skipping it on GPU (v0.14.2)
+	// left the first eglSwapBuffers on an unconfigured 1× surface —
+	// black window and oversized chrome. GPU swap is presentGPU inside.
 	_ = w.surf.Present(rects)
 }
 

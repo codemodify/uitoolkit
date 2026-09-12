@@ -49,6 +49,30 @@ func scaleFromDPI(dpi float32) float32 {
 	return clampScale(dpi / 96)
 }
 
+// SurfaceScale is s.Scale(), or 1 when missing.
+func SurfaceScale(s Surface) float32 {
+	if s == nil {
+		return 1
+	}
+	if sc := s.Scale(); sc > 0 {
+		return sc
+	}
+	return 1
+}
+
+// AdoptDisplayScale returns the scale to use for look metrics. A higher
+// native/surface factor replaces a 1× guess from New() before the display
+// connection existed. It never shrinks an explicit UITK_SCALE / env scale.
+func AdoptDisplayScale(current, surface float32) float32 {
+	if current <= 0 {
+		current = 1
+	}
+	if surface > current+0.01 && surface > 1.01 {
+		return clampScale(surface)
+	}
+	return current
+}
+
 func clampScale(s float32) float32 {
 	if s < 0.75 {
 		s = 0.75
