@@ -510,6 +510,9 @@ are independent look.json fields again; compound pack names migrate
 
 ## Version
 
+**0.17.1** — CGO preamble fix: no nested `*/` inside `wayland_linux.go`
+(that closed the Go `/*` block and broke `CGO_ENABLED=1` builds).
+
 **0.17.0** — **Robust StatusItem.** Default **HostMenu** exports a real
 `com.canonical.dbusmenu` at `Menu=/MenuBar` so Plasma / AppIndicator /
 Waybar draw the native tray menu (QSystemTrayIcon / KStatusNotifierItem /

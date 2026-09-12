@@ -364,9 +364,8 @@ static int ui_wl_wait_fds(struct wl_display *d, int extra_fd, int ms) {
 	}
 	if (extra_fd >= 0 && n > 0 && nfd > 1 && (pfds[1].revents & POLLIN)) {
 		uint64_t buf = 0;
-		if (read(extra_fd, &buf, sizeof(buf)) < 0) {
-			/* EAGAIN is fine; the wake already unblocked poll. */
-		}
+		ssize_t nr = read(extra_fd, &buf, sizeof(buf));
+		(void)nr;
 	}
 	return wl_display_dispatch_pending(d);
 }
