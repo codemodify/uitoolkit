@@ -398,8 +398,8 @@ func Gallery(a *app.Application, win *app.Window, light bool) widget.Component {
 
 	menubar := widgets.NewMenuBar(
 		widgets.NewMenu("&File",
-			widgets.ItemAccel("&New window", "Ctrl+N", func() { other.OnClick() }),
-			widgets.ItemAccel("&Open…", "Ctrl+O", func() { openFile.OnClick() }),
+			widgets.ItemIconAccel(style.IconNew, "&New window", "Ctrl+N", func() { other.OnClick() }),
+			widgets.ItemIconAccel(style.IconOpen, "&Open…", "Ctrl+O", func() { openFile.OnClick() }),
 			widgets.ItemAccel("&About", "F1", func() { about.OnClick() }),
 			widgets.Sep(),
 			widgets.ItemAccel("&Quit", "Ctrl+Q", func() { a.Quit() }),
@@ -419,11 +419,11 @@ func Gallery(a *app.Application, win *app.Window, light bool) widget.Component {
 			&widgets.MenuItem{Text: "Undo", Shortcut: "Ctrl+Z", Disabled: true},
 		),
 		widgets.NewMenu("&View",
-			widgets.CheckItem("&Dark", !light, func() {
+			widgets.RadioItem("&Dark", "palette", !light, func() {
 				a.SetLook(style.WithTheme(win.Look(), style.ThemeDark))
 				win.SetContent(Gallery(a, win, false))
 			}),
-			widgets.CheckItem("&Light", light, func() {
+			widgets.RadioItem("&Light", "palette", light, func() {
 				a.SetLook(style.WithTheme(win.Look(), style.ThemeLight))
 				win.SetContent(Gallery(a, win, true))
 			}),

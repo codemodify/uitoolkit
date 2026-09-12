@@ -6,6 +6,17 @@ import (
 	"github.com/codemodify/paintengine2d"
 )
 
+func TestMenuChromeGutterFitsIconSize(t *testing.T) {
+	for _, sz := range []IconSize{IconSizeSmall, IconSizeMedium, IconSizeLarge} {
+		lk := WithIconSize(DarkLook(), sz)
+		ch := MenuChromeFor(lk)
+		need := IconSizePixels(sz)
+		if ch.CheckCol()+0.5 < need {
+			t.Fatalf("%s gutter %v < icon %v", sz, ch.CheckCol(), need)
+		}
+	}
+}
+
 func TestMenuChromeForScalesWithLook(t *testing.T) {
 	lo := MenuChromeFor(DarkLook())
 	hi := MenuChromeFor(WithScale(DarkLook(), 2))

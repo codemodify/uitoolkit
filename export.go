@@ -221,6 +221,15 @@ func NewMenuItem(text string, on func()) *widgets.MenuItem { return widgets.Item
 func NewMenuItemAccel(text, shortcut string, on func()) *widgets.MenuItem {
 	return widgets.ItemAccel(text, shortcut, on)
 }
+func NewMenuItemIcon(icon style.ToolIcon, text string, on func()) *widgets.MenuItem {
+	return widgets.ItemIcon(icon, text, on)
+}
+func MenuCheckItem(text string, checked bool, on func()) *widgets.MenuItem {
+	return widgets.CheckItem(text, checked, on)
+}
+func MenuRadioItem(text, group string, checked bool, on func()) *widgets.MenuItem {
+	return widgets.RadioItem(text, group, checked, on)
+}
 func MenuSep() *widgets.MenuItem { return widgets.Sep() }
 func NewPopupMenu(items ...*widgets.MenuItem) *widgets.PopupMenu {
 	return widgets.NewPopupMenu(items...)

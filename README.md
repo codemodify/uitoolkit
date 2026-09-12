@@ -509,6 +509,13 @@ are independent look.json fields again; compound pack names migrate
 
 ## Version
 
+**0.13.4** — Menu / context items gain **icons** and **toggles**.
+`MenuItem` has `Icon`, `Checkable`, and `RadioGroup`; click and keyboard
+activate the same. The XP gutter paints a check, radio, or ToolIcon
+(check/radio wins when on). Mail View uses radios for layout / list /
+density / palette; File/Message dogfood a few icons. Still paintengine2d
+**v0.9.0**.
+
 **0.13.3** — Settings **Icon size** (Small / Medium / Large → 16 / 24 /
 32 px). `look.json` stores `"iconSize"` next to theme, corners, and
 icons. `PreferredLook` / `WatchLook` apply it toolkit-wide: ToolBar
