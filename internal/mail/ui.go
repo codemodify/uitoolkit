@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -785,10 +786,12 @@ func (s *session) rebuildTree() {
 			selected = n
 		}
 	}
+	var outbox *Folder
 	if vfs, err := s.cli.VirtualFolders(); err == nil {
 		for _, f := range vfs {
 			if f.ID == FolderOutbox {
-				addVirtual(f)
+				cp := f
+				outbox = &cp
 			}
 		}
 	}
@@ -802,6 +805,9 @@ func (s *session) rebuildTree() {
 		folders, _ := s.cli.ListFolders(acct.ID)
 		for _, f := range folders {
 			byParent[f.Parent] = append(byParent[f.Parent], f)
+		}
+		for pid, kids := range byParent {
+			byParent[pid] = orderFolderChildren(kids)
 		}
 		var addKids func(parent *widgets.TreeNode, pid FolderID)
 		addKids = func(parent *widgets.TreeNode, pid FolderID) {
@@ -852,10 +858,51 @@ func (s *session) rebuildTree() {
 		}
 	}
 	roots = append(roots, tagsNode)
+	if outbox != nil {
+		addVirtual(*outbox)
+	}
 
 	s.tree.Roots = roots
 	s.tree.Selected = selected
 	s.tree.Invalidate()
+}
+
+func isOutboxFolder(f Folder) bool {
+	return f.ID == FolderOutbox || strings.EqualFold(f.Name, "Outbox")
+}
+
+func folderSidebarRank(f Folder) int {
+	if isOutboxFolder(f) {
+		return 90
+	}
+	switch f.Kind {
+	case FolderInbox:
+		return 0
+	case FolderDrafts:
+		return 1
+	case FolderSent:
+		return 2
+	case FolderArchive:
+		return 3
+	case FolderJunk:
+		return 4
+	case FolderTrash:
+		return 5
+	default:
+		return 40
+	}
+}
+
+func orderFolderChildren(folders []Folder) []Folder {
+	out := append([]Folder(nil), folders...)
+	sort.SliceStable(out, func(i, j int) bool {
+		ri, rj := folderSidebarRank(out[i]), folderSidebarRank(out[j])
+		if ri != rj {
+			return ri < rj
+		}
+		return out[i].Name < out[j].Name
+	})
+	return out
 }
 
 func (s *session) clickRow(i int, add bool) {

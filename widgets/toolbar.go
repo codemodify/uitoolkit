@@ -41,10 +41,11 @@ func ToolDivider() *ToolItem { return &ToolItem{Sep: true} }
 // ToolBar is a horizontal strip of tool buttons.
 type ToolBar struct {
 	widget.Base
-	items []*ToolItem
-	hover int
-	press int
-	focus int
+	items  []*ToolItem
+	hover  int
+	press  int
+	focus  int
+	keyNav bool
 }
 
 // NewToolBar constructs a toolbar.
@@ -127,12 +128,24 @@ func (t *ToolBar) itemBoxW(it *ToolItem, btn float32) float32 {
 	if it == nil || it.Sep {
 		return 8
 	}
+	pad, iconSide, iconGap := style.ToolButtonChrome(btn)
 	if it.Text == "" {
+		if it.Icon != style.IconNone {
+			w := pad*2 + iconSide
+			if w < btn {
+				return btn
+			}
+			return w
+		}
 		return btn
 	}
-	w := t.Look().Font().Advance(it.Text) + 18
+	textW := t.Look().Font().InkWidth(it.Text)
+	if adv := t.Look().Font().Advance(it.Text); adv > textW {
+		textW = adv
+	}
+	w := pad*2 + textW
 	if it.Icon != style.IconNone {
-		w += 18
+		w += iconSide + iconGap
 	}
 	return w
 }
@@ -144,10 +157,10 @@ func (t *ToolBar) contentW() float32 {
 	x := float32(6)
 	for _, it := range t.items {
 		if it == nil || it.Sep {
-			x += 10
+			x += 8 + style.ToolItemGap
 			continue
 		}
-		x += t.itemBoxW(it, btn) + 4
+		x += t.itemBoxW(it, btn) + style.ToolItemGap
 	}
 	return x + 6
 }
@@ -171,12 +184,12 @@ func (t *ToolBar) itemRects() []paintengine2d.Rect {
 	for i, it := range t.items {
 		if it == nil || it.Sep {
 			out[i] = paintengine2d.XYWH(x, 6, 8, h-12)
-			x += 10
+			x += 8 + style.ToolItemGap
 			continue
 		}
 		w := t.itemBoxW(it, btn)
 		out[i] = paintengine2d.XYWH(x, y, w, btn)
-		x += w + 4
+		x += w + style.ToolItemGap
 	}
 	return out
 }
@@ -205,14 +218,17 @@ func (t *ToolBar) Paint(ctx *paintengine2d.Context) {
 			continue
 		}
 		st := t.State()
-		if i != t.focus {
+		if i != t.focus || !t.keyNav {
 			st &^= style.StateFocused
 		}
 		if i == t.hover {
 			st |= style.StateHovered
 		}
-		if i == t.press || it.Down {
+		if i == t.press {
 			st |= style.StatePressed
+		}
+		if it.Toggle {
+			st |= style.StateToggle
 		}
 		if it.Down {
 			st |= style.StateChecked
@@ -241,10 +257,17 @@ func (t *ToolBar) MouseExit() {
 	t.Base.MouseExit()
 }
 
+func (t *ToolBar) FocusLost() {
+	t.keyNav = false
+	t.focus = -1
+	t.Base.FocusLost()
+}
+
 func (t *ToolBar) MousePress(e widget.MouseEvent) bool {
 	if !t.Enabled() || e.Button == platform.ButtonRight {
 		return false
 	}
+	t.keyNav = false
 	t.RequestFocus()
 	i := t.itemAt(e.Pos)
 	t.press = i
@@ -269,6 +292,10 @@ func (t *ToolBar) MouseRelease(e widget.MouseEvent) bool {
 func (t *ToolBar) KeyPress(e widget.KeyEvent) bool {
 	if !t.Enabled() || len(t.items) == 0 {
 		return false
+	}
+	t.keyNav = true
+	if t.focus < 0 {
+		t.focus = firstTool(t.items)
 	}
 	switch e.Key {
 	case platform.KeyLeft:

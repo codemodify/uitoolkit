@@ -575,10 +575,49 @@ func (l *Classic) DrawToolBar(ctx *paintengine2d.Context, b paintengine2d.Rect) 
 	ctx.DrawRect(paintengine2d.XYWH(b.Min.X, b.Max.Y-1, b.Dx(), 1), paintengine2d.Fill(p.Divider))
 }
 
+// ToolItemGap is the horizontal space between adjacent tool buttons.
+const ToolItemGap = float32(8)
+
+// ToolButtonChrome is pad, icon side, and icon→label gap for a tool
+// button of height h. Measure and paint share this so labels cannot
+// run into the next icon.
+func ToolButtonChrome(h float32) (pad, iconSide, iconGap float32) {
+	pad = 10
+	iconGap = 8
+	iconSide = h - 10
+	if iconSide < 16 {
+		iconSide = 16
+	}
+	max := float32(24)
+	if h >= 56 {
+		max = 48
+	}
+	if iconSide > max {
+		iconSide = max
+	}
+	return pad, iconSide, iconGap
+}
+
 func (l *Classic) DrawToolButton(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, icon ToolIcon) {
 	p := l.palette
 	r := l.metrics.RadiusSmall
-	if st.Pressed() || st.Checked() {
+	if st.Toggle() {
+		well := b.Inset(1)
+		if st.Checked() {
+			ctx.DrawRoundRect(well, r, r, paintengine2d.Fill(p.Accent.WithAlpha(0.32)))
+			ctx.DrawRoundRect(well.Inset(0.5), r, r, paintengine2d.StrokePaint(p.Accent, 1.15))
+		} else {
+			fill := p.Field
+			if st.Hovered() && !st.Disabled() {
+				fill = p.Highlight
+			}
+			ctx.DrawRoundRect(well, r, r, paintengine2d.Fill(fill))
+			ctx.DrawRoundRect(well.Inset(0.5), r, r, paintengine2d.StrokePaint(p.Border, 1))
+		}
+		if st.Pressed() && !st.Disabled() {
+			ctx.DrawRoundRect(well.Inset(1), r, r, paintengine2d.Fill(p.Accent.WithAlpha(0.18)))
+		}
+	} else if st.Pressed() && !st.Disabled() {
 		ctx.DrawRoundRect(b.Inset(2), r, r, paintengine2d.Fill(p.Accent.WithAlpha(0.28)))
 	} else if st.Hovered() && !st.Disabled() {
 		ctx.DrawRoundRect(b.Inset(2), r, r, paintengine2d.Fill(p.Highlight))
@@ -592,30 +631,25 @@ func (l *Classic) DrawToolButton(ctx *paintengine2d.Context, b paintengine2d.Rec
 		fg = p.TextMuted
 		font = l.muted
 	}
-	pad := float32(8)
+	pad, iconSide, iconGap := ToolButtonChrome(b.Dy())
 	x := b.Min.X + pad
 	if icon != IconNone {
-		side := b.Dy() - 10
-		if side < 16 {
-			side = 16
-		}
-		// 1× toolbar (~36px) → 24px glyph. HiDPI / 2× chrome → 48px.
-		max := float32(24)
-		if b.Dy() >= 56 {
-			max = 48
-		}
-		if side > max {
-			side = max
-		}
-		ib := paintengine2d.XYWH(x, b.Min.Y+(b.Dy()-side)*0.5, side, side)
+		ib := paintengine2d.XYWH(x, b.Min.Y+(b.Dy()-iconSide)*0.5, iconSide, iconSide)
 		if label == "" {
-			ib = paintengine2d.XYWH(b.Min.X+(b.Dx()-side)*0.5, b.Min.Y+(b.Dy()-side)*0.5, side, side)
+			ib = paintengine2d.XYWH(b.Min.X+(b.Dx()-iconSide)*0.5, b.Min.Y+(b.Dy()-iconSide)*0.5, iconSide, iconSide)
 		}
 		l.drawToolIcon(ctx, ib, icon, fg)
-		x = ib.Max.X + 6
+		x = ib.Max.X + iconGap
 	}
 	if label != "" {
+		right := b.Max.X - pad
+		if right < x {
+			right = x
+		}
+		ctx.Save()
+		ctx.ClipRect(paintengine2d.XYWH(x, b.Min.Y, right-x, b.Dy()))
 		font.Draw(ctx, label, paintengine2d.Pt(x, b.Min.Y+(b.Dy()-font.Height())*0.5), fg)
+		ctx.Restore()
 	}
 }
 

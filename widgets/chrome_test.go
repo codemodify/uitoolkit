@@ -275,6 +275,47 @@ func TestMenuBarMnemonic(t *testing.T) {
 	if mb.focus != 0 {
 		t.Fatalf("focus %d", mb.focus)
 	}
+	if !mb.keyNav {
+		t.Fatal("alt mnemonic is keyboard focus")
+	}
+	mb.Close()
+	if mb.focus != -1 || mb.keyNav {
+		t.Fatalf("Close must drop focus paint focus=%d keyNav=%v", mb.focus, mb.keyNav)
+	}
+}
+
+func TestMenuBarMouseDoesNotLeaveFocusRing(t *testing.T) {
+	mb := NewMenuBar(NewMenu("&Help", Item("About", nil)))
+	mb.SetHost(&host{})
+	mb.Arrange(paintengine2d.XYWH(0, 0, 400, 28))
+	mb.MousePress(widget.MouseEvent{Pos: paintengine2d.Pt(20, 12), Button: platform.ButtonLeft})
+	if mb.keyNav {
+		t.Fatal("mouse must not enable keyboard focus chrome")
+	}
+	mb.FocusLost()
+	if mb.focus != -1 {
+		t.Fatalf("FocusLost left focus %d", mb.focus)
+	}
+}
+
+func TestMenuBarKeyAfterCloseStartsAtFirst(t *testing.T) {
+	mb := NewMenuBar(
+		NewMenu("&File", Item("About", nil)),
+		NewMenu("&Help", Item("About", nil)),
+	)
+	mb.SetHost(&host{})
+	mb.Arrange(paintengine2d.XYWH(0, 0, 400, 28))
+	if !mb.HandleAlt(platform.KeyH) {
+		t.Fatal("alt+H")
+	}
+	mb.Close()
+	if mb.focus != -1 || mb.keyNav {
+		t.Fatalf("after Close focus=%d keyNav=%v", mb.focus, mb.keyNav)
+	}
+	mb.KeyPress(widget.KeyEvent{Key: platform.KeyDown})
+	if mb.focus != 0 || !mb.keyNav {
+		t.Fatalf("keyboard after Close focus=%d keyNav=%v", mb.focus, mb.keyNav)
+	}
 }
 
 func TestPopupMenuMnemonicKey(t *testing.T) {

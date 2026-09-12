@@ -506,6 +506,15 @@ are independent look.json fields again; compound pack names migrate
 
 ## Version
 
+**0.12.4** — Mail keeps **Outbox** last in the folder sidebar (after
+Trash / Junk / Archive, and after Tags for the virtual mailbox).
+ToolBar Measure and paint share pad, icon size, and gaps so a label
+cannot collide with the next tool’s icon. MenuBar and ToolBar drop
+keyboard focus chrome when a menu closes or the mouse is used, so
+accent rings do not linger. ToolToggle is outlined when off and
+filled when on; plain tool actions stay flat. Still paintengine2d
+**v0.9.0**.
+
 **0.12.3** — Settings can **Delete** a selected **User** theme (confirm,
 then remove `~/.config/uitoolkit/themes/<name>/`). Built-in dark/light
 never offer Delete. The live selection falls back to a builtin palette
