@@ -34,14 +34,18 @@ action PNG. **Apply** writes `look.json`:
 
 ```json
 {
-  "theme": "dark-round-classic",
+  "theme": "dark",
+  "corners": "round",
   "icons": "lucide"
 }
 ```
 
-Theme packs may still have an `icons` field (`classic` / `sharp`). That
-value is a fallback default only. When `look.json` has `"icons"`, it
-owns chrome icons.
+Theme packs are palette only. `look.json` stores theme, corners, and
+icons independently.
+
+Settings lists **Built-in** (drawn classic/sharp, plus the five premiere
+names when those folders are present) and **User** (any other
+`icons/<name>/` folder).
 
 ## Sets
 

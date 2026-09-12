@@ -40,17 +40,17 @@ const (
 	IconSetMaterialSymbols IconSetName = "material-symbols"
 )
 
-// Appearance is the resolved toolkit skin. Name is the theme pack
-// (look.json "theme"). Icons is chosen on top of the pack and stored
-// in look.json; the pack's icons field is only a fallback default.
+// Appearance is the resolved toolkit skin. Name is the color theme
+// (look.json "theme": dark, light, or a user export). Corners and
+// icons are independent prefs in the same file.
 type Appearance struct {
-	Name    string // pack id: "dark-round-classic" or a user export
+	Name    string // pack id: "dark", "light", or a user export
 	Theme   ThemeName
 	Corners CornerStyle
 	Icons   IconSetName
 }
 
-// DefaultAppearance is the embedded dark-round-classic starter.
+// DefaultAppearance is the embedded dark palette, round corners, classic icons.
 func DefaultAppearance() Appearance {
 	return Appearance{
 		Name:    DefaultThemeName,
@@ -109,14 +109,14 @@ func ParseIconSet(s string) IconSetName {
 }
 
 // Normalize fills empty fields with defaults. An empty Name becomes the
-// matching embedded starter (dark-round-classic, light-square-sharp, …).
-// File icon sets do not change the starter name (icons live in look.json).
+// matching embedded palette starter (dark / light). Corners and icons
+// do not change the theme name.
 func (a Appearance) Normalize() Appearance {
 	a.Theme = ParseTheme(string(a.Theme))
 	a.Corners = ParseCorners(string(a.Corners))
 	a.Icons = ParseIconSet(string(a.Icons))
 	if strings.TrimSpace(a.Name) == "" {
-		a.Name = StarterName(a.Theme, a.Corners, FallbackIcons(a.Icons))
+		a.Name = StarterName(a.Theme)
 	}
 	return a
 }
@@ -126,12 +126,12 @@ func (a Appearance) String() string {
 	return a.Name
 }
 
-// WithPalette switches to the embedded starter that keeps corners/icons
-// and uses the given palette (Mail View → Dark / Light).
+// WithPalette switches to the embedded dark / light starter and keeps
+// corners and icons (Mail View → Dark / Light).
 func (a Appearance) WithPalette(theme ThemeName) Appearance {
 	a = a.Normalize()
 	a.Theme = ParseTheme(string(theme))
-	a.Name = StarterName(a.Theme, a.Corners, FallbackIcons(a.Icons))
+	a.Name = StarterName(a.Theme)
 	return a
 }
 
@@ -211,7 +211,7 @@ func WithTheme(look LookAndFeel, theme ThemeName) LookAndFeel {
 		p = Light()
 	}
 	return newClassic(name, p, c.Metrics(), c.Corners(), c.Icons()).
-		setPack(StarterName(theme, c.Corners(), FallbackIcons(c.Icons())))
+		setPack(StarterName(theme))
 }
 
 // WithCorners rebuilds a Classic look with a new radius policy.
@@ -223,7 +223,7 @@ func WithCorners(look LookAndFeel, corners CornerStyle) LookAndFeel {
 	corners = ParseCorners(string(corners))
 	m := ApplyCorners(c.Metrics(), corners)
 	return newClassic(c.Name(), c.Palette(), m, corners, c.Icons()).
-		setPack(StarterName(ParseTheme(c.Name()), corners, FallbackIcons(c.Icons())))
+		setPack(c.Pack())
 }
 
 // WithIcons rebuilds a Classic look with a new ToolIcon set (file or
@@ -250,12 +250,8 @@ func WithAppearance(look LookAndFeel, a Appearance) LookAndFeel {
 	}
 	a = a.Normalize()
 	pack := a.Name
-	if loaded, ok := LoadTheme(pack); ok {
-		if loaded.Palette != a.Theme || loaded.Corners != a.Corners {
-			pack = StarterName(a.Theme, a.Corners, FallbackIcons(a.Icons))
-		}
-	} else {
-		pack = StarterName(a.Theme, a.Corners, FallbackIcons(a.Icons))
+	if _, ok := LoadTheme(pack); !ok {
+		pack = StarterName(a.Theme)
 	}
 	name := string(a.Theme)
 	p := Dark()

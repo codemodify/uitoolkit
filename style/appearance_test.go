@@ -17,7 +17,7 @@ func TestAppearanceLookThemeAndCorners(t *testing.T) {
 		t.Fatalf("round radii %+v", dark.Metrics())
 	}
 	sq := Appearance{Theme: ThemeLight, Corners: CornersSquare, Icons: IconSetSharp}.Look()
-	if sq.Name() != "light" || sq.Corners() != CornersSquare || sq.Icons() != IconSetSharp || sq.Pack() != "light-square-sharp" {
+	if sq.Name() != "light" || sq.Corners() != CornersSquare || sq.Icons() != IconSetSharp || sq.Pack() != "light" {
 		t.Fatalf("square %+v", LookAppearance(sq))
 	}
 	if sq.Metrics().Radius != 0 || sq.Metrics().RadiusSmall != 0 {

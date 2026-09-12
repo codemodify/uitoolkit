@@ -15,7 +15,30 @@ import (
 type IconSetInfo struct {
 	Name   IconSetName
 	Label  string
-	Source string // "builtin" (classic/sharp) or "user" (XDG files)
+	Source ThemeSource // builtin (drawn + premiere names) or user
+}
+
+// PremiereIconSets are the five shipped PNG families. After a manual
+// copy into ~/.config/uitoolkit/icons/<name>/ they still list as
+// Built-in in Settings. Any other folder is User.
+var PremiereIconSets = []IconSetName{
+	IconSetLucide,
+	IconSetPhosphor,
+	IconSetTabler,
+	IconSetHeroicons,
+	IconSetMaterialSymbols,
+}
+
+// IsPremiereIconSet reports whether name is one of the five shipped
+// premiere PNG families (lucide, phosphor, tabler, heroicons,
+// material-symbols).
+func IsPremiereIconSet(name IconSetName) bool {
+	switch ParseIconSet(string(name)) {
+	case IconSetLucide, IconSetPhosphor, IconSetTabler, IconSetHeroicons, IconSetMaterialSymbols:
+		return true
+	default:
+		return false
+	}
 }
 
 // IconsDir is $XDG_CONFIG_HOME/uitoolkit/icons
@@ -82,19 +105,12 @@ func iconSetDisplay(name string) string {
 	}
 }
 
-// ListIconSets returns drawn builtins (classic, sharp) then installed
-// file sets from ~/.config/uitoolkit/icons/* (sorted). A directory
-// counts if it contains at least one ToolIcon PNG (24 or @2x).
-func ListIconSets() []IconSetInfo {
-	out := []IconSetInfo{
-		{Name: IconSetClassic, Label: "Classic  · builtin", Source: "builtin"},
-		{Name: IconSetSharp, Label: "Sharp  · builtin", Source: "builtin"},
-	}
+func listInstalledIconDirs() map[string]string {
+	out := map[string]string{}
 	entries, err := os.ReadDir(IconsDir())
 	if err != nil {
 		return out
 	}
-	var names []string
 	for _, e := range entries {
 		if !e.IsDir() {
 			continue
@@ -109,16 +125,63 @@ func ListIconSets() []IconSetInfo {
 		if !iconSetHasGlyphs(filepath.Join(IconsDir(), e.Name())) {
 			continue
 		}
-		names = append(names, name)
+		out[name] = e.Name()
+	}
+	return out
+}
+
+// ListBuiltinIconSets is drawn classic/sharp plus premiere PNG families
+// that are present under icons/.
+func ListBuiltinIconSets() []IconSetInfo {
+	out := []IconSetInfo{
+		{Name: IconSetClassic, Label: "Classic", Source: ThemeSourceBuiltin},
+		{Name: IconSetSharp, Label: "Sharp", Source: ThemeSourceBuiltin},
+	}
+	installed := listInstalledIconDirs()
+	for _, n := range PremiereIconSets {
+		if _, ok := installed[string(n)]; ok {
+			out = append(out, IconSetInfo{
+				Name:   n,
+				Label:  iconSetDisplay(string(n)),
+				Source: ThemeSourceBuiltin,
+			})
+		}
+	}
+	return out
+}
+
+// ListUserIconSets is every icons/<name>/ folder that is not a premiere
+// set (and not the drawn classic/sharp names).
+func ListUserIconSets() []IconSetInfo {
+	installed := listInstalledIconDirs()
+	var names []string
+	for n := range installed {
+		if IsPremiereIconSet(IconSetName(n)) {
+			continue
+		}
+		names = append(names, n)
 	}
 	sort.Strings(names)
+	out := make([]IconSetInfo, 0, len(names))
 	for _, n := range names {
 		out = append(out, IconSetInfo{
 			Name:   IconSetName(n),
-			Label:  iconSetDisplay(n) + "  · installed",
-			Source: "user",
+			Label:  iconSetDisplay(n),
+			Source: ThemeSourceUser,
 		})
 	}
+	return out
+}
+
+// ListIconSets returns Built-in (drawn classic/sharp, then premiere
+// names when present) followed by User folders, sorted. A directory
+// counts if it contains at least one ToolIcon PNG (24 or @2x).
+func ListIconSets() []IconSetInfo {
+	builtins := ListBuiltinIconSets()
+	users := ListUserIconSets()
+	out := make([]IconSetInfo, 0, len(builtins)+len(users))
+	out = append(out, builtins...)
+	out = append(out, users...)
 	return out
 }
 

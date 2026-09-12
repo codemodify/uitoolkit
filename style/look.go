@@ -47,7 +47,7 @@ func newClassic(name string, p Palette, m Metrics, corners CornerStyle, icons Ic
 		palette: p,
 		metrics: m,
 		name:    name,
-		pack:    StarterName(ParseTheme(name), corners, FallbackIcons(icons)),
+		pack:    StarterName(ParseTheme(name)),
 		corners: corners,
 		icons:   icons,
 		// OpenType atlases (Titillium / JetBrains Mono); Color tints at draw.
@@ -86,8 +86,8 @@ func (l *Classic) Corners() CornerStyle   { return ParseCorners(string(l.corners
 func (l *Classic) Icons() IconSetName     { return ParseIconSet(string(l.icons)) }
 func (l *Classic) Appearance() Appearance { return LookAppearance(l) }
 
-// Pack is the theme package name (look.json "theme"). Empty falls back
-// to the embedded starter matching palette × corners × icons.
+// Pack is the color theme name (look.json "theme"). Empty falls back
+// to the embedded starter matching the palette.
 func (l *Classic) Pack() string {
 	if l == nil {
 		return DefaultThemeName
@@ -95,7 +95,7 @@ func (l *Classic) Pack() string {
 	if l.pack != "" {
 		return l.pack
 	}
-	return StarterName(ParseTheme(l.name), l.Corners(), l.Icons())
+	return StarterName(ParseTheme(l.name))
 }
 
 func (l *Classic) setPack(name string) *Classic {

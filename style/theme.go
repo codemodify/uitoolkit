@@ -17,8 +17,8 @@ import (
 //go:embed themes/*/theme.json
 var starterFS embed.FS
 
-// DefaultThemeName is the embedded dark / round / classic starter.
-const DefaultThemeName = "dark-round-classic"
+// DefaultThemeName is the embedded dark palette starter.
+const DefaultThemeName = "dark"
 
 // ThemeSource says whether a pack is compiled in or loaded from disk.
 type ThemeSource string
@@ -30,24 +30,21 @@ const (
 	ThemeSourceUser ThemeSource = "user"
 )
 
-// ThemePack is a named installable look (GTK/KDE-like). Corners live
-// inside the pack. The pack may keep an icons field (classic/sharp) as
-// a default; look.json "icons" overrides it for chrome ToolIcons.
+// ThemePack is a named color theme (palette only). Corners and icons
+// are independent look.json prefs, not part of the pack identity.
 type ThemePack struct {
 	Name    string
 	Label   string
 	Source  ThemeSource
 	Palette ThemeName
-	Corners CornerStyle
-	Icons   IconSetName
 }
 
 type themeFileJSON struct {
 	Label   string `json:"label,omitempty"`
 	Palette string `json:"palette,omitempty"`
-	Theme   string `json:"theme,omitempty"` // alias for palette
-	Corners string `json:"corners,omitempty"`
-	Icons   string `json:"icons,omitempty"`
+	Theme   string `json:"theme,omitempty"`   // alias for palette
+	Corners string `json:"corners,omitempty"` // ignored; look.json owns corners
+	Icons   string `json:"icons,omitempty"`   // ignored; look.json owns icons
 }
 
 var (
@@ -68,11 +65,40 @@ func ThemeFile(name string) string {
 	return filepath.Join(ThemesDir(), name, "theme.json")
 }
 
-// StarterName is the embedded pack id for a palette × corners × drawn-icons
-// combo. File icon sets (lucide, …) map to classic so pack names stay in
-// the eight-starter matrix.
-func StarterName(theme ThemeName, corners CornerStyle, icons IconSetName) string {
-	return string(ParseTheme(string(theme))) + "-" + string(ParseCorners(string(corners))) + "-" + string(FallbackIcons(icons))
+// StarterName is the embedded pack id for a palette (dark or light).
+func StarterName(theme ThemeName) string {
+	return string(ParseTheme(string(theme)))
+}
+
+// SplitLookThemeName reads a look.json "theme" value. Compound v0.11–v0.12.1
+// ids (dark-round-classic, light-square-sharp, dark-round, …) become the
+// palette name plus corners from the name. Other names are user packs.
+func SplitLookThemeName(name string) (pack string, corners CornerStyle, hasCorners bool) {
+	name = strings.ToLower(strings.TrimSpace(name))
+	if name == "" {
+		return DefaultThemeName, CornersRound, false
+	}
+	parts := strings.Split(name, "-")
+	if len(parts) >= 1 && (parts[0] == "dark" || parts[0] == "light") {
+		if len(parts) >= 2 && (parts[1] == "round" || parts[1] == "square") {
+			return parts[0], ParseCorners(parts[1]), true
+		}
+		if len(parts) == 1 {
+			return parts[0], CornersRound, false
+		}
+	}
+	return name, CornersRound, false
+}
+
+// CanonicalStarterName maps a look.json / pack id onto the palette
+// starter (dark / light). Trailing -round/-square/-classic/-sharp are
+// dropped for the eight legacy compound names. Other names are unchanged.
+func CanonicalStarterName(name string) string {
+	pack, _, _ := SplitLookThemeName(name)
+	if pack == "" {
+		return DefaultThemeName
+	}
+	return pack
 }
 
 // SanitizeThemeName lowercases and accepts [a-z][a-z0-9_-]{0,63}.
@@ -91,31 +117,26 @@ func SanitizeThemeName(s string) (string, error) {
 	return s, nil
 }
 
-// Display is the Settings picker label (exported packs first by convention).
+// Display is the Settings picker label (short palette name).
 func (p ThemePack) Display() string {
-	label := p.Label
-	if label == "" {
-		label = p.Name
+	if strings.TrimSpace(p.Label) != "" {
+		return p.Label
 	}
-	switch p.Source {
-	case ThemeSourceUser:
-		return label + "  · exported"
-	default:
-		return label + "  · builtin"
-	}
+	return p.Name
 }
 
-// Appearance resolves the pack into the live LookAndFeel knobs.
+// Appearance resolves the pack into palette knobs. Corners and icons
+// stay at defaults; callers overlay look.json prefs.
 func (p ThemePack) Appearance() Appearance {
 	return Appearance{
 		Name:    p.Name,
 		Theme:   ParseTheme(string(p.Palette)),
-		Corners: ParseCorners(string(p.Corners)),
-		Icons:   ParseIconSet(string(p.Icons)),
+		Corners: CornersRound,
+		Icons:   IconSetClassic,
 	}.Normalize()
 }
 
-// Look builds a Classic look from the pack (1× metrics).
+// Look builds a Classic look from the pack palette (1× metrics, round).
 func (p ThemePack) Look() *Classic {
 	return p.Appearance().Look()
 }
@@ -138,8 +159,6 @@ func parseThemeFile(name string, raw []byte, src ThemeSource) (ThemePack, error)
 		Label:   label,
 		Source:  src,
 		Palette: ParseTheme(pal),
-		Corners: ParseCorners(doc.Corners),
-		Icons:   ParseIconSet(doc.Icons),
 	}, nil
 }
 
@@ -167,15 +186,7 @@ func loadEmbedded() map[string]ThemePack {
 }
 
 func starterOrder() []string {
-	var names []string
-	for _, pal := range []ThemeName{ThemeDark, ThemeLight} {
-		for _, cor := range []CornerStyle{CornersRound, CornersSquare} {
-			for _, ic := range []IconSetName{IconSetClassic, IconSetSharp} {
-				names = append(names, StarterName(pal, cor, ic))
-			}
-		}
-	}
-	return names
+	return []string{StarterName(ThemeDark), StarterName(ThemeLight)}
 }
 
 func readUserTheme(name string) (ThemePack, bool) {
@@ -190,7 +201,7 @@ func readUserTheme(name string) (ThemePack, bool) {
 	return pack, true
 }
 
-func listUserThemes() map[string]ThemePack {
+func listUserThemeMap() map[string]ThemePack {
 	out := map[string]ThemePack{}
 	entries, err := os.ReadDir(ThemesDir())
 	if err != nil {
@@ -211,21 +222,26 @@ func listUserThemes() map[string]ThemePack {
 	return out
 }
 
-// ListThemes returns user packs (sorted by name) then embedded starters
-// whose names are not shadowed. A user pack with the same name as a
-// builtin wins in LoadTheme and is listed once (as exported).
-func ListThemes() []ThemePack {
-	users := listUserThemes()
-	var userNames []string
+// ListUserThemes returns exported color themes, sorted by name.
+func ListUserThemes() []ThemePack {
+	users := listUserThemeMap()
+	var names []string
 	for n := range users {
-		userNames = append(userNames, n)
+		names = append(names, n)
 	}
-	sort.Strings(userNames)
-	out := make([]ThemePack, 0, len(users)+8)
-	for _, n := range userNames {
+	sort.Strings(names)
+	out := make([]ThemePack, 0, len(names))
+	for _, n := range names {
 		out = append(out, users[n])
 	}
+	return out
+}
+
+// ListBuiltinThemes returns embedded dark / light when not shadowed.
+func ListBuiltinThemes() []ThemePack {
+	users := listUserThemeMap()
 	embedded := loadEmbedded()
+	out := make([]ThemePack, 0, 2)
 	for _, n := range starterOrder() {
 		if _, shadowed := users[n]; shadowed {
 			continue
@@ -237,8 +253,18 @@ func ListThemes() []ThemePack {
 	return out
 }
 
+// ListThemes returns embedded starters (not shadowed) then user packs.
+func ListThemes() []ThemePack {
+	builtins := ListBuiltinThemes()
+	users := ListUserThemes()
+	out := make([]ThemePack, 0, len(builtins)+len(users))
+	out = append(out, builtins...)
+	out = append(out, users...)
+	return out
+}
+
 // LoadTheme prefers a user pack at themes/<name>/theme.json, then an
-// embedded starter of the same name.
+// embedded starter. Legacy compound ids map to dark / light.
 func LoadTheme(name string) (ThemePack, bool) {
 	name = strings.TrimSpace(name)
 	if name == "" {
@@ -250,16 +276,25 @@ func LoadTheme(name string) (ThemePack, bool) {
 	if pack, ok := loadEmbedded()[name]; ok {
 		return pack, true
 	}
+	packName, _, _ := SplitLookThemeName(name)
+	if packName != name {
+		if pack, ok := readUserTheme(packName); ok {
+			return pack, true
+		}
+		if pack, ok := loadEmbedded()[packName]; ok {
+			return pack, true
+		}
+	}
 	return ThemePack{}, false
 }
 
-// ExportTheme writes the current look as themes/<name>/theme.json so the
-// user can tweak the pack. The directory name is the pack id.
+// ExportTheme writes the current look's palette as themes/<name>/theme.json.
+// Corners and icons stay look.json prefs; they are not stored in the pack.
 func ExportTheme(name string, look LookAndFeel) (ThemePack, error) {
 	return ExportAppearance(name, LookAppearance(look))
 }
 
-// ExportAppearance writes a user theme pack for the resolved appearance.
+// ExportAppearance writes a user color theme (palette only).
 func ExportAppearance(name string, a Appearance) (ThemePack, error) {
 	clean, err := SanitizeThemeName(name)
 	if err != nil {
@@ -271,14 +306,10 @@ func ExportAppearance(name string, a Appearance) (ThemePack, error) {
 		Label:   clean,
 		Source:  ThemeSourceUser,
 		Palette: a.Theme,
-		Corners: a.Corners,
-		Icons:   a.Icons,
 	}
 	doc := themeFileJSON{
 		Label:   pack.Label,
 		Palette: string(pack.Palette),
-		Corners: string(pack.Corners),
-		Icons:   string(pack.Icons),
 	}
 	if err := writeJSONFile(ThemeFile(clean), doc); err != nil {
 		return ThemePack{}, err

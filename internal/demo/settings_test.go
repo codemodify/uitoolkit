@@ -35,7 +35,13 @@ func TestSettingsAppAppliesAndPersists(t *testing.T) {
 		t.Fatal("settings must not have a menu bar")
 	}
 	if findRadio(w.Content(), "Dark graphite") != nil || findRadio(w.Content(), "Round corners") != nil {
-		t.Fatal("theme/corners/icons triad must be replaced by a theme picker")
+		t.Fatal("old triad radio labels must be gone")
+	}
+	if findRadio(w.Content(), "Round") == nil || findRadio(w.Content(), "Square") == nil {
+		t.Fatal("corners should be a separate Round / Square control")
+	}
+	if !findLabel(w.Content(), "Built-in") || !findLabel(w.Content(), "User") {
+		t.Fatal("Theme and Icons lists should split Built-in vs User")
 	}
 	got := style.LookAppearance(a.Look())
 	if got.Theme != style.ThemeLight || got.Corners != style.CornersSquare || got.Icons != style.IconSetSharp {
@@ -45,13 +51,14 @@ func TestSettingsAppAppliesAndPersists(t *testing.T) {
 		t.Fatalf("prefs %+v", style.LoadAppearance())
 	}
 
-	clickTheme(t, w, "Dark · Square · Sharp")
+	clickTheme(t, w, "dark")
 	a.PumpOnce()
 	if a.Look().Name() != "dark" {
 		t.Fatalf("preview theme %s", a.Look().Name())
 	}
-	if style.LookAppearance(a.Look()).Name != "dark-square-sharp" {
-		t.Fatalf("preview pack %+v", style.LookAppearance(a.Look()))
+	live := style.LookAppearance(a.Look())
+	if live.Name != "dark" || live.Corners != style.CornersSquare || live.Icons != style.IconSetSharp {
+		t.Fatalf("preview should keep corners/icons %+v", live)
 	}
 	if style.LoadAppearance() != want.Normalize() {
 		t.Fatalf("toggle must not write prefs: %+v", style.LoadAppearance())
@@ -63,11 +70,23 @@ func TestSettingsAppAppliesAndPersists(t *testing.T) {
 	clickApply(t, w)
 	a.PumpOnce()
 	saved := style.LoadAppearance()
-	if saved.Name != "dark-square-sharp" || saved.Theme != style.ThemeDark || saved.Corners != style.CornersSquare || saved.Icons != style.IconSetSharp {
+	if saved.Name != "dark" || saved.Theme != style.ThemeDark || saved.Corners != style.CornersSquare || saved.Icons != style.IconSetSharp {
 		t.Fatalf("applied prefs %+v", saved)
 	}
 	if findApply(w.Content()).Enabled() {
 		t.Fatal("Apply should disable once saved matches staged")
+	}
+
+	clickCorners(t, w, "Round")
+	a.PumpOnce()
+	if style.LookAppearance(a.Look()).Corners != style.CornersRound || style.LookAppearance(a.Look()).Name != "dark" {
+		t.Fatalf("corners preview %+v", style.LookAppearance(a.Look()))
+	}
+	clickApply(t, w)
+	a.PumpOnce()
+	saved = style.LoadAppearance()
+	if saved.Name != "dark" || saved.Corners != style.CornersRound || saved.Icons != style.IconSetSharp {
+		t.Fatalf("corners apply %+v", saved)
 	}
 }
 
@@ -97,7 +116,7 @@ func TestSettingsApplyNotifiesOtherApp(t *testing.T) {
 		t.Fatalf("listener start %s", listener.Look().Name())
 	}
 
-	clickTheme(t, sw, "Light · Round · Classic")
+	clickTheme(t, sw, "light")
 	settingsApp.PumpOnce()
 	listener.PumpOnce()
 	if style.LoadAppearance().Theme != style.ThemeDark {
@@ -110,7 +129,7 @@ func TestSettingsApplyNotifiesOtherApp(t *testing.T) {
 	clickApply(t, sw)
 	settingsApp.PumpOnce()
 	listener.PumpOnce()
-	if style.LoadAppearance().Name != "light-round-classic" || style.LoadAppearance().Theme != style.ThemeLight {
+	if style.LoadAppearance().Name != "light" || style.LoadAppearance().Theme != style.ThemeLight {
 		t.Fatalf("apply wrote %+v", style.LoadAppearance())
 	}
 	if listener.Look().Name() != "light" {
@@ -153,6 +172,9 @@ func TestSettingsExportThemeByName(t *testing.T) {
 	if !strings.Contains(string(raw), `"palette": "light"`) {
 		t.Fatalf("exported pack: %s", raw)
 	}
+	if strings.Contains(string(raw), `"corners"`) || strings.Contains(string(raw), `"icons"`) {
+		t.Fatalf("export should be palette only: %s", raw)
+	}
 	pack, ok := style.LoadTheme("ocean")
 	if !ok || pack.Source != style.ThemeSourceUser || pack.Palette != style.ThemeLight {
 		t.Fatalf("load exported %+v ok=%v", pack, ok)
@@ -162,7 +184,7 @@ func TestSettingsExportThemeByName(t *testing.T) {
 	}
 	listed := false
 	widget.Walk(w.Content(), func(c widget.Component) {
-		if l, ok := c.(*widgets.ListView); ok && l.Count >= 8 && l.ItemText != nil {
+		if l, ok := c.(*widgets.ListView); ok && l.ItemText != nil {
 			for i := 0; i < l.Count; i++ {
 				if strings.Contains(l.ItemText(i), "ocean") {
 					listed = true
@@ -329,12 +351,22 @@ func findRadio(root widget.Component, label string) *widgets.RadioButton {
 	return rb
 }
 
+func findLabel(root widget.Component, text string) bool {
+	found := false
+	widget.Walk(root, func(c widget.Component) {
+		if l, ok := c.(*widgets.Label); ok && l.Text == text {
+			found = true
+		}
+	})
+	return found
+}
+
 func findThemeList(root widget.Component) *widgets.ListView {
 	var list *widgets.ListView
 	widget.Walk(root, func(c widget.Component) {
-		if l, ok := c.(*widgets.ListView); ok && l.ItemText != nil && l.Count >= 8 {
+		if l, ok := c.(*widgets.ListView); ok && l.ItemText != nil {
 			for i := 0; i < l.Count; i++ {
-				if strings.Contains(l.ItemText(i), "Dark ·") {
+				if l.ItemText(i) == "dark" || l.ItemText(i) == "light" {
 					list = l
 					return
 				}
@@ -348,11 +380,17 @@ func findIconList(root widget.Component) *widgets.ListView {
 	var list *widgets.ListView
 	widget.Walk(root, func(c widget.Component) {
 		if l, ok := c.(*widgets.ListView); ok && l.ItemText != nil {
+			hasClassic, hasSharp := false, false
 			for i := 0; i < l.Count; i++ {
-				if strings.Contains(l.ItemText(i), "Classic  · builtin") {
-					list = l
-					return
+				if l.ItemText(i) == "Classic" {
+					hasClassic = true
 				}
+				if l.ItemText(i) == "Sharp" {
+					hasSharp = true
+				}
+			}
+			if hasClassic && hasSharp {
+				list = l
 			}
 		}
 	})
@@ -361,24 +399,38 @@ func findIconList(root widget.Component) *widgets.ListView {
 
 func clickTheme(t *testing.T, w *app.Window, label string) {
 	t.Helper()
-	list := findThemeList(w.Content())
-	if list == nil || list.ItemText == nil || list.OnSelect == nil {
-		t.Fatal("no theme picker")
-	}
-	for i := 0; i < list.Count; i++ {
-		if strings.Contains(list.ItemText(i), label) {
-			list.OnSelect(i)
-			return
+	var found *widgets.ListView
+	var idx int
+	widget.Walk(w.Content(), func(c widget.Component) {
+		if l, ok := c.(*widgets.ListView); ok && l.ItemText != nil && l.OnSelect != nil {
+			for i := 0; i < l.Count; i++ {
+				if l.ItemText(i) == label || strings.Contains(l.ItemText(i), label) {
+					found = l
+					idx = i
+				}
+			}
 		}
+	})
+	if found == nil {
+		t.Fatalf("no theme %q", label)
 	}
-	t.Fatalf("no theme %q", label)
+	found.OnSelect(idx)
+}
+
+func clickCorners(t *testing.T, w *app.Window, label string) {
+	t.Helper()
+	rb := findRadio(w.Content(), label)
+	if rb == nil {
+		t.Fatalf("no corners radio %q", label)
+	}
+	rb.MousePress(widget.MouseEvent{})
 }
 
 func clickExportLook(t *testing.T, w *app.Window) {
 	t.Helper()
-	btn := findButton(w.Content(), "Export current look…")
+	btn := findButton(w.Content(), "Export current theme…")
 	if btn == nil || btn.OnClick == nil {
-		t.Fatal("no Export current look…")
+		t.Fatal("no Export current theme…")
 	}
 	btn.OnClick()
 }

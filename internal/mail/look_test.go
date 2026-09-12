@@ -30,7 +30,7 @@ func TestMailRebuildDoesNotClobberLookJSON(t *testing.T) {
 		t.Fatalf("rebuild clobbered look.json: %+v", got)
 	}
 	live := style.LookAppearance(a.Look())
-	if live.Theme != style.ThemeLight || live.Corners != style.CornersSquare || live.Icons != style.IconSetSharp || live.Name != "light-square-sharp" {
+	if live.Theme != style.ThemeLight || live.Corners != style.CornersSquare || live.Icons != style.IconSetSharp || live.Name != "light" {
 		t.Fatalf("applyLook after rebuild %+v", live)
 	}
 	if a.Look().Metrics().Radius != 0 {
@@ -59,7 +59,7 @@ func TestMailWatchLookAppliesSettingsPack(t *testing.T) {
 	}
 	a.PumpOnce()
 	got := style.LookAppearance(a.Look())
-	if got.Theme != style.ThemeLight || got.Corners != style.CornersSquare || got.Icons != style.IconSetSharp || got.Name != "light-square-sharp" {
+	if got.Theme != style.ThemeLight || got.Corners != style.CornersSquare || got.Icons != style.IconSetSharp || got.Name != "light" {
 		t.Fatalf("WatchLook after Settings Apply %+v", got)
 	}
 	if a.Look().Metrics().Radius != 0 {
@@ -87,7 +87,7 @@ func TestMailViewLightWritesPaletteOnly(t *testing.T) {
 	s.setPalette(true)
 	a.PumpOnce()
 	got := style.LoadAppearance()
-	if got.Name != "light-square-sharp" || got.Theme != style.ThemeLight || got.Corners != style.CornersSquare || got.Icons != style.IconSetSharp {
+	if got.Name != "light" || got.Theme != style.ThemeLight || got.Corners != style.CornersSquare || got.Icons != style.IconSetSharp {
 		t.Fatalf("View Light should SaveAppearance(WithPalette): %+v", got)
 	}
 	live := style.LookAppearance(a.Look())

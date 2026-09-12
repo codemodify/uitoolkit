@@ -11,9 +11,9 @@ import (
 	"github.com/codemodify/uitoolkit/widgets"
 )
 
-// SettingsApp is the toolkit appearance editor (theme packs + icon sets).
-// Picker changes preview locally via Application.SetLook. Apply writes
-// look.json {theme, icons} so other apps watching the file reload.
+// SettingsApp is the toolkit appearance editor. Theme (palette), corners,
+// and icon set are independent. Picker changes preview locally via
+// Application.SetLook. Apply writes look.json {theme, corners, icons}.
 // Closing the window without Apply discards staged changes.
 func SettingsApp(a *app.Application, win *app.Window) widget.Component {
 	saved := style.LoadAppearance().Normalize()
@@ -27,12 +27,12 @@ func buildSettings(a *app.Application, win *app.Window, saved, staged style.Appe
 		section = 0
 	}
 
-	st := staged.Name + " · " + string(staged.Icons)
+	st := staged.Name + " · " + string(staged.Corners) + " · " + string(staged.Icons)
 	if staged != saved {
 		st += " · unapplied"
 	}
 	status := widgets.NewStatusBar(st, style.AppearancePath(), "v"+uitoolkit.Version)
-	chrome := widgets.NewTitleBar("Settings", "Theme packs and PNG icon sets for every uitoolkit app")
+	chrome := widgets.NewTitleBar("Settings", "Theme, corners, and icon sets for every uitoolkit app")
 
 	preview := func(next style.Appearance) {
 		next = next.Normalize()
@@ -49,56 +49,68 @@ func buildSettings(a *app.Application, win *app.Window, saved, staged style.Appe
 		win.SetContent(buildSettings(a, win, next, next, section))
 	}
 
-	themes := style.ListThemes()
-	sel := 0
-	for i, p := range themes {
-		if p.Name == staged.Name {
-			sel = i
-			break
-		}
-	}
-	picker := widgets.NewListView(len(themes), func(i int) string {
-		if i < 0 || i >= len(themes) {
-			return ""
-		}
-		return themes[i].Display()
-	}, func(i int) {
-		if i < 0 || i >= len(themes) {
-			return
-		}
-		next := themes[i].Appearance()
-		next.Icons = staged.Icons
-		preview(next)
-	})
-	picker.Selected = sel
-	picker.RowHeight = 28
-
-	iconSets := style.ListIconSets()
-	iconSel := 0
-	for i, s := range iconSets {
-		if s.Name == staged.Icons {
-			iconSel = i
-			break
-		}
-	}
-	iconPicker := widgets.NewListView(len(iconSets), func(i int) string {
-		if i < 0 || i >= len(iconSets) {
-			return ""
-		}
-		return iconSets[i].Label
-	}, func(i int) {
-		if i < 0 || i >= len(iconSets) {
-			return
-		}
+	themeBuiltin := style.ListBuiltinThemes()
+	themeUser := style.ListUserThemes()
+	onTheme := func(p style.ThemePack) {
 		next := staged
-		next.Icons = iconSets[i].Name
+		next.Name = p.Name
+		next.Theme = p.Palette
+		preview(next)
+	}
+	builtinTheme := pickerSection("Built-in", len(themeBuiltin), func(i int) string {
+		return themeBuiltin[i].Display()
+	}, indexTheme(themeBuiltin, staged.Name), func(i int) {
+		if i >= 0 && i < len(themeBuiltin) {
+			onTheme(themeBuiltin[i])
+		}
+	})
+	userTheme := pickerSection("User", len(themeUser), func(i int) string {
+		return themeUser[i].Display()
+	}, indexTheme(themeUser, staged.Name), func(i int) {
+		if i >= 0 && i < len(themeUser) {
+			onTheme(themeUser[i])
+		}
+	})
+
+	iconBuiltin := style.ListBuiltinIconSets()
+	iconUser := style.ListUserIconSets()
+	onIcon := func(s style.IconSetInfo) {
+		next := staged
+		next.Icons = s.Name
+		preview(next)
+	}
+	builtinIcons := pickerSection("Built-in", len(iconBuiltin), func(i int) string {
+		return iconBuiltin[i].Label
+	}, indexIcon(iconBuiltin, staged.Icons), func(i int) {
+		if i >= 0 && i < len(iconBuiltin) {
+			onIcon(iconBuiltin[i])
+		}
+	})
+	userIcons := pickerSection("User", len(iconUser), func(i int) string {
+		return iconUser[i].Label
+	}, indexIcon(iconUser, staged.Icons), func(i int) {
+		if i >= 0 && i < len(iconUser) {
+			onIcon(iconUser[i])
+		}
+	})
+
+	cornerSel := 0
+	if staged.Corners == style.CornersSquare {
+		cornerSel = 1
+	}
+	corners := widgets.NewRadioGroup([]string{"Round", "Square"}, cornerSel, func(i int) {
+		next := staged
+		if i == 1 {
+			next.Corners = style.CornersSquare
+		} else {
+			next.Corners = style.CornersRound
+		}
 		preview(next)
 	})
-	iconPicker.Selected = iconSel
-	iconPicker.RowHeight = 28
+	cornerCol := widgets.NewColumn(widgets.NewLabel("Corners"), corners).WithGap(4)
 
 	var exportHost widget.Component
-	exportBtn := widgets.NewButton("Export current look…", func() {
+	exportBtn := widgets.NewButton("Export current theme…", func() {
 		promptExportName(exportHost, func(name string) {
 			name = strings.TrimSpace(name)
 			pack, err := style.ExportAppearance(name, staged)
@@ -106,26 +118,37 @@ func buildSettings(a *app.Application, win *app.Window, saved, staged style.Appe
 				status.Set(0, err.Error())
 				return
 			}
-			preview(pack.Appearance())
+			next := staged
+			next.Name = pack.Name
+			next.Theme = pack.Palette
+			preview(next)
 		})
 	})
 	exportHost = exportBtn
 
 	detail := widgets.NewColumn(
-		widgets.NewLabel("Pack  "+staged.Name),
+		widgets.NewLabel("Theme  "+staged.Name),
 		widgets.NewLabel("Palette  "+string(staged.Theme)),
 		widgets.NewLabel("Corners  "+string(staged.Corners)),
-		widgets.NewLabel("Icons  "+string(staged.Icons)+"  (on top of the pack)"),
-		widgets.NewLabel("Copy repo icons/<set>/ PNGs into ~/.config/uitoolkit/icons/ to install sets."),
-		widgets.NewLabel("User packs override builtins of the same name."),
+		widgets.NewLabel("Icons  "+string(staged.Icons)),
+		widgets.NewLabel("look.json stores theme, corners, and icons independently."),
+		widgets.NewLabel("Export writes the color theme only; corners and icons stay prefs."),
+		widgets.NewLabel("Built-in vs User: stock dark/light and premiere icon names, then custom folders."),
 		widgets.NewRow(exportBtn).WithGap(8),
 	).WithGap(6)
-	pickerCol := widgets.NewColumn(widgets.NewLabel("Theme"), picker).WithGap(4)
-	pickerCol.AddFlex(picker, 1)
-	iconCol := widgets.NewColumn(widgets.NewLabel("Icons"), iconPicker).WithGap(4)
-	iconCol.AddFlex(iconPicker, 1)
-	choices := widgets.NewRow(pickerCol, iconCol, detail).WithGap(16)
+	pickerCol := widgets.NewColumn(widgets.NewLabel("Theme"), builtinTheme, userTheme).WithGap(8)
+	pickerCol.AddFlex(builtinTheme, 1)
+	if len(themeUser) > 0 {
+		pickerCol.AddFlex(userTheme, 1)
+	}
+	iconCol := widgets.NewColumn(widgets.NewLabel("Icons"), builtinIcons, userIcons).WithGap(8)
+	iconCol.AddFlex(builtinIcons, 1)
+	if len(iconUser) > 0 {
+		iconCol.AddFlex(userIcons, 1)
+	}
+	choices := widgets.NewRow(pickerCol, cornerCol, iconCol, detail).WithGap(16)
 	choices.AddFlex(pickerCol, 3)
+	choices.AddFlex(cornerCol, 1)
 	choices.AddFlex(iconCol, 2)
 	choices.AddFlex(detail, 2)
 
@@ -195,13 +218,13 @@ func buildSettings(a *app.Application, win *app.Window, saved, staged style.Appe
 		widgets.NewTitle("About"),
 		widgets.NewLabel("uitoolkit v"+uitoolkit.Version),
 		widgets.NewLabel("LookAndFeel Classic — Titillium Web + JetBrains Mono."),
-		widgets.NewLabel("Prefs file (theme + icons, written on Apply):"),
+		widgets.NewLabel("Prefs file (theme + corners + icons, written on Apply):"),
 		aboutPath,
-		widgets.NewLabel("User theme packs (exported; override builtins by name):"),
+		widgets.NewLabel("User color themes (exported palette; listed under User; override builtins by name):"),
 		themesPath,
-		widgets.NewLabel("Icon sets (copy repo lucide/phosphor/tabler/heroicons/material-symbols here):"),
+		widgets.NewLabel("Icon sets: Built-in = lucide/phosphor/tabler/heroicons/material-symbols when copied, plus drawn classic/sharp. User = any other folder:"),
 		iconsPath,
-		widgets.NewLabel("Eight starter packs are embedded. Icon PNGs are not."),
+		widgets.NewLabel("Two starter palettes are embedded (dark, light). Corners and icons are separate prefs."),
 		widgets.NewLabel("Other apps watch look.json and call SetLook(PreferredLook())."),
 		widgets.NewButton("Open appearance", func() {
 			win.SetContent(buildSettings(a, win, saved, staged, 0))
@@ -236,12 +259,43 @@ func buildSettings(a *app.Application, win *app.Window, saved, staged style.Appe
 	if staged == saved {
 		applyBtn.SetEnabled(false)
 	}
-	hint := widgets.NewLabel("Apply writes theme + icons to look.json. Close without Apply discards staged changes.")
+	hint := widgets.NewLabel("Apply writes theme, corners, and icons to look.json. Close without Apply discards staged changes.")
 	actions := widgets.NewRow(applyBtn, hint).WithGap(12).WithPad(8)
 
 	root := widgets.NewColumn(chrome, split, actions, status)
 	root.AddFlex(split, 1)
 	return root
+}
+
+func pickerSection(title string, count int, text func(int) string, selected int, on func(int)) widget.Component {
+	head := widgets.NewLabel(title)
+	if count == 0 {
+		return widgets.NewColumn(head, widgets.NewLabel("None yet")).WithGap(4)
+	}
+	list := widgets.NewListView(count, text, on)
+	list.Selected = selected
+	list.RowHeight = 28
+	col := widgets.NewColumn(head, list).WithGap(4)
+	col.AddFlex(list, 1)
+	return col
+}
+
+func indexTheme(packs []style.ThemePack, name string) int {
+	for i, p := range packs {
+		if p.Name == name {
+			return i
+		}
+	}
+	return -1
+}
+
+func indexIcon(sets []style.IconSetInfo, name style.IconSetName) int {
+	for i, s := range sets {
+		if s.Name == name {
+			return i
+		}
+	}
+	return -1
 }
 
 func promptExportName(from widget.Component, on func(string)) {
@@ -262,7 +316,7 @@ func promptExportName(from widget.Component, on func(string)) {
 	ok.Primary = true
 	field.OnSubmit = func(string) { finish(true) }
 	card := widgets.NewPanel("Export theme",
-		widgets.NewLabel("Name the pack. Written to ~/.config/uitoolkit/themes/<name>/theme.json so you can tweak it."),
+		widgets.NewLabel("Name the color theme (palette only). Written to ~/.config/uitoolkit/themes/<name>/theme.json. Corners and icons stay in look.json."),
 		field,
 		widgets.NewRow(cancel, ok).WithGap(8),
 	)

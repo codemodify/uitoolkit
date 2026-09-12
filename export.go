@@ -87,8 +87,26 @@ func IconsDir() string       { return style.IconsDir() }
 func ListIconSets() []style.IconSetInfo {
 	return style.ListIconSets()
 }
+func ListBuiltinIconSets() []style.IconSetInfo {
+	return style.ListBuiltinIconSets()
+}
+func ListUserIconSets() []style.IconSetInfo {
+	return style.ListUserIconSets()
+}
 func ListThemes() []style.ThemePack {
 	return style.ListThemes()
+}
+func ListBuiltinThemes() []style.ThemePack {
+	return style.ListBuiltinThemes()
+}
+func ListUserThemes() []style.ThemePack {
+	return style.ListUserThemes()
+}
+func CanonicalStarterName(name string) string {
+	return style.CanonicalStarterName(name)
+}
+func IsPremiereIconSet(name style.IconSetName) bool {
+	return style.IsPremiereIconSet(name)
 }
 func LoadTheme(name string) (style.ThemePack, bool) {
 	return style.LoadTheme(name)
@@ -99,8 +117,11 @@ func ExportTheme(name string, look style.LookAndFeel) (style.ThemePack, error) {
 func ExportAppearance(name string, a style.Appearance) (style.ThemePack, error) {
 	return style.ExportAppearance(name, a)
 }
-func StarterName(theme style.ThemeName, corners style.CornerStyle, icons style.IconSetName) string {
-	return style.StarterName(theme, corners, icons)
+func StarterName(theme style.ThemeName) string {
+	return style.StarterName(theme)
+}
+func SplitLookThemeName(name string) (string, style.CornerStyle, bool) {
+	return style.SplitLookThemeName(name)
 }
 func LookAppearance(look style.LookAndFeel) style.Appearance {
 	return style.LookAppearance(look)
