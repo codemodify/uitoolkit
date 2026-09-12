@@ -170,6 +170,8 @@ func (a *Application) Run() error {
 	}
 	var nextBlink time.Time
 	for !a.quit {
+		// Wayland / X11 / offscreen: poll look.json on every idle wake
+		// (waitTimeout ≤ lookWatchInterval when WatchLook is on).
 		a.pollLookFile()
 		now := time.Now()
 		if a.anyCaret() && (nextBlink.IsZero() || !now.Before(nextBlink)) {

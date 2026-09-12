@@ -48,14 +48,14 @@ func (a *Application) WatchingLook() bool { return a.watchLook }
 
 // ReloadPreferredLook applies XDG look.json (theme pack name) onto the
 // current look, keeping display scale and density (WithAppearance).
+// Always SetLook when the file changed: skipping on Appearance equality
+// can no-op if LookAppearance is stale or a pack name matches while
+// palette / corners / icons do not.
 func (a *Application) ReloadPreferredLook() {
 	if a == nil || a.look == nil {
 		return
 	}
 	next := style.LoadAppearance()
-	if style.LookAppearance(a.look).Normalize() == next.Normalize() {
-		return
-	}
 	a.SetLook(style.WithAppearance(a.look, next))
 }
 

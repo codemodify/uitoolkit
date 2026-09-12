@@ -495,9 +495,19 @@ the file. Running apps that use `PreferredLook` (default `New`) watch
 installable theme packs replace the Theme / Corners / Icons triad:
 `look.json` stores a pack name, eight starters are embedded, and
 Settings can export the current look to
-`~/.config/uitoolkit/themes/<name>/theme.json` (**v0.11.2**).
+`~/.config/uitoolkit/themes/<name>/theme.json` (**v0.11.2**). Mail chrome
+prefs no longer rewrite `look.json`; Settings → Apply updates a running
+Mail with `WatchLook` (**v0.11.3**).
 
 ## Version
+
+**0.11.3** — Mail does not own `look.json`. Density / layout stay in
+`mailui.json`. `applyLook` uses `PreferredLook` plus Mail density; View
+→ Dark / Light is the only Mail path that `SaveAppearance`s a
+`WithPalette` starter. `pollLookFile` runs on the Wayland / X11 `Run`
+idle wake so Settings → Apply updates a running Mail (light palette,
+square radii, sharp icons) without a restart. Still paintengine2d
+**v0.9.0**.
 
 **0.11.2** — Named theme packages. Settings is a theme picker (embedded
 starters + exported user packs). **Apply** writes only the pack name to

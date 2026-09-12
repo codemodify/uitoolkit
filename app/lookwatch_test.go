@@ -1,6 +1,7 @@
 package app
 
 import (
+	"os"
 	"testing"
 	"time"
 
@@ -113,6 +114,71 @@ func TestLookWatchWaitTimeoutBounded(t *testing.T) {
 	d := a.waitTimeout(time.Now(), time.Time{})
 	if d < 0 || d > lookWatchInterval {
 		t.Fatalf("watch wait %v", d)
+	}
+}
+
+func TestReloadPreferredLookAppliesWhenAppearanceLooksEqual(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	want := style.Appearance{Theme: style.ThemeLight, Corners: style.CornersSquare, Icons: style.IconSetSharp}
+	if err := style.SaveAppearance(want); err != nil {
+		t.Fatal(err)
+	}
+	a := New(Options{Look: style.PreferredLook(), WatchLook: true, Headless: true, Scale: 1})
+	w, err := a.NewWindow(platform.WindowOptions{Width: 200, Height: 80, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+	w.SetContent(widgets.NewLabel("equal"))
+	a.PumpOnce()
+	if style.LookAppearance(a.Look()).Normalize() != want.Normalize() {
+		t.Fatalf("start %+v", style.LookAppearance(a.Look()))
+	}
+	// Same pack, different JSON (legacy triad). File contents change;
+	// Appearance equality would match. Watcher must still SetLook.
+	path := style.AppearancePath()
+	if err := os.WriteFile(path, []byte("{\n  \"theme\": \"light\",\n  \"corners\": \"square\",\n  \"icons\": \"sharp\"\n}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	a.PumpOnce()
+	got := style.LookAppearance(a.Look())
+	if got.Theme != style.ThemeLight || got.Corners != style.CornersSquare || got.Icons != style.IconSetSharp {
+		t.Fatalf("reapply %+v", got)
+	}
+}
+
+func TestRunIdlePollsLookFile(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if err := style.SaveAppearance(style.DefaultAppearance()); err != nil {
+		t.Fatal(err)
+	}
+	a := New(Options{Headless: true, Scale: 1})
+	w, err := a.NewWindow(platform.WindowOptions{Width: 200, Height: 80, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+	w.SetContent(widgets.NewLabel("run-idle"))
+	done := make(chan error, 1)
+	go func() { done <- a.Run() }()
+
+	time.Sleep(30 * time.Millisecond)
+	next := style.Appearance{Theme: style.ThemeLight, Corners: style.CornersSquare, Icons: style.IconSetSharp}
+	if err := style.SaveAppearance(next); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-done:
+		t.Fatalf("Run exited: %v", err)
+	case <-time.After(lookWatchInterval + 200*time.Millisecond):
+	}
+	a.Quit()
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	got := style.LookAppearance(a.Look())
+	if got.Theme != style.ThemeLight || got.Corners != style.CornersSquare || got.Icons != style.IconSetSharp {
+		t.Fatalf("Run idle poll %+v", got)
 	}
 }
 

@@ -8,7 +8,9 @@ import (
 	"github.com/codemodify/uitoolkit/style"
 )
 
-// ChromePrefs is UI-only (card vs table, density). Lives next to mail.json.
+// ChromePrefs is UI-only (card vs table, density, layout). Lives in
+// mailui.json. Theme packs stay in look.json (Settings); Light is a
+// menu-checkmark mirror of LoadAppearance, not a second skin owner.
 type ChromePrefs struct {
 	CardView bool   `json:"cardView"`
 	Density  string `json:"density"`
