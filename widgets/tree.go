@@ -222,12 +222,17 @@ func paintTreeSwatch(ctx *paintengine2d.Context, row paintengine2d.Rect, col pai
 }
 
 func (t *TreeView) rowAt(y float32) int {
-	i := int((y + t.OffsetY) / t.rowH())
 	rows := t.flatten()
-	if i < 0 || i >= len(rows) {
-		return -1
-	}
-	return i
+	return rowIndexAt(y, t.OffsetY, t.rowH(), len(rows))
+}
+
+// SetRoots replaces the tree and drops the row paint cache so expand/collapse
+// and rebuilds cannot paint stale Y slots.
+func (t *TreeView) SetRoots(roots []*TreeNode) {
+	t.Roots = roots
+	t.rows.reset()
+	t.clamp()
+	t.Invalidate()
 }
 
 func (t *TreeView) nodeAt(y float32) *TreeNode {

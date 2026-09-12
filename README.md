@@ -509,6 +509,17 @@ are independent look.json fields again; compound pack names migrate
 
 ## Version
 
+**0.13.6** — Mail list chrome hides the Quick Filter field behind an
+icon-only Filter button (right of Delete); View / Ctrl+F still open and
+focus the field, Escape hides it and keeps the query. Filters tree is
+Unread / Starred / Attachment plus remaining tags (Important, To Do) —
+From / To / Subject / Body pins and Work / Personal / Later folders are
+gone. Toolkit: `TextField` / `NumberField` measure `style.FieldHeight`
+(`ComboH`, same toolbar height as ComboBox; `ControlH` was the tall-field
+bug). Tree/List `rowIndexAt` maps clicks to the painted row; Mail
+preserves Filters expand/collapse across `rebuildTree` so a collapsed
+Filters no longer steals the Outbox click. Still paintengine2d **v0.9.0**.
+
 **0.13.5** — Mail Filters chrome: the sidebar **Tags** group is **Filters**.
 Pin toggles (Unread, Starred, Attachment, From, To, Subject, Body) live
 as checkable rows there with the existing tag folders; the old filter

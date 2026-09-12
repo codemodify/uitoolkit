@@ -7,6 +7,7 @@ import (
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/layout"
 	"github.com/codemodify/uitoolkit/platform"
+	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
 )
 
@@ -73,7 +74,7 @@ func (n *NumberField) SetValue(v float64) {
 }
 
 func (n *NumberField) Measure(c layout.Constraints) paintengine2d.Point {
-	h := n.Look().Metrics().ControlH
+	h := style.FieldHeight(n.Look().Metrics())
 	return c.Constrain(paintengine2d.Pt(120, h))
 }
 

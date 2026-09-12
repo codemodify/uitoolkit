@@ -259,7 +259,7 @@ func DefaultMetrics() Metrics {
 
 // ComboHeight is the closed ComboBox row. ComboH (else ToolBtn) stays
 // flush with toolbar chrome and is not grown by icon-size ToolBtn bumps;
-// ControlH stays the taller standalone button/field.
+// ControlH stays the taller standalone button.
 func ComboHeight(m Metrics) float32 {
 	if m.ComboH > 0 {
 		return m.ComboH
@@ -269,6 +269,10 @@ func ComboHeight(m Metrics) float32 {
 	}
 	return m.ControlH
 }
+
+// FieldHeight is the closed TextField / NumberField row. Same metric as
+// ComboHeight — ControlH was oversized next to ToolBtn chrome.
+func FieldHeight(m Metrics) float32 { return ComboHeight(m) }
 
 // Align is a 2D alignment hint for labels and flex cross-axis.
 type Align int

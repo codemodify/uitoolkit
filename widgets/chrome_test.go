@@ -100,6 +100,46 @@ func TestTabBarKeysAndPress(t *testing.T) {
 	}
 }
 
+func TestTreeViewCollapsedParentDoesNotStealNextRow(t *testing.T) {
+	child := NewTreeNode("Unread")
+	parent := NewTreeNode("Filters", child)
+	parent.Expanded = true
+	outbox := NewTreeNode("Outbox")
+	tree := NewTreeView(parent, outbox)
+	tree.SetHost(&host{})
+	tree.Arrange(paintengine2d.XYWH(0, 0, 220, 240))
+	tree.Toggle(parent)
+	if parent.Expanded {
+		t.Fatal("Filters should stay collapsed")
+	}
+	rows := tree.flatten()
+	if len(rows) != 2 {
+		t.Fatalf("collapsed rows %d", len(rows))
+	}
+	var got *TreeNode
+	tree.OnSelect = func(n *TreeNode) { got = n }
+	rh := tree.rowH()
+	// Click the label of the row under Filters (not the expander column).
+	y := rh + rh*0.5
+	tree.MousePress(widget.MouseEvent{Pos: paintengine2d.Pt(90, y), Button: platform.ButtonLeft})
+	if parent.Expanded {
+		t.Fatal("Outbox click expanded Filters")
+	}
+	if got != outbox || tree.Selected != outbox {
+		t.Fatalf("selected %q want Outbox", labelOf(got))
+	}
+	if tree.nodeAt(y) != outbox {
+		t.Fatalf("nodeAt y=%v got %q", y, labelOf(tree.nodeAt(y)))
+	}
+}
+
+func labelOf(n *TreeNode) string {
+	if n == nil {
+		return "<nil>"
+	}
+	return n.Label
+}
+
 func TestTreeViewExpandSelect(t *testing.T) {
 	child := NewTreeNode("child.go")
 	src := NewTreeNode("src", child)
