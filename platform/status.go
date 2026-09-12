@@ -1,6 +1,7 @@
 package platform
 
 import (
+	"log"
 	"os"
 	"strings"
 
@@ -83,6 +84,13 @@ func invokeStatus(dispatch func(func()), fn func()) {
 		return
 	}
 	fn()
+}
+
+func trayDebug(format string, args ...any) {
+	if os.Getenv("UITK_TRAY_DEBUG") == "" {
+		return
+	}
+	log.Printf("uitk tray: "+format, args...)
 }
 
 // Notification is a tray balloon / desktop toast.

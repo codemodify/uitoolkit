@@ -510,6 +510,14 @@ are independent look.json fields again; compound pack names migrate
 
 ## Version
 
+**0.16.3** — **Plasma tray menu actually appears.** SNI `Menu` is
+`/NO_DBUSMENU` (not `/`, which hosts treat as a real dbusmenu path).
+`ShowStatusMenu` ignores SNI root/screen coordinates that fall outside
+the window and anchors the toolkit popup to the bottom-right.
+`ContextMenu`, `SecondaryActivate`, dbusmenu `AboutToShow`, and
+`Event("clicked")` on the stub root all open the same menu.
+`UITK_TRAY_DEBUG` logs the path. See `docs/tray.md`.
+
 **0.16.2** — **Mail tray polish.** Tray uses `IconMail` (envelope; premiere
 `mail` / `inbox` / `mail-open` PNGs; SNI theme name `mail-unread`).
 Wayland Show/Raise remaps the `xdg_toplevel` after close-to-tray

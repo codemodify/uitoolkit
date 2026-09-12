@@ -75,8 +75,8 @@ func TestGetLayoutReplySignatureNoPanic(t *testing.T) {
 	if derr != nil {
 		t.Fatal(derr)
 	}
-	if rev != 3 || layout.ID != 0 || len(layout.Children) != 3 {
-		t.Fatalf("rev=%d layout=%+v", rev, layout)
+	if rev != 3 || layout.ID != 0 || len(layout.Children) != 1 {
+		t.Fatalf("stub layout rev=%d children=%d", rev, len(layout.Children))
 	}
 	_ = dbus.SignatureOf(rev, layout)
 	_, leaf, derr := s.GetLayout(1, 0, nil)
@@ -108,6 +108,19 @@ func TestLinuxContextMenuInvokesOnMenu(t *testing.T) {
 	}
 	if n != 2 || gx != 5 || gy != 6 {
 		t.Fatalf("SecondaryActivate n=%d %d,%d", n, gx, gy)
+	}
+	need, aerr := s.AboutToShow(0)
+	if aerr != nil || need {
+		t.Fatalf("AboutToShow %v %v", need, aerr)
+	}
+	if n != 3 {
+		t.Fatalf("AboutToShow should open toolkit menu, n=%d", n)
+	}
+	if err := s.Event(1, "clicked", dbus.MakeVariant(""), 0); err != nil {
+		t.Fatal(err)
+	}
+	if n != 4 {
+		t.Fatalf("Event stub click should open toolkit menu, n=%d", n)
 	}
 }
 
@@ -209,10 +222,18 @@ func TestExportGetLayoutNoNestingPanic(t *testing.T) {
 	if err := call.Store(&rev, &layout); err != nil {
 		t.Fatalf("GetLayout over bus: %v", err)
 	}
-	if len(layout.Children) != 3 {
-		t.Fatalf("bus layout children %d", len(layout.Children))
+	if len(layout.Children) > 1 {
+		t.Fatalf("stub layout should not export real rows, children %d", len(layout.Children))
 	}
 	_ = dbus.SignatureOf(rev, layout)
+	menuVar, derr := s.props.Get(sniInterface, "Menu")
+	if derr != nil {
+		t.Fatal(derr)
+	}
+	path, _ := menuVar.Value().(dbus.ObjectPath)
+	if path != sniMenuNone {
+		t.Fatalf("Menu %q want %s", path, sniMenuNone)
+	}
 }
 
 func TestSurviveStatusNotifierWatcherGetLayout(t *testing.T) {
@@ -260,8 +281,8 @@ func TestSurviveStatusNotifierWatcherGetLayout(t *testing.T) {
 		if err != nil {
 			t.Fatalf("GetLayout after watcher: %v", err)
 		}
-		if len(layout.Children) != 3 {
-			t.Fatalf("menu rows %d", len(layout.Children))
+		if len(layout.Children) > 1 {
+			t.Fatalf("stub layout children %d", len(layout.Children))
 		}
 	}
 	if !item.Alive() && item.Backend() == "stub" {

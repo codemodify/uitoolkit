@@ -1,6 +1,7 @@
 package app
 
 import (
+	"log"
 	"os"
 	"strings"
 
@@ -139,8 +140,9 @@ func StatusMenuToItems(items []platform.StatusMenuItem) []*widgets.MenuItem {
 }
 
 // ShowStatusMenu opens a toolkit PopupMenu on a live window (Show/Raise if
-// the window was hidden to the tray). x,y are SNI root coordinates; they
-// are clamped to the surface so a panel click lands near the matching edge.
+// the window was hidden to the tray). x,y from SNI are root/screen
+// coordinates — they are not window-local. Out-of-window values are
+// ignored and the menu is anchored to the bottom-right (typical panel).
 func (a *Application) ShowStatusMenu(x, y int32, items []platform.StatusMenuItem) {
 	if a == nil {
 		return
@@ -161,12 +163,30 @@ func (a *Application) ShowStatusMenu(x, y int32, items []platform.StatusMenuItem
 	if from == nil {
 		return
 	}
-	origin := paintengine2d.Pt(float32(x), float32(y))
-	if x <= 0 && y <= 0 {
-		ww, _ := w.SurfaceSize()
-		origin = paintengine2d.Pt(float32(ww)-12, 8)
+	ww, hh := w.SurfaceSize()
+	origin := statusMenuOrigin(ww, hh, x, y)
+	if os.Getenv("UITK_TRAY_DEBUG") != "" {
+		log.Printf("uitk tray: ShowStatusMenu screen=%d,%d window=%dx%d origin=%.0f,%.0f", x, y, ww, hh, origin.X, origin.Y)
 	}
 	widgets.ShowContextMenu(from, origin, rows...)
+}
+
+// statusMenuOrigin maps SNI ContextMenu coordinates into window space.
+// Screen/root coords outside the surface become the bottom-right corner
+// so the popup stays visible (Plasma panel clicks are typically 1k–4k).
+func statusMenuOrigin(winW, winH int, screenX, screenY int32) paintengine2d.Point {
+	const inset = 8
+	ww, hh := float32(winW), float32(winH)
+	if ww < 1 {
+		ww = 400
+	}
+	if hh < 1 {
+		hh = 240
+	}
+	if screenX > 0 && screenY > 0 && int(screenX) < winW && int(screenY) < winH {
+		return paintengine2d.Pt(float32(screenX), float32(screenY))
+	}
+	return paintengine2d.Pt(ww-inset, hh-inset)
 }
 
 func (a *Application) preferredStatusWindow() *Window {
