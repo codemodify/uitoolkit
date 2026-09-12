@@ -596,11 +596,16 @@ func (l *Classic) DrawToolButton(ctx *paintengine2d.Context, b paintengine2d.Rec
 	x := b.Min.X + pad
 	if icon != IconNone {
 		side := b.Dy() - 10
-		if side < 14 {
-			side = 14
+		if side < 16 {
+			side = 16
 		}
-		if side > 20 {
-			side = 20
+		// 1× toolbar (~36px) → 24px glyph. HiDPI / 2× chrome → 48px.
+		max := float32(24)
+		if b.Dy() >= 56 {
+			max = 48
+		}
+		if side > max {
+			side = max
 		}
 		ib := paintengine2d.XYWH(x, b.Min.Y+(b.Dy()-side)*0.5, side, side)
 		if label == "" {

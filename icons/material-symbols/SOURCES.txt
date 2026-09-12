@@ -1,0 +1,18 @@
+Material Symbols — Apache-2.0. https://fonts.google.com/icons
+https://github.com/google/material-design-icons
+SVG export: https://github.com/marella/material-symbols @ af93fdc (outlined, weight 400).
+Rendered with rsvg-convert.
+
+new        note_add
+open       folder_open
+save       save
+cut        content_cut
+copy       content_copy
+paste      content_paste
+undo       undo
+redo       redo
+search     search
+info       info
+warning    warning
+error      error
+question   help

@@ -1,0 +1,16 @@
+Phosphor Icons — MIT. https://phosphoricons.com  https://github.com/phosphor-icons/core
+Style: regular weight. Pinned v2.0.8. Rendered with rsvg-convert.
+
+new        file-plus
+open       folder-open
+save       floppy-disk
+cut        scissors
+copy       copy
+paste      clipboard-text
+undo       arrow-counter-clockwise
+redo       arrow-clockwise
+search     magnifying-glass
+info       info
+warning    warning
+error      x-circle
+question   question

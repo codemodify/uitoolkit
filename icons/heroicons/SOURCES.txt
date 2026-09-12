@@ -1,0 +1,16 @@
+Heroicons — MIT. https://heroicons.com  https://github.com/tailwindlabs/heroicons
+Style: 24px outline. Pinned v2.2.0. Rendered with rsvg-convert.
+
+new        document-plus
+open       folder-open
+save       arrow-down-on-square
+cut        scissors
+copy       document-duplicate
+paste      clipboard-document
+undo       arrow-uturn-left
+redo       arrow-uturn-right
+search     magnifying-glass
+info       information-circle
+warning    exclamation-triangle
+error      x-circle
+question   question-mark-circle

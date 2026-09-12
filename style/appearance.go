@@ -20,7 +20,7 @@ const (
 
 // IconSetName selects chrome ToolIcons. classic / sharp are drawn in
 // process. Any other sanitized name is a file set under
-// ~/.config/uitoolkit/icons/<name>/ (filled, outline, duotone, …).
+// ~/.config/uitoolkit/icons/<name>/ (lucide, phosphor, tabler, …).
 type IconSetName string
 
 const (
@@ -28,12 +28,16 @@ const (
 	IconSetClassic IconSetName = "classic"
 	// IconSetSharp is an angular, square-cap set (CapSquare / JoinMiter).
 	IconSetSharp IconSetName = "sharp"
-	// IconSetFilled is the shipped solid SVG set (install from repo icons/).
-	IconSetFilled IconSetName = "filled"
-	// IconSetOutline is the shipped stroke SVG set.
-	IconSetOutline IconSetName = "outline"
-	// IconSetDuotone is the shipped two-layer SVG set.
-	IconSetDuotone IconSetName = "duotone"
+	// IconSetLucide is the shipped Lucide PNG set (install from repo icons/).
+	IconSetLucide IconSetName = "lucide"
+	// IconSetPhosphor is the shipped Phosphor regular PNG set.
+	IconSetPhosphor IconSetName = "phosphor"
+	// IconSetTabler is the shipped Tabler outline PNG set.
+	IconSetTabler IconSetName = "tabler"
+	// IconSetHeroicons is the shipped Heroicons outline PNG set.
+	IconSetHeroicons IconSetName = "heroicons"
+	// IconSetMaterialSymbols is the shipped Material Symbols outlined PNG set.
+	IconSetMaterialSymbols IconSetName = "material-symbols"
 )
 
 // Appearance is the resolved toolkit skin. Name is the theme pack
@@ -76,19 +80,24 @@ func ParseCorners(s string) CornerStyle {
 	}
 }
 
-// ParseIconSet accepts classic / sharp / filled / outline / duotone
-// or any sanitized file-set directory name (empty → classic).
+// ParseIconSet accepts classic / sharp / lucide / phosphor / tabler /
+// heroicons / material-symbols or any sanitized file-set directory
+// name (empty → classic).
 func ParseIconSet(s string) IconSetName {
 	s = strings.TrimSpace(s)
 	switch s {
 	case "sharp", "Sharp", "geometric":
 		return IconSetSharp
-	case "filled", "Filled":
-		return IconSetFilled
-	case "outline", "Outline":
-		return IconSetOutline
-	case "duotone", "Duotone":
-		return IconSetDuotone
+	case "lucide", "Lucide":
+		return IconSetLucide
+	case "phosphor", "Phosphor":
+		return IconSetPhosphor
+	case "tabler", "Tabler":
+		return IconSetTabler
+	case "heroicons", "Heroicons":
+		return IconSetHeroicons
+	case "material-symbols", "Material Symbols", "material", "Material":
+		return IconSetMaterialSymbols
 	case "", "classic", "Classic":
 		return IconSetClassic
 	default:

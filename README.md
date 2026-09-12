@@ -498,20 +498,29 @@ Settings can export the current look to
 `~/.config/uitoolkit/themes/<name>/theme.json` (**v0.11.2**). Mail chrome
 prefs no longer rewrite `look.json`; Settings → Apply updates a running
 Mail with `WatchLook` (**v0.11.3**). File SVG icon sets (`filled` /
-`outline` / `duotone`) live in the repo and are copied by hand into
-`~/.config/uitoolkit/icons/<set>/`. Settings picks an icon set on top
-of the theme; `look.json` stores `{ "theme", "icons" }` (**v0.12.0**).
+`outline` / `duotone`) lived in the repo and were copied by hand into
+`~/.config/uitoolkit/icons/<set>/` (**v0.12.0**). Those SVGs are
+replaced by premiere PNG packs (**v0.12.1**).
 
 ## Version
 
-**0.12.0** — File-based SVG icon sets. Three 24×24 families ship in
-`icons/` (not embedded, not auto-copied). Copy them to
+**0.12.1** — Premiere PNG icon packs. Lucide (ISC), Phosphor regular
+(MIT), Tabler outline (MIT), Heroicons outline (MIT), and Material
+Symbols outlined (Apache-2.0) ship as 24×24 + `name@2x.png` 48×48
+under `icons/<set>/` (not embedded, not auto-copied). Copy a folder
+to `$XDG_CONFIG_HOME/uitoolkit/icons/<set>/`. Settings lists
+installed sets plus drawn classic/sharp. Apply writes `theme` +
+`icons` to `look.json` (`"icons": "lucide"`). The toolkit picks `@2x`
+by destination size and tints monochrome/alpha PNGs with the Look
+foreground. Missing files fall back to drawn classic. The v0.12.0
+SVG `filled` / `outline` / `duotone` sets are removed. See
+[icons/README.md](icons/README.md). Still paintengine2d **v0.9.0**.
+
+**0.12.0** — File-based SVG icon sets (superseded by **v0.12.1**
+PNGs). Three 24×24 families shipped in `icons/`. Copy them to
 `$XDG_CONFIG_HOME/uitoolkit/icons/<set>/`. Settings lists installed
 sets plus drawn classic/sharp. Apply writes `theme` + `icons` to
-`look.json`; live reload applies both. Missing SVGs fall back to the
-drawn classic glyph. Tint uses `currentColor` and the Look foreground
-color. See [icons/README.md](icons/README.md). Still paintengine2d
-**v0.9.0**.
+`look.json`. Missing files fall back to the drawn classic glyph.
 
 **0.11.3** — Mail does not own `look.json`. Density / layout stay in
 `mailui.json`. `applyLook` uses `PreferredLook` plus Mail density; View

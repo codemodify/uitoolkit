@@ -69,7 +69,7 @@ func ThemeFile(name string) string {
 }
 
 // StarterName is the embedded pack id for a palette × corners × drawn-icons
-// combo. File icon sets (outline, …) map to classic so pack names stay in
+// combo. File icon sets (lucide, …) map to classic so pack names stay in
 // the eight-starter matrix.
 func StarterName(theme ThemeName, corners CornerStyle, icons IconSetName) string {
 	return string(ParseTheme(string(theme))) + "-" + string(ParseCorners(string(corners))) + "-" + string(FallbackIcons(icons))

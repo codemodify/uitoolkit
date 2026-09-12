@@ -1,8 +1,9 @@
 package style
 
 // ToolIcon is a stock glyph drawn by LookAndFeel.
-// File icon sets use one SVG per id (new.svg, open.svg, …) under
+// File icon sets use one PNG per id (new.png, open.png, …) under
 // ~/.config/uitoolkit/icons/<set>/. Classic / Sharp remain drawn fallbacks.
+// HiDPI uses name@2x.png (48×48) when the destination is large enough.
 type ToolIcon int
 
 const (
@@ -22,7 +23,7 @@ const (
 	IconQuestion
 )
 
-// toolIconFiles maps each chrome action to its SVG basename (no extension).
+// toolIconFiles maps each chrome action to its PNG basename (no extension).
 var toolIconFiles = []struct {
 	icon ToolIcon
 	name string
@@ -51,7 +52,7 @@ func AllToolIcons() []ToolIcon {
 	return out
 }
 
-// ToolIconName is the action id used for SVG files (open, new, cut, …).
+// ToolIconName is the action id used for PNG files (open, new, cut, …).
 func ToolIconName(icon ToolIcon) string {
 	for _, e := range toolIconFiles {
 		if e.icon == icon {
@@ -61,12 +62,36 @@ func ToolIconName(icon ToolIcon) string {
 	return ""
 }
 
-// ToolIconFileName is the SVG file for icon (open.svg). Empty for IconNone.
+// ToolIconFileName is the 24×24 PNG for icon (open.png). Empty for IconNone.
 func ToolIconFileName(icon ToolIcon) string {
 	if name := ToolIconName(icon); name != "" {
-		return name + ".svg"
+		return name + ".png"
 	}
 	return ""
+}
+
+// ToolIconHiDPIFileName is the 48×48 PNG (open@2x.png). Empty for IconNone.
+func ToolIconHiDPIFileName(icon ToolIcon) string {
+	if name := ToolIconName(icon); name != "" {
+		return name + "@2x.png"
+	}
+	return ""
+}
+
+// iconHiDPIMin is the destination width (user-space px) at which @2x is
+// preferred. Toolbar 1× is 24; message icons and 2× chrome are ≥36.
+const iconHiDPIMin = 36
+
+func toolIconFileCandidates(icon ToolIcon, destW float32) []string {
+	lo := ToolIconFileName(icon)
+	hi := ToolIconHiDPIFileName(icon)
+	if lo == "" {
+		return nil
+	}
+	if destW >= iconHiDPIMin {
+		return []string{hi, lo}
+	}
+	return []string{lo, hi}
 }
 
 // ToolIconByName maps a file stem ("open") to a ToolIcon.

@@ -14,7 +14,7 @@ const appearanceFile = "look.json"
 //
 // Current format stores the theme pack name plus the chrome icon set:
 //
-//	{ "theme": "dark-round-classic", "icons": "outline" }
+//	{ "theme": "dark-round-classic", "icons": "lucide" }
 //
 // A pack's icons field is ignored when look.json "icons" is set.
 // A legacy v0.11.0/0.11.1 triad (theme + corners + icons) is migrated

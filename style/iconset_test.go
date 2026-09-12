@@ -1,6 +1,7 @@
 package style
 
 import (
+	"image/png"
 	"os"
 	"path/filepath"
 	"testing"
@@ -8,24 +9,38 @@ import (
 	"github.com/codemodify/paintengine2d"
 )
 
+var shippedIconSets = []string{"lucide", "phosphor", "tabler", "heroicons", "material-symbols"}
+
 func TestRepoIconSetsCoverAllToolIcons(t *testing.T) {
 	root := filepath.Join("..", "icons")
-	for _, set := range []string{"filled", "outline", "duotone"} {
+	for _, set := range shippedIconSets {
 		for _, icon := range AllToolIcons() {
-			path := filepath.Join(root, set, ToolIconFileName(icon))
-			raw, err := os.ReadFile(path)
-			if err != nil {
-				t.Errorf("missing %s", path)
-				continue
-			}
-			doc, err := parseSVG(raw)
-			if err != nil || doc.empty() {
-				t.Errorf("parse %s: %v empty=%v", path, err, doc.empty())
-			}
-			if doc.vbW != 24 || doc.vbH != 24 {
-				t.Errorf("%s viewBox %v×%v", path, doc.vbW, doc.vbH)
-			}
+			lo := filepath.Join(root, set, ToolIconFileName(icon))
+			hi := filepath.Join(root, set, ToolIconHiDPIFileName(icon))
+			checkPNG(t, lo, 24)
+			checkPNG(t, hi, 48)
 		}
+		if _, err := os.Stat(filepath.Join(root, set, "LICENSE")); err != nil {
+			t.Errorf("missing %s/LICENSE", set)
+		}
+	}
+}
+
+func checkPNG(t *testing.T, path string, size int) {
+	t.Helper()
+	f, err := os.Open(path)
+	if err != nil {
+		t.Errorf("missing %s", path)
+		return
+	}
+	defer f.Close()
+	cfg, err := png.DecodeConfig(f)
+	if err != nil {
+		t.Errorf("decode %s: %v", path, err)
+		return
+	}
+	if cfg.Width != size || cfg.Height != size {
+		t.Errorf("%s size %d×%d want %d×%d", path, cfg.Width, cfg.Height, size, size)
 	}
 }
 
@@ -36,20 +51,23 @@ func TestListIconSetsListsInstalled(t *testing.T) {
 	if len(listed) != 2 || listed[0].Name != IconSetClassic || listed[1].Name != IconSetSharp {
 		t.Fatalf("builtins only: %+v", listed)
 	}
-	installRepoIconSet(t, "outline")
+	installRepoIconSet(t, "lucide")
 	listed = ListIconSets()
-	if len(listed) != 3 || listed[2].Name != IconSetOutline || listed[2].Source != "user" {
+	if len(listed) != 3 || listed[2].Name != IconSetLucide || listed[2].Source != "user" {
 		t.Fatalf("installed %+v", listed)
+	}
+	if listed[2].Label != "Lucide  · installed" {
+		t.Fatalf("label %q", listed[2].Label)
 	}
 }
 
 func TestFileIconLoadTintFallback(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	resetIconCache()
-	installRepoIconSet(t, "outline")
+	installRepoIconSet(t, "lucide")
 
-	red := paintFileIcon(IconSetOutline, IconSearch, paintengine2d.RGB(1, 0, 0))
-	blue := paintFileIcon(IconSetOutline, IconSearch, paintengine2d.RGB(0, 0, 1))
+	red := paintFileIcon(IconSetLucide, IconSearch, paintengine2d.RGB(1, 0, 0))
+	blue := paintFileIcon(IconSetLucide, IconSearch, paintengine2d.RGB(0, 0, 1))
 	if inkCount(red) < 8 || inkCount(blue) < 8 {
 		t.Fatalf("no ink red=%d blue=%d", inkCount(red), inkCount(blue))
 	}
@@ -62,15 +80,16 @@ func TestFileIconLoadTintFallback(t *testing.T) {
 
 	// Missing glyph → drawn classic (same ink mask as classic).
 	classic := rasterIcon(IconSetClassic, IconCut)
-	missing := rasterIcon(IconSetOutline, IconCut) // cut.svg is installed; delete it
-	_ = os.Remove(filepath.Join(IconSetDir(IconSetOutline), "cut.svg"))
+	missing := rasterIcon(IconSetLucide, IconCut) // cut.png is installed; delete both sizes
+	_ = os.Remove(filepath.Join(IconSetDir(IconSetLucide), "cut.png"))
+	_ = os.Remove(filepath.Join(IconSetDir(IconSetLucide), "cut@2x.png"))
 	resetIconCache()
-	fallback := rasterIcon(IconSetOutline, IconCut)
+	fallback := rasterIcon(IconSetLucide, IconCut)
 	if maskDiff(classic, fallback) > 4 {
 		t.Fatalf("missing file should match classic (diff=%d)", maskDiff(classic, fallback))
 	}
 	if maskDiff(classic, missing) < 8 {
-		t.Fatal("installed outline cut should differ from classic before delete")
+		t.Fatal("installed lucide cut should differ from classic before delete")
 	}
 
 	// Unknown set name with no directory → classic.
@@ -81,9 +100,57 @@ func TestFileIconLoadTintFallback(t *testing.T) {
 	}
 }
 
+func TestFileIconPicksHiDPI(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	resetIconCache()
+	dst := filepath.Join(IconSetDir(IconSetLucide))
+	if err := os.MkdirAll(dst, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	src := filepath.Join("..", "icons", "lucide")
+	// Only @2x for search — 1× dest should still paint via fallback candidate.
+	hi, err := os.ReadFile(filepath.Join(src, "search@2x.png"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dst, "search@2x.png"), hi, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	small := paintFileIcon(IconSetLucide, IconSearch, paintengine2d.RGB(1, 1, 1))
+	if inkCount(small) < 8 {
+		t.Fatalf("1× dest should use @2x when 24 is missing (ink=%d)", inkCount(small))
+	}
+
+	lo, err := os.ReadFile(filepath.Join(src, "search.png"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dst, "search.png"), lo, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	resetIconCache()
+	cands := toolIconFileCandidates(IconSearch, 24)
+	if len(cands) != 2 || cands[0] != "search.png" {
+		t.Fatalf("1× candidates %v", cands)
+	}
+	cands = toolIconFileCandidates(IconSearch, 48)
+	if len(cands) != 2 || cands[0] != "search@2x.png" {
+		t.Fatalf("2× candidates %v", cands)
+	}
+	large := paintengine2d.NewImage(64, 64)
+	ctx := paintengine2d.NewContext(large)
+	DrawToolIcon(ctx, paintengine2d.XYWH(8, 8, 48, 48), IconSearch, paintengine2d.RGB(0, 1, 0), IconSetLucide)
+	if inkCount(large) < 16 {
+		t.Fatalf("2× dest no ink %d", inkCount(large))
+	}
+	if !tinted(large, 0, 1, 0) {
+		t.Fatal("2× dest should tint green")
+	}
+}
+
 func TestLookJSONThemeAndIcons(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	want := Appearance{Name: "dark-round-classic", Theme: ThemeDark, Corners: CornersRound, Icons: IconSetOutline}
+	want := Appearance{Name: "dark-round-classic", Theme: ThemeDark, Corners: CornersRound, Icons: IconSetLucide}
 	if err := SaveAppearance(want); err != nil {
 		t.Fatal(err)
 	}
@@ -91,7 +158,7 @@ func TestLookJSONThemeAndIcons(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !containsAll(string(raw), `"theme": "dark-round-classic"`, `"icons": "outline"`) {
+	if !containsAll(string(raw), `"theme": "dark-round-classic"`, `"icons": "lucide"`) {
 		t.Fatalf("look.json: %s", raw)
 	}
 	got := LoadAppearance()
@@ -99,7 +166,7 @@ func TestLookJSONThemeAndIcons(t *testing.T) {
 		t.Fatalf("got %+v want %+v", got, want.Normalize())
 	}
 	look := PreferredLook().(*Classic)
-	if look.Pack() != "dark-round-classic" || look.Icons() != IconSetOutline {
+	if look.Pack() != "dark-round-classic" || look.Icons() != IconSetLucide {
 		t.Fatalf("preferred %+v", LookAppearance(look))
 	}
 }
@@ -110,26 +177,32 @@ func TestLoadAppearanceIconsOverlayPackDefault(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(path, []byte(`{"theme":"light-square-sharp","icons":"duotone"}`+"\n"), 0o600); err != nil {
+	if err := os.WriteFile(path, []byte(`{"theme":"light-square-sharp","icons":"phosphor"}`+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	got := LoadAppearance()
-	if got.Name != "light-square-sharp" || got.Theme != ThemeLight || got.Corners != CornersSquare || got.Icons != IconSetDuotone {
+	if got.Name != "light-square-sharp" || got.Theme != ThemeLight || got.Corners != CornersSquare || got.Icons != IconSetPhosphor {
 		t.Fatalf("%+v", got)
 	}
 }
 
 func TestParseIconSetFileNames(t *testing.T) {
-	if ParseIconSet("outline") != IconSetOutline || ParseIconSet("filled") != IconSetFilled {
+	if ParseIconSet("lucide") != IconSetLucide || ParseIconSet("phosphor") != IconSetPhosphor {
 		t.Fatal("shipped names")
+	}
+	if ParseIconSet("tabler") != IconSetTabler || ParseIconSet("heroicons") != IconSetHeroicons {
+		t.Fatal("tabler/heroicons")
+	}
+	if ParseIconSet("material-symbols") != IconSetMaterialSymbols || ParseIconSet("Material") != IconSetMaterialSymbols {
+		t.Fatal("material-symbols")
 	}
 	if ParseIconSet("My Set") != IconSetName("my-set") {
 		t.Fatalf("%q", ParseIconSet("My Set"))
 	}
-	if !IsFileIconSet(IconSetOutline) || IsFileIconSet(IconSetClassic) {
+	if !IsFileIconSet(IconSetLucide) || IsFileIconSet(IconSetClassic) {
 		t.Fatal("file vs builtin")
 	}
-	if FallbackIcons(IconSetOutline) != IconSetClassic || FallbackIcons(IconSetSharp) != IconSetSharp {
+	if FallbackIcons(IconSetLucide) != IconSetClassic || FallbackIcons(IconSetSharp) != IconSetSharp {
 		t.Fatal("fallback")
 	}
 }

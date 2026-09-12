@@ -1,0 +1,16 @@
+Lucide Icons — ISC. https://lucide.dev  https://github.com/lucide-icons/lucide
+Style: 24px outline (stroke). Pinned v0.544.0. Rendered with rsvg-convert.
+
+new        file-plus
+open       folder-open
+save       save
+cut        scissors
+copy       copy
+paste      clipboard-paste
+undo       undo-2
+redo       redo-2
+search     search
+info       info
+warning    triangle-alert
+error      circle-x
+question   circle-question-mark

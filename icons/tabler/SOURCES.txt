@@ -1,0 +1,16 @@
+Tabler Icons — MIT. https://tabler.io/icons  https://github.com/tabler/tabler-icons
+Style: outline. Pinned v3.34.1. Rendered with rsvg-convert.
+
+new        file-plus
+open       folder-open
+save       device-floppy
+cut        scissors
+copy       copy
+paste      clipboard
+undo       arrow-back-up
+redo       arrow-forward-up
+search     search
+info       info-circle
+warning    alert-triangle
+error      circle-x
+question   help
