@@ -6,6 +6,7 @@ import (
 
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/internal/uitest"
+	"github.com/codemodify/uitoolkit/layout"
 	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
@@ -26,6 +27,7 @@ import (
 //	                        TestMenuBarDropdownFitsLabelsAndShortcuts,
 //	                        TestMenuBarHelpNearRightEdgeFitsAboutMail
 //	combo overlap / clip    TestComboBoxPopupClearsFieldAndFitsLabels
+//	toolbar steals MaxW     TestToolBarLeavesRoomForFlexSibling
 
 func TestSplitterPanesExclusiveAtRatios(t *testing.T) {
 	left := widgets.NewLabel("AAAA pane A chrome")
@@ -482,5 +484,36 @@ func TestTreeInvariantsOnMountedTable(t *testing.T) {
 	s.Wheel(paintengine2d.Pt(40, 50), 80)
 	if errs := uitest.TreeInvariants(tv); len(errs) > 0 {
 		t.Fatal(errs)
+	}
+}
+
+func TestToolBarLeavesRoomForFlexSibling(t *testing.T) {
+	bar := widgets.NewToolBar(
+		widgets.ToolText("Get Messages", nil),
+		widgets.ToolText("Write", nil),
+		widgets.ToolDivider(),
+		widgets.ToolText("Cards", nil),
+		widgets.ToolText("Classic", nil),
+	)
+	field := widgets.NewTextField("", "Quick Filter (subject, people, body)", nil)
+	qf := widgets.NewRow(field).WithGap(8).WithPadding(8, 4, 8, 4)
+	spacer := widgets.NewRow()
+	row := widgets.NewRow(bar, spacer, qf).WithGap(8).WithPadding(4, 0, 8, 0)
+	row.AddFlex(spacer, 1)
+	const rowW float32 = 800
+	uitest.Mount(row, paintengine2d.XYWH(0, 0, rowW, 40))
+
+	if qf.Bounds().Dx() <= 100 {
+		t.Fatalf("flex sibling crushed: qf width=%v toolbar=%v", qf.Bounds().Dx(), bar.Bounds().Dx())
+	}
+	if field.Bounds().Dx() <= 100 {
+		t.Fatalf("filter field crushed: field width=%v", field.Bounds().Dx())
+	}
+	content := bar.Measure(layout.Unbounded())
+	if bar.Bounds().Dx() > rowW*0.5 {
+		t.Fatalf("toolbar width %v claimed half+ of row %v", bar.Bounds().Dx(), rowW)
+	}
+	if bar.Bounds().Dx() > content.X+1 {
+		t.Fatalf("toolbar arranged %v > intrinsic %v", bar.Bounds().Dx(), content.X)
 	}
 }

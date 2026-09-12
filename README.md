@@ -471,9 +471,20 @@ shift horizontally at the window edge instead of cropping labels
 each row; the shared pair is replaced by **Save All** (one folder pick,
 then write every attachment). Tag / Archive / Junk / Delete sit above
 the thread header; Quick Filter moves into the main toolbar after
-Classic (**v0.10.11**).
+Classic (**v0.10.11**). `ToolBar.Measure` returns intrinsic width so a
+flex spacer can right-align siblings; Mail Quick Filter stays visible
+on the right (**v0.10.12**).
 
 ## Version
+
+**0.10.12** — Toolkit: `ToolBar.Measure` reports item widths + padding
+(height stays `ToolBarH`) instead of expanding to `MaxW`. Parent
+`Row`/`Flex` growth is Flex weights only, so a toolbar + spacer +
+sibling no longer crushes the sibling. TitleBar / StatusBar / MenuBar /
+TabBar still take the strip width (they are full-width column chrome).
+Mail: Quick Filter field + pins stay right-aligned after Classic when
+`ShowFilter` is on; hide via View → Quick Filter Bar (the left toolbar
+toggle is gone). Still paintengine2d **v0.9.0**.
 
 **0.10.11** — Mail chrome: each preview attachment row shows the
 filename plus inline toolkit `Button` **Open** and **Save As**. Single
