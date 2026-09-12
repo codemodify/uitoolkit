@@ -5,9 +5,10 @@
 //	go run ./cmd/uitksettings -screenshot docs/screenshots
 //
 // The theme picker previews embedded starters and exported user packs.
-// Apply writes the theme name to $XDG_CONFIG_HOME/uitoolkit/look.json
-// and running apps that watch the file (Application default when Look
-// is PreferredLook) reload without a restart. Export writes
+// The icon picker lists classic/sharp plus sets copied into
+// ~/.config/uitoolkit/icons/<set>/. Apply writes {theme, icons} to
+// $XDG_CONFIG_HOME/uitoolkit/look.json and running apps that watch
+// the file reload without a restart. Export writes
 // themes/<name>/theme.json. Close without Apply discards staged
 // changes. See docs/settings.md.
 package main

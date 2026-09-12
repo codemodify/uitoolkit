@@ -12,8 +12,13 @@ const appearanceFile = "look.json"
 // appearanceFileJSON is the on-disk XDG document. Other apps (Mail, gallery)
 // read the same file via LoadAppearance / PreferredLook.
 //
-// Current format stores the theme pack name only. A legacy v0.11.0/0.11.1
-// file with theme/corners/icons is migrated to the matching starter name.
+// Current format stores the theme pack name plus the chrome icon set:
+//
+//	{ "theme": "dark-round-classic", "icons": "outline" }
+//
+// A pack's icons field is ignored when look.json "icons" is set.
+// A legacy v0.11.0/0.11.1 triad (theme + corners + icons) is migrated
+// to the matching starter; file icon names in that triad overlay the pack.
 type appearanceFileJSON struct {
 	Theme   string `json:"theme"`
 	Corners string `json:"corners,omitempty"`
@@ -59,8 +64,9 @@ func writeJSONFile(path string, v any) error {
 }
 
 func resolveLookThemeName(raw appearanceFileJSON) string {
-	if raw.Corners != "" || raw.Icons != "" {
-		return StarterName(ParseTheme(raw.Theme), ParseCorners(raw.Corners), ParseIconSet(raw.Icons))
+	// Corners in the file means the v0.11 triad (theme/corners/icons).
+	if raw.Corners != "" {
+		return StarterName(ParseTheme(raw.Theme), ParseCorners(raw.Corners), FallbackIcons(ParseIconSet(raw.Icons)))
 	}
 	name := strings.TrimSpace(raw.Theme)
 	if name == "" {
@@ -81,6 +87,7 @@ func resolveLookThemeName(raw appearanceFileJSON) string {
 
 // LoadAppearance reads XDG look.json. Missing or invalid files yield defaults.
 // A legacy triad (theme + corners + icons) maps to the matching starter pack.
+// When "icons" is set (new format or overlay), it wins over the pack default.
 func LoadAppearance() Appearance {
 	b, err := os.ReadFile(AppearancePath())
 	if err != nil {
@@ -91,14 +98,21 @@ func LoadAppearance() Appearance {
 		return DefaultAppearance()
 	}
 	name := resolveLookThemeName(raw)
+	a := DefaultAppearance()
 	if pack, ok := LoadTheme(name); ok {
-		return pack.Appearance()
+		a = pack.Appearance()
 	}
-	return DefaultAppearance()
+	if strings.TrimSpace(raw.Icons) != "" {
+		a.Icons = ParseIconSet(raw.Icons)
+	}
+	return a.Normalize()
 }
 
-// SaveAppearance writes look.json with the theme pack name only (mode 0600).
+// SaveAppearance writes look.json with theme pack + icon set (mode 0600).
 func SaveAppearance(a Appearance) error {
 	a = a.Normalize()
-	return writeJSONFile(AppearancePath(), appearanceFileJSON{Theme: a.Name})
+	return writeJSONFile(AppearancePath(), appearanceFileJSON{
+		Theme: a.Name,
+		Icons: string(a.Icons),
+	})
 }

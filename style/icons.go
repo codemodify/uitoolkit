@@ -3,12 +3,21 @@ package style
 import "github.com/codemodify/paintengine2d"
 
 // DrawToolIcon paints a stock ToolIcon in the chosen glyph set.
-// Classic is the original rounded-stroke set; Sharp is angular / square-cap.
+// File sets (filled / outline / duotone / user dirs) load a tinted SVG
+// from ~/.config/uitoolkit/icons/<set>/<action>.svg. Missing files fall
+// back to the drawn classic set. Classic / Sharp stay in-process vectors.
 func DrawToolIcon(ctx *paintengine2d.Context, b paintengine2d.Rect, icon ToolIcon, col paintengine2d.Color, set IconSetName) {
 	if icon == IconNone || b.Empty() || ctx == nil {
 		return
 	}
-	switch ParseIconSet(string(set)) {
+	set = ParseIconSet(string(set))
+	if IsFileIconSet(set) {
+		if DrawFileToolIcon(ctx, b, icon, col, set) {
+			return
+		}
+		set = FallbackIcons(set)
+	}
+	switch set {
 	case IconSetSharp:
 		drawSharpIcon(ctx, b, icon, col)
 	default:

@@ -107,7 +107,7 @@ paintengine2d with Titillium Web (and JetBrains Mono in code views).
 
 ![Inspector](docs/screenshots/inspector.png)
 
-### Settings — named theme packs
+### Settings — theme packs and icon sets
 
 ![Settings](docs/screenshots/settings.png)
 
@@ -201,7 +201,7 @@ go run ./examples/mail              # in-process daemon + UI (same protocol)
 go run ./examples/mail -headless    # writes mail.png
 go run ./examples/mail -classic     # preview below the thread list
 go run ./examples/mail -light
-go run ./cmd/uitksettings           # theme packs (XDG look.json + themes/<name>/)
+go run ./cmd/uitksettings           # theme packs + icon sets (look.json)
 go run ./cmd/uitksettings -headless # writes settings.png
 ```
 
@@ -291,13 +291,13 @@ widgets    Button, Label, TextField, TextArea     ScrollView, ListView, TableVie
            Accordion, Expander, Spacer            ProgressBar, RadioGroup
            MessageBox, FileDialog stub, Tooltip   TitleBar, context menus
            CardList
-style      LookAndFeel + Palette + Metrics        Named theme packs
-                                                  (embedded dark/light ×
-                                                  round/square × classic/sharp)
+style      LookAndFeel + Palette + Metrics        Named theme packs +
+                                                  file SVG icon sets
+                                                  (~/.config/uitoolkit/icons/)
 ```
 
 Swap the skin with `Application.SetLook(uitoolkit.LightLook())` or
-`PreferredLook()` (XDG `look.json` theme name from **Settings**). `New`
+`PreferredLook()` (XDG `look.json` theme + icons from **Settings**). `New`
 watches that file when Look is omitted so Apply updates running apps.
 Controls never hard-code colors. See [docs/settings.md](docs/settings.md).
 
@@ -497,9 +497,21 @@ installable theme packs replace the Theme / Corners / Icons triad:
 Settings can export the current look to
 `~/.config/uitoolkit/themes/<name>/theme.json` (**v0.11.2**). Mail chrome
 prefs no longer rewrite `look.json`; Settings → Apply updates a running
-Mail with `WatchLook` (**v0.11.3**).
+Mail with `WatchLook` (**v0.11.3**). File SVG icon sets (`filled` /
+`outline` / `duotone`) live in the repo and are copied by hand into
+`~/.config/uitoolkit/icons/<set>/`. Settings picks an icon set on top
+of the theme; `look.json` stores `{ "theme", "icons" }` (**v0.12.0**).
 
 ## Version
+
+**0.12.0** — File-based SVG icon sets. Three 24×24 families ship in
+`icons/` (not embedded, not auto-copied). Copy them to
+`$XDG_CONFIG_HOME/uitoolkit/icons/<set>/`. Settings lists installed
+sets plus drawn classic/sharp. Apply writes `theme` + `icons` to
+`look.json`; live reload applies both. Missing SVGs fall back to the
+drawn classic glyph. Tint uses `currentColor` and the Look foreground
+color. See [icons/README.md](icons/README.md). Still paintengine2d
+**v0.9.0**.
 
 **0.11.3** — Mail does not own `look.json`. Density / layout stay in
 `mailui.json`. `applyLook` uses `PreferredLook` plus Mail density; View

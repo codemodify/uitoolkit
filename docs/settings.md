@@ -1,11 +1,14 @@
 # Settings
 
 `cmd/uitksettings` is the toolkit appearance editor. It does not invent a
-second theme system: it selects a **named theme pack** and other apps
-apply it with `Application.SetLook` / `PreferredLook`.
+second theme system: it selects a **named theme pack** and an **icon set**
+on top of that pack. Other apps apply both with `Application.SetLook` /
+`PreferredLook`.
 
-Theme packs are GTK/KDE-like look files (palette + corners + icons), not
-full style plugins.
+Theme packs are GTK/KDE-like look files (palette + corners). Chrome
+`ToolIcon`s come from a file set under `~/.config/uitoolkit/icons/` when
+one is selected. Packs may still list a default `icons` field
+(`classic` / `sharp`); `look.json` `"icons"` overrides it.
 
 ## Run
 
@@ -26,12 +29,13 @@ There is no menu bar. **Apply** is the only persist action for
 | Control | LookAndFeel | Values |
 | --- | --- | --- |
 | Theme picker | named pack → `Classic` | embedded starters + exported user packs |
+| Icon picker | file set or drawn fallback | classic / sharp + `icons/<set>/` |
 | Export | `themes/<name>/theme.json` | current (staged) look, asked for a name |
 
-There is no independent Theme / Corners / Icons triad. Those knobs live
-**inside** the selected pack.
+Corners stay inside the selected pack. Icons are chosen **on top of**
+the pack.
 
-The picker updates a **staged** appearance and previews it in the
+The pickers update a **staged** appearance and preview it in the
 Settings window (`Application.SetLook`) without touching disk. **Apply**
 writes `$XDG_CONFIG_HOME/uitoolkit/look.json` (atomic rename) so other
 running apps can reload. Closing the window without Apply **discards**
@@ -46,11 +50,14 @@ $XDG_CONFIG_HOME/uitoolkit/look.json
 
 ```json
 {
-  "theme": "dark-round-classic"
+  "theme": "dark-round-classic",
+  "icons": "outline"
 }
 ```
 
-`theme` is the **pack name only**. Corners and icons are not stored here.
+`theme` is the pack name. `icons` is the chrome set (`classic`, `sharp`,
+or an installed directory such as `outline`). Corners are not stored
+here.
 
 Mode `0600`. Missing or invalid files yield `dark-round-classic`.
 
@@ -93,14 +100,38 @@ $XDG_CONFIG_HOME/uitoolkit/themes/<name>/theme.json
 }
 ```
 
-JSON only. Edit the file to tweak palette, corners, or icons. **Export
-current look…** asks for a name and writes this file from the staged
-look.
+JSON only. Edit the file to tweak palette or corners. The pack `icons`
+field (`classic` / `sharp`) is a **fallback default** used only when
+`look.json` has no `"icons"`. When Settings Apply writes `"icons"`, that
+value owns chrome ToolIcons.
+
+**Export current look…** asks for a name and writes this file from the
+staged look.
 
 `ListThemes` lists **user packs first** (sorted by name), then builtins
 that are not shadowed. `LoadTheme(name)` **prefers the user pack** when
 both exist — a user `dark-round-classic` overrides the embedded starter
 of the same name and is listed once (as exported).
+
+## Icon sets (files)
+
+Chrome icons are **not** embedded. Ship-in-repo sets live at
+`icons/filled`, `icons/outline`, and `icons/duotone` (24×24 SVG, one
+file per action). Copy them yourself:
+
+```bash
+mkdir -p ~/.config/uitoolkit/icons
+cp -R icons/filled icons/outline icons/duotone ~/.config/uitoolkit/icons/
+```
+
+See [icons/README.md](../icons/README.md). Settings lists
+`classic` / `sharp` (drawn) plus every `icons/<set>/` directory that
+contains at least one ToolIcon SVG. A missing file falls back to the
+drawn classic glyph. The toolkit tints `currentColor` with the Look
+foreground / icon color.
+
+`ListIconSets` / `IconsDir` / `WithIcons` are the API. Changing icons
+and Apply reloads other apps the same way as a theme change.
 
 ## Live reload in other apps
 
@@ -159,8 +190,8 @@ uitoolkit.WithAppearance(look, uitoolkit.Appearance{Name: "ocean"})
 ```
 
 `PreferredLook` is `LoadAppearance().Look()`. `LoadAppearance` reads the
-pack name from `look.json` and resolves it with `LoadTheme` (user pack,
-then builtin).
+pack name and optional `"icons"` from `look.json`, resolves the pack
+with `LoadTheme` (user pack, then builtin), and overlays the icon set.
 
 ## API
 
@@ -168,9 +199,10 @@ then builtin).
 | --- | --- |
 | `ThemePack`, `ListThemes`, `LoadTheme`, `ExportTheme` | `style` / `uitoolkit` |
 | `Appearance`, `ThemeName`, `CornerStyle`, `IconSetName` | `style` / `uitoolkit` |
+| `IconSetInfo`, `ListIconSets`, `IconsDir` | `style` / `uitoolkit` |
 | `LoadAppearance`, `SaveAppearance`, `AppearancePath` | `style` / `uitoolkit` |
 | `ThemesDir`, `StarterName`, `DefaultThemeName` | `style` / `uitoolkit` |
 | `PreferredLook`, `LookAppearance` | `style` / `uitoolkit` |
 | `Options.WatchLook`, `Options.DisableLookWatch` | `app` / `uitoolkit` |
 | `Application.WatchingLook`, `Application.ReloadPreferredLook` | `app` |
-| `DrawToolIcon` | `style` |
+| `DrawToolIcon`, `DrawFileToolIcon` | `style` |

@@ -46,8 +46,8 @@ func (s *lookFileStamp) changed() bool {
 // WatchingLook reports whether this application reloads look.json at runtime.
 func (a *Application) WatchingLook() bool { return a.watchLook }
 
-// ReloadPreferredLook applies XDG look.json (theme pack name) onto the
-// current look, keeping display scale and density (WithAppearance).
+// ReloadPreferredLook applies XDG look.json (theme pack + icon set) onto
+// the current look, keeping display scale and density (WithAppearance).
 // Always SetLook when the file changed: skipping on Appearance equality
 // can no-op if LookAppearance is stale or a pack name matches while
 // palette / corners / icons do not.

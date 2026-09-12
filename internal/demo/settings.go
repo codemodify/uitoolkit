@@ -11,9 +11,9 @@ import (
 	"github.com/codemodify/uitoolkit/widgets"
 )
 
-// SettingsApp is the toolkit appearance editor (named theme packs).
+// SettingsApp is the toolkit appearance editor (theme packs + icon sets).
 // Picker changes preview locally via Application.SetLook. Apply writes
-// look.json (theme name only) so other apps watching the file reload.
+// look.json {theme, icons} so other apps watching the file reload.
 // Closing the window without Apply discards staged changes.
 func SettingsApp(a *app.Application, win *app.Window) widget.Component {
 	saved := style.LoadAppearance().Normalize()
@@ -27,12 +27,12 @@ func buildSettings(a *app.Application, win *app.Window, saved, staged style.Appe
 		section = 0
 	}
 
-	st := staged.String()
+	st := staged.Name + " · " + string(staged.Icons)
 	if staged != saved {
 		st += " · unapplied"
 	}
 	status := widgets.NewStatusBar(st, style.AppearancePath(), "v"+uitoolkit.Version)
-	chrome := widgets.NewTitleBar("Settings", "Named theme packs for every uitoolkit app")
+	chrome := widgets.NewTitleBar("Settings", "Theme packs and file icon sets for every uitoolkit app")
 
 	preview := func(next style.Appearance) {
 		next = next.Normalize()
@@ -66,10 +66,36 @@ func buildSettings(a *app.Application, win *app.Window, saved, staged style.Appe
 		if i < 0 || i >= len(themes) {
 			return
 		}
-		preview(themes[i].Appearance())
+		next := themes[i].Appearance()
+		next.Icons = staged.Icons
+		preview(next)
 	})
 	picker.Selected = sel
 	picker.RowHeight = 28
+
+	iconSets := style.ListIconSets()
+	iconSel := 0
+	for i, s := range iconSets {
+		if s.Name == staged.Icons {
+			iconSel = i
+			break
+		}
+	}
+	iconPicker := widgets.NewListView(len(iconSets), func(i int) string {
+		if i < 0 || i >= len(iconSets) {
+			return ""
+		}
+		return iconSets[i].Label
+	}, func(i int) {
+		if i < 0 || i >= len(iconSets) {
+			return
+		}
+		next := staged
+		next.Icons = iconSets[i].Name
+		preview(next)
+	})
+	iconPicker.Selected = iconSel
+	iconPicker.RowHeight = 28
 
 	var exportHost widget.Component
 	exportBtn := widgets.NewButton("Export current look…", func() {
@@ -89,14 +115,18 @@ func buildSettings(a *app.Application, win *app.Window, saved, staged style.Appe
 		widgets.NewLabel("Pack  "+staged.Name),
 		widgets.NewLabel("Palette  "+string(staged.Theme)),
 		widgets.NewLabel("Corners  "+string(staged.Corners)),
-		widgets.NewLabel("Icons  "+string(staged.Icons)),
+		widgets.NewLabel("Icons  "+string(staged.Icons)+"  (on top of the pack)"),
+		widgets.NewLabel("Copy repo icons/ into ~/.config/uitoolkit/icons/ to install sets."),
 		widgets.NewLabel("User packs override builtins of the same name."),
 		widgets.NewRow(exportBtn).WithGap(8),
 	).WithGap(6)
 	pickerCol := widgets.NewColumn(widgets.NewLabel("Theme"), picker).WithGap(4)
 	pickerCol.AddFlex(picker, 1)
-	choices := widgets.NewRow(pickerCol, detail).WithGap(20)
+	iconCol := widgets.NewColumn(widgets.NewLabel("Icons"), iconPicker).WithGap(4)
+	iconCol.AddFlex(iconPicker, 1)
+	choices := widgets.NewRow(pickerCol, iconCol, detail).WithGap(16)
 	choices.AddFlex(pickerCol, 3)
+	choices.AddFlex(iconCol, 2)
 	choices.AddFlex(detail, 2)
 
 	primary := widgets.NewButton("Primary action", func() { status.Set(0, "Primary") })
@@ -158,15 +188,20 @@ func buildSettings(a *app.Application, win *app.Window, saved, staged style.Appe
 	themesPath := widgets.NewMonoTextView(style.ThemesDir()+"/<name>/theme.json", "")
 	themesPath.MinRows = 2
 	themesPath.Wrap = true
+	iconsPath := widgets.NewMonoTextView(style.IconsDir()+"/<set>/*.svg", "")
+	iconsPath.MinRows = 2
+	iconsPath.Wrap = true
 	about := widgets.NewColumn(
 		widgets.NewTitle("About"),
 		widgets.NewLabel("uitoolkit v"+uitoolkit.Version),
 		widgets.NewLabel("LookAndFeel Classic — Titillium Web + JetBrains Mono."),
-		widgets.NewLabel("Prefs file (theme name, written on Apply):"),
+		widgets.NewLabel("Prefs file (theme + icons, written on Apply):"),
 		aboutPath,
 		widgets.NewLabel("User theme packs (exported; override builtins by name):"),
 		themesPath,
-		widgets.NewLabel("Eight starter packs are embedded in the binary, not written to disk."),
+		widgets.NewLabel("Icon sets (copy repo icons/filled|outline|duotone here):"),
+		iconsPath,
+		widgets.NewLabel("Eight starter packs are embedded. Icon SVGs are not."),
 		widgets.NewLabel("Other apps watch look.json and call SetLook(PreferredLook())."),
 		widgets.NewButton("Open appearance", func() {
 			win.SetContent(buildSettings(a, win, saved, staged, 0))
@@ -201,7 +236,7 @@ func buildSettings(a *app.Application, win *app.Window, saved, staged style.Appe
 	if staged == saved {
 		applyBtn.SetEnabled(false)
 	}
-	hint := widgets.NewLabel("Apply writes the theme name to look.json. Close without Apply discards staged changes.")
+	hint := widgets.NewLabel("Apply writes theme + icons to look.json. Close without Apply discards staged changes.")
 	actions := widgets.NewRow(applyBtn, hint).WithGap(12).WithPad(8)
 
 	root := widgets.NewColumn(chrome, split, actions, status)

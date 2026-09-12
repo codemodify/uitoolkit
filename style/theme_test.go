@@ -42,7 +42,7 @@ func TestEmbeddedStartersCoverMatrix(t *testing.T) {
 	}
 }
 
-func TestSaveAppearanceWritesThemeNameOnly(t *testing.T) {
+func TestSaveAppearanceWritesThemeAndIcons(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	want := Appearance{Theme: ThemeLight, Corners: CornersSquare, Icons: IconSetSharp}
 	if err := SaveAppearance(want); err != nil {
@@ -59,11 +59,11 @@ func TestSaveAppearanceWritesThemeNameOnly(t *testing.T) {
 	if doc["theme"] != "light-square-sharp" {
 		t.Fatalf("theme %v", doc["theme"])
 	}
+	if doc["icons"] != "sharp" {
+		t.Fatalf("icons %v", doc["icons"])
+	}
 	if _, ok := doc["corners"]; ok {
 		t.Fatalf("corners leaked: %s", raw)
-	}
-	if _, ok := doc["icons"]; ok {
-		t.Fatalf("icons leaked: %s", raw)
 	}
 	got := LoadAppearance()
 	if got != want.Normalize() {

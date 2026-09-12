@@ -47,7 +47,7 @@ func newClassic(name string, p Palette, m Metrics, corners CornerStyle, icons Ic
 		palette: p,
 		metrics: m,
 		name:    name,
-		pack:    StarterName(ParseTheme(name), corners, icons),
+		pack:    StarterName(ParseTheme(name), corners, FallbackIcons(icons)),
 		corners: corners,
 		icons:   icons,
 		// OpenType atlases (Titillium / JetBrains Mono); Color tints at draw.
