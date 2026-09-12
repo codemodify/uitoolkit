@@ -1,6 +1,6 @@
 # Mail — mailclientd + mailclientui
 
-Thunderbird-chrome mail client on uitoolkit **v0.10.11**. Two processes:
+Thunderbird-chrome mail client on uitoolkit **v0.10.12**. Two processes:
 
 | Process | Role |
 | --- | --- |
@@ -315,7 +315,7 @@ Condition fields: `from`, `to`, `subject`, `body`, `attachment`, `unread`, `tag`
 Actions: `move` (`folder`), `tag`, `markRead`, `markUnread`, `delete`, `stop`.
 AND across conditions. Persist in MemoryStore or the disk cache. Tools → Message Filters.
 
-## UI features (v0.10.11)
+## UI features (v0.10.12)
 
 - **Empty by default** — no demo accounts unless `UITK_MAIL=memory`. First-run Yes/No is only “There are no accounts, want to add one?” Password / `0600` notes are on the Add Account form.
 - **Add account** — IMAP vs POP3 radios, domain auto-guess (including POP hosts), **Test connection** (and optional auto-detect after email+password), masked password field, or Sign in with Google / Microsoft (or device code; IMAP). Saved accounts show the protocol on Account Central and in Preferences. `passEnv` remains an optional fallback.
@@ -327,7 +327,7 @@ AND across conditions. Persist in MemoryStore or the disk cache. Tools → Messa
 - **Card / Table** — View → Card view or the Cards toolbar toggle. Remembered in `~/.config/uitoolkit/mailui.json`. Star after Message → Star (or context menu) paints immediately.
 - **Density** — View → Compact / Default / Relaxed.
 - **Folder tree** — account folders, Tags, and Outbox. Unified Folders, Smart Folders, Categories, and VIP are not shown. Click an account root to open that Inbox.
-- **Chrome** — no path/subtitle strip, no bottom status bar, no sidebar Account / Folders section headers, no identity ComboBox, and no active-filter banner (`Filter on · N shown` / `Clear filter`) above the thread list. The folder tree (including Tags) starts at the top of the sidebar. The main toolbar keeps Get / Write / Quick Filter toggle / Cards / Classic on the left; Quick Filter (field + Unread / Starred / Attachment / From / To / Subject / Body pins) sits in that same row after Classic, right-aligned (flex spacer). There is no second filter strip under the toolbar. Tag / Archive / Junk / Delete live on a small toolbar immediately above the Topic / Who / When header. Reply and Forward are menu / keyboard only (not on the main toolbar). File → Add Account / Remove Account / Account Central still manage stores.
+- **Chrome** — no path/subtitle strip, no bottom status bar, no sidebar Account / Folders section headers, no identity ComboBox, and no active-filter banner (`Filter on · N shown` / `Clear filter`) above the thread list. The folder tree (including Tags) starts at the top of the sidebar. The main toolbar keeps Get / Write / Cards / Classic on the left; Quick Filter (field + Unread / Starred / Attachment / From / To / Subject / Body pins) sits in that same row after Classic, right-aligned (flex spacer). Hide or show the filter with View → Quick Filter Bar (or Edit → Find / Ctrl+F to show and focus). There is no second filter strip under the toolbar and no left-side Quick Filter visibility toggle. Tag / Archive / Junk / Delete live on a small toolbar immediately above the Topic / Who / When header. Reply and Forward are menu / keyboard only (not on the main toolbar). File → Add Account / Remove Account / Account Central still manage stores.
 - **Threaded** view and **Mute Thread**.
 - **Attachments** — per-row Open / Save As; toolbar Save All (one folder pick, then write all files); single click selects, double click or row Open opens.
 - **Snappy open** — unread click patches the row; preview uses a cached `messages.get` body.

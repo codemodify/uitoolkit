@@ -637,6 +637,18 @@ func assertMailToolChrome(t *testing.T, root widget.Component, qf widget.Compone
 	if separateFilterRow(root) {
 		t.Fatal("separate Quick Filter row still under the main toolbar")
 	}
+	if main["Quick Filter"] {
+		t.Fatal("left Quick Filter visibility toggle should be gone (View menu / Ctrl+F)")
+	}
+	barOrigin := widget.DeviceOrigin(mainBar)
+	qfOrigin := widget.DeviceOrigin(qf)
+	if qfOrigin.X+0.5 < barOrigin.X+mainBar.Bounds().Dx() {
+		t.Fatalf("filter should sit after Classic: bar=%v..%v qf=%v",
+			barOrigin.X, barOrigin.X+mainBar.Bounds().Dx(), qfOrigin.X)
+	}
+	if qf.Bounds().Dx() <= 100 {
+		t.Fatalf("quick filter crushed: width=%v toolbar=%v", qf.Bounds().Dx(), mainBar.Bounds().Dx())
+	}
 }
 
 func toolTexts(bar *widgets.ToolBar) map[string]bool {

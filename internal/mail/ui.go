@@ -558,8 +558,6 @@ func (s *session) toolBar() widget.Component {
 	get.Tip = "Get new messages for this account (demo Fetch)"
 	write := widgets.ToolIconBtn(style.IconNew, "Write", s.write)
 	write.Tip = "Write a new message"
-	qf := widgets.ToolToggle("Quick Filter", s.opts.ShowFilter, s.toggleFilter)
-	qf.Tip = "Show Quick Filter on the right of this toolbar"
 	cards := widgets.ToolToggle("Cards", s.cardView, func() { s.setCardView(!s.cardView) })
 	cards.Tip = "Toggle card vs table thread list"
 	lay := widgets.ToolToggle("Classic", s.opts.Layout == LayoutClassic, func() {
@@ -573,7 +571,7 @@ func (s *session) toolBar() widget.Component {
 	lay.Tip = "Toggle classic vs vertical 3-pane"
 	left := widgets.NewToolBar(
 		get, write, widgets.ToolDivider(),
-		qf, cards, lay,
+		cards, lay,
 	)
 	spacer := widgets.NewRow()
 	bar := widgets.NewRow(left, spacer, s.qfBar).WithGap(8).WithPadding(4, 0, 8, 0).WithAlign(layout.AlignCenter)

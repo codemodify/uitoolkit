@@ -112,24 +112,55 @@ func (t *ToolBar) barH() float32 {
 	return h
 }
 
-func (t *ToolBar) Measure(c layout.Constraints) paintengine2d.Point {
-	w := float32(200)
-	if c.HasMaxW() {
-		w = c.MaxW
+func (t *ToolBar) toolBtnW(h float32) float32 {
+	btn := t.Look().Metrics().ToolBtn
+	if btn <= 0 {
+		btn = h - 6
+		if btn < 8 {
+			btn = 8
+		}
 	}
-	return c.Constrain(paintengine2d.Pt(w, t.barH()))
+	return btn
+}
+
+func (t *ToolBar) itemBoxW(it *ToolItem, btn float32) float32 {
+	if it == nil || it.Sep {
+		return 8
+	}
+	if it.Text == "" {
+		return btn
+	}
+	w := t.Look().Font().Advance(it.Text) + 18
+	if it.Icon != style.IconNone {
+		w += 18
+	}
+	return w
+}
+
+// contentW is the intrinsic strip width (items + padding). ToolBar must
+// not expand to MaxW: a Row/Flex parent decides growth via Flex weights.
+func (t *ToolBar) contentW() float32 {
+	btn := t.toolBtnW(t.barH())
+	x := float32(6)
+	for _, it := range t.items {
+		if it == nil || it.Sep {
+			x += 10
+			continue
+		}
+		x += t.itemBoxW(it, btn) + 4
+	}
+	return x + 6
+}
+
+func (t *ToolBar) Measure(c layout.Constraints) paintengine2d.Point {
+	return c.Constrain(paintengine2d.Pt(t.contentW(), t.barH()))
 }
 
 func (t *ToolBar) Arrange(r paintengine2d.Rect) { t.SetBounds(r) }
 
 func (t *ToolBar) itemRects() []paintengine2d.Rect {
-	f := t.Look().Font()
-	m := t.Look().Metrics()
 	h := t.LocalBounds().Dy()
-	btn := m.ToolBtn
-	if btn <= 0 {
-		btn = h - 6
-	}
+	btn := t.toolBtnW(h)
 	x := float32(6)
 	y := (h - btn) * 0.5
 	if y < 2 {
@@ -143,13 +174,7 @@ func (t *ToolBar) itemRects() []paintengine2d.Rect {
 			x += 10
 			continue
 		}
-		w := btn
-		if it.Text != "" {
-			w = f.Advance(it.Text) + 18
-			if it.Icon != style.IconNone {
-				w += 18
-			}
-		}
+		w := t.itemBoxW(it, btn)
 		out[i] = paintengine2d.XYWH(x, y, w, btn)
 		x += w + 4
 	}
