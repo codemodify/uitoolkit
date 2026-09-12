@@ -78,6 +78,11 @@ func TestMailTrayFakeClickRaises(t *testing.T) {
 	if tray.MenuChrome() != platform.HostMenu {
 		t.Fatalf("Mail tray chrome %v want HostMenu", tray.MenuChrome())
 	}
+	w.Hide()
+	tray.ClickNotify()
+	if !w.Visible() {
+		t.Fatal("notify-click should show Mail")
+	}
 }
 
 func TestMailNotifyEventShowsToast(t *testing.T) {

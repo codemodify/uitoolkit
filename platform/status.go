@@ -86,7 +86,9 @@ type StatusItemOptions struct {
 	// (opt-in toolkit PopupMenu). See [StatusMenuChrome].
 	MenuChrome StatusMenuChrome
 	// ItemIsMenu, when true, advertises SNI ItemIsMenu so left-click is
-	// treated as “menu only” by hosts. Default false: left-click is Activate.
+	// treated as “menu only” by hosts (they draw dbusmenu). Activate then
+	// does not fire OnClick. ToolkitMenu still routes Activate to OnMenu.
+	// Default false: left-click is Activate → OnClick.
 	ItemIsMenu bool
 	// OnClick is the primary (left) click. Apps typically Show/Raise a window.
 	OnClick func()
@@ -183,6 +185,20 @@ func copyMenu(in []StatusMenuItem) []StatusMenuItem {
 	out := make([]StatusMenuItem, len(in))
 	copy(out, in)
 	return out
+}
+
+// statusIconName is the freedesktop / SNI IconName. Empty Name falls
+// back to a generic theme icon so hosts that ignore IconPixmap still
+// show something (not a Mail-specific name).
+func statusIconName(icon StatusIcon) string {
+	if icon.Name != "" {
+		return icon.Name
+	}
+	return "application-default-icon"
+}
+
+func menuItemClickable(it StatusMenuItem) bool {
+	return !it.Separator && !it.Disabled && it.OnClick != nil
 }
 
 func menuRowsEqual(a, b []StatusMenuItem) bool {

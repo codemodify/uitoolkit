@@ -122,6 +122,45 @@ func TestMenuRowsEqual(t *testing.T) {
 	if menuRowsEqual(a, b) {
 		t.Fatal("text change")
 	}
+	if !menuRowsEqual(nil, []StatusMenuItem{}) {
+		t.Fatal("nil and empty are the same menu")
+	}
+}
+
+func TestStatusIconNameAndClickable(t *testing.T) {
+	if statusIconName(StatusIcon{Name: "mail-unread"}) != "mail-unread" {
+		t.Fatal("keep explicit name")
+	}
+	if statusIconName(StatusIcon{}) != "application-default-icon" {
+		t.Fatal("generic fallback, not mail-unread")
+	}
+	if menuItemClickable(StatusMenuItem{Separator: true, OnClick: func() {}}) {
+		t.Fatal("separator")
+	}
+	if menuItemClickable(StatusMenuItem{Text: "x", Disabled: true, OnClick: func() {}}) {
+		t.Fatal("disabled")
+	}
+	if !menuItemClickable(StatusMenuItem{Text: "x", OnClick: func() {}}) {
+		t.Fatal("enabled")
+	}
+}
+
+func TestFakeItemIsMenuClickDoesNotOnClick(t *testing.T) {
+	t.Setenv("UITK_TRAY", "fake")
+	n, opened := 0, 0
+	item, err := NewStatusItem(StatusItemOptions{
+		Title:      "Mail",
+		ItemIsMenu: true,
+		OnClick:    func() { n++ },
+		OnMenu:     func(x, y int32) { opened++ },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	item.(*FakeStatusItem).Click()
+	if n != 0 || opened != 1 {
+		t.Fatalf("ItemIsMenu Click n=%d opened=%d", n, opened)
+	}
 }
 
 func TestShowRaiseAfterHideMakesVisible(t *testing.T) {

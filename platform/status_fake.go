@@ -117,9 +117,18 @@ func (f *FakeStatusItem) Closed() bool {
 func (f *FakeStatusItem) Click() {
 	f.mu.Lock()
 	f.Clicks++
+	menuOnly := f.opts.ItemIsMenu
 	fn := f.opts.OnClick
+	menuFn := f.opts.OnMenu
+	dispatch := f.opts.Dispatch
 	f.mu.Unlock()
-	invokeStatus(f.opts.Dispatch, fn)
+	if menuOnly {
+		if menuFn != nil {
+			invokeStatus(dispatch, func() { menuFn(0, 0) })
+		}
+		return
+	}
+	invokeStatus(dispatch, fn)
 }
 
 // ClickNotify activates the last notification.
@@ -154,7 +163,7 @@ func (f *FakeStatusItem) ContextClick(x, y int32) {
 func (f *FakeStatusItem) ClickMenu(i int) {
 	f.mu.Lock()
 	var fn func()
-	if i >= 0 && i < len(f.menu) {
+	if i >= 0 && i < len(f.menu) && menuItemClickable(f.menu[i]) {
 		fn = f.menu[i].OnClick
 	}
 	f.mu.Unlock()

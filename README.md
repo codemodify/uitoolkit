@@ -510,6 +510,13 @@ are independent look.json fields again; compound pack names migrate
 
 ## Version
 
+**0.18.1** — **StatusItem HostMenu harden.** Empty dbusmenu layout,
+`IconName` fallback (no toolkit-wide `mail-unread`), `ItemIsMenu` is
+menu-only, HostMenu `SecondaryActivate` does not raise, dbusmenu
+`Version=3`, `Event` ignores separator/disabled. Mail tray unchanged
+(Show Mail / Quit, left-click + notify-click raise, envelope,
+close-to-tray). See `docs/tray.md`.
+
 **0.18.0** — **Desktop chrome hardness.** New `ChromeNorms` lock
 ScrollView thumbs, List/Table clip + header flush, TableView column
 resize, Splitter clip/cursor, ComboBox/NumberField/`FieldHeight`,
