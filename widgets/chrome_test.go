@@ -301,6 +301,30 @@ func TestPopupMenuActivate(t *testing.T) {
 	}
 }
 
+func TestMenuBarHoverIsPerTitle(t *testing.T) {
+	mb := NewMenuBar(
+		NewMenu("&File", Item("New", nil)),
+		NewMenu("&Help", Item("About", nil)),
+	)
+	mb.SetHost(&host{})
+	mb.Arrange(paintengine2d.XYWH(0, 0, 480, 30))
+	mb.MouseEnter()
+	file := mb.TitleRect(0)
+	help := mb.TitleRect(1)
+	mb.MouseMove(widget.MouseEvent{Pos: paintengine2d.Pt((help.Min.X+help.Max.X)*0.5, 12)})
+	if mb.HoverIndex() != 1 {
+		t.Fatalf("hover %d want Help", mb.HoverIndex())
+	}
+	mb.MouseMove(widget.MouseEvent{Pos: paintengine2d.Pt((file.Min.X+file.Max.X)*0.5, 12)})
+	if mb.HoverIndex() != 0 {
+		t.Fatalf("hover %d want File", mb.HoverIndex())
+	}
+	mb.MouseMove(widget.MouseEvent{Pos: paintengine2d.Pt(help.Max.X+40, 12)})
+	if mb.HoverIndex() != -1 {
+		t.Fatalf("empty strip hover %d (help=%+v)", mb.HoverIndex(), help)
+	}
+}
+
 func TestMenuBarMnemonic(t *testing.T) {
 	mb := NewMenuBar(
 		NewMenu("&File", Item("About", nil)),

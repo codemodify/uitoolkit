@@ -454,7 +454,7 @@ func (l *Classic) DrawMenuItem(ctx *paintengine2d.Context, b paintengine2d.Rect,
 	ch := MenuChromeFor(l)
 	if row.Separator {
 		y := (b.Min.Y + b.Max.Y) * 0.5
-		x0 := b.Min.X + ch.CheckCol()
+		x0 := ch.LabelMinX(b.Min.X)
 		if w := b.Max.X - 8 - x0; w > 0 {
 			ctx.DrawRect(paintengine2d.XYWH(x0, y, w, 1), paintengine2d.Fill(p.Divider))
 		}

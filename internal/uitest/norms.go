@@ -95,6 +95,12 @@ func ChromeNorms() []Norm {
 			Check: checkMenuHoverBordered,
 		},
 		{
+			ID: "menubar-title-hover", Control: "MenuBar",
+			Peer:  "Office XP / Qt QMenuBar · GTK GtkPopoverMenuBar",
+			Want:  "only the hovered (or open) title paints XP highlight; siblings stay idle",
+			Check: checkMenuBarTitleHover,
+		},
+		{
 			ID: "textfield-inactive-sel", Control: "TextField",
 			Peer:  "Qt QLineEdit inactive · GTK GtkEntry · Avalonia TextBox",
 			Want:  "unfocused selection is de-emphasized vs the live accent band",
@@ -257,6 +263,45 @@ func checkMenuHoverBordered() error {
 		return fmt.Errorf("light: %w", err)
 	}
 	return checkMenuBarOpenTitle(style.DarkLook())
+}
+
+func checkMenuBarTitleHover() error {
+	if err := checkMenuBarTitleHoverOnLook(style.LightLook()); err != nil {
+		return fmt.Errorf("light: %w", err)
+	}
+	return checkMenuBarTitleHoverOnLook(style.DarkLook())
+}
+
+func checkMenuBarTitleHoverOnLook(lk style.LookAndFeel) error {
+	h := NewHost()
+	h.SetLook(lk)
+	mb := widgets.NewMenuBar(
+		widgets.NewMenu("&File", widgets.Item("New", nil)),
+		widgets.NewMenu("&Help", widgets.Item("About", nil)),
+	)
+	s := MountHost(h, mb, paintengine2d.XYWH(0, 0, 480, 40))
+	file := mb.TitleRect(0)
+	help := mb.TitleRect(1)
+	if file.Empty() || help.Empty() {
+		return fmt.Errorf("empty titles")
+	}
+	s.MouseMove(paintengine2d.Pt((help.Min.X+help.Max.X)*0.5, (help.Min.Y+help.Max.Y)*0.5))
+	img := s.Paint()
+	p := style.ResolveMenuChrome(lk.Palette())
+	hr, hg, hb := RGB8(p.MenuHover)
+	helpFill := countNearRGB(img, help.Inset(1), hr, hg, hb, 48)
+	fileFill := countNearRGB(img, file.Inset(1), hr, hg, hb, 48)
+	if helpFill < 8 {
+		return fmt.Errorf("hovered Help title lacks MenuHover (near=%d)", helpFill)
+	}
+	if fileFill >= 8 && fileFill*2 >= helpFill {
+		return fmt.Errorf("idle File title painted MenuHover (file=%d help=%d) — full-bar wash", fileFill, helpFill)
+	}
+	s.MouseMove(paintengine2d.Pt(mb.Bounds().Dx()-12, (help.Min.Y+help.Max.Y)*0.5))
+	if mb.HoverIndex() != -1 {
+		return fmt.Errorf("empty-bar hover index %d (file=%+v help=%+v)", mb.HoverIndex(), file, help)
+	}
+	return nil
 }
 
 func checkMenuHoverOnLook(lk style.LookAndFeel) error {

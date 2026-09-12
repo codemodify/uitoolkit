@@ -20,7 +20,7 @@ func TestMenuChromeGutterFitsIconSize(t *testing.T) {
 func TestMenuChromeForScalesWithLook(t *testing.T) {
 	lo := MenuChromeFor(DarkLook())
 	hi := MenuChromeFor(WithScale(DarkLook(), 2))
-	if lo.CheckCol() < 19 || lo.ItemPad < 9 {
+	if lo.CheckCol() < 19 || lo.ItemPad < 9 || lo.LabelGap < 7 {
 		t.Fatalf("1x chrome %+v", lo)
 	}
 	if hi.CheckCol() < lo.CheckCol()*1.9 || hi.ItemPad < lo.ItemPad*1.9 {
@@ -68,13 +68,29 @@ func sameRGB(a, b paintengine2d.Color) bool {
 	return a.R == b.R && a.G == b.G && a.B == b.B
 }
 
+func TestMenuChromeLabelGapAfterGutter(t *testing.T) {
+	ch := MenuChromeFor(DarkLook())
+	if ch.LabelGap < 8 {
+		t.Fatalf("LabelGap %v", ch.LabelGap)
+	}
+	gutter := ch.GutterW()
+	label := ch.PadL + ch.CheckCol() + ch.LabelGap
+	if gap := label - gutter; gap < 8 {
+		t.Fatalf("gutter→label %v (gutter %v label %v)", gap, gutter, label)
+	}
+	row := float32(8)
+	if ch.LabelMinX(row)-row < ch.CheckCol()+7 {
+		t.Fatalf("LabelMinX %v CheckCol %v", ch.LabelMinX(row), ch.CheckCol())
+	}
+}
+
 func TestMenuChromeFrameWidthIncludesItemPad(t *testing.T) {
 	ch := MenuChromeFor(nil)
 	label := float32(80)
 	w := ch.FrameWidth(label, 0)
-	// Label starts at PadL+CheckCol; reserved advance ends ItemPad before item
-	// right, and item right is PadR before the frame. Border is extra slop.
-	need := ch.PadL + ch.CheckCol() + label + ch.ItemPad + ch.PadR
+	// Label starts after PadL+CheckCol+LabelGap; reserved advance ends ItemPad
+	// before item right, and item right is PadR before the frame.
+	need := ch.PadL + ch.CheckCol() + ch.LabelGap + label + ch.ItemPad + ch.PadR
 	if w+0.5 < need {
 		t.Fatalf("frame %v < pad+label %v chrome=%+v", w, need, ch)
 	}

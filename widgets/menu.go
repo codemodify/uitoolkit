@@ -96,6 +96,9 @@ func (m *MenuBar) Menus() []*Menu { return m.menus }
 // OpenIndex is the open menu, or -1.
 func (m *MenuBar) OpenIndex() int { return m.open }
 
+// HoverIndex is the title under the pointer, or -1.
+func (m *MenuBar) HoverIndex() int { return m.hover }
+
 func (m *MenuBar) RetainsPointer() bool { return true }
 
 func (m *MenuBar) barH() float32 {
@@ -162,7 +165,11 @@ func (m *MenuBar) Paint(ctx *paintengine2d.Context) {
 	ctx.ClipRect(m.LocalBounds())
 	rects := m.titleRects()
 	for i, menu := range m.menus {
+		// The bar's widget StateHovered is true for any pointer on the
+		// strip (including empty space). Titles must not inherit it or
+		// every label paints the XP fill — a full-bar wash.
 		st := m.State()
+		st &^= style.StateHovered | style.StatePressed
 		if i == m.hover {
 			st |= style.StateHovered
 		}

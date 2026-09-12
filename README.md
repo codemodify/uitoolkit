@@ -509,6 +509,12 @@ are independent look.json fields again; compound pack names migrate
 
 ## Version
 
+**0.13.7** — MenuBar titles no longer inherit the strip’s `StateHovered`,
+so only the hovered or open title paints the XP highlight (siblings stay
+idle; empty-bar hover is not a full wash). Dropdown / context rows gain
+`MenuChrome.LabelGap` (8px at 1×) between the gray icon gutter and the
+label. Still paintengine2d **v0.9.0**.
+
 **0.13.6** — Mail list chrome hides the Quick Filter field behind an
 icon-only Filter button (right of Delete); View / Ctrl+F still open and
 focus the field, Escape hides it and keeps the query. Filters tree is
