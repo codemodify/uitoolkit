@@ -48,9 +48,9 @@ func main() {
 	}
 	defer cli.Close()
 
-	look := style.DarkLook()
+	look := style.PreferredLook()
 	if *light {
-		look = style.LightLook()
+		look = style.WithTheme(look, style.ThemeLight)
 	}
 	layout := mail.LayoutVertical
 	if *classic {
@@ -65,7 +65,7 @@ func main() {
 		log.Fatal(err)
 	}
 	win.SetContent(mail.Open(a, win, cli, mail.AppOptions{
-		Light: *light, Layout: layout, ShowFilter: true,
+		Light: style.LookAppearance(look).Theme == style.ThemeLight, Layout: layout, ShowFilter: true,
 	}))
 	if *headless {
 		if err := win.WritePNG("mail.png"); err != nil {

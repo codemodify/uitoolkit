@@ -15,7 +15,7 @@ func main() {
 	headless := flag.Bool("headless", false, "paint offscreen and write notes.png")
 	flag.Parse()
 
-	a := uitoolkit.New(uitoolkit.Options{Look: uitoolkit.DarkLook(), Headless: *headless})
+	a := uitoolkit.New(uitoolkit.Options{Look: uitoolkit.PreferredLook(), Headless: *headless})
 	win, err := a.NewWindow(platform.WindowOptions{
 		Title: "Notes", Width: 860, Height: 540, MinWidth: 520, MinHeight: 360,
 	})

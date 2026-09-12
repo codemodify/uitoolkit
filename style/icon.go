@@ -1,6 +1,7 @@
 package style
 
 // ToolIcon is a stock glyph drawn by LookAndFeel (no bitmap assets).
+// Classic and Sharp icon sets share this enum; see DrawToolIcon / IconSetName.
 type ToolIcon int
 
 const (

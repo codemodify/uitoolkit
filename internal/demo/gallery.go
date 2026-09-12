@@ -124,12 +124,14 @@ func Gallery(a *app.Application, win *app.Window, light bool) widget.Component {
 	})
 
 	themeBtn := widgets.NewButton("Theme", func() {
-		if win.Look().Name() == "dark" {
-			a.SetLook(style.LightLook())
+		next := style.LookAppearance(win.Look())
+		if next.Theme == style.ThemeLight {
+			next.Theme = style.ThemeDark
 		} else {
-			a.SetLook(style.DarkLook())
+			next.Theme = style.ThemeLight
 		}
-		win.SetContent(Gallery(a, win, win.Look().Name() == "light"))
+		a.SetLook(style.WithAppearance(win.Look(), next))
+		win.SetContent(Gallery(a, win, next.Theme == style.ThemeLight))
 	})
 
 	buttons := widgets.NewPanel("Buttons",
@@ -418,11 +420,11 @@ func Gallery(a *app.Application, win *app.Window, light bool) widget.Component {
 		),
 		widgets.NewMenu("&View",
 			widgets.CheckItem("&Dark", !light, func() {
-				a.SetLook(style.DarkLook())
+				a.SetLook(style.WithTheme(win.Look(), style.ThemeDark))
 				win.SetContent(Gallery(a, win, false))
 			}),
 			widgets.CheckItem("&Light", light, func() {
-				a.SetLook(style.LightLook())
+				a.SetLook(style.WithTheme(win.Look(), style.ThemeLight))
 				win.SetContent(Gallery(a, win, true))
 			}),
 		),

@@ -107,6 +107,10 @@ paintengine2d with Titillium Web (and JetBrains Mono in code views).
 
 ![Inspector](docs/screenshots/inspector.png)
 
+### Settings — theme, corners, icon set
+
+![Settings](docs/screenshots/settings.png)
+
 ### Files — projects dogfood
 
 ![Files](docs/screenshots/files.png)
@@ -170,6 +174,7 @@ Regenerate:
 ```bash
 go run ./examples/gallery -screenshot docs/screenshots
 go run ./examples/mail -screenshot docs/screenshots
+go run ./cmd/uitksettings -screenshot docs/screenshots
 ```
 
 ## Quickstart
@@ -196,6 +201,8 @@ go run ./examples/mail              # in-process daemon + UI (same protocol)
 go run ./examples/mail -headless    # writes mail.png
 go run ./examples/mail -classic     # preview below the thread list
 go run ./examples/mail -light
+go run ./cmd/uitksettings           # theme, corners, icon set (XDG look.json)
+go run ./cmd/uitksettings -headless # writes settings.png
 ```
 
 ## Testing
@@ -284,11 +291,14 @@ widgets    Button, Label, TextField, TextArea     ScrollView, ListView, TableVie
            Accordion, Expander, Spacer            ProgressBar, RadioGroup
            MessageBox, FileDialog stub, Tooltip   TitleBar, context menus
            CardList
-style      LookAndFeel + Palette + Metrics        Dark / Light Classic
+style      LookAndFeel + Palette + Metrics        Dark / Light Classic,
+                                                  round / square corners,
+                                                  Classic / Sharp icons
 ```
 
-Swap the skin with `Application.SetLook(uitoolkit.LightLook())`. Controls
-never hard-code colors.
+Swap the skin with `Application.SetLook(uitoolkit.LightLook())` or
+`PreferredLook()` (XDG `look.json` from **Settings**). Controls
+never hard-code colors. See [docs/settings.md](docs/settings.md).
 
 ## Widget comparison
 
@@ -475,9 +485,19 @@ Classic (**v0.10.11**). `ToolBar.Measure` returns intrinsic width so a
 flex spacer can right-align siblings; Mail Quick Filter stays visible
 on the right (**v0.10.12**). Context menus size to the full label plus
 check column, padding, and frame so “Add sender to VIP” is not clipped
-(**v0.10.13**).
+(**v0.10.13**). Settings (`cmd/uitksettings`) is a first-class Appearance
+editor: Dark / Light, round / square corners, Classic / Sharp icon sets,
+persisted as `$XDG_CONFIG_HOME/uitoolkit/look.json` (**v0.11.0**).
 
 ## Version
+
+**0.11.0** — Toolkit Settings app (`go run ./cmd/uitksettings`). Theme,
+corner policy, and icon set are LookAndFeel settings (`Appearance`,
+`PreferredLook`, `WithTheme` / `WithCorners` / `WithIcons`) other apps
+apply via `SetLook`. Square chrome zeros `Metrics.Radius`; Sharp is a
+second vector `ToolIcon` set. Prefs live in XDG `uitoolkit/look.json`.
+Mail, gallery, Files, Notes, and Inspector start from `PreferredLook`.
+Still paintengine2d **v0.9.0**.
 
 **0.10.13** — Toolkit: `PopupMenu` / `DrawMenuItem` share Look `MenuChrome`
 (scale + density) so context menus without shortcuts still size to the
