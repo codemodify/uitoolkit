@@ -506,6 +506,12 @@ are independent look.json fields again; compound pack names migrate
 
 ## Version
 
+**0.12.3** — Settings can **Delete** a selected **User** theme (confirm,
+then remove `~/.config/uitoolkit/themes/<name>/`). Built-in dark/light
+never offer Delete. The live selection falls back to a builtin palette
+so the picker is not left dangling. User icon-set folders can be
+removed the same way. Still paintengine2d **v0.9.0**.
+
 **0.12.2** — Theme is palette only (`dark`, `light`, plus user color
 themes). Corners (round / square) and icons are separate Settings
 controls, stored independently in `look.json`:

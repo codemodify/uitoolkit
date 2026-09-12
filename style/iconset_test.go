@@ -86,6 +86,18 @@ func TestListIconSetsListsInstalled(t *testing.T) {
 	if users[0].Label != "my-set" {
 		t.Fatalf("user label %q", users[0].Label)
 	}
+	if err := DeleteUserIconSet(IconSetLucide); err == nil {
+		t.Fatal("must not delete premiere")
+	}
+	if err := DeleteUserIconSet(IconSetClassic); err == nil {
+		t.Fatal("must not delete drawn builtin")
+	}
+	if err := DeleteUserIconSet(IconSetName("my-set")); err != nil {
+		t.Fatal(err)
+	}
+	if len(ListUserIconSets()) != 0 {
+		t.Fatalf("user icons after delete %+v", ListUserIconSets())
+	}
 }
 
 func TestFileIconLoadTintFallback(t *testing.T) {

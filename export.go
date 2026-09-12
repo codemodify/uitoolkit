@@ -117,6 +117,15 @@ func ExportTheme(name string, look style.LookAndFeel) (style.ThemePack, error) {
 func ExportAppearance(name string, a style.Appearance) (style.ThemePack, error) {
 	return style.ExportAppearance(name, a)
 }
+func DeleteUserTheme(name string) error {
+	return style.DeleteUserTheme(name)
+}
+func DeleteUserIconSet(name style.IconSetName) error {
+	return style.DeleteUserIconSet(name)
+}
+func AfterUserThemeDeleted(a style.Appearance, deleted string) style.Appearance {
+	return style.AfterUserThemeDeleted(a, deleted)
+}
 func StarterName(theme style.ThemeName) string {
 	return style.StarterName(theme)
 }

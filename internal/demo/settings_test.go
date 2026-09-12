@@ -197,6 +197,79 @@ func TestSettingsExportThemeByName(t *testing.T) {
 	}
 }
 
+func TestSettingsDeleteUserTheme(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	if err := style.SaveAppearance(style.Appearance{Theme: style.ThemeLight, Corners: style.CornersSquare, Icons: style.IconSetSharp}); err != nil {
+		t.Fatal(err)
+	}
+	a := uitoolkit.New(uitoolkit.Options{Headless: true, Scale: 1, DisableLookWatch: true})
+	w, err := a.NewWindow(platform.WindowOptions{Title: "settings", Width: 960, Height: 780, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+	w.SetContent(SettingsApp(a, w))
+	a.PumpOnce()
+	if findButton(w.Content(), "Delete") != nil {
+		t.Fatal("Delete must not appear for built-in themes")
+	}
+
+	if _, err := style.ExportAppearance("ocean", style.LoadAppearance()); err != nil {
+		t.Fatal(err)
+	}
+	w.SetContent(SettingsApp(a, w))
+	a.PumpOnce()
+	clickTheme(t, w, "ocean")
+	a.PumpOnce()
+	if findButton(w.Content(), "Delete") == nil {
+		t.Fatal("Delete should appear for a selected user theme")
+	}
+	clickApply(t, w)
+	a.PumpOnce()
+	if style.LoadAppearance().Name != "ocean" {
+		t.Fatalf("apply ocean %+v", style.LoadAppearance())
+	}
+
+	clickNamed(t, w.Content(), "Delete")
+	a.PumpOnce()
+	if w.Overlay() == nil {
+		t.Fatal("delete should confirm")
+	}
+	clickNamed(t, w.Overlay(), "Yes")
+	a.PumpOnce()
+
+	if _, err := os.Stat(style.ThemeFile("ocean")); !os.IsNotExist(err) {
+		t.Fatalf("user theme still on disk: %v", err)
+	}
+	if _, ok := style.LoadTheme("ocean"); ok {
+		t.Fatal("deleted theme still loads")
+	}
+	live := style.LookAppearance(a.Look())
+	if live.Name != "light" || live.Theme != style.ThemeLight || live.Corners != style.CornersSquare || live.Icons != style.IconSetSharp {
+		t.Fatalf("fallback %+v", live)
+	}
+	if style.LoadAppearance() != live {
+		t.Fatalf("look.json left dangling %+v", style.LoadAppearance())
+	}
+	if findButton(w.Content(), "Delete") != nil {
+		t.Fatal("Delete should hide after falling back to a builtin")
+	}
+	listed := false
+	widget.Walk(w.Content(), func(c widget.Component) {
+		if l, ok := c.(*widgets.ListView); ok && l.ItemText != nil {
+			for i := 0; i < l.Count; i++ {
+				if l.ItemText(i) == "ocean" {
+					listed = true
+				}
+			}
+		}
+	})
+	if listed {
+		t.Fatal("deleted pack still listed")
+	}
+}
+
 func TestSettingsIconSetApplyWritesLookJSON(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", dir)

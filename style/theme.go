@@ -316,3 +316,53 @@ func ExportAppearance(name string, a Appearance) (ThemePack, error) {
 	}
 	return pack, nil
 }
+
+// DeleteUserTheme removes themes/<name>/ from disk. Built-in embedded
+// starters cannot be deleted. The name must resolve to a user pack.
+func DeleteUserTheme(name string) error {
+	clean, err := SanitizeThemeName(name)
+	if err != nil {
+		return err
+	}
+	if _, ok := readUserTheme(clean); !ok {
+		return fmt.Errorf("not a user theme: %s", clean)
+	}
+	return os.RemoveAll(filepath.Join(ThemesDir(), clean))
+}
+
+// AfterUserThemeDeleted rewrites a if it named the deleted pack.
+// A shadowed builtin of the same name is kept; otherwise the matching
+// embedded palette starter (dark / light) is selected.
+func AfterUserThemeDeleted(a Appearance, deleted string) Appearance {
+	a = a.Normalize()
+	deleted = strings.ToLower(strings.TrimSpace(deleted))
+	if a.Name != deleted {
+		return a
+	}
+	if pack, ok := LoadTheme(deleted); ok {
+		a.Name = pack.Name
+		a.Theme = pack.Palette
+		return a
+	}
+	return FallbackBuiltinTheme(a)
+}
+
+// FallbackBuiltinTheme keeps corners/icons and selects the embedded
+// starter for a.Theme (or the other palette if that name is still a
+// user pack).
+func FallbackBuiltinTheme(a Appearance) Appearance {
+	a = a.Normalize()
+	name := StarterName(a.Theme)
+	if pack, ok := LoadTheme(name); ok && pack.Source == ThemeSourceBuiltin {
+		a.Name = pack.Name
+		a.Theme = pack.Palette
+		return a
+	}
+	other := ThemeLight
+	if a.Theme == ThemeLight {
+		other = ThemeDark
+	}
+	a.Name = StarterName(other)
+	a.Theme = other
+	return a
+}

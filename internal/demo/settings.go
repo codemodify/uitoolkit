@@ -64,13 +64,44 @@ func buildSettings(a *app.Application, win *app.Window, saved, staged style.Appe
 			onTheme(themeBuiltin[i])
 		}
 	})
+	userThemeSel := indexTheme(themeUser, staged.Name)
 	userTheme := pickerSection("User", len(themeUser), func(i int) string {
 		return themeUser[i].Display()
-	}, indexTheme(themeUser, staged.Name), func(i int) {
+	}, userThemeSel, func(i int) {
 		if i >= 0 && i < len(themeUser) {
 			onTheme(themeUser[i])
 		}
 	})
+	if userThemeSel >= 0 {
+		var delThemeHost widget.Component
+		delTheme := widgets.NewButton("Delete", func() {
+			name := themeUser[userThemeSel].Name
+			widgets.Confirm(delThemeHost, "Delete theme?",
+				"Remove "+name+" from disk? This cannot be undone.",
+				func(yes bool) {
+					if !yes {
+						return
+					}
+					if err := style.DeleteUserTheme(name); err != nil {
+						status.Set(0, err.Error())
+						return
+					}
+					next := style.AfterUserThemeDeleted(staged, name)
+					newSaved := saved
+					if saved.Name == name {
+						if err := style.SaveAppearance(next); err != nil {
+							status.Set(0, err.Error())
+							return
+						}
+						newSaved = next
+					}
+					a.SetLook(next.Look())
+					win.SetContent(buildSettings(a, win, newSaved, next, section))
+				})
+		})
+		delThemeHost = delTheme
+		userTheme = widgets.NewColumn(userTheme, delTheme).WithGap(4)
+	}
 
 	iconBuiltin := style.ListBuiltinIconSets()
 	iconUser := style.ListUserIconSets()
@@ -86,13 +117,47 @@ func buildSettings(a *app.Application, win *app.Window, saved, staged style.Appe
 			onIcon(iconBuiltin[i])
 		}
 	})
+	userIconSel := indexIcon(iconUser, staged.Icons)
 	userIcons := pickerSection("User", len(iconUser), func(i int) string {
 		return iconUser[i].Label
-	}, indexIcon(iconUser, staged.Icons), func(i int) {
+	}, userIconSel, func(i int) {
 		if i >= 0 && i < len(iconUser) {
 			onIcon(iconUser[i])
 		}
 	})
+	if userIconSel >= 0 {
+		var delIconHost widget.Component
+		delIcon := widgets.NewButton("Delete", func() {
+			name := iconUser[userIconSel].Name
+			widgets.Confirm(delIconHost, "Delete icon set?",
+				"Remove "+string(name)+" from disk? This cannot be undone.",
+				func(yes bool) {
+					if !yes {
+						return
+					}
+					if err := style.DeleteUserIconSet(name); err != nil {
+						status.Set(0, err.Error())
+						return
+					}
+					next := staged
+					if next.Icons == name {
+						next.Icons = style.IconSetClassic
+					}
+					newSaved := saved
+					if saved.Icons == name {
+						if err := style.SaveAppearance(next); err != nil {
+							status.Set(0, err.Error())
+							return
+						}
+						newSaved = next
+					}
+					a.SetLook(next.Look())
+					win.SetContent(buildSettings(a, win, newSaved, next, section))
+				})
+		})
+		delIconHost = delIcon
+		userIcons = widgets.NewColumn(userIcons, delIcon).WithGap(4)
+	}
 
 	cornerSel := 0
 	if staged.Corners == style.CornersSquare {
@@ -134,6 +199,7 @@ func buildSettings(a *app.Application, win *app.Window, saved, staged style.Appe
 		widgets.NewLabel("look.json stores theme, corners, and icons independently."),
 		widgets.NewLabel("Export writes the color theme only; corners and icons stay prefs."),
 		widgets.NewLabel("Built-in vs User: stock dark/light and premiere icon names, then custom folders."),
+		widgets.NewLabel("Delete (under User) removes that pack from disk after confirm."),
 		widgets.NewRow(exportBtn).WithGap(8),
 	).WithGap(6)
 	pickerCol := widgets.NewColumn(widgets.NewLabel("Theme"), builtinTheme, userTheme).WithGap(8)
@@ -220,7 +286,7 @@ func buildSettings(a *app.Application, win *app.Window, saved, staged style.Appe
 		widgets.NewLabel("LookAndFeel Classic — Titillium Web + JetBrains Mono."),
 		widgets.NewLabel("Prefs file (theme + corners + icons, written on Apply):"),
 		aboutPath,
-		widgets.NewLabel("User color themes (exported palette; listed under User; override builtins by name):"),
+		widgets.NewLabel("User color themes (exported palette; listed under User; Delete removes the folder after confirm):"),
 		themesPath,
 		widgets.NewLabel("Icon sets: Built-in = lucide/phosphor/tabler/heroicons/material-symbols when copied, plus drawn classic/sharp. User = any other folder:"),
 		iconsPath,

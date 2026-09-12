@@ -173,6 +173,24 @@ func ListUserIconSets() []IconSetInfo {
 	return out
 }
 
+// DeleteUserIconSet removes icons/<name>/ from disk. Drawn classic/sharp
+// and premiere set names cannot be deleted this way.
+func DeleteUserIconSet(name IconSetName) error {
+	clean, err := SanitizeIconSetName(string(name))
+	if err != nil {
+		return err
+	}
+	if clean == string(IconSetClassic) || clean == string(IconSetSharp) || IsPremiereIconSet(IconSetName(clean)) {
+		return fmt.Errorf("not a user icon set: %s", clean)
+	}
+	installed := listInstalledIconDirs()
+	dirName, ok := installed[clean]
+	if !ok {
+		return fmt.Errorf("not a user icon set: %s", clean)
+	}
+	return os.RemoveAll(filepath.Join(IconsDir(), dirName))
+}
+
 // ListIconSets returns Built-in (drawn classic/sharp, then premiere
 // names when present) followed by User folders, sorted. A directory
 // counts if it contains at least one ToolIcon PNG (24 or @2x).
