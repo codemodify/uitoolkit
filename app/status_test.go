@@ -55,6 +55,35 @@ func TestFakeStatusItemClickShowsWindow(t *testing.T) {
 	}
 }
 
+func TestShowRaiseAfterCloseToTray(t *testing.T) {
+	a := New(Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{Width: 200, Height: 80, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.SetContent(widgets.NewLabel("mail"))
+	a.PumpOnce()
+	w.SetCloseHides(true)
+	w.dispatch(platform.Event{Kind: platform.EventClose})
+	if w.Visible() || w.Closed() {
+		t.Fatal("close-to-tray should hide")
+	}
+	w.Show()
+	w.Raise()
+	if !w.Visible() {
+		t.Fatal("Show/Raise after hide")
+	}
+}
+
+func TestApplicationPostRunsImmediatelyOutsideLoop(t *testing.T) {
+	a := New(Options{Look: style.DarkLook(), Headless: true})
+	n := 0
+	a.Post(func() { n++ })
+	if n != 1 {
+		t.Fatalf("Post outside Run should be sync, n=%d", n)
+	}
+}
+
 func TestCloseHidesKeepsWindow(t *testing.T) {
 	a := New(Options{Look: style.DarkLook(), Headless: true})
 	w, err := a.NewWindow(platform.WindowOptions{Width: 200, Height: 80, Headless: true})

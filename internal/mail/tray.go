@@ -16,7 +16,7 @@ func (s *session) attachTray() {
 		ID:      "mailclientui",
 		Title:   "Mail",
 		Tooltip: "Mail",
-		Icon:    app.StatusIconFromTool(style.IconInfo, look, 22),
+		Icon:    app.StatusIconFromTool(style.IconMail, look, 22),
 		Menu: app.StatusMenuFromItems([]*widgets.MenuItem{
 			widgets.Item("Show Mail", s.showMain),
 			widgets.Sep(),

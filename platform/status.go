@@ -60,8 +60,23 @@ type StatusItemOptions struct {
 	OnClick func()
 	// OnNotifyClick is invoked when the user activates a desktop notification.
 	OnNotifyClick func()
+	// Dispatch runs tray callbacks (Activate, dbusmenu Event, notify
+	// click) on the UI thread. Application.NewStatusItem sets this to
+	// Application.Post. If nil, callbacks run on the D-Bus goroutine.
+	Dispatch func(func())
 	// Stub forces the no-op backend (headless apps).
 	Stub bool
+}
+
+func invokeStatus(dispatch func(func()), fn func()) {
+	if fn == nil {
+		return
+	}
+	if dispatch != nil {
+		dispatch(fn)
+		return
+	}
+	fn()
 }
 
 // Notification is a tray balloon / desktop toast.

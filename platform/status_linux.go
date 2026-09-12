@@ -13,14 +13,14 @@ import (
 )
 
 const (
-	sniPath       = "/StatusNotifierItem"
-	sniInterface  = "org.kde.StatusNotifierItem"
-	sniWatcher    = "org.kde.StatusNotifierWatcher"
+	sniPath        = "/StatusNotifierItem"
+	sniInterface   = "org.kde.StatusNotifierItem"
+	sniWatcher     = "org.kde.StatusNotifierWatcher"
 	sniWatcherPath = "/StatusNotifierWatcher"
-	fdoNotify     = "org.freedesktop.Notifications"
-	fdoNotifyPath = "/org/freedesktop/Notifications"
-	dbusMenuPath  = "/MenuBar"
-	dbusMenuIface = "com.canonical.dbusmenu"
+	fdoNotify      = "org.freedesktop.Notifications"
+	fdoNotifyPath  = "/org/freedesktop/Notifications"
+	dbusMenuPath   = "/MenuBar"
+	dbusMenuIface  = "com.canonical.dbusmenu"
 )
 
 type linuxStatusItem struct {
@@ -101,21 +101,21 @@ func (s *linuxStatusItem) export() error {
 
 	propsSpec := map[string]map[string]*prop.Prop{
 		sniInterface: {
-			"Category":           {Value: "ApplicationStatus", Writable: false, Emit: prop.EmitFalse},
-			"Id":                 {Value: id, Writable: false, Emit: prop.EmitFalse},
-			"Title":              {Value: s.title, Writable: false, Emit: prop.EmitTrue},
-			"Status":             {Value: "Active", Writable: false, Emit: prop.EmitTrue},
-			"WindowId":           {Value: int32(0), Writable: false, Emit: prop.EmitFalse},
-			"IconName":           {Value: s.icon.Name, Writable: false, Emit: prop.EmitTrue},
-			"IconPixmap":         {Value: s.iconPixmaps(), Writable: false, Emit: prop.EmitTrue},
-			"OverlayIconName":    {Value: "", Writable: false, Emit: prop.EmitFalse},
-			"OverlayIconPixmap":  {Value: []sniPixmap{}, Writable: false, Emit: prop.EmitFalse},
-			"AttentionIconName":  {Value: "", Writable: false, Emit: prop.EmitFalse},
+			"Category":            {Value: "ApplicationStatus", Writable: false, Emit: prop.EmitFalse},
+			"Id":                  {Value: id, Writable: false, Emit: prop.EmitFalse},
+			"Title":               {Value: s.title, Writable: false, Emit: prop.EmitTrue},
+			"Status":              {Value: "Active", Writable: false, Emit: prop.EmitTrue},
+			"WindowId":            {Value: int32(0), Writable: false, Emit: prop.EmitFalse},
+			"IconName":            {Value: s.icon.Name, Writable: false, Emit: prop.EmitTrue},
+			"IconPixmap":          {Value: s.iconPixmaps(), Writable: false, Emit: prop.EmitTrue},
+			"OverlayIconName":     {Value: "", Writable: false, Emit: prop.EmitFalse},
+			"OverlayIconPixmap":   {Value: []sniPixmap{}, Writable: false, Emit: prop.EmitFalse},
+			"AttentionIconName":   {Value: "", Writable: false, Emit: prop.EmitFalse},
 			"AttentionIconPixmap": {Value: []sniPixmap{}, Writable: false, Emit: prop.EmitFalse},
-			"AttentionMovieName": {Value: "", Writable: false, Emit: prop.EmitFalse},
-			"ToolTip":            {Value: s.toolTip(), Writable: false, Emit: prop.EmitTrue},
-			"ItemIsMenu":         {Value: false, Writable: false, Emit: prop.EmitFalse},
-			"Menu":               {Value: dbus.ObjectPath(dbusMenuPath), Writable: false, Emit: prop.EmitFalse},
+			"AttentionMovieName":  {Value: "", Writable: false, Emit: prop.EmitFalse},
+			"ToolTip":             {Value: s.toolTip(), Writable: false, Emit: prop.EmitTrue},
+			"ItemIsMenu":          {Value: false, Writable: false, Emit: prop.EmitFalse},
+			"Menu":                {Value: dbus.ObjectPath(dbusMenuPath), Writable: false, Emit: prop.EmitFalse},
 		},
 	}
 	props, err := prop.Export(s.conn, sniPath, propsSpec)
@@ -190,10 +190,9 @@ func (s *linuxStatusItem) listenNotifyActions() {
 			if fn == nil {
 				fn = s.opts.OnClick
 			}
+			dispatch := s.opts.Dispatch
 			s.mu.Unlock()
-			if fn != nil {
-				fn()
-			}
+			invokeStatus(dispatch, fn)
 		}
 	}()
 }
@@ -351,10 +350,9 @@ func (s *linuxStatusItem) Activate(x, y int32) *dbus.Error {
 	_, _ = x, y
 	s.mu.Lock()
 	fn := s.opts.OnClick
+	dispatch := s.opts.Dispatch
 	s.mu.Unlock()
-	if fn != nil {
-		fn()
-	}
+	invokeStatus(dispatch, fn)
 	return nil
 }
 
@@ -430,10 +428,9 @@ func (s *linuxStatusItem) Event(id int32, eventID string, data dbus.Variant, tim
 	if i >= 0 && i < len(s.menu) {
 		fn = s.menu[i].OnClick
 	}
+	dispatch := s.opts.Dispatch
 	s.mu.Unlock()
-	if fn != nil {
-		fn()
-	}
+	invokeStatus(dispatch, fn)
 	return nil
 }
 

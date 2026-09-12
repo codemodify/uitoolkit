@@ -2,8 +2,9 @@ package platform
 
 // HostWindow is an optional Surface capability: raise / show / hide the
 // native window. Offscreen implements it as a visibility flag. X11 maps
-// and sends _NET_ACTIVE_WINDOW. Wayland can minimize; un-minimize is
-// compositor-dependent.
+// and sends _NET_ACTIVE_WINDOW. Wayland Hide drops the xdg_toplevel
+// role (and may set_minimized first); Show remaps the role and requests
+// xdg_activation_v1 when the compositor advertises it.
 type HostWindow interface {
 	Raise()
 	Show()

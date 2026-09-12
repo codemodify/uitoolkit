@@ -14,3 +14,6 @@ info       information-circle
 warning    exclamation-triangle
 error      x-circle
 question   question-mark-circle
+mail       envelope
+inbox      inbox
+mail-open  envelope-open

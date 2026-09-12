@@ -376,6 +376,7 @@ const (
 	IconWarning  = style.IconWarning
 	IconError    = style.IconError
 	IconQuestion = style.IconQuestion
+	IconMail     = style.IconMail
 
 	MessageInfo     = widgets.MessageInfo
 	MessageWarning  = widgets.MessageWarning

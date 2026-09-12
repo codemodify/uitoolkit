@@ -23,6 +23,7 @@ package platform
 #include "xdg-decoration-unstable-v1-client-protocol.h"
 #include "fractional-scale-v1-client-protocol.h"
 #include "viewporter-client-protocol.h"
+#include "xdg-activation-v1-client-protocol.h"
 #include "wayland_dmabuf.h"
 #include "wayland_sync.h"
 
@@ -62,6 +63,7 @@ extern void uitkWlTICommit(uintptr_t id, char *text);
 extern void uitkWlTIDelete(uintptr_t id, uint32_t before, uint32_t after);
 extern void uitkWlTIDone(uintptr_t id);
 extern void uitkWlFracScale(uintptr_t sid, uint32_t scale_120);
+extern void uitkWlActivationToken(uintptr_t sid, char *token);
 
 static int ui_wl_probe(void) {
 	struct wl_display *d = wl_display_connect(NULL);
@@ -671,6 +673,35 @@ static void ui_wl_set_full(struct xdg_toplevel *t) { if (t) xdg_toplevel_set_ful
 static void ui_wl_unset_full(struct xdg_toplevel *t) { if (t) xdg_toplevel_unset_fullscreen(t); }
 static void ui_wl_set_minimized(struct xdg_toplevel *t) { if (t) xdg_toplevel_set_minimized(t); }
 
+static const struct wl_interface *ui_wl_act_iface(void) { return &xdg_activation_v1_interface; }
+static void ui_wl_act_destroy(struct xdg_activation_v1 *a) { if (a) xdg_activation_v1_destroy(a); }
+static struct xdg_activation_token_v1 *ui_wl_act_token(struct xdg_activation_v1 *a) {
+	return a ? xdg_activation_v1_get_activation_token(a) : NULL;
+}
+static void uitk_act_done(void *data, struct xdg_activation_token_v1 *tok, const char *token) {
+	uitkWlActivationToken((uintptr_t)data, (char *)token);
+	if (tok) xdg_activation_token_v1_destroy(tok);
+}
+static const struct xdg_activation_token_v1_listener uitk_act_listener = { .done = uitk_act_done };
+static void ui_wl_act_token_listen(struct xdg_activation_token_v1 *t, uintptr_t sid) {
+	if (t) xdg_activation_token_v1_add_listener(t, &uitk_act_listener, (void*)sid);
+}
+static void ui_wl_act_token_app(struct xdg_activation_token_v1 *t, const char *id) {
+	if (t && id) xdg_activation_token_v1_set_app_id(t, id);
+}
+static void ui_wl_act_token_surf(struct xdg_activation_token_v1 *t, struct wl_surface *s) {
+	if (t && s) xdg_activation_token_v1_set_surface(t, s);
+}
+static void ui_wl_act_token_serial(struct xdg_activation_token_v1 *t, uint32_t serial, struct wl_seat *seat) {
+	if (t && seat) xdg_activation_token_v1_set_serial(t, serial, seat);
+}
+static void ui_wl_act_token_commit(struct xdg_activation_token_v1 *t) {
+	if (t) xdg_activation_token_v1_commit(t);
+}
+static void ui_wl_act_activate(struct xdg_activation_v1 *a, const char *token, struct wl_surface *s) {
+	if (a && token && s) xdg_activation_v1_activate(a, token, s);
+}
+
 static struct zxdg_toplevel_decoration_v1 *ui_wl_deco(struct zxdg_decoration_manager_v1 *m, struct xdg_toplevel *t) {
 	return zxdg_decoration_manager_v1_get_toplevel_decoration(m, t);
 }
@@ -760,9 +791,19 @@ func (WaylandBackend) NewSurface(opts WindowOptions) (Surface, error) {
 	if title == "" {
 		title = "uitoolkit"
 	}
+	mw, mh := opts.MinWidth, opts.MinHeight
+	if mw < 1 {
+		mw = 200
+	}
+	if mh < 1 {
+		mh = 120
+	}
 	s := &wlSurface{
 		conn:     c,
 		title:    title,
+		appID:    "uitoolkit",
+		minW:     mw,
+		minH:     mh,
 		logicalW: w,
 		logicalH: h,
 		wantW:    w,
@@ -789,30 +830,7 @@ func (WaylandBackend) NewSurface(opts WindowOptions) (Surface, error) {
 	if s.surf != nil {
 		wlByNative[uintptr(unsafe.Pointer(s.surf))] = s.id
 	}
-	s.xdg = C.ui_wl_xdg_surface(c.wm, s.surf)
-	C.ui_wl_xdg_listen(s.xdg, C.uintptr_t(s.id))
-	s.top = C.ui_wl_toplevel(s.xdg)
-	C.ui_wl_top_listen(s.top, C.uintptr_t(s.id))
-	ct := C.CString(title)
-	C.ui_wl_set_title(s.top, ct)
-	C.free(unsafe.Pointer(ct))
-	app := C.CString("uitoolkit")
-	C.ui_wl_set_app_id(s.top, app)
-	C.free(unsafe.Pointer(app))
-	mw, mh := opts.MinWidth, opts.MinHeight
-	if mw < 1 {
-		mw = 200
-	}
-	if mh < 1 {
-		mh = 120
-	}
-	C.ui_wl_set_min(s.top, C.int(mw), C.int(mh))
-	if c.decoMan != nil && s.top != nil {
-		s.deco = C.ui_wl_deco(c.decoMan, s.top)
-		if s.deco != nil {
-			C.ui_wl_deco_ssd(s.deco)
-		}
-	}
+	s.bindToplevelLocked()
 	if c.fracMan != nil && s.surf != nil {
 		s.fracObj = C.ui_wl_frac(c.fracMan, s.surf)
 		if s.fracObj != nil {
@@ -898,6 +916,7 @@ type wlConn struct {
 	decoMan    *C.struct_zxdg_decoration_manager_v1
 	fracMan    *C.struct_wp_fractional_scale_manager_v1
 	viewporter *C.struct_wp_viewporter
+	activation *C.struct_xdg_activation_v1
 	output     *C.struct_wl_output
 
 	dmabuf     unsafe.Pointer // *zwp_linux_dmabuf_v1
@@ -941,6 +960,8 @@ type wlSurface struct {
 	xdg        *C.struct_xdg_surface
 	top        *C.struct_xdg_toplevel
 	title      string
+	appID      string
+	minW, minH int
 	img        *paintengine2d.Image
 	slots      [4]wlSlot
 	wantW      int
@@ -1094,6 +1115,10 @@ func (c *wlConn) closeLocked() {
 		C.ui_wl_viewporter_destroy(c.viewporter)
 		c.viewporter = nil
 	}
+	if c.activation != nil {
+		C.ui_wl_act_destroy(c.activation)
+		c.activation = nil
+	}
 	if c.output != nil {
 		C.ui_wl_out_destroy(c.output)
 		c.output = nil
@@ -1198,6 +1223,12 @@ func (s *wlSurface) SetMaximized(on bool) {
 
 func (s *wlSurface) Raise() {
 	s.hidden = false
+	if s.xdg == nil || s.top == nil {
+		// xdg_toplevel has no unset_minimized. Destroying the role and
+		// remapping is the reliable restore after close-to-tray.
+		s.bindToplevelLocked()
+	}
+	s.requestActivate()
 	if s.conn != nil && s.conn.dpy != nil {
 		C.ui_wl_flush(s.conn.dpy)
 	}
@@ -1207,12 +1238,103 @@ func (s *wlSurface) Show() { s.Raise() }
 
 func (s *wlSurface) Hide() {
 	s.hidden = true
+	// Minimize first (taskbar / overview), then drop the xdg role so
+	// Show can remap. set_minimized alone cannot be undone.
 	if s.top != nil {
 		C.ui_wl_set_minimized(s.top)
 	}
+	s.unmapToplevelLocked()
 	if s.conn != nil && s.conn.dpy != nil {
 		C.ui_wl_flush(s.conn.dpy)
 	}
+}
+
+func (s *wlSurface) bindToplevelLocked() {
+	if s == nil || s.conn == nil || s.conn.wm == nil || s.surf == nil {
+		return
+	}
+	if s.xdg != nil || s.top != nil {
+		return
+	}
+	s.xdg = C.ui_wl_xdg_surface(s.conn.wm, s.surf)
+	if s.xdg == nil {
+		return
+	}
+	C.ui_wl_xdg_listen(s.xdg, C.uintptr_t(s.id))
+	s.top = C.ui_wl_toplevel(s.xdg)
+	if s.top != nil {
+		C.ui_wl_top_listen(s.top, C.uintptr_t(s.id))
+		ct := C.CString(s.title)
+		C.ui_wl_set_title(s.top, ct)
+		C.free(unsafe.Pointer(ct))
+		appID := s.appID
+		if appID == "" {
+			appID = "uitoolkit"
+		}
+		app := C.CString(appID)
+		C.ui_wl_set_app_id(s.top, app)
+		C.free(unsafe.Pointer(app))
+		C.ui_wl_set_min(s.top, C.int(s.minW), C.int(s.minH))
+		if s.conn.decoMan != nil {
+			s.deco = C.ui_wl_deco(s.conn.decoMan, s.top)
+			if s.deco != nil {
+				C.ui_wl_deco_ssd(s.deco)
+			}
+		}
+	}
+	s.configured = false
+	C.ui_wl_commit(s.surf)
+}
+
+func (s *wlSurface) unmapToplevelLocked() {
+	if s == nil {
+		return
+	}
+	if s.deco != nil {
+		C.ui_wl_deco_destroy(s.deco)
+		s.deco = nil
+	}
+	if s.top != nil {
+		C.ui_wl_top_destroy(s.top)
+		s.top = nil
+	}
+	if s.xdg != nil {
+		C.ui_wl_xdg_destroy(s.xdg)
+		s.xdg = nil
+	}
+	s.configured = false
+}
+
+func (s *wlSurface) requestActivate() {
+	if s == nil || s.conn == nil || s.conn.activation == nil || s.surf == nil {
+		return
+	}
+	tok := C.ui_wl_act_token(s.conn.activation)
+	if tok == nil {
+		return
+	}
+	C.ui_wl_act_token_listen(tok, C.uintptr_t(s.id))
+	appID := s.appID
+	if appID == "" {
+		appID = "uitoolkit"
+	}
+	app := C.CString(appID)
+	C.ui_wl_act_token_app(tok, app)
+	C.free(unsafe.Pointer(app))
+	C.ui_wl_act_token_surf(tok, s.surf)
+	if s.conn.seat != nil && s.conn.serial != 0 {
+		C.ui_wl_act_token_serial(tok, C.uint32_t(s.conn.serial), s.conn.seat)
+	}
+	C.ui_wl_act_token_commit(tok)
+}
+
+//export uitkWlActivationToken
+func uitkWlActivationToken(sid C.uintptr_t, token *C.char) {
+	s := wlSurfBy(sid)
+	if s == nil || s.conn == nil || s.conn.activation == nil || s.surf == nil || token == nil {
+		return
+	}
+	C.ui_wl_act_activate(s.conn.activation, token, s.surf)
 }
 
 func (s *wlSurface) Visible() bool {
@@ -2001,6 +2123,8 @@ func uitkWlRegistryGlobal(id C.uintptr_t, reg *C.struct_wl_registry, name C.uint
 		c.fracMan = (*C.struct_wp_fractional_scale_manager_v1)(C.ui_wl_bind(reg, name, C.ui_wl_frac_man_iface(), 1))
 	case "wp_viewporter":
 		c.viewporter = (*C.struct_wp_viewporter)(C.ui_wl_bind(reg, name, C.ui_wl_viewporter_iface(), 1))
+	case "xdg_activation_v1":
+		c.activation = (*C.struct_xdg_activation_v1)(C.ui_wl_bind(reg, name, C.ui_wl_act_iface(), 1))
 	case "zwp_linux_explicit_synchronization_v1":
 		if !waylandWantDmabuf() {
 			break

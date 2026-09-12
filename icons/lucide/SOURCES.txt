@@ -14,3 +14,6 @@ info       info
 warning    triangle-alert
 error      circle-x
 question   circle-question-mark
+mail       mail
+inbox      inbox
+mail-open  mail-open

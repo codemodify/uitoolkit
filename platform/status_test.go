@@ -99,3 +99,40 @@ func TestOffscreenHostWindow(t *testing.T) {
 		t.Fatal("shown")
 	}
 }
+
+func TestShowRaiseAfterHideMakesVisible(t *testing.T) {
+	o := NewOffscreen(WindowOptions{Width: 80, Height: 40})
+	HideSurface(o)
+	if SurfaceVisible(o) {
+		t.Fatal("hidden")
+	}
+	RaiseSurface(o)
+	if !SurfaceVisible(o) {
+		t.Fatal("Show/Raise after hide must set Visible")
+	}
+}
+
+func TestFakeDbusMenuClickInvokesOnClick(t *testing.T) {
+	t.Setenv("UITK_TRAY", "fake")
+	n := 0
+	item, err := NewStatusItem(StatusItemOptions{
+		Title: "Mail",
+		Menu: []StatusMenuItem{
+			{Text: "Show Mail", OnClick: func() { n++ }},
+			{Separator: true},
+			{Text: "Quit", OnClick: func() { n += 10 }},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fake := item.(*FakeStatusItem)
+	fake.ClickMenu(0)
+	if n != 1 {
+		t.Fatalf("Show Mail click %d", n)
+	}
+	fake.ClickMenu(2)
+	if n != 11 {
+		t.Fatalf("Quit click %d", n)
+	}
+}

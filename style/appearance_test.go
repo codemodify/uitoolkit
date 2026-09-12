@@ -93,6 +93,27 @@ func TestSquareButtonRadiusZero(t *testing.T) {
 	}
 }
 
+func TestIconMailPaintsAndThemeName(t *testing.T) {
+	if ToolIconName(IconMail) != "mail" {
+		t.Fatalf("file stem %q", ToolIconName(IconMail))
+	}
+	if ToolIconThemeName(IconMail) != "mail-unread" {
+		t.Fatalf("theme %q", ToolIconThemeName(IconMail))
+	}
+	mail := paintIcon(IconSetClassic, IconMail)
+	info := paintIcon(IconSetClassic, IconInfo)
+	if mail < 8 || info < 8 {
+		t.Fatalf("ink mail=%d info=%d", mail, info)
+	}
+	if maskDiff(rasterIcon(IconSetClassic, IconMail), rasterIcon(IconSetClassic, IconInfo)) < 8 {
+		t.Fatal("mail glyph should differ from info")
+	}
+	cands := toolIconFileCandidates(IconMail, 24)
+	if len(cands) < 4 || cands[0] != "mail.png" {
+		t.Fatalf("candidates %v", cands)
+	}
+}
+
 func TestIconSetsPaintDistinctInk(t *testing.T) {
 	classic := paintIcon(IconSetClassic, IconSearch)
 	sharp := paintIcon(IconSetSharp, IconSearch)

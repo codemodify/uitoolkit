@@ -165,6 +165,14 @@ func drawClassicIcon(ctx *paintengine2d.Context, b paintengine2d.Rect, icon Tool
 		q.LineTo(cx, cy+0.2)
 		ctx.DrawPath(q, stroke)
 		ctx.DrawCircle(paintengine2d.Pt(cx, cy+3.4), 1.05, fill)
+	case IconMail:
+		box := paintengine2d.XYWH(b.Min.X+1.6, b.Min.Y+h*0.28, w-3.2, h*0.50)
+		ctx.DrawRoundRect(box, 1.5, 1.5, paintengine2d.StrokePaint(col, 1.5))
+		flap := paintengine2d.NewPath()
+		flap.MoveTo(box.Min.X+1.2, box.Min.Y+1.2)
+		flap.LineTo(cx, box.Min.Y+h*0.22)
+		flap.LineTo(box.Max.X-1.2, box.Min.Y+1.2)
+		ctx.DrawPath(flap, stroke)
 	}
 }
 
@@ -271,5 +279,13 @@ func drawSharpIcon(ctx *paintengine2d.Context, b paintengine2d.Rect, icon ToolIc
 		q.LineTo(cx, cy+1.2)
 		ctx.DrawPath(q, stroke)
 		ctx.DrawRect(paintengine2d.XYWH(cx-1.1, cy+2.6, 2.2, 2.2), fill)
+	case IconMail:
+		box := paintengine2d.XYWH(b.Min.X+1.4, b.Min.Y+h*0.26, w-2.8, h*0.52)
+		ctx.DrawRect(box, paintengine2d.StrokePaint(col, 1.6))
+		flap := paintengine2d.NewPath()
+		flap.MoveTo(box.Min.X, box.Min.Y)
+		flap.LineTo(cx, box.Min.Y+h*0.22)
+		flap.LineTo(box.Max.X, box.Min.Y)
+		ctx.DrawPath(flap, stroke)
 	}
 }
