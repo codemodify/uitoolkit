@@ -325,20 +325,18 @@ func (p *PopupMenu) rowH(it *MenuItem) float32 {
 	return p.itemH()
 }
 
-const (
-	menuPadL     = 8
-	menuPadR     = 10
-	menuPadT     = 6
-	menuPadB     = 8
-	menuCheckCol = 20 // DrawMenuItem: pad 10 + check/label gutter 10
-	menuAccelGap = 20
-)
+func (p *PopupMenu) chrome() style.MenuChrome {
+	return style.MenuChromeFor(p.Look())
+}
 
-func menuTextAdvance(f *style.Font, text string) float32 {
+func menuTextWidth(f *style.Font, text string) float32 {
 	if text == "" {
 		return 0
 	}
 	if f != nil {
+		if w := f.InkWidth(text); w > 0 {
+			return w
+		}
 		if w := f.Advance(text); w > 0 {
 			return w
 		}
@@ -350,33 +348,32 @@ func menuTextAdvance(f *style.Font, text string) float32 {
 }
 
 func (p *PopupMenu) contentSize() paintengine2d.Point {
+	lk := p.Look()
+	ch := style.MenuChromeFor(lk)
 	f := (*style.Font)(nil)
-	if lk := p.Look(); lk != nil {
+	if lk != nil {
 		f = lk.Font()
 	}
 	var maxLabel, maxAccel float32
-	h := float32(menuPadT + menuPadB)
+	h := ch.PadT + ch.PadB
 	for _, it := range p.Items {
 		h += p.rowH(it)
 		if it == nil || it.Separator {
 			continue
 		}
 		label, _, _ := ParseMnemonic(it.Text)
-		if tw := menuTextAdvance(f, label); tw > maxLabel {
+		if tw := menuTextWidth(f, label); tw > maxLabel {
 			maxLabel = tw
 		}
 		if it.Shortcut != "" {
-			if tw := menuTextAdvance(f, it.Shortcut); tw > maxAccel {
+			if tw := menuTextWidth(f, it.Shortcut); tw > maxAccel {
 				maxAccel = tw
 			}
 		}
 	}
-	w := float32(menuPadL+menuCheckCol) + maxLabel + menuPadR
-	if maxAccel > 0 {
-		w += menuAccelGap + maxAccel
-	}
-	if w < 80 {
-		w = 80
+	w := ch.FrameWidth(maxLabel, maxAccel)
+	if min := style.Dip(lk, 80); w < min {
+		w = min
 	}
 	return paintengine2d.Pt(w, h)
 }
@@ -425,7 +422,8 @@ func (p *PopupMenu) scrollTrack() (track, thumb paintengine2d.Rect) {
 func (p *PopupMenu) ScrollTrack() (track, thumb paintengine2d.Rect) { return p.scrollTrack() }
 
 func (p *PopupMenu) innerWidth() float32 {
-	w := p.LocalBounds().Dx() - menuPadL - menuPadR
+	ch := p.chrome()
+	w := p.LocalBounds().Dx() - ch.PadL - ch.PadR
 	if p.MaxOffset() > 0 {
 		bar, gap := overflowBarSize(p.Look())
 		w -= bar + gap
@@ -437,7 +435,7 @@ func (p *PopupMenu) innerWidth() float32 {
 }
 
 func (p *PopupMenu) rowTop(i int) float32 {
-	cur := float32(menuPadT)
+	cur := p.chrome().PadT
 	for n, it := range p.Items {
 		if n == i {
 			return cur
@@ -448,7 +446,8 @@ func (p *PopupMenu) rowTop(i int) float32 {
 }
 
 func (p *PopupMenu) rowAt(y float32) int {
-	cur := float32(menuPadT) - p.OffsetY
+	ch := p.chrome()
+	cur := ch.PadT - p.OffsetY
 	for i, it := range p.Items {
 		rh := p.rowH(it)
 		if y >= cur && y < cur+rh {
@@ -463,7 +462,8 @@ func (p *PopupMenu) rowBounds(i int) paintengine2d.Rect {
 	if i < 0 || i >= len(p.Items) {
 		return paintengine2d.Rect{}
 	}
-	return paintengine2d.XYWH(menuPadL, p.rowTop(i)-p.OffsetY, p.innerWidth(), p.rowH(p.Items[i]))
+	ch := p.chrome()
+	return paintengine2d.XYWH(ch.PadL, p.rowTop(i)-p.OffsetY, p.innerWidth(), p.rowH(p.Items[i]))
 }
 
 // ItemBounds is the arranged row in popup-local coordinates (scroll applied).
@@ -475,10 +475,11 @@ func (p *PopupMenu) LabelBounds(i int) paintengine2d.Rect {
 	if row.Empty() || i < 0 || i >= len(p.Items) || p.Items[i] == nil {
 		return paintengine2d.Rect{}
 	}
-	x0 := row.Min.X + menuCheckCol
-	x1 := row.Max.X
+	ch := p.chrome()
+	x0 := ch.LabelMinX(row.Min.X)
+	x1 := ch.LabelMaxX(row.Max.X)
 	if r := p.ShortcutBounds(i); !r.Empty() {
-		x1 = r.Min.X - menuAccelGap
+		x1 = r.Min.X - ch.AccelGap
 	}
 	if x1 < x0 {
 		x1 = x0
@@ -499,8 +500,9 @@ func (p *PopupMenu) ShortcutBounds(i int) paintengine2d.Rect {
 	if lk := p.Look(); lk != nil {
 		f = lk.Font()
 	}
-	tw := menuTextAdvance(f, p.Items[i].Shortcut)
-	return paintengine2d.XYWH(row.Max.X-tw, row.Min.Y, tw, row.Dy())
+	ch := p.chrome()
+	tw := menuTextWidth(f, p.Items[i].Shortcut)
+	return paintengine2d.XYWH(ch.LabelMaxX(row.Max.X)-tw, row.Min.Y, tw, row.Dy())
 }
 
 func (p *PopupMenu) ensureItemVisible(i int) {
@@ -513,11 +515,12 @@ func (p *PopupMenu) ensureItemVisible(i int) {
 	if view <= 0 {
 		return
 	}
-	if top < p.OffsetY+menuPadT {
-		p.OffsetY = top - menuPadT
+	ch := p.chrome()
+	if top < p.OffsetY+ch.PadT {
+		p.OffsetY = top - ch.PadT
 	}
-	if bot > p.OffsetY+view-menuPadB {
-		p.OffsetY = bot - view + menuPadB
+	if bot > p.OffsetY+view-ch.PadB {
+		p.OffsetY = bot - view + ch.PadB
 	}
 	p.clamp()
 }

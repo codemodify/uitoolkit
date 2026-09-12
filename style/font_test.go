@@ -66,6 +66,17 @@ func containsEllipsis(s string) bool {
 	return false
 }
 
+func TestFontInkWidthCoversAdvance(t *testing.T) {
+	f := BakeFont(16, paintengine2d.White)
+	for _, s := range []string{"P", "Add sender to VIP", "About Mail"} {
+		adv := f.Advance(s)
+		ink := f.InkWidth(s)
+		if ink+0.01 < adv {
+			t.Fatalf("%q ink %v < advance %v", s, ink, adv)
+		}
+	}
+}
+
 func TestSpaceAdvanceKeepsWordGap(t *testing.T) {
 	f := BakeFont(16, paintengine2d.White)
 	space := f.Advance(" ")

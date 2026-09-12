@@ -379,19 +379,51 @@ func openGalleryCombo(a *app.Application, w *app.Window) error {
 	return nil
 }
 
+func mailMessageMenuItems() []*widgets.MenuItem {
+	return []*widgets.MenuItem{
+		widgets.Item("Reply", nil),
+		widgets.Item("Forward", nil),
+		widgets.Sep(),
+		widgets.Item("Mark as Read", nil),
+		widgets.Item("Mark as Unread", nil),
+		widgets.Item("Star", nil),
+		widgets.Sep(),
+		widgets.Item("Tag · Important", nil),
+		widgets.Item("Mute Thread", nil),
+		widgets.Item("Add sender to VIP", nil),
+		widgets.Item("Archive", nil),
+		widgets.Item("Junk", nil),
+		widgets.Item("Delete", nil),
+	}
+}
+
 func openMailContextMenu(a *app.Application, w *app.Window) error {
 	var table *widgets.TableView
+	var cards *widgets.CardList
 	widget.Walk(w.Content(), func(c widget.Component) {
 		if tv, ok := c.(*widgets.TableView); ok && table == nil && tv.RowCount > 0 {
 			table = tv
 		}
+		if cl, ok := c.(*widgets.CardList); ok && cards == nil && cl.Count > 0 {
+			cards = cl
+		}
 	})
-	if table == nil {
-		return fmt.Errorf("no thread table with rows")
+	switch {
+	case table != nil:
+		o := widget.DeviceOrigin(table)
+		p := paintengine2d.Pt(o.X+48, o.Y+table.HeaderHeight()+10)
+		w.Inject(platform.Event{Kind: platform.EventMouseDown, Pos: p, Button: platform.ButtonRight})
+	case cards != nil:
+		o := widget.DeviceOrigin(cards)
+		p := paintengine2d.Pt(o.X+48, o.Y+24)
+		w.Inject(platform.Event{Kind: platform.EventMouseDown, Pos: p, Button: platform.ButtonRight})
+	default:
+		// Demo list can be empty (first-run / filter); still size the Mail
+		// message menu — including “Add sender to VIP”.
+		if widgets.ShowContextMenu(w.Content(), paintengine2d.Pt(40, 80), mailMessageMenuItems()...) == nil {
+			return fmt.Errorf("ShowContextMenu failed")
+		}
 	}
-	o := widget.DeviceOrigin(table)
-	p := paintengine2d.Pt(o.X+48, o.Y+table.HeaderHeight()+10)
-	w.Inject(platform.Event{Kind: platform.EventMouseDown, Pos: p, Button: platform.ButtonRight})
 	a.PumpOnce()
 	pop, ok := w.Popup().(*widgets.PopupMenu)
 	if !ok || pop == nil {

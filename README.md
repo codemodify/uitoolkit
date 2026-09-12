@@ -473,9 +473,18 @@ then write every attachment). Tag / Archive / Junk / Delete sit above
 the thread header; Quick Filter moves into the main toolbar after
 Classic (**v0.10.11**). `ToolBar.Measure` returns intrinsic width so a
 flex spacer can right-align siblings; Mail Quick Filter stays visible
-on the right (**v0.10.12**).
+on the right (**v0.10.12**). Context menus size to the full label plus
+check column, padding, and frame so “Add sender to VIP” is not clipped
+(**v0.10.13**).
 
 ## Version
+
+**0.10.13** — Toolkit: `PopupMenu` / `DrawMenuItem` share Look `MenuChrome`
+(scale + density) so context menus without shortcuts still size to the
+widest label + check column + item pad + frame. Measure uses the same
+host font as paint (`Advance` / `InkWidth`); the item clip no longer
+shears the last glyph. Right-edge `ShowContextMenu` still translates,
+never shrinks below intrinsic width. Still paintengine2d **v0.9.0**.
 
 **0.10.12** — Toolkit: `ToolBar.Measure` reports item widths + padding
 (height stays `ToolBarH`) instead of expanding to `MaxW`. Parent
