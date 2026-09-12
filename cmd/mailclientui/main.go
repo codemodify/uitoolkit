@@ -49,7 +49,7 @@ func main() {
 		layout = mail.LayoutClassic
 	}
 
-	a := uitoolkit.New(uitoolkit.Options{Look: look, Headless: *headless})
+	a := uitoolkit.New(uitoolkit.Options{Look: look, Headless: *headless, WatchLook: true})
 	win, err := a.NewWindow(platform.WindowOptions{
 		Title: "Mail", Width: 1280, Height: 800, MinWidth: 860, MinHeight: 560,
 	})

@@ -4,9 +4,11 @@
 //	go run ./cmd/uitksettings -headless          # writes settings.png
 //	go run ./cmd/uitksettings -screenshot docs/screenshots
 //
-// Theme, corner policy, and icon set apply live and persist to
-// $XDG_CONFIG_HOME/uitoolkit/look.json. Other apps load the same
-// file with uitoolkit.PreferredLook(). See docs/settings.md.
+// Theme, corner policy, and icon set preview in this window. Apply
+// writes $XDG_CONFIG_HOME/uitoolkit/look.json and running apps that
+// watch the file (Application default when Look is PreferredLook)
+// reload without a restart. Close without Apply discards staged
+// changes. See docs/settings.md.
 package main
 
 import (
@@ -26,8 +28,10 @@ func main() {
 	shot := flag.String("screenshot", "", "write settings.png into this directory (or file) and exit")
 	flag.Parse()
 
-	look := uitoolkit.PreferredLook()
-	a := uitoolkit.New(uitoolkit.Options{Look: look, Headless: *headless || *shot != ""})
+	a := uitoolkit.New(uitoolkit.Options{
+		Headless:         *headless || *shot != "",
+		DisableLookWatch: true, // stage locally; Apply is the only writer
+	})
 	win, err := a.NewWindow(platform.WindowOptions{
 		Title: "Settings", Width: 960, Height: 780, MinWidth: 720, MinHeight: 520,
 		Headless: *headless || *shot != "",

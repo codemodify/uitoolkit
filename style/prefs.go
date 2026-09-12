@@ -62,5 +62,13 @@ func SaveAppearance(a Appearance) error {
 		return err
 	}
 	b = append(b, '\n')
-	return os.WriteFile(path, b, 0o600)
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, b, 0o600); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return nil
 }

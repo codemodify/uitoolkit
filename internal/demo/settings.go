@@ -11,70 +11,83 @@ import (
 )
 
 // SettingsApp is the toolkit appearance editor (theme, corners, icon set).
-// Changes apply live via Application.SetLook and persist to XDG look.json.
+// Radio changes preview locally via Application.SetLook. Apply writes
+// look.json (the source of truth) so other apps watching the file reload.
+// Closing the window without Apply discards staged changes.
 func SettingsApp(a *app.Application, win *app.Window) widget.Component {
-	return buildSettings(a, win, style.LoadAppearance(), 0)
+	saved := style.LoadAppearance().Normalize()
+	return buildSettings(a, win, saved, saved, 0)
 }
 
-func buildSettings(a *app.Application, win *app.Window, ap style.Appearance, section int) widget.Component {
-	ap = ap.Normalize()
+func buildSettings(a *app.Application, win *app.Window, saved, staged style.Appearance, section int) widget.Component {
+	saved = saved.Normalize()
+	staged = staged.Normalize()
 	if section < 0 || section > 1 {
 		section = 0
 	}
 
-	status := widgets.NewStatusBar(ap.String(), style.AppearancePath(), "v"+uitoolkit.Version)
+	st := staged.String()
+	if staged != saved {
+		st += " · unapplied"
+	}
+	status := widgets.NewStatusBar(st, style.AppearancePath(), "v"+uitoolkit.Version)
 	chrome := widgets.NewTitleBar("Settings", "Appearance for every uitoolkit app")
 
-	apply := func(next style.Appearance) {
+	preview := func(next style.Appearance) {
 		next = next.Normalize()
+		a.SetLook(next.Look())
+		win.SetContent(buildSettings(a, win, saved, next, section))
+	}
+	persist := func() {
+		next := staged.Normalize()
 		if err := style.SaveAppearance(next); err != nil {
 			status.Set(0, err.Error())
 			return
 		}
 		a.SetLook(next.Look())
-		win.SetContent(buildSettings(a, win, next, section))
+		win.SetContent(buildSettings(a, win, next, next, section))
 	}
 
 	themeSel := 0
-	if ap.Theme == style.ThemeLight {
+	if staged.Theme == style.ThemeLight {
 		themeSel = 1
 	}
 	theme := widgets.NewRadioGroup([]string{"Dark graphite", "Light paper"}, themeSel, func(i int) {
-		next := ap
+		next := staged
 		if i == 1 {
 			next.Theme = style.ThemeLight
 		} else {
 			next.Theme = style.ThemeDark
 		}
-		apply(next)
+		preview(next)
 	})
 
 	cornerSel := 0
-	if ap.Corners == style.CornersSquare {
+	if staged.Corners == style.CornersSquare {
 		cornerSel = 1
 	}
 	corners := widgets.NewRadioGroup([]string{"Round corners", "Square corners"}, cornerSel, func(i int) {
-		next := ap
+		next := staged
 		if i == 1 {
 			next.Corners = style.CornersSquare
 		} else {
 			next.Corners = style.CornersRound
 		}
-		apply(next)
+		preview(next)
 	})
 
 	iconSel := 0
-	if ap.Icons == style.IconSetSharp {
+	if staged.Icons == style.IconSetSharp {
 		iconSel = 1
 	}
 	icons := widgets.NewRadioGroup([]string{"Classic (rounded stroke)", "Sharp (geometric)"}, iconSel, func(i int) {
-		next := ap
+		next := staged
 		if i == 1 {
 			next.Icons = style.IconSetSharp
 		} else {
 			next.Icons = style.IconSetClassic
 		}
-		apply(next)
+		preview(next)
 	})
 
 	primary := widgets.NewButton("Primary action", func() { status.Set(0, "Primary") })
@@ -114,60 +127,12 @@ func buildSettings(a *app.Application, win *app.Window, ap style.Appearance, sec
 		searchBtn, infoBtn, warnBtn, errBtn,
 	)
 
-	preview := widgets.NewPanel("Live preview",
+	previewPane := widgets.NewPanel("Live preview",
 		widgets.NewRow(primary, secondary, disabled).WithGap(10),
 		toolbar,
 		widgets.NewRow(field, combo).WithGap(10),
 		widgets.NewRow(check, sw).WithGap(16),
 		slider,
-	)
-
-	menu := widgets.NewMenuBar(
-		widgets.NewMenu("&File",
-			widgets.ItemAccel("&Save prefs", "Ctrl+S", func() {
-				if err := style.SaveAppearance(ap); err != nil {
-					status.Set(0, err.Error())
-					return
-				}
-				status.Set(0, "Wrote "+style.AppearancePath())
-			}),
-			widgets.Sep(),
-			widgets.ItemAccel("&Quit", "Ctrl+Q", func() { a.Quit() }),
-		),
-		widgets.NewMenu("&View",
-			widgets.CheckItem("&Dark", ap.Theme == style.ThemeDark, func() {
-				next := ap
-				next.Theme = style.ThemeDark
-				apply(next)
-			}),
-			widgets.CheckItem("&Light", ap.Theme == style.ThemeLight, func() {
-				next := ap
-				next.Theme = style.ThemeLight
-				apply(next)
-			}),
-			widgets.Sep(),
-			widgets.CheckItem("&Round", ap.Corners == style.CornersRound, func() {
-				next := ap
-				next.Corners = style.CornersRound
-				apply(next)
-			}),
-			widgets.CheckItem("S&quare", ap.Corners == style.CornersSquare, func() {
-				next := ap
-				next.Corners = style.CornersSquare
-				apply(next)
-			}),
-			widgets.Sep(),
-			widgets.CheckItem("&Classic icons", ap.Icons == style.IconSetClassic, func() {
-				next := ap
-				next.Icons = style.IconSetClassic
-				apply(next)
-			}),
-			widgets.CheckItem("S&harp icons", ap.Icons == style.IconSetSharp, func() {
-				next := ap
-				next.Icons = style.IconSetSharp
-				apply(next)
-			}),
-		),
 	)
 
 	themeCol := widgets.NewColumn(widgets.NewLabel("Theme"), theme).WithGap(4)
@@ -181,7 +146,7 @@ func buildSettings(a *app.Application, win *app.Window, ap style.Appearance, sec
 		widgets.NewTitle("Appearance"),
 		widgets.NewLabel("Shared by Mail, gallery, and any app that calls PreferredLook()."),
 		choices,
-		preview,
+		previewPane,
 	).WithGap(10).WithPad(4)
 
 	aboutPath := widgets.NewMonoTextView(style.AppearancePath(), "")
@@ -191,17 +156,17 @@ func buildSettings(a *app.Application, win *app.Window, ap style.Appearance, sec
 		widgets.NewTitle("About"),
 		widgets.NewLabel("uitoolkit v"+uitoolkit.Version),
 		widgets.NewLabel("LookAndFeel Classic — Titillium Web + JetBrains Mono."),
-		widgets.NewLabel("Prefs file:"),
+		widgets.NewLabel("Prefs file (written on Apply):"),
 		aboutPath,
-		widgets.NewLabel("Other apps apply the same skin with PreferredLook()."),
+		widgets.NewLabel("Other apps watch this file and call SetLook(PreferredLook())."),
 		widgets.NewButton("Open appearance", func() {
-			win.SetContent(buildSettings(a, win, ap, 0))
+			win.SetContent(buildSettings(a, win, saved, staged, 0))
 		}),
 	).WithGap(10).WithPad(4)
 
 	sections := []string{"Appearance", "About"}
 	nav := widgets.NewListView(len(sections), func(i int) string { return sections[i] }, func(i int) {
-		win.SetContent(buildSettings(a, win, ap, i))
+		win.SetContent(buildSettings(a, win, saved, staged, i))
 	})
 	nav.Selected = section
 	nav.RowHeight = 32
@@ -222,7 +187,15 @@ func buildSettings(a *app.Application, win *app.Window, ap style.Appearance, sec
 	split := widgets.NewSplitter(true, side, right)
 	split.Ratio = 0.24
 
-	root := widgets.NewColumn(chrome, menu, split, status)
+	applyBtn := widgets.NewButton("Apply", persist)
+	applyBtn.Primary = true
+	if staged == saved {
+		applyBtn.SetEnabled(false)
+	}
+	hint := widgets.NewLabel("Apply writes look.json. Close without Apply discards staged changes.")
+	actions := widgets.NewRow(applyBtn, hint).WithGap(12).WithPad(8)
+
+	root := widgets.NewColumn(chrome, split, actions, status)
 	root.AddFlex(split, 1)
 	return root
 }

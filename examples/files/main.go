@@ -15,7 +15,7 @@ func main() {
 	headless := flag.Bool("headless", false, "paint offscreen and write files.png")
 	flag.Parse()
 
-	a := uitoolkit.New(uitoolkit.Options{Look: uitoolkit.PreferredLook(), Headless: *headless})
+	a := uitoolkit.New(uitoolkit.Options{Headless: *headless})
 	win, err := a.NewWindow(platform.WindowOptions{
 		Title: "Files", Width: 1040, Height: 680, MinWidth: 720, MinHeight: 480,
 	})
