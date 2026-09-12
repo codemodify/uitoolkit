@@ -6,8 +6,10 @@ uitoolkit app can open one.
 
 **v0.16.2** Mail tray: `IconMail` (not `IconInfo`); Wayland Show/Raise
 remaps the toplevel after close-to-tray and activates via
-`xdg_activation_v1` when the compositor has it. D-Bus Activate /
-dbusmenu `Event("clicked")` (and `EventGroup`) run on the UI thread.
+`xdg_activation_v1` when the compositor has it. The tray **context
+menu is a toolkit `PopupMenu`** (Office XP chrome), not Plasma’s
+native dbusmenu. Left-click is still SNI `Activate` → Show Mail.
+Callbacks run on the UI thread.
 
 **v0.16.1** fixes a startup panic on KDE Plasma. `com.canonical.dbusmenu.GetLayout`
 must return D-Bus type `(ia{sv}av)` — children are an array of variants,
@@ -42,7 +44,7 @@ window chrome). `UITK_TRAY=fake` records calls for tests.
 | Type / func | Role |
 | --- | --- |
 | `StatusItem` | `SetIcon` / `SetTooltip` / `SetTitle` / `SetMenu` / `Notify` / `Close` / `Backend` / `Alive` |
-| `StatusItemOptions` | ID, title, tooltip, icon, menu, `OnClick`, `OnNotifyClick`, `Stub` |
+| `StatusItemOptions` | ID, title, tooltip, icon, menu, `OnClick`, `OnNotifyClick`, `OnMenu`, `Stub` |
 | `StatusIcon` | `Image` (paintengine2d), `Path` (PNG), or `Name` (freedesktop / theme) |
 | `StatusMenuItem` | text, separator, check, `OnClick` — map from `widgets.MenuItem` |
 | `Notification` | title + body (+ optional icon / click) |
@@ -61,19 +63,38 @@ One D-Bus path for every Linux display server. No extra CGO.
 | Piece | Bus name | Needs |
 | --- | --- | --- |
 | Tray icon | `org.kde.StatusNotifierItem` + `RegisterStatusNotifierItem` on `org.kde.StatusNotifierWatcher` | A StatusNotifier host |
-| Context menu | `com.canonical.dbusmenu` | Same host |
+| Context menu | SNI `ContextMenu(x,y)` → toolkit `PopupMenu` | Same host (right-click) |
+| dbusmenu stub | `com.canonical.dbusmenu` at `/MenuBar` (empty `Menu=/`) | Hosts that probe the iface |
 | Toast | `org.freedesktop.Notifications` | notification daemon (almost always present) |
 
-**Compositor / desktop:**
+**Tray menu chrome**
 
-| Environment | Tray icon | Toast |
-| --- | --- | --- |
-| KDE Plasma | yes (native SNI) | yes |
-| GNOME 45+ | install [AppIndicator](https://extensions.gnome.org/extension/615/appindicator-support/) (or `gnome-shell-extension-appindicator`) | yes without the extension |
-| Sway / Hyprland | Waybar / fuzzel / similar `tray` module | Mako / Dunst / fnott |
-| Xfce / Cinnamon / MATE | usually yes (SNI or Ayatana) | yes |
-| Xlibre | same as X11 (SNI over the session bus) | yes |
-| No session bus / SSH | stub | stub |
+Linux SNI `Menu` is advertised as `/` with `ItemIsMenu=false`. Plasma
+then calls `ContextMenu` instead of drawing a native dbusmenu. The
+app opens the same `PopupMenu` / `MenuItem` path as in-window context
+menus (gutter icons, checks, Look fonts). Left-click stays `Activate`.
+
+| Environment | Icon | Toolkit popup | Notes |
+| --- | --- | --- | --- |
+| KDE Plasma | yes (SNI) | yes (`ContextMenu`) | Native dbusmenu is **not** used for chrome |
+| GNOME 45+ | AppIndicator extension | only if the host calls `ContextMenu` | Extension often expects dbusmenu; right-click may no-op |
+| Sway / Hyprland + Waybar | tray module | if Waybar sends `ContextMenu` | dbusmenu-only modules get the stub |
+| Xfce / Cinnamon / MATE | usually SNI | if the host calls `ContextMenu` | |
+| Xlibre | same as X11 | same | |
+| Windows | `Shell_NotifyIcon` | yes (`OnMenu` on right-click) when a window exists | No Win32 `HMENU` |
+| macOS (`CGO`) | `NSStatusItem` | not wired | OS menu-bar click is native; toolkit popup not used |
+| No session bus / SSH | stub | stub | |
+
+**Compositor / desktop (toasts):**
+
+| Environment | Toast |
+| --- | --- |
+| KDE Plasma | yes |
+| GNOME 45+ | yes (extension only needed for the icon) |
+| Sway / Hyprland | Mako / Dunst / fnott |
+| Xfce / Cinnamon / MATE | yes |
+| Xlibre | yes |
+| No session bus / SSH | stub |
 
 ```bash
 # Debian/Ubuntu
@@ -90,13 +111,14 @@ XEmbed `_NET_SYSTEM_TRAY` is **not** implemented. Portal
 the same toasts outside a sandbox).
 
 `Window.Raise` on X11 maps the window and sends `_NET_ACTIVE_WINDOW`.
-On Wayland, hide is `xdg_toplevel.set_minimized`; restore is
-compositor-dependent (clicking the tray still `Show`s / invalidates).
+On Wayland, Hide drops the `xdg_toplevel` role (after `set_minimized`);
+Show remaps it and requests `xdg_activation_v1` when available.
 
 ### Windows
 
 `GOOS=windows`: `Shell_NotifyIconW` (notification area) plus `NIF_INFO`
-balloons. Left-click fires `OnClick`; balloon click fires
+balloons. Left-click fires `OnClick`; right-click fires `OnMenu` (toolkit
+`PopupMenu` when a toolkit window exists). Balloon click fires
 `OnNotifyClick`. Windowing (HWND app windows) is still a stub — only
 the tray landed.
 
@@ -108,7 +130,8 @@ mailclientui.exe
 ### macOS
 
 `GOOS=darwin` **and** `CGO_ENABLED=1`: `NSStatusItem` on the menu bar
-and `NSUserNotification` toasts. Without CGO the item is a stub.
+and `NSUserNotification` toasts. The OS owns the menu-bar click;
+toolkit `PopupMenu` is not used on macOS. Without CGO the item is a stub.
 AppKit windows are still a stub.
 
 ```bash

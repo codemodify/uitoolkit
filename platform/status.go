@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/codemodify/paintengine2d"
+	"github.com/codemodify/uitoolkit/style"
 )
 
 // StatusItem is a cross-platform tray / menu-bar / notification-area icon.
@@ -44,6 +45,7 @@ type StatusMenuItem struct {
 	Disabled  bool
 	Separator bool
 	Checked   bool
+	Icon      style.ToolIcon
 	OnClick   func()
 }
 
@@ -60,6 +62,10 @@ type StatusItemOptions struct {
 	OnClick func()
 	// OnNotifyClick is invoked when the user activates a desktop notification.
 	OnNotifyClick func()
+	// OnMenu is the context / right-click handler. Application.NewStatusItem
+	// sets this to open a toolkit PopupMenu (same chrome as app menus).
+	// x, y are SNI root coordinates; 0,0 means "near the window".
+	OnMenu func(x, y int32)
 	// Dispatch runs tray callbacks (Activate, dbusmenu Event, notify
 	// click) on the UI thread. Application.NewStatusItem sets this to
 	// Application.Post. If nil, callbacks run on the D-Bus goroutine.

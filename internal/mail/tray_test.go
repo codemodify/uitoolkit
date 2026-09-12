@@ -11,6 +11,7 @@ import (
 	"github.com/codemodify/uitoolkit/app"
 	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
+	"github.com/codemodify/uitoolkit/widgets"
 )
 
 func TestMailTrayFakeClickRaises(t *testing.T) {
@@ -64,6 +65,14 @@ func TestMailTrayFakeClickRaises(t *testing.T) {
 	tray.ClickMenu(0)
 	if !w.Visible() {
 		t.Fatal("Show Mail menu should raise")
+	}
+	w.Hide()
+	tray.ContextClick(600, 10)
+	if !w.Visible() {
+		t.Fatal("tray context click should show Mail")
+	}
+	if _, ok := w.Popup().(*widgets.PopupMenu); !ok {
+		t.Fatalf("tray context should be toolkit PopupMenu, got %T", w.Popup())
 	}
 }
 

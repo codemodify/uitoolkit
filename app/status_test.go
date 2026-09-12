@@ -106,6 +106,50 @@ func TestCloseHidesKeepsWindow(t *testing.T) {
 	}
 }
 
+func TestTrayContextMenuIsToolkitPopup(t *testing.T) {
+	t.Setenv("UITK_TRAY", "fake")
+	a := New(Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{Width: 400, Height: 240, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.SetContent(widgets.NewLabel("mail"))
+	a.PumpOnce()
+	picked := 0
+	item, err := a.NewStatusItem(platform.StatusItemOptions{
+		Title: "Mail",
+		Menu: []platform.StatusMenuItem{
+			{Text: "Show Mail", Icon: style.IconMail, OnClick: func() { picked++ }},
+			{Separator: true},
+			{Text: "Quit"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fake, ok := item.(*platform.FakeStatusItem)
+	if !ok {
+		t.Fatalf("backend %s", item.Backend())
+	}
+	w.Hide()
+	fake.ContextClick(380, 8)
+	if !w.Visible() {
+		t.Fatal("context menu should show a hidden window")
+	}
+	pop, ok := w.Popup().(*widgets.PopupMenu)
+	if !ok || pop == nil {
+		t.Fatalf("want toolkit PopupMenu, got %T", w.Popup())
+	}
+	if len(pop.Items) != 3 || pop.Items[0].Text != "Show Mail" || pop.Items[0].Icon != style.IconMail {
+		t.Fatalf("popup items %+v", pop.Items)
+	}
+	w.RequestFocus(pop)
+	w.dispatch(platform.Event{Kind: platform.EventKeyDown, Key: platform.KeyReturn})
+	if picked != 1 {
+		t.Fatalf("popup activate %d", picked)
+	}
+}
+
 func TestStatusMenuFromItems(t *testing.T) {
 	n := 0
 	got := StatusMenuFromItems([]*widgets.MenuItem{

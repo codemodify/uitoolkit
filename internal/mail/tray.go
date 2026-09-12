@@ -18,7 +18,7 @@ func (s *session) attachTray() {
 		Tooltip: "Mail",
 		Icon:    app.StatusIconFromTool(style.IconMail, look, 22),
 		Menu: app.StatusMenuFromItems([]*widgets.MenuItem{
-			widgets.Item("Show Mail", s.showMain),
+			widgets.ItemIcon(style.IconMail, "Show Mail", s.showMain),
 			widgets.Sep(),
 			widgets.Item("Quit", s.quitFromTray),
 		}),
