@@ -88,7 +88,7 @@ func Light() Palette {
 }
 
 // Metrics is the geometric skin (radii, paddings). Apps swap LookAndFeel,
-// not a global singleton.
+// not a global singleton. Square Appearance sets Radius and RadiusSmall to 0.
 type Metrics struct {
 	Radius      float32
 	RadiusSmall float32

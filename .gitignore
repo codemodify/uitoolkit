@@ -8,4 +8,6 @@ examples/gallery/gallery
 examples/notes/notes
 examples/inspector/inspector
 examples/files/files
+cmd/uitksettings/uitksettings
+/settings.png
 /tmp/

@@ -32,12 +32,13 @@ type Application struct {
 	onQuit   func()
 }
 
-// New constructs an application. Default look is dark Classic.
+// New constructs an application. Default look is PreferredLook
+// (XDG appearance, else dark Classic).
 // Scale <= 0 means detect (env, then Xft.dpi on X11). Headless
 // stays 1× unless UITK_SCALE / GDK_SCALE / QT_SCALE_FACTOR is set.
 func New(opts Options) *Application {
 	if opts.Look == nil {
-		opts.Look = style.DarkLook()
+		opts.Look = style.PreferredLook()
 	}
 	var backend platform.Backend
 	if opts.Backend != "" {

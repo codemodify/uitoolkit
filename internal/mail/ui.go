@@ -158,17 +158,23 @@ func (s *session) persistChrome() {
 	}
 	s.chromePrefs.Light = s.opts.Light
 	saveChromePrefs(s.chromePrefs)
+	ap := style.LoadAppearance()
+	if s.opts.Light {
+		ap.Theme = style.ThemeLight
+	} else {
+		ap.Theme = style.ThemeDark
+	}
+	_ = style.SaveAppearance(ap)
 }
 
 func (s *session) applyLook() {
-	var look style.LookAndFeel
+	ap := style.LoadAppearance()
 	if s.opts.Light {
-		look = style.LightLook()
+		ap.Theme = style.ThemeLight
 	} else {
-		look = style.DarkLook()
+		ap.Theme = style.ThemeDark
 	}
-	look = style.WithDensity(look, s.density)
-	s.app.SetLook(look)
+	s.app.SetLook(style.WithDensity(ap.Look(), s.density))
 }
 
 func (s *session) rebuild() {
@@ -539,7 +545,7 @@ func (s *session) menuBar() *widgets.MenuBar {
 				s.mark(fmt.Sprintf("Filters applied (%d)", n))
 			}),
 			widgets.Item("Add-ons and Themes", func() {
-				widgets.Info(s.win.Content(), "Add-ons", "LookAndFeel is Dark / Light Classic. No XPI store.", nil)
+				widgets.Info(s.win.Content(), "Add-ons", "LookAndFeel is Dark / Light Classic (corners and icons from Settings). No XPI store.", nil)
 			}),
 			widgets.Item("Error Console", func() { s.mark("Error Console (stub)") }),
 			widgets.Item("Activity Manager", func() { s.mark("Activity Manager (stub)") }),

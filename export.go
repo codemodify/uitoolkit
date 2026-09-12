@@ -36,6 +36,10 @@ type (
 	CardContent       = widgets.CardContent
 	CardBadge         = widgets.CardBadge
 	Cursor            = platform.Cursor
+	Appearance        = style.Appearance
+	ThemeName         = style.ThemeName
+	CornerStyle       = style.CornerStyle
+	IconSetName       = style.IconSetName
 )
 
 const (
@@ -46,17 +50,46 @@ const (
 	CursorColResize = platform.CursorColResize
 	CursorRowResize = platform.CursorRowResize
 	CursorText      = platform.CursorText
+	ThemeDark       = style.ThemeDark
+	ThemeLight      = style.ThemeLight
+	CornersRound    = style.CornersRound
+	CornersSquare   = style.CornersSquare
+	IconSetClassic  = style.IconSetClassic
+	IconSetSharp    = style.IconSetSharp
 )
 
 func New(opts Options) *Application { return app.New(opts) }
 
 func DarkLook() *style.Classic  { return style.DarkLook() }
 func LightLook() *style.Classic { return style.LightLook() }
+func PreferredLook() style.LookAndFeel {
+	return style.PreferredLook()
+}
+func LoadAppearance() style.Appearance { return style.LoadAppearance() }
+func SaveAppearance(a style.Appearance) error {
+	return style.SaveAppearance(a)
+}
+func AppearancePath() string { return style.AppearancePath() }
+func LookAppearance(look style.LookAndFeel) style.Appearance {
+	return style.LookAppearance(look)
+}
 func WithScale(look style.LookAndFeel, scale float32) style.LookAndFeel {
 	return style.WithScale(look, scale)
 }
 func WithDensity(look style.LookAndFeel, d style.Density) style.LookAndFeel {
 	return style.WithDensity(look, d)
+}
+func WithTheme(look style.LookAndFeel, theme style.ThemeName) style.LookAndFeel {
+	return style.WithTheme(look, theme)
+}
+func WithCorners(look style.LookAndFeel, corners style.CornerStyle) style.LookAndFeel {
+	return style.WithCorners(look, corners)
+}
+func WithIcons(look style.LookAndFeel, icons style.IconSetName) style.LookAndFeel {
+	return style.WithIcons(look, icons)
+}
+func WithAppearance(look style.LookAndFeel, a style.Appearance) style.LookAndFeel {
+	return style.WithAppearance(look, a)
 }
 func Dark() style.Palette  { return style.Dark() }
 func Light() style.Palette { return style.Light() }

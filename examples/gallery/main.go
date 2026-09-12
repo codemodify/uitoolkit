@@ -32,14 +32,14 @@ func main() {
 		}
 		return
 	}
-	a := uitoolkit.New(uitoolkit.Options{Look: uitoolkit.DarkLook(), Headless: *headless})
+	a := uitoolkit.New(uitoolkit.Options{Look: uitoolkit.PreferredLook(), Headless: *headless})
 	win, err := a.NewWindow(platform.WindowOptions{
 		Title: "uitoolkit gallery", Width: 1000, Height: 760, MinWidth: 720, MinHeight: 480,
 	})
 	if err != nil {
 		log.Fatal(err)
 	}
-	win.SetContent(buildGallery(a, win, false))
+	win.SetContent(buildGallery(a, win, a.Look().Name() == "light"))
 	if *headless {
 		_ = win.WritePNG("gallery.png")
 		fmt.Println("wrote gallery.png")
