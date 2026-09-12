@@ -32,7 +32,7 @@ func buildSettings(a *app.Application, win *app.Window, saved, staged style.Appe
 		st += " · unapplied"
 	}
 	status := widgets.NewStatusBar(st, style.AppearancePath(), "v"+uitoolkit.Version)
-	chrome := widgets.NewTitleBar("Settings", "Theme packs and file icon sets for every uitoolkit app")
+	chrome := widgets.NewTitleBar("Settings", "Theme packs and PNG icon sets for every uitoolkit app")
 
 	preview := func(next style.Appearance) {
 		next = next.Normalize()
@@ -116,7 +116,7 @@ func buildSettings(a *app.Application, win *app.Window, saved, staged style.Appe
 		widgets.NewLabel("Palette  "+string(staged.Theme)),
 		widgets.NewLabel("Corners  "+string(staged.Corners)),
 		widgets.NewLabel("Icons  "+string(staged.Icons)+"  (on top of the pack)"),
-		widgets.NewLabel("Copy repo icons/ into ~/.config/uitoolkit/icons/ to install sets."),
+		widgets.NewLabel("Copy repo icons/<set>/ PNGs into ~/.config/uitoolkit/icons/ to install sets."),
 		widgets.NewLabel("User packs override builtins of the same name."),
 		widgets.NewRow(exportBtn).WithGap(8),
 	).WithGap(6)
@@ -188,7 +188,7 @@ func buildSettings(a *app.Application, win *app.Window, saved, staged style.Appe
 	themesPath := widgets.NewMonoTextView(style.ThemesDir()+"/<name>/theme.json", "")
 	themesPath.MinRows = 2
 	themesPath.Wrap = true
-	iconsPath := widgets.NewMonoTextView(style.IconsDir()+"/<set>/*.svg", "")
+	iconsPath := widgets.NewMonoTextView(style.IconsDir()+"/<set>/*.png", "")
 	iconsPath.MinRows = 2
 	iconsPath.Wrap = true
 	about := widgets.NewColumn(
@@ -199,9 +199,9 @@ func buildSettings(a *app.Application, win *app.Window, saved, staged style.Appe
 		aboutPath,
 		widgets.NewLabel("User theme packs (exported; override builtins by name):"),
 		themesPath,
-		widgets.NewLabel("Icon sets (copy repo icons/filled|outline|duotone here):"),
+		widgets.NewLabel("Icon sets (copy repo lucide/phosphor/tabler/heroicons/material-symbols here):"),
 		iconsPath,
-		widgets.NewLabel("Eight starter packs are embedded. Icon SVGs are not."),
+		widgets.NewLabel("Eight starter packs are embedded. Icon PNGs are not."),
 		widgets.NewLabel("Other apps watch look.json and call SetLook(PreferredLook())."),
 		widgets.NewButton("Open appearance", func() {
 			win.SetContent(buildSettings(a, win, saved, staged, 0))

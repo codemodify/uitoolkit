@@ -181,7 +181,7 @@ func TestSettingsIconSetApplyWritesLookJSON(t *testing.T) {
 	if err := style.SaveAppearance(style.DefaultAppearance()); err != nil {
 		t.Fatal(err)
 	}
-	installSettingsIconSet(t, dir, "outline")
+	installSettingsIconSet(t, dir, "lucide")
 	a := uitoolkit.New(uitoolkit.Options{Headless: true, Scale: 1, DisableLookWatch: true})
 	w, err := a.NewWindow(platform.WindowOptions{Title: "settings", Width: 960, Height: 780, Headless: true})
 	if err != nil {
@@ -193,9 +193,9 @@ func TestSettingsIconSetApplyWritesLookJSON(t *testing.T) {
 	if findIconList(w.Content()) == nil {
 		t.Fatal("missing icon picker")
 	}
-	clickIconSet(t, w, "outline")
+	clickIconSet(t, w, "Lucide")
 	a.PumpOnce()
-	if style.LookAppearance(a.Look()).Icons != style.IconSetOutline {
+	if style.LookAppearance(a.Look()).Icons != style.IconSetLucide {
 		t.Fatalf("preview icons %+v", style.LookAppearance(a.Look()))
 	}
 	if style.LoadAppearance().Icons != style.IconSetClassic {
@@ -204,14 +204,14 @@ func TestSettingsIconSetApplyWritesLookJSON(t *testing.T) {
 	clickApply(t, w)
 	a.PumpOnce()
 	got := style.LoadAppearance()
-	if got.Name != style.DefaultThemeName || got.Icons != style.IconSetOutline {
+	if got.Name != style.DefaultThemeName || got.Icons != style.IconSetLucide {
 		t.Fatalf("applied %+v", got)
 	}
 	raw, err := os.ReadFile(style.AppearancePath())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(raw), `"icons": "outline"`) {
+	if !strings.Contains(string(raw), `"icons": "lucide"`) {
 		t.Fatalf("look.json: %s", raw)
 	}
 }

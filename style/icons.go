@@ -3,9 +3,10 @@ package style
 import "github.com/codemodify/paintengine2d"
 
 // DrawToolIcon paints a stock ToolIcon in the chosen glyph set.
-// File sets (filled / outline / duotone / user dirs) load a tinted SVG
-// from ~/.config/uitoolkit/icons/<set>/<action>.svg. Missing files fall
-// back to the drawn classic set. Classic / Sharp stay in-process vectors.
+// File sets (lucide / phosphor / tabler / heroicons / material-symbols /
+// user dirs) load a tinted PNG from ~/.config/uitoolkit/icons/<set>/<action>.png
+// (or name@2x.png). Missing files fall back to the drawn classic set.
+// Classic / Sharp stay in-process vectors.
 func DrawToolIcon(ctx *paintengine2d.Context, b paintengine2d.Rect, icon ToolIcon, col paintengine2d.Color, set IconSetName) {
 	if icon == IconNone || b.Empty() || ctx == nil {
 		return

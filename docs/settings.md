@@ -6,8 +6,8 @@ on top of that pack. Other apps apply both with `Application.SetLook` /
 `PreferredLook`.
 
 Theme packs are GTK/KDE-like look files (palette + corners). Chrome
-`ToolIcon`s come from a file set under `~/.config/uitoolkit/icons/` when
-one is selected. Packs may still list a default `icons` field
+`ToolIcon`s come from a **PNG** file set under `~/.config/uitoolkit/icons/`
+when one is selected. Packs may still list a default `icons` field
 (`classic` / `sharp`); `look.json` `"icons"` overrides it.
 
 ## Run
@@ -29,7 +29,7 @@ There is no menu bar. **Apply** is the only persist action for
 | Control | LookAndFeel | Values |
 | --- | --- | --- |
 | Theme picker | named pack → `Classic` | embedded starters + exported user packs |
-| Icon picker | file set or drawn fallback | classic / sharp + `icons/<set>/` |
+| Icon picker | PNG set or drawn fallback | classic / sharp + `icons/<set>/` |
 | Export | `themes/<name>/theme.json` | current (staged) look, asked for a name |
 
 Corners stay inside the selected pack. Icons are chosen **on top of**
@@ -51,12 +51,12 @@ $XDG_CONFIG_HOME/uitoolkit/look.json
 ```json
 {
   "theme": "dark-round-classic",
-  "icons": "outline"
+  "icons": "lucide"
 }
 ```
 
 `theme` is the pack name. `icons` is the chrome set (`classic`, `sharp`,
-or an installed directory such as `outline`). Corners are not stored
+or an installed directory such as `lucide`). Corners are not stored
 here.
 
 Mode `0600`. Missing or invalid files yield `dark-round-classic`.
@@ -113,22 +113,26 @@ that are not shadowed. `LoadTheme(name)` **prefers the user pack** when
 both exist — a user `dark-round-classic` overrides the embedded starter
 of the same name and is listed once (as exported).
 
-## Icon sets (files)
+## Icon sets (PNG files)
 
 Chrome icons are **not** embedded. Ship-in-repo sets live at
-`icons/filled`, `icons/outline`, and `icons/duotone` (24×24 SVG, one
-file per action). Copy them yourself:
+`icons/lucide`, `icons/phosphor`, `icons/tabler`, `icons/heroicons`,
+and `icons/material-symbols` (24×24 + `name@2x.png` 48×48, one stem
+per action). Copy them yourself:
 
 ```bash
 mkdir -p ~/.config/uitoolkit/icons
-cp -R icons/filled icons/outline icons/duotone ~/.config/uitoolkit/icons/
+cp -R icons/lucide icons/phosphor icons/tabler icons/heroicons icons/material-symbols ~/.config/uitoolkit/icons/
 ```
 
-See [icons/README.md](../icons/README.md). Settings lists
-`classic` / `sharp` (drawn) plus every `icons/<set>/` directory that
-contains at least one ToolIcon SVG. A missing file falls back to the
-drawn classic glyph. The toolkit tints `currentColor` with the Look
-foreground / icon color.
+See [icons/README.md](../icons/README.md) for licenses, attribution,
+and the `@2x` convention. Settings lists `classic` / `sharp` (drawn)
+plus every `icons/<set>/` directory that contains at least one
+ToolIcon PNG. A missing file falls back to the drawn classic glyph.
+The toolkit tints monochrome/alpha PNGs with the Look foreground /
+icon color.
+
+The v0.12.0 `filled` / `outline` / `duotone` SVG folders are removed.
 
 `ListIconSets` / `IconsDir` / `WithIcons` are the API. Changing icons
 and Apply reloads other apps the same way as a theme change.

@@ -45,7 +45,7 @@ func SanitizeIconSetName(s string) (string, error) {
 	return s, nil
 }
 
-// IsFileIconSet reports whether name is loaded from icons/<name>/*.svg
+// IsFileIconSet reports whether name is loaded from icons/<name>/*.png
 // (not the drawn classic/sharp fallbacks).
 func IsFileIconSet(name IconSetName) bool {
 	switch ParseIconSet(string(name)) {
@@ -65,9 +65,26 @@ func FallbackIcons(name IconSetName) IconSetName {
 	return IconSetClassic
 }
 
+func iconSetDisplay(name string) string {
+	switch name {
+	case "lucide":
+		return "Lucide"
+	case "phosphor":
+		return "Phosphor"
+	case "tabler":
+		return "Tabler"
+	case "heroicons":
+		return "Heroicons"
+	case "material-symbols":
+		return "Material Symbols"
+	default:
+		return name
+	}
+}
+
 // ListIconSets returns drawn builtins (classic, sharp) then installed
 // file sets from ~/.config/uitoolkit/icons/* (sorted). A directory
-// counts if it contains at least one ToolIcon SVG.
+// counts if it contains at least one ToolIcon PNG (24 or @2x).
 func ListIconSets() []IconSetInfo {
 	out := []IconSetInfo{
 		{Name: IconSetClassic, Label: "Classic  · builtin", Source: "builtin"},
@@ -98,7 +115,7 @@ func ListIconSets() []IconSetInfo {
 	for _, n := range names {
 		out = append(out, IconSetInfo{
 			Name:   IconSetName(n),
-			Label:  n + "  · installed",
+			Label:  iconSetDisplay(n) + "  · installed",
 			Source: "user",
 		})
 	}
@@ -110,19 +127,22 @@ func iconSetHasGlyphs(dir string) bool {
 		if _, err := os.Stat(filepath.Join(dir, ToolIconFileName(icon))); err == nil {
 			return true
 		}
+		if _, err := os.Stat(filepath.Join(dir, ToolIconHiDPIFileName(icon))); err == nil {
+			return true
+		}
 	}
 	return false
 }
 
 type fileIconCache struct {
 	mu    sync.Mutex
-	docs  map[string]svgDoc // key: abs path
+	imgs  map[string]*paintengine2d.Image // key: abs path
 	miss  map[string]bool
 	mtime map[string]int64
 }
 
 var iconsCache = &fileIconCache{
-	docs:  map[string]svgDoc{},
+	imgs:  map[string]*paintengine2d.Image{},
 	miss:  map[string]bool{},
 	mtime: map[string]int64{},
 }
@@ -130,56 +150,107 @@ var iconsCache = &fileIconCache{
 func resetIconCache() {
 	iconsCache.mu.Lock()
 	defer iconsCache.mu.Unlock()
-	iconsCache.docs = map[string]svgDoc{}
+	iconsCache.imgs = map[string]*paintengine2d.Image{}
 	iconsCache.miss = map[string]bool{}
 	iconsCache.mtime = map[string]int64{}
 }
 
-func loadFileIcon(set IconSetName, icon ToolIcon) (svgDoc, bool) {
-	name := ToolIconFileName(icon)
-	if name == "" || !IsFileIconSet(set) {
-		return svgDoc{}, false
+func loadFileIcon(set IconSetName, icon ToolIcon, destW float32) (*paintengine2d.Image, bool) {
+	if !IsFileIconSet(set) {
+		return nil, false
 	}
-	path := filepath.Join(IconSetDir(set), name)
+	dir := IconSetDir(set)
+	for _, name := range toolIconFileCandidates(icon, destW) {
+		if img, ok := loadPNGIcon(filepath.Join(dir, name)); ok {
+			return img, true
+		}
+	}
+	return nil, false
+}
+
+func loadPNGIcon(path string) (*paintengine2d.Image, bool) {
 	st, err := os.Stat(path)
 	if err != nil {
-		return svgDoc{}, false
+		return nil, false
 	}
 	mod := st.ModTime().UnixNano()
 	iconsCache.mu.Lock()
 	defer iconsCache.mu.Unlock()
 	if iconsCache.miss[path] && iconsCache.mtime[path] == mod {
-		return svgDoc{}, false
+		return nil, false
 	}
-	if doc, ok := iconsCache.docs[path]; ok && iconsCache.mtime[path] == mod {
-		return doc, true
+	if img, ok := iconsCache.imgs[path]; ok && iconsCache.mtime[path] == mod {
+		return img, true
 	}
-	raw, err := os.ReadFile(path)
-	if err != nil {
+	raw, err := paintengine2d.DecodePNGFile(path)
+	if err != nil || raw == nil || raw.Width < 1 || raw.Height < 1 {
 		iconsCache.miss[path] = true
 		iconsCache.mtime[path] = mod
-		return svgDoc{}, false
+		return nil, false
 	}
-	doc, err := parseSVG(raw)
-	if err != nil || doc.empty() {
-		iconsCache.miss[path] = true
-		iconsCache.mtime[path] = mod
-		return svgDoc{}, false
-	}
+	img := toWhiteMask(raw)
 	delete(iconsCache.miss, path)
-	iconsCache.docs[path] = doc
+	iconsCache.imgs[path] = img
 	iconsCache.mtime[path] = mod
-	return doc, true
+	return img, true
 }
 
-// DrawFileToolIcon paints a tinted SVG from the named file set.
+// toWhiteMask turns a monochrome/alpha PNG into a white premul atlas
+// so DrawImageRectPaint can tint it with the Look foreground (same
+// currentColor intent as the old SVGs).
+func toWhiteMask(src *paintengine2d.Image) *paintengine2d.Image {
+	w, h := src.Width, src.Height
+	n := w * h
+	transparent := 0
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			_, _, _, a := src.PremulAt(x, y)
+			if a < 24 {
+				transparent++
+			}
+		}
+	}
+	useAlpha := n > 0 && transparent*20 > n // >5% clear → trust alpha
+	out := paintengine2d.NewImage(w, h)
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			r, g, b, a := src.PremulAt(x, y)
+			var cov uint8
+			if useAlpha {
+				cov = a
+			} else {
+				lum := (uint32(r) + uint32(g) + uint32(b)) / 3
+				if a > 0 {
+					lum = lum * 255 / uint32(a)
+					if lum > 255 {
+						lum = 255
+					}
+				}
+				cov = uint8(255 - lum)
+			}
+			i := y*out.RowStride() + x*4
+			out.Pix[i+0] = cov
+			out.Pix[i+1] = cov
+			out.Pix[i+2] = cov
+			out.Pix[i+3] = cov
+		}
+	}
+	out.Touch()
+	return out
+}
+
+// DrawFileToolIcon paints a tinted PNG from the named file set.
 // It returns false when the file is missing or empty so the caller
 // can fall back to a drawn classic/sharp glyph.
 func DrawFileToolIcon(ctx *paintengine2d.Context, b paintengine2d.Rect, icon ToolIcon, col paintengine2d.Color, set IconSetName) bool {
-	doc, ok := loadFileIcon(set, icon)
+	img, ok := loadFileIcon(set, icon, b.Dx())
 	if !ok {
 		return false
 	}
-	doc.draw(ctx, b, col)
+	src := paintengine2d.XYWH(0, 0, float32(img.Width), float32(img.Height))
+	ctx.DrawImageRectPaint(img, src, b, paintengine2d.Paint{
+		Color:  col,
+		Filter: paintengine2d.FilterBilinear,
+	})
 	return true
 }

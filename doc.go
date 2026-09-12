@@ -14,7 +14,7 @@
 //	            Tooltip, Accordion, Expander, Separator, Spacer, …
 //	style     — LookAndFeel themes (Titillium Web + JetBrains Mono OpenType atlases),
 //	            named theme packs (embedded starters + XDG themes/<name>/theme.json)
-//	            and file icon sets (~/.config/uitoolkit/icons/<set>/*.svg;
+//	            and PNG icon sets (~/.config/uitoolkit/icons/<set>/*.png;
 //	            look.json stores theme + icons; live watch)
 //
 // All pixels go through paintengine2d.Context (CPU scanline or Linux

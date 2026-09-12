@@ -46,25 +46,27 @@ type (
 )
 
 const (
-	DensityDefault     = style.DensityDefault
-	DensityCompact     = style.DensityCompact
-	DensityRelaxed     = style.DensityRelaxed
-	CursorDefault      = platform.CursorDefault
-	CursorColResize    = platform.CursorColResize
-	CursorRowResize    = platform.CursorRowResize
-	CursorText         = platform.CursorText
-	ThemeDark          = style.ThemeDark
-	ThemeLight         = style.ThemeLight
-	CornersRound       = style.CornersRound
-	CornersSquare      = style.CornersSquare
-	IconSetClassic     = style.IconSetClassic
-	IconSetSharp       = style.IconSetSharp
-	IconSetFilled      = style.IconSetFilled
-	IconSetOutline     = style.IconSetOutline
-	IconSetDuotone     = style.IconSetDuotone
-	ThemeSourceBuiltin = style.ThemeSourceBuiltin
-	ThemeSourceUser    = style.ThemeSourceUser
-	DefaultThemeName   = style.DefaultThemeName
+	DensityDefault         = style.DensityDefault
+	DensityCompact         = style.DensityCompact
+	DensityRelaxed         = style.DensityRelaxed
+	CursorDefault          = platform.CursorDefault
+	CursorColResize        = platform.CursorColResize
+	CursorRowResize        = platform.CursorRowResize
+	CursorText             = platform.CursorText
+	ThemeDark              = style.ThemeDark
+	ThemeLight             = style.ThemeLight
+	CornersRound           = style.CornersRound
+	CornersSquare          = style.CornersSquare
+	IconSetClassic         = style.IconSetClassic
+	IconSetSharp           = style.IconSetSharp
+	IconSetLucide          = style.IconSetLucide
+	IconSetPhosphor        = style.IconSetPhosphor
+	IconSetTabler          = style.IconSetTabler
+	IconSetHeroicons       = style.IconSetHeroicons
+	IconSetMaterialSymbols = style.IconSetMaterialSymbols
+	ThemeSourceBuiltin     = style.ThemeSourceBuiltin
+	ThemeSourceUser        = style.ThemeSourceUser
+	DefaultThemeName       = style.DefaultThemeName
 )
 
 func New(opts Options) *Application { return app.New(opts) }
