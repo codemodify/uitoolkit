@@ -54,11 +54,11 @@ func (c *Checkbox) Paint(ctx *paintengine2d.Context) {
 	c.Look().DrawCheckbox(ctx, c.LocalBounds(), st, c.Checked, c.Text)
 }
 
-func (c *Checkbox) MouseEnter() { c.hovered = true; c.Invalidate() }
+func (c *Checkbox) MouseEnter() { c.hovered = true; c.Base.MouseEnter() }
 func (c *Checkbox) MouseExit() {
 	c.hovered = false
 	c.pressed = false
-	c.Invalidate()
+	c.Base.MouseExit()
 }
 
 func (c *Checkbox) MousePress(widget.MouseEvent) bool {

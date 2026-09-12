@@ -69,14 +69,6 @@ type Host interface {
 	RequestLayout()
 }
 
-// PixelScroller is an optional Host assertion (app.Window). The blit
-// path is disabled (v0.14.4) until Context.Scroll + strip damage is
-// proven on Wayland/HiDPI; hosts should return false so widgets
-// Invalidate the full viewport. Hover still uses small dirty rects.
-type PixelScroller interface {
-	ScrollPixels(c Component, local paintengine2d.Rect, dx, dy float32) bool
-}
-
 // Self is used so an embedded Base can return the outer Component.
 type Self interface {
 	Component

@@ -119,11 +119,6 @@ func (t *TextArea) Selection() (a, b int) { return t.selA, t.selB }
 
 func (t *TextArea) SetCaretBlink(on bool) { t.blinkOn = on }
 
-// InvalidateCaret dirties only the insertion bar (blink / hide).
-func (t *TextArea) InvalidateCaret() {
-	t.InvalidateRect(t.IMECaretRect().Inset(-2))
-}
-
 func (t *TextArea) Lines() []style.TextLine {
 	t.relayout()
 	return t.lines
@@ -231,7 +226,9 @@ func (t *TextArea) OffsetY() float32 { return t.scrollY }
 
 // ScrollTo sets the vertical offset (clamped).
 func (t *TextArea) ScrollTo(y float32) {
-	t.setScroll(t.scrollX, y)
+	t.scrollY = y
+	t.clampScroll()
+	t.Invalidate()
 }
 
 func (t *TextArea) clampScroll() {
@@ -239,34 +236,13 @@ func (t *TextArea) clampScroll() {
 	t.scrollX = layout.ClampScroll(t.scrollX, t.contentW(), t.inner().Dx())
 }
 
-func (t *TextArea) scrollView() paintengine2d.Rect {
-	inner := t.inner()
-	vt, _ := t.scrollTrackV()
-	ht, _ := t.scrollTrackH()
-	return contentViewMinusHBar(contentViewMinusVBar(inner, vt), ht)
-}
-
-func (t *TextArea) setScroll(x, y float32) {
-	oldX, oldY := t.scrollX, t.scrollY
-	_, oldVT := t.scrollTrackV()
-	_, oldHT := t.scrollTrackH()
-	commitScrollXY(t, t.scrollView(), oldX, oldY, x, y, t.maxScrollX(), t.maxScrollY(), func(nx, ny float32) {
-		t.scrollX, t.scrollY = nx, ny
-	})
-	if t.scrollX != oldX || t.scrollY != oldY {
-		_, newVT := t.scrollTrackV()
-		_, newHT := t.scrollTrackH()
-		invalidateOverflowThumbs(t, oldVT, newVT)
-		invalidateOverflowThumbs(t, oldHT, newHT)
-	}
-}
-
 func (t *TextArea) scrollBy(dy, dx float32) {
-	nx, ny := t.scrollX, t.scrollY+dy
+	t.scrollY += dy
 	if !t.Wrap {
-		nx += dx
+		t.scrollX += dx
 	}
-	t.setScroll(nx, ny)
+	t.clampScroll()
+	t.Invalidate()
 }
 
 func (t *TextArea) scrollTrackV() (track, thumb paintengine2d.Rect) {
@@ -488,12 +464,16 @@ func (t *TextArea) MousePress(e widget.MouseEvent) bool {
 	t.RequestFocus()
 	vt, vth := t.scrollTrackV()
 	if off, ok := t.vbar.press(e.Pos, vt, vth, true, t.scrollY, t.maxScrollY(), t.inner().Dy()*0.9); ok {
-		t.setScroll(t.scrollX, off)
+		t.scrollY = off
+		t.clampScroll()
+		t.Invalidate()
 		return true
 	}
 	ht, hth := t.scrollTrackH()
 	if off, ok := t.hbar.press(e.Pos, ht, hth, false, t.scrollX, t.maxScrollX(), t.inner().Dx()*0.9); ok {
-		t.setScroll(off, t.scrollY)
+		t.scrollX = off
+		t.clampScroll()
+		t.Invalidate()
 		return true
 	}
 	if e.Button == platform.ButtonMiddle {
@@ -521,16 +501,26 @@ func (t *TextArea) MousePress(e widget.MouseEvent) bool {
 
 func (t *TextArea) MouseMove(e widget.MouseEvent) bool {
 	vt, vth := t.scrollTrackV()
-	if applyScrollHover(&t.vbar, e.Pos, vt, vth, true, t.maxScrollY(), func(off float32) {
-		t.setScroll(t.scrollX, off)
-	}, nil, func() { invalidateOverflowTrack(t, vt) }) {
-		return true
+	if off, apply, handled, dirty := t.vbar.move(e.Pos, vt, vth, true, t.maxScrollY()); apply || handled || dirty {
+		if apply {
+			t.scrollY = off
+			t.clampScroll()
+		}
+		t.Invalidate()
+		if apply || handled {
+			return true
+		}
 	}
 	ht, hth := t.scrollTrackH()
-	if applyScrollHover(&t.hbar, e.Pos, ht, hth, false, t.maxScrollX(), func(off float32) {
-		t.setScroll(off, t.scrollY)
-	}, nil, func() { invalidateOverflowTrack(t, ht) }) {
-		return true
+	if off, apply, handled, dirty := t.hbar.move(e.Pos, ht, hth, false, t.maxScrollX()); apply || handled || dirty {
+		if apply {
+			t.scrollX = off
+			t.clampScroll()
+		}
+		t.Invalidate()
+		if apply || handled {
+			return true
+		}
 	}
 	if !t.dragging && e.Button != platform.ButtonLeft {
 		return false
@@ -545,25 +535,15 @@ func (t *TextArea) MouseMove(e widget.MouseEvent) bool {
 func (t *TextArea) MouseRelease(widget.MouseEvent) bool {
 	t.dragging = false
 	if t.vbar.release() || t.hbar.release() {
-		vt, _ := t.scrollTrackV()
-		ht, _ := t.scrollTrackH()
-		invalidateOverflowTrack(t, vt)
-		invalidateOverflowTrack(t, ht)
+		t.Invalidate()
 	}
 	return true
 }
 
 func (t *TextArea) MouseExit() {
-	was := t.vbar.over || t.hbar.over
 	t.vbar.over = false
 	t.hbar.over = false
-	if !was {
-		return
-	}
-	vt, _ := t.scrollTrackV()
-	ht, _ := t.scrollTrackH()
-	invalidateOverflowTrack(t, vt)
-	invalidateOverflowTrack(t, ht)
+	t.Base.MouseExit()
 }
 
 func (t *TextArea) MouseWheel(e widget.MouseEvent) bool {

@@ -185,14 +185,18 @@ func (b *Base) HitTest(local paintengine2d.Point) Component {
 func (b *Base) MousePress(MouseEvent) bool   { return false }
 func (b *Base) MouseRelease(MouseEvent) bool { return false }
 func (b *Base) MouseMove(MouseEvent) bool    { return false }
-func (b *Base) MouseEnter() { b.hovered = true }
-func (b *Base) MouseExit()  { b.hovered = false }
-
-// SetHovered records the pointer-hover bit without invalidating.
-// MenuBar / PopupMenu / ToolBar / TabBar dirty only the old and new item.
-// Labels, pads, and layout panes must not Invalidate on enter — ClearRect
-// + DrawSceneDamage of static text dropped glyph weight (v0.14.5 Mail).
-func (b *Base) SetHovered(v bool)          { b.hovered = v }
+func (b *Base) MouseEnter() {
+	if !b.hovered {
+		b.hovered = true
+		b.Invalidate()
+	}
+}
+func (b *Base) MouseExit() {
+	if b.hovered {
+		b.hovered = false
+		b.Invalidate()
+	}
+}
 func (b *Base) MouseWheel(MouseEvent) bool { return false }
 func (b *Base) Hovered() bool              { return b.hovered }
 func (b *Base) KeyPress(KeyEvent) bool     { return false }

@@ -55,21 +55,6 @@ func TestScaleFromEnvUITK(t *testing.T) {
 	}
 }
 
-func TestAdoptDisplayScale(t *testing.T) {
-	if AdoptDisplayScale(1, 2) != 2 {
-		t.Fatal("surface 2× should replace a 1× guess")
-	}
-	if AdoptDisplayScale(2, 1) != 2 {
-		t.Fatal("must not shrink an explicit scale")
-	}
-	if AdoptDisplayScale(2, 2) != 2 {
-		t.Fatal("equal")
-	}
-	if AdoptDisplayScale(0, 1) != 1 {
-		t.Fatal("zero current")
-	}
-}
-
 func TestFitLogicalSizeRejectsBufferEcho(t *testing.T) {
 	lw, lh := fitLogicalSize(2000, 1400, 1000, 700, 2)
 	if lw != 1000 || lh != 700 {

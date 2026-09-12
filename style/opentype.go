@@ -295,7 +295,7 @@ func (a *otAtlas) blitPath(atlas *paintengine2d.FontAtlas, r rune, p *paintengin
 		return paintengine2d.AtlasCell{}, fmt.Errorf("atlas full for %q", string(r))
 	}
 	blitGlyph(atlas.Image, ax, ay, tmp)
-	atlas.Image.TouchRect(paintengine2d.XYWH(float32(ax), float32(ay), float32(gw), float32(gh)))
+	atlas.Image.Bump()
 	cell := paintengine2d.AtlasCell{
 		Src:     paintengine2d.XYWH(float32(ax), float32(ay), float32(gw), float32(gh)),
 		Bearing: paintengine2d.Pt(xmin-pad, a.ascent+ymin-pad),

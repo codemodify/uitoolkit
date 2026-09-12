@@ -64,21 +64,6 @@ func (l *ListView) scrollTrack() (track, thumb paintengine2d.Rect) {
 	return vScrollThumb(l.LocalBounds(), l.contentH(), l.OffsetY, bar, gap)
 }
 
-func (l *ListView) scrollView() paintengine2d.Rect {
-	track, _ := l.scrollTrack()
-	return contentViewMinusVBar(l.LocalBounds(), track)
-}
-
-func (l *ListView) setOffsetY(y float32) {
-	old := l.OffsetY
-	_, oldThumb := l.scrollTrack()
-	commitAxisScroll(l, l.scrollView(), old, y, l.MaxOffset(), func(v float32) { l.OffsetY = v }, true)
-	if l.OffsetY != old {
-		_, newThumb := l.scrollTrack()
-		invalidateOverflowThumbs(l, oldThumb, newThumb)
-	}
-}
-
 // VisibleRange is the half-open [lo, hi) window of rows that Paint draws.
 func (l *ListView) VisibleRange() (lo, hi int) { return l.visibleRange() }
 
@@ -87,7 +72,9 @@ func (l *ListView) ScrollTrack() (track, thumb paintengine2d.Rect) { return l.sc
 
 // ScrollTo sets OffsetY (clamped) without requiring a wheel event.
 func (l *ListView) ScrollTo(y float32) {
-	l.setOffsetY(y)
+	l.OffsetY = y
+	l.clamp()
+	l.Invalidate()
 }
 
 func (l *ListView) visibleRange() (lo, hi int) {
@@ -140,9 +127,6 @@ func (l *ListView) Paint(ctx *paintengine2d.Context) {
 		for i := lo; i < hi; i++ {
 			y := float32(i)*rh - l.OffsetY
 			row := paintengine2d.XYWH(0, y, b.Dx(), rh)
-			if ctx.QuickReject(row) {
-				continue
-			}
 			label := ""
 			if l.ItemText != nil {
 				label = l.ItemText(i)
@@ -177,19 +161,19 @@ func (l *ListView) invalidateRow(i int) {
 	}
 }
 
-func (l *ListView) invalidateBar() {
-	track, _ := l.scrollTrack()
-	invalidateOverflowTrack(l, track)
-}
-
 func (l *ListView) MouseEnter() {}
 
 func (l *ListView) MouseMove(e widget.MouseEvent) bool {
 	track, thumb := l.scrollTrack()
-	if applyScrollHover(&l.vbar, e.Pos, track, thumb, true, l.MaxOffset(), func(off float32) {
-		l.setOffsetY(off)
-	}, nil, l.invalidateBar) {
-		return true
+	if off, apply, handled, dirty := l.vbar.move(e.Pos, track, thumb, true, l.MaxOffset()); apply || handled || dirty {
+		if apply {
+			l.OffsetY = off
+			l.clamp()
+		}
+		l.Invalidate()
+		if apply || handled {
+			return true
+		}
 	}
 	h := l.indexAt(e.Pos.Y)
 	if h != l.hovered {
@@ -210,7 +194,7 @@ func (l *ListView) MouseExit() {
 
 func (l *ListView) MouseRelease(widget.MouseEvent) bool {
 	if l.vbar.release() {
-		l.invalidateBar()
+		l.Invalidate()
 		return true
 	}
 	return false
@@ -220,15 +204,15 @@ func (l *ListView) MousePress(e widget.MouseEvent) bool {
 	l.RequestFocus()
 	track, thumb := l.scrollTrack()
 	if off, ok := l.vbar.press(e.Pos, track, thumb, true, l.OffsetY, l.MaxOffset(), l.LocalBounds().Dy()*0.9); ok {
-		l.setOffsetY(off)
+		l.OffsetY = off
+		l.clamp()
+		l.Invalidate()
 		return true
 	}
 	i := l.indexAt(e.Pos.Y)
 	if i >= 0 {
-		old := l.Selected
 		l.Selected = i
-		l.invalidateRow(old)
-		l.invalidateRow(i)
+		l.Invalidate()
 		if l.OnSelect != nil {
 			l.OnSelect(i)
 		}
@@ -241,7 +225,9 @@ func (l *ListView) MousePress(e widget.MouseEvent) bool {
 }
 
 func (l *ListView) MouseWheel(e widget.MouseEvent) bool {
-	l.setOffsetY(l.OffsetY + wheelDelta(e.Scroll.Y, l.rowH()))
+	l.OffsetY += wheelDelta(e.Scroll.Y, l.rowH())
+	l.clamp()
+	l.Invalidate()
 	return true
 }
 
@@ -282,11 +268,9 @@ func (l *ListView) KeyPress(e widget.KeyEvent) bool {
 		next = l.Count - 1
 	}
 	if next != l.Selected {
-		old := l.Selected
 		l.Selected = next
 		l.ensureVisible(next)
-		l.invalidateRow(old)
-		l.invalidateRow(next)
+		l.Invalidate()
 		if l.OnSelect != nil {
 			l.OnSelect(next)
 		}
@@ -299,10 +283,11 @@ func (l *ListView) ensureVisible(i int) {
 	top := float32(i) * rh
 	bot := top + rh
 	view := l.LocalBounds().Dy()
-	switch {
-	case top < l.OffsetY:
-		l.setOffsetY(top)
-	case bot > l.OffsetY+view:
-		l.setOffsetY(bot - view)
+	if top < l.OffsetY {
+		l.OffsetY = top
 	}
+	if bot > l.OffsetY+view {
+		l.OffsetY = bot - view
+	}
+	l.clamp()
 }

@@ -48,8 +48,6 @@ type TreeView struct {
 	lastAt    time.Time
 	vbar      scrollDrag
 	rows      rowSceneCache
-	flat      []treeRow
-	flatOK    bool
 }
 
 // NewTreeView constructs a tree.
@@ -65,9 +63,6 @@ func (t *TreeView) rowH() float32 {
 }
 
 func (t *TreeView) flatten() []treeRow {
-	if t.flatOK {
-		return t.flat
-	}
 	var out []treeRow
 	var walk func([]*TreeNode, int)
 	walk = func(nodes []*TreeNode, depth int) {
@@ -82,9 +77,7 @@ func (t *TreeView) flatten() []treeRow {
 		}
 	}
 	walk(t.Roots, 0)
-	t.flat = out
-	t.flatOK = true
-	return t.flat
+	return out
 }
 
 func (t *TreeView) contentH() float32 { return float32(len(t.flatten())) * t.rowH() }
@@ -101,21 +94,6 @@ func (t *TreeView) clamp() {
 func (t *TreeView) scrollTrack() (track, thumb paintengine2d.Rect) {
 	bar, gap := overflowBarSize(t.Look())
 	return vScrollThumb(t.LocalBounds(), t.contentH(), t.OffsetY, bar, gap)
-}
-
-func (t *TreeView) scrollView() paintengine2d.Rect {
-	track, _ := t.scrollTrack()
-	return contentViewMinusVBar(t.LocalBounds(), track)
-}
-
-func (t *TreeView) setOffsetY(y float32) {
-	old := t.OffsetY
-	_, oldThumb := t.scrollTrack()
-	commitAxisScroll(t, t.scrollView(), old, y, t.MaxOffset(), func(v float32) { t.OffsetY = v }, true)
-	if t.OffsetY != old {
-		_, newThumb := t.scrollTrack()
-		invalidateOverflowThumbs(t, oldThumb, newThumb)
-	}
 }
 
 // VisibleRange is the half-open [lo, hi) window of flattened rows Paint draws.
@@ -141,7 +119,9 @@ func (t *TreeView) ScrollTrack() (track, thumb paintengine2d.Rect) { return t.sc
 
 // ScrollTo sets OffsetY (clamped) without requiring a wheel event.
 func (t *TreeView) ScrollTo(y float32) {
-	t.setOffsetY(y)
+	t.OffsetY = y
+	t.clamp()
+	t.Invalidate()
 }
 
 func (t *TreeView) Measure(c layout.Constraints) paintengine2d.Point {
@@ -212,9 +192,6 @@ func (t *TreeView) Paint(ctx *paintengine2d.Context) {
 		for i := lo; i < hi; i++ {
 			y := float32(i)*rh - t.OffsetY
 			row := paintengine2d.XYWH(0, y, b.Dx(), rh)
-			if ctx.QuickReject(row) {
-				continue
-			}
 			n := rows[i].node
 			lk.DrawTreeRow(ctx, row, n == t.Selected, n == t.hover, n.Expanded, n.Leaf(), rows[i].depth, n.Label, n.Bold)
 			paintTreeSwatch(ctx, row, n.Color)
@@ -253,7 +230,6 @@ func (t *TreeView) rowAt(y float32) int {
 // and rebuilds cannot paint stale Y slots.
 func (t *TreeView) SetRoots(roots []*TreeNode) {
 	t.Roots = roots
-	t.flatOK = false
 	t.rows.reset()
 	t.clamp()
 	t.Invalidate()
@@ -307,10 +283,15 @@ func (t *TreeView) MouseEnter() {}
 
 func (t *TreeView) MouseMove(e widget.MouseEvent) bool {
 	track, thumb := t.scrollTrack()
-	if applyScrollHover(&t.vbar, e.Pos, track, thumb, true, t.MaxOffset(), func(off float32) {
-		t.setOffsetY(off)
-	}, nil, func() { invalidateOverflowTrack(t, track) }) {
-		return true
+	if off, apply, handled, dirty := t.vbar.move(e.Pos, track, thumb, true, t.MaxOffset()); apply || handled || dirty {
+		if apply {
+			t.OffsetY = off
+			t.clamp()
+		}
+		t.Invalidate()
+		if apply || handled {
+			return true
+		}
 	}
 	n := t.nodeAt(e.Pos.Y)
 	if n != t.hover {
@@ -336,7 +317,9 @@ func (t *TreeView) MousePress(e widget.MouseEvent) bool {
 	t.RequestFocus()
 	track, thumb := t.scrollTrack()
 	if off, ok := t.vbar.press(e.Pos, track, thumb, true, t.OffsetY, t.MaxOffset(), t.LocalBounds().Dy()*0.9); ok {
-		t.setOffsetY(off)
+		t.OffsetY = off
+		t.clamp()
+		t.Invalidate()
 		return true
 	}
 	i := t.rowAt(e.Pos.Y)
@@ -370,15 +353,16 @@ func (t *TreeView) MousePress(e widget.MouseEvent) bool {
 
 func (t *TreeView) MouseRelease(widget.MouseEvent) bool {
 	if t.vbar.release() {
-		track, _ := t.scrollTrack()
-		invalidateOverflowTrack(t, track)
+		t.Invalidate()
 		return true
 	}
 	return false
 }
 
 func (t *TreeView) MouseWheel(e widget.MouseEvent) bool {
-	t.setOffsetY(t.OffsetY + wheelDelta(e.Scroll.Y, t.rowH()))
+	t.OffsetY += wheelDelta(e.Scroll.Y, t.rowH())
+	t.clamp()
+	t.Invalidate()
 	return true
 }
 
@@ -495,7 +479,6 @@ func (t *TreeView) Toggle(n *TreeNode) {
 		return
 	}
 	n.Expanded = !n.Expanded
-	t.flatOK = false
 	t.rows.reset()
 	t.clamp()
 	t.Invalidate()
@@ -508,11 +491,9 @@ func (t *TreeView) selectNode(n *TreeNode) {
 	if n == nil {
 		return
 	}
-	old := t.Selected
 	t.Selected = n
 	t.ensureVisible(n)
-	t.invalidateNode(old)
-	t.invalidateNode(n)
+	t.Invalidate()
 	if t.OnSelect != nil {
 		t.OnSelect(n)
 	}
@@ -528,12 +509,13 @@ func (t *TreeView) ensureVisible(n *TreeNode) {
 		top := float32(i) * rh
 		bot := top + rh
 		view := t.LocalBounds().Dy()
-		switch {
-		case top < t.OffsetY:
-			t.setOffsetY(top)
-		case bot > t.OffsetY+view:
-			t.setOffsetY(bot - view)
+		if top < t.OffsetY {
+			t.OffsetY = top
 		}
+		if bot > t.OffsetY+view {
+			t.OffsetY = bot - view
+		}
+		t.clamp()
 		return
 	}
 }

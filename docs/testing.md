@@ -71,14 +71,6 @@ go run ./cmd/uitest-driver -compare
 Chrome vs Avalonia / Qt / GTK (focus-visible, toolbar gaps, toggle
 chrome, menu dismiss, Office XP menu hover, label clip) is
 `TestDesktopChromeNorms` and `-compare`. See [compare.md](compare.md).
-Menu hover tracks the pointer (`TestPopupMenuHoverFollowsPointer`,
-`TestMenuHoverPaintFollowsPointer`). A hover change invalidates the
-full popup until per-row damage covers the XP gutter highlight.
-`TestMenuHoverDoesNotFullInvalidate` still forbids a window-wide
-`full` flag. `BenchmarkMenuHover` sits beside the other chrome benches.
-Splitter drag, popup open, list
-scrollbar hover, and caret blink have matching invalidation asserts;
-`BenchmarkSplitterDrag` / `BenchmarkListRowHover` sit beside the menu bench.
 
 Linux CGO build (Wayland/X11) — required on a real desktop, not just
 `CGO_ENABLED=0 go test`:

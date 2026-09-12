@@ -85,14 +85,9 @@ func (s *wlSurface) resizeGPU(w, h int) {
 	}
 }
 
-func (s *wlSurface) presentGPU(dirty []paintengine2d.Rect) error {
+func (s *wlSurface) presentGPU() error {
 	if s == nil || s.gpu == nil {
 		return paintengine2d.ErrGPUUnavailable
-	}
-	if p, ok := any(s.gpu).(interface {
-		PresentRects([]paintengine2d.Rect) error
-	}); ok && len(dirty) > 0 {
-		return p.PresentRects(dirty)
 	}
 	return s.gpu.Present()
 }

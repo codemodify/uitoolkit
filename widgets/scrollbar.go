@@ -162,48 +162,6 @@ func (d *scrollDrag) move(pos paintengine2d.Point, track, thumb paintengine2d.Re
 	return t * maxOff, true, true, hoverDirty
 }
 
-// applyScrollHover updates thumb-drag offset or track hover. invalidateAll
-// runs when the offset changes; invalidateBar when only the thumb chrome
-// changes. Every move over the track used to call invalidateAll.
-func applyScrollHover(d *scrollDrag, pos paintengine2d.Point, track, thumb paintengine2d.Rect, alongY bool, maxOff float32, setOff func(float32), invalidateAll, invalidateBar func()) bool {
-	if d == nil {
-		return false
-	}
-	off, apply, handled, hoverDirty := d.move(pos, track, thumb, alongY, maxOff)
-	if apply {
-		if setOff != nil {
-			setOff(off)
-		}
-		// setOff owns invalidation (List/Table/Tree/TextArea full-viewport
-		// fallback). CardList still passes invalidateAll.
-		if invalidateAll != nil {
-			invalidateAll()
-		}
-	} else if hoverDirty && invalidateBar != nil {
-		invalidateBar()
-	}
-	return apply || handled
-}
-
-func invalidateOverflowTrack(c interface{ InvalidateRect(paintengine2d.Rect) }, track paintengine2d.Rect) {
-	if c == nil || track.Empty() {
-		return
-	}
-	c.InvalidateRect(track.Inset(-2))
-}
-
-func invalidateOverflowThumbs(c interface{ InvalidateRect(paintengine2d.Rect) }, oldThumb, newThumb paintengine2d.Rect) {
-	if c == nil {
-		return
-	}
-	if !oldThumb.Empty() {
-		c.InvalidateRect(oldThumb.Inset(-2))
-	}
-	if !newThumb.Empty() && (newThumb.Min != oldThumb.Min || newThumb.Max != oldThumb.Max) {
-		c.InvalidateRect(newThumb.Inset(-2))
-	}
-}
-
 func (d *scrollDrag) release() bool {
 	if !d.active {
 		return false

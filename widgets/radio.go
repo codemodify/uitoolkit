@@ -61,11 +61,11 @@ func (r *RadioButton) Paint(ctx *paintengine2d.Context) {
 	r.Look().DrawRadio(ctx, r.LocalBounds(), st, r.Selected, r.Text)
 }
 
-func (r *RadioButton) MouseEnter() { r.hovered = true; r.Invalidate() }
+func (r *RadioButton) MouseEnter() { r.hovered = true; r.Base.MouseEnter() }
 func (r *RadioButton) MouseExit() {
 	r.hovered = false
 	r.pressed = false
-	r.Invalidate()
+	r.Base.MouseExit()
 }
 
 func (r *RadioButton) MousePress(widget.MouseEvent) bool {

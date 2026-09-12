@@ -101,11 +101,6 @@ func (t *TextField) Selection() (a, b int) { return t.selA, t.selB }
 
 func (t *TextField) SetCaretBlink(on bool) { t.blinkOn = on }
 
-// InvalidateCaret dirties only the insertion bar (blink / hide).
-func (t *TextField) InvalidateCaret() {
-	t.InvalidateRect(t.IMECaretRect().Inset(-2))
-}
-
 func (t *TextField) Measure(c layout.Constraints) paintengine2d.Point {
 	h := style.FieldHeight(t.Look().Metrics())
 	return c.Constrain(paintengine2d.Pt(180, h))

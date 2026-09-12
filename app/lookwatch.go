@@ -12,36 +12,18 @@ import (
 // (no fsnotify) and fits the existing waitDisplay timeout.
 const lookWatchInterval = 300 * time.Millisecond
 
-// lookFileStamp is the last-seen look.json. Idle polls Stat size+mtime
-// and only ReadFile when those change (Mail WatchLook used to read the
-// file every 300ms). Content is still compared after a meta change so
-// same-length theme swaps apply.
+// lookFileStamp is the last-seen contents of look.json. Size+mtime is not
+// enough: dark/round and light/square JSON can be the same
+// length, and overlay clocks may not bump mtime.
 type lookFileStamp struct {
 	path string
 	raw  string
-	size int64
-	mod  time.Time
 }
 
 func newLookFileStamp() *lookFileStamp {
 	s := &lookFileStamp{path: style.AppearancePath()}
-	s.refreshMeta()
 	s.raw = readLookFile(s.path)
 	return s
-}
-
-func (s *lookFileStamp) refreshMeta() {
-	if s == nil {
-		return
-	}
-	st, err := os.Stat(s.path)
-	if err != nil {
-		s.size = 0
-		s.mod = time.Time{}
-		return
-	}
-	s.size = st.Size()
-	s.mod = st.ModTime()
 }
 
 func readLookFile(path string) string {
@@ -53,21 +35,6 @@ func readLookFile(path string) string {
 }
 
 func (s *lookFileStamp) changed() bool {
-	st, err := os.Stat(s.path)
-	if err != nil {
-		if s.raw == "" && s.size == 0 {
-			return false
-		}
-		s.raw = ""
-		s.size = 0
-		s.mod = time.Time{}
-		return true
-	}
-	if st.Size() == s.size && st.ModTime().Equal(s.mod) && time.Since(st.ModTime()) > time.Second {
-		return false
-	}
-	s.size = st.Size()
-	s.mod = st.ModTime()
 	raw := readLookFile(s.path)
 	if raw == s.raw {
 		return false

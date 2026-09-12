@@ -1154,11 +1154,6 @@ func (s *wlSurface) Buffer() *paintengine2d.Image {
 func (s *wlSurface) Closed() bool   { return s.closed }
 func (s *wlSurface) Scale() float32 { return s.deviceScale() }
 
-// PresentReady is true after xdg_surface configure with a real size.
-func (s *wlSurface) PresentReady() bool {
-	return s != nil && !s.closed && s.configured && (s.logicalW > 0 || s.wantW > 0) && (s.logicalH > 0 || s.wantH > 0)
-}
-
 func (s *wlSurface) deviceScale() float32 {
 	if s.frac > 1 {
 		return s.frac
@@ -1512,7 +1507,7 @@ func (s *wlSurface) Present(dirty []paintengine2d.Rect) error {
 		s.opaqueW, s.opaqueH = s.logicalW, s.logicalH
 	}
 	if s.gpu != nil {
-		if err := s.presentGPU(dirty); err == nil {
+		if err := s.presentGPU(); err == nil {
 			C.ui_wl_flush(s.conn.dpy)
 			return nil
 		}
