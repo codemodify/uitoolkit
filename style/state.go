@@ -13,6 +13,7 @@ const (
 	StateFocused
 	StateChecked
 	StatePrimary
+	StateToggle
 )
 
 func (s ControlState) Hovered() bool  { return s&StateHovered != 0 }
@@ -21,6 +22,7 @@ func (s ControlState) Disabled() bool { return s&StateDisabled != 0 }
 func (s ControlState) Focused() bool  { return s&StateFocused != 0 }
 func (s ControlState) Checked() bool  { return s&StateChecked != 0 }
 func (s ControlState) Primary() bool  { return s&StatePrimary != 0 }
+func (s ControlState) Toggle() bool   { return s&StateToggle != 0 }
 
 // LookAndFeel paints control chrome. Widgets never hard-code a skin.
 type LookAndFeel interface {

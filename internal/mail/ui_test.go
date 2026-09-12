@@ -354,6 +354,7 @@ func TestFolderTreeOmitsVirtualSections(t *testing.T) {
 		}
 	}
 	walk(tree.Roots)
+	assertOutboxLastRoot(t, tree)
 
 	banned := []string{"Unified Inbox", "New Smart Folder", "Smart Folders", "Move sender to Primary"}
 	widget.Walk(w.Content(), func(c widget.Component) {
@@ -1200,6 +1201,74 @@ func confirmFileDialog(t *testing.T, w *app.Window, path string) error {
 func globMailOpenDirs() []string {
 	matches, _ := filepath.Glob(filepath.Join(os.TempDir(), "uitk-mail-*"))
 	return matches
+}
+
+func TestOrderFolderChildrenOutboxLast(t *testing.T) {
+	got := orderFolderChildren([]Folder{
+		{Name: "Outbox", ID: FolderOutbox, Kind: FolderCustom},
+		{Name: "Projects", Kind: FolderCustom},
+		{Name: "Inbox", Kind: FolderInbox},
+		{Name: "Trash", Kind: FolderTrash},
+		{Name: "Junk", Kind: FolderJunk},
+		{Name: "Archive", Kind: FolderArchive},
+		{Name: "Drafts", Kind: FolderDrafts},
+		{Name: "Sent", Kind: FolderSent},
+	})
+	want := []string{"Inbox", "Drafts", "Sent", "Archive", "Junk", "Trash", "Projects", "Outbox"}
+	if len(got) != len(want) {
+		t.Fatalf("len %d want %d", len(got), len(want))
+	}
+	for i := range want {
+		if got[i].Name != want[i] {
+			t.Fatalf("pos %d: got %q want %q", i, got[i].Name, want[i])
+		}
+	}
+	named := orderFolderChildren([]Folder{
+		{Name: "Outbox", Kind: FolderCustom},
+		{Name: "Inbox", Kind: FolderInbox},
+		{Name: "Notes", Kind: FolderCustom},
+	})
+	if named[len(named)-1].Name != "Outbox" {
+		t.Fatalf("named Outbox not last: %#v", named)
+	}
+}
+
+func TestMailFolderTreePutsOutboxLast(t *testing.T) {
+	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{
+		Title: "Mail", Width: 1280, Height: 800, Headless: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.SetContent(MailApp(a, w))
+	a.PumpOnce()
+	var tree *widgets.TreeView
+	widget.Walk(w.Content(), func(c widget.Component) {
+		if tr, ok := c.(*widgets.TreeView); ok && tree == nil {
+			tree = tr
+		}
+	})
+	assertOutboxLastRoot(t, tree)
+	w.Close()
+}
+
+func assertOutboxLastRoot(t *testing.T, tree *widgets.TreeView) {
+	t.Helper()
+	if tree == nil || len(tree.Roots) == 0 {
+		t.Fatal("empty folder tree")
+	}
+	last := tree.Roots[len(tree.Roots)-1]
+	if last == nil {
+		t.Fatal("nil last root")
+	}
+	id, ok := last.Data.(FolderID)
+	if !ok || id != FolderOutbox {
+		t.Fatalf("last root data=%v label=%q, want Outbox", last.Data, last.Label)
+	}
+	if !strings.HasPrefix(last.Label, "Outbox") {
+		t.Fatalf("last root label %q", last.Label)
+	}
 }
 
 func cellInk(img *paintengine2d.Image, x0, x1 int) int {

@@ -48,11 +48,12 @@ func NewMenu(title string, items ...*MenuItem) *Menu {
 // MenuBar is a horizontal strip of menu titles.
 type MenuBar struct {
 	widget.Base
-	menus []*Menu
-	open  int
-	hover int
-	press int
-	focus int
+	menus  []*Menu
+	open   int
+	hover  int
+	press  int
+	focus  int
+	keyNav bool
 }
 
 // NewMenuBar constructs a menu bar.
@@ -124,7 +125,7 @@ func (m *MenuBar) Paint(ctx *paintengine2d.Context) {
 		if i == m.press {
 			st |= style.StatePressed
 		}
-		if i != m.focus {
+		if i != m.focus || !m.keyNav || i == m.open {
 			st &^= style.StateFocused
 		}
 		label, _, idx := ParseMnemonic(menu.Title)
@@ -160,10 +161,17 @@ func (m *MenuBar) MouseExit() {
 	m.Base.MouseExit()
 }
 
+func (m *MenuBar) FocusLost() {
+	m.keyNav = false
+	m.focus = -1
+	m.Base.FocusLost()
+}
+
 func (m *MenuBar) MousePress(e widget.MouseEvent) bool {
 	if !m.Enabled() || e.Button == platform.ButtonRight {
 		return false
 	}
+	m.keyNav = false
 	m.RequestFocus()
 	i := m.titleAt(e.Pos.X)
 	m.press = i
@@ -188,6 +196,10 @@ func (m *MenuBar) MouseRelease(widget.MouseEvent) bool {
 func (m *MenuBar) KeyPress(e widget.KeyEvent) bool {
 	if !m.Enabled() || len(m.menus) == 0 {
 		return false
+	}
+	m.keyNav = true
+	if m.focus < 0 {
+		m.focus = 0
 	}
 	switch e.Key {
 	case platform.KeyLeft:
@@ -225,6 +237,7 @@ func (m *MenuBar) HandleAlt(key platform.Key) bool {
 	for i, menu := range m.menus {
 		_, k, _ := ParseMnemonic(menu.Title)
 		if k != platform.KeyUnknown && k == key {
+			m.keyNav = true
 			m.RequestFocus()
 			m.focus = i
 			m.Open(i)
@@ -243,6 +256,8 @@ func (m *MenuBar) Open(i int) {
 	pop := NewPopupMenu(m.menus[i].Items...)
 	pop.OnPick = func(it *MenuItem) {
 		m.open = -1
+		m.keyNav = false
+		m.focus = -1
 		widget.DismissPopup(m)
 		if it != nil && it.OnClick != nil {
 			it.OnClick()
@@ -251,8 +266,10 @@ func (m *MenuBar) Open(i int) {
 	pop.OnDismiss = func() {
 		if m.open == i {
 			m.open = -1
-			m.Invalidate()
 		}
+		m.keyNav = false
+		m.focus = -1
+		m.Invalidate()
 	}
 	origin := widget.DeviceOrigin(m)
 	tb := rects[i]
@@ -268,6 +285,8 @@ func (m *MenuBar) Open(i int) {
 // Close dismisses the open menu.
 func (m *MenuBar) Close() {
 	m.open = -1
+	m.keyNav = false
+	m.focus = -1
 	widget.DismissPopup(m)
 	m.Invalidate()
 }
