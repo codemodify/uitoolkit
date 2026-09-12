@@ -354,7 +354,7 @@ func TestFolderTreeOmitsVirtualSections(t *testing.T) {
 		}
 	}
 	walk(tree.Roots)
-	assertOutboxLastRoot(t, tree)
+	assertOutboxPinnedBottom(t, w.Content())
 
 	banned := []string{"Unified Inbox", "New Smart Folder", "Smart Folders", "Move sender to Primary"}
 	widget.Walk(w.Content(), func(c widget.Component) {
@@ -547,6 +547,7 @@ func TestMailChromeHidesStatusBarAndVIPFolder(t *testing.T) {
 	if qf.Visible() {
 		t.Fatal("quick filter field should stay hidden until the Filter icon or Ctrl+F")
 	}
+	assertNoUnreadFolderFooter(t, w.Content())
 	if split == nil || !widget.Contains(split, qf) {
 		t.Fatal("quick filter should sit on the list toolbar row inside the splitter")
 	}
@@ -650,22 +651,11 @@ func TestMailCollapsedFiltersDoesNotStealOutbox(t *testing.T) {
 	if filters.Expanded {
 		t.Fatal("Filters should collapse")
 	}
-	rows := visibleTreeRows(tree.Roots)
-	idx := -1
-	for i, n := range rows {
-		if n != nil && strings.HasPrefix(n.Label, "Outbox") {
-			idx = i
-		}
+	_, pin := mailSidebarTrees(w.Content())
+	if pin == nil || pin.OnSelect == nil || len(pin.Roots) == 0 {
+		t.Fatal("Outbox pin")
 	}
-	if idx < 0 {
-		t.Fatal("Outbox not visible after collapsing Filters")
-	}
-	rh := tree.RowHeight
-	if rh <= 0 {
-		rh = 24
-	}
-	y := float32(idx)*rh + rh*0.5
-	tree.MousePress(widget.MouseEvent{Pos: paintengine2d.Pt(100, y), Button: platform.ButtonLeft})
+	pin.OnSelect(pin.Roots[0])
 	a.PumpOnce()
 	filters = findTreeLabel(tree.Roots, "Filters")
 	if filters == nil {
@@ -674,10 +664,11 @@ func TestMailCollapsedFiltersDoesNotStealOutbox(t *testing.T) {
 	if filters.Expanded {
 		t.Fatal("Outbox click re-opened Filters (rebuild lost collapse, or hit-test stole the row)")
 	}
-	if tree.Selected == nil || !strings.HasPrefix(tree.Selected.Label, "Outbox") {
+	_, pin = mailSidebarTrees(w.Content())
+	if pin == nil || pin.Selected == nil || !strings.HasPrefix(pin.Selected.Label, "Outbox") {
 		label := ""
-		if tree.Selected != nil {
-			label = tree.Selected.Label
+		if pin != nil && pin.Selected != nil {
+			label = pin.Selected.Label
 		}
 		t.Fatalf("selected %q want Outbox", label)
 	}
@@ -1620,32 +1611,91 @@ func TestMailFolderTreePutsOutboxLast(t *testing.T) {
 	}
 	w.SetContent(MailApp(a, w))
 	a.PumpOnce()
-	var tree *widgets.TreeView
-	widget.Walk(w.Content(), func(c widget.Component) {
-		if tr, ok := c.(*widgets.TreeView); ok && tree == nil {
-			tree = tr
-		}
-	})
-	assertOutboxLastRoot(t, tree)
+	assertOutboxPinnedBottom(t, w.Content())
 	w.Close()
 }
 
-func assertOutboxLastRoot(t *testing.T, tree *widgets.TreeView) {
+func mailSidebarTrees(root widget.Component) (folder, outbox *widgets.TreeView) {
+	widget.Walk(root, func(c widget.Component) {
+		tv, ok := c.(*widgets.TreeView)
+		if !ok {
+			return
+		}
+		if treeHasOutboxRoot(tv) {
+			if outbox == nil {
+				outbox = tv
+			}
+			return
+		}
+		if folder == nil {
+			folder = tv
+		}
+	})
+	return folder, outbox
+}
+
+func treeHasOutboxRoot(tv *widgets.TreeView) bool {
+	if tv == nil {
+		return false
+	}
+	for _, n := range tv.Roots {
+		if n == nil {
+			continue
+		}
+		if id, ok := n.Data.(FolderID); ok && id == FolderOutbox {
+			return true
+		}
+		if strings.HasPrefix(n.Label, "Outbox") {
+			return true
+		}
+	}
+	return false
+}
+
+func assertOutboxPinnedBottom(t *testing.T, root widget.Component) {
 	t.Helper()
-	if tree == nil || len(tree.Roots) == 0 {
-		t.Fatal("empty folder tree")
+	folder, pin := mailSidebarTrees(root)
+	if folder == nil || len(folder.Roots) == 0 {
+		t.Fatal("folder tree")
 	}
-	last := tree.Roots[len(tree.Roots)-1]
-	if last == nil {
-		t.Fatal("nil last root")
+	if treeHasOutboxRoot(folder) {
+		t.Fatal("Outbox should not sit in the folder tree next to Filters")
 	}
-	id, ok := last.Data.(FolderID)
-	if !ok || id != FolderOutbox {
-		t.Fatalf("last root data=%v label=%q, want Outbox", last.Data, last.Label)
+	last := folder.Roots[len(folder.Roots)-1]
+	if last == nil || last.Label != "Filters" {
+		label := ""
+		if last != nil {
+			label = last.Label
+		}
+		t.Fatalf("folder tree last root %q, want Filters", label)
 	}
-	if !strings.HasPrefix(last.Label, "Outbox") {
-		t.Fatalf("last root label %q", last.Label)
+	if pin == nil || !treeHasOutboxRoot(pin) {
+		t.Fatal("Outbox pin missing")
 	}
+	if pin.Bounds().Dy() > 48 {
+		t.Fatalf("Outbox pin too tall %v (should be one row at the bottom)", pin.Bounds().Dy())
+	}
+	fo := widget.DeviceOrigin(folder)
+	po := widget.DeviceOrigin(pin)
+	if po.Y+0.5 < fo.Y+folder.Bounds().Dy()-pin.Bounds().Dy()-8 {
+		t.Fatalf("Outbox not at the bottom of the folder pane: folder=%v..%v pin=%v",
+			fo.Y, fo.Y+folder.Bounds().Dy(), po.Y)
+	}
+}
+
+func assertNoUnreadFolderFooter(t *testing.T, root widget.Component) {
+	t.Helper()
+	walkAll(root, func(c widget.Component) {
+		switch v := c.(type) {
+		case *widgets.StatusBar:
+			t.Fatal("status bar should stay gone")
+		case *widgets.Label:
+			if strings.Contains(strings.ToLower(v.Text), "unread in all folders") ||
+				strings.Contains(strings.ToLower(v.Text), "unread folders") {
+				t.Fatalf("unread-count footer still present: %q", v.Text)
+			}
+		}
+	})
 }
 
 func cellInk(img *paintengine2d.Image, x0, x1 int) int {

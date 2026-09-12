@@ -101,6 +101,7 @@ type session struct {
 	cards                                      *widgets.CardList
 	listStack                                  *widgets.Stack
 	tree                                       *widgets.TreeView
+	outboxTree                                 *widgets.TreeView
 	preview                                    *widgets.TextArea
 	source                                     *widgets.TextArea
 	attachHits                                 []*attachHit
@@ -115,7 +116,6 @@ type session struct {
 	status                                     *widgets.StatusBar
 	qf                                         *widgets.TextField
 	qfBtn                                      *widgets.ToolItem
-	folderL                                    *widgets.Label
 	acctPanel                                  widget.Component
 	acctTitle                                  *widgets.Label
 	acctBody                                   *widgets.Label
@@ -211,7 +211,6 @@ func (s *session) build() widget.Component {
 	s.hdrDate = widgets.NewLabel("")
 	s.hdrTo = widgets.NewLabel("")
 	s.hdrExtra = widgets.NewLabel("")
-	s.folderL = widgets.NewLabel("Folders")
 	s.preview = widgets.NewTextView("", "Select a message (plain text)")
 	s.preview.MinRows = 8
 	s.source = widgets.NewMonoTextView("", "Raw source")
@@ -254,43 +253,10 @@ func (s *session) build() widget.Component {
 	}
 
 	s.tree = widgets.NewTreeView()
+	s.outboxTree = widgets.NewTreeView()
 	s.rebuildTree()
-	s.tree.OnSelect = func(n *widgets.TreeNode) {
-		if n == nil {
-			return
-		}
-		if pin, ok := n.Data.(filterPin); ok {
-			s.toggleFilterPin(pin)
-			return
-		}
-		if id, ok := n.Data.(FolderID); ok && id != "" {
-			s.selectFolder(id)
-			return
-		}
-		if acct, ok := n.Data.(string); ok && acct != "" {
-			if acct == AccountTags || acct == AccountUnified || acct == AccountSmart || acct == AccountCategories {
-				return
-			}
-			s.openAccountInbox(acct)
-		}
-	}
-	s.tree.OnContext = func(n *widgets.TreeNode, p paintengine2d.Point) {
-		if n != nil {
-			if id, ok := n.Data.(FolderID); ok && id != "" {
-				s.folder = id
-				s.selected = nil
-				s.refreshAll()
-			}
-		}
-		widgets.ShowContextMenu(s.tree, p,
-			widgets.Item("Get Messages", s.getMessages),
-			widgets.Item("New Folder…", s.newFolder),
-			widgets.Item("Remove Account…", s.removeCurrentAccount),
-			widgets.Sep(),
-			widgets.Item("Empty Trash", s.emptyTrash),
-			widgets.Item("Compact Folders", func() { s.mark("Compact Folders (stub)") }),
-		)
-	}
+	s.wireFolderTree(s.tree)
+	s.wireFolderTree(s.outboxTree)
 
 	s.qf = widgets.NewTextField("", "Quick Filter (subject, people, body)", func(q string) {
 		s.filter.Query = q
@@ -346,8 +312,9 @@ func (s *session) build() widget.Component {
 	s.applyRowMetrics()
 	sidebar := widgets.NewColumn(
 		s.tree,
-		s.folderL,
-	).WithGap(4).WithPad(6)
+		widgets.NewSeparator(),
+		s.outboxTree,
+	).WithGap(0).WithPad(6)
 	sidebar.AddFlex(s.tree, 1)
 
 	var split *widgets.Splitter
@@ -729,20 +696,6 @@ func (s *session) rebuildTree() {
 	var roots []*widgets.TreeNode
 	var selected *widgets.TreeNode
 
-	addVirtual := func(f Folder) {
-		label := f.Name
-		nUnread, _ := s.cli.Unread(f.ID)
-		if nUnread > 0 {
-			label = fmt.Sprintf("%s (%d)", f.Name, nUnread)
-		}
-		n := widgets.NewTreeNode(label)
-		n.Data = f.ID
-		n.Bold = nUnread > 0
-		roots = append(roots, n)
-		if f.ID == s.folder && !s.central {
-			selected = n
-		}
-	}
 	var outbox *Folder
 	if vfs, err := s.cli.VirtualFolders(); err == nil {
 		for _, f := range vfs {
@@ -833,13 +786,105 @@ func (s *session) rebuildTree() {
 		}
 	}
 	roots = append(roots, filtersNode)
-	if outbox != nil {
-		addVirtual(*outbox)
-	}
 
 	s.tree.SetRoots(roots)
 	s.tree.Selected = selected
 	s.tree.Invalidate()
+	s.rebuildOutboxPin(outbox)
+}
+
+func (s *session) rebuildOutboxPin(outbox *Folder) {
+	if s.outboxTree == nil {
+		return
+	}
+	if outbox == nil {
+		if vfs, err := s.cli.VirtualFolders(); err == nil {
+			for _, f := range vfs {
+				if f.ID == FolderOutbox {
+					cp := f
+					outbox = &cp
+					break
+				}
+			}
+		}
+	}
+	if outbox == nil {
+		s.outboxTree.SetRoots(nil)
+		return
+	}
+	label := outbox.Name
+	nUnread, _ := s.cli.Unread(outbox.ID)
+	if nUnread > 0 {
+		label = fmt.Sprintf("%s (%d)", outbox.Name, nUnread)
+	}
+	n := widgets.NewTreeNode(label)
+	n.Data = outbox.ID
+	n.Bold = nUnread > 0
+	s.outboxTree.SetRoots([]*widgets.TreeNode{n})
+	if outbox.ID == s.folder && !s.central {
+		s.outboxTree.Selected = n
+		if s.tree != nil {
+			s.tree.Selected = nil
+			s.tree.Invalidate()
+		}
+	} else {
+		s.outboxTree.Selected = nil
+	}
+	s.outboxTree.Invalidate()
+}
+
+func (s *session) wireFolderTree(tv *widgets.TreeView) {
+	if tv == nil {
+		return
+	}
+	tv.OnSelect = func(n *widgets.TreeNode) {
+		if n == nil {
+			return
+		}
+		s.syncFolderTreeSelection(tv)
+		if pin, ok := n.Data.(filterPin); ok {
+			s.toggleFilterPin(pin)
+			return
+		}
+		if id, ok := n.Data.(FolderID); ok && id != "" {
+			s.selectFolder(id)
+			return
+		}
+		if acct, ok := n.Data.(string); ok && acct != "" {
+			if acct == AccountTags || acct == AccountUnified || acct == AccountSmart || acct == AccountCategories {
+				return
+			}
+			s.openAccountInbox(acct)
+		}
+	}
+	tv.OnContext = func(n *widgets.TreeNode, p paintengine2d.Point) {
+		if n != nil {
+			if id, ok := n.Data.(FolderID); ok && id != "" {
+				s.folder = id
+				s.selected = nil
+				s.refreshAll()
+			}
+		}
+		widgets.ShowContextMenu(tv, p,
+			widgets.Item("Get Messages", s.getMessages),
+			widgets.Item("New Folder…", s.newFolder),
+			widgets.Item("Remove Account…", s.removeCurrentAccount),
+			widgets.Sep(),
+			widgets.Item("Empty Trash", s.emptyTrash),
+			widgets.Item("Compact Folders", func() { s.mark("Compact Folders (stub)") }),
+		)
+	}
+}
+
+func (s *session) syncFolderTreeSelection(from *widgets.TreeView) {
+	if s.tree != nil && s.tree != from {
+		s.tree.Selected = nil
+		s.tree.Invalidate()
+	}
+	if s.outboxTree != nil && s.outboxTree != from {
+		s.outboxTree.Selected = nil
+		s.outboxTree.Invalidate()
+	}
 }
 
 func hideFilterTag(name string) bool {
@@ -1054,9 +1099,6 @@ func (s *session) loadPreview() {
 
 func (s *session) refreshStatus() {
 	unread, _ := s.cli.UnreadTotal()
-	if s.folderL != nil {
-		s.folderL.SetText(fmt.Sprintf("%d unread in all folders", unread))
-	}
 	if s.status == nil {
 		return
 	}

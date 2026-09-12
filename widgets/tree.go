@@ -126,7 +126,7 @@ func (t *TreeView) ScrollTo(y float32) {
 
 func (t *TreeView) Measure(c layout.Constraints) paintengine2d.Point {
 	h := t.contentH()
-	if h < 80 {
+	if h <= 0 {
 		h = 80
 	}
 	if c.HasMaxH() && h > c.MaxH {
