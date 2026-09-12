@@ -240,6 +240,57 @@ func TestExportThemeWritesPaletteOnly(t *testing.T) {
 	}
 }
 
+func TestDeleteUserTheme(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if _, err := ExportAppearance("ocean", Appearance{Theme: ThemeLight}); err != nil {
+		t.Fatal(err)
+	}
+	if err := DeleteUserTheme("dark"); err == nil {
+		t.Fatal("must not delete builtin")
+	}
+	if err := DeleteUserTheme("../etc"); err == nil {
+		t.Fatal("path escape")
+	}
+	if err := DeleteUserTheme("ocean"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(ThemeFile("ocean")); !os.IsNotExist(err) {
+		t.Fatalf("theme dir still present: %v", err)
+	}
+	if _, ok := LoadTheme("ocean"); ok {
+		t.Fatal("deleted pack still loads")
+	}
+	if len(ListUserThemes()) != 0 {
+		t.Fatalf("user list %+v", ListUserThemes())
+	}
+}
+
+func TestDeleteUserThemeUnshadowsBuiltin(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if _, err := ExportAppearance("dark", Appearance{Theme: ThemeLight}); err != nil {
+		t.Fatal(err)
+	}
+	got, ok := LoadTheme("dark")
+	if !ok || got.Source != ThemeSourceUser || got.Palette != ThemeLight {
+		t.Fatalf("shadow %+v ok=%v", got, ok)
+	}
+	if err := DeleteUserTheme("dark"); err != nil {
+		t.Fatal(err)
+	}
+	got, ok = LoadTheme("dark")
+	if !ok || got.Source != ThemeSourceBuiltin || got.Palette != ThemeDark {
+		t.Fatalf("unshadow %+v ok=%v", got, ok)
+	}
+	a := AfterUserThemeDeleted(Appearance{Name: "dark", Theme: ThemeLight, Corners: CornersSquare, Icons: IconSetSharp}, "dark")
+	if a.Name != "dark" || a.Theme != ThemeDark || a.Corners != CornersSquare || a.Icons != IconSetSharp {
+		t.Fatalf("after delete shadow %+v", a)
+	}
+	a = AfterUserThemeDeleted(Appearance{Name: "ocean", Theme: ThemeLight, Corners: CornersSquare}, "ocean")
+	if a.Name != "light" || a.Theme != ThemeLight || a.Corners != CornersSquare {
+		t.Fatalf("after delete user %+v", a)
+	}
+}
+
 func TestSanitizeThemeName(t *testing.T) {
 	got, err := SanitizeThemeName(" Ocean Breeze ")
 	if err != nil || got != "ocean-breeze" {

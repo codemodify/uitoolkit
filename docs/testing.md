@@ -79,7 +79,8 @@ CGO_ENABLED=0 go build ./cmd/uitksettings
 Settings (`cmd/uitksettings`) **Apply** writes theme, corners, and icons
 to `$XDG_CONFIG_HOME/uitoolkit/look.json`. The pickers preview only; close
 without Apply discards. **Export current theme…** writes a palette-only
-`themes/<name>/theme.json`. `Application` watches `look.json` when Look
+`themes/<name>/theme.json`. **Delete** (User themes only) confirms then
+removes that folder. `Application` watches `look.json` when Look
 came from `PreferredLook` (`Look == nil` or `WatchLook: true`). Widget
 tests that persist appearance should point `XDG_CONFIG_HOME` at a temp
 dir (same isolation idea as Mail chrome prefs). Tests that pass

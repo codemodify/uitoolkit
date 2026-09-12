@@ -99,6 +99,15 @@ JSON only. Pack-level `corners` / `icons` fields are ignored.
 **Export current theme…** asks for a name and writes the staged
 **palette**. Corners and icons stay in `look.json`.
 
+When a **User** theme is selected, **Delete** under that list confirms
+(Yes/No) then removes `themes/<name>/` from disk. Built-in `dark` /
+`light` never show Delete. If the deleted pack was selected, Settings
+falls back to the matching builtin palette (or the other one if that
+name was a shadow). If `look.json` named the deleted pack, it is
+rewritten to the fallback so the selection is not left dangling.
+The same Delete control appears under **User** icon sets (not premiere
+or drawn classic/sharp).
+
 `ListThemes` lists Built-in starters (not shadowed) then user packs
 (sorted by name). `LoadTheme(name)` **prefers the user pack** when both
 exist — a user `dark` overrides the embedded starter and is listed once
