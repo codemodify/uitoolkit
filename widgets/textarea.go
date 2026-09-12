@@ -119,6 +119,11 @@ func (t *TextArea) Selection() (a, b int) { return t.selA, t.selB }
 
 func (t *TextArea) SetCaretBlink(on bool) { t.blinkOn = on }
 
+// InvalidateCaret dirties only the insertion bar (blink / hide).
+func (t *TextArea) InvalidateCaret() {
+	t.InvalidateRect(t.IMECaretRect().Inset(-2))
+}
+
 func (t *TextArea) Lines() []style.TextLine {
 	t.relayout()
 	return t.lines
@@ -501,26 +506,18 @@ func (t *TextArea) MousePress(e widget.MouseEvent) bool {
 
 func (t *TextArea) MouseMove(e widget.MouseEvent) bool {
 	vt, vth := t.scrollTrackV()
-	if off, apply, handled, dirty := t.vbar.move(e.Pos, vt, vth, true, t.maxScrollY()); apply || handled || dirty {
-		if apply {
-			t.scrollY = off
-			t.clampScroll()
-		}
-		t.Invalidate()
-		if apply || handled {
-			return true
-		}
+	if applyScrollHover(&t.vbar, e.Pos, vt, vth, true, t.maxScrollY(), func(off float32) {
+		t.scrollY = off
+		t.clampScroll()
+	}, t.Invalidate, func() { invalidateOverflowTrack(t, vt) }) {
+		return true
 	}
 	ht, hth := t.scrollTrackH()
-	if off, apply, handled, dirty := t.hbar.move(e.Pos, ht, hth, false, t.maxScrollX()); apply || handled || dirty {
-		if apply {
-			t.scrollX = off
-			t.clampScroll()
-		}
-		t.Invalidate()
-		if apply || handled {
-			return true
-		}
+	if applyScrollHover(&t.hbar, e.Pos, ht, hth, false, t.maxScrollX(), func(off float32) {
+		t.scrollX = off
+		t.clampScroll()
+	}, t.Invalidate, func() { invalidateOverflowTrack(t, ht) }) {
+		return true
 	}
 	if !t.dragging && e.Button != platform.ButtonLeft {
 		return false

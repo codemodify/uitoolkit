@@ -73,7 +73,9 @@ chrome, menu dismiss, Office XP menu hover, label clip) is
 `TestDesktopChromeNorms` and `-compare`. See [compare.md](compare.md).
 Menu hover dirty-rect discipline is `TestMenuHoverDoesNotFullInvalidate`
 and `BenchmarkMenuHover` (`app`); widget-level
-`TestPopupMenuHoverInvalidatesTwoRows`.
+`TestPopupMenuHoverInvalidatesTwoRows`. Splitter drag, popup open, list
+scrollbar hover, and caret blink have matching invalidation asserts;
+`BenchmarkSplitterDrag` / `BenchmarkListRowHover` sit beside the menu bench.
 
 Linux CGO build (Wayland/X11) — required on a real desktop, not just
 `CGO_ENABLED=0 go test`:

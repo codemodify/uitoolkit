@@ -509,11 +509,14 @@ are independent look.json fields again; compound pack names migrate
 
 ## Version
 
-**0.14.0** — Menu / toolbar / list hover is dirty-rect only: previous + new
-row (and the open title) invalidate; dirty frames clip paint and do **not**
-`Clear` + `DrawScene` the whole window. Popup, overlay, and tooltip honor
-the same damage. `BenchmarkMenuHover` guards the path. paintengine2d is
-still **v0.9.0** — it has no dirty-rect `DrawScene` (see
+**0.14.0** — Dirty-rect chrome vs KDE/Qt: menu hover (previous + new row)
+does **not** `Clear` + `DrawScene` the window. Splitter drag Arranges
+locally (no per-pixel `RequestLayout`). Scrollbar-track hover dirties
+the bar only; list/tree/table selection dirties two rows. Caret blink
+invalidates the caret, not the field. Opening a popup dirties the popup
+box, not the full window. Tree flatten is cached; look.json idle poll
+is Stat-first. `BenchmarkMenuHover` / `BenchmarkSplitterDrag` guard the
+paths. paintengine2d is still **v0.9.0** (no dirty `DrawScene`; see
 `docs/platform.md`).
 
 **0.13.8** — Mail sidebar pins **Outbox** to the bottom of the folder pane

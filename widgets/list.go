@@ -164,19 +164,20 @@ func (l *ListView) invalidateRow(i int) {
 	}
 }
 
+func (l *ListView) invalidateBar() {
+	track, _ := l.scrollTrack()
+	invalidateOverflowTrack(l, track)
+}
+
 func (l *ListView) MouseEnter() {}
 
 func (l *ListView) MouseMove(e widget.MouseEvent) bool {
 	track, thumb := l.scrollTrack()
-	if off, apply, handled, dirty := l.vbar.move(e.Pos, track, thumb, true, l.MaxOffset()); apply || handled || dirty {
-		if apply {
-			l.OffsetY = off
-			l.clamp()
-		}
-		l.Invalidate()
-		if apply || handled {
-			return true
-		}
+	if applyScrollHover(&l.vbar, e.Pos, track, thumb, true, l.MaxOffset(), func(off float32) {
+		l.OffsetY = off
+		l.clamp()
+	}, l.Invalidate, l.invalidateBar) {
+		return true
 	}
 	h := l.indexAt(e.Pos.Y)
 	if h != l.hovered {
@@ -214,8 +215,10 @@ func (l *ListView) MousePress(e widget.MouseEvent) bool {
 	}
 	i := l.indexAt(e.Pos.Y)
 	if i >= 0 {
+		old := l.Selected
 		l.Selected = i
-		l.Invalidate()
+		l.invalidateRow(old)
+		l.invalidateRow(i)
 		if l.OnSelect != nil {
 			l.OnSelect(i)
 		}
@@ -271,9 +274,16 @@ func (l *ListView) KeyPress(e widget.KeyEvent) bool {
 		next = l.Count - 1
 	}
 	if next != l.Selected {
+		old := l.Selected
+		off := l.OffsetY
 		l.Selected = next
 		l.ensureVisible(next)
-		l.Invalidate()
+		if l.OffsetY != off {
+			l.Invalidate()
+		} else {
+			l.invalidateRow(old)
+			l.invalidateRow(next)
+		}
 		if l.OnSelect != nil {
 			l.OnSelect(next)
 		}

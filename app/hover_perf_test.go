@@ -128,6 +128,126 @@ func TestComboPopupHoverDirtiesRows(t *testing.T) {
 	}
 }
 
+func TestPopupOpenDoesNotFullInvalidate(t *testing.T) {
+	a, w, mb, _ := hoverChromeWindow(t, 720, 480)
+	mb.Open(0)
+	if w.full {
+		t.Fatal("opening a menu must not full-invalidate the window")
+	}
+	if w.dirty.Empty() {
+		t.Fatal("open should dirty the popup")
+	}
+	ww, hh := w.surf.Size()
+	if dirtyArea(w) > float32(ww*hh)*0.55 {
+		t.Fatalf("popup open dirty %v of %dx%d", dirtyArea(w), ww, hh)
+	}
+	_ = a
+}
+
+func TestSplitterDragDoesNotRequestLayout(t *testing.T) {
+	a := New(Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{Width: 640, Height: 400, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	left := widgets.NewListView(40, func(i int) string { return fmt.Sprintf("L%d", i) }, nil)
+	right := widgets.NewListView(40, func(i int) string { return fmt.Sprintf("R%d", i) }, nil)
+	split := widgets.NewSplitter(true, left, right)
+	split.Ratio = 0.4
+	w.SetContent(split)
+	a.PumpOnce()
+	sashX := split.PaneA().Max.X + 1
+	o := widget.DeviceOrigin(split)
+	w.dispatch(platform.Event{Kind: platform.EventMouseDown, Pos: paintengine2d.Pt(o.X+sashX, o.Y+40), Button: platform.ButtonLeft})
+	a.PumpOnce()
+	w.dispatch(platform.Event{Kind: platform.EventMouseMove, Pos: paintengine2d.Pt(o.X+280, o.Y+40), Button: platform.ButtonLeft})
+	if w.full {
+		t.Fatal("splitter drag must not full-invalidate")
+	}
+	if !w.laid {
+		t.Fatal("splitter drag must not RequestLayout the window")
+	}
+	ww, hh := w.surf.Size()
+	if dirtyArea(w) > float32(ww*hh)*1.05 {
+		t.Fatalf("drag dirty %v", dirtyArea(w))
+	}
+}
+
+func TestListScrollbarHoverDirtiesBar(t *testing.T) {
+	a := New(Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{Width: 280, Height: 220, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	list := widgets.NewListView(80, func(i int) string { return fmt.Sprintf("row %02d", i) }, nil)
+	w.SetContent(list)
+	a.PumpOnce()
+	track, thumb := list.ScrollTrack()
+	if thumb.Empty() {
+		t.Fatal("need overflow thumb")
+	}
+	o := widget.DeviceOrigin(list)
+	pos := paintengine2d.Pt(o.X+(track.Min.X+track.Max.X)*0.5, o.Y+(track.Min.Y+track.Max.Y)*0.5)
+	w.dispatch(platform.Event{Kind: platform.EventMouseMove, Pos: pos})
+	if w.full {
+		t.Fatal("scrollbar hover must not full-invalidate")
+	}
+	area := dirtyArea(w)
+	if area <= 0 {
+		t.Fatal("bar hover should dirty the track")
+	}
+	lb := list.Bounds()
+	if area > lb.Dx()*lb.Dy()*0.45 {
+		t.Fatalf("bar hover dirty %v of list %v", area, lb.Dx()*lb.Dy())
+	}
+	_ = a
+}
+
+func BenchmarkSplitterDrag(b *testing.B) {
+	a := New(Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{Width: 800, Height: 560, Headless: true})
+	if err != nil {
+		b.Fatal(err)
+	}
+	split := widgets.NewSplitter(true,
+		widgets.NewListView(48, func(i int) string { return fmt.Sprintf("L%d", i) }, nil),
+		widgets.NewListView(48, func(i int) string { return fmt.Sprintf("R%d", i) }, nil),
+	)
+	w.SetContent(split)
+	a.PumpOnce()
+	o := widget.DeviceOrigin(split)
+	sashX := split.PaneA().Max.X + 1
+	w.dispatch(platform.Event{Kind: platform.EventMouseDown, Pos: paintengine2d.Pt(o.X+sashX, o.Y+80), Button: platform.ButtonLeft})
+	a.PumpOnce()
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		x := o.X + 180 + float32(i%80)
+		w.dispatch(platform.Event{Kind: platform.EventMouseMove, Pos: paintengine2d.Pt(x, o.Y+80), Button: platform.ButtonLeft})
+		a.PumpOnce()
+	}
+}
+
+func BenchmarkListRowHover(b *testing.B) {
+	a := New(Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{Width: 400, Height: 360, Headless: true})
+	if err != nil {
+		b.Fatal(err)
+	}
+	list := widgets.NewListView(80, func(i int) string { return fmt.Sprintf("row %02d body", i) }, nil)
+	w.SetContent(list)
+	a.PumpOnce()
+	o := widget.DeviceOrigin(list)
+	rh := list.Bounds().Dy() / 12
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		y := o.Y + 20 + float32(i%10)*rh
+		w.dispatch(platform.Event{Kind: platform.EventMouseMove, Pos: paintengine2d.Pt(o.X+40, y)})
+		a.PumpOnce()
+	}
+}
+
 func BenchmarkMenuHover(b *testing.B) {
 	a, w, mb, _ := hoverChromeWindow(b, 800, 560)
 	mb.Open(0)

@@ -350,7 +350,7 @@ func (m *MenuBar) Open(i int) {
 		}
 		m.keyNav = false
 		m.focus = -1
-		m.Invalidate()
+		m.invalidateTitle(i)
 	}
 	origin := widget.DeviceOrigin(m)
 	tb := rects[i]
@@ -359,18 +359,19 @@ func (m *MenuBar) Open(i int) {
 	widget.PlacePopupForAnchor(m, pop, anchor, 0, 0)
 	if widget.ShowPopup(m, pop) {
 		m.open = i
-		m.Invalidate()
+		m.invalidateTitle(i)
 		pop.RequestFocus()
 	}
 }
 
 // Close dismisses the open menu.
 func (m *MenuBar) Close() {
+	old := m.open
 	m.open = -1
 	m.keyNav = false
 	m.focus = -1
 	widget.DismissPopup(m)
-	m.Invalidate()
+	m.invalidateTitle(old)
 }
 
 // PopupMenu is a floating list of MenuItems (drop-down or context menu).
@@ -704,8 +705,10 @@ func (p *PopupMenu) MouseMove(e widget.MouseEvent) bool {
 			p.OffsetY = off
 			p.clamp()
 		}
-		if apply || hoverDirty {
+		if apply {
 			p.Invalidate()
+		} else if hoverDirty {
+			invalidateOverflowTrack(p, track)
 		}
 		return true
 	}

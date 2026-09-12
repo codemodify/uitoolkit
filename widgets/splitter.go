@@ -147,8 +147,13 @@ func (s *Splitter) paintPane(ctx *paintengine2d.Context, child widget.Component,
 
 func (s *Splitter) Paint(ctx *paintengine2d.Context) {
 	a, _, b := s.panes(s.LocalBounds())
-	s.paintPane(ctx, s.A, a)
-	s.paintPane(ctx, s.B, b)
+	clip := ctx.LocalClipBounds()
+	if clip.Empty() || clip.Overlaps(a) {
+		s.paintPane(ctx, s.A, a)
+	}
+	if clip.Empty() || clip.Overlaps(b) {
+		s.paintPane(ctx, s.B, b)
+	}
 	st := s.State()
 	if s.hovered || s.drag {
 		st |= style.StateHovered
@@ -214,14 +219,23 @@ func (s *Splitter) applyCursor(local paintengine2d.Point) {
 	widget.ApplyCursor(s.Host(), s.CursorAt(local))
 }
 
-func (s *Splitter) MouseEnter() { s.hovered = true; s.Base.MouseEnter() }
+func (s *Splitter) invalidateSash() {
+	s.InvalidateRect(s.divider().Inset(-2))
+}
+
+func (s *Splitter) MouseEnter() {
+	s.hovered = true
+	s.SetHovered(true)
+	s.invalidateSash()
+}
 
 func (s *Splitter) MouseExit() {
 	s.hovered = false
+	s.SetHovered(false)
 	if !s.drag {
 		widget.ApplyCursor(s.Host(), platform.CursorDefault)
 	}
-	s.Base.MouseExit()
+	s.invalidateSash()
 }
 
 func (s *Splitter) MousePress(e widget.MouseEvent) bool {
@@ -238,7 +252,7 @@ func (s *Splitter) MouseMove(e widget.MouseEvent) bool {
 	over := s.divider().Contains(e.Pos)
 	if over != s.hovered {
 		s.hovered = over
-		s.Invalidate()
+		s.invalidateSash()
 	}
 	if !s.drag {
 		s.applyCursor(e.Pos)
@@ -258,8 +272,9 @@ func (s *Splitter) MouseMove(e widget.MouseEvent) bool {
 		}
 	}
 	s.clampRatio()
+	// Arrange this splitter only. RequestLayout full-Measures the window
+	// and full-invalidates every pixel of the drag.
 	s.Arrange(s.Bounds())
-	s.RequestLayout()
 	s.applyCursor(e.Pos)
 	s.Invalidate()
 	return true

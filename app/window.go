@@ -121,8 +121,9 @@ func (w *Window) SetOverlay(c widget.Component) {
 func (w *Window) Overlay() widget.Component { return w.overlay }
 
 func (w *Window) SetPopup(c widget.Component) {
-	if w.popup != nil && w.popup != c {
-		if d, ok := w.popup.(widget.Dismisser); ok {
+	old := w.popup
+	if old != nil && old != c {
+		if d, ok := old.(widget.Dismisser); ok {
 			d.Dismissed()
 		}
 	}
@@ -131,7 +132,21 @@ func (w *Window) SetPopup(c widget.Component) {
 		c.SetHost(w)
 		w.HideTooltip()
 	}
-	w.fullInvalidate()
+	if old != c {
+		w.dirtyLayer(old)
+	}
+	w.dirtyLayer(c)
+}
+
+func (w *Window) dirtyLayer(c widget.Component) {
+	if c == nil {
+		return
+	}
+	r := c.LocalBounds()
+	if r.Empty() {
+		r = c.Bounds()
+	}
+	w.Invalidate(c, r.Inset(-4))
 }
 
 func (w *Window) Popup() widget.Component { return w.popup }
@@ -140,11 +155,12 @@ func (w *Window) DismissPopup() {
 	if w.popup == nil {
 		return
 	}
-	if d, ok := w.popup.(widget.Dismisser); ok {
+	old := w.popup
+	if d, ok := old.(widget.Dismisser); ok {
 		d.Dismissed()
 	}
 	w.popup = nil
-	w.fullInvalidate()
+	w.dirtyLayer(old)
 }
 
 func (w *Window) SetTooltip(c widget.Component) {
@@ -284,7 +300,11 @@ func (w *Window) toggleBlink() {
 	}
 	if b, ok := w.focus.(interface{ SetCaretBlink(bool) }); ok {
 		b.SetCaretBlink(w.blink)
-		w.focus.Invalidate()
+		if c, ok := w.focus.(interface{ InvalidateCaret() }); ok {
+			c.InvalidateCaret()
+		} else {
+			w.focus.Invalidate()
+		}
 	}
 }
 
