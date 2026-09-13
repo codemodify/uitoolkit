@@ -549,8 +549,8 @@ func TestMailChromeHidesStatusBarAndVIPFolder(t *testing.T) {
 		t.Fatal("quick filter field should stay hidden until the Filter icon or Ctrl+F")
 	}
 	assertNoUnreadFolderFooter(t, w.Content())
-	if split == nil || !widget.Contains(split, qf) {
-		t.Fatal("quick filter should sit on the list toolbar row inside the splitter")
+	if split == nil || widget.Contains(split, qf) {
+		t.Fatal("quick filter should sit on the M chrome row, not inside the splitter")
 	}
 	assertMailToolChrome(t, w.Content(), qf)
 	w.Close()
@@ -717,7 +717,7 @@ func assertMailToolChrome(t *testing.T, root widget.Component, qf widget.Compone
 	t.Helper()
 	var split *widgets.Splitter
 	var table *widgets.TableView
-	var mainBar, listBar, filterBar *widgets.ToolBar
+	var mainBar, extraList *widgets.ToolBar
 	var menuBar *widgets.MenuBar
 	var tree *widgets.TreeView
 	widget.Walk(root, func(c widget.Component) {
@@ -742,12 +742,8 @@ func assertMailToolChrome(t *testing.T, root widget.Component, qf widget.Compone
 			texts := toolTexts(v)
 			if texts["Classic"] || texts["Get Messages"] || texts["Write"] {
 				mainBar = v
-			}
-			if texts["Tag"] && texts["Archive"] && texts["Junk"] && texts["Delete"] {
-				listBar = v
-			}
-			if filterIconItem(v) != nil {
-				filterBar = v
+			} else if texts["Tag"] && texts["Archive"] && texts["Junk"] && texts["Delete"] {
+				extraList = v
 			}
 			for _, name := range []string{"Unread", "Starred", "Attachment", "From", "To", "Subject", "Body"} {
 				if texts[name] {
@@ -761,48 +757,48 @@ func assertMailToolChrome(t *testing.T, root widget.Component, qf widget.Compone
 	if mainBar == nil {
 		t.Fatal("main toolbar")
 	}
-	if listBar == nil {
-		t.Fatal("list toolbar (Tag / Archive / Junk / Delete)")
+	if extraList != nil {
+		t.Fatal("separate list toolbar still above the message list")
 	}
-	if filterBar == nil {
-		t.Fatal("icon-only Filter button missing after Delete")
+	if filterIconItem(mainBar) == nil {
+		t.Fatal("icon-only Filter button missing on the combined toolbar")
 	}
 	if split == nil || table == nil {
 		t.Fatal("splitter/table")
 	}
 	main := toolTexts(mainBar)
-	for _, name := range []string{"Reply", "Forward", "Tag", "Archive", "Junk", "Delete"} {
+	for _, name := range []string{"Reply", "Forward"} {
 		if main[name] {
 			t.Fatalf("main toolbar still has %s", name)
 		}
 	}
-	if !main["Write"] || !main["Classic"] {
-		t.Fatalf("main toolbar missing Write/Classic: %v", main)
+	for _, name := range []string{"Get Messages", "Write", "Tag", "Archive", "Junk", "Delete", "Cards", "Classic"} {
+		if !main[name] {
+			t.Fatalf("combined toolbar missing %s: %v", name, main)
+		}
 	}
 	assertMenuToolbarShareRow(t, root, menuBar, mainBar)
-	if widget.Contains(mainBar, qf) {
-		t.Fatal("filter field should sit after Delete on the list toolbar, not the main toolbar")
+	if widget.Contains(split, mainBar) {
+		t.Fatal("combined toolbar should sit on the M row, not in the thread pane")
 	}
-	if !widget.Contains(split, listBar) {
-		t.Fatal("list toolbar should sit in the thread pane")
+	if widget.Contains(split, qf) {
+		t.Fatal("quick filter should sit on the M chrome row, not in the thread pane")
 	}
-	if !widget.Contains(split, qf) || !widget.Contains(split, filterBar) {
-		t.Fatal("quick filter chrome should sit on the list toolbar row inside the splitter")
-	}
-	if !filterAfterListActions(root, filterBar) {
-		t.Fatal("Filter button should share the list toolbar row after Delete (right-aligned)")
+	if !filterAfterListActions(root, qf) {
+		t.Fatal("Quick Filter field should share the M chrome row with the combined toolbar")
 	}
 	if separateFilterRow(root) {
 		t.Fatal("separate Quick Filter row still under the main toolbar")
 	}
 	if main["Quick Filter"] {
-		t.Fatal("left Quick Filter visibility toggle should be gone (View menu / Ctrl+F)")
+		t.Fatal("left Quick Filter visibility toggle should be gone (icon / Ctrl+F)")
 	}
-	barOrigin := widget.DeviceOrigin(listBar)
-	iconOrigin := widget.DeviceOrigin(filterBar)
-	if iconOrigin.X+0.5 < barOrigin.X+listBar.Bounds().Dx() {
-		t.Fatalf("Filter icon should sit after Delete: bar=%v..%v icon=%v",
-			barOrigin.X, barOrigin.X+listBar.Bounds().Dx(), iconOrigin.X)
+	if widget.Contains(split, table) {
+		to := widget.DeviceOrigin(table)
+		mo := widget.DeviceOrigin(mainBar)
+		if to.Y+0.5 < mo.Y+mainBar.Bounds().Dy() {
+			t.Fatalf("thread list should sit below the M toolbar row: table=%v bar=%v", to, mo)
+		}
 	}
 	if qf.Visible() {
 		t.Fatal("quick filter field should be hidden until the Filter icon opens it")
@@ -858,13 +854,13 @@ func toolTexts(bar *widgets.ToolBar) map[string]bool {
 
 func filterAfterListActions(root, qf widget.Component) bool {
 	var row *widgets.FlexBox
-	widget.Walk(root, func(c widget.Component) {
+	walkAll(root, func(c widget.Component) {
 		f, ok := c.(*widgets.FlexBox)
 		if !ok || row != nil {
 			return
 		}
 		var hasList, hasQF bool
-		widget.Walk(f, func(ch widget.Component) {
+		walkAll(f, func(ch widget.Component) {
 			if bar, ok := ch.(*widgets.ToolBar); ok {
 				texts := toolTexts(bar)
 				if texts["Delete"] && texts["Tag"] {

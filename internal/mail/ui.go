@@ -296,16 +296,7 @@ func (s *session) build() widget.Component {
 	s.table.SetVisible(!s.cardView)
 	s.cards.SetVisible(s.cardView)
 	s.listStack = widgets.NewStack(s.table, s.cards)
-	s.listBar = s.listToolBar()
-	s.qfBtn = widgets.ToolIconBtn(style.IconSearch, "", s.toggleFilter)
-	s.qfBtn.Tip = "Quick Filter"
-	s.qfBtn.Toggle = true
-	s.qfBtn.Down = s.opts.ShowFilter
-	qfTools := widgets.NewToolBar(s.qfBtn)
-	qfSlot := widgets.NewRow()
-	listChrome := widgets.NewRow(s.listBar, qfSlot, s.qf, qfTools).WithGap(8).WithAlign(layout.AlignCenter)
-	listChrome.AddFlex(qfSlot, 1)
-	thread := widgets.NewColumn(listChrome, s.listStack).WithGap(0).WithPad(8)
+	thread := widgets.NewColumn(s.listStack).WithGap(0).WithPad(8)
 	thread.AddFlex(s.listStack, 1)
 	s.thread = thread
 	s.acctPanel = s.buildAccountCentral()
@@ -333,9 +324,10 @@ func (s *session) build() widget.Component {
 		split.Ratio = 0.17
 	}
 
-	s.mainBar = s.toolBar()
+	s.listBar = s.toolBar()
+	s.mainBar = s.listBar
 	slot := widgets.NewSpacer()
-	chromeRow := widgets.NewRow(s.menuBar(), slot, s.mainBar).WithGap(0).WithAlign(layout.AlignCenter)
+	chromeRow := widgets.NewRow(s.menuBar(), slot, s.qf, s.listBar).WithGap(8).WithAlign(layout.AlignCenter)
 	chromeRow.AddFlex(slot, 1)
 	chrome := []widget.Component{chromeRow, split}
 	if s.status != nil {
@@ -386,11 +378,36 @@ func (s *session) menuBar() *widgets.MenuBar {
 	)
 }
 
-func (s *session) toolBar() widget.Component {
+func (s *session) toolBar() *widgets.ToolBar {
 	get := widgets.ToolIconBtn(style.IconOpen, "Get Messages", s.getMessages)
 	get.Tip = "Get new messages for this account (demo Fetch)"
 	write := widgets.ToolIconBtn(style.IconNew, "Write", s.write)
 	write.Tip = "Write a new message"
+	tag := widgets.ToolText("Tag", func() {
+		from := widget.Component(s.listBar)
+		if from == nil {
+			from = s.win.Content()
+		}
+		o := widget.DeviceOrigin(from)
+		x := float32(24)
+		if s.listBar != nil {
+			for i, it := range s.listBar.Items() {
+				if it != nil && it.Text == "Tag" {
+					c := s.listBar.ItemCenter(i)
+					x = c.X
+					break
+				}
+			}
+		}
+		s.tagPopup(from, paintengine2d.Pt(o.X+x, o.Y+from.Bounds().Dy()))
+	})
+	tag.Tip = "Tag the selection"
+	arch := widgets.ToolText("Archive", s.archive)
+	arch.Tip = "Archive"
+	junk := widgets.ToolText("Junk", s.junk)
+	junk.Tip = "Mark as junk"
+	del := widgets.ToolIconBtn(style.IconCut, "Delete", s.deleteSel)
+	del.Tip = "Delete (move to Trash)"
 	cards := widgets.ToolToggle("Cards", s.cardView, func() { s.setCardView(!s.cardView) })
 	cards.Tip = "Toggle card vs table thread list"
 	lay := widgets.ToolToggle("Classic", s.opts.Layout == LayoutClassic, func() {
@@ -402,34 +419,16 @@ func (s *session) toolBar() widget.Component {
 		s.rebuild()
 	})
 	lay.Tip = "Toggle classic vs vertical 3-pane"
+	s.qfBtn = widgets.ToolIconBtn(style.IconSearch, "", s.toggleFilter)
+	s.qfBtn.Tip = "Quick Filter"
+	s.qfBtn.Toggle = true
+	s.qfBtn.Down = s.opts.ShowFilter
 	return widgets.NewToolBar(
 		get, write, widgets.ToolDivider(),
-		cards, lay,
+		tag, arch, junk, del, widgets.ToolDivider(),
+		cards, lay, widgets.ToolDivider(),
+		s.qfBtn,
 	)
-}
-
-func (s *session) listToolBar() *widgets.ToolBar {
-	tag := widgets.ToolText("Tag", func() {
-		from := widget.Component(s.listBar)
-		if from == nil {
-			from = s.win.Content()
-		}
-		o := widget.DeviceOrigin(from)
-		x := float32(24)
-		if s.listBar != nil {
-			c := s.listBar.ItemCenter(0)
-			x = c.X
-		}
-		s.tagPopup(from, paintengine2d.Pt(o.X+x, o.Y+from.Bounds().Dy()))
-	})
-	tag.Tip = "Tag the selection"
-	arch := widgets.ToolText("Archive", s.archive)
-	arch.Tip = "Archive"
-	junk := widgets.ToolText("Junk", s.junk)
-	junk.Tip = "Mark as junk"
-	del := widgets.ToolIconBtn(style.IconCut, "Delete", s.deleteSel)
-	del.Tip = "Delete (move to Trash)"
-	return widgets.NewToolBar(tag, arch, junk, del)
 }
 
 func (s *session) tagPopup(from widget.Component, p paintengine2d.Point) {
@@ -2071,6 +2070,10 @@ func (s *session) afterAccountsChanged() {
 func (s *session) handleKey(e widget.KeyEvent) bool {
 	if e.Mods.Ctrl() && e.Key == platform.KeyU {
 		s.viewSource()
+		return true
+	}
+	if e.Mods.Ctrl() && e.Key == platform.KeyF {
+		s.showFilter(true)
 		return true
 	}
 	if isTextFocus(s.win.Focus()) {

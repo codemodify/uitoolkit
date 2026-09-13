@@ -236,8 +236,11 @@ func dragSplitters(a *app.Application, w *app.Window) error {
 				last = err
 			}
 		}
-		// Leave the sash so a stuck resize cursor would show.
-		away := paintengine2d.Pt(o.X+8, o.Y+8)
+		// Leave the sash in the middle of pane A (not the thread-list
+		// header, which now sits at the pane's top-left after the list
+		// toolbar moved onto the M row).
+		pa = sp.PaneA()
+		away := paintengine2d.Pt(o.X+(pa.Min.X+pa.Max.X)*0.5, o.Y+(pa.Min.Y+pa.Max.Y)*0.5)
 		w.Inject(platform.Event{Kind: platform.EventMouseMove, Pos: away})
 		a.PumpOnce()
 		if w.Cursor() == platform.CursorColResize || w.Cursor() == platform.CursorRowResize {
