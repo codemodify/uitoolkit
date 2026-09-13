@@ -57,13 +57,27 @@ func buildSettings(a *app.Application, win *app.Window, saved, staged style.Appe
 		next.Theme = p.Palette
 		preview(next)
 	}
-	builtinTheme := pickerSection("Built-in", len(themeBuiltin), func(i int) string {
-		return themeBuiltin[i].Display()
-	}, indexTheme(themeBuiltin, staged.Name), func(i int) {
-		if i >= 0 && i < len(themeBuiltin) {
-			onTheme(themeBuiltin[i])
-		}
-	})
+	var builtinParts []widget.Component
+	for _, g := range style.ListBuiltinThemesByEra() {
+		g := g
+		builtinParts = append(builtinParts, pickerSection(g.Era, len(g.Packs), func(i int) string {
+			return g.Packs[i].Display()
+		}, indexTheme(g.Packs, staged.Name), func(i int) {
+			if i >= 0 && i < len(g.Packs) {
+				onTheme(g.Packs[i])
+			}
+		}))
+	}
+	if len(builtinParts) == 0 {
+		builtinParts = append(builtinParts, pickerSection("Built-in", len(themeBuiltin), func(i int) string {
+			return themeBuiltin[i].Display()
+		}, indexTheme(themeBuiltin, staged.Name), func(i int) {
+			if i >= 0 && i < len(themeBuiltin) {
+				onTheme(themeBuiltin[i])
+			}
+		}))
+	}
+	builtinTheme := widgets.NewColumn(builtinParts...).WithGap(8)
 	userThemeSel := indexTheme(themeUser, staged.Name)
 	userTheme := pickerSection("User", len(themeUser), func(i int) string {
 		return themeUser[i].Display()
@@ -219,8 +233,8 @@ func buildSettings(a *app.Application, win *app.Window, saved, staged style.Appe
 		widgets.NewLabel("Icons  "+string(staged.Icons)),
 		widgets.NewLabel("Icon size  "+string(staged.IconSize)+" ("+fmt.Sprintf("%.0f", style.IconSizePixels(staged.IconSize))+"px)"),
 		widgets.NewLabel("look.json stores theme, corners, icons, and iconSize independently."),
-		widgets.NewLabel("Export writes the color theme only; corners, icons, and size stay prefs."),
-		widgets.NewLabel("Built-in vs User: stock dark/light and premiere icon names, then custom folders."),
+		widgets.NewLabel("Export writes theme tokens (palette, bevel, metrics); corners/icons/size stay prefs."),
+		widgets.NewLabel("Built-in era packs span Classic 95 through FlatLaf. User packs overlay the same schema."),
 		widgets.NewLabel("Delete (under User) removes that pack from disk after confirm."),
 		widgets.NewRow(exportBtn).WithGap(8),
 	).WithGap(6)
@@ -316,12 +330,12 @@ func buildSettings(a *app.Application, win *app.Window, saved, staged style.Appe
 		widgets.NewLabel("LookAndFeel Classic — Titillium Web + JetBrains Mono."),
 		widgets.NewLabel("Prefs file (theme + corners + icons + iconSize, written on Apply):"),
 		aboutPath,
-		widgets.NewLabel("User color themes (exported palette; listed under User; Delete removes the folder after confirm):"),
+		widgets.NewLabel("User theme packs (exported tokens; listed under User; Delete removes the folder after confirm):"),
 		themesPath,
 		widgets.NewLabel("Icon sets: Built-in = lucide/phosphor/tabler/heroicons/material-symbols when copied (wide stem coverage: chrome, Mail, UI), plus drawn classic/sharp. User = any other folder:"),
 		iconsPath,
 		widgets.NewLabel("After pulling a new uitoolkit, copy the repo icons/ folders again — packs are not embedded or auto-installed."),
-		widgets.NewLabel("Two starter palettes are embedded (dark, light). Corners, icons, and icon size are separate prefs."),
+		widgets.NewLabel("Era packs are embedded (Classic 95, Motif/CDE, NeXT, Luna, Aqua, Fusion, Breeze, Fluent, Material, FlatLaf). Corners, icons, and icon size stay separate prefs."),
 		widgets.NewLabel("Other apps watch look.json and call SetLook(PreferredLook())."),
 		widgets.NewButton("Open appearance", func() {
 			win.SetContent(buildSettings(a, win, saved, staged, 0))
@@ -413,7 +427,7 @@ func promptExportName(from widget.Component, on func(string)) {
 	ok.Primary = true
 	field.OnSubmit = func(string) { finish(true) }
 	card := widgets.NewPanel("Export theme",
-		widgets.NewLabel("Name the color theme (palette only). Written to ~/.config/uitoolkit/themes/<name>/theme.json. Corners, icons, and icon size stay in look.json."),
+		widgets.NewLabel("Name the theme pack. Written to ~/.config/uitoolkit/themes/<name>/theme.json with tokens (colors, bevel, metrics). Corners, icons, and icon size stay in look.json."),
 		field,
 		widgets.NewRow(cancel, ok).WithGap(8),
 	)

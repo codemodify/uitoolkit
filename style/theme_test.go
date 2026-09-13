@@ -10,7 +10,7 @@ import (
 func TestEmbeddedStartersArePalettes(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	got := ListThemes()
-	if len(got) != 2 {
+	if len(got) < 10 {
 		t.Fatalf("starters %d: %+v", len(got), namesOf(got))
 	}
 	for _, pal := range []ThemeName{ThemeDark, ThemeLight} {
@@ -216,10 +216,11 @@ func TestUserThemeOverridesBuiltin(t *testing.T) {
 			builtins++
 		}
 	}
-	if users != 1 || builtins != 1 || len(listed) != 2 {
-		t.Fatalf("list users=%d builtins=%d n=%d %+v", users, builtins, len(listed), namesOf(listed))
+	nBuiltin := len(AllBuiltinThemeNames())
+	if users != 1 || builtins != nBuiltin-1 || len(listed) != nBuiltin {
+		t.Fatalf("list users=%d builtins=%d n=%d want builtins=%d listed=%d %+v", users, builtins, len(listed), nBuiltin-1, nBuiltin, namesOf(listed))
 	}
-	if len(ListBuiltinThemes()) != 1 || len(ListUserThemes()) != 1 {
+	if len(ListBuiltinThemes()) != nBuiltin-1 || len(ListUserThemes()) != 1 {
 		t.Fatalf("split builtin=%d user=%d", len(ListBuiltinThemes()), len(ListUserThemes()))
 	}
 }

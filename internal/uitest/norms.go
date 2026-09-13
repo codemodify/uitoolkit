@@ -352,6 +352,11 @@ func checkMenuHoverBordered() error {
 	if err := checkMenuHoverOnLook(style.LightLook()); err != nil {
 		return fmt.Errorf("light: %w", err)
 	}
+	if pack, ok := style.LoadTheme("luna"); ok {
+		if err := checkMenuHoverOnLook(pack.Look()); err != nil {
+			return fmt.Errorf("luna: %w", err)
+		}
+	}
 	return checkMenuBarOpenTitle(style.DarkLook())
 }
 

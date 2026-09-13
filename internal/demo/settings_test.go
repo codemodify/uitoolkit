@@ -54,7 +54,7 @@ func TestSettingsAppAppliesAndPersists(t *testing.T) {
 		t.Fatalf("prefs %+v", style.LoadAppearance())
 	}
 
-	clickTheme(t, w, "dark")
+	clickTheme(t, w, "Classic 95 Dark")
 	a.PumpOnce()
 	if a.Look().Name() != "dark" {
 		t.Fatalf("preview theme %s", a.Look().Name())
@@ -119,7 +119,7 @@ func TestSettingsApplyNotifiesOtherApp(t *testing.T) {
 		t.Fatalf("listener start %s", listener.Look().Name())
 	}
 
-	clickTheme(t, sw, "light")
+	clickTheme(t, sw, "Classic 95 Light")
 	settingsApp.PumpOnce()
 	listener.PumpOnce()
 	if style.LoadAppearance().Theme != style.ThemeDark {
@@ -478,7 +478,8 @@ func findThemeList(root widget.Component) *widgets.ListView {
 	widget.Walk(root, func(c widget.Component) {
 		if l, ok := c.(*widgets.ListView); ok && l.ItemText != nil {
 			for i := 0; i < l.Count; i++ {
-				if l.ItemText(i) == "dark" || l.ItemText(i) == "light" {
+				if l.ItemText(i) == "dark" || l.ItemText(i) == "light" ||
+					strings.Contains(l.ItemText(i), "Classic 95") {
 					list = l
 					return
 				}
@@ -516,7 +517,7 @@ func clickTheme(t *testing.T, w *app.Window, label string) {
 	widget.Walk(w.Content(), func(c widget.Component) {
 		if l, ok := c.(*widgets.ListView); ok && l.ItemText != nil && l.OnSelect != nil {
 			for i := 0; i < l.Count; i++ {
-				if l.ItemText(i) == label || strings.Contains(l.ItemText(i), label) {
+				if strings.EqualFold(l.ItemText(i), label) || strings.Contains(strings.ToLower(l.ItemText(i)), strings.ToLower(label)) {
 					found = l
 					idx = i
 				}

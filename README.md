@@ -510,6 +510,14 @@ are independent look.json fields again; compound pack names migrate
 
 ## Version
 
+**0.19.0** — First-class **era theme packs**. `ThemeTokens` drive bevel,
+hot-track, elevation, and per-state chrome for every control (not menus
+only). Embedded packs: Classic 95 (`dark` / `light`), Motif, CDE
+Charcoal / Crimson, NeXT, Luna, Aqua, Fusion, Breeze, Fluent, Material,
+FlatLaf — each with a night twin where it belongs. Settings groups
+Built-in packs by era. Corners, icons, and icon size stay orthogonal.
+See [docs/themes.md](docs/themes.md).
+
 **0.18.8** — Premiere PNG icon packs rebuilt from pinned upstream SVGs
 (Lucide 1.45.0, Phosphor v2.0.8, Tabler v3.46.0, Heroicons v2.2.0,
 Material Symbols outlined via marella v0.47.2) with a **wide** stem
