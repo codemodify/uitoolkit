@@ -2,6 +2,7 @@ package style
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -79,13 +80,21 @@ func IsFileIconSet(name IconSetName) bool {
 	}
 }
 
-// FallbackIcons is the drawn set used when a file glyph is missing.
-// File sets fall back to classic.
+// FallbackIcons is the drawn set used when a file set is not installed.
+// An installed premiere / user folder never falls through to this — missing
+// stems stay inside the same set (see loadFileIcon).
 func FallbackIcons(name IconSetName) IconSetName {
 	if ParseIconSet(string(name)) == IconSetSharp {
 		return IconSetSharp
 	}
 	return IconSetClassic
+}
+
+func fileIconSetInstalled(set IconSetName) bool {
+	if !IsFileIconSet(set) {
+		return false
+	}
+	return iconSetHasGlyphs(IconSetDir(set))
 }
 
 func iconSetDisplay(name string) string {
@@ -234,6 +243,9 @@ func resetIconCache() {
 	iconsCache.imgs = map[string]*paintengine2d.Image{}
 	iconsCache.miss = map[string]bool{}
 	iconsCache.mtime = map[string]int64{}
+	missingStemLog.mu.Lock()
+	missingStemLog.seen = map[string]bool{}
+	missingStemLog.mu.Unlock()
 }
 
 func loadFileIcon(set IconSetName, icon ToolIcon, destW float32) (*paintengine2d.Image, bool) {
@@ -246,7 +258,50 @@ func loadFileIcon(set IconSetName, icon ToolIcon, destW float32) (*paintengine2d
 			return img, true
 		}
 	}
+	if !fileIconSetInstalled(set) {
+		return nil, false
+	}
+	for _, stem := range sameSetFallbackStems() {
+		for _, name := range stemFileCandidates(stem, destW) {
+			if img, ok := loadPNGIcon(filepath.Join(dir, name)); ok {
+				logMissingStemOnce(set, icon, stem)
+				return img, true
+			}
+		}
+	}
+	for _, other := range AllToolIcons() {
+		if other == icon {
+			continue
+		}
+		name := ToolIconName(other)
+		for _, file := range stemFileCandidates(name, destW) {
+			if img, ok := loadPNGIcon(filepath.Join(dir, file)); ok {
+				logMissingStemOnce(set, icon, name)
+				return img, true
+			}
+		}
+	}
 	return nil, false
+}
+
+var missingStemLog = struct {
+	mu   sync.Mutex
+	seen map[string]bool
+}{seen: map[string]bool{}}
+
+func logMissingStemOnce(set IconSetName, icon ToolIcon, used string) {
+	want := ToolIconName(icon)
+	if want == "" {
+		want = fmt.Sprintf("icon-%d", int(icon))
+	}
+	key := string(set) + ":" + want
+	missingStemLog.mu.Lock()
+	defer missingStemLog.mu.Unlock()
+	if missingStemLog.seen[key] {
+		return
+	}
+	missingStemLog.seen[key] = true
+	log.Printf("uitk icons: %s missing %s.png, using %s", set, want, used)
 }
 
 func loadPNGIcon(path string) (*paintengine2d.Image, bool) {
@@ -321,8 +376,10 @@ func toWhiteMask(src *paintengine2d.Image) *paintengine2d.Image {
 }
 
 // DrawFileToolIcon paints a tinted PNG from the named file set.
-// It returns false when the file is missing or empty so the caller
-// can fall back to a drawn classic/sharp glyph.
+// Missing stems fall back to a closest stem in the same folder.
+// It returns false only when the set is not installed (or empty), so
+// the caller can use drawn classic/sharp — never when a premiere set
+// is present.
 func DrawFileToolIcon(ctx *paintengine2d.Context, b paintengine2d.Rect, icon ToolIcon, col paintengine2d.Color, set IconSetName) bool {
 	img, ok := loadFileIcon(set, icon, b.Dx())
 	if !ok {

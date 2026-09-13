@@ -5,8 +5,8 @@
 //	go run ./cmd/uitksettings -screenshot docs/screenshots
 //
 // The theme picker previews embedded starters and exported user packs.
-// The icon picker lists classic/sharp plus PNG sets copied into
-// ~/.config/uitoolkit/icons/<set>/. Apply writes {theme, icons} to
+// The icon picker lists classic/sharp plus wide premiere PNG sets
+// copied into ~/.config/uitoolkit/icons/<set>/. Apply writes {theme, icons} to
 // $XDG_CONFIG_HOME/uitoolkit/look.json and running apps that watch
 // the file reload without a restart. Export writes
 // themes/<name>/theme.json. Close without Apply discards staged

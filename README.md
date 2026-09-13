@@ -510,6 +510,17 @@ are independent look.json fields again; compound pack names migrate
 
 ## Version
 
+**0.18.8** — Premiere PNG icon packs rebuilt from pinned upstream SVGs
+(Lucide 1.45.0, Phosphor v2.0.8, Tabler v3.46.0, Heroicons v2.2.0,
+Material Symbols outlined via marella v0.47.2) with a **wide** stem
+list (chrome, Mail, UI — 78 names, including `pen` and `download` in
+every set). `icons/render.sh` is reproducible from those pins.
+Installed file sets never fall back to the drawn classic scribble: a
+missing stem logs once and uses the closest PNG in the same folder.
+Settings shows an icon preview strip. Copy `icons/*` into
+`~/.config/uitoolkit/icons/` again after pull — packs are not
+embedded. See [icons/README.md](icons/README.md).
+
 **0.18.7** — Mail **Write** uses the pen icon (same toolbar path as **Fetch** /
 download). Tags are one store: sidebar and Preferences → Tags show the same
 list. Unread, Starred, and Attachment are locked system tags; other tags can
