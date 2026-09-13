@@ -647,7 +647,7 @@ func TestMailShowFilterPrefHonored(t *testing.T) {
 	w.Close()
 }
 
-func TestMailCollapsedFiltersDoesNotStealOutbox(t *testing.T) {
+func TestMailCollapsedTagsDoesNotStealOutbox(t *testing.T) {
 	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true})
 	w, err := a.NewWindow(platform.WindowOptions{
 		Title: "Mail", Width: 1280, Height: 800, Headless: true,
@@ -666,13 +666,13 @@ func TestMailCollapsedFiltersDoesNotStealOutbox(t *testing.T) {
 	if tree == nil {
 		t.Fatal("folder tree")
 	}
-	filters := findTreeLabel(tree.Roots, "Filters")
+	filters := findTreeLabel(tree.Roots, "Tags")
 	if filters == nil {
-		t.Fatal("Filters")
+		t.Fatal("Tags")
 	}
 	tree.Toggle(filters)
 	if filters.Expanded {
-		t.Fatal("Filters should collapse")
+		t.Fatal("Tags should collapse")
 	}
 	_, pin := mailSidebarTrees(w.Content())
 	if pin == nil || pin.OnSelect == nil || len(pin.Roots) == 0 {
@@ -680,12 +680,12 @@ func TestMailCollapsedFiltersDoesNotStealOutbox(t *testing.T) {
 	}
 	pin.OnSelect(pin.Roots[0])
 	a.PumpOnce()
-	filters = findTreeLabel(tree.Roots, "Filters")
+	filters = findTreeLabel(tree.Roots, "Tags")
 	if filters == nil {
-		t.Fatal("Filters after rebuild")
+		t.Fatal("Tags after rebuild")
 	}
 	if filters.Expanded {
-		t.Fatal("Outbox click re-opened Filters (rebuild lost collapse, or hit-test stole the row)")
+		t.Fatal("Outbox click re-opened Tags (rebuild lost collapse, or hit-test stole the row)")
 	}
 	_, pin = mailSidebarTrees(w.Content())
 	if pin == nil || pin.Selected == nil || !strings.HasPrefix(pin.Selected.Label, "Outbox") {
@@ -768,7 +768,7 @@ func assertMailToolChrome(t *testing.T, root widget.Component, qf widget.Compone
 					t.Fatalf("%q still on a toolbar: %v", name, texts)
 				}
 			}
-			if texts["Get Messages"] || texts["Write"] {
+			if texts["Fetch"] || texts["Write"] {
 				leftBar = v
 			} else if texts["Delete"] || filterIconItem(v) != nil {
 				rightBar = v
@@ -783,10 +783,10 @@ func assertMailToolChrome(t *testing.T, root widget.Component, qf widget.Compone
 		}
 	})
 	if leftBar == nil {
-		t.Fatal("left Get/Write toolbar")
+		t.Fatal("left Fetch/Write toolbar")
 	}
 	if rightBar == nil {
-		t.Fatal("right Delete/Filter toolbar")
+		t.Fatal("right Filter toolbar")
 	}
 	if filterIconItem(rightBar) == nil {
 		t.Fatal("icon-only Filter button missing on the right toolbar")
@@ -796,7 +796,7 @@ func assertMailToolChrome(t *testing.T, root widget.Component, qf widget.Compone
 	}
 	left := toolTexts(leftBar)
 	right := toolTexts(rightBar)
-	for _, name := range []string{"Get Messages", "Write"} {
+	for _, name := range []string{"Fetch", "Write"} {
 		if !left[name] {
 			t.Fatalf("left toolbar missing %s: %v", name, left)
 		}
@@ -804,11 +804,29 @@ func assertMailToolChrome(t *testing.T, root widget.Component, qf widget.Compone
 			t.Fatalf("right toolbar still has %s: %v", name, right)
 		}
 	}
-	if !right["Delete"] {
-		t.Fatalf("right toolbar missing Delete: %v", right)
+	if left["Get Messages"] || right["Get Messages"] {
+		t.Fatal("Get Messages should be renamed Fetch")
 	}
-	if left["Delete"] {
-		t.Fatal("Delete should stay on the right toolbar")
+	if right["Delete"] || left["Delete"] {
+		t.Fatal("Delete should not sit on either main toolbar")
+	}
+	var fetch, write *widgets.ToolItem
+	for _, it := range leftBar.Items() {
+		if it == nil {
+			continue
+		}
+		switch it.Text {
+		case "Fetch":
+			fetch = it
+		case "Write":
+			write = it
+		}
+	}
+	if fetch == nil || fetch.Icon != style.IconDownload {
+		t.Fatalf("Fetch should use IconDownload, got %+v", fetch)
+	}
+	if write == nil || write.Icon != style.IconPen {
+		t.Fatalf("Write should use IconPen, got %+v", write)
 	}
 	for _, name := range []string{"Reply", "Forward", "Quick Filter"} {
 		if left[name] || right[name] {
@@ -838,7 +856,7 @@ func assertMailToolChrome(t *testing.T, root widget.Component, qf widget.Compone
 	if qf.Visible() {
 		t.Fatal("quick filter field should be hidden until the Filter icon opens it")
 	}
-	assertFiltersTree(t, tree)
+	assertTagsTree(t, tree)
 }
 
 func findQuickFilter(root widget.Component) *widgets.TextField {
@@ -898,7 +916,7 @@ func filterAfterListActions(root, qf widget.Component) bool {
 		walkAll(f, func(ch widget.Component) {
 			if bar, ok := ch.(*widgets.ToolBar); ok {
 				texts := toolTexts(bar)
-				if texts["Delete"] && filterIconItem(bar) != nil {
+				if filterIconItem(bar) != nil && !texts["Fetch"] && !texts["Write"] {
 					hasList = true
 				}
 			}
@@ -913,7 +931,7 @@ func filterAfterListActions(root, qf widget.Component) bool {
 	return row != nil
 }
 
-func assertFiltersTree(t *testing.T, tree *widgets.TreeView) {
+func assertTagsTree(t *testing.T, tree *widgets.TreeView) {
 	t.Helper()
 	if tree == nil {
 		t.Fatal("folder tree")
@@ -923,15 +941,15 @@ func assertFiltersTree(t *testing.T, tree *widgets.TreeView) {
 		if n == nil {
 			continue
 		}
-		if n.Label == "Tags" {
-			t.Fatal("sidebar Tags node should be renamed Filters")
+		if n.Label == "Filters" {
+			t.Fatal("sidebar Filters node should be renamed Tags")
 		}
-		if n.Label == "Filters" || n.Data == AccountTags {
+		if n.Label == "Tags" || n.Data == AccountTags {
 			filters = n
 		}
 	}
-	if filters == nil || filters.Label != "Filters" {
-		t.Fatal("Filters missing from the tree")
+	if filters == nil || filters.Label != "Tags" {
+		t.Fatal("Tags missing from the tree")
 	}
 	want := []string{"Unread", "Starred", "Attachment"}
 	ban := []string{"From", "To", "Subject", "Body", "Work", "Personal", "Later"}
@@ -952,16 +970,16 @@ func assertFiltersTree(t *testing.T, tree *widgets.TreeView) {
 	}
 	for _, name := range want {
 		if !got[name] {
-			t.Fatalf("Filters tree missing pin %q", name)
+			t.Fatalf("Tags tree missing pin %q", name)
 		}
 	}
 	for _, name := range ban {
 		if got[name] {
-			t.Fatalf("Filters tree still has %q", name)
+			t.Fatalf("Tags tree still has %q", name)
 		}
 	}
 	if !important {
-		t.Fatal("Filters tree missing Important")
+		t.Fatal("Tags tree missing Important")
 	}
 }
 
@@ -974,7 +992,7 @@ func assertMenubarChromeRow(t *testing.T, root widget.Component, mb *widgets.Men
 	compose := widget.DeviceBounds(left)
 	tool := widget.DeviceBounds(right)
 	if menu.Max.Y < compose.Min.Y+1 || compose.Max.Y < menu.Min.Y+1 {
-		t.Fatalf("M and Get/Write toolbar must share one row: menu=%v left=%v", menu, compose)
+		t.Fatalf("M and Fetch/Write toolbar must share one row: menu=%v left=%v", menu, compose)
 	}
 	if menu.Max.Y < tool.Min.Y+1 || tool.Max.Y < menu.Min.Y+1 {
 		t.Fatalf("M and right toolbar must share one row: menu=%v right=%v", menu, tool)
@@ -983,13 +1001,13 @@ func assertMenubarChromeRow(t *testing.T, root widget.Component, mb *widgets.Men
 		t.Fatalf("M should sit on the left: %+v", menu)
 	}
 	if compose.Min.X < menu.Max.X {
-		t.Fatalf("Get/Write should sit after M: menu=%v left=%v", menu, compose)
+		t.Fatalf("Fetch/Write should sit after M: menu=%v left=%v", menu, compose)
 	}
 	if compose.Min.X > menu.Max.X+24 {
-		t.Fatalf("Get/Write should sit immediately after M: menu=%v left=%v", menu, compose)
+		t.Fatalf("Fetch/Write should sit immediately after M: menu=%v left=%v", menu, compose)
 	}
 	if tool.Min.X < compose.Max.X+8 {
-		t.Fatalf("right toolbar should sit after Get/Write: left=%v right=%v", compose, tool)
+		t.Fatalf("right toolbar should sit after Fetch/Write: left=%v right=%v", compose, tool)
 	}
 	rootBox := widget.DeviceBounds(root)
 	if tool.Max.X < rootBox.Max.X-24 {
@@ -997,7 +1015,7 @@ func assertMenubarChromeRow(t *testing.T, root widget.Component, mb *widgets.Men
 	}
 	row := parentRow(mb)
 	if row == nil || row != parentRow(left) || row != parentRow(right) {
-		t.Fatal("M, Get/Write, and the right toolbar should share one horizontal row")
+		t.Fatal("M, Fetch/Write, and the right toolbar should share one horizontal row")
 	}
 }
 
@@ -1123,10 +1141,10 @@ func TestMailChromeHasNoSidebarAccountPicker(t *testing.T) {
 		if id, ok := n.Data.(string); ok && id != "" && id != AccountTags {
 			acctNode = true
 		}
-		if n.Label == "Tags" {
-			t.Fatal("sidebar Tags node should be renamed Filters")
+		if n.Label == "Filters" {
+			t.Fatal("sidebar Filters node should be renamed Tags")
 		}
-		if n.Label == "Filters" || n.Data == AccountTags {
+		if n.Label == "Tags" || n.Data == AccountTags {
 			tagsNode = true
 		}
 	}
@@ -1134,7 +1152,7 @@ func TestMailChromeHasNoSidebarAccountPicker(t *testing.T) {
 		t.Fatal("account folders missing from the tree")
 	}
 	if !tagsNode {
-		t.Fatal("Filters missing from the tree")
+		t.Fatal("Tags missing from the tree")
 	}
 	if !prefs {
 		t.Fatal("M → Preferences missing")
@@ -1175,7 +1193,7 @@ func TestMailChromeHasNoActiveFilterBanner(t *testing.T) {
 		t.Fatal("thread table")
 	}
 	if tree == nil || tree.OnSelect == nil {
-		t.Fatal("Filters tree")
+		t.Fatal("Tags tree")
 	}
 	assertNoFilterBanner(t, w.Content())
 
@@ -1196,7 +1214,7 @@ func TestMailChromeHasNoActiveFilterBanner(t *testing.T) {
 
 	unread := findFilterPin(tree, "Unread")
 	if unread == nil {
-		t.Fatal("Unread pin missing from Filters tree")
+		t.Fatal("Unread pin missing from Tags tree")
 	}
 	tree.OnSelect(unread)
 	a.PumpOnce()
@@ -1764,15 +1782,15 @@ func assertOutboxPinnedBottom(t *testing.T, root widget.Component) {
 		t.Fatal("folder tree")
 	}
 	if treeHasOutboxRoot(folder) {
-		t.Fatal("Outbox should not sit in the folder tree next to Filters")
+		t.Fatal("Outbox should not sit in the folder tree next to Tags")
 	}
 	last := folder.Roots[len(folder.Roots)-1]
-	if last == nil || last.Label != "Filters" {
+	if last == nil || last.Label != "Tags" {
 		label := ""
 		if last != nil {
 			label = last.Label
 		}
-		t.Fatalf("folder tree last root %q, want Filters", label)
+		t.Fatalf("folder tree last root %q, want Tags", label)
 	}
 	if pin == nil || !treeHasOutboxRoot(pin) {
 		t.Fatal("Outbox pin missing")
@@ -1838,7 +1856,7 @@ func TestMailMenuBarIsOnlyM(t *testing.T) {
 		}
 	}
 	var labels []string
-	var quit, prefs, view, threaded, muted bool
+	var quit, prefs, view, notify, threaded, muted bool
 	gone := []string{
 		"Mail Toolbar", "Quick Filter Bar",
 		"Sort by When", "Sort by Topic", "Sort by Who",
@@ -1866,6 +1884,23 @@ func TestMailMenuBarIsOnlyM(t *testing.T) {
 			quit = it.Shortcut == "Ctrl+Q" && it.OnClick != nil
 		case "Preferences":
 			prefs = it.OnClick != nil
+		case "Notify":
+			notify = it.HasSubmenu()
+			wantNotify := []string{"Notify on new mail", "VIP senders only", "Desktop notifications"}
+			gotNotify := menuItemLabels(it.Submenu)
+			for _, name := range wantNotify {
+				if !containsLabel(gotNotify, name) {
+					t.Fatalf("Notify submenu missing %q: %v", name, gotNotify)
+				}
+			}
+			for _, sub := range it.Submenu {
+				if sub == nil {
+					continue
+				}
+				if !sub.Checkable {
+					t.Fatalf("Notify item %q should be a check", sub.Text)
+				}
+			}
 		case "View":
 			view = it.HasSubmenu()
 			want := []string{
@@ -1899,8 +1934,8 @@ func TestMailMenuBarIsOnlyM(t *testing.T) {
 			}
 		}
 	}
-	if !view || !threaded || !muted || !prefs || !quit {
-		t.Fatalf("M items view=%v threaded=%v muted=%v prefs=%v quit=%v %v", view, threaded, muted, prefs, quit, labels)
+	if !view || !notify || !threaded || !muted || !prefs || !quit {
+		t.Fatalf("M items view=%v notify=%v threaded=%v muted=%v prefs=%v quit=%v %v", view, notify, threaded, muted, prefs, quit, labels)
 	}
 	pos := map[string]int{}
 	for i, l := range labels {
@@ -1908,8 +1943,8 @@ func TestMailMenuBarIsOnlyM(t *testing.T) {
 			pos[l] = i
 		}
 	}
-	if pos["View"] > pos["Preferences"] || pos["Preferences"] > pos["Quit"] {
-		t.Fatalf("order %v want View, Preferences, Quit", labels)
+	if pos["View"] > pos["Notify"] || pos["Notify"] > pos["Preferences"] || pos["Preferences"] > pos["Quit"] {
+		t.Fatalf("order %v want View, Notify, Preferences, Quit", labels)
 	}
 	w.Close()
 }
@@ -1933,6 +1968,120 @@ func containsLabel(labels []string, want string) bool {
 		}
 	}
 	return false
+}
+
+func TestMailPreferencesTabs(t *testing.T) {
+	sock, stop, err := StartDemo(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stop()
+	cli, err := DialWait(sock, 2*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cli.Close()
+
+	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true})
+	w, err := OpenPrefs(a, cli, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.PumpOnce()
+	var bar *widgets.TabBar
+	widget.Walk(w.Content(), func(c widget.Component) {
+		if tv, ok := c.(*widgets.TabBar); ok && bar == nil {
+			bar = tv
+		}
+	})
+	if bar == nil {
+		t.Fatal("Preferences tabs")
+	}
+	got := append([]string(nil), bar.Titles...)
+	if len(got) != 2 || got[0] != "Accounts" || got[1] != "Tags" {
+		t.Fatalf("Preferences tabs %v want Accounts, Tags", got)
+	}
+	for _, name := range []string{"Appearance", "Notify", "VIP", "Identities", "Filters"} {
+		if containsLabel(got, name) {
+			t.Fatalf("removed Preferences tab still present: %q %v", name, got)
+		}
+	}
+	w.Close()
+}
+
+func TestMailNotifyMenuPersists(t *testing.T) {
+	sock, stop, err := StartDemo(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stop()
+	cli, err := DialWait(sock, 2*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cli.Close()
+
+	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{
+		Title: "Mail", Width: 1280, Height: 800, Headless: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.SetContent(Open(a, w, cli, AppOptions{}))
+	a.PumpOnce()
+
+	before, err := cli.NotifyPrefs()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var notifyOn, vipOnly *widgets.MenuItem
+	widget.Walk(w.Content(), func(c widget.Component) {
+		mb, ok := c.(*widgets.MenuBar)
+		if !ok {
+			return
+		}
+		for _, m := range mb.Menus() {
+			for _, it := range m.Items {
+				if it == nil {
+					continue
+				}
+				label, _, _ := widgets.ParseMnemonic(it.Text)
+				if label != "Notify" {
+					continue
+				}
+				for _, sub := range it.Submenu {
+					if sub == nil {
+						continue
+					}
+					subLabel, _, _ := widgets.ParseMnemonic(sub.Text)
+					switch subLabel {
+					case "Notify on new mail":
+						notifyOn = sub
+					case "VIP senders only":
+						vipOnly = sub
+					}
+				}
+			}
+		}
+	})
+	if notifyOn == nil || notifyOn.OnClick == nil || vipOnly == nil || vipOnly.OnClick == nil {
+		t.Fatal("M → Notify checks")
+	}
+	if notifyOn.Checked != before.Enabled || vipOnly.Checked != before.VIPOnly {
+		t.Fatalf("notify checks enabled=%v vip=%v prefs %+v", notifyOn.Checked, vipOnly.Checked, before)
+	}
+	notifyOn.OnClick()
+	vipOnly.OnClick()
+	a.PumpOnce()
+	after, err := cli.NotifyPrefs()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Enabled == before.Enabled || after.VIPOnly == before.VIPOnly {
+		t.Fatalf("notify prefs unchanged: before %+v after %+v", before, after)
+	}
+	w.Close()
 }
 
 func cellInk(img *paintengine2d.Image, x0, x1 int) int {

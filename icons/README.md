@@ -82,7 +82,7 @@ and paints with the Look icon / foreground color (same intent as SVG
 One stem per toolkit action / `style.Icon*` id:
 
 `new` `open` `save` `cut` `copy` `paste` `undo` `redo` `search`
-`info` `warning` `error` `question` `mail`
+`info` `warning` `error` `question` `mail` `download` `pen`
 
 Extra mail-themed files (not ToolIcon ids): `inbox` `mail-open`.
 

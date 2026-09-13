@@ -19,3 +19,5 @@ question   help
 mail       mail
 inbox      inbox
 mail-open  drafts
+download   download
+pen        edit

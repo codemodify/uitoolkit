@@ -100,7 +100,9 @@ pack lucide "$LUCIDE_BASE" "$LUCIDE_LICENSE" \
 	question circle-question-mark \
 	mail mail \
 	inbox inbox \
-	mail-open mail-open
+	mail-open mail-open \
+	download download \
+	pen pen
 
 write_sources "$ROOT/lucide" \
 	"Lucide Icons — ISC. https://lucide.dev  https://github.com/lucide-icons/lucide" \
@@ -121,7 +123,9 @@ write_sources "$ROOT/lucide" \
 	"question   circle-question-mark" \
 	"mail       mail" \
 	"inbox      inbox" \
-	"mail-open  mail-open"
+	"mail-open  mail-open" \
+	"download   download" \
+	"pen        pen"
 
 pack phosphor "$PHOS_BASE" "$PHOS_LICENSE" \
 	new file-plus \
@@ -139,7 +143,9 @@ pack phosphor "$PHOS_BASE" "$PHOS_LICENSE" \
 	question question \
 	mail envelope \
 	inbox tray \
-	mail-open envelope-open
+	mail-open envelope-open \
+	download download-simple \
+	pen pencil-simple
 
 write_sources "$ROOT/phosphor" \
 	"Phosphor Icons — MIT. https://phosphoricons.com  https://github.com/phosphor-icons/core" \
@@ -160,7 +166,9 @@ write_sources "$ROOT/phosphor" \
 	"question   question" \
 	"mail       envelope" \
 	"inbox      tray" \
-	"mail-open  envelope-open"
+	"mail-open  envelope-open" \
+	"download   download-simple" \
+	"pen        pencil-simple"
 
 pack tabler "$TABLER_BASE" "$TABLER_LICENSE" \
 	new file-plus \
@@ -178,7 +186,9 @@ pack tabler "$TABLER_BASE" "$TABLER_LICENSE" \
 	question help \
 	mail mail \
 	inbox inbox \
-	mail-open mail-opened
+	mail-open mail-opened \
+	download download \
+	pen pencil
 
 write_sources "$ROOT/tabler" \
 	"Tabler Icons — MIT. https://tabler.io/icons  https://github.com/tabler/tabler-icons" \
@@ -199,7 +209,9 @@ write_sources "$ROOT/tabler" \
 	"question   help" \
 	"mail       mail" \
 	"inbox      inbox" \
-	"mail-open  mail-opened"
+	"mail-open  mail-opened" \
+	"download   download" \
+	"pen        pencil"
 
 pack heroicons "$HERO_BASE" "$HERO_LICENSE" \
 	new document-plus \
@@ -217,7 +229,9 @@ pack heroicons "$HERO_BASE" "$HERO_LICENSE" \
 	question question-mark-circle \
 	mail envelope \
 	inbox inbox \
-	mail-open envelope-open
+	mail-open envelope-open \
+	download arrow-down-tray \
+	pen pencil
 
 write_sources "$ROOT/heroicons" \
 	"Heroicons — MIT. https://heroicons.com  https://github.com/tailwindlabs/heroicons" \
@@ -238,7 +252,9 @@ write_sources "$ROOT/heroicons" \
 	"question   question-mark-circle" \
 	"mail       envelope" \
 	"inbox      inbox" \
-	"mail-open  envelope-open"
+	"mail-open  envelope-open" \
+	"download   arrow-down-tray" \
+	"pen        pencil"
 
 pack material-symbols "$MAT_BASE" "$MAT_LICENSE" \
 	new note_add \
@@ -256,7 +272,9 @@ pack material-symbols "$MAT_BASE" "$MAT_LICENSE" \
 	question help \
 	mail mail \
 	inbox inbox \
-	mail-open drafts
+	mail-open drafts \
+	download download \
+	pen edit
 
 write_sources "$ROOT/material-symbols" \
 	"Material Symbols — Apache-2.0. https://fonts.google.com/icons" \
@@ -279,6 +297,8 @@ write_sources "$ROOT/material-symbols" \
 	"question   help" \
 	"mail       mail" \
 	"inbox      inbox" \
-	"mail-open  drafts"
+	"mail-open  drafts" \
+	"download   download" \
+	"pen        edit"
 
 echo "rendered packs in $ROOT"

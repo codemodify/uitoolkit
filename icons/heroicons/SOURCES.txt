@@ -17,3 +17,5 @@ question   question-mark-circle
 mail       envelope
 inbox      inbox
 mail-open  envelope-open
+download   arrow-down-tray
+pen        pencil

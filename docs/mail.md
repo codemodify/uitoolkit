@@ -245,7 +245,7 @@ Message view stays **text-only**. Each attachment row shows its name plus inline
 ## VIP, notifications, categories
 
 - **VIP** senders (Message → Add sender to VIP). The VIP smart folder is **not** shown in the sidebar; Preferences still lists VIP contacts, and VIP-only notifications still work.
-- **Notification rules** (Preferences → Notify): new mail, optional VIP-only, optional `notify-send` on Linux. No display / no `notify-send` → stub (RPC event `mail.notify` still fires). `UITK_MAIL_NO_NOTIFY=1` disables the desktop helper.
+- **Notification rules** (**M → Notify**): new mail, optional VIP-only, optional `notify-send` on Linux. No display / no `notify-send` → stub (RPC event `mail.notify` still fires). `UITK_MAIL_NO_NOTIFY=1` disables the desktop helper.
 - **Categories** (Gmail-lite, local) still classify on the daemon; they are **not** a folder-tree section as of v0.10.4.
 
 Calendar / iTip is **not** in this release (Tier C later).
@@ -336,7 +336,7 @@ Quick Filter in the UI calls `messages.list` with the pin/query filter so the li
 
 Condition fields: `from`, `to`, `subject`, `body`, `attachment`, `unread`, `tag`.
 Actions: `move` (`folder`), `tag`, `markRead`, `markUnread`, `delete`, `stop`.
-AND across conditions. Persist in MemoryStore or the disk cache. Tools → Message Filters.
+AND across conditions. Persist in MemoryStore or the disk cache. The sidebar Tags group and Preferences → Tags share the colored-keyword list (pins plus tags).
 
 ## UI features (v0.10.13)
 
@@ -349,12 +349,12 @@ AND across conditions. Persist in MemoryStore or the disk cache. Tools → Messa
 - **Thread columns** — ★, 📎, Topic, Who, When. No Size. Click a column header to sort.
 - **Card / Table** — **M → View** Card view. Remembered in `~/.config/uitoolkit/mailui.json`. Star after the message context menu paints immediately.
 - **Density** — **M → View** Compact / Default / Relaxed.
-- **Folder tree** — account folders and Filters at the top of the sidebar; Outbox is pinned to the **bottom** of the pane (separated from Filters). Unified Folders, Smart Folders, Categories, and VIP are not shown. Click an account root to open that Inbox. The Filters group holds Unread / Starred / Attachment pins (✓ + bold when on) plus remaining tag folders (Important, To Do). Work / Personal / Later are not listed there.
-- **Chrome** — no path/subtitle strip, no bottom status bar, no unread-folder-count footer, no sidebar Account / Folders section headers, no identity or Tags ComboBox, and no active-filter banner (`Filter on · N shown` / `Clear filter`) above the thread list. The folder tree (including Filters) starts at the top of the sidebar. The menubar row is **M**, a left **Get Messages / Write** toolbar, then a right-aligned **Delete + Filter** toolbar. Tag, Archive, Junk, Cards, and Classic are not on those bars. There is no strip above the Topic / Who / When header. The Quick Filter field stays hidden until that button or Ctrl+F (`ShowFilter` defaults off; a saved `mailui.json` `showFilter: true` is honored) and opens on the same row; Escape hides it again and keeps the query. Filter pins are only on the Filters tree. Reply and Forward are keyboard / context menu only. The menu bar is a single **M** menu: **View** submenu (layout / list / density / Threaded / Hide muted threads), Preferences, Quit. Preferences / Account Central still manage stores. Menu and toolbar hover do not refresh the folder tree or the message list.
+- **Folder tree** — account folders and Tags at the top of the sidebar; Outbox is pinned to the **bottom** of the pane (separated from Tags). Unified Folders, Smart Folders, Categories, and VIP are not shown. Click an account root to open that Inbox. The Tags group holds Unread / Starred / Attachment pins (✓ + bold when on) plus remaining tag folders (Important, To Do). Work / Personal / Later are not listed there.
+- **Chrome** — no path/subtitle strip, no bottom status bar, no unread-folder-count footer, no sidebar Account / Folders section headers, no identity or Tags ComboBox, and no active-filter banner (`Filter on · N shown` / `Clear filter`) above the thread list. The folder tree (including Tags) starts at the top of the sidebar. The menubar row is **M**, a left **Fetch / Write** toolbar, then a right-aligned **Filter** toolbar. Tag, Archive, Junk, Cards, Classic, and Delete are not on those bars. There is no strip above the Topic / Who / When header. The Quick Filter field stays hidden until that button or Ctrl+F (`ShowFilter` defaults off; a saved `mailui.json` `showFilter: true` is honored) and opens on the same row; Escape hides it again and keeps the query. Filter pins are only on the Tags tree. Reply and Forward are keyboard / context menu only. The menu bar is a single **M** menu: **View** submenu (layout / list / density / Threaded / Hide muted threads), **Notify** submenu (new mail / VIP-only / desktop), Preferences, Quit. Preferences is Accounts + Tags (the same Tags model as the sidebar). Menu and toolbar hover do not refresh the folder tree or the message list.
 - **Threaded** view and **Mute Thread**.
 - **Attachments** — per-row Open / Save As; toolbar Save All (one folder pick, then write all files); single click selects, double click or row Open opens.
 - **Snappy open** — unread click patches the row; preview uses a cached `messages.get` body.
-- **Colored tags**, identities, Sorting Office filters — unchanged.
+- **Colored tags** — Preferences → Tags is the same list as the sidebar Tags group.
 
 ## Keyboard (Thunderbird-like)
 
@@ -368,7 +368,7 @@ Documented in [keyboard.md](keyboard.md). When the thread list (not a text field
 | **f** | Forward |
 | **c** | Compose |
 | **m** | Mark as read |
-| **F5** | Get Messages / sync |
+| **F5** | Fetch / sync |
 | **Ctrl+,** | Preferences |
 
 ## How to try (dogfood)
@@ -378,7 +378,7 @@ UITK_MAIL=memory go run ./cmd/mailclientd
 UITK_SCENE=auto go run ./cmd/mailclientui
 ```
 
-- **VIP** — open a Kai / Thunderbird Team message → Message → Add sender to VIP (Preferences → VIP lists senders; no VIP folder in the tree).
+- **VIP** — open a Kai / Thunderbird Team message → Message → Add sender to VIP (M → Notify can restrict alerts to VIP senders; no VIP folder in the tree).
 - **Threading** — View → Threaded; look for “Thread: lunch plans (3)”. Message → Mute Thread.
 - **OAuth** — File → Add Account, enter a Gmail/Outlook address (hosts fill in), paste your client id, Sign in with Google / Microsoft. Approve in the browser (or use Device code). Then Get Messages.
 

@@ -59,7 +59,7 @@ func WriteScreenshots(dir string) error {
 	if err := writePrefsShot(cli, filepath.Join(dir, "mail-prefs.png"), 0); err != nil {
 		return err
 	}
-	if err := writePrefsShot(cli, filepath.Join(dir, "mail-filters.png"), 2); err != nil {
+	if err := writePrefsShot(cli, filepath.Join(dir, "mail-filters.png"), 1); err != nil {
 		return err
 	}
 	if err := writeMailFolderShot(cli, filepath.Join(dir, "mail-smart.png"), FolderID("smart/sf-invoices")); err != nil {

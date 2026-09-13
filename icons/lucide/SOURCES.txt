@@ -17,3 +17,5 @@ question   circle-question-mark
 mail       mail
 inbox      inbox
 mail-open  mail-open
+download   download
+pen        pen

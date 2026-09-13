@@ -17,3 +17,5 @@ question   help
 mail       mail
 inbox      inbox
 mail-open  mail-opened
+download   download
+pen        pencil

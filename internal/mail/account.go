@@ -210,7 +210,7 @@ func AddAccountApp(win *app.Window, cli *Client, onSaved func()) widget.Componen
 			onSaved()
 		}
 		widgets.Info(win.Content(), "Account saved",
-			fmt.Sprintf("%s <%s>\nProtocol: %s\n\nPassword is in %s (mode 0600). Get Messages to connect.",
+			fmt.Sprintf("%s <%s>\nProtocol: %s\n\nPassword is in %s (mode 0600). Fetch to connect.",
 				acct.Name, acct.Address, ProtocolLabel(acct), ConfigPath()),
 			func() { win.Close() })
 	}
