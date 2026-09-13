@@ -250,6 +250,9 @@ func MenuRadioItem(text, group string, checked bool, on func()) *widgets.MenuIte
 	return widgets.RadioItem(text, group, checked, on)
 }
 func MenuSep() *widgets.MenuItem { return widgets.Sep() }
+func MenuSubmenu(text string, items ...*widgets.MenuItem) *widgets.MenuItem {
+	return widgets.Submenu(text, items...)
+}
 func NewPopupMenu(items ...*widgets.MenuItem) *widgets.PopupMenu {
 	return widgets.NewPopupMenu(items...)
 }

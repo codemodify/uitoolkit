@@ -18,7 +18,13 @@ type MenuItem struct {
 	Checkable  bool           // click / keyboard toggles Checked
 	Checked    bool
 	RadioGroup string // exclusive with siblings that share the name
+	Submenu    []*MenuItem
 	OnClick    func()
+}
+
+// HasSubmenu reports whether this row opens a child popup.
+func (it *MenuItem) HasSubmenu() bool {
+	return it != nil && len(it.Submenu) > 0
 }
 
 // Item is an enabled command row.
@@ -54,6 +60,11 @@ func RadioItem(text, group string, checked bool, on func()) *MenuItem {
 		group = "radio"
 	}
 	return &MenuItem{Text: text, RadioGroup: group, Checked: checked, OnClick: on}
+}
+
+// Submenu is a cascade parent row. Hover or click opens items to the right.
+func Submenu(text string, items ...*MenuItem) *MenuItem {
+	return &MenuItem{Text: text, Submenu: items}
 }
 
 func (it *MenuItem) isRadio() bool {
@@ -358,6 +369,8 @@ func (m *MenuBar) Close() {
 	m.Invalidate()
 }
 
+var _ widget.CascadeHost = (*PopupMenu)(nil)
+
 // PopupMenu is a floating list of MenuItems (drop-down or context menu).
 type PopupMenu struct {
 	widget.Base
@@ -365,16 +378,19 @@ type PopupMenu struct {
 	OnPick    func(*MenuItem)
 	OnDismiss func()
 	OffsetY   float32
-	hover     int
-	press     int
-	focus     int
-	keyNav    bool
-	vbar      scrollDrag
+	hover      int
+	press      int
+	focus      int
+	keyNav     bool
+	vbar       scrollDrag
+	cascade    *PopupMenu
+	cascadeIdx int
+	parentMenu *PopupMenu
 }
 
 // NewPopupMenu builds a popup from items.
 func NewPopupMenu(items ...*MenuItem) *PopupMenu {
-	p := &PopupMenu{Items: items, hover: -1, press: -1, focus: firstEnabled(items)}
+	p := &PopupMenu{Items: items, hover: -1, press: -1, cascadeIdx: -1, focus: firstEnabled(items)}
 	p.Init(p)
 	p.SetWantsFocus(true)
 	return p
@@ -442,11 +458,15 @@ func (p *PopupMenu) contentSize() paintengine2d.Point {
 		f = lk.Font()
 	}
 	var maxLabel, maxAccel float32
+	hasSub := false
 	h := ch.PadT + ch.PadB
 	for _, it := range p.Items {
 		h += p.rowH(it)
 		if it == nil || it.Separator {
 			continue
+		}
+		if it.HasSubmenu() {
+			hasSub = true
 		}
 		label, _, _ := ParseMnemonic(it.Text)
 		if tw := menuTextWidth(f, label); tw > maxLabel {
@@ -459,6 +479,9 @@ func (p *PopupMenu) contentSize() paintengine2d.Point {
 		}
 	}
 	w := ch.FrameWidth(maxLabel, maxAccel)
+	if hasSub {
+		w += ch.SubmenuArrow
+	}
 	if min := style.Dip(lk, 80); w < min {
 		w = min
 	}
@@ -565,6 +588,9 @@ func (p *PopupMenu) LabelBounds(i int) paintengine2d.Rect {
 	ch := p.chrome()
 	x0 := ch.LabelMinX(row.Min.X)
 	x1 := ch.LabelMaxX(row.Max.X)
+	if r := p.ArrowBounds(i); !r.Empty() {
+		x1 = r.Min.X
+	}
 	if r := p.ShortcutBounds(i); !r.Empty() {
 		x1 = r.Min.X - ch.AccelGap
 	}
@@ -589,7 +615,44 @@ func (p *PopupMenu) ShortcutBounds(i int) paintengine2d.Rect {
 	}
 	ch := p.chrome()
 	tw := menuTextWidth(f, p.Items[i].Shortcut)
-	return paintengine2d.XYWH(ch.LabelMaxX(row.Max.X)-tw, row.Min.Y, tw, row.Dy())
+	right := ch.LabelMaxX(row.Max.X)
+	if r := p.ArrowBounds(i); !r.Empty() {
+		right = r.Min.X
+	}
+	return paintengine2d.XYWH(right-tw, row.Min.Y, tw, row.Dy())
+}
+
+// ArrowBounds is the trailing submenu chevron column, or empty.
+func (p *PopupMenu) ArrowBounds(i int) paintengine2d.Rect {
+	if i < 0 || i >= len(p.Items) || !p.Items[i].HasSubmenu() {
+		return paintengine2d.Rect{}
+	}
+	row := p.rowBounds(i)
+	if row.Empty() {
+		return paintengine2d.Rect{}
+	}
+	ch := p.chrome()
+	aw := ch.SubmenuArrow
+	if aw < 1 {
+		aw = 10
+	}
+	return paintengine2d.XYWH(ch.ArrowMinX(row.Max.X), row.Min.Y, aw, row.Dy())
+}
+
+// Cascade is the open child popup, if any (widget.CascadeHost).
+func (p *PopupMenu) Cascade() widget.Component {
+	if p == nil || p.cascade == nil {
+		return nil
+	}
+	return p.cascade
+}
+
+// CascadeMenu is the open child PopupMenu, or nil.
+func (p *PopupMenu) CascadeMenu() *PopupMenu {
+	if p == nil {
+		return nil
+	}
+	return p.cascade
 }
 
 func (p *PopupMenu) ensureItemVisible(i int) {
@@ -636,7 +699,8 @@ func (p *PopupMenu) Paint(ctx *paintengine2d.Context) {
 		label, _, idx := ParseMnemonic(it.Text)
 		lk.DrawMenuItem(ctx, p.rowBounds(i), st, style.MenuRow{
 			Label: label, Shortcut: it.Shortcut, Underline: idx,
-			Separator: it.Separator, Checked: it.Checked, Radio: it.isRadio(), Icon: it.Icon,
+			Separator: it.Separator, Checked: it.Checked, Radio: it.isRadio(),
+			Submenu: it.HasSubmenu(), Icon: it.Icon,
 		})
 	}
 	ctx.Restore()
@@ -674,10 +738,15 @@ func (p *PopupMenu) MouseMove(e widget.MouseEvent) bool {
 		p.invalidateRow(old)
 		p.invalidateRow(i)
 	}
+	p.syncCascade(i)
 	return true
 }
 
 func (p *PopupMenu) MouseExit() {
+	if p.cascade != nil {
+		p.hover = p.cascadeIdx
+		return
+	}
 	p.hover = -1
 	p.Invalidate()
 }
@@ -753,6 +822,23 @@ func (p *PopupMenu) KeyPress(e widget.KeyEvent) bool {
 		p.hover = p.focus
 		p.Invalidate()
 		return true
+	case platform.KeyRight:
+		if p.focus >= 0 && p.focus < len(p.Items) && p.Items[p.focus].HasSubmenu() {
+			p.openCascade(p.focus)
+			if p.cascade != nil {
+				p.cascade.keyNav = true
+				p.cascade.RequestFocus()
+			}
+			return true
+		}
+	case platform.KeyLeft:
+		if p.parentMenu != nil {
+			parent := p.parentMenu
+			parent.closeCascade()
+			parent.keyNav = true
+			parent.RequestFocus()
+			return true
+		}
 	case platform.KeyReturn, platform.KeySpace:
 		p.activate(p.focus)
 		return true
@@ -855,6 +941,10 @@ func (p *PopupMenu) activate(i int) {
 	if it == nil || it.Separator || it.Disabled {
 		return
 	}
+	if it.HasSubmenu() {
+		p.openCascade(i)
+		return
+	}
 	p.applyCheck(it)
 	if p.OnPick != nil {
 		p.OnPick(it)
@@ -867,9 +957,63 @@ func (p *PopupMenu) activate(i int) {
 }
 
 func (p *PopupMenu) Dismissed() {
+	p.closeCascade()
 	if p.OnDismiss != nil {
 		p.OnDismiss()
 	}
+}
+
+func (p *PopupMenu) syncCascade(i int) {
+	if i >= 0 && i < len(p.Items) && p.Items[i].HasSubmenu() && !p.Items[i].Disabled {
+		p.openCascade(i)
+		return
+	}
+	if i >= 0 {
+		p.closeCascade()
+	}
+}
+
+func (p *PopupMenu) openCascade(i int) {
+	if i < 0 || i >= len(p.Items) {
+		p.closeCascade()
+		return
+	}
+	it := p.Items[i]
+	if it == nil || it.Disabled || !it.HasSubmenu() {
+		p.closeCascade()
+		return
+	}
+	if p.cascade != nil && p.cascadeIdx == i {
+		return
+	}
+	p.closeCascade()
+	child := NewPopupMenu(it.Submenu...)
+	child.parentMenu = p
+	child.OnPick = p.OnPick
+	widget.PreparePopup(p, child)
+	origin := widget.DeviceOrigin(p)
+	row := p.rowBounds(i)
+	pb := widget.DeviceBounds(p)
+	anchor := paintengine2d.XYWH(pb.Min.X, origin.Y+row.Min.Y, pb.Dx(), row.Dy())
+	widget.PlacePopupBeside(p, child, anchor)
+	p.cascade = child
+	p.cascadeIdx = i
+	p.hover = i
+	child.Invalidate()
+	p.Invalidate()
+}
+
+func (p *PopupMenu) closeCascade() {
+	child := p.cascade
+	if child == nil {
+		return
+	}
+	p.cascade = nil
+	p.cascadeIdx = -1
+	child.parentMenu = nil
+	child.closeCascade()
+	child.Invalidate()
+	p.Invalidate()
 }
 
 // ShowContextMenu opens a popup at window-space origin.

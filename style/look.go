@@ -497,15 +497,27 @@ func (l *Classic) DrawMenuItem(ctx *paintengine2d.Context, b paintengine2d.Rect,
 	}
 	l.drawMenuGutter(ctx, b, ch, row, fg)
 	label, shortcut, underline := row.Label, row.Shortcut, row.Underline
-	// Clip to the item (and shortcut column), never tighter than the
-	// reserved label box — glyph bearing may use the trailing item pad.
+	// Clip to the item (and shortcut / submenu-arrow column), never tighter
+	// than the reserved label box — glyph bearing may use the trailing pad.
 	labelRight := b.Max.X
+	if row.Submenu {
+		aw := ch.SubmenuArrow
+		if aw < 1 {
+			aw = 10
+		}
+		ab := paintengine2d.XYWH(ch.ArrowMinX(b.Max.X), b.Min.Y, aw, b.Dy())
+		drawMenuSubmenuArrow(ctx, ab, fg)
+		labelRight = ab.Min.X
+	}
 	if shortcut != "" {
 		tw := l.muted.InkWidth(shortcut)
 		if tw <= 0 {
 			tw = l.muted.Advance(shortcut)
 		}
 		sx := ch.LabelMaxX(b.Max.X) - tw
+		if row.Submenu {
+			sx = ch.ArrowMinX(b.Max.X) - tw
+		}
 		l.muted.Draw(ctx, shortcut, paintengine2d.Pt(sx, ty), p.TextMuted)
 		labelRight = sx - ch.AccelGap
 	}
@@ -555,6 +567,28 @@ func drawMenuCheck(ctx *paintengine2d.Context, b paintengine2d.Rect, col painten
 	p.LineTo(b.Min.X+b.Dx()*0.40, b.Min.Y+b.Dy()*0.78)
 	p.LineTo(b.Min.X+b.Dx()*0.86, b.Min.Y+b.Dy()*0.20)
 	ctx.DrawPath(p, iconStroke(col, 1.85, paintengine2d.CapRound, paintengine2d.JoinRound))
+}
+
+func drawMenuSubmenuArrow(ctx *paintengine2d.Context, b paintengine2d.Rect, col paintengine2d.Color) {
+	if ctx == nil || b.Empty() {
+		return
+	}
+	cx := b.Min.X + b.Dx()*0.42
+	cy := (b.Min.Y + b.Max.Y) * 0.5
+	hw := b.Dx() * 0.22
+	if hw < 2.2 {
+		hw = 2.2
+	}
+	hh := b.Dy() * 0.16
+	if hh < 3.2 {
+		hh = 3.2
+	}
+	p := paintengine2d.NewPath()
+	p.MoveTo(cx-hw*0.35, cy-hh)
+	p.LineTo(cx+hw, cy)
+	p.LineTo(cx-hw*0.35, cy+hh)
+	p.Close()
+	ctx.DrawPath(p, paintengine2d.Fill(col))
 }
 
 func drawMenuRadio(ctx *paintengine2d.Context, b paintengine2d.Rect, on bool, col paintengine2d.Color) {

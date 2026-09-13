@@ -1167,29 +1167,9 @@ func TestMailColumnsTopicWhoWhen(t *testing.T) {
 	w.SetContent(MailApp(a, w))
 	a.PumpOnce()
 	var table *widgets.TableView
-	var sortWhen, sortTopic, sortWho, sortSize bool
 	widget.Walk(w.Content(), func(c widget.Component) {
 		if tv, ok := c.(*widgets.TableView); ok && table == nil {
 			table = tv
-		}
-		if mb, ok := c.(*widgets.MenuBar); ok {
-			for _, m := range mb.Menus() {
-				for _, it := range m.Items {
-					if it == nil {
-						continue
-					}
-					switch it.Text {
-					case "Sort by When":
-						sortWhen = true
-					case "Sort by Topic":
-						sortTopic = true
-					case "Sort by Who":
-						sortWho = true
-					case "Sort by Size", "Sort by Date", "Sort by Subject", "Sort by Correspondent":
-						sortSize = true
-					}
-				}
-			}
 		}
 	})
 	if table == nil {
@@ -1203,12 +1183,6 @@ func TestMailColumnsTopicWhoWhen(t *testing.T) {
 		if table.Columns[i].Title != title {
 			t.Fatalf("col %d %q want %q", i, table.Columns[i].Title, title)
 		}
-	}
-	if !sortWhen || !sortTopic || !sortWho {
-		t.Fatalf("view sort labels when=%v topic=%v who=%v", sortWhen, sortTopic, sortWho)
-	}
-	if sortSize {
-		t.Fatal("old Size/Date/Subject/Correspondent sort labels still present")
 	}
 	w.Close()
 }
@@ -1537,28 +1511,17 @@ func TestMailMessageSourceShowsRFC822(t *testing.T) {
 		t.Fatal("Source tab used reconstructed headers")
 	}
 
-	var open func()
+	var mb *widgets.MenuBar
 	widget.Walk(w.Content(), func(c widget.Component) {
-		mb, ok := c.(*widgets.MenuBar)
-		if !ok {
-			return
-		}
-		for _, m := range mb.Menus() {
-			for _, it := range m.Items {
-				if it == nil {
-					continue
-				}
-				label, _, _ := widgets.ParseMnemonic(it.Text)
-				if label == "Message Source" && it.OnClick != nil {
-					open = it.OnClick
-				}
-			}
+		if m, ok := c.(*widgets.MenuBar); ok && mb == nil {
+			mb = m
 		}
 	})
-	if open == nil {
-		t.Fatal("View/Message Source menu missing")
+	if mb == nil {
+		t.Fatal("menu bar")
 	}
-	open()
+	mb.RequestFocus()
+	w.Inject(platform.Event{Kind: platform.EventKeyDown, Key: platform.KeyU, Mods: platform.ModCtrl})
 	a.PumpOnce()
 	var srcWin *app.Window
 	for _, win := range a.Windows() {
@@ -1769,43 +1732,93 @@ func TestMailMenuBarIsOnlyM(t *testing.T) {
 	if title != "M" {
 		t.Fatalf("menu title %q want M", menus[0].Title)
 	}
-	banned := []string{"File", "Edit", "View", "Go", "Message", "Tools", "Help"}
-	for _, name := range banned {
+	bannedTitles := []string{"File", "Edit", "View", "Go", "Message", "Tools", "Help"}
+	for _, name := range bannedTitles {
 		if title == name {
 			t.Fatalf("old top-level menu %q", name)
 		}
 	}
 	var labels []string
-	var quit, prefs, source bool
+	var quit, prefs, view, threaded, muted bool
+	gone := []string{
+		"Mail Toolbar", "Quick Filter Bar",
+		"Sort by When", "Sort by Topic", "Sort by Who",
+		"Dark", "Light", "Message Source",
+	}
 	for _, it := range menus[0].Items {
 		if it == nil {
 			continue
 		}
 		label, _, _ := widgets.ParseMnemonic(it.Text)
 		labels = append(labels, label)
+		for _, g := range gone {
+			if label == g {
+				t.Fatalf("removed item still on M: %q %v", label, labels)
+			}
+		}
 		switch label {
 		case "Quit":
 			quit = it.Shortcut == "Ctrl+Q" && it.OnClick != nil
 		case "Preferences":
 			prefs = it.OnClick != nil
-		case "Message Source":
-			source = it.Shortcut == "Ctrl+U" && it.OnClick != nil
+		case "View":
+			view = it.HasSubmenu()
+			want := []string{
+				"Vertical (3-pane)", "Classic (preview below)",
+				"Table view", "Card view",
+				"Compact", "Default density", "Relaxed",
+			}
+			got := menuItemLabels(it.Submenu)
+			for _, name := range want {
+				if !containsLabel(got, name) {
+					t.Fatalf("View submenu missing %q: %v", name, got)
+				}
+			}
+			for _, name := range gone {
+				if containsLabel(got, name) {
+					t.Fatalf("removed item under View: %q %v", name, got)
+				}
+			}
+		case "Threaded":
+			threaded = it.Checkable
+		case "Hide muted threads":
+			muted = it.Checkable
 		}
 	}
-	if !source || !prefs || !quit {
-		t.Fatalf("M items source=%v prefs=%v quit=%v %v", source, prefs, quit, labels)
+	if !view || !threaded || !muted || !prefs || !quit {
+		t.Fatalf("M items view=%v threaded=%v muted=%v prefs=%v quit=%v %v", view, threaded, muted, prefs, quit, labels)
 	}
-	wantOrder := []string{"Message Source", "Preferences", "Quit"}
 	pos := map[string]int{}
 	for i, l := range labels {
 		if _, ok := pos[l]; !ok {
 			pos[l] = i
 		}
 	}
-	if pos["Message Source"] > pos["Preferences"] || pos["Preferences"] > pos["Quit"] {
-		t.Fatalf("order %v want %v last", labels, wantOrder)
+	if pos["View"] > pos["Threaded"] || pos["Threaded"] > pos["Preferences"] || pos["Preferences"] > pos["Quit"] {
+		t.Fatalf("order %v want View, Threaded…, Preferences, Quit", labels)
 	}
 	w.Close()
+}
+
+func menuItemLabels(items []*widgets.MenuItem) []string {
+	var out []string
+	for _, it := range items {
+		if it == nil || it.Separator {
+			continue
+		}
+		label, _, _ := widgets.ParseMnemonic(it.Text)
+		out = append(out, label)
+	}
+	return out
+}
+
+func containsLabel(labels []string, want string) bool {
+	for _, l := range labels {
+		if l == want {
+			return true
+		}
+	}
+	return false
 }
 
 func cellInk(img *paintengine2d.Image, x0, x1 int) int {

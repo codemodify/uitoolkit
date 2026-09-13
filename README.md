@@ -510,6 +510,14 @@ are independent look.json fields again; compound pack names migrate
 
 ## Version
 
+**0.18.4** — Cascading **submenu** in the toolkit: `MenuItem.Submenu` /
+`widgets.Submenu` opens a child `PopupMenu` to the right (Office XP
+arrow, on-screen clamp, dismisses with the parent). Mail **M** keeps
+Threaded / Hide muted / Preferences / Quit and moves layout, list, and
+density into **M → View**. Mail Toolbar, Quick Filter Bar, Sort by *,
+Dark / Light, and Message Source leave the menu (Ctrl+U still opens
+source).
+
 **0.18.3** — Mail menu bar is a single **M** menu: former View
 items (toolbar, layout, table/card, density, sort, threaded, muted,
 dark/light, Message Source), then Preferences, then Quit. File, Edit,

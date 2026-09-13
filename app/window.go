@@ -438,7 +438,7 @@ func (w *Window) dispatch(ev platform.Event) {
 			}
 		}
 		if w.popup != nil {
-			if w.popup.KeyPress(widget.KeyEvent{Key: ev.Key, Mods: ev.Mods}) {
+			if widget.CascadeLeaf(w.popup).KeyPress(widget.KeyEvent{Key: ev.Key, Mods: ev.Mods}) {
 				return
 			}
 		}
@@ -470,7 +470,7 @@ func (w *Window) bubbleWheel(ev platform.Event) {
 
 func (w *Window) hit(p paintengine2d.Point) widget.Component {
 	if w.popup != nil {
-		if h := widget.HitRoot(w.popup, p); h != nil {
+		if h := widget.HitCascade(w.popup, p); h != nil {
 			return h
 		}
 	}
@@ -572,7 +572,7 @@ func (w *Window) tickTips() {
 func (w *Window) mouseDown(ev platform.Event) {
 	w.HideTooltip()
 	if w.popup != nil {
-		if widget.HitRoot(w.popup, ev.Pos) == nil {
+		if widget.HitCascade(w.popup, ev.Pos) == nil {
 			under := w.hitContent(ev.Pos)
 			if !widget.Retains(under) {
 				w.DismissPopup()
@@ -752,7 +752,7 @@ func (w *Window) frameImmediate() {
 		widget.PaintTree(w.overlay, ctx, nil)
 	}
 	if w.popup != nil {
-		widget.PaintTree(w.popup, ctx, nil)
+		widget.PaintCascade(w.popup, ctx, nil)
 	}
 	if w.tooltip != nil {
 		widget.PaintTree(w.tooltip, ctx, nil)
@@ -775,7 +775,7 @@ func (w *Window) frameScene() {
 		widget.RecordTree(w.overlay, rec, ctx, nil, w.layers, true)
 	}
 	if w.popup != nil {
-		widget.RecordTree(w.popup, rec, ctx, nil, w.layers, true)
+		widget.RecordCascade(w.popup, rec, ctx, nil, w.layers, true)
 	}
 	if w.tooltip != nil {
 		widget.RecordTree(w.tooltip, rec, ctx, nil, w.layers, true)

@@ -348,28 +348,23 @@ func (s *session) menuBar() *widgets.MenuBar {
 	layoutClassic := s.opts.Layout == LayoutClassic
 	return widgets.NewMenuBar(
 		widgets.NewMenu("M",
-			widgets.CheckItem("Mail Toolbar", true, func() { s.mark("Mail Toolbar") }),
-			widgets.CheckItem("Quick Filter Bar", s.opts.ShowFilter, s.toggleFilter),
-			widgets.Sep(),
-			widgets.RadioItem("&Vertical (3-pane)", "layout", !layoutClassic, func() {
-				s.opts.Layout = LayoutVertical
-				s.rebuild()
-			}),
-			widgets.RadioItem("&Classic (preview below)", "layout", layoutClassic, func() {
-				s.opts.Layout = LayoutClassic
-				s.rebuild()
-			}),
-			widgets.Sep(),
-			widgets.RadioItem("&Table view", "list", !s.cardView, func() { s.setCardView(false) }),
-			widgets.RadioItem("C&ard view", "list", s.cardView, func() { s.setCardView(true) }),
-			widgets.Sep(),
-			widgets.RadioItem("&Compact", "density", s.density == style.DensityCompact, func() { s.setDensity(style.DensityCompact) }),
-			widgets.RadioItem("&Default density", "density", s.density == style.DensityDefault, func() { s.setDensity(style.DensityDefault) }),
-			widgets.RadioItem("&Relaxed", "density", s.density == style.DensityRelaxed, func() { s.setDensity(style.DensityRelaxed) }),
-			widgets.Sep(),
-			widgets.Item("Sort by When", func() { s.sortCol, s.sortAsc = 4, false; s.refreshList() }),
-			widgets.Item("Sort by Topic", func() { s.sortCol, s.sortAsc = 2, true; s.refreshList() }),
-			widgets.Item("Sort by Who", func() { s.sortCol, s.sortAsc = 3, true; s.refreshList() }),
+			widgets.Submenu("&View",
+				widgets.RadioItem("&Vertical (3-pane)", "layout", !layoutClassic, func() {
+					s.opts.Layout = LayoutVertical
+					s.rebuild()
+				}),
+				widgets.RadioItem("&Classic (preview below)", "layout", layoutClassic, func() {
+					s.opts.Layout = LayoutClassic
+					s.rebuild()
+				}),
+				widgets.Sep(),
+				widgets.RadioItem("&Table view", "list", !s.cardView, func() { s.setCardView(false) }),
+				widgets.RadioItem("C&ard view", "list", s.cardView, func() { s.setCardView(true) }),
+				widgets.Sep(),
+				widgets.RadioItem("&Compact", "density", s.density == style.DensityCompact, func() { s.setDensity(style.DensityCompact) }),
+				widgets.RadioItem("&Default density", "density", s.density == style.DensityDefault, func() { s.setDensity(style.DensityDefault) }),
+				widgets.RadioItem("&Relaxed", "density", s.density == style.DensityRelaxed, func() { s.setDensity(style.DensityRelaxed) }),
+			),
 			widgets.CheckItem("&Threaded", s.threaded, func() {
 				s.threaded = !s.threaded
 				s.persistChrome()
@@ -380,11 +375,6 @@ func (s *session) menuBar() *widgets.MenuBar {
 				s.persistChrome()
 				s.refreshList()
 			}),
-			widgets.Sep(),
-			widgets.RadioItem("&Dark", "palette", !s.opts.Light, func() { s.setPalette(false) }),
-			widgets.RadioItem("&Light", "palette", s.opts.Light, func() { s.setPalette(true) }),
-			widgets.Sep(),
-			widgets.ItemAccel("Message &Source", "Ctrl+U", s.viewSource),
 			widgets.Sep(),
 			widgets.ItemAccel("Preferences", "Ctrl+,", s.openPrefs),
 			widgets.Sep(),
