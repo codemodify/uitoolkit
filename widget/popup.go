@@ -247,6 +247,135 @@ func PlacePopup(popup Component, origin paintengine2d.Point, maxW, maxH float32)
 	popup.Arrange(paintengine2d.XYWH(x, y, w, h))
 }
 
+// PlacePopupBeside sizes popup and places it to the right of anchor (a
+// parent menu row in window space), flipping to the left when that side
+// has more room. Top-aligned to the row, then clamped on-screen.
+func PlacePopupBeside(from, popup Component, anchor paintengine2d.Rect) {
+	if popup == nil {
+		return
+	}
+	PreparePopup(from, popup)
+	intrinsic := popup.Measure(layout.Unbounded())
+	w, h := intrinsic.X, intrinsic.Y
+	inset := float32(4)
+	surfW, surfH := popupSurfaceWH(popup)
+
+	right := float32(1e9)
+	left := float32(1e9)
+	if surfW > 0 {
+		right = surfW - inset - anchor.Max.X
+		left = anchor.Min.X - inset
+		if right < 0 {
+			right = 0
+		}
+		if left < 0 {
+			left = 0
+		}
+	}
+	placeRight := true
+	if w > right && left > right {
+		placeRight = false
+	}
+	availW := right
+	if !placeRight {
+		availW = left
+	}
+	if surfW > 0 && w > availW && availW >= 1 {
+		// Prefer shifting the full intrinsic width; only shrink when the
+		// surface itself is narrower than the menu.
+		if availW >= intrinsic.X || surfW-2*inset < intrinsic.X {
+			w = availW
+			sz := popup.Measure(layout.Constraints{MaxW: w, MaxH: -1})
+			if sz.Y > h {
+				h = sz.Y
+			}
+			if sz.X > 0 && sz.X < w {
+				w = sz.X
+			}
+			if w < 1 {
+				w = 1
+			}
+		}
+	}
+
+	x := anchor.Max.X
+	if !placeRight {
+		x = anchor.Min.X - w
+	}
+	y := anchor.Min.Y
+	if surfH > 0 && h > surfH-2*inset {
+		sz := popup.Measure(layout.Constraints{MaxW: -1, MaxH: surfH - 2*inset})
+		w, h = sz.X, sz.Y
+		if w < intrinsic.X && surfW-2*inset >= intrinsic.X {
+			w = intrinsic.X
+		}
+	}
+	x, w = shiftPopupX(x, w, surfW, inset)
+	y, h = shiftPopupY(y, h, surfH, inset)
+	popup.Arrange(paintengine2d.XYWH(x, y, w, h))
+}
+
+// CascadeHost is a popup that may show a sibling cascade (submenu) menu.
+type CascadeHost interface {
+	Cascade() Component
+}
+
+// CascadeOf is the open child cascade of c, if any.
+func CascadeOf(c Component) Component {
+	if c == nil {
+		return nil
+	}
+	if h, ok := c.(CascadeHost); ok {
+		return h.Cascade()
+	}
+	return nil
+}
+
+// WalkCascade visits root then each nested cascade (parent first).
+func WalkCascade(root Component, fn func(Component)) {
+	for c := root; c != nil; c = CascadeOf(c) {
+		fn(c)
+	}
+}
+
+// CascadeLeaf is the deepest open cascade, or root when none is open.
+func CascadeLeaf(root Component) Component {
+	c := root
+	for {
+		next := CascadeOf(c)
+		if next == nil {
+			return c
+		}
+		c = next
+	}
+}
+
+// HitCascade hit-tests p against root and its cascade chain (leaf first).
+func HitCascade(root Component, p paintengine2d.Point) Component {
+	var chain []Component
+	WalkCascade(root, func(c Component) { chain = append(chain, c) })
+	for i := len(chain) - 1; i >= 0; i-- {
+		if h := HitRoot(chain[i], p); h != nil {
+			return h
+		}
+	}
+	return nil
+}
+
+// PaintCascade paints root then each cascade sibling (child on top).
+func PaintCascade(root Component, ctx *paintengine2d.Context, dirty *paintengine2d.Damage) {
+	WalkCascade(root, func(c Component) {
+		PaintTree(c, ctx, dirty)
+	})
+}
+
+// RecordCascade records root then each cascade sibling into rec.
+func RecordCascade(root Component, rec *paintengine2d.Recorder, ctx *paintengine2d.Context, dirty *paintengine2d.Damage, cache *SceneCache, fullContent bool) {
+	WalkCascade(root, func(c Component) {
+		RecordTree(c, rec, ctx, dirty, cache, fullContent)
+	})
+}
+
 // ClampToSurface keeps popup inside the host surface. It repositions first
 // (prefer full intrinsic size). Only if the popup is larger than the
 // surface does it shrink the arranged box — the popup should then scroll

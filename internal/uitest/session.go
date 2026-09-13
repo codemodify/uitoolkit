@@ -66,7 +66,7 @@ func (s *Session) Hit(p paintengine2d.Point) widget.Component {
 	}
 	if s.Host != nil {
 		if pop := s.Host.Popup(); pop != nil {
-			if h := widget.HitRoot(pop, p); h != nil {
+			if h := widget.HitCascade(pop, p); h != nil {
 				return h
 			}
 		}
@@ -79,7 +79,7 @@ func (s *Session) Hit(p paintengine2d.Point) widget.Component {
 	if s.Root == nil {
 		return nil
 	}
-	return widget.HitRoot(s.Root, p)
+	return widget.HitCascade(s.Root, p)
 }
 
 func local(c widget.Component, p paintengine2d.Point) paintengine2d.Point {
@@ -282,14 +282,14 @@ func (s *Session) Paint() *paintengine2d.Image {
 	img := paintengine2d.NewImage(w, h)
 	ctx := paintengine2d.NewContext(img)
 	if s.Root != nil {
-		widget.PaintTree(s.Root, ctx, nil)
+		widget.PaintCascade(s.Root, ctx, nil)
 	}
 	if s.Host != nil {
 		if ov := s.Host.Overlay(); ov != nil {
 			widget.PaintTree(ov, ctx, nil)
 		}
 		if pop := s.Host.Popup(); pop != nil {
-			widget.PaintTree(pop, ctx, nil)
+			widget.PaintCascade(pop, ctx, nil)
 		}
 	}
 	return img
@@ -308,14 +308,14 @@ func (s *Session) Record() *paintengine2d.Scene {
 	rec := paintengine2d.NewRecorder(w, h)
 	ctx := paintengine2d.NewContextDevice(rec)
 	if s.Root != nil {
-		widget.PaintTree(s.Root, ctx, nil)
+		widget.PaintCascade(s.Root, ctx, nil)
 	}
 	if s.Host != nil {
 		if ov := s.Host.Overlay(); ov != nil {
 			widget.PaintTree(ov, ctx, nil)
 		}
 		if pop := s.Host.Popup(); pop != nil {
-			widget.PaintTree(pop, ctx, nil)
+			widget.PaintCascade(pop, ctx, nil)
 		}
 	}
 	return rec.Finish()

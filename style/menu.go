@@ -7,6 +7,7 @@ type MenuRow struct {
 	Separator       bool
 	Checked         bool
 	Radio           bool
+	Submenu         bool
 	Icon            ToolIcon
 }
 
@@ -18,6 +19,7 @@ type MenuChrome struct {
 	CheckGutter            float32 // check/icon column after ItemPad (gray gutter)
 	LabelGap               float32 // body space after the gray gutter before text
 	AccelGap               float32
+	SubmenuArrow           float32 // trailing chevron column when a row has children
 	Border                 float32 // frame/clip so the last glyph is not bitten
 }
 
@@ -35,6 +37,11 @@ func (c MenuChrome) LabelMinX(rowMinX float32) float32 {
 // LabelMaxX is the reserved advance right edge (item pad stays free for ink).
 func (c MenuChrome) LabelMaxX(rowMaxX float32) float32 { return rowMaxX - c.ItemPad }
 
+// ArrowMinX is the submenu chevron origin inside an arranged item row.
+func (c MenuChrome) ArrowMinX(rowMaxX float32) float32 {
+	return c.LabelMaxX(rowMaxX) - c.SubmenuArrow
+}
+
 // FrameWidth is the intrinsic menu width for the widest label/shortcut.
 func (c MenuChrome) FrameWidth(maxLabel, maxAccel float32) float32 {
 	w := c.PadL + c.CheckCol() + c.LabelGap + maxLabel + c.ItemPad + c.PadR + c.Border
@@ -48,15 +55,16 @@ func (c MenuChrome) FrameWidth(maxLabel, maxAccel float32) float32 {
 // Scale and density come from Look metrics so measure and paint stay aligned.
 func MenuChromeFor(lk LookAndFeel) MenuChrome {
 	c := MenuChrome{
-		PadL:        8,
-		PadR:        10,
-		PadT:        6,
-		PadB:        8,
-		ItemPad:     10,
-		CheckGutter: 10,
-		LabelGap:    8,
-		AccelGap:    20,
-		Border:      2,
+		PadL:         8,
+		PadR:         10,
+		PadT:         6,
+		PadB:         8,
+		ItemPad:      10,
+		CheckGutter:  10,
+		LabelGap:     8,
+		AccelGap:     20,
+		SubmenuArrow: 10,
+		Border:       2,
 	}
 	if lk == nil {
 		return c
@@ -73,6 +81,7 @@ func MenuChromeFor(lk LookAndFeel) MenuChrome {
 	c.CheckGutter *= s
 	c.LabelGap *= s
 	c.AccelGap *= s
+	c.SubmenuArrow *= s
 	c.Border *= s
 	switch LookIconSize(lk) {
 	case IconSizeSmall:
