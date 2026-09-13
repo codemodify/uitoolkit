@@ -17,3 +17,5 @@ question   question
 mail       envelope
 inbox      tray
 mail-open  envelope-open
+download   download-simple
+pen        pencil-simple

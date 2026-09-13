@@ -29,7 +29,7 @@ const (
 	LayoutClassic
 )
 
-// filterPin is a sidebar Filters-tree toggle (not a folder).
+// filterPin is a sidebar Tags-tree toggle (not a folder).
 type filterPin string
 
 const (
@@ -374,6 +374,8 @@ func (s *session) menuBar() *widgets.MenuBar {
 				}),
 			),
 			widgets.Sep(),
+			s.notifyMenuItems(),
+			widgets.Sep(),
 			widgets.ItemAccel("Preferences", "Ctrl+,", s.openPrefs),
 			widgets.Sep(),
 			widgets.ItemAccel("&Quit", "Ctrl+Q", func() { s.app.Quit() }),
@@ -382,21 +384,53 @@ func (s *session) menuBar() *widgets.MenuBar {
 }
 
 func (s *session) composeBar() *widgets.ToolBar {
-	get := widgets.ToolIconBtn(style.IconOpen, "Get Messages", s.getMessages)
-	get.Tip = "Get new messages for this account (demo Fetch)"
-	write := widgets.ToolIconBtn(style.IconNew, "Write", s.write)
+	get := widgets.ToolIconBtn(style.IconDownload, "Fetch", s.getMessages)
+	get.Tip = "Fetch new messages for this account"
+	write := widgets.ToolIconBtn(style.IconPen, "Write", s.write)
 	write.Tip = "Write a new message"
 	return widgets.NewToolBar(get, write)
 }
 
 func (s *session) toolBar() *widgets.ToolBar {
-	del := widgets.ToolIconBtn(style.IconCut, "Delete", s.deleteSel)
-	del.Tip = "Delete (move to Trash)"
 	s.qfBtn = widgets.ToolIconBtn(style.IconSearch, "", s.toggleFilter)
 	s.qfBtn.Tip = "Quick Filter"
 	s.qfBtn.Toggle = true
 	s.qfBtn.Down = s.opts.ShowFilter
-	return widgets.NewToolBar(del, widgets.ToolDivider(), s.qfBtn)
+	return widgets.NewToolBar(s.qfBtn)
+}
+
+func (s *session) notifyPrefs() NotifyPrefs {
+	if s.cli == nil {
+		return NotifyPrefs{Enabled: true, Desktop: true}
+	}
+	p, err := s.cli.NotifyPrefs()
+	if err != nil {
+		return NotifyPrefs{Enabled: true, Desktop: true}
+	}
+	return p
+}
+
+func (s *session) toggleNotify(mut func(*NotifyPrefs)) {
+	p := s.notifyPrefs()
+	mut(&p)
+	if s.cli != nil {
+		_, _ = s.cli.PutNotifyPrefs(p)
+	}
+}
+
+func (s *session) notifyMenuItems() *widgets.MenuItem {
+	p := s.notifyPrefs()
+	return widgets.Submenu("Notify",
+		widgets.CheckItem("Notify on new mail", p.Enabled, func() {
+			s.toggleNotify(func(n *NotifyPrefs) { n.Enabled = !n.Enabled })
+		}),
+		widgets.CheckItem("VIP senders only", p.VIPOnly, func() {
+			s.toggleNotify(func(n *NotifyPrefs) { n.VIPOnly = !n.VIPOnly })
+		}),
+		widgets.CheckItem("Desktop notifications", p.Desktop, func() {
+			s.toggleNotify(func(n *NotifyPrefs) { n.Desktop = !n.Desktop })
+		}),
+	)
 }
 
 func (s *session) tagPopup(from widget.Component, p paintengine2d.Point) {
@@ -613,7 +647,7 @@ func (s *session) rebuildTree() {
 		acctUnread = 0
 	}
 
-	filtersNode := widgets.NewTreeNode("Filters")
+	filtersNode := widgets.NewTreeNode("Tags")
 	filtersNode.Data = AccountTags
 	applyTreeExpand(filtersNode, was, true)
 	for _, pin := range []struct {
@@ -730,7 +764,7 @@ func (s *session) wireFolderTree(tv *widgets.TreeView) {
 			}
 		}
 		widgets.ShowContextMenu(tv, p,
-			widgets.Item("Get Messages", s.getMessages),
+			widgets.Item("Fetch", s.getMessages),
 			widgets.Item("New Folder…", s.newFolder),
 			widgets.Item("Remove Account…", s.removeCurrentAccount),
 			widgets.Sep(),
@@ -1045,7 +1079,7 @@ func (s *session) getMessages() {
 	if err != nil {
 		n, ferr := s.cli.Fetch(acct)
 		if ferr != nil {
-			widgets.Warn(s.win.Content(), "Get Messages", err.Error(), nil)
+			widgets.Warn(s.win.Content(), "Fetch", err.Error(), nil)
 			return
 		}
 		res.New = n
@@ -1156,7 +1190,7 @@ func (s *session) newSmartFolder() {
 		widgets.NewTitle("Saved search"),
 		widgets.NewLabel("Name"), name,
 		widgets.NewLabel("Query"), query,
-		widgets.NewLabel("Unread / starred / attachment pins on the Filters tree are included."),
+		widgets.NewLabel("Unread / starred / attachment pins on the Tags tree are included."),
 		widgets.NewRow(widgets.NewSpacer(), cancel, save).WithGap(8),
 	).WithGap(8)
 	win.SetContent(widgets.NewPad(12, form))
@@ -1448,7 +1482,7 @@ func (s *session) openAddAccount() {
 			s.folder = inbox.ID
 		}
 		s.refreshAll()
-		s.mark("Account saved — Get Messages to connect")
+		s.mark("Account saved — Fetch to connect")
 	}); err != nil {
 		widgets.Warn(s.win.Content(), "Add account", err.Error(), nil)
 		return
@@ -1836,10 +1870,10 @@ func mailDirEntries(path string) []widgets.FileInfo {
 
 func (s *session) openFilters() {
 	if _, err := OpenFilters(s.app, s.cli); err != nil {
-		widgets.Warn(s.win.Content(), "Filters", err.Error(), nil)
+		widgets.Warn(s.win.Content(), "Tags", err.Error(), nil)
 		return
 	}
-	s.mark("Message Filters")
+	s.mark("Tags")
 }
 
 func (s *session) accountID() string {
@@ -1944,7 +1978,7 @@ func (s *session) showCenter() {
 func (s *session) buildAccountCentral() widget.Component {
 	s.acctTitle = widgets.NewTitle("Account Central")
 	s.acctBody = widgets.NewLabel("Use Preferences or Account Central to add or remove stores. Open Inbox or pick a folder in the tree.")
-	get := widgets.NewButton("Get Messages", s.getMessages)
+	get := widgets.NewButton("Fetch", s.getMessages)
 	write := widgets.NewButton("Write", s.write)
 	prefs := widgets.NewButton("Account Settings", s.openPrefs)
 	inbox := widgets.NewButton("Open Inbox", func() {
@@ -1970,7 +2004,7 @@ func (s *session) refreshAccount() {
 	unread, _ := s.cli.UnreadTotal()
 	st, _ := s.cli.Status()
 	s.acctTitle.SetText(name)
-	s.acctBody.SetText(fmt.Sprintf("%s\n\nProtocol: %s\nIdentity for this window.\nUnread (all folders): %d\nDaemon: %s  ·  %s\nSocket: %s\n\nGet Messages, Write, or open Inbox — retrieve stays in mailclientd.",
+	s.acctBody.SetText(fmt.Sprintf("%s\n\nProtocol: %s\nIdentity for this window.\nUnread (all folders): %d\nDaemon: %s  ·  %s\nSocket: %s\n\nFetch, Write, or open Inbox — retrieve stays in mailclientd.",
 		addr, proto, unread, st.Backend, s.backendLabel(), s.cli.Socket))
 }
 

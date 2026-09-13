@@ -94,7 +94,7 @@ const ShortcutHelp = `Thunderbird-like (thread list focused, not a text field)
   m         mark as read
 
 Menus
-  F5        Get Messages
+  F5        Fetch
   Ctrl+N    Write
   Ctrl+R    Reply
   Ctrl+L    Forward

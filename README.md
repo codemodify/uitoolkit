@@ -510,6 +510,13 @@ are independent look.json fields again; compound pack names migrate
 
 ## Version
 
+**0.18.6** — Mail left toolbar is **Fetch** (download icon) and **Write** (pen).
+The right bar is the Filter toggle only (Delete leaves that bar). Preferences
+keeps **Accounts** and **Tags**; Appearance, Notify, VIP, Identities, and the
+separate Filters tab are gone. Notify on new mail / VIP-only / desktop
+notifications live under **M → Notify**. Sidebar **Filters** is **Tags**
+(same pins and keywords as the Tags tab).
+
 **0.18.5** — Mail menubar row is **M**, then a left **Get Messages / Write**
 toolbar, then a right-aligned **Delete + Filter** toolbar. Tag, Archive,
 Junk, Cards, and Classic leave the toolbars (View / context menu / keys

@@ -22,6 +22,8 @@ const (
 	IconError
 	IconQuestion
 	IconMail
+	IconDownload
+	IconPen
 )
 
 // toolIconFiles maps each chrome action to its PNG basename (no extension).
@@ -43,6 +45,8 @@ var toolIconFiles = []struct {
 	{IconError, "error"},
 	{IconQuestion, "question"},
 	{IconMail, "mail"},
+	{IconDownload, "download"},
+	{IconPen, "pen"},
 }
 
 // AllToolIcons is every ToolIcon that has a file name (not IconNone).
@@ -88,6 +92,12 @@ func toolIconFileCandidates(icon ToolIcon, destW float32) []string {
 	stems := []string{ToolIconName(icon)}
 	if icon == IconMail {
 		stems = append(stems, "inbox", "mail-open")
+	}
+	if icon == IconDownload {
+		stems = append(stems, "save")
+	}
+	if icon == IconPen {
+		stems = append(stems, "pencil", "edit", "new")
 	}
 	var out []string
 	for _, name := range stems {

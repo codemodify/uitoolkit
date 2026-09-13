@@ -93,6 +93,29 @@ func TestSquareButtonRadiusZero(t *testing.T) {
 	}
 }
 
+func TestIconDownloadAndPenPaint(t *testing.T) {
+	if ToolIconName(IconDownload) != "download" {
+		t.Fatalf("download stem %q", ToolIconName(IconDownload))
+	}
+	if ToolIconName(IconPen) != "pen" {
+		t.Fatalf("pen stem %q", ToolIconName(IconPen))
+	}
+	down := paintIcon(IconSetClassic, IconDownload)
+	pen := paintIcon(IconSetClassic, IconPen)
+	if down < 8 || pen < 8 {
+		t.Fatalf("ink download=%d pen=%d", down, pen)
+	}
+	if maskDiff(rasterIcon(IconSetClassic, IconDownload), rasterIcon(IconSetClassic, IconPen)) < 8 {
+		t.Fatal("download and pen should differ")
+	}
+	if maskDiff(rasterIcon(IconSetClassic, IconDownload), rasterIcon(IconSetClassic, IconOpen)) < 8 {
+		t.Fatal("download should differ from open")
+	}
+	if maskDiff(rasterIcon(IconSetClassic, IconPen), rasterIcon(IconSetClassic, IconNew)) < 8 {
+		t.Fatal("pen should differ from new")
+	}
+}
+
 func TestIconMailPaintsAndThemeName(t *testing.T) {
 	if ToolIconName(IconMail) != "mail" {
 		t.Fatalf("file stem %q", ToolIconName(IconMail))

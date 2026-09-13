@@ -98,7 +98,7 @@ Single-letter Thunderbird bindings apply when focus is **not** a TextField / Tex
 | **f** | Forward |
 | **c** | Compose |
 | **m** | Mark as read |
-| **F5** | Get Messages |
+| **F5** | Fetch |
 | **Ctrl+F** | Quick Filter |
 | **Ctrl+,** | Preferences |
 | **Ctrl+U** | Message Source (raw RFC822) |
