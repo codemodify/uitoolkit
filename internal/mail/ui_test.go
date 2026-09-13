@@ -828,6 +828,7 @@ func assertMailToolChrome(t *testing.T, root widget.Component, qf widget.Compone
 	if write == nil || write.Icon != style.IconPen {
 		t.Fatalf("Write should use IconPen, got %+v", write)
 	}
+	assertFetchWriteIconsPaint(t, leftBar)
 	for _, name := range []string{"Reply", "Forward", "Quick Filter"} {
 		if left[name] || right[name] {
 			t.Fatalf("toolbar still has %s: left=%v right=%v", name, left, right)
@@ -951,10 +952,10 @@ func assertTagsTree(t *testing.T, tree *widgets.TreeView) {
 	if filters == nil || filters.Label != "Tags" {
 		t.Fatal("Tags missing from the tree")
 	}
-	want := []string{"Unread", "Starred", "Attachment"}
-	ban := []string{"From", "To", "Subject", "Body", "Work", "Personal", "Later"}
-	got := map[string]bool{}
-	var important bool
+	want := tagNames(DefaultTags())
+	ban := []string{"From", "To", "Subject", "Body"}
+	got := make([]string, 0, len(filters.Children))
+	seen := map[string]bool{}
 	for _, n := range filters.Children {
 		if n == nil {
 			continue
@@ -963,24 +964,90 @@ func assertTagsTree(t *testing.T, tree *widgets.TreeView) {
 		if i := strings.Index(label, " ("); i > 0 {
 			label = label[:i]
 		}
-		got[label] = true
-		if label == "Important" {
-			important = true
-		}
+		got = append(got, label)
+		seen[label] = true
 	}
 	for _, name := range want {
-		if !got[name] {
-			t.Fatalf("Tags tree missing pin %q", name)
+		if !seen[name] {
+			t.Fatalf("Tags tree missing %q (got %v)", name, got)
 		}
 	}
 	for _, name := range ban {
-		if got[name] {
+		if seen[name] {
 			t.Fatalf("Tags tree still has %q", name)
 		}
 	}
-	if !important {
-		t.Fatal("Tags tree missing Important")
+}
+
+func assertFetchWriteIconsPaint(t *testing.T, bar *widgets.ToolBar) {
+	t.Helper()
+	if bar == nil {
+		t.Fatal("left toolbar")
 	}
+	sz := bar.Measure(layout.Unbounded())
+	if sz.X < 8 || sz.Y < 8 {
+		t.Fatalf("toolbar size %v", sz)
+	}
+	bar.Arrange(paintengine2d.XYWH(0, 0, sz.X, sz.Y))
+	img := paintengine2d.NewImage(int(sz.X)+2, int(sz.Y)+2)
+	ctx := paintengine2d.NewContext(img)
+	bar.Paint(ctx)
+	var fetchR, writeR paintengine2d.Rect
+	for i, it := range bar.Items() {
+		if it == nil {
+			continue
+		}
+		switch it.Text {
+		case "Fetch":
+			fetchR = bar.ItemRect(i)
+		case "Write":
+			writeR = bar.ItemRect(i)
+		}
+	}
+	if fetchR.Empty() || writeR.Empty() {
+		t.Fatalf("Fetch/Write rects fetch=%v write=%v", fetchR, writeR)
+	}
+	fetchInk := iconRegionInk(img, fetchR)
+	writeInk := iconRegionInk(img, writeR)
+	if fetchInk < 8 {
+		t.Fatalf("Fetch download icon has no ink (%d)", fetchInk)
+	}
+	if writeInk < 8 {
+		t.Fatalf("Write pen icon has no ink (%d)", writeInk)
+	}
+	if fetchInk == writeInk {
+		t.Fatalf("Fetch and Write icon ink identical (%d); pen should differ from download", fetchInk)
+	}
+}
+
+func iconRegionInk(img *paintengine2d.Image, btn paintengine2d.Rect) int {
+	pad, side, _ := style.ToolButtonChromeFor(nil, btn.Dy())
+	x0 := int(btn.Min.X + pad)
+	y0 := int(btn.Min.Y + (btn.Dy()-side)*0.5)
+	x1 := x0 + int(side)
+	y1 := y0 + int(side)
+	if x0 < 0 {
+		x0 = 0
+	}
+	if y0 < 0 {
+		y0 = 0
+	}
+	if x1 > img.Width {
+		x1 = img.Width
+	}
+	if y1 > img.Height {
+		y1 = img.Height
+	}
+	n := 0
+	for y := y0; y < y1; y++ {
+		for x := x0; x < x1; x++ {
+			_, _, _, a := img.PremulAt(x, y)
+			if a > 20 {
+				n++
+			}
+		}
+	}
+	return n
 }
 
 func assertMenubarChromeRow(t *testing.T, root widget.Component, mb *widgets.MenuBar, left, right *widgets.ToolBar) {
@@ -2005,6 +2072,41 @@ func TestMailPreferencesTabs(t *testing.T) {
 		if containsLabel(got, name) {
 			t.Fatalf("removed Preferences tab still present: %q %v", name, got)
 		}
+	}
+	var add, edit, remove *widgets.Button
+	widget.Walk(w.Content(), func(c widget.Component) {
+		b, ok := c.(*widgets.Button)
+		if !ok {
+			return
+		}
+		switch b.Text {
+		case "Add":
+			add = b
+		case "Edit":
+			edit = b
+		case "Remove":
+			remove = b
+		}
+	})
+	if add == nil || edit == nil || remove == nil {
+		t.Fatalf("Tags CRUD buttons add=%v edit=%v remove=%v", add, edit, remove)
+	}
+	prefs, err := cli.Tags()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := tagNames(DefaultTags())
+	gotNames := tagNames(prefs)
+	if len(gotNames) != len(want) {
+		t.Fatalf("prefs tags %v want %v", gotNames, want)
+	}
+	for i, name := range want {
+		if !strings.EqualFold(gotNames[i], name) {
+			t.Fatalf("prefs tags %v want %v", gotNames, want)
+		}
+	}
+	if remove.Enabled() {
+		t.Fatal("Remove should be disabled on the locked Unread tag")
 	}
 	w.Close()
 }

@@ -399,6 +399,10 @@ func (c *Client) PutTag(t Tag) (Tag, error) {
 	return out, err
 }
 
+func (c *Client) DeleteTag(name string) error {
+	return c.call(MethodTagsDel, tagNameParams{Name: name}, nil)
+}
+
 func (c *Client) VirtualFolders() ([]Folder, error) {
 	var out []Folder
 	err := c.call(MethodFoldersVirtual, nil, &out)

@@ -650,22 +650,22 @@ func (s *session) rebuildTree() {
 	filtersNode := widgets.NewTreeNode("Tags")
 	filtersNode.Data = AccountTags
 	applyTreeExpand(filtersNode, was, true)
-	for _, pin := range []struct {
-		label string
-		id    filterPin
-		on    bool
-	}{
-		{"Unread", pinUnread, s.filter.Unread},
-		{"Starred", pinStarred, s.filter.Starred},
-		{"Attachment", pinAttachment, s.filter.Attachment},
-	} {
-		n := widgets.NewTreeNode(filterPinLabel(pin.label, pin.on))
-		n.Data = pin.id
-		n.Bold = pin.on
-		filtersNode.Children = append(filtersNode.Children, n)
-	}
 	for _, t := range s.tags {
-		if hideFilterTag(t.Name) {
+		if pin, ok := systemFilterPin(t.Name); ok {
+			on := false
+			switch pin {
+			case pinUnread:
+				on = s.filter.Unread
+			case pinStarred:
+				on = s.filter.Starred
+			case pinAttachment:
+				on = s.filter.Attachment
+			}
+			n := widgets.NewTreeNode(filterPinLabel(t.Name, on))
+			n.Data = pin
+			n.Bold = on
+			n.Color = ParseHexColor(t.Color)
+			filtersNode.Children = append(filtersNode.Children, n)
 			continue
 		}
 		label := t.Name
@@ -785,12 +785,16 @@ func (s *session) syncFolderTreeSelection(from *widgets.TreeView) {
 	}
 }
 
-func hideFilterTag(name string) bool {
+func systemFilterPin(name string) (filterPin, bool) {
 	switch strings.ToLower(strings.TrimSpace(name)) {
-	case "work", "personal", "later":
-		return true
+	case "unread":
+		return pinUnread, true
+	case "starred":
+		return pinStarred, true
+	case "attachment":
+		return pinAttachment, true
 	default:
-		return false
+		return "", false
 	}
 }
 
@@ -1576,6 +1580,9 @@ func (s *session) tagNames() []string {
 	}
 	out := make([]string, 0, len(s.tags))
 	for _, t := range s.tags {
+		if t.System || IsSystemTag(t.Name) {
+			continue
+		}
 		out = append(out, t.Name)
 	}
 	if len(out) == 0 {

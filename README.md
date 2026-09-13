@@ -510,6 +510,12 @@ are independent look.json fields again; compound pack names migrate
 
 ## Version
 
+**0.18.7** — Mail **Write** uses the pen icon (same toolbar path as **Fetch** /
+download). Tags are one store: sidebar and Preferences → Tags show the same
+list. Unread, Starred, and Attachment are locked system tags; other tags can
+be added, edited, and removed. New mail is tagged Unread; messages with
+parts get Attachment.
+
 **0.18.6** — Mail left toolbar is **Fetch** (download icon) and **Write** (pen).
 The right bar is the Filter toggle only (Delete leaves that bar). Preferences
 keeps **Accounts** and **Tags**; Appearance, Notify, VIP, Identities, and the

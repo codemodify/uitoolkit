@@ -154,10 +154,50 @@ func TestToolBarClickAndKeys(t *testing.T) {
 	}
 }
 
+func TestToolBarFetchWriteIconsPaint(t *testing.T) {
+	tb := NewToolBar(
+		ToolIconBtn(style.IconDownload, "Fetch", nil),
+		ToolIconBtn(style.IconPen, "Write", nil),
+	)
+	tb.SetHost(&host{})
+	sz := tb.Measure(layout.Unbounded())
+	tb.Arrange(paintengine2d.XYWH(0, 0, sz.X, 36))
+	img := rasterTool(tb)
+	ink := func(i int) int {
+		r := tb.ItemRect(i)
+		pad, side, _ := style.ToolButtonChromeFor(tb.Look(), r.Dy())
+		x0 := int(r.Min.X + pad)
+		y0 := int(r.Min.Y + (r.Dy()-side)*0.5)
+		n := 0
+		for y := y0; y < y0+int(side); y++ {
+			for x := x0; x < x0+int(side); x++ {
+				if x < 0 || y < 0 || x >= img.Width || y >= img.Height {
+					continue
+				}
+				_, _, _, a := img.PremulAt(x, y)
+				if a > 20 {
+					n++
+				}
+			}
+		}
+		return n
+	}
+	fetch, write := ink(0), ink(1)
+	if fetch < 8 {
+		t.Fatalf("Fetch download icon has no ink (%d)", fetch)
+	}
+	if write < 8 {
+		t.Fatalf("Write pen icon has no ink (%d)", write)
+	}
+	if fetch == write {
+		t.Fatalf("Fetch and Write icons look the same (ink=%d)", fetch)
+	}
+}
+
 func TestToolBarIconLabelItemsDoNotOverlap(t *testing.T) {
 	tb := NewToolBar(
 		ToolIconBtn(style.IconOpen, "Get Messages", nil),
-		ToolIconBtn(style.IconNew, "Write", nil),
+		ToolIconBtn(style.IconPen, "Write", nil),
 		ToolDivider(),
 		ToolToggle("Cards", false, nil),
 		ToolToggle("Classic", true, nil),

@@ -200,6 +200,7 @@ func (s *MemoryStore) SetFlags(id MessageID, patch FlagPatch) error {
 	if patch.Tags != nil {
 		s.messages[i].Tags = append([]string(nil), (*patch.Tags)...)
 	}
+	syncSystemTagsFromFlags(&s.messages[i])
 	if s.feat != nil && !s.feat.Online() {
 		s.feat.mu.Lock()
 		s.feat.enqueueLocked(OutboxOp{Kind: "flag", MessageID: id, Patch: patch, AccountID: s.messages[i].AccountID})
@@ -272,6 +273,7 @@ func (s *MemoryStore) Append(folder FolderID, msg Message) (MessageID, error) {
 	if msg.Category == "" && s.feat != nil {
 		msg.Category = messageCategory(msg, s.feat.snap())
 	}
+	applyAutomaticTags(&msg)
 	s.messages = append(s.messages, msg)
 	s.storeRawLocked(msg)
 	if s.feat != nil && s.feat.index != nil {
@@ -341,6 +343,7 @@ func (s *MemoryStore) Fetch(accountID string) (int, error) {
 		Body:      "This arrival was injected by MemoryStore.Fetch.\nIMAP would FETCH unseen here.\n",
 	}
 	msg.Size = len(msg.Subject) + len(msg.Body) + 80
+	applyAutomaticTags(&msg)
 	s.applyRulesOnLocked(&msg)
 	s.messages = append(s.messages, msg)
 	s.storeRawLocked(msg)
@@ -482,6 +485,7 @@ func (s *MemoryStore) addMessage(m Message) {
 	if m.Category == "" && s.feat != nil {
 		m.Category = messageCategory(m, s.feat.snap())
 	}
+	applyAutomaticTags(&m)
 	s.messages = append(s.messages, m)
 	s.storeRawLocked(m)
 	if s.feat != nil && s.feat.index != nil {
@@ -655,17 +659,47 @@ func (s *MemoryStore) DeleteIdentity(id string) error {
 func (s *MemoryStore) ListTags() []Tag {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if len(s.tags) == 0 {
-		s.tags = DefaultTags()
-	}
+	s.tags = mergeTagStore(s.tags)
 	return cloneTags(s.tags)
 }
 
 func (s *MemoryStore) PutTag(t Tag) (Tag, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.tags = mergeTagStore(s.tags)
+	prev := strings.TrimSpace(t.Previous)
+	t.Previous = ""
+	if prev != "" && !strings.EqualFold(prev, t.Name) {
+		next, err := renameTag(s.tags, prev, t)
+		if err != nil {
+			return Tag{}, err
+		}
+		s.tags = next
+		for i := range s.messages {
+			s.messages[i].Tags = replaceTagName(s.messages[i].Tags, prev, t.Name)
+		}
+		return t, nil
+	}
 	s.tags = upsertTag(s.tags, t)
+	if got, ok := tagByName(s.tags, t.Name); ok {
+		t = got
+	}
 	return t, nil
+}
+
+func (s *MemoryStore) DeleteTag(name string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.tags = mergeTagStore(s.tags)
+	next, err := removeTag(s.tags, name)
+	if err != nil {
+		return err
+	}
+	s.tags = next
+	for i := range s.messages {
+		s.messages[i].Tags = dropTag(s.messages[i].Tags, name)
+	}
+	return nil
 }
 
 func (s *MemoryStore) VirtualFolders() []Folder {
@@ -757,6 +791,9 @@ func (s *MemoryStore) applyRulesOnLocked(m *Message) bool {
 		if stop || r.Stop {
 			break
 		}
+	}
+	if changed {
+		applyAutomaticTags(m)
 	}
 	return changed
 }

@@ -98,10 +98,13 @@ func (id Identity) DisplayFrom() string {
 	return name + " <" + addr + ">"
 }
 
-// Tag is a colored keyword (Thunderbird-style).
+// Tag is a colored keyword. System tags (Unread, Starred, Attachment)
+// are locked pins shared by the sidebar Tags group and Preferences.
 type Tag struct {
-	Name  string `json:"name"`
-	Color string `json:"color"` // #rrggbb
+	Name     string `json:"name"`
+	Color    string `json:"color"` // #rrggbb
+	System   bool   `json:"system,omitempty"`
+	Previous string `json:"previous,omitempty"` // tags.put rename-from
 }
 
 // Part is one MIME part (attachment or alternative).
@@ -319,6 +322,7 @@ type Store interface {
 
 	ListTags() []Tag
 	PutTag(Tag) (Tag, error)
+	DeleteTag(name string) error
 
 	VirtualFolders() []Folder
 

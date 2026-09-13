@@ -97,7 +97,7 @@ func toolIconFileCandidates(icon ToolIcon, destW float32) []string {
 		stems = append(stems, "save")
 	}
 	if icon == IconPen {
-		stems = append(stems, "pencil", "edit", "new")
+		stems = append(stems, "pencil")
 	}
 	var out []string
 	for _, name := range stems {

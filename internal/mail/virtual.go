@@ -111,6 +111,16 @@ func matchVirtual(id FolderID, m Message, folder Folder, kind FolderKind, snap f
 		return false
 	}
 	if tag := TagNameFromFolder(id); tag != "" {
+		if IsSystemTag(tag) {
+			switch strings.ToLower(tag) {
+			case "unread":
+				return !m.Read || hasTag(m.Tags, TagUnread)
+			case "starred":
+				return m.Starred || hasTag(m.Tags, TagStarred)
+			case "attachment":
+				return m.HasAttach || hasTag(m.Tags, TagAttachment)
+			}
+		}
 		return hasTag(m.Tags, tag)
 	}
 	return false

@@ -33,7 +33,8 @@ import "encoding/json"
 //	identities.put      Identity
 //	identities.delete   {id}
 //	tags.list
-//	tags.put            {name, color}
+//	tags.put            {name, color, system?, previous?}
+//	tags.delete         {name}
 //	folders.virtual
 //	filters.list
 //	filters.put         FilterRule
@@ -85,6 +86,7 @@ const (
 	MethodIdentitiesDel  = "identities.delete"
 	MethodTagsList       = "tags.list"
 	MethodTagsPut        = "tags.put"
+	MethodTagsDel        = "tags.delete"
 	MethodFoldersVirtual = "folders.virtual"
 	MethodFiltersList    = "filters.list"
 	MethodFiltersPut     = "filters.put"
@@ -268,6 +270,10 @@ func (p accountDelParams) id() string {
 
 type ruleIDParams struct {
 	ID string `json:"id"`
+}
+
+type tagNameParams struct {
+	Name string `json:"name"`
 }
 
 type applyRulesParams struct {
