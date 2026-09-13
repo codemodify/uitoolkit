@@ -174,6 +174,12 @@ func TestTreeViewExpandSelect(t *testing.T) {
 	if n := len(tree.flatten()); n != 2 {
 		t.Fatalf("expanded rows %d", n)
 	}
+	// With nothing selected the first Down lands on row 0 (GTK / Qt tree
+	// behaviour); it used to skip it because the absent selection read as 0.
+	tree.KeyPress(widget.KeyEvent{Key: platform.KeyDown})
+	if tree.Selected != src {
+		t.Fatalf("first down should select row 0, got %+v", tree.Selected)
+	}
 	tree.KeyPress(widget.KeyEvent{Key: platform.KeyDown})
 	if tree.Selected != child {
 		t.Fatalf("down selected %+v", tree.Selected)

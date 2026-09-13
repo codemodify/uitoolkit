@@ -115,3 +115,95 @@ func TestWalkSkipsInvisible(t *testing.T) {
 		t.Fatal("Contains should ignore visibility")
 	}
 }
+
+// --- focus-scope helpers used by popups, overlays and the window layers.
+
+type focusHost struct {
+	focus Component
+	look  style.LookAndFeel
+}
+
+func (h *focusHost) Invalidate(Component, paintengine2d.Rect) {}
+func (h *focusHost) RequestFocus(c Component)                 { h.focus = c }
+func (h *focusHost) Focus() Component                         { return h.focus }
+func (h *focusHost) Scale() float32                           { return 1 }
+func (h *focusHost) Look() style.LookAndFeel {
+	if h.look == nil {
+		h.look = style.DarkLook()
+	}
+	return h.look
+}
+func (h *focusHost) RequestLayout() {}
+
+type focusNode struct{ Base }
+
+func newFocusNode(wants bool) *focusNode {
+	n := &focusNode{}
+	n.Init(n)
+	n.SetWantsFocus(wants)
+	return n
+}
+
+func TestFocusScopeHelpers(t *testing.T) {
+	h := &focusHost{}
+	root := newFocusNode(false)
+	root.SetHost(h)
+	inert := newFocusNode(false)
+	first := newFocusNode(true)
+	second := newFocusNode(true)
+	root.Add(inert)
+	root.Add(first)
+	root.Add(second)
+
+	if got := FirstFocusable(root); got != first {
+		t.Fatalf("FirstFocusable %v", got)
+	}
+	if !FocusFirstIn(root) || h.Focus() != first {
+		t.Fatalf("FocusFirstIn left focus on %v", h.Focus())
+	}
+	if !first.KeyNav() {
+		t.Fatal("FocusFirstIn must mark keyboard focus")
+	}
+	if !FocusWithin(root) || FocusOwner(root) != first {
+		t.Fatal("FocusWithin/FocusOwner disagree")
+	}
+
+	outside := newFocusNode(true)
+	outside.SetHost(h)
+	if FocusWithin(outside) {
+		t.Fatal("FocusWithin true for an unrelated subtree")
+	}
+
+	// RestoreFocus only fires while the scope owns focus.
+	if !RestoreFocus(root, outside, true) || h.Focus() != outside {
+		t.Fatalf("RestoreFocus did not hand focus over: %v", h.Focus())
+	}
+	if RestoreFocus(root, first, true) {
+		t.Fatal("RestoreFocus stole focus the scope no longer owned")
+	}
+
+	// LiveUnder / ClearFocusOutside drop detached focus.
+	if LiveUnder(outside, root) {
+		t.Fatal("LiveUnder true for a detached node")
+	}
+	if !ClearFocusOutside(h, root) || h.Focus() != nil {
+		t.Fatalf("ClearFocusOutside left %v focused", h.Focus())
+	}
+	h.RequestFocus(second)
+	if ClearFocusOutside(h, root) {
+		t.Fatal("ClearFocusOutside cleared live focus")
+	}
+
+	// KeyTarget refuses anything outside a mounted overlay.
+	overlay := newFocusNode(true)
+	overlay.SetHost(h)
+	if KeyTarget(second, overlay) != nil {
+		t.Fatal("KeyTarget allowed content keys under a modal overlay")
+	}
+	if KeyTarget(overlay, overlay) != overlay {
+		t.Fatal("KeyTarget refused the overlay itself")
+	}
+	if KeyTarget(second, nil) != second {
+		t.Fatal("KeyTarget dropped keys with no overlay")
+	}
+}

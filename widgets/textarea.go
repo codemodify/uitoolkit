@@ -29,6 +29,9 @@ type TextArea struct {
 	scrollX      float32
 	scrollY      float32
 	lines        []style.TextLine
+	lay          areaLayout // model text
+	vlay         areaLayout // visual text (IME preedit composed in)
+	caretUp      bool       // caret sits at the end of the wrapped line, not the start of the next
 	preferX      float32
 	havePref     bool
 	preedit      string
@@ -83,6 +86,7 @@ func (t *TextArea) SetText(s string) {
 	}
 	t.selA, t.selB = t.caret, t.caret
 	t.havePref = false
+	t.caretUp = false
 	t.relayout()
 	t.ensureCaretVisible()
 	t.Invalidate()
@@ -108,6 +112,7 @@ func (t *TextArea) SetSelection(a, b int) {
 	}
 	t.selA, t.selB, t.caret = a, b, b
 	t.havePref = false
+	t.caretUp = false
 	t.relayout()
 	t.ensureCaretVisible()
 	t.Invalidate()
@@ -175,14 +180,73 @@ func (t *TextArea) inner() paintengine2d.Rect {
 	return paintengine2d.XYWH(pad, pad, b.Dx()-pad*2, b.Dy()-pad*2)
 }
 
-func (t *TextArea) relayout() {
-	w := t.inner().Dx()
+// areaLayout caches one wrap result. Re-wrapping is O(runes) with a font
+// lookup per rune, and Paint / indexAt / ensureCaretVisible / IMECaretRect all
+// ask for it, so an uncached TextArea re-wrapped the whole document several
+// times per keystroke and twice per frame.
+type areaLayout struct {
+	valid   bool
+	wrap    bool
+	haveMax bool
+	width   float32
+	maxAdv  float32
+	text    string
+	face    faceKey
+	lines   []style.TextLine
+}
+
+// faceKey identifies a face by the values that decide its metrics. A
+// LookAndFeel may hand out a fresh *style.Font per call (roles differ only by
+// color), so the pointer is not a usable cache key.
+type faceKey struct {
+	family  string
+	size    float32
+	weight  style.Weight
+	outline bool
+}
+
+func faceKeyOf(f *style.Font) faceKey {
+	if f == nil {
+		return faceKey{}
+	}
+	return faceKey{family: f.Family, size: f.Size, weight: f.Weight, outline: f.Outline}
+}
+
+func (c *areaLayout) hit(f faceKey, text string, w float32, wrap bool) bool {
+	return c.valid && c.face == f && c.wrap == wrap && c.width == w && c.text == text
+}
+
+func (c *areaLayout) put(f faceKey, text string, w float32, wrap bool, lines []style.TextLine, maxAdv float32) {
+	c.valid, c.face, c.text, c.width, c.wrap = true, f, text, w, wrap
+	c.lines, c.maxAdv, c.haveMax = lines, maxAdv, true
+}
+
+func (t *TextArea) wrapWidth() float32 {
 	if !t.Wrap {
-		w = 1e6
-	} else if w < 8 {
+		return 1e6
+	}
+	w := t.inner().Dx()
+	if w < 8 {
 		w = 8
 	}
-	t.lines = layoutArea(t.font(), t.Text, w, t.Wrap)
+	return w
+}
+
+// layoutFor returns the wrapped lines for text, reusing cache when possible.
+func (t *TextArea) layoutFor(cache *areaLayout, text string) []style.TextLine {
+	f := t.font()
+	key := faceKeyOf(f)
+	w := t.wrapWidth()
+	if cache.hit(key, text, w, t.Wrap) {
+		return cache.lines
+	}
+	lines, maxAdv := layoutAreaMax(f, text, w, t.Wrap)
+	cache.put(key, text, w, t.Wrap, lines, maxAdv)
+	return lines
+}
+
+func (t *TextArea) relayout() {
+	t.lines = t.layoutFor(&t.lay, t.Text)
 }
 
 func (t *TextArea) contentH() float32 {
@@ -201,14 +265,8 @@ func (t *TextArea) contentW() float32 {
 	if t.Wrap {
 		return t.inner().Dx()
 	}
-	var w float32
-	f := t.font()
-	for _, ln := range t.lines {
-		if adv := f.Advance(ln.Text); adv > w {
-			w = adv
-		}
-	}
-	return w
+	t.relayout()
+	return t.lay.maxAdv
 }
 
 func (t *TextArea) maxScrollX() float32 {
@@ -236,18 +294,30 @@ func (t *TextArea) clampScroll() {
 	t.scrollX = layout.ClampScroll(t.scrollX, t.contentW(), t.inner().Dx())
 }
 
-func (t *TextArea) scrollBy(dy, dx float32) {
+// scrollBy applies a delta and reports whether anything moved.
+func (t *TextArea) scrollBy(dy, dx float32) bool {
+	beforeY, beforeX := t.scrollY, t.scrollX
 	t.scrollY += dy
 	if !t.Wrap {
 		t.scrollX += dx
 	}
 	t.clampScroll()
+	if t.scrollY == beforeY && t.scrollX == beforeX {
+		return false
+	}
 	t.Invalidate()
+	return true
 }
 
+// scrollTrackV keeps the bar on the widget edge but sizes the thumb against
+// the inner viewport, which is what clampScroll / maxScrollY use. Measuring it
+// against the full height made offset/maxOff exceed 1 and the thumb overshoot
+// the track at the bottom of the document.
 func (t *TextArea) scrollTrackV() (track, thumb paintengine2d.Rect) {
 	bar, gap := overflowBarSize(t.Look())
-	return vScrollThumb(t.LocalBounds(), t.contentH(), t.scrollY, bar, gap)
+	in := t.inner()
+	box := paintengine2d.XYWH(0, in.Min.Y, t.LocalBounds().Dx(), in.Dy())
+	return vScrollThumb(box, t.contentH(), t.scrollY, bar, gap)
 }
 
 func (t *TextArea) scrollTrackH() (track, thumb paintengine2d.Rect) {
@@ -255,7 +325,9 @@ func (t *TextArea) scrollTrackH() (track, thumb paintengine2d.Rect) {
 		return
 	}
 	bar, gap := overflowBarSize(t.Look())
-	return hScrollThumb(t.LocalBounds(), t.contentW(), t.scrollX, bar, gap)
+	in := t.inner()
+	box := paintengine2d.XYWH(in.Min.X, 0, in.Dx(), t.LocalBounds().Dy())
+	return hScrollThumb(box, t.contentW(), t.scrollX, bar, gap)
 }
 
 func (t *TextArea) blink() bool {
@@ -274,13 +346,12 @@ func (t *TextArea) Paint(ctx *paintengine2d.Context) {
 	t.relayout()
 	t.clampScroll()
 	text, caret, selA, selB := t.visual()
-	w := t.inner().Dx()
-	if !t.Wrap {
-		w = 1e6
-	} else if w < 8 {
-		w = 8
+	lines := t.lines
+	if text != t.Text {
+		// IME composition: the visual string differs from the model, so it
+		// gets its own (also cached) wrap.
+		lines = t.layoutFor(&t.vlay, text)
 	}
-	lines := layoutArea(t.font(), text, w, t.Wrap)
 	blink := t.blink() && t.editable()
 	if t.ReadOnly {
 		caret = -1
@@ -386,24 +457,50 @@ func (t *TextArea) FocusLost() {
 	}
 }
 
-func (t *TextArea) lineIndexOf(caret int) int {
-	if len(t.lines) == 0 {
+// softWrapped reports whether ln ends at a wrap point rather than a newline.
+// Its End is then the next line's Start, so a caret there is ambiguous.
+func softWrapped(ln style.TextLine) bool { return ln.End == ln.Start+runeCount(ln.Text) }
+
+func (t *TextArea) lineIndexOf(caret int) int { return t.lineIndexFor(caret, t.caretUp) }
+
+// lineIndexFor maps a caret to a visual line. At a soft-wrap boundary the
+// caret belongs to two lines; up (affinity) picks the end of the earlier one,
+// which is where End and a click past the last glyph must land.
+func (t *TextArea) lineIndexFor(caret int, up bool) int {
+	lines := t.lines
+	if len(lines) == 0 {
 		return 0
 	}
-	for i, ln := range t.lines {
-		if caret < ln.End || i == len(t.lines)-1 {
+	for i, ln := range lines {
+		if caret < ln.End {
 			if caret >= ln.Start {
 				return i
 			}
+			continue
+		}
+		if caret != ln.End {
+			continue
+		}
+		if i == len(lines)-1 {
+			return i
+		}
+		if up && softWrapped(ln) {
+			return i
 		}
 	}
-	return len(t.lines) - 1
+	return len(lines) - 1
 }
 
 func (t *TextArea) indexAt(x, y float32) int {
+	idx, up := t.indexAtAff(x, y)
+	t.caretUp = up
+	return idx
+}
+
+func (t *TextArea) indexAtAff(x, y float32) (int, bool) {
 	t.relayout()
 	if len(t.lines) == 0 {
-		return 0
+		return 0, false
 	}
 	inner := t.inner()
 	li := int((y - inner.Min.Y + t.scrollY) / t.lineH())
@@ -423,10 +520,14 @@ func (t *TextArea) indexAt(x, y float32) int {
 	if idx > ln.End {
 		idx = ln.End
 	}
-	if li < len(t.lines)-1 && idx == ln.End && ln.End > ln.Start+n {
+	if li < len(t.lines)-1 && idx == ln.End && !softWrapped(ln) {
+		// Hard break: never put the caret after the newline.
 		idx = ln.End - 1
 	}
-	return idx
+	// Clicking past the last glyph of a wrapped line keeps the caret on that
+	// line instead of jumping to the start of the next one.
+	up := li < len(t.lines)-1 && idx == ln.End && softWrapped(ln)
+	return idx, up
 }
 
 func (t *TextArea) ensureCaretVisible() {
@@ -546,13 +647,15 @@ func (t *TextArea) MouseExit() {
 	t.Base.MouseExit()
 }
 
+// MouseWheel scrolls, and reports false when it cannot: an unscrollable or
+// already-at-the-edge view must let the wheel bubble to an outer scroll pane
+// instead of swallowing it.
 func (t *TextArea) MouseWheel(e widget.MouseEvent) bool {
 	dy := e.Scroll.Y
 	if dy == 0 && e.Scroll.X == 0 {
 		return false
 	}
-	t.scrollBy(wheelDelta(dy, t.lineH()), e.Scroll.X)
-	return true
+	return t.scrollBy(wheelDelta(dy, t.lineH()), e.Scroll.X)
 }
 
 func (t *TextArea) TextInput(r rune) bool {
@@ -606,6 +709,7 @@ func (t *TextArea) KeyPress(e widget.KeyEvent) bool {
 		} else if t.caret > 0 {
 			t.caret--
 		}
+		t.caretUp = false
 		t.applyNav(e.Mods.Shift(), false)
 		return true
 	case platform.KeyRight:
@@ -616,6 +720,7 @@ func (t *TextArea) KeyPress(e widget.KeyEvent) bool {
 		} else if t.caret < runeCount(t.Text) {
 			t.caret++
 		}
+		t.caretUp = false
 		t.applyNav(e.Mods.Shift(), false)
 		return true
 	case platform.KeyUp:
@@ -632,16 +737,21 @@ func (t *TextArea) KeyPress(e widget.KeyEvent) bool {
 			ln := t.lines[t.lineIndexOf(t.caret)]
 			t.caret = ln.Start
 		}
+		t.caretUp = false
 		t.applyNav(e.Mods.Shift(), false)
 		return true
 	case platform.KeyEnd:
 		if e.Mods.Ctrl() {
 			t.caret = runeCount(t.Text)
+			t.caretUp = false
 		} else {
 			t.relayout()
 			li := t.lineIndexOf(t.caret)
 			ln := t.lines[li]
 			t.caret = ln.Start + runeCount(ln.Text)
+			// On a wrapped line this position is also the next line's Start:
+			// stay on the line the user is editing.
+			t.caretUp = softWrapped(ln) && li < len(t.lines)-1
 		}
 		t.applyNav(e.Mods.Shift(), false)
 		return true
@@ -707,8 +817,10 @@ func (t *TextArea) moveVert(dir int, extend bool) {
 	next := li + dir
 	if next < 0 {
 		t.caret = 0
+		t.caretUp = false
 	} else if next >= len(t.lines) {
 		t.caret = runeCount(t.Text)
+		t.caretUp = false
 	} else {
 		dst := t.lines[next]
 		col := t.font().IndexAt(dst.Text, t.preferX)
@@ -720,6 +832,7 @@ func (t *TextArea) moveVert(dir int, extend bool) {
 		if t.caret > dst.End {
 			t.caret = dst.End
 		}
+		t.caretUp = t.caret == dst.End && softWrapped(dst) && next < len(t.lines)-1
 	}
 	t.applyNav(extend, true)
 }
@@ -846,6 +959,7 @@ func (t *TextArea) replaceSel(s string) {
 	t.caret = a + runeCount(s)
 	t.selA, t.selB = t.caret, t.caret
 	t.havePref = false
+	t.caretUp = false
 	t.changed()
 }
 
@@ -859,15 +973,42 @@ func (t *TextArea) changed() {
 }
 
 func layoutArea(f *style.Font, text string, maxW float32, wrap bool) []style.TextLine {
+	lines, _ := layoutAreaMax(f, text, maxW, wrap)
+	return lines
+}
+
+// layoutAreaMax wraps text and also reports the widest line advance (used for
+// the horizontal scroll range when Wrap is off).
+//
+// Line widths accumulate one rune advance at a time through a per-call table.
+// The old form measured f.Advance(runes[start:i+1]) for every rune, which
+// allocated a prefix string and shaped it — quadratic in line length, and it
+// flushed the shared 512-entry shape cache on every frame for any paragraph
+// longer than that.
+func layoutAreaMax(f *style.Font, text string, maxW float32, wrap bool) ([]style.TextLine, float32) {
 	runes := []rune(text)
 	if len(runes) == 0 {
-		return []style.TextLine{{Text: "", Start: 0, End: 0}}
+		return []style.TextLine{{Text: "", Start: 0, End: 0}}, 0
 	}
 	if maxW < 4 {
 		maxW = 4
 	}
+	// CaretX is the metric the caret, selection and IndexAt use. Measuring
+	// wraps with f.Advance instead (as the shaped-prefix version did) put line
+	// breaks about a percent away from where the caret thinks they are.
+	table := make(map[rune]float32, 64)
+	advance := func(r rune) float32 {
+		if w, ok := table[r]; ok {
+			return w
+		}
+		w := f.CaretX(string(r), 1)
+		table[r] = w
+		return w
+	}
 	var out []style.TextLine
+	var maxAdv float32
 	start := 0
+	acc := float32(0)
 	flush := func(end int, includeNL bool) {
 		if end < start {
 			end = start
@@ -876,12 +1017,20 @@ func layoutArea(f *style.Font, text string, maxW float32, wrap bool) []style.Tex
 		if includeNL && end < len(runes) && runes[end] == '\n' {
 			srcEnd = end + 1
 		}
+		var w float32
+		for _, r := range runes[start:end] {
+			w += advance(r)
+		}
+		if w > maxAdv {
+			maxAdv = w
+		}
 		out = append(out, style.TextLine{
 			Text:  string(runes[start:end]),
 			Start: start,
 			End:   srcEnd,
 		})
 		start = srcEnd
+		acc = 0
 	}
 	i := 0
 	for i < len(runes) {
@@ -891,13 +1040,13 @@ func layoutArea(f *style.Font, text string, maxW float32, wrap bool) []style.Tex
 			continue
 		}
 		if wrap {
-			adv := f.Advance(string(runes[start : i+1]))
-			if adv > maxW && i > start {
+			if acc+advance(runes[i]) > maxW && i > start {
 				brk := lastWrap(runes, start, i)
 				flush(brk, false)
 				i = start
 				continue
 			}
+			acc += advance(runes[i])
 		}
 		i++
 	}
@@ -907,7 +1056,7 @@ func layoutArea(f *style.Font, text string, maxW float32, wrap bool) []style.Tex
 	if runes[len(runes)-1] == '\n' {
 		out = append(out, style.TextLine{Text: "", Start: len(runes), End: len(runes)})
 	}
-	return out
+	return out, maxAdv
 }
 
 func lastWrap(runes []rune, start, i int) int {
