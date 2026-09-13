@@ -347,50 +347,7 @@ func (s *session) build() widget.Component {
 func (s *session) menuBar() *widgets.MenuBar {
 	layoutClassic := s.opts.Layout == LayoutClassic
 	return widgets.NewMenuBar(
-		widgets.NewMenu("&File",
-			widgets.ItemIconAccel(style.IconNew, "&New Message", "Ctrl+N", s.write),
-			widgets.Item("New &Folder…", s.newFolder),
-			widgets.Item("Add &Account…", s.openAddAccount),
-			widgets.Item("Remove &Account…", s.removeCurrentAccount),
-			widgets.Item("Account Central", func() {
-				if id := s.accountID(); id != "" {
-					s.showAccountCentral(id)
-				}
-			}),
-			widgets.Sep(),
-			widgets.ItemIconAccel(style.IconOpen, "&Get New Messages", "F5", s.getMessages),
-			widgets.Item("Get Messages for Current Account", s.getMessages),
-			widgets.Sep(),
-			widgets.Item("Work Offline", s.toggleOnline),
-			widgets.Item("Compact Folders", func() { s.mark("Compact Folders (stub)") }),
-			widgets.Item("Empty Trash", s.emptyTrash),
-			widgets.Sep(),
-			widgets.ItemAccel("&Close Window", "Ctrl+W", func() { s.win.Close() }),
-			widgets.ItemAccel("&Quit", "Ctrl+Q", func() { s.app.Quit() }),
-		),
-		widgets.NewMenu("&Edit",
-			&widgets.MenuItem{Text: "Undo", Shortcut: "Ctrl+Z", Disabled: true},
-			widgets.Sep(),
-			widgets.ItemIconAccel(style.IconSearch, "&Find", "Ctrl+F", func() {
-				s.showFilter(true)
-				s.mark("Quick Filter")
-			}),
-			widgets.ItemAccel("Select &All", "Ctrl+A", s.selectAll),
-			widgets.Sep(),
-			widgets.Item("Folder Properties", func() {
-				f, ok, err := s.cli.GetFolder(s.folder)
-				if err != nil || !ok {
-					s.mark("No folder")
-					return
-				}
-				unread, _ := s.cli.Unread(f.ID)
-				list, _ := s.cli.ListMessages(f.ID, Filter{})
-				widgets.Info(s.win.Content(), "Folder Properties",
-					fmt.Sprintf("%s\n%s\n%d messages  ·  %d unread", f.Name, f.ID, len(list), unread),
-					nil)
-			}),
-		),
-		widgets.NewMenu("&View",
+		widgets.NewMenu("M",
 			widgets.CheckItem("Mail Toolbar", true, func() { s.mark("Mail Toolbar") }),
 			widgets.CheckItem("Quick Filter Bar", s.opts.ShowFilter, s.toggleFilter),
 			widgets.Sep(),
@@ -428,66 +385,10 @@ func (s *session) menuBar() *widgets.MenuBar {
 			widgets.RadioItem("&Light", "palette", s.opts.Light, func() { s.setPalette(true) }),
 			widgets.Sep(),
 			widgets.ItemAccel("Message &Source", "Ctrl+U", s.viewSource),
-		),
-		widgets.NewMenu("&Go",
-			widgets.ItemAccel("Next Message", "n", func() { s.moveSel(1) }),
-			widgets.ItemAccel("Previous Message", "p", func() { s.moveSel(-1) }),
-			widgets.Item("Next Unread Message", s.nextUnread),
 			widgets.Sep(),
-			widgets.Item("Inbox", func() { s.goKind(FolderInbox) }),
-			widgets.Item("Drafts", func() { s.goKind(FolderDrafts) }),
-			widgets.Item("Sent", func() { s.goKind(FolderSent) }),
-			widgets.Item("Junk", func() { s.goKind(FolderJunk) }),
-			widgets.Item("Trash", func() { s.goKind(FolderTrash) }),
-		),
-		widgets.NewMenu("&Message",
-			widgets.ItemIconAccel(style.IconNew, "&New Message", "c", s.write),
-			widgets.ItemAccel("&Reply", "r", s.reply),
-			widgets.Item("Reply All", s.reply),
-			widgets.ItemAccel("&Forward", "f", s.forward),
+			widgets.ItemAccel("Preferences", "Ctrl+,", s.openPrefs),
 			widgets.Sep(),
-			widgets.Item("Archive", s.archive),
-			widgets.ItemAccel("Mark as Read", "M", func() { s.setRead(true) }),
-			widgets.Item("Mark as Unread", func() { s.setRead(false) }),
-			widgets.Item("Star", s.toggleStar),
-			widgets.Sep(),
-			widgets.Item("Tag · Important", func() { s.toggleTag("Important") }),
-			widgets.Item("Tag · Work", func() { s.toggleTag("Work") }),
-			widgets.Item("Tag · Personal", func() { s.toggleTag("Personal") }),
-			widgets.Item("Tag · To Do", func() { s.toggleTag("To Do") }),
-			widgets.Sep(),
-			widgets.Item("Mute Thread", func() { s.muteThread(true) }),
-			widgets.Item("Unmute Thread", func() { s.muteThread(false) }),
-			widgets.Item("Add sender to VIP", s.addVIP),
-			widgets.Sep(),
-			widgets.ItemIconAccel(style.IconCut, "&Delete", "#", s.deleteSel),
-			widgets.Sep(),
-			widgets.ItemAccel("Message &Source", "Ctrl+U", s.viewSource),
-		),
-		widgets.NewMenu("&Tools",
-			widgets.ItemAccel("Account Settings", "Ctrl+,", s.openPrefs),
-			widgets.Item("Preferences", s.openPrefs),
-			widgets.Item("Message Filters", s.openFilters),
-			widgets.Item("Apply Filters Now", func() {
-				n, err := s.cli.ApplyRules(s.folder)
-				if err != nil {
-					s.mark(err.Error())
-					return
-				}
-				s.refreshAll()
-				s.mark(fmt.Sprintf("Filters applied (%d)", n))
-			}),
-			widgets.Item("Add-ons and Themes", func() {
-				widgets.Info(s.win.Content(), "Add-ons", "LookAndFeel is a named theme pack from Settings (embedded starters or ~/.config/uitoolkit/themes). No XPI store.", nil)
-			}),
-			widgets.Item("Error Console", func() { s.mark("Error Console (stub)") }),
-			widgets.Item("Activity Manager", func() { s.mark("Activity Manager (stub)") }),
-		),
-		widgets.NewMenu("&Help",
-			widgets.Item("Keyboard", func() {
-				widgets.Info(s.win.Content(), "Keyboard", ShortcutHelp, nil)
-			}),
-			widgets.Item("About Mail", s.about),
+			widgets.ItemAccel("&Quit", "Ctrl+Q", func() { s.app.Quit() }),
 		),
 	)
 }
@@ -2080,7 +1981,7 @@ func (s *session) showCenter() {
 
 func (s *session) buildAccountCentral() widget.Component {
 	s.acctTitle = widgets.NewTitle("Account Central")
-	s.acctBody = widgets.NewLabel("Use File → Add Account or Remove Account to manage stores. Open Inbox or pick a folder in the tree.")
+	s.acctBody = widgets.NewLabel("Use Preferences or Account Central to add or remove stores. Open Inbox or pick a folder in the tree.")
 	get := widgets.NewButton("Get Messages", s.getMessages)
 	write := widgets.NewButton("Write", s.write)
 	prefs := widgets.NewButton("Account Settings", s.openPrefs)
