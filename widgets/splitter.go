@@ -146,9 +146,11 @@ func (s *Splitter) paintPane(ctx *paintengine2d.Context, child widget.Component,
 }
 
 func (s *Splitter) Paint(ctx *paintengine2d.Context) {
-	a, _, b := s.panes(s.LocalBounds())
-	s.paintPane(ctx, s.A, a)
-	s.paintPane(ctx, s.B, b)
+	if !widget.Recording(ctx) {
+		a, _, b := s.panes(s.LocalBounds())
+		s.paintPane(ctx, s.A, a)
+		s.paintPane(ctx, s.B, b)
+	}
 	st := s.State()
 	if s.hovered || s.drag {
 		st |= style.StateHovered

@@ -1,4 +1,14 @@
 {
-  "label": "dark",
-  "palette": "dark"
+  "label": "Classic 95 Dark",
+  "era": "Classic 95",
+  "family": "dark",
+  "palette": "dark",
+  "bevel": "classic-3d",
+  "elevation": 0,
+  "metrics": {
+    "radius": 2,
+    "radiusSmall": 1,
+    "bevelDepth": 1,
+    "scroll": 16
+  }
 }

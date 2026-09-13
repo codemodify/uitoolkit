@@ -101,5 +101,11 @@ func MenuChromeFor(lk LookAndFeel) MenuChrome {
 	if m.RowPad > c.ItemPad {
 		c.ItemPad = m.RowPad
 	}
+	if tok := LookTokens(lk); tok.Metrics.GutterWidth > 0 {
+		gw := tok.Metrics.GutterWidth * s
+		if gw > c.CheckGutter {
+			c.CheckGutter = gw
+		}
+	}
 	return c
 }

@@ -1,0 +1,16 @@
+{
+  "label": "Luna",
+  "era": "Luna",
+  "family": "light",
+  "palette": "light",
+  "bevel": "luna-hottrack",
+  "colors": {
+    "background": "#ece9d8",
+    "surface": "#ece9d8",
+    "hotFill": "#c1d2ee",
+    "hotBorder": "#316ac5",
+    "menuHover": "#c1d2ee",
+    "menuHoverBorder": "#316ac5",
+    "accent": "#316ac5"
+  }
+}
