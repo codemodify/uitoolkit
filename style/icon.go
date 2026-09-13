@@ -117,9 +117,10 @@ func ToolIconHiDPIFileName(icon ToolIcon) string {
 	return ""
 }
 
-// iconHiDPIMin is the destination width (user-space px) at which @2x is
-// preferred. Toolbar 1× is 24; message icons and 2× chrome are ≥36.
-const iconHiDPIMin = 36
+// iconNative1x is the native width of a 1× ToolIcon PNG. Anything larger
+// than that upscales the small asset, so @2x (48×48) is preferred as soon as
+// the destination exceeds it — "large" chrome icons are 32 user-space px.
+const iconNative1x = 24
 
 func toolIconAliases(icon ToolIcon) []string {
 	switch icon {
@@ -156,7 +157,7 @@ func stemFileCandidates(name string, destW float32) []string {
 		return nil
 	}
 	lo, hi := name+".png", name+"@2x.png"
-	if destW >= iconHiDPIMin {
+	if destW > iconNative1x {
 		return []string{hi, lo}
 	}
 	return []string{lo, hi}

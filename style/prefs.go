@@ -76,9 +76,12 @@ func resolveAppearance(raw appearanceFileJSON) Appearance {
 	} else if packName == "light" {
 		a.Name = StarterName(ThemeLight)
 		a.Theme = ThemeLight
-	} else if packName != "" && packName != "dark" {
-		a.Name = packName
-		a.Theme = ParseTheme(packName)
+	} else if clean, err := SanitizeThemeName(packName); err == nil && clean != "" && clean != "dark" {
+		// A pack that is not installed (yet) keeps its name so the pref
+		// survives, but only in canonical form: look.json is shared with
+		// other apps and the name ends up in file paths.
+		a.Name = clean
+		a.Theme = ParseTheme(clean)
 	}
 	if strings.TrimSpace(raw.Corners) != "" {
 		a.Corners = ParseCorners(raw.Corners)
