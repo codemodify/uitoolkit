@@ -984,70 +984,91 @@ func assertFetchWriteIconsPaint(t *testing.T, bar *widgets.ToolBar) {
 	if bar == nil {
 		t.Fatal("left toolbar")
 	}
-	sz := bar.Measure(layout.Unbounded())
-	if sz.X < 8 || sz.Y < 8 {
-		t.Fatalf("toolbar size %v", sz)
+	fetch := widgets.NewToolBar(widgets.ToolIconBtn(style.IconDownload, "Fetch", nil))
+	write := widgets.NewToolBar(widgets.ToolIconBtn(style.IconPen, "Write", nil))
+	if bar.Host() != nil {
+		fetch.SetHost(bar.Host())
+		write.SetHost(bar.Host())
 	}
-	bar.Arrange(paintengine2d.XYWH(0, 0, sz.X, sz.Y))
-	img := paintengine2d.NewImage(int(sz.X)+2, int(sz.Y)+2)
-	ctx := paintengine2d.NewContext(img)
-	bar.Paint(ctx)
-	var fetchR, writeR paintengine2d.Rect
-	for i, it := range bar.Items() {
-		if it == nil {
-			continue
-		}
-		switch it.Text {
-		case "Fetch":
-			fetchR = bar.ItemRect(i)
-		case "Write":
-			writeR = bar.ItemRect(i)
-		}
-	}
-	if fetchR.Empty() || writeR.Empty() {
-		t.Fatalf("Fetch/Write rects fetch=%v write=%v", fetchR, writeR)
-	}
-	fetchInk := iconRegionInk(img, fetchR)
-	writeInk := iconRegionInk(img, writeR)
+	fetchImg := rasterToolBar(fetch)
+	writeImg := rasterToolBar(write)
+	fetchInk := toolIconContrast(fetch, fetchImg)
+	writeInk := toolIconContrast(write, writeImg)
 	if fetchInk < 8 {
 		t.Fatalf("Fetch download icon has no ink (%d)", fetchInk)
 	}
 	if writeInk < 8 {
 		t.Fatalf("Write pen icon has no ink (%d)", writeInk)
 	}
-	if fetchInk == writeInk {
-		t.Fatalf("Fetch and Write icon ink identical (%d); pen should differ from download", fetchInk)
+	if toolIconMaskDiff(fetch, fetchImg, write, writeImg) < 8 {
+		t.Fatal("Fetch download and Write pen glyphs should differ")
 	}
 }
 
-func iconRegionInk(img *paintengine2d.Image, btn paintengine2d.Rect) int {
-	pad, side, _ := style.ToolButtonChromeFor(nil, btn.Dy())
-	x0 := int(btn.Min.X + pad)
-	y0 := int(btn.Min.Y + (btn.Dy()-side)*0.5)
-	x1 := x0 + int(side)
-	y1 := y0 + int(side)
-	if x0 < 0 {
-		x0 = 0
+func rasterToolBar(tb *widgets.ToolBar) *paintengine2d.Image {
+	sz := tb.Measure(layout.Unbounded())
+	h := sz.Y
+	if h < 36 {
+		h = 36
 	}
-	if y0 < 0 {
-		y0 = 0
-	}
-	if x1 > img.Width {
-		x1 = img.Width
-	}
-	if y1 > img.Height {
-		y1 = img.Height
-	}
+	tb.Arrange(paintengine2d.XYWH(0, 0, sz.X, h))
+	img := paintengine2d.NewImage(int(sz.X)+4, int(h)+4)
+	tb.Paint(paintengine2d.NewContext(img))
+	return img
+}
+
+func toolIconBox(tb *widgets.ToolBar) (x0, y0, x1, y1 int) {
+	r := tb.ItemRect(0)
+	pad, side, _ := style.ToolButtonChromeFor(tb.Look(), r.Dy())
+	x0 = int(r.Min.X + pad)
+	y0 = int(r.Min.Y + (r.Dy()-side)*0.5)
+	return x0, y0, x0 + int(side), y0 + int(side)
+}
+
+func toolIconContrast(tb *widgets.ToolBar, img *paintengine2d.Image) int {
+	br, bg, bb := styleRGB8(tb.Look().Palette().SurfaceAlt)
+	x0, y0, x1, y1 := toolIconBox(tb)
 	n := 0
 	for y := y0; y < y1; y++ {
 		for x := x0; x < x1; x++ {
-			_, _, _, a := img.PremulAt(x, y)
-			if a > 20 {
+			if x < 0 || y < 0 || x >= img.Width || y >= img.Height {
+				continue
+			}
+			r, g, b, _ := img.PremulAt(x, y)
+			if chanDelta(r, br)+chanDelta(g, bg)+chanDelta(b, bb) > 80 {
 				n++
 			}
 		}
 	}
 	return n
+}
+
+func toolIconMaskDiff(a *widgets.ToolBar, ai *paintengine2d.Image, b *widgets.ToolBar, bi *paintengine2d.Image) int {
+	ax0, ay0, ax1, ay1 := toolIconBox(a)
+	bx0, by0, _, _ := toolIconBox(b)
+	w, h := ax1-ax0, ay1-ay0
+	diff := 0
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			ar, ag, ab, _ := ai.PremulAt(ax0+x, ay0+y)
+			br, bg, bb, _ := bi.PremulAt(bx0+x, by0+y)
+			if chanDelta(ar, br)+chanDelta(ag, bg)+chanDelta(ab, bb) > 40 {
+				diff++
+			}
+		}
+	}
+	return diff
+}
+
+func chanDelta(a, b uint8) int {
+	if a > b {
+		return int(a - b)
+	}
+	return int(b - a)
+}
+
+func styleRGB8(c paintengine2d.Color) (r, g, b uint8) {
+	return uint8(c.R*255 + 0.5), uint8(c.G*255 + 0.5), uint8(c.B*255 + 0.5)
 }
 
 func assertMenubarChromeRow(t *testing.T, root widget.Component, mb *widgets.MenuBar, left, right *widgets.ToolBar) {
@@ -2074,7 +2095,7 @@ func TestMailPreferencesTabs(t *testing.T) {
 		}
 	}
 	var add, edit, remove *widgets.Button
-	widget.Walk(w.Content(), func(c widget.Component) {
+	walkAll(w.Content(), func(c widget.Component) {
 		b, ok := c.(*widgets.Button)
 		if !ok {
 			return
