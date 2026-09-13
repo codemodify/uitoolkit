@@ -378,6 +378,18 @@ func (s *Server) dispatch(req Request) Response {
 		t, err = decodeParams[Tag](req.Params)
 		if err == nil {
 			result, err = s.Store.PutTag(t)
+			if err == nil {
+				s.broadcast(EventChanged, eventParams{Reason: "tags"})
+			}
+		}
+	case MethodTagsDel:
+		var p tagNameParams
+		p, err = decodeParams[tagNameParams](req.Params)
+		if err == nil {
+			err = s.Store.DeleteTag(p.Name)
+			if err == nil {
+				s.broadcast(EventChanged, eventParams{Reason: "tags"})
+			}
 		}
 	case MethodFoldersVirtual:
 		result = s.Store.VirtualFolders()

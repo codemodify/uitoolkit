@@ -114,6 +114,11 @@ func TestIconDownloadAndPenPaint(t *testing.T) {
 	if maskDiff(rasterIcon(IconSetClassic, IconPen), rasterIcon(IconSetClassic, IconNew)) < 8 {
 		t.Fatal("pen should differ from new")
 	}
+	for _, name := range toolIconFileCandidates(IconPen, 24) {
+		if name == "new.png" || name == "new@2x.png" || name == "edit.png" {
+			t.Fatalf("pen must not fall back to %s: %v", name, toolIconFileCandidates(IconPen, 24))
+		}
+	}
 }
 
 func TestIconMailPaintsAndThemeName(t *testing.T) {

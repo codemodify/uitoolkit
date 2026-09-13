@@ -517,6 +517,7 @@ func (s *LocalStore) SetFlags(id MessageID, patch FlagPatch) error {
 			add = append(add, imapSafeKeyword(t))
 		}
 	}
+	syncSystemTagsFromFlags(m)
 	if s.feat != nil && !s.feat.Online() {
 		s.feat.mu.Lock()
 		s.feat.enqueueLocked(OutboxOp{Kind: "flag", MessageID: id, Patch: patch, AccountID: m.AccountID, UID: m.UID})
@@ -699,6 +700,7 @@ func (s *LocalStore) Append(folder FolderID, msg Message) (MessageID, error) {
 	if msg.Size <= 0 {
 		msg.Size = len(msg.Subject) + len(msg.Body) + 80
 	}
+	applyAutomaticTags(&msg)
 	ident := s.defaultIdentLocked(f.AccountID)
 	raw := BuildRFC822(msg, ident, nil)
 	s.writeRawLocked(msg, raw)
@@ -889,6 +891,7 @@ func (s *LocalStore) syncPOP3Locked(accountID string) (int, error) {
 		if msg.Category == "" && s.feat != nil {
 			msg.Category = messageCategory(msg, s.feat.snap())
 		}
+		applyAutomaticTags(&msg)
 		s.writeRawLocked(msg, raw)
 		s.messages = append(s.messages, msg)
 		if s.feat != nil && s.feat.index != nil {
@@ -992,6 +995,7 @@ func (s *LocalStore) syncFolderLocked(cli *imapClient, f Folder) (int, error) {
 				m.Attachments = append(m.Attachments, p.Filename)
 			}
 		}
+		applyAutomaticTags(&m)
 		s.messages = append(s.messages, m)
 		s.applyRulesOnLocked(&s.messages[len(s.messages)-1])
 		added++
@@ -1117,15 +1121,50 @@ func (s *LocalStore) DeleteIdentity(id string) error {
 func (s *LocalStore) ListTags() []Tag {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.tags = mergeTagStore(s.tags)
 	return cloneTags(s.tags)
 }
 
 func (s *LocalStore) PutTag(t Tag) (Tag, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.tags = mergeTagStore(s.tags)
+	prev := strings.TrimSpace(t.Previous)
+	t.Previous = ""
+	if prev != "" && !strings.EqualFold(prev, t.Name) {
+		next, err := renameTag(s.tags, prev, t)
+		if err != nil {
+			return Tag{}, err
+		}
+		s.tags = next
+		for i := range s.messages {
+			s.messages[i].Tags = replaceTagName(s.messages[i].Tags, prev, t.Name)
+		}
+		s.saveLocked()
+		return t, nil
+	}
 	s.tags = upsertTag(s.tags, t)
+	if got, ok := tagByName(s.tags, t.Name); ok {
+		t = got
+	}
 	s.saveLocked()
 	return t, nil
+}
+
+func (s *LocalStore) DeleteTag(name string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.tags = mergeTagStore(s.tags)
+	next, err := removeTag(s.tags, name)
+	if err != nil {
+		return err
+	}
+	s.tags = next
+	for i := range s.messages {
+		s.messages[i].Tags = dropTag(s.messages[i].Tags, name)
+	}
+	s.saveLocked()
+	return nil
 }
 
 func (s *LocalStore) VirtualFolders() []Folder {
@@ -1216,6 +1255,9 @@ func (s *LocalStore) applyRulesOnLocked(m *Message) bool {
 		if stop || r.Stop {
 			break
 		}
+	}
+	if changed {
+		applyAutomaticTags(m)
 	}
 	return changed
 }
@@ -1429,9 +1471,7 @@ func (s *LocalStore) loadLocked() {
 	_ = readJSONFile(filepath.Join(s.dir, "categories.json"), &s.feat.cats)
 	_ = readJSONFile(filepath.Join(s.dir, "notify.json"), &s.feat.notify)
 	_ = readJSONFile(filepath.Join(s.dir, "outbox.json"), &s.feat.outbox)
-	if len(s.tags) == 0 {
-		s.tags = DefaultTags()
-	}
+	s.tags = mergeTagStore(s.tags)
 	assignThreadIDs(s.messages)
 	if s.feat.index != nil {
 		s.feat.index.rebuild(s.messages)

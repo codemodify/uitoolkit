@@ -336,7 +336,7 @@ Quick Filter in the UI calls `messages.list` with the pin/query filter so the li
 
 Condition fields: `from`, `to`, `subject`, `body`, `attachment`, `unread`, `tag`.
 Actions: `move` (`folder`), `tag`, `markRead`, `markUnread`, `delete`, `stop`.
-AND across conditions. Persist in MemoryStore or the disk cache. The sidebar Tags group and Preferences → Tags share the colored-keyword list (pins plus tags).
+AND across conditions. Persist in MemoryStore or the disk cache. The sidebar Tags group and Preferences → Tags share one Tags store (locked Unread / Starred / Attachment plus keywords). Preferences can add, edit, and remove user tags.
 
 ## UI features (v0.10.13)
 
@@ -349,12 +349,12 @@ AND across conditions. Persist in MemoryStore or the disk cache. The sidebar Tag
 - **Thread columns** — ★, 📎, Topic, Who, When. No Size. Click a column header to sort.
 - **Card / Table** — **M → View** Card view. Remembered in `~/.config/uitoolkit/mailui.json`. Star after the message context menu paints immediately.
 - **Density** — **M → View** Compact / Default / Relaxed.
-- **Folder tree** — account folders and Tags at the top of the sidebar; Outbox is pinned to the **bottom** of the pane (separated from Tags). Unified Folders, Smart Folders, Categories, and VIP are not shown. Click an account root to open that Inbox. The Tags group holds Unread / Starred / Attachment pins (✓ + bold when on) plus remaining tag folders (Important, To Do). Work / Personal / Later are not listed there.
+- **Folder tree** — account folders and Tags at the top of the sidebar; Outbox is pinned to the **bottom** of the pane (separated from Tags). Unified Folders, Smart Folders, Categories, and VIP are not shown. Click an account root to open that Inbox. The Tags group is the same list as Preferences → Tags: locked Unread / Starred / Attachment pins (✓ + bold when on) plus every keyword (Important, Work, Personal, To Do, Later, and user-created).
 - **Chrome** — no path/subtitle strip, no bottom status bar, no unread-folder-count footer, no sidebar Account / Folders section headers, no identity or Tags ComboBox, and no active-filter banner (`Filter on · N shown` / `Clear filter`) above the thread list. The folder tree (including Tags) starts at the top of the sidebar. The menubar row is **M**, a left **Fetch / Write** toolbar, then a right-aligned **Filter** toolbar. Tag, Archive, Junk, Cards, Classic, and Delete are not on those bars. There is no strip above the Topic / Who / When header. The Quick Filter field stays hidden until that button or Ctrl+F (`ShowFilter` defaults off; a saved `mailui.json` `showFilter: true` is honored) and opens on the same row; Escape hides it again and keeps the query. Filter pins are only on the Tags tree. Reply and Forward are keyboard / context menu only. The menu bar is a single **M** menu: **View** submenu (layout / list / density / Threaded / Hide muted threads), **Notify** submenu (new mail / VIP-only / desktop), Preferences, Quit. Preferences is Accounts + Tags (the same Tags model as the sidebar). Menu and toolbar hover do not refresh the folder tree or the message list.
 - **Threaded** view and **Mute Thread**.
 - **Attachments** — per-row Open / Save As; toolbar Save All (one folder pick, then write all files); single click selects, double click or row Open opens.
 - **Snappy open** — unread click patches the row; preview uses a cached `messages.get` body.
-- **Colored tags** — Preferences → Tags is the same list as the sidebar Tags group.
+- **Colored tags** — Preferences → Tags is the same list as the sidebar Tags group, with Add / Edit / Remove (Remove disabled for Unread, Starred, and Attachment). New mail is tagged Unread; parts with a filename get Attachment.
 
 ## Keyboard (Thunderbird-like)
 
