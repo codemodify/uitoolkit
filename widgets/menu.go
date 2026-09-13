@@ -134,12 +134,12 @@ func (m *MenuBar) titlesWidth() float32 {
 }
 
 func (m *MenuBar) Measure(c layout.Constraints) paintengine2d.Point {
+	// Intrinsic title strip only. Do not expand to MaxW: a Row/Flex parent
+	// decides growth (Mail puts M on the left of a chrome row). A column
+	// AlignStretch still arranges the bar to the full cross-axis width.
 	w := m.titlesWidth()
-	if w < 200 {
-		w = 200
-	}
-	if c.HasMaxW() {
-		w = c.MaxW
+	if w < 1 {
+		w = 1
 	}
 	return c.Constrain(paintengine2d.Pt(w, m.barH()))
 }
@@ -374,10 +374,10 @@ var _ widget.CascadeHost = (*PopupMenu)(nil)
 // PopupMenu is a floating list of MenuItems (drop-down or context menu).
 type PopupMenu struct {
 	widget.Base
-	Items     []*MenuItem
-	OnPick    func(*MenuItem)
-	OnDismiss func()
-	OffsetY   float32
+	Items      []*MenuItem
+	OnPick     func(*MenuItem)
+	OnDismiss  func()
+	OffsetY    float32
 	hover      int
 	press      int
 	focus      int

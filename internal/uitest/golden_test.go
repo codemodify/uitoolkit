@@ -8,8 +8,8 @@ import (
 // Locked hashes for the chrome strip. Recomputed when UITK_UPDATE_GOLDEN=1
 // prints the new values — do not silently accept a dirty-rect glyph change.
 var chromeStripHash = map[float32]uint64{
-	1: 0x97fdf4d4d16a7ac9,
-	2: 0x9f5fd44e7a6d2d61,
+	1: 0xdb74ae491f3d8024,
+	2: 0xf3f2324340f1c655,
 }
 
 func TestChromeStripGolden(t *testing.T) {

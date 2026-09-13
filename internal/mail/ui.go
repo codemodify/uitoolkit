@@ -334,7 +334,10 @@ func (s *session) build() widget.Component {
 	}
 
 	s.mainBar = s.toolBar()
-	chrome := []widget.Component{s.menuBar(), s.mainBar, split}
+	slot := widgets.NewSpacer()
+	chromeRow := widgets.NewRow(s.menuBar(), slot, s.mainBar).WithGap(0).WithAlign(layout.AlignCenter)
+	chromeRow.AddFlex(slot, 1)
+	chrome := []widget.Component{chromeRow, split}
 	if s.status != nil {
 		chrome = append(chrome, s.status)
 	}
