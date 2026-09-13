@@ -105,9 +105,15 @@ func CheckMenuHoverBordered(img *paintengine2d.Image, row paintengine2d.Rect, lk
 		return fmt.Errorf("hovered row %+v lacks MenuHoverBorder (near=%d)", row, border)
 	}
 	// A text-invert highlight would not paint the icon gutter.
+	// MenuBar titles have no gutter; classic-3d uses a solid select, so
+	// sample the row center. Luna / flat packs still check the icon column.
 	ch := style.MenuChromeFor(lk)
 	gx := int(row.Min.X + ch.CheckCol()*0.45)
 	gy := int((row.Min.Y + row.Max.Y) * 0.5)
+	if tok := style.LookTokens(lk); tok.Bevel == style.BevelClassic3D {
+		// Solid navy select + inverted label: avoid sampling glyph ink.
+		gx = int(row.Min.X + 4)
+	}
 	if ColorDist(img, gx, gy, p.MenuHover) >= ColorDist(img, gx, gy, p.MenuGutter) {
 		return fmt.Errorf("icon gutter %d,%d is not MenuHover fill", gx, gy)
 	}

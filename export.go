@@ -49,6 +49,10 @@ type (
 	IconSize          = style.IconSize
 	ThemePack         = style.ThemePack
 	ThemeSource       = style.ThemeSource
+	ThemeTokens       = style.ThemeTokens
+	BevelStyle        = style.BevelStyle
+	ChromeMetrics     = style.ChromeMetrics
+	ThemeEraGroup     = style.ThemeEraGroup
 	IconSetInfo       = style.IconSetInfo
 )
 
@@ -77,6 +81,11 @@ const (
 	ThemeSourceBuiltin     = style.ThemeSourceBuiltin
 	ThemeSourceUser        = style.ThemeSourceUser
 	DefaultThemeName       = style.DefaultThemeName
+	BevelNone              = style.BevelNone
+	BevelClassic3D         = style.BevelClassic3D
+	BevelLunaHottrack      = style.BevelLunaHottrack
+	BevelSoftShadow        = style.BevelSoftShadow
+	BevelFluentAccent      = style.BevelFluentAccent
 	HostMenu               = platform.HostMenu
 	ToolkitMenu            = platform.ToolkitMenu
 )
@@ -122,6 +131,12 @@ func ListThemes() []style.ThemePack {
 func ListBuiltinThemes() []style.ThemePack {
 	return style.ListBuiltinThemes()
 }
+func ListBuiltinThemesByEra() []style.ThemeEraGroup {
+	return style.ListBuiltinThemesByEra()
+}
+func AllBuiltinThemeNames() []string {
+	return style.AllBuiltinThemeNames()
+}
 func ListUserThemes() []style.ThemePack {
 	return style.ListUserThemes()
 }
@@ -160,6 +175,9 @@ func SplitLookThemeName(name string) (string, style.CornerStyle, bool) {
 }
 func LookAppearance(look style.LookAndFeel) style.Appearance {
 	return style.LookAppearance(look)
+}
+func LookTokens(look style.LookAndFeel) style.ThemeTokens {
+	return style.LookTokens(look)
 }
 func WithScale(look style.LookAndFeel, scale float32) style.LookAndFeel {
 	return style.WithScale(look, scale)

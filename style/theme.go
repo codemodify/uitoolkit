@@ -30,21 +30,29 @@ const (
 	ThemeSourceUser ThemeSource = "user"
 )
 
-// ThemePack is a named color theme (palette only). Corners and icons
+// ThemePack is a named era skin (tokens + family). Corners and icons
 // are independent look.json prefs, not part of the pack identity.
 type ThemePack struct {
 	Name    string
 	Label   string
 	Source  ThemeSource
-	Palette ThemeName
+	Palette ThemeName // dark / light family (Mail View + legacy)
+	Era     string
+	Tokens  ThemeTokens
 }
 
 type themeFileJSON struct {
-	Label   string `json:"label,omitempty"`
-	Palette string `json:"palette,omitempty"`
-	Theme   string `json:"theme,omitempty"`   // alias for palette
-	Corners string `json:"corners,omitempty"` // ignored; look.json owns corners
-	Icons   string `json:"icons,omitempty"`   // ignored; look.json owns icons
+	Label     string             `json:"label,omitempty"`
+	Palette   string             `json:"palette,omitempty"` // family: dark / light
+	Theme     string             `json:"theme,omitempty"`   // alias for palette
+	Family    string             `json:"family,omitempty"`
+	Era       string             `json:"era,omitempty"`
+	Bevel     string             `json:"bevel,omitempty"`
+	Elevation int                `json:"elevation,omitempty"`
+	Metrics   *chromeMetricsJSON `json:"metrics,omitempty"`
+	Colors    map[string]string  `json:"colors,omitempty"`
+	Corners   string             `json:"corners,omitempty"` // ignored; look.json owns corners
+	Icons     string             `json:"icons,omitempty"`   // ignored; look.json owns icons
 }
 
 var (
@@ -128,9 +136,13 @@ func (p ThemePack) Display() string {
 // Appearance resolves the pack into palette knobs. Corners and icons
 // stay at defaults; callers overlay look.json prefs.
 func (p ThemePack) Appearance() Appearance {
+	fam := p.Palette
+	if p.Tokens.Family != "" {
+		fam = p.Tokens.Family
+	}
 	return Appearance{
 		Name:    p.Name,
-		Theme:   ParseTheme(string(p.Palette)),
+		Theme:   ParseTheme(string(fam)),
 		Corners: CornersRound,
 		Icons:   IconSetClassic,
 	}.Normalize()
@@ -148,23 +160,133 @@ func parseThemeFile(name string, raw []byte, src ThemeSource) (ThemePack, error)
 	}
 	pal := doc.Palette
 	if pal == "" {
+		pal = doc.Family
+	}
+	if pal == "" {
 		pal = doc.Theme
 	}
 	label := strings.TrimSpace(doc.Label)
 	if label == "" {
 		label = name
 	}
+	era := strings.TrimSpace(doc.Era)
+	tok := tokensFromJSON(doc)
+	if base, ok := builtinEraPack(name); ok {
+		if era == "" {
+			era = base.Era
+		}
+		if label == name && base.Label != "" {
+			label = base.Label
+		}
+		if tok.Empty() || (len(doc.Colors) == 0 && doc.Bevel == "") {
+			tok = base.Tokens
+		} else {
+			tok = mergeTokens(base.Tokens, tok)
+		}
+		if pal == "" {
+			pal = string(base.Palette)
+		}
+	}
+	tok.Family = ParseTheme(pal)
+	if tok.Era == "" {
+		tok.Era = era
+	}
+	tok = tok.Resolve()
 	return ThemePack{
 		Name:    name,
 		Label:   label,
 		Source:  src,
-		Palette: ParseTheme(pal),
+		Palette: tok.Family,
+		Era:     era,
+		Tokens:  tok,
 	}, nil
+}
+
+func mergeTokens(base, over ThemeTokens) ThemeTokens {
+	out := base
+	if over.Bevel != "" {
+		out.Bevel = over.Bevel
+	}
+	if over.Family != "" {
+		out.Family = over.Family
+	}
+	if over.Era != "" {
+		out.Era = over.Era
+	}
+	out.Palette = overlayPalette(base.Palette, over.Palette)
+	out.Metrics = mergeChromeMetrics(base.Metrics, over.Metrics)
+	if !colorUnset(over.Hot.Fill) {
+		out.Hot.Fill = over.Hot.Fill
+	}
+	if !colorUnset(over.Hot.Border) {
+		out.Hot.Border = over.Hot.Border
+	}
+	if !colorUnset(over.Pressed.Fill) {
+		out.Pressed.Fill = over.Pressed.Fill
+	}
+	if !colorUnset(over.Pressed.Border) {
+		out.Pressed.Border = over.Pressed.Border
+	}
+	if !colorUnset(over.Selected.Fill) {
+		out.Selected.Fill = over.Selected.Fill
+	}
+	if !colorUnset(over.Selected.Border) {
+		out.Selected.Border = over.Selected.Border
+	}
+	if !colorUnset(over.Disabled.Fill) {
+		out.Disabled.Fill = over.Disabled.Fill
+	}
+	if !colorUnset(over.Disabled.Border) {
+		out.Disabled.Border = over.Disabled.Border
+	}
+	if !colorUnset(over.Focus.Fill) {
+		out.Focus.Fill = over.Focus.Fill
+	}
+	if !colorUnset(over.Focus.Border) {
+		out.Focus.Border = over.Focus.Border
+	}
+	return out
+}
+
+func mergeChromeMetrics(base, over ChromeMetrics) ChromeMetrics {
+	out := base
+	if over.Radius != 0 {
+		out.Radius = over.Radius
+	}
+	if over.RadiusSmall != 0 {
+		out.RadiusSmall = over.RadiusSmall
+	}
+	if over.BevelDepth != 0 {
+		out.BevelDepth = over.BevelDepth
+	}
+	if over.GutterWidth != 0 {
+		out.GutterWidth = over.GutterWidth
+	}
+	if over.Scroll != 0 {
+		out.Scroll = over.Scroll
+	}
+	if over.ControlH != 0 {
+		out.ControlH = over.ControlH
+	}
+	if over.FieldH != 0 {
+		out.FieldH = over.FieldH
+	}
+	if over.ComboH != 0 {
+		out.ComboH = over.ComboH
+	}
+	if over.Elevation != 0 {
+		out.Elevation = over.Elevation
+	}
+	return out
 }
 
 func loadEmbedded() map[string]ThemePack {
 	embeddedOnce.Do(func() {
 		embeddedPack = map[string]ThemePack{}
+		for name, p := range eraPackIndex() {
+			p.Source = ThemeSourceBuiltin
+			embeddedPack[name] = p
+		}
 		_ = fs.WalkDir(starterFS, ".", func(p string, d fs.DirEntry, err error) error {
 			if err != nil || d.IsDir() || path.Base(p) != "theme.json" {
 				return err
@@ -178,7 +300,9 @@ func loadEmbedded() map[string]ThemePack {
 			if err != nil {
 				return nil
 			}
-			embeddedPack[name] = pack
+			if _, exists := embeddedPack[name]; !exists {
+				embeddedPack[name] = pack
+			}
 			return nil
 		})
 	})
@@ -186,6 +310,9 @@ func loadEmbedded() map[string]ThemePack {
 }
 
 func starterOrder() []string {
+	if names := builtinEraOrder(); len(names) > 0 {
+		return names
+	}
 	return []string{StarterName(ThemeDark), StarterName(ThemeLight)}
 }
 
@@ -237,7 +364,35 @@ func ListUserThemes() []ThemePack {
 	return out
 }
 
-// ListBuiltinThemes returns embedded dark / light when not shadowed.
+// ThemeEraGroup is a Settings section of built-in packs from one decade.
+type ThemeEraGroup struct {
+	Era   string
+	Packs []ThemePack
+}
+
+// ListBuiltinThemesByEra returns unshadowed embedded packs grouped oldest → newest.
+func ListBuiltinThemesByEra() []ThemeEraGroup {
+	var groups []ThemeEraGroup
+	var cur ThemeEraGroup
+	for _, p := range ListBuiltinThemes() {
+		era := p.Era
+		if era == "" {
+			era = "Built-in"
+		}
+		if cur.Era != "" && cur.Era != era {
+			groups = append(groups, cur)
+			cur = ThemeEraGroup{}
+		}
+		cur.Era = era
+		cur.Packs = append(cur.Packs, p)
+	}
+	if cur.Era != "" {
+		groups = append(groups, cur)
+	}
+	return groups
+}
+
+// ListBuiltinThemes returns embedded era packs when not shadowed.
 func ListBuiltinThemes() []ThemePack {
 	users := listUserThemeMap()
 	embedded := loadEmbedded()
@@ -264,12 +419,14 @@ func ListThemes() []ThemePack {
 }
 
 // LoadTheme prefers a user pack at themes/<name>/theme.json, then an
-// embedded starter. Legacy compound ids map to dark / light.
+// embedded starter. Legacy compound ids map to dark / light. Era aliases
+// (classic95, luna-dark, …) resolve to the shipped pack id.
 func LoadTheme(name string) (ThemePack, bool) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return ThemePack{}, false
 	}
+	name = aliasThemeName(strings.ToLower(name))
 	if pack, ok := readUserTheme(name); ok {
 		return pack, true
 	}
@@ -301,15 +458,36 @@ func ExportAppearance(name string, a Appearance) (ThemePack, error) {
 		return ThemePack{}, err
 	}
 	a = a.Normalize()
+	tok := ThemeTokens{Family: a.Theme}
+	if live, ok := LoadTheme(a.Name); ok {
+		tok = live.Tokens
+		if tok.Family == "" {
+			tok.Family = a.Theme
+		}
+	} else {
+		if base, ok := builtinEraPack(StarterName(a.Theme)); ok {
+			tok = base.Tokens
+		}
+	}
+	tok.Family = ParseTheme(string(tok.Family))
+	tok = tok.Resolve()
 	pack := ThemePack{
 		Name:    clean,
 		Label:   clean,
 		Source:  ThemeSourceUser,
-		Palette: a.Theme,
+		Palette: tok.Family,
+		Era:     tok.Era,
+		Tokens:  tok,
 	}
 	doc := themeFileJSON{
-		Label:   pack.Label,
-		Palette: string(pack.Palette),
+		Label:     pack.Label,
+		Palette:   string(pack.Palette),
+		Family:    string(pack.Palette),
+		Era:       pack.Era,
+		Bevel:     string(tok.Bevel),
+		Elevation: tok.Metrics.Elevation,
+		Metrics:   tok.Metrics.json(),
+		Colors:    tokensToColorMap(tok),
 	}
 	if err := writeJSONFile(ThemeFile(clean), doc); err != nil {
 		return ThemePack{}, err

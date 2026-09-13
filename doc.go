@@ -12,10 +12,11 @@
 //	            TableView, CardList, StatusBar, ToolBar, ComboBox, ProgressBar,
 //	            RadioGroup, MessageBox, TitleBar, ListView, FileDialog,
 //	            Tooltip, Accordion, Expander, Separator, Spacer, …
-//	style     — LookAndFeel themes (Titillium Web + JetBrains Mono OpenType atlases),
-//	            named theme packs (embedded starters + XDG themes/<name>/theme.json)
-//	            and PNG icon sets (~/.config/uitoolkit/icons/<set>/*.png;
-//	            look.json stores theme + icons; live watch)
+//	style     — LookAndFeel era theme packs (ThemeTokens: bevel, hot-track,
+//	            elevation; Titillium Web + JetBrains Mono OpenType atlases),
+//	            XDG themes/<name>/theme.json and PNG icon sets
+//	            (~/.config/uitoolkit/icons/<set>/*.png; look.json stores
+//	            theme + icons; live watch)
 //
 // All pixels go through paintengine2d.Context (CPU scanline or Linux
 // EGL/GLES2 GPUDevice). There is no second rasterizer.

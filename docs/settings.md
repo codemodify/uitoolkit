@@ -4,10 +4,11 @@
 **corners**, **icons**, and **icon size** are independent prefs. Other
 apps apply them with `Application.SetLook` / `PreferredLook`.
 
-A theme is a color scheme only (`dark`, `light`, or a user-exported
-palette). Control shape is the Corners radio (Round / Square →
-`Metrics.Radius`). Chrome `ToolIcon`s come from `look.json` `"icons"`
-(a PNG set under `~/.config/uitoolkit/icons/`, or drawn classic/sharp).
+A theme is an **era token pack** (`dark` / `light` Classic 95, Luna,
+Motif, …, or a user export). Control shape is the Corners radio (Round /
+Square → `Metrics.Radius`). Chrome `ToolIcon`s come from `look.json`
+`"icons"` (a PNG set under `~/.config/uitoolkit/icons/`, or drawn
+classic/sharp). See [themes.md](themes.md).
 
 ## Run
 
@@ -21,18 +22,18 @@ Linux X11 or Wayland (same backends as gallery / Mail). Headless uses the
 offscreen surface.
 
 There is no menu bar. **Apply** is the only persist action for
-`look.json`. **Export current theme…** writes a user color theme
-(palette only).
+`look.json`. **Export current theme…** writes a user token pack
+(colors, bevel, metrics).
 
 ## What it sets
 
 | Control | LookAndFeel | Values |
 | --- | --- | --- |
-| Theme | palette pack → `Classic` | Built-in `dark` / `light` + exported user palettes |
+| Theme | token pack → `Classic` | Built-in era packs (grouped) + exported user packs |
 | Corners | `Metrics.Radius` | Round / Square |
 | Icons | PNG set or drawn fallback | Built-in (classic/sharp + premiere names when copied) + User folders |
 | Icon size | ToolIcon destination side | Small (16) / Medium (24) / Large (32); HiDPI still uses `@2x` |
-| Export | `themes/<name>/theme.json` | current palette only; corners/icons/size stay prefs |
+| Export | `themes/<name>/theme.json` | current tokens; corners/icons/size stay prefs |
 
 Theme and Icons lists use the same **Built-in** / **User** grouping.
 
@@ -81,11 +82,13 @@ name. `"icons"` is always the chrome set (never inferred from
 
 ## Theme packs
 
-Two **embedded starters** (`dark`, `light`) ship in the binary
-(`style/themes/*/theme.json`) and are **not** auto-written to disk.
+**Embedded era packs** (Classic 95 through FlatLaf, each with a light
+and a night twin where that era had one) ship in the binary and are
+**not** auto-written to disk. `dark` / `light` are the Classic 95 twins
+so existing `look.json` files keep working.
 
-Settings lists them under **Built-in**. User exports live under
-**User**.
+Settings lists them under era headings (Classic 95, Motif / CDE, …).
+User exports live under **User**.
 
 ```
 $XDG_CONFIG_HOME/uitoolkit/themes/<name>/theme.json
@@ -95,13 +98,21 @@ $XDG_CONFIG_HOME/uitoolkit/themes/<name>/theme.json
 ```json
 {
   "label": "ocean",
-  "palette": "dark"
+  "palette": "dark",
+  "family": "dark",
+  "bevel": "classic-3d",
+  "colors": {
+    "background": "#3c3c3c",
+    "hotFill": "#000080",
+    "hotBorder": "#000040"
+  }
 }
 ```
 
 JSON only. Pack-level `corners` / `icons` fields are ignored.
 **Export current theme…** asks for a name and writes the staged
-**palette**. Corners, icons, and icon size stay in `look.json`.
+**tokens**. Corners, icons, and icon size stay in `look.json`.
+A legacy `{ "palette": "dark" }` file still loads.
 
 When a **User** theme is selected, **Delete** under that list confirms
 (Yes/No) then removes `themes/<name>/` from disk. Built-in `dark` /
@@ -112,10 +123,11 @@ rewritten to the fallback so the selection is not left dangling.
 The same Delete control appears under **User** icon sets (not premiere
 or drawn classic/sharp).
 
-`ListThemes` lists Built-in starters (not shadowed) then user packs
+`ListThemes` lists Built-in era packs (not shadowed) then user packs
 (sorted by name). `LoadTheme(name)` **prefers the user pack** when both
 exist — a user `dark` overrides the embedded starter and is listed once
-under User. Legacy compound ids map to `dark` / `light`.
+under User. Legacy compound ids map to `dark` / `light`. Era aliases
+(`classic95`, `luna-dark`, …) resolve to the shipped id.
 
 ## Icon sets (PNG files)
 
