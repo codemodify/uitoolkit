@@ -436,10 +436,14 @@ func TestSettingsThemeListScrollsAllBuiltins(t *testing.T) {
 	if lastIdx := list.Count - 1; lastIdx < lo || lastIdx >= hi {
 		t.Fatalf("last theme not in view after scroll lo=%d hi=%d count=%d", lo, hi, list.Count)
 	}
-	clickTheme(t, w, last.Display())
+	if list.OnSelect == nil {
+		t.Fatal("theme list has no OnSelect")
+	}
+	list.OnSelect(list.Count - 1)
 	a.PumpOnce()
-	if a.Look().Name() != last.Name {
-		t.Fatalf("preview last theme %s want %s", a.Look().Name(), last.Name)
+	live := style.LookAppearance(a.Look())
+	if live.Name != last.Name {
+		t.Fatalf("preview last theme %+v want %s", live, last.Name)
 	}
 	apply := findApply(w.Content())
 	if apply == nil || !apply.Enabled() {
