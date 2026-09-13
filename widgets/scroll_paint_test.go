@@ -210,6 +210,43 @@ func TestListViewScenePaintsPastFirstPage(t *testing.T) {
 	}
 }
 
+func TestSplitterScrollViewSceneRecordsChild(t *testing.T) {
+	look := style.DarkLook()
+	col := NewColumn()
+	for i := 0; i < 28; i++ {
+		col.Add(NewLabel(fmt.Sprintf("scroll-row-%02d", i)))
+	}
+	sv := NewScrollView(col)
+	sv.SetLook(look)
+	side := NewLabel("nav")
+	side.SetLook(look)
+	split := NewSplitter(true, side, sv)
+	split.Ratio = 0.28
+	split.SetLook(look)
+	split.SetHost(&host{})
+	const w, h = 320, 160
+	split.Arrange(paintengine2d.XYWH(0, 0, w, h))
+	if sv.MaxOffset() <= 0 {
+		t.Fatalf("expected ScrollView overflow inside Splitter, max=%v content=%v", sv.MaxOffset(), sv.ContentHeight())
+	}
+
+	imm := immediatePaint(split, w, h)
+	scn := scenePaint(split, w, h)
+	bx := int(split.PaneB().Min.X) + 12
+	if bandInk(imm, 4, h-8, bx, w-8) < 20 {
+		t.Fatal("immediate Splitter+ScrollView pane looks empty")
+	}
+	if bandInk(scn, 4, h-8, bx, w-8) < 20 {
+		t.Fatal("scene graph skipped ScrollView child inside Splitter")
+	}
+
+	sv.ScrollTo(sv.MaxOffset())
+	scrolled := scenePaint(split, w, h)
+	if bandInk(scrolled, 4, h-8, bx, w-8) < 20 {
+		t.Fatal("scrolled Splitter+ScrollView scene looks empty")
+	}
+}
+
 func TestCardListScenePaintsPastFirstPage(t *testing.T) {
 	look := style.DarkLook()
 	cl := NewCardList(80, func(i int) CardContent {

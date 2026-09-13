@@ -390,6 +390,91 @@ func clickIconSet(t *testing.T, w *app.Window, name string) {
 	t.Fatalf("no icon set %q", name)
 }
 
+func TestSettingsThemeListScrollsAllBuiltins(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if err := style.SaveAppearance(style.DefaultAppearance()); err != nil {
+		t.Fatal(err)
+	}
+	a := uitoolkit.New(uitoolkit.Options{Headless: true, Scale: 1, DisableLookWatch: true})
+	w, err := a.NewWindow(platform.WindowOptions{Title: "settings", Width: 720, Height: 520, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+	w.SetContent(SettingsApp(a, w))
+	a.PumpOnce()
+
+	packs := style.ListBuiltinThemes()
+	if len(packs) < 8 {
+		t.Fatalf("expected era packs, got %d", len(packs))
+	}
+	list := findThemeList(w.Content())
+	if list == nil {
+		t.Fatal("missing theme picker")
+	}
+	if list.Count != len(packs) {
+		t.Fatalf("theme list count=%d want %d (one Built-in list)", list.Count, len(packs))
+	}
+	seen := map[string]bool{}
+	for i := 0; i < list.Count; i++ {
+		seen[list.ItemText(i)] = true
+	}
+	for _, p := range packs {
+		if !seen[p.Display()] {
+			t.Fatalf("missing theme %q", p.Display())
+		}
+	}
+	if list.MaxOffset() <= 0 {
+		t.Fatalf("theme list should overflow at 720×520, view=%v rows=%d", list.LocalBounds().Dy(), list.Count)
+	}
+	if _, thumb := list.ScrollTrack(); thumb.Empty() {
+		t.Fatal("overflow theme list should show scrollbar chrome")
+	}
+	last := packs[len(packs)-1]
+	list.ScrollTo(list.MaxOffset())
+	lo, hi := list.VisibleRange()
+	if lastIdx := list.Count - 1; lastIdx < lo || lastIdx >= hi {
+		t.Fatalf("last theme not in view after scroll lo=%d hi=%d count=%d", lo, hi, list.Count)
+	}
+	clickTheme(t, w, last.Display())
+	a.PumpOnce()
+	if a.Look().Name() != last.Name {
+		t.Fatalf("preview last theme %s want %s", a.Look().Name(), last.Name)
+	}
+	apply := findApply(w.Content())
+	if apply == nil || !apply.Enabled() {
+		t.Fatal("Apply should stay reachable and enabled after staging")
+	}
+	if nestedInScroll(apply) {
+		t.Fatal("Apply must stay pinned outside the scroll region")
+	}
+	if findRadio(w.Content(), "Round") == nil || findRadio(w.Content(), "Square") == nil {
+		t.Fatal("Corners options must stay reachable")
+	}
+	if findRadio(w.Content(), "Small") == nil || findRadio(w.Content(), "Large") == nil {
+		t.Fatal("Icon size options must stay reachable")
+	}
+	if findIconList(w.Content()) == nil {
+		t.Fatal("missing icon picker")
+	}
+
+	clickSettingsNav(t, w, "About")
+	a.PumpOnce()
+	if findApply(w.Content()) == nil {
+		t.Fatal("Apply missing on About")
+	}
+	if nestedInScroll(findApply(w.Content())) {
+		t.Fatal("Apply must stay pinned on About")
+	}
+	aboutScroll := findScrollView(w.Content())
+	if aboutScroll == nil {
+		t.Fatal("About should scroll")
+	}
+	if aboutScroll.MaxOffset() <= 0 {
+		t.Fatalf("About should overflow at 720×520, content=%v view=%v", aboutScroll.ContentHeight(), aboutScroll.LocalBounds().Dy())
+	}
+}
+
 func TestSettingsAppPaintsPreview(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true, Scale: 1})
@@ -579,6 +664,53 @@ func findOverlayField(w *app.Window) *widgets.TextField {
 		}
 	})
 	return field
+}
+
+func nestedInScroll(c widget.Component) bool {
+	if c == nil {
+		return false
+	}
+	for p := c.Parent(); p != nil; p = p.Parent() {
+		if _, ok := p.(*widgets.ScrollView); ok {
+			return true
+		}
+	}
+	return false
+}
+
+func findScrollView(root widget.Component) *widgets.ScrollView {
+	var sv *widgets.ScrollView
+	widget.Walk(root, func(c widget.Component) {
+		if s, ok := c.(*widgets.ScrollView); ok {
+			sv = s
+		}
+	})
+	return sv
+}
+
+func clickSettingsNav(t *testing.T, w *app.Window, name string) {
+	t.Helper()
+	var nav *widgets.ListView
+	widget.Walk(w.Content(), func(c widget.Component) {
+		if l, ok := c.(*widgets.ListView); ok && l.ItemText != nil && l.OnSelect != nil {
+			for i := 0; i < l.Count; i++ {
+				if l.ItemText(i) == "Appearance" {
+					nav = l
+					return
+				}
+			}
+		}
+	})
+	if nav == nil {
+		t.Fatal("missing Settings nav")
+	}
+	for i := 0; i < nav.Count; i++ {
+		if nav.ItemText(i) == name {
+			nav.OnSelect(i)
+			return
+		}
+	}
+	t.Fatalf("no settings section %q", name)
 }
 
 func clickApply(t *testing.T, w *app.Window) {
