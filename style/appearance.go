@@ -218,13 +218,34 @@ func ApplyIconSize(m Metrics, sz IconSize) Metrics {
 // Application.SetLook still applies display scale afterward.
 func (a Appearance) Look() *Classic {
 	a = a.Normalize()
-	name := string(a.Theme)
-	p := Dark()
-	if a.Theme == ThemeLight {
-		p = Light()
+	tok := tokensForAppearance(a)
+	p := tok.Palette
+	m := ApplyChromeMetrics(DefaultMetrics(), tok.Metrics)
+	m = ApplyThemeCorners(m, a.Corners, tok.Metrics.Radius, tok.Metrics.RadiusSmall)
+	m = ApplyIconSize(m, a.IconSize)
+	return newClassic(string(tok.Family), p, m, a.Corners, a.Icons, a.IconSize, tok).setPack(a.Name)
+}
+
+func tokensForAppearance(a Appearance) ThemeTokens {
+	a = a.Normalize()
+	if pack, ok := LoadTheme(a.Name); ok {
+		tok := pack.Tokens
+		if tok.Empty() {
+			tok = ThemeTokens{Family: pack.Palette, Palette: paletteForFamily(pack.Palette)}
+		}
+		return tok.Resolve()
 	}
-	m := ApplyIconSize(ApplyCorners(DefaultMetrics(), a.Corners), a.IconSize)
-	return newClassic(name, p, m, a.Corners, a.Icons, a.IconSize).setPack(a.Name)
+	if pack, ok := LoadTheme(StarterName(a.Theme)); ok {
+		return pack.Tokens.Resolve()
+	}
+	return ThemeTokens{Family: a.Theme, Palette: paletteForFamily(a.Theme)}.Resolve()
+}
+
+func paletteForFamily(t ThemeName) Palette {
+	if ParseTheme(string(t)) == ThemeLight {
+		return Light()
+	}
+	return Dark()
 }
 
 // PreferredLook loads XDG appearance prefs (or defaults) as a LookAndFeel.
@@ -271,12 +292,14 @@ func WithTheme(look LookAndFeel, theme ThemeName) LookAndFeel {
 		return look
 	}
 	theme = ParseTheme(string(theme))
-	name := string(theme)
-	p := Dark()
-	if theme == ThemeLight {
-		p = Light()
+	tok := c.tokens
+	if pack, ok := LoadTheme(StarterName(theme)); ok {
+		tok = pack.Tokens.Resolve()
+	} else {
+		tok = ThemeTokens{Family: theme, Palette: paletteForFamily(theme)}.Resolve()
 	}
-	return newClassic(name, p, c.Metrics(), c.Corners(), c.Icons(), c.IconSize()).
+	m := applyPackMetrics(c.Metrics(), tok, c.Corners())
+	return newClassic(string(theme), tok.Palette, m, c.Corners(), c.Icons(), c.IconSize(), tok).
 		setPack(StarterName(theme))
 }
 
@@ -287,8 +310,9 @@ func WithCorners(look LookAndFeel, corners CornerStyle) LookAndFeel {
 		return look
 	}
 	corners = ParseCorners(string(corners))
-	m := ApplyCorners(c.Metrics(), corners)
-	return newClassic(c.Name(), c.Palette(), m, corners, c.Icons(), c.IconSize()).
+	tok := c.Tokens()
+	m := ApplyThemeCorners(c.Metrics(), corners, tok.Metrics.Radius, tok.Metrics.RadiusSmall)
+	return newClassic(c.Name(), c.Palette(), m, corners, c.Icons(), c.IconSize(), tok).
 		setPack(c.Pack())
 }
 
@@ -300,7 +324,7 @@ func WithIcons(look LookAndFeel, icons IconSetName) LookAndFeel {
 		return look
 	}
 	icons = ParseIconSet(string(icons))
-	return newClassic(c.Name(), c.Palette(), c.Metrics(), c.Corners(), icons, c.IconSize()).
+	return newClassic(c.Name(), c.Palette(), c.Metrics(), c.Corners(), icons, c.IconSize(), c.Tokens()).
 		setPack(c.Pack())
 }
 
@@ -312,7 +336,7 @@ func WithIconSize(look LookAndFeel, sz IconSize) LookAndFeel {
 	}
 	sz = ParseIconSize(string(sz))
 	m := ApplyIconSize(c.Metrics(), sz)
-	return newClassic(c.Name(), c.Palette(), m, c.Corners(), c.Icons(), sz).
+	return newClassic(c.Name(), c.Palette(), m, c.Corners(), c.Icons(), sz, c.Tokens()).
 		setPack(c.Pack())
 }
 
@@ -328,16 +352,35 @@ func WithAppearance(look LookAndFeel, a Appearance) LookAndFeel {
 	}
 	a = a.Normalize()
 	pack := a.Name
+	tok := tokensForAppearance(a)
 	if _, ok := LoadTheme(pack); !ok {
 		pack = StarterName(a.Theme)
 	}
-	name := string(a.Theme)
-	p := Dark()
-	if a.Theme == ThemeLight {
-		p = Light()
+	m := applyPackMetrics(c.Metrics(), tok, a.Corners)
+	m = ApplyIconSize(m, a.IconSize)
+	return newClassic(string(tok.Family), tok.Palette, m, a.Corners, a.Icons, a.IconSize, tok).setPack(pack)
+}
+
+func applyPackMetrics(m Metrics, tok ThemeTokens, corners CornerStyle) Metrics {
+	s := float32(1)
+	if def := DefaultMetrics(); def.FontSize > 0 && m.FontSize > 0 {
+		s = m.FontSize / def.FontSize
 	}
-	m := ApplyIconSize(ApplyCorners(c.Metrics(), a.Corners), a.IconSize)
-	return newClassic(name, p, m, a.Corners, a.Icons, a.IconSize).setPack(pack)
+	cm := tok.Metrics
+	if cm.Scroll > 0 {
+		m.Scroll = cm.Scroll * s
+	}
+	if cm.ComboH > 0 {
+		m.ComboH = cm.ComboH * s
+	}
+	if cm.ControlH > 0 && s == 1 {
+		// Keep density/scale ControlH when the live look is already scaled.
+		if m.FontSize == DefaultMetrics().FontSize {
+			m.ControlH = cm.ControlH
+		}
+	}
+	tr, ts := cm.Radius*s, cm.RadiusSmall*s
+	return ApplyThemeCorners(m, corners, tr, ts)
 }
 
 func classicOf(look LookAndFeel) (*Classic, bool) {

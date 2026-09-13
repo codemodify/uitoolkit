@@ -109,8 +109,10 @@ func WithDensity(look LookAndFeel, d Density) LookAndFeel {
 	if !ok {
 		return look
 	}
-	m := ApplyCorners(ApplyDensity(DefaultMetrics(), d), c.Corners())
-	return newClassic(c.Name(), c.Palette(), m, c.Corners(), c.Icons(), c.IconSize()).setPack(c.Pack())
+	tok := c.Tokens()
+	m := ApplyChromeMetrics(ApplyDensity(DefaultMetrics(), d), tok.Metrics)
+	m = ApplyThemeCorners(m, c.Corners(), tok.Metrics.Radius, tok.Metrics.RadiusSmall)
+	return newClassic(c.Name(), c.Palette(), m, c.Corners(), c.Icons(), c.IconSize(), tok).setPack(c.Pack())
 }
 
 // BaseFontSize is the unscaled Classic body size (1× design pixels).

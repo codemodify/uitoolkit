@@ -35,7 +35,7 @@ func main() {
 		DisableLookWatch: true, // stage locally; Apply is the only writer
 	})
 	win, err := a.NewWindow(platform.WindowOptions{
-		Title: "Settings", Width: 960, Height: 780, MinWidth: 720, MinHeight: 520,
+		Title: "Settings", Width: 1024, Height: 780, MinWidth: 720, MinHeight: 520,
 		Headless: *headless || *shot != "",
 	})
 	if err != nil {

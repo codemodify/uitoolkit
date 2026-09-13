@@ -510,6 +510,21 @@ are independent look.json fields again; compound pack names migrate
 
 ## Version
 
+**0.19.1** — Settings Appearance uses a two-pane layout with a single
+scrollable Built-in theme list (and a scrollable preview / Corners /
+Icons column) so every era pack is reachable. Apply stays pinned below
+the splitter. About scrolls the same way. `ScrollView` inside a
+`Splitter` records its child when `UITK_SCENE` is on.
+
+**0.19.0** — First-class **era theme packs**. `ThemeTokens` drive bevel,
+hot-track, elevation, and per-state chrome for every control (not menus
+only). Embedded packs: Classic 95 (`dark` / `light`), Motif, CDE
+Charcoal / Crimson, NeXT, Luna, Aqua, Fusion, Breeze, Fluent, Material,
+FlatLaf — each with a night twin where it belongs. Settings lists
+Built-in packs in one scrollable list (era is in the display name).
+Corners, icons, and icon size stay orthogonal.
+See [docs/themes.md](docs/themes.md).
+
 **0.18.8** — Premiere PNG icon packs rebuilt from pinned upstream SVGs
 (Lucide 1.45.0, Phosphor v2.0.8, Tabler v3.46.0, Heroicons v2.2.0,
 Material Symbols outlined via marella v0.47.2) with a **wide** stem
