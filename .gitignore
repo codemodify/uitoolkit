@@ -13,3 +13,6 @@ cmd/uitksettings/uitksettings
 /tmp/
 go.work
 go.work.sum
+
+# Claude Cowork session outputs
+/Claude outputs/
