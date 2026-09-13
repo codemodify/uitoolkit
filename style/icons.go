@@ -5,8 +5,9 @@ import "github.com/codemodify/paintengine2d"
 // DrawToolIcon paints a stock ToolIcon in the chosen glyph set.
 // File sets (lucide / phosphor / tabler / heroicons / material-symbols /
 // user dirs) load a tinted PNG from ~/.config/uitoolkit/icons/<set>/<action>.png
-// (or name@2x.png). Missing files fall back to the drawn classic set.
-// Classic / Sharp stay in-process vectors.
+// (or name@2x.png). A missing stem stays inside that set (closest PNG,
+// logged once). Drawn classic/sharp are used only when the file set is
+// not installed. Classic / Sharp stay in-process vectors.
 // DrawToolIconImage rasterizes icon onto a square pixmap (tray / SNI).
 func DrawToolIconImage(icon ToolIcon, look LookAndFeel, size int) *paintengine2d.Image {
 	if size < 16 {
@@ -43,6 +44,9 @@ func DrawToolIcon(ctx *paintengine2d.Context, b paintengine2d.Rect, icon ToolIco
 	set = ParseIconSet(string(set))
 	if IsFileIconSet(set) {
 		if DrawFileToolIcon(ctx, b, icon, col, set) {
+			return
+		}
+		if fileIconSetInstalled(set) {
 			return
 		}
 		set = FallbackIcons(set)

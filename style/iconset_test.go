@@ -20,8 +20,61 @@ func TestRepoIconSetsCoverAllToolIcons(t *testing.T) {
 			checkPNG(t, lo, 24)
 			checkPNG(t, hi, 48)
 		}
+		for _, stem := range []string{"pen", "download"} {
+			checkPNG(t, filepath.Join(root, set, stem+".png"), 24)
+			checkPNG(t, filepath.Join(root, set, stem+"@2x.png"), 48)
+		}
 		if _, err := os.Stat(filepath.Join(root, set, "LICENSE")); err != nil {
 			t.Errorf("missing %s/LICENSE", set)
+		}
+		if _, err := os.Stat(filepath.Join(root, set, "SOURCES.txt")); err != nil {
+			t.Errorf("missing %s/SOURCES.txt", set)
+		}
+	}
+}
+
+func TestRepoIconSetsWideStems(t *testing.T) {
+	root := filepath.Join("..", "icons")
+	stems := ShippedIconStems()
+	if len(stems) < 60 {
+		t.Fatalf("wide stem list too short: %d", len(stems))
+	}
+	listed, err := os.ReadFile(filepath.Join(root, "STEMS.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, stem := range stems {
+		if !containsStr(string(listed), stem+"\n") && !containsStr(string(listed), "\n"+stem) {
+			t.Errorf("STEMS.txt missing %s", stem)
+		}
+		for _, set := range shippedIconSets {
+			checkPNG(t, filepath.Join(root, set, stem+".png"), 24)
+			checkPNG(t, filepath.Join(root, set, stem+"@2x.png"), 48)
+		}
+	}
+}
+
+func TestToolIconFileNameResolves(t *testing.T) {
+	if ToolIconFileName(IconNone) != "" {
+		t.Fatal("none")
+	}
+	if ToolIconFileName(IconPen) != "pen.png" || ToolIconHiDPIFileName(IconPen) != "pen@2x.png" {
+		t.Fatalf("pen files %q %q", ToolIconFileName(IconPen), ToolIconHiDPIFileName(IconPen))
+	}
+	if ToolIconFileName(IconDownload) != "download.png" {
+		t.Fatalf("download %q", ToolIconFileName(IconDownload))
+	}
+	for _, icon := range AllToolIcons() {
+		name := ToolIconName(icon)
+		if name == "" {
+			t.Fatalf("empty name for %v", icon)
+		}
+		got, ok := ToolIconByName(name)
+		if !ok || got != icon {
+			t.Fatalf("ToolIconByName(%q) = %v %v", name, got, ok)
+		}
+		if ToolIconFileName(icon) != name+".png" {
+			t.Fatalf("file %q", ToolIconFileName(icon))
 		}
 	}
 }
@@ -127,25 +180,45 @@ func TestFileIconLoadTintFallback(t *testing.T) {
 		t.Fatal("search should tint blue")
 	}
 
-	// Missing glyph → drawn classic (same ink mask as classic).
+	// Missing glyph in an installed premiere set stays inside that set
+	// (closest stem), never the drawn classic scribble.
 	classic := rasterIcon(IconSetClassic, IconCut)
-	missing := rasterIcon(IconSetLucide, IconCut) // cut.png is installed; delete both sizes
+	installed := rasterIcon(IconSetLucide, IconCut)
 	_ = os.Remove(filepath.Join(IconSetDir(IconSetLucide), "cut.png"))
 	_ = os.Remove(filepath.Join(IconSetDir(IconSetLucide), "cut@2x.png"))
 	resetIconCache()
 	fallback := rasterIcon(IconSetLucide, IconCut)
-	if maskDiff(classic, fallback) > 4 {
-		t.Fatalf("missing file should match classic (diff=%d)", maskDiff(classic, fallback))
+	if inkCount(fallback) < 8 {
+		t.Fatal("missing stem should still paint from the same set")
 	}
-	if maskDiff(classic, missing) < 8 {
+	if maskDiff(classic, fallback) < 8 {
+		t.Fatalf("missing file must not use classic (diff=%d)", maskDiff(classic, fallback))
+	}
+	if maskDiff(classic, installed) < 8 {
 		t.Fatal("installed lucide cut should differ from classic before delete")
 	}
 
 	// Unknown set name with no directory → classic.
 	resetIconCache()
 	unknown := rasterIcon(IconSetName("not-installed"), IconSearch)
-	if maskDiff(classic, unknown) > 4 && maskDiff(rasterIcon(IconSetClassic, IconSearch), unknown) > 4 {
+	if maskDiff(rasterIcon(IconSetClassic, IconSearch), unknown) > 4 {
 		t.Fatal("unknown file set should fall back")
+	}
+}
+
+func TestFileIconSetDoesNotUseClassicWhenPresent(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	resetIconCache()
+	installRepoIconSet(t, "lucide")
+	for _, icon := range AllToolIcons() {
+		classic := rasterIcon(IconSetClassic, icon)
+		file := rasterIcon(IconSetLucide, icon)
+		if inkCount(file) < 8 {
+			t.Fatalf("%s lucide has no ink", ToolIconName(icon))
+		}
+		if maskDiff(classic, file) < 8 {
+			t.Fatalf("%s lucide matches classic (diff=%d)", ToolIconName(icon), maskDiff(classic, file))
+		}
 	}
 }
 
@@ -179,11 +252,11 @@ func TestFileIconPicksHiDPI(t *testing.T) {
 	}
 	resetIconCache()
 	cands := toolIconFileCandidates(IconSearch, 24)
-	if len(cands) != 2 || cands[0] != "search.png" {
+	if len(cands) < 2 || cands[0] != "search.png" {
 		t.Fatalf("1× candidates %v", cands)
 	}
 	cands = toolIconFileCandidates(IconSearch, 48)
-	if len(cands) != 2 || cands[0] != "search@2x.png" {
+	if len(cands) < 2 || cands[0] != "search@2x.png" {
 		t.Fatalf("2× candidates %v", cands)
 	}
 	large := paintengine2d.NewImage(64, 64)

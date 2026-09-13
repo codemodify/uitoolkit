@@ -131,6 +131,9 @@ func CanonicalStarterName(name string) string {
 func IsPremiereIconSet(name style.IconSetName) bool {
 	return style.IsPremiereIconSet(name)
 }
+func ShippedIconStems() []string {
+	return style.ShippedIconStems()
+}
 func LoadTheme(name string) (style.ThemePack, bool) {
 	return style.LoadTheme(name)
 }

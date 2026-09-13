@@ -121,16 +121,18 @@ under User. Legacy compound ids map to `dark` / `light`.
 
 Chrome icons are **not** embedded. Ship-in-repo sets live at
 `icons/lucide`, `icons/phosphor`, `icons/tabler`, `icons/heroicons`,
-and `icons/material-symbols` (24×24 + `name@2x.png` 48×48, one stem
-per action). Copy them yourself:
+and `icons/material-symbols` (24×24 + `name@2x.png` 48×48). Each pack
+covers the typed `ToolIcon` stems plus a wide chrome / Mail / UI
+vocabulary (`pen` and `download` are always present). Copy them
+yourself after every pull that refreshes `icons/`:
 
 ```bash
 mkdir -p ~/.config/uitoolkit/icons
 cp -R icons/lucide icons/phosphor icons/tabler icons/heroicons icons/material-symbols ~/.config/uitoolkit/icons/
 ```
 
-See [icons/README.md](../icons/README.md) for licenses, attribution,
-and the `@2x` convention.
+See [icons/README.md](../icons/README.md) for licenses, the full stem
+list, attribution, and the `@2x` convention.
 
 Settings groups icon sets the same way as themes:
 
@@ -139,8 +141,13 @@ Settings groups icon sets the same way as themes:
 - **User** — any other `icons/<name>/` folder that contains at least
   one ToolIcon PNG
 
-A missing file falls back to the drawn classic glyph. The toolkit tints
-monochrome/alpha PNGs with the Look foreground / icon color.
+The Appearance live preview includes a toolbar strip of chrome + Mail
+Fetch / Write glyphs for the selected set.
+
+When a premiere or user set is installed, a missing stem logs once and
+uses the closest PNG **in that folder**. Drawn classic is used only if
+the set is not copied yet. The toolkit tints monochrome/alpha PNGs with
+the Look foreground / icon color.
 
 The v0.12.0 `filled` / `outline` / `duotone` SVG folders are removed.
 

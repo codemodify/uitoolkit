@@ -268,18 +268,25 @@ func buildSettings(a *app.Application, win *app.Window, saved, staged style.Appe
 	cutBtn := widgets.ToolIconBtn(style.IconCut, "", nil)
 	copyBtn := widgets.ToolIconBtn(style.IconCopy, "", nil)
 	pasteBtn := widgets.ToolIconBtn(style.IconPaste, "", nil)
+	undoBtn := widgets.ToolIconBtn(style.IconUndo, "", nil)
+	redoBtn := widgets.ToolIconBtn(style.IconRedo, "", nil)
 	searchBtn := widgets.ToolIconBtn(style.IconSearch, "", nil)
+	mailBtn := widgets.ToolIconBtn(style.IconMail, "", nil)
+	downBtn := widgets.ToolIconBtn(style.IconDownload, "", nil)
+	penBtn := widgets.ToolIconBtn(style.IconPen, "", nil)
 	infoBtn := widgets.ToolIconBtn(style.IconInfo, "", nil)
 	warnBtn := widgets.ToolIconBtn(style.IconWarning, "", nil)
 	errBtn := widgets.ToolIconBtn(style.IconError, "", nil)
 	toolbar := widgets.NewToolBar(
 		newBtn, openBtn, saveBtn, widgets.ToolDivider(),
-		cutBtn, copyBtn, pasteBtn, widgets.ToolDivider(),
-		searchBtn, infoBtn, warnBtn, errBtn,
+		cutBtn, copyBtn, pasteBtn, undoBtn, redoBtn, widgets.ToolDivider(),
+		searchBtn, mailBtn, downBtn, penBtn, widgets.ToolDivider(),
+		infoBtn, warnBtn, errBtn,
 	)
 
 	previewPane := widgets.NewPanel("Live preview",
 		widgets.NewRow(primary, secondary, disabled).WithGap(10),
+		widgets.NewLabel("Icon set preview (chrome + Mail Fetch / Write stems)"),
 		toolbar,
 		widgets.NewRow(field, combo).WithGap(10),
 		widgets.NewRow(check, sw).WithGap(16),
@@ -311,8 +318,9 @@ func buildSettings(a *app.Application, win *app.Window, saved, staged style.Appe
 		aboutPath,
 		widgets.NewLabel("User color themes (exported palette; listed under User; Delete removes the folder after confirm):"),
 		themesPath,
-		widgets.NewLabel("Icon sets: Built-in = lucide/phosphor/tabler/heroicons/material-symbols when copied, plus drawn classic/sharp. User = any other folder:"),
+		widgets.NewLabel("Icon sets: Built-in = lucide/phosphor/tabler/heroicons/material-symbols when copied (wide stem coverage: chrome, Mail, UI), plus drawn classic/sharp. User = any other folder:"),
 		iconsPath,
+		widgets.NewLabel("After pulling a new uitoolkit, copy the repo icons/ folders again — packs are not embedded or auto-installed."),
 		widgets.NewLabel("Two starter palettes are embedded (dark, light). Corners, icons, and icon size are separate prefs."),
 		widgets.NewLabel("Other apps watch look.json and call SetLook(PreferredLook())."),
 		widgets.NewButton("Open appearance", func() {
