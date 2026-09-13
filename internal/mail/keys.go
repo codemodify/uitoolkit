@@ -17,7 +17,7 @@ import (
 //	c         compose
 //	m         mark read
 //
-// Ctrl+N / Ctrl+R / Del / F5 / F7 / F8 stay in the MenuBar hints.
+// Ctrl+N / Ctrl+R / Del / F5 / F7 / F8 stay as toolbar / key bindings.
 
 type shortcutRoot struct {
 	widget.Base
@@ -84,7 +84,7 @@ func isHashDelete(e widget.KeyEvent) bool {
 	return e.Key == platform.Key3 && e.Mods.Shift() && !e.Mods.Ctrl()
 }
 
-// ShortcutHelp is shown in Help → Keyboard and docs/mail.md.
+// ShortcutHelp is documented in docs/mail.md.
 const ShortcutHelp = `Thunderbird-like (thread list focused, not a text field)
   n / p     next / previous message
   #         delete (also Del)

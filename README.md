@@ -510,6 +510,12 @@ are independent look.json fields again; compound pack names migrate
 
 ## Version
 
+**0.18.3** — Mail menu bar is a single **M** menu: former View
+items (toolbar, layout, table/card, density, sort, threaded, muted,
+dark/light, Message Source), then Preferences, then Quit. File, Edit,
+Go, Message, Tools, and Help titles are gone. Keyboard / toolbar
+shortcuts stay.
+
 **0.18.2** — **Host-provided pointer cursors.** Wayland uses
 `wp_cursor_shape_v1` when the compositor advertises it, else
 `libwayland-cursor` / `XCURSOR_THEME`. X11 prefers Xcursor theme names

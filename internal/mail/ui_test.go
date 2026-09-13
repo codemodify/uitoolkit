@@ -1236,26 +1236,13 @@ func TestMailStarRendersAfterToggle(t *testing.T) {
 	w.SetContent(MailApp(a, w))
 	a.PumpOnce()
 	var table *widgets.TableView
-	var star func()
 	widget.Walk(w.Content(), func(c widget.Component) {
 		if tv, ok := c.(*widgets.TableView); ok && table == nil {
 			table = tv
 		}
-		if mb, ok := c.(*widgets.MenuBar); ok {
-			for _, m := range mb.Menus() {
-				for _, it := range m.Items {
-					if it != nil && it.Text == "Star" && it.OnClick != nil {
-						star = it.OnClick
-					}
-				}
-			}
-		}
 	})
 	if table == nil || table.CellText == nil || table.RowCount < 1 {
 		t.Fatal("thread table")
-	}
-	if star == nil {
-		t.Fatal("Message → Star")
 	}
 	row := -1
 	for i := 0; i < table.RowCount; i++ {
@@ -1270,6 +1257,24 @@ func TestMailStarRendersAfterToggle(t *testing.T) {
 	table.Selected = row
 	if table.OnSelect != nil {
 		table.OnSelect(row)
+	}
+	if table.OnContext == nil {
+		t.Fatal("thread context menu")
+	}
+	table.OnContext(row, paintengine2d.Pt(10, 10))
+	a.PumpOnce()
+	pop, ok := w.Popup().(*widgets.PopupMenu)
+	if !ok || pop == nil {
+		t.Fatal("context menu Star")
+	}
+	var star func()
+	for _, it := range pop.Items {
+		if it != nil && it.Text == "Star" && it.OnClick != nil {
+			star = it.OnClick
+		}
+	}
+	if star == nil {
+		t.Fatal("context menu Star")
 	}
 	star()
 	a.PumpOnce()
@@ -1641,7 +1646,7 @@ func TestMailMenuHoverDoesNotRebuildTree(t *testing.T) {
 	a.PumpOnce()
 	pop, ok := w.Popup().(*widgets.PopupMenu)
 	if !ok || pop == nil || len(pop.Items) < 3 {
-		t.Fatal("file menu")
+		t.Fatal("M menu")
 	}
 	for i := 0; i < 3; i++ {
 		r := pop.ItemBounds(i)
@@ -1739,6 +1744,72 @@ func assertNoUnreadFolderFooter(t *testing.T, root widget.Component) {
 			}
 		}
 	})
+}
+
+func TestMailMenuBarIsOnlyM(t *testing.T) {
+	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{
+		Title: "Mail", Width: 1280, Height: 800, Headless: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.SetContent(MailApp(a, w))
+	a.PumpOnce()
+	var mb *widgets.MenuBar
+	widget.Walk(w.Content(), func(c widget.Component) {
+		if m, ok := c.(*widgets.MenuBar); ok && mb == nil {
+			mb = m
+		}
+	})
+	if mb == nil {
+		t.Fatal("menu bar")
+	}
+	menus := mb.Menus()
+	if len(menus) != 1 {
+		t.Fatalf("menus %d want 1", len(menus))
+	}
+	title, _, _ := widgets.ParseMnemonic(menus[0].Title)
+	if title != "M" {
+		t.Fatalf("menu title %q want M", menus[0].Title)
+	}
+	banned := []string{"File", "Edit", "View", "Go", "Message", "Tools", "Help"}
+	for _, name := range banned {
+		if title == name {
+			t.Fatalf("old top-level menu %q", name)
+		}
+	}
+	var labels []string
+	var quit, prefs, source bool
+	for _, it := range menus[0].Items {
+		if it == nil {
+			continue
+		}
+		label, _, _ := widgets.ParseMnemonic(it.Text)
+		labels = append(labels, label)
+		switch label {
+		case "Quit":
+			quit = it.Shortcut == "Ctrl+Q" && it.OnClick != nil
+		case "Preferences":
+			prefs = it.OnClick != nil
+		case "Message Source":
+			source = it.Shortcut == "Ctrl+U" && it.OnClick != nil
+		}
+	}
+	if !source || !prefs || !quit {
+		t.Fatalf("M items source=%v prefs=%v quit=%v %v", source, prefs, quit, labels)
+	}
+	wantOrder := []string{"Message Source", "Preferences", "Quit"}
+	pos := map[string]int{}
+	for i, l := range labels {
+		if _, ok := pos[l]; !ok {
+			pos[l] = i
+		}
+	}
+	if pos["Message Source"] > pos["Preferences"] || pos["Preferences"] > pos["Quit"] {
+		t.Fatalf("order %v want %v last", labels, wantOrder)
+	}
+	w.Close()
 }
 
 func cellInk(img *paintengine2d.Image, x0, x1 int) int {

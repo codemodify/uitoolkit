@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/codemodify/uitoolkit"
+	"github.com/codemodify/uitoolkit/app"
 	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
@@ -561,7 +562,7 @@ func TestRemoveAccountMenuAndFirstRunAgain(t *testing.T) {
 	if w.Overlay() != nil {
 		t.Fatal("first-run should not open when an account exists")
 	}
-	var remove *widgets.MenuItem
+	var prefs *widgets.MenuItem
 	widget.Walk(w.Content(), func(c widget.Component) {
 		mb, ok := c.(*widgets.MenuBar)
 		if !ok {
@@ -569,18 +570,40 @@ func TestRemoveAccountMenuAndFirstRunAgain(t *testing.T) {
 		}
 		for _, m := range mb.Menus() {
 			for _, it := range m.Items {
-				if strings.Contains(it.Text, "Remove") && strings.Contains(it.Text, "Account") {
-					remove = it
+				label, _, _ := widgets.ParseMnemonic(it.Text)
+				if label == "Preferences" {
+					prefs = it
 				}
 			}
 		}
 	})
-	if remove == nil || remove.OnClick == nil {
-		t.Fatal("File → Remove Account missing")
+	if prefs == nil || prefs.OnClick == nil {
+		t.Fatal("M → Preferences missing")
+	}
+	prefs.OnClick()
+	a.PumpOnce()
+	var pw *app.Window
+	for _, win := range a.Windows() {
+		if win != w && win.Title() == "Preferences" {
+			pw = win
+			break
+		}
+	}
+	if pw == nil {
+		t.Fatal("Preferences window")
+	}
+	var remove *widgets.Button
+	widget.Walk(pw.Content(), func(c widget.Component) {
+		if b, ok := c.(*widgets.Button); ok && strings.Contains(b.Text, "Remove account") && b.OnClick != nil {
+			remove = b
+		}
+	})
+	if remove == nil {
+		t.Fatal("Preferences missing Remove account")
 	}
 	remove.OnClick()
 	a.PumpOnce()
-	ov := w.Overlay()
+	ov := pw.Overlay()
 	if ov == nil {
 		t.Fatal("expected Remove account confirm")
 	}
@@ -606,21 +629,6 @@ func TestRemoveAccountMenuAndFirstRunAgain(t *testing.T) {
 	})
 	if !prompt {
 		t.Fatal("first-run copy missing after delete")
-	}
-
-	pw, err := OpenPrefs(a, cli, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	a.PumpOnce()
-	var prefsRemove bool
-	widget.Walk(pw.Content(), func(c widget.Component) {
-		if b, ok := c.(*widgets.Button); ok && strings.Contains(b.Text, "Remove account") {
-			prefsRemove = true
-		}
-	})
-	if !prefsRemove {
-		t.Fatal("Preferences missing Remove account")
 	}
 	pw.Close()
 	w.Close()
