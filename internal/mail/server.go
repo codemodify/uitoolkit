@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -35,6 +36,20 @@ func (c *rpcConn) send(v any) error {
 	return writeJSON(c.w, v)
 }
 
+// sendTimeout writes an event with a deadline and drops the client when it
+// stops reading, so a wedged UI cannot stall the daemon's event fan-out.
+func (c *rpcConn) sendTimeout(v any, d time.Duration) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	_ = c.Conn.SetWriteDeadline(time.Now().Add(d))
+	defer func() { _ = c.Conn.SetWriteDeadline(time.Time{}) }()
+	if err := writeJSON(c.w, v); err != nil {
+		_ = c.Conn.Close()
+		return err
+	}
+	return nil
+}
+
 // NewServer owns store and advertises socket in status.get.
 func NewServer(store Store, socket string) *Server {
 	if store == nil {
@@ -47,26 +62,42 @@ func NewServer(store Store, socket string) *Server {
 }
 
 // ListenAndServe binds a Unix socket and serves until ctx is cancelled.
+// ListenAndServe binds a hardened Unix socket and serves until ctx is
+// cancelled. The socket lives in an owner-only directory, is chmodded 0600,
+// is protected by a lock file, and every connection is checked against our
+// own uid — it is the only authorisation boundary the daemon has.
 func ListenAndServe(ctx context.Context, socket string, store Store) error {
-	if err := os.RemoveAll(socket); err != nil {
-		return err
-	}
-	ln, err := net.Listen("unix", socket)
+	ln, lock, err := listenSocket(socket)
 	if err != nil {
 		return err
+	}
+	defer lock.release()
+	defer func() { _ = os.Remove(socket + ".lock") }()
+
+	srv := NewServer(store, socket)
+	if ls, ok := store.(*LocalStore); ok {
+		// Background work (IDLE, the periodic poll) tells connected clients
+		// what changed instead of leaving the UI to poll.
+		ls.SetOnChange(func(ev StoreEvent) {
+			srv.broadcast(EventChanged, eventParams{
+				FolderID: ev.FolderID, AccountID: ev.AccountID,
+				Count: ev.Count, Reason: ev.Reason,
+			})
+			if ev.Count > 0 {
+				srv.broadcast(EventFetched, eventParams{AccountID: ev.AccountID, Count: ev.Count})
+				srv.maybeNotify(ev.AccountID, ev.Count)
+			}
+		})
+		ls.StartPush(ctx)
+		defer ls.StopPush()
+		defer ls.SetOnChange(nil)
 	}
 	go func() {
 		<-ctx.Done()
 		_ = ln.Close()
 	}()
-	srv := NewServer(store, socket)
-	if ls, ok := store.(*LocalStore); ok {
-		ls.StartPush(ctx)
-	}
 	return srv.Serve(ln)
 }
-
-// Serve accepts connections on ln until the listener closes.
 func (s *Server) Serve(ln net.Listener) error {
 	s.mu.Lock()
 	s.serving = true
@@ -112,6 +143,12 @@ func isClosed(err error) bool {
 }
 
 func (s *Server) handleConn(raw net.Conn) {
+	if ok, err := peerAllowed(raw); err != nil || !ok {
+		// Another local user must not be able to read the mailbox or send
+		// mail through this daemon.
+		_ = raw.Close()
+		return
+	}
 	c := &rpcConn{Conn: raw, w: bufio.NewWriter(raw)}
 	s.mu.Lock()
 	s.conns[c] = struct{}{}
@@ -123,7 +160,7 @@ func (s *Server) handleConn(raw net.Conn) {
 		_ = c.Close()
 	}()
 	sc := bufio.NewScanner(c)
-	sc.Buffer(make([]byte, 0, 64*1024), 8*1024*1024)
+	sc.Buffer(make([]byte, 0, 64*1024), maxRPCLine)
 	for sc.Scan() {
 		line := sc.Bytes()
 		if len(line) == 0 {
@@ -145,6 +182,10 @@ func (s *Server) handleConn(raw net.Conn) {
 		}
 	}
 }
+
+// maxRPCLine bounds one NDJSON request. Attachments travel as base64 inside
+// compose.send, so the limit has to accommodate a real message.
+const maxRPCLine = 64 * 1024 * 1024
 
 func writeJSON(w *bufio.Writer, v any) error {
 	b, err := json.Marshal(v)
@@ -338,6 +379,17 @@ func (s *Server) dispatch(req Request) Response {
 				result = unreadResult{Count: s.Store.Unread(p.FolderID)}
 			}
 		}
+	case MethodUnreadAll:
+		counts := map[FolderID]int{}
+		for _, a := range s.Store.Accounts() {
+			for _, f := range s.Store.ListFolders(a.ID) {
+				counts[f.ID] = s.Store.Unread(f.ID)
+			}
+		}
+		for _, f := range s.Store.VirtualFolders() {
+			counts[f.ID] = s.Store.Unread(f.ID)
+		}
+		result = unreadAllResult{Counts: counts, Total: s.Store.UnreadTotal()}
 	case MethodComposeSend:
 		var p composeParams
 		p, err = decodeParams[composeParams](req.Params)
@@ -705,21 +757,24 @@ func (s *Server) send(p composeParams) (appendResult, error) {
 	}
 	msg.IdentityID = ident.ID
 	msg.Read = true
+	// Attachments arrive as bytes from the UI. The daemon deliberately does
+	// not read arbitrary paths on behalf of a client: that turned the socket
+	// into a file-exfiltration primitive.
 	var files []AttachedFile
-	for _, path := range p.AttachPaths {
-		b, err := os.ReadFile(path)
-		if err != nil {
-			return appendResult{}, fmt.Errorf("attach %s: %w", path, err)
+	for _, f := range p.Attachments {
+		name := attachFileName(f.Name)
+		if name == "attachment" && f.Name != "" {
+			name = attachFileName(filepath.Base(f.Name))
 		}
-		name := path
-		if i := strings.LastIndex(path, "/"); i >= 0 {
-			name = path[i+1:]
+		mimeType := f.MIME
+		if mimeType == "" {
+			mimeType = guessMIME(name)
 		}
-		files = append(files, AttachedFile{Name: name, MIME: guessMIME(name), Data: b})
+		files = append(files, AttachedFile{Name: name, MIME: mimeType, Data: f.Data})
 		msg.HasAttach = true
 		msg.Attachments = append(msg.Attachments, name)
 	}
-	if ls, ok := s.Store.(*LocalStore); ok && len(ls.cfg.Accounts) > 0 {
+	if ls, ok := s.Store.(*LocalStore); ok && ls.hasConfiguredAccounts() {
 		id, err := ls.SendViaSMTP(accountID, ident.ID, msg, files)
 		if err != nil {
 			return appendResult{}, err
@@ -767,6 +822,9 @@ func (s *Server) saveDraft(p composeParams) (appendResult, error) {
 	return appendResult{ID: id}, nil
 }
 
+// broadcast fans an event out to every client. The connection list is copied
+// under the lock and the writes happen outside it with a deadline, so one
+// client that stops reading cannot freeze the daemon.
 func (s *Server) broadcast(method string, params eventParams) {
 	raw, err := json.Marshal(params)
 	if err != nil {
@@ -774,12 +832,15 @@ func (s *Server) broadcast(method string, params eventParams) {
 	}
 	note := Request{JSONRPC: RPCVersion, Method: method, Params: raw}
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	conns := make([]*rpcConn, 0, len(s.conns))
 	for c := range s.conns {
-		_ = c.send(note)
+		conns = append(conns, c)
+	}
+	s.mu.Unlock()
+	for _, c := range conns {
+		_ = c.sendTimeout(note, 5*time.Second)
 	}
 }
-
 func specialFolder(store Store, accountID string, kind FolderKind) (Folder, bool) {
 	for _, f := range store.ListFolders(accountID) {
 		if f.Kind == kind && f.Parent == "" {

@@ -9,6 +9,20 @@ Thunderbird-chrome mail client on uitoolkit **v0.10.13**. Two processes:
 
 Shared types and the RPC client/server live in [`internal/mail`](../internal/mail).
 
+## What changed in the hardening pass (read this if you are upgrading)
+
+| Change | What you may notice |
+| --- | --- |
+| Socket is `0600` in a `0700` dir, same-uid only, lock-file guarded | A second `mailclientd` on the same socket now **fails to start** instead of taking over |
+| One fail-closed `tlsMode` (`ssl` / `starttls` / `plain`) | A `starttls` server that stops offering STARTTLS is now an **error**, not a silent cleartext login. `"tls": true` on port 143/110/587 now upgrades instead of going cleartext |
+| No plaintext credentials to a remote host | An account deliberately on a custom cleartext port must say `"tlsMode": "plain"`, and even then only loopback will authenticate |
+| `compose.send` takes attachment **bytes** | `attachPaths` is gone from the wire; the daemon no longer opens client-supplied paths. `Client.SendIdent` still takes paths and reads them UI-side |
+| OAuth master key derivation fixed | Existing `secrets/*.tok` written by a build **with libsecret present** cannot be read (they never could). Delete `secrets/` and sign in again |
+| `Bcc` is no longer written into the message | Blind recipients still receive it; they are just no longer disclosed |
+| Moves re-key on `COPYUID` | Cache entries change id after a move; a server without UIDPLUS drops the entry until the next sync |
+| Deletion reconciliation without QRESYNC | Messages deleted elsewhere finally disappear from the cache |
+| Folder / message ids are sanitised | Cached `meta/` filenames changed, so the first sync after upgrading re-reads folder metadata |
+
 ## How to start
 
 Default socket:
@@ -16,6 +30,14 @@ Default socket:
 - `$UITK_MAIL_SOCK` if set
 - else `$XDG_RUNTIME_DIR/mailclientd.sock`
 - else `/tmp/mailclientd-<uid>.sock`
+
+**The socket is the daemon's only authorisation boundary**, so it is locked
+down: the containing directory is created `0700`, the socket itself is
+`chmod 0600` immediately after bind, and every accepted connection must come
+from the same uid (`SO_PEERCRED`; root is also allowed). A `<socket>.lock`
+file means a second `mailclientd` refuses to start rather than silently
+stealing the path from the running one — if you see
+`another daemon is already serving …`, one is already up.
 
 ```bash
 # Terminal 1 — daemon (empty until you add an account)
@@ -64,6 +86,30 @@ Waybar, …). Headless / `CGO_ENABLED=0` tests use a stub or `UITK_TRAY=fake`.
 
 `mailclientd` is meant to be pointed at a real account. **Add Account** takes a typed (masked) password and writes it into `mail.json`. That file is **mode `0600`**. The password field is **temporary plaintext** until a secret store exists. OAuth (encrypted refresh token) and optional `passEnv` / `UITK_MAIL_PASS` still work when `password` is empty.
 
+### Connection security (`tlsMode`)
+
+Each server block resolves to exactly one mode, and the client obeys it
+**fail-closed** — it never downgrades:
+
+| `tlsMode` | Meaning | Usual ports |
+| --- | --- | --- |
+| `ssl` | TLS from the first byte | 993 / 995 / 465 |
+| `starttls` | cleartext connect, then a **mandatory** upgrade | 143 / 110 / 587 |
+| `plain` | no TLS — opt-in only, never a fallback | custom |
+
+- If a `starttls` server does not advertise STARTTLS/STLS the connection is
+  **aborted**; it is never continued in the clear. (An SMTP server that drops
+  `250-STARTTLS` used to get a cleartext `AUTH`.)
+- Credentials are never sent over an unencrypted connection to a non-loopback
+  host — neither by the accounts, nor by **Test connection**.
+- Certificate verification is always on. There is no switch to disable it.
+
+The older `"tls"` / `"starttls"` booleans are still read. They now map
+fail-closed: `"tls": true` on a STARTTLS port (143/110/587) **upgrades**
+instead of producing the silent cleartext session it used to. Omit both and
+the port decides; an unrecognised port defaults to `ssl` for IMAP/POP3 and
+`starttls` for SMTP.
+
 Config file (first existing wins):
 
 - `$UITK_MAIL_CONFIG`
@@ -90,13 +136,13 @@ Example `mail.json` (written mode `0600`; `password` is temporary plaintext):
         "host": "imap.example.com:993",
         "user": "ada@example.com",
         "password": "your-app-password",
-        "tls": true
+        "tlsMode": "ssl"
       },
       "smtp": {
         "host": "smtp.example.com:587",
         "user": "ada@example.com",
         "password": "your-app-password",
-        "starttls": true
+        "tlsMode": "starttls"
       }
     }
   ]
@@ -135,13 +181,13 @@ POP3 account (inbox retrieve; SMTP still used to send):
     "host": "pop.example.com:995",
     "user": "ada@example.com",
     "password": "your-app-password",
-    "tls": true
+    "tlsMode": "ssl"
   },
   "smtp": {
     "host": "smtp.example.com:587",
     "user": "ada@example.com",
     "password": "your-app-password",
-    "starttls": true
+    "tlsMode": "starttls"
   }
 }
 ```
@@ -166,6 +212,13 @@ The Message tab is **plain text**. mailclientd prefers the `text/plain` part; if
 
 Real **authorization-code + PKCE loopback** (`http://127.0.0.1:<port>/oauth/callback`) or **device code** flow. IMAP/SMTP then use **AUTH XOAUTH2**. The `UITK_MAIL_XOAUTH2` bearer passthrough, inline `password`, and `passEnv` / `UITK_MAIL_PASS` still work.
 
+The loopback callback carries an unguessable **`state`** nonce and only the
+matching callback is accepted (and only once). Any local process — or a web
+page the browser is pointed at — can reach `127.0.0.1:<port>`, so without it
+an attacker could complete the flow with their own code and attach their
+mailbox to the account. Provider error text echoed into the browser tab is
+HTML-escaped and served as `text/plain`.
+
 **Honest gap:** uitoolkit does **not** ship Google or Microsoft client IDs. You must register an app and supply credentials:
 
 | Provider | Register | Env (or wizard fields) |
@@ -186,9 +239,20 @@ Device flow: **Device code…** on the same dialog (useful when loopback cannot 
 
 Refresh/access tokens are **never** written to `mail.json`. They live under `$XDG_DATA_HOME/uitoolkit/mail/secrets/` (or `$UITK_MAIL_DATA/secrets/`):
 
-- `*.tok` — AES-256-GCM (random nonce prefix)
-- `master.key` — 32 random bytes, mode `0600`, used when libsecret is unavailable
-- If `secret-tool` is on `PATH`, the master key is also stored as `service=uitoolkit-mail`
+- `*.tok` — AES-256-GCM (random nonce prefix), mode `0600`
+- `master.key` — the 32-byte key as **hex**, mode `0600`
+- If `secret-tool` is on `PATH` the same hex string is also stored as
+  `service=uitoolkit-mail`
+
+Both copies hold the identical value and are decoded the same way. (Before
+v0.10.14 the libsecret copy was hashed on read but not on write, so on any
+desktop with libsecret every stored token became undecryptable and OAuth
+accounts failed to authenticate after the first sign-in. If you hit that,
+delete `secrets/` and sign in again.)
+
+The OAuth **client id** (and secret, when the app is confidential) is stored
+alongside the token, so refreshing an hour later works even if the
+`UITK_MAIL_OAUTH_*` variables are no longer exported.
 
 This is an encrypted file (plus optional OS keyring), **not** a TPM-backed vault. Backup the `secrets/` directory with the same care as an SSH key.
 
@@ -203,16 +267,41 @@ After listen, LocalStore starts a **push supervisor**:
 - **QRESYNC** when the server advertises it (`ENABLE QRESYNC`): `SELECT … (QRESYNC (uidvalidity highestmodseq))`, apply `VANISHED`, then flag refresh.
 - Else **CONDSTORE** `UID FETCH … (CHANGEDSINCE highestmodseq)` for flags.
 - Else a full `UID FETCH 1:* (UID FLAGS)`.
+- **Deletion reconciliation**: on a server without QRESYNC (so no `VANISHED`)
+  each pass also diffs the mailbox's UID set against the cache and drops what
+  is gone. Messages deleted from another client used to stay in the cache for
+  ever, and later UID commands then addressed a message that no longer
+  existed.
 - Other folders: CONDSTORE/FLAGS poll about every **2 minutes**, plus File → Get Messages.
 - `UIDVALIDITY` change still wipes that folder’s cache.
 
 Manual Get Messages / `sync.run` always does a full account pass (LIST + incremental UID FETCH).
+
+Sync never holds the store lock across network I/O (snapshot → I/O → re-lock
+and apply) and only one sync runs at a time, so a slow or unresponsive server
+no longer blocks unrelated RPCs. Progress is announced with `mail.changed` /
+`mail.fetched` as each folder completes, and the UI refreshes on those events
+instead of waiting for the whole pass. Every IMAP command has a deadline, and
+an `AUTHENTICATE` that draws a `+` continuation is answered so the server can
+report its error rather than both sides waiting for ever.
+
+**Moves keep server state straight.** A `UID MOVE` / `UID COPY` response
+carrying `COPYUID` (UIDPLUS) re-keys the cached message to its destination
+UID; without one the cache entry is dropped and the next sync re-adds it. A
+message is expunged with `UID EXPUNGE` where UIDPLUS is available, so a bare
+`EXPUNGE` can no longer purge other `\Deleted` messages that another client
+flagged.
 
 Work Offline (`status.set`) stops treating the transport as reachable; mutations go to the outbox (below). Going online flushes the queue.
 
 ## Offline outbox
 
 While offline (or after a transport error), **send / move / delete / flag** apply to the local cache immediately and enqueue an `OutboxOp`. The folder tree **Outbox** node lists queued sends.
+
+Queued sends keep their **attachments**, so a message composed offline goes
+out complete. A send that fails in transport is queued **once** and reports
+the error (it used to both queue a copy and error, so a user retry sent the
+message twice).
 
 Flush: File → Work Offline (toggle back on), Get Messages, or `outbox.flush`.
 
@@ -222,6 +311,24 @@ Conflict-safe cache:
 - Flush of a vanished UID is a no-op (dropped).
 - `UIDVALIDITY` change drops stale UIDs; the user re-syncs.
 
+## Cache integrity
+
+Every cache file (`messages.json`, `folders.json`, the per-folder `meta/`
+files, `mail.json`, token blobs, saved attachments) is written
+**tmp → fsync → rename**, with the parent directory fsynced, so a crash
+mid-write leaves the previous good file rather than a truncated one. On
+start, a file that fails to parse is moved aside as `*.corrupt`, the rest of
+the cache still loads, and `status.get` reports the recovery in `health` so
+you know to re-sync — the old code silently loaded an empty store and then
+overwrote the good file with it.
+
+Account ids are reduced to `[a-z0-9_-]` and every derived path is checked
+against the data directory, so an `accounts.put` with an id like `../../..`
+cannot write (or, on `accounts.delete`, `RemoveAll`) outside the cache.
+
+`mail.json` is re-`chmod`ed to `0600` on every save, including a file you
+created by hand with a looser umask — it holds a plaintext password.
+
 ## Fast search + Smart folders
 
 Daemon-side inverted index over subject / from / to / body (AND of tokens). Quick Filter and `messages.search` use it when a query is present, then apply pins.
@@ -230,7 +337,10 @@ Daemon-side inverted index over subject / from / to / body (AND of tokens). Quic
 
 ## Threading + mute
 
-Conversations group by `In-Reply-To` / `References` when Message-IDs exist, otherwise a normalized subject key. View → **Threaded** nests replies (`↳`) and shows a count on the root.
+Conversations group by `In-Reply-To` / `References` when Message-IDs exist, otherwise a normalized subject key. Roots are re-derived across the whole cache after a sync adds messages, so a reply that arrives before its parent (or a reply to a reply) still lands in the right conversation. View → **Threaded** nests replies (`↳`) and shows a count on the root.
+
+Replies you send carry **`In-Reply-To`** and **`References`**, so they thread
+in the recipient's client too, and Reply honours the sender's `Reply-To`.
 
 **Message → Mute Thread** (and Unmute). Muted threads:
 
@@ -240,7 +350,25 @@ Conversations group by `In-Reply-To` / `References` when Message-IDs exist, othe
 
 ## Attachments
 
-Message view stays **text-only**. Each attachment row shows its name plus inline **Open** and **Save As** (toolkit `Button`). A single click on the name selects only; a double click — or that row’s **Open** — calls `messages.openPart`: mailclientd writes a cache file under the data dir (`open/` or a temp file for MemoryStore) and launches `xdg-open` (or `open` on macOS) when a display is available. `UITK_MAIL_NO_OPEN=1` skips the spawn (tests / headless). **Save As** uses the toolkit file dialog and writes `messages.part` bytes to the chosen path (mode `0600`). The attachment toolbar (where the shared Open used to sit) has **Save All**: one folder pick via the same file dialog (the confirmed path is treated as a directory — an existing file uses its parent; a missing path with no extension is created), then every attachment on the current message is written there (`0600`; `name-2.ext` on collisions).
+Message view stays **text-only**. Each attachment row shows its name plus inline **Open** and **Save As** (toolkit `Button`). A single click on the name selects only; a double click — or that row’s **Open** — calls `messages.openPart`: mailclientd writes a cache file under the data dir (`open/` or a temp file for MemoryStore) and launches `xdg-open` (or `open` on macOS) when a display is available. `UITK_MAIL_NO_OPEN=1` skips the spawn (tests / headless). **Save As** uses the toolkit file dialog and writes `messages.part` bytes to the chosen path (mode `0600`). Attachment bytes are decoded from the cached `.eml`, so a row saves **its own** part (a `report.pdf` row no longer writes the text body under that name).
+
+`messages.openPart` refuses to hand the desktop opener anything it would
+execute or render as markup (`.desktop`, `.sh`, `.js`, `.html`, `.svg`, …) —
+save it and inspect it instead. The cache file is written under the data dir
+with the attachment's **base** name, so a `filename="../../…"` cannot escape. The attachment toolbar (where the shared Open used to sit) has **Save All**: one folder pick via the same file dialog (the confirmed path is treated as a directory — an existing file uses its parent; a missing path with no extension is created), then every attachment on the current message is written there (`0600`; `name-2.ext` on collisions).
+
+## Outgoing mail
+
+`BuildRFC822Strict` is the only way a message reaches the wire:
+
+- **`Bcc` is never written as a header.** Blind recipients are passed to SMTP
+  as `RCPT TO` only; the header used to disclose the whole blind list to
+  every recipient and to the copy filed in Sent.
+- Every header value is rejected or folded if it contains CR/LF, and display
+  names / subjects / filenames are RFC 2047-encoded. A `To:` field containing
+  `\r\nX-Evil: 1` can no longer inject a header or a body.
+- Attachment filenames are reduced to a base name before they go into the
+  `filename=` parameter.
 
 ## VIP, notifications, categories
 
@@ -254,17 +382,17 @@ Calendar / iTip is **not** in this release (Tier C later).
 
 Implemented in mailclientd:
 
-- IMAP: CONNECT, implicit TLS (993) and STARTTLS (143), LOGIN, AUTH PLAIN, AUTH XOAUTH2 (env bearer **or** stored OAuth token), CAPABILITY, ENABLE QRESYNC/CONDSTORE, LIST/LSUB, SELECT/EXAMINE (+ QRESYNC), UID FETCH (ENVELOPE, FLAGS, BODYSTRUCTURE, BODY.PEEK[] / sections), UID STORE, UID SEARCH, UID COPY, UID MOVE (or COPY+\\Deleted+EXPUNGE), APPEND, EXPUNGE, IDLE (Inbox+Sent supervisor), CONDSTORE CHANGEDSINCE, VANISHED when QRESYNC.
+- IMAP: CONNECT, implicit TLS (993) and **mandatory** STARTTLS (143), mailbox names in modified UTF-7, LOGIN, AUTH PLAIN, AUTH XOAUTH2 (env bearer **or** stored OAuth token), CAPABILITY, ENABLE QRESYNC/CONDSTORE, LIST/LSUB, SELECT/EXAMINE (+ QRESYNC), UID FETCH (ENVELOPE, FLAGS, BODYSTRUCTURE, BODY.PEEK[] / sections), UID STORE, UID SEARCH, UID COPY, UID MOVE (or COPY+\\Deleted+EXPUNGE), APPEND, EXPUNGE, IDLE (Inbox+Sent supervisor), CONDSTORE CHANGEDSINCE, VANISHED when QRESYNC.
 - POP3: CONNECT, implicit TLS (995) and STLS (110), USER/PASS, STAT, UIDL, RETR into the local Inbox (leave-on-server — no DELE). Incremental skip by UIDL (or RFC Message-ID if UIDL is missing). Local Drafts/Sent/Trash exist for compose.
 - Incremental cache: UIDVALIDITY wipe, UIDNEXT, highestmodseq. Raw `.eml` on disk after body fetch.
-- MIME: multipart (nested), text/plain + text/html, attachments, RFC 2047, charset via `golang.org/x/text`.
+- MIME: multipart (nested), text/plain + text/html, attachments (decoded to their own bytes), RFC 2047, charset via `golang.org/x/text`, numeric + named HTML entities, and a 64 MiB cap per decoded part.
 - SMTP: implicit TLS (465), STARTTLS (587), AUTH PLAIN / LOGIN / XOAUTH2. Send then IMAP APPEND to Sent (or outbox if offline).
 - Multiple accounts in one config; folder tree mirrors LIST + local specials + virtuals.
 - Offline read of anything already synced; queued mutations.
 
 Known gaps:
 
-- BODYSTRUCTURE walker covers common multipart/alternative + mixed; exotic message/rfc822 nests may miss a part id.
+- BODYSTRUCTURE walker covers common multipart/alternative + mixed; exotic message/rfc822 nests may miss a part id. Part ids follow RFC 3501 section numbering (`1`, `1.1`, `2`) in both the parser and the walker — they used to disagree, and nested parts could collide.
 - HTML is **stripped to text** in the Message tab (no HTML engine, no HTML tab). Scripts/iframes never run.
 - OAuth needs **your** Google/Microsoft app registration (no bundled client IDs). OAuth accounts are **IMAP + SMTP** only (not POP3).
 - IDLE watches Inbox + Sent, not every mailbox (others poll). POP3 has no IDLE (Get Messages / periodic Sync).
@@ -309,7 +437,8 @@ Notifications (no `id`): `mail.changed`, `mail.fetched`, `mail.synced`, `mail.no
 | `messages.fetch` | `{accountId}` |
 | `sync.run` | `{accountId?}` |
 | `unread.get` | `{folderId?}` |
-| `compose.send` | `{accountId, identityId?, message, attachPaths?, id?}` |
+| `unread.all` | — every folder + virtual folder in one round trip |
+| `compose.send` | `{accountId, identityId?, message, attachments?, id?}` — attachments are **bytes**; the daemon never opens a client-supplied path |
 | `compose.saveDraft` | `{accountId, message, id?}` |
 | `outbox.list` / `outbox.flush` | queued send/move/delete/flag |
 | `smart.list` / `smart.put` / `smart.delete` | saved search folders |

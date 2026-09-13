@@ -2,7 +2,6 @@ package mail
 
 import (
 	"bufio"
-	"crypto/tls"
 	"fmt"
 	"net"
 	"strings"
@@ -35,19 +34,10 @@ type ProbeResult struct {
 type probeCand struct {
 	Protocol string
 	Host     string
-	Implicit bool
-	StartTLS bool
+	Mode     TLSMode
 }
 
-func (c probeCand) tlsMode() string {
-	if c.Implicit {
-		return "ssl"
-	}
-	if c.StartTLS {
-		return "starttls"
-	}
-	return "plain"
-}
+func (c probeCand) tlsMode() string { return string(c.Mode) }
 
 // ProbeAccount dials IMAP and/or POP3 with the typed user/password.
 // Overall time is capped (default 8s) so the Add Account UI stays usable.
@@ -162,47 +152,44 @@ func candsForHost(proto, host string) []probeCand {
 	if !strings.Contains(host, ":") {
 		if proto == ProtoPOP3 {
 			return []probeCand{
-				{Protocol: ProtoPOP3, Host: host + ":995", Implicit: true},
-				{Protocol: ProtoPOP3, Host: host + ":110", StartTLS: true},
+				{Protocol: ProtoPOP3, Host: host + ":995", Mode: TLSImplicit},
+				{Protocol: ProtoPOP3, Host: host + ":110", Mode: TLSStartTLS},
 			}
 		}
 		return []probeCand{
-			{Protocol: ProtoIMAP, Host: host + ":993", Implicit: true},
-			{Protocol: ProtoIMAP, Host: host + ":143", StartTLS: true},
+			{Protocol: ProtoIMAP, Host: host + ":993", Mode: TLSImplicit},
+			{Protocol: ProtoIMAP, Host: host + ":143", Mode: TLSStartTLS},
 		}
 	}
-	impl, stls := tlsModeForHost(host)
-	return []probeCand{{Protocol: proto, Host: host, Implicit: impl, StartTLS: stls}}
+	return []probeCand{{Protocol: proto, Host: host, Mode: tlsModeForHost(host)}}
 }
 
 func imapCommonHosts(domain string) []probeCand {
 	return []probeCand{
-		{Protocol: ProtoIMAP, Host: "imap." + domain + ":993", Implicit: true},
-		{Protocol: ProtoIMAP, Host: "mail." + domain + ":993", Implicit: true},
-		{Protocol: ProtoIMAP, Host: "imap." + domain + ":143", StartTLS: true},
-		{Protocol: ProtoIMAP, Host: "mail." + domain + ":143", StartTLS: true},
+		{Protocol: ProtoIMAP, Host: "imap." + domain + ":993", Mode: TLSImplicit},
+		{Protocol: ProtoIMAP, Host: "mail." + domain + ":993", Mode: TLSImplicit},
+		{Protocol: ProtoIMAP, Host: "imap." + domain + ":143", Mode: TLSStartTLS},
+		{Protocol: ProtoIMAP, Host: "mail." + domain + ":143", Mode: TLSStartTLS},
 	}
 }
 
 func popCommonHosts(domain string) []probeCand {
 	return []probeCand{
-		{Protocol: ProtoPOP3, Host: "pop." + domain + ":995", Implicit: true},
-		{Protocol: ProtoPOP3, Host: "mail." + domain + ":995", Implicit: true},
-		{Protocol: ProtoPOP3, Host: "pop." + domain + ":110", StartTLS: true},
-		{Protocol: ProtoPOP3, Host: "mail." + domain + ":110", StartTLS: true},
+		{Protocol: ProtoPOP3, Host: "pop." + domain + ":995", Mode: TLSImplicit},
+		{Protocol: ProtoPOP3, Host: "mail." + domain + ":995", Mode: TLSImplicit},
+		{Protocol: ProtoPOP3, Host: "pop." + domain + ":110", Mode: TLSStartTLS},
+		{Protocol: ProtoPOP3, Host: "mail." + domain + ":110", Mode: TLSStartTLS},
 	}
 }
 
-func tlsModeForHost(host string) (implicit, starttls bool) {
-	switch {
-	case strings.HasSuffix(host, ":993"), strings.HasSuffix(host, ":995"), strings.HasSuffix(host, ":465"):
-		return true, false
-	case strings.HasSuffix(host, ":143"), strings.HasSuffix(host, ":110"), strings.HasSuffix(host, ":587"):
-		return false, true
-	default:
-		// Custom / test ports: plain TCP (caller can still set tls flags).
-		return false, false
+// tlsModeForHost maps a typed host:port to its conventional mode. Custom
+// ports get plain TCP — the probe then refuses to send a password to a
+// non-loopback host (see probeIMAP / probePOP3).
+func tlsModeForHost(host string) TLSMode {
+	if m, ok := modeForPort(portOf(host)); ok {
+		return m
 	}
+	return TLSPlain
 }
 
 func dedupeProbeCands(in []probeCand) []probeCand {
@@ -241,31 +228,8 @@ func probeOne(c probeCand, user, pass string, timeout time.Duration) error {
 	return probeIMAP(c, user, pass, timeout)
 }
 
-func dialMail(host string, implicit bool, timeout time.Duration) (net.Conn, error) {
-	d := net.Dialer{Timeout: timeout}
-	if implicit {
-		return tls.DialWithDialer(&d, "tcp", host, &tls.Config{
-			MinVersion: tls.VersionTLS12,
-			ServerName: serverName(host),
-		})
-	}
-	return d.Dial("tcp", host)
-}
-
-func upgradeTLS(conn net.Conn, host string, timeout time.Duration) (net.Conn, error) {
-	_ = conn.SetDeadline(time.Now().Add(timeout))
-	t := tls.Client(conn, &tls.Config{
-		MinVersion: tls.VersionTLS12,
-		ServerName: serverName(host),
-	})
-	if err := t.Handshake(); err != nil {
-		return nil, err
-	}
-	return t, nil
-}
-
 func probeIMAP(c probeCand, user, pass string, timeout time.Duration) error {
-	conn, err := dialMail(c.Host, c.Implicit, timeout)
+	conn, err := dialMode(c.Host, c.Mode, timeout)
 	if err != nil {
 		return fmt.Errorf("imap %s: %w", c.Host, err)
 	}
@@ -279,7 +243,7 @@ func probeIMAP(c probeCand, user, pass string, timeout time.Duration) error {
 	if !strings.Contains(strings.ToUpper(greet), "OK") && !strings.Contains(strings.ToUpper(greet), "PREAUTH") {
 		return fmt.Errorf("imap %s: unexpected greeting %q", c.Host, greet)
 	}
-	if c.StartTLS && !c.Implicit {
+	if c.Mode == TLSStartTLS {
 		if err := writeCRLF(conn, "a1 STARTTLS"); err != nil {
 			return err
 		}
@@ -288,9 +252,9 @@ func probeIMAP(c probeCand, user, pass string, timeout time.Duration) error {
 			return fmt.Errorf("imap STARTTLS: %w", err)
 		}
 		if !strings.Contains(strings.ToUpper(ln), "OK") {
-			return fmt.Errorf("imap STARTTLS: %s", ln)
+			return errNoSTARTTLS("imap", c.Host)
 		}
-		up, err := upgradeTLS(conn, c.Host, timeout)
+		up, err := upgradeToTLS(conn, c.Host)
 		if err != nil {
 			return fmt.Errorf("imap STARTTLS handshake: %w", err)
 		}
@@ -300,6 +264,11 @@ func probeIMAP(c probeCand, user, pass string, timeout time.Duration) error {
 	}
 	if strings.TrimSpace(pass) == "" {
 		return nil
+	}
+	if !c.Mode.Encrypted() && !isLoopbackHost(c.Host) {
+		// Reachable when the user typed a custom port: report the server as
+		// reachable rather than leaking the password to test it.
+		return errProbeNoTLS{host: c.Host}
 	}
 	if err := writeCRLF(conn, fmt.Sprintf("a2 LOGIN %s %s", imapQuote(user), imapQuote(pass))); err != nil {
 		return err
@@ -320,10 +289,20 @@ func probeIMAP(c probeCand, user, pass string, timeout time.Duration) error {
 	}
 }
 
+// errProbeNoTLS marks "server answered, but we would not authenticate in
+// the clear" so Test connection can say so instead of claiming failure.
+type errProbeNoTLS struct{ host string }
+
+func (e errProbeNoTLS) Error() string {
+	return "reachable, but " + e.host + " offers no TLS — not sending the password (set a 993/995 or 143/110 port)"
+}
+
 func probePOP3(c probeCand, user, pass string, timeout time.Duration) error {
+	if strings.TrimSpace(pass) != "" && !c.Mode.Encrypted() && !isLoopbackHost(c.Host) {
+		pass = ""
+	}
 	cli := &pop3Client{cfg: ServerConfig{
-		Host: c.Host, User: user, Pass: pass,
-		TLS: boolPtrVal(c.Implicit), StartTLS: boolPtrVal(c.StartTLS),
+		Host: c.Host, User: user, Pass: pass, TLSMode: string(c.Mode),
 	}, user: user, timeout: timeout}
 	if err := cli.connect(); err != nil {
 		return err

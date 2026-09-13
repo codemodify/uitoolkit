@@ -1,6 +1,8 @@
 package mail
 
 import (
+	"time"
+
 	"github.com/codemodify/uitoolkit/app"
 	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
@@ -8,36 +10,83 @@ import (
 )
 
 func (s *session) attachTray() {
-	if s == nil || s.app == nil || s.tray != nil {
+	if s == nil || s.app == nil {
 		return
 	}
-	look := s.app.Look()
-	item, err := s.app.NewStatusItem(platform.StatusItemOptions{
-		ID:         "mailclientui",
-		Title:      "Mail",
-		Tooltip:    "Mail",
-		MenuChrome: platform.HostMenu,
-		Icon:       app.StatusIconFromTool(style.IconMail, look, 22),
-		Menu: app.StatusMenuFromItems([]*widgets.MenuItem{
-			widgets.ItemIcon(style.IconMail, "Show Mail", s.showMain),
-			widgets.Sep(),
-			widgets.Item("Quit", s.quitFromTray),
-		}),
-		OnClick:       s.showMain,
-		OnNotifyClick: s.showMain,
-	})
-	if err != nil || item == nil {
-		return
+	if s.statusItem() == nil {
+		look := s.app.Look()
+		item, err := s.app.NewStatusItem(platform.StatusItemOptions{
+			ID:         "mailclientui",
+			Title:      "Mail",
+			Tooltip:    "Mail",
+			MenuChrome: platform.HostMenu,
+			Icon:       app.StatusIconFromTool(style.IconMail, look, 22),
+			Menu: app.StatusMenuFromItems([]*widgets.MenuItem{
+				widgets.ItemIcon(style.IconMail, "Show Mail", s.showMain),
+				widgets.Sep(),
+				widgets.Item("Quit", s.quitFromTray),
+			}),
+			OnClick:       s.showMain,
+			OnNotifyClick: s.showMain,
+		})
+		if err == nil && item != nil {
+			s.setStatusItem(item)
+			if s.win != nil && item.Alive() {
+				s.win.SetCloseHides(true)
+			}
+		}
 	}
-	s.tray = item
-	if s.win != nil && item.Alive() {
-		s.win.SetCloseHides(true)
-	}
-	if s.cli != nil {
-		s.cli.OnEvent(s.onDaemonEvent)
-	}
+	// Subscribe after the tray is published so the event goroutine sees it.
+	// The daemon event stream drives both the toast and the list refresh,
+	// so it is wired even when the tray itself is unavailable.
+	s.listenDaemon()
 }
 
+// statusItem / setStatusItem guard s.tray: it is written by the UI goroutine
+// (attach, quit) and read by the daemon event goroutine.
+func (s *session) statusItem() platform.StatusItem {
+	s.trayMu.Lock()
+	defer s.trayMu.Unlock()
+	return s.tray
+}
+
+func (s *session) setStatusItem(it platform.StatusItem) {
+	s.trayMu.Lock()
+	s.tray = it
+	s.trayMu.Unlock()
+}
+func (s *session) listenDaemon() {
+	if s.cli == nil || s.refresher != nil {
+		return
+	}
+	// Bursts of IDLE-driven mail.changed events collapse into one refresh:
+	// each refresh re-queries every folder's unread count.
+	s.refresher = newRefreshCoalescer(250*time.Millisecond, func() {
+		queued := s.postLive(func() {
+			s.pendingRefresh.Store(false)
+			s.refreshList()
+			s.rebuildTree()
+			s.refreshStatus()
+		})
+		if !queued {
+			s.pendingRefresh.Store(true)
+		}
+	})
+	s.cli.OnEvent(s.onDaemonEvent)
+}
+
+// DrainDaemonEvents applies a refresh that a daemon event asked for while no
+// UI loop was pumping. It reports whether anything was pending. Headless
+// renderers and tests call it; the running UI never needs to.
+func (s *session) DrainDaemonEvents() bool {
+	if s == nil || !s.pendingRefresh.Swap(false) {
+		return false
+	}
+	s.refreshList()
+	s.rebuildTree()
+	s.refreshStatus()
+	return true
+}
 func (s *session) showMain() {
 	if s == nil || s.app == nil {
 		return
@@ -51,39 +100,51 @@ func (s *session) showMain() {
 		}
 		s.win = win
 		win.SetContent(s.build())
-		if s.tray != nil && s.tray.Alive() {
+		if it := s.statusItem(); it != nil && it.Alive() {
 			win.SetCloseHides(true)
 		}
 	}
 	s.win.Show()
 	s.win.Raise()
 }
-
 func (s *session) quitFromTray() {
+	if s.refresher != nil {
+		s.refresher.stop()
+	}
 	if s.win != nil {
 		s.win.SetCloseHides(false)
 		s.win.Close()
 	}
-	if s.tray != nil {
-		_ = s.tray.Close()
-		s.tray = nil
+	if it := s.statusItem(); it != nil {
+		_ = it.Close()
+		s.setStatusItem(nil)
 	}
 	if s.app != nil {
 		s.app.Quit()
 	}
 }
-
 func (s *session) onDaemonEvent(ev Event) {
-	if ev.Method != EventNotify || s.tray == nil {
-		return
+	switch ev.Method {
+	case EventChanged, EventFetched, EventSynced:
+		// New mail, a flag change, or a deletion from another client: the
+		// window used to show nothing until the user pressed Fetch.
+		if s.refresher != nil {
+			s.refresher.request()
+		}
+	case EventNotify:
+		title := ev.Title
+		if title == "" {
+			title = "New mail"
+		}
+		if it := s.statusItem(); it != nil {
+			_ = it.Notify(platform.Notification{
+				Title:   title,
+				Body:    ev.Body,
+				OnClick: s.showMain,
+			})
+		}
+		if s.refresher != nil {
+			s.refresher.request()
+		}
 	}
-	title := ev.Title
-	if title == "" {
-		title = "New mail"
-	}
-	_ = s.tray.Notify(platform.Notification{
-		Title:   title,
-		Body:    ev.Body,
-		OnClick: s.showMain,
-	})
 }

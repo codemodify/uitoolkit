@@ -194,6 +194,7 @@ type Message struct {
 	Parts        []Part `json:"parts,omitempty"`
 	IdentityID   string `json:"identityId,omitempty"`
 	RFCMessageID string `json:"rfcMessageId,omitempty"`
+	ReplyTo      string `json:"replyTo,omitempty"`
 	InReplyTo    string `json:"inReplyTo,omitempty"`
 	References   string `json:"references,omitempty"`
 	ThreadID     string `json:"threadId,omitempty"`

@@ -57,11 +57,13 @@ func TestMailTrayFakeClickRaises(t *testing.T) {
 		t.Fatal("close-to-tray hide")
 	}
 	tray.Click()
+	a.DrainPosted() // tray callbacks are queued for the UI goroutine
 	if !w.Visible() {
 		t.Fatal("tray click should show Mail")
 	}
 	w.Hide()
 	tray.ClickMenu(0)
+	a.DrainPosted()
 	if !w.Visible() {
 		t.Fatal("Show Mail menu should raise")
 	}
@@ -80,6 +82,7 @@ func TestMailTrayFakeClickRaises(t *testing.T) {
 	}
 	w.Hide()
 	tray.ClickNotify()
+	a.DrainPosted()
 	if !w.Visible() {
 		t.Fatal("notify-click should show Mail")
 	}

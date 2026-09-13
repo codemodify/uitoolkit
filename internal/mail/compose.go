@@ -61,20 +61,25 @@ func ComposeApp(a *app.Application, win *app.Window, cli *Client, opts ComposeOp
 	to0, cc0, bcc0, subj0, body0 := "", "", "", "", ""
 	fromIdx := 0
 	draftID := MessageID("")
+	// Threading headers for the outgoing message. Without them a reply
+	// starts a new conversation in the recipient's client.
+	inReplyTo, references := "", ""
 	if opts.Draft != nil {
 		d := opts.Draft
 		to0, cc0, bcc0, subj0, body0 = d.To, d.Cc, d.Bcc, d.Subject, d.Body
 		draftID = d.ID
 		fromIdx = indexFrom(fromItems, d.From)
+		inReplyTo, references = d.InReplyTo, d.References
 	} else if opts.ReplyTo != nil {
 		m := opts.ReplyTo
-		to0 = firstAddr(m.From)
+		to0 = replyToAddr(*m)
 		if strings.TrimSpace(m.Cc) != "" {
 			cc0 = m.Cc
 		}
 		subj0 = "Re: " + stripRe(m.Subject)
 		body0 = quoteBody(*m)
 		fromIdx = indexFrom(fromItems, m.To)
+		inReplyTo, references = replyThreadHeaders(*m)
 	} else if opts.Forward != nil {
 		m := opts.Forward
 		subj0 = "Fwd: " + strings.TrimSpace(m.Subject)
@@ -128,16 +133,20 @@ func ComposeApp(a *app.Application, win *app.Window, cli *Client, opts ComposeOp
 
 	collect := func() Message {
 		return Message{
-			From:    fromText(),
-			To:      to.Text,
-			Cc:      cc.Text,
-			Bcc:     bcc.Text,
-			Subject: subject.Text,
-			Body:    body.Text,
-			Read:    true,
+			From:       fromText(),
+			To:         to.Text,
+			Cc:         cc.Text,
+			Bcc:        bcc.Text,
+			Subject:    subject.Text,
+			Body:       body.Text,
+			InReplyTo:  inReplyTo,
+			References: references,
+			Read:       true,
 		}
 	}
 
+	// Both of these are daemon round trips (a send can take a while): run
+	// them off the UI goroutine and apply the result back on it.
 	saveDraft := func() {
 		acct := accountID()
 		if acct == "" {
@@ -148,16 +157,20 @@ func ComposeApp(a *app.Application, win *app.Window, cli *Client, opts ComposeOp
 		if ident := identityID(); ident != "" && msg.From == "" {
 			msg.From = fromText()
 		}
-		id, err := cli.SaveDraft(acct, msg, draftID)
-		if err != nil {
-			widgets.Warn(win.Content(), "Save Draft", err.Error(), nil)
-			return
-		}
-		draftID = id
-		status.Set(0, "Saved draft")
-		if opts.OnChange != nil {
-			opts.OnChange()
-		}
+		status.Set(0, "Saving draft…")
+		runAsync(a, func() (any, error) {
+			return cli.SaveDraft(acct, msg, draftID)
+		}, func(v any, err error) {
+			if err != nil {
+				widgets.Warn(win.Content(), "Save Draft", err.Error(), nil)
+				return
+			}
+			draftID = v.(MessageID)
+			status.Set(0, "Saved draft")
+			if opts.OnChange != nil {
+				opts.OnChange()
+			}
+		})
 	}
 
 	send := func() {
@@ -167,16 +180,30 @@ func ComposeApp(a *app.Application, win *app.Window, cli *Client, opts ComposeOp
 		}
 		acct := accountID()
 		msg := collect()
-		if _, err := cli.SendIdent(acct, identityID(), msg, draftID, attachPaths); err != nil {
-			widgets.Warn(win.Content(), "Send", err.Error(), nil)
-			return
-		}
-		if opts.OnChange != nil {
-			opts.OnChange()
-		}
-		widgets.Info(win.Content(), "Sent",
-			"Message filed in Sent via mailclientd (no SMTP on the wire in demo).\nIMAP/SMTP live in the daemon, not this window.",
-			func() { win.Close() })
+		ident := identityID()
+		did := draftID
+		status.Set(0, "Sending…")
+		runAsync(a, func() (any, error) {
+			// Attachments are read here and shipped as bytes: mailclientd
+			// does not open paths on a client's behalf.
+			files, err := ReadAttachments(attachPaths)
+			if err != nil {
+				return nil, err
+			}
+			return cli.SendFiles(acct, ident, msg, did, files)
+		}, func(_ any, err error) {
+			if err != nil {
+				status.Set(0, "Send failed")
+				widgets.Warn(win.Content(), "Send", err.Error(), nil)
+				return
+			}
+			if opts.OnChange != nil {
+				opts.OnChange()
+			}
+			widgets.Info(win.Content(), "Sent",
+				"Message handed to mailclientd: submitted over SMTP and filed in Sent\n(queued in the Outbox when offline).",
+				func() { win.Close() })
+		})
 	}
 
 	closeWin := func() {
@@ -272,6 +299,34 @@ func ComposeApp(a *app.Application, win *app.Window, cli *Client, opts ComposeOp
 	root.AddFlex(bodyPad, 1)
 	_ = a
 	return root
+}
+
+// replyToAddr honours Reply-To when the sender set one.
+func replyToAddr(m Message) string {
+	if r := strings.TrimSpace(m.ReplyTo); r != "" {
+		return firstAddr(r)
+	}
+	return firstAddr(m.From)
+}
+
+// replyThreadHeaders builds In-Reply-To and References for a reply, per
+// RFC 5322 §3.6.4: In-Reply-To is the parent's Message-ID and References is
+// the parent's References plus that Message-ID.
+func replyThreadHeaders(m Message) (inReplyTo, references string) {
+	parent := strings.TrimSpace(m.RFCMessageID)
+	if parent == "" {
+		return "", strings.TrimSpace(m.References)
+	}
+	if !strings.HasPrefix(parent, "<") {
+		parent = "<" + strings.Trim(parent, "<>") + ">"
+	}
+	refs := strings.Fields(strings.TrimSpace(m.References))
+	if len(refs) > 20 {
+		// Keep the root plus the most recent ancestors (RFC 5322 guidance).
+		refs = append(refs[:1:1], refs[len(refs)-19:]...)
+	}
+	refs = append(refs, parent)
+	return parent, strings.Join(refs, " ")
 }
 
 func stripRe(s string) string {

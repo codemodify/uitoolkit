@@ -35,8 +35,10 @@ func main() {
 	defer stop()
 
 	fmt.Printf("mailclientd  backend=%s  socket=%s\n", store.Backend(), sock)
-	fmt.Println("JSON-RPC 2.0 NDJSON. Docs: docs/mail.md")
+	fmt.Println("JSON-RPC 2.0 NDJSON (socket is mode 0600, same-uid only). Docs: docs/mail.md")
 	if err := mail.ListenAndServe(ctx, sock, store); err != nil {
-		log.Fatal(err)
+		// A lock-file clash means another mailclientd already owns the
+		// socket; saying so beats the old silent takeover.
+		log.Fatalf("mailclientd: %v", err)
 	}
 }
