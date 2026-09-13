@@ -188,3 +188,18 @@ func TestX11IMEEventsOnFocusOut(t *testing.T) {
 	_ = s.Present(nil)
 	_ = s.Poll()
 }
+
+func TestX11SupportedBPP(t *testing.T) {
+	for _, bpp := range []int{32, 16} {
+		if !x11SupportedBPP(bpp) {
+			t.Fatalf("%d bpp should be supported", bpp)
+		}
+	}
+	// 8-bit PseudoColor and packed 24 present nothing rather than
+	// writing past the image's real bytes_per_line.
+	for _, bpp := range []int{0, 1, 8, 24, 64} {
+		if x11SupportedBPP(bpp) {
+			t.Fatalf("%d bpp should be refused", bpp)
+		}
+	}
+}

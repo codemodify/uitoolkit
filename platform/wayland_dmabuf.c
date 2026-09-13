@@ -246,25 +246,47 @@ static int alloc_gbm(struct ui_dmabuf_bo *out, int w, int h, uint32_t format) {
 		gbm_release();
 		return -1;
 	}
-	uint32_t stride = 0;
+	uint32_t map_stride = 0;
 	void *map_data = NULL;
-	void *map = p_gbm_bo_map(bo, 0, 0, (uint32_t)w, (uint32_t)h, GBM_BO_TRANSFER_READ_WRITE, &stride, &map_data);
+	void *map = p_gbm_bo_map(bo, 0, 0, (uint32_t)w, (uint32_t)h, GBM_BO_TRANSFER_READ_WRITE, &map_stride, &map_data);
 	if (!map || map == MAP_FAILED) {
 		close(fd);
 		p_gbm_bo_destroy(bo);
 		gbm_release();
 		return -1;
 	}
-	if (stride < (uint32_t)w * 4) stride = (uint32_t)w * 4;
+	/* The pitch the compositor must be told is the bo's own stride, not
+	   the (possibly staged) mapping pitch. Handing it the map pitch
+	   sheared the image on drivers where they differ. */
+	uint32_t bo_stride = p_gbm_bo_get_stride ? p_gbm_bo_get_stride(bo) : map_stride;
+	if (bo_stride < (uint32_t)w * 4) bo_stride = (uint32_t)w * 4;
+	if (map_stride < (uint32_t)w * 4) map_stride = (uint32_t)w * 4;
+	if (map_stride != bo_stride) {
+		/* A staged mapping with a different pitch would need a per-row
+		   bounce; fall back to the next allocator instead of shearing. */
+		if (p_gbm_bo_unmap) p_gbm_bo_unmap(bo, map_data);
+		close(fd);
+		p_gbm_bo_destroy(bo);
+		gbm_release();
+		return -1;
+	}
 	out->fd = fd;
 	out->mapped = map;
-	out->map_size = (size_t)stride * (size_t)h;
-	out->stride = stride;
+	out->map_size = (size_t)map_stride * (size_t)h;
+	out->stride = bo_stride;
+	out->map_stride = map_stride;
 	out->offset = p_gbm_bo_get_offset ? p_gbm_bo_get_offset(bo, 0) : 0;
 	out->modifier = mod;
 	out->kind = UI_DMA_GBM;
 	out->gbm_bo = bo;
 	out->gbm_map_data = map_data;
+	/* Drivers that stage gbm_bo_map only flush on unmap, so the mapping
+	   is dropped now and retaken per frame by ui_dmabuf_map. */
+	p_gbm_bo_unmap(bo, map_data);
+	out->mapped = NULL;
+	out->gbm_map_data = NULL;
+	out->w = w;
+	out->h = h;
 	return 0;
 }
 
@@ -299,9 +321,12 @@ static int alloc_heap(struct ui_dmabuf_bo *out, int w, int h) {
 		out->mapped = map;
 		out->map_size = size;
 		out->stride = stride;
+		out->map_stride = stride;
 		out->offset = 0;
 		out->modifier = 0;
 		out->kind = UI_DMA_HEAP;
+		out->w = w;
+		out->h = h;
 		return 0;
 	}
 	return -1;
@@ -347,9 +372,12 @@ static int alloc_udmabuf(struct ui_dmabuf_bo *out, int w, int h) {
 	out->mapped = map;
 	out->map_size = size;
 	out->stride = stride;
+	out->map_stride = stride;
 	out->offset = 0;
 	out->modifier = 0;
 	out->kind = UI_DMA_UDMA;
+	out->w = w;
+	out->h = h;
 	return 0;
 }
 
@@ -366,7 +394,7 @@ int ui_dmabuf_alloc(struct ui_dmabuf_bo *out, int w, int h, uint32_t format) {
 void ui_dmabuf_free(struct ui_dmabuf_bo *bo) {
 	if (!bo) return;
 	if (bo->kind == UI_DMA_GBM) {
-		if (bo->gbm_bo && p_gbm_bo_unmap) p_gbm_bo_unmap(bo->gbm_bo, bo->gbm_map_data);
+		if (bo->gbm_bo && bo->mapped && p_gbm_bo_unmap) p_gbm_bo_unmap(bo->gbm_bo, bo->gbm_map_data);
 		if (bo->fd >= 0) close(bo->fd);
 		if (bo->gbm_bo && p_gbm_bo_destroy) p_gbm_bo_destroy(bo->gbm_bo);
 		gbm_release();
@@ -376,6 +404,43 @@ void ui_dmabuf_free(struct ui_dmabuf_bo *bo) {
 	}
 	memset(bo, 0, sizeof(*bo));
 	bo->fd = -1;
+}
+
+/* ui_dmabuf_map (re)establishes the CPU mapping for one frame of writes.
+   Non-GBM buffers keep a permanent mmap and only need the dma-buf sync
+   ioctl. Returns 0 on success; bo->mapped is valid afterwards. */
+int ui_dmabuf_map(struct ui_dmabuf_bo *bo, int w, int h) {
+	if (!bo) return -1;
+	if (bo->kind != UI_DMA_GBM) {
+		return bo->mapped ? 0 : -1;
+	}
+	if (bo->mapped) return 0;
+	if (!bo->gbm_bo || !p_gbm_bo_map) return -1;
+	if (w < 1) w = bo->w;
+	if (h < 1) h = bo->h;
+	uint32_t stride = 0;
+	void *map_data = NULL;
+	void *map = p_gbm_bo_map(bo->gbm_bo, 0, 0, (uint32_t)w, (uint32_t)h,
+		GBM_BO_TRANSFER_READ_WRITE, &stride, &map_data);
+	if (!map || map == MAP_FAILED) return -1;
+	if (stride != bo->map_stride) {
+		p_gbm_bo_unmap(bo->gbm_bo, map_data);
+		return -1;
+	}
+	bo->mapped = map;
+	bo->gbm_map_data = map_data;
+	return 0;
+}
+
+/* ui_dmabuf_unmap drops a GBM mapping so the driver flushes the staged
+   writes into the buffer object the compositor will read. */
+void ui_dmabuf_unmap(struct ui_dmabuf_bo *bo) {
+	if (!bo || bo->kind != UI_DMA_GBM) return;
+	if (bo->gbm_bo && bo->mapped && p_gbm_bo_unmap) {
+		p_gbm_bo_unmap(bo->gbm_bo, bo->gbm_map_data);
+	}
+	bo->mapped = NULL;
+	bo->gbm_map_data = NULL;
 }
 
 int ui_dmabuf_drm_fd(void) { return g_drm_fd; }

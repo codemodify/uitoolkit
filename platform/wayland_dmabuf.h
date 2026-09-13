@@ -21,10 +21,16 @@ struct ui_dmabuf_bo {
 	int fd;
 	void *mapped;
 	size_t map_size;
+	/* stride is the buffer object's real row pitch: what the compositor
+	   is told in zwp_linux_buffer_params_v1.add. The CPU mapping may be
+	   staged with a different pitch, so map_stride is tracked apart. */
 	uint32_t stride;
+	uint32_t map_stride;
 	uint32_t offset;
 	uint64_t modifier;
 	int kind;
+	int w;
+	int h;
 	void *gbm_bo;
 	void *gbm_map_data;
 };
@@ -45,6 +51,8 @@ int ui_dmabuf_probe(char *name, int n);
 int ui_dmabuf_drm_fd(void);
 int ui_dmabuf_cpu_begin(int fd);
 int ui_dmabuf_cpu_end(int fd);
+int ui_dmabuf_map(struct ui_dmabuf_bo *bo, int w, int h);
+void ui_dmabuf_unmap(struct ui_dmabuf_bo *bo);
 int ui_dmabuf_export_sync_file(int fd);
 
 #ifdef __cplusplus

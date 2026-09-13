@@ -3,13 +3,24 @@
 package platform
 
 /*
-#cgo linux pkg-config: wayland-egl wayland-client
+#cgo linux pkg-config: wayland-egl wayland-client egl
 #include <wayland-client.h>
 #include <wayland-egl.h>
+#include <EGL/egl.h>
 
 static struct wl_egl_window *ui_wl_egl_create(struct wl_surface *s, int w, int h) {
 	if (!s || w < 1 || h < 1) return NULL;
 	return wl_egl_window_create(s, w, h);
+}
+
+// eglSwapBuffers with the default swap interval of 1 blocks inside Mesa
+// until the compositor sends a frame callback. An occluded or throttled
+// window then stalls the whole run loop -- tray, timers and posted work
+// included. Interval 0 returns immediately; pacing is done with
+// wl_surface.frame instead.
+static void ui_wl_egl_no_vsync(uintptr_t dpy) {
+	if (!dpy) return;
+	eglSwapInterval((EGLDisplay)dpy, 0);
 }
 static void ui_wl_egl_resize(struct wl_egl_window *win, int w, int h) {
 	if (win) wl_egl_window_resize(win, w, h, 0, 0);
@@ -51,6 +62,9 @@ func (s *wlSurface) tryBindGPU() {
 	}
 	s.eglWin = unsafe.Pointer(win)
 	s.gpu = dev
+	if egl, _, _ := dev.EGLHandles(); egl != 0 {
+		C.ui_wl_egl_no_vsync(C.uintptr_t(egl))
+	}
 }
 
 func (s *wlSurface) closeGPU() {

@@ -167,6 +167,18 @@ type WindowOptions struct {
 
 // Surface is the OS (or offscreen) window seam. The toolkit paints with
 // NewPaintContext (GPUDevice when EGL is bound, else Buffer) and calls Present.
+//
+// Threading: every Surface method, and the package-level clipboard and
+// cursor helpers, must be called from the one goroutine that runs the
+// event loop. The backends talk to Xlib / libwayland connections that are
+// not goroutine-safe in the way this package uses them.
+//
+// Close semantics: [EventClose] is a *request* from the window manager or
+// compositor (WM_DELETE_WINDOW, xdg_toplevel.close). The application may
+// ignore it (close-to-tray) and keep using the surface. Closed only
+// reports true once Close has been called or the window died for real
+// (X11 DestroyNotify / a lost connection), so a surface that is still
+// usable is never reaped by a run loop that polls Closed.
 type Surface interface {
 	Title() string
 	SetTitle(title string)
@@ -174,8 +186,14 @@ type Surface interface {
 	Resize(w, h int) error
 	Buffer() *paintengine2d.Image
 	Present(dirty []paintengine2d.Rect) error
+	// Poll returns the events queued since the last call. It keeps
+	// returning already-queued events after the surface is closed so a
+	// final EventClose cannot be lost.
 	Poll() []Event
 	Close() error
+	// Closed reports that the surface is gone for good: Close was
+	// called, or the window was destroyed by the server. Receiving
+	// EventClose does not by itself make this true.
 	Closed() bool
 	Scale() float32
 }

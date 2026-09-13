@@ -58,7 +58,13 @@ func imageToPE(src image.Image) *paintengine2d.Image {
 	return dst
 }
 
-// sniARGB is StatusNotifierItem IconPixmap: network-endian ARGB32.
+// sniARGB is StatusNotifierItem IconPixmap: network-endian ARGB32 with
+// straight (non-premultiplied) colour channels.
+//
+// The spec, and every host that implements it (Plasma, AppIndicator,
+// Waybar), treat the pixmap as plain ARGB32. Sending premultiplied
+// channels darkened every semi-transparent pixel, which shows up as a
+// dirty fringe around an anti-aliased icon.
 func sniARGB(img *paintengine2d.Image) (w, h int, pix []byte) {
 	if img == nil || img.Width < 1 || img.Height < 1 {
 		return 0, 0, nil
@@ -69,6 +75,7 @@ func sniARGB(img *paintengine2d.Image) (w, h int, pix []byte) {
 	for y := 0; y < h; y++ {
 		for x := 0; x < w; x++ {
 			r, g, b, a := img.PremulAt(x, y)
+			r, g, b = unpremul(r, a), unpremul(g, a), unpremul(b, a)
 			pix[i+0] = a
 			pix[i+1] = r
 			pix[i+2] = g
@@ -77,4 +84,24 @@ func sniARGB(img *paintengine2d.Image) (w, h int, pix []byte) {
 		}
 	}
 	return w, h, pix
+}
+
+// unpremul converts one premultiplied channel back to straight alpha.
+func unpremul(c, a uint8) uint8 {
+	if a == 0 {
+		return 0
+	}
+	if a == 0xff || c >= a {
+		if c > a {
+			return 0xff
+		}
+		if a == 0xff {
+			return c
+		}
+	}
+	v := (int(c)*255 + int(a)/2) / int(a)
+	if v > 255 {
+		v = 255
+	}
+	return uint8(v)
 }
