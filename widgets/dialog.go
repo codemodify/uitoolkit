@@ -10,10 +10,11 @@ import (
 // Overlay is a dimmed full-window layer with a centered card (dialog pattern).
 type Overlay struct {
 	widget.Base
-	Card     widget.Component
-	OnClose  func()
-	MinCardW float32
-	MinCardH float32
+	Card      widget.Component
+	OnClose   func()
+	MinCardW  float32
+	MinCardH  float32
+	prevFocus widget.Component
 }
 
 func NewOverlay(card widget.Component) *Overlay {
@@ -24,6 +25,22 @@ func NewOverlay(card widget.Component) *Overlay {
 	}
 	return o
 }
+
+// Presented traps focus inside the card (widget.Presenter). Without it the
+// widget that was focused before the modal opened keeps receiving text and
+// Return, so typing "leaks" under the dimmer.
+func (o *Overlay) Presented(from widget.Component) {
+	o.prevFocus = widget.FocusOwner(from)
+	if o.prevFocus == nil {
+		o.prevFocus = from
+	}
+	if o.Card != nil {
+		widget.FocusFirstIn(o.Card)
+	}
+}
+
+// FocusAnchor is the component focused before the overlay was shown.
+func (o *Overlay) FocusAnchor() widget.Component { return o.prevFocus }
 
 func (o *Overlay) Measure(c layout.Constraints) paintengine2d.Point {
 	if c.HasMaxW() && c.HasMaxH() {
@@ -83,6 +100,10 @@ func (o *Overlay) KeyPress(e widget.KeyEvent) bool {
 }
 
 func (o *Overlay) Dismissed() {
+	// Only while the card still owns focus: a dismissal triggered by clicking
+	// elsewhere must not steal focus back from what the user just clicked.
+	widget.RestoreFocus(o, o.prevFocus, true)
+	o.prevFocus = nil
 	if o.OnClose != nil {
 		o.OnClose()
 	}

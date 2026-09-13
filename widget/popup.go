@@ -31,6 +31,20 @@ type Dismisser interface {
 	Dismissed()
 }
 
+// Presenter is a popup or overlay that wants to know when it is mounted on a
+// layer, and by whom. Menus and modal dialogs use it to remember the focus
+// owner so dismissal can hand focus back to the anchor instead of leaving a
+// detached node focused.
+type Presenter interface {
+	Presented(from Component)
+}
+
+func notifyPresented(from, c Component) {
+	if pr, ok := c.(Presenter); ok {
+		pr.Presented(from)
+	}
+}
+
 // ShowPopup places c on the window popup layer. c should already be Arranged
 // in window coordinates.
 func ShowPopup(from Component, popup Component) bool {
@@ -47,6 +61,7 @@ func ShowPopup(from Component, popup Component) bool {
 	}
 	popup.SetHost(h)
 	ph.SetPopup(popup)
+	notifyPresented(from, popup)
 	return true
 }
 
@@ -79,6 +94,7 @@ func ShowOverlay(from Component, overlay Component) bool {
 	}
 	overlay.SetHost(h)
 	oh.SetOverlay(overlay)
+	notifyPresented(from, overlay)
 	return true
 }
 

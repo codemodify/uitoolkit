@@ -188,13 +188,20 @@ func (s *ScrollView) HitTest(local paintengine2d.Point) widget.Component {
 	return s
 }
 
+// MouseWheel scrolls, and reports false when it cannot: an unscrollable or
+// already-at-the-edge view must let the wheel bubble to an outer scroll pane
+// instead of swallowing it.
 func (s *ScrollView) MouseWheel(e widget.MouseEvent) bool {
 	dy := e.Scroll.Y
 	if dy == 0 && e.Scroll.X == 0 {
 		return false
 	}
+	if s.maxOff() <= 0 {
+		return false
+	}
+	before := s.OffsetY
 	s.ScrollBy(wheelDelta(dy, s.lineStep()))
-	return true
+	return s.OffsetY != before
 }
 
 func (s *ScrollView) MousePress(e widget.MouseEvent) bool {

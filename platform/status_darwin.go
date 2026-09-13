@@ -4,51 +4,107 @@ package platform
 
 /*
 #cgo CFLAGS: -x objective-c
-#cgo LDFLAGS: -framework AppKit -framework Foundation
+#cgo LDFLAGS: -framework AppKit -framework Foundation -framework UserNotifications
+#include <dispatch/dispatch.h>
 #include <stdlib.h>
 #import <AppKit/AppKit.h>
+#import <UserNotifications/UserNotifications.h>
+
+// AppKit is main-thread only: NSStatusItem must be created, mutated and
+// removed there. A Go caller can be on any thread (and NewStatusItem is
+// routinely called off the main goroutine), so every call is trampolined
+// onto the main queue. Creation is synchronous because the caller needs
+// the handle; the rest is fire-and-forget.
+static void ui_main_sync(void (^block)(void)) {
+	if ([NSThread isMainThread]) {
+		block();
+		return;
+	}
+	dispatch_sync(dispatch_get_main_queue(), block);
+}
+
+static void ui_main_async(void (^block)(void)) {
+	if ([NSThread isMainThread]) {
+		block();
+		return;
+	}
+	dispatch_async(dispatch_get_main_queue(), block);
+}
 
 static void *ui_status_create(const char *title, const char *tip) {
-	@autoreleasepool {
-		NSStatusItem *item = [[NSStatusBar systemStatusBar] statusItemWithLength:NSSquareStatusItemLength];
-		item.button.title = title ? [NSString stringWithUTF8String:title] : @"";
-		if (tip) {
-			item.button.toolTip = [NSString stringWithUTF8String:tip];
+	__block void *out = NULL;
+	NSString *t = title ? [NSString stringWithUTF8String:title] : @"";
+	NSString *tp = tip ? [NSString stringWithUTF8String:tip] : nil;
+	ui_main_sync(^{
+		@autoreleasepool {
+			NSStatusItem *item = [[NSStatusBar systemStatusBar] statusItemWithLength:NSSquareStatusItemLength];
+			item.button.title = t;
+			if (tp) {
+				item.button.toolTip = tp;
+			}
+			item.button.image = [NSImage imageNamed:NSImageNameApplicationIcon];
+			item.button.image.template = YES;
+			out = (void *)CFBridgingRetain(item);
 		}
-		item.button.image = [NSImage imageNamed:NSImageNameApplicationIcon];
-		item.button.image.template = YES;
-		return (void *)CFBridgingRetain(item);
-	}
+	});
+	return out;
 }
 
 static void ui_status_set_title(void *p, const char *title) {
-	@autoreleasepool {
-		NSStatusItem *item = (__bridge NSStatusItem *)p;
-		item.button.title = title ? [NSString stringWithUTF8String:title] : @"";
-	}
+	if (!p) return;
+	NSString *t = title ? [NSString stringWithUTF8String:title] : @"";
+	ui_main_async(^{
+		@autoreleasepool {
+			NSStatusItem *item = (__bridge NSStatusItem *)p;
+			item.button.title = t;
+		}
+	});
 }
 
 static void ui_status_set_tip(void *p, const char *tip) {
-	@autoreleasepool {
-		NSStatusItem *item = (__bridge NSStatusItem *)p;
-		item.button.toolTip = tip ? [NSString stringWithUTF8String:tip] : @"";
-	}
+	if (!p) return;
+	NSString *t = tip ? [NSString stringWithUTF8String:tip] : @"";
+	ui_main_async(^{
+		@autoreleasepool {
+			NSStatusItem *item = (__bridge NSStatusItem *)p;
+			item.button.toolTip = t;
+		}
+	});
 }
 
 static void ui_status_remove(void *p) {
-	@autoreleasepool {
-		NSStatusItem *item = CFBridgingRelease(p);
-		[[NSStatusBar systemStatusBar] removeStatusItem:item];
-	}
+	if (!p) return;
+	ui_main_sync(^{
+		@autoreleasepool {
+			NSStatusItem *item = CFBridgingRelease(p);
+			[[NSStatusBar systemStatusBar] removeStatusItem:item];
+		}
+	});
 }
 
+// UNUserNotificationCenter replaces NSUserNotification, which is
+// deprecated and silently does nothing for an unbundled binary on recent
+// macOS. Delivery still requires a bundle identifier; when there is none
+// the request is dropped by the framework rather than crashing.
 static void ui_status_notify(const char *title, const char *body) {
-	@autoreleasepool {
-		NSUserNotification *n = [NSUserNotification new];
-		n.title = title ? [NSString stringWithUTF8String:title] : @"uitoolkit";
-		n.informativeText = body ? [NSString stringWithUTF8String:body] : @"";
-		[[NSUserNotificationCenter defaultUserNotificationCenter] deliverNotification:n];
-	}
+	NSString *t = title ? [NSString stringWithUTF8String:title] : @"uitoolkit";
+	NSString *b = body ? [NSString stringWithUTF8String:body] : @"";
+	ui_main_async(^{
+		@autoreleasepool {
+			if ([NSBundle mainBundle].bundleIdentifier == nil) {
+				return;
+			}
+			UNUserNotificationCenter *center = [UNUserNotificationCenter currentNotificationCenter];
+			UNMutableNotificationContent *content = [UNMutableNotificationContent new];
+			content.title = t;
+			content.body = b;
+			UNNotificationRequest *req = [UNNotificationRequest
+				requestWithIdentifier:[[NSUUID UUID] UUIDString]
+				content:content
+				trigger:nil];
+			[center addNotificationRequest:req withCompletionHandler:nil];
+		}
+	});
 }
 */
 import "C"

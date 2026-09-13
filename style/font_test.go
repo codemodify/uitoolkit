@@ -9,7 +9,7 @@ import (
 func TestBakeFontDrawsKnownGlyphs(t *testing.T) {
 	f := BakeFont(16, paintengine2d.White)
 	for _, r := range []rune{'A', 'a', '0', ',', ' '} {
-		if _, ok := f.Atlas.Cell(paintengine2d.GlyphID(r)); !ok {
+		if _, ok := f.GlyphAtlas().Cell(paintengine2d.GlyphID(r)); !ok {
 			t.Fatalf("missing %q", string(r))
 		}
 	}
@@ -136,7 +136,7 @@ func TestSpaceAdvanceKeepsWordGap(t *testing.T) {
 func TestBakeFontTintAppliesThemeColor(t *testing.T) {
 	red := BakeFont(16, paintengine2d.RGB(1, 0, 0))
 	blue := BakeFont(16, paintengine2d.RGB(0.2, 0.5, 1))
-	if red.Atlas != blue.Atlas {
+	if red.GlyphAtlas() != blue.GlyphAtlas() {
 		t.Fatal("same size should share the white atlas")
 	}
 	img := paintengine2d.NewImage(80, 24)
@@ -162,7 +162,7 @@ func TestUISymbolFallbacksPaint(t *testing.T) {
 		if f.Advance(s) < 4 {
 			t.Fatalf("%q advance %v (Titillium has no gid; fallback must measure)", s, f.Advance(s))
 		}
-		if _, ok := f.Atlas.Cell(paintengine2d.GlyphID([]rune(s)[0])); !ok {
+		if _, ok := f.GlyphAtlas().Cell(paintengine2d.GlyphID([]rune(s)[0])); !ok {
 			t.Fatalf("%q missing from atlas after Advance", s)
 		}
 		img := paintengine2d.NewImage(36, 24)

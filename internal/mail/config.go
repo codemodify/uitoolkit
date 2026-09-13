@@ -74,15 +74,24 @@ func (a AccountConfig) Incoming() ServerConfig {
 //	"passEnv": "UITK_MAIL_PASS"  reads os.Getenv when password is empty
 //	"user" may differ from the From address
 //
-// tls: implicit TLS (993 / 465). starttls: upgrade after connect (587 / 143).
+// Connection security is one enum — see TLSMode and ServerConfig.Mode:
+//
+//	"tlsMode": "ssl"       implicit TLS from the first byte (993 / 995 / 465)
+//	"tlsMode": "starttls"  cleartext connect then a mandatory upgrade (143 / 110 / 587)
+//	"tlsMode": "plain"     no TLS at all — opt-in, never a fallback
+//
+// The older "tls" / "starttls" booleans are still read (see Mode) and are
+// mapped fail-closed: tls:true on a STARTTLS port now upgrades instead of
+// silently producing a cleartext session.
 type ServerConfig struct {
 	Host     string `json:"host"`
 	User     string `json:"user,omitempty"`
 	Pass     string `json:"password,omitempty"`
 	PassEnv  string `json:"passEnv,omitempty"`
-	TLS      *bool  `json:"tls,omitempty"`
-	StartTLS *bool  `json:"starttls,omitempty"`
-	Auth     string `json:"auth,omitempty"` // plain (default), login, xoauth2
+	TLSMode  string `json:"tlsMode,omitempty"`  // ssl | starttls | plain
+	TLS      *bool  `json:"tls,omitempty"`      // legacy: implicit TLS
+	StartTLS *bool  `json:"starttls,omitempty"` // legacy: upgrade after connect
+	Auth     string `json:"auth,omitempty"`     // plain (default), login, xoauth2
 	tokenKey string // runtime; account id for the encrypted token store
 }
 
@@ -102,27 +111,6 @@ func (s ServerConfig) Password() string {
 		name = EnvPass
 	}
 	return os.Getenv(name)
-}
-
-func (s ServerConfig) implicitTLS(defaultTLS bool) bool {
-	if s.TLS != nil {
-		return *s.TLS
-	}
-	host := s.Host
-	if strings.HasSuffix(host, ":993") || strings.HasSuffix(host, ":465") || strings.HasSuffix(host, ":995") {
-		return true
-	}
-	if strings.HasSuffix(host, ":587") || strings.HasSuffix(host, ":143") || strings.HasSuffix(host, ":25") || strings.HasSuffix(host, ":110") {
-		return false
-	}
-	return defaultTLS
-}
-
-func (s ServerConfig) useStartTLS() bool {
-	if s.StartTLS != nil {
-		return *s.StartTLS
-	}
-	return strings.HasSuffix(s.Host, ":587") || strings.HasSuffix(s.Host, ":143") || strings.HasSuffix(s.Host, ":110")
 }
 
 // ConfigPath is the account file.
@@ -173,7 +161,12 @@ func SaveConfig(cfg MailConfig) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, b, 0o600)
+	if err := writeFileAtomic(path, b, 0o600); err != nil {
+		return err
+	}
+	// A mail.json the user created by hand keeps its original mode through
+	// a rename, so force owner-only every time we touch it.
+	return os.Chmod(path, 0o600)
 }
 
 // SanitizeAccountConfig fills defaults. Inline passwords are kept; passEnv
@@ -220,9 +213,12 @@ func SanitizeAccountConfig(a AccountConfig) (AccountConfig, error) {
 	if a.Name == "" {
 		a.Name = DisplayName(a.Address)
 	}
-	if a.ID == "" {
+	// The account id reaches the filesystem (raw/<id>/…, meta/…): it must
+	// never contain a separator or a dot-dot segment.
+	if strings.TrimSpace(a.ID) == "" {
 		a.ID = slug(a.Address)
 	}
+	a.ID = safeID(a.ID)
 	sanitizeServerSecret(&a.IMAP)
 	in = a.Incoming()
 	if a.SMTP.Host == "" {

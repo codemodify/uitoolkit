@@ -341,9 +341,13 @@ func (m *MenuBar) Open(i int) {
 		}
 	}
 	pop.OnDismiss = func() {
-		if m.open == i {
-			m.open = -1
+		// Switching menus (Left / Right / hover) shows the next popup, which
+		// dismisses this one. Only the still-current menu may clear bar state,
+		// or the arrow keys would reset focus and stick on one title.
+		if m.open != i {
+			return
 		}
+		m.open = -1
 		m.keyNav = false
 		m.focus = -1
 		m.Invalidate()
@@ -353,11 +357,17 @@ func (m *MenuBar) Open(i int) {
 	anchor := paintengine2d.XYWH(origin.X+tb.Min.X, origin.Y+tb.Min.Y, tb.Dx(), tb.Dy())
 	// Flush under the title so DrawMenuTitle(open) shares an edge with the popup.
 	widget.PlacePopupForAnchor(m, pop, anchor, 0, 0)
+	pop.RestoreFocusTo(m)
+	prev := m.open
+	// Set before ShowPopup: the outgoing popup's OnDismiss runs inside it and
+	// must see that a sibling menu is now the current one.
+	m.open = i
 	if widget.ShowPopup(m, pop) {
-		m.open = i
 		m.Invalidate()
 		pop.RequestFocus()
+		return
 	}
+	m.open = prev
 }
 
 // Close dismisses the open menu.
@@ -386,6 +396,21 @@ type PopupMenu struct {
 	cascade    *PopupMenu
 	cascadeIdx int
 	parentMenu *PopupMenu
+	restore    widget.Component
+	dead       bool
+	lay        menuLayout
+}
+
+// menuLayout caches the per-item geometry for one popup. Without it every
+// rowBounds walks the item list (rowTop) and re-measures every label
+// (contentSize through innerWidth), making Paint O(n^2) in item count.
+type menuLayout struct {
+	valid bool
+	itemH float32
+	padT  float32
+	padB  float32
+	tops  []float32 // len(Items)+1 offsets from the frame top
+	size  paintengine2d.Point
 }
 
 // NewPopupMenu builds a popup from items.
@@ -403,6 +428,43 @@ func firstEnabled(items []*MenuItem) int {
 		}
 	}
 	return 0
+}
+
+// Presented records the opener as the focus anchor when one was not set
+// explicitly (widget.Presenter, called from widget.ShowPopup).
+func (p *PopupMenu) Presented(from widget.Component) {
+	if p.restore == nil {
+		p.restore = from
+	}
+}
+
+// RestoreFocusTo records the component that opened this popup. When the popup
+// is dismissed while it still holds focus, focus returns there instead of
+// staying on a detached node that would keep handling keys.
+func (p *PopupMenu) RestoreFocusTo(anchor widget.Component) { p.restore = anchor }
+
+// Dead reports whether this popup has been dismissed. A dead popup ignores
+// every input event: the window may still hold a reference to it (focus,
+// pointer capture) for the rest of the current event.
+func (p *PopupMenu) Dead() bool { return p.dead }
+
+// Invalidate also drops the cached item geometry so label / item changes are
+// measured again on the next paint.
+func (p *PopupMenu) Invalidate() {
+	p.lay.valid = false
+	p.Base.Invalidate()
+}
+
+func (p *PopupMenu) markDead() {
+	if p.dead {
+		return
+	}
+	p.dead = true
+	p.restoreFocus()
+}
+
+func (p *PopupMenu) restoreFocus() {
+	widget.RestoreFocus(p, p.restore, p.keyNav)
 }
 
 func (p *PopupMenu) itemH() float32 {
@@ -450,9 +512,27 @@ func menuTextWidth(f *style.Font, text string) float32 {
 	return float32(len([]rune(text))) * 10
 }
 
-func (p *PopupMenu) contentSize() paintengine2d.Point {
+// layoutInfo returns the cached item geometry, recomputing it when the
+// metrics that feed it changed (density, theme, item count).
+func (p *PopupMenu) layoutInfo() *menuLayout {
+	ch := p.chrome()
+	ih := p.itemH()
+	if p.lay.valid && p.lay.itemH == ih && p.lay.padT == ch.PadT && p.lay.padB == ch.PadB &&
+		len(p.lay.tops) == len(p.Items)+1 {
+		return &p.lay
+	}
+	p.lay.itemH = ih
+	p.lay.padT = ch.PadT
+	p.lay.padB = ch.PadB
+	p.lay.size = p.measureContent(ch)
+	p.lay.valid = true
+	return &p.lay
+}
+
+func (p *PopupMenu) contentSize() paintengine2d.Point { return p.layoutInfo().size }
+
+func (p *PopupMenu) measureContent(ch style.MenuChrome) paintengine2d.Point {
 	lk := p.Look()
-	ch := style.MenuChromeFor(lk)
 	f := (*style.Font)(nil)
 	if lk != nil {
 		f = lk.Font()
@@ -460,7 +540,15 @@ func (p *PopupMenu) contentSize() paintengine2d.Point {
 	var maxLabel, maxAccel float32
 	hasSub := false
 	h := ch.PadT + ch.PadB
+	if cap(p.lay.tops) >= len(p.Items)+1 {
+		p.lay.tops = p.lay.tops[:0]
+	} else {
+		p.lay.tops = make([]float32, 0, len(p.Items)+1)
+	}
+	cur := ch.PadT
 	for _, it := range p.Items {
+		p.lay.tops = append(p.lay.tops, cur)
+		cur += p.rowH(it)
 		h += p.rowH(it)
 		if it == nil || it.Separator {
 			continue
@@ -485,6 +573,7 @@ func (p *PopupMenu) contentSize() paintengine2d.Point {
 	if min := style.Dip(lk, 80); w < min {
 		w = min
 	}
+	p.lay.tops = append(p.lay.tops, cur)
 	return paintengine2d.Pt(w, h)
 }
 
@@ -512,7 +601,7 @@ func (p *PopupMenu) Arrange(r paintengine2d.Rect) {
 	p.clamp()
 }
 
-func (p *PopupMenu) contentH() float32 { return p.contentSize().Y }
+func (p *PopupMenu) contentH() float32 { return p.layoutInfo().size.Y }
 
 // MaxOffset is max(0, content − viewport) when the popup was clamped.
 func (p *PopupMenu) MaxOffset() float32 {
@@ -545,25 +634,23 @@ func (p *PopupMenu) innerWidth() float32 {
 }
 
 func (p *PopupMenu) rowTop(i int) float32 {
-	cur := p.chrome().PadT
-	for n, it := range p.Items {
-		if n == i {
-			return cur
+	tops := p.layoutInfo().tops
+	if i < 0 || i >= len(tops) {
+		if len(tops) == 0 {
+			return p.chrome().PadT
 		}
-		cur += p.rowH(it)
+		return tops[len(tops)-1]
 	}
-	return cur
+	return tops[i]
 }
 
 func (p *PopupMenu) rowAt(y float32) int {
-	ch := p.chrome()
-	cur := ch.PadT - p.OffsetY
-	for i, it := range p.Items {
-		rh := p.rowH(it)
-		if y >= cur && y < cur+rh {
+	tops := p.layoutInfo().tops
+	y += p.OffsetY
+	for i := 0; i+1 < len(tops); i++ {
+		if y >= tops[i] && y < tops[i+1] {
 			return i
 		}
-		cur += rh
 	}
 	return -1
 }
@@ -716,6 +803,9 @@ func (p *PopupMenu) invalidateRow(i int) {
 }
 
 func (p *PopupMenu) MouseMove(e widget.MouseEvent) bool {
+	if p.dead {
+		return false
+	}
 	track, thumb := p.scrollTrack()
 	if off, apply, handled, hoverDirty := p.vbar.move(e.Pos, track, thumb, true, p.MaxOffset()); handled {
 		if apply {
@@ -763,6 +853,9 @@ func (p *PopupMenu) HighlightedIndex() int {
 }
 
 func (p *PopupMenu) MousePress(e widget.MouseEvent) bool {
+	if p.dead {
+		return false
+	}
 	track, thumb := p.scrollTrack()
 	if off, ok := p.vbar.press(e.Pos, track, thumb, true, p.OffsetY, p.MaxOffset(), p.LocalBounds().Dy()*0.9); ok {
 		p.OffsetY = off
@@ -776,6 +869,9 @@ func (p *PopupMenu) MousePress(e widget.MouseEvent) bool {
 }
 
 func (p *PopupMenu) MouseRelease(e widget.MouseEvent) bool {
+	if p.dead {
+		return false
+	}
 	if p.vbar.release() {
 		p.press = -1
 		p.Invalidate()
@@ -791,16 +887,23 @@ func (p *PopupMenu) MouseRelease(e widget.MouseEvent) bool {
 }
 
 func (p *PopupMenu) MouseWheel(e widget.MouseEvent) bool {
-	if p.MaxOffset() <= 0 {
+	if p.dead || p.MaxOffset() <= 0 {
 		return false
 	}
+	before := p.OffsetY
 	p.OffsetY += wheelDelta(e.Scroll.Y, p.itemH())
 	p.clamp()
+	if p.OffsetY == before {
+		return false
+	}
 	p.Invalidate()
 	return true
 }
 
 func (p *PopupMenu) KeyPress(e widget.KeyEvent) bool {
+	if p.dead {
+		return false
+	}
 	p.keyNav = true
 	if p.focus < 0 {
 		p.focus = firstEnabled(p.Items)
@@ -845,6 +948,12 @@ func (p *PopupMenu) KeyPress(e widget.KeyEvent) bool {
 	case platform.KeyEscape:
 		widget.DismissPopup(p)
 		return true
+	}
+	// Type-ahead must not eat application accelerators: while a popup is open
+	// every key comes here first, so Ctrl+C over a context menu would
+	// otherwise activate the first item starting with "c".
+	if e.Mods.Ctrl() || e.Mods.Alt() {
+		return false
 	}
 	if i := p.indexForKey(e.Key); i >= 0 {
 		p.activate(i)
@@ -934,7 +1043,7 @@ func (p *PopupMenu) applyCheck(it *MenuItem) {
 }
 
 func (p *PopupMenu) activate(i int) {
-	if i < 0 || i >= len(p.Items) {
+	if p.dead || i < 0 || i >= len(p.Items) {
 		return
 	}
 	it := p.Items[i]
@@ -958,6 +1067,9 @@ func (p *PopupMenu) activate(i int) {
 
 func (p *PopupMenu) Dismissed() {
 	p.closeCascade()
+	// Mark dead before the callback: OnDismiss may reopen a sibling popup and
+	// this one must stop answering keys either way.
+	p.markDead()
 	if p.OnDismiss != nil {
 		p.OnDismiss()
 	}
@@ -990,6 +1102,7 @@ func (p *PopupMenu) openCascade(i int) {
 	child := NewPopupMenu(it.Submenu...)
 	child.parentMenu = p
 	child.OnPick = p.OnPick
+	child.RestoreFocusTo(p)
 	widget.PreparePopup(p, child)
 	origin := widget.DeviceOrigin(p)
 	row := p.rowBounds(i)
@@ -1012,6 +1125,9 @@ func (p *PopupMenu) closeCascade() {
 	p.cascadeIdx = -1
 	child.parentMenu = nil
 	child.closeCascade()
+	// A closed cascade is unreachable but may still be the host focus (it was
+	// opened with Right). Mark it dead and hand focus back to this menu.
+	child.markDead()
 	child.Invalidate()
 	p.Invalidate()
 }
@@ -1020,6 +1136,7 @@ func (p *PopupMenu) closeCascade() {
 func ShowContextMenu(from widget.Component, origin paintengine2d.Point, items ...*MenuItem) *PopupMenu {
 	pop := NewPopupMenu(items...)
 	widget.PreparePopup(from, pop)
+	pop.RestoreFocusTo(from)
 	widget.PlacePopup(pop, origin, 360, 480)
 	if widget.ShowPopup(from, pop) {
 		widget.ClampToSurface(from, pop)

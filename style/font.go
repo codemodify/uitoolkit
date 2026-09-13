@@ -10,8 +10,11 @@ import (
 // Font is a baked glyph atlas painted through paintengine2d.
 // Default UI/mono faces are OpenType outlines (Titillium Web / JetBrains Mono)
 // rasterized with the engine's scanline AA into a white sheet; Paint.Color tints.
+//
+// A Font value is a cheap handle: BakeFamily hands out copies that share one
+// copy-on-write glyph sheet (see [Font.GlyphAtlas]), so copies are safe to use
+// from different goroutines.
 type Font struct {
-	Atlas   *paintengine2d.FontAtlas
 	Size    float32
 	Ascent  float32
 	Descent float32
@@ -19,8 +22,42 @@ type Font struct {
 	Family  string
 	Weight  Weight
 	Outline bool // true when built from TTF outlines (not the 5×7 bitmap)
-	ot      *otAtlas
-	shaped  *shapeCache
+	// static is the immutable sheet of a bitmap face (ot == nil).
+	static *paintengine2d.FontAtlas
+	ot     *otAtlas
+	shaped *shapeCache
+}
+
+// GlyphAtlas is the face's current glyph sheet.
+//
+// The OpenType path publishes a new immutable sheet whenever a rune is baked,
+// so the returned pointer is a snapshot: safe to read from any goroutine and
+// never mutated after publication. Re-read it (do not cache it) after drawing
+// text that may introduce new runes.
+func (f *Font) GlyphAtlas() *paintengine2d.FontAtlas {
+	if f == nil {
+		return nil
+	}
+	if f.ot != nil {
+		if a := f.ot.atlas(); a != nil {
+			return a
+		}
+	}
+	return f.static
+}
+
+// atlasBytes is the live sheet size (font cache budget accounting).
+func (f *Font) atlasBytes() int64 {
+	if f == nil {
+		return 0
+	}
+	if f.ot != nil {
+		return f.ot.atlasBytes()
+	}
+	if f.static != nil && f.static.Image != nil {
+		return int64(f.static.Image.Width) * int64(f.static.Image.Height) * 4
+	}
+	return 0
 }
 
 // shapeCacheCap drops shaped runs once the map grows past this. Labels
@@ -61,8 +98,9 @@ func (f *Font) Fit(text string, maxW float32) string {
 	budget := maxW - ew
 	n := 0
 	var acc float32
+	atlas := f.ensure(text) // one publication for the whole string
 	for _, r := range text {
-		adv := f.runeAdvance(r)
+		adv := advanceIn(atlas, r)
 		if acc+adv > budget {
 			break
 		}
@@ -93,7 +131,7 @@ func (f *Font) Height() float32 {
 }
 
 func (f *Font) Advance(text string) float32 {
-	if f == nil || f.Atlas == nil {
+	if f == nil {
 		return 0
 	}
 	return f.shapeOf(text).adv
@@ -102,11 +140,11 @@ func (f *Font) Advance(text string) float32 {
 // InkWidth is the painted AABB width of text (advance plus last-glyph
 // bearing / atlas pad). Menus use this so DrawGlyphs cannot clip a stem.
 func (f *Font) InkWidth(text string) float32 {
-	if f == nil || f.Atlas == nil || text == "" {
-		if f == nil {
-			return 0
-		}
-		return f.Advance(text)
+	if f == nil {
+		return 0
+	}
+	if text == "" {
+		return 0
 	}
 	return f.shapeOf(text).ink
 }
@@ -117,8 +155,9 @@ func (f *Font) IndexAt(text string, x float32) int {
 	}
 	var acc float32
 	i := 0
+	atlas := f.ensure(text)
 	for _, r := range text {
-		adv := f.runeAdvance(r)
+		adv := advanceIn(atlas, r)
 		if x < acc+adv*0.5 {
 			return i
 		}
@@ -128,18 +167,45 @@ func (f *Font) IndexAt(text string, x float32) int {
 	return i
 }
 
-func (f *Font) runeAdvance(r rune) float32 {
-	if f == nil || f.Atlas == nil {
+// advanceIn is the advance of r in an already-baked sheet.
+func advanceIn(atlas *paintengine2d.FontAtlas, r rune) float32 {
+	cell, ok := atlas.Cell(paintengine2d.GlyphID(r))
+	if !ok {
 		return 0
 	}
-	f.ensure(string(r))
-	if cell, ok := f.Atlas.Cell(paintengine2d.GlyphID(r)); ok {
-		if cell.Advance > 0 {
-			return cell.Advance
-		}
-		return cell.Src.Dx()
+	if cell.Advance > 0 {
+		return cell.Advance
 	}
-	return 0
+	return cell.Src.Dx()
+}
+
+// cellFor is the atlas cell for r, baking it on first use.
+func (f *Font) cellFor(r rune) (paintengine2d.AtlasCell, bool) {
+	if f == nil {
+		return paintengine2d.AtlasCell{}, false
+	}
+	atlas := f.GlyphAtlas()
+	if atlas == nil {
+		return paintengine2d.AtlasCell{}, false
+	}
+	if c, ok := atlas.Cell(paintengine2d.GlyphID(r)); ok {
+		return c, true
+	}
+	if f.ot == nil {
+		return paintengine2d.AtlasCell{}, false
+	}
+	return f.ot.ensureRune(r).Cell(paintengine2d.GlyphID(r))
+}
+
+func (f *Font) runeAdvance(r rune) float32 {
+	cell, ok := f.cellFor(r)
+	if !ok {
+		return 0
+	}
+	if cell.Advance > 0 {
+		return cell.Advance
+	}
+	return cell.Src.Dx()
 }
 
 func (f *Font) CaretX(text string, i int) float32 {
@@ -148,48 +214,55 @@ func (f *Font) CaretX(text string, i int) float32 {
 	}
 	n := 0
 	var acc float32
+	atlas := f.ensure(text)
 	for _, r := range text {
 		if n >= i {
 			break
 		}
-		acc += f.runeAdvance(r)
+		acc += advanceIn(atlas, r)
 		n++
 	}
 	return acc
 }
 
-func (f *Font) ensure(text string) {
-	if f == nil || f.ot == nil || f.Atlas == nil || text == "" {
-		return
+// ensure bakes every rune of text and returns the sheet to shape against.
+func (f *Font) ensure(text string) *paintengine2d.FontAtlas {
+	if f == nil {
+		return nil
 	}
-	f.ot.mu.Lock()
-	defer f.ot.mu.Unlock()
-	for _, r := range text {
-		if _, ok := f.Atlas.Cells[paintengine2d.GlyphID(r)]; ok {
-			continue
-		}
-		_, _ = f.ot.rasterize(f.Atlas, r)
+	if f.ot == nil {
+		return f.static
 	}
+	return f.ot.ensure(text)
 }
 
 func (f *Font) shapeOf(text string) shapedRun {
-	if f == nil || f.Atlas == nil {
+	if f == nil || text == "" {
 		return shapedRun{}
 	}
-	if text == "" {
+	atlas := f.ensure(text)
+	if atlas == nil {
 		return shapedRun{}
 	}
-	f.ensure(text)
+	shape := func() shapedRun {
+		return measureShaped(snapRun(paintengine2d.NullShaper{}.Shape(text, atlas), atlas), atlas)
+	}
 	if f.shaped == nil {
-		return measureShaped(paintengine2d.NullShaper{}.Shape(text, f.Atlas), f.Atlas)
+		return shape()
 	}
 	f.shaped.mu.Lock()
+	defer f.shaped.mu.Unlock()
 	if hit, ok := f.shaped.m[text]; ok {
-		f.shaped.mu.Unlock()
+		// Re-point a run shaped against an earlier snapshot: cells are only
+		// ever added, so the positions still hold, and the superseded sheet
+		// stops being pinned by the cache.
+		if hit.run.Atlas != atlas {
+			hit.run.Atlas = atlas
+			f.shaped.m[text] = hit
+		}
 		return hit
 	}
-	run := paintengine2d.NullShaper{}.Shape(text, f.Atlas)
-	hit := measureShaped(run, f.Atlas)
+	hit := shape()
 	if f.shaped.m == nil {
 		f.shaped.m = make(map[string]shapedRun, 32)
 	}
@@ -197,8 +270,31 @@ func (f *Font) shapeOf(text string) shapedRun {
 		clear(f.shaped.m)
 	}
 	f.shaped.m[text] = hit
-	f.shaped.mu.Unlock()
 	return hit
+}
+
+// snapRun rounds every glyph onto the pixel grid.
+//
+// Cells are rasterized with a fractional bearing and NullShaper accumulates
+// fractional advances, so an unsnapped run lands the atlas blit between
+// pixels: the engine then resamples the sheet (a 16px stem measured 255/2px
+// crisp drops to ~191/3px) and loses its fast 1:1 path. Rounding the sum of
+// position and bearing keeps every glyph within half a pixel of its ideal
+// spot and makes the blit integer-aligned.
+func snapRun(run paintengine2d.GlyphRun, atlas *paintengine2d.FontAtlas) paintengine2d.GlyphRun {
+	if len(run.Glyphs) == 0 || atlas == nil {
+		return run
+	}
+	out := run
+	out.Glyphs = make([]paintengine2d.Glyph, len(run.Glyphs))
+	for i, g := range run.Glyphs {
+		if cell, ok := atlas.Cell(g.ID); ok {
+			g.X = snapCoord(g.X+cell.Bearing.X) - cell.Bearing.X
+			g.Y = snapCoord(g.Y+cell.Bearing.Y) - cell.Bearing.Y
+		}
+		out.Glyphs[i] = g
+	}
+	return out
 }
 
 func measureShaped(run paintengine2d.GlyphRun, atlas *paintengine2d.FontAtlas) shapedRun {
@@ -227,8 +323,17 @@ func measureShaped(run paintengine2d.GlyphRun, atlas *paintengine2d.FontAtlas) s
 	return shapedRun{run: run, adv: w, ink: inkW}
 }
 
+// Draw paints text at origin (baseline-top of the em box) tinted with col.
+//
+// Under a pure translation the origin is snapped to whole device pixels and
+// the sheet is blitted 1:1 with FilterNearest — crisp stems and the engine's
+// fast blit. A scaled or rotated context resamples, so it keeps bilinear.
 func (f *Font) Draw(ctx *paintengine2d.Context, text string, origin paintengine2d.Point, tint paintengine2d.Color) {
-	if f == nil || f.Atlas == nil || text == "" {
+	if f == nil || ctx == nil || text == "" {
+		return
+	}
+	run := f.shapeOf(text).run
+	if len(run.Glyphs) == 0 {
 		return
 	}
 	col := tint
@@ -238,9 +343,10 @@ func (f *Font) Draw(ctx *paintengine2d.Context, text string, origin paintengine2
 	if col == (paintengine2d.Color{}) {
 		col = paintengine2d.White
 	}
-	run := f.shapeOf(text).run
 	filter := paintengine2d.FilterNearest
-	if f.Outline {
+	if m := ctx.Matrix(); m.IsTranslation() {
+		origin = paintengine2d.Pt(snapCoord(origin.X+m.E)-m.E, snapCoord(origin.Y+m.F)-m.F)
+	} else {
 		filter = paintengine2d.FilterBilinear
 	}
 	ctx.DrawGlyphs(run, origin, paintengine2d.Paint{Color: col, Filter: filter})
@@ -252,7 +358,90 @@ type fontKey struct {
 	size   int
 }
 
-var fontCache sync.Map
+// fontCacheBudget caps the glyph sheets the size cache keeps alive. Sheets
+// grow as new runes are baked, so the budget is re-checked on every bake and
+// the least recently used faces are dropped (a Font already handed out stays
+// valid — only the cache entry goes).
+//
+// A var, not a const, so tests can shrink it.
+var fontCacheBudget int64 = 48 << 20
+
+type fontCacheEntry struct {
+	font *Font
+	used uint64
+}
+
+var fontCache = struct {
+	mu   sync.Mutex
+	m    map[fontKey]*fontCacheEntry
+	tick uint64
+}{m: map[fontKey]*fontCacheEntry{}}
+
+func cachedFont(key fontKey) *Font {
+	fontCache.mu.Lock()
+	defer fontCache.mu.Unlock()
+	e, ok := fontCache.m[key]
+	if !ok {
+		return nil
+	}
+	fontCache.tick++
+	e.used = fontCache.tick
+	return e.font
+}
+
+// storeFont publishes f and returns the face callers should use: a
+// concurrent bake of the same key wins so every caller shares one sheet.
+func storeFont(key fontKey, f *Font) *Font {
+	fontCache.mu.Lock()
+	defer fontCache.mu.Unlock()
+	fontCache.tick++
+	if e, ok := fontCache.m[key]; ok {
+		e.used = fontCache.tick
+		return e.font
+	}
+	fontCache.m[key] = &fontCacheEntry{font: f, used: fontCache.tick}
+	evictFontsLocked(key)
+	return f
+}
+
+// evictFontsLocked drops least-recently-used faces until the live sheets fit
+// the budget. keep is never evicted (it was just requested).
+func evictFontsLocked(keep fontKey) {
+	total := int64(0)
+	for _, e := range fontCache.m {
+		total += e.font.atlasBytes()
+	}
+	for total > fontCacheBudget && len(fontCache.m) > 1 {
+		var (
+			victim fontKey
+			oldest uint64
+			found  bool
+		)
+		for k, e := range fontCache.m {
+			if k == keep {
+				continue
+			}
+			if !found || e.used < oldest {
+				oldest, victim, found = e.used, k, true
+			}
+		}
+		if !found {
+			break
+		}
+		total -= fontCache.m[victim].font.atlasBytes()
+		delete(fontCache.m, victim)
+	}
+}
+
+// fontCacheStats is the live cache size (entries, glyph sheet bytes).
+func fontCacheStats() (entries int, bytes int64) {
+	fontCache.mu.Lock()
+	defer fontCache.mu.Unlock()
+	for _, e := range fontCache.m {
+		bytes += e.font.atlasBytes()
+	}
+	return len(fontCache.m), bytes
+}
 
 // BakeFont builds the default UI face (Titillium Web Regular) at size.
 // Glyphs are OpenType outlines rasterized through paintengine2d — not the
@@ -296,8 +485,8 @@ func BakeFamily(family string, weight Weight, size float32, col paintengine2d.Co
 		size = 8
 	}
 	key := fontKey{family: family, weight: weight, size: int(size*4 + 0.5)}
-	if v, ok := fontCache.Load(key); ok {
-		f := *v.(*Font)
+	if cached := cachedFont(key); cached != nil {
+		f := *cached
 		f.Color = col
 		return &f
 	}
@@ -305,8 +494,7 @@ func BakeFamily(family string, weight Weight, size float32, col paintengine2d.Co
 	if err != nil {
 		panic(err)
 	}
-	fontCache.Store(key, f)
-	out := *f
+	out := *storeFont(key, f)
 	out.Color = col
 	return &out
 }
@@ -323,17 +511,18 @@ func bakeOutline(family string, weight Weight, size float32) (*Font, error) {
 	if err != nil {
 		return nil, err
 	}
-	if _, ok := atlas.Cell(paintengine2d.GlyphID('A')); !ok {
+	cell, ok := atlas.Cell(paintengine2d.GlyphID('A'))
+	if !ok || cell.Src.Empty() || (ot.hasNotdef && cell.Src == ot.notdef.Src) {
 		return nil, fmt.Errorf("style: %s did not rasterize A", family)
 	}
 	return &Font{
-		Atlas:   atlas,
 		Size:    size,
 		Ascent:  ascent,
 		Descent: descent,
 		Family:  family,
 		Weight:  weight,
 		Outline: true,
+		static:  atlas,
 		ot:      ot,
 		shaped:  newShapeCache(),
 	}, nil
@@ -390,7 +579,7 @@ func bakeScaled(scale int, col paintengine2d.Color) *Font {
 		}
 	}
 	return &Font{
-		Atlas:   &paintengine2d.FontAtlas{Image: img, Cells: cells},
+		static:  &paintengine2d.FontAtlas{Image: img, Cells: cells},
 		Size:    float32(dstH),
 		Ascent:  float32(7 * scale),
 		Descent: float32(scale + 2),

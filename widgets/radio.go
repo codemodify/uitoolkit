@@ -193,6 +193,9 @@ func (g *RadioGroup) move(dir int) {
 	}
 	g.Select(i)
 	g.buttons[i].RequestFocus()
+	// Arrow keys moved focus, so the new radio must paint its focus ring
+	// (radios are focus-visible-only).
+	widget.MarkKeyboardFocus(g.buttons[i])
 }
 
 func (g *RadioGroup) Measure(c layout.Constraints) paintengine2d.Point {

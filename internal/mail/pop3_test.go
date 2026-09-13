@@ -121,7 +121,7 @@ func TestPOP3RetrieveIntoLocalStore(t *testing.T) {
 	tlsOff := false
 	cfg := MailConfig{Accounts: []AccountConfig{{
 		ID: "home", Name: "Ada", Address: "ada@example.com", Protocol: ProtoPOP3,
-		POP: ServerConfig{Host: ln.Addr().String(), User: "ada@example.com", Pass: "secret", TLS: &tlsOff},
+		POP:  ServerConfig{Host: ln.Addr().String(), User: "ada@example.com", Pass: "secret", TLS: &tlsOff},
 		SMTP: ServerConfig{Host: "smtp.example.com:587"},
 	}}}
 	s, err := NewLocalStoreDir(cfg, dir)

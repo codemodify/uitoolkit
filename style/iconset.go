@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/codemodify/paintengine2d"
 )
@@ -56,9 +57,14 @@ func IconsDir() string {
 	return filepath.Join(ConfigDir(), "icons")
 }
 
-// IconSetDir is icons/<name>/.
+// IconSetDir is icons/<name>/. When a folder with a different spelling
+// (case, spaces) canonicalizes to name, that folder is returned.
 func IconSetDir(name IconSetName) string {
-	return filepath.Join(IconsDir(), string(ParseIconSet(string(name))))
+	set := string(ParseIconSet(string(name)))
+	if dir, ok := iconDirIndex()[set]; ok {
+		return filepath.Join(IconsDir(), dir)
+	}
+	return filepath.Join(IconsDir(), set)
 }
 
 // SanitizeIconSetName lowercases and accepts [a-z][a-z0-9_-]{0,63}.
@@ -122,7 +128,11 @@ func iconSetDisplay(name string) string {
 	}
 }
 
-func listInstalledIconDirs() map[string]string {
+// scanIconDirs reads icons/ and maps each canonical set id onto the folder
+// that holds it, so a folder named "My Icons" both lists and loads as
+// "my-icons" instead of listing as installed and then falling back to the
+// embedded placeholder for every stem.
+func scanIconDirs() map[string]string {
 	out := map[string]string{}
 	entries, err := os.ReadDir(IconsDir())
 	if err != nil {
@@ -142,10 +152,15 @@ func listInstalledIconDirs() map[string]string {
 		if !iconSetHasGlyphs(filepath.Join(IconsDir(), e.Name())) {
 			continue
 		}
+		if _, dup := out[name]; dup {
+			continue // first (sorted) entry wins, deterministically
+		}
 		out[name] = e.Name()
 	}
 	return out
 }
+
+func listInstalledIconDirs() map[string]string { return scanIconDirs() }
 
 // ListBuiltinIconSets is drawn classic/sharp plus premiere PNG families
 // that are present under icons/.
@@ -232,28 +247,128 @@ func iconSetHasGlyphs(dir string) bool {
 	return false
 }
 
+// iconCacheTTL is how long a cached stat result is trusted. Within a frame
+// nothing is re-stat'ed (a missing stem used to cost 8 stats per draw); a PNG
+// edited on disk still shows up about a second later.
+const iconCacheTTL = time.Second
+
+// iconEntry caches one path. A nil img is a negative entry: the file is
+// missing or undecodable, and it is not stat'ed again this generation.
+type iconEntry struct {
+	img     *paintengine2d.Image
+	mod     int64
+	size    int64
+	checked time.Time
+	gen     uint64
+}
+
 type fileIconCache struct {
-	mu    sync.Mutex
-	imgs  map[string]*paintengine2d.Image // key: abs path
-	miss  map[string]bool
-	mtime map[string]int64
+	mu sync.Mutex
+	// gen invalidates every cached path and directory listing at once.
+	// Bumped by InvalidateIconCache (theme / look reload).
+	gen      uint64
+	entries  map[string]*iconEntry
+	embedded map[string]*paintengine2d.Image
+	dirs     map[string]string
+	dirsGen  uint64
+	dirsMod  int64
+	dirsAt   time.Time
 }
 
 var iconsCache = &fileIconCache{
-	imgs:  map[string]*paintengine2d.Image{},
-	miss:  map[string]bool{},
-	mtime: map[string]int64{},
+	entries:  map[string]*iconEntry{},
+	embedded: map[string]*paintengine2d.Image{},
 }
 
-func resetIconCache() {
+// IconGeneration is the current icon cache generation. It changes whenever
+// cached icon files and directory listings are invalidated.
+func IconGeneration() uint64 {
 	iconsCache.mu.Lock()
 	defer iconsCache.mu.Unlock()
-	iconsCache.imgs = map[string]*paintengine2d.Image{}
-	iconsCache.miss = map[string]bool{}
-	iconsCache.mtime = map[string]int64{}
+	return iconsCache.gen
+}
+
+// InvalidateIconCache drops cached icon files and directory listings. Call it
+// after the icon set changes on disk (the look watcher does).
+func InvalidateIconCache() {
+	iconsCache.mu.Lock()
+	iconsCache.gen++
+	iconsCache.entries = map[string]*iconEntry{}
+	iconsCache.dirs = nil
+	iconsCache.dirsMod = 0
+	iconsCache.dirsAt = time.Time{}
+	iconsCache.mu.Unlock()
 	missingStemLog.mu.Lock()
 	missingStemLog.seen = map[string]bool{}
 	missingStemLog.mu.Unlock()
+}
+
+func resetIconCache() { InvalidateIconCache() }
+
+// iconDirIndex maps a canonical set id onto its folder name. It is consulted
+// on every icon draw, so it is cached and revalidated with a single stat of
+// icons/ (whose mtime changes when a set folder is added, renamed, or
+// removed) plus the cache generation.
+func iconDirIndex() map[string]string {
+	iconsCache.mu.Lock()
+	gen := iconsCache.gen
+	// Inside the TTL the index is reused without touching the filesystem,
+	// so a frame full of icons costs no syscalls at all.
+	if iconsCache.dirs != nil && iconsCache.dirsGen == gen && time.Since(iconsCache.dirsAt) < iconCacheTTL {
+		dirs := iconsCache.dirs
+		iconsCache.mu.Unlock()
+		return dirs
+	}
+	iconsCache.mu.Unlock()
+
+	var mod int64
+	if st, err := os.Stat(IconsDir()); err == nil {
+		mod = st.ModTime().UnixNano()
+	}
+	iconsCache.mu.Lock()
+	if iconsCache.dirs != nil && iconsCache.dirsGen == gen && iconsCache.dirsMod == mod {
+		dirs := iconsCache.dirs
+		iconsCache.dirsAt = time.Now()
+		iconsCache.mu.Unlock()
+		return dirs
+	}
+	iconsCache.mu.Unlock()
+
+	dirs := scanIconDirNames()
+
+	iconsCache.mu.Lock()
+	if iconsCache.gen == gen {
+		iconsCache.dirs = dirs
+		iconsCache.dirsGen = gen
+		iconsCache.dirsMod = mod
+		iconsCache.dirsAt = time.Now()
+	}
+	iconsCache.mu.Unlock()
+	return dirs
+}
+
+// scanIconDirNames maps canonical set id → folder name without looking
+// inside the folders (path resolution only).
+func scanIconDirNames() map[string]string {
+	out := map[string]string{}
+	entries, err := os.ReadDir(IconsDir())
+	if err != nil {
+		return out
+	}
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		name, err := SanitizeIconSetName(e.Name())
+		if err != nil {
+			continue
+		}
+		if _, dup := out[name]; dup {
+			continue // first (sorted) entry wins, deterministically
+		}
+		out[name] = e.Name()
+	}
+	return out
 }
 
 func loadFileIcon(set IconSetName, icon ToolIcon, destW float32) (*paintengine2d.Image, bool) {
@@ -282,7 +397,7 @@ func loadFileIcon(set IconSetName, icon ToolIcon, destW float32) (*paintengine2d
 func loadEmbeddedNoIcon(destW float32) (*paintengine2d.Image, bool) {
 	raw := embeddedNoIcon24
 	key := "embed:no-icon.png"
-	if destW >= iconHiDPIMin && len(embeddedNoIcon48) > 0 {
+	if destW > iconNative1x && len(embeddedNoIcon48) > 0 {
 		raw = embeddedNoIcon48
 		key = "embed:no-icon@2x.png"
 	}
@@ -291,7 +406,7 @@ func loadEmbeddedNoIcon(destW float32) (*paintengine2d.Image, bool) {
 	}
 	iconsCache.mu.Lock()
 	defer iconsCache.mu.Unlock()
-	if img, ok := iconsCache.imgs[key]; ok {
+	if img, ok := iconsCache.embedded[key]; ok {
 		return img, true
 	}
 	dec, err := paintengine2d.DecodePNG(bytes.NewReader(raw))
@@ -299,7 +414,7 @@ func loadEmbeddedNoIcon(destW float32) (*paintengine2d.Image, bool) {
 		return nil, false
 	}
 	img := toWhiteMask(dec)
-	iconsCache.imgs[key] = img
+	iconsCache.embedded[key] = img
 	return img, true
 }
 
@@ -323,30 +438,33 @@ func logMissingStemOnce(set IconSetName, icon ToolIcon, used string) {
 	log.Printf("uitk icons: %s missing %s.png, using %s", set, want, used)
 }
 
+// loadPNGIcon decodes path into a white mask, caching hits and misses. A
+// missing file costs one stat per TTL instead of one per draw.
 func loadPNGIcon(path string) (*paintengine2d.Image, bool) {
+	c := iconsCache
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	now := time.Now()
+	if e, ok := c.entries[path]; ok && e.gen == c.gen && now.Sub(e.checked) < iconCacheTTL {
+		return e.img, e.img != nil
+	}
 	st, err := os.Stat(path)
 	if err != nil {
+		c.entries[path] = &iconEntry{checked: now, gen: c.gen}
 		return nil, false
 	}
-	mod := st.ModTime().UnixNano()
-	iconsCache.mu.Lock()
-	defer iconsCache.mu.Unlock()
-	if iconsCache.miss[path] && iconsCache.mtime[path] == mod {
-		return nil, false
-	}
-	if img, ok := iconsCache.imgs[path]; ok && iconsCache.mtime[path] == mod {
-		return img, true
+	mod, size := st.ModTime().UnixNano(), st.Size()
+	if e, ok := c.entries[path]; ok && e.gen == c.gen && e.mod == mod && e.size == size {
+		e.checked = now
+		return e.img, e.img != nil
 	}
 	raw, err := paintengine2d.DecodePNGFile(path)
 	if err != nil || raw == nil || raw.Width < 1 || raw.Height < 1 {
-		iconsCache.miss[path] = true
-		iconsCache.mtime[path] = mod
+		c.entries[path] = &iconEntry{mod: mod, size: size, checked: now, gen: c.gen}
 		return nil, false
 	}
 	img := toWhiteMask(raw)
-	delete(iconsCache.miss, path)
-	iconsCache.imgs[path] = img
-	iconsCache.mtime[path] = mod
+	c.entries[path] = &iconEntry{img: img, mod: mod, size: size, checked: now, gen: c.gen}
 	return img, true
 }
 

@@ -5,20 +5,29 @@ package platform
 /*
 #cgo CFLAGS: -x objective-c
 #cgo LDFLAGS: -framework AppKit -framework Foundation
+#include <dispatch/dispatch.h>
 #import <AppKit/AppKit.h>
 
+// NSCursor, like the rest of AppKit, is main-thread only.
 static void ui_set_nscursor(int kind) {
-	@autoreleasepool {
-		NSCursor *c = [NSCursor arrowCursor];
-		if (kind == 1) {
-			c = [NSCursor resizeLeftRightCursor];
-		} else if (kind == 2) {
-			c = [NSCursor resizeUpDownCursor];
-		} else if (kind == 3) {
-			c = [NSCursor IBeamCursor];
+	void (^apply)(void) = ^{
+		@autoreleasepool {
+			NSCursor *c = [NSCursor arrowCursor];
+			if (kind == 1) {
+				c = [NSCursor resizeLeftRightCursor];
+			} else if (kind == 2) {
+				c = [NSCursor resizeUpDownCursor];
+			} else if (kind == 3) {
+				c = [NSCursor IBeamCursor];
+			}
+			[c set];
 		}
-		[c set];
+	};
+	if ([NSThread isMainThread]) {
+		apply();
+		return;
 	}
+	dispatch_async(dispatch_get_main_queue(), apply);
 }
 */
 import "C"

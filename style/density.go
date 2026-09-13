@@ -99,8 +99,10 @@ func ApplyDensity(m Metrics, d Density) Metrics {
 	return m
 }
 
-// WithDensity rebuilds a Classic look at 1× density. Application.SetLook
-// still applies display scale afterward.
+// WithDensity rebuilds a Classic look at density d, keeping the look's
+// display scale (Application.SetLook does not re-scale an already scaled
+// look). Metrics are rebuilt from defaults + density + pack, so switching
+// density cannot inherit stale values.
 func WithDensity(look LookAndFeel, d Density) LookAndFeel {
 	if look == nil {
 		return look
@@ -110,9 +112,9 @@ func WithDensity(look LookAndFeel, d Density) LookAndFeel {
 		return look
 	}
 	tok := c.Tokens()
-	m := ApplyChromeMetrics(ApplyDensity(DefaultMetrics(), d), tok.Metrics)
-	m = ApplyThemeCorners(m, c.Corners(), tok.Metrics.Radius, tok.Metrics.RadiusSmall)
-	return newClassic(c.Name(), c.Palette(), m, c.Corners(), c.Icons(), c.IconSize(), tok).setPack(c.Pack())
+	m := lookMetrics(d, c.Scale(), tok, c.Corners(), c.IconSize())
+	return newClassic(c.Name(), c.Palette(), m, c.Corners(), c.Icons(), c.IconSize(), tok).
+		setPack(c.Pack()).setDensity(d).setScale(c.Scale())
 }
 
 // BaseFontSize is the unscaled Classic body size (1× design pixels).

@@ -199,3 +199,53 @@ func TestFakeDbusMenuClickInvokesOnClick(t *testing.T) {
 		t.Fatalf("Quit click %d", n)
 	}
 }
+
+func TestSNIPixmapIsStraightAlpha(t *testing.T) {
+	// A 50% transparent pure red pixel: premultiplied storage is
+	// (0x80,0,0,0x80); the SNI wire format wants straight ARGB, so the
+	// red channel must come back at full strength.
+	img := paintengine2d.NewImage(1, 1)
+	img.SetColor(0, 0, paintengine2d.RGBA(1, 0, 0, 0.5))
+	w, h, pix := sniARGB(img)
+	if w != 1 || h != 1 || len(pix) != 4 {
+		t.Fatalf("sniARGB = %d×%d, %d bytes", w, h, len(pix))
+	}
+	a, r, g, b := pix[0], pix[1], pix[2], pix[3]
+	if a < 0x7c || a > 0x84 {
+		t.Fatalf("alpha = %#02x, want ~0x80", a)
+	}
+	if r < 0xf0 {
+		t.Fatalf("red = %#02x, want ~0xff (straight alpha, not premultiplied)", r)
+	}
+	if g != 0 || b != 0 {
+		t.Fatalf("green/blue = %#02x/%#02x, want 0", g, b)
+	}
+}
+
+func TestUnpremul(t *testing.T) {
+	cases := []struct{ c, a, want uint8 }{
+		{0, 0, 0},
+		{0xff, 0xff, 0xff},
+		{0x80, 0x80, 0xff}, // fully saturated at half alpha
+		{0x40, 0x80, 0x80},
+		{0x00, 0x80, 0x00},
+	}
+	for _, c := range cases {
+		if got := unpremul(c.c, c.a); got != c.want {
+			t.Fatalf("unpremul(%#02x,%#02x) = %#02x, want %#02x", c.c, c.a, got, c.want)
+		}
+	}
+}
+
+func TestSNIPixmapOpaqueRoundTrip(t *testing.T) {
+	img := paintengine2d.NewImage(2, 1)
+	img.SetColor(0, 0, paintengine2d.RGBA(0, 1, 0, 1))
+	img.SetColor(1, 0, paintengine2d.RGBA(0, 0, 1, 1))
+	_, _, pix := sniARGB(img)
+	if pix[0] != 0xff || pix[2] < 0xf0 {
+		t.Fatalf("opaque green = %v", pix[:4])
+	}
+	if pix[4] != 0xff || pix[7] < 0xf0 {
+		t.Fatalf("opaque blue = %v", pix[4:8])
+	}
+}
