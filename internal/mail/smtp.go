@@ -1,9 +1,7 @@
 package mail
 
 import (
-	"crypto/tls"
 	"fmt"
-	"net"
 	"net/smtp"
 	"strings"
 	"time"
@@ -11,58 +9,43 @@ import (
 
 // SendSMTP submits RFC822 on the account's SMTP server.
 func SendSMTP(cfg ServerConfig, from string, to []string, raw []byte) error {
-	host := cfg.Host
-	if host == "" {
+	if strings.TrimSpace(cfg.Host) == "" {
 		return fmt.Errorf("smtp: empty host")
 	}
-	if !strings.Contains(host, ":") {
-		if cfg.implicitTLS(false) {
-			host += ":465"
-		} else {
-			host += ":587"
-		}
-	}
+	host := cfg.HostPort(smtpPorts)
+	mode := cfg.Mode(smtpPorts)
 	user := cfg.Username(from)
 	pass := cfg.Password()
 	authName := strings.ToLower(strings.TrimSpace(cfg.Auth))
-	serverName := serverName(host)
-	dialer := net.Dialer{Timeout: 20 * time.Second}
+	name := serverName(host)
 
-	var client *smtp.Client
-	if cfg.implicitTLS(false) && strings.HasSuffix(host, ":465") {
-		conn, err := tls.DialWithDialer(&dialer, "tcp", host, &tls.Config{MinVersion: tls.VersionTLS12, ServerName: serverName})
-		if err != nil {
-			return fmt.Errorf("smtp: connect %s: %w", host, err)
-		}
-		c, err := smtp.NewClient(conn, serverName)
-		if err != nil {
-			_ = conn.Close()
-			return err
-		}
-		client = c
-	} else {
-		conn, err := dialer.Dial("tcp", host)
-		if err != nil {
-			return fmt.Errorf("smtp: connect %s: %w", host, err)
-		}
-		c, err := smtp.NewClient(conn, serverName)
-		if err != nil {
-			_ = conn.Close()
-			return err
-		}
-		client = c
-		if cfg.useStartTLS() || !cfg.implicitTLS(false) {
-			if ok, _ := client.Extension("STARTTLS"); ok {
-				if err := client.StartTLS(&tls.Config{MinVersion: tls.VersionTLS12, ServerName: serverName}); err != nil {
-					_ = client.Close()
-					return fmt.Errorf("smtp: STARTTLS: %w", err)
-				}
-			}
-		}
+	conn, err := dialMode(host, mode, 20*time.Second)
+	if err != nil {
+		return fmt.Errorf("smtp: connect %s: %w", host, err)
+	}
+	client, err := smtp.NewClient(conn, name)
+	if err != nil {
+		_ = conn.Close()
+		return err
 	}
 	defer client.Close()
 
+	if mode == TLSStartTLS {
+		if ok, _ := client.Extension("STARTTLS"); !ok {
+			// Fail closed: a stripped 250-STARTTLS used to fall through to
+			// a cleartext AUTH, which handed the password to the attacker.
+			return errNoSTARTTLS("smtp", host)
+		}
+		if err := client.StartTLS(tlsClientConfig(host)); err != nil {
+			return fmt.Errorf("smtp: STARTTLS: %w", err)
+		}
+	}
+	encrypted := mode.Encrypted()
+
 	if authName == "xoauth2" {
+		if !encrypted && !isLoopbackHost(host) {
+			return fmt.Errorf("smtp: refusing to send a bearer token to %s in the clear", host)
+		}
 		token, err := resolveAccessToken(cfg, user)
 		if err != nil {
 			return err
@@ -71,8 +54,13 @@ func SendSMTP(cfg ServerConfig, from string, to []string, raw []byte) error {
 			return fmt.Errorf("smtp: AUTH XOAUTH2: %w", err)
 		}
 	} else if user != "" && pass != "" {
-		if err := client.Auth(smtp.PlainAuth("", user, pass, serverName)); err != nil {
-			// Some servers want LOGIN; retry via AUTH PLAIN raw is enough for most.
+		if !encrypted && !isLoopbackHost(host) {
+			return fmt.Errorf("smtp: refusing to send credentials to %s over an unencrypted connection "+
+				`(use "tlsMode":"ssl" or "starttls")`, host)
+		}
+		if err := client.Auth(smtp.PlainAuth("", user, pass, name)); err != nil {
+			// AUTH LOGIN is only tried on a connection we know is encrypted
+			// (or loopback); it has no TLS check of its own.
 			if err2 := client.Auth(smtpLogin{user, pass}); err2 != nil {
 				return fmt.Errorf("smtp: AUTH: %v / %v", err, err2)
 			}
@@ -81,6 +69,7 @@ func SendSMTP(cfg ServerConfig, from string, to []string, raw []byte) error {
 	if err := client.Mail(extractAddr(from)); err != nil {
 		return fmt.Errorf("smtp: MAIL FROM: %w", err)
 	}
+	sent := 0
 	for _, rcpt := range to {
 		rcpt = extractAddr(rcpt)
 		if rcpt == "" {
@@ -89,6 +78,10 @@ func SendSMTP(cfg ServerConfig, from string, to []string, raw []byte) error {
 		if err := client.Rcpt(rcpt); err != nil {
 			return fmt.Errorf("smtp: RCPT %s: %w", rcpt, err)
 		}
+		sent++
+	}
+	if sent == 0 {
+		return fmt.Errorf("smtp: no usable recipient in To/Cc/Bcc")
 	}
 	w, err := client.Data()
 	if err != nil {

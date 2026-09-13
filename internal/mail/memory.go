@@ -824,42 +824,57 @@ func (s *MemoryStore) GetPart(id MessageID, partID string) (PartData, error) {
 	if !ok {
 		return PartData{}, fmt.Errorf("mail: no message %s", id)
 	}
+	// Demo messages carry Parts without a raw blob, so attachments are
+	// matched by section id, by the synthetic att-N id, and by filename.
+	for i, name := range m.Attachments {
+		if fmt.Sprintf("att-%d", i+1) != partID && name != partID {
+			if i >= len(m.Parts) || m.Parts[i].ID != partID {
+				continue
+			}
+		}
+		return PartData{
+			Part: Part{ID: partID, MIMEType: guessMIME(name), Filename: name},
+			Data: []byte(name + " (demo attachment)\n"),
+		}, nil
+	}
+	for _, p := range m.Parts {
+		if p.ID != partID || p.Filename == "" {
+			continue
+		}
+		return PartData{Part: p, Data: []byte(p.Filename + " (demo attachment)\n")}, nil
+	}
 	if partID == "" || partID == "1" {
 		return PartData{Part: Part{ID: "1", MIMEType: "text/plain", Size: len(m.Body)}, Data: []byte(m.Body)}, nil
 	}
 	if strings.EqualFold(partID, "html") || partID == "1.2" {
 		return PartData{Part: Part{ID: partID, MIMEType: "text/html", Size: len(m.HTML)}, Data: []byte(m.HTML)}, nil
 	}
-	for i, name := range m.Attachments {
-		if fmt.Sprintf("att-%d", i+1) == partID || name == partID {
-			return PartData{Part: Part{ID: partID, MIMEType: "application/octet-stream", Filename: name}, Data: []byte(name + " (demo attachment)\n")}, nil
-		}
-	}
 	return PartData{Part: Part{ID: partID}, Data: []byte(m.Body)}, nil
 }
-
 func (s *MemoryStore) OpenPart(id MessageID, partID string) (PartData, error) {
 	p, err := s.GetPart(id, partID)
 	if err != nil {
 		return p, err
 	}
-	name := p.Filename
-	if name == "" {
-		name = string(id) + "-" + partID + ".txt"
+	name := attachFileName(p.Filename)
+	if name == "attachment" {
+		name = attachFileName(safeID(string(id))+"-"+safeID(partID)) + ".txt"
+	}
+	if unsafeAttachmentName(name) {
+		return p, fmt.Errorf("mail: refusing to open %q — save it and inspect it instead", name)
 	}
 	dir, err := os.MkdirTemp("", "uitk-mail-")
 	if err != nil {
 		return p, err
 	}
-	path := filepath.Join(dir, filepath.Base(name))
-	if err := os.WriteFile(path, p.Data, 0o600); err != nil {
+	path := filepath.Join(dir, name)
+	if err := writeFileAtomic(path, p.Data, 0o600); err != nil {
 		return p, err
 	}
 	p.Path = path
 	openCachedFile(path)
 	return p, nil
 }
-
 func (s *MemoryStore) Sync(accountID string) (SyncResult, error) {
 	n, err := s.Fetch(accountID)
 	if s.feat != nil && s.feat.Online() {

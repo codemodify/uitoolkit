@@ -69,13 +69,13 @@ func seedDemo(s *MemoryStore) {
 
 	// Pin a distinctive unread welcome at the top of Ada’s Inbox (newest).
 	s.addMessage(Message{
-		Folder:    FolderAdaInbox,
-		AccountID: AcctAda,
-		From:      "Thunderbird Team <hello@thunderbird.example>",
-		To:        "Ada Lovelace <ada@example.com>",
-		Subject:   "Welcome to Mail on uitoolkit",
-		Date:      DemoNow.Add(-34 * time.Minute),
-		Read:      false,
+		Folder:      FolderAdaInbox,
+		AccountID:   AcctAda,
+		From:        "Thunderbird Team <hello@thunderbird.example>",
+		To:          "Ada Lovelace <ada@example.com>",
+		Subject:     "Welcome to Mail on uitoolkit",
+		Date:        DemoNow.Add(-34 * time.Minute),
+		Read:        false,
 		Starred:     true,
 		HasAttach:   true,
 		Tags:        []string{"Important"},

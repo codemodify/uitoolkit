@@ -2,7 +2,6 @@ package mail
 
 import (
 	"bufio"
-	"crypto/tls"
 	"encoding/base64"
 	"fmt"
 	"io"
@@ -29,17 +28,35 @@ type imapClient struct {
 	uidnext  uint32
 	exists   int
 	modseq   uint64
+
 	idle         bool
 	lastVanished []uint32
+	lastCopyUID  uint32 // destination UID from the most recent COPYUID
+
+	// cmdTimeout bounds a single command/response exchange. Without it a
+	// server that accepts the TCP connection and then stops talking wedges
+	// the daemon (and, through LocalStore.mu, every RPC) forever.
+	cmdTimeout  time.Duration
+	dialTimeout time.Duration
 }
+
+const (
+	defaultIMAPCmdTimeout  = 90 * time.Second
+	defaultIMAPDialTimeout = 20 * time.Second
+)
 
 func newIMAPClient(cfg ServerConfig, address string) *imapClient {
 	return &imapClient{
-		cfg:  cfg,
-		user: cfg.Username(address),
-		caps: map[string]bool{},
+		cfg:         cfg,
+		user:        cfg.Username(address),
+		caps:        map[string]bool{},
+		cmdTimeout:  defaultIMAPCmdTimeout,
+		dialTimeout: defaultIMAPDialTimeout,
 	}
 }
+
+// mode is the resolved connection security for this account.
+func (c *imapClient) mode() TLSMode { return c.cfg.Mode(imapPorts) }
 
 func (c *imapClient) connect() error {
 	c.mu.Lock()
@@ -51,54 +68,52 @@ func (c *imapClient) connectLocked() error {
 	if c.conn != nil {
 		return nil
 	}
-	host := c.cfg.Host
-	if host == "" {
+	if strings.TrimSpace(c.cfg.Host) == "" {
 		return fmt.Errorf("imap: empty host")
 	}
-	if !strings.Contains(host, ":") {
-		if c.cfg.implicitTLS(true) {
-			host += ":993"
-		} else {
-			host += ":143"
-		}
-	}
-	dialer := net.Dialer{Timeout: 20 * time.Second}
-	var conn net.Conn
-	var err error
-	if c.cfg.implicitTLS(true) && !c.cfg.useStartTLS() {
-		conn, err = tls.DialWithDialer(&dialer, "tcp", host, &tls.Config{MinVersion: tls.VersionTLS12, ServerName: serverName(host)})
-	} else {
-		conn, err = dialer.Dial("tcp", host)
-	}
+	host := c.cfg.HostPort(imapPorts)
+	mode := c.mode()
+	conn, err := dialMode(host, mode, c.dialTimeout)
 	if err != nil {
 		return fmt.Errorf("imap: connect %s: %w", host, err)
 	}
 	c.conn = conn
 	c.r = bufio.NewReaderSize(conn, 256*1024)
 	if _, err := c.readRawLocked(); err != nil { // greeting
-		c.closeLocked()
+		c.dropLocked()
 		return err
 	}
 	if err := c.capabilityLocked(); err != nil {
-		c.closeLocked()
+		c.dropLocked()
 		return err
 	}
-	if c.cfg.useStartTLS() && !c.cfg.implicitTLS(false) {
+	if mode == TLSStartTLS {
+		if !c.caps["STARTTLS"] {
+			c.dropLocked()
+			return errNoSTARTTLS("imap", host)
+		}
 		if _, err := c.cmdLocked("STARTTLS"); err != nil {
-			c.closeLocked()
+			c.dropLocked()
 			return fmt.Errorf("imap: STARTTLS: %w", err)
 		}
-		tlsConn := tls.Client(c.conn, &tls.Config{MinVersion: tls.VersionTLS12, ServerName: serverName(host)})
-		if err := tlsConn.Handshake(); err != nil {
-			c.closeLocked()
+		_ = c.conn.SetDeadline(time.Now().Add(c.dialTimeout))
+		tlsConn, err := upgradeToTLS(c.conn, host)
+		if err != nil {
+			c.dropLocked()
 			return fmt.Errorf("imap: TLS handshake: %w", err)
 		}
+		_ = tlsConn.SetDeadline(time.Time{})
 		c.conn = tlsConn
 		c.r = bufio.NewReaderSize(tlsConn, 256*1024)
-		_ = c.capabilityLocked()
+		// Capabilities before the upgrade are not trustworthy (RFC 3501).
+		c.caps = map[string]bool{}
+		if err := c.capabilityLocked(); err != nil {
+			c.dropLocked()
+			return err
+		}
 	}
-	if err := c.loginLocked(); err != nil {
-		c.closeLocked()
+	if err := c.loginLocked(mode, host); err != nil {
+		c.dropLocked()
 		return err
 	}
 	_ = c.capabilityLocked()
@@ -114,11 +129,17 @@ func serverName(hostport string) string {
 	return host
 }
 
-func (c *imapClient) loginLocked() error {
+func (c *imapClient) loginLocked(mode TLSMode, host string) error {
 	pass := c.cfg.Password()
 	auth := strings.ToLower(strings.TrimSpace(c.cfg.Auth))
 	if auth == "" {
 		auth = "plain"
+	}
+	// Credentials never go out in the clear unless the account explicitly
+	// asked for plain mode (and even then never to a remote host).
+	if !mode.Encrypted() && !isLoopbackHost(host) {
+		return fmt.Errorf("imap: refusing to send credentials to %s over an unencrypted connection "+
+			`(use "tlsMode":"ssl" or "starttls")`, host)
 	}
 	if auth == "xoauth2" {
 		token, err := resolveAccessToken(c.cfg, c.user)
@@ -127,19 +148,19 @@ func (c *imapClient) loginLocked() error {
 		}
 		raw := fmt.Sprintf("user=%s\x01auth=Bearer %s\x01\x01", c.user, token)
 		b64 := base64.StdEncoding.EncodeToString([]byte(raw))
-		_, err = c.cmdLocked("AUTHENTICATE XOAUTH2 %s", b64)
+		_, err = c.cmdAuthLocked("AUTHENTICATE XOAUTH2 " + b64)
 		return err
 	}
-	if c.caps["AUTH=PLAIN"] || auth == "plain" {
-		// LOGIN is widely deployed; AUTHENTICATE PLAIN when advertised.
-		if c.caps["LOGINDISABLED"] && c.caps["AUTH=PLAIN"] {
-			payload := base64.StdEncoding.EncodeToString([]byte("\x00" + c.user + "\x00" + pass))
-			_, err := c.cmdLocked("AUTHENTICATE PLAIN %s", payload)
-			return err
-		}
+	if c.caps["LOGINDISABLED"] && !c.caps["AUTH=PLAIN"] {
+		return fmt.Errorf("imap: server disabled LOGIN and offers no AUTH=PLAIN")
 	}
 	if pass == "" {
 		return fmt.Errorf("imap: empty password (set imap.password in mail.json, or %s / passEnv)", EnvPass)
+	}
+	if c.caps["AUTH=PLAIN"] && c.caps["LOGINDISABLED"] {
+		payload := base64.StdEncoding.EncodeToString([]byte("\x00" + c.user + "\x00" + pass))
+		_, err := c.cmdAuthLocked("AUTHENTICATE PLAIN " + payload)
+		return err
 	}
 	_, err := c.cmdLocked("LOGIN %s %s", imapQuote(c.user), imapQuote(pass))
 	return err
@@ -174,13 +195,22 @@ func (c *imapClient) close() {
 
 func (c *imapClient) closeLocked() {
 	if c.conn != nil {
+		_ = c.conn.SetDeadline(time.Now().Add(5 * time.Second))
 		_, _ = c.cmdLocked("LOGOUT")
+	}
+	c.dropLocked()
+}
+
+// dropLocked tears the socket down without trying to talk on it.
+func (c *imapClient) dropLocked() {
+	if c.conn != nil {
 		_ = c.conn.Close()
 	}
 	c.conn = nil
 	c.r = nil
 	c.selected = ""
 	c.idle = false
+	c.lastCopyUID = 0
 }
 
 func (c *imapClient) has(cap string) bool {
@@ -188,8 +218,18 @@ func (c *imapClient) has(cap string) bool {
 }
 
 type imapListBox struct {
-	Name, Delim string
+	Name, Delim string // Name is the wire (modified UTF-7) name
+	Display     string // Display is Name decoded to UTF-8
 	Attrs       []string
+}
+
+// imapMailbox is the wire form of a mailbox name: modified UTF-7, quoted,
+// and rejected outright when it carries CR/LF (command injection).
+func imapMailbox(name string) (string, error) {
+	if !validMailboxName(name) {
+		return "", fmt.Errorf("imap: illegal mailbox name %q", truncate(name, 40))
+	}
+	return imapQuote(encodeIMAPUTF7(name)), nil
 }
 
 func (c *imapClient) createMailbox(name string) error {
@@ -198,7 +238,11 @@ func (c *imapClient) createMailbox(name string) error {
 	if err := c.connectLocked(); err != nil {
 		return err
 	}
-	_, err := c.cmdLocked("CREATE %s", imapQuote(name))
+	box, err := imapMailbox(name)
+	if err != nil {
+		return err
+	}
+	_, err = c.cmdLocked("CREATE %s", box)
 	return err
 }
 
@@ -215,6 +259,7 @@ func (c *imapClient) list() ([]imapListBox, error) {
 	var out []imapListBox
 	for _, ln := range lines {
 		if b, ok := parseIMAPList(ln); ok {
+			b.Display = decodeIMAPUTF7(b.Name)
 			out = append(out, b)
 		}
 	}
@@ -226,6 +271,7 @@ func (c *imapClient) list() ([]imapListBox, error) {
 			}
 			for _, ln := range extra {
 				if b, ok := parseIMAPList(ln); ok && !seen[b.Name] {
+					b.Display = decodeIMAPUTF7(b.Name)
 					out = append(out, b)
 				}
 			}
@@ -320,7 +366,11 @@ func (c *imapClient) selectBox(name string, examine bool) (imapSelect, error) {
 	if examine {
 		cmd = "EXAMINE"
 	}
-	lines, err := c.cmdLocked("%s %s", cmd, imapQuote(name))
+	box, err := imapMailbox(name)
+	if err != nil {
+		return imapSelect{}, err
+	}
+	lines, err := c.cmdLocked("%s %s", cmd, box)
 	if err != nil {
 		return imapSelect{}, err
 	}
@@ -345,15 +395,19 @@ func (c *imapClient) selectSync(name string, examine bool, meta folderMeta) (ima
 	if examine {
 		cmd = "EXAMINE"
 	}
+	box, berr := imapMailbox(name)
+	if berr != nil {
+		return imapSelect{}, nil, berr
+	}
 	var lines []string
 	var err error
-	if (c.has("QRESYNC") || c.has("ENABLE")) && meta.UIDValidity != 0 && meta.HighestMod != 0 {
-		lines, err = c.cmdLocked("%s %s (QRESYNC (%d %d))", cmd, imapQuote(name), meta.UIDValidity, meta.HighestMod)
+	if c.has("QRESYNC") && meta.UIDValidity != 0 && meta.HighestMod != 0 {
+		lines, err = c.cmdLocked("%s %s (QRESYNC (%d %d))", cmd, box, meta.UIDValidity, meta.HighestMod)
 		if err != nil {
-			lines, err = c.cmdLocked("%s %s", cmd, imapQuote(name))
+			lines, err = c.cmdLocked("%s %s", cmd, box)
 		}
 	} else {
-		lines, err = c.cmdLocked("%s %s", cmd, imapQuote(name))
+		lines, err = c.cmdLocked("%s %s", cmd, box)
 	}
 	if err != nil {
 		return imapSelect{}, nil, err
@@ -455,6 +509,7 @@ type imapMeta struct {
 	Parts        []Part
 	RFCMessageID string
 	InReplyTo    string
+	ModSeq       uint64
 }
 
 func (c *imapClient) uidFetchMeta(fromUID uint32) ([]imapMeta, error) {
@@ -509,11 +564,35 @@ func (c *imapClient) uidFetchSection(uid uint32, section string) ([]byte, error)
 	if section == "" {
 		section = "1"
 	}
+	if !validPartID(section) {
+		return nil, fmt.Errorf("imap: illegal section %q", truncate(section, 32))
+	}
 	lines, err := c.cmdLocked("UID FETCH %d (BODY.PEEK[%s])", uid, section)
 	if err != nil {
 		return nil, err
 	}
 	return extractLiteralBody(lines), nil
+}
+
+// uidList returns every UID currently in the selected mailbox. It is the
+// fallback reconciliation path for servers that never send VANISHED.
+func (c *imapClient) uidList() ([]uint32, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.selected == "" {
+		return nil, fmt.Errorf("imap: no mailbox selected")
+	}
+	lines, err := c.cmdLocked("UID FETCH 1:* (UID)")
+	if err != nil {
+		return nil, err
+	}
+	var out []uint32
+	for _, m := range parseUIDFetchMeta(lines) {
+		if m.UID != 0 {
+			out = append(out, m.UID)
+		}
+	}
+	return out, nil
 }
 
 func (c *imapClient) uidStore(uid uint32, add, rem []string) error {
@@ -532,28 +611,105 @@ func (c *imapClient) uidStore(uid uint32, add, rem []string) error {
 	return nil
 }
 
-func (c *imapClient) uidCopy(uid uint32, dest string) error {
+// uidCopy copies one message and returns the destination UID when the server
+// supports UIDPLUS (COPYUID). newUID is 0 when the server stayed silent.
+func (c *imapClient) uidCopy(uid uint32, dest string) (newUID uint32, err error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	_, err := c.cmdLocked("UID COPY %d %s", uid, imapQuote(dest))
-	return err
+	box, err := imapMailbox(dest)
+	if err != nil {
+		return 0, err
+	}
+	c.lastCopyUID = 0
+	if _, err := c.cmdLocked("UID COPY %d %s", uid, box); err != nil {
+		return 0, err
+	}
+	return c.lastCopyUID, nil
 }
 
-func (c *imapClient) uidMove(uid uint32, dest string) error {
+// uidMove moves one message. It returns the destination UID from COPYUID /
+// the MOVE response when the server reports one, so the local cache can be
+// re-keyed instead of keeping a UID that now names a different message.
+func (c *imapClient) uidMove(uid uint32, dest string) (newUID uint32, err error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	box, err := imapMailbox(dest)
+	if err != nil {
+		return 0, err
+	}
+	c.lastCopyUID = 0
 	if c.has("MOVE") {
-		_, err := c.cmdLocked("UID MOVE %d %s", uid, imapQuote(dest))
-		return err
+		lines, err := c.cmdLocked("UID MOVE %d %s", uid, box)
+		if err != nil {
+			return 0, err
+		}
+		if c.lastCopyUID == 0 {
+			for _, ln := range lines {
+				if u, ok := parseCopyUID(ln); ok {
+					c.lastCopyUID = u
+					break
+				}
+			}
+		}
+		return c.lastCopyUID, nil
 	}
-	if _, err := c.cmdLocked("UID COPY %d %s", uid, imapQuote(dest)); err != nil {
-		return err
+	if _, err := c.cmdLocked("UID COPY %d %s", uid, box); err != nil {
+		return 0, err
 	}
+	newUID = c.lastCopyUID
 	if _, err := c.cmdLocked("UID STORE %d +FLAGS.SILENT (\\Deleted)", uid); err != nil {
+		return newUID, err
+	}
+	return newUID, c.expungeUIDLocked(uid)
+}
+
+// expungeUIDLocked removes exactly one message. A bare EXPUNGE would purge
+// every \Deleted message in the mailbox, including ones another client
+// flagged, so UID EXPUNGE is used whenever UIDPLUS is advertised.
+func (c *imapClient) expungeUIDLocked(uid uint32) error {
+	if c.has("UIDPLUS") {
+		_, err := c.cmdLocked("UID EXPUNGE %d", uid)
 		return err
 	}
 	_, err := c.cmdLocked("EXPUNGE")
 	return err
+}
+
+// expungeUID is the locked wrapper around expungeUIDLocked.
+func (c *imapClient) expungeUID(uid uint32) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.expungeUIDLocked(uid)
+}
+
+// parseCopyUID pulls the destination UID out of an [COPYUID valid src dst]
+// response code (RFC 4315). Only single-UID copies are issued here.
+func parseCopyUID(line string) (uint32, bool) {
+	up := strings.ToUpper(line)
+	i := strings.Index(up, "[COPYUID ")
+	if i < 0 {
+		return 0, false
+	}
+	rest := line[i+len("[COPYUID "):]
+	if j := strings.IndexByte(rest, ']'); j >= 0 {
+		rest = rest[:j]
+	}
+	fields := strings.Fields(rest)
+	if len(fields) < 3 {
+		return 0, false
+	}
+	last := fields[len(fields)-1]
+	if k := strings.LastIndexByte(last, ':'); k >= 0 {
+		last = last[k+1:]
+	}
+	if k := strings.LastIndexByte(last, ','); k >= 0 {
+		last = last[k+1:]
+	}
+	n := atoi(last)
+	if n <= 0 {
+		return 0, false
+	}
+	return uint32(n), true
 }
 
 func (c *imapClient) expunge() error {
@@ -569,11 +725,15 @@ func (c *imapClient) appendRaw(mbox string, raw []byte, flags string) error {
 	if err := c.connectLocked(); err != nil {
 		return err
 	}
-	head := fmt.Sprintf("APPEND %s {%d}", imapQuote(mbox), len(raw))
-	if flags != "" {
-		head = fmt.Sprintf("APPEND %s (%s) {%d}", imapQuote(mbox), flags, len(raw))
+	box, err := imapMailbox(mbox)
+	if err != nil {
+		return err
 	}
-	_, err := c.cmdLiteralLocked(head, string(raw))
+	head := fmt.Sprintf("APPEND %s {%d}", box, len(raw))
+	if flags != "" {
+		head = fmt.Sprintf("APPEND %s (%s) {%d}", box, flags, len(raw))
+	}
+	_, err = c.cmdLiteralLocked(head, string(raw))
 	return err
 }
 
@@ -635,6 +795,7 @@ func (c *imapClient) idleOnce(wait time.Duration) (woke bool, err error) {
 		ln, err := c.readRawLocked()
 		if err != nil {
 			if ne, ok := err.(net.Error); ok && ne.Timeout() {
+				_ = c.conn.SetReadDeadline(time.Now().Add(30 * time.Second))
 				_, _ = io.WriteString(c.conn, "DONE\r\n")
 				_, _ = c.readUntilTaggedLocked(tag)
 				return false, nil
@@ -646,6 +807,7 @@ func (c *imapClient) idleOnce(wait time.Duration) (woke bool, err error) {
 			continue
 		}
 		if strings.Contains(u, " EXISTS") || strings.Contains(u, " EXPUNGE") || strings.Contains(u, " FETCH") || strings.Contains(u, " RECENT") {
+			_ = c.conn.SetReadDeadline(time.Now().Add(30 * time.Second))
 			_, _ = io.WriteString(c.conn, "DONE\r\n")
 			_, _ = c.readUntilTaggedLocked(tag)
 			return true, nil
@@ -656,25 +818,89 @@ func (c *imapClient) idleOnce(wait time.Duration) (woke bool, err error) {
 	}
 }
 
+func (c *imapClient) nextTagLocked() string {
+	c.tag++
+	return fmt.Sprintf("A%03d", c.tag)
+}
+
+// deadlineLocked arms the per-command deadline. Every exchange is bounded so
+// a silent server cannot wedge the daemon (and LocalStore.mu behind it).
+func (c *imapClient) deadlineLocked() {
+	if c.conn == nil {
+		return
+	}
+	d := c.cmdTimeout
+	if d <= 0 {
+		d = defaultIMAPCmdTimeout
+	}
+	_ = c.conn.SetDeadline(time.Now().Add(d))
+}
+
+func (c *imapClient) clearDeadlineLocked() {
+	if c.conn != nil {
+		_ = c.conn.SetDeadline(time.Time{})
+	}
+}
+
 func (c *imapClient) cmdLocked(format string, args ...any) ([]string, error) {
 	if c.conn == nil {
 		return nil, fmt.Errorf("imap: not connected")
 	}
-	c.tag++
-	tag := fmt.Sprintf("A%03d", c.tag)
+	tag := c.nextTagLocked()
 	line := tag + " " + fmt.Sprintf(format, args...) + "\r\n"
+	c.deadlineLocked()
+	defer c.clearDeadlineLocked()
 	if _, err := io.WriteString(c.conn, line); err != nil {
 		return nil, err
 	}
 	return c.readUntilTaggedLocked(tag)
 }
 
+// cmdAuthLocked runs a SASL command. When the server answers with a "+"
+// continuation (XOAUTH2 error details, or a challenge we have nothing to add
+// to) an empty line is sent so the server can finish with its tagged NO —
+// otherwise both sides wait forever.
+func (c *imapClient) cmdAuthLocked(cmd string) ([]string, error) {
+	if c.conn == nil {
+		return nil, fmt.Errorf("imap: not connected")
+	}
+	tag := c.nextTagLocked()
+	c.deadlineLocked()
+	defer c.clearDeadlineLocked()
+	if _, err := io.WriteString(c.conn, tag+" "+cmd+"\r\n"); err != nil {
+		return nil, err
+	}
+	var lines []string
+	for {
+		ln, err := c.readRawLocked()
+		if err != nil {
+			return lines, err
+		}
+		trimmed := strings.TrimSpace(ln)
+		if strings.HasPrefix(trimmed, "+") {
+			if _, err := io.WriteString(c.conn, "\r\n"); err != nil {
+				return lines, err
+			}
+			continue
+		}
+		if strings.HasPrefix(ln, tag+" ") {
+			rest := strings.TrimSpace(ln[len(tag)+1:])
+			if strings.HasPrefix(strings.ToUpper(rest), "OK") {
+				return lines, nil
+			}
+			return lines, fmt.Errorf("imap: %s", rest)
+		}
+		lines = append(lines, ln)
+	}
+}
+
 func (c *imapClient) cmdLiteralLocked(head, literal string) ([]string, error) {
 	if c.conn == nil {
 		return nil, fmt.Errorf("imap: not connected")
 	}
-	c.tag++
-	tag := fmt.Sprintf("A%03d", c.tag)
+	tag := c.nextTagLocked()
+	c.deadlineLocked()
+	defer c.clearDeadlineLocked()
 	if _, err := io.WriteString(c.conn, tag+" "+head+"\r\n"); err != nil {
 		return nil, err
 	}
@@ -703,7 +929,10 @@ func (c *imapClient) readUntilTaggedLocked(tag string) ([]string, error) {
 		}
 		if strings.HasPrefix(ln, tag+" ") {
 			rest := strings.TrimSpace(ln[len(tag)+1:])
-			if strings.HasPrefix(rest, "OK") {
+			if uid, ok := parseCopyUID(rest); ok {
+				c.lastCopyUID = uid
+			}
+			if strings.HasPrefix(strings.ToUpper(rest), "OK") {
 				return lines, nil
 			}
 			return lines, fmt.Errorf("imap: %s", rest)
@@ -807,42 +1036,104 @@ func extractQuotedAfter(s, key string) string {
 	return out
 }
 
+// parseUIDFetchMeta decodes untagged FETCH responses. Attributes are read
+// from the parsed parenthesised list, not by scanning for "UID " in the raw
+// line: servers may order attributes freely, and a subject such as
+// "SQUID Game" used to be mistaken for the UID (which dropped the message).
 func parseUIDFetchMeta(lines []string) []imapMeta {
 	var out []imapMeta
 	for _, ln := range lines {
-		u := strings.ToUpper(ln)
-		if !strings.Contains(u, " FETCH ") {
+		i := fetchAttrStart(ln)
+		if i < 0 {
 			continue
 		}
-		m := imapMeta{}
-		if i := strings.Index(u, "UID "); i >= 0 {
-			m.UID = uint32(atoi(ln[i+4:]))
+		list, _, err := parseSexp(ln, i)
+		if err != nil && len(list.List) == 0 {
+			continue
 		}
-		if i := strings.Index(u, "RFC822.SIZE "); i >= 0 {
-			m.Size = atoi(ln[i+12:])
-		}
-		if i := strings.Index(u, "FLAGS "); i >= 0 {
-			if attrs, _, ok := cutParenList(ln[i+6:]); ok {
-				m.Flags = attrs
-			}
-		}
-		if i := strings.Index(u, "ENVELOPE "); i >= 0 {
-			env, _, err := parseSexp(ln, i+len("ENVELOPE "))
-			if err == nil {
-				applyEnvelope(&m, env)
-			}
-		}
-		if i := strings.Index(u, "BODYSTRUCTURE "); i >= 0 {
-			bs, _, err := parseSexp(ln, i+len("BODYSTRUCTURE "))
-			if err == nil {
-				m.Parts = walkBodyStructure(bs, "")
-			}
-		}
-		if m.UID != 0 || m.Subject != "" || len(m.Flags) > 0 {
+		if m, ok := metaFromAttrs(list); ok {
 			out = append(out, m)
 		}
 	}
 	return out
+}
+
+// fetchAttrStart finds the '(' that opens the attribute list of an untagged
+// "* <seq> FETCH (...)" response.
+func fetchAttrStart(ln string) int {
+	if !strings.HasPrefix(strings.TrimSpace(ln), "*") {
+		return -1
+	}
+	up := strings.ToUpper(ln)
+	i := strings.Index(up, " FETCH ")
+	if i < 0 {
+		return -1
+	}
+	j := strings.IndexByte(ln[i:], '(')
+	if j < 0 {
+		return -1
+	}
+	return i + j
+}
+
+func metaFromAttrs(list sexp) (imapMeta, bool) {
+	m := imapMeta{}
+	seen := false
+	for i := 0; i < len(list.List); i++ {
+		key := strings.ToUpper(strings.TrimSpace(list.List[i].Str))
+		if key == "" {
+			continue
+		}
+		var val sexp
+		haveVal := false
+		if i+1 < len(list.List) {
+			val = list.List[i+1]
+			haveVal = true
+		}
+		switch key {
+		case "UID":
+			if haveVal {
+				m.UID = uint32(val.Num)
+				seen = true
+			}
+		case "RFC822.SIZE":
+			if haveVal {
+				m.Size = int(val.Num)
+				seen = true
+			}
+		case "FLAGS":
+			if haveVal {
+				for _, f := range val.List {
+					if f.Str != "" {
+						m.Flags = append(m.Flags, f.Str)
+					}
+				}
+				seen = true
+			}
+		case "ENVELOPE":
+			if haveVal {
+				applyEnvelope(&m, val)
+				seen = true
+			}
+		case "BODYSTRUCTURE", "BODY":
+			if haveVal && len(val.List) > 0 {
+				m.Parts = walkBodyStructure(val, "")
+				seen = true
+			}
+		case "MODSEQ":
+			if haveVal {
+				if len(val.List) > 0 {
+					m.ModSeq = uint64(val.List[0].Num)
+				} else {
+					m.ModSeq = uint64(val.Num)
+				}
+			}
+		}
+		// Every attribute is key + one value: skip the value so the walk
+		// stays aligned even for attributes we do not consume.
+		i++
+	}
+	return m, seen
 }
 
 type sexp struct {
@@ -877,6 +1168,11 @@ func parseSexp(s string, i int) (sexp, int, error) {
 			el, ni, err := parseSexp(s, i)
 			if err != nil {
 				return sexp{List: list}, ni, err
+			}
+			if ni <= i {
+				// Unparseable byte: consume it so a malformed response can
+				// never spin this reader forever.
+				return sexp{List: list}, i + 1, nil
 			}
 			list = append(list, el)
 			i = ni
@@ -931,12 +1227,14 @@ func parseSexp(s string, i int) (sexp, int, error) {
 	}
 }
 
+// isAtomChar covers IMAP atoms plus the leading backslash of a system flag
+// (\Seen, \Flagged): FLAGS lists are read with the same parser.
 func isAtomChar(c byte) bool {
 	if c <= 32 || c >= 127 {
 		return false
 	}
 	switch c {
-	case '(', ')', '{', '}', '"', '\\', '%', '*':
+	case '(', ')', '{', '}', '"', '%', '*':
 		return false
 	}
 	return true
@@ -1098,4 +1396,3 @@ func imapKeywords(flags []string) []string {
 	}
 	return out
 }
-

@@ -27,7 +27,8 @@ import "encoding/json"
 //	messages.update     {id, message}
 //	messages.fetch      {accountId}     // Get Messages
 //	unread.get          {folderId?}     // omit folderId → total
-//	compose.send        {accountId, identityId?, message, attachPaths?}
+//	unread.all                          // every folder + virtual, one call
+//	compose.send        {accountId, identityId?, message, attachments?}
 //	compose.saveDraft   {accountId, message, id?}
 //	identities.list     {accountId?}
 //	identities.put      Identity
@@ -79,6 +80,7 @@ const (
 	MethodMessagesUpdate = "messages.update"
 	MethodMessagesFetch  = "messages.fetch"
 	MethodUnreadGet      = "unread.get"
+	MethodUnreadAll      = "unread.all"
 	MethodComposeSend    = "compose.send"
 	MethodComposeDraft   = "compose.saveDraft"
 	MethodIdentitiesList = "identities.list"
@@ -154,13 +156,14 @@ func (e *RPCError) Error() string {
 
 // Event is a server notification (no id).
 type Event struct {
-	Method string
-	Reason string
-	Folder FolderID
-	Count  int
-	Title  string
-	Body   string
-	VIP    bool
+	Method    string
+	Reason    string
+	Folder    FolderID
+	AccountID string
+	Count     int
+	Title     string
+	Body      string
+	VIP       bool
 }
 
 // Wire params.
@@ -241,11 +244,13 @@ type unreadParams struct {
 }
 
 type composeParams struct {
-	AccountID   string    `json:"accountId"`
-	IdentityID  string    `json:"identityId,omitempty"`
-	Message     Message   `json:"message"`
-	ID          MessageID `json:"id,omitempty"`
-	AttachPaths []string  `json:"attachPaths,omitempty"`
+	AccountID  string    `json:"accountId"`
+	IdentityID string    `json:"identityId,omitempty"`
+	Message    Message   `json:"message"`
+	ID         MessageID `json:"id,omitempty"`
+	// Attachments are the file bytes themselves. The daemon never opens a
+	// path supplied by a client (see Server.send).
+	Attachments []AttachedFile `json:"attachments,omitempty"`
 }
 
 type identityListParams struct {
@@ -296,6 +301,13 @@ type applyResult struct {
 
 type unreadResult struct {
 	Count int `json:"count"`
+}
+
+// unreadAllResult is one round trip for every folder's unread count.
+// Rebuilding the sidebar used to issue one unread.get per folder and per tag.
+type unreadAllResult struct {
+	Counts map[FolderID]int `json:"counts"`
+	Total  int              `json:"total"`
 }
 
 type fetchResult struct {
