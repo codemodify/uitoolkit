@@ -30,7 +30,7 @@ go get github.com/codemodify/paintengine2d@v0.9.0
 | Language | Go 1.22+ |
 | Paint | paintengine2d **v0.9.0** (`Scene` / `Recorder` / GPU rect batches; flatten cache) |
 | Fonts | Titillium Web (UI) + JetBrains Mono (code), OpenType → atlas |
-| Windowing | Linux X11 + Wayland (`wl_egl_window` / eglSwapBuffers, else `wl_shm` / `XPutImage`); offscreen always |
+| Windowing | Linux X11 + Wayland (`wl_egl_window` / eglSwapBuffers, else `wl_shm` / `XPutImage`); offscreen always. Pointers are host cursors (`wp_cursor_shape_v1` / XCURSOR / Xfont / `LoadCursorW` / `NSCursor`) |
 | Tray | `StatusItem` — Linux SNI + fdo notifications; Win32 notify area; macOS `NSStatusItem` (CGO) |
 | CGO | optional — tests and screenshots are `CGO_ENABLED=0` |
 | License | MIT |
@@ -509,6 +509,14 @@ are independent look.json fields again; compound pack names migrate
 (**v0.12.2**).
 
 ## Version
+
+**0.18.2** — **Host-provided pointer cursors.** Wayland uses
+`wp_cursor_shape_v1` when the compositor advertises it, else
+`libwayland-cursor` / `XCURSOR_THEME`. X11 prefers Xcursor theme names
+and still falls back to `XCreateFontCursor`. Win32 `LoadCursorW` and
+AppKit `NSCursor` apply the same `platform.Cursor` enum. Homemade
+24×24 ARGB Wayland glyphs are gone. Offscreen still records the
+logical shape. See `docs/platform.md`.
 
 **0.18.1** — **StatusItem HostMenu harden.** Empty dbusmenu layout,
 `IconName` fallback (no toolkit-wide `mail-unread`), `ItemIsMenu` is
