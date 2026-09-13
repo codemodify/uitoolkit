@@ -510,6 +510,13 @@ are independent look.json fields again; compound pack names migrate
 
 ## Version
 
+**0.18.5** — Mail menubar row is **M**, then a left **Get Messages / Write**
+toolbar, then a right-aligned **Delete + Filter** toolbar. Tag, Archive,
+Junk, Cards, and Classic leave the toolbars (View / context menu / keys
+keep those actions). **Threaded** and **Hide muted threads** move into
+**M → View**. Quick Filter stays hidden by default (`ShowFilter=false`);
+an explicit saved `mailui.json` `showFilter: true` is still honored.
+
 **0.18.4** — Cascading **submenu** in the toolkit: `MenuItem.Submenu` /
 `widgets.Submenu` opens a child `PopupMenu` to the right (Office XP
 arrow, on-screen clamp, dismisses with the parent). Mail **M** keeps

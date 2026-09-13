@@ -490,6 +490,7 @@ func TestHiddenFromFolderTree(t *testing.T) {
 }
 
 func TestMailChromeHidesStatusBarAndVIPFolder(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true})
 	w, err := a.NewWindow(platform.WindowOptions{
 		Title: "Mail", Width: 1280, Height: 800, Headless: true,
@@ -557,6 +558,7 @@ func TestMailChromeHidesStatusBarAndVIPFolder(t *testing.T) {
 }
 
 func TestMailToolBarChrome(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true})
 	w, err := a.NewWindow(platform.WindowOptions{
 		Title: "Mail", Width: 1280, Height: 800, Headless: true,
@@ -575,6 +577,7 @@ func TestMailToolBarChrome(t *testing.T) {
 }
 
 func TestMailFilterIconTogglesField(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true})
 	w, err := a.NewWindow(platform.WindowOptions{
 		Title: "Mail", Width: 1280, Height: 800, Headless: true,
@@ -621,6 +624,25 @@ func TestMailFilterIconTogglesField(t *testing.T) {
 	}
 	if qf.Text != "lunch" {
 		t.Fatalf("hide should keep text, got %q", qf.Text)
+	}
+	w.Close()
+}
+
+func TestMailShowFilterPrefHonored(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	saveChromePrefs(ChromePrefs{ShowFilter: true})
+	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{
+		Title: "Mail", Width: 1280, Height: 800, Headless: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.SetContent(MailApp(a, w))
+	a.PumpOnce()
+	qf := findQuickFilter(w.Content())
+	if qf == nil || !qf.Visible() {
+		t.Fatal("saved showFilter:true should open the Quick Filter field")
 	}
 	w.Close()
 }
@@ -717,9 +739,10 @@ func assertMailToolChrome(t *testing.T, root widget.Component, qf widget.Compone
 	t.Helper()
 	var split *widgets.Splitter
 	var table *widgets.TableView
-	var mainBar, extraList *widgets.ToolBar
+	var leftBar, rightBar *widgets.ToolBar
 	var menuBar *widgets.MenuBar
 	var tree *widgets.TreeView
+	removed := []string{"Tag", "Archive", "Junk", "Cards", "Classic"}
 	widget.Walk(root, func(c widget.Component) {
 		switch v := c.(type) {
 		case *widgets.Splitter:
@@ -740,10 +763,15 @@ func assertMailToolChrome(t *testing.T, root widget.Component, qf widget.Compone
 			}
 		case *widgets.ToolBar:
 			texts := toolTexts(v)
-			if texts["Classic"] || texts["Get Messages"] || texts["Write"] {
-				mainBar = v
-			} else if texts["Tag"] && texts["Archive"] && texts["Junk"] && texts["Delete"] {
-				extraList = v
+			for _, name := range removed {
+				if texts[name] {
+					t.Fatalf("%q still on a toolbar: %v", name, texts)
+				}
+			}
+			if texts["Get Messages"] || texts["Write"] {
+				leftBar = v
+			} else if texts["Delete"] || filterIconItem(v) != nil {
+				rightBar = v
 			}
 			for _, name := range []string{"Unread", "Starred", "Attachment", "From", "To", "Subject", "Body"} {
 				if texts[name] {
@@ -754,49 +782,56 @@ func assertMailToolChrome(t *testing.T, root widget.Component, qf widget.Compone
 			t.Fatal("Tags ComboBox should be gone from Mail chrome")
 		}
 	})
-	if mainBar == nil {
-		t.Fatal("main toolbar")
+	if leftBar == nil {
+		t.Fatal("left Get/Write toolbar")
 	}
-	if extraList != nil {
-		t.Fatal("separate list toolbar still above the message list")
+	if rightBar == nil {
+		t.Fatal("right Delete/Filter toolbar")
 	}
-	if filterIconItem(mainBar) == nil {
-		t.Fatal("icon-only Filter button missing on the combined toolbar")
+	if filterIconItem(rightBar) == nil {
+		t.Fatal("icon-only Filter button missing on the right toolbar")
 	}
 	if split == nil || table == nil {
 		t.Fatal("splitter/table")
 	}
-	main := toolTexts(mainBar)
-	for _, name := range []string{"Reply", "Forward"} {
-		if main[name] {
-			t.Fatalf("main toolbar still has %s", name)
+	left := toolTexts(leftBar)
+	right := toolTexts(rightBar)
+	for _, name := range []string{"Get Messages", "Write"} {
+		if !left[name] {
+			t.Fatalf("left toolbar missing %s: %v", name, left)
+		}
+		if right[name] {
+			t.Fatalf("right toolbar still has %s: %v", name, right)
 		}
 	}
-	for _, name := range []string{"Get Messages", "Write", "Tag", "Archive", "Junk", "Delete", "Cards", "Classic"} {
-		if !main[name] {
-			t.Fatalf("combined toolbar missing %s: %v", name, main)
+	if !right["Delete"] {
+		t.Fatalf("right toolbar missing Delete: %v", right)
+	}
+	if left["Delete"] {
+		t.Fatal("Delete should stay on the right toolbar")
+	}
+	for _, name := range []string{"Reply", "Forward", "Quick Filter"} {
+		if left[name] || right[name] {
+			t.Fatalf("toolbar still has %s: left=%v right=%v", name, left, right)
 		}
 	}
-	assertMenuToolbarShareRow(t, root, menuBar, mainBar)
-	if widget.Contains(split, mainBar) {
-		t.Fatal("combined toolbar should sit on the M row, not in the thread pane")
+	assertMenubarChromeRow(t, root, menuBar, leftBar, rightBar)
+	if widget.Contains(split, leftBar) || widget.Contains(split, rightBar) {
+		t.Fatal("toolbars should sit on the M row, not in the thread pane")
 	}
 	if widget.Contains(split, qf) {
 		t.Fatal("quick filter should sit on the M chrome row, not in the thread pane")
 	}
 	if !filterAfterListActions(root, qf) {
-		t.Fatal("Quick Filter field should share the M chrome row with the combined toolbar")
+		t.Fatal("Quick Filter field should share the M chrome row with the right toolbar")
 	}
 	if separateFilterRow(root) {
 		t.Fatal("separate Quick Filter row still under the main toolbar")
 	}
-	if main["Quick Filter"] {
-		t.Fatal("left Quick Filter visibility toggle should be gone (icon / Ctrl+F)")
-	}
 	if widget.Contains(split, table) {
 		to := widget.DeviceOrigin(table)
-		mo := widget.DeviceOrigin(mainBar)
-		if to.Y+0.5 < mo.Y+mainBar.Bounds().Dy() {
+		mo := widget.DeviceOrigin(rightBar)
+		if to.Y+0.5 < mo.Y+rightBar.Bounds().Dy() {
 			t.Fatalf("thread list should sit below the M toolbar row: table=%v bar=%v", to, mo)
 		}
 	}
@@ -863,7 +898,7 @@ func filterAfterListActions(root, qf widget.Component) bool {
 		walkAll(f, func(ch widget.Component) {
 			if bar, ok := ch.(*widgets.ToolBar); ok {
 				texts := toolTexts(bar)
-				if texts["Delete"] && texts["Tag"] {
+				if texts["Delete"] && filterIconItem(bar) != nil {
 					hasList = true
 				}
 			}
@@ -930,28 +965,39 @@ func assertFiltersTree(t *testing.T, tree *widgets.TreeView) {
 	}
 }
 
-func assertMenuToolbarShareRow(t *testing.T, root widget.Component, mb *widgets.MenuBar, main *widgets.ToolBar) {
+func assertMenubarChromeRow(t *testing.T, root widget.Component, mb *widgets.MenuBar, left, right *widgets.ToolBar) {
 	t.Helper()
-	if mb == nil || main == nil {
-		t.Fatal("menu / main toolbar")
+	if mb == nil || left == nil || right == nil {
+		t.Fatal("menu / left / right toolbar")
 	}
 	menu := widget.DeviceBounds(mb)
-	tool := widget.DeviceBounds(main)
+	compose := widget.DeviceBounds(left)
+	tool := widget.DeviceBounds(right)
+	if menu.Max.Y < compose.Min.Y+1 || compose.Max.Y < menu.Min.Y+1 {
+		t.Fatalf("M and Get/Write toolbar must share one row: menu=%v left=%v", menu, compose)
+	}
 	if menu.Max.Y < tool.Min.Y+1 || tool.Max.Y < menu.Min.Y+1 {
-		t.Fatalf("M and main toolbar must share one row: menu=%v tool=%v", menu, tool)
+		t.Fatalf("M and right toolbar must share one row: menu=%v right=%v", menu, tool)
 	}
 	if menu.Min.X > 16 {
 		t.Fatalf("M should sit on the left: %+v", menu)
 	}
-	if tool.Min.X < menu.Max.X+8 {
-		t.Fatalf("toolbar should sit to the right of M: menu=%v tool=%v", menu, tool)
+	if compose.Min.X < menu.Max.X {
+		t.Fatalf("Get/Write should sit after M: menu=%v left=%v", menu, compose)
+	}
+	if compose.Min.X > menu.Max.X+24 {
+		t.Fatalf("Get/Write should sit immediately after M: menu=%v left=%v", menu, compose)
+	}
+	if tool.Min.X < compose.Max.X+8 {
+		t.Fatalf("right toolbar should sit after Get/Write: left=%v right=%v", compose, tool)
 	}
 	rootBox := widget.DeviceBounds(root)
 	if tool.Max.X < rootBox.Max.X-24 {
-		t.Fatalf("main toolbar should be right-aligned: tool=%v root=%v", tool, rootBox)
+		t.Fatalf("right toolbar should be right-aligned: tool=%v root=%v", tool, rootBox)
 	}
-	if parentRow(mb) == nil || parentRow(mb) != parentRow(main) {
-		t.Fatal("M and main toolbar should share one horizontal row")
+	row := parentRow(mb)
+	if row == nil || row != parentRow(left) || row != parentRow(right) {
+		t.Fatal("M, Get/Write, and the right toolbar should share one horizontal row")
 	}
 }
 
@@ -1758,6 +1804,7 @@ func assertNoUnreadFolderFooter(t *testing.T, root widget.Component) {
 }
 
 func TestMailMenuBarIsOnlyM(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true})
 	w, err := a.NewWindow(platform.WindowOptions{
 		Title: "Mail", Width: 1280, Height: 800, Headless: true,
@@ -1797,6 +1844,7 @@ func TestMailMenuBarIsOnlyM(t *testing.T) {
 		"Sort by When", "Sort by Topic", "Sort by Who",
 		"Dark", "Light", "Message Source",
 	}
+	topGone := []string{"Threaded", "Hide muted threads"}
 	for _, it := range menus[0].Items {
 		if it == nil {
 			continue
@@ -1806,6 +1854,11 @@ func TestMailMenuBarIsOnlyM(t *testing.T) {
 		for _, g := range gone {
 			if label == g {
 				t.Fatalf("removed item still on M: %q %v", label, labels)
+			}
+		}
+		for _, g := range topGone {
+			if label == g {
+				t.Fatalf("%q should live under View, not on M: %v", label, labels)
 			}
 		}
 		switch label {
@@ -1819,6 +1872,7 @@ func TestMailMenuBarIsOnlyM(t *testing.T) {
 				"Vertical (3-pane)", "Classic (preview below)",
 				"Table view", "Card view",
 				"Compact", "Default density", "Relaxed",
+				"Threaded", "Hide muted threads",
 			}
 			got := menuItemLabels(it.Submenu)
 			for _, name := range want {
@@ -1831,10 +1885,18 @@ func TestMailMenuBarIsOnlyM(t *testing.T) {
 					t.Fatalf("removed item under View: %q %v", name, got)
 				}
 			}
-		case "Threaded":
-			threaded = it.Checkable
-		case "Hide muted threads":
-			muted = it.Checkable
+			for _, sub := range it.Submenu {
+				if sub == nil {
+					continue
+				}
+				subLabel, _, _ := widgets.ParseMnemonic(sub.Text)
+				switch subLabel {
+				case "Threaded":
+					threaded = sub.Checkable
+				case "Hide muted threads":
+					muted = sub.Checkable
+				}
+			}
 		}
 	}
 	if !view || !threaded || !muted || !prefs || !quit {
@@ -1846,8 +1908,8 @@ func TestMailMenuBarIsOnlyM(t *testing.T) {
 			pos[l] = i
 		}
 	}
-	if pos["View"] > pos["Threaded"] || pos["Threaded"] > pos["Preferences"] || pos["Preferences"] > pos["Quit"] {
-		t.Fatalf("order %v want View, Threaded…, Preferences, Quit", labels)
+	if pos["View"] > pos["Preferences"] || pos["Preferences"] > pos["Quit"] {
+		t.Fatalf("order %v want View, Preferences, Quit", labels)
 	}
 	w.Close()
 }

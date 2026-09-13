@@ -135,6 +135,7 @@ func newSession(a *app.Application, win *app.Window, cli *Client, opts AppOption
 	p := loadChromePrefs()
 	s.chromePrefs = p
 	s.cardView = opts.CardView || p.CardView
+	s.opts.ShowFilter = opts.ShowFilter || p.ShowFilter
 	s.threaded = p.Threaded
 	s.hideMuted = p.HideMute
 	s.density = opts.Density
@@ -157,6 +158,7 @@ func newSession(a *app.Application, win *app.Window, cli *Client, opts AppOption
 
 func (s *session) persistChrome() {
 	s.chromePrefs.CardView = s.cardView
+	s.chromePrefs.ShowFilter = s.opts.ShowFilter
 	s.chromePrefs.Threaded = s.threaded
 	s.chromePrefs.HideMute = s.hideMuted
 	s.chromePrefs.Density = s.density.String()
@@ -324,10 +326,10 @@ func (s *session) build() widget.Component {
 		split.Ratio = 0.17
 	}
 
+	s.mainBar = s.composeBar()
 	s.listBar = s.toolBar()
-	s.mainBar = s.listBar
 	slot := widgets.NewSpacer()
-	chromeRow := widgets.NewRow(s.menuBar(), slot, s.qf, s.listBar).WithGap(8).WithAlign(layout.AlignCenter)
+	chromeRow := widgets.NewRow(s.menuBar(), s.mainBar, slot, s.qf, s.listBar).WithGap(8).WithAlign(layout.AlignCenter)
 	chromeRow.AddFlex(slot, 1)
 	chrome := []widget.Component{chromeRow, split}
 	if s.status != nil {
@@ -359,17 +361,18 @@ func (s *session) menuBar() *widgets.MenuBar {
 				widgets.RadioItem("&Compact", "density", s.density == style.DensityCompact, func() { s.setDensity(style.DensityCompact) }),
 				widgets.RadioItem("&Default density", "density", s.density == style.DensityDefault, func() { s.setDensity(style.DensityDefault) }),
 				widgets.RadioItem("&Relaxed", "density", s.density == style.DensityRelaxed, func() { s.setDensity(style.DensityRelaxed) }),
+				widgets.Sep(),
+				widgets.CheckItem("&Threaded", s.threaded, func() {
+					s.threaded = !s.threaded
+					s.persistChrome()
+					s.refreshList()
+				}),
+				widgets.CheckItem("Hide muted threads", s.hideMuted, func() {
+					s.hideMuted = !s.hideMuted
+					s.persistChrome()
+					s.refreshList()
+				}),
 			),
-			widgets.CheckItem("&Threaded", s.threaded, func() {
-				s.threaded = !s.threaded
-				s.persistChrome()
-				s.refreshList()
-			}),
-			widgets.CheckItem("Hide muted threads", s.hideMuted, func() {
-				s.hideMuted = !s.hideMuted
-				s.persistChrome()
-				s.refreshList()
-			}),
 			widgets.Sep(),
 			widgets.ItemAccel("Preferences", "Ctrl+,", s.openPrefs),
 			widgets.Sep(),
@@ -378,57 +381,22 @@ func (s *session) menuBar() *widgets.MenuBar {
 	)
 }
 
-func (s *session) toolBar() *widgets.ToolBar {
+func (s *session) composeBar() *widgets.ToolBar {
 	get := widgets.ToolIconBtn(style.IconOpen, "Get Messages", s.getMessages)
 	get.Tip = "Get new messages for this account (demo Fetch)"
 	write := widgets.ToolIconBtn(style.IconNew, "Write", s.write)
 	write.Tip = "Write a new message"
-	tag := widgets.ToolText("Tag", func() {
-		from := widget.Component(s.listBar)
-		if from == nil {
-			from = s.win.Content()
-		}
-		o := widget.DeviceOrigin(from)
-		x := float32(24)
-		if s.listBar != nil {
-			for i, it := range s.listBar.Items() {
-				if it != nil && it.Text == "Tag" {
-					c := s.listBar.ItemCenter(i)
-					x = c.X
-					break
-				}
-			}
-		}
-		s.tagPopup(from, paintengine2d.Pt(o.X+x, o.Y+from.Bounds().Dy()))
-	})
-	tag.Tip = "Tag the selection"
-	arch := widgets.ToolText("Archive", s.archive)
-	arch.Tip = "Archive"
-	junk := widgets.ToolText("Junk", s.junk)
-	junk.Tip = "Mark as junk"
+	return widgets.NewToolBar(get, write)
+}
+
+func (s *session) toolBar() *widgets.ToolBar {
 	del := widgets.ToolIconBtn(style.IconCut, "Delete", s.deleteSel)
 	del.Tip = "Delete (move to Trash)"
-	cards := widgets.ToolToggle("Cards", s.cardView, func() { s.setCardView(!s.cardView) })
-	cards.Tip = "Toggle card vs table thread list"
-	lay := widgets.ToolToggle("Classic", s.opts.Layout == LayoutClassic, func() {
-		if s.opts.Layout == LayoutClassic {
-			s.opts.Layout = LayoutVertical
-		} else {
-			s.opts.Layout = LayoutClassic
-		}
-		s.rebuild()
-	})
-	lay.Tip = "Toggle classic vs vertical 3-pane"
 	s.qfBtn = widgets.ToolIconBtn(style.IconSearch, "", s.toggleFilter)
 	s.qfBtn.Tip = "Quick Filter"
 	s.qfBtn.Toggle = true
 	s.qfBtn.Down = s.opts.ShowFilter
-	return widgets.NewToolBar(
-		get, write, widgets.ToolDivider(),
-		tag, arch, junk, del, widgets.ToolDivider(),
-		cards, lay, widgets.ToolDivider(),
-		s.qfBtn,
-	)
+	return widgets.NewToolBar(del, widgets.ToolDivider(), s.qfBtn)
 }
 
 func (s *session) tagPopup(from widget.Component, p paintengine2d.Point) {
@@ -1407,6 +1375,8 @@ func (s *session) toggleFilter() {
 
 func (s *session) showFilter(on bool) {
 	s.opts.ShowFilter = on
+	s.chromePrefs.ShowFilter = on
+	saveChromePrefs(s.chromePrefs)
 	if s.qf != nil {
 		s.qf.SetVisible(on)
 		if on && s.win != nil {
