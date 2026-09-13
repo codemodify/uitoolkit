@@ -15,6 +15,8 @@ import (
 // icon set, and icon size are independent. Picker changes preview locally
 // via Application.SetLook. Apply writes look.json
 // {theme, corners, icons, iconSize}. Closing without Apply discards staged changes.
+// Appearance is two-pane: a scrollable Built-in theme list on the left,
+// Corners/Icons/preview on the right. Apply stays pinned under the splitter.
 func SettingsApp(a *app.Application, win *app.Window) widget.Component {
 	saved := style.LoadAppearance().Normalize()
 	return buildSettings(a, win, saved, saved, 0)
@@ -57,27 +59,15 @@ func buildSettings(a *app.Application, win *app.Window, saved, staged style.Appe
 		next.Theme = p.Palette
 		preview(next)
 	}
-	var builtinParts []widget.Component
-	for _, g := range style.ListBuiltinThemesByEra() {
-		g := g
-		builtinParts = append(builtinParts, pickerSection(g.Era, len(g.Packs), func(i int) string {
-			return g.Packs[i].Display()
-		}, indexTheme(g.Packs, staged.Name), func(i int) {
-			if i >= 0 && i < len(g.Packs) {
-				onTheme(g.Packs[i])
-			}
-		}))
-	}
-	if len(builtinParts) == 0 {
-		builtinParts = append(builtinParts, pickerSection("Built-in", len(themeBuiltin), func(i int) string {
-			return themeBuiltin[i].Display()
-		}, indexTheme(themeBuiltin, staged.Name), func(i int) {
-			if i >= 0 && i < len(themeBuiltin) {
-				onTheme(themeBuiltin[i])
-			}
-		}))
-	}
-	builtinTheme := widgets.NewColumn(builtinParts...).WithGap(8)
+	// One Built-in list (era is in each Display name). Stacked per-era
+	// ListViews each measure at full content height and overflow the pane.
+	builtinTheme := pickerSection("Built-in", len(themeBuiltin), func(i int) string {
+		return themeBuiltin[i].Display()
+	}, indexTheme(themeBuiltin, staged.Name), func(i int) {
+		if i >= 0 && i < len(themeBuiltin) {
+			onTheme(themeBuiltin[i])
+		}
+	})
 	userThemeSel := indexTheme(themeUser, staged.Name)
 	userTheme := pickerSection("User", len(themeUser), func(i int) string {
 		return themeUser[i].Display()
@@ -248,12 +238,6 @@ func buildSettings(a *app.Application, win *app.Window, saved, staged style.Appe
 	if len(iconUser) > 0 {
 		iconCol.AddFlex(userIcons, 1)
 	}
-	choices := widgets.NewRow(pickerCol, cornerCol, sizeCol, iconCol, detail).WithGap(16)
-	choices.AddFlex(pickerCol, 3)
-	choices.AddFlex(cornerCol, 1)
-	choices.AddFlex(sizeCol, 1)
-	choices.AddFlex(iconCol, 2)
-	choices.AddFlex(detail, 2)
 
 	primary := widgets.NewButton("Primary action", func() { status.Set(0, "Primary") })
 	primary.Primary = true
@@ -307,13 +291,20 @@ func buildSettings(a *app.Application, win *app.Window, saved, staged style.Appe
 		slider,
 	)
 
+	options := widgets.NewRow(cornerCol, sizeCol, iconCol).WithGap(16)
+	options.AddFlex(iconCol, 2)
+	inspect := widgets.NewColumn(options, previewPane, detail).WithGap(12)
+	inspectScroll := widgets.NewScrollView(inspect)
+	body := widgets.NewRow(pickerCol, inspectScroll).WithGap(16)
+	body.AddFlex(pickerCol, 5)
+	body.AddFlex(inspectScroll, 7)
+
 	appearance := widgets.NewColumn(
 		widgets.NewTitle("Appearance"),
 		widgets.NewLabel("Shared by Mail, gallery, and any app that calls PreferredLook()."),
-		choices,
-		previewPane,
+		body,
 	).WithGap(10).WithPad(4)
-	appearance.AddFlex(choices, 1)
+	appearance.AddFlex(body, 1)
 
 	aboutPath := widgets.NewMonoTextView(style.AppearancePath(), "")
 	aboutPath.MinRows = 2
@@ -356,11 +347,8 @@ func buildSettings(a *app.Application, win *app.Window, saved, staged style.Appe
 
 	var page widget.Component = appearance
 	if section == 1 {
-		page = about
+		page = widgets.NewScrollView(about)
 	}
-	// Pad (not ScrollView): a ScrollView as a Splitter pane is a SceneLayer
-	// that Splitter.Paint never recordNode-walks, so UITK_SCENE skips its
-	// children. Column/Pad paint through PaintTree instead.
 	right := widgets.NewPad(12, page)
 	split := widgets.NewSplitter(true, side, right)
 	split.Ratio = 0.24

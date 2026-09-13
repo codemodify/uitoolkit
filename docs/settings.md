@@ -29,13 +29,19 @@ There is no menu bar. **Apply** is the only persist action for
 
 | Control | LookAndFeel | Values |
 | --- | --- | --- |
-| Theme | token pack → `Classic` | Built-in era packs (grouped) + exported user packs |
+| Theme | token pack → `Classic` | Built-in era packs (one scrollable list) + exported user packs |
 | Corners | `Metrics.Radius` | Round / Square |
 | Icons | PNG set or drawn fallback | Built-in (classic/sharp + premiere names when copied) + User folders |
 | Icon size | ToolIcon destination side | Small (16) / Medium (24) / Large (32); HiDPI still uses `@2x` |
 | Export | `themes/<name>/theme.json` | current tokens; corners/icons/size stay prefs |
 
 Theme and Icons lists use the same **Built-in** / **User** grouping.
+The Appearance page is a two-pane layout: the Theme lists on the left
+scroll independently (toolkit overflow chrome when the era packs do not
+fit); Corners, Icons, Icon size, live preview, and Export sit on the
+right in their own `ScrollView`. **Apply** stays pinned under the
+splitter with the status bar so it is never clipped off-screen. About
+is the same pattern (scroll the notes, Apply stays put).
 
 The pickers update a **staged** appearance and preview it in the
 Settings window (`Application.SetLook`) without touching disk. **Apply**
@@ -87,8 +93,8 @@ and a night twin where that era had one) ship in the binary and are
 **not** auto-written to disk. `dark` / `light` are the Classic 95 twins
 so existing `look.json` files keep working.
 
-Settings lists them under era headings (Classic 95, Motif / CDE, …).
-User exports live under **User**.
+Settings lists them in one Built-in list (each row is the pack display
+name, e.g. Classic 95 Dark, Luna Night). User exports live under **User**.
 
 ```
 $XDG_CONFIG_HOME/uitoolkit/themes/<name>/theme.json

@@ -150,7 +150,10 @@ func recordNode(c Component, rec *paintengine2d.Recorder, ctx *paintengine2d.Con
 			}
 			ctx.Restore()
 		}
-	} else if !c.ManagesChildren() {
+	} else {
+		// Walk children even when ManagesChildren (Splitter). Immediate
+		// PaintTree already drew those panes; Recording skips that so a
+		// nested SceneLayer (ScrollView) can record its child here.
 		for _, ch := range c.Children() {
 			recordNode(ch, rec, ctx, dirty, cache, fullContent)
 		}
