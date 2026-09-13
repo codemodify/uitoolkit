@@ -214,16 +214,33 @@ func ApplyIconSize(m Metrics, sz IconSize) Metrics {
 	return m
 }
 
+// packMetrics rebuilds 1× chrome metrics from scratch: stock defaults, then
+// density, then the theme pack, then corners and icon size.
+//
+// Rebuilding — instead of overlaying the new pack onto the live metrics —
+// is what keeps a live theme switch from inheriting the previous pack's
+// control heights, scrollbar width, or radii when the new pack leaves them
+// unset.
+func packMetrics(d Density, tok ThemeTokens, corners CornerStyle, sz IconSize) Metrics {
+	m := ApplyDensity(DefaultMetrics(), d)
+	m = ApplyChromeMetrics(m, tok.Metrics)
+	m = ApplyThemeCorners(m, corners, tok.Metrics.Radius, tok.Metrics.RadiusSmall)
+	return ApplyIconSize(m, sz)
+}
+
+// lookMetrics is packMetrics at a display scale.
+func lookMetrics(d Density, scale float32, tok ThemeTokens, corners CornerStyle, sz IconSize) Metrics {
+	return ScaleMetrics(packMetrics(d, tok, corners, sz), scale)
+}
+
 // Look builds a Classic LookAndFeel from the appearance prefs (1× metrics).
 // Application.SetLook still applies display scale afterward.
 func (a Appearance) Look() *Classic {
 	a = a.Normalize()
 	tok := tokensForAppearance(a)
-	p := tok.Palette
-	m := ApplyChromeMetrics(DefaultMetrics(), tok.Metrics)
-	m = ApplyThemeCorners(m, a.Corners, tok.Metrics.Radius, tok.Metrics.RadiusSmall)
-	m = ApplyIconSize(m, a.IconSize)
-	return newClassic(string(tok.Family), p, m, a.Corners, a.Icons, a.IconSize, tok).setPack(a.Name)
+	m := packMetrics(DensityDefault, tok, a.Corners, a.IconSize)
+	return newClassic(string(tok.Family), tok.Palette, m, a.Corners, a.Icons, a.IconSize, tok).
+		setPack(a.Name).setDensity(DensityDefault).setScale(1)
 }
 
 func tokensForAppearance(a Appearance) ThemeTokens {
@@ -292,15 +309,15 @@ func WithTheme(look LookAndFeel, theme ThemeName) LookAndFeel {
 		return look
 	}
 	theme = ParseTheme(string(theme))
-	tok := c.tokens
+	var tok ThemeTokens
 	if pack, ok := LoadTheme(StarterName(theme)); ok {
 		tok = pack.Tokens.Resolve()
 	} else {
 		tok = ThemeTokens{Family: theme, Palette: paletteForFamily(theme)}.Resolve()
 	}
-	m := applyPackMetrics(c.Metrics(), tok, c.Corners())
+	m := lookMetrics(c.Density(), c.Scale(), tok, c.Corners(), c.IconSize())
 	return newClassic(string(theme), tok.Palette, m, c.Corners(), c.Icons(), c.IconSize(), tok).
-		setPack(StarterName(theme))
+		setPack(StarterName(theme)).setDensity(c.Density()).setScale(c.Scale())
 }
 
 // WithCorners rebuilds a Classic look with a new radius policy.
@@ -311,9 +328,9 @@ func WithCorners(look LookAndFeel, corners CornerStyle) LookAndFeel {
 	}
 	corners = ParseCorners(string(corners))
 	tok := c.Tokens()
-	m := ApplyThemeCorners(c.Metrics(), corners, tok.Metrics.Radius, tok.Metrics.RadiusSmall)
+	m := lookMetrics(c.Density(), c.Scale(), tok, corners, c.IconSize())
 	return newClassic(c.Name(), c.Palette(), m, corners, c.Icons(), c.IconSize(), tok).
-		setPack(c.Pack())
+		setPack(c.Pack()).setDensity(c.Density()).setScale(c.Scale())
 }
 
 // WithIcons rebuilds a Classic look with a new ToolIcon set (file or
@@ -325,7 +342,7 @@ func WithIcons(look LookAndFeel, icons IconSetName) LookAndFeel {
 	}
 	icons = ParseIconSet(string(icons))
 	return newClassic(c.Name(), c.Palette(), c.Metrics(), c.Corners(), icons, c.IconSize(), c.Tokens()).
-		setPack(c.Pack())
+		setPack(c.Pack()).setDensity(c.Density()).setScale(c.Scale())
 }
 
 // WithIconSize rebuilds a Classic look with a new ToolIcon draw size.
@@ -335,13 +352,18 @@ func WithIconSize(look LookAndFeel, sz IconSize) LookAndFeel {
 		return look
 	}
 	sz = ParseIconSize(string(sz))
-	m := ApplyIconSize(c.Metrics(), sz)
+	m := lookMetrics(c.Density(), c.Scale(), c.Tokens(), c.Corners(), sz)
 	return newClassic(c.Name(), c.Palette(), m, c.Corners(), c.Icons(), sz, c.Tokens()).
-		setPack(c.Pack())
+		setPack(c.Pack()).setDensity(c.Density()).setScale(c.Scale())
 }
 
-// WithAppearance applies all three settings to an existing Classic look,
-// preserving current metrics (density / scale) except corner radii.
+// WithAppearance applies the appearance prefs to an existing Classic look,
+// keeping its density and display scale.
+//
+// Metrics are rebuilt (defaults → density → pack → corners → icon size →
+// scale) rather than overlaid on the live look: a pack that leaves ControlH
+// or ComboH unset must fall back to the density default, not to whatever the
+// previously selected pack asked for.
 func WithAppearance(look LookAndFeel, a Appearance) LookAndFeel {
 	c, ok := classicOf(look)
 	if !ok {
@@ -356,31 +378,9 @@ func WithAppearance(look LookAndFeel, a Appearance) LookAndFeel {
 	if _, ok := LoadTheme(pack); !ok {
 		pack = StarterName(a.Theme)
 	}
-	m := applyPackMetrics(c.Metrics(), tok, a.Corners)
-	m = ApplyIconSize(m, a.IconSize)
-	return newClassic(string(tok.Family), tok.Palette, m, a.Corners, a.Icons, a.IconSize, tok).setPack(pack)
-}
-
-func applyPackMetrics(m Metrics, tok ThemeTokens, corners CornerStyle) Metrics {
-	s := float32(1)
-	if def := DefaultMetrics(); def.FontSize > 0 && m.FontSize > 0 {
-		s = m.FontSize / def.FontSize
-	}
-	cm := tok.Metrics
-	if cm.Scroll > 0 {
-		m.Scroll = cm.Scroll * s
-	}
-	if cm.ComboH > 0 {
-		m.ComboH = cm.ComboH * s
-	}
-	if cm.ControlH > 0 && s == 1 {
-		// Keep density/scale ControlH when the live look is already scaled.
-		if m.FontSize == DefaultMetrics().FontSize {
-			m.ControlH = cm.ControlH
-		}
-	}
-	tr, ts := cm.Radius*s, cm.RadiusSmall*s
-	return ApplyThemeCorners(m, corners, tr, ts)
+	m := lookMetrics(c.Density(), c.Scale(), tok, a.Corners, a.IconSize)
+	return newClassic(string(tok.Family), tok.Palette, m, a.Corners, a.Icons, a.IconSize, tok).
+		setPack(pack).setDensity(c.Density()).setScale(c.Scale())
 }
 
 func classicOf(look LookAndFeel) (*Classic, bool) {

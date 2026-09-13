@@ -2,8 +2,11 @@ package app
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/codemodify/paintengine2d"
 
 	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
@@ -254,4 +257,97 @@ func TestSecondAppSeesApplyWithoutRestart(t *testing.T) {
 	if got != next.Normalize() {
 		t.Fatalf("listener %+v", got)
 	}
+}
+
+// TestLookWatchFollowsPackFile pins the watcher half of the style review:
+// editing the selected pack's theme.json used to need a restart because only
+// look.json was stamped.
+func TestLookWatchFollowsPackFile(t *testing.T) {
+	cfg := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", cfg)
+	dir := filepath.Join(cfg, "uitoolkit", "themes", "mypack")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	pack := filepath.Join(dir, "theme.json")
+	write := func(body string) {
+		if err := os.WriteFile(pack, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		past := time.Now().Add(-2 * time.Second)
+		_ = os.Chtimes(pack, past, past)
+	}
+	write(`{"palette":"dark","metrics":{"scroll":12},"colors":{"accent":"#112233"}}`)
+	if err := style.SaveAppearance(style.Appearance{Name: "mypack", Theme: style.ThemeDark}); err != nil {
+		t.Fatal(err)
+	}
+	a := New(Options{Headless: true, Scale: 1})
+	w, err := a.NewWindow(platform.WindowOptions{Width: 200, Height: 80, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+	w.SetContent(widgets.NewLabel("pack"))
+	a.PumpOnce()
+	if a.Look().Metrics().Scroll != 12 {
+		t.Fatalf("pack metrics not applied: %v", a.Look().Metrics().Scroll)
+	}
+	if a.lookWatch == nil || a.lookWatch.pack == nil || a.lookWatch.pack.path != pack {
+		t.Fatalf("watcher should stamp %s", pack)
+	}
+
+	// Edit only the pack file: look.json is untouched.
+	write(`{"palette":"dark","metrics":{"scroll":20},"colors":{"accent":"#445566"}}`)
+	a.PumpOnce()
+	if got := a.Look().Metrics().Scroll; got != 20 {
+		t.Fatalf("pack edit needs a restart, scroll %v", got)
+	}
+	if a.Look().Palette().Accent != mustColor(t, "#445566") {
+		t.Fatalf("pack accent %+v", a.Look().Palette().Accent)
+	}
+
+	// A settled pack file must not be re-read on every poll.
+	a.lookWatch.refreshMeta()
+	n := a.lookWatch.reads
+	a.PumpOnce()
+	a.PumpOnce()
+	if a.lookWatch.reads != n {
+		t.Fatalf("settled pack re-read: %d→%d", n, a.lookWatch.reads)
+	}
+}
+
+// TestLookWatchSettleWindowIsAbsolute pins the future-mtime case: a file
+// stamped ahead of the clock used to be re-read on every poll forever.
+func TestLookWatchSettleWindowIsAbsolute(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if err := style.SaveAppearance(style.DefaultAppearance()); err != nil {
+		t.Fatal(err)
+	}
+	s := newLookFileStamp()
+	future := time.Now().Add(2 * time.Hour)
+	if err := os.Chtimes(s.path, future, future); err != nil {
+		t.Fatal(err)
+	}
+	s.refreshMeta()
+	if s.changed() {
+		t.Fatal("a future-stamped file should settle, not report a change")
+	}
+	n := s.reads
+	for i := 0; i < 5; i++ {
+		if s.changed() {
+			t.Fatal("repeat poll reported a change")
+		}
+	}
+	if s.reads != n {
+		t.Fatalf("future mtime kept re-reading: %d→%d", n, s.reads)
+	}
+}
+
+func mustColor(t *testing.T, hex string) paintengine2d.Color {
+	t.Helper()
+	c, ok := style.ParseHexColor(hex)
+	if !ok {
+		t.Fatalf("bad hex %q", hex)
+	}
+	return c
 }

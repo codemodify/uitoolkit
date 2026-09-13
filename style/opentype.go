@@ -2,7 +2,9 @@ package style
 
 import (
 	"fmt"
+	"math"
 	"sync"
+	"sync/atomic"
 
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/sfnt"
@@ -66,15 +68,6 @@ type otFace struct {
 	name string
 	mu   sync.Mutex
 	buf  sfnt.Buffer
-}
-
-type otAtlas struct {
-	face   *otFace
-	size   float32
-	ascent float32
-	pad    int
-	packer shelfPacker
-	mu     sync.Mutex
 }
 
 var (
@@ -179,67 +172,217 @@ func ppem26(size float32) fixed.Int26_6 {
 
 func fx32(v fixed.Int26_6) float32 { return float32(v) / 64 }
 
-const otPreload = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~\u2026\u00b7\u2013\u2014\u201c\u201d\u2018\u2019\u20ac"
+const otPreload = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~…·–—“”‘’€"
+
+const (
+	// atlasSmallSide / atlasBigSide are the first sheet allocated for a size.
+	atlasSmallSide = 512
+	atlasBigSide   = 768
+	// atlasMaxSide caps one (family, weight, size) sheet at 2048² = 16 MB.
+	// A full sheet still measures text: further runes reuse the .notdef
+	// advance, they just stop adding pixels.
+	atlasMaxSide = 2048
+)
+
+// otAtlas bakes glyphs for one (face, size) into a copy-on-write
+// [paintengine2d.FontAtlas].
+//
+// Readers (measure, shape, paint) take the published snapshot through
+// atlas() and never lock: a published sheet is immutable. A writer clones
+// the sheet (fresh Cells map and image), rasterizes the missing runes into
+// the private draft, and stores the pointer atomically — so a paint loop in
+// one goroutine can blit while another measures a rune that is not baked yet.
+type otAtlas struct {
+	face   *otFace
+	size   float32
+	ascent float32
+	pad    int
+
+	// mu serializes writers (draft + publish) only.
+	mu        sync.Mutex
+	packer    shelfPacker
+	notdef    paintengine2d.AtlasCell
+	hasNotdef bool
+	full      bool
+
+	cur   atomic.Pointer[paintengine2d.FontAtlas]
+	bytes atomic.Int64
+}
 
 func newOTAtlas(face *otFace, size float32) *otAtlas {
 	if size < 8 {
 		size = 8
 	}
 	ascent, _ := face.metrics(size)
-	side := 512
+	side := atlasSmallSide
 	if size >= 22 {
-		side = 768
+		side = atlasBigSide
 	}
-	a := &otAtlas{
+	return &otAtlas{
 		face:   face,
 		size:   size,
 		ascent: ascent,
 		pad:    1,
 		packer: shelfPacker{w: side, h: side, x: 1, y: 1, pad: 1},
 	}
-	return a
+}
+
+// atlas is the published snapshot. Never mutated after publication.
+func (a *otAtlas) atlas() *paintengine2d.FontAtlas {
+	if a == nil {
+		return nil
+	}
+	return a.cur.Load()
+}
+
+// atlasBytes is the live sheet size, used by the font cache budget.
+func (a *otAtlas) atlasBytes() int64 {
+	if a == nil {
+		return 0
+	}
+	return a.bytes.Load()
+}
+
+// atlasDraft is a private, writable copy of the sheet.
+type atlasDraft struct {
+	a      *otAtlas
+	img    *paintengine2d.Image
+	cells  map[paintengine2d.GlyphID]paintengine2d.AtlasCell
+	packer shelfPacker
+	full   bool
+}
+
+// draft clones from (nil for the first bake). Caller holds a.mu.
+func (a *otAtlas) draft(from *paintengine2d.FontAtlas) *atlasDraft {
+	d := &atlasDraft{a: a, packer: a.packer, full: a.full}
+	if from == nil || from.Image == nil {
+		d.img = paintengine2d.NewImage(a.packer.w, a.packer.h)
+		d.cells = make(map[paintengine2d.GlyphID]paintengine2d.AtlasCell, 256)
+		return d
+	}
+	d.img = cloneImage(from.Image, from.Image.Width, from.Image.Height)
+	d.cells = make(map[paintengine2d.GlyphID]paintengine2d.AtlasCell, len(from.Cells)+8)
+	for k, v := range from.Cells {
+		d.cells[k] = v
+	}
+	return d
+}
+
+// publish swaps the draft in as the new snapshot. Caller holds a.mu.
+func (a *otAtlas) publish(d *atlasDraft) *paintengine2d.FontAtlas {
+	next := &paintengine2d.FontAtlas{Image: d.img, Cells: d.cells}
+	a.packer = d.packer
+	a.full = d.full
+	a.cur.Store(next)
+	a.bytes.Store(int64(d.img.Width) * int64(d.img.Height) * 4)
+	return next
 }
 
 func (a *otAtlas) bake(preload string) (*paintengine2d.FontAtlas, error) {
-	img := paintengine2d.NewImage(a.packer.w, a.packer.h)
-	atlas := &paintengine2d.FontAtlas{
-		Image: img,
-		Cells: make(map[paintengine2d.GlyphID]paintengine2d.AtlasCell, 128),
-	}
 	if preload == "" {
 		preload = otPreload
 	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	d := a.draft(nil)
 	for _, r := range preload {
-		if _, err := a.rasterize(atlas, r); err != nil {
+		if err := d.rasterize(r); err != nil {
 			return nil, err
 		}
 	}
-	return atlas, nil
+	return a.publish(d), nil
 }
 
-func (a *otAtlas) rasterize(atlas *paintengine2d.FontAtlas, r rune) (paintengine2d.AtlasCell, error) {
-	if atlas.Cells != nil {
-		if c, ok := atlas.Cells[paintengine2d.GlyphID(r)]; ok {
-			return c, nil
+func atlasHas(cur *paintengine2d.FontAtlas, r rune) bool {
+	if cur == nil {
+		return false
+	}
+	_, ok := cur.Cells[paintengine2d.GlyphID(r)]
+	return ok
+}
+
+func atlasHasAll(cur *paintengine2d.FontAtlas, text string) bool {
+	if cur == nil {
+		return false
+	}
+	for _, r := range text {
+		if _, ok := cur.Cells[paintengine2d.GlyphID(r)]; !ok {
+			return false
 		}
 	}
+	return true
+}
+
+// ensure bakes every rune of text the published sheet lacks and republishes
+// once for the whole string. Returns the snapshot callers should shape with.
+func (a *otAtlas) ensure(text string) *paintengine2d.FontAtlas {
+	if a == nil {
+		return nil
+	}
+	cur := a.atlas()
+	if text == "" || atlasHasAll(cur, text) {
+		return cur
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	cur = a.atlas()
+	if atlasHasAll(cur, text) {
+		return cur
+	}
+	d := a.draft(cur)
+	for _, r := range text {
+		if _, ok := d.cells[paintengine2d.GlyphID(r)]; ok {
+			continue
+		}
+		// A rune that cannot be rasterized still gets a .notdef cell,
+		// so it is never re-attempted on the next measure.
+		_ = d.rasterize(r)
+	}
+	return a.publish(d)
+}
+
+// ensureRune is ensure for a single rune (no string allocation).
+func (a *otAtlas) ensureRune(r rune) *paintengine2d.FontAtlas {
+	if a == nil {
+		return nil
+	}
+	cur := a.atlas()
+	if atlasHas(cur, r) {
+		return cur
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	cur = a.atlas()
+	if atlasHas(cur, r) {
+		return cur
+	}
+	d := a.draft(cur)
+	_ = d.rasterize(r)
+	return a.publish(d)
+}
+
+func (d *atlasDraft) rasterize(r rune) error {
+	id := paintengine2d.GlyphID(r)
+	if _, ok := d.cells[id]; ok {
+		return nil
+	}
+	a := d.a
 	tf := a.face
 	ppem := ppem26(a.size)
 	tf.mu.Lock()
 	gid, err := tf.font.GlyphIndex(&tf.buf, r)
 	if err != nil {
 		tf.mu.Unlock()
-		return paintengine2d.AtlasCell{}, err
+		return err
 	}
 	if gid == 0 && r != ' ' && r != 0 {
 		tf.mu.Unlock()
 		if p, adv := symbolFallback(r, a.size); p != nil {
-			return a.blitPath(atlas, r, p, adv)
+			return d.blitPath(r, p, adv)
 		}
-		if r > 127 {
-			return paintengine2d.AtlasCell{}, nil
-		}
-		return paintengine2d.AtlasCell{}, fmt.Errorf("missing glyph %q", string(r))
+		// Unsupported rune: a .notdef box keeps the run measurable
+		// (non-zero advance) and visible instead of silently empty.
+		return d.storeNotdef(r)
 	}
 	adv, err := tf.font.GlyphAdvance(&tf.buf, gid, ppem, font.HintingNone)
 	if err != nil {
@@ -248,25 +391,117 @@ func (a *otAtlas) rasterize(atlas *paintengine2d.FontAtlas, r rune) (paintengine
 	segs, err := tf.font.LoadGlyph(&tf.buf, gid, ppem, nil)
 	tf.mu.Unlock()
 	if err != nil {
-		return paintengine2d.AtlasCell{}, err
+		return d.storeNotdef(r)
 	}
 	advance := fx32(adv)
 	if r == ' ' && advance < a.size*0.2 {
 		advance = a.size * 0.3
 	}
 	if len(segs) == 0 {
-		return a.blitPath(atlas, r, nil, advance)
+		return d.blitPath(r, nil, advance)
 	}
-	return a.blitPath(atlas, r, segmentsPath(segs), advance)
+	return d.blitPath(r, segmentsPath(segs), advance)
 }
 
-// blitPath rasterizes p into the white atlas. Font space is baseline origin,
-// Y down (same as sfnt). Engine DrawPath does the AA; we only pack the sheet.
-func (a *otAtlas) blitPath(atlas *paintengine2d.FontAtlas, r rune, p *paintengine2d.Path, advance float32) (paintengine2d.AtlasCell, error) {
+// storeNotdef points r at the sheet's shared .notdef cell.
+func (d *atlasDraft) storeNotdef(r rune) error {
+	cell, err := d.notdefCell()
+	if err != nil {
+		return err
+	}
+	d.cells[paintengine2d.GlyphID(r)] = cell
+	return nil
+}
+
+// notdefCell rasterizes the face's own .notdef glyph once per sheet (a drawn
+// box when the face has no outline for gid 0) and reuses those pixels for
+// every unsupported rune. Caller holds a.mu.
+func (d *atlasDraft) notdefCell() (paintengine2d.AtlasCell, error) {
+	a := d.a
+	if a.hasNotdef {
+		return a.notdef, nil
+	}
+	tf := a.face
+	ppem := ppem26(a.size)
+	var (
+		advance float32
+		p       *paintengine2d.Path
+	)
+	tf.mu.Lock()
+	if adv, err := tf.font.GlyphAdvance(&tf.buf, 0, ppem, font.HintingNone); err == nil {
+		advance = fx32(adv)
+	}
+	segs, err := tf.font.LoadGlyph(&tf.buf, 0, ppem, nil)
+	tf.mu.Unlock()
+	if err == nil && len(segs) > 0 {
+		p = segmentsPath(segs)
+	}
 	if p == nil || p.Empty() {
-		cell := paintengine2d.AtlasCell{Advance: advance}
-		atlas.Cells[paintengine2d.GlyphID(r)] = cell
-		return cell, nil
+		p, advance = notdefBox(a.size)
+	}
+	if advance <= 0 {
+		advance = a.size * 0.55
+	}
+	cell, err := d.bakeCell(p, advance)
+	if err != nil {
+		return paintengine2d.AtlasCell{}, err
+	}
+	a.notdef = cell
+	a.hasNotdef = true
+	d.cells[paintengine2d.GlyphID(0)] = cell
+	return cell, nil
+}
+
+// notdefBox is the drawn fallback box (four bars so any fill rule leaves it
+// hollow). Font space is baseline origin, Y down.
+func notdefBox(size float32) (*paintengine2d.Path, float32) {
+	adv := size * 0.55
+	w := adv - size*0.16
+	if w < 2 {
+		w = 2
+	}
+	h := size * 0.64
+	x := size * 0.08
+	th := size * 0.07
+	if th < 1 {
+		th = 1
+	}
+	if th > h/3 {
+		th = h / 3
+	}
+	p := paintengine2d.NewPath()
+	rect := func(rx, ry, rw, rh float32) {
+		p.MoveTo(rx, ry)
+		p.LineTo(rx+rw, ry)
+		p.LineTo(rx+rw, ry+rh)
+		p.LineTo(rx, ry+rh)
+		p.Close()
+	}
+	rect(x, -h, w, th)      // top
+	rect(x, -th, w, th)     // bottom
+	rect(x, -h, th, h)      // left
+	rect(x+w-th, -h, th, h) // right
+	return p, adv
+}
+
+// blitPath rasterizes p into the white sheet and records the cell for r.
+func (d *atlasDraft) blitPath(r rune, p *paintengine2d.Path, advance float32) error {
+	id := paintengine2d.GlyphID(r)
+	cell, err := d.bakeCell(p, advance)
+	if err != nil {
+		return err
+	}
+	d.cells[id] = cell
+	return nil
+}
+
+// bakeCell packs p (may be nil / empty) and returns its atlas cell. Font
+// space is baseline origin, Y down (same as sfnt). Engine DrawPath does the
+// AA; we only pack the sheet.
+func (d *atlasDraft) bakeCell(p *paintengine2d.Path, advance float32) (paintengine2d.AtlasCell, error) {
+	a := d.a
+	if p == nil || p.Empty() {
+		return paintengine2d.AtlasCell{Advance: advance}, nil
 	}
 	b := p.Bounds()
 	xmin, ymin, xmax, ymax := b.Min.X, b.Min.Y, b.Max.X, b.Max.Y
@@ -285,24 +520,23 @@ func (a *otAtlas) blitPath(atlas *paintengine2d.FontAtlas, r rune, p *paintengin
 	if gh < 1 {
 		gh = 1
 	}
+	ax, ay, ok := d.pack(gw, gh)
+	if !ok {
+		// Sheet is at its cap: keep the advance so layout still measures.
+		d.full = true
+		return paintengine2d.AtlasCell{Advance: advance}, nil
+	}
 	tmp := paintengine2d.NewImage(gw, gh)
 	ctx := paintengine2d.NewContext(tmp)
 	ctx.Translate(-xmin+pad, -ymin+pad)
 	ctx.DrawPath(p, paintengine2d.Fill(paintengine2d.White))
-
-	ax, ay, ok := a.pack(atlas, gw, gh)
-	if !ok {
-		return paintengine2d.AtlasCell{}, fmt.Errorf("atlas full for %q", string(r))
-	}
-	blitGlyph(atlas.Image, ax, ay, tmp)
-	atlas.Image.Bump()
-	cell := paintengine2d.AtlasCell{
+	blitGlyph(d.img, ax, ay, tmp)
+	d.img.Bump()
+	return paintengine2d.AtlasCell{
 		Src:     paintengine2d.XYWH(float32(ax), float32(ay), float32(gw), float32(gh)),
 		Bearing: paintengine2d.Pt(xmin-pad, a.ascent+ymin-pad),
 		Advance: advance,
-	}
-	atlas.Cells[paintengine2d.GlyphID(r)] = cell
-	return cell, nil
+	}, nil
 }
 
 func segmentsPath(segs sfnt.Segments) *paintengine2d.Path {
@@ -349,19 +583,49 @@ func blitGlyph(dst *paintengine2d.Image, dx, dy int, src *paintengine2d.Image) {
 	}
 }
 
+// cloneImage copies src into a fresh w×h pixmap with row-slice copies.
+// Growing keeps every packed cell at the same coordinates.
+func cloneImage(src *paintengine2d.Image, w, h int) *paintengine2d.Image {
+	if w < 1 {
+		w = 1
+	}
+	if h < 1 {
+		h = 1
+	}
+	dst := paintengine2d.NewImage(w, h)
+	if src == nil || src.Width == 0 || src.Height == 0 {
+		return dst
+	}
+	rows := src.Height
+	if h < rows {
+		rows = h
+	}
+	ss, ds := src.RowStride(), dst.RowStride()
+	n := src.Width * 4
+	if m := dst.Width * 4; m < n {
+		n = m
+	}
+	for y := 0; y < rows; y++ {
+		copy(dst.Pix[y*ds:y*ds+n], src.Pix[y*ss:y*ss+n])
+	}
+	dst.Touch()
+	return dst
+}
+
 type shelfPacker struct {
 	w, h, x, y, rowH, pad int
 }
 
-func (a *otAtlas) pack(atlas *paintengine2d.FontAtlas, gw, gh int) (x, y int, ok bool) {
-	for try := 0; try < 6; try++ {
-		x, y, ok = a.packer.add(gw, gh)
-		if ok {
+// pack finds room for gw×gh, growing the draft sheet as needed.
+func (d *atlasDraft) pack(gw, gh int) (x, y int, ok bool) {
+	for {
+		if x, y, ok = d.packer.add(gw, gh); ok {
 			return x, y, true
 		}
-		a.grow(atlas)
+		if !d.grow() {
+			return 0, 0, false
+		}
 	}
-	return 0, 0, false
 }
 
 func (p *shelfPacker) add(gw, gh int) (x, y int, ok bool) {
@@ -388,20 +652,23 @@ func (p *shelfPacker) add(gw, gh int) (x, y int, ok bool) {
 	return x, y, true
 }
 
-func (a *otAtlas) grow(atlas *paintengine2d.FontAtlas) {
-	old := atlas.Image
-	nw, nh := old.Width, old.Height*2
-	if nw < 64 {
-		nw = 64
+// grow doubles the shorter side (width first) up to atlasMaxSide. Cells keep
+// their coordinates, so only the packer bounds change.
+func (d *atlasDraft) grow() bool {
+	w, h := d.img.Width, d.img.Height
+	switch {
+	case w <= h && w*2 <= atlasMaxSide:
+		w *= 2
+	case h*2 <= atlasMaxSide:
+		h *= 2
+	case w*2 <= atlasMaxSide:
+		w *= 2
+	default:
+		return false
 	}
-	img := paintengine2d.NewImage(nw, nh)
-	for y := 0; y < old.Height; y++ {
-		for x := 0; x < old.Width; x++ {
-			r, g, b, al := old.PremulAt(x, y)
-			img.SetColor(x, y, paintengine2d.FromPremul8(r, g, b, al))
-		}
-	}
-	atlas.Image = img
-	a.packer.h = nh
-	a.packer.w = nw
+	d.img = cloneImage(d.img, w, h)
+	d.packer.w, d.packer.h = w, h
+	return true
 }
+
+func snapCoord(v float32) float32 { return float32(math.Round(float64(v))) }

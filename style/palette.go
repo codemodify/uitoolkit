@@ -107,8 +107,35 @@ func Light() Palette {
 }
 
 // colorUnset is the zero Color (user palettes that omit a field).
+//
+// A theme that asks for fully transparent black would collide with "absent",
+// so the JSON reader marks such a value explicit with [markExplicitColor].
 func colorUnset(c paintengine2d.Color) bool {
 	return c.R == 0 && c.G == 0 && c.B == 0 && c.A == 0
+}
+
+// clearAlpha is the presence marker for a colour a theme set to fully
+// transparent black ("#00000000" / "#0000"). It still quantises to alpha 0
+// in 8-bit output, so the colour paints nothing — it just is not "unset".
+const clearAlpha = 1.0 / 512.0
+
+// markExplicitColor tags a parsed colour as present. Only transparent black
+// needs it; every other value is already distinguishable from the zero Color.
+func markExplicitColor(c paintengine2d.Color) paintengine2d.Color {
+	if colorUnset(c) {
+		c.A = clearAlpha
+	}
+	return c
+}
+
+// paletteFamily guesses dark / light from a palette, for callers of
+// [ResolveBevelChrome] that do not carry a family.
+func paletteFamily(p Palette) ThemeName {
+	lum := func(c paintengine2d.Color) float32 { return 0.299*c.R + 0.587*c.G + 0.114*c.B }
+	if lum(p.Text) > lum(p.Background) {
+		return ThemeDark
+	}
+	return ThemeLight
 }
 
 // ResolveMenuChrome fills MenuHover / MenuHoverBorder / MenuGutter when

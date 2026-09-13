@@ -202,6 +202,24 @@ func parseThemeFile(name string, raw []byte, src ThemeSource) (ThemePack, error)
 	}, nil
 }
 
+// themeDoc is the on-disk document for a resolved token set. Reading it back
+// through parseThemeFile reproduces the same tokens at 8-bit colour
+// precision, which is what keeps themes/*/theme.json in sync with the Go
+// era packs (see TestShippedThemeJSONMatchesPacks).
+func themeDoc(label, era string, tok ThemeTokens) themeFileJSON {
+	fam := string(ParseTheme(string(tok.Family)))
+	return themeFileJSON{
+		Label:     label,
+		Palette:   fam,
+		Family:    fam,
+		Era:       era,
+		Bevel:     string(tok.Bevel),
+		Elevation: tok.Metrics.Elevation,
+		Metrics:   tok.Metrics.json(),
+		Colors:    tokensToColorMap(tok),
+	}
+}
+
 func mergeTokens(base, over ThemeTokens) ThemeTokens {
 	out := base
 	if over.Bevel != "" {
@@ -316,20 +334,15 @@ func starterOrder() []string {
 	return []string{StarterName(ThemeDark), StarterName(ThemeLight)}
 }
 
-func readUserTheme(name string) (ThemePack, bool) {
-	b, err := os.ReadFile(ThemeFile(name))
-	if err != nil {
-		return ThemePack{}, false
-	}
-	pack, err := parseThemeFile(name, b, ThemeSourceUser)
-	if err != nil {
-		return ThemePack{}, false
-	}
-	return pack, true
-}
-
-func listUserThemeMap() map[string]ThemePack {
-	out := map[string]ThemePack{}
+// userThemeDirs maps a canonical pack id onto the directory that holds it.
+//
+// Listing and loading must agree: a folder named "MyTheme" lists (and is
+// exported / deleted) as "mytheme", so the loader has to find it under the
+// canonical id too. Only sanitized names are accepted, which is also what
+// keeps "../../etc" out of [ThemeFile] — and os.ReadDir does not follow
+// symlinks, so a symlinked folder is not a directory entry here.
+func userThemeDirs() map[string]string {
+	out := map[string]string{}
 	entries, err := os.ReadDir(ThemesDir())
 	if err != nil {
 		return out
@@ -338,10 +351,56 @@ func listUserThemeMap() map[string]ThemePack {
 		if !e.IsDir() {
 			continue
 		}
-		name := e.Name()
-		if _, err := SanitizeThemeName(name); err != nil {
+		name, err := SanitizeThemeName(e.Name())
+		if err != nil {
 			continue
 		}
+		if _, dup := out[name]; dup {
+			continue // first (sorted) entry wins, deterministically
+		}
+		out[name] = e.Name()
+	}
+	return out
+}
+
+// ThemeSourceFile is the theme.json backing a user pack, or "" when name is
+// a builtin (or not installed). Watchers stamp this file so editing a pack
+// applies without a restart.
+func ThemeSourceFile(name string) string {
+	clean, err := SanitizeThemeName(aliasThemeName(strings.ToLower(strings.TrimSpace(name))))
+	if err != nil {
+		return ""
+	}
+	dir, ok := userThemeDirs()[clean]
+	if !ok {
+		return ""
+	}
+	return filepath.Join(ThemesDir(), dir, "theme.json")
+}
+
+func readUserTheme(name string) (ThemePack, bool) {
+	clean, err := SanitizeThemeName(name)
+	if err != nil {
+		return ThemePack{}, false
+	}
+	dir, ok := userThemeDirs()[clean]
+	if !ok {
+		return ThemePack{}, false
+	}
+	b, err := os.ReadFile(filepath.Join(ThemesDir(), dir, "theme.json"))
+	if err != nil {
+		return ThemePack{}, false
+	}
+	pack, err := parseThemeFile(clean, b, ThemeSourceUser)
+	if err != nil {
+		return ThemePack{}, false
+	}
+	return pack, true
+}
+
+func listUserThemeMap() map[string]ThemePack {
+	out := map[string]ThemePack{}
+	for name := range userThemeDirs() {
 		if pack, ok := readUserTheme(name); ok {
 			out[name] = pack
 		}
@@ -427,14 +486,20 @@ func LoadTheme(name string) (ThemePack, bool) {
 		return ThemePack{}, false
 	}
 	name = aliasThemeName(strings.ToLower(name))
-	if pack, ok := readUserTheme(name); ok {
+	// Sanitize before any path is built from name: look.json is shared with
+	// other apps and a value like "../../../evil" must not reach ReadFile.
+	clean, err := SanitizeThemeName(name)
+	if err != nil {
+		return ThemePack{}, false
+	}
+	if pack, ok := readUserTheme(clean); ok {
 		return pack, true
 	}
-	if pack, ok := loadEmbedded()[name]; ok {
+	if pack, ok := loadEmbedded()[clean]; ok {
 		return pack, true
 	}
-	packName, _, _ := SplitLookThemeName(name)
-	if packName != name {
+	packName, _, _ := SplitLookThemeName(clean)
+	if packName != clean {
 		if pack, ok := readUserTheme(packName); ok {
 			return pack, true
 		}
@@ -479,16 +544,7 @@ func ExportAppearance(name string, a Appearance) (ThemePack, error) {
 		Era:     tok.Era,
 		Tokens:  tok,
 	}
-	doc := themeFileJSON{
-		Label:     pack.Label,
-		Palette:   string(pack.Palette),
-		Family:    string(pack.Palette),
-		Era:       pack.Era,
-		Bevel:     string(tok.Bevel),
-		Elevation: tok.Metrics.Elevation,
-		Metrics:   tok.Metrics.json(),
-		Colors:    tokensToColorMap(tok),
-	}
+	doc := themeDoc(pack.Label, pack.Era, tok)
 	if err := writeJSONFile(ThemeFile(clean), doc); err != nil {
 		return ThemePack{}, err
 	}
@@ -505,7 +561,11 @@ func DeleteUserTheme(name string) error {
 	if _, ok := readUserTheme(clean); !ok {
 		return fmt.Errorf("not a user theme: %s", clean)
 	}
-	return os.RemoveAll(filepath.Join(ThemesDir(), clean))
+	dir, ok := userThemeDirs()[clean]
+	if !ok {
+		return fmt.Errorf("not a user theme: %s", clean)
+	}
+	return os.RemoveAll(filepath.Join(ThemesDir(), dir))
 }
 
 // AfterUserThemeDeleted rewrites a if it named the deleted pack.
