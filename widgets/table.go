@@ -1,6 +1,8 @@
 package widgets
 
 import (
+	"time"
+
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/layout"
 	"github.com/codemodify/uitoolkit/platform"
@@ -22,35 +24,42 @@ type TableColumn struct {
 // TableView is a virtualized row/column grid with optional sort headers.
 type TableView struct {
 	widget.Base
-	Columns   []TableColumn
-	RowCount  int
-	RowHeight float32
-	Selected  int
-	SortCol   int
-	SortAsc   bool
-	CellText  func(row, col int) string
-	CellBold  func(row, col int) bool
-	OnSelect  func(row int)
-	OnSort    func(col int, asc bool)
-	OnContext func(row int, windowPos paintengine2d.Point)
-	Mono      bool
-	OffsetY   float32
-	hovered   int
-	hoverCol  int
-	pressCol  int
-	resizeCol int
-	resizeX   float32
-	resizeW   float32
-	vbar      scrollDrag
-	rows      rowSceneCache
+	Columns    []TableColumn
+	RowCount   int
+	RowHeight  float32
+	Selected   int
+	SortCol    int
+	SortAsc    bool
+	CellText   func(row, col int) string
+	CellBold   func(row, col int) bool
+	OnSelect   func(row int)
+	OnActivate func(row int) // Return / Space / double click; falls back to OnSelect
+	OnSort     func(col int, asc bool)
+	OnContext  func(row int, windowPos paintengine2d.Point)
+	Mono       bool
+	OffsetY    float32
+	hovered    int
+	hoverCol   int
+	pressCol   int
+	resizeCol  int
+	resizeX    float32
+	resizeW    float32
+	vbar       scrollDrag
+	rows       rowSceneCache
+	lastRow    int
+	lastAt     time.Time
 }
+
+// doubleClickInterval is the window for a second press on the same row to
+// count as an activation.
+const doubleClickInterval = 400 * time.Millisecond
 
 // NewTableView builds a table. selected starts at -1.
 func NewTableView(cols []TableColumn, rows int, cell func(row, col int) string, on func(int)) *TableView {
 	t := &TableView{
 		Columns: cols, RowCount: rows, RowHeight: 28, Selected: -1,
 		SortCol: -1, SortAsc: true, CellText: cell, OnSelect: on,
-		hovered: -1, hoverCol: -1, pressCol: -1, resizeCol: -1,
+		hovered: -1, hoverCol: -1, pressCol: -1, resizeCol: -1, lastRow: -1,
 	}
 	t.Init(t)
 	t.SetWantsFocus(true)
@@ -437,14 +446,14 @@ func (t *TableView) Paint(ctx *paintengine2d.Context) {
 	ctx.DrawRect(b, paintengine2d.Fill(lk.Palette().Field))
 	widths := t.colWidths()
 	body := paintengine2d.XYWH(0, hh, b.Dx(), b.Dy()-hh)
-	ctx.Save()
-	ctx.ClipRect(body)
 	rh := t.rowH()
 	lo, hi := t.visibleRange()
 	if rec, ok := ctx.Device().(*paintengine2d.Recorder); ok {
-		ob := t.Bounds()
-		t.rows.ready(ob.Min.X, ob.Min.Y, b.Dx(), rh, t.OffsetY, lookSig(lk))
-		recordScrollingRows(rec, &t.rows, t.ID()^(1<<32), t.OffsetY, hh, lo, hi,
+		// The body viewport goes on the band group, so the sticky header
+		// keeps its own clip and the rows slide under it.
+		o := rowOrigin(ctx)
+		t.rows.ready(o.X, o.Y, b.Dx(), rh, lookSig(lk))
+		recordScrollingRows(rec, ctx, &t.rows, t.ID()^(1<<32), body, b.Dx(), rh, t.OffsetY, hh, lo, hi,
 			func(i int) uint64 { return t.ID()<<32 | uint64(i) + 1 },
 			func(i int) uint64 {
 				extra := bits32(b.Dx())
@@ -454,27 +463,32 @@ func (t *TableView) Paint(ctx *paintengine2d.Context) {
 				if t.CellBold != nil && t.CellBold(i, 0) {
 					extra ^= 0xb01d
 				}
-				parts := make([]string, len(t.Columns))
 				for col := range t.Columns {
-					if t.CellText != nil {
-						parts[col] = t.CellText(i, col)
-					}
 					extra ^= bits32(widths[col]) << uint(col%16)
 				}
-				return visualSig(i == t.Selected, i == t.hovered, extra, parts...)
+				sig := newRowSig(i == t.Selected, i == t.hovered, extra)
+				for col := range t.Columns {
+					if t.CellText != nil {
+						sig.str(t.CellText(i, col))
+					} else {
+						sig.str("")
+					}
+				}
+				return sig.sum()
 			},
 			func(i int) {
-				y := hh + float32(i)*rh - t.OffsetY
-				t.paintRow(ctx, lk, widths, i, y, rh)
+				t.paintRow(ctx, lk, widths, i, 0, rh)
 			},
 		)
 	} else {
+		ctx.Save()
+		ctx.ClipRect(body)
 		for row := lo; row < hi; row++ {
 			y := hh + float32(row)*rh - t.OffsetY
 			t.paintRow(ctx, lk, widths, row, y, rh)
 		}
+		ctx.Restore()
 	}
-	ctx.Restore()
 	// Sticky header after the body so a leaked row cannot cover the labels.
 	t.paintHeader(ctx, lk, widths, hh)
 	track, thumb := t.scrollTrack()
@@ -622,6 +636,15 @@ func (t *TableView) MousePress(e widget.MouseEvent) bool {
 		if t.OnSelect != nil {
 			t.OnSelect(i)
 		}
+		if e.Button == platform.ButtonLeft {
+			if i == t.lastRow && time.Since(t.lastAt) < doubleClickInterval {
+				t.lastRow = -1
+				t.activate(i)
+			} else {
+				t.lastRow = i
+				t.lastAt = time.Now()
+			}
+		}
 	}
 	if e.Button == platform.ButtonRight && t.OnContext != nil {
 		o := widget.DeviceOrigin(t)
@@ -646,6 +669,24 @@ func (t *TableView) MouseRelease(e widget.MouseEvent) bool {
 	return true
 }
 
+// activate reports a row the user committed to (Return, Space, double click).
+// Callers that only want selection changes keep using OnSelect.
+func (t *TableView) activate(row int) {
+	if row < 0 || row >= t.RowCount {
+		return
+	}
+	if t.OnActivate != nil {
+		t.OnActivate(row)
+		return
+	}
+	if t.OnSelect != nil {
+		t.OnSelect(row)
+	}
+}
+
+// Activate commits row (the programmatic form of Return / double click).
+func (t *TableView) Activate(row int) { t.activate(row) }
+
 func (t *TableView) sortBy(col int) {
 	if t.SortCol == col {
 		t.SortAsc = !t.SortAsc
@@ -659,9 +700,19 @@ func (t *TableView) sortBy(col int) {
 	}
 }
 
+// MouseWheel scrolls, and reports false when it cannot: an unscrollable or
+// already-at-the-edge view must let the wheel bubble to an outer scroll pane
+// instead of swallowing it.
 func (t *TableView) MouseWheel(e widget.MouseEvent) bool {
+	if t.MaxOffset() <= 0 {
+		return false
+	}
+	before := t.OffsetY
 	t.OffsetY += wheelDelta(e.Scroll.Y, t.rowH())
 	t.clamp()
+	if t.OffsetY == before {
+		return false
+	}
 	t.Invalidate()
 	return true
 }
@@ -689,9 +740,7 @@ func (t *TableView) KeyPress(e widget.KeyEvent) bool {
 	case platform.KeyEnd:
 		next = t.RowCount - 1
 	case platform.KeyReturn, platform.KeySpace:
-		if t.Selected >= 0 && t.OnSelect != nil {
-			t.OnSelect(t.Selected)
-		}
+		t.activate(t.Selected)
 		return true
 	default:
 		return false

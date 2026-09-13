@@ -98,32 +98,35 @@ func (l *ListView) Paint(ctx *paintengine2d.Context) {
 	b := l.LocalBounds()
 	lk := l.Look()
 	ctx.DrawRect(b, paintengine2d.Fill(lk.Palette().Field))
-	ctx.Save()
-	ctx.ClipRect(b)
 	rh := l.rowH()
 	lo, hi := l.visibleRange()
 	if rec, ok := ctx.Device().(*paintengine2d.Recorder); ok {
-		ob := l.Bounds()
-		l.rows.ready(ob.Min.X, ob.Min.Y, b.Dx(), rh, l.OffsetY, lookSig(lk))
-		recordScrollingRows(rec, &l.rows, l.ID()^(1<<32), l.OffsetY, 0, lo, hi,
+		// Rows carry the viewport on their band group, not in their own
+		// clips, so no ctx.ClipRect(b) here.
+		o := rowOrigin(ctx)
+		l.rows.ready(o.X, o.Y, b.Dx(), rh, lookSig(lk))
+		recordScrollingRows(rec, ctx, &l.rows, l.ID()^(1<<32), b, b.Dx(), rh, l.OffsetY, 0, lo, hi,
 			func(i int) uint64 { return l.ID()<<32 | uint64(i) + 1 },
 			func(i int) uint64 {
 				label := ""
 				if l.ItemText != nil {
 					label = l.ItemText(i)
 				}
-				return visualSig(i == l.Selected, i == l.hovered, bits32(b.Dx()), label)
+				sig := newRowSig(i == l.Selected, i == l.hovered, bits32(b.Dx()))
+				sig.str(label)
+				return sig.sum()
 			},
 			func(i int) {
 				label := ""
 				if l.ItemText != nil {
 					label = l.ItemText(i)
 				}
-				y := float32(i)*rh - l.OffsetY
-				lk.DrawListRow(ctx, paintengine2d.XYWH(0, y, b.Dx(), rh), i == l.Selected, i == l.hovered, label)
+				lk.DrawListRow(ctx, paintengine2d.XYWH(0, 0, b.Dx(), rh), i == l.Selected, i == l.hovered, label)
 			},
 		)
 	} else {
+		ctx.Save()
+		ctx.ClipRect(b)
 		for i := lo; i < hi; i++ {
 			y := float32(i)*rh - l.OffsetY
 			row := paintengine2d.XYWH(0, y, b.Dx(), rh)
@@ -133,8 +136,8 @@ func (l *ListView) Paint(ctx *paintengine2d.Context) {
 			}
 			lk.DrawListRow(ctx, row, i == l.Selected, i == l.hovered, label)
 		}
+		ctx.Restore()
 	}
-	ctx.Restore()
 	track, thumb := l.scrollTrack()
 	paintOverflowBar(ctx, lk, track, thumb, l.vbar.over, l.vbar.active)
 	if l.Focused() {
@@ -224,9 +227,19 @@ func (l *ListView) MousePress(e widget.MouseEvent) bool {
 	return true
 }
 
+// MouseWheel scrolls, and reports false when it cannot: an unscrollable or
+// already-at-the-edge view must let the wheel bubble to an outer scroll pane
+// instead of swallowing it.
 func (l *ListView) MouseWheel(e widget.MouseEvent) bool {
+	if l.MaxOffset() <= 0 {
+		return false
+	}
+	before := l.OffsetY
 	l.OffsetY += wheelDelta(e.Scroll.Y, l.rowH())
 	l.clamp()
+	if l.OffsetY == before {
+		return false
+	}
 	l.Invalidate()
 	return true
 }
