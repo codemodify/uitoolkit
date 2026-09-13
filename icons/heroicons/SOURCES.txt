@@ -79,3 +79,4 @@ table           table-cells
 cards           squares-2x2
 sun             sun
 moon            moon
+no-icon         placeholder (missing stem)

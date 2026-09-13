@@ -20,7 +20,7 @@ func TestRepoIconSetsCoverAllToolIcons(t *testing.T) {
 			checkPNG(t, lo, 24)
 			checkPNG(t, hi, 48)
 		}
-		for _, stem := range []string{"pen", "download"} {
+		for _, stem := range []string{"pen", "download", "no-icon"} {
 			checkPNG(t, filepath.Join(root, set, stem+".png"), 24)
 			checkPNG(t, filepath.Join(root, set, stem+"@2x.png"), 48)
 		}
@@ -180,29 +180,62 @@ func TestFileIconLoadTintFallback(t *testing.T) {
 		t.Fatal("search should tint blue")
 	}
 
-	// Missing glyph in an installed premiere set stays inside that set
-	// (closest stem), never the drawn classic scribble.
+	// Missing glyph in an installed premiere set uses no-icon, never
+	// the drawn classic scribble.
 	classic := rasterIcon(IconSetClassic, IconCut)
 	installed := rasterIcon(IconSetLucide, IconCut)
+	placeholder := rasterNamedStem(IconSetLucide, "no-icon")
 	_ = os.Remove(filepath.Join(IconSetDir(IconSetLucide), "cut.png"))
 	_ = os.Remove(filepath.Join(IconSetDir(IconSetLucide), "cut@2x.png"))
 	resetIconCache()
 	fallback := rasterIcon(IconSetLucide, IconCut)
 	if inkCount(fallback) < 8 {
-		t.Fatal("missing stem should still paint from the same set")
+		t.Fatal("missing stem should paint no-icon")
 	}
 	if maskDiff(classic, fallback) < 8 {
 		t.Fatalf("missing file must not use classic (diff=%d)", maskDiff(classic, fallback))
+	}
+	if maskDiff(placeholder, fallback) > 4 {
+		t.Fatalf("missing stem should match no-icon (diff=%d)", maskDiff(placeholder, fallback))
 	}
 	if maskDiff(classic, installed) < 8 {
 		t.Fatal("installed lucide cut should differ from classic before delete")
 	}
 
-	// Unknown set name with no directory → classic.
+	// Unknown / not-installed file set → embedded no-icon, not classic.
 	resetIconCache()
 	unknown := rasterIcon(IconSetName("not-installed"), IconSearch)
-	if maskDiff(rasterIcon(IconSetClassic, IconSearch), unknown) > 4 {
-		t.Fatal("unknown file set should fall back")
+	if maskDiff(rasterIcon(IconSetClassic, IconSearch), unknown) < 8 {
+		t.Fatal("unknown file set must not paint classic search")
+	}
+	if maskDiff(placeholder, unknown) > 8 {
+		t.Fatalf("unknown file set should paint no-icon (diff=%d)", maskDiff(placeholder, unknown))
+	}
+}
+
+func TestMissingStemUsesNoIconNotClassicPen(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	resetIconCache()
+	installRepoIconSet(t, "lucide")
+	_ = os.Remove(filepath.Join(IconSetDir(IconSetLucide), "pen.png"))
+	_ = os.Remove(filepath.Join(IconSetDir(IconSetLucide), "pen@2x.png"))
+	_ = os.Remove(filepath.Join(IconSetDir(IconSetLucide), "pencil.png"))
+	_ = os.Remove(filepath.Join(IconSetDir(IconSetLucide), "pencil@2x.png"))
+	_ = os.Remove(filepath.Join(IconSetDir(IconSetLucide), "compose.png"))
+	_ = os.Remove(filepath.Join(IconSetDir(IconSetLucide), "compose@2x.png"))
+	resetIconCache()
+	got := rasterIcon(IconSetLucide, IconPen)
+	classicPen := rasterIcon(IconSetClassic, IconPen)
+	classicNew := rasterIcon(IconSetClassic, IconNew)
+	placeholder := rasterNamedStem(IconSetLucide, "no-icon")
+	if maskDiff(got, classicPen) < 8 {
+		t.Fatal("missing pen must not paint classic pen")
+	}
+	if maskDiff(got, classicNew) < 8 {
+		t.Fatal("missing pen must not paint classic new")
+	}
+	if maskDiff(got, placeholder) > 4 {
+		t.Fatalf("missing pen should be no-icon (diff=%d)", maskDiff(got, placeholder))
 	}
 }
 
@@ -352,6 +385,19 @@ func installRepoIconSet(t *testing.T, name string) {
 			t.Fatal(err)
 		}
 	}
+}
+
+func rasterNamedStem(set IconSetName, stem string) *paintengine2d.Image {
+	img := paintengine2d.NewImage(32, 32)
+	ctx := paintengine2d.NewContext(img)
+	loaded, ok := loadPNGIcon(filepath.Join(IconSetDir(set), stem+".png"))
+	if !ok {
+		loaded, ok = loadEmbeddedNoIcon(24)
+	}
+	if ok {
+		paintTintedIcon(ctx, paintengine2d.XYWH(2, 2, 28, 28), loaded, paintengine2d.RGB(1, 1, 1))
+	}
+	return img
 }
 
 func paintFileIcon(set IconSetName, icon ToolIcon, col paintengine2d.Color) *paintengine2d.Image {

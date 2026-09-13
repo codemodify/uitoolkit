@@ -81,3 +81,4 @@ table           table_chart
 cards           grid_view
 sun             light_mode
 moon            dark_mode
+no-icon         placeholder (missing stem)

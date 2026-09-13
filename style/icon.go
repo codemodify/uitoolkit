@@ -72,6 +72,7 @@ var shippedIconStems = []string{
 	"home", "calendar", "clock", "link", "external-link",
 	"list", "layout", "columns", "rows", "table", "cards",
 	"sun", "moon",
+	"no-icon",
 }
 
 // ShippedIconStems is every PNG stem committed in the five premiere packs.
@@ -122,36 +123,12 @@ const iconHiDPIMin = 36
 
 func toolIconAliases(icon ToolIcon) []string {
 	switch icon {
-	case IconNew:
-		return []string{"plus"}
-	case IconOpen:
-		return []string{"folder"}
-	case IconSave:
-		return []string{"download"}
-	case IconCut:
-		return []string{"copy"}
-	case IconCopy:
-		return []string{"paste"}
-	case IconPaste:
-		return []string{"copy"}
-	case IconUndo:
-		return []string{"arrow-left"}
-	case IconRedo:
-		return []string{"arrow-right"}
-	case IconSearch:
-		return []string{"filter"}
-	case IconInfo:
-		return []string{"help"}
-	case IconWarning:
-		return []string{"error"}
-	case IconError:
-		return []string{"warning"}
 	case IconQuestion:
-		return []string{"help", "question"}
+		return []string{"help"}
 	case IconMail:
 		return []string{"inbox", "mail-open"}
 	case IconDownload:
-		return []string{"fetch", "save"}
+		return []string{"fetch"}
 	case IconPen:
 		return []string{"pencil", "compose"}
 	default:
@@ -193,12 +170,7 @@ func toolIconFileCandidates(icon ToolIcon, destW float32) []string {
 	return out
 }
 
-// sameSetFallbackStems are last-resort glyphs inside an installed file set
-// when the typed action and its aliases are missing. Never include classic
-// drawn names — these must exist as PNGs in every shipped pack.
-func sameSetFallbackStems() []string {
-	return []string{"more", "info", "search", "check"}
-}
+const noIconStem = "no-icon"
 
 // ToolIconThemeName is a freedesktop icon-theme name for tray / SNI
 // (IconName). File sets still use ToolIconName ("mail.png").
