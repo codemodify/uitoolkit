@@ -65,7 +65,7 @@ func main() {
 		log.Fatal(err)
 	}
 	win.SetContent(mail.Open(a, win, cli, mail.AppOptions{
-		Light: style.LookAppearance(look).Theme == style.ThemeLight, Layout: layout, ShowFilter: true,
+		Light: style.LookAppearance(look).Theme == style.ThemeLight, Layout: layout,
 	}))
 	if *headless {
 		if err := win.WritePNG("mail.png"); err != nil {

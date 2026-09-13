@@ -650,9 +650,9 @@ func TestConfigFromEnv(t *testing.T) {
 func TestChromePrefsRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", dir)
-	saveChromePrefs(ChromePrefs{CardView: true, Density: "compact"})
+	saveChromePrefs(ChromePrefs{CardView: true, Density: "compact", ShowFilter: true})
 	p := loadChromePrefs()
-	if !p.CardView || p.density() != style.DensityCompact {
+	if !p.CardView || p.density() != style.DensityCompact || !p.ShowFilter {
 		t.Fatalf("%+v", p)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "uitoolkit", "mailui.json")); err != nil {
