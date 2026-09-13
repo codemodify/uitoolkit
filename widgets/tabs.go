@@ -307,6 +307,7 @@ func (t *TabView) Select(i int) {
 		old := t.tabs[t.selected].Content
 		if h := t.Host(); h != nil && widget.Contains(old, h.Focus()) {
 			t.bar.RequestFocus()
+			widget.MarkKeyboardFocus(t.bar)
 		}
 		old.SetVisible(false)
 	}
