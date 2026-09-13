@@ -103,6 +103,11 @@ names) is in [compare.md](compare.md).
 `FileDialog` is an in-process modal list + path field, not a native portal /
 COM picker.
 
+Pointer shapes (`TableView` column dividers, `Splitter` sash, text
+fields) use the **host** cursor theme — compositor `wp_cursor_shape_v1`
+or XCURSOR on Wayland, Xcursor / X font cursors on X11, `LoadCursorW`
+on Windows, `NSCursor` on macOS. See [platform.md](platform.md).
+
 ## Inventory notes
 
 Only constructors re-exported from `export.go` are listed. Helpers that are

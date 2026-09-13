@@ -3,10 +3,11 @@
 package platform
 
 /*
-#cgo linux pkg-config: wayland-client xkbcommon
+#cgo linux pkg-config: wayland-client wayland-cursor xkbcommon
 #cgo linux CFLAGS: -I${SRCDIR} -I/usr/include/drm
 #define _GNU_SOURCE
 #include <wayland-client.h>
+#include <wayland-cursor.h>
 #include <xkbcommon/xkbcommon.h>
 #include <xkbcommon/xkbcommon-compose.h>
 #include <fcntl.h>
@@ -24,8 +25,10 @@ package platform
 #include "fractional-scale-v1-client-protocol.h"
 #include "viewporter-client-protocol.h"
 #include "xdg-activation-v1-client-protocol.h"
+#include "cursor-shape-v1-client-protocol.h"
 #include "wayland_dmabuf.h"
 #include "wayland_sync.h"
+#include "wayland_cursor.h"
 
 extern void uitkWlRegistryGlobal(uintptr_t id, struct wl_registry *reg, uint32_t name, char *iface, uint32_t ver);
 extern void uitkWlPing(uintptr_t id, struct xdg_wm_base *wm, uint32_t serial);
@@ -191,14 +194,6 @@ static void uitk_ptr_enter(void *data, struct wl_pointer *p, uint32_t serial, st
 }
 static void ui_wl_set_cursor(struct wl_pointer *p, uint32_t serial, struct wl_surface *surf, int32_t hx, int32_t hy) {
 	if (p) wl_pointer_set_cursor(p, serial, surf, hx, hy);
-}
-static struct wl_buffer *ui_wl_argb_buffer(struct wl_shm *shm, int fd, int w, int h, int stride, size_t size) {
-	if (!shm) return NULL;
-	struct wl_shm_pool *pool = wl_shm_create_pool(shm, fd, (int32_t)size);
-	if (!pool) return NULL;
-	struct wl_buffer *buf = wl_shm_pool_create_buffer(pool, 0, w, h, stride, WL_SHM_FORMAT_ARGB8888);
-	wl_shm_pool_destroy(pool);
-	return buf;
 }
 static void uitk_ptr_leave(void *data, struct wl_pointer *p, uint32_t serial, struct wl_surface *surf) {
 	(void)p; (void)serial; (void)surf;
@@ -907,7 +902,9 @@ type wlConn struct {
 	ptrSerial  uint32
 	cursor     Cursor
 	curSurf    *C.struct_wl_surface
-	curSlot    [4]wlCursorBuf
+	shapeMan   *C.struct_wp_cursor_shape_manager_v1
+	shapeDev   *C.struct_wp_cursor_shape_device_v1
+	curTheme   *C.struct_wl_cursor_theme
 	outScale   float32
 
 	dataMan     *C.struct_wl_data_device_manager
@@ -1038,9 +1035,6 @@ func wlRetain() (*wlConn, error) {
 		return nil, fmt.Errorf("platform: wl_display_connect failed (set WAYLAND_DISPLAY or use headless)")
 	}
 	c := &wlConn{dpy: dpy, refs: 1, xkbCtx: C.ui_xkb_ctx()}
-	for i := range c.curSlot {
-		c.curSlot[i].fd = -1
-	}
 	wlNext++
 	c.id = wlNext
 	wlConns[c.id] = c
@@ -1080,6 +1074,10 @@ func (c *wlConn) closeLocked() {
 		c.keyboard = nil
 	}
 	c.destroyCursorsLocked()
+	if c.shapeMan != nil {
+		C.ui_wl_cursor_shape_man_destroy(c.shapeMan)
+		c.shapeMan = nil
+	}
 	if c.pointer != nil {
 		C.ui_wl_ptr_destroy(c.pointer)
 		c.pointer = nil
@@ -1381,174 +1379,91 @@ func (s *wlSurface) SetCursor(cur Cursor) {
 	wlMu.Unlock()
 }
 
-type wlCursorBuf struct {
-	buf    *C.struct_wl_buffer
-	mem    unsafe.Pointer
-	fd     int
-	size   int
-	hx, hy int
-	ready  bool
-}
-
-const wlCursorSize = 24
-
 func (c *wlConn) destroyCursorsLocked() {
+	if c.shapeDev != nil {
+		C.ui_wl_cursor_shape_dev_destroy(c.shapeDev)
+		c.shapeDev = nil
+	}
 	if c.curSurf != nil {
 		C.ui_wl_surface_destroy(c.curSurf)
 		c.curSurf = nil
 	}
-	for i := range c.curSlot {
-		s := &c.curSlot[i]
-		if s.buf != nil {
-			C.ui_wl_buf_destroy(s.buf)
-			s.buf = nil
-		}
-		if s.mem != nil {
-			C.ui_wl_munmap(s.mem, C.size_t(s.size))
-			s.mem = nil
-		}
-		if s.ready && s.fd >= 0 {
-			C.ui_wl_close_fd(C.int(s.fd))
-		}
-		s.fd = -1
-		s.ready = false
-	}
-}
-
-func (c *wlConn) ensureCursorBuf(cur Cursor) *wlCursorBuf {
-	idx := int(cur)
-	if idx < 0 || idx >= len(c.curSlot) {
-		idx = 0
-	}
-	slot := &c.curSlot[idx]
-	if slot.ready && slot.buf != nil {
-		return slot
-	}
-	const n = wlCursorSize
-	stride := n * 4
-	size := stride * n
-	var mem unsafe.Pointer
-	fd := int(C.ui_wl_memfd(C.size_t(size), &mem))
-	if fd < 0 || mem == nil {
-		return nil
-	}
-	pix := unsafe.Slice((*byte)(mem), size)
-	hx, hy := drawCursorARGB(pix, n, stride, cur)
-	buf := C.ui_wl_argb_buffer(c.shm, C.int(fd), C.int(n), C.int(n), C.int(stride), C.size_t(size))
-	if buf == nil {
-		C.ui_wl_munmap(mem, C.size_t(size))
-		C.ui_wl_close_fd(C.int(fd))
-		return nil
-	}
-	slot.buf, slot.mem, slot.fd, slot.size = buf, mem, fd, size
-	slot.hx, slot.hy, slot.ready = hx, hy, true
-	return slot
-}
-
-func putARGB(pix []byte, stride, x, y int, r, g, b, a byte) {
-	if x < 0 || y < 0 {
-		return
-	}
-	off := y*stride + x*4
-	if off < 0 || off+3 >= len(pix) {
-		return
-	}
-	// WL_SHM_FORMAT_ARGB8888 little-endian: B, G, R, A
-	pix[off+0] = b
-	pix[off+1] = g
-	pix[off+2] = r
-	pix[off+3] = a
-}
-
-func drawCursorARGB(pix []byte, n, stride int, cur Cursor) (hx, hy int) {
-	for i := range pix {
-		pix[i] = 0
-	}
-	dot := func(x, y int, on bool) {
-		if on {
-			putARGB(pix, stride, x, y, 0, 0, 0, 255)
-		} else {
-			putARGB(pix, stride, x, y, 255, 255, 255, 255)
-		}
-	}
-	switch cur {
-	case CursorColResize:
-		cy := n / 2
-		for x := 3; x < n-3; x++ {
-			dot(x, cy, true)
-			dot(x, cy-1, false)
-			dot(x, cy+1, false)
-		}
-		for i := 0; i < 5; i++ {
-			dot(3+i, cy-i, true)
-			dot(3+i, cy+i, true)
-			dot(n-4-i, cy-i, true)
-			dot(n-4-i, cy+i, true)
-		}
-		return n / 2, cy
-	case CursorRowResize:
-		cx := n / 2
-		for y := 3; y < n-3; y++ {
-			dot(cx, y, true)
-			dot(cx-1, y, false)
-			dot(cx+1, y, false)
-		}
-		for i := 0; i < 5; i++ {
-			dot(cx-i, 3+i, true)
-			dot(cx+i, 3+i, true)
-			dot(cx-i, n-4-i, true)
-			dot(cx+i, n-4-i, true)
-		}
-		return cx, n / 2
-	case CursorText:
-		cx := n / 2
-		for y := 4; y < n-4; y++ {
-			dot(cx, y, true)
-			dot(cx-1, y, false)
-			dot(cx+1, y, false)
-		}
-		for x := cx - 3; x <= cx+3; x++ {
-			dot(x, 4, true)
-			dot(x, n-5, true)
-		}
-		return cx, n / 2
-	default:
-		// left-pointing arrow
-		for y := 1; y < 16; y++ {
-			w := y
-			if w > 10 {
-				w = 10
-			}
-			if y > 12 {
-				w = 16 - y
-			}
-			for x := 1; x <= w; x++ {
-				dot(x, y, x == 1 || x == w || y == 1)
-			}
-		}
-		return 1, 1
+	if c.curTheme != nil {
+		C.ui_wl_cursor_theme_destroy(c.curTheme)
+		c.curTheme = nil
 	}
 }
 
 func (c *wlConn) applyCursorLocked() {
-	if c == nil || c.pointer == nil || c.compositor == nil || c.shm == nil || c.dpy == nil {
+	if c == nil || c.pointer == nil || c.dpy == nil {
+		return
+	}
+	if c.applyCursorShapeLocked() {
+		return
+	}
+	c.applyCursorThemeLocked()
+}
+
+func (c *wlConn) applyCursorShapeLocked() bool {
+	if c.shapeMan == nil {
+		return false
+	}
+	if c.shapeDev == nil {
+		c.shapeDev = C.ui_wl_cursor_shape_pointer(c.shapeMan, c.pointer)
+	}
+	if c.shapeDev == nil {
+		return false
+	}
+	C.ui_wl_cursor_shape_set(c.shapeDev, C.uint32_t(c.ptrSerial), C.uint32_t(waylandCursorShape(c.cursor)))
+	C.ui_wl_flush(c.dpy)
+	return true
+}
+
+func (c *wlConn) applyCursorThemeLocked() {
+	if c.compositor == nil || c.shm == nil {
+		return
+	}
+	if c.curTheme == nil {
+		c.curTheme = C.ui_wl_cursor_theme_load(c.shm)
+	}
+	if c.curTheme == nil {
+		return
+	}
+	cur := c.themeCursor(c.cursor)
+	if cur == nil && c.cursor != CursorDefault {
+		cur = c.themeCursor(CursorDefault)
+	}
+	if cur == nil {
+		return
+	}
+	var w, h, hx, hy C.int
+	buf := C.ui_wl_cursor_buffer(cur, &w, &h, &hx, &hy)
+	if buf == nil {
 		return
 	}
 	if c.curSurf == nil {
 		c.curSurf = C.ui_wl_surface(c.compositor)
 	}
-	slot := c.ensureCursorBuf(c.cursor)
-	if slot == nil && c.cursor != CursorDefault {
-		slot = c.ensureCursorBuf(CursorDefault)
-	}
-	if slot == nil || slot.buf == nil || c.curSurf == nil {
+	if c.curSurf == nil {
 		return
 	}
-	C.ui_wl_attach(c.curSurf, slot.buf)
-	C.ui_wl_damage(c.curSurf, C.int(0), C.int(0), C.int(wlCursorSize), C.int(wlCursorSize))
+	C.ui_wl_attach(c.curSurf, buf)
+	C.ui_wl_damage(c.curSurf, 0, 0, w, h)
 	C.ui_wl_commit(c.curSurf)
-	C.ui_wl_set_cursor(c.pointer, C.uint32_t(c.ptrSerial), c.curSurf, C.int32_t(slot.hx), C.int32_t(slot.hy))
+	C.ui_wl_set_cursor(c.pointer, C.uint32_t(c.ptrSerial), c.curSurf, C.int32_t(hx), C.int32_t(hy))
 	C.ui_wl_flush(c.dpy)
+}
+
+func (c *wlConn) themeCursor(cur Cursor) *C.struct_wl_cursor {
+	for _, name := range waylandThemeCursorNames(cur) {
+		cs := C.CString(name)
+		got := C.ui_wl_cursor_get(c.curTheme, cs)
+		C.free(unsafe.Pointer(cs))
+		if got != nil {
+			return got
+		}
+	}
+	return nil
 }
 
 func (s *wlSurface) SetIMEEnabled(on bool) {
@@ -2159,6 +2074,15 @@ func uitkWlRegistryGlobal(id C.uintptr_t, reg *C.struct_wl_registry, name C.uint
 		c.viewporter = (*C.struct_wp_viewporter)(C.ui_wl_bind(reg, name, C.ui_wl_viewporter_iface(), 1))
 	case "xdg_activation_v1":
 		c.activation = (*C.struct_xdg_activation_v1)(C.ui_wl_bind(reg, name, C.ui_wl_act_iface(), 1))
+	case "wp_cursor_shape_manager_v1":
+		v := ver
+		if v > 1 {
+			v = 1
+		}
+		if v < 1 {
+			v = 1
+		}
+		c.shapeMan = (*C.struct_wp_cursor_shape_manager_v1)(C.ui_wl_bind(reg, name, C.ui_wl_cursor_shape_iface(), v))
 	case "zwp_linux_explicit_synchronization_v1":
 		if !waylandWantDmabuf() {
 			break

@@ -72,7 +72,7 @@ func (w *Window) SetFullscreen(on bool) { platform.SetFullscreen(w.surf, on) }
 // SetMaximized asks the native backend when available.
 func (w *Window) SetMaximized(on bool) { platform.SetMaximized(w.surf, on) }
 
-// SetCursor applies the pointer shape on X11 / Wayland / offscreen.
+// SetCursor applies the host pointer shape (X11, Wayland, Win32, AppKit, offscreen).
 func (w *Window) SetCursor(c platform.Cursor) {
 	if w == nil {
 		return

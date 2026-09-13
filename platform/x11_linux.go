@@ -3,7 +3,7 @@
 package platform
 
 /*
-#cgo linux LDFLAGS: -lX11 -lXext -lXrandr
+#cgo linux LDFLAGS: -lX11 -lXext -lXrandr -ldl
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <X11/Xatom.h>
@@ -13,6 +13,7 @@ package platform
 #include <X11/cursorfont.h>
 #include <X11/extensions/XShm.h>
 #include <X11/extensions/Xrandr.h>
+#include <dlfcn.h>
 #include <locale.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -415,6 +416,25 @@ static void ui_resize_win(Display* d, Window w, int width, int height) {
 static Cursor ui_font_cursor(Display* d, unsigned int shape) {
 	if (!d) return None;
 	return XCreateFontCursor(d, shape);
+}
+static Cursor ui_theme_cursor(Display* d, const char* name) {
+	static int tried = 0;
+	static Cursor (*load)(Display*, const char*) = 0;
+	if (!tried) {
+		void* h;
+		tried = 1;
+		h = dlopen("libXcursor.so.1", RTLD_LAZY | RTLD_LOCAL);
+		if (h) {
+			union { void* p; Cursor (*f)(Display*, const char*); } u;
+			u.p = dlsym(h, "XcursorLibraryLoadCursor");
+			load = u.f;
+		}
+	}
+	if (d && load && name && name[0]) {
+		Cursor c = load(d, name);
+		if (c) return c;
+	}
+	return None;
 }
 static void ui_define_cursor(Display* d, Window w, Cursor c) {
 	if (!d || !w) return;
@@ -1744,27 +1764,37 @@ func (c *x11Conn) xcursor(cur Cursor) C.Cursor {
 	if c == nil || c.dpy == nil {
 		return 0
 	}
+	slot := c.xcursorSlot(cur)
+	if slot == nil {
+		return 0
+	}
+	if *slot != 0 {
+		return *slot
+	}
+	shape := C.uint(x11FontCursorShape(cur))
+	for _, name := range x11ThemeCursorNames(cur) {
+		cs := C.CString(name)
+		got := C.ui_theme_cursor(c.dpy, cs)
+		C.free(unsafe.Pointer(cs))
+		if got != 0 {
+			*slot = got
+			return got
+		}
+	}
+	*slot = C.ui_font_cursor(c.dpy, shape)
+	return *slot
+}
+
+func (c *x11Conn) xcursorSlot(cur Cursor) *C.Cursor {
 	switch cur {
 	case CursorColResize:
-		if c.curCol == 0 {
-			c.curCol = C.ui_font_cursor(c.dpy, C.XC_sb_h_double_arrow)
-		}
-		return c.curCol
+		return &c.curCol
 	case CursorRowResize:
-		if c.curRow == 0 {
-			c.curRow = C.ui_font_cursor(c.dpy, C.XC_sb_v_double_arrow)
-		}
-		return c.curRow
+		return &c.curRow
 	case CursorText:
-		if c.curText == 0 {
-			c.curText = C.ui_font_cursor(c.dpy, C.XC_xterm)
-		}
-		return c.curText
+		return &c.curText
 	default:
-		if c.curDefault == 0 {
-			c.curDefault = C.ui_font_cursor(c.dpy, C.XC_left_ptr)
-		}
-		return c.curDefault
+		return &c.curDefault
 	}
 }
 

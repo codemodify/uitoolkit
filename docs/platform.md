@@ -7,9 +7,9 @@ tries `GPUDevice` and falls back to the CPU pixmap.
 | Backend | When | Present | Clipboard | Scale | IME | Cursor |
 | --- | --- | --- | --- | --- | --- | --- |
 | **offscreen** | `Headless`, `UITK_BACKEND=offscreen`, or no display | no-op | in-process | env or 1 | n/a | last `SetCursor` |
-| **Wayland** | Linux + CGO + `WAYLAND_DISPLAY` | **`wl_egl_window` + `eglSwapBuffers`** when `UITK_PAINT=auto\|gpu` and EGL works; else v0.4.1 **`wl_shm` XRGB8888** (opaque). **linux-dmabuf** only if `UITK_WAYLAND_PRESENT=dmabuf` on the CPU path | `wl_data_device` + primary when the compositor offers it | `wl_output` scale, `wp_fractional_scale_v1` + viewporter, env | `zwp_text_input_v3` preedit / commit | `wl_pointer_set_cursor` (enter serial + ARGB shm); re-applied on pointer enter |
-| **X11** | Linux + CGO + `DISPLAY` | **EGL window + `eglSwapBuffers`** when EGL works; else dirty-rect `XPutImage` / MIT-SHM | CLIPBOARD + PRIMARY, ICCCM **INCR** | Xft.dpi, RandR mm, screen mm, env | XIM preedit callbacks + compose / dead keys | `XDefineCursor` + `XFlush` (font cursors) |
-| Win32 / AppKit | stub windows; **tray** is `Shell_NotifyIcon` / `NSStatusItem` | — | — | — | — | — |
+| **Wayland** | Linux + CGO + `WAYLAND_DISPLAY` | **`wl_egl_window` + `eglSwapBuffers`** when `UITK_PAINT=auto\|gpu` and EGL works; else v0.4.1 **`wl_shm` XRGB8888** (opaque). **linux-dmabuf** only if `UITK_WAYLAND_PRESENT=dmabuf` on the CPU path | `wl_data_device` + primary when the compositor offers it | `wl_output` scale, `wp_fractional_scale_v1` + viewporter, env | `zwp_text_input_v3` preedit / commit | host cursors: `wp_cursor_shape_v1` when advertised, else `wl_cursor_theme` (`XCURSOR_THEME` / `XCURSOR_SIZE`) + `wl_pointer_set_cursor` (enter serial); re-applied on pointer enter |
+| **X11** | Linux + CGO + `DISPLAY` | **EGL window + `eglSwapBuffers`** when EGL works; else dirty-rect `XPutImage` / MIT-SHM | CLIPBOARD + PRIMARY, ICCCM **INCR** | Xft.dpi, RandR mm, screen mm, env | XIM preedit callbacks + compose / dead keys | host cursors: `XcursorLibraryLoadCursor` theme names, else `XCreateFontCursor` + `XDefineCursor` |
+| Win32 / AppKit | stub windows; **tray** is `Shell_NotifyIcon` / `NSStatusItem` | — | — | — | — | host cursors: `LoadCursorW` (`IDC_ARROW` / `SIZEWE` / `SIZENS` / `IBEAM`); AppKit `NSCursor` (arrow / resizeLeftRight / resizeUpDown / IBeam) |
 
 Auto-select: Wayland if `WAYLAND_DISPLAY` is set **and** a compositor
 accepts the connection, else X11 if `DISPLAY` is set, else offscreen.
@@ -37,8 +37,26 @@ UITK_PAINT=gpu  go run ./examples/gallery   # prefer EGL; CPU if init fails
 ```
 
 CGO Linux links `libX11`, `libXext`, `libXrandr`, `libwayland-client`,
-`libwayland-egl`, and `libxkbcommon`. paintengine2d's GPUDevice also
-needs EGL / GLES2. `CGO_ENABLED=0` never needs those libraries.
+`libwayland-cursor`, `libwayland-egl`, and `libxkbcommon`. Theme
+cursors on X11 load `libXcursor.so.1` at runtime when present.
+paintengine2d's GPUDevice also needs EGL / GLES2. `CGO_ENABLED=0`
+never needs those libraries.
+
+## Cursors (0.18.2)
+
+Pointer shapes are **host-provided**. `platform.Cursor` stays a small
+logical enum (`default`, `col-resize`, `row-resize`, `text`). Widgets
+(`TableView` column dividers, `Splitter` sash, text fields) call
+`Window.SetCursor`; each backend maps that to the compositor or OS
+theme. uitoolkit does not draw 24×24 ARGB cursor glyphs.
+
+| Backend | How |
+| --- | --- |
+| Wayland | Prefer `wp_cursor_shape_manager_v1` (`default`, `col_resize`, `row_resize`, `text`). Else `wl_cursor_theme_load` from `XCURSOR_THEME` / `XCURSOR_SIZE` and `wl_pointer_set_cursor` with the theme buffer. Both need a pointer-enter serial. |
+| X11 | `XcursorLibraryLoadCursor` (`left_ptr`, `sb_h_double_arrow`, `sb_v_double_arrow`, `xterm`) when libXcursor is available, else `XCreateFontCursor` (`XC_left_ptr`, `XC_sb_h_double_arrow`, `XC_sb_v_double_arrow`, `XC_xterm`). |
+| Win32 | `LoadCursorW` + `SetCursor` with `IDC_ARROW`, `IDC_SIZEWE`, `IDC_SIZENS`, `IDC_IBEAM`. |
+| AppKit | `NSCursor` `arrowCursor`, `resizeLeftRightCursor`, `resizeUpDownCursor`, `IBeamCursor`. |
+| offscreen | Records the last logical `SetCursor` (tests / screenshots). |
 
 ## X11 notes (0.3.0 / 0.5.0)
 
@@ -158,7 +176,7 @@ request `EGL_ALPHA_SIZE` 0.
   `wp_linux_drm_syncobj_v1`, `zwp_text_input_manager_v3`,
   `zwp_primary_selection_device_manager_v1`,
   `zxdg_decoration_manager_v1`, `wp_fractional_scale_manager_v1`,
-  `wp_viewporter`.
+  `wp_viewporter`, `xdg_activation_v1`, `wp_cursor_shape_manager_v1`.
 - Each window is an `xdg_toplevel`. Configure width/height are
   surface-local (logical); the present buffer is `ceil(logical * scale)`.
   States maximized / fullscreen / resizing / activated are parsed.
@@ -228,7 +246,7 @@ wayland-scanner private-code \
 # same for text-input-unstable-v3, primary-selection-unstable-v1,
 # xdg-decoration-unstable-v1, fractional-scale-v1, viewporter,
 # linux-dmabuf-unstable-v1, linux-explicit-synchronization-unstable-v1,
-# linux-drm-syncobj-v1, xdg-activation-v1
+# linux-drm-syncobj-v1, xdg-activation-v1, cursor-shape-v1
 ```
 
 ```bash

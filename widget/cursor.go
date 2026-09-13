@@ -5,7 +5,7 @@ import (
 	"github.com/codemodify/uitoolkit/platform"
 )
 
-// CursorHost is implemented by app.Window: change the OS pointer shape.
+// CursorHost is implemented by app.Window: change the host pointer shape.
 type CursorHost interface {
 	SetCursor(platform.Cursor)
 }
