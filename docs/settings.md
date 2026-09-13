@@ -144,10 +144,11 @@ Settings groups icon sets the same way as themes:
 The Appearance live preview includes a toolbar strip of chrome + Mail
 Fetch / Write glyphs for the selected set.
 
-When a premiere or user set is installed, a missing stem logs once and
-uses the closest PNG **in that folder**. Drawn classic is used only if
-the set is not copied yet. The toolkit tints monochrome/alpha PNGs with
-the Look foreground / icon color.
+When a premiere or user set is selected, a missing stem logs once and
+paints **`no-icon`** (pack file, or the embedded placeholder if the
+folder is not copied yet). Drawn classic is used only when the Icons
+pref is explicitly `classic` or `sharp`. The toolkit tints
+monochrome/alpha PNGs with the Look foreground / icon color.
 
 The v0.12.0 `filled` / `outline` / `duotone` SVG folders are removed.
 

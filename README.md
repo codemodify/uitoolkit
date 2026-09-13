@@ -516,7 +516,9 @@ Material Symbols outlined via marella v0.47.2) with a **wide** stem
 list (chrome, Mail, UI — 78 names, including `pen` and `download` in
 every set). `icons/render.sh` is reproducible from those pins.
 Installed file sets never fall back to the drawn classic scribble: a
-missing stem logs once and uses the closest PNG in the same folder.
+missing stem logs once and paints **`no-icon`** (every pack ships it;
+the same placeholder is embedded for a selected set that is not copied
+yet).
 Settings shows an icon preview strip. Copy `icons/*` into
 `~/.config/uitoolkit/icons/` again after pull — packs are not
 embedded. See [icons/README.md](icons/README.md).

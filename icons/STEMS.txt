@@ -78,3 +78,4 @@ table
 cards
 sun
 moon
+no-icon

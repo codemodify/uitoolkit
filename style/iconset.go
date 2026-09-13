@@ -1,6 +1,8 @@
 package style
 
 import (
+	"bytes"
+	_ "embed"
 	"fmt"
 	"log"
 	"os"
@@ -11,6 +13,12 @@ import (
 
 	"github.com/codemodify/paintengine2d"
 )
+
+//go:embed no-icon.png
+var embeddedNoIcon24 []byte
+
+//go:embed no-icon@2x.png
+var embeddedNoIcon48 []byte
 
 // IconSetInfo is a chrome icon set listed by Settings.
 type IconSetInfo struct {
@@ -258,30 +266,41 @@ func loadFileIcon(set IconSetName, icon ToolIcon, destW float32) (*paintengine2d
 			return img, true
 		}
 	}
-	if !fileIconSetInstalled(set) {
-		return nil, false
-	}
-	for _, stem := range sameSetFallbackStems() {
-		for _, name := range stemFileCandidates(stem, destW) {
-			if img, ok := loadPNGIcon(filepath.Join(dir, name)); ok {
-				logMissingStemOnce(set, icon, stem)
-				return img, true
-			}
+	for _, name := range stemFileCandidates(noIconStem, destW) {
+		if img, ok := loadPNGIcon(filepath.Join(dir, name)); ok {
+			logMissingStemOnce(set, icon, noIconStem)
+			return img, true
 		}
 	}
-	for _, other := range AllToolIcons() {
-		if other == icon {
-			continue
-		}
-		name := ToolIconName(other)
-		for _, file := range stemFileCandidates(name, destW) {
-			if img, ok := loadPNGIcon(filepath.Join(dir, file)); ok {
-				logMissingStemOnce(set, icon, name)
-				return img, true
-			}
-		}
+	if img, ok := loadEmbeddedNoIcon(destW); ok {
+		logMissingStemOnce(set, icon, noIconStem)
+		return img, true
 	}
 	return nil, false
+}
+
+func loadEmbeddedNoIcon(destW float32) (*paintengine2d.Image, bool) {
+	raw := embeddedNoIcon24
+	key := "embed:no-icon.png"
+	if destW >= iconHiDPIMin && len(embeddedNoIcon48) > 0 {
+		raw = embeddedNoIcon48
+		key = "embed:no-icon@2x.png"
+	}
+	if len(raw) == 0 {
+		return nil, false
+	}
+	iconsCache.mu.Lock()
+	defer iconsCache.mu.Unlock()
+	if img, ok := iconsCache.imgs[key]; ok {
+		return img, true
+	}
+	dec, err := paintengine2d.DecodePNG(bytes.NewReader(raw))
+	if err != nil || dec == nil || dec.Width < 1 || dec.Height < 1 {
+		return nil, false
+	}
+	img := toWhiteMask(dec)
+	iconsCache.imgs[key] = img
+	return img, true
 }
 
 var missingStemLog = struct {
@@ -376,13 +395,19 @@ func toWhiteMask(src *paintengine2d.Image) *paintengine2d.Image {
 }
 
 // DrawFileToolIcon paints a tinted PNG from the named file set.
-// Missing stems fall back to a closest stem in the same folder.
-// It returns false only when the set is not installed (or empty), so
-// the caller can use drawn classic/sharp — never when a premiere set
-// is present.
+// Lookup is exact stem, then documented aliases, then no-icon (pack
+// file or the embedded placeholder). It never paints a drawn classic
+// scribble. False only if even the embedded placeholder cannot decode.
 func DrawFileToolIcon(ctx *paintengine2d.Context, b paintengine2d.Rect, icon ToolIcon, col paintengine2d.Color, set IconSetName) bool {
 	img, ok := loadFileIcon(set, icon, b.Dx())
 	if !ok {
+		return false
+	}
+	return paintTintedIcon(ctx, b, img, col)
+}
+
+func paintTintedIcon(ctx *paintengine2d.Context, b paintengine2d.Rect, img *paintengine2d.Image, col paintengine2d.Color) bool {
+	if ctx == nil || img == nil || b.Empty() {
 		return false
 	}
 	src := paintengine2d.XYWH(0, 0, float32(img.Width), float32(img.Height))
@@ -391,4 +416,12 @@ func DrawFileToolIcon(ctx *paintengine2d.Context, b paintengine2d.Rect, icon Too
 		Filter: paintengine2d.FilterBilinear,
 	})
 	return true
+}
+
+func drawEmbeddedNoIcon(ctx *paintengine2d.Context, b paintengine2d.Rect, col paintengine2d.Color) bool {
+	img, ok := loadEmbeddedNoIcon(b.Dx())
+	if !ok {
+		return false
+	}
+	return paintTintedIcon(ctx, b, img, col)
 }

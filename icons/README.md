@@ -108,13 +108,15 @@ Wide coverage (every shipped set, see `STEMS.txt`):
 
 `pen.png` and `download.png` are required in every set (Mail **Write** /
 **Fetch**). Aliases (`pencil` `compose` for pen; `fetch` for download)
-ship as their own files.
+ship as their own files. Every set also ships `no-icon` / `no-icon@2x`
+(dashed box + X) for a missing stem.
 
-When a premiere or user set is **installed** and one stem is missing,
-the loader logs once and uses the closest stem **in that same folder**.
-It does **not** fall through to the drawn classic scribble. `classic`
-and `sharp` remain built-in vector fallbacks only when no file set is
-present, and do not need files.
+When a premiere or user set is selected and one stem is missing, the
+loader logs once and paints **`no-icon`** (dashed box + X) from that
+folder — or the copy embedded in the toolkit if the directory is
+absent. It does **not** fall through to a drawn classic scribble.
+`classic` and `sharp` remain explicit vector sets only when those names
+are chosen in Settings.
 
 Glyph → upstream name for each pack is in that folder’s `SOURCES.txt`.
 
