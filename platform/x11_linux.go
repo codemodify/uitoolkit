@@ -18,8 +18,8 @@ package platform
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <poll.h>
 #include <sys/ipc.h>
-#include <sys/select.h>
 #include <sys/shm.h>
 #include <sys/time.h>
 #include <unistd.h>
@@ -50,19 +50,21 @@ static int ui_filter(Display* d, XEvent* e) { return XFilterEvent(e, None); }
 
 static int ui_fd(Display* d) { return ConnectionNumber(d); }
 
+// poll, not select: a connection fd above FD_SETSIZE (1024) is undefined
+// behaviour with fd_set and silently corrupts the stack.
 static int ui_wait(Display* d, int ms) {
-	int fd = ConnectionNumber(d);
+	if (!d) return -1;
 	if (XPending(d)) return 1;
-	fd_set fds;
-	FD_ZERO(&fds);
-	FD_SET(fd, &fds);
-	if (ms < 0) {
-		return select(fd + 1, &fds, NULL, NULL, NULL);
+	struct pollfd pfd;
+	pfd.fd = ConnectionNumber(d);
+	pfd.events = POLLIN;
+	pfd.revents = 0;
+	int n = poll(&pfd, 1, ms);
+	if (n > 0 && XPending(d) == 0) {
+		// readable but no complete event yet: let the caller loop.
+		return 1;
 	}
-	struct timeval tv;
-	tv.tv_sec = ms / 1000;
-	tv.tv_usec = (ms % 1000) * 1000;
-	return select(fd + 1, &fds, NULL, NULL, &tv);
+	return n;
 }
 
 static Window ui_create(Display* d, int x, int y, int w, int h, const char* title, int popup) {
@@ -175,6 +177,7 @@ static XImage* ui_image(Display* d, int w, int h, char* data) {
 }
 
 static int ui_img_bpl(XImage* img) { return img ? img->bytes_per_line : 0; }
+static int ui_img_bpp(XImage* img) { return img ? img->bits_per_pixel : 0; }
 static int ui_img_msb(XImage* img) { return img && img->byte_order == MSBFirst; }
 static unsigned long ui_red_mask(Display* d) { return DefaultVisual(d, DefaultScreen(d))->red_mask; }
 static unsigned long ui_green_mask(Display* d) { return DefaultVisual(d, DefaultScreen(d))->green_mask; }
@@ -208,27 +211,74 @@ static KeySym ui_lookup(Display* d, XEvent* e, char* buf, int n, int* len) {
 	return ks;
 }
 
+// utf8 is set when the bytes are UTF-8 (Xutf8LookupString). Without an
+// input context XLookupString returns ISO-8859-1, which must be re-encoded
+// before it reaches Go or every accented character becomes U+FFFD.
 #ifdef X_HAVE_UTF8_STRING
-static int ui_lookup_im(XIC ic, Display* d, XEvent* e, char* buf, int n, KeySym* ks) {
+static int ui_lookup_im(XIC ic, Display* d, XEvent* e, char* buf, int n, KeySym* ks, int* utf8) {
 	*ks = 0;
+	*utf8 = 0;
 	if (ic) {
 		Status st = 0;
 		int len = Xutf8LookupString(ic, &e->xkey, buf, n, ks, &st);
+		*utf8 = 1;
 		if (st == XBufferOverflow) {
 			return -len;
 		}
 		return len;
 	}
+	(void)d;
 	return XLookupString(&e->xkey, buf, n, ks, NULL);
 }
 #else
-static int ui_lookup_im(XIC ic, Display* d, XEvent* e, char* buf, int n, KeySym* ks) {
+static int ui_lookup_im(XIC ic, Display* d, XEvent* e, char* buf, int n, KeySym* ks, int* utf8) {
 	(void)ic;
 	(void)d;
 	*ks = 0;
+	*utf8 = 0;
 	return XLookupString(&e->xkey, buf, n, ks, NULL);
 }
 #endif
+
+// ui_base_sym is the keysym this physical key produces on group 0, level 0
+// -- the layout-independent symbol. Shortcuts must resolve against it or
+// Ctrl+C stops working under a Cyrillic / Greek / Hebrew layout.
+static KeySym ui_base_sym(Display* d, XEvent* e) {
+	if (!d || !e) return 0;
+	return XkbKeycodeToKeysym(d, (KeyCode)e->xkey.keycode, 0, 0);
+}
+
+static Time ui_event_time(XEvent* e) {
+	if (!e) return CurrentTime;
+	switch (e->type) {
+	case KeyPress:
+	case KeyRelease:
+		return e->xkey.time;
+	case ButtonPress:
+	case ButtonRelease:
+		return e->xbutton.time;
+	case MotionNotify:
+		return e->xmotion.time;
+	case PropertyNotify:
+		return e->xproperty.time;
+	case SelectionClear:
+		return e->xselectionclear.time;
+	case SelectionRequest:
+		return e->xselectionrequest.time;
+	case SelectionNotify:
+		return e->xselection.time;
+	}
+	return CurrentTime;
+}
+
+// A zero-length append to a property generates a PropertyNotify carrying a
+// real server timestamp. ICCCM wants selection ownership taken with such a
+// timestamp, never CurrentTime.
+static void ui_touch_prop(Display* d, Window w, Atom prop) {
+	if (!d || !w) return;
+	XChangeProperty(d, w, prop, XA_STRING, 8, PropModeAppend, (const unsigned char*)"", 0);
+	XFlush(d);
+}
 
 static Atom ui_delete_atom(Display* d) { return XInternAtom(d, "WM_DELETE_WINDOW", False); }
 
@@ -269,14 +319,14 @@ static Window ui_helper(Display* d) {
 
 static Atom ui_atom(Display* d, const char* n) { return XInternAtom(d, n, False); }
 
-static void ui_set_owner(Display* d, Window w, Atom sel) {
-	XSetSelectionOwner(d, sel, w, CurrentTime);
+static void ui_set_owner(Display* d, Window w, Atom sel, Time t) {
+	XSetSelectionOwner(d, sel, w, t);
 }
 
 static Window ui_owner(Display* d, Atom sel) { return XGetSelectionOwner(d, sel); }
 
-static void ui_convert(Display* d, Window w, Atom sel, Atom target, Atom prop) {
-	XConvertSelection(d, sel, target, prop, w, CurrentTime);
+static void ui_convert(Display* d, Window w, Atom sel, Atom target, Atom prop, Time t) {
+	XConvertSelection(d, sel, target, prop, w, t);
 }
 
 static Window ui_sr_requestor(XEvent* e) { return e->xselectionrequest.requestor; }
@@ -311,17 +361,37 @@ static void ui_change_prop32(Display* d, Window w, Atom prop, Atom type, unsigne
 	XChangeProperty(d, w, prop, type, 32, PropModeReplace, (const unsigned char*)data, n);
 }
 
+// ui_get_prop reads a whole property, however large: size it with a
+// zero-length probe (bytes_after), then fetch that many 32-bit words in
+// one request. The old fixed 256KiB cap silently truncated a large
+// non-INCR paste. The caller frees the data with ui_xfree.
 static int ui_get_prop(Display* d, Window w, Atom prop, unsigned char** data, unsigned long* nitems, Atom* type) {
 	Atom actual = 0;
 	int fmt = 0;
 	unsigned long n = 0, rem = 0;
 	unsigned char* p = NULL;
-	int st = XGetWindowProperty(d, w, prop, 0L, 256 * 1024, True, AnyPropertyType,
-		&actual, &fmt, &n, &rem, &p);
-	if (st != Success || p == NULL) {
-		*data = NULL;
-		*nitems = 0;
-		*type = None;
+	*data = NULL;
+	*nitems = 0;
+	*type = None;
+	if (!d || !w) return 0;
+	if (XGetWindowProperty(d, w, prop, 0L, 0L, False, AnyPropertyType,
+			&actual, &fmt, &n, &rem, &p) != Success) {
+		return 0;
+	}
+	if (p) {
+		XFree(p);
+		p = NULL;
+	}
+	if (fmt == 0) {
+		// property does not exist; still delete so INCR handshakes advance
+		XDeleteProperty(d, w, prop);
+		return 0;
+	}
+	long words = (long)((rem + 3) / 4) + 1;
+	if (XGetWindowProperty(d, w, prop, 0L, words, True, AnyPropertyType,
+			&actual, &fmt, &n, &rem, &p) != Success || p == NULL) {
+		if (p) XFree(p);
+		XDeleteProperty(d, w, prop);
 		return 0;
 	}
 	*type = actual;
@@ -486,6 +556,21 @@ static int uitk_on_xerr(Display* d, XErrorEvent* e) {
 	return 0;
 }
 
+// Xlib's default error handler prints and calls exit(1). A BadWindow from
+// a request racing the window manager (or our own request on a window the
+// server already destroyed) must not kill the application, so install a
+// handler that hands the error to Go for logging and returns.
+extern void uitkXError(int code, int request, int minor);
+static int uitk_report_xerr(Display* d, XErrorEvent* e) {
+	(void)d;
+	uitk_xerr = e->error_code;
+	uitkXError((int)e->error_code, (int)e->request_code, (int)e->minor_code);
+	return 0;
+}
+static void ui_install_error_handler(void) {
+	XSetErrorHandler(uitk_report_xerr);
+}
+
 static int ui_shm_query(Display* d) {
 	int ev = 0, err = 0, major = 0, minor = 0, pix = 0;
 	if (!d || !XShmQueryExtension(d)) return 0;
@@ -581,8 +666,10 @@ import "C"
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unsafe"
 
@@ -672,6 +759,7 @@ type x11Conn struct {
 	atomTargets   C.Atom
 	atomText      C.Atom
 	atomINCR      C.Atom
+	atomTimestamp C.Atom
 	atomProp      C.Atom
 	atomString    C.Atom
 	atomNetState  C.Atom
@@ -679,9 +767,19 @@ type x11Conn struct {
 	atomMaxHorz   C.Atom
 	atomFullscr   C.Atom
 
-	clipText  string
-	ownClip   bool
-	ownPrim   bool
+	clipText string
+	ownClip  bool
+	ownPrim  bool
+	// ownTime is the timestamp ownership was taken with; the ICCCM
+	// TIMESTAMP target must return exactly that value.
+	ownTime C.Time
+	// serverTime is the most recent timestamp seen on an X event. ICCCM
+	// requires selection ownership and conversions to use a real server
+	// time, never CurrentTime.
+	serverTime C.Time
+	// servicing is set while the background selection servicer runs (no
+	// window loop is left to answer SelectionRequest).
+	servicing bool
 	pasteText string
 	pasteDone bool
 	pasteWant C.Atom
@@ -704,7 +802,9 @@ type x11Surface struct {
 	title      string
 	img        *paintengine2d.Image
 	xbuf       []byte
+	xmem       unsafe.Pointer // C.malloc'd XImage backing store (non-SHM)
 	stride     int
+	bpp        int
 	msb        bool
 	rmask      uint32
 	gmask      uint32
@@ -731,7 +831,25 @@ func x11InitOnce() {
 	x11Once.Do(func() {
 		C.ui_threads()
 		C.ui_init_locale()
+		C.ui_install_error_handler()
 	})
+}
+
+// x11Errors counts X protocol errors delivered to the process-wide
+// handler; the first few are logged, the rest only counted so a storm
+// cannot flood a terminal.
+var x11Errors atomic.Int64
+
+// X11Errors is the number of X protocol errors seen since start (tests
+// and diagnostics).
+func X11Errors() int { return int(x11Errors.Load()) }
+
+//export uitkXError
+func uitkXError(code, request, minor C.int) {
+	n := x11Errors.Add(1)
+	if n <= 8 || os.Getenv("UITK_X11_DEBUG") != "" {
+		log.Printf("uitk x11: protocol error %d (request %d.%d)", int(code), int(request), int(minor))
+	}
 }
 
 func x11OpenLocked() (*x11Conn, error) {
@@ -753,6 +871,7 @@ func x11OpenLocked() (*x11Conn, error) {
 	c.atomTargets = internAtom(d, "TARGETS")
 	c.atomText = internAtom(d, "TEXT")
 	c.atomINCR = internAtom(d, "INCR")
+	c.atomTimestamp = internAtom(d, "TIMESTAMP")
 	c.atomProp = internAtom(d, "UITK_CLIP")
 	c.atomString = C.XA_STRING
 	c.atomNetState = internAtom(d, "_NET_WM_STATE")
@@ -808,7 +927,16 @@ func (c *x11Conn) release() {
 	if c.refs < 0 {
 		c.refs = 0
 	}
-	if c.refs == 0 && !c.keep {
+	if c.refs > 0 {
+		return
+	}
+	if c.keep {
+		// We still own a selection: keep serving it from a background
+		// drainer now that no window loop is left to do it.
+		c.startSelectionServiceLocked()
+		return
+	}
+	if !c.servicing {
 		c.closeLocked()
 	}
 }
@@ -914,7 +1042,9 @@ func (s *x11Surface) Scale() float32 {
 
 func (s *x11Surface) SetTitle(title string) {
 	s.title = title
-	if s.conn == nil || s.conn.dpy == nil {
+	if s.conn == nil || s.conn.dpy == nil || s.win == 0 {
+		// After Close the window id is gone but the display may still be
+		// shared; a request on window 0 is a BadWindow error.
 		return
 	}
 	ct := C.CString(title)
@@ -933,6 +1063,9 @@ func internAtom(d *C.Display, name string) C.Atom {
 }
 
 func (s *x11Surface) Resize(w, h int) error {
+	if s.closed || s.win == 0 {
+		return nil
+	}
 	if w < 1 {
 		w = 1
 	}
@@ -967,40 +1100,82 @@ func (s *x11Surface) rebuildImageLocked() {
 		var info, addr unsafe.Pointer
 		img := C.ui_shm_image(s.conn.dpy, C.int(w), C.int(h), &info, &addr)
 		if img != nil && addr != nil {
-			s.ximg = img
+			if !s.adoptImageLocked(img, addr, h) {
+				C.ui_shm_destroy(s.conn.dpy, img, info)
+				return
+			}
 			s.shm = true
 			s.shmInfo = info
-			s.stride = int(C.ui_img_bpl(img))
-			s.msb = C.ui_img_msb(img) != 0
-			need := s.stride * h
-			if need < w*h*4 {
-				need = w * h * 4
-			}
-			s.xbuf = unsafe.Slice((*byte)(addr), need)
-			if s.stride < w*4 {
-				s.stride = w * 4
-			}
 			return
 		}
 	}
-	s.shm = false
-	s.xbuf = make([]byte, w*h*4+64)
-	s.ximg = C.ui_image(s.conn.dpy, C.int(w), C.int(h), (*C.char)(unsafe.Pointer(&s.xbuf[0])))
-	if s.ximg != nil {
-		s.stride = int(C.ui_img_bpl(s.ximg))
-		s.msb = C.ui_img_msb(s.ximg) != 0
-		need := s.stride * h
-		if need > len(s.xbuf) {
-			s.xbuf = make([]byte, need)
-			C.ui_destroy_image(s.ximg)
-			s.ximg = C.ui_image(s.conn.dpy, C.int(w), C.int(h), (*C.char)(unsafe.Pointer(&s.xbuf[0])))
-			if s.ximg != nil {
-				s.stride = int(C.ui_img_bpl(s.ximg))
-			}
-		}
+	// XCreateImage keeps the data pointer for the life of the image, so
+	// the backing store must be C memory: handing C a pointer into a Go
+	// slice it retains violates the cgo pointer rules.
+	probe := C.ui_image(s.conn.dpy, C.int(w), C.int(h), nil)
+	if probe == nil {
+		return
 	}
-	if s.stride < w*4 {
-		s.stride = w * 4
+	stride := int(C.ui_img_bpl(probe))
+	C.ui_destroy_image(probe)
+	if stride < 1 {
+		return
+	}
+	size := stride * h
+	if size < 4 {
+		size = 4
+	}
+	mem := C.calloc(1, C.size_t(size))
+	if mem == nil {
+		return
+	}
+	img := C.ui_image(s.conn.dpy, C.int(w), C.int(h), (*C.char)(mem))
+	if img == nil {
+		C.free(mem)
+		return
+	}
+	s.xmem = mem
+	if !s.adoptImageLocked(img, mem, h) {
+		C.ui_destroy_image(img)
+		C.free(mem)
+		s.xmem = nil
+		return
+	}
+	s.shm = false
+}
+
+// adoptImageLocked wires an XImage and its backing store into the surface,
+// refusing any geometry this code cannot pack pixels for. stride comes
+// from the server (bytes_per_line) and is never widened: doing that on a
+// 16-bpp visual made the slice twice the real MIT-SHM segment and the
+// blit walked off the end of it.
+func (s *x11Surface) adoptImageLocked(img *C.XImage, addr unsafe.Pointer, h int) bool {
+	stride := int(C.ui_img_bpl(img))
+	bpp := int(C.ui_img_bpp(img))
+	if stride < 1 || h < 1 || !x11SupportedBPP(bpp) {
+		x11WarnVisual(bpp)
+		return false
+	}
+	s.ximg = img
+	s.stride = stride
+	s.bpp = bpp
+	s.msb = C.ui_img_msb(img) != 0
+	s.xbuf = unsafe.Slice((*byte)(addr), stride*h)
+	return true
+}
+
+var x11VisualWarned atomic.Bool
+
+// x11SupportedBPP reports whether the CPU present path can pack pixels
+// for this server pixel size. 32 and 16 bits per pixel cover every
+// TrueColor visual in practice; anything else (8-bit PseudoColor, packed
+// 24) presents nothing rather than corrupting memory.
+func x11SupportedBPP(bpp int) bool { return bpp == 32 || bpp == 16 }
+
+func x11WarnVisual(bpp int) {
+	if x11VisualWarned.CompareAndSwap(false, true) {
+		log.Printf("uitk x11: unsupported visual (%d bits per pixel); "+
+			"window will not present -- use a 32- or 16-bpp visual, or UITK_BACKEND=offscreen", bpp)
 	}
 }
 
@@ -1015,13 +1190,21 @@ func (s *x11Surface) destroyImageLocked() {
 		s.shmInfo = nil
 		s.shm = false
 		s.xbuf = nil
+		s.stride = 0
+		s.bpp = 0
 		return
 	}
 	if s.ximg != nil {
 		C.ui_destroy_image(s.ximg)
 		s.ximg = nil
 	}
+	if s.xmem != nil {
+		C.free(s.xmem)
+		s.xmem = nil
+	}
 	s.xbuf = nil
+	s.stride = 0
+	s.bpp = 0
 }
 
 func (s *x11Surface) copyRect(r paintengine2d.Rect) {
@@ -1042,13 +1225,18 @@ func (s *x11Surface) copyRect(r paintengine2d.Rect) {
 		return
 	}
 	stride := s.stride
-	if stride < s.img.Width*4 {
-		stride = s.img.Width * 4
+	if stride < 1 || len(s.xbuf) == 0 {
+		return
+	}
+	bytesPP := s.bpp / 8
+	if bytesPP < 1 {
+		return
 	}
 	// Typical LE TrueColor (red 0xff0000) is the same BGRA layout as
 	// Wayland XRGB8888 — one damage-rect swizzle, not NRGBAAt+pack
 	// per pixel (that path was ~70ms/frame at 1000×760).
-	if !s.msb && s.rmask == 0x00ff0000 && s.gmask == 0x0000ff00 && s.bmask == 0x000000ff {
+	if bytesPP == 4 && !s.msb && s.rmask == 0x00ff0000 && s.gmask == 0x0000ff00 && s.bmask == 0x000000ff &&
+		stride >= s.img.Width*4 {
 		copyImageRect(s.xbuf, stride, s.img, r, true, true)
 		return
 	}
@@ -1056,11 +1244,11 @@ func (s *x11Surface) copyRect(r paintengine2d.Rect) {
 		row := y * stride
 		for x := x0; x < x1; x++ {
 			n := s.img.NRGBAAt(x, y)
-			i := row + x*4
-			if i+4 > len(s.xbuf) {
+			i := row + x*bytesPP
+			if i+bytesPP > len(s.xbuf) {
 				return
 			}
-			packXPixel(s.xbuf[i:], n.R, n.G, n.B, n.A, s.msb, s.rmask, s.gmask, s.bmask)
+			packXPixelN(s.xbuf[i:], bytesPP, n.R, n.G, n.B, n.A, s.msb, s.rmask, s.gmask, s.bmask)
 		}
 	}
 }
@@ -1135,10 +1323,15 @@ func (s *x11Surface) Present(dirty []paintengine2d.Rect) error {
 }
 
 func (s *x11Surface) Poll() []Event {
-	if s.closed || s.conn == nil {
+	if s.conn == nil {
 		return nil
 	}
-	s.conn.drain()
+	if !s.closed {
+		s.conn.drain()
+	}
+	// Drain the queue even when closed: an EventClose (or the events
+	// before it) must never be swallowed because the surface changed
+	// state between Wait and Poll.
 	x11Mu.Lock()
 	ev := s.conn.queues[s.win]
 	s.conn.queues[s.win] = nil
@@ -1167,6 +1360,9 @@ func (c *x11Conn) drainLocked() {
 	for C.ui_pending(c.dpy) != 0 {
 		var xe C.XEvent
 		C.ui_next(c.dpy, &xe)
+		if t := C.ui_event_time(&xe); t != 0 {
+			c.serverTime = t
+		}
 		if C.ui_filter(c.dpy, &xe) != 0 {
 			continue
 		}
@@ -1255,25 +1451,35 @@ func (s *x11Surface) translate(xe *C.XEvent) []Event {
 		}
 		var buf [128]C.char
 		var ks C.KeySym
-		n := int(C.ui_lookup_im(s.ic, s.conn.dpy, xe, &buf[0], 128, &ks))
+		var isUTF8 C.int
+		n := int(C.ui_lookup_im(s.ic, s.conn.dpy, xe, &buf[0], 128, &ks, &isUTF8))
+		text := C.GoBytes(unsafe.Pointer(&buf[0]), C.int(max(n, 0)))
 		if n < 0 {
 			need := -n
-			if need > 8 && need < 4096 {
+			text = nil
+			if need > 8 && need < 1<<20 {
 				big := make([]C.char, need+1)
-				n = int(C.ui_lookup_im(s.ic, s.conn.dpy, xe, &big[0], C.int(need+1), &ks))
-				ev := Event{Kind: kind, Key: xkey(ks), Mods: xmods(uint(C.ui_key_state(xe)))}
-				out := []Event{ev}
-				if kind == EventKeyDown && n > 0 && !ev.Mods.Ctrl() {
-					out = append(out, textEvents(C.GoBytes(unsafe.Pointer(&big[0]), C.int(n)), ev.Mods)...)
+				n = int(C.ui_lookup_im(s.ic, s.conn.dpy, xe, &big[0], C.int(need+1), &ks, &isUTF8))
+				if n > 0 {
+					text = C.GoBytes(unsafe.Pointer(&big[0]), C.int(n))
 				}
-				return out
+			} else {
+				n = 0
 			}
-			n = 0
 		}
-		ev := Event{Kind: kind, Key: xkey(ks), Mods: xmods(uint(C.ui_key_state(xe)))}
+		if isUTF8 == 0 {
+			// XLookupString (no input context) yields ISO-8859-1.
+			text = latin1ToUTF8(text)
+		}
+		base := uint64(C.ui_base_sym(s.conn.dpy, xe))
+		ev := Event{
+			Kind: kind,
+			Key:  KeyFromKeysymFallback(uint64(ks), base),
+			Mods: xmods(uint(C.ui_key_state(xe))),
+		}
 		out := []Event{ev}
-		if kind == EventKeyDown && n > 0 && !ev.Mods.Ctrl() {
-			out = append(out, textEvents(C.GoBytes(unsafe.Pointer(&buf[0]), C.int(n)), ev.Mods)...)
+		if kind == EventKeyDown && len(text) > 0 && !ev.Mods.Ctrl() {
+			out = append(out, textEvents(text, ev.Mods)...)
 		}
 		return out
 	case C.FocusIn:
@@ -1292,11 +1498,15 @@ func (s *x11Surface) translate(xe *C.XEvent) []Event {
 		}
 		return []Event{{Kind: EventFocusOut}, {Kind: EventIMECancel}}
 	case C.DestroyNotify:
+		// The window really is gone (server-side death or our own
+		// XDestroyWindow): only here does the surface become Closed.
 		s.closed = true
 		return []Event{{Kind: EventClose}}
 	case C.ClientMessage:
 		if C.ui_is_delete(s.conn.dpy, xe) != 0 {
-			s.closed = true
+			// WM_DELETE_WINDOW is a *request*. The app may veto it
+			// (close-to-tray). Surface.Closed stays false until
+			// Close() runs or the window is destroyed.
 			return []Event{{Kind: EventClose}}
 		}
 	}
@@ -1519,13 +1729,26 @@ func (c *x11Conn) handleSelReq(xe *C.XEvent) {
 	data := c.clipText
 	switch target {
 	case c.atomTargets:
+		// INCR is a transfer *type*, never a target: advertising it let
+		// requestors ask for a target we cannot convert. TIMESTAMP is
+		// required of every ICCCM selection owner.
 		atoms := []C.ulong{
-			C.ulong(c.atomTargets), C.ulong(c.atomUTF8), C.ulong(c.atomString),
-			C.ulong(c.atomText), C.ulong(c.atomINCR),
+			C.ulong(c.atomTargets), C.ulong(c.atomTimestamp),
+			C.ulong(c.atomUTF8), C.ulong(c.atomString), C.ulong(c.atomText),
 		}
 		C.ui_change_prop32(c.dpy, req, prop, C.XA_ATOM, &atoms[0], C.int(len(atoms)))
 		C.ui_send_sel_notify(c.dpy, xe, prop)
+	case c.atomTimestamp:
+		ts := []C.ulong{C.ulong(c.ownTime)}
+		C.ui_change_prop32(c.dpy, req, prop, C.XA_INTEGER, &ts[0], 1)
+		C.ui_send_sel_notify(c.dpy, xe, prop)
 	case c.atomUTF8, c.atomString, c.atomText:
+		// TEXT is a polymorphic target: the reply must name a concrete
+		// type, not echo TEXT back at the requestor.
+		replyType := target
+		if replyType == c.atomText {
+			replyType = c.atomUTF8
+		}
 		raw := []byte(data)
 		thr := INCRThreshold(c.maxReq)
 		if len(raw) > thr {
@@ -1536,7 +1759,7 @@ func (c *x11Conn) handleSelReq(xe *C.XEvent) {
 			c.incrSends = append(c.incrSends, incrSendState{
 				requestor: req,
 				prop:      prop,
-				typ:       target,
+				typ:       replyType,
 				data:      raw,
 				chunk:     INCRChunkSize(thr),
 			})
@@ -1544,7 +1767,7 @@ func (c *x11Conn) handleSelReq(xe *C.XEvent) {
 			return
 		}
 		ct := C.CString(data)
-		C.ui_change_prop8(c.dpy, req, prop, target, ct, C.int(len(data)))
+		C.ui_change_prop8(c.dpy, req, prop, replyType, ct, C.int(len(data)))
 		C.free(unsafe.Pointer(ct))
 		C.ui_send_sel_notify(c.dpy, xe, prop)
 	default:
@@ -1562,6 +1785,7 @@ func (c *x11Conn) handleSelClear(xe *C.XEvent) {
 	}
 	if !c.ownClip && !c.ownPrim && len(c.incrSends) == 0 {
 		c.keep = false
+		c.clipText = ""
 	}
 }
 
@@ -1661,12 +1885,85 @@ func (c *x11Conn) setClipboard(s string) {
 		return
 	}
 	c.clipText = s
-	C.ui_set_owner(c.dpy, c.helper, c.atomClipboard)
-	C.ui_set_owner(c.dpy, c.helper, c.atomPrimary)
+	t := c.selectionTimeLocked()
+	c.ownTime = t
+	C.ui_set_owner(c.dpy, c.helper, c.atomClipboard, t)
+	C.ui_set_owner(c.dpy, c.helper, c.atomPrimary, t)
 	c.ownClip = C.ui_owner(c.dpy, c.atomClipboard) == c.helper
 	c.ownPrim = C.ui_owner(c.dpy, c.atomPrimary) == c.helper
 	c.keep = c.ownClip || c.ownPrim
 	C.ui_flush(c.dpy)
+	c.startSelectionServiceLocked()
+}
+
+// selectionTimeLocked returns a real server timestamp for selection
+// ownership and conversion. ICCCM forbids CurrentTime there: with
+// CurrentTime an owner cannot tell a stale request from a fresh one.
+// When no timestamped event has arrived yet, a zero-length property
+// append on the helper window produces one.
+func (c *x11Conn) selectionTimeLocked() C.Time {
+	if c.serverTime != 0 {
+		return c.serverTime
+	}
+	if c.dpy == nil || c.helper == 0 {
+		return 0 // CurrentTime
+	}
+	C.ui_touch_prop(c.dpy, c.helper, c.atomProp)
+	deadline := time.Now().Add(100 * time.Millisecond)
+	for c.serverTime == 0 && time.Now().Before(deadline) {
+		c.drainLocked()
+		if c.serverTime != 0 {
+			break
+		}
+		dpy := c.dpy
+		x11Mu.Unlock()
+		C.ui_wait(dpy, 5)
+		x11Mu.Lock()
+		if c.dpy == nil {
+			return 0
+		}
+	}
+	return c.serverTime
+}
+
+// startSelectionServiceLocked keeps answering SelectionRequest after the
+// last window is gone. An X selection owner that never reads its
+// connection makes every other application's paste hang until their own
+// timeout: ownership is a promise to serve the data. The goroutine exits
+// as soon as a window loop takes over (refs > 0) or ownership is lost.
+func (c *x11Conn) startSelectionServiceLocked() {
+	if c.servicing || c.refs > 0 || !c.keep || c.dpy == nil {
+		return
+	}
+	c.servicing = true
+	go c.serviceSelections()
+}
+
+func (c *x11Conn) serviceSelections() {
+	for {
+		x11Mu.Lock()
+		if c.dpy == nil || c.refs > 0 || !c.keep {
+			c.servicing = false
+			done := c.dpy != nil && c.refs == 0 && !c.keep
+			c.mayCloseLocked(done)
+			x11Mu.Unlock()
+			return
+		}
+		c.drainLocked()
+		dpy := c.dpy
+		x11Mu.Unlock()
+		if dpy == nil {
+			return
+		}
+		C.ui_wait(dpy, 50)
+	}
+}
+
+// mayCloseLocked closes an idle connection nobody is using any more.
+func (c *x11Conn) mayCloseLocked(ok bool) {
+	if ok && c.refs == 0 && !c.keep && !c.servicing {
+		c.closeLocked()
+	}
 }
 
 func (c *x11Conn) readSelection(sel C.Atom, timeout time.Duration) (string, bool) {
@@ -1689,7 +1986,7 @@ func (c *x11Conn) readSelection(sel C.Atom, timeout time.Duration) (string, bool
 	c.pasteText = ""
 	c.pasteWant = sel
 	c.incrRecv = incrRecvState{}
-	C.ui_convert(c.dpy, c.helper, sel, c.atomUTF8, c.atomProp)
+	C.ui_convert(c.dpy, c.helper, sel, c.atomUTF8, c.atomProp, c.selectionTimeLocked())
 	C.ui_flush(c.dpy)
 	deadline := time.Now().Add(timeout)
 	for !c.pasteDone && time.Now().Before(deadline) {
@@ -1697,8 +1994,9 @@ func (c *x11Conn) readSelection(sel C.Atom, timeout time.Duration) (string, bool
 		if c.pasteDone {
 			break
 		}
+		dpy := c.dpy
 		x11Mu.Unlock()
-		C.ui_wait(c.dpy, 20)
+		C.ui_wait(dpy, 5)
 		x11Mu.Lock()
 		if c.dpy == nil {
 			x11Mu.Unlock()
@@ -1707,7 +2005,7 @@ func (c *x11Conn) readSelection(sel C.Atom, timeout time.Duration) (string, bool
 	}
 	if !c.pasteDone && c.dpy != nil && !c.incrRecv.active {
 		c.pasteDone = false
-		C.ui_convert(c.dpy, c.helper, sel, c.atomString, c.atomProp)
+		C.ui_convert(c.dpy, c.helper, sel, c.atomString, c.atomProp, c.selectionTimeLocked())
 		C.ui_flush(c.dpy)
 		end := time.Now().Add(timeout / 2)
 		for !c.pasteDone && time.Now().Before(end) {
@@ -1715,8 +2013,9 @@ func (c *x11Conn) readSelection(sel C.Atom, timeout time.Duration) (string, bool
 			if c.pasteDone {
 				break
 			}
+			dpy := c.dpy
 			x11Mu.Unlock()
-			C.ui_wait(c.dpy, 20)
+			C.ui_wait(dpy, 5)
 			x11Mu.Lock()
 			if c.dpy == nil {
 				x11Mu.Unlock()

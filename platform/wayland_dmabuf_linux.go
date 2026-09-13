@@ -91,13 +91,15 @@ func (s *wlSurface) ensureDmabufSlot(i, w, h int) error {
 		return fmt.Errorf("platform: linux-dmabuf create_immed failed")
 	}
 	s.slots[i] = wlSlot{
-		buf:    buf,
-		mem:    bo.mapped,
+		buf: buf,
+		// mem is established per frame by beginDMAWrite: a GBM mapping
+		// held across frames is never flushed by some drivers.
+		mem:    unsafe.Pointer(bo.mapped),
 		size:   int(bo.map_size),
 		fd:     int(bo.fd),
 		w:      w,
 		h:      h,
-		stride: int(bo.stride),
+		stride: int(bo.map_stride),
 		dma:    unsafe.Pointer(bo),
 	}
 	return nil

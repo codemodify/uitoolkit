@@ -3,69 +3,90 @@
 package platform
 
 import (
+	"errors"
+	"os"
 	"sync"
 	"syscall"
 	"time"
 )
 
 // fdWaker is a pipe the UI loop can poll (Wayland wl_display + extra fd)
-// and Application.Post can write to. Pipe2 is in Go 1.22 syscall; Eventfd
-// is not.
+// and Application.Post can write to.
+//
+// The read end is owned by an *os.File so the Go runtime poller supplies
+// the timeout. The previous syscall.Select version indexed a 1024-bit
+// fd_set with the raw descriptor, which panics (Go) or smashes the stack
+// (C) as soon as the process has more than 1024 descriptors open — a
+// perfectly ordinary state for an app with many fonts, sockets and
+// buffers. The raw descriptor is still available for C pollers via FD.
 type fdWaker struct {
-	r, w int
+	r, w *os.File
+	fd   int
 }
 
 func newFDWaker() *fdWaker {
 	var p [2]int
 	if err := syscall.Pipe2(p[:], syscall.O_CLOEXEC|syscall.O_NONBLOCK); err != nil {
-		return &fdWaker{r: -1, w: -1}
+		return &fdWaker{fd: -1}
 	}
-	return &fdWaker{r: p[0], w: p[1]}
+	return &fdWaker{
+		r:  os.NewFile(uintptr(p[0]), "uitk-wake-r"),
+		w:  os.NewFile(uintptr(p[1]), "uitk-wake-w"),
+		fd: p[0],
+	}
 }
 
+// FD is the raw read descriptor, for a C poll loop (wl_display + waker).
+// It stays registered with the Go poller: reading it from C is only safe
+// because every Go-side read goes through Wait / Drain.
 func (w *fdWaker) FD() int {
-	if w == nil {
+	if w == nil || w.r == nil {
 		return -1
 	}
-	return w.r
+	return w.fd
 }
 
 func (w *fdWaker) Signal() {
-	if w == nil || w.w < 0 {
+	if w == nil || w.w == nil {
 		return
 	}
 	var b [1]byte
-	_, _ = syscall.Write(w.w, b[:])
+	_, _ = w.w.Write(b[:])
 }
 
 func (w *fdWaker) Drain() {
-	if w == nil || w.r < 0 {
+	if w == nil || w.r == nil {
 		return
 	}
+	_ = w.r.SetReadDeadline(time.Now())
 	var buf [64]byte
 	for {
-		if _, err := syscall.Read(w.r, buf[:]); err != nil {
+		if _, err := w.r.Read(buf[:]); err != nil {
 			break
 		}
 	}
+	_ = w.r.SetReadDeadline(time.Time{})
 }
 
 func (w *fdWaker) Wait(timeout time.Duration) bool {
-	if w == nil || w.r < 0 {
+	if w == nil || w.r == nil {
 		if timeout > 0 {
 			time.Sleep(timeout)
 		}
 		return false
 	}
-	var set syscall.FdSet
-	set.Bits[w.r/64] |= 1 << (uint(w.r) % 64)
-	var tv *syscall.Timeval
 	if timeout >= 0 {
-		t := syscall.NsecToTimeval(int64(timeout))
-		tv = &t
+		_ = w.r.SetReadDeadline(time.Now().Add(timeout))
+	} else {
+		_ = w.r.SetReadDeadline(time.Time{})
 	}
-	n, err := syscall.Select(w.r+1, &set, nil, nil, tv)
-	if err != nil || n <= 0 {
+	var buf [64]byte
+	_, err := w.r.Read(buf[:])
+	_ = w.r.SetReadDeadline(time.Time{})
+	if err != nil {
+		if errors.Is(err, os.ErrDeadlineExceeded) {
+			return false
+		}
 		return false
 	}
 	w.Drain()
@@ -76,14 +97,15 @@ func (w *fdWaker) Close() {
 	if w == nil {
 		return
 	}
-	if w.r >= 0 {
-		_ = syscall.Close(w.r)
-		w.r = -1
+	if w.r != nil {
+		_ = w.r.Close()
+		w.r = nil
 	}
-	if w.w >= 0 {
-		_ = syscall.Close(w.w)
-		w.w = -1
+	if w.w != nil {
+		_ = w.w.Close()
+		w.w = nil
 	}
+	w.fd = -1
 }
 
 var (
