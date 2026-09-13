@@ -977,7 +977,7 @@ func TestMailChromeHasNoSidebarAccountPicker(t *testing.T) {
 
 	var split *widgets.Splitter
 	var tree *widgets.TreeView
-	var addAcct, removeAcct, acctCentral bool
+	var prefs bool
 	widget.Walk(w.Content(), func(c widget.Component) {
 		switch v := c.(type) {
 		case *widgets.Splitter:
@@ -998,13 +998,9 @@ func TestMailChromeHasNoSidebarAccountPicker(t *testing.T) {
 					if it == nil {
 						continue
 					}
-					switch it.Text {
-					case "Add Account…", "Add &Account…":
-						addAcct = true
-					case "Remove Account…", "Remove &Account…":
-						removeAcct = true
-					case "Account Central":
-						acctCentral = true
+					label, _, _ := widgets.ParseMnemonic(it.Text)
+					if label == "Preferences" && it.OnClick != nil {
+						prefs = true
 					}
 				}
 			}
@@ -1042,8 +1038,8 @@ func TestMailChromeHasNoSidebarAccountPicker(t *testing.T) {
 	if !tagsNode {
 		t.Fatal("Filters missing from the tree")
 	}
-	if !addAcct || !removeAcct || !acctCentral {
-		t.Fatalf("account menus add=%v remove=%v central=%v", addAcct, removeAcct, acctCentral)
+	if !prefs {
+		t.Fatal("M → Preferences missing")
 	}
 	w.Close()
 }
