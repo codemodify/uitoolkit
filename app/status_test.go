@@ -50,6 +50,7 @@ func TestFakeStatusItemClickShowsWindow(t *testing.T) {
 		t.Fatal("hidden")
 	}
 	fake.Click()
+	a.DrainPosted() // tray callbacks are queued for the UI goroutine
 	if shown != 1 || !w.Visible() {
 		t.Fatalf("shown=%d visible=%v", shown, w.Visible())
 	}
@@ -75,12 +76,25 @@ func TestShowRaiseAfterCloseToTray(t *testing.T) {
 	}
 }
 
-func TestApplicationPostRunsImmediatelyOutsideLoop(t *testing.T) {
+func TestApplicationPostNeverRunsOnCallerGoroutine(t *testing.T) {
 	a := New(Options{Look: style.DarkLook(), Headless: true})
 	n := 0
 	a.Post(func() { n++ })
+	if n != 0 {
+		t.Fatalf("Post must not run fn inline, n=%d", n)
+	}
+	if a.Looping() {
+		t.Fatal("Looping outside Run")
+	}
+	a.DrainPosted()
 	if n != 1 {
-		t.Fatalf("Post outside Run should be sync, n=%d", n)
+		t.Fatalf("DrainPosted should run queued fn, n=%d", n)
+	}
+	// PumpOnce drains too, so a headless pump loop needs no special care.
+	a.Post(func() { n++ })
+	a.PumpOnce()
+	if n != 2 {
+		t.Fatalf("PumpOnce should drain, n=%d", n)
 	}
 }
 
@@ -177,6 +191,7 @@ func TestTrayContextMenuIsToolkitPopup(t *testing.T) {
 	}
 	w.Hide()
 	fake.ContextClick(380, 8)
+	a.DrainPosted() // tray callbacks are queued for the UI goroutine
 	if w.Visible() {
 		t.Fatal("context menu must not raise the main window")
 	}
