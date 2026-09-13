@@ -191,6 +191,7 @@ func (c *ComboBox) Open() {
 			c.Invalidate()
 		}
 	}
+	pop.RestoreFocusTo(c)
 	o := widget.DeviceOrigin(c)
 	b := c.LocalBounds()
 	anchor := paintengine2d.XYWH(o.X, o.Y, b.Dx(), b.Dy())

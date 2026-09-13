@@ -10,6 +10,7 @@ package platform
 #include <wayland-cursor.h>
 #include <xkbcommon/xkbcommon.h>
 #include <xkbcommon/xkbcommon-compose.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <poll.h>
 #include <stdint.h>
@@ -49,7 +50,8 @@ extern void uitkWlKeyMods(uintptr_t id, uint32_t depressed, uint32_t latched, ui
 extern void uitkWlKeyRepeat(uintptr_t id, int32_t rate, int32_t delay);
 extern void uitkWlBufRelease(uintptr_t sid, int slot);
 extern void uitkWlExplicitRelease(uintptr_t sid, int slot);
-extern void uitkWlOutputScale(uintptr_t id, int32_t factor);
+extern void uitkWlOutputScale(uintptr_t id, struct wl_output *out, int32_t factor);
+extern void uitkWlRegistryRemove(uintptr_t id, uint32_t name);
 extern void uitkWlDataOffer(uintptr_t id, struct wl_data_offer *offer);
 extern void uitkWlDataOfferMime(uintptr_t id, struct wl_data_offer *offer, char *mime);
 extern void uitkWlSelection(uintptr_t id, struct wl_data_offer *offer);
@@ -67,6 +69,11 @@ extern void uitkWlTIDelete(uintptr_t id, uint32_t before, uint32_t after);
 extern void uitkWlTIDone(uintptr_t id);
 extern void uitkWlFracScale(uintptr_t sid, uint32_t scale_120);
 extern void uitkWlActivationToken(uintptr_t sid, char *token);
+extern void uitkWlSurfEnter(uintptr_t sid, struct wl_output *out);
+extern void uitkWlSurfLeave(uintptr_t sid, struct wl_output *out);
+extern void uitkWlOutputDone(uintptr_t id, struct wl_output *out);
+extern void uitkWlFrameDone(uintptr_t sid);
+extern void uitkWlPrimCancelled(uintptr_t id);
 
 static int ui_wl_probe(void) {
 	struct wl_display *d = wl_display_connect(NULL);
@@ -85,7 +92,8 @@ static void uitk_reg_global(void *data, struct wl_registry *reg, uint32_t name, 
 	uitkWlRegistryGlobal((uintptr_t)data, reg, name, (char *)iface, ver);
 }
 static void uitk_reg_remove(void *data, struct wl_registry *reg, uint32_t name) {
-	(void)data; (void)reg; (void)name;
+	(void)reg;
+	uitkWlRegistryRemove((uintptr_t)data, name);
 }
 static const struct wl_registry_listener uitk_reg_listener = {
 	.global = uitk_reg_global,
@@ -123,6 +131,59 @@ static void ui_wl_set_app_id(struct xdg_toplevel *t, const char *id) { xdg_tople
 static void ui_wl_set_min(struct xdg_toplevel *t, int w, int h) { xdg_toplevel_set_min_size(t, w, h); }
 static void ui_wl_commit(struct wl_surface *s) { wl_surface_commit(s); }
 static void ui_wl_attach(struct wl_surface *s, struct wl_buffer *b) { wl_surface_attach(s, b, 0, 0); }
+
+// Detaching the buffer is mandatory before an xdg role is destroyed and
+// re-created on the same wl_surface: xdg_wm_base.get_xdg_surface on a
+// surface that still has a buffer committed is a protocol error and the
+// compositor disconnects the client.
+static void ui_wl_detach(struct wl_surface *s) {
+	if (!s) return;
+	wl_surface_attach(s, NULL, 0, 0);
+	wl_surface_commit(s);
+}
+
+static void uitk_surf_enter(void *data, struct wl_surface *s, struct wl_output *out) {
+	(void)s;
+	uitkWlSurfEnter((uintptr_t)data, out);
+}
+static void uitk_surf_leave(void *data, struct wl_surface *s, struct wl_output *out) {
+	(void)s;
+	uitkWlSurfLeave((uintptr_t)data, out);
+}
+#ifdef WL_SURFACE_PREFERRED_BUFFER_SCALE_SINCE_VERSION
+static void uitk_surf_pref_scale(void *data, struct wl_surface *s, int32_t factor) {
+	(void)data; (void)s; (void)factor;
+}
+static void uitk_surf_pref_transform(void *data, struct wl_surface *s, uint32_t transform) {
+	(void)data; (void)s; (void)transform;
+}
+#endif
+static const struct wl_surface_listener uitk_surf_listener = {
+	.enter = uitk_surf_enter,
+	.leave = uitk_surf_leave,
+#ifdef WL_SURFACE_PREFERRED_BUFFER_SCALE_SINCE_VERSION
+	.preferred_buffer_scale = uitk_surf_pref_scale,
+	.preferred_buffer_transform = uitk_surf_pref_transform,
+#endif
+};
+static void ui_wl_surf_listen(struct wl_surface *s, uintptr_t sid) {
+	if (s) wl_surface_add_listener(s, &uitk_surf_listener, (void*)sid);
+}
+
+// Frame callbacks pace presentation: without them a GPU swap blocks in
+// the driver whenever the compositor throttles an occluded window, which
+// froze the whole run loop (tray, timers, posted work).
+static void uitk_frame_done(void *data, struct wl_callback *cb, uint32_t t) {
+	(void)t;
+	if (cb) wl_callback_destroy(cb);
+	uitkWlFrameDone((uintptr_t)data);
+}
+static const struct wl_callback_listener uitk_frame_listener = { .done = uitk_frame_done };
+static void ui_wl_frame_request(struct wl_surface *s, uintptr_t sid) {
+	if (!s) return;
+	struct wl_callback *cb = wl_surface_frame(s);
+	if (cb) wl_callback_add_listener(cb, &uitk_frame_listener, (void*)sid);
+}
 static void ui_wl_damage(struct wl_surface *s, int x, int y, int w, int h) {
 	if (wl_surface_get_version(s) >= 4) {
 		wl_surface_damage_buffer(s, x, y, w, h);
@@ -412,6 +473,23 @@ static uint32_t ui_xkb_sym(struct xkb_state *s, uint32_t key) {
 	if (!s) return 0;
 	return (uint32_t)xkb_state_key_get_one_sym(s, (xkb_keycode_t)(key + 8));
 }
+
+// ui_xkb_base_sym is the symbol this key produces in layout group 0 at
+// level 0 -- what shortcuts must resolve against so Ctrl+C survives a
+// non-Latin layout.
+static uint32_t ui_xkb_base_sym(struct xkb_keymap *m, uint32_t key) {
+	if (!m) return 0;
+	const xkb_keysym_t *syms = NULL;
+	int n = xkb_keymap_key_get_syms_by_level(m, (xkb_keycode_t)(key + 8), 0, 0, &syms);
+	if (n < 1 || !syms) return 0;
+	return (uint32_t)syms[0];
+}
+
+// Modifiers and other non-repeating keys must not auto-repeat.
+static int ui_xkb_key_repeats(struct xkb_keymap *m, uint32_t key) {
+	if (!m) return 0;
+	return xkb_keymap_key_repeats(m, (xkb_keycode_t)(key + 8)) ? 1 : 0;
+}
 static int ui_xkb_utf8(struct xkb_state *s, uint32_t key, char *buf, int n) {
 	if (!s) return 0;
 	return xkb_state_key_get_utf8(s, (xkb_keycode_t)(key + 8), buf, (size_t)n);
@@ -592,7 +670,10 @@ static void uitk_psrc_send(void *data, struct zwp_primary_selection_source_v1 *s
 	(void)s; (void)mime;
 	uitkWlPrimSend((uintptr_t)data, fd);
 }
-static void uitk_psrc_cancelled(void *data, struct zwp_primary_selection_source_v1 *s) { (void)data; (void)s; }
+static void uitk_psrc_cancelled(void *data, struct zwp_primary_selection_source_v1 *s) {
+	(void)s;
+	uitkWlPrimCancelled((uintptr_t)data);
+}
 static const struct zwp_primary_selection_source_v1_listener uitk_psrc_listener = {
 	.send = uitk_psrc_send,
 	.cancelled = uitk_psrc_cancelled,
@@ -658,10 +739,11 @@ static void uitk_out_geom(void *data, struct wl_output *o, int32_t x, int32_t y,
 static void uitk_out_mode(void *data, struct wl_output *o, uint32_t flags, int32_t w, int32_t h, int32_t refresh) {
 	(void)data; (void)o; (void)flags; (void)w; (void)h; (void)refresh;
 }
-static void uitk_out_done(void *data, struct wl_output *o) { (void)data; (void)o; }
+static void uitk_out_done(void *data, struct wl_output *o) {
+	uitkWlOutputDone((uintptr_t)data, o);
+}
 static void uitk_out_scale(void *data, struct wl_output *o, int32_t factor) {
-	(void)o;
-	uitkWlOutputScale((uintptr_t)data, factor);
+	uitkWlOutputScale((uintptr_t)data, o, factor);
 }
 static void uitk_out_name(void *data, struct wl_output *o, const char *n) { (void)data; (void)o; (void)n; }
 static void uitk_out_desc(void *data, struct wl_output *o, const char *n) { (void)data; (void)o; (void)n; }
@@ -755,8 +837,55 @@ static void ui_wl_viewport_destroy(struct wp_viewport *v) { if (v) wp_viewport_d
 static void ui_wl_viewporter_destroy(struct wp_viewporter *v) { if (v) wp_viewporter_destroy(v); }
 
 static int ui_wl_pipe(int fds[2]) { return pipe(fds); }
-static ssize_t ui_wl_write(int fd, const char *p, size_t n) { return write(fd, p, n); }
-static ssize_t ui_wl_read(int fd, char *p, size_t n) { return read(fd, p, n); }
+
+static void ui_wl_set_nonblock(int fd) {
+	if (fd < 0) return;
+	int fl = fcntl(fd, F_GETFL);
+	if (fl >= 0) fcntl(fd, F_SETFL, fl | O_NONBLOCK);
+}
+
+// ui_wl_write_all writes the whole selection with a deadline. The old
+// single write() ran on the UI thread and either truncated the paste
+// (EAGAIN once the pipe filled) or blocked the entire application until
+// the receiving client drained it.
+static ssize_t ui_wl_write_all(int fd, const char *p, size_t n, int ms) {
+	size_t off = 0;
+	while (off < n) {
+		ssize_t w = write(fd, p + off, n - off);
+		if (w > 0) {
+			off += (size_t)w;
+			continue;
+		}
+		if (w < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+			struct pollfd pfd = { .fd = fd, .events = POLLOUT };
+			int r = poll(&pfd, 1, ms);
+			if (r <= 0) break;
+			if (pfd.revents & (POLLERR | POLLHUP | POLLNVAL)) break;
+			continue;
+		}
+		if (w < 0 && errno == EINTR) continue;
+		break;
+	}
+	return (ssize_t)off;
+}
+
+// ui_wl_read_all reads a selection with an overall deadline so a source
+// client that never writes cannot wedge the UI thread forever.
+static ssize_t ui_wl_read_deadline(int fd, char *p, size_t n, int ms) {
+	for (;;) {
+		ssize_t r = read(fd, p, n);
+		if (r >= 0) return r;
+		if (errno == EINTR) continue;
+		if (errno == EAGAIN || errno == EWOULDBLOCK) {
+			struct pollfd pfd = { .fd = fd, .events = POLLIN };
+			int pr = poll(&pfd, 1, ms);
+			if (pr <= 0) return -1;
+			if (pfd.revents & (POLLERR | POLLNVAL)) return -1;
+			continue;
+		}
+		return -1;
+	}
+}
 */
 import "C"
 
@@ -833,6 +962,7 @@ func (WaylandBackend) NewSurface(opts WindowOptions) (Surface, error) {
 		wantH:    h,
 		bufScale: 1,
 		popup:    opts.Popup,
+		outs:     newOutputSet(),
 	}
 	bw, bh := w, h
 	if sc := int(c.outScale + 0.1); sc > 1 {
@@ -912,7 +1042,7 @@ type wlConn struct {
 	dataSrc     *C.struct_wl_data_source
 	clipOffer   *C.struct_wl_data_offer
 	clipMime    string
-	clipText    string
+	clip        clipCache
 	pendingOff  *C.struct_wl_data_offer
 	pendingMime string
 
@@ -921,7 +1051,7 @@ type wlConn struct {
 	primSrc      *C.struct_zwp_primary_selection_source_v1
 	primOffer    *C.struct_zwp_primary_selection_offer_v1
 	primMime     string
-	primText     string
+	prim         clipCache
 	pendPrim     *C.struct_zwp_primary_selection_offer_v1
 	pendPrimMime string
 
@@ -943,7 +1073,11 @@ type wlConn struct {
 	fracMan    *C.struct_wp_fractional_scale_manager_v1
 	viewporter *C.struct_wp_viewporter
 	activation *C.struct_xdg_activation_v1
-	output     *C.struct_wl_output
+	// outputs maps a wl_output proxy to its registry name; outs holds
+	// each output's scale and is the source of truth for surface scale.
+	outputs map[uintptr]uint32
+	outObjs map[uint32]*C.struct_wl_output
+	outs    *outputSet
 
 	dmabuf     unsafe.Pointer // *zwp_linux_dmabuf_v1
 	dmabufFB   unsafe.Pointer // *zwp_linux_dmabuf_feedback_v1
@@ -966,6 +1100,9 @@ type wlConn struct {
 	heldKey     uint32
 	heldDown    bool
 	clipKeep    bool
+	// servicing is set while the background clipboard drainer runs: no
+	// window loop is left to answer wl_data_source.send.
+	servicing bool
 }
 
 type wlSlot struct {
@@ -1011,6 +1148,23 @@ type wlSurface struct {
 	gpu        *paintengine2d.GPUDevice
 	eglWin     unsafe.Pointer // *wl_egl_window
 	popup      bool
+	// outs is the set of wl_output registry names this surface overlaps
+	// (wl_surface.enter / leave).
+	outs *outputSet
+	// framePending is set between wl_surface.frame and its done event;
+	// frameSince is when it was requested, so a lost callback cannot
+	// wedge presentation.
+	framePending bool
+	frameSince   time.Time
+	// blank marks a buffer that was reallocated (resize / scale change)
+	// and never painted; committing it shows a black or transparent
+	// flash, so Present skips it and lets the resize event drive a
+	// repaint first.
+	blank bool
+	// mapped is true once a buffer has been committed against the
+	// current xdg role. Hide/Show must clear it (and detach) or
+	// re-creating the role is a protocol error.
+	mapped bool
 }
 
 var (
@@ -1034,7 +1188,14 @@ func wlRetain() (*wlConn, error) {
 	if dpy == nil {
 		return nil, fmt.Errorf("platform: wl_display_connect failed (set WAYLAND_DISPLAY or use headless)")
 	}
-	c := &wlConn{dpy: dpy, refs: 1, xkbCtx: C.ui_xkb_ctx()}
+	c := &wlConn{
+		dpy:     dpy,
+		refs:    1,
+		xkbCtx:  C.ui_xkb_ctx(),
+		outputs: map[uintptr]uint32{},
+		outObjs: map[uint32]*C.struct_wl_output{},
+		outs:    newOutputSet(),
+	}
 	wlNext++
 	c.id = wlNext
 	wlConns[c.id] = c
@@ -1063,8 +1224,43 @@ func (c *wlConn) release() {
 	wlMu.Lock()
 	defer wlMu.Unlock()
 	c.refs--
-	if c.refs <= 0 && !c.clipKeep {
+	if c.refs > 0 {
+		return
+	}
+	if c.clipKeep {
+		// Owning a selection is a promise to serve it. With no window
+		// loop left to dispatch, wl_data_source.send would never be
+		// answered and every other client's paste would hang on us.
+		c.startClipboardServiceLocked()
+		return
+	}
+	if !c.servicing {
 		c.closeLocked()
+	}
+}
+
+func (c *wlConn) startClipboardServiceLocked() {
+	if c.servicing || c.refs > 0 || !c.clipKeep || c.dpy == nil {
+		return
+	}
+	c.servicing = true
+	go c.serviceClipboard()
+}
+
+func (c *wlConn) serviceClipboard() {
+	for {
+		wlMu.Lock()
+		if c.dpy == nil || c.refs > 0 || !c.clipKeep {
+			c.servicing = false
+			if c.dpy != nil && c.refs == 0 && !c.clipKeep {
+				c.closeLocked()
+			}
+			wlMu.Unlock()
+			return
+		}
+		dpy := c.dpy
+		wlMu.Unlock()
+		C.ui_wl_wait(dpy, 50)
 	}
 }
 
@@ -1147,10 +1343,14 @@ func (c *wlConn) closeLocked() {
 		C.ui_wl_act_destroy(c.activation)
 		c.activation = nil
 	}
-	if c.output != nil {
-		C.ui_wl_out_destroy(c.output)
-		c.output = nil
+	for name, out := range c.outObjs {
+		if out != nil {
+			C.ui_wl_out_destroy(out)
+		}
+		delete(c.outObjs, name)
 	}
+	c.outputs = map[uintptr]uint32{}
+	c.outs = newOutputSet()
 	if c.seat != nil {
 		C.ui_wl_seat_destroy(c.seat)
 		c.seat = nil
@@ -1318,6 +1518,14 @@ func (s *wlSurface) unmapToplevelLocked() {
 	if s == nil {
 		return
 	}
+	// A wl_surface that still has a buffer committed cannot be given a
+	// new xdg role: xdg_wm_base.get_xdg_surface then raises
+	// "xdg_surface must not have a buffer at creation" and the
+	// compositor disconnects the client. Detach and commit first, so
+	// Show() can re-create the role on a pristine surface.
+	if s.surf != nil {
+		C.ui_wl_detach(s.surf)
+	}
 	if s.deco != nil {
 		C.ui_wl_deco_destroy(s.deco)
 		s.deco = nil
@@ -1330,7 +1538,19 @@ func (s *wlSurface) unmapToplevelLocked() {
 		C.ui_wl_xdg_destroy(s.xdg)
 		s.xdg = nil
 	}
+	// Per-configure state belongs to the destroyed role: the new role
+	// starts unconfigured, unscaled, with no opaque region and no
+	// buffers the compositor still owns.
 	s.configured = false
+	s.mapped = false
+	s.scaleSet = 0
+	s.opaqueW, s.opaqueH = 0, 0
+	s.framePending = false
+	s.frameSince = time.Time{}
+	s.blank = true
+	for i := range s.slots {
+		s.slots[i].busy = false
+	}
 }
 
 func (s *wlSurface) requestActivate() {
@@ -1528,6 +1748,7 @@ func (s *wlSurface) Resize(w, h int) error {
 		return nil
 	}
 	s.img = paintengine2d.NewImage(bw, bh)
+	s.blank = true
 	if s.gpu != nil {
 		s.resizeGPU(bw, bh)
 	}
@@ -1580,6 +1801,20 @@ func (s *wlSurface) Present(dirty []paintengine2d.Rect) error {
 		if s.gpu != nil {
 			s.resizeGPU(bw, bh)
 		}
+		// The new pixmap is empty. Committing it now paints a black or
+		// transparent flash over the window for one frame; the resize
+		// event just queued makes the app repaint immediately.
+		s.blank = true
+	}
+	if s.blank {
+		// One frame only: the resize event queued above makes the app
+		// repaint, and committing the empty pixmap in the meantime
+		// flashes black over the window. The GPU path draws into its
+		// own surface, so it is not affected.
+		s.blank = false
+		if s.gpu == nil && !s.imgPainted() {
+			return nil
+		}
 	}
 	if s.frac > 1 && s.viewport != nil {
 		if s.scaleSet != 1 {
@@ -1599,10 +1834,19 @@ func (s *wlSurface) Present(dirty []paintengine2d.Rect) error {
 		s.opaqueW, s.opaqueH = s.logicalW, s.logicalH
 	}
 	if s.gpu != nil {
+		// Frame-callback pacing: with an occluded or throttled surface
+		// the compositor stops sending frame events, and a blocking
+		// eglSwapBuffers would stall the whole run loop. Skip the swap
+		// while one is outstanding.
+		if s.framePending && !s.frameOverdue() {
+			return nil
+		}
+		s.requestFrame()
 		if err := s.presentGPU(); err == nil {
 			C.ui_wl_flush(s.conn.dpy)
 			return nil
 		}
+		s.framePending = false
 		// EGL failed this frame — keep the last GPU frame on the CPU
 		// pixmap and fall back to v0.4.1 opaque shm.
 		s.abandonGPU()
@@ -1610,7 +1854,13 @@ func (s *wlSurface) Present(dirty []paintengine2d.Rect) error {
 	if len(dirty) == 0 {
 		dirty = []paintengine2d.Rect{paintengine2d.XYWH(0, 0, float32(s.img.Width), float32(s.img.Height))}
 	}
-	slot := s.pickSlot()
+	slot, ok := s.pickSlot()
+	if !ok {
+		// Every buffer is still owned by the compositor. Writing into
+		// one anyway tears (and with dmabuf races the GPU); the next
+		// Present after a release paints this frame instead.
+		return nil
+	}
 	if err := s.ensureSlot(slot, s.img.Width, s.img.Height); err != nil {
 		if s.conn.useDmabuf {
 			s.conn.useDmabuf = false
@@ -1636,8 +1886,46 @@ func (s *wlSurface) Present(dirty []paintengine2d.Rect) error {
 	C.ui_wl_attach(s.surf, s.slots[slot].buf)
 	C.ui_wl_commit(s.surf)
 	s.slots[slot].busy = true
+	s.mapped = true
 	C.ui_wl_flush(s.conn.dpy)
 	return nil
+}
+
+// imgPainted reports whether anything has been drawn into the current
+// pixmap since it was allocated.
+func (s *wlSurface) imgPainted() bool {
+	return s.img != nil && pixmapHasOpaque(s.img)
+}
+
+// requestFrame asks for the next wl_surface.frame callback.
+func (s *wlSurface) requestFrame() {
+	if s == nil || s.surf == nil {
+		return
+	}
+	if s.framePending && !s.frameOverdue() {
+		return
+	}
+	s.framePending = true
+	s.frameSince = time.Now()
+	C.ui_wl_frame_request(s.surf, C.uintptr_t(s.id))
+}
+
+// frameCallbackGrace is how long a frame callback may be outstanding
+// before presentation resumes anyway. Compositors legitimately withhold
+// frame events from an occluded surface, but a callback lost across a
+// role change must not freeze the window for good.
+const frameCallbackGrace = 250 * time.Millisecond
+
+func (s *wlSurface) frameOverdue() bool {
+	return !s.frameSince.IsZero() && time.Since(s.frameSince) > frameCallbackGrace
+}
+
+//export uitkWlFrameDone
+func uitkWlFrameDone(sid C.uintptr_t) {
+	if s := wlSurfBy(sid); s != nil {
+		s.framePending = false
+		s.frameSince = time.Time{}
+	}
 }
 
 func (s *wlSurface) blitDirty(slot int, dirty []paintengine2d.Rect) {
@@ -1668,19 +1956,36 @@ func (s *wlSurface) beginDMAWrite(slot int) {
 	if slot < 0 || slot >= len(s.slots) {
 		return
 	}
-	fd := s.slots[slot].fd
-	if s.slots[slot].dma != nil && fd >= 0 {
-		C.ui_dmabuf_cpu_begin(C.int(fd))
+	sl := &s.slots[slot]
+	if sl.dma == nil {
+		return
 	}
+	if sl.fd >= 0 {
+		C.ui_dmabuf_cpu_begin(C.int(sl.fd))
+	}
+	// GBM mappings are taken per frame: drivers that stage gbm_bo_map
+	// only flush the staging buffer on unmap, so a mapping held across
+	// frames never reached the compositor.
+	bo := (*C.struct_ui_dmabuf_bo)(sl.dma)
+	if C.ui_dmabuf_map(bo, C.int(sl.w), C.int(sl.h)) != 0 {
+		sl.mem = nil
+		return
+	}
+	sl.mem = unsafe.Pointer(bo.mapped)
 }
 
 func (s *wlSurface) finishDMAWrite(slot int) {
 	if slot < 0 || slot >= len(s.slots) {
 		return
 	}
-	fd := s.slots[slot].fd
-	if s.slots[slot].dma != nil && fd >= 0 {
-		C.ui_dmabuf_cpu_end(C.int(fd))
+	sl := &s.slots[slot]
+	if sl.dma == nil {
+		return
+	}
+	C.ui_dmabuf_unmap((*C.struct_ui_dmabuf_bo)(sl.dma))
+	sl.mem = nil
+	if sl.fd >= 0 {
+		C.ui_dmabuf_cpu_end(C.int(sl.fd))
 	}
 }
 
@@ -1692,6 +1997,9 @@ func (s *wlSurface) dmabufUploadBlank(slot int) bool {
 	if sl.dma == nil || sl.mem == nil || !pixmapHasOpaque(s.img) {
 		return false
 	}
+	if sl.size < 4 {
+		return false
+	}
 	dst := unsafe.Slice((*byte)(sl.mem), sl.size)
 	n := sl.stride
 	if n < 64 {
@@ -1700,76 +2008,42 @@ func (s *wlSurface) dmabufUploadBlank(slot int) bool {
 	return destAlphaAllZero(dst, n)
 }
 
-func (s *wlSurface) bindExplicitSync() {
-	if s == nil || s.conn == nil || s.surf == nil {
-		return
-	}
-	if s.conn.drmSyncobj != nil {
-		fd := int(C.ui_dmabuf_drm_fd())
-		if fd >= 0 {
-			tl := C.ui_drm_timeline_setup(
-				(*C.struct_wp_linux_drm_syncobj_manager_v1)(s.conn.drmSyncobj),
-				s.surf, C.int(fd))
-			if tl != nil {
-				s.timeline = unsafe.Pointer(tl)
-				return
-			}
-		}
-	}
-	if s.conn.explicitSync != nil {
-		sync := C.ui_wl_explicit_get_sync(
-			(*C.struct_zwp_linux_explicit_synchronization_v1)(s.conn.explicitSync),
-			s.surf)
-		if sync != nil {
-			s.surfSync = unsafe.Pointer(sync)
-		}
-	}
-}
+// Explicit synchronisation (zwp_linux_explicit_synchronization_v1 /
+// wp_linux_drm_syncobj_v1) is deliberately not bound to a surface. Those
+// protocols require an acquire fence on *every* later commit, and a CPU
+// write that is not in the buffer's implicit reservation leaves the
+// compositor waiting on an unsignalled fence -- a permanently transparent
+// window. The manager objects are still bound (and destroyed) so a future
+// GPU present path can adopt them; the per-surface glue that used to live
+// here was dead code whose slot bookkeeping covered only 2 of the 4
+// buffers, so it is gone rather than half-wired.
 
-func (s *wlSurface) markAcquire(slot, dmaFD int) {
-	if s.timeline != nil && s.slots[slot].dma != nil {
-		C.ui_drm_timeline_set_points((*C.struct_ui_drm_timeline)(s.timeline), C.int(slot))
-		return
-	}
-	if s.surfSync == nil || s.slots[slot].dma == nil || dmaFD < 0 {
-		return
-	}
-	fence := int(C.ui_dmabuf_export_sync_file(C.int(dmaFD)))
-	if fence >= 0 {
-		C.ui_wl_explicit_set_acquire((*C.struct_zwp_linux_surface_synchronization_v1)(s.surfSync), C.int(fence))
-		C.ui_wl_close_fd(C.int(fence))
-	}
-	C.ui_wl_explicit_get_release((*C.struct_zwp_linux_surface_synchronization_v1)(s.surfSync), C.uintptr_t(s.id), C.int(slot))
-}
-
-func (s *wlSurface) pickSlot() int {
+// pickSlot returns a buffer the compositor has released. It never falls
+// back to a busy slot: the old "return 0" path let the CPU blit into a
+// buffer the compositor was still reading.
+func (s *wlSurface) pickSlot() (int, bool) {
 	if i, ok := s.freeSlot(); ok {
-		return i
+		return i, true
 	}
 	// All four slots are in flight. Wait briefly for a release —
 	// not a 24× wl_display_roundtrip storm (~55ms/frame at 1000×760).
-	if s.conn != nil && s.conn.dpy != nil {
-		C.ui_wl_wait(s.conn.dpy, 8)
-	}
-	if i, ok := s.freeSlot(); ok {
-		return i
-	}
-	if s.conn != nil && s.conn.dpy != nil {
-		C.ui_wl_wait(s.conn.dpy, 8)
-	}
-	if i, ok := s.freeSlot(); ok {
-		return i
-	}
-	return 0
-}
-
-func (s *wlSurface) freeSlot() (int, bool) {
-	for i := range s.slots {
-		if !s.slots[i].busy {
+	for try := 0; try < 2; try++ {
+		if s.conn != nil && s.conn.dpy != nil {
+			C.ui_wl_wait(s.conn.dpy, 8)
+		}
+		if i, ok := s.freeSlot(); ok {
 			return i, true
 		}
 	}
 	return 0, false
+}
+
+func (s *wlSurface) freeSlot() (int, bool) {
+	busy := make([]bool, len(s.slots))
+	for i := range s.slots {
+		busy[i] = s.slots[i].busy
+	}
+	return pickPresentSlot(busy)
 }
 
 func (s *wlSurface) ensureSlot(i, w, h int) error {
@@ -1859,12 +2133,18 @@ func (s *wlSurface) copyRect(slot int, r paintengine2d.Rect) {
 }
 
 func (s *wlSurface) Poll() []Event {
-	if s.closed || s.conn == nil || s.conn.dpy == nil {
+	if s.conn == nil || s.conn.dpy == nil {
 		return nil
 	}
-	C.ui_wl_pump(s.conn.dpy)
+	if !s.closed {
+		C.ui_wl_pump(s.conn.dpy)
+	}
 	wlMu.Lock()
-	s.conn.flushRepeatLocked()
+	if !s.closed {
+		s.conn.flushRepeatLocked()
+	}
+	// Hand back whatever is queued even after the surface closed, so a
+	// final EventClose can never be swallowed.
 	ev := s.queue
 	s.queue = nil
 	wlMu.Unlock()
@@ -1907,13 +2187,13 @@ func (c *wlConn) flushRepeatLocked() {
 	if now.Before(c.repeatNext) {
 		return
 	}
-	interval := time.Second / time.Duration(c.repeatRate)
-	if interval < time.Millisecond {
-		interval = 25 * time.Millisecond
+	interval := repeatInterval(c.repeatRate)
+	if interval <= 0 {
+		return
 	}
 	for !c.repeatNext.After(now) {
 		ks := uint64(C.ui_xkb_sym(c.xkbState, C.uint32_t(c.repeatKey)))
-		s.push(Event{Kind: EventKeyDown, Key: KeyFromKeysym(ks), Mods: c.mods})
+		s.push(Event{Kind: EventKeyDown, Key: c.mapKey(C.uint32_t(c.repeatKey), ks), Mods: c.mods})
 		c.pushXKBText(s, C.uint32_t(c.repeatKey), ks)
 		c.repeatNext = c.repeatNext.Add(interval)
 		if c.repeatNext.Before(now.Add(-250 * time.Millisecond)) {
@@ -2056,9 +2336,15 @@ func uitkWlRegistryGlobal(id C.uintptr_t, reg *C.struct_wl_registry, name C.uint
 		if v < 2 {
 			v = 2
 		}
-		c.output = (*C.struct_wl_output)(C.ui_wl_bind(reg, name, C.ui_wl_output_iface(), v))
-		if c.output != nil {
-			C.ui_wl_out_listen(c.output, id)
+		out := (*C.struct_wl_output)(C.ui_wl_bind(reg, name, C.ui_wl_output_iface(), v))
+		if out != nil {
+			// Every output is tracked: binding only the last one
+			// announced made a window on the 1x monitor of a mixed-DPI
+			// desktop render at the 2x monitor's scale.
+			c.outputs[uintptr(unsafe.Pointer(out))] = uint32(name)
+			c.outObjs[uint32(name)] = out
+			c.outs.setScale(uint32(name), 1)
+			C.ui_wl_out_listen(out, id)
 		}
 	case "zwp_text_input_manager_v3":
 		c.textMan = (*C.struct_zwp_text_input_manager_v3)(C.ui_wl_bind(reg, name, C.ui_wl_ti_man_iface(), 1))
@@ -2191,7 +2477,10 @@ func uitkWlTopClose(sid C.uintptr_t) {
 	if s == nil {
 		return
 	}
-	s.closed = true
+	// xdg_toplevel.close is a *request*: the application may ignore it
+	// and keep the window (close-to-tray). Marking the surface closed
+	// here also let Poll drop the event on the floor when the compositor
+	// sent it during a Wait.
 	s.push(Event{Kind: EventClose})
 }
 
@@ -2371,14 +2660,20 @@ func uitkWlKey(id C.uintptr_t, key, state, serial C.uint32_t) {
 	C.ui_xkb_update_key(c.xkbState, key, C.int(btoi(pressed)))
 	c.mods = wlMods(c)
 	ks := uint64(C.ui_xkb_sym(c.xkbState, key))
-	ev := Event{Kind: EventKeyUp, Key: KeyFromKeysym(ks), Mods: c.mods}
+	ev := Event{Kind: EventKeyUp, Key: c.mapKey(key, ks), Mods: c.mods}
 	if pressed {
 		ev.Kind = EventKeyDown
 		c.heldKey = uint32(key)
 		c.heldDown = true
-		if c.repeatDelay > 0 && c.repeatRate > 0 {
+		// Only keys the keymap marks repeatable auto-repeat: holding
+		// Shift or Ctrl must not emit a KeyDown stream (and must not
+		// keep waking the run loop 30 times a second).
+		repeats := C.ui_xkb_key_repeats(c.xkbMap, key) != 0
+		if ShouldArmKeyRepeat(repeats, c.repeatRate, c.repeatDelay) {
 			c.repeatKey = uint32(key)
 			c.repeatNext = time.Now().Add(time.Duration(c.repeatDelay) * time.Millisecond)
+		} else {
+			c.repeatKey = 0
 		}
 	} else if c.heldKey == uint32(key) {
 		c.heldDown = false
@@ -2389,6 +2684,14 @@ func uitkWlKey(id C.uintptr_t, key, state, serial C.uint32_t) {
 		return
 	}
 	c.pushXKBText(s, key, ks)
+}
+
+// mapKey resolves a keycode to a toolkit Key, falling back to the
+// layout-independent (group 0, level 0) symbol so shortcuts keep working
+// under a Cyrillic / Greek / Hebrew layout.
+func (c *wlConn) mapKey(key C.uint32_t, sym uint64) Key {
+	base := uint64(C.ui_xkb_base_sym(c.xkbMap, key))
+	return KeyFromKeysymFallback(sym, base)
 }
 
 // pushXKBText emits EventText from xkb/compose unless IME preedit owns the key.
@@ -2538,14 +2841,95 @@ func uitkWlKeyRepeat(id C.uintptr_t, rate, delay C.int32_t) {
 }
 
 //export uitkWlOutputScale
-func uitkWlOutputScale(id C.uintptr_t, factor C.int32_t) {
+func uitkWlOutputScale(id C.uintptr_t, out *C.struct_wl_output, factor C.int32_t) {
+	c := wlConnBy(id)
+	if c == nil || factor <= 0 {
+		return
+	}
+	name, ok := c.outputs[uintptr(unsafe.Pointer(out))]
+	if !ok {
+		return
+	}
+	c.outs.setScale(name, int32(factor))
+	c.outScale = float32(c.outs.maxScale())
+	c.refreshSurfaceScales()
+}
+
+//export uitkWlOutputDone
+func uitkWlOutputDone(id C.uintptr_t, out *C.struct_wl_output) {
 	c := wlConnBy(id)
 	if c == nil {
 		return
 	}
-	if factor > 0 {
-		c.outScale = float32(factor)
+	_ = out
+	c.refreshSurfaceScales()
+}
+
+//export uitkWlSurfEnter
+func uitkWlSurfEnter(sid C.uintptr_t, out *C.struct_wl_output) {
+	s := wlSurfBy(sid)
+	if s == nil || s.conn == nil {
+		return
 	}
+	if name, ok := s.conn.outputs[uintptr(unsafe.Pointer(out))]; ok {
+		s.outs.enter(name)
+		s.applyOutputScale()
+	}
+}
+
+//export uitkWlSurfLeave
+func uitkWlSurfLeave(sid C.uintptr_t, out *C.struct_wl_output) {
+	s := wlSurfBy(sid)
+	if s == nil || s.conn == nil {
+		return
+	}
+	if name, ok := s.conn.outputs[uintptr(unsafe.Pointer(out))]; ok {
+		s.outs.leave(name)
+		s.applyOutputScale()
+	}
+}
+
+//export uitkWlRegistryRemove
+func uitkWlRegistryRemove(id C.uintptr_t, name C.uint32_t) {
+	c := wlConnBy(id)
+	if c == nil {
+		return
+	}
+	n := uint32(name)
+	if obj, ok := c.outObjs[n]; ok && obj != nil {
+		delete(c.outputs, uintptr(unsafe.Pointer(obj)))
+		delete(c.outObjs, n)
+		C.ui_wl_out_destroy(obj)
+	}
+	c.outs.remove(n)
+	c.outScale = float32(c.outs.maxScale())
+	c.refreshSurfaceScales()
+}
+
+// refreshSurfaceScales re-evaluates every surface's integer scale after
+// an output changed.
+func (c *wlConn) refreshSurfaceScales() {
+	for _, s := range wlSurfaces {
+		if s != nil && s.conn == c {
+			s.applyOutputScale()
+		}
+	}
+}
+
+// applyOutputScale adopts the largest scale among the outputs this
+// surface overlaps. A fractional-scale surface ignores it: the
+// compositor's preferred_scale is authoritative there.
+func (s *wlSurface) applyOutputScale() {
+	if s == nil || s.conn == nil || s.frac > 1 {
+		return
+	}
+	// The scales live on the connection (one per wl_output); the surface
+	// only knows which outputs it currently overlaps.
+	sc := int(s.conn.outs.maxScaleEntered(s.outs.enteredNames()))
+	if sc < 1 {
+		sc = 1
+	}
+	s.bufScale = sc
 }
 
 //export uitkWlFracScale
@@ -2598,6 +2982,8 @@ func uitkWlSelection(id C.uintptr_t, offer *C.struct_wl_data_offer) {
 	if offer == c.pendingOff {
 		c.pendingOff = nil
 	}
+	// The cache is only valid while we hold a live source of our own.
+	c.clip.selectionChanged(c.dataSrc != nil)
 }
 
 //export uitkWlDataSend
@@ -2607,11 +2993,23 @@ func uitkWlDataSend(id C.uintptr_t, fd C.int) {
 		C.ui_wl_close_fd(fd)
 		return
 	}
-	b := []byte(c.clipText)
-	if len(b) > 0 {
-		C.ui_wl_write(fd, (*C.char)(unsafe.Pointer(&b[0])), C.size_t(len(b)))
+	text, _ := c.clip.get()
+	wlSendSelection(fd, text)
+}
+
+// wlSendSelection writes the selection to the requesting client's pipe
+// and always closes it. The write is non-blocking with a deadline: this
+// runs on the UI thread, and a receiver that stops reading must not be
+// able to hang the application (or silently truncate a large paste).
+func wlSendSelection(fd C.int, text string) {
+	defer C.ui_wl_close_fd(fd)
+	b := []byte(text)
+	if len(b) == 0 {
+		return
 	}
-	C.ui_wl_close_fd(fd)
+	C.ui_wl_set_nonblock(fd)
+	C.ui_wl_write_all(fd, (*C.char)(unsafe.Pointer(&b[0])), C.size_t(len(b)),
+		C.int(wlClipboardTimeout/time.Millisecond))
 }
 
 //export uitkWlDataCancelled
@@ -2620,9 +3018,22 @@ func uitkWlDataCancelled(id C.uintptr_t) {
 	if c == nil {
 		return
 	}
+	// The compositor cancels our source when another client takes the
+	// selection. Dropping the source without dropping the cached text
+	// made ClipboardGet keep returning what this app copied long ago.
+	c.clip.invalidate()
 	if c.dataSrc != nil {
 		C.ui_wl_data_source_destroy(c.dataSrc)
 		c.dataSrc = nil
+	}
+	c.clipKeepLocked()
+}
+
+// clipKeepLocked drops the "hold the connection open for the clipboard"
+// flag once this process owns neither selection.
+func (c *wlConn) clipKeepLocked() {
+	if c.dataSrc == nil && c.primSrc == nil {
+		c.clipKeep = false
 	}
 }
 
@@ -2661,6 +3072,7 @@ func uitkWlPrimSelection(id C.uintptr_t, offer *C.struct_zwp_primary_selection_o
 	}
 	c.primOffer = offer
 	c.primMime = c.pendPrimMime
+	c.prim.selectionChanged(c.primSrc != nil)
 }
 
 //export uitkWlPrimSend
@@ -2670,14 +3082,26 @@ func uitkWlPrimSend(id C.uintptr_t, fd C.int) {
 		C.ui_wl_close_fd(fd)
 		return
 	}
-	b := []byte(c.primText)
-	if len(b) == 0 {
-		b = []byte(c.clipText)
+	text, ok := c.prim.get()
+	if !ok {
+		text, _ = c.clip.get()
 	}
-	if len(b) > 0 {
-		C.ui_wl_write(fd, (*C.char)(unsafe.Pointer(&b[0])), C.size_t(len(b)))
+	wlSendSelection(fd, text)
+}
+
+//export uitkWlPrimCancelled
+func uitkWlPrimCancelled(id C.uintptr_t) {
+	c := wlConnBy(id)
+	if c == nil {
+		return
 	}
-	C.ui_wl_close_fd(fd)
+	// Another client owns PRIMARY now: our cached text is stale.
+	c.prim.invalidate()
+	if c.primSrc != nil {
+		C.ui_wl_prim_source_destroy(c.primSrc)
+		c.primSrc = nil
+	}
+	c.clipKeepLocked()
 }
 
 //export uitkWlTIEnter
@@ -2816,8 +3240,8 @@ func wlClipSet(s string) bool {
 		return false
 	}
 	wlMu.Lock()
-	c.clipText = s
-	c.primText = s
+	c.clip.set(s)
+	c.prim.set(s)
 	c.clipKeep = true
 	if c.dataSrc != nil {
 		C.ui_wl_data_source_destroy(c.dataSrc)
@@ -2866,8 +3290,8 @@ func wlClipGet(primary bool) (string, bool) {
 	}
 	defer c.release()
 	if primary {
-		if c.primText != "" {
-			return c.primText, true
+		if text, ok := c.prim.get(); ok {
+			return text, true
 		}
 		if c.primOffer == nil || c.primMime == "" {
 			return "", false
@@ -2878,8 +3302,8 @@ func wlClipGet(primary bool) (string, bool) {
 			C.free(unsafe.Pointer(cm))
 		})
 	}
-	if c.clipText != "" {
-		return c.clipText, true
+	if text, ok := c.clip.get(); ok {
+		return text, true
 	}
 	if c.clipOffer == nil || c.clipMime == "" {
 		return "", false
@@ -2891,6 +3315,11 @@ func wlClipGet(primary bool) (string, bool) {
 	})
 }
 
+// wlClipboardTimeout bounds both halves of a selection transfer. A peer
+// that stops reading (or never writes) then costs one timeout instead of
+// freezing the UI thread for good.
+const wlClipboardTimeout = 500 * time.Millisecond
+
 func wlReadFD(c *wlConn, request func(fd int)) (string, bool) {
 	var fds [2]C.int
 	if C.ui_wl_pipe(&fds[0]) != 0 {
@@ -2900,14 +3329,24 @@ func wlReadFD(c *wlConn, request func(fd int)) (string, bool) {
 	C.ui_wl_close_fd(fds[1])
 	C.ui_wl_flush(c.dpy)
 	C.ui_wl_roundtrip(c.dpy)
+	C.ui_wl_set_nonblock(fds[0])
 	var out []byte
 	var buf [4096]byte
+	deadline := time.Now().Add(wlClipboardTimeout)
 	for {
-		n := int(C.ui_wl_read(fds[0], (*C.char)(unsafe.Pointer(&buf[0])), 4096))
+		remain := time.Until(deadline)
+		if remain <= 0 {
+			break
+		}
+		n := int(C.ui_wl_read_deadline(fds[0], (*C.char)(unsafe.Pointer(&buf[0])), 4096,
+			C.int(remain/time.Millisecond)+1))
 		if n <= 0 {
 			break
 		}
 		out = append(out, buf[:n]...)
+		if len(out) > 64<<20 {
+			break
+		}
 	}
 	C.ui_wl_close_fd(fds[0])
 	return string(out), true

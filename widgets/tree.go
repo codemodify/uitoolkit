@@ -48,6 +48,9 @@ type TreeView struct {
 	lastAt    time.Time
 	vbar      scrollDrag
 	rows      rowSceneCache
+	flat      []treeRow
+	index     map[*TreeNode]int
+	flatValid bool
 }
 
 // NewTreeView constructs a tree.
@@ -62,22 +65,71 @@ func (t *TreeView) rowH() float32 {
 	return style.FittedRowHeight(t.Look(), t.RowHeight)
 }
 
+// flatten returns the visible rows. The result is cached: a single MouseMove
+// used to walk the whole tree seven times (scroll track, MaxOffset, nodeAt,
+// two invalidateNode calls), which allocated megabytes per event on a large
+// tree. The cache is dropped by Invalidate / Toggle / SetRoots / Refresh.
 func (t *TreeView) flatten() []treeRow {
-	var out []treeRow
+	if t.flatValid {
+		return t.flat
+	}
+	t.flat = t.flat[:0]
+	if t.index == nil {
+		t.index = make(map[*TreeNode]int, 64)
+	} else {
+		clear(t.index)
+	}
 	var walk func([]*TreeNode, int)
 	walk = func(nodes []*TreeNode, depth int) {
 		for _, n := range nodes {
 			if n == nil {
 				continue
 			}
-			out = append(out, treeRow{node: n, depth: depth})
+			t.index[n] = len(t.flat)
+			t.flat = append(t.flat, treeRow{node: n, depth: depth})
 			if n.Expanded && len(n.Children) > 0 {
 				walk(n.Children, depth+1)
 			}
 		}
 	}
 	walk(t.Roots, 0)
-	return out
+	t.flatValid = true
+	return t.flat
+}
+
+// indexOf is the visible row of n, or -1 when n is absent or collapsed away.
+func (t *TreeView) indexOf(n *TreeNode) int {
+	if n == nil {
+		return -1
+	}
+	t.flatten()
+	if i, ok := t.index[n]; ok {
+		return i
+	}
+	return -1
+}
+
+func (t *TreeView) dropFlat() {
+	t.flatValid = false
+	t.flat = t.flat[:0]
+	clear(t.index)
+}
+
+// Invalidate drops the cached row layout and the retained row scenes, so node
+// label / color / structure changes repaint on the next frame.
+func (t *TreeView) Invalidate() {
+	t.dropFlat()
+	t.rows.reset()
+	t.Base.Invalidate()
+}
+
+// Refresh re-reads the tree after the caller mutated nodes directly (added
+// children, renamed, recolored) and repaints.
+func (t *TreeView) Refresh() {
+	t.dropFlat()
+	t.rows.reset()
+	t.clamp()
+	t.Base.Invalidate()
 }
 
 func (t *TreeView) contentH() float32 { return float32(len(t.flatten())) * t.rowH() }
@@ -146,8 +198,6 @@ func (t *TreeView) Paint(ctx *paintengine2d.Context) {
 	b := t.LocalBounds()
 	lk := t.Look()
 	ctx.DrawRect(b, paintengine2d.Fill(lk.Palette().Field))
-	ctx.Save()
-	ctx.ClipRect(b)
 	rows := t.flatten()
 	rh := t.rowH()
 	lo := int(t.OffsetY / rh)
@@ -159,36 +209,21 @@ func (t *TreeView) Paint(ctx *paintengine2d.Context) {
 		hi = len(rows)
 	}
 	if rec, ok := ctx.Device().(*paintengine2d.Recorder); ok {
-		ob := t.Bounds()
-		t.rows.ready(ob.Min.X, ob.Min.Y, b.Dx(), rh, t.OffsetY, lookSig(lk))
-		recordScrollingRows(rec, &t.rows, t.ID()^(1<<32), t.OffsetY, 0, lo, hi,
+		o := rowOrigin(ctx)
+		t.rows.ready(o.X, o.Y, b.Dx(), rh, lookSig(lk))
+		recordScrollingRows(rec, ctx, &t.rows, t.ID()^(1<<32), b, b.Dx(), rh, t.OffsetY, 0, lo, hi,
 			func(i int) uint64 { return t.ID()<<32 | uint64(i) + 1 },
-			func(i int) uint64 {
-				n := rows[i].node
-				extra := uint64(rows[i].depth+1) << 8
-				if n.Expanded {
-					extra |= 1
-				}
-				if n.Leaf() {
-					extra |= 2
-				}
-				if n.Bold {
-					extra |= 4
-				}
-				if n.Color != (paintengine2d.Color{}) {
-					extra |= 8
-				}
-				return visualSig(n == t.Selected, n == t.hover, extra, n.Label)
-			},
+			func(i int) uint64 { return t.rowSig(rows[i]) },
 			func(i int) {
 				n := rows[i].node
-				y := float32(i)*rh - t.OffsetY
-				row := paintengine2d.XYWH(0, y, b.Dx(), rh)
+				row := paintengine2d.XYWH(0, 0, b.Dx(), rh)
 				lk.DrawTreeRow(ctx, row, n == t.Selected, n == t.hover, n.Expanded, n.Leaf(), rows[i].depth, n.Label, n.Bold)
 				paintTreeSwatch(ctx, row, n.Color)
 			},
 		)
 	} else {
+		ctx.Save()
+		ctx.ClipRect(b)
 		for i := lo; i < hi; i++ {
 			y := float32(i)*rh - t.OffsetY
 			row := paintengine2d.XYWH(0, y, b.Dx(), rh)
@@ -196,13 +231,36 @@ func (t *TreeView) Paint(ctx *paintengine2d.Context) {
 			lk.DrawTreeRow(ctx, row, n == t.Selected, n == t.hover, n.Expanded, n.Leaf(), rows[i].depth, n.Label, n.Bold)
 			paintTreeSwatch(ctx, row, n.Color)
 		}
+		ctx.Restore()
 	}
-	ctx.Restore()
 	track, thumb := t.scrollTrack()
 	paintOverflowBar(ctx, lk, track, thumb, t.vbar.over, t.vbar.active)
 	if t.Focused() {
 		lk.DrawFocusRing(ctx, b.Inset(-2))
 	}
+}
+
+// rowSig is the retained-row cache key for one visible row. Every painted
+// attribute must be folded in, or a changed node keeps its cached scene.
+func (t *TreeView) rowSig(row treeRow) uint64 {
+	n := row.node
+	extra := uint64(row.depth+1) << 8
+	if n.Expanded {
+		extra |= 1
+	}
+	if n.Leaf() {
+		extra |= 2
+	}
+	if n.Bold {
+		extra |= 4
+	}
+	if c := n.Color; c != (paintengine2d.Color{}) {
+		extra |= 8
+		// Fold the channels in: "has a swatch" alone let a recolored node
+		// keep its cached row.
+		extra ^= bits32(c.R)*31 ^ bits32(c.G)*131 ^ bits32(c.B)*313 ^ bits32(c.A)*1013
+	}
+	return visualSig(n == t.Selected, n == t.hover, extra, n.Label)
 }
 
 func paintTreeSwatch(ctx *paintengine2d.Context, row paintengine2d.Rect, col paintengine2d.Color) {
@@ -230,6 +288,7 @@ func (t *TreeView) rowAt(y float32) int {
 // and rebuilds cannot paint stale Y slots.
 func (t *TreeView) SetRoots(roots []*TreeNode) {
 	t.Roots = roots
+	t.dropFlat()
 	t.rows.reset()
 	t.clamp()
 	t.Invalidate()
@@ -265,18 +324,13 @@ func (t *TreeView) expanderHit(e widget.MouseEvent, n *TreeNode, depth int) bool
 }
 
 func (t *TreeView) invalidateNode(n *TreeNode) {
-	if n == nil {
+	i := t.indexOf(n)
+	if i < 0 {
 		return
 	}
-	rows := t.flatten()
 	rh := t.rowH()
-	for i, row := range rows {
-		if row.node == n {
-			y := float32(i)*rh - t.OffsetY
-			t.InvalidateRect(paintengine2d.XYWH(0, y, t.LocalBounds().Dx(), rh).Inset(-1))
-			return
-		}
-	}
+	y := float32(i)*rh - t.OffsetY
+	t.InvalidateRect(paintengine2d.XYWH(0, y, t.LocalBounds().Dx(), rh).Inset(-1))
 }
 
 func (t *TreeView) MouseEnter() {}
@@ -340,7 +394,7 @@ func (t *TreeView) MousePress(e widget.MouseEvent) bool {
 		t.Toggle(n)
 		return true
 	}
-	if n == t.lastClick && time.Since(t.lastAt) < 400*time.Millisecond {
+	if n == t.lastClick && time.Since(t.lastAt) < doubleClickInterval {
 		t.Toggle(n)
 		t.lastClick = nil
 		return true
@@ -359,9 +413,19 @@ func (t *TreeView) MouseRelease(widget.MouseEvent) bool {
 	return false
 }
 
+// MouseWheel scrolls, and reports false when it cannot: an unscrollable or
+// already-at-the-edge view must let the wheel bubble to an outer scroll pane
+// instead of swallowing it.
 func (t *TreeView) MouseWheel(e widget.MouseEvent) bool {
+	if t.MaxOffset() <= 0 {
+		return false
+	}
+	before := t.OffsetY
 	t.OffsetY += wheelDelta(e.Scroll.Y, t.rowH())
 	t.clamp()
+	if t.OffsetY == before {
+		return false
+	}
 	t.Invalidate()
 	return true
 }
@@ -374,21 +438,21 @@ func (t *TreeView) KeyPress(e widget.KeyEvent) bool {
 	if len(rows) == 0 {
 		return false
 	}
-	idx := 0
-	for i, r := range rows {
-		if r.node == t.Selected {
-			idx = i
-			break
-		}
-	}
+	// -1 means "nothing selected yet": the first Down / Up must land on the
+	// first row, not skip it.
+	idx := t.indexOf(t.Selected)
 	switch e.Key {
 	case platform.KeyDown:
-		if idx+1 < len(rows) {
+		if idx < 0 {
+			t.selectNode(rows[0].node)
+		} else if idx+1 < len(rows) {
 			t.selectNode(rows[idx+1].node)
 		}
 		return true
 	case platform.KeyUp:
-		if idx > 0 {
+		if idx < 0 {
+			t.selectNode(rows[0].node)
+		} else if idx > 0 {
 			t.selectNode(rows[idx-1].node)
 		}
 		return true
@@ -404,6 +468,9 @@ func (t *TreeView) KeyPress(e widget.KeyEvent) bool {
 			page = 1
 		}
 		next := idx + page
+		if idx < 0 {
+			next = 0
+		}
 		if next >= len(rows) {
 			next = len(rows) - 1
 		}
@@ -415,6 +482,9 @@ func (t *TreeView) KeyPress(e widget.KeyEvent) bool {
 			page = 1
 		}
 		next := idx - page
+		if idx < 0 {
+			next = 0
+		}
 		if next < 0 {
 			next = 0
 		}
@@ -479,6 +549,7 @@ func (t *TreeView) Toggle(n *TreeNode) {
 		return
 	}
 	n.Expanded = !n.Expanded
+	t.dropFlat()
 	t.rows.reset()
 	t.clamp()
 	t.Invalidate()
@@ -500,22 +571,19 @@ func (t *TreeView) selectNode(n *TreeNode) {
 }
 
 func (t *TreeView) ensureVisible(n *TreeNode) {
-	rows := t.flatten()
-	rh := t.rowH()
-	for i, r := range rows {
-		if r.node != n {
-			continue
-		}
-		top := float32(i) * rh
-		bot := top + rh
-		view := t.LocalBounds().Dy()
-		if top < t.OffsetY {
-			t.OffsetY = top
-		}
-		if bot > t.OffsetY+view {
-			t.OffsetY = bot - view
-		}
-		t.clamp()
+	i := t.indexOf(n)
+	if i < 0 {
 		return
 	}
+	rh := t.rowH()
+	top := float32(i) * rh
+	bot := top + rh
+	view := t.LocalBounds().Dy()
+	if top < t.OffsetY {
+		t.OffsetY = top
+	}
+	if bot > t.OffsetY+view {
+		t.OffsetY = bot - view
+	}
+	t.clamp()
 }

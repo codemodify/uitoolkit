@@ -5,6 +5,7 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"sync"
 
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/style"
@@ -101,11 +102,25 @@ type StatusItemOptions struct {
 	OnMenu func(x, y int32)
 	// Dispatch runs tray callbacks (Activate, dbusmenu Event, notify
 	// click) on the UI thread. Application.NewStatusItem sets this to
-	// Application.Post. If nil, callbacks run on the D-Bus goroutine.
+	// Application.Post.
+	//
+	// Leaving it nil is only safe for callbacks that touch nothing the
+	// UI goroutine touches: they then run on the D-Bus (or Win32 pump)
+	// thread, serialized against other tray callbacks but not against
+	// the toolkit.
 	Dispatch func(func())
 	// Stub forces the no-op backend (headless apps).
 	Stub bool
 }
+
+// statusCallbackMu serializes tray callbacks that have no Dispatch hook.
+//
+// D-Bus method calls (Activate, ContextMenu, dbusmenu Event) and the
+// Win32 pump both deliver on their own threads, so without Dispatch two
+// callbacks could touch application state concurrently. Serializing them
+// does not make the callback run on the UI goroutine — only Dispatch does
+// that — but it removes the data race between two tray callbacks.
+var statusCallbackMu sync.Mutex
 
 func invokeStatus(dispatch func(func()), fn func()) {
 	if fn == nil {
@@ -115,6 +130,8 @@ func invokeStatus(dispatch func(func()), fn func()) {
 		dispatch(fn)
 		return
 	}
+	statusCallbackMu.Lock()
+	defer statusCallbackMu.Unlock()
 	fn()
 }
 

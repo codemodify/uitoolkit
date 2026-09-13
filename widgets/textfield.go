@@ -392,10 +392,19 @@ func (t *TextField) KeyPress(e widget.KeyEvent) bool {
 		t.applyNav(e.Mods.Shift())
 		return true
 	case platform.KeyHome:
+		// Ctrl+Home / Ctrl+End are document-level: a single-line field already
+		// does the same thing with plain Home / End, so the Ctrl form bubbles
+		// to the parent (NumberField min / max, an outer scroll pane).
+		if e.Mods.Ctrl() {
+			return false
+		}
 		t.caret = 0
 		t.applyNav(e.Mods.Shift())
 		return true
 	case platform.KeyEnd:
+		if e.Mods.Ctrl() {
+			return false
+		}
 		t.caret = runeCount(t.Text)
 		t.applyNav(e.Mods.Shift())
 		return true

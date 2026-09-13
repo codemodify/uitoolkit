@@ -24,12 +24,20 @@ func OpenAddAccount(a *app.Application, cli *Client, onSaved func()) (*app.Windo
 	if err != nil {
 		return nil, err
 	}
-	win.SetContent(AddAccountApp(win, cli, onSaved))
+	win.SetContent(AddAccountAppOn(a, win, cli, onSaved))
 	return win, nil
 }
 
 // AddAccountApp is the first-run / File → Add Account form.
 func AddAccountApp(win *app.Window, cli *Client, onSaved func()) widget.Component {
+	return AddAccountAppOn(nil, win, cli, onSaved)
+}
+
+// AddAccountAppOn is AddAccountApp with the Application that owns win.
+// Connection probes run on a background goroutine and their results touch
+// widgets, so they are applied through a.Post; pass nil (tests, headless)
+// to apply them inline.
+func AddAccountAppOn(a *app.Application, win *app.Window, cli *Client, onSaved func()) widget.Component {
 	name := widgets.NewTextField("", "Display name", nil)
 	addr := widgets.NewTextField("", "you@example.com", nil)
 	incoming := widgets.NewTextField("imap.example.com:993", "imap.host:993 or pop.host:995", nil)
@@ -145,7 +153,8 @@ func AddAccountApp(win *app.Window, cli *Client, onSaved func()) widget.Componen
 			if err != nil {
 				res = ProbeResult{Error: err.Error()}
 			}
-			applyProbe(res)
+			// applyProbe touches widgets: hand it to the UI goroutine.
+			postUI(a, func() { applyProbe(res) })
 		}()
 	}
 	maybeAutoDetect := func() {
@@ -158,7 +167,7 @@ func AddAccountApp(win *app.Window, cli *Client, onSaved func()) widget.Componen
 			if detectGen.Load() != gen {
 				return
 			}
-			runProbe(true, gen)
+			postUI(a, func() { runProbe(true, gen) })
 		})
 	}
 

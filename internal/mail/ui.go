@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/codemodify/paintengine2d"
@@ -112,6 +114,7 @@ type session struct {
 	attachRows                                 *widgets.FlexBox
 	attachPane                                 *widgets.FlexBox
 	askedEmpty                                 bool
+	trayMu                                     sync.Mutex
 	tray                                       platform.StatusItem
 	mainBar                                    widget.Component
 	listBar                                    *widgets.ToolBar
@@ -124,6 +127,12 @@ type session struct {
 	acctBody                                   *widgets.Label
 	thread                                     widget.Component
 	center                                     *widgets.Stack
+
+	busy      sync.WaitGroup
+	refresher *refreshCoalescer
+	// pendingRefresh records a daemon event that arrived while no UI loop
+	// was pumping (headless / tests). DrainDaemonEvents applies it.
+	pendingRefresh atomic.Bool
 }
 
 func newSession(a *app.Application, win *app.Window, cli *Client, opts AppOptions) *session {
@@ -463,6 +472,16 @@ func (s *session) messageMenu(from widget.Component, p paintengine2d.Point) {
 	)
 }
 
+// now is the clock the thread list formats against. The seeded demo store
+// has a frozen "today" so screenshots stay stable; a real account must use
+// the wall clock, or every date reads as a weekday from September 2026.
+func (s *session) now() time.Time {
+	if s.backend == "memory" {
+		return DemoNow
+	}
+	return time.Now()
+}
+
 func (s *session) cellText(row, col int) string {
 	if row < 0 || row >= len(s.rows) {
 		return ""
@@ -494,7 +513,7 @@ func (s *session) cellText(row, col int) string {
 	case 3:
 		return m.Correspondent(s.kind)
 	case 4:
-		return formatDate(m.Date, DemoNow)
+		return formatDate(m.Date, s.now())
 	default:
 		return ""
 	}
@@ -559,6 +578,10 @@ func (s *session) refreshList() {
 	} else {
 		s.rows = rows
 	}
+	// Drop selected ids that are no longer in the list (moved, deleted, or
+	// re-keyed by a server-side MOVE): acting on them would target nothing,
+	// or — before UIDs were re-keyed — the wrong message.
+	s.pruneSelection()
 	if len(s.selected) == 0 && len(s.rows) > 0 {
 		s.selected = []MessageID{s.rows[0].ID}
 	}
@@ -593,6 +616,8 @@ func (s *session) rebuildTree() {
 	was := treeExpandState(s.tree.Roots)
 	var roots []*widgets.TreeNode
 	var selected *widgets.TreeNode
+	// One RPC for every folder's unread count instead of one per node.
+	unread, _, _ := s.cli.UnreadAll()
 
 	var outbox *Folder
 	if vfs, err := s.cli.VirtualFolders(); err == nil {
@@ -621,7 +646,7 @@ func (s *session) rebuildTree() {
 		addKids = func(parent *widgets.TreeNode, pid FolderID) {
 			for _, f := range byParent[pid] {
 				label := f.Name
-				nUnread, _ := s.cli.Unread(f.ID)
+				nUnread := unread[f.ID]
 				if nUnread > 0 {
 					label = fmt.Sprintf("%s (%d)", f.Name, nUnread)
 					acctUnread += nUnread
@@ -670,7 +695,7 @@ func (s *session) rebuildTree() {
 		}
 		label := t.Name
 		fid := TagFolderID(t.Name)
-		nUnread, _ := s.cli.Unread(fid)
+		nUnread := unread[fid]
 		if nUnread > 0 {
 			label = fmt.Sprintf("%s (%d)", t.Name, nUnread)
 		}
@@ -915,6 +940,24 @@ func (s *session) clickRow(i int, add bool) {
 	s.refreshStatus()
 }
 
+// pruneSelection keeps only ids that are still visible in the thread list.
+func (s *session) pruneSelection() {
+	if len(s.selected) == 0 {
+		return
+	}
+	live := make(map[MessageID]bool, len(s.rows))
+	for _, m := range s.rows {
+		live[m.ID] = true
+	}
+	keep := s.selected[:0]
+	for _, id := range s.selected {
+		if live[id] {
+			keep = append(keep, id)
+		}
+	}
+	s.selected = keep
+}
+
 func (s *session) primaryIndex() int {
 	if len(s.selected) == 0 {
 		return -1
@@ -1077,40 +1120,53 @@ func (s *session) forward() {
 	}
 }
 
+// getMessages runs a full sync off the UI goroutine. The window stays live
+// while it runs and the daemon's mail.changed events refresh the list as
+// folders complete.
 func (s *session) getMessages() {
 	acct := s.accountID()
-	res, err := s.cli.Sync(acct)
-	if err != nil {
-		n, ferr := s.cli.Fetch(acct)
-		if ferr != nil {
+	s.mark("Fetching " + acct + "…")
+	s.async(func() (any, error) {
+		return s.cli.Sync(acct)
+	}, func(v any, err error) {
+		if err != nil {
 			widgets.Warn(s.win.Content(), "Fetch", err.Error(), nil)
+			s.refreshAll()
 			return
 		}
-		res.New = n
-	}
-	s.refreshAll()
-	if res.New == 0 {
-		s.mark("No new messages on " + acct)
-		return
-	}
-	s.mark(fmt.Sprintf("Downloaded %d message(s)", res.New))
+		res := v.(SyncResult)
+		s.refreshAll()
+		if res.Error != "" {
+			s.mark("Sync: " + res.Error)
+			return
+		}
+		if res.New == 0 {
+			s.mark("No new messages on " + acct)
+			return
+		}
+		s.mark(fmt.Sprintf("Downloaded %d message(s)", res.New))
+	})
 }
-
 func (s *session) toggleOnline() {
 	s.online = !s.online
-	n, err := s.cli.SetOnline(s.online)
-	if err != nil {
-		s.mark(err.Error())
-	}
+	online := s.online
 	s.refreshStatus()
-	if s.online {
-		s.mark(fmt.Sprintf("Online · flushed %d queued op(s)", n))
-		s.refreshAll()
-		return
-	}
-	s.mark("Working offline · send/move/delete/flag queue in the Outbox")
+	s.async(func() (any, error) {
+		return s.cli.SetOnline(online)
+	}, func(v any, err error) {
+		if err != nil {
+			s.mark(err.Error())
+			return
+		}
+		s.refreshStatus()
+		if online {
+			s.mark(fmt.Sprintf("Online · flushed %d queued op(s)", v.(int)))
+			s.refreshAll()
+			return
+		}
+		s.mark("Working offline · send/move/delete/flag queue in the Outbox")
+	})
 }
-
 func (s *session) muteThread(muted bool) {
 	m, ok := s.primary()
 	if !ok {
@@ -1514,7 +1570,7 @@ func (s *session) cardAt(i int) widgets.CardContent {
 	return widgets.CardContent{
 		Title:    m.Correspondent(s.kind),
 		Subtitle: m.Subject,
-		Meta:     formatDate(m.Date, DemoNow),
+		Meta:     formatDate(m.Date, s.now()),
 		Snippet:  snip,
 		Badges:   badges,
 		Bold:     !m.Read,
@@ -1666,127 +1722,166 @@ func (s *session) selectAttachment(i int) {
 	}
 }
 
-func (s *session) attachPartID(m Message, i int) string {
-	if i >= 0 && i < len(m.Parts) && m.Parts[i].ID != "" {
-		return m.Parts[i].ID
+// attachmentParts is the subset of m.Parts that the attachment rows show,
+// in the same order as m.Attachments.
+func attachmentParts(m Message) []Part {
+	var out []Part
+	for _, p := range m.Parts {
+		if strings.TrimSpace(p.Filename) != "" {
+			out = append(out, p)
+		}
 	}
-	return fmt.Sprintf("att-%d", i+1)
+	return out
 }
 
+// attachPartID maps attachment row i to its MIME section id.
+//
+// Row i indexes m.Attachments (filenames); m.Parts also holds the text
+// parts, so indexing Parts directly used to fetch the message body for
+// "Save As report.pdf". Match by filename first, then by position among the
+// parts that actually have a filename.
+func (s *session) attachPartID(m Message, i int) string {
+	if i < 0 || i >= len(s.attNames) {
+		return ""
+	}
+	want := s.attNames[i]
+	parts := attachmentParts(m)
+	for _, p := range parts {
+		if p.Filename == want && p.ID != "" {
+			return p.ID
+		}
+	}
+	if i < len(parts) && parts[i].ID != "" {
+		return parts[i].ID
+	}
+	// MemoryStore / demo messages have no BODYSTRUCTURE parts.
+	return fmt.Sprintf("att-%d", i+1)
+}
 func (s *session) openAttachment(i int) {
 	m, ok := s.primary()
 	if !ok || i < 0 || i >= len(s.attNames) {
 		return
 	}
-	p, err := s.cli.OpenPart(m.ID, s.attachPartID(m, i))
-	if err != nil {
-		s.mark("Attachment: " + s.attNames[i] + " (demo)")
-		return
-	}
-	if p.Path != "" {
-		s.mark("Opened " + p.Path + " (xdg-open)")
-		return
-	}
-	s.mark("Attachment: " + s.attNames[i])
+	pid := s.attachPartID(m, i)
+	s.mark("Opening " + s.attNames[i] + "…")
+	s.async(func() (any, error) {
+		return s.cli.OpenPart(m.ID, pid)
+	}, func(v any, err error) {
+		if err != nil {
+			s.mark("Open: " + err.Error())
+			return
+		}
+		p := v.(PartData)
+		if p.Path != "" {
+			s.mark("Opened " + p.Path)
+			return
+		}
+		s.mark("Attachment: " + s.attNames[i])
+	})
 }
-
 func (s *session) saveAttachment(i int) {
 	m, ok := s.primary()
 	if !ok || i < 0 || i >= len(s.attNames) || s.win == nil {
 		return
 	}
-	data, err := s.attachmentBytes(m, i)
-	if err != nil {
-		s.mark("Save As: " + err.Error())
-		return
-	}
 	name := attachFileName(s.attNames[i])
-	widgets.ShowFileDialog(s.win.Content(), widgets.FileDialogOptions{
-		Title:      "Save As",
-		Mode:       widgets.FileSave,
-		Path:       filepath.Join(os.TempDir(), name),
-		OnNavigate: mailDirEntries,
-		OnPick: func(path string) {
-			if path == "" {
-				return
-			}
-			if st, err := os.Stat(path); err == nil && st.IsDir() {
-				path = filepath.Join(path, name)
-			}
-			if err := os.WriteFile(path, data, 0o600); err != nil {
-				s.mark("Save As: " + err.Error())
-				return
-			}
-			s.mark("Saved " + path)
-		},
+	s.async(func() (any, error) {
+		return s.attachmentBytes(m, i)
+	}, func(v any, err error) {
+		if err != nil {
+			s.mark("Save As: " + err.Error())
+			return
+		}
+		data := v.([]byte)
+		widgets.ShowFileDialog(s.win.Content(), widgets.FileDialogOptions{
+			Title:      "Save As",
+			Mode:       widgets.FileSave,
+			Path:       filepath.Join(os.TempDir(), name),
+			OnNavigate: mailDirEntries,
+			OnPick: func(path string) {
+				if path == "" {
+					return
+				}
+				if st, err := os.Stat(path); err == nil && st.IsDir() {
+					path = filepath.Join(path, name)
+				}
+				if err := writeFileAtomic(path, data, 0o600); err != nil {
+					s.mark("Save As: " + err.Error())
+					return
+				}
+				s.mark("Saved " + path)
+			},
+		})
 	})
 }
 
 // saveAllAttachments picks one folder (FileDialog path treated as a directory:
-// an existing file uses its parent; a missing path with no extension is created)
-// then writes every attachment for the current message there (mode 0600).
+// an existing file uses its parent; a missing path with no extension is
+// created) then writes every attachment for the current message there (0600).
 func (s *session) saveAllAttachments() {
 	m, ok := s.primary()
 	if !ok || len(s.attNames) == 0 || s.win == nil {
 		return
 	}
-	items := make([]attachBlob, 0, len(s.attNames))
-	for i := range s.attNames {
-		data, err := s.attachmentBytes(m, i)
+	names := append([]string(nil), s.attNames...)
+	s.mark("Collecting attachments…")
+	s.async(func() (any, error) {
+		items := make([]attachBlob, 0, len(names))
+		for i := range names {
+			data, err := s.attachmentBytes(m, i)
+			if err != nil {
+				return nil, err
+			}
+			items = append(items, attachBlob{Name: attachFileName(names[i]), Data: data})
+		}
+		return items, nil
+	}, func(v any, err error) {
 		if err != nil {
 			s.mark("Save All: " + err.Error())
 			return
 		}
-		items = append(items, attachBlob{Name: attachFileName(s.attNames[i]), Data: data})
-	}
-	widgets.ShowFileDialog(s.win.Content(), widgets.FileDialogOptions{
-		Title:      "Save All",
-		Mode:       widgets.FileSave,
-		Path:       os.TempDir(),
-		OnNavigate: mailDirEntries,
-		OnPick: func(path string) {
-			dir, err := saveAllDir(path)
-			if err != nil {
-				s.mark("Save All: " + err.Error())
-				return
-			}
-			used := map[string]int{}
-			for _, it := range items {
-				dest := filepath.Join(dir, uniqueFileName(it.Name, used))
-				if err := os.WriteFile(dest, it.Data, 0o600); err != nil {
+		items := v.([]attachBlob)
+		widgets.ShowFileDialog(s.win.Content(), widgets.FileDialogOptions{
+			Title:      "Save All",
+			Mode:       widgets.FileSave,
+			Path:       os.TempDir(),
+			OnNavigate: mailDirEntries,
+			OnPick: func(path string) {
+				dir, err := saveAllDir(path)
+				if err != nil {
 					s.mark("Save All: " + err.Error())
 					return
 				}
-			}
-			s.mark(fmt.Sprintf("Saved %d attachment(s) to %s", len(items), dir))
-		},
+				used := map[string]int{}
+				for _, it := range items {
+					dest := filepath.Join(dir, uniqueFileName(it.Name, used))
+					if err := writeFileAtomic(dest, it.Data, 0o600); err != nil {
+						s.mark("Save All: " + err.Error())
+						return
+					}
+				}
+				s.mark(fmt.Sprintf("Saved %d attachment(s) to %s", len(items), dir))
+			},
+		})
 	})
 }
-
 func (s *session) attachmentBytes(m Message, i int) ([]byte, error) {
-	p, err := s.cli.GetPart(m.ID, s.attachPartID(m, i))
+	pid := s.attachPartID(m, i)
+	if pid == "" {
+		return nil, fmt.Errorf("no such attachment")
+	}
+	p, err := s.cli.GetPart(m.ID, pid)
 	if err != nil {
 		return nil, err
 	}
 	if len(p.Data) == 0 && p.Path != "" {
 		return os.ReadFile(p.Path)
 	}
+	if len(p.Data) == 0 {
+		return nil, fmt.Errorf("attachment %q is empty", s.attNames[i])
+	}
 	return p.Data, nil
 }
-
-type attachBlob struct {
-	Name string
-	Data []byte
-}
-
-// attachHit is the clickable name on an attachment row (select; double-click opens).
-type attachHit struct {
-	widget.Base
-	Text     string
-	Selected bool
-	OnPress  func()
-}
-
 func newAttachHit(text string, on func()) *attachHit {
 	h := &attachHit{Text: text, OnPress: on}
 	h.Init(h)
@@ -1812,6 +1907,19 @@ func (h *attachHit) MousePress(widget.MouseEvent) bool {
 		h.OnPress()
 	}
 	return true
+}
+
+type attachBlob struct {
+	Name string
+	Data []byte
+}
+
+// attachHit is the clickable name on an attachment row (select; double-click opens).
+type attachHit struct {
+	widget.Base
+	Text     string
+	Selected bool
+	OnPress  func()
 }
 
 func attachFileName(name string) string {
