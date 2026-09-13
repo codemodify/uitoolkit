@@ -516,7 +516,8 @@ arrow, on-screen clamp, dismisses with the parent). Mail **M** keeps
 Threaded / Hide muted / Preferences / Quit and moves layout, list, and
 density into **M → View**. Mail Toolbar, Quick Filter Bar, Sort by *,
 Dark / Light, and Message Source leave the menu (Ctrl+U still opens
-source).
+source). The main toolbar (Get / Write / Cards / Classic) shares the
+**M** menu row and is right-aligned.
 
 **0.18.3** — Mail menu bar is a single **M** menu: former View
 items (toolbar, layout, table/card, density, sort, threaded, muted,

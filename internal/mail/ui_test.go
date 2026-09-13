@@ -12,6 +12,7 @@ import (
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit"
 	"github.com/codemodify/uitoolkit/app"
+	"github.com/codemodify/uitoolkit/layout"
 	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
@@ -717,12 +718,17 @@ func assertMailToolChrome(t *testing.T, root widget.Component, qf widget.Compone
 	var split *widgets.Splitter
 	var table *widgets.TableView
 	var mainBar, listBar, filterBar *widgets.ToolBar
+	var menuBar *widgets.MenuBar
 	var tree *widgets.TreeView
 	widget.Walk(root, func(c widget.Component) {
 		switch v := c.(type) {
 		case *widgets.Splitter:
 			if split == nil {
 				split = v
+			}
+		case *widgets.MenuBar:
+			if menuBar == nil {
+				menuBar = v
 			}
 		case *widgets.TableView:
 			if table == nil && len(v.Columns) >= 5 {
@@ -773,6 +779,7 @@ func assertMailToolChrome(t *testing.T, root widget.Component, qf widget.Compone
 	if !main["Write"] || !main["Classic"] {
 		t.Fatalf("main toolbar missing Write/Classic: %v", main)
 	}
+	assertMenuToolbarShareRow(t, root, menuBar, mainBar)
 	if widget.Contains(mainBar, qf) {
 		t.Fatal("filter field should sit after Delete on the list toolbar, not the main toolbar")
 	}
@@ -927,6 +934,54 @@ func assertFiltersTree(t *testing.T, tree *widgets.TreeView) {
 	}
 }
 
+func assertMenuToolbarShareRow(t *testing.T, root widget.Component, mb *widgets.MenuBar, main *widgets.ToolBar) {
+	t.Helper()
+	if mb == nil || main == nil {
+		t.Fatal("menu / main toolbar")
+	}
+	menu := widget.DeviceBounds(mb)
+	tool := widget.DeviceBounds(main)
+	if menu.Max.Y < tool.Min.Y+1 || tool.Max.Y < menu.Min.Y+1 {
+		t.Fatalf("M and main toolbar must share one row: menu=%v tool=%v", menu, tool)
+	}
+	if menu.Min.X > 16 {
+		t.Fatalf("M should sit on the left: %+v", menu)
+	}
+	if tool.Min.X < menu.Max.X+8 {
+		t.Fatalf("toolbar should sit to the right of M: menu=%v tool=%v", menu, tool)
+	}
+	rootBox := widget.DeviceBounds(root)
+	if tool.Max.X < rootBox.Max.X-24 {
+		t.Fatalf("main toolbar should be right-aligned: tool=%v root=%v", tool, rootBox)
+	}
+	if parentRow(mb) == nil || parentRow(mb) != parentRow(main) {
+		t.Fatal("M and main toolbar should share one horizontal row")
+	}
+}
+
+func parentRow(c widget.Component) *widgets.FlexBox {
+	for p := c.Parent(); p != nil; p = p.Parent() {
+		f, ok := p.(*widgets.FlexBox)
+		if !ok {
+			continue
+		}
+		if f.Spec.Axis == layout.AxisHorizontal {
+			return f
+		}
+	}
+	return nil
+}
+
+func containsMenuBar(c widget.Component) bool {
+	found := false
+	widget.Walk(c, func(n widget.Component) {
+		if _, ok := n.(*widgets.MenuBar); ok {
+			found = true
+		}
+	})
+	return found
+}
+
 func separateFilterRow(root widget.Component) bool {
 	var col *widgets.FlexBox
 	widget.Walk(root, func(c widget.Component) {
@@ -934,16 +989,16 @@ func separateFilterRow(root widget.Component) bool {
 		if !ok || col != nil {
 			return
 		}
-		var hasMenu, hasSplit bool
+		var hasChrome, hasSplit bool
 		for _, ch := range f.Children() {
-			if _, ok := ch.(*widgets.MenuBar); ok {
-				hasMenu = true
+			if containsMenuBar(ch) {
+				hasChrome = true
 			}
 			if _, ok := ch.(*widgets.Splitter); ok {
 				hasSplit = true
 			}
 		}
-		if hasMenu && hasSplit {
+		if hasChrome && hasSplit {
 			col = f
 		}
 	})
@@ -951,17 +1006,18 @@ func separateFilterRow(root widget.Component) bool {
 		return true
 	}
 	chs := col.Children()
-	if len(chs) < 3 {
+	if len(chs) < 2 || !containsMenuBar(chs[0]) {
 		return true
 	}
-	if _, ok := chs[0].(*widgets.MenuBar); !ok {
-		return true
+	for i := 1; i < len(chs); i++ {
+		if _, ok := chs[i].(*widgets.Splitter); ok {
+			return false
+		}
+		if _, ok := chs[i].(*widgets.StatusBar); !ok {
+			return true
+		}
 	}
-	if _, ok := chs[2].(*widgets.Splitter); !ok {
-		return true
-	}
-	// A leftover filter strip would be a sibling between the main row and the split.
-	return len(chs) > 3
+	return true
 }
 
 func TestMailChromeHasNoSidebarAccountPicker(t *testing.T) {
