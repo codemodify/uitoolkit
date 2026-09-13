@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"os"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -82,8 +84,9 @@ func (c *Client) OnEvent(fn func(Event)) {
 }
 
 func (c *Client) readLoop() {
+	defer c.failPending()
 	sc := bufio.NewScanner(c.conn)
-	sc.Buffer(make([]byte, 0, 64*1024), 8*1024*1024)
+	sc.Buffer(make([]byte, 0, 64*1024), maxRPCLine)
 	for sc.Scan() {
 		line := sc.Bytes()
 		if len(line) == 0 {
@@ -118,6 +121,7 @@ func (c *Client) readLoop() {
 			ev.Title = p.Title
 			ev.Body = p.Body
 			ev.VIP = p.VIP
+			ev.AccountID = p.AccountID
 		}
 		c.mu.Lock()
 		fn := c.onEvent
@@ -128,6 +132,20 @@ func (c *Client) readLoop() {
 	}
 }
 
+// failPending releases every in-flight call when the socket dies, instead of
+// making each one wait out its timeout.
+func (c *Client) failPending() {
+	c.mu.Lock()
+	pending := c.pending
+	c.pending = map[uint64]chan Response{}
+	c.mu.Unlock()
+	for _, ch := range pending {
+		select {
+		case ch <- Response{Error: &RPCError{Code: -32000, Message: "mailclientd: connection closed"}}:
+		default:
+		}
+	}
+}
 func (c *Client) deliver(resp Response) {
 	id, ok := jsonNumber(resp.ID)
 	if !ok {
@@ -160,6 +178,22 @@ func jsonNumber(v any) (uint64, bool) {
 	}
 }
 
+// callTimeout is how long a client waits for one method. Sync, fetch and the
+// connection probe legitimately take minutes on a first run, so they are not
+// held to the interactive budget.
+func callTimeout(method string) time.Duration {
+	switch method {
+	case MethodSyncRun, MethodMessagesFetch, MethodOutboxFlush, MethodStatusSet:
+		return 30 * time.Minute
+	case MethodComposeSend, MethodMessagesPart, MethodMessagesOpen, MethodMessagesGet, MethodMessagesSource:
+		return 5 * time.Minute
+	case MethodAccountsTest, MethodHostsProbe:
+		return 2 * time.Minute
+	default:
+		return 30 * time.Second
+	}
+}
+
 func (c *Client) call(method string, params any, result any) error {
 	id := c.nextID.Add(1)
 	raw, err := json.Marshal(params)
@@ -184,7 +218,7 @@ func (c *Client) call(method string, params any, result any) error {
 	}
 	c.mu.Unlock()
 
-	timer := time.NewTimer(15 * time.Second)
+	timer := time.NewTimer(callTimeout(method))
 	defer timer.Stop()
 	select {
 	case resp := <-ch:
@@ -202,7 +236,6 @@ func (c *Client) call(method string, params any, result any) error {
 		return fmt.Errorf("mailclientui: timeout on %s", method)
 	}
 }
-
 func (c *Client) Ping() error {
 	var out map[string]string
 	return c.call(MethodPing, nil, &out)
@@ -341,6 +374,16 @@ func (c *Client) Unread(folder FolderID) (int, error) {
 	return r.Count, err
 }
 
+// UnreadAll returns every folder's unread count in one round trip.
+func (c *Client) UnreadAll() (map[FolderID]int, int, error) {
+	var r unreadAllResult
+	err := c.call(MethodUnreadAll, nil, &r)
+	if r.Counts == nil {
+		r.Counts = map[FolderID]int{}
+	}
+	return r.Counts, r.Total, err
+}
+
 func (c *Client) UnreadTotal() (int, error) {
 	var r unreadResult
 	err := c.call(MethodUnreadGet, unreadParams{}, &r)
@@ -351,13 +394,45 @@ func (c *Client) Send(accountID string, msg Message, draftID MessageID) (Message
 	return c.SendIdent(accountID, "", msg, draftID, nil)
 }
 
+// SendIdent submits a message. Attachments are read by the caller (the UI)
+// and shipped as bytes: the daemon never opens a path on a client's behalf.
 func (c *Client) SendIdent(accountID, identityID string, msg Message, draftID MessageID, attachPaths []string) (MessageID, error) {
+	files, err := ReadAttachments(attachPaths)
+	if err != nil {
+		return "", err
+	}
+	return c.SendFiles(accountID, identityID, msg, draftID, files)
+}
+
+// SendFiles is SendIdent with the attachment bytes already in hand.
+func (c *Client) SendFiles(accountID, identityID string, msg Message, draftID MessageID, files []AttachedFile) (MessageID, error) {
 	var r appendResult
 	err := c.call(MethodComposeSend, composeParams{
-		AccountID: accountID, IdentityID: identityID, Message: msg, ID: draftID, AttachPaths: attachPaths,
+		AccountID: accountID, IdentityID: identityID, Message: msg, ID: draftID, Attachments: files,
 	}, &r)
 	return r.ID, err
 }
+
+// ReadAttachments loads compose attachments in the UI process.
+func ReadAttachments(paths []string) ([]AttachedFile, error) {
+	var out []AttachedFile
+	for _, path := range paths {
+		b, err := os.ReadFile(path)
+		if err != nil {
+			return nil, fmt.Errorf("attach %s: %w", path, err)
+		}
+		if len(b) > maxAttachmentBytes {
+			return nil, fmt.Errorf("attach %s: %d bytes exceeds the %d byte limit", path, len(b), maxAttachmentBytes)
+		}
+		name := attachFileName(filepath.Base(path))
+		out = append(out, AttachedFile{Name: name, MIME: guessMIME(name), Data: b})
+	}
+	return out, nil
+}
+
+// maxAttachmentBytes caps one compose attachment (the RPC line limit is
+// larger so a few of these still fit in one request).
+const maxAttachmentBytes = 32 << 20
 
 func (c *Client) SaveDraft(accountID string, msg Message, draftID MessageID) (MessageID, error) {
 	var r appendResult

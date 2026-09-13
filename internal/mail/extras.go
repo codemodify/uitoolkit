@@ -65,17 +65,19 @@ type NotifyPrefs struct {
 
 // OutboxOp is one queued mutation while offline (or after a transport error).
 type OutboxOp struct {
-	ID        string    `json:"id"`
-	Kind      string    `json:"kind"` // send, move, delete, flag
-	AccountID string    `json:"accountId,omitempty"`
-	MessageID MessageID `json:"messageId,omitempty"`
-	Dest      FolderID  `json:"dest,omitempty"`
-	Patch     FlagPatch `json:"patch,omitempty"`
-	Message   *Message  `json:"message,omitempty"`
-	Error     string    `json:"error,omitempty"`
-	Tries     int       `json:"tries,omitempty"`
-	UID       uint32    `json:"uid,omitempty"`
-	UIDVal    uint32    `json:"uidValidity,omitempty"`
+	ID          string         `json:"id"`
+	Kind        string         `json:"kind"` // send, move, delete, flag
+	AccountID   string         `json:"accountId,omitempty"`
+	MessageID   MessageID      `json:"messageId,omitempty"`
+	Dest        FolderID       `json:"dest,omitempty"`
+	Patch       FlagPatch      `json:"patch,omitempty"`
+	Message     *Message       `json:"message,omitempty"`
+	IdentityID  string         `json:"identityId,omitempty"`
+	Attachments []AttachedFile `json:"attachments,omitempty"`
+	Error       string         `json:"error,omitempty"`
+	Tries       int            `json:"tries,omitempty"`
+	UID         uint32         `json:"uid,omitempty"`
+	UIDVal      uint32         `json:"uidValidity,omitempty"`
 }
 
 // featureHost is the shared Tier A/B state (MemoryStore + LocalStore).

@@ -1,7 +1,6 @@
 package mail
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -28,6 +27,40 @@ type LocalStore struct {
 	now        time.Time
 	feat       *featureHost
 	pushCancel func()
+
+	// syncMu serialises whole-account syncs. Network I/O happens with mu
+	// released (snapshot → I/O → re-lock and apply), so an unresponsive
+	// server can no longer block every unrelated RPC.
+	syncMu sync.Mutex
+
+	changeMu sync.Mutex
+	onChange func(StoreEvent)
+}
+
+// StoreEvent is emitted by background work (push/IDLE, periodic sync) so the
+// daemon can broadcast mail.changed and the UI can refresh without polling.
+type StoreEvent struct {
+	Reason    string
+	AccountID string
+	FolderID  FolderID
+	Count     int
+}
+
+// SetOnChange registers the daemon's broadcast hook. fn is always called
+// with no store lock held.
+func (s *LocalStore) SetOnChange(fn func(StoreEvent)) {
+	s.changeMu.Lock()
+	s.onChange = fn
+	s.changeMu.Unlock()
+}
+
+func (s *LocalStore) emit(ev StoreEvent) {
+	s.changeMu.Lock()
+	fn := s.onChange
+	s.changeMu.Unlock()
+	if fn != nil {
+		fn(ev)
+	}
 }
 
 type folderMeta struct {
@@ -46,6 +79,7 @@ func NewLocalStoreDir(cfg MailConfig, dir string) (*LocalStore, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
 	}
+	_ = os.Chmod(dir, 0o700)
 	s := &LocalStore{
 		dir: dir, cfg: cfg, clients: map[string]*imapClient{},
 		tags: DefaultTags(), nextID: 1, now: time.Now(), feat: newFeatureHost(),
@@ -99,16 +133,11 @@ func (s *LocalStore) ensureAccount(a AccountConfig) {
 	}
 }
 
+// slug is the filesystem-safe form of an id. It is deliberately strict:
+// account and folder ids derived from untrusted input become path segments.
 func slug(s string) string {
-	s = strings.ToLower(strings.TrimSpace(s))
-	s = strings.ReplaceAll(s, "@", "-")
-	s = strings.ReplaceAll(s, ".", "-")
-	if s == "" {
-		return "acct"
-	}
-	return s
+	return safeID(s)
 }
-
 func hasIdentityFor(ids []Identity, accountID string) bool {
 	for _, id := range ids {
 		if id.AccountID == accountID {
@@ -254,9 +283,13 @@ func (s *LocalStore) dropAccountLocked(id string) {
 		}
 		s.feat.outbox = ops
 	}
-	_ = os.RemoveAll(filepath.Join(s.dir, "raw", id))
+	if p, err := underRoot(s.dir, "raw", safeID(id)); err == nil {
+		_ = os.RemoveAll(p)
+	}
 	for _, fid := range drop {
-		_ = os.Remove(filepath.Join(s.dir, "meta", slug(string(fid))+".json"))
+		if p, err := s.folderMetaPath(fid); err == nil {
+			_ = os.Remove(p)
+		}
 	}
 }
 
@@ -313,30 +346,37 @@ func (s *LocalStore) folderLocked(id FolderID) (Folder, bool) {
 }
 
 func (s *LocalStore) CreateFolder(accountID, name string, parent FolderID) (Folder, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	name = strings.TrimSpace(name)
 	if accountID == "" || name == "" {
 		return Folder{}, fmt.Errorf("mail: account and folder name required")
 	}
+	if !validMailboxName(name) {
+		return Folder{}, fmt.Errorf("mail: illegal folder name")
+	}
+	s.mu.Lock()
 	remote := name
 	if parent != "" {
-		if p, ok := s.folderLocked(parent); ok && p.Remote != "" {
-			remote = p.Remote + "/" + name
+		if pf, ok := s.folderLocked(parent); ok && pf.Remote != "" {
+			remote = pf.Remote + "/" + name
 		}
 	}
-	id := FolderID(accountID + "/" + slug(name))
-	f := Folder{ID: id, AccountID: accountID, Name: name, Kind: FolderCustom, Parent: parent, Remote: remote}
-	if cli, err := s.clientLocked(accountID); err == nil {
+	s.mu.Unlock()
+
+	// CREATE is network I/O: no store lock held.
+	if cli, err := s.client(accountID); err == nil {
 		if err := cli.createMailbox(remote); err != nil {
 			return Folder{}, err
 		}
 	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	id := FolderID(safeID(accountID) + "/" + safeID(name))
+	f := Folder{ID: id, AccountID: accountID, Name: name, Kind: FolderCustom, Parent: parent, Remote: remote}
 	s.folders = append(s.folders, f)
 	s.saveLocked()
 	return f, nil
 }
-
 func (s *LocalStore) ListMessages(folder FolderID) []Message {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -366,94 +406,129 @@ func (s *LocalStore) listLocked(folder FolderID) []Message {
 
 func (s *LocalStore) GetMessage(id MessageID) (Message, bool) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	i, ok := s.indexLocked(id)
 	if !ok {
+		s.mu.Unlock()
 		return Message{}, false
 	}
 	m := s.messages[i].Clone()
-	if m.Body == "" && m.HTML == "" {
-		if raw := s.readRawLocked(m); len(raw) > 0 {
-			if parsed, err := ParseRFC822(raw, m.Folder, m.AccountID); err == nil {
-				parsed.ID = m.ID
-				parsed.UID = m.UID
-				parsed.Read = m.Read
-				parsed.Starred = m.Starred
-				parsed.Tags = m.Tags
-				s.messages[i] = parsed
-				m = parsed.Clone()
-			}
-		} else {
-			s.fetchBodyLocked(&s.messages[i])
-			m = s.messages[i].Clone()
+	if m.Body != "" || m.HTML != "" {
+		s.mu.Unlock()
+		return m, true
+	}
+	if raw := s.readRawLocked(m); len(raw) > 0 {
+		out := s.applyRawLocked(i, raw)
+		s.mu.Unlock()
+		return out, true
+	}
+	s.mu.Unlock()
+	if raw, err := s.fetchRaw(m); err == nil && len(raw) > 0 {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if j, ok := s.indexLocked(id); ok {
+			return s.applyRawLocked(j, raw), true
 		}
 	}
 	return m, true
 }
 
-func (s *LocalStore) GetRaw(id MessageID) ([]byte, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	i, ok := s.indexLocked(id)
-	if !ok {
-		return nil, fmt.Errorf("mail: no message %s", id)
-	}
+// applyRawLocked parses raw into the cached message at index i, preserving
+// the locally-owned fields (flags, tags, ids).
+func (s *LocalStore) applyRawLocked(i int, raw []byte) Message {
 	m := s.messages[i]
-	if raw := s.readRawLocked(m); len(raw) > 0 {
-		return append([]byte(nil), raw...), nil
+	parsed, err := ParseRFC822(raw, m.Folder, m.AccountID)
+	if err != nil {
+		return m.Clone()
 	}
-	s.fetchBodyLocked(&s.messages[i])
-	if raw := s.readRawLocked(s.messages[i]); len(raw) > 0 {
-		return append([]byte(nil), raw...), nil
+	parsed.ID = m.ID
+	parsed.UID = m.UID
+	parsed.Read = m.Read
+	parsed.Starred = m.Starred
+	parsed.Tags = m.Tags
+	if parsed.ThreadID == "" {
+		parsed.ThreadID = m.ThreadID
 	}
-	return nil, fmt.Errorf("mail: no raw source for %s", id)
+	s.messages[i] = parsed
+	return parsed.Clone()
 }
 
-func (s *LocalStore) fetchBodyLocked(m *Message) {
-	if m == nil {
-		return
+// fetchRaw downloads the full message. No store lock is held while it runs.
+func (s *LocalStore) fetchRaw(m Message) ([]byte, error) {
+	if m.UID == 0 {
+		return nil, fmt.Errorf("mail: %s has no server UID", m.ID)
 	}
-	if raw := s.readRawLocked(*m); len(raw) > 0 {
-		if parsed, err := ParseRFC822(raw, m.Folder, m.AccountID); err == nil {
-			parsed.ID = m.ID
-			parsed.UID = m.UID
-			parsed.Read = m.Read
-			parsed.Starred = m.Starred
-			parsed.Tags = m.Tags
-			*m = parsed
-		}
-		return
-	}
-	cli, err := s.clientLocked(m.AccountID)
-	if err != nil {
-		return
-	}
+	s.mu.Lock()
 	f, ok := s.folderLocked(m.Folder)
-	if !ok || m.UID == 0 {
-		return
+	s.mu.Unlock()
+	if !ok {
+		return nil, fmt.Errorf("mail: no folder for %s", m.ID)
 	}
-	remote := f.Remote
-	if remote == "" {
-		remote = f.Name
+	cli, err := s.client(m.AccountID)
+	if err != nil {
+		return nil, err
 	}
-	if _, err := cli.selectBox(remote, true); err != nil {
-		return
+	if err := selectFor(cli, f, true); err != nil {
+		return nil, err
 	}
 	raw, err := cli.uidFetchRFC822(m.UID)
-	if err != nil || len(raw) == 0 {
-		return
+	if err != nil {
+		return nil, err
 	}
-	s.writeRawLocked(*m, raw)
-	if parsed, err := ParseRFC822(raw, m.Folder, m.AccountID); err == nil {
-		parsed.ID = m.ID
-		parsed.UID = m.UID
-		parsed.Read = m.Read
-		parsed.Starred = m.Starred
-		parsed.Tags = m.Tags
-		*m = parsed
+	if len(raw) == 0 {
+		return nil, fmt.Errorf("mail: empty body for %s", m.ID)
 	}
+	s.mu.Lock()
+	s.writeRawLocked(m, raw)
+	s.mu.Unlock()
+	return raw, nil
+}
+func (s *LocalStore) GetRaw(id MessageID) ([]byte, error) {
+	s.mu.Lock()
+	i, ok := s.indexLocked(id)
+	if !ok {
+		s.mu.Unlock()
+		return nil, fmt.Errorf("mail: no message %s", id)
+	}
+	m := s.messages[i].Clone()
+	if raw := s.readRawLocked(m); len(raw) > 0 {
+		s.mu.Unlock()
+		return append([]byte(nil), raw...), nil
+	}
+	s.mu.Unlock()
+	raw, err := s.fetchRaw(m)
+	if err != nil {
+		return nil, fmt.Errorf("mail: no raw source for %s: %w", id, err)
+	}
+	s.mu.Lock()
+	if j, ok := s.indexLocked(id); ok {
+		s.applyRawLocked(j, raw)
+	}
+	s.mu.Unlock()
+	return append([]byte(nil), raw...), nil
 }
 
+// hydrateFromDiskLocked fills m from the cached blob. Disk only — the
+// network path is fetchRaw, which runs without the store lock.
+func (s *LocalStore) hydrateFromDiskLocked(m *Message) bool {
+	if m == nil {
+		return false
+	}
+	raw := s.readRawLocked(*m)
+	if len(raw) == 0 {
+		return false
+	}
+	parsed, err := ParseRFC822(raw, m.Folder, m.AccountID)
+	if err != nil {
+		return false
+	}
+	parsed.ID = m.ID
+	parsed.UID = m.UID
+	parsed.Read = m.Read
+	parsed.Starred = m.Starred
+	parsed.Tags = m.Tags
+	*m = parsed
+	return true
+}
 func (s *LocalStore) Search(q SearchQuery) []Message {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -488,9 +563,9 @@ func (s *LocalStore) Search(q SearchQuery) []Message {
 
 func (s *LocalStore) SetFlags(id MessageID, patch FlagPatch) error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	i, ok := s.indexLocked(id)
 	if !ok {
+		s.mu.Unlock()
 		return fmt.Errorf("mail: no message %s", id)
 	}
 	m := &s.messages[i]
@@ -518,177 +593,268 @@ func (s *LocalStore) SetFlags(id MessageID, patch FlagPatch) error {
 		}
 	}
 	syncSystemTagsFromFlags(m)
-	if s.feat != nil && !s.feat.Online() {
+	snapshot := m.Clone()
+	offline := s.feat != nil && !s.feat.Online()
+	if offline {
 		s.feat.mu.Lock()
 		s.feat.enqueueLocked(OutboxOp{Kind: "flag", MessageID: id, Patch: patch, AccountID: m.AccountID, UID: m.UID})
 		s.feat.mu.Unlock()
-		s.saveLocked()
+	}
+	folder, hasFolder := s.folderLocked(snapshot.Folder)
+	s.saveLocked()
+	s.mu.Unlock()
+
+	if offline || !hasFolder || snapshot.UID == 0 {
 		return nil
 	}
-	s.pushFlagsLocked(*m, add, rem)
-	s.saveLocked()
+	s.pushFlags(snapshot, folder, add, rem)
 	return nil
 }
-
 func imapSafeKeyword(s string) string {
 	s = strings.ReplaceAll(s, " ", "_")
 	return s
 }
 
-func (s *LocalStore) pushFlagsLocked(m Message, add, rem []string) {
-	if m.UID == 0 {
+// pushFlags mirrors a flag change to the server. Network I/O: never called
+// with the store lock held.
+func (s *LocalStore) pushFlags(m Message, f Folder, add, rem []string) {
+	if m.UID == 0 || (len(add) == 0 && len(rem) == 0) {
 		return
 	}
-	cli, err := s.clientLocked(m.AccountID)
+	cli, err := s.client(m.AccountID)
 	if err != nil {
 		return
 	}
-	f, ok := s.folderLocked(m.Folder)
-	if !ok {
-		return
-	}
-	remote := f.Remote
-	if remote == "" {
-		remote = f.Name
-	}
-	if _, err := cli.selectBox(remote, false); err != nil {
+	if err := selectFor(cli, f, false); err != nil {
 		return
 	}
 	_ = cli.uidStore(m.UID, add, rem)
 }
 
+// Move relocates messages. When the server reports the destination UID
+// (UIDPLUS COPYUID, or the MOVE response) the cache entry is re-keyed to it;
+// when it does not, the stale entry is dropped so a later UID STORE / MOVE
+// can never address an unrelated message in the destination mailbox.
 func (s *LocalStore) Move(ids []MessageID, dest FolderID) error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	df, ok := s.folderLocked(dest)
 	if !ok {
+		s.mu.Unlock()
 		return fmt.Errorf("mail: no folder %s", dest)
 	}
+	offline := s.feat != nil && !s.feat.Online()
+	type job struct {
+		id  MessageID
+		msg Message
+		src Folder
+	}
+	var jobs []job
 	for _, id := range ids {
 		i, ok := s.indexLocked(id)
 		if !ok {
+			s.mu.Unlock()
 			return fmt.Errorf("mail: no message %s", id)
 		}
-		m := s.messages[i]
-		if s.feat != nil && !s.feat.Online() {
+		m := s.messages[i].Clone()
+		src, _ := s.folderLocked(m.Folder)
+		if offline {
 			s.feat.mu.Lock()
 			s.feat.enqueueLocked(OutboxOp{Kind: "move", MessageID: id, Dest: dest, AccountID: m.AccountID, UID: m.UID})
 			s.feat.mu.Unlock()
 			s.messages[i].Folder = dest
 			continue
 		}
-		if m.UID != 0 {
-			if cli, err := s.clientLocked(m.AccountID); err == nil {
-				sf, _ := s.folderLocked(m.Folder)
-				remote := sf.Remote
-				if remote == "" {
-					remote = sf.Name
-				}
-				dremote := df.Remote
-				if dremote == "" {
-					dremote = df.Name
-				}
-				if _, err := cli.selectBox(remote, false); err == nil {
-					if err := cli.uidMove(m.UID, dremote); err != nil {
-						s.feat.mu.Lock()
-						s.feat.enqueueLocked(OutboxOp{Kind: "move", MessageID: id, Dest: dest, AccountID: m.AccountID, UID: m.UID, Error: err.Error()})
-						s.feat.mu.Unlock()
-					}
-				}
-			}
+		if m.UID == 0 {
+			s.messages[i].Folder = dest
+			continue
 		}
-		s.messages[i].Folder = dest
+		jobs = append(jobs, job{id: id, msg: m, src: src})
 	}
+	if len(jobs) == 0 {
+		s.saveLocked()
+		s.mu.Unlock()
+		return nil
+	}
+	s.mu.Unlock()
+
+	dremote := remoteName(df)
+	for _, j := range jobs {
+		var newUID uint32
+		var moveErr error
+		cli, err := s.client(j.msg.AccountID)
+		if err == nil {
+			if err := selectFor(cli, j.src, false); err == nil {
+				newUID, moveErr = cli.uidMove(j.msg.UID, dremote)
+			} else {
+				moveErr = err
+			}
+		} else {
+			moveErr = err
+		}
+		s.mu.Lock()
+		i, ok := s.indexLocked(j.id)
+		if !ok {
+			s.mu.Unlock()
+			continue
+		}
+		if moveErr != nil {
+			if s.feat != nil {
+				s.feat.mu.Lock()
+				s.feat.enqueueLocked(OutboxOp{Kind: "move", MessageID: j.id, Dest: dest, AccountID: j.msg.AccountID, UID: j.msg.UID, Error: moveErr.Error()})
+				s.feat.mu.Unlock()
+			}
+			s.messages[i].Folder = dest
+			s.mu.Unlock()
+			continue
+		}
+		s.rekeyMovedLocked(i, dest, newUID)
+		s.mu.Unlock()
+	}
+	s.mu.Lock()
 	s.saveLocked()
+	s.mu.Unlock()
 	return nil
 }
 
+// rekeyMovedLocked applies a completed server-side move to the cache entry
+// at index i. newUID == 0 means the server gave us no UID: the entry is
+// removed rather than kept under a UID that names something else.
+func (s *LocalStore) rekeyMovedLocked(i int, dest FolderID, newUID uint32) {
+	old := s.messages[i]
+	if newUID == 0 {
+		s.removeRawLocked(old)
+		if s.feat != nil && s.feat.index != nil {
+			s.feat.index.remove(old.ID)
+		}
+		s.messages = append(s.messages[:i], s.messages[i+1:]...)
+		return
+	}
+	raw := s.readRawLocked(old)
+	s.removeRawLocked(old)
+	m := old
+	m.Folder = dest
+	m.UID = newUID
+	m.ID = MessageID(fmt.Sprintf("%s:%d", dest, newUID))
+	if s.feat != nil && s.feat.index != nil {
+		s.feat.index.remove(old.ID)
+		s.feat.index.add(m)
+	}
+	s.messages[i] = m
+	if len(raw) > 0 {
+		s.writeRawLocked(m, raw)
+	}
+}
 func (s *LocalStore) Delete(ids []MessageID) error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	offline := s.feat != nil && !s.feat.Online()
+	type purge struct {
+		msg Message
+		src Folder
+	}
+	type toTrash struct {
+		id    MessageID
+		msg   Message
+		src   Folder
+		trash Folder
+	}
+	var purges []purge
+	var moves []toTrash
 	for _, id := range ids {
 		i, ok := s.indexLocked(id)
 		if !ok {
+			s.mu.Unlock()
 			return fmt.Errorf("mail: no message %s", id)
 		}
 		cur, ok := s.folderLocked(s.messages[i].Folder)
 		if !ok {
+			s.mu.Unlock()
 			return fmt.Errorf("mail: no folder for %s", id)
 		}
-		if s.feat != nil && !s.feat.Online() {
+		m := s.messages[i].Clone()
+		if offline {
 			s.feat.mu.Lock()
-			s.feat.enqueueLocked(OutboxOp{Kind: "delete", MessageID: id, AccountID: s.messages[i].AccountID, UID: s.messages[i].UID})
+			s.feat.enqueueLocked(OutboxOp{Kind: "delete", MessageID: id, AccountID: m.AccountID, UID: m.UID})
 			s.feat.mu.Unlock()
 		}
-		if cur.Kind == FolderTrash {
-			if s.feat == nil || s.feat.Online() {
-				s.expungeLocked(s.messages[i])
+		trash, hasTrash := s.specialLocked(cur.AccountID, FolderTrash)
+		if cur.Kind == FolderTrash || !hasTrash {
+			if !offline {
+				purges = append(purges, purge{msg: m, src: cur})
 			}
-			s.messages = append(s.messages[:i], s.messages[i+1:]...)
-			continue
-		}
-		trash, ok := s.specialLocked(cur.AccountID, FolderTrash)
-		if !ok {
-			s.expungeLocked(s.messages[i])
+			s.removeRawLocked(m)
+			if s.feat != nil && s.feat.index != nil {
+				s.feat.index.remove(m.ID)
+			}
 			s.messages = append(s.messages[:i], s.messages[i+1:]...)
 			continue
 		}
 		s.messages[i].Folder = trash.ID
-		if s.messages[i].UID != 0 {
-			if cli, err := s.clientLocked(cur.AccountID); err == nil {
-				remote := cur.Remote
-				if remote == "" {
-					remote = cur.Name
-				}
-				dremote := trash.Remote
-				if dremote == "" {
-					dremote = trash.Name
-				}
-				if _, err := cli.selectBox(remote, false); err == nil {
-					_ = cli.uidMove(s.messages[i].UID, dremote)
-				}
-			}
+		if !offline && m.UID != 0 {
+			moves = append(moves, toTrash{id: id, msg: m, src: cur, trash: trash})
 		}
 	}
 	s.saveLocked()
+	s.mu.Unlock()
+
+	for _, p := range purges {
+		s.expungeOne(p.msg, p.src)
+	}
+	for _, mv := range moves {
+		var newUID uint32
+		cli, err := s.client(mv.msg.AccountID)
+		if err != nil {
+			continue
+		}
+		if err := selectFor(cli, mv.src, false); err != nil {
+			continue
+		}
+		newUID, err = cli.uidMove(mv.msg.UID, remoteName(mv.trash))
+		if err != nil {
+			continue
+		}
+		s.mu.Lock()
+		if i, ok := s.indexLocked(mv.id); ok {
+			s.rekeyMovedLocked(i, mv.trash.ID, newUID)
+		}
+		s.mu.Unlock()
+	}
+	s.mu.Lock()
+	s.saveLocked()
+	s.mu.Unlock()
 	return nil
 }
 
-func (s *LocalStore) expungeLocked(m Message) {
+// expungeOne permanently removes one message from the server. UID EXPUNGE is
+// used when UIDPLUS is advertised so other \Deleted messages in the mailbox
+// (possibly flagged by another client) survive.
+func (s *LocalStore) expungeOne(m Message, f Folder) {
 	if m.UID == 0 {
 		return
 	}
-	cli, err := s.clientLocked(m.AccountID)
+	cli, err := s.client(m.AccountID)
 	if err != nil {
 		return
 	}
-	f, ok := s.folderLocked(m.Folder)
-	if !ok {
+	if err := selectFor(cli, f, false); err != nil {
 		return
 	}
-	remote := f.Remote
-	if remote == "" {
-		remote = f.Name
-	}
-	if _, err := cli.selectBox(remote, false); err != nil {
+	if err := cli.uidStore(m.UID, []string{`\Deleted`}, nil); err != nil {
 		return
 	}
-	_ = cli.uidStore(m.UID, []string{`\Deleted`}, nil)
-	_ = cli.expunge()
+	_ = cli.expungeUID(m.UID)
 }
-
 func (s *LocalStore) Append(folder FolderID, msg Message) (MessageID, error) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	f, ok := s.folderLocked(folder)
 	if !ok {
+		s.mu.Unlock()
 		return "", fmt.Errorf("mail: no folder %s", folder)
 	}
 	if msg.Date.IsZero() {
-		msg.Date = s.now
+		msg.Date = time.Now()
 	}
 	s.nextID++
-	msg.ID = MessageID(fmt.Sprintf("%s-m-%04d", f.AccountID, s.nextID))
+	msg.ID = MessageID(fmt.Sprintf("%s-m-%04d", safeID(f.AccountID), s.nextID))
 	msg.Folder = folder
 	msg.AccountID = f.AccountID
 	if msg.ThreadID == "" {
@@ -702,23 +868,26 @@ func (s *LocalStore) Append(folder FolderID, msg Message) (MessageID, error) {
 	}
 	applyAutomaticTags(&msg)
 	ident := s.defaultIdentLocked(f.AccountID)
-	raw := BuildRFC822(msg, ident, nil)
-	s.writeRawLocked(msg, raw)
-	if cli, err := s.clientLocked(f.AccountID); err == nil {
-		remote := f.Remote
-		if remote == "" {
-			remote = f.Name
-		}
-		_ = cli.appendRaw(remote, raw, `\Seen`)
+	raw, buildErr := BuildRFC822Strict(msg, ident, nil)
+	if buildErr != nil {
+		s.mu.Unlock()
+		return "", buildErr
 	}
+	s.writeRawLocked(msg, raw)
 	s.messages = append(s.messages, msg)
 	if s.feat != nil && s.feat.index != nil {
 		s.feat.index.add(msg)
 	}
 	s.saveLocked()
+	accountID := f.AccountID
+	s.mu.Unlock()
+
+	// APPEND is network I/O.
+	if cli, err := s.client(accountID); err == nil {
+		_ = cli.appendRaw(remoteName(f), raw, `\Seen`)
+	}
 	return msg.ID, nil
 }
-
 func (s *LocalStore) Update(id MessageID, msg Message) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -748,43 +917,58 @@ func (s *LocalStore) Fetch(accountID string) (int, error) {
 	return res.New, err
 }
 
+// Sync runs a full pass. Only one sync runs at a time (syncMu); the store
+// lock is taken only to snapshot inputs and apply results, never across
+// network I/O, and progress is announced with StoreEvents so the UI can
+// refresh while a long first sync is still running.
 func (s *LocalStore) Sync(accountID string) (SyncResult, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.syncMu.Lock()
+	defer s.syncMu.Unlock()
+
 	res := SyncResult{AccountID: accountID}
-	accts := s.accounts
+	s.mu.Lock()
+	accts := append([]Account(nil), s.accounts...)
+	s.mu.Unlock()
 	if accountID != "" {
-		accts = nil
-		for _, a := range s.accounts {
+		var only []Account
+		for _, a := range accts {
 			if a.ID == accountID {
-				accts = []Account{a}
+				only = append(only, a)
 			}
 		}
+		accts = only
 	}
 	for _, a := range accts {
-		n, err := s.syncAccountLocked(a.ID)
+		n, err := s.syncAccount(a.ID)
 		res.New += n
+		s.mu.Lock()
 		nf := 0
 		for _, f := range s.folders {
 			if f.AccountID == a.ID && !f.Virtual {
 				nf++
 			}
 		}
+		s.mu.Unlock()
 		res.Folders += nf
 		if err != nil {
-			s.health = err
+			s.setHealth(err)
 			res.Error = err.Error()
 		}
+		if n > 0 {
+			s.emit(StoreEvent{Reason: "sync", AccountID: a.ID, Count: n})
+		}
 	}
+	s.mu.Lock()
 	s.saveLocked()
-	return res, s.health
+	health := s.health
+	s.mu.Unlock()
+	return res, health
 }
-
-func (s *LocalStore) syncAccountLocked(accountID string) (int, error) {
+func (s *LocalStore) syncAccount(accountID string) (int, error) {
 	if cfg, ok := s.accountCfg(accountID); ok && cfg.IsPOP3() {
-		return s.syncPOP3Locked(accountID)
+		return s.syncPOP3(accountID)
 	}
-	cli, err := s.clientLocked(accountID)
+	cli, err := s.client(accountID)
 	if err != nil {
 		return 0, err
 	}
@@ -797,31 +981,40 @@ func (s *LocalStore) syncAccountLocked(accountID string) (int, error) {
 		if b.Name == "" {
 			continue
 		}
-		kind := folderKindFromIMAP(b.Name, b.Attrs)
-		id := FolderID(accountID + "/" + slug(b.Name))
-		if kind == FolderInbox {
-			id = FolderID(accountID + "/inbox")
+		display := b.Display
+		if display == "" {
+			display = decodeIMAPUTF7(b.Name)
 		}
+		kind := folderKindFromIMAP(display, b.Attrs)
+		id := FolderID(safeID(accountID) + "/" + safeID(display))
+		if kind == FolderInbox {
+			id = FolderID(safeID(accountID) + "/inbox")
+		}
+		s.mu.Lock()
 		f, ok := s.folderLocked(id)
 		if !ok {
-			f = Folder{ID: id, AccountID: accountID, Name: displayIMAPName(b.Name, b.Delim), Kind: kind, Remote: b.Name}
+			f = Folder{ID: id, AccountID: accountID, Name: displayIMAPName(display, b.Delim), Kind: kind, Remote: b.Name}
 			s.folders = append(s.folders, f)
 		} else {
 			f.Remote = b.Name
 			f.Kind = kind
 			s.replaceFolderLocked(f)
 		}
-		n, err := s.syncFolderLocked(cli, f)
+		s.mu.Unlock()
+
+		n, err := s.syncFolder(cli, f)
 		if err != nil {
-			s.health = err
+			s.setHealth(err)
 			continue
 		}
 		added += n
+		if n > 0 {
+			s.emit(StoreEvent{Reason: "fetch", AccountID: accountID, FolderID: f.ID, Count: n})
+		}
 	}
 	return added, nil
 }
-
-func (s *LocalStore) syncPOP3Locked(accountID string) (int, error) {
+func (s *LocalStore) syncPOP3(accountID string) (int, error) {
 	cfg, ok := s.accountCfg(accountID)
 	if !ok {
 		return 0, fmt.Errorf("mail: no account %s", accountID)
@@ -831,17 +1024,26 @@ func (s *LocalStore) syncPOP3Locked(accountID string) (int, error) {
 		return 0, fmt.Errorf("mail: no POP3 host for %s", accountID)
 	}
 	in.tokenKey = accountID
+
+	s.mu.Lock()
+	s.ensureLocalSpecialsLocked(accountID)
+	inbox, ok := s.specialLocked(accountID, FolderInbox)
+	haveRFC := map[string]bool{}
+	for _, m := range s.messages {
+		if m.AccountID == accountID && m.RFCMessageID != "" {
+			haveRFC[strings.TrimSpace(m.RFCMessageID)] = true
+		}
+	}
+	s.mu.Unlock()
+	if !ok {
+		return 0, fmt.Errorf("mail: no inbox for %s", accountID)
+	}
+
 	cli := newPOP3Client(in, cfg.Address)
 	if err := cli.connect(); err != nil {
 		return 0, err
 	}
 	defer cli.close()
-
-	s.ensureLocalSpecialsLocked(accountID)
-	inbox, ok := s.specialLocked(accountID, FolderInbox)
-	if !ok {
-		return 0, fmt.Errorf("mail: no inbox for %s", accountID)
-	}
 
 	uidls, err := cli.uidl()
 	if err != nil {
@@ -854,22 +1056,18 @@ func (s *LocalStore) syncPOP3Locked(accountID string) (int, error) {
 		}
 	}
 
-	haveRFC := map[string]bool{}
-	for _, m := range s.messages {
-		if m.AccountID == accountID && m.RFCMessageID != "" {
-			haveRFC[strings.TrimSpace(m.RFCMessageID)] = true
-		}
-	}
-
 	added := 0
 	for _, u := range uidls {
 		id := popMessageID(accountID, u.UIDL)
-		if _, exists := s.indexLocked(id); exists {
+		s.mu.Lock()
+		_, exists := s.indexLocked(id)
+		s.mu.Unlock()
+		if exists {
 			continue
 		}
 		raw, err := cli.retr(u.N)
 		if err != nil {
-			s.health = err
+			s.setHealth(err)
 			continue
 		}
 		msg, err := ParseRFC822(raw, inbox.ID, accountID)
@@ -883,11 +1081,12 @@ func (s *LocalStore) syncPOP3Locked(accountID string) (int, error) {
 		msg.Folder = inbox.ID
 		msg.AccountID = accountID
 		if msg.Date.IsZero() {
-			msg.Date = s.now
+			msg.Date = time.Now()
 		}
 		if msg.ThreadID == "" {
 			msg.ThreadID = ThreadIDOf(msg)
 		}
+		s.mu.Lock()
 		if msg.Category == "" && s.feat != nil {
 			msg.Category = messageCategory(msg, s.feat.snap())
 		}
@@ -897,14 +1096,17 @@ func (s *LocalStore) syncPOP3Locked(accountID string) (int, error) {
 		if s.feat != nil && s.feat.index != nil {
 			s.feat.index.add(msg)
 		}
+		s.mu.Unlock()
 		if msg.RFCMessageID != "" {
 			haveRFC[strings.TrimSpace(msg.RFCMessageID)] = true
 		}
 		added++
 	}
+	s.mu.Lock()
+	s.saveLocked()
+	s.mu.Unlock()
 	return added, nil
 }
-
 func (s *LocalStore) ensureLocalSpecialsLocked(accountID string) {
 	for _, spec := range defaultSpecials() {
 		id := FolderID(accountID + "/" + strings.ToLower(spec.Name))
@@ -941,19 +1143,27 @@ func (s *LocalStore) replaceFolderLocked(f Folder) {
 	s.folders = append(s.folders, f)
 }
 
-func (s *LocalStore) syncFolderLocked(cli *imapClient, f Folder) (int, error) {
-	remote := f.Remote
-	if remote == "" {
-		remote = f.Name
-	}
-	st, vanished, err := cli.selectSync(remote, true, s.loadFolderMeta(f.ID))
+// syncFolder is one mailbox pass: SELECT (+QRESYNC), incremental UID FETCH,
+// flag refresh, and — for servers that never send VANISHED — a UID-set diff
+// so messages deleted elsewhere actually leave the cache.
+//
+// All of it runs with the store lock released; results are applied at the
+// end under the lock.
+func (s *LocalStore) syncFolder(cli *imapClient, f Folder) (int, error) {
+	remote := remoteName(f)
+
+	s.mu.Lock()
+	meta := s.loadFolderMeta(f.ID)
+	s.mu.Unlock()
+
+	st, vanished, err := cli.selectSync(remote, true, meta)
 	if err != nil {
 		return 0, err
 	}
-	_ = vanished
-	meta := s.loadFolderMeta(f.ID)
 	if meta.UIDValidity != 0 && st.UIDValidity != 0 && meta.UIDValidity != st.UIDValidity {
+		s.mu.Lock()
 		s.dropFolderMessagesLocked(f.ID)
+		s.mu.Unlock()
 		meta = folderMeta{}
 	}
 	from := uint32(1)
@@ -964,6 +1174,24 @@ func (s *LocalStore) syncFolderLocked(cli *imapClient, f Folder) (int, error) {
 	if err != nil {
 		return 0, err
 	}
+	flags, flagErr := cli.uidFetchFlags(1, meta.HighestMod)
+
+	// Deletion reconciliation. QRESYNC servers tell us what vanished; the
+	// rest need an explicit UID-set diff, or messages deleted from another
+	// client stay in the cache forever (and later UID commands address a
+	// message that no longer exists).
+	var serverUIDs []uint32
+	haveUIDSet := false
+	if !cli.has("QRESYNC") {
+		if uids, err := cli.uidList(); err == nil {
+			serverUIDs = uids
+			haveUIDSet = true
+		}
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	added := 0
 	maxUID := meta.UIDNext
 	for _, im := range list {
@@ -997,21 +1225,44 @@ func (s *LocalStore) syncFolderLocked(cli *imapClient, f Folder) (int, error) {
 		}
 		applyAutomaticTags(&m)
 		s.messages = append(s.messages, m)
+		if s.feat != nil && s.feat.index != nil {
+			s.feat.index.add(m)
+		}
 		s.applyRulesOnLocked(&s.messages[len(s.messages)-1])
 		added++
 	}
-	if vanished, err := cli.uidVanished(meta); err == nil {
-		for _, uid := range vanished {
-			id := MessageID(fmt.Sprintf("%s:%d", f.ID, uid))
-			if s.feat != nil && s.feat.pendingFor(id) {
+
+	for _, uid := range vanished {
+		s.dropUIDLocked(f.ID, uid)
+	}
+	if haveUIDSet {
+		live := make(map[uint32]bool, len(serverUIDs))
+		for _, u := range serverUIDs {
+			live[u] = true
+		}
+		for i := len(s.messages) - 1; i >= 0; i-- {
+			m := s.messages[i]
+			if m.Folder != f.ID || m.UID == 0 {
 				continue
 			}
-			if i, ok := s.indexLocked(id); ok {
-				s.messages = append(s.messages[:i], s.messages[i+1:]...)
+			if live[m.UID] {
+				continue
 			}
+			if m.UID >= maxUID {
+				// Arrived after the listing; keep it.
+				continue
+			}
+			if s.feat != nil && s.feat.pendingFor(m.ID) {
+				continue
+			}
+			s.removeRawLocked(m)
+			if s.feat != nil && s.feat.index != nil {
+				s.feat.index.remove(m.ID)
+			}
+			s.messages = append(s.messages[:i], s.messages[i+1:]...)
 		}
 	}
-	if flags, err := cli.uidFetchFlags(1, meta.HighestMod); err == nil {
+	if flagErr == nil {
 		for _, im := range flags {
 			id := MessageID(fmt.Sprintf("%s:%d", f.ID, im.UID))
 			if s.feat != nil && s.feat.pendingFor(id) {
@@ -1023,12 +1274,35 @@ func (s *LocalStore) syncFolderLocked(cli *imapClient, f Folder) (int, error) {
 			}
 		}
 	}
+	if added > 0 {
+		// Re-derive conversation roots across the whole cache: a reply that
+		// arrives before its parent (or a reply to a reply) resolves to the
+		// wrong root when it is threaded in isolation.
+		assignThreadIDs(s.messages)
+	}
 	s.saveFolderMeta(f.ID, folderMeta{
 		UIDValidity: st.UIDValidity, UIDNext: maxUID, HighestMod: st.HighestMod, Remote: remote,
 	})
 	return added, nil
 }
 
+// dropUIDLocked removes one cached message by folder+UID unless a local
+// mutation for it is still queued.
+func (s *LocalStore) dropUIDLocked(folder FolderID, uid uint32) {
+	id := MessageID(fmt.Sprintf("%s:%d", folder, uid))
+	if s.feat != nil && s.feat.pendingFor(id) {
+		return
+	}
+	i, ok := s.indexLocked(id)
+	if !ok {
+		return
+	}
+	s.removeRawLocked(s.messages[i])
+	if s.feat != nil && s.feat.index != nil {
+		s.feat.index.remove(id)
+	}
+	s.messages = append(s.messages[:i], s.messages[i+1:]...)
+}
 func (s *LocalStore) dropFolderMessagesLocked(id FolderID) {
 	out := s.messages[:0]
 	for _, m := range s.messages {
@@ -1263,15 +1537,23 @@ func (s *LocalStore) applyRulesOnLocked(m *Message) bool {
 }
 
 func (s *LocalStore) deleteOne(id MessageID) error {
+	s.mu.Lock()
 	i, ok := s.indexLocked(id)
 	if !ok {
+		s.mu.Unlock()
 		return fmt.Errorf("mail: no message %s", id)
 	}
-	s.expungeLocked(s.messages[i])
+	m := s.messages[i].Clone()
+	f, _ := s.folderLocked(m.Folder)
+	s.removeRawLocked(m)
+	if s.feat != nil && s.feat.index != nil {
+		s.feat.index.remove(id)
+	}
 	s.messages = append(s.messages[:i], s.messages[i+1:]...)
+	s.mu.Unlock()
+	s.expungeOne(m, f)
 	return nil
 }
-
 func (s *LocalStore) moveOne(id MessageID, dest FolderID) error {
 	i, ok := s.indexLocked(id)
 	if !ok {
@@ -1284,29 +1566,49 @@ func (s *LocalStore) moveOne(id MessageID, dest FolderID) error {
 func (s *LocalStore) indexOf(id MessageID) (int, bool) { return s.indexLocked(id) }
 func (s *LocalStore) messageAt(i int) *Message         { return &s.messages[i] }
 
+// GetPart returns one decoded MIME section. The cached .eml is re-walked so
+// attachments come back as their actual bytes; previously a non-text part
+// resolved to an empty PartData (and "Save As" wrote the text body under the
+// attachment's name).
 func (s *LocalStore) GetPart(id MessageID, partID string) (PartData, error) {
+	if !validPartID(partID) {
+		return PartData{}, fmt.Errorf("mail: illegal part id %q", truncate(partID, 32))
+	}
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	i, ok := s.indexLocked(id)
 	if !ok {
+		s.mu.Unlock()
 		return PartData{}, fmt.Errorf("mail: no message %s", id)
 	}
-	m := s.messages[i]
+	m := s.messages[i].Clone()
 	raw := s.readRawLocked(m)
+	s.mu.Unlock()
+
 	if len(raw) == 0 {
-		s.fetchBodyLocked(&s.messages[i])
-		m = s.messages[i]
-		raw = s.readRawLocked(m)
+		fetched, err := s.fetchRaw(m)
+		if err == nil && len(fetched) > 0 {
+			raw = fetched
+			s.mu.Lock()
+			if j, ok := s.indexLocked(id); ok {
+				s.applyRawLocked(j, raw)
+			}
+			s.mu.Unlock()
+		}
 	}
-	if len(raw) == 0 && m.UID != 0 {
-		if cli, err := s.clientLocked(m.AccountID); err == nil {
-			if f, ok := s.folderLocked(m.Folder); ok {
-				remote := f.Remote
-				if remote == "" {
-					remote = f.Name
-				}
-				if _, err := cli.selectBox(remote, true); err == nil {
-					if b, err := cli.uidFetchSection(m.UID, partID); err == nil {
+	if len(raw) > 0 {
+		if p, ok := PartFromRaw(raw, partID); ok {
+			return p, nil
+		}
+	}
+	// No cached blob: ask the server for just this section.
+	if m.UID != 0 {
+		s.mu.Lock()
+		f, hasFolder := s.folderLocked(m.Folder)
+		s.mu.Unlock()
+		if hasFolder {
+			if cli, err := s.client(m.AccountID); err == nil {
+				if err := selectFor(cli, f, true); err == nil {
+					if b, err := cli.uidFetchSection(m.UID, partID); err == nil && len(b) > 0 {
 						p := partByID(m.Parts, partID)
 						p.Data = b
 						return p, nil
@@ -1318,28 +1620,8 @@ func (s *LocalStore) GetPart(id MessageID, partID string) (PartData, error) {
 	if len(raw) == 0 {
 		return PartData{}, fmt.Errorf("mail: no body for %s", id)
 	}
-	parsed, err := ParseRFC822(raw, m.Folder, m.AccountID)
-	if err != nil {
-		return PartData{}, err
-	}
-	if partID == "" || partID == "1" && len(parsed.Parts) == 0 {
-		return PartData{Part: Part{ID: "1", MIMEType: "text/plain", Size: len(parsed.Body)}, Data: []byte(parsed.Body)}, nil
-	}
-	// Prefer cached raw section via IMAP; otherwise return text body for text parts.
-	for _, p := range parsed.Parts {
-		if p.ID == partID {
-			if strings.HasPrefix(strings.ToLower(p.MIMEType), "text/html") {
-				return PartData{Part: p, Data: []byte(parsed.HTML)}, nil
-			}
-			if strings.HasPrefix(strings.ToLower(p.MIMEType), "text/") {
-				return PartData{Part: p, Data: []byte(parsed.Body)}, nil
-			}
-			return PartData{Part: p}, nil
-		}
-	}
 	return PartData{}, fmt.Errorf("mail: no part %s", partID)
 }
-
 func partByID(parts []Part, id string) PartData {
 	for _, p := range parts {
 		if p.ID == id {
@@ -1349,29 +1631,53 @@ func partByID(parts []Part, id string) PartData {
 	return PartData{Part: Part{ID: id}}
 }
 
+// OpenPart writes the part to the cache dir and hands it to the desktop
+// opener. The filename is attacker-controlled, so it is reduced to a base
+// name, kept inside the cache directory, written 0600, and refused outright
+// for types the desktop would execute.
 func (s *LocalStore) OpenPart(id MessageID, partID string) (PartData, error) {
 	p, err := s.GetPart(id, partID)
 	if err != nil {
 		return p, err
 	}
-	name := p.Filename
-	if name == "" {
-		name = string(id) + "-" + partID
+	name := attachFileName(p.Filename)
+	if name == "attachment" {
+		name = attachFileName(safeID(string(id)) + "-" + safeID(partID))
 	}
-	name = filepath.Base(name)
-	dir := filepath.Join(s.dir, "open")
-	_ = os.MkdirAll(dir, 0o700)
-	path := filepath.Join(dir, name)
+	if unsafeAttachmentName(name) {
+		return p, fmt.Errorf("mail: refusing to open %q — save it and inspect it instead", name)
+	}
+	path, err := underRoot(s.dir, "open", name)
+	if err != nil {
+		return p, err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return p, err
+	}
 	if len(p.Data) > 0 {
-		if err := os.WriteFile(path, p.Data, 0o600); err != nil {
+		if err := writeFileAtomic(path, p.Data, 0o600); err != nil {
 			return p, err
 		}
+	} else if _, statErr := os.Stat(path); statErr != nil {
+		return p, fmt.Errorf("mail: part %s has no data to open", partID)
 	}
 	p.Path = path
 	openCachedFile(path)
 	return p, nil
 }
 
+// unsafeAttachmentName flags extensions a desktop handler would run.
+func unsafeAttachmentName(name string) bool {
+	ext := strings.ToLower(filepath.Ext(name))
+	switch ext {
+	case ".desktop", ".exe", ".com", ".bat", ".cmd", ".scr", ".pif", ".msi",
+		".sh", ".bash", ".zsh", ".run", ".appimage", ".jar", ".js", ".jse",
+		".vbs", ".vbe", ".wsf", ".wsh", ".ps1", ".psm1", ".hta", ".lnk",
+		".reg", ".scf", ".url", ".html", ".htm", ".xhtml", ".svg", ".mhtml":
+		return true
+	}
+	return false
+}
 func (s *LocalStore) UnreadAll() int { return s.UnreadTotal() }
 
 func (s *LocalStore) indexLocked(id MessageID) (int, bool) {
@@ -1408,23 +1714,24 @@ func (s *LocalStore) defaultIdentLocked(accountID string) Identity {
 	return first
 }
 
-func (s *LocalStore) clientLocked(accountID string) (*imapClient, error) {
-	if c := s.clients[accountID]; c != nil {
-		if err := c.connect(); err != nil {
+// client returns a connected IMAP session for accountID.
+//
+// It must be called WITHOUT s.mu held: connecting (and the TLS handshake,
+// and LOGIN) is network I/O, and holding the store lock across it used to
+// freeze every unrelated RPC behind one slow server.
+func (s *LocalStore) client(accountID string) (*imapClient, error) {
+	s.mu.Lock()
+	existing := s.clients[accountID]
+	cfg, ok := s.accountCfgLocked(accountID)
+	s.mu.Unlock()
+	if existing != nil {
+		if err := existing.connect(); err != nil {
 			return nil, err
 		}
-		return c, nil
+		return existing, nil
 	}
-	var cfg AccountConfig
-	for _, a := range s.cfg.Accounts {
-		id := a.ID
-		if id == "" {
-			id = slug(a.Address)
-		}
-		if id == accountID {
-			cfg = a
-			break
-		}
+	if !ok {
+		return nil, fmt.Errorf("mail: no account %s", accountID)
 	}
 	if cfg.IsPOP3() {
 		return nil, fmt.Errorf("mail: account %s is POP3 (no IMAP session)", accountID)
@@ -1435,14 +1742,50 @@ func (s *LocalStore) clientLocked(accountID string) (*imapClient, error) {
 	cfg.IMAP.tokenKey = accountID
 	c := newIMAPClient(cfg.IMAP, cfg.Address)
 	if err := c.connect(); err != nil {
-		s.health = err
+		s.setHealth(err)
 		return nil, err
 	}
+	s.mu.Lock()
+	if prev := s.clients[accountID]; prev != nil {
+		// Another goroutine won the race; keep one session per account.
+		s.mu.Unlock()
+		c.close()
+		return prev, nil
+	}
 	s.clients[accountID] = c
+	s.mu.Unlock()
 	return c, nil
 }
 
+func (s *LocalStore) setHealth(err error) {
+	s.mu.Lock()
+	s.health = err
+	s.mu.Unlock()
+}
+
+// selectFor selects the remote mailbox backing f (network I/O; no store lock).
+func selectFor(cli *imapClient, f Folder, readOnly bool) error {
+	remote := f.Remote
+	if remote == "" {
+		remote = f.Name
+	}
+	_, err := cli.selectBox(remote, readOnly)
+	return err
+}
+
+func remoteName(f Folder) string {
+	if f.Remote != "" {
+		return f.Remote
+	}
+	return f.Name
+}
 func (s *LocalStore) accountCfg(accountID string) (AccountConfig, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.accountCfgLocked(accountID)
+}
+
+func (s *LocalStore) accountCfgLocked(accountID string) (AccountConfig, bool) {
 	for _, a := range s.cfg.Accounts {
 		id := a.ID
 		if id == "" {
@@ -1454,23 +1797,42 @@ func (s *LocalStore) accountCfg(accountID string) (AccountConfig, bool) {
 	}
 	return AccountConfig{}, false
 }
-
 func (s *LocalStore) loadLocked() {
-	_ = readJSONFile(filepath.Join(s.dir, "accounts.json"), &s.accounts)
-	_ = readJSONFile(filepath.Join(s.dir, "identities.json"), &s.identities)
-	_ = readJSONFile(filepath.Join(s.dir, "folders.json"), &s.folders)
-	_ = readJSONFile(filepath.Join(s.dir, "messages.json"), &s.messages)
-	_ = readJSONFile(filepath.Join(s.dir, "tags.json"), &s.tags)
-	_ = readJSONFile(filepath.Join(s.dir, "rules.json"), &s.rules)
 	if s.feat == nil {
 		s.feat = newFeatureHost()
 	}
-	_ = readJSONFile(filepath.Join(s.dir, "smart.json"), &s.feat.smart)
-	_ = readJSONFile(filepath.Join(s.dir, "vip.json"), &s.feat.vips)
-	_ = readJSONFile(filepath.Join(s.dir, "muted.json"), &s.feat.muted)
-	_ = readJSONFile(filepath.Join(s.dir, "categories.json"), &s.feat.cats)
-	_ = readJSONFile(filepath.Join(s.dir, "notify.json"), &s.feat.notify)
-	_ = readJSONFile(filepath.Join(s.dir, "outbox.json"), &s.feat.outbox)
+	type slot struct {
+		name string
+		dest any
+	}
+	slots := []slot{
+		{"accounts.json", &s.accounts},
+		{"identities.json", &s.identities},
+		{"folders.json", &s.folders},
+		{"messages.json", &s.messages},
+		{"tags.json", &s.tags},
+		{"rules.json", &s.rules},
+		{"smart.json", &s.feat.smart},
+		{"vip.json", &s.feat.vips},
+		{"muted.json", &s.feat.muted},
+		{"categories.json", &s.feat.cats},
+		{"notify.json", &s.feat.notify},
+		{"outbox.json", &s.feat.outbox},
+	}
+	var bad []string
+	for _, sl := range slots {
+		path := filepath.Join(s.dir, sl.name)
+		if err := readJSONFileStrict(path, sl.dest); err != nil {
+			quarantine(path)
+			bad = append(bad, sl.name)
+		}
+	}
+	if len(bad) > 0 {
+		// Rebuild what we can: messages.json is reconstructible from the
+		// raw/*.eml blobs the next sync re-reads.
+		s.health = fmt.Errorf("mail: recovered from corrupt cache file(s) %s (moved to *.corrupt); re-sync to refill",
+			strings.Join(bad, ", "))
+	}
 	s.tags = mergeTagStore(s.tags)
 	assignThreadIDs(s.messages)
 	if s.feat.index != nil {
@@ -1483,53 +1845,87 @@ func (s *LocalStore) loadLocked() {
 	}
 }
 
+// saveLocked persists the cache with tmp+fsync+rename so a crash mid-write
+// leaves the previous good file in place.
 func (s *LocalStore) saveLocked() {
-	_ = writeJSONFile(filepath.Join(s.dir, "accounts.json"), s.accounts)
-	_ = writeJSONFile(filepath.Join(s.dir, "identities.json"), s.identities)
-	_ = writeJSONFile(filepath.Join(s.dir, "folders.json"), s.folders)
-	_ = writeJSONFile(filepath.Join(s.dir, "messages.json"), s.messages)
-	_ = writeJSONFile(filepath.Join(s.dir, "tags.json"), s.tags)
-	_ = writeJSONFile(filepath.Join(s.dir, "rules.json"), s.rules)
+	_ = writeJSONFileAtomic(filepath.Join(s.dir, "accounts.json"), s.accounts)
+	_ = writeJSONFileAtomic(filepath.Join(s.dir, "identities.json"), s.identities)
+	_ = writeJSONFileAtomic(filepath.Join(s.dir, "folders.json"), s.folders)
+	_ = writeJSONFileAtomic(filepath.Join(s.dir, "messages.json"), s.messages)
+	_ = writeJSONFileAtomic(filepath.Join(s.dir, "tags.json"), s.tags)
+	_ = writeJSONFileAtomic(filepath.Join(s.dir, "rules.json"), s.rules)
 	if s.feat != nil {
-		_ = writeJSONFile(filepath.Join(s.dir, "smart.json"), s.feat.smart)
-		_ = writeJSONFile(filepath.Join(s.dir, "vip.json"), s.feat.vips)
-		_ = writeJSONFile(filepath.Join(s.dir, "muted.json"), s.feat.muted)
-		_ = writeJSONFile(filepath.Join(s.dir, "categories.json"), s.feat.cats)
-		_ = writeJSONFile(filepath.Join(s.dir, "notify.json"), s.feat.notify)
-		_ = writeJSONFile(filepath.Join(s.dir, "outbox.json"), s.feat.outbox)
+		_ = writeJSONFileAtomic(filepath.Join(s.dir, "smart.json"), s.feat.smart)
+		_ = writeJSONFileAtomic(filepath.Join(s.dir, "vip.json"), s.feat.vips)
+		_ = writeJSONFileAtomic(filepath.Join(s.dir, "muted.json"), s.feat.muted)
+		_ = writeJSONFileAtomic(filepath.Join(s.dir, "categories.json"), s.feat.cats)
+		_ = writeJSONFileAtomic(filepath.Join(s.dir, "notify.json"), s.feat.notify)
+		_ = writeJSONFileAtomic(filepath.Join(s.dir, "outbox.json"), s.feat.outbox)
 	}
 }
 
-func (s *LocalStore) rawPath(m Message) string {
-	return filepath.Join(s.dir, "raw", string(m.AccountID), fmt.Sprintf("%s.eml", m.ID))
+// rawPath is the .eml blob for m. Both the account id and the message id are
+// folded to safe segments and the result is checked against the data root,
+// so a hostile accounts.put / message id cannot write outside the cache.
+func (s *LocalStore) rawPath(m Message) (string, error) {
+	acct := safeID(string(m.AccountID))
+	name := safeID(string(m.ID))
+	if name == "acct" {
+		name = "msg"
+	}
+	return underRoot(s.dir, "raw", acct, name+".eml")
 }
-
 func (s *LocalStore) writeRawLocked(m Message, raw []byte) {
-	p := s.rawPath(m)
+	p, err := s.rawPath(m)
+	if err != nil {
+		return
+	}
 	_ = os.MkdirAll(filepath.Dir(p), 0o700)
-	_ = os.WriteFile(p, raw, 0o600)
+	_ = writeFileAtomic(p, raw, 0o600)
 }
-
 func (s *LocalStore) readRawLocked(m Message) []byte {
-	b, err := os.ReadFile(s.rawPath(m))
+	p, err := s.rawPath(m)
+	if err != nil {
+		return nil
+	}
+	b, err := os.ReadFile(p)
 	if err != nil {
 		return nil
 	}
 	return b
 }
 
+// removeRawLocked drops the cached blob (used when a message is re-keyed
+// after a server-side MOVE).
+func (s *LocalStore) removeRawLocked(m Message) {
+	if p, err := s.rawPath(m); err == nil {
+		_ = os.Remove(p)
+	}
+}
+func (s *LocalStore) folderMetaPath(id FolderID) (string, error) {
+	return underRoot(s.dir, "meta", safeID(string(id))+".json")
+}
+
 func (s *LocalStore) loadFolderMeta(id FolderID) folderMeta {
 	var m folderMeta
-	_ = readJSONFile(filepath.Join(s.dir, "meta", slug(string(id))+".json"), &m)
+	p, err := s.folderMetaPath(id)
+	if err != nil {
+		return m
+	}
+	if err := readJSONFileStrict(p, &m); err != nil {
+		quarantine(p)
+		return folderMeta{}
+	}
 	return m
 }
-
 func (s *LocalStore) saveFolderMeta(id FolderID, m folderMeta) {
-	dir := filepath.Join(s.dir, "meta")
-	_ = os.MkdirAll(dir, 0o700)
-	_ = writeJSONFile(filepath.Join(dir, slug(string(id))+".json"), m)
+	p, err := s.folderMetaPath(id)
+	if err != nil {
+		return
+	}
+	_ = os.MkdirAll(filepath.Dir(p), 0o700)
+	_ = writeJSONFileAtomic(p, m)
 }
-
 func idSeq(id MessageID) int {
 	s := string(id)
 	i := strings.LastIndex(s, "-")
@@ -1546,36 +1942,21 @@ func idSeq(id MessageID) int {
 	return n
 }
 
-func readJSONFile(path string, v any) error {
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return err
-	}
-	return json.Unmarshal(b, v)
-}
-
-func writeJSONFile(path string, v any) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return err
-	}
-	b, err := json.MarshalIndent(v, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(path, b, 0o600)
-}
-
 // SendViaSMTP builds RFC822 and submits, then APPENDs to Sent.
+// SendViaSMTP builds the RFC822 message and submits it. When the account is
+// offline the message (with its attachments) is queued instead; a transport
+// failure queues it once and reports the error — it no longer both queues a
+// copy and errors, which used to send the message twice after a user retry.
 func (s *LocalStore) SendViaSMTP(accountID, identityID string, msg Message, files []AttachedFile) (MessageID, error) {
 	s.mu.Lock()
-	cfg, ok := s.accountCfg(accountID)
+	cfg, ok := s.accountCfgLocked(accountID)
 	ident := s.defaultIdentLocked(accountID)
 	for _, id := range s.identities {
 		if id.ID == identityID {
 			ident = id
 			if id.AccountID != "" {
 				accountID = id.AccountID
-				if c, ok2 := s.accountCfg(accountID); ok2 {
+				if c, ok2 := s.accountCfgLocked(accountID); ok2 {
 					cfg = c
 					ok = true
 				}
@@ -1589,36 +1970,49 @@ func (s *LocalStore) SendViaSMTP(accountID, identityID string, msg Message, file
 	if msg.From == "" {
 		msg.From = ident.DisplayFrom()
 	}
-	raw := BuildRFC822(msg, ident, files)
+	raw, err := BuildRFC822Strict(msg, ident, files)
+	if err != nil {
+		return "", err
+	}
 	rcpts := append(splitAddrs(msg.To), splitAddrs(msg.Cc)...)
 	rcpts = append(rcpts, splitAddrs(msg.Bcc)...)
+	if len(rcpts) == 0 {
+		return "", fmt.Errorf("mail: no recipient")
+	}
 	cfg.SMTP.tokenKey = accountID
+
+	queue := func(id MessageID, sendErr string) {
+		if s.feat == nil {
+			return
+		}
+		cp := msg.Clone()
+		s.feat.mu.Lock()
+		s.feat.enqueueLocked(OutboxOp{
+			Kind: "send", AccountID: accountID, IdentityID: ident.ID,
+			MessageID: id, Message: &cp, Attachments: files, Error: sendErr,
+		})
+		s.feat.mu.Unlock()
+		s.mu.Lock()
+		s.saveLocked()
+		s.mu.Unlock()
+	}
+
 	if s.feat != nil && !s.feat.Online() {
 		id, err := s.Append(FolderOutbox, msg)
 		if err != nil {
-			// no physical outbox folder — keep the draft in memory list via a queued send
 			s.mu.Lock()
 			s.nextID++
-			id = MessageID(fmt.Sprintf("%s-out-%04d", accountID, s.nextID))
+			id = MessageID(fmt.Sprintf("%s-out-%04d", safeID(accountID), s.nextID))
 			msg.ID = id
 			msg.AccountID = accountID
 			s.messages = append(s.messages, msg)
 			s.mu.Unlock()
 		}
-		s.feat.mu.Lock()
-		cp := msg.Clone()
-		s.feat.enqueueLocked(OutboxOp{Kind: "send", AccountID: accountID, MessageID: id, Message: &cp})
-		s.feat.mu.Unlock()
-		s.mu.Lock()
-		s.saveLocked()
-		s.mu.Unlock()
+		queue(id, "")
 		return id, nil
 	}
 	if err := SendSMTP(cfg.SMTP, extractAddr(msg.From), rcpts, raw); err != nil {
-		s.feat.mu.Lock()
-		cp := msg.Clone()
-		s.feat.enqueueLocked(OutboxOp{Kind: "send", AccountID: accountID, Message: &cp, Error: err.Error()})
-		s.feat.mu.Unlock()
+		queue("", err.Error())
 		return "", err
 	}
 	sent, ok := specialFolder(s, accountID, FolderSent)
@@ -1626,6 +2020,13 @@ func (s *LocalStore) SendViaSMTP(accountID, identityID string, msg Message, file
 		return "", nil
 	}
 	return s.Append(sent.ID, msg)
+}
+
+// hasConfiguredAccounts reports whether any account has real server config.
+func (s *LocalStore) hasConfiguredAccounts() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.cfg.Accounts) > 0
 }
 
 func (s *LocalStore) extras() *featureHost {
@@ -1742,12 +2143,17 @@ func (s *LocalStore) flushOne(op OutboxOp) error {
 	switch op.Kind {
 	case "flag":
 		s.mu.Lock()
-		defer s.mu.Unlock()
 		i, ok := s.indexLocked(op.MessageID)
 		if !ok {
+			s.mu.Unlock()
 			return nil // vanished; drop
 		}
-		s.pushFlagsLocked(s.messages[i], nil, nil)
+		m := s.messages[i].Clone()
+		f, hasFolder := s.folderLocked(m.Folder)
+		s.mu.Unlock()
+		if !hasFolder {
+			return nil
+		}
 		var add, rem []string
 		if op.Patch.Read != nil {
 			if *op.Patch.Read {
@@ -1763,7 +2169,7 @@ func (s *LocalStore) flushOne(op OutboxOp) error {
 				rem = append(rem, `\Flagged`)
 			}
 		}
-		s.pushFlagsLocked(s.messages[i], add, rem)
+		s.pushFlags(m, f, add, rem)
 		return nil
 	case "move":
 		return s.Move([]MessageID{op.MessageID}, op.Dest)
@@ -1773,7 +2179,9 @@ func (s *LocalStore) flushOne(op OutboxOp) error {
 		if op.Message == nil {
 			return nil
 		}
-		_, err := s.SendViaSMTP(op.AccountID, "", *op.Message, nil)
+		// Attachments are carried in the queued op, so a message composed
+		// offline still goes out with its files.
+		_, err := s.SendViaSMTP(op.AccountID, op.IdentityID, *op.Message, op.Attachments)
 		return err
 	default:
 		return nil
