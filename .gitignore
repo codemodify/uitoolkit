@@ -11,3 +11,5 @@ examples/files/files
 cmd/uitksettings/uitksettings
 /settings.png
 /tmp/
+go.work
+go.work.sum

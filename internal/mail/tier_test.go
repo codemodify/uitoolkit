@@ -211,7 +211,7 @@ func TestOAuthLoopbackFakeProvider(t *testing.T) {
 	t.Setenv("UITK_MAIL_NO_OPEN", "1")
 	dir := t.TempDir()
 	t.Setenv(EnvData, dir)
-	defaultTokenStore = NewTokenStore(filepath.Join(dir, "secrets"))
+	SetDefaultTokenStore(NewTokenStore(filepath.Join(dir, "secrets")))
 
 	var exchanged bool
 	mux := http.NewServeMux()

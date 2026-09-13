@@ -59,6 +59,7 @@ func (e *Expander) yieldFocusFromBody() {
 	}
 	if widget.Contains(e.body, h.Focus()) {
 		e.head.RequestFocus()
+		widget.MarkKeyboardFocus(e.head)
 	}
 }
 

@@ -1,6 +1,8 @@
 package style
 
 import (
+	"log"
+	"math"
 	"strconv"
 	"strings"
 
@@ -92,7 +94,8 @@ func (t ThemeTokens) Resolve() ThemeTokens {
 	}
 	t.Palette = overlayPalette(base, t.Palette)
 	t.Palette = ResolveMenuChrome(t.Palette)
-	t.Palette = ResolveBevelChrome(t.Palette)
+	t.Palette = ResolveBevelChromeFor(t.Palette, t.Family)
+	t.Metrics = clampChromeMetrics(t.Metrics)
 	if t.Bevel == "" {
 		t.Bevel = BevelNone
 	}
@@ -139,9 +142,6 @@ func (t ThemeTokens) Resolve() ThemeTokens {
 	if t.Metrics.BevelDepth <= 0 && t.Bevel == BevelClassic3D {
 		t.Metrics.BevelDepth = 1
 	}
-	if t.Metrics.Elevation < 0 {
-		t.Metrics.Elevation = 0
-	}
 	return t
 }
 
@@ -184,11 +184,17 @@ func overlayPalette(base, over Palette) Palette {
 }
 
 // ResolveBevelChrome fills BevelLight / BevelDark when a pack omitted them.
+// The palette family is inferred; [ResolveBevelChromeFor] takes it directly.
 func ResolveBevelChrome(p Palette) Palette {
+	return ResolveBevelChromeFor(p, paletteFamily(p))
+}
+
+// ResolveBevelChromeFor fills BevelLight / BevelDark for a known family.
+func ResolveBevelChromeFor(p Palette, fam ThemeName) Palette {
 	if colorUnset(p.BevelLight) {
 		if p.Highlight.A > 0.2 && (p.Highlight.R+p.Highlight.G+p.Highlight.B) > 1.6 {
 			p.BevelLight = paintengine2d.RGB(p.Highlight.R, p.Highlight.G, p.Highlight.B)
-		} else if ParseTheme("") == ThemeDark && p.Text.R > 0.6 {
+		} else if ParseTheme(string(fam)) == ThemeDark && p.Text.R > 0.6 {
 			p.BevelLight = p.SurfaceAlt.Lerp(paintengine2d.RGB(1, 1, 1), 0.45)
 			p.BevelLight.A = 1
 		} else {
@@ -385,6 +391,68 @@ func (cm ChromeMetrics) json() *chromeMetricsJSON {
 	return out
 }
 
+// Chrome metric bounds. Zero always means "unset"; any other value is
+// clamped into a range a control can actually paint, so a typo
+// ("scroll": 160) or a hostile theme.json cannot produce screen-sized
+// chrome or a 2e9-pixel shadow offset.
+const (
+	maxThemeRadius = 64
+	maxBevelDepth  = 4
+	maxGutterWidth = 256
+	minThemeScroll = 2
+	maxThemeScroll = 64
+	minControlSide = 8
+	maxControlSide = 256
+	maxElevation   = 8
+)
+
+// clampMetric keeps v inside [min, max]. Zero stays zero (unset); negative
+// and non-finite values fall back to unset. Every change is logged once at
+// the point a theme is parsed or resolved.
+func clampMetric(name string, v, min, max float32) float32 {
+	if v == 0 {
+		return 0
+	}
+	if math.IsNaN(float64(v)) || math.IsInf(float64(v), 0) {
+		log.Printf("uitk theme: %s is not a finite number, ignoring", name)
+		return 0
+	}
+	if v < 0 {
+		log.Printf("uitk theme: %s %v is negative, ignoring", name, v)
+		return 0
+	}
+	if v < min {
+		log.Printf("uitk theme: %s %v below %v, clamped", name, v, min)
+		return min
+	}
+	if v > max {
+		log.Printf("uitk theme: %s %v above %v, clamped", name, v, max)
+		return max
+	}
+	return v
+}
+
+// clampChromeMetrics bounds every theme-supplied geometry knob.
+func clampChromeMetrics(cm ChromeMetrics) ChromeMetrics {
+	cm.Radius = clampMetric("metrics.radius", cm.Radius, 0, maxThemeRadius)
+	cm.RadiusSmall = clampMetric("metrics.radiusSmall", cm.RadiusSmall, 0, maxThemeRadius)
+	cm.BevelDepth = clampMetric("metrics.bevelDepth", cm.BevelDepth, 0, maxBevelDepth)
+	cm.GutterWidth = clampMetric("metrics.gutterWidth", cm.GutterWidth, 0, maxGutterWidth)
+	cm.Scroll = clampMetric("metrics.scroll", cm.Scroll, minThemeScroll, maxThemeScroll)
+	cm.ControlH = clampMetric("metrics.controlH", cm.ControlH, minControlSide, maxControlSide)
+	cm.FieldH = clampMetric("metrics.fieldH", cm.FieldH, minControlSide, maxControlSide)
+	cm.ComboH = clampMetric("metrics.comboH", cm.ComboH, minControlSide, maxControlSide)
+	if cm.Elevation < 0 {
+		log.Printf("uitk theme: metrics.elevation %d is negative, ignoring", cm.Elevation)
+		cm.Elevation = 0
+	}
+	if cm.Elevation > maxElevation {
+		log.Printf("uitk theme: metrics.elevation %d above %d, clamped", cm.Elevation, maxElevation)
+		cm.Elevation = maxElevation
+	}
+	return cm
+}
+
 func (j *chromeMetricsJSON) metrics() ChromeMetrics {
 	if j == nil {
 		return ChromeMetrics{}
@@ -417,7 +485,7 @@ func (j *chromeMetricsJSON) metrics() ChromeMetrics {
 	if j.Elevation != nil {
 		cm.Elevation = *j.Elevation
 	}
-	return cm
+	return clampChromeMetrics(cm)
 }
 
 func tokensToColorMap(t ThemeTokens) map[string]string {
@@ -483,9 +551,12 @@ func applyColorMap(t ThemeTokens, m map[string]string) ThemeTokens {
 		}
 		return ParseHexColor(s)
 	}
+	// A colour present in the file wins even when it is fully transparent
+	// black: markExplicitColor keeps it out of the "unset" bucket so a theme
+	// can switch off a shadow or a selection wash.
 	setP := func(dst *paintengine2d.Color, k string) {
 		if c, ok := get(k); ok {
-			*dst = c
+			*dst = markExplicitColor(c)
 		}
 	}
 	setP(&t.Palette.Background, "background")

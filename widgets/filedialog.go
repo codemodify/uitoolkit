@@ -48,7 +48,9 @@ type FileDialog struct {
 	dir     string
 	entries []FileInfo
 	picked  string
+	err     string
 	done    bool
+	hint    *Label
 	overlay *Overlay
 }
 
@@ -74,14 +76,15 @@ func NewFileDialog(opts FileDialogOptions) *FileDialog {
 	fd.table = NewTableView([]TableColumn{
 		{Title: "Name", Width: 0, Sortable: true},
 		{Title: "Kind", Width: 88, Sortable: true},
-	}, 0, fd.cell, fd.onRow)
+	}, 0, fd.cell, fd.onSelect)
+	// Selection only moves the path field. Entering a folder is an
+	// activation (Return or double click), so arrowing through the list no
+	// longer navigates on every keystroke.
+	fd.table.OnActivate = fd.onActivate
 	fd.table.OnSort = fd.sortEntries
 	fd.table.RowHeight = 26
 
-	hint := NewLabel("Stub picker — wire OnNavigate or Entries; native dialog later.")
-	if opts.Filter != "" {
-		hint.SetText("Filter  " + opts.Filter + "  ·  stub picker (no platform dialog)")
-	}
+	fd.hint = NewLabel("")
 
 	openLbl := "Open"
 	if opts.Mode == FileSave {
@@ -94,7 +97,7 @@ func NewFileDialog(opts FileDialogOptions) *FileDialog {
 	browse := NewColumn(
 		NewLabel("Path"),
 		fd.path,
-		hint,
+		fd.hint,
 		fd.table,
 		NewRow(cancel, open).WithGap(8).WithJustify(layout.JustifyEnd),
 	).WithGap(8).WithPad(4)
@@ -109,6 +112,21 @@ func NewFileDialog(opts FileDialogOptions) *FileDialog {
 	fd.reload(opts.Path)
 	return fd
 }
+
+// hintText is the status line: the read error when the listing failed,
+// otherwise the active filter.
+func (fd *FileDialog) hintText() string {
+	if fd.err != "" {
+		return fd.err
+	}
+	if fd.opts.Filter != "" {
+		return "Filter  " + fd.opts.Filter
+	}
+	return ""
+}
+
+// Error is the last directory read failure, or empty.
+func (fd *FileDialog) Error() string { return fd.err }
 
 func (fd *FileDialog) cell(row, col int) string {
 	if row < 0 || row >= len(fd.entries) {
@@ -127,7 +145,16 @@ func (fd *FileDialog) cell(row, col int) string {
 	return e.Name
 }
 
-func (fd *FileDialog) onRow(i int) {
+// onSelect only mirrors the highlighted row into the path field.
+func (fd *FileDialog) onSelect(i int) {
+	if i < 0 || i >= len(fd.entries) || fd.path == nil {
+		return
+	}
+	fd.path.SetText(filepath.Join(fd.dir, fd.entries[i].Name))
+}
+
+// onActivate enters a folder, or accepts a file (Return / double click).
+func (fd *FileDialog) onActivate(i int) {
 	if i < 0 || i >= len(fd.entries) {
 		return
 	}
@@ -137,7 +164,10 @@ func (fd *FileDialog) onRow(i int) {
 		fd.setPath(next)
 		return
 	}
-	fd.path.SetText(next)
+	if fd.path != nil {
+		fd.path.SetText(next)
+	}
+	fd.finish(true)
 }
 
 func (fd *FileDialog) setPath(p string) {
@@ -152,26 +182,39 @@ func (fd *FileDialog) setPath(p string) {
 }
 
 func (fd *FileDialog) reload(p string) {
-	fd.entries = fd.list(p)
+	ents, err := fd.list(p)
+	fd.entries = ents
+	fd.err = ""
+	if err != nil {
+		fd.err = "Cannot open " + p + ": " + err.Error()
+	}
+	if fd.hint != nil {
+		fd.hint.SetText(fd.hintText())
+	}
 	fd.table.RowCount = len(fd.entries)
 	fd.table.Selected = -1
 	fd.table.OffsetY = 0
 	fd.table.Invalidate()
 }
 
-func (fd *FileDialog) list(p string) []FileInfo {
+// list reads a directory through the configured seam. A failed read reports
+// the error so the dialog can show it — it must never fall back to a
+// fabricated listing, which produced paths for files that do not exist.
+func (fd *FileDialog) list(p string) ([]FileInfo, error) {
 	if fd.opts.OnNavigate != nil {
 		if ents := fd.opts.OnNavigate(p); ents != nil {
-			return filterEntries(ents, fd.opts.Filter)
+			return filterEntries(ents, fd.opts.Filter), nil
 		}
 	}
-	if ents, err := ReadDirEntries(p); err == nil {
-		return filterEntries(ents, fd.opts.Filter)
+	ents, err := ReadDirEntries(p)
+	if err == nil {
+		return filterEntries(ents, fd.opts.Filter), nil
 	}
 	if len(fd.opts.Entries) > 0 {
-		return filterEntries(append([]FileInfo(nil), fd.opts.Entries...), fd.opts.Filter)
+		// Explicit caller-supplied listing (the documented stub seam).
+		return filterEntries(append([]FileInfo(nil), fd.opts.Entries...), fd.opts.Filter), nil
 	}
-	return filterEntries(stubEntries(), fd.opts.Filter)
+	return nil, err
 }
 
 func (fd *FileDialog) sortEntries(col int, asc bool) {
@@ -275,6 +318,8 @@ func ReadDirEntries(path string) ([]FileInfo, error) {
 	return out, nil
 }
 
+// stubEntries is a sample listing for demos and tests. It is never used as a
+// silent fallback for a failed directory read.
 func stubEntries() []FileInfo {
 	return []FileInfo{
 		{Name: "docs", Dir: true},

@@ -1,11 +1,13 @@
 package mail
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"html"
 	"io"
 	"net"
 	"net/http"
@@ -67,12 +69,14 @@ type oauthSession struct {
 	req      oauthReq
 	flow     string
 	verifier string
+	state    string
 	redirect string
 	authURL  string
 	device   string
 	userCode string
 	verify   string
 	interval time.Duration
+	mu       sync.Mutex
 	done     chan struct{}
 	err      error
 	account  Account
@@ -110,6 +114,7 @@ func (h *oauthHub) start(req oauthReq) (OAuthStart, error) {
 		done: make(chan struct{}), started: time.Now(),
 	}
 	s.verifier = pkceVerifier()
+	s.state = randID(24)
 	h.mu.Lock()
 	h.sess[s.id] = s
 	h.mu.Unlock()
@@ -142,10 +147,11 @@ func (h *oauthHub) poll(id string) (OAuthPoll, error) {
 	}
 	select {
 	case <-s.done:
-		if s.err != nil {
-			return OAuthPoll{Done: true, Error: s.err.Error()}, nil
+		acct, ferr := s.result()
+		if ferr != nil {
+			return OAuthPoll{Done: true, Error: ferr.Error()}, nil
 		}
-		return OAuthPoll{Done: true, Account: s.account}, nil
+		return OAuthPoll{Done: true, Account: acct}, nil
 	default:
 		if time.Since(s.started) > 15*time.Minute {
 			return OAuthPoll{Done: true, Error: "oauth: timed out"}, nil
@@ -158,7 +164,12 @@ func (h *oauthHub) takeConfig(id string) (AccountConfig, bool) {
 	h.mu.Lock()
 	s := h.sess[id]
 	h.mu.Unlock()
-	if s == nil || s.cfg.ID == "" {
+	if s == nil {
+		return AccountConfig{}, false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.cfg.ID == "" {
 		return AccountConfig{}, false
 	}
 	return s.cfg, true
@@ -191,7 +202,7 @@ func (s *oauthSession) finishOK(tok TokenBlob) {
 	if name == "" {
 		name = DisplayName(addr)
 	}
-	id := slug(addr)
+	id := safeID(addr)
 	hosts := GuessMailHosts(addr)
 	if hosts.IMAP == "" {
 		if s.req.Provider == "google" {
@@ -202,23 +213,39 @@ func (s *oauthSession) finishOK(tok TokenBlob) {
 	}
 	cfg := AccountConfig{
 		ID: id, Name: name, Address: addr, Provider: s.req.Provider, Protocol: ProtoIMAP,
-		IMAP: ServerConfig{Host: hosts.IMAP, User: addr, Auth: "xoauth2", TLS: boolPtrVal(true)},
+		IMAP: ServerConfig{Host: hosts.IMAP, User: addr, Auth: "xoauth2", TLSMode: string(TLSImplicit)},
 		SMTP: ServerConfig{Host: hosts.SMTP, User: addr, Auth: "xoauth2"},
 	}
 	tok.Provider = s.req.Provider
+	// The client id is needed an hour later to refresh. A wizard-supplied id
+	// used to be forgotten, so refresh failed unless the env var was also set.
+	tok.ClientID = s.req.ClientID
+	tok.ClientSecret = s.req.ClientSecret
 	_ = DefaultTokenStore().Put(id, tok)
 	_ = DefaultTokenStore().Put(addr, tok)
+	s.mu.Lock()
 	s.account = accountFromConfig(cfg, ProtoIMAP)
 	s.cfg = cfg
+	s.mu.Unlock()
 	s.closeDone()
 }
-
 func (s *oauthSession) fail(err error) {
-	s.err = err
+	s.mu.Lock()
+	if s.err == nil {
+		s.err = err
+	}
+	s.mu.Unlock()
 	s.closeDone()
 }
 
+func (s *oauthSession) result() (Account, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.account, s.err
+}
 func (s *oauthSession) closeDone() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	select {
 	case <-s.done:
 	default:
@@ -233,42 +260,85 @@ func (s *oauthSession) startLoopback() error {
 	}
 	port := ln.Addr().(*net.TCPAddr).Port
 	s.redirect = fmt.Sprintf("http://127.0.0.1:%d/oauth/callback", port)
-	s.authURL = authorizeURL(s.req, s.redirect, pkceChallenge(s.verifier))
+	s.authURL = authorizeURL(s.req, s.redirect, pkceChallenge(s.verifier), s.state)
 	mux := http.NewServeMux()
-	srv := &http.Server{Handler: mux}
+	srv := &http.Server{Handler: mux, ReadHeaderTimeout: 10 * time.Second}
+	var once sync.Once
 	mux.HandleFunc("/oauth/callback", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		// The loopback port is reachable by any local process and by any web
+		// page the browser is told to load, so the state nonce — not the
+		// port — is what proves this callback belongs to our flow.
+		if got := r.URL.Query().Get("state"); got != s.state {
+			http.Error(w, "state mismatch — this callback did not come from the sign-in that started here.", http.StatusBadRequest)
+			return
+		}
+		handled := false
+		once.Do(func() { handled = true })
+		if !handled {
+			_, _ = io.WriteString(w, "This sign-in was already completed. You can close this tab.")
+			return
+		}
 		if errStr := r.URL.Query().Get("error"); errStr != "" {
-			_, _ = io.WriteString(w, "Mail OAuth error: "+errStr+" — you can close this tab.")
-			s.fail(fmt.Errorf("oauth: %s", errStr))
-			go srv.Close()
+			// Escaped: the value is attacker-controlled and is echoed back.
+			_, _ = io.WriteString(w, "Mail OAuth error: "+sanitizeForDisplay(errStr)+" — you can close this tab.")
+			s.fail(fmt.Errorf("oauth: %s", sanitizeForDisplay(errStr)))
+			go gracefulClose(srv)
 			return
 		}
 		code := r.URL.Query().Get("code")
 		if code == "" {
-			http.Error(w, "missing code", 400)
+			http.Error(w, "missing code", http.StatusBadRequest)
 			return
 		}
 		tok, err := exchangeCode(s.req, code, s.redirect, s.verifier)
 		if err != nil {
 			_, _ = io.WriteString(w, "Token exchange failed. You can close this tab.")
 			s.fail(err)
-			go srv.Close()
+			go gracefulClose(srv)
 			return
 		}
 		_, _ = io.WriteString(w, "Mail is signed in. You can close this tab.")
 		s.finishOK(tok)
-		go srv.Close()
+		go gracefulClose(srv)
 	})
 	go func() {
 		_ = srv.Serve(ln)
 	}()
 	go func() {
-		time.Sleep(15 * time.Minute)
-		_ = srv.Close()
+		select {
+		case <-s.done:
+		case <-time.After(15 * time.Minute):
+		}
+		gracefulClose(srv)
 	}()
 	return nil
 }
 
+// gracefulClose lets the browser receive the "you can close this tab" page
+// before the loopback listener goes away. Closing the server straight from
+// the handler truncated the response.
+func gracefulClose(srv *http.Server) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_ = srv.Shutdown(ctx)
+	_ = srv.Close()
+}
+
+// sanitizeForDisplay strips control characters and markup from a value we
+// echo back into the browser tab.
+func sanitizeForDisplay(v string) string {
+	v = html.EscapeString(v)
+	var b strings.Builder
+	for _, r := range v {
+		if r < 0x20 || r == 0x7f {
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return truncate(b.String(), 200)
+}
 func (s *oauthSession) startDevice() error {
 	ep := deviceURL(s.req.Provider)
 	form := url.Values{
@@ -316,9 +386,9 @@ func (s *oauthSession) pollDevice() {
 	for time.Since(s.started) < 15*time.Minute {
 		time.Sleep(s.interval)
 		form := url.Values{
-			"client_id":  {s.req.ClientID},
+			"client_id":   {s.req.ClientID},
 			"device_code": {s.device},
-			"grant_type": {"urn:ietf:params:oauth:grant-type:device_code"},
+			"grant_type":  {"urn:ietf:params:oauth:grant-type:device_code"},
 		}
 		if s.req.ClientSecret != "" {
 			form.Set("client_secret", s.req.ClientSecret)
@@ -355,7 +425,7 @@ func fillOAuthClient(req *oauthReq) {
 	}
 }
 
-func authorizeURL(req oauthReq, redirect, challenge string) string {
+func authorizeURL(req oauthReq, redirect, challenge, state string) string {
 	u, _ := url.Parse(authURL(req.Provider))
 	q := u.Query()
 	q.Set("client_id", req.ClientID)
@@ -364,6 +434,7 @@ func authorizeURL(req oauthReq, redirect, challenge string) string {
 	q.Set("scope", oauthScope(req.Provider))
 	q.Set("code_challenge", challenge)
 	q.Set("code_challenge_method", "S256")
+	q.Set("state", state)
 	if req.Provider == "google" {
 		q.Set("access_type", "offline")
 		q.Set("prompt", "consent")
@@ -376,7 +447,6 @@ func authorizeURL(req oauthReq, redirect, challenge string) string {
 	u.RawQuery = q.Encode()
 	return u.String()
 }
-
 func exchangeCode(req oauthReq, code, redirect, verifier string) (TokenBlob, error) {
 	form := url.Values{
 		"client_id":     {req.ClientID},
@@ -392,7 +462,7 @@ func exchangeCode(req oauthReq, code, redirect, verifier string) (TokenBlob, err
 }
 
 func refreshOAuthToken(tok TokenBlob) (TokenBlob, error) {
-	req := oauthReq{Provider: tok.Provider}
+	req := oauthReq{Provider: tok.Provider, ClientID: tok.ClientID, ClientSecret: tok.ClientSecret}
 	fillOAuthClient(&req)
 	if req.ClientID == "" {
 		return TokenBlob{}, fmt.Errorf("oauth: cannot refresh without client id")
@@ -413,9 +483,10 @@ func refreshOAuthToken(tok TokenBlob) (TokenBlob, error) {
 		fresh.RefreshToken = tok.RefreshToken
 	}
 	fresh.Provider = tok.Provider
+	fresh.ClientID = req.ClientID
+	fresh.ClientSecret = req.ClientSecret
 	return fresh, nil
 }
-
 func postToken(ep string, form url.Values) (TokenBlob, error) {
 	var raw struct {
 		AccessToken  string `json:"access_token"`
@@ -445,13 +516,28 @@ func postToken(ep string, form url.Values) (TokenBlob, error) {
 	return tok, nil
 }
 
+// oauthHTTP is the client used for every token endpoint call: bounded, and
+// never following a redirect to a non-HTTPS location.
+var oauthHTTP = &http.Client{
+	Timeout: 60 * time.Second,
+	CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		if req.URL.Scheme != "https" && !isLoopbackHost(req.URL.Host) {
+			return fmt.Errorf("oauth: refusing redirect to %s", req.URL.Scheme)
+		}
+		if len(via) >= 5 {
+			return fmt.Errorf("oauth: too many redirects")
+		}
+		return nil
+	},
+}
+
 func postForm(ep string, form url.Values, dest any) error {
-	resp, err := http.PostForm(ep, form)
+	resp, err := oauthHTTP.PostForm(ep, form)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
-	b, err := io.ReadAll(resp.Body)
+	b, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
 		return err
 	}
@@ -460,7 +546,6 @@ func postForm(ep string, form url.Values, dest any) error {
 	}
 	return nil
 }
-
 func authURL(provider string) string {
 	if provider == "microsoft" {
 		if u := os.Getenv(EnvOAuthMSAuth); u != "" {

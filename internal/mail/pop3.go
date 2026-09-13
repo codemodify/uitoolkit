@@ -2,7 +2,6 @@ package mail
 
 import (
 	"bufio"
-	"crypto/tls"
 	"fmt"
 	"io"
 	"net"
@@ -15,11 +14,13 @@ import (
 // Enough for inbox retrieve (USER/PASS, UIDL, RETR). Gaps: no TOP-only
 // preview, no server-side folders/flags, leave-on-server (no DELE).
 type pop3Client struct {
-	cfg     ServerConfig
-	user    string
-	timeout time.Duration
-	conn    net.Conn
-	r       *bufio.Reader
+	cfg         ServerConfig
+	user        string
+	timeout     time.Duration
+	conn        net.Conn
+	r           *bufio.Reader
+	host        string
+	mustEncrypt bool
 }
 
 type popUIDL struct {
@@ -35,72 +36,108 @@ func newPOP3Client(cfg ServerConfig, address string) *pop3Client {
 	}
 }
 
+func (c *pop3Client) mode() TLSMode { return c.cfg.Mode(popPorts) }
+
 func (c *pop3Client) connect() error {
-	host := strings.TrimSpace(c.cfg.Host)
-	if host == "" {
+	if strings.TrimSpace(c.cfg.Host) == "" {
 		return fmt.Errorf("pop3: empty host")
 	}
-	if !strings.Contains(host, ":") {
-		if c.cfg.implicitTLS(true) {
-			host += ":995"
-		} else {
-			host += ":110"
-		}
-	}
+	host := c.cfg.HostPort(popPorts)
 	to := c.timeout
 	if to <= 0 {
 		to = 20 * time.Second
 	}
-	dialer := net.Dialer{Timeout: to}
-	var conn net.Conn
-	var err error
-	if c.cfg.implicitTLS(true) && !c.cfg.useStartTLS() {
-		conn, err = tls.DialWithDialer(&dialer, "tcp", host, &tls.Config{
-			MinVersion: tls.VersionTLS12, ServerName: serverName(host),
-		})
-	} else {
-		conn, err = dialer.Dial("tcp", host)
-	}
+	mode := c.mode()
+	conn, err := dialMode(host, mode, to)
 	if err != nil {
 		return fmt.Errorf("pop3: connect %s: %w", host, err)
 	}
 	c.conn = conn
 	c.r = bufio.NewReaderSize(conn, 256*1024)
-	_ = conn.SetDeadline(time.Now().Add(to))
+	c.host = host
+	c.mustEncrypt = mode.Encrypted()
+	c.touch()
 	greet, err := c.readLine()
 	if err != nil {
-		c.close()
+		c.drop()
 		return fmt.Errorf("pop3: greeting: %w", err)
 	}
 	if !strings.HasPrefix(greet, "+OK") {
-		c.close()
+		c.drop()
 		return fmt.Errorf("pop3: greeting %s", greet)
 	}
-	if c.cfg.useStartTLS() && !c.cfg.implicitTLS(false) {
+	if mode == TLSStartTLS {
+		if !c.serverHasSTLS() {
+			c.drop()
+			return errNoSTARTTLS("pop3", host)
+		}
 		if _, err := c.cmd("STLS"); err != nil {
-			c.close()
+			c.drop()
 			return fmt.Errorf("pop3: STLS: %w", err)
 		}
-		tlsConn := tls.Client(c.conn, &tls.Config{
-			MinVersion: tls.VersionTLS12, ServerName: serverName(host),
-		})
-		if err := tlsConn.Handshake(); err != nil {
-			c.close()
+		tlsConn, err := upgradeToTLS(c.conn, host)
+		if err != nil {
+			c.drop()
 			return fmt.Errorf("pop3: TLS handshake: %w", err)
 		}
 		c.conn = tlsConn
 		c.r = bufio.NewReaderSize(tlsConn, 256*1024)
-		_ = c.conn.SetDeadline(time.Now().Add(to))
+		c.touch()
 	}
 	if err := c.login(); err != nil {
-		c.close()
+		c.drop()
 		return err
 	}
 	return nil
 }
 
+// serverHasSTLS asks CAPA whether the upgrade is offered. A server that does
+// not implement CAPA at all is given the benefit of the doubt (the STLS
+// command itself then fails closed).
+func (c *pop3Client) serverHasSTLS() bool {
+	if _, err := c.cmd("CAPA"); err != nil {
+		return true
+	}
+	lines, err := c.readDot()
+	if err != nil {
+		return true
+	}
+	for _, ln := range lines {
+		if strings.EqualFold(strings.TrimSpace(ln), "STLS") {
+			return true
+		}
+	}
+	return false
+}
+
+// touch re-arms the idle deadline. POP3 uses a per-command deadline rather
+// than one deadline for the whole session, so retrieving a large mailbox
+// cannot time out halfway through.
+func (c *pop3Client) touch() {
+	if c.conn == nil {
+		return
+	}
+	to := c.timeout
+	if to <= 0 {
+		to = 20 * time.Second
+	}
+	_ = c.conn.SetDeadline(time.Now().Add(to))
+}
+
+func (c *pop3Client) drop() {
+	if c.conn != nil {
+		_ = c.conn.Close()
+	}
+	c.conn = nil
+	c.r = nil
+}
+
 func (c *pop3Client) login() error {
 	pass := c.cfg.Password()
+	if pass != "" && !c.mustEncrypt && !isLoopbackHost(c.host) {
+		return fmt.Errorf("pop3: refusing to send credentials to %s over an unencrypted connection "+
+			`(use "tlsMode":"ssl" or "starttls")`, c.host)
+	}
 	if pass == "" && c.cfg.Pass == "" && c.cfg.PassEnv == "" {
 		// Greeting-only probe (Test connection before a password is typed).
 		return nil
@@ -164,6 +201,7 @@ func (c *pop3Client) retr(n int) ([]byte, error) {
 }
 
 func (c *pop3Client) cmd(s string) (string, error) {
+	c.touch()
 	if err := writeCRLF(c.conn, s); err != nil {
 		return "", err
 	}
@@ -178,6 +216,7 @@ func (c *pop3Client) cmd(s string) (string, error) {
 }
 
 func (c *pop3Client) readLine() (string, error) {
+	c.touch()
 	ln, err := c.r.ReadString('\n')
 	if err != nil {
 		return "", err
@@ -208,8 +247,10 @@ func (c *pop3Client) readDotRaw() ([]byte, error) {
 	for {
 		ln, err := c.readLine()
 		if err != nil {
-			if err == io.EOF && b.Len() > 0 {
-				break
+			// A stream that ends without the "." terminator is truncated:
+			// returning it would cache a half message as if it were whole.
+			if err == io.EOF {
+				return nil, fmt.Errorf("pop3: connection closed before end of message")
 			}
 			return nil, err
 		}
@@ -233,21 +274,13 @@ func (c *pop3Client) close() {
 		return
 	}
 	_, _ = c.cmd("QUIT")
-	_ = c.conn.Close()
-	c.conn = nil
-	c.r = nil
+	c.drop()
 }
 
 func popMessageID(accountID, uidl string) MessageID {
-	safe := slug(uidl)
-	safe = strings.Map(func(r rune) rune {
-		if r == '/' || r == '\\' || r == ':' {
-			return '-'
-		}
-		return r
-	}, safe)
-	if safe == "" {
+	safe := safeID(uidl)
+	if safe == "" || safe == "acct" {
 		safe = "msg"
 	}
-	return MessageID(accountID + "-pop-" + safe)
+	return MessageID(safeID(accountID) + "-pop-" + safe)
 }

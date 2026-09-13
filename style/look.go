@@ -12,13 +12,20 @@ type Classic struct {
 	corners  CornerStyle
 	icons    IconSetName
 	iconSize IconSize
-	tokens   ThemeTokens
-	body     *Font
-	title    *Font
-	bold     *Font
-	muted    *Font
-	onAcc    *Font
-	mono     *Font
+	// density and scale are carried explicitly so a theme switch can
+	// rebuild metrics from scratch instead of overlaying the new pack onto
+	// the previous pack's values (which leaked control heights) or
+	// re-deriving the display scale from FontSize (which is wrong as soon
+	// as density changed the 1× size).
+	density Density
+	scale   float32
+	tokens  ThemeTokens
+	body    *Font
+	title   *Font
+	bold    *Font
+	muted   *Font
+	onAcc   *Font
+	mono    *Font
 }
 
 // NewClassic builds fonts for p. Name is "dark" or "light" typically.
@@ -64,7 +71,8 @@ func newClassic(name string, p Palette, m Metrics, corners CornerStyle, icons Ic
 	tokens = tokens.Resolve()
 	p = tokens.Palette
 	p = ResolveMenuChrome(p)
-	p = ResolveBevelChrome(p)
+	p = ResolveBevelChromeFor(p, tokens.Family)
+	density, scale := inferDensityScale(m)
 	return &Classic{
 		palette:  p,
 		metrics:  m,
@@ -73,6 +81,8 @@ func newClassic(name string, p Palette, m Metrics, corners CornerStyle, icons Ic
 		corners:  corners,
 		icons:    icons,
 		iconSize: iconSize,
+		density:  density,
+		scale:    scale,
 		tokens:   tokens,
 		// OpenType atlases (Titillium / JetBrains Mono); Color tints at draw.
 		body:  BakeFont(m.FontSize, p.Text),
@@ -82,6 +92,73 @@ func newClassic(name string, p Palette, m Metrics, corners CornerStyle, icons Ic
 		onAcc: BakeFont(m.FontSize, p.TextOnAccent),
 		mono:  BakeMonoFont(m.FontSize, p.Text),
 	}
+}
+
+// inferDensityScale recovers the density and display scale of metrics that
+// were not built through the style rebuild path (a caller-supplied
+// [NewClassic] Metrics). An exact rebuild wins; otherwise default / 1×.
+func inferDensityScale(m Metrics) (Density, float32) {
+	best, bestScale, found := DensityDefault, float32(1), false
+	near := func(a, b float32) bool {
+		d := a - b
+		return d < 0.05 && d > -0.05
+	}
+	for _, d := range []Density{DensityDefault, DensityCompact, DensityRelaxed} {
+		base := ApplyDensity(DefaultMetrics(), d)
+		if base.FontSize <= 0 || m.FontSize <= 0 {
+			continue
+		}
+		s := m.FontSize / base.FontSize
+		if s <= 0 {
+			continue
+		}
+		want := ScaleMetrics(base, s)
+		if !near(m.RowH, want.RowH) || !near(m.MenuItemH, want.MenuItemH) || !near(m.Pad, want.Pad) {
+			continue
+		}
+		off := s - 1
+		if off < 0 {
+			off = -off
+		}
+		bestOff := bestScale - 1
+		if bestOff < 0 {
+			bestOff = -bestOff
+		}
+		if !found || off < bestOff {
+			best, bestScale, found = d, s, true
+		}
+	}
+	return best, bestScale
+}
+
+func (l *Classic) setDensity(d Density) *Classic {
+	if l != nil {
+		l.density = d
+	}
+	return l
+}
+
+func (l *Classic) setScale(s float32) *Classic {
+	if l != nil && s > 0 {
+		l.scale = s
+	}
+	return l
+}
+
+// Density is the chrome density this look was built at.
+func (l *Classic) Density() Density {
+	if l == nil {
+		return DensityDefault
+	}
+	return l.density
+}
+
+// Scale is the display scale this look was built at (1 = unscaled).
+func (l *Classic) Scale() float32 {
+	if l == nil || l.scale <= 0 {
+		return 1
+	}
+	return l.scale
 }
 
 // DarkLook is the default night skin (round + classic icons).
@@ -100,7 +177,8 @@ func WithScale(look LookAndFeel, scale float32) LookAndFeel {
 	if !ok {
 		return look
 	}
-	return newClassic(c.Name(), c.Palette(), ScaleMetrics(c.Metrics(), scale), c.Corners(), c.Icons(), c.IconSize(), c.Tokens()).setPack(c.Pack())
+	return newClassic(c.Name(), c.Palette(), ScaleMetrics(c.Metrics(), scale), c.Corners(), c.Icons(), c.IconSize(), c.Tokens()).
+		setPack(c.Pack()).setDensity(c.Density()).setScale(c.Scale() * scale)
 }
 
 func (l *Classic) Name() string           { return l.name }

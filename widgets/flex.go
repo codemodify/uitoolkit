@@ -59,8 +59,25 @@ func (f *FlexBox) WithAlign(a layout.Align) *FlexBox { f.Spec.Align = a; return 
 func (f *FlexBox) WithJustify(j layout.Justify) *FlexBox { f.Spec.Justify = j; return f }
 
 func (f *FlexBox) Add(child widget.Component) {
+	if child == nil {
+		return
+	}
 	f.Base.Add(child)
 	f.items = append(f.items, layout.Item{Node: wrap(child)})
+}
+
+// Remove keeps the flex item list in step with the children. Without this the
+// next syncItems saw a length mismatch and rebuilt every item with weight 0,
+// so removing one child silently dropped every sibling's grow weight.
+func (f *FlexBox) Remove(child widget.Component) {
+	f.Base.Remove(child)
+	f.syncItems()
+}
+
+// ClearChildren drops the children and their flex weights together.
+func (f *FlexBox) ClearChildren() {
+	f.Base.ClearChildren()
+	f.items = f.items[:0]
 }
 
 func (f *FlexBox) AddFlex(child widget.Component, weight float32) {
@@ -107,17 +124,36 @@ func (f *FlexBox) visibleItems(collapseHidden bool) []layout.Item {
 	return out
 }
 
+// syncItems reconciles items with the child list, carrying grow weights across
+// by component identity so add / remove / re-parent cannot silently reset them.
 func (f *FlexBox) syncItems() {
 	chs := f.Children()
-	if len(f.items) != len(chs) {
-		f.items = f.items[:0]
-		for _, ch := range chs {
-			f.items = append(f.items, layout.Item{Node: wrap(ch)})
+	if len(f.items) == len(chs) {
+		aligned := true
+		for i, ch := range chs {
+			if n, ok := f.items[i].Node.(node); !ok || n.c != ch {
+				aligned = false
+				break
+			}
 		}
-		return
+		if aligned {
+			return
+		}
 	}
-	for i, ch := range chs {
-		f.items[i].Node = wrap(ch)
+	var weights map[widget.Component]float32
+	for _, it := range f.items {
+		n, ok := it.Node.(node)
+		if !ok || n.c == nil || it.Flex == 0 {
+			continue
+		}
+		if weights == nil {
+			weights = make(map[widget.Component]float32, len(f.items))
+		}
+		weights[n.c] = it.Flex
+	}
+	f.items = f.items[:0]
+	for _, ch := range chs {
+		f.items = append(f.items, layout.Item{Node: wrap(ch), Flex: weights[ch]})
 	}
 }
 

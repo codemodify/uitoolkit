@@ -182,8 +182,13 @@ func (n *NumberField) MouseRelease(widget.MouseEvent) bool {
 	return true
 }
 
+// MouseWheel steps the value only while the spinner has focus. An unfocused
+// spinner must not change under a passing pointer, nor block the page scroll.
 func (n *NumberField) MouseWheel(e widget.MouseEvent) bool {
-	if !n.Enabled() {
+	if !n.Enabled() || !n.focusHere() {
+		return false
+	}
+	if e.Scroll.Y == 0 {
 		return false
 	}
 	if e.Scroll.Y < 0 {
@@ -192,6 +197,14 @@ func (n *NumberField) MouseWheel(e widget.MouseEvent) bool {
 		n.nudge(-1)
 	}
 	return true
+}
+
+// focusHere reports whether the spinner or its inner editor holds focus.
+func (n *NumberField) focusHere() bool {
+	if n.Focused() {
+		return true
+	}
+	return n.field != nil && n.field.Focused()
 }
 
 func (n *NumberField) KeyPress(e widget.KeyEvent) bool {
@@ -216,6 +229,9 @@ func (n *NumberField) KeyPress(e widget.KeyEvent) bool {
 		n.nudge(-10)
 		return true
 	case platform.KeyHome:
+		// The inner editor consumes plain Home / End for its caret and leaves
+		// the Ctrl form to bubble here, which is how Min / Max became
+		// reachable at all. Both forms work when the spinner is the target.
 		n.SetValue(n.Min)
 		return true
 	case platform.KeyEnd:
@@ -225,9 +241,16 @@ func (n *NumberField) KeyPress(e widget.KeyEvent) bool {
 	return false
 }
 
+// nudge parses whatever is typed and applies the step in a single SetValue,
+// so stepping after typing reports one OnChange instead of two.
 func (n *NumberField) nudge(dir float64) {
-	n.commit()
-	n.SetValue(n.Value + dir*n.Step)
+	v := n.Value
+	if n.field != nil {
+		if parsed, err := strconv.ParseFloat(n.field.Text, 64); err == nil {
+			v = parsed
+		}
+	}
+	n.SetValue(clamp64(v, n.Min, n.Max) + dir*n.Step)
 }
 
 func (n *NumberField) onField(s string) {

@@ -276,7 +276,17 @@ type sniToolTip struct {
 }
 
 func (s *linuxStatusItem) iconPixmaps() []sniPixmap {
-	img := resolveStatusImage(s.icon, 22)
+	s.mu.Lock()
+	icon := s.icon
+	s.mu.Unlock()
+	return iconPixmapsOf(icon)
+}
+
+// iconPixmapsOf renders an icon without touching shared state, so a
+// caller that already holds the lock (or has a snapshot) cannot race
+// with SetIcon.
+func iconPixmapsOf(icon StatusIcon) []sniPixmap {
+	img := resolveStatusImage(icon, 22)
 	w, h, pix := sniARGB(img)
 	if w == 0 {
 		return []sniPixmap{}
@@ -285,11 +295,14 @@ func (s *linuxStatusItem) iconPixmaps() []sniPixmap {
 }
 
 func (s *linuxStatusItem) toolTip() sniToolTip {
+	s.mu.Lock()
+	icon, title, tip := s.icon, s.title, s.tooltip
+	s.mu.Unlock()
 	return sniToolTip{
-		IconName: statusIconName(s.icon),
-		Pixmaps:  s.iconPixmaps(),
-		Title:    s.title,
-		Text:     s.tooltip,
+		IconName: statusIconName(icon),
+		Pixmaps:  iconPixmapsOf(icon),
+		Title:    title,
+		Text:     tip,
 	}
 }
 
@@ -306,7 +319,7 @@ func (s *linuxStatusItem) SetIcon(icon StatusIcon) error {
 	s.mu.Unlock()
 	if s.props != nil {
 		s.props.SetMust(sniInterface, "IconName", statusIconName(icon))
-		s.props.SetMust(sniInterface, "IconPixmap", s.iconPixmaps())
+		s.props.SetMust(sniInterface, "IconPixmap", iconPixmapsOf(icon))
 	}
 	s.emit("NewIcon")
 	return nil

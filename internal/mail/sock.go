@@ -12,13 +12,13 @@ import (
 
 // Env vars for mailclientd / mailclientui.
 const (
-	EnvMail   = "UITK_MAIL"      // unset: empty LocalStore | memory | imap
-	EnvSock   = "UITK_MAIL_SOCK" // Unix socket path
-	EnvHost   = "UITK_MAIL_HOST"
-	EnvUser   = "UITK_MAIL_USER"
-	EnvPass   = "UITK_MAIL_PASS"
-	EnvTLS    = "UITK_MAIL_TLS"
-	EnvName   = "UITK_MAIL_NAME"
+	EnvMail = "UITK_MAIL"      // unset: empty LocalStore | memory | imap
+	EnvSock = "UITK_MAIL_SOCK" // Unix socket path
+	EnvHost = "UITK_MAIL_HOST"
+	EnvUser = "UITK_MAIL_USER"
+	EnvPass = "UITK_MAIL_PASS"
+	EnvTLS  = "UITK_MAIL_TLS"
+	EnvName = "UITK_MAIL_NAME"
 )
 
 // DefaultSocket is the mailclientd listen path.

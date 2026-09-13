@@ -3,6 +3,8 @@
 package platform
 
 import (
+	"fmt"
+	"runtime"
 	"sync"
 	"syscall"
 	"unsafe"
@@ -37,7 +39,11 @@ var (
 	procPostQuit     = user32.NewProc("PostQuitMessage")
 	procLoadIcon     = user32.NewProc("LoadIconW")
 	procDestroyWin   = user32.NewProc("DestroyWindow")
+	procPostMessage  = user32.NewProc("PostMessageW")
 )
+
+// wmQuitPump asks the pump thread to leave its GetMessage loop.
+const wmQuitPump = wmApp + 9
 
 type winStatusItem struct {
 	mu      sync.Mutex
@@ -49,6 +55,7 @@ type winStatusItem struct {
 	hwnd    uintptr
 	nid     notifyIconData
 	closed  bool
+	ready   chan error
 }
 
 type notifyIconData struct {
@@ -83,7 +90,21 @@ func newNativeStatusItem(opts StatusItemOptions) (StatusItem, error) {
 
 func nativeStatusItemAvailable() bool { return true }
 
+// start creates the message window and pumps its queue on one dedicated
+// OS thread.
+//
+// Win32 message queues are per-thread: GetMessageW only ever returns
+// messages for windows created by the calling thread. Creating the window
+// on the caller's goroutine and pumping it from another one (the old
+// shape) made GetMessageW fail immediately, so tray clicks, balloon
+// clicks and the context menu never fired.
 func (w *winStatusItem) start() error {
+	w.ready = make(chan error, 1)
+	go w.loop()
+	return <-w.ready
+}
+
+func (w *winStatusItem) create() error {
 	class, _ := syscall.UTF16PtrFromString("uitoolkit.StatusItem")
 	var wc struct {
 		Size       uint32
@@ -107,9 +128,14 @@ func (w *winStatusItem) start() error {
 	hwnd, _, err := procCreateWindow.Call(0, uintptr(unsafe.Pointer(class)), uintptr(unsafe.Pointer(title)),
 		0, 0, 0, 0, 0, hwndMessage, 0, 0, 0)
 	if hwnd == 0 {
-		return err
+		if err != nil {
+			return err
+		}
+		return fmt.Errorf("status: CreateWindowExW failed")
 	}
+	w.mu.Lock()
 	w.hwnd = hwnd
+	w.mu.Unlock()
 	icon, _, _ := procLoadIcon.Call(0, 32512) // IDI_APPLICATION
 	w.nid.Size = uint32(unsafe.Sizeof(w.nid))
 	w.nid.Wnd = hwnd
@@ -120,13 +146,28 @@ func (w *winStatusItem) start() error {
 	utf16Copy(w.nid.Tip[:], w.tooltip)
 	r, _, callErr := procNotifyIcon.Call(nimAdd, uintptr(unsafe.Pointer(&w.nid)))
 	if r == 0 {
-		return callErr
+		procDestroyWin.Call(hwnd)
+		w.mu.Lock()
+		w.hwnd = 0
+		w.mu.Unlock()
+		if callErr != nil {
+			return callErr
+		}
+		return fmt.Errorf("status: Shell_NotifyIconW failed")
 	}
-	go w.loop()
 	return nil
 }
 
 func (w *winStatusItem) loop() {
+	// The window and its message pump must live on the same OS thread
+	// for the life of the item.
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	err := w.create()
+	w.ready <- err
+	if err != nil {
+		return
+	}
 	var msg struct {
 		HWND    uintptr
 		Message uint32
@@ -136,7 +177,7 @@ func (w *winStatusItem) loop() {
 		Pt      struct{ X, Y int32 }
 	}
 	for {
-		r, _, _ := procGetMessage.Call(uintptr(unsafe.Pointer(&msg)), w.hwnd, 0, 0)
+		r, _, _ := procGetMessage.Call(uintptr(unsafe.Pointer(&msg)), 0, 0, 0)
 		if int32(r) <= 0 {
 			return
 		}
@@ -177,6 +218,11 @@ func (w *winStatusItem) wndProc(hwnd, msg, wparam, lparam uintptr) uintptr {
 			w.mu.Unlock()
 			invokeStatus(dispatch, fn)
 		}
+		return 0
+	}
+	if msg == wmQuitPump {
+		procDestroyWin.Call(hwnd)
+		procPostQuit.Call(0)
 		return 0
 	}
 	r, _, _ := procDefWindow.Call(hwnd, msg, wparam, lparam)
@@ -236,8 +282,10 @@ func (w *winStatusItem) Close() error {
 	w.mu.Unlock()
 	procNotifyIcon.Call(nimDelete, uintptr(unsafe.Pointer(&w.nid)))
 	if hwnd != 0 {
-		procDestroyWin.Call(hwnd)
-		procPostQuit.Call(0)
+		// Only the pump thread may destroy its own window, and it must
+		// still be alive to receive the message: one posted message
+		// does both, so the loop cannot be left blocked in GetMessage.
+		procPostMessage.Call(hwnd, wmQuitPump, 0, 0)
 	}
 	return nil
 }

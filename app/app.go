@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/codemodify/uitoolkit/platform"
@@ -32,13 +33,18 @@ type Options struct {
 
 // Application owns the run loop and open windows.
 type Application struct {
-	mu               sync.Mutex
-	look             style.LookAndFeel
-	scale            float32
+	mu    sync.Mutex
+	look  style.LookAndFeel
+	base  style.LookAndFeel
+	scale float32
+	// autoScale is set when no explicit Options.Scale / env override was
+	// given, so each Window may take its display scale from its own
+	// surface (per-monitor DPI) instead of the process-wide guess.
+	autoScale        bool
 	headless         bool
 	backend          platform.Backend
 	windows          []*Window
-	quit             bool
+	quit             atomic.Bool
 	onQuit           func()
 	watchLook        bool
 	lookWatch        *lookFileStamp
@@ -69,22 +75,24 @@ func New(opts Options) *Application {
 	} else {
 		backend = platform.Default(opts.Headless)
 	}
+	auto := false
 	if opts.Scale <= 0 {
-		if opts.Headless {
+		if env := platform.ScaleFromEnv(); env > 0 {
+			opts.Scale = env
+		} else if opts.Headless {
 			opts.Scale = 1
-			if s := platform.ScaleFromEnv(); s > 0 {
-				opts.Scale = s
-			}
+			auto = true
 		} else {
 			opts.Scale = platform.DetectScale()
+			auto = true
 		}
 	}
-	if opts.Scale != 1 {
-		opts.Look = style.WithScale(opts.Look, opts.Scale)
-	}
+	base := lookAtScale(opts.Look, 1)
 	a := &Application{
-		look:      opts.Look,
+		look:      lookAtScale(base, opts.Scale),
+		base:      base,
 		scale:     opts.Scale,
+		autoScale: auto,
 		headless:  opts.Headless,
 		backend:   backend,
 		watchLook: watch,
@@ -98,37 +106,70 @@ func New(opts Options) *Application {
 // Look is the default theme for new windows.
 func (a *Application) Look() style.LookAndFeel { return a.look }
 
-// SetLook swaps the theme on the app and every open window.
-// Unscaled Classic looks are rebuilt with the application display scale
-// so theme toggles do not drop HiDPI metrics.
+// SetLook swaps the theme on the app and every open window. The look is
+// kept as an unscaled base; each window rebuilds it at that window's own
+// display scale, so a theme toggle never drops (or doubles) HiDPI metrics
+// and a window on a 2× monitor keeps 2× metrics.
 func (a *Application) SetLook(l style.LookAndFeel) {
 	if l == nil {
 		return
 	}
-	l = applyScale(l, a.scale)
-	a.look = l
-	for _, w := range a.windows {
-		w.look = l
-		w.RequestLayout()
+	a.base = lookAtScale(l, 1)
+	a.look = lookAtScale(a.base, a.scale)
+	for _, w := range a.Windows() {
+		w.applyLook(a.base)
 	}
 }
 
-func applyScale(look style.LookAndFeel, scale float32) style.LookAndFeel {
-	if look == nil || scale <= 0 || scale == 1 {
-		return look
+// lookScaleOf is the display scale a look was built at (1 when unknown).
+// Classic carries this explicitly; inferring it from FontSize would confuse
+// display scale with density.
+func lookScaleOf(look style.LookAndFeel) float32 {
+	if c, ok := look.(*style.Classic); ok {
+		if s := c.Scale(); s > 0 {
+			return s
+		}
 	}
-	if _, ok := look.(*style.Classic); !ok {
-		return look
-	}
-	// Already HiDPI-scaled (density may have changed the 1× font size).
-	if style.LookScale(look) > 1.01 {
-		return look
-	}
-	return style.WithScale(look, scale)
+	return 1
 }
 
-// Scale is the display scale applied to layout metrics at the window.
+// lookAtScale rebuilds look at an absolute display scale. style.WithScale
+// multiplies onto whatever scale the look already carries, so the ratio is
+// what gets applied; metrics are rebuilt from the pack defaults either way.
+func lookAtScale(look style.LookAndFeel, scale float32) style.LookAndFeel {
+	if look == nil || scale <= 0 {
+		return look
+	}
+	cur := lookScaleOf(look)
+	if cur <= 0 {
+		cur = 1
+	}
+	if d := scale / cur; d < 0.999 || d > 1.001 {
+		return style.WithScale(look, d)
+	}
+	return look
+}
+
+// Scale is the application display scale. Individual windows may differ
+// when the backend reports a per-surface scale (see Window.Scale).
 func (a *Application) Scale() float32 { return a.scale }
+
+// windowScale is the display scale for a surface. An explicit Options.Scale
+// (or UITK_SCALE / GDK_SCALE / QT_SCALE_FACTOR) pins every window; otherwise
+// the surface reports its own output scale so a window on a HiDPI monitor
+// gets HiDPI metrics even when another window does not.
+func (a *Application) windowScale(surf platform.Surface) float32 {
+	if a == nil {
+		return 1
+	}
+	if !a.autoScale || surf == nil {
+		return a.scale
+	}
+	if s := surf.Scale(); s > 0 {
+		return s
+	}
+	return a.scale
+}
 
 // BackendName is "x11", "wayland", "offscreen", or a stub.
 func (a *Application) BackendName() string { return a.backend.Name() }
@@ -169,23 +210,44 @@ const caretBlinkPeriod = 530 * time.Millisecond
 // Run waits on the display connection and paints only when a window is
 // dirty, a caret blinks, a tooltip is due, or (on Wayland) a key repeat
 // fires. Idle gallery no longer wakes at 60 Hz.
-// Post runs fn on the UI thread. During Run the func is queued and
-// drained before the next pump; otherwise it runs immediately so tests
-// and startup paths stay synchronous.
+// Post hands fn to the UI goroutine. It never runs fn on the caller's
+// goroutine: the func is queued and the display wait is woken, and the queue
+// is drained by Run and PumpOnce before the next pump.
+//
+// Posting before Run starts is fine — the queue is drained as the loop comes
+// up. A func posted when no loop will ever run stays queued; callers outside
+// a loop (tests, headless tools) flush it with DrainPosted.
+//
+// This is the only safe way for a background goroutine (a DBus tray
+// callback, a network worker) to touch widgets.
 func (a *Application) Post(fn func()) {
 	if a == nil || fn == nil {
 		return
 	}
 	a.mu.Lock()
-	if !a.looping {
-		a.mu.Unlock()
-		fn()
-		return
-	}
 	a.posted = append(a.posted, fn)
+	looping := a.looping
 	a.mu.Unlock()
-	a.wakeUI()
+	if looping {
+		a.wakeUI()
+	}
 }
+
+// Looping reports whether the run loop is pumping. Background callers use it
+// to decide whether posted work will be drained promptly.
+func (a *Application) Looping() bool {
+	if a == nil {
+		return false
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.looping
+}
+
+// DrainPosted runs everything queued by Post on the calling goroutine. Run
+// and PumpOnce do this automatically; it is exported for headless callers
+// and tests that never start a loop.
+func (a *Application) DrainPosted() { a.runPosted() }
 
 func (a *Application) wakeUI() {
 	if a == nil {
@@ -193,7 +255,7 @@ func (a *Application) wakeUI() {
 		return
 	}
 	for _, w := range a.Windows() {
-		if w != nil && !w.closed {
+		if !w.Closed() {
 			platform.WakeSurface(w.surf)
 			return
 		}
@@ -217,9 +279,12 @@ func (a *Application) runPosted() {
 }
 
 func (a *Application) Run() error {
-	if len(a.windows) == 0 && !a.trayHolds() {
+	if len(a.Windows()) == 0 && !a.trayHolds() {
 		return fmt.Errorf("uitoolkit: Run with no windows")
 	}
+	// Clear a quit left over from a previous Run so an application can be
+	// restarted (a tray app that reopens its window after Quit).
+	a.quit.Store(false)
 	a.mu.Lock()
 	a.looping = true
 	a.mu.Unlock()
@@ -229,7 +294,7 @@ func (a *Application) Run() error {
 		a.mu.Unlock()
 	}()
 	var nextBlink time.Time
-	for !a.quit {
+	for !a.quit.Load() {
 		// Wayland / X11 / offscreen: poll look.json on every idle wake
 		// (waitTimeout ≤ lookWatchInterval when WatchLook is on).
 		a.pollLookFile()
@@ -241,25 +306,30 @@ func (a *Application) Run() error {
 			}
 			nextBlink = now.Add(caretBlinkPeriod)
 		}
-		alive := 0
-		wins := a.Windows()
-		for _, w := range wins {
+		for _, w := range a.Windows() {
+			// Closed() is true only for a surface the display server
+			// destroyed. A user close request arrives as EventClose and
+			// is answered by Window.dispatch, which may veto it
+			// (close-to-tray, status menus).
 			if w.surf.Closed() {
 				w.Close()
 				continue
 			}
 			w.pump()
-			alive++
 		}
 		// One frame per event burst: drain every surface first, then
 		// paint. Per-window pump+frame used to present mid-burst.
 		for _, w := range a.Windows() {
-			if w.closed {
+			if w.Closed() {
 				continue
 			}
 			w.frame()
 		}
 		a.reap()
+		// Count survivors after pump/frame: a window that closed itself
+		// while draining its burst must not hold the loop open for
+		// another iteration.
+		alive := a.aliveWindows()
 		if alive == 0 {
 			if a.trayHolds() {
 				timeout := a.waitTimeout(time.Now(), nextBlink)
@@ -269,10 +339,10 @@ func (a *Application) Run() error {
 				a.waitDisplay(timeout)
 				continue
 			}
-			a.quit = true
+			a.quit.Store(true)
 			break
 		}
-		if a.quit {
+		if a.quit.Load() {
 			break
 		}
 		timeout := a.waitTimeout(time.Now(), nextBlink)
@@ -288,6 +358,20 @@ func (a *Application) Run() error {
 		a.onQuit()
 	}
 	return nil
+}
+
+// aliveWindows counts windows that can still hold the run loop open. A
+// hidden status-menu window is chrome the toolkit owns, not an application
+// window: it must not keep Run alive once the real windows are gone.
+func (a *Application) aliveWindows() int {
+	n := 0
+	for _, w := range a.Windows() {
+		if w.Closed() || w.holdsNothing() {
+			continue
+		}
+		n++
+	}
+	return n
 }
 
 func (a *Application) anyCaret() bool {
@@ -318,6 +402,9 @@ func (a *Application) waitTimeout(now, nextBlink time.Time) time.Duration {
 		}
 	}
 	for _, w := range a.Windows() {
+		if w.Closed() {
+			continue
+		}
 		if d, ok := w.tipDeadline(now); ok {
 			if deadline.IsZero() || d.Before(deadline) {
 				deadline = d
@@ -353,6 +440,9 @@ func (a *Application) waitTimeout(now, nextBlink time.Time) time.Duration {
 
 func (a *Application) waitDisplay(timeout time.Duration) {
 	for _, w := range a.Windows() {
+		if w.Closed() {
+			continue
+		}
 		if _, ok := w.surf.(platform.DisplayWaiter); ok {
 			platform.WaitDisplay(w.surf, timeout)
 			return
@@ -367,26 +457,74 @@ func (a *Application) PumpOnce() {
 	a.pollLookFile()
 	a.runPosted()
 	for _, w := range a.Windows() {
+		if w.Closed() {
+			continue
+		}
 		w.pump()
 	}
 	for _, w := range a.Windows() {
+		if w.Closed() {
+			continue
+		}
 		w.frame()
 	}
 }
 
-// Quit requests the run loop to exit.
-func (a *Application) Quit() { a.quit = true }
+// Quit requests the run loop to exit. Safe from any goroutine: the flag is
+// atomic and the display wait is woken so an idle loop (blocked on the
+// display fd with no caret or timer pending) leaves immediately.
+func (a *Application) Quit() {
+	if a == nil {
+		return
+	}
+	a.quit.Store(true)
+	a.wakeUI()
+}
 
+// Quitting reports whether Quit has been requested.
+func (a *Application) Quitting() bool { return a != nil && a.quit.Load() }
+
+// reap drops closed windows. A status-menu window is toolkit chrome; once
+// the last application window is gone it is destroyed too, so its surface
+// does not keep the process (or an X11 display wait) alive.
 func (a *Application) reap() {
 	a.mu.Lock()
-	defer a.mu.Unlock()
+	var orphan []*Window
+	real := 0
 	out := a.windows[:0]
 	for _, w := range a.windows {
-		if !w.closed {
+		if w.Closed() {
+			continue
+		}
+		out = append(out, w)
+		if !w.statusMenu {
+			real++
+		}
+	}
+	a.windows = out
+	if real == 0 {
+		for _, w := range a.windows {
+			if w.statusMenu {
+				orphan = append(orphan, w)
+			}
+		}
+	}
+	a.mu.Unlock()
+	for _, w := range orphan {
+		w.Close()
+	}
+	if len(orphan) == 0 {
+		return
+	}
+	a.mu.Lock()
+	out = a.windows[:0]
+	for _, w := range a.windows {
+		if !w.Closed() {
 			out = append(out, w)
 		}
 	}
 	a.windows = out
+	a.mu.Unlock()
 }
 
 func (a *Application) remove(w *Window) {

@@ -390,9 +390,15 @@ func installRepoIconSet(t *testing.T, name string) {
 func rasterNamedStem(set IconSetName, stem string) *paintengine2d.Image {
 	img := paintengine2d.NewImage(32, 32)
 	ctx := paintengine2d.NewContext(img)
-	loaded, ok := loadPNGIcon(filepath.Join(IconSetDir(set), stem+".png"))
+	var loaded *paintengine2d.Image
+	ok := false
+	for _, name := range stemFileCandidates(stem, 28) {
+		if loaded, ok = loadPNGIcon(filepath.Join(IconSetDir(set), name)); ok {
+			break
+		}
+	}
 	if !ok {
-		loaded, ok = loadEmbeddedNoIcon(24)
+		loaded, ok = loadEmbeddedNoIcon(28)
 	}
 	if ok {
 		paintTintedIcon(ctx, paintengine2d.XYWH(2, 2, 28, 28), loaded, paintengine2d.RGB(1, 1, 1))

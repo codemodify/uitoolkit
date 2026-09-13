@@ -1,10 +1,11 @@
 package mail
 
 import (
+	"context"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
-	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,6 +14,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -25,6 +27,10 @@ type TokenBlob struct {
 	Expiry       time.Time `json:"expiry,omitempty"`
 	TokenType    string    `json:"tokenType,omitempty"`
 	Scope        string    `json:"scope,omitempty"`
+	// ClientID / ClientSecret are stored with the token so a refresh an hour
+	// later works without the env vars being set again.
+	ClientID     string `json:"clientId,omitempty"`
+	ClientSecret string `json:"clientSecret,omitempty"`
 }
 
 // TokenStore is AES-GCM encrypted files under DataDir()/secrets.
@@ -38,22 +44,28 @@ type TokenStore struct {
 	mu  sync.Mutex
 }
 
-var defaultTokens sync.Once
-var defaultTokenStore *TokenStore
+// defaultTokenStore is an atomic pointer so tests (and the isolation helper)
+// can redirect the store without racing the lazy initialiser.
+var defaultTokenStore atomic.Pointer[TokenStore]
 
 // DefaultTokenStore is the process-wide encrypted token file store.
+// DefaultTokenStore is the process-wide encrypted token file store.
+// DefaultTokenStore is the process-wide encrypted token file store.
 func DefaultTokenStore() *TokenStore {
-	if defaultTokenStore != nil {
-		return defaultTokenStore
+	if s := defaultTokenStore.Load(); s != nil {
+		return s
 	}
-	defaultTokens.Do(func() {
-		if defaultTokenStore == nil {
-			defaultTokenStore = NewTokenStore(filepath.Join(DataDir(), "secrets"))
-		}
-	})
-	return defaultTokenStore
+	fresh := NewTokenStore(filepath.Join(DataDir(), "secrets"))
+	if defaultTokenStore.CompareAndSwap(nil, fresh) {
+		return fresh
+	}
+	return defaultTokenStore.Load()
 }
 
+// SetDefaultTokenStore redirects the process-wide store (tests, isolation).
+func SetDefaultTokenStore(s *TokenStore) {
+	defaultTokenStore.Store(s)
+}
 func NewTokenStore(dir string) *TokenStore {
 	return &TokenStore{dir: dir}
 }
@@ -89,8 +101,8 @@ func (s *TokenStore) Put(key string, tok TokenBlob) error {
 	if err := os.MkdirAll(s.dir, 0o700); err != nil {
 		return err
 	}
-	path := filepath.Join(s.dir, slug(key)+".tok")
-	return os.WriteFile(path, sealed, 0o600)
+	path := filepath.Join(s.dir, safeID(key)+".tok")
+	return writeFileAtomic(path, sealed, 0o600)
 }
 
 func (s *TokenStore) Get(key string) (TokenBlob, error) {
@@ -99,7 +111,7 @@ func (s *TokenStore) Get(key string) (TokenBlob, error) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	path := filepath.Join(s.dir, slug(key)+".tok")
+	path := filepath.Join(s.dir, safeID(key)+".tok")
 	sealed, err := os.ReadFile(path)
 	if err != nil {
 		return TokenBlob{}, err
@@ -137,58 +149,83 @@ func (s *TokenStore) Delete(key string) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return os.Remove(filepath.Join(s.dir, slug(key)+".tok"))
+	return os.Remove(filepath.Join(s.dir, safeID(key)+".tok"))
 }
 
+// masterKey returns the 32-byte AES key.
+//
+// The key material is always a hex string: whether it comes from libsecret
+// or from master.key, it is decoded the same way. The previous version
+// encrypted with the raw random bytes but decrypted with sha256(hex(bytes))
+// whenever secret-tool was on PATH, so on any desktop with libsecret every
+// stored token became permanently undecryptable.
 func (s *TokenStore) masterKey() ([]byte, error) {
-	if k, ok := secretToolLookup(); ok {
-		sum := sha256.Sum256([]byte(k))
-		return sum[:], nil
+	if hexKey, ok := secretToolLookup(); ok {
+		if k, err := decodeMasterKey(hexKey); err == nil {
+			return k, nil
+		}
+		// A value we cannot parse (an old install, or another app's entry)
+		// must not silently produce a different key: fall through to the
+		// file, which is the authoritative copy.
 	}
 	if err := os.MkdirAll(s.dir, 0o700); err != nil {
 		return nil, err
 	}
 	path := filepath.Join(s.dir, "master.key")
-	b, err := os.ReadFile(path)
-	if err == nil && len(b) == 32 {
-		return b, nil
+	if b, err := os.ReadFile(path); err == nil {
+		if k, kerr := decodeMasterKey(strings.TrimSpace(string(b))); kerr == nil {
+			return k, nil
+		}
+		if len(b) == 32 {
+			// Keys written by older builds were raw bytes.
+			return b, nil
+		}
 	}
 	key := make([]byte, 32)
 	if _, err := io.ReadFull(rand.Reader, key); err != nil {
 		return nil, err
 	}
-	if err := os.WriteFile(path, key, 0o600); err != nil {
+	hexKey := hex.EncodeToString(key)
+	if err := writeFileAtomic(path, []byte(hexKey), 0o600); err != nil {
 		return nil, err
 	}
-	_ = secretToolStore(fmt.Sprintf("%x", key))
+	_ = secretToolStore(hexKey)
 	return key, nil
 }
 
+// decodeMasterKey accepts the 64-char hex form written by this package.
+func decodeMasterKey(v string) ([]byte, error) {
+	v = strings.TrimSpace(v)
+	if len(v) != 64 {
+		return nil, fmt.Errorf("mail: master key is not 32 hex bytes")
+	}
+	return hex.DecodeString(v)
+}
 func secretToolLookup() (string, bool) {
 	if _, err := exec.LookPath("secret-tool"); err != nil {
 		return "", false
 	}
-	cmd := exec.Command("secret-tool", "lookup", "service", "uitoolkit-mail", "attribute", "master")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "secret-tool", "lookup", "service", "uitoolkit-mail", "attribute", "master")
 	out, err := cmd.Output()
 	if err != nil {
 		return "", false
 	}
-	s := strings.TrimSpace(string(out))
-	return s, s != ""
+	v := strings.TrimSpace(string(out))
+	return v, v != ""
 }
-
 func secretToolStore(hexkey string) error {
 	if _, err := exec.LookPath("secret-tool"); err != nil {
 		return err
 	}
-	cmd := exec.Command("secret-tool", "store", "--label", "uitoolkit mail master",
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "secret-tool", "store", "--label", "uitoolkit mail master",
 		"service", "uitoolkit-mail", "attribute", "master")
 	cmd.Stdin = strings.NewReader(hexkey)
 	return cmd.Run()
 }
-
-// resolveAccessToken prefers UITK_MAIL_XOAUTH2, then the encrypted store
-// (refreshing when expired).
 func resolveAccessToken(cfg ServerConfig, address string) (string, error) {
 	if t := strings.TrimSpace(os.Getenv(EnvXOAuth)); t != "" {
 		return t, nil

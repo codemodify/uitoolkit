@@ -472,19 +472,19 @@ func (s *IMAPStore) Identities(accountID string) []Identity {
 }
 func (s *IMAPStore) PutIdentity(id Identity) (Identity, error) { return id, nil }
 func (s *IMAPStore) DeleteIdentity(id string) error            { return nil }
-func (s *IMAPStore) ListTags() []Tag           { return DefaultTags() }
-func (s *IMAPStore) PutTag(t Tag) (Tag, error) { return t, nil }
+func (s *IMAPStore) ListTags() []Tag                           { return DefaultTags() }
+func (s *IMAPStore) PutTag(t Tag) (Tag, error)                 { return t, nil }
 func (s *IMAPStore) DeleteTag(name string) error {
 	if IsSystemTag(name) {
 		return fmt.Errorf("mail: cannot remove system tag %s", canonicalSystemTagName(name))
 	}
 	return nil
 }
-func (s *IMAPStore) VirtualFolders() []Folder                  { return defaultVirtualFolders() }
-func (s *IMAPStore) ListRules() []FilterRule                   { return nil }
-func (s *IMAPStore) PutRule(r FilterRule) (FilterRule, error)  { return r, nil }
-func (s *IMAPStore) DeleteRule(id string) error                { return nil }
-func (s *IMAPStore) ApplyRules(folder FolderID) (int, error)   { return 0, nil }
+func (s *IMAPStore) VirtualFolders() []Folder                 { return defaultVirtualFolders() }
+func (s *IMAPStore) ListRules() []FilterRule                  { return nil }
+func (s *IMAPStore) PutRule(r FilterRule) (FilterRule, error) { return r, nil }
+func (s *IMAPStore) DeleteRule(id string) error               { return nil }
+func (s *IMAPStore) ApplyRules(folder FolderID) (int, error)  { return 0, nil }
 
 func (s *IMAPStore) GetPart(id MessageID, partID string) (PartData, error) {
 	m, ok := s.GetMessage(id)

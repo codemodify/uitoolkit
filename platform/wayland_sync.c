@@ -66,11 +66,14 @@ void ui_wl_explicit_destroy(struct zwp_linux_explicit_synchronization_v1 *m) {
 	if (m) zwp_linux_explicit_synchronization_v1_destroy(m);
 }
 
+/* UI_DMA_SLOTS must match the Go wlSurface.slots array. */
+#define UI_DMA_SLOTS 4
+
 struct ui_drm_timeline {
 	int drm_fd;
 	uint32_t handle;
 	uint64_t point;
-	uint64_t slot_rel[2];
+	uint64_t slot_rel[UI_DMA_SLOTS];
 	struct wp_linux_drm_syncobj_timeline_v1 *tl;
 	struct wp_linux_drm_syncobj_surface_v1 *surf;
 };
@@ -160,13 +163,13 @@ void ui_drm_timeline_destroy(struct ui_drm_timeline *t) {
 }
 
 int ui_drm_timeline_wait_slot(struct ui_drm_timeline *t, int slot) {
-	if (!t || slot < 0 || slot > 1) return 0;
+	if (!t || slot < 0 || slot >= UI_DMA_SLOTS) return 0;
 	if (t->slot_rel[slot] == 0) return 0;
 	return syncobj_wait(t->drm_fd, t->handle, t->slot_rel[slot]);
 }
 
 int ui_drm_timeline_set_points(struct ui_drm_timeline *t, int slot) {
-	if (!t || !t->surf || !t->tl || slot < 0 || slot > 1) return -1;
+	if (!t || !t->surf || !t->tl || slot < 0 || slot >= UI_DMA_SLOTS) return -1;
 	t->point++;
 	uint64_t acq = t->point;
 	t->point++;
