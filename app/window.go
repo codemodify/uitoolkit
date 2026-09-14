@@ -551,6 +551,8 @@ func (w *Window) dispatch(ev platform.Event) {
 		w.mouseMove(ev)
 	case platform.EventScroll:
 		w.bubbleWheel(ev)
+	case platform.EventPointerLeave:
+		w.pointerLeft()
 	case platform.EventKeyDown:
 		if ev.Key == platform.KeyTab {
 			w.tab(!ev.Mods.Shift())
@@ -760,6 +762,22 @@ func (w *Window) mouseUp(ev platform.Event) {
 	} else {
 		w.SetCursor(platform.CursorDefault)
 	}
+}
+
+// pointerLeft clears hover and pending tooltips when the pointer leaves the
+// window. A drag in progress keeps its capture: the release still comes.
+func (w *Window) pointerLeft() {
+	if w.capture != nil {
+		return
+	}
+	if w.hover != nil {
+		w.hover.MouseExit()
+		w.hover = nil
+	}
+	w.dismissTooltip()
+	w.tipHover = nil
+	w.lastTip = ""
+	w.SetCursor(platform.CursorDefault)
 }
 
 func (w *Window) mouseMove(ev platform.Event) {

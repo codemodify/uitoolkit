@@ -203,3 +203,19 @@ func TestX11SupportedBPP(t *testing.T) {
 		}
 	}
 }
+
+// X sends a press and a release for every wheel notch; only the press may
+// scroll. The release used to scroll a second time (two steps per notch).
+func TestX11WheelScrollsOncePerNotch(t *testing.T) {
+	for btn := 4; btn <= 7; btn++ {
+		if ev := x11ButtonEvents(btn, false, paintengine2d.Pt(1, 2), 0); len(ev) != 1 || ev[0].Kind != EventScroll {
+			t.Fatalf("button %d press: %+v", btn, ev)
+		}
+		if ev := x11ButtonEvents(btn, true, paintengine2d.Pt(1, 2), 0); len(ev) != 0 {
+			t.Fatalf("button %d release must not scroll: %+v", btn, ev)
+		}
+	}
+	if ev := x11ButtonEvents(1, true, paintengine2d.Pt(1, 2), 0); len(ev) != 1 || ev[0].Kind != EventMouseUp {
+		t.Fatalf("left release: %+v", ev)
+	}
+}

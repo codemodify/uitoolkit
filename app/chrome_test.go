@@ -373,3 +373,36 @@ func TestAltOpensMenu(t *testing.T) {
 		t.Fatalf("open %d", mb.OpenIndex())
 	}
 }
+
+// Leaving the window must clear hover and cancel the pending tooltip. There
+// used to be no leave event at all: buttons stayed hot and tooltips popped
+// up after the pointer was gone (Wayland and X11).
+func TestPointerLeaveClearsHoverAndTooltip(t *testing.T) {
+	a := New(Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{Width: 400, Height: 200, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	btn := widgets.NewButton("Save", nil)
+	btn.Tip = "Write the file"
+	w.SetContent(widgets.NewPad(20, btn))
+	a.PumpOnce()
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	w.SetClock(func() time.Time { return now })
+	w.SetTooltipDelay(400 * time.Millisecond)
+	bb := btn.Bounds()
+	pos := paintengine2d.Pt(20+bb.Min.X+8, 20+bb.Min.Y+8)
+	w.dispatch(platform.Event{Kind: platform.EventMouseMove, Pos: pos})
+	if !btn.State().Hovered() {
+		t.Fatal("button should be hovered")
+	}
+	w.dispatch(platform.Event{Kind: platform.EventPointerLeave})
+	if btn.State().Hovered() {
+		t.Fatal("hover must clear when the pointer leaves the window")
+	}
+	now = now.Add(time.Second)
+	a.PumpOnce()
+	if w.Tooltip() != nil {
+		t.Fatal("no tooltip may appear after the pointer left")
+	}
+}
