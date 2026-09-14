@@ -406,3 +406,62 @@ func TestPointerLeaveClearsHoverAndTooltip(t *testing.T) {
 		t.Fatal("no tooltip may appear after the pointer left")
 	}
 }
+
+// A modal message box stays until answered: clicks on the dimmer do not
+// dismiss it (a double-click on "Confirm…" used to open and close it), the
+// default button has focus, and the look orders the buttons.
+func TestMessageBoxModalFocusAndOrder(t *testing.T) {
+	for _, tc := range []struct {
+		theme        string
+		primaryFirst bool
+	}{{"dark", false}, {"win95", true}} {
+		pack, ok := style.LoadTheme(tc.theme)
+		if !ok {
+			t.Fatalf("theme %s", tc.theme)
+		}
+		a := New(Options{Look: pack.Look(), Headless: true})
+		w, err := a.NewWindow(platform.WindowOptions{Width: 520, Height: 360, Headless: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		w.SetContent(widgets.NewLabel("host"))
+		a.PumpOnce()
+		got := widgets.ResultNone
+		widgets.ShowMessageBox(w.Content(), widgets.MessageBoxOptions{
+			Title: "Confirm", Message: "Proceed?", Kind: widgets.MessageQuestion,
+			Buttons: widgets.ButtonsYesNo, OnResult: func(r widgets.MessageResult) { got = r },
+		})
+		a.PumpOnce()
+		ov := w.Overlay()
+		if ov == nil {
+			t.Fatal("overlay")
+		}
+		var buttons []*widgets.Button
+		widget.Walk(ov, func(c widget.Component) {
+			if b, ok := c.(*widgets.Button); ok {
+				buttons = append(buttons, b)
+			}
+		})
+		if len(buttons) != 2 {
+			t.Fatalf("%s: %d buttons", tc.theme, len(buttons))
+		}
+		if first := buttons[0].Text; (first == "Yes") != tc.primaryFirst {
+			t.Fatalf("%s: first button %q, primaryFirst=%v", tc.theme, first, tc.primaryFirst)
+		}
+		if f, ok := w.Focus().(*widgets.Button); !ok || f.Text != "Yes" {
+			t.Fatalf("%s: default button must have focus, got %T %v", tc.theme, w.Focus(), w.Focus())
+		}
+		// Click on the dimmer, well outside the card.
+		w.dispatch(platform.Event{Kind: platform.EventMouseDown, Pos: paintengine2d.Pt(4, 4), Button: platform.ButtonLeft})
+		w.dispatch(platform.Event{Kind: platform.EventMouseUp, Pos: paintengine2d.Pt(4, 4), Button: platform.ButtonLeft})
+		a.PumpOnce()
+		if w.Overlay() == nil || got != widgets.ResultNone {
+			t.Fatalf("%s: a click outside dismissed the modal box (result %v)", tc.theme, got)
+		}
+		w.dispatch(platform.Event{Kind: platform.EventKeyDown, Key: platform.KeyEscape})
+		a.PumpOnce()
+		if got != widgets.ResultNo || w.Overlay() != nil {
+			t.Fatalf("%s: Escape should answer No and close, got %v", tc.theme, got)
+		}
+	}
+}

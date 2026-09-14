@@ -93,22 +93,38 @@ func NewMessageBox(opts MessageBoxOptions) *MessageBox {
 	icon := &messageIcon{kind: opts.Kind}
 	icon.Init(icon)
 
-	body := NewColumn(
-		NewTitle(opts.Title),
-		NewLabel(opts.Message),
-	).WithGap(8)
+	body := NewColumn(NewLabel(opts.Message)).WithGap(8)
 
 	head := NewRow(icon, body).WithGap(12).WithAlign(layout.AlignStart)
 	head.AddFlex(body, 1)
 
 	actions := mb.actionButtons()
-	col := NewColumn(head, NewRow(actions...).WithGap(8).WithJustify(layout.JustifyEnd)).
-		WithGap(16).WithPad(6)
-	card := NewPanel("", col)
+	row := NewRow(actions...).WithGap(8).WithJustify(layout.JustifyEnd)
+	col := NewColumn(head, row).WithGap(16).WithPad(6)
+	card := NewPanel(opts.Title, col)
+	card.Window = true
 	card.Raised = true
+	card.OnClose = func() { mb.finish(mb.cancelResult()) }
 
 	mb.overlay = NewOverlay(card)
+	mb.overlay.Modal = true
 	mb.overlay.OnClose = func() { mb.finish(mb.cancelResult()) }
+	// The default button takes focus and Enter; its position follows the
+	// look (Windows / KDE: "OK Cancel", Mac / GNOME: "Cancel OK").
+	primary := actions[len(actions)-1]
+	mb.overlay.InitialFocus = primary
+	mb.overlay.OnPresented = func() {
+		if style.LookHint(mb.overlay.Look(), style.HintDialogPrimaryFirst) == 0 {
+			return
+		}
+		ordered := append([]widget.Component{primary}, actions[:len(actions)-1]...)
+		for _, c := range actions {
+			row.Remove(c)
+		}
+		for _, c := range ordered {
+			row.Add(c)
+		}
+	}
 	return mb
 }
 
