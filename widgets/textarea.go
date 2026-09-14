@@ -313,21 +313,59 @@ func (t *TextArea) scrollBy(dy, dx float32) bool {
 // the inner viewport, which is what clampScroll / maxScrollY use. Measuring it
 // against the full height made offset/maxOff exceed 1 and the thumb overshoot
 // the track at the bottom of the document.
-func (t *TextArea) scrollTrackV() (track, thumb paintengine2d.Rect) {
-	bar, gap := overflowBarSize(t.Look())
+func (t *TextArea) vparts() style.ScrollParts {
 	in := t.inner()
 	box := paintengine2d.XYWH(0, in.Min.Y, t.LocalBounds().Dx(), in.Dy())
-	return vScrollThumb(box, t.contentH(), t.scrollY, bar, gap)
+	return style.ScrollGeometry(t.Look(), box, true, t.contentH(), in.Dy(), t.scrollY, false)
+}
+
+func (t *TextArea) hparts() style.ScrollParts {
+	if t.Wrap {
+		return style.ScrollParts{}
+	}
+	in := t.inner()
+	box := paintengine2d.XYWH(in.Min.X, 0, in.Dx(), t.LocalBounds().Dy())
+	return style.ScrollGeometry(t.Look(), box, false, t.contentW(), in.Dx(), t.scrollX, false)
+}
+
+func (t *TextArea) lineStep() float32 {
+	if f := t.font(); f != nil {
+		return f.Height() + 2
+	}
+	return 18
+}
+
+func (t *TextArea) vaxis() scrollAxis {
+	return scrollAxis{
+		vertical: true,
+		parts:    t.vparts,
+		get:      func() (float32, float32) { return t.scrollY, t.maxScrollY() },
+		set:      func(y float32) { t.scrollY = y; t.clampScroll(); t.Invalidate() },
+		steps:    func() (float32, float32) { return t.lineStep(), t.inner().Dy() * 0.9 },
+	}
+}
+
+func (t *TextArea) haxis() scrollAxis {
+	return scrollAxis{
+		parts: t.hparts,
+		get:   func() (float32, float32) { return t.scrollX, t.maxScrollX() },
+		set:   func(x float32) { t.scrollX = x; t.clampScroll(); t.Invalidate() },
+		steps: func() (float32, float32) { return t.lineStep() * 2, t.inner().Dx() * 0.9 },
+	}
+}
+
+// scrollTrackV keeps the bar on the widget edge but sizes the thumb against
+// the inner viewport, which is what clampScroll / maxScrollY use. Measuring it
+// against the full height made offset/maxOff exceed 1 and the thumb overshoot
+// the track at the bottom of the document.
+func (t *TextArea) scrollTrackV() (track, thumb paintengine2d.Rect) {
+	sp := t.vparts()
+	return sp.Track, sp.Thumb
 }
 
 func (t *TextArea) scrollTrackH() (track, thumb paintengine2d.Rect) {
-	if t.Wrap {
-		return
-	}
-	bar, gap := overflowBarSize(t.Look())
-	in := t.inner()
-	box := paintengine2d.XYWH(in.Min.X, 0, in.Dx(), t.LocalBounds().Dy())
-	return hScrollThumb(box, t.contentW(), t.scrollX, bar, gap)
+	sp := t.hparts()
+	return sp.Track, sp.Thumb
 }
 
 func (t *TextArea) blink() bool {
@@ -358,10 +396,8 @@ func (t *TextArea) Paint(ctx *paintengine2d.Context) {
 		blink = false
 	}
 	t.Look().DrawTextArea(ctx, t.LocalBounds(), t.State(), lines, caret, selA, selB, blink, t.scrollX, t.scrollY, t.Placeholder, t.font())
-	vt, vth := t.scrollTrackV()
-	paintOverflowBar(ctx, t.Look(), vt, vth, t.vbar.over, t.vbar.active)
-	ht, hth := t.scrollTrackH()
-	paintOverflowBar(ctx, t.Look(), ht, hth, t.hbar.over, t.hbar.active)
+	t.vbar.paint(ctx, t.Look(), t.vparts(), true)
+	t.hbar.paint(ctx, t.Look(), t.hparts(), false)
 }
 
 func (t *TextArea) visual() (text string, caret, selA, selB int) {
@@ -563,17 +599,7 @@ func (t *TextArea) MousePress(e widget.MouseEvent) bool {
 		return false
 	}
 	t.RequestFocus()
-	vt, vth := t.scrollTrackV()
-	if off, ok := t.vbar.press(e.Pos, vt, vth, true, t.scrollY, t.maxScrollY(), t.inner().Dy()*0.9); ok {
-		t.scrollY = off
-		t.clampScroll()
-		t.Invalidate()
-		return true
-	}
-	ht, hth := t.scrollTrackH()
-	if off, ok := t.hbar.press(e.Pos, ht, hth, false, t.scrollX, t.maxScrollX(), t.inner().Dx()*0.9); ok {
-		t.scrollX = off
-		t.clampScroll()
+	if t.vbar.press(t, e.Pos, t.vaxis()) || t.hbar.press(t, e.Pos, t.haxis()) {
 		t.Invalidate()
 		return true
 	}
@@ -601,26 +627,17 @@ func (t *TextArea) MousePress(e widget.MouseEvent) bool {
 }
 
 func (t *TextArea) MouseMove(e widget.MouseEvent) bool {
-	vt, vth := t.scrollTrackV()
-	if off, apply, handled, dirty := t.vbar.move(e.Pos, vt, vth, true, t.maxScrollY()); apply || handled || dirty {
-		if apply {
-			t.scrollY = off
-			t.clampScroll()
-		}
-		t.Invalidate()
-		if apply || handled {
-			return true
-		}
-	}
-	ht, hth := t.scrollTrackH()
-	if off, apply, handled, dirty := t.hbar.move(e.Pos, ht, hth, false, t.maxScrollX()); apply || handled || dirty {
-		if apply {
-			t.scrollX = off
-			t.clampScroll()
-		}
-		t.Invalidate()
-		if apply || handled {
-			return true
+	for _, bar := range []struct {
+		d  *scrollDrag
+		ax scrollAxis
+	}{{&t.vbar, t.vaxis()}, {&t.hbar, t.haxis()}} {
+		if handled, dirty := bar.d.move(e.Pos, bar.ax); handled || dirty {
+			if dirty {
+				t.Invalidate()
+			}
+			if handled {
+				return true
+			}
 		}
 	}
 	if !t.dragging && e.Button != platform.ButtonLeft {
@@ -635,15 +652,16 @@ func (t *TextArea) MouseMove(e widget.MouseEvent) bool {
 
 func (t *TextArea) MouseRelease(widget.MouseEvent) bool {
 	t.dragging = false
-	if t.vbar.release() || t.hbar.release() {
+	v, h := t.vbar.release(), t.hbar.release()
+	if v || h {
 		t.Invalidate()
 	}
 	return true
 }
 
 func (t *TextArea) MouseExit() {
-	t.vbar.over = false
-	t.hbar.over = false
+	t.vbar.exit()
+	t.hbar.exit()
 	t.Base.MouseExit()
 }
 

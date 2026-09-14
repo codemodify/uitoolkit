@@ -14,6 +14,9 @@ const (
 type CornerStyle string
 
 const (
+	// CornersTheme keeps each theme's native shape (Win95 square, Aqua
+	// pill, Luna rounded). It is the default.
+	CornersTheme  CornerStyle = "theme"
 	CornersRound  CornerStyle = "round"
 	CornersSquare CornerStyle = "square"
 )
@@ -67,7 +70,7 @@ func DefaultAppearance() Appearance {
 	return Appearance{
 		Name:     DefaultThemeName,
 		Theme:    ThemeDark,
-		Corners:  CornersRound,
+		Corners:  CornersTheme,
 		Icons:    IconSetClassic,
 		IconSize: IconSizeMedium,
 	}
@@ -83,13 +86,15 @@ func ParseTheme(s string) ThemeName {
 	}
 }
 
-// ParseCorners accepts round / square (empty → round).
+// ParseCorners accepts theme / round / square (empty or unknown → theme).
 func ParseCorners(s string) CornerStyle {
-	switch s {
-	case "square", "Square", "rect", "sharp-corners":
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "square", "rect", "sharp-corners":
 		return CornersSquare
-	default:
+	case "round", "rounded":
 		return CornersRound
+	default:
+		return CornersTheme
 	}
 }
 
@@ -224,7 +229,7 @@ func ApplyIconSize(m Metrics, sz IconSize) Metrics {
 func packMetrics(d Density, tok ThemeTokens, corners CornerStyle, sz IconSize) Metrics {
 	m := ApplyDensity(DefaultMetrics(), d)
 	m = ApplyChromeMetrics(m, tok.Metrics)
-	m = ApplyThemeCorners(m, corners, tok.Metrics.Radius, tok.Metrics.RadiusSmall)
+	m = applyPackCorners(m, corners, tok.Metrics)
 	return ApplyIconSize(m, sz)
 }
 

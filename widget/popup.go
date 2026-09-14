@@ -3,6 +3,7 @@ package widget
 import (
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/layout"
+	"github.com/codemodify/uitoolkit/style"
 )
 
 // PopupHost is implemented by app.Window: floating menus without a dimmer.
@@ -60,9 +61,27 @@ func ShowPopup(from Component, popup Component) bool {
 		return false
 	}
 	popup.SetHost(h)
+	inheritLook(from, popup, h)
 	ph.SetPopup(popup)
 	notifyPresented(from, popup)
 	return true
+}
+
+// inheritLook gives a popup or overlay the look of the widget that opened
+// it when that differs from the window's (a combo inside a themed preview
+// opens a list in the preview's theme, not the window's).
+func inheritLook(from, layer Component, h Host) {
+	fl, ok := from.(interface{ Look() style.LookAndFeel })
+	if !ok {
+		return
+	}
+	sl, ok := layer.(interface{ SetLook(style.LookAndFeel) })
+	if !ok {
+		return
+	}
+	if lk := fl.Look(); lk != nil && lk != h.Look() {
+		sl.SetLook(lk)
+	}
 }
 
 // DismissPopup closes the window popup layer, if any.
@@ -93,6 +112,7 @@ func ShowOverlay(from Component, overlay Component) bool {
 		return false
 	}
 	overlay.SetHost(h)
+	inheritLook(from, overlay, h)
 	oh.SetOverlay(overlay)
 	notifyPresented(from, overlay)
 	return true
