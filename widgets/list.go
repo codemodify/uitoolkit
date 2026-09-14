@@ -83,6 +83,9 @@ func (l *ListView) scrollTrack() (track, thumb paintengine2d.Rect) {
 	return sp.Track, sp.Thumb
 }
 
+// HoverIndex is the row under the pointer, or -1.
+func (l *ListView) HoverIndex() int { return l.hovered }
+
 // VisibleRange is the half-open [lo, hi) window of rows that Paint draws.
 func (l *ListView) VisibleRange() (lo, hi int) { return l.visibleRange() }
 

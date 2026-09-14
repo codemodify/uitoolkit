@@ -100,6 +100,28 @@ func (s *ScrollView) Arrange(r paintengine2d.Rect) {
 // reserved, so content does not reflow when it starts to overflow).
 func (s *ScrollView) gutter() float32 { return style.ScrollGutter(s.Look()) }
 
+// Reveal scrolls so c (a descendant) is fully visible, with a small margin
+// for its focus ring (widget.Revealer).
+func (s *ScrollView) Reveal(c widget.Component) {
+	if c == nil || s.child == nil {
+		return
+	}
+	// c's box in the scroll view's coordinates.
+	top := float32(0)
+	for p := widget.Component(c); p != nil && p != widget.Component(s); p = p.Parent() {
+		top += p.Bounds().Min.Y
+	}
+	bot := top + c.Bounds().Dy()
+	margin := float32(8)
+	view := s.LocalBounds().Dy()
+	switch {
+	case top-margin < 0:
+		s.ScrollTo(s.OffsetY + top - margin)
+	case bot+margin > view:
+		s.ScrollTo(s.OffsetY + bot + margin - view)
+	}
+}
+
 func (s *ScrollView) maxOff() float32 {
 	return layout.MaxScroll(s.content.Y, s.LocalBounds().Dy())
 }

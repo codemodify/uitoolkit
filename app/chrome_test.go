@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -575,5 +576,100 @@ func TestMenuKeyboardWalksOpenMenus(t *testing.T) {
 	a.PumpOnce()
 	if bar.OpenIndex() != 0 {
 		t.Fatalf("Left should go back to File, open=%d", bar.OpenIndex())
+	}
+}
+
+// Wheel-scrolling under a still pointer moves the hover to the row now
+// under it (it stayed on the row that scrolled away).
+func TestWheelScrollRehovers(t *testing.T) {
+	a := New(Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{Width: 300, Height: 200, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	list := widgets.NewListView(100, func(i int) string { return fmt.Sprint("row ", i) }, nil)
+	w.SetContent(list)
+	a.PumpOnce()
+	pos := paintengine2d.Pt(40, 60)
+	w.dispatch(platform.Event{Kind: platform.EventMouseMove, Pos: pos})
+	before := list.HoverIndex()
+	w.dispatch(platform.Event{Kind: platform.EventScroll, Pos: pos, Scroll: paintengine2d.Pt(0, 1)})
+	a.PumpOnce()
+	if list.OffsetY <= 0 {
+		t.Fatal("wheel did not scroll")
+	}
+	if got := list.HoverIndex(); got == before || got < 0 {
+		t.Fatalf("hover stayed on row %d after scrolling (now %d)", before, got)
+	}
+}
+
+// A press dragged off a button pops it up (releasing outside does not
+// click) and the release hands hover to what is under the pointer.
+func TestButtonPressDragOff(t *testing.T) {
+	a := New(Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{Width: 400, Height: 200, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	clicks := 0
+	btn := widgets.NewButton("Press", func() { clicks++ })
+	other := widgets.NewButton("Other", nil)
+	w.SetContent(widgets.NewRow(btn, other).WithGap(20))
+	a.PumpOnce()
+	in := paintengine2d.Pt(btn.Bounds().Min.X+8, btn.Bounds().Min.Y+8)
+	out := paintengine2d.Pt(other.Bounds().Min.X+8, other.Bounds().Min.Y+8)
+	w.dispatch(platform.Event{Kind: platform.EventMouseMove, Pos: in})
+	w.dispatch(platform.Event{Kind: platform.EventMouseDown, Pos: in, Button: platform.ButtonLeft})
+	if !btn.PaintState().Pressed() {
+		t.Fatal("pressed")
+	}
+	w.dispatch(platform.Event{Kind: platform.EventMouseMove, Pos: out, Button: platform.ButtonLeft})
+	if btn.PaintState().Pressed() {
+		t.Fatal("a press dragged off the button must pop it up")
+	}
+	w.dispatch(platform.Event{Kind: platform.EventMouseMove, Pos: in, Button: platform.ButtonLeft})
+	if !btn.PaintState().Pressed() {
+		t.Fatal("dragging back re-presses")
+	}
+	w.dispatch(platform.Event{Kind: platform.EventMouseMove, Pos: out, Button: platform.ButtonLeft})
+	w.dispatch(platform.Event{Kind: platform.EventMouseUp, Pos: out, Button: platform.ButtonLeft})
+	if clicks != 0 {
+		t.Fatal("releasing outside must not click")
+	}
+	if btn.PaintState().Hovered() || !other.PaintState().Hovered() {
+		t.Fatalf("hover after release: pressed-button hot=%v other hot=%v", btn.PaintState().Hovered(), other.PaintState().Hovered())
+	}
+}
+
+// Tab to a control below the fold of a ScrollView scrolls it into view.
+func TestTabRevealsFocusInScrollView(t *testing.T) {
+	a := New(Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{Width: 300, Height: 200, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	col := widgets.NewColumn()
+	var last *widgets.Button
+	for i := 0; i < 20; i++ {
+		last = widgets.NewButton(fmt.Sprint("Button ", i), nil)
+		col.Add(last)
+	}
+	sv := widgets.NewScrollView(col)
+	w.SetContent(sv)
+	a.PumpOnce()
+	for i := 0; i < 40 && w.Focus() != last; i++ {
+		w.dispatch(platform.Event{Kind: platform.EventKeyDown, Key: platform.KeyTab})
+		a.PumpOnce()
+		b, ok := w.Focus().(*widgets.Button)
+		if !ok {
+			continue
+		}
+		top := b.Bounds().Min.Y + col.Bounds().Min.Y
+		if top < 0 || top+b.Bounds().Dy() > sv.LocalBounds().Dy() {
+			t.Fatalf("%s focused but not visible: top=%v view=%v offset=%v", b.Text, top, sv.LocalBounds().Dy(), sv.OffsetY)
+		}
+	}
+	if w.Focus() != last {
+		t.Fatal("never reached the last button")
 	}
 }
