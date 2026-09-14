@@ -303,3 +303,60 @@ func TestSelectWaylandFallsBack(t *testing.T) {
 		t.Fatal("offscreen")
 	}
 }
+
+// A frame the compositor could not take yet (frame callback outstanding,
+// every buffer busy) must not lose its damage: it is folded into the next
+// present. Dropping it left pressed buttons and popups off screen.
+func TestWaylandDeferredDamageIsKept(t *testing.T) {
+	s := &wlSurface{}
+	a := paintengine2d.XYWH(0, 0, 10, 10)
+	b := paintengine2d.XYWH(50, 0, 10, 10)
+	s.deferDamage([]paintengine2d.Rect{a})
+	s.deferDamage([]paintengine2d.Rect{b})
+	c := paintengine2d.XYWH(90, 0, 5, 5)
+	rects, full := s.takeDeferred([]paintengine2d.Rect{c}, false)
+	if full || len(rects) != 3 {
+		t.Fatalf("deferred a+b plus current c: got %v full=%v", rects, full)
+	}
+	if s.pendAny || len(s.pendRects) != 0 {
+		t.Fatal("takeDeferred must clear the pending damage")
+	}
+	// A deferred full frame wins over everything after it.
+	s.deferDamage(nil)
+	s.deferDamage([]paintengine2d.Rect{a})
+	if _, full := s.takeDeferred([]paintengine2d.Rect{c}, false); !full {
+		t.Fatal("a deferred full frame must present the whole surface")
+	}
+	// Flushing presents only what was deferred.
+	s.deferDamage([]paintengine2d.Rect{b})
+	rects, full = s.takeDeferred(nil, true)
+	if full || len(rects) != 1 || rects[0] != b {
+		t.Fatalf("flush-only: got %v full=%v", rects, full)
+	}
+}
+
+// Each shm buffer remembers what was presented through the others since it
+// last held a frame; a buffer reused frames later must get all of it.
+func TestWaylandSlotDamageHistory(t *testing.T) {
+	s := &wlSurface{}
+	r1 := paintengine2d.XYWH(0, 0, 10, 10)
+	r2 := paintengine2d.XYWH(20, 0, 10, 10)
+	s.noteSlotPresented(0, []paintengine2d.Rect{r1}) // slot 0 valid
+	s.noteSlotPresented(1, []paintengine2d.Rect{r2}) // slot 1 valid; slot 0 misses r2
+	if !s.slots[0].valid || len(s.slots[0].stale) != 1 || s.slots[0].stale[0] != r2 {
+		t.Fatalf("slot 0 history %+v", s.slots[0])
+	}
+	if s.slots[2].valid || len(s.slots[2].stale) != 0 {
+		t.Fatal("a never-used buffer stays invalid (full copy) and keeps no history")
+	}
+	s.noteSlotPresented(0, []paintengine2d.Rect{r1})
+	if len(s.slots[0].stale) != 0 || len(s.slots[1].stale) != 1 {
+		t.Fatalf("presenting into slot 0 clears its history and extends slot 1's: %+v / %+v", s.slots[0], s.slots[1])
+	}
+	for i := 0; i < maxSlotStale+1; i++ {
+		s.noteSlotPresented(0, []paintengine2d.Rect{r1})
+	}
+	if s.slots[1].valid {
+		t.Fatal("a buffer whose history overflowed must be rewritten in full")
+	}
+}
