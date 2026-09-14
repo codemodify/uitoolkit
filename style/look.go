@@ -21,6 +21,7 @@ type Classic struct {
 	scale   float32
 	tokens  ThemeTokens
 	engine  Engine
+	memo    lookMemo // engine-derived paint data, built once per look
 	body    *Font
 	title   *Font
 	bold    *Font
