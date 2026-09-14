@@ -1067,6 +1067,12 @@ func aquaLight(l *Classic, b paintengine2d.Rect, i int) paintengine2d.Rect {
 }
 
 // WindowCloseRect is the red traffic light, first on the left.
+// DrawWindowBackground puts the pinstripes (or brushed metal) behind the
+// whole window, anchored to the device grid so partial redraws line up.
+func (aquaEngine) DrawWindowBackground(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect) {
+	aquaColors(l).texture(l, ctx, b)
+}
+
 func (aquaEngine) WindowCloseRect(l *Classic, b paintengine2d.Rect) paintengine2d.Rect {
 	return aquaLight(l, b, 0)
 }

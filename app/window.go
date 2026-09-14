@@ -1048,14 +1048,25 @@ func (w *Window) paintLayers(ctx *paintengine2d.Context, dirty *paintengine2d.Da
 	}
 }
 
+// paintBackground lets the look paint the window background (Aqua
+// pinstripes, brushed metal); the flat clear already covers the rest.
+func (w *Window) paintBackground(ctx *paintengine2d.Context, full paintengine2d.Rect) {
+	if bl, ok := w.look.(style.WindowBackgroundLook); ok {
+		bl.DrawWindowBackground(ctx, full)
+	}
+}
+
 func (w *Window) frameImmediate(rects []paintengine2d.Rect) {
 	ctx := platform.NewPaintContext(w.surf)
 	if ctx == nil {
 		return
 	}
 	bg := w.look.Palette().Background
+	ww, hh := w.surf.Size()
+	full := paintengine2d.XYWH(0, 0, float32(ww), float32(hh))
 	if len(rects) == 0 {
 		ctx.Clear(bg)
+		w.paintBackground(ctx, full)
 		w.paintLayers(ctx, nil)
 		return
 	}
@@ -1069,6 +1080,7 @@ func (w *Window) frameImmediate(rects []paintengine2d.Rect) {
 		ctx.Save()
 		ctx.ClipDeviceRect(r)
 		ctx.DrawRect(r, paintengine2d.Fill(bg))
+		w.paintBackground(ctx, full)
 		w.paintLayers(ctx, &one)
 		ctx.Restore()
 	}
@@ -1079,6 +1091,7 @@ func (w *Window) frameScene(rects []paintengine2d.Rect) {
 	rec := paintengine2d.NewRecorder(ww, hh)
 	rec.Clear(w.look.Palette().Background)
 	ctx := paintengine2d.NewContextDevice(rec)
+	w.paintBackground(ctx, paintengine2d.XYWH(0, 0, float32(ww), float32(hh)))
 	// The recording is always a complete display list for the window;
 	// partial redraw happens at replay, where the engine clips every op to
 	// the dirty box. Recording a subset would make the next partial replay
