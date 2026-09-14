@@ -47,7 +47,14 @@ type w95 struct {
 	capOff1, capOff2, capOffTxt    paintengine2d.Color
 }
 
+type w95Key struct{}
+
+// w95colors is the look's resolved colour set (built once per look).
 func w95colors(l *Classic) w95 {
+	return l.Memo(w95Key{}, func() any { return w95build(l) }).(w95)
+}
+
+func w95build(l *Classic) w95 {
 	p := l.palette
 	face := p.SurfaceAlt
 	c := w95{

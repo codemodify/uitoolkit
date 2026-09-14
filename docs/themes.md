@@ -1,5 +1,9 @@
 # Theme packs
 
+> Shapes per theme come from **theme engines** — see
+> [theme-engines.md](theme-engines.md) for the architecture, the rules and
+> how to write one. This page lists the packs and the pack schema.
+
 `uitoolkit` skins are **token packs**, not palette-only recolors. A pack
 names a bevel language, metrics, elevation, and per-state chrome colors.
 `Classic` paints every control from those tokens. Corners, icon set, and

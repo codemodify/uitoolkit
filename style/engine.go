@@ -595,6 +595,36 @@ func (l *Classic) eng() Engine {
 // Engine is the engine painting this look.
 func (l *Classic) Engine() Engine { return l.eng() }
 
+// lookMemo caches values an engine derives from a look (resolved colour
+// sets, gradients, paths). A look is immutable, so each value is built
+// once; the lock only guards the first build (looks can be painted from
+// tests in parallel).
+type lookMemo struct {
+	mu sync.Mutex
+	m  map[any]any
+}
+
+// Memo returns the value cached under key for this look, building it on
+// first use. Engines use it so painting does not re-derive colours:
+//
+//	c := l.Memo(w95Key{}, func() any { return w95build(l) }).(w95)
+func (l *Classic) Memo(key any, build func() any) any {
+	if l == nil {
+		return build()
+	}
+	l.memo.mu.Lock()
+	defer l.memo.mu.Unlock()
+	if v, ok := l.memo.m[key]; ok {
+		return v
+	}
+	if l.memo.m == nil {
+		l.memo.m = map[any]any{}
+	}
+	v := build()
+	l.memo.m[key] = v
+	return v
+}
+
 // X reads an engine-specific colour from the pack's "extra" map, falling
 // back to def when the pack does not define key.
 func (l *Classic) X(key string, def paintengine2d.Color) paintengine2d.Color {
