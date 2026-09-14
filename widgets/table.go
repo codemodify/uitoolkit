@@ -387,10 +387,9 @@ func (t *TableView) paintHeader(ctx *paintengine2d.Context, lk style.LookAndFeel
 	for i, col := range t.Columns {
 		w := widths[i]
 		hb := paintengine2d.XYWH(x, 0, w, hh)
-		st := t.State()
-		if i != t.hoverCol {
-			st &^= style.StateHovered
-		} else {
+		// A press on a body row must not paint every header pressed.
+		st := t.State() &^ (style.StateHovered | style.StatePressed)
+		if i == t.hoverCol {
 			st |= style.StateHovered
 		}
 		if i == t.pressCol {
