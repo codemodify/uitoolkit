@@ -51,7 +51,19 @@ func (l *Classic) tokensOr() ThemeTokens {
 // always made readable on the fill (every early return included).
 func (l *Classic) faceColors(role chromeRole, st ControlState) (fill, border, fg paintengine2d.Color) {
 	fill, border, fg = l.faceColorsRaw(role, st)
-	return fill, border, l.readableFg(fg, fill)
+	return fill, border, l.readableFg(fg, fill, l.roleBase(role))
+}
+
+// roleBase is what a role's face is painted over: rows, fields, combos and
+// indicators sit on the field (view) colour, everything else on the window.
+func (l *Classic) roleBase(role chromeRole) paintengine2d.Color {
+	switch role {
+	case roleRow, roleField, roleCombo, roleCheck:
+		if !colorUnset(l.palette.Field) {
+			return l.palette.Field
+		}
+	}
+	return l.palette.Background
 }
 
 func (l *Classic) faceColorsRaw(role chromeRole, st ControlState) (fill, border, fg paintengine2d.Color) {
@@ -253,13 +265,13 @@ func (l *Classic) faceColorsRaw(role chromeRole, st ControlState) (fill, border,
 // readableFg keeps a label readable on the fill it sits on: filled rows,
 // tabs and menu items fall back to TextOnAccent, then black / white
 // (light-theme selected rows drew black on navy).
-func (l *Classic) readableFg(fg, fill paintengine2d.Color) paintengine2d.Color {
-	if colorUnset(fill) || fill.A < 0.5 {
+func (l *Classic) readableFg(fg, fill, base paintengine2d.Color) paintengine2d.Color {
+	if colorUnset(fill) || fill.A < 0.05 {
 		return fg
 	}
 	bg := fill
 	if fill.A < 1 {
-		bg = Mix(l.palette.Background, fill, fill.A)
+		bg = Mix(base, fill, fill.A)
 	}
 	if ContrastRatio(fg, bg) >= 3 {
 		return fg
