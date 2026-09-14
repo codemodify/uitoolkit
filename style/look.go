@@ -270,8 +270,31 @@ func (l *Classic) baseDrawButton(ctx *paintengine2d.Context, b paintengine2d.Rec
 }
 
 func (l *Classic) baseDrawLabel(ctx *paintengine2d.Context, b paintengine2d.Rect, text string, col paintengine2d.Color, align Align) {
+	col = l.onWindow(col)
 	f := l.fontFor(col)
 	l.drawFittedText(ctx, f, text, b, col, align, 2)
+}
+
+// onWindow nudges a coloured label or glyph until it reads on the window
+// background (3:1): Classic 95 Dark drew accent links and info icons navy
+// on dark grey. Colours that already read are returned unchanged.
+func (l *Classic) onWindow(col paintengine2d.Color) paintengine2d.Color {
+	bg := l.palette.Background
+	if colorUnset(col) || colorUnset(bg) || ContrastRatio(col, bg) >= 3 {
+		return col
+	}
+	toward := paintengine2d.RGB(1, 1, 1)
+	if RelLuminance(bg) > 0.4 {
+		toward = paintengine2d.RGB(0, 0, 0)
+	}
+	for t := float32(0.1); t <= 1; t += 0.1 {
+		c := Mix(col, toward, t)
+		if ContrastRatio(c, bg) >= 3 {
+			c.A = col.A
+			return c
+		}
+	}
+	return col
 }
 
 func (l *Classic) baseDrawCheckbox(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, checked bool, label string) {
@@ -368,6 +391,8 @@ func (l *Classic) baseDrawTextField(ctx *paintengine2d.Context, b paintengine2d.
 	}
 	ty := inner.Min.Y + (inner.Dy()-font.Height())*0.5
 	ox := inner.Min.X - scrollX
+	var selBox paintengine2d.Rect
+	var selCol paintengine2d.Color
 	if selA != selB && text != "" {
 		if selA > selB {
 			selA, selB = selB, selA
@@ -378,9 +403,23 @@ func (l *Classic) baseDrawTextField(ctx *paintengine2d.Context, b paintengine2d.
 		if !st.Focused() {
 			sel = p.Selection.WithAlpha(0.14)
 		}
-		ctx.DrawRect(paintengine2d.XYWH(x0, ty+1, x1-x0, f.Height()-2), paintengine2d.Fill(sel))
+		selBox = paintengine2d.XYWH(x0, ty+1, x1-x0, f.Height()-2)
+		ctx.DrawRect(selBox, paintengine2d.Fill(sel))
+		selCol = l.selectedText(sel)
 	}
-	font.Draw(ctx, show, paintengine2d.Pt(ox, ty), p.Text)
+	col := l.fieldText()
+	if font == muted {
+		col = p.TextMuted
+	}
+	font.Draw(ctx, show, paintengine2d.Pt(ox, ty), col)
+	if !selBox.Empty() && selCol != col {
+		// Selected text in the highlighted-text colour (Qt's
+		// HighlightedText): a dark selection hid black text.
+		ctx.Save()
+		ctx.ClipRect(selBox)
+		font.Draw(ctx, show, paintengine2d.Pt(ox, ty), selCol)
+		ctx.Restore()
+	}
 	if st.Focused() && blink && text == show {
 		cx := ox + f.CaretX(text, caret)
 		ctx.DrawRect(paintengine2d.XYWH(cx, ty+2, 1.6, f.Height()-4), paintengine2d.Fill(l.caretColor()))
@@ -461,7 +500,7 @@ func (l *Classic) baseDrawListRow(ctx *paintengine2d.Context, b paintengine2d.Re
 	if selected {
 		st |= StateChecked
 	}
-	fg := l.palette.Text
+	fg := l.fieldText()
 	inner := b.Inset(2)
 	if selected || hovered {
 		fg = l.paintFace(ctx, inner, roleRow, st)
@@ -737,7 +776,7 @@ func (l *Classic) baseDrawTreeRow(ctx *paintengine2d.Context, b paintengine2d.Re
 	if selected {
 		st |= StateChecked
 	}
-	fg := p.Text
+	fg := l.fieldText()
 	if selected || hovered {
 		fg = l.paintFace(ctx, b.Inset(2), roleRow, st)
 	}
@@ -1026,11 +1065,12 @@ func (l *Classic) baseDrawComboBox(ctx *paintengine2d.Context, b paintengine2d.R
 // faceBackdrop is the opaque colour a face of role / state ends up as.
 func (l *Classic) faceBackdrop(role chromeRole, st ControlState) paintengine2d.Color {
 	fill, _, _ := l.faceColorsRaw(role, st)
+	base := l.roleBase(role)
 	if colorUnset(fill) {
-		return l.palette.Background
+		return base
 	}
 	if fill.A < 1 {
-		return Mix(l.palette.Background, fill, fill.A)
+		return Mix(base, fill, fill.A)
 	}
 	return fill
 }
@@ -1064,7 +1104,7 @@ func (l *Classic) baseDrawMessageIcon(ctx *paintengine2d.Context, b paintengine2
 	if icon == IconNone {
 		return
 	}
-	l.drawToolIcon(ctx, b, icon, l.messageIconColor(icon))
+	l.drawToolIcon(ctx, b, icon, l.onWindow(l.messageIconColor(icon)))
 }
 
 func (l *Classic) messageIconColor(icon ToolIcon) paintengine2d.Color {
@@ -1161,7 +1201,7 @@ func (l *Classic) baseDrawTableCell(ctx *paintengine2d.Context, b paintengine2d.
 	if selected {
 		st |= StateChecked
 	}
-	fg := p.Text
+	fg := l.fieldText()
 	if selected || hovered {
 		fg = l.paintFace(ctx, b, roleRow, st)
 	}
@@ -1302,10 +1342,17 @@ func (l *Classic) baseDrawTextArea(ctx *paintengine2d.Context, b paintengine2d.R
 			if x1-x0 < 3 && selB > line.End-1 {
 				x1 = inner.Max.X
 			}
-			ctx.DrawRect(paintengine2d.XYWH(x0, y+1, x1-x0, f.Height()-2), paintengine2d.Fill(p.Selection))
-		}
-		if line.Text != "" {
-			f.Draw(ctx, line.Text, paintengine2d.Pt(ox, y), p.Text)
+			selBox := paintengine2d.XYWH(x0, y+1, x1-x0, f.Height()-2)
+			ctx.DrawRect(selBox, paintengine2d.Fill(p.Selection))
+			if line.Text != "" {
+				f.Draw(ctx, line.Text, paintengine2d.Pt(ox, y), l.fieldText())
+				ctx.Save()
+				ctx.ClipRect(selBox)
+				f.Draw(ctx, line.Text, paintengine2d.Pt(ox, y), l.selectedText(p.Selection))
+				ctx.Restore()
+			}
+		} else if line.Text != "" {
+			f.Draw(ctx, line.Text, paintengine2d.Pt(ox, y), l.fieldText())
 		}
 		if st.Focused() && blink && caret >= line.Start && caret <= line.End {
 			onThis := caret < line.End || i == len(lines)-1
@@ -1516,10 +1563,40 @@ func (l *Classic) fontFor(col paintengine2d.Color) *Font {
 	return l.body
 }
 
+type fieldTextKey struct{}
+
+// fieldText is the text colour on the field / view background: the window
+// text when it reads there, else black or white (NeXT has dark chrome and
+// white fields; its lists and text fields drew white on white).
+func (l *Classic) fieldText() paintengine2d.Color {
+	return l.Memo(fieldTextKey{}, func() any {
+		if colorUnset(l.palette.Field) {
+			return l.palette.Text
+		}
+		return ReadableOn(l.palette.Field, 4.5, l.palette.Text)
+	}).(paintengine2d.Color)
+}
+
+// selectedText is the colour of text over a text selection of colour sel.
+func (l *Classic) selectedText(sel paintengine2d.Color) paintengine2d.Color {
+	bg := sel
+	if colorUnset(bg) {
+		return l.fieldText()
+	}
+	if bg.A < 1 {
+		base := l.palette.Field
+		if colorUnset(base) {
+			base = l.palette.Background
+		}
+		bg = Mix(base, sel, sel.A)
+	}
+	return ReadableOn(bg, 4.5, l.fieldText(), l.palette.TextOnAccent)
+}
+
 // caretColor is the text caret: the pack's "caret" extra, else the text
 // colour (the old accent caret vanished on dark fields — navy on grey).
 func (l *Classic) caretColor() paintengine2d.Color {
-	return l.X("caret", l.palette.Text)
+	return l.X("caret", l.fieldText())
 }
 
 // labelFocusRect is the focus rectangle around a check / radio label (the

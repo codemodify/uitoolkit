@@ -248,12 +248,14 @@ func (s *sheet) tabsMenus(x, y float32) {
 
 func (s *sheet) rows(x, y float32) {
 	s.heading(x, y, "Lists, trees, tables")
-	s.lk.DrawPanel(s.ctx, s.r(x, y+22, 170, 110), false)
+	// Lists, trees and tables paint on the field (view) colour.
+	s.ctx.DrawRect(s.r(x, y+22, 170, 110), paintengine2d.Fill(s.p.Field))
 	s.lk.DrawListRow(s.ctx, s.r(x, y+24, 170, 24), false, false, "List row")
 	s.lk.DrawListRow(s.ctx, s.r(x, y+48, 170, 24), false, true, "Hovered row")
 	s.lk.DrawListRow(s.ctx, s.r(x, y+72, 170, 24), true, false, "Selected row")
 	s.lk.DrawListRow(s.ctx, s.r(x, y+96, 170, 24), true, true, "Selected+hover")
-	s.lk.DrawPanel(s.ctx, s.r(x+180, y+22, 170, 110), false)
+	s.ctx.DrawRect(s.r(x+180, y+22, 170, 110), paintengine2d.Fill(s.p.Field))
+	s.ctx.DrawRect(s.r(x+360, y+46, 180, 72), paintengine2d.Fill(s.p.Field))
 	s.lk.DrawTreeRow(s.ctx, s.r(x+180, y+24, 170, 24), false, false, true, false, 0, "Inbox", true)
 	s.lk.DrawTreeRow(s.ctx, s.r(x+180, y+48, 170, 24), false, true, false, false, 1, "Archives", false)
 	s.lk.DrawTreeRow(s.ctx, s.r(x+180, y+72, 170, 24), true, false, false, true, 2, "2026", false)
