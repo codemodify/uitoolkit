@@ -54,6 +54,11 @@ func (BaseEngine) MenuTextColor(l *Classic, hot bool) paintengine2d.Color {
 	return l.palette.Text
 }
 
+func (BaseEngine) FieldFocusRing(l *Classic) bool {
+	b := l.tokensOr().Bevel
+	return b != BevelLunaHottrack && b != BevelFluentAccent
+}
+
 // ---- scrollbars -------------------------------------------------------------
 
 func (BaseEngine) ScrollBarStyle(l *Classic) ScrollBarStyle {

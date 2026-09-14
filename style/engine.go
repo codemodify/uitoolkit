@@ -52,6 +52,9 @@ type Engine interface {
 	MenuHighlight(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, attachBottom bool)
 	// MenuTextColor is the label colour on a hot menu item / title.
 	MenuTextColor(l *Classic, hot bool) paintengine2d.Color
+	// FieldFocusRing reports whether focused text fields, text areas and
+	// combos draw a focus ring (Win95 and Motif showed only the caret).
+	FieldFocusRing(l *Classic) bool
 
 	// ---- scrollbars ---------------------------------------------------
 

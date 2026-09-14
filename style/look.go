@@ -347,7 +347,7 @@ func (l *Classic) baseDrawTextField(ctx *paintengine2d.Context, b paintengine2d.
 	p := l.palette
 	m := l.metrics
 	l.paintFace(ctx, b, roleField, st)
-	if st.Focused() && !st.Disabled() && l.tokensOr().Bevel != BevelLunaHottrack && l.tokensOr().Bevel != BevelFluentAccent {
+	if st.Focused() && !st.Disabled() && l.eng().FieldFocusRing(l) {
 		l.DrawFocusRing(ctx, b)
 	}
 	pad := m.FieldPad
@@ -382,7 +382,7 @@ func (l *Classic) baseDrawTextField(ctx *paintengine2d.Context, b paintengine2d.
 	font.Draw(ctx, show, paintengine2d.Pt(ox, ty), p.Text)
 	if st.Focused() && blink && text == show {
 		cx := ox + f.CaretX(text, caret)
-		ctx.DrawRect(paintengine2d.XYWH(cx, ty+2, 1.6, f.Height()-4), paintengine2d.Fill(p.Accent))
+		ctx.DrawRect(paintengine2d.XYWH(cx, ty+2, 1.6, f.Height()-4), paintengine2d.Fill(l.caretColor()))
 	}
 	ctx.Restore()
 }
@@ -736,8 +736,9 @@ func (l *Classic) baseDrawTreeRow(ctx *paintengine2d.Context, b paintengine2d.Re
 	if selected {
 		st |= StateChecked
 	}
+	fg := p.Text
 	if selected || hovered {
-		l.paintFace(ctx, b.Inset(2), roleRow, st)
+		fg = l.paintFace(ctx, b.Inset(2), roleRow, st)
 	}
 	indent := m.TreeIndent
 	if indent <= 0 {
@@ -782,7 +783,7 @@ func (l *Classic) baseDrawTreeRow(ctx *paintengine2d.Context, b paintengine2d.Re
 	}
 	ctx.Save()
 	ctx.ClipRect(b)
-	face.Draw(ctx, label, paintengine2d.Pt(x+14, b.Min.Y+(b.Dy()-face.Height())*0.5), p.Text)
+	face.Draw(ctx, label, paintengine2d.Pt(x+14, b.Min.Y+(b.Dy()-face.Height())*0.5), fg)
 	ctx.Restore()
 }
 
@@ -968,7 +969,7 @@ func (l *Classic) baseDrawComboBox(ctx *paintengine2d.Context, b paintengine2d.R
 		st |= StatePressed
 	}
 	l.paintFace(ctx, b, roleCombo, st)
-	if st.Focused() && !open && l.tokensOr().Bevel != BevelLunaHottrack && l.tokensOr().Bevel != BevelFluentAccent {
+	if st.Focused() && !open && l.eng().FieldFocusRing(l) {
 		l.DrawFocusRing(ctx, b)
 	}
 	chevW := float32(22)
@@ -1141,8 +1142,9 @@ func (l *Classic) baseDrawTableCell(ctx *paintengine2d.Context, b paintengine2d.
 	if selected {
 		st |= StateChecked
 	}
+	fg := p.Text
 	if selected || hovered {
-		l.paintFace(ctx, b, roleRow, st)
+		fg = l.paintFace(ctx, b, roleRow, st)
 	}
 	f := l.faceOrBody(face)
 	pad := tableCellPad(b.Dx(), f.Advance(label))
@@ -1162,7 +1164,7 @@ func (l *Classic) baseDrawTableCell(ctx *paintengine2d.Context, b paintengine2d.
 	ty := b.Min.Y + (b.Dy()-f.Height())*0.5
 	ctx.Save()
 	ctx.ClipRect(b.Inset(1))
-	f.Draw(ctx, label, paintengine2d.Pt(x, ty), p.Text)
+	f.Draw(ctx, label, paintengine2d.Pt(x, ty), fg)
 	ctx.Restore()
 	ctx.DrawRect(paintengine2d.XYWH(b.Max.X-1, b.Min.Y, 1, b.Dy()), paintengine2d.Fill(p.Divider.WithAlpha(0.55)))
 }
@@ -1224,7 +1226,7 @@ func (l *Classic) baseDrawTextArea(ctx *paintengine2d.Context, b paintengine2d.R
 	p := l.palette
 	m := l.metrics
 	l.paintFace(ctx, b, roleField, st)
-	if st.Focused() && l.tokensOr().Bevel != BevelLunaHottrack && l.tokensOr().Bevel != BevelFluentAccent {
+	if st.Focused() && l.eng().FieldFocusRing(l) {
 		l.DrawFocusRing(ctx, b)
 	}
 	pad := m.FieldPad
@@ -1297,7 +1299,7 @@ func (l *Classic) baseDrawTextArea(ctx *paintengine2d.Context, b paintengine2d.R
 					col = 0
 				}
 				cx := ox + f.CaretX(line.Text, col)
-				ctx.DrawRect(paintengine2d.XYWH(cx, y+1, 1.6, f.Height()-2), paintengine2d.Fill(p.Accent))
+				ctx.DrawRect(paintengine2d.XYWH(cx, y+1, 1.6, f.Height()-2), paintengine2d.Fill(l.caretColor()))
 			}
 		}
 	}
@@ -1493,6 +1495,12 @@ func (l *Classic) fontFor(col paintengine2d.Color) *Font {
 		return BakeFont(l.metrics.FontSize, col)
 	}
 	return l.body
+}
+
+// caretColor is the text caret: the pack's "caret" extra, else the text
+// colour (the old accent caret vanished on dark fields — navy on grey).
+func (l *Classic) caretColor() paintengine2d.Color {
+	return l.X("caret", l.palette.Text)
 }
 
 // labelFocusRect is the focus rectangle around a check / radio label (the

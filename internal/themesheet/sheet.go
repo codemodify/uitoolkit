@@ -142,8 +142,8 @@ func (s *sheet) fields(x, y float32) {
 	s.lk.DrawSpinner(s.ctx, s.r(x+30, y+144, 20, 28), stN, false, true, false, true)
 	s.lk.DrawSpinner(s.ctx, s.r(x+60, y+144, 20, 28), stD, false, false, false, false)
 	lines := []style.TextLine{{Text: "A text area", Start: 0, End: 11}, {Text: "with two lines", Start: 12, End: 26}}
-	s.lk.DrawTextArea(s.ctx, s.r(x+100, y+130, 220, 44), stF, lines, 5, 2, 6, true, 0, 0, "", nil)
-	s.lk.DrawTextArea(s.ctx, s.r(x+330, y+130, 230, 44), stN, nil, 0, 0, 0, false, 0, 0, "Placeholder", nil)
+	s.lk.DrawTextArea(s.ctx, s.r(x+100, y+126, 220, 60), stF, lines, 5, 2, 6, true, 0, 0, "", nil)
+	s.lk.DrawTextArea(s.ctx, s.r(x+330, y+126, 230, 60), stN, nil, 0, 0, 0, false, 0, 0, "Placeholder", nil)
 }
 
 func (s *sheet) scrollbars(x, y float32) {

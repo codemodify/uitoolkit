@@ -935,6 +935,11 @@ func packFlatLafNight() ThemePack {
 }
 
 func aliasThemeName(name string) string {
+	// A real pack always wins over a legacy alias (win95 and win98 used to
+	// alias Classic 95 Light; adwaita aliased Breeze).
+	if _, ok := builtinEraPack(name); ok {
+		return name
+	}
 	switch name {
 	case "classic95", "classic95-light", "win95", "win98":
 		return "light"
