@@ -7,6 +7,7 @@ import (
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/layout"
 	"github.com/codemodify/uitoolkit/platform"
+	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
 )
 
@@ -435,5 +436,38 @@ func TestTreeViewPageKeys(t *testing.T) {
 	tree.KeyPress(widget.KeyEvent{Key: platform.KeyPageDown})
 	if tree.Selected == root {
 		t.Fatal("page down should move")
+	}
+}
+
+// tabStateLook records the ControlState each DrawTab call receives.
+type tabStateLook struct {
+	style.LookAndFeel
+	states []style.ControlState
+}
+
+func (l *tabStateLook) DrawTab(ctx *paintengine2d.Context, b paintengine2d.Rect, st style.ControlState, label string, selected bool) {
+	l.states = append(l.states, st)
+}
+
+// Hovering one tab must not paint every tab hot: the bar's own hover belongs
+// to the strip, not to each tab (the whole strip lit up on real hardware).
+func TestTabBarHoverOnlyTabUnderPointer(t *testing.T) {
+	bar := NewTabBar("Scroll", "List", "Tree", "Table")
+	rec := &tabStateLook{LookAndFeel: style.DarkLook()}
+	bar.SetHost(&fakeWindow{look: rec})
+	bar.Arrange(paintengine2d.XYWH(0, 0, 400, 30))
+	rects := bar.tabRects()
+	pt := paintengine2d.Pt((rects[1].Min.X+rects[1].Max.X)*0.5, 15)
+	bar.MouseEnter()
+	bar.MouseMove(widget.MouseEvent{Pos: pt})
+	img := paintengine2d.NewImage(400, 30)
+	bar.Paint(paintengine2d.NewContext(img))
+	if len(rec.states) != 4 {
+		t.Fatalf("painted %d tabs, want 4", len(rec.states))
+	}
+	for i, st := range rec.states {
+		if got, want := st.Hovered(), i == 1; got != want {
+			t.Fatalf("tab %d hovered=%v, want %v", i, got, want)
+		}
 	}
 }

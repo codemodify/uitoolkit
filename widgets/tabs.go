@@ -78,7 +78,9 @@ func (t *TabBar) Paint(ctx *paintengine2d.Context) {
 	lk := t.Look()
 	lk.DrawTabBar(ctx, t.LocalBounds())
 	for i, title := range t.Titles {
-		st := t.State()
+		// The bar's own hover/press describe the whole strip; each tab takes
+		// hover and press only from the index under the pointer.
+		st := t.State() &^ (style.StateHovered | style.StatePressed)
 		if i == t.hover {
 			st |= style.StateHovered
 		}
