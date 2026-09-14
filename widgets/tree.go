@@ -255,7 +255,7 @@ func (t *TreeView) Paint(ctx *paintengine2d.Context) {
 	}
 	t.vbar.paint(ctx, lk, t.vparts(), true)
 	if t.Focused() {
-		lk.DrawFocusRing(ctx, b.Inset(-2))
+		lk.DrawFocusRing(ctx, b)
 	}
 }
 

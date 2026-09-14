@@ -201,7 +201,7 @@ func (l *CardList) Paint(ctx *paintengine2d.Context) {
 	}
 	l.vbar.paint(ctx, lk, l.vparts(), true)
 	if l.Focused() {
-		lk.DrawFocusRing(ctx, b.Inset(-2))
+		lk.DrawFocusRing(ctx, b)
 	}
 }
 

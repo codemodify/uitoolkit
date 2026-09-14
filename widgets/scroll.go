@@ -179,7 +179,7 @@ func (s *ScrollView) Paint(ctx *paintengine2d.Context) {
 	}
 	s.bar.paint(ctx, lk, s.vparts(), true)
 	if s.State().Focused() {
-		lk.DrawFocusRing(ctx, b.Inset(-2))
+		lk.DrawFocusRing(ctx, b)
 	}
 }
 
