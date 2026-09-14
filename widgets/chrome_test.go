@@ -471,3 +471,38 @@ func TestTabBarHoverOnlyTabUnderPointer(t *testing.T) {
 		}
 	}
 }
+
+// toolStateLook records the ControlState each DrawToolButton call receives.
+type toolStateLook struct {
+	style.LookAndFeel
+	states []style.ControlState
+}
+
+func (l *toolStateLook) DrawToolButton(ctx *paintengine2d.Context, b paintengine2d.Rect, st style.ControlState, label string, icon style.ToolIcon) {
+	l.states = append(l.states, st)
+}
+
+// Same leak the TabBar had: the bar's own hover/press must not light every
+// tool (seen on real hardware in the gallery and Mail toolbars).
+func TestToolBarHoverOnlyToolUnderPointer(t *testing.T) {
+	bar := NewToolBar(&ToolItem{Text: "One"}, &ToolItem{Text: "Two"}, &ToolItem{Text: "Three"})
+	rec := &toolStateLook{LookAndFeel: style.DarkLook()}
+	bar.SetHost(&fakeWindow{look: rec})
+	bar.Arrange(paintengine2d.XYWH(0, 0, 400, 40))
+	rects := bar.itemRects()
+	pt := paintengine2d.Pt((rects[1].Min.X+rects[1].Max.X)*0.5, 20)
+	bar.MouseEnter()
+	bar.MouseMove(widget.MouseEvent{Pos: pt})
+	bar.MousePress(widget.MouseEvent{Pos: pt, Button: platform.ButtonLeft})
+	img := paintengine2d.NewImage(400, 40)
+	bar.Paint(paintengine2d.NewContext(img))
+	if len(rec.states) != 3 {
+		t.Fatalf("painted %d tools, want 3", len(rec.states))
+	}
+	for i, st := range rec.states {
+		want := i == 1
+		if st.Hovered() != want || st.Pressed() != want {
+			t.Fatalf("tool %d hovered=%v pressed=%v, want %v", i, st.Hovered(), st.Pressed(), want)
+		}
+	}
+}
