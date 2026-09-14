@@ -76,6 +76,12 @@ type Engine interface {
 	// DrawWindowFrame paints an in-app window or dialog: frame, caption bar
 	// with title and caption buttons.
 	DrawWindowFrame(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, title string, st WindowState)
+	// DrawWindowBackground paints the window's background (pinstripes,
+	// brushed metal, textures). It must depend only on window coordinates:
+	// partial redraw repaints any sub-rect of it under a clip.
+	DrawWindowBackground(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect)
+	// DrawTabPane paints the page under a tab bar (TabView).
+	DrawTabPane(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect)
 	// WindowCloseRect is where DrawWindowFrame put the close button for a
 	// frame of bounds b (empty when there is none) — hit-testing uses it.
 	WindowCloseRect(l *Classic, b paintengine2d.Rect) paintengine2d.Rect
@@ -492,6 +498,26 @@ func DrawScrollBarParts(lk LookAndFeel, ctx *paintengine2d.Context, p ScrollPart
 type GroupBoxLook interface {
 	GroupBoxInsets(hasTitle bool) Insets
 	DrawGroupBox(ctx *paintengine2d.Context, b paintengine2d.Rect, title string, raised bool)
+}
+
+// WindowBackgroundLook paints a window background beyond a flat colour.
+type WindowBackgroundLook interface {
+	DrawWindowBackground(ctx *paintengine2d.Context, b paintengine2d.Rect)
+}
+
+// TabPaneLook paints the page of a TabView.
+type TabPaneLook interface {
+	DrawTabPane(ctx *paintengine2d.Context, b paintengine2d.Rect)
+}
+
+// DrawWindowBackground implements [WindowBackgroundLook].
+func (l *Classic) DrawWindowBackground(ctx *paintengine2d.Context, b paintengine2d.Rect) {
+	l.eng().DrawWindowBackground(l, ctx, b)
+}
+
+// DrawTabPane implements [TabPaneLook].
+func (l *Classic) DrawTabPane(ctx *paintengine2d.Context, b paintengine2d.Rect) {
+	l.eng().DrawTabPane(l, ctx, b)
 }
 
 // WindowFrameLook is implemented by looks that paint in-app window /

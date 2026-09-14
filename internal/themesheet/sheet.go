@@ -60,6 +60,9 @@ func Render(lk style.LookAndFeel, title string) *paintengine2d.Image {
 	ctx := paintengine2d.NewContext(img)
 	s := &sheet{ctx: ctx, lk: lk, sc: sc, p: lk.Palette()}
 	ctx.Clear(s.p.Background)
+	if bl, ok := lk.(style.WindowBackgroundLook); ok {
+		bl.DrawWindowBackground(ctx, paintengine2d.XYWH(0, 0, float32(img.Width), float32(img.Height)))
+	}
 	s.heading(16, 10, title)
 
 	// Left column.
@@ -147,7 +150,8 @@ func (s *sheet) fields(x, y float32) {
 }
 
 func (s *sheet) scrollbars(x, y float32) {
-	s.heading(x, y, "Scrollbars: normal / thumb hot / thumb pressed / arrow hot / arrow pressed / nothing to scroll")
+	s.heading(x, y, "Scrollbars")
+	s.caption(x+120, y+2, "normal · thumb hot · pressed · arrow hot · arrow pressed · none")
 	states := []style.ScrollState{
 		{},
 		{Hot: style.ScrollThumbPart, Hovered: true},
