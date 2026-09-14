@@ -2667,9 +2667,13 @@ func uitkWlPtrEnter(id C.uintptr_t, serial C.uint32_t, surf *C.struct_wl_surface
 //export uitkWlPtrLeave
 func uitkWlPtrLeave(id C.uintptr_t) {
 	c := wlConnBy(id)
-	if c != nil {
-		c.ptrSurf = 0
+	if c == nil {
+		return
 	}
+	if s := wlSurfaces[c.ptrSurf]; s != nil {
+		s.push(Event{Kind: EventPointerLeave, Mods: c.mods})
+	}
+	c.ptrSurf = 0
 }
 
 //export uitkWlPtrMotion
