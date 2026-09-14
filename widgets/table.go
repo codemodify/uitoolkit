@@ -514,7 +514,7 @@ func (t *TableView) Paint(ctx *paintengine2d.Context) {
 	t.paintHeader(ctx, lk, widths, hh)
 	t.vbar.paint(ctx, lk, t.vparts(), true)
 	if t.Focused() {
-		lk.DrawFocusRing(ctx, b.Inset(-2))
+		lk.DrawFocusRing(ctx, b)
 	}
 }
 
