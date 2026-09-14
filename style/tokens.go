@@ -59,14 +59,92 @@ type ChromeMetrics struct {
 	FieldH      float32
 	ComboH      float32
 	Elevation   int
+
+	// Square marks a natively square-cornered look (Win95, Motif, NeXT):
+	// with the "theme" Corners pref its radii stay 0.
+	Square bool
+
+	// Engine-level geometry (all 1x design pixels; 0 = keep the default).
+	Checkbox   float32 // checkbox indicator side
+	Radio      float32 // radio indicator side
+	MenuItemH  float32
+	MenuBarH   float32
+	TabH       float32
+	RowH       float32
+	TitleBar   float32 // panel / dialog caption band
+	HeaderH    float32 // table header
+	ProgressH  float32
+	SliderH    float32
+	Thumb      float32 // slider thumb
+	Pad        float32
+	FieldPad   float32
+	ToolBarH   float32
+	StatusBarH float32
+	SpinnerW   float32
+	Border     float32
+	FocusWidth float32
+	SwitchW    float32
+	SwitchH    float32
+}
+
+// MergeChromeMetrics fills every zero field of over from base (over wins).
+func MergeChromeMetrics(base, over ChromeMetrics) ChromeMetrics {
+	pick := func(a, b float32) float32 {
+		if b != 0 {
+			return b
+		}
+		return a
+	}
+	out := over
+	out.Square = over.Square || (base.Square && over.Radius == 0 && over.RadiusSmall == 0)
+	out.Radius = pick(base.Radius, over.Radius)
+	out.RadiusSmall = pick(base.RadiusSmall, over.RadiusSmall)
+	out.BevelDepth = pick(base.BevelDepth, over.BevelDepth)
+	out.GutterWidth = pick(base.GutterWidth, over.GutterWidth)
+	out.Scroll = pick(base.Scroll, over.Scroll)
+	out.ControlH = pick(base.ControlH, over.ControlH)
+	out.FieldH = pick(base.FieldH, over.FieldH)
+	out.ComboH = pick(base.ComboH, over.ComboH)
+	if over.Elevation == 0 {
+		out.Elevation = base.Elevation
+	}
+	out.Checkbox = pick(base.Checkbox, over.Checkbox)
+	out.Radio = pick(base.Radio, over.Radio)
+	out.MenuItemH = pick(base.MenuItemH, over.MenuItemH)
+	out.MenuBarH = pick(base.MenuBarH, over.MenuBarH)
+	out.TabH = pick(base.TabH, over.TabH)
+	out.RowH = pick(base.RowH, over.RowH)
+	out.TitleBar = pick(base.TitleBar, over.TitleBar)
+	out.HeaderH = pick(base.HeaderH, over.HeaderH)
+	out.ProgressH = pick(base.ProgressH, over.ProgressH)
+	out.SliderH = pick(base.SliderH, over.SliderH)
+	out.Thumb = pick(base.Thumb, over.Thumb)
+	out.Pad = pick(base.Pad, over.Pad)
+	out.FieldPad = pick(base.FieldPad, over.FieldPad)
+	out.ToolBarH = pick(base.ToolBarH, over.ToolBarH)
+	out.StatusBarH = pick(base.StatusBarH, over.StatusBarH)
+	out.SpinnerW = pick(base.SpinnerW, over.SpinnerW)
+	out.Border = pick(base.Border, over.Border)
+	out.FocusWidth = pick(base.FocusWidth, over.FocusWidth)
+	out.SwitchW = pick(base.SwitchW, over.SwitchW)
+	out.SwitchH = pick(base.SwitchH, over.SwitchH)
+	return out
 }
 
 // ThemeTokens is the first-class skin a theme pack can fully specify.
 // Palette + bevel + state colors + metrics drive every LookAndFeel Draw*.
 type ThemeTokens struct {
-	Bevel    BevelStyle
-	Family   ThemeName
-	Era      string
+	Bevel  BevelStyle
+	Family ThemeName
+	Era    string
+	// Engine is the registry id of the painter ("" → base: the Bevel modes).
+	Engine string
+	// Extra holds engine-specific named colours (theme.json "extra"), read
+	// by engines through Classic.X.
+	Extra map[string]paintengine2d.Color
+	// Params holds engine-specific numbers (theme.json "params"), read
+	// through Classic.P.
+	Params   map[string]float32
 	Metrics  ChromeMetrics
 	Palette  Palette
 	Hot      ChromeState
@@ -78,7 +156,8 @@ type ThemeTokens struct {
 
 // Empty reports a zero-value token set (legacy palette-only packs).
 func (t ThemeTokens) Empty() bool {
-	return t.Bevel == "" && t.Metrics == (ChromeMetrics{}) &&
+	return t.Bevel == "" && t.Engine == "" && len(t.Extra) == 0 && len(t.Params) == 0 &&
+		t.Metrics == (ChromeMetrics{}) &&
 		colorUnset(t.Palette.Background) && colorUnset(t.Palette.Surface) &&
 		colorUnset(t.Hot.Fill)
 }
@@ -95,6 +174,9 @@ func (t ThemeTokens) Resolve() ThemeTokens {
 	t.Palette = overlayPalette(base, t.Palette)
 	t.Palette = ResolveMenuChrome(t.Palette)
 	t.Palette = ResolveBevelChromeFor(t.Palette, t.Family)
+	if e, ok := EngineByID(t.Engine); ok {
+		t.Metrics = MergeChromeMetrics(e.DefaultMetrics(), t.Metrics)
+	}
 	t.Metrics = clampChromeMetrics(t.Metrics)
 	if t.Bevel == "" {
 		t.Bevel = BevelNone
@@ -234,7 +316,50 @@ func ApplyChromeMetrics(m Metrics, cm ChromeMetrics) Metrics {
 	if cm.FieldH > 0 && cm.ComboH <= 0 {
 		m.ComboH = cm.FieldH
 	}
+	set := func(dst *float32, v float32) {
+		if v > 0 {
+			*dst = v
+		}
+	}
+	set(&m.Checkbox, cm.Checkbox)
+	set(&m.Radio, cm.Radio)
+	set(&m.MenuItemH, cm.MenuItemH)
+	set(&m.MenuBarH, cm.MenuBarH)
+	set(&m.TabH, cm.TabH)
+	set(&m.RowH, cm.RowH)
+	set(&m.TitleBar, cm.TitleBar)
+	set(&m.HeaderH, cm.HeaderH)
+	set(&m.ProgressH, cm.ProgressH)
+	set(&m.SliderH, cm.SliderH)
+	set(&m.Thumb, cm.Thumb)
+	set(&m.Pad, cm.Pad)
+	set(&m.FieldPad, cm.FieldPad)
+	set(&m.ToolBarH, cm.ToolBarH)
+	set(&m.StatusBarH, cm.StatusBarH)
+	set(&m.SpinnerW, cm.SpinnerW)
+	set(&m.Border, cm.Border)
+	set(&m.FocusWidth, cm.FocusWidth)
+	set(&m.SwitchW, cm.SwitchW)
+	set(&m.SwitchH, cm.SwitchH)
 	return m
+}
+
+// applyPackCorners applies the Corners pref against a pack's metrics:
+// theme keeps the pack's native shape (square packs stay square), round
+// forces rounded radii, square zeros them.
+func applyPackCorners(m Metrics, c CornerStyle, cm ChromeMetrics) Metrics {
+	switch ParseCorners(string(c)) {
+	case CornersTheme:
+		if cm.Square {
+			m.Radius, m.RadiusSmall = 0, 0
+			return m
+		}
+		return ApplyThemeCorners(m, CornersRound, cm.Radius, cm.RadiusSmall)
+	case CornersRound:
+		return ApplyThemeCorners(m, CornersRound, cm.Radius, cm.RadiusSmall)
+	default:
+		return ApplyThemeCorners(m, CornersSquare, 0, 0)
+	}
 }
 
 // ApplyThemeCorners applies the orthogonal Corners pref. Square zeros radii.
@@ -363,6 +488,62 @@ type chromeMetricsJSON struct {
 	FieldH      *float32 `json:"fieldH,omitempty"`
 	ComboH      *float32 `json:"comboH,omitempty"`
 	Elevation   *int     `json:"elevation,omitempty"`
+	Square      *bool    `json:"square,omitempty"`
+	Checkbox    *float32 `json:"checkbox,omitempty"`
+	Radio       *float32 `json:"radio,omitempty"`
+	MenuItemH   *float32 `json:"menuItemH,omitempty"`
+	MenuBarH    *float32 `json:"menuBarH,omitempty"`
+	TabH        *float32 `json:"tabH,omitempty"`
+	RowH        *float32 `json:"rowH,omitempty"`
+	TitleBar    *float32 `json:"titleBar,omitempty"`
+	HeaderH     *float32 `json:"headerH,omitempty"`
+	ProgressH   *float32 `json:"progressH,omitempty"`
+	SliderH     *float32 `json:"sliderH,omitempty"`
+	Thumb       *float32 `json:"thumb,omitempty"`
+	Pad         *float32 `json:"pad,omitempty"`
+	FieldPad    *float32 `json:"fieldPad,omitempty"`
+	ToolBarH    *float32 `json:"toolBarH,omitempty"`
+	StatusBarH  *float32 `json:"statusBarH,omitempty"`
+	SpinnerW    *float32 `json:"spinnerW,omitempty"`
+	Border      *float32 `json:"border,omitempty"`
+	FocusWidth  *float32 `json:"focusWidth,omitempty"`
+	SwitchW     *float32 `json:"switchW,omitempty"`
+	SwitchH     *float32 `json:"switchH,omitempty"`
+}
+
+// geometry pairs the engine-level JSON fields with their ChromeMetrics
+// fields so encode / decode / clamp stay in one table.
+func (j *chromeMetricsJSON) geometry(cm *ChromeMetrics) []struct {
+	name string
+	js   **float32
+	v    *float32
+} {
+	return []struct {
+		name string
+		js   **float32
+		v    *float32
+	}{
+		{"checkbox", &j.Checkbox, &cm.Checkbox},
+		{"radio", &j.Radio, &cm.Radio},
+		{"menuItemH", &j.MenuItemH, &cm.MenuItemH},
+		{"menuBarH", &j.MenuBarH, &cm.MenuBarH},
+		{"tabH", &j.TabH, &cm.TabH},
+		{"rowH", &j.RowH, &cm.RowH},
+		{"titleBar", &j.TitleBar, &cm.TitleBar},
+		{"headerH", &j.HeaderH, &cm.HeaderH},
+		{"progressH", &j.ProgressH, &cm.ProgressH},
+		{"sliderH", &j.SliderH, &cm.SliderH},
+		{"thumb", &j.Thumb, &cm.Thumb},
+		{"pad", &j.Pad, &cm.Pad},
+		{"fieldPad", &j.FieldPad, &cm.FieldPad},
+		{"toolBarH", &j.ToolBarH, &cm.ToolBarH},
+		{"statusBarH", &j.StatusBarH, &cm.StatusBarH},
+		{"spinnerW", &j.SpinnerW, &cm.SpinnerW},
+		{"border", &j.Border, &cm.Border},
+		{"focusWidth", &j.FocusWidth, &cm.FocusWidth},
+		{"switchW", &j.SwitchW, &cm.SwitchW},
+		{"switchH", &j.SwitchH, &cm.SwitchH},
+	}
 }
 
 func (cm ChromeMetrics) json() *chromeMetricsJSON {
@@ -387,6 +568,13 @@ func (cm ChromeMetrics) json() *chromeMetricsJSON {
 	if cm.Elevation != 0 {
 		e := cm.Elevation
 		out.Elevation = &e
+	}
+	for _, g := range out.geometry(&cm) {
+		setF(g.js, *g.v)
+	}
+	if cm.Square {
+		sq := true
+		out.Square = &sq
 	}
 	return out
 }
@@ -450,6 +638,15 @@ func clampChromeMetrics(cm ChromeMetrics) ChromeMetrics {
 		log.Printf("uitk theme: metrics.elevation %d above %d, clamped", cm.Elevation, maxElevation)
 		cm.Elevation = maxElevation
 	}
+	var j chromeMetricsJSON
+	for _, g := range j.geometry(&cm) {
+		max := float32(maxControlSide)
+		switch g.name {
+		case "pad", "fieldPad", "border", "focusWidth":
+			max = 64
+		}
+		*g.v = clampMetric("metrics."+g.name, *g.v, 1, max)
+	}
 	return cm
 }
 
@@ -484,6 +681,14 @@ func (j *chromeMetricsJSON) metrics() ChromeMetrics {
 	}
 	if j.Elevation != nil {
 		cm.Elevation = *j.Elevation
+	}
+	for _, g := range j.geometry(&cm) {
+		if *g.js != nil {
+			*g.v = **g.js
+		}
+	}
+	if j.Square != nil {
+		cm.Square = *j.Square
 	}
 	return clampChromeMetrics(cm)
 }
@@ -612,7 +817,25 @@ func tokensFromJSON(doc themeFileJSON) ThemeTokens {
 		Bevel:   ParseBevel(doc.Bevel),
 		Family:  ParseTheme(fam),
 		Era:     strings.TrimSpace(doc.Era),
+		Engine:  strings.ToLower(strings.TrimSpace(doc.Engine)),
 		Metrics: doc.Metrics.metrics(),
+	}
+	for k, v := range doc.Extra {
+		if c, ok := ParseHexColor(v); ok {
+			if t.Extra == nil {
+				t.Extra = map[string]paintengine2d.Color{}
+			}
+			t.Extra[k] = markExplicitColor(c)
+		}
+	}
+	for k, v := range doc.Params {
+		if math.IsNaN(float64(v)) || math.IsInf(float64(v), 0) {
+			continue
+		}
+		if t.Params == nil {
+			t.Params = map[string]float32{}
+		}
+		t.Params[k] = v
 	}
 	if doc.Elevation != 0 && t.Metrics.Elevation == 0 {
 		t.Metrics.Elevation = doc.Elevation

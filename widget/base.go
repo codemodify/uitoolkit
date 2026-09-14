@@ -100,15 +100,18 @@ func (b *Base) SetPreferred(w, h float32) { b.pref = paintengine2d.Pt(w, h) }
 
 func (b *Base) Preferred() paintengine2d.Point { return b.pref }
 
+// resolveLook is the widget's own look, else the nearest ancestor's, else
+// the window's. Parents come before the host so a subtree can run in its
+// own theme (a Settings preview, a themed dialog) — see widgets.ThemeScope.
 func (b *Base) resolveLook() style.LookAndFeel {
 	if b.look != nil {
 		return b.look
 	}
-	if b.host != nil {
-		return b.host.Look()
-	}
 	if b.parent != nil {
 		return b.parent.Look()
+	}
+	if b.host != nil {
+		return b.host.Look()
 	}
 	return style.DarkLook()
 }

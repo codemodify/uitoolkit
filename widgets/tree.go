@@ -143,9 +143,28 @@ func (t *TreeView) clamp() {
 	t.OffsetY = layout.ClampScroll(t.OffsetY, t.contentH(), t.LocalBounds().Dy())
 }
 
+func (t *TreeView) vparts() style.ScrollParts {
+	return vScrollParts(t.Look(), t.LocalBounds(), t.contentH(), t.OffsetY)
+}
+
+func (t *TreeView) vaxis() scrollAxis {
+	return scrollAxis{
+		vertical: true,
+		parts:    t.vparts,
+		get:      func() (float32, float32) { return t.OffsetY, t.MaxOffset() },
+		set:      func(y float32) { t.OffsetY = y; t.clamp(); t.Invalidate() },
+		steps:    func() (float32, float32) { return t.rowH(), t.LocalBounds().Dy() * 0.9 },
+	}
+}
+
+// rowsW is the row width: the view minus the gutter a visible bar takes.
+func (t *TreeView) rowsW() float32 {
+	return t.LocalBounds().Dx() - scrollGutter(t.Look(), t.MaxOffset() > 0)
+}
+
 func (t *TreeView) scrollTrack() (track, thumb paintengine2d.Rect) {
-	bar, gap := overflowBarSize(t.Look())
-	return vScrollThumb(t.LocalBounds(), t.contentH(), t.OffsetY, bar, gap)
+	sp := t.vparts()
+	return sp.Track, sp.Thumb
 }
 
 // VisibleRange is the half-open [lo, hi) window of flattened rows Paint draws.
@@ -197,6 +216,7 @@ func (t *TreeView) Paint(ctx *paintengine2d.Context) {
 	t.clamp()
 	b := t.LocalBounds()
 	lk := t.Look()
+	rw := t.rowsW()
 	ctx.DrawRect(b, paintengine2d.Fill(lk.Palette().Field))
 	rows := t.flatten()
 	rh := t.rowH()
@@ -210,13 +230,13 @@ func (t *TreeView) Paint(ctx *paintengine2d.Context) {
 	}
 	if rec, ok := ctx.Device().(*paintengine2d.Recorder); ok {
 		o := rowOrigin(ctx)
-		t.rows.ready(o.X, o.Y, b.Dx(), rh, lookSig(lk))
-		recordScrollingRows(rec, ctx, &t.rows, t.ID()^(1<<32), b, b.Dx(), rh, t.OffsetY, 0, lo, hi,
+		t.rows.ready(o.X, o.Y, rw, rh, lookSig(lk))
+		recordScrollingRows(rec, ctx, &t.rows, t.ID()^(1<<32), b, rw, rh, t.OffsetY, 0, lo, hi,
 			func(i int) uint64 { return t.ID()<<32 | uint64(i) + 1 },
 			func(i int) uint64 { return t.rowSig(rows[i]) },
 			func(i int) {
 				n := rows[i].node
-				row := paintengine2d.XYWH(0, 0, b.Dx(), rh)
+				row := paintengine2d.XYWH(0, 0, rw, rh)
 				lk.DrawTreeRow(ctx, row, n == t.Selected, n == t.hover, n.Expanded, n.Leaf(), rows[i].depth, n.Label, n.Bold)
 				paintTreeSwatch(ctx, row, n.Color)
 			},
@@ -226,15 +246,14 @@ func (t *TreeView) Paint(ctx *paintengine2d.Context) {
 		ctx.ClipRect(b)
 		for i := lo; i < hi; i++ {
 			y := float32(i)*rh - t.OffsetY
-			row := paintengine2d.XYWH(0, y, b.Dx(), rh)
+			row := paintengine2d.XYWH(0, y, rw, rh)
 			n := rows[i].node
 			lk.DrawTreeRow(ctx, row, n == t.Selected, n == t.hover, n.Expanded, n.Leaf(), rows[i].depth, n.Label, n.Bold)
 			paintTreeSwatch(ctx, row, n.Color)
 		}
 		ctx.Restore()
 	}
-	track, thumb := t.scrollTrack()
-	paintOverflowBar(ctx, lk, track, thumb, t.vbar.over, t.vbar.active)
+	t.vbar.paint(ctx, lk, t.vparts(), true)
 	if t.Focused() {
 		lk.DrawFocusRing(ctx, b.Inset(-2))
 	}
@@ -336,14 +355,11 @@ func (t *TreeView) invalidateNode(n *TreeNode) {
 func (t *TreeView) MouseEnter() {}
 
 func (t *TreeView) MouseMove(e widget.MouseEvent) bool {
-	track, thumb := t.scrollTrack()
-	if off, apply, handled, dirty := t.vbar.move(e.Pos, track, thumb, true, t.MaxOffset()); apply || handled || dirty {
-		if apply {
-			t.OffsetY = off
-			t.clamp()
+	if handled, dirty := t.vbar.move(e.Pos, t.vaxis()); handled || dirty {
+		if dirty {
+			t.Invalidate()
 		}
-		t.Invalidate()
-		if apply || handled {
+		if handled {
 			return true
 		}
 	}
@@ -360,7 +376,7 @@ func (t *TreeView) MouseMove(e widget.MouseEvent) bool {
 func (t *TreeView) MouseExit() {
 	old := t.hover
 	t.hover = nil
-	t.vbar.over = false
+	t.vbar.exit()
 	t.invalidateNode(old)
 }
 
@@ -369,10 +385,7 @@ func (t *TreeView) MousePress(e widget.MouseEvent) bool {
 		return false
 	}
 	t.RequestFocus()
-	track, thumb := t.scrollTrack()
-	if off, ok := t.vbar.press(e.Pos, track, thumb, true, t.OffsetY, t.MaxOffset(), t.LocalBounds().Dy()*0.9); ok {
-		t.OffsetY = off
-		t.clamp()
+	if t.vbar.press(t, e.Pos, t.vaxis()) {
 		t.Invalidate()
 		return true
 	}
