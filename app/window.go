@@ -563,8 +563,14 @@ func (w *Window) dispatch(ev platform.Event) {
 				return
 			}
 		}
-		if ev.Mods.Alt() && w.root != nil {
-			if handleAlt(w.root, ev.Key) {
+		if ev.Mods.Alt() {
+			// While a modal overlay is up its mnemonics are the only ones:
+			// Alt+F used to open the main menu above a dialog.
+			scope := w.root
+			if w.overlay != nil {
+				scope = w.overlay
+			}
+			if scope != nil && handleAlt(scope, ev.Key) {
 				return
 			}
 		}
@@ -581,7 +587,14 @@ func (w *Window) dispatch(ev platform.Event) {
 				return
 			}
 		}
-		w.bubbleKey(widget.KeyEvent{Key: ev.Key, Mods: ev.Mods})
+		if w.bubbleKey(widget.KeyEvent{Key: ev.Key, Mods: ev.Mods}) {
+			return
+		}
+		// Keys nobody took run menu accelerators (Ctrl+N, F1, Ctrl+Q …),
+		// but not under a modal overlay.
+		if w.overlay == nil && w.root != nil {
+			handleAccel(w.root, ev.Key, ev.Mods)
+		}
 	case platform.EventKeyUp:
 		if t := w.keyTarget(); t != nil {
 			t.KeyRelease(widget.KeyEvent{Key: ev.Key, Mods: ev.Mods})
@@ -670,16 +683,46 @@ func (w *Window) keyTarget() widget.Component {
 	return widget.KeyTarget(w.focus, w.overlay)
 }
 
-func (w *Window) bubbleKey(e widget.KeyEvent) {
+// bubbleKey offers a key to the focused widget and its ancestors and
+// reports whether one of them took it.
+func (w *Window) bubbleKey(e widget.KeyEvent) bool {
 	start := w.keyTarget()
 	if start == nil {
-		return
+		return false
 	}
 	for c := start; c != nil; c = c.Parent() {
 		if c.KeyPress(e) {
-			return
+			return true
 		}
 	}
+	return false
+}
+
+// focusOnClick reports whether a click should focus c. Widgets that take
+// keyboard focus only through Tab / mnemonics (a menu bar, a tool bar —
+// Qt's Qt::TabFocus policy) implement FocusOnClick() false, so clicking
+// them leaves focus with the field the user was typing in.
+func focusOnClick(c widget.Component) bool {
+	if f, ok := c.(interface{ FocusOnClick() bool }); ok {
+		return f.FocusOnClick()
+	}
+	return true
+}
+
+// handleAccel runs the first menu accelerator under root that matches.
+func handleAccel(root widget.Component, key platform.Key, mods platform.Modifiers) bool {
+	handled := false
+	widget.Walk(root, func(c widget.Component) {
+		if handled {
+			return
+		}
+		if a, ok := c.(interface {
+			HandleAccelerator(platform.Key, platform.Modifiers) bool
+		}); ok && a.HandleAccelerator(key, mods) {
+			handled = true
+		}
+	})
+	return handled
 }
 
 func (w *Window) showTip(text string, pos paintengine2d.Point) {
@@ -734,11 +777,11 @@ func (w *Window) mouseDown(ev platform.Event) {
 	}
 	t := w.hit(ev.Pos)
 	w.capture = t
-	if t != nil && t.WantsFocus() {
+	if t != nil && t.WantsFocus() && focusOnClick(t) {
 		w.RequestFocus(t)
-	} else if t == nil || !t.WantsFocus() {
-		// click on inert chrome keeps focus unless it is the overlay dimmer
 	}
+	// A click on inert chrome (or on a widget with a tab-only focus policy)
+	// keeps focus where it was.
 	if t != nil {
 		lp := local(t, ev.Pos)
 		t.MousePress(widget.MouseEvent{Pos: lp, Button: ev.Button, Mods: ev.Mods})

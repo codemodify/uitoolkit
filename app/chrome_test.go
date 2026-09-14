@@ -465,3 +465,115 @@ func TestMessageBoxModalFocusAndOrder(t *testing.T) {
 		}
 	}
 }
+
+// menuFixture is a window with a text field and a File / Edit menu bar.
+func menuFixture(t *testing.T) (*Application, *Window, *widgets.TextField, *widgets.MenuBar, map[string]int) {
+	t.Helper()
+	a := New(Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{Width: 520, Height: 320, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fired := map[string]int{}
+	bar := widgets.NewMenuBar(
+		widgets.NewMenu("&File",
+			widgets.ItemAccel("&New", "Ctrl+N", func() { fired["new"]++ }),
+			widgets.ItemAccel("&Help", "F1", func() { fired["help"]++ }),
+		),
+		widgets.NewMenu("&Edit",
+			widgets.ItemAccel("&Copy", "Ctrl+C", func() { fired["copy"]++ }),
+		),
+	)
+	field := widgets.NewTextField("hello", "", nil)
+	w.SetContent(widgets.NewColumn(bar, field))
+	a.PumpOnce()
+	return a, w, field, bar, fired
+}
+
+// Shortcuts shown in menus work window-wide — except for keys the focused
+// widget takes (Ctrl+C in a field copies text) and under a modal overlay.
+func TestMenuAcceleratorsDispatch(t *testing.T) {
+	a, w, field, _, fired := menuFixture(t)
+	key := func(k platform.Key, m platform.Modifiers) {
+		w.dispatch(platform.Event{Kind: platform.EventKeyDown, Key: k, Mods: m})
+		a.PumpOnce()
+	}
+	key(platform.KeyN, platform.ModCtrl)
+	key(platform.KeyF1, 0)
+	if fired["new"] != 1 || fired["help"] != 1 {
+		t.Fatalf("accelerators with no focus: %v", fired)
+	}
+	field.RequestFocus()
+	key(platform.KeyN, platform.ModCtrl)
+	if fired["new"] != 2 {
+		t.Fatalf("Ctrl+N with a field focused: %v", fired)
+	}
+	key(platform.KeyC, platform.ModCtrl)
+	if fired["copy"] != 0 {
+		t.Fatal("Ctrl+C belongs to the focused text field")
+	}
+	key(platform.KeyN, platform.ModCtrl|platform.ModShift)
+	if fired["new"] != 2 {
+		t.Fatal("Ctrl+Shift+N must not match Ctrl+N")
+	}
+	widgets.Info(w.Content(), "Modal", "A modal box", nil)
+	a.PumpOnce()
+	key(platform.KeyN, platform.ModCtrl)
+	if fired["new"] != 2 {
+		t.Fatal("accelerators must not fire under a modal overlay")
+	}
+	key(platform.KeyF, platform.ModAlt)
+	if w.Popup() != nil {
+		t.Fatal("Alt+F must not open the main menu above a modal dialog")
+	}
+}
+
+// Picking from a menu gives focus back to the widget that had it (it stayed
+// on the bar and typing went nowhere).
+func TestMenuPickReturnsFocus(t *testing.T) {
+	a, w, field, bar, fired := menuFixture(t)
+	field.RequestFocus()
+	a.PumpOnce()
+	edit := bar.TitleRect(1)
+	o := widget.DeviceOrigin(bar)
+	pos := paintengine2d.Pt(o.X+edit.Min.X+4, o.Y+edit.Min.Y+4)
+	w.dispatch(platform.Event{Kind: platform.EventMouseDown, Pos: pos, Button: platform.ButtonLeft})
+	w.dispatch(platform.Event{Kind: platform.EventMouseUp, Pos: pos, Button: platform.ButtonLeft})
+	a.PumpOnce()
+	if w.Popup() == nil {
+		t.Fatal("Edit did not open")
+	}
+	w.dispatch(platform.Event{Kind: platform.EventKeyDown, Key: platform.KeyReturn})
+	a.PumpOnce()
+	if fired["copy"] != 1 {
+		t.Fatalf("Copy not activated: %v", fired)
+	}
+	if w.Focus() != field {
+		t.Fatalf("focus after the menu closed: %T, want the text field", w.Focus())
+	}
+}
+
+// Left / Right walk the bar while a dropdown is open, and a keyboard-opened
+// menu highlights its first item.
+func TestMenuKeyboardWalksOpenMenus(t *testing.T) {
+	a, w, _, bar, _ := menuFixture(t)
+	w.dispatch(platform.Event{Kind: platform.EventKeyDown, Key: platform.KeyF, Mods: platform.ModAlt})
+	a.PumpOnce()
+	pop, ok := w.Popup().(*widgets.PopupMenu)
+	if !ok || bar.OpenIndex() != 0 {
+		t.Fatalf("Alt+F did not open File (open=%d)", bar.OpenIndex())
+	}
+	if pop.HighlightedIndex() != 0 {
+		t.Fatalf("keyboard-opened menu should highlight the first item, got %d", pop.HighlightedIndex())
+	}
+	w.dispatch(platform.Event{Kind: platform.EventKeyDown, Key: platform.KeyRight})
+	a.PumpOnce()
+	if bar.OpenIndex() != 1 {
+		t.Fatalf("Right should open Edit, open=%d", bar.OpenIndex())
+	}
+	w.dispatch(platform.Event{Kind: platform.EventKeyDown, Key: platform.KeyLeft})
+	a.PumpOnce()
+	if bar.OpenIndex() != 0 {
+		t.Fatalf("Left should go back to File, open=%d", bar.OpenIndex())
+	}
+}

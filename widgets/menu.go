@@ -91,6 +91,8 @@ type MenuBar struct {
 	press  int
 	focus  int
 	keyNav bool
+	// prevFocus had focus before the bar was activated; it gets it back.
+	prevFocus widget.Component
 }
 
 // NewMenuBar constructs a menu bar.
@@ -100,6 +102,10 @@ func NewMenuBar(menus ...*Menu) *MenuBar {
 	m.SetWantsFocus(true)
 	return m
 }
+
+// FocusOnClick is false: clicking a title opens the menu without moving
+// focus away from the widget the user was working in.
+func (m *MenuBar) FocusOnClick() bool { return false }
 
 // Menus returns the attached menus.
 func (m *MenuBar) Menus() []*Menu { return m.menus }
@@ -249,7 +255,9 @@ func (m *MenuBar) MousePress(e widget.MouseEvent) bool {
 		return false
 	}
 	m.keyNav = false
-	m.RequestFocus()
+	// A click opens a menu without taking focus (Win32, GTK): the popup
+	// holds focus while it is open and hands it back to its owner.
+	m.rememberFocus()
 	i := m.titleAt(e.Pos.X)
 	m.press = i
 	if i < 0 {
@@ -315,6 +323,7 @@ func (m *MenuBar) HandleAlt(key platform.Key) bool {
 		_, k, _ := ParseMnemonic(menu.Title)
 		if k != platform.KeyUnknown && k == key {
 			m.keyNav = true
+			m.rememberFocus()
 			m.RequestFocus()
 			m.focus = i
 			m.Open(i)
@@ -352,12 +361,21 @@ func (m *MenuBar) Open(i int) {
 		m.focus = -1
 		m.Invalidate()
 	}
+	// Left / Right on a row without a submenu walk the bar.
+	pop.OnNavigate = func(dir int) {
+		n := len(m.menus)
+		m.keyNav = true
+		m.focus = (i + dir + n) % n
+		m.Open(m.focus)
+	}
+	// Opened from the keyboard: the first item is current and painted so.
+	pop.keyNav = m.keyNav
 	origin := widget.DeviceOrigin(m)
 	tb := rects[i]
 	anchor := paintengine2d.XYWH(origin.X+tb.Min.X, origin.Y+tb.Min.Y, tb.Dx(), tb.Dy())
 	// Flush under the title so DrawMenuTitle(open) shares an edge with the popup.
 	widget.PlacePopupForAnchor(m, pop, anchor, 0, 0)
-	pop.RestoreFocusTo(m)
+	pop.RestoreFocusTo(m.focusReturn())
 	prev := m.open
 	// Set before ShowPopup: the outgoing popup's OnDismiss runs inside it and
 	// must see that a sibling menu is now the current one.
@@ -368,6 +386,78 @@ func (m *MenuBar) Open(i int) {
 		return
 	}
 	m.open = prev
+}
+
+// rememberFocus records who had focus before the bar was activated, so it
+// gets focus back when the menu closes (it used to stay on the bar, and
+// typing went nowhere after picking Edit ▸ Copy).
+func (m *MenuBar) rememberFocus() {
+	f := widget.FocusOwner(m)
+	if f == nil || f == m {
+		return
+	}
+	if _, isMenu := f.(*PopupMenu); isMenu {
+		return
+	}
+	m.prevFocus = f
+}
+
+// focusReturn is where focus goes when the open menu closes.
+func (m *MenuBar) focusReturn() widget.Component {
+	if m.prevFocus != nil && m.prevFocus.Visible() && m.prevFocus.Host() != nil {
+		return m.prevFocus
+	}
+	return m
+}
+
+// HandleAccelerator runs the enabled menu item whose Shortcut is key+mods
+// (the window calls it for keys the focused widget did not take).
+func (m *MenuBar) HandleAccelerator(key platform.Key, mods platform.Modifiers) bool {
+	if !m.Enabled() || !m.Visible() {
+		return false
+	}
+	const mask = platform.ModCtrl | platform.ModShift | platform.ModAlt | platform.ModSuper
+	var hit func(items []*MenuItem) bool
+	hit = func(items []*MenuItem) bool {
+		for _, it := range items {
+			if it == nil || it.Separator || it.Disabled {
+				continue
+			}
+			if it.HasSubmenu() {
+				if hit(it.Submenu) {
+					return true
+				}
+				continue
+			}
+			k, want, ok := ParseAccel(it.Shortcut)
+			if !ok || k != key || mods&mask != want {
+				continue
+			}
+			if m.open >= 0 {
+				m.Close()
+			}
+			if it.RadioGroup != "" {
+				for _, o := range items {
+					if o != nil && o.RadioGroup == it.RadioGroup {
+						o.Checked = o == it
+					}
+				}
+			} else if it.Checkable {
+				it.Checked = !it.Checked
+			}
+			if it.OnClick != nil {
+				it.OnClick()
+			}
+			return true
+		}
+		return false
+	}
+	for _, menu := range m.menus {
+		if menu != nil && hit(menu.Items) {
+			return true
+		}
+	}
+	return false
 }
 
 // Close dismisses the open menu.
@@ -384,9 +474,12 @@ var _ widget.CascadeHost = (*PopupMenu)(nil)
 // PopupMenu is a floating list of MenuItems (drop-down or context menu).
 type PopupMenu struct {
 	widget.Base
-	Items      []*MenuItem
-	OnPick     func(*MenuItem)
-	OnDismiss  func()
+	Items     []*MenuItem
+	OnPick    func(*MenuItem)
+	OnDismiss func()
+	// OnNavigate walks to the adjacent menu of a menu bar (dir -1 / +1)
+	// for Left / Right on a row that has no submenu.
+	OnNavigate func(dir int)
 	OffsetY    float32
 	hover      int
 	press      int
@@ -910,15 +1003,31 @@ func (p *PopupMenu) KeyPress(e widget.KeyEvent) bool {
 	if p.dead {
 		return false
 	}
+	wasKey := p.keyNav
 	p.keyNav = true
 	if p.focus < 0 {
 		p.focus = firstEnabled(p.Items)
 	}
 	switch e.Key {
 	case platform.KeyUp:
+		if !wasKey && p.hover < 0 {
+			// Nothing was highlighted yet: land on the last item.
+			p.focus = lastEnabled(p.Items)
+			p.hover = p.focus
+			p.Invalidate()
+			return true
+		}
 		p.moveFocus(-1)
 		return true
 	case platform.KeyDown:
+		if !wasKey && p.hover < 0 {
+			// Nothing was highlighted yet (mouse-opened menu): the first
+			// Down lands on the first item instead of skipping it.
+			p.focus = firstEnabled(p.Items)
+			p.hover = p.focus
+			p.Invalidate()
+			return true
+		}
 		p.moveFocus(1)
 		return true
 	case platform.KeyHome:
@@ -940,12 +1049,20 @@ func (p *PopupMenu) KeyPress(e widget.KeyEvent) bool {
 			}
 			return true
 		}
+		if root := p.rootMenu(); root.OnNavigate != nil {
+			root.OnNavigate(1)
+			return true
+		}
 	case platform.KeyLeft:
 		if p.parentMenu != nil {
 			parent := p.parentMenu
 			parent.closeCascade()
 			parent.keyNav = true
 			parent.RequestFocus()
+			return true
+		}
+		if p.OnNavigate != nil {
+			p.OnNavigate(-1)
 			return true
 		}
 	case platform.KeyReturn, platform.KeySpace:
@@ -1011,6 +1128,15 @@ func lastEnabled(items []*MenuItem) int {
 		}
 	}
 	return 0
+}
+
+// rootMenu is the top of a cascade (the popup a menu bar opened).
+func (p *PopupMenu) rootMenu() *PopupMenu {
+	r := p
+	for r.parentMenu != nil {
+		r = r.parentMenu
+	}
+	return r
 }
 
 func (p *PopupMenu) moveFocus(dir int) {
