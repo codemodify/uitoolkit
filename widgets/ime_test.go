@@ -62,3 +62,42 @@ func TestIMETargetSatisfied(t *testing.T) {
 	var _ widget.IMETarget = (*TextField)(nil)
 	var _ widget.IMETarget = (*TextArea)(nil)
 }
+
+// The compositor repeats text_input done events with nothing new; an
+// unchanged preedit must not repaint (it spun the app at ~3500 frames/s on
+// KWin with a focused field).
+func TestIMEPreeditUnchangedDoesNotInvalidate(t *testing.T) {
+	h := &countHost{}
+	tf := NewTextField("x", "", nil)
+	tf.SetHost(h)
+	tf.Arrange(paintengine2d.XYWH(0, 0, 200, 30))
+	tf.IMEPreedit("", 0)
+	n := h.n
+	for i := 0; i < 5; i++ {
+		tf.IMEPreedit("", 0)
+	}
+	if h.n != n {
+		t.Fatalf("unchanged empty preedit invalidated %d times", h.n-n)
+	}
+	tf.IMEPreedit("ka", 2)
+	if h.n == n {
+		t.Fatal("a real preedit change must repaint")
+	}
+	ta := NewTextArea("", "", nil)
+	ta.SetHost(h)
+	ta.Arrange(paintengine2d.XYWH(0, 0, 200, 80))
+	ta.IMEPreedit("", 0)
+	n = h.n
+	ta.IMEPreedit("", 0)
+	if h.n != n {
+		t.Fatal("TextArea: unchanged preedit repainted")
+	}
+}
+
+// countHost counts invalidations.
+type countHost struct {
+	host
+	n int
+}
+
+func (h *countHost) Invalidate(widget.Component, paintengine2d.Rect) { h.n++ }
