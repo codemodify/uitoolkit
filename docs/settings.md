@@ -1,53 +1,34 @@
 # Settings
 
-`cmd/uitksettings` is the toolkit appearance editor. Theme (palette),
-**corners**, **icons**, and **icon size** are independent prefs. Other
-apps apply them with `Application.SetLook` / `PreferredLook`.
-
-A theme is an **era token pack** (`dark` / `light` Classic 95, Luna,
-Motif, …, or a user export). Control shape is the Corners radio (Round /
-Square → `Metrics.Radius`). Chrome `ToolIcon`s come from `look.json`
-`"icons"` (a PNG set under `~/.config/uitoolkit/icons/`, or drawn
-classic/sharp). See [themes.md](themes.md).
+`cmd/uitksettings` is the toolkit appearance editor and theme browser.
 
 ## Run
 
 ```bash
 go run ./cmd/uitksettings
+go run ./cmd/uitksettings -stage win98              # open with Windows 98 staged in the preview
 go run ./cmd/uitksettings -headless                 # settings.png in cwd
-go run ./cmd/uitksettings -screenshot docs/screenshots
+go run ./cmd/uitksettings -stage aqua -screenshot docs/screenshots
 ```
 
-Linux X11 or Wayland (same backends as gallery / Mail). Headless uses the
-offscreen surface.
+## Pages
 
-There is no menu bar. **Apply** is the only persist action for
-`look.json`. **Export current theme…** writes a user token pack
-(colors, bevel, metrics).
+- **Themes** — the theme browser. Every built-in pack listed by year
+  (`1995 · Windows 95`), filterable by decade or *My themes*; the selected
+  pack's name, year, lineage, engine and summary; a **live preview**: a small
+  but fully interactive application window (menu bar, tool bar, tabs with
+  every control, tree, table, dialogs, status bar) painted entirely in the
+  staged theme — frame, caption and all — while Settings itself keeps the
+  applied look (`widgets.ThemeScope`). Under the preview: **Corners**
+  (Theme shape / Round / Square), **Icon size** and **Icons**, all shown live.
+- **Packs & icons** — user theme packs (export the staged theme, delete
+  user packs) and icon sets (built-in and user, delete user sets).
+- **About** — versions, the engine list, and the files Settings reads and
+  writes.
 
-## What it sets
-
-| Control | LookAndFeel | Values |
-| --- | --- | --- |
-| Theme | token pack → `Classic` | Built-in era packs (one scrollable list) + exported user packs |
-| Corners | `Metrics.Radius` | Round / Square |
-| Icons | PNG set or drawn fallback | Built-in (classic/sharp + premiere names when copied) + User folders |
-| Icon size | ToolIcon destination side | Small (16) / Medium (24) / Large (32); HiDPI still uses `@2x` |
-| Export | `themes/<name>/theme.json` | current tokens; corners/icons/size stay prefs |
-
-Theme and Icons lists use the same **Built-in** / **User** grouping.
-The Appearance page is a two-pane layout: the Theme lists on the left
-scroll independently (toolkit overflow chrome when the era packs do not
-fit); Corners, Icons, Icon size, live preview, and Export sit on the
-right in their own `ScrollView`. **Apply** stays pinned under the
-splitter with the status bar so it is never clipped off-screen. About
-is the same pattern (scroll the notes, Apply stays put).
-
-The pickers update a **staged** appearance and preview it in the
-Settings window (`Application.SetLook`) without touching disk. **Apply**
-writes `$XDG_CONFIG_HOME/uitoolkit/look.json` (atomic rename) so other
-running apps can reload. Closing the window without Apply **discards**
-staged changes; the last applied file stays as-is.
+**Apply** writes `look.json` and switches Settings and every app that
+watches the file; **Revert** drops the staged change. Both stay pinned under
+the pages. Closing without Apply discards the staged change.
 
 ## Prefs file
 

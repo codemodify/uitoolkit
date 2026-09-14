@@ -796,13 +796,14 @@ func (l *Classic) baseDrawStatusBar(ctx *paintengine2d.Context, b paintengine2d.
 	}
 	n := float32(len(parts))
 	slot := b.Dx() / n
-	ty := b.Min.Y + (b.Dy()-l.body.Height())*0.5
 	for i, s := range parts {
 		x := b.Min.X + slot*float32(i)
 		if i > 0 {
 			ctx.DrawRect(paintengine2d.XYWH(x, b.Min.Y+6, 1, b.Dy()-12), paintengine2d.Fill(p.Divider))
 		}
-		l.body.Draw(ctx, s, paintengine2d.Pt(x+10, ty), p.TextMuted)
+		// Each part fits its own slot (a long path used to run into the
+		// next part — Settings' status bar).
+		l.drawFittedText(ctx, l.body, s, paintengine2d.XYWH(x+10, b.Min.Y, slot-16, b.Dy()), p.TextMuted, AlignStart, 0)
 	}
 }
 

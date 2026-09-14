@@ -34,7 +34,7 @@ func (win95Engine) DefaultMetrics() ChromeMetrics {
 		MenuItemH: 24, MenuBarH: 24, TabH: 26, RowH: 22,
 		TitleBar: 26, HeaderH: 24, ProgressH: 20,
 		Scroll: 16, Pad: 10, FieldPad: 5, FocusWidth: 1, Border: 1,
-		ToolBarH: 34, StatusBarH: 24,
+		ToolBarH: 34, StatusBarH: 26,
 	}
 }
 
@@ -873,7 +873,7 @@ func (e win95Engine) DrawStatusBar(l *Classic, ctx *paintengine2d.Context, b pai
 	slot := (b.Dx() - grip) / float32(len(parts))
 	gap := l.S(2)
 	for i, s := range parts {
-		r := paintengine2d.XYWH(b.Min.X+slot*float32(i)+gap, b.Min.Y+gap, slot-gap*2, b.Dy()-gap*2)
+		r := paintengine2d.XYWH(b.Min.X+slot*float32(i)+gap, b.Min.Y+1, slot-gap*2, b.Dy()-2)
 		c.thin(ctx, r, false)
 		l.drawFittedText(ctx, l.body, s, paintengine2d.XYWH(r.Min.X+l.S(4), r.Min.Y, r.Dx()-l.S(8), r.Dy()), c.text, AlignStart, 0)
 	}
