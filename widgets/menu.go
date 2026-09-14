@@ -583,8 +583,7 @@ func (p *PopupMenu) ContentSize() paintengine2d.Point { return p.contentSize() }
 func (p *PopupMenu) Measure(c layout.Constraints) paintengine2d.Point {
 	sz := p.contentSize()
 	if c.HasMaxH() && sz.Y > c.MaxH {
-		bar, gap := overflowBarSize(p.Look())
-		sz.X += bar + gap
+		sz.X += style.ScrollGutter(p.Look())
 	}
 	out := c.Constrain(sz)
 	if out.Y+0.5 < sz.Y && out.X < sz.X {
@@ -612,9 +611,25 @@ func (p *PopupMenu) clamp() {
 	p.OffsetY = layout.ClampScroll(p.OffsetY, p.contentH(), p.LocalBounds().Dy())
 }
 
+func (p *PopupMenu) vparts() style.ScrollParts {
+	return vScrollParts(p.Look(), p.LocalBounds(), p.contentH(), p.OffsetY)
+}
+
+func (p *PopupMenu) vaxis() scrollAxis {
+	return scrollAxis{
+		vertical: true,
+		parts:    p.vparts,
+		get:      func() (float32, float32) { return p.OffsetY, p.MaxOffset() },
+		set:      func(y float32) { p.OffsetY = y; p.clamp(); p.Invalidate() },
+		steps: func() (float32, float32) {
+			return p.Look().Metrics().MenuItemH, p.LocalBounds().Dy() * 0.9
+		},
+	}
+}
+
 func (p *PopupMenu) scrollTrack() (track, thumb paintengine2d.Rect) {
-	bar, gap := overflowBarSize(p.Look())
-	return vScrollThumb(p.LocalBounds(), p.contentH(), p.OffsetY, bar, gap)
+	sp := p.vparts()
+	return sp.Track, sp.Thumb
 }
 
 // ScrollTrack is the overflow bar (empty thumb when every item fits).
@@ -624,8 +639,7 @@ func (p *PopupMenu) innerWidth() float32 {
 	ch := p.chrome()
 	w := p.LocalBounds().Dx() - ch.PadL - ch.PadR
 	if p.MaxOffset() > 0 {
-		bar, gap := overflowBarSize(p.Look())
-		w -= bar + gap
+		w -= style.ScrollGutter(p.Look())
 	}
 	if w < 0 {
 		w = 0
@@ -791,8 +805,7 @@ func (p *PopupMenu) Paint(ctx *paintengine2d.Context) {
 		})
 	}
 	ctx.Restore()
-	track, thumb := p.scrollTrack()
-	paintOverflowBar(ctx, lk, track, thumb, p.vbar.over, p.vbar.active)
+	p.vbar.paint(ctx, lk, p.vparts(), true)
 }
 
 func (p *PopupMenu) invalidateRow(i int) {
@@ -806,13 +819,8 @@ func (p *PopupMenu) MouseMove(e widget.MouseEvent) bool {
 	if p.dead {
 		return false
 	}
-	track, thumb := p.scrollTrack()
-	if off, apply, handled, hoverDirty := p.vbar.move(e.Pos, track, thumb, true, p.MaxOffset()); handled {
-		if apply {
-			p.OffsetY = off
-			p.clamp()
-		}
-		if apply || hoverDirty {
+	if handled, dirty := p.vbar.move(e.Pos, p.vaxis()); handled {
+		if dirty {
 			p.Invalidate()
 		}
 		return true
@@ -838,6 +846,7 @@ func (p *PopupMenu) MouseExit() {
 		return
 	}
 	p.hover = -1
+	p.vbar.exit()
 	p.Invalidate()
 }
 
@@ -856,10 +865,7 @@ func (p *PopupMenu) MousePress(e widget.MouseEvent) bool {
 	if p.dead {
 		return false
 	}
-	track, thumb := p.scrollTrack()
-	if off, ok := p.vbar.press(e.Pos, track, thumb, true, p.OffsetY, p.MaxOffset(), p.LocalBounds().Dy()*0.9); ok {
-		p.OffsetY = off
-		p.clamp()
+	if p.vbar.press(p, e.Pos, p.vaxis()) {
 		p.Invalidate()
 		return true
 	}

@@ -115,11 +115,28 @@ func (t *TableView) clamp() {
 	t.OffsetY = layout.ClampScroll(t.OffsetY, t.contentH(), t.bodyH())
 }
 
+func (t *TableView) vparts() style.ScrollParts {
+	return vScrollParts(t.Look(), paintengine2d.XYWH(0, t.headerH(), t.LocalBounds().Dx(), t.bodyH()), t.contentH(), t.OffsetY)
+}
+
+func (t *TableView) vaxis() scrollAxis {
+	return scrollAxis{
+		vertical: true,
+		parts:    t.vparts,
+		get:      func() (float32, float32) { return t.OffsetY, t.MaxOffset() },
+		set:      func(y float32) { t.OffsetY = y; t.clamp(); t.Invalidate() },
+		steps:    func() (float32, float32) { return t.rowH(), t.bodyH() * 0.9 },
+	}
+}
+
+// rowsW is the row width: the view minus the gutter a visible bar takes.
+func (t *TableView) rowsW() float32 {
+	return t.LocalBounds().Dx() - scrollGutter(t.Look(), t.MaxOffset() > 0)
+}
+
 func (t *TableView) scrollTrack() (track, thumb paintengine2d.Rect) {
-	b := t.LocalBounds()
-	body := paintengine2d.XYWH(0, t.headerH(), b.Dx(), t.bodyH())
-	bar, gap := overflowBarSize(t.Look())
-	return vScrollThumb(body, t.contentH(), t.OffsetY, bar, gap)
+	sp := t.vparts()
+	return sp.Track, sp.Thumb
 }
 
 // VisibleRange is the half-open [lo, hi) window of body rows that Paint draws.
@@ -156,13 +173,17 @@ func (t *TableView) bodyH() float32 {
 // ColumnWidths is the current header/cell layout in device pixels.
 func (t *TableView) ColumnWidths() []float32 { return t.colWidths() }
 
+// RowsWidth is the width the columns fill: the view minus the gutter a
+// visible scrollbar takes, so no cell text runs under the bar.
+func (t *TableView) RowsWidth() float32 { return t.rowsW() }
+
 func (t *TableView) colWidths() []float32 {
 	n := len(t.Columns)
 	out := make([]float32, n)
 	if n == 0 {
 		return out
 	}
-	total := t.LocalBounds().Dx()
+	total := t.rowsW()
 	if total < 1 {
 		return out
 	}
@@ -442,6 +463,7 @@ func (t *TableView) Paint(ctx *paintengine2d.Context) {
 	t.clamp()
 	b := t.LocalBounds()
 	lk := t.Look()
+	rw := t.rowsW()
 	hh := t.headerH()
 	ctx.DrawRect(b, paintengine2d.Fill(lk.Palette().Field))
 	widths := t.colWidths()
@@ -452,11 +474,11 @@ func (t *TableView) Paint(ctx *paintengine2d.Context) {
 		// The body viewport goes on the band group, so the sticky header
 		// keeps its own clip and the rows slide under it.
 		o := rowOrigin(ctx)
-		t.rows.ready(o.X, o.Y, b.Dx(), rh, lookSig(lk))
-		recordScrollingRows(rec, ctx, &t.rows, t.ID()^(1<<32), body, b.Dx(), rh, t.OffsetY, hh, lo, hi,
+		t.rows.ready(o.X, o.Y, rw, rh, lookSig(lk))
+		recordScrollingRows(rec, ctx, &t.rows, t.ID()^(1<<32), body, rw, rh, t.OffsetY, hh, lo, hi,
 			func(i int) uint64 { return t.ID()<<32 | uint64(i) + 1 },
 			func(i int) uint64 {
-				extra := bits32(b.Dx())
+				extra := bits32(rw)
 				if t.Mono {
 					extra ^= 0x4d
 				}
@@ -491,8 +513,7 @@ func (t *TableView) Paint(ctx *paintengine2d.Context) {
 	}
 	// Sticky header after the body so a leaked row cannot cover the labels.
 	t.paintHeader(ctx, lk, widths, hh)
-	track, thumb := t.scrollTrack()
-	paintOverflowBar(ctx, lk, track, thumb, t.vbar.over, t.vbar.active)
+	t.vbar.paint(ctx, lk, t.vparts(), true)
 	if t.Focused() {
 		lk.DrawFocusRing(ctx, b.Inset(-2))
 	}
@@ -548,14 +569,11 @@ func (t *TableView) MouseMove(e widget.MouseEvent) bool {
 		t.applyCursor(e.Pos)
 		return true
 	}
-	track, thumb := t.scrollTrack()
-	if off, apply, handled, dirty := t.vbar.move(e.Pos, track, thumb, true, t.MaxOffset()); apply || handled || dirty {
-		if apply {
-			t.OffsetY = off
-			t.clamp()
+	if handled, dirty := t.vbar.move(e.Pos, t.vaxis()); handled || dirty {
+		if dirty {
+			t.Invalidate()
 		}
-		t.Invalidate()
-		if apply || handled {
+		if handled {
 			return true
 		}
 	}
@@ -591,7 +609,7 @@ func (t *TableView) MouseExit() {
 	t.hovered = -1
 	t.hoverCol = -1
 	t.pressCol = -1
-	t.vbar.over = false
+	t.vbar.exit()
 	if t.resizeCol < 0 {
 		widget.ApplyCursor(t.Host(), platform.CursorDefault)
 	}
@@ -603,10 +621,7 @@ func (t *TableView) MouseExit() {
 
 func (t *TableView) MousePress(e widget.MouseEvent) bool {
 	t.RequestFocus()
-	track, thumb := t.scrollTrack()
-	if off, ok := t.vbar.press(e.Pos, track, thumb, true, t.OffsetY, t.MaxOffset(), t.bodyH()*0.9); ok {
-		t.OffsetY = off
-		t.clamp()
+	if t.vbar.press(t, e.Pos, t.vaxis()) {
 		t.Invalidate()
 		return true
 	}

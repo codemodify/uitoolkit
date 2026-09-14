@@ -261,7 +261,13 @@ func (l *Classic) faceRadius(role chromeRole) float32 {
 	return r
 }
 
+// paintFace paints a control face through the look's engine.
 func (l *Classic) paintFace(ctx *paintengine2d.Context, b paintengine2d.Rect, role chromeRole, st ControlState) (fg paintengine2d.Color) {
+	return l.eng().Face(l, ctx, b, role, st)
+}
+
+// basePaintFace is the stock token-driven face (fill + bevel language).
+func (l *Classic) basePaintFace(ctx *paintengine2d.Context, b paintengine2d.Rect, role chromeRole, st ControlState) (fg paintengine2d.Color) {
 	if ctx == nil || b.Empty() {
 		return
 	}

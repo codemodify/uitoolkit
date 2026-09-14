@@ -59,9 +59,28 @@ func (l *ListView) clamp() {
 	l.OffsetY = layout.ClampScroll(l.OffsetY, l.contentH(), l.LocalBounds().Dy())
 }
 
+func (l *ListView) vparts() style.ScrollParts {
+	return vScrollParts(l.Look(), l.LocalBounds(), l.contentH(), l.OffsetY)
+}
+
+func (l *ListView) vaxis() scrollAxis {
+	return scrollAxis{
+		vertical: true,
+		parts:    l.vparts,
+		get:      func() (float32, float32) { return l.OffsetY, l.MaxOffset() },
+		set:      func(y float32) { l.OffsetY = y; l.clamp(); l.Invalidate() },
+		steps:    func() (float32, float32) { return l.rowH(), l.LocalBounds().Dy() * 0.9 },
+	}
+}
+
+// rowsW is the row width: the view minus the gutter a visible bar takes.
+func (l *ListView) rowsW() float32 {
+	return l.LocalBounds().Dx() - scrollGutter(l.Look(), l.MaxOffset() > 0)
+}
+
 func (l *ListView) scrollTrack() (track, thumb paintengine2d.Rect) {
-	bar, gap := overflowBarSize(l.Look())
-	return vScrollThumb(l.LocalBounds(), l.contentH(), l.OffsetY, bar, gap)
+	sp := l.vparts()
+	return sp.Track, sp.Thumb
 }
 
 // VisibleRange is the half-open [lo, hi) window of rows that Paint draws.
@@ -97,6 +116,7 @@ func (l *ListView) Paint(ctx *paintengine2d.Context) {
 	l.clamp()
 	b := l.LocalBounds()
 	lk := l.Look()
+	rw := l.rowsW()
 	ctx.DrawRect(b, paintengine2d.Fill(lk.Palette().Field))
 	rh := l.rowH()
 	lo, hi := l.visibleRange()
@@ -104,15 +124,15 @@ func (l *ListView) Paint(ctx *paintengine2d.Context) {
 		// Rows carry the viewport on their band group, not in their own
 		// clips, so no ctx.ClipRect(b) here.
 		o := rowOrigin(ctx)
-		l.rows.ready(o.X, o.Y, b.Dx(), rh, lookSig(lk))
-		recordScrollingRows(rec, ctx, &l.rows, l.ID()^(1<<32), b, b.Dx(), rh, l.OffsetY, 0, lo, hi,
+		l.rows.ready(o.X, o.Y, rw, rh, lookSig(lk))
+		recordScrollingRows(rec, ctx, &l.rows, l.ID()^(1<<32), b, rw, rh, l.OffsetY, 0, lo, hi,
 			func(i int) uint64 { return l.ID()<<32 | uint64(i) + 1 },
 			func(i int) uint64 {
 				label := ""
 				if l.ItemText != nil {
 					label = l.ItemText(i)
 				}
-				sig := newRowSig(i == l.Selected, i == l.hovered, bits32(b.Dx()))
+				sig := newRowSig(i == l.Selected, i == l.hovered, bits32(rw))
 				sig.str(label)
 				return sig.sum()
 			},
@@ -121,7 +141,7 @@ func (l *ListView) Paint(ctx *paintengine2d.Context) {
 				if l.ItemText != nil {
 					label = l.ItemText(i)
 				}
-				lk.DrawListRow(ctx, paintengine2d.XYWH(0, 0, b.Dx(), rh), i == l.Selected, i == l.hovered, label)
+				lk.DrawListRow(ctx, paintengine2d.XYWH(0, 0, rw, rh), i == l.Selected, i == l.hovered, label)
 			},
 		)
 	} else {
@@ -129,7 +149,7 @@ func (l *ListView) Paint(ctx *paintengine2d.Context) {
 		ctx.ClipRect(b)
 		for i := lo; i < hi; i++ {
 			y := float32(i)*rh - l.OffsetY
-			row := paintengine2d.XYWH(0, y, b.Dx(), rh)
+			row := paintengine2d.XYWH(0, y, rw, rh)
 			label := ""
 			if l.ItemText != nil {
 				label = l.ItemText(i)
@@ -138,8 +158,7 @@ func (l *ListView) Paint(ctx *paintengine2d.Context) {
 		}
 		ctx.Restore()
 	}
-	track, thumb := l.scrollTrack()
-	paintOverflowBar(ctx, lk, track, thumb, l.vbar.over, l.vbar.active)
+	l.vbar.paint(ctx, lk, l.vparts(), true)
 	if l.Focused() {
 		lk.DrawFocusRing(ctx, b.Inset(-2))
 	}
@@ -167,14 +186,11 @@ func (l *ListView) invalidateRow(i int) {
 func (l *ListView) MouseEnter() {}
 
 func (l *ListView) MouseMove(e widget.MouseEvent) bool {
-	track, thumb := l.scrollTrack()
-	if off, apply, handled, dirty := l.vbar.move(e.Pos, track, thumb, true, l.MaxOffset()); apply || handled || dirty {
-		if apply {
-			l.OffsetY = off
-			l.clamp()
+	if handled, dirty := l.vbar.move(e.Pos, l.vaxis()); handled || dirty {
+		if dirty {
+			l.Invalidate()
 		}
-		l.Invalidate()
-		if apply || handled {
+		if handled {
 			return true
 		}
 	}
@@ -191,7 +207,7 @@ func (l *ListView) MouseMove(e widget.MouseEvent) bool {
 func (l *ListView) MouseExit() {
 	old := l.hovered
 	l.hovered = -1
-	l.vbar.over = false
+	l.vbar.exit()
 	l.invalidateRow(old)
 }
 
@@ -205,10 +221,7 @@ func (l *ListView) MouseRelease(widget.MouseEvent) bool {
 
 func (l *ListView) MousePress(e widget.MouseEvent) bool {
 	l.RequestFocus()
-	track, thumb := l.scrollTrack()
-	if off, ok := l.vbar.press(e.Pos, track, thumb, true, l.OffsetY, l.MaxOffset(), l.LocalBounds().Dy()*0.9); ok {
-		l.OffsetY = off
-		l.clamp()
+	if l.vbar.press(l, e.Pos, l.vaxis()) {
 		l.Invalidate()
 		return true
 	}

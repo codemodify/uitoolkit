@@ -142,9 +142,13 @@ func TestLoadAppearanceMigratesCompoundNames(t *testing.T) {
 		want Appearance
 	}{
 		{`{"theme":"light-square-sharp","icons":"phosphor"}`, Appearance{Name: "light", Theme: ThemeLight, Corners: CornersSquare, Icons: IconSetPhosphor, IconSize: IconSizeMedium}},
-		{`{"theme":"dark-round-classic","icons":"lucide"}`, Appearance{Name: "dark", Theme: ThemeDark, Corners: CornersRound, Icons: IconSetLucide, IconSize: IconSizeMedium}},
-		{`{"theme":"dark-round"}`, Appearance{Name: "dark", Theme: ThemeDark, Corners: CornersRound, Icons: IconSetClassic, IconSize: IconSizeMedium}},
-		{`{"theme":"light-square","corners":"round","icons":"sharp"}`, Appearance{Name: "light", Theme: ThemeLight, Corners: CornersRound, Icons: IconSetSharp, IconSize: IconSizeMedium}},
+		// Pre-v2 "round" was the written-out default: it now means "keep
+		// the theme's native shape".
+		{`{"theme":"dark-round-classic","icons":"lucide"}`, Appearance{Name: "dark", Theme: ThemeDark, Corners: CornersTheme, Icons: IconSetLucide, IconSize: IconSizeMedium}},
+		{`{"theme":"dark-round"}`, Appearance{Name: "dark", Theme: ThemeDark, Corners: CornersTheme, Icons: IconSetClassic, IconSize: IconSizeMedium}},
+		{`{"theme":"light-square","corners":"round","icons":"sharp"}`, Appearance{Name: "light", Theme: ThemeLight, Corners: CornersTheme, Icons: IconSetSharp, IconSize: IconSizeMedium}},
+		// v2 files keep an explicit round override.
+		{`{"version":2,"theme":"light","corners":"round","icons":"sharp"}`, Appearance{Name: "light", Theme: ThemeLight, Corners: CornersRound, Icons: IconSetSharp, IconSize: IconSizeMedium}},
 	}
 	for _, tc := range cases {
 		if err := os.WriteFile(path, []byte(tc.raw+"\n"), 0o600); err != nil {

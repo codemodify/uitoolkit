@@ -20,6 +20,9 @@ const appearanceFile = "look.json"
 // dark-round, …) migrate to palette + corners. Pack-level corners/icons
 // are ignored.
 type appearanceFileJSON struct {
+	// Version 2 introduced corners "theme" (the theme's native shape) as
+	// the default; older files carry "round" as the written-out default.
+	Version  int    `json:"version,omitempty"`
 	Theme    string `json:"theme"`
 	Corners  string `json:"corners,omitempty"`
 	Icons    string `json:"icons,omitempty"`
@@ -85,8 +88,16 @@ func resolveAppearance(raw appearanceFileJSON) Appearance {
 	}
 	if strings.TrimSpace(raw.Corners) != "" {
 		a.Corners = ParseCorners(raw.Corners)
+		if raw.Version < 2 && a.Corners == CornersRound {
+			// Pre-v2 files wrote "round" as the default, before themes had
+			// shapes of their own: read it as "keep the theme's shape".
+			a.Corners = CornersTheme
+		}
 	} else if hasCorners {
 		a.Corners = cornersFromName
+		if a.Corners == CornersRound {
+			a.Corners = CornersTheme
+		}
 	}
 	if strings.TrimSpace(raw.Icons) != "" {
 		a.Icons = ParseIconSet(raw.Icons)
@@ -116,6 +127,7 @@ func LoadAppearance() Appearance {
 func SaveAppearance(a Appearance) error {
 	a = a.Normalize()
 	return writeJSONFile(AppearancePath(), appearanceFileJSON{
+		Version:  2,
 		Theme:    a.Name,
 		Corners:  string(a.Corners),
 		Icons:    string(a.Icons),

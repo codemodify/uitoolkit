@@ -406,6 +406,30 @@ func (w *Window) needsPaint() bool {
 	return !w.laid || w.full || !w.dirty.Empty()
 }
 
+// AfterFunc runs fn on the UI thread after d (widget.Timers). The returned
+// stop cancels it if it has not run yet.
+func (w *Window) AfterFunc(d time.Duration, fn func()) (stop func()) {
+	if w == nil || fn == nil {
+		return func() {}
+	}
+	var cancelled atomic.Bool
+	t := time.AfterFunc(d, func() {
+		if cancelled.Load() {
+			return
+		}
+		w.app.Post(func() {
+			if cancelled.Load() || w.Closed() {
+				return
+			}
+			fn()
+		})
+	})
+	return func() {
+		cancelled.Store(true)
+		t.Stop()
+	}
+}
+
 // RequestAnim asks Run to wake at least every d (busy indicators).
 // d <= 0 clears the request so idle can sleep on the display fd.
 func (w *Window) RequestAnim(d time.Duration) { w.animPeriod = d }
