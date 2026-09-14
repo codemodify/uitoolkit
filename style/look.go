@@ -646,7 +646,11 @@ func (l *Classic) baseDrawMenuItem(ctx *paintengine2d.Context, b paintengine2d.R
 		if row.Submenu {
 			sx = ch.ArrowMinX(b.Max.X) - tw
 		}
-		l.muted.Draw(ctx, shortcut, paintengine2d.Pt(sx, ty), p.TextMuted)
+		scCol := p.TextMuted
+		if (st.Hovered() || st.Pressed()) && !st.Disabled() {
+			scCol = fg // muted grey vanished on dark hot rows (Aqua blue)
+		}
+		l.muted.Draw(ctx, shortcut, paintengine2d.Pt(sx, ty), scCol)
 		labelRight = sx - ch.AccelGap
 	}
 	lx := ch.LabelMinX(b.Min.X)

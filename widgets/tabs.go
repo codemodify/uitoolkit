@@ -50,7 +50,8 @@ func (t *TabBar) tabRects() []paintengine2d.Rect {
 	if n == 0 {
 		return nil
 	}
-	f := t.Look().Font()
+	lk := t.Look()
+	f := lk.Font()
 	h := t.LocalBounds().Dy()
 	x := float32(4)
 	out := make([]paintengine2d.Rect, n)
@@ -61,6 +62,14 @@ func (t *TabBar) tabRects() []paintengine2d.Rect {
 		}
 		out[i] = paintengine2d.XYWH(x, 0, w, h)
 		x += w
+	}
+	// Some looks centre the strip over its page (Aqua's segmented tabs).
+	if style.LookHint(lk, style.HintTabsCentered) == 1 {
+		if shift := (t.LocalBounds().Dx() - (x + 4)) * 0.5; shift > 0 {
+			for i := range out {
+				out[i] = out[i].Translate(paintengine2d.Pt(shift, 0))
+			}
+		}
 	}
 	return out
 }
@@ -89,6 +98,12 @@ func (t *TabBar) Paint(ctx *paintengine2d.Context) {
 		}
 		if i != t.Selected {
 			st &^= style.StateFocused
+		}
+		if i == 0 {
+			st |= style.StateFirst
+		}
+		if i == len(t.Titles)-1 {
+			st |= style.StateLast
 		}
 		lk.DrawTab(ctx, t.tabRects()[i], st, title, i == t.Selected)
 	}
@@ -347,5 +362,9 @@ func (t *TabView) Arrange(r paintengine2d.Rect) {
 }
 
 func (t *TabView) Paint(ctx *paintengine2d.Context) {
-	t.Look().DrawPanel(ctx, t.LocalBounds(), false)
+	if tp, ok := t.Look().(style.TabPaneLook); ok {
+		tp.DrawTabPane(ctx, t.LocalBounds())
+	} else {
+		t.Look().DrawPanel(ctx, t.LocalBounds(), false)
+	}
 }

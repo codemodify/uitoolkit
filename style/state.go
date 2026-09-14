@@ -14,6 +14,10 @@ const (
 	StateChecked
 	StatePrimary
 	StateToggle
+	// StateFirst / StateLast mark the first and last item of a strip
+	// (tabs, segmented controls), for engines that shape the ends.
+	StateFirst
+	StateLast
 )
 
 func (s ControlState) Hovered() bool  { return s&StateHovered != 0 }
@@ -23,6 +27,8 @@ func (s ControlState) Focused() bool  { return s&StateFocused != 0 }
 func (s ControlState) Checked() bool  { return s&StateChecked != 0 }
 func (s ControlState) Primary() bool  { return s&StatePrimary != 0 }
 func (s ControlState) Toggle() bool   { return s&StateToggle != 0 }
+func (s ControlState) First() bool    { return s&StateFirst != 0 }
+func (s ControlState) Last() bool     { return s&StateLast != 0 }
 
 // LookAndFeel paints control chrome. Widgets never hard-code a skin.
 type LookAndFeel interface {
