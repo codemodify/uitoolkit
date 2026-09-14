@@ -49,6 +49,10 @@ type ToolBar struct {
 }
 
 // NewToolBar constructs a toolbar.
+// FocusOnClick is false: a tool button runs its command and leaves focus
+// with the document or field (Win32 / Qt toolbars).
+func (t *ToolBar) FocusOnClick() bool { return false }
+
 func NewToolBar(items ...*ToolItem) *ToolBar {
 	t := &ToolBar{items: items, hover: -1, press: -1, focus: firstTool(items)}
 	t.Init(t)
