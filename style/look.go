@@ -257,7 +257,7 @@ func (l *Classic) baseDrawButton(ctx *paintengine2d.Context, b paintengine2d.Rec
 	}
 	col := l.paintFace(ctx, b, roleButton, st)
 	if st.Focused() {
-		l.DrawFocusRing(ctx, b.Inset(-2))
+		l.DrawFocusRing(ctx, b)
 	}
 	face := l.body
 	if st.Disabled() {
@@ -282,9 +282,6 @@ func (l *Classic) baseDrawCheckbox(ctx *paintengine2d.Context, b paintengine2d.R
 		st |= StateChecked
 	}
 	l.eng().CheckIndicator(l, ctx, box, st, checked)
-	if st.Focused() {
-		l.DrawFocusRing(ctx, box.Inset(-2))
-	}
 	if label != "" {
 		f := l.body
 		if st.Disabled() {
@@ -292,6 +289,11 @@ func (l *Classic) baseDrawCheckbox(ctx *paintengine2d.Context, b paintengine2d.R
 		}
 		lb := paintengine2d.XYWH(box.Max.X+8, b.Min.Y, b.Max.X-(box.Max.X+8), b.Dy())
 		l.drawFittedText(ctx, f, label, lb, p.Text, AlignStart, 0)
+		if st.Focused() {
+			l.DrawFocusRing(ctx, labelFocusRect(f, label, lb, b))
+		}
+	} else if st.Focused() {
+		l.DrawFocusRing(ctx, box.Intersect(b))
 	}
 }
 
@@ -337,7 +339,7 @@ func (l *Classic) baseDrawSlider(ctx *paintengine2d.Context, b paintengine2d.Rec
 		ctx.DrawCircle(paintengine2d.Pt(tx-rad*0.25, cy-rad*0.25), rad*0.35, paintengine2d.Fill(p.Highlight))
 	}
 	if st.Focused() {
-		l.DrawFocusRing(ctx, paintengine2d.XYWH(tx-rad-3, cy-rad-3, rad*2+6, rad*2+6))
+		l.DrawFocusRing(ctx, paintengine2d.XYWH(tx-rad-3, cy-rad-3, rad*2+6, rad*2+6).Intersect(b))
 	}
 }
 
@@ -346,7 +348,7 @@ func (l *Classic) baseDrawTextField(ctx *paintengine2d.Context, b paintengine2d.
 	m := l.metrics
 	l.paintFace(ctx, b, roleField, st)
 	if st.Focused() && !st.Disabled() && l.tokensOr().Bevel != BevelLunaHottrack && l.tokensOr().Bevel != BevelFluentAccent {
-		l.DrawFocusRing(ctx, b.Inset(-2))
+		l.DrawFocusRing(ctx, b)
 	}
 	pad := m.FieldPad
 	if pad <= 0 {
@@ -404,32 +406,38 @@ func (l *Classic) baseDrawScrollBar(ctx *paintengine2d.Context, track, thumb pai
 	}
 }
 
+// baseDrawFocusRing paints keyboard focus INSIDE b (the control's own
+// rect). Widgets paint clipped to their bounds, so a ring drawn around the
+// control — the old b.Inset(-2) convention — was clipped away and Tab
+// focus was invisible on buttons, fields, lists and scroll views.
 func (l *Classic) baseDrawFocusRing(ctx *paintengine2d.Context, b paintengine2d.Rect) {
 	p := l.palette
 	m := l.metrics
 	t := l.tokensOr()
+	if b.Dx() < 4 || b.Dy() < 4 {
+		return
+	}
 	r := m.Radius
 	rs := m.RadiusSmall
-	if rs > 0 {
-		rs += 1
-	}
 	col := t.Focus.Border
 	if colorUnset(col) {
 		col = p.Focus
 	}
 	switch t.Bevel {
 	case BevelClassic3D:
-		ctx.DrawRect(b.Inset(1), paintengine2d.StrokePaint(p.Text, 1))
+		// Windows / Motif: a dotted rectangle just inside the bevel.
+		DottedRect(ctx, b.Inset(3), p.Text)
 	case BevelLunaHottrack:
-		DrawHotTrack(ctx, b.Inset(0.5), col.WithAlpha(0.08), col, l.rx(1))
+		DrawHotTrack(ctx, b.Inset(1.5), col.WithAlpha(0.08), col, l.rx(1))
 	case BevelFluentAccent:
-		ctx.DrawRoundRect(b.Inset(0.5), rs, rs, paintengine2d.StrokePaint(col, 1.5))
-	case BevelSoftShadow:
-		ctx.DrawRoundRect(b, r, r, paintengine2d.StrokePaint(col.WithAlpha(0.35), m.FocusWidth+2))
-		ctx.DrawRoundRect(b.Inset(1.25), rs, rs, paintengine2d.StrokePaint(col.WithAlpha(0.90), 1.15))
-	default:
-		ctx.DrawRoundRect(b, r, r, paintengine2d.StrokePaint(col.WithAlpha(0.40), m.FocusWidth+1.5))
-		ctx.DrawRoundRect(b.Inset(1.25), rs, rs, paintengine2d.StrokePaint(col.WithAlpha(0.92), 1.15))
+		ctx.DrawRoundRect(b.Inset(1), rs, rs, paintengine2d.StrokePaint(col, 1.5))
+	default: // soft-shadow and none: soft outer band, crisp inner line
+		fw := m.FocusWidth
+		if fw < 1 {
+			fw = 1
+		}
+		ctx.DrawRoundRect(b.Inset(fw*0.5+0.5), r, r, paintengine2d.StrokePaint(col.WithAlpha(0.40), fw+1))
+		ctx.DrawRoundRect(b.Inset(fw+1.25), rs, rs, paintengine2d.StrokePaint(col.WithAlpha(0.92), 1.15))
 	}
 }
 
@@ -938,9 +946,6 @@ func (l *Classic) baseDrawRadio(ctx *paintengine2d.Context, b paintengine2d.Rect
 	cx := b.Min.X + side*0.5
 	cy := (b.Min.Y + b.Max.Y) * 0.5
 	l.eng().RadioIndicator(l, ctx, paintengine2d.XYWH(cx-side*0.5, cy-side*0.5, side, side), st, selected)
-	if st.Focused() {
-		l.DrawFocusRing(ctx, paintengine2d.XYWH(cx-side*0.5-2, cy-side*0.5-2, side+4, side+4))
-	}
 	if label != "" {
 		f := l.body
 		if st.Disabled() {
@@ -948,6 +953,11 @@ func (l *Classic) baseDrawRadio(ctx *paintengine2d.Context, b paintengine2d.Rect
 		}
 		lb := paintengine2d.XYWH(b.Min.X+side+8, b.Min.Y, b.Max.X-(b.Min.X+side+8), b.Dy())
 		l.drawFittedText(ctx, f, label, lb, p.Text, AlignStart, 0)
+		if st.Focused() {
+			l.DrawFocusRing(ctx, labelFocusRect(f, label, lb, b))
+		}
+	} else if st.Focused() {
+		l.DrawFocusRing(ctx, paintengine2d.XYWH(cx-side*0.5, cy-side*0.5, side, side).Intersect(b))
 	}
 }
 
@@ -959,7 +969,7 @@ func (l *Classic) baseDrawComboBox(ctx *paintengine2d.Context, b paintengine2d.R
 	}
 	l.paintFace(ctx, b, roleCombo, st)
 	if st.Focused() && !open && l.tokensOr().Bevel != BevelLunaHottrack && l.tokensOr().Bevel != BevelFluentAccent {
-		l.DrawFocusRing(ctx, b.Inset(-2))
+		l.DrawFocusRing(ctx, b)
 	}
 	chevW := float32(22)
 	btn := paintengine2d.XYWH(b.Max.X-chevW, b.Min.Y, chevW, b.Dy())
@@ -1215,7 +1225,7 @@ func (l *Classic) baseDrawTextArea(ctx *paintengine2d.Context, b paintengine2d.R
 	m := l.metrics
 	l.paintFace(ctx, b, roleField, st)
 	if st.Focused() && l.tokensOr().Bevel != BevelLunaHottrack && l.tokensOr().Bevel != BevelFluentAccent {
-		l.DrawFocusRing(ctx, b.Inset(-2))
+		l.DrawFocusRing(ctx, b)
 	}
 	pad := m.FieldPad
 	if pad <= 0 {
@@ -1338,7 +1348,7 @@ func (l *Classic) baseDrawSwitch(ctx *paintengine2d.Context, b paintengine2d.Rec
 	ctx.DrawCircle(paintengine2d.Pt(kx, cy+0.6), kr+0.6, paintengine2d.Fill(p.Shadow))
 	ctx.DrawCircle(paintengine2d.Pt(kx, cy), kr, paintengine2d.Fill(knob))
 	if st.Focused() {
-		l.DrawFocusRing(ctx, track.Inset(-3))
+		l.DrawFocusRing(ctx, track)
 	}
 	if label != "" {
 		f := l.body
@@ -1483,6 +1493,23 @@ func (l *Classic) fontFor(col paintengine2d.Color) *Font {
 		return BakeFont(l.metrics.FontSize, col)
 	}
 	return l.body
+}
+
+// labelFocusRect is the focus rectangle around a check / radio label (the
+// Windows convention), kept inside the control rect.
+func labelFocusRect(f *Font, label string, lb, b paintengine2d.Rect) paintengine2d.Rect {
+	w := lb.Dx()
+	if f != nil {
+		if tw := f.Advance(label); tw+6 < w {
+			w = tw + 6
+		}
+	}
+	h := b.Dy() - 2
+	if f != nil && f.Height()+6 < h {
+		h = f.Height() + 6
+	}
+	r := paintengine2d.XYWH(lb.Min.X-3, b.Min.Y+(b.Dy()-h)*0.5, w, h)
+	return r.Intersect(b)
 }
 
 func nearColor(a, b paintengine2d.Color) bool {
