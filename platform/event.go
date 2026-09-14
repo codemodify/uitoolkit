@@ -127,6 +127,9 @@ const (
 	EventIMEPreedit
 	EventIMECommit
 	EventIMECancel
+	// EventPointerLeave: the pointer left the window (wl_pointer.leave,
+	// X11 LeaveNotify). Hover and pending tooltips must not survive it.
+	EventPointerLeave
 )
 
 // Event is a platform-translated input or window event.
