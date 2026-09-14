@@ -51,15 +51,51 @@ func fallbackStar(size float32) (*paintengine2d.Path, float32) {
 	return p, size * 0.78
 }
 
+// fallbackPaperclip is 📎 for fonts without it: a wire loop (a capsule
+// ring) with the inner wire standing in its hole. Glyphs bake with the
+// non-zero rule, so the hole is wound the other way; with both contours
+// clockwise the clip used to fill solid and read as a tofu box.
 func fallbackPaperclip(size float32) (*paintengine2d.Path, float32) {
 	p := paintengine2d.NewPath()
-	h := size * 0.76
-	w := size * 0.30
-	x := size * 0.12
-	y := -size * 0.80
-	p.AddRoundRect(paintengine2d.XYWH(x, y, w, h), w*0.48, w*0.48)
-	p.AddRoundRect(paintengine2d.XYWH(x+w*0.28, y+h*0.16, w*0.52, h*0.64), w*0.26, w*0.26)
+	h := size * 0.80
+	w := size * 0.36
+	x := size * 0.10
+	y := -size * 0.84
+	t := size * 0.075 // wire thickness
+	if t < 1.2 {
+		t = 1.2
+	}
+	p.AddRoundRect(paintengine2d.XYWH(x, y, w, h), w*0.5, w*0.5)
+	hole := paintengine2d.XYWH(x+t, y+t, w-2*t, h-2*t)
+	addRoundRectCCW(p, hole, hole.Dx()*0.5)
+	// The inner wire: a bar from the upper third down towards the bottom.
+	bx := x + w*0.5 - t*0.5
+	p.AddRoundRect(paintengine2d.XYWH(bx, y+h*0.30, t, h*0.52), t*0.5, t*0.5)
 	return p, size * 0.62
+}
+
+// addRoundRectCCW adds a counter-clockwise rounded rect (a hole under the
+// non-zero fill rule when its outline is clockwise).
+func addRoundRectCCW(p *paintengine2d.Path, b paintengine2d.Rect, r float32) {
+	if b.Dx() <= 0 || b.Dy() <= 0 {
+		return
+	}
+	if max := b.Dx() * 0.5; r > max {
+		r = max
+	}
+	if max := b.Dy() * 0.5; r > max {
+		r = max
+	}
+	const k = 0.5522847
+	p.MoveTo(b.Min.X+r, b.Min.Y)
+	p.CubicTo(b.Min.X+r-r*k, b.Min.Y, b.Min.X, b.Min.Y+r-r*k, b.Min.X, b.Min.Y+r)
+	p.LineTo(b.Min.X, b.Max.Y-r)
+	p.CubicTo(b.Min.X, b.Max.Y-r+r*k, b.Min.X+r-r*k, b.Max.Y, b.Min.X+r, b.Max.Y)
+	p.LineTo(b.Max.X-r, b.Max.Y)
+	p.CubicTo(b.Max.X-r+r*k, b.Max.Y, b.Max.X, b.Max.Y-r+r*k, b.Max.X, b.Max.Y-r)
+	p.LineTo(b.Max.X, b.Min.Y+r)
+	p.CubicTo(b.Max.X, b.Min.Y+r-r*k, b.Max.X-r+r*k, b.Min.Y, b.Max.X-r, b.Min.Y)
+	p.Close()
 }
 
 func fallbackBullet(size float32) (*paintengine2d.Path, float32) {

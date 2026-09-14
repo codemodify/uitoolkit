@@ -552,3 +552,42 @@ func Contrast(bg paintengine2d.Color) paintengine2d.Color {
 	}
 	return paintengine2d.RGB(1, 1, 1)
 }
+
+// linear converts an sRGB channel to linear light.
+func linear(c float32) float64 {
+	v := float64(c)
+	if v <= 0.04045 {
+		return v / 12.92
+	}
+	return math.Pow((v+0.055)/1.055, 2.4)
+}
+
+// RelLuminance is the WCAG relative luminance of c.
+func RelLuminance(c paintengine2d.Color) float64 {
+	return 0.2126*linear(c.R) + 0.7152*linear(c.G) + 0.0722*linear(c.B)
+}
+
+// ContrastRatio is the WCAG contrast ratio between two opaque colours
+// (1 … 21; 4.5 is the body-text minimum, 3 for large text and UI glyphs).
+func ContrastRatio(a, b paintengine2d.Color) float64 {
+	la, lb := RelLuminance(a), RelLuminance(b)
+	if la < lb {
+		la, lb = lb, la
+	}
+	return (la + 0.05) / (lb + 0.05)
+}
+
+// ReadableOn returns the first of prefs that reaches ratio against bg,
+// else whichever of black and white contrasts more.
+func ReadableOn(bg paintengine2d.Color, ratio float64, prefs ...paintengine2d.Color) paintengine2d.Color {
+	for _, c := range prefs {
+		if ContrastRatio(c, bg) >= ratio {
+			return c
+		}
+	}
+	black, white := paintengine2d.RGB(0, 0, 0), paintengine2d.RGB(1, 1, 1)
+	if ContrastRatio(black, bg) >= ContrastRatio(white, bg) {
+		return black
+	}
+	return white
+}
