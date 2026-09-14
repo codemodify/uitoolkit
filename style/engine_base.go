@@ -145,6 +145,12 @@ func (BaseEngine) DrawWindowFrame(l *Classic, ctx *paintengine2d.Context, b pain
 	}
 }
 
+func (BaseEngine) WindowCloseRect(l *Classic, b paintengine2d.Rect) paintengine2d.Rect {
+	return CaptionCloseRect(l, paintengine2d.XYWH(b.Min.X, b.Min.Y, b.Dx(), l.metrics.TitleBar))
+}
+
+func (BaseEngine) StyleHint(l *Classic, h StyleHint) int { return 0 }
+
 // CaptionCloseRect is where an in-app window's close button sits inside
 // its caption bar. Engines with a different layout (Mac: left) override
 // DrawWindowFrame and hit-testing uses [WindowCloseRect].

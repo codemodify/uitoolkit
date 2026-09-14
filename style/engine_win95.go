@@ -409,9 +409,7 @@ func (e win95Engine) DrawWindowFrame(l *Classic, ctx *paintengine2d.Context, b p
 	}
 	right := bar.Max.X
 	if st.CanClose {
-		bh := bar.Dy() - l.S(4)
-		bw := bh + l.S(2)
-		cb := paintengine2d.XYWH(bar.Max.X-bw-l.S(2), bar.Min.Y+l.S(2), bw, bh)
+		cb := e.WindowCloseRect(l, b)
 		ctx.DrawRect(cb, paintengine2d.Fill(c.face))
 		if st.ClosePress {
 			c.pushed(ctx, cb)
@@ -428,6 +426,23 @@ func (e win95Engine) DrawWindowFrame(l *Classic, ctx *paintengine2d.Context, b p
 	if title != "" {
 		l.drawFittedText(ctx, f, title, paintengine2d.XYWH(bar.Min.X+l.S(4), bar.Min.Y, right-bar.Min.X-l.S(4), bar.Dy()), tc, AlignStart, 0)
 	}
+}
+
+// WindowCloseRect is the bevelled close button at the caption's right end.
+func (win95Engine) WindowCloseRect(l *Classic, b paintengine2d.Rect) paintengine2d.Rect {
+	in := l.S(3)
+	bar := paintengine2d.XYWH(b.Min.X+in, b.Min.Y+in, b.Dx()-in*2, w95CaptionH(l))
+	bh := bar.Dy() - l.S(4)
+	bw := bh + l.S(2)
+	return paintengine2d.XYWH(bar.Max.X-bw-l.S(2), bar.Min.Y+l.S(2), bw, bh)
+}
+
+// Windows dialogs put the default button first: "OK  Cancel".
+func (win95Engine) StyleHint(l *Classic, h StyleHint) int {
+	if h == HintDialogPrimaryFirst {
+		return 1
+	}
+	return 0
 }
 
 // ---- controls ---------------------------------------------------------------

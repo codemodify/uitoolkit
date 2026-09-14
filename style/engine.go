@@ -76,6 +76,15 @@ type Engine interface {
 	// DrawWindowFrame paints an in-app window or dialog: frame, caption bar
 	// with title and caption buttons.
 	DrawWindowFrame(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, title string, st WindowState)
+	// WindowCloseRect is where DrawWindowFrame put the close button for a
+	// frame of bounds b (empty when there is none) — hit-testing uses it.
+	WindowCloseRect(l *Classic, b paintengine2d.Rect) paintengine2d.Rect
+
+	// ---- behaviour ------------------------------------------------------
+
+	// StyleHint answers look-dependent behaviour questions (Qt's
+	// QStyle::styleHint): dialog button order, tab alignment, ...
+	StyleHint(l *Classic, h StyleHint) int
 
 	// ---- whole controls (same shape as LookAndFeel, plus the look) ------
 
@@ -151,6 +160,25 @@ type Insets struct{ Top, Right, Bottom, Left float32 }
 // Apply shrinks r by the insets.
 func (in Insets) Apply(r paintengine2d.Rect) paintengine2d.Rect {
 	return paintengine2d.XYWH(r.Min.X+in.Left, r.Min.Y+in.Top, r.Dx()-in.Left-in.Right, r.Dy()-in.Top-in.Bottom)
+}
+
+// StyleHint names a look-dependent behaviour (see Engine.StyleHint).
+type StyleHint int
+
+const (
+	// HintDialogPrimaryFirst: 1 puts the default dialog button first
+	// (Windows, KDE: "OK Cancel"); 0 puts it last (Mac, GNOME: "Cancel OK").
+	HintDialogPrimaryFirst StyleHint = iota
+	// HintTabsCentered: 1 centres tabs over their pane (Aqua segmented).
+	HintTabsCentered
+)
+
+// LookHint reads a style hint from any look (0 for non-engine looks).
+func LookHint(lk LookAndFeel, h StyleHint) int {
+	if c, ok := lk.(*Classic); ok && c != nil {
+		return c.eng().StyleHint(c, h)
+	}
+	return 0
 }
 
 // WindowState is the state of an in-app window / dialog frame.
@@ -471,6 +499,7 @@ type GroupBoxLook interface {
 type WindowFrameLook interface {
 	WindowFrameInsets() Insets
 	DrawWindowFrame(ctx *paintengine2d.Context, b paintengine2d.Rect, title string, st WindowState)
+	WindowCloseRect(b paintengine2d.Rect) paintengine2d.Rect
 }
 
 // ---- registry -------------------------------------------------------------
@@ -670,4 +699,9 @@ func (l *Classic) WindowFrameInsets() Insets { return l.eng().WindowFrameInsets(
 // DrawWindowFrame implements [WindowFrameLook].
 func (l *Classic) DrawWindowFrame(ctx *paintengine2d.Context, b paintengine2d.Rect, title string, st WindowState) {
 	l.eng().DrawWindowFrame(l, ctx, b, title, st)
+}
+
+// WindowCloseRect implements [WindowFrameLook].
+func (l *Classic) WindowCloseRect(b paintengine2d.Rect) paintengine2d.Rect {
+	return l.eng().WindowCloseRect(l, b)
 }
