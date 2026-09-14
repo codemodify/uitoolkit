@@ -231,7 +231,9 @@ func (t *ToolBar) Paint(ctx *paintengine2d.Context) {
 			ctx.DrawRect(paintengine2d.XYWH(x, b.Min.Y, 1, b.Dy()), paintengine2d.Fill(lk.Palette().Divider))
 			continue
 		}
-		st := t.State()
+		// The bar's own hover/press cover the whole strip; each tool takes
+		// them only from the index under the pointer.
+		st := t.State() &^ (style.StateHovered | style.StatePressed)
 		if i != t.focus || !t.keyNav {
 			st &^= style.StateFocused
 		}
