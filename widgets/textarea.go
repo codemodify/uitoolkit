@@ -411,7 +411,6 @@ func (t *TextArea) IMEPreedit(s string, caret int) {
 	if !t.editable() {
 		return
 	}
-	t.preedit = s
 	n := runeCount(s)
 	if caret < 0 {
 		caret = n
@@ -419,6 +418,10 @@ func (t *TextArea) IMEPreedit(s string, caret int) {
 	if caret > n {
 		caret = n
 	}
+	if s == t.preedit && caret == t.preeditCaret {
+		return // nothing changed: no relayout, no repaint
+	}
+	t.preedit = s
 	t.preeditCaret = caret
 	t.relayout()
 	t.ensureCaretVisible()

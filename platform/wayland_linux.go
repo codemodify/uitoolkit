@@ -1055,19 +1055,28 @@ type wlConn struct {
 	pendPrim     *C.struct_zwp_primary_selection_offer_v1
 	pendPrimMime string
 
-	textMan     *C.struct_zwp_text_input_manager_v3
-	textIn      *C.struct_zwp_text_input_v3
-	textActive  bool
-	tiWanted    bool // app focused an IMETarget; enable only then
-	tiSurf      int
-	imePre      string
-	imeCommit   string
-	imeDelB     int
-	imeDelA     int
-	imeBegin    int
-	imeEnd      int
-	lastXkbText string
-	lastIMEText string
+	textMan    *C.struct_zwp_text_input_manager_v3
+	textIn     *C.struct_zwp_text_input_v3
+	textActive bool
+	tiWanted   bool // app focused an IMETarget; enable only then
+	tiSurf     int
+	imePre     string
+	imeCommit  string
+	// lastPre / lastPreCaret are the preedit last handed to the app, and
+	// tiRect the cursor rectangle last committed to the compositor. Every
+	// text_input commit makes the compositor answer with done; re-sending
+	// an unchanged rectangle on each (empty) done was a busy loop on KWin
+	// (~3500 repaints/s with a focused field).
+	lastPre      string
+	lastPreCaret int
+	tiRect       [4]int
+	tiRectSet    bool
+	imeDelB      int
+	imeDelA      int
+	imeBegin     int
+	imeEnd       int
+	lastXkbText  string
+	lastIMEText  string
 
 	decoMan    *C.struct_zxdg_decoration_manager_v1
 	fracMan    *C.struct_wp_fractional_scale_manager_v1
@@ -1114,7 +1123,18 @@ type wlSlot struct {
 	stride int
 	busy   bool
 	dma    unsafe.Pointer // *ui_dmabuf_bo
+	// valid is set once the buffer holds a complete frame; stale is the
+	// damage presented through the other buffers since then. A buffer
+	// comes back into use frames later, so copying only the current
+	// frame's rects into it showed older content everywhere else (the shm
+	// equivalent of EGL buffer age).
+	valid bool
+	stale []paintengine2d.Rect
 }
+
+// maxSlotStale bounds a buffer's damage history; past it the buffer is
+// simply rewritten in full.
+const maxSlotStale = 32
 
 type wlSurface struct {
 	id         int
@@ -1156,6 +1176,14 @@ type wlSurface struct {
 	// wedge presentation.
 	framePending bool
 	frameSince   time.Time
+	// pend* is damage from frames that could not be presented yet (a frame
+	// callback was outstanding, or the compositor held every buffer). It
+	// is folded into the next present, or flushed from Poll once the
+	// compositor is ready, so nothing painted is ever lost. The content is
+	// already in the pixmap / GPU target: flushing repaints nothing.
+	pendAny   bool
+	pendFull  bool
+	pendRects []paintengine2d.Rect
 	// blank marks a buffer that was reallocated (resize / scale change)
 	// and never painted; committing it shows a black or transparent
 	// flash, so Present skips it and lets the resize event drive a
@@ -1713,7 +1741,12 @@ func (s *wlSurface) SetIMECursor(x, y, w, h int) {
 		sc = 1
 	}
 	// text-input cursor rect is in surface-local (logical) units
-	C.ui_wl_ti_cursor(s.conn.textIn, C.int(float32(x)/sc), C.int(float32(y)/sc), C.int(float32(w)/sc+0.5), C.int(float32(h)/sc+0.5))
+	r := [4]int{int(float32(x) / sc), int(float32(y) / sc), int(float32(w)/sc + 0.5), int(float32(h)/sc + 0.5)}
+	if s.conn.tiRectSet && s.conn.tiRect == r {
+		return // unchanged: a commit would only trigger another done
+	}
+	s.conn.tiRect, s.conn.tiRectSet = r, true
+	C.ui_wl_ti_cursor(s.conn.textIn, C.int(r[0]), C.int(r[1]), C.int(r[2]), C.int(r[3]))
 	C.ui_wl_ti_commit(s.conn.textIn)
 }
 
@@ -1782,6 +1815,48 @@ func (s *wlSurface) bufferWH() (int, int) {
 }
 
 func (s *wlSurface) Present(dirty []paintengine2d.Rect) error {
+	return s.present(dirty, false)
+}
+
+// deferDamage remembers the damage of a frame that could not be presented.
+func (s *wlSurface) deferDamage(dirty []paintengine2d.Rect) {
+	s.pendAny = true
+	if len(dirty) == 0 {
+		s.pendFull = true
+	}
+	if s.pendFull {
+		s.pendRects = s.pendRects[:0]
+		return
+	}
+	s.pendRects = append(s.pendRects, dirty...)
+}
+
+// takeDeferred unions deferred damage with this present's (nothing extra
+// when flushOnly) and clears it. full means the whole surface.
+func (s *wlSurface) takeDeferred(dirty []paintengine2d.Rect, flushOnly bool) (rects []paintengine2d.Rect, full bool) {
+	full = s.pendFull || (!flushOnly && len(dirty) == 0)
+	if !full {
+		rects = append(append(rects, s.pendRects...), dirty...)
+	}
+	s.pendAny, s.pendFull = false, false
+	s.pendRects = s.pendRects[:0]
+	return rects, full
+}
+
+// flushDeferred presents damage left over from skipped frames once the
+// compositor can take a frame again (called from Poll after dispatch,
+// where frame-done and buffer-release events land).
+func (s *wlSurface) flushDeferred() {
+	if s == nil || !s.pendAny || s.closed {
+		return
+	}
+	if s.gpu != nil && s.framePending && !s.frameOverdue() {
+		return
+	}
+	_ = s.present(nil, true)
+}
+
+func (s *wlSurface) present(dirty []paintengine2d.Rect, flushOnly bool) error {
 	if s.closed || s.surf == nil || s.conn == nil || s.conn.dpy == nil {
 		return nil
 	}
@@ -1839,7 +1914,20 @@ func (s *wlSurface) Present(dirty []paintengine2d.Rect) error {
 		// eglSwapBuffers would stall the whole run loop. Skip the swap
 		// while one is outstanding.
 		if s.framePending && !s.frameOverdue() {
+			// Keep the frame's damage: it was painted into the GPU target
+			// but never swapped. Dropping it left pressed buttons and
+			// popups off screen until an unrelated repaint.
+			if !flushOnly {
+				s.deferDamage(dirty)
+			}
 			return nil
+		}
+		if flushOnly || s.pendAny {
+			rects, full := s.takeDeferred(dirty, flushOnly)
+			if full {
+				rects = nil
+			}
+			s.gpu.SetPresentDamage(rects)
 		}
 		s.requestFrame()
 		if err := s.presentGPU(); err == nil {
@@ -1851,14 +1939,28 @@ func (s *wlSurface) Present(dirty []paintengine2d.Rect) error {
 		// pixmap and fall back to v0.4.1 opaque shm.
 		s.abandonGPU()
 	}
-	if len(dirty) == 0 {
-		dirty = []paintengine2d.Rect{paintengine2d.XYWH(0, 0, float32(s.img.Width), float32(s.img.Height))}
+	whole := []paintengine2d.Rect{paintengine2d.XYWH(0, 0, float32(s.img.Width), float32(s.img.Height))}
+	if len(dirty) == 0 && !flushOnly {
+		dirty = whole
 	}
 	slot, ok := s.pickSlot()
 	if !ok {
 		// Every buffer is still owned by the compositor. Writing into
-		// one anyway tears (and with dmabuf races the GPU); the next
-		// Present after a release paints this frame instead.
+		// one anyway tears (and with dmabuf races the GPU); the damage
+		// is kept and presented once a buffer is released.
+		if !flushOnly {
+			s.deferDamage(dirty)
+		}
+		return nil
+	}
+	if flushOnly || s.pendAny {
+		rects, full := s.takeDeferred(dirty, flushOnly)
+		if full {
+			rects = whole
+		}
+		dirty = rects
+	}
+	if len(dirty) == 0 {
 		return nil
 	}
 	if err := s.ensureSlot(slot, s.img.Width, s.img.Height); err != nil {
@@ -1872,7 +1974,15 @@ func (s *wlSurface) Present(dirty []paintengine2d.Rect) error {
 			return err
 		}
 	}
-	s.blitDirty(slot, dirty)
+	// This buffer also needs everything presented through the others
+	// since it last held a frame.
+	copyRects := dirty
+	if sl := &s.slots[slot]; !sl.valid {
+		copyRects = whole
+	} else if len(sl.stale) > 0 {
+		copyRects = append(append([]paintengine2d.Rect(nil), sl.stale...), dirty...)
+	}
+	s.blitDirty(slot, copyRects)
 	if s.dmabufUploadBlank(slot) {
 		s.finishDMAWrite(slot)
 		s.conn.useDmabuf = false
@@ -1880,15 +1990,38 @@ func (s *wlSurface) Present(dirty []paintengine2d.Rect) error {
 		if err := s.ensureSlot(slot, s.img.Width, s.img.Height); err != nil {
 			return err
 		}
-		s.blitDirty(slot, dirty)
+		s.blitDirty(slot, whole)
 	}
 	s.finishDMAWrite(slot)
 	C.ui_wl_attach(s.surf, s.slots[slot].buf)
 	C.ui_wl_commit(s.surf)
 	s.slots[slot].busy = true
+	s.noteSlotPresented(slot, dirty)
 	s.mapped = true
 	C.ui_wl_flush(s.conn.dpy)
 	return nil
+}
+
+// noteSlotPresented marks slot current and adds dirty to every other
+// buffer's history.
+func (s *wlSurface) noteSlotPresented(slot int, dirty []paintengine2d.Rect) {
+	for i := range s.slots {
+		sl := &s.slots[i]
+		if i == slot {
+			sl.valid = true
+			sl.stale = sl.stale[:0]
+			continue
+		}
+		if !sl.valid {
+			continue
+		}
+		if len(sl.stale)+len(dirty) > maxSlotStale {
+			sl.valid = false
+			sl.stale = sl.stale[:0]
+			continue
+		}
+		sl.stale = append(sl.stale, dirty...)
+	}
 }
 
 // imgPainted reports whether anything has been drawn into the current
@@ -2138,6 +2271,9 @@ func (s *wlSurface) Poll() []Event {
 	}
 	if !s.closed {
 		C.ui_wl_pump(s.conn.dpy)
+		// Frame-done / buffer-release just arrived: present whatever a
+		// throttled frame could not.
+		s.flushDeferred()
 	}
 	wlMu.Lock()
 	if !s.closed {
@@ -3176,12 +3312,15 @@ func uitkWlTIDone(id C.uintptr_t) {
 	if s == nil {
 		return
 	}
-	if c.imePre != "" || (c.imeCommit == "" && c.imeDelB == 0 && c.imeDelA == 0) {
-		caret := runeCountStr(c.imePre)
-		if c.imeEnd >= 0 && c.imeEnd < caret {
-			caret = c.imeEnd
-		}
+	caret := runeCountStr(c.imePre)
+	if c.imeEnd >= 0 && c.imeEnd < caret {
+		caret = c.imeEnd
+	}
+	// Only a preedit that changed reaches the app: done also arrives for
+	// every commit we send (cursor rectangle updates), with nothing new.
+	if c.imePre != c.lastPre || (c.imePre != "" && caret != c.lastPreCaret) {
 		s.push(Event{Kind: EventIMEPreedit, Text: c.imePre, IMECaret: caret})
+		c.lastPre, c.lastPreCaret = c.imePre, caret
 	}
 	emit, lastX, lastI := PairIMECommit(c.imeCommit, c.lastXkbText)
 	c.lastXkbText, c.lastIMEText = lastX, lastI
@@ -3220,6 +3359,8 @@ func wlEnableTextInput(c *wlConn, s *wlSurface) {
 	C.ui_wl_ti_enable(c.textIn)
 	C.ui_wl_ti_cursor(c.textIn, 0, 0, 1, 1)
 	C.ui_wl_ti_commit(c.textIn)
+	c.tiRect, c.tiRectSet = [4]int{0, 0, 1, 1}, true
+	c.lastPre, c.lastPreCaret = "", 0
 }
 
 func wlDisableTextInput(c *wlConn) {
@@ -3229,6 +3370,8 @@ func wlDisableTextInput(c *wlConn) {
 	C.ui_wl_ti_disable(c.textIn)
 	C.ui_wl_ti_commit(c.textIn)
 	c.textActive = false
+	c.tiRectSet = false
+	c.lastPre, c.lastPreCaret = "", 0
 }
 
 func wlClipSet(s string) bool {
