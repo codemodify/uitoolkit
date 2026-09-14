@@ -615,6 +615,12 @@ func (w *Window) bubbleWheel(ev platform.Event) {
 			continue
 		}
 		if c.MouseWheel(widget.MouseEvent{Pos: local(c, ev.Pos), Scroll: ev.Scroll, Mods: ev.Mods}) {
+			// Content moved under a still pointer: re-hit-test so the row
+			// (or widget) now under it becomes hot, not the one that
+			// scrolled away.
+			if w.capture == nil {
+				w.rehover(ev.Pos, ev.Mods)
+			}
 			return
 		}
 	}
@@ -798,12 +804,39 @@ func (w *Window) mouseUp(ev platform.Event) {
 		lp := local(t, ev.Pos)
 		t.MouseRelease(widget.MouseEvent{Pos: lp, Button: ev.Button, Mods: ev.Mods})
 	}
+	captured := w.capture != nil
 	w.capture = nil
+	if captured {
+		// A drag that ended over another widget hands hover to it (the
+		// pressed button used to stay hot until the pointer moved again).
+		w.rehover(ev.Pos, ev.Mods)
+	}
 	hit := w.hit(ev.Pos)
 	if hit != nil {
 		w.syncCursor(hit, local(hit, ev.Pos))
 	} else {
 		w.SetCursor(platform.CursorDefault)
+	}
+}
+
+// rehover re-hit-tests hover at pos after the content moved under a still
+// pointer (wheel scroll) or a capture ended. Unlike real motion it never
+// arms a tooltip.
+func (w *Window) rehover(pos paintengine2d.Point, mods platform.Modifiers) {
+	t := w.hit(pos)
+	if t != w.hover {
+		if w.hover != nil {
+			w.hover.MouseExit()
+		}
+		w.hover = t
+		if t != nil {
+			t.MouseEnter()
+		}
+	}
+	if t != nil {
+		lp := local(t, pos)
+		t.MouseMove(widget.MouseEvent{Pos: lp, Mods: mods})
+		w.syncCursor(t, lp)
 	}
 }
 
@@ -899,6 +932,7 @@ func (w *Window) tab(forward bool) {
 	}
 	w.RequestFocus(list[idx])
 	widget.MarkKeyboardFocus(list[idx])
+	widget.RevealFocus(list[idx])
 }
 
 func (w *Window) layout() {
