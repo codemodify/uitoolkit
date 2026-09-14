@@ -47,7 +47,14 @@ func (l *Classic) tokensOr() ThemeTokens {
 	return l.Tokens()
 }
 
+// faceColors is the fill, border and label colour of a face; the label is
+// always made readable on the fill (every early return included).
 func (l *Classic) faceColors(role chromeRole, st ControlState) (fill, border, fg paintengine2d.Color) {
+	fill, border, fg = l.faceColorsRaw(role, st)
+	return fill, border, l.readableFg(fg, fill)
+}
+
+func (l *Classic) faceColorsRaw(role chromeRole, st ControlState) (fill, border, fg paintengine2d.Color) {
 	p := l.palette
 	t := l.tokensOr()
 	fg = p.Text
@@ -207,13 +214,15 @@ func (l *Classic) faceColors(role chromeRole, st ControlState) (fill, border, fg
 				fill = p.Accent
 			}
 		case roleRow:
+			// Hover must never look like selection: a pack whose hot fill
+			// is its selection gets a light wash of it instead (hovered and
+			// selected rows used to be pixel-identical in every theme).
 			fill = t.Hot.Fill
-			if t.Bevel == BevelNone || t.Bevel == BevelFluentAccent || t.Bevel == BevelSoftShadow {
-				if fill.A > 0.95 {
-					fill = fill.WithAlpha(0.55)
-				}
-			}
 			border = t.Hot.Border
+			if sameFaceRGB(fill, t.Selected.Fill) || t.Bevel == BevelNone || t.Bevel == BevelFluentAccent || t.Bevel == BevelSoftShadow {
+				fill = t.Selected.Fill.WithAlpha(0.22)
+				border = paintengine2d.Color{}
+			}
 		case roleSplitter:
 			fill = p.Accent
 			border = p.Accent
@@ -239,6 +248,27 @@ func (l *Classic) faceColors(role chromeRole, st ControlState) (fill, border, fg
 		border = t.Selected.Border
 	}
 	return fill, border, fg
+}
+
+// readableFg keeps a label readable on the fill it sits on: filled rows,
+// tabs and menu items fall back to TextOnAccent, then black / white
+// (light-theme selected rows drew black on navy).
+func (l *Classic) readableFg(fg, fill paintengine2d.Color) paintengine2d.Color {
+	if colorUnset(fill) || fill.A < 0.5 {
+		return fg
+	}
+	bg := fill
+	if fill.A < 1 {
+		bg = Mix(l.palette.Background, fill, fill.A)
+	}
+	if ContrastRatio(fg, bg) >= 3 {
+		return fg
+	}
+	return ReadableOn(bg, 3, l.palette.TextOnAccent, l.palette.Text)
+}
+
+func sameFaceRGB(a, b paintengine2d.Color) bool {
+	return !colorUnset(a) && a.R == b.R && a.G == b.G && a.B == b.B
 }
 
 func (l *Classic) faceRadius(role chromeRole) float32 {

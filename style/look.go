@@ -846,13 +846,13 @@ func ToolButtonChromeFor(lk LookAndFeel, h float32) (pad, iconSide, iconGap floa
 func (l *Classic) baseDrawToolButton(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, icon ToolIcon) {
 	p := l.palette
 	well := b.Inset(1)
+	fg := p.Text
 	if st.Toggle() || (st.Hovered() && !st.Disabled()) || (st.Pressed() && !st.Disabled()) {
-		l.paintFace(ctx, well, roleTool, st)
+		fg = l.paintFace(ctx, well, roleTool, st)
 	}
 	if st.Focused() {
 		l.DrawFocusRing(ctx, b.Inset(1))
 	}
-	fg := p.Text
 	font := l.body
 	if st.Disabled() {
 		fg = p.TextMuted
@@ -970,7 +970,7 @@ func (l *Classic) baseDrawComboBox(ctx *paintengine2d.Context, b paintengine2d.R
 	if open {
 		st |= StatePressed
 	}
-	l.paintFace(ctx, b, roleCombo, st)
+	faceFg := l.paintFace(ctx, b, roleCombo, st)
 	if st.Focused() && !open && l.eng().FieldFocusRing(l) {
 		l.DrawFocusRing(ctx, b)
 	}
@@ -985,7 +985,7 @@ func (l *Classic) baseDrawComboBox(ctx *paintengine2d.Context, b paintengine2d.R
 	}
 	inner := paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad-chevW, b.Dy())
 	f := l.body
-	col := p.Text
+	col := faceFg
 	if text == "" {
 		f = l.muted
 		col = p.TextMuted
@@ -1016,7 +1016,23 @@ func (l *Classic) baseDrawComboBox(ctx *paintengine2d.Context, b paintengine2d.R
 		chev.LineTo(cx, cy+4)
 		chev.Close()
 	}
-	ctx.DrawPath(chev, paintengine2d.Fill(p.TextMuted))
+	chevCol := p.TextMuted
+	if ContrastRatio(chevCol, l.faceBackdrop(roleCombo, st)) < 3 {
+		chevCol = faceFg
+	}
+	ctx.DrawPath(chev, paintengine2d.Fill(chevCol))
+}
+
+// faceBackdrop is the opaque colour a face of role / state ends up as.
+func (l *Classic) faceBackdrop(role chromeRole, st ControlState) paintengine2d.Color {
+	fill, _, _ := l.faceColorsRaw(role, st)
+	if colorUnset(fill) {
+		return l.palette.Background
+	}
+	if fill.A < 1 {
+		return Mix(l.palette.Background, fill, fill.A)
+	}
+	return fill
 }
 
 func (l *Classic) baseDrawTitleBar(ctx *paintengine2d.Context, b paintengine2d.Rect, title, subtitle string) {
@@ -1095,8 +1111,9 @@ func (l *Classic) square() bool {
 func (l *Classic) baseDrawTableHeader(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, sorted, asc bool) {
 	p := l.palette
 	l.paintBezel(ctx, b, p.SurfaceAlt, p.Divider, roleBar, StateNone)
+	fg := p.Text
 	if st.Pressed() || (st.Hovered() && !st.Disabled()) {
-		l.paintFace(ctx, b.Inset(1), roleRow, st)
+		fg = l.paintFace(ctx, b.Inset(1), roleRow, st)
 	}
 	ctx.DrawRect(paintengine2d.XYWH(b.Max.X-1, b.Min.Y+6, 1, b.Dy()-12), paintengine2d.Fill(p.Divider))
 	ctx.DrawRect(paintengine2d.XYWH(b.Min.X, b.Max.Y-1, b.Dx(), 1), paintengine2d.Fill(p.Divider))
@@ -1115,7 +1132,7 @@ func (l *Classic) baseDrawTableHeader(ctx *paintengine2d.Context, b paintengine2
 	inner := paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, innerW, b.Dy())
 	ctx.Save()
 	ctx.ClipRect(inner)
-	l.body.Draw(ctx, l.body.Fit(label, inner.Dx()), paintengine2d.Pt(inner.Min.X, ty), p.Text)
+	l.body.Draw(ctx, l.body.Fit(label, inner.Dx()), paintengine2d.Pt(inner.Min.X, ty), fg)
 	ctx.Restore()
 	if sorted {
 		cx := b.Max.X - 12
