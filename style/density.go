@@ -35,6 +35,34 @@ func ParseDensity(s string) Density {
 
 // ApplyDensity rewrites 1× metrics for the chosen chrome density.
 // Compact keeps a 14px body; Default and Relaxed stay at 16px.
+// shiftDensity adds the density adjustment (dens - base, per metric) to m.
+func shiftDensity(m, base, dens Metrics) Metrics {
+	add := func(dst *float32, b, d float32) {
+		if v := *dst + (d - b); v > 0 {
+			*dst = v
+		}
+	}
+	add(&m.Pad, base.Pad, dens.Pad)
+	add(&m.Gap, base.Gap, dens.Gap)
+	add(&m.ControlH, base.ControlH, dens.ControlH)
+	add(&m.TitleBar, base.TitleBar, dens.TitleBar)
+	add(&m.FontSize, base.FontSize, dens.FontSize)
+	add(&m.TitleSize, base.TitleSize, dens.TitleSize)
+	add(&m.FieldPad, base.FieldPad, dens.FieldPad)
+	add(&m.MenuBarH, base.MenuBarH, dens.MenuBarH)
+	add(&m.MenuItemH, base.MenuItemH, dens.MenuItemH)
+	add(&m.TabH, base.TabH, dens.TabH)
+	add(&m.StatusBarH, base.StatusBarH, dens.StatusBarH)
+	add(&m.ToolBarH, base.ToolBarH, dens.ToolBarH)
+	add(&m.ToolBtn, base.ToolBtn, dens.ToolBtn)
+	add(&m.ComboH, base.ComboH, dens.ComboH)
+	add(&m.HeaderH, base.HeaderH, dens.HeaderH)
+	add(&m.AccordionH, base.AccordionH, dens.AccordionH)
+	add(&m.RowH, base.RowH, dens.RowH)
+	add(&m.RowPad, base.RowPad, dens.RowPad)
+	return m
+}
+
 func ApplyDensity(m Metrics, d Density) Metrics {
 	switch d {
 	case DensityCompact:

@@ -227,8 +227,12 @@ func ApplyIconSize(m Metrics, sz IconSize) Metrics {
 // control heights, scrollbar width, or radii when the new pack leaves them
 // unset.
 func packMetrics(d Density, tok ThemeTokens, corners CornerStyle, sz IconSize) Metrics {
-	m := ApplyDensity(DefaultMetrics(), d)
-	m = ApplyChromeMetrics(m, tok.Metrics)
+	// The pack (and its engine) set the default-density geometry; density
+	// then shifts it by the same amounts it shifts the stock metrics, so a
+	// compact Win95 still gets shorter rows than a default one.
+	base := DefaultMetrics()
+	m := ApplyChromeMetrics(base, tok.Metrics)
+	m = shiftDensity(m, base, ApplyDensity(base, d))
 	m = applyPackCorners(m, corners, tok.Metrics)
 	return ApplyIconSize(m, sz)
 }
