@@ -164,6 +164,11 @@ func (win95Engine) Face(l *Classic, ctx *paintengine2d.Context, b paintengine2d.
 		c.sunken(ctx, b)
 		return fg
 	case RoleRow, RoleMenu:
+		if role == RoleRow && st.Checked() && st.Inactive() {
+			// Unfocused lists grey their selection to the button face.
+			ctx.DrawRect(b, paintengine2d.Fill(c.face))
+			return c.text
+		}
 		if st.Checked() || (role == RoleMenu && (st.Hovered() || st.Pressed())) {
 			ctx.DrawRect(b, paintengine2d.Fill(c.sel))
 			return c.selTxt
@@ -804,7 +809,8 @@ func (e win95Engine) DrawSwitch(l *Classic, ctx *paintengine2d.Context, b painte
 	}
 }
 
-func (e win95Engine) DrawTreeRow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, selected, hovered, expanded, leaf bool, depth int, label string, bold bool) {
+func (e win95Engine) DrawTreeRow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, expanded, leaf bool, depth int, label string, bold bool) {
+	selected := st.Checked()
 	c := w95colors(l)
 	m := l.metrics
 	indent := m.TreeIndent
@@ -842,13 +848,33 @@ func (e win95Engine) DrawTreeRow(l *Classic, ctx *paintengine2d.Context, b paint
 	lb := paintengine2d.XYWH(lx-l.S(2), b.Min.Y+l.S(1), tw, b.Dy()-l.S(2))
 	fg := c.text
 	if selected {
-		ctx.DrawRect(lb, paintengine2d.Fill(c.sel))
+		fill := c.sel
 		fg = c.selTxt
+		if st.Inactive() {
+			// An unfocused tree keeps its selection in the button face.
+			fill, fg = c.face, c.text
+		}
+		ctx.DrawRect(lb, paintengine2d.Fill(fill))
 	}
 	ctx.Save()
 	ctx.ClipRect(b)
 	f.Draw(ctx, label, paintengine2d.Pt(lx, b.Min.Y+(b.Dy()-f.Height())*0.5), fg)
 	ctx.Restore()
+	if st.Focused() {
+		// The focus rectangle hugs the label, as the selection does.
+		e.ItemFocus(l, ctx, lb.Intersect(b), st)
+	}
+}
+
+// ItemFocus is the dotted focus rectangle, drawn in the colour that reads
+// on the row (on the navy selection it is the selection text).
+func (win95Engine) ItemFocus(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState) {
+	c := w95colors(l)
+	col := c.text
+	if st.Checked() && !st.Inactive() {
+		col = c.selTxt
+	}
+	DottedRect(ctx, b, col)
 }
 
 func (e win95Engine) DrawTableHeader(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, sorted, asc bool) {

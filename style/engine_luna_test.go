@@ -183,12 +183,12 @@ func lunaStateless(lk *Classic, ctx *paintengine2d.Context, r paintengine2d.Rect
 	lk.DrawFocusRing(ctx, r)
 	for _, sel := range []bool{false, true} {
 		for _, hov := range []bool{false, true} {
-			lk.DrawListRow(ctx, r, sel, hov, "Row")
-			lk.DrawTableCell(ctx, r, sel, hov, "Cell", AlignStart, nil)
-			lk.DrawTableCell(ctx, r, sel, hov, "12", AlignEnd, nil)
-			lk.DrawTableCell(ctx, r, sel, hov, "Row", AlignCenter, nil)
-			lk.DrawTreeRow(ctx, r, sel, hov, true, false, 0, "Inbox", true)
-			lk.DrawTreeRow(ctx, r, sel, hov, false, true, 2, "2026", false)
+			lk.DrawListRow(ctx, r, RowState(sel, hov), "Row")
+			lk.DrawTableCell(ctx, r, RowState(sel, hov), "Cell", AlignStart, nil)
+			lk.DrawTableCell(ctx, r, RowState(sel, hov), "12", AlignEnd, nil)
+			lk.DrawTableCell(ctx, r, RowState(sel, hov), "Row", AlignCenter, nil)
+			lk.DrawTreeRow(ctx, r, RowState(sel, hov), true, false, 0, "Inbox", true)
+			lk.DrawTreeRow(ctx, r, RowState(sel, hov), false, true, 2, "2026", false)
 		}
 	}
 	lk.DrawOverlay(ctx, r)
@@ -324,9 +324,9 @@ func TestLunaPaintsInsideRect(t *testing.T) {
 			lk.DrawAccordionHeader(ctx, r, st, "Section", st.Checked())
 		}},
 		{"rows", 170, 24, func(lk *Classic, ctx *paintengine2d.Context, r paintengine2d.Rect, st ControlState) {
-			lk.DrawListRow(ctx, r, st.Checked(), st.Hovered(), "Row")
-			lk.DrawTreeRow(ctx, r, st.Checked(), st.Hovered(), false, false, 1, "Archives", false)
-			lk.DrawTableCell(ctx, r, st.Checked(), st.Hovered(), "Cell", AlignEnd, nil)
+			lk.DrawListRow(ctx, r, st, "Row")
+			lk.DrawTreeRow(ctx, r, st, false, false, 1, "Archives", false)
+			lk.DrawTableCell(ctx, r, st, "Cell", AlignEnd, nil)
 		}},
 		{"bars", 300, 34, func(lk *Classic, ctx *paintengine2d.Context, r paintengine2d.Rect, st ControlState) {
 			lk.DrawMenuBar(ctx, r)

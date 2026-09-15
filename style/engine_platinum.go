@@ -355,6 +355,13 @@ func (e platinumEngine) Face(l *Classic, ctx *paintengine2d.Context, b paintengi
 		}
 		return fg
 	case RoleRow:
+		if st.Checked() && st.Inactive() {
+			// Classic Mac OS draws the selection of an inactive list as a
+			// hollow frame in the highlight colour.
+			u := l.S(1)
+			ctx.DrawRect(b.Inset(u*0.5), paintengine2d.StrokePaint(c.sel, u))
+			return fg
+		}
 		if st.Checked() {
 			ctx.DrawRect(b, paintengine2d.Fill(c.sel))
 			return c.selTxt
@@ -691,6 +698,10 @@ func (platinumEngine) DrawPopupShadow(l *Classic, ctx *paintengine2d.Context, b 
 	}
 	DropShadow(ctx, b, 0, paintengine2d.RGBA(0, 0, 0, 0.55), l.S(1), l.S(1), 0, 0)
 }
+
+// ItemFocus: none — a focused list is ringed as a whole (its view frame
+// draws the look's focus ring), the Mac way.
+func (platinumEngine) ItemFocus(*Classic, *paintengine2d.Context, paintengine2d.Rect, ControlState) {}
 
 func (platinumEngine) WindowCloseRect(l *Classic, b paintengine2d.Rect) paintengine2d.Rect {
 	return platBox(l, platBar(l, b), true, 0)
@@ -1236,29 +1247,17 @@ func (e platinumEngine) DrawSwitch(l *Classic, ctx *paintengine2d.Context, b pai
 	}
 }
 
-func (e platinumEngine) DrawListRow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, selected, hovered bool, label string) {
-	st := StateNone
-	if selected {
-		st |= StateChecked
-	}
-	if hovered {
-		st |= StateHovered
-	}
+func (e platinumEngine) DrawListRow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string) {
+	selected, hovered := st.Checked(), st.Hovered()
 	fg := l.fieldText()
 	if selected || hovered {
-		fg = e.Face(l, ctx, b, RoleRow, st)
+		fg = e.Face(l, ctx, b, RoleRow, st&^StateFocused)
 	}
 	l.drawFittedText(ctx, l.body, label, paintengine2d.XYWH(b.Min.X+l.S(8), b.Min.Y, b.Dx()-l.S(12), b.Dy()), fg, AlignStart, 0)
 }
 
-func (e platinumEngine) DrawTreeRow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, selected, hovered, expanded, leaf bool, depth int, label string, bold bool) {
-	st := StateNone
-	if selected {
-		st |= StateChecked
-	}
-	if hovered {
-		st |= StateHovered
-	}
+func (e platinumEngine) DrawTreeRow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, expanded, leaf bool, depth int, label string, bold bool) {
+	selected, hovered := st.Checked(), st.Hovered()
 	indent := l.metrics.TreeIndent
 	if indent <= 0 {
 		indent = l.S(16)
@@ -1273,7 +1272,7 @@ func (e platinumEngine) DrawTreeRow(l *Classic, ctx *paintengine2d.Context, b pa
 	if selected || hovered {
 		// The Finder highlights the name, not the whole row.
 		hb := paintengine2d.XYWH(lx-l.S(3), b.Min.Y+l.S(1), f.Advance(label)+l.S(6), b.Dy()-l.S(2)).Intersect(b)
-		fg = e.Face(l, ctx, hb, RoleRow, st)
+		fg = e.Face(l, ctx, hb, RoleRow, st&^StateFocused)
 	}
 	if !leaf {
 		e.Expander(l, ctx, paintengine2d.XYWH(x, b.Min.Y, indent, b.Dy()), expanded, fg)

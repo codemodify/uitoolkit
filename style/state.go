@@ -18,6 +18,13 @@ const (
 	// (tabs, segmented controls), for engines that shape the ends.
 	StateFirst
 	StateLast
+	// StateInactive marks an item whose view does not have keyboard focus
+	// (always so in an inactive window). Windows and Mac looks grey such a
+	// selection; GTK / Qt-style looks keep it until the window is inactive.
+	StateInactive
+	// StateBackdrop marks chrome in an inactive window (GTK's :backdrop,
+	// Qt's inactive palette group): every look may subdue it.
+	StateBackdrop
 )
 
 func (s ControlState) Hovered() bool  { return s&StateHovered != 0 }
@@ -29,6 +36,20 @@ func (s ControlState) Primary() bool  { return s&StatePrimary != 0 }
 func (s ControlState) Toggle() bool   { return s&StateToggle != 0 }
 func (s ControlState) First() bool    { return s&StateFirst != 0 }
 func (s ControlState) Last() bool     { return s&StateLast != 0 }
+func (s ControlState) Inactive() bool { return s&StateInactive != 0 }
+func (s ControlState) Backdrop() bool { return s&StateBackdrop != 0 }
+
+// RowState is the item state of a plain row: selected and hovered.
+func RowState(selected, hovered bool) ControlState {
+	st := StateNone
+	if selected {
+		st |= StateChecked
+	}
+	if hovered {
+		st |= StateHovered
+	}
+	return st
+}
 
 // LookAndFeel paints control chrome. Widgets never hard-code a skin.
 type LookAndFeel interface {
@@ -51,7 +72,10 @@ type LookAndFeel interface {
 	DrawScrollBar(ctx *paintengine2d.Context, track, thumb paintengine2d.Rect, st ControlState)
 	DrawFocusRing(ctx *paintengine2d.Context, b paintengine2d.Rect)
 	DrawSplitter(ctx *paintengine2d.Context, b paintengine2d.Rect, vertical bool, st ControlState)
-	DrawListRow(ctx *paintengine2d.Context, b paintengine2d.Rect, selected, hovered bool, label string)
+	// Row painters take the item state: Checked (selected), Hovered,
+	// Focused (the current row of a focused view), Inactive, Disabled. The
+	// current row's focus mark is DrawItemFocus, painted over the row.
+	DrawListRow(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string)
 	DrawOverlay(ctx *paintengine2d.Context, b paintengine2d.Rect)
 	DrawMenuBar(ctx *paintengine2d.Context, b paintengine2d.Rect)
 	DrawMenuTitle(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, underline int, open bool)
@@ -59,7 +83,7 @@ type LookAndFeel interface {
 	DrawMenuItem(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, row MenuRow)
 	DrawTabBar(ctx *paintengine2d.Context, b paintengine2d.Rect)
 	DrawTab(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, selected bool)
-	DrawTreeRow(ctx *paintengine2d.Context, b paintengine2d.Rect, selected, hovered, expanded, leaf bool, depth int, label string, bold bool)
+	DrawTreeRow(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, expanded, leaf bool, depth int, label string, bold bool)
 	DrawStatusBar(ctx *paintengine2d.Context, b paintengine2d.Rect, parts []string)
 	DrawToolBar(ctx *paintengine2d.Context, b paintengine2d.Rect)
 	DrawToolButton(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, icon ToolIcon)
@@ -69,7 +93,7 @@ type LookAndFeel interface {
 	DrawTitleBar(ctx *paintengine2d.Context, b paintengine2d.Rect, title, subtitle string)
 	DrawMessageIcon(ctx *paintengine2d.Context, b paintengine2d.Rect, icon ToolIcon)
 	DrawTableHeader(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, sorted, asc bool)
-	DrawTableCell(ctx *paintengine2d.Context, b paintengine2d.Rect, selected, hovered bool, label string, align Align, face *Font)
+	DrawTableCell(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, align Align, face *Font)
 	DrawSpinner(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, upHover, downHover, upPress, downPress bool)
 	DrawTooltip(ctx *paintengine2d.Context, b paintengine2d.Rect, text string)
 	DrawTextArea(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, lines []TextLine, caret, selA, selB int, blink bool, scrollX, scrollY float32, placeholder string, face *Font)

@@ -948,8 +948,9 @@ func (e lunaEngine) Face(l *Classic, ctx *paintengine2d.Context, b paintengine2d
 		e.CheckIndicator(l, ctx, b, st, false)
 	case RoleRow:
 		if st.Checked() {
-			ctx.DrawRect(b, paintengine2d.Fill(c.sel))
-			return c.selText
+			fill, fg := c.selFor(st)
+			ctx.DrawRect(b, paintengine2d.Fill(fill))
+			return fg
 		}
 		return l.fieldText()
 	case RoleMenu:
@@ -2112,21 +2113,46 @@ func (e lunaEngine) DrawSwitch(l *Classic, ctx *paintengine2d.Context, b painten
 	}
 }
 
+// selFor is the selection fill and text of a row: the highlight colour,
+// or the button face with plain text when the view is unfocused (XP's
+// list and tree views grey an inactive selection).
+func (c *lunaSet) selFor(st ControlState) (fill, fg paintengine2d.Color) {
+	if st.Inactive() {
+		return c.face, c.text
+	}
+	return c.sel, c.selText
+}
+
+// ItemFocus is the dotted focus rectangle XP list and tree views kept.
+func (lunaEngine) ItemFocus(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState) {
+	c := lunaColors(l)
+	col := c.text
+	if st.Checked() && !st.Inactive() {
+		col = c.selText
+	}
+	DottedRect(ctx, lunaSnap(b), col)
+}
+
 // DrawListRow is a ListView row: XP highlighted the selection in the
 // scheme's highlight colour and did not hot-track.
-func (lunaEngine) DrawListRow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, selected, hovered bool, label string) {
+func (lunaEngine) DrawListRow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string) {
 	c := lunaColors(l)
 	fg := l.fieldText()
-	if selected {
-		ctx.DrawRect(lunaSnap(b), paintengine2d.Fill(c.sel))
-		fg = c.selText
+	if st.Checked() {
+		var fill paintengine2d.Color
+		fill, fg = c.selFor(st)
+		ctx.DrawRect(lunaSnap(b), paintengine2d.Fill(fill))
 	}
 	l.drawFittedText(ctx, l.body, label, paintengine2d.XYWH(b.Min.X+l.S(6), b.Min.Y, b.Dx()-l.S(10), b.Dy()), fg, AlignStart, 0)
+	if st.Focused() {
+		lunaEngine{}.ItemFocus(l, ctx, b, st)
+	}
 }
 
 // DrawTreeRow is a TreeView row: dotted connectors, the +/- box and the
 // selection behind the label only.
-func (e lunaEngine) DrawTreeRow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, selected, hovered, expanded, leaf bool, depth int, label string, bold bool) {
+func (e lunaEngine) DrawTreeRow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, expanded, leaf bool, depth int, label string, bold bool) {
+	selected := st.Checked()
 	c := lunaColors(l)
 	lw := lunaPx(l)
 	indent := l.metrics.TreeIndent
@@ -2164,15 +2190,19 @@ func (e lunaEngine) DrawTreeRow(l *Classic, ctx *paintengine2d.Context, b painte
 	}
 	lx := x + indent + l.S(4)
 	fg := l.fieldText()
+	lb := lunaSnap(paintengine2d.XYWH(lx-l.S(2), b.Min.Y+lw, f.Advance(label)+l.S(4), b.Dy()-2*lw)).Intersect(b)
 	if selected {
-		lb := lunaSnap(paintengine2d.XYWH(lx-l.S(2), b.Min.Y+lw, f.Advance(label)+l.S(4), b.Dy()-2*lw))
-		ctx.DrawRect(lb.Intersect(b), paintengine2d.Fill(c.sel))
-		fg = c.selText
+		var fill paintengine2d.Color
+		fill, fg = c.selFor(st)
+		ctx.DrawRect(lb, paintengine2d.Fill(fill))
 	}
 	ctx.Save()
 	ctx.ClipRect(b)
 	f.Draw(ctx, label, paintengine2d.Pt(lx, b.Min.Y+(b.Dy()-f.Height())*0.5), fg)
 	ctx.Restore()
+	if st.Focused() {
+		e.ItemFocus(l, ctx, lb, st)
+	}
 }
 
 // DrawTableHeader is ListViewHeader.bmp: a flat face over a three-line
@@ -2225,12 +2255,13 @@ func (e lunaEngine) DrawTableHeader(l *Classic, ctx *paintengine2d.Context, b pa
 	l.drawFittedText(ctx, l.body, label, paintengine2d.XYWH(lb.Min.X+l.S(6), lb.Min.Y, lb.Dx()-l.S(10)-aw, lb.Dy()-2*lw), fg, AlignStart, 0)
 }
 
-func (lunaEngine) DrawTableCell(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, selected, hovered bool, label string, align Align, face *Font) {
+func (lunaEngine) DrawTableCell(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, align Align, face *Font) {
 	c := lunaColors(l)
 	fg := l.fieldText()
-	if selected {
-		ctx.DrawRect(lunaSnap(b), paintengine2d.Fill(c.sel))
-		fg = c.selText
+	if st.Checked() {
+		var fill paintengine2d.Color
+		fill, fg = c.selFor(st)
+		ctx.DrawRect(lunaSnap(b), paintengine2d.Fill(fill))
 	}
 	f := l.faceOrBody(face)
 	pad := tableCellPad(b.Dx(), f.Advance(label))

@@ -1810,7 +1810,8 @@ func (e nextEngine) DrawSwitch(l *Classic, ctx *paintengine2d.Context, b painten
 // DrawListRow: lists sit on the white field, where NeXT's light-grey
 // selection would read as a hole; selected rows take the pack's row colour
 // (dark grey with white text). Lists do not hot-track.
-func (e nextEngine) DrawListRow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, selected, hovered bool, label string) {
+func (e nextEngine) DrawListRow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string) {
+	selected := st.Checked()
 	c := nxColors(l)
 	fg := c.fieldTxt
 	if selected {
@@ -1818,11 +1819,15 @@ func (e nextEngine) DrawListRow(l *Classic, ctx *paintengine2d.Context, b painte
 		fg = c.rowSelTxt
 	}
 	l.drawFittedText(ctx, l.body, label, paintengine2d.XYWH(b.Min.X+l.S(6), b.Min.Y, b.Dx()-l.S(10), b.Dy()), fg, AlignStart, 0)
+	if st.Focused() {
+		e.ItemFocus(l, ctx, b, st)
+	}
 }
 
 // DrawTreeRow is a browser-style row: the engraved branch arrow and the
 // selection across the row.
-func (e nextEngine) DrawTreeRow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, selected, hovered, expanded, leaf bool, depth int, label string, bold bool) {
+func (e nextEngine) DrawTreeRow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, expanded, leaf bool, depth int, label string, bold bool) {
+	selected := st.Checked()
 	c := nxColors(l)
 	indent := l.metrics.TreeIndent
 	if indent <= 0 {
@@ -1846,6 +1851,9 @@ func (e nextEngine) DrawTreeRow(l *Classic, ctx *paintengine2d.Context, b painte
 	ctx.ClipRect(b)
 	f.Draw(ctx, label, paintengine2d.Pt(lx, b.Min.Y+(b.Dy()-f.Height())*0.5), fg)
 	ctx.Restore()
+	if st.Focused() {
+		e.ItemFocus(l, ctx, b, st)
+	}
 }
 
 // DrawTableHeader: a row of NeXT buttons (the NSTableView header); pressed
@@ -1871,7 +1879,8 @@ func (e nextEngine) DrawTableHeader(l *Classic, ctx *paintengine2d.Context, b pa
 	l.drawFittedText(ctx, l.body, label, paintengine2d.XYWH(lb.Min.X+l.S(6), lb.Min.Y, lb.Dx()-l.S(10)-aw, lb.Dy()-u), fg, AlignStart, 0)
 }
 
-func (e nextEngine) DrawTableCell(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, selected, hovered bool, label string, align Align, face *Font) {
+func (e nextEngine) DrawTableCell(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, align Align, face *Font) {
+	selected := st.Checked()
 	c := nxColors(l)
 	fg := c.fieldTxt
 	if selected {

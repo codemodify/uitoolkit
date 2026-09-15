@@ -282,29 +282,38 @@ func (s *sheet) tabsMenus(x, y float32) {
 
 func (s *sheet) rows(x, y float32) {
 	s.heading(x, y, "Lists, trees, tables")
-	// Lists, trees and tables paint on the field (view) colour.
-	s.ctx.DrawRect(s.r(x, y+22, 170, 110), paintengine2d.Fill(s.p.Field))
-	s.lk.DrawListRow(s.ctx, s.r(x, y+24, 170, 24), false, false, "List row")
-	s.lk.DrawListRow(s.ctx, s.r(x, y+48, 170, 24), false, true, "Hovered row")
-	s.lk.DrawListRow(s.ctx, s.r(x, y+72, 170, 24), true, false, "Selected row")
-	s.lk.DrawListRow(s.ctx, s.r(x, y+96, 170, 24), true, true, "Selected+hover")
+	// Lists, trees and tables paint on the field (view) colour. Rows show
+	// every item state: hover, the current row of a focused view (its focus
+	// mark), and a selection in an unfocused view (Inactive).
+	sel := style.StateChecked
+	cur := style.StateChecked | style.StateFocused
+	off := style.StateChecked | style.StateInactive
+	s.ctx.DrawRect(s.r(x, y+22, 170, 114), paintengine2d.Fill(s.p.Field))
+	s.lk.DrawListRow(s.ctx, s.r(x, y+24, 170, 22), stN, "List row")
+	s.lk.DrawListRow(s.ctx, s.r(x, y+46, 170, 22), stH, "Hovered row")
+	s.lk.DrawListRow(s.ctx, s.r(x, y+68, 170, 22), cur, "Selected, focused")
+	s.lk.DrawListRow(s.ctx, s.r(x, y+90, 170, 22), off, "Selected, unfocused")
+	s.lk.DrawListRow(s.ctx, s.r(x, y+112, 170, 22), style.StateFocused, "Current row")
 	s.ctx.DrawRect(s.r(x+180, y+22, 170, 110), paintengine2d.Fill(s.p.Field))
-	s.ctx.DrawRect(s.r(x+360, y+46, 180, 72), paintengine2d.Fill(s.p.Field))
-	s.lk.DrawTreeRow(s.ctx, s.r(x+180, y+24, 170, 24), false, false, true, false, 0, "Inbox", true)
-	s.lk.DrawTreeRow(s.ctx, s.r(x+180, y+48, 170, 24), false, true, false, false, 1, "Archives", false)
-	s.lk.DrawTreeRow(s.ctx, s.r(x+180, y+72, 170, 24), true, false, false, true, 2, "2026", false)
-	s.lk.DrawTreeRow(s.ctx, s.r(x+180, y+96, 170, 24), false, false, false, true, 1, "Sent", false)
+	s.ctx.DrawRect(s.r(x+360, y+46, 180, 96), paintengine2d.Fill(s.p.Field))
+	s.lk.DrawTreeRow(s.ctx, s.r(x+180, y+24, 170, 24), stN, true, false, 0, "Inbox", true)
+	s.lk.DrawTreeRow(s.ctx, s.r(x+180, y+48, 170, 24), stH, false, false, 1, "Archives", false)
+	s.lk.DrawTreeRow(s.ctx, s.r(x+180, y+72, 170, 24), cur, false, true, 2, "2026", false)
+	s.lk.DrawTreeRow(s.ctx, s.r(x+180, y+96, 170, 24), off, false, true, 1, "Sent", false)
 	hx := x + 360
 	s.lk.DrawTableHeader(s.ctx, s.r(hx, y+22, 60, 24), stN, "Name", false, false)
 	s.lk.DrawTableHeader(s.ctx, s.r(hx+60, y+22, 60, 24), stH, "Hover", true, true)
 	s.lk.DrawTableHeader(s.ctx, s.r(hx+120, y+22, 60, 24), stP, "Press", true, false)
-	for i, sel := range []bool{false, true, false} {
+	for i, st := range []style.ControlState{stN, cur, stH, off} {
 		ry := y + 46 + float32(i)*24
-		hov := i == 2
-		s.lk.DrawTableCell(s.ctx, s.r(hx, ry, 60, 24), sel, hov, "Cell", style.AlignStart, nil)
-		s.lk.DrawTableCell(s.ctx, s.r(hx+60, ry, 60, 24), sel, hov, "12", style.AlignEnd, nil)
-		s.lk.DrawTableCell(s.ctx, s.r(hx+120, ry, 60, 24), sel, hov, "Row", style.AlignCenter, nil)
+		s.lk.DrawTableCell(s.ctx, s.r(hx, ry, 60, 24), st, "Cell", style.AlignStart, nil)
+		s.lk.DrawTableCell(s.ctx, s.r(hx+60, ry, 60, 24), st, "12", style.AlignEnd, nil)
+		s.lk.DrawTableCell(s.ctx, s.r(hx+120, ry, 60, 24), st, "Row", style.AlignCenter, nil)
+		if st.Focused() {
+			style.DrawItemFocusOf(s.lk, s.ctx, s.r(hx, ry, 180, 24), st)
+		}
 	}
+	_ = sel
 	s.caption(x, y+150, "accordion: collapsed / expanded / hover / focused")
 	s.lk.DrawAccordionHeader(s.ctx, s.r(x, y+168, 130, 28), stN, "Section", false)
 	s.lk.DrawAccordionHeader(s.ctx, s.r(x+136, y+168, 130, 28), stN, "Open", true)

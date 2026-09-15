@@ -153,6 +153,7 @@ type aqua struct {
 
 	field, fieldTop, fieldSide, fieldBot paintengine2d.Color
 	sel, selTxt, hover                   paintengine2d.Color
+	selOff, selOffTxt                    paintengine2d.Color // selection of an unfocused list
 	box, boxEdge, boxEdgeLo              paintengine2d.Color
 	menuBg, menuEdge, menuTxt, menuHiTxt paintengine2d.Color
 	menuHiStops                          []paintengine2d.GradientStop
@@ -269,6 +270,12 @@ func aquaBuild(l *Classic) *aqua {
 	c.sel = l.X("listSel", p.Accent)
 	c.selTxt = ReadableOn(c.sel, 4.5, p.TextOnAccent, white, black)
 	c.hover = c.sel.WithAlpha(0.1)
+	// Mac OS X greys the selection of a list without focus.
+	c.selOff = l.X("listSelInactive", Mix(p.Field, Hex("#8e8e8e"), 0.4))
+	if c.dark {
+		c.selOff = Mix(p.Field, white, 0.18)
+	}
+	c.selOffTxt = ReadableOn(c.selOff, 4.5, p.Text, black, white)
 
 	c.box = l.X("box", black.WithAlpha(0.045))
 	c.boxEdge = l.X("boxEdge", Mix(p.Border, p.Background, 0.15))
@@ -712,6 +719,10 @@ func (e aquaEngine) Face(l *Classic, ctx *paintengine2d.Context, b paintengine2d
 		aquaGelPaint(ctx, b, l.S(3), u, g, false)
 		return g.fg
 	case RoleRow:
+		if st.Checked() && st.Inactive() {
+			ctx.DrawRect(b, paintengine2d.Fill(c.selOff))
+			return c.selOffTxt
+		}
 		if st.Checked() {
 			ctx.DrawRect(b, paintengine2d.Fill(c.sel))
 			return c.selTxt
@@ -1113,6 +1124,10 @@ func aquaShadow(l *Classic, kind PopupKind) baseShadowSpec {
 	}
 	return baseShadowSpec{col: paintengine2d.RGBA(0, 0, 0, 0.4), r: l.S(5), dy: l.S(5), blur: l.S(16)}
 }
+
+// ItemFocus: none — a focused list is ringed as a whole (its view frame
+// draws the look's focus ring), the Mac way.
+func (aquaEngine) ItemFocus(*Classic, *paintengine2d.Context, paintengine2d.Rect, ControlState) {}
 
 func (aquaEngine) WindowCloseRect(l *Classic, b paintengine2d.Rect) paintengine2d.Rect {
 	return aquaLight(l, b, 0)
@@ -1638,17 +1653,11 @@ func (e aquaEngine) DrawSwitch(l *Classic, ctx *paintengine2d.Context, b painten
 	}
 }
 
-func (e aquaEngine) DrawListRow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, selected, hovered bool, label string) {
-	st := StateNone
-	if selected {
-		st |= StateChecked
-	}
-	if hovered {
-		st |= StateHovered
-	}
+func (e aquaEngine) DrawListRow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string) {
+	selected, hovered := st.Checked(), st.Hovered()
 	fg := l.fieldText()
 	if selected || hovered {
-		fg = e.Face(l, ctx, b, RoleRow, st)
+		fg = e.Face(l, ctx, b, RoleRow, st&^StateFocused)
 		if !selected {
 			fg = l.fieldText()
 		}
@@ -1656,18 +1665,12 @@ func (e aquaEngine) DrawListRow(l *Classic, ctx *paintengine2d.Context, b painte
 	l.drawFittedText(ctx, l.body, label, paintengine2d.XYWH(b.Min.X+l.S(8), b.Min.Y, b.Dx()-l.S(12), b.Dy()), fg, AlignStart, 0)
 }
 
-func (e aquaEngine) DrawTreeRow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, selected, hovered, expanded, leaf bool, depth int, label string, bold bool) {
+func (e aquaEngine) DrawTreeRow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, expanded, leaf bool, depth int, label string, bold bool) {
+	selected, hovered := st.Checked(), st.Hovered()
 	c := aquaColors(l)
-	st := StateNone
-	if selected {
-		st |= StateChecked
-	}
-	if hovered {
-		st |= StateHovered
-	}
 	fg := l.fieldText()
 	if selected || hovered {
-		fg = e.Face(l, ctx, b, RoleRow, st)
+		fg = e.Face(l, ctx, b, RoleRow, st&^StateFocused)
 		if !selected {
 			fg = l.fieldText()
 		}
@@ -1679,7 +1682,7 @@ func (e aquaEngine) DrawTreeRow(l *Classic, ctx *paintengine2d.Context, b painte
 	x := b.Min.X + l.S(4) + float32(depth)*indent
 	if !leaf {
 		col := c.disclose
-		if selected {
+		if selected && !st.Inactive() {
 			col = c.selTxt
 		}
 		e.Expander(l, ctx, paintengine2d.XYWH(x, b.Min.Y, indent, b.Dy()), expanded, col)
@@ -1695,17 +1698,11 @@ func (e aquaEngine) DrawTreeRow(l *Classic, ctx *paintengine2d.Context, b painte
 	ctx.Restore()
 }
 
-func (e aquaEngine) DrawTableCell(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, selected, hovered bool, label string, align Align, face *Font) {
-	st := StateNone
-	if selected {
-		st |= StateChecked
-	}
-	if hovered {
-		st |= StateHovered
-	}
+func (e aquaEngine) DrawTableCell(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, align Align, face *Font) {
+	selected, hovered := st.Checked(), st.Hovered()
 	fg := l.fieldText()
 	if selected || hovered {
-		fg = e.Face(l, ctx, b, RoleRow, st)
+		fg = e.Face(l, ctx, b, RoleRow, st&^StateFocused)
 		if !selected {
 			fg = l.fieldText()
 		}
