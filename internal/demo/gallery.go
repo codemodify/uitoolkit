@@ -136,9 +136,10 @@ func Gallery(a *app.Application, win *app.Window, light bool) widget.Component {
 	})
 
 	buttons := widgets.NewPanel("Buttons",
-		widgets.NewRow(primary, plain, disabled).WithGap(10),
-		widgets.NewRow(about, ask, warn).WithGap(10),
-		widgets.NewRow(other, themeBtn).WithGap(10),
+		// Each group folds onto another line when the column is narrow.
+		wrapRow(primary, plain, disabled),
+		wrapRow(about, ask, warn),
+		wrapRow(other, themeBtn),
 		clickLbl,
 	)
 
@@ -461,4 +462,11 @@ func Gallery(a *app.Application, win *app.Window, light bool) widget.Component {
 	root.AddFlex(split, 1)
 	_ = light
 	return root
+}
+
+// wrapRow is a row of controls that wraps when it runs out of width.
+func wrapRow(children ...widget.Component) *widgets.Wrap {
+	w := widgets.NewWrap(children...)
+	w.Gap = 10
+	return w
 }
