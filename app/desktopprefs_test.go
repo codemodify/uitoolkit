@@ -3,6 +3,7 @@ package app
 import (
 	"testing"
 
+	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widgets"
@@ -100,5 +101,26 @@ func TestAppNotFollowingIgnoresScheme(t *testing.T) {
 	a := New(Options{Headless: true, Scale: 1})
 	if got := lookPack(t, a); got != "breeze" {
 		t.Fatalf("%s, want breeze", got)
+	}
+}
+
+// UITK_ACCENT stands in for the desktop's accent; the portal's accent
+// arriving later restyles an app that follows the desktop.
+func TestAppTakesDesktopAccent(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv(AccentEnv, "#e95420")
+	defer style.SetDesktopAccent(paintengine2d.Color{}, false)
+	if err := style.SaveAppearance(style.Appearance{Name: "breeze", Theme: style.ThemeLight, FollowDesktop: true}); err != nil {
+		t.Fatal(err)
+	}
+	a := New(Options{Headless: true, Scale: 1})
+	if got := a.Look().Palette().Selection; got != style.Hex("#e95420") {
+		t.Fatalf("selection %v, want UITK_ACCENT", got)
+	}
+	// A portal accent (as SettingChanged would bring it).
+	a.accentForced = false
+	a.desktopPrefsChanged(platform.DesktopPrefs{HasAccent: true, Accent: [3]float64{0, 0.5, 0}})
+	if got := a.Look().Palette().Selection; got != paintengine2d.RGB(0, 0.5, 0) {
+		t.Fatalf("selection %v after the desktop's accent changed", got)
 	}
 }

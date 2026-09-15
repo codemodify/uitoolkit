@@ -13,12 +13,25 @@ import (
 // each line is aligned and, when too long, elided on its own.
 type Label struct {
 	widget.Base
-	Text     string
-	Color    paintengine2d.Color
-	Align    style.Align
-	Title    bool
-	Mono     bool
-	wrapHint float32
+	Text  string
+	Color paintengine2d.Color
+	Align style.Align
+	Title bool
+	Mono  bool
+	// Wrap breaks long lines at spaces to fit the label's width (QLabel's
+	// wordWrap, GtkLabel's wrap): the label grows taller instead of
+	// eliding. It measures to the width its parent offers.
+	Wrap bool
+
+	wrapKey labelWrapKey
+	wrapped []string
+}
+
+// labelWrapKey is what a wrapped layout depends on.
+type labelWrapKey struct {
+	text string
+	w    float32
+	f    *style.Font
 }
 
 func NewLabel(text string) *Label {
@@ -63,9 +76,54 @@ func (l *Label) lines() []string {
 	return strings.Split(strings.ReplaceAll(l.Text, "\r\n", "\n"), "\n")
 }
 
+// layoutLines is the text's lines at width w: its newlines, and with Wrap
+// the breaks that fit w (w <= 0: unbounded).
+func (l *Label) layoutLines(f *style.Font, w float32) []string {
+	if !l.Wrap || w <= 0 {
+		return l.lines()
+	}
+	k := labelWrapKey{l.Text, w, f}
+	if l.wrapped != nil && l.wrapKey == k {
+		return l.wrapped
+	}
+	var out []string
+	for _, para := range l.lines() {
+		out = append(out, wrapText(f, para, w)...)
+	}
+	l.wrapKey, l.wrapped = k, out
+	return out
+}
+
+// wrapText breaks s at spaces into lines no wider than w; a word wider
+// than w keeps a line of its own (elided when painted).
+func wrapText(f *style.Font, s string, w float32) []string {
+	if f.Advance(s) <= w {
+		return []string{s}
+	}
+	words := strings.Fields(s)
+	if len(words) == 0 {
+		return []string{""}
+	}
+	var out []string
+	line := words[0]
+	for _, word := range words[1:] {
+		if cand := line + " " + word; f.Advance(cand) <= w {
+			line = cand
+			continue
+		}
+		out = append(out, line)
+		line = word
+	}
+	return append(out, line)
+}
+
 func (l *Label) Measure(c layout.Constraints) paintengine2d.Point {
 	f := l.font()
-	lines := l.lines()
+	wrapW := float32(-1)
+	if l.Wrap && c.HasMaxW() {
+		wrapW = c.MaxW - 2
+	}
+	lines := l.layoutLines(f, wrapW)
 	var w float32
 	for _, line := range lines {
 		w = max(w, f.Advance(line))
@@ -83,7 +141,7 @@ func (l *Label) Paint(ctx *paintengine2d.Context) {
 		col = lk.Palette().Text
 	}
 	b := l.LocalBounds()
-	lines := l.lines()
+	lines := l.layoutLines(f, b.Dx()-2)
 	th := f.Height()
 	y := b.Min.Y + (b.Dy()-th*float32(len(lines)))*0.5
 	maxW := b.Dx() - 2

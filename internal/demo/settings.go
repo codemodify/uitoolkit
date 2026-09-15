@@ -248,11 +248,15 @@ func (s *settingsState) themesPage(status *widgets.StatusBar, stage func(style.A
 		widgets.NewLabel(strings.Join(meta, "  ·  ")),
 	).WithGap(2)
 	if pack.Summary != "" {
-		info.Add(widgets.NewLabel(pack.Summary))
+		summary := widgets.NewLabel(pack.Summary)
+		summary.Wrap = true
+		info.Add(summary)
 	}
 	shown := pack
 	if note := s.followNote(pack, &shown); note != "" {
-		info.Add(widgets.NewLabel(note))
+		n := widgets.NewLabel(note)
+		n.Wrap = true
+		info.Add(n)
 	}
 
 	// The live preview: a small application window in the staged theme —
@@ -320,9 +324,10 @@ func (s *settingsState) themesPage(status *widgets.StatusBar, stage func(style.A
 	options.Place(widgets.NewLabel("Icons"), 1, 0)
 	options.Place(icons, 1, 1)
 	options.PlaceSpan(motion, 1, 2, 1, 2)
-	// GNOME's and Plasma's light / dark setting: the theme shows its
-	// sibling (Breeze and Breeze Dark) to match the desktop.
-	follow := widgets.NewSwitch("Match the desktop's light or dark mode", s.staged.FollowDesktop, func(on bool) {
+	// GNOME's and Plasma's light / dark setting and accent colour: the
+	// theme shows its sibling (Breeze and Breeze Dark) to match the
+	// desktop, recoloured around its accent where the engine takes one.
+	follow := widgets.NewSwitch("Match the desktop's light or dark mode and accent colour", s.staged.FollowDesktop, func(on bool) {
 		next := s.staged
 		next.FollowDesktop = on
 		stage(next)
@@ -347,21 +352,24 @@ func (s *settingsState) followNote(pack style.ThemePack, shown *style.ThemePack)
 	if !s.staged.FollowDesktop {
 		return ""
 	}
+	var note string
 	scheme := s.a.DesktopColorScheme()
-	if scheme == style.SchemeNoPreference {
-		return "The desktop has no light or dark preference: the theme shows as it is."
-	}
 	eff := s.staged.Effective()
-	if eff.Name != s.staged.Name {
+	switch {
+	case scheme == style.SchemeNoPreference:
+		note = "The desktop has no light or dark preference: the theme shows as it is."
+	case eff.Name != s.staged.Name:
 		if p, ok := style.LoadTheme(eff.Name); ok {
 			*shown = p
 		}
-		return fmt.Sprintf("The desktop prefers %s: %s shows as %s.", scheme, pack.Display(), shown.Display())
+		note = fmt.Sprintf("The desktop prefers %s: %s shows as %s.", scheme, pack.Display(), shown.Display())
+	case (scheme == style.SchemeDark) != (pack.Palette == style.ThemeDark):
+		note = fmt.Sprintf("The desktop prefers %s, but %s has no %s version.", scheme, pack.Display(), scheme)
 	}
-	if (scheme == style.SchemeDark) != (pack.Palette == style.ThemeDark) {
-		return fmt.Sprintf("The desktop prefers %s, but %s has no %s version.", scheme, pack.Display(), scheme)
+	if _, ok := style.DesktopAccent(); ok && style.TakesAccent(*shown) {
+		note = strings.TrimSpace(note + " It takes the desktop's accent colour.")
 	}
-	return ""
+	return note
 }
 
 // PreviewApp is a small, fully interactive application used to preview a

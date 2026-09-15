@@ -131,6 +131,28 @@ combo boxes cross-fade that long when only their hover or focus changes
 composited as one layer, so engines draw each state as usual.
 `UITK_ANIMATIONS=0` turns fades off.
 
+### Accent colours
+
+An engine whose looks recolour around a user accent (Windows 10 and 11,
+macOS, Plasma, GNOME 47, Material You) implements `AccentEngine`:
+
+```go
+func (breezeEngine) Accented(tok ThemeTokens, accent paintengine2d.Color) ThemeTokens {
+    tok = CloneTokenMaps(tok) // never write into the registered pack's maps
+    tok.Palette.Selection, tok.Palette.Focus = accent, accent
+    tok.Extra["focus"], tok.Extra["hover"] = accent, accent
+    ...
+    return tok
+}
+```
+
+`Accented` gets the resolved pack tokens and the desktop's accent when the
+user's appearance follows the desktop (`UITK_ACCENT=#e95420` stands in for
+it). Recolour what the platform recoloured, derive the rest as the platform
+did (hover and pressed shades, the text on the accent), and recompute any
+chrome states built from the palette. Historical looks with fixed palettes
+leave it out.
+
 ### Item views
 
 `DrawListRow`, `DrawTreeRow` and `DrawTableCell` get the item state:

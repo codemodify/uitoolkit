@@ -265,7 +265,11 @@ func tokensForAppearance(a Appearance) ThemeTokens {
 		if tok.Empty() {
 			tok = ThemeTokens{Family: pack.Palette, Palette: paletteForFamily(pack.Palette)}
 		}
-		return withEraFonts(tok.Resolve(), pack.Name)
+		tok = tok.Resolve()
+		if a.FollowDesktop {
+			tok = withDesktopAccent(tok)
+		}
+		return withEraFonts(tok, pack.Name)
 	}
 	if pack, ok := LoadTheme(StarterName(a.Theme)); ok {
 		return pack.Tokens.Resolve()

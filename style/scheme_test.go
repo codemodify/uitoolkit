@@ -3,6 +3,8 @@ package style
 import (
 	"strings"
 	"testing"
+
+	"github.com/codemodify/paintengine2d"
 )
 
 func TestSchemeVariantPairs(t *testing.T) {
@@ -122,4 +124,39 @@ func TestParseColorScheme(t *testing.T) {
 			t.Errorf("ParseColorScheme(%q) = %v", in, got)
 		}
 	}
+}
+
+// Breeze takes the desktop's accent when the appearance follows the
+// desktop: selection, focus and hover, and what it mixes from them.
+func TestBreezeTakesDesktopAccent(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	defer SetDesktopAccent(paintengine2d.Color{}, false)
+	pack, _ := LoadTheme("breeze")
+	if !TakesAccent(pack) {
+		t.Fatal("breeze should take an accent")
+	}
+	if win95, _ := LoadTheme("win95"); TakesAccent(win95) {
+		t.Fatal("win95 has no accent")
+	}
+	accent := Hex("#e95420")
+	SetDesktopAccent(accent, true)
+	a := Appearance{Name: "breeze", Theme: ThemeLight}
+	if got := a.Look().Palette().Selection; got == accent {
+		t.Fatal("not following: the pack's own selection")
+	}
+	a.FollowDesktop = true
+	l := a.Look()
+	if got := l.Palette().Selection; got != accent {
+		t.Fatalf("selection %v, want the accent", got)
+	}
+	if got := l.X("focus", paintengine2d.Color{}); got != accent {
+		t.Fatalf("focus %v", got)
+	}
+	// The registered pack is untouched.
+	if again, _ := LoadTheme("breeze"); again.Tokens.Extra["focus"] == accent || again.Tokens.Palette.Selection == accent {
+		t.Fatal("Accented wrote into the registered pack")
+	}
+	// Every control still paints inside its bounds with the accent.
+	aquaExercise(t, "breeze+accent", l)
+	kdeExtras(t, "breeze+accent", l)
 }

@@ -73,6 +73,44 @@ func TestLabelLines(t *testing.T) {
 	}
 }
 
+// A wrapping label breaks at spaces to the width it is offered and grows
+// taller; a plain one keeps its lines.
+func TestLabelWordWrap(t *testing.T) {
+	text := "The desktop prefers dark: Luna Olive Green shows as Royale Noir. It takes the desktop's accent colour."
+	l := NewLabel(text)
+	l.Wrap = true
+	l.SetLook(style.DarkLook())
+	l.SetHost(&host{})
+	one := l.Measure(layout.Unbounded())
+	narrow := l.Measure(layout.Constraints{MaxW: 160, MaxH: -1})
+	if narrow.X > 160 {
+		t.Fatalf("wrapped width %v over 160", narrow.X)
+	}
+	if narrow.Y < one.Y*3 {
+		t.Fatalf("at 160px the text should take several lines: %v vs %v", narrow.Y, one.Y)
+	}
+	lines := l.layoutLines(l.font(), 158)
+	if got := strings.Join(lines, " "); got != text {
+		t.Fatalf("wrapping lost words: %q", got)
+	}
+	for _, line := range lines {
+		if strings.Contains(line, "  ") || strings.HasPrefix(line, " ") {
+			t.Fatalf("stray spaces in %q", line)
+		}
+	}
+	plain := NewLabel(text)
+	plain.SetLook(style.DarkLook())
+	plain.SetHost(&host{})
+	if got := plain.Measure(layout.Constraints{MaxW: 160, MaxH: -1}).Y; got != one.Y {
+		t.Fatalf("a plain label stays one line: %v", got)
+	}
+	// Paint at the narrow size draws inside the label.
+	l.Arrange(paintengine2d.XYWH(0, 0, 160, narrow.Y))
+	img := paintengine2d.NewImage(200, int(narrow.Y)+40)
+	ctx := paintengine2d.NewContext(img)
+	l.Paint(ctx)
+}
+
 // Wrap folds its items onto new lines as its width shrinks, and grows in
 // height to hold them.
 func TestWrapFolds(t *testing.T) {
