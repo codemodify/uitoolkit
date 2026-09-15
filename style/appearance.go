@@ -63,6 +63,8 @@ type Appearance struct {
 	Corners  CornerStyle
 	Icons    IconSetName
 	IconSize IconSize
+	// ReduceMotion turns animations off (see [Animations]).
+	ReduceMotion bool
 }
 
 // DefaultAppearance is the embedded dark palette, round corners, classic icons.

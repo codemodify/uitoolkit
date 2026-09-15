@@ -182,6 +182,7 @@ func (a *Application) ReloadPreferredLook() {
 	// new set is picked up on the next paint.
 	style.InvalidateIconCache()
 	next := style.LoadAppearance()
+	style.SetReduceMotion(next.ReduceMotion)
 	a.SetLook(style.WithAppearance(a.look, next))
 }
 

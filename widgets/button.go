@@ -2,7 +2,6 @@ package widgets
 
 import (
 	"math"
-	"os"
 	"time"
 
 	"github.com/codemodify/paintengine2d"
@@ -91,7 +90,7 @@ func (b *Button) pulse(st style.ControlState) (float32, bool) {
 		return 0, false
 	}
 	ms := style.LookHint(b.Look(), style.HintDefaultPulseMs)
-	if ms <= 0 || os.Getenv(AnimationsEnv) == "0" {
+	if ms <= 0 || !style.Animations() {
 		return 0, false
 	}
 	period := time.Duration(ms) * time.Millisecond

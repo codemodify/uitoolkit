@@ -171,3 +171,32 @@ func TestSelectionTextPinnedByPack(t *testing.T) {
 		t.Errorf("light: selected text %s does not read on its selection", colorHexPadded(got))
 	}
 }
+
+// "Reduce motion" is saved in look.json and, with UITK_ANIMATIONS, decides
+// whether controls animate.
+func TestReduceMotionPref(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv(AnimationsEnv, "")
+	defer SetReduceMotion(false)
+	a := DefaultAppearance()
+	a.ReduceMotion = true
+	if err := SaveAppearance(a); err != nil {
+		t.Fatal(err)
+	}
+	if !LoadAppearance().ReduceMotion {
+		t.Fatal("reduce motion did not survive look.json")
+	}
+	SetReduceMotion(false)
+	if !Animations() {
+		t.Fatal("animations should be on by default")
+	}
+	SetReduceMotion(true)
+	if Animations() {
+		t.Fatal("reduce motion should turn animations off")
+	}
+	SetReduceMotion(false)
+	t.Setenv(AnimationsEnv, "0")
+	if Animations() {
+		t.Fatal("UITK_ANIMATIONS=0 should turn animations off")
+	}
+}
