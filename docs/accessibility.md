@@ -81,9 +81,10 @@ when a screen reader starts. Then it:
 - connects to the accessibility bus and has the registry embed the app
   under the desktop;
 - exports every node at `/org/a11y/atspi/accessible/<id>` with the
-  Accessible, Application, Component, Action, Value, Text and EditableText
-  interfaces (fields take text from assistive technology and automation
-  tools such as dogtail);
+  Accessible, Application, Component, Action, Value, Text, EditableText and
+  Selection interfaces (fields take text from assistive technology and
+  automation tools such as dogtail; lists, trees, tables and tab lists say
+  what is selected and select by index);
 - announces the active window (`window:activate`) and focus moves
   (`object:state-changed:focused`), including a view's current row, tab or
   tool;
@@ -113,6 +114,6 @@ python-gobject.
 
 ## Still to come
 - Changes on objects without the focus (a status line updating).
-- Relations (a label that labels a field), the Selection and Table
-  interfaces, and items built lazily for very long lists.
+- Relations (a label that labels a field), the Table interface (row and
+  column navigation), and items built lazily for very long lists.
 - Windows and macOS adapters.

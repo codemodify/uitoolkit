@@ -158,6 +158,7 @@ func newATSPIBridge(a *Application, addr string) (*atspiBridge, error) {
 		atspiIface + "Action":                 atspiAction{b},
 		atspiIface + "Text":                   atspiText{b},
 		atspiIface + "EditableText":           atspiEditable{b},
+		atspiIface + "Selection":              atspiSelection{b},
 		"org.freedesktop.DBus.Properties":     atspiProps{b},
 		"org.freedesktop.DBus.Introspectable": atspiIntrospect{},
 	} {
@@ -424,6 +425,32 @@ func (o *atspiObj) interfaces() []string {
 	}
 	if o.node.State.Has(a11y.StateEditable) && o.node.Role != a11y.RoleSpinButton {
 		out = append(out, atspiIface+"EditableText")
+	}
+	if o.selectable() {
+		out = append(out, atspiIface+"Selection")
+	}
+	return out
+}
+
+// selectable reports whether o's children can be selected (a list, a
+// tree, a table, a tab list).
+func (o *atspiObj) selectable() bool {
+	switch o.node.Role {
+	case a11y.RoleList, a11y.RoleTree, a11y.RoleTable, a11y.RoleTabList:
+		return true
+	}
+	return false
+}
+
+// selectedKids are o's selected children, in order.
+func (b *atspiBridge) selectedKids(o *atspiObj) []dbus.ObjectPath {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	var out []dbus.ObjectPath
+	for _, k := range o.kids {
+		if ko := b.objs[k]; ko != nil && ko.node.State.Has(a11y.StateSelected) {
+			out = append(out, k)
+		}
 	}
 	return out
 }
@@ -918,6 +945,68 @@ func (e atspiEditable) DeleteText(msg dbus.Message, start, end int32) (bool, *db
 	return e.set(o, string(r[:start])+string(r[end:])), nil
 }
 
+// ---- org.a11y.atspi.Selection ------------------------------------------------------
+
+type atspiSelection struct{ b *atspiBridge }
+
+func (s atspiSelection) GetSelectedChild(msg dbus.Message, i int32) (atspiRef, *dbus.Error) {
+	o, err := s.b.obj(msg)
+	if err != nil {
+		return atspiRef{}, err
+	}
+	sel := s.b.selectedKids(o)
+	if i < 0 || int(i) >= len(sel) {
+		return s.b.ref(""), nil
+	}
+	return s.b.ref(sel[i]), nil
+}
+
+func (s atspiSelection) IsChildSelected(msg dbus.Message, i int32) (bool, *dbus.Error) {
+	o, err := s.b.obj(msg)
+	if err != nil {
+		return false, err
+	}
+	if i < 0 || int(i) >= len(o.kids) {
+		return false, nil
+	}
+	s.b.mu.Lock()
+	ko := s.b.objs[o.kids[i]]
+	s.b.mu.Unlock()
+	return ko != nil && ko.node.State.Has(a11y.StateSelected), nil
+}
+
+// SelectChild selects child i as a click on it would.
+func (s atspiSelection) SelectChild(msg dbus.Message, i int32) (bool, *dbus.Error) {
+	o, err := s.b.obj(msg)
+	if err != nil {
+		return false, err
+	}
+	if i < 0 || int(i) >= len(o.kids) {
+		return false, nil
+	}
+	s.b.mu.Lock()
+	ko := s.b.objs[o.kids[i]]
+	s.b.mu.Unlock()
+	if ko == nil || !ko.node.State.Has(a11y.StateSelectable) {
+		return false, nil
+	}
+	return s.b.do(ko, a11y.ActionDefault), nil
+}
+
+// The toolkit's views keep at least their current row selected; clearing
+// or selecting everything is not offered through AT-SPI yet.
+func (s atspiSelection) DeselectSelectedChild(msg dbus.Message, i int32) (bool, *dbus.Error) {
+	return false, nil
+}
+
+func (s atspiSelection) DeselectChild(msg dbus.Message, i int32) (bool, *dbus.Error) {
+	return false, nil
+}
+
+func (s atspiSelection) SelectAll(msg dbus.Message) (bool, *dbus.Error) { return false, nil }
+
+func (s atspiSelection) ClearSelection(msg dbus.Message) (bool, *dbus.Error) { return false, nil }
+
 // ---- properties -------------------------------------------------------------------
 
 type atspiProps struct{ b *atspiBridge }
@@ -961,6 +1050,8 @@ func (p atspiProps) props(o *atspiObj, iface string) map[string]dbus.Variant {
 			"CharacterCount": dbus.MakeVariant(int32(utf8.RuneCountInString(o.text()))),
 			"CaretOffset":    dbus.MakeVariant(int32(n.Caret)),
 		}
+	case "Selection":
+		return map[string]dbus.Variant{"NSelectedChildren": dbus.MakeVariant(int32(len(p.b.selectedKids(o))))}
 	}
 	return map[string]dbus.Variant{}
 }

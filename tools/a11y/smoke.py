@@ -91,6 +91,15 @@ Atspi.Action.do_action(tabs[1], 0)
 time.sleep(0.3)
 check(tabs[1].get_state_set().contains(Atspi.StateType.SELECTED), "a tab selected through AT-SPI")
 
+# Selection: the tab list reports its selected tab and selects by index.
+tablist = next(o for o in nodes if o.get_role() == R.PAGE_TAB_LIST)
+check(Atspi.Selection.get_n_selected_children(tablist) == 1, "the tab list has one selected tab")
+Atspi.Selection.select_child(tablist, 2)
+time.sleep(0.3)
+third = tablist.get_child_at_index(2)
+check(Atspi.Selection.is_child_selected(tablist, 2) and third.get_state_set().contains(Atspi.StateType.SELECTED),
+      "selecting the third tab through the Selection interface")
+
 # Focus: grabbing the entry's focus announces it, as Orca expects.
 from gi.repository import GLib  # noqa: E402
 
