@@ -301,7 +301,7 @@ func AddAccountAppOn(a *app.Application, win *app.Window, cli *Client, onSaved f
 		labeled("OAuth client secret", clientSecret),
 		oauthNote,
 	).WithGap(6)
-	tools := widgets.NewRow(google, ms, device, widgets.NewSpacer(), test, cancel, save).WithGap(8)
+	tools := widgets.NewRow(google, ms, device, widgets.NewSpacer(), test, widgets.NewButtonBox().AddButton(cancel, widgets.RoleReject).AddButton(save, widgets.RoleAccept)).WithGap(8)
 	chrome := widgets.NewTitleBar("Add account", "IMAP or POP3 · Test connection · typed password or OAuth · mail.json 0600")
 	pad := widgets.NewPad(12, form)
 	root := widgets.NewColumn(chrome, pad, tools, status).WithGap(0)
