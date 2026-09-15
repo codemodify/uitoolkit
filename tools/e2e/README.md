@@ -15,6 +15,7 @@ own Wayland socket `uitk-e2e-N`, own Xwayland (display number in `N/display`), o
     ./in.sh N move X Y sleep 150 click sleep 300     # inject input (compositor coords)
     ./shot.sh N name             # screenshot -> N/shots/name.png  (then Read the png)
     python3 crop.py out.png x0 y0 x1 y1 a.png b.png ...   # stack same crop from several shots
+    ./kwin.py N 'JS'             # run a KWin script: OUT(x) prints (window geometry / state oracle, maximize, tile)
     ./stop.sh N                  # stop app + compositor when done
     ./theme-tour.sh N [PACK...]  # gallery in every pack on the GPU + the same pack on the CPU, in pairs
 
@@ -29,6 +30,12 @@ own Wayland socket `uitk-e2e-N`, own Xwayland (display number in `N/display`), o
 - Coordinates are logical px of the 1280x860 virtual screen (x2 if SCALE=2 in the png).
 - X11 backend: `UITK_BACKEND=x11 ./run.sh N ./gallery` (runs on the nested Xwayland).
 - Paint escape hatches: UITK_PAINT_FULLFRAME=1 (no partial redraw), UITK_PAINT_MSAA=0.
-- App log: N/app.log. Key codes: keys.txt.
+- App log: N/app.log; KWin's (and its scripts' print()) N/kwin.log. Key codes: keys.txt.
+- Apps run on the instance's own D-Bus session (APP_BUS=... overrides): on the
+  user's bus a tray icon or notification from the app would show on the real desktop.
+- Drags: one in.sh invocation holds the button (`move X Y down move X2 Y2 up`); a
+  window move starts only past the drag threshold (8 px; KDE 10), so move a few
+  px first, then on: `move 700 50 down move 714 52 sleep 150 move 820 160 up`.
+- Client-side frames: `UITK_DECORATIONS=client ./run.sh N BIN` (see docs/decorations.md).
 - NEVER run apps or `go test ./platform` against the user's real session (wayland-0 / :0):
   always export WAYLAND_DISPLAY=uitk-e2e-N DISPLAY=$(cat N/display) for tests that open windows.
