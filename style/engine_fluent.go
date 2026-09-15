@@ -1437,20 +1437,27 @@ func (fluentEngine) DrawTableHeader(l *Classic, ctx *paintengine2d.Context, b pa
 // DrawTableCell: a selected row is tinted with the accent (a table has no
 // pill to carry the selection), a hot one takes the subtle fill; the focused
 // row's focus visual spans the row.
+// DrawTableCell paints one cell of a row that looks like a list item: the
+// rounded item box runs across the row, each cell painting its part, and
+// the accent pill sits in the first cell.
 func (fluentEngine) DrawTableCell(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, align Align, face *Font) {
 	c := fluentColors(l)
 	r := winSnap(b)
-	switch {
-	case st.Checked() && (st.Backdrop() || st.Disabled()):
-		ctx.DrawRect(r, paintengine2d.Fill(c.subtle))
-	case st.Checked():
-		ctx.DrawRect(r, paintengine2d.Fill(c.tint))
-	case st.Hovered() && !st.Disabled():
-		ctx.DrawRect(r, paintengine2d.Fill(c.subtle))
+	ctx.Save()
+	ctx.ClipRect(r)
+	item := fluentItemRect(l, CellSpan(r, st, l.S(8)))
+	c.subtleBox(l, ctx, item, c.rowFill(st))
+	if st.Checked() && st.First() {
+		c.pill(l, ctx, item, st)
 	}
+	ctx.Restore()
 	fg := c.text
 	if st.Disabled() {
 		fg = c.textDis
+	}
+	if st.First() {
+		// The first cell's text clears the pill, as a list item's does.
+		b.Min.X += l.S(4)
 	}
 	winCellText(l, ctx, b, label, align, face, fg)
 }

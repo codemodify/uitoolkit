@@ -83,6 +83,10 @@ type Engine interface {
 	// TabOutset grows the selected tab's rect so it can overlap its
 	// neighbours; it is painted after them. Zero for most looks.
 	TabOutset(l *Classic) Insets
+	// TabOverlap is how far neighbouring tabs overlap (Qt's
+	// PM_TabBarTabOverlap): a border's width makes two tabs share one
+	// border line instead of drawing two side by side. Zero for most looks.
+	TabOverlap(l *Classic) float32
 	// DrawTabPane paints the page under a tab bar (TabView).
 	DrawTabPane(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect)
 	// WindowCloseRect is where DrawWindowFrame put the close button for a
@@ -710,6 +714,23 @@ func TabOutsetOf(lk LookAndFeel) Insets {
 		return t.TabOutset()
 	}
 	return Insets{}
+}
+
+// TabOverlapLook lays neighbouring tabs over each other's border.
+type TabOverlapLook interface {
+	TabOverlap() float32
+}
+
+// TabOverlap implements [TabOverlapLook].
+func (l *Classic) TabOverlap() float32 { return l.eng().TabOverlap(l) }
+
+// TabOverlapOf is how far any look's neighbouring tabs overlap (zero when
+// the look does not say), already at display scale.
+func TabOverlapOf(lk LookAndFeel) float32 {
+	if t, ok := lk.(TabOverlapLook); ok {
+		return t.TabOverlap()
+	}
+	return 0
 }
 
 // WindowBackgroundLook paints a window background beyond a flat colour.

@@ -497,7 +497,14 @@ func (t *TableView) paintRow(ctx *paintengine2d.Context, lk style.LookAndFeel, w
 		if t.CellBold != nil && t.CellBold(row, col) {
 			face = lk.BoldFont()
 		}
-		lk.DrawTableCell(ctx, cell, st, label, t.Columns[col].Align, face)
+		cst := st
+		if col == 0 {
+			cst |= style.StateFirst
+		}
+		if col == len(t.Columns)-1 {
+			cst |= style.StateLast
+		}
+		lk.DrawTableCell(ctx, cell, cst, label, t.Columns[col].Align, face)
 		cx += w
 	}
 	if st.Focused() {

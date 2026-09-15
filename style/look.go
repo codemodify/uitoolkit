@@ -828,7 +828,11 @@ func (l *Classic) baseDrawTreeRow(ctx *paintengine2d.Context, b paintengine2d.Re
 			chev.LineTo(x, cy+u*0.55)
 			chev.Close()
 		}
-		ctx.DrawPath(chev, paintengine2d.Fill(p.TextMuted))
+		col := p.TextMuted
+		if st.ExpanderHot() {
+			col = fg
+		}
+		ctx.DrawPath(chev, paintengine2d.Fill(col))
 	}
 	face := l.body
 	if bold {

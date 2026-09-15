@@ -15,7 +15,8 @@ const (
 	StatePrimary
 	StateToggle
 	// StateFirst / StateLast mark the first and last item of a strip
-	// (tabs, segmented controls), for engines that shape the ends.
+	// (tabs, segmented controls, the cells of a table row), for engines
+	// that shape the ends. A table cell with neither is a middle cell.
 	StateFirst
 	StateLast
 	// StateInactive marks an item whose view does not have keyboard focus
@@ -28,6 +29,9 @@ const (
 	// StateAlternate marks the odd rows of an item view, for looks with
 	// striped lists (Mac OS X, Nimbus, Qt's alternatingRowColors).
 	StateAlternate
+	// StateExpanderHot marks a tree row whose expander is under the pointer
+	// (Vista's bright triangle, GTK's prelit arrow).
+	StateExpanderHot
 )
 
 func (s ControlState) Hovered() bool   { return s&StateHovered != 0 }
@@ -42,6 +46,22 @@ func (s ControlState) Last() bool      { return s&StateLast != 0 }
 func (s ControlState) Inactive() bool  { return s&StateInactive != 0 }
 func (s ControlState) Backdrop() bool  { return s&StateBackdrop != 0 }
 func (s ControlState) Alternate() bool { return s&StateAlternate != 0 }
+func (s ControlState) ExpanderHot() bool { return s&StateExpanderHot != 0 }
+
+// CellSpan is the box a table row's selection spans, seen from one cell:
+// b grown by reach past each side where the row goes on (a cell that is
+// not StateFirst / StateLast). An engine paints its whole rounded row box
+// over the span, clipped to the cell, and the cells of a row join into one
+// box (Explorer's details view, a Fluent list item).
+func CellSpan(b paintengine2d.Rect, st ControlState, reach float32) paintengine2d.Rect {
+	if !st.First() {
+		b.Min.X -= reach
+	}
+	if !st.Last() {
+		b.Max.X += reach
+	}
+	return b
+}
 
 // RowState is the item state of a plain row: selected and hovered.
 func RowState(selected, hovered bool) ControlState {

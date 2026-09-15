@@ -47,6 +47,7 @@ type TreeView struct {
 	// framed pane).
 	Frameless bool
 	hover     *TreeNode
+	hoverExp  bool // the pointer is on the hovered row's expander
 	lastClick *TreeNode
 	lastAt    time.Time
 	vbar      scrollDrag
@@ -326,7 +327,11 @@ func (t *TreeView) rowSig(row treeRow) uint64 {
 
 // rowState is n's item state for the look.
 func (t *TreeView) rowState(n *TreeNode) style.ControlState {
-	return widget.RowItemState(t, t.indexOf(n), n == t.Selected, n == t.hover, n == t.Selected)
+	st := widget.RowItemState(t, t.indexOf(n), n == t.Selected, n == t.hover, n == t.Selected)
+	if n == t.hover && t.hoverExp {
+		st |= style.StateExpanderHot
+	}
+	return st
 }
 
 func paintTreeSwatch(ctx *paintengine2d.Context, row paintengine2d.Rect, col paintengine2d.Color) {
@@ -413,12 +418,17 @@ func (t *TreeView) MouseMove(e widget.MouseEvent) bool {
 		}
 	}
 	var n *TreeNode
+	exp := false
 	if p.Y >= 0 && p.Y < t.inner().Dy() {
-		n = t.nodeAt(p.Y)
+		if i := t.rowAt(p.Y); i >= 0 {
+			row := t.flatten()[i]
+			n = row.node
+			exp = t.expanderHit(p.X, n, row.depth)
+		}
 	}
-	if n != t.hover {
+	if n != t.hover || exp != t.hoverExp {
 		old := t.hover
-		t.hover = n
+		t.hover, t.hoverExp = n, exp
 		t.invalidateNode(old)
 		t.invalidateNode(n)
 	}
@@ -427,7 +437,7 @@ func (t *TreeView) MouseMove(e widget.MouseEvent) bool {
 
 func (t *TreeView) MouseExit() {
 	old := t.hover
-	t.hover = nil
+	t.hover, t.hoverExp = nil, false
 	t.vbar.exit()
 	t.invalidateNode(old)
 }

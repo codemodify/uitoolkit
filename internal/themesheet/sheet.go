@@ -204,15 +204,17 @@ func (s *sheet) tabsMenus(x, y float32) {
 	s.heading(x, y, "Tabs")
 	bar := s.r(x, y+22, 540, 32)
 	s.lk.DrawTabBar(s.ctx, bar)
-	// Adjacent tabs as a TabBar lays them out: the selected one (second, so
-	// both neighbours show any overlap) paints last, grown by the outset.
+	// Adjacent tabs as a TabBar lays them out, over each other by the tab
+	// overlap: the selected one (second, so both neighbours show any
+	// overlap) paints last, grown by the outset.
 	tabs := []struct {
 		n   string
 		st  style.ControlState
 		sel bool
 	}{{"Normal", stN, false}, {"Selected", stN, true}, {"Hover", stH, false}, {"Pressed", stP, false}, {"Disabled", stD, false}}
+	ov := style.TabOverlapOf(s.lk)
 	tabRect := func(i int) paintengine2d.Rect {
-		r := s.r(x+float32(i)*100, y+22, 100, 32)
+		r := s.r(x+float32(i)*100, y+22, 100, 32).Translate(paintengine2d.Pt(-float32(i)*ov, 0))
 		if tabs[i].sel {
 			out := style.TabOutsetOf(s.lk)
 			r = paintengine2d.XYWH(r.Min.X-out.Left, r.Min.Y-out.Top, r.Dx()+out.Left+out.Right, r.Dy()+out.Top+out.Bottom)
@@ -297,7 +299,7 @@ func (s *sheet) rows(x, y float32) {
 	s.ctx.DrawRect(s.r(x+180, y+22, 170, 110), paintengine2d.Fill(s.p.Field))
 	s.ctx.DrawRect(s.r(x+360, y+46, 180, 96), paintengine2d.Fill(s.p.Field))
 	s.lk.DrawTreeRow(s.ctx, s.r(x+180, y+24, 170, 24), stN, true, false, 0, "Inbox", true)
-	s.lk.DrawTreeRow(s.ctx, s.r(x+180, y+48, 170, 24), stH, false, false, 1, "Archives", false)
+	s.lk.DrawTreeRow(s.ctx, s.r(x+180, y+48, 170, 24), stH|style.StateExpanderHot, false, false, 1, "Archives", false)
 	s.lk.DrawTreeRow(s.ctx, s.r(x+180, y+72, 170, 24), cur, false, true, 2, "2026", false)
 	s.lk.DrawTreeRow(s.ctx, s.r(x+180, y+96, 170, 24), off, false, true, 1, "Sent", false)
 	hx := x + 360
@@ -306,9 +308,9 @@ func (s *sheet) rows(x, y float32) {
 	s.lk.DrawTableHeader(s.ctx, s.r(hx+120, y+22, 60, 24), stP, "Press", true, false)
 	for i, st := range []style.ControlState{stN, cur, stH, off} {
 		ry := y + 46 + float32(i)*24
-		s.lk.DrawTableCell(s.ctx, s.r(hx, ry, 60, 24), st, "Cell", style.AlignStart, nil)
+		s.lk.DrawTableCell(s.ctx, s.r(hx, ry, 60, 24), st|style.StateFirst, "Cell", style.AlignStart, nil)
 		s.lk.DrawTableCell(s.ctx, s.r(hx+60, ry, 60, 24), st, "12", style.AlignEnd, nil)
-		s.lk.DrawTableCell(s.ctx, s.r(hx+120, ry, 60, 24), st, "Row", style.AlignCenter, nil)
+		s.lk.DrawTableCell(s.ctx, s.r(hx+120, ry, 60, 24), st|style.StateLast, "Row", style.AlignCenter, nil)
 		if st.Focused() {
 			style.DrawItemFocusOf(s.lk, s.ctx, s.r(hx, ry, 180, 24), st)
 		}
