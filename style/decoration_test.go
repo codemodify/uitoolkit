@@ -23,7 +23,7 @@ func whole(v float32) bool { return v == float32(math.Round(float64(v))) }
 // maximized.
 func TestDecorationSpecs(t *testing.T) {
 	for _, p := range ListBuiltinThemes() {
-		for _, scale := range []float32{1, 1.75, 2} {
+		for _, scale := range []float32{1, 1.25, 1.5, 1.75, 2} {
 			lk := p.Look().setScale(scale)
 			for _, st := range decorationStates {
 				s := DecorationOf(lk, st)
@@ -40,6 +40,12 @@ func TestDecorationSpecs(t *testing.T) {
 				}
 				if s.Button.Y > 0 && s.ButtonPad.Top+s.Button.Y > s.Caption+0.01 {
 					t.Fatalf("%s @%vx %+v: buttons (%v below %v) overhang the caption %v", p.Name, scale, st, s.Button.Y, s.ButtonPad.Top, s.Caption)
+				}
+				if s.CloseButton.Y > 0 && s.ButtonPad.Top+s.CloseButton.Y > s.Caption+0.01 {
+					t.Fatalf("%s @%vx %+v: the close button overhangs the caption", p.Name, scale, st)
+				}
+				if st.Maximized && NativeDecoration(lk) && s.Radius != ([4]float32{}) {
+					t.Fatalf("%s @%vx: a maximized frame is square: %v", p.Name, scale, s.Radius)
 				}
 			}
 		}
@@ -67,7 +73,7 @@ func paintedOutside(img *paintengine2d.Image, r paintengine2d.Rect, slack float3
 // their boxes: the window repaints only those when they change.
 func TestDecorationPaintsInsideItsBoxes(t *testing.T) {
 	for _, p := range ListBuiltinThemes() {
-		for _, scale := range []float32{1, 2} {
+		for _, scale := range []float32{1, 1.5, 2} {
 			lk := p.Look().setScale(scale)
 			for _, st := range decorationStates {
 				s := DecorationOf(lk, st)

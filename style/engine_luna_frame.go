@@ -18,6 +18,10 @@ func (lunaEngine) Decoration(l *Classic, st DecorationState) DecorationSpec {
 	fw := lunaFrameW(l)
 	side := snap(h * 21 / 29)
 	right := snap(h*4/29) + lunaPx(l) - fw
+	r := l.rx(7)
+	if st.Maximized || st.Tiled != 0 {
+		r = 0
+	}
 	return DecorationSpec{
 		Stacked:   true,
 		Border:    Insets{Right: fw, Bottom: fw, Left: fw},
@@ -26,7 +30,7 @@ func (lunaEngine) Decoration(l *Classic, st DecorationState) DecorationSpec {
 		ButtonGap: snap(h * 2 / 29),
 		ButtonPad: Insets{Top: snap(h * 5 / 29), Right: max(right, 0), Left: max(right, 0)},
 		Layout:    "icon:minimize,maximize,close",
-		Radius:    [4]float32{l.rx(7), l.rx(7), 0, 0},
+		Radius:    [4]float32{r, r, 0, 0},
 	}
 }
 
