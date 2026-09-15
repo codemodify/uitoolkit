@@ -20,7 +20,9 @@ type Window struct {
 	app *Application
 	// altHeld: the Alt key is down (mnemonic underlines show in looks
 	// that hide them otherwise).
-	altHeld    bool
+	altHeld bool
+	// dropOver is the drop target a drag from another app is over.
+	dropOver   widget.Component
 	surf       platform.Surface
 	root       widget.Component
 	overlay    widget.Component
@@ -585,6 +587,12 @@ func (w *Window) dispatch(ev platform.Event) {
 		w.bubbleWheel(ev)
 	case platform.EventPointerLeave:
 		w.pointerLeft()
+	case platform.EventDragMotion:
+		w.dragMotion(ev)
+	case platform.EventDragLeave:
+		w.dragLeave()
+	case platform.EventDrop:
+		w.drop(ev)
 	case platform.EventKeyDown:
 		if ev.Key == platform.KeyAlt {
 			w.setAltHeld(true)

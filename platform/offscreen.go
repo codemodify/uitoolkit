@@ -19,6 +19,9 @@ type Offscreen struct {
 	cursor Cursor
 	wake   chan struct{}
 	wakes  atomic.Int32
+	// drop is a simulated drop's data by type (SimulateDrop).
+	drop      map[string][]byte
+	dropTaken *bool
 }
 
 // NewOffscreen allocates a CPU pixmap of the requested size.

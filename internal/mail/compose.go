@@ -295,7 +295,16 @@ func ComposeApp(a *app.Application, win *app.Window, cli *Client, opts ComposeOp
 	root := widgets.NewColumn(menubar, tools, chrome, fields, bodyPad, status).WithGap(0)
 	root.AddFlex(bodyPad, 1)
 	_ = a
-	return root
+	// Files dragged in from a file manager are attached; text dropped on a
+	// field goes into that field (the fields take text themselves).
+	return widgets.NewDropZone(root, func(paths []string) {
+		attachPaths = append(attachPaths, paths...)
+		if len(paths) == 1 {
+			status.Set(0, "Attached "+paths[0])
+		} else {
+			status.Set(0, fmt.Sprintf("Attached %d files", len(paths)))
+		}
+	})
 }
 
 // replyToAddr honours Reply-To when the sender set one.
