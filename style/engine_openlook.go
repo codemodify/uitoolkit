@@ -1519,7 +1519,7 @@ func (e openlookEngine) DrawTableCell(l *Classic, ctx *paintengine2d.Context, b 
 		hi.fill(ctx, c.hi)
 	}
 	f := l.faceOrBody(face)
-	pad := tableCellPad(b.Dx(), f.Advance(label))
+	pad := l.tableCellPad(b.Dx(), f.Advance(label))
 	l.drawFittedText(ctx, f, label, paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad*2, b.Dy()), c.text, align, 0)
 }
 
