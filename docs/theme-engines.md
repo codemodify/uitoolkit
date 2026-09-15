@@ -100,6 +100,11 @@ gets the era right:
   turns them off); eras without shadows return zero (Win95, Motif, NeXT).
   `DropShadow` is an exact nine-piece gradient shadow; `ShadowReach` is its
   extent.
+- **Materials** — `ctx.BackdropBlur(r, sigma)` blurs what lies under r
+  (inside the clip) on every device: paint a translucent tint over it next
+  for acrylic, glass or vibrancy (Fluent's flyouts, Aero's glass frames).
+  `ctx.DrawLayer` fades a group as one, `ctx.DrawCrossFade` mixes two
+  drawings.
 - **Controls** — the 34 `Draw*` methods, same signatures as `LookAndFeel`
   plus the look. Override when the era's layout differs (Win95 combos
   highlight their text; Aqua centres tabs).

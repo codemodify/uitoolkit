@@ -914,6 +914,19 @@ func (e aeroEngine) DrawWindowFrame(l *Classic, ctx *paintengine2d.Context, b pa
 	if !st.Active {
 		grad = c.glassOff
 	}
+	if c.glass && st.Active {
+		// Aero Glass: what lies behind the frame, blurred, through the
+		// tinted glass.
+		ctx.Save()
+		ctx.ClipPath(glass)
+		ctx.BackdropBlur(in, l.S(6))
+		ctx.Restore()
+		tint := make([]paintengine2d.GradientStop, len(grad))
+		for i, s := range grad {
+			tint[i] = paintengine2d.GradientStop{Offset: s.Offset, Color: s.Color.WithAlpha(s.Color.A * 0.78)}
+		}
+		grad = tint
+	}
 	ctx.DrawPath(glass, VGradient(in, grad...))
 	if c.glass {
 		ctx.Save()

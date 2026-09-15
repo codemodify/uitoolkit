@@ -1046,7 +1046,8 @@ func (w *Window) frame() {
 	}
 	rects := w.paintRects()
 	if platform.WantScene() {
-		w.frameScene(rects)
+		// A backdrop blur can widen what is repainted.
+		rects = w.frameScene(rects)
 	} else {
 		w.frameImmediate(rects)
 	}
@@ -1152,7 +1153,7 @@ func (w *Window) frameImmediate(rects []paintengine2d.Rect) {
 	}
 }
 
-func (w *Window) frameScene(rects []paintengine2d.Rect) {
+func (w *Window) frameScene(rects []paintengine2d.Rect) []paintengine2d.Rect {
 	ww, hh := w.surf.Size()
 	rec := paintengine2d.NewRecorder(ww, hh)
 	if w.paths == nil {
@@ -1187,14 +1188,15 @@ func (w *Window) frameScene(rects []paintengine2d.Rect) {
 	w.scene = rec.Finish()
 	dev := platform.SurfaceDevice(w.surf)
 	if dev == nil {
-		return
+		return rects
 	}
 	if len(rects) == 0 {
 		paintengine2d.DrawScene(w.scene, dev)
-		return
+		return rects
 	}
 	dmg := paintengine2d.Damage{Rects: rects}
 	paintengine2d.DrawSceneDamage(w.scene, dev, &dmg)
+	return dmg.Rects
 }
 
 // Scene is the last retained graph (tests / inspector).
