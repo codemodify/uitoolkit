@@ -1262,12 +1262,12 @@ func (w *Window) frame() {
 // caller's clip is what makes the result correct.
 func (w *Window) paintLayers(ctx *paintengine2d.Context, dirty *paintengine2d.Damage) {
 	if w.caption != nil {
+		w.paintDecoration(ctx)
 		widget.PaintTree(w.caption, ctx, dirty)
 	}
 	if w.root != nil {
 		widget.PaintTree(w.root, ctx, dirty)
 	}
-	w.paintFrame(ctx)
 	if w.overlay != nil {
 		widget.PaintTree(w.overlay, ctx, dirty)
 	}
@@ -1371,12 +1371,12 @@ func (w *Window) frameScene(rects []paintengine2d.Rect) []paintengine2d.Rect {
 	// the dirty box. Recording a subset would make the next partial replay
 	// paint from a scene that never had the clean widgets in it.
 	if w.caption != nil {
+		w.paintDecoration(ctx)
 		widget.RecordTree(w.caption, rec, ctx, nil, w.layers, false)
 	}
 	if w.root != nil {
 		widget.RecordTree(w.root, rec, ctx, nil, w.layers, false)
 	}
-	w.paintFrame(ctx)
 	if w.overlay != nil {
 		widget.RecordTree(w.overlay, rec, ctx, nil, w.layers, true)
 	}
