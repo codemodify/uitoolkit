@@ -862,7 +862,9 @@ func (nextEngine) DrawFocusRing(l *Classic, ctx *paintengine2d.Context, b painte
 // min end — the bottom of a vertical scroller, the left of a horizontal one;
 // the toolkit's placement is shared by both axes, so both go to the end.
 func (nextEngine) ScrollBarStyle(l *Classic) ScrollBarStyle {
-	return ScrollBarStyle{Thickness: 20, Arrows: ArrowsTogetherEnd, ArrowLen: 18, MinThumb: 18}
+	// Grouped arrows: at the bottom of vertical scrollers, at the left of
+	// horizontal ones (NeXTSTEP UI Guidelines).
+	return ScrollBarStyle{Thickness: 20, Arrows: ArrowsTogetherEnd, HArrows: ArrowsTogetherStart, HArrowsSet: true, ArrowLen: 18, MinThumb: 18}
 }
 
 func (e nextEngine) DrawScrollBarParts(l *Classic, ctx *paintengine2d.Context, p ScrollParts, vertical bool, st ScrollState) {

@@ -240,6 +240,11 @@ type ScrollBarStyle struct {
 	// along the axis (0 = Thickness).
 	Arrows   ArrowPlacement
 	ArrowLen float32
+	// HArrows places a horizontal bar's buttons when HArrowsSet (NeXT
+	// grouped them at the left of horizontal scrollers, the bottom of
+	// vertical ones).
+	HArrows    ArrowPlacement
+	HArrowsSet bool
 	// MinThumb is the shortest thumb (0 = 24).
 	MinThumb float32
 	// EndPad is extra padding at both ends of an overlay track (0 = 4).
@@ -342,7 +347,7 @@ func ScrollBarStyleOf(lk LookAndFeel) ScrollBarStyle {
 	s.ArrowLen *= scale
 	s.MinThumb *= scale
 	s.EndPad *= scale
-	if s.ArrowLen <= 0 && s.Arrows != ArrowsNone {
+	if s.ArrowLen <= 0 && (s.Arrows != ArrowsNone || (s.HArrowsSet && s.HArrows != ArrowsNone)) {
 		s.ArrowLen = s.Thickness
 	}
 	if s.MinThumb <= 0 {
@@ -402,8 +407,15 @@ func ScrollGeometry(lk LookAndFeel, view paintengine2d.Rect, vertical bool, cont
 		return ScrollParts{}
 	}
 	// Step buttons.
+	arrows := s.Arrows
+	if !vertical && s.HArrowsSet {
+		arrows = s.HArrows
+	}
 	a := s.ArrowLen
-	if s.Arrows != ArrowsNone && along < a*2+8 {
+	if arrows == ArrowsNone {
+		a = 0
+	}
+	if arrows != ArrowsNone && along < a*2+8 {
 		a = (along - 8) / 2
 		if a < 6 {
 			a = 0
@@ -417,7 +429,7 @@ func ScrollGeometry(lk LookAndFeel, view paintengine2d.Rect, vertical bool, cont
 		return paintengine2d.XYWH(p.Bar.Min.X+from, p.Bar.Min.Y, n, p.Bar.Dy())
 	}
 	if a > 0 {
-		switch s.Arrows {
+		switch arrows {
 		case ArrowsEnds:
 			p.Dec = seg(0, a)
 			p.Inc = seg(along-a, a)
