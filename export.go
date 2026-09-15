@@ -133,6 +133,11 @@ func NewColorButton(col paintengine2d.Color, on func(paintengine2d.Color)) *widg
 	return widgets.NewColorButton(col, on)
 }
 
+// NewSegmented is a row of joined toggle buttons, one chosen (a view switch).
+func NewSegmented(segments []string, selected int, on func(int)) *widgets.Segmented {
+	return widgets.NewSegmented(segments, selected, on)
+}
+
 // NewPicture shows a raster image.
 func NewPicture(img *paintengine2d.Image) *widgets.Picture { return widgets.NewPicture(img) }
 
