@@ -57,6 +57,7 @@ extern void uitkWlDataOfferMime(uintptr_t id, struct wl_data_offer *offer, char 
 extern void uitkWlSelection(uintptr_t id, struct wl_data_offer *offer);
 extern void uitkWlPtrFrame(uintptr_t id);
 extern void uitkWlAxisSource(uintptr_t id, uint32_t src);
+extern void uitkWlAxisStop(uintptr_t id);
 extern void uitkWlDndEnter(uintptr_t id, uint32_t serial, struct wl_surface *s, wl_fixed_t x, wl_fixed_t y, struct wl_data_offer *o);
 extern void uitkWlDndLeave(uintptr_t id);
 extern void uitkWlDndMotion(uintptr_t id, wl_fixed_t x, wl_fixed_t y);
@@ -281,7 +282,8 @@ static void uitk_ptr_axis(void *data, struct wl_pointer *p, uint32_t time, uint3
 static void uitk_ptr_frame(void *data, struct wl_pointer *p) { (void)p; uitkWlPtrFrame((uintptr_t)data); }
 static void uitk_ptr_axis_src(void *data, struct wl_pointer *p, uint32_t src) { (void)p; uitkWlAxisSource((uintptr_t)data, src); }
 static void uitk_ptr_axis_stop(void *data, struct wl_pointer *p, uint32_t time, uint32_t axis) {
-	(void)data; (void)p; (void)time; (void)axis;
+	(void)p; (void)time; (void)axis;
+	uitkWlAxisStop((uintptr_t)data);
 }
 static void uitk_ptr_axis_disc(void *data, struct wl_pointer *p, uint32_t axis, int32_t disc) {
 	(void)data; (void)p; (void)axis; (void)disc;
@@ -1072,6 +1074,10 @@ type wlConn struct {
 	// axisSrc is the current pointer frame's axis source (wl_pointer v5:
 	// 0 wheel, 1 finger, 2 continuous, 3 wheel tilt; -1 not said).
 	axisSrc int
+	// kin keeps a touchpad scroll going after the fingers lift, over the
+	// surface kinSurf.
+	kin     kinetic
+	kinSurf int
 
 	primMan      *C.struct_zwp_primary_selection_device_manager_v1
 	primDev      *C.struct_zwp_primary_selection_device_v1
@@ -2306,6 +2312,7 @@ func (s *wlSurface) Poll() []Event {
 	wlMu.Lock()
 	if !s.closed {
 		s.conn.flushRepeatLocked()
+		s.conn.flushKineticLocked()
 	}
 	// Hand back whatever is queued even after the surface closed, so a
 	// final EventClose can never be swallowed.
@@ -2333,10 +2340,37 @@ func (s *wlSurface) WakeAt() time.Time {
 	}
 	wlMu.Lock()
 	defer wlMu.Unlock()
-	if !s.conn.heldDown || s.conn.repeatKey == 0 || s.conn.repeatRate <= 0 {
-		return time.Time{}
+	var at time.Time
+	if s.conn.heldDown && s.conn.repeatKey != 0 && s.conn.repeatRate > 0 {
+		at = s.conn.repeatNext
 	}
-	return s.conn.repeatNext
+	if s.conn.kin.running && s.conn.kinSurf == s.id && (at.IsZero() || s.conn.kin.next.Before(at)) {
+		at = s.conn.kin.next
+	}
+	return at
+}
+
+// flushKineticLocked scrolls a gliding fling on by the time since its
+// last step.
+func (c *wlConn) flushKineticLocked() {
+	if !c.kin.running {
+		return
+	}
+	now := time.Now()
+	if now.Before(c.kin.next) {
+		return
+	}
+	s := wlSurfaces[c.kinSurf]
+	if s == nil {
+		c.kin.stop()
+		return
+	}
+	dx, dy, ok := c.kin.step(now)
+	if !ok || (dx == 0 && dy == 0) {
+		return
+	}
+	px, py := s.toDevice(c.px, c.py)
+	s.push(Event{Kind: EventScroll, Pos: paintengine2d.Pt(px, py), Scroll: paintengine2d.Pt(dx, dy), Mods: c.mods, ScrollPrecise: true})
 }
 
 func (c *wlConn) flushRepeatLocked() {
@@ -2698,6 +2732,7 @@ func uitkWlPtrLeave(id C.uintptr_t) {
 	if c == nil {
 		return
 	}
+	c.kin.stop()
 	if s := wlSurfaces[c.ptrSurf]; s != nil {
 		s.push(Event{Kind: EventPointerLeave, Mods: c.mods})
 	}
@@ -2724,6 +2759,8 @@ func uitkWlPtrButton(id C.uintptr_t, button, state, serial C.uint32_t) {
 	if c == nil {
 		return
 	}
+	// A click stops a fling.
+	c.kin.stop()
 	c.serial = uint32(serial)
 	s := wlSurfaces[c.ptrSurf]
 	if s == nil {
@@ -2757,6 +2794,14 @@ func uitkWlPtrAxis(id C.uintptr_t, axis C.uint32_t, value C.wl_fixed_t) {
 		// the content follows as they are (device pixels).
 		ex, _ := s.toDevice(raw, 0)
 		v, ev.ScrollPrecise = ex, true
+		if c.axisSrc == 1 {
+			if axis == 0 {
+				c.kin.sample(time.Now(), 0, ex)
+			} else {
+				c.kin.sample(time.Now(), ex, 0)
+			}
+			c.kinSurf = s.id
+		}
 	default:
 		// A wheel: libinput reports 10 per notch (hi-res wheels a part of
 		// one); widgets scroll three lines a notch, as on X11.
@@ -2774,6 +2819,18 @@ func uitkWlPtrAxis(id C.uintptr_t, axis C.uint32_t, value C.wl_fixed_t) {
 func uitkWlAxisSource(id C.uintptr_t, src C.uint32_t) {
 	if c := wlConnBy(id); c != nil {
 		c.axisSrc = int(src)
+	}
+}
+
+//export uitkWlAxisStop
+func uitkWlAxisStop(id C.uintptr_t) {
+	c := wlConnBy(id)
+	if c == nil || c.axisSrc != 1 {
+		return
+	}
+	// The fingers lifted: a quick swipe glides on.
+	if c.kin.release(time.Now()) {
+		WakeLoop()
 	}
 }
 
