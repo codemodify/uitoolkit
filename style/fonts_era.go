@@ -81,6 +81,13 @@ var eraEngineFonts = map[string]FontPrefs{
 	"adwaita": {UI: cantarell, Mono: []string{"Source Code Pro", "Adwaita Mono", "DejaVu Sans Mono", "Noto Sans Mono"}},
 	// Windows 11: Segoe UI Variable.
 	"fluent": {UI: append([]string{"Segoe UI Variable Text", "Segoe UI Variable"}, segoe...), Mono: append([]string{"Cascadia Mono"}, consolas...)},
+	// macOS 10.11 onwards: San Francisco (Inter is the closest open face).
+	"macos": {UI: []string{"SF Pro Text", "SF Pro", "SF NS", ".SF NS Text", "Inter", "Noto Sans"}, Mono: []string{"SF Mono", "Menlo", "DejaVu Sans Mono", "Noto Sans Mono"}},
+	// Material Design: Roboto.
+	"material": {UI: []string{"Roboto", "Noto Sans", "Open Sans"}, Mono: []string{"Roboto Mono", "Noto Sans Mono", "DejaVu Sans Mono"}},
+	// FlatLaf takes the platform's UI font: Segoe UI in its reference
+	// screenshots, Inter when an app bundles FlatLaf's; IntelliJ's mono.
+	"flatlaf": {UI: append([]string{"Segoe UI", "Inter"}, segoe[1:]...), Mono: append([]string{"JetBrains Mono"}, consolas...)},
 }
 
 // eraPackFonts override the engine's typefaces for one pack.
@@ -89,9 +96,8 @@ var eraPackFonts = map[string]FontPrefs{
 	"win2000": {UI: tahoma, Mono: courierNw},
 	// GNOME 3.14 kept DejaVu Sans Mono.
 	"adwaita-gtk3": {UI: cantarell, Mono: veraMono},
-	// Material Design: Roboto.
-	"material":       {UI: []string{"Roboto", "Noto Sans", "Open Sans"}, Mono: []string{"Roboto Mono", "Noto Sans Mono", "DejaVu Sans Mono"}},
-	"material-night": {UI: []string{"Roboto", "Noto Sans", "Open Sans"}, Mono: []string{"Roboto Mono", "Noto Sans Mono", "DejaVu Sans Mono"}},
+	// OS X 10.10 Yosemite: Helvetica Neue, the year before San Francisco.
+	"yosemite": {UI: append([]string{"Helvetica Neue"}, helvetica...), Mono: []string{"Menlo", "DejaVu Sans Mono", "Noto Sans Mono"}},
 }
 
 // withEraFonts fills the typefaces tok leaves unset from its pack's era:
