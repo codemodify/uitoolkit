@@ -23,7 +23,15 @@ func main() {
 	all := flag.Bool("all", false, "render every built-in pack")
 	out := flag.String("o", ".", "output directory")
 	scale := flag.Float64("scale", 1, "display scale (1, 1.5, 2)")
+	list := flag.Bool("list", false, "print every built-in pack (id, year, lineage, engine, label, summary) tab-separated and exit")
 	flag.Parse()
+	if *list {
+		for _, p := range style.ListBuiltinThemes() {
+			engine := p.Look().Engine().ID()
+			fmt.Printf("%s\t%d\t%s\t%s\t%s\t%s\n", p.Name, p.Year, p.Lineage, engine, p.Display(), p.Summary)
+		}
+		return
+	}
 	if *all {
 		themes = append(themes, style.AllBuiltinThemeNames()...)
 	}
