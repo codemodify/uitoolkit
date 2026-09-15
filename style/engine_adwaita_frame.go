@@ -38,9 +38,6 @@ func (adwaitaEngine) Decoration(l *Classic, st DecorationState) DecorationSpec {
 		s.ButtonGap, s.ButtonPad.Left, s.ButtonPad.Right = 0, snap(l.S(6))-lw, snap(l.S(6))-lw
 		s.Radius = [4]float32{r * 0.66, r * 0.66, 0, 0}
 	}
-	if st.Maximized || st.Tiled != 0 {
-		s.Radius = [4]float32{}
-	}
 	return s
 }
 

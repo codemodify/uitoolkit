@@ -83,8 +83,10 @@ func RenderFrames(look style.LookAndFeel, scale float32, title string) *painteng
 		col, row := i%3, i/3
 		x, y := float32(16+col*(frameW+18)), float32(40+row*(frameH+36))
 		label(x, y, fc.Name)
-		if shot := FrameShot(a, fc, scale); shot != nil {
-			ctx.DrawImage(shot, s.u(x), s.u(y+22))
+		if shot, org := FrameShot(a, fc, scale); shot != nil {
+			// The shot carries the shadow's margin around the window: land
+			// the window where the column is, shadow and all.
+			ctx.DrawImage(shot, s.u(x)-org.X, s.u(y+22)-org.Y)
 		}
 	}
 	return img
@@ -129,8 +131,8 @@ func RenderFramesOverview(packs []style.ThemePack, scale float32) *paintengine2d
 		f.Draw(ctx, name, paintengine2d.Pt(u(10), u(y+overviewH*0.4)), paintengine2d.RGB(1, 1, 1))
 		a := app.New(app.Options{Look: p.Look(), Headless: true, Scale: scale})
 		for i, fc := range OverviewCases {
-			if shot := frameShot(a, fc, scale, overviewW, overviewH, true); shot != nil {
-				ctx.DrawImage(shot, u(float32(overviewName+i*(overviewW+10))), u(y))
+			if shot, org := frameShot(a, fc, scale, overviewW, overviewH, true); shot != nil {
+				ctx.DrawImage(shot, u(float32(overviewName+i*(overviewW+10)))-org.X, u(y)-org.Y)
 			}
 		}
 	}
@@ -151,20 +153,22 @@ func FrameKind(lk style.LookAndFeel) string {
 }
 
 // FrameShot paints one frames-sheet window with a's look: frameW×frameH at
-// 1x, scaled.
-func FrameShot(a *app.Application, fc FrameCase, scale float32) *paintengine2d.Image {
+// 1x, scaled. The image is the whole surface — the window with the margin
+// its shadow lives in — and the point is where the visible window starts
+// inside it, so a caller lands the window itself where it means to.
+func FrameShot(a *app.Application, fc FrameCase, scale float32) (*paintengine2d.Image, paintengine2d.Point) {
 	return frameShot(a, fc, scale, frameW, frameH, false)
 }
 
 // frameShot paints a fw×fh (at 1x) window of case fc; a compact one holds a
 // label only.
-func frameShot(a *app.Application, fc FrameCase, scale float32, fw, fh int, compact bool) *paintengine2d.Image {
+func frameShot(a *app.Application, fc FrameCase, scale float32, fw, fh int, compact bool) (*paintengine2d.Image, paintengine2d.Point) {
 	w, err := a.NewWindow(platform.WindowOptions{
 		Title: "Window", Width: int(float32(fw)*scale + 0.5), Height: int(float32(fh)*scale + 0.5),
 		Headless: true, Decorations: platform.DecorationsClient,
 	})
 	if err != nil {
-		return nil
+		return nil, paintengine2d.Point{}
 	}
 	defer w.Close()
 	p := platform.DefaultTitleBarPrefs("")
@@ -195,7 +199,7 @@ func frameShot(a *app.Application, fc FrameCase, scale float32, fw, fh int, comp
 	}
 	o.SimulateWindowState(fc.State)
 	a.PumpOnce()
-	w.Capture()
+	w.CaptureSurface()
 	point := func(b platform.CaptionButton) (paintengine2d.Point, bool) {
 		hb := w.Caption()
 		if hb == nil {
@@ -218,5 +222,5 @@ func frameShot(a *app.Application, fc FrameCase, scale float32, fw, fh int, comp
 		w.Inject(platform.Event{Kind: platform.EventMouseDown, Pos: pt, Button: platform.ButtonLeft})
 	}
 	a.PumpOnce()
-	return w.Capture()
+	return w.CaptureSurface(), w.WindowRect().Min
 }
