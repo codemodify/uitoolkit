@@ -3,7 +3,7 @@
 package platform
 
 /*
-#cgo linux LDFLAGS: -lX11 -lXext -lXrandr -ldl
+#cgo linux LDFLAGS: -lX11 -lXext -lXrandr -lXfixes -lXrender -ldl
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <X11/Xatom.h>
@@ -13,9 +13,13 @@ package platform
 #include <X11/cursorfont.h>
 #include <X11/extensions/XShm.h>
 #include <X11/extensions/Xrandr.h>
+#include <X11/extensions/Xfixes.h>
+#include <X11/extensions/shape.h>
+#include <X11/extensions/Xrender.h>
 #include <dlfcn.h>
 #include <locale.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <poll.h>
@@ -67,14 +71,96 @@ static int ui_wait(Display* d, int ms) {
 	return n;
 }
 
-static Window ui_create(Display* d, int x, int y, int w, int h, const char* title, int popup) {
+// ui_argb_visual finds a 32-bit TrueColor visual with an alpha channel and
+// makes a colormap for it: what a window with a translucent shadow margin
+// and rounded corners must be created with. It returns 0 when the screen
+// has none (then the frame stays solid).
+static int ui_argb_visual(Display* d, Visual** vis, Colormap* cmap, int* depth) {
+	XVisualInfo tmpl, *found;
+	int n = 0;
+	if (!d) return 0;
+	memset(&tmpl, 0, sizeof(tmpl));
+	tmpl.screen = DefaultScreen(d);
+	tmpl.depth = 32;
+	tmpl.class = TrueColor;
+	found = XGetVisualInfo(d, VisualScreenMask|VisualDepthMask|VisualClassMask, &tmpl, &n);
+	if (!found || n < 1) {
+		if (found) XFree(found);
+		return 0;
+	}
+	Visual* pick = NULL;
+	for (int i = 0; i < n; i++) {
+		XRenderPictFormat* f = XRenderFindVisualFormat(d, found[i].visual);
+		if (f && f->type == PictTypeDirect && f->direct.alphaMask) {
+			pick = found[i].visual;
+			*depth = found[i].depth;
+			break;
+		}
+	}
+	XFree(found);
+	if (!pick) return 0;
+	*vis = pick;
+	*cmap = XCreateColormap(d, DefaultRootWindow(d), pick, AllocNone);
+	return 1;
+}
+
+// _NET_WM_CM_S<screen>: a compositing manager owns it while one runs.
+// Without one the X server simply ignores a window's alpha, so a
+// translucent frame would show black instead of the desktop.
+static int ui_composited(Display* d) {
+	char name[32];
+	if (!d) return 0;
+	snprintf(name, sizeof(name), "_NET_WM_CM_S%d", DefaultScreen(d));
+	Atom sel = XInternAtom(d, name, False);
+	return XGetSelectionOwner(d, sel) != None;
+}
+
+// ui_watch_composited asks for XFixesSelectionNotify on the compositing
+// manager's selection, so a compositor starting or stopping is an event
+// rather than a poll. It returns the extension's event base (0 when
+// XFixes is missing).
+static int ui_watch_composited(Display* d) {
+	int ev = 0, err = 0;
+	char name[32];
+	if (!d || !XFixesQueryExtension(d, &ev, &err)) return 0;
+	snprintf(name, sizeof(name), "_NET_WM_CM_S%d", DefaultScreen(d));
+	Atom sel = XInternAtom(d, name, False);
+	XFixesSelectSelectionInput(d, DefaultRootWindow(d), sel,
+		XFixesSetSelectionOwnerNotifyMask | XFixesSelectionWindowDestroyNotifyMask |
+		XFixesSelectionClientCloseNotifyMask);
+	return ev;
+}
+
+// ui_shape_input restricts where a press reaches the window to one box
+// (the visible window plus the resize band in the shadow); the rest of the
+// margin clicks through to whatever is behind it.
+static void ui_shape_input(Display* d, Window w, int x, int y, int width, int height) {
+	XRectangle r;
+	int ev = 0, err = 0;
+	if (!d || !w || !XShapeQueryExtension(d, &ev, &err)) return;
+	r.x = (short)x;
+	r.y = (short)y;
+	r.width = (unsigned short)(width > 0 ? width : 1);
+	r.height = (unsigned short)(height > 0 ? height : 1);
+	XShapeCombineRectangles(d, w, ShapeInput, 0, 0, &r, 1, ShapeSet, Unsorted);
+}
+
+// ui_shape_input_all gives the whole window back to input (a frame that
+// stopped keeping a margin).
+static void ui_shape_input_all(Display* d, Window w) {
+	int ev = 0, err = 0;
+	if (!d || !w || !XShapeQueryExtension(d, &ev, &err)) return;
+	XShapeCombineMask(d, w, ShapeInput, 0, 0, None, ShapeSet);
+}
+
+static Window ui_create_visual(Display* d, int x, int y, int w, int h, const char* title, int popup, Visual* vis, Colormap cmap, int depth) {
 	int s = DefaultScreen(d);
 	XSetWindowAttributes swa;
 	memset(&swa, 0, sizeof(swa));
-	swa.background_pixel = BlackPixel(d, s);
-	swa.border_pixel = BlackPixel(d, s);
+	swa.background_pixel = vis ? 0 : BlackPixel(d, s);
+	swa.border_pixel = vis ? 0 : BlackPixel(d, s);
 	swa.bit_gravity = NorthWestGravity;
-	swa.colormap = DefaultColormap(d, s);
+	swa.colormap = vis ? cmap : DefaultColormap(d, s);
 	swa.override_redirect = popup ? True : False;
 	swa.event_mask = ExposureMask|KeyPressMask|KeyReleaseMask|ButtonPressMask|ButtonReleaseMask|
 		PointerMotionMask|LeaveWindowMask|StructureNotifyMask|FocusChangeMask|PropertyChangeMask;
@@ -87,7 +173,7 @@ static Window ui_create(Display* d, int x, int y, int w, int h, const char* titl
 		y = 40;
 	}
 	Window win = XCreateWindow(d, RootWindow(d, s), x, y, (unsigned)w, (unsigned)h, 0,
-		DefaultDepth(d, s), InputOutput, DefaultVisual(d, s),
+		vis ? depth : DefaultDepth(d, s), InputOutput, vis ? vis : DefaultVisual(d, s),
 		mask, &swa);
 	XStoreName(d, win, title);
 	Atom net = XInternAtom(d, "_NET_WM_NAME", False);
@@ -123,6 +209,10 @@ static Window ui_create(Display* d, int x, int y, int w, int h, const char* titl
 	}
 	XFlush(d);
 	return win;
+}
+
+static Window ui_create(Display* d, int x, int y, int w, int h, const char* title, int popup) {
+	return ui_create_visual(d, x, y, w, h, title, popup, NULL, 0, 0);
 }
 
 static void ui_move(Display* d, Window w, int x, int y) {
@@ -170,10 +260,10 @@ static void ui_destroy_image(XImage* img) {
 	}
 }
 
-static XImage* ui_image(Display* d, int w, int h, char* data) {
-	Visual* v = DefaultVisual(d, DefaultScreen(d));
-	int depth = DefaultDepth(d, DefaultScreen(d));
-	return XCreateImage(d, v, (unsigned)depth, ZPixmap, 0, data, (unsigned)w, (unsigned)h, 32, 0);
+static XImage* ui_image(Display* d, int w, int h, char* data, Visual* vis, int depth) {
+	Visual* v = vis ? vis : DefaultVisual(d, DefaultScreen(d));
+	int dep = vis ? depth : DefaultDepth(d, DefaultScreen(d));
+	return XCreateImage(d, v, (unsigned)dep, ZPixmap, 0, data, (unsigned)w, (unsigned)h, 32, 0);
 }
 
 static int ui_img_bpl(XImage* img) { return img ? img->bytes_per_line : 0; }
@@ -182,6 +272,10 @@ static int ui_img_msb(XImage* img) { return img && img->byte_order == MSBFirst; 
 static unsigned long ui_red_mask(Display* d) { return DefaultVisual(d, DefaultScreen(d))->red_mask; }
 static unsigned long ui_green_mask(Display* d) { return DefaultVisual(d, DefaultScreen(d))->green_mask; }
 static unsigned long ui_blue_mask(Display* d) { return DefaultVisual(d, DefaultScreen(d))->blue_mask; }
+static unsigned long ui_vis_red(Visual* v) { return v ? v->red_mask : 0; }
+static unsigned long ui_vis_green(Visual* v) { return v ? v->green_mask : 0; }
+static unsigned long ui_vis_blue(Visual* v) { return v ? v->blue_mask : 0; }
+static void ui_free_colormap(Display* d, Colormap c) { if (d && c) XFreeColormap(d, c); }
 
 static int ui_event_type(XEvent* e) { return e->type; }
 static int ui_cross_mode(XEvent* e) { return e->xcrossing.mode; }
@@ -669,12 +763,12 @@ static int ui_shm_query(Display* d) {
 	return 1;
 }
 
-static XImage* ui_shm_image(Display* d, int w, int h, void** info_out, void** addr) {
+static XImage* ui_shm_image(Display* d, int w, int h, void** info_out, void** addr, Visual* vis, int depth) {
 	XShmSegmentInfo* info = (XShmSegmentInfo*)calloc(1, sizeof(XShmSegmentInfo));
 	if (!info) return NULL;
-	Visual* v = DefaultVisual(d, DefaultScreen(d));
-	int depth = DefaultDepth(d, DefaultScreen(d));
-	XImage* img = XShmCreateImage(d, v, (unsigned)depth, ZPixmap, NULL, info, (unsigned)w, (unsigned)h);
+	Visual* v = vis ? vis : DefaultVisual(d, DefaultScreen(d));
+	int dep = vis ? depth : DefaultDepth(d, DefaultScreen(d));
+	XImage* img = XShmCreateImage(d, v, (unsigned)dep, ZPixmap, NULL, info, (unsigned)w, (unsigned)h);
 	if (!img) {
 		free(info);
 		return NULL;
@@ -758,6 +852,7 @@ import "C"
 import (
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"sync"
 	"sync/atomic"
@@ -828,7 +923,11 @@ func (X11Backend) NewSurface(opts WindowOptions) (Surface, error) {
 		popup:    opts.Popup,
 		wantDeco: requestedDecorations(opts.Decorations),
 		focused:  true,
+		geomW:    w,
+		geomH:    h,
+		opts:     opts,
 	}
+	s.state.Solid = !c.composited
 	if opts.Popup {
 		// Override-redirect: no window manager frame to ask about.
 		s.wantDeco = DecorationsNone
@@ -881,6 +980,13 @@ type x11Conn struct {
 	// until then); wmName is its _NET_WM_NAME.
 	supported map[C.Atom]bool
 	wmName    string
+	// composited is whether a compositing manager owns _NET_WM_CM_S<n>
+	// (translucent frames need one); fixesEvent is the XFixes event base
+	// the selection notifications arrive on (0: no XFixes).
+	composited  bool
+	fixesEvent  int
+	atomExtents C.Atom
+	atomOpaque  C.Atom
 
 	clipText string
 	ownClip  bool
@@ -945,6 +1051,18 @@ type x11Surface struct {
 	caps     WMCaps
 	focused  bool
 	wantDeco Decorations
+	// frame is the client frame's margin and regions; geomW / geomH the
+	// visible window, which the X window is that plus the margin. vis is
+	// the 32-bit visual the window was created with for a translucent
+	// frame (nil: the screen's default, opaque one).
+	frame        Frame
+	geomW, geomH int
+	vis          *C.Visual
+	visDepth     int
+	cmap         C.Colormap
+	// opts are what the window was made with, so it can be re-created on
+	// another visual when the frame starts or stops needing alpha.
+	opts WindowOptions
 	// The last button press: root position, button and time, which
 	// _NET_WM_MOVERESIZE needs; buttons is the set held now.
 	pressRootX, pressRootY int
@@ -1021,6 +1139,10 @@ func x11OpenLocked() (*x11Conn, error) {
 	c.atomMoveRes = internAtom(d, "_NET_WM_MOVERESIZE")
 	c.atomShowMenu = internAtom(d, "_GTK_SHOW_WINDOW_MENU")
 	c.atomMotif = internAtom(d, "_MOTIF_WM_HINTS")
+	c.atomExtents = internAtom(d, "_GTK_FRAME_EXTENTS")
+	c.atomOpaque = internAtom(d, "_NET_WM_OPAQUE_REGION")
+	c.composited = C.ui_composited(d) != 0
+	c.fixesEvent = int(C.ui_watch_composited(d))
 	c.cursors = map[Cursor]C.Cursor{}
 	c.maxReq = int(C.ui_max_req(d))
 	C.ui_detectable_repeat(d)
@@ -1196,6 +1318,9 @@ func internAtom(d *C.Display, name string) C.Atom {
 	return C.ui_atom(d, cn)
 }
 
+// Resize sizes the *window*: the X window is that plus the frame's margin,
+// the band the shadow lives in (_GTK_FRAME_EXTENTS tells the window manager
+// as much, so it moves and snaps the window, not the shadow).
 func (s *x11Surface) Resize(w, h int) error {
 	if s.closed || s.win == 0 {
 		return nil
@@ -1206,6 +1331,9 @@ func (s *x11Surface) Resize(w, h int) error {
 	if h < 1 {
 		h = 1
 	}
+	s.geomW, s.geomH = w, h
+	m := s.frame.Margin
+	w, h = w+m.Width(), h+m.Height()
 	if s.img.Width == w && s.img.Height == h {
 		return nil
 	}
@@ -1232,7 +1360,7 @@ func (s *x11Surface) rebuildImageLocked() {
 	w, h := s.img.Width, s.img.Height
 	if C.ui_shm_query(s.conn.dpy) != 0 {
 		var info, addr unsafe.Pointer
-		img := C.ui_shm_image(s.conn.dpy, C.int(w), C.int(h), &info, &addr)
+		img := C.ui_shm_image(s.conn.dpy, C.int(w), C.int(h), &info, &addr, s.vis, C.int(s.visDepth))
 		if img != nil && addr != nil {
 			if !s.adoptImageLocked(img, addr, h) {
 				C.ui_shm_destroy(s.conn.dpy, img, info)
@@ -1246,7 +1374,7 @@ func (s *x11Surface) rebuildImageLocked() {
 	// XCreateImage keeps the data pointer for the life of the image, so
 	// the backing store must be C memory: handing C a pointer into a Go
 	// slice it retains violates the cgo pointer rules.
-	probe := C.ui_image(s.conn.dpy, C.int(w), C.int(h), nil)
+	probe := C.ui_image(s.conn.dpy, C.int(w), C.int(h), nil, s.vis, C.int(s.visDepth))
 	if probe == nil {
 		return
 	}
@@ -1263,7 +1391,7 @@ func (s *x11Surface) rebuildImageLocked() {
 	if mem == nil {
 		return
 	}
-	img := C.ui_image(s.conn.dpy, C.int(w), C.int(h), (*C.char)(mem))
+	img := C.ui_image(s.conn.dpy, C.int(w), C.int(h), (*C.char)(mem), s.vis, C.int(s.visDepth))
 	if img == nil {
 		C.free(mem)
 		return
@@ -1371,7 +1499,10 @@ func (s *x11Surface) copyRect(r paintengine2d.Rect) {
 	// per pixel (that path was ~70ms/frame at 1000×760).
 	if bytesPP == 4 && !s.msb && s.rmask == 0x00ff0000 && s.gmask == 0x0000ff00 && s.bmask == 0x000000ff &&
 		stride >= s.img.Width*4 {
-		copyImageRect(s.xbuf, stride, s.img, r, true, true)
+		// A 32-bit ARGB visual keeps the alpha the frame painted (the
+		// compositor reads it premultiplied); every other visual has the
+		// alpha byte forced opaque.
+		copyImageRect(s.xbuf, stride, s.img, r, true, !s.frame.Alpha)
 		return
 	}
 	for y := y0; y < y1; y++ {
@@ -1500,6 +1631,10 @@ func (c *x11Conn) drainLocked() {
 		if C.ui_filter(c.dpy, &xe) != 0 {
 			continue
 		}
+		if c.fixesEvent > 0 && int(C.ui_event_type(&xe)) == c.fixesEvent+C.XFixesSelectionNotify {
+			c.compositingChangedLocked()
+			continue
+		}
 		switch C.ui_event_type(&xe) {
 		case C.SelectionRequest:
 			c.handleSelReq(&xe)
@@ -1550,7 +1685,11 @@ func (s *x11Surface) translate(xe *C.XEvent) []Event {
 			if s.gpu == nil {
 				s.rebuildImageLocked()
 			}
-			return []Event{{Kind: EventResize, Width: w, Height: h}}
+			// The X window holds the frame's margin too; the app hears
+			// about the window inside it.
+			m := s.frame.Margin
+			s.geomW, s.geomH = max(w-m.Width(), 1), max(h-m.Height(), 1)
+			return []Event{{Kind: EventResize, Width: s.geomW, Height: s.geomH}}
 		}
 	case C.ButtonPress, C.ButtonRelease:
 		btn := int(C.ui_btn(xe))
@@ -2431,6 +2570,23 @@ func (s *x11Surface) setMotifLocked() {
 	C.ui_flush(c.dpy)
 }
 
+// compositingChangedLocked follows a compositing manager starting or
+// stopping: every window hears about it, so a frame that was translucent
+// goes solid (or the other way round) at once, as GTK's .solid-csd does.
+func (c *x11Conn) compositingChangedLocked() {
+	now := C.ui_composited(c.dpy) != 0
+	if now == c.composited {
+		return
+	}
+	c.composited = now
+	for win, s := range c.surfaces {
+		if s == nil || s.closed {
+			continue
+		}
+		c.queues[win] = append(c.queues[win], s.readStateLocked()...)
+	}
+}
+
 // focusChangedLocked follows keyboard focus as the active state where the
 // window manager does not maintain _NET_WM_STATE_FOCUSED.
 func (s *x11Surface) focusChangedLocked(in bool) []Event {
@@ -2477,6 +2633,9 @@ func (s *x11Surface) readStateLocked() []Event {
 		}
 	}
 	st := netWMState(bits, c.supportsLocked(c.atomFocused), s.focused)
+	// Without a compositing manager the X server ignores alpha: a frame
+	// the toolkit draws has to be solid there.
+	st.Solid = !c.composited
 	if st == s.state {
 		return nil
 	}
@@ -2616,6 +2775,218 @@ func (s *x11Surface) ShowWindowMenu(p paintengine2d.Point) bool {
 	return true
 }
 
+// SetFrame takes the frame the toolkit draws (FrameSurface): the X window
+// grows by the margin, _GTK_FRAME_EXTENTS tells the window manager how much
+// of it is shadow (KWin and Mutter honour it when snapping, tiling and
+// maximizing), an input shape keeps presses in the margin out of the
+// window, and _NET_WM_OPAQUE_REGION says what of it is solid.
+//
+// A translucent frame needs a 32-bit visual, which an X window is born
+// with: one that has to change is re-created (invisibly before the window
+// is first mapped, where a frame is normally decided).
+func (s *x11Surface) SetFrame(f Frame) {
+	if s == nil || s.closed || s.win == 0 || f == s.frame {
+		return
+	}
+	if f.Alpha && !s.argb() {
+		s.recreateOnVisual(true)
+	}
+	if !f.Alpha && s.frame.Alpha && s.argb() && f.Margin.Zero() {
+		// Nothing translucent left to paint: the ARGB visual is harmless
+		// (every pixel is opaque) and re-creating the window would flash,
+		// so it stays until the window is made again.
+		_ = f
+	}
+	s.frame = f
+	x11Mu.Lock()
+	s.applyFrameLocked()
+	x11Mu.Unlock()
+	w, h := s.geomW+f.Margin.Width(), s.geomH+f.Margin.Height()
+	if s.img != nil && (s.img.Width != w || s.img.Height != h) {
+		s.img = paintengine2d.NewImage(max(w, 1), max(h, 1))
+		x11Mu.Lock()
+		if s.gpu != nil {
+			s.resizeGPU(w, h)
+		}
+		if s.gpu == nil {
+			s.rebuildImageLocked()
+		}
+		if s.conn != nil && s.conn.dpy != nil {
+			C.ui_resize_win(s.conn.dpy, s.win, C.int(w), C.int(h))
+		}
+		x11Mu.Unlock()
+	}
+}
+
+// Frame is the frame last set (FrameSurface).
+func (s *x11Surface) Frame() Frame {
+	if s == nil {
+		return Frame{}
+	}
+	return s.frame
+}
+
+// argb reports whether the window was created on a visual with an alpha
+// channel.
+func (s *x11Surface) argb() bool { return s != nil && s.vis != nil }
+
+// recreateOnVisual makes the window again on a 32-bit visual (argb) or on
+// the screen's default one. An X window's visual is fixed when it is
+// created, and a frame with a shadow needs an alpha channel, so the window
+// is destroyed and made afresh with everything on it: its properties, its
+// input context, its graphics context and its GPU device.
+//
+// Before the first map — where a frame is normally decided, the title bar
+// being set after the window is made — nothing shows. A mapped window is
+// re-created at the place it stood.
+func (s *x11Surface) recreateOnVisual(argb bool) {
+	c := s.conn
+	if s == nil || c == nil || c.dpy == nil || s.win == 0 || s.popup {
+		return
+	}
+	if argb == s.argb() {
+		return
+	}
+	var vis *C.Visual
+	var cmap C.Colormap
+	depth := C.int(0)
+	if argb {
+		if !c.composited {
+			return
+		}
+		if C.ui_argb_visual(c.dpy, &vis, &cmap, &depth) == 0 {
+			return
+		}
+	}
+	x11Mu.Lock()
+	defer x11Mu.Unlock()
+	mapped := s.mapped
+	x, y := s.opts.X, s.opts.Y
+	if mapped {
+		var rx, ry C.int
+		if C.ui_to_root(c.dpy, s.win, 0, 0, &rx, &ry) != 0 {
+			x, y = int(rx), int(ry)
+		}
+	}
+	w, h := s.img.Width, s.img.Height
+	// Everything that hangs off the old window goes with it.
+	s.closeGPU()
+	if s.ic != nil {
+		C.ui_destroy_ic(s.ic)
+		s.ic = nil
+	}
+	if s.ximCbs != nil {
+		x11FreeCbs(s.ximCbs)
+		s.ximCbs = nil
+	}
+	s.destroyImageLocked()
+	old := s.win
+	delete(c.surfaces, old)
+	delete(c.queues, old)
+	C.ui_destroy_win(c.dpy, old, s.gc)
+	s.gc = nil
+	if s.cmap != 0 {
+		C.ui_free_colormap(c.dpy, s.cmap)
+		s.cmap = 0
+	}
+	ctitle := C.CString(s.title)
+	popup := C.int(0)
+	s.win = C.ui_create_visual(c.dpy, C.int(x), C.int(y), C.int(w), C.int(h), ctitle, popup, vis, cmap, depth)
+	C.free(unsafe.Pointer(ctitle))
+	s.vis, s.cmap, s.visDepth = vis, cmap, int(depth)
+	if vis != nil {
+		s.rmask = uint32(C.ui_vis_red(vis))
+		s.gmask = uint32(C.ui_vis_green(vis))
+		s.bmask = uint32(C.ui_vis_blue(vis))
+	} else {
+		s.rmask = uint32(C.ui_red_mask(c.dpy))
+		s.gmask = uint32(C.ui_green_mask(c.dpy))
+		s.bmask = uint32(C.ui_blue_mask(c.dpy))
+	}
+	if mw, mh := s.opts.MinWidth, s.opts.MinHeight; mw > 0 || mh > 0 {
+		C.ui_resize_hints(c.dpy, s.win, C.int(max(mw, 1)), C.int(max(mh, 1)))
+	}
+	s.gc = C.ui_gc(c.dpy, s.win)
+	s.ic, s.ximCbs = x11CreateIC(c.im, s.win)
+	c.surfaces[s.win] = s
+	s.setMotifLocked()
+	s.mapped = false
+	s.rebuildImageLocked()
+	if mapped && !s.hidden {
+		C.ui_map(c.dpy, s.win)
+		s.mapped = true
+	}
+	// The GPU device is bound to the window: a new one for the new visual,
+	// with an alpha channel where the frame needs it.
+	x11Mu.Unlock()
+	s.tryBindGPU()
+	x11Mu.Lock()
+}
+
+// applyFrameLocked publishes the frame's geometry: the shadow margin, the
+// input shape and the opaque region.
+func (s *x11Surface) applyFrameLocked() {
+	c := s.conn
+	if c == nil || c.dpy == nil || s.win == 0 {
+		return
+	}
+	m := s.frame.Margin
+	if m.Zero() {
+		C.ui_delete_prop(c.dpy, s.win, c.atomExtents)
+		C.ui_shape_input_all(c.dpy, s.win)
+	} else {
+		ext := [4]C.ulong{C.ulong(m.Left), C.ulong(m.Right), C.ulong(m.Top), C.ulong(m.Bottom)}
+		C.ui_change_prop32(c.dpy, s.win, c.atomExtents, C.XA_CARDINAL, &ext[0], 4)
+		in := s.frame.Input
+		x := m.Left - min(in.Left, m.Left)
+		y := m.Top - min(in.Top, m.Top)
+		w := s.geomW + min(in.Left, m.Left) + min(in.Right, m.Right)
+		h := s.geomH + min(in.Top, m.Top) + min(in.Bottom, m.Bottom)
+		C.ui_shape_input(c.dpy, s.win, C.int(x), C.int(y), C.int(w), C.int(h))
+	}
+	// The opaque region is the window less its rounded corners, in window
+	// (X) coordinates: a compositor that knows what is solid need not
+	// blend it.
+	rects := s.opaqueRects()
+	if len(rects) == 0 {
+		C.ui_delete_prop(c.dpy, s.win, c.atomOpaque)
+	} else {
+		C.ui_change_prop32(c.dpy, s.win, c.atomOpaque, C.XA_CARDINAL, &rects[0], C.int(len(rects)))
+	}
+	C.ui_flush(c.dpy)
+}
+
+// opaqueRects is the window less the squares its rounded corners live in,
+// as _NET_WM_OPAQUE_REGION's flat list of x, y, width, height.
+func (s *x11Surface) opaqueRects() []C.ulong {
+	m := s.frame.Margin
+	x, y := m.Left, m.Top
+	w, h := s.geomW, s.geomH
+	if w < 1 || h < 1 {
+		return nil
+	}
+	up := func(v float32) int {
+		if v <= 0 {
+			return 0
+		}
+		return int(math.Ceil(float64(v)))
+	}
+	r := s.frame.Radius
+	tl, tr, br, bl := up(r[0]), up(r[1]), up(r[2]), up(r[3])
+	top, bottom := max(tl, tr), max(br, bl)
+	if top+bottom >= h {
+		return nil
+	}
+	out := []C.ulong{C.ulong(x), C.ulong(y + top), C.ulong(w), C.ulong(h - top - bottom)}
+	if top > 0 && w-tl-tr > 0 {
+		out = append(out, C.ulong(x+tl), C.ulong(y), C.ulong(w-tl-tr), C.ulong(top))
+	}
+	if bottom > 0 && w-bl-br > 0 {
+		out = append(out, C.ulong(x+bl), C.ulong(y+h-bottom), C.ulong(w-bl-br), C.ulong(bottom))
+	}
+	return out
+}
+
 // Minimize iconifies the window (XIconifyWindow).
 func (s *x11Surface) Minimize() {
 	if s.conn == nil || s.conn.dpy == nil || s.win == 0 {
@@ -2651,3 +3022,6 @@ func (s *x11Surface) ToggleMaximizeAxis(vertical bool) {
 	C.ui_ewmh_state(s.conn.dpy, s.win, 2, atom, 0) // _NET_WM_STATE_TOGGLE
 	x11Mu.Unlock()
 }
+
+// x11Surface is a full FrameSurface (compile-time check).
+var _ FrameSurface = (*x11Surface)(nil)
