@@ -4,6 +4,7 @@ import (
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/layout"
 	"github.com/codemodify/uitoolkit/platform"
+	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
 )
 
@@ -95,7 +96,11 @@ func (o *Overlay) Arrange(r paintengine2d.Rect) {
 }
 
 func (o *Overlay) Paint(ctx *paintengine2d.Context) {
-	o.Look().DrawOverlay(ctx, o.LocalBounds())
+	lk := o.Look()
+	lk.DrawOverlay(ctx, o.LocalBounds())
+	if o.Card != nil && o.Card.Visible() {
+		style.DrawPopupShadowOf(lk, ctx, o.Card.Bounds(), style.PopupDialog)
+	}
 }
 
 func (o *Overlay) MousePress(e widget.MouseEvent) bool {

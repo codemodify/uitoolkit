@@ -435,6 +435,11 @@ func (win95Engine) TabOutset(l *Classic) Insets {
 }
 
 // WindowCloseRect is the bevelled close button at the caption's right end.
+// No drop shadows: Windows 95–2000 menus and tooltips float flat.
+func (win95Engine) PopupShadow(*Classic, PopupKind) Insets { return Insets{} }
+
+func (win95Engine) DrawPopupShadow(*Classic, *paintengine2d.Context, paintengine2d.Rect, PopupKind) {}
+
 func (win95Engine) WindowCloseRect(l *Classic, b paintengine2d.Rect) paintengine2d.Rect {
 	in := l.S(3)
 	bar := paintengine2d.XYWH(b.Min.X+in, b.Min.Y+in, b.Dx()-in*2, w95CaptionH(l))

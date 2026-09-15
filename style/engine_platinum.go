@@ -675,6 +675,22 @@ func platBar(l *Classic, b paintengine2d.Rect) paintengine2d.Rect {
 }
 
 // WindowCloseRect is the square close box at the title bar's left end.
+// PopupShadow: classic Mac menus and balloons cast a hard one-pixel shadow
+// to the lower right; windows cast none.
+func (platinumEngine) PopupShadow(l *Classic, kind PopupKind) Insets {
+	if kind == PopupDialog {
+		return Insets{}
+	}
+	return ShadowReach(l.S(1), l.S(1), 0, 0)
+}
+
+func (platinumEngine) DrawPopupShadow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, kind PopupKind) {
+	if kind == PopupDialog {
+		return
+	}
+	DropShadow(ctx, b, 0, paintengine2d.RGBA(0, 0, 0, 0.55), l.S(1), l.S(1), 0, 0)
+}
+
 func (platinumEngine) WindowCloseRect(l *Classic, b paintengine2d.Rect) paintengine2d.Rect {
 	return platBox(l, platBar(l, b), true, 0)
 }

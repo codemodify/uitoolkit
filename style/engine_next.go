@@ -1074,6 +1074,11 @@ func nxFrameFits(l *Classic, b paintengine2d.Rect) bool {
 }
 
 // WindowCloseRect is the close button at the right of the title bar.
+// No drop shadows: NeXTSTEP and Window Maker menus and tooltips float flat.
+func (nextEngine) PopupShadow(*Classic, PopupKind) Insets { return Insets{} }
+
+func (nextEngine) DrawPopupShadow(*Classic, *paintengine2d.Context, paintengine2d.Rect, PopupKind) {}
+
 func (nextEngine) WindowCloseRect(l *Classic, b paintengine2d.Rect) paintengine2d.Rect {
 	if !nxFrameFits(l, b) {
 		return paintengine2d.Rect{}

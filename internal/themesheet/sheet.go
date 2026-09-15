@@ -249,6 +249,7 @@ func (s *sheet) tabsMenus(x, y float32) {
 	s.lk.DrawMenuTitle(s.ctx, s.r(x+116, y+122, 52, 26), stN, "View", 0, false)
 	s.lk.DrawMenuTitle(s.ctx, s.r(x+172, y+122, 60, 26), stF, "Help", 0, false)
 	frame := s.r(x+4, y+150, 230, 190)
+	style.DrawPopupShadowOf(s.lk, s.ctx, frame, style.PopupMenu)
 	s.lk.DrawMenuFrame(s.ctx, frame)
 	ch := style.MenuChromeFor(s.lk)
 	rows := []struct {
@@ -270,7 +271,9 @@ func (s *sheet) tabsMenus(x, y float32) {
 		s.lk.DrawMenuItem(s.ctx, rb, rw.st, rw.row)
 	}
 	s.caption(x+250, y+156, "tooltip")
-	s.lk.DrawTooltip(s.ctx, s.r(x+250, y+174, 150, 26), "A helpful tip")
+	tip := s.r(x+250, y+174, 150, 26)
+	style.DrawPopupShadowOf(s.lk, s.ctx, tip, style.PopupTooltip)
+	s.lk.DrawTooltip(s.ctx, tip, "A helpful tip")
 	s.caption(x+250, y+210, "message icons")
 	for i, ic := range []style.ToolIcon{style.IconInfo, style.IconWarning, style.IconError, style.IconQuestion} {
 		s.lk.DrawMessageIcon(s.ctx, s.r(x+250+float32(i)*40, y+228, 32, 32), ic)
@@ -350,6 +353,7 @@ func (s *sheet) frames(x, y float32) {
 	}
 	wf := s.r(x+280, y+22, 270, 150)
 	if w, ok := s.lk.(style.WindowFrameLook); ok {
+		style.DrawPopupShadowOf(s.lk, s.ctx, wf, style.PopupDialog)
 		w.DrawWindowFrame(s.ctx, wf, "Dialog", style.WindowState{Active: true, CanClose: true, CloseHot: true})
 		in := w.WindowFrameInsets().Apply(wf)
 		f := s.lk.Font()
