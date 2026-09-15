@@ -379,6 +379,7 @@ func Gallery(a *app.Application, win *app.Window, light bool) widget.Component {
 	account.AddRow("Server type", widgets.NewComboBox([]string{"IMAP", "POP3", "Exchange"}, 0, nil))
 	account.AddRow("Port", widgets.NewNumberField(1, 65535, 993, 1, nil))
 	account.AddRow("Renews", widgets.NewDateField(time.Date(2026, time.September, 14, 0, 0, 0, 0, time.Local), nil))
+	account.AddRow("Label colour", widgets.NewColorButton(paintengine2d.RGB(0.13, 0.43, 0.47), nil))
 	account.AddWide(widgets.NewCheckbox("Use TLS", true, nil))
 	form := widgets.NewPanel("Form",
 		account,
