@@ -133,6 +133,16 @@ var eraPackFonts = map[string]FontPrefs{
 	"linear": linearFonts, "linear-night": linearFonts,
 	// GNOME 48 reads in Adwaita Sans and Adwaita Mono.
 	"adwaita48": adwaitaSans, "adwaita48-night": adwaitaSans,
+	// macOS Tahoe: San Francisco, then Inter and its GNOME twin.
+	"tahoe": tahoeFonts, "tahoe-night": tahoeFonts,
+}
+
+// tahoeFonts are San Francisco where it is installed (a Mac), else the
+// closest open faces: Inter, or Adwaita Sans (Inter with one variant
+// frozen).
+var tahoeFonts = FontPrefs{
+	UI:   []string{"SF Pro Text", "SF Pro", "SF NS", ".SF NS Text", "Inter", "Inter Variable", "Adwaita Sans", "Noto Sans"},
+	Mono: []string{"SF Mono", "Menlo", "DejaVu Sans Mono", "Noto Sans Mono"},
 }
 
 // adwaitaSans is GNOME 48's pair: Adwaita Sans (Inter 4.1 with one variant
