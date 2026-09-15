@@ -545,7 +545,7 @@ func (nimbusEngine) CheckIndicator(l *Classic, ctx *paintengine2d.Context, box p
 		p.LineTo(x+s*0.44, y+s*0.72)
 		p.LineTo(x+s*0.78, y+s*0.2)
 		ctx.DrawPath(p, paintengine2d.Paint{Color: mark, Style: paintengine2d.StyleStroke,
-			Stroke: paintengine2d.Stroke{Width: 2.2 * u, Cap: paintengine2d.CapRound, Join: paintengine2d.JoinRound, MiterLimit: 4}})
+			Stroke: paintengine2d.Stroke{Width: max(s*0.16, 1.5), Cap: paintengine2d.CapRound, Join: paintengine2d.JoinRound, MiterLimit: 4}})
 	}
 	if st.Focused() && !st.Disabled() {
 		c.ring(ctx, body, 2.5*u)
