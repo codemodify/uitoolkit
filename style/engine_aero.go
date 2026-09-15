@@ -1777,6 +1777,8 @@ func aeroPack(name, label string, year int, summary string, glass float32) Theme
 		Family:  ThemeLight,
 		Palette: pal,
 		Params:  map[string]float32{"glass": glass},
+		// Selected text is white on the #3399ff highlight (HighlightText).
+		Extra: map[string]paintengine2d.Color{"selectionText": Hex("#ffffff")},
 	}
 	tok.Hot = ChromeState{Fill: pal.MenuHover, Border: pal.MenuHoverBorder}
 	tok.Pressed = ChromeState{Fill: Hex("#c1dbfc"), Border: Hex("#7da2ce")}
