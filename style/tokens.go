@@ -186,7 +186,7 @@ func (t ThemeTokens) Resolve() ThemeTokens {
 	t.Palette = ResolveMenuChrome(t.Palette)
 	t.Palette = ResolveBevelChromeFor(t.Palette, t.Family)
 	if e, ok := EngineByID(t.Engine); ok {
-		t.Metrics = MergeChromeMetrics(e.DefaultMetrics(), t.Metrics)
+		t.Metrics = MergeChromeMetrics(eraEngine(e, t).DefaultMetrics(), t.Metrics)
 	}
 	t.Metrics = clampChromeMetrics(t.Metrics)
 	if t.Bevel == "" {
