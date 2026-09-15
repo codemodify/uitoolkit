@@ -80,6 +80,7 @@ func paletteSpecs() []webSpec {
 	out = append(out, draculaSpecs()...)
 	out = append(out, tokyoNightSpecs()...)
 	out = append(out, rosePineSpecs()...)
+	out = append(out, editorPaletteSpecs()...)
 	return out
 }
 
