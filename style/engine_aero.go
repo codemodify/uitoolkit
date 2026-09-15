@@ -879,6 +879,9 @@ func (aeroEngine) WindowCloseRect(l *Classic, b paintengine2d.Rect) paintengine2
 
 // Windows dialogs put the default button first: "OK  Cancel".
 func (aeroEngine) StyleHint(l *Classic, h StyleHint) int {
+	if h == HintDefaultPulseMs {
+		return 2400 // the default button breathes
+	}
 	if h == HintHoverFadeMs {
 		return 200 // Vista and 7 buttons glow in
 	}

@@ -27,6 +27,10 @@ func main() {
 	theme := flag.String("theme", "", "with -screenshot: take every gallery shot in this theme pack (default: $UITK_THEME, else each shot's own look)")
 	tab := flag.Int("tab", 0, "with -headless: the gallery tab to show (0 Scroll, 1 List, 2 Tree, 3 Table, 4 Form)")
 	flag.Parse()
+	if (*shot != "" || *headless) && os.Getenv(widgets.AnimationsEnv) == "" {
+		// Stills are the same every run: no fade or pulse caught mid-way.
+		os.Setenv(widgets.AnimationsEnv, "0")
+	}
 
 	if *shot != "" {
 		name := *theme
