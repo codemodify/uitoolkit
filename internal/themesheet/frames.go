@@ -93,10 +93,11 @@ func RenderFrames(look style.LookAndFeel, scale float32, title string) *painteng
 // OverviewCases are the states the frames overview shows for every pack.
 var OverviewCases = []FrameCase{FrameCases[0], FrameCases[1], FrameCases[2], FrameCases[3]}
 
-// overview window size at 1x, and the name column's width.
+// overview window size at 1x, and the name column's width. The windows hold
+// one line of content: room for it under the tallest caption (GNOME's).
 const (
 	overviewW    = 270
-	overviewH    = 76
+	overviewH    = 92
 	overviewName = 150
 )
 
@@ -128,7 +129,7 @@ func RenderFramesOverview(packs []style.ThemePack, scale float32) *paintengine2d
 		f.Draw(ctx, name, paintengine2d.Pt(u(10), u(y+overviewH*0.4)), paintengine2d.RGB(1, 1, 1))
 		a := app.New(app.Options{Look: p.Look(), Headless: true, Scale: scale})
 		for i, fc := range OverviewCases {
-			if shot := frameShot(a, fc, scale, overviewW, overviewH); shot != nil {
+			if shot := frameShot(a, fc, scale, overviewW, overviewH, true); shot != nil {
 				ctx.DrawImage(shot, u(float32(overviewName+i*(overviewW+10))), u(y))
 			}
 		}
@@ -152,10 +153,12 @@ func FrameKind(lk style.LookAndFeel) string {
 // FrameShot paints one frames-sheet window with a's look: frameW×frameH at
 // 1x, scaled.
 func FrameShot(a *app.Application, fc FrameCase, scale float32) *paintengine2d.Image {
-	return frameShot(a, fc, scale, frameW, frameH)
+	return frameShot(a, fc, scale, frameW, frameH, false)
 }
 
-func frameShot(a *app.Application, fc FrameCase, scale float32, fw, fh int) *paintengine2d.Image {
+// frameShot paints a fw×fh (at 1x) window of case fc; a compact one holds a
+// label only.
+func frameShot(a *app.Application, fc FrameCase, scale float32, fw, fh int, compact bool) *paintengine2d.Image {
 	w, err := a.NewWindow(platform.WindowOptions{
 		Title: "Window", Width: int(float32(fw)*scale + 0.5), Height: int(float32(fh)*scale + 0.5),
 		Headless: true, Decorations: platform.DecorationsClient,
@@ -169,7 +172,10 @@ func frameShot(a *app.Application, fc FrameCase, scale float32, fw, fh int) *pai
 		p.Layout = platform.ParseButtonLayout(fc.Layout)
 	}
 	a.SetTitleBarPrefs(p)
-	body := widgets.NewColumn(widgets.NewLabel("Window content"), widgets.NewButton("Button", nil)).WithPad(12)
+	var body widget.Component = widgets.NewColumn(widgets.NewLabel("Window content"), widgets.NewButton("Button", nil)).WithPad(12)
+	if compact {
+		body = widgets.NewPad(10, widgets.NewLabel("Window content"))
+	}
 	w.SetContent(body)
 	if fc.Header {
 		tabs := widgets.NewBrowserTabs("Documents", "Pictures")
