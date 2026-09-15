@@ -1100,6 +1100,9 @@ func (materialEngine) StyleHint(l *Classic, h StyleHint) int {
 	if h == HintHoverFadeMs {
 		return 150
 	}
+	if h == HintMnemonics {
+		return MnemonicsNever // Material has no mnemonics
+	}
 	return 0
 }
 

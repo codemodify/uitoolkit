@@ -75,6 +75,9 @@ func (oxygenEngine) StyleHint(l *Classic, h StyleHint) int {
 	case HintDialogPrimaryFirst, HintFormLabelsRight:
 		return 1
 	}
+	if h == HintMnemonics {
+		return MnemonicsOnAlt // KDE 4 hid them until Alt
+	}
 	return 0
 }
 

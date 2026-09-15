@@ -888,6 +888,9 @@ func (aeroEngine) StyleHint(l *Classic, h StyleHint) int {
 	if h == HintDialogPrimaryFirst {
 		return 1
 	}
+	if h == HintMnemonics {
+		return MnemonicsOnAlt // Windows hides the underlines until Alt
+	}
 	return 0
 }
 

@@ -903,6 +903,9 @@ func (flatlafEngine) StyleHint(l *Classic, h StyleHint) int {
 	if h == HintDialogPrimaryFirst {
 		return 1
 	}
+	if h == HintMnemonics {
+		return MnemonicsOnAlt // FlatLaf hides them until Alt
+	}
 	return 0
 }
 

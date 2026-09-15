@@ -39,11 +39,43 @@ func DesktopAccent() (paintengine2d.Color, bool) {
 	return desktopAccent.c, desktopAccent.ok
 }
 
-// TakesAccent reports whether the pack's engine recolours it around an
-// accent.
+// TakesAccent reports whether the pack is recoloured around an accent:
+// its engine takes one, and for this pack (not GNOME 3's Adwaita, not
+// Yosemite, not Windows 7 Basic) it changes something. Two probe accents,
+// so a pack whose own accent is one of them still answers.
 func TakesAccent(p ThemePack) bool {
-	_, ok := engineFor(p.Tokens).(AccentEngine)
-	return ok
+	ae, ok := engineFor(p.Tokens).(AccentEngine)
+	if !ok {
+		return false
+	}
+	tok := p.Tokens.Resolve()
+	for _, probe := range []string{"#e95420", "#26a269"} {
+		if !sameTokens(ae.Accented(tok, Hex(probe)), tok) {
+			return true
+		}
+	}
+	return false
+}
+
+// sameTokens compares what an AccentEngine may change.
+func sameTokens(a, b ThemeTokens) bool {
+	if a.Palette != b.Palette || a.Hot != b.Hot || a.Pressed != b.Pressed || a.Selected != b.Selected || a.Focus != b.Focus {
+		return false
+	}
+	if len(a.Extra) != len(b.Extra) || len(a.Params) != len(b.Params) {
+		return false
+	}
+	for k, v := range a.Extra {
+		if w, ok := b.Extra[k]; !ok || w != v {
+			return false
+		}
+	}
+	for k, v := range a.Params {
+		if w, ok := b.Params[k]; !ok || w != v {
+			return false
+		}
+	}
+	return true
 }
 
 // withDesktopAccent recolours tok around the desktop's accent when its

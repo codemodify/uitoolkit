@@ -998,6 +998,9 @@ func (adwaitaEngine) StyleHint(l *Classic, h StyleHint) int {
 	if h == HintHoverFadeMs {
 		return 200 // Adwaita's button transition: 200ms, easing out
 	}
+	if h == HintMnemonics {
+		return MnemonicsOnAlt // GTK shows them while Alt is held
+	}
 	return 0
 }
 

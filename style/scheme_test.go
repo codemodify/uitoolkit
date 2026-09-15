@@ -160,3 +160,20 @@ func TestBreezeTakesDesktopAccent(t *testing.T) {
 	aquaExercise(t, "breeze+accent", l)
 	kdeExtras(t, "breeze+accent", l)
 }
+
+// Settings says a pack takes the accent only when it does.
+func TestTakesAccentPerPack(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	for name, want := range map[string]bool{
+		"breeze": true, "fluent": true, "adwaita": true, "bigsur": true, "material3": true,
+		"adwaita-gtk3": false, "yosemite": false, "aero-basic": false, "win95": false, "luna": false,
+	} {
+		p, ok := LoadTheme(name)
+		if !ok {
+			t.Fatalf("no pack %s", name)
+		}
+		if got := TakesAccent(p); got != want {
+			t.Errorf("TakesAccent(%s) = %v, want %v", name, got, want)
+		}
+	}
+}

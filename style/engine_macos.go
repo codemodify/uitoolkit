@@ -1171,6 +1171,9 @@ func (macosEngine) StyleHint(l *Classic, h StyleHint) int {
 	case HintTabsCentered, HintFormLabelsRight:
 		return 1
 	}
+	if h == HintMnemonics {
+		return MnemonicsNever // the Mac has no mnemonics
+	}
 	return 0
 }
 

@@ -57,3 +57,27 @@ func TestMnemonicCuesFollowTheLook(t *testing.T) {
 		t.Fatal("no component, no Alt")
 	}
 }
+
+// Every engine answers the mnemonics hint the way its platform behaved.
+func TestMnemonicsEveryEngine(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	want := map[string]int{
+		"win31": style.MnemonicsAlways, "win95": style.MnemonicsAlways, "win2000": style.MnemonicsOnAlt,
+		"luna": style.MnemonicsOnAlt, "aero": style.MnemonicsOnAlt, "win10": style.MnemonicsOnAlt,
+		"fluent": style.MnemonicsOnAlt, "motif": style.MnemonicsAlways, "keramik": style.MnemonicsAlways,
+		"oxygen": style.MnemonicsOnAlt, "breeze": style.MnemonicsOnAlt, "fusion": style.MnemonicsAlways,
+		"clearlooks": style.MnemonicsAlways, "adwaita": style.MnemonicsOnAlt, "aqua": style.MnemonicsNever,
+		"bigsur": style.MnemonicsNever, "system7": style.MnemonicsNever, "next": style.MnemonicsNever,
+		"material3": style.MnemonicsNever, "flatlaf": style.MnemonicsOnAlt, "metal-steel": style.MnemonicsAlways,
+		"nimbus": style.MnemonicsAlways, "amiga31": style.MnemonicsNever, "beos": style.MnemonicsNever,
+	}
+	for name, w := range want {
+		p, ok := style.LoadTheme(name)
+		if !ok {
+			t.Fatalf("no pack %s", name)
+		}
+		if got := style.LookHint(p.Look(), style.HintMnemonics); got != w {
+			t.Errorf("%s: mnemonics %d, want %d", name, got, w)
+		}
+	}
+}
