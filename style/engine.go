@@ -864,31 +864,29 @@ func (l *Classic) Engine() Engine { return l.eng() }
 
 // lookMemo caches values an engine derives from a look (resolved colour
 // sets, gradients, paths). A look is immutable, so each value is built
-// once; the lock only guards the first build (looks can be painted from
-// tests in parallel).
+// once; reads are lock-free (looks are painted from tests in parallel).
 type lookMemo struct {
-	mu sync.Mutex
-	m  map[any]any
+	m sync.Map
 }
 
 // Memo returns the value cached under key for this look, building it on
 // first use. Engines use it so painting does not re-derive colours:
 //
 //	c := l.Memo(w95Key{}, func() any { return w95build(l) }).(w95)
+//
+// Builders run outside any lock, so one may call Memo for another value
+// (a colour set derived from a shared one). Two goroutines racing on the
+// first build may both build; the first value stored wins and every caller
+// gets it, so builders must be deterministic (they are: pure functions of
+// the look).
 func (l *Classic) Memo(key any, build func() any) any {
 	if l == nil {
 		return build()
 	}
-	l.memo.mu.Lock()
-	defer l.memo.mu.Unlock()
-	if v, ok := l.memo.m[key]; ok {
+	if v, ok := l.memo.m.Load(key); ok {
 		return v
 	}
-	if l.memo.m == nil {
-		l.memo.m = map[any]any{}
-	}
-	v := build()
-	l.memo.m[key] = v
+	v, _ := l.memo.m.LoadOrStore(key, build())
 	return v
 }
 
