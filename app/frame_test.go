@@ -809,3 +809,79 @@ func TestStackedFrame(t *testing.T) {
 		t.Fatalf("default caption: strip %v bar %v", st, b)
 	}
 }
+
+// Browser tabs in the title bar (Chromium, SourceGit): the tabs are
+// controls, the rest of the strip is caption, a right-click there shows the
+// strip's own menu, and Ctrl+Tab reaches the app's shortcut handler.
+func TestBrowserTabsInTheTitleBar(t *testing.T) {
+	r := newFrameRig(t, platform.DecorationsClient)
+	tabs := widgets.NewBrowserTabs("uitoolkit", "paintengine2d")
+	menus := 0
+	tabs.OnContextMenu = func(i int, _ paintengine2d.Point) bool { menus++; return i < 0 }
+	switched := 0
+	root := &keyRoot{onKey: func(e widget.KeyEvent) bool {
+		if tabs.Shortcut(e) {
+			switched++
+			return true
+		}
+		return false
+	}}
+	root.Init(root)
+	root.Add(widgets.NewColumn(r.body))
+	r.w.SetContent(root)
+	r.w.SetTitleBar(widgets.NewHeaderBar(nil, tabs, nil))
+	r.a.PumpOnce()
+	r.w.Capture()
+	sb := widget.DeviceBounds(tabs)
+	if hb := widget.DeviceBounds(r.w.Caption()); sb.Min.Y != hb.Min.Y || sb.Max.Y != hb.Max.Y {
+		t.Fatalf("the strip %v fills the caption %v", sb, hb)
+	}
+	first := paintengine2d.Pt(sb.Min.X+60, sb.Max.Y-8)
+	if got, _ := r.w.NonClientHit(first); got != RegionClient {
+		t.Fatalf("a tab: %v", got)
+	}
+	empty := paintengine2d.Pt(sb.Max.X-20, sb.Max.Y-8)
+	if got, _ := r.w.NonClientHit(empty); got != RegionCaption {
+		t.Fatalf("the empty strip: %v", got)
+	}
+	// Clicking the second tab (tabs are 200 px wide here, the close button
+	// at a tab's right end) selects it without moving the window.
+	r.click(sb.Min.X+260, first.Y)
+	if tabs.Selected() != 1 || r.o.FrameCalls().Moves != 0 {
+		t.Fatalf("selected %d moves %d", tabs.Selected(), r.o.FrameCalls().Moves)
+	}
+	// The empty strip moves the window and has the strip's own menu.
+	r.now = r.now.Add(time.Second)
+	r.ev(platform.EventMouseDown, empty.X, empty.Y, platform.ButtonLeft)
+	r.ev(platform.EventMouseMove, empty.X-30, empty.Y, platform.ButtonLeft)
+	if r.o.FrameCalls().Moves != 1 {
+		t.Fatal("the empty strip moves the window")
+	}
+	r.ev(platform.EventMouseDown, empty.X, empty.Y, platform.ButtonRight)
+	r.ev(platform.EventMouseUp, empty.X, empty.Y, platform.ButtonRight)
+	if menus != 1 || len(r.o.FrameCalls().Menus) != 0 {
+		t.Fatalf("strip menu %d, window menus %v", menus, r.o.FrameCalls().Menus)
+	}
+	// Ctrl+Tab goes to the app (which switches tabs), plain Tab moves focus.
+	r.w.RequestFocus(r.body)
+	r.w.dispatch(platform.Event{Kind: platform.EventKeyDown, Key: platform.KeyTab, Mods: platform.ModCtrl})
+	if switched != 1 || tabs.Selected() != 0 || r.w.Focus() != widget.Component(r.body) {
+		t.Fatalf("Ctrl+Tab: switched %d selected %d focus %T", switched, tabs.Selected(), r.w.Focus())
+	}
+	r.w.dispatch(platform.Event{Kind: platform.EventKeyDown, Key: platform.KeyTab})
+	if r.w.Focus() == widget.Component(r.body) {
+		t.Fatal("Tab still moves the focus")
+	}
+	// Assistive technology sees the tabs inside the title bar.
+	tree := r.w.AccessibleTree()
+	found := false
+	tree.Children[0].Walk(func(n *a11y.Node) bool {
+		if n.Role == a11y.RoleTab && n.Name == "paintengine2d" {
+			found = true
+		}
+		return true
+	})
+	if !found {
+		t.Fatal("page tabs in the title bar's accessible tree")
+	}
+}

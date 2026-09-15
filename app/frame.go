@@ -450,6 +450,16 @@ func (w *Window) captionPress(ev platform.Event) {
 		w.runTitleAction(p.MiddleClick, ev.Pos)
 	case platform.ButtonRight:
 		w.capClick = captionClick{}
+		// The component's own menu (a tab strip's), then the header bar's,
+		// then the desktop's action.
+		for c := widget.HitRoot(w.caption, ev.Pos); c != nil; c = c.Parent() {
+			if m, ok := c.(widget.CaptionMenuer); ok && m.CaptionMenu(ev.Pos) {
+				return
+			}
+			if c == widget.Component(w.caption) {
+				break
+			}
+		}
 		if w.caption.OnContextMenu != nil && w.caption.OnContextMenu(ev.Pos) {
 			return
 		}
