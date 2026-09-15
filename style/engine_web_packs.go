@@ -106,6 +106,7 @@ func webSpecs() []webSpec {
 	specs = append(specs, shadcnSpecs()...)
 	specs = append(specs, geistSpecs()...)
 	specs = append(specs, linearSpecs()...)
+	specs = append(specs, ideSpecs()...)
 	specs = append(specs, paletteSpecs()...)
 	return specs
 }

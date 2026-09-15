@@ -45,7 +45,7 @@ func (e webEngine) Face(l *Classic, ctx *paintengine2d.Context, b paintengine2d.
 			col = c.scrollThumbHot
 		}
 		b = winSnap(b)
-		r := min(b.Dx(), b.Dy()) * 0.5
+		r := c.thumbR(l, b)
 		ctx.DrawRoundRect(b, r, r, paintengine2d.Fill(col))
 	case RoleTrack:
 		if c.scrollTrack.A > 0 {
@@ -445,7 +445,7 @@ func (e webEngine) DrawScrollBarParts(l *Classic, ctx *paintengine2d.Context, p 
 	if st.Hot == ScrollThumbPart || st.Pressed == ScrollThumbPart {
 		col = c.scrollThumbHot
 	}
-	r := min(t.Dx(), t.Dy()) * 0.5
+	r := c.thumbR(l, t)
 	ctx.DrawRoundRect(t, r, r, paintengine2d.Fill(col))
 }
 
