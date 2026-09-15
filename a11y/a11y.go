@@ -62,6 +62,9 @@ const (
 	RoleCalendar
 	RoleToolTip
 	RoleLink
+	// RoleTitleBar is a window's title bar when the toolkit draws it: its
+	// content and the caption buttons.
+	RoleTitleBar
 	roleCount
 )
 
@@ -74,7 +77,7 @@ var roleNames = [roleCount]string{
 	"column header", "tab list", "tab", "tab panel", "menu bar", "menu",
 	"menu item", "check menu item", "radio menu item", "separator",
 	"tool bar", "status bar", "splitter", "image", "calendar", "tool tip",
-	"link",
+	"link", "title bar",
 }
 
 func (r Role) String() string {

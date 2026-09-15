@@ -52,6 +52,7 @@ const (
 	atspiRoleTableRow       = 90
 	atspiRoleTreeItem       = 91
 	atspiRoleGrouping       = 99
+	atspiRoleTitleBar       = 104
 	atspiRoleSwitch         = 130
 )
 
@@ -102,6 +103,7 @@ var atspiRoles = map[a11y.Role]uint32{
 	a11y.RoleCalendar:      atspiRoleCalendar,
 	a11y.RoleToolTip:       atspiRoleToolTip,
 	a11y.RoleLink:          atspiRoleLink,
+	a11y.RoleTitleBar:      atspiRoleTitleBar,
 }
 
 // atspiRoleNames are AT-SPI's names for the roles used here (what
@@ -122,7 +124,7 @@ var atspiRoleNames = map[uint32]string{
 	atspiRoleToolTip: "tool tip", atspiRoleTree: "tree", atspiRoleUnknown: "unknown",
 	atspiRoleApplication: "application", atspiRoleEntry: "entry", atspiRoleHeading: "heading",
 	atspiRoleLink: "link", atspiRoleTableRow: "table row", atspiRoleTreeItem: "tree item",
-	atspiRoleGrouping: "grouping", atspiRoleSwitch: "switch",
+	atspiRoleGrouping: "grouping", atspiRoleSwitch: "switch", atspiRoleTitleBar: "title bar",
 }
 
 func atspiRole(r a11y.Role) uint32 {
