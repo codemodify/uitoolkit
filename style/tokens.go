@@ -86,6 +86,11 @@ type ChromeMetrics struct {
 	SwitchW    float32
 	SwitchH    float32
 	ViewFrame  float32 // frame around list / tree / table views
+	// FontSize is the body text size the pack was designed at (1× design
+	// pixels): a pack whose platform reads at 13 or 14px (SourceGit, the web
+	// design systems) sets it with the other metrics in the same pixels.
+	// 0 keeps the toolkit's 16px; density still shifts it.
+	FontSize float32
 }
 
 // MergeChromeMetrics fills every zero field of over from base (over wins).
@@ -130,6 +135,7 @@ func MergeChromeMetrics(base, over ChromeMetrics) ChromeMetrics {
 	out.FocusWidth = pick(base.FocusWidth, over.FocusWidth)
 	out.SwitchW = pick(base.SwitchW, over.SwitchW)
 	out.SwitchH = pick(base.SwitchH, over.SwitchH)
+	out.FontSize = pick(base.FontSize, over.FontSize)
 	return out
 }
 
@@ -347,6 +353,13 @@ func ApplyChromeMetrics(m Metrics, cm ChromeMetrics) Metrics {
 	set(&m.FocusWidth, cm.FocusWidth)
 	set(&m.SwitchW, cm.SwitchW)
 	set(&m.SwitchH, cm.SwitchH)
+	if cm.FontSize > 0 {
+		// The heading size keeps its proportion to the body text.
+		if m.FontSize > 0 && m.TitleSize > 0 {
+			m.TitleSize *= cm.FontSize / m.FontSize
+		}
+		m.FontSize = cm.FontSize
+	}
 	return m
 }
 
@@ -516,6 +529,7 @@ type chromeMetricsJSON struct {
 	SwitchW     *float32 `json:"switchW,omitempty"`
 	SwitchH     *float32 `json:"switchH,omitempty"`
 	ViewFrame   *float32 `json:"viewFrame,omitempty"`
+	FontSize    *float32 `json:"fontSize,omitempty"`
 }
 
 // geometry pairs the engine-level JSON fields with their ChromeMetrics
@@ -580,6 +594,7 @@ func (cm ChromeMetrics) json() *chromeMetricsJSON {
 	for _, g := range out.geometry(&cm) {
 		setF(g.js, *g.v)
 	}
+	setF(&out.FontSize, cm.FontSize)
 	if cm.Square {
 		sq := true
 		out.Square = &sq
@@ -600,6 +615,8 @@ const (
 	minControlSide = 8
 	maxControlSide = 256
 	maxElevation   = 8
+	minFontSize    = 8
+	maxFontSize    = 48
 )
 
 // clampMetric keeps v inside [min, max]. Zero stays zero (unset); negative
@@ -638,6 +655,7 @@ func clampChromeMetrics(cm ChromeMetrics) ChromeMetrics {
 	cm.ControlH = clampMetric("metrics.controlH", cm.ControlH, minControlSide, maxControlSide)
 	cm.FieldH = clampMetric("metrics.fieldH", cm.FieldH, minControlSide, maxControlSide)
 	cm.ComboH = clampMetric("metrics.comboH", cm.ComboH, minControlSide, maxControlSide)
+	cm.FontSize = clampMetric("metrics.fontSize", cm.FontSize, minFontSize, maxFontSize)
 	if cm.Elevation < 0 {
 		log.Printf("uitk theme: metrics.elevation %d is negative, ignoring", cm.Elevation)
 		cm.Elevation = 0
@@ -694,6 +712,9 @@ func (j *chromeMetricsJSON) metrics() ChromeMetrics {
 		if *g.js != nil {
 			*g.v = **g.js
 		}
+	}
+	if j.FontSize != nil {
+		cm.FontSize = *j.FontSize
 	}
 	if j.Square != nil {
 		cm.Square = *j.Square

@@ -14,6 +14,7 @@ var sidebarPackNames = []string{
 	"adwaita", "adwaita-night",
 	"fluent", "fluent-night",
 	"material", "material-night", "material3", "material3-night",
+	"sourcegit", "sourcegit-night", "primer", "shadcn", "geist", "linear-night", "catppuccin-mocha",
 }
 
 // sidebarSelected are the states of a selected row: in a focused view, in
@@ -83,6 +84,8 @@ func sidebarLabelColor(t *testing.T, lk *Classic, b paintengine2d.Rect, st Contr
 	case "material":
 		_, fg := mdColors(lk).drawerRow(lk, ctx, b, st)
 		return fg
+	case "web":
+		return webColors(lk).rowLabel(st, webSide)
 	}
 	t.Fatalf("%s: engine %q has no sidebar style", lk.Pack(), lk.Engine().ID())
 	return paintengine2d.Color{}
@@ -168,6 +171,8 @@ func TestSidebarViewBackground(t *testing.T) {
 		"adwaita": true, "adwaita-night": true, "adwaita-gtk3": false,
 		"fluent": true, "fluent-night": true,
 		"material": false, "material-night": false, "material3": true, "material3-night": true,
+		"sourcegit": true, "sourcegit-night": true, "primer": true, "shadcn": true, "geist": true,
+		"linear-night": true, "catppuccin-mocha": true,
 	}
 	backdrop := map[string]bool{"yosemite": true, "bigsur": true, "bigsur-night": true, "adwaita": true, "adwaita-night": true}
 	for n, want := range differs {
@@ -305,7 +310,7 @@ func TestSidebarPacksExist(t *testing.T) {
 		lk := lunaLook(t, n, 1)
 		engines[lk.Engine().ID()] = true
 	}
-	for _, e := range []string{"macos", "adwaita", "fluent", "material"} {
+	for _, e := range []string{"macos", "adwaita", "fluent", "material", "web"} {
 		if !engines[e] {
 			t.Errorf("no pack paints with %s", e)
 		}

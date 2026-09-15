@@ -33,6 +33,7 @@ var accCases = []accCase{
 	{"fusion", "#308cc6", 3}, {"fusion-night", "#2a82da", 3},
 	{"oxygen", "#43ace8", 2.2},
 	{"aero", "#74b8fc", 0}, {"aero-basic", "", 0},
+	{"sourcegit", "#0078d7", 3}, {"sourcegit-night", "#0078d7", 3}, {"primer", "", 0}, {"catppuccin-mocha", "", 0},
 }
 
 // accSamples are desktop accents: Ubuntu's orange, GNOME's yellow 2 and
@@ -89,7 +90,7 @@ func accHue(c paintengine2d.Color) (h, chroma float64) {
 
 // accTakers are the engines whose looks follow the desktop's accent: the
 // platforms that let the user pick one (and Breeze, the first).
-var accTakers = []string{"adwaita", "aero", "breeze", "flatlaf", "fluent", "fusion", "macos", "material", "metro", "oxygen"}
+var accTakers = []string{"adwaita", "aero", "breeze", "flatlaf", "fluent", "fusion", "macos", "material", "metro", "oxygen", "web"}
 
 // Only the engines of platforms with an accent take it; the historical
 // looks keep their fixed palettes.
@@ -416,6 +417,10 @@ func accWhere(t *testing.T, pack string, lk *Classic, a paintengine2d.Color) []a
 		c := aeroColors(lk)
 		return []accShown{{c.glassGrad[1].Color, accentShift(a, aeroWindowColour, Hex(aeroBase["glass1"])), "glass"},
 			{lk.Palette().Accent, Hex("#3399ff"), "controls' highlight"}}
+	case "web":
+		c := webColors(lk)
+		return []accShown{{c.accent, a, "accent"}, {c.primary, a, "primary button"}, {c.sel, a, "selection"},
+			{c.accentHover, webLight1(a), "hover (Light1)"}, {c.accentPress, webDark1(a), "pressed (Dark1)"}}
 	}
 	t.Fatalf("%s: no probe for engine %q", pack, lk.Engine().ID())
 	return nil
@@ -516,6 +521,9 @@ func TestAccentTextStaysReadable(t *testing.T) {
 				pairs = []pair{{"highlighted text", f.hlText, f.hl}}
 			case "oxygen":
 				pairs = []pair{{"selection", lk.Palette().TextOnAccent, lk.Palette().Selection}}
+			case "web":
+				w := webColors(lk)
+				pairs = []pair{{"primary button", w.onPrimary, w.primary}, {"text on accent", w.onAccent, w.accent}}
 			}
 			for _, p := range pairs {
 				if r := ContrastRatio(p.fg, p.bg); r < c.floor-0.005 {
