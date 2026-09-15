@@ -154,6 +154,7 @@ type aqua struct {
 	field, fieldTop, fieldSide, fieldBot paintengine2d.Color
 	sel, selTxt, hover                   paintengine2d.Color
 	selOff, selOffTxt                    paintengine2d.Color // selection of an unfocused list
+	stripe                               paintengine2d.Color // alternate row wash (0 alpha: none)
 	box, boxEdge, boxEdgeLo              paintengine2d.Color
 	menuBg, menuEdge, menuTxt, menuHiTxt paintengine2d.Color
 	menuHiStops                          []paintengine2d.GradientStop
@@ -276,6 +277,14 @@ func aquaBuild(l *Classic) *aqua {
 		c.selOff = Mix(p.Field, white, 0.18)
 	}
 	c.selOffTxt = ReadableOn(c.selOff, 4.5, p.Text, black, white)
+	// Panther-era lists (iTunes, Mail, Finder's list view) stripe their
+	// rows white and pale blue; "stripes" 0 turns it off.
+	if l.P("stripes", 1) > 0 {
+		c.stripe = l.X("listStripe", Hex("#edf3fe"))
+		if c.dark {
+			c.stripe = Mix(p.Field, white, 0.05)
+		}
+	}
 
 	c.box = l.X("box", black.WithAlpha(0.045))
 	c.boxEdge = l.X("boxEdge", Mix(p.Border, p.Background, 0.15))
@@ -592,6 +601,13 @@ func (c *aqua) texture(l *Classic, ctx *paintengine2d.Context, b paintengine2d.R
 			ctx.DrawPath(path, paintengine2d.Linear(paintengine2d.LinearGradient{
 				Start: paintengine2d.Pt(b.Min.X+st.from*w, b.Min.Y), End: paintengine2d.Pt(b.Min.X+st.to*w, b.Min.Y), Stops: st.stops}))
 		}
+	}
+}
+
+// rowStripe washes an unselected odd row with the list stripe.
+func (c *aqua) rowStripe(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState) {
+	if st.Alternate() && !st.Checked() && c.stripe.A > 0 {
+		ctx.DrawRect(b, paintengine2d.Fill(c.stripe))
 	}
 }
 
@@ -1654,6 +1670,7 @@ func (e aquaEngine) DrawSwitch(l *Classic, ctx *paintengine2d.Context, b painten
 }
 
 func (e aquaEngine) DrawListRow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string) {
+	aquaColors(l).rowStripe(ctx, b, st)
 	selected, hovered := st.Checked(), st.Hovered()
 	fg := l.fieldText()
 	if selected || hovered {
@@ -1666,6 +1683,7 @@ func (e aquaEngine) DrawListRow(l *Classic, ctx *paintengine2d.Context, b painte
 }
 
 func (e aquaEngine) DrawTreeRow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, expanded, leaf bool, depth int, label string, bold bool) {
+	aquaColors(l).rowStripe(ctx, b, st)
 	selected, hovered := st.Checked(), st.Hovered()
 	c := aquaColors(l)
 	fg := l.fieldText()
@@ -1699,6 +1717,7 @@ func (e aquaEngine) DrawTreeRow(l *Classic, ctx *paintengine2d.Context, b painte
 }
 
 func (e aquaEngine) DrawTableCell(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, align Align, face *Font) {
+	aquaColors(l).rowStripe(ctx, b, st)
 	selected, hovered := st.Checked(), st.Hovered()
 	fg := l.fieldText()
 	if selected || hovered {

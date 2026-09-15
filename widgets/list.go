@@ -431,7 +431,7 @@ func (l *ListView) TextInput(r rune) bool {
 
 // rowState is row i's item state for the look.
 func (l *ListView) rowState(i int) style.ControlState {
-	return widget.ItemState(l, l.IsSelected(i), i == l.hovered, i == l.Selected)
+	return widget.RowItemState(l, i, l.IsSelected(i), i == l.hovered, i == l.Selected)
 }
 
 // IsSelected reports whether row i is selected (in SelectSingle, whether it

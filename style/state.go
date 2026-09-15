@@ -25,19 +25,23 @@ const (
 	// StateBackdrop marks chrome in an inactive window (GTK's :backdrop,
 	// Qt's inactive palette group): every look may subdue it.
 	StateBackdrop
+	// StateAlternate marks the odd rows of an item view, for looks with
+	// striped lists (Mac OS X, Nimbus, Qt's alternatingRowColors).
+	StateAlternate
 )
 
-func (s ControlState) Hovered() bool  { return s&StateHovered != 0 }
-func (s ControlState) Pressed() bool  { return s&StatePressed != 0 }
-func (s ControlState) Disabled() bool { return s&StateDisabled != 0 }
-func (s ControlState) Focused() bool  { return s&StateFocused != 0 }
-func (s ControlState) Checked() bool  { return s&StateChecked != 0 }
-func (s ControlState) Primary() bool  { return s&StatePrimary != 0 }
-func (s ControlState) Toggle() bool   { return s&StateToggle != 0 }
-func (s ControlState) First() bool    { return s&StateFirst != 0 }
-func (s ControlState) Last() bool     { return s&StateLast != 0 }
-func (s ControlState) Inactive() bool { return s&StateInactive != 0 }
-func (s ControlState) Backdrop() bool { return s&StateBackdrop != 0 }
+func (s ControlState) Hovered() bool   { return s&StateHovered != 0 }
+func (s ControlState) Pressed() bool   { return s&StatePressed != 0 }
+func (s ControlState) Disabled() bool  { return s&StateDisabled != 0 }
+func (s ControlState) Focused() bool   { return s&StateFocused != 0 }
+func (s ControlState) Checked() bool   { return s&StateChecked != 0 }
+func (s ControlState) Primary() bool   { return s&StatePrimary != 0 }
+func (s ControlState) Toggle() bool    { return s&StateToggle != 0 }
+func (s ControlState) First() bool     { return s&StateFirst != 0 }
+func (s ControlState) Last() bool      { return s&StateLast != 0 }
+func (s ControlState) Inactive() bool  { return s&StateInactive != 0 }
+func (s ControlState) Backdrop() bool  { return s&StateBackdrop != 0 }
+func (s ControlState) Alternate() bool { return s&StateAlternate != 0 }
 
 // RowState is the item state of a plain row: selected and hovered.
 func RowState(selected, hovered bool) ControlState {
