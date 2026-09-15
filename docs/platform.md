@@ -177,11 +177,18 @@ request `EGL_ALPHA_SIZE` 0.
   `zwp_primary_selection_device_manager_v1`,
   `zxdg_decoration_manager_v1`, `wp_fractional_scale_manager_v1`,
   `wp_viewporter`, `xdg_activation_v1`, `wp_cursor_shape_manager_v1`.
-- Each window is an `xdg_toplevel`. Configure width/height are
-  surface-local (logical); the present buffer is `ceil(logical * scale)`.
-  States maximized / fullscreen / resizing / activated are parsed.
-  `xdg_toplevel.close` is `EventClose`. Server-side decorations are
-  requested when `xdg-decoration` is present.
+- Each window is an `xdg_toplevel`; `xdg_wm_base` is bound up to v6.
+  Configure width/height are surface-local (logical); the present buffer
+  is `ceil(logical * scale)`. The toplevel's states (maximized,
+  fullscreen, resizing, activated, the four tiled edges, suspended) and
+  `wm_capabilities` are applied with the `xdg_surface.configure` that
+  follows them and reported as `EventWindowState` / `EventCapabilities`
+  (`Window.WindowState()`); `activated` drives the window's active /
+  backdrop look. `configure_bounds` keeps a window the client sizes
+  itself inside the work area. `xdg_toplevel.close` is `EventClose`.
+  Decorations are negotiated with `xdg-decoration` (see
+  [decorations.md](decorations.md)): a mode is always requested and the
+  compositor's `configure(mode)` answer is obeyed.
 - When `UITK_PAINT=auto|gpu` and EGL init succeeds, present is
   **`wl_egl_window` + `eglSwapBuffers`** (paintengine2d `GPUDevice`).
   Resize calls `wl_egl_window_resize` and `GPUDevice.Resize`. A failed
