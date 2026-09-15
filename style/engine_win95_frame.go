@@ -139,16 +139,9 @@ func w95Glyph(ctx *paintengine2d.Context, b paintengine2d.Rect, k CaptionButton,
 		ctx.DrawPath(p, fill)
 		box(x0+px(3), y0+px(4), px(6), px(6))
 	case CaptionClose:
-		// A cross of two-pixel steps.
-		p := paintengine2d.NewPath()
-		n := 7
-		for i := 0; i < n; i++ {
-			x := x0 + px(4) + float32(i)*u
-			y := y0 + px(3) + float32(i)*u
-			p.AddRect(paintengine2d.XYWH(snap(x), snap(y), max(px(2), 2), max(px(1), 1)))
-			p.AddRect(paintengine2d.XYWH(snap(x0+px(4)+float32(n-1-i)*u), snap(y), max(px(2), 2), max(px(1), 1)))
-		}
-		ctx.DrawPath(p, fill)
+		// A heavy cross: two bars as wide as the thick strokes, their ends
+		// cut flat.
+		lunaCross(ctx, paintengine2d.XYWH(x0+px(4)+t*0.5, y0+px(3)+t*0.3, px(8)-t, px(7)-t*0.6), col, t*0.85)
 	case CaptionMenu:
 		// The control-menu box: a window with a thick title bar.
 		box(x0+px(4), y0+px(3), px(8), px(7))
