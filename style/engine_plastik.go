@@ -796,7 +796,7 @@ func (plastikEngine) DrawPopupShadow(l *Classic, ctx *paintengine2d.Context, b p
 
 // ScrollBarStyle: 16px bars with a step button at each end.
 func (plastikEngine) ScrollBarStyle(l *Classic) ScrollBarStyle {
-	return ScrollBarStyle{Thickness: 16, Arrows: ArrowsEnds, MinThumb: 20}
+	return ScrollBarStyle{Thickness: 16, Arrows: ArrowsTripleEnd, MinThumb: 20}
 }
 
 // slider is the scroll bar slider: a scroll surface with its grid of
@@ -855,6 +855,7 @@ func (e plastikEngine) DrawScrollBarParts(l *Classic, ctx *paintengine2d.Context
 		dec, inc = DirLeft, DirRight
 	}
 	step(p.Dec, dec, ScrollDec)
+	step(p.DecEnd, dec, ScrollDecEnd)
 	step(p.Inc, inc, ScrollInc)
 	if p.Thumb.Empty() || st.Disabled {
 		return
