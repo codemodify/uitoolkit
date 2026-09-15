@@ -28,7 +28,8 @@
     "statusBarH": 26,
     "spinnerW": 17,
     "border": 1,
-    "focusWidth": 1
+    "focusWidth": 1,
+    "viewFrame": 1
   },
   "colors": {
     "accent": "#316ac5",

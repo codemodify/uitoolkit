@@ -54,7 +54,8 @@ func (aquaEngine) ID() string { return "aqua" }
 // 30px control, 14px check boxes, 15px scroll gutters.
 func (aquaEngine) DefaultMetrics() ChromeMetrics {
 	return ChromeMetrics{
-		Radius: 6, RadiusSmall: 4,
+		ViewFrame: 1,
+		Radius:    6, RadiusSmall: 4,
 		ControlH: 30, FieldH: 26, ComboH: 28,
 		Checkbox: 14, Radio: 15,
 		MenuItemH: 24, MenuBarH: 24, TabH: 30, RowH: 22,

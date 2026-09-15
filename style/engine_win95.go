@@ -28,7 +28,8 @@ func (win95Engine) ID() string { return "win95" }
 // font (Windows used 11px MS Sans Serif): short controls, 16px scrollbars.
 func (win95Engine) DefaultMetrics() ChromeMetrics {
 	return ChromeMetrics{
-		Square: true, BevelDepth: 2,
+		ViewFrame: 2,
+		Square:    true, BevelDepth: 2,
 		ControlH: 28, FieldH: 26, ComboH: 26,
 		Checkbox: 13, Radio: 12,
 		MenuItemH: 24, MenuBarH: 24, TabH: 26, RowH: 22,

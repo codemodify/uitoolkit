@@ -44,7 +44,8 @@ func (platinumEngine) ID() string { return "platinum" }
 // 16px scroll bars stay 16px.
 func (platinumEngine) DefaultMetrics() ChromeMetrics {
 	return ChromeMetrics{
-		Radius: 4, RadiusSmall: 3,
+		ViewFrame: 2,
+		Radius:    4, RadiusSmall: 3,
 		ControlH: 28, FieldH: 26, ComboH: 26,
 		Checkbox: 13, Radio: 13,
 		MenuItemH: 24, MenuBarH: 24, TabH: 28, RowH: 22,
