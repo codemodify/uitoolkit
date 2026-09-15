@@ -266,6 +266,8 @@ func (s *session) build() widget.Component {
 		s.messageMenu(s.table, p)
 	}
 	s.cards = widgets.NewCardList(0, s.cardAt, nil)
+	s.table.SetAccessibleName("Messages")
+	s.cards.SetAccessibleName("Messages")
 	s.cards.Mode = widgets.SelectExtended
 	s.cards.OnSelectionChange = func(rows []int) { s.viewSelection(rows, s.cards.Selected) }
 	s.cards.OnContext = func(i int, p paintengine2d.Point) {
@@ -280,6 +282,8 @@ func (s *session) build() widget.Component {
 	s.tree.DisableTypeAhead = true
 	s.outboxTree.DisableTypeAhead = true
 	s.tree.Sidebar, s.outboxTree.Sidebar = true, true
+	s.tree.SetAccessibleName("Folders")
+	s.outboxTree.SetAccessibleName("Outbox")
 	s.rebuildTree()
 	s.wireFolderTree(s.tree)
 	s.wireFolderTree(s.outboxTree)

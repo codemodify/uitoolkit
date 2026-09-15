@@ -29,7 +29,12 @@ type Base struct {
 	focusVisibleOnly bool
 	look             style.LookAndFeel
 	host             Host
+	// acc holds an accessible name and description, when set (most
+	// components take theirs from their text).
+	acc *accLabel
 }
+
+type accLabel struct{ name, desc string }
 
 // Init binds the outer Component so HitTest / Invalidate return the concrete type.
 func (b *Base) Init(self Component) {
