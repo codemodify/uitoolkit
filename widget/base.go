@@ -1,6 +1,7 @@
 package widget
 
 import (
+	"math"
 	"sync/atomic"
 
 	"github.com/codemodify/paintengine2d"
@@ -54,7 +55,7 @@ func (b *Base) Parent() Component              { return b.parent }
 func (b *Base) setParent(p Component)          { b.parent = p }
 func (b *Base) Children() []Component          { return b.children }
 func (b *Base) Bounds() paintengine2d.Rect     { return b.bounds }
-func (b *Base) SetBounds(r paintengine2d.Rect) { b.bounds = r.Canon() }
+func (b *Base) SetBounds(r paintengine2d.Rect) { b.bounds = PixelRect(r.Canon()) }
 func (b *Base) Visible() bool                  { return b.visible }
 func (b *Base) Enabled() bool                  { return b.enabled }
 func (b *Base) WantsFocus() bool               { return b.focus }
@@ -159,7 +160,21 @@ func (b *Base) Measure(c layout.Constraints) paintengine2d.Point {
 	return c.Constrain(paintengine2d.Pt(0, 0))
 }
 
-func (b *Base) Arrange(r paintengine2d.Rect) { b.bounds = r.Canon() }
+func (b *Base) Arrange(r paintengine2d.Rect) { b.bounds = PixelRect(r.Canon()) }
+
+// PixelRect rounds r's edges to whole pixels. Layout works in device pixels
+// and every component's bounds go through it (layout rounding, as in WPF,
+// Avalonia and WinUI): each origin then sits on the pixel grid, so a look's
+// pixel snapping and its 1px lines land on real pixels instead of smearing
+// over two, and neighbours that share an edge still share it.
+func PixelRect(r paintengine2d.Rect) paintengine2d.Rect {
+	return paintengine2d.Rect{
+		Min: paintengine2d.Pt(roundPx(r.Min.X), roundPx(r.Min.Y)),
+		Max: paintengine2d.Pt(roundPx(r.Max.X), roundPx(r.Max.Y)),
+	}
+}
+
+func roundPx(v float32) float32 { return float32(math.Floor(float64(v) + 0.5)) }
 
 func (b *Base) Paint(ctx *paintengine2d.Context) { _ = ctx }
 

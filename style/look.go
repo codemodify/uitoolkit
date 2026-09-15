@@ -1234,7 +1234,11 @@ func (l *Classic) baseDrawTableCell(ctx *paintengine2d.Context, b paintengine2d.
 	ctx.ClipRect(b.Inset(1))
 	f.Draw(ctx, label, paintengine2d.Pt(x, ty), fg)
 	ctx.Restore()
-	ctx.DrawRect(paintengine2d.XYWH(b.Max.X-1, b.Min.Y, 1, b.Dy()), paintengine2d.Fill(p.Divider.WithAlpha(0.55)))
+	// The column guide stops at a selected row: the selection reads as one
+	// bar across the row (Explorer's details view, Finder's list).
+	if !st.Checked() {
+		ctx.DrawRect(paintengine2d.XYWH(b.Max.X-1, b.Min.Y, 1, b.Dy()), paintengine2d.Fill(p.Divider.WithAlpha(0.55)))
+	}
 }
 
 // tableCellPad keeps the default 8px inset unless the full label already
