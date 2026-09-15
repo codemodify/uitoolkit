@@ -13,8 +13,8 @@ import "github.com/codemodify/paintengine2d"
 //	focus / hover    the scheme's focus / hover decoration (#3daee9)
 //	frame background mix(window, base, 0.3) — group boxes, tab panes, menus
 //
-// Frames are 1px outlines with 3px corners (Plasma 6 moved to 5px; these
-// are the Plasma 5 proportions). Push buttons are
+// Frames are 1px outlines with 3px corners (the Plasma 5 proportions;
+// Plasma 6, param "plasma" 6, is engine_breeze6.go's). Push buttons are
 // the button colour over a one-pixel drop shadow; hover and keyboard focus
 // turn the outline to the highlight, a pressed button fills with a third of
 // the highlight, the default button with a fifth. Check boxes and radios
@@ -106,6 +106,10 @@ type breeze struct {
 	hlOff, hlOffText, hlDis                      paintengine2d.Color
 	headerHot, headerDown, headerLine, headerSep paintengine2d.Color
 	disField, disBtn                             paintengine2d.Color
+
+	// frameR is the frame radius for a 1px pen: 2.5 (3px frames), 4.5 on
+	// Plasma 6 (5px).
+	frameR float32
 }
 
 type breezeKey struct{}
@@ -194,6 +198,10 @@ func breezeBuild(l *Classic) *breeze {
 	c.hlOff = l.X("selectionInactive", Mix(c.hl, c.base, 0.5))
 	c.hlOffText = ReadableOn(c.hlOff, 4.5, c.hlText, c.viewText)
 	c.hlDis = Mix(c.hl, c.win, 0.5)
+	c.frameR = 2.5
+	if l.P("plasma", 5) >= 6 {
+		breeze6Mixes(c)
+	}
 	return c
 }
 
@@ -208,8 +216,9 @@ func brU(l *Classic) float32 {
 	return u
 }
 
-// brR is the 3px frame radius for a 1px pen stroked half a pixel in.
-func brR(l *Classic) float32 { return l.rx(2.5) }
+// brR is the frame radius (3px, Plasma 6's 5px) for a 1px pen stroked half
+// a pixel in.
+func brR(l *Classic) float32 { return l.rx(breezeColors(l).frameR) }
 
 // frame is Breeze's frame: a 1px margin, then the outline (stroked half a
 // pixel in) around the fill.

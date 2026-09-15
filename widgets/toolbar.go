@@ -233,11 +233,18 @@ func (t *ToolBar) Paint(ctx *paintengine2d.Context) {
 	if len(t.fades) != len(t.items) {
 		t.fades = make([]stateFade, len(t.items))
 	}
+	grouped := style.ToolGroupsOf(lk)
+	if grouped {
+		t.paintGroups(ctx, rects)
+	}
 	for i, it := range t.items {
 		if it == nil {
 			continue
 		}
 		if it.Sep {
+			if grouped {
+				continue // the space between two groups
+			}
 			b := rects[i]
 			x := (b.Min.X + b.Max.X) * 0.5
 			ctx.DrawRect(paintengine2d.XYWH(x, b.Min.Y, 1, b.Dy()), paintengine2d.Fill(lk.Palette().Divider))
@@ -270,6 +277,33 @@ func (t *ToolBar) Paint(ctx *paintengine2d.Context) {
 			lk.DrawToolButton(ctx, r, st, it.Text, it.Icon)
 		})
 	}
+}
+
+// paintGroups paints the look's group chrome under each run of buttons
+// between separators (macOS Tahoe's glass capsules).
+func (t *ToolBar) paintGroups(ctx *paintengine2d.Context, rects []paintengine2d.Rect) {
+	lk := t.Look()
+	var run paintengine2d.Rect
+	n := 0
+	flush := func() {
+		if n > 0 {
+			style.DrawToolGroupOf(lk, ctx, run, n)
+		}
+		run, n = paintengine2d.Rect{}, 0
+	}
+	for i, it := range t.items {
+		if it == nil || it.Sep {
+			flush()
+			continue
+		}
+		if n == 0 {
+			run = rects[i]
+		} else {
+			run = run.Union(rects[i])
+		}
+		n++
+	}
+	flush()
 }
 
 func (t *ToolBar) MouseMove(e widget.MouseEvent) bool {

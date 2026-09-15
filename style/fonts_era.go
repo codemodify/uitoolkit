@@ -131,6 +131,46 @@ var eraPackFonts = map[string]FontPrefs{
 	"primer": primerFonts, "primer-night": primerFonts, "primer-dimmed": primerFonts,
 	"geist": geistFonts, "geist-night": geistFonts,
 	"linear": linearFonts, "linear-night": linearFonts,
+	// GNOME 48 reads in Adwaita Sans and Adwaita Mono.
+	"adwaita48": adwaitaSans, "adwaita48-night": adwaitaSans,
+	// macOS Tahoe: San Francisco, then Inter and its GNOME twin.
+	"tahoe": tahoeFonts, "tahoe-night": tahoeFonts,
+	// Material 3 Expressive: Roboto Flex, Roboto's variable version.
+	"material3x": robotoFlex, "material3x-night": robotoFlex,
+	// VS Code: the system UI stack (Islands keeps the web engine's Inter
+	// and JetBrains Mono, IntelliJ's own pair).
+	"vscode": vscodeFonts, "vscode-night": vscodeFonts,
+}
+
+// vscodeFonts are the workbench's stacks: Segoe WPC and Segoe UI on
+// Windows, San Francisco on a Mac, system-ui, Ubuntu and Droid Sans on
+// Linux (the desktops' usual faces stand in for system-ui); the editor's
+// Consolas, Menlo and Droid Sans Mono.
+var vscodeFonts = FontPrefs{
+	UI:   []string{"Segoe WPC", "Segoe UI", "SF Pro Text", "Ubuntu", "Droid Sans", "Noto Sans", "Cantarell", "DejaVu Sans"},
+	Mono: []string{"Consolas", "Menlo", "Droid Sans Mono", "DejaVu Sans Mono", "Noto Sans Mono", "Liberation Mono"},
+}
+
+// robotoFlex is Material 3's typeface in its variable version, then the
+// material engine's.
+var robotoFlex = FontPrefs{
+	UI:   []string{"Roboto Flex", "Roboto", "Noto Sans", "Open Sans"},
+	Mono: []string{"Roboto Mono", "Noto Sans Mono", "DejaVu Sans Mono"},
+}
+
+// tahoeFonts are San Francisco where it is installed (a Mac), else the
+// closest open faces: Inter, or Adwaita Sans (Inter with one variant
+// frozen).
+var tahoeFonts = FontPrefs{
+	UI:   []string{"SF Pro Text", "SF Pro", "SF NS", ".SF NS Text", "Inter", "Inter Variable", "Adwaita Sans", "Noto Sans"},
+	Mono: []string{"SF Mono", "Menlo", "DejaVu Sans Mono", "Noto Sans Mono"},
+}
+
+// adwaitaSans is GNOME 48's pair: Adwaita Sans (Inter 4.1 with one variant
+// frozen) and Adwaita Mono (Iosevka), then their sources and GNOME 47's.
+var adwaitaSans = FontPrefs{
+	UI:   []string{"Adwaita Sans", "Inter", "Inter Variable", "Cantarell", "Noto Sans", "DejaVu Sans"},
+	Mono: []string{"Adwaita Mono", "Iosevka", "Source Code Pro", "DejaVu Sans Mono", "Noto Sans Mono"},
 }
 
 // withEraFonts fills the typefaces tok leaves unset from its pack's era:

@@ -15,7 +15,7 @@ import (
 func (webEngine) DrawTabBar(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect) {
 	c := webColors(l)
 	b = winSnap(b)
-	if b.Empty() {
+	if b.Empty() || c.ideTabBar(l, ctx, b) {
 		return
 	}
 	px := c.px(l)
@@ -40,6 +40,10 @@ func (e webEngine) DrawTab(l *Classic, ctx *paintengine2d.Context, b paintengine
 		e.DrawBrowserTab(l, ctx, b, st, label, selected)
 	case webTabSegmented:
 		c.segmentTab(l, ctx, winSnap(b), st, label, selected)
+	case webTabEditor:
+		c.editorTab(l, ctx, winSnap(b), st, label, selected)
+	case webTabPill:
+		c.pillTab(l, ctx, winSnap(b), st, label, selected)
 	default:
 		c.underlineTab(l, ctx, winSnap(b), st, label, selected)
 	}
@@ -211,9 +215,13 @@ func (e webEngine) DrawBrowserTab(l *Classic, ctx *paintengine2d.Context, b pain
 	}
 }
 
-// DrawTabPane is the page under the tabs, in the tab page's colour.
+// DrawTabPane is the page under the tabs, in the tab page's colour (an
+// island where the look has them).
 func (webEngine) DrawTabPane(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect) {
 	c := webColors(l)
+	if c.islandPane(l, ctx, b) {
+		return
+	}
 	fill := c.tabPane
 	if c.tabStyle == webTabBrowser {
 		fill = c.toolBar

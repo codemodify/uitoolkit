@@ -45,7 +45,7 @@ func (e webEngine) Face(l *Classic, ctx *paintengine2d.Context, b paintengine2d.
 			col = c.scrollThumbHot
 		}
 		b = winSnap(b)
-		r := min(b.Dx(), b.Dy()) * 0.5
+		r := c.thumbR(l, b)
 		ctx.DrawRoundRect(b, r, r, paintengine2d.Fill(col))
 	case RoleTrack:
 		if c.scrollTrack.A > 0 {
@@ -445,7 +445,7 @@ func (e webEngine) DrawScrollBarParts(l *Classic, ctx *paintengine2d.Context, p 
 	if st.Hot == ScrollThumbPart || st.Pressed == ScrollThumbPart {
 		col = c.scrollThumbHot
 	}
-	r := min(t.Dx(), t.Dy()) * 0.5
+	r := c.thumbR(l, t)
 	ctx.DrawRoundRect(t, r, r, paintengine2d.Fill(col))
 }
 
@@ -458,9 +458,10 @@ func (e webEngine) DrawScrollBar(l *Classic, ctx *paintengine2d.Context, track, 
 // webHeadH is the band a group's heading takes above its card.
 func webHeadH(l *Classic) float32 { return snap(l.BoldFont().Height() + l.S(8)) }
 
-// GroupBoxInsets: a titled group is a heading above a card.
+// GroupBoxInsets: a titled group is a heading above a card (an island with
+// its heading inside where the look has them).
 func (webEngine) GroupBoxInsets(l *Classic, hasTitle bool) Insets {
-	pad := l.metrics.Pad
+	pad := l.metrics.Pad + webColors(l).islandBand(l)
 	top := pad
 	if hasTitle {
 		top += webHeadH(l)
@@ -470,6 +471,9 @@ func (webEngine) GroupBoxInsets(l *Classic, hasTitle bool) Insets {
 
 func (webEngine) DrawGroupBox(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, title string, raised bool) {
 	c := webColors(l)
+	if c.islandGroup(l, ctx, b, title) {
+		return
+	}
 	card := winSnap(b)
 	if title != "" {
 		hh := webHeadH(l)
@@ -483,7 +487,9 @@ func (webEngine) DrawGroupBox(l *Classic, ctx *paintengine2d.Context, b painteng
 func (webEngine) DrawPanel(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, raised bool) {
 	c := webColors(l)
 	if raised {
-		c.box(l, ctx, winSnap(b), c.rad(l, c.cardR), c.card, c.border0)
+		if !c.islandCard(l, ctx, b) {
+			c.box(l, ctx, winSnap(b), c.rad(l, c.cardR), c.card, c.border0)
+		}
 		return
 	}
 	ctx.DrawRect(b, paintengine2d.Fill(c.window))
@@ -642,7 +648,7 @@ func (webEngine) DrawPopupShadow(l *Classic, ctx *paintengine2d.Context, b paint
 // ---- views --------------------------------------------------------------------------------------
 
 // ViewFrameInsets: the view's hairline, and room for its corner so the
-// rows inside never cover it.
+// rows inside never cover it (and an island's band).
 func (webEngine) ViewFrameInsets(l *Classic) Insets {
 	c := webColors(l)
 	h := c.px(l)
@@ -650,13 +656,18 @@ func (webEngine) ViewFrameInsets(l *Classic) Insets {
 	if r := c.rad(l, c.viewR); r > h {
 		v = max(h, float32(math.Ceil(float64(r-(r-h)/math.Sqrt2))))
 	}
+	v += c.islandBand(l)
 	return Insets{Top: v, Right: v, Bottom: v, Left: v}
 }
 
 // DrawViewFrame is a list, tree or table in the field colour inside the
-// separator hairline; a sidebar is its pane, edge to edge.
+// separator hairline; a sidebar is its pane, edge to edge; either is an
+// island where the look has them.
 func (webEngine) DrawViewFrame(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState) {
 	c := webColors(l)
+	if c.islandView(l, ctx, b, st) {
+		return
+	}
 	if st.Sidebar() {
 		if !b.Empty() {
 			ctx.DrawRect(b, paintengine2d.Fill(c.sidebar))

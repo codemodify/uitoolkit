@@ -24,7 +24,7 @@ import (
 // 80% black, so a 10% wash is 8% of near-black. Colours are libadwaita's
 // named colours (window, view, headerbar, card, popover, accent…), alphas
 // and sizes the stylesheet's; radii follow GNOME 42–47 (6px controls, 12px
-// cards and popovers).
+// cards and popovers; GNOME 48's, param "era" 48, are engine_adwaita48.go's).
 //
 // The GTK 3 Adwaita of 2014 (GTK 3.14) is the same engine with scheme 2:
 // see engine_adwaita_gtk3.go.
@@ -270,10 +270,10 @@ func adwPill(l *Classic, b paintengine2d.Rect) float32 {
 	return max(min(b.Dx(), b.Dy())*0.5, 0)
 }
 
-// adwR is design radius r (1x px) for a shape of size b, never more than
-// half its short side.
+// adwR is design radius r (1x px, GNOME 42–47's) for a shape of size b in
+// the look's GNOME (adwEraR), never more than half its short side.
 func adwR(l *Classic, r float32, b paintengine2d.Rect) float32 {
-	return min(l.rx(r), adwPill(l, b))
+	return min(l.rx(adwEraR(l, r)), adwPill(l, b))
 }
 
 // adwRing strokes a w-wide ring just inside b, following radius r.
@@ -538,7 +538,7 @@ func (c *adwSet) cardFace(l *Classic, ctx *paintengine2d.Context, b paintengine2
 		c.g3.frame(l, ctx, b, c.g3.view)
 		return
 	}
-	adwFrame(ctx, adwSnap(b), adwR(l, 12, b), adwPx(l), c.cardEdge, c.card)
+	adwFrame(ctx, adwSnap(b), adwCardR(l, b), adwPx(l), c.cardEdge, c.card)
 }
 
 func (e adwaitaEngine) Face(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, role Role, st ControlState) paintengine2d.Color {
@@ -1545,7 +1545,7 @@ func (e adwaitaEngine) DrawPanel(l *Classic, ctx *paintengine2d.Context, b paint
 		c.g3.frame(l, ctx, b, c.win)
 		return
 	}
-	adwFrame(ctx, adwSnap(b), adwR(l, 12, b), adwPx(l), c.border, c.win)
+	adwFrame(ctx, adwSnap(b), adwCardR(l, b), adwPx(l), c.border, c.win)
 }
 
 func (e adwaitaEngine) DrawMenuBar(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect) {

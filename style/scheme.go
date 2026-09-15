@@ -66,6 +66,9 @@ var (
 		"alucard":          "dracula",
 		"tokyonight-day":   "tokyonight",
 		"rosepine-dawn":    "rosepine",
+		"gruvbox-light":    "gruvbox",
+		"solarized-light":  "solarized",
+		"onelight":         "onedark",
 	}
 	lightSiblings = map[string]string{
 		"dark":                 "light",
@@ -78,6 +81,9 @@ var (
 		"tokyonight-storm":     "tokyonight-day",
 		"rosepine":             "rosepine-dawn",
 		"rosepine-moon":        "rosepine-dawn",
+		"gruvbox":              "gruvbox-light",
+		"solarized":            "solarized-light",
+		"onedark":              "onelight",
 	}
 )
 

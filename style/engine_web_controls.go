@@ -349,7 +349,7 @@ func (e webEngine) DrawComboBox(l *Classic, ctx *paintengine2d.Context, b painte
 		pad := l.metrics.FieldPad
 		l.drawFittedText(ctx, l.body, text, paintengine2d.XYWH(f.Min.X+pad, f.Min.Y, ab.Min.X-f.Min.X-pad, f.Dy()), fg, AlignStart, 0)
 	}
-	if st.Focused() && !open && !st.Disabled() {
+	if (st.Focused() && !open || open && webIDE(l).openRing) && !st.Disabled() {
 		if c.focusStyle == webFocusOutside || (c.focusStyle == webFocusDotted && !st.Editable()) {
 			c.fieldFocusRing(l, ctx, b, f, r)
 		}
