@@ -243,7 +243,7 @@ func (s *session) build() widget.Component {
 	s.table.Mode = widgets.SelectExtended
 	// Letters are commands here (n / p / r / f / c / m), not a search.
 	s.table.DisableTypeAhead = true
-	s.table.OnSelectionChange = s.tableSelection
+	s.table.OnSelectionChange = func(rows []int) { s.viewSelection(rows, s.table.Selected) }
 	s.table.CellBold = func(row, col int) bool {
 		if row < 0 || row >= len(s.rows) {
 			return false
@@ -263,11 +263,11 @@ func (s *session) build() widget.Component {
 		}
 		s.messageMenu(s.table, p)
 	}
-	s.cards = widgets.NewCardList(0, s.cardAt, func(i int) {
-		s.clickRow(i, false)
-	})
+	s.cards = widgets.NewCardList(0, s.cardAt, nil)
+	s.cards.Mode = widgets.SelectExtended
+	s.cards.OnSelectionChange = func(rows []int) { s.viewSelection(rows, s.cards.Selected) }
 	s.cards.OnContext = func(i int, p paintengine2d.Point) {
-		if i >= 0 && i < len(s.rows) {
+		if i >= 0 && i < len(s.rows) && !s.cards.IsSelected(i) {
 			s.clickRow(i, false)
 		}
 		s.messageMenu(s.cards, p)
@@ -601,16 +601,15 @@ func (s *session) refreshList() {
 		s.table.RowCount = len(s.rows)
 		s.table.SortCol = s.sortCol
 		s.table.SortAsc = s.sortAsc
-		s.syncTable()
 		s.table.SetVisible(!s.cardView)
 		s.table.Invalidate()
 	}
 	if s.cards != nil {
 		s.cards.Count = len(s.rows)
-		s.cards.Selected = s.primaryIndex()
 		s.cards.SetVisible(s.cardView)
 		s.cards.Invalidate()
 	}
+	s.syncViews()
 	s.loadPreview()
 	s.refreshStatus()
 }
@@ -927,11 +926,7 @@ func (s *session) clickRow(i int, add bool) {
 	} else {
 		s.selected = []MessageID{id}
 	}
-	s.syncTable()
-	if s.cards != nil {
-		s.cards.Selected = i
-		s.cards.Invalidate()
-	}
+	s.syncViews()
 	if !s.rows[i].Read {
 		_ = s.cli.SetFlags(id, FlagPatch{Read: boolPtr(true)})
 		s.rows[i].Read = true
@@ -946,17 +941,14 @@ func (s *session) clickRow(i int, add bool) {
 	s.refreshStatus()
 }
 
-// tableSelection mirrors the message table's selection. One row behaves as
-// a click (preview, mark read); several are all selected with the current
-// row last, so the preview follows the keyboard and nothing is marked read.
-func (s *session) tableSelection(rows []int) {
+// viewSelection mirrors the selection of the message table or card list
+// (cur is that view's current row). One row behaves as a click (preview,
+// mark read); several are all selected with the current row last, so the
+// preview follows the keyboard and nothing is marked read.
+func (s *session) viewSelection(rows []int, cur int) {
 	if len(rows) == 1 {
 		s.clickRow(rows[0], false)
 		return
-	}
-	cur := -1
-	if s.table != nil {
-		cur = s.table.Selected
 	}
 	s.selected = s.selected[:0]
 	curSelected := false
@@ -973,14 +965,15 @@ func (s *session) tableSelection(rows []int) {
 	if curSelected {
 		s.selected = append(s.selected, s.rows[cur].ID)
 	}
+	s.syncViews()
 	s.loadPreview()
 	s.refreshStatus()
 }
 
-// syncTable shows s.selected in the message table, the primary (last) as
-// its current row.
-func (s *session) syncTable() {
-	if s.table == nil {
+// syncViews shows s.selected in the message table and the card list, the
+// primary (last) as their current row.
+func (s *session) syncViews() {
+	if s.table == nil && s.cards == nil {
 		return
 	}
 	pos := make(map[MessageID]int, len(s.rows))
@@ -993,7 +986,12 @@ func (s *session) syncTable() {
 			idx = append(idx, i)
 		}
 	}
-	s.table.SetSelectedRows(idx)
+	if s.table != nil {
+		s.table.SetSelectedRows(idx)
+	}
+	if s.cards != nil {
+		s.cards.SetSelectedRows(idx)
+	}
 }
 
 // pruneSelection keeps only ids that are still visible in the thread list.
@@ -1484,7 +1482,7 @@ func (s *session) selectAll() {
 	if primary >= 0 {
 		s.selected = append(s.selected, s.rows[primary].ID)
 	}
-	s.syncTable()
+	s.syncViews()
 	s.refreshStatus()
 	s.mark(fmt.Sprintf("%d selected", len(s.selected)))
 }
@@ -2359,9 +2357,10 @@ func PrepareShotCards(w *app.Window) {
 		if cl, ok := c.(*widgets.CardList); ok {
 			cl.SetVisible(true)
 			if cl.Count > 0 {
-				cl.Selected = 0
-				if cl.OnSelect != nil {
-					cl.OnSelect(0)
+				// Select the first card as a click would (preview, read).
+				cl.SetSelectedRows([]int{0})
+				if cl.OnSelectionChange != nil {
+					cl.OnSelectionChange([]int{0})
 				}
 			}
 			cl.Invalidate()
