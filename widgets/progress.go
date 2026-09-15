@@ -1,11 +1,11 @@
 package widgets
 
 import (
-	"os"
 	"time"
 
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/layout"
+	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
 )
 
@@ -83,7 +83,7 @@ func (p *ProgressBar) Paint(ctx *paintengine2d.Context) {
 // frame: the loop runs only while the bar is painted, so a hidden bar costs
 // nothing.
 func (p *ProgressBar) phase() float32 {
-	if !p.Indeterminate || p.Manual || os.Getenv(AnimationsEnv) == "0" {
+	if !p.Indeterminate || p.Manual || !style.Animations() {
 		return p.Phase
 	}
 	now := fadeNow()
