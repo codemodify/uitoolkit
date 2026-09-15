@@ -128,6 +128,11 @@ func NewDateField(value time.Time, on func(time.Time)) *widgets.DateField {
 	return widgets.NewDateField(value, on)
 }
 
+// NewColorButton shows a colour and drops a picker down (GtkColorButton).
+func NewColorButton(col paintengine2d.Color, on func(paintengine2d.Color)) *widgets.ColorButton {
+	return widgets.NewColorButton(col, on)
+}
+
 // NewPicture shows a raster image.
 func NewPicture(img *paintengine2d.Image) *widgets.Picture { return widgets.NewPicture(img) }
 
