@@ -18,6 +18,18 @@ const (
 	scrollRepeatEvery = 50 * time.Millisecond
 )
 
+// Transient bars (style.ScrollBarStyle.Transient) stay a second after the
+// view last scrolled or the pointer last moved over it, then fade out in
+// a few steps.
+const (
+	transientRest  = time.Second
+	transientStep  = 40 * time.Millisecond
+	transientSteps = 5
+)
+
+// scrollNow is the clock transient bars rest by (tests replace it).
+var scrollNow = time.Now
+
 // scrollAxis is how a widget exposes one scrollable axis to its bar.
 type scrollAxis struct {
 	vertical bool
@@ -36,6 +48,66 @@ type scrollDrag struct {
 	hot    style.ScrollPart // part under the pointer
 	down   style.ScrollPart // part held (step / page auto-repeat)
 	stop   func()           // cancels a pending auto-repeat
+
+	// A transient bar's visibility: reveal runs from 0 (hidden) to 1,
+	// woke is when the view last scrolled or the pointer last moved over
+	// it, and resting reports a fade-out timer is pending.
+	reveal  float32
+	woke    time.Time
+	resting bool
+	lastOff float32
+	painted bool
+}
+
+// transient reports whether lk's bars come and go over the content.
+func transient(lk style.LookAndFeel) bool { return style.ScrollBarStyleOf(lk).Transient }
+
+// wake shows a transient bar and restarts its rest; owner repaints and
+// times the fade.
+func (d *scrollDrag) wake(owner widget.Component) {
+	if owner == nil || !transient(owner.Look()) {
+		return
+	}
+	d.woke = scrollNow()
+	if d.reveal < 1 {
+		d.reveal = 1
+		repaintBar(owner)
+	}
+	if !d.resting {
+		d.resting = true
+		d.rest(owner, transientRest)
+	}
+}
+
+// rest waits out the rest period (restarted by every wake), then fades
+// the bar out step by step. A hovered or held bar stays.
+func (d *scrollDrag) rest(owner widget.Component, after time.Duration) {
+	widget.After(owner, after, func() {
+		if left := transientRest - scrollNow().Sub(d.woke); left > 0 {
+			d.rest(owner, left)
+			return
+		}
+		if d.over || d.active || d.down != style.ScrollNone {
+			d.rest(owner, transientRest)
+			return
+		}
+		d.reveal -= 1.0 / transientSteps
+		if d.reveal <= 0.001 {
+			d.reveal = 0
+			d.resting = false
+		} else {
+			d.rest(owner, transientStep)
+		}
+		repaintBar(owner)
+	})
+}
+
+// repaintBar repaints the owner without dropping its retained rows (the
+// views' own Invalidate re-records every row).
+func repaintBar(owner widget.Component) {
+	if r, ok := owner.(interface{ InvalidateRect(paintengine2d.Rect) }); ok {
+		r.InvalidateRect(owner.LocalBounds())
+	}
 }
 
 // vScrollParts lays out a vertical bar at the right edge of view.
@@ -157,12 +229,16 @@ func (d *scrollDrag) cancel() {
 }
 
 // move tracks hover and drags the thumb. handled reports the pointer is
-// on (or dragging) the bar; dirty that the bar needs a repaint.
-func (d *scrollDrag) move(pos paintengine2d.Point, ax scrollAxis) (handled, dirty bool) {
+// on (or dragging) the bar; dirty that the bar needs a repaint. Pointer
+// motion over a scrollable view shows its transient bar.
+func (d *scrollDrag) move(owner widget.Component, pos paintengine2d.Point, ax scrollAxis) (handled, dirty bool) {
 	if ax.parts == nil {
 		return false, false
 	}
 	sp := ax.parts()
+	if !sp.Thumb.Empty() {
+		d.wake(owner)
+	}
 	over := !sp.Bar.Empty() && sp.Bar.Contains(pos)
 	hot := style.ScrollNone
 	if over {
@@ -200,8 +276,10 @@ func (d *scrollDrag) exit() {
 }
 
 // paint draws the bar from its geometry (nothing when there is nothing to
-// scroll).
-func (d *scrollDrag) paint(ctx *paintengine2d.Context, lk style.LookAndFeel, sp style.ScrollParts, vertical bool) {
+// scroll). offset is the axis' scroll offset: when it moved since the last
+// paint, a transient bar shows; a hidden one draws nothing and a fading one
+// draws at its reveal.
+func (d *scrollDrag) paint(owner widget.Component, ctx *paintengine2d.Context, lk style.LookAndFeel, sp style.ScrollParts, vertical bool, offset float32) {
 	if ctx == nil || lk == nil || sp.Thumb.Empty() {
 		return
 	}
@@ -209,7 +287,26 @@ func (d *scrollDrag) paint(ctx *paintengine2d.Context, lk style.LookAndFeel, sp 
 	if d.active {
 		pressed = style.ScrollThumbPart
 	}
-	style.DrawScrollBarParts(lk, ctx, sp, vertical, style.ScrollState{Hot: d.hot, Pressed: pressed, Hovered: d.over})
+	st := style.ScrollState{Hot: d.hot, Pressed: pressed, Hovered: d.over}
+	if !transient(lk) {
+		style.DrawScrollBarParts(lk, ctx, sp, vertical, st)
+		return
+	}
+	if d.painted && offset != d.lastOff {
+		d.wake(owner)
+	}
+	d.painted, d.lastOff = true, offset
+	reveal := d.reveal
+	if d.over || d.active || d.down != style.ScrollNone {
+		reveal = 1
+	}
+	if reveal <= 0 {
+		return
+	}
+	ctx.Save()
+	ctx.SetAlpha(reveal)
+	style.DrawScrollBarParts(lk, ctx, sp, vertical, st)
+	ctx.Restore()
 }
 
 func wheelDelta(scrollY, line float32) float32 {
