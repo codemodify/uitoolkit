@@ -1,4 +1,4 @@
-# Resume here — end-to-end fixes and theme engines, 2026-09-14
+# Resume here — end-to-end fixes and theme engines, 2026-09-15
 
 Everything is on feature branches, pushed to GitHub. `dev` is untouched in both
 repos.
@@ -78,13 +78,14 @@ Merged engines:
 | breeze | KDE Plasma Breeze, Breeze Dark |
 | clearlooks, bluecurve | GNOME 2 Clearlooks, Human, Qt Cleanlooks; Red Hat Bluecurve |
 | adwaita | GNOME Adwaita, Adwaita Dark, Adwaita (GTK 3) |
+| aero, metro, fluent | Windows Vista/7 Aero and 7 Basic; Windows 8, 10, 10 Dark; Windows 11 Fluent and Fluent Dark |
 
 In progress, or queued with briefs written:
-- modern Windows (Aero, Windows 8 and 10, Fluent);
-- KDE 3 (Keramik, Plastik);
+- KDE 3 (Keramik, Plastik, Qt's Plastique), running;
 - the first desktops (Mac System 1 and 7, Windows 3.1, OPEN LOOK, Amiga, BeOS,
-  OS/2);
-- a clean-room Metal and Nimbus.
+  OS/2), running;
+- modern Mac (Yosemite, Big Sur), Material and FlatLaf, queued;
+- a clean-room Metal and Nimbus, queued.
 
 Core features the engines drive, added along the way:
 - selected tabs overlap their neighbours;
@@ -94,7 +95,30 @@ Core features the engines drive, added along the way:
 - window backgrounds and tab panes;
 - group boxes and in-app dialog windows;
 - item states: selected, current, unfocused, and backdrop when the window is
-  inactive, each engine following its platform's rules.
+  inactive, each engine following its platform's rules;
+- **whole-pixel layout:** component bounds and table column edges are
+  rounded to device pixels (WPF / Avalonia layout rounding). This removed the
+  seam every engine showed at column edges in a selected table row, and makes
+  every engine's 1px lines land on real pixels;
+- **every theme reads in its era's typeface** when installed (fontconfig):
+  Tahoma for XP, Segoe UI for Vista to 11, Lucida Grande for Aqua, Helvetica
+  (or Nimbus Sans) for NeXT and Motif, Cantarell for GNOME, Noto Sans for
+  Plasma, Roboto for Material, then open look-alikes; the bundled Titillium
+  Web is the last resort. `theme.json` can list its own `fonts`;
+  `UITK_SYSTEM_FONTS=0` keeps the bundled faces;
+- **transient overlay scroll bars** (libadwaita, Fluent): the content keeps
+  its full width and the bar shows while scrolling or hovered, then fades;
+- **hover and focus cross-fade** where the platform animated (Aero and Adwaita
+  200ms, Windows 10, Breeze and Oxygen 150ms, Fluent 83ms); presses stay
+  instant; `UITK_ANIMATIONS=0` turns fades off;
+- **spin boxes** put their buttons where the platform did: inside the field's
+  frame (Windows, KDE, GNOME side by side "− +"), beside it (Mac OS, Motif);
+- engine hooks from the Windows engines' wish list: table cells know their
+  place in the row (one rounded selection box across a row), tabs overlap by a
+  border so neighbours share one line, tree expanders light up under the
+  pointer, packs can pin the colour of selected text (Windows' white on blue);
+- message boxes read "Yes No Cancel" under Windows and KDE, and a pack's look
+  keeps the pack's own corners.
 
 ## Toolkit features added
 
@@ -136,6 +160,9 @@ Core features the engines drive, added along the way:
 - Textured looks batch their stripes.
 - Open strokes with square caps no longer draw a stray band (their outline
   was left unclosed).
+- `Context.SetAlpha` (global alpha) and `Context.DrawLayer` (group opacity)
+  drive the fades; GPU gradients now honour `Paint.Opacity`, which they
+  ignored before.
 
 The result: a hover repaint on the stock look went from 321 to 152
 allocations, and on Aqua from 4,376 to 356. The gallery peaks at about 35 MB
