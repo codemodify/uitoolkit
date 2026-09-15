@@ -157,6 +157,13 @@ Core features the engines drive, added along the way:
   default button follow it; odd list rows can be striped (Aqua).
 - **Settings:** restructured as a theme browser with a live, themed preview
   application.
+- **Follows the desktop's light or dark mode:** Settings → "Match the
+  desktop's light or dark mode" (look.json `followDesktop`). Apps read the
+  XDG portal's `color-scheme`, as GTK 4 and Qt 6 apps do, and show the
+  saved theme's sibling: Breeze and Breeze Dark, Luna Olive and Royale
+  Noir, CDE palettes and Charcoal. They switch live when the desktop does.
+  Themes with no sibling stay as chosen. `UITK_COLOR_SCHEME=dark` stands in
+  for the desktop. See `docs/settings.md`.
 - **`UITK_THEME=<pack>`:** runs any app in any theme, like `GTK_THEME`.
 - **`gallery -screenshot DIR -theme <pack>`:** takes every scripted gallery
   shot in one pack.
@@ -191,4 +198,10 @@ RSS.
 - text meets contrast checks.
 
 Everything headless ran in this session; the GPU and Wayland paths still need
-the real-hardware pass.
+the real-hardware pass. A slip on 2026-09-15: one `go test ./platform` ran
+without unsetting `WAYLAND_DISPLAY`, so its live-compositor tests opened
+test windows on the real session for under a second. Two of them failed
+there, and both belong in the real-hardware pass:
+- `TestWaylandSurfacePresent` expects a 160px buffer and got 280 (the
+  output's 1.75 scale);
+- `TestWaylandPresentOpaqueColor` reported "no present slot".
