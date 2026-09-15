@@ -174,6 +174,12 @@ An engine implements these only when its platform differs from the base:
 - `ComboTextRect(l, b)`: where an editable combo box (`st.Editable()`) puts
   its field. Windows looks draw the editable box as a field with an arrow
   button, and must not fill it with the selection colour when focused.
+  Windows 3.1 stands the button eight pixels off the edit box.
+- `DrawFramelessText(l, ctx, b, st, …)`: the text of a frameless field (a
+  spin box's, an editable combo's), inside a frame its parent drew. An
+  engine that paints its own field text (its colour, caret, selection)
+  implements it, keeping the text in `l.fieldTextBox(b)`, so those fields
+  type as its plain ones do: Motif's I-beam, Windows 3.1's XOR caret.
 - `Accented(tok, accent)`: see Accent colours above.
 - `l.WeightFont(WeightMedium)` and `WeightSemibold`: Material's medium
   labels and Fluent's semibold headings; the installed weight, or the

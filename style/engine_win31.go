@@ -945,11 +945,23 @@ func (e win31Engine) DrawTextField(l *Classic, ctx *paintengine2d.Context, b pai
 	e.Face(l, ctx, b, RoleField, st)
 	pad := max(l.metrics.FieldPad, 3*u)
 	inner := paintengine2d.XYWH(b.Min.X+pad, b.Min.Y+u, b.Dx()-2*pad, b.Dy()-2*u)
+	rpFieldText(l, ctx, inner, st, text, placeholder, caret, selA, selB, blink, scrollX, face, c.editOpts(l, st))
+}
+
+// DrawFramelessText: a spin box's or editable combo's text types as the
+// edit fields do, with the XOR caret bar and the highlight.
+func (e win31Engine) DrawFramelessText(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, text, placeholder string, caret, selA, selB int, blink bool, scrollX float32, face *Font) {
+	rpFieldText(l, ctx, l.fieldTextBox(b), st, text, placeholder, caret, selA, selB, blink, scrollX, face, w31colors(l).editOpts(l, st))
+}
+
+// editOpts is how an edit field types; its selection shows only while it
+// has the focus.
+func (c *w31) editOpts(l *Classic, st ControlState) rpFieldOpts {
 	o := c.fieldOpts(l)
 	if !st.Focused() {
 		o.sel = paintengine2d.Color{A: 0}
 	}
-	rpFieldText(l, ctx, inner, st, text, placeholder, caret, selA, selB, blink, scrollX, face, o)
+	return o
 }
 
 func (e win31Engine) DrawTextArea(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, lines []TextLine, caret, selA, selB int, blink bool, scrollX, scrollY float32, placeholder string, face *Font) {
