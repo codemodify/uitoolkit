@@ -983,6 +983,36 @@ func DrawBrowserTabBarOf(lk LookAndFeel, ctx *paintengine2d.Context, b paintengi
 	lk.DrawTabBar(ctx, b)
 }
 
+// ToolGroupEngine is an optional engine hook for tool bars whose buttons
+// share one piece of chrome per group (macOS Tahoe's glass capsules): the
+// tool bar paints DrawToolGroup under each run of n buttons between
+// separators, b spanning the run, then the buttons over it, and its
+// separators are only the space between the groups. A group's shadow may
+// fall a few pixels past b, inside the tool bar.
+type ToolGroupEngine interface {
+	DrawToolGroup(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, n int)
+}
+
+// ToolGroupsOf reports whether lk paints its tool bar buttons on shared
+// group chrome ([ToolGroupEngine]).
+func ToolGroupsOf(lk LookAndFeel) bool {
+	if c, ok := lk.(*Classic); ok && c != nil {
+		_, ok := c.eng().(ToolGroupEngine)
+		return ok
+	}
+	return false
+}
+
+// DrawToolGroupOf paints lk's group chrome under a run of n tool bar
+// buttons spanning b (nothing for a look without groups).
+func DrawToolGroupOf(lk LookAndFeel, ctx *paintengine2d.Context, b paintengine2d.Rect, n int) {
+	if c, ok := lk.(*Classic); ok && c != nil && ctx != nil {
+		if e, ok := c.eng().(ToolGroupEngine); ok {
+			e.DrawToolGroup(c, ctx, b, n)
+		}
+	}
+}
+
 // ViewBackgroundLook says what an item view's rows sit on.
 type ViewBackgroundLook interface {
 	ViewBackground(st ControlState) paintengine2d.Color
@@ -1142,10 +1172,30 @@ func itoa(n int) string {
 	return string(b[i:])
 }
 
-// engineFor resolves the engine a token set names (BaseEngine fallback).
+// EraEngine is an optional engine hook for an engine whose later era redraws
+// most of its shapes (macOS Tahoe's glass after Big Sur, Plasma 6's Breeze):
+// EngineFor answers the engine that paints the era a token set's params
+// name, usually a type in a file of its own that embeds this engine and keeps
+// its ID; nil keeps this engine. The registry holds one engine per ID.
+type EraEngine interface {
+	EngineFor(t ThemeTokens) Engine
+}
+
+// eraEngine is e, or the engine it hands t's era to.
+func eraEngine(e Engine, t ThemeTokens) Engine {
+	if era, ok := e.(EraEngine); ok {
+		if x := era.EngineFor(t); x != nil {
+			return x
+		}
+	}
+	return e
+}
+
+// engineFor resolves the engine a token set names (BaseEngine fallback),
+// through the engine's EraEngine hook.
 func engineFor(t ThemeTokens) Engine {
 	if e, ok := EngineByID(t.Engine); ok {
-		return e
+		return eraEngine(e, t)
 	}
 	return baseEngine
 }
