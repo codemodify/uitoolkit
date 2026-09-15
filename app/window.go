@@ -146,7 +146,17 @@ func (w *Window) Surface() platform.Surface { return w.surf }
 func (w *Window) Title() string             { return w.surf.Title() }
 func (w *Window) SurfaceSize() (int, int)   { return w.surf.Size() }
 
-func (w *Window) SetTitle(s string) { w.surf.SetTitle(s) }
+// SetTitle sets the window's title: the desktop's title bar and task bar
+// show it, and so does a title bar the toolkit draws.
+func (w *Window) SetTitle(s string) {
+	if w.surf.Title() == s {
+		return
+	}
+	w.surf.SetTitle(s)
+	if w.caption != nil {
+		w.caption.Invalidate()
+	}
+}
 
 // SetFullscreen asks the native backend (EWMH / xdg-shell) when available.
 func (w *Window) SetFullscreen(on bool) { platform.SetFullscreen(w.surf, on) }

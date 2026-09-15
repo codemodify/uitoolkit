@@ -916,3 +916,29 @@ func TestThemeCaptionButtons(t *testing.T) {
 		t.Fatalf("desktop layout: left %v right %v", left.Shown(), right.Shown())
 	}
 }
+
+// A new window title repaints the title bar the toolkit draws (a tab strip
+// retitles the window as its selection changes).
+func TestSetTitleRepaintsTheCaption(t *testing.T) {
+	r := newFrameRig(t, platform.DecorationsClient)
+	r.w.SetTitleBar(nil)
+	r.a.PumpOnce()
+	r.w.Capture()
+	r.w.dirty.Reset()
+	r.w.SetTitle("Renamed")
+	hb := widget.DeviceBounds(r.w.Caption())
+	covered := false
+	for _, d := range r.w.dirty.Rects {
+		if d.Intersect(hb) == hb {
+			covered = true
+		}
+	}
+	if !covered || r.w.Title() != "Renamed" {
+		t.Fatalf("dirty %v caption %v", r.w.dirty.Rects, hb)
+	}
+	r.w.dirty.Reset()
+	r.w.SetTitle("Renamed")
+	if !r.w.dirty.Empty() {
+		t.Fatal("the same title repaints nothing")
+	}
+}
