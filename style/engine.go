@@ -827,6 +827,28 @@ type TabOverlapLook interface {
 // TabOverlap implements [TabOverlapLook].
 func (l *Classic) TabOverlap() float32 { return l.eng().TabOverlap(l) }
 
+// ComboTextEngine is an optional engine hook: the box an editable combo
+// box's field fills in a combo of bounds b (the face less its arrow and
+// padding). The default is the base combo's.
+type ComboTextEngine interface {
+	ComboTextRect(l *Classic, b paintengine2d.Rect) paintengine2d.Rect
+}
+
+// ComboTextRectOf is where any look's editable combo box puts its field.
+func ComboTextRectOf(lk LookAndFeel, b paintengine2d.Rect) paintengine2d.Rect {
+	if c, ok := lk.(*Classic); ok && c != nil {
+		if e, ok := c.eng().(ComboTextEngine); ok {
+			return e.ComboTextRect(c, b)
+		}
+	}
+	pad := lk.Metrics().FieldPad
+	if pad <= 0 {
+		pad = 8
+	}
+	chev := Dip(lk, 22)
+	return paintengine2d.XYWH(b.Min.X+pad*0.5, b.Min.Y+1, max(0, b.Dx()-pad*0.5-chev), max(0, b.Dy()-2))
+}
+
 // SliderTravelEngine is an optional engine hook: where the slider thumb's
 // centre travels in a slider of bounds b, from t=0 to t=1. Engines that
 // size their thumb their own way implement it so tick marks and clicks

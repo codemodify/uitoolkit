@@ -130,6 +130,10 @@ func (t *TextField) Describe(n *a11y.Node) {
 	} else {
 		n.Value = t.Text
 	}
+	if cb, ok := t.Parent().(*ComboBox); ok && n.Name == "" {
+		// An editable combo box's entry is known by the box's name.
+		n.Name = cb.AccessibleName()
+	}
 	if n.Name == "" {
 		// A placeholder stands in for a missing label, as browsers do.
 		n.Name = t.Placeholder
@@ -158,8 +162,12 @@ func (c *ComboBox) Describe(n *a11y.Node) {
 	if c.open {
 		n.State |= a11y.StateExpanded
 	}
-	if c.Selected >= 0 && c.Selected < len(c.Items) {
-		n.Value = c.Items[c.Selected]
+	n.Value = c.Text()
+	if c.field != nil {
+		n.State |= a11y.StateEditable
+		if c.field.Focused() {
+			n.State |= a11y.StateFocused | a11y.StateFocusable
+		}
 	}
 	if n.Name == "" {
 		n.Name = c.Placeholder

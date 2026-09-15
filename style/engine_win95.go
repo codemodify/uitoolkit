@@ -508,6 +508,14 @@ func (e win95Engine) DrawToolButton(l *Classic, ctx *paintengine2d.Context, b pa
 	l.baseDrawToolButton(ctx, b, st, label, icon)
 }
 
+// ComboTextRect: an editable combo's field fills the text box beside the
+// arrow button.
+func (win95Engine) ComboTextRect(l *Classic, b paintengine2d.Rect) paintengine2d.Rect {
+	in := b.Inset(2)
+	bw := min(l.S(16), in.Dy())
+	return paintengine2d.XYWH(in.Min.X+l.S(1), in.Min.Y+l.S(1), in.Max.X-bw-in.Min.X-l.S(2), in.Dy()-l.S(2))
+}
+
 func (e win95Engine) DrawComboBox(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, text string, open bool) {
 	c := w95colors(l)
 	fill := c.field
@@ -542,7 +550,7 @@ func (e win95Engine) DrawComboBox(l *Classic, ctx *paintengine2d.Context, b pain
 	tc := c.text
 	if st.Disabled() {
 		tc = c.gray
-	} else if st.Focused() && !open {
+	} else if st.Focused() && !open && !st.Editable() {
 		ctx.DrawRect(tb, paintengine2d.Fill(c.sel))
 		tc = c.selTxt
 		DottedRect(ctx, tb, c.hi)

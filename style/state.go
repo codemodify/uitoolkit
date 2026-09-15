@@ -51,6 +51,11 @@ const (
 	// State_AutoRaise): flat until the pointer is over it, where a free
 	// tool button keeps its bezel.
 	StateAutoRaise
+	// StateEditable marks a combo box whose text is typed into (QComboBox's
+	// editable, GTK's combo box with an entry): Windows and GTK looks draw
+	// it as a field with an arrow button. DrawComboBox gets no text for
+	// it; the field inside draws its own.
+	StateEditable
 )
 
 // treeChainShift is where a tree row's chain bits start: above every
@@ -81,6 +86,7 @@ func (s ControlState) HasNextSibling(d int) bool {
 
 func (s ControlState) Sidebar() bool     { return s&StateSidebar != 0 }
 func (s ControlState) AutoRaise() bool   { return s&StateAutoRaise != 0 }
+func (s ControlState) Editable() bool    { return s&StateEditable != 0 }
 func (s ControlState) Hovered() bool     { return s&StateHovered != 0 }
 func (s ControlState) Pressed() bool     { return s&StatePressed != 0 }
 func (s ControlState) Disabled() bool    { return s&StateDisabled != 0 }

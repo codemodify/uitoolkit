@@ -1325,7 +1325,7 @@ func (e metalEngine) DrawComboBox(l *Classic, ctx *paintengine2d.Context, b pain
 		switch {
 		case st.Disabled():
 			ctx.DrawRect(b, paintengine2d.Fill(c.s3))
-		case st.Focused() && !open:
+		case st.Focused() && !open && !st.Editable():
 			ctx.DrawRect(fb, paintengine2d.Fill(c.p2))
 			c.ring(ctx, paintengine2d.XYWH(fb.Min.X+u, fb.Min.Y+u, fb.Dx()-u, fb.Dy()-2*u), c.p3)
 		default:
