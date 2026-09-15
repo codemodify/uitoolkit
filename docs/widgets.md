@@ -97,6 +97,8 @@ names) is in [compare.md](compare.md).
 | Column / row | `Column` / `Row` (`FlexBox`) | `QVBoxLayout` / `Row`+`Column` | `GtkBox` | `StackPanel` | `container.VBox` / `HBox` | `FlowLayoutPanel` ≈ | `StackPanel` | `NSStackView` | `VStack` / `HStack` | [thumb](screenshots/compare/layout.png) |
 | Stack | `Stack` | `QStackedWidget` / `StackLayout` | `GtkStack` | `Panel` (z) ≈ | `container.Stack` | z-order ≈ | `Grid` / `Canvas` ≈ | layers ≈ | `ZStack` | [thumb](screenshots/compare/layout.png) |
 | Pad | `Pad` | layout margins | margins | `Padding` / `Decorator` | `container.Padded` | `Padding` | `Padding` | constraints ≈ | `padding` | — |
+| Grid | `Grid` (auto / px / flex tracks, spans) | `QGridLayout` / `GridLayout` | `GtkGrid` | `Grid` | `container.NewGridWithColumns` ≈ | `TableLayoutPanel` | `Grid` | `NSGridView` | `Grid` | — |
+| Form | `Form` (label column + fields) | `QFormLayout` | `GtkGrid` ≈ | `Grid` ≈ | `widget.Form` | `TableLayoutPanel` ≈ | `Grid` ≈ | `NSGridView` ≈ | `Form` | [gallery](screenshots/gallery-accordion.png) |
 | Spacer | `Spacer` | `QSpacerItem` / `Item` | `GtkBox` expand | — | `layout.Spacer` | — | — | — | `Spacer` | [thumb](screenshots/compare/layout.png) |
 | Separator | `Separator` / `VSeparator` | `QFrame` / `ToolSeparator` | `GtkSeparator` | `Separator` | `widget.Separator` | `ToolStripSeparator` | `Separator` | `NSBox` (separator) | `Divider` | [thumb](screenshots/compare/layout.png) |
 | Panel | `Panel` | `QGroupBox` / `GroupBox` | `GtkFrame` | `HeaderedContentControl` ≈ | `widget.Card` ≈ | `GroupBox` | `GroupBox` | `NSBox` | `GroupBox` | [thumb](screenshots/compare/panel.png) |

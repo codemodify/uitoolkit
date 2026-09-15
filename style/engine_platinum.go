@@ -703,6 +703,15 @@ func (platinumEngine) DrawPopupShadow(l *Classic, ctx *paintengine2d.Context, b 
 // draws the look's focus ring), the Mac way.
 func (platinumEngine) ItemFocus(*Classic, *paintengine2d.Context, paintengine2d.Rect, ControlState) {}
 
+// StyleHint: Mac-style dialogs put the default button last and right-align
+// form labels.
+func (platinumEngine) StyleHint(l *Classic, h StyleHint) int {
+	if h == HintFormLabelsRight {
+		return 1
+	}
+	return 0
+}
+
 func (platinumEngine) WindowCloseRect(l *Classic, b paintengine2d.Rect) paintengine2d.Rect {
 	return platBox(l, platBar(l, b), true, 0)
 }
