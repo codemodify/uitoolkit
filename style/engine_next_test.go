@@ -159,10 +159,12 @@ func TestNextCloseButtonAgreesWithPaint(t *testing.T) {
 				r, g, bl, _ := img.PremulAt(int(ctr.X), int(ctr.Y))
 				t.Fatalf("%s@%gx: close centre rgb(%d,%d,%d), want the glyph %s", n, scale, r, g, bl, colorHexPadded(glyph))
 			}
-			// NeXT buttons are light-grey squares inset in the black bar.
+			// NeXT buttons are light-grey squares inset in the black bar
+			// (the face starts inside the 1px highlight; at NeXT's own 15px
+			// size the × reaches 3px in).
 			if !c.wm {
 				u := nxU(lk)
-				if !nxNear(img, int(cr.Min.X+3*u), int(cr.Min.Y+3*u), c.face) {
+				if !nxNear(img, int(cr.Min.X+2*u), int(cr.Min.Y+2*u), c.face) {
 					t.Fatalf("%s@%gx: close button face missing at its inner top-left", n, scale)
 				}
 				if !nxNear(img, int(cr.Min.X-2*u), int(ctr.Y), Hex("#000000")) {

@@ -146,7 +146,10 @@ type ThemeTokens struct {
 	Extra map[string]paintengine2d.Color
 	// Params holds engine-specific numbers (theme.json "params"), read
 	// through Classic.P.
-	Params   map[string]float32
+	Params map[string]float32
+	// Fonts names the pack's typefaces (theme.json "fonts"); unset, the
+	// era's own list applies when the look is built.
+	Fonts    FontPrefs
 	Metrics  ChromeMetrics
 	Palette  Palette
 	Hot      ChromeState
@@ -844,6 +847,9 @@ func tokensFromJSON(doc themeFileJSON) ThemeTokens {
 	}
 	if doc.Elevation != 0 && t.Metrics.Elevation == 0 {
 		t.Metrics.Elevation = doc.Elevation
+	}
+	if doc.Fonts != nil {
+		t.Fonts = cleanFontPrefs(*doc.Fonts)
 	}
 	t = applyColorMap(t, doc.Colors)
 	// Legacy { "palette": "dark" } with no colors keeps family only;

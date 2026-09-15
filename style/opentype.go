@@ -61,13 +61,17 @@ func FontFor(l LookAndFeel, role FontRole) *Font {
 	return l.Font()
 }
 
-// otFace is a parsed bundled TTF used to rasterize glyphs into a white atlas.
+// otFace is a parsed TTF / OTF used to rasterize glyphs into a white atlas.
 type otFace struct {
 	font *sfnt.Font
 	src  []byte
 	name string
 	mu   sync.Mutex
 	buf  sfnt.Buffer
+	// embolden draws the outline heavier by this fraction of the size: a
+	// bold synthesized from a regular face (a variable font's bold instance,
+	// which sfnt cannot draw).
+	embolden float32
 }
 
 var (
@@ -116,8 +120,22 @@ func parseFace(name string, load func() ([]byte, error)) (*otFace, error) {
 		return nil, err
 	}
 	// Copy: sfnt keeps a view of the bytes.
-	buf := append([]byte(nil), src...)
-	f, err := sfnt.Parse(buf)
+	return parseFaceBytes(name, append([]byte(nil), src...), 0)
+}
+
+// parseFaceBytes parses face index of buf (a single font or a collection).
+// sfnt keeps a view of buf.
+func parseFaceBytes(name string, buf []byte, index int) (*otFace, error) {
+	var f *sfnt.Font
+	var err error
+	if len(buf) >= 4 && string(buf[:4]) == "ttcf" {
+		var c *sfnt.Collection
+		if c, err = sfnt.ParseCollection(buf); err == nil {
+			f, err = c.Font(index)
+		}
+	} else {
+		f, err = sfnt.Parse(buf)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("style: parse %s: %w", name, err)
 	}
@@ -133,18 +151,24 @@ func faceFor(family string, w Weight) (*otFace, error) {
 	if err := LoadEmbeddedFonts(); err != nil {
 		return nil, err
 	}
-	switch family {
-	case FamilyMono, "jetbrains mono", "mono":
+	switch bundledFamily(family) {
+	case FamilyMono:
 		if w >= WeightBold {
 			return monoBold, nil
 		}
 		return monoReg, nil
+	case FamilyUI:
 	default:
-		if w >= WeightBold {
-			return uiBold, nil
+		// An installed face (a pack's era font); not installed, the
+		// bundled UI face stands in.
+		if f := systemOTFace(family, w); f != nil {
+			return f, nil
 		}
-		return uiReg, nil
 	}
+	if w >= WeightBold {
+		return uiBold, nil
+	}
+	return uiReg, nil
 }
 
 func (f *otFace) metrics(size float32) (ascent, descent float32) {
@@ -397,6 +421,9 @@ func (d *atlasDraft) rasterize(r rune) error {
 	if r == ' ' && advance < a.size*0.2 {
 		advance = a.size * 0.3
 	}
+	if tf.embolden > 0 {
+		advance += tf.embolden * a.size
+	}
 	if len(segs) == 0 {
 		return d.blitPath(r, nil, advance)
 	}
@@ -504,6 +531,10 @@ func (d *atlasDraft) bakeCell(p *paintengine2d.Path, advance float32) (paintengi
 		return paintengine2d.AtlasCell{Advance: advance}, nil
 	}
 	b := p.Bounds()
+	heavy := a.face.embolden * a.size
+	if heavy > 0 {
+		b = b.Inset(-heavy * 0.5)
+	}
 	xmin, ymin, xmax, ymax := b.Min.X, b.Min.Y, b.Max.X, b.Max.Y
 	if xmax <= xmin {
 		xmax = xmin + 1
@@ -529,7 +560,13 @@ func (d *atlasDraft) bakeCell(p *paintengine2d.Path, advance float32) (paintengi
 	tmp := paintengine2d.NewImage(gw, gh)
 	ctx := paintengine2d.NewContext(tmp)
 	ctx.Translate(-xmin+pad, -ymin+pad)
-	ctx.DrawPath(p, paintengine2d.Fill(paintengine2d.White))
+	ink := paintengine2d.Fill(paintengine2d.White)
+	if heavy > 0 {
+		// Synthesized bold: the outline stroked round as well as filled.
+		ink.Style = paintengine2d.StyleStrokeAndFill
+		ink.Stroke = paintengine2d.Stroke{Width: heavy, Join: paintengine2d.JoinRound}
+	}
+	ctx.DrawPath(p, ink)
 	blitGlyph(d.img, ax, ay, tmp)
 	d.img.Bump()
 	return paintengine2d.AtlasCell{

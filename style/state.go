@@ -34,18 +34,18 @@ const (
 	StateExpanderHot
 )
 
-func (s ControlState) Hovered() bool   { return s&StateHovered != 0 }
-func (s ControlState) Pressed() bool   { return s&StatePressed != 0 }
-func (s ControlState) Disabled() bool  { return s&StateDisabled != 0 }
-func (s ControlState) Focused() bool   { return s&StateFocused != 0 }
-func (s ControlState) Checked() bool   { return s&StateChecked != 0 }
-func (s ControlState) Primary() bool   { return s&StatePrimary != 0 }
-func (s ControlState) Toggle() bool    { return s&StateToggle != 0 }
-func (s ControlState) First() bool     { return s&StateFirst != 0 }
-func (s ControlState) Last() bool      { return s&StateLast != 0 }
-func (s ControlState) Inactive() bool  { return s&StateInactive != 0 }
-func (s ControlState) Backdrop() bool  { return s&StateBackdrop != 0 }
-func (s ControlState) Alternate() bool { return s&StateAlternate != 0 }
+func (s ControlState) Hovered() bool     { return s&StateHovered != 0 }
+func (s ControlState) Pressed() bool     { return s&StatePressed != 0 }
+func (s ControlState) Disabled() bool    { return s&StateDisabled != 0 }
+func (s ControlState) Focused() bool     { return s&StateFocused != 0 }
+func (s ControlState) Checked() bool     { return s&StateChecked != 0 }
+func (s ControlState) Primary() bool     { return s&StatePrimary != 0 }
+func (s ControlState) Toggle() bool      { return s&StateToggle != 0 }
+func (s ControlState) First() bool       { return s&StateFirst != 0 }
+func (s ControlState) Last() bool        { return s&StateLast != 0 }
+func (s ControlState) Inactive() bool    { return s&StateInactive != 0 }
+func (s ControlState) Backdrop() bool    { return s&StateBackdrop != 0 }
+func (s ControlState) Alternate() bool   { return s&StateAlternate != 0 }
 func (s ControlState) ExpanderHot() bool { return s&StateExpanderHot != 0 }
 
 // CellSpan is the box a table row's selection spans, seen from one cell:
