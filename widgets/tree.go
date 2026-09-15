@@ -55,6 +55,10 @@ type TreeView struct {
 	index     map[*TreeNode]int
 	flatValid bool
 	reveal    *TreeNode // brought into view at the next Arrange
+	find      typeAhead
+	// DisableTypeAhead turns off type-ahead find, for views whose letters
+	// are commands (Mail's n / p / r).
+	DisableTypeAhead bool
 }
 
 // NewTreeView constructs a tree.
@@ -500,6 +504,18 @@ func (t *TreeView) KeyPress(e widget.KeyEvent) bool {
 	if len(rows) == 0 {
 		return false
 	}
+	if contextKey(e) {
+		if t.OnContext == nil {
+			return false
+		}
+		var row paintengine2d.Rect
+		if i := t.indexOf(t.Selected); i >= 0 {
+			rh := t.rowH()
+			row = fromView(paintengine2d.XYWH(0, float32(i)*rh-t.OffsetY, t.inner().Dx(), rh), t.frame())
+		}
+		t.OnContext(t.Selected, contextPoint(t, row))
+		return true
+	}
 	// -1 means "nothing selected yet": the first Down / Up must land on the
 	// first row, not skip it.
 	idx := t.indexOf(t.Selected)
@@ -577,6 +593,19 @@ func (t *TreeView) KeyPress(e widget.KeyEvent) bool {
 		return true
 	}
 	return false
+}
+
+// TextInput is type-ahead find over the visible (expanded) rows.
+func (t *TreeView) TextInput(r rune) bool {
+	if !t.Enabled() || t.DisableTypeAhead {
+		return false
+	}
+	rows := t.flatten()
+	i, searched := t.find.next(r, t.indexOf(t.Selected), len(rows), func(i int) string { return rows[i].node.Label })
+	if i >= 0 {
+		t.selectNode(rows[i].node)
+	}
+	return searched
 }
 
 func (t *TreeView) parentOf(n *TreeNode) *TreeNode {

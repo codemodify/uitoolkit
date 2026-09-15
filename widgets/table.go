@@ -60,6 +60,13 @@ type TableView struct {
 	lastRow           int
 	lastAt            time.Time
 	reveal            int // row+1 to bring into view at the next Arrange
+	find              typeAhead
+	// SearchColumn is the column type-ahead find matches (-1: the first
+	// flexible column, usually the main text).
+	SearchColumn int
+	// DisableTypeAhead turns off type-ahead find, for views whose letters
+	// are commands (Mail's n / p / r).
+	DisableTypeAhead bool
 }
 
 // doubleClickInterval is the window for a second press on the same row to
@@ -71,7 +78,7 @@ func NewTableView(cols []TableColumn, rows int, cell func(row, col int) string, 
 	t := &TableView{
 		Columns: cols, RowCount: rows, RowHeight: 28, Selected: -1,
 		SortCol: -1, SortAsc: true, CellText: cell, OnSelect: on,
-		hovered: -1, hoverCol: -1, pressCol: -1, resizeCol: -1, lastRow: -1,
+		hovered: -1, hoverCol: -1, pressCol: -1, resizeCol: -1, lastRow: -1, SearchColumn: -1,
 	}
 	t.Init(t)
 	t.SetWantsFocus(true)
@@ -869,6 +876,13 @@ func (t *TableView) KeyPress(e widget.KeyEvent) bool {
 	if !t.Enabled() || t.RowCount <= 0 {
 		return false
 	}
+	if contextKey(e) {
+		if t.OnContext == nil {
+			return false
+		}
+		t.OnContext(t.Selected, contextPoint(t, t.RowBounds(t.Selected)))
+		return true
+	}
 	next := t.Selected
 	page := int(t.bodyH()/t.rowH()) - 1
 	if page < 1 {
@@ -912,6 +926,13 @@ func (t *TableView) KeyPress(e widget.KeyEvent) bool {
 	default:
 		return false
 	}
+	t.navigate(next, e.Mods)
+	return true
+}
+
+// navigate makes row next current the way keyboard navigation does: plain
+// moves select it, Shift extends and Ctrl only moves (SelectExtended).
+func (t *TableView) navigate(next int, mods platform.Modifiers) {
 	if next < 0 {
 		next = 0
 	}
@@ -920,7 +941,7 @@ func (t *TableView) KeyPress(e widget.KeyEvent) bool {
 	}
 	changed := false
 	if t.Mode != SelectSingle {
-		changed = t.sel.moveTo(t.Mode, next, e.Mods)
+		changed = t.sel.moveTo(t.Mode, next, mods)
 	}
 	if next != t.Selected || changed {
 		t.Selected = next
@@ -933,7 +954,32 @@ func (t *TableView) KeyPress(e widget.KeyEvent) bool {
 			t.selectionChanged()
 		}
 	}
-	return true
+}
+
+// searchColumn is the column type-ahead matches.
+func (t *TableView) searchColumn() int {
+	if t.SearchColumn >= 0 && t.SearchColumn < len(t.Columns) {
+		return t.SearchColumn
+	}
+	for i, c := range t.Columns {
+		if c.Width <= 0 {
+			return i
+		}
+	}
+	return 0
+}
+
+// TextInput is type-ahead find on the search column.
+func (t *TableView) TextInput(r rune) bool {
+	if !t.Enabled() || t.CellText == nil || len(t.Columns) == 0 || t.DisableTypeAhead {
+		return false
+	}
+	col := t.searchColumn()
+	i, searched := t.find.next(r, t.Selected, t.RowCount, func(row int) string { return t.CellText(row, col) })
+	if i >= 0 {
+		t.navigate(i, 0)
+	}
+	return searched
 }
 
 func (t *TableView) ensureVisible(i int) {

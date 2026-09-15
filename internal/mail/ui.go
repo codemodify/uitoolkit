@@ -241,6 +241,8 @@ func (s *session) build() widget.Component {
 	// Mail-client selection: Ctrl toggles, Shift extends, Ctrl+A selects the
 	// folder; bulk actions then act on every selected message.
 	s.table.Mode = widgets.SelectExtended
+	// Letters are commands here (n / p / r / f / c / m), not a search.
+	s.table.DisableTypeAhead = true
 	s.table.OnSelectionChange = s.tableSelection
 	s.table.CellBold = func(row, col int) bool {
 		if row < 0 || row >= len(s.rows) {
@@ -273,6 +275,8 @@ func (s *session) build() widget.Component {
 
 	s.tree = widgets.NewTreeView()
 	s.outboxTree = widgets.NewTreeView()
+	s.tree.DisableTypeAhead = true
+	s.outboxTree.DisableTypeAhead = true
 	s.rebuildTree()
 	s.wireFolderTree(s.tree)
 	s.wireFolderTree(s.outboxTree)
