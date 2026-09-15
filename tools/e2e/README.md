@@ -16,6 +16,7 @@ own Wayland socket `uitk-e2e-N`, own Xwayland (display number in `N/display`), o
     ./shot.sh N name             # screenshot -> N/shots/name.png  (then Read the png)
     python3 crop.py out.png x0 y0 x1 y1 a.png b.png ...   # stack same crop from several shots
     ./stop.sh N                  # stop app + compositor when done
+    ./theme-tour.sh N [PACK...]  # gallery in every pack on the GPU + the same pack on the CPU, in pairs
 
 - The first window is placed at the same spot every time if it is the only window.
 - Coordinates are logical px of the 1280x860 virtual screen (x2 if SCALE=2 in the png).
