@@ -119,31 +119,83 @@ func AccessibleTree(parent *a11y.Node, root Component) {
 	build(parent, root)
 }
 
+// describe is c's own node (no children), or nil when c is not
+// accessible.
+func describe(c Component) *a11y.Node {
+	acc, ok := c.(Accessible)
+	if !ok {
+		return nil
+	}
+	n := &a11y.Node{ID: c.ID(), Bounds: DeviceBounds(c)}
+	if c.WantsFocus() {
+		n.State |= a11y.StateFocusable
+	}
+	if h := c.Host(); h != nil && h.Focus() == c {
+		n.State |= a11y.StateFocused
+	}
+	if !c.Enabled() {
+		n.State |= a11y.StateDisabled
+	}
+	var named string
+	if l, ok := c.(accessibleLabel); ok {
+		named = l.AccessibleName()
+		n.Name, n.Description = named, l.AccessibleDescription()
+	}
+	acc.Describe(n)
+	if named != "" {
+		n.Name = named
+	}
+	return n
+}
+
+// maxFocusItems caps the view size whose items FocusNode lists to find
+// the focused one each frame.
+const maxFocusItems = 4096
+
+// FocusNode describes the object with the keyboard focus when c has it
+// (see FocusID), without building the rest of the tree; nil when it
+// cannot say cheaply. Adapters compare it frame to frame to announce what
+// changed (a check box ticked, a branch opened).
+func FocusNode(c Component) *a11y.Node {
+	if c == nil {
+		return nil
+	}
+	id := FocusID(c)
+	comp, item := SplitItemID(id)
+	for p := c; p != nil; p = p.Parent() {
+		if p.ID() != comp {
+			continue
+		}
+		if item < 0 {
+			return describe(p)
+		}
+		items, ok := p.(AccessibleItems)
+		if !ok {
+			return nil
+		}
+		if fi, ok := p.(interface{ AccessibleItemCount() int }); ok && fi.AccessibleItemCount() > maxFocusItems {
+			return nil
+		}
+		var hit *a11y.Node
+		for _, n := range items.AccessibleItems() {
+			n.Walk(func(x *a11y.Node) bool {
+				if x.ID == id {
+					hit = x
+				}
+				return hit == nil
+			})
+		}
+		return hit
+	}
+	return nil
+}
+
 func build(parent *a11y.Node, c Component) {
 	if c == nil || !c.Visible() {
 		return
 	}
 	target := parent
-	if acc, ok := c.(Accessible); ok {
-		n := &a11y.Node{ID: c.ID(), Bounds: DeviceBounds(c)}
-		if c.WantsFocus() {
-			n.State |= a11y.StateFocusable
-		}
-		if h := c.Host(); h != nil && h.Focus() == c {
-			n.State |= a11y.StateFocused
-		}
-		if !c.Enabled() {
-			n.State |= a11y.StateDisabled
-		}
-		var named string
-		if l, ok := c.(accessibleLabel); ok {
-			named = l.AccessibleName()
-			n.Name, n.Description = named, l.AccessibleDescription()
-		}
-		acc.Describe(n)
-		if named != "" {
-			n.Name = named
-		}
+	if n := describe(c); n != nil {
 		if items, ok := c.(AccessibleItems); ok {
 			for _, it := range items.AccessibleItems() {
 				if !c.Enabled() {

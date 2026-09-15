@@ -73,6 +73,9 @@ type atspiBridge struct {
 	stale atomic.Bool
 	focus dbus.ObjectPath
 	win   *Window
+	// seen is the focused object as last described, to announce what
+	// changes on it (a check box ticked by Space, a branch opened).
+	seen *a11y.Node
 }
 
 // startA11y looks for assistive technology in the background and turns
@@ -205,14 +208,65 @@ func (b *atspiBridge) sync() {
 	if f != nil {
 		path = b.pathOf(widget.FocusID(f))
 	}
-	if path == b.focus || path == "" {
+	if path == "" {
+		return
+	}
+	now := widget.FocusNode(f)
+	if path == b.focus {
+		b.announce(path, b.seen, now)
+		b.seen = now
 		return
 	}
 	if b.focus != "" {
 		b.emit(b.focus, "Object", "StateChanged", "focused", 0)
 	}
 	b.emit(path, "Object", "StateChanged", "focused", 1)
-	b.focus = path
+	b.focus, b.seen = path, now
+}
+
+// atspiWatched are the states whose changes a screen reader speaks.
+var atspiWatched = []struct {
+	s      a11y.State
+	detail string
+}{
+	{a11y.StateChecked, "checked"},
+	{a11y.StateMixed, "indeterminate"},
+	{a11y.StateSelected, "selected"},
+	{a11y.StateExpanded, "expanded"},
+	{a11y.StatePressed, "pressed"},
+	{a11y.StateDisabled, "sensitive"},
+}
+
+// announce emits what changed on the focused object between two frames.
+func (b *atspiBridge) announce(path dbus.ObjectPath, was, now *a11y.Node) {
+	if was == nil || now == nil || was.ID != now.ID {
+		return
+	}
+	for _, w := range atspiWatched {
+		if was.State.Has(w.s) == now.State.Has(w.s) {
+			continue
+		}
+		on := now.State.Has(w.s)
+		if w.s == a11y.StateDisabled {
+			on = !on // AT-SPI says "sensitive"
+		}
+		v := int32(0)
+		if on {
+			v = 1
+		}
+		b.emit(path, "Object", "StateChanged", w.detail, v)
+	}
+	if was.Name != now.Name {
+		b.emitProp(path, "accessible-name", now.Name)
+	}
+	if was.Value != now.Value || was.Now != now.Now {
+		b.emitProp(path, "accessible-value", now.Value)
+	}
+}
+
+func (b *atspiBridge) emitProp(path dbus.ObjectPath, prop, value string) {
+	_ = b.conn.Emit(path, atspiIface+"Event.Object.PropertyChange", prop, int32(0), int32(0),
+		dbus.MakeVariant(value), map[string]dbus.Variant{})
 }
 
 func (b *atspiBridge) emit(path dbus.ObjectPath, class, member, detail string, d1 int32) {
