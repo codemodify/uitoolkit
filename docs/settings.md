@@ -98,8 +98,10 @@ whatever `reduceMotion` says; Settings shows a note under its Animations
 switch while it does. Apps read the portal once at start (in the
 background, alongside the font index) and follow it live.
 
-Mode `0600`. Missing or invalid files yield `dark` + `round` +
-`classic` + `medium`. A file without `iconSize` migrates to medium.
+Mode `0600`. Missing or invalid files yield the default theme,
+`metal-ocean` (Metal, Ocean theme), in its own corners (`theme`), with
+`classic` icons at `medium` size. A file without `iconSize` migrates to
+medium.
 
 Compound v0.11–v0.12.1 theme ids migrate on load:
 
@@ -118,7 +120,8 @@ name. `"icons"` is always the chrome set (never inferred from
 **Embedded era packs** (Classic 95 through FlatLaf, each with a light
 and a night twin where that era had one) ship in the binary and are
 **not** auto-written to disk. `dark` / `light` are the Classic 95 twins
-so existing `look.json` files keep working.
+so existing `look.json` files keep working. Until the user picks one,
+apps show the default theme, Metal (Ocean) (`style.DefaultThemeName`).
 
 Settings lists them in one Built-in list (each row is the pack display
 name, e.g. Classic 95 Dark, Luna Night). User exports live under **User**.

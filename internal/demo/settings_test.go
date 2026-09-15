@@ -106,7 +106,7 @@ func TestSettingsAppAppliesAndPersists(t *testing.T) {
 
 func TestSettingsApplyNotifiesOtherApp(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	if err := style.SaveAppearance(style.DefaultAppearance()); err != nil {
+	if err := style.SaveAppearance(style.DefaultAppearance().WithPalette(style.ThemeDark)); err != nil {
 		t.Fatal(err)
 	}
 	settingsApp, sw := openSettings(t, 1024, 780)

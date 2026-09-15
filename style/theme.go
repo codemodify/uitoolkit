@@ -19,8 +19,11 @@ import (
 //go:embed themes/*/theme.json
 var starterFS embed.FS
 
-// DefaultThemeName is the embedded dark palette starter.
-const DefaultThemeName = "dark"
+// DefaultThemeName is the look apps show until the user picks one, and
+// what an unusable look.json theme falls back to: Swing's Metal in its
+// Ocean theme, Java's default since 2004. The embedded "dark" and "light"
+// packs stay the palette starters (see [StarterName]).
+const DefaultThemeName = "metal-ocean"
 
 // ThemeSource says whether a pack is compiled in or loaded from disk.
 type ThemeSource string

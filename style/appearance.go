@@ -74,11 +74,12 @@ type Appearance struct {
 	NativeDialogs bool
 }
 
-// DefaultAppearance is the embedded dark palette, round corners, classic icons.
+// DefaultAppearance is the default theme ([DefaultThemeName], a light
+// pack) in its own corners, with the classic icons.
 func DefaultAppearance() Appearance {
 	return Appearance{
 		Name:     DefaultThemeName,
-		Theme:    ThemeDark,
+		Theme:    ThemeLight,
 		Corners:  CornersTheme,
 		Icons:    IconSetClassic,
 		IconSize: IconSizeMedium,

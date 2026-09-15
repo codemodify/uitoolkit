@@ -10,7 +10,7 @@ import (
 
 func TestAppearanceLookThemeAndCorners(t *testing.T) {
 	dark := Appearance{Theme: ThemeDark, Corners: CornersRound, Icons: IconSetClassic}.Look()
-	if dark.Name() != "dark" || dark.Corners() != CornersRound || dark.Pack() != DefaultThemeName {
+	if dark.Name() != "dark" || dark.Corners() != CornersRound || dark.Pack() != "dark" {
 		t.Fatalf("dark %+v", LookAppearance(dark))
 	}
 	if dark.Metrics().Radius < 4 || dark.Metrics().RadiusSmall < 2 {
@@ -248,6 +248,22 @@ func TestLoadAppearanceMissingIsDefault(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	if LoadAppearance() != DefaultAppearance() {
 		t.Fatal(LoadAppearance())
+	}
+}
+
+// The default theme is a built-in pack, and the default appearance names
+// the pack's own family.
+func TestDefaultThemeIsABuiltinPack(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	p, ok := LoadTheme(DefaultThemeName)
+	if !ok || p.Source != ThemeSourceBuiltin {
+		t.Fatalf("default theme %q is not built in", DefaultThemeName)
+	}
+	if a := DefaultAppearance(); a.Theme != p.Palette {
+		t.Fatalf("default appearance family %s, the pack's %s", a.Theme, p.Palette)
+	}
+	if got := PreferredLook().(*Classic).Pack(); got != DefaultThemeName {
+		t.Fatalf("with no look.json the look is %q", got)
 	}
 }
 

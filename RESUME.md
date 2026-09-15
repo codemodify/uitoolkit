@@ -23,19 +23,18 @@ Before merging to `dev`:
   again in `306e12c`), and `4f1eab2` does not build on its own (`014fef6`
   completes it). Squash-merge, or filter both out of the history.
 
-## Decisions waiting for you
+## Decisions (answered 2026-09-15)
 
-1. **The default theme.** The stock looks are "Classic 95 Dark / Light" (a
-   Win95 homage). Breeze, Adwaita, Fusion and Fluent all have real engines
-   now, so any of them could be the default instead. Say which.
-2. **Follow the desktop by default?** Apps can follow the desktop's light or
-   dark mode and accent colour (Settings, look.json `followDesktop`). It is
-   off unless switched on. GTK 4, libadwaita and Qt 6 apps follow by default.
-3. **The Java looks are settled.** Metal (Steel, Ocean) and Nimbus were
-   rewritten clean-room from published facts and are merged. The old
-   OpenJDK-derived branch `engine/metal` (local only, worktree
-   `uitoolkit-eng-metal`, never pushed) can be deleted:
-   `git worktree remove ../uitoolkit-eng-metal && git branch -D engine/metal`.
+1. **The default theme is Metal (Ocean)** (`metal-ocean`, Swing's own
+   default since Java 5), replacing Classic 95 Dark. Apps show it until the
+   user picks a theme; `dark` and `light` remain the Classic 95 packs.
+2. **Apps do not follow the desktop by default.** Following its light or
+   dark mode and accent colour stays a Settings switch (look.json
+   `followDesktop`), off unless switched on.
+3. **The OpenJDK-derived `engine/metal` branch is deleted.** Metal (Steel,
+   Ocean) and Nimbus are the clean-room engines, from published facts.
+4. **The real-hardware pass may use the laptop**, through the nested-KWin
+   rig only.
 
 ## Real-hardware checklist (needs your laptop)
 
