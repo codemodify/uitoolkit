@@ -822,10 +822,13 @@ func (e win95Engine) DrawTreeRow(l *Classic, ctx *paintengine2d.Context, b paint
 	cy := snap((b.Min.Y + b.Max.Y) * 0.5)
 	// Dotted connector lines, one per ancestor level plus the elbow.
 	for d := 0; d <= depth; d++ {
+		if d < depth && !st.HasNextSibling(d) {
+			continue // that ancestor's branch has ended
+		}
 		gx := snap(b.Min.X + pad + float32(d)*indent + indent*0.5)
 		y1 := b.Max.Y
-		if d == depth {
-			y1 = cy
+		if d == depth && !st.HasNextSibling(depth) {
+			y1 = cy // the last child's elbow
 		}
 		for y := snap(b.Min.Y); y < y1; y += 2 {
 			ctx.DrawRect(paintengine2d.XYWH(gx, y, 1, 1), paintengine2d.Fill(c.shadow))

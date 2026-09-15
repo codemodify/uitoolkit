@@ -1948,7 +1948,12 @@ func (e motifEngine) DrawTreeRow(l *Classic, ctx *paintengine2d.Context, b paint
 	ctx.ClipRect(b)
 	for d := 0; d < depth; d++ {
 		gx := snap(b.Min.X + pad + float32(d)*indent + indent*0.5)
-		ctx.DrawRect(paintengine2d.XYWH(gx, b.Min.Y, u, b.Dy()), line)
+		switch {
+		case d == depth-1 && !st.HasNextSibling(depth):
+			ctx.DrawRect(paintengine2d.XYWH(gx, b.Min.Y, u, cy-b.Min.Y+u), line) // down to the last child's elbow
+		case d == depth-1 || st.HasNextSibling(d+1):
+			ctx.DrawRect(paintengine2d.XYWH(gx, b.Min.Y, u, b.Dy()), line)
+		}
 	}
 	if depth > 0 {
 		gx := snap(b.Min.X + pad + float32(depth-1)*indent + indent*0.5)
