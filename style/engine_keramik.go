@@ -770,7 +770,7 @@ func (keramikEngine) DrawPopupShadow(l *Classic, ctx *paintengine2d.Context, b p
 
 // ScrollBarStyle: 17px bars, both step buttons together at the far end.
 func (keramikEngine) ScrollBarStyle(l *Classic) ScrollBarStyle {
-	return ScrollBarStyle{Thickness: 17, Arrows: ArrowsTogetherEnd, MinThumb: 26}
+	return ScrollBarStyle{Thickness: 17, Arrows: ArrowsTripleEnd, MinThumb: 26}
 }
 
 // handle is the scroll handle: a rounded gel in the selection colour (the
@@ -884,11 +884,14 @@ func (e keramikEngine) DrawScrollBarParts(l *Classic, ctx *paintengine2d.Context
 			return math.Abs(float64(btn.Min.X-tr.Max.X)) < 1.5
 		}
 		openStart := !touches(p.Dec, true) && !touches(p.Inc, true)
-		openEnd := !touches(p.Dec, false) && !touches(p.Inc, false)
+		openEnd := !touches(p.Dec, false) && !touches(p.Inc, false) && !touches(p.DecEnd, false)
 		c.grooveBody(l, ctx, tr, vertical, openStart, openEnd)
 	}
 	if !p.Dec.Empty() {
 		c.stepButton(l, ctx, p.Dec, bar, vertical, false, st.Part(ScrollDec))
+	}
+	if !p.DecEnd.Empty() {
+		c.stepButton(l, ctx, p.DecEnd, bar, vertical, false, st.Part(ScrollDecEnd))
 	}
 	if !p.Inc.Empty() {
 		c.stepButton(l, ctx, p.Inc, bar, vertical, true, st.Part(ScrollInc))

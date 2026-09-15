@@ -169,7 +169,7 @@ func (d *scrollDrag) press(owner widget.Component, pos paintengine2d.Point, ax s
 			d.grab = pos.X - sp.Thumb.Min.X
 		}
 		return true
-	case style.ScrollDec, style.ScrollInc, style.ScrollPageDec, style.ScrollPageInc:
+	case style.ScrollDec, style.ScrollDecEnd, style.ScrollInc, style.ScrollPageDec, style.ScrollPageInc:
 		d.down = part
 		d.hot = part
 		d.step(ax, part, pos)
@@ -187,7 +187,7 @@ func (d *scrollDrag) step(ax scrollAxis, part style.ScrollPart, pos paintengine2
 	line, page := ax.steps()
 	next := off
 	switch part {
-	case style.ScrollDec:
+	case style.ScrollDec, style.ScrollDecEnd:
 		next = off - line
 	case style.ScrollInc:
 		next = off + line

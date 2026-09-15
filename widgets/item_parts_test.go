@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/codemodify/paintengine2d"
+	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
 )
@@ -117,5 +118,37 @@ func TestTreeRowsCarryTheirBranchChain(t *testing.T) {
 	// Without the chain, painters keep every line running.
 	if !style.StateNone.HasNextSibling(3) {
 		t.Error("a row without chain bits should keep its lines")
+	}
+}
+
+// KDE 3 scroll bars had three arrows: back at the start, back and forward
+// together at the end; either back button steps back.
+func TestTripleArrowScrollBar(t *testing.T) {
+	pack, ok := style.LoadTheme("plastik")
+	if !ok {
+		t.Fatal("no plastik pack")
+	}
+	lk := pack.Look()
+	sp := style.ScrollGeometry(lk, paintengine2d.XYWH(0, 0, 200, 300), true, 3000, 300, 1000, false)
+	if sp.Dec.Empty() || sp.DecEnd.Empty() || sp.Inc.Empty() {
+		t.Fatalf("parts %+v", sp)
+	}
+	if !(sp.Dec.Max.Y <= sp.Track.Min.Y && sp.Track.Max.Y <= sp.DecEnd.Min.Y && sp.DecEnd.Max.Y <= sp.Inc.Min.Y) {
+		t.Fatalf("order: dec %v, track %v, dec end %v, inc %v", sp.Dec, sp.Track, sp.DecEnd, sp.Inc)
+	}
+	if got := sp.HitTest(sp.DecEnd.Center(), true); got != style.ScrollDecEnd {
+		t.Fatalf("the second back button hit %v", got)
+	}
+	lv := NewListView(200, func(i int) string { return "row" }, nil)
+	lv.SetLook(lk)
+	lv.SetHost(&host{})
+	lv.Arrange(paintengine2d.XYWH(0, 0, 160, 200))
+	lv.ScrollTo(100)
+	before := lv.OffsetY
+	end := fromView(lv.vparts().DecEnd, lv.frame()).Center()
+	lv.MousePress(widget.MouseEvent{Pos: end, Button: platform.ButtonLeft})
+	lv.MouseRelease(widget.MouseEvent{Pos: end, Button: platform.ButtonLeft})
+	if lv.OffsetY >= before {
+		t.Fatalf("the second back button should scroll back: %v → %v", before, lv.OffsetY)
 	}
 }

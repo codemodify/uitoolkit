@@ -50,14 +50,13 @@ func TestKeramikStyleHintsAndScrollBars(t *testing.T) {
 		t.Fatal("Keramik: want OK before Cancel, left-aligned tabs and left-aligned form labels")
 	}
 	s := ScrollBarStyleOf(lk)
-	if s.Arrows != ArrowsTogetherEnd || s.Overlay || s.Thickness != 17 {
-		t.Fatalf("Keramik scroll bar %+v: want a 17px bar with both step buttons at the far end", s)
+	if s.Arrows != ArrowsTripleEnd || s.Overlay || s.Thickness != 17 {
+		t.Fatalf("Keramik scroll bar %+v: want a 17px bar with KDE 3's three step buttons", s)
 	}
-	// Both buttons sit at the bottom of a vertical bar: the groove reaches
-	// the top.
+	// A back button at the top, back and forward together at the bottom.
 	parts := ScrollGeometry(lk, paintengine2d.XYWH(0, 0, 200, 300), true, 900, 300, 0, false)
-	if parts.Track.Min.Y != 0 || parts.Dec.Min.Y < 200 || parts.Inc.Min.Y <= parts.Dec.Min.Y {
-		t.Fatalf("Keramik vertical bar parts %+v: want the groove from the top and the step buttons together at the bottom", parts)
+	if parts.Dec.Min.Y != 0 || parts.Track.Min.Y != parts.Dec.Max.Y || parts.DecEnd.Min.Y < 200 || parts.Inc.Min.Y <= parts.DecEnd.Min.Y {
+		t.Fatalf("Keramik vertical bar parts %+v: want back at the top, back and forward together at the bottom", parts)
 	}
 	// KDE 3.1 menus cast no shadow.
 	for _, k := range []PopupKind{PopupMenu, PopupTooltip, PopupDialog} {

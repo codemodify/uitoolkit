@@ -255,6 +255,9 @@ const (
 	ArrowsTogetherEnd
 	// ArrowsTogetherStart: both buttons at the top / left.
 	ArrowsTogetherStart
+	// ArrowsTripleEnd: a step-back button at the start and both buttons
+	// together at the end (KDE 3's Keramik and Plastik, BeOS option).
+	ArrowsTripleEnd
 )
 
 // ScrollBarStyle is an engine's scrollbar policy at 1x (the look scales it).
@@ -298,6 +301,7 @@ const (
 	ScrollPageDec              // track before the thumb
 	ScrollPageInc              // track after the thumb
 	ScrollThumbPart            // the thumb
+	ScrollDecEnd               // the second step-back button (ArrowsTripleEnd)
 )
 
 // ScrollParts is the laid-out geometry of one scrollbar.
@@ -307,6 +311,9 @@ type ScrollParts struct {
 	Thumb paintengine2d.Rect // empty when nothing to scroll
 	Dec   paintengine2d.Rect // step-back button (empty when none)
 	Inc   paintengine2d.Rect // step-forward button (empty when none)
+	// DecEnd is the second step-back button, beside Inc at the end
+	// (ArrowsTripleEnd); empty otherwise.
+	DecEnd paintengine2d.Rect
 }
 
 // HitTest maps a point to the part under it.
@@ -316,6 +323,8 @@ func (p ScrollParts) HitTest(pt paintengine2d.Point, vertical bool) ScrollPart {
 		return ScrollDec
 	case !p.Inc.Empty() && p.Inc.Contains(pt):
 		return ScrollInc
+	case !p.DecEnd.Empty() && p.DecEnd.Contains(pt):
+		return ScrollDecEnd
 	case !p.Thumb.Empty() && p.Thumb.Contains(pt):
 		return ScrollThumbPart
 	case !p.Track.Empty() && p.Track.Contains(pt) && !p.Thumb.Empty():
@@ -456,8 +465,12 @@ func ScrollGeometry(lk LookAndFeel, view paintengine2d.Rect, vertical bool, cont
 	if arrows == ArrowsNone {
 		a = 0
 	}
-	if arrows != ArrowsNone && along < a*2+8 {
-		a = (along - 8) / 2
+	buttons := float32(2)
+	if arrows == ArrowsTripleEnd {
+		buttons = 3
+	}
+	if arrows != ArrowsNone && along < a*buttons+8 {
+		a = (along - 8) / buttons
 		if a < 6 {
 			a = 0
 		}
@@ -483,6 +496,11 @@ func ScrollGeometry(lk LookAndFeel, view paintengine2d.Rect, vertical bool, cont
 			p.Dec = seg(0, a)
 			p.Inc = seg(a, a)
 			lo = 2 * a
+		case ArrowsTripleEnd:
+			p.Dec = seg(0, a)
+			p.DecEnd = seg(along-2*a, a)
+			p.Inc = seg(along-a, a)
+			lo, hi = a, along-2*a
 		}
 	}
 	if s.Overlay {

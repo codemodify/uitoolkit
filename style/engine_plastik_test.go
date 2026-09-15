@@ -73,8 +73,8 @@ func TestPlastikStyleHintsAndScrollBars(t *testing.T) {
 			t.Fatalf("%s: want OK before Cancel, left-aligned tabs and form labels right = %d", c.name, c.labelRight)
 		}
 		s := ScrollBarStyleOf(lk)
-		if s.Arrows != ArrowsEnds || s.Overlay || s.Thickness != 16 {
-			t.Fatalf("%s scroll bar %+v: want a 16px bar with a step button at each end", c.name, s)
+		if s.Arrows != ArrowsTripleEnd || s.Overlay || s.Thickness != 16 {
+			t.Fatalf("%s scroll bar %+v: want a 16px bar with KDE 3's three step buttons", c.name, s)
 		}
 		if o := lk.TabOverlap(); o != 1 {
 			t.Fatalf("%s: neighbouring tabs share their contour, got overlap %v", c.name, o)
