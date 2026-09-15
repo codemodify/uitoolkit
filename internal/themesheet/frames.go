@@ -90,11 +90,74 @@ func RenderFrames(look style.LookAndFeel, scale float32, title string) *painteng
 	return img
 }
 
+// OverviewCases are the states the frames overview shows for every pack.
+var OverviewCases = []FrameCase{FrameCases[0], FrameCases[1], FrameCases[2], FrameCases[3]}
+
+// overview window size at 1x, and the name column's width.
+const (
+	overviewW    = 270
+	overviewH    = 76
+	overviewName = 150
+)
+
+// RenderFramesOverview paints the frames of several packs, one row each:
+// the pack's name, then its frame in OverviewCases (active, backdrop,
+// maximized, the close button hot), at display scale scale.
+func RenderFramesOverview(packs []style.ThemePack, scale float32) *paintengine2d.Image {
+	if scale <= 0 {
+		scale = 1
+	}
+	rowH := float32(overviewH + 10)
+	w := float32(overviewName + len(OverviewCases)*(overviewW+10) + 10)
+	h := float32(34) + float32(len(packs))*rowH
+	img := paintengine2d.NewImage(int(w*scale+0.5), int(h*scale+0.5))
+	ctx := paintengine2d.NewContext(img)
+	ctx.Clear(paintengine2d.RGB(0.4, 0.43, 0.48))
+	var head style.LookAndFeel = style.WithScale(style.LightLook(), scale)
+	f := head.BoldFont()
+	u := func(v float32) float32 { return v * scale }
+	for i, fc := range OverviewCases {
+		f.Draw(ctx, fc.Name, paintengine2d.Pt(u(float32(overviewName+i*(overviewW+10))), u(10)), paintengine2d.RGB(1, 1, 1))
+	}
+	for r, p := range packs {
+		y := 34 + float32(r)*rowH
+		name := p.Name
+		if FrameKind(p.Look()) == "adapted" {
+			name += " (adapted)"
+		}
+		f.Draw(ctx, name, paintengine2d.Pt(u(10), u(y+overviewH*0.4)), paintengine2d.RGB(1, 1, 1))
+		a := app.New(app.Options{Look: p.Look(), Headless: true, Scale: scale})
+		for i, fc := range OverviewCases {
+			if shot := frameShot(a, fc, scale, overviewW, overviewH); shot != nil {
+				ctx.DrawImage(shot, u(float32(overviewName+i*(overviewW+10))), u(y))
+			}
+		}
+	}
+	return img
+}
+
+// FrameKind says how lk paints window frames: "native" (its engine's own
+// DecorationEngine), "plain" (the base look's hairline frame) or "adapted"
+// (its in-app window frame).
+func FrameKind(lk style.LookAndFeel) string {
+	switch {
+	case style.NativeDecoration(lk):
+		return "native"
+	case style.LookTokens(lk).Engine == "" || style.LookTokens(lk).Engine == "base":
+		return "plain"
+	}
+	return "adapted"
+}
+
 // FrameShot paints one frames-sheet window with a's look: frameW×frameH at
 // 1x, scaled.
 func FrameShot(a *app.Application, fc FrameCase, scale float32) *paintengine2d.Image {
+	return frameShot(a, fc, scale, frameW, frameH)
+}
+
+func frameShot(a *app.Application, fc FrameCase, scale float32, fw, fh int) *paintengine2d.Image {
 	w, err := a.NewWindow(platform.WindowOptions{
-		Title: "Window", Width: int(frameW*scale + 0.5), Height: int(frameH*scale + 0.5),
+		Title: "Window", Width: int(float32(fw)*scale + 0.5), Height: int(float32(fh)*scale + 0.5),
 		Headless: true, Decorations: platform.DecorationsClient,
 	})
 	if err != nil {

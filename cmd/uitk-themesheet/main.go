@@ -8,6 +8,7 @@
 //	go run ./cmd/uitk-themesheet -theme win95 -o /tmp/sheets
 //	go run ./cmd/uitk-themesheet -all -scale 2 -o /tmp/sheets
 //	go run ./cmd/uitk-themesheet -frames -all -o /tmp/frames
+//	go run ./cmd/uitk-themesheet -frames-overview -all -o /tmp/frames
 package main
 
 import (
@@ -30,6 +31,7 @@ func main() {
 	scale := flag.Float64("scale", 1, "display scale (1, 1.5, 2)")
 	list := flag.Bool("list", false, "print every built-in pack (id, year, lineage, engine, label, summary) tab-separated and exit")
 	frames := flag.Bool("frames", false, "render the window-frames sheet (<pack>-frames.png) instead of the controls sheet")
+	overview := flag.Bool("frames-overview", false, "render the frames of the packs asked for (-theme, -all) as overview pages, 20 packs a page (frames-overview-N.png)")
 	flag.Parse()
 	if *list {
 		for _, p := range style.ListBuiltinThemes() {
@@ -48,6 +50,27 @@ func main() {
 	if err := os.MkdirAll(*out, 0o755); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
+	}
+	if *overview {
+		var packs []style.ThemePack
+		for _, id := range themes {
+			pack, ok := style.LoadTheme(id)
+			if !ok {
+				fmt.Fprintf(os.Stderr, "uitk-themesheet: unknown theme %q\n", id)
+				os.Exit(1)
+			}
+			packs = append(packs, pack)
+		}
+		for page := 0; page*20 < len(packs); page++ {
+			img := themesheet.RenderFramesOverview(packs[page*20:min((page+1)*20, len(packs))], float32(*scale))
+			path := filepath.Join(*out, fmt.Sprintf("frames-overview-%d.png", page+1))
+			if err := img.WritePNGFile(path); err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
+			fmt.Println(path)
+		}
+		return
 	}
 	for _, id := range themes {
 		pack, ok := style.LoadTheme(id)
@@ -70,10 +93,7 @@ func main() {
 		var img *paintengine2d.Image
 		name := pack.Name
 		if *frames {
-			frame := "adapted in-app frame"
-			if style.NativeDecoration(pack.Look()) {
-				frame = "native frame"
-			}
+			frame := map[string]string{"native": "native frame", "plain": "plain frame", "adapted": "adapted in-app frame"}[themesheet.FrameKind(pack.Look())]
 			img = themesheet.RenderFrames(pack.Look(), float32(*scale), title+"  ·  "+frame)
 			name += "-frames"
 		} else {
