@@ -29,6 +29,8 @@ func Gallery(a *app.Application, win *app.Window, light bool) widget.Component {
 		status.Set(0, fmt.Sprintf("Columns  %d", int(v)))
 	})
 	columns.Tip = "Layout columns (spinner)"
+	columns.SetAccessibleName("Columns")
+	slider.SetAccessibleName("Volume")
 	engine := widgets.NewComboBox([]string{
 		"paintengine2d", "Software raster", "Offscreen pixmap",
 	}, 0, func(i int) {

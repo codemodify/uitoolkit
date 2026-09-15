@@ -224,6 +224,8 @@ func (s *settingsState) themesPage(status *widgets.StatusBar, stage func(style.A
 	// The staged theme may sit below the fold (Aqua is row 30): bring it
 	// into view; a row the user just clicked is already there.
 	list.EnsureVisible(sel)
+	filters.SetAccessibleName("Decade")
+	list.SetAccessibleName("Themes")
 	browser := widgets.NewColumn(widgets.NewLabel("Themes"), filters, list).WithGap(6)
 	browser.AddFlex(list, 1)
 
@@ -315,6 +317,9 @@ func (s *settingsState) themesPage(status *widgets.StatusBar, stage func(style.A
 		next.ReduceMotion = !on
 		stage(next)
 	})
+	corners.SetAccessibleName("Corners")
+	sizes.SetAccessibleName("Icon size")
+	icons.SetAccessibleName("Icons")
 	// Two rows of label / control pairs, so no label is cut short.
 	options := widgets.NewGrid()
 	options.Cols = []widgets.Track{widgets.Auto(), widgets.Flex(1), widgets.Auto(), widgets.Flex(1)}
@@ -433,14 +438,17 @@ func PreviewApp(say func(string)) widget.Component {
 		widgets.NewCheckbox("Unchecked", false, nil),
 		widgets.NewRadioGroup([]string{"Radio one", "Radio two"}, 0, nil),
 	).WithGap(8)
+	combo := widgets.NewComboBox([]string{"Combo box", "Second choice", "Third choice"}, 0, nil)
+	combo.SetAccessibleName("Choice")
+	spin := widgets.NewNumberField(0, 99, 3, 1, nil)
+	spin.SetAccessibleName("Count")
+	slider := widgets.NewSlider(0, 100, 40, nil)
+	slider.SetAccessibleName("Level")
 	right := widgets.NewColumn(
 		widgets.NewTextField("Ada Lovelace", "Name", nil),
-		widgets.NewRow(
-			widgets.NewComboBox([]string{"Combo box", "Second choice", "Third choice"}, 0, nil),
-			widgets.NewNumberField(0, 99, 3, 1, nil),
-		).WithGap(8),
+		widgets.NewRow(combo, spin).WithGap(8),
 		widgets.NewSwitch("Switch", true, nil),
-		widgets.NewSlider(0, 100, 40, nil),
+		slider,
 		progress,
 	).WithGap(8)
 	controls := widgets.NewRow(left, right).WithGap(16).WithPad(8)
