@@ -53,6 +53,9 @@ var eraEngineFonts = map[string]FontPrefs{
 	"bluecurve": {UI: []string{"Luxi Sans", "Bitstream Vera Sans", "DejaVu Sans", "Nimbus Sans"}, Mono: []string{"Luxi Mono", "Bitstream Vera Sans Mono", "DejaVu Sans Mono"}},
 	// GNOME 2 and the Qt look after it: Bitstream Vera, then DejaVu.
 	"clearlooks": {UI: vera, Mono: veraMono},
+	// KDE 3 and Qt 4's Plastique: "Sans Serif", Bitstream Vera then DejaVu.
+	"keramik": {UI: vera, Mono: veraMono},
+	"plastik": {UI: vera, Mono: veraMono},
 	// Windows Vista and 7: Segoe UI 9pt.
 	"aero": {UI: segoe, Mono: consolas},
 	// KDE 4: DejaVu Sans, later the Oxygen font.
