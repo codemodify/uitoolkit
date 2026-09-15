@@ -63,6 +63,9 @@ type Application struct {
 	lookHooks    []*func()
 	// a11y is the accessibility bridge while assistive technology runs.
 	a11y a11yBridge
+	// lookNotify wakes the loop when look.json's directory changes; with
+	// it the loop does not poll the file while idle.
+	lookNotify *lookNotify
 }
 
 // a11yBridge is a platform's accessibility adapter; sync runs on the UI
@@ -124,6 +127,17 @@ func New(opts Options) *Application {
 	a.look = lookAtScale(a.base, opts.Scale)
 	if watch {
 		a.lookWatch = newLookFileStamp()
+		if !opts.Headless {
+			a.lookNotify = newLookNotify(func() {
+				a.Post(func() {
+					// A directory that appeared (a first save) is watched
+					// before its files are read.
+					a.watchLookFiles()
+					a.pollLookFile()
+				})
+			})
+			a.watchLookFiles()
+		}
 	}
 	a.startA11y()
 	return a
@@ -474,7 +488,7 @@ func (a *Application) waitTimeout(now, nextBlink time.Time) time.Duration {
 			}
 		}
 	}
-	if a.watchLook {
+	if a.watchLook && a.lookNotify == nil {
 		t := now.Add(lookWatchInterval)
 		if deadline.IsZero() || t.Before(deadline) {
 			deadline = t
