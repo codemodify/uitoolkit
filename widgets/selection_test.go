@@ -82,3 +82,18 @@ func TestListSingleSelectionIgnoresModifiers(t *testing.T) {
 		t.Fatal("a single-selection list swallowed Ctrl+A")
 	}
 }
+
+// Card lists (Mail's card view) select like tables.
+func TestCardListExtendedSelection(t *testing.T) {
+	cl := NewCardList(10, func(i int) CardContent { return CardContent{Title: fmt.Sprint(i)} }, nil)
+	cl.Mode = SelectExtended
+	cl.SetHost(&fakeWindow{look: style.DarkLook()})
+	cl.Arrange(paintengine2d.XYWH(0, 0, 300, 600))
+	at := func(i int) paintengine2d.Point { return paintengine2d.Pt(40, (float32(i)+0.5)*cl.rowH()-cl.OffsetY) }
+	cl.MousePress(widget.MouseEvent{Pos: at(1)})
+	cl.MousePress(widget.MouseEvent{Pos: at(4), Mods: platform.ModCtrl})
+	cl.MousePress(widget.MouseEvent{Pos: at(6), Mods: platform.ModShift})
+	if got := cl.SelectedRows(); !slices.Equal(got, []int{4, 5, 6}) {
+		t.Fatalf("cards selected %v, want [4 5 6]", got)
+	}
+}
