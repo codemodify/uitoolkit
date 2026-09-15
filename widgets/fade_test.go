@@ -157,3 +157,41 @@ func TestToolHoverFadesOut(t *testing.T) {
 		t.Errorf("after the fade the box should be gone: %d, idle %d", got, idle)
 	}
 }
+
+// Aqua's default button throbs in an active window: it swells toward its
+// hover look and back over the look's period. Not in an inactive window,
+// not under the pointer, not in Win95.
+func TestDefaultButtonPulses(t *testing.T) {
+	pack, _ := style.LoadTheme("aqua")
+	h := &timerHost{look: pack.Look(), now: time.Unix(6000, 0)}
+	defer func(old func() time.Time) { fadeNow = old }(fadeNow)
+	fadeNow = func() time.Time { return h.now }
+	b := NewButton("OK", nil)
+	b.Primary = true
+	b.SetHost(h)
+	b.Arrange(paintengine2d.XYWH(0, 0, 100, 30))
+	st := b.PaintState()
+	seen := map[int]bool{}
+	for i := 0; i < 8; i++ {
+		p, ok := b.pulse(st)
+		if !ok || p < 0 || p > 1 {
+			t.Fatalf("pulse %v ok=%v", p, ok)
+		}
+		seen[int(p*10)] = true
+		h.advance(200 * time.Millisecond)
+	}
+	if len(seen) < 3 {
+		t.Fatalf("the pulse should sweep over its period, saw %v", seen)
+	}
+	if _, ok := b.pulse(st | style.StateBackdrop); ok {
+		t.Error("an inactive window's default button is still")
+	}
+	if _, ok := b.pulse(st | style.StateHovered); ok {
+		t.Error("under the pointer the default button shows its hover look")
+	}
+	win95, _ := style.LoadTheme("win95")
+	b.SetLook(win95.Look())
+	if _, ok := b.pulse(st); ok {
+		t.Error("Win95's default button does not pulse")
+	}
+}
