@@ -61,7 +61,7 @@ func (s *Switch) Paint(ctx *paintengine2d.Context) {
 		st |= style.StateChecked
 	}
 	lk, r := s.Look(), s.LocalBounds()
-	s.fade.paint(s, ctx, st, func(ctx *paintengine2d.Context, st style.ControlState) { lk.DrawSwitch(ctx, r, st, s.On, s.Text) })
+	s.fade.paint(s, ctx, r, st, func(ctx *paintengine2d.Context, st style.ControlState) { lk.DrawSwitch(ctx, r, st, s.On, s.Text) })
 }
 
 func (s *Switch) MouseEnter() { s.hovered = true; s.Base.MouseEnter() }
