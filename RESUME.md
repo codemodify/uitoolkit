@@ -1,27 +1,26 @@
 # Resume here — end-to-end fixes and theme engines, 2026-09-15
 
-Everything is on feature branches, pushed to GitHub. `dev` is untouched in both
-repos.
+**Merged to `dev` and pushed on 2026-09-15**, in both repos, together with
+the 2026-09-13 review merge that had been waiting on local `dev`:
 
-| repo | branch | worktree |
+| repo | merge on `dev` | worktree |
 | --- | --- | --- |
-| uitoolkit | `feat/theme-engines` (includes `feat/e2e-era-themes`) | `~/go/src/github.com/codemodify/uitoolkit-core` |
-| paintengine2d | `feat/e2e-era-themes` | `~/go/src/github.com/codemodify/paintengine2d` |
+| uitoolkit | `c3083df` (`feat/theme-engines`) | `~/go/src/github.com/codemodify/uitoolkit-core` |
+| paintengine2d | `4ed8330` (`feat/e2e-era-themes`) | `~/go/src/github.com/codemodify/paintengine2d` |
 
-The two branches go together: uitoolkit uses paintengine2d's new APIs
-(`PathCache`, `BackdropBlur`, `DrawCrossFade`, `ImagePattern`, through the
-relative `replace ../paintengine2d` in `go.mod`), so check out both before
-building, and merge paintengine2d first. `~/go/src/github.com/codemodify/uitoolkit`
-itself sits on `feat/e2e-era-themes`; the theme work is in the `uitoolkit-core`
-worktree.
+uitoolkit uses paintengine2d's new APIs (`PathCache`, `BackdropBlur`,
+`DrawCrossFade`, `ImagePattern`) through the relative
+`replace ../paintengine2d` in `go.mod`, so keep both checked out side by side
+until paintengine2d v0.11.0 is tagged.
 
-Before merging to `dev`:
-- Your local `dev` holds the 2026-09-13 review merge, which was never pushed
-  (9 commits in uitoolkit, 5 in paintengine2d). Both feature branches are
-  built on it, so a pull request against `origin/dev` includes those commits.
-- Commit `6194388` accidentally added a 9 MB `uitk-themesheet` binary (removed
-  again in `306e12c`), and `4f1eab2` does not build on its own (`014fef6`
-  completes it). Squash-merge, or filter both out of the history.
+Both repos are now under **The Free License** (the license of
+simple-http-fileserver), replacing MIT.
+
+Before the merge, the feature branch's history was cleaned of stray
+binaries: a 25 MB `gallery` build that was still tracked, and the 9 MB
+`uitk-themesheet` of `6194388`. Every commit and merge was kept; only those
+files are gone. The branch as it was is kept locally as
+`backup/theme-engines-pre-clean`.
 
 ## Decisions (answered 2026-09-15)
 
