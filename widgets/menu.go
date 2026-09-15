@@ -1007,7 +1007,7 @@ func (p *PopupMenu) MouseWheel(e widget.MouseEvent) bool {
 		return false
 	}
 	before := p.OffsetY
-	p.OffsetY += wheelDelta(e.Scroll.Y, p.itemH())
+	p.OffsetY += wheelDelta(e.Scroll.Y, p.itemH(), e.Precise)
 	p.clamp()
 	if p.OffsetY == before {
 		return false

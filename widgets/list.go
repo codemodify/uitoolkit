@@ -323,7 +323,7 @@ func (l *ListView) MouseWheel(e widget.MouseEvent) bool {
 		return false
 	}
 	before := l.OffsetY
-	l.OffsetY += wheelDelta(e.Scroll.Y, l.rowH())
+	l.OffsetY += wheelDelta(e.Scroll.Y, l.rowH(), e.Precise)
 	l.clamp()
 	if l.OffsetY == before {
 		return false

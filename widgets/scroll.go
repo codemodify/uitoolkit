@@ -234,7 +234,7 @@ func (s *ScrollView) MouseWheel(e widget.MouseEvent) bool {
 		return false
 	}
 	before := s.OffsetY
-	s.ScrollBy(wheelDelta(dy, s.lineStep()))
+	s.ScrollBy(wheelDelta(dy, s.lineStep(), e.Precise))
 	return s.OffsetY != before
 }
 
