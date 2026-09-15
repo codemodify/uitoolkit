@@ -60,7 +60,7 @@ func (r *RadioButton) Paint(ctx *paintengine2d.Context) {
 		st |= style.StateHovered
 	}
 	lk, b := r.Look(), r.LocalBounds()
-	r.fade.paint(r, ctx, st, func(ctx *paintengine2d.Context, st style.ControlState) { lk.DrawRadio(ctx, b, st, r.Selected, r.Text) })
+	r.fade.paint(r, ctx, b, st, func(ctx *paintengine2d.Context, st style.ControlState) { lk.DrawRadio(ctx, b, st, r.Selected, r.Text) })
 }
 
 func (r *RadioButton) MouseEnter() { r.hovered = true; r.Base.MouseEnter() }
