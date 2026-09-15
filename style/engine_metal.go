@@ -1951,7 +1951,7 @@ func (e metalEngine) DrawTableCell(l *Classic, ctx *paintengine2d.Context, b pai
 	g.add(sb.Min.X, sb.Max.Y-u, sb.Dx()-u, u)
 	g.fill(ctx, c.grid)
 	f := l.faceOrBody(face)
-	pad := tableCellPad(b.Dx(), f.Advance(label))
+	pad := l.tableCellPad(b.Dx(), f.Advance(label))
 	avail := b.Dx() - pad*2
 	if avail < 4 {
 		avail = 4

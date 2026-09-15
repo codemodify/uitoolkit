@@ -2232,7 +2232,7 @@ func winMenuText(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, c
 // winCellText draws a table cell's label with the stock padding rules.
 func winCellText(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, label string, align Align, face *Font, fg paintengine2d.Color) {
 	f := l.faceOrBody(face)
-	pad := tableCellPad(b.Dx(), f.Advance(label))
+	pad := l.tableCellPad(b.Dx(), f.Advance(label))
 	avail := b.Dx() - pad*2
 	if avail < 4 {
 		avail = 4

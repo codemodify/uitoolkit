@@ -1439,7 +1439,7 @@ func (e flatlafEngine) DrawTableCell(l *Classic, ctx *paintengine2d.Context, b p
 	cell := flatSnap(b)
 	fg := c.row(ctx, cell, st)
 	f := l.faceOrBody(face)
-	pad := tableCellPad(b.Dx(), f.Advance(label))
+	pad := l.tableCellPad(b.Dx(), f.Advance(label))
 	avail := max(b.Dx()-pad*2, 4)
 	label = f.Fit(label, avail)
 	tw := f.Advance(label)
