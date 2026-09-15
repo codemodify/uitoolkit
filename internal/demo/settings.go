@@ -123,6 +123,7 @@ func buildSettingsState(s *settingsState) widget.Component {
 	})
 	nav.Selected = s.page
 	nav.RowHeight = 32
+	nav.Sidebar = true
 	side := widgets.NewColumn(
 		widgets.NewTitle("Settings"),
 		widgets.NewLabel("v"+uitoolkit.Version),

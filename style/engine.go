@@ -90,6 +90,10 @@ type Engine interface {
 	// PM_TabBarTabOverlap): a border's width makes two tabs share one
 	// border line instead of drawing two side by side. Zero for most looks.
 	TabOverlap(l *Classic) float32
+	// ViewBackground is the colour an item view (list, tree, table) fills
+	// the area under its rows with, for the view's state st: the field
+	// colour, or a sidebar's pane (StateSidebar) in looks that have one.
+	ViewBackground(l *Classic, st ControlState) paintengine2d.Color
 	// DrawTabPane paints the page under a tab bar (TabView).
 	DrawTabPane(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect)
 	// WindowCloseRect is where DrawWindowFrame put the close button for a
@@ -820,6 +824,25 @@ type TabOverlapLook interface {
 
 // TabOverlap implements [TabOverlapLook].
 func (l *Classic) TabOverlap() float32 { return l.eng().TabOverlap(l) }
+
+// ViewBackgroundLook says what an item view's rows sit on.
+type ViewBackgroundLook interface {
+	ViewBackground(st ControlState) paintengine2d.Color
+}
+
+// ViewBackground implements [ViewBackgroundLook].
+func (l *Classic) ViewBackground(st ControlState) paintengine2d.Color {
+	return l.eng().ViewBackground(l, st)
+}
+
+// ViewBackgroundOf is the colour any look's item view in state st fills
+// its rows' area with (the field colour when the look does not say).
+func ViewBackgroundOf(lk LookAndFeel, st ControlState) paintengine2d.Color {
+	if v, ok := lk.(ViewBackgroundLook); ok {
+		return v.ViewBackground(st)
+	}
+	return lk.Palette().Field
+}
 
 // TabOverlapOf is how far any look's neighbouring tabs overlap (zero when
 // the look does not say), already at display scale.

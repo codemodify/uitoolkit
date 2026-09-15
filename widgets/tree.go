@@ -49,6 +49,9 @@ type TreeView struct {
 	// Frameless drops the look's view frame (a tree that already sits in a
 	// framed pane).
 	Frameless bool
+	// Sidebar paints the tree as a sidebar (a mail app's folders), where
+	// the look has a sidebar style (see ListView.Sidebar).
+	Sidebar   bool
 	hover     *TreeNode
 	hoverExp  bool // the pointer is on the hovered row's expander
 	lastClick *TreeNode
@@ -264,12 +267,16 @@ func (t *TreeView) EnsureVisible(n *TreeNode) {
 func (t *TreeView) Paint(ctx *paintengine2d.Context) {
 	t.clamp()
 	lk := t.Look()
-	if beginViewFrame(ctx, lk, t.LocalBounds(), t.frame(), t.State()) {
+	vst := t.State()
+	if t.Sidebar {
+		vst |= style.StateSidebar
+	}
+	if beginViewFrame(ctx, lk, t.LocalBounds(), t.frame(), vst) {
 		defer ctx.Restore()
 	}
 	b := t.inner()
 	rw := t.rowsW()
-	ctx.DrawRect(b, paintengine2d.Fill(lk.Palette().Field))
+	ctx.DrawRect(b, paintengine2d.Fill(style.ViewBackgroundOf(lk, vst)))
 	rows := t.flatten()
 	rh := t.rowH()
 	lo := int(t.OffsetY / rh)
@@ -333,7 +340,8 @@ func (t *TreeView) rowSig(row treeRow) uint64 {
 		// keep its cached row.
 		extra ^= bits32(c.R)*31 ^ bits32(c.G)*131 ^ bits32(c.B)*313 ^ bits32(c.A)*1013
 	}
-	return visualSig(n == t.Selected, n == t.hover, extra^uint64(t.rowState(n))<<32, n.Label)
+	st := uint64(t.rowState(n))
+	return visualSig(n == t.Selected, n == t.hover, extra^st<<32^st>>32, n.Label)
 }
 
 // rowState is n's item state for the look, with its branch-line chain.
@@ -345,6 +353,9 @@ func (t *TreeView) rowState(n *TreeNode) style.ControlState {
 	}
 	if n == t.hover && t.hoverExp {
 		st |= style.StateExpanderHot
+	}
+	if t.Sidebar {
+		st |= style.StateSidebar
 	}
 	return st
 }
