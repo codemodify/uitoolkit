@@ -2,6 +2,7 @@ package uitoolkit
 
 import (
 	"io"
+	"time"
 
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/app"
@@ -116,6 +117,16 @@ func NewForm() *widgets.Form { return widgets.NewForm() }
 func Auto() widgets.Track               { return widgets.Auto() }
 func Px(v float32) widgets.Track        { return widgets.Px(v) }
 func Flex(weight float32) widgets.Track { return widgets.Flex(weight) }
+
+// NewCalendar is a month view (QCalendarWidget).
+func NewCalendar(selected time.Time, on func(time.Time)) *widgets.Calendar {
+	return widgets.NewCalendar(selected, on)
+}
+
+// NewDateField is a date entry with a drop-down calendar (QDateEdit).
+func NewDateField(value time.Time, on func(time.Time)) *widgets.DateField {
+	return widgets.NewDateField(value, on)
+}
 
 // NewPicture shows a raster image.
 func NewPicture(img *paintengine2d.Image) *widgets.Picture { return widgets.NewPicture(img) }
