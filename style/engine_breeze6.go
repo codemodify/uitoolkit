@@ -819,7 +819,7 @@ func breeze6Pack(name, label, summary string, fam ThemeName, s breezeScheme) The
 func breeze6Packs() []ThemePack {
 	return []ThemePack{
 		breeze6Pack("breeze6", "Breeze (Plasma 6)",
-			"KDE Plasma 6's Breeze: 5px frames in a 20% outline, frameless views, rounded outlined selections, a soft focus band round the focused control.",
+			"KDE Plasma 6's Breeze: 5px frames in a 20% outline, frameless views, rounded outlined selections, a soft focus band around the focused control.",
 			ThemeLight, breeze6Light),
 		breeze6Pack("breeze6-night", "Breeze Dark (Plasma 6)",
 			"Plasma 6.4's darker Breeze Dark: #202326 windows, #141618 views and #292c30 buttons in the Plasma 6 shapes.",
