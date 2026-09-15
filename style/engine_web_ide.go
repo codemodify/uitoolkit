@@ -340,7 +340,7 @@ func vscodeSpecs() []webSpec {
 	}
 	return []webSpec{
 		{name: "vscode", label: "VS Code Light 2026", era: "VS Code", lineage: "VS Code", year: 2026, c: light, p: p, m: m,
-			summary: "VS Code's Light 2026: #fafafd chrome round a white editor, 4px buttons and inputs, 1px focus borders inside, a black line atop the active tab."},
+			summary: "VS Code's Light 2026: #fafafd chrome around a white editor, 4px buttons and inputs, 1px focus borders inside, a black line atop the active tab."},
 		{name: "vscode-night", label: "VS Code Dark 2026", era: "VS Code", lineage: "VS Code", year: 2026, dark: true, c: dark, p: p, m: m,
 			summary: "VS Code's Dark 2026: a #121314 editor in #191a1b chrome, #297aa0 buttons, the #3994bc line atop the active tab, white-alpha selections."},
 	}
