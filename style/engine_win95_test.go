@@ -3,7 +3,8 @@ package style
 import "testing"
 
 func TestWin95PacksRegisteredInYearOrder(t *testing.T) {
-	want := []string{"win-hotdog", "win95", "win-highcontrast", "win95-dark", "win98", "win2000"}
+	// Hot Dog Stand (1992) moved to the win31 engine it was a scheme of.
+	want := []string{"win95", "win-highcontrast", "win95-dark", "win98", "win2000"}
 	pos := map[string]int{}
 	for i, n := range AllBuiltinThemeNames() {
 		pos[n] = i
@@ -20,7 +21,7 @@ func TestWin95PacksRegisteredInYearOrder(t *testing.T) {
 			t.Fatalf("%s look paints with %q", n, lk.Engine().ID())
 		}
 	}
-	if pos["win-hotdog"] > pos["win95"] || pos["win95"] > pos["win98"] || pos["win98"] > pos["win2000"] {
+	if pos["win95"] > pos["win98"] || pos["win98"] > pos["win2000"] {
 		t.Fatalf("packs not ordered by year: %v", pos)
 	}
 }
