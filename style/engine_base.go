@@ -73,6 +73,9 @@ func (BaseEngine) DrawScrollBarParts(l *Classic, ctx *paintengine2d.Context, p S
 	if !p.Dec.Empty() {
 		l.baseScrollArrow(ctx, p.Dec, vertical, false, st.Part(ScrollDec))
 	}
+	if !p.DecEnd.Empty() {
+		l.baseScrollArrow(ctx, p.DecEnd, vertical, false, st.Part(ScrollDecEnd))
+	}
 	if !p.Inc.Empty() {
 		l.baseScrollArrow(ctx, p.Inc, vertical, true, st.Part(ScrollInc))
 	}
