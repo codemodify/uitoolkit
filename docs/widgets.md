@@ -98,6 +98,7 @@ names) is in [compare.md](compare.md).
 | Stack | `Stack` | `QStackedWidget` / `StackLayout` | `GtkStack` | `Panel` (z) ≈ | `container.Stack` | z-order ≈ | `Grid` / `Canvas` ≈ | layers ≈ | `ZStack` | [thumb](screenshots/compare/layout.png) |
 | Pad | `Pad` | layout margins | margins | `Padding` / `Decorator` | `container.Padded` | `Padding` | `Padding` | constraints ≈ | `padding` | — |
 | Grid | `Grid` (auto / px / flex tracks, spans) | `QGridLayout` / `GridLayout` | `GtkGrid` | `Grid` | `container.NewGridWithColumns` ≈ | `TableLayoutPanel` | `Grid` | `NSGridView` | `Grid` | — |
+| Picture | `Picture` (contain / cover / stretch / natural, HiDPI, pixelated) | `QLabel` pixmap / `Image` | `GtkPicture` | `Image` | `canvas.Image` | `PictureBox` | `Image` | `NSImageView` | `Image` | — |
 | Form | `Form` (label column + fields) | `QFormLayout` | `GtkGrid` ≈ | `Grid` ≈ | `widget.Form` | `TableLayoutPanel` ≈ | `Grid` ≈ | `NSGridView` ≈ | `Form` | [gallery](screenshots/gallery-accordion.png) |
 | Spacer | `Spacer` | `QSpacerItem` / `Item` | `GtkBox` expand | — | `layout.Spacer` | — | — | — | `Spacer` | [thumb](screenshots/compare/layout.png) |
 | Separator | `Separator` / `VSeparator` | `QFrame` / `ToolSeparator` | `GtkSeparator` | `Separator` | `widget.Separator` | `ToolStripSeparator` | `Separator` | `NSBox` (separator) | `Divider` | [thumb](screenshots/compare/layout.png) |
