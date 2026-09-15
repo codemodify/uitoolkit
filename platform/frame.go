@@ -40,6 +40,11 @@ const (
 // testing and escape hatch that UITK_PAINT is for painting.
 const EnvDecorations = "UITK_DECORATIONS"
 
+// EnvXdgDecoration set to 0 makes the Wayland backend ignore the
+// compositor's zxdg_decoration_manager_v1, as if it had no server-side
+// decorations (GNOME, Weston): a testing switch for that path on KWin.
+const EnvXdgDecoration = "UITK_XDG_DECORATION"
+
 func (d Decorations) String() string {
 	switch d {
 	case DecorationsServer:
