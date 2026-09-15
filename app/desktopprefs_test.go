@@ -39,8 +39,8 @@ func TestAppFollowsDesktopScheme(t *testing.T) {
 	hooks := 0
 	remove := a.OnLookChange(func() { hooks++ })
 	// The desktop turns light (as the portal's SettingChanged would say).
-	a.schemeStop = func() {}
-	a.desktopSchemeChanged(style.SchemeLight)
+	a.schemeForced = false
+	a.desktopPrefsChanged(platform.DesktopPrefs{ColorScheme: platform.SchemeLight})
 	if got := lookPack(t, a); got != "breeze" {
 		t.Fatalf("after light: %s, want breeze", got)
 	}
@@ -51,7 +51,7 @@ func TestAppFollowsDesktopScheme(t *testing.T) {
 		t.Fatalf("OnLookChange ran %d times", hooks)
 	}
 	// The same scheme again is not a change.
-	a.desktopSchemeChanged(style.SchemeLight)
+	a.desktopPrefsChanged(platform.DesktopPrefs{ColorScheme: platform.SchemeLight})
 	if hooks != 1 {
 		t.Fatalf("repeat scheme restyled (%d)", hooks)
 	}
@@ -60,11 +60,33 @@ func TestAppFollowsDesktopScheme(t *testing.T) {
 	if hooks != 1 {
 		t.Fatal("removed hook ran")
 	}
-	if a.schemeStop != nil {
-		t.Fatal("not following: the watch should stop")
-	}
 	if got := lookPack(t, a); got != "win95" {
 		t.Fatalf("apply: %s", got)
+	}
+	// Not following: the desktop turning dark changes nothing.
+	a.desktopPrefsChanged(platform.DesktopPrefs{ColorScheme: platform.SchemeDark})
+	if got := lookPack(t, a); got != "win95" {
+		t.Fatalf("not following, dark desktop: %s", got)
+	}
+}
+
+// The desktop's reduced-motion setting stops animations in every app,
+// whatever its theme.
+func TestDesktopReducedMotion(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv(style.AnimationsEnv, "")
+	defer style.SetDesktopReduceMotion(false)
+	a := New(Options{Look: style.DarkLook(), Headless: true, Scale: 1})
+	if !style.Animations() {
+		t.Fatal("animations should start on")
+	}
+	a.desktopPrefsChanged(platform.DesktopPrefs{ReducedMotion: true})
+	if style.Animations() {
+		t.Fatal("the desktop asked for reduced motion")
+	}
+	a.desktopPrefsChanged(platform.DesktopPrefs{})
+	if !style.Animations() {
+		t.Fatal("reduced motion lifted")
 	}
 }
 

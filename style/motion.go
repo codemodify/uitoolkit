@@ -9,15 +9,23 @@ import (
 // screenshots, tests), whatever the saved preference says.
 const AnimationsEnv = "UITK_ANIMATIONS"
 
-var reduceMotion atomic.Bool
+var reduceMotion, desktopReduce atomic.Bool
 
 // Animations reports whether controls animate: hover fades, the default
 // button's pulse, busy bars, transient scroll bars fading out. Off with
-// UITK_ANIMATIONS=0 or the user's "reduce motion" preference (look.json,
-// like GTK's gtk-enable-animations).
+// UITK_ANIMATIONS=0, the user's "reduce motion" preference (look.json), or
+// the desktop's reduced-motion setting (GNOME's and Plasma's animations
+// switch, which GTK's gtk-enable-animations follows too).
 func Animations() bool {
-	return os.Getenv(AnimationsEnv) != "0" && !reduceMotion.Load()
+	return os.Getenv(AnimationsEnv) != "0" && !reduceMotion.Load() && !desktopReduce.Load()
 }
 
 // SetReduceMotion applies the "reduce motion" preference for the process.
 func SetReduceMotion(v bool) { reduceMotion.Store(v) }
+
+// SetDesktopReduceMotion records the desktop's reduced-motion setting for
+// the process; the app package keeps it current.
+func SetDesktopReduceMotion(v bool) { desktopReduce.Store(v) }
+
+// DesktopReducesMotion reports the desktop's reduced-motion setting.
+func DesktopReducesMotion() bool { return desktopReduce.Load() }

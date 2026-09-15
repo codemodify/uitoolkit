@@ -53,12 +53,13 @@ type Application struct {
 	posted           []func()
 	statusMenu       *Window
 	hidingStatusMenu bool
-	// schemeStop ends the watch on the desktop's light / dark preference
-	// (nil while the appearance does not follow it); schemeRead is set
-	// once the preference has been asked for.
-	schemeStop func()
-	schemeRead bool
-	lookHooks  []*func()
+	// desktopStop ends the watch on the desktop's appearance preferences;
+	// schemeForced is set when ColorSchemeEnv stands in for the desktop;
+	// following is set while the look follows its light / dark preference.
+	desktopStop  func()
+	schemeForced bool
+	following    bool
+	lookHooks    []*func()
 }
 
 // New constructs an application. Default look is PreferredLook
@@ -67,6 +68,8 @@ type Application struct {
 // Scale <= 0 means detect (env, then Xft.dpi on X11). Headless
 // stays 1× unless UITK_SCALE / GDK_SCALE / QT_SCALE_FACTOR is set.
 func New(opts Options) *Application {
+	// The installed-font index loads while the display comes up.
+	style.PrefetchSystemFonts()
 	watch := opts.WatchLook
 	preferred := opts.Look == nil
 	var ap style.Appearance
@@ -103,10 +106,11 @@ func New(opts Options) *Application {
 		backend:   backend,
 		watchLook: watch,
 	}
+	// Ask the desktop for its preferences before the look is built: a
+	// theme that follows its light / dark mode starts in the right one.
+	a.watchDesktop()()
 	if preferred {
-		// Ask the desktop for its light / dark preference before the
-		// look is built: a theme that follows it starts in the right one.
-		a.followDesktop(ap.FollowDesktop)
+		a.following = ap.FollowDesktop
 		opts.Look = ap.Look()
 	}
 	a.base = lookAtScale(opts.Look, 1)

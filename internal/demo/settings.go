@@ -80,9 +80,6 @@ func buildSettings(a *app.Application, win *app.Window, saved, staged style.Appe
 }
 
 func buildSettingsState(s *settingsState) widget.Component {
-	if s.staged.FollowDesktop {
-		s.a.DesktopColorScheme() // ask the desktop, once
-	}
 	s.scheme = style.DesktopColorScheme()
 	if s.page < 0 || s.page >= len(settingsPages) {
 		s.page = pageThemes
@@ -331,6 +328,9 @@ func (s *settingsState) themesPage(status *widgets.StatusBar, stage func(style.A
 		stage(next)
 	})
 	options.PlaceSpan(follow, 2, 0, 1, 4)
+	if style.DesktopReducesMotion() {
+		options.PlaceSpan(widgets.NewLabel("The desktop asks for reduced motion, so animations stay off."), 3, 0, 1, 4)
+	}
 
 	preview := widgets.NewColumn(info, scope, options).WithGap(10)
 	preview.AddFlex(scope, 1)
