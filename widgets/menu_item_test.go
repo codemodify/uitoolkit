@@ -47,6 +47,8 @@ func TestMenuItemRadioGroupExclusive(t *testing.T) {
 	pop := widgets.NewPopupMenu(a, b, other)
 	pop.OnPick = func(*widgets.MenuItem) {}
 	_ = uitest.Mount(pop, paintengine2d.XYWH(0, 0, 200, 120))
+	// The first Down highlights the first row; the second moves to Light.
+	pop.KeyPress(widget.KeyEvent{Key: platform.KeyDown})
 	pop.KeyPress(widget.KeyEvent{Key: platform.KeyDown})
 	pop.KeyPress(widget.KeyEvent{Key: platform.KeyReturn})
 	if a.Checked || !b.Checked || !other.Checked {

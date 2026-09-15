@@ -114,6 +114,7 @@ func runGallery(opts Options) []Result {
 
 	step(&out, "gallery", "construct", func() error { return checkTree(w.Content()) })
 	step(&out, "gallery", "combo-popup", func() error { return openGalleryCombo(a, w) })
+	step(&out, "gallery", "form-popups", func() error { return driveFormPopups(a, w) })
 	sizes := [][2]int{{1000, 760}, {860, 560}}
 	if !opts.Short {
 		sizes = append(sizes, [2]int{1200, 800})
@@ -351,6 +352,64 @@ func selectRows(a *app.Application, w *app.Window) error {
 		last = err
 	}
 	return last
+}
+
+// driveFormPopups opens the Form tab's date field and colour button from
+// the keyboard, as a user would: each drop-down must sit below its field,
+// Escape must close it and focus must come back to the field.
+func driveFormPopups(a *app.Application, w *app.Window) error {
+	widget.Walk(w.Content(), func(c widget.Component) {
+		if tv, ok := c.(*widgets.TabView); ok {
+			tv.Select(4)
+		}
+	})
+	a.PumpOnce()
+	var df *widgets.DateField
+	var cbtn *widgets.ColorButton
+	widget.Walk(w.Content(), func(c widget.Component) {
+		switch v := c.(type) {
+		case *widgets.DateField:
+			df = v
+		case *widgets.ColorButton:
+			cbtn = v
+		}
+	})
+	if df == nil || cbtn == nil {
+		return fmt.Errorf("form tab: date field %v, colour button %v", df != nil, cbtn != nil)
+	}
+	key := func(k platform.Key, mods platform.Modifiers) {
+		w.Inject(platform.Event{Kind: platform.EventKeyDown, Key: k, Mods: mods})
+		w.Inject(platform.Event{Kind: platform.EventKeyUp, Key: k, Mods: mods})
+		a.PumpOnce()
+	}
+	for _, f := range []widget.Component{df, cbtn} {
+		w.RequestFocus(f)
+		a.PumpOnce()
+		if f == widget.Component(df) {
+			key(platform.KeyDown, platform.ModAlt)
+		} else {
+			key(platform.KeySpace, 0)
+		}
+		pop := w.Popup()
+		if pop == nil {
+			return fmt.Errorf("%T: the keyboard did not open its drop-down", f)
+		}
+		fb, pb := widget.DeviceBounds(f), pop.Bounds()
+		if pb.Min.Y < fb.Max.Y-0.5 && pb.Max.Y > fb.Min.Y+0.5 {
+			return fmt.Errorf("%T drop-down %v overlaps its field %v", f, pb, fb)
+		}
+		if err := checkTree(pop); err != nil {
+			return err
+		}
+		key(platform.KeyEscape, 0)
+		if w.Popup() != nil {
+			return fmt.Errorf("%T: Escape left the drop-down open", f)
+		}
+		if w.Focus() != f {
+			return fmt.Errorf("%T: focus went to %T after Escape, want the field back", f, w.Focus())
+		}
+	}
+	return nil
 }
 
 func openGalleryCombo(a *app.Application, w *app.Window) error {

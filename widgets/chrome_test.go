@@ -7,6 +7,7 @@ import (
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/layout"
 	"github.com/codemodify/uitoolkit/platform"
+	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
 )
 
@@ -435,5 +436,114 @@ func TestTreeViewPageKeys(t *testing.T) {
 	tree.KeyPress(widget.KeyEvent{Key: platform.KeyPageDown})
 	if tree.Selected == root {
 		t.Fatal("page down should move")
+	}
+}
+
+// tabStateLook records the ControlState each DrawTab call receives.
+type tabStateLook struct {
+	style.LookAndFeel
+	states map[string]style.ControlState
+	order  []string
+	rects  map[string]paintengine2d.Rect
+}
+
+func (l *tabStateLook) TabOutset() style.Insets { return style.TabOutsetOf(l.LookAndFeel) }
+
+func (l *tabStateLook) DrawTab(ctx *paintengine2d.Context, b paintengine2d.Rect, st style.ControlState, label string, selected bool) {
+	if l.states == nil {
+		l.states = map[string]style.ControlState{}
+		l.rects = map[string]paintengine2d.Rect{}
+	}
+	l.states[label] = st
+	l.rects[label] = b
+	l.order = append(l.order, label)
+}
+
+// Hovering one tab must not paint every tab hot: the bar's own hover belongs
+// to the strip, not to each tab (the whole strip lit up on real hardware).
+func TestTabBarHoverOnlyTabUnderPointer(t *testing.T) {
+	bar := NewTabBar("Scroll", "List", "Tree", "Table")
+	rec := &tabStateLook{LookAndFeel: style.DarkLook()}
+	bar.SetHost(&fakeWindow{look: rec})
+	bar.Arrange(paintengine2d.XYWH(0, 0, 400, 30))
+	rects := bar.tabRects()
+	pt := paintengine2d.Pt((rects[1].Min.X+rects[1].Max.X)*0.5, 15)
+	bar.MouseEnter()
+	bar.MouseMove(widget.MouseEvent{Pos: pt})
+	img := paintengine2d.NewImage(400, 30)
+	bar.Paint(paintengine2d.NewContext(img))
+	if len(rec.order) != 4 {
+		t.Fatalf("painted %d tabs, want 4", len(rec.order))
+	}
+	for i, title := range bar.Titles {
+		if got, want := rec.states[title].Hovered(), i == 1; got != want {
+			t.Fatalf("tab %d hovered=%v, want %v", i, got, want)
+		}
+	}
+}
+
+// The selected tab paints last, grown by the look's outset, so it overlaps
+// its neighbours (Win95/XP/Platinum tabs); unselected tabs keep their rects.
+func TestTabBarSelectedTabPaintsLastWithOutset(t *testing.T) {
+	bar := NewTabBar("Scroll", "List", "Tree")
+	bar.Selected = 1
+	p, ok := style.LoadTheme("win95")
+	if !ok {
+		t.Fatal("win95 pack missing")
+	}
+	lk := p.Look()
+	rec := &tabStateLook{LookAndFeel: lk}
+	bar.SetHost(&fakeWindow{look: rec})
+	bar.Arrange(paintengine2d.XYWH(0, 0, 400, 30))
+	rects := bar.tabRects()
+	bar.Paint(paintengine2d.NewContext(paintengine2d.NewImage(400, 30)))
+	if got := rec.order[len(rec.order)-1]; got != "List" {
+		t.Fatalf("last painted tab = %q, want the selected one (order %v)", got, rec.order)
+	}
+	if rec.rects["Scroll"] != rects[0] || rec.rects["Tree"] != rects[2] {
+		t.Fatalf("unselected tabs moved: %v", rec.rects)
+	}
+	out := style.TabOutsetOf(lk)
+	if out.Left <= 0 || out.Right <= 0 {
+		t.Fatalf("win95 tab outset = %+v, want positive sides", out)
+	}
+	sel := rec.rects["List"]
+	if sel.Min.X >= rects[1].Min.X || sel.Max.X <= rects[1].Max.X {
+		t.Fatalf("selected tab %v not grown past its slot %v", sel, rects[1])
+	}
+}
+
+// toolStateLook records the ControlState each DrawToolButton call receives.
+type toolStateLook struct {
+	style.LookAndFeel
+	states []style.ControlState
+}
+
+func (l *toolStateLook) DrawToolButton(ctx *paintengine2d.Context, b paintengine2d.Rect, st style.ControlState, label string, icon style.ToolIcon) {
+	l.states = append(l.states, st)
+}
+
+// Same leak the TabBar had: the bar's own hover/press must not light every
+// tool (seen on real hardware in the gallery and Mail toolbars).
+func TestToolBarHoverOnlyToolUnderPointer(t *testing.T) {
+	bar := NewToolBar(&ToolItem{Text: "One"}, &ToolItem{Text: "Two"}, &ToolItem{Text: "Three"})
+	rec := &toolStateLook{LookAndFeel: style.DarkLook()}
+	bar.SetHost(&fakeWindow{look: rec})
+	bar.Arrange(paintengine2d.XYWH(0, 0, 400, 40))
+	rects := bar.itemRects()
+	pt := paintengine2d.Pt((rects[1].Min.X+rects[1].Max.X)*0.5, 20)
+	bar.MouseEnter()
+	bar.MouseMove(widget.MouseEvent{Pos: pt})
+	bar.MousePress(widget.MouseEvent{Pos: pt, Button: platform.ButtonLeft})
+	img := paintengine2d.NewImage(400, 40)
+	bar.Paint(paintengine2d.NewContext(img))
+	if len(rec.states) != 3 {
+		t.Fatalf("painted %d tools, want 3", len(rec.states))
+	}
+	for i, st := range rec.states {
+		want := i == 1
+		if st.Hovered() != want || st.Pressed() != want {
+			t.Fatalf("tool %d hovered=%v pressed=%v, want %v", i, st.Hovered(), st.Pressed(), want)
+		}
 	}
 }

@@ -35,9 +35,78 @@ type CardList struct {
 	OnSelect   func(i int)
 	OnContext  func(i int, windowPos paintengine2d.Point)
 	OffsetY    float32
-	hovered    int
-	vbar       scrollDrag
-	rows       rowSceneCache
+	// Mode selects one card (the default) or several (SelectExtended: Ctrl
+	// toggles, Shift extends, Ctrl+A). Selected stays the current card.
+	Mode SelectionMode
+	// OnSelectionChange reports the selected cards, ascending, whenever the
+	// set changes in SelectExtended or SelectMulti.
+	OnSelectionChange func(rows []int)
+	sel               rowSelection
+	hovered           int
+	vbar              scrollDrag
+	rows              rowSceneCache
+}
+
+// IsSelected reports whether card i is selected (in SelectSingle, whether
+// it is the current card).
+func (l *CardList) IsSelected(i int) bool {
+	if i < 0 || i >= l.Count {
+		return false
+	}
+	if l.Mode == SelectSingle {
+		return i == l.Selected
+	}
+	return l.sel.has(i)
+}
+
+// SelectedRows is the selection in ascending order.
+func (l *CardList) SelectedRows() []int {
+	if l.Mode == SelectSingle {
+		if l.Selected >= 0 && l.Selected < l.Count {
+			return []int{l.Selected}
+		}
+		return nil
+	}
+	l.sel.drop(l.Count)
+	return l.sel.rows()
+}
+
+// SetSelectedRows replaces the selection; the last card given becomes the
+// current one and the anchor. It does not call the callbacks.
+func (l *CardList) SetSelectedRows(rows []int) {
+	l.sel.clear()
+	for _, r := range rows {
+		if r >= 0 && r < l.Count {
+			l.sel.add(r)
+			l.Selected = r
+			l.sel.anchor = r
+		}
+	}
+	if len(rows) == 0 {
+		l.Selected = -1
+	}
+	l.Invalidate()
+}
+
+// SelectAll selects every card (SelectExtended / SelectMulti) and reports it.
+func (l *CardList) SelectAll() {
+	if l.Mode == SelectSingle || l.Count == 0 {
+		return
+	}
+	l.sel.addRange(0, l.Count-1)
+	l.Invalidate()
+	l.selectionChanged()
+}
+
+func (l *CardList) selectionChanged() {
+	if l.OnSelectionChange != nil && l.Mode != SelectSingle {
+		l.OnSelectionChange(l.SelectedRows())
+	}
+}
+
+// cardState is card i's item state (focus mark on the current card).
+func (l *CardList) cardState(i int) style.ControlState {
+	return widget.ItemState(l, l.IsSelected(i), i == l.hovered, i == l.Selected)
 }
 
 // NewCardList builds a card list. selected starts at -1.
@@ -56,7 +125,7 @@ func (l *CardList) Measure(c layout.Constraints) paintengine2d.Point {
 	if c.HasMaxH() && h > c.MaxH {
 		h = c.MaxH
 	}
-	w := float32(240)
+	w := style.Dip(l.Look(), 240)
 	if c.HasMaxW() {
 		w = c.MaxW
 	}
@@ -82,7 +151,7 @@ func (l *CardList) rowH() float32 {
 	if pad <= 0 {
 		pad = 6
 	}
-	min := font*3 + pad*3 + 12
+	min := font*3 + pad*3 + style.Dip(lk, 12)
 	if min > h {
 		h = min
 	}
@@ -105,9 +174,28 @@ func (l *CardList) clamp() {
 	l.OffsetY = layout.ClampScroll(l.OffsetY, l.contentH(), l.LocalBounds().Dy())
 }
 
+func (l *CardList) vparts() style.ScrollParts {
+	return vScrollParts(l.Look(), l.LocalBounds(), l.contentH(), l.OffsetY)
+}
+
+func (l *CardList) vaxis() scrollAxis {
+	return scrollAxis{
+		vertical: true,
+		parts:    l.vparts,
+		get:      func() (float32, float32) { return l.OffsetY, l.MaxOffset() },
+		set:      func(y float32) { l.OffsetY = y; l.clamp(); l.Invalidate() },
+		steps:    func() (float32, float32) { return l.rowH(), l.LocalBounds().Dy() * 0.9 },
+	}
+}
+
+// rowsW is the row width: the view minus the gutter a visible bar takes.
+func (l *CardList) rowsW() float32 {
+	return l.LocalBounds().Dx() - scrollGutter(l.Look(), l.MaxOffset() > 0)
+}
+
 func (l *CardList) scrollTrack() (track, thumb paintengine2d.Rect) {
-	bar, gap := overflowBarSize(l.Look())
-	return vScrollThumb(l.LocalBounds(), l.contentH(), l.OffsetY, bar, gap)
+	sp := l.vparts()
+	return sp.Track, sp.Thumb
 }
 
 // VisibleRange is the half-open [lo, hi) window of cards that Paint draws.
@@ -150,24 +238,25 @@ func (l *CardList) Paint(ctx *paintengine2d.Context) {
 	l.clamp()
 	b := l.LocalBounds()
 	lk := l.Look()
+	rw := l.rowsW()
 	ctx.DrawRect(b, paintengine2d.Fill(lk.Palette().Field))
 	rh := l.rowH()
 	lo, hi := l.visibleRange()
 	if rec, ok := ctx.Device().(*paintengine2d.Recorder); ok {
 		o := rowOrigin(ctx)
-		l.rows.ready(o.X, o.Y, b.Dx(), rh, lookSig(lk))
-		recordScrollingRows(rec, ctx, &l.rows, l.ID()^(3<<32), b, b.Dx(), rh, l.OffsetY, 0, lo, hi,
+		l.rows.ready(o.X, o.Y, rw, rh, lookSig(lk))
+		recordScrollingRows(rec, ctx, &l.rows, l.ID()^(3<<32), b, rw, rh, l.OffsetY, 0, lo, hi,
 			func(i int) uint64 { return l.ID()<<32 | uint64(i) + 1 },
 			func(i int) uint64 {
 				c := l.cardAt(i)
-				sig := newRowSig(i == l.Selected, i == l.hovered, bits32(b.Dx()))
+				sig := newRowSig(l.IsSelected(i), i == l.hovered, bits32(rw)^uint64(l.cardState(i))<<40)
 				for _, part := range cardSigParts(c) {
 					sig.str(part)
 				}
 				return sig.sum()
 			},
 			func(i int) {
-				paintCard(lk, ctx, paintengine2d.XYWH(0, 0, b.Dx(), rh), l.cardAt(i), i == l.Selected, i == l.hovered)
+				paintCardState(lk, ctx, paintengine2d.XYWH(0, 0, rw, rh), l.cardAt(i), l.cardState(i))
 			},
 		)
 	} else {
@@ -175,14 +264,13 @@ func (l *CardList) Paint(ctx *paintengine2d.Context) {
 		ctx.ClipRect(b)
 		for i := lo; i < hi; i++ {
 			y := float32(i)*rh - l.OffsetY
-			paintCard(lk, ctx, paintengine2d.XYWH(0, y, b.Dx(), rh), l.cardAt(i), i == l.Selected, i == l.hovered)
+			paintCardState(lk, ctx, paintengine2d.XYWH(0, y, rw, rh), l.cardAt(i), l.cardState(i))
 		}
 		ctx.Restore()
 	}
-	track, thumb := l.scrollTrack()
-	paintOverflowBar(ctx, lk, track, thumb, l.vbar.over, l.vbar.active)
+	l.vbar.paint(l, ctx, lk, l.vparts(), true, l.OffsetY)
 	if l.Focused() {
-		lk.DrawFocusRing(ctx, b.Inset(-2))
+		lk.DrawFocusRing(ctx, b)
 	}
 }
 
@@ -198,6 +286,15 @@ func cardSigParts(c CardContent) []string {
 		parts = append(parts, b.Label)
 	}
 	return parts
+}
+
+// paintCardState paints a card with its item state and, on the current card
+// of a focused list, the look's focus mark.
+func paintCardState(lk style.LookAndFeel, ctx *paintengine2d.Context, b paintengine2d.Rect, c CardContent, st style.ControlState) {
+	paintCard(lk, ctx, b, c, st.Checked(), st.Hovered())
+	if st.Focused() {
+		style.DrawItemFocusOf(lk, ctx, b.Inset(1), st)
+	}
 }
 
 func paintCard(lk style.LookAndFeel, ctx *paintengine2d.Context, b paintengine2d.Rect, c CardContent, selected, hovered bool) {
@@ -317,14 +414,11 @@ func (l *CardList) invalidateRow(i int) {
 func (l *CardList) MouseEnter() {}
 
 func (l *CardList) MouseMove(e widget.MouseEvent) bool {
-	track, thumb := l.scrollTrack()
-	if off, apply, handled, dirty := l.vbar.move(e.Pos, track, thumb, true, l.MaxOffset()); apply || handled || dirty {
-		if apply {
-			l.OffsetY = off
-			l.clamp()
+	if handled, dirty := l.vbar.move(l, e.Pos, l.vaxis()); handled || dirty {
+		if dirty {
+			l.Invalidate()
 		}
-		l.Invalidate()
-		if apply || handled {
+		if handled {
 			return true
 		}
 	}
@@ -341,7 +435,7 @@ func (l *CardList) MouseMove(e widget.MouseEvent) bool {
 func (l *CardList) MouseExit() {
 	old := l.hovered
 	l.hovered = -1
-	l.vbar.over = false
+	l.vbar.exit()
 	l.invalidateRow(old)
 }
 
@@ -355,19 +449,27 @@ func (l *CardList) MouseRelease(widget.MouseEvent) bool {
 
 func (l *CardList) MousePress(e widget.MouseEvent) bool {
 	l.RequestFocus()
-	track, thumb := l.scrollTrack()
-	if off, ok := l.vbar.press(e.Pos, track, thumb, true, l.OffsetY, l.MaxOffset(), l.LocalBounds().Dy()*0.9); ok {
-		l.OffsetY = off
-		l.clamp()
+	if l.vbar.press(l, e.Pos, l.vaxis()) {
 		l.Invalidate()
 		return true
 	}
 	i := l.indexAt(e.Pos.Y)
 	if i >= 0 {
+		changed := false
+		if l.Mode != SelectSingle {
+			if e.Button == platform.ButtonRight {
+				changed = l.sel.contextClick(i)
+			} else {
+				changed = l.sel.click(l.Mode, i, e.Mods)
+			}
+		}
 		l.Selected = i
 		l.Invalidate()
 		if l.OnSelect != nil {
 			l.OnSelect(i)
+		}
+		if changed {
+			l.selectionChanged()
 		}
 	}
 	if e.Button == platform.ButtonRight && l.OnContext != nil {
@@ -385,7 +487,7 @@ func (l *CardList) MouseWheel(e widget.MouseEvent) bool {
 		return false
 	}
 	before := l.OffsetY
-	l.OffsetY += wheelDelta(e.Scroll.Y, l.rowH())
+	l.OffsetY += wheelDelta(e.Scroll.Y, l.rowH(), e.Precise)
 	l.clamp()
 	if l.OffsetY == before {
 		return false
@@ -416,12 +518,41 @@ func (l *CardList) KeyPress(e widget.KeyEvent) bool {
 		next = 0
 	case platform.KeyEnd:
 		next = l.Count - 1
-	case platform.KeyReturn, platform.KeySpace:
+	case platform.KeySpace:
+		if l.Mode == SelectMulti || (l.Mode == SelectExtended && e.Mods.Ctrl()) {
+			if l.Selected >= 0 {
+				l.sel.toggle(l.Selected)
+				l.sel.anchor = l.Selected
+				l.Invalidate()
+				l.selectionChanged()
+			}
+			return true
+		}
 		if l.Selected >= 0 && l.OnSelect != nil {
 			l.OnSelect(l.Selected)
 		}
 		return true
+	case platform.KeyReturn:
+		if l.Selected >= 0 && l.OnSelect != nil {
+			l.OnSelect(l.Selected)
+		}
+		return true
+	case platform.KeyA:
+		if e.Mods.Ctrl() && l.Mode != SelectSingle {
+			l.SelectAll()
+			return true
+		}
+		return false
 	default:
+		if contextKey(e) && l.OnContext != nil {
+			var row paintengine2d.Rect
+			if l.Selected >= 0 {
+				rh := l.rowH()
+				row = paintengine2d.XYWH(0, float32(l.Selected)*rh-l.OffsetY, l.LocalBounds().Dx(), rh)
+			}
+			l.OnContext(l.Selected, contextPoint(l, row))
+			return true
+		}
 		return false
 	}
 	if next < 0 {
@@ -430,12 +561,19 @@ func (l *CardList) KeyPress(e widget.KeyEvent) bool {
 	if next >= l.Count {
 		next = l.Count - 1
 	}
-	if next != l.Selected {
+	changed := false
+	if l.Mode != SelectSingle {
+		changed = l.sel.moveTo(l.Mode, next, e.Mods)
+	}
+	if next != l.Selected || changed {
 		l.Selected = next
 		l.ensureVisible(next)
 		l.Invalidate()
 		if l.OnSelect != nil {
 			l.OnSelect(next)
+		}
+		if changed {
+			l.selectionChanged()
 		}
 	}
 	return true

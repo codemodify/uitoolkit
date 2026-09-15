@@ -4,6 +4,7 @@ import (
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/layout"
 	"github.com/codemodify/uitoolkit/platform"
+	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
 )
 
@@ -13,9 +14,7 @@ type ScrollView struct {
 	OffsetY      float32
 	child        widget.Component
 	content      paintengine2d.Point
-	drag         bool
-	grab         float32
-	overBar      bool
+	bar          scrollDrag
 	sceneOff     float32
 	contentDirty bool
 }
@@ -59,18 +58,18 @@ func (s *ScrollView) ScrollTo(y float32) {
 func (s *ScrollView) ScrollBy(dy float32) { s.ScrollTo(s.OffsetY + dy) }
 
 func (s *ScrollView) Measure(c layout.Constraints) paintengine2d.Point {
-	bar, gap := s.barGap()
+	g := s.gutter()
 	if s.child != nil {
 		cw := c.MaxW
 		if c.HasMaxW() {
-			cw = c.MaxW - bar - gap
+			cw = c.MaxW - g
 			if cw < 0 {
 				cw = 0
 			}
 		}
 		s.content = s.child.Measure(layout.Constraints{MaxW: cw, MaxH: -1})
 	}
-	w, h := s.content.X+bar+gap, float32(160)
+	w, h := s.content.X+g, style.Dip(s.Look(), 160)
 	if c.HasMaxH() {
 		h = c.MaxH
 	}
@@ -85,8 +84,7 @@ func (s *ScrollView) Arrange(r paintengine2d.Rect) {
 	if s.child == nil {
 		return
 	}
-	bar, gap := s.barGap()
-	cw := r.Dx() - bar - gap
+	cw := r.Dx() - s.gutter()
 	if cw < 0 {
 		cw = 0
 	}
@@ -98,7 +96,31 @@ func (s *ScrollView) Arrange(r paintengine2d.Rect) {
 	s.child.Arrange(paintengine2d.XYWH(0, -s.OffsetY, cw, s.content.Y))
 }
 
-func (s *ScrollView) barGap() (bar, gap float32) { return overflowBarSize(s.Look()) }
+// gutter is the width the child gives up to the scrollbar (always
+// reserved, so content does not reflow when it starts to overflow).
+func (s *ScrollView) gutter() float32 { return style.ScrollGutter(s.Look()) }
+
+// Reveal scrolls so c (a descendant) is fully visible, with a small margin
+// for its focus ring (widget.Revealer).
+func (s *ScrollView) Reveal(c widget.Component) {
+	if c == nil || s.child == nil {
+		return
+	}
+	// c's box in the scroll view's coordinates.
+	top := float32(0)
+	for p := widget.Component(c); p != nil && p != widget.Component(s); p = p.Parent() {
+		top += p.Bounds().Min.Y
+	}
+	bot := top + c.Bounds().Dy()
+	margin := float32(8)
+	view := s.LocalBounds().Dy()
+	switch {
+	case top-margin < 0:
+		s.ScrollTo(s.OffsetY + top - margin)
+	case bot+margin > view:
+		s.ScrollTo(s.OffsetY + bot + margin - view)
+	}
+}
 
 func (s *ScrollView) maxOff() float32 {
 	return layout.MaxScroll(s.content.Y, s.LocalBounds().Dy())
@@ -124,9 +146,23 @@ func (s *ScrollView) pageStep() float32 {
 	return h
 }
 
+func (s *ScrollView) vparts() style.ScrollParts {
+	return vScrollParts(s.Look(), s.LocalBounds(), s.content.Y, s.OffsetY)
+}
+
+func (s *ScrollView) vaxis() scrollAxis {
+	return scrollAxis{
+		vertical: true,
+		parts:    s.vparts,
+		get:      func() (float32, float32) { return s.OffsetY, s.maxOff() },
+		set:      s.ScrollTo,
+		steps:    func() (float32, float32) { return s.lineStep(), s.pageStep() },
+	}
+}
+
 func (s *ScrollView) thumb() (track, thumb paintengine2d.Rect) {
-	bar, gap := s.barGap()
-	return vScrollThumb(s.LocalBounds(), s.content.Y, s.OffsetY, bar, gap)
+	sp := s.vparts()
+	return sp.Track, sp.Thumb
 }
 
 // ScrollTrack is the overflow bar geometry (empty thumb when content fits).
@@ -163,10 +199,9 @@ func (s *ScrollView) Paint(ctx *paintengine2d.Context) {
 		}
 		ctx.Restore()
 	}
-	track, thumb := s.thumb()
-	paintOverflowBar(ctx, lk, track, thumb, s.overBar, s.drag)
+	s.bar.paint(s, ctx, lk, s.vparts(), true, s.OffsetY)
 	if s.State().Focused() {
-		lk.DrawFocusRing(ctx, b.Inset(-2))
+		lk.DrawFocusRing(ctx, b)
 	}
 }
 
@@ -174,8 +209,7 @@ func (s *ScrollView) HitTest(local paintengine2d.Point) widget.Component {
 	if !s.Visible() || !s.LocalBounds().Contains(local) {
 		return nil
 	}
-	track, _ := s.thumb()
-	if !track.Empty() && track.Contains(local) {
+	if sp := s.vparts(); !sp.Thumb.Empty() && sp.Bar.Contains(local) {
 		return s
 	}
 	if s.child != nil {
@@ -200,7 +234,7 @@ func (s *ScrollView) MouseWheel(e widget.MouseEvent) bool {
 		return false
 	}
 	before := s.OffsetY
-	s.ScrollBy(wheelDelta(dy, s.lineStep()))
+	s.ScrollBy(wheelDelta(dy, s.lineStep(), e.Precise))
 	return s.OffsetY != before
 }
 
@@ -208,66 +242,33 @@ func (s *ScrollView) MousePress(e widget.MouseEvent) bool {
 	if !s.Enabled() {
 		return false
 	}
-	track, thumb := s.thumb()
-	if thumb.Contains(e.Pos) {
+	if s.bar.press(s, e.Pos, s.vaxis()) {
 		s.MarkPointerFocus()
 		s.RequestFocus()
-		s.drag = true
-		s.grab = e.Pos.Y - thumb.Min.Y
 		s.Invalidate()
-		return true
-	}
-	if track.Contains(e.Pos) {
-		s.MarkPointerFocus()
-		s.RequestFocus()
-		page := s.pageStep()
-		if e.Pos.Y < thumb.Min.Y {
-			s.ScrollBy(-page)
-		} else {
-			s.ScrollBy(page)
-		}
 		return true
 	}
 	return false
 }
 
 func (s *ScrollView) MouseMove(e widget.MouseEvent) bool {
-	track, thumb := s.thumb()
-	over := track.Contains(e.Pos)
-	if over != s.overBar {
-		s.overBar = over
+	handled, dirty := s.bar.move(s, e.Pos, s.vaxis())
+	if dirty {
 		s.Invalidate()
 	}
-	if !s.drag {
-		return over
-	}
-	span := track.Dy() - thumb.Dy()
-	if span <= 0 {
-		return true
-	}
-	ty := e.Pos.Y - s.grab
-	t := (ty - track.Min.Y) / span
-	if t < 0 {
-		t = 0
-	}
-	if t > 1 {
-		t = 1
-	}
-	s.ScrollTo(t * s.maxOff())
-	return true
+	return handled
 }
 
 func (s *ScrollView) MouseRelease(widget.MouseEvent) bool {
-	if !s.drag {
+	if !s.bar.release() {
 		return false
 	}
-	s.drag = false
 	s.Invalidate()
 	return true
 }
 
 func (s *ScrollView) MouseExit() {
-	s.overBar = false
+	s.bar.exit()
 	s.Base.MouseExit()
 }
 

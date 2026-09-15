@@ -18,6 +18,7 @@ type RadioButton struct {
 	pressed  bool
 	group    *RadioGroup
 	index    int
+	fade     stateFade // hover / focus cross-fade (the look's HintHoverFadeMs)
 }
 
 // NewRadio builds a standalone radio (selects on press; does not uncheck itself).
@@ -47,7 +48,7 @@ func (r *RadioButton) Measure(c layout.Constraints) paintengine2d.Point {
 	if side <= 0 {
 		side = m.Checkbox
 	}
-	w := side + 8 + lk.Font().Advance(r.Text) + 4
+	w := side + style.Dip(lk, 8) + style.ControlFontOf(lk, style.RoleCheck).Advance(r.Text) + style.Dip(lk, 4)
 	return c.Constrain(paintengine2d.Pt(w, m.ControlH))
 }
 
@@ -58,7 +59,8 @@ func (r *RadioButton) Paint(ctx *paintengine2d.Context) {
 	if r.hovered {
 		st |= style.StateHovered
 	}
-	r.Look().DrawRadio(ctx, r.LocalBounds(), st, r.Selected, r.Text)
+	lk, b := r.Look(), r.LocalBounds()
+	r.fade.paint(r, ctx, b, st, func(ctx *paintengine2d.Context, st style.ControlState) { lk.DrawRadio(ctx, b, st, r.Selected, r.Text) })
 }
 
 func (r *RadioButton) MouseEnter() { r.hovered = true; r.Base.MouseEnter() }

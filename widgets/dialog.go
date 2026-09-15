@@ -4,17 +4,26 @@ import (
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/layout"
 	"github.com/codemodify/uitoolkit/platform"
+	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
 )
 
 // Overlay is a dimmed full-window layer with a centered card (dialog pattern).
 type Overlay struct {
 	widget.Base
-	Card      widget.Component
-	OnClose   func()
-	MinCardW  float32
-	MinCardH  float32
-	prevFocus widget.Component
+	Card     widget.Component
+	OnClose  func()
+	MinCardW float32
+	MinCardH float32
+	// Modal overlays ignore clicks outside the card (message boxes,
+	// dialogs); others close on them (light dismiss).
+	Modal bool
+	// InitialFocus is focused when the overlay is shown (the default
+	// button of a message box); otherwise the first focusable in Card.
+	InitialFocus widget.Component
+	// OnPresented runs once the overlay is on a window (its look is known).
+	OnPresented func()
+	prevFocus   widget.Component
 }
 
 func NewOverlay(card widget.Component) *Overlay {
@@ -33,6 +42,13 @@ func (o *Overlay) Presented(from widget.Component) {
 	o.prevFocus = widget.FocusOwner(from)
 	if o.prevFocus == nil {
 		o.prevFocus = from
+	}
+	if o.OnPresented != nil {
+		o.OnPresented()
+	}
+	if f, ok := o.InitialFocus.(interface{ RequestFocus() }); ok && o.InitialFocus.Visible() && o.InitialFocus.Enabled() {
+		f.RequestFocus()
+		return
 	}
 	if o.Card != nil {
 		widget.FocusFirstIn(o.Card)
@@ -80,12 +96,21 @@ func (o *Overlay) Arrange(r paintengine2d.Rect) {
 }
 
 func (o *Overlay) Paint(ctx *paintengine2d.Context) {
-	o.Look().DrawOverlay(ctx, o.LocalBounds())
+	lk := o.Look()
+	lk.DrawOverlay(ctx, o.LocalBounds())
+	if o.Card != nil && o.Card.Visible() {
+		style.DrawPopupShadowOf(lk, ctx, o.Card.Bounds(), style.PopupDialog)
+	}
 }
 
 func (o *Overlay) MousePress(e widget.MouseEvent) bool {
 	if o.Card != nil && o.Card.Bounds().Contains(e.Pos) {
 		return false
+	}
+	if o.Modal {
+		// A modal box stays until answered: a stray click (or the second
+		// click of the double-click that opened it) must not dismiss it.
+		return true
 	}
 	widget.DismissOverlay(o)
 	return true
@@ -109,14 +134,16 @@ func (o *Overlay) Dismissed() {
 	}
 }
 
-// DialogCard is a titled panel with a message and action row.
+// DialogCard is an in-app window with a title, a message and an action
+// row; the look paints its frame and caption.
 func DialogCard(title, body string, actions ...widget.Component) *Panel {
 	col := NewColumn(
-		NewTitle(title),
 		NewLabel(body),
 		NewRow(actions...).WithGap(8).WithJustify(layout.JustifyEnd),
 	).WithGap(12).WithPad(4)
-	p := NewPanel("", col)
+	p := NewPanel(title, col)
+	p.Window = true
 	p.Raised = true
+	p.OnClose = func() { widget.DismissOverlay(p) }
 	return p
 }

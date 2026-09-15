@@ -92,13 +92,3 @@ func max0(v float32) float32 {
 	}
 	return v
 }
-
-func clamp(v, lo, hi float32) float32 {
-	if hi >= 0 && v > hi {
-		return hi
-	}
-	if v < lo {
-		return lo
-	}
-	return v
-}

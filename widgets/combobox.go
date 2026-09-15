@@ -1,6 +1,8 @@
 package widgets
 
 import (
+	"strings"
+
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/layout"
 	"github.com/codemodify/uitoolkit/platform"
@@ -8,15 +10,27 @@ import (
 	"github.com/codemodify/uitoolkit/widget"
 )
 
-// ComboBox is a closed field that drops a list of choices.
+// ComboBox is a closed field that drops a list of choices. SetEditable
+// lets the user type a value of their own.
 type ComboBox struct {
 	widget.Base
 	Items       []string
 	Selected    int
 	Placeholder string
 	OnChange    func(int)
-	open        bool
-	hovered     bool
+	// OnEdit reports the text of an editable combo box as it is typed;
+	// OnSubmit reports it when Return is pressed.
+	OnEdit   func(text string)
+	OnSubmit func(text string)
+	// NoCompletion stops an editable combo box completing typed text
+	// inline from Items (QComboBox completes by default).
+	NoCompletion bool
+	open         bool
+	hovered      bool
+	fade         stateFade // hover / focus cross-fade (the look's HintHoverFadeMs)
+	field        *TextField
+	typed        string // the text as typed, without the completion
+	completing   bool
 }
 
 // NewComboBox builds a drop-down. selected < 0 means none.
@@ -33,12 +47,104 @@ func NewComboBox(items []string, selected int, on func(int)) *ComboBox {
 
 func (c *ComboBox) RetainsPointer() bool { return true }
 
-// Text is the selected label, or empty.
+// Text is the selected label (an editable box's typed text), or empty.
 func (c *ComboBox) Text() string {
+	if c.field != nil {
+		return c.field.Text
+	}
 	if c.Selected >= 0 && c.Selected < len(c.Items) {
 		return c.Items[c.Selected]
 	}
 	return ""
+}
+
+// Editable reports whether the text is typed into.
+func (c *ComboBox) Editable() bool { return c.field != nil }
+
+// SetEditable makes the combo box's text editable (QComboBox's
+// setEditable, GTK's combo box with an entry): a field inside takes
+// typing, the arrow and Down drop the list, and typed text completes
+// inline from Items unless NoCompletion is set.
+func (c *ComboBox) SetEditable(on bool) {
+	if on == (c.field != nil) {
+		return
+	}
+	if !on {
+		c.Remove(c.field)
+		c.field = nil
+		c.SetWantsFocus(true)
+		c.RequestLayout()
+		return
+	}
+	f := NewTextField(c.Text(), c.Placeholder, nil)
+	f.Frameless = true
+	f.OnChange = c.edited
+	f.OnSubmit = func(s string) {
+		if c.OnSubmit != nil {
+			c.OnSubmit(s)
+		}
+	}
+	c.field = f
+	c.typed = f.Text
+	c.Add(f)
+	// The field takes the keyboard focus for the box.
+	c.SetWantsFocus(false)
+	c.RequestLayout()
+}
+
+// SetText sets an editable combo box's text (and the matching choice).
+func (c *ComboBox) SetText(s string) {
+	if c.field == nil {
+		return
+	}
+	c.completing = true
+	c.field.SetText(s)
+	c.completing = false
+	c.typed = s
+	c.Selected = c.indexOf(s)
+	c.Invalidate()
+}
+
+func (c *ComboBox) indexOf(s string) int {
+	for i, it := range c.Items {
+		if it == s {
+			return i
+		}
+	}
+	return -1
+}
+
+// edited follows the field: the matching choice, and inline completion
+// when the text grew at its end.
+func (c *ComboBox) edited(s string) {
+	if c.completing {
+		return
+	}
+	grew := len(s) > len(c.typed) && strings.HasPrefix(s, c.typed)
+	c.typed = s
+	f := c.field
+	if grew && !c.NoCompletion && s != "" && f.caret == runeCount(s) {
+		low := strings.ToLower(s)
+		for _, it := range c.Items {
+			if len(it) > len(s) && strings.HasPrefix(strings.ToLower(it), low) {
+				// Keep what was typed; select the completed rest, so the
+				// next key replaces it.
+				full := s + string([]rune(it)[runeCount(s):])
+				c.completing = true
+				f.SetText(full)
+				c.completing = false
+				f.selA, f.selB, f.caret = runeCount(full), runeCount(s), runeCount(s)
+				f.Invalidate()
+				s = full
+				break
+			}
+		}
+	}
+	c.Selected = c.indexOf(s)
+	c.Invalidate()
+	if c.OnEdit != nil {
+		c.OnEdit(s)
+	}
 }
 
 // Select sets the current choice.
@@ -51,6 +157,10 @@ func (c *ComboBox) Select(i int) {
 		return
 	}
 	c.Selected = i
+	if c.field != nil && i >= 0 {
+		c.SetText(c.Items[i])
+		c.field.selA, c.field.selB, c.field.caret = 0, runeCount(c.field.Text), runeCount(c.field.Text)
+	}
 	c.Invalidate()
 	c.Close()
 	if c.OnChange != nil {
@@ -61,14 +171,14 @@ func (c *ComboBox) Select(i int) {
 func (c *ComboBox) Measure(cons layout.Constraints) paintengine2d.Point {
 	lk := c.Look()
 	m := lk.Metrics()
-	w := float32(160)
-	f := lk.Font()
+	w := style.Dip(lk, 160)
+	f := style.ControlFontOf(lk, style.RoleCombo)
 	for _, s := range c.Items {
 		tw := f.Advance(s)
 		if ink := f.InkWidth(s); ink > tw {
 			tw = ink
 		}
-		tw += 44
+		tw += style.Dip(lk, 44)
 		if tw > w {
 			w = tw
 		}
@@ -78,7 +188,7 @@ func (c *ComboBox) Measure(cons layout.Constraints) paintengine2d.Point {
 		if ink := f.InkWidth(c.Placeholder); ink > tw {
 			tw = ink
 		}
-		tw += 44
+		tw += style.Dip(lk, 44)
 		if tw > w {
 			w = tw
 		}
@@ -86,7 +196,12 @@ func (c *ComboBox) Measure(cons layout.Constraints) paintengine2d.Point {
 	return cons.Constrain(paintengine2d.Pt(w, style.ComboHeight(m)))
 }
 
-func (c *ComboBox) Arrange(r paintengine2d.Rect) { c.SetBounds(r) }
+func (c *ComboBox) Arrange(r paintengine2d.Rect) {
+	c.SetBounds(r)
+	if c.field != nil {
+		c.field.Arrange(style.ComboTextRectOf(c.Look(), c.LocalBounds()))
+	}
+}
 
 func (c *ComboBox) Paint(ctx *paintengine2d.Context) {
 	st := c.State()
@@ -97,7 +212,16 @@ func (c *ComboBox) Paint(ctx *paintengine2d.Context) {
 	if show == "" {
 		show = c.Placeholder
 	}
-	c.Look().DrawComboBox(ctx, c.LocalBounds(), st, show, c.open)
+	if c.field != nil {
+		// The face only: the field inside draws the text.
+		st |= style.StateEditable
+		if c.field.Focused() {
+			st |= style.StateFocused
+		}
+		show = ""
+	}
+	lk, r := c.Look(), c.LocalBounds()
+	c.fade.paint(c, ctx, r, st, func(ctx *paintengine2d.Context, st style.ControlState) { lk.DrawComboBox(ctx, r, st, show, c.open) })
 }
 
 func (c *ComboBox) MouseEnter() { c.hovered = true; c.Base.MouseEnter() }
@@ -108,7 +232,11 @@ func (c *ComboBox) MousePress(e widget.MouseEvent) bool {
 		return false
 	}
 	c.MarkPointerFocus()
-	c.RequestFocus()
+	if c.field != nil {
+		c.field.RequestFocus()
+	} else {
+		c.RequestFocus()
+	}
 	if c.open {
 		c.Close()
 	} else {
@@ -137,6 +265,9 @@ func (c *ComboBox) KeyPress(e widget.KeyEvent) bool {
 		}
 		return true
 	case platform.KeyReturn:
+		if c.field != nil && !c.open {
+			return false
+		}
 		if c.open {
 			c.Close()
 		} else {
@@ -149,11 +280,17 @@ func (c *ComboBox) KeyPress(e widget.KeyEvent) bool {
 			return true
 		}
 	case platform.KeyHome:
+		if c.field != nil {
+			return false
+		}
 		if len(c.Items) > 0 {
 			c.Select(0)
 		}
 		return true
 	case platform.KeyEnd:
+		if c.field != nil {
+			return false
+		}
 		if len(c.Items) > 0 {
 			c.Select(len(c.Items) - 1)
 		}
@@ -191,7 +328,11 @@ func (c *ComboBox) Open() {
 			c.Invalidate()
 		}
 	}
-	pop.RestoreFocusTo(c)
+	if c.field != nil {
+		pop.RestoreFocusTo(c.field)
+	} else {
+		pop.RestoreFocusTo(c)
+	}
 	o := widget.DeviceOrigin(c)
 	b := c.LocalBounds()
 	anchor := paintengine2d.XYWH(o.X, o.Y, b.Dx(), b.Dy())

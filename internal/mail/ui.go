@@ -189,7 +189,7 @@ func (s *session) applyLook() {
 		// follows look.json (PreferredLook), never opts.Light.
 		ap = style.LookAppearance(s.app.Look())
 	}
-	s.opts.Light = ap.Theme == style.ThemeLight
+	s.opts.Light = ap.Effective().Theme == style.ThemeLight
 	s.app.SetLook(style.WithDensity(ap.Look(), s.density))
 }
 
@@ -202,6 +202,8 @@ func (s *session) setPalette(light bool) {
 	} else {
 		ap = ap.WithPalette(style.ThemeDark)
 	}
+	// Picking dark or light by hand stops following the desktop.
+	ap.FollowDesktop = false
 	_ = style.SaveAppearance(ap)
 	s.opts.Light = light
 	s.rebuild()
@@ -237,9 +239,13 @@ func (s *session) build() widget.Component {
 		{Title: "Topic", MinWidth: 180, Sortable: true},
 		{Title: "Who", Width: 148, MinWidth: 110, Sortable: true},
 		{Title: "When", Width: 108, MinWidth: 88, Sortable: true},
-	}, 0, s.cellText, func(i int) {
-		s.clickRow(i, false)
-	})
+	}, 0, s.cellText, nil)
+	// Mail-client selection: Ctrl toggles, Shift extends, Ctrl+A selects the
+	// folder; bulk actions then act on every selected message.
+	s.table.Mode = widgets.SelectExtended
+	// Letters are commands here (n / p / r / f / c / m), not a search.
+	s.table.DisableTypeAhead = true
+	s.table.OnSelectionChange = func(rows []int) { s.viewSelection(rows, s.table.Selected) }
 	s.table.CellBold = func(row, col int) bool {
 		if row < 0 || row >= len(s.rows) {
 			return false
@@ -250,17 +256,22 @@ func (s *session) build() widget.Component {
 		s.sortCol, s.sortAsc = col, asc
 		s.refreshList()
 	}
+	// Inside the selection the menu acts on every selected message; on a row
+	// outside it, on that row alone (the table's right-click does the same,
+	// this covers callers that open the menu directly).
 	s.table.OnContext = func(i int, p paintengine2d.Point) {
-		if i >= 0 && i < len(s.rows) {
+		if i >= 0 && i < len(s.rows) && !s.table.IsSelected(i) {
 			s.clickRow(i, false)
 		}
 		s.messageMenu(s.table, p)
 	}
-	s.cards = widgets.NewCardList(0, s.cardAt, func(i int) {
-		s.clickRow(i, false)
-	})
+	s.cards = widgets.NewCardList(0, s.cardAt, nil)
+	s.table.SetAccessibleName("Messages")
+	s.cards.SetAccessibleName("Messages")
+	s.cards.Mode = widgets.SelectExtended
+	s.cards.OnSelectionChange = func(rows []int) { s.viewSelection(rows, s.cards.Selected) }
 	s.cards.OnContext = func(i int, p paintengine2d.Point) {
-		if i >= 0 && i < len(s.rows) {
+		if i >= 0 && i < len(s.rows) && !s.cards.IsSelected(i) {
 			s.clickRow(i, false)
 		}
 		s.messageMenu(s.cards, p)
@@ -268,6 +279,11 @@ func (s *session) build() widget.Component {
 
 	s.tree = widgets.NewTreeView()
 	s.outboxTree = widgets.NewTreeView()
+	s.tree.DisableTypeAhead = true
+	s.outboxTree.DisableTypeAhead = true
+	s.tree.Sidebar, s.outboxTree.Sidebar = true, true
+	s.tree.SetAccessibleName("Folders")
+	s.outboxTree.SetAccessibleName("Outbox")
 	s.rebuildTree()
 	s.wireFolderTree(s.tree)
 	s.wireFolderTree(s.outboxTree)
@@ -592,16 +608,15 @@ func (s *session) refreshList() {
 		s.table.RowCount = len(s.rows)
 		s.table.SortCol = s.sortCol
 		s.table.SortAsc = s.sortAsc
-		s.table.Selected = s.primaryIndex()
 		s.table.SetVisible(!s.cardView)
 		s.table.Invalidate()
 	}
 	if s.cards != nil {
 		s.cards.Count = len(s.rows)
-		s.cards.Selected = s.primaryIndex()
 		s.cards.SetVisible(s.cardView)
 		s.cards.Invalidate()
 	}
+	s.syncViews()
 	s.loadPreview()
 	s.refreshStatus()
 }
@@ -918,14 +933,7 @@ func (s *session) clickRow(i int, add bool) {
 	} else {
 		s.selected = []MessageID{id}
 	}
-	if s.table != nil {
-		s.table.Selected = i
-		s.table.Invalidate()
-	}
-	if s.cards != nil {
-		s.cards.Selected = i
-		s.cards.Invalidate()
-	}
+	s.syncViews()
 	if !s.rows[i].Read {
 		_ = s.cli.SetFlags(id, FlagPatch{Read: boolPtr(true)})
 		s.rows[i].Read = true
@@ -938,6 +946,59 @@ func (s *session) clickRow(i int, add bool) {
 	}
 	s.loadPreview()
 	s.refreshStatus()
+}
+
+// viewSelection mirrors the selection of the message table or card list
+// (cur is that view's current row). One row behaves as a click (preview,
+// mark read); several are all selected with the current row last, so the
+// preview follows the keyboard and nothing is marked read.
+func (s *session) viewSelection(rows []int, cur int) {
+	if len(rows) == 1 {
+		s.clickRow(rows[0], false)
+		return
+	}
+	s.selected = s.selected[:0]
+	curSelected := false
+	for _, r := range rows {
+		if r < 0 || r >= len(s.rows) {
+			continue
+		}
+		if r == cur {
+			curSelected = true
+			continue
+		}
+		s.selected = append(s.selected, s.rows[r].ID)
+	}
+	if curSelected {
+		s.selected = append(s.selected, s.rows[cur].ID)
+	}
+	s.syncViews()
+	s.loadPreview()
+	s.refreshStatus()
+}
+
+// syncViews shows s.selected in the message table and the card list, the
+// primary (last) as their current row.
+func (s *session) syncViews() {
+	if s.table == nil && s.cards == nil {
+		return
+	}
+	pos := make(map[MessageID]int, len(s.rows))
+	for i, m := range s.rows {
+		pos[m.ID] = i
+	}
+	idx := make([]int, 0, len(s.selected))
+	for _, id := range s.selected {
+		if i, ok := pos[id]; ok {
+			idx = append(idx, i)
+		}
+	}
+	if s.table != nil {
+		s.table.SetSelectedRows(idx)
+	}
+	if s.cards != nil {
+		s.cards.SetSelectedRows(idx)
+	}
 }
 
 // pruneSelection keeps only ids that are still visible in the thread list.
@@ -1251,7 +1312,7 @@ func (s *session) newSmartFolder() {
 		widgets.NewLabel("Name"), name,
 		widgets.NewLabel("Query"), query,
 		widgets.NewLabel("Unread / starred / attachment pins on the Tags tree are included."),
-		widgets.NewRow(widgets.NewSpacer(), cancel, save).WithGap(8),
+		widgets.NewButtonBox().AddButton(cancel, widgets.RoleReject).AddButton(save, widgets.RoleAccept),
 	).WithGap(8)
 	win.SetContent(widgets.NewPad(12, form))
 }
@@ -1418,10 +1479,17 @@ func (s *session) newFolder() {
 }
 
 func (s *session) selectAll() {
+	primary := s.primaryIndex()
 	s.selected = s.selected[:0]
-	for _, m := range s.rows {
-		s.selected = append(s.selected, m.ID)
+	for i, m := range s.rows {
+		if i != primary {
+			s.selected = append(s.selected, m.ID)
+		}
 	}
+	if primary >= 0 {
+		s.selected = append(s.selected, s.rows[primary].ID)
+	}
+	s.syncViews()
 	s.refreshStatus()
 	s.mark(fmt.Sprintf("%d selected", len(s.selected)))
 }
@@ -1899,7 +1967,7 @@ func (h *attachHit) Measure(c layout.Constraints) paintengine2d.Point {
 func (h *attachHit) Arrange(r paintengine2d.Rect) { h.SetBounds(r) }
 
 func (h *attachHit) Paint(ctx *paintengine2d.Context) {
-	h.Look().DrawListRow(ctx, h.LocalBounds(), h.Selected, h.Hovered(), h.Text)
+	h.Look().DrawListRow(ctx, h.LocalBounds(), style.RowState(h.Selected, h.Hovered()), h.Text)
 }
 
 func (h *attachHit) MousePress(widget.MouseEvent) bool {
@@ -2296,9 +2364,10 @@ func PrepareShotCards(w *app.Window) {
 		if cl, ok := c.(*widgets.CardList); ok {
 			cl.SetVisible(true)
 			if cl.Count > 0 {
-				cl.Selected = 0
-				if cl.OnSelect != nil {
-					cl.OnSelect(0)
+				// Select the first card as a click would (preview, read).
+				cl.SetSelectedRows([]int{0})
+				if cl.OnSelectionChange != nil {
+					cl.OnSelectionChange([]int{0})
 				}
 			}
 			cl.Invalidate()

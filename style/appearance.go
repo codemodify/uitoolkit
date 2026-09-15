@@ -14,6 +14,9 @@ const (
 type CornerStyle string
 
 const (
+	// CornersTheme keeps each theme's native shape (Win95 square, Aqua
+	// pill, Luna rounded). It is the default.
+	CornersTheme  CornerStyle = "theme"
 	CornersRound  CornerStyle = "round"
 	CornersSquare CornerStyle = "square"
 )
@@ -60,14 +63,24 @@ type Appearance struct {
 	Corners  CornerStyle
 	Icons    IconSetName
 	IconSize IconSize
+	// ReduceMotion turns animations off (see [Animations]).
+	ReduceMotion bool
+	// FollowDesktop shows the pack's light or dark sibling to match the
+	// desktop's preference (see [Appearance.Effective]); Name stays the
+	// user's choice.
+	FollowDesktop bool
+	// NativeDialogs shows the desktop's own file dialogs (the XDG portal's)
+	// instead of the toolkit's themed ones.
+	NativeDialogs bool
 }
 
-// DefaultAppearance is the embedded dark palette, round corners, classic icons.
+// DefaultAppearance is the default theme ([DefaultThemeName], a light
+// pack) in its own corners, with the classic icons.
 func DefaultAppearance() Appearance {
 	return Appearance{
 		Name:     DefaultThemeName,
-		Theme:    ThemeDark,
-		Corners:  CornersRound,
+		Theme:    ThemeLight,
+		Corners:  CornersTheme,
 		Icons:    IconSetClassic,
 		IconSize: IconSizeMedium,
 	}
@@ -83,13 +96,15 @@ func ParseTheme(s string) ThemeName {
 	}
 }
 
-// ParseCorners accepts round / square (empty → round).
+// ParseCorners accepts theme / round / square (empty or unknown → theme).
 func ParseCorners(s string) CornerStyle {
-	switch s {
-	case "square", "Square", "rect", "sharp-corners":
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "square", "rect", "sharp-corners":
 		return CornersSquare
-	default:
+	case "round", "rounded":
 		return CornersRound
+	default:
+		return CornersTheme
 	}
 }
 
@@ -222,9 +237,13 @@ func ApplyIconSize(m Metrics, sz IconSize) Metrics {
 // control heights, scrollbar width, or radii when the new pack leaves them
 // unset.
 func packMetrics(d Density, tok ThemeTokens, corners CornerStyle, sz IconSize) Metrics {
-	m := ApplyDensity(DefaultMetrics(), d)
-	m = ApplyChromeMetrics(m, tok.Metrics)
-	m = ApplyThemeCorners(m, corners, tok.Metrics.Radius, tok.Metrics.RadiusSmall)
+	// The pack (and its engine) set the default-density geometry; density
+	// then shifts it by the same amounts it shifts the stock metrics, so a
+	// compact Win95 still gets shorter rows than a default one.
+	base := DefaultMetrics()
+	m := ApplyChromeMetrics(base, tok.Metrics)
+	m = shiftDensity(m, base, ApplyDensity(base, d))
+	m = applyPackCorners(m, corners, tok.Metrics)
 	return ApplyIconSize(m, sz)
 }
 
@@ -236,7 +255,7 @@ func lookMetrics(d Density, scale float32, tok ThemeTokens, corners CornerStyle,
 // Look builds a Classic LookAndFeel from the appearance prefs (1× metrics).
 // Application.SetLook still applies display scale afterward.
 func (a Appearance) Look() *Classic {
-	a = a.Normalize()
+	a = a.Effective()
 	tok := tokensForAppearance(a)
 	m := packMetrics(DensityDefault, tok, a.Corners, a.IconSize)
 	return newClassic(string(tok.Family), tok.Palette, m, a.Corners, a.Icons, a.IconSize, tok).
@@ -250,7 +269,11 @@ func tokensForAppearance(a Appearance) ThemeTokens {
 		if tok.Empty() {
 			tok = ThemeTokens{Family: pack.Palette, Palette: paletteForFamily(pack.Palette)}
 		}
-		return tok.Resolve()
+		tok = tok.Resolve()
+		if a.FollowDesktop {
+			tok = withDesktopAccent(tok)
+		}
+		return withEraFonts(tok, pack.Name)
 	}
 	if pack, ok := LoadTheme(StarterName(a.Theme)); ok {
 		return pack.Tokens.Resolve()
@@ -372,7 +395,7 @@ func WithAppearance(look LookAndFeel, a Appearance) LookAndFeel {
 		}
 		return look
 	}
-	a = a.Normalize()
+	a = a.Effective()
 	pack := a.Name
 	tok := tokensForAppearance(a)
 	if _, ok := LoadTheme(pack); !ok {

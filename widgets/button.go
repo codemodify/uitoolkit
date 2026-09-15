@@ -1,6 +1,9 @@
 package widgets
 
 import (
+	"math"
+	"time"
+
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/layout"
 	"github.com/codemodify/uitoolkit/platform"
@@ -17,9 +20,31 @@ type Button struct {
 	OnClick func()
 	hovered bool
 	pressed bool
+	// outside is set while a press is dragged off the button: it pops up
+	// (and releasing there does not click), then re-presses on re-entry —
+	// Qt's QAbstractButton / Win32 BUTTON behaviour.
+	outside bool
+	fade    stateFade // hover / focus cross-fade (the look's HintHoverFadeMs)
+	pulsing bool      // a default-button pulse frame is scheduled
 }
 
 func (b *Button) Tooltip() string { return b.Tip }
+
+// PaintState is the state the button paints with (pressed only while the
+// pointer is over it, hovered only when not dragged off).
+func (b *Button) PaintState() style.ControlState {
+	st := b.State()
+	if b.hovered && !b.outside {
+		st |= style.StateHovered
+	}
+	if b.pressed && !b.outside {
+		st |= style.StatePressed
+	}
+	if b.Primary {
+		st |= style.StatePrimary
+	}
+	return st
+}
 
 func NewButton(text string, onClick func()) *Button {
 	b := &Button{Text: text, OnClick: onClick}
@@ -32,7 +57,7 @@ func NewButton(text string, onClick func()) *Button {
 func (b *Button) Measure(c layout.Constraints) paintengine2d.Point {
 	lk := b.Look()
 	m := lk.Metrics()
-	w := lk.Font().Advance(b.Text) + m.Pad*2 + 16
+	w := style.ControlFontOf(lk, style.RoleButton).Advance(b.Text) + m.Pad*2 + style.Dip(lk, 16)
 	h := m.ControlH
 	return c.Constrain(paintengine2d.Pt(w, h))
 }
@@ -40,17 +65,44 @@ func (b *Button) Measure(c layout.Constraints) paintengine2d.Point {
 func (b *Button) Arrange(r paintengine2d.Rect) { b.SetBounds(r) }
 
 func (b *Button) Paint(ctx *paintengine2d.Context) {
-	st := b.State()
-	if b.hovered {
-		st |= style.StateHovered
+	lk, r := b.Look(), b.LocalBounds()
+	b.fade.paint(b, ctx, r, b.PaintState(), func(ctx *paintengine2d.Context, st style.ControlState) {
+		if p, ok := b.pulse(st); ok {
+			// The default button swells toward its hover look and back.
+			ctx.DrawCrossFade(r, p,
+				func(ctx *paintengine2d.Context) { lk.DrawButton(ctx, r, st, b.Text) },
+				func(ctx *paintengine2d.Context) { lk.DrawButton(ctx, r, st|style.StateHovered, b.Text) })
+			return
+		}
+		lk.DrawButton(ctx, r, st, b.Text)
+	})
+}
+
+// pulseFrame is how often a pulsing default button repaints.
+const pulseFrame = 40 * time.Millisecond
+
+// pulse is how far the default button has swollen toward its hover look,
+// for looks whose default button pulses (style.HintDefaultPulseMs), and
+// asks for the next frame. Only a resting default button in an active
+// window pulses.
+func (b *Button) pulse(st style.ControlState) (float32, bool) {
+	if !st.Primary() || st&(style.StateHovered|style.StatePressed|style.StateDisabled|style.StateBackdrop) != 0 {
+		return 0, false
 	}
-	if b.pressed {
-		st |= style.StatePressed
+	ms := style.LookHint(b.Look(), style.HintDefaultPulseMs)
+	if ms <= 0 || !style.Animations() {
+		return 0, false
 	}
-	if b.Primary {
-		st |= style.StatePrimary
+	period := time.Duration(ms) * time.Millisecond
+	t := float64(fadeNow().UnixNano()%int64(period)) / float64(period)
+	if !b.pulsing {
+		b.pulsing = true
+		widget.After(b, pulseFrame, func() {
+			b.pulsing = false
+			b.Invalidate()
+		})
 	}
-	b.Look().DrawButton(ctx, b.LocalBounds(), st, b.Text)
+	return float32(0.5-0.5*math.Cos(2*math.Pi*t)) * 0.8, true
 }
 
 func (b *Button) MouseEnter() { b.hovered = true; b.Base.MouseEnter() }
@@ -71,9 +123,23 @@ func (b *Button) MousePress(e widget.MouseEvent) bool {
 	return true
 }
 
+// MouseMove tracks a press dragged off and back onto the button.
+func (b *Button) MouseMove(e widget.MouseEvent) bool {
+	if !b.pressed {
+		return false
+	}
+	out := !b.LocalBounds().Contains(e.Pos)
+	if out != b.outside {
+		b.outside = out
+		b.Invalidate()
+	}
+	return true
+}
+
 func (b *Button) MouseRelease(e widget.MouseEvent) bool {
 	was := b.pressed
 	b.pressed = false
+	b.outside = false
 	b.Invalidate()
 	if was && b.LocalBounds().Contains(e.Pos) && b.OnClick != nil && b.Enabled() {
 		b.OnClick()

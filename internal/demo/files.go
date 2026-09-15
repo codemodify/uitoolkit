@@ -68,8 +68,13 @@ func FilesApp(win *app.Window) widget.Component {
 		if r.Dir {
 			kind = "Folder"
 		}
-		details.SetText(fmt.Sprintf("%s\n%s  ·  %s  ·  %s\nTitillium UI  ·  %s preview",
-			r.Name, kind, r.Size, r.Modified, previewFace(r.Name)))
+		ui, mono := lookFaces(win)
+		face := ui
+		if isCodeName(r.Name) {
+			face = mono
+		}
+		details.SetText(fmt.Sprintf("%s\n%s  ·  %s  ·  %s\n%s UI  ·  %s preview",
+			r.Name, kind, r.Size, r.Modified, ui, face))
 		status.Set(1, full)
 	}
 
@@ -82,8 +87,11 @@ func FilesApp(win *app.Window) widget.Component {
 		if sel < 0 && len(rows) > 0 {
 			sel = 0
 		}
-		table.Selected = sel
-		table.Invalidate()
+		if sel >= 0 {
+			table.SetSelectedRows([]int{sel})
+		} else {
+			table.SetSelectedRows(nil)
+		}
 		loadPreview()
 		status.Set(0, fmt.Sprintf("%d items", len(rows)))
 	}
@@ -114,7 +122,15 @@ func FilesApp(win *app.Window) widget.Component {
 		loadPreview()
 		mark("Selected " + places[place].Rows[i].Name)
 	})
-	table.Selected = 0
+	// A file manager selects like Explorer and Finder: Ctrl, Shift, Ctrl+A;
+	// typing a name jumps to it.
+	table.Mode = widgets.SelectExtended
+	table.OnSelectionChange = func(rows []int) {
+		if len(rows) > 1 {
+			mark(fmt.Sprintf("%d items selected", len(rows)))
+		}
+	}
+	table.SetSelectedRows([]int{0})
 	table.OnSort = func(col int, asc bool) {
 		rows := places[place].Rows
 		sortFileRows(rows, col, asc)
@@ -130,14 +146,30 @@ func FilesApp(win *app.Window) widget.Component {
 		}
 		return -1
 	}
+	// A place that is a folder of another shows under it, not again at the
+	// top (projects/uitoolkit sits under Projects).
+	nested := map[int]bool{}
+	for _, p := range places {
+		for _, r := range p.Rows {
+			if j := placeIndex(r.Name); r.Dir && j >= 0 {
+				nested[j] = true
+			}
+		}
+	}
+	nodeOf := map[int]*widgets.TreeNode{}
 	for i, p := range places {
+		if nested[i] {
+			continue
+		}
 		n := widgets.NewTreeNode(p.Label)
 		n.Data = i
+		nodeOf[i] = n
 		for _, r := range p.Rows {
 			if r.Dir {
 				child := widgets.NewTreeNode(r.Name)
 				if j := placeIndex(r.Name); j >= 0 {
 					child.Data = j
+					nodeOf[j] = child
 				} else {
 					child.Data = i
 				}
@@ -148,8 +180,10 @@ func FilesApp(win *app.Window) widget.Component {
 		roots = append(roots, n)
 	}
 	tree = widgets.NewTreeView(roots...)
-	if place >= 0 && place < len(roots) {
-		tree.Selected = roots[place]
+	tree.Sidebar = true // the places pane
+	tree.SetAccessibleName("Places")
+	if n := nodeOf[place]; n != nil {
+		tree.Selected = n
 	} else {
 		tree.Selected = roots[0]
 	}
@@ -183,8 +217,9 @@ func FilesApp(win *app.Window) widget.Component {
 	}
 
 	about := func() {
+		ui, mono := lookFaces(win)
 		widgets.Info(win.Content(), "About Files",
-			"Files / Projects dogfood on uitoolkit.\nUI: Titillium Web. Code preview: JetBrains Mono.",
+			"Files / Projects dogfood on uitoolkit.\nUI: "+ui+". Code preview: "+mono+".",
 			func() { mark("About") })
 	}
 
@@ -274,7 +309,8 @@ func FilesApp(win *app.Window) widget.Component {
 	split := widgets.NewSplitter(true, sidebar, right)
 	split.Ratio = 0.28
 
-	chrome := widgets.NewTitleBar("Files", "projects  ·  Titillium Web  ·  v"+uitoolkit.Version)
+	ui, _ := lookFaces(win)
+	chrome := widgets.NewTitleBar("Files", "projects  ·  "+ui+"  ·  v"+uitoolkit.Version)
 	root := widgets.NewColumn(menubar, tools, chrome, split, status).WithGap(0)
 	root.AddFlex(split, 1)
 
@@ -282,11 +318,13 @@ func FilesApp(win *app.Window) widget.Component {
 	return root
 }
 
-func previewFace(name string) string {
-	if isCodeName(name) {
-		return "JetBrains Mono"
+// lookFaces are the typefaces the window's look reads in (its era's when
+// installed, else the bundled Titillium Web and JetBrains Mono).
+func lookFaces(win *app.Window) (ui, mono string) {
+	if c, ok := win.Look().(*style.Classic); ok {
+		return c.UIFamily(), c.MonoFamily()
 	}
-	return "Titillium Web"
+	return style.FamilyUI, style.FamilyMono
 }
 
 func isCodeName(name string) bool {

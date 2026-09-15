@@ -7,9 +7,9 @@ import (
 	"github.com/codemodify/uitoolkit/style"
 )
 
-// lookWatchInterval is how often Run re-stats the watched files while idle.
-// PumpOnce always checks once. Polling keeps the watcher dependency-free
-// (no fsnotify) and fits the existing waitDisplay timeout.
+// lookWatchInterval is how often Run re-stats the watched files while idle
+// where there is no inotify; on Linux the directories are watched and an
+// idle app does not wake for them. PumpOnce always checks once.
 const lookWatchInterval = 300 * time.Millisecond
 
 // lookSettleWindow keeps reading a file whose stamp matches but whose mtime
@@ -181,8 +181,7 @@ func (a *Application) ReloadPreferredLook() {
 	// Icon files may have changed with the set; drop cached stats so the
 	// new set is picked up on the next paint.
 	style.InvalidateIconCache()
-	next := style.LoadAppearance()
-	a.SetLook(style.WithAppearance(a.look, next))
+	a.ApplyAppearance(style.LoadAppearance())
 }
 
 func (a *Application) pollLookFile() {
@@ -193,4 +192,17 @@ func (a *Application) pollLookFile() {
 		return
 	}
 	a.ReloadPreferredLook()
+	a.watchLookFiles()
+}
+
+// watchLookFiles points the notifier at look.json's directory and the
+// selected pack's, which can change with every reload.
+func (a *Application) watchLookFiles() {
+	if a.lookNotify == nil || a.lookWatch == nil {
+		return
+	}
+	a.lookNotify.watchFile(a.lookWatch.path)
+	if a.lookWatch.pack != nil {
+		a.lookNotify.watchFile(a.lookWatch.pack.path)
+	}
 }

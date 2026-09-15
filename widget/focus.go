@@ -149,3 +149,23 @@ func KeyTarget(focus, overlay Component) Component {
 	}
 	return focus
 }
+
+// Revealer is implemented by scrolling containers that can bring a
+// descendant into view (widgets.ScrollView).
+type Revealer interface {
+	Reveal(c Component)
+}
+
+// RevealFocus scrolls every enclosing Revealer so c is visible — Tab and
+// mnemonics used to move focus to controls below the fold of a ScrollView
+// without showing them.
+func RevealFocus(c Component) {
+	if c == nil {
+		return
+	}
+	for p := c.Parent(); p != nil; p = p.Parent() {
+		if r, ok := p.(Revealer); ok {
+			r.Reveal(c)
+		}
+	}
+}

@@ -10,7 +10,7 @@ func TestDrawTableCellPaintsNarrowStar(t *testing.T) {
 	look := DarkLook()
 	img := paintengine2d.NewImage(28, 28)
 	ctx := paintengine2d.NewContext(img)
-	look.DrawTableCell(ctx, paintengine2d.XYWH(0, 0, 28, 28), false, false, "★", AlignStart, look.Font())
+	look.DrawTableCell(ctx, paintengine2d.XYWH(0, 0, 28, 28), StateNone, "★", AlignStart, look.Font())
 	n := 0
 	for y := 0; y < img.Height; y++ {
 		for x := 0; x < 26; x++ {

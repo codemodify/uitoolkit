@@ -28,6 +28,7 @@ import (
 func main() {
 	headless := flag.Bool("headless", false, "paint offscreen and write settings.png")
 	shot := flag.String("screenshot", "", "write settings.png into this directory (or file) and exit")
+	stage := flag.String("stage", "", "open with this theme staged in the preview (not applied)")
 	flag.Parse()
 
 	a := uitoolkit.New(uitoolkit.Options{
@@ -35,13 +36,17 @@ func main() {
 		DisableLookWatch: true, // stage locally; Apply is the only writer
 	})
 	win, err := a.NewWindow(platform.WindowOptions{
-		Title: "Settings", Width: 1024, Height: 780, MinWidth: 720, MinHeight: 520,
+		Title: "Settings", Width: 1024, Height: 860, MinWidth: 720, MinHeight: 520,
 		Headless: *headless || *shot != "",
 	})
 	if err != nil {
 		log.Fatal(err)
 	}
-	win.SetContent(demo.SettingsApp(a, win))
+	if *stage != "" {
+		win.SetContent(demo.SettingsAppStaged(a, win, *stage))
+	} else {
+		win.SetContent(demo.SettingsApp(a, win))
+	}
 	if *shot != "" || *headless {
 		out := "settings.png"
 		if *shot != "" {

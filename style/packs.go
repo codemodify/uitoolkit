@@ -1,6 +1,9 @@
 package style
 
-import "sync"
+import (
+	"sort"
+	"sync"
+)
 
 // Era names for Settings grouping (oldest → newest).
 const (
@@ -17,27 +20,98 @@ const (
 )
 
 var (
-	eraPacksOnce sync.Once
+	eraPacksMu   sync.Mutex
+	eraPacksGen  = -1
 	eraPacksBy   map[string]ThemePack
 	eraPackOrder []string
 )
 
+// legacyEraMeta dates and files the 21 v0.19 era packs so they sort with
+// the engine packs in the theme browser.
+var legacyEraMeta = map[string]struct {
+	year    int
+	lineage string
+}{
+	"dark": {1995, "Windows"}, "light": {1995, "Windows"},
+	"motif": {1990, "Unix"}, "cde": {1993, "Unix"}, "cde-crimson": {1993, "Unix"},
+	"next": {1989, "NeXT"}, "next-night": {1989, "NeXT"},
+	"luna": {2001, "Windows"}, "luna-night": {2001, "Windows"},
+	"aqua": {2001, "Mac OS"}, "aqua-night": {2001, "Mac OS"},
+	"fusion": {2012, "Qt"}, "fusion-night": {2012, "Qt"},
+	"breeze": {2014, "KDE"}, "breeze-night": {2014, "KDE"},
+	"fluent": {2017, "Windows"}, "fluent-night": {2017, "Windows"},
+	"material": {2014, "Google"}, "material-night": {2014, "Google"},
+	"flatlaf": {2019, "Java"}, "flatlaf-night": {2019, "Java"},
+}
+
+// eraPackIndex merges the legacy era packs with packs registered by the
+// engines (a registered pack replaces a legacy one of the same name) and
+// orders them oldest → newest. It rebuilds whenever RegisterPack ran.
 func eraPackIndex() map[string]ThemePack {
-	eraPacksOnce.Do(func() {
-		eraPacksBy = map[string]ThemePack{}
-		for _, p := range allEraPacks() {
-			p.Source = ThemeSourceBuiltin
-			p.Tokens = p.Tokens.Resolve()
-			p.Palette = p.Tokens.Family
-			eraPacksBy[p.Name] = p
-			eraPackOrder = append(eraPackOrder, p.Name)
+	packMu.Lock()
+	gen := packGen
+	packMu.Unlock()
+	eraPacksMu.Lock()
+	defer eraPacksMu.Unlock()
+	if eraPacksBy != nil && eraPacksGen == gen {
+		return eraPacksBy
+	}
+	by := map[string]ThemePack{}
+	var order []ThemePack
+	add := func(p ThemePack) {
+		p.Source = ThemeSourceBuiltin
+		p.Tokens = p.Tokens.Resolve()
+		p.Palette = p.Tokens.Family
+		if _, dup := by[p.Name]; dup {
+			for i := range order {
+				if order[i].Name == p.Name {
+					order[i] = p
+				}
+			}
+		} else {
+			order = append(order, p)
 		}
+		by[p.Name] = p
+	}
+	for _, p := range allEraPacks() {
+		if meta, ok := legacyEraMeta[p.Name]; ok {
+			if p.Year == 0 {
+				p.Year = meta.year
+			}
+			if p.Lineage == "" {
+				p.Lineage = meta.lineage
+			}
+		}
+		add(p)
+	}
+	for _, p := range registeredPacks() {
+		add(p)
+	}
+	sort.SliceStable(order, func(i, j int) bool {
+		a, b := order[i], order[j]
+		if a.Year != b.Year {
+			if a.Year == 0 || b.Year == 0 {
+				return b.Year == 0
+			}
+			return a.Year < b.Year
+		}
+		if a.Lineage != b.Lineage {
+			return a.Lineage < b.Lineage
+		}
+		return a.Display() < b.Display()
 	})
+	names := make([]string, len(order))
+	for i, p := range order {
+		names[i] = p.Name
+	}
+	eraPacksBy, eraPackOrder, eraPacksGen = by, names, gen
 	return eraPacksBy
 }
 
 func builtinEraOrder() []string {
 	eraPackIndex()
+	eraPacksMu.Lock()
+	defer eraPacksMu.Unlock()
 	return append([]string(nil), eraPackOrder...)
 }
 
@@ -861,13 +935,18 @@ func packFlatLafNight() ThemePack {
 }
 
 func aliasThemeName(name string) string {
+	// A real pack always wins over a legacy alias (win95 and win98 used to
+	// alias Classic 95 Light, adwaita aliased Breeze before it had an engine).
+	if _, ok := builtinEraPack(name); ok {
+		return name
+	}
 	switch name {
 	case "classic95", "classic95-light", "win95", "win98":
 		return "light"
 	case "classic95-dark", "win95-dark":
 		return "dark"
-	case "cde-charcoal", "charcoal":
-		return "cde"
+	case "charcoal":
+		return "cde-charcoal"
 	case "next-dark":
 		return "next-night"
 	case "luna-dark":
@@ -876,11 +955,10 @@ func aliasThemeName(name string) string {
 		return "aqua-night"
 	case "fusion-dark":
 		return "fusion-night"
-	case "breeze-dark", "adwaita", "adwaita-dark":
-		if name == "adwaita" {
-			return "breeze"
-		}
+	case "breeze-dark":
 		return "breeze-night"
+	case "adwaita-dark":
+		return "adwaita-night"
 	case "fluent-dark":
 		return "fluent-night"
 	case "material-dark":

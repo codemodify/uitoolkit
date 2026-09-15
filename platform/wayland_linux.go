@@ -55,6 +55,13 @@ extern void uitkWlRegistryRemove(uintptr_t id, uint32_t name);
 extern void uitkWlDataOffer(uintptr_t id, struct wl_data_offer *offer);
 extern void uitkWlDataOfferMime(uintptr_t id, struct wl_data_offer *offer, char *mime);
 extern void uitkWlSelection(uintptr_t id, struct wl_data_offer *offer);
+extern void uitkWlPtrFrame(uintptr_t id);
+extern void uitkWlAxisSource(uintptr_t id, uint32_t src);
+extern void uitkWlAxisStop(uintptr_t id);
+extern void uitkWlDndEnter(uintptr_t id, uint32_t serial, struct wl_surface *s, wl_fixed_t x, wl_fixed_t y, struct wl_data_offer *o);
+extern void uitkWlDndLeave(uintptr_t id);
+extern void uitkWlDndMotion(uintptr_t id, wl_fixed_t x, wl_fixed_t y);
+extern void uitkWlDndDrop(uintptr_t id);
 extern void uitkWlDataSend(uintptr_t id, int fd);
 extern void uitkWlDataCancelled(uintptr_t id);
 extern void uitkWlPrimOffer(uintptr_t id, struct zwp_primary_selection_offer_v1 *offer);
@@ -272,10 +279,11 @@ static void uitk_ptr_axis(void *data, struct wl_pointer *p, uint32_t time, uint3
 	(void)p; (void)time;
 	uitkWlPtrAxis((uintptr_t)data, axis, value);
 }
-static void uitk_ptr_frame(void *data, struct wl_pointer *p) { (void)data; (void)p; }
-static void uitk_ptr_axis_src(void *data, struct wl_pointer *p, uint32_t src) { (void)data; (void)p; (void)src; }
+static void uitk_ptr_frame(void *data, struct wl_pointer *p) { (void)p; uitkWlPtrFrame((uintptr_t)data); }
+static void uitk_ptr_axis_src(void *data, struct wl_pointer *p, uint32_t src) { (void)p; uitkWlAxisSource((uintptr_t)data, src); }
 static void uitk_ptr_axis_stop(void *data, struct wl_pointer *p, uint32_t time, uint32_t axis) {
-	(void)data; (void)p; (void)time; (void)axis;
+	(void)p; (void)time; (void)axis;
+	uitkWlAxisStop((uintptr_t)data);
 }
 static void uitk_ptr_axis_disc(void *data, struct wl_pointer *p, uint32_t axis, int32_t disc) {
 	(void)data; (void)p; (void)axis; (void)disc;
@@ -569,13 +577,22 @@ static void uitk_ddev_offer(void *data, struct wl_data_device *d, struct wl_data
 	uitkWlDataOffer((uintptr_t)data, o);
 }
 static void uitk_ddev_enter(void *data, struct wl_data_device *d, uint32_t serial, struct wl_surface *s, wl_fixed_t x, wl_fixed_t y, struct wl_data_offer *o) {
-	(void)data; (void)d; (void)serial; (void)s; (void)x; (void)y; (void)o;
+	(void)d;
+	uitkWlDndEnter((uintptr_t)data, serial, s, x, y, o);
 }
-static void uitk_ddev_leave(void *data, struct wl_data_device *d) { (void)data; (void)d; }
+static void uitk_ddev_leave(void *data, struct wl_data_device *d) { (void)d; uitkWlDndLeave((uintptr_t)data); }
 static void uitk_ddev_motion(void *data, struct wl_data_device *d, uint32_t time, wl_fixed_t x, wl_fixed_t y) {
-	(void)data; (void)d; (void)time; (void)x; (void)y;
+	(void)d; (void)time;
+	uitkWlDndMotion((uintptr_t)data, x, y);
 }
-static void uitk_ddev_drop(void *data, struct wl_data_device *d) { (void)data; (void)d; }
+static void uitk_ddev_drop(void *data, struct wl_data_device *d) { (void)d; uitkWlDndDrop((uintptr_t)data); }
+static void ui_wl_offer_accept(struct wl_data_offer *o, uint32_t serial, const char *mime) { wl_data_offer_accept(o, serial, mime); }
+static void ui_wl_offer_actions(struct wl_data_offer *o, uint32_t actions, uint32_t preferred) {
+	if (wl_data_offer_get_version(o) >= 3) wl_data_offer_set_actions(o, actions, preferred);
+}
+static void ui_wl_offer_finish(struct wl_data_offer *o) {
+	if (wl_data_offer_get_version(o) >= 3) wl_data_offer_finish(o);
+}
 static void uitk_ddev_sel(void *data, struct wl_data_device *d, struct wl_data_offer *o) {
 	(void)d;
 	uitkWlSelection((uintptr_t)data, o);
@@ -1045,6 +1062,22 @@ type wlConn struct {
 	clip        clipCache
 	pendingOff  *C.struct_wl_data_offer
 	pendingMime string
+	// offerMimes are every type each live offer carries (drags need them
+	// all; the clipboard only its preferred one). dnd* is the drag over a
+	// window now: its offer, serial, surface, and whether it was dropped.
+	offerMimes map[*C.struct_wl_data_offer][]string
+	dndOffer   *C.struct_wl_data_offer
+	dndSerial  uint32
+	dndSurf    int
+	dndDropped bool
+	dndPos     paintengine2d.Point // device pixels in the surface
+	// axisSrc is the current pointer frame's axis source (wl_pointer v5:
+	// 0 wheel, 1 finger, 2 continuous, 3 wheel tilt; -1 not said).
+	axisSrc int
+	// kin keeps a touchpad scroll going after the fingers lift, over the
+	// surface kinSurf.
+	kin     kinetic
+	kinSurf int
 
 	primMan      *C.struct_zwp_primary_selection_device_manager_v1
 	primDev      *C.struct_zwp_primary_selection_device_v1
@@ -1055,19 +1088,28 @@ type wlConn struct {
 	pendPrim     *C.struct_zwp_primary_selection_offer_v1
 	pendPrimMime string
 
-	textMan     *C.struct_zwp_text_input_manager_v3
-	textIn      *C.struct_zwp_text_input_v3
-	textActive  bool
-	tiWanted    bool // app focused an IMETarget; enable only then
-	tiSurf      int
-	imePre      string
-	imeCommit   string
-	imeDelB     int
-	imeDelA     int
-	imeBegin    int
-	imeEnd      int
-	lastXkbText string
-	lastIMEText string
+	textMan    *C.struct_zwp_text_input_manager_v3
+	textIn     *C.struct_zwp_text_input_v3
+	textActive bool
+	tiWanted   bool // app focused an IMETarget; enable only then
+	tiSurf     int
+	imePre     string
+	imeCommit  string
+	// lastPre / lastPreCaret are the preedit last handed to the app, and
+	// tiRect the cursor rectangle last committed to the compositor. Every
+	// text_input commit makes the compositor answer with done; re-sending
+	// an unchanged rectangle on each (empty) done was a busy loop on KWin
+	// (~3500 repaints/s with a focused field).
+	lastPre      string
+	lastPreCaret int
+	tiRect       [4]int
+	tiRectSet    bool
+	imeDelB      int
+	imeDelA      int
+	imeBegin     int
+	imeEnd       int
+	lastXkbText  string
+	lastIMEText  string
 
 	decoMan    *C.struct_zxdg_decoration_manager_v1
 	fracMan    *C.struct_wp_fractional_scale_manager_v1
@@ -1103,6 +1145,10 @@ type wlConn struct {
 	// servicing is set while the background clipboard drainer runs: no
 	// window loop is left to answer wl_data_source.send.
 	servicing bool
+	// svcDone closes when the drainer stops. It dispatches (runs the event
+	// callbacks) outside wlMu, so a caller taking the connection back
+	// waits for it: two goroutines must never dispatch at once.
+	svcDone chan struct{}
 }
 
 type wlSlot struct {
@@ -1114,9 +1160,21 @@ type wlSlot struct {
 	stride int
 	busy   bool
 	dma    unsafe.Pointer // *ui_dmabuf_bo
+	// valid is set once the buffer holds a complete frame; stale is the
+	// damage presented through the other buffers since then. A buffer
+	// comes back into use frames later, so copying only the current
+	// frame's rects into it showed older content everywhere else (the shm
+	// equivalent of EGL buffer age).
+	valid bool
+	stale []paintengine2d.Rect
 }
 
+// maxSlotStale bounds a buffer's damage history; past it the buffer is
+// simply rewritten in full.
+const maxSlotStale = 32
+
 type wlSurface struct {
+	soft       softDevice // software devices of the buffers (no GPU)
 	id         int
 	conn       *wlConn
 	surf       *C.struct_wl_surface
@@ -1156,6 +1214,14 @@ type wlSurface struct {
 	// wedge presentation.
 	framePending bool
 	frameSince   time.Time
+	// pend* is damage from frames that could not be presented yet (a frame
+	// callback was outstanding, or the compositor held every buffer). It
+	// is folded into the next present, or flushed from Poll once the
+	// compositor is ready, so nothing painted is ever lost. The content is
+	// already in the pixmap / GPU target: flushing repaints nothing.
+	pendAny   bool
+	pendFull  bool
+	pendRects []paintengine2d.Rect
 	// blank marks a buffer that was reallocated (resize / scale change)
 	// and never painted; committing it shows a black or transparent
 	// flash, so Present skips it and lets the resize event drive a
@@ -1179,11 +1245,18 @@ var (
 
 func wlRetain() (*wlConn, error) {
 	wlMu.Lock()
-	defer wlMu.Unlock()
-	if wlc != nil {
-		wlc.refs++
-		return wlc, nil
+	if c := wlc; c != nil {
+		c.refs++
+		done := c.svcDone
+		wlMu.Unlock()
+		if done != nil {
+			// The clipboard drainer sees the new reference and stops
+			// within one wait; only then may this caller dispatch.
+			<-done
+		}
+		return c, nil
 	}
+	defer wlMu.Unlock()
 	dpy := C.ui_wl_connect()
 	if dpy == nil {
 		return nil, fmt.Errorf("platform: wl_display_connect failed (set WAYLAND_DISPLAY or use headless)")
@@ -1244,6 +1317,7 @@ func (c *wlConn) startClipboardServiceLocked() {
 		return
 	}
 	c.servicing = true
+	c.svcDone = make(chan struct{})
 	go c.serviceClipboard()
 }
 
@@ -1252,10 +1326,13 @@ func (c *wlConn) serviceClipboard() {
 		wlMu.Lock()
 		if c.dpy == nil || c.refs > 0 || !c.clipKeep {
 			c.servicing = false
+			done := c.svcDone
+			c.svcDone = nil
 			if c.dpy != nil && c.refs == 0 && !c.clipKeep {
 				c.closeLocked()
 			}
 			wlMu.Unlock()
+			close(done)
 			return
 		}
 		dpy := c.dpy
@@ -1713,7 +1790,12 @@ func (s *wlSurface) SetIMECursor(x, y, w, h int) {
 		sc = 1
 	}
 	// text-input cursor rect is in surface-local (logical) units
-	C.ui_wl_ti_cursor(s.conn.textIn, C.int(float32(x)/sc), C.int(float32(y)/sc), C.int(float32(w)/sc+0.5), C.int(float32(h)/sc+0.5))
+	r := [4]int{int(float32(x) / sc), int(float32(y) / sc), int(float32(w)/sc + 0.5), int(float32(h)/sc + 0.5)}
+	if s.conn.tiRectSet && s.conn.tiRect == r {
+		return // unchanged: a commit would only trigger another done
+	}
+	s.conn.tiRect, s.conn.tiRectSet = r, true
+	C.ui_wl_ti_cursor(s.conn.textIn, C.int(r[0]), C.int(r[1]), C.int(r[2]), C.int(r[3]))
 	C.ui_wl_ti_commit(s.conn.textIn)
 }
 
@@ -1782,6 +1864,48 @@ func (s *wlSurface) bufferWH() (int, int) {
 }
 
 func (s *wlSurface) Present(dirty []paintengine2d.Rect) error {
+	return s.present(dirty, false)
+}
+
+// deferDamage remembers the damage of a frame that could not be presented.
+func (s *wlSurface) deferDamage(dirty []paintengine2d.Rect) {
+	s.pendAny = true
+	if len(dirty) == 0 {
+		s.pendFull = true
+	}
+	if s.pendFull {
+		s.pendRects = s.pendRects[:0]
+		return
+	}
+	s.pendRects = append(s.pendRects, dirty...)
+}
+
+// takeDeferred unions deferred damage with this present's (nothing extra
+// when flushOnly) and clears it. full means the whole surface.
+func (s *wlSurface) takeDeferred(dirty []paintengine2d.Rect, flushOnly bool) (rects []paintengine2d.Rect, full bool) {
+	full = s.pendFull || (!flushOnly && len(dirty) == 0)
+	if !full {
+		rects = append(append(rects, s.pendRects...), dirty...)
+	}
+	s.pendAny, s.pendFull = false, false
+	s.pendRects = s.pendRects[:0]
+	return rects, full
+}
+
+// flushDeferred presents damage left over from skipped frames once the
+// compositor can take a frame again (called from Poll after dispatch,
+// where frame-done and buffer-release events land).
+func (s *wlSurface) flushDeferred() {
+	if s == nil || !s.pendAny || s.closed {
+		return
+	}
+	if s.gpu != nil && s.framePending && !s.frameOverdue() {
+		return
+	}
+	_ = s.present(nil, true)
+}
+
+func (s *wlSurface) present(dirty []paintengine2d.Rect, flushOnly bool) error {
 	if s.closed || s.surf == nil || s.conn == nil || s.conn.dpy == nil {
 		return nil
 	}
@@ -1839,7 +1963,20 @@ func (s *wlSurface) Present(dirty []paintengine2d.Rect) error {
 		// eglSwapBuffers would stall the whole run loop. Skip the swap
 		// while one is outstanding.
 		if s.framePending && !s.frameOverdue() {
+			// Keep the frame's damage: it was painted into the GPU target
+			// but never swapped. Dropping it left pressed buttons and
+			// popups off screen until an unrelated repaint.
+			if !flushOnly {
+				s.deferDamage(dirty)
+			}
 			return nil
+		}
+		if flushOnly || s.pendAny {
+			rects, full := s.takeDeferred(dirty, flushOnly)
+			if full {
+				rects = nil
+			}
+			s.gpu.SetPresentDamage(rects)
 		}
 		s.requestFrame()
 		if err := s.presentGPU(); err == nil {
@@ -1851,14 +1988,28 @@ func (s *wlSurface) Present(dirty []paintengine2d.Rect) error {
 		// pixmap and fall back to v0.4.1 opaque shm.
 		s.abandonGPU()
 	}
-	if len(dirty) == 0 {
-		dirty = []paintengine2d.Rect{paintengine2d.XYWH(0, 0, float32(s.img.Width), float32(s.img.Height))}
+	whole := []paintengine2d.Rect{paintengine2d.XYWH(0, 0, float32(s.img.Width), float32(s.img.Height))}
+	if len(dirty) == 0 && !flushOnly {
+		dirty = whole
 	}
 	slot, ok := s.pickSlot()
 	if !ok {
 		// Every buffer is still owned by the compositor. Writing into
-		// one anyway tears (and with dmabuf races the GPU); the next
-		// Present after a release paints this frame instead.
+		// one anyway tears (and with dmabuf races the GPU); the damage
+		// is kept and presented once a buffer is released.
+		if !flushOnly {
+			s.deferDamage(dirty)
+		}
+		return nil
+	}
+	if flushOnly || s.pendAny {
+		rects, full := s.takeDeferred(dirty, flushOnly)
+		if full {
+			rects = whole
+		}
+		dirty = rects
+	}
+	if len(dirty) == 0 {
 		return nil
 	}
 	if err := s.ensureSlot(slot, s.img.Width, s.img.Height); err != nil {
@@ -1872,7 +2023,15 @@ func (s *wlSurface) Present(dirty []paintengine2d.Rect) error {
 			return err
 		}
 	}
-	s.blitDirty(slot, dirty)
+	// This buffer also needs everything presented through the others
+	// since it last held a frame.
+	copyRects := dirty
+	if sl := &s.slots[slot]; !sl.valid {
+		copyRects = whole
+	} else if len(sl.stale) > 0 {
+		copyRects = append(append([]paintengine2d.Rect(nil), sl.stale...), dirty...)
+	}
+	s.blitDirty(slot, copyRects)
 	if s.dmabufUploadBlank(slot) {
 		s.finishDMAWrite(slot)
 		s.conn.useDmabuf = false
@@ -1880,15 +2039,38 @@ func (s *wlSurface) Present(dirty []paintengine2d.Rect) error {
 		if err := s.ensureSlot(slot, s.img.Width, s.img.Height); err != nil {
 			return err
 		}
-		s.blitDirty(slot, dirty)
+		s.blitDirty(slot, whole)
 	}
 	s.finishDMAWrite(slot)
 	C.ui_wl_attach(s.surf, s.slots[slot].buf)
 	C.ui_wl_commit(s.surf)
 	s.slots[slot].busy = true
+	s.noteSlotPresented(slot, dirty)
 	s.mapped = true
 	C.ui_wl_flush(s.conn.dpy)
 	return nil
+}
+
+// noteSlotPresented marks slot current and adds dirty to every other
+// buffer's history.
+func (s *wlSurface) noteSlotPresented(slot int, dirty []paintengine2d.Rect) {
+	for i := range s.slots {
+		sl := &s.slots[i]
+		if i == slot {
+			sl.valid = true
+			sl.stale = sl.stale[:0]
+			continue
+		}
+		if !sl.valid {
+			continue
+		}
+		if len(sl.stale)+len(dirty) > maxSlotStale {
+			sl.valid = false
+			sl.stale = sl.stale[:0]
+			continue
+		}
+		sl.stale = append(sl.stale, dirty...)
+	}
 }
 
 // imgPainted reports whether anything has been drawn into the current
@@ -2138,10 +2320,14 @@ func (s *wlSurface) Poll() []Event {
 	}
 	if !s.closed {
 		C.ui_wl_pump(s.conn.dpy)
+		// Frame-done / buffer-release just arrived: present whatever a
+		// throttled frame could not.
+		s.flushDeferred()
 	}
 	wlMu.Lock()
 	if !s.closed {
 		s.conn.flushRepeatLocked()
+		s.conn.flushKineticLocked()
 	}
 	// Hand back whatever is queued even after the surface closed, so a
 	// final EventClose can never be swallowed.
@@ -2169,10 +2355,37 @@ func (s *wlSurface) WakeAt() time.Time {
 	}
 	wlMu.Lock()
 	defer wlMu.Unlock()
-	if !s.conn.heldDown || s.conn.repeatKey == 0 || s.conn.repeatRate <= 0 {
-		return time.Time{}
+	var at time.Time
+	if s.conn.heldDown && s.conn.repeatKey != 0 && s.conn.repeatRate > 0 {
+		at = s.conn.repeatNext
 	}
-	return s.conn.repeatNext
+	if s.conn.kin.running && s.conn.kinSurf == s.id && (at.IsZero() || s.conn.kin.next.Before(at)) {
+		at = s.conn.kin.next
+	}
+	return at
+}
+
+// flushKineticLocked scrolls a gliding fling on by the time since its
+// last step.
+func (c *wlConn) flushKineticLocked() {
+	if !c.kin.running {
+		return
+	}
+	now := time.Now()
+	if now.Before(c.kin.next) {
+		return
+	}
+	s := wlSurfaces[c.kinSurf]
+	if s == nil {
+		c.kin.stop()
+		return
+	}
+	dx, dy, ok := c.kin.step(now)
+	if !ok || (dx == 0 && dy == 0) {
+		return
+	}
+	px, py := s.toDevice(c.px, c.py)
+	s.push(Event{Kind: EventScroll, Pos: paintengine2d.Pt(px, py), Scroll: paintengine2d.Pt(dx, dy), Mods: c.mods, ScrollPrecise: true})
 }
 
 func (c *wlConn) flushRepeatLocked() {
@@ -2531,9 +2744,14 @@ func uitkWlPtrEnter(id C.uintptr_t, serial C.uint32_t, surf *C.struct_wl_surface
 //export uitkWlPtrLeave
 func uitkWlPtrLeave(id C.uintptr_t) {
 	c := wlConnBy(id)
-	if c != nil {
-		c.ptrSurf = 0
+	if c == nil {
+		return
 	}
+	c.kin.stop()
+	if s := wlSurfaces[c.ptrSurf]; s != nil {
+		s.push(Event{Kind: EventPointerLeave, Mods: c.mods})
+	}
+	c.ptrSurf = 0
 }
 
 //export uitkWlPtrMotion
@@ -2556,6 +2774,8 @@ func uitkWlPtrButton(id C.uintptr_t, button, state, serial C.uint32_t) {
 	if c == nil {
 		return
 	}
+	// A click stops a fling.
+	c.kin.stop()
 	c.serial = uint32(serial)
 	s := wlSurfaces[c.ptrSurf]
 	if s == nil {
@@ -2579,18 +2799,61 @@ func uitkWlPtrAxis(id C.uintptr_t, axis C.uint32_t, value C.wl_fixed_t) {
 	if s == nil {
 		return
 	}
-	v := float32(C.ui_wl_fixed(value)) * 4
-	dx, dy := float32(0), float32(0)
-	if s != nil {
-		dx, dy = s.toDevice(c.px, c.py)
-	}
+	raw := float32(C.ui_wl_fixed(value))
+	dx, dy := s.toDevice(c.px, c.py)
 	ev := Event{Kind: EventScroll, Pos: paintengine2d.Pt(dx, dy), Mods: c.mods}
+	var v float32
+	switch c.axisSrc {
+	case 1, 2:
+		// A touchpad or other continuous source: surface pixels, which
+		// the content follows as they are (device pixels).
+		ex, _ := s.toDevice(raw, 0)
+		v, ev.ScrollPrecise = ex, true
+		if c.axisSrc == 1 {
+			if axis == 0 {
+				c.kin.sample(time.Now(), 0, ex)
+			} else {
+				c.kin.sample(time.Now(), ex, 0)
+			}
+			c.kinSurf = s.id
+		}
+	default:
+		// A wheel: libinput reports 10 per notch (hi-res wheels a part of
+		// one); widgets scroll three lines a notch, as on X11.
+		v = raw / 10
+	}
 	if axis == 0 {
 		ev.Scroll = paintengine2d.Pt(0, v)
 	} else {
 		ev.Scroll = paintengine2d.Pt(v, 0)
 	}
 	s.push(ev)
+}
+
+//export uitkWlAxisSource
+func uitkWlAxisSource(id C.uintptr_t, src C.uint32_t) {
+	if c := wlConnBy(id); c != nil {
+		c.axisSrc = int(src)
+	}
+}
+
+//export uitkWlAxisStop
+func uitkWlAxisStop(id C.uintptr_t) {
+	c := wlConnBy(id)
+	if c == nil || c.axisSrc != 1 {
+		return
+	}
+	// The fingers lifted: a quick swipe glides on.
+	if c.kin.release(time.Now()) {
+		WakeLoop()
+	}
+}
+
+//export uitkWlPtrFrame
+func uitkWlPtrFrame(id C.uintptr_t) {
+	if c := wlConnBy(id); c != nil {
+		c.axisSrc = -1
+	}
 }
 
 //export uitkWlKeymap
@@ -2965,7 +3228,103 @@ func uitkWlDataOfferMime(id C.uintptr_t, offer *C.struct_wl_data_offer, mime *C.
 	if preferMime(c.pendingMime, m) {
 		c.pendingMime = m
 	}
-	_ = offer
+	if offer != nil {
+		if c.offerMimes == nil {
+			c.offerMimes = map[*C.struct_wl_data_offer][]string{}
+		}
+		c.offerMimes[offer] = append(c.offerMimes[offer], m)
+	}
+}
+
+// dropMime is the type a drop is read in: files, then UTF-8 text.
+func dropMime(mimes []string) string {
+	for _, want := range []string{"text/uri-list", "text/plain;charset=utf-8", "UTF8_STRING", "text/plain"} {
+		for _, m := range mimes {
+			if m == want {
+				return m
+			}
+		}
+	}
+	return ""
+}
+
+//export uitkWlDndEnter
+func uitkWlDndEnter(id C.uintptr_t, serial C.uint32_t, surf *C.struct_wl_surface, x, y C.wl_fixed_t, offer *C.struct_wl_data_offer) {
+	c := wlConnBy(id)
+	if c == nil {
+		return
+	}
+	c.dndDrop(false)
+	c.dndOffer, c.dndSerial, c.dndDropped = offer, uint32(serial), false
+	s := wlSurfNative(surf)
+	if s == nil || offer == nil {
+		return
+	}
+	c.dndSurf = s.id
+	mimes := c.offerMimes[offer]
+	if m := dropMime(mimes); m != "" {
+		cm := C.CString(m)
+		C.ui_wl_offer_accept(offer, serial, cm)
+		C.free(unsafe.Pointer(cm))
+		C.ui_wl_offer_actions(offer, 1, 1) // copy
+	} else {
+		C.ui_wl_offer_accept(offer, serial, nil)
+	}
+	dx, dy := s.toDevice(float32(C.ui_wl_fixed(x)), float32(C.ui_wl_fixed(y)))
+	c.dndPos = paintengine2d.Pt(dx, dy)
+	s.push(Event{Kind: EventDragMotion, Pos: c.dndPos, Mimes: mimes})
+}
+
+//export uitkWlDndMotion
+func uitkWlDndMotion(id C.uintptr_t, x, y C.wl_fixed_t) {
+	c := wlConnBy(id)
+	if c == nil || c.dndOffer == nil {
+		return
+	}
+	if s := wlSurfaces[c.dndSurf]; s != nil {
+		dx, dy := s.toDevice(float32(C.ui_wl_fixed(x)), float32(C.ui_wl_fixed(y)))
+		c.dndPos = paintengine2d.Pt(dx, dy)
+		s.push(Event{Kind: EventDragMotion, Pos: c.dndPos, Mimes: c.offerMimes[c.dndOffer]})
+	}
+}
+
+//export uitkWlDndLeave
+func uitkWlDndLeave(id C.uintptr_t) {
+	c := wlConnBy(id)
+	if c == nil {
+		return
+	}
+	if !c.dndDropped {
+		if s := wlSurfaces[c.dndSurf]; s != nil {
+			s.push(Event{Kind: EventDragLeave})
+		}
+		c.dndDrop(false)
+	}
+}
+
+//export uitkWlDndDrop
+func uitkWlDndDrop(id C.uintptr_t) {
+	c := wlConnBy(id)
+	if c == nil || c.dndOffer == nil {
+		return
+	}
+	c.dndDropped = true
+	if s := wlSurfaces[c.dndSurf]; s != nil {
+		s.push(Event{Kind: EventDrop, Pos: c.dndPos, Mimes: c.offerMimes[c.dndOffer]})
+	}
+}
+
+// dndDrop ends the current drag's offer, finished when it was taken.
+func (c *wlConn) dndDrop(taken bool) {
+	if c.dndOffer == nil {
+		return
+	}
+	if taken {
+		C.ui_wl_offer_finish(c.dndOffer)
+	}
+	delete(c.offerMimes, c.dndOffer)
+	C.ui_wl_data_offer_destroy(c.dndOffer)
+	c.dndOffer, c.dndDropped = nil, false
 }
 
 //export uitkWlSelection
@@ -2979,9 +3338,20 @@ func uitkWlSelection(id C.uintptr_t, offer *C.struct_wl_data_offer) {
 	}
 	c.clipOffer = offer
 	c.clipMime = c.pendingMime
+	if ms, ok := c.offerMimes[offer]; ok {
+		// This offer's own types: a drag's offer may have come in between.
+		c.clipMime = ""
+		for _, m := range ms {
+			if preferMime(c.clipMime, m) {
+				c.clipMime = m
+			}
+		}
+	}
 	if offer == c.pendingOff {
 		c.pendingOff = nil
 	}
+	// The clipboard keeps its preferred type; forget the list.
+	delete(c.offerMimes, offer)
 	// The cache is only valid while we hold a live source of our own.
 	c.clip.selectionChanged(c.dataSrc != nil)
 }
@@ -3176,12 +3546,15 @@ func uitkWlTIDone(id C.uintptr_t) {
 	if s == nil {
 		return
 	}
-	if c.imePre != "" || (c.imeCommit == "" && c.imeDelB == 0 && c.imeDelA == 0) {
-		caret := runeCountStr(c.imePre)
-		if c.imeEnd >= 0 && c.imeEnd < caret {
-			caret = c.imeEnd
-		}
+	caret := runeCountStr(c.imePre)
+	if c.imeEnd >= 0 && c.imeEnd < caret {
+		caret = c.imeEnd
+	}
+	// Only a preedit that changed reaches the app: done also arrives for
+	// every commit we send (cursor rectangle updates), with nothing new.
+	if c.imePre != c.lastPre || (c.imePre != "" && caret != c.lastPreCaret) {
 		s.push(Event{Kind: EventIMEPreedit, Text: c.imePre, IMECaret: caret})
+		c.lastPre, c.lastPreCaret = c.imePre, caret
 	}
 	emit, lastX, lastI := PairIMECommit(c.imeCommit, c.lastXkbText)
 	c.lastXkbText, c.lastIMEText = lastX, lastI
@@ -3220,6 +3593,8 @@ func wlEnableTextInput(c *wlConn, s *wlSurface) {
 	C.ui_wl_ti_enable(c.textIn)
 	C.ui_wl_ti_cursor(c.textIn, 0, 0, 1, 1)
 	C.ui_wl_ti_commit(c.textIn)
+	c.tiRect, c.tiRectSet = [4]int{0, 0, 1, 1}, true
+	c.lastPre, c.lastPreCaret = "", 0
 }
 
 func wlDisableTextInput(c *wlConn) {
@@ -3229,6 +3604,8 @@ func wlDisableTextInput(c *wlConn) {
 	C.ui_wl_ti_disable(c.textIn)
 	C.ui_wl_ti_commit(c.textIn)
 	c.textActive = false
+	c.tiRectSet = false
+	c.lastPre, c.lastPreCaret = "", 0
 }
 
 func wlClipSet(s string) bool {
@@ -3350,4 +3727,26 @@ func wlReadFD(c *wlConn, request func(fd int)) (string, bool) {
 	}
 	C.ui_wl_close_fd(fds[0])
 	return string(out), true
+}
+
+// ReceiveDrop reads the drag dropped on the surface as mime.
+func (s *wlSurface) ReceiveDrop(mime string) ([]byte, bool) {
+	c := s.conn
+	if c == nil || c.dndOffer == nil || !c.dndDropped || mime == "" {
+		return nil, false
+	}
+	offer := c.dndOffer
+	text, ok := wlReadFD(c, func(fd int) {
+		cm := C.CString(mime)
+		C.ui_wl_data_receive(offer, cm, C.int(fd))
+		C.free(unsafe.Pointer(cm))
+	})
+	return []byte(text), ok
+}
+
+// FinishDrop completes the drop (ok: taken) and lets the offer go.
+func (s *wlSurface) FinishDrop(ok bool) {
+	if c := s.conn; c != nil {
+		c.dndDrop(ok)
+	}
 }

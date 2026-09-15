@@ -53,7 +53,30 @@ type Application struct {
 	posted           []func()
 	statusMenu       *Window
 	hidingStatusMenu bool
+	// desktopStop ends the watch on the desktop's appearance preferences;
+	// schemeForced is set when ColorSchemeEnv stands in for the desktop;
+	// following is set while the look follows its light / dark preference.
+	desktopStop  func()
+	schemeForced bool
+	accentForced bool
+	following    bool
+	lookHooks    []*func()
+	// a11y is the accessibility bridge while assistive technology runs.
+	a11y a11yBridge
+	// lookNotify wakes the loop when look.json's directory changes; with
+	// it the loop does not poll the file while idle.
+	lookNotify *lookNotify
 }
+
+// trayWakeCap is the longest a tray-holding loop sleeps. Tray events
+// arrive through Post, which wakes the loop (platform.WakeLoop, the
+// surface's waker), so this is only a safety net; it was 100ms, ten wakes a
+// second for every tray app.
+const trayWakeCap = time.Second
+
+// a11yBridge is a platform's accessibility adapter; sync runs on the UI
+// goroutine after every frame.
+type a11yBridge interface{ sync() }
 
 // New constructs an application. Default look is PreferredLook
 // (XDG appearance, else dark Classic). When Look is nil, New also
@@ -61,9 +84,15 @@ type Application struct {
 // Scale <= 0 means detect (env, then Xft.dpi on X11). Headless
 // stays 1× unless UITK_SCALE / GDK_SCALE / QT_SCALE_FACTOR is set.
 func New(opts Options) *Application {
+	// The installed-font index loads while the display comes up.
+	style.PrefetchSystemFonts()
 	watch := opts.WatchLook
-	if opts.Look == nil {
-		opts.Look = style.PreferredLook()
+	preferred := opts.Look == nil
+	var ap style.Appearance
+	if preferred {
+		ap = style.LoadAppearance()
+		style.SetReduceMotion(ap.ReduceMotion)
+		style.SetNativeDialogs(ap.NativeDialogs)
 		watch = true
 	}
 	if opts.DisableLookWatch {
@@ -87,19 +116,37 @@ func New(opts Options) *Application {
 			auto = true
 		}
 	}
-	base := lookAtScale(opts.Look, 1)
 	a := &Application{
-		look:      lookAtScale(base, opts.Scale),
-		base:      base,
 		scale:     opts.Scale,
 		autoScale: auto,
 		headless:  opts.Headless,
 		backend:   backend,
 		watchLook: watch,
 	}
+	// Ask the desktop for its preferences before the look is built: a
+	// theme that follows its light / dark mode starts in the right one.
+	a.watchDesktop()()
+	if preferred {
+		a.following = ap.FollowDesktop
+		opts.Look = ap.Look()
+	}
+	a.base = lookAtScale(opts.Look, 1)
+	a.look = lookAtScale(a.base, opts.Scale)
 	if watch {
 		a.lookWatch = newLookFileStamp()
+		if !opts.Headless {
+			a.lookNotify = newLookNotify(func() {
+				a.Post(func() {
+					// A directory that appeared (a first save) is watched
+					// before its files are read.
+					a.watchLookFiles()
+					a.pollLookFile()
+				})
+			})
+			a.watchLookFiles()
+		}
 	}
+	a.startA11y()
 	return a
 }
 
@@ -118,6 +165,29 @@ func (a *Application) SetLook(l style.LookAndFeel) {
 	a.look = lookAtScale(a.base, a.scale)
 	for _, w := range a.Windows() {
 		w.applyLook(a.base)
+	}
+	for _, fn := range append([]*func(){}, a.lookHooks...) {
+		(*fn)()
+	}
+}
+
+// OnLookChange runs fn on the UI goroutine after every change of the app's
+// look: a theme applied in Settings, the desktop turning dark. Content that
+// caches something drawn in the old look (a theme preview) rebuilds there.
+// remove unregisters fn.
+func (a *Application) OnLookChange(fn func()) (remove func()) {
+	if a == nil || fn == nil {
+		return func() {}
+	}
+	p := &fn
+	a.lookHooks = append(a.lookHooks, p)
+	return func() {
+		for i, q := range a.lookHooks {
+			if q == p {
+				a.lookHooks = append(a.lookHooks[:i:i], a.lookHooks[i+1:]...)
+				return
+			}
+		}
 	}
 }
 
@@ -326,6 +396,9 @@ func (a *Application) Run() error {
 			w.frame()
 		}
 		a.reap()
+		if a.a11y != nil {
+			a.a11y.sync()
+		}
 		// Count survivors after pump/frame: a window that closed itself
 		// while draining its burst must not hold the loop open for
 		// another iteration.
@@ -333,8 +406,8 @@ func (a *Application) Run() error {
 		if alive == 0 {
 			if a.trayHolds() {
 				timeout := a.waitTimeout(time.Now(), nextBlink)
-				if timeout < 0 || timeout > 100*time.Millisecond {
-					timeout = 100 * time.Millisecond
+				if timeout < 0 || timeout > trayWakeCap {
+					timeout = trayWakeCap
 				}
 				a.waitDisplay(timeout)
 				continue
@@ -349,8 +422,8 @@ func (a *Application) Run() error {
 		if a.anyNeedsPaint() {
 			timeout = 0
 		}
-		if a.trayHolds() && (timeout < 0 || timeout > 100*time.Millisecond) {
-			timeout = 100 * time.Millisecond
+		if a.trayHolds() && (timeout < 0 || timeout > trayWakeCap) {
+			timeout = trayWakeCap
 		}
 		a.waitDisplay(timeout)
 	}
@@ -422,7 +495,7 @@ func (a *Application) waitTimeout(now, nextBlink time.Time) time.Duration {
 			}
 		}
 	}
-	if a.watchLook {
+	if a.watchLook && a.lookNotify == nil {
 		t := now.Add(lookWatchInterval)
 		if deadline.IsZero() || t.Before(deadline) {
 			deadline = t
@@ -467,6 +540,9 @@ func (a *Application) PumpOnce() {
 			continue
 		}
 		w.frame()
+	}
+	if a.a11y != nil {
+		a.a11y.sync()
 	}
 }
 

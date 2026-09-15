@@ -73,6 +73,9 @@ type shapedRun struct {
 	run paintengine2d.GlyphRun
 	adv float32
 	ink float32
+	// xs is where each rune starts, kerning included, then where the run
+	// ends: carets, hit-testing and eliding read the layout Draw paints.
+	xs []float32
 }
 
 func newShapeCache() *shapeCache {
@@ -96,15 +99,9 @@ func (f *Font) Fit(text string, maxW float32) string {
 		return ell
 	}
 	budget := maxW - ew
+	xs := f.shapeOf(text).xs
 	n := 0
-	var acc float32
-	atlas := f.ensure(text) // one publication for the whole string
-	for _, r := range text {
-		adv := advanceIn(atlas, r)
-		if acc+adv > budget {
-			break
-		}
-		acc += adv
+	for n+1 < len(xs) && xs[n+1] <= budget {
 		n++
 	}
 	if n <= 0 {
@@ -150,33 +147,16 @@ func (f *Font) InkWidth(text string) float32 {
 }
 
 func (f *Font) IndexAt(text string, x float32) int {
-	if f == nil || x <= 0 {
+	if f == nil || x <= 0 || text == "" {
 		return 0
 	}
-	var acc float32
-	i := 0
-	atlas := f.ensure(text)
-	for _, r := range text {
-		adv := advanceIn(atlas, r)
-		if x < acc+adv*0.5 {
+	xs := f.shapeOf(text).xs
+	for i := 0; i+1 < len(xs); i++ {
+		if x < (xs[i]+xs[i+1])*0.5 {
 			return i
 		}
-		acc += adv
-		i++
 	}
-	return i
-}
-
-// advanceIn is the advance of r in an already-baked sheet.
-func advanceIn(atlas *paintengine2d.FontAtlas, r rune) float32 {
-	cell, ok := atlas.Cell(paintengine2d.GlyphID(r))
-	if !ok {
-		return 0
-	}
-	if cell.Advance > 0 {
-		return cell.Advance
-	}
-	return cell.Src.Dx()
+	return max(len(xs)-1, 0)
 }
 
 // cellFor is the atlas cell for r, baking it on first use.
@@ -209,20 +189,14 @@ func (f *Font) runeAdvance(r rune) float32 {
 }
 
 func (f *Font) CaretX(text string, i int) float32 {
-	if f == nil || i <= 0 {
+	if f == nil || i <= 0 || text == "" {
 		return 0
 	}
-	n := 0
-	var acc float32
-	atlas := f.ensure(text)
-	for _, r := range text {
-		if n >= i {
-			break
-		}
-		acc += advanceIn(atlas, r)
-		n++
+	xs := f.shapeOf(text).xs
+	if i >= len(xs) {
+		i = len(xs) - 1
 	}
-	return acc
+	return xs[i]
 }
 
 // ensure bakes every rune of text and returns the sheet to shape against.
@@ -244,9 +218,7 @@ func (f *Font) shapeOf(text string) shapedRun {
 	if atlas == nil {
 		return shapedRun{}
 	}
-	shape := func() shapedRun {
-		return measureShaped(snapRun(paintengine2d.NullShaper{}.Shape(text, atlas), atlas), atlas)
-	}
+	shape := func() shapedRun { return f.layout(text, atlas) }
 	if f.shaped == nil {
 		return shape()
 	}
@@ -271,6 +243,44 @@ func (f *Font) shapeOf(text string) shapedRun {
 	}
 	f.shaped.m[text] = hit
 	return hit
+}
+
+// layout places each rune of text at the sum of the advances before it,
+// with the face's pair kerning ("AV", "To") between neighbours, then snaps
+// the glyphs onto the pixel grid.
+func (f *Font) layout(text string, atlas *paintengine2d.FontAtlas) shapedRun {
+	run := paintengine2d.GlyphRun{Atlas: atlas}
+	xs := make([]float32, 0, len(text)+1)
+	var x float32
+	prev := rune(-1)
+	for _, r := range text {
+		id := paintengine2d.GlyphID(r)
+		cell, ok := atlas.Cell(id)
+		if ok && prev >= 0 && f.ot != nil {
+			x += f.ot.kern(prev, r)
+		}
+		xs = append(xs, x)
+		if !ok {
+			prev = -1
+			continue
+		}
+		run.Glyphs = append(run.Glyphs, paintengine2d.Glyph{ID: id, X: x})
+		adv := cell.Advance
+		if adv <= 0 {
+			adv = cell.Src.Dx() + 1
+		}
+		x += adv
+		prev = r
+	}
+	xs = append(xs, x)
+	s := measureShaped(snapRun(run, atlas), atlas)
+	// The advance is where the layout ends; snapping each glyph onto the
+	// pixel grid moves ink, not the layout.
+	s.adv, s.xs = x, xs
+	if s.ink < x {
+		s.ink = x
+	}
+	return s
 }
 
 // snapRun rounds every glyph onto the pixel grid.
