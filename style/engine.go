@@ -1,6 +1,8 @@
 package style
 
 import (
+	"math"
+
 	"sort"
 	"strings"
 	"sync"
@@ -824,6 +826,53 @@ type TabOverlapLook interface {
 
 // TabOverlap implements [TabOverlapLook].
 func (l *Classic) TabOverlap() float32 { return l.eng().TabOverlap(l) }
+
+// SliderTravelEngine is an optional engine hook: where the slider thumb's
+// centre travels in a slider of bounds b, from t=0 to t=1. Engines that
+// size their thumb their own way implement it so tick marks and clicks
+// line up with the thumb; the default is the Thumb metric's travel.
+type SliderTravelEngine interface {
+	SliderTravel(l *Classic, b paintengine2d.Rect) (x0, x1 float32)
+}
+
+// SliderTravelOf is where any look's slider thumb centre travels in b.
+func SliderTravelOf(lk LookAndFeel, b paintengine2d.Rect) (x0, x1 float32) {
+	if c, ok := lk.(*Classic); ok && c != nil {
+		if e, ok := c.eng().(SliderTravelEngine); ok {
+			return e.SliderTravel(c, b)
+		}
+	}
+	half := lk.Metrics().Thumb * 0.5
+	return b.Min.X + half, b.Max.X - half
+}
+
+// SliderTicksEngine is an optional engine hook that paints a slider's
+// tick marks (xs, in b) under its track, in the platform's style.
+type SliderTicksEngine interface {
+	DrawSliderTicks(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, xs []float32, st ControlState)
+}
+
+// DrawSliderTicksOf paints tick marks at xs in b: the engine's own, or
+// thin lines in the look's muted text colour.
+func DrawSliderTicksOf(lk LookAndFeel, ctx *paintengine2d.Context, b paintengine2d.Rect, xs []float32, st ControlState) {
+	if c, ok := lk.(*Classic); ok && c != nil {
+		if e, ok := c.eng().(SliderTicksEngine); ok {
+			e.DrawSliderTicks(c, ctx, b, xs, st)
+			return
+		}
+	}
+	col := lk.Palette().TextMuted
+	if st.Disabled() {
+		col = col.WithAlpha(col.A * 0.5)
+	}
+	w := max(1, float32(math.Round(float64(Dip(lk, 1)))))
+	var p paintengine2d.Path
+	for _, x := range xs {
+		x = float32(math.Round(float64(x - w*0.5)))
+		p.AddRect(paintengine2d.XYWH(x, b.Min.Y, w, b.Dy()))
+	}
+	ctx.DrawPath(&p, paintengine2d.Fill(col))
+}
 
 // ViewBackgroundLook says what an item view's rows sit on.
 type ViewBackgroundLook interface {

@@ -153,3 +153,17 @@ Regenerate thumbs and gallery frames:
 ```bash
 go run ./examples/gallery -screenshot docs/screenshots
 ```
+
+## Sliders and progress bars
+
+`Slider.Ticks` (`TicksBelow`, `TicksAbove`, `TicksBoth`) adds tick marks every
+`TickInterval` (a tenth of the range by default), like QSlider's
+tickPosition and WPF's TickPlacement. Pressing the thumb takes hold of it
+where it was pressed: it never jumps. Pressing the track moves the thumb
+there. Engines place the thumb with the optional `SliderTravel` hook and can
+draw their own ticks with `DrawSliderTicks`.
+
+`ProgressBar.ShowText` writes the progress ("42%", or `Format`'s text). In a
+bar tall enough to hold it, the text sits in the middle and changes colour
+where the fill ends; beside a thin bar (Fluent, Material, Aqua) it sits to
+the right.
