@@ -1869,7 +1869,12 @@ func (e oxygenEngine) DrawTreeRow(l *Classic, ctx *paintengine2d.Context, b pain
 	line := Mix(c.base, c.viewText, 0.25)
 	for d := 0; d < depth; d++ {
 		gx := snap(b.Min.X + pad + float32(d)*indent + aw*0.5)
-		fuVLine(ctx, gx, b.Min.Y, b.Max.Y, u, line)
+		switch {
+		case d == depth-1 && !st.HasNextSibling(depth):
+			fuVLine(ctx, gx, b.Min.Y, cy, u, line) // down to the last child's elbow
+		case d == depth-1 || st.HasNextSibling(d+1):
+			fuVLine(ctx, gx, b.Min.Y, b.Max.Y, u, line)
+		}
 	}
 	if depth > 0 {
 		gx := snap(b.Min.X + pad + float32(depth-1)*indent + aw*0.5)

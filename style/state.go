@@ -36,7 +36,36 @@ const (
 	// (Qt's frameless QLineEdit in a QSpinBox): a field paints only its
 	// text, a stepper only its buttons.
 	StateFrameless
+	// StateTreeChain marks a tree row that carries its chain bits (see
+	// TreeChain); without it a painter cannot tell where branch lines end.
+	StateTreeChain
 )
+
+// treeChainShift is where a tree row's chain bits start: above every named
+// state.
+const treeChainShift = 16
+
+// TreeChain is the state of a tree row whose chain of nodes (its ancestors
+// at depths 0…, then the row itself at its own depth) has, for each depth d
+// with bit d set, a sibling after the node at that depth: which branch
+// lines run on past the row (Qt's State_Sibling per branch). Depths from 16
+// on count as having one.
+func TreeChain(bits uint16) ControlState {
+	return StateTreeChain | ControlState(bits)<<treeChainShift
+}
+
+// HasNextSibling reports whether the node at depth d on a tree row's chain
+// has a sibling after it. Without chain bits (see StateTreeChain) every
+// depth reports true, so painters keep their lines running.
+func (s ControlState) HasNextSibling(d int) bool {
+	if d < 0 {
+		return false
+	}
+	if s&StateTreeChain == 0 || d >= 16 {
+		return true
+	}
+	return s&(1<<(treeChainShift+d)) != 0
+}
 
 func (s ControlState) Hovered() bool     { return s&StateHovered != 0 }
 func (s ControlState) Pressed() bool     { return s&StatePressed != 0 }

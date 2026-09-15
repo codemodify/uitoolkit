@@ -831,6 +831,9 @@ func (l *Classic) baseDrawTreeRow(ctx *paintengine2d.Context, b paintengine2d.Re
 	cy := (b.Min.Y + b.Max.Y) * 0.5
 	guide := p.Divider.WithAlpha(0.85)
 	for d := 0; d < depth; d++ {
+		if d < depth-1 && !st.HasNextSibling(d+1) {
+			continue // that ancestor's children end above
+		}
 		gx := b.Min.X + pad + float32(d)*indent + 3
 		ctx.DrawRect(paintengine2d.XYWH(gx, b.Min.Y, 1, b.Dy()), paintengine2d.Fill(guide))
 	}

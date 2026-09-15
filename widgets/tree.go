@@ -31,6 +31,9 @@ func (n *TreeNode) Leaf() bool { return n == nil || len(n.Children) == 0 }
 type treeRow struct {
 	node  *TreeNode
 	depth int
+	// chain has bit d set when the node at depth d on this row's chain
+	// (its ancestors, then itself) has a sibling after it.
+	chain uint16
 }
 
 // TreeView is an expand/collapse hierarchical list with selection.
@@ -88,20 +91,28 @@ func (t *TreeView) flatten() []treeRow {
 	} else {
 		clear(t.index)
 	}
-	var walk func([]*TreeNode, int)
-	walk = func(nodes []*TreeNode, depth int) {
-		for _, n := range nodes {
+	var walk func([]*TreeNode, int, uint16)
+	walk = func(nodes []*TreeNode, depth int, chain uint16) {
+		last := len(nodes) - 1
+		for last >= 0 && nodes[last] == nil {
+			last--
+		}
+		for i, n := range nodes {
 			if n == nil {
 				continue
 			}
+			own := chain
+			if i < last && depth < 16 {
+				own |= 1 << depth
+			}
 			t.index[n] = len(t.flat)
-			t.flat = append(t.flat, treeRow{node: n, depth: depth})
+			t.flat = append(t.flat, treeRow{node: n, depth: depth, chain: own})
 			if n.Expanded && len(n.Children) > 0 {
-				walk(n.Children, depth+1)
+				walk(n.Children, depth+1, own)
 			}
 		}
 	}
-	walk(t.Roots, 0)
+	walk(t.Roots, 0, 0)
 	t.flatValid = true
 	return t.flat
 }
@@ -322,12 +333,16 @@ func (t *TreeView) rowSig(row treeRow) uint64 {
 		// keep its cached row.
 		extra ^= bits32(c.R)*31 ^ bits32(c.G)*131 ^ bits32(c.B)*313 ^ bits32(c.A)*1013
 	}
-	return visualSig(n == t.Selected, n == t.hover, extra^uint64(t.rowState(n))<<40, n.Label)
+	return visualSig(n == t.Selected, n == t.hover, extra^uint64(t.rowState(n))<<32, n.Label)
 }
 
-// rowState is n's item state for the look.
+// rowState is n's item state for the look, with its branch-line chain.
 func (t *TreeView) rowState(n *TreeNode) style.ControlState {
-	st := widget.RowItemState(t, t.indexOf(n), n == t.Selected, n == t.hover, n == t.Selected)
+	i := t.indexOf(n)
+	st := widget.RowItemState(t, i, n == t.Selected, n == t.hover, n == t.Selected)
+	if i >= 0 {
+		st |= style.TreeChain(t.flatten()[i].chain)
+	}
 	if n == t.hover && t.hoverExp {
 		st |= style.StateExpanderHot
 	}

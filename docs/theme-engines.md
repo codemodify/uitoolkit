@@ -147,6 +147,13 @@ To draw one selection box across a row, paint the row box over
 where the row goes on, so the cells join into one box (Aero's Explorer
 selection, Fluent's list item and pill).
 
+Tree rows carry their branch chain (Qt's `State_Sibling`): `st.HasNextSibling(d)`
+says whether the node at depth `d` on the row's chain (its ancestors, then
+the row itself) has a sibling after it. Draw a branch line through the row
+only where that branch continues, and end a last child's line at its elbow
+("└" rather than "├"). Rows without the chain (`StateTreeChain` unset)
+answer true, so lines keep running.
+
 List and tree painters mark a `Focused` row themselves — default
 `ItemFocus` over the row, Win95 and XP a dotted rectangle around the label,
 Motif the solid location cursor; tables call `DrawItemFocus` over the whole
