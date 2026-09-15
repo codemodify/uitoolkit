@@ -148,8 +148,9 @@ func (p ThemePack) Display() string {
 	return p.Name
 }
 
-// Appearance resolves the pack into palette knobs. Corners and icons
-// stay at defaults; callers overlay look.json prefs.
+// Appearance resolves the pack into palette knobs. Corners keep the pack's
+// own shape (Metro and Win95 square, Aqua round) and icons stay at the
+// default; callers overlay look.json prefs.
 func (p ThemePack) Appearance() Appearance {
 	fam := p.Palette
 	if p.Tokens.Family != "" {
@@ -158,12 +159,12 @@ func (p ThemePack) Appearance() Appearance {
 	return Appearance{
 		Name:    p.Name,
 		Theme:   ParseTheme(string(fam)),
-		Corners: CornersRound,
+		Corners: CornersTheme,
 		Icons:   IconSetClassic,
 	}.Normalize()
 }
 
-// Look builds a Classic look from the pack palette (1× metrics, round).
+// Look builds a Classic look from the pack (1× metrics, the pack's corners).
 func (p ThemePack) Look() *Classic {
 	return p.Appearance().Look()
 }
