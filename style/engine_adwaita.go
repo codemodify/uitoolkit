@@ -1603,7 +1603,11 @@ func (e adwaitaEngine) DrawTreeRow(l *Classic, ctx *paintengine2d.Context, b pai
 	x := b.Min.X + l.S(6) + float32(depth)*indent
 	es := l.S(16)
 	if !leaf {
-		l.Engine().Expander(l, ctx, paintengine2d.XYWH(x, b.Min.Y, es, b.Dy()), expanded, Mix(c.view, fg, 0.7))
+		arrow := Mix(c.view, fg, 0.7)
+		if st.ExpanderHot() {
+			arrow = fg
+		}
+		l.Engine().Expander(l, ctx, paintengine2d.XYWH(x, b.Min.Y, es, b.Dy()), expanded, arrow)
 	}
 	f := l.body
 	if bold {

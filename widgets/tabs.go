@@ -54,6 +54,9 @@ func (t *TabBar) tabRects() []paintengine2d.Rect {
 	f := style.ControlFontOf(lk, style.RoleTab)
 	h := t.LocalBounds().Dy()
 	x := float32(4)
+	// Neighbours overlap by the look's tab overlap, so two tabs share one
+	// border line (each tab still paints only inside its own rect).
+	ov := style.TabOverlapOf(lk)
 	out := make([]paintengine2d.Rect, n)
 	for i, title := range t.Titles {
 		w := f.Advance(title) + 28
@@ -62,6 +65,9 @@ func (t *TabBar) tabRects() []paintengine2d.Rect {
 		}
 		out[i] = paintengine2d.XYWH(x, 0, w, h)
 		x += w
+		if i < n-1 {
+			x -= ov
+		}
 	}
 	// Some looks centre the strip over its page (Aqua's segmented tabs).
 	if style.LookHint(lk, style.HintTabsCentered) == 1 {
@@ -75,8 +81,11 @@ func (t *TabBar) tabRects() []paintengine2d.Rect {
 }
 
 func (t *TabBar) indexAt(x float32) int {
-	for i, r := range t.tabRects() {
-		if x >= r.Min.X && x < r.Max.X {
+	// Later tabs win where neighbours overlap: they paint over the shared
+	// border.
+	rects := t.tabRects()
+	for i := len(rects) - 1; i >= 0; i-- {
+		if r := rects[i]; x >= r.Min.X && x < r.Max.X {
 			return i
 		}
 	}

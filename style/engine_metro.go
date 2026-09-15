@@ -891,6 +891,9 @@ func (metroEngine) TabOutset(l *Classic) Insets {
 	return Insets{Left: snap(l.S(2)), Right: snap(l.S(2))}
 }
 
+// TabOverlap: neighbouring tabs share one border line.
+func (metroEngine) TabOverlap(l *Classic) float32 { return winPx(l) }
+
 // DrawTabPane is the page under the tabs in its light-grey line.
 func (metroEngine) DrawTabPane(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect) {
 	c := metroColors(l)
