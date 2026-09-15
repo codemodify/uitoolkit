@@ -21,6 +21,7 @@ type Button struct {
 	// (and releasing there does not click), then re-presses on re-entry —
 	// Qt's QAbstractButton / Win32 BUTTON behaviour.
 	outside bool
+	fade    stateFade // hover / focus cross-fade (the look's HintHoverFadeMs)
 }
 
 func (b *Button) Tooltip() string { return b.Tip }
@@ -60,7 +61,8 @@ func (b *Button) Measure(c layout.Constraints) paintengine2d.Point {
 func (b *Button) Arrange(r paintengine2d.Rect) { b.SetBounds(r) }
 
 func (b *Button) Paint(ctx *paintengine2d.Context) {
-	b.Look().DrawButton(ctx, b.LocalBounds(), b.PaintState(), b.Text)
+	lk, r := b.Look(), b.LocalBounds()
+	b.fade.paint(b, ctx, b.PaintState(), func(ctx *paintengine2d.Context, st style.ControlState) { lk.DrawButton(ctx, r, st, b.Text) })
 }
 
 func (b *Button) MouseEnter() { b.hovered = true; b.Base.MouseEnter() }

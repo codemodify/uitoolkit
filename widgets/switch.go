@@ -16,6 +16,7 @@ type Switch struct {
 	OnChange func(bool)
 	hovered  bool
 	pressed  bool
+	fade     stateFade // hover / focus cross-fade (the look's HintHoverFadeMs)
 }
 
 // NewSwitch builds a toggle. on is the initial value.
@@ -59,7 +60,8 @@ func (s *Switch) Paint(ctx *paintengine2d.Context) {
 	if s.On {
 		st |= style.StateChecked
 	}
-	s.Look().DrawSwitch(ctx, s.LocalBounds(), st, s.On, s.Text)
+	lk, r := s.Look(), s.LocalBounds()
+	s.fade.paint(s, ctx, st, func(ctx *paintengine2d.Context, st style.ControlState) { lk.DrawSwitch(ctx, r, st, s.On, s.Text) })
 }
 
 func (s *Switch) MouseEnter() { s.hovered = true; s.Base.MouseEnter() }

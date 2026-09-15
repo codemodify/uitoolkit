@@ -777,6 +777,9 @@ func (metroEngine) WindowCloseRect(l *Classic, b paintengine2d.Rect) paintengine
 
 // Windows dialogs put the default button first: "OK  Cancel".
 func (metroEngine) StyleHint(l *Classic, h StyleHint) int {
+	if h == HintHoverFadeMs {
+		return 150 // Windows 10 controls fade their hover
+	}
 	if h == HintDialogPrimaryFirst {
 		return 1
 	}

@@ -763,6 +763,9 @@ func (fluentEngine) WindowCloseRect(l *Classic, b paintengine2d.Rect) paintengin
 // StyleHint: ContentDialog puts the primary button first; form labels are
 // left-aligned.
 func (fluentEngine) StyleHint(l *Classic, h StyleHint) int {
+	if h == HintHoverFadeMs {
+		return 83 // WinUI's ControlFasterAnimationDuration
+	}
 	if h == HintDialogPrimaryFirst {
 		return 1
 	}

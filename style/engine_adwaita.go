@@ -994,7 +994,12 @@ func (e adwaitaEngine) DrawPopupShadow(l *Classic, ctx *paintengine2d.Context, b
 }
 
 // GNOME dialogs put the affirmative button last: "Cancel  OK".
-func (adwaitaEngine) StyleHint(l *Classic, h StyleHint) int { return 0 }
+func (adwaitaEngine) StyleHint(l *Classic, h StyleHint) int {
+	if h == HintHoverFadeMs {
+		return 200 // Adwaita's button transition: 200ms, easing out
+	}
+	return 0
+}
 
 // ---- controls ------------------------------------------------------------------------------
 

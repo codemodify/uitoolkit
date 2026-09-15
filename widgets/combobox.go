@@ -17,6 +17,7 @@ type ComboBox struct {
 	OnChange    func(int)
 	open        bool
 	hovered     bool
+	fade        stateFade // hover / focus cross-fade (the look's HintHoverFadeMs)
 }
 
 // NewComboBox builds a drop-down. selected < 0 means none.
@@ -97,7 +98,8 @@ func (c *ComboBox) Paint(ctx *paintengine2d.Context) {
 	if show == "" {
 		show = c.Placeholder
 	}
-	c.Look().DrawComboBox(ctx, c.LocalBounds(), st, show, c.open)
+	lk, r := c.Look(), c.LocalBounds()
+	c.fade.paint(c, ctx, st, func(ctx *paintengine2d.Context, st style.ControlState) { lk.DrawComboBox(ctx, r, st, show, c.open) })
 }
 
 func (c *ComboBox) MouseEnter() { c.hovered = true; c.Base.MouseEnter() }
