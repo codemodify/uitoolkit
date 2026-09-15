@@ -40,11 +40,12 @@ go get github.com/codemodify/paintengine2d@v0.9.0
 ## Highlights
 
 - **Themes that change shapes, not just colours.** 29 engines (like Qt's
-  QStyle) draw 103 packs spanning four decades: System 1 to macOS Big Sur,
-  Windows 3.1 to 11, Motif, CDE, NeXT, Amiga, BeOS, OS/2, KDE 3 to Plasma,
-  GNOME 2 to libadwaita, Material 2 and 3, Swing's Metal and Nimbus,
-  FlatLaf, and today's SourceGit, Primer, shadcn/ui, Geist and Linear with
-  the Catppuccin, Nord, Dracula, Tokyo Night and Rosé Pine palettes. See
+  QStyle) draw 121 packs spanning four decades: System 1 to macOS Tahoe's
+  Liquid Glass, Windows 3.1 to 11, Motif, CDE, NeXT, Amiga, BeOS, OS/2, KDE 3
+  to Plasma 6, GNOME 2 to GNOME 48, Material 2, 3 and 3 Expressive, Swing's
+  Metal and Nimbus, FlatLaf, and today's VS Code, JetBrains Islands,
+  SourceGit, Primer, shadcn/ui, Geist and Linear with the Catppuccin, Nord,
+  Dracula, Tokyo Night, Rosé Pine, Gruvbox, Solarized and One palettes. See
   [docs/theme-engines.md](docs/theme-engines.md).
 - **Desktop integration.**
   - Follows the desktop's light or dark mode and accent colour (the XDG
@@ -76,8 +77,11 @@ go get github.com/codemodify/paintengine2d@v0.9.0
 ## Themes
 
 A theme is an **engine**, Go code that decides the shapes (like Qt's
-QStyle), plus a **pack** of colours, metrics and fonts. 29 engines draw 103
-packs, from the 1984 Finder to Linear. Each was researched from
+QStyle), plus a **pack** of colours, metrics and fonts. 29 engines draw 121
+packs, from the 1984 Finder to VS Code's 2026 themes. An engine can hand a
+later era of its platform to code of its own, so macOS draws Big Sur and
+Tahoe, Breeze Plasma 5 and 6, Adwaita GNOME 42 and 48, Material 3 and 3
+Expressive. Each was researched from
 published facts: design guides, SDK documentation, and pixels measured from
 screenshots of the originals. No code or pixmaps were copied.
 
@@ -112,12 +116,17 @@ drawn by its pack's engine.
 
 ![libadwaita, macOS Big Sur, Material 3 and Fluent, light and dark](docs/screenshots/themes/themes-2020s.webp)
 
+The platforms' latest eras join them: KDE Plasma 6's Breeze, GNOME 48's
+Adwaita, macOS 26 Tahoe's Liquid Glass and Material 3 Expressive, each
+light and dark.
+
 ### The web and its apps
 
 The web engine draws the looks developers live in today: the design
-systems of GitHub (Primer), Vercel (Geist), shadcn/ui and Linear, the
-editor palettes Dracula, Nord, Tokyo Night, Catppuccin and Rosé Pine, and
-SourceGit's own theme.
+systems of GitHub (Primer), Vercel (Geist), shadcn/ui and Linear, VS
+Code's 2026 themes and JetBrains' Islands, the editor palettes Dracula,
+Nord, Tokyo Night, Catppuccin, Rosé Pine, Gruvbox, Solarized and Atom's
+One, and SourceGit's own theme.
 
 ![Dracula, Nord, Tokyo Night, Catppuccin, Rosé Pine, GitHub Primer, Vercel Geist, SourceGit, shadcn/ui and Linear, light and dark](docs/screenshots/themes/themes-web.webp)
 

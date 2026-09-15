@@ -186,6 +186,18 @@ An engine implements these only when its platform differs from the base:
   implements it, keeping the text in `l.fieldTextBox(b)`, so those fields
   type as its plain ones do: Motif's I-beam, Windows 3.1's XOR caret.
 - `Accented(tok, accent)`: see Accent colours above.
+- `EngineFor(tok)` (`EraEngine`): an engine hands a later era of its
+  platform to an engine type of its own, which embeds it and lives in a file
+  of its own, keyed on a pack param: `macos` with `era` 2 is Tahoe's Liquid
+  Glass, `breeze` with `plasma` 6 is Plasma 6, `adwaita` with `era` 48 is
+  GNOME 48, `material` with `expressive` 1 (and `gen` 3) is Material 3
+  Expressive. The look keeps the engine's ID and takes the era engine's
+  default metrics. Go's embedding calls the embedded engine's own methods,
+  so an era that changes a part overrides the controls that paint it too.
+- `DrawToolGroup(l, ctx, b, n)` (`ToolGroupEngine`): a tool bar hands each
+  run of its `n` buttons between separators (their union `b`) to the
+  engine, which paints chrome they share under them, and the separators
+  become space (Tahoe's glass capsules).
 - `l.WeightFont(WeightMedium)` and `WeightSemibold`: Material's medium
   labels and Fluent's semibold headings; the installed weight, or the
   nearest drawn heavier.
@@ -230,8 +242,10 @@ may leave `ItemFocus` empty and let the view frame ring the focused view.
 
 `web` (`style/engine_web*.go`) paints today's flat design systems —
 SourceGit (Avalonia's Fluent theme as SourceGit restyles it), GitHub's
-Primer, shadcn/ui, Vercel's Geist, Linear — and the editor palettes people
-carry between apps (Catppuccin, Nord, Dracula, Tokyo Night, Rosé Pine).
+Primer, shadcn/ui, Vercel's Geist, Linear — the code editors' own looks
+(VS Code's 2026 themes, JetBrains' Islands) and the editor palettes people
+carry between apps (Catppuccin, Nord, Dracula, Tokyo Night, Rosé Pine,
+Gruvbox, Solarized, Atom's One).
 They share one idiom: flat faces in a 1px hairline, small radii, a keyboard
 focus ring, underlined or segmented tabs, pill switches, menus of rounded
 rows on a rounded popover, overlay scroll bars. So the engine is
@@ -246,11 +260,13 @@ lists every key with its default; the ones that decide the shapes:
 | `focusWidth`, `focusGap`, `focusAlpha` | the ring [2, 0, 1] | shadcn 3px at 50%, Geist 2px beyond a 2px gap |
 | `hoverBorder`, `checkFocus` | the accent border under the pointer; focus as a 2px accent border on check boxes and radios [0, 0] | SourceGit |
 | `primaryStyle` | the default button: 0 the accent [0], 1 the text colour, 2 the pack's `primary` | shadcn and Geist 1, Primer 2 (its green) |
-| `tabStyle` | 0 underline [0], 1 segmented, 2 browser; `tabLine`, `tabLineGap`, `tabFit`, `tabAccent`, `tabDim` | SourceGit's 1px accent pipe 2px up, Primer's coral line, shadcn and Linear 1 |
+| `tabStyle` | 0 underline [0], 1 segmented, 2 browser, 3 editor tabs (boxed on a strip, the active one the editor's colour with a `tabLine` along its top), 4 pills (`tabPillH`, `tabRadius`); `tabLine`, `tabLineGap`, `tabFit`, `tabAccent`, `tabDim` | SourceGit's 1px accent pipe 2px up, Primer's coral line, shadcn and Linear 1, VS Code and Atom's One 3, Islands 4 |
+| `island` | px [0]: list, tree, table and sidebar frames, cards and tab views are islands, panels rounded by `viewRadius` / `cardRadius` inside a band left to what is behind (the main window between islands; nested islands merge); a group's heading goes inside, a tab view's strip is its island's top | Islands 3 |
 | `checkStyle`, `radioStyle`, `radioSize`, `switchShape`, `knob` | unfilled with an accent tick or filled [1]; ring and dot or filled [1]; pill [0] or rounded switch | SourceGit unfilled, 14px radios; Primer's rounded switch |
 | `menuHighlight`, `menuInset`, `menuSep` | a wash [0] or the accent under the row, its inset from the popover's sides, separators from the label column | |
 | `rowInset`, `sideInset`, `rowBar`, `listSel`, `sideSel`, `sideOffWash`, … | rows boxed in from the sides or full width, the selection's alpha focused / hovered / unfocused per list, sidebar and table, an accent bar | SourceGit's joined sidebar boxes, Primer's bar |
-| `scrollIdle`, `scrollInset`, `scrollArrows` | transient bars: the idle thumb's width [2], the gap [2], arrows while expanded [0] | SourceGit 2px with arrows, Linear 6px |
+| `scrollIdle`, `scrollInset`, `scrollArrows`, `scrollRadius` | transient bars: the idle thumb's width [2], the gap [2], arrows while expanded [0], the thumb's corner [a pill] | SourceGit 2px with arrows, Linear 6px, VS Code's square 10px sliders |
+| `openRing` | 1: an open combo keeps the focus ring [0] | Islands (Swing rings whatever holds focus) |
 | `captionStyle`, `captionButton` | a caption strip with a centred bold title and a close cell that turns red (0), or a web dialog's header and icon close button (1) [1] | SourceGit 0: a 28px strip, a 48px cell |
 | `accentFollows` | 1: the pack takes the desktop's accent (`AccentEngine`) and derives Avalonia's shades from it | SourceGit |
 
@@ -260,9 +276,9 @@ their controls to include it: shadcn's 36px buttons in 42px), and the ring
 goes over the face's edge where a control has none (a tool bar's buttons).
 With an outside ring a pack's `fieldRing` colour gives focused fields
 Geist's halo in place of the ring. The text size is the `fontSize` metric
-(13px SourceGit and Linear, 14px the rest), and the typefaces are each
-system's own (Inter, Mona Sans, Geist) before the engine's Inter-first
-stack.
+(13px SourceGit, Linear, VS Code and Islands, 14px the rest), and the
+typefaces are each system's own (Inter, Mona Sans, Geist, VS Code's system
+stacks) before the engine's Inter-first stack.
 
 ## Writing an engine
 
