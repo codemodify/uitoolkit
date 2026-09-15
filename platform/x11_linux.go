@@ -2227,3 +2227,12 @@ func (s *x11Surface) SetIMECursor(x, y, w, h int) {
 	C.ui_set_spot(s.ic, C.int(x), C.int(spotY))
 	x11Mu.Unlock()
 }
+
+// PortalParent is the window's id for the desktop portal ("x11:<hex id>"),
+// so the desktop's dialogs open as its children.
+func (s *x11Surface) PortalParent() string {
+	if s == nil || s.win == 0 {
+		return ""
+	}
+	return fmt.Sprintf("x11:%x", uint64(s.win))
+}

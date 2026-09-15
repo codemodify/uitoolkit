@@ -15,6 +15,12 @@ type FileChooserOptions struct {
 	ParentWindow string
 }
 
+// PortalParenter is implemented by surfaces that can name themselves as a
+// portal dialog's parent (X11 windows; Wayland needs xdg-foreign).
+type PortalParenter interface {
+	PortalParent() string
+}
+
 // FileFilter is one entry of a dialog's type list ("Images", "*.png").
 type FileFilter struct {
 	Name     string
