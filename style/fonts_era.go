@@ -137,7 +137,8 @@ var eraPackFonts = map[string]FontPrefs{
 	"tahoe": tahoeFonts, "tahoe-night": tahoeFonts,
 	// Material 3 Expressive: Roboto Flex, Roboto's variable version.
 	"material3x": robotoFlex, "material3x-night": robotoFlex,
-	// VS Code: the system UI stack.
+	// VS Code: the system UI stack (Islands keeps the web engine's Inter
+	// and JetBrains Mono, IntelliJ's own pair).
 	"vscode": vscodeFonts, "vscode-night": vscodeFonts,
 }
 

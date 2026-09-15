@@ -27,8 +27,8 @@ func TestWebPacksRegisteredInYearOrder(t *testing.T) {
 		pos[n] = i
 	}
 	names := webPackNames()
-	if len(names) != 27 {
-		t.Fatalf("%d web packs, want 27: %v", len(names), names)
+	if len(names) != 29 {
+		t.Fatalf("%d web packs, want 29: %v", len(names), names)
 	}
 	for _, n := range names {
 		p, ok := LoadTheme(n)
@@ -431,6 +431,7 @@ func TestWebSchemeSiblings(t *testing.T) {
 		{"tokyonight-day", SchemeDark, "tokyonight"}, {"tokyonight-storm", SchemeLight, "tokyonight-day"}, {"tokyonight", SchemeLight, "tokyonight-day"},
 		{"rosepine-dawn", SchemeDark, "rosepine"}, {"rosepine-moon", SchemeLight, "rosepine-dawn"}, {"rosepine", SchemeLight, "rosepine-dawn"},
 		{"vscode", SchemeDark, "vscode-night"}, {"vscode-night", SchemeLight, "vscode"},
+		{"islands", SchemeDark, "islands-night"}, {"islands-night", SchemeLight, "islands"},
 	} {
 		if got := SchemeVariant(c.name, c.scheme); got != c.want {
 			t.Errorf("SchemeVariant(%q, %v) = %q, want %q", c.name, c.scheme, got, c.want)
