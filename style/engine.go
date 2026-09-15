@@ -1115,10 +1115,30 @@ func itoa(n int) string {
 	return string(b[i:])
 }
 
-// engineFor resolves the engine a token set names (BaseEngine fallback).
+// EraEngine is an optional engine hook for an engine whose later era redraws
+// most of its shapes (macOS Tahoe's glass after Big Sur, Plasma 6's Breeze):
+// EngineFor answers the engine that paints the era a token set's params
+// name, usually a type in a file of its own that embeds this engine and keeps
+// its ID; nil keeps this engine. The registry holds one engine per ID.
+type EraEngine interface {
+	EngineFor(t ThemeTokens) Engine
+}
+
+// eraEngine is e, or the engine it hands t's era to.
+func eraEngine(e Engine, t ThemeTokens) Engine {
+	if era, ok := e.(EraEngine); ok {
+		if x := era.EngineFor(t); x != nil {
+			return x
+		}
+	}
+	return e
+}
+
+// engineFor resolves the engine a token set names (BaseEngine fallback),
+// through the engine's EraEngine hook.
 func engineFor(t ThemeTokens) Engine {
 	if e, ok := EngineByID(t.Engine); ok {
-		return e
+		return eraEngine(e, t)
 	}
 	return baseEngine
 }
