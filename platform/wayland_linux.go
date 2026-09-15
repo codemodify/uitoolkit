@@ -4316,3 +4316,6 @@ func (s *wlSurface) Minimize() {
 	C.ui_wl_set_minimized(s.top)
 	C.ui_wl_flush(s.conn.dpy)
 }
+
+// wlSurface is a full FrameSurface (compile-time check).
+var _ FrameSurface = (*wlSurface)(nil)
