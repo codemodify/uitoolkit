@@ -54,20 +54,52 @@ func (t *TabBar) tabRects() []paintengine2d.Rect {
 	lk := t.Look()
 	f := style.ControlFontOf(lk, style.RoleTab)
 	h := t.LocalBounds().Dy()
-	x := style.Dip(lk, 4)
+	margin := style.Dip(lk, 4)
+	x := margin
 	// Neighbours overlap by the look's tab overlap, so two tabs share one
 	// border line (each tab still paints only inside its own rect).
 	ov := style.TabOverlapOf(lk)
-	out := make([]paintengine2d.Rect, n)
+	ws := make([]float32, n)
+	minW := style.Dip(lk, 56)
+	var total float32
 	for i, title := range t.Titles {
-		w := f.Advance(title) + style.Dip(lk, 28)
-		if min := style.Dip(lk, 56); w < min {
-			w = min
+		ws[i] = max(f.Advance(title)+style.Dip(lk, 28), minW)
+		total += ws[i]
+	}
+	total -= ov * float32(n-1)
+	// Too many for the strip: tabs give up width above a narrower floor
+	// (their labels elide), then the strip slides to keep the selected tab
+	// in view (Qt's QTabBar, GTK's notebook).
+	avail := t.LocalBounds().Dx() - 2*margin
+	if total > avail && avail > 0 {
+		floor := style.Dip(lk, 40)
+		var spare float32
+		for _, w := range ws {
+			spare += w - floor
 		}
+		if cut := total - avail; spare > 0 {
+			k := min(cut/spare, 1)
+			for i := range ws {
+				ws[i] -= (ws[i] - floor) * k
+			}
+		}
+	}
+	out := make([]paintengine2d.Rect, n)
+	for i, w := range ws {
 		out[i] = paintengine2d.XYWH(x, 0, w, h)
 		x += w
 		if i < n-1 {
 			x -= ov
+		}
+	}
+	if end := x + margin; end > t.LocalBounds().Dx() && t.Selected >= 0 && t.Selected < n {
+		sel := out[t.Selected]
+		shift := float32(0)
+		if over := sel.Max.X + margin - t.LocalBounds().Dx(); over > 0 {
+			shift = -over
+		}
+		for i := range out {
+			out[i] = out[i].Translate(paintengine2d.Pt(shift, 0))
 		}
 	}
 	// Some looks centre the strip over its page (Aqua's segmented tabs).

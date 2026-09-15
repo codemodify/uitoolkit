@@ -176,3 +176,24 @@ func TestFixedScrollThumb(t *testing.T) {
 		t.Fatalf("at the end the box should meet the track's end: %v", d)
 	}
 }
+
+// Too many tabs for the strip: they narrow (labels elide), and the
+// selected one stays whole and in view.
+func TestTabsFitOrKeepTheSelectedInView(t *testing.T) {
+	tb := NewTabBar("Scroll", "List", "Tree", "Table", "Form", "Settings", "Preferences")
+	tb.SetLook(style.DarkLook())
+	tb.SetHost(&host{})
+	tb.Arrange(paintengine2d.XYWH(0, 0, 300, 30))
+	r := tb.tabRects()
+	if r[len(r)-1].Max.X > 300 && r[0].Dx() > style.Dip(tb.Look(), 40)+0.5 {
+		t.Fatalf("tabs should narrow before running off: first %v, last %v", r[0], r[len(r)-1])
+	}
+	tb.Select(6)
+	r = tb.tabRects()
+	if sel := r[6]; sel.Min.X < 0 || sel.Max.X > 300 {
+		t.Fatalf("the selected tab %v should be in view", sel)
+	}
+	if got := tb.indexAt(r[6].Center().X); got != 6 {
+		t.Fatalf("clicking the selected tab hit %d", got)
+	}
+}
