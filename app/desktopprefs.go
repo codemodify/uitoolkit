@@ -124,6 +124,7 @@ func (a *Application) ApplyAppearance(ap style.Appearance) {
 		return
 	}
 	style.SetReduceMotion(ap.ReduceMotion)
+	style.SetNativeDialogs(ap.NativeDialogs)
 	a.following = ap.FollowDesktop
 	if a.look == nil {
 		a.SetLook(ap.Look())

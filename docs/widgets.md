@@ -179,3 +179,14 @@ completes inline from `Items`; the next key replaces the completion, and
 `OnSubmit` reports Return. Engines see `StateEditable`: Windows looks keep
 the field white instead of highlighting it, and `ComboTextRect` places the
 field exactly.
+
+## File dialogs
+
+`ShowFileDialog` shows the toolkit's own file dialog, drawn in the theme.
+With `FileDialogOptions.Native`, or the `nativeDialogs` preference
+(Settings: "Use the desktop's file dialogs"), or `UITK_NATIVE_DIALOGS=1`,
+it shows the desktop's own dialog instead: KDE's or GNOME's, through the
+XDG desktop portal's FileChooser, as Qt and GTK apps do, and as sandboxed
+(Flatpak) apps must. `Filter`, the starting `Path` and Save mode carry
+over. `OnPick` or `OnCancel` run on the UI goroutine when the user is done.
+Without a portal the toolkit's dialog shows.

@@ -339,8 +339,16 @@ func (s *settingsState) themesPage(status *widgets.StatusBar, stage func(style.A
 		stage(next)
 	})
 	options.PlaceSpan(follow, 2, 0, 1, 4)
+	// The desktop's own file dialogs (the XDG portal's), as Qt and GTK
+	// apps can use, instead of the themed ones.
+	native := widgets.NewSwitch("Use the desktop's file dialogs", s.staged.NativeDialogs, func(on bool) {
+		next := s.staged
+		next.NativeDialogs = on
+		stage(next)
+	})
+	options.PlaceSpan(native, 3, 0, 1, 4)
 	if style.DesktopReducesMotion() {
-		options.PlaceSpan(widgets.NewLabel("The desktop asks for reduced motion, so animations stay off."), 3, 0, 1, 4)
+		options.PlaceSpan(widgets.NewLabel("The desktop asks for reduced motion, so animations stay off."), 4, 0, 1, 4)
 	}
 
 	preview := widgets.NewColumn(info, scope, options).WithGap(10)
