@@ -65,6 +65,10 @@ type Appearance struct {
 	IconSize IconSize
 	// ReduceMotion turns animations off (see [Animations]).
 	ReduceMotion bool
+	// FollowDesktop shows the pack's light or dark sibling to match the
+	// desktop's preference (see [Appearance.Effective]); Name stays the
+	// user's choice.
+	FollowDesktop bool
 }
 
 // DefaultAppearance is the embedded dark palette, round corners, classic icons.
@@ -247,7 +251,7 @@ func lookMetrics(d Density, scale float32, tok ThemeTokens, corners CornerStyle,
 // Look builds a Classic LookAndFeel from the appearance prefs (1× metrics).
 // Application.SetLook still applies display scale afterward.
 func (a Appearance) Look() *Classic {
-	a = a.Normalize()
+	a = a.Effective()
 	tok := tokensForAppearance(a)
 	m := packMetrics(DensityDefault, tok, a.Corners, a.IconSize)
 	return newClassic(string(tok.Family), tok.Palette, m, a.Corners, a.Icons, a.IconSize, tok).
@@ -383,7 +387,7 @@ func WithAppearance(look LookAndFeel, a Appearance) LookAndFeel {
 		}
 		return look
 	}
-	a = a.Normalize()
+	a = a.Effective()
 	pack := a.Name
 	tok := tokensForAppearance(a)
 	if _, ok := LoadTheme(pack); !ok {

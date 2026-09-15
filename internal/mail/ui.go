@@ -189,7 +189,7 @@ func (s *session) applyLook() {
 		// follows look.json (PreferredLook), never opts.Light.
 		ap = style.LookAppearance(s.app.Look())
 	}
-	s.opts.Light = ap.Theme == style.ThemeLight
+	s.opts.Light = ap.Effective().Theme == style.ThemeLight
 	s.app.SetLook(style.WithDensity(ap.Look(), s.density))
 }
 
@@ -202,6 +202,8 @@ func (s *session) setPalette(light bool) {
 	} else {
 		ap = ap.WithPalette(style.ThemeDark)
 	}
+	// Picking dark or light by hand stops following the desktop.
+	ap.FollowDesktop = false
 	_ = style.SaveAppearance(ap)
 	s.opts.Light = light
 	s.rebuild()

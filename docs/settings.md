@@ -20,7 +20,9 @@ go run ./cmd/uitksettings -stage aqua -screenshot docs/screenshots
   every control, tree, table, dialogs, status bar) painted entirely in the
   staged theme — frame, caption and all — while Settings itself keeps the
   applied look (`widgets.ThemeScope`). Under the preview: **Corners**
-  (Theme shape / Round / Square), **Icon size** and **Icons**, all shown live.
+  (Theme shape / Round / Square), **Icon size** and **Icons**, all shown
+  live; **Animations** (hover fades, the default button's pulse, busy
+  bars); and **Match the desktop's light or dark mode** (see below).
 - **Packs & icons** — user theme packs (export the staged theme, delete
   user packs) and icon sets (built-in and user, delete user sets).
 - **About** — versions, the engine list, and the files Settings reads and
@@ -39,18 +41,45 @@ $XDG_CONFIG_HOME/uitoolkit/look.json
 
 ```json
 {
-  "theme": "dark",
-  "corners": "square",
+  "version": 2,
+  "theme": "breeze",
+  "corners": "theme",
   "icons": "lucide",
-  "iconSize": "medium"
+  "iconSize": "medium",
+  "reduceMotion": false,
+  "followDesktop": true
 }
 ```
 
-`theme` is the color theme name. `corners` is `round` or `square`.
-`icons` is the chrome set (`classic`, `sharp`, or an installed
-directory such as `lucide`). `iconSize` is `small` (16px), `medium`
-(24px, default), or `large` (32px). Numeric aliases `16` / `24` / `32`
-are accepted on load.
+`theme` is the theme pack. `corners` is `theme` (the pack's own shape,
+the default), `round` or `square`. `icons` is the chrome set (`classic`,
+`sharp`, or an installed directory such as `lucide`). `iconSize` is
+`small` (16px), `medium` (24px, default), or `large` (32px). Numeric
+aliases `16` / `24` / `32` are accepted on load. `reduceMotion` turns
+animations off. `followDesktop` shows the pack's light or dark sibling to
+match the desktop.
+
+### Following the desktop's light or dark mode
+
+With `followDesktop` on, apps ask the desktop for its light / dark
+preference, the setting GTK 4, libadwaita, Qt 6 and the browsers follow
+(on Linux the XDG desktop portal's `org.freedesktop.appearance
+color-scheme`, which GNOME's *Style* and Plasma's colour schemes set), and
+show the saved pack's sibling for it. They switch live when the desktop
+does. `theme` stays the pack you chose, so a desktop that turns light
+again gets it back.
+
+Siblings pair by name: `breeze` and `breeze-night`, `win95` and
+`win95-dark`; a variant takes its family's sibling (`luna-olive` shows as
+`luna-night`, Royale Noir; `aqua-graphite` as `aqua-night`); every CDE
+palette darkens to Charcoal and every Window Maker scheme to Night Sky.
+Packs with no sibling (Amiga, OS/2 Warp, BeOS, the high-contrast scheme)
+stay as they are. A user pack `mine` pairs with a user pack `mine-night`.
+
+`UITK_COLOR_SCHEME=dark` (or `light`) stands in for the desktop, to try a
+theme's other side without switching the desktop. `UITK_THEME=<pack>`
+shows exactly that pack and does not follow. Headless apps (tests,
+screenshots) never ask the desktop.
 
 Mode `0600`. Missing or invalid files yield `dark` + `round` +
 `classic` + `medium`. A file without `iconSize` migrates to medium.
@@ -165,7 +194,12 @@ app.SetLook(style.WithAppearance(app.Look(), style.LoadAppearance()))
 ```
 
 so theme, corners, icons, and icon size update without a restart. Display
-scale and density on the current look are kept.
+scale and density on the current look are kept. A desktop that turns light
+or dark reloads the same way while the appearance follows it, and
+`Application.OnLookChange` callbacks run after every change (Settings
+redraws its preview there).
+`Application.ApplyAppearance(ap)` applies an `Appearance` without saving
+it: theme, corners, icons, motion and following the desktop.
 
 `Application.New` enables the watcher **by default when `Options.Look` is
 nil** (that path already uses `PreferredLook()`). This is the least
@@ -229,4 +263,7 @@ corners, the icon set, and icon size on top.
 | `PreferredLook`, `LookAppearance`, `WithIconSize`, `IconSizePixels` | `style` / `uitoolkit` |
 | `Options.WatchLook`, `Options.DisableLookWatch` | `app` / `uitoolkit` |
 | `Application.WatchingLook`, `Application.ReloadPreferredLook` | `app` |
+| `Application.ApplyAppearance`, `Application.OnLookChange`, `Application.DesktopColorScheme`, `ColorSchemeEnv` | `app` |
+| `ColorScheme`, `SchemeVariant`, `Appearance.Effective`, `SetDesktopColorScheme` | `style` / `uitoolkit` |
+| `DesktopColorScheme`, `WatchColorScheme` (the portal) | `platform` |
 | `DrawToolIcon`, `DrawFileToolIcon` | `style` |
