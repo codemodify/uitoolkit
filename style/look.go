@@ -230,6 +230,35 @@ func (l *Classic) BoldFont() *Font {
 	return l.body
 }
 
+// WeightFont is the look's UI face at weight w (Material's medium button
+// labels, Fluent's semibold headings): an installed face of that weight,
+// or the nearest drawn heavier. Built on first use.
+func (l *Classic) WeightFont(w Weight) *Font {
+	switch {
+	case w <= WeightRegular:
+		return l.body
+	case w >= WeightBold:
+		return l.BoldFont()
+	}
+	return l.Memo(weightFontKey{w}, func() any {
+		return BakeFamily(l.UIFamily(), w, l.metrics.FontSize, l.palette.Text)
+	}).(*Font)
+}
+
+type weightFontKey struct{ w Weight }
+
+// WeightFontOf is any look's UI face at weight w (bold for semibold and
+// up, regular below, when the look cannot say).
+func WeightFontOf(lk LookAndFeel, w Weight) *Font {
+	if c, ok := lk.(*Classic); ok && c != nil {
+		return c.WeightFont(w)
+	}
+	if w >= WeightSemibold {
+		return lk.BoldFont()
+	}
+	return lk.Font()
+}
+
 func (l *Classic) MutedFont() *Font    { return l.muted }
 func (l *Classic) OnAccentFont() *Font { return l.onAcc }
 func (l *Classic) MonoFont() *Font     { return l.mono }
