@@ -693,3 +693,31 @@ func ReadableOn(bg paintengine2d.Color, ratio float64, prefs ...paintengine2d.Co
 	}
 	return white
 }
+
+// DitherTile is a 2×2 checker of a and b: the 50% dithers of the eras
+// before true colour (the first Mac and Windows desktops, Plastik's scroll
+// groove). Build it once per look; tile it with [DevicePattern].
+func DitherTile(a, b paintengine2d.Color) *paintengine2d.Image {
+	img := paintengine2d.NewImage(2, 2)
+	img.SetColor(0, 0, a)
+	img.SetColor(1, 1, a)
+	img.SetColor(1, 0, b)
+	img.SetColor(0, 1, b)
+	return img
+}
+
+// DevicePattern is a paint that tiles tile across the device grid, one tile
+// pixel per unit device pixels: neighbouring widgets' patterns meet without
+// a seam whatever their own origins.
+func DevicePattern(ctx *paintengine2d.Context, tile *paintengine2d.Image, unit float32) paintengine2d.Paint {
+	m := ctx.Matrix()
+	origin := paintengine2d.Pt(0, 0)
+	if inv, ok := m.Invert(); ok {
+		origin = inv.Transform(paintengine2d.Pt(0, 0))
+	}
+	scale := unit
+	if s := m.ApproxScale(); s > 0 {
+		scale = unit / s
+	}
+	return paintengine2d.Paint{Shader: paintengine2d.ImagePattern{Image: tile, Origin: origin, Scale: scale}, Style: paintengine2d.StyleFill, AntiAlias: true}
+}

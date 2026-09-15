@@ -26,7 +26,7 @@ import (
 //     contour;
 //   - check boxes are small white surfaces with a bold X, radio buttons
 //     circles with a dark dot;
-//   - scroll bars are a light dithered groove (painted as its average)
+//   - scroll bars are a light dithered groove, white and the window colour
 //     with surface step buttons at both ends and a surface slider carrying a
 //     grid of raised dots;
 //   - tabs have softly rounded tops and share their borders; the selected
@@ -120,6 +120,7 @@ type plastik struct {
 	sbFace, sbFaceHot, sbFaceDown []paintengine2d.GradientStop
 	sbHiLeft, sbHiTop, sbLo       paintengine2d.Color
 	groove                        paintengine2d.Color
+	grooveTile                    *paintengine2d.Image // the white / window dither
 	dotDk, dotLt                  paintengine2d.Color
 
 	// Check boxes and radios: white surfaces with a dark mark.
@@ -220,6 +221,7 @@ func plastikBuild(l *Classic) *plastik {
 	c.sbHiTop = Mix(c.btn, white, 0.4)
 	c.sbLo = darkerPct(c.btn, 113)
 	c.groove = Mix(c.bg, white, 0.5) // the white / window dither, averaged
+	c.grooveTile = DitherTile(c.bg, white)
 	c.dotDk = darkerPct(c.btn, 150)
 	c.dotLt = Mix(c.btn, white, 0.8)
 
@@ -529,7 +531,7 @@ func (e plastikEngine) Face(l *Classic, ctx *paintengine2d.Context, b paintengin
 	case RoleThumb:
 		c.slider(l, ctx, b, b.Dy() >= b.Dx(), st)
 	case RoleTrack:
-		ctx.DrawRect(b, paintengine2d.Fill(c.groove))
+		ctx.DrawRect(b, DevicePattern(ctx, c.grooveTile, kde3U(l)))
 	case RoleBar, RolePanel, RoleSplitter:
 		ctx.DrawRect(b, paintengine2d.Fill(c.bg))
 	}
@@ -830,7 +832,7 @@ func (e plastikEngine) DrawScrollBarParts(l *Classic, ctx *paintengine2d.Context
 	if p.Bar.Empty() {
 		return
 	}
-	ctx.DrawRect(kde3Snap(p.Bar), paintengine2d.Fill(c.groove))
+	ctx.DrawRect(kde3Snap(p.Bar), DevicePattern(ctx, c.grooveTile, kde3U(l)))
 	step := func(b paintengine2d.Rect, dir Direction, part ScrollPart) {
 		if b.Empty() {
 			return
