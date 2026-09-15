@@ -505,6 +505,103 @@ func SoftShadow(ctx *paintengine2d.Context, b paintengine2d.Rect, r float32, col
 	}
 }
 
+// DropShadow paints the soft shadow of the rounded rect b (radius r): the
+// shape offset by (dx, dy), grown by spread and faded over blur pixels with
+// a Gaussian-like ramp whose half-alpha point sits on the shape's edge.
+// Nine gradient pieces that never overlap, so the alpha is exact with no
+// banding (unlike stacked rects). Paint b over it; blur < 1 is a hard
+// shadow (classic Mac menus).
+func DropShadow(ctx *paintengine2d.Context, b paintengine2d.Rect, r float32, col paintengine2d.Color, dx, dy, blur, spread float32) {
+	if ctx == nil || b.Empty() || col.A <= 0 {
+		return
+	}
+	s := paintengine2d.Rect{
+		Min: paintengine2d.Pt(b.Min.X+dx-spread, b.Min.Y+dy-spread),
+		Max: paintengine2d.Pt(b.Max.X+dx+spread, b.Max.Y+dy+spread),
+	}
+	if blur < 1 {
+		ctx.DrawRoundRect(s, r, r, paintengine2d.Fill(col))
+		return
+	}
+	// Whole pixels, so neighbouring pieces meet without anti-aliased seams.
+	bl := snap(blur)
+	h := bl * 0.5
+	c := paintengine2d.Rect{
+		Min: paintengine2d.Pt(snap(s.Min.X+h), snap(s.Min.Y+h)),
+		Max: paintengine2d.Pt(snap(s.Max.X-h), snap(s.Max.Y-h)),
+	}
+	if c.Dx() < 1 || c.Dy() < 1 {
+		// Smaller than its blur: fall back to the stacked approximation.
+		SoftShadow(ctx, b, r, col, dx, dy, blur)
+		return
+	}
+	rc := snap(r - h)
+	if lim := float32(math.Floor(float64(min(c.Dx(), c.Dy()) * 0.5))); rc > lim {
+		rc = lim
+	}
+	if rc < 0 {
+		rc = 0
+	}
+	a := col.A
+	stops := []paintengine2d.GradientStop{
+		{Offset: 0, Color: col.WithAlpha(a)},
+		{Offset: 0.25, Color: col.WithAlpha(a * 0.84)},
+		{Offset: 0.5, Color: col.WithAlpha(a * 0.5)},
+		{Offset: 0.75, Color: col.WithAlpha(a * 0.16)},
+		{Offset: 1, Color: col.WithAlpha(0)},
+	}
+	x0, x1, x2, x3, x4, x5 := c.Min.X-bl, c.Min.X, c.Min.X+rc, c.Max.X-rc, c.Max.X, c.Max.X+bl
+	y0, y1, y2, y3, y4, y5 := c.Min.Y-bl, c.Min.Y, c.Min.Y+rc, c.Max.Y-rc, c.Max.Y, c.Max.Y+bl
+	rect := func(ax, ay, bx, by float32) paintengine2d.Rect {
+		return paintengine2d.Rect{Min: paintengine2d.Pt(ax, ay), Max: paintengine2d.Pt(bx, by)}
+	}
+	corner := func(r paintengine2d.Rect, cx, cy float32) {
+		ctx.DrawRect(r, paintengine2d.Radial(paintengine2d.RadialGradient{
+			Center: paintengine2d.Pt(cx, cy), Inner: rc, Radius: rc + bl, Stops: stops,
+		}))
+	}
+	edge := func(r paintengine2d.Rect, from, to paintengine2d.Point) {
+		if r.Empty() {
+			return
+		}
+		ctx.DrawRect(r, paintengine2d.Linear(paintengine2d.LinearGradient{Start: from, End: to, Stops: stops}))
+	}
+	corner(rect(x0, y0, x2, y2), x2, y2)
+	corner(rect(x3, y0, x5, y2), x3, y2)
+	corner(rect(x0, y3, x2, y5), x2, y3)
+	corner(rect(x3, y3, x5, y5), x3, y3)
+	edge(rect(x2, y0, x3, y1), paintengine2d.Pt(x2, y1), paintengine2d.Pt(x2, y0))
+	edge(rect(x2, y4, x3, y5), paintengine2d.Pt(x2, y4), paintengine2d.Pt(x2, y5))
+	edge(rect(x0, y2, x1, y3), paintengine2d.Pt(x1, y2), paintengine2d.Pt(x0, y2))
+	edge(rect(x4, y2, x5, y3), paintengine2d.Pt(x4, y2), paintengine2d.Pt(x5, y2))
+	solid := paintengine2d.Fill(col)
+	for _, r := range [...]paintengine2d.Rect{rect(x1, y2, x4, y3), rect(x2, y1, x3, y2), rect(x2, y3, x3, y4)} {
+		if !r.Empty() {
+			ctx.DrawRect(r, solid)
+		}
+	}
+}
+
+// ShadowReach is how far DropShadow's paint reaches past b on each side.
+func ShadowReach(dx, dy, blur, spread float32) Insets {
+	if blur < 1 {
+		blur = 0
+	}
+	e := func(v float32) float32 {
+		if v < 0 {
+			return 0
+		}
+		return float32(math.Ceil(float64(v)))
+	}
+	h := snap(blur)*0.5 + 1 // the half-blur ramp outside the shape, plus rounding
+	return Insets{
+		Left:   e(spread - dx + h),
+		Right:  e(spread + dx + h),
+		Top:    e(spread - dy + h),
+		Bottom: e(spread + dy + h),
+	}
+}
+
 // Glow strokes concentric fading rings outside b (Oxygen / Aero focus and
 // hover glows). width is how far the glow extends.
 func Glow(ctx *paintengine2d.Context, b paintengine2d.Rect, r float32, col paintengine2d.Color, width float32) {

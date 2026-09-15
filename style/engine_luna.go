@@ -1359,6 +1359,22 @@ func (lunaEngine) WindowFrameInsets(l *Classic) Insets {
 
 // WindowCloseRect is CloseButton.bmp's place: 21px square at the top right
 // of a 29px caption (offset -25, 5), scaled with the caption.
+// PopupShadow: XP's "shadows under menus" — a small soft shadow down and to
+// the right of menus and tooltips (windows got shadows only in Vista).
+func (lunaEngine) PopupShadow(l *Classic, kind PopupKind) Insets {
+	if kind == PopupDialog {
+		return Insets{}
+	}
+	return ShadowReach(l.S(2), l.S(2), l.S(6), -l.S(1))
+}
+
+func (lunaEngine) DrawPopupShadow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, kind PopupKind) {
+	if kind == PopupDialog {
+		return
+	}
+	DropShadow(ctx, b, 0, paintengine2d.RGBA(0, 0, 0, 0.32), l.S(2), l.S(2), l.S(6), -l.S(1))
+}
+
 func (lunaEngine) WindowCloseRect(l *Classic, b paintengine2d.Rect) paintengine2d.Rect {
 	b = lunaSnap(b)
 	h := lunaCaptionH(l)

@@ -539,9 +539,8 @@ func (l *Classic) baseDrawMenuTitle(ctx *paintengine2d.Context, b paintengine2d.
 func (l *Classic) baseDrawMenuFrame(ctx *paintengine2d.Context, b paintengine2d.Rect) {
 	p := l.palette
 	m := l.metrics
-	// Keep the drop shadow inside the arranged box so PaintTree clip
-	// cannot leave a sliver artifact under the last row.
-	ctx.DrawRoundRect(b.Inset(1).Translate(paintengine2d.Pt(1, 2)), m.RadiusSmall, m.RadiusSmall, paintengine2d.Fill(p.Shadow))
+	// The drop shadow is the engine's PopupShadow, painted outside b by the
+	// window's popup layer.
 	ctx.DrawRoundRect(b.Inset(1), m.RadiusSmall, m.RadiusSmall, paintengine2d.Fill(p.SurfaceAlt))
 	// Classic XP icon gutter: a slightly darker strip to the label origin.
 	ch := MenuChromeFor(l)
@@ -1474,7 +1473,6 @@ func (l *Classic) baseDrawTooltip(ctx *paintengine2d.Context, b paintengine2d.Re
 	p := l.palette
 	m := l.metrics
 	r := m.RadiusSmall
-	ctx.DrawRoundRect(b.Translate(paintengine2d.Pt(1.5, 2)), r, r, paintengine2d.Fill(p.Shadow))
 	ctx.DrawRoundRect(b, r, r, paintengine2d.Fill(p.SurfaceAlt))
 	ctx.DrawRoundRect(b.Inset(0.5), r, r, paintengine2d.StrokePaint(p.Border, m.Border))
 	pad := m.TooltipPad

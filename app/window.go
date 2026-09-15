@@ -309,6 +309,12 @@ func (w *Window) Invalidate(c widget.Component, local paintengine2d.Rect) {
 	if r.Empty() {
 		r = dev
 	}
+	if c.Parent() == nil && c != w.root && (local.Empty() || local == c.LocalBounds()) {
+		// A floating layer shown, moved or hidden: its drop shadow lies
+		// outside it and must be repainted too.
+		lk := w.layerLook(c)
+		r = style.PopupShadowOf(lk, style.PopupMenu).Max(style.PopupShadowOf(lk, style.PopupTooltip)).Grow(r)
+	}
 	w.dirty.Add(r.Inset(-1))
 	if w.layers != nil {
 		w.layers.Invalidate(c.ID())
@@ -1041,11 +1047,49 @@ func (w *Window) paintLayers(ctx *paintengine2d.Context, dirty *paintengine2d.Da
 		widget.PaintTree(w.overlay, ctx, dirty)
 	}
 	if w.popup != nil {
-		widget.PaintCascade(w.popup, ctx, dirty)
+		widget.WalkCascade(w.popup, func(c widget.Component) {
+			w.paintShadow(ctx, c, style.PopupMenu, dirty)
+			widget.PaintTree(c, ctx, dirty)
+		})
 	}
 	if w.tooltip != nil {
+		w.paintShadow(ctx, w.tooltip, style.PopupTooltip, dirty)
 		widget.PaintTree(w.tooltip, ctx, dirty)
 	}
+}
+
+// layerLook is the look a floating layer paints with: its own (inherited
+// from the widget that opened it) or the window's.
+func (w *Window) layerLook(c widget.Component) style.LookAndFeel {
+	if l, ok := c.(interface{ Look() style.LookAndFeel }); ok {
+		if lk := l.Look(); lk != nil {
+			return lk
+		}
+	}
+	return w.look
+}
+
+// paintShadow drops the look's shadow under a floating layer, just before
+// the layer paints over it. dirty (device pixels) skips it when no dirty box
+// reaches the shadow.
+func (w *Window) paintShadow(ctx *paintengine2d.Context, c widget.Component, kind style.PopupKind, dirty *paintengine2d.Damage) {
+	if c == nil || !c.Visible() {
+		return
+	}
+	lk := w.layerLook(c)
+	out := style.PopupShadowOf(lk, kind)
+	if out.Zero() {
+		return
+	}
+	b := c.Bounds()
+	reach := out.Grow(b)
+	if dirty != nil && !dirty.Empty() && !dirty.Overlaps(ctx.Matrix().TransformRect(reach)) {
+		return
+	}
+	ctx.Save()
+	ctx.ClipRect(reach)
+	style.DrawPopupShadowOf(lk, ctx, b, kind)
+	ctx.Restore()
 }
 
 // paintBackground lets the look paint the window background (Aqua
@@ -1103,9 +1147,13 @@ func (w *Window) frameScene(rects []paintengine2d.Rect) {
 		widget.RecordTree(w.overlay, rec, ctx, nil, w.layers, true)
 	}
 	if w.popup != nil {
-		widget.RecordCascade(w.popup, rec, ctx, nil, w.layers, true)
+		widget.WalkCascade(w.popup, func(c widget.Component) {
+			w.paintShadow(ctx, c, style.PopupMenu, nil)
+			widget.RecordTree(c, rec, ctx, nil, w.layers, true)
+		})
 	}
 	if w.tooltip != nil {
+		w.paintShadow(ctx, w.tooltip, style.PopupTooltip, nil)
 		widget.RecordTree(w.tooltip, rec, ctx, nil, w.layers, true)
 	}
 	w.layers.EndFrame()

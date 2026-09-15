@@ -145,6 +145,60 @@ func (BaseEngine) DrawWindowFrame(l *Classic, ctx *paintengine2d.Context, b pain
 	}
 }
 
+// PopupShadow: the stock looks float menus, tooltips and dialogs on a soft
+// shadow. A pack's "shadow" param scales its strength; 0 turns it off.
+func (BaseEngine) PopupShadow(l *Classic, kind PopupKind) Insets {
+	sp, ok := baseShadow(l, kind)
+	if !ok {
+		return Insets{}
+	}
+	return ShadowReach(0, sp.dy, sp.blur, 0)
+}
+
+func (BaseEngine) DrawPopupShadow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, kind PopupKind) {
+	if sp, ok := baseShadow(l, kind); ok {
+		DropShadow(ctx, b, sp.r, sp.col, 0, sp.dy, sp.blur, 0)
+	}
+}
+
+type baseShadowSpec struct {
+	col         paintengine2d.Color
+	r, dy, blur float32
+}
+
+func baseShadow(l *Classic, kind PopupKind) (baseShadowSpec, bool) {
+	k := l.P("shadow", 1)
+	if k <= 0 {
+		return baseShadowSpec{}, false
+	}
+	dark := Luma(l.palette.Background) < 0.5
+	m := l.metrics
+	var sp baseShadowSpec
+	var a float32
+	switch kind {
+	case PopupTooltip:
+		sp = baseShadowSpec{r: m.RadiusSmall, dy: l.S(1.5), blur: l.S(6)}
+		a = 0.16
+		if dark {
+			a = 0.4
+		}
+	case PopupDialog:
+		sp = baseShadowSpec{r: m.Radius, dy: l.S(8), blur: l.S(28)}
+		a = 0.3
+		if dark {
+			a = 0.55
+		}
+	default:
+		sp = baseShadowSpec{r: m.RadiusSmall, dy: l.S(4), blur: l.S(14)}
+		a = 0.22
+		if dark {
+			a = 0.5
+		}
+	}
+	sp.col = paintengine2d.RGBA(0, 0, 0, min(a*k, 1))
+	return sp, true
+}
+
 func (BaseEngine) WindowCloseRect(l *Classic, b paintengine2d.Rect) paintengine2d.Rect {
 	return CaptionCloseRect(l, paintengine2d.XYWH(b.Min.X, b.Min.Y, b.Dx(), l.metrics.TitleBar))
 }

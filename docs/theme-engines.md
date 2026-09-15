@@ -54,7 +54,19 @@ gets the era right:
   placement: none / both ends / grouped end / grouped start) and
   `DrawScrollBarParts`.
 - **Frames** — `GroupBoxInsets/DrawGroupBox` (titled frames),
-  `WindowFrameInsets/DrawWindowFrame` (in-app dialogs: caption, close).
+  `WindowFrameInsets/DrawWindowFrame` (in-app dialogs: caption, close),
+  `DrawWindowBackground` (pinstripes, brushed metal) and `DrawTabPane`.
+- **Tabs** — `TabOutset` grows the selected tab, which the tab bar paints
+  last, so it overlaps its neighbours (Win95 and XP: 2px each side).
+- **Shadows** — `PopupShadow(kind)` is how far a floating layer's drop
+  shadow reaches past its bounds, and `DrawPopupShadow` paints it before the
+  layer (`PopupMenu` for menus and lists, `PopupTooltip`, `PopupDialog`).
+  The window paints them for its popup and tooltip layers and repaints the
+  reach when a layer goes away; overlays paint their dialog's. The base
+  engine gives modern soft shadows (the pack param `shadow` scales them, `0`
+  turns them off); eras without shadows return zero (Win95, Motif, NeXT).
+  `DropShadow` is an exact nine-piece gradient shadow; `ShadowReach` is its
+  extent.
 - **Controls** — the 34 `Draw*` methods, same signatures as `LookAndFeel`
   plus the look. Override when the era's layout differs (Win95 combos
   highlight their text; Aqua centres tabs).
@@ -98,7 +110,11 @@ state bitset (`Hovered`, `Pressed`, `Disabled`, `Focused`, `Checked`,
    legacy era pack (`luna`, `aqua`, `motif`…) replaces it.
 
 4. Look at it: `go run ./cmd/uitk-themesheet -theme luna-blue -o /tmp/s`
-   (and `-scale 2`). Read the PNG. Iterate until it matches the era.
+   (and `-scale 2`). Read the PNG. Iterate until it matches the era. Then
+   see real apps in it: `go run ./examples/gallery -screenshot /tmp/g
+   -theme luna` takes every scripted gallery shot (menus, combo lists,
+   tooltips, message boxes, tables) in your pack, and `UITK_THEME=luna`
+   runs any uitoolkit app in it, like `GTK_THEME` or `QT_STYLE_OVERRIDE`.
 
 5. Test it: at minimum a registration test; the contract test covers
    painting every control in every state.

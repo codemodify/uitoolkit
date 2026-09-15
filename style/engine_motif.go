@@ -1018,6 +1018,11 @@ func (motifEngine) WindowFrameInsets(l *Classic) Insets {
 
 // WindowCloseRect is the window menu button at the left of the title bar:
 // in mwm that is how a window is closed (its menu, or a double click).
+// No drop shadows: Motif and CDE menus and tooltips float flat.
+func (motifEngine) PopupShadow(*Classic, PopupKind) Insets { return Insets{} }
+
+func (motifEngine) DrawPopupShadow(*Classic, *paintengine2d.Context, paintengine2d.Rect, PopupKind) {}
+
 func (motifEngine) WindowCloseRect(l *Classic, b paintengine2d.Rect) paintengine2d.Rect {
 	return motifMwm(l, b).menu
 }
