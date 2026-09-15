@@ -23,8 +23,9 @@ func (a *Application) owesTrim() {
 	}
 }
 
-// stirred records activity (an event, a painted frame), which pushes a
-// pending trim back.
+// stirred records activity (an event: input, a resize, focus), which
+// pushes a pending trim back. Frames do not count: a busy bar or a caret
+// repaints for as long as it shows, and the app would never trim.
 func (a *Application) stirred() {
 	if a != nil {
 		a.stir.Add(1)

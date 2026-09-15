@@ -1093,7 +1093,6 @@ func (w *Window) frame() {
 	// actually repainted are uploaded / swapped.
 	_ = w.surf.Present(rects)
 	w.paints++
-	w.app.stirred()
 	w.dirty.Reset()
 	w.full = false
 }
