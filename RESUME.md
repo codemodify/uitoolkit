@@ -104,6 +104,16 @@ Core features the engines drive, added along the way:
   - a focus mark on the current row.
 - **Mail:** its message list multi-selects in both the table and card views,
   so bulk actions act on every selected message.
+- **New widgets:**
+  - `Grid` and `Form` layouts (QGridLayout, QFormLayout; form labels are
+    right-aligned in Mac looks);
+  - `Calendar` and `DateField`;
+  - `ColorButton` with a drop-down picker;
+  - `Picture` for PNG, JPEG and GIF images.
+
+  The gallery's Form tab shows them.
+- **Windows know when they're inactive:** captions, selections and Aqua's
+  default button follow it; odd list rows can be striped (Aqua).
 - **Settings:** restructured as a theme browser with a live, themed preview
   application.
 - **`UITK_THEME=<pack>`:** runs any app in any theme, like `GTK_THEME`.
