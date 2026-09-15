@@ -2,6 +2,7 @@ package widgets
 
 import (
 	"math"
+	"sync"
 
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/a11y"
@@ -687,16 +688,64 @@ func (t *BrowserTabs) paintClose(ctx *paintengine2d.Context, i int, cb paintengi
 		fg = lk.Palette().Text
 	}
 	if st.Hovered() || st.Pressed() {
-		fg = style.DrawFaceOf(lk, ctx, cb, style.RoleTool, st)
+		fg = t.hotFace(ctx, cb, st, true)
 	}
 	style.DrawCaptionGlyph(ctx, cb, style.CaptionClose, false, fg, style.Dip(lk, 8), max(style.Dip(lk, 1.25), 1))
+}
+
+// hotFace paints the face of a strip button under the pointer and returns
+// the glyph colour on it: the look's flat tool face, or, in looks whose tool
+// buttons show nothing but a brighter glyph (SourceGit's), a wash of the
+// text colour — round for a tab's close button — so the button still shows
+// where a click goes.
+func (t *BrowserTabs) hotFace(ctx *paintengine2d.Context, r paintengine2d.Rect, st style.ControlState, round bool) paintengine2d.Color {
+	lk := t.Look()
+	fg := style.DrawFaceOf(lk, ctx, r, style.RoleTool, st)
+	if (!st.Hovered() && !st.Pressed()) || toolHoverShows(lk) {
+		return fg
+	}
+	wash := lk.Palette().Text.WithAlpha(0.12)
+	if st.Pressed() {
+		wash = lk.Palette().Text.WithAlpha(0.22)
+	}
+	rad := min(r.Dx(), r.Dy()) * 0.5
+	if !round {
+		rad = min(rad, style.Dip(lk, 4))
+	}
+	ctx.DrawRoundRect(r, rad, rad, paintengine2d.Fill(wash))
+	return lk.Palette().Text
+}
+
+// hoverFaces remembers, per look, whether its flat tool face shows under
+// the pointer.
+var hoverFaces sync.Map
+
+// toolHoverShows reports whether lk paints anything for a flat tool button
+// under the pointer (one small offscreen paint per look).
+func toolHoverShows(lk style.LookAndFeel) bool {
+	if v, ok := hoverFaces.Load(lk); ok {
+		return v.(bool)
+	}
+	img := paintengine2d.NewImage(16, 16)
+	style.DrawFaceOf(lk, paintengine2d.NewContext(img), paintengine2d.XYWH(0, 0, 16, 16), style.RoleTool, style.StateHovered|style.StateAutoRaise)
+	shows := false
+	for y := 0; y < img.Height && !shows; y++ {
+		for x := 0; x < img.Width; x++ {
+			if _, _, _, a := img.At(x, y).RGBA(); a > 0x0800 {
+				shows = true
+				break
+			}
+		}
+	}
+	hoverFaces.Store(lk, shows)
+	return shows
 }
 
 // paintButton paints the new-tab or a scroll button.
 func (t *BrowserTabs) paintButton(ctx *paintengine2d.Context, r paintengine2d.Rect, part stripPart) {
 	lk := t.Look()
 	st := t.partState(part, -1)
-	fg := style.DrawFaceOf(lk, ctx, r, style.RoleTool, st)
+	fg := t.hotFace(ctx, r, st, false)
 	switch part {
 	case partNew:
 		s := t.dip(12)
