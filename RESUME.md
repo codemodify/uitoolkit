@@ -31,6 +31,31 @@ it out of the history.
    `uitoolkit-eng-metal`, never pushed) can be deleted:
    `git worktree remove ../uitoolkit-eng-metal && git branch -D engine/metal`.
 
+## Real-hardware checklist (needs your laptop)
+
+Everything below passed headless. Each item needs a real compositor and
+GPU, through the nested-KWin rig (`tools/e2e/theme-tour.sh`), never your own
+session:
+1. **The original glitches.** Click around the gallery and Mail in several
+   themes: dialogs, menus, theme switches, hover.
+2. **GPU paths.** Fluent's acrylic menus and Aero's glass (backdrop blur),
+   the fades (layers, cross-fades), and Plastik's dithered groove
+   (patterns).
+3. **Fractional scale 1.75** (yours). Check the HiDPI fixes in the base
+   look and widgets. Two live-compositor tests failed on your session at
+   this scale:
+   - `TestWaylandSurfacePresent` expects a 160px buffer and got 280;
+   - `TestWaylandPresentOpaqueColor` reports "no present slot".
+4. **Desktop following.** Switch Plasma between light and dark and change
+   its accent with a following app open: it should restyle live. Also
+   Plasma's animation speed at Instant, which is reduced motion.
+5. **The tray.** Mail's tray menu should respond at once. The loop now
+   sleeps up to 1s between safety wakes instead of 100ms; events wake it.
+6. **Mnemonic underlines.** They should show only while Alt is held in the
+   XP, Plasma and Windows 10 looks.
+7. **Orca**, if you install it: `UITK_A11Y=1` is not needed, since the
+   bridge starts when Orca does.
+
 ## What the glitching was
 
 Found on real hardware with the nested-KWin rig in `tools/e2e/`; the findings
