@@ -292,6 +292,11 @@ func (b *Base) State() style.ControlState {
 	if b.hovered {
 		s |= style.StateHovered
 	}
+	if !WindowActive(b.me()) {
+		// The window is in the backdrop; looks may subdue what their
+		// platform did (Aqua's default button loses its blue).
+		s |= style.StateBackdrop
+	}
 	return s
 }
 
