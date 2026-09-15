@@ -695,3 +695,71 @@ func (p *PopupMenu) AccessibleItems() []*a11y.Node {
 	}
 	return out
 }
+
+// ---- the item with the keyboard focus ------------------------------------------
+
+func (l *ListView) AccessibleFocusItem() int {
+	if l.Selected >= 0 && l.Selected < l.Count {
+		return l.Selected
+	}
+	return -1
+}
+
+func (t *TreeView) AccessibleFocusItem() int {
+	if t.Selected == nil {
+		return -1
+	}
+	return t.indexOf(t.Selected)
+}
+
+func (t *TableView) AccessibleFocusItem() int {
+	if t.Selected >= 0 && t.Selected < t.RowCount {
+		return len(t.Columns) + t.Selected
+	}
+	return -1
+}
+
+func (l *CardList) AccessibleFocusItem() int {
+	if l.Selected >= 0 && l.Selected < l.Count {
+		return l.Selected
+	}
+	return -1
+}
+
+func (t *TabBar) AccessibleFocusItem() int {
+	if t.Selected >= 0 && t.Selected < len(t.Titles) {
+		return t.Selected
+	}
+	return -1
+}
+
+func (s *Segmented) AccessibleFocusItem() int {
+	if s.Selected >= 0 && s.Selected < len(s.Segments) {
+		return s.Selected
+	}
+	return -1
+}
+
+func (t *ToolBar) AccessibleFocusItem() int {
+	if t.keyNav && t.focus >= 0 && t.focus < len(t.items) {
+		return t.focus
+	}
+	return -1
+}
+
+func (m *MenuBar) AccessibleFocusItem() int {
+	if m.keyNav && m.focus >= 0 && m.focus < len(m.menus) {
+		return m.focus
+	}
+	return -1
+}
+
+func (p *PopupMenu) AccessibleFocusItem() int {
+	if p.focus >= 0 && p.focus < len(p.Items) {
+		return p.focus
+	}
+	if p.hover >= 0 && p.hover < len(p.Items) {
+		return p.hover
+	}
+	return -1
+}

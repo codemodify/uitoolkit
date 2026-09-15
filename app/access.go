@@ -12,7 +12,7 @@ import (
 func (w *Window) AccessibleTree() *a11y.Node {
 	root := &a11y.Node{Role: a11y.RoleWindow, Name: w.Title()}
 	if w.root != nil {
-		root.ID = w.root.ID()<<1 | 1 // not a component's own ID
+		root.ID = 1<<63 | w.root.ID() // no component or item has bit 63
 	}
 	if w.Active() {
 		root.State |= a11y.StateFocused

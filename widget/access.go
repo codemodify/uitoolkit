@@ -30,6 +30,33 @@ type AccessibleActor interface {
 	AccessibleAction(item int, a a11y.Action) bool
 }
 
+// AccessibleFocusItem is implemented by views whose keyboard focus sits on
+// one of their items (the current row, the selected tab): the item's
+// index as in AccessibleItems, or -1.
+type AccessibleFocusItem interface {
+	AccessibleFocusItem() int
+}
+
+// FocusID is the accessible ID of the object with the keyboard focus
+// when c has it: c's current item, the accessible leaf that contains c
+// (a spin button's field), or c itself.
+func FocusID(c Component) uint64 {
+	if c == nil {
+		return 0
+	}
+	if fi, ok := c.(AccessibleFocusItem); ok {
+		if i := fi.AccessibleFocusItem(); i >= 0 {
+			return ItemID(c, i)
+		}
+	}
+	for p := c.Parent(); p != nil; p = p.Parent() {
+		if leaf, ok := p.(interface{ AccessibleLeaf() bool }); ok && leaf.AccessibleLeaf() {
+			return p.ID()
+		}
+	}
+	return c.ID()
+}
+
 // itemBits is how many low ID bits number a view's items.
 const itemBits = 24
 
