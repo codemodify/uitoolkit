@@ -53,15 +53,23 @@ func TestDecorationSpecs(t *testing.T) {
 }
 
 // paintedOutside reports the first pixel with ink outside r (grown by slack)
-// in an image that started transparent.
+// in an image that started transparent; it looks at the pixels outside only.
 func paintedOutside(img *paintengine2d.Image, r paintengine2d.Rect, slack float32) (int, int, bool) {
 	g := r.Inset(-slack)
+	x0, y0 := int(math.Floor(float64(g.Min.X))), int(math.Floor(float64(g.Min.Y)))
+	x1, y1 := int(math.Ceil(float64(g.Max.X))), int(math.Ceil(float64(g.Max.Y)))
+	ink := func(x, y int) bool {
+		_, _, _, a := img.At(x, y).RGBA()
+		return a != 0
+	}
 	for y := 0; y < img.Height; y++ {
+		inside := y >= y0 && y < y1
 		for x := 0; x < img.Width; x++ {
-			if _, _, _, a := img.At(x, y).RGBA(); a == 0 {
+			if inside && x >= x0 && x < x1 {
+				x = x1 - 1
 				continue
 			}
-			if float32(x) < g.Min.X || float32(y) < g.Min.Y || float32(x)+1 > g.Max.X || float32(y)+1 > g.Max.Y {
+			if ink(x, y) {
 				return x, y, true
 			}
 		}
@@ -77,23 +85,28 @@ func TestDecorationPaintsInsideItsBoxes(t *testing.T) {
 			lk := p.Look().setScale(scale)
 			for _, st := range decorationStates {
 				s := DecorationOf(lk, st)
-				win := paintengine2d.XYWH(20, 20, float32(math.Round(float64(lk.S(360)))), float32(math.Round(float64(lk.S(200)))))
+				win := paintengine2d.XYWH(8, 8, float32(math.Round(float64(lk.S(360)))), float32(math.Round(float64(lk.S(200)))))
 				inner := s.Border.Apply(win)
 				capH := float32(math.Ceil(float64(s.Caption)))
 				f := DecorationFrame{Window: win, Caption: paintengine2d.XYWH(inner.Min.X, inner.Min.Y, inner.Dx(), capH)}
 				if s.Stacked && st.Custom {
 					f.Bar = paintengine2d.XYWH(inner.Min.X, f.Caption.Max.Y, inner.Dx(), lk.S(36))
 				}
-				img := paintengine2d.NewImage(int(win.Max.X)+20, int(win.Max.Y)+20)
+				img := paintengine2d.NewImage(int(win.Max.X)+8, int(win.Max.Y)+8)
 				DrawDecorationOf(lk, paintengine2d.NewContext(img), f, st)
 				if x, y, bad := paintedOutside(img, win, 0); bad {
 					t.Fatalf("%s @%vx %+v: frame paints (%d,%d) outside the window %v", p.Name, scale, st, x, y, win)
 				}
-				tb := paintengine2d.XYWH(f.Caption.Min.X+lk.S(60), f.Caption.Min.Y, f.Caption.Dx()-lk.S(120), capH)
-				img = paintengine2d.NewImage(int(win.Max.X)+20, int(win.Max.Y)+20)
+				// The title on a canvas of its own, 8px round its box.
+				tb := paintengine2d.XYWH(8, 8, f.Caption.Dx()-lk.S(120), capH)
+				img = paintengine2d.NewImage(int(tb.Max.X)+8, int(tb.Max.Y)+8)
 				DrawCaptionTitleOf(lk, paintengine2d.NewContext(img), tb, "Window title", st)
 				if x, y, bad := paintedOutside(img, tb, 0); bad {
 					t.Fatalf("%s @%vx %+v: title paints (%d,%d) outside its box %v", p.Name, scale, st, x, y, tb)
+				}
+				if st.Custom || st.Tiled != 0 {
+					// The buttons do not change with these.
+					continue
 				}
 				bh := s.Button.Y
 				if bh <= 0 {
