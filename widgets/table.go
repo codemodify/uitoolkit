@@ -498,7 +498,7 @@ func (t *TableView) paintRow(ctx *paintengine2d.Context, lk style.LookAndFeel, w
 
 // rowState is row i's item state for the look.
 func (t *TableView) rowState(i int) style.ControlState {
-	return widget.ItemState(t, t.IsSelected(i), i == t.hovered, i == t.Selected)
+	return widget.RowItemState(t, i, t.IsSelected(i), i == t.hovered, i == t.Selected)
 }
 
 func (t *TableView) visibleRange() (lo, hi int) {

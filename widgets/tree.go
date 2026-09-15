@@ -326,7 +326,7 @@ func (t *TreeView) rowSig(row treeRow) uint64 {
 
 // rowState is n's item state for the look.
 func (t *TreeView) rowState(n *TreeNode) style.ControlState {
-	return widget.ItemState(t, n == t.Selected, n == t.hover, n == t.Selected)
+	return widget.RowItemState(t, t.indexOf(n), n == t.Selected, n == t.hover, n == t.Selected)
 }
 
 func paintTreeSwatch(ctx *paintengine2d.Context, row paintengine2d.Rect, col paintengine2d.Color) {

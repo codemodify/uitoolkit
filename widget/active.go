@@ -23,6 +23,20 @@ func WindowActive(c Component) bool {
 // hovered, the current row of a focused view (Focused), and Inactive /
 // Backdrop when the view or its window does not have focus.
 func ItemState(view Component, selected, hovered, current bool) style.ControlState {
+	return itemState(view, selected, hovered, current)
+}
+
+// RowItemState is ItemState for row index i, which also marks odd rows
+// Alternate for striped looks.
+func RowItemState(view Component, i int, selected, hovered, current bool) style.ControlState {
+	st := itemState(view, selected, hovered, current)
+	if i%2 == 1 {
+		st |= style.StateAlternate
+	}
+	return st
+}
+
+func itemState(view Component, selected, hovered, current bool) style.ControlState {
 	st := style.RowState(selected, hovered)
 	if view == nil {
 		return st
