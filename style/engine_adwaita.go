@@ -15,6 +15,9 @@ import (
 // trough filled with the accent up to a round white knob, flat notebook
 // tabs underlined in the accent, popover menus with rounded rows, entries
 // washed like buttons, and list selections tinted with the accent at 25%.
+// A sidebar (StateSidebar) is the .navigation-sidebar on its pane
+// (sidebar_bg_color): 6px-rounded rows inset 6px, a faint wash under the
+// pointer and a neutral 10% wash, not the accent, on the selected row.
 //
 // Every wash is currentColor at a fixed alpha, as the stylesheet writes it,
 // so a button reads the same on the window, a view or a card; light text is
@@ -77,6 +80,9 @@ var adwLight = adwScheme{
 	"destructive": "#c30000", "success": "#007c3d", "warning": "#905400", "error": "#c30000",
 	"shade": "#00000612", "outline": "#ffffff59", "outlineHot": "#ffffff99",
 	"knob": "#ffffff", "tooltip": "#000006cc", "tooltipFg": "#ffffff", "dimmer": "#00000640",
+	// The sidebar pane (sidebar_bg_color) and the pane of an inactive
+	// window (sidebar_backdrop_color); its text is "fg".
+	"sidebar": "#ebebed", "sidebarBackdrop": "#f2f2f4",
 }
 
 // adwDark is libadwaita's dark palette.
@@ -89,6 +95,7 @@ var adwDark = adwScheme{
 	"destructive": "#ff938c", "success": "#78e9ab", "warning": "#ffc252", "error": "#ff938c",
 	"shade": "#00000640", "outline": "#00000c53", "outlineHot": "#00000c8f",
 	"knob": "#d2d2d2", "tooltip": "#000006cc", "tooltipFg": "#ffffff", "dimmer": "#00000680",
+	"sidebar": "#2e2e32", "sidebarBackdrop": "#28282c",
 }
 
 // adwSchemes indexes the tables by the "scheme" param (adw314 is GTK 3.14).
@@ -114,6 +121,9 @@ const (
 	adwSelAlpha         = 0.25 // selected row: the accent at a quarter
 	adwSelHoverAlpha    = 0.32
 	adwSelActiveAlpha   = 0.39
+	adwSideSel          = 0.10 // selected .navigation-sidebar row: a neutral wash
+	adwSideSelHover     = 0.13
+	adwSideSelActive    = 0.19
 	adwDimOpacity       = 0.55 // dim-label, accelerators
 	adwDisabledOpacity  = 0.50 // insensitive widgets
 	adwFocusAlpha       = 0.50 // focus ring: the accent at half alpha
@@ -144,6 +154,8 @@ type adwSet struct {
 	outline, outlineHot, knob, knobOn     paintengine2d.Color
 	tooltip, tooltipFg, tooltipEdge       paintengine2d.Color
 	headerText, headerHot                 paintengine2d.Color
+	// The sidebar pane (active, backdrop) and the opaque label on each.
+	side, sideOff, sideText, sideTextOff paintengine2d.Color
 
 	// Popup shadows (the CSS box-shadows, see adwShadowSpecs).
 	shadows [3][]adwShadow
@@ -217,6 +229,8 @@ func adwBuild(l *Classic) *adwSet {
 	c.tooltipEdge = paintengine2d.RGBA(1, 1, 1, 0.1)
 	c.headerText = adwOver(c.view, c.wash(adwHeaderAlpha))
 	c.headerHot = adwOver(c.view, c.wash(0.7))
+	c.side, c.sideOff = col("sidebar"), col("sidebarBackdrop")
+	c.sideText, c.sideTextOff = adwOver(c.side, c.fg), adwOver(c.sideOff, c.fg)
 	c.shadows = adwShadowSpecs(l, i)
 	if c.gtk3 {
 		c.g3 = adw314Build(col)
@@ -451,6 +465,70 @@ func (c *adwSet) row(ctx *paintengine2d.Context, b paintengine2d.Rect, st Contro
 		ctx.DrawRect(b, paintengine2d.Fill(fill))
 	}
 	return c.viewText
+}
+
+// sidebar reports whether st paints libadwaita's navigation sidebar; GTK
+// 3.14's sidebars stay plain views on the view colour, with the accent
+// selection.
+func (c *adwSet) sidebar(st ControlState) bool { return st.Sidebar() && !c.gtk3 }
+
+// pane is the sidebar pane: sidebar_bg_color, sidebar_backdrop_color while
+// the window is in the backdrop.
+func (c *adwSet) pane(st ControlState) paintengine2d.Color {
+	if st.Backdrop() {
+		return c.sideOff
+	}
+	return c.side
+}
+
+// adwSideBox is a .navigation-sidebar row's box inside its row rect: 6px in
+// from the pane's sides and 1px from the row's top and bottom (the 2px the
+// rows keep between them).
+func adwSideBox(l *Classic, b paintengine2d.Rect) paintengine2d.Rect {
+	b = adwSnap(b)
+	in, v := snap(l.S(6)), snap(l.S(1))
+	if b.Dx() <= 4*in || b.Dy() <= 8*v {
+		return b
+	}
+	return paintengine2d.Rect{Min: paintengine2d.Pt(b.Min.X+in, b.Min.Y+v), Max: paintengine2d.Pt(b.Max.X-in, b.Max.Y-v)}
+}
+
+// sideRow paints a .navigation-sidebar row into its box (adwSideBox) and
+// returns the box and the label colour: a 6px-rounded wash of the text
+// colour, 7% under the pointer and 16% pressed, and when selected a
+// neutral 10% (13% hovered, 19% pressed) rather than the accent, with the
+// label in the sidebar's normal text colour. The selection stays in the
+// backdrop, where only the pane pales.
+func (c *adwSet) sideRow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState) (paintengine2d.Rect, paintengine2d.Color) {
+	box := adwSideBox(l, b)
+	var a float32
+	switch {
+	case st.Checked() && st.Disabled():
+		a = adwSideSel * adwDisabledOpacity
+	case st.Disabled():
+	case st.Checked() && st.Pressed():
+		a = adwSideSelActive
+	case st.Checked() && st.Hovered():
+		a = adwSideSelHover
+	case st.Checked():
+		a = adwSideSel
+	case st.Pressed():
+		a = adwWashFlatActive
+	case st.Hovered():
+		a = adwWashFlatHover
+	}
+	if a > 0 {
+		r := adwR(l, 6, box)
+		ctx.DrawRoundRect(box, r, r, paintengine2d.Fill(c.wash(a)))
+	}
+	fg := c.sideText
+	if st.Backdrop() {
+		fg = c.sideTextOff
+	}
+	if st.Disabled() {
+		fg = adwOver(c.pane(st), c.wash(adwDisabledOpacity))
+	}
+	return box, fg
 }
 
 // cardFace is a card or boxed list: the card colour in 12px corners with
@@ -915,9 +993,16 @@ func (adwaitaEngine) ViewFrameInsets(l *Classic) Insets {
 }
 
 // DrawViewFrame is a framed view: the view colour in a hairline border.
-// GTK rings the focused row, not the view.
+// GTK rings the focused row, not the view. A navigation sidebar has no
+// frame: its pane runs to the view's edges.
 func (e adwaitaEngine) DrawViewFrame(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState) {
 	c := adwColors(l)
+	if c.sidebar(st) {
+		if !b.Empty() {
+			ctx.DrawRect(b, paintengine2d.Fill(c.pane(st)))
+		}
+		return
+	}
 	in := e.ViewFrameInsets(l)
 	if in.Zero() || b.Empty() {
 		return
@@ -928,6 +1013,16 @@ func (e adwaitaEngine) DrawViewFrame(l *Classic, ctx *paintengine2d.Context, b p
 	}
 	ctx.DrawRect(b, paintengine2d.Fill(edge))
 	ctx.DrawRect(in.Apply(b), paintengine2d.Fill(fill))
+}
+
+// ViewBackground: a navigation sidebar's rows sit on the sidebar pane,
+// slightly darker than the view in the light style (#ebebed on white) and
+// lighter than it in the dark one; other views keep the field colour.
+func (e adwaitaEngine) ViewBackground(l *Classic, st ControlState) paintengine2d.Color {
+	if c := adwColors(l); c.sidebar(st) {
+		return c.pane(st)
+	}
+	return e.BaseEngine.ViewBackground(l, st)
 }
 
 // adwShadow is one CSS box-shadow layer.
@@ -1601,6 +1696,16 @@ func (e adwaitaEngine) DrawMenuItem(l *Classic, ctx *paintengine2d.Context, b pa
 
 func (e adwaitaEngine) DrawListRow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string) {
 	c := adwColors(l)
+	if c.sidebar(st) {
+		// The label sits 8px into the row's box (the row's padding).
+		box, fg := c.sideRow(l, ctx, b, st)
+		pad := l.S(8)
+		l.drawFittedText(ctx, l.body, label, paintengine2d.XYWH(box.Min.X+pad, b.Min.Y, box.Dx()-2*pad, b.Dy()), fg, AlignStart, 0)
+		if st.Focused() {
+			l.Engine().ItemFocus(l, ctx, box, st)
+		}
+		return
+	}
 	fg := c.row(ctx, b, st)
 	pad := l.S(12)
 	l.drawFittedText(ctx, l.body, label, paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-2*pad, b.Dy()), fg, AlignStart, 0)
@@ -1613,15 +1718,26 @@ func (e adwaitaEngine) DrawListRow(l *Classic, ctx *paintengine2d.Context, b pai
 // chevron as the expander, no guide lines.
 func (e adwaitaEngine) DrawTreeRow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, expanded, leaf bool, depth int, label string, bold bool) {
 	c := adwColors(l)
-	fg := c.row(ctx, b, st)
+	side := c.sidebar(st)
+	var fg paintengine2d.Color
+	box, bg := b, c.view
+	if side {
+		box, fg = c.sideRow(l, ctx, b, st)
+		bg = c.pane(st)
+	} else {
+		fg = c.row(ctx, b, st)
+	}
 	indent := l.metrics.TreeIndent
 	if indent <= 0 {
 		indent = l.S(16)
 	}
 	x := b.Min.X + l.S(6) + float32(depth)*indent
+	if side {
+		x = box.Min.X + l.S(4) + float32(depth)*indent
+	}
 	es := l.S(16)
 	if !leaf {
-		arrow := Mix(c.view, fg, 0.7)
+		arrow := Mix(bg, fg, 0.7)
 		if st.ExpanderHot() {
 			arrow = fg
 		}
@@ -1633,11 +1749,11 @@ func (e adwaitaEngine) DrawTreeRow(l *Classic, ctx *paintengine2d.Context, b pai
 	}
 	lx := x + es + l.S(6)
 	ctx.Save()
-	ctx.ClipRect(b)
+	ctx.ClipRect(box)
 	f.Draw(ctx, label, paintengine2d.Pt(lx, b.Min.Y+(b.Dy()-f.Height())*0.5), fg)
 	ctx.Restore()
 	if st.Focused() {
-		l.Engine().ItemFocus(l, ctx, b, st)
+		l.Engine().ItemFocus(l, ctx, box, st)
 	}
 }
 
