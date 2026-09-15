@@ -156,6 +156,7 @@ func newATSPIBridge(a *Application, addr string) (*atspiBridge, error) {
 		atspiIface + "Component":              atspiComponent{b},
 		atspiIface + "Action":                 atspiAction{b},
 		atspiIface + "Text":                   atspiText{b},
+		atspiIface + "EditableText":           atspiEditable{b},
 		"org.freedesktop.DBus.Properties":     atspiProps{b},
 		"org.freedesktop.DBus.Introspectable": atspiIntrospect{},
 	} {
@@ -259,9 +260,54 @@ func (b *atspiBridge) announce(path dbus.ObjectPath, was, now *a11y.Node) {
 	if was.Name != now.Name {
 		b.emitProp(path, "accessible-name", now.Name)
 	}
+	switch now.Role {
+	case a11y.RoleTextField, a11y.RoleTextArea, a11y.RolePasswordField:
+		b.announceText(path, was, now)
+		return
+	}
 	if was.Value != now.Value || was.Now != now.Now {
 		b.emitProp(path, "accessible-value", now.Value)
 	}
+}
+
+// announceText reports an edit as the text removed and inserted where
+// the old and new texts part, and a caret that moved (a screen reader
+// speaks the character or word it moved over).
+func (b *atspiBridge) announceText(path dbus.ObjectPath, was, now *a11y.Node) {
+	if was.Value != now.Value {
+		old, cur := []rune(was.Value), []rune(now.Value)
+		pre := 0
+		for pre < len(old) && pre < len(cur) && old[pre] == cur[pre] {
+			pre++
+		}
+		suf := 0
+		for suf < len(old)-pre && suf < len(cur)-pre && old[len(old)-1-suf] == cur[len(cur)-1-suf] {
+			suf++
+		}
+		shown := func(r []rune) string {
+			if now.Role == a11y.RolePasswordField {
+				return strings.Repeat("•", len(r))
+			}
+			return string(r)
+		}
+		if del := old[pre : len(old)-suf]; len(del) > 0 {
+			b.emitData(path, "TextChanged", "delete", int32(pre), int32(len(del)), shown(del))
+		}
+		if ins := cur[pre : len(cur)-suf]; len(ins) > 0 {
+			b.emitData(path, "TextChanged", "insert", int32(pre), int32(len(ins)), shown(ins))
+		}
+	}
+	if was.Caret != now.Caret {
+		b.emitData(path, "TextCaretMoved", "", int32(now.Caret), 0, "")
+	}
+	if was.SelStart != now.SelStart || was.SelEnd != now.SelEnd {
+		b.emitData(path, "TextSelectionChanged", "", 0, 0, "")
+	}
+}
+
+func (b *atspiBridge) emitData(path dbus.ObjectPath, member, detail string, d1, d2 int32, data string) {
+	_ = b.conn.Emit(path, atspiIface+"Event.Object."+member, detail, d1, d2,
+		dbus.MakeVariant(data), map[string]dbus.Variant{})
 }
 
 func (b *atspiBridge) emitProp(path dbus.ObjectPath, prop, value string) {
@@ -374,6 +420,9 @@ func (o *atspiObj) interfaces() []string {
 	switch o.node.Role {
 	case a11y.RoleTextField, a11y.RolePasswordField, a11y.RoleTextArea, a11y.RoleLabel, a11y.RoleHeading:
 		out = append(out, atspiIface+"Text")
+	}
+	if o.node.State.Has(a11y.StateEditable) && o.node.Role != a11y.RoleSpinButton {
+		out = append(out, atspiIface+"EditableText")
 	}
 	return out
 }
@@ -805,6 +854,67 @@ func (t atspiText) GetSelection(msg dbus.Message, i int32) (int32, int32, *dbus.
 		return 0, 0, err
 	}
 	return int32(o.node.SelStart), int32(o.node.SelEnd), nil
+}
+
+// ---- org.a11y.atspi.EditableText ---------------------------------------------------
+
+type atspiEditable struct{ b *atspiBridge }
+
+// set replaces o's text on the UI goroutine.
+func (e atspiEditable) set(o *atspiObj, s string) bool {
+	if o.win == nil {
+		return false
+	}
+	done := make(chan bool, 1)
+	e.b.app.Post(func() { done <- o.win.AccessibleSetText(o.node.ID, s) })
+	select {
+	case ok := <-done:
+		return ok
+	case <-time.After(atspiRefresh):
+		return false
+	}
+}
+
+func (e atspiEditable) SetTextContents(msg dbus.Message, s string) (bool, *dbus.Error) {
+	o, err := e.b.obj(msg)
+	if err != nil {
+		return false, err
+	}
+	return e.set(o, s), nil
+}
+
+func (e atspiEditable) InsertText(msg dbus.Message, pos int32, text string, length int32) (bool, *dbus.Error) {
+	o, err := e.b.obj(msg)
+	if err != nil {
+		return false, err
+	}
+	r := []rune(o.node.Value)
+	if pos < 0 || int(pos) > len(r) {
+		pos = int32(len(r))
+	}
+	ins := []rune(text)
+	if length >= 0 && int(length) < len(ins) {
+		ins = ins[:length]
+	}
+	return e.set(o, string(r[:pos])+string(ins)+string(r[pos:])), nil
+}
+
+func (e atspiEditable) DeleteText(msg dbus.Message, start, end int32) (bool, *dbus.Error) {
+	o, err := e.b.obj(msg)
+	if err != nil {
+		return false, err
+	}
+	r := []rune(o.node.Value)
+	if start < 0 {
+		start = 0
+	}
+	if end < 0 || int(end) > len(r) {
+		end = int32(len(r))
+	}
+	if start >= end {
+		return false, nil
+	}
+	return e.set(o, string(r[:start])+string(r[end:])), nil
 }
 
 // ---- properties -------------------------------------------------------------------
