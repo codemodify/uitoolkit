@@ -569,8 +569,10 @@ func (p *PopupMenu) itemH() float32 {
 		h = lk.Metrics().MenuItemH
 	}
 	if lk != nil {
+		// The look's row height rules (24px Windows 95 rows, 32px Fluent
+		// ones); it only grows when the menu font's line would not fit.
 		if f := style.ControlFontOf(lk, style.RoleMenu); f != nil {
-			if min := f.Height() + 16; min > h {
+			if min := f.Height() + style.Dip(lk, 2); min > h {
 				h = min
 			}
 		}
@@ -580,7 +582,7 @@ func (p *PopupMenu) itemH() float32 {
 
 func (p *PopupMenu) rowH(it *MenuItem) float32 {
 	if it != nil && it.Separator {
-		return 8
+		return style.Dip(p.Look(), 8)
 	}
 	return p.itemH()
 }
