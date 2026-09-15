@@ -945,8 +945,8 @@ func aliasThemeName(name string) string {
 		return "light"
 	case "classic95-dark", "win95-dark":
 		return "dark"
-	case "cde-charcoal", "charcoal":
-		return "cde"
+	case "charcoal":
+		return "cde-charcoal"
 	case "next-dark":
 		return "next-night"
 	case "luna-dark":
