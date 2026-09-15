@@ -480,7 +480,7 @@ func (e openlookEngine) DrawFocusRing(l *Classic, ctx *paintengine2d.Context, b 
 // buttons (6px boxes and a 2px gap); the thumb is at least as long as the
 // 47px elevator, which is drawn at the thumb's place along the cable.
 func (openlookEngine) ScrollBarStyle(l *Classic) ScrollBarStyle {
-	return ScrollBarStyle{Thickness: 19, Arrows: ArrowsEnds, ArrowLen: 8, MinThumb: 47}
+	return ScrollBarStyle{Thickness: 19, Arrows: ArrowsEnds, ArrowLen: 8, MinThumb: 47, FixedThumb: 47}
 }
 
 func (e openlookEngine) DrawScrollBarParts(l *Classic, ctx *paintengine2d.Context, p ScrollParts, vertical bool, st ScrollState) {
@@ -549,7 +549,7 @@ func (e openlookEngine) DrawScrollBarParts(l *Classic, ctx *paintengine2d.Contex
 	if !active {
 		return
 	}
-	t0, tn := pos(p.Thumb)
+	t0, tn := pos(p.Proportion)
 	ctx.DrawRect(cell(t0, cx, tn, cw), paintengine2d.Fill(c.bg3))
 	// The elevator: three cells (arrow, drag area, arrow) of ew rows each,
 	// one-cell lines between them, at the thumb's fraction of the track.

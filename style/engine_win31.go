@@ -390,7 +390,7 @@ func (e win31Engine) DrawFocusRing(l *Classic, ctx *paintengine2d.Context, b pai
 // ScrollBarStyle: 17px bars with an arrow button at each end and a square
 // thumb as long as the bar is thick.
 func (win31Engine) ScrollBarStyle(l *Classic) ScrollBarStyle {
-	return ScrollBarStyle{Thickness: 17, Arrows: ArrowsEnds, MinThumb: 17}
+	return ScrollBarStyle{Thickness: 17, Arrows: ArrowsEnds, MinThumb: 17, FixedThumb: 17}
 }
 
 func (e win31Engine) DrawScrollBarParts(l *Classic, ctx *paintengine2d.Context, p ScrollParts, vertical bool, st ScrollState) {

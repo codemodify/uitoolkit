@@ -152,3 +152,27 @@ func TestTripleArrowScrollBar(t *testing.T) {
 		t.Fatalf("the second back button should scroll back: %v → %v", before, lv.OffsetY)
 	}
 }
+
+// The Mac's scroll box keeps its size whatever the content; the parts still
+// carry the visible proportion for looks that show it beside a fixed thumb.
+func TestFixedScrollThumb(t *testing.T) {
+	pack, ok := style.LoadTheme("system7")
+	if !ok {
+		t.Fatal("no system7 pack")
+	}
+	lk := pack.Look()
+	view := paintengine2d.XYWH(0, 0, 200, 300)
+	short := style.ScrollGeometry(lk, view, true, 400, 300, 0, false)
+	long := style.ScrollGeometry(lk, view, true, 6000, 300, 0, false)
+	if short.Thumb.Dy() != long.Thumb.Dy() {
+		t.Fatalf("the scroll box changed size: %v vs %v", short.Thumb.Dy(), long.Thumb.Dy())
+	}
+	if short.Proportion.Dy() <= long.Proportion.Dy() {
+		t.Fatalf("the proportion should shrink with more content: %v vs %v", short.Proportion.Dy(), long.Proportion.Dy())
+	}
+	// Dragged to the end, the box lands at the end of the track.
+	end := style.ScrollGeometry(lk, view, true, 6000, 300, 5700, false)
+	if d := end.Track.Max.Y - end.Thumb.Max.Y; d > 0.5 || d < -0.5 {
+		t.Fatalf("at the end the box should meet the track's end: %v", d)
+	}
+}
