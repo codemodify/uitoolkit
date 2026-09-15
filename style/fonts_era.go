@@ -135,6 +135,15 @@ var eraPackFonts = map[string]FontPrefs{
 	"adwaita48": adwaitaSans, "adwaita48-night": adwaitaSans,
 	// macOS Tahoe: San Francisco, then Inter and its GNOME twin.
 	"tahoe": tahoeFonts, "tahoe-night": tahoeFonts,
+	// Material 3 Expressive: Roboto Flex, Roboto's variable version.
+	"material3x": robotoFlex, "material3x-night": robotoFlex,
+}
+
+// robotoFlex is Material 3's typeface in its variable version, then the
+// material engine's.
+var robotoFlex = FontPrefs{
+	UI:   []string{"Roboto Flex", "Roboto", "Noto Sans", "Open Sans"},
+	Mono: []string{"Roboto Mono", "Noto Sans Mono", "DejaVu Sans Mono"},
 }
 
 // tahoeFonts are San Francisco where it is installed (a Mac), else the
