@@ -22,6 +22,10 @@ type Label struct {
 	// wordWrap, GtkLabel's wrap): the label grows taller instead of
 	// eliding. It measures to the width its parent offers.
 	Wrap bool
+	// MinLines reserves at least this many lines, text at the top, so a
+	// layout keeps its place as the text changes (Settings' theme
+	// description above its preview).
+	MinLines int
 
 	wrapKey labelWrapKey
 	wrapped []string
@@ -140,7 +144,8 @@ func (l *Label) Measure(c layout.Constraints) paintengine2d.Point {
 	for _, line := range lines {
 		w = max(w, f.Advance(line))
 	}
-	return c.Constrain(paintengine2d.Pt(w+2, f.Height()*float32(len(lines))+2))
+	n := max(len(lines), l.MinLines)
+	return c.Constrain(paintengine2d.Pt(w+2, f.Height()*float32(n)+2))
 }
 
 func (l *Label) Arrange(r paintengine2d.Rect) { l.SetBounds(r) }
@@ -156,6 +161,9 @@ func (l *Label) Paint(ctx *paintengine2d.Context) {
 	lines := l.layoutLines(f, b.Dx()-2)
 	th := f.Height()
 	y := b.Min.Y + (b.Dy()-th*float32(len(lines)))*0.5
+	if l.MinLines > len(lines) {
+		y = b.Min.Y + 1
+	}
 	maxW := b.Dx() - 2
 	if maxW < 4 {
 		maxW = 4
