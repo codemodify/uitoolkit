@@ -241,8 +241,9 @@ func (t *ToolBar) Paint(ctx *paintengine2d.Context) {
 			continue
 		}
 		// The bar's own hover/press cover the whole strip; each tool takes
-		// them only from the index under the pointer.
-		st := t.State() &^ (style.StateHovered | style.StatePressed)
+		// them only from the index under the pointer. Tools in a bar are
+		// auto-raise: flat until the pointer is over them.
+		st := t.State()&^(style.StateHovered|style.StatePressed) | style.StateAutoRaise
 		if i != t.focus || !t.keyNav {
 			st &^= style.StateFocused
 		}

@@ -253,6 +253,11 @@ func (BaseEngine) TabOutset(l *Classic) Insets { return Insets{} }
 
 func (BaseEngine) TabOverlap(l *Classic) float32 { return 0 }
 
+// ViewBackground: item views sit on the field colour.
+func (BaseEngine) ViewBackground(l *Classic, st ControlState) paintengine2d.Color {
+	return l.palette.Field
+}
+
 // SpinBoxStyle: the step buttons share the field's frame, stacked.
 func (BaseEngine) SpinBoxStyle(l *Classic) SpinBoxStyle { return SpinBoxStyle{Inside: true} }
 

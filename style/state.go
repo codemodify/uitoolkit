@@ -3,7 +3,7 @@ package style
 import "github.com/codemodify/paintengine2d"
 
 // ControlState is a bitset of interactive chrome states.
-type ControlState uint32
+type ControlState uint64
 
 const (
 	StateNone    ControlState = 0
@@ -41,8 +41,20 @@ const (
 	StateTreeChain
 )
 
-// treeChainShift is where a tree row's chain bits start: above every named
-// state.
+// Named states above the tree chain bits (16 to 31).
+const (
+	// StateSidebar marks a view used as a sidebar (macOS source lists,
+	// libadwaita's navigation sidebar, WinUI's NavigationView pane) and
+	// its rows: looks with a sidebar style paint it; others ignore it.
+	StateSidebar ControlState = 1 << (32 + iota)
+	// StateAutoRaise marks a tool button that sits in a tool bar (Qt's
+	// State_AutoRaise): flat until the pointer is over it, where a free
+	// tool button keeps its bezel.
+	StateAutoRaise
+)
+
+// treeChainShift is where a tree row's chain bits start: above every
+// state named before them.
 const treeChainShift = 16
 
 // TreeChain is the state of a tree row whose chain of nodes (its ancestors
@@ -67,6 +79,8 @@ func (s ControlState) HasNextSibling(d int) bool {
 	return s&(1<<(treeChainShift+d)) != 0
 }
 
+func (s ControlState) Sidebar() bool     { return s&StateSidebar != 0 }
+func (s ControlState) AutoRaise() bool   { return s&StateAutoRaise != 0 }
 func (s ControlState) Hovered() bool     { return s&StateHovered != 0 }
 func (s ControlState) Pressed() bool     { return s&StatePressed != 0 }
 func (s ControlState) Disabled() bool    { return s&StateDisabled != 0 }

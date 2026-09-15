@@ -186,6 +186,14 @@ type aqua struct {
 	paneEdge, progTrack, pole, poleOff   []paintengine2d.GradientStop
 	sep, sepHi                           paintengine2d.Color
 	disclose                             paintengine2d.Color
+	// The source list (sidebar): its pane in an active and an inactive
+	// window, and its selection bars (focused list, unfocused list,
+	// inactive window) with their top lines.
+	src, srcOff paintengine2d.Color
+	srcSel      [3][]paintengine2d.GradientStop
+	srcSelTop   [3]paintengine2d.Color
+	srcText     paintengine2d.Color
+	srcDisclose paintengine2d.Color
 }
 
 type aquaKey struct{}
@@ -288,6 +296,21 @@ func aquaBuild(l *Classic) *aqua {
 		c.selOff = Mix(p.Field, white, 0.18)
 	}
 	c.selOffTxt = ReadableOn(c.selOff, 4.5, p.Text, black, white)
+	// Leopard's source list (Finder, Mail and iTunes sidebars): a pale
+	// blue-grey pane, grey in an inactive window; the selection is a blue
+	// bar, paler while the list lacks focus, grey in an inactive window.
+	c.src, c.srcOff = l.X("sourceList", Hex("#d6dde5")), l.X("sourceListOff", Hex("#e8e8e8"))
+	c.srcText, c.srcDisclose = black, Hex("#707070")
+	c.srcSel = [3][]paintengine2d.GradientStop{
+		{Stop(0, Hex("#6495d8")), Stop(1, Hex("#2861be"))},
+		{Stop(0, Hex("#a2b5d2")), Stop(1, Hex("#7d95bc"))},
+		{Stop(0, Hex("#bababa")), Stop(1, Hex("#979797"))},
+	}
+	c.srcSelTop = [3]paintengine2d.Color{Hex("#4a83cc"), Hex("#91a7c8"), Hex("#a8a8a8")}
+	if c.dark {
+		c.src, c.srcOff = Mix(p.Background, Hex("#4a5a70"), 0.18), Mix(p.Background, white, 0.06)
+		c.srcText, c.srcDisclose = p.Text, Mix(p.Text, p.Background, 0.4)
+	}
 	// Panther-era lists (iTunes, Mail, Finder's list view) stripe their
 	// rows white and pale blue; "stripes" 0 turns it off.
 	if l.P("stripes", 1) > 0 {
@@ -1740,7 +1763,62 @@ func (e aquaEngine) DrawSwitch(l *Classic, ctx *paintengine2d.Context, b painten
 	}
 }
 
+// DrawViewFrame: a sidebar is the frameless source-list pane; other views
+// keep the field frame.
+func (e aquaEngine) DrawViewFrame(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState) {
+	if !st.Sidebar() {
+		e.BaseEngine.DrawViewFrame(l, ctx, b, st)
+		return
+	}
+	c := aquaColors(l)
+	bg := c.src
+	if st.Backdrop() {
+		bg = c.srcOff
+	}
+	ctx.DrawRect(b, paintengine2d.Fill(bg))
+}
+
+// ViewBackground: a sidebar sits on the source-list pane.
+func (e aquaEngine) ViewBackground(l *Classic, st ControlState) paintengine2d.Color {
+	if !st.Sidebar() {
+		return l.palette.Field
+	}
+	c := aquaColors(l)
+	if st.Backdrop() {
+		return c.srcOff
+	}
+	return c.src
+}
+
+// sourceRow paints a source-list row's selection bar and returns the text
+// colour and face: bold white on the bar.
+func (c *aqua) sourceRow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState) (paintengine2d.Color, *Font) {
+	if !st.Checked() {
+		if st.Disabled() {
+			return c.dim, l.body
+		}
+		return c.srcText, l.body
+	}
+	k := 0
+	switch {
+	case st.Backdrop():
+		k = 2
+	case st.Inactive():
+		k = 1
+	}
+	ctx.DrawRect(b, paintengine2d.Linear(paintengine2d.LinearGradient{
+		Start: b.Min, End: paintengine2d.Pt(b.Min.X, b.Max.Y), Stops: c.srcSel[k]}))
+	u := aquaU(l)
+	ctx.DrawRect(paintengine2d.XYWH(b.Min.X, b.Min.Y, b.Dx(), u), paintengine2d.Fill(c.srcSelTop[k]))
+	return paintengine2d.RGB(1, 1, 1), l.BoldFont()
+}
+
 func (e aquaEngine) DrawListRow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string) {
+	if st.Sidebar() {
+		fg, f := aquaColors(l).sourceRow(l, ctx, b, st)
+		l.drawFittedText(ctx, f, label, paintengine2d.XYWH(b.Min.X+l.S(12), b.Min.Y, b.Dx()-l.S(16), b.Dy()), fg, AlignStart, 0)
+		return
+	}
 	aquaColors(l).rowStripe(ctx, b, st)
 	selected, hovered := st.Checked(), st.Hovered()
 	fg := l.fieldText()
@@ -1754,14 +1832,20 @@ func (e aquaEngine) DrawListRow(l *Classic, ctx *paintengine2d.Context, b painte
 }
 
 func (e aquaEngine) DrawTreeRow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, expanded, leaf bool, depth int, label string, bold bool) {
-	aquaColors(l).rowStripe(ctx, b, st)
-	selected, hovered := st.Checked(), st.Hovered()
 	c := aquaColors(l)
+	selected, hovered := st.Checked(), st.Hovered()
 	fg := l.fieldText()
-	if selected || hovered {
-		fg = e.Face(l, ctx, b, RoleRow, st&^StateFocused)
-		if !selected {
-			fg = l.fieldText()
+	var srcFace *Font
+	switch {
+	case st.Sidebar():
+		fg, srcFace = c.sourceRow(l, ctx, b, st)
+	default:
+		c.rowStripe(ctx, b, st)
+		if selected || hovered {
+			fg = e.Face(l, ctx, b, RoleRow, st&^StateFocused)
+			if !selected {
+				fg = l.fieldText()
+			}
 		}
 	}
 	indent := l.metrics.TreeIndent
@@ -1771,13 +1855,18 @@ func (e aquaEngine) DrawTreeRow(l *Classic, ctx *paintengine2d.Context, b painte
 	x := b.Min.X + l.S(4) + float32(depth)*indent
 	if !leaf {
 		col := c.disclose
-		if selected && !st.Inactive() {
+		switch {
+		case st.Sidebar() && selected:
+			col = fg
+		case st.Sidebar():
+			col = c.srcDisclose
+		case selected && !st.Inactive():
 			col = c.selTxt
 		}
 		e.Expander(l, ctx, paintengine2d.XYWH(x, b.Min.Y, indent, b.Dy()), expanded, col)
 	}
 	f := l.body
-	if bold {
+	if bold || srcFace == l.BoldFont() {
 		f = l.BoldFont()
 	}
 	lx := x + indent + l.S(3)

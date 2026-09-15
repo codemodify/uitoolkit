@@ -118,7 +118,12 @@ state bitset (`Hovered`, `Pressed`, `Disabled`, `Focused`, `Checked`,
 `Primary` = default button, `Toggle`, `First` / `Last` in a strip or a
 table row, `Inactive`, `Backdrop`, `Alternate` = an odd row, `ExpanderHot`
 = the pointer is on a tree row's expander, `Frameless` = a part inside a
-frame its parent drew).
+frame its parent drew), `Sidebar` = a view used as a sidebar and its rows
+(macOS source lists, libadwaita's navigation sidebar, WinUI's navigation
+pane; `ListView.Sidebar`, `TreeView.Sidebar`), `AutoRaise` = a tool button
+in a tool bar, flat until hovered (Qt's `State_AutoRaise`), where a free
+tool button keeps its bezel. `ViewBackground(l, st)` is what an item view's
+rows sit on: the field colour, or the sidebar pane.
 
 `StyleHint` answers behaviour questions like Qt's `styleHint`:
 `HintDialogPrimaryFirst` (1: "OK Cancel", Windows and KDE; 0: "Cancel OK",
