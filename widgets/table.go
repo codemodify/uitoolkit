@@ -41,17 +41,25 @@ type TableView struct {
 	// Frameless drops the look's view frame (a table that already sits in
 	// a framed pane).
 	Frameless bool
-	hovered   int
-	hoverCol  int
-	pressCol  int
-	resizeCol int
-	resizeX   float32
-	resizeW   float32
-	vbar      scrollDrag
-	rows      rowSceneCache
-	lastRow   int
-	lastAt    time.Time
-	reveal    int // row+1 to bring into view at the next Arrange
+	// Mode selects one row (the default) or several: SelectExtended is the
+	// mail-client convention (Ctrl toggles, Shift extends, Ctrl+A).
+	// Selected stays the current row either way.
+	Mode SelectionMode
+	// OnSelectionChange reports the selected rows, ascending, whenever the
+	// set changes in SelectExtended or SelectMulti.
+	OnSelectionChange func(rows []int)
+	sel               rowSelection
+	hovered           int
+	hoverCol          int
+	pressCol          int
+	resizeCol         int
+	resizeX           float32
+	resizeW           float32
+	vbar              scrollDrag
+	rows              rowSceneCache
+	lastRow           int
+	lastAt            time.Time
+	reveal            int // row+1 to bring into view at the next Arrange
 }
 
 // doubleClickInterval is the window for a second press on the same row to
@@ -471,7 +479,7 @@ func (t *TableView) paintRow(ctx *paintengine2d.Context, lk style.LookAndFeel, w
 		if t.CellBold != nil && t.CellBold(row, col) {
 			face = lk.BoldFont()
 		}
-		lk.DrawTableCell(ctx, cell, row == t.Selected, row == t.hovered, label, t.Columns[col].Align, face)
+		lk.DrawTableCell(ctx, cell, t.IsSelected(row), row == t.hovered, label, t.Columns[col].Align, face)
 		cx += w
 	}
 }
@@ -524,7 +532,7 @@ func (t *TableView) Paint(ctx *paintengine2d.Context) {
 				for col := range t.Columns {
 					extra ^= bits32(widths[col]) << uint(col%16)
 				}
-				sig := newRowSig(i == t.Selected, i == t.hovered, extra)
+				sig := newRowSig(t.IsSelected(i), i == t.hovered, extra)
 				for col := range t.Columns {
 					if t.CellText != nil {
 						sig.str(t.CellText(i, col))
@@ -690,12 +698,24 @@ func (t *TableView) MousePress(e widget.MouseEvent) bool {
 		i = -1
 	}
 	if i >= 0 {
+		changed := false
+		if t.Mode != SelectSingle {
+			if e.Button == platform.ButtonRight {
+				changed = t.sel.contextClick(i)
+			} else {
+				changed = t.sel.click(t.Mode, i, e.Mods)
+			}
+		}
 		t.Selected = i
 		t.Invalidate()
 		if t.OnSelect != nil {
 			t.OnSelect(i)
 		}
-		if e.Button == platform.ButtonLeft {
+		if changed {
+			t.selectionChanged()
+		}
+		// A Ctrl or Shift click edits the selection; it never activates.
+		if e.Button == platform.ButtonLeft && !e.Mods.Ctrl() && !e.Mods.Shift() {
 			if i == t.lastRow && time.Since(t.lastAt) < doubleClickInterval {
 				t.lastRow = -1
 				t.activate(i)
@@ -745,6 +765,63 @@ func (t *TableView) activate(row int) {
 
 // Activate commits row (the programmatic form of Return / double click).
 func (t *TableView) Activate(row int) { t.activate(row) }
+
+// IsSelected reports whether row i is selected (in SelectSingle, whether it
+// is the current row).
+func (t *TableView) IsSelected(i int) bool {
+	if i < 0 || i >= t.RowCount {
+		return false
+	}
+	if t.Mode == SelectSingle {
+		return i == t.Selected
+	}
+	return t.sel.has(i)
+}
+
+// SelectedRows is the selection in ascending order.
+func (t *TableView) SelectedRows() []int {
+	if t.Mode == SelectSingle {
+		if t.Selected >= 0 && t.Selected < t.RowCount {
+			return []int{t.Selected}
+		}
+		return nil
+	}
+	t.sel.drop(t.RowCount)
+	return t.sel.rows()
+}
+
+// SetSelectedRows replaces the selection; the last row given becomes the
+// current row and the anchor. It does not call the callbacks.
+func (t *TableView) SetSelectedRows(rows []int) {
+	t.sel.clear()
+	for _, r := range rows {
+		if r >= 0 && r < t.RowCount {
+			t.sel.add(r)
+			t.Selected = r
+			t.sel.anchor = r
+		}
+	}
+	if len(rows) == 0 {
+		t.Selected = -1
+	}
+	t.Invalidate()
+}
+
+// SelectAll selects every row (SelectExtended / SelectMulti) and reports it.
+func (t *TableView) SelectAll() {
+	if t.Mode == SelectSingle || t.RowCount == 0 {
+		return
+	}
+	t.sel.addRange(0, t.RowCount-1)
+	t.Invalidate()
+	t.selectionChanged()
+}
+
+func (t *TableView) selectionChanged() {
+	if t.OnSelectionChange != nil && t.Mode != SelectSingle {
+		t.OnSelectionChange(t.SelectedRows())
+	}
+}
 
 func (t *TableView) sortBy(col int) {
 	if t.SortCol == col {
@@ -798,9 +875,28 @@ func (t *TableView) KeyPress(e widget.KeyEvent) bool {
 		next = 0
 	case platform.KeyEnd:
 		next = t.RowCount - 1
-	case platform.KeyReturn, platform.KeySpace:
+	case platform.KeySpace:
+		// Space toggles the current row in Multi (Ctrl+Space in Extended).
+		if t.Mode == SelectMulti || (t.Mode == SelectExtended && e.Mods.Ctrl()) {
+			if t.Selected >= 0 {
+				t.sel.toggle(t.Selected)
+				t.sel.anchor = t.Selected
+				t.Invalidate()
+				t.selectionChanged()
+			}
+			return true
+		}
 		t.activate(t.Selected)
 		return true
+	case platform.KeyReturn:
+		t.activate(t.Selected)
+		return true
+	case platform.KeyA:
+		if e.Mods.Ctrl() && t.Mode != SelectSingle {
+			t.SelectAll()
+			return true
+		}
+		return false
 	default:
 		return false
 	}
@@ -810,12 +906,19 @@ func (t *TableView) KeyPress(e widget.KeyEvent) bool {
 	if next >= t.RowCount {
 		next = t.RowCount - 1
 	}
-	if next != t.Selected {
+	changed := false
+	if t.Mode != SelectSingle {
+		changed = t.sel.moveTo(t.Mode, next, e.Mods)
+	}
+	if next != t.Selected || changed {
 		t.Selected = next
 		t.ensureVisible(next)
 		t.Invalidate()
 		if t.OnSelect != nil {
 			t.OnSelect(next)
+		}
+		if changed {
+			t.selectionChanged()
 		}
 	}
 	return true

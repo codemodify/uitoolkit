@@ -237,9 +237,11 @@ func (s *session) build() widget.Component {
 		{Title: "Topic", MinWidth: 180, Sortable: true},
 		{Title: "Who", Width: 148, MinWidth: 110, Sortable: true},
 		{Title: "When", Width: 108, MinWidth: 88, Sortable: true},
-	}, 0, s.cellText, func(i int) {
-		s.clickRow(i, false)
-	})
+	}, 0, s.cellText, nil)
+	// Mail-client selection: Ctrl toggles, Shift extends, Ctrl+A selects the
+	// folder; bulk actions then act on every selected message.
+	s.table.Mode = widgets.SelectExtended
+	s.table.OnSelectionChange = s.tableSelection
 	s.table.CellBold = func(row, col int) bool {
 		if row < 0 || row >= len(s.rows) {
 			return false
@@ -250,8 +252,11 @@ func (s *session) build() widget.Component {
 		s.sortCol, s.sortAsc = col, asc
 		s.refreshList()
 	}
+	// Inside the selection the menu acts on every selected message; on a row
+	// outside it, on that row alone (the table's right-click does the same,
+	// this covers callers that open the menu directly).
 	s.table.OnContext = func(i int, p paintengine2d.Point) {
-		if i >= 0 && i < len(s.rows) {
+		if i >= 0 && i < len(s.rows) && !s.table.IsSelected(i) {
 			s.clickRow(i, false)
 		}
 		s.messageMenu(s.table, p)
@@ -592,7 +597,7 @@ func (s *session) refreshList() {
 		s.table.RowCount = len(s.rows)
 		s.table.SortCol = s.sortCol
 		s.table.SortAsc = s.sortAsc
-		s.table.Selected = s.primaryIndex()
+		s.syncTable()
 		s.table.SetVisible(!s.cardView)
 		s.table.Invalidate()
 	}
@@ -918,10 +923,7 @@ func (s *session) clickRow(i int, add bool) {
 	} else {
 		s.selected = []MessageID{id}
 	}
-	if s.table != nil {
-		s.table.Selected = i
-		s.table.Invalidate()
-	}
+	s.syncTable()
 	if s.cards != nil {
 		s.cards.Selected = i
 		s.cards.Invalidate()
@@ -938,6 +940,56 @@ func (s *session) clickRow(i int, add bool) {
 	}
 	s.loadPreview()
 	s.refreshStatus()
+}
+
+// tableSelection mirrors the message table's selection. One row behaves as
+// a click (preview, mark read); several are all selected with the current
+// row last, so the preview follows the keyboard and nothing is marked read.
+func (s *session) tableSelection(rows []int) {
+	if len(rows) == 1 {
+		s.clickRow(rows[0], false)
+		return
+	}
+	cur := -1
+	if s.table != nil {
+		cur = s.table.Selected
+	}
+	s.selected = s.selected[:0]
+	curSelected := false
+	for _, r := range rows {
+		if r < 0 || r >= len(s.rows) {
+			continue
+		}
+		if r == cur {
+			curSelected = true
+			continue
+		}
+		s.selected = append(s.selected, s.rows[r].ID)
+	}
+	if curSelected {
+		s.selected = append(s.selected, s.rows[cur].ID)
+	}
+	s.loadPreview()
+	s.refreshStatus()
+}
+
+// syncTable shows s.selected in the message table, the primary (last) as
+// its current row.
+func (s *session) syncTable() {
+	if s.table == nil {
+		return
+	}
+	pos := make(map[MessageID]int, len(s.rows))
+	for i, m := range s.rows {
+		pos[m.ID] = i
+	}
+	idx := make([]int, 0, len(s.selected))
+	for _, id := range s.selected {
+		if i, ok := pos[id]; ok {
+			idx = append(idx, i)
+		}
+	}
+	s.table.SetSelectedRows(idx)
 }
 
 // pruneSelection keeps only ids that are still visible in the thread list.
@@ -1418,10 +1470,17 @@ func (s *session) newFolder() {
 }
 
 func (s *session) selectAll() {
+	primary := s.primaryIndex()
 	s.selected = s.selected[:0]
-	for _, m := range s.rows {
-		s.selected = append(s.selected, m.ID)
+	for i, m := range s.rows {
+		if i != primary {
+			s.selected = append(s.selected, m.ID)
+		}
 	}
+	if primary >= 0 {
+		s.selected = append(s.selected, s.rows[primary].ID)
+	}
+	s.syncTable()
 	s.refreshStatus()
 	s.mark(fmt.Sprintf("%d selected", len(s.selected)))
 }

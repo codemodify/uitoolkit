@@ -21,10 +21,17 @@ type ListView struct {
 	// Frameless drops the look's view frame (a list that already sits in a
 	// framed pane).
 	Frameless bool
-	hovered   int
-	vbar      scrollDrag
-	rows      rowSceneCache
-	reveal    int // row+1 to bring into view at the next Arrange
+	// Mode selects one row (the default) or several (SelectExtended: Ctrl
+	// toggles, Shift extends, Ctrl+A). Selected stays the current row.
+	Mode SelectionMode
+	// OnSelectionChange reports the selected rows, ascending, whenever the
+	// set changes in SelectExtended or SelectMulti.
+	OnSelectionChange func(rows []int)
+	sel               rowSelection
+	hovered           int
+	vbar              scrollDrag
+	rows              rowSceneCache
+	reveal            int // row+1 to bring into view at the next Arrange
 }
 
 func NewListView(count int, text func(int) string, on func(int)) *ListView {
@@ -171,7 +178,7 @@ func (l *ListView) Paint(ctx *paintengine2d.Context) {
 				if l.ItemText != nil {
 					label = l.ItemText(i)
 				}
-				sig := newRowSig(i == l.Selected, i == l.hovered, bits32(rw))
+				sig := newRowSig(l.IsSelected(i), i == l.hovered, bits32(rw))
 				sig.str(label)
 				return sig.sum()
 			},
@@ -180,7 +187,7 @@ func (l *ListView) Paint(ctx *paintengine2d.Context) {
 				if l.ItemText != nil {
 					label = l.ItemText(i)
 				}
-				lk.DrawListRow(ctx, paintengine2d.XYWH(0, 0, rw, rh), i == l.Selected, i == l.hovered, label)
+				lk.DrawListRow(ctx, paintengine2d.XYWH(0, 0, rw, rh), l.IsSelected(i), i == l.hovered, label)
 			},
 		)
 	} else {
@@ -193,7 +200,7 @@ func (l *ListView) Paint(ctx *paintengine2d.Context) {
 			if l.ItemText != nil {
 				label = l.ItemText(i)
 			}
-			lk.DrawListRow(ctx, row, i == l.Selected, i == l.hovered, label)
+			lk.DrawListRow(ctx, row, l.IsSelected(i), i == l.hovered, label)
 		}
 		ctx.Restore()
 	}
@@ -274,10 +281,21 @@ func (l *ListView) MousePress(e widget.MouseEvent) bool {
 		i = -1
 	}
 	if i >= 0 {
+		changed := false
+		if l.Mode != SelectSingle {
+			if e.Button == platform.ButtonRight {
+				changed = l.sel.contextClick(i)
+			} else {
+				changed = l.sel.click(l.Mode, i, e.Mods)
+			}
+		}
 		l.Selected = i
 		l.Invalidate()
 		if l.OnSelect != nil {
 			l.OnSelect(i)
+		}
+		if changed {
+			l.selectionChanged()
 		}
 	}
 	if e.Button == platform.ButtonRight && l.OnContext != nil {
@@ -326,11 +344,32 @@ func (l *ListView) KeyPress(e widget.KeyEvent) bool {
 		next = 0
 	case platform.KeyEnd:
 		next = l.Count - 1
-	case platform.KeyReturn, platform.KeySpace:
+	case platform.KeySpace:
+		// Space toggles the current row in Multi (Ctrl+Space in Extended).
+		if l.Mode == SelectMulti || (l.Mode == SelectExtended && e.Mods.Ctrl()) {
+			if l.Selected >= 0 {
+				l.sel.toggle(l.Selected)
+				l.sel.anchor = l.Selected
+				l.Invalidate()
+				l.selectionChanged()
+			}
+			return true
+		}
 		if l.Selected >= 0 && l.OnSelect != nil {
 			l.OnSelect(l.Selected)
 		}
 		return true
+	case platform.KeyReturn:
+		if l.Selected >= 0 && l.OnSelect != nil {
+			l.OnSelect(l.Selected)
+		}
+		return true
+	case platform.KeyA:
+		if e.Mods.Ctrl() && l.Mode != SelectSingle {
+			l.SelectAll()
+			return true
+		}
+		return false
 	default:
 		return false
 	}
@@ -340,15 +379,79 @@ func (l *ListView) KeyPress(e widget.KeyEvent) bool {
 	if next >= l.Count {
 		next = l.Count - 1
 	}
-	if next != l.Selected {
+	changed := false
+	if l.Mode != SelectSingle {
+		changed = l.sel.moveTo(l.Mode, next, e.Mods)
+	}
+	if next != l.Selected || changed {
 		l.Selected = next
 		l.ensureVisible(next)
 		l.Invalidate()
 		if l.OnSelect != nil {
 			l.OnSelect(next)
 		}
+		if changed {
+			l.selectionChanged()
+		}
 	}
 	return true
+}
+
+// IsSelected reports whether row i is selected (in SelectSingle, whether it
+// is the current row).
+func (l *ListView) IsSelected(i int) bool {
+	if i < 0 || i >= l.Count {
+		return false
+	}
+	if l.Mode == SelectSingle {
+		return i == l.Selected
+	}
+	return l.sel.has(i)
+}
+
+// SelectedRows is the selection in ascending order.
+func (l *ListView) SelectedRows() []int {
+	if l.Mode == SelectSingle {
+		if l.Selected >= 0 && l.Selected < l.Count {
+			return []int{l.Selected}
+		}
+		return nil
+	}
+	l.sel.drop(l.Count)
+	return l.sel.rows()
+}
+
+// SetSelectedRows replaces the selection; the last row given becomes the
+// current row and the anchor. It does not call the callbacks.
+func (l *ListView) SetSelectedRows(rows []int) {
+	l.sel.clear()
+	for _, r := range rows {
+		if r >= 0 && r < l.Count {
+			l.sel.add(r)
+			l.Selected = r
+			l.sel.anchor = r
+		}
+	}
+	if len(rows) == 0 {
+		l.Selected = -1
+	}
+	l.Invalidate()
+}
+
+// SelectAll selects every row (SelectExtended / SelectMulti) and reports it.
+func (l *ListView) SelectAll() {
+	if l.Mode == SelectSingle || l.Count == 0 {
+		return
+	}
+	l.sel.addRange(0, l.Count-1)
+	l.Invalidate()
+	l.selectionChanged()
+}
+
+func (l *ListView) selectionChanged() {
+	if l.OnSelectionChange != nil && l.Mode != SelectSingle {
+		l.OnSelectionChange(l.SelectedRows())
+	}
 }
 
 func (l *ListView) ensureVisible(i int) {

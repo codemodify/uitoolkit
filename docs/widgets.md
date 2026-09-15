@@ -60,6 +60,16 @@ stub; there is no native AppKit/SwiftUI control host.
 `CardList` is a first-class virtualized multi-line row (Mail thread cards).
 It is not a generic Material “card” container.
 
+`ListView` and `TableView` select like Qt's item views (`Mode`):
+`SelectSingle` (default), `SelectExtended` — click selects one row,
+Ctrl+click toggles, Shift+click and Shift+arrows extend from the anchor,
+Ctrl+A selects all, a right-click outside the selection selects that row —
+and `SelectMulti` (every click toggles, Space toggles the current row).
+`Selected` is always the current row; read the set with `SelectedRows` /
+`IsSelected`, set it with `SetSelectedRows`, and follow it with
+`OnSelectionChange`. `EnsureVisible` scrolls a row into view (also before
+the first layout). Views sit in the theme's frame; `Frameless` opts out.
+
 ## Chrome and menus
 
 | Widget | uitoolkit | Qt (Widgets / Quick) | GTK 4 | Avalonia | Fyne | WinForms | WPF | AppKit | SwiftUI | Screenshot |
