@@ -285,7 +285,8 @@ may leave `ItemFocus` empty and let the view frame ring the focused view.
 - **No hover where the era had none** only when authentic (Win95 buttons
   had no hot state) — but never lose feedback users rely on: hover on tool
   buttons and menus, pressed on everything, visible focus.
-- **Facts, not copies.** uitoolkit is MIT. Take colours, sizes, radii,
+- **Facts, not copies.** uitoolkit is under The Free License, with no
+  restrictions on its users. Take colours, sizes, radii,
   gradient stops and behaviour from other toolkits as facts, and write the
   drawing yourself; never transcribe or port code, path tables, pixmaps or
   data from GPL / LGPL toolkits (Qt and KDE styles, GTK engines, OpenJDK,

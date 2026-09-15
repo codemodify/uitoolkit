@@ -35,7 +35,7 @@ go get github.com/codemodify/paintengine2d@v0.9.0
 | Windowing | Linux X11 + Wayland (`wl_egl_window` / eglSwapBuffers, else `wl_shm` / `XPutImage`); offscreen always. Pointers are host cursors (`wp_cursor_shape_v1` / XCURSOR / Xfont / `LoadCursorW` / `NSCursor`) |
 | Tray | `StatusItem` — Linux SNI + fdo notifications; Win32 notify area; macOS `NSStatusItem` (CGO) |
 | CGO | optional — tests and screenshots are `CGO_ENABLED=0` |
-| License | MIT |
+| License | [The Free License](LICENSE) |
 
 ## Highlights
 
@@ -388,7 +388,7 @@ widgets in other desktop kits. This is a name map, not feature parity.
 Full notes, layout primitives, and official doc links:
 **[docs/widgets.md](docs/widgets.md)**.
 
-Thumbs are uitoolkit (MIT), from `docs/screenshots/compare/` plus the
+Thumbs are uitoolkit frames, from `docs/screenshots/compare/` plus the
 gallery. Other-toolkit screenshots are **not** embedded (proprietary /
 unclear docs licenses) — follow the doc links in `docs/widgets.md`.
 
@@ -1117,4 +1117,4 @@ toolbar + tabs + message box). Keyboard map covers the new controls.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+The Free License — see [LICENSE](LICENSE).

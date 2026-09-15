@@ -190,7 +190,7 @@ func InspectorApp(win *app.Window) widget.Component {
 		widgets.NewSeparator(),
 		widgets.NewButton("License…", func() {
 			widgets.Info(win.Content(), "License",
-				"MIT. Paints only with paintengine2d. UI: Titillium Web.", nil)
+				"The Free License. Paints only with paintengine2d. UI: Titillium Web.", nil)
 		}),
 		widgets.NewSpacer(),
 	).WithGap(10).WithPad(16)
