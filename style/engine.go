@@ -287,6 +287,10 @@ type ScrollBarStyle struct {
 	HArrowsSet bool
 	// MinThumb is the shortest thumb (0 = 24).
 	MinThumb float32
+	// FixedThumb, when set, is the thumb's length whatever the content: the
+	// Mac's scroll box, Windows 3.1's thumb and OPEN LOOK's elevator never
+	// changed size.
+	FixedThumb float32
 	// EndPad is extra padding at both ends of an overlay track (0 = 4).
 	EndPad float32
 }
@@ -314,6 +318,10 @@ type ScrollParts struct {
 	// DecEnd is the second step-back button, beside Inc at the end
 	// (ArrowsTripleEnd); empty otherwise.
 	DecEnd paintengine2d.Rect
+	// Proportion is the span of the track the visible part covers, at the
+	// scroll position: the thumb itself unless the look fixes its size
+	// (OPEN LOOK's cable shows it beside a fixed elevator).
+	Proportion paintengine2d.Rect
 }
 
 // HitTest maps a point to the part under it.
@@ -392,6 +400,7 @@ func ScrollBarStyleOf(lk LookAndFeel) ScrollBarStyle {
 	s.Inset *= scale
 	s.ArrowLen *= scale
 	s.MinThumb *= scale
+	s.FixedThumb *= scale
 	s.EndPad *= scale
 	if s.ArrowLen <= 0 && (s.Arrows != ArrowsNone || (s.HArrowsSet && s.HArrows != ArrowsNone)) {
 		s.ArrowLen = s.Thickness
@@ -529,8 +538,11 @@ func ScrollGeometry(lk LookAndFeel, view paintengine2d.Rect, vertical bool, cont
 	if th > span {
 		th = span
 	}
-	pos := lo + (span-th)*(offset/maxOff)
-	p.Thumb = seg(pos, th)
+	p.Proportion = seg(lo+(span-th)*(offset/maxOff), th)
+	if s.FixedThumb > 0 {
+		th = min(s.FixedThumb, span)
+	}
+	p.Thumb = seg(lo+(span-th)*(offset/maxOff), th)
 	return p
 }
 

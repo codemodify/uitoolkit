@@ -547,7 +547,7 @@ func (e system7Engine) DrawFocusRing(l *Classic, ctx *paintengine2d.Context, b p
 // ScrollBarStyle: 16px bars with an arrow box at each end; the thumb is at
 // least as long as the scroll box drawn at its place.
 func (system7Engine) ScrollBarStyle(l *Classic) ScrollBarStyle {
-	return ScrollBarStyle{Thickness: 16, Arrows: ArrowsEnds, MinThumb: 16}
+	return ScrollBarStyle{Thickness: 16, Arrows: ArrowsEnds, MinThumb: 16, FixedThumb: 16}
 }
 
 // rpBoxAt places a fixed-length box of n cells along a track at the
