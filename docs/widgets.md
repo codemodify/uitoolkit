@@ -69,6 +69,10 @@ and `SelectMulti` (every click toggles, Space toggles the current row).
 `IsSelected`, set it with `SetSelectedRows`, and follow it with
 `OnSelectionChange`. `EnsureVisible` scrolls a row into view (also before
 the first layout). Views sit in the theme's frame; `Frameless` opts out.
+Typing jumps to the next row starting with what was typed (type-ahead
+find; a table matches its `SearchColumn`, by default the first flexible
+column) unless `DisableTypeAhead` is set, and the Menu key or Shift+F10
+opens `OnContext` for the current row.
 
 ## Chrome and menus
 

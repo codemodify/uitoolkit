@@ -1710,6 +1710,8 @@ func xkey(ks C.KeySym) Key {
 		return KeyF11
 	case C.XK_F12:
 		return KeyF12
+	case C.XK_Menu:
+		return KeyMenu
 	}
 	return KeyUnknown
 }
