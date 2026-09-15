@@ -39,11 +39,13 @@ go get github.com/codemodify/paintengine2d@v0.9.0
 
 ## Highlights
 
-- **Themes that change shapes, not just colours.** 28 engines (like Qt's
-  QStyle) draw 78 packs spanning four decades: System 1 to macOS Big Sur,
+- **Themes that change shapes, not just colours.** 29 engines (like Qt's
+  QStyle) draw 103 packs spanning four decades: System 1 to macOS Big Sur,
   Windows 3.1 to 11, Motif, CDE, NeXT, Amiga, BeOS, OS/2, KDE 3 to Plasma,
-  GNOME 2 to libadwaita, Material 2 and 3, Swing's Metal and Nimbus, and
-  FlatLaf. See [docs/theme-engines.md](docs/theme-engines.md).
+  GNOME 2 to libadwaita, Material 2 and 3, Swing's Metal and Nimbus,
+  FlatLaf, and today's SourceGit, Primer, shadcn/ui, Geist and Linear with
+  the Catppuccin, Nord, Dracula, Tokyo Night and Rosé Pine palettes. See
+  [docs/theme-engines.md](docs/theme-engines.md).
 - **Desktop integration.**
   - Follows the desktop's light or dark mode and accent colour (the XDG
     portal).
@@ -74,8 +76,8 @@ go get github.com/codemodify/paintengine2d@v0.9.0
 ## Themes
 
 A theme is an **engine**, Go code that decides the shapes (like Qt's
-QStyle), plus a **pack** of colours, metrics and fonts. 28 engines draw 78
-packs, from the 1984 Finder to Windows 11. Each was researched from
+QStyle), plus a **pack** of colours, metrics and fonts. 29 engines draw 103
+packs, from the 1984 Finder to Linear. Each was researched from
 published facts: design guides, SDK documentation, and pixels measured from
 screenshots of the originals. No code or pixmaps were copied.
 

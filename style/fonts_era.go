@@ -94,7 +94,29 @@ var eraEngineFonts = map[string]FontPrefs{
 	// Nimbus: SansSerif 12, DejaVu Sans on Linux JDKs.
 	"nimbus": {UI: []string{"DejaVu Sans", "Bitstream Vera Sans", "Segoe UI", "Tahoma", "Liberation Sans", "Noto Sans"},
 		Mono: []string{"DejaVu Sans Mono", "Bitstream Vera Sans Mono", "Liberation Mono", "Courier New"}},
+	// The web design systems and the palettes' app ports read in Inter
+	// (Adwaita Sans is Inter 4.1 with one variant frozen).
+	"web": {UI: inter, Mono: webMono},
 }
+
+// The web engine's faces: Inter and its twin, then the system sans of the
+// web's font stacks; the monospace stacks' faces.
+var (
+	inter   = []string{"Inter", "Inter Variable", "Inter Display", "Adwaita Sans", "Noto Sans", "Segoe UI", "Helvetica Neue", "DejaVu Sans"}
+	webMono = []string{"JetBrains Mono", "SF Mono", "Menlo", "Cascadia Mono", "Consolas", "Liberation Mono", "DejaVu Sans Mono"}
+)
+
+// The design systems' own faces, each followed by the web engine's:
+// SourceGit bundles Inter and JetBrains Mono NL, Primer asks for Mona Sans
+// then the system stack, Geist for Geist, Linear for Inter Variable and
+// Berkeley Mono.
+var (
+	sourcegitFonts = FontPrefs{UI: inter, Mono: append([]string{"JetBrains Mono NL"}, webMono...)}
+	primerFonts    = FontPrefs{UI: append([]string{"Mona Sans VF", "Mona Sans", "Segoe UI", "Noto Sans", "Helvetica", "Arial"}, inter...),
+		Mono: append([]string{"SF Mono", "SFMono-Regular", "Menlo", "Consolas", "Liberation Mono"}, webMono...)}
+	geistFonts  = FontPrefs{UI: append([]string{"Geist"}, inter...), Mono: append([]string{"Geist Mono"}, webMono...)}
+	linearFonts = FontPrefs{UI: inter, Mono: append([]string{"Berkeley Mono"}, webMono...)}
+)
 
 // eraPackFonts override the engine's typefaces for one pack.
 var eraPackFonts = map[string]FontPrefs{
@@ -104,6 +126,11 @@ var eraPackFonts = map[string]FontPrefs{
 	"adwaita-gtk3": {UI: cantarell, Mono: veraMono},
 	// OS X 10.10 Yosemite: Helvetica Neue, the year before San Francisco.
 	"yosemite": {UI: append([]string{"Helvetica Neue"}, helvetica...), Mono: []string{"Menlo", "DejaVu Sans Mono", "Noto Sans Mono"}},
+	// The web engine's design systems.
+	"sourcegit": sourcegitFonts, "sourcegit-night": sourcegitFonts,
+	"primer": primerFonts, "primer-night": primerFonts, "primer-dimmed": primerFonts,
+	"geist": geistFonts, "geist-night": geistFonts,
+	"linear": linearFonts, "linear-night": linearFonts,
 }
 
 // withEraFonts fills the typefaces tok leaves unset from its pack's era:

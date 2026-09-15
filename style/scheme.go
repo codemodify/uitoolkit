@@ -60,10 +60,24 @@ var (
 		"wmaker":  "wmaker-night",
 		"win98":   "win95-dark",
 		"win2000": "win95-dark",
+		// The web engine's families: each palette's darkest scheme.
+		"sourcegit":        "sourcegit-night",
+		"catppuccin-latte": "catppuccin-mocha",
+		"alucard":          "dracula",
+		"tokyonight-day":   "tokyonight",
+		"rosepine-dawn":    "rosepine",
 	}
 	lightSiblings = map[string]string{
-		"dark":         "light",
-		"cde-charcoal": "cde",
+		"dark":                 "light",
+		"cde-charcoal":         "cde",
+		"catppuccin-frappe":    "catppuccin-latte",
+		"catppuccin-macchiato": "catppuccin-latte",
+		"catppuccin-mocha":     "catppuccin-latte",
+		"dracula":              "alucard",
+		"tokyonight":           "tokyonight-day",
+		"tokyonight-storm":     "tokyonight-day",
+		"rosepine":             "rosepine-dawn",
+		"rosepine-moon":        "rosepine-dawn",
 	}
 )
 

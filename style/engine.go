@@ -916,6 +916,46 @@ func DrawSliderTicksOf(lk LookAndFeel, ctx *paintengine2d.Context, b paintengine
 	ctx.DrawPath(&p, paintengine2d.Fill(col))
 }
 
+// BrowserTabEngine is an optional engine hook for document tabs in a title
+// bar, browser style (SourceGit's repository tabs, a web browser's): the
+// selected tab is one outline with rounded top corners whose bottom corners
+// flare out into the tool bar row below it, the others are bare labels
+// between thin separators. The selected tab's flares reach BrowserTabOutset
+// past its slot on each side: grow its rect by that and paint it after its
+// neighbours (as a TabBar does with TabOutset). A look's in-page tabs may be
+// of another style.
+type BrowserTabEngine interface {
+	BrowserTabOutset(l *Classic) Insets
+	DrawBrowserTab(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, selected bool)
+}
+
+// BrowserTabOutsetOf is how far any look's selected browser tab reaches past
+// its slot, at display scale: for a look without browser tabs, its ordinary
+// tab's outset (the tab [DrawBrowserTabOf] paints instead).
+func BrowserTabOutsetOf(lk LookAndFeel) Insets {
+	if c, ok := lk.(*Classic); ok && c != nil {
+		if e, ok := c.eng().(BrowserTabEngine); ok {
+			return e.BrowserTabOutset(c)
+		}
+	}
+	return TabOutsetOf(lk)
+}
+
+// DrawBrowserTabOf paints a browser-style tab in any look: the engine's own,
+// else the look's ordinary tab.
+func DrawBrowserTabOf(lk LookAndFeel, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, selected bool) {
+	if lk == nil || ctx == nil {
+		return
+	}
+	if c, ok := lk.(*Classic); ok && c != nil {
+		if e, ok := c.eng().(BrowserTabEngine); ok {
+			e.DrawBrowserTab(c, ctx, b, st, label, selected)
+			return
+		}
+	}
+	lk.DrawTab(ctx, b, st, label, selected)
+}
+
 // ViewBackgroundLook says what an item view's rows sit on.
 type ViewBackgroundLook interface {
 	ViewBackground(st ControlState) paintengine2d.Color
