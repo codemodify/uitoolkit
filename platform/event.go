@@ -143,6 +143,16 @@ const (
 	EventDragMotion
 	EventDragLeave
 	EventDrop
+	// EventWindowState: the desktop changed the window's state (State):
+	// maximized, full screen, activated, tiled, suspended.
+	EventWindowState
+	// EventDecorations: the decoration mode in effect changed (Decor) — the
+	// compositor answered a request, or decided on its own (KWin draws no
+	// frame at all for a full-screen window).
+	EventDecorations
+	// EventCapabilities: what the desktop can do for the window changed
+	// (Caps).
+	EventCapabilities
 )
 
 // DropReceiver is implemented by surfaces that take drops from other
@@ -173,6 +183,12 @@ type Event struct {
 	// ScrollPrecise: Scroll is in device pixels from a touchpad or other
 	// continuous source; otherwise it counts wheel notches.
 	ScrollPrecise bool
+	// State is the window's new state (EventWindowState), Decor the new
+	// decoration mode (EventDecorations), Caps the desktop's new
+	// capabilities for the window (EventCapabilities).
+	State WindowState
+	Decor Decorations
+	Caps  WMCaps
 }
 
 // WindowOptions configure a native or offscreen surface.
@@ -192,6 +208,10 @@ type WindowOptions struct {
 	// Popup requests a short-lived menu surface: no taskbar, no
 	// decorations when the backend can, positioned at X,Y on X11.
 	Popup bool
+	// Decorations says who draws the window's frame (see [Decorations]).
+	// The app package resolves Auto before the surface is made; a backend
+	// handed Auto uses the desktop's frame.
+	Decorations Decorations
 }
 
 // Surface is the OS (or offscreen) window seam. The toolkit paints with

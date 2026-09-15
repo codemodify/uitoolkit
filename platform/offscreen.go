@@ -22,6 +22,8 @@ type Offscreen struct {
 	// drop is a simulated drop's data by type (SimulateDrop).
 	drop      map[string][]byte
 	dropTaken *bool
+	// frame is the simulated desktop behind FrameSurface (offscreen_frame.go).
+	frame offscreenFrame
 }
 
 // NewOffscreen allocates a CPU pixmap of the requested size.
@@ -33,11 +35,16 @@ func NewOffscreen(opts WindowOptions) *Offscreen {
 	if h < 1 {
 		h = 1
 	}
-	return &Offscreen{
+	o := &Offscreen{
 		title: opts.Title,
 		img:   paintengine2d.NewImage(w, h),
 		wake:  make(chan struct{}, 1),
 	}
+	o.frame.deco, o.frame.decoSet = requestedDecorations(opts.Decorations), true
+	if opts.Popup {
+		o.frame.deco = DecorationsNone
+	}
+	return o
 }
 
 func (o *Offscreen) Title() string                { return o.title }
