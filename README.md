@@ -116,11 +116,10 @@ drawn by its pack's engine.
 
 ### 2020s
 
-![libadwaita, macOS Big Sur, Material 3 and Fluent, light and dark](docs/screenshots/themes/themes-2020s.webp)
+The platforms' latest eras are here too: KDE Plasma 6's Breeze, GNOME 48's
+Adwaita, macOS 26 Tahoe's Liquid Glass and Material 3 Expressive.
 
-The platforms' latest eras join them: KDE Plasma 6's Breeze, GNOME 48's
-Adwaita, macOS 26 Tahoe's Liquid Glass and Material 3 Expressive, each
-light and dark.
+![libadwaita and GNOME 48's Adwaita, macOS Big Sur and Tahoe, Material 3 and Material 3 Expressive, Fluent, Plasma 6's Breeze, light and dark](docs/screenshots/themes/themes-2020s.webp)
 
 ### The web and its apps
 
@@ -130,7 +129,7 @@ Code's 2026 themes and JetBrains' Islands, the editor palettes Dracula,
 Nord, Tokyo Night, Catppuccin, Rosé Pine, Gruvbox, Solarized and Atom's
 One, and SourceGit's own theme.
 
-![Dracula, Nord, Tokyo Night, Catppuccin, Rosé Pine, GitHub Primer, Vercel Geist, SourceGit, shadcn/ui and Linear, light and dark](docs/screenshots/themes/themes-web.webp)
+![Solarized, Gruvbox, Dracula, Atom One, Nord, Tokyo Night, Catppuccin, Rosé Pine, GitHub Primer, Vercel Geist, SourceGit, shadcn/ui, JetBrains Islands, Linear and VS Code 2026, light and dark](docs/screenshots/themes/themes-web.webp)
 
 The full list, with what each pack reproduces, is in
 [docs/themes.md](docs/themes.md). How engines work, and how to write one,

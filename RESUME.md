@@ -31,6 +31,8 @@ Also merged to `dev` and pushed:
 | `468d557` | `feat/csd` | windows that draw their own title bar and borders (phase 1) |
 | `04d0746` | `engine/web` | the `web` engine: 25 packs of today's web and app looks |
 | `ff2cc6b` | `docs/themes-web` | the Settings preview no longer jumps; README sheets and timeline |
+| `6dbe277` | `feat/titlebar` | tabs in the title bar, and a title bar in every look (phase 2) |
+| `476dc19` | `engine/modern` | 18 more packs of today's looks; 121 in all |
 
 - **Today's themes.** The 29th engine, `web`, draws the looks developers
   use now: GitHub's Primer (light, dark, dark dimmed), Vercel's Geist,
@@ -45,13 +47,29 @@ Also merged to `dev` and pushed:
   system title bar and borders"; `UITK_DECORATIONS` and look.json's
   `"decorations"` choose too. GNOME, which has no server frames, now gets a
   frame. How it works: `docs/decorations.md`.
-- **Next, not started:**
-  - title-bar phases 2 to 4 (`docs/decorations.md`): frames drawn by each
-    engine; then shadows, rounded corners and resize handles in the shadow;
-    then browser-style tabs in the title bar with tear-off, as SourceGit and
-    Chromium have;
-  - more of today's packs: macOS Tahoe, Breeze 6, Material 3 Expressive,
-    JetBrains' Islands, VS Code's 2026 themes, Adwaita 48.
+- **Tabs in the title bar, and a title bar in every look** (phase 2).
+  `widgets.BrowserTabs` is a Chromium-style document-tab strip that sits in
+  a header bar (Files has folder tabs); `style.DecorationEngine` lets an
+  engine paint its era's frame, and every other pack gets its in-app window
+  caption adapted, so all 121 have one: 70 native, 31 adapted, 2 plain.
+  Settings: "Place window buttons as the theme does" (look.json
+  `captionButtons`).
+- **18 more packs of today's looks** (`engine/modern`): macOS Tahoe's Liquid
+  Glass, Plasma 6's Breeze, GNOME 48's Adwaita, Material 3 Expressive, VS
+  Code's 2026 themes, JetBrains Islands, and the Gruvbox, Solarized and Atom
+  One palettes. Platform engines can now hand a later era to an engine of
+  their own (`style.EraEngine`), and tool bars can share group chrome
+  (`style.ToolGroupEngine`, Tahoe's glass capsules). 121 packs, 29 engines.
+- **Next:**
+  - shadows, rounded corners and resize handles in the shadow (phase 3),
+    under way on `feat/frame-shadows`;
+  - then: tab tear-off (phase 4), drag and drop on X11 and dragging out of
+    apps, dockable panels;
+  - the 31 adapted looks could get frames of their own (NeXT, Platinum,
+    System 7, Amiga, BeOS, OS/2, Windows 3.1, KDE 3 and GNOME 2).
+- **Off the list** (the user's call, 2026-09-15): releases and tags; IME and
+  right-to-left text; Windows and macOS backends (pinned until Linux is
+  polished); printing.
 
 ## Decisions (answered 2026-09-15)
 
@@ -157,7 +175,7 @@ Also merged: `macos` (OS X Yosemite, macOS Big Sur and Big Sur Dark),
 whose tonal palettes are computed from a seed colour) and `flatlaf` (FlatLaf
 Light, FlatLaf Dark, Darcula).
 
-103 packs from 29 engines in all, with `web` (above). Every agent branch is merged, the last
+121 packs from 29 engines in all, with `web` and the later eras (above). Every agent branch is merged, the last
 being sidebar styles and tool-bar buttons for macOS, Adwaita, Fluent and
 Material (`engine/sidebar`).
 
