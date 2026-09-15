@@ -61,6 +61,10 @@ import (
 //     shadows of levels 2 and 3; dialogs have 28dp corners;
 //   - list and table selections are secondary-container pills.
 //
+// A sidebar (StateSidebar) is each generation's navigation drawer: Material
+// 3's secondary-container pill on surface-container-low, Material 2's
+// primary-tinted, 4dp-rounded activated item on the surface.
+//
 // Both animate their state changes: StyleHint answers HintHoverFadeMs 150.
 //
 // Pack data: params "gen" (2 or 3) and "plain" (how a plain push button
@@ -121,6 +125,8 @@ type mdSet struct {
 	ctlOn, ctlMark, ctlOff paintengine2d.Color
 	// Row selection fill and its text.
 	rowSel, rowSelText paintengine2d.Color
+	// Material 2's activated drawer item and its label.
+	navSel, navSelText paintengine2d.Color
 	// Slider / progress inactive track; the M2 switch thumb when off.
 	trackOff, thumbOff paintengine2d.Color
 	// State layer opacities.
@@ -156,6 +162,8 @@ func mdBuild(l *Classic) *mdSet {
 	small := l.metrics.FontSize * 0.75
 	c.small = BakeFamily(l.UIFamily(), WeightRegular, small, c.text2)
 	c.label = l.BoldFont()
+	c.navSel = mdOver(c.drawer(), c.primary, 0.12)
+	c.navSelText = ReadableOn(c.navSel, 4.5, mdOver(c.navSel, c.primary, 0.87), c.primary, c.text)
 	return c
 }
 
@@ -1081,6 +1089,14 @@ func (materialEngine) ViewFrameInsets(l *Classic) Insets {
 
 func (materialEngine) DrawViewFrame(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState) {
 	c := mdColors(l)
+	if st.Sidebar() {
+		// A navigation drawer: its container, no outline; focus shows on
+		// the item.
+		if !b.Empty() {
+			ctx.DrawRect(b, paintengine2d.Fill(c.drawer()))
+		}
+		return
+	}
 	b = mdSnap(b)
 	if b.Dx() < 4 || b.Dy() < 4 {
 		return
@@ -1092,6 +1108,101 @@ func (materialEngine) DrawViewFrame(l *Classic, ctx *paintengine2d.Context, b pa
 		edge = c.primary
 	}
 	mdRing(ctx, b, r, mdPx(l), edge)
+}
+
+// ViewBackground: a sidebar is a navigation drawer, whose items sit on its
+// container; other views on the field colour.
+func (e materialEngine) ViewBackground(l *Classic, st ControlState) paintengine2d.Color {
+	if st.Sidebar() {
+		return mdColors(l).drawer()
+	}
+	return e.BaseEngine.ViewBackground(l, st)
+}
+
+// drawer is the navigation drawer's container. Material 3's is
+// surface-container-low: in the 2021 roles this engine derives it is the
+// surface at elevation level 1 (tinted by the primary at 5%), the colour
+// the 2023 role took over (#F7F2FA for the baseline seed), a step off the
+// surface in both schemes. Material 2's standard drawer is the surface.
+func (c *mdSet) drawer() paintengine2d.Color {
+	if c.m3 {
+		return c.card
+	}
+	return c.surface
+}
+
+// drawerItem is a navigation drawer item's box inside its row and the box's
+// corner. Material 3's active indicator is a full-height pill (corner full:
+// 28dp on the 56dp item) inset 12dp from the drawer's sides (336dp in a
+// 360dp drawer); Material 2's item a 4dp-rounded box inset 8dp from the
+// sides and 4dp from the top and bottom (40dp in its 48dp slot).
+func (c *mdSet) drawerItem(l *Classic, b paintengine2d.Rect) (paintengine2d.Rect, float32) {
+	b = mdSnap(b)
+	h, v := snap(l.S(12)), float32(0)
+	if !c.m3 {
+		h = snap(l.S(8))
+		v = snap(min(l.S(4), max((b.Dy()-l.S(24))*0.5, 0)))
+	}
+	if b.Dx() <= 4*h || b.Dy() <= 2*v+4 {
+		return b, 0
+	}
+	box := paintengine2d.Rect{Min: paintengine2d.Pt(b.Min.X+h, b.Min.Y+v), Max: paintengine2d.Pt(b.Max.X-h, b.Max.Y-v)}
+	if c.m3 {
+		return box, min(l.rx(28), box.Dy()*0.5)
+	}
+	return box, min(l.rx(4), box.Dy()*0.5)
+}
+
+// drawerRow paints a navigation drawer item and returns its box and label
+// colour. Material 3: the active item is the secondary-container pill with
+// its label on-secondary-container; other labels are on-surface-variant,
+// on-surface when hovered, focused or pressed. The state layer — 8%
+// hovered, 12% focused or pressed — is on-secondary-container over the
+// active item and a pressed one, on-surface elsewhere. Material 2: the
+// activated item is the primary at 12% (16% hovered, 24% focused or
+// pressed) with its label the primary at 87%; other items take the
+// on-surface overlay. An inactive window keeps a neutral selection, as the
+// engine's lists do.
+func (c *mdSet) drawerRow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState) (paintengine2d.Rect, paintengine2d.Color) {
+	box, r := c.drawerItem(l, b)
+	pane := c.drawer()
+	dis := st.Disabled()
+	fg := c.text
+	if c.m3 && !st.Hovered() && !st.Focused() && !st.Pressed() {
+		fg = c.onSurfaceVar
+	}
+	if dis {
+		fg = c.textDis
+	}
+	a := c.layer(st)
+	if st.Checked() {
+		if st.Backdrop() || dis {
+			mdFill(ctx, box, r, mdOver(pane, c.onSurface, 0.08))
+			return box, fg
+		}
+		if c.m3 {
+			mdFill(ctx, box, r, c.secondaryC)
+			if a > 0 {
+				mdFill(ctx, box, r, c.onSecondaryC.WithAlpha(a))
+			}
+			return box, c.onSecondaryC
+		}
+		if a <= 0 {
+			mdFill(ctx, box, r, c.navSel)
+			return box, c.navSelText
+		}
+		sel := mdOver(pane, c.primary, 0.12+a)
+		mdFill(ctx, box, r, sel)
+		return box, ReadableOn(sel, 4.5, c.navSelText, c.primary, c.text)
+	}
+	if a > 0 {
+		layer := c.onSurface
+		if c.m3 && st.Pressed() {
+			layer = c.onSecondaryC
+		}
+		mdFill(ctx, box, r, layer.WithAlpha(a))
+	}
+	return box, fg
 }
 
 // StyleHint: Material's state changes fade (about 150ms); dialogs put the
@@ -1698,8 +1809,24 @@ func (c *mdSet) rowBox(l *Classic, b paintengine2d.Rect) (paintengine2d.Rect, fl
 	return p, p.Dy() * 0.5
 }
 
+// drawerPad is where a drawer item's label starts inside its box: 16dp into
+// Material 3's indicator, past Material 2's 8dp padding.
+func (c *mdSet) drawerPad(l *Classic) float32 {
+	if c.m3 {
+		return l.S(16)
+	}
+	return l.S(8)
+}
+
 func (e materialEngine) DrawListRow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string) {
 	c := mdColors(l)
+	if st.Sidebar() {
+		// The focus layer is part of the drawer item's state layer.
+		box, fg := c.drawerRow(l, ctx, b, st)
+		pad := c.drawerPad(l)
+		l.drawFittedText(ctx, l.body, label, paintengine2d.XYWH(box.Min.X+pad, b.Min.Y, box.Dx()-pad-l.S(8), b.Dy()), fg, AlignStart, 0)
+		return
+	}
 	box, r := c.rowBox(l, b)
 	fg := c.row(l, ctx, box, st, r)
 	pad := l.S(16)
@@ -1711,13 +1838,21 @@ func (e materialEngine) DrawListRow(l *Classic, ctx *paintengine2d.Context, b pa
 
 func (e materialEngine) DrawTreeRow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, expanded, leaf bool, depth int, label string, bold bool) {
 	c := mdColors(l)
-	box, r := c.rowBox(l, b)
-	fg := c.row(l, ctx, box, st, r)
+	side := st.Sidebar()
+	var fg paintengine2d.Color
+	x0, right := b.Min.X+l.S(8), b.Max.X-l.S(4)
+	if side {
+		box, col := c.drawerRow(l, ctx, b, st)
+		fg, x0, right = col, box.Min.X+c.drawerPad(l)-l.S(8), box.Max.X-l.S(8)
+	} else {
+		box, r := c.rowBox(l, b)
+		fg = c.row(l, ctx, box, st, r)
+	}
 	indent := l.metrics.TreeIndent
 	if indent <= 0 {
 		indent = l.S(16)
 	}
-	x := b.Min.X + l.S(8) + float32(depth)*indent
+	x := x0 + float32(depth)*indent
 	if !leaf {
 		col := c.text2
 		if st.ExpanderHot() || (st.Checked() && !st.Backdrop()) {
@@ -1730,8 +1865,8 @@ func (e materialEngine) DrawTreeRow(l *Classic, ctx *paintengine2d.Context, b pa
 		f = l.BoldFont()
 	}
 	lx := x + indent + l.S(6)
-	l.drawFittedText(ctx, f, label, paintengine2d.XYWH(lx, b.Min.Y, b.Max.X-lx-l.S(4), b.Dy()), fg, AlignStart, 0)
-	if st.Focused() {
+	l.drawFittedText(ctx, f, label, paintengine2d.XYWH(lx, b.Min.Y, right-lx, b.Dy()), fg, AlignStart, 0)
+	if st.Focused() && !side {
 		e.ItemFocus(l, ctx, b, st)
 	}
 }
