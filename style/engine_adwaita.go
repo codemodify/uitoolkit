@@ -1331,7 +1331,9 @@ func (e adwaitaEngine) DrawSpinner(l *Classic, ctx *paintengine2d.Context, b pai
 	if b.Dx() < 4 || b.Dy() < 6 {
 		return
 	}
-	c.field(l, ctx, b, st&^StateFocused)
+	if !st.Frameless() {
+		c.field(l, ctx, b, st&^StateFocused)
+	}
 	mid := snap((b.Min.Y + b.Max.Y) * 0.5)
 	lw := adwPx(l)
 	half := func(r paintengine2d.Rect, plus, hover, press bool) {
@@ -1356,6 +1358,13 @@ func (e adwaitaEngine) DrawSpinner(l *Classic, ctx *paintengine2d.Context, b pai
 			p.LineTo(cx, gb.Max.Y)
 		}
 		ctx.DrawPath(p, adwStroke(fg, max(l.S(1.5), 1)))
+	}
+	if st.Frameless() {
+		// GTK's spin button: flat "−" and "+" side by side in the entry.
+		cx := snap((b.Min.X + b.Max.X) * 0.5)
+		half(paintengine2d.XYWH(b.Min.X, b.Min.Y, cx-b.Min.X, b.Dy()).Inset(lw*2), false, downHover, downPress)
+		half(paintengine2d.XYWH(cx, b.Min.Y, b.Max.X-cx, b.Dy()).Inset(lw*2), true, upHover, upPress)
+		return
 	}
 	half(paintengine2d.XYWH(b.Min.X, b.Min.Y, b.Dx(), mid-b.Min.Y), true, upHover, upPress)
 	half(paintengine2d.XYWH(b.Min.X, mid, b.Dx(), b.Max.Y-mid), false, downHover, downPress)
@@ -1879,4 +1888,9 @@ func adwaitaPacks() []ThemePack {
 			"libadwaita's dark style: the same flat shapes on charcoal, sky-blue accent text.",
 			ThemeDark, 1, adwaitaPalette(1), ChromeMetrics{}),
 	}
+}
+
+// SpinBoxStyle: GTK 3 and 4 put "− +" side by side inside the entry.
+func (adwaitaEngine) SpinBoxStyle(l *Classic) SpinBoxStyle {
+	return SpinBoxStyle{Inside: true, Across: true}
 }

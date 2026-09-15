@@ -2317,3 +2317,6 @@ func motifPacks() []ThemePack {
 			map[string]float32{"optionMenu": 1, "graded": 1, "outline": 1, "arrowBox": 1, "grip": 1, "titleLeft": 1, "checkGlyph": 1}),
 	}
 }
+
+// SpinBoxStyle: Motif: the XmSpinBox arrows stand beside the text.
+func (motifEngine) SpinBoxStyle(l *Classic) SpinBoxStyle { return SpinBoxStyle{} }

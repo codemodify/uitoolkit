@@ -32,6 +32,10 @@ const (
 	// StateExpanderHot marks a tree row whose expander is under the pointer
 	// (Vista's bright triangle, GTK's prelit arrow).
 	StateExpanderHot
+	// StateFrameless marks a part that sits inside a frame its parent drew
+	// (Qt's frameless QLineEdit in a QSpinBox): a field paints only its
+	// text, a stepper only its buttons.
+	StateFrameless
 )
 
 func (s ControlState) Hovered() bool     { return s&StateHovered != 0 }
@@ -47,6 +51,7 @@ func (s ControlState) Inactive() bool    { return s&StateInactive != 0 }
 func (s ControlState) Backdrop() bool    { return s&StateBackdrop != 0 }
 func (s ControlState) Alternate() bool   { return s&StateAlternate != 0 }
 func (s ControlState) ExpanderHot() bool { return s&StateExpanderHot != 0 }
+func (s ControlState) Frameless() bool   { return s&StateFrameless != 0 }
 
 // CellSpan is the box a table row's selection spans, seen from one cell:
 // b grown by reach past each side where the row goes on (a cell that is

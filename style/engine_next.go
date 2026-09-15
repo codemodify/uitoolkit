@@ -2357,3 +2357,6 @@ func nextPacks() []ThemePack {
 			ThemeLight, wings, wmSilk, map[string]float32{"wm": 1, "justify": 1, "dither": 1, "cross": 1}),
 	}
 }
+
+// SpinBoxStyle: NeXTSTEP had no spin box: a stepper beside the field.
+func (nextEngine) SpinBoxStyle(l *Classic) SpinBoxStyle { return SpinBoxStyle{} }

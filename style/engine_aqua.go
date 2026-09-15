@@ -2017,3 +2017,6 @@ func aquaPacks() []ThemePack {
 			}, map[string]float32{"stripe": 4}),
 	}
 }
+
+// SpinBoxStyle: Mac OS X: the little arrows stand beside the field.
+func (aquaEngine) SpinBoxStyle(l *Classic) SpinBoxStyle { return SpinBoxStyle{} }

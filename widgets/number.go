@@ -11,7 +11,10 @@ import (
 	"github.com/codemodify/uitoolkit/widget"
 )
 
-// NumberField is a numeric TextField with stepper buttons (spinner).
+// NumberField is a numeric TextField with stepper buttons (spinner). The
+// look decides where the buttons go (style.SpinBoxStyle, Qt's CC_SpinBox):
+// inside the field's frame, sharing it, for Windows, KDE and GNOME (GNOME
+// side by side, "− +"); a stepper beside the field for Mac OS and Motif.
 type NumberField struct {
 	widget.Base
 	Min, Max, Step, Value float64
@@ -94,22 +97,72 @@ func (n *NumberField) spinnerW() float32 {
 	return w
 }
 
+// spinParts lays the spin box out for its look: the editor's rect, the
+// button box and its up / down halves, and whether the buttons share the
+// field's frame (then the editor is frameless and the box sits inside the
+// frame).
+func (n *NumberField) spinParts() (field, box, up, down paintengine2d.Rect, inside bool) {
+	lk := n.Look()
+	b := n.LocalBounds()
+	ss := style.SpinBoxStyleOf(lk)
+	sw := n.spinnerW()
+	if !ss.Inside {
+		box = paintengine2d.XYWH(b.Dx()-sw, 0, sw, b.Dy())
+		field = paintengine2d.XYWH(0, 0, b.Dx()-sw, b.Dy())
+	} else {
+		// Inside the field's frame, clear of its border.
+		fi := style.ViewFrameInsetsOf(lk)
+		px := style.Dip(lk, 1)
+		in := style.Insets{Top: max(fi.Top, px), Right: max(fi.Right, px), Bottom: max(fi.Bottom, px), Left: max(fi.Left, px)}
+		w := sw
+		if ss.Across {
+			w = min(b.Dy()*2, b.Dx()*0.5)
+		}
+		box = paintengine2d.XYWH(b.Dx()-in.Right-w, in.Top, w, b.Dy()-in.Top-in.Bottom)
+		field = paintengine2d.XYWH(0, 0, box.Min.X, b.Dy())
+		inside = true
+	}
+	if ss.Across {
+		mid := (box.Min.X + box.Max.X) * 0.5
+		down = paintengine2d.Rect{Min: box.Min, Max: paintengine2d.Pt(mid, box.Max.Y)}
+		up = paintengine2d.Rect{Min: paintengine2d.Pt(mid, box.Min.Y), Max: box.Max}
+	} else {
+		mid := (box.Min.Y + box.Max.Y) * 0.5
+		up = paintengine2d.Rect{Min: box.Min, Max: paintengine2d.Pt(box.Max.X, mid)}
+		down = paintengine2d.Rect{Min: paintengine2d.Pt(box.Min.X, mid), Max: box.Max}
+	}
+	return
+}
+
 func (n *NumberField) Arrange(r paintengine2d.Rect) {
 	n.SetBounds(r)
-	sw := n.spinnerW()
+	field, _, _, _, inside := n.spinParts()
 	if n.field != nil {
-		n.field.Arrange(paintengine2d.XYWH(0, 0, r.Dx()-sw, r.Dy()))
+		n.field.Frameless = inside
+		n.field.Arrange(field)
 	}
 }
 
 func (n *NumberField) spinnerBox() paintengine2d.Rect {
-	b := n.LocalBounds()
-	sw := n.spinnerW()
-	return paintengine2d.XYWH(b.Dx()-sw, 0, sw, b.Dy())
+	_, box, _, _, _ := n.spinParts()
+	return box
 }
 
 func (n *NumberField) Paint(ctx *paintengine2d.Context) {
-	n.Look().DrawSpinner(ctx, n.spinnerBox(), n.State(), n.upHover, n.downHover, n.upPress, n.downPress)
+	lk := n.Look()
+	_, box, _, _, inside := n.spinParts()
+	st := n.State()
+	if inside {
+		// One frame round text and buttons: the field's, drawn across the
+		// whole box (focused while the editor inside is).
+		fst := st
+		if n.focusHere() {
+			fst |= style.StateFocused
+		}
+		lk.DrawTextField(ctx, n.LocalBounds(), fst, "", "", 0, 0, 0, false, 0, nil)
+		st |= style.StateFrameless
+	}
+	lk.DrawSpinner(ctx, box, st, n.upHover, n.downHover, n.upPress, n.downPress)
 }
 
 func (n *NumberField) HitTest(local paintengine2d.Point) widget.Component {
@@ -133,10 +186,8 @@ func (n *NumberField) HitTest(local paintengine2d.Point) widget.Component {
 }
 
 func (n *NumberField) MouseMove(e widget.MouseEvent) bool {
-	sb := n.spinnerBox()
-	mid := (sb.Min.Y + sb.Max.Y) * 0.5
-	up := sb.Contains(e.Pos) && e.Pos.Y < mid
-	down := sb.Contains(e.Pos) && e.Pos.Y >= mid
+	_, _, ur, dr, _ := n.spinParts()
+	up, down := ur.Contains(e.Pos), dr.Contains(e.Pos)
 	if up != n.upHover || down != n.downHover {
 		n.upHover, n.downHover = up, down
 		n.Invalidate()
@@ -160,17 +211,16 @@ func (n *NumberField) MousePress(e widget.MouseEvent) bool {
 	} else {
 		n.RequestFocus()
 	}
-	sb := n.spinnerBox()
-	if !sb.Contains(e.Pos) {
-		return true
-	}
-	mid := (sb.Min.Y + sb.Max.Y) * 0.5
-	if e.Pos.Y < mid {
+	_, _, ur, dr, _ := n.spinParts()
+	switch {
+	case ur.Contains(e.Pos):
 		n.upPress = true
 		n.nudge(1)
-	} else {
+	case dr.Contains(e.Pos):
 		n.downPress = true
 		n.nudge(-1)
+	default:
+		return true
 	}
 	n.Invalidate()
 	return true
