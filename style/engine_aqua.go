@@ -1498,7 +1498,7 @@ func (e aquaEngine) DrawMenuFrame(l *Classic, ctx *paintengine2d.Context, b pain
 		aquaStripes(l, ctx, b, paintengine2d.RGBA(0, 0, 0, 0), c.menuLo, c.menuLine, c.period)
 	}
 	ctx.Restore()
-	ctx.DrawPath(RoundRectPath(b.Inset(u*0.5), 0, 0, r, r), paintengine2d.StrokePaint(c.menuEdge, u))
+	ctx.DrawRoundRectCorners(b.Inset(u*0.5), 0, 0, r, r, paintengine2d.StrokePaint(c.menuEdge, u))
 }
 
 // DrawMenuItem lays out an Aqua menu row: shortcuts in the label colour

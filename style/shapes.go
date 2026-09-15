@@ -147,40 +147,8 @@ func Pill(ctx *paintengine2d.Context, b paintengine2d.Rect, paint paintengine2d.
 
 // RoundRectPath builds a rect path with per-corner radii (tl, tr, br, bl).
 func RoundRectPath(b paintengine2d.Rect, tl, tr, br, bl float32) *paintengine2d.Path {
-	clampR := func(r float32) float32 {
-		m := b.Dx() * 0.5
-		if b.Dy()*0.5 < m {
-			m = b.Dy() * 0.5
-		}
-		if r > m {
-			r = m
-		}
-		if r < 0 {
-			r = 0
-		}
-		return r
-	}
-	tl, tr, br, bl = clampR(tl), clampR(tr), clampR(br), clampR(bl)
-	const k = 0.5522847 // cubic circle constant
 	p := paintengine2d.NewPath()
-	p.MoveTo(b.Min.X+tl, b.Min.Y)
-	p.LineTo(b.Max.X-tr, b.Min.Y)
-	if tr > 0 {
-		p.CubicTo(b.Max.X-tr+tr*k, b.Min.Y, b.Max.X, b.Min.Y+tr-tr*k, b.Max.X, b.Min.Y+tr)
-	}
-	p.LineTo(b.Max.X, b.Max.Y-br)
-	if br > 0 {
-		p.CubicTo(b.Max.X, b.Max.Y-br+br*k, b.Max.X-br+br*k, b.Max.Y, b.Max.X-br, b.Max.Y)
-	}
-	p.LineTo(b.Min.X+bl, b.Max.Y)
-	if bl > 0 {
-		p.CubicTo(b.Min.X+bl-bl*k, b.Max.Y, b.Min.X, b.Max.Y-bl+bl*k, b.Min.X, b.Max.Y-bl)
-	}
-	p.LineTo(b.Min.X, b.Min.Y+tl)
-	if tl > 0 {
-		p.CubicTo(b.Min.X, b.Min.Y+tl-tl*k, b.Min.X+tl-tl*k, b.Min.Y, b.Min.X+tl, b.Min.Y)
-	}
-	p.Close()
+	p.AddRoundRectCorners(b, tl, tr, br, bl)
 	return p
 }
 

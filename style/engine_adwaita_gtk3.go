@@ -416,13 +416,13 @@ func (g *adw314Set) window(e adwaitaEngine, l *Classic, ctx *paintengine2d.Conte
 		return
 	}
 	r := adwR(l, 7, b)
-	ctx.DrawPath(RoundRectPath(b, r, r, 0, 0), paintengine2d.Fill(g.border))
+	ctx.DrawRoundRectCorners(b, r, r, 0, 0, paintengine2d.Fill(g.border))
 	in := b.Inset(lw)
 	ri := max(r-lw, 0)
-	ctx.DrawPath(RoundRectPath(in, ri, ri, 0, 0), paintengine2d.Fill(g.win))
+	ctx.DrawRoundRectCorners(in, ri, ri, 0, 0, paintengine2d.Fill(g.win))
 	bar := paintengine2d.XYWH(in.Min.X, in.Min.Y, in.Dx(), adwCaptionH(l)-2*lw)
 	if st.Active {
-		ctx.DrawPath(RoundRectPath(bar, ri, ri, 0, 0), VGradient(bar, g.hb...))
+		ctx.DrawRoundRectCorners(bar, ri, ri, 0, 0, VGradient(bar, g.hb...))
 		ctx.Save()
 		ctx.ClipPath(RoundRectPath(bar, ri, ri, 0, 0))
 		ctx.DrawRect(paintengine2d.XYWH(bar.Min.X, bar.Min.Y, bar.Dx(), lw), paintengine2d.Fill(g.hilight))

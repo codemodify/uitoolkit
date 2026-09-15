@@ -968,7 +968,7 @@ func (clearlooksEngine) MenuHighlight(l *Classic, ctx *paintengine2d.Context, b 
 		path := RoundRectPath(b, r, r, 0, 0)
 		ctx.DrawPath(path, paintengine2d.Fill(edge))
 		in := paintengine2d.XYWH(b.Min.X+lw, b.Min.Y+lw, b.Dx()-2*lw, b.Dy()-lw)
-		ctx.DrawPath(RoundRectPath(in, max(r-lw, 0), max(r-lw, 0), 0, 0), VGradient(in, c.menuItem...))
+		ctx.DrawRoundRectCorners(in, max(r-lw, 0), max(r-lw, 0), 0, 0, VGradient(in, c.menuItem...))
 		return
 	}
 	clFrame(ctx, b, r, lw, paintengine2d.Fill(edge), VGradient(b, c.menuItem...))
@@ -1396,16 +1396,16 @@ func (e clearlooksEngine) DrawWindowFrame(l *Classic, ctx *paintengine2d.Context
 	if !st.Active {
 		base = c.bg
 	}
-	ctx.DrawPath(RoundRectPath(b, r, r, 0, 0), paintengine2d.Fill(clShade(base, 0.45)))
+	ctx.DrawRoundRectCorners(b, r, r, 0, 0, paintengine2d.Fill(clShade(base, 0.45)))
 	in := b.Inset(lw)
 	ri := max(r-lw, 0)
-	ctx.DrawPath(RoundRectPath(in, ri, ri, 0, 0), paintengine2d.Fill(c.bg))
+	ctx.DrawRoundRectCorners(in, ri, ri, 0, 0, paintengine2d.Fill(c.bg))
 	bar := paintengine2d.XYWH(in.Min.X, in.Min.Y, in.Dx(), clCaptionH(l)+snap(l.S(4))-2*lw)
 	stops := c.capGrad
 	if !st.Active {
 		stops = c.capOff
 	}
-	ctx.DrawPath(RoundRectPath(bar, ri, ri, 0, 0), VGradient(bar, stops...))
+	ctx.DrawRoundRectCorners(bar, ri, ri, 0, 0, VGradient(bar, stops...))
 	ctx.Save()
 	ctx.ClipPath(RoundRectPath(bar, ri, ri, 0, 0))
 	ctx.DrawRect(paintengine2d.XYWH(bar.Min.X, bar.Min.Y, bar.Dx(), lw), paintengine2d.Fill(clShade(base, 1.2)))
@@ -1507,9 +1507,9 @@ func (clearlooksEngine) DrawTabPane(l *Classic, ctx *paintengine2d.Context, b pa
 		edge, fill = Hex("#9d968f"), Hex("#e9e4df")
 	}
 	r := clR(l, 3, b)
-	ctx.DrawPath(RoundRectPath(b, 0, 0, r, r), paintengine2d.Fill(edge))
+	ctx.DrawRoundRectCorners(b, 0, 0, r, r, paintengine2d.Fill(edge))
 	in := b.Inset(lw)
-	ctx.DrawPath(RoundRectPath(in, 0, 0, max(r-lw, 0), max(r-lw, 0)), paintengine2d.Fill(fill))
+	ctx.DrawRoundRectCorners(in, 0, 0, max(r-lw, 0), max(r-lw, 0), paintengine2d.Fill(fill))
 	clLit(ctx, in, max(r-lw, 0), lw, c.white, clShade(fill, 0.93))
 }
 
@@ -1983,9 +1983,9 @@ func (e clearlooksEngine) DrawSpinner(l *Classic, ctx *paintengine2d.Context, b 
 		} else {
 			br = r
 		}
-		ctx.DrawPath(RoundRectPath(h, 0, tr, br, 0), edge)
+		ctx.DrawRoundRectCorners(h, 0, tr, br, 0, edge)
 		in := h.Inset(lw)
-		ctx.DrawPath(RoundRectPath(in, 0, max(tr-lw, 0), max(br-lw, 0), 0), VGradient(in, face...))
+		ctx.DrawRoundRectCorners(in, 0, max(tr-lw, 0), max(br-lw, 0), 0, VGradient(in, face...))
 		hi := c.white
 		if press {
 			hi = c.s[4]
@@ -2050,10 +2050,10 @@ func (e clearlooksEngine) DrawTab(l *Classic, ctx *paintengine2d.Context, b pain
 	if c.flavour == clCleanlooks {
 		edge = c.qEdge
 	}
-	ctx.DrawPath(RoundRectPath(t, r, r, 0, 0), VGradient(t, edge...))
+	ctx.DrawRoundRectCorners(t, r, r, 0, 0, VGradient(t, edge...))
 	in := paintengine2d.XYWH(t.Min.X+lw, t.Min.Y+lw, t.Dx()-2*lw, t.Dy()-lw)
 	ri := max(r-lw, 0)
-	ctx.DrawPath(RoundRectPath(in, ri, ri, 0, 0), VGradient(in, stops...))
+	ctx.DrawRoundRectCorners(in, ri, ri, 0, 0, VGradient(in, stops...))
 	ctx.Save()
 	ctx.ClipPath(RoundRectPath(in, ri, ri, 0, 0))
 	if selected {
