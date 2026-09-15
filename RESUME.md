@@ -22,6 +22,37 @@ binaries: a 25 MB `gallery` build that was still tracked, and the 9 MB
 files are gone. The branch as it was is kept locally as
 `backup/theme-engines-pre-clean`.
 
+## Later on 2026-09-15: today's themes and app-drawn title bars
+
+Also merged to `dev` and pushed:
+
+| merge on `dev` | branch | what |
+| --- | --- | --- |
+| `468d557` | `feat/csd` | windows that draw their own title bar and borders (phase 1) |
+| `04d0746` | `engine/web` | the `web` engine: 25 packs of today's web and app looks |
+| `ff2cc6b` | `docs/themes-web` | the Settings preview no longer jumps; README sheets and timeline |
+
+- **Today's themes.** The 29th engine, `web`, draws the looks developers
+  use now: GitHub's Primer (light, dark, dark dimmed), Vercel's Geist,
+  shadcn/ui, Linear, **SourceGit** (light and dark, from its own theme),
+  Dracula and Alucard, Nord, Tokyo Night (night, storm, day), Catppuccin
+  (four flavours) and Rosé Pine (three). On the GPU in the rig every one
+  matches the CPU render within 46 pixels (0.01%).
+- **Title bars like SourceGit's and Chromium's.** A window can draw its own
+  title bar: `widgets.HeaderBar` with the caption buttons where the desktop
+  puts them, while moves, resizes, snapping and the window menu stay the
+  compositor's. Mail's tool-bar row is now its title bar. Settings has "Use
+  system title bar and borders"; `UITK_DECORATIONS` and look.json's
+  `"decorations"` choose too. GNOME, which has no server frames, now gets a
+  frame. How it works: `docs/decorations.md`.
+- **Next, not started:**
+  - title-bar phases 2 to 4 (`docs/decorations.md`): frames drawn by each
+    engine; then shadows, rounded corners and resize handles in the shadow;
+    then browser-style tabs in the title bar with tear-off, as SourceGit and
+    Chromium have;
+  - more of today's packs: macOS Tahoe, Breeze 6, Material 3 Expressive,
+    JetBrains' Islands, VS Code's 2026 themes, Adwaita 48.
+
 ## Decisions (answered 2026-09-15)
 
 1. **The default theme is Metal (Ocean)** (`metal-ocean`, Swing's own
@@ -119,13 +150,14 @@ Merged engines:
 | system7, win31, openlook, amiga, beos, os2 | System 1 and 7, Windows 3.1 and Hot Dog Stand, OPEN LOOK, Workbench 1.3 and 3.1, BeOS, OS/2 Warp 4 |
 | macos, material, flatlaf | OS X Yosemite, macOS Big Sur and Dark; Material 2 and 3, light and dark; FlatLaf Light, Dark, Darcula |
 | metal, nimbus | Swing's Metal (Steel 1998, Ocean 2004) and Nimbus (2008), clean-room |
+| web | GitHub Primer, Vercel Geist, shadcn/ui, Linear, SourceGit, Dracula, Nord, Tokyo Night, Catppuccin, Rosé Pine (25 packs) |
 
 Also merged: `macos` (OS X Yosemite, macOS Big Sur and Big Sur Dark),
 `material` (Material and Material Dark, Material 3 and Material 3 Dark,
 whose tonal palettes are computed from a seed colour) and `flatlaf` (FlatLaf
 Light, FlatLaf Dark, Darcula).
 
-78 packs from 28 engines in all. Every agent branch is merged, the last
+103 packs from 29 engines in all, with `web` (above). Every agent branch is merged, the last
 being sidebar styles and tool-bar buttons for macOS, Adwaita, Fluent and
 Material (`engine/sidebar`).
 
