@@ -396,8 +396,8 @@ func (t *TextArea) Paint(ctx *paintengine2d.Context) {
 		blink = false
 	}
 	t.Look().DrawTextArea(ctx, t.LocalBounds(), t.State(), lines, caret, selA, selB, blink, t.scrollX, t.scrollY, t.Placeholder, t.font())
-	t.vbar.paint(ctx, t.Look(), t.vparts(), true)
-	t.hbar.paint(ctx, t.Look(), t.hparts(), false)
+	t.vbar.paint(t, ctx, t.Look(), t.vparts(), true, t.scrollY)
+	t.hbar.paint(t, ctx, t.Look(), t.hparts(), false, t.scrollX)
 }
 
 func (t *TextArea) visual() (text string, caret, selA, selB int) {
@@ -634,7 +634,7 @@ func (t *TextArea) MouseMove(e widget.MouseEvent) bool {
 		d  *scrollDrag
 		ax scrollAxis
 	}{{&t.vbar, t.vaxis()}, {&t.hbar, t.haxis()}} {
-		if handled, dirty := bar.d.move(e.Pos, bar.ax); handled || dirty {
+		if handled, dirty := bar.d.move(t, e.Pos, bar.ax); handled || dirty {
 			if dirty {
 				t.Invalidate()
 			}

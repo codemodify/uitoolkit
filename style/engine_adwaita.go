@@ -658,14 +658,15 @@ func (adwaitaEngine) DrawFocusRing(l *Classic, ctx *paintengine2d.Context, b pai
 
 // ---- scrollbars ------------------------------------------------------------------------
 
-// ScrollBarStyle: libadwaita's overlay bars have no arrows; the bar is as
-// wide as the hovered 8px slider plus its margins, and idle only a 3px
-// indicator shows. GTK 3.14 keeps a 13px gutter with a pill slider.
+// ScrollBarStyle: libadwaita's overlay bars have no arrows and come and go
+// over the content; the bar is as wide as the hovered 8px slider plus its
+// margins, and idle only a 3px indicator shows. GTK 3.14 keeps a 13px
+// gutter with a pill slider.
 func (adwaitaEngine) ScrollBarStyle(l *Classic) ScrollBarStyle {
 	if adwColors(l).gtk3 {
 		return ScrollBarStyle{Thickness: 13, MinThumb: 42}
 	}
-	return ScrollBarStyle{Thickness: 14, Overlay: true, MinThumb: 40, EndPad: 3}
+	return ScrollBarStyle{Thickness: 14, Overlay: true, Transient: true, MinThumb: 40, EndPad: 3}
 }
 
 func (e adwaitaEngine) DrawScrollBarParts(l *Classic, ctx *paintengine2d.Context, p ScrollParts, vertical bool, st ScrollState) {

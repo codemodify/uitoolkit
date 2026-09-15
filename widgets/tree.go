@@ -294,7 +294,7 @@ func (t *TreeView) Paint(ctx *paintengine2d.Context) {
 		}
 		ctx.Restore()
 	}
-	t.vbar.paint(ctx, lk, t.vparts(), true)
+	t.vbar.paint(t, ctx, lk, t.vparts(), true, t.OffsetY)
 	// The current row carries the focus mark; a focused tree without one
 	// rings itself.
 	if t.Focused() && t.indexOf(t.Selected) < 0 {
@@ -409,7 +409,7 @@ func (t *TreeView) MouseEnter() {}
 
 func (t *TreeView) MouseMove(e widget.MouseEvent) bool {
 	p := toView(e.Pos, t.frame())
-	if handled, dirty := t.vbar.move(p, t.vaxis()); handled || dirty {
+	if handled, dirty := t.vbar.move(t, p, t.vaxis()); handled || dirty {
 		if dirty {
 			t.Invalidate()
 		}

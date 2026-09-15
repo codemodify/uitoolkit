@@ -64,7 +64,11 @@ gets the era right:
   `MenuHighlight`, `MenuTextColor`, `FieldFocusRing`.
 - **Scrollbars** — `ScrollBarStyle` (thickness, overlay vs gutter, arrow
   placement: none / both ends / grouped end / grouped start) and
-  `DrawScrollBarParts`.
+  `DrawScrollBarParts`. `Transient` bars come and go over the content,
+  which keeps its full width (libadwaita, WinUI, Mac OS X since Lion): the
+  view shows them while it scrolls or the pointer moves over it and fades
+  them out after a second of rest; the engine draws the thin idle form unless
+  `ScrollState.Hovered` or a part is pressed.
 - **Frames** — `GroupBoxInsets/DrawGroupBox` (titled frames),
   `WindowFrameInsets/DrawWindowFrame` (in-app dialogs: caption, close),
   `DrawWindowBackground` (pinstripes, brushed metal) and `DrawTabPane`.
@@ -79,6 +83,8 @@ gets the era right:
   handle). Odd rows carry `StateAlternate` for striped lists (Aqua).
 - **Tabs** — `TabOutset` grows the selected tab, which the tab bar paints
   last, so it overlaps its neighbours (Win95 and XP: 2px each side).
+  `TabOverlap` lays every tab over its neighbour's border, so two tabs share
+  one line (Aero and Metro: 1px; Qt's `PM_TabBarTabOverlap`).
 - **Shadows** — `PopupShadow(kind)` is how far a floating layer's drop
   shadow reaches past its bounds, and `DrawPopupShadow` paints it before the
   layer (`PopupMenu` for menus and lists, `PopupTooltip`, `PopupDialog`).
@@ -96,8 +102,9 @@ gets the era right:
 `RoleCheck`, `RoleRow`, `RoleTab`, `RoleThumb`, `RoleTrack`, `RoleMenu`,
 `RoleCombo`, `RoleSplitter`, `RoleBar`, `RolePanel`. `ControlState` is the
 state bitset (`Hovered`, `Pressed`, `Disabled`, `Focused`, `Checked`,
-`Primary` = default button, `Toggle`, `First` / `Last` in a strip,
-`Inactive`, `Backdrop`, `Alternate` = an odd row).
+`Primary` = default button, `Toggle`, `First` / `Last` in a strip or a
+table row, `Inactive`, `Backdrop`, `Alternate` = an odd row, `ExpanderHot`
+= the pointer is on a tree row's expander).
 
 `StyleHint` answers behaviour questions like Qt's `styleHint`:
 `HintDialogPrimaryFirst` (1: "OK Cancel", Windows and KDE; 0: "Cancel OK",
@@ -116,6 +123,12 @@ Windows and Mac looks grey a selection as soon as the view is `Inactive`
 and Qt-style looks keep it until `Backdrop`, Motif and NeXT never change
 it. `RoleRow` faces see the same bits, and every widget's state carries
 `Backdrop` while its window is inactive (Aqua's default button turns clear).
+
+Table cells carry `First` / `Last` (a cell with neither is a middle cell).
+To draw one selection box across a row, paint the row box over
+`CellSpan(b, st, reach)` clipped to the cell: the span runs past the sides
+where the row goes on, so the cells join into one box (Aero's Explorer
+selection, Fluent's list item and pill).
 
 List and tree painters mark a `Focused` row themselves — default
 `ItemFocus` over the row, Win95 and XP a dotted rectangle around the label,
@@ -172,6 +185,10 @@ may leave `ItemFocus` empty and let the view frame ring the focused view.
 
 - **Paint inside the rect you are given.** Widgets paint clipped to their
   bounds; anything outside is lost (this is why focus rings used to vanish).
+- **Rects arrive on whole pixels.** Layout rounds every component's bounds
+  to device pixels (as WPF and Avalonia do), and tables round their column
+  edges, so `snap`ped lines in your painting land on real pixels. Cells that
+  meet share an edge exactly; never grow a cell to cover a seam.
 - **Focus is painted inside** the control (`DrawFocusRing(ctx, b)` rings
   the inside of `b`). Check boxes and radios ring their label.
 - **Scale everything** that is a design length with `l.S(v)` (display scale)
@@ -201,7 +218,9 @@ look may implement; use the `…Of` helpers, which fall back when a look
 does not: `ControlFontOf` (measure labels), `DrawArrowOf` (era arrows),
 `DrawItemFocusOf` (current-row mark), `ViewFrameInsetsOf` /
 `DrawViewFrameOf`, `PopupShadowOf` / `DrawPopupShadowOf`, `TabOutsetOf`,
-`ToolBarInsetsOf` and `LookHint`. Build row states with `widget.ItemState`
+`TabOverlapOf`, `ToolBarInsetsOf` and `LookHint`. A scrolling view gives up
+`ScrollGutter` to its bar (nothing for transient bars) and lets
+`scrollDrag` show, fade and hit-test it. Build row states with `widget.ItemState`
 or `widget.RowItemState`, which add `Focused`, `Inactive`, `Backdrop` and
 `Alternate` for you.
 

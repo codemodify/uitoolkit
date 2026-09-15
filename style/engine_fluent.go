@@ -612,7 +612,7 @@ func (fluentEngine) DrawFocusRing(l *Classic, ctx *paintengine2d.Context, b pain
 // ScrollBarStyle: WinUI's floating bar — a thin line at rest, a 12px
 // rounded bar with arrow carets under the pointer.
 func (fluentEngine) ScrollBarStyle(l *Classic) ScrollBarStyle {
-	return ScrollBarStyle{Thickness: 12, Overlay: true, Inset: 1, Arrows: ArrowsEnds, ArrowLen: 12, MinThumb: 24, EndPad: 1}
+	return ScrollBarStyle{Thickness: 12, Overlay: true, Transient: true, Inset: 1, Arrows: ArrowsEnds, ArrowLen: 12, MinThumb: 24, EndPad: 1}
 }
 
 func (e fluentEngine) DrawScrollBarParts(l *Classic, ctx *paintengine2d.Context, p ScrollParts, vertical bool, st ScrollState) {

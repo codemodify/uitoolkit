@@ -208,7 +208,7 @@ func (l *ListView) Paint(ctx *paintengine2d.Context) {
 		}
 		ctx.Restore()
 	}
-	l.vbar.paint(ctx, lk, l.vparts(), true)
+	l.vbar.paint(l, ctx, lk, l.vparts(), true, l.OffsetY)
 	// The current row carries the focus mark; a focused list without one
 	// rings itself.
 	if l.Focused() && (l.Selected < 0 || l.Selected >= l.Count) {
@@ -239,7 +239,7 @@ func (l *ListView) MouseEnter() {}
 
 func (l *ListView) MouseMove(e widget.MouseEvent) bool {
 	p := toView(e.Pos, l.frame())
-	if handled, dirty := l.vbar.move(p, l.vaxis()); handled || dirty {
+	if handled, dirty := l.vbar.move(l, p, l.vaxis()); handled || dirty {
 		if dirty {
 			l.Invalidate()
 		}

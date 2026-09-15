@@ -199,7 +199,7 @@ func (s *ScrollView) Paint(ctx *paintengine2d.Context) {
 		}
 		ctx.Restore()
 	}
-	s.bar.paint(ctx, lk, s.vparts(), true)
+	s.bar.paint(s, ctx, lk, s.vparts(), true, s.OffsetY)
 	if s.State().Focused() {
 		lk.DrawFocusRing(ctx, b)
 	}
@@ -252,7 +252,7 @@ func (s *ScrollView) MousePress(e widget.MouseEvent) bool {
 }
 
 func (s *ScrollView) MouseMove(e widget.MouseEvent) bool {
-	handled, dirty := s.bar.move(e.Pos, s.vaxis())
+	handled, dirty := s.bar.move(s, e.Pos, s.vaxis())
 	if dirty {
 		s.Invalidate()
 	}
