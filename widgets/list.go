@@ -24,6 +24,7 @@ type ListView struct {
 	hovered   int
 	vbar      scrollDrag
 	rows      rowSceneCache
+	reveal    int // row+1 to bring into view at the next Arrange
 }
 
 func NewListView(count int, text func(int) string, on func(int)) *ListView {
@@ -45,7 +46,29 @@ func (l *ListView) Measure(c layout.Constraints) paintengine2d.Point {
 	return c.Constrain(paintengine2d.Pt(w, h))
 }
 
-func (l *ListView) Arrange(r paintengine2d.Rect) { l.SetBounds(r); l.clamp() }
+func (l *ListView) Arrange(r paintengine2d.Rect) {
+	l.SetBounds(r)
+	if l.reveal > 0 {
+		i := l.reveal - 1
+		l.reveal = 0
+		l.ensureVisible(i)
+	}
+	l.clamp()
+}
+
+// EnsureVisible scrolls the least needed to bring row i into view. Called
+// before the list is laid out, it applies at the first Arrange.
+func (l *ListView) EnsureVisible(i int) {
+	if i < 0 || i >= l.Count {
+		return
+	}
+	if l.inner().Dy() <= 0 {
+		l.reveal = i + 1
+		return
+	}
+	l.ensureVisible(i)
+	l.Invalidate()
+}
 
 func (l *ListView) rowH() float32 {
 	return style.FittedRowHeight(l.Look(), l.RowHeight)

@@ -54,6 +54,7 @@ type TreeView struct {
 	flat      []treeRow
 	index     map[*TreeNode]int
 	flatValid bool
+	reveal    *TreeNode // brought into view at the next Arrange
 }
 
 // NewTreeView constructs a tree.
@@ -220,7 +221,29 @@ func (t *TreeView) Measure(c layout.Constraints) paintengine2d.Point {
 	return c.Constrain(paintengine2d.Pt(w, h))
 }
 
-func (t *TreeView) Arrange(r paintengine2d.Rect) { t.SetBounds(r); t.clamp() }
+func (t *TreeView) Arrange(r paintengine2d.Rect) {
+	t.SetBounds(r)
+	if n := t.reveal; n != nil {
+		t.reveal = nil
+		t.ensureVisible(n)
+	}
+	t.clamp()
+}
+
+// EnsureVisible scrolls the least needed to bring n's row into view (n
+// must be visible: its ancestors expanded). Called before the tree is laid
+// out, it applies at the first Arrange.
+func (t *TreeView) EnsureVisible(n *TreeNode) {
+	if n == nil {
+		return
+	}
+	if t.inner().Dy() <= 0 {
+		t.reveal = n
+		return
+	}
+	t.ensureVisible(n)
+	t.Invalidate()
+}
 
 func (t *TreeView) Paint(ctx *paintengine2d.Context) {
 	t.clamp()
