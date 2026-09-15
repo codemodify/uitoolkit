@@ -198,7 +198,7 @@ func (w *Window) rebuildCaption() {
 	}
 	if hb != nil {
 		hb.SetHost(w)
-		hb.SetWindowControls(w.app.TitleBarPrefs().Layout, framed)
+		hb.SetWindowControls(w.buttonLayout(hb), framed)
 	}
 	if hb != w.caption {
 		old := w.caption
@@ -211,6 +211,18 @@ func (w *Window) rebuildCaption() {
 	w.laid = false
 	w.dropScene()
 	w.fullInvalidate()
+}
+
+// buttonLayout is where hb's caption buttons go: the desktop's layout, or
+// the look's own when the user prefers it (look.json "captionButtons").
+func (w *Window) buttonLayout(hb *widgets.HeaderBar) platform.ButtonLayout {
+	if w.app.captionPref == style.CaptionButtonsTheme {
+		st := hb.DecorationState()
+		if l := style.DecorationOf(w.look, st).Layout; l != "" {
+			return platform.ParseButtonLayout(l)
+		}
+	}
+	return w.app.TitleBarPrefs().Layout
 }
 
 // decorationsChanged adopts the mode the desktop answered.
@@ -735,6 +747,23 @@ func (a *Application) titleBarPrefsChanged() {
 		}
 	}
 }
+
+// SetCaptionButtons puts the caption buttons of every frame the toolkit
+// draws where the desktop's layout puts them (CaptionButtonsDesktop, the
+// default) or where the look's own does (CaptionButtonsTheme): the user's
+// look.json "captionButtons".
+func (a *Application) SetCaptionButtons(p style.CaptionButtonsPref) {
+	p = style.ParseCaptionButtonsPref(string(p))
+	if a == nil || p == a.captionPref {
+		return
+	}
+	a.captionPref = p
+	a.titleBarPrefsChanged()
+}
+
+// CaptionButtons is where frames the toolkit draws put their caption
+// buttons (see SetCaptionButtons).
+func (a *Application) CaptionButtons() style.CaptionButtonsPref { return a.captionPref }
 
 // setDecorationsPref applies the user's decorations preference (look.json).
 func (a *Application) setDecorationsPref(p style.DecorationsPref) {

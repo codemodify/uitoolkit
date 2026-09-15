@@ -78,6 +78,9 @@ type Application struct {
 	decorPref style.DecorationsPref
 	tbar      titleBarPrefsCache
 	desktop   platform.DesktopPrefs
+	// captionPref is where toolkit frames put their caption buttons: the
+	// desktop's layout or the look's own (look.json "captionButtons").
+	captionPref style.CaptionButtonsPref
 }
 
 // trayWakeCap is the longest a tray-holding loop sleeps. Tray events
@@ -111,14 +114,15 @@ func New(opts Options) *Application {
 		watch = false
 	}
 	var decorPref style.DecorationsPref
+	var captionPref style.CaptionButtonsPref
 	if !opts.Headless {
-		// "Use system title bar and borders" is a desktop-wide choice: it
-		// applies to apps with a look of their own too.
-		if preferred {
-			decorPref = ap.Decorations
-		} else {
-			decorPref = style.LoadAppearance().Decorations
+		// "Use system title bar and borders" and the caption buttons'
+		// layout are desktop-wide choices: they apply to apps with a look
+		// of their own too.
+		if !preferred {
+			ap = style.LoadAppearance()
 		}
+		decorPref, captionPref = ap.Decorations, ap.CaptionButtons
 	}
 	var backend platform.Backend
 	if opts.Backend != "" {
@@ -139,12 +143,13 @@ func New(opts Options) *Application {
 		}
 	}
 	a := &Application{
-		scale:     opts.Scale,
-		autoScale: auto,
-		headless:  opts.Headless,
-		backend:   backend,
-		watchLook: watch,
-		decorPref: decorPref,
+		scale:       opts.Scale,
+		autoScale:   auto,
+		headless:    opts.Headless,
+		backend:     backend,
+		watchLook:   watch,
+		decorPref:   decorPref,
+		captionPref: captionPref,
 	}
 	// Ask the desktop for its preferences before the look is built: a
 	// theme that follows its light / dark mode starts in the right one.

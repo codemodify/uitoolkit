@@ -360,8 +360,20 @@ func (s *settingsState) themesPage(status *widgets.StatusBar, stage func(style.A
 		stage(next)
 	})
 	options.PlaceSpan(system, 4, 0, 1, 4)
+	// Where a title bar the toolkit draws puts its caption buttons: the
+	// desktop's layout, or the theme's own (the Mac's traffic lights on
+	// the left).
+	themeButtons := widgets.NewSwitch("Place window buttons as the theme does", s.staged.CaptionButtons == style.CaptionButtonsTheme, func(on bool) {
+		next := s.staged
+		next.CaptionButtons = style.CaptionButtonsDesktop
+		if on {
+			next.CaptionButtons = style.CaptionButtonsTheme
+		}
+		stage(next)
+	})
+	options.PlaceSpan(themeButtons, 5, 0, 1, 4)
 	if style.DesktopReducesMotion() {
-		options.PlaceSpan(widgets.NewLabel("The desktop asks for reduced motion, so animations stay off."), 5, 0, 1, 4)
+		options.PlaceSpan(widgets.NewLabel("The desktop asks for reduced motion, so animations stay off."), 6, 0, 1, 4)
 	}
 
 	preview := widgets.NewColumn(info, scope, options).WithGap(10)

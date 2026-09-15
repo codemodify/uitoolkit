@@ -812,3 +812,33 @@ func TestSettingsSystemTitleBarSwitch(t *testing.T) {
 		t.Fatalf("back to auto: %q", got)
 	}
 }
+
+// "Place window buttons as the theme does" writes look.json's
+// captionButtons.
+func TestSettingsThemeCaptionButtonsSwitch(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	a, w := openSettings(t, 1024, 780)
+	const label = "Place window buttons as the theme does"
+	sw := findSwitch(w.Content(), label)
+	if sw == nil || sw.On {
+		t.Fatalf("switch %v: the desktop's layout is the default", sw)
+	}
+	sw.OnChange(true)
+	a.PumpOnce()
+	clickApply(t, w)
+	a.PumpOnce()
+	if got := style.LoadAppearance().CaptionButtons; got != style.CaptionButtonsTheme {
+		t.Fatalf("saved captionButtons %q", got)
+	}
+	raw, err := os.ReadFile(style.AppearancePath())
+	if err != nil || !strings.Contains(string(raw), `"captionButtons": "theme"`) {
+		t.Fatalf("look.json %s %v", raw, err)
+	}
+	findSwitch(w.Content(), label).OnChange(false)
+	a.PumpOnce()
+	clickApply(t, w)
+	a.PumpOnce()
+	if raw, _ := os.ReadFile(style.AppearancePath()); strings.Contains(string(raw), "captionButtons") {
+		t.Fatalf("the desktop's layout is left out of look.json: %s", raw)
+	}
+}
