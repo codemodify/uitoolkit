@@ -89,6 +89,7 @@ func buildSettingsState(s *settingsState) widget.Component {
 			return
 		}
 		s.saved = next
+		style.SetReduceMotion(next.ReduceMotion)
 		s.a.SetLook(next.Look())
 		s.rebuild()
 	}
@@ -297,8 +298,15 @@ func (s *settingsState) themesPage(status *widgets.StatusBar, stage func(style.A
 	options.AddFlex(corners, 1)
 	options.AddFlex(sizes, 1)
 	options.AddFlex(icons, 1)
+	// Hover fades, the default button's pulse, busy bars: off for users
+	// who get unwell from motion (GTK's gtk-enable-animations).
+	motion := widgets.NewSwitch("Animations", !s.staged.ReduceMotion, func(on bool) {
+		next := s.staged
+		next.ReduceMotion = !on
+		stage(next)
+	})
 
-	preview := widgets.NewColumn(info, scope, options).WithGap(10)
+	preview := widgets.NewColumn(info, scope, options, motion).WithGap(10)
 	preview.AddFlex(scope, 1)
 
 	body := widgets.NewRow(browser, preview).WithGap(14)

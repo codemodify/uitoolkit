@@ -63,7 +63,9 @@ type Application struct {
 func New(opts Options) *Application {
 	watch := opts.WatchLook
 	if opts.Look == nil {
-		opts.Look = style.PreferredLook()
+		ap := style.LoadAppearance()
+		style.SetReduceMotion(ap.ReduceMotion)
+		opts.Look = ap.Look()
 		watch = true
 	}
 	if opts.DisableLookWatch {

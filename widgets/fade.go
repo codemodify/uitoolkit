@@ -1,7 +1,6 @@
 package widgets
 
 import (
-	"os"
 	"time"
 
 	"github.com/codemodify/paintengine2d"
@@ -10,8 +9,8 @@ import (
 )
 
 // AnimationsEnv set to "0" makes every state change instant (reduced
-// motion, reproducible screenshots).
-const AnimationsEnv = "UITK_ANIMATIONS"
+// motion, reproducible screenshots); see style.Animations.
+const AnimationsEnv = style.AnimationsEnv
 
 // fadeNow is the clock fades run by (tests replace it).
 var fadeNow = time.Now
@@ -38,7 +37,7 @@ type stateFade struct {
 // change.
 func (f *stateFade) paint(owner widget.Component, ctx *paintengine2d.Context, r paintengine2d.Rect, st style.ControlState, draw func(*paintengine2d.Context, style.ControlState)) {
 	ms := 0
-	if owner != nil && os.Getenv(AnimationsEnv) != "0" {
+	if owner != nil && style.Animations() {
 		ms = style.LookHint(owner.Look(), style.HintHoverFadeMs)
 	}
 	now := fadeNow()

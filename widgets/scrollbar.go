@@ -92,6 +92,9 @@ func (d *scrollDrag) rest(owner widget.Component, after time.Duration) {
 			return
 		}
 		d.reveal -= 1.0 / transientSteps
+		if !style.Animations() {
+			d.reveal = 0 // reduced motion: gone at once, no fade
+		}
 		if d.reveal <= 0.001 {
 			d.reveal = 0
 			d.resting = false

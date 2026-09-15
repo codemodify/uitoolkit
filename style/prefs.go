@@ -27,6 +27,8 @@ type appearanceFileJSON struct {
 	Corners  string `json:"corners,omitempty"`
 	Icons    string `json:"icons,omitempty"`
 	IconSize string `json:"iconSize,omitempty"`
+	// ReduceMotion turns animations off.
+	ReduceMotion bool `json:"reduceMotion,omitempty"`
 }
 
 // ConfigDir is $XDG_CONFIG_HOME/uitoolkit (or ~/.config/uitoolkit).
@@ -105,6 +107,7 @@ func resolveAppearance(raw appearanceFileJSON) Appearance {
 	if strings.TrimSpace(raw.IconSize) != "" {
 		a.IconSize = ParseIconSize(raw.IconSize)
 	}
+	a.ReduceMotion = raw.ReduceMotion
 	return a.Normalize()
 }
 
@@ -146,5 +149,7 @@ func SaveAppearance(a Appearance) error {
 		Corners:  string(a.Corners),
 		Icons:    string(a.Icons),
 		IconSize: string(a.IconSize),
+
+		ReduceMotion: a.ReduceMotion,
 	})
 }
