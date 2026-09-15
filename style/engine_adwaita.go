@@ -1872,13 +1872,98 @@ func adwaitaPack(name, label string, year int, summary string, fam ThemeName, sc
 		Metrics: m,
 		Params:  map[string]float32{"scheme": float32(scheme)},
 	}
-	tok.Hot = ChromeState{Fill: pal.MenuHover, Border: pal.MenuHover}
-	tok.Selected = ChromeState{Fill: pal.Selection, Border: pal.Accent}
-	tok.Focus = ChromeState{Fill: pal.Focus.WithAlpha(0.1), Border: pal.Focus}
+	adwaitaChrome(&tok)
 	return ThemePack{
 		Name: name, Label: label, Year: year, Lineage: "GNOME", Summary: summary,
 		Era: "Adwaita", Palette: fam, Tokens: tok,
 	}
+}
+
+// adwaitaChrome sets the chrome states Adwaita derives from its palette
+// (pressed comes from the resolver).
+func adwaitaChrome(tok *ThemeTokens) {
+	pal := tok.Palette
+	tok.Hot = ChromeState{Fill: pal.MenuHover, Border: pal.MenuHover}
+	tok.Selected = ChromeState{Fill: pal.Selection, Border: pal.Accent}
+	tok.Focus = ChromeState{Fill: pal.Focus.WithAlpha(0.1), Border: pal.Focus}
+}
+
+// adwAccents are GNOME 47's accent colours, libadwaita 1.6's
+// accent_bg_color for each (the same in the light and dark styles): blue,
+// teal, green, yellow, orange, red, pink, purple and slate.
+var adwAccents = [...]string{"#3584e4", "#2190a4", "#3a944a", "#c88800", "#ed5b00", "#e62d42", "#d56199", "#9141ac", "#6f8396"}
+
+// adwSlateChroma is the Oklch chroma below which a desktop accent has too
+// little hue to pick by (GNOME's slate itself carries 0.037).
+const adwSlateChroma = 0.04
+
+// adwNearestAccent is the GNOME accent libadwaita shows for a desktop
+// accent. The settings portal may hand it any colour (Plasma's are free);
+// libadwaita keeps to its nine and takes the closest one in Oklch, mostly
+// by hue. Here: the accent with the nearest hue, or slate for a colour too
+// grey to have one.
+func adwNearestAccent(c paintengine2d.Color) paintengine2d.Color {
+	_, C, h := okLCh(c)
+	best := Hex(adwAccents[len(adwAccents)-1]) // slate
+	if C < adwSlateChroma {
+		return best
+	}
+	bestD := math.Inf(1)
+	for _, s := range adwAccents[:len(adwAccents)-1] {
+		a := Hex(s)
+		_, _, ah := okLCh(a)
+		if d := math.Abs(okTurn(h, ah)); d < bestD {
+			best, bestD = a, d
+		}
+	}
+	return best
+}
+
+// adwStandalone is libadwaita's accent_color, the accent that is safe as
+// text on the window: accent_bg_color with its Oklab lightness capped at
+// 0.5 in the light style and raised to at least 0.85 in the dark one
+// (--standalone-color-oklab), each channel clipped to sRGB.
+func adwStandalone(bg paintengine2d.Color, dark bool) paintengine2d.Color {
+	L, a, b := okLab(bg)
+	if dark {
+		L = math.Max(L, 0.85)
+	} else {
+		L = math.Min(L, 0.5)
+	}
+	return okClip(L, a, b)
+}
+
+// Accented is GNOME 47's accent colour (libadwaita 1.6): the desktop's
+// accent, as the closest of GNOME's nine, becomes accent_bg_color — the
+// suggested action, checked boxes, radios and switches, the slider and
+// progress fills, the tab underline and the tinted selections — with
+// white on it, and the text-safe accent_color GNOME derives from it colours
+// links, the focus ring and the accent text. The GTK 3 Adwaita of 2014
+// keeps its blue: GNOME 3 had no accent setting.
+func (adwaitaEngine) Accented(tok ThemeTokens, accent paintengine2d.Color) ThemeTokens {
+	scheme := int(accentP(tok, "scheme", 0))
+	if scheme == 2 {
+		return tok
+	}
+	sc := adwSchemes[0]
+	if scheme == 1 {
+		sc = adwSchemes[1]
+	}
+	bg := adwNearestAccent(accent)
+	std := adwStandalone(bg, scheme == 1)
+	// Every GNOME accent carries white at 3:1 or better (yellow is the
+	// dimmest).
+	fg := ReadableOn(bg, 3, accentX(tok, "accentFg", Hex(sc["accentFg"])), tok.Palette.Text)
+	tok = CloneTokenMaps(tok)
+	tok.Extra["accentBg"], tok.Extra["accentFg"], tok.Extra["accent"] = bg, fg, std
+	p := &tok.Palette
+	p.Accent, p.TextOnAccent = std, fg
+	p.AccentHover, p.AccentPress = adwOver(bg, fg.WithAlpha(0.1)), adwOver(bg, adwInk(0.2))
+	p.Focus = std.WithAlpha(adwFocusAlpha)
+	p.Selection = bg.WithAlpha(adwTextSelAlpha)
+	adwaitaChrome(&tok)
+	tok.Pressed = ChromeState{} // the resolver's, from the new palette
+	return tok.Resolve()
 }
 
 func adwaitaPacks() []ThemePack {

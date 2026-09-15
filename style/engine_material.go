@@ -1940,13 +1940,72 @@ func mdPack(name, label string, year int, summary string, fam ThemeName, pal Pal
 		}
 		tok.Extra[k] = hexColor(v)
 	}
-	tok.Hot = ChromeState{Fill: pal.MenuHover, Border: pal.MenuHover}
-	tok.Selected = ChromeState{Fill: pal.Selection, Border: pal.Accent}
-	tok.Focus = ChromeState{Fill: pal.Accent.WithAlpha(0.12), Border: pal.Accent}
+	mdChrome(&tok)
 	return ThemePack{
 		Name: name, Label: label, Year: year, Lineage: "Google", Summary: summary,
 		Era: EraMaterial, Palette: fam, Tokens: tok,
 	}
+}
+
+// mdChrome sets the chrome states Material derives from its palette
+// (pressed and disabled come from the resolver).
+func mdChrome(tok *ThemeTokens) {
+	pal := tok.Palette
+	tok.Hot = ChromeState{Fill: pal.MenuHover, Border: pal.MenuHover}
+	tok.Selected = ChromeState{Fill: pal.Selection, Border: pal.Accent}
+	tok.Focus = ChromeState{Fill: pal.Accent.WithAlpha(0.12), Border: pal.Accent}
+}
+
+// md2Baseline is Material 2's baseline primary, #6200EE (Purple 500 of its
+// palette); its variant is #3700B3 (the 700) and the dark theme's primary
+// #BB86FC (the 200).
+var md2Baseline = Hex("#6200ee")
+
+// Accented recolours Material around the desktop's accent. Material 3
+// (Material You) takes it as the seed: every tonal palette — primary,
+// secondary, tertiary and the neutrals, which carry the seed's hue — is
+// regenerated from it, so the whole scheme follows (engine_material_tone.go).
+// Material 2 takes it as the primary colour: the contained button, the
+// slider, progress, tab indicator, focused field line and selection tints;
+// the primary variant (the 700 shade), the dark theme's lighter primary
+// (the 200) and its pressed shade make the step from the accent that the
+// baseline palette makes from #6200EE (accentShift). The teal secondary of
+// Material 2's check boxes and switches stays. On-colours keep 4.5:1.
+func (materialEngine) Accented(tok ThemeTokens, accent paintengine2d.Color) ThemeTokens {
+	dark := accentDark(tok)
+	tok = CloneTokenMaps(tok)
+	if accentP(tok, "gen", 2) >= 3 {
+		// Every colour the pack's palette took from its seed is taken
+		// from the accent; a colour the pack set itself stays.
+		was := mdPalette3(accentX(tok, "seed", Hex("#6750a4")), dark)
+		tok.Palette = accentRepalette(tok.Palette, was, mdPalette3(accent, dark))
+		tok.Extra["seed"] = accent
+		p := &tok.Palette
+		p.TextOnAccent = ReadableOn(p.Accent, 4.5, p.TextOnAccent)
+	} else {
+		pick := func(light, darkHex string) paintengine2d.Color {
+			if dark {
+				return Hex(darkHex)
+			}
+			return Hex(light)
+		}
+		primary0 := accentX(tok, "primary", pick("#6200ee", "#bb86fc"))
+		// The primary this pack's is the Material 2 shade of: #6200EE for
+		// both shipped packs.
+		ref := accentShift(primary0, pick("#6200ee", "#bb86fc"), md2Baseline)
+		primary := accentShift(accent, ref, primary0)
+		variant := accentShift(accent, ref, accentX(tok, "primaryVariant", Hex("#3700b3")))
+		p := &tok.Palette
+		on := ReadableOn(primary, 4.5, accentX(tok, "onPrimary", pick("#ffffff", "#000000")), pick("#000000", "#ffffff"))
+		tok.Extra["primary"], tok.Extra["primaryVariant"], tok.Extra["onPrimary"] = primary, variant, on
+		p.Accent, p.Focus, p.TextOnAccent = primary, primary, on
+		p.AccentHover = mdOver(primary, on, 0.08)
+		p.AccentPress = accentShift(accent, ref, p.AccentPress)
+		p.Track, p.Selection = primary.WithAlpha(0.24), primary.WithAlpha(0.24)
+	}
+	mdChrome(&tok)
+	tok.Pressed, tok.Disabled = ChromeState{}, ChromeState{} // the resolver's, from the new palette
+	return tok.Resolve()
 }
 
 // mdPalette2 is a Material 2 palette over surface (text at the emphasis

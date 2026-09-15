@@ -1605,14 +1605,208 @@ func flatPack(name, label string, summary string, fam ThemeName, sc flatScheme, 
 		Params:  params,
 		Extra:   map[string]paintengine2d.Color{"selectionText": h("selText")},
 	}
-	tok.Hot = ChromeState{Fill: h("toolHover"), Border: h("btnHoverBorder")}
-	tok.Pressed = ChromeState{Fill: h("btnPress"), Border: h("btnHoverBorder")}
-	tok.Selected = ChromeState{Fill: h("sel"), Border: h("sel")}
-	tok.Focus = ChromeState{Fill: h("btnFocus"), Border: h("borderFocus")}
+	flatChrome(&tok, h)
 	return ThemePack{
 		Name: name, Label: label, Year: 2019, Lineage: "Java", Summary: summary,
 		Era: EraFlatLaf, Palette: fam, Tokens: tok,
 	}
+}
+
+// flatChrome sets the chrome states FlatLaf derives from its colours.
+func flatChrome(tok *ThemeTokens, h func(string) paintengine2d.Color) {
+	tok.Hot = ChromeState{Fill: h("toolHover"), Border: h("btnHoverBorder")}
+	tok.Pressed = ChromeState{Fill: h("btnPress"), Border: h("btnHoverBorder")}
+	tok.Selected = ChromeState{Fill: h("sel"), Border: h("sel")}
+	tok.Focus = ChromeState{Fill: h("btnFocus"), Border: h("borderFocus")}
+}
+
+// ---- accent -------------------------------------------------------------------------------------
+
+// FlatLaf's colour functions, as its properties files use them: LESS's
+// operations in HSL (hue in degrees, saturation and lightness in percent),
+// each rounding its result to 8-bit channels as java.awt.Color does.
+
+func flat8(v float64) float32 { return float32(math.Floor(math.Min(1, math.Max(0, v))*255+0.5)) / 255 }
+
+func flatHSL(c paintengine2d.Color) (h, s, l float64) {
+	r, g, b := float64(c.R), float64(c.G), float64(c.B)
+	mx, mn := math.Max(r, math.Max(g, b)), math.Min(r, math.Min(g, b))
+	l = (mx + mn) / 2
+	if mx == mn {
+		return 0, 0, l * 100
+	}
+	d := mx - mn
+	if l > 0.5 {
+		s = d / (2 - mx - mn)
+	} else {
+		s = d / (mx + mn)
+	}
+	switch mx {
+	case r:
+		h = (g - b) / d
+		if g < b {
+			h += 6
+		}
+	case g:
+		h = (b-r)/d + 2
+	default:
+		h = (r-g)/d + 4
+	}
+	return h * 60, s * 100, l * 100
+}
+
+func flatFromHSL(h, s, l float64, a float32) paintengine2d.Color {
+	h = math.Mod(math.Mod(h, 360)+360, 360) / 360
+	s, l = math.Min(100, math.Max(0, s))/100, math.Min(100, math.Max(0, l))/100
+	if s == 0 {
+		v := flat8(l)
+		return paintengine2d.RGBA(v, v, v, a)
+	}
+	q := l + s - l*s
+	if l < 0.5 {
+		q = l * (1 + s)
+	}
+	p := 2*l - q
+	ch := func(t float64) float32 {
+		t = math.Mod(t+1, 1)
+		switch {
+		case t < 1.0/6:
+			return flat8(p + (q-p)*6*t)
+		case t < 0.5:
+			return flat8(q)
+		case t < 2.0/3:
+			return flat8(p + (q-p)*(2.0/3-t)*6)
+		}
+		return flat8(p)
+	}
+	return paintengine2d.RGBA(ch(h+1.0/3), ch(h), ch(h-1.0/3), a)
+}
+
+// flatLighten is lighten(c, pct) (darken with a negative pct).
+func flatLighten(c paintengine2d.Color, pct float64) paintengine2d.Color {
+	h, s, l := flatHSL(c)
+	return flatFromHSL(h, s, l+pct, c.A)
+}
+
+func flatSaturate(c paintengine2d.Color, pct float64) paintengine2d.Color {
+	h, s, l := flatHSL(c)
+	return flatFromHSL(h, s+pct, l, c.A)
+}
+
+func flatSpin(c paintengine2d.Color, deg float64) paintengine2d.Color {
+	h, s, l := flatHSL(c)
+	return flatFromHSL(h+deg, s, l, c.A)
+}
+
+// flatSetLightness is changeLightness(c, pct).
+func flatSetLightness(c paintengine2d.Color, pct float64) paintengine2d.Color {
+	h, s, _ := flatHSL(c)
+	return flatFromHSL(h, s, pct, c.A)
+}
+
+// flatMix is mix(a, b, w): w of a and the rest of b.
+func flatMix(a, b paintengine2d.Color, w float64) paintengine2d.Color {
+	m := func(x, y float32) float32 { return flat8(float64(x)*w + float64(y)*(1-w)) }
+	return paintengine2d.RGBA(m(a.R, b.R), m(a.G, b.G), m(a.B, b.B), 1)
+}
+
+func flatTint(c paintengine2d.Color, w float64) paintengine2d.Color {
+	return flatMix(paintengine2d.RGB(1, 1, 1), c, w)
+}
+
+func flatShade(c paintengine2d.Color, w float64) paintengine2d.Color {
+	return flatMix(paintengine2d.RGB(0, 0, 0), c, w)
+}
+
+// flatFade is fade(c, a): c at alpha a.
+func flatFade(c paintengine2d.Color, a float64) paintengine2d.Color { return c.WithAlpha(flat8(a)) }
+
+// Accented is FlatLaf's accent colour. FlatLaf derives its whole accent
+// family from one colour — @accentBaseColor, the #2675BF of FlatLaf Light
+// and #4B6EAF of FlatLaf Dark and Darcula: the selection, the checked box
+// and its tick, the slider and progress (a brighter variation of it), the
+// tab underline and its faded unfocused form, the focus colour and the
+// focused and hovered borders mixed from it, the default button (its ring
+// in Light, its fill in Dark), the table's focused-cell line. The desktop
+// accent takes the base's place and every property follows by FlatLaf's
+// own formulas (lighten, saturate, spin, tint, shade, mix). FlatLaf's
+// @accentColor would instead paint every one of them in the single accent
+// colour; taking the base keeps the variations, and the pack's own blue
+// gives the pack back exactly. The text on the selection keeps FlatLaf's
+// contrast rule: white until the accent reaches about 2.2:1 in the light
+// theme, the light text until 3:1 in the dark ones.
+func (flatlafEngine) Accented(tok ThemeTokens, accent paintengine2d.Color) ThemeTokens {
+	dark := accentDark(tok)
+	sc := flatLight
+	if dark {
+		sc = flatDark
+	}
+	own := func(k string) paintengine2d.Color { return accentX(tok, k, Hex(sc[k])) }
+	base, bg := accent, own("bg")
+	set := map[string]paintengine2d.Color{"sel": base, "accent": base}
+	put := func(c paintengine2d.Color, keys ...string) {
+		for _, k := range keys {
+			set[k] = c
+		}
+	}
+	if dark {
+		base2 := flatLighten(flatSaturate(flatSpin(base, -8), 13), 5)
+		focus := flatShade(flatSpin(base, -8), 0.2)
+		def := flatLighten(flatSpin(base, -8), -13)
+		put(base2, "slider", "progress", "tabLine")
+		put(focus, "focus")
+		put(flatLighten(focus, 5), "borderFocus", "btnHoverBorder", "btnFocusBorder", "chkHoverBorder", "chkFocusBorder")
+		put(def, "def", "defFocus")
+		put(flatLighten(def, 3), "defHover")
+		put(flatLighten(def, 6), "defPress")
+		put(flatTint(def, 0.15), "defBorder")
+		put(flatTint(def, 0.18), "defHoverBorder", "defFocusBorder")
+		put(flatLighten(focus, 3), "defRing")
+		put(flatSpin(flatSaturate(flatShade(base, 0.7), 20), -15), "selOff")
+		put(flatLighten(base, 10), "cellFocus")
+		put(flatLighten(base2, 5), "sliderHover")
+		put(flatLighten(base2, 8), "sliderPress")
+		put(flatFade(flatSetLightness(focus, 60), 0.3), "sliderHalo")
+		put(flatMix(base2, bg, 0.6), "tabLineOff")
+		put(flatMix(base, bg, 0.25), "tabFocus")
+		// The focused check box's wash is no formula of FlatLaf's: it is
+		// the pack's wash of its base, retinted.
+		put(accentWash(accent, own("accent"), own("chkFocus")), "chkFocus")
+		ink := flatShade(bg, 0.5)
+		put(ReadableOn(base, 3, own("selText"), ink), "selText")
+		put(ReadableOn(def, 3, own("defText"), ink), "defText")
+	} else {
+		base2 := flatLighten(flatSaturate(base, 10), 6)
+		focus := flatLighten(base, 31)
+		border := flatShade(focus, 0.1)
+		under := flatTint(base, 0.1)
+		put(base2, "slider", "progress")
+		put(flatTint(base2, 0.2), "chkMark", "chkSelBorder", "menuCheck", "defBorder")
+		put(focus, "focus", "defRing")
+		put(border, "borderFocus", "btnHoverBorder", "btnFocusBorder", "defHoverBorder", "defFocusBorder")
+		put(flatShade(border, 0.1), "chkHoverBorder", "chkFocusBorder")
+		put(flatSetLightness(focus, 95), "btnFocus", "defFocus", "chkFocus")
+		put(flatLighten(base2, -5), "sliderHover")
+		put(flatLighten(base2, -8), "sliderPress")
+		put(flatFade(flatSetLightness(focus, 75), 0.5), "sliderHalo")
+		put(under, "tabLine")
+		put(flatMix(under, bg, 0.5), "tabLineOff")
+		put(flatMix(base, bg, 0.1), "tabFocus")
+		put(flatLighten(base, -20), "cellFocus")
+		put(ReadableOn(base, 2.2, own("selText"), own("text")), "selText")
+	}
+	tok = CloneTokenMaps(tok)
+	for k, c := range set {
+		tok.Extra[k] = c
+	}
+	h := func(k string) paintengine2d.Color { return accentX(tok, k, Hex(sc[k])) }
+	p := &tok.Palette
+	p.Accent, p.Selection, p.Focus = h("accent"), h("sel"), h("borderFocus")
+	p.AccentHover, p.AccentPress, p.TextOnAccent = h("sliderHover"), h("sliderPress"), h("selText")
+	p.MenuHover, p.MenuHoverBorder = h("sel"), h("sel")
+	tok.Extra["selectionText"] = h("selText")
+	flatChrome(&tok, h)
+	return tok
 }
 
 func flatlafPacks() []ThemePack {

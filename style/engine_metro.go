@@ -1628,14 +1628,108 @@ func metroPack(name, label string, year int, summary string, fam ThemeName, sche
 		// Selected text is white on the accent (HighlightText).
 		Extra: map[string]paintengine2d.Color{"selectionText": Hex("#ffffff")},
 	}
-	tok.Hot = ChromeState{Fill: pal.MenuHover, Border: pal.MenuHoverBorder}
-	tok.Pressed = ChromeState{Fill: Shade(pal.MenuHover, -0.08), Border: pal.Accent}
-	tok.Selected = ChromeState{Fill: pal.Selection, Border: pal.Selection}
-	tok.Focus = ChromeState{Fill: pal.Focus.WithAlpha(0.12), Border: pal.Focus}
+	metroChrome(&tok)
 	return ThemePack{
 		Name: name, Label: label, Year: year, Lineage: "Windows", Summary: summary,
 		Era: "Metro", Palette: fam, Tokens: tok,
 	}
+}
+
+// metroChrome sets the chrome states Metro derives from its palette.
+func metroChrome(tok *ThemeTokens) {
+	pal := tok.Palette
+	tok.Hot = ChromeState{Fill: pal.MenuHover, Border: pal.MenuHoverBorder}
+	tok.Pressed = ChromeState{Fill: Shade(pal.MenuHover, -0.08), Border: pal.Accent}
+	tok.Selected = ChromeState{Fill: pal.Selection, Border: pal.Selection}
+	tok.Focus = ChromeState{Fill: pal.Focus.WithAlpha(0.12), Border: pal.Focus}
+}
+
+// metroAccentKeys are the colours of Windows 10 (scheme 0) and Windows 10
+// Dark (scheme 2) that are its accent blue: the shades of it — the accent
+// and its Light1, the push buttons' hot and pressed borders and the default
+// button's, the check boxes' hot and pressed marks, the focused edit line,
+// the slider thumb — and the washes of it over the face: the pale blues of
+// the hot and pressed buttons and boxes, the hot tab, Explorer's selection,
+// the menus, the header and the tool buttons (the dark theme's tinted hot
+// and pressed faces; its other hot faces are greys and stay).
+var metroAccentKeys = map[int]struct{ shades, washes []string }{
+	0: {
+		shades: []string{"accent", "accentLt", "btnHotBorder", "btnPressBorder", "btnDefBorder",
+			"chkHotBorder", "chkHotMark", "chkPressBorder", "chkPressMark", "edFocus", "slThumb"},
+		washes: []string{"btnHot", "btnPress", "chkPress", "tabHot", "hov", "selFill", "selBorder", "focusBorder",
+			"menuHot", "menuHotBorder", "mbHot", "mbHotBorder", "mbOpen", "mbOpenBorder",
+			"hdrHot", "hdrHotBorder", "hdrPress", "hdrPressBorder", "toolHot", "toolHotBorder", "toolPress", "toolPressBorder"},
+	},
+	2: {
+		shades: []string{"accent", "accentLt", "btnHotBorder", "btnPressBorder", "btnDefBorder",
+			"chkHotBorder", "chkHotMark", "chkPressBorder", "edFocus", "slThumb", "selBorder", "focusBorder", "toolPressBorder"},
+		washes: []string{"btnHot", "btnPress", "chkPress", "tabHot", "selFill", "toolPress"},
+	},
+}
+
+// Accented is the accent colour of Windows 10 and its dark mode: the accent
+// blue and every shade of it that the controls wear take the user's accent.
+// Shades (Light1, the pressed borders) make the step from the accent that
+// Windows 10's made from its default #0078d7 (accentShift); the pale blues
+// and the dark theme's tinted faces hold the same share of the accent over
+// their grey (accentWash: #cce4f7 is the blue at 20% over white, and
+// becomes any accent at 20%). The text and the switch knob on the accent
+// stay white while they read at 3:1. Windows 8 coloured only its window
+// frames: its active frame takes the accent as its window colour, the
+// border the shade that the default frame's border is of it, and the
+// controls keep Windows 8's fixed #3399ff highlight.
+func (metroEngine) Accented(tok ThemeTokens, accent paintengine2d.Color) ThemeTokens {
+	def := float32(0)
+	if accentDark(tok) {
+		def = 2
+	}
+	idx := int(accentP(tok, "scheme", def))
+	if idx < 0 || idx >= len(metroSchemes) {
+		idx = 0
+	}
+	sc := metroSchemes[idx]
+	own := func(k string) paintengine2d.Color {
+		v, ok := sc[k]
+		if !ok {
+			v = metroWin10[k]
+		}
+		return accentX(tok, k, Hex(v))
+	}
+	tok = CloneTokenMaps(tok)
+	if idx == 1 {
+		frame := own("frame")
+		tok.Extra["frame"] = accent
+		tok.Extra["frameBorder"] = accentShift(accent, frame, own("frameBorder"))
+		tok.Extra["capText"] = ReadableOn(accent, 3, own("capText"), Hex("#ffffff"))
+		return tok
+	}
+	ref := own("accent")
+	keys := metroAccentKeys[idx]
+	for _, k := range keys.shades {
+		tok.Extra[k] = accentShift(accent, ref, own(k))
+	}
+	for _, k := range keys.washes {
+		tok.Extra[k] = accentWash(accent, ref, own(k))
+	}
+	p := &tok.Palette
+	a := tok.Extra["accent"]
+	p.Accent, p.Selection = a, a
+	p.AccentHover, p.AccentPress = Shade(a, 0.2), Shade(a, -0.25)
+	p.Focus = accentShift(accent, ref, p.Focus)
+	if idx == 0 {
+		// The hot menu row's pale blue.
+		p.Highlight = accentWash(accent, ref, p.Highlight)
+		p.MenuHover = accentWash(accent, ref, p.MenuHover)
+		p.MenuHoverBorder = accentWash(accent, ref, p.MenuHoverBorder)
+	}
+	p.TextOnAccent = ReadableOn(a, 3, p.TextOnAccent, p.Text)
+	// The switch's knob sits on the accent as its text does.
+	tok.Extra["swKnobOn"] = ReadableOn(a, 3, own("swKnobOn"), p.Text)
+	if c, ok := tok.Extra["selectionText"]; ok {
+		tok.Extra["selectionText"] = ReadableOn(p.Selection, 3, c, p.Text)
+	}
+	metroChrome(&tok)
+	return tok
 }
 
 func metroPacks() []ThemePack {

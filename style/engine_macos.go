@@ -2027,13 +2027,82 @@ func macPack(name, label string, year int, summary string, fam ThemeName, sc mac
 	if fam == ThemeDark {
 		tok.Extra["selectionText"] = Hex("#ffffff")
 	}
-	tok.Hot = ChromeState{Fill: pal.MenuHover, Border: pal.MenuHover}
-	tok.Selected = ChromeState{Fill: h("sel"), Border: h("sel")}
-	tok.Focus = ChromeState{Fill: accent.WithAlpha(0.2), Border: accent}
+	macChrome(&tok, h("sel"))
 	return ThemePack{
 		Name: name, Label: label, Year: year, Lineage: "Mac OS", Summary: summary,
 		Era: "macOS", Palette: fam, Tokens: tok,
 	}
+}
+
+// macChrome sets the chrome states macOS derives from its palette and its
+// list selection colour (pressed comes from the resolver).
+func macChrome(tok *ThemeTokens, sel paintengine2d.Color) {
+	pal := tok.Palette
+	tok.Hot = ChromeState{Fill: pal.MenuHover, Border: pal.MenuHover}
+	tok.Selected = ChromeState{Fill: sel, Border: sel}
+	tok.Focus = ChromeState{Fill: pal.Accent.WithAlpha(0.2), Border: pal.Accent}
+}
+
+// macAccentKeys are the shades of the accent Big Sur paints with: the flat
+// accent (check boxes, radios, sliders, progress), the default button's
+// face gradient and its pressed one, the checked face, the emphasized list
+// selection, the focus ring, the menu's hot row and a latched tool button's
+// glyph. The text highlight ("textSel") is the accent washed towards the
+// content and keeps its lightness.
+var macAccentKeys = [...]string{"accent", "accentTop", "accentBot", "accentPress", "accentPress2", "check", "check2",
+	"sel", "focus", "menuHi", "toolOnText"}
+
+// macOnAccentFills are the accent faces the text and marks on the accent
+// sit on.
+var macOnAccentFills = [...]string{"accentTop", "accentBot", "check", "check2", "sel", "menuHi"}
+
+// Accented is the accent colour of macOS Big Sur (the Accent colour of
+// System Preferences, light and dark): default buttons, check boxes,
+// radios, sliders, progress bars, the focus ring, the emphasized list
+// selection, the text highlight (the Highlight colour's "Accent colour"
+// setting) and the menu highlight take it. Each shade makes the step from
+// the accent that Big Sur's makes from its blue #007aff (accentShift). The
+// selection of an unfocused list or an inactive window stays AppKit's grey
+// (unemphasizedSelectedContentBackgroundColor), whatever the accent. The
+// white on the accent turns dark for an accent too pale to carry it at
+// 2.2:1 (Apple's own orange and green carry white at about 2.5:1). Yosemite
+// keeps its blue: its only other choice was Graphite.
+func (macosEngine) Accented(tok ThemeTokens, accent paintengine2d.Color) ThemeTokens {
+	dark := accentDark(tok)
+	if !dark && accentP(tok, "era", 0) < 1 {
+		return tok
+	}
+	sc := macBigSur
+	if dark {
+		sc = macBigSurDark
+	}
+	own := func(k string) paintengine2d.Color { return accentX(tok, k, Hex(sc[k])) }
+	ref := own("accent")
+	tok = CloneTokenMaps(tok)
+	for _, k := range macAccentKeys {
+		tok.Extra[k] = accentShift(accent, ref, own(k))
+	}
+	tok.Extra["textSel"] = accentWash(accent, ref, own("textSel"))
+	on := own("onAccent")
+	for _, k := range macOnAccentFills {
+		if ContrastRatio(on, tok.Extra[k]) < 2.2 {
+			on = Hex(macBigSur["text"]) // the light appearance's label colour
+			break
+		}
+	}
+	tok.Extra["onAccent"] = on
+	p := &tok.Palette
+	a := tok.Extra["accent"]
+	p.Accent, p.Focus, p.AccentHover = a, a, Shade(a, 0.1)
+	p.AccentPress, p.TextOnAccent = tok.Extra["accentPress"], on
+	p.Selection = tok.Extra["textSel"]
+	p.MenuHover, p.MenuHoverBorder = tok.Extra["menuHi"], tok.Extra["menuHi"]
+	if c, ok := tok.Extra["selectionText"]; ok {
+		tok.Extra["selectionText"] = ReadableOn(p.Selection, 4.5, c, p.Text, Hex("#ffffff"))
+	}
+	macChrome(&tok, tok.Extra["sel"])
+	tok.Pressed = ChromeState{} // the resolver's, from the new palette
+	return tok.Resolve()
 }
 
 func macosPacks() []ThemePack {

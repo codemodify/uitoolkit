@@ -1899,35 +1899,68 @@ func fusionPack(name, label, summary string, fam ThemeName, pal Palette, extra m
 		}
 		tok.Extra[k] = hexColor(v)
 	}
-	tok.Hot = ChromeState{Fill: pal.MenuHover, Border: pal.MenuHoverBorder}
-	tok.Selected = ChromeState{Fill: pal.Selection, Border: pal.Selection}
-	tok.Focus = ChromeState{Fill: pal.Focus.WithAlpha(0.12), Border: pal.Focus}
+	fusionChrome(&tok)
 	return ThemePack{
 		Name: name, Label: label, Year: 2012, Lineage: "Qt", Summary: summary,
 		Era: EraFusion, Palette: fam, Tokens: tok,
 	}
 }
 
+// fusionChrome sets the chrome states Fusion derives from its palette
+// (pressed comes from the resolver).
+func fusionChrome(tok *ThemeTokens) {
+	pal := tok.Palette
+	tok.Hot = ChromeState{Fill: pal.MenuHover, Border: pal.MenuHoverBorder}
+	tok.Selected = ChromeState{Fill: pal.Selection, Border: pal.Selection}
+	tok.Focus = ChromeState{Fill: pal.Focus.WithAlpha(0.12), Border: pal.Focus}
+}
+
+// fusionHighlight sets the palette entries Fusion takes from QPalette's
+// Highlight: the accent, its hover and pressed shades, focus, selection
+// and the menu highlight in its darker outline.
+func fusionHighlight(p *Palette, hl paintengine2d.Color) {
+	p.Accent, p.Focus, p.Selection, p.MenuHover = hl, hl, hl, hl
+	p.AccentHover, p.AccentPress = lighterPct(hl, 110), darkerPct(hl, 115)
+	p.MenuHoverBorder = darkerPct(hl, 125)
+}
+
+// Accented is Qt's QPalette::Highlight, which Plasma (5.25 and later) sets
+// from the accent colour for every Qt application: Fusion draws its
+// selections, the menu highlight, focus outlines, the default button's
+// tint, slider and progress fills and its in-app title bars from it. The
+// highlighted text stays the palette's while it reads at 3:1 and turns to
+// the other text colour on a pale accent.
+func (fusionEngine) Accented(tok ThemeTokens, accent paintengine2d.Color) ThemeTokens {
+	p := tok.Palette
+	text := ReadableOn(accent, 3, accentX(tok, "highlightText", p.TextOnAccent), p.Text)
+	tok = CloneTokenMaps(tok)
+	tok.Extra["highlight"], tok.Extra["highlightText"] = accent, text
+	fusionHighlight(&tok.Palette, accent)
+	tok.Palette.TextOnAccent = text
+	fusionChrome(&tok)
+	tok.Pressed = ChromeState{} // the resolver's, from the new palette
+	return tok.Resolve()
+}
+
 // fusionPalette maps Qt-style palette roles onto the shared palette
 // (disabled text is the "disabledText" extra).
 func fusionPalette(window, windowText, base, highlight, highlightText, placeholder string) Palette {
 	w := hexColor(window)
-	hl := hexColor(highlight)
 	outline := darkerPct(w, 140)
-	return Palette{
+	p := Palette{
 		Background: w, Surface: w, SurfaceAlt: w,
 		Border: outline, Divider: darkerPct(w, 120),
 		Text: hexColor(windowText), TextMuted: hexColor(placeholder), TextOnAccent: hexColor(highlightText),
-		Accent: hl, AccentHover: lighterPct(hl, 110), AccentPress: darkerPct(hl, 115),
 		Field: hexColor(base), FieldBorder: outline,
-		Focus: hl, Selection: hl,
 		Track: darkerPct(w, 106), Thumb: lighterPct(w, 104),
 		Highlight: paintengine2d.RGBA(1, 1, 1, 30.0/255), Shadow: paintengine2d.RGBA(0, 0, 0, 0.2),
-		MenuHover: hl, MenuHoverBorder: darkerPct(hl, 125), MenuGutter: lighterPct(hexColor(base), 108),
-		Danger: hexColor("#c0392b"), Success: hexColor("#2e8b57"), Warning: hexColor("#c07000"),
+		MenuGutter: lighterPct(hexColor(base), 108),
+		Danger:     hexColor("#c0392b"), Success: hexColor("#2e8b57"), Warning: hexColor("#c07000"),
 		Overlay:    paintengine2d.RGBA(0, 0, 0, 0.32),
 		BevelLight: lighterPct(w, 150), BevelDark: darkerPct(w, 150),
 	}
+	fusionHighlight(&p, hexColor(highlight))
+	return p
 }
 
 func fusionPacks() []ThemePack {
