@@ -66,6 +66,49 @@ go get github.com/codemodify/paintengine2d@v0.9.0
   inotify and the desktop's settings through D-Bus, so it wakes only for
   its caret or a tray item's one-second safety check.
 
+## Themes
+
+A theme is an **engine**, Go code that decides the shapes (like Qt's
+QStyle), plus a **pack** of colours, metrics and fonts. 28 engines draw 78
+packs, from the 1984 Finder to Windows 11. Each was researched from
+published facts: design guides, SDK documentation, and pixels measured from
+screenshots of the originals. No code or pixmaps were copied.
+
+Apps start in Metal (Ocean). Settings previews and applies any pack, and
+`UITK_THEME=<pack>` runs any app in any of them.
+
+![Theme packs by year and platform](docs/screenshots/themes/timeline.png)
+
+*Each dot is a pack, placed by the year its original shipped and the
+platform it came from. The rust dot is the default, Metal (Ocean).*
+
+Every tile below is the same small app, the Settings window's preview,
+drawn by its pack's engine.
+
+### 1980s
+
+![System 1, Workbench 1.3, OPEN LOOK, NeXTSTEP](docs/screenshots/themes/themes-1980s.webp)
+
+### 1990s
+
+![Motif and CDE, System 7, Windows 3.1 to 98, Window Maker, BeOS, OS/2, Metal Steel and more](docs/screenshots/themes/themes-1990s.webp)
+
+### 2000s
+
+![Windows 2000, Aqua, Luna, KDE 3, GNOME 2, Metal Ocean, Aero and more](docs/screenshots/themes/themes-2000s.webp)
+
+### 2010s
+
+![Fusion, Windows 8 and 10, Yosemite, Breeze, Adwaita for GTK 3, Material, FlatLaf and more](docs/screenshots/themes/themes-2010s.webp)
+
+### 2020s
+
+![libadwaita, macOS Big Sur, Material 3 and Fluent, light and dark](docs/screenshots/themes/themes-2020s.webp)
+
+The full list, with what each pack reproduces, is in
+[docs/themes.md](docs/themes.md). How engines work, and how to write one,
+is in [docs/theme-engines.md](docs/theme-engines.md).
+
 ## Screenshots
 
 Real frames from the gallery, Notes, Inspector, Files, and Mail, painted through
