@@ -79,10 +79,19 @@ type DecorationSpec struct {
 	Button    paintengine2d.Point
 	ButtonGap float32
 	ButtonPad Insets
+	// CloseButton is the close button's box where it differs from Button
+	// (Windows 7's wide red one; zero: Button), CloseGap extra room between
+	// it and its neighbour (Windows 95 to 2000 keep 2px).
+	CloseButton paintengine2d.Point
+	CloseGap    float32
 	// CenterButtons centres the buttons in a caption taller than Caption
 	// (GNOME, KDE, macOS); otherwise they keep ButtonPad.Top from the top
 	// (Windows).
 	CenterButtons bool
+	// CenterTitle: the look centres the window title on the window (the
+	// Mac, GNOME, Motif), so the title's box is kept clear of both button
+	// groups alike; otherwise it is the space between them.
+	CenterTitle bool
 	// Layout is the look's own caption-button layout in GNOME's syntax
 	// ("close,minimize,maximize:" on the Mac), used when the user prefers
 	// the theme's layout to the desktop's (look.json "captionButtons");
@@ -94,6 +103,15 @@ type DecorationSpec struct {
 	// and shadowless until then.
 	Radius [4]float32
 	Shadow Insets
+}
+
+// ButtonBox is the box of caption button k in s: the close button's own
+// when it has one.
+func (s DecorationSpec) ButtonBox(k CaptionButton) paintengine2d.Point {
+	if k == CaptionClose && s.CloseButton.X > 0 {
+		return s.CloseButton
+	}
+	return s.Button
 }
 
 // DecorationFrame is where a window frame's parts are, in device pixels.
@@ -523,4 +541,58 @@ var adapterLayouts = map[string]string{
 	"nimbus":     ":minimize,maximize,close",
 	"material":   ":minimize,maximize,close",
 	"fusion":     ":minimize,maximize,close",
+}
+
+// ---- shared painters --------------------------------------------------------
+
+// flatCaption is a set of flat caption buttons (Windows 10 and 11,
+// SourceGit, FlatLaf): nothing at rest but the glyph, a wash under the
+// pointer and a deeper one pressed, a red close button with a white glyph.
+type flatCaption struct {
+	fg, fgOff                  paintengine2d.Color // the glyph; in a backdrop window
+	hover, press               paintengine2d.Color
+	close, closePress, onClose paintengine2d.Color
+	// glyph sides for minimize, maximize and close, and the line width.
+	min, max, cls, lw float32
+}
+
+func (f flatCaption) draw(ctx *paintengine2d.Context, b paintengine2d.Rect, k CaptionButton, cs ControlState, st DecorationState) {
+	hot := cs.Hovered() || cs.Pressed()
+	fg := f.fg
+	if !st.Active && !hot {
+		fg = f.fgOff
+	}
+	switch {
+	case k == CaptionClose && cs.Pressed():
+		ctx.DrawRect(b, paintengine2d.Fill(f.closePress))
+		fg = f.onClose.WithAlpha(f.onClose.A * 0.8)
+	case k == CaptionClose && hot:
+		ctx.DrawRect(b, paintengine2d.Fill(f.close))
+		fg = f.onClose
+	case cs.Pressed():
+		ctx.DrawRect(b, paintengine2d.Fill(f.press))
+	case hot:
+		ctx.DrawRect(b, paintengine2d.Fill(f.hover))
+	}
+	s := f.max
+	switch k {
+	case CaptionMinimize:
+		s = f.min
+	case CaptionClose:
+		s = f.cls
+	}
+	DrawCaptionGlyph(ctx, b, k, st.Maximized, fg, s, f.lw)
+}
+
+// captionTitle draws a window title in b: f in col, aligned (centred on b,
+// or at its left after pad), elided to fit.
+func captionTitle(l *Classic, ctx *paintengine2d.Context, f *Font, b paintengine2d.Rect, title string, col paintengine2d.Color, center bool, pad float32) {
+	if f == nil {
+		f = l.body
+	}
+	if center {
+		l.drawFittedText(ctx, f, title, b, col, AlignCenter, pad)
+		return
+	}
+	l.drawFittedText(ctx, f, title, paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad, b.Dy()), col, AlignStart, 0)
 }

@@ -141,10 +141,27 @@ func (c *WindowControls) spacerW() float32 {
 // them).
 func (c *WindowControls) MinHeight() float32 {
 	s := c.spec()
-	if s.Button.Y > 0 {
-		return max(s.ButtonPad.Top+s.Button.Y, s.Caption)
+	if h := max(s.Button.Y, s.CloseButton.Y); h > 0 {
+		return max(s.ButtonPad.Top+h, s.Caption)
 	}
 	return max(s.Caption, s.ButtonPad.Top+float32(math.Round(float64(style.Dip(c.Look(), 24)))))
+}
+
+// size is shown button b's box in spec s (a spacer's width and no height).
+func (c *WindowControls) size(s style.DecorationSpec, b platform.CaptionButton) paintengine2d.Point {
+	if b == platform.CaptionSpacer {
+		return paintengine2d.Pt(c.spacerW(), 0)
+	}
+	return s.ButtonBox(style.CaptionButton(b))
+}
+
+// gap is the room between shown buttons a and b in spec s.
+func gap(s style.DecorationSpec, a, b platform.CaptionButton) float32 {
+	g := s.ButtonGap
+	if a == platform.CaptionClose || b == platform.CaptionClose {
+		g += s.CloseGap
+	}
+	return g
 }
 
 // width is the room the shown buttons take in spec s, the outer padding
@@ -156,13 +173,9 @@ func (c *WindowControls) width(s style.DecorationSpec) float32 {
 	}
 	var w float32
 	for i, b := range shown {
-		if b == platform.CaptionSpacer {
-			w += c.spacerW()
-		} else {
-			w += s.Button.X
-		}
+		w += c.size(s, b).X
 		if i > 0 {
-			w += s.ButtonGap
+			w += gap(s, shown[i-1], b)
 		}
 	}
 	if c.lead {
@@ -183,10 +196,7 @@ func (c *WindowControls) rects() []paintengine2d.Rect {
 	shown := c.Shown()
 	h := c.LocalBounds().Dy()
 	top := s.ButtonPad.Top
-	bh := s.Button.Y
-	if bh <= 0 {
-		bh = max(h-top, 0)
-	} else if s.CenterButtons && h > s.Caption {
+	if s.CenterButtons && h > s.Caption {
 		top += float32(math.Round(float64(h-s.Caption) * 0.5))
 	}
 	out := make([]paintengine2d.Rect, len(shown))
@@ -195,12 +205,16 @@ func (c *WindowControls) rects() []paintengine2d.Rect {
 		x = s.ButtonPad.Left
 	}
 	for i, b := range shown {
-		w := s.Button.X
-		if b == platform.CaptionSpacer {
-			w = c.spacerW()
+		if i > 0 {
+			x += gap(s, shown[i-1], b)
 		}
-		out[i] = paintengine2d.XYWH(x, top, w, bh)
-		x += w + s.ButtonGap
+		sz := c.size(s, b)
+		bh := sz.Y
+		if bh <= 0 {
+			bh = max(h-s.ButtonPad.Top, 0)
+		}
+		out[i] = paintengine2d.XYWH(x, top, sz.X, bh)
+		x += sz.X
 	}
 	return out
 }

@@ -271,14 +271,25 @@ func (h *HeaderBar) Paint(ctx *paintengine2d.Context) {
 
 // titleRect is where the title goes: a stacked frame's strip between the
 // buttons, else the free space's width at the row's height (the free space
-// itself is centred with no height of its own).
+// itself is centred with no height of its own). A look that centres its
+// title on the window gets a box as far from both sides.
 func (h *HeaderBar) titleRect() paintengine2d.Rect {
+	var r paintengine2d.Rect
 	if h.strip > 0 {
 		lw, rw := h.controlsW()
-		return paintengine2d.XYWH(lw, 0, max(h.LocalBounds().Dx()-lw-rw, 0), h.strip)
+		r = paintengine2d.XYWH(lw, 0, max(h.LocalBounds().Dx()-lw-rw, 0), h.strip)
+	} else {
+		rb, fb := h.row.Bounds(), h.free.Bounds()
+		r = paintengine2d.XYWH(rb.Min.X+fb.Min.X, rb.Min.Y, fb.Dx(), rb.Dy())
 	}
-	rb, fb := h.row.Bounds(), h.free.Bounds()
-	return paintengine2d.XYWH(rb.Min.X+fb.Min.X, rb.Min.Y, fb.Dx(), rb.Dy())
+	if h.framed && h.spec().CenterTitle {
+		w := h.LocalBounds().Dx()
+		m := max(r.Min.X, w-r.Max.X)
+		if w-2*m > style.Dip(h.Look(), 48) {
+			r.Min.X, r.Max.X = m, w-m
+		}
+	}
+	return r
 }
 
 // CaptionAt: the header bar's own space is caption.
