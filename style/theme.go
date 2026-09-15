@@ -65,6 +65,7 @@ type themeFileJSON struct {
 	Summary   string             `json:"summary,omitempty"`
 	Extra     map[string]string  `json:"extra,omitempty"`
 	Params    map[string]float32 `json:"params,omitempty"`
+	Fonts     *FontPrefs         `json:"fonts,omitempty"`
 	Corners   string             `json:"corners,omitempty"` // ignored; look.json owns corners
 	Icons     string             `json:"icons,omitempty"`   // ignored; look.json owns icons
 }
@@ -205,7 +206,11 @@ func parseThemeFile(name string, raw []byte, src ThemeSource) (ThemePack, error)
 			label = base.Label
 		}
 		if tok.Empty() || (len(doc.Colors) == 0 && doc.Bevel == "" && doc.Engine == "" && len(doc.Extra) == 0 && len(doc.Params) == 0) {
+			fonts := tok.Fonts
 			tok = base.Tokens
+			if !fonts.Empty() {
+				tok = mergeTokens(tok, ThemeTokens{Fonts: fonts})
+			}
 		} else {
 			tok = mergeTokens(base.Tokens, tok)
 		}
@@ -249,7 +254,30 @@ func themeDoc(label, era string, tok ThemeTokens) themeFileJSON {
 		Engine:    tok.Engine,
 		Extra:     extraToHex(tok.Extra),
 		Params:    copyParams(tok.Params),
+		Fonts:     fontPrefsDoc(tok.Fonts),
 	}
+}
+
+// fontPrefsDoc is prefs for theme.json (nil when they name nothing).
+func fontPrefsDoc(f FontPrefs) *FontPrefs {
+	if f.Empty() {
+		return nil
+	}
+	return &FontPrefs{UI: append([]string(nil), f.UI...), Mono: append([]string(nil), f.Mono...)}
+}
+
+// cleanFontPrefs trims the names and drops empty ones.
+func cleanFontPrefs(f FontPrefs) FontPrefs {
+	clean := func(in []string) []string {
+		var out []string
+		for _, s := range in {
+			if s = strings.TrimSpace(s); s != "" {
+				out = append(out, s)
+			}
+		}
+		return out
+	}
+	return FontPrefs{UI: clean(f.UI), Mono: clean(f.Mono)}
 }
 
 func extraToHex(m map[string]paintengine2d.Color) map[string]string {
@@ -299,6 +327,12 @@ func mergeTokens(base, over ThemeTokens) ThemeTokens {
 			m[k] = v
 		}
 		out.Extra = m
+	}
+	if len(over.Fonts.UI) > 0 {
+		out.Fonts.UI = over.Fonts.UI
+	}
+	if len(over.Fonts.Mono) > 0 {
+		out.Fonts.Mono = over.Fonts.Mono
 	}
 	if len(over.Params) > 0 {
 		m := make(map[string]float32, len(base.Params)+len(over.Params))
