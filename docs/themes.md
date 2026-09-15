@@ -11,7 +11,7 @@ icon size stay independent `look.json` prefs.
 
 ## Built-in packs
 
-78 packs from 28 engines, by the year their original shipped. Each one was
+103 packs from 29 engines, by the year their original shipped. Each one was
 researched from published facts (design guides, SDK documentation, pixels
 measured from screenshots of the originals); no code or pixmaps were copied.
 Apps start in `metal-ocean` (`style.DefaultThemeName`) until the user picks
@@ -78,6 +78,7 @@ one; `UITK_THEME=<id>` runs any app in any pack.
 | `fusion` | Fusion | 2012 | Qt | `fusion` | Qt's cross-platform style: 2px gradient buttons, highlight focus outlines, square scroll sliders. |
 | `fusion-night` | Fusion Dark | 2012 | Qt | `fusion` | Fusion in the widely used community dark palette. Not historical: Qt's 2012 Fusion shipped a light palette only. |
 | `win8` | Windows 8 | 2012 | Windows | `metro` | The flat desktop of Windows 8: square 1px-bordered controls, dotted focus, solid blue selection, coloured window frames. |
+| `dracula` | Dracula | 2013 | Dracula | `web` | Dracula: #282a36 panes, darker sidebars and bars, #343746 popovers, the Purple #bd93f9 accent and #815cd6 focus rings. |
 | `adwaita-gtk3` | Adwaita (GTK 3) | 2014 | GNOME | `adwaita` | GNOME 3.14's Adwaita: soft gradient buttons in grey borders, blue selections, pill scroll bars. |
 | `material` | Material | 2014 | Google | `material` | Material Design 2: contained buttons on 2dp shadows, outlined fields with floating labels, #6200EE. |
 | `material-night` | Material Dark | 2014 | Google | `material` | Material Design 2's dark theme: #121212 surfaces lifted by elevation, primary #BB86FC. |
@@ -85,6 +86,8 @@ one; `UITK_THEME=<id>` runs any app in any pack.
 | `breeze-night` | Breeze Dark | 2014 | KDE | `breeze` | Plasma 5's Breeze in the Breeze Dark colour scheme (Plasma 5.27 values). |
 | `yosemite` | OS X Yosemite | 2014 | Mac OS | `macos` | Yosemite to Mojave: flat white buttons, the blue accent, overlay scrollers, vibrant menus. |
 | `win10` | Windows 10 | 2015 | Windows | `metro` | Windows 10's flat desktop: accent-blue focus, thin scroll bars, pill toggles, rectangular slider thumbs, Explorer's light accent selection. |
+| `nord-night` | Nord | 2016 | Nord | `web` | Nord's Polar Night: #2e3440 backgrounds, #3b4252 raised UI, #434c5e selections, the Frost #88c0d0 accent with dark text on it. |
+| `nord` | Nord Light | 2016 | Nord | `web` | Nord's Snow Storm scheme: #eceff4 backgrounds, #d8dee9 raised UI and borders, Polar Night text, the Frost #5e81ac accent. |
 | `win10-night` | Windows 10 Dark | 2018 | Windows | `metro` | Windows 10's 2018 dark mode: the same flat shapes on dark greys with the accent blue. |
 | `flatlaf-darcula` | Darcula | 2019 | Java | `flatlaf` | FlatDarculaLaf: IntelliJ's Darcula — a 2px focus ring outside every border, triangle arrows. |
 | `flatlaf-night` | FlatLaf Dark | 2019 | Java | `flatlaf` | FlatDarkLaf: charcoal faces, the dark blue bold default button, grey ticks. |
@@ -93,10 +96,32 @@ one; `UITK_THEME=<id>` runs any app in any pack.
 | `adwaita-night` | Adwaita Dark | 2020 | GNOME | `adwaita` | libadwaita's dark style: the same flat shapes on charcoal, sky-blue accent text. |
 | `bigsur` | macOS Big Sur | 2020 | Mac OS | `macos` | Big Sur: rounder controls, the unified toolbar, rounded inset selections in lists and sidebars. |
 | `bigsur-night` | macOS Big Sur Dark | 2020 | Mac OS | `macos` | Big Sur's dark appearance: grey faces on charcoal, the brighter blue accent. |
+| `tokyonight` | Tokyo Night | 2020 | Tokyo Night | `web` | Tokyo Night: #1a1b26 panes in #16161e chrome with near-black borders, #202330 selections, the #3d59a1 accent. |
+| `tokyonight-storm` | Tokyo Night Storm | 2020 | Tokyo Night | `web` | Tokyo Night Storm: #24283b panes in #1f2335 chrome, #2c324a selections, the #3d59a1 accent. |
+| `catppuccin-frappe` | Catppuccin Frappé | 2021 | Catppuccin | `web` | Catppuccin Frappé: the lightest dark flavour, #303446 Base with Surface popovers and Blue #8caaee. |
+| `catppuccin-latte` | Catppuccin Latte | 2021 | Catppuccin | `web` | Catppuccin's light flavour: Base #eff1f5 panes, Mantle sidebars, Blue #1e66f5 accent, Lavender focus. |
+| `catppuccin-macchiato` | Catppuccin Macchiato | 2021 | Catppuccin | `web` | Catppuccin Macchiato: #24273a Base, deeper Mantle and Crust bars, Blue #8aadf4 with Lavender focus. |
+| `catppuccin-mocha` | Catppuccin Mocha | 2021 | Catppuccin | `web` | Catppuccin Mocha, the darkest flavour: #1e1e2e Base, #11111b Crust bars, Blue #89b4fa and Lavender #b4befe. |
 | `material3` | Material 3 | 2021 | Google | `material` | Material You: tonal palettes from one seed colour, pill buttons, state layers, the big switch. |
 | `material3-night` | Material 3 Dark | 2021 | Google | `material` | Material You's dark scheme from the same seed: tone 80 primaries on tone 10 surfaces. |
+| `rosepine` | Rosé Pine | 2021 | Rosé Pine | `web` | Rosé Pine: #191724 base, #1f1d2e surfaces, #26233a overlays for hover and selection, iris #c4a7e7. |
+| `rosepine-dawn` | Rosé Pine Dawn | 2021 | Rosé Pine | `web` | Rosé Pine's light variant: #faf4ed base, #fffaf3 surfaces, highlight-med selections, iris #907aa9. |
+| `rosepine-moon` | Rosé Pine Moon | 2021 | Rosé Pine | `web` | Rosé Pine Moon: #232136 base, #2a273f surfaces, #393552 overlays, iris #c4a7e7. |
+| `tokyonight-day` | Tokyo Night Day | 2021 | Tokyo Night | `web` | Tokyo Night Day: #e1e2e7 panes with #d0d5e3 sidebars and popups, blue #3760bf text, the #2e7de9 accent. |
 | `fluent` | Fluent | 2021 | Windows | `fluent` | Windows 11's Fluent (WinUI 3): 4px and 8px corners, translucent control fills over Mica, accent check boxes, pill selection indicators, the two-colour focus visual. |
 | `fluent-night` | Fluent Dark | 2021 | Windows | `fluent` | Windows 11's dark theme: Fluent's shapes on #202020 Mica with the light-blue accent and black text on it. |
+| `alucard` | Alucard | 2023 | Dracula | `web` | Dracula's light variant: cream #fffbeb panes, #efeddc popovers, the Purple #644ac9 accent and the #815cd6 focus ring. |
+| `primer` | Primer | 2023 | GitHub | `web` | GitHub's Primer: 6px controls in #d1d9e0 hairlines, the green primary button, the coral underline under the current tab, rows marked with an accent bar. |
+| `primer-night` | Primer Dark | 2023 | GitHub | `web` | GitHub's dark theme: Primer's shapes on #0d1117 with #3d444d hairlines and #1f6feb for focus and checks. |
+| `primer-dimmed` | Primer Dark Dimmed | 2023 | GitHub | `web` | GitHub's dark dimmed theme: softer #212830 greys, muted green buttons and the #316dca accent. |
+| `geist` | Geist | 2023 | Vercel | `web` | Vercel's Geist: gray-1000 primary buttons, alpha-ring hairlines, a 2px blue ring beyond a 2px gap, 2px underlined tabs. |
+| `geist-night` | Geist Dark | 2023 | Vercel | `web` | Geist's dark theme: #0a0a0a on black sidebars, near-white primary buttons and the #52a9ff focus ring. |
+| `sourcegit` | SourceGit | 2024 | SourceGit | `web` | SourceGit's Avalonia look: square fields, bold 3px flat buttons, the 1px accent tab pipe, unfilled check boxes with an accent tick, joined sidebar selections. |
+| `sourcegit-night` | SourceGit Dark | 2024 | SourceGit | `web` | SourceGit's dark theme: #252525 windows round #1c1c1c contents, the same Avalonia controls and the OS accent. |
+| `shadcn` | shadcn/ui | 2025 | shadcn/ui | `web` | shadcn/ui's new-york style in neutral: near-black primary buttons, #e5e5e5 hairlines, a 3px grey focus ring outside, segmented tabs. |
+| `shadcn-night` | shadcn/ui Dark | 2025 | shadcn/ui | `web` | shadcn/ui's dark neutral theme: #0a0a0a with white-alpha hairlines and near-white primary buttons. |
+| `linear` | Linear | 2026 | Linear | `web` | Linear's light theme: warm #f9f9fa greys, 4px controls and 8px inputs, the indigo accent, compact rounded tabs. |
+| `linear-night` | Linear Dark | 2026 | Linear | `web` | Linear's dark theme: #121213 content by a #09090a sidebar, hairlines barely lighter, the #5e6ad2 indigo. |
 
 Aliases (load-only, not listed twice): `classic95` → `light`,
 `classic95-dark` → `dark`, `luna-dark` → `luna-night`, and the other

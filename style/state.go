@@ -56,6 +56,13 @@ const (
 	// it as a field with an arrow button. DrawComboBox gets no text for
 	// it; the field inside draws its own.
 	StateEditable
+	// StateSelectedAbove and StateSelectedBelow mark a selected row of an
+	// item view whose neighbour above (below) is selected too, so a look
+	// that boxes its selection can join consecutive rows into one block with
+	// square shared corners (SourceGit's sidebar lists, macOS's inset
+	// lists).
+	StateSelectedAbove
+	StateSelectedBelow
 )
 
 // treeChainShift is where a tree row's chain bits start: above every
@@ -101,6 +108,12 @@ func (s ControlState) Backdrop() bool    { return s&StateBackdrop != 0 }
 func (s ControlState) Alternate() bool   { return s&StateAlternate != 0 }
 func (s ControlState) ExpanderHot() bool { return s&StateExpanderHot != 0 }
 func (s ControlState) Frameless() bool   { return s&StateFrameless != 0 }
+
+// SelectedAbove reports that the row above this selected row is selected.
+func (s ControlState) SelectedAbove() bool { return s&StateSelectedAbove != 0 }
+
+// SelectedBelow reports that the row below this selected row is selected.
+func (s ControlState) SelectedBelow() bool { return s&StateSelectedBelow != 0 }
 
 // CellSpan is the box a table row's selection spans, seen from one cell:
 // b grown by reach past each side where the row goes on (a cell that is
