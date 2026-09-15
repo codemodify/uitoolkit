@@ -46,6 +46,7 @@ type ToolBar struct {
 	press  int
 	focus  int
 	keyNav bool
+	fades  []stateFade // one per tool: hover cross-fades
 }
 
 // NewToolBar constructs a toolbar.
@@ -226,6 +227,9 @@ func (t *ToolBar) Paint(ctx *paintengine2d.Context) {
 	lk := t.Look()
 	lk.DrawToolBar(ctx, t.LocalBounds())
 	rects := t.itemRects()
+	if len(t.fades) != len(t.items) {
+		t.fades = make([]stateFade, len(t.items))
+	}
 	for i, it := range t.items {
 		if it == nil {
 			continue
@@ -257,7 +261,10 @@ func (t *ToolBar) Paint(ctx *paintengine2d.Context) {
 		if it.Disabled {
 			st |= style.StateDisabled
 		}
-		lk.DrawToolButton(ctx, rects[i], st, it.Text, it.Icon)
+		r := rects[i]
+		t.fades[i].paint(t, ctx, r, st, func(ctx *paintengine2d.Context, st style.ControlState) {
+			lk.DrawToolButton(ctx, r, st, it.Text, it.Icon)
+		})
 	}
 }
 

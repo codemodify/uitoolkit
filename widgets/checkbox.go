@@ -53,7 +53,7 @@ func (c *Checkbox) Paint(ctx *paintengine2d.Context) {
 		st |= style.StateHovered
 	}
 	lk, r := c.Look(), c.LocalBounds()
-	c.fade.paint(c, ctx, st, func(ctx *paintengine2d.Context, st style.ControlState) {
+	c.fade.paint(c, ctx, r, st, func(ctx *paintengine2d.Context, st style.ControlState) {
 		lk.DrawCheckbox(ctx, r, st, c.Checked, c.Text)
 	})
 }

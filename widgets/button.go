@@ -62,7 +62,7 @@ func (b *Button) Arrange(r paintengine2d.Rect) { b.SetBounds(r) }
 
 func (b *Button) Paint(ctx *paintengine2d.Context) {
 	lk, r := b.Look(), b.LocalBounds()
-	b.fade.paint(b, ctx, b.PaintState(), func(ctx *paintengine2d.Context, st style.ControlState) { lk.DrawButton(ctx, r, st, b.Text) })
+	b.fade.paint(b, ctx, r, b.PaintState(), func(ctx *paintengine2d.Context, st style.ControlState) { lk.DrawButton(ctx, r, st, b.Text) })
 }
 
 func (b *Button) MouseEnter() { b.hovered = true; b.Base.MouseEnter() }

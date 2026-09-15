@@ -99,7 +99,7 @@ func (c *ComboBox) Paint(ctx *paintengine2d.Context) {
 		show = c.Placeholder
 	}
 	lk, r := c.Look(), c.LocalBounds()
-	c.fade.paint(c, ctx, st, func(ctx *paintengine2d.Context, st style.ControlState) { lk.DrawComboBox(ctx, r, st, show, c.open) })
+	c.fade.paint(c, ctx, r, st, func(ctx *paintengine2d.Context, st style.ControlState) { lk.DrawComboBox(ctx, r, st, show, c.open) })
 }
 
 func (c *ComboBox) MouseEnter() { c.hovered = true; c.Base.MouseEnter() }
