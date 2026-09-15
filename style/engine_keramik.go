@@ -1826,7 +1826,7 @@ func kde3ControlFont(l *Classic, role Role) *Font {
 		return l.body
 	}
 	return l.Memo(kde3ToolFontKey{}, func() any {
-		return BakeFamily(FamilyUI, WeightRegular, l.metrics.FontSize*k, l.palette.Text)
+		return BakeFamily(l.UIFamily(), WeightRegular, l.metrics.FontSize*k, l.palette.Text)
 	}).(*Font)
 }
 
