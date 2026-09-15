@@ -1,18 +1,35 @@
 package widgets
 
 import (
+	"os"
+	"time"
+
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/layout"
 	"github.com/codemodify/uitoolkit/widget"
 )
 
-// ProgressBar is a determinate (0..1) or indeterminate meter.
+// ProgressBar is a determinate (0..1) or indeterminate meter. A busy bar
+// animates itself while it is on screen (Qt's busy QProgressBar, Win32's
+// marquee, Mac OS X's barber pole): Phase is where the animation starts.
+// Manual stops that, and the bar shows only the Phase the app sets (GTK's
+// pulse). UITK_ANIMATIONS=0 holds every bar still.
 type ProgressBar struct {
 	widget.Base
 	Value         float32
 	Indeterminate bool
 	Phase         float32
+	Manual        bool
+	started       time.Time
+	pending       bool
 }
+
+// busyPeriod is one cycle of a busy bar's animation; busyFrame how often
+// it repaints.
+const (
+	busyPeriod = 1600 * time.Millisecond
+	busyFrame  = 33 * time.Millisecond
+)
 
 // NewProgressBar builds a determinate bar at value (clamped to 0..1).
 func NewProgressBar(value float32) *ProgressBar {
@@ -59,7 +76,30 @@ func (p *ProgressBar) Measure(c layout.Constraints) paintengine2d.Point {
 func (p *ProgressBar) Arrange(r paintengine2d.Rect) { p.SetBounds(r) }
 
 func (p *ProgressBar) Paint(ctx *paintengine2d.Context) {
-	p.Look().DrawProgressBar(ctx, p.LocalBounds(), p.State(), p.Value, p.Indeterminate, p.Phase)
+	p.Look().DrawProgressBar(ctx, p.LocalBounds(), p.State(), p.Value, p.Indeterminate, p.phase())
+}
+
+// phase is where a busy bar's animation is now, and asks for the next
+// frame: the loop runs only while the bar is painted, so a hidden bar costs
+// nothing.
+func (p *ProgressBar) phase() float32 {
+	if !p.Indeterminate || p.Manual || os.Getenv(AnimationsEnv) == "0" {
+		return p.Phase
+	}
+	now := fadeNow()
+	if p.started.IsZero() {
+		p.started = now
+	}
+	t := float32(now.Sub(p.started)%busyPeriod) / float32(busyPeriod)
+	if !p.pending {
+		p.pending = true
+		widget.After(p, busyFrame, func() {
+			p.pending = false
+			p.Invalidate()
+		})
+	}
+	ph := p.Phase + t
+	return ph - float32(int(ph))
 }
 
 func clamp01(v float32) float32 {
