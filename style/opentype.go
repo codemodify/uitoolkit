@@ -378,7 +378,8 @@ type atlasDraft struct {
 func (a *otAtlas) draft(from *paintengine2d.FontAtlas) *atlasDraft {
 	d := &atlasDraft{a: a, packer: a.packer, full: a.full}
 	if from == nil || from.Image == nil {
-		d.img = paintengine2d.NewImage(a.packer.w, a.packer.h)
+		// One byte a pixel: glyphs are coverage, tinted when drawn.
+		d.img = paintengine2d.NewImageA8(a.packer.w, a.packer.h)
 		d.cells = make(map[paintengine2d.GlyphID]paintengine2d.AtlasCell, 256)
 		return d
 	}
@@ -396,7 +397,7 @@ func (a *otAtlas) publish(d *atlasDraft) *paintengine2d.FontAtlas {
 	a.packer = d.packer
 	a.full = d.full
 	a.cur.Store(next)
-	a.bytes.Store(int64(d.img.Width) * int64(d.img.Height) * 4)
+	a.bytes.Store(int64(d.img.Width) * int64(d.img.Height) * int64(d.img.BytesPerPixel()))
 	return next
 }
 
@@ -702,6 +703,24 @@ func blitGlyph(dst *paintengine2d.Image, dx, dy int, src *paintengine2d.Image) {
 	if dst == nil || src == nil {
 		return
 	}
+	if dst.Format == paintengine2d.FormatA8 {
+		// The glyph was drawn white: its alpha is the coverage.
+		ds := dst.RowStride()
+		for y := 0; y < src.Height; y++ {
+			sy := dy + y
+			if sy < 0 || sy >= dst.Height {
+				continue
+			}
+			for x := 0; x < src.Width; x++ {
+				if sx := dx + x; sx >= 0 && sx < dst.Width {
+					_, _, _, a := src.PremulAt(x, y)
+					dst.Pix[sy*ds+sx] = a
+				}
+			}
+		}
+		dst.TouchRect(paintengine2d.XYWH(float32(dx), float32(dy), float32(src.Width), float32(src.Height)))
+		return
+	}
 	for y := 0; y < src.Height; y++ {
 		sy := dy + y
 		if sy < 0 || sy >= dst.Height {
@@ -718,8 +737,9 @@ func blitGlyph(dst *paintengine2d.Image, dx, dy int, src *paintengine2d.Image) {
 	}
 }
 
-// cloneImage copies src into a fresh w×h pixmap with row-slice copies.
-// Growing keeps every packed cell at the same coordinates.
+// cloneImage copies src into a fresh w×h sheet of its format (a coverage
+// mask when there is no src) with row-slice copies. Growing keeps every
+// packed cell at the same coordinates.
 func cloneImage(src *paintengine2d.Image, w, h int) *paintengine2d.Image {
 	if w < 1 {
 		w = 1
@@ -727,7 +747,10 @@ func cloneImage(src *paintengine2d.Image, w, h int) *paintengine2d.Image {
 	if h < 1 {
 		h = 1
 	}
-	dst := paintengine2d.NewImage(w, h)
+	dst := paintengine2d.NewImageA8(w, h)
+	if src != nil && src.Format != paintengine2d.FormatA8 {
+		dst = paintengine2d.NewImage(w, h)
+	}
 	if src == nil || src.Width == 0 || src.Height == 0 {
 		return dst
 	}
@@ -736,8 +759,9 @@ func cloneImage(src *paintengine2d.Image, w, h int) *paintengine2d.Image {
 		rows = h
 	}
 	ss, ds := src.RowStride(), dst.RowStride()
-	n := src.Width * 4
-	if m := dst.Width * 4; m < n {
+	bpp := dst.BytesPerPixel()
+	n := src.Width * bpp
+	if m := dst.Width * bpp; m < n {
 		n = m
 	}
 	for y := 0; y < rows; y++ {
