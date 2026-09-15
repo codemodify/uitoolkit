@@ -144,6 +144,7 @@ func (w *Window) syncCursor(target widget.Component, local paintengine2d.Point) 
 }
 
 func (w *Window) SetContent(c widget.Component) {
+	w.app.owesTrim()
 	old := w.root
 	w.root = c
 	if c != nil {
@@ -502,6 +503,7 @@ func (w *Window) armStatusMenuIfDue() {
 }
 
 func (w *Window) dispatch(ev platform.Event) {
+	w.app.stirred()
 	switch ev.Kind {
 	case platform.EventClose:
 		if w.statusMenu {
@@ -1286,6 +1288,7 @@ func (w *Window) Close() {
 	if w == nil || !w.closed.CompareAndSwap(false, true) {
 		return
 	}
+	w.app.owesTrim()
 	if w.app != nil && w.app.statusMenu == w {
 		w.app.statusMenu = nil
 	}

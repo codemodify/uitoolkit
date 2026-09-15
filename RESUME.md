@@ -1,27 +1,26 @@
 # Resume here — end-to-end fixes and theme engines, 2026-09-15
 
-Everything is on feature branches, pushed to GitHub. `dev` is untouched in both
-repos.
+**Merged to `dev` and pushed on 2026-09-15**, in both repos, together with
+the 2026-09-13 review merge that had been waiting on local `dev`:
 
-| repo | branch | worktree |
+| repo | merge on `dev` | worktree |
 | --- | --- | --- |
-| uitoolkit | `feat/theme-engines` (includes `feat/e2e-era-themes`) | `~/go/src/github.com/codemodify/uitoolkit-core` |
-| paintengine2d | `feat/e2e-era-themes` | `~/go/src/github.com/codemodify/paintengine2d` |
+| uitoolkit | `c3083df` (`feat/theme-engines`) | `~/go/src/github.com/codemodify/uitoolkit-core` |
+| paintengine2d | `4ed8330` (`feat/e2e-era-themes`) | `~/go/src/github.com/codemodify/paintengine2d` |
 
-The two branches go together: uitoolkit uses paintengine2d's new APIs
-(`PathCache`, `BackdropBlur`, `DrawCrossFade`, `ImagePattern`, through the
-relative `replace ../paintengine2d` in `go.mod`), so check out both before
-building, and merge paintengine2d first. `~/go/src/github.com/codemodify/uitoolkit`
-itself sits on `feat/e2e-era-themes`; the theme work is in the `uitoolkit-core`
-worktree.
+uitoolkit uses paintengine2d's new APIs (`PathCache`, `BackdropBlur`,
+`DrawCrossFade`, `ImagePattern`) through the relative
+`replace ../paintengine2d` in `go.mod`, so keep both checked out side by side
+until paintengine2d v0.11.0 is tagged.
 
-Before merging to `dev`:
-- Your local `dev` holds the 2026-09-13 review merge, which was never pushed
-  (9 commits in uitoolkit, 5 in paintengine2d). Both feature branches are
-  built on it, so a pull request against `origin/dev` includes those commits.
-- Commit `6194388` accidentally added a 9 MB `uitk-themesheet` binary (removed
-  again in `306e12c`), and `4f1eab2` does not build on its own (`014fef6`
-  completes it). Squash-merge, or filter both out of the history.
+Both repos are now under **The Free License** (the license of
+simple-http-fileserver), replacing MIT.
+
+Before the merge, the feature branch's history was cleaned of stray
+binaries: a 25 MB `gallery` build that was still tracked, and the 9 MB
+`uitk-themesheet` of `6194388`. Every commit and merge was kept; only those
+files are gone. The branch as it was is kept locally as
+`backup/theme-engines-pre-clean`.
 
 ## Decisions (answered 2026-09-15)
 
@@ -313,8 +312,37 @@ and macOS adapters.
   ignored before.
 
 The result: a hover repaint on the stock look went from 321 to 152
-allocations, and on Aqua from 4,376 to 356. The gallery peaks at about 35 MB
-RSS.
+allocations, and on Aqua from 4,376 to 356.
+
+### Memory (branch `feat/memory`, both repos)
+
+Measured on the GPU in the nested KWin at a real 1.75 scale, 10 s after
+launch; "own" is private dirty memory, what the app itself costs. The rest
+of resident memory is the GPU driver's shared libraries (Mesa, LLVM: about
+38 MB, shared by every GL app) and the binary's clean pages.
+
+| app | before: resident / own | after: resident / own |
+| --- | --- | --- |
+| Mail | 140 / 80 MB | 91 / 36 MB |
+| gallery | 103 / 65 MB | 83 / 30 MB |
+| Settings | 100 / 46 MB | 82 / 31 MB |
+| Files | 98 / 45 MB | 82 / 31 MB |
+| Notes | 97 / 44 MB | 78 / 28 MB |
+| Inspector | 91 / 37 MB | 79 / 28 MB |
+
+- **Glyph sheets start small** (128² or 256²) and double as they fill; the
+  512² and 768² first sheets were mostly empty, 47 MB of Mail's 53 MB live
+  heap.
+- **Idle trim:** two seconds after a burst of allocation (start-up, a
+  window, a theme, new content) with no events, the free heap goes back to
+  the OS once. Go otherwise keeps up to twice the live heap.
+- **No CPU copies beside the GPU:** the Wayland window's device-size pixmap
+  and the GPU device's readback image are made only when the CPU path or a
+  screenshot needs them.
+
+Next candidates: one-byte (alpha) glyph sheets, 4× smaller, for about 3–5
+MB per app and less GPU memory (a new image format in paintengine2d); the
+same pixmap change for X11.
 
 ## Checks that ran
 
