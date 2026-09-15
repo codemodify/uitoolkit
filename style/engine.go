@@ -834,6 +834,26 @@ type ComboTextEngine interface {
 	ComboTextRect(l *Classic, b paintengine2d.Rect) paintengine2d.Rect
 }
 
+// FramelessTextEngine is an optional engine hook: the text of a frameless
+// field (StateFrameless: a spin box's, an editable combo box's), which sits
+// in a frame its parent drew. Engines that paint their own field text (its
+// colour, caret and selection) implement it so those fields type as their
+// plain fields do, keeping the text in [Classic.fieldTextBox]; the default
+// is the base look's text.
+type FramelessTextEngine interface {
+	DrawFramelessText(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, text, placeholder string, caret, selA, selB int, blink bool, scrollX float32, face *Font)
+}
+
+// fieldTextBox is where a field's text runs in its bounds b: FieldPad in
+// from each side.
+func (l *Classic) fieldTextBox(b paintengine2d.Rect) paintengine2d.Rect {
+	pad := l.metrics.FieldPad
+	if pad <= 0 {
+		pad = 8
+	}
+	return paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad*2, b.Dy())
+}
+
 // ComboTextRectOf is where any look's editable combo box puts its field.
 func ComboTextRectOf(lk LookAndFeel, b paintengine2d.Rect) paintengine2d.Rect {
 	if c, ok := lk.(*Classic); ok && c != nil {

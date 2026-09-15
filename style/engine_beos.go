@@ -1349,6 +1349,12 @@ func (e beosEngine) DrawTextField(l *Classic, ctx *paintengine2d.Context, b pain
 	rpFieldText(l, ctx, inner, st, text, placeholder, caret, selA, selB, blink, scrollX, face, c.fieldOpts())
 }
 
+// DrawFramelessText: a spin box's or editable combo's text types as the
+// text views do.
+func (e beosEngine) DrawFramelessText(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, text, placeholder string, caret, selA, selB int, blink bool, scrollX float32, face *Font) {
+	rpFieldText(l, ctx, l.fieldTextBox(b), st, text, placeholder, caret, selA, selB, blink, scrollX, face, beColorsOf(l).fieldOpts())
+}
+
 // DrawTextArea is a BTextView in the same frame.
 func (e beosEngine) DrawTextArea(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, lines []TextLine, caret, selA, selB int, blink bool, scrollX, scrollY float32, placeholder string, face *Font) {
 	c := beColorsOf(l)

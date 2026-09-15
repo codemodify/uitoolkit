@@ -1231,6 +1231,12 @@ func (e system7Engine) DrawTextField(l *Classic, ctx *paintengine2d.Context, b p
 	rpFieldText(l, ctx, inner, st, text, placeholder, caret, selA, selB, blink, scrollX, face, c.fieldOpts(l))
 }
 
+// DrawFramelessText: a spin box's or editable combo's text types as the
+// fields do.
+func (e system7Engine) DrawFramelessText(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, text, placeholder string, caret, selA, selB int, blink bool, scrollX float32, face *Font) {
+	rpFieldText(l, ctx, l.fieldTextBox(b), st, text, placeholder, caret, selA, selB, blink, scrollX, face, s7colors(l).fieldOpts(l))
+}
+
 func (e system7Engine) DrawTextArea(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, lines []TextLine, caret, selA, selB int, blink bool, scrollX, scrollY float32, placeholder string, face *Font) {
 	c := s7colors(l)
 	e.Face(l, ctx, b, RoleField, st)

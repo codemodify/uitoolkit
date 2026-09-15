@@ -1163,6 +1163,13 @@ func (e os2Engine) DrawTextField(l *Classic, ctx *paintengine2d.Context, b paint
 	rpFieldText(l, ctx, inner, st, text, placeholder, caret, selA, selB, blink, scrollX, face, c.fieldOpts(c.field))
 }
 
+// DrawFramelessText: a spin button's or editable combo's text types as the
+// entry fields do.
+func (e os2Engine) DrawFramelessText(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, text, placeholder string, caret, selA, selB int, blink bool, scrollX float32, face *Font) {
+	c := o2colors(l)
+	rpFieldText(l, ctx, l.fieldTextBox(b), st, text, placeholder, caret, selA, selB, blink, scrollX, face, c.fieldOpts(c.field))
+}
+
 // DrawTextArea is a multi-line entry field in the same frame.
 func (e os2Engine) DrawTextArea(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, lines []TextLine, caret, selA, selB int, blink bool, scrollX, scrollY float32, placeholder string, face *Font) {
 	c := o2colors(l)

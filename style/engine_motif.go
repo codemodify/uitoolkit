@@ -1399,16 +1399,27 @@ func (e motifEngine) field(l *Classic, ctx *paintengine2d.Context, b paintengine
 // DrawTextField is an XmTextField: sunken in the text colour set, selection
 // in reversed ground colours, the I-beam caret, and the highlight band.
 func (e motifEngine) DrawTextField(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, text, placeholder string, caret, selA, selB int, blink bool, scrollX float32, face *Font) {
-	c := motifColors(l)
 	area := e.field(l, ctx, b, st)
 	pad := l.metrics.FieldPad
 	if pad <= 0 {
 		pad = l.S(6)
 	}
 	inner := paintengine2d.XYWH(area.Min.X+pad-l.S(2), area.Min.Y, area.Dx()-2*pad+l.S(4), area.Dy())
+	e.fieldText(l, ctx, b, inner, st, text, placeholder, caret, selA, selB, blink, scrollX, face)
+}
+
+// DrawFramelessText: a spin box's or editable combo's text types as the
+// text fields do, with the I-beam and the selection in the foreground.
+func (e motifEngine) DrawFramelessText(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, text, placeholder string, caret, selA, selB int, blink bool, scrollX float32, face *Font) {
+	e.fieldText(l, ctx, b, l.fieldTextBox(b), st, text, placeholder, caret, selA, selB, blink, scrollX, face)
+}
+
+// fieldText is a text field's text in inner, centred on b.
+func (e motifEngine) fieldText(l *Classic, ctx *paintengine2d.Context, b, inner paintengine2d.Rect, st ControlState, text, placeholder string, caret, selA, selB int, blink bool, scrollX float32, face *Font) {
 	if inner.Empty() {
 		return
 	}
+	c := motifColors(l)
 	ctx.Save()
 	ctx.ClipRect(inner)
 	f := l.faceOrBody(face)

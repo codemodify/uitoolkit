@@ -1138,11 +1138,22 @@ func (e openlookEngine) DrawTextField(l *Classic, ctx *paintengine2d.Context, b 
 	lo.cells(g, 0, g.h-1, g.w, 1)
 	hi.fill(ctx, c.hi)
 	lo.fill(ctx, c.bg3)
-	o := c.fieldOpts(l)
-	o.text = c.text
 	pad := l.metrics.FieldPad
 	inner := paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-2*pad, b.Dy()-2*u)
-	rpFieldText(l, ctx, inner, st, text, placeholder, caret, selA, selB, blink, scrollX, face, o)
+	rpFieldText(l, ctx, inner, st, text, placeholder, caret, selA, selB, blink, scrollX, face, c.editOpts(l))
+}
+
+// DrawFramelessText: a spin box's or editable combo's text types as the
+// text fields do.
+func (e openlookEngine) DrawFramelessText(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, text, placeholder string, caret, selA, selB int, blink bool, scrollX float32, face *Font) {
+	rpFieldText(l, ctx, l.fieldTextBox(b), st, text, placeholder, caret, selA, selB, blink, scrollX, face, olColors(l).editOpts(l))
+}
+
+// editOpts is how a text field types: in the text colour.
+func (c *olc) editOpts(l *Classic) rpFieldOpts {
+	o := c.fieldOpts(l)
+	o.text = c.text
+	return o
 }
 
 // DrawTextArea: a text window, white inside the etched border.
