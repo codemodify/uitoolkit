@@ -1465,7 +1465,7 @@ func (e breezeEngine) DrawTableCell(l *Classic, ctx *paintengine2d.Context, b pa
 	u := brU(l)
 	fg := c.row(ctx, b, st)
 	f := l.faceOrBody(face)
-	pad := tableCellPad(b.Dx(), f.Advance(label))
+	pad := l.tableCellPad(b.Dx(), f.Advance(label))
 	avail := b.Dx() - pad*2
 	if avail < 4 {
 		avail = 4

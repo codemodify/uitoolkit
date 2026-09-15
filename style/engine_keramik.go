@@ -2030,7 +2030,7 @@ func kde3TreeRow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, s
 // kde3CellText draws a table cell's label (padded, fitted, aligned).
 func kde3CellText(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, label string, align Align, face *Font, fg paintengine2d.Color) {
 	f := l.faceOrBody(face)
-	pad := tableCellPad(b.Dx(), f.Advance(label))
+	pad := l.tableCellPad(b.Dx(), f.Advance(label))
 	label = f.Fit(label, max(b.Dx()-pad*2, 4))
 	tw := f.Advance(label)
 	x := b.Min.X + pad

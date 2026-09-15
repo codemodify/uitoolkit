@@ -1909,7 +1909,7 @@ func (e amigaEngine) DrawTableCell(l *Classic, ctx *paintengine2d.Context, b pai
 	if f == nil {
 		f = l.MonoFont()
 	}
-	pad := tableCellPad(b.Dx(), f.Advance(label))
+	pad := l.tableCellPad(b.Dx(), f.Advance(label))
 	lb := paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad*2, b.Dy())
 	ctx.Save()
 	ctx.ClipRect(b)

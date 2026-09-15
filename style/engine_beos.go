@@ -1768,7 +1768,7 @@ func (e beosEngine) DrawTableCell(l *Classic, ctx *paintengine2d.Context, b pain
 		fg = c.rowText
 	}
 	f := l.faceOrBody(face)
-	pad := tableCellPad(b.Dx(), f.Advance(label))
+	pad := l.tableCellPad(b.Dx(), f.Advance(label))
 	l.drawFittedText(ctx, f, label, paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad*2, b.Dy()), fg, align, 0)
 }
 
