@@ -62,6 +62,11 @@ type Window struct {
 	sweeping        bool
 	statusMenuArmed bool
 	statusMenuArmAt time.Time
+	// state is what the desktop says about the window (maximized, tiled,
+	// activated, suspended); stateKnown is set once it has said, from when
+	// on its Activated — not keyboard focus — drives the active look.
+	state      platform.WindowState
+	stateKnown bool
 }
 
 func newWindow(a *Application, surf platform.Surface, opts platform.WindowOptions) *Window {
@@ -120,6 +125,47 @@ func (w *Window) SetFullscreen(on bool) { platform.SetFullscreen(w.surf, on) }
 
 // SetMaximized asks the native backend when available.
 func (w *Window) SetMaximized(on bool) { platform.SetMaximized(w.surf, on) }
+
+// WindowState is what the desktop last said about the window: maximized,
+// full screen, tiled edges, activated, suspended.
+func (w *Window) WindowState() platform.WindowState {
+	if w == nil {
+		return platform.WindowState{}
+	}
+	return w.state
+}
+
+// Minimize iconifies the window when the desktop can (a caption button,
+// a title-bar action). Unlike Hide it keeps the window in the taskbar.
+func (w *Window) Minimize() {
+	if w == nil || w.Closed() {
+		return
+	}
+	if f, ok := w.surf.(platform.FrameSurface); ok {
+		f.Minimize()
+	}
+}
+
+// ToggleMaximize maximizes the window, or restores a maximized one.
+func (w *Window) ToggleMaximize() {
+	if w == nil || w.Closed() {
+		return
+	}
+	w.SetMaximized(!w.state.Maximized)
+}
+
+// windowStateChanged adopts the desktop's new state for the window.
+func (w *Window) windowStateChanged(st platform.WindowState) {
+	was := w.state
+	w.state, w.stateKnown = st, true
+	w.setActive(st.Activated)
+	if was.Maximized != st.Maximized || was.Fullscreen != st.Fullscreen || was.Tiled != st.Tiled {
+		// The frame (borders, the restore glyph) depends on these.
+		w.laid = false
+		w.dropScene()
+		w.fullInvalidate()
+	}
+}
 
 // SetCursor applies the host pointer shape (X11, Wayland, Win32, AppKit, offscreen).
 func (w *Window) SetCursor(c platform.Cursor) {
@@ -413,6 +459,9 @@ func (w *Window) dropScene() {
 }
 
 func (w *Window) toggleBlink() {
+	if w.state.Suspended {
+		return
+	}
 	w.blink = !w.blink
 	if w.focus == nil {
 		return
@@ -424,7 +473,9 @@ func (w *Window) toggleBlink() {
 }
 
 func (w *Window) wantsBlink() bool {
-	if w == nil || w.focus == nil {
+	if w == nil || w.focus == nil || w.state.Suspended {
+		// A suspended window is not visible: no caret to blink (and no
+		// wake-ups for it).
 		return false
 	}
 	_, ok := w.focus.(interface{ SetCaretBlink(bool) })
@@ -530,9 +581,15 @@ func (w *Window) dispatch(ev platform.Event) {
 		}
 	case platform.EventExpose:
 		w.dirty.Add(paintengine2d.XYWH(ev.Pos.X, ev.Pos.Y, float32(ev.Width), float32(ev.Height)))
+	case platform.EventWindowState:
+		w.windowStateChanged(ev.State)
 	case platform.EventFocusOut:
 		w.setAltHeld(false)
-		w.setActive(false)
+		if !w.stateKnown {
+			// Without the desktop's activated state, keyboard focus is the
+			// best guess at the active look.
+			w.setActive(false)
+		}
 		w.resetIME()
 		w.dismissTooltip()
 		w.capture = nil
@@ -551,7 +608,9 @@ func (w *Window) dispatch(ev platform.Event) {
 			}
 		}
 	case platform.EventFocusIn:
-		w.setActive(true)
+		if !w.stateKnown {
+			w.setActive(true)
+		}
 		// Toolkit status menus arm FocusOut-dismiss after a short delay
 		// so map/focus churn on Wayland does not kill the first frame.
 		w.syncIMECursor()
