@@ -1462,7 +1462,7 @@ func TestMailStarRendersAfterToggle(t *testing.T) {
 	}
 	img := paintengine2d.NewImage(32, 28)
 	ctx := paintengine2d.NewContext(img)
-	table.Look().DrawTableCell(ctx, paintengine2d.XYWH(0, 0, 28, 28), true, false, "★", style.AlignStart, table.Look().Font())
+	table.Look().DrawTableCell(ctx, paintengine2d.XYWH(0, 0, 28, 28), style.StateChecked, "★", style.AlignStart, table.Look().Font())
 	if ink := cellInk(img, 0, 26); ink < 8 {
 		t.Fatalf("star glyph missing in 28px cell, ink=%d", ink)
 	}

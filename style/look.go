@@ -492,24 +492,41 @@ func (l *Classic) baseDrawSplitter(ctx *paintengine2d.Context, b paintengine2d.R
 	}
 }
 
-func (l *Classic) baseDrawListRow(ctx *paintengine2d.Context, b paintengine2d.Rect, selected, hovered bool, label string) {
-	st := StateNone
-	if hovered {
-		st |= StateHovered
-	}
-	if selected {
-		st |= StateChecked
-	}
+func (l *Classic) baseDrawListRow(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string) {
 	fg := l.fieldText()
 	inner := b.Inset(2)
-	if selected || hovered {
-		fg = l.paintFace(ctx, inner, roleRow, st)
+	if st.Checked() || st.Hovered() {
+		fg = l.paintFace(ctx, inner, roleRow, st&^StateFocused)
 	}
-	if l.menuInvertText() && selected {
+	if l.menuInvertText() && st.Checked() && !st.Inactive() {
 		fg = l.palette.TextOnAccent
 	}
 	lb := paintengine2d.XYWH(b.Min.X+10, b.Min.Y, b.Dx()-14, b.Dy())
 	l.drawFittedText(ctx, l.body, label, lb, fg, AlignStart, 0)
+	if st.Focused() {
+		l.eng().ItemFocus(l, ctx, b, st)
+	}
+}
+
+// baseItemFocus rings the current row one pixel inside, in the focus colour
+// (or, on a filled selection, a colour readable on it).
+func (l *Classic) baseItemFocus(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState) {
+	if b.Dx() < 4 || b.Dy() < 4 {
+		return
+	}
+	col := l.palette.Focus
+	if colorUnset(col) {
+		col = l.palette.Accent
+	}
+	if st.Checked() {
+		fill, _, fg := l.faceColors(roleRow, st&^StateFocused)
+		if !colorUnset(fill) && fill.A > 0.5 {
+			col = fg
+		}
+	}
+	w := l.S(1)
+	r := l.metrics.RadiusSmall
+	ctx.DrawRoundRect(b.Inset(w*1.5), r, r, paintengine2d.StrokePaint(col.WithAlpha(0.85), w))
 }
 
 func (l *Classic) baseDrawOverlay(ctx *paintengine2d.Context, b paintengine2d.Rect) {
@@ -769,19 +786,12 @@ func (l *Classic) baseDrawTab(ctx *paintengine2d.Context, b paintengine2d.Rect, 
 	}
 }
 
-func (l *Classic) baseDrawTreeRow(ctx *paintengine2d.Context, b paintengine2d.Rect, selected, hovered, expanded, leaf bool, depth int, label string, bold bool) {
+func (l *Classic) baseDrawTreeRow(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, expanded, leaf bool, depth int, label string, bold bool) {
 	p := l.palette
 	m := l.metrics
-	st := StateNone
-	if hovered {
-		st |= StateHovered
-	}
-	if selected {
-		st |= StateChecked
-	}
 	fg := l.fieldText()
-	if selected || hovered {
-		fg = l.paintFace(ctx, b.Inset(2), roleRow, st)
+	if st.Checked() || st.Hovered() {
+		fg = l.paintFace(ctx, b.Inset(2), roleRow, st&^StateFocused)
 	}
 	indent := m.TreeIndent
 	if indent <= 0 {
@@ -828,6 +838,9 @@ func (l *Classic) baseDrawTreeRow(ctx *paintengine2d.Context, b paintengine2d.Re
 	ctx.ClipRect(b)
 	face.Draw(ctx, label, paintengine2d.Pt(x+14, b.Min.Y+(b.Dy()-face.Height())*0.5), fg)
 	ctx.Restore()
+	if st.Focused() {
+		l.eng().ItemFocus(l, ctx, b, st)
+	}
 }
 
 func (l *Classic) baseDrawStatusBar(ctx *paintengine2d.Context, b paintengine2d.Rect, parts []string) {
@@ -1195,18 +1208,11 @@ func (l *Classic) baseDrawTableHeader(ctx *paintengine2d.Context, b paintengine2
 	}
 }
 
-func (l *Classic) baseDrawTableCell(ctx *paintengine2d.Context, b paintengine2d.Rect, selected, hovered bool, label string, align Align, face *Font) {
+func (l *Classic) baseDrawTableCell(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, align Align, face *Font) {
 	p := l.palette
-	st := StateNone
-	if hovered {
-		st |= StateHovered
-	}
-	if selected {
-		st |= StateChecked
-	}
 	fg := l.fieldText()
-	if selected || hovered {
-		fg = l.paintFace(ctx, b, roleRow, st)
+	if st.Checked() || st.Hovered() {
+		fg = l.paintFace(ctx, b, roleRow, st&^StateFocused)
 	}
 	f := l.faceOrBody(face)
 	pad := tableCellPad(b.Dx(), f.Advance(label))
@@ -1682,8 +1688,8 @@ func (l *Classic) DrawSplitter(ctx *paintengine2d.Context, b paintengine2d.Rect,
 	l.eng().DrawSplitter(l, ctx, b, vertical, st)
 }
 
-func (l *Classic) DrawListRow(ctx *paintengine2d.Context, b paintengine2d.Rect, selected, hovered bool, label string) {
-	l.eng().DrawListRow(l, ctx, b, selected, hovered, label)
+func (l *Classic) DrawListRow(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string) {
+	l.eng().DrawListRow(l, ctx, b, st, label)
 }
 
 func (l *Classic) DrawOverlay(ctx *paintengine2d.Context, b paintengine2d.Rect) {
@@ -1714,8 +1720,8 @@ func (l *Classic) DrawTab(ctx *paintengine2d.Context, b paintengine2d.Rect, st C
 	l.eng().DrawTab(l, ctx, b, st, label, selected)
 }
 
-func (l *Classic) DrawTreeRow(ctx *paintengine2d.Context, b paintengine2d.Rect, selected, hovered, expanded, leaf bool, depth int, label string, bold bool) {
-	l.eng().DrawTreeRow(l, ctx, b, selected, hovered, expanded, leaf, depth, label, bold)
+func (l *Classic) DrawTreeRow(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, expanded, leaf bool, depth int, label string, bold bool) {
+	l.eng().DrawTreeRow(l, ctx, b, st, expanded, leaf, depth, label, bold)
 }
 
 func (l *Classic) DrawStatusBar(ctx *paintengine2d.Context, b paintengine2d.Rect, parts []string) {
@@ -1754,8 +1760,8 @@ func (l *Classic) DrawTableHeader(ctx *paintengine2d.Context, b paintengine2d.Re
 	l.eng().DrawTableHeader(l, ctx, b, st, label, sorted, asc)
 }
 
-func (l *Classic) DrawTableCell(ctx *paintengine2d.Context, b paintengine2d.Rect, selected, hovered bool, label string, align Align, face *Font) {
-	l.eng().DrawTableCell(l, ctx, b, selected, hovered, label, align, face)
+func (l *Classic) DrawTableCell(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, align Align, face *Font) {
+	l.eng().DrawTableCell(l, ctx, b, st, label, align, face)
 }
 
 func (l *Classic) DrawSpinner(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, upHover, downHover, upPress, downPress bool) {

@@ -1958,7 +1958,7 @@ func (h *attachHit) Measure(c layout.Constraints) paintengine2d.Point {
 func (h *attachHit) Arrange(r paintengine2d.Rect) { h.SetBounds(r) }
 
 func (h *attachHit) Paint(ctx *paintengine2d.Context) {
-	h.Look().DrawListRow(ctx, h.LocalBounds(), h.Selected, h.Hovered(), h.Text)
+	h.Look().DrawListRow(ctx, h.LocalBounds(), style.RowState(h.Selected, h.Hovered()), h.Text)
 }
 
 func (h *attachHit) MousePress(widget.MouseEvent) bool {
