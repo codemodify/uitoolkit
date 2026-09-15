@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"os/exec"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -17,12 +18,21 @@ import (
 // Response signal on it.
 type fakeChooser struct {
 	conn    *dbus.Conn
+	mu      sync.Mutex
 	options map[string]dbus.Variant
 	title   string
 }
 
+func (f *fakeChooser) seen() (map[string]dbus.Variant, string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.options, f.title
+}
+
 func (f *fakeChooser) OpenFile(sender dbus.Sender, parent, title string, options map[string]dbus.Variant) (dbus.ObjectPath, *dbus.Error) {
+	f.mu.Lock()
 	f.options, f.title = options, title
+	f.mu.Unlock()
 	token, _ := options["handle_token"].Value().(string)
 	path := dbus.ObjectPath("/org/freedesktop/portal/desktop/request/" +
 		strings.ReplaceAll(strings.TrimPrefix(string(sender), ":"), ".", "_") + "/" + token)
@@ -93,16 +103,17 @@ func TestFileChooserThroughPortal(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		t.Fatal("no answer")
 	}
-	if fake.title != "Attach file" {
-		t.Fatalf("title %q", fake.title)
+	options, title := fake.seen()
+	if title != "Attach file" {
+		t.Fatalf("title %q", title)
 	}
-	if m, _ := fake.options["multiple"].Value().(bool); !m {
+	if m, _ := options["multiple"].Value().(bool); !m {
 		t.Fatal("multiple not asked for")
 	}
-	if b, _ := fake.options["current_folder"].Value().([]byte); string(b) != "/home/ada\x00" {
+	if b, _ := options["current_folder"].Value().([]byte); string(b) != "/home/ada\x00" {
 		t.Fatalf("current_folder %q", b)
 	}
-	if _, ok := fake.options["filters"]; !ok {
+	if _, ok := options["filters"]; !ok {
 		t.Fatal("filters not passed")
 	}
 }
