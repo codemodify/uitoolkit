@@ -62,6 +62,10 @@ func (s *wlSurface) tryBindGPU() {
 	}
 	s.eglWin = unsafe.Pointer(win)
 	s.gpu = dev
+	// The buffer is this size now: a configure that arrived since the
+	// surface was made (configure_bounds, a compositor's size) changed it,
+	// and a present that thought otherwise never resized the EGL window.
+	s.bufW, s.bufH = bw, bh
 	if egl, _, _ := dev.EGLHandles(); egl != 0 {
 		C.ui_wl_egl_no_vsync(C.uintptr_t(egl))
 	}
