@@ -4,7 +4,23 @@ import (
 	"strings"
 
 	"github.com/codemodify/uitoolkit/platform"
+	"github.com/codemodify/uitoolkit/style"
+	"github.com/codemodify/uitoolkit/widget"
 )
+
+// mnemonicShown reports whether c paints its mnemonic underlines: always
+// in looks that always showed them, while Alt is held or the keyboard
+// drives the menus (keyNav) in looks that hid them (Windows 2000 onward,
+// GNOME, Plasma), never in Mac OS and Material looks.
+func mnemonicShown(c widget.Component, keyNav bool) bool {
+	switch style.LookHint(c.Look(), style.HintMnemonics) {
+	case style.MnemonicsNever:
+		return false
+	case style.MnemonicsOnAlt:
+		return keyNav || widget.AltHeld(c)
+	}
+	return true
+}
 
 // ParseMnemonic strips the '&' marker from label text and reports the
 // accelerator. "&File" → ("File", KeyF, 0). No marker → (s, KeyUnknown, -1).

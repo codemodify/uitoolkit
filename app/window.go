@@ -17,7 +17,10 @@ import (
 
 // Window is a widget host that paints into a platform.Surface.
 type Window struct {
-	app        *Application
+	app *Application
+	// altHeld: the Alt key is down (mnemonic underlines show in looks
+	// that hide them otherwise).
+	altHeld    bool
 	surf       platform.Surface
 	root       widget.Component
 	overlay    widget.Component
@@ -524,6 +527,7 @@ func (w *Window) dispatch(ev platform.Event) {
 	case platform.EventExpose:
 		w.dirty.Add(paintengine2d.XYWH(ev.Pos.X, ev.Pos.Y, float32(ev.Width), float32(ev.Height)))
 	case platform.EventFocusOut:
+		w.setAltHeld(false)
 		w.setActive(false)
 		w.resetIME()
 		w.dismissTooltip()
@@ -582,6 +586,9 @@ func (w *Window) dispatch(ev platform.Event) {
 	case platform.EventPointerLeave:
 		w.pointerLeft()
 	case platform.EventKeyDown:
+		if ev.Key == platform.KeyAlt {
+			w.setAltHeld(true)
+		}
 		if ev.Key == platform.KeyTab {
 			w.tab(!ev.Mods.Shift())
 			return
@@ -624,6 +631,9 @@ func (w *Window) dispatch(ev platform.Event) {
 			handleAccel(w.root, ev.Key, ev.Mods)
 		}
 	case platform.EventKeyUp:
+		if ev.Key == platform.KeyAlt {
+			w.setAltHeld(false)
+		}
 		if t := w.keyTarget(); t != nil {
 			t.KeyRelease(widget.KeyEvent{Key: ev.Key, Mods: ev.Mods})
 		}
@@ -631,6 +641,21 @@ func (w *Window) dispatch(ev platform.Event) {
 		if t := w.keyTarget(); t != nil {
 			t.TextInput(ev.Rune)
 		}
+	}
+}
+
+// AltHeld reports whether the Alt key is down in the window.
+func (w *Window) AltHeld() bool { return w != nil && w.altHeld }
+
+// setAltHeld records the Alt key and, in looks that show mnemonic
+// underlines only while it is held, repaints them.
+func (w *Window) setAltHeld(v bool) {
+	if w.altHeld == v {
+		return
+	}
+	w.altHeld = v
+	if style.LookHint(w.look, style.HintMnemonics) == style.MnemonicsOnAlt {
+		w.Invalidate(nil, paintengine2d.Rect{})
 	}
 }
 

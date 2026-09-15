@@ -1388,8 +1388,11 @@ func (lunaEngine) WindowCloseRect(l *Classic, b paintengine2d.Rect) paintengine2
 
 // Windows dialogs put the default button first: "OK  Cancel".
 func (lunaEngine) StyleHint(l *Classic, h StyleHint) int {
-	if h == HintDialogPrimaryFirst {
+	switch h {
+	case HintDialogPrimaryFirst:
 		return 1
+	case HintMnemonics:
+		return MnemonicsOnAlt // XP hides the underlines until Alt
 	}
 	return 0
 }

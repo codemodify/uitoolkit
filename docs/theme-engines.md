@@ -129,7 +129,11 @@ combo boxes cross-fade that long when only their hover or focus changes
 (Aero 200ms, Adwaita 200ms, Windows 10, Breeze and Oxygen 150ms, Fluent
 83ms; older eras switch at once, and presses never fade). The new state is
 composited as one layer, so engines draw each state as usual.
-`UITK_ANIMATIONS=0` turns fades off.
+`UITK_ANIMATIONS=0` turns fades off. `HintMnemonics` says when mnemonic
+underlines show (Qt's `SH_UnderlineShortcut`): `MnemonicsAlways` (Windows
+3.1 to 98, Motif, OS/2, KDE 3, GNOME 2, Swing), `MnemonicsOnAlt` while Alt
+is held or the keyboard drives the menus (Windows 2000 onward, GNOME 3,
+Plasma, FlatLaf), `MnemonicsNever` (Mac OS, NeXT, Amiga, BeOS, Material).
 
 ### Accent colours
 

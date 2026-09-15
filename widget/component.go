@@ -69,6 +69,19 @@ type Host interface {
 	RequestLayout()
 }
 
+// AltHeld reports whether the Alt key is held in c's window (hosts that
+// track it implement AltHeld() bool); looks that hide mnemonic underlines
+// show them then.
+func AltHeld(c Component) bool {
+	if c == nil {
+		return false
+	}
+	if h, ok := c.Host().(interface{ AltHeld() bool }); ok {
+		return h.AltHeld()
+	}
+	return false
+}
+
 // Self is used so an embedded Base can return the outer Component.
 type Self interface {
 	Component
