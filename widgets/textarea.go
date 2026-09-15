@@ -671,7 +671,7 @@ func (t *TextArea) MouseWheel(e widget.MouseEvent) bool {
 	if dy == 0 && e.Scroll.X == 0 {
 		return false
 	}
-	return t.scrollBy(wheelDelta(dy, t.lineH()), e.Scroll.X)
+	return t.scrollBy(wheelDelta(dy, t.lineH(), e.Precise), e.Scroll.X)
 }
 
 func (t *TextArea) TextInput(r rune) bool {

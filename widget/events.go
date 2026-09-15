@@ -10,7 +10,10 @@ type MouseEvent struct {
 	Pos    paintengine2d.Point
 	Button platform.MouseButton
 	Scroll paintengine2d.Point
-	Mods   platform.Modifiers
+	// Precise: Scroll is in device pixels (a touchpad); otherwise it
+	// counts wheel notches.
+	Precise bool
+	Mods    platform.Modifiers
 }
 
 // KeyEvent is keyboard input for the focused component.

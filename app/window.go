@@ -675,7 +675,7 @@ func (w *Window) bubbleWheel(ev platform.Event) {
 		if !c.Enabled() || !c.Visible() {
 			continue
 		}
-		if c.MouseWheel(widget.MouseEvent{Pos: local(c, ev.Pos), Scroll: ev.Scroll, Mods: ev.Mods}) {
+		if c.MouseWheel(widget.MouseEvent{Pos: local(c, ev.Pos), Scroll: ev.Scroll, Mods: ev.Mods, Precise: ev.ScrollPrecise}) {
 			// Content moved under a still pointer: re-hit-test so the row
 			// (or widget) now under it becomes hot, not the one that
 			// scrolled away.
