@@ -52,6 +52,34 @@ func NewPaintContext(s Surface) *paintengine2d.Context {
 	return paintengine2d.NewContext(img)
 }
 
+// softDevice caches the software devices of a surface's buffers. A device
+// owns the rasterizer's scratch (edges, coverage rows, stroke outlines);
+// making a new one per frame reallocated all of it every frame. Two slots
+// cover a double-buffered shm surface.
+type softDevice struct {
+	img [2]*paintengine2d.Image
+	dev [2]*paintengine2d.CPUDevice
+}
+
+// of is the device painting img, reused while img is.
+func (c *softDevice) of(img *paintengine2d.Image) *paintengine2d.CPUDevice {
+	if img == nil {
+		return nil
+	}
+	for i := range c.img {
+		if c.img[i] == img && c.dev[i] != nil {
+			if i == 1 {
+				c.img[0], c.img[1] = c.img[1], c.img[0]
+				c.dev[0], c.dev[1] = c.dev[1], c.dev[0]
+			}
+			return c.dev[0]
+		}
+	}
+	c.img[1], c.dev[1] = c.img[0], c.dev[0]
+	c.img[0], c.dev[0] = img, paintengine2d.NewCPUDevice(img)
+	return c.dev[0]
+}
+
 // SurfaceUsesGPU reports whether s presents through paintengine2d.GPUDevice
 // (wl_egl_window / X11 EGL + eglSwapBuffers).
 func SurfaceUsesGPU(s Surface) bool {

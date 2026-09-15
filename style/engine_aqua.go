@@ -544,28 +544,46 @@ func (c *aqua) texture(l *Classic, ctx *paintengine2d.Context, b paintengine2d.R
 	ctx.DrawRect(b, HGradient(b, c.metalStops...))
 	u := aquaU(l)
 	off := aquaAnchor(ctx)
-	row := int(math.Floor(float64((b.Min.Y + off) / u)))
+	first := int(math.Floor(float64((b.Min.Y + off) / u)))
 	n := len(c.streaks)
 	w := b.Dx()
-	for y := float32(row)*u - off; y < b.Max.Y; y, row = y+u, row+1 {
-		st := &c.streaks[((row%n)+n)%n]
+	// Rows that share a streak share its span and ramp: gather each
+	// streak's rows into one path and fill it once (61 draws per texture,
+	// not one per pixel row).
+	for k := 0; k < n; k++ {
+		st := &c.streaks[k]
 		if st.stops[1].Color.A == 0 {
 			continue
-		}
-		y0, y1 := y, y+u
-		if y0 < b.Min.Y {
-			y0 = b.Min.Y
-		}
-		if y1 > b.Max.Y {
-			y1 = b.Max.Y
 		}
 		x0, x1 := b.Min.X+st.from*w, b.Min.X+st.to*w
 		if x1 > b.Max.X {
 			x1 = b.Max.X
 		}
-		if y1 > y0 && x1 > x0 {
-			ctx.DrawRect(paintengine2d.XYWH(x0, y0, x1-x0, y1-y0), paintengine2d.Linear(paintengine2d.LinearGradient{
-				Start: paintengine2d.Pt(b.Min.X+st.from*w, y0), End: paintengine2d.Pt(b.Min.X+st.to*w, y0), Stops: st.stops}))
+		if x1 <= x0 {
+			continue
+		}
+		// The first row at or after first whose streak is k.
+		row := first + ((k-first)%n+n)%n
+		var path *paintengine2d.Path
+		for y := float32(row)*u - off; y < b.Max.Y; y += float32(n) * u {
+			y0, y1 := y, y+u
+			if y0 < b.Min.Y {
+				y0 = b.Min.Y
+			}
+			if y1 > b.Max.Y {
+				y1 = b.Max.Y
+			}
+			if y1 <= y0 {
+				continue
+			}
+			if path == nil {
+				path = paintengine2d.NewPath()
+			}
+			path.AddRect(paintengine2d.XYWH(x0, y0, x1-x0, y1-y0))
+		}
+		if path != nil {
+			ctx.DrawPath(path, paintengine2d.Linear(paintengine2d.LinearGradient{
+				Start: paintengine2d.Pt(b.Min.X+st.from*w, b.Min.Y), End: paintengine2d.Pt(b.Min.X+st.to*w, b.Min.Y), Stops: st.stops}))
 		}
 	}
 }

@@ -795,6 +795,7 @@ type x11Conn struct {
 }
 
 type x11Surface struct {
+	soft       softDevice // software devices of the buffers (no GPU)
 	conn       *x11Conn
 	win        C.Window
 	gc         C.GC
