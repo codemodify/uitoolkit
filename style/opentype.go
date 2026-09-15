@@ -14,13 +14,55 @@ import (
 	"github.com/codemodify/uitoolkit/fonts"
 )
 
-// Weight selects Regular or Bold of a bundled family.
+// Weight is a face's weight on the CSS / OpenType scale.
 type Weight int
 
 const (
 	WeightRegular Weight = 400
-	WeightBold    Weight = 700
+	// WeightMedium is Material's button and tab weight (Roboto Medium).
+	WeightMedium Weight = 500
+	// WeightSemibold is Fluent's and macOS's heading weight (Segoe UI
+	// Semibold, SF Pro Semibold).
+	WeightSemibold Weight = 600
+	WeightBold     Weight = 700
 )
+
+// synthFor is how much heavier (a fraction of the size) a face of weight
+// have draws to stand in for w: synthBold from regular to bold, in
+// proportion between.
+func synthFor(w, have Weight) float32 {
+	if w <= have {
+		return 0
+	}
+	return synthBold * float32(w-have) / float32(WeightBold-WeightRegular)
+}
+
+// emboldened is base drawn heavier by amount, a face of its own that
+// shares base's outlines (cached).
+var emboldenedFaces = struct {
+	mu sync.Mutex
+	m  map[embKey]*otFace
+}{m: map[embKey]*otFace{}}
+
+type embKey struct {
+	base   *otFace
+	amount float32
+}
+
+func emboldened(base *otFace, amount float32) *otFace {
+	if base == nil || amount <= 0 {
+		return base
+	}
+	k := embKey{base, amount}
+	emboldenedFaces.mu.Lock()
+	defer emboldenedFaces.mu.Unlock()
+	if f, ok := emboldenedFaces.m[k]; ok {
+		return f
+	}
+	f := &otFace{font: base.font, src: base.src, name: base.name, embolden: base.embolden + amount}
+	emboldenedFaces.m[k] = f
+	return f
+}
 
 const (
 	FamilyUI   = fonts.FamilyUI
@@ -156,7 +198,7 @@ func faceFor(family string, w Weight) (*otFace, error) {
 		if w >= WeightBold {
 			return monoBold, nil
 		}
-		return monoReg, nil
+		return emboldened(monoReg, synthFor(w, WeightRegular)), nil
 	case FamilyUI:
 	default:
 		// An installed face (a pack's era font); not installed, the
@@ -168,7 +210,9 @@ func faceFor(family string, w Weight) (*otFace, error) {
 	if w >= WeightBold {
 		return uiBold, nil
 	}
-	return uiReg, nil
+	// Titillium Web ships regular and bold: medium and semibold are the
+	// regular drawn a little heavier.
+	return emboldened(uiReg, synthFor(w, WeightRegular)), nil
 }
 
 // kern is the face's pair kerning (GPOS or kern table) for r0 then r1 at
