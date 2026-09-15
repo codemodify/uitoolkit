@@ -284,7 +284,9 @@ func (h *HeaderBar) Paint(ctx *paintengine2d.Context) {
 // titleRect is where the title goes: a stacked frame's strip between the
 // buttons, else the free space's width at the row's height (the free space
 // itself is centred with no height of its own). A look that centres its
-// title on the window gets a box as far from both sides.
+// title on the window gets a box the title's width centred on the window,
+// or, where the buttons leave no room at the centre, pushed aside by them
+// (as GNOME and the Mac do) rather than cut short.
 func (h *HeaderBar) titleRect() paintengine2d.Rect {
 	var r paintengine2d.Rect
 	if h.strip > 0 {
@@ -303,13 +305,26 @@ func (h *HeaderBar) titleRect() paintengine2d.Rect {
 		r = paintengine2d.XYWH(rb.Min.X+fb.Min.X, rb.Min.Y, fb.Dx(), rb.Dy())
 	}
 	if h.framed && h.spec().CenterTitle {
-		w := h.LocalBounds().Dx()
-		m := max(r.Min.X, w-r.Max.X)
-		if w-2*m > style.Dip(h.Look(), 48) {
-			r.Min.X, r.Max.X = m, w-m
-		}
+		tw := min(h.titleWidth(), r.Dx())
+		x := min(max((h.LocalBounds().Dx()-tw)*0.5, r.Min.X), r.Max.X-tw)
+		r.Min.X, r.Max.X = x, x+tw
 	}
 	return r
+}
+
+// titleWidth is about what a look's centred title needs: the title in the
+// bold font (the widest a title bar uses) and the looks' pads round it.
+func (h *HeaderBar) titleWidth() float32 {
+	title := ""
+	if t, ok := h.Host().(interface{ Title() string }); ok {
+		title = t.Title()
+	}
+	lk := h.Look()
+	f := lk.BoldFont()
+	if f == nil {
+		f = lk.Font()
+	}
+	return f.Advance(title) + 2*style.Dip(lk, 12)
 }
 
 // CaptionAt: the header bar's own space is caption.
