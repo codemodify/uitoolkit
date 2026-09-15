@@ -36,39 +36,38 @@ Before merging to `dev`:
 4. **The real-hardware pass may use the laptop**, through the nested-KWin
    rig only.
 
-## Real-hardware checklist (needs your laptop)
+## Real-hardware pass (2026-09-15, nested KWin on your GPU)
 
-Everything below passed headless. Each item needs a real compositor and
-GPU, through the nested-KWin rig (`tools/e2e/theme-tour.sh`), never your own
-session:
-1. **The original glitches.** Click around the gallery and Mail in several
-   themes: dialogs, menus, theme switches, hover.
-2. **GPU paths.** Fluent's acrylic menus and Aero's glass (backdrop blur),
-   the fades (layers, cross-fades), and Plastik's dithered groove
-   (patterns).
-3. **Fractional scale 1.75** (yours). Check the HiDPI fixes in the base
-   look and widgets. Two live-compositor tests failed on your session at
-   this scale:
-   - `TestWaylandSurfacePresent` expects a 160px buffer and got 280;
-   - `TestWaylandPresentOpaqueColor` reports "no present slot".
-4. **Desktop following.** Switch Plasma between light and dark and change
-   its accent with a following app open: it should restyle live. Also
-   Plasma's animation speed at Instant, which is reduced motion.
-5. **The tray.** Mail's tray menu should respond at once. The loop now
-   sleeps up to 1s between safety wakes instead of 100ms; events wake it.
-6. **Mnemonic underlines.** They should show only while Alt is held in the
-   XP, Plasma and Windows 10 looks.
-7. **Touchpad scrolling.** Slow two-finger scrolls should follow the
-   fingers; they used to jump by whole lines (a bug found and fixed
-   today). A quick swipe should glide on and slow down (new kinetic
-   scrolling). A mouse wheel should scroll three lines a notch.
-8. **Drag and drop.** Drag files from Dolphin into Mail's compose window,
-   which should attach them, and text into a field. This is Wayland only for
-   now.
+Run through the rig in `tools/e2e/` (nested KWin on the real GPU, never your
+session). Verified there:
+1. **The original glitches: gone.** The gallery in ten themes (Metal Ocean,
+   Fluent, Aero, Luna, Breeze, Adwaita, Big Sur, Material 3, Windows 95,
+   Aqua) went through hover, a menu, the About dialog, a tab, a combo popup
+   and a theme switch. Every frame matched a full-frame repaint.
+2. **GPU paths: match the CPU.** All 78 themes' galleries on the GPU are
+   within 0.03% of the CPU render. Fluent's acrylic and Big Sur's vibrant
+   menus, and Aero's glass dialogs, render.
+3. **Fractional scale 1.75: correct.** At a real 1.75 output apps are asked
+   for 1.75 (`preferred_scale` 210) and draw 1750×1330 buffers for a
+   1000×760 window, crisp. The two tests that failed on your session were
+   wrong about scale and timing, and are fixed.
+6. **Alt underlines: fixed.** They never showed on a live compositor (Alt
+   only re-presented the cached frame); now they show while Alt is held.
+
+Also found and fixed there: a crash ("concurrent map writes") when a window
+opened while the app was still serving a clipboard it owned after its last
+window closed.
+
+Still to try on your own desktop, since they need its services:
+4. **Desktop following.** Switch Plasma between light and dark, or change
+   its accent, with "Match the desktop" on in Settings.
+5. **The tray.** Mail's tray menu should respond at once.
+7. **Touchpad scrolling.** Slow two-finger scrolls follow the fingers; a
+   quick swipe glides and slows down; a wheel notch scrolls three lines.
+8. **Drag and drop.** Files from Dolphin into Mail's compose window.
 9. **Native file dialogs.** Settings, "Use the desktop's file dialogs",
-   then Attach in Mail's compose window: Plasma's own dialog should open.
-10. **Orca**, if you install it: `UITK_A11Y=1` is not needed, since the
-   bridge starts when Orca does.
+   then Attach in Mail's compose window.
+10. **Orca**, if you install it: the bridge starts when Orca does.
 
 ## What the glitching was
 
@@ -88,8 +87,8 @@ are in `docs/e2e/2026-09-14/`.
   navigation and accelerators; modality; focus rings clipped away; contrast;
   the paperclip glyph; and Mail multi-selection.
 
-All of these are fixed, with tests. **Not yet re-verified on real hardware**:
-that needs your laptop and the rig, and is the first thing to do next.
+All of these are fixed, with tests, and re-verified on your GPU in the
+nested-KWin rig (see the real-hardware pass above).
 
 ## Theme engines
 
@@ -327,11 +326,12 @@ every pack:
 - keyboard focus is visible;
 - text meets contrast checks.
 
-Everything headless ran in this session; the GPU and Wayland paths still need
-the real-hardware pass. A slip on 2026-09-15: one `go test ./platform` ran
-without unsetting `WAYLAND_DISPLAY`, so its live-compositor tests opened
-test windows on the real session for under a second. Two of them failed
-there, and both belong in the real-hardware pass:
-- `TestWaylandSurfacePresent` expects a 160px buffer and got 280 (the
-  output's 1.75 scale);
-- `TestWaylandPresentOpaqueColor` reported "no present slot".
+On a live compositor (nested KWin at 1.75), the platform tests pass 30
+runs in a row and run race-clean; before the clipboard fix, 3 in 11 runs
+crashed.
+
+A slip on 2026-09-15: one `go test ./platform` ran without unsetting
+`WAYLAND_DISPLAY`, so its live-compositor tests opened test windows on the
+real session for under a second. The two that failed there
+(`TestWaylandSurfacePresent` expected 160px where 1.75 gives 280;
+`TestWaylandPresentOpaqueColor` read the first frame too early) are fixed.
