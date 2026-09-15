@@ -131,6 +131,15 @@ var eraPackFonts = map[string]FontPrefs{
 	"primer": primerFonts, "primer-night": primerFonts, "primer-dimmed": primerFonts,
 	"geist": geistFonts, "geist-night": geistFonts,
 	"linear": linearFonts, "linear-night": linearFonts,
+	// GNOME 48 reads in Adwaita Sans and Adwaita Mono.
+	"adwaita48": adwaitaSans, "adwaita48-night": adwaitaSans,
+}
+
+// adwaitaSans is GNOME 48's pair: Adwaita Sans (Inter 4.1 with one variant
+// frozen) and Adwaita Mono (Iosevka), then their sources and GNOME 47's.
+var adwaitaSans = FontPrefs{
+	UI:   []string{"Adwaita Sans", "Inter", "Inter Variable", "Cantarell", "Noto Sans", "DejaVu Sans"},
+	Mono: []string{"Adwaita Mono", "Iosevka", "Source Code Pro", "DejaVu Sans Mono", "Noto Sans Mono"},
 }
 
 // withEraFonts fills the typefaces tok leaves unset from its pack's era:
