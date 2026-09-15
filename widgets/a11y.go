@@ -763,3 +763,9 @@ func (p *PopupMenu) AccessibleFocusItem() int {
 	}
 	return -1
 }
+
+// AccessibleItemCount bounds the work of finding a focused item.
+func (l *ListView) AccessibleItemCount() int  { return l.Count }
+func (t *TableView) AccessibleItemCount() int { return t.RowCount * (len(t.Columns) + 1) }
+func (l *CardList) AccessibleItemCount() int  { return l.Count }
+func (t *TreeView) AccessibleItemCount() int  { return len(t.flatten()) }

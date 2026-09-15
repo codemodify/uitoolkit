@@ -114,5 +114,29 @@ for _ in range(100):
 check(bool(got) and got[-1].get_role() == R.ENTRY, "focusing the entry announces it (object:state-changed:focused)")
 check(entry.get_state_set().contains(Atspi.StateType.FOCUSED), "the entry reports focused")
 
+# A change on the focused object is announced: tick the check box that has
+# the focus and expect object:state-changed:checked.
+changes = []
+
+
+def on_checked(ev):
+    changes.append((ev.source, ev.detail1))
+
+
+checked = Atspi.EventListener.new(on_checked)
+checked.register("object:state-changed:checked")
+Atspi.Component.grab_focus(box)
+for _ in range(20):
+    ctx.iteration(False)
+    time.sleep(0.02)
+Atspi.Action.do_action(box, 0)
+for _ in range(100):
+    ctx.iteration(False)
+    if changes:
+        break
+    time.sleep(0.02)
+check(bool(changes) and changes[-1][0].get_role() == R.CHECK_BOX,
+      "ticking the focused check box announces it (object:state-changed:checked)")
+
 print("%d problems" % len(problems))
 sys.exit(1 if problems else 0)

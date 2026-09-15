@@ -79,7 +79,11 @@ when a screen reader starts. Then it:
   Accessible, Application, Component, Action, Value and Text interfaces;
 - announces the active window (`window:activate`) and focus moves
   (`object:state-changed:focused`), including a view's current row, tab or
-  tool.
+  tool;
+- announces changes on the focused object: `object:state-changed:checked`
+  (and `selected`, `expanded`, `pressed`, `indeterminate`, `sensitive`),
+  plus name and value changes. Only that object is described each frame,
+  so this stays cheap.
 
 Queries read a snapshot of the trees that the UI goroutine rebuilds when
 something has changed since the last query. Actions (DoAction, GrabFocus,
@@ -100,9 +104,8 @@ Nothing touches the desktop's session. It needs at-spi2-core and
 python-gobject.
 
 ## Still to come
-- Property and text-change events (`object:property-change:accessible-name`,
-  `object:text-changed`, `object:state-changed:checked`), so a screen reader
-  hears changes without moving focus.
+- Text-change events (`object:text-changed:insert` / `delete`) while typing,
+  and changes on objects without the focus.
 - Relations (a label that labels a field), the Selection and Table
   interfaces, and items built lazily for very long lists.
 - Windows and macOS adapters.
