@@ -76,8 +76,15 @@ palette darkens to Charcoal and every Window Maker scheme to Night Sky.
 Packs with no sibling (Amiga, OS/2 Warp, BeOS, the high-contrast scheme)
 stay as they are. A user pack `mine` pairs with a user pack `mine-night`.
 
+Following the desktop also takes its **accent colour** (Plasma's and
+GNOME 47's accent, the portal's `accent-color`) in themes whose engine
+recolours around one, as Windows 10 and 11, macOS, Plasma, GNOME and
+Material You do: Breeze's selection, focus, hover and default button, and
+everything it mixes from them. Historical looks keep their own colours.
+
 `UITK_COLOR_SCHEME=dark` (or `light`) stands in for the desktop, to try a
-theme's other side without switching the desktop. `UITK_THEME=<pack>`
+theme's other side without switching the desktop; `UITK_ACCENT=#e95420`
+stands in for its accent. `UITK_THEME=<pack>`
 shows exactly that pack and does not follow. Headless and offscreen apps
 (tests, screenshots) never ask the desktop.
 
@@ -272,5 +279,6 @@ corners, the icon set, and icon size on top.
 | `Application.WatchingLook`, `Application.ReloadPreferredLook` | `app` |
 | `Application.ApplyAppearance`, `Application.OnLookChange`, `Application.DesktopColorScheme`, `ColorSchemeEnv` | `app` |
 | `ColorScheme`, `SchemeVariant`, `Appearance.Effective`, `SetDesktopColorScheme`, `DesktopReducesMotion` | `style` / `uitoolkit` |
+| `AccentEngine`, `SetDesktopAccent`, `DesktopAccent`, `TakesAccent`, `CloneTokenMaps` | `style` |
 | `DesktopPrefs`, `ReadDesktopPrefs`, `WatchDesktopPrefs` (the portal) | `platform` |
 | `DrawToolIcon`, `DrawFileToolIcon` | `style` |

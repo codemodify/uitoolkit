@@ -58,6 +58,7 @@ type Application struct {
 	// following is set while the look follows its light / dark preference.
 	desktopStop  func()
 	schemeForced bool
+	accentForced bool
 	following    bool
 	lookHooks    []*func()
 }
