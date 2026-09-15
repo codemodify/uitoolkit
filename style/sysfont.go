@@ -97,19 +97,44 @@ func parseFCList(out []byte, into map[string][]sysFace) {
 
 // fontconfig weights.
 const (
-	fcRegular = 80
-	fcBold    = 200
+	fcRegular  = 80
+	fcMedium   = 100
+	fcSemibold = 180
+	fcBold     = 200
 )
 
-// pickSystemFace is family's installed face for w: a static face of that
-// weight when there is one; otherwise, for bold, the regular outline drawn
-// heavier (synth), and for regular the nearest static face.
-func pickSystemFace(family string, w Weight) (face sysFace, synth, ok bool) {
-	faces := systemFaces()[strings.ToLower(strings.TrimSpace(family))]
-	want := fcRegular
-	if w >= WeightBold {
-		want = fcBold
+// fcWeight is fontconfig's number for a CSS weight (80 regular, 100
+// medium, 180 demibold, 200 bold); cssWeight goes back.
+func fcWeight(w Weight) int {
+	switch {
+	case w >= WeightBold:
+		return fcBold
+	case w >= WeightSemibold:
+		return fcSemibold
+	case w >= WeightMedium:
+		return fcMedium
 	}
+	return fcRegular
+}
+
+func cssWeight(fc int) Weight {
+	switch {
+	case fc >= fcBold:
+		return WeightBold
+	case fc >= fcSemibold:
+		return WeightSemibold
+	case fc >= fcMedium:
+		return WeightMedium
+	}
+	return WeightRegular
+}
+
+// pickSystemFace is family's installed face for w: a static face of that
+// weight when there is one; otherwise the nearest face, drawn heavier
+// (synth, a fraction of the size) when it is lighter than asked for.
+func pickSystemFace(family string, w Weight) (face sysFace, synth float32, ok bool) {
+	faces := systemFaces()[strings.ToLower(strings.TrimSpace(family))]
+	want := fcWeight(w)
 	best, bestD := -1, 1<<30
 	for i, f := range faces {
 		if f.named && f.weight != fcRegular {
@@ -124,10 +149,12 @@ func pickSystemFace(family string, w Weight) (face sysFace, synth, ok bool) {
 		}
 	}
 	if best < 0 {
-		return sysFace{}, false, false
+		return sysFace{}, 0, false
 	}
 	face = faces[best]
-	synth = want == fcBold && face.weight < 150
+	if s := synthFor(w, cssWeight(face.weight)); s >= 0.005 {
+		synth = s
+	}
 	return face, synth, true
 }
 
@@ -174,7 +201,7 @@ var systemOTFaces = struct {
 type sysFaceKey struct {
 	file  string
 	index int
-	synth bool
+	synth float32
 }
 
 // synthBold is how much heavier a synthesized bold draws, as a fraction of
@@ -203,9 +230,7 @@ func systemOTFace(family string, w Weight) *otFace {
 		systemOTFaces.m[key] = nil
 		return nil
 	}
-	if synth {
-		f.embolden = synthBold
-	}
+	f.embolden = synth
 	systemOTFaces.m[key] = f
 	return f
 }

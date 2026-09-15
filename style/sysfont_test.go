@@ -51,16 +51,24 @@ func TestFCListIndex(t *testing.T) {
 	}
 
 	// Bold: a static bold face when there is one…
-	if f, synth, ok := pickSystemFace("Tahoma", WeightBold); !ok || synth || f.file != "/f/tahomabd.ttf" {
+	if f, synth, ok := pickSystemFace("Tahoma", WeightBold); !ok || synth != 0 || f.file != "/f/tahomabd.ttf" {
 		t.Fatalf("Tahoma bold: %+v synth=%v ok=%v", f, synth, ok)
 	}
 	// …else the regular outline drawn heavier (sfnt cannot draw a variable
 	// font's bold instance).
-	if f, synth, ok := pickSystemFace("Adwaita Sans", WeightBold); !ok || !synth || f.named {
+	if f, synth, ok := pickSystemFace("Adwaita Sans", WeightBold); !ok || synth != synthBold || f.named {
 		t.Fatalf("Adwaita Sans bold: %+v synth=%v ok=%v", f, synth, ok)
 	}
-	if _, synth, _ := pickSystemFace("Noto Sans", WeightRegular); synth {
+	if _, synth, _ := pickSystemFace("Noto Sans", WeightRegular); synth != 0 {
 		t.Fatal("a regular face is never synthesized")
+	}
+	// Semibold with only regular and bold installed: the bold face, as CSS
+	// matches upward; medium: the regular a little heavier.
+	if f, synth, ok := pickSystemFace("Tahoma", WeightSemibold); !ok || synth != 0 || f.file != "/f/tahomabd.ttf" {
+		t.Fatalf("Tahoma semibold: %+v synth=%v", f, synth)
+	}
+	if f, synth, ok := pickSystemFace("Tahoma", WeightMedium); !ok || synth <= 0 || synth >= synthBold || f.weight != fcRegular {
+		t.Fatalf("Tahoma medium: %+v synth=%v", f, synth)
 	}
 
 	if got := ResolveFont([]string{"Segoe UI", "Tahoma", "Noto Sans"}); got != "Tahoma" {
