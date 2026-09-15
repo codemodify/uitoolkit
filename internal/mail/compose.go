@@ -279,19 +279,16 @@ func ComposeApp(a *app.Application, win *app.Window, cli *Client, opts ComposeOp
 	attachBtn.Tip = "Attach file (stub)"
 	tools := widgets.NewToolBar(sendBtn, draftBtn, widgets.ToolDivider(), attachBtn)
 
-	labeled := func(name string, field widget.Component) widget.Component {
-		row := widgets.NewRow(widgets.NewLabel(name), field).WithGap(8).WithAlign(uitoolkit.AlignCenter)
-		row.AddFlex(field, 1)
-		return row
-	}
-
-	fields := widgets.NewColumn(
-		labeled("From", from),
-		labeled("To", to),
-		labeled("Cc", cc),
-		labeled("Bcc", bcc),
-		labeled("Subject", subject),
-	).WithGap(6).WithPad(10)
+	// One label column, so the fields line up (right-aligned labels under
+	// Mac looks).
+	form := widgets.NewForm()
+	form.RowGap = 6
+	form.AddRow("From", from)
+	form.AddRow("To", to)
+	form.AddRow("Cc", cc)
+	form.AddRow("Bcc", bcc)
+	form.AddRow("Subject", subject)
+	fields := widgets.NewPad(10, form)
 
 	chrome := widgets.NewTitleBar("Write", "compose  ·  mailclientd  ·  v"+uitoolkit.Version)
 	bodyPad := widgets.NewPad(8, body)

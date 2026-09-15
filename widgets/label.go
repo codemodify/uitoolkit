@@ -1,13 +1,16 @@
 package widgets
 
 import (
+	"strings"
+
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/layout"
 	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
 )
 
-// Label is static text.
+// Label is static text. A newline starts another line (QLabel, GtkLabel);
+// each line is aligned and, when too long, elided on its own.
 type Label struct {
 	widget.Base
 	Text     string
@@ -52,12 +55,22 @@ func (l *Label) font() *style.Font {
 	return lk.Font()
 }
 
+// lines splits the text at its newlines.
+func (l *Label) lines() []string {
+	if !strings.Contains(l.Text, "\n") {
+		return []string{l.Text}
+	}
+	return strings.Split(strings.ReplaceAll(l.Text, "\r\n", "\n"), "\n")
+}
+
 func (l *Label) Measure(c layout.Constraints) paintengine2d.Point {
 	f := l.font()
-	sz := f.Measure(l.Text)
-	sz.X += 2
-	sz.Y += 2
-	return c.Constrain(sz)
+	lines := l.lines()
+	var w float32
+	for _, line := range lines {
+		w = max(w, f.Advance(line))
+	}
+	return c.Constrain(paintengine2d.Pt(w+2, f.Height()*float32(len(lines))+2))
 }
 
 func (l *Label) Arrange(r paintengine2d.Rect) { l.SetBounds(r) }
@@ -70,34 +83,30 @@ func (l *Label) Paint(ctx *paintengine2d.Context) {
 		col = lk.Palette().Text
 	}
 	b := l.LocalBounds()
-	tw := f.Advance(l.Text)
+	lines := l.lines()
 	th := f.Height()
-	x := b.Min.X
-	switch l.Align {
-	case style.AlignCenter:
-		x = b.Min.X + (b.Dx()-tw)*0.5
-	case style.AlignEnd:
-		x = b.Max.X - tw - 2
-	}
-	y := b.Min.Y + (b.Dy()-th)*0.5
-	ctx.Save()
-	ctx.ClipRect(b)
-	show := l.Text
+	y := b.Min.Y + (b.Dy()-th*float32(len(lines)))*0.5
 	maxW := b.Dx() - 2
 	if maxW < 4 {
 		maxW = 4
 	}
-	if f.Advance(show) > maxW {
-		show = f.Fit(show, maxW)
-		tw = f.Advance(show)
+	ctx.Save()
+	ctx.ClipRect(b)
+	for _, show := range lines {
+		if f.Advance(show) > maxW {
+			show = f.Fit(show, maxW)
+		}
+		tw := f.Advance(show)
+		x := b.Min.X
 		switch l.Align {
 		case style.AlignCenter:
 			x = b.Min.X + (b.Dx()-tw)*0.5
 		case style.AlignEnd:
 			x = b.Max.X - tw - 2
 		}
+		f.Draw(ctx, show, paintengine2d.Pt(x, y), col)
+		y += th
 	}
-	f.Draw(ctx, show, paintengine2d.Pt(x, y), col)
 	ctx.Restore()
 }
 
