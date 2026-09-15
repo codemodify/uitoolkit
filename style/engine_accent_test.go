@@ -30,6 +30,7 @@ var accCases = []accCase{
 	{"tahoe", "#0088ff", 2.2}, {"tahoe-night", "#0091ff", 2.2}, {"adwaita48", "#3584e4", 3}, {"adwaita48-night", "#3584e4", 3},
 	{"material", "#6200ee", 4.5}, {"material-night", "#6200ee", 4.5},
 	{"material3", "#6750a4", 4.5}, {"material3-night", "#6750a4", 4.5},
+	{"material3x", "#6750a4", 4.5}, {"material3x-night", "#6750a4", 4.5},
 	{"flatlaf", "#2675bf", 2.2}, {"flatlaf-night", "#4b6eaf", 3}, {"flatlaf-darcula", "#4b6eaf", 3},
 	{"fusion", "#308cc6", 3}, {"fusion-night", "#2a82da", 3},
 	{"oxygen", "#43ace8", 2.2},
