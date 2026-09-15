@@ -1101,10 +1101,10 @@ func (fluentEngine) DrawTab(l *Classic, ctx *paintengine2d.Context, b paintengin
 		hb := paintengine2d.XYWH(body.Min.X+lw, body.Min.Y, body.Dx()-2*lw, body.Dy()-2*lw)
 		switch {
 		case st.Pressed():
-			ctx.DrawPath(RoundRectPath(hb, r, r, lw*2, lw*2), paintengine2d.Fill(c.subtle2))
+			ctx.DrawRoundRectCorners(hb, r, r, lw*2, lw*2, paintengine2d.Fill(c.subtle2))
 			fg = c.text
 		case st.Hovered():
-			ctx.DrawPath(RoundRectPath(hb, r, r, lw*2, lw*2), paintengine2d.Fill(c.subtle))
+			ctx.DrawRoundRectCorners(hb, r, r, lw*2, lw*2, paintengine2d.Fill(c.subtle))
 			fg = c.text
 		case !st.Last():
 			h := min(snap(l.S(16)), body.Dy()-4*lw)
