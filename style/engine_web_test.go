@@ -27,15 +27,15 @@ func TestWebPacksRegisteredInYearOrder(t *testing.T) {
 		pos[n] = i
 	}
 	names := webPackNames()
-	if len(names) != 29 {
-		t.Fatalf("%d web packs, want 29: %v", len(names), names)
+	if len(names) != 35 {
+		t.Fatalf("%d web packs, want 35: %v", len(names), names)
 	}
 	for _, n := range names {
 		p, ok := LoadTheme(n)
 		if !ok {
 			t.Fatalf("pack %q not registered", n)
 		}
-		if p.Tokens.Engine != "web" || p.Year < 2013 || p.Year > 2026 || p.Label == "" || p.Lineage == "" || p.Era == "" {
+		if p.Tokens.Engine != "web" || p.Year < 2011 || p.Year > 2026 || p.Label == "" || p.Lineage == "" || p.Era == "" {
 			t.Fatalf("%s: engine %q year %d label %q lineage %q era %q", n, p.Tokens.Engine, p.Year, p.Label, p.Lineage, p.Era)
 		}
 		if strings.TrimSpace(p.Summary) == "" || strings.Contains(p.Summary, "\n") {
@@ -49,14 +49,16 @@ func TestWebPacksRegisteredInYearOrder(t *testing.T) {
 		}
 		wantDark := strings.HasSuffix(n, "-night") || strings.HasSuffix(n, "-dimmed") || n == "dracula" ||
 			strings.Contains(n, "frappe") || strings.Contains(n, "macchiato") || strings.Contains(n, "mocha") ||
-			n == "tokyonight" || n == "tokyonight-storm" || n == "rosepine" || n == "rosepine-moon"
+			n == "tokyonight" || n == "tokyonight-storm" || n == "rosepine" || n == "rosepine-moon" ||
+			n == "gruvbox" || n == "solarized" || n == "onedark"
 		if (p.Tokens.Family == ThemeDark) != wantDark {
 			t.Fatalf("%s: family %q", n, p.Tokens.Family)
 		}
 	}
-	// Registered packs sort by year: Dracula (2013) before Nord (2016),
-	// Tokyo Night (2020), SourceGit (2024), shadcn (2025) and Linear (2026).
-	order := []string{"dracula", "nord", "tokyonight", "catppuccin-mocha", "primer", "sourcegit", "shadcn", "linear"}
+	// Registered packs sort by year: Solarized (2011) and Gruvbox (2012)
+	// before Dracula (2013), One (2014), Nord (2016), Tokyo Night (2020),
+	// SourceGit (2024), shadcn (2025) and Linear (2026).
+	order := []string{"solarized", "gruvbox", "dracula", "onedark", "nord", "tokyonight", "catppuccin-mocha", "primer", "sourcegit", "shadcn", "linear"}
 	for i := 1; i < len(order); i++ {
 		if pos[order[i-1]] > pos[order[i]] {
 			t.Fatalf("%s sorts after %s", order[i-1], order[i])
@@ -431,6 +433,9 @@ func TestWebSchemeSiblings(t *testing.T) {
 		{"tokyonight-day", SchemeDark, "tokyonight"}, {"tokyonight-storm", SchemeLight, "tokyonight-day"}, {"tokyonight", SchemeLight, "tokyonight-day"},
 		{"rosepine-dawn", SchemeDark, "rosepine"}, {"rosepine-moon", SchemeLight, "rosepine-dawn"}, {"rosepine", SchemeLight, "rosepine-dawn"},
 		{"vscode", SchemeDark, "vscode-night"}, {"vscode-night", SchemeLight, "vscode"},
+		{"gruvbox", SchemeLight, "gruvbox-light"}, {"gruvbox-light", SchemeDark, "gruvbox"},
+		{"solarized", SchemeLight, "solarized-light"}, {"solarized-light", SchemeDark, "solarized"},
+		{"onedark", SchemeLight, "onelight"}, {"onelight", SchemeDark, "onedark"},
 		{"islands", SchemeDark, "islands-night"}, {"islands-night", SchemeLight, "islands"},
 	} {
 		if got := SchemeVariant(c.name, c.scheme); got != c.want {
