@@ -82,7 +82,8 @@ type atspiBridge struct {
 // the bridge on when it runs (see A11yEnv).
 func (a *Application) startA11y() {
 	env := strings.TrimSpace(os.Getenv(A11yEnv))
-	if env == "0" || (a.headless && env != "1") {
+	offscreen := a.headless || a.backend == nil || a.backend.Name() == "offscreen"
+	if env == "0" || (offscreen && env != "1") {
 		return
 	}
 	go func() {
