@@ -167,3 +167,15 @@ draw their own ticks with `DrawSliderTicks`.
 bar tall enough to hold it, the text sits in the middle and changes colour
 where the fill ends; beside a thin bar (Fluent, Material, Aqua) it sits to
 the right.
+
+## Editable combo boxes
+
+`ComboBox.SetEditable(true)` lets the user type a value of their own, as
+QComboBox's `setEditable` and GTK's combo box with an entry do (a font size,
+an address). A field inside the box takes the typing. The arrow button and
+Down drop the list, and picking an item fills the field. Typed text
+completes inline from `Items`; the next key replaces the completion, and
+`NoCompletion` turns it off. `OnEdit` reports the text as it changes and
+`OnSubmit` reports Return. Engines see `StateEditable`: Windows looks keep
+the field white instead of highlighting it, and `ComboTextRect` places the
+field exactly.

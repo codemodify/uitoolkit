@@ -1632,7 +1632,7 @@ func (e lunaEngine) DrawComboBox(l *Classic, ctx *paintengine2d.Context, b paint
 	switch {
 	case st.Disabled():
 		tc = c.disText
-	case st.Focused() && !open:
+	case st.Focused() && !open && !st.Editable():
 		tb = lunaSnap(tb)
 		ctx.DrawRect(tb, paintengine2d.Fill(c.sel))
 		tc = c.selText

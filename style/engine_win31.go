@@ -864,7 +864,7 @@ func (e win31Engine) DrawComboBox(l *Classic, ctx *paintengine2d.Context, b pain
 	// The field, with a white margin.
 	fg := g.sub(2, 2, bx-3, g.h-4)
 	tc := c.text
-	if st.Focused() && !open && !st.Disabled() {
+	if st.Focused() && !open && !st.Disabled() && !st.Editable() {
 		ctx.DrawRect(fg.rect(), paintengine2d.Fill(c.sel))
 		tc = c.selText
 		w31focus(ctx, fg, 0, 0, fg.w, fg.h, c.sel)

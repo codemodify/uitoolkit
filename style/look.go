@@ -1056,11 +1056,17 @@ func (l *Classic) baseDrawComboBox(ctx *paintengine2d.Context, b paintengine2d.R
 	if open {
 		st |= StatePressed
 	}
-	faceFg := l.paintFace(ctx, b, roleCombo, st)
+	var faceFg paintengine2d.Color
+	if st.Editable() {
+		// A field with an arrow button: the text is typed, not picked.
+		faceFg = l.paintFace(ctx, b, roleField, st&^(StateHovered|StatePressed))
+	} else {
+		faceFg = l.paintFace(ctx, b, roleCombo, st)
+	}
 	if st.Focused() && !open && l.eng().FieldFocusRing(l) {
 		l.DrawFocusRing(ctx, b)
 	}
-	chevW := float32(22)
+	chevW := l.S(22)
 	btn := paintengine2d.XYWH(b.Max.X-chevW, b.Min.Y, chevW, b.Dy())
 	if l.tokensOr().Bevel == BevelClassic3D || l.tokensOr().Bevel == BevelLunaHottrack {
 		l.paintFace(ctx, btn.Inset(1), roleButton, st)

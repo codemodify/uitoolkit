@@ -41,6 +41,13 @@ func Gallery(a *app.Application, win *app.Window, light bool) widget.Component {
 		}
 	})
 	engine.Placeholder = "Paint engine"
+	// An editable combo box: type a size or pick one.
+	size := widgets.NewComboBox([]string{"8", "9", "10", "11", "12", "14", "16", "18", "24", "36", "48", "72"}, 4, func(i int) {
+		status.Set(0, "Font size picked")
+	})
+	size.SetEditable(true)
+	size.SetAccessibleName("Font size")
+	size.OnSubmit = func(s string) { status.Set(0, "Font size "+s) }
 
 	progress := widgets.NewProgressBar(0.42)
 	progress.ShowText = true
@@ -171,6 +178,8 @@ func Gallery(a *app.Application, win *app.Window, light bool) widget.Component {
 		columns,
 		widgets.NewLabel("Paint engine"),
 		engine,
+		widgets.NewLabel("Font size (type or pick)"),
+		size,
 		widgets.NewLabel("Theme preset"),
 		radios,
 		volume,
