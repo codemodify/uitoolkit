@@ -1217,11 +1217,11 @@ func (materialEngine) StyleHint(l *Classic, h StyleHint) int {
 	return 0
 }
 
-// ControlFont: buttons and tabs are labelled in the medium (here bold)
-// weight.
+// ControlFont: buttons and tabs are labelled in the medium weight (Roboto
+// Medium), as Material specifies.
 func (materialEngine) ControlFont(l *Classic, role Role) *Font {
 	if role == RoleButton || role == RoleTab {
-		return l.BoldFont()
+		return l.WeightFont(WeightMedium)
 	}
 	return l.body
 }
