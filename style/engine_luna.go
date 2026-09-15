@@ -1701,7 +1701,7 @@ func (lunaEngine) DrawTab(l *Classic, ctx *paintengine2d.Context, b paintengine2
 		border = c.tabHotBorder
 	}
 	r := l.rx(3)
-	ctx.DrawPath(RoundRectPath(t, r, r, 0, 0), paintengine2d.Fill(border))
+	ctx.DrawRoundRectCorners(t, r, r, 0, 0, paintengine2d.Fill(border))
 	in := paintengine2d.XYWH(t.Min.X+lw, t.Min.Y+lw, t.Dx()-2*lw, t.Dy()-lw)
 	ri := r - lw
 	if ri < 0 {
@@ -2413,7 +2413,7 @@ func (lunaEngine) DrawAccordionHeader(l *Classic, ctx *paintengine2d.Context, b 
 	b = lunaSnap(b)
 	lw := lunaPx(l)
 	r := l.rx(3)
-	ctx.DrawPath(RoundRectPath(b, r, r, 0, 0), HGradient(b, c.xbHead...))
+	ctx.DrawRoundRectCorners(b, r, r, 0, 0, HGradient(b, c.xbHead...))
 	d := snap(b.Dy() - l.S(8))
 	if m := snap(l.S(19)); d > m {
 		d = m

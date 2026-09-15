@@ -783,10 +783,10 @@ func (e breezeEngine) DrawWindowFrame(l *Classic, ctx *paintengine2d.Context, b 
 	if !st.Active {
 		bar, fg = c.titleOff, c.titleTextOff
 	}
-	ctx.DrawPath(RoundRectPath(b, r, r, 0, 0), paintengine2d.Fill(c.win))
-	ctx.DrawPath(RoundRectPath(paintengine2d.XYWH(b.Min.X, b.Min.Y, b.Dx(), h), r, r, 0, 0), paintengine2d.Fill(bar))
+	ctx.DrawRoundRectCorners(b, r, r, 0, 0, paintengine2d.Fill(c.win))
+	ctx.DrawRoundRectCorners(paintengine2d.XYWH(b.Min.X, b.Min.Y, b.Dx(), h), r, r, 0, 0, paintengine2d.Fill(bar))
 	fuHLine(ctx, b.Min.X, b.Max.X, b.Min.Y+h-u, u, c.sep)
-	ctx.DrawPath(RoundRectPath(b.Inset(u*0.5), r, r, 0, 0), paintengine2d.StrokePaint(Mix(c.win, c.text, 0.35).WithAlpha(0.6), u))
+	ctx.DrawRoundRectCorners(b.Inset(u*0.5), r, r, 0, 0, paintengine2d.StrokePaint(Mix(c.win, c.text, 0.35).WithAlpha(0.6), u))
 	right := b.Max.X - l.S(8)
 	if st.CanClose {
 		cb := e.WindowCloseRect(l, b)
@@ -841,8 +841,8 @@ func (breezeEngine) DrawTabPane(l *Classic, ctx *paintengine2d.Context, b painte
 		tl = 0
 	}
 	in := pane.Inset(u * 0.5)
-	ctx.DrawPath(RoundRectPath(in, tl, r, r, r), paintengine2d.Fill(c.frameBg))
-	ctx.DrawPath(RoundRectPath(in, tl, r, r, r), paintengine2d.StrokePaint(c.outline, u))
+	ctx.DrawRoundRectCorners(in, tl, r, r, r, paintengine2d.Fill(c.frameBg))
+	ctx.DrawRoundRectCorners(in, tl, r, r, r, paintengine2d.StrokePaint(c.outline, u))
 }
 
 // ---- controls ----------------------------------------------------------------------------------------------
@@ -1220,10 +1220,10 @@ func (e breezeEngine) DrawTab(l *Classic, ctx *paintengine2d.Context, b painteng
 		ctx.Save()
 		ctx.ClipRect(b)
 		in := body.Inset(u * 0.5)
-		ctx.DrawPath(RoundRectPath(in, rr, rr, 0, 0), paintengine2d.Fill(c.win))
-		ctx.DrawPath(RoundRectPath(in, rr, rr, 0, 0), paintengine2d.StrokePaint(Mix(c.win, c.text, 0.25), u))
+		ctx.DrawRoundRectCorners(in, rr, rr, 0, 0, paintengine2d.Fill(c.win))
+		ctx.DrawRoundRectCorners(in, rr, rr, 0, 0, paintengine2d.StrokePaint(Mix(c.win, c.text, 0.25), u))
 		strip := snap(l.S(3))
-		ctx.DrawPath(RoundRectPath(paintengine2d.XYWH(b.Min.X, b.Min.Y, b.Dx(), strip), r, r, 0, 0), paintengine2d.Fill(c.hl))
+		ctx.DrawRoundRectCorners(paintengine2d.XYWH(b.Min.X, b.Min.Y, b.Dx(), strip), r, r, 0, 0, paintengine2d.Fill(c.hl))
 		ctx.Restore()
 	} else {
 		bg := c.tabOff
@@ -1237,7 +1237,7 @@ func (e breezeEngine) DrawTab(l *Classic, ctx *paintengine2d.Context, b painteng
 		if st.Last() {
 			tr = r
 		}
-		ctx.DrawPath(RoundRectPath(paintengine2d.XYWH(b.Min.X, b.Min.Y, b.Dx(), b.Dy()-u), tl, tr, 0, 0), paintengine2d.Fill(bg))
+		ctx.DrawRoundRectCorners(paintengine2d.XYWH(b.Min.X, b.Min.Y, b.Dx(), b.Dy()-u), tl, tr, 0, 0, paintengine2d.Fill(bg))
 	}
 	lb := b
 	if selected {

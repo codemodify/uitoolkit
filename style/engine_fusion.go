@@ -976,7 +976,7 @@ func (e fusionEngine) DrawWindowFrame(l *Classic, ctx *paintengine2d.Context, b 
 	ctx.DrawPath(path, VGradient(bar, stops...))
 	ctx.Save()
 	ctx.ClipRect(bar)
-	ctx.DrawPath(RoundRectPath(bar.Inset(u*0.5), ch, ch, 0, 0), paintengine2d.StrokePaint(line, u))
+	ctx.DrawRoundRectCorners(bar.Inset(u*0.5), ch, ch, 0, 0, paintengine2d.StrokePaint(line, u))
 	ctx.Restore()
 	fuHLine(ctx, bar.Min.X+6*u, bar.Max.X-6*u, bar.Min.Y+u, u, hi)
 	right := bar.Max.X - l.S(6)
@@ -1401,7 +1401,7 @@ func (e fusionEngine) DrawSpinner(l *Classic, ctx *paintengine2d.Context, b pain
 	if st.Focused() && !st.Disabled() {
 		line = c.hlOutline
 	}
-	ctx.DrawPath(RoundRectPath(body.Inset(u*0.5), 0, r, r, 0), paintengine2d.StrokePaint(line, u))
+	ctx.DrawRoundRectCorners(body.Inset(u*0.5), 0, r, r, 0, paintengine2d.StrokePaint(line, u))
 	col, dcol := c.arrow, c.arrow
 	if st.Disabled() {
 		col, dcol = c.dis, c.dis
@@ -1452,14 +1452,13 @@ func (e fusionEngine) DrawTab(l *Classic, ctx *paintengine2d.Context, b painteng
 	ctx.ClipRect(paintengine2d.XYWH(b.Min.X, b.Min.Y, b.Dx(), paneY-b.Min.Y))
 	shape := paintengine2d.XYWH(body.Min.X, body.Min.Y, body.Dx(), body.Dy()+4*u)
 	if selected {
-		ctx.DrawPath(RoundRectPath(shape.Inset(u*0.5), r, r, 0, 0), VGradient(b, c.tabSel...))
-		ctx.DrawPath(RoundRectPath(shape.Inset(u*0.5), r, r, 0, 0), paintengine2d.StrokePaint(c.outline, u))
+		ctx.DrawRoundRectCorners(shape.Inset(u*0.5), r, r, 0, 0, VGradient(b, c.tabSel...))
+		ctx.DrawRoundRectCorners(shape.Inset(u*0.5), r, r, 0, 0, paintengine2d.StrokePaint(c.outline, u))
 	} else {
-		ctx.DrawPath(RoundRectPath(shape.Inset(u*0.5), r, r, 0, 0), VGradient(b, c.tabStops...))
-		ctx.DrawPath(RoundRectPath(shape.Inset(u*0.5), r, r, 0, 0), paintengine2d.StrokePaint(c.outlineLt, u))
+		ctx.DrawRoundRectCorners(shape.Inset(u*0.5), r, r, 0, 0, VGradient(b, c.tabStops...))
+		ctx.DrawRoundRectCorners(shape.Inset(u*0.5), r, r, 0, 0, paintengine2d.StrokePaint(c.outlineLt, u))
 	}
-	ctx.DrawPath(RoundRectPath(paintengine2d.XYWH(shape.Min.X+u, shape.Min.Y+u, shape.Dx()-2*u, shape.Dy()-u).Inset(u*0.5), r, r, 0, 0),
-		paintengine2d.StrokePaint(c.contrast, u))
+	ctx.DrawRoundRectCorners(paintengine2d.XYWH(shape.Min.X+u, shape.Min.Y+u, shape.Dx()-2*u, shape.Dy()-u).Inset(u*0.5), r, r, 0, 0, paintengine2d.StrokePaint(c.contrast, u))
 	ctx.Restore()
 	if selected {
 		// Open the pane edge under the tab.

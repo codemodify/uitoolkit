@@ -906,7 +906,7 @@ func (e aeroEngine) DrawWindowFrame(l *Classic, ctx *paintengine2d.Context, b pa
 		return
 	}
 	r := l.rx(6)
-	ctx.DrawPath(RoundRectPath(b, r, r, r*0.5, r*0.5), paintengine2d.Fill(c.frameEdge))
+	ctx.DrawRoundRectCorners(b, r, r, r*0.5, r*0.5, paintengine2d.Fill(c.frameEdge))
 	in := b.Inset(lw)
 	ri := max(r-lw, 0)
 	glass := RoundRectPath(in, ri, ri, ri*0.5, ri*0.5)
@@ -1214,7 +1214,7 @@ func (aeroEngine) DrawTab(l *Classic, ctx *paintengine2d.Context, b paintengine2
 		border = c.btnHot.border
 	}
 	r := l.rx(3)
-	ctx.DrawPath(RoundRectPath(t, r, r, 0, 0), paintengine2d.Fill(border))
+	ctx.DrawRoundRectCorners(t, r, r, 0, 0, paintengine2d.Fill(border))
 	in := paintengine2d.XYWH(t.Min.X+lw, t.Min.Y+lw, t.Dx()-2*lw, t.Dy()-lw)
 	ri := max(r-lw, 0)
 	inner := RoundRectPath(in, ri, ri, 0, 0)
@@ -1414,7 +1414,7 @@ func (aeroEngine) DrawProgressBar(l *Classic, ctx *paintengine2d.Context, b pain
 		re = ra
 	}
 	fr := paintengine2d.XYWH(area.Min.X, area.Min.Y, w, area.Dy())
-	ctx.DrawPath(RoundRectPath(fr, ra, re, re, ra), fill)
+	ctx.DrawRoundRectCorners(fr, ra, re, re, ra, fill)
 	if !st.Disabled() {
 		sw := min(fr.Dx()*0.4, l.S(50))
 		sx := fr.Min.X + fr.Dx()*0.6 - sw*0.5
