@@ -3,6 +3,7 @@ package style
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/codemodify/paintengine2d"
@@ -286,4 +287,40 @@ func paintIcon(set IconSetName, icon ToolIcon) int {
 		}
 	}
 	return n
+}
+
+func TestDecorationsPrefRoundTrip(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv(ThemeEnv, "")
+	for in, want := range map[string]DecorationsPref{
+		"system": DecorationsSystem, "toolkit": DecorationsToolkit, "auto": DecorationsAuto,
+		"": DecorationsAuto, "server": DecorationsSystem, "client": DecorationsToolkit, "bogus": DecorationsAuto,
+	} {
+		if got := ParseDecorationsPref(in); got != want {
+			t.Errorf("ParseDecorationsPref(%q) = %q want %q", in, got, want)
+		}
+	}
+	ap := DefaultAppearance()
+	if ap.Decorations != DecorationsAuto {
+		t.Fatalf("default %q", ap.Decorations)
+	}
+	ap.Decorations = DecorationsSystem
+	if err := SaveAppearance(ap); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(AppearancePath())
+	if err != nil || !strings.Contains(string(raw), `"decorations": "system"`) {
+		t.Fatalf("look.json %s %v", raw, err)
+	}
+	if got := LoadAppearance(); got.Decorations != DecorationsSystem {
+		t.Fatalf("loaded %q", got.Decorations)
+	}
+	ap.Decorations = DecorationsAuto
+	if err := SaveAppearance(ap); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ = os.ReadFile(AppearancePath())
+	if strings.Contains(string(raw), "decorations") {
+		t.Fatalf("auto is left out of look.json: %s", raw)
+	}
 }

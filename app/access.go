@@ -17,7 +17,13 @@ func (w *Window) AccessibleTree() *a11y.Node {
 	if w.Active() {
 		root.State |= a11y.StateFocused
 	}
-	for _, c := range []widget.Component{w.root, w.overlay, w.popup, w.tooltip} {
+	// The title bar first: where the toolkit draws it, it is the window's
+	// title bar (with its caption buttons), otherwise the top content row.
+	var caption widget.Component
+	if w.caption != nil {
+		caption = w.caption
+	}
+	for _, c := range []widget.Component{caption, w.root, w.overlay, w.popup, w.tooltip} {
 		widget.AccessibleTree(root, c)
 	}
 	return root
@@ -31,7 +37,7 @@ func (w *Window) AccessibleSetText(id uint64, s string) bool {
 		return false
 	}
 	var hit widget.Component
-	for _, c := range []widget.Component{w.root, w.overlay, w.popup} {
+	for _, c := range []widget.Component{w.captionLayer(), w.root, w.overlay, w.popup} {
 		if c == nil {
 			continue
 		}
@@ -53,7 +59,7 @@ func (w *Window) AccessibleSetText(id uint64, s string) bool {
 func (w *Window) AccessibleAction(id uint64, a a11y.Action) bool {
 	comp, item := widget.SplitItemID(id)
 	var hit widget.Component
-	for _, c := range []widget.Component{w.root, w.overlay, w.popup, w.tooltip} {
+	for _, c := range []widget.Component{w.captionLayer(), w.root, w.overlay, w.popup, w.tooltip} {
 		if c == nil {
 			continue
 		}
@@ -77,4 +83,13 @@ func (w *Window) AccessibleAction(id uint64, a a11y.Action) bool {
 		return act.AccessibleAction(item, a)
 	}
 	return false
+}
+
+// captionLayer is the caption as a component (nil, not a nil pointer, when
+// there is none).
+func (w *Window) captionLayer() widget.Component {
+	if w.caption == nil {
+		return nil
+	}
+	return w.caption
 }
