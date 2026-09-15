@@ -53,10 +53,31 @@ func DrawToolIcon(ctx *paintengine2d.Context, b paintengine2d.Rect, icon ToolIco
 	}
 	switch set {
 	case IconSetSharp:
-		drawSharpIcon(ctx, b, icon, col)
+		drawScaledIcon(ctx, b, func(ctx *paintengine2d.Context, db paintengine2d.Rect) { drawSharpIcon(ctx, db, icon, col) })
 	default:
-		drawClassicIcon(ctx, b, icon, col)
+		drawScaledIcon(ctx, b, func(ctx *paintengine2d.Context, db paintengine2d.Rect) { drawClassicIcon(ctx, db, icon, col) })
 	}
+}
+
+// iconDesign is the box the vector icons are drawn for (a medium icon at
+// 1x); other boxes scale the whole drawing, strokes included, so a 2x
+// display gets 2x strokes, not hairlines.
+const iconDesign = 24
+
+func drawScaledIcon(ctx *paintengine2d.Context, b paintengine2d.Rect, draw func(*paintengine2d.Context, paintengine2d.Rect)) {
+	s := min(b.Dx(), b.Dy()) / iconDesign
+	if s <= 0 {
+		return
+	}
+	if s > 0.99 && s < 1.01 {
+		draw(ctx, b)
+		return
+	}
+	ctx.Save()
+	ctx.Translate(b.Min.X, b.Min.Y)
+	ctx.Scale(s, s)
+	draw(ctx, paintengine2d.XYWH(0, 0, b.Dx()/s, b.Dy()/s))
+	ctx.Restore()
 }
 
 func iconStroke(col paintengine2d.Color, width float32, cap paintengine2d.Cap, join paintengine2d.Join) paintengine2d.Paint {
