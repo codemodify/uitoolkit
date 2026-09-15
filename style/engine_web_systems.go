@@ -236,6 +236,6 @@ func linearSpecs() []webSpec {
 		{name: "linear", label: "Linear", era: "Linear", lineage: "Linear", year: 2026, c: light, p: p, m: m,
 			summary: "Linear's light theme: warm #f9f9fa greys, 4px controls and 8px inputs, the indigo accent, compact rounded tabs."},
 		{name: "linear-night", label: "Linear Dark", era: "Linear", lineage: "Linear", year: 2026, dark: true, c: dark, p: p, m: m,
-			summary: "Linear's dark theme: #121213 content by a #09090a sidebar, hairlines barely lighter, the #5e6ad2 indigo."},
+			summary: "Linear's dark theme: #121213 content beside a #09090a sidebar, hairlines barely lighter, the #5e6ad2 indigo."},
 	}
 }

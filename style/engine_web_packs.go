@@ -214,7 +214,7 @@ func sourcegitSpec(dark bool) webSpec {
 	}
 	if dark {
 		s.name, s.label, s.dark = "sourcegit-night", "SourceGit Dark", true
-		s.summary = "SourceGit's dark theme: #252525 windows round #1c1c1c contents, the same Avalonia controls and the OS accent."
+		s.summary = "SourceGit's dark theme: #252525 windows around #1c1c1c content, the same Avalonia controls and the OS accent."
 	}
 	return s
 }
