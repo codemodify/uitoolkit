@@ -159,6 +159,8 @@ func newATSPIBridge(a *Application, addr string) (*atspiBridge, error) {
 		atspiIface + "Text":                   atspiText{b},
 		atspiIface + "EditableText":           atspiEditable{b},
 		atspiIface + "Selection":              atspiSelection{b},
+		atspiIface + "Table":                  atspiTable{b},
+		atspiIface + "TableCell":              atspiTableCell{b},
 		"org.freedesktop.DBus.Properties":     atspiProps{b},
 		"org.freedesktop.DBus.Introspectable": atspiIntrospect{},
 	} {
@@ -429,7 +431,47 @@ func (o *atspiObj) interfaces() []string {
 	if o.selectable() {
 		out = append(out, atspiIface+"Selection")
 	}
+	switch o.node.Role {
+	case a11y.RoleTable:
+		out = append(out, atspiIface+"Table")
+	case a11y.RoleCell, a11y.RoleColumnHeader:
+		out = append(out, atspiIface+"TableCell")
+	}
 	return out
+}
+
+// tableShape is a table's column headers and rows (its children).
+func (b *atspiBridge) tableShape(t *atspiObj) (headers, rows []*atspiObj) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for _, k := range t.kids {
+		ko := b.objs[k]
+		if ko == nil {
+			continue
+		}
+		switch ko.node.Role {
+		case a11y.RoleColumnHeader:
+			headers = append(headers, ko)
+		case a11y.RoleRow:
+			rows = append(rows, ko)
+		}
+	}
+	return headers, rows
+}
+
+// cellAt is the cell at row, col of table t, or nil.
+func (b *atspiBridge) cellAt(t *atspiObj, row, col int32) *atspiObj {
+	_, rows := b.tableShape(t)
+	if row < 0 || int(row) >= len(rows) {
+		return nil
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	kids := rows[row].kids
+	if col < 0 || int(col) >= len(kids) {
+		return nil
+	}
+	return b.objs[kids[col]]
 }
 
 // selectable reports whether o's children can be selected (a list, a
@@ -1007,6 +1049,246 @@ func (s atspiSelection) SelectAll(msg dbus.Message) (bool, *dbus.Error) { return
 
 func (s atspiSelection) ClearSelection(msg dbus.Message) (bool, *dbus.Error) { return false, nil }
 
+// ---- org.a11y.atspi.Table ------------------------------------------------------------
+
+// The table's children are its column headers, then one row per record
+// holding its cells; a cell's index is row × columns + column.
+type atspiTable struct{ b *atspiBridge }
+
+func (t atspiTable) shape(msg dbus.Message) (*atspiObj, []*atspiObj, []*atspiObj, *dbus.Error) {
+	o, err := t.b.obj(msg)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	h, r := t.b.tableShape(o)
+	return o, h, r, nil
+}
+
+func cols(headers, rows []*atspiObj) int32 {
+	if len(headers) > 0 {
+		return int32(len(headers))
+	}
+	if len(rows) > 0 {
+		return int32(len(rows[0].kids))
+	}
+	return 0
+}
+
+func (t atspiTable) GetAccessibleAt(msg dbus.Message, row, col int32) (atspiRef, *dbus.Error) {
+	o, err := t.b.obj(msg)
+	if err != nil {
+		return atspiRef{}, err
+	}
+	if c := t.b.cellAt(o, row, col); c != nil {
+		return t.b.ref(c.path), nil
+	}
+	return t.b.ref(""), nil
+}
+
+func (t atspiTable) GetIndexAt(msg dbus.Message, row, col int32) (int32, *dbus.Error) {
+	_, h, r, err := t.shape(msg)
+	if err != nil {
+		return -1, err
+	}
+	return row*cols(h, r) + col, nil
+}
+
+func (t atspiTable) GetRowAtIndex(msg dbus.Message, i int32) (int32, *dbus.Error) {
+	_, h, r, err := t.shape(msg)
+	if err != nil {
+		return -1, err
+	}
+	if n := cols(h, r); n > 0 {
+		return i / n, nil
+	}
+	return -1, nil
+}
+
+func (t atspiTable) GetColumnAtIndex(msg dbus.Message, i int32) (int32, *dbus.Error) {
+	_, h, r, err := t.shape(msg)
+	if err != nil {
+		return -1, err
+	}
+	if n := cols(h, r); n > 0 {
+		return i % n, nil
+	}
+	return -1, nil
+}
+
+func (t atspiTable) GetRowDescription(msg dbus.Message, row int32) (string, *dbus.Error) {
+	return "", nil
+}
+
+func (t atspiTable) GetColumnDescription(msg dbus.Message, col int32) (string, *dbus.Error) {
+	_, h, _, err := t.shape(msg)
+	if err != nil {
+		return "", err
+	}
+	if col >= 0 && int(col) < len(h) {
+		return h[col].node.Name, nil
+	}
+	return "", nil
+}
+
+func (t atspiTable) GetRowExtentAt(msg dbus.Message, row, col int32) (int32, *dbus.Error) {
+	return 1, nil
+}
+
+func (t atspiTable) GetColumnExtentAt(msg dbus.Message, row, col int32) (int32, *dbus.Error) {
+	return 1, nil
+}
+
+func (t atspiTable) GetRowHeader(msg dbus.Message, row int32) (atspiRef, *dbus.Error) {
+	return t.b.ref(""), nil
+}
+
+func (t atspiTable) GetColumnHeader(msg dbus.Message, col int32) (atspiRef, *dbus.Error) {
+	_, h, _, err := t.shape(msg)
+	if err != nil {
+		return atspiRef{}, err
+	}
+	if col >= 0 && int(col) < len(h) {
+		return t.b.ref(h[col].path), nil
+	}
+	return t.b.ref(""), nil
+}
+
+func (t atspiTable) GetSelectedRows(msg dbus.Message) ([]int32, *dbus.Error) {
+	_, _, r, err := t.shape(msg)
+	if err != nil {
+		return nil, err
+	}
+	out := []int32{}
+	for i, row := range r {
+		if row.node.State.Has(a11y.StateSelected) {
+			out = append(out, int32(i))
+		}
+	}
+	return out, nil
+}
+
+func (t atspiTable) GetSelectedColumns(msg dbus.Message) ([]int32, *dbus.Error) {
+	return []int32{}, nil
+}
+
+func (t atspiTable) IsRowSelected(msg dbus.Message, row int32) (bool, *dbus.Error) {
+	_, _, r, err := t.shape(msg)
+	if err != nil {
+		return false, err
+	}
+	return row >= 0 && int(row) < len(r) && r[row].node.State.Has(a11y.StateSelected), nil
+}
+
+func (t atspiTable) IsColumnSelected(msg dbus.Message, col int32) (bool, *dbus.Error) {
+	return false, nil
+}
+
+func (t atspiTable) IsSelected(msg dbus.Message, row, col int32) (bool, *dbus.Error) {
+	return t.IsRowSelected(msg, row)
+}
+
+// AddRowSelection selects the row as a click on it would.
+func (t atspiTable) AddRowSelection(msg dbus.Message, row int32) (bool, *dbus.Error) {
+	_, _, r, err := t.shape(msg)
+	if err != nil {
+		return false, err
+	}
+	if row < 0 || int(row) >= len(r) {
+		return false, nil
+	}
+	return t.b.do(r[row], a11y.ActionDefault), nil
+}
+
+func (t atspiTable) AddColumnSelection(msg dbus.Message, col int32) (bool, *dbus.Error) {
+	return false, nil
+}
+
+func (t atspiTable) RemoveRowSelection(msg dbus.Message, row int32) (bool, *dbus.Error) {
+	return false, nil
+}
+
+func (t atspiTable) RemoveColumnSelection(msg dbus.Message, col int32) (bool, *dbus.Error) {
+	return false, nil
+}
+
+func (t atspiTable) GetRowColumnExtentsAtIndex(msg dbus.Message, i int32) (bool, int32, int32, int32, int32, bool, *dbus.Error) {
+	_, h, r, err := t.shape(msg)
+	if err != nil {
+		return false, 0, 0, 0, 0, false, err
+	}
+	n := cols(h, r)
+	if n <= 0 || i < 0 || i/n >= int32(len(r)) {
+		return false, 0, 0, 0, 0, false, nil
+	}
+	row := i / n
+	return true, row, i % n, 1, 1, r[row].node.State.Has(a11y.StateSelected), nil
+}
+
+// ---- org.a11y.atspi.TableCell ------------------------------------------------------
+
+type atspiTableCell struct{ b *atspiBridge }
+
+// place is a cell's row and column and its table (headers are row -1).
+func (c atspiTableCell) place(msg dbus.Message) (row, col int32, table *atspiObj, err *dbus.Error) {
+	o, err := c.b.obj(msg)
+	if err != nil {
+		return 0, 0, nil, err
+	}
+	row, col, table = c.b.cellPlace(o)
+	return row, col, table, nil
+}
+
+// cellPlace is cell o's row and column and its table (a header's row is
+// -1; nil table when o is not in one).
+func (b *atspiBridge) cellPlace(o *atspiObj) (row, col int32, table *atspiObj) {
+	b.mu.Lock()
+	parent := b.objs[o.parent]
+	b.mu.Unlock()
+	if parent == nil {
+		return 0, 0, nil
+	}
+	if o.node.Role == a11y.RoleColumnHeader {
+		return -1, int32(o.index), parent
+	}
+	b.mu.Lock()
+	table = b.objs[parent.parent]
+	b.mu.Unlock()
+	if table == nil {
+		return 0, 0, nil
+	}
+	_, rows := b.tableShape(table)
+	for i, r := range rows {
+		if r == parent {
+			return int32(i), int32(o.index), table
+		}
+	}
+	return 0, int32(o.index), table
+}
+
+func (c atspiTableCell) GetRowColumnSpan(msg dbus.Message) (int32, int32, int32, int32, *dbus.Error) {
+	row, col, _, err := c.place(msg)
+	if err != nil {
+		return 0, 0, 0, 0, err
+	}
+	return row, col, 1, 1, nil
+}
+
+func (c atspiTableCell) GetRowHeaderCells(msg dbus.Message) ([]atspiRef, *dbus.Error) {
+	return []atspiRef{}, nil
+}
+
+func (c atspiTableCell) GetColumnHeaderCells(msg dbus.Message) ([]atspiRef, *dbus.Error) {
+	_, col, table, err := c.place(msg)
+	if err != nil || table == nil {
+		return []atspiRef{}, err
+	}
+	h, _ := c.b.tableShape(table)
+	if col >= 0 && int(col) < len(h) {
+		return []atspiRef{c.b.ref(h[col].path)}, nil
+	}
+	return []atspiRef{}, nil
+}
+
 // ---- properties -------------------------------------------------------------------
 
 type atspiProps struct{ b *atspiBridge }
@@ -1052,6 +1334,35 @@ func (p atspiProps) props(o *atspiObj, iface string) map[string]dbus.Variant {
 		}
 	case "Selection":
 		return map[string]dbus.Variant{"NSelectedChildren": dbus.MakeVariant(int32(len(p.b.selectedKids(o))))}
+	case "Table":
+		h, r := p.b.tableShape(o)
+		nsel := int32(0)
+		for _, row := range r {
+			if row.node.State.Has(a11y.StateSelected) {
+				nsel++
+			}
+		}
+		return map[string]dbus.Variant{
+			"NRows":            dbus.MakeVariant(int32(len(r))),
+			"NColumns":         dbus.MakeVariant(cols(h, r)),
+			"Caption":          dbus.MakeVariant(p.b.ref("")),
+			"Summary":          dbus.MakeVariant(p.b.ref("")),
+			"NSelectedRows":    dbus.MakeVariant(nsel),
+			"NSelectedColumns": dbus.MakeVariant(int32(0)),
+		}
+	case "TableCell":
+		row, col, table := p.b.cellPlace(o)
+		tref := p.b.ref("")
+		if table != nil {
+			tref = p.b.ref(table.path)
+		}
+		type pos struct{ Row, Col int32 }
+		return map[string]dbus.Variant{
+			"ColumnSpan": dbus.MakeVariant(int32(1)),
+			"RowSpan":    dbus.MakeVariant(int32(1)),
+			"Position":   dbus.MakeVariant(pos{row, col}),
+			"Table":      dbus.MakeVariant(tref),
+		}
 	}
 	return map[string]dbus.Variant{}
 }
