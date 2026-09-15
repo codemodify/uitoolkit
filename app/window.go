@@ -706,6 +706,12 @@ func (w *Window) dispatch(ev platform.Event) {
 			w.setAltHeld(true)
 		}
 		if ev.Key == platform.KeyTab {
+			// Ctrl+Tab goes to the widgets and the app first (a tab strip
+			// switches tabs with it); plain Tab, and a Ctrl+Tab nobody
+			// takes, move the focus.
+			if ev.Mods.Ctrl() && w.popup == nil && (w.bubbleKey(widget.KeyEvent{Key: ev.Key, Mods: ev.Mods}) || w.accelerator(ev.Key, ev.Mods)) {
+				return
+			}
 			w.tab(!ev.Mods.Shift())
 			return
 		}
@@ -748,16 +754,8 @@ func (w *Window) dispatch(ev platform.Event) {
 		if w.bubbleKey(widget.KeyEvent{Key: ev.Key, Mods: ev.Mods}) {
 			return
 		}
-		// Keys nobody took run menu accelerators (Ctrl+N, F1, Ctrl+Q …),
-		// but not under a modal overlay. The title bar's come first (it is
-		// the window's top row).
-		if w.overlay == nil {
-			if w.caption == nil || !handleAccel(w.caption, ev.Key, ev.Mods) {
-				if w.root != nil {
-					handleAccel(w.root, ev.Key, ev.Mods)
-				}
-			}
-		}
+		// Keys nobody took run menu accelerators (Ctrl+N, F1, Ctrl+Q …).
+		w.accelerator(ev.Key, ev.Mods)
 	case platform.EventKeyUp:
 		if ev.Key == platform.KeyAlt {
 			w.setAltHeld(false)
@@ -770,6 +768,19 @@ func (w *Window) dispatch(ev platform.Event) {
 			t.TextInput(ev.Rune)
 		}
 	}
+}
+
+// accelerator runs the first menu accelerator for key, but not under a
+// modal overlay; the title bar's come first (it is the window's top row).
+// It reports whether one ran.
+func (w *Window) accelerator(key platform.Key, mods platform.Modifiers) bool {
+	if w.overlay != nil {
+		return false
+	}
+	if w.caption != nil && handleAccel(w.caption, key, mods) {
+		return true
+	}
+	return w.root != nil && handleAccel(w.root, key, mods)
 }
 
 // AltHeld reports whether the Alt key is down in the window.
