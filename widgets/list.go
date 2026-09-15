@@ -21,6 +21,10 @@ type ListView struct {
 	// Frameless drops the look's view frame (a list that already sits in a
 	// framed pane).
 	Frameless bool
+	// Sidebar paints the list as a sidebar (a settings page list, a
+	// mail app's folders): macOS source lists, libadwaita's navigation
+	// sidebar, WinUI's navigation pane, where the look has one.
+	Sidebar bool
 	// Mode selects one row (the default) or several (SelectExtended: Ctrl
 	// toggles, Shift extends, Ctrl+A). Selected stays the current row.
 	Mode SelectionMode
@@ -162,12 +166,12 @@ func (l *ListView) visibleRange() (lo, hi int) {
 func (l *ListView) Paint(ctx *paintengine2d.Context) {
 	l.clamp()
 	lk := l.Look()
-	if beginViewFrame(ctx, lk, l.LocalBounds(), l.frame(), l.State()) {
+	if beginViewFrame(ctx, lk, l.LocalBounds(), l.frame(), l.viewState()) {
 		defer ctx.Restore()
 	}
 	b := l.inner()
 	rw := l.rowsW()
-	ctx.DrawRect(b, paintengine2d.Fill(lk.Palette().Field))
+	ctx.DrawRect(b, paintengine2d.Fill(style.ViewBackgroundOf(lk, l.viewState())))
 	rh := l.rowH()
 	lo, hi := l.visibleRange()
 	if rec, ok := ctx.Device().(*paintengine2d.Recorder); ok {
@@ -431,7 +435,19 @@ func (l *ListView) TextInput(r rune) bool {
 
 // rowState is row i's item state for the look.
 func (l *ListView) rowState(i int) style.ControlState {
-	return widget.RowItemState(l, i, l.IsSelected(i), i == l.hovered, i == l.Selected)
+	st := widget.RowItemState(l, i, l.IsSelected(i), i == l.hovered, i == l.Selected)
+	if l.Sidebar {
+		st |= style.StateSidebar
+	}
+	return st
+}
+
+// viewState is the list's own state for its frame.
+func (l *ListView) viewState() style.ControlState {
+	if l.Sidebar {
+		return l.State() | style.StateSidebar
+	}
+	return l.State()
 }
 
 // IsSelected reports whether row i is selected (in SelectSingle, whether it

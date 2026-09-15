@@ -159,6 +159,7 @@ func FilesApp(win *app.Window) widget.Component {
 		roots = append(roots, n)
 	}
 	tree = widgets.NewTreeView(roots...)
+	tree.Sidebar = true // the places pane
 	if place >= 0 && place < len(roots) {
 		tree.Selected = roots[place]
 	} else {

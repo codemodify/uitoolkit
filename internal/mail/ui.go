@@ -279,6 +279,7 @@ func (s *session) build() widget.Component {
 	s.outboxTree = widgets.NewTreeView()
 	s.tree.DisableTypeAhead = true
 	s.outboxTree.DisableTypeAhead = true
+	s.tree.Sidebar, s.outboxTree.Sidebar = true, true
 	s.rebuildTree()
 	s.wireFolderTree(s.tree)
 	s.wireFolderTree(s.outboxTree)
