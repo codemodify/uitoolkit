@@ -61,7 +61,13 @@ type Application struct {
 	accentForced bool
 	following    bool
 	lookHooks    []*func()
+	// a11y is the accessibility bridge while assistive technology runs.
+	a11y a11yBridge
 }
+
+// a11yBridge is a platform's accessibility adapter; sync runs on the UI
+// goroutine after every frame.
+type a11yBridge interface{ sync() }
 
 // New constructs an application. Default look is PreferredLook
 // (XDG appearance, else dark Classic). When Look is nil, New also
@@ -119,6 +125,7 @@ func New(opts Options) *Application {
 	if watch {
 		a.lookWatch = newLookFileStamp()
 	}
+	a.startA11y()
 	return a
 }
 
@@ -368,6 +375,9 @@ func (a *Application) Run() error {
 			w.frame()
 		}
 		a.reap()
+		if a.a11y != nil {
+			a.a11y.sync()
+		}
 		// Count survivors after pump/frame: a window that closed itself
 		// while draining its burst must not hold the loop open for
 		// another iteration.
@@ -509,6 +519,9 @@ func (a *Application) PumpOnce() {
 			continue
 		}
 		w.frame()
+	}
+	if a.a11y != nil {
+		a.a11y.sync()
 	}
 }
 
