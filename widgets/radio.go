@@ -47,7 +47,7 @@ func (r *RadioButton) Measure(c layout.Constraints) paintengine2d.Point {
 	if side <= 0 {
 		side = m.Checkbox
 	}
-	w := side + 8 + lk.Font().Advance(r.Text) + 4
+	w := side + 8 + style.ControlFontOf(lk, style.RoleCheck).Advance(r.Text) + 4
 	return c.Constrain(paintengine2d.Pt(w, m.ControlH))
 }
 

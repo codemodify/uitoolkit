@@ -88,6 +88,12 @@ type Engine interface {
 	// WindowCloseRect is where DrawWindowFrame put the close button for a
 	// frame of bounds b (empty when there is none) — hit-testing uses it.
 	WindowCloseRect(l *Classic, b paintengine2d.Rect) paintengine2d.Rect
+	// ToolBarInsets is the room a tool bar keeps before its first and after
+	// its last item (a grip: Metal's bumps, XP's rebar handle).
+	ToolBarInsets(l *Classic) Insets
+	// ControlFont is the face the look labels a control of role with
+	// (Metal's bold buttons and menus); widgets measure labels with it.
+	ControlFont(l *Classic, role Role) *Font
 	// ItemFocus marks the current row of a focused view over the painted
 	// row b (Win95's dotted rectangle); st is the row's state.
 	ItemFocus(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState)
@@ -528,6 +534,40 @@ func DrawScrollBarParts(lk LookAndFeel, ctx *paintengine2d.Context, p ScrollPart
 type GroupBoxLook interface {
 	GroupBoxInsets(hasTitle bool) Insets
 	DrawGroupBox(ctx *paintengine2d.Context, b paintengine2d.Rect, title string, raised bool)
+}
+
+// ToolBarInsetsOf is the horizontal room lk's tool bars keep around their
+// items (6px each side when the look does not say).
+func ToolBarInsetsOf(lk LookAndFeel) Insets {
+	if t, ok := lk.(interface{ ToolBarInsets() Insets }); ok {
+		return t.ToolBarInsets()
+	}
+	return Insets{Left: 6, Right: 6}
+}
+
+// ToolBarInsets is the tool bar's room around its items.
+func (l *Classic) ToolBarInsets() Insets { return l.eng().ToolBarInsets(l) }
+
+// ControlFontLook names the face a look labels a control role with.
+type ControlFontLook interface {
+	ControlFont(role Role) *Font
+}
+
+// ControlFont implements [ControlFontLook].
+func (l *Classic) ControlFont(role Role) *Font { return l.eng().ControlFont(l, role) }
+
+// ControlFontOf is the face lk labels role with: its ControlFont, else its
+// body font. Widgets measure labels with it so a bold look's text fits.
+func ControlFontOf(lk LookAndFeel, role Role) *Font {
+	if lk == nil {
+		return nil
+	}
+	if c, ok := lk.(ControlFontLook); ok {
+		if f := c.ControlFont(role); f != nil {
+			return f
+		}
+	}
+	return lk.Font()
 }
 
 // ItemFocusLook marks the current row of a focused list, tree or table

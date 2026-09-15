@@ -52,7 +52,7 @@ func NewButton(text string, onClick func()) *Button {
 func (b *Button) Measure(c layout.Constraints) paintengine2d.Point {
 	lk := b.Look()
 	m := lk.Metrics()
-	w := lk.Font().Advance(b.Text) + m.Pad*2 + 16
+	w := style.ControlFontOf(lk, style.RoleButton).Advance(b.Text) + m.Pad*2 + 16
 	h := m.ControlH
 	return c.Constrain(paintengine2d.Pt(w, h))
 }
