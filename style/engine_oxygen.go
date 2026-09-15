@@ -2168,12 +2168,50 @@ func oxygenPacks() []ThemePack {
 		Extra:   extra,
 		Params:  map[string]float32{"contrast": 7},
 	}
-	tok.Hot = ChromeState{Fill: pal.MenuHover, Border: pal.MenuHoverBorder}
-	tok.Selected = ChromeState{Fill: sel, Border: sel}
-	tok.Focus = ChromeState{Fill: pal.Focus.WithAlpha(0.15), Border: pal.Focus}
+	oxygenChrome(&tok)
 	return []ThemePack{{
 		Name: "oxygen", Label: "Oxygen", Year: 2008, Lineage: "KDE",
 		Summary: "KDE 4's Oxygen: glossy slabs with soft shadows, the blue hover glow and a window-wide gradient.",
 		Era:     "Oxygen", Palette: ThemeLight, Tokens: tok,
 	}}
+}
+
+// oxygenChrome sets the chrome states Oxygen derives from its palette
+// (pressed comes from the resolver).
+func oxygenChrome(tok *ThemeTokens) {
+	pal := tok.Palette
+	tok.Hot = ChromeState{Fill: pal.MenuHover, Border: pal.MenuHoverBorder}
+	tok.Selected = ChromeState{Fill: pal.Selection, Border: pal.Selection}
+	tok.Focus = ChromeState{Fill: pal.Focus.WithAlpha(0.15), Border: pal.Focus}
+}
+
+// Accented recolours Oxygen's colour-scheme decorations around the
+// accent, as Plasma's accent colour recolours a KDE colour scheme: the
+// selection takes the accent, and the focus and hover decorations (the
+// glows round a focused or hovered slab or hole, and the hover wash of
+// splitters) and the inactive selection take the shades the Oxygen scheme
+// sets beside its #43ace8 selection — the deeper #3aa7dd focus, the paler
+// #6ed6ff hover, the duller #3e8acc inactive selection — made from the
+// accent by the same steps (accentShift). The progress bar, item
+// selections and focus marks follow the selection. White stays on it while
+// it reads at 2.2:1 (KDE's own is 2.5:1), else the text colour.
+func (oxygenEngine) Accented(tok ThemeTokens, accent paintengine2d.Color) ThemeTokens {
+	p := tok.Palette
+	ref := p.Selection
+	if ref.A < 0.9 {
+		ref = p.Accent
+	}
+	focus := accentShift(accent, ref, accentX(tok, "focus", Hex("#3aa7dd")))
+	hover := accentShift(accent, ref, accentX(tok, "hover", Hex("#6ed6ff")))
+	inactive := accentShift(accent, ref, accentX(tok, "selectionInactive", Hex("#3e8acc")))
+	tok = CloneTokenMaps(tok)
+	tok.Extra["focus"], tok.Extra["hover"], tok.Extra["selectionInactive"] = focus, hover, inactive
+	q := &tok.Palette
+	q.Accent, q.Selection = accent, accent
+	q.AccentHover, q.AccentPress, q.Focus = hover, focus, focus
+	q.Highlight = accent.WithAlpha(0.2)
+	q.TextOnAccent = ReadableOn(accent, 2.2, p.TextOnAccent, p.Text)
+	oxygenChrome(&tok)
+	tok.Pressed = ChromeState{} // the resolver's, from the new palette
+	return tok.Resolve()
 }

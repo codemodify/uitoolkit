@@ -1662,14 +1662,69 @@ func fluentPack(name, label string, fam ThemeName, scheme int, summary string) T
 		Palette: pal,
 		Params:  map[string]float32{"scheme": float32(scheme)},
 	}
-	tok.Hot = ChromeState{Fill: pal.MenuHover, Border: pal.MenuHover}
-	tok.Pressed = ChromeState{Fill: Mix(pal.MenuHover, pal.Text, 0.04), Border: pal.Accent}
-	tok.Selected = ChromeState{Fill: pal.Highlight, Border: pal.Accent}
-	tok.Focus = ChromeState{Fill: pal.Field, Border: pal.Focus}
+	fluentChrome(&tok)
 	return ThemePack{
 		Name: name, Label: label, Year: 2021, Lineage: "Windows", Summary: summary,
 		Era: EraFluent, Palette: fam, Tokens: tok,
 	}
+}
+
+// fluentChrome sets the chrome states Fluent derives from its palette.
+func fluentChrome(tok *ThemeTokens) {
+	pal := tok.Palette
+	tok.Hot = ChromeState{Fill: pal.MenuHover, Border: pal.MenuHover}
+	tok.Pressed = ChromeState{Fill: Mix(pal.MenuHover, pal.Text, 0.04), Border: pal.Accent}
+	tok.Selected = ChromeState{Fill: pal.Highlight, Border: pal.Accent}
+	tok.Focus = ChromeState{Fill: pal.Field, Border: pal.Focus}
+}
+
+// fluentSystemAccent is Windows 11's default accent colour (#0078d4, its
+// SystemAccentColor). Windows derives three lighter and three darker shades
+// from the accent; WinUI fills with Dark1 in the light theme and Light2 in
+// the dark one, which for this blue are fluentLight's and fluentDark's
+// "accent" (#0067c0, #4cc2ff).
+var fluentSystemAccent = Hex("#0078d4")
+
+// fluentAccentKeys are the colours Windows 11 takes from the accent: the
+// accent fill at rest, under the pointer and pressed (the fill at 90% and
+// 80%, AccentFillColorSecondary and Tertiary), and the text selection.
+var fluentAccentKeys = [...]string{"accent", "accent2", "accent3", "selText"}
+
+// Accented is Windows 11's accent colour: it fills the accent button, the
+// checked check box, radio and switch, the slider, the progress bar, the
+// focused text box's bottom line and the list's selection pill, lights its
+// hover and pressed states and colours the text selection. Windows'
+// algorithm for the shades is not published: each takes the step Windows
+// took from its own default blue to that shade (accentShift) — Dark1 in the
+// light theme, Light2 in the dark one. The text on the fill stays white
+// (black in the dark theme) while it reads at WinUI's 4.5:1, and turns to
+// the other when a pale accent would lose it.
+func (fluentEngine) Accented(tok ThemeTokens, accent paintengine2d.Color) ThemeTokens {
+	def := float32(0)
+	if accentDark(tok) {
+		def = 1
+	}
+	sc := fluentLight
+	if accentP(tok, "scheme", def) == 1 {
+		sc = fluentDark
+	}
+	own := func(k string) paintengine2d.Color { return accentX(tok, k, Hex(sc[k])) }
+	// The system accent this pack's fill is the Windows shade of: #0078d4
+	// for the shipped packs.
+	ref := accentShift(own("accent"), Hex(sc["accent"]), fluentSystemAccent)
+	tok = CloneTokenMaps(tok)
+	for _, k := range fluentAccentKeys {
+		tok.Extra[k] = accentShift(accent, ref, own(k))
+	}
+	fill, hover, press := tok.Extra["accent"], tok.Extra["accent2"], tok.Extra["accent3"]
+	on := ReadableOn(fill, 4.5, own("onAccent"), own("text"))
+	tok.Extra["onAccent"], tok.Extra["onAccent2"] = on, on.WithAlpha(own("onAccent2").A)
+	p := &tok.Palette
+	p.Accent, p.MenuHoverBorder, p.TextOnAccent = fill, fill, on
+	p.AccentHover, p.AccentPress = Mix(p.Background, hover, hover.A), Mix(p.Background, press, press.A)
+	p.Selection = tok.Extra["selText"]
+	fluentChrome(&tok)
+	return tok
 }
 
 func fluentPacks() []ThemePack {
