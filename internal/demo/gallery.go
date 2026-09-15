@@ -370,7 +370,17 @@ func Gallery(a *app.Application, win *app.Window, light bool) widget.Component {
 		nil,
 	)
 	formNotes.MinRows = 4
+	// A dialog form: labels line up in their own column (right-aligned in
+	// Mac looks), fields take the rest.
+	account := widgets.NewForm()
+	account.AddRow("Name", widgets.NewTextField("Ada Lovelace", "Full name", nil))
+	account.AddRow("Email", widgets.NewTextField("ada@example.com", "Address", nil))
+	account.AddRow("Server type", widgets.NewComboBox([]string{"IMAP", "POP3", "Exchange"}, 0, nil))
+	account.AddRow("Port", widgets.NewNumberField(1, 65535, 993, 1, nil))
+	account.AddWide(widgets.NewCheckbox("Use TLS", true, nil))
 	form := widgets.NewPanel("Form",
+		account,
+		widgets.NewSeparator(),
 		widgets.NewLabel("TextArea, accordion, switch, separator, spacer."),
 		formNotes,
 		widgets.NewSeparator(),

@@ -201,6 +201,10 @@ const (
 	HintDialogPrimaryFirst StyleHint = iota
 	// HintTabsCentered: 1 centres tabs over their pane (Aqua segmented).
 	HintTabsCentered
+	// HintFormLabelsRight: 1 right-aligns form labels against their fields
+	// (Mac OS, NeXT); 0 left-aligns them (Windows, GTK, KDE). Qt's
+	// SH_FormLayoutLabelAlignment.
+	HintFormLabelsRight
 )
 
 // LookHint reads a style hint from any look (0 for non-engine looks).

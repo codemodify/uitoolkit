@@ -1082,15 +1082,21 @@ func (nextEngine) PopupShadow(*Classic, PopupKind) Insets { return Insets{} }
 
 func (nextEngine) DrawPopupShadow(*Classic, *paintengine2d.Context, paintengine2d.Rect, PopupKind) {}
 
+// StyleHint: NeXT dialogs put the default button last, at the bottom right,
+// and NSForm right-aligns its titles against the fields.
+func (nextEngine) StyleHint(l *Classic, h StyleHint) int {
+	if h == HintFormLabelsRight {
+		return 1
+	}
+	return 0
+}
+
 func (nextEngine) WindowCloseRect(l *Classic, b paintengine2d.Rect) paintengine2d.Rect {
 	if !nxFrameFits(l, b) {
 		return paintengine2d.Rect{}
 	}
 	return nxTitleButton(l, b, true)
 }
-
-// NeXT dialogs put the default button last, at the bottom right.
-func (nextEngine) StyleHint(l *Classic, h StyleHint) int { return 0 }
 
 // DrawWindowFrame is a NeXT window: 1px black frame, the title bar (black
 // when key, light grey otherwise — or the WM theme's FTitleBack / UTitleBack)
