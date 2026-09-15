@@ -16,6 +16,7 @@ type TabBar struct {
 	OnSelect func(int)
 	hover    int
 	press    int
+	fades    []stateFade // one per tab: hover cross-fades
 }
 
 // NewTabBar constructs a tab strip.
@@ -118,9 +119,15 @@ func (t *TabBar) Paint(ctx *paintengine2d.Context) {
 		}
 		return st
 	}
+	if len(t.fades) != len(t.Titles) {
+		t.fades = make([]stateFade, len(t.Titles))
+	}
 	for i, title := range t.Titles {
 		if i != t.Selected {
-			lk.DrawTab(ctx, rects[i], state(i), title, false)
+			r := rects[i]
+			t.fades[i].paint(t, ctx, r, state(i), func(ctx *paintengine2d.Context, st style.ControlState) {
+				lk.DrawTab(ctx, r, st, title, false)
+			})
 		}
 	}
 	// The selected tab paints last, grown by the look's outset, so it can
