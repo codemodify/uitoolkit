@@ -635,7 +635,7 @@ func promptExportName(from widget.Component, on func(string)) {
 	card := widgets.NewPanel("Export theme",
 		widgets.NewLabel("Name the theme pack. It is written to ~/.config/uitoolkit/themes/<name>/theme.json with the theme's colours, engine and metrics. Corners, icons and icon size stay in look.json."),
 		field,
-		widgets.NewRow(cancel, ok).WithGap(8).WithJustify(layout.JustifyEnd),
+		widgets.NewButtonBox().AddButton(cancel, widgets.RoleReject).AddButton(ok, widgets.RoleAccept),
 	)
 	card.Window = true
 	card.Raised = true

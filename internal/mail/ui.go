@@ -1305,7 +1305,7 @@ func (s *session) newSmartFolder() {
 		widgets.NewLabel("Name"), name,
 		widgets.NewLabel("Query"), query,
 		widgets.NewLabel("Unread / starred / attachment pins on the Tags tree are included."),
-		widgets.NewRow(widgets.NewSpacer(), cancel, save).WithGap(8),
+		widgets.NewButtonBox().AddButton(cancel, widgets.RoleReject).AddButton(save, widgets.RoleAccept),
 	).WithGap(8)
 	win.SetContent(widgets.NewPad(12, form))
 }

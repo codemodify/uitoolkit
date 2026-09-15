@@ -99,7 +99,7 @@ func NewFileDialog(opts FileDialogOptions) *FileDialog {
 		fd.path,
 		fd.hint,
 		fd.table,
-		NewRow(cancel, open).WithGap(8).WithJustify(layout.JustifyEnd),
+		NewButtonBox().AddButton(cancel, RoleReject).AddButton(open, RoleAccept),
 	).WithGap(8).WithPad(4)
 	browse.AddFlex(fd.table, 1)
 
