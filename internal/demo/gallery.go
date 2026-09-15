@@ -31,6 +31,7 @@ func Gallery(a *app.Application, win *app.Window, light bool) widget.Component {
 	columns.Tip = "Layout columns (spinner)"
 	columns.SetAccessibleName("Columns")
 	slider.SetAccessibleName("Volume")
+	slider.Ticks, slider.TickInterval = widgets.TicksBelow, 10
 	engine := widgets.NewComboBox([]string{
 		"paintengine2d", "Software raster", "Offscreen pixmap",
 	}, 0, func(i int) {
@@ -42,6 +43,7 @@ func Gallery(a *app.Application, win *app.Window, light bool) widget.Component {
 	engine.Placeholder = "Paint engine"
 
 	progress := widgets.NewProgressBar(0.42)
+	progress.ShowText = true
 	progressLbl := widgets.NewLabel("Build  42%")
 	busy := widgets.NewBusyBar(0.35)
 
