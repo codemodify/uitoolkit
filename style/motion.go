@@ -29,3 +29,12 @@ func SetDesktopReduceMotion(v bool) { desktopReduce.Store(v) }
 
 // DesktopReducesMotion reports the desktop's reduced-motion setting.
 func DesktopReducesMotion() bool { return desktopReduce.Load() }
+
+var nativeDialogs atomic.Bool
+
+// SetNativeDialogs applies the "desktop's file dialogs" preference for the
+// process (look.json nativeDialogs); the app package keeps it current.
+func SetNativeDialogs(v bool) { nativeDialogs.Store(v) }
+
+// NativeDialogs reports whether file dialogs should be the desktop's own.
+func NativeDialogs() bool { return nativeDialogs.Load() }

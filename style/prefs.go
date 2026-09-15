@@ -32,6 +32,8 @@ type appearanceFileJSON struct {
 	// FollowDesktop swaps the theme for its light or dark sibling to match
 	// the desktop.
 	FollowDesktop bool `json:"followDesktop,omitempty"`
+	// NativeDialogs uses the desktop's own file dialogs.
+	NativeDialogs bool `json:"nativeDialogs,omitempty"`
 }
 
 // ConfigDir is $XDG_CONFIG_HOME/uitoolkit (or ~/.config/uitoolkit).
@@ -112,6 +114,7 @@ func resolveAppearance(raw appearanceFileJSON) Appearance {
 	}
 	a.ReduceMotion = raw.ReduceMotion
 	a.FollowDesktop = raw.FollowDesktop
+	a.NativeDialogs = raw.NativeDialogs
 	return a.Normalize()
 }
 
@@ -159,5 +162,6 @@ func SaveAppearance(a Appearance) error {
 
 		ReduceMotion:  a.ReduceMotion,
 		FollowDesktop: a.FollowDesktop,
+		NativeDialogs: a.NativeDialogs,
 	})
 }
