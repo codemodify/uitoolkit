@@ -82,8 +82,11 @@ func FilesApp(win *app.Window) widget.Component {
 		if sel < 0 && len(rows) > 0 {
 			sel = 0
 		}
-		table.Selected = sel
-		table.Invalidate()
+		if sel >= 0 {
+			table.SetSelectedRows([]int{sel})
+		} else {
+			table.SetSelectedRows(nil)
+		}
 		loadPreview()
 		status.Set(0, fmt.Sprintf("%d items", len(rows)))
 	}
@@ -114,7 +117,15 @@ func FilesApp(win *app.Window) widget.Component {
 		loadPreview()
 		mark("Selected " + places[place].Rows[i].Name)
 	})
-	table.Selected = 0
+	// A file manager selects like Explorer and Finder: Ctrl, Shift, Ctrl+A;
+	// typing a name jumps to it.
+	table.Mode = widgets.SelectExtended
+	table.OnSelectionChange = func(rows []int) {
+		if len(rows) > 1 {
+			mark(fmt.Sprintf("%d items selected", len(rows)))
+		}
+	}
+	table.SetSelectedRows([]int{0})
 	table.OnSort = func(col int, asc bool) {
 		rows := places[place].Rows
 		sortFileRows(rows, col, asc)
