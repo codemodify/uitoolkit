@@ -92,31 +92,30 @@ func (a *Application) startA11y() {
 			}
 			return
 		}
-		sess, err := platform.DialSessionBus()
+		sess, err := platform.SharedSessionBus()
 		if err != nil {
 			return
 		}
 		bus := sess.Object("org.a11y.Bus", "/org/a11y/bus")
 		if env != "1" && !a11yEnabled(bus) {
 			// Wait for a screen reader to start.
-			if sess.AddMatchSignal(dbus.WithMatchInterface("org.freedesktop.DBus.Properties"),
-				dbus.WithMatchMember("PropertiesChanged"), dbus.WithMatchObjectPath("/org/a11y/bus")) != nil {
-				sess.Close()
+			match := []dbus.MatchOption{dbus.WithMatchInterface("org.freedesktop.DBus.Properties"),
+				dbus.WithMatchMember("PropertiesChanged"), dbus.WithMatchObjectPath("/org/a11y/bus")}
+			if sess.AddMatchSignal(match...) != nil {
 				return
 			}
 			ch := make(chan *dbus.Signal, 4)
 			sess.Signal(ch)
-			for range ch {
-				if a11yEnabled(bus) {
+			for sig := range ch {
+				if sig.Path == "/org/a11y/bus" && sig.Name == "org.freedesktop.DBus.Properties.PropertiesChanged" && a11yEnabled(bus) {
 					break
 				}
 			}
 			sess.RemoveSignal(ch)
+			_ = sess.RemoveMatchSignal(match...)
 		}
 		var addr string
-		err = bus.Call("org.a11y.Bus.GetAddress", 0).Store(&addr)
-		sess.Close()
-		if err != nil || addr == "" {
+		if err := bus.Call("org.a11y.Bus.GetAddress", 0).Store(&addr); err != nil || addr == "" {
 			return
 		}
 		b, err := newATSPIBridge(a, addr)
