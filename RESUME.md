@@ -55,6 +55,9 @@ that needs your laptop and the rig, and is the first thing to do next.
 
 ## Theme engines
 
+**See them all:** the Theme Atlas, https://claude.ai/artifact/FDfGxoNiUnPuyU9TMEy9aZ
+(private until you share it), shows every pack's live preview and full gallery.
+
 A theme is now an **engine** (Go code that decides the shapes, like Qt's
 `QStyle`) plus **packs** (colours, metrics and parameters). The guide is
 `docs/theme-engines.md`; `go run ./cmd/uitk-themesheet -list` lists every
