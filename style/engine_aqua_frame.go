@@ -24,9 +24,6 @@ func (aquaEngine) Decoration(l *Classic, st DecorationState) DecorationSpec {
 	top := snap((bar - d) * 0.5)
 	pad := snap(l.S(8)) - 2*u
 	r := l.S(5)
-	if st.Maximized || st.Tiled != 0 {
-		r = 0
-	}
 	return DecorationSpec{
 		Stacked:     true,
 		Border:      Insets{Top: u, Right: u, Bottom: u, Left: u},

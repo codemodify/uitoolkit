@@ -30,9 +30,6 @@ func (breezeEngine) Decoration(l *Classic, st DecorationState) DecorationSpec {
 		Radius:        [4]float32{r, r, 0, 0},
 		Shadow:        breezeEngine{}.PopupShadow(l, PopupDialog),
 	}
-	if st.Maximized || st.Tiled != 0 {
-		s.Radius = [4]float32{}
-	}
 	return s
 }
 

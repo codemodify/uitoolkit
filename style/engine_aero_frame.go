@@ -42,9 +42,6 @@ func (aeroEngine) Decoration(l *Classic, st DecorationState) DecorationSpec {
 		Radius:      [4]float32{r, r, r * 0.5, r * 0.5},
 		Shadow:      aeroEngine{}.PopupShadow(l, PopupDialog),
 	}
-	if st.Maximized || st.Tiled != 0 {
-		s.Radius = [4]float32{}
-	}
 	return s
 }
 

@@ -21,9 +21,6 @@ func (fluentEngine) Decoration(l *Classic, st DecorationState) DecorationSpec {
 		Layout:  ":minimize,maximize,close",
 		Radius:  [4]float32{r, r, r, r},
 	}
-	if st.Maximized || st.Tiled != 0 {
-		s.Radius = [4]float32{}
-	}
 	s.Shadow = fluentEngine{}.PopupShadow(l, PopupDialog)
 	return s
 }

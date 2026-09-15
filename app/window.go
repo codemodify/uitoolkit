@@ -79,10 +79,15 @@ type Window struct {
 	wrapCaption    *widgets.HeaderBar
 	defaultCaption *widgets.HeaderBar
 	// decor is the decoration mode in effect, caps what the desktop can
-	// do for the window, geom the frame's last layout.
+	// do for the window, geom the frame's last layout, shape what the
+	// window system was last told about the frame (the margin holding the
+	// shadow, the resize band in it, the corner radii, alpha) and shadow
+	// the cached nine-patch that margin is painted from.
 	decor    platform.Decorations
 	caps     platform.WMCaps
 	geom     frameGeom
+	shape    platform.Frame
+	shadow   frameShadow
 	capPress captionGesture
 	capClick captionClick
 }
@@ -144,7 +149,29 @@ func (w *Window) Scale() float32            { return w.scale }
 func (w *Window) Focus() widget.Component   { return w.focus }
 func (w *Window) Surface() platform.Surface { return w.surf }
 func (w *Window) Title() string             { return w.surf.Title() }
-func (w *Window) SurfaceSize() (int, int)   { return w.surf.Size() }
+
+// SurfaceSize is the whole buffer in device pixels — the visible window
+// plus the invisible margin a frame the toolkit draws keeps for its shadow.
+// Size is the window itself, which is what an app means by "the window".
+func (w *Window) SurfaceSize() (int, int) { return w.surf.Size() }
+
+// Size is the visible window in device pixels: the surface less the frame's
+// margin (the same box the desktop moves, snaps and tiles).
+func (w *Window) Size() (int, int) {
+	box := w.WindowRect()
+	return int(box.Dx()), int(box.Dy())
+}
+
+// WindowRect is the visible window inside the surface, in surface device
+// pixels (widget.WindowRecter): popups, menus and tooltips stay inside it,
+// never in the margin, where a compositor may clip them and clicks fall
+// through to the window behind.
+func (w *Window) WindowRect() paintengine2d.Rect {
+	if w == nil {
+		return paintengine2d.Rect{}
+	}
+	return w.windowBox()
+}
 
 // SetTitle sets the window's title: the desktop's title bar and task bar
 // show it, and so does a title bar the toolkit draws.
@@ -1180,6 +1207,9 @@ func (w *Window) tab(forward bool) {
 }
 
 func (w *Window) layout() {
+	// The margin is part of the surface: ask for it first, so this layout
+	// (and the frame painted from it) already has the buffer it needs.
+	w.applyFrame()
 	ww, hh := w.surf.Size()
 	box := paintengine2d.XYWH(0, 0, float32(ww), float32(hh))
 	g := w.layoutFrame(box)
@@ -1248,7 +1278,14 @@ func (w *Window) paintRects() []paintengine2d.Rect {
 	for _, r := range w.dirty.Rects {
 		out.Add(r)
 	}
-	out.ClipTo(paintengine2d.XYWH(0, 0, float32(ww), float32(hh)))
+	clip := paintengine2d.XYWH(0, 0, float32(ww), float32(hh))
+	if g := w.geom; g.framed && !g.margin.Zero() {
+		// The margin holds the shadow and nothing else: it changes only
+		// with the window's size or state, both of which repaint in full.
+		// A hover or a caret never touches it.
+		clip = clip.Intersect(g.window)
+	}
+	out.ClipTo(clip)
 	if out.Empty() {
 		return nil
 	}
@@ -1351,18 +1388,45 @@ func (w *Window) paintBackground(ctx *paintengine2d.Context, full paintengine2d.
 	}
 }
 
+// windowBox is the visible window inside the surface: the whole surface
+// unless a frame of ours keeps a margin for its shadow.
+func (w *Window) windowBox() paintengine2d.Rect {
+	ww, hh := w.surf.Size()
+	full := paintengine2d.XYWH(0, 0, float32(ww), float32(hh))
+	if g := w.geom; g.framed && !g.margin.Zero() {
+		return full.Intersect(g.window)
+	}
+	return full
+}
+
+// clearColor is what a frame starts from: the look's background, or
+// nothing at all where the margin around the window must stay see-through.
+func (w *Window) clearColor() paintengine2d.Color {
+	if w.geom.translucent() {
+		return paintengine2d.Transparent
+	}
+	return w.look.Palette().Background
+}
+
 func (w *Window) frameImmediate(rects []paintengine2d.Rect) {
 	ctx := platform.NewPaintContext(w.surf)
 	if ctx == nil {
 		return
 	}
 	bg := w.look.Palette().Background
-	ww, hh := w.surf.Size()
-	full := paintengine2d.XYWH(0, 0, float32(ww), float32(hh))
+	win := w.windowBox()
 	if len(rects) == 0 {
-		ctx.Clear(bg)
-		w.paintBackground(ctx, full)
+		ctx.Clear(w.clearColor())
+		ctx.Save()
+		ctx.ClipRect(win)
+		if w.geom.translucent() {
+			ctx.DrawRect(win, paintengine2d.Fill(bg))
+		}
+		w.paintBackground(ctx, win)
 		w.paintLayers(ctx, nil)
+		ctx.Restore()
+		w.paintFrameCorners(ctx, nil)
+		w.paintFrameShadow(ctx, nil)
 		return
 	}
 	// One pass per dirty box with the device clip pinned to that box. The
@@ -1374,9 +1438,15 @@ func (w *Window) frameImmediate(rects []paintengine2d.Rect) {
 		one.Add(r)
 		ctx.Save()
 		ctx.ClipDeviceRect(r)
+		ctx.ClipRect(win)
 		ctx.DrawRect(r, paintengine2d.Fill(bg))
-		w.paintBackground(ctx, full)
+		w.paintBackground(ctx, win)
 		w.paintLayers(ctx, &one)
+		ctx.Restore()
+		// A box that reaches a corner takes its bite out again.
+		ctx.Save()
+		ctx.ClipDeviceRect(r)
+		w.paintFrameCorners(ctx, &one)
 		ctx.Restore()
 	}
 }
@@ -1389,9 +1459,17 @@ func (w *Window) frameScene(rects []paintengine2d.Rect) []paintengine2d.Rect {
 	}
 	rec.UsePathCache(w.paths)
 	defer w.paths.EndFrame()
-	rec.Clear(w.look.Palette().Background)
+	rec.Clear(w.clearColor())
 	ctx := paintengine2d.NewContextDevice(rec)
-	w.paintBackground(ctx, paintengine2d.XYWH(0, 0, float32(ww), float32(hh)))
+	win := w.windowBox()
+	ctx.Save()
+	ctx.ClipRect(win)
+	if w.geom.translucent() {
+		// The clear left the whole surface see-through for the shadow; the
+		// window itself starts from the look's background again.
+		ctx.DrawRect(win, paintengine2d.Fill(w.look.Palette().Background))
+	}
+	w.paintBackground(ctx, win)
 	// The recording is always a complete display list for the window;
 	// partial redraw happens at replay, where the engine clips every op to
 	// the dirty box. Recording a subset would make the next partial replay
@@ -1416,6 +1494,11 @@ func (w *Window) frameScene(rects []paintengine2d.Rect) []paintengine2d.Rect {
 		w.paintShadow(ctx, w.tooltip, style.PopupTooltip, nil)
 		widget.RecordTree(w.tooltip, rec, ctx, nil, w.layers, true)
 	}
+	ctx.Restore()
+	// Last, outside the window's clip: the corners are cut out of what was
+	// painted and the shadow goes into the margin around it.
+	w.paintFrameCorners(ctx, nil)
+	w.paintFrameShadow(ctx, nil)
 	w.layers.EndFrame()
 	w.scene = rec.Finish()
 	dev := platform.SurfaceDevice(w.surf)
@@ -1434,8 +1517,27 @@ func (w *Window) frameScene(rects []paintengine2d.Rect) []paintengine2d.Rect {
 // Scene is the last retained graph (tests / inspector).
 func (w *Window) Scene() *paintengine2d.Scene { return w.scene }
 
-// Capture paints a full frame and returns a clone of the pixmap.
+// Capture paints a full frame and returns a clone of the pixmap — the
+// visible window only: the invisible margin a frame keeps for its shadow is
+// cropped away, so a screenshot is the window the user sees, whatever the
+// look does outside it.
 func (w *Window) Capture() *paintengine2d.Image {
+	img := w.CaptureSurface()
+	if img == nil {
+		return nil
+	}
+	g := w.geom
+	if !g.framed || g.margin.Zero() {
+		return img
+	}
+	x0, y0, x1, y1 := g.window.IntBounds()
+	return img.SubImage(x0, y0, x1, y1)
+}
+
+// CaptureSurface paints a full frame and returns the whole buffer, margin
+// and all: the shadow and the see-through corners as the compositor gets
+// them (the frames sheet and the frame tests look at these).
+func (w *Window) CaptureSurface() *paintengine2d.Image {
 	w.laid = false
 	w.fullInvalidate()
 	w.frame()
