@@ -19,18 +19,17 @@ it out of the history.
 
 ## Decisions waiting for you
 
-1. **Java looks and licensing.** `engine/metal` (local only, worktree
-   `uitoolkit-eng-metal`, not pushed) holds Metal (Steel, Ocean) and Nimbus. They
-   are pixel-exact because they were ported and transcribed from OpenJDK, which
-   is GPL-2.0 with the Classpath exception, and uitoolkit is MIT. Your options:
-   - keep them behind a build tag, under their GPL terms;
-   - have them rewritten clean-room from visual facts (queued as a later batch);
-   - drop them.
-
-   Every later engine brief forbids transcribing.
-2. **The default theme.** The stock looks are "Classic 95 Dark / Light" (a
-   Win95 homage). Adwaita, Breeze and Fusion now have real engines (Fluent is
-   in progress), so any of them could be the default instead. Say which.
+1. **The default theme.** The stock looks are "Classic 95 Dark / Light" (a
+   Win95 homage). Breeze, Adwaita, Fusion and Fluent all have real engines
+   now, so any of them could be the default instead. Say which.
+2. **Follow the desktop by default?** Apps can follow the desktop's light or
+   dark mode and accent colour (Settings, look.json `followDesktop`). It is
+   off unless switched on. GTK 4, libadwaita and Qt 6 apps follow by default.
+3. **The Java looks are settled.** Metal (Steel, Ocean) and Nimbus were
+   rewritten clean-room from published facts and are merged. The old
+   OpenJDK-derived branch `engine/metal` (local only, worktree
+   `uitoolkit-eng-metal`, never pushed) can be deleted:
+   `git worktree remove ../uitoolkit-eng-metal && git branch -D engine/metal`.
 
 ## What the glitching was
 
@@ -82,15 +81,15 @@ Merged engines:
 | keramik, plastik | KDE 3 Keramik, Plastik, Qt 4 Plastique |
 | system7, win31, openlook, amiga, beos, os2 | System 1 and 7, Windows 3.1 and Hot Dog Stand, OPEN LOOK, Workbench 1.3 and 3.1, BeOS, OS/2 Warp 4 |
 | macos, material, flatlaf | OS X Yosemite, macOS Big Sur and Dark; Material 2 and 3, light and dark; FlatLaf Light, Dark, Darcula |
+| metal, nimbus | Swing's Metal (Steel 1998, Ocean 2004) and Nimbus (2008), clean-room |
 
 Also merged: `macos` (OS X Yosemite, macOS Big Sur and Big Sur Dark),
 `material` (Material and Material Dark, Material 3 and Material 3 Dark,
 whose tonal palettes are computed from a seed colour) and `flatlaf` (FlatLaf
 Light, FlatLaf Dark, Darcula).
 
-75 packs from 26 engines in all. Running now, each in its own worktree:
-- a clean-room Metal and Nimbus (`engine/java`);
-- accent colours for the modern engines (`engine/accent`).
+78 packs from 28 engines in all. Running now in its own worktree: accent
+colours for the modern engines (`engine/accent`).
 
 Core features the engines drive, added along the way:
 - selected tabs overlap their neighbours;
@@ -185,6 +184,26 @@ Core features the engines drive, added along the way:
 - **`UITK_THEME=<pack>`:** runs any app in any theme, like `GTK_THEME`.
 - **`gallery -screenshot DIR -theme <pack>`:** takes every scripted gallery
   shot in one pack.
+
+## Accessibility
+
+uitoolkit had no accessibility layer, so screen readers could not see its
+apps. Now:
+- **The model** (`a11y`): every window is a tree of roles, names, states,
+  values and actions. Every stock widget describes itself; views list their
+  items, and actions (press, toggle, select, expand) reach the widgets.
+- **The audit**: `a11y.Check` flags controls without a name, duplicate IDs
+  and similar problems. Tests run it over every gallery page, Settings and
+  Mail; it found unnamed controls in all three, now fixed.
+- **The Linux bridge** (AT-SPI2): Orca and other assistive technology read
+  and drive the apps. It stays off until a screen reader runs (your desktop
+  says none does).
+- **The smoke test**: `tools/a11y/smoke.sh` proves the bridge in a private
+  D-Bus session with a real libatspi client. It checks roles, names, values
+  and text, actions, and the focus and "checked" announcements.
+
+See `docs/accessibility.md`. Still to do: text-change events, relations,
+and the Windows and macOS adapters.
 
 ## Performance
 
