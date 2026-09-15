@@ -185,11 +185,21 @@ func runMail(opts Options) []Result {
 	w.SetContent(mail.Open(a, w, cli, mail.AppOptions{ShowFilter: true}))
 	a.PumpOnce()
 
-	step(&out, "mail", "construct", func() error { return checkTree(w.Content()) })
+	// Mail's chrome row is the window's title bar: check it with the content.
+	checkWindow := func() error {
+		if err := checkTree(w.Content()); err != nil {
+			return err
+		}
+		if tb := w.TitleBar(); tb != nil {
+			return checkTree(tb)
+		}
+		return nil
+	}
+	step(&out, "mail", "construct", checkWindow)
 	step(&out, "mail", "resize", func() error {
 		w.Inject(platform.Event{Kind: platform.EventResize, Width: 1100, Height: 720})
 		a.PumpOnce()
-		return checkTree(w.Content())
+		return checkWindow()
 	})
 	step(&out, "mail", "drag-splitters", func() error { return dragSplitters(a, w) })
 	step(&out, "mail", "scroll-lists", func() error { return scrollCollections(a, w, opts.Short) })

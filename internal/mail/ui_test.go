@@ -33,7 +33,7 @@ func TestMailAppPaints(t *testing.T) {
 	a.PumpOnce()
 
 	var tables, trees, areas, bars, menus int
-	widget.Walk(w.Content(), func(c widget.Component) {
+	widget.Walk(mailTree(w), func(c widget.Component) {
 		switch c.(type) {
 		case *widgets.TableView:
 			tables++
@@ -47,7 +47,7 @@ func TestMailAppPaints(t *testing.T) {
 			menus++
 		}
 	})
-	widget.Walk(w.Content(), func(c widget.Component) {
+	widget.Walk(mailTree(w), func(c widget.Component) {
 		if tv, ok := c.(*widgets.TableView); ok && tv.CellText != nil && tv.RowCount > 0 {
 			subj := tv.CellText(0, 2)
 			t.Logf("row0 subject %q selected=%d rows=%d", subj, tv.Selected, tv.RowCount)
@@ -91,7 +91,7 @@ func TestMailHiDPIResizeStable(t *testing.T) {
 
 	var table *widgets.TableView
 	var tree *widgets.TreeView
-	widget.Walk(w.Content(), func(c widget.Component) {
+	widget.Walk(mailTree(w), func(c widget.Component) {
 		if tv, ok := c.(*widgets.TableView); ok && table == nil {
 			table = tv
 		}
@@ -139,7 +139,7 @@ func TestMailSubjectColumnFillsThreadPane(t *testing.T) {
 	w.SetContent(MailApp(a, w))
 	a.PumpOnce()
 	var table *widgets.TableView
-	widget.Walk(w.Content(), func(c widget.Component) {
+	widget.Walk(mailTree(w), func(c widget.Component) {
 		if tv, ok := c.(*widgets.TableView); ok && len(tv.Columns) >= 5 && table == nil {
 			table = tv
 		}
@@ -195,7 +195,7 @@ func TestComposeAppPaints(t *testing.T) {
 	}
 	a.PumpOnce()
 	var body *widgets.TextArea
-	widget.Walk(w.Content(), func(c widget.Component) {
+	widget.Walk(mailTree(w), func(c widget.Component) {
 		if ta, ok := c.(*widgets.TextArea); ok && !ta.ReadOnly {
 			body = ta
 		}
@@ -237,7 +237,7 @@ func TestMailPreviewReadOnlyAndListClamp(t *testing.T) {
 	var table *widgets.TableView
 	var views []*widgets.TextArea
 	var splits []*widgets.Splitter
-	widget.Walk(w.Content(), func(c widget.Component) {
+	widget.Walk(mailTree(w), func(c widget.Component) {
 		switch t := c.(type) {
 		case *widgets.TableView:
 			if len(t.Columns) >= 5 && table == nil {
@@ -339,7 +339,7 @@ func TestFolderTreeOmitsVirtualSections(t *testing.T) {
 	a.PumpOnce()
 
 	var tree *widgets.TreeView
-	widget.Walk(w.Content(), func(c widget.Component) {
+	widget.Walk(mailTree(w), func(c widget.Component) {
 		if tr, ok := c.(*widgets.TreeView); ok && tree == nil {
 			tree = tr
 		}
@@ -360,10 +360,10 @@ func TestFolderTreeOmitsVirtualSections(t *testing.T) {
 		}
 	}
 	walk(tree.Roots)
-	assertOutboxPinnedBottom(t, w.Content())
+	assertOutboxPinnedBottom(t, mailTree(w))
 
 	banned := []string{"Unified Inbox", "New Smart Folder", "Smart Folders", "Move sender to Primary"}
-	widget.Walk(w.Content(), func(c widget.Component) {
+	widget.Walk(mailTree(w), func(c widget.Component) {
 		mb, ok := c.(*widgets.MenuBar)
 		if !ok {
 			return
@@ -394,7 +394,7 @@ func TestSelectAccountKeepsInboxList(t *testing.T) {
 
 	var tree *widgets.TreeView
 	var table *widgets.TableView
-	widget.Walk(w.Content(), func(c widget.Component) {
+	widget.Walk(mailTree(w), func(c widget.Component) {
 		if tr, ok := c.(*widgets.TreeView); ok && tree == nil {
 			tree = tr
 		}
@@ -447,7 +447,7 @@ func TestClickUnreadKeepsList(t *testing.T) {
 	a.PumpOnce()
 
 	var table *widgets.TableView
-	widget.Walk(w.Content(), func(c widget.Component) {
+	widget.Walk(mailTree(w), func(c widget.Component) {
 		if tv, ok := c.(*widgets.TableView); ok && table == nil {
 			table = tv
 		}
@@ -509,7 +509,7 @@ func TestMailChromeHidesStatusBarAndVIPFolder(t *testing.T) {
 	var vipNode bool
 	var qf widget.Component
 	var split *widgets.Splitter
-	widget.Walk(w.Content(), func(c widget.Component) {
+	widget.Walk(mailTree(w), func(c widget.Component) {
 		switch v := c.(type) {
 		case *widgets.StatusBar:
 			bars++
@@ -547,18 +547,18 @@ func TestMailChromeHidesStatusBarAndVIPFolder(t *testing.T) {
 	if vipNode {
 		t.Fatal("VIP folder still in the sidebar tree")
 	}
-	qf = findQuickFilter(w.Content())
+	qf = findQuickFilter(mailTree(w))
 	if qf == nil {
 		t.Fatal("quick filter field missing")
 	}
 	if qf.Visible() {
 		t.Fatal("quick filter field should stay hidden until the Filter icon or Ctrl+F")
 	}
-	assertNoUnreadFolderFooter(t, w.Content())
+	assertNoUnreadFolderFooter(t, mailTree(w))
 	if split == nil || widget.Contains(split, qf) {
 		t.Fatal("quick filter should sit on the M chrome row, not inside the splitter")
 	}
-	assertMailToolChrome(t, w.Content(), qf)
+	assertMailToolChrome(t, mailTree(w), qf)
 	w.Close()
 }
 
@@ -573,11 +573,11 @@ func TestMailToolBarChrome(t *testing.T) {
 	}
 	w.SetContent(MailApp(a, w))
 	a.PumpOnce()
-	qf := findQuickFilter(w.Content())
+	qf := findQuickFilter(mailTree(w))
 	if qf == nil {
 		t.Fatal("quick filter field missing")
 	}
-	assertMailToolChrome(t, w.Content(), qf)
+	assertMailToolChrome(t, mailTree(w), qf)
 	w.Close()
 }
 
@@ -592,9 +592,9 @@ func TestMailFilterIconTogglesField(t *testing.T) {
 	}
 	w.SetContent(MailApp(a, w))
 	a.PumpOnce()
-	qf := findQuickFilter(w.Content())
+	qf := findQuickFilter(mailTree(w))
 	var btn *widgets.ToolItem
-	widget.Walk(w.Content(), func(c widget.Component) {
+	widget.Walk(mailTree(w), func(c widget.Component) {
 		if v, ok := c.(*widgets.ToolBar); ok {
 			if it := filterIconItem(v); it != nil {
 				btn = it
@@ -645,7 +645,7 @@ func TestMailShowFilterPrefHonored(t *testing.T) {
 	}
 	w.SetContent(MailApp(a, w))
 	a.PumpOnce()
-	qf := findQuickFilter(w.Content())
+	qf := findQuickFilter(mailTree(w))
 	if qf == nil || !qf.Visible() {
 		t.Fatal("saved showFilter:true should open the Quick Filter field")
 	}
@@ -663,7 +663,7 @@ func TestMailCollapsedTagsDoesNotStealOutbox(t *testing.T) {
 	w.SetContent(MailApp(a, w))
 	a.PumpOnce()
 	var tree *widgets.TreeView
-	widget.Walk(w.Content(), func(c widget.Component) {
+	widget.Walk(mailTree(w), func(c widget.Component) {
 		if v, ok := c.(*widgets.TreeView); ok && tree == nil {
 			tree = v
 		}
@@ -679,7 +679,7 @@ func TestMailCollapsedTagsDoesNotStealOutbox(t *testing.T) {
 	if filters.Expanded {
 		t.Fatal("Tags should collapse")
 	}
-	_, pin := mailSidebarTrees(w.Content())
+	_, pin := mailSidebarTrees(mailTree(w))
 	if pin == nil || pin.OnSelect == nil || len(pin.Roots) == 0 {
 		t.Fatal("Outbox pin")
 	}
@@ -692,7 +692,7 @@ func TestMailCollapsedTagsDoesNotStealOutbox(t *testing.T) {
 	if filters.Expanded {
 		t.Fatal("Outbox click re-opened Tags (rebuild lost collapse, or hit-test stole the row)")
 	}
-	_, pin = mailSidebarTrees(w.Content())
+	_, pin = mailSidebarTrees(mailTree(w))
 	if pin == nil || pin.Selected == nil || !strings.HasPrefix(pin.Selected.Label, "Outbox") {
 		label := ""
 		if pin != nil && pin.Selected != nil {
@@ -1136,37 +1136,29 @@ func containsMenuBar(c widget.Component) bool {
 }
 
 func separateFilterRow(root widget.Component) bool {
+	// The column holding the thread pane: only the M chrome row may sit
+	// above the splitter. The chrome row may also be the window's title bar,
+	// above the column altogether.
 	var col *widgets.FlexBox
 	widget.Walk(root, func(c widget.Component) {
 		f, ok := c.(*widgets.FlexBox)
 		if !ok || col != nil {
 			return
 		}
-		var hasChrome, hasSplit bool
 		for _, ch := range f.Children() {
-			if containsMenuBar(ch) {
-				hasChrome = true
-			}
 			if _, ok := ch.(*widgets.Splitter); ok {
-				hasSplit = true
+				col = f
 			}
-		}
-		if hasChrome && hasSplit {
-			col = f
 		}
 	})
 	if col == nil {
 		return true
 	}
-	chs := col.Children()
-	if len(chs) < 2 || !containsMenuBar(chs[0]) {
-		return true
-	}
-	for i := 1; i < len(chs); i++ {
-		if _, ok := chs[i].(*widgets.Splitter); ok {
+	for _, ch := range col.Children() {
+		if _, ok := ch.(*widgets.Splitter); ok {
 			return false
 		}
-		if _, ok := chs[i].(*widgets.StatusBar); !ok {
+		if !containsMenuBar(ch) {
 			return true
 		}
 	}
@@ -1187,7 +1179,7 @@ func TestMailChromeHasNoSidebarAccountPicker(t *testing.T) {
 	var split *widgets.Splitter
 	var tree *widgets.TreeView
 	var prefs bool
-	widget.Walk(w.Content(), func(c widget.Component) {
+	widget.Walk(mailTree(w), func(c widget.Component) {
 		switch v := c.(type) {
 		case *widgets.Splitter:
 			if split == nil {
@@ -1264,10 +1256,10 @@ func TestMailChromeHasNoActiveFilterBanner(t *testing.T) {
 	w.SetContent(MailApp(a, w))
 	a.PumpOnce()
 
-	qf := findQuickFilter(w.Content())
+	qf := findQuickFilter(mailTree(w))
 	var tree *widgets.TreeView
 	var table *widgets.TableView
-	widget.Walk(w.Content(), func(c widget.Component) {
+	widget.Walk(mailTree(w), func(c widget.Component) {
 		switch v := c.(type) {
 		case *widgets.TableView:
 			if table == nil {
@@ -1288,19 +1280,19 @@ func TestMailChromeHasNoActiveFilterBanner(t *testing.T) {
 	if tree == nil || tree.OnSelect == nil {
 		t.Fatal("Tags tree")
 	}
-	assertNoFilterBanner(t, w.Content())
+	assertNoFilterBanner(t, mailTree(w))
 
 	before := table.RowCount
 	qf.SetText("lunch")
 	a.PumpOnce()
-	assertNoFilterBanner(t, w.Content())
+	assertNoFilterBanner(t, mailTree(w))
 	if table.RowCount <= 0 || table.RowCount > before {
 		t.Fatalf("quick filter should narrow the list, rows=%d before=%d", table.RowCount, before)
 	}
 
 	qf.SetText("")
 	a.PumpOnce()
-	assertNoFilterBanner(t, w.Content())
+	assertNoFilterBanner(t, mailTree(w))
 	if table.RowCount != before {
 		t.Fatalf("emptying quick filter should restore the list, rows=%d want %d", table.RowCount, before)
 	}
@@ -1311,7 +1303,7 @@ func TestMailChromeHasNoActiveFilterBanner(t *testing.T) {
 	}
 	tree.OnSelect(unread)
 	a.PumpOnce()
-	assertNoFilterBanner(t, w.Content())
+	assertNoFilterBanner(t, mailTree(w))
 	if table.RowCount <= 0 || table.RowCount > before {
 		t.Fatalf("Unread pin should narrow the list, rows=%d before=%d", table.RowCount, before)
 	}
@@ -1321,7 +1313,7 @@ func TestMailChromeHasNoActiveFilterBanner(t *testing.T) {
 	}
 	tree.OnSelect(unread)
 	a.PumpOnce()
-	assertNoFilterBanner(t, w.Content())
+	assertNoFilterBanner(t, mailTree(w))
 	w.Close()
 }
 
@@ -1376,7 +1368,7 @@ func TestMailColumnsTopicWhoWhen(t *testing.T) {
 	w.SetContent(MailApp(a, w))
 	a.PumpOnce()
 	var table *widgets.TableView
-	widget.Walk(w.Content(), func(c widget.Component) {
+	widget.Walk(mailTree(w), func(c widget.Component) {
 		if tv, ok := c.(*widgets.TableView); ok && table == nil {
 			table = tv
 		}
@@ -1415,7 +1407,7 @@ func TestMailStarRendersAfterToggle(t *testing.T) {
 	w.SetContent(MailApp(a, w))
 	a.PumpOnce()
 	var table *widgets.TableView
-	widget.Walk(w.Content(), func(c widget.Component) {
+	widget.Walk(mailTree(w), func(c widget.Component) {
 		if tv, ok := c.(*widgets.TableView); ok && table == nil {
 			table = tv
 		}
@@ -1486,7 +1478,7 @@ func TestMailAttachmentSelectOpenSaveAs(t *testing.T) {
 	w.SetContent(MailApp(a, w))
 	a.PumpOnce()
 
-	hits, opens, saves, saveAll := findAttachChrome(w.Content())
+	hits, opens, saves, saveAll := findAttachChrome(mailTree(w))
 	if len(hits) < 2 || len(opens) < 2 || len(saves) < 2 {
 		t.Fatalf("per-row chrome hits=%d open=%d saveAs=%d", len(hits), len(opens), len(saves))
 	}
@@ -1697,7 +1689,7 @@ func TestMailMessageSourceShowsRFC822(t *testing.T) {
 	a.PumpOnce()
 
 	var tabs *widgets.TabView
-	widget.Walk(w.Content(), func(c widget.Component) {
+	widget.Walk(mailTree(w), func(c widget.Component) {
 		if tv, ok := c.(*widgets.TabView); ok && tabs == nil {
 			tabs = tv
 		}
@@ -1708,7 +1700,7 @@ func TestMailMessageSourceShowsRFC822(t *testing.T) {
 	tabs.Select(1)
 	a.PumpOnce()
 	var sourceTab *widgets.TextArea
-	widget.Walk(w.Content(), func(c widget.Component) {
+	widget.Walk(mailTree(w), func(c widget.Component) {
 		if ta, ok := c.(*widgets.TextArea); ok && ta.Mono && ta.ReadOnly {
 			sourceTab = ta
 		}
@@ -1721,7 +1713,7 @@ func TestMailMessageSourceShowsRFC822(t *testing.T) {
 	}
 
 	var mb *widgets.MenuBar
-	widget.Walk(w.Content(), func(c widget.Component) {
+	widget.Walk(mailTree(w), func(c widget.Component) {
 		if m, ok := c.(*widgets.MenuBar); ok && mb == nil {
 			mb = m
 		}
@@ -1784,7 +1776,7 @@ func TestMailFolderTreePutsOutboxLast(t *testing.T) {
 	}
 	w.SetContent(MailApp(a, w))
 	a.PumpOnce()
-	assertOutboxPinnedBottom(t, w.Content())
+	assertOutboxPinnedBottom(t, mailTree(w))
 	w.Close()
 }
 
@@ -1800,12 +1792,12 @@ func TestMailMenuHoverDoesNotRebuildTree(t *testing.T) {
 	a.PumpOnce()
 	var mb *widgets.MenuBar
 	var folder *widgets.TreeView
-	widget.Walk(w.Content(), func(c widget.Component) {
+	widget.Walk(mailTree(w), func(c widget.Component) {
 		if m, ok := c.(*widgets.MenuBar); ok && mb == nil {
 			mb = m
 		}
 	})
-	folder, _ = mailSidebarTrees(w.Content())
+	folder, _ = mailSidebarTrees(mailTree(w))
 	if mb == nil || folder == nil {
 		t.Fatal("mail chrome")
 	}
@@ -1926,7 +1918,7 @@ func TestMailMenuBarIsOnlyM(t *testing.T) {
 	w.SetContent(MailApp(a, w))
 	a.PumpOnce()
 	var mb *widgets.MenuBar
-	widget.Walk(w.Content(), func(c widget.Component) {
+	widget.Walk(mailTree(w), func(c widget.Component) {
 		if m, ok := c.(*widgets.MenuBar); ok && mb == nil {
 			mb = m
 		}
@@ -2082,7 +2074,7 @@ func TestMailPreferencesTabs(t *testing.T) {
 	}
 	a.PumpOnce()
 	var bar *widgets.TabBar
-	widget.Walk(w.Content(), func(c widget.Component) {
+	widget.Walk(mailTree(w), func(c widget.Component) {
 		if tv, ok := c.(*widgets.TabBar); ok && bar == nil {
 			bar = tv
 		}
@@ -2100,7 +2092,7 @@ func TestMailPreferencesTabs(t *testing.T) {
 		}
 	}
 	var add, edit, remove *widgets.Button
-	walkAll(w.Content(), func(c widget.Component) {
+	walkAll(mailTree(w), func(c widget.Component) {
 		b, ok := c.(*widgets.Button)
 		if !ok {
 			return
@@ -2164,7 +2156,7 @@ func TestMailNotifyMenuPersists(t *testing.T) {
 		t.Fatal(err)
 	}
 	var notifyOn, vipOnly *widgets.MenuItem
-	widget.Walk(w.Content(), func(c widget.Component) {
+	widget.Walk(mailTree(w), func(c widget.Component) {
 		mb, ok := c.(*widgets.MenuBar)
 		if !ok {
 			return

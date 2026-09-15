@@ -11,6 +11,9 @@ rm -f "/run/user/$(id -u)/uitk-e2e-$N" "/run/user/$(id -u)/uitk-e2e-$N.lock"
 before=$(ls /tmp/.X11-unix/)
 (
   export KWIN_SCREENSHOT_NO_PERMISSION_CHECKS=1 KWIN_WAYLAND_NO_PERMISSION_CHECKS=1
+  # KWin's log (and its scripts' print(), which kwin.py reads back) goes to
+  # N/kwin.log: without a terminal Qt would write into the user's journal.
+  export QT_FORCE_STDERR_LOGGING=1 QT_LOGGING_RULES="${QT_LOGGING_RULES:-kwin_scripting.debug=true;js.debug=true;qml.debug=true}"
   # KWin's own settings stay in the instance: with the user's config dir a
   # nested session saved its virtual output (and any kscreen-doctor scale)
   # into their real ~/.config/kwinoutputconfig.json.

@@ -27,6 +27,18 @@ type DesktopPrefs struct {
 	// Accent is the accent colour (sRGB, 0..1) when HasAccent is set.
 	Accent    [3]float64
 	HasAccent bool
+	// ButtonLayout and the Titlebar* actions are GNOME's window-manager
+	// preferences (org.gnome.desktop.wm.preferences: button-layout,
+	// action-double-click-titlebar, …) as the GNOME and GTK portal backends
+	// publish them; DoubleClickTime (ms) and DragThreshold (px) are
+	// org.gnome.desktop.peripherals.mouse's. Empty / zero when the desktop
+	// does not say (KDE's portal publishes none of them).
+	ButtonLayout        string
+	TitlebarDoubleClick string
+	TitlebarMiddleClick string
+	TitlebarRightClick  string
+	DoubleClickTime     int
+	DragThreshold       int
 }
 
 // parseScheme maps the portal's value (0 none, 1 dark, 2 light).
