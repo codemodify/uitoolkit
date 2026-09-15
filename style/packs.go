@@ -166,23 +166,27 @@ func eraPack(name, label, era string, family ThemeName, bevel BevelStyle, tok Th
 }
 
 func packClassic95Dark() ThemePack {
-	return eraPack("dark", "Classic 95 Dark", EraClassic95, ThemeDark, BevelClassic3D, ThemeTokens{
+	p := eraPack("dark", "Classic 95 Dark", EraClassic95, ThemeDark, BevelClassic3D, ThemeTokens{
 		Metrics:  ChromeMetrics{BevelDepth: 1, Scroll: 16, Elevation: 0},
 		Palette:  Dark(),
 		Hot:      ChromeState{Fill: hexColor("#000080"), Border: hexColor("#000040")},
 		Pressed:  ChromeState{Fill: hexColor("#000060"), Border: hexColor("#000040")},
 		Selected: ChromeState{Fill: hexColor("#000080"), Border: hexColor("#000040")},
 	})
+	p.Summary = "The toolkit's own first look: Windows 95 bevels on charcoal with navy selection, and its default until Metal."
+	return p
 }
 
 func packClassic95Light() ThemePack {
-	return eraPack("light", "Classic 95 Light", EraClassic95, ThemeLight, BevelClassic3D, ThemeTokens{
+	p := eraPack("light", "Classic 95 Light", EraClassic95, ThemeLight, BevelClassic3D, ThemeTokens{
 		Metrics:  ChromeMetrics{BevelDepth: 1, Scroll: 16, Elevation: 0},
 		Palette:  Light(),
 		Hot:      ChromeState{Fill: hexColor("#000080"), Border: hexColor("#000040")},
 		Pressed:  ChromeState{Fill: hexColor("#000060"), Border: hexColor("#000040")},
 		Selected: ChromeState{Fill: hexColor("#000080"), Border: hexColor("#000040")},
 	})
+	p.Summary = "The toolkit's own first look: Windows 95 silver bevels with navy selection, and its default until Metal."
+	return p
 }
 
 func packMotif() ThemePack {

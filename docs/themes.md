@@ -38,8 +38,8 @@ one; `UITK_THEME=<id>` runs any app in any pack.
 | `irix` | IRIX Indigo Magic | 1993 | Unix | `motif` | SGI IRIX Indigo Magic: #c1c1c1 IRIS IM widgets with SGI's graded shading, lavender fields, khaki active frames. |
 | `amiga31` | Workbench 3.1 | 1994 | Amiga | `amiga` | Workbench 2.0 to 3.1: Intuition's grey 3D look, blue active borders, ridged string and cycle gadgets. |
 | `openstep` | OPENSTEP | 1994 | NeXT | `next` | OPENSTEP 4: NeXTSTEP's greys with tab views, split slider knobs, pearl radio beads and a bolder close box. |
-| `dark` | Classic 95 Dark | 1995 | Windows | `base` |  |
-| `light` | Classic 95 Light | 1995 | Windows | `base` |  |
+| `dark` | Classic 95 Dark | 1995 | Windows | `base` | The toolkit's own first look: Windows 95 bevels on charcoal with navy selection, and its default until Metal. |
+| `light` | Classic 95 Light | 1995 | Windows | `base` | The toolkit's own first look: Windows 95 silver bevels with navy selection, and its default until Metal. |
 | `win-highcontrast` | High Contrast Black | 1995 | Windows | `win95` | Accessibility scheme: black, white, cyan and green. |
 | `win95` | Windows 95 | 1995 | Windows | `win95` | The four-colour bevel, navy captions, dotted focus. |
 | `win95-dark` | Windows 95 Dark | 1995 | Windows | `win95` | Classic 95 shapes in a dark grey scheme. |

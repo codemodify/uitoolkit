@@ -111,6 +111,29 @@ func TestLabelWordWrap(t *testing.T) {
 	l.Paint(ctx)
 }
 
+// MinLines holds a label at that many lines whatever its text wraps to,
+// and a longer text still grows it.
+func TestLabelMinLines(t *testing.T) {
+	mk := func(text string) *Label {
+		l := NewLabel(text)
+		l.Wrap = true
+		l.MinLines = 3
+		l.SetLook(style.DarkLook())
+		l.SetHost(&host{})
+		return l
+	}
+	c := layout.Constraints{MaxW: 160, MaxH: -1}
+	short := mk("One line.").Measure(c)
+	mid := mk("Two lines of text at this width, or so.").Measure(c)
+	if short.Y != mid.Y {
+		t.Fatalf("a short text and a two-line one differ in height: %v vs %v", short.Y, mid.Y)
+	}
+	long := mk("The desktop prefers dark: Luna Olive Green shows as Royale Noir. It takes the desktop's accent colour.").Measure(c)
+	if long.Y <= short.Y {
+		t.Fatalf("a text over three lines should grow the label: %v vs %v", long.Y, short.Y)
+	}
+}
+
 // Wrap folds its items onto new lines as its width shrinks, and grows in
 // height to hold them.
 func TestWrapFolds(t *testing.T) {
