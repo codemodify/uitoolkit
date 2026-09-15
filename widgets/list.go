@@ -32,6 +32,10 @@ type ListView struct {
 	vbar              scrollDrag
 	rows              rowSceneCache
 	reveal            int // row+1 to bring into view at the next Arrange
+	find              typeAhead
+	// DisableTypeAhead turns off type-ahead find, for views whose letters
+	// are commands (Mail's n / p / r).
+	DisableTypeAhead bool
 }
 
 func NewListView(count int, text func(int) string, on func(int)) *ListView {
@@ -328,6 +332,13 @@ func (l *ListView) KeyPress(e widget.KeyEvent) bool {
 	if !l.Enabled() || l.Count <= 0 {
 		return false
 	}
+	if contextKey(e) {
+		if l.OnContext == nil {
+			return false
+		}
+		l.OnContext(l.Selected, contextPoint(l, fromView(l.rowRect(l.Selected), l.frame())))
+		return true
+	}
 	next := l.Selected
 	page := int(l.inner().Dy()/l.rowH()) - 1
 	if page < 1 {
@@ -375,6 +386,13 @@ func (l *ListView) KeyPress(e widget.KeyEvent) bool {
 	default:
 		return false
 	}
+	l.navigate(next, e.Mods)
+	return true
+}
+
+// navigate makes row next current the way keyboard navigation does: plain
+// moves select it, Shift extends and Ctrl only moves (SelectExtended).
+func (l *ListView) navigate(next int, mods platform.Modifiers) {
 	if next < 0 {
 		next = 0
 	}
@@ -383,7 +401,7 @@ func (l *ListView) KeyPress(e widget.KeyEvent) bool {
 	}
 	changed := false
 	if l.Mode != SelectSingle {
-		changed = l.sel.moveTo(l.Mode, next, e.Mods)
+		changed = l.sel.moveTo(l.Mode, next, mods)
 	}
 	if next != l.Selected || changed {
 		l.Selected = next
@@ -396,7 +414,19 @@ func (l *ListView) KeyPress(e widget.KeyEvent) bool {
 			l.selectionChanged()
 		}
 	}
-	return true
+}
+
+// TextInput is type-ahead find: typing jumps to the next row whose text
+// starts with what was typed.
+func (l *ListView) TextInput(r rune) bool {
+	if !l.Enabled() || l.ItemText == nil || l.DisableTypeAhead {
+		return false
+	}
+	i, searched := l.find.next(r, l.Selected, l.Count, l.ItemText)
+	if i >= 0 {
+		l.navigate(i, 0)
+	}
+	return searched
 }
 
 // rowState is row i's item state for the look.

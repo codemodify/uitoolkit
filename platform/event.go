@@ -72,6 +72,9 @@ const (
 	KeyF10
 	KeyF11
 	KeyF12
+	// KeyMenu is the context-menu key (between AltGr and Ctrl; Shift+F10
+	// does the same).
+	KeyMenu
 )
 
 // Modifiers is a bitset of active modifier keys.
