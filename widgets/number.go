@@ -86,7 +86,7 @@ func (n *NumberField) SetValue(v float64) {
 
 func (n *NumberField) Measure(c layout.Constraints) paintengine2d.Point {
 	h := style.FieldHeight(n.Look().Metrics())
-	return c.Constrain(paintengine2d.Pt(120, h))
+	return c.Constrain(paintengine2d.Pt(style.Dip(n.Look(), 120), h))
 }
 
 func (n *NumberField) spinnerW() float32 {

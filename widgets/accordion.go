@@ -4,6 +4,7 @@ import (
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/layout"
 	"github.com/codemodify/uitoolkit/platform"
+	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
 )
 
@@ -84,7 +85,7 @@ func (e *Expander) bodyPad() float32 {
 
 func (e *Expander) Measure(c layout.Constraints) paintengine2d.Point {
 	hh := e.headerH()
-	w := float32(160)
+	w := style.Dip(e.Look(), 160)
 	if c.HasMaxW() {
 		w = c.MaxW
 	}
@@ -99,7 +100,7 @@ func (e *Expander) Measure(c layout.Constraints) paintengine2d.Point {
 			}
 		}
 		sz := e.body.Measure(inner)
-		h += sz.Y + 6
+		h += sz.Y + style.Dip(e.Look(), 6)
 		need := sz.X + pad
 		if need > w {
 			w = need
@@ -200,7 +201,7 @@ func newExpanderHead(owner *Expander) *expanderHead {
 
 func (h *expanderHead) Measure(c layout.Constraints) paintengine2d.Point {
 	hh := h.owner.headerH()
-	w := float32(160)
+	w := style.Dip(h.Look(), 160)
 	if c.HasMaxW() {
 		w = c.MaxW
 	}

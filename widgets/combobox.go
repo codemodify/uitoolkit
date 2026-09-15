@@ -171,14 +171,14 @@ func (c *ComboBox) Select(i int) {
 func (c *ComboBox) Measure(cons layout.Constraints) paintengine2d.Point {
 	lk := c.Look()
 	m := lk.Metrics()
-	w := float32(160)
+	w := style.Dip(lk, 160)
 	f := style.ControlFontOf(lk, style.RoleCombo)
 	for _, s := range c.Items {
 		tw := f.Advance(s)
 		if ink := f.InkWidth(s); ink > tw {
 			tw = ink
 		}
-		tw += 44
+		tw += style.Dip(lk, 44)
 		if tw > w {
 			w = tw
 		}
@@ -188,7 +188,7 @@ func (c *ComboBox) Measure(cons layout.Constraints) paintengine2d.Point {
 		if ink := f.InkWidth(c.Placeholder); ink > tw {
 			tw = ink
 		}
-		tw += 44
+		tw += style.Dip(lk, 44)
 		if tw > w {
 			w = tw
 		}

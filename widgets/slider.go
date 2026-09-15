@@ -100,7 +100,7 @@ func (s *Slider) Measure(c layout.Constraints) paintengine2d.Point {
 	case TicksBoth:
 		h += 2 * s.tickBand()
 	}
-	return c.Constrain(paintengine2d.Pt(160, h))
+	return c.Constrain(paintengine2d.Pt(style.Dip(s.Look(), 160), h))
 }
 
 func (s *Slider) Arrange(r paintengine2d.Rect) { s.SetBounds(r) }
