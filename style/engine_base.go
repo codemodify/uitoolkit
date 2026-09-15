@@ -248,6 +248,8 @@ func (BaseEngine) DrawWindowBackground(l *Classic, ctx *paintengine2d.Context, b
 
 func (BaseEngine) TabOutset(l *Classic) Insets { return Insets{} }
 
+func (BaseEngine) TabOverlap(l *Classic) float32 { return 0 }
+
 func (BaseEngine) DrawTabPane(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect) {
 	l.DrawPanel(ctx, b, false)
 }

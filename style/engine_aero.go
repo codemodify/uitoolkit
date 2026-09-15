@@ -140,6 +140,7 @@ var aeroBase = aeroScheme{
 
 	// Tree expanders: the filled (open) and hollow (closed) triangles.
 	"expOpen": "#595959", "expOpenEdge": "#262626", "expClosed": "#a6a6a6", "expClosedFill": "#ffffff",
+	"expHot": "#1cc4f7", "expHotEdge": "#1ba1c9", "expHotFill": "#e5f8fe",
 
 	// List-view header.
 	"hdrTop": "#ffffff", "hdrBot0": "#f7f8fa", "hdrBot1": "#f1f2f4", "hdrDiv": "#e3e5e8", "hdrLine": "#d5d5d5",
@@ -240,6 +241,7 @@ type aeroSet struct {
 	menuSep, menuSepLt, menuDisText        paintengine2d.Color
 	gutter, mbar                           []paintengine2d.GradientStop
 	expOpen, expOpenEdge, expClosed, expCF paintengine2d.Color
+	expHot, expHotEdge, expHotFill         paintengine2d.Color
 
 	hdrStops, hdrHotStops, hdrPressStops                []paintengine2d.GradientStop
 	hdrDiv, hdrLine, hdrHotBorder, hdrPressBorder       paintengine2d.Color
@@ -352,6 +354,7 @@ func aeroBuild(l *Classic) *aeroSet {
 	s.menuSep, s.menuSepLt, s.menuDisText = col("menuSep"), col("menuSepLt"), col("menuDisText")
 	s.gutter, s.mbar = two("gutter0", "gutter1"), two("mbar0", "mbar1")
 	s.expOpen, s.expOpenEdge, s.expClosed, s.expCF = col("expOpen"), col("expOpenEdge"), col("expClosed"), col("expClosedFill")
+	s.expHot, s.expHotEdge, s.expHotFill = col("expHot"), col("expHotEdge"), col("expHotFill")
 
 	s.hdrStops = []paintengine2d.GradientStop{Stop(0, col("hdrTop")), Stop(0.4, col("hdrTop")), Stop(0.4, col("hdrBot0")), Stop(1, col("hdrBot1"))}
 	s.hdrHotStops = two("hdrHot0", "hdrHot1")
@@ -692,7 +695,16 @@ func (aeroEngine) Arrow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.
 // Expander is Vista's tree glyph: a hollow grey triangle pointing right
 // when closed, a filled dark one pointing down-right when open.
 func (aeroEngine) Expander(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, expanded bool, col paintengine2d.Color) {
+	aeroExpander(l, ctx, b, expanded, false)
+}
+
+// aeroExpander is the Vista triangle; under the pointer it turns blue.
+func aeroExpander(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, expanded, hot bool) {
 	c := aeroColors(l)
+	if hot {
+		winVistaTriangle(l, ctx, b, expanded, c.expHot, c.expHotEdge, c.expHot, c.expHotFill)
+		return
+	}
 	winVistaTriangle(l, ctx, b, expanded, c.expOpen, c.expOpenEdge, c.expClosed, c.expCF)
 }
 
@@ -1014,6 +1026,9 @@ func aeroShadow(l *Classic, kind PopupKind) (winShadow, bool) {
 func (aeroEngine) TabOutset(l *Classic) Insets {
 	return Insets{Left: snap(l.S(2)), Right: snap(l.S(2))}
 }
+
+// TabOverlap: neighbouring tabs share one border line.
+func (aeroEngine) TabOverlap(l *Classic) float32 { return winPx(l) }
 
 // DrawTabPane is the white property page in its tab border.
 func (aeroEngine) DrawTabPane(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect) {
@@ -1520,7 +1535,7 @@ func (e aeroEngine) DrawTreeRow(l *Classic, ctx *paintengine2d.Context, b painte
 	}
 	x := b.Min.X + l.S(4) + float32(depth)*indent
 	if !leaf {
-		e.Expander(l, ctx, paintengine2d.XYWH(x, b.Min.Y, indent, b.Dy()), expanded, c.expOpen)
+		aeroExpander(l, ctx, paintengine2d.XYWH(x, b.Min.Y, indent, b.Dy()), expanded, st.ExpanderHot())
 	}
 	f := l.body
 	if bold && l.bold != nil {
@@ -1587,9 +1602,9 @@ func (aeroEngine) DrawTableHeader(l *Classic, ctx *paintengine2d.Context, b pain
 	l.drawFittedText(ctx, l.body, label, paintengine2d.XYWH(lb.Min.X+l.S(6), lb.Min.Y, lb.Dx()-l.S(10), lb.Dy()), fg, AlignStart, 0)
 }
 
-// DrawTableCell paints one cell of an Explorer details row: the selection
-// box runs across the row (its top and bottom lines here; the focused row's
-// ItemFocus closes it).
+// DrawTableCell paints one cell of an Explorer details row: the list
+// item's rounded selection box runs across the row, each cell painting its
+// part of it (the ends round on the first and last cell).
 func (aeroEngine) DrawTableCell(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, align Align, face *Font) {
 	c := aeroColors(l)
 	fg := l.fieldText()
@@ -1597,16 +1612,11 @@ func (aeroEngine) DrawTableCell(l *Classic, ctx *paintengine2d.Context, b painte
 		fg = c.gray
 	}
 	if bx := c.rowBox(st); bx != nil {
-		lw := winPx(l)
 		r := winSnap(b)
-		if r.Dy() > 2*lw {
-			ctx.DrawRect(r, VGradient(r, bx.face...))
-			edges := paintengine2d.NewPath()
-			edges.AddRect(paintengine2d.XYWH(r.Min.X, r.Min.Y, r.Dx(), lw))
-			edges.AddRect(paintengine2d.XYWH(r.Min.X, r.Max.Y-lw, r.Dx(), lw))
-			ctx.DrawPath(edges, paintengine2d.Fill(bx.border))
-			ctx.DrawRect(paintengine2d.XYWH(r.Min.X, r.Min.Y+lw, r.Dx(), lw), paintengine2d.Fill(c.innerHi))
-		}
+		ctx.Save()
+		ctx.ClipRect(r)
+		c.paintBox(l, ctx, CellSpan(r, st, l.S(8)).Inset(winPx(l)), bx)
+		ctx.Restore()
 	}
 	winCellText(l, ctx, b, label, align, face, fg)
 }
