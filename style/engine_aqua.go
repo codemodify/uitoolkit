@@ -689,6 +689,9 @@ func (c *aqua) gelFor(st ControlState) *aquaGel {
 		return &c.off
 	case st.Pressed():
 		return &c.press
+	case st.Primary() && st.Backdrop():
+		// In an inactive window the default button is plain clear gel.
+		return &c.clear
 	case st.Primary() && st.Hovered():
 		return &c.accentHot
 	case st.Primary():
