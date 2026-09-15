@@ -76,6 +76,8 @@ func (breezeEngine) StyleHint(l *Classic, h StyleHint) int {
 	switch h {
 	case HintDialogPrimaryFirst, HintFormLabelsRight:
 		return 1
+	case HintMnemonics:
+		return MnemonicsOnAlt // Plasma shows them while Alt is held
 	}
 	return 0
 }

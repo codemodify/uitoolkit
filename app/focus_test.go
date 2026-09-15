@@ -233,3 +233,28 @@ func TestTooltipStaysDismissed(t *testing.T) {
 		})
 	}
 }
+
+// The window tracks the Alt key for mnemonic underlines; losing focus
+// (Alt+Tab) forgets it.
+func TestWindowTracksAlt(t *testing.T) {
+	a := New(Options{Look: style.DarkLook(), Headless: true, Scale: 1})
+	w, err := a.NewWindow(platform.WindowOptions{Width: 200, Height: 120, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+	w.SetContent(widgets.NewLabel("x"))
+	w.dispatch(platform.Event{Kind: platform.EventKeyDown, Key: platform.KeyAlt, Mods: platform.ModAlt})
+	if !w.AltHeld() {
+		t.Fatal("Alt down")
+	}
+	w.dispatch(platform.Event{Kind: platform.EventKeyUp, Key: platform.KeyAlt})
+	if w.AltHeld() {
+		t.Fatal("Alt up")
+	}
+	w.dispatch(platform.Event{Kind: platform.EventKeyDown, Key: platform.KeyAlt, Mods: platform.ModAlt})
+	w.dispatch(platform.Event{Kind: platform.EventFocusOut})
+	if w.AltHeld() {
+		t.Fatal("focus out forgets Alt")
+	}
+}

@@ -1061,6 +1061,9 @@ func (amigaEngine) StyleHint(l *Classic, h StyleHint) int {
 	switch h {
 	case HintDialogPrimaryFirst, HintFormLabelsRight:
 		return 1
+	case HintMnemonics:
+		// Intuition menus show Amiga-key shortcuts, no underlines.
+		return MnemonicsNever
 	}
 	return 0
 }

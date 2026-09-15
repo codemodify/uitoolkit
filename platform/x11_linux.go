@@ -1712,6 +1712,8 @@ func xkey(ks C.KeySym) Key {
 		return KeyF12
 	case C.XK_Menu:
 		return KeyMenu
+	case C.XK_Alt_L, C.XK_Alt_R, C.XK_Meta_L, C.XK_Meta_R:
+		return KeyAlt
 	}
 	return KeyUnknown
 }

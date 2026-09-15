@@ -856,8 +856,11 @@ func (e system7Engine) DrawViewFrame(l *Classic, ctx *paintengine2d.Context, b p
 // StyleHint: the default button goes last (bottom right), and form labels
 // are right-aligned against their fields.
 func (system7Engine) StyleHint(l *Classic, h StyleHint) int {
-	if h == HintFormLabelsRight {
+	switch h {
+	case HintFormLabelsRight:
 		return 1
+	case HintMnemonics:
+		return MnemonicsNever // the Mac has no mnemonics
 	}
 	return 0
 }

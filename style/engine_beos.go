@@ -1014,7 +1014,12 @@ func (e beosEngine) DrawViewFrame(l *Classic, ctx *paintengine2d.Context, b pain
 
 // StyleHint: BAlert's buttons line the bottom with the default rightmost,
 // labels sit left of their text controls, tabs start at the left.
-func (beosEngine) StyleHint(l *Classic, h StyleHint) int { return 0 }
+func (beosEngine) StyleHint(l *Classic, h StyleHint) int {
+	if h == HintMnemonics {
+		return MnemonicsNever // BeOS menus show shortcuts, no underlines
+	}
+	return 0
+}
 
 // ControlFont: BeOS labels every control in the plain system font; only
 // window titles and box labels are bold.

@@ -706,8 +706,11 @@ func (platinumEngine) ItemFocus(*Classic, *paintengine2d.Context, paintengine2d.
 // StyleHint: Mac-style dialogs put the default button last and right-align
 // form labels.
 func (platinumEngine) StyleHint(l *Classic, h StyleHint) int {
-	if h == HintFormLabelsRight {
+	switch h {
+	case HintFormLabelsRight:
 		return 1
+	case HintMnemonics:
+		return MnemonicsNever // the Mac has no mnemonics
 	}
 	return 0
 }

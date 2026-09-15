@@ -63,6 +63,8 @@ func KeyFromKeysym(ks uint64) Key {
 		return KeyF12
 	case 0xff67:
 		return KeyMenu
+	case 0xffe9, 0xffea, 0xffe7, 0xffe8: // Alt_L, Alt_R, Meta_L, Meta_R
+		return KeyAlt
 	}
 	if ks >= 'a' && ks <= 'z' {
 		return KeyA + Key(ks-'a')

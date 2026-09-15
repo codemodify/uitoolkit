@@ -222,6 +222,19 @@ const (
 	// Vista's breathing glow): it swells toward its hover look and back.
 	// 0: a still default button.
 	HintDefaultPulseMs
+	// HintMnemonics: when mnemonic underlines show (Qt's
+	// SH_UnderlineShortcut): MnemonicsAlways (Windows 3.1 to 98, Motif,
+	// KDE 3, Swing's Metal), MnemonicsOnAlt, while Alt is held or the
+	// keyboard drives the menus (Windows 2000 onward, GNOME, Plasma), or
+	// MnemonicsNever (Mac OS, Material).
+	HintMnemonics
+)
+
+// HintMnemonics answers.
+const (
+	MnemonicsAlways = 0
+	MnemonicsOnAlt  = 1
+	MnemonicsNever  = 2
 )
 
 // LookHint reads a style hint from any look (0 for non-engine looks).
