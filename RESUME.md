@@ -88,8 +88,9 @@ Also merged: `macos` (OS X Yosemite, macOS Big Sur and Big Sur Dark),
 whose tonal palettes are computed from a seed colour) and `flatlaf` (FlatLaf
 Light, FlatLaf Dark, Darcula).
 
-78 packs from 28 engines in all. Running now in its own worktree: accent
-colours for the modern engines (`engine/accent`).
+78 packs from 28 engines in all. Running now in its own worktree: sidebar
+styles and toolbar tool buttons for macOS, Adwaita, Fluent, Material and
+Metal (`engine/sidebar`).
 
 Core features the engines drive, added along the way:
 - selected tabs overlap their neighbours;
@@ -170,15 +171,30 @@ Core features the engines drive, added along the way:
   Themes with no sibling stay as chosen. `UITK_COLOR_SCHEME=dark` stands in
   for the desktop. See `docs/settings.md`.
 - **Takes the desktop's accent colour** in themes whose engine recolours
-  around one (`style.AccentEngine`). Breeze does now, and the other modern
-  engines are in progress. `UITK_ACCENT=#e95420` stands in for the
-  desktop's accent.
+  around one (`style.AccentEngine`): Breeze, Fluent, Windows 10, Adwaita
+  (snapped to GNOME's nine accents, as libadwaita does), macOS Big Sur,
+  Material 2 and 3 (Material You: the accent becomes the seed), FlatLaf,
+  Fusion, Oxygen, and Aero's glass. Each derives its shades the way its
+  platform did. `UITK_ACCENT=#e95420` stands in for the desktop's accent.
 - **Honours the desktop's reduced-motion setting** (yours is on): fades,
   pulses and busy bars stop in every app, as in GTK 4 apps.
 - **Mnemonic underlines** show when each platform showed them: always in
   Windows 95, only while Alt is held in XP and Plasma, never on the Mac
   (`HintMnemonics`).
 - **Labels word-wrap** (`Label.Wrap`, QLabel's wordWrap).
+- **Editable combo boxes** (`ComboBox.SetEditable`): type a value or pick
+  one, with inline completion (QComboBox's editable).
+- **Slider tick marks** (`Slider.Ticks`). Pressing the thumb takes hold of
+  it where it was pressed; it used to jump a few pixels in most looks.
+- **Progress text** (`ProgressBar.ShowText`): in the bar where it fits,
+  beside thin bars.
+- **HiDPI:** the base look (the default Classic 95 themes) and the widgets'
+  default sizes and paddings now scale with the display. At 1.75x, which is
+  your laptop's scale, labels crowded their controls and lines came out
+  thin.
+- **Sidebars** (`ListView.Sidebar`, `TreeView.Sidebar`) and a new
+  `ViewBackground` engine hook: Aqua draws Leopard's source list; more
+  engines are in progress.
 - **Start-up:** the font index and the portal read run alongside display
   setup.
 - **`UITK_THEME=<pack>`:** runs any app in any theme, like `GTK_THEME`.
@@ -202,8 +218,10 @@ apps. Now:
   D-Bus session with a real libatspi client. It checks roles, names, values
   and text, actions, and the focus and "checked" announcements.
 
-See `docs/accessibility.md`. Still to do: text-change events, relations,
-and the Windows and macOS adapters.
+It also announces changes on the focused object (a ticked check box, typed
+text, caret moves) and supports EditableText, for automation tools such as
+dogtail. See `docs/accessibility.md`. Still to do: relations, the Selection
+and Table interfaces, and the Windows and macOS adapters.
 
 ## Performance
 
