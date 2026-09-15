@@ -571,19 +571,24 @@ func (t *BrowserTabs) tabState(i int) style.ControlState {
 	return st
 }
 
-// label is tab i's title as it fits its slot s, and whether it was elided.
-func (t *BrowserTabs) label(i int, s paintengine2d.Rect, g stripGeom) (string, bool) {
+// labelBox is where tab i's label goes in its slot s: the slot, less the
+// close button's room at its right end when the tab has one.
+func (t *BrowserTabs) labelBox(i int, s paintengine2d.Rect, g stripGeom) paintengine2d.Rect {
+	if !t.closable(i, g) {
+		return s
+	}
+	return paintengine2d.Rect{Min: s.Min, Max: paintengine2d.Pt(t.closeRect(s).Min.X-t.dip(2), s.Max.Y)}
+}
+
+// label is tab i's title as it fits its label box lb, and whether it was
+// elided.
+func (t *BrowserTabs) label(i int, lb paintengine2d.Rect) (string, bool) {
 	title := t.tabs[i].Title
 	f := style.ControlFontOf(t.Look(), style.RoleTab)
 	if f == nil || title == "" {
 		return title, false
 	}
-	room := s.Dx() - 2*t.dip(12)
-	if t.closable(i, g) {
-		// Room for the close button on both sides keeps the label centred.
-		room = s.Dx() - 2*(s.Max.X-t.closeRect(s).Min.X+t.dip(4))
-	}
-	room = max(room, t.dip(8))
+	room := max(lb.Dx()-2*t.dip(8), t.dip(8))
 	if f.Advance(title) <= room {
 		return title, false
 	}
@@ -606,8 +611,26 @@ func (t *BrowserTabs) Paint(ctx *paintengine2d.Context) {
 		if sel {
 			r = paintengine2d.Rect{Min: paintengine2d.Pt(s.Min.X-out.Left, s.Min.Y-out.Top), Max: paintengine2d.Pt(s.Max.X+out.Right, s.Max.Y+out.Bottom)}.Intersect(b)
 		}
-		text, _ := t.label(i, s, g)
-		style.DrawBrowserTabOf(lk, ctx, r, t.tabState(i), text, sel)
+		st := t.tabState(i)
+		lb := t.labelBox(i, s, g)
+		text, _ := t.label(i, lb)
+		if lb == s {
+			style.DrawBrowserTabOf(lk, ctx, r, st, text, sel)
+		} else {
+			// The look centres a tab's label on the tab; to centre it on
+			// the room left of the close button, the tab is painted bare,
+			// then again moved left by half the button's room, clipped to
+			// that room: inside it the face is the same, and the label
+			// lands where it belongs.
+			style.DrawBrowserTabOf(lk, ctx, r, st, "", sel)
+			if text != "" {
+				shift := (s.Max.X - lb.Max.X) * 0.5
+				ctx.Save()
+				ctx.ClipRect(paintengine2d.Rect{Min: paintengine2d.Pt(lb.Min.X+t.dip(2), s.Min.Y), Max: lb.Max})
+				style.DrawBrowserTabOf(lk, ctx, s.Translate(paintengine2d.Pt(-shift, 0)), st, text, sel)
+				ctx.Restore()
+			}
+		}
 		if t.hasClose(i, g) {
 			t.paintClose(ctx, i, t.closeRect(s), sel)
 		}
@@ -728,7 +751,7 @@ func (t *BrowserTabs) Tooltip() string {
 			return t.tabs[i].Tip
 		}
 		g := t.geom()
-		if _, elided := t.label(i, g.slots[i], g); elided {
+		if _, elided := t.label(i, t.labelBox(i, g.slots[i], g)); elided {
 			return t.tabs[i].Title
 		}
 	}
