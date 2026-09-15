@@ -89,8 +89,9 @@ type DecorationSpec struct {
 	// (Windows).
 	CenterButtons bool
 	// CenterTitle: the look centres the window title on the window (the
-	// Mac, GNOME, Motif), so the title's box is kept clear of both button
-	// groups alike; otherwise it is the space between them.
+	// Mac, GNOME, Plasma): its box is the title's width on the window's
+	// centre, pushed aside by the buttons where they leave no room there;
+	// otherwise it is the space between them.
 	CenterTitle bool
 	// Layout is the look's own caption-button layout in GNOME's syntax
 	// ("close,minimize,maximize:" on the Mac), used when the user prefers

@@ -258,7 +258,8 @@ func (lunaEngine) DrawCaptionButton(l *Classic, ctx *paintengine2d.Context, b pa
   `ButtonPad` (from the caption's top and sides), `CloseButton` and
   `CloseGap` where close differs (Windows 7's wide one, Windows 95's 2 px),
   `CenterButtons` (in a caption taller than `Caption`), `CenterTitle` (the
-  title's box is kept clear of both button groups), `Layout` (the era's
+  title centred on the window, pushed aside by the buttons rather than cut
+  short where they leave no room at the centre), `Layout` (the era's
   button layout in GNOME's syntax, for `"captionButtons": "theme"`), and
   for Phase 3 `Radius` and `Shadow`.
 - `DrawDecoration` paints the border inside `f.Window` and the caption band
