@@ -25,6 +25,10 @@ func (s *x11Surface) tryBindGPU() {
 		Platform: paintengine2d.EGLPlatformX11,
 		Width:    w,
 		Height:   h,
+		// A window on a 32-bit visual must be drawn through a config with
+		// an alpha channel, or the buffers it swaps have no alpha for the
+		// compositor to read and the window shows through everywhere.
+		Alpha: s.argb(),
 	})
 	if err != nil {
 		return
