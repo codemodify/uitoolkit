@@ -250,11 +250,12 @@ func (s *settingsState) themesPage(status *widgets.StatusBar, stage func(style.A
 		widgets.NewTitle(pack.Display()),
 		widgets.NewLabel(strings.Join(meta, "  ·  ")),
 	).WithGap(2)
-	if pack.Summary != "" {
-		summary := widgets.NewLabel(pack.Summary)
-		summary.Wrap = true
-		info.Add(summary)
-	}
+	// Three lines whatever the pack says (a user pack may say nothing), so
+	// the preview below stays put as the user arrows through the list.
+	summary := widgets.NewLabel(pack.Summary)
+	summary.Wrap = true
+	summary.MinLines = 3
+	info.Add(summary)
 	shown := pack
 	if note := s.followNote(pack, &shown); note != "" {
 		n := widgets.NewLabel(note)
