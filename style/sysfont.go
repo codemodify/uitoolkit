@@ -43,6 +43,11 @@ var fcList = func() ([]byte, error) {
 	return exec.Command(path, "--format", "%{family}\t%{weight}\t%{slant}\t%{index}\t%{file}\n").Output()
 }
 
+// PrefetchSystemFonts builds the installed-font index in the background
+// (fontconfig takes a dozen milliseconds), so the first look does not wait
+// for it. The app package calls it while the display connection comes up.
+func PrefetchSystemFonts() { go systemFaces() }
+
 func systemFaces() map[string][]sysFace {
 	sysIndex.once.Do(func() {
 		sysIndex.faces = map[string][]sysFace{}

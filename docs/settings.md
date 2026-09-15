@@ -78,8 +78,15 @@ stay as they are. A user pack `mine` pairs with a user pack `mine-night`.
 
 `UITK_COLOR_SCHEME=dark` (or `light`) stands in for the desktop, to try a
 theme's other side without switching the desktop. `UITK_THEME=<pack>`
-shows exactly that pack and does not follow. Headless apps (tests,
-screenshots) never ask the desktop.
+shows exactly that pack and does not follow. Headless and offscreen apps
+(tests, screenshots) never ask the desktop.
+
+The desktop's **reduced-motion** setting (GNOME's *Animations* switch,
+Plasma's animation speed at *Instant*, published as the portal's
+`reduced-motion`) turns every uitoolkit animation off in every app,
+whatever `reduceMotion` says; Settings shows a note under its Animations
+switch while it does. Apps read the portal once at start (in the
+background, alongside the font index) and follow it live.
 
 Mode `0600`. Missing or invalid files yield `dark` + `round` +
 `classic` + `medium`. A file without `iconSize` migrates to medium.
@@ -264,6 +271,6 @@ corners, the icon set, and icon size on top.
 | `Options.WatchLook`, `Options.DisableLookWatch` | `app` / `uitoolkit` |
 | `Application.WatchingLook`, `Application.ReloadPreferredLook` | `app` |
 | `Application.ApplyAppearance`, `Application.OnLookChange`, `Application.DesktopColorScheme`, `ColorSchemeEnv` | `app` |
-| `ColorScheme`, `SchemeVariant`, `Appearance.Effective`, `SetDesktopColorScheme` | `style` / `uitoolkit` |
-| `DesktopColorScheme`, `WatchColorScheme` (the portal) | `platform` |
+| `ColorScheme`, `SchemeVariant`, `Appearance.Effective`, `SetDesktopColorScheme`, `DesktopReducesMotion` | `style` / `uitoolkit` |
+| `DesktopPrefs`, `ReadDesktopPrefs`, `WatchDesktopPrefs` (the portal) | `platform` |
 | `DrawToolIcon`, `DrawFileToolIcon` | `style` |

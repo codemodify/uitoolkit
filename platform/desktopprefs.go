@@ -14,6 +14,21 @@ const (
 	SchemeLight
 )
 
+// DesktopPrefs are the desktop's appearance preferences, as the XDG
+// desktop portal publishes them (org.freedesktop.appearance): GNOME's
+// Style, Plasma's colour scheme and accent, and both desktops' animation
+// and contrast settings.
+type DesktopPrefs struct {
+	ColorScheme ColorScheme
+	// ReducedMotion: the user asked for fewer animations.
+	ReducedMotion bool
+	// HighContrast: the user asked for higher contrast.
+	HighContrast bool
+	// Accent is the accent colour (sRGB, 0..1) when HasAccent is set.
+	Accent    [3]float64
+	HasAccent bool
+}
+
 // parseScheme maps the portal's value (0 none, 1 dark, 2 light).
 func parseScheme(v uint32) ColorScheme {
 	switch v {
