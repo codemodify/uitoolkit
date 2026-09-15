@@ -75,6 +75,9 @@ const (
 	// KeyMenu is the context-menu key (between AltGr and Ctrl; Shift+F10
 	// does the same).
 	KeyMenu
+	// KeyAlt is either Alt key on its own: windows show mnemonic
+	// underlines while it is held in looks that hide them otherwise.
+	KeyAlt
 )
 
 // Modifiers is a bitset of active modifier keys.

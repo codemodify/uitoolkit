@@ -74,6 +74,9 @@ func (aquaEngine) StyleHint(l *Classic, h StyleHint) int {
 	if h == HintTabsCentered || h == HintFormLabelsRight {
 		return 1
 	}
+	if h == HintMnemonics {
+		return MnemonicsNever // the Mac has no mnemonics
+	}
 	return 0
 }
 

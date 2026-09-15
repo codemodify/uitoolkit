@@ -183,6 +183,7 @@ func (m *MenuBar) Paint(ctx *paintengine2d.Context) {
 	ctx.Save()
 	ctx.ClipRect(m.LocalBounds())
 	rects := m.titleRects()
+	cues := mnemonicShown(m, m.keyNav)
 	for i, menu := range m.menus {
 		// The bar's widget StateHovered is true for any pointer on the
 		// strip (including empty space). Titles must not inherit it or
@@ -199,6 +200,9 @@ func (m *MenuBar) Paint(ctx *paintengine2d.Context) {
 			st &^= style.StateFocused
 		}
 		label, _, idx := ParseMnemonic(menu.Title)
+		if !cues {
+			idx = -1
+		}
 		lk.DrawMenuTitle(ctx, rects[i], st, label, idx, i == m.open)
 	}
 	ctx.Restore()
@@ -370,8 +374,10 @@ func (m *MenuBar) Open(i int) {
 		m.focus = (i + dir + n) % n
 		m.Open(m.focus)
 	}
-	// Opened from the keyboard: the first item is current and painted so.
+	// Opened from the keyboard: the first item is current and painted so,
+	// and its mnemonics show until it closes.
 	pop.keyNav = m.keyNav
+	pop.cues = m.keyNav
 	origin := widget.DeviceOrigin(m)
 	tb := rects[i]
 	anchor := paintengine2d.XYWH(origin.X+tb.Min.X, origin.Y+tb.Min.Y, tb.Dx(), tb.Dy())
@@ -487,6 +493,9 @@ type PopupMenu struct {
 	press      int
 	focus      int
 	keyNav     bool
+	// cues: opened from the keyboard, so mnemonic underlines show until
+	// it closes (pointer moves do not hide them, unlike keyNav).
+	cues       bool
 	vbar       scrollDrag
 	cascade    *PopupMenu
 	cascadeIdx int
@@ -880,6 +889,7 @@ func (p *PopupMenu) Paint(ctx *paintengine2d.Context) {
 	lk.DrawMenuFrame(ctx, b)
 	ctx.Save()
 	ctx.ClipRect(b.Inset(2))
+	cues := mnemonicShown(p, p.cues)
 	for i, it := range p.Items {
 		if it == nil {
 			continue
@@ -895,6 +905,9 @@ func (p *PopupMenu) Paint(ctx *paintengine2d.Context) {
 			st |= style.StatePressed
 		}
 		label, _, idx := ParseMnemonic(it.Text)
+		if !cues {
+			idx = -1
+		}
 		lk.DrawMenuItem(ctx, p.rowBounds(i), st, style.MenuRow{
 			Label: label, Shortcut: it.Shortcut, Underline: idx,
 			Separator: it.Separator, Checked: it.Checked, Radio: it.isRadio(),
@@ -1049,6 +1062,7 @@ func (p *PopupMenu) KeyPress(e widget.KeyEvent) bool {
 			p.openCascade(p.focus)
 			if p.cascade != nil {
 				p.cascade.keyNav = true
+				p.cascade.cues = true
 				p.cascade.RequestFocus()
 			}
 			return true

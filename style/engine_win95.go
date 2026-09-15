@@ -456,8 +456,13 @@ func (win95Engine) WindowCloseRect(l *Classic, b paintengine2d.Rect) paintengine
 
 // Windows dialogs put the default button first: "OK  Cancel".
 func (win95Engine) StyleHint(l *Classic, h StyleHint) int {
-	if h == HintDialogPrimaryFirst {
+	switch h {
+	case HintDialogPrimaryFirst:
 		return 1
+	case HintMnemonics:
+		// 95 and 98 always underline; 2000 hides them until Alt (param
+		// "mnemonics" 1).
+		return int(l.P("mnemonics", MnemonicsAlways))
 	}
 	return 0
 }
@@ -1067,7 +1072,8 @@ func win95Packs() []ThemePack {
 		win95Pack("win2000", "Windows 2000", 2000, "Warm grey #d4d0c8, blue gradient captions.", ThemeLight, w2k,
 			map[string]string{"hi": "#ffffff", "light": "#d4d0c8", "shadow": "#808080", "dk": "#404040",
 				"caption": "#0a246a", "caption2": "#a6caf0", "captionOff": "#808080", "captionOff2": "#c0c0c0", "captionOffText": "#d4d0c8"},
-			map[string]float32{"flatMenuBar": 1}),
+			// Windows 2000 hid the underlines until Alt by default.
+			map[string]float32{"flatMenuBar": 1, "mnemonics": MnemonicsOnAlt}),
 		win95Pack("win-highcontrast", "High Contrast Black", 1995, "Accessibility scheme: black, white, cyan and green.", ThemeDark, hc,
 			map[string]string{"hi": "#ffffff", "light": "#c0c0c0", "shadow": "#808080", "dk": "#ffffff",
 				"caption": "#800080", "captionOff": "#008000", "info": "#000000", "infoText": "#ffffff"}, nil),

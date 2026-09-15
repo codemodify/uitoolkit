@@ -1085,8 +1085,12 @@ func (nextEngine) DrawPopupShadow(*Classic, *paintengine2d.Context, paintengine2
 // StyleHint: NeXT dialogs put the default button last, at the bottom right,
 // and NSForm right-aligns its titles against the fields.
 func (nextEngine) StyleHint(l *Classic, h StyleHint) int {
-	if h == HintFormLabelsRight {
+	switch h {
+	case HintFormLabelsRight:
 		return 1
+	case HintMnemonics:
+		// NeXTSTEP menus carry Command-key equivalents, no underlines.
+		return MnemonicsNever
 	}
 	return 0
 }
