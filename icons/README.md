@@ -139,4 +139,5 @@ Name must be `[a-z][a-z0-9_-]{0,63}`.
 ## Attribution
 
 These icons remain under their upstream licenses. Copying a pack into
-config keeps `LICENSE` + `SOURCES.txt` with it. uitoolkit itself is MIT.
+config keeps `LICENSE` + `SOURCES.txt` with it. uitoolkit itself is under
+The Free License (see the repository's `LICENSE`).
