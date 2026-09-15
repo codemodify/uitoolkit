@@ -45,6 +45,21 @@ func sessionBusAddress() string {
 // sessionBusAddress); the caller closes the connection.
 func DialSessionBus() (*dbus.Conn, error) { return connectSessionBus() }
 
+var sharedBus struct {
+	once sync.Once
+	conn *dbus.Conn
+	err  error
+}
+
+// SharedSessionBus is the process's one session-bus connection for
+// watchers (the desktop's preferences, the accessibility status): opened
+// on first use, without starting a bus, and never closed. Watchers share
+// its signals, so each filters by name and path.
+func SharedSessionBus() (*dbus.Conn, error) {
+	sharedBus.once.Do(func() { sharedBus.conn, sharedBus.err = connectSessionBus() })
+	return sharedBus.conn, sharedBus.err
+}
+
 func connectSessionBus() (*dbus.Conn, error) {
 	addr := sessionBusAddress()
 	if addr == "" {
@@ -145,22 +160,26 @@ func ReadDesktopPrefs(timeout time.Duration) (DesktopPrefs, bool) {
 // portal still starting), the set arrives through fn once it is known. ok
 // is false without a session bus or portal; stop is always safe to call.
 func WatchDesktopPrefs(timeout time.Duration, fn func(DesktopPrefs)) (prefs DesktopPrefs, ok bool, stop func()) {
-	conn, err := connectSessionBus()
-	if err != nil {
-		return DesktopPrefs{}, false, func() {}
-	}
 	if fn == nil {
+		conn, err := connectSessionBus()
+		if err != nil {
+			return DesktopPrefs{}, false, func() {}
+		}
 		prefs, ok = readPrefs(conn, timeout)
 		conn.Close()
 		return prefs, ok, func() {}
 	}
+	conn, err := SharedSessionBus()
+	if err != nil {
+		return DesktopPrefs{}, false, func() {}
+	}
 	// Subscribe before reading, so no change falls between the two.
-	if err := conn.AddMatchSignal(
+	match := []dbus.MatchOption{
 		dbus.WithMatchInterface(portalSettings),
 		dbus.WithMatchMember("SettingChanged"),
 		dbus.WithMatchObjectPath(portalPath),
-	); err != nil {
-		conn.Close()
+	}
+	if err := conn.AddMatchSignal(match...); err != nil {
 		return DesktopPrefs{}, false, func() {}
 	}
 	ch := make(chan *dbus.Signal, 8)
@@ -182,7 +201,7 @@ func WatchDesktopPrefs(timeout time.Duration, fn func(DesktopPrefs)) (prefs Desk
 				if !open {
 					return
 				}
-				if len(sig.Body) < 3 {
+				if sig.Name != portalSettings+".SettingChanged" || sig.Path != portalPath || len(sig.Body) < 3 {
 					continue
 				}
 				ns, _ := sig.Body[0].(string)
@@ -202,7 +221,7 @@ func WatchDesktopPrefs(timeout time.Duration, fn func(DesktopPrefs)) (prefs Desk
 		once.Do(func() {
 			close(done)
 			conn.RemoveSignal(ch)
-			conn.Close()
+			_ = conn.RemoveMatchSignal(match...)
 		})
 	}
 }
