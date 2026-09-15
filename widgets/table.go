@@ -1,6 +1,7 @@
 package widgets
 
 import (
+	"math"
 	"time"
 
 	"github.com/codemodify/paintengine2d"
@@ -318,6 +319,15 @@ func (t *TableView) colWidths() []float32 {
 		if out[give] < 1 {
 			out[give] = 1
 		}
+	}
+	// Whole-pixel column edges: two cells meeting on a fraction would each
+	// half-cover the shared pixel, and a selected row would show a seam.
+	var acc, prev float32
+	for i := range out {
+		acc += out[i]
+		edge := float32(math.Floor(float64(acc) + 0.5))
+		out[i] = edge - prev
+		prev = edge
 	}
 	return out
 }

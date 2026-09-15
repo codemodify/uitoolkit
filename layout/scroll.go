@@ -1,9 +1,13 @@
 package layout
 
 // MaxScroll is the largest legal offset: max(0, content − viewport).
+//
+// Components sit on whole pixels while text makes content heights
+// fractional, so an overflow under one pixel has nothing to reveal: it
+// counts as fitting and brings up no scroll bar.
 func MaxScroll(content, viewport float32) float32 {
 	m := content - viewport
-	if m < 0 {
+	if m < 1 {
 		return 0
 	}
 	return m
