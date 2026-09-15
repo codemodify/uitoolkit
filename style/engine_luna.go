@@ -2166,10 +2166,13 @@ func (e lunaEngine) DrawTreeRow(l *Classic, ctx *paintengine2d.Context, b painte
 	ctx.Save()
 	ctx.ClipRect(b)
 	for d := 0; d <= depth; d++ {
+		if d < depth && !st.HasNextSibling(d) {
+			continue // that ancestor's branch has ended
+		}
 		gx := snap(b.Min.X + pad + float32(d)*indent + indent*0.5)
 		y1 := b.Max.Y
-		if d == depth {
-			y1 = cy
+		if d == depth && !st.HasNextSibling(depth) {
+			y1 = cy // the last child's elbow
 		}
 		for y := snap(b.Min.Y); y < y1; y += 2 * lw {
 			ctx.DrawRect(paintengine2d.XYWH(gx, y, lw, lw), dot)

@@ -76,3 +76,46 @@ func TestTreeExpanderHover(t *testing.T) {
 		t.Fatal("the row itself stays hovered")
 	}
 }
+
+// Each tree row knows which branch lines run on past it: the last child
+// ends its parent's line at its elbow, and a finished subtree draws none.
+//
+//	root
+//	├ a
+//	│ ├ a1
+//	│ └ a2
+//	└ b
+//	  └ b1
+func TestTreeRowsCarryTheirBranchChain(t *testing.T) {
+	a1, a2 := &TreeNode{Label: "a1"}, &TreeNode{Label: "a2"}
+	b1 := &TreeNode{Label: "b1"}
+	a := &TreeNode{Label: "a", Expanded: true, Children: []*TreeNode{a1, a2}}
+	b := &TreeNode{Label: "b", Expanded: true, Children: []*TreeNode{b1}}
+	root := &TreeNode{Label: "root", Expanded: true, Children: []*TreeNode{a, b}}
+	tv := NewTreeView(root)
+	tv.SetHost(&host{})
+	tv.Arrange(paintengine2d.XYWH(0, 0, 200, 200))
+	for _, c := range []struct {
+		n     *TreeNode
+		depth int
+		next  []bool // HasNextSibling for depths 0..depth
+	}{
+		{root, 0, []bool{false}},
+		{a, 1, []bool{false, true}},
+		{a1, 2, []bool{false, true, true}},
+		{a2, 2, []bool{false, true, false}},
+		{b, 1, []bool{false, false}},
+		{b1, 2, []bool{false, false, false}},
+	} {
+		st := tv.rowState(c.n)
+		for d, want := range c.next {
+			if got := st.HasNextSibling(d); got != want {
+				t.Errorf("%s: depth %d has a next sibling = %v, want %v", c.n.Label, d, got, want)
+			}
+		}
+	}
+	// Without the chain, painters keep every line running.
+	if !style.StateNone.HasNextSibling(3) {
+		t.Error("a row without chain bits should keep its lines")
+	}
+}
