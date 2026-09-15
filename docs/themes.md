@@ -11,7 +11,7 @@ icon size stay independent `look.json` prefs.
 
 ## Built-in packs
 
-103 packs from 29 engines, by the year their original shipped. Each one was
+121 packs from 29 engines, by the year their original shipped. Each one was
 researched from published facts (design guides, SDK documentation, pixels
 measured from screenshots of the originals); no code or pixmaps were copied.
 Apps start in `metal-ocean` (`style.DefaultThemeName`) until the user picks
@@ -75,10 +75,16 @@ one; `UITK_THEME=<id>` runs any app in any pack.
 | `nimbus` | Nimbus | 2008 | Java | `nimbus` | Java 6's vector look: glossy rounded controls, blue focus glow, orange progress. |
 | `oxygen` | Oxygen | 2008 | KDE | `oxygen` | KDE 4's Oxygen: glossy slabs with soft shadows, the blue hover glow and a window-wide gradient. |
 | `aero-basic` | Windows 7 Basic | 2009 | Windows | `aero` | Windows 7 without Aero Glass: the same controls under opaque light-blue frames. |
+| `solarized` | Solarized Dark | 2011 | Solarized | `web` | Solarized Dark: base03 #002b36 panes with base02 highlights, base1 text, blue #268bd2 as the accent. |
+| `solarized-light` | Solarized Light | 2011 | Solarized | `web` | Solarized Light: base3 #fdf6e3 panes with base2 highlights, base01 text, the same blue #268bd2 as the accent. |
+| `gruvbox` | Gruvbox Dark | 2012 | Gruvbox | `web` | Gruvbox's dark mode: warm #282828 panes, #ebdbb2 cream text, #504945 menus with the current item on blue #83a598. |
+| `gruvbox-light` | Gruvbox Light | 2012 | Gruvbox | `web` | Gruvbox's light mode: #fbf1c7 panes, #3c3836 text, #d5c4a1 menus, the faded blue #076678 as the accent. |
 | `fusion` | Fusion | 2012 | Qt | `fusion` | Qt's cross-platform style: 2px gradient buttons, highlight focus outlines, square scroll sliders. |
 | `fusion-night` | Fusion Dark | 2012 | Qt | `fusion` | Fusion in the widely used community dark palette. Not historical: Qt's 2012 Fusion shipped a light palette only. |
 | `win8` | Windows 8 | 2012 | Windows | `metro` | The flat desktop of Windows 8: square 1px-bordered controls, dotted focus, solid blue selection, coloured window frames. |
 | `dracula` | Dracula | 2013 | Dracula | `web` | Dracula: #282a36 panes, darker sidebars and bars, #343746 popovers, the Purple #bd93f9 accent and #815cd6 focus rings. |
+| `onedark` | One Dark | 2014 | Atom | `web` | Atom's One Dark: #282c34 panes in #21252b chrome, #9da5b4 text, 3px controls, boxed tabs, the #4d78cc accent. |
+| `onelight` | One Light | 2014 | Atom | `web` | Atom's One Light: #fafafa panes in #eaeaeb chrome, #424243 text, 3px controls, boxed tabs, the #556de8 accent. |
 | `adwaita-gtk3` | Adwaita (GTK 3) | 2014 | GNOME | `adwaita` | GNOME 3.14's Adwaita: soft gradient buttons in grey borders, blue selections, pill scroll bars. |
 | `material` | Material | 2014 | Google | `material` | Material Design 2: contained buttons on 2dp shadows, outlined fields with floating labels, #6200EE. |
 | `material-night` | Material Dark | 2014 | Google | `material` | Material Design 2's dark theme: #121212 surfaces lifted by elevation, primary #BB86FC. |
@@ -116,12 +122,24 @@ one; `UITK_THEME=<id>` runs any app in any pack.
 | `primer-dimmed` | Primer Dark Dimmed | 2023 | GitHub | `web` | GitHub's dark dimmed theme: softer #212830 greys, muted green buttons and the #316dca accent. |
 | `geist` | Geist | 2023 | Vercel | `web` | Vercel's Geist: gray-1000 primary buttons, alpha-ring hairlines, a 2px blue ring beyond a 2px gap, 2px underlined tabs. |
 | `geist-night` | Geist Dark | 2023 | Vercel | `web` | Geist's dark theme: #0a0a0a on black sidebars, near-white primary buttons and the #52a9ff focus ring. |
+| `breeze6` | Breeze (Plasma 6) | 2024 | KDE | `breeze` | KDE Plasma 6's Breeze: 5px frames in a 20% outline, frameless views, rounded outlined selections, a soft focus band around the focused control. |
+| `breeze6-night` | Breeze Dark (Plasma 6) | 2024 | KDE | `breeze` | Plasma 6.4's darker Breeze Dark: #202326 windows, #141618 views and #292c30 buttons in the Plasma 6 shapes. |
 | `sourcegit` | SourceGit | 2024 | SourceGit | `web` | SourceGit's Avalonia look: square fields, bold 3px flat buttons, the 1px accent tab pipe, unfilled check boxes with an accent tick, joined sidebar selections. |
-| `sourcegit-night` | SourceGit Dark | 2024 | SourceGit | `web` | SourceGit's dark theme: #252525 windows round #1c1c1c contents, the same Avalonia controls and the OS accent. |
+| `sourcegit-night` | SourceGit Dark | 2024 | SourceGit | `web` | SourceGit's dark theme: #252525 windows around #1c1c1c content, the same Avalonia controls and the OS accent. |
+| `adwaita48` | Adwaita (GNOME 48) | 2025 | GNOME | `adwaita` | libadwaita as GNOME 48 draws it: 9px controls and rows, 15px popovers and dialogs, a ring for the popover's edge, Adwaita Sans. |
+| `adwaita48-night` | Adwaita Dark (GNOME 48) | 2025 | GNOME | `adwaita` | GNOME 48's dark style: the rounder libadwaita shapes on #222226 windows, #1d1d20 views and #36363a popovers. |
+| `material3x` | Material 3 Expressive | 2025 | Google | `material` | Material 3 Expressive: tone-based surface containers, round buttons that square off when pressed, the split slider, wavy progress, segmented lists, a secondary focus ring. |
+| `material3x-night` | Material 3 Expressive Dark | 2025 | Google | `material` | Material 3 Expressive's dark baseline: #141218 surfaces, #211f26 containers, the #d0bcff primary. |
+| `islands-night` | Islands Dark | 2025 | JetBrains | `web` | JetBrains' Islands Dark: #191a1c islands on #26282c with 6px between them, #2a4371 selections, #233558 tab pills, the #3871e1 accent. |
+| `islands` | Islands Light | 2025 | JetBrains | `web` | JetBrains' Islands Light: white 10px-rounded islands on #e9eaee, 4px controls, the #3871e1 accent, pill editor tabs, rounded selections inset 12px. |
+| `tahoe` | macOS Tahoe | 2025 | Mac OS | `macos` | macOS 26's Liquid Glass: grey rounded controls, glass menus and tool bar groups, a floating glass sidebar, the #0088FF blue. |
+| `tahoe-night` | macOS Tahoe Dark | 2025 | Mac OS | `macos` | Tahoe's dark appearance: the same glass over charcoal windows and #1c1c1e content, the #0091FF blue. |
 | `shadcn` | shadcn/ui | 2025 | shadcn/ui | `web` | shadcn/ui's new-york style in neutral: near-black primary buttons, #e5e5e5 hairlines, a 3px grey focus ring outside, segmented tabs. |
 | `shadcn-night` | shadcn/ui Dark | 2025 | shadcn/ui | `web` | shadcn/ui's dark neutral theme: #0a0a0a with white-alpha hairlines and near-white primary buttons. |
 | `linear` | Linear | 2026 | Linear | `web` | Linear's light theme: warm #f9f9fa greys, 4px controls and 8px inputs, the indigo accent, compact rounded tabs. |
-| `linear-night` | Linear Dark | 2026 | Linear | `web` | Linear's dark theme: #121213 content by a #09090a sidebar, hairlines barely lighter, the #5e6ad2 indigo. |
+| `linear-night` | Linear Dark | 2026 | Linear | `web` | Linear's dark theme: #121213 content beside a #09090a sidebar, hairlines barely lighter, the #5e6ad2 indigo. |
+| `vscode-night` | VS Code Dark 2026 | 2026 | VS Code | `web` | VS Code's Dark 2026: a #121314 editor in #191a1b chrome, #297aa0 buttons, the #3994bc line atop the active tab, white-alpha selections. |
+| `vscode` | VS Code Light 2026 | 2026 | VS Code | `web` | VS Code's Light 2026: #fafafd chrome around a white editor, 4px buttons and inputs, 1px focus borders inside, a black line atop the active tab. |
 
 Aliases (load-only, not listed twice): `classic95` → `light`,
 `classic95-dark` → `dark`, `luna-dark` → `luna-night`, and the other
