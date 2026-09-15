@@ -114,6 +114,11 @@ func (s *wlSurface) abandonGPU() {
 		s.img = snap.Clone()
 	}
 	s.closeGPU()
+	if s.img == nil {
+		// The GPU painted the window and left no frame behind: the shm
+		// path needs a pixmap of the buffer's size.
+		s.img = paintengine2d.NewImage(max(s.bufW, 1), max(s.bufH, 1))
+	}
 }
 
 func (s *wlSurface) UsesGPU() bool { return s != nil && s.gpu != nil }

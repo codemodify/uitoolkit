@@ -987,6 +987,7 @@ func (WaylandBackend) NewSurface(opts WindowOptions) (Surface, error) {
 		bw, bh = w*sc, h*sc
 	}
 	s.img = paintengine2d.NewImage(bw, bh)
+	s.bufW, s.bufH = bw, bh
 	wlMu.Lock()
 	wlNextSurf++
 	s.id = wlNextSurf
@@ -1022,6 +1023,9 @@ func (WaylandBackend) NewSurface(opts WindowOptions) (Surface, error) {
 		C.ui_wl_roundtrip(c.dpy)
 	}
 	s.tryBindGPU()
+	if s.gpu != nil {
+		s.img = nil
+	}
 	return s, nil
 }
 
@@ -1183,7 +1187,12 @@ type wlSurface struct {
 	title      string
 	appID      string
 	minW, minH int
+	// img is the CPU pixmap, nil while the GPU paints the window (a
+	// device-size pixmap beside the GPU surface would only hold memory:
+	// 12.5 MB for a 1280×800 window at 1.75x). bufW × bufH is the buffer's
+	// size either way.
 	img        *paintengine2d.Image
+	bufW, bufH int
 	slots      [4]wlSlot
 	wantW      int
 	wantH      int
@@ -1817,7 +1826,7 @@ func (s *wlSurface) Resize(w, h int) error {
 		h = 1
 	}
 	w, h = fitLogicalSize(w, h, s.logicalW, s.logicalH, s.deviceScale())
-	if s.img != nil && s.img.Width == w && s.img.Height == h {
+	if s.bufW == w && s.bufH == h {
 		// Caller passed current buffer pixels; keep logical, just sync.
 		if bw, bh := s.bufferWH(); bw == w && bh == h {
 			return nil
@@ -1826,15 +1835,27 @@ func (s *wlSurface) Resize(w, h int) error {
 	s.logicalW, s.logicalH = w, h
 	s.wantW, s.wantH = w, h
 	bw, bh := s.bufferWH()
-	if s.img != nil && s.img.Width == bw && s.img.Height == bh {
+	if s.bufW == bw && s.bufH == bh {
 		return nil
 	}
-	s.img = paintengine2d.NewImage(bw, bh)
+	s.setBuffer(bw, bh)
 	s.blank = true
-	if s.gpu != nil {
-		s.resizeGPU(bw, bh)
-	}
 	return nil
+}
+
+// setBuffer sizes the window's buffer: the GPU surface while there is one
+// (the CPU pixmap goes), else the CPU pixmap — also when resizing the GPU
+// surface failed and closed it.
+func (s *wlSurface) setBuffer(bw, bh int) {
+	s.bufW, s.bufH = bw, bh
+	if s.gpu != nil {
+		s.img = nil
+		s.resizeGPU(bw, bh)
+		if s.gpu != nil {
+			return
+		}
+	}
+	s.img = paintengine2d.NewImage(bw, bh)
 }
 
 func (s *wlSurface) bufferWH() (int, int) {
@@ -1919,12 +1940,9 @@ func (s *wlSurface) present(dirty []paintengine2d.Rect, flushOnly bool) error {
 		s.logicalH = s.wantH
 	}
 	bw, bh := s.bufferWH()
-	if s.img.Width != bw || s.img.Height != bh {
-		s.img = paintengine2d.NewImage(bw, bh)
+	if s.bufW != bw || s.bufH != bh {
+		s.setBuffer(bw, bh)
 		s.queue = append(s.queue, Event{Kind: EventResize, Width: s.logicalW, Height: s.logicalH})
-		if s.gpu != nil {
-			s.resizeGPU(bw, bh)
-		}
 		// The new pixmap is empty. Committing it now paints a black or
 		// transparent flash over the window for one frame; the resize
 		// event just queued makes the app repaint immediately.
@@ -2677,7 +2695,7 @@ func uitkWlTopConfigure(sid C.uintptr_t, top *C.struct_xdg_toplevel, w, h C.int3
 		s.wantW, s.wantH = int(w), int(h)
 		s.logicalW, s.logicalH = int(w), int(h)
 		bw, bh := s.bufferWH()
-		if s.img != nil && (s.img.Width != bw || s.img.Height != bh) {
+		if s.bufW != bw || s.bufH != bh {
 			s.push(Event{Kind: EventResize, Width: int(w), Height: int(h)})
 		}
 	}
