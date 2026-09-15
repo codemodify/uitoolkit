@@ -11,6 +11,18 @@ One engine paints many packs: the `win95` engine paints Windows 95, 98, 2000,
 Hot Dog Stand and High Contrast; a `luna` engine paints Luna Blue, Olive and
 Silver. Packs change colours and metrics; engines change shapes.
 
+Engines so far, each a good model for its family:
+
+| engine | looks | a good example of |
+| --- | --- | --- |
+| `win95` | Windows 95 / 98 / 2000 and schemes | the reference: bevels, dotted focus, overlapping tabs |
+| `luna` | Windows XP Luna, Royale | gradients, memoised colours, rebar grips |
+| `aqua`, `platinum` | Mac OS X, Mac OS 8 | gel materials, textures, Mac rules (inactive grey, hollow selections) |
+| `motif` | Motif, CDE, IRIX, HP VUE | colour derivation, shadow thickness per pack |
+| `next` | NeXTSTEP, OPENSTEP, Window Maker | textures as pack data, dithers |
+| `fusion`, `oxygen`, `breeze` | Qt Fusion, KDE 4, Plasma | modern flat and glow looks, tone models |
+| `base` | the stock looks | defaults every engine inherits |
+
 ## Where this comes from
 
 Every serious toolkit separates *what a control does* from *how it looks*,
@@ -85,7 +97,13 @@ gets the era right:
 `RoleCombo`, `RoleSplitter`, `RoleBar`, `RolePanel`. `ControlState` is the
 state bitset (`Hovered`, `Pressed`, `Disabled`, `Focused`, `Checked`,
 `Primary` = default button, `Toggle`, `First` / `Last` in a strip,
-`Inactive`, `Backdrop`).
+`Inactive`, `Backdrop`, `Alternate` = an odd row).
+
+`StyleHint` answers behaviour questions like Qt's `styleHint`:
+`HintDialogPrimaryFirst` (1: "OK Cancel", Windows and KDE; 0: "Cancel OK",
+Mac and GNOME), `HintTabsCentered` (Aqua's segmented tabs) and
+`HintFormLabelsRight` (Mac, NeXT, Oxygen and Breeze right-align form
+labels).
 
 ### Item views
 
@@ -137,15 +155,18 @@ may leave `ItemFocus` empty and let the view frame ring the focused view.
    Params}}`. Registered packs sort by `Year`; a pack with the name of a
    legacy era pack (`luna`, `aqua`, `motif`…) replaces it.
 
-4. Look at it: `go run ./cmd/uitk-themesheet -theme luna-blue -o /tmp/s`
+4. Look at it: `go run ./cmd/uitk-themesheet -theme luna -o /tmp/s`
    (and `-scale 2`). Read the PNG. Iterate until it matches the era. Then
    see real apps in it: `go run ./examples/gallery -screenshot /tmp/g
    -theme luna` takes every scripted gallery shot (menus, combo lists,
    tooltips, message boxes, tables) in your pack, and `UITK_THEME=luna`
    runs any uitoolkit app in it, like `GTK_THEME` or `QT_STYLE_OVERRIDE`.
 
-5. Test it: at minimum a registration test; the contract test covers
-   painting every control in every state.
+5. Test it. The shared tests run over every registered pack: every control
+   paints inside its bounds in every state, shadows stay within their
+   reach, keyboard focus is visible, text meets the contrast checks. Add a
+   test file for the engine: registration and year order, bounds at scale 1
+   and 2, `WindowCloseRect` against the painting, your style hints.
 
 ## Rules
 
@@ -167,6 +188,22 @@ may leave `ItemFocus` empty and let the view frame ring the focused view.
 - **No hover where the era had none** only when authentic (Win95 buttons
   had no hot state) — but never lose feedback users rely on: hover on tool
   buttons and menus, pressed on everything, visible focus.
+- **Facts, not copies.** uitoolkit is MIT. Take colours, sizes, radii,
+  gradient stops and behaviour from other toolkits as facts, and write the
+  drawing yourself; never transcribe or port code, path tables, pixmaps or
+  data from GPL / LGPL toolkits (Qt and KDE styles, GTK engines, OpenJDK,
+  Window Maker) or proprietary artwork.
+
+## For widget authors
+
+Widgets reach the look through `LookAndFeel`, plus optional interfaces a
+look may implement; use the `…Of` helpers, which fall back when a look
+does not: `ControlFontOf` (measure labels), `DrawArrowOf` (era arrows),
+`DrawItemFocusOf` (current-row mark), `ViewFrameInsetsOf` /
+`DrawViewFrameOf`, `PopupShadowOf` / `DrawPopupShadowOf`, `TabOutsetOf`,
+`ToolBarInsetsOf` and `LookHint`. Build row states with `widget.ItemState`
+or `widget.RowItemState`, which add `Focused`, `Inactive`, `Backdrop` and
+`Alternate` for you.
 
 ## Pack schema (`theme.json`)
 
