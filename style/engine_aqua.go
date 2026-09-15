@@ -67,7 +67,7 @@ func (aquaEngine) DefaultMetrics() ChromeMetrics {
 
 // StyleHint: Mac dialog order (default button last) and centred tabs.
 func (aquaEngine) StyleHint(l *Classic, h StyleHint) int {
-	if h == HintTabsCentered {
+	if h == HintTabsCentered || h == HintFormLabelsRight {
 		return 1
 	}
 	return 0
