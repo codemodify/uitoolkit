@@ -591,7 +591,7 @@ func (t *TableView) Paint(ctx *paintengine2d.Context) {
 	}
 	// Sticky header after the body so a leaked row cannot cover the labels.
 	t.paintHeader(ctx, lk, widths, hh)
-	t.vbar.paint(ctx, lk, t.vparts(), true)
+	t.vbar.paint(t, ctx, lk, t.vparts(), true, t.OffsetY)
 	// The current row carries the focus mark; a focused table without one
 	// rings itself.
 	if t.Focused() && (t.Selected < 0 || t.Selected >= t.RowCount) {
@@ -650,7 +650,7 @@ func (t *TableView) MouseMove(e widget.MouseEvent) bool {
 		t.applyCursor(e.Pos)
 		return true
 	}
-	if handled, dirty := t.vbar.move(p, t.vaxis()); handled || dirty {
+	if handled, dirty := t.vbar.move(t, p, t.vaxis()); handled || dirty {
 		if dirty {
 			t.Invalidate()
 		}

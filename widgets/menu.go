@@ -898,7 +898,7 @@ func (p *PopupMenu) Paint(ctx *paintengine2d.Context) {
 		})
 	}
 	ctx.Restore()
-	p.vbar.paint(ctx, lk, p.vparts(), true)
+	p.vbar.paint(p, ctx, lk, p.vparts(), true, p.OffsetY)
 }
 
 func (p *PopupMenu) invalidateRow(i int) {
@@ -912,7 +912,7 @@ func (p *PopupMenu) MouseMove(e widget.MouseEvent) bool {
 	if p.dead {
 		return false
 	}
-	if handled, dirty := p.vbar.move(e.Pos, p.vaxis()); handled {
+	if handled, dirty := p.vbar.move(p, e.Pos, p.vaxis()); handled {
 		if dirty {
 			p.Invalidate()
 		}

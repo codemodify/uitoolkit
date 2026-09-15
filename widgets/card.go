@@ -268,7 +268,7 @@ func (l *CardList) Paint(ctx *paintengine2d.Context) {
 		}
 		ctx.Restore()
 	}
-	l.vbar.paint(ctx, lk, l.vparts(), true)
+	l.vbar.paint(l, ctx, lk, l.vparts(), true, l.OffsetY)
 	if l.Focused() {
 		lk.DrawFocusRing(ctx, b)
 	}
@@ -414,7 +414,7 @@ func (l *CardList) invalidateRow(i int) {
 func (l *CardList) MouseEnter() {}
 
 func (l *CardList) MouseMove(e widget.MouseEvent) bool {
-	if handled, dirty := l.vbar.move(e.Pos, l.vaxis()); handled || dirty {
+	if handled, dirty := l.vbar.move(l, e.Pos, l.vaxis()); handled || dirty {
 		if dirty {
 			l.Invalidate()
 		}

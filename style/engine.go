@@ -251,6 +251,13 @@ type ScrollBarStyle struct {
 	// Overlay bars float inside the content with Inset padding and do not
 	// reserve layout space; classic bars reserve a Thickness-wide gutter.
 	Overlay bool
+	// Transient overlay bars come and go (GTK's overlay scrolling, WinUI,
+	// Mac OS X since Lion; Qt's SH_ScrollBar_Transient): the content keeps
+	// its full width and runs under the bar, which shows while the view
+	// scrolls or the pointer moves over it and fades out after a moment of
+	// rest. Engines draw the thin idle form unless ScrollState.Hovered or a
+	// part is pressed.
+	Transient bool
 	// Inset is the gap between an overlay bar and the view edge.
 	Inset float32
 	// Arrows places the step buttons; ArrowLen is each button's length
@@ -378,9 +385,13 @@ func ScrollBarStyleOf(lk LookAndFeel) ScrollBarStyle {
 
 // ScrollGutter is the layout space content gives up to a visible
 // scrollbar across its axis, so no row text ever runs under the bar:
-// the bar plus its inset for overlay bars, the bar for gutter bars.
+// the bar plus its inset for overlay bars, the bar for gutter bars, and
+// nothing for transient bars, which float over the content.
 func ScrollGutter(lk LookAndFeel) float32 {
 	s := ScrollBarStyleOf(lk)
+	if s.Transient {
+		return 0
+	}
 	if s.Overlay {
 		return s.Thickness + s.Inset*2
 	}
