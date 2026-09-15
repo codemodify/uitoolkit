@@ -1621,8 +1621,13 @@ func (l *Classic) fieldText() paintengine2d.Color {
 	}).(paintengine2d.Color)
 }
 
-// selectedText is the colour of text over a text selection of colour sel.
+// selectedText is the colour of text over a text selection of colour sel:
+// the pack's "selectionText" extra when it pins one (Windows' HighlightText
+// is white even on its light blues), else the most readable text colour.
 func (l *Classic) selectedText(sel paintengine2d.Color) paintengine2d.Color {
+	if c, ok := l.tokens.Extra["selectionText"]; ok {
+		return c
+	}
 	bg := sel
 	if colorUnset(bg) {
 		return l.fieldText()

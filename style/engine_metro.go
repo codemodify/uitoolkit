@@ -1622,6 +1622,8 @@ func metroPack(name, label string, year int, summary string, fam ThemeName, sche
 		Family:  fam,
 		Palette: pal,
 		Params:  map[string]float32{"scheme": float32(scheme)},
+		// Selected text is white on the accent (HighlightText).
+		Extra: map[string]paintengine2d.Color{"selectionText": Hex("#ffffff")},
 	}
 	tok.Hot = ChromeState{Fill: pal.MenuHover, Border: pal.MenuHoverBorder}
 	tok.Pressed = ChromeState{Fill: Shade(pal.MenuHover, -0.08), Border: pal.Accent}
@@ -1639,9 +1641,6 @@ func metroPacks() []ThemePack {
 	dark := metroPal("#202020", "#2b2b2b", "#191919", "#ffffff", "#9a9a9a", "#0078d7", "#4d4d4d", "#3d3d3d", "#414141", "#414141")
 	dark.Danger, dark.Success, dark.Warning = Hex("#ff6b6b"), Hex("#6ccb5f"), Hex("#fcc300")
 	dark.Focus = Hex("#429ce3")
-	// Text selections take the accent's darker step so their text reads
-	// white, as on Windows 10.
-	win10.Selection, dark.Selection = Hex("#0063b1"), Hex("#0063b1")
 	dark.Shadow, dark.Overlay = paintengine2d.RGBA(0, 0, 0, 0.5), paintengine2d.RGBA(0, 0, 0, 0.5)
 	return []ThemePack{
 		metroPack("win8", "Windows 8", 2012, "The flat desktop of Windows 8: square 1px-bordered controls, dotted focus, solid blue selection, coloured window frames.", ThemeLight, 1, win8),
