@@ -29,8 +29,8 @@ it out of the history.
 
    Every later engine brief forbids transcribing.
 2. **The default theme.** The stock looks are "Classic 95 Dark / Light" (a
-   Win95 homage). A modern engine such as Adwaita, Breeze or Fluent could be the
-   default instead. Say which.
+   Win95 homage). Adwaita, Breeze and Fusion now have real engines (Fluent is
+   in progress), so any of them could be the default instead. Say which.
 
 ## What the glitching was
 
@@ -76,9 +76,10 @@ Merged engines:
 | fusion | Qt Fusion, Fusion Dark |
 | oxygen | KDE 4 Oxygen |
 | breeze | KDE Plasma Breeze, Breeze Dark |
+| clearlooks, bluecurve | GNOME 2 Clearlooks, Human, Qt Cleanlooks; Red Hat Bluecurve |
+| adwaita | GNOME Adwaita, Adwaita Dark, Adwaita (GTK 3) |
 
 In progress, or queued with briefs written:
-- GNOME (Clearlooks, Bluecurve, Human, Cleanlooks, Adwaita);
 - modern Windows (Aero, Windows 8 and 10, Fluent);
 - KDE 3 (Keramik, Plastik);
 - the first desktops (Mac System 1 and 7, Windows 3.1, OPEN LOOK, Amiga, BeOS,
