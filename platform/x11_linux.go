@@ -933,6 +933,9 @@ type x11Surface struct {
 	ximCbs     unsafe.Pointer
 	gpu        *paintengine2d.GPUDevice
 	popup      bool
+	// hidden is set by Hide: presenting must not map the window again
+	// (close-to-tray hid it, and the next repaint showed it).
+	hidden bool
 
 	// state, caps: what the window manager says about the window
 	// (_NET_WM_STATE, _NET_WM_ALLOWED_ACTIONS); focused tracks focus
@@ -1391,7 +1394,7 @@ func (s *x11Surface) Present(dirty []paintengine2d.Rect) error {
 	if s.gpu != nil {
 		if err := s.presentGPU(); err == nil {
 			x11Mu.Lock()
-			if !s.mapped && s.conn.dpy != nil && s.win != 0 {
+			if !s.mapped && !s.hidden && s.conn.dpy != nil && s.win != 0 {
 				C.ui_map(s.conn.dpy, s.win)
 				s.mapped = true
 			}
@@ -1445,7 +1448,7 @@ func (s *x11Surface) Present(dirty []paintengine2d.Rect) error {
 			C.ui_put(s.conn.dpy, s.win, s.gc, s.ximg, C.int(x0), C.int(y0), C.int(x0), C.int(y0), C.uint(x1-x0), C.uint(y1-y0))
 		}
 	}
-	if !s.mapped {
+	if !s.mapped && !s.hidden {
 		C.ui_map(s.conn.dpy, s.win)
 		s.mapped = true
 	}
@@ -2267,6 +2270,7 @@ func (s *x11Surface) Raise() {
 		C.ui_focus(s.conn.dpy, s.win)
 	}
 	s.mapped = true
+	s.hidden = false
 	x11Mu.Unlock()
 }
 
@@ -2297,6 +2301,7 @@ func (s *x11Surface) Hide() {
 	x11Mu.Lock()
 	C.ui_unmap(s.conn.dpy, s.win)
 	s.mapped = false
+	s.hidden = true
 	x11Mu.Unlock()
 }
 
