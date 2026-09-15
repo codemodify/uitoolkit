@@ -1052,7 +1052,6 @@ func w95Palette(face, text, field, fieldText, sel, selText, gray, accent string)
 func win95Packs() []ThemePack {
 	std := w95Palette("#c0c0c0", "#000000", "#ffffff", "#000000", "#000080", "#ffffff", "#808080", "#000080")
 	w2k := w95Palette("#d4d0c8", "#000000", "#ffffff", "#000000", "#0a246a", "#ffffff", "#808080", "#0a246a")
-	hot := w95Palette("#ffff00", "#000000", "#ffffff", "#000000", "#000000", "#ffffff", "#808080", "#ff0000")
 	hc := w95Palette("#000000", "#ffffff", "#000000", "#ffffff", "#800080", "#ffffff", "#00ff00", "#00ffff")
 	dark := w95Palette("#3c3c3c", "#e6e6e6", "#1f1f1f", "#e6e6e6", "#1c3f94", "#ffffff", "#9a9a9a", "#6f9bff")
 	dark.Danger, dark.Success, dark.Warning = hexColor("#ff6b6b"), hexColor("#5fd35f"), hexColor("#f0c040")
@@ -1069,9 +1068,6 @@ func win95Packs() []ThemePack {
 			map[string]string{"hi": "#ffffff", "light": "#d4d0c8", "shadow": "#808080", "dk": "#404040",
 				"caption": "#0a246a", "caption2": "#a6caf0", "captionOff": "#808080", "captionOff2": "#c0c0c0", "captionOffText": "#d4d0c8"},
 			map[string]float32{"flatMenuBar": 1}),
-		win95Pack("win-hotdog", "Hot Dog Stand", 1992, "The infamous Windows 3.1 scheme: red, yellow and no mercy.", ThemeLight, hot,
-			map[string]string{"hi": "#ffffff", "light": "#ffff80", "shadow": "#808000", "dk": "#000000",
-				"caption": "#ff0000", "captionText": "#ffffff", "captionOff": "#ffffff", "captionOffText": "#000000"}, nil),
 		win95Pack("win-highcontrast", "High Contrast Black", 1995, "Accessibility scheme: black, white, cyan and green.", ThemeDark, hc,
 			map[string]string{"hi": "#ffffff", "light": "#c0c0c0", "shadow": "#808080", "dk": "#ffffff",
 				"caption": "#800080", "captionOff": "#008000", "info": "#000000", "infoText": "#ffffff"}, nil),
