@@ -46,6 +46,18 @@ func NewTitle(text string) *Label {
 	return l
 }
 
+// For makes the label the caption of c, as Qt's buddy labels are: c is
+// named after the label for assistive technology, unless it has a name.
+func (l *Label) For(c widget.Component) *Label {
+	if nm, ok := c.(interface {
+		AccessibleName() string
+		SetAccessibleName(string)
+	}); ok && nm.AccessibleName() == "" {
+		nm.SetAccessibleName(strings.TrimSuffix(strings.TrimSpace(l.Text), ":"))
+	}
+	return l
+}
+
 func (l *Label) SetText(s string) {
 	if l.Text == s {
 		return

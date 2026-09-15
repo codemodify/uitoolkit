@@ -283,11 +283,11 @@ func NotesApp(win *app.Window) widget.Component {
 	sidebar.AddFlex(table, 1)
 
 	editor := widgets.NewPanel("Editor",
-		widgets.NewLabel("Title"),
+		widgets.NewLabel("Title").For(title),
 		title,
-		widgets.NewLabel("Body"),
+		widgets.NewLabel("Body").For(body),
 		body,
-		widgets.NewLabel("Priority"),
+		widgets.NewLabel("Priority").For(priority),
 		priority,
 		done,
 		widgets.NewLabel("Table, textarea, spinner, file stub."),

@@ -122,3 +122,21 @@ func TestAppsAreAccessible(t *testing.T) {
 		t.Fatal("settings: the page did not change")
 	}
 }
+
+// The other sample apps pass the audit too.
+func TestSampleAppsAreAccessible(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true, Scale: 1, DisableLookWatch: true})
+	for name, build := range map[string]func(*app.Window) widget.Component{
+		"files": FilesApp, "notes": NotesApp, "inspector": InspectorApp,
+	} {
+		w, err := a.NewWindow(platform.WindowOptions{Title: name, Width: 1040, Height: 700, Headless: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		w.SetContent(build(w))
+		a.PumpOnce()
+		auditWindow(t, name, w)
+		w.Close()
+	}
+}
