@@ -106,7 +106,7 @@ func (t *TextField) SetCaretBlink(on bool) { t.blinkOn = on }
 
 func (t *TextField) Measure(c layout.Constraints) paintengine2d.Point {
 	h := style.FieldHeight(t.Look().Metrics())
-	return c.Constrain(paintengine2d.Pt(180, h))
+	return c.Constrain(paintengine2d.Pt(style.Dip(t.Look(), 180), h))
 }
 
 func (t *TextField) Arrange(r paintengine2d.Rect) { t.SetBounds(r) }

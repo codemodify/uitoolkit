@@ -54,7 +54,7 @@ func (l *ListView) Measure(c layout.Constraints) paintengine2d.Point {
 	if c.HasMaxH() && h > c.MaxH {
 		h = c.MaxH
 	}
-	w := float32(200)
+	w := style.Dip(l.Look(), 200)
 	if c.HasMaxW() {
 		w = c.MaxW
 	}

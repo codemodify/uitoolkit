@@ -101,9 +101,9 @@ func (c *Calendar) geometry() (head, wk, cw, ch float32) {
 	m := lk.Metrics()
 	head = m.ControlH
 	if head <= 0 {
-		head = 28
+		head = style.Dip(lk, 28)
 	}
-	wk = lk.MutedFont().Height() + 6
+	wk = lk.MutedFont().Height() + style.Dip(lk, 6)
 	b := c.LocalBounds()
 	cw = b.Dx() / 7
 	ch = (b.Dy() - head - wk - 4) / 6
@@ -368,7 +368,7 @@ func (f *DateField) Measure(c layout.Constraints) paintengine2d.Point {
 	if h <= 0 {
 		h = m.ControlH
 	}
-	w := style.ControlFontOf(lk, style.RoleCombo).Advance("0000-00-00") + m.Pad*2 + 40
+	w := style.ControlFontOf(lk, style.RoleCombo).Advance("0000-00-00") + m.Pad*2 + style.Dip(lk, 40)
 	return c.Constrain(paintengine2d.Pt(w, h))
 }
 

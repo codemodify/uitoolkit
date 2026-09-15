@@ -135,7 +135,7 @@ func (t *ToolBar) barH() float32 {
 func (t *ToolBar) toolBtnW(h float32) float32 {
 	btn := t.Look().Metrics().ToolBtn
 	if btn <= 0 {
-		btn = h - 6
+		btn = h - style.Dip(t.Look(), 6)
 		if btn < 8 {
 			btn = 8
 		}

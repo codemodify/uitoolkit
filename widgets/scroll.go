@@ -69,7 +69,7 @@ func (s *ScrollView) Measure(c layout.Constraints) paintengine2d.Point {
 		}
 		s.content = s.child.Measure(layout.Constraints{MaxW: cw, MaxH: -1})
 	}
-	w, h := s.content.X+g, float32(160)
+	w, h := s.content.X+g, style.Dip(s.Look(), 160)
 	if c.HasMaxH() {
 		h = c.MaxH
 	}
