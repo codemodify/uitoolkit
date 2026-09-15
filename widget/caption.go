@@ -39,6 +39,15 @@ func IsCaption(hit, titleBar Component, p paintengine2d.Point) bool {
 	return false
 }
 
+// CaptionMenuer is implemented by title-bar components with a context menu
+// of their own for their caption space (Chromium's tab-strip menu): a
+// right-click there runs CaptionMenu (p in window device pixels) before
+// the header bar's OnContextMenu and the window menu, and it reports
+// whether it showed a menu.
+type CaptionMenuer interface {
+	CaptionMenu(p paintengine2d.Point) bool
+}
+
 // FrameHost is implemented by app.Window: what a window's caption controls
 // (widgets.WindowControls) show and ask for.
 type FrameHost interface {

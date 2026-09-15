@@ -956,6 +956,29 @@ func DrawBrowserTabOf(lk LookAndFeel, ctx *paintengine2d.Context, b paintengine2
 	lk.DrawTab(ctx, b, st, label, selected)
 }
 
+// BrowserTabBarEngine is an optional engine hook: the strip browser tabs
+// stand on (a title bar's colour with the tool bar's edge along its bottom,
+// which the selected tab opens). Looks without it paint their ordinary tab
+// bar.
+type BrowserTabBarEngine interface {
+	DrawBrowserTabBar(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect)
+}
+
+// DrawBrowserTabBarOf paints the strip under browser tabs in any look: the
+// engine's own, else the look's ordinary tab bar.
+func DrawBrowserTabBarOf(lk LookAndFeel, ctx *paintengine2d.Context, b paintengine2d.Rect) {
+	if lk == nil || ctx == nil {
+		return
+	}
+	if c, ok := lk.(*Classic); ok && c != nil {
+		if e, ok := c.eng().(BrowserTabBarEngine); ok {
+			e.DrawBrowserTabBar(c, ctx, b)
+			return
+		}
+	}
+	lk.DrawTabBar(ctx, b)
+}
+
 // ViewBackgroundLook says what an item view's rows sit on.
 type ViewBackgroundLook interface {
 	ViewBackground(st ControlState) paintengine2d.Color
