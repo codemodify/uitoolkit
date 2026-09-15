@@ -36,9 +36,10 @@ import (
 //     (black in the light theme) and a 1px inner one (white);
 //   - progress bars are a 3px accent bar over a 1px track.
 //
-// Pack data: params "scheme" 0 = light, 1 = dark; every colour key of
-// fluentLight can be overridden through "extra" ("#rrggbbaa" for the
-// translucent tokens).
+// Pack data: params "scheme" 0 = light, 1 = dark, "acrylic" 0 turns the
+// flyouts' in-app acrylic (the blurred backdrop under a light tint) off;
+// every colour key of fluentLight can be overridden through "extra"
+// ("#rrggbbaa" for the translucent tokens).
 type fluentEngine struct{ BaseEngine }
 
 func init() {
@@ -1160,7 +1161,17 @@ func (fluentEngine) DrawMenuFrame(l *Classic, ctx *paintengine2d.Context, b pain
 		return
 	}
 	r := l.rx(8)
-	ctx.DrawRoundRect(b, r, r, paintengine2d.Fill(c.flyout))
+	if l.P("acrylic", 1) != 0 {
+		// In-app acrylic: what lies under the flyout, blurred, through a
+		// light tint of the flyout colour.
+		ctx.Save()
+		ctx.ClipRoundRect(b, r, r)
+		ctx.BackdropBlur(b, l.S(16))
+		ctx.Restore()
+		ctx.DrawRoundRect(b, r, r, paintengine2d.Fill(c.flyout.WithAlpha(0.85)))
+	} else {
+		ctx.DrawRoundRect(b, r, r, paintengine2d.Fill(c.flyout))
+	}
 	winRing(ctx, b, r, lw, paintengine2d.Fill(c.flyoutStroke))
 }
 
