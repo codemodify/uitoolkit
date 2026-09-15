@@ -1510,3 +1510,6 @@ func platinumPacks() []ThemePack {
 			}),
 	}
 }
+
+// SpinBoxStyle: Mac OS 8: the little arrows stand beside the field.
+func (platinumEngine) SpinBoxStyle(l *Classic) SpinBoxStyle { return SpinBoxStyle{} }

@@ -250,6 +250,9 @@ func (BaseEngine) TabOutset(l *Classic) Insets { return Insets{} }
 
 func (BaseEngine) TabOverlap(l *Classic) float32 { return 0 }
 
+// SpinBoxStyle: the step buttons share the field's frame, stacked.
+func (BaseEngine) SpinBoxStyle(l *Classic) SpinBoxStyle { return SpinBoxStyle{Inside: true} }
+
 func (BaseEngine) DrawTabPane(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect) {
 	l.DrawPanel(ctx, b, false)
 }

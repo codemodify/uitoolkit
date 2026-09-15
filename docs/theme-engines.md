@@ -81,6 +81,12 @@ gets the era right:
   in (Metal's bold buttons); widgets measure labels with it, so a bold look's
   text fits. `ToolBarInsets` keeps room for a tool bar grip (XP's rebar
   handle). Odd rows carry `StateAlternate` for striped lists (Aqua).
+- **Spin boxes** — `SpinBoxStyle` (Qt's `CC_SpinBox`): `Inside` puts the
+  step buttons inside the field's frame, which the spin box draws across the
+  whole box, then paints the editor and the stepper `StateFrameless` inside
+  it (Windows, KDE, GNOME and the base look); `Across` lays them side by
+  side, "− +" (GTK 3 and later); neither stands a stepper beside the field
+  (Mac OS, Motif, NeXT).
 - **Tabs** — `TabOutset` grows the selected tab, which the tab bar paints
   last, so it overlaps its neighbours (Win95 and XP: 2px each side).
   `TabOverlap` lays every tab over its neighbour's border, so two tabs share
@@ -104,7 +110,8 @@ gets the era right:
 state bitset (`Hovered`, `Pressed`, `Disabled`, `Focused`, `Checked`,
 `Primary` = default button, `Toggle`, `First` / `Last` in a strip or a
 table row, `Inactive`, `Backdrop`, `Alternate` = an odd row, `ExpanderHot`
-= the pointer is on a tree row's expander).
+= the pointer is on a tree row's expander, `Frameless` = a part inside a
+frame its parent drew).
 
 `StyleHint` answers behaviour questions like Qt's `styleHint`:
 `HintDialogPrimaryFirst` (1: "OK Cancel", Windows and KDE; 0: "Cancel OK",
