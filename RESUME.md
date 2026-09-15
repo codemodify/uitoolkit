@@ -253,6 +253,26 @@ text, caret moves) and supports EditableText, for automation tools such as
 dogtail. See `docs/accessibility.md`. Still to do: relations, the Selection
 and Table interfaces, and the Windows and macOS adapters.
 
+## Gaps against Qt and GTK (my proposed order)
+
+1. **Complex text:** bidirectional text (Arabic, Hebrew) and shaping for
+   scripts that need it (Arabic joining, Indic), plus right-to-left
+   layout mirroring. Text is kerned but not shaped. A pure-Go HarfBuzz port
+   (go-text/typesetting, BSD) could do the shaping.
+2. **Drag and drop, the rest:** X11's XDND, and dragging out of uitoolkit
+   apps (drag sources). Drops onto windows work on Wayland.
+3. **Other platforms:** Windows and macOS backends, with UI Automation and
+   NSAccessibility adapters for the accessibility tree that now exists.
+4. **Portals:** a parent window for native dialogs on Wayland
+   (xdg-foreign), OpenURI, notifications through the portal.
+5. **Widgets:**
+   - a rich-text editor;
+   - dock widgets (QDockWidget);
+   - an MDI area;
+   - a wizard;
+   - kinetic scrolling and touchpad gestures.
+6. **Printing.**
+
 ## Performance
 
 `BenchmarkGalleryRepaint` and `BenchmarkGallerySmallRepaint` in
