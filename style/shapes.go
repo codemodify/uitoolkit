@@ -258,12 +258,17 @@ func Pinstripes(ctx *paintengine2d.Context, b paintengine2d.Rect, col paintengin
 	if thickness <= 0 {
 		thickness = 1
 	}
-	ctx.Save()
-	ctx.ClipRect(b)
+	// One path of every stripe, filled once: a window of pinstripes is a
+	// single draw op instead of hundreds.
+	path := paintengine2d.NewPath()
 	for y := b.Min.Y; y < b.Max.Y; y += period {
-		ctx.DrawRect(paintengine2d.XYWH(b.Min.X, y, b.Dx(), thickness), paintengine2d.Fill(col))
+		h := thickness
+		if y+h > b.Max.Y {
+			h = b.Max.Y - y
+		}
+		path.AddRect(paintengine2d.XYWH(b.Min.X, y, b.Dx(), h))
 	}
-	ctx.Restore()
+	ctx.DrawPath(path, paintengine2d.Fill(col))
 }
 
 // GripLines paints n raised grip lines across b (toolbar handles, thumb
