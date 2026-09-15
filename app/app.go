@@ -68,6 +68,12 @@ type Application struct {
 	lookNotify *lookNotify
 }
 
+// trayWakeCap is the longest a tray-holding loop sleeps. Tray events
+// arrive through Post, which wakes the loop (platform.WakeLoop, the
+// surface's waker), so this is only a safety net; it was 100ms, ten wakes a
+// second for every tray app.
+const trayWakeCap = time.Second
+
 // a11yBridge is a platform's accessibility adapter; sync runs on the UI
 // goroutine after every frame.
 type a11yBridge interface{ sync() }
@@ -399,8 +405,8 @@ func (a *Application) Run() error {
 		if alive == 0 {
 			if a.trayHolds() {
 				timeout := a.waitTimeout(time.Now(), nextBlink)
-				if timeout < 0 || timeout > 100*time.Millisecond {
-					timeout = 100 * time.Millisecond
+				if timeout < 0 || timeout > trayWakeCap {
+					timeout = trayWakeCap
 				}
 				a.waitDisplay(timeout)
 				continue
@@ -415,8 +421,8 @@ func (a *Application) Run() error {
 		if a.anyNeedsPaint() {
 			timeout = 0
 		}
-		if a.trayHolds() && (timeout < 0 || timeout > 100*time.Millisecond) {
-			timeout = 100 * time.Millisecond
+		if a.trayHolds() && (timeout < 0 || timeout > trayWakeCap) {
+			timeout = trayWakeCap
 		}
 		a.waitDisplay(timeout)
 	}
