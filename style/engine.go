@@ -83,6 +83,9 @@ type Engine interface {
 	// TabOutset grows the selected tab's rect so it can overlap its
 	// neighbours; it is painted after them. Zero for most looks.
 	TabOutset(l *Classic) Insets
+	// SpinBoxStyle is how a spin box puts its step buttons: inside the
+	// field's frame or beside it, stacked or side by side.
+	SpinBoxStyle(l *Classic) SpinBoxStyle
 	// TabOverlap is how far neighbouring tabs overlap (Qt's
 	// PM_TabBarTabOverlap): a border's width makes two tabs share one
 	// border line instead of drawing two side by side. Zero for most looks.
@@ -725,6 +728,36 @@ func TabOutsetOf(lk LookAndFeel) Insets {
 		return t.TabOutset()
 	}
 	return Insets{}
+}
+
+// SpinBoxStyle is how a look builds a spin box (Qt's CC_SpinBox).
+type SpinBoxStyle struct {
+	// Inside puts the step buttons inside the field's frame, sharing it
+	// (Windows, KDE, GNOME): the field is drawn across the whole box and
+	// its text and the buttons are painted StateFrameless inside it.
+	// Otherwise the stepper stands beside a field of its own (Mac OS,
+	// Motif).
+	Inside bool
+	// Across lays the buttons side by side, "− +" (GTK 3 and later);
+	// otherwise the up button sits over the down one.
+	Across bool
+}
+
+// SpinBoxStyleLook tells how a look builds a spin box.
+type SpinBoxStyleLook interface {
+	SpinBoxStyle() SpinBoxStyle
+}
+
+// SpinBoxStyle implements [SpinBoxStyleLook].
+func (l *Classic) SpinBoxStyle() SpinBoxStyle { return l.eng().SpinBoxStyle(l) }
+
+// SpinBoxStyleOf is any look's spin box style (a stepper beside the field
+// when the look does not say).
+func SpinBoxStyleOf(lk LookAndFeel) SpinBoxStyle {
+	if s, ok := lk.(SpinBoxStyleLook); ok {
+		return s.SpinBoxStyle()
+	}
+	return SpinBoxStyle{}
 }
 
 // TabOverlapLook lays neighbouring tabs over each other's border.

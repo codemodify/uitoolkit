@@ -394,9 +394,11 @@ func (l *Classic) baseDrawSlider(ctx *paintengine2d.Context, b paintengine2d.Rec
 func (l *Classic) baseDrawTextField(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, text, placeholder string, caret, selA, selB int, blink bool, scrollX float32, face *Font) {
 	p := l.palette
 	m := l.metrics
-	l.paintFace(ctx, b, roleField, st)
-	if st.Focused() && !st.Disabled() && l.eng().FieldFocusRing(l) {
-		l.DrawFocusRing(ctx, b)
+	if !st.Frameless() {
+		l.paintFace(ctx, b, roleField, st)
+		if st.Focused() && !st.Disabled() && l.eng().FieldFocusRing(l) {
+			l.DrawFocusRing(ctx, b)
+		}
 	}
 	pad := m.FieldPad
 	if pad <= 0 {
@@ -432,7 +434,7 @@ func (l *Classic) baseDrawTextField(ctx *paintengine2d.Context, b paintengine2d.
 		selCol = l.selectedText(sel)
 	}
 	col := l.fieldText()
-	if font == muted {
+	if font == muted || st.Disabled() {
 		col = p.TextMuted
 	}
 	font.Draw(ctx, show, paintengine2d.Pt(ox, ty), col)
@@ -1287,8 +1289,13 @@ func (l *Classic) baseDrawSpinner(ctx *paintengine2d.Context, b paintengine2d.Re
 	p := l.palette
 	m := l.metrics
 	r := m.RadiusSmall
-	ctx.DrawRoundRect(b, r, r, paintengine2d.Fill(p.SurfaceAlt))
-	ctx.DrawRoundRect(b.Inset(0.5), r, r, paintengine2d.StrokePaint(p.FieldBorder, 1))
+	if st.Frameless() {
+		// Inside the field's frame: a divider against the text.
+		ctx.DrawRect(paintengine2d.XYWH(b.Min.X, b.Min.Y+2, 1, b.Dy()-4), paintengine2d.Fill(p.Divider))
+	} else {
+		ctx.DrawRoundRect(b, r, r, paintengine2d.Fill(p.SurfaceAlt))
+		ctx.DrawRoundRect(b.Inset(0.5), r, r, paintengine2d.StrokePaint(p.FieldBorder, 1))
+	}
 	mid := (b.Min.Y + b.Max.Y) * 0.5
 	up := paintengine2d.XYWH(b.Min.X, b.Min.Y, b.Dx(), mid-b.Min.Y)
 	down := paintengine2d.XYWH(b.Min.X, mid, b.Dx(), b.Max.Y-mid)
@@ -1710,6 +1717,11 @@ func (l *Classic) DrawSlider(ctx *paintengine2d.Context, b paintengine2d.Rect, s
 }
 
 func (l *Classic) DrawTextField(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, text, placeholder string, caret, selA, selB int, blink bool, scrollX float32, face *Font) {
+	if st.Frameless() {
+		// Inside a frame its parent drew (a spin box): the text alone.
+		l.baseDrawTextField(ctx, b, st, text, placeholder, caret, selA, selB, blink, scrollX, face)
+		return
+	}
 	l.eng().DrawTextField(l, ctx, b, st, text, placeholder, caret, selA, selB, blink, scrollX, face)
 }
 
