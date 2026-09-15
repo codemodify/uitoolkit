@@ -266,9 +266,13 @@ func fx32(v fixed.Int26_6) float32 { return float32(v) / 64 }
 const otPreload = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~…·–—“”‘’€"
 
 const (
-	// atlasSmallSide / atlasBigSide are the first sheet allocated for a size.
-	atlasSmallSide = 512
-	atlasBigSide   = 768
+	// atlasSmallSide / atlasBigSide are the first sheet allocated for a
+	// size. They start small: the preload set (about a hundred cells) fills
+	// a 256×128 sheet at body sizes, and a sheet doubles one side at a time
+	// as it fills, keeping every cell where it was. The old 512² and 768²
+	// first sheets were mostly empty: 1–2.25 MB for each face and size.
+	atlasSmallSide = 128
+	atlasBigSide   = 256
 	// atlasMaxSide caps one (family, weight, size) sheet at 2048² = 16 MB.
 	// A full sheet still measures text: further runes reuse the .notdef
 	// advance, they just stop adding pixels.
