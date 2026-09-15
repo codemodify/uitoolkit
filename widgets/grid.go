@@ -2,6 +2,7 @@ package widgets
 
 import (
 	"math"
+	"strings"
 
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/layout"
@@ -359,6 +360,13 @@ func (f *Form) AddRow(label string, field widget.Component) *Label {
 	f.Place(l, f.n, 0)
 	if field != nil {
 		f.Place(field, f.n, 1)
+		// The label names its field for assistive technology (Qt's buddy).
+		if nm, ok := field.(interface {
+			AccessibleName() string
+			SetAccessibleName(string)
+		}); ok && nm.AccessibleName() == "" {
+			nm.SetAccessibleName(strings.TrimSuffix(strings.TrimSpace(widget.PlainText(label)), ":"))
+		}
 	}
 	f.n++
 	return l
