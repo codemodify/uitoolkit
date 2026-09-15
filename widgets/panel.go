@@ -83,7 +83,8 @@ func (p *Panel) Paint(ctx *paintengine2d.Context) {
 	b := p.LocalBounds()
 	if w, ok := p.windowLook(); ok {
 		w.DrawWindowFrame(ctx, b, p.Title, style.WindowState{
-			Active: true, CanClose: p.OnClose != nil,
+			// Its caption follows the app window: grey in the backdrop.
+			Active: widget.WindowActive(p), CanClose: p.OnClose != nil,
 			CloseHot: p.closeHot, ClosePress: p.closeDown && p.closeHot,
 		})
 		return
