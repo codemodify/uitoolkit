@@ -96,7 +96,8 @@ window is inactive (GTK's `:backdrop`). Follow the platform you imitate:
 Windows and Mac looks grey a selection as soon as the view is `Inactive`
 (Win95 to the button face, Aqua pale grey, Platinum a hollow outline), GTK
 and Qt-style looks keep it until `Backdrop`, Motif and NeXT never change
-it. `RoleRow` faces see the same bits.
+it. `RoleRow` faces see the same bits, and every widget's state carries
+`Backdrop` while its window is inactive (Aqua's default button turns clear).
 
 List and tree painters mark a `Focused` row themselves — default
 `ItemFocus` over the row, Win95 and XP a dotted rectangle around the label,
