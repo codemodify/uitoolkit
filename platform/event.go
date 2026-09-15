@@ -136,7 +136,22 @@ const (
 	// EventPointerLeave: the pointer left the window (wl_pointer.leave,
 	// X11 LeaveNotify). Hover and pending tooltips must not survive it.
 	EventPointerLeave
+	// EventDragMotion: something dragged from another app is over the
+	// window at Pos (Mimes are what it offers); EventDragLeave: it left;
+	// EventDrop: it was dropped at Pos. The data is read with the
+	// surface's DropReceiver.
+	EventDragMotion
+	EventDragLeave
+	EventDrop
 )
+
+// DropReceiver is implemented by surfaces that take drops from other
+// apps: ReceiveDrop reads the dropped data as mime, and FinishDrop
+// completes (or, with ok false, refuses) the drop.
+type DropReceiver interface {
+	ReceiveDrop(mime string) ([]byte, bool)
+	FinishDrop(ok bool)
+}
 
 // Event is a platform-translated input or window event.
 type Event struct {
@@ -153,6 +168,8 @@ type Event struct {
 	IMECaret     int    // caret within EventIMEPreedit text
 	IMEDelBefore int    // text-input-v3 delete_surrounding bytes before caret
 	IMEDelAfter  int    // text-input-v3 delete_surrounding bytes after caret
+	// Mimes are the types a drag offers (EventDragMotion, EventDrop).
+	Mimes []string
 }
 
 // WindowOptions configure a native or offscreen surface.

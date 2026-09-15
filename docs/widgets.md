@@ -190,3 +190,18 @@ XDG desktop portal's FileChooser, as Qt and GTK apps do, and as sandboxed
 (Flatpak) apps must. `Filter`, the starting `Path` and Save mode carry
 over. `OnPick` or `OnCancel` run on the UI goroutine when the user is done.
 Without a portal the toolkit's dialog shows.
+
+## Drops from other apps
+
+Files and text dragged from other apps (a file manager, a browser) drop
+onto components that implement `widget.DropTarget`:
+- `DropTypes()` lists the types taken, best first: `text/uri-list` for
+  files, `text/plain` for text in any of its names;
+- `Drop(e)` gets `e.Paths`, the local files, or `e.Text`.
+
+`widgets.NewDropZone(child, onFiles)` wraps content that takes files, with a
+highlight while a drag is over it; set `OnText` for text. Text fields and
+areas take dropped text where it is dropped. Mail's compose window attaches
+dropped files. On Wayland the drop comes through `wl_data_device` (the
+drag's offer is accepted for copying, read and finished); X11's XDND is not
+done yet.

@@ -55,6 +55,10 @@ extern void uitkWlRegistryRemove(uintptr_t id, uint32_t name);
 extern void uitkWlDataOffer(uintptr_t id, struct wl_data_offer *offer);
 extern void uitkWlDataOfferMime(uintptr_t id, struct wl_data_offer *offer, char *mime);
 extern void uitkWlSelection(uintptr_t id, struct wl_data_offer *offer);
+extern void uitkWlDndEnter(uintptr_t id, uint32_t serial, struct wl_surface *s, wl_fixed_t x, wl_fixed_t y, struct wl_data_offer *o);
+extern void uitkWlDndLeave(uintptr_t id);
+extern void uitkWlDndMotion(uintptr_t id, wl_fixed_t x, wl_fixed_t y);
+extern void uitkWlDndDrop(uintptr_t id);
 extern void uitkWlDataSend(uintptr_t id, int fd);
 extern void uitkWlDataCancelled(uintptr_t id);
 extern void uitkWlPrimOffer(uintptr_t id, struct zwp_primary_selection_offer_v1 *offer);
@@ -569,13 +573,22 @@ static void uitk_ddev_offer(void *data, struct wl_data_device *d, struct wl_data
 	uitkWlDataOffer((uintptr_t)data, o);
 }
 static void uitk_ddev_enter(void *data, struct wl_data_device *d, uint32_t serial, struct wl_surface *s, wl_fixed_t x, wl_fixed_t y, struct wl_data_offer *o) {
-	(void)data; (void)d; (void)serial; (void)s; (void)x; (void)y; (void)o;
+	(void)d;
+	uitkWlDndEnter((uintptr_t)data, serial, s, x, y, o);
 }
-static void uitk_ddev_leave(void *data, struct wl_data_device *d) { (void)data; (void)d; }
+static void uitk_ddev_leave(void *data, struct wl_data_device *d) { (void)d; uitkWlDndLeave((uintptr_t)data); }
 static void uitk_ddev_motion(void *data, struct wl_data_device *d, uint32_t time, wl_fixed_t x, wl_fixed_t y) {
-	(void)data; (void)d; (void)time; (void)x; (void)y;
+	(void)d; (void)time;
+	uitkWlDndMotion((uintptr_t)data, x, y);
 }
-static void uitk_ddev_drop(void *data, struct wl_data_device *d) { (void)data; (void)d; }
+static void uitk_ddev_drop(void *data, struct wl_data_device *d) { (void)d; uitkWlDndDrop((uintptr_t)data); }
+static void ui_wl_offer_accept(struct wl_data_offer *o, uint32_t serial, const char *mime) { wl_data_offer_accept(o, serial, mime); }
+static void ui_wl_offer_actions(struct wl_data_offer *o, uint32_t actions, uint32_t preferred) {
+	if (wl_data_offer_get_version(o) >= 3) wl_data_offer_set_actions(o, actions, preferred);
+}
+static void ui_wl_offer_finish(struct wl_data_offer *o) {
+	if (wl_data_offer_get_version(o) >= 3) wl_data_offer_finish(o);
+}
 static void uitk_ddev_sel(void *data, struct wl_data_device *d, struct wl_data_offer *o) {
 	(void)d;
 	uitkWlSelection((uintptr_t)data, o);
@@ -1045,6 +1058,15 @@ type wlConn struct {
 	clip        clipCache
 	pendingOff  *C.struct_wl_data_offer
 	pendingMime string
+	// offerMimes are every type each live offer carries (drags need them
+	// all; the clipboard only its preferred one). dnd* is the drag over a
+	// window now: its offer, serial, surface, and whether it was dropped.
+	offerMimes map[*C.struct_wl_data_offer][]string
+	dndOffer   *C.struct_wl_data_offer
+	dndSerial  uint32
+	dndSurf    int
+	dndDropped bool
+	dndPos     paintengine2d.Point // device pixels in the surface
 
 	primMan      *C.struct_zwp_primary_selection_device_manager_v1
 	primDev      *C.struct_zwp_primary_selection_device_v1
@@ -3106,7 +3128,103 @@ func uitkWlDataOfferMime(id C.uintptr_t, offer *C.struct_wl_data_offer, mime *C.
 	if preferMime(c.pendingMime, m) {
 		c.pendingMime = m
 	}
-	_ = offer
+	if offer != nil {
+		if c.offerMimes == nil {
+			c.offerMimes = map[*C.struct_wl_data_offer][]string{}
+		}
+		c.offerMimes[offer] = append(c.offerMimes[offer], m)
+	}
+}
+
+// dropMime is the type a drop is read in: files, then UTF-8 text.
+func dropMime(mimes []string) string {
+	for _, want := range []string{"text/uri-list", "text/plain;charset=utf-8", "UTF8_STRING", "text/plain"} {
+		for _, m := range mimes {
+			if m == want {
+				return m
+			}
+		}
+	}
+	return ""
+}
+
+//export uitkWlDndEnter
+func uitkWlDndEnter(id C.uintptr_t, serial C.uint32_t, surf *C.struct_wl_surface, x, y C.wl_fixed_t, offer *C.struct_wl_data_offer) {
+	c := wlConnBy(id)
+	if c == nil {
+		return
+	}
+	c.dndDrop(false)
+	c.dndOffer, c.dndSerial, c.dndDropped = offer, uint32(serial), false
+	s := wlSurfNative(surf)
+	if s == nil || offer == nil {
+		return
+	}
+	c.dndSurf = s.id
+	mimes := c.offerMimes[offer]
+	if m := dropMime(mimes); m != "" {
+		cm := C.CString(m)
+		C.ui_wl_offer_accept(offer, serial, cm)
+		C.free(unsafe.Pointer(cm))
+		C.ui_wl_offer_actions(offer, 1, 1) // copy
+	} else {
+		C.ui_wl_offer_accept(offer, serial, nil)
+	}
+	dx, dy := s.toDevice(float32(C.ui_wl_fixed(x)), float32(C.ui_wl_fixed(y)))
+	c.dndPos = paintengine2d.Pt(dx, dy)
+	s.push(Event{Kind: EventDragMotion, Pos: c.dndPos, Mimes: mimes})
+}
+
+//export uitkWlDndMotion
+func uitkWlDndMotion(id C.uintptr_t, x, y C.wl_fixed_t) {
+	c := wlConnBy(id)
+	if c == nil || c.dndOffer == nil {
+		return
+	}
+	if s := wlSurfaces[c.dndSurf]; s != nil {
+		dx, dy := s.toDevice(float32(C.ui_wl_fixed(x)), float32(C.ui_wl_fixed(y)))
+		c.dndPos = paintengine2d.Pt(dx, dy)
+		s.push(Event{Kind: EventDragMotion, Pos: c.dndPos, Mimes: c.offerMimes[c.dndOffer]})
+	}
+}
+
+//export uitkWlDndLeave
+func uitkWlDndLeave(id C.uintptr_t) {
+	c := wlConnBy(id)
+	if c == nil {
+		return
+	}
+	if !c.dndDropped {
+		if s := wlSurfaces[c.dndSurf]; s != nil {
+			s.push(Event{Kind: EventDragLeave})
+		}
+		c.dndDrop(false)
+	}
+}
+
+//export uitkWlDndDrop
+func uitkWlDndDrop(id C.uintptr_t) {
+	c := wlConnBy(id)
+	if c == nil || c.dndOffer == nil {
+		return
+	}
+	c.dndDropped = true
+	if s := wlSurfaces[c.dndSurf]; s != nil {
+		s.push(Event{Kind: EventDrop, Pos: c.dndPos, Mimes: c.offerMimes[c.dndOffer]})
+	}
+}
+
+// dndDrop ends the current drag's offer, finished when it was taken.
+func (c *wlConn) dndDrop(taken bool) {
+	if c.dndOffer == nil {
+		return
+	}
+	if taken {
+		C.ui_wl_offer_finish(c.dndOffer)
+	}
+	delete(c.offerMimes, c.dndOffer)
+	C.ui_wl_data_offer_destroy(c.dndOffer)
+	c.dndOffer, c.dndDropped = nil, false
 }
 
 //export uitkWlSelection
@@ -3120,9 +3238,20 @@ func uitkWlSelection(id C.uintptr_t, offer *C.struct_wl_data_offer) {
 	}
 	c.clipOffer = offer
 	c.clipMime = c.pendingMime
+	if ms, ok := c.offerMimes[offer]; ok {
+		// This offer's own types: a drag's offer may have come in between.
+		c.clipMime = ""
+		for _, m := range ms {
+			if preferMime(c.clipMime, m) {
+				c.clipMime = m
+			}
+		}
+	}
 	if offer == c.pendingOff {
 		c.pendingOff = nil
 	}
+	// The clipboard keeps its preferred type; forget the list.
+	delete(c.offerMimes, offer)
 	// The cache is only valid while we hold a live source of our own.
 	c.clip.selectionChanged(c.dataSrc != nil)
 }
@@ -3498,4 +3627,26 @@ func wlReadFD(c *wlConn, request func(fd int)) (string, bool) {
 	}
 	C.ui_wl_close_fd(fds[0])
 	return string(out), true
+}
+
+// ReceiveDrop reads the drag dropped on the surface as mime.
+func (s *wlSurface) ReceiveDrop(mime string) ([]byte, bool) {
+	c := s.conn
+	if c == nil || c.dndOffer == nil || !c.dndDropped || mime == "" {
+		return nil, false
+	}
+	offer := c.dndOffer
+	text, ok := wlReadFD(c, func(fd int) {
+		cm := C.CString(mime)
+		C.ui_wl_data_receive(offer, cm, C.int(fd))
+		C.free(unsafe.Pointer(cm))
+	})
+	return []byte(text), ok
+}
+
+// FinishDrop completes the drop (ok: taken) and lets the offer go.
+func (s *wlSurface) FinishDrop(ok bool) {
+	if c := s.conn; c != nil {
+		c.dndDrop(ok)
+	}
 }
