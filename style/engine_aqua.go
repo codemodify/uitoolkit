@@ -2,6 +2,7 @@ package style
 
 import (
 	"math"
+	"sync"
 
 	"github.com/codemodify/paintengine2d"
 )
@@ -146,6 +147,10 @@ type aqua struct {
 	metal, dark             bool
 	metalStops              []paintengine2d.GradientStop
 	streaks                 [61]aquaStreak
+	// tiles are periods of the brushed texture for the last few widths it
+	// was drawn at (the window, a splitter…; see metalTile).
+	tileMu sync.Mutex
+	tiles  []*paintengine2d.Image
 
 	text, dim, glyph paintengine2d.Color
 
@@ -560,9 +565,26 @@ func (c *aqua) texture(l *Classic, ctx *paintengine2d.Context, b paintengine2d.R
 	}
 	// Brushed metal: a light band down the middle and fine horizontal
 	// streaks, one design pixel tall, anchored to the device grid.
-	ctx.DrawRect(b, HGradient(b, c.metalStops...))
 	u := aquaU(l)
 	off := aquaAnchor(ctx)
+	if u == float32(int(u)) && off == float32(int(off)) && b.Min.X == float32(int(b.Min.X)) {
+		// On whole pixels: one period, rendered once per width, blitted
+		// down the window (a blit per 61 rows instead of 61 paths a paint).
+		tile := c.metalTile(b.Dx(), u)
+		n := len(c.streaks)
+		first := int(math.Floor(float64((b.Min.Y + off) / u)))
+		period := float32(n) * u
+		y := float32(first-((first%n)+n)%n)*u - off
+		src := paintengine2d.XYWH(0, 0, float32(tile.Width), float32(tile.Height))
+		ctx.Save()
+		ctx.ClipRect(b)
+		for ; y < b.Max.Y; y += period {
+			ctx.DrawImageRect(tile, src, paintengine2d.XYWH(b.Min.X, y, float32(tile.Width), period))
+		}
+		ctx.Restore()
+		return
+	}
+	ctx.DrawRect(b, HGradient(b, c.metalStops...))
 	first := int(math.Floor(float64((b.Min.Y + off) / u)))
 	n := len(c.streaks)
 	w := b.Dx()
@@ -605,6 +627,46 @@ func (c *aqua) texture(l *Classic, ctx *paintengine2d.Context, b paintengine2d.R
 				Start: paintengine2d.Pt(b.Min.X+st.from*w, b.Min.Y), End: paintengine2d.Pt(b.Min.X+st.to*w, b.Min.Y), Stops: st.stops}))
 		}
 	}
+}
+
+// metalTile is one period of the brushed texture (its 61 streak rows, u
+// device pixels each, over the band) across a rect w wide. The last few
+// widths are kept, so the window and a splitter do not evict each other.
+func (c *aqua) metalTile(w, u float32) *paintengine2d.Image {
+	c.tileMu.Lock()
+	defer c.tileMu.Unlock()
+	iw, ih := int(math.Ceil(float64(w))), int(float32(len(c.streaks))*u)
+	for i, t := range c.tiles {
+		if t.Width == iw && t.Height == ih {
+			// Most recent first.
+			copy(c.tiles[1:i+1], c.tiles[:i])
+			c.tiles[0] = t
+			return t
+		}
+	}
+	img := paintengine2d.NewImage(iw, ih)
+	tctx := paintengine2d.NewContext(img)
+	b := paintengine2d.XYWH(0, 0, float32(iw), float32(ih))
+	tctx.DrawRect(b, HGradient(b, c.metalStops...))
+	for k := range c.streaks {
+		st := &c.streaks[k]
+		if st.stops[1].Color.A == 0 {
+			continue
+		}
+		x0, x1 := st.from*w, min(st.to*w, float32(iw))
+		if x1 <= x0 {
+			continue
+		}
+		tctx.DrawRect(paintengine2d.XYWH(x0, float32(k)*u, x1-x0, u), paintengine2d.Linear(paintengine2d.LinearGradient{
+			Start: paintengine2d.Pt(st.from*w, 0), End: paintengine2d.Pt(st.to*w, 0), Stops: st.stops}))
+	}
+	const keep = 4
+	if len(c.tiles) < keep {
+		c.tiles = append(c.tiles, nil)
+	}
+	copy(c.tiles[1:], c.tiles[:len(c.tiles)-1])
+	c.tiles[0] = img
+	return img
 }
 
 // rowStripe washes an unselected odd row with the list stripe.
