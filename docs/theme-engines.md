@@ -73,6 +73,9 @@ gets the era right:
 - **Frames** — `GroupBoxInsets/DrawGroupBox` (titled frames),
   `WindowFrameInsets/DrawWindowFrame` (in-app dialogs: caption, close),
   `DrawWindowBackground` (pinstripes, brushed metal) and `DrawTabPane`.
+  Top-level windows whose frame the toolkit draws use the optional
+  `DecorationEngine` ([Window frames](#window-frames)), else the in-app
+  frame adapted.
 - **View frames** — `ViewFrameInsets` / `DrawViewFrame` frame lists,
   trees and tables (Qt's `PE_Frame`). By default the frame is the engine's
   own field face, as thick as the `viewFrame` metric (Win95 2px sunken,
@@ -96,6 +99,9 @@ gets the era right:
   outlined tab whose feet flare into the tool bar, bare labels between thin
   separators, as SourceGit's repository tabs); `DrawBrowserTabOf` and
   `BrowserTabOutsetOf` fall back to the look's ordinary tab.
+  `BrowserTabBarEngine` paints the strip under them where it is not in a
+  title bar (`DrawBrowserTabBarOf` falls back to the tab bar);
+  `widgets.BrowserTabs` uses all three.
 - **Shadows** — `PopupShadow(kind)` is how far a floating layer's drop
   shadow reaches past its bounds, and `DrawPopupShadow` paints it before the
   layer (`PopupMenu` for menus and lists, `PopupTooltip`, `PopupDialog`).
@@ -226,6 +232,62 @@ Motif the solid location cursor; tables call `DrawItemFocus` over the whole
 row after its cells. Looks whose fields have a focus ring (`FieldFocusRing`)
 may leave `ItemFocus` empty and let the view frame ring the focused view.
 
+## Window frames
+
+A window whose frame uitoolkit draws (a client-side frame,
+[decorations.md](decorations.md)) asks its look for the frame. An engine
+paints its era's by implementing the optional `DecorationEngine`, in a
+file of its own (`style/engine_<id>_frame.go`):
+
+```go
+func (lunaEngine) Decoration(l *Classic, st DecorationState) DecorationSpec
+func (lunaEngine) DrawDecoration(l *Classic, ctx *paintengine2d.Context, f DecorationFrame, st DecorationState)
+func (lunaEngine) DrawCaptionTitle(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, title string, st DecorationState)
+func (lunaEngine) DrawCaptionButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, k CaptionButton, cs ControlState, st DecorationState)
+```
+
+- `DecorationState`: `Active` (the desktop's active window, not keyboard
+  focus: otherwise paint the backdrop look), `Maximized` (no border, the
+  maximize button restores), `Tiled` edges, `Custom` (the app's own title
+  bar fills the caption: macOS makes it a 52 px unified tool bar).
+- `DecorationSpec`, device pixels: `Border` (whole pixels; the toolkit
+  drops it when maximized), `Caption` (a stacked strip's height, a merged
+  caption's least), `Stacked` (the era's caption strip with the app's title
+  bar under it, or merged: the app's title bar is the caption), `Button`
+  (Y 0: the caption's full height, as Windows 10 and 11), `ButtonGap`,
+  `ButtonPad` (from the caption's top and sides), `CloseButton` and
+  `CloseGap` where close differs (Windows 7's wide one, Windows 95's 2 px),
+  `CenterButtons` (in a caption taller than `Caption`), `CenterTitle` (the
+  title centred on the window, pushed aside by the buttons rather than cut
+  short where they leave no room at the centre), `Layout` (the era's
+  button layout in GNOME's syntax, for `"captionButtons": "theme"`), and
+  for Phase 3 `Radius` and `Shadow`.
+- `DrawDecoration` paints the border inside `f.Window` and the caption band
+  `f.Caption` (a stacked frame's strip; a unified look may paint `f.Bar`,
+  the app's row under it), never the content. `FrameParts` lists the rects
+  a frame stays inside. `DrawCaptionTitle` gets the free space between the
+  button groups; `DrawCaptionButton` a button's box and its hover and
+  pressed state, `st.Maximized` for the restore glyph.
+- `DrawCaptionGlyph` draws the generic crisp glyphs (a cross, a bar, a
+  square, two for restore, a small window) for engines without their own.
+
+Engines without the hook get their in-app window frame adapted: the caption
+of `DrawWindowFrame` as a stacked strip (only its parts are painted, never
+its body over the content; `WindowState.NoButtons` asks for it without
+zoom or depth boxes), its borders round the window, its own close button
+moved to wherever the button layout puts it (the in-app frame is painted
+translated so its `WindowCloseRect` lands on the button, clipped to it),
+push buttons at its size with generic glyphs for the rest, and the title
+laid out by the engine over the free space. Native frames exist for
+`win95`, `luna`, `aero`, `metro`, `fluent`, `aqua`, `macos`, `breeze`,
+`adwaita`, `web`, `motif`, `flatlaf` and `material`; the base look has the
+plain frame.
+
+Check a frame with `go run ./cmd/uitk-themesheet -frames -theme luna -o
+/tmp/f` (and `-scale 1.75`): real windows active, in the backdrop,
+maximized, with the close button hot and pressed, with tabs in the title
+bar, with KDE's button layout. The decoration tests run over every pack.
+
 ## The web engine
 
 `web` (`style/engine_web*.go`) paints today's flat design systems —
@@ -347,8 +409,10 @@ look may implement; use the `…Of` helpers, which fall back when a look
 does not: `ControlFontOf` (measure labels), `DrawArrowOf` (era arrows),
 `DrawItemFocusOf` (current-row mark), `ViewFrameInsetsOf` /
 `DrawViewFrameOf`, `PopupShadowOf` / `DrawPopupShadowOf`, `TabOutsetOf`,
-`TabOverlapOf`, `BrowserTabOutsetOf` / `DrawBrowserTabOf`, `ToolBarInsetsOf`
-and `LookHint`. A scrolling view gives up `ScrollGutter` to its bar (nothing
+`TabOverlapOf`, `BrowserTabOutsetOf` / `DrawBrowserTabOf` /
+`DrawBrowserTabBarOf`, `ToolBarInsetsOf`, `DecorationOf` /
+`DrawDecorationOf` / `DrawCaptionTitleOf` / `DrawCaptionButtonOf` and
+`LookHint`. A scrolling view gives up `ScrollGutter` to its bar (nothing
 for transient bars) and lets `scrollDrag` show, fade and hit-test it. Build
 row states with `widget.ItemState` or `widget.RowItemState`, which add
 `Focused`, `Inactive`, `Backdrop` and `Alternate` for you; a list with

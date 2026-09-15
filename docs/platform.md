@@ -353,6 +353,7 @@ top-level surfaces and by `Offscreen`, which records the calls for tests.
 ## Deferred
 
 - IME candidate-window theming (the IM draws its own window)
-- Themed window frames, shadows and rounded corners for toolkit-drawn frames
-  (Phases 2–3 of [decorations.md](decorations.md#phases))
+- Shadows, rounded corners and translucency for toolkit-drawn frames
+  (Phase 3 of [decorations.md](decorations.md#phases); the themed frames of
+  Phase 2 are done)
 - Win32 and AppKit **windows** (tray landed in 0.16.0)

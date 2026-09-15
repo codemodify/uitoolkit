@@ -777,15 +777,17 @@ func (e platinumEngine) DrawWindowFrame(l *Classic, ctx *paintengine2d.Context, 
 			c.winBox(ctx, cb, u, st.ClosePress)
 			left = cb.Max.X + l.S(4)
 		}
-		zoom := platBox(l, bar, false, 0)
-		c.winBox(ctx, zoom, u, false)
-		ctx.DrawRect(paintengine2d.XYWH(zoom.Min.X+u, zoom.Min.Y+u, zoom.Dx()*0.55, zoom.Dy()*0.55), paintengine2d.StrokePaint(c.black, u))
-		shade := platBox(l, bar, false, 1)
-		c.winBox(ctx, shade, u, false)
-		mid := snap(shade.Min.Y + shade.Dy()*0.5)
-		ctx.DrawRect(paintengine2d.XYWH(shade.Min.X+u, mid-u, shade.Dx()-u*2, u), paintengine2d.Fill(c.black))
-		ctx.DrawRect(paintengine2d.XYWH(shade.Min.X+u, mid+u, shade.Dx()-u*2, u), paintengine2d.Fill(c.black))
-		right = shade.Min.X - l.S(4)
+		if !st.NoButtons {
+			zoom := platBox(l, bar, false, 0)
+			c.winBox(ctx, zoom, u, false)
+			ctx.DrawRect(paintengine2d.XYWH(zoom.Min.X+u, zoom.Min.Y+u, zoom.Dx()*0.55, zoom.Dy()*0.55), paintengine2d.StrokePaint(c.black, u))
+			shade := platBox(l, bar, false, 1)
+			c.winBox(ctx, shade, u, false)
+			mid := snap(shade.Min.Y + shade.Dy()*0.5)
+			ctx.DrawRect(paintengine2d.XYWH(shade.Min.X+u, mid-u, shade.Dx()-u*2, u), paintengine2d.Fill(c.black))
+			ctx.DrawRect(paintengine2d.XYWH(shade.Min.X+u, mid+u, shade.Dx()-u*2, u), paintengine2d.Fill(c.black))
+			right = shade.Min.X - l.S(4)
+		}
 		place()
 		cy := bar.Min.Y + bar.Dy()*0.5
 		if title == "" {

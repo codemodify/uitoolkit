@@ -7,6 +7,7 @@ import (
 	"github.com/codemodify/uitoolkit/a11y"
 	"github.com/codemodify/uitoolkit/layout"
 	"github.com/codemodify/uitoolkit/platform"
+	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
 )
 
@@ -335,5 +336,49 @@ func TestHeaderBarTitle(t *testing.T) {
 	}
 	if items := h.AccessibleItems(); len(items) != 1 || items[0].Name != "Hello caption" {
 		t.Fatalf("title item %+v", items)
+	}
+}
+
+// lookFrameHost is a frameHost in a given look.
+type lookFrameHost struct {
+	frameHost
+	look style.LookAndFeel
+}
+
+func (h *lookFrameHost) Look() style.LookAndFeel { return h.look }
+
+// A look that centres the title (GNOME's) centres it on the window; where
+// the buttons leave no room at the centre they push it aside instead of
+// cutting it short.
+func TestHeaderBarCentredTitle(t *testing.T) {
+	pack, ok := style.LoadTheme("adwaita-gtk3")
+	if !ok {
+		t.Fatal("no adwaita-gtk3 pack")
+	}
+	lk := pack.Look()
+	h := NewHeaderBar(nil, nil, nil)
+	h.ShowTitle = true
+	h.SetHost(&lookFrameHost{frameHost: frameHost{active: true}, look: lk})
+	h.SetWindowControls(platform.ParseButtonLayout(":minimize,maximize,close"), true)
+	if !h.spec().CenterTitle {
+		t.Fatal("GNOME centres its title")
+	}
+	// The title and the look's pads round it.
+	need := lk.BoldFont().Advance("Window") + 2*style.Dip(lk, 8)
+	sz := h.Measure(layout.Loose(800, 100))
+	h.Arrange(paintengine2d.XYWH(0, 0, 800, sz.Y))
+	buttons := 800 - h.trail.Bounds().Min.X
+	// Too narrow for a box on the window's centre to hold the title.
+	narrow := 2*buttons + need*0.8
+	for _, w := range []float32{800, narrow} {
+		sz := h.Measure(layout.Loose(w, 100))
+		h.Arrange(paintengine2d.XYWH(0, 0, w, sz.Y))
+		r, ctl := h.titleRect(), h.trail.Bounds()
+		if r.Dx() < need || r.Min.X < 0 || r.Max.X > ctl.Min.X+0.5 {
+			t.Fatalf("%v wide: title %v (needs %v) beside the buttons at %v", w, r, need, ctl)
+		}
+		if mid := (r.Min.X + r.Max.X) * 0.5; w == 800 && (mid < w/2-1 || mid > w/2+1) {
+			t.Fatalf("title %v off the window's centre %v", r, w/2)
+		}
 	}
 }
