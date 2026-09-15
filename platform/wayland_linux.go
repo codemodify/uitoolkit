@@ -1145,6 +1145,10 @@ type wlConn struct {
 	// servicing is set while the background clipboard drainer runs: no
 	// window loop is left to answer wl_data_source.send.
 	servicing bool
+	// svcDone closes when the drainer stops. It dispatches (runs the event
+	// callbacks) outside wlMu, so a caller taking the connection back
+	// waits for it: two goroutines must never dispatch at once.
+	svcDone chan struct{}
 }
 
 type wlSlot struct {
@@ -1241,11 +1245,18 @@ var (
 
 func wlRetain() (*wlConn, error) {
 	wlMu.Lock()
-	defer wlMu.Unlock()
-	if wlc != nil {
-		wlc.refs++
-		return wlc, nil
+	if c := wlc; c != nil {
+		c.refs++
+		done := c.svcDone
+		wlMu.Unlock()
+		if done != nil {
+			// The clipboard drainer sees the new reference and stops
+			// within one wait; only then may this caller dispatch.
+			<-done
+		}
+		return c, nil
 	}
+	defer wlMu.Unlock()
 	dpy := C.ui_wl_connect()
 	if dpy == nil {
 		return nil, fmt.Errorf("platform: wl_display_connect failed (set WAYLAND_DISPLAY or use headless)")
@@ -1306,6 +1317,7 @@ func (c *wlConn) startClipboardServiceLocked() {
 		return
 	}
 	c.servicing = true
+	c.svcDone = make(chan struct{})
 	go c.serviceClipboard()
 }
 
@@ -1314,10 +1326,13 @@ func (c *wlConn) serviceClipboard() {
 		wlMu.Lock()
 		if c.dpy == nil || c.refs > 0 || !c.clipKeep {
 			c.servicing = false
+			done := c.svcDone
+			c.svcDone = nil
 			if c.dpy != nil && c.refs == 0 && !c.clipKeep {
 				c.closeLocked()
 			}
 			wlMu.Unlock()
+			close(done)
 			return
 		}
 		dpy := c.dpy

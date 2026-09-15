@@ -3,8 +3,10 @@
 package platform
 
 import (
+	"math"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/codemodify/paintengine2d"
 )
@@ -30,8 +32,10 @@ func TestWaylandSurfacePresent(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
-	if s.Buffer() == nil || s.Buffer().Width != 160 {
-		t.Fatalf("buffer %+v", s.Buffer())
+	// The buffer is in device pixels: 160 at the output's scale (280 at
+	// 1.75), once the connection knows it.
+	if want := int(math.Ceil(float64(float32(160) * s.Scale()))); s.Buffer() == nil || s.Buffer().Width != want {
+		t.Fatalf("buffer %+v, want %d wide at scale %v", s.Buffer(), want, s.Scale())
 	}
 	ctx := NewPaintContext(s)
 	ctx.Clear(paintengine2d.RGB(0.1, 0.3, 0.6))
@@ -151,13 +155,20 @@ func TestWaylandPresentOpaqueColor(t *testing.T) {
 	if err := s.Present(nil); err != nil {
 		t.Fatal(err)
 	}
-	_ = s.Poll()
+	// A real compositor can hold the first frame back until its configure
+	// or frame callback: poll until a slot is mapped, for up to a second.
 	var pix []byte
-	for i := 0; i < 2; i++ {
-		if p := ws.slotBGRA(i); len(p) >= 4 && p[3] != 0 {
-			pix = p
+	for deadline := time.Now().Add(time.Second); ; {
+		_ = s.Poll()
+		for i := 0; i < 2 && len(pix) < 4; i++ {
+			if p := ws.slotBGRA(i); len(p) >= 4 && p[3] != 0 {
+				pix = p
+			}
+		}
+		if len(pix) >= 4 || time.Now().After(deadline) {
 			break
 		}
+		ws.Wait(10 * time.Millisecond)
 	}
 	if len(pix) < 4 {
 		// Slot may still be the one just attached; read whichever is mapped.
