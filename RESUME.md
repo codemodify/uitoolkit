@@ -73,9 +73,11 @@ Merged engines:
 | platinum | Mac OS 8 Platinum, Platinum Lime |
 | motif | Motif, CDE (six schemes), IRIX Indigo Magic, HP VUE |
 | next | NeXTSTEP, OPENSTEP, NeXTSTEP Night, Window Maker (four themes) |
+| fusion | Qt Fusion, Fusion Dark |
+| oxygen | KDE 4 Oxygen |
+| breeze | KDE Plasma Breeze, Breeze Dark |
 
 In progress, or queued with briefs written:
-- KDE (Fusion, Oxygen, Breeze);
 - GNOME (Clearlooks, Bluecurve, Human, Cleanlooks, Adwaita);
 - modern Windows (Aero, Windows 8 and 10, Fluent);
 - KDE 3 (Keramik, Plastik);
@@ -130,6 +132,8 @@ Core features the engines drive, added along the way:
 - Its CPU fast path now takes gradient rects, and rect lists whose pixels don't
   touch.
 - Textured looks batch their stripes.
+- Open strokes with square caps no longer draw a stray band (their outline
+  was left unclosed).
 
 The result: a hover repaint on the stock look went from 321 to 152
 allocations, and on Aqua from 4,376 to 356. The gallery peaks at about 35 MB
