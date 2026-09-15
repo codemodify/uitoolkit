@@ -37,6 +37,18 @@ var (
 
 // eraEngineFonts are the typefaces of each engine's era.
 var eraEngineFonts = map[string]FontPrefs{
+	// The first Mac through System 7: Chicago 12.
+	"system7": {UI: []string{"Chicago", "ChicagoFLF", "Charcoal", "Geneva"}, Mono: monaco},
+	// Windows 3.1 dialogs: MS Sans Serif (the bold System font elsewhere).
+	"win31": {UI: msSans, Mono: append([]string{"Fixedsys", "Fixedsys Excelsior"}, courierNw...)},
+	// Sun's OpenWindows set OPEN LOOK in Lucida.
+	"openlook": {UI: []string{"Lucida Sans", "Lucida Sans Unicode", "Lucida Grande", "DejaVu Sans"}, Mono: []string{"Lucida Sans Typewriter", "Lucida Console", "DejaVu Sans Mono"}},
+	// Workbench: Topaz 8, a monospaced bitmap face; monospaced faces stand in.
+	"amiga": {UI: []string{"Topaz", "Topaz New", "Amiga Topaz", "DejaVu Sans Mono", "Liberation Mono", "Noto Sans Mono"}, Mono: []string{"Topaz", "Topaz New", "DejaVu Sans Mono", "Liberation Mono"}},
+	// BeOS: Swiss 721, a Helvetica design.
+	"beos": {UI: append([]string{"Swis721 BT", "Swiss 721"}, helvetica...), Mono: courier},
+	// OS/2 Warp 4: WarpSans (Workplace Sans is an open look-alike).
+	"os2": {UI: append([]string{"WarpSans", "Workplace Sans"}, helvetica...), Mono: courier},
 	// NeXTSTEP, OPENSTEP and Window Maker set their UI in Helvetica.
 	"next": {UI: helvetica, Mono: courier},
 	// Motif, HP VUE, CDE and IRIX read in X11's Helvetica.
