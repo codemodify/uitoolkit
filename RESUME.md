@@ -53,12 +53,16 @@ session:
    sleeps up to 1s between safety wakes instead of 100ms; events wake it.
 6. **Mnemonic underlines.** They should show only while Alt is held in the
    XP, Plasma and Windows 10 looks.
-7. **Drag and drop.** Drag files from Dolphin into Mail's compose window,
+7. **Touchpad scrolling.** Slow two-finger scrolls should follow the
+   fingers; they used to jump by whole lines (a bug found and fixed
+   today). A quick swipe should glide on and slow down (new kinetic
+   scrolling). A mouse wheel should scroll three lines a notch.
+8. **Drag and drop.** Drag files from Dolphin into Mail's compose window,
    which should attach them, and text into a field. This is Wayland only for
    now.
-8. **Native file dialogs.** Settings, "Use the desktop's file dialogs",
+9. **Native file dialogs.** Settings, "Use the desktop's file dialogs",
    then Attach in Mail's compose window: Plasma's own dialog should open.
-9. **Orca**, if you install it: `UITK_A11Y=1` is not needed, since the
+10. **Orca**, if you install it: `UITK_A11Y=1` is not needed, since the
    bridge starts when Orca does.
 
 ## What the glitching was
