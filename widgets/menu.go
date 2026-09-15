@@ -179,7 +179,10 @@ func (m *MenuBar) titleAt(x float32) int {
 
 func (m *MenuBar) Paint(ctx *paintengine2d.Context) {
 	lk := m.Look()
-	lk.DrawMenuBar(ctx, m.LocalBounds())
+	if !inMergedCaption(m) {
+		// In a title bar the toolkit draws, the caption is the bar.
+		lk.DrawMenuBar(ctx, m.LocalBounds())
+	}
 	ctx.Save()
 	ctx.ClipRect(m.LocalBounds())
 	rects := m.titleRects()

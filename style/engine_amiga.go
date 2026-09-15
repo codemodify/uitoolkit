@@ -1150,7 +1150,7 @@ func (e amigaEngine) frame31(l *Classic, ctx *paintengine2d.Context, b paintengi
 		}
 		x0 = 20
 	}
-	if W >= x0+24+24 {
+	if !st.NoButtons && W >= x0+24+24 {
 		x1 = W - 24
 		amBevel(&hi, &lo, g, x1, 0, 24, bh, 1)
 		oy := (rows - 7) / 2 * amRow
@@ -1207,7 +1207,7 @@ func (e amigaEngine) frame13(l *Classic, ctx *paintengine2d.Context, b paintengi
 		}
 		x0 = 22
 	}
-	if W >= x0+48+24 {
+	if !st.NoButtons && W >= x0+48+24 {
 		x1 = W - 48
 		blue.cells(g, W-48, 0, 2, bw)
 		blue.cells(g, W-24, 0, 2, bw)

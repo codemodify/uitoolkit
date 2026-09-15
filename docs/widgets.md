@@ -56,6 +56,7 @@ stub; there is no native AppKit/SwiftUI control host.
 | Table | `TableView` (sticky header, column-resize) | `QTableView` / `TableView` | `GtkColumnView` | `DataGrid` | `widget.Table` | `DataGridView` | `DataGrid` | `NSTableView` | `Table` | [thumb](screenshots/compare/tableview.png) · [gallery](screenshots/gallery-table.png) |
 | Tree | `TreeView` | `QTreeView` / `TreeView` | `GtkListView` (tree) / `GtkTreeView` | `TreeView` | `widget.Tree` | `TreeView` | `TreeView` | `NSOutlineView` | `OutlineGroup` / `List` | [thumb](screenshots/compare/treeview.png) · [gallery](screenshots/gallery-tree.png) |
 | Tabs | `TabView` / `TabBar` / `TabPage` | `QTabWidget` / `TabBar` | `GtkNotebook` | `TabControl` | `container.AppTabs` | `TabControl` | `TabControl` | `NSTabView` | `TabView` | [thumb](screenshots/compare/tabview.png) |
+| Document tabs (browser style, title bar) | `BrowserTabs` | `QTabBar` (documentMode, tabsClosable, movable) ≈ | `AdwTabBar` | `TabView` (Fluent) ≈ | — | — | — | `NSWindow` tab bar ≈ | `TabView` ≈ | — |
 
 `CardList` is a first-class virtualized multi-line row (Mail thread cards).
 It is not a generic Material “card” container.
@@ -88,11 +89,25 @@ opens `OnContext` for the current row.
 | Title bar | `TitleBar` | custom chrome ≈ | `GtkHeaderBar` ≈ | window chrome ≈ | window title ≈ | `Form.Text` ≈ | window chrome ≈ | `NSWindow` title | `navigationTitle` | [thumb](screenshots/compare/titlebar.png) |
 | Header bar (window title bar) | `HeaderBar` + `Window.SetTitleBar`, `WindowControls`, `DragArea` / `NoDrag` | custom frameless window | `GtkHeaderBar` + `gtk_window_set_titlebar`, `GtkWindowControls`, `GtkWindowHandle` | `WindowDrawnDecorations` (12) | `widget/material.Decorations` (Gio) ≈ | custom `WM_NCHITTEST` | `WindowChrome` | `NSWindow` full-size content view | `.windowStyle(.hiddenTitleBar)` ≈ | — |
 
+`BrowserTabs` is a strip of document tabs, browser style (Chromium's,
+SourceGit's repository tabs, Dolphin's folder tabs): a close button on the
+selected tab and the one under the pointer, "+" after the last tab
+(`OnNew`), drag to reorder (`OnReorder`), a middle click closes, equal
+widths up to 200 px and scrolling below 80 px (wheel, arrow buttons) with
+the selected tab kept in view, elided titles as tool tips, Left / Right /
+Home / End with the focus and `Shortcut(e)` for the app's Ctrl+Tab,
+Ctrl+W, Ctrl+T. As a `HeaderBar`'s centre it is the window's title bar:
+its tabs stand on the content below, the rest of the strip moves the
+window, and a right click there is the strip's menu (`OnContextMenu`, tab
+-1). Files puts its folders in one. See [decorations.md](decorations.md#tabs-in-the-title-bar).
+
 `TitleBar` is a caption + subtitle heading strip. As content it stays a
 heading; passed to `Window.SetTitleBar` it becomes a window's title bar. A
 `HeaderBar` is a window's title bar: where uitoolkit draws the frame it is
-the caption, with caption buttons in the desktop's layout, and its free space
-moves the window; under the desktop's frame it is the first row. See
+the caption, with caption buttons in the desktop's layout (or the theme's),
+painted by the look — merged into one row or, in the classic looks, as a
+row under the era's caption strip — and its free space moves the window;
+under the desktop's frame it is the first row. See
 [decorations.md](decorations.md). Avalonia has no stock `ToolBar`/`StatusBar` (use `CommandBar` or
 layout; SourceGit uses `ToggleButton` for view modes). `GtkStatusbar` still
 exists in GTK 4 but is no longer the preferred pattern. Behavior (not just

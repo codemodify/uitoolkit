@@ -112,6 +112,11 @@ func (w *Window) applyLook(base style.LookAndFeel) {
 		return
 	}
 	w.look = lookAtScale(base, w.scale)
+	if w.caption != nil {
+		// The frame is the new look's (and, with the theme's button
+		// layout, so are the caption buttons' places).
+		w.rebuildCaption()
+	}
 	w.RequestLayout()
 }
 
@@ -141,7 +146,17 @@ func (w *Window) Surface() platform.Surface { return w.surf }
 func (w *Window) Title() string             { return w.surf.Title() }
 func (w *Window) SurfaceSize() (int, int)   { return w.surf.Size() }
 
-func (w *Window) SetTitle(s string) { w.surf.SetTitle(s) }
+// SetTitle sets the window's title: the desktop's title bar and task bar
+// show it, and so does a title bar the toolkit draws.
+func (w *Window) SetTitle(s string) {
+	if w.surf.Title() == s {
+		return
+	}
+	w.surf.SetTitle(s)
+	if w.caption != nil {
+		w.caption.Invalidate()
+	}
+}
 
 // SetFullscreen asks the native backend (EWMH / xdg-shell) when available.
 func (w *Window) SetFullscreen(on bool) { platform.SetFullscreen(w.surf, on) }
@@ -706,6 +721,12 @@ func (w *Window) dispatch(ev platform.Event) {
 			w.setAltHeld(true)
 		}
 		if ev.Key == platform.KeyTab {
+			// Ctrl+Tab goes to the widgets and the app first (a tab strip
+			// switches tabs with it); plain Tab, and a Ctrl+Tab nobody
+			// takes, move the focus.
+			if ev.Mods.Ctrl() && w.popup == nil && (w.bubbleKey(widget.KeyEvent{Key: ev.Key, Mods: ev.Mods}) || w.accelerator(ev.Key, ev.Mods)) {
+				return
+			}
 			w.tab(!ev.Mods.Shift())
 			return
 		}
@@ -748,16 +769,8 @@ func (w *Window) dispatch(ev platform.Event) {
 		if w.bubbleKey(widget.KeyEvent{Key: ev.Key, Mods: ev.Mods}) {
 			return
 		}
-		// Keys nobody took run menu accelerators (Ctrl+N, F1, Ctrl+Q …),
-		// but not under a modal overlay. The title bar's come first (it is
-		// the window's top row).
-		if w.overlay == nil {
-			if w.caption == nil || !handleAccel(w.caption, ev.Key, ev.Mods) {
-				if w.root != nil {
-					handleAccel(w.root, ev.Key, ev.Mods)
-				}
-			}
-		}
+		// Keys nobody took run menu accelerators (Ctrl+N, F1, Ctrl+Q …).
+		w.accelerator(ev.Key, ev.Mods)
 	case platform.EventKeyUp:
 		if ev.Key == platform.KeyAlt {
 			w.setAltHeld(false)
@@ -770,6 +783,19 @@ func (w *Window) dispatch(ev platform.Event) {
 			t.TextInput(ev.Rune)
 		}
 	}
+}
+
+// accelerator runs the first menu accelerator for key, but not under a
+// modal overlay; the title bar's come first (it is the window's top row).
+// It reports whether one ran.
+func (w *Window) accelerator(key platform.Key, mods platform.Modifiers) bool {
+	if w.overlay != nil {
+		return false
+	}
+	if w.caption != nil && handleAccel(w.caption, key, mods) {
+		return true
+	}
+	return w.root != nil && handleAccel(w.root, key, mods)
 }
 
 // AltHeld reports whether the Alt key is down in the window.
@@ -1262,12 +1288,12 @@ func (w *Window) frame() {
 // caller's clip is what makes the result correct.
 func (w *Window) paintLayers(ctx *paintengine2d.Context, dirty *paintengine2d.Damage) {
 	if w.caption != nil {
+		w.paintDecoration(ctx)
 		widget.PaintTree(w.caption, ctx, dirty)
 	}
 	if w.root != nil {
 		widget.PaintTree(w.root, ctx, dirty)
 	}
-	w.paintFrame(ctx)
 	if w.overlay != nil {
 		widget.PaintTree(w.overlay, ctx, dirty)
 	}
@@ -1371,12 +1397,12 @@ func (w *Window) frameScene(rects []paintengine2d.Rect) []paintengine2d.Rect {
 	// the dirty box. Recording a subset would make the next partial replay
 	// paint from a scene that never had the clean widgets in it.
 	if w.caption != nil {
+		w.paintDecoration(ctx)
 		widget.RecordTree(w.caption, rec, ctx, nil, w.layers, false)
 	}
 	if w.root != nil {
 		widget.RecordTree(w.root, rec, ctx, nil, w.layers, false)
 	}
-	w.paintFrame(ctx)
 	if w.overlay != nil {
 		widget.RecordTree(w.overlay, rec, ctx, nil, w.layers, true)
 	}

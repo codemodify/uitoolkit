@@ -5,8 +5,10 @@ import (
 	"path"
 	"strings"
 
+	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit"
 	"github.com/codemodify/uitoolkit/app"
+	"github.com/codemodify/uitoolkit/layout"
 	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
 	"github.com/codemodify/uitoolkit/widgets"
@@ -26,6 +28,10 @@ type filePlace struct {
 
 // FilesApp is the Files / Projects dogfood: sidebar tree, table, toolbar,
 // menus, preview TextArea (JetBrains Mono for code), tabs, dialogs, HiDPI metrics.
+// Its folders open in tabs in the window's title bar (Dolphin's folder tabs
+// in Chromium's place): the tree and the table show the selected tab's
+// folder, "+" or Ctrl+T opens Home in a new tab, Ctrl+W closes one,
+// Ctrl+Tab switches, and a tab dragged along the strip moves.
 func FilesApp(win *app.Window) widget.Component {
 	places := samplePlaces()
 	place := 1
@@ -33,6 +39,7 @@ func FilesApp(win *app.Window) widget.Component {
 		place = 0
 	}
 	sel := 0
+	tabs := widgets.NewBrowserTabs()
 
 	status := widgets.NewStatusBar("Ready.", places[0].Path, "v"+uitoolkit.Version)
 	mark := func(msg string) { status.Set(0, msg) }
@@ -187,6 +194,15 @@ func FilesApp(win *app.Window) widget.Component {
 	} else {
 		tree.Selected = roots[0]
 	}
+	// showPlace shows place i in the table and the window title.
+	showPlace := func(i int) {
+		place = i
+		sel = 0
+		refreshTable()
+		if win != nil {
+			win.SetTitle(places[i].Label + " — Files")
+		}
+	}
 	tree.OnSelect = func(n *widgets.TreeNode) {
 		if n == nil {
 			return
@@ -195,9 +211,11 @@ func FilesApp(win *app.Window) widget.Component {
 		if !ok || i < 0 || i >= len(places) {
 			return
 		}
-		place = i
-		sel = 0
-		refreshTable()
+		// The tree navigates the selected tab, as a browser's address bar does.
+		if t := tabs.Selected(); t >= 0 {
+			tabs.SetTab(t, widgets.BrowserTab{Title: places[i].Label, Data: i})
+		}
+		showPlace(i)
 		mark("Place  " + places[i].Label)
 	}
 
@@ -287,11 +305,11 @@ func FilesApp(win *app.Window) widget.Component {
 
 	previewTab := widgets.NewPad(8, preview)
 	detailCol := widgets.NewColumn(pathLbl, widgets.NewSeparator(), details).WithGap(8).WithPad(12)
-	tabs := widgets.NewTabView(
+	pages := widgets.NewTabView(
 		widgets.Tab{Title: "Preview", Content: previewTab},
 		widgets.Tab{Title: "Details", Content: detailCol},
 	)
-	tabs.OnChange = func(i int) {
+	pages.OnChange = func(i int) {
 		if i == 0 {
 			mark("Preview")
 		} else {
@@ -302,21 +320,126 @@ func FilesApp(win *app.Window) widget.Component {
 	listing := widgets.NewColumn(filter, table).WithGap(8).WithPad(8)
 	listing.AddFlex(table, 1)
 
-	right := widgets.NewColumn(listing, tabs).WithGap(0)
+	right := widgets.NewColumn(listing, pages).WithGap(0)
 	right.AddFlex(listing, 1)
-	right.AddFlex(tabs, 1)
+	right.AddFlex(pages, 1)
 
 	split := widgets.NewSplitter(true, sidebar, right)
 	split.Ratio = 0.28
 
-	ui, _ := lookFaces(win)
-	chrome := widgets.NewTitleBar("Files", "projects  ·  "+ui+"  ·  v"+uitoolkit.Version)
-	root := widgets.NewColumn(menubar, tools, chrome, split, status).WithGap(0)
-	root.AddFlex(split, 1)
+	// The folder tabs.
+	keepOne := func() {
+		// A window keeps its last tab (Dolphin's, Konsole's way).
+		for i := 0; i < tabs.Len(); i++ {
+			tab := tabs.Tab(i)
+			tab.NoClose = tabs.Len() == 1
+			tabs.SetTab(i, tab)
+		}
+	}
+	openTab := func(at, p int) int {
+		tabs.InsertTab(at, widgets.BrowserTab{Title: places[p].Label, Data: p})
+		keepOne()
+		return at
+	}
+	selectTab := func(i int) {
+		p, ok := tabs.Tab(i).Data.(int)
+		if !ok || p < 0 || p >= len(places) {
+			return
+		}
+		if n := nodeOf[p]; n != nil {
+			tree.Selected = n
+			tree.Invalidate()
+		}
+		showPlace(p)
+	}
+	newTab := func() {
+		// Home, next to the selected tab.
+		tabs.Select(openTab(tabs.Selected()+1, 2))
+		mark("New tab")
+	}
+	tabs.OnSelect = func(i int) {
+		selectTab(i)
+		mark("Tab  " + tabs.Tab(i).Title)
+	}
+	tabs.OnNew = newTab
+	tabs.OnClose = func(i int) {
+		title := tabs.Tab(i).Title
+		tabs.RemoveTab(i)
+		keepOne()
+		mark("Closed " + title)
+	}
+	tabs.OnReorder = func(from, to int) { mark(fmt.Sprintf("Moved %s to %d", tabs.Tab(to).Title, to+1)) }
+	tabs.OnContextMenu = func(i int, at paintengine2d.Point) bool {
+		items := []*widgets.MenuItem{widgets.ItemAccel("New Tab", "Ctrl+T", newTab)}
+		if i >= 0 {
+			items = append(items,
+				widgets.Item("Duplicate Tab", func() {
+					if p, ok := tabs.Tab(i).Data.(int); ok {
+						tabs.Select(openTab(i+1, p))
+					}
+				}),
+				widgets.Sep(),
+				widgets.ItemAccel("Close Tab", "Ctrl+W", func() { tabs.CloseTab(i) }),
+				widgets.Item("Close Other Tabs", func() {
+					keep := tabs.Tab(i)
+					for j := tabs.Len() - 1; j >= 0; j-- {
+						if tabs.Tab(j).Data != keep.Data || tabs.Tab(j).Title != keep.Title {
+							tabs.RemoveTab(j)
+						}
+					}
+					keepOne()
+				}))
+		}
+		widgets.ShowContextMenu(tabs, at, items...)
+		return true
+	}
+	openTab(0, place)
+	openTab(1, 0)
+	tabs.Select(0)
+
+	// The tabs are the window's title bar: the caption of the frame the
+	// toolkit draws (the caption buttons beside them, the empty strip moves
+	// the window), or the first row under the desktop's frame.
+	head := widgets.NewHeaderBar([]widget.Component{menubar}, tabs, nil)
+	var rows []widget.Component
+	if win != nil {
+		win.SetTitleBar(head)
+		win.SetTitle(places[place].Label + " — Files")
+	} else {
+		rows = append(rows, head)
+	}
+	rows = append(rows, tools, split, status)
+	col := widgets.NewColumn(rows...).WithGap(0)
+	col.AddFlex(split, 1)
 
 	loadPreview()
-	return root
+	return newShortcutRoot(col, tabs.Shortcut)
 }
+
+// shortcutRoot is a window's content root with the app's own keys: those
+// no focused widget took reach it (a browser's Ctrl+T, Ctrl+W, Ctrl+Tab).
+type shortcutRoot struct {
+	widget.Base
+	onKey func(widget.KeyEvent) bool
+}
+
+func newShortcutRoot(child widget.Component, onKey func(widget.KeyEvent) bool) *shortcutRoot {
+	r := &shortcutRoot{onKey: onKey}
+	r.Init(r)
+	r.Add(child)
+	return r
+}
+
+func (r *shortcutRoot) Measure(c layout.Constraints) paintengine2d.Point {
+	return r.Children()[0].Measure(c)
+}
+
+func (r *shortcutRoot) Arrange(b paintengine2d.Rect) {
+	r.SetBounds(b)
+	r.Children()[0].Arrange(paintengine2d.XYWH(0, 0, b.Dx(), b.Dy()))
+}
+
+func (r *shortcutRoot) KeyPress(e widget.KeyEvent) bool { return r.onKey != nil && r.onKey(e) }
 
 // lookFaces are the typefaces the window's look reads in (its era's when
 // installed, else the bundled Titillium Web and JetBrains Mono).
