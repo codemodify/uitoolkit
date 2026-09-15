@@ -424,18 +424,13 @@ func (l *Classic) baseDrawSlider(ctx *paintengine2d.Context, b paintengine2d.Rec
 
 func (l *Classic) baseDrawTextField(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, text, placeholder string, caret, selA, selB int, blink bool, scrollX float32, face *Font) {
 	p := l.palette
-	m := l.metrics
 	if !st.Frameless() {
 		l.paintFace(ctx, b, roleField, st)
 		if st.Focused() && !st.Disabled() && l.eng().FieldFocusRing(l) {
 			l.DrawFocusRing(ctx, b)
 		}
 	}
-	pad := m.FieldPad
-	if pad <= 0 {
-		pad = 8
-	}
-	inner := paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad*2, b.Dy())
+	inner := l.fieldTextBox(b)
 	ctx.Save()
 	ctx.ClipRect(inner)
 	f := l.faceOrBody(face)
@@ -1736,7 +1731,12 @@ func (l *Classic) DrawSlider(ctx *paintengine2d.Context, b paintengine2d.Rect, s
 
 func (l *Classic) DrawTextField(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, text, placeholder string, caret, selA, selB int, blink bool, scrollX float32, face *Font) {
 	if st.Frameless() {
-		// Inside a frame its parent drew (a spin box): the text alone.
+		// Inside a frame its parent drew (a spin box): the text alone, as
+		// the engine's own fields type it when it paints their text.
+		if e, ok := l.eng().(FramelessTextEngine); ok {
+			e.DrawFramelessText(l, ctx, b, st, text, placeholder, caret, selA, selB, blink, scrollX, face)
+			return
+		}
 		l.baseDrawTextField(ctx, b, st, text, placeholder, caret, selA, selB, blink, scrollX, face)
 		return
 	}

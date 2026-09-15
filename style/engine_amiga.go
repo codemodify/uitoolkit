@@ -1468,6 +1468,17 @@ func (e amigaEngine) DrawTextField(l *Classic, ctx *paintengine2d.Context, b pai
 	}
 }
 
+// DrawFramelessText: a spin box's or editable combo's text types as the
+// string gadgets do, ghosted with them when disabled (the dot grid lies on
+// device cells, so it matches the parent's own ghosting).
+func (e amigaEngine) DrawFramelessText(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, text, placeholder string, caret, selA, selB int, blink bool, scrollX float32, face *Font) {
+	c := amColors(l)
+	amFieldText(l, ctx, l.fieldTextBox(b), st, text, placeholder, caret, selA, selB, blink, scrollX, face, c.fieldOpts())
+	if st.Disabled() {
+		amGhostOver(l, ctx, b, c.ghost)
+	}
+}
+
 // DrawTextArea: a multi-line string gadget in the same frame.
 func (e amigaEngine) DrawTextArea(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, lines []TextLine, caret, selA, selB int, blink bool, scrollX, scrollY float32, placeholder string, face *Font) {
 	c := amColors(l)
