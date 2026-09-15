@@ -36,6 +36,9 @@ extern void uitkWlPing(uintptr_t id, struct xdg_wm_base *wm, uint32_t serial);
 extern void uitkWlXdgConfigure(uintptr_t sid, struct xdg_surface *surf, uint32_t serial);
 extern void uitkWlTopConfigure(uintptr_t sid, struct xdg_toplevel *top, int32_t w, int32_t h, uint32_t flags);
 extern void uitkWlTopClose(uintptr_t sid);
+extern void uitkWlTopBounds(uintptr_t sid, int32_t w, int32_t h);
+extern void uitkWlTopCaps(uintptr_t sid, uint32_t mask);
+extern void uitkWlDecoConfigure(uintptr_t sid, uint32_t mode);
 extern void uitkWlSeatCaps(uintptr_t id, struct wl_seat *seat, uint32_t caps);
 extern void uitkWlPtrEnter(uintptr_t id, uint32_t serial, struct wl_surface *surf, wl_fixed_t x, wl_fixed_t y);
 extern void uitkWlPtrLeave(uintptr_t id);
@@ -207,15 +210,15 @@ static void ui_wl_xdg_listen(struct xdg_surface *s, uintptr_t sid) {
 	xdg_surface_add_listener(s, &uitk_xdg_listener, (void*)sid);
 }
 
+// The state array becomes a bit set, bit n for state value n (maximized 1
+// ... suspended 9 ... constrained_bottom 13); Go decodes it
+// (xdgStateFromMask), so the decoding is tested without a compositor.
 static void uitk_top_cfg(void *data, struct xdg_toplevel *top, int32_t w, int32_t h, struct wl_array *states) {
 	uint32_t flags = 0;
 	if (states) {
 		uint32_t *p;
 		wl_array_for_each(p, states) {
-			if (*p == XDG_TOPLEVEL_STATE_MAXIMIZED) flags |= 1;
-			if (*p == XDG_TOPLEVEL_STATE_FULLSCREEN) flags |= 2;
-			if (*p == XDG_TOPLEVEL_STATE_RESIZING) flags |= 4;
-			if (*p == XDG_TOPLEVEL_STATE_ACTIVATED) flags |= 8;
+			if (*p < 32) flags |= 1u << *p;
 		}
 	}
 	uitkWlTopConfigure((uintptr_t)data, top, w, h, flags);
@@ -225,10 +228,30 @@ static void uitk_top_close(void *data, struct xdg_toplevel *top) {
 	uitkWlTopClose((uintptr_t)data);
 }
 static void uitk_top_bounds(void *data, struct xdg_toplevel *top, int32_t w, int32_t h) {
-	(void)data; (void)top; (void)w; (void)h;
+	(void)top;
+	uitkWlTopBounds((uintptr_t)data, w, h);
 }
 static void uitk_top_caps(void *data, struct xdg_toplevel *top, struct wl_array *caps) {
-	(void)data; (void)top; (void)caps;
+	(void)top;
+	uint32_t mask = 0;
+	if (caps) {
+		uint32_t *p;
+		wl_array_for_each(p, caps) {
+			if (*p < 32) mask |= 1u << *p;
+		}
+	}
+	uitkWlTopCaps((uintptr_t)data, mask);
+}
+// Interactive move / resize and the window menu, handed to the compositor
+// with the serial of the button press that started them (xdg-shell).
+static void ui_wl_move(struct xdg_toplevel *t, struct wl_seat *seat, uint32_t serial) {
+	if (t && seat) xdg_toplevel_move(t, seat, serial);
+}
+static void ui_wl_resize(struct xdg_toplevel *t, struct wl_seat *seat, uint32_t serial, uint32_t edges) {
+	if (t && seat) xdg_toplevel_resize(t, seat, serial, edges);
+}
+static void ui_wl_window_menu(struct xdg_toplevel *t, struct wl_seat *seat, uint32_t serial, int32_t x, int32_t y) {
+	if (t && seat) xdg_toplevel_show_window_menu(t, seat, serial, x, y);
 }
 static const struct xdg_toplevel_listener uitk_top_listener = {
 	.configure = uitk_top_cfg,
@@ -818,8 +841,19 @@ static void ui_wl_act_activate(struct xdg_activation_v1 *a, const char *token, s
 static struct zxdg_toplevel_decoration_v1 *ui_wl_deco(struct zxdg_decoration_manager_v1 *m, struct xdg_toplevel *t) {
 	return zxdg_decoration_manager_v1_get_toplevel_decoration(m, t);
 }
-static void ui_wl_deco_ssd(struct zxdg_toplevel_decoration_v1 *d) {
-	if (d) zxdg_toplevel_decoration_v1_set_mode(d, ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
+// mode is ZXDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE (1) or _SERVER_SIDE (2).
+static void ui_wl_deco_mode(struct zxdg_toplevel_decoration_v1 *d, uint32_t mode) {
+	if (d) zxdg_toplevel_decoration_v1_set_mode(d, mode);
+}
+// The compositor answers every set_mode with configure(mode), and may send
+// one at any time: "the specified mode must be obeyed by the client".
+static void uitk_deco_cfg(void *data, struct zxdg_toplevel_decoration_v1 *d, uint32_t mode) {
+	(void)d;
+	uitkWlDecoConfigure((uintptr_t)data, mode);
+}
+static const struct zxdg_toplevel_decoration_v1_listener uitk_deco_listener = { .configure = uitk_deco_cfg };
+static void ui_wl_deco_listen(struct zxdg_toplevel_decoration_v1 *d, uintptr_t sid) {
+	if (d) zxdg_toplevel_decoration_v1_add_listener(d, &uitk_deco_listener, (void*)sid);
 }
 static void ui_wl_deco_destroy(struct zxdg_toplevel_decoration_v1 *d) {
 	if (d) zxdg_toplevel_decoration_v1_destroy(d);
@@ -980,7 +1014,12 @@ func (WaylandBackend) NewSurface(opts WindowOptions) (Surface, error) {
 		bufScale: 1,
 		popup:    opts.Popup,
 		outs:     newOutputSet(),
+		wantDeco: requestedDecorations(opts.Decorations),
 	}
+	if opts.Popup {
+		s.wantDeco = DecorationsNone
+	}
+	s.decoMode = s.effectiveDeco()
 	bw, bh := w, h
 	if sc := int(c.outScale + 0.1); sc > 1 {
 		s.bufScale = sc
@@ -1051,12 +1090,17 @@ type wlConn struct {
 	mods       Modifiers
 	serial     uint32
 	ptrSerial  uint32
-	cursor     Cursor
-	curSurf    *C.struct_wl_surface
-	shapeMan   *C.struct_wp_cursor_shape_manager_v1
-	shapeDev   *C.struct_wp_cursor_shape_device_v1
-	curTheme   *C.struct_wl_cursor_theme
-	outScale   float32
+	// pressSerial is the serial of the last pointer button press and
+	// buttons the pointer buttons held now (bit 0 left, 1 right, 2 middle):
+	// xdg_toplevel.move / resize need a press whose button is still down.
+	pressSerial uint32
+	buttons     uint8
+	cursor      Cursor
+	curSurf     *C.struct_wl_surface
+	shapeMan    *C.struct_wp_cursor_shape_manager_v1
+	shapeDev    *C.struct_wp_cursor_shape_device_v1
+	curTheme    *C.struct_wl_cursor_theme
+	outScale    float32
 
 	dataMan     *C.struct_wl_data_device_manager
 	dataDev     *C.struct_wl_data_device
@@ -1240,6 +1284,33 @@ type wlSurface struct {
 	// current xdg role. Hide/Show must clear it (and detach) or
 	// re-creating the role is a protocol error.
 	mapped bool
+
+	// wantDeco is the decoration mode the app asked for; decoSent the mode
+	// last put on the wire (set_mode is sent only when it changes: clients
+	// must not loop on it); decoAnswer the compositor's last configure(mode)
+	// (DecorationsAuto while it has not answered, or with no decoration
+	// manager at all); decoMode the mode in effect.
+	wantDeco   Decorations
+	decoSent   uint32
+	decoAnswer Decorations
+	decoMode   Decorations
+	// state and caps are the applied toplevel state and wm_capabilities;
+	// pend* hold what an xdg_toplevel event announced until the
+	// xdg_surface.configure that makes it current.
+	state        WindowState
+	caps         WMCaps
+	pendState    WindowState
+	pendStateSet bool
+	pendCaps     WMCaps
+	pendCapsSet  bool
+	pendDeco     Decorations
+	pendDecoSet  bool
+	// boundsW / boundsH are the latest configure_bounds (logical px; 0 when
+	// unknown): the largest size that fits the screen's work area, which
+	// ConfigureBounds reports. The window's size is not clamped to it: a
+	// size change between making the EGL window and the first frame
+	// presents that frame at the old size.
+	boundsW, boundsH int
 }
 
 var (
@@ -1590,9 +1661,15 @@ func (s *wlSurface) bindToplevelLocked() {
 		C.free(unsafe.Pointer(app))
 		C.ui_wl_set_min(s.top, C.int(s.minW), C.int(s.minH))
 		if s.conn.decoMan != nil && !s.popup {
+			// Created before the first buffer is attached (version 1 of
+			// xdg-decoration requires it), and always with an explicit
+			// mode: KWin reads an unset mode as server-side.
 			s.deco = C.ui_wl_deco(s.conn.decoMan, s.top)
 			if s.deco != nil {
-				C.ui_wl_deco_ssd(s.deco)
+				C.ui_wl_deco_listen(s.deco, C.uintptr_t(s.id))
+				s.decoSent = 0
+				s.decoAnswer = DecorationsAuto
+				s.sendDecoMode()
 			}
 		}
 	}
@@ -1616,6 +1693,9 @@ func (s *wlSurface) unmapToplevelLocked() {
 		C.ui_wl_deco_destroy(s.deco)
 		s.deco = nil
 	}
+	s.decoSent = 0
+	s.decoAnswer = DecorationsAuto
+	s.pendStateSet, s.pendCapsSet, s.pendDecoSet = false, false, false
 	if s.top != nil {
 		C.ui_wl_top_destroy(s.top)
 		s.top = nil
@@ -2528,9 +2608,11 @@ func uitkWlRegistryGlobal(id C.uintptr_t, reg *C.struct_wl_registry, name C.uint
 	case "wl_shm":
 		c.shm = (*C.struct_wl_shm)(C.ui_wl_bind(reg, name, C.ui_wl_shm_iface(), 1))
 	case "xdg_wm_base":
+		// v4 adds configure_bounds, v5 wm_capabilities, v6 the suspended
+		// state (KWin serves 6, Mutter 7).
 		v := ver
-		if v > 3 {
-			v = 3
+		if v > 6 {
+			v = 6
 		}
 		if v < 1 {
 			v = 1
@@ -2584,6 +2666,12 @@ func uitkWlRegistryGlobal(id C.uintptr_t, reg *C.struct_wl_registry, name C.uint
 		c.primMan = (*C.struct_zwp_primary_selection_device_manager_v1)(C.ui_wl_bind(reg, name, C.ui_wl_prim_man_iface(), 1))
 		c.bindSeatExtras()
 	case "zxdg_decoration_manager_v1":
+		if os.Getenv(EnvXdgDecoration) == "0" {
+			// Testing: behave as on GNOME, which has no server-side
+			// decorations (KWin then treats every window as drawing its
+			// own frame).
+			break
+		}
 		c.decoMan = (*C.struct_zxdg_decoration_manager_v1)(C.ui_wl_bind(reg, name, C.ui_wl_deco_man_iface(), 1))
 	case "wp_fractional_scale_manager_v1":
 		c.fracMan = (*C.struct_wp_fractional_scale_manager_v1)(C.ui_wl_bind(reg, name, C.ui_wl_frac_man_iface(), 1))
@@ -2682,6 +2770,33 @@ func uitkWlXdgConfigure(sid C.uintptr_t, surf *C.struct_xdg_surface, serial C.ui
 	if s.surf != nil {
 		wlByNative[uintptr(unsafe.Pointer(s.surf))] = s.id
 	}
+	// xdg_surface.configure makes everything announced before it current
+	// at once: the toplevel's states, its capabilities, the decoration mode.
+	s.applyPendingConfigure()
+}
+
+// applyPendingConfigure adopts the state, capabilities and decoration mode
+// the last configure sequence announced, and reports what changed.
+func (s *wlSurface) applyPendingConfigure() {
+	if s.pendCapsSet {
+		s.pendCapsSet = false
+		if s.pendCaps != s.caps {
+			s.caps = s.pendCaps
+			s.push(Event{Kind: EventCapabilities, Caps: s.caps})
+		}
+	}
+	if s.pendStateSet {
+		s.pendStateSet = false
+		if s.pendState != s.state {
+			s.state = s.pendState
+			s.push(Event{Kind: EventWindowState, State: s.state})
+		}
+	}
+	if s.pendDecoSet {
+		s.pendDecoSet = false
+		s.decoAnswer = s.pendDeco
+	}
+	s.applyDeco()
 }
 
 //export uitkWlTopConfigure
@@ -2699,7 +2814,40 @@ func uitkWlTopConfigure(sid C.uintptr_t, top *C.struct_xdg_toplevel, w, h C.int3
 			s.push(Event{Kind: EventResize, Width: int(w), Height: int(h)})
 		}
 	}
-	_ = flags
+	s.pendState = xdgStateFromMask(uint32(flags))
+	s.pendStateSet = true
+}
+
+//export uitkWlTopBounds
+func uitkWlTopBounds(sid C.uintptr_t, w, h C.int32_t) {
+	if s := wlSurfBy(sid); s != nil {
+		s.boundsW, s.boundsH = int(w), int(h)
+	}
+}
+
+//export uitkWlTopCaps
+func uitkWlTopCaps(sid C.uintptr_t, mask C.uint32_t) {
+	if s := wlSurfBy(sid); s != nil {
+		s.pendCaps = xdgCapsFromMask(uint32(mask))
+		s.pendCapsSet = true
+	}
+}
+
+//export uitkWlDecoConfigure
+func uitkWlDecoConfigure(sid C.uintptr_t, mode C.uint32_t) {
+	s := wlSurfBy(sid)
+	if s == nil {
+		return
+	}
+	switch mode {
+	case 1:
+		s.pendDeco = DecorationsClient
+	case 2:
+		s.pendDeco = DecorationsServer
+	default:
+		return
+	}
+	s.pendDecoSet = true
 }
 
 //export uitkWlTopClose
@@ -2770,6 +2918,10 @@ func uitkWlPtrLeave(id C.uintptr_t) {
 		s.push(Event{Kind: EventPointerLeave, Mods: c.mods})
 	}
 	c.ptrSurf = 0
+	// A new enter starts with no button held (an interactive move or
+	// resize takes the pointer away mid-press, and the release goes to
+	// the compositor).
+	c.buttons = 0
 }
 
 //export uitkWlPtrMotion
@@ -2795,6 +2947,13 @@ func uitkWlPtrButton(id C.uintptr_t, button, state, serial C.uint32_t) {
 	// A click stops a fling.
 	c.kin.stop()
 	c.serial = uint32(serial)
+	bit := wlButtonBit(uint32(button))
+	if state == 1 {
+		c.pressSerial = uint32(serial)
+		c.buttons |= bit
+	} else {
+		c.buttons &^= bit
+	}
 	s := wlSurfaces[c.ptrSurf]
 	if s == nil {
 		return
@@ -3045,6 +3204,20 @@ func uitkWlBufRelease(sid C.uintptr_t, slot C.int) {
 	if i >= 0 && i < len(s.slots) {
 		s.slots[i].busy = false
 	}
+}
+
+// wlButtonBit is a pointer button's bit in wlConn.buttons (any other
+// button counts as held too, on bit 3).
+func wlButtonBit(code uint32) uint8 {
+	switch code {
+	case 0x110:
+		return 1
+	case 0x111:
+		return 2
+	case 0x112:
+		return 4
+	}
+	return 8
 }
 
 func wlButton(code uint32) MouseButton {
@@ -3767,4 +3940,171 @@ func (s *wlSurface) FinishDrop(ok bool) {
 	if c := s.conn; c != nil {
 		c.dndDrop(ok)
 	}
+}
+
+// ---- client-side frame support (FrameSurface) ----------------------------
+
+// effectiveDeco is the decoration mode in effect: a popup has none; with a
+// decoration object the compositor's answer rules (the requested mode until
+// it answers); without one (GNOME, Weston) nobody else draws a frame.
+func (s *wlSurface) effectiveDeco() Decorations {
+	if s.popup {
+		return DecorationsNone
+	}
+	answer := DecorationsAuto
+	if s.deco != nil {
+		answer = s.decoAnswer
+		if answer == DecorationsAuto {
+			answer = decoWire(s.wantDeco)
+		}
+	} else if s.conn != nil && s.conn.decoMan != nil && s.top == nil {
+		// Hidden (no role): keep reporting what the next role will ask.
+		answer = decoWire(s.wantDeco)
+	}
+	return effectiveDecorations(s.wantDeco, answer)
+}
+
+// decoWire is the xdg-decoration mode that asks for d: the compositor's
+// frame for Server, none of its own for Client and None.
+func decoWire(d Decorations) Decorations {
+	if d == DecorationsServer || d == DecorationsAuto {
+		return DecorationsServer
+	}
+	return DecorationsClient
+}
+
+// sendDecoMode puts the wanted mode on the wire when it differs from what
+// was last sent.
+func (s *wlSurface) sendDecoMode() {
+	if s.deco == nil {
+		return
+	}
+	mode := uint32(2) // server_side
+	if decoWire(s.wantDeco) == DecorationsClient {
+		mode = 1 // client_side
+	}
+	if mode == s.decoSent {
+		return
+	}
+	s.decoSent = mode
+	C.ui_wl_deco_mode(s.deco, C.uint32_t(mode))
+}
+
+// applyDeco recomputes the mode in effect and reports a change.
+func (s *wlSurface) applyDeco() {
+	if m := s.effectiveDeco(); m != s.decoMode {
+		s.decoMode = m
+		s.push(Event{Kind: EventDecorations, Decor: m})
+	}
+}
+
+// Decorations is the negotiated decoration mode (FrameSurface).
+func (s *wlSurface) Decorations() Decorations { return s.decoMode }
+
+// RequestDecorations asks the compositor for mode d (FrameSurface). Before
+// the window is first shown the answer is awaited, so the first frame is
+// already drawn in the mode the window will have.
+func (s *wlSurface) RequestDecorations(d Decorations) {
+	if s == nil || s.popup || s.closed {
+		return
+	}
+	d = requestedDecorations(d)
+	if d == s.wantDeco {
+		return
+	}
+	s.wantDeco = d
+	if s.deco == nil || s.conn == nil || s.conn.dpy == nil {
+		s.applyDeco()
+		return
+	}
+	before := s.decoSent
+	s.sendDecoMode()
+	if s.decoSent == before {
+		// Client and None ask the compositor for the same thing.
+		s.applyDeco()
+		return
+	}
+	if !s.mapped {
+		C.ui_wl_roundtrip(s.conn.dpy)
+	} else {
+		C.ui_wl_flush(s.conn.dpy)
+	}
+	s.applyDeco()
+}
+
+// WindowState is the toplevel's current state (FrameSurface).
+func (s *wlSurface) WindowState() WindowState { return s.state }
+
+// Capabilities are the compositor's wm_capabilities (FrameSurface).
+func (s *wlSurface) Capabilities() WMCaps { return s.caps }
+
+// ConfigureBounds is the compositor's recommended largest window size
+// (xdg_toplevel.configure_bounds, logical px); zero when it has not said.
+func (s *wlSurface) ConfigureBounds() (w, h int) { return s.boundsW, s.boundsH }
+
+// SuitsClientFrame is always true: xdg-shell moves and resizes on request.
+func (s *wlSurface) SuitsClientFrame() bool { return true }
+
+// heldPress reports whether a pointer button pressed over this surface is
+// still down, which xdg_toplevel.move and resize need.
+func (s *wlSurface) heldPress() bool {
+	c := s.conn
+	return s.top != nil && c != nil && c.seat != nil && c.dpy != nil &&
+		c.ptrSurf == s.id && c.buttons != 0 && c.pressSerial != 0
+}
+
+// StartSystemMove hands the held button press to the compositor for an
+// interactive move (xdg_toplevel.move).
+func (s *wlSurface) StartSystemMove() bool {
+	if !s.heldPress() {
+		return false
+	}
+	c := s.conn
+	C.ui_wl_move(s.top, c.seat, C.uint32_t(c.pressSerial))
+	C.ui_wl_flush(c.dpy)
+	// The compositor owns the grab now; the release goes to it.
+	c.buttons = 0
+	return true
+}
+
+// StartSystemResize hands the held button press to the compositor for an
+// interactive resize from edges (xdg_toplevel.resize).
+func (s *wlSurface) StartSystemResize(edges Edges) bool {
+	e := xdgResizeEdge(edges)
+	if e == 0 || !s.heldPress() {
+		return false
+	}
+	c := s.conn
+	C.ui_wl_resize(s.top, c.seat, C.uint32_t(c.pressSerial), C.uint32_t(e))
+	C.ui_wl_flush(c.dpy)
+	c.buttons = 0
+	return true
+}
+
+// ShowWindowMenu asks the compositor for its window menu at p, in surface
+// device pixels (xdg_toplevel.show_window_menu takes surface-local logical
+// coordinates).
+func (s *wlSurface) ShowWindowMenu(p paintengine2d.Point) bool {
+	c := s.conn
+	if s.top == nil || c == nil || c.seat == nil || c.dpy == nil || !s.caps.Can(CapWindowMenu) {
+		return false
+	}
+	sc := s.deviceScale()
+	if sc <= 0 {
+		sc = 1
+	}
+	C.ui_wl_window_menu(s.top, c.seat, C.uint32_t(c.pressSerial), C.int32_t(p.X/sc), C.int32_t(p.Y/sc))
+	C.ui_wl_flush(c.dpy)
+	c.buttons = 0
+	return true
+}
+
+// Minimize iconifies the window (xdg_toplevel.set_minimized), keeping its
+// role: the taskbar brings it back. Hide, by contrast, drops the role.
+func (s *wlSurface) Minimize() {
+	if s.top == nil || s.conn == nil || s.conn.dpy == nil || !s.caps.Can(CapMinimize) {
+		return
+	}
+	C.ui_wl_set_minimized(s.top)
+	C.ui_wl_flush(s.conn.dpy)
 }

@@ -53,3 +53,31 @@ func TestSessionBusAddressNeverLaunches(t *testing.T) {
 		t.Fatal("no bus, no prefs")
 	}
 }
+
+func TestDesktopPrefsTitleBarKeys(t *testing.T) {
+	var p DesktopPrefs
+	if !p.setNS(gnomeWMNS, "button-layout", dbus.MakeVariant(dbus.MakeVariant("appmenu:close"))) || p.ButtonLayout != "appmenu:close" {
+		t.Fatalf("layout %+v", p)
+	}
+	if !p.setNS(gnomeWMNS, "action-double-click-titlebar", dbus.MakeVariant("minimize")) || p.TitlebarDoubleClick != "minimize" {
+		t.Fatalf("double click %+v", p)
+	}
+	if !p.setNS(gnomeWMNS, "action-right-click-titlebar", dbus.MakeVariant("menu")) || p.TitlebarRightClick != "menu" {
+		t.Fatalf("right click %+v", p)
+	}
+	if !p.setNS(gnomeMouseNS, "double-click", dbus.MakeVariant(int32(350))) || p.DoubleClickTime != 350 {
+		t.Fatalf("double-click time %+v", p)
+	}
+	if !p.setNS(gnomeMouseNS, "drag-threshold", dbus.MakeVariant(int32(9))) || p.DragThreshold != 9 {
+		t.Fatalf("drag threshold %+v", p)
+	}
+	if p.setNS(gnomeWMNS, "button-layout", dbus.MakeVariant(uint32(1))) {
+		t.Fatal("a number is no layout")
+	}
+	if p.setNS(gnomeWMNS, "theme", dbus.MakeVariant("Adwaita")) {
+		t.Fatal("an unrelated key")
+	}
+	if !p.setNS(appearanceNS, "color-scheme", dbus.MakeVariant(uint32(1))) || p.ColorScheme != SchemeDark {
+		t.Fatal("appearance keys still arrive through setNS")
+	}
+}

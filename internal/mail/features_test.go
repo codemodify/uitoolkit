@@ -508,7 +508,7 @@ func TestAddAccountProtocolAndTestButton(t *testing.T) {
 	}
 	a.PumpOnce()
 	var imap, pop, test bool
-	widget.Walk(w.Content(), func(c widget.Component) {
+	widget.Walk(mailTree(w), func(c widget.Component) {
 		switch x := c.(type) {
 		case *widgets.RadioButton:
 			if x.Text == "IMAP" {
@@ -563,7 +563,7 @@ func TestRemoveAccountMenuAndFirstRunAgain(t *testing.T) {
 		t.Fatal("first-run should not open when an account exists")
 	}
 	var prefs *widgets.MenuItem
-	widget.Walk(w.Content(), func(c widget.Component) {
+	widget.Walk(mailTree(w), func(c widget.Component) {
 		mb, ok := c.(*widgets.MenuBar)
 		if !ok {
 			return

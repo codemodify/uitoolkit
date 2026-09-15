@@ -72,6 +72,12 @@ type Application struct {
 	// lookNotify wakes the loop when look.json's directory changes; with
 	// it the loop does not poll the file while idle.
 	lookNotify *lookNotify
+	// decorPref is the user's decorations preference (look.json); tbar the
+	// desktop's title-bar conventions; desktop its latest portal
+	// preferences (frame.go).
+	decorPref style.DecorationsPref
+	tbar      titleBarPrefsCache
+	desktop   platform.DesktopPrefs
 }
 
 // trayWakeCap is the longest a tray-holding loop sleeps. Tray events
@@ -104,6 +110,16 @@ func New(opts Options) *Application {
 	if opts.DisableLookWatch {
 		watch = false
 	}
+	var decorPref style.DecorationsPref
+	if !opts.Headless {
+		// "Use system title bar and borders" is a desktop-wide choice: it
+		// applies to apps with a look of their own too.
+		if preferred {
+			decorPref = ap.Decorations
+		} else {
+			decorPref = style.LoadAppearance().Decorations
+		}
+	}
 	var backend platform.Backend
 	if opts.Backend != "" {
 		backend = platform.Select(opts.Backend, opts.Headless)
@@ -128,6 +144,7 @@ func New(opts Options) *Application {
 		headless:  opts.Headless,
 		backend:   backend,
 		watchLook: watch,
+		decorPref: decorPref,
 	}
 	// Ask the desktop for its preferences before the look is built: a
 	// theme that follows its light / dark mode starts in the right one.
@@ -263,7 +280,11 @@ func (a *Application) NewWindow(opts platform.WindowOptions) (*Window, error) {
 	if opts.Height < 1 {
 		opts.Height = 560
 	}
-	surf, err := a.backend.NewSurface(opts)
+	// The frame is decided before the window exists (and again once it has
+	// a title bar), so it never shows with the wrong one.
+	surfOpts := opts
+	surfOpts.Decorations = a.resolveDecorations(opts, false, nil)
+	surf, err := a.backend.NewSurface(surfOpts)
 	if err != nil {
 		return nil, err
 	}

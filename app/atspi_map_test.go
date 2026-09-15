@@ -38,7 +38,7 @@ func TestATSPIStates(t *testing.T) {
 }
 
 func TestATSPIRolesCovered(t *testing.T) {
-	for r := a11y.RoleUnknown; r <= a11y.RoleLink; r++ {
+	for r := a11y.RoleUnknown; r <= a11y.RoleTitleBar; r++ {
 		v, ok := atspiRoles[r]
 		if !ok {
 			t.Errorf("no AT-SPI role for %s", r)
@@ -47,6 +47,9 @@ func TestATSPIRolesCovered(t *testing.T) {
 		if atspiRoleNames[v] == "" {
 			t.Errorf("no AT-SPI name for %s (%d)", r, v)
 		}
+	}
+	if atspiRole(a11y.RoleTitleBar) != 104 || a11y.RoleTitleBar.String() != "title bar" {
+		t.Error("title bar is ATSPI_ROLE_TITLE_BAR (104)")
 	}
 	if atspiActionName(&a11y.Node{Role: a11y.RoleCheckBox}, a11y.ActionDefault) != "toggle" ||
 		atspiActionName(&a11y.Node{Role: a11y.RoleButton}, a11y.ActionDefault) != "click" {

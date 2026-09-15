@@ -86,9 +86,14 @@ opens `OnContext` for the current row.
 | Tool bar | `ToolBar` / `ToolToggle` / `ToolButton` | `QToolBar` + checkable `QToolButton` | `GtkBox` ≈ + `GtkToggleButton` | `CommandBar` ≈ + `ToggleButton` | `widget.Toolbar` | `ToolStrip` | `ToolBar` | `NSToolbar` | `ToolbarItem` | [thumb](screenshots/compare/toolbar.png) · [gallery](screenshots/gallery-toolbar.png) |
 | Status bar | `StatusBar` | `QStatusBar` / `StatusBar` | `GtkStatusbar` ≈ | — | — | `StatusStrip` | `StatusBar` | — | — | [thumb](screenshots/compare/statusbar.png) |
 | Title bar | `TitleBar` | custom chrome ≈ | `GtkHeaderBar` ≈ | window chrome ≈ | window title ≈ | `Form.Text` ≈ | window chrome ≈ | `NSWindow` title | `navigationTitle` | [thumb](screenshots/compare/titlebar.png) |
+| Header bar (window title bar) | `HeaderBar` + `Window.SetTitleBar`, `WindowControls`, `DragArea` / `NoDrag` | custom frameless window | `GtkHeaderBar` + `gtk_window_set_titlebar`, `GtkWindowControls`, `GtkWindowHandle` | `WindowDrawnDecorations` (12) | `widget/material.Decorations` (Gio) ≈ | custom `WM_NCHITTEST` | `WindowChrome` | `NSWindow` full-size content view | `.windowStyle(.hiddenTitleBar)` ≈ | — |
 
-`TitleBar` is optional **client-side** caption + subtitle, not an OS CSD
-replacement. Avalonia has no stock `ToolBar`/`StatusBar` (use `CommandBar` or
+`TitleBar` is a caption + subtitle heading strip. As content it stays a
+heading; passed to `Window.SetTitleBar` it becomes a window's title bar. A
+`HeaderBar` is a window's title bar: where uitoolkit draws the frame it is
+the caption, with caption buttons in the desktop's layout, and its free space
+moves the window; under the desktop's frame it is the first row. See
+[decorations.md](decorations.md). Avalonia has no stock `ToolBar`/`StatusBar` (use `CommandBar` or
 layout; SourceGit uses `ToggleButton` for view modes). `GtkStatusbar` still
 exists in GTK 4 but is no longer the preferred pattern. Behavior (not just
 names) is in [compare.md](compare.md).

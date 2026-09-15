@@ -199,6 +199,96 @@ static int ui_btn(XEvent* e) { return e->xbutton.button; }
 static int ui_btn_x(XEvent* e) { return e->xbutton.x; }
 static int ui_btn_y(XEvent* e) { return e->xbutton.y; }
 static unsigned ui_btn_state(XEvent* e) { return e->xbutton.state; }
+static int ui_btn_xroot(XEvent* e) { return e->xbutton.x_root; }
+static int ui_btn_yroot(XEvent* e) { return e->xbutton.y_root; }
+static Time ui_btn_time(XEvent* e) { return e->xbutton.time; }
+
+// ui_get_atoms reads a list property (ATOM[] such as _NET_WM_STATE,
+// _NET_SUPPORTED, _NET_WM_ALLOWED_ACTIONS) into out; it returns how many.
+static int ui_get_atoms(Display* d, Window w, Atom prop, Atom* out, int max) {
+	Atom type = None;
+	int fmt = 0;
+	unsigned long n = 0, rem = 0;
+	unsigned char* data = NULL;
+	if (!d || !w) return 0;
+	if (XGetWindowProperty(d, w, prop, 0, max, False, XA_ATOM, &type, &fmt, &n, &rem, &data) != Success || !data) {
+		return 0;
+	}
+	int k = 0;
+	if (fmt == 32) {
+		for (unsigned long i = 0; i < n && k < max; i++) out[k++] = ((Atom*)data)[i];
+	}
+	XFree(data);
+	return k;
+}
+
+// ui_wm_name is the window manager's name: _NET_WM_NAME of the window
+// _NET_SUPPORTING_WM_CHECK names on the root window.
+static int ui_wm_name(Display* d, char* out, int max) {
+	Atom check = XInternAtom(d, "_NET_SUPPORTING_WM_CHECK", False);
+	Atom name = XInternAtom(d, "_NET_WM_NAME", False);
+	Atom utf8 = XInternAtom(d, "UTF8_STRING", False);
+	Atom type = None;
+	int fmt = 0;
+	unsigned long n = 0, rem = 0;
+	unsigned char* data = NULL;
+	Window wm = 0;
+	if (XGetWindowProperty(d, DefaultRootWindow(d), check, 0, 1, False, XA_WINDOW, &type, &fmt, &n, &rem, &data) == Success && data) {
+		if (fmt == 32 && n == 1) wm = *(Window*)data;
+		XFree(data);
+	}
+	if (!wm) return 0;
+	data = NULL;
+	int k = 0;
+	if (XGetWindowProperty(d, wm, name, 0, 64, False, utf8, &type, &fmt, &n, &rem, &data) == Success && data) {
+		if (fmt == 8) {
+			for (unsigned long i = 0; i < n && k < max - 1; i++) out[k++] = (char)data[i];
+		}
+		XFree(data);
+	}
+	out[k] = 0;
+	return k;
+}
+
+// ui_root_message sends a client message about w to the root window, the
+// way EWMH requests (_NET_WM_MOVERESIZE, _GTK_SHOW_WINDOW_MENU) travel.
+static void ui_root_message(Display* d, Window w, Atom type, long l0, long l1, long l2, long l3, long l4) {
+	XEvent ev;
+	memset(&ev, 0, sizeof(ev));
+	ev.xclient.type = ClientMessage;
+	ev.xclient.window = w;
+	ev.xclient.message_type = type;
+	ev.xclient.format = 32;
+	ev.xclient.data.l[0] = l0;
+	ev.xclient.data.l[1] = l1;
+	ev.xclient.data.l[2] = l2;
+	ev.xclient.data.l[3] = l3;
+	ev.xclient.data.l[4] = l4;
+	XSendEvent(d, DefaultRootWindow(d), False, SubstructureRedirectMask|SubstructureNotifyMask, &ev);
+	XFlush(d);
+}
+
+// The client "MUST release all grabs" before _NET_WM_MOVERESIZE: the
+// button press's implicit grab included.
+static void ui_ungrab_pointer(Display* d) {
+	XUngrabPointer(d, CurrentTime);
+	XFlush(d);
+}
+
+static void ui_iconify(Display* d, Window w) {
+	XIconifyWindow(d, w, DefaultScreen(d));
+	XFlush(d);
+}
+
+static void ui_lower(Display* d, Window w) {
+	XLowerWindow(d, w);
+	XFlush(d);
+}
+
+static int ui_to_root(Display* d, Window w, int x, int y, int* rx, int* ry) {
+	Window child = 0;
+	return XTranslateCoordinates(d, w, DefaultRootWindow(d), x, y, rx, ry, &child);
+}
 
 static int ui_mot_x(XEvent* e) { return e->xmotion.x; }
 static int ui_mot_y(XEvent* e) { return e->xmotion.y; }
@@ -725,17 +815,26 @@ func (X11Backend) NewSurface(opts WindowOptions) (Surface, error) {
 	gc := C.ui_gc(c.dpy, win)
 	ic, cbs := x11CreateIC(c.im, win)
 	s := &x11Surface{
-		conn:   c,
-		win:    win,
-		gc:     gc,
-		ic:     ic,
-		ximCbs: cbs,
-		title:  title,
-		img:    paintengine2d.NewImage(w, h),
-		rmask:  uint32(C.ui_red_mask(c.dpy)),
-		gmask:  uint32(C.ui_green_mask(c.dpy)),
-		bmask:  uint32(C.ui_blue_mask(c.dpy)),
-		popup:  opts.Popup,
+		conn:     c,
+		win:      win,
+		gc:       gc,
+		ic:       ic,
+		ximCbs:   cbs,
+		title:    title,
+		img:      paintengine2d.NewImage(w, h),
+		rmask:    uint32(C.ui_red_mask(c.dpy)),
+		gmask:    uint32(C.ui_green_mask(c.dpy)),
+		bmask:    uint32(C.ui_blue_mask(c.dpy)),
+		popup:    opts.Popup,
+		wantDeco: requestedDecorations(opts.Decorations),
+		focused:  true,
+	}
+	if opts.Popup {
+		// Override-redirect: no window manager frame to ask about.
+		s.wantDeco = DecorationsNone
+	} else if s.wantDeco != DecorationsServer {
+		// Before the window is mapped, so it never shows with a frame.
+		s.setMotifLocked()
 	}
 	s.rebuildImageLocked()
 	c.surfaces[win] = s
@@ -767,6 +866,21 @@ type x11Conn struct {
 	atomMaxVert   C.Atom
 	atomMaxHorz   C.Atom
 	atomFullscr   C.Atom
+	atomHidden    C.Atom
+	atomFocused   C.Atom
+	atomAllowed   C.Atom
+	atomActMin    C.Atom
+	atomActMaxH   C.Atom
+	atomActMaxV   C.Atom
+	atomActFull   C.Atom
+	atomSupported C.Atom
+	atomMoveRes   C.Atom
+	atomShowMenu  C.Atom
+	atomMotif     C.Atom
+	// supported is the window manager's _NET_SUPPORTED, read once (nil
+	// until then); wmName is its _NET_WM_NAME.
+	supported map[C.Atom]bool
+	wmName    string
 
 	clipText string
 	ownClip  bool
@@ -788,10 +902,8 @@ type x11Conn struct {
 	incrSends []incrSendState
 	maxReq    int
 
-	curDefault C.Cursor
-	curCol     C.Cursor
-	curRow     C.Cursor
-	curText    C.Cursor
+	// cursors caches one X cursor per shape.
+	cursors map[Cursor]C.Cursor
 }
 
 type x11Surface struct {
@@ -821,6 +933,24 @@ type x11Surface struct {
 	ximCbs     unsafe.Pointer
 	gpu        *paintengine2d.GPUDevice
 	popup      bool
+	// hidden is set by Hide: presenting must not map the window again
+	// (close-to-tray hid it, and the next repaint showed it).
+	hidden bool
+
+	// state, caps: what the window manager says about the window
+	// (_NET_WM_STATE, _NET_WM_ALLOWED_ACTIONS); focused tracks focus
+	// events for managers without _NET_WM_STATE_FOCUSED. wantDeco is the
+	// requested decoration mode (_MOTIF_WM_HINTS).
+	state    WindowState
+	caps     WMCaps
+	focused  bool
+	wantDeco Decorations
+	// The last button press: root position, button and time, which
+	// _NET_WM_MOVERESIZE needs; buttons is the set held now.
+	pressRootX, pressRootY int
+	pressButton            int
+	pressTime              C.Time
+	buttons                uint8
 }
 
 var (
@@ -880,6 +1010,18 @@ func x11OpenLocked() (*x11Conn, error) {
 	c.atomMaxVert = internAtom(d, "_NET_WM_STATE_MAXIMIZED_VERT")
 	c.atomMaxHorz = internAtom(d, "_NET_WM_STATE_MAXIMIZED_HORZ")
 	c.atomFullscr = internAtom(d, "_NET_WM_STATE_FULLSCREEN")
+	c.atomHidden = internAtom(d, "_NET_WM_STATE_HIDDEN")
+	c.atomFocused = internAtom(d, "_NET_WM_STATE_FOCUSED")
+	c.atomAllowed = internAtom(d, "_NET_WM_ALLOWED_ACTIONS")
+	c.atomActMin = internAtom(d, "_NET_WM_ACTION_MINIMIZE")
+	c.atomActMaxH = internAtom(d, "_NET_WM_ACTION_MAXIMIZE_HORZ")
+	c.atomActMaxV = internAtom(d, "_NET_WM_ACTION_MAXIMIZE_VERT")
+	c.atomActFull = internAtom(d, "_NET_WM_ACTION_FULLSCREEN")
+	c.atomSupported = internAtom(d, "_NET_SUPPORTED")
+	c.atomMoveRes = internAtom(d, "_NET_WM_MOVERESIZE")
+	c.atomShowMenu = internAtom(d, "_GTK_SHOW_WINDOW_MENU")
+	c.atomMotif = internAtom(d, "_MOTIF_WM_HINTS")
+	c.cursors = map[Cursor]C.Cursor{}
 	c.maxReq = int(C.ui_max_req(d))
 	C.ui_detectable_repeat(d)
 	C.ui_select_randr(d)
@@ -945,21 +1087,11 @@ func (c *x11Conn) release() {
 
 func (c *x11Conn) closeLocked() {
 	if c.dpy != nil {
-		if c.curDefault != 0 {
-			C.ui_free_cursor(c.dpy, c.curDefault)
-			c.curDefault = 0
-		}
-		if c.curCol != 0 {
-			C.ui_free_cursor(c.dpy, c.curCol)
-			c.curCol = 0
-		}
-		if c.curRow != 0 {
-			C.ui_free_cursor(c.dpy, c.curRow)
-			c.curRow = 0
-		}
-		if c.curText != 0 {
-			C.ui_free_cursor(c.dpy, c.curText)
-			c.curText = 0
+		for k, cur := range c.cursors {
+			if cur != 0 {
+				C.ui_free_cursor(c.dpy, cur)
+			}
+			delete(c.cursors, k)
 		}
 	}
 	if c.im != nil {
@@ -1262,7 +1394,7 @@ func (s *x11Surface) Present(dirty []paintengine2d.Rect) error {
 	if s.gpu != nil {
 		if err := s.presentGPU(); err == nil {
 			x11Mu.Lock()
-			if !s.mapped && s.conn.dpy != nil && s.win != 0 {
+			if !s.mapped && !s.hidden && s.conn.dpy != nil && s.win != 0 {
 				C.ui_map(s.conn.dpy, s.win)
 				s.mapped = true
 			}
@@ -1316,7 +1448,7 @@ func (s *x11Surface) Present(dirty []paintengine2d.Rect) error {
 			C.ui_put(s.conn.dpy, s.win, s.gc, s.ximg, C.int(x0), C.int(y0), C.int(x0), C.int(y0), C.uint(x1-x0), C.uint(y1-y0))
 		}
 	}
-	if !s.mapped {
+	if !s.mapped && !s.hidden {
 		C.ui_map(s.conn.dpy, s.win)
 		s.mapped = true
 	}
@@ -1379,6 +1511,9 @@ func (c *x11Conn) drainLocked() {
 			c.handleSelNotify(&xe)
 			continue
 		case C.PropertyNotify:
+			if s := c.surfaces[C.ui_prop_window(&xe)]; s != nil {
+				c.queues[s.win] = append(c.queues[s.win], s.propertyChangedLocked(C.ui_prop_atom(&xe))...)
+			}
 			c.handleProperty(&xe)
 			continue
 		case C.MappingNotify:
@@ -1421,7 +1556,18 @@ func (s *x11Surface) translate(xe *C.XEvent) []Event {
 		btn := int(C.ui_btn(xe))
 		x, y := float32(C.ui_btn_x(xe)), float32(C.ui_btn_y(xe))
 		mods := xmods(uint(C.ui_btn_state(xe)))
-		return x11ButtonEvents(btn, C.ui_event_type(xe) == C.ButtonRelease, paintengine2d.Pt(x, y), mods)
+		release := C.ui_event_type(xe) == C.ButtonRelease
+		if bit := x11ButtonBit(btn); bit != 0 {
+			if release {
+				s.buttons &^= bit
+			} else {
+				s.buttons |= bit
+				s.pressRootX, s.pressRootY = int(C.ui_btn_xroot(xe)), int(C.ui_btn_yroot(xe))
+				s.pressButton = btn
+				s.pressTime = C.ui_btn_time(xe)
+			}
+		}
+		return x11ButtonEvents(btn, release, paintengine2d.Pt(x, y), mods)
 	case C.LeaveNotify:
 		// Grab and ungrab crossings (menus, the implicit button grab
 		// ending) are not the pointer leaving the window.
@@ -1475,19 +1621,18 @@ func (s *x11Surface) translate(xe *C.XEvent) []Event {
 		return out
 	case C.FocusIn:
 		C.ui_set_ic_focus(s.ic)
-		return []Event{{Kind: EventFocusIn}}
+		return append([]Event{{Kind: EventFocusIn}}, s.focusChangedLocked(true)...)
 	case C.FocusOut:
 		C.ui_unset_ic_focus(s.ic)
+		out := []Event{{Kind: EventFocusOut}, {Kind: EventIMECancel}}
 		if leftover := C.ui_reset_ic(s.ic); leftover != nil {
 			txt := C.GoString(leftover)
 			C.ui_xfree(unsafe.Pointer(leftover))
-			out := []Event{{Kind: EventFocusOut}, {Kind: EventIMECancel}}
 			if txt != "" {
 				out = append(out, Event{Kind: EventIMECommit, Text: txt})
 			}
-			return out
 		}
-		return []Event{{Kind: EventFocusOut}, {Kind: EventIMECancel}}
+		return append(out, s.focusChangedLocked(false)...)
 	case C.DestroyNotify:
 		// The window really is gone (server-side death or our own
 		// XDestroyWindow): only here does the surface become Closed.
@@ -2086,38 +2231,24 @@ func (c *x11Conn) xcursor(cur Cursor) C.Cursor {
 	if c == nil || c.dpy == nil {
 		return 0
 	}
-	slot := c.xcursorSlot(cur)
-	if slot == nil {
-		return 0
+	if c.cursors == nil {
+		c.cursors = map[Cursor]C.Cursor{}
 	}
-	if *slot != 0 {
-		return *slot
+	if got := c.cursors[cur]; got != 0 {
+		return got
 	}
-	shape := C.uint(x11FontCursorShape(cur))
 	for _, name := range x11ThemeCursorNames(cur) {
 		cs := C.CString(name)
 		got := C.ui_theme_cursor(c.dpy, cs)
 		C.free(unsafe.Pointer(cs))
 		if got != 0 {
-			*slot = got
+			c.cursors[cur] = got
 			return got
 		}
 	}
-	*slot = C.ui_font_cursor(c.dpy, shape)
-	return *slot
-}
-
-func (c *x11Conn) xcursorSlot(cur Cursor) *C.Cursor {
-	switch cur {
-	case CursorColResize:
-		return &c.curCol
-	case CursorRowResize:
-		return &c.curRow
-	case CursorText:
-		return &c.curText
-	default:
-		return &c.curDefault
-	}
+	got := C.ui_font_cursor(c.dpy, C.uint(x11FontCursorShape(cur)))
+	c.cursors[cur] = got
+	return got
 }
 
 func (s *x11Surface) SetCursor(cur Cursor) {
@@ -2139,6 +2270,7 @@ func (s *x11Surface) Raise() {
 		C.ui_focus(s.conn.dpy, s.win)
 	}
 	s.mapped = true
+	s.hidden = false
 	x11Mu.Unlock()
 }
 
@@ -2169,6 +2301,7 @@ func (s *x11Surface) Hide() {
 	x11Mu.Lock()
 	C.ui_unmap(s.conn.dpy, s.win)
 	s.mapped = false
+	s.hidden = true
 	x11Mu.Unlock()
 }
 
@@ -2235,4 +2368,286 @@ func (s *x11Surface) PortalParent() string {
 		return ""
 	}
 	return fmt.Sprintf("x11:%x", uint64(s.win))
+}
+
+// ---- client-side frame support (FrameSurface) ----------------------------
+
+// x11ButtonBit is a core pointer button's bit in x11Surface.buttons (wheel
+// "buttons" 4-7 are not held buttons).
+func x11ButtonBit(btn int) uint8 {
+	switch btn {
+	case 1:
+		return 1
+	case 3:
+		return 2
+	case 2:
+		return 4
+	case 8, 9:
+		return 8
+	}
+	return 0
+}
+
+// supportsLocked reports whether the window manager lists atom in
+// _NET_SUPPORTED (read once per connection).
+func (c *x11Conn) supportsLocked(atom C.Atom) bool {
+	if c == nil || c.dpy == nil {
+		return false
+	}
+	if c.supported == nil {
+		c.supported = map[C.Atom]bool{}
+		var buf [512]C.Atom
+		n := int(C.ui_get_atoms(c.dpy, C.XDefaultRootWindow(c.dpy), c.atomSupported, &buf[0], C.int(len(buf))))
+		for _, a := range buf[:n] {
+			c.supported[a] = true
+		}
+		var name [128]C.char
+		if C.ui_wm_name(c.dpy, &name[0], C.int(len(name))) > 0 {
+			c.wmName = C.GoString(&name[0])
+		}
+	}
+	return c.supported[atom]
+}
+
+// setMotifLocked writes (or removes) _MOTIF_WM_HINTS for the requested
+// decoration mode.
+func (s *x11Surface) setMotifLocked() {
+	c := s.conn
+	if c == nil || c.dpy == nil || s.win == 0 {
+		return
+	}
+	hints, ok := motifHints(s.wantDeco)
+	if !ok {
+		C.ui_delete_prop(c.dpy, s.win, c.atomMotif)
+		C.ui_flush(c.dpy)
+		return
+	}
+	var v [5]C.ulong
+	for i, h := range hints {
+		v[i] = C.ulong(h)
+	}
+	// The type must be _MOTIF_WM_HINTS itself or KWin ignores it.
+	C.ui_change_prop32(c.dpy, s.win, c.atomMotif, c.atomMotif, &v[0], 5)
+	C.ui_flush(c.dpy)
+}
+
+// focusChangedLocked follows keyboard focus as the active state where the
+// window manager does not maintain _NET_WM_STATE_FOCUSED.
+func (s *x11Surface) focusChangedLocked(in bool) []Event {
+	s.focused = in
+	if s.conn == nil || s.conn.supportsLocked(s.conn.atomFocused) {
+		return nil
+	}
+	return s.readStateLocked()
+}
+
+// propertyChangedLocked follows the window manager's properties on the
+// window.
+func (s *x11Surface) propertyChangedLocked(atom C.Atom) []Event {
+	switch atom {
+	case s.conn.atomNetState:
+		return s.readStateLocked()
+	case s.conn.atomAllowed:
+		return s.readCapsLocked()
+	}
+	return nil
+}
+
+// readStateLocked re-reads _NET_WM_STATE and reports a change.
+func (s *x11Surface) readStateLocked() []Event {
+	c := s.conn
+	if c == nil || c.dpy == nil || s.win == 0 {
+		return nil
+	}
+	var buf [32]C.Atom
+	n := int(C.ui_get_atoms(c.dpy, s.win, c.atomNetState, &buf[0], C.int(len(buf))))
+	var bits uint32
+	for _, a := range buf[:n] {
+		switch a {
+		case c.atomMaxVert:
+			bits |= netStateMaxVert
+		case c.atomMaxHorz:
+			bits |= netStateMaxHorz
+		case c.atomFullscr:
+			bits |= netStateFullscreen
+		case c.atomHidden:
+			bits |= netStateHidden
+		case c.atomFocused:
+			bits |= netStateFocused
+		}
+	}
+	st := netWMState(bits, c.supportsLocked(c.atomFocused), s.focused)
+	if st == s.state {
+		return nil
+	}
+	s.state = st
+	return []Event{{Kind: EventWindowState, State: st}}
+}
+
+// readCapsLocked re-reads _NET_WM_ALLOWED_ACTIONS and reports a change.
+func (s *x11Surface) readCapsLocked() []Event {
+	c := s.conn
+	if c == nil || c.dpy == nil || s.win == 0 {
+		return nil
+	}
+	var buf [64]C.Atom
+	n := int(C.ui_get_atoms(c.dpy, s.win, c.atomAllowed, &buf[0], C.int(len(buf))))
+	var bits uint32
+	for _, a := range buf[:n] {
+		switch a {
+		case c.atomActMin:
+			bits |= netActionMinimize
+		case c.atomActMaxH:
+			bits |= netActionMaximizeHorz
+		case c.atomActMaxV:
+			bits |= netActionMaximizeVert
+		case c.atomActFull:
+			bits |= netActionFullscreen
+		}
+	}
+	caps := netAllowedCaps(bits, c.supportsLocked(c.atomShowMenu))
+	if caps == s.caps {
+		return nil
+	}
+	s.caps = caps
+	return []Event{{Kind: EventCapabilities, Caps: caps}}
+}
+
+// Decorations is the requested mode: an X11 window manager does not answer
+// (FrameSurface).
+func (s *x11Surface) Decorations() Decorations {
+	if s.popup {
+		return DecorationsNone
+	}
+	return s.wantDeco
+}
+
+// RequestDecorations sets or removes _MOTIF_WM_HINTS; the window manager
+// adds or drops its frame (FrameSurface).
+func (s *x11Surface) RequestDecorations(d Decorations) {
+	if s == nil || s.popup || s.closed {
+		return
+	}
+	d = requestedDecorations(d)
+	if d == s.wantDeco {
+		return
+	}
+	s.wantDeco = d
+	x11Mu.Lock()
+	s.setMotifLocked()
+	x11Mu.Unlock()
+	if s.conn != nil {
+		x11Mu.Lock()
+		s.conn.queues[s.win] = append(s.conn.queues[s.win], Event{Kind: EventDecorations, Decor: d})
+		x11Mu.Unlock()
+	}
+}
+
+// WindowState is the window manager's _NET_WM_STATE, decoded (FrameSurface).
+func (s *x11Surface) WindowState() WindowState { return s.state }
+
+// Capabilities are the window's _NET_WM_ALLOWED_ACTIONS (FrameSurface).
+func (s *x11Surface) Capabilities() WMCaps { return s.caps }
+
+// SuitsClientFrame: the window manager moves and resizes on request
+// (_NET_WM_MOVERESIZE) and is not a tiling manager.
+func (s *x11Surface) SuitsClientFrame() bool {
+	if s == nil || s.conn == nil {
+		return false
+	}
+	x11Mu.Lock()
+	defer x11Mu.Unlock()
+	return s.conn.supportsLocked(s.conn.atomMoveRes) && !tilingWM(s.conn.wmName)
+}
+
+// moveResizeLocked sends _NET_WM_MOVERESIZE for the held press.
+func (s *x11Surface) moveResize(dir uint32) bool {
+	c := s.conn
+	if c == nil || c.dpy == nil || s.win == 0 || s.buttons == 0 {
+		return false
+	}
+	x11Mu.Lock()
+	defer x11Mu.Unlock()
+	if !c.supportsLocked(c.atomMoveRes) {
+		return false
+	}
+	C.ui_ungrab_pointer(c.dpy)
+	// Source 1: a normal application.
+	C.ui_root_message(c.dpy, s.win, c.atomMoveRes, C.long(s.pressRootX), C.long(s.pressRootY), C.long(dir), C.long(s.pressButton), 1)
+	// The window manager owns the pointer now; the release goes to it.
+	s.buttons = 0
+	return true
+}
+
+// StartSystemMove hands the held press to the window manager for an
+// interactive move (_NET_WM_MOVERESIZE, MOVE), from where it was pressed.
+func (s *x11Surface) StartSystemMove() bool { return s.moveResize(netMoveResizeMove) }
+
+// StartSystemResize hands the held press to the window manager for an
+// interactive resize from edges.
+func (s *x11Surface) StartSystemResize(edges Edges) bool {
+	dir, ok := netMoveResizeDirection(edges)
+	if !ok {
+		return false
+	}
+	return s.moveResize(dir)
+}
+
+// ShowWindowMenu asks the window manager for its window menu at p (window
+// device pixels) with _GTK_SHOW_WINDOW_MENU, where it is supported.
+func (s *x11Surface) ShowWindowMenu(p paintengine2d.Point) bool {
+	c := s.conn
+	if c == nil || c.dpy == nil || s.win == 0 {
+		return false
+	}
+	x11Mu.Lock()
+	defer x11Mu.Unlock()
+	if !c.supportsLocked(c.atomShowMenu) {
+		return false
+	}
+	var rx, ry C.int
+	if C.ui_to_root(c.dpy, s.win, C.int(p.X), C.int(p.Y), &rx, &ry) == 0 {
+		return false
+	}
+	C.ui_ungrab_pointer(c.dpy)
+	// {device id, x_root, y_root}; the core pointer's device when unknown.
+	C.ui_root_message(c.dpy, s.win, c.atomShowMenu, 0, C.long(rx), C.long(ry), 0, 0)
+	s.buttons = 0
+	return true
+}
+
+// Minimize iconifies the window (XIconifyWindow).
+func (s *x11Surface) Minimize() {
+	if s.conn == nil || s.conn.dpy == nil || s.win == 0 {
+		return
+	}
+	x11Mu.Lock()
+	C.ui_iconify(s.conn.dpy, s.win)
+	x11Mu.Unlock()
+}
+
+// Lower puts the window below the others (a title-bar action that only X11
+// offers).
+func (s *x11Surface) Lower() {
+	if s.conn == nil || s.conn.dpy == nil || s.win == 0 {
+		return
+	}
+	x11Mu.Lock()
+	C.ui_lower(s.conn.dpy, s.win)
+	x11Mu.Unlock()
+}
+
+// ToggleMaximizeAxis maximizes (or restores) one way only: KWin's "Maximize
+// (vertical only)" title-bar action, which only X11 can express.
+func (s *x11Surface) ToggleMaximizeAxis(vertical bool) {
+	if s.conn == nil || s.conn.dpy == nil || s.win == 0 {
+		return
+	}
+	atom := s.conn.atomMaxHorz
+	if vertical {
+		atom = s.conn.atomMaxVert
+	}
+	x11Mu.Lock()
+	C.ui_ewmh_state(s.conn.dpy, s.win, 2, atom, 0) // _NET_WM_STATE_TOGGLE
+	x11Mu.Unlock()
 }

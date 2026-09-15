@@ -776,3 +776,39 @@ func TestSettingsFollowDesktop(t *testing.T) {
 		t.Fatal("switch should show the saved choice")
 	}
 }
+
+// "Use system title bar and borders" writes look.json's decorations, and
+// running apps switch their windows at once.
+func TestSettingsSystemTitleBarSwitch(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	a, w := openSettings(t, 1024, 780)
+	const label = "Use system title bar and borders"
+	sw := findSwitch(w.Content(), label)
+	if sw == nil {
+		t.Fatal("no system title bar switch")
+	}
+	if sw.On {
+		t.Fatal("the toolkit's frame is the default for windows with a title bar")
+	}
+	sw.OnChange(true)
+	a.PumpOnce()
+	clickApply(t, w)
+	a.PumpOnce()
+	if got := style.LoadAppearance().Decorations; got != style.DecorationsSystem {
+		t.Fatalf("saved decorations %q", got)
+	}
+	raw, err := os.ReadFile(style.AppearancePath())
+	if err != nil || !strings.Contains(string(raw), `"decorations": "system"`) {
+		t.Fatalf("look.json %s %v", raw, err)
+	}
+	if sw := findSwitch(w.Content(), label); sw == nil || !sw.On {
+		t.Fatal("switch should show the saved choice")
+	}
+	findSwitch(w.Content(), label).OnChange(false)
+	a.PumpOnce()
+	clickApply(t, w)
+	a.PumpOnce()
+	if got := style.LoadAppearance().Decorations; got != style.DecorationsAuto {
+		t.Fatalf("back to auto: %q", got)
+	}
+}

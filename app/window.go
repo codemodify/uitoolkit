@@ -62,6 +62,29 @@ type Window struct {
 	sweeping        bool
 	statusMenuArmed bool
 	statusMenuArmAt time.Time
+	// state is what the desktop says about the window (maximized, tiled,
+	// activated, suspended); stateKnown is set once it has said, from when
+	// on its Activated — not keyboard focus — drives the active look.
+	state      platform.WindowState
+	stateKnown bool
+
+	// opts are the options the window was made with (the decoration policy
+	// runs again whenever its inputs change).
+	opts platform.WindowOptions
+	// titleBar is the app's title bar (SetTitleBar); caption the header bar
+	// laid out on top: titleBar itself, wrapCaption around it, or the
+	// defaultCaption of a toolkit-drawn frame (frame.go).
+	titleBar       widget.Component
+	caption        *widgets.HeaderBar
+	wrapCaption    *widgets.HeaderBar
+	defaultCaption *widgets.HeaderBar
+	// decor is the decoration mode in effect, caps what the desktop can
+	// do for the window, geom the frame's last layout.
+	decor    platform.Decorations
+	caps     platform.WMCaps
+	geom     frameGeom
+	capPress captionGesture
+	capClick captionClick
 }
 
 func newWindow(a *Application, surf platform.Surface, opts platform.WindowOptions) *Window {
@@ -73,7 +96,12 @@ func newWindow(a *Application, surf platform.Surface, opts platform.WindowOption
 	w.scale = a.windowScale(surf)
 	w.look = lookAtScale(a.base, w.scale)
 	w.dirty.Pad = 1
-	_ = opts
+	w.opts = opts
+	w.decor = platform.SurfaceDecorations(surf)
+	if f, ok := surf.(platform.FrameSurface); ok {
+		w.caps = f.Capabilities()
+	}
+	w.rebuildCaption()
 	return w
 }
 
@@ -120,6 +148,57 @@ func (w *Window) SetFullscreen(on bool) { platform.SetFullscreen(w.surf, on) }
 
 // SetMaximized asks the native backend when available.
 func (w *Window) SetMaximized(on bool) { platform.SetMaximized(w.surf, on) }
+
+// WindowState is what the desktop last said about the window: maximized,
+// full screen, tiled edges, activated, suspended.
+func (w *Window) WindowState() platform.WindowState {
+	if w == nil {
+		return platform.WindowState{}
+	}
+	return w.state
+}
+
+// Minimize iconifies the window when the desktop can (a caption button,
+// a title-bar action). Unlike Hide it keeps the window in the taskbar.
+func (w *Window) Minimize() {
+	if w == nil || w.Closed() {
+		return
+	}
+	if f, ok := w.surf.(platform.FrameSurface); ok {
+		f.Minimize()
+	}
+}
+
+// ToggleMaximize maximizes the window, or restores a maximized one.
+func (w *Window) ToggleMaximize() {
+	if w == nil || w.Closed() {
+		return
+	}
+	w.SetMaximized(!w.state.Maximized)
+}
+
+// windowStateChanged adopts the desktop's new state for the window.
+func (w *Window) windowStateChanged(st platform.WindowState) {
+	was := w.state
+	w.state, w.stateKnown = st, true
+	w.setActive(st.Activated)
+	if st.Activated && !was.Activated {
+		// Back from another window: the desktop's title-bar settings may
+		// have changed there.
+		w.app.refreshTitleBarPrefs()
+	}
+	switch {
+	case was.Fullscreen != st.Fullscreen:
+		// No frame at all in full screen.
+		w.rebuildCaption()
+	case was.Maximized != st.Maximized || was.Tiled != st.Tiled || was.Constrained != st.Constrained:
+		// The frame (borders, resize edges, the restore glyph) depends on
+		// these.
+		w.laid = false
+		w.dropScene()
+		w.fullInvalidate()
+	}
+}
 
 // SetCursor applies the host pointer shape (X11, Wayland, Win32, AppKit, offscreen).
 func (w *Window) SetCursor(c platform.Cursor) {
@@ -240,7 +319,7 @@ func (w *Window) dropDeadRefs() {
 	}
 	w.sweeping = true
 	defer func() { w.sweeping = false }()
-	roots := []widget.Component{w.popup, w.overlay, w.root}
+	roots := w.layerRoots()
 	widget.ClearFocusOutside(w, roots...)
 	if !widget.LiveUnder(w.hover, roots...) {
 		if w.hover != nil {
@@ -257,6 +336,15 @@ func (w *Window) dropDeadRefs() {
 		w.HideTooltip()
 	}
 	w.syncIMECursor()
+}
+
+// layerRoots are the window's live layers below the tooltip, top first.
+func (w *Window) layerRoots() []widget.Component {
+	roots := []widget.Component{w.popup, w.overlay}
+	if w.caption != nil {
+		roots = append(roots, w.caption)
+	}
+	return append(roots, w.root)
 }
 
 func (w *Window) SetTooltip(c widget.Component) {
@@ -335,7 +423,7 @@ func (w *Window) Invalidate(c widget.Component, local paintengine2d.Rect) {
 	if r.Empty() {
 		r = dev
 	}
-	if c.Parent() == nil && c != w.root && (local.Empty() || local == c.LocalBounds()) {
+	if c.Parent() == nil && c != w.root && c != widget.Component(w.caption) && (local.Empty() || local == c.LocalBounds()) {
 		// A floating layer shown, moved or hidden: its drop shadow lies
 		// outside it and must be repainted too.
 		lk := w.layerLook(c)
@@ -413,6 +501,9 @@ func (w *Window) dropScene() {
 }
 
 func (w *Window) toggleBlink() {
+	if w.state.Suspended {
+		return
+	}
 	w.blink = !w.blink
 	if w.focus == nil {
 		return
@@ -424,7 +515,9 @@ func (w *Window) toggleBlink() {
 }
 
 func (w *Window) wantsBlink() bool {
-	if w == nil || w.focus == nil {
+	if w == nil || w.focus == nil || w.state.Suspended {
+		// A suspended window is not visible: no caret to blink (and no
+		// wake-ups for it).
 		return false
 	}
 	_, ok := w.focus.(interface{ SetCaretBlink(bool) })
@@ -530,9 +623,19 @@ func (w *Window) dispatch(ev platform.Event) {
 		}
 	case platform.EventExpose:
 		w.dirty.Add(paintengine2d.XYWH(ev.Pos.X, ev.Pos.Y, float32(ev.Width), float32(ev.Height)))
+	case platform.EventWindowState:
+		w.windowStateChanged(ev.State)
+	case platform.EventDecorations:
+		w.decorationsChanged(ev.Decor)
+	case platform.EventCapabilities:
+		w.capsChanged(ev.Caps)
 	case platform.EventFocusOut:
 		w.setAltHeld(false)
-		w.setActive(false)
+		if !w.stateKnown {
+			// Without the desktop's activated state, keyboard focus is the
+			// best guess at the active look.
+			w.setActive(false)
+		}
 		w.resetIME()
 		w.dismissTooltip()
 		w.capture = nil
@@ -551,7 +654,10 @@ func (w *Window) dispatch(ev platform.Event) {
 			}
 		}
 	case platform.EventFocusIn:
-		w.setActive(true)
+		if !w.stateKnown {
+			w.setActive(true)
+			w.app.refreshTitleBarPrefs()
+		}
 		// Toolkit status menus arm FocusOut-dismiss after a short delay
 		// so map/focus churn on Wayland does not kill the first frame.
 		w.syncIMECursor()
@@ -608,14 +714,21 @@ func (w *Window) dispatch(ev platform.Event) {
 				return
 			}
 		}
+		if ev.Key == platform.KeyF4 && ev.Mods.Alt() && !ev.Mods.Ctrl() && w.geom.framed {
+			// The toolkit draws the frame: Alt+F4 closes, as the desktop's
+			// frame would (a compositor that owns the shortcut never sends
+			// it).
+			w.RequestClose()
+			return
+		}
 		if ev.Mods.Alt() {
 			// While a modal overlay is up its mnemonics are the only ones:
 			// Alt+F used to open the main menu above a dialog.
-			scope := w.root
 			if w.overlay != nil {
-				scope = w.overlay
-			}
-			if scope != nil && handleAlt(scope, ev.Key) {
+				if handleAlt(w.overlay, ev.Key) {
+					return
+				}
+			} else if w.caption != nil && handleAlt(w.caption, ev.Key) || w.root != nil && handleAlt(w.root, ev.Key) {
 				return
 			}
 		}
@@ -636,9 +749,14 @@ func (w *Window) dispatch(ev platform.Event) {
 			return
 		}
 		// Keys nobody took run menu accelerators (Ctrl+N, F1, Ctrl+Q …),
-		// but not under a modal overlay.
-		if w.overlay == nil && w.root != nil {
-			handleAccel(w.root, ev.Key, ev.Mods)
+		// but not under a modal overlay. The title bar's come first (it is
+		// the window's top row).
+		if w.overlay == nil {
+			if w.caption == nil || !handleAccel(w.caption, ev.Key, ev.Mods) {
+				if w.root != nil {
+					handleAccel(w.root, ev.Key, ev.Mods)
+				}
+			}
 		}
 	case platform.EventKeyUp:
 		if ev.Key == platform.KeyAlt {
@@ -707,6 +825,19 @@ func (w *Window) hitContent(p paintengine2d.Point) widget.Component {
 			return h
 		}
 	}
+	if w.caption != nil {
+		if h := widget.HitRoot(w.caption, p); h != nil {
+			if w.overlay != nil {
+				// A modal dialog is up: the title bar's own controls are
+				// the app's and inert like the rest; its caption buttons
+				// are the window's and keep working.
+				if _, ok := h.(*widgets.WindowControls); !ok {
+					return nil
+				}
+			}
+			return h
+		}
+	}
 	return widget.HitRoot(w.root, p)
 }
 
@@ -762,10 +893,17 @@ func (w *Window) bubbleKey(e widget.KeyEvent) bool {
 	if start == nil {
 		return false
 	}
+	var top widget.Component
 	for c := start; c != nil; c = c.Parent() {
 		if c.KeyPress(e) {
 			return true
 		}
+		top = c
+	}
+	// The content root is the window's key handler (an app's shortcuts):
+	// keys from the title bar, the row above it, reach it too.
+	if w.caption != nil && top == widget.Component(w.caption) && w.root != nil && w.overlay == nil {
+		return w.root.KeyPress(e)
 	}
 	return false
 }
@@ -847,6 +985,9 @@ func (w *Window) mouseDown(ev platform.Event) {
 			}
 		}
 	}
+	if (w.popup == nil || widget.HitCascade(w.popup, ev.Pos) == nil) && w.frameMouseDown(ev) {
+		return
+	}
 	t := w.hit(ev.Pos)
 	w.capture = t
 	if t != nil && t.WantsFocus() && focusOnClick(t) {
@@ -862,6 +1003,9 @@ func (w *Window) mouseDown(ev platform.Event) {
 }
 
 func (w *Window) mouseUp(ev platform.Event) {
+	if w.frameMouseUp() {
+		return
+	}
 	t := w.capture
 	if t == nil {
 		t = w.hit(ev.Pos)
@@ -923,6 +1067,9 @@ func (w *Window) pointerLeft() {
 }
 
 func (w *Window) mouseMove(ev platform.Event) {
+	if w.frameMouseMove(ev) {
+		return
+	}
 	t := w.capture
 	if t == nil {
 		t = w.hit(ev.Pos)
@@ -964,14 +1111,19 @@ func (w *Window) mouseMove(ev platform.Event) {
 }
 
 func (w *Window) tab(forward bool) {
-	root := w.root
-	if w.overlay != nil {
-		root = w.overlay
+	var list []widget.Component
+	switch {
+	case w.popup != nil:
+		list = widget.Focusables(w.popup)
+	case w.overlay != nil:
+		list = widget.Focusables(w.overlay)
+	default:
+		// The title bar's controls come first: it is the window's top row.
+		if w.caption != nil {
+			list = widget.Focusables(w.caption)
+		}
+		list = append(list, widget.Focusables(w.root)...)
 	}
-	if w.popup != nil {
-		root = w.popup
-	}
-	list := widget.Focusables(root)
 	if len(list) == 0 {
 		return
 	}
@@ -1004,13 +1156,21 @@ func (w *Window) tab(forward bool) {
 func (w *Window) layout() {
 	ww, hh := w.surf.Size()
 	box := paintengine2d.XYWH(0, 0, float32(ww), float32(hh))
+	g := w.layoutFrame(box)
 	if w.root != nil {
-		_ = w.root.Measure(layout.Tight(box.Dx(), box.Dy()))
-		w.root.Arrange(box)
+		_ = w.root.Measure(layout.Tight(g.content.Dx(), g.content.Dy()))
+		w.root.Arrange(g.content)
 	}
 	if w.overlay != nil {
-		_ = w.overlay.Measure(layout.Tight(box.Dx(), box.Dy()))
-		w.overlay.Arrange(box)
+		// A modal dialog dims the content; in a frame the toolkit draws,
+		// the caption stays out of it (the window can still be moved,
+		// minimized and closed, as with a macOS sheet).
+		ob := box
+		if g.framed {
+			ob = g.content
+		}
+		_ = w.overlay.Measure(layout.Tight(ob.Dx(), ob.Dy()))
+		w.overlay.Arrange(ob)
 	}
 	if w.statusMenu && w.popup != nil {
 		w.popup.Arrange(box)
@@ -1101,9 +1261,13 @@ func (w *Window) frame() {
 // dirty (device pixels) only skips subtrees that cannot contribute; the
 // caller's clip is what makes the result correct.
 func (w *Window) paintLayers(ctx *paintengine2d.Context, dirty *paintengine2d.Damage) {
+	if w.caption != nil {
+		widget.PaintTree(w.caption, ctx, dirty)
+	}
 	if w.root != nil {
 		widget.PaintTree(w.root, ctx, dirty)
 	}
+	w.paintFrame(ctx)
 	if w.overlay != nil {
 		widget.PaintTree(w.overlay, ctx, dirty)
 	}
@@ -1206,9 +1370,13 @@ func (w *Window) frameScene(rects []paintengine2d.Rect) []paintengine2d.Rect {
 	// partial redraw happens at replay, where the engine clips every op to
 	// the dirty box. Recording a subset would make the next partial replay
 	// paint from a scene that never had the clean widgets in it.
+	if w.caption != nil {
+		widget.RecordTree(w.caption, rec, ctx, nil, w.layers, false)
+	}
 	if w.root != nil {
 		widget.RecordTree(w.root, rec, ctx, nil, w.layers, false)
 	}
+	w.paintFrame(ctx)
 	if w.overlay != nil {
 		widget.RecordTree(w.overlay, rec, ctx, nil, w.layers, true)
 	}
@@ -1295,6 +1463,8 @@ func (w *Window) Close() {
 	w.popup = nil
 	w.overlay = nil
 	w.root = nil
+	w.caption = nil
+	w.titleBar = nil
 	w.tooltip = nil
 	w.focus = nil
 	w.hover = nil
