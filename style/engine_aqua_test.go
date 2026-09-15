@@ -162,7 +162,9 @@ func aquaExercise(t *testing.T, name string, lk *Classic) {
 	for _, sel := range []bool{false, true} {
 		for _, hov := range []bool{false, true} {
 			sel, hov := sel, hov
-			add(fmt.Sprintf("list row %v %v", sel, hov), 170, 24, func(ctx *paintengine2d.Context, b paintengine2d.Rect) { lk.DrawListRow(ctx, b, RowState(sel, hov), "List row") })
+			add(fmt.Sprintf("list row %v %v", sel, hov), 170, 24, func(ctx *paintengine2d.Context, b paintengine2d.Rect) {
+				lk.DrawListRow(ctx, b, RowState(sel, hov), "List row")
+			})
 			add(fmt.Sprintf("cell %v %v", sel, hov), 60, 24, func(ctx *paintengine2d.Context, b paintengine2d.Rect) {
 				lk.DrawTableCell(ctx, b, RowState(sel, hov), "Cell", AlignEnd, nil)
 			})

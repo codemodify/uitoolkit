@@ -3,8 +3,8 @@ package main
 import (
 	"testing"
 
-	uitoolkit "github.com/codemodify/uitoolkit"
 	"github.com/codemodify/paintengine2d"
+	uitoolkit "github.com/codemodify/uitoolkit"
 	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
