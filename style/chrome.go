@@ -502,13 +502,6 @@ func DrawHotTrack(ctx *paintengine2d.Context, b paintengine2d.Rect, fill, border
 	ctx.DrawRoundRect(b.Inset(0.5), radius, radius, paintengine2d.StrokePaint(border, 1))
 }
 
-func (l *Classic) paintFocus(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState) {
-	if ctx == nil || !st.Focused() || st.Disabled() {
-		return
-	}
-	l.DrawFocusRing(ctx, b)
-}
-
 func (l *Classic) menuInvertText() bool {
 	t := l.tokensOr()
 	switch t.Bevel {

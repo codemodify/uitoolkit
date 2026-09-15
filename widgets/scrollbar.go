@@ -118,27 +118,12 @@ func vScrollParts(lk style.LookAndFeel, view paintengine2d.Rect, content, offset
 	return style.ScrollGeometry(lk, view, true, content, view.Dy(), offset, false)
 }
 
-// hScrollParts lays out a horizontal bar at the bottom edge of view.
-func hScrollParts(lk style.LookAndFeel, view paintengine2d.Rect, content, offset float32) style.ScrollParts {
-	return style.ScrollGeometry(lk, view, false, content, view.Dx(), offset, false)
-}
-
 // scrollGutter is the width content gives up to a visible bar.
 func scrollGutter(lk style.LookAndFeel, overflow bool) float32 {
 	if !overflow {
 		return 0
 	}
 	return style.ScrollGutter(lk)
-}
-
-// overflowBarSize is the bar thickness and the gap to the edge (layout
-// helpers that reserve room for a bar next to their content).
-func overflowBarSize(lk style.LookAndFeel) (bar, gap float32) {
-	s := style.ScrollBarStyleOf(lk)
-	if s.Overlay {
-		return s.Thickness, s.Inset
-	}
-	return s.Thickness, 0
 }
 
 func clampOff(offset, maxOff float32) float32 {

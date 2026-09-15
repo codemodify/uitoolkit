@@ -315,7 +315,6 @@ func reuseDelta(ent *cachedGroup, origin paintengine2d.Point, clip paintengine2d
 }
 
 func nearRect(a, b paintengine2d.Rect) bool {
-	const eps = 1.0 / 64
 	return nearF(a.Min.X, b.Min.X) && nearF(a.Min.Y, b.Min.Y) &&
 		nearF(a.Max.X, b.Max.X) && nearF(a.Max.Y, b.Max.Y)
 }
