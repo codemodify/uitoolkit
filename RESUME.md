@@ -79,13 +79,12 @@ Merged engines:
 | clearlooks, bluecurve | GNOME 2 Clearlooks, Human, Qt Cleanlooks; Red Hat Bluecurve |
 | adwaita | GNOME Adwaita, Adwaita Dark, Adwaita (GTK 3) |
 | aero, metro, fluent | Windows Vista/7 Aero and 7 Basic; Windows 8, 10, 10 Dark; Windows 11 Fluent and Fluent Dark |
+| keramik, plastik | KDE 3 Keramik, Plastik, Qt 4 Plastique |
+| system7, win31, openlook, amiga, beos, os2 | System 1 and 7, Windows 3.1 and Hot Dog Stand, OPEN LOOK, Workbench 1.3 and 3.1, BeOS, OS/2 Warp 4 |
 
-In progress, or queued with briefs written:
-- KDE 3 (Keramik, Plastik, Qt's Plastique), running;
-- the first desktops (Mac System 1 and 7, Windows 3.1, OPEN LOOK, Amiga, BeOS,
-  OS/2), running;
-- modern Mac (Yosemite, Big Sur), Material and FlatLaf, queued;
-- a clean-room Metal and Nimbus, queued.
+69 packs from 23 engines in all. Running now, each in its own worktree:
+- modern Mac (Yosemite, Big Sur), Material 2 and 3, FlatLaf (`engine/modern`);
+- a clean-room Metal and Nimbus (`engine/java`).
 
 Core features the engines drive, added along the way:
 - selected tabs overlap their neighbours;
@@ -118,7 +117,21 @@ Core features the engines drive, added along the way:
   border so neighbours share one line, tree expanders light up under the
   pointer, packs can pin the colour of selected text (Windows' white on blue);
 - message boxes read "Yes No Cancel" under Windows and KDE, and a pack's look
-  keeps the pack's own corners.
+  keeps the pack's own corners;
+- **materials:** backdrop blur on CPU and GPU (Fluent's acrylic menus, Aero's
+  blurred glass frames), group opacity and true cross-fades, tiled image
+  patterns (Plastik's dithered groove);
+- **text is kerned** (the fonts' GPOS / kern pairs), with carets, hit-testing
+  and eliding on the kerned layout;
+- **tree branch lines** end where their branches do (last-child elbows);
+  KDE 3's three-arrow scroll bars; fixed-size thumbs (Mac, Windows 3.1,
+  OPEN LOOK); menus take each look's row height;
+- **`ButtonBox`** puts dialog buttons in the platform's order (Qt's
+  QDialogButtonBox), live with the theme; Mail and the file dialog use it;
+- busy bars animate themselves; the default button throbs in Aqua and
+  breathes in Aero; a saved "reduce motion" preference and a Settings switch
+  turn every animation off;
+- labels honour newlines, and paddings scale with the display.
 
 ## Toolkit features added
 
