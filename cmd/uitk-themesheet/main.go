@@ -1,9 +1,13 @@
 // Command uitk-themesheet renders theme sheets: every control of a theme
 // pack in every interesting state, offscreen, as PNG. It is the quickest way
-// to see what an engine paints.
+// to see what an engine paints. -frames renders the window-frames sheet
+// instead: windows whose frame uitoolkit draws in the pack, active, in the
+// backdrop, maximized, with the close button under the pointer, and with the
+// app's own title bar.
 //
 //	go run ./cmd/uitk-themesheet -theme win95 -o /tmp/sheets
 //	go run ./cmd/uitk-themesheet -all -scale 2 -o /tmp/sheets
+//	go run ./cmd/uitk-themesheet -frames -all -o /tmp/frames
 package main
 
 import (
@@ -13,6 +17,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/internal/themesheet"
 	"github.com/codemodify/uitoolkit/style"
 )
@@ -24,6 +29,7 @@ func main() {
 	out := flag.String("o", ".", "output directory")
 	scale := flag.Float64("scale", 1, "display scale (1, 1.5, 2)")
 	list := flag.Bool("list", false, "print every built-in pack (id, year, lineage, engine, label, summary) tab-separated and exit")
+	frames := flag.Bool("frames", false, "render the window-frames sheet (<pack>-frames.png) instead of the controls sheet")
 	flag.Parse()
 	if *list {
 		for _, p := range style.ListBuiltinThemes() {
@@ -61,8 +67,18 @@ func main() {
 		if pack.Year > 0 {
 			title += fmt.Sprintf("  ·  %d", pack.Year)
 		}
-		img := themesheet.Render(lk, title)
+		var img *paintengine2d.Image
 		name := pack.Name
+		if *frames {
+			frame := "adapted in-app frame"
+			if style.NativeDecoration(pack.Look()) {
+				frame = "native frame"
+			}
+			img = themesheet.RenderFrames(pack.Look(), float32(*scale), title+"  ·  "+frame)
+			name += "-frames"
+		} else {
+			img = themesheet.Render(lk, title)
+		}
 		if *scale != 1 {
 			name += fmt.Sprintf("@%gx", *scale)
 		}
