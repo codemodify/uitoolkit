@@ -109,9 +109,13 @@ func FrameShot(a *app.Application, fc FrameCase, scale float32) *paintengine2d.I
 	body := widgets.NewColumn(widgets.NewLabel("Window content"), widgets.NewButton("Button", nil)).WithPad(12)
 	w.SetContent(body)
 	if fc.Header {
-		tabs := widgets.NewTabBar("Documents", "Pictures")
+		tabs := widgets.NewBrowserTabs("Documents", "Pictures")
+		tabs.OnNew = func() {}
 		tools := widgets.NewToolBar(widgets.ToolIconBtn(style.IconSearch, "", nil))
 		w.SetTitleBar(widgets.NewHeaderBar(nil, tabs, []widget.Component{tools}))
+		body = widgets.NewColumn(widgets.NewToolBar(widgets.ToolText("Back", nil), widgets.ToolText("Forward", nil)),
+			widgets.NewPad(12, widgets.NewLabel("Window content")))
+		w.SetContent(body)
 	}
 	o := w.Surface().(*platform.Offscreen)
 	if !fc.State.Activated {
