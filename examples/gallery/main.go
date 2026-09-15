@@ -268,11 +268,16 @@ func selectGalleryTab(w *app.Window, i int) {
 }
 
 func openGalleryMenu(w *app.Window, i int) {
-	widget.Walk(w.Content(), func(c widget.Component) {
+	open := func(c widget.Component) {
 		if mb, ok := c.(*widgets.MenuBar); ok {
 			mb.Open(i)
 		}
-	})
+	}
+	// The menu bar may be in the window's title bar (Files).
+	if hb := w.Caption(); hb != nil {
+		widget.Walk(hb, open)
+	}
+	widget.Walk(w.Content(), open)
 }
 
 func sortGalleryTable(w *app.Window) {
