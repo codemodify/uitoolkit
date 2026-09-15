@@ -8,14 +8,20 @@ repos.
 | uitoolkit | `feat/theme-engines` (includes `feat/e2e-era-themes`) | `~/go/src/github.com/codemodify/uitoolkit-core` |
 | paintengine2d | `feat/e2e-era-themes` | `~/go/src/github.com/codemodify/paintengine2d` |
 
-The two branches go together: uitoolkit uses paintengine2d's new `PathCache`
-(through the relative `replace ../paintengine2d` in `go.mod`), so check out both
-before building. `~/go/src/github.com/codemodify/uitoolkit` itself sits on
-`feat/e2e-era-themes`; the theme work is in the `uitoolkit-core` worktree.
+The two branches go together: uitoolkit uses paintengine2d's new APIs
+(`PathCache`, `BackdropBlur`, `DrawCrossFade`, `ImagePattern`, through the
+relative `replace ../paintengine2d` in `go.mod`), so check out both before
+building, and merge paintengine2d first. `~/go/src/github.com/codemodify/uitoolkit`
+itself sits on `feat/e2e-era-themes`; the theme work is in the `uitoolkit-core`
+worktree.
 
-Before merging to `dev`: commit `6194388` accidentally added a 9 MB
-`uitk-themesheet` binary (removed again in `306e12c`). Squash-merge, or filter
-it out of the history.
+Before merging to `dev`:
+- Your local `dev` holds the 2026-09-13 review merge, which was never pushed
+  (9 commits in uitoolkit, 5 in paintengine2d). Both feature branches are
+  built on it, so a pull request against `origin/dev` includes those commits.
+- Commit `6194388` accidentally added a 9 MB `uitk-themesheet` binary (removed
+  again in `306e12c`), and `4f1eab2` does not build on its own (`014fef6`
+  completes it). Squash-merge, or filter both out of the history.
 
 ## Decisions waiting for you
 
@@ -288,7 +294,8 @@ and macOS adapters.
    - dock widgets (QDockWidget);
    - an MDI area;
    - a wizard;
-   - kinetic scrolling and touchpad gestures.
+   - touchpad gestures (pinch, swipe), and kinetic scrolling on X11
+     (Wayland has it).
 6. **Printing.**
 
 ## Performance
@@ -314,7 +321,8 @@ RSS.
 ## Checks that ran
 
 `go build`, `go vet`, gofmt and `go test ./...` pass in both repos, as does
-`go test -race ./...` for uitoolkit. Contract tests cover every pack:
+`go test -race ./...` for uitoolkit, with no data races. Contract tests cover
+every pack:
 - controls paint inside their bounds;
 - shadows stay within their reach;
 - keyboard focus is visible;
