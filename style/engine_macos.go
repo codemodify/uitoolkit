@@ -46,6 +46,16 @@ import (
 // sides (a table row's cells join into one box through CellSpan); the
 // menu's hot row is a rounded box inset 5pt.
 //
+// Sidebars (StateSidebar, the source list) sit on the vibrant sidebar
+// material, flattened to a grey (light in the light appearance, dark in
+// the dark one) that goes flat in an inactive window; their selection is
+// Yosemite's flat bar across the row or Big Sur's rounded row inset 10pt,
+// the accent with white text while the sidebar has focus and a grey bar
+// otherwise, the labels in the regular body face. Tool buttons in a tool
+// bar (StateAutoRaise) are the era's toolbar items: Yosemite's textured
+// bezel, Big Sur's borderless button with a hover wash. A free tool button
+// keeps the plain push-button bezel, the accent while pressed or latched.
+//
 // Pack data: every colour key of macYosemite can be overridden through
 // "extra"; params "era" (0 Yosemite, 1 Big Sur) and "vibrancy" (0 turns the
 // menus' blurred backdrop off).
@@ -136,6 +146,10 @@ var macYosemite = macScheme{
 	// Tool buttons: the wash under the pointer (Big Sur), pressed; the
 	// latched textured segment and its glyph.
 	"wash": "#0000000f", "washPress": "#0000001f", "toolOn": "#6d6c6d", "toolOnText": "#ffffff",
+	// The sidebar (source list): its vibrant pane flattened over a neutral
+	// desktop, the pane of an inactive window (the material's inactive,
+	// unblurred state) and the grey bar of an unfocused selection.
+	"side": "#e6e6e6", "sideOff": "#efefef", "sideSel": "#cfcfcf",
 	// Status colours.
 	"red": "#ff3b30", "green": "#28cd41", "orange": "#ff9500",
 }
@@ -164,6 +178,7 @@ var macBigSur = macScheme{
 	"zoom": "#28c840", "zoomEdge": "#1aab29", "lightOff": "#d0d0d0", "lightOffEdge": "#bcbcbc", "glyph": "#4d0000",
 	"winEdge": "#00000033", "header": "#ffffff", "headerEdge": "#e5e5e5",
 	"wash": "#0000000f", "washPress": "#0000001f", "toolOn": "#0000001f", "toolOnText": "#007aff",
+	"side": "#e3e3e3", "sideOff": "#ebebeb", "sideSel": "#cbcbcb",
 	"red": "#ff3b30", "green": "#28cd41", "orange": "#ff9500",
 }
 
@@ -191,6 +206,7 @@ var macBigSurDark = macScheme{
 	"zoom": "#28c840", "zoomEdge": "#1aab29", "lightOff": "#4d4d4d", "lightOffEdge": "#444444", "glyph": "#4d0000",
 	"winEdge": "#000000cc", "header": "#1e1e1e", "headerEdge": "#464646",
 	"wash": "#ffffff1a", "washPress": "#ffffff2e", "toolOn": "#ffffff2e", "toolOnText": "#3d9bff",
+	"side": "#2a2a2a", "sideOff": "#262626", "sideSel": "#464646",
 	"red": "#ff453a", "green": "#32d74b", "orange": "#ff9f0a",
 }
 
@@ -217,6 +233,9 @@ type macSet struct {
 	lightOff, lightOffEdge, glyph         paintengine2d.Color
 	winEdge, header, headerEdge           paintengine2d.Color
 	wash, washPress, toolOn, toolOnText   paintengine2d.Color
+	// The sidebar pane (active and inactive window) and its unfocused
+	// selection.
+	side, sideOff, sideSel paintengine2d.Color
 	// Text field faces (enabled, disabled); Big Sur's segment track and
 	// its knob.
 	fieldFill, fieldDis, segTrack, segKnob paintengine2d.Color
@@ -282,6 +301,7 @@ func macBuild(l *Classic) *macSet {
 	c.lightOff, c.lightOffEdge, c.glyph, c.winEdge = col("lightOff"), col("lightOffEdge"), col("glyph"), col("winEdge")
 	c.header, c.headerEdge, c.wash, c.washPress = col("header"), col("headerEdge"), col("wash"), col("washPress")
 	c.toolOn, c.toolOnText = col("toolOn"), col("toolOnText")
+	c.side, c.sideOff, c.sideSel = col("side"), col("sideOff"), col("sideSel")
 	two := func(a, b string) []paintengine2d.GradientStop {
 		return []paintengine2d.GradientStop{Stop(0, col(a)), Stop(1, col(b))}
 	}
@@ -607,7 +627,8 @@ func (e macosEngine) Face(l *Classic, ctx *paintengine2d.Context, b paintengine2
 		}
 		return c.btnText
 	case RoleTool:
-		return c.tool(l, ctx, b, st)
+		fg, _ := c.tool(l, ctx, b, st)
+		return fg
 	case RoleField:
 		c.field(l, ctx, macFace(l, b), st)
 		if st.Disabled() {
@@ -662,13 +683,19 @@ func (c *macSet) field(l *Classic, ctx *paintengine2d.Context, f paintengine2d.R
 	macRing(ctx, f, r, lw, VGradient(f, c.fieldStops...))
 }
 
-// tool paints a tool button: Yosemite's bezelled (textured) button, Big
-// Sur's borderless one with a rounded wash under the pointer. It returns
-// the glyph colour.
-func (c *macSet) tool(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState) paintengine2d.Color {
+// tool paints a tool button and returns its glyph and label colours. A tool
+// bar's item (StateAutoRaise) is the era's toolbar button: Yosemite's
+// textured rounded bezel, darker while pressed, a latched one the dark grey
+// segment with a white glyph; Big Sur's borderless button with a rounded
+// wash under the pointer. A free tool button keeps the plain bezel (see
+// freeTool).
+func (c *macSet) tool(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState) (glyph, label paintengine2d.Color) {
 	b = macSnap(b)
 	if b.Dx() < 4 || b.Dy() < 4 {
-		return c.text2
+		return c.text2, c.text
+	}
+	if !st.AutoRaise() {
+		return c.freeTool(l, ctx, b, st)
 	}
 	fg := c.text2
 	if c.dark {
@@ -676,6 +703,16 @@ func (c *macSet) tool(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Re
 	}
 	if st.Disabled() {
 		fg = c.text3
+	}
+	// A label reads in the text colour, or on the latched face in its glyph's.
+	lbl := func(fg paintengine2d.Color) (paintengine2d.Color, paintengine2d.Color) {
+		switch {
+		case st.Disabled():
+			return fg, c.text3
+		case st.Checked():
+			return fg, fg
+		}
+		return fg, c.text
 	}
 	if c.bigSur {
 		r := min(l.rx(6), b.Dy()*0.5)
@@ -689,10 +726,8 @@ func (c *macSet) tool(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Re
 		case st.Hovered():
 			ctx.DrawRoundRect(b, r, r, paintengine2d.Fill(c.wash))
 		}
-		return fg
+		return lbl(fg)
 	}
-	// Yosemite: a textured rounded bezel, darker while pressed; a latched
-	// one is the dark grey segment with a white glyph.
 	f := macCentered(b, b.Dx()-l.S(4), min(b.Dy()-l.S(6), l.S(26)))
 	r := min(l.rx(4), f.Dy()*0.5)
 	if st.Checked() && !st.Disabled() {
@@ -701,10 +736,42 @@ func (c *macSet) tool(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Re
 		if st.Pressed() {
 			ctx.DrawRoundRect(f, r, r, paintengine2d.Fill(paintengine2d.RGBA(0, 0, 0, 0.15)))
 		}
-		return c.toolOnText
+		return lbl(c.toolOnText)
 	}
 	c.bezel(l, ctx, f, r, macPlain, st.Pressed(), st.Disabled())
-	return fg
+	if st.Hovered() && !st.Pressed() && !st.Disabled() {
+		// Yosemite's toolbar had no hover; the toolkit keeps tool buttons'.
+		macFill(ctx, f, r, paintengine2d.Fill(c.wash))
+	}
+	return lbl(fg)
+}
+
+// freeTool paints a free-standing tool button (calendar arrows, segments,
+// the theme sheet's samples) with the plain push-button bezel of the era.
+// As AppKit draws a push button it turns the accent while pressed (until
+// macOS 12), and a latched one — a push-on/push-off button that is on — is
+// drawn highlighted, in the accent too. The pointer lays the toolbar's wash
+// over the face, so the button keeps its hover feedback.
+func (c *macSet) freeTool(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState) (glyph, label paintengine2d.Color) {
+	f := macFace(l, b)
+	r := c.radius(l, f)
+	dis := st.Disabled()
+	on := (st.Checked() || st.Pressed()) && !dis
+	kind := macPlain
+	if on {
+		kind = macAccent
+	}
+	c.bezel(l, ctx, f, r, kind, on && st.Checked() && st.Pressed(), dis)
+	switch {
+	case dis:
+		return c.text3, c.text3
+	case on:
+		return c.onAccent, c.onAccent
+	}
+	if st.Hovered() {
+		macFill(ctx, f, r, paintengine2d.Fill(c.wash))
+	}
+	return c.btnText, c.btnText
 }
 
 // row paints an item row's selection (list, tree, or a table cell's part
@@ -1145,6 +1212,14 @@ func (macosEngine) ViewFrameInsets(l *Classic) Insets {
 func (macosEngine) DrawViewFrame(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState) {
 	c := macColors(l)
 	b = macSnap(b)
+	if st.Sidebar() {
+		// A source list has no bezel and no focus halo: its pane runs to
+		// the view's edges, and its accent selection shows the focus.
+		if !b.Empty() {
+			ctx.DrawRect(b, paintengine2d.Fill(c.pane(st)))
+		}
+		return
+	}
 	w := macHaloW(l)
 	if b.Dx() < 3*w || b.Dy() < 3*w {
 		return
@@ -1161,6 +1236,58 @@ func (macosEngine) DrawViewFrame(l *Classic, ctx *paintengine2d.Context, b paint
 	if st.Focused() && !st.Disabled() {
 		macRing(ctx, b, min(l.rx(3)+w, b.Dy()*0.5), w, paintengine2d.Fill(c.focus))
 	}
+}
+
+// ViewBackground: a sidebar sits on its pane (see pane); other views on the
+// content colour.
+func (e macosEngine) ViewBackground(l *Classic, st ControlState) paintengine2d.Color {
+	if !st.Sidebar() {
+		return e.BaseEngine.ViewBackground(l, st)
+	}
+	return macColors(l).pane(st)
+}
+
+// pane is the sidebar's pane: the vibrant grey of the source list (a light
+// grey in the light appearance, a dark one in the dark), flattened over a
+// neutral desktop since the window's own background is all a toolkit window
+// can blur. The material turns inactive, flat and neutral, with its window.
+func (c *macSet) pane(st ControlState) paintengine2d.Color {
+	if st.Backdrop() {
+		return c.sideOff
+	}
+	return c.side
+}
+
+// sideRow paints a sidebar row's selection and returns its text colour.
+// Yosemite's selection is a flat bar across the row, Big Sur's a rounded
+// row inset 10pt from the sidebar's sides (rowBox); both are the accent
+// with white text while the sidebar has focus, and a grey bar with the
+// label colour when it has not or the window is inactive. Labels keep the
+// sidebar's regular face at the body size (13pt, "Medium" sidebar icons).
+func (c *macSet) sideRow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState) paintengine2d.Color {
+	fg := c.text
+	if st.Disabled() {
+		fg = c.text3
+	}
+	if !st.Checked() {
+		return fg
+	}
+	box, r := c.rowBox(l, b)
+	fill, text := c.sel, c.onAccent
+	if st.Inactive() || st.Backdrop() || st.Disabled() {
+		fill, text = c.sideSel, fg
+	}
+	macFill(ctx, box, r, paintengine2d.Fill(fill))
+	return text
+}
+
+// sidePad is where a sidebar row's content starts: Yosemite's source list
+// indents its items 12px, Big Sur's sit 8px inside the inset selection.
+func (c *macSet) sidePad(l *Classic) float32 {
+	if c.bigSur {
+		return snap(l.S(10)) + l.S(8)
+	}
+	return l.S(12)
 }
 
 // StyleHint: the Mac order (default button last), centred segmented tabs,
@@ -1210,7 +1337,7 @@ func (e macosEngine) DrawButton(l *Classic, ctx *paintengine2d.Context, b painte
 
 func (e macosEngine) DrawToolButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, icon ToolIcon) {
 	c := macColors(l)
-	fg := c.tool(l, ctx, b, st)
+	fg, tc := c.tool(l, ctx, b, st)
 	pad, iconSide, iconGap := ToolButtonChromeFor(l, b.Dy())
 	x := b.Min.X + pad
 	if icon != IconNone {
@@ -1221,19 +1348,22 @@ func (e macosEngine) DrawToolButton(l *Classic, ctx *paintengine2d.Context, b pa
 		l.drawToolIcon(ctx, ib.Intersect(b), icon, fg)
 		x = ib.Max.X + iconGap
 	}
-	if label != "" {
-		tc := c.text
-		switch {
-		case st.Disabled():
-			tc = c.text3
-		case st.Checked():
-			tc = fg // on the latched segment
-		}
+	switch {
+	case label == "":
+	case icon == IconNone && !st.AutoRaise():
+		// A bezelled button centres its title, as a push button does.
+		l.drawFittedText(ctx, l.body, label, macFace(l, b), tc, AlignCenter, l.S(4))
+	default:
 		l.drawFittedText(ctx, l.body, label, paintengine2d.XYWH(x, b.Min.Y, b.Max.X-x-pad*0.5, b.Dy()), tc, AlignStart, 0)
 	}
 	if st.Focused() && !st.Disabled() {
 		f := macSnap(b).Inset(macHaloW(l))
-		c.halo(l, ctx, f, b, min(l.rx(4), f.Dy()*0.5))
+		r := min(l.rx(4), f.Dy()*0.5)
+		if !st.AutoRaise() {
+			f = macFace(l, b)
+			r = c.radius(l, f)
+		}
+		c.halo(l, ctx, f, b, r)
 	}
 }
 
@@ -1775,6 +1905,12 @@ func macGutter(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, ch 
 
 func (e macosEngine) DrawListRow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string) {
 	c := macColors(l)
+	if st.Sidebar() {
+		fg := c.sideRow(l, ctx, b, st)
+		pad := c.sidePad(l)
+		l.drawFittedText(ctx, l.body, label, paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-2*pad, b.Dy()), fg, AlignStart, 0)
+		return
+	}
 	box, r := c.rowBox(l, b)
 	fg := c.row(l, ctx, box, st, r)
 	pad := l.S(8)
@@ -1786,14 +1922,22 @@ func (e macosEngine) DrawListRow(l *Classic, ctx *paintengine2d.Context, b paint
 
 func (e macosEngine) DrawTreeRow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, expanded, leaf bool, depth int, label string, bold bool) {
 	c := macColors(l)
-	box, r := c.rowBox(l, b)
-	fg := c.row(l, ctx, box, st, r)
+	var fg paintengine2d.Color
+	if st.Sidebar() {
+		fg = c.sideRow(l, ctx, b, st)
+	} else {
+		box, r := c.rowBox(l, b)
+		fg = c.row(l, ctx, box, st, r)
+	}
 	indent := l.metrics.TreeIndent
 	if indent <= 0 {
 		indent = l.S(16)
 	}
 	x := b.Min.X + l.S(4) + float32(depth)*indent
-	if c.bigSur {
+	switch {
+	case st.Sidebar():
+		x = b.Min.X + c.sidePad(l) - l.S(4) + float32(depth)*indent
+	case c.bigSur:
 		x += l.S(8)
 	}
 	if !leaf {

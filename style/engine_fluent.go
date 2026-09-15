@@ -31,7 +31,9 @@ import (
 //     into the page; menus are 8px-rounded flyouts with rounded hot rows;
 //   - list and tree items are rounded rows with the 3×16 accent pill at the
 //     left of the selected one (a selection stays as it is when the view
-//     loses focus, as in WinUI, and turns grey in an inactive window);
+//     loses focus, as in WinUI, and turns grey in an inactive window); a
+//     sidebar (StateSidebar) is a NavigationView pane whose items sit on
+//     the window's Mica rather than in a card;
 //   - keyboard focus is the two-colour focus visual: a 2px outer line
 //     (black in the light theme) and a 1px inner one (white);
 //   - progress bars are a 3px accent bar over a 1px track.
@@ -367,6 +369,29 @@ func (c *fluentSet) rowFill(st ControlState) paintengine2d.Color {
 		return c.subtle
 	}
 	return paintengine2d.Color{}
+}
+
+// itemFill is the background of a list or tree item. A sidebar's item is a
+// NavigationViewItem: 36px tall with the list item's 4,2 margin and 4px
+// corners, the same subtle fills and the 3×16 accent pill, but a disabled
+// selected item keeps SubtleFillColorSecondary.
+func (c *fluentSet) itemFill(st ControlState) paintengine2d.Color {
+	if st.Sidebar() && st.Disabled() && st.Checked() {
+		return c.subtle
+	}
+	return c.rowFill(st)
+}
+
+// itemText is a list or tree item's label colour; a pressed
+// NavigationViewItem dims its label to TextFillColorSecondary.
+func (c *fluentSet) itemText(st ControlState) paintengine2d.Color {
+	switch {
+	case st.Disabled():
+		return c.textDis
+	case st.Sidebar() && st.Pressed():
+		return c.text2
+	}
+	return c.text
 }
 
 // itemRect is a list / tree item inside its row: 4px in from the sides,
@@ -877,9 +902,17 @@ func (fluentEngine) ViewFrameInsets(l *Classic) Insets {
 	return Insets{Top: v, Right: v, Bottom: v, Left: v}
 }
 
-// DrawViewFrame is the card a list, tree or table sits in.
+// DrawViewFrame is the card a list, tree or table sits in. A sidebar is a
+// NavigationView's pane instead: transparent over the window's Mica
+// (NavigationViewExpandedPaneBackground), with no card and no border.
 func (fluentEngine) DrawViewFrame(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState) {
 	c := fluentColors(l)
+	if st.Sidebar() {
+		if !b.Empty() {
+			ctx.DrawRect(b, paintengine2d.Fill(c.bg))
+		}
+		return
+	}
 	b = winSnap(b)
 	lw := winPx(l)
 	if b.Dx() < 4*lw || b.Dy() < 4*lw {
@@ -888,6 +921,16 @@ func (fluentEngine) DrawViewFrame(l *Classic, ctx *paintengine2d.Context, b pain
 	r := l.rx(4)
 	ctx.DrawRoundRect(b, r, r, paintengine2d.Fill(c.field))
 	winRing(ctx, b, r, lw, paintengine2d.Fill(c.cardStroke))
+}
+
+// ViewBackground: a sidebar's items sit on the NavigationView pane, which
+// shows the window's Mica (its solid base colour when the window is
+// inactive, the same flat colour here); other views on the field colour.
+func (e fluentEngine) ViewBackground(l *Classic, st ControlState) paintengine2d.Color {
+	if st.Sidebar() {
+		return fluentColors(l).bg
+	}
+	return e.BaseEngine.ViewBackground(l, st)
 }
 
 // ItemFocus is the focus visual round the current item.
@@ -1369,14 +1412,11 @@ func (e fluentEngine) DrawSwitch(l *Classic, ctx *paintengine2d.Context, b paint
 func (e fluentEngine) DrawListRow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string) {
 	c := fluentColors(l)
 	item := fluentItemRect(l, b)
-	c.subtleBox(l, ctx, item, c.rowFill(st))
+	c.subtleBox(l, ctx, item, c.itemFill(st))
 	if st.Checked() {
 		c.pill(l, ctx, item, st)
 	}
-	fg := c.text
-	if st.Disabled() {
-		fg = c.textDis
-	}
+	fg := c.itemText(st)
 	l.drawFittedText(ctx, l.body, label, paintengine2d.XYWH(item.Min.X+l.S(12), b.Min.Y, item.Dx()-l.S(16), b.Dy()), fg, AlignStart, 0)
 	if st.Focused() {
 		// Round the row, clear of the item and its pill.
@@ -1389,7 +1429,7 @@ func (e fluentEngine) DrawListRow(l *Classic, ctx *paintengine2d.Context, b pain
 func (e fluentEngine) DrawTreeRow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, expanded, leaf bool, depth int, label string, bold bool) {
 	c := fluentColors(l)
 	item := fluentItemRect(l, b)
-	c.subtleBox(l, ctx, item, c.rowFill(st))
+	c.subtleBox(l, ctx, item, c.itemFill(st))
 	if st.Checked() {
 		c.pill(l, ctx, item, st)
 	}
@@ -1405,10 +1445,7 @@ func (e fluentEngine) DrawTreeRow(l *Classic, ctx *paintengine2d.Context, b pain
 	if bold && l.bold != nil {
 		f = l.bold
 	}
-	fg := c.text
-	if st.Disabled() {
-		fg = c.textDis
-	}
+	fg := c.itemText(st)
 	lx := x + indent + l.S(4)
 	l.drawFittedText(ctx, f, label, paintengine2d.XYWH(lx, b.Min.Y, item.Max.X-lx-l.S(4), b.Dy()), fg, AlignStart, 0)
 	if st.Focused() {
