@@ -13,7 +13,7 @@ it, so an app pays nothing while no assistive technology is running.
 | `widget` | `Accessible` (`Describe(*a11y.Node)`), `AccessibleItems` for views whose items are not components, `AccessibleActor`, `SetAccessibleName`, `AccessibleTree` |
 | `widgets` | every stock widget describes itself: buttons, check boxes, radios, switches, fields, spin buttons, sliders, progress bars, combo and date fields, lists, trees, tables (headers, rows, cells), card lists, tabs, segmented controls, tool bars, menu bars and menus, status bars, group boxes, dialogs, message boxes |
 | `app` | `Window.AccessibleTree()` (content, then any dialog, menu or tooltip over it), `Window.AccessibleAction(id, action)` |
-| platform adapter | AT-SPI2 on Linux (next), then UI Automation and NSAccessibility |
+| platform adapter | AT-SPI2 on Linux (`app/atspi_linux.go`); UI Automation and NSAccessibility later |
 
 ## Naming controls
 
@@ -67,12 +67,42 @@ Assistive technology can act through the tree:
 Widgets implement `widget.AccessibleActor`, and
 `Window.AccessibleAction(id, a)` routes an action to the right one.
 
+## The Linux adapter (AT-SPI2)
+
+Screen readers on Linux (Orca), accerciser and test tools read apps
+through AT-SPI2. uitoolkit's bridge works like Qt's: it stays off until
+`org.a11y.Status` says assistive technology is on, which the desktop sets
+when a screen reader starts. Then it:
+- connects to the accessibility bus and has the registry embed the app
+  under the desktop;
+- exports every node at `/org/a11y/atspi/accessible/<id>` with the
+  Accessible, Application, Component, Action, Value and Text interfaces;
+- announces the active window (`window:activate`) and focus moves
+  (`object:state-changed:focused`), including a view's current row, tab or
+  tool.
+
+Queries read a snapshot of the trees that the UI goroutine rebuilds when
+something has changed since the last query. Actions (DoAction, GrabFocus,
+ScrollTo) run on the UI goroutine.
+
+`UITK_A11Y=1` turns the bridge on regardless of the desktop (a screen
+reader started by hand, tests), and `UITK_A11Y=0` keeps it off.
+`AT_SPI_BUS_ADDRESS` names the accessibility bus directly, as libatspi
+allows.
+
+**Testing it:** `tools/a11y/smoke.sh` starts a private D-Bus session with
+its own accessibility bus and registry and runs the gallery headless with
+the bridge on. `smoke.py` then reads and drives the gallery through
+libatspi, as a screen reader would: roles, names, states, boxes, the
+slider's value, the entry's text, toggling a check box and selecting a tab
+through their actions, and the focus event when the entry takes focus.
+Nothing touches the desktop's session. It needs at-spi2-core and
+python-gobject.
+
 ## Still to come
-- **The AT-SPI2 bridge.** It exports the tree on the accessibility bus
-  (`org.a11y.Bus`), registers the app, answers the Accessible, Component,
-  Action, Value, Text and Selection interfaces, and emits focus, state and
-  property change events. It stays off until `org.a11y.Status` says a screen
-  reader is on.
-- **Text interfaces for fields.** The caret and selection are in the model
-  already; exposing words and lines is still to do.
-- **Windows and macOS adapters.**
+- Property and text-change events (`object:property-change:accessible-name`,
+  `object:text-changed`, `object:state-changed:checked`), so a screen reader
+  hears changes without moving focus.
+- Relations (a label that labels a field), the Selection and Table
+  interfaces, and items built lazily for very long lists.
+- Windows and macOS adapters.
