@@ -94,3 +94,32 @@ func TestPressNeverFades(t *testing.T) {
 		t.Fatalf("a press should paint once in its own state, painted %v", drawn)
 	}
 }
+
+// A busy bar animates itself while painted; Manual and UITK_ANIMATIONS=0
+// hold it at the app's phase.
+func TestBusyBarAnimatesItself(t *testing.T) {
+	h := &timerHost{look: style.DarkLook(), now: time.Unix(4000, 0)}
+	defer func(old func() time.Time) { fadeNow = old }(fadeNow)
+	fadeNow = func() time.Time { return h.now }
+	p := NewBusyBar(0.25)
+	p.SetHost(h)
+	p.Arrange(paintengine2d.XYWH(0, 0, 160, 14))
+	a := p.phase()
+	h.advance(400 * time.Millisecond)
+	b := p.phase()
+	if a != 0.25 || b <= a || b >= 1 {
+		t.Fatalf("phase %v then %v, want 0.25 then a quarter cycle on", a, b)
+	}
+	if len(h.queue) == 0 {
+		t.Fatal("a painted busy bar should ask for its next frame")
+	}
+	p.Manual = true
+	if got := p.phase(); got != 0.25 {
+		t.Fatalf("a manual bar shows the app's phase, got %v", got)
+	}
+	p.Manual = false
+	t.Setenv(AnimationsEnv, "0")
+	if got := p.phase(); got != 0.25 {
+		t.Fatalf("animations off: phase %v", got)
+	}
+}
