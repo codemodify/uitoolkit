@@ -186,7 +186,10 @@ func (l *ListView) Paint(ctx *paintengine2d.Context) {
 				if l.ItemText != nil {
 					label = l.ItemText(i)
 				}
-				sig := newRowSig(l.IsSelected(i), i == l.hovered, bits32(rw)^uint64(l.rowState(i))<<40)
+				// Every state bit counts, the named states above bit 24
+				// (sidebar, a selected neighbour) included.
+				st := uint64(l.rowState(i))
+				sig := newRowSig(l.IsSelected(i), i == l.hovered, bits32(rw)^st<<40^st>>24)
 				sig.str(label)
 				return sig.sum()
 			},
@@ -435,7 +438,17 @@ func (l *ListView) TextInput(r rune) bool {
 
 // rowState is row i's item state for the look.
 func (l *ListView) rowState(i int) style.ControlState {
-	st := widget.RowItemState(l, i, l.IsSelected(i), i == l.hovered, i == l.Selected)
+	sel := l.IsSelected(i)
+	st := widget.RowItemState(l, i, sel, i == l.hovered, i == l.Selected)
+	if sel {
+		// Consecutive selected rows: looks that box a selection join them.
+		if l.IsSelected(i - 1) {
+			st |= style.StateSelectedAbove
+		}
+		if l.IsSelected(i + 1) {
+			st |= style.StateSelectedBelow
+		}
+	}
 	if l.Sidebar {
 		st |= style.StateSidebar
 	}
