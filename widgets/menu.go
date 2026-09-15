@@ -573,7 +573,7 @@ func (p *PopupMenu) restoreFocus() {
 
 func (p *PopupMenu) itemH() float32 {
 	lk := p.Look()
-	h := float32(28)
+	h := style.Dip(lk, 28)
 	if lk != nil && lk.Metrics().MenuItemH > 0 {
 		h = lk.Metrics().MenuItemH
 	}

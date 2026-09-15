@@ -3,6 +3,7 @@ package widgets
 import (
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/layout"
+	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
 )
 
@@ -52,7 +53,7 @@ func (s *StatusBar) barH() float32 {
 }
 
 func (s *StatusBar) Measure(c layout.Constraints) paintengine2d.Point {
-	w := float32(200)
+	w := style.Dip(s.Look(), 200)
 	if c.HasMaxW() {
 		w = c.MaxW
 	}

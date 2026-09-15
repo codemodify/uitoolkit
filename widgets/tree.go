@@ -233,7 +233,7 @@ func (t *TreeView) Measure(c layout.Constraints) paintengine2d.Point {
 	if c.HasMaxH() && h > c.MaxH {
 		h = c.MaxH
 	}
-	w := float32(200)
+	w := style.Dip(t.Look(), 200)
 	if c.HasMaxW() {
 		w = c.MaxW
 	}

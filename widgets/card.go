@@ -125,7 +125,7 @@ func (l *CardList) Measure(c layout.Constraints) paintengine2d.Point {
 	if c.HasMaxH() && h > c.MaxH {
 		h = c.MaxH
 	}
-	w := float32(240)
+	w := style.Dip(l.Look(), 240)
 	if c.HasMaxW() {
 		w = c.MaxW
 	}
@@ -151,7 +151,7 @@ func (l *CardList) rowH() float32 {
 	if pad <= 0 {
 		pad = 6
 	}
-	min := font*3 + pad*3 + 12
+	min := font*3 + pad*3 + style.Dip(lk, 12)
 	if min > h {
 		h = min
 	}
