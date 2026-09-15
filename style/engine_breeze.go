@@ -1718,14 +1718,41 @@ func breezePack(name, label, summary string, fam ThemeName, s breezeScheme) Them
 		Era:     EraBreeze,
 		Extra:   s.extra(),
 	}
-	tok.Hot = ChromeState{Fill: pal.MenuHover, Border: pal.MenuHoverBorder}
-	tok.Pressed = ChromeState{Fill: pal.AccentPress, Border: pal.Accent}
-	tok.Selected = ChromeState{Fill: pal.Selection, Border: pal.Selection}
-	tok.Focus = ChromeState{Fill: pal.Focus.WithAlpha(0.12), Border: pal.Focus}
+	breezeChrome(&tok)
 	return ThemePack{
 		Name: name, Label: label, Year: 2014, Lineage: "KDE", Summary: summary,
 		Era: EraBreeze, Palette: fam, Tokens: tok,
 	}
+}
+
+// breezeChrome sets the chrome states Breeze derives from its palette.
+func breezeChrome(tok *ThemeTokens) {
+	pal := tok.Palette
+	tok.Hot = ChromeState{Fill: pal.MenuHover, Border: pal.MenuHoverBorder}
+	tok.Pressed = ChromeState{Fill: pal.AccentPress, Border: pal.Accent}
+	tok.Selected = ChromeState{Fill: pal.Selection, Border: pal.Selection}
+	tok.Focus = ChromeState{Fill: pal.Focus.WithAlpha(0.12), Border: pal.Focus}
+}
+
+// Accented is Plasma's accent colour (5.25 onwards): the selection and the
+// focus and hover decorations take it, and everything Breeze mixes from
+// them follows (pressed buttons, checked marks, progress, menus).
+func (breezeEngine) Accented(tok ThemeTokens, accent paintengine2d.Color) ThemeTokens {
+	tok = CloneTokenMaps(tok)
+	p := &tok.Palette
+	frameBg := Mix(p.Background, p.Field, 0.3)
+	p.Accent, p.AccentHover, p.Selection, p.Focus = accent, accent, accent, accent
+	p.AccentPress = Mix(p.SurfaceAlt, accent, 0.333)
+	p.Highlight = accent.WithAlpha(0.2)
+	p.MenuHover = Mix(frameBg, accent, 0.3)
+	p.MenuHoverBorder = Mix(accent, p.Text, 0.15)
+	// Breeze keeps white on its own #3daee9 (2.5:1); a pale accent gets
+	// the text colour instead.
+	p.TextOnAccent = ReadableOn(accent, 2.2, p.TextOnAccent, p.Text)
+	tok.Extra["focus"], tok.Extra["hover"] = accent, accent
+	tok.Extra["selectionInactive"] = Mix(accent, p.Field, 0.5)
+	breezeChrome(&tok)
+	return tok
 }
 
 func breezePacks() []ThemePack {

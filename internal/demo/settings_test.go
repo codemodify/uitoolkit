@@ -747,7 +747,7 @@ func TestSettingsFollowDesktop(t *testing.T) {
 		t.Fatal(err)
 	}
 	a, w := openSettings(t, 1024, 780)
-	const label = "Match the desktop's light or dark mode"
+	const label = "Match the desktop's light or dark mode and accent colour"
 	sw := findSwitch(w.Content(), label)
 	if sw == nil {
 		t.Fatal("no follow-the-desktop switch")

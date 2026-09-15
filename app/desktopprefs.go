@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
 )
@@ -15,9 +16,22 @@ import (
 // follows the desktop.
 const ColorSchemeEnv = "UITK_COLOR_SCHEME"
 
+// AccentEnv overrides the desktop's accent colour for the process
+// (UITK_ACCENT=#e95420 ./app). Like the desktop's, it recolours only
+// appearances that follow the desktop, and only in themes whose engine
+// takes an accent.
+const AccentEnv = "UITK_ACCENT"
+
 // desktopReadTimeout bounds how long New waits for the desktop portal; a
 // slower answer arrives later and restyles the app.
 const desktopReadTimeout = 300 * time.Millisecond
+
+func accentOf(p platform.DesktopPrefs) (paintengine2d.Color, bool) {
+	if !p.HasAccent {
+		return paintengine2d.Color{}, false
+	}
+	return paintengine2d.RGB(float32(p.Accent[0]), float32(p.Accent[1]), float32(p.Accent[2])), true
+}
 
 func styleScheme(s platform.ColorScheme) style.ColorScheme {
 	switch s {
@@ -39,6 +53,11 @@ func (a *Application) watchDesktop() (wait func()) {
 	if env := strings.TrimSpace(os.Getenv(ColorSchemeEnv)); env != "" {
 		style.SetDesktopColorScheme(style.ParseColorScheme(env))
 		a.schemeForced = true
+	}
+	if env := strings.TrimSpace(os.Getenv(AccentEnv)); env != "" {
+		c, ok := style.ParseHexColor(env)
+		style.SetDesktopAccent(c, ok)
+		a.accentForced = true
 	}
 	if a.headless || a.backend == nil || a.backend.Name() == "offscreen" {
 		return func() {}
@@ -63,6 +82,9 @@ func (a *Application) watchDesktop() (wait func()) {
 			if !a.schemeForced {
 				style.SetDesktopColorScheme(styleScheme(r.prefs.ColorScheme))
 			}
+			if !a.accentForced {
+				style.SetDesktopAccent(accentOf(r.prefs))
+			}
 		}
 	}
 }
@@ -71,12 +93,19 @@ func (a *Application) watchDesktop() (wait func()) {
 // UI goroutine.
 func (a *Application) desktopPrefsChanged(p platform.DesktopPrefs) {
 	style.SetDesktopReduceMotion(p.ReducedMotion)
-	s := styleScheme(p.ColorScheme)
-	if a.schemeForced || style.DesktopColorScheme() == s {
-		return
+	changed := false
+	if s := styleScheme(p.ColorScheme); !a.schemeForced && style.DesktopColorScheme() != s {
+		style.SetDesktopColorScheme(s)
+		changed = true
 	}
-	style.SetDesktopColorScheme(s)
-	if a.following {
+	if !a.accentForced {
+		c, ok := accentOf(p)
+		if was, wasOK := style.DesktopAccent(); ok != wasOK || (ok && was != c) {
+			style.SetDesktopAccent(c, ok)
+			changed = true
+		}
+	}
+	if changed && a.following {
 		a.ReloadPreferredLook()
 	}
 }
