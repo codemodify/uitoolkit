@@ -144,6 +144,10 @@ const (
 	RoleHelp        = widgets.RoleHelp
 )
 
+// NewWrap flows children into lines that fold when the width runs out
+// (Qt's flow layout, GTK's FlowBox, WPF's WrapPanel).
+func NewWrap(children ...Component) *widgets.Wrap { return widgets.NewWrap(children...) }
+
 // NewButtonBox lays a dialog's buttons out in the order of the look's
 // platform ("OK Cancel" on Windows and KDE, "Cancel OK" on Mac and GNOME).
 func NewButtonBox() *widgets.ButtonBox { return widgets.NewButtonBox() }

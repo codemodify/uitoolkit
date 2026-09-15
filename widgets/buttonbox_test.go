@@ -72,3 +72,22 @@ func TestLabelLines(t *testing.T) {
 		t.Fatal("the widest line sets the width")
 	}
 }
+
+// Wrap folds its items onto new lines as its width shrinks, and grows in
+// height to hold them.
+func TestWrapFolds(t *testing.T) {
+	w := NewWrap(NewButton("Primary action", nil), NewButton("Secondary", nil), NewButton("Disabled", nil))
+	w.SetLook(style.DarkLook())
+	w.SetHost(&host{})
+	wide := w.Measure(layout.Constraints{MaxW: 2000})
+	narrow := w.Measure(layout.Constraints{MaxW: 200})
+	if narrow.Y < wide.Y*2.5 {
+		t.Fatalf("at 200px three buttons should take three lines: %v vs one line %v", narrow.Y, wide.Y)
+	}
+	w.Arrange(paintengine2d.XYWH(0, 0, 200, narrow.Y))
+	for _, c := range w.Children() {
+		if b := c.Bounds(); b.Max.X > 200.5 {
+			t.Errorf("%v runs past the edge", b)
+		}
+	}
+}
