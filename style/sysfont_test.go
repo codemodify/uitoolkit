@@ -154,3 +154,20 @@ func TestInstalledHelveticaDraws(t *testing.T) {
 		t.Fatalf("bold %v is not wider than regular %v", bold.Advance("Workspace"), reg.Advance("Workspace"))
 	}
 }
+
+// Windows draws selected text white (HighlightText) even on its light
+// blues; other looks keep the most readable colour.
+func TestSelectionTextPinnedByPack(t *testing.T) {
+	white := Hex("#ffffff")
+	for _, pack := range []string{"aero", "win8", "win10"} {
+		lk := mustLook(t, pack)
+		if got := lk.selectedText(lk.palette.Selection); got != white {
+			t.Errorf("%s: selected text %s, want white", pack, colorHexPadded(got))
+		}
+	}
+	lk := mustLook(t, "light")
+	sel := lk.palette.Selection
+	if got := lk.selectedText(sel); ContrastRatio(got, Mix(lk.palette.Field, sel, sel.A)) < 4.5 {
+		t.Errorf("light: selected text %s does not read on its selection", colorHexPadded(got))
+	}
+}
