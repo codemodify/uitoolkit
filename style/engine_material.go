@@ -265,6 +265,9 @@ func mdBuild3(l *Classic, c *mdSet) {
 	c.rowSel, c.rowSelText = c.secondaryC, c.onSecondaryC
 	c.trackOff = c.surfaceVar
 	c.aHover, c.aFocus, c.aPress = 0.08, 0.12, 0.12
+	if l.P("expressive", 0) != 0 {
+		md3xRoles(l, c) // the 2023–25 roles: engine_material_expressive.go
+	}
 }
 
 // layer is the state-layer opacity of st: the strongest of hover, focus

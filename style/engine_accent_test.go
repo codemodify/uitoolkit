@@ -27,8 +27,10 @@ var accCases = []accCase{
 	{"win8", "#6ba5e7", 3}, {"win10", "#0078d7", 3}, {"win10-night", "#0078d7", 3},
 	{"adwaita", "#3584e4", 3}, {"adwaita-night", "#3584e4", 3}, {"adwaita-gtk3", "", 0},
 	{"yosemite", "", 0}, {"bigsur", "#007aff", 2.2}, {"bigsur-night", "#007aff", 2.2},
+	{"tahoe", "#0088ff", 2.2}, {"tahoe-night", "#0091ff", 2.2}, {"adwaita48", "#3584e4", 3}, {"adwaita48-night", "#3584e4", 3},
 	{"material", "#6200ee", 4.5}, {"material-night", "#6200ee", 4.5},
 	{"material3", "#6750a4", 4.5}, {"material3-night", "#6750a4", 4.5},
+	{"material3x", "#6750a4", 4.5}, {"material3x-night", "#6750a4", 4.5},
 	{"flatlaf", "#2675bf", 2.2}, {"flatlaf-night", "#4b6eaf", 3}, {"flatlaf-darcula", "#4b6eaf", 3},
 	{"fusion", "#308cc6", 3}, {"fusion-night", "#2a82da", 3},
 	{"oxygen", "#43ace8", 2.2},
@@ -387,6 +389,13 @@ func accWhere(t *testing.T, pack string, lk *Classic, a paintengine2d.Color) []a
 		bg := adwNearestAccent(a)
 		return []accShown{{c.accentBg, bg, "accent_bg_color"}, {c.accent, adwStandalone(bg, c.dark), "accent_color"}, {c.accentFg, Hex("#ffffff"), "accent_fg_color"}}
 	case "macos":
+		if _, ok := lk.Engine().(tahoeEngine); ok {
+			c := tahoeColors(lk)
+			sc := map[bool]macScheme{false: tahoeLight, true: tahoeDark}[c.dark]
+			return []accShown{{c.accent, a, "accent"}, {c.menuHi, a, "menu highlight"},
+				{c.sel, accentShift(a, Hex(sc["accent"]), Hex(sc["sel"])), "list selection"},
+				{c.selOff, Hex(sc["selOff"]), "unemphasized selection (grey)"}}
+		}
 		c := macColors(lk)
 		return []accShown{{c.accent, a, "accent"}, {c.accentStops[1].Color, a, "default button"}, {c.checkStops[1].Color, a, "checked box"},
 			{c.selOff, Hex(map[bool]string{false: macBigSur["selOff"], true: macBigSurDark["selOff"]}[c.dark]), "unemphasized selection (grey)"}}
@@ -504,6 +513,11 @@ func TestAccentTextStaysReadable(t *testing.T) {
 				a := adwColors(lk)
 				pairs = []pair{{"suggested action", a.accentFg, a.accentBg}}
 			case "macos":
+				if _, ok := lk.Engine().(tahoeEngine); ok {
+					m := tahoeColors(lk)
+					pairs = []pair{{"default button", m.onAccent, m.accent}, {"list selection", m.onAccent, m.sel}, {"menu highlight", m.onAccent, m.menuHi}}
+					break
+				}
 				m := macColors(lk)
 				pairs = []pair{{"default button", m.onAccent, m.accentStops[0].Color}, {"checked box", m.onAccent, m.checkStops[0].Color},
 					{"list selection", m.onAccent, m.sel}, {"menu highlight", m.onAccent, m.menuHi}}
