@@ -70,6 +70,9 @@ func (breezeEngine) DefaultMetrics() ChromeMetrics {
 // one: "OK  Cancel"), form labels right-aligned against their fields (as
 // Breeze lays out Qt forms) and left-aligned tabs (Breeze's default).
 func (breezeEngine) StyleHint(l *Classic, h StyleHint) int {
+	if h == HintHoverFadeMs {
+		return 150 // Plasma's animated hover
+	}
 	switch h {
 	case HintDialogPrimaryFirst, HintFormLabelsRight:
 		return 1

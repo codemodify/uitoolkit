@@ -212,6 +212,11 @@ const (
 	// (Mac OS, NeXT, KDE's Oxygen and Breeze); 0 left-aligns them (Windows,
 	// GTK, Qt's Fusion). Qt's SH_FormLayoutLabelAlignment.
 	HintFormLabelsRight
+	// HintHoverFadeMs: how long, in milliseconds, a control cross-fades
+	// when only its hover or focus changes (Vista's glowing buttons, GTK's
+	// 200ms button transitions, WinUI's 83ms); 0 switches at once, as the
+	// older eras did. Presses never fade.
+	HintHoverFadeMs
 )
 
 // LookHint reads a style hint from any look (0 for non-engine looks).

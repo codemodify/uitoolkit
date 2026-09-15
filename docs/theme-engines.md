@@ -117,7 +117,12 @@ frame its parent drew).
 `HintDialogPrimaryFirst` (1: "OK Cancel", Windows and KDE; 0: "Cancel OK",
 Mac and GNOME), `HintTabsCentered` (Aqua's segmented tabs) and
 `HintFormLabelsRight` (Mac, NeXT, Oxygen and Breeze right-align form
-labels).
+labels) and `HintHoverFadeMs`: buttons, check boxes, radios, switches and
+combo boxes cross-fade that long when only their hover or focus changes
+(Aero 200ms, Adwaita 200ms, Windows 10, Breeze and Oxygen 150ms, Fluent
+83ms; older eras switch at once, and presses never fade). The new state is
+composited as one layer, so engines draw each state as usual.
+`UITK_ANIMATIONS=0` turns fades off.
 
 ### Item views
 
