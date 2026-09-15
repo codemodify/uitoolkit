@@ -297,9 +297,13 @@ func (d *scrollDrag) paint(owner widget.Component, ctx *paintengine2d.Context, l
 	ctx.Restore()
 }
 
-func wheelDelta(scrollY, line float32) float32 {
+// wheelDelta is how far a wheel or touchpad event scrolls: a touchpad's
+// pixels as they are (the content follows the fingers), wheel notches
+// three lines each. Large non-precise values are pixels from backends that
+// send them.
+func wheelDelta(scrollY, line float32, precise bool) float32 {
 	dy := scrollY
-	if dy > -8 && dy < 8 && dy != 0 {
+	if !precise && dy > -8 && dy < 8 && dy != 0 {
 		dy *= line * 3
 	}
 	return dy

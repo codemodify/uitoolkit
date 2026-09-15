@@ -170,6 +170,9 @@ type Event struct {
 	IMEDelAfter  int    // text-input-v3 delete_surrounding bytes after caret
 	// Mimes are the types a drag offers (EventDragMotion, EventDrop).
 	Mimes []string
+	// ScrollPrecise: Scroll is in device pixels from a touchpad or other
+	// continuous source; otherwise it counts wheel notches.
+	ScrollPrecise bool
 }
 
 // WindowOptions configure a native or offscreen surface.

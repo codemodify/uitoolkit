@@ -880,7 +880,7 @@ func (t *TableView) MouseWheel(e widget.MouseEvent) bool {
 		return false
 	}
 	before := t.OffsetY
-	t.OffsetY += wheelDelta(e.Scroll.Y, t.rowH())
+	t.OffsetY += wheelDelta(e.Scroll.Y, t.rowH(), e.Precise)
 	t.clamp()
 	if t.OffsetY == before {
 		return false
