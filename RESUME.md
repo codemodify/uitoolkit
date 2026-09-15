@@ -312,8 +312,37 @@ and macOS adapters.
   ignored before.
 
 The result: a hover repaint on the stock look went from 321 to 152
-allocations, and on Aqua from 4,376 to 356. The gallery peaks at about 35 MB
-RSS.
+allocations, and on Aqua from 4,376 to 356.
+
+### Memory (branch `feat/memory`, both repos)
+
+Measured on the GPU in the nested KWin at a real 1.75 scale, 10 s after
+launch; "own" is private dirty memory, what the app itself costs. The rest
+of resident memory is the GPU driver's shared libraries (Mesa, LLVM: about
+38 MB, shared by every GL app) and the binary's clean pages.
+
+| app | before: resident / own | after: resident / own |
+| --- | --- | --- |
+| Mail | 140 / 80 MB | 91 / 36 MB |
+| gallery | 103 / 65 MB | 83 / 30 MB |
+| Settings | 100 / 46 MB | 82 / 31 MB |
+| Files | 98 / 45 MB | 82 / 31 MB |
+| Notes | 97 / 44 MB | 78 / 28 MB |
+| Inspector | 91 / 37 MB | 79 / 28 MB |
+
+- **Glyph sheets start small** (128² or 256²) and double as they fill; the
+  512² and 768² first sheets were mostly empty, 47 MB of Mail's 53 MB live
+  heap.
+- **Idle trim:** two seconds after a burst of allocation (start-up, a
+  window, a theme, new content) with no events, the free heap goes back to
+  the OS once. Go otherwise keeps up to twice the live heap.
+- **No CPU copies beside the GPU:** the Wayland window's device-size pixmap
+  and the GPU device's readback image are made only when the CPU path or a
+  screenshot needs them.
+
+Next candidates: one-byte (alpha) glyph sheets, 4× smaller, for about 3–5
+MB per app and less GPU memory (a new image format in paintengine2d); the
+same pixmap change for X11.
 
 ## Checks that ran
 
