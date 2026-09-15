@@ -48,7 +48,9 @@ $XDG_CONFIG_HOME/uitoolkit/look.json
   "iconSize": "medium",
   "reduceMotion": false,
   "followDesktop": true,
-  "nativeDialogs": false
+  "nativeDialogs": false,
+  "decorations": "system",
+  "captionButtons": "theme"
 }
 ```
 
@@ -60,7 +62,13 @@ aliases `16` / `24` / `32` are accepted on load. `reduceMotion` turns
 animations off. `followDesktop` shows the pack's light or dark sibling to
 match the desktop. `nativeDialogs` shows the desktop's own file dialogs
 (KDE's, GNOME's, through the XDG portal) instead of the toolkit's themed
-ones.
+ones. `decorations` is who draws the frame of a window with its own title
+bar: `system` the desktop (**Use system title bar and borders**),
+`toolkit` uitoolkit for every window, left out for the default.
+`captionButtons` `theme` puts the caption buttons of a frame uitoolkit
+draws where the theme's era put them (the Mac's traffic lights on the
+left; **Place window buttons as the theme does**); left out, they follow
+the desktop's button layout. See [decorations.md](decorations.md).
 
 ### Following the desktop's light or dark mode
 
