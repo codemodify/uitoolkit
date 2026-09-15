@@ -137,6 +137,17 @@ var eraPackFonts = map[string]FontPrefs{
 	"tahoe": tahoeFonts, "tahoe-night": tahoeFonts,
 	// Material 3 Expressive: Roboto Flex, Roboto's variable version.
 	"material3x": robotoFlex, "material3x-night": robotoFlex,
+	// VS Code: the system UI stack.
+	"vscode": vscodeFonts, "vscode-night": vscodeFonts,
+}
+
+// vscodeFonts are the workbench's stacks: Segoe WPC and Segoe UI on
+// Windows, San Francisco on a Mac, system-ui, Ubuntu and Droid Sans on
+// Linux (the desktops' usual faces stand in for system-ui); the editor's
+// Consolas, Menlo and Droid Sans Mono.
+var vscodeFonts = FontPrefs{
+	UI:   []string{"Segoe WPC", "Segoe UI", "SF Pro Text", "Ubuntu", "Droid Sans", "Noto Sans", "Cantarell", "DejaVu Sans"},
+	Mono: []string{"Consolas", "Menlo", "Droid Sans Mono", "DejaVu Sans Mono", "Noto Sans Mono", "Liberation Mono"},
 }
 
 // robotoFlex is Material 3's typeface in its variable version, then the
