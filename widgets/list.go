@@ -178,7 +178,7 @@ func (l *ListView) Paint(ctx *paintengine2d.Context) {
 				if l.ItemText != nil {
 					label = l.ItemText(i)
 				}
-				sig := newRowSig(l.IsSelected(i), i == l.hovered, bits32(rw))
+				sig := newRowSig(l.IsSelected(i), i == l.hovered, bits32(rw)^uint64(l.rowState(i))<<40)
 				sig.str(label)
 				return sig.sum()
 			},
@@ -187,7 +187,7 @@ func (l *ListView) Paint(ctx *paintengine2d.Context) {
 				if l.ItemText != nil {
 					label = l.ItemText(i)
 				}
-				lk.DrawListRow(ctx, paintengine2d.XYWH(0, 0, rw, rh), l.IsSelected(i), i == l.hovered, label)
+				lk.DrawListRow(ctx, paintengine2d.XYWH(0, 0, rw, rh), l.rowState(i), label)
 			},
 		)
 	} else {
@@ -200,12 +200,14 @@ func (l *ListView) Paint(ctx *paintengine2d.Context) {
 			if l.ItemText != nil {
 				label = l.ItemText(i)
 			}
-			lk.DrawListRow(ctx, row, l.IsSelected(i), i == l.hovered, label)
+			lk.DrawListRow(ctx, row, l.rowState(i), label)
 		}
 		ctx.Restore()
 	}
 	l.vbar.paint(ctx, lk, l.vparts(), true)
-	if l.Focused() {
+	// The current row carries the focus mark; a focused list without one
+	// rings itself.
+	if l.Focused() && (l.Selected < 0 || l.Selected >= l.Count) {
 		lk.DrawFocusRing(ctx, b)
 	}
 }
@@ -395,6 +397,11 @@ func (l *ListView) KeyPress(e widget.KeyEvent) bool {
 		}
 	}
 	return true
+}
+
+// rowState is row i's item state for the look.
+func (l *ListView) rowState(i int) style.ControlState {
+	return widget.ItemState(l, l.IsSelected(i), i == l.hovered, i == l.Selected)
 }
 
 // IsSelected reports whether row i is selected (in SelectSingle, whether it

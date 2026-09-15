@@ -273,7 +273,7 @@ func (t *TreeView) Paint(ctx *paintengine2d.Context) {
 			func(i int) {
 				n := rows[i].node
 				row := paintengine2d.XYWH(0, 0, rw, rh)
-				lk.DrawTreeRow(ctx, row, n == t.Selected, n == t.hover, n.Expanded, n.Leaf(), rows[i].depth, n.Label, n.Bold)
+				lk.DrawTreeRow(ctx, row, t.rowState(n), n.Expanded, n.Leaf(), rows[i].depth, n.Label, n.Bold)
 				paintTreeSwatch(ctx, row, n.Color)
 			},
 		)
@@ -284,13 +284,15 @@ func (t *TreeView) Paint(ctx *paintengine2d.Context) {
 			y := float32(i)*rh - t.OffsetY
 			row := paintengine2d.XYWH(0, y, rw, rh)
 			n := rows[i].node
-			lk.DrawTreeRow(ctx, row, n == t.Selected, n == t.hover, n.Expanded, n.Leaf(), rows[i].depth, n.Label, n.Bold)
+			lk.DrawTreeRow(ctx, row, t.rowState(n), n.Expanded, n.Leaf(), rows[i].depth, n.Label, n.Bold)
 			paintTreeSwatch(ctx, row, n.Color)
 		}
 		ctx.Restore()
 	}
 	t.vbar.paint(ctx, lk, t.vparts(), true)
-	if t.Focused() {
+	// The current row carries the focus mark; a focused tree without one
+	// rings itself.
+	if t.Focused() && t.indexOf(t.Selected) < 0 {
 		lk.DrawFocusRing(ctx, b)
 	}
 }
@@ -315,7 +317,12 @@ func (t *TreeView) rowSig(row treeRow) uint64 {
 		// keep its cached row.
 		extra ^= bits32(c.R)*31 ^ bits32(c.G)*131 ^ bits32(c.B)*313 ^ bits32(c.A)*1013
 	}
-	return visualSig(n == t.Selected, n == t.hover, extra, n.Label)
+	return visualSig(n == t.Selected, n == t.hover, extra^uint64(t.rowState(n))<<40, n.Label)
+}
+
+// rowState is n's item state for the look.
+func (t *TreeView) rowState(n *TreeNode) style.ControlState {
+	return widget.ItemState(t, n == t.Selected, n == t.hover, n == t.Selected)
 }
 
 func paintTreeSwatch(ctx *paintengine2d.Context, row paintengine2d.Rect, col paintengine2d.Color) {

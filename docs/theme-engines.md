@@ -80,7 +80,25 @@ gets the era right:
 `RoleCheck`, `RoleRow`, `RoleTab`, `RoleThumb`, `RoleTrack`, `RoleMenu`,
 `RoleCombo`, `RoleSplitter`, `RoleBar`, `RolePanel`. `ControlState` is the
 state bitset (`Hovered`, `Pressed`, `Disabled`, `Focused`, `Checked`,
-`Primary` = default button, `Toggle`).
+`Primary` = default button, `Toggle`, `First` / `Last` in a strip,
+`Inactive`, `Backdrop`).
+
+### Item views
+
+`DrawListRow`, `DrawTreeRow` and `DrawTableCell` get the item state:
+`Checked` = selected, `Hovered`, `Focused` = the current row of a focused
+view, `Inactive` = the view does not have keyboard focus, `Backdrop` = the
+window is inactive (GTK's `:backdrop`). Follow the platform you imitate:
+Windows and Mac looks grey a selection as soon as the view is `Inactive`
+(Win95 to the button face, Aqua pale grey, Platinum a hollow outline), GTK
+and Qt-style looks keep it until `Backdrop`, Motif and NeXT never change
+it. `RoleRow` faces see the same bits.
+
+List and tree painters mark a `Focused` row themselves — default
+`ItemFocus` over the row, Win95 and XP a dotted rectangle around the label,
+Motif the solid location cursor; tables call `DrawItemFocus` over the whole
+row after its cells. Looks whose fields have a focus ring (`FieldFocusRing`)
+may leave `ItemFocus` empty and let the view frame ring the focused view.
 
 ## Writing an engine
 

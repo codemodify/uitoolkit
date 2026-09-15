@@ -88,6 +88,9 @@ type Engine interface {
 	// WindowCloseRect is where DrawWindowFrame put the close button for a
 	// frame of bounds b (empty when there is none) — hit-testing uses it.
 	WindowCloseRect(l *Classic, b paintengine2d.Rect) paintengine2d.Rect
+	// ItemFocus marks the current row of a focused view over the painted
+	// row b (Win95's dotted rectangle); st is the row's state.
+	ItemFocus(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState)
 	// ViewFrameInsets is the frame around scrolling views (lists, trees,
 	// tables): Win95's sunken well, a hairline, or zero (flat).
 	ViewFrameInsets(l *Classic) Insets
@@ -118,7 +121,7 @@ type Engine interface {
 	DrawScrollBar(l *Classic, ctx *paintengine2d.Context, track, thumb paintengine2d.Rect, st ControlState)
 	DrawFocusRing(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect)
 	DrawSplitter(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, vertical bool, st ControlState)
-	DrawListRow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, selected, hovered bool, label string)
+	DrawListRow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string)
 	DrawOverlay(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect)
 	DrawMenuBar(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect)
 	DrawMenuTitle(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, underline int, open bool)
@@ -126,7 +129,7 @@ type Engine interface {
 	DrawMenuItem(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, row MenuRow)
 	DrawTabBar(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect)
 	DrawTab(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, selected bool)
-	DrawTreeRow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, selected, hovered, expanded, leaf bool, depth int, label string, bold bool)
+	DrawTreeRow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, expanded, leaf bool, depth int, label string, bold bool)
 	DrawStatusBar(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, parts []string)
 	DrawToolBar(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect)
 	DrawToolButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, icon ToolIcon)
@@ -136,7 +139,7 @@ type Engine interface {
 	DrawTitleBar(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, title, subtitle string)
 	DrawMessageIcon(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, icon ToolIcon)
 	DrawTableHeader(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, sorted, asc bool)
-	DrawTableCell(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, selected, hovered bool, label string, align Align, face *Font)
+	DrawTableCell(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, align Align, face *Font)
 	DrawSpinner(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, upHover, downHover, upPress, downPress bool)
 	DrawTooltip(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, text string)
 	DrawTextArea(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, lines []TextLine, caret, selA, selB int, blink bool, scrollX, scrollY float32, placeholder string, face *Font)
@@ -525,6 +528,24 @@ func DrawScrollBarParts(lk LookAndFeel, ctx *paintengine2d.Context, p ScrollPart
 type GroupBoxLook interface {
 	GroupBoxInsets(hasTitle bool) Insets
 	DrawGroupBox(ctx *paintengine2d.Context, b paintengine2d.Rect, title string, raised bool)
+}
+
+// ItemFocusLook marks the current row of a focused list, tree or table
+// (Qt's PE_FrameFocusRect on an item).
+type ItemFocusLook interface {
+	DrawItemFocus(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState)
+}
+
+// DrawItemFocus implements [ItemFocusLook].
+func (l *Classic) DrawItemFocus(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState) {
+	l.eng().ItemFocus(l, ctx, b, st)
+}
+
+// DrawItemFocusOf marks the current row b with lk's item focus, if any.
+func DrawItemFocusOf(lk LookAndFeel, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState) {
+	if f, ok := lk.(ItemFocusLook); ok {
+		f.DrawItemFocus(ctx, b, st)
+	}
 }
 
 // ViewFrameLook frames scrolling views (Qt's PE_Frame around item views).

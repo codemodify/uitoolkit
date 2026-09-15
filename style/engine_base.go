@@ -149,6 +149,12 @@ func (BaseEngine) DrawWindowFrame(l *Classic, ctx *paintengine2d.Context, b pain
 	}
 }
 
+// ItemFocus: a one-pixel ring in the focus colour just inside the row
+// (Fusion and GTK mark the current item this way).
+func (BaseEngine) ItemFocus(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState) {
+	l.baseItemFocus(ctx, b, st)
+}
+
 // ViewFrameInsets: the ViewFrame metric on every side, in whole pixels so
 // rows never overlap the frame's lines (the stock looks keep 0: flat).
 func (BaseEngine) ViewFrameInsets(l *Classic) Insets {
@@ -163,6 +169,11 @@ func (BaseEngine) DrawViewFrame(l *Classic, ctx *paintengine2d.Context, b painte
 		return
 	}
 	l.eng().Face(l, ctx, b, RoleField, st&^(StateHovered|StatePressed))
+	// Looks that ring focused fields ring a focused view the same way
+	// (Aqua's blue halo); the others mark its current row instead.
+	if st.Focused() && !st.Disabled() && l.eng().FieldFocusRing(l) {
+		l.DrawFocusRing(ctx, b)
+	}
 }
 
 // PopupShadow: the stock looks float menus, tooltips and dialogs on a soft
@@ -275,8 +286,8 @@ func (BaseEngine) DrawFocusRing(l *Classic, ctx *paintengine2d.Context, b painte
 func (BaseEngine) DrawSplitter(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, vertical bool, st ControlState) {
 	l.baseDrawSplitter(ctx, b, vertical, st)
 }
-func (BaseEngine) DrawListRow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, selected, hovered bool, label string) {
-	l.baseDrawListRow(ctx, b, selected, hovered, label)
+func (BaseEngine) DrawListRow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string) {
+	l.baseDrawListRow(ctx, b, st, label)
 }
 func (BaseEngine) DrawOverlay(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect) {
 	l.baseDrawOverlay(ctx, b)
@@ -299,8 +310,8 @@ func (BaseEngine) DrawTabBar(l *Classic, ctx *paintengine2d.Context, b paintengi
 func (BaseEngine) DrawTab(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, selected bool) {
 	l.baseDrawTab(ctx, b, st, label, selected)
 }
-func (BaseEngine) DrawTreeRow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, selected, hovered, expanded, leaf bool, depth int, label string, bold bool) {
-	l.baseDrawTreeRow(ctx, b, selected, hovered, expanded, leaf, depth, label, bold)
+func (BaseEngine) DrawTreeRow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, expanded, leaf bool, depth int, label string, bold bool) {
+	l.baseDrawTreeRow(ctx, b, st, expanded, leaf, depth, label, bold)
 }
 func (BaseEngine) DrawStatusBar(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, parts []string) {
 	l.baseDrawStatusBar(ctx, b, parts)
@@ -329,8 +340,8 @@ func (BaseEngine) DrawMessageIcon(l *Classic, ctx *paintengine2d.Context, b pain
 func (BaseEngine) DrawTableHeader(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, sorted, asc bool) {
 	l.baseDrawTableHeader(ctx, b, st, label, sorted, asc)
 }
-func (BaseEngine) DrawTableCell(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, selected, hovered bool, label string, align Align, face *Font) {
-	l.baseDrawTableCell(ctx, b, selected, hovered, label, align, face)
+func (BaseEngine) DrawTableCell(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, align Align, face *Font) {
+	l.baseDrawTableCell(ctx, b, st, label, align, face)
 }
 func (BaseEngine) DrawSpinner(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, upHover, downHover, upPress, downPress bool) {
 	l.baseDrawSpinner(ctx, b, st, upHover, downHover, upPress, downPress)

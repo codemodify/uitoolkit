@@ -1024,6 +1024,19 @@ func (motifEngine) PopupShadow(*Classic, PopupKind) Insets { return Insets{} }
 
 func (motifEngine) DrawPopupShadow(*Classic, *paintengine2d.Context, paintengine2d.Rect, PopupKind) {}
 
+// ItemFocus is XmList's location cursor: a one-pixel box in the text colour
+// around the current item.
+func (motifEngine) ItemFocus(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState) {
+	c := motifColors(l)
+	col := c.text.fgFor(st &^ StateChecked)
+	if st.Checked() {
+		// On the inverse selection the cursor takes the selection's text.
+		col = c.selFg
+	}
+	u := mPx(l, 1)
+	ctx.DrawRect(mSnap(b).Inset(u*0.5), paintengine2d.StrokePaint(col, u))
+}
+
 // ViewFrameInsets: lists sit in a sunken shadow of the pack's thickness.
 func (motifEngine) ViewFrameInsets(l *Classic) Insets {
 	t := motifColors(l).px(l)
@@ -1903,7 +1916,8 @@ func (e motifEngine) DrawMenuItem(l *Classic, ctx *paintengine2d.Context, b pain
 
 // DrawListRow is an XmList item: selected items in the select colour (or
 // reversed ground colours); Motif lists did not track the pointer.
-func (motifEngine) DrawListRow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, selected, hovered bool, label string) {
+func (motifEngine) DrawListRow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string) {
+	selected := st.Checked()
 	c := motifColors(l)
 	fg := c.text.fg
 	if selected {
@@ -1911,11 +1925,15 @@ func (motifEngine) DrawListRow(l *Classic, ctx *paintengine2d.Context, b painten
 		fg = c.selFg
 	}
 	l.drawFittedText(ctx, l.body, label, paintengine2d.XYWH(b.Min.X+l.S(8), b.Min.Y, b.Dx()-l.S(12), b.Dy()), fg, AlignStart, 0)
+	if st.Focused() {
+		motifEngine{}.ItemFocus(l, ctx, b, st)
+	}
 }
 
 // DrawTreeRow is an XmContainer outline row: solid outline lines, the
 // bevelled outline button, the selected label highlighted.
-func (e motifEngine) DrawTreeRow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, selected, hovered, expanded, leaf bool, depth int, label string, bold bool) {
+func (e motifEngine) DrawTreeRow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, expanded, leaf bool, depth int, label string, bold bool) {
+	selected := st.Checked()
 	c := motifColors(l)
 	u := mPx(l, 1)
 	indent := l.metrics.TreeIndent
@@ -1955,6 +1973,11 @@ func (e motifEngine) DrawTreeRow(l *Classic, ctx *paintengine2d.Context, b paint
 	ctx.ClipRect(b)
 	f.Draw(ctx, label, paintengine2d.Pt(lx, b.Min.Y+(b.Dy()-f.Height())*0.5), fg)
 	ctx.Restore()
+	if st.Focused() {
+		// The box spans the row while the selection hugs the label: draw
+		// it in the plain text colour.
+		e.ItemFocus(l, ctx, b, st&^StateChecked)
+	}
 }
 
 // DrawTableHeader is a column heading: a raised push button, sunken while
@@ -1988,7 +2011,8 @@ func (e motifEngine) DrawTableHeader(l *Classic, ctx *paintengine2d.Context, b p
 	l.drawFittedText(ctx, l.body, label, paintengine2d.XYWH(r.Min.X+t+l.S(4), r.Min.Y, r.Dx()-2*t-l.S(6)-aw, r.Dy()), c.win.fgFor(st), AlignStart, 0)
 }
 
-func (motifEngine) DrawTableCell(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, selected, hovered bool, label string, align Align, face *Font) {
+func (motifEngine) DrawTableCell(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, align Align, face *Font) {
+	selected := st.Checked()
 	c := motifColors(l)
 	fg := c.text.fg
 	if selected {

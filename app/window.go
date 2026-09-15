@@ -44,7 +44,10 @@ type Window struct {
 	scene      *paintengine2d.Scene
 	// paths keeps recorded shapes across frames, so a steady UI does not
 	// clone every path it records each frame.
-	paths      *paintengine2d.PathCache
+	paths *paintengine2d.PathCache
+	// inactive: the window lost keyboard focus (selections dim, GTK's
+	// backdrop). Windows start active; offscreen ones never change.
+	inactive   bool
 	cursor     platform.Cursor
 	paints     int
 	closeHides bool
@@ -152,6 +155,20 @@ func (w *Window) SetContent(c widget.Component) {
 }
 
 func (w *Window) Content() widget.Component { return w.root }
+
+// Active reports whether the window has keyboard focus (widget.ActiveHost).
+func (w *Window) Active() bool { return !w.inactive }
+
+// setActive repaints everything when the window gains or loses keyboard
+// focus: selections, focus marks and default buttons follow it.
+func (w *Window) setActive(active bool) {
+	if w.inactive == !active {
+		return
+	}
+	w.inactive = !active
+	w.dropScene()
+	w.fullInvalidate()
+}
 
 func (w *Window) SetOverlay(c widget.Component) {
 	if w.overlay == c {
@@ -507,6 +524,7 @@ func (w *Window) dispatch(ev platform.Event) {
 	case platform.EventExpose:
 		w.dirty.Add(paintengine2d.XYWH(ev.Pos.X, ev.Pos.Y, float32(ev.Width), float32(ev.Height)))
 	case platform.EventFocusOut:
+		w.setActive(false)
 		w.resetIME()
 		w.dismissTooltip()
 		w.capture = nil
@@ -525,6 +543,7 @@ func (w *Window) dispatch(ev platform.Event) {
 			}
 		}
 	case platform.EventFocusIn:
+		w.setActive(true)
 		// Toolkit status menus arm FocusOut-dismiss after a short delay
 		// so map/focus churn on Wayland does not kill the first frame.
 		w.syncIMECursor()

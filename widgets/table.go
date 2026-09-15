@@ -464,6 +464,7 @@ func (t *TableView) paintHeader(ctx *paintengine2d.Context, lk style.LookAndFeel
 }
 
 func (t *TableView) paintRow(ctx *paintengine2d.Context, lk style.LookAndFeel, widths []float32, row int, y, rh float32) {
+	st := t.rowState(row)
 	cx := float32(0)
 	for col := range t.Columns {
 		w := widths[col]
@@ -479,9 +480,18 @@ func (t *TableView) paintRow(ctx *paintengine2d.Context, lk style.LookAndFeel, w
 		if t.CellBold != nil && t.CellBold(row, col) {
 			face = lk.BoldFont()
 		}
-		lk.DrawTableCell(ctx, cell, t.IsSelected(row), row == t.hovered, label, t.Columns[col].Align, face)
+		lk.DrawTableCell(ctx, cell, st, label, t.Columns[col].Align, face)
 		cx += w
 	}
+	if st.Focused() {
+		// Cells do not know their row: the focus mark spans it.
+		style.DrawItemFocusOf(lk, ctx, paintengine2d.XYWH(0, y, cx, rh), st)
+	}
+}
+
+// rowState is row i's item state for the look.
+func (t *TableView) rowState(i int) style.ControlState {
+	return widget.ItemState(t, t.IsSelected(i), i == t.hovered, i == t.Selected)
 }
 
 func (t *TableView) visibleRange() (lo, hi int) {
@@ -532,7 +542,7 @@ func (t *TableView) Paint(ctx *paintengine2d.Context) {
 				for col := range t.Columns {
 					extra ^= bits32(widths[col]) << uint(col%16)
 				}
-				sig := newRowSig(t.IsSelected(i), i == t.hovered, extra)
+				sig := newRowSig(t.IsSelected(i), i == t.hovered, extra^uint64(t.rowState(i))<<40)
 				for col := range t.Columns {
 					if t.CellText != nil {
 						sig.str(t.CellText(i, col))
@@ -558,7 +568,9 @@ func (t *TableView) Paint(ctx *paintengine2d.Context) {
 	// Sticky header after the body so a leaked row cannot cover the labels.
 	t.paintHeader(ctx, lk, widths, hh)
 	t.vbar.paint(ctx, lk, t.vparts(), true)
-	if t.Focused() {
+	// The current row carries the focus mark; a focused table without one
+	// rings itself.
+	if t.Focused() && (t.Selected < 0 || t.Selected >= t.RowCount) {
 		lk.DrawFocusRing(ctx, b)
 	}
 }

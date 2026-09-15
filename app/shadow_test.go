@@ -6,6 +6,7 @@ import (
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
+	"github.com/codemodify/uitoolkit/widget"
 	"github.com/codemodify/uitoolkit/widgets"
 )
 
@@ -51,5 +52,34 @@ func testPopupShadow(t *testing.T, lk *style.Classic) {
 	after := w.surf.Buffer()
 	if got, bg := lum(after, x, y), lum(before, x, y); got < bg-0.01 {
 		t.Fatalf("shadow left behind after dismiss: %.3f vs %.3f", got, bg)
+	}
+}
+
+// Losing keyboard focus puts the window in the backdrop: widgets read it
+// through widget.WindowActive and everything repaints.
+func TestWindowFocusOutIsBackdrop(t *testing.T) {
+	a := New(Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{Width: 200, Height: 120, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	lbl := widgets.NewLabel("x")
+	w.SetContent(lbl)
+	a.PumpOnce()
+	if !widget.WindowActive(lbl) {
+		t.Fatal("a new window should be active")
+	}
+	before := w.paints
+	w.dispatch(platform.Event{Kind: platform.EventFocusOut})
+	a.PumpOnce()
+	if widget.WindowActive(lbl) {
+		t.Fatal("focus out should make the window inactive")
+	}
+	if w.paints == before {
+		t.Fatal("going to the backdrop did not repaint")
+	}
+	w.dispatch(platform.Event{Kind: platform.EventFocusIn})
+	if !widget.WindowActive(lbl) {
+		t.Fatal("focus in should make the window active again")
 	}
 }

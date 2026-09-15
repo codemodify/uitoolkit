@@ -179,6 +179,19 @@ func (l *Classic) faceColorsRaw(role chromeRole, st ControlState) (fill, border,
 	if st.Checked() && (role == roleRow || role == roleTab) {
 		fill = t.Selected.Fill
 		border = t.Selected.Border
+		classic := t.Bevel == BevelClassic3D || t.Bevel == BevelLunaHottrack
+		if role == roleRow && (st.Backdrop() || (classic && st.Inactive())) {
+			// A subdued selection: the classic looks grey it to the face
+			// colour whenever the view loses focus (Windows); the modern
+			// ones keep it until the window goes to the back, then wash it
+			// out (GTK's backdrop).
+			if classic {
+				fill = p.SurfaceAlt
+			} else {
+				fill = fill.WithAlpha(fill.A * 0.45)
+			}
+			return fill, paintengine2d.Color{}, p.Text
+		}
 		if t.Bevel == BevelClassic3D || t.Bevel == BevelLunaHottrack {
 			if t.Selected.Fill.A > 0.7 {
 				fg = p.TextOnAccent
