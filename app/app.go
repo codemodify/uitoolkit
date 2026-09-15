@@ -92,6 +92,7 @@ func New(opts Options) *Application {
 	if preferred {
 		ap = style.LoadAppearance()
 		style.SetReduceMotion(ap.ReduceMotion)
+		style.SetNativeDialogs(ap.NativeDialogs)
 		watch = true
 	}
 	if opts.DisableLookWatch {

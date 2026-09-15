@@ -69,6 +69,9 @@ type Appearance struct {
 	// desktop's preference (see [Appearance.Effective]); Name stays the
 	// user's choice.
 	FollowDesktop bool
+	// NativeDialogs shows the desktop's own file dialogs (the XDG portal's)
+	// instead of the toolkit's themed ones.
+	NativeDialogs bool
 }
 
 // DefaultAppearance is the embedded dark palette, round corners, classic icons.

@@ -47,7 +47,8 @@ $XDG_CONFIG_HOME/uitoolkit/look.json
   "icons": "lucide",
   "iconSize": "medium",
   "reduceMotion": false,
-  "followDesktop": true
+  "followDesktop": true,
+  "nativeDialogs": false
 }
 ```
 
@@ -57,7 +58,9 @@ the default), `round` or `square`. `icons` is the chrome set (`classic`,
 `small` (16px), `medium` (24px, default), or `large` (32px). Numeric
 aliases `16` / `24` / `32` are accepted on load. `reduceMotion` turns
 animations off. `followDesktop` shows the pack's light or dark sibling to
-match the desktop.
+match the desktop. `nativeDialogs` shows the desktop's own file dialogs
+(KDE's, GNOME's, through the XDG portal) instead of the toolkit's themed
+ones.
 
 ### Following the desktop's light or dark mode
 

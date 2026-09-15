@@ -8,6 +8,8 @@ import (
 
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/layout"
+	"github.com/codemodify/uitoolkit/platform"
+	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
 )
 
@@ -26,18 +28,26 @@ const (
 	FileSave
 )
 
-// FileDialogOptions configures ShowFileDialog. Entries and OnNavigate are the
-// stub seam — a later backend can swap this for a native picker.
+// FileDialogOptions configures ShowFileDialog. Entries and OnNavigate feed
+// the toolkit's own dialog.
 type FileDialogOptions struct {
 	Title      string
 	Path       string
-	Filter     string
+	Filter     string // glob patterns, separated by spaces or ';' ("*.txt *.md")
 	Mode       FileDialogMode
 	Entries    []FileInfo
 	OnNavigate func(path string) []FileInfo
 	OnPick     func(path string)
 	OnCancel   func()
+	// Native shows the desktop's own file dialog (KDE's, GNOME's) through
+	// the XDG portal, as Qt and GTK apps do, instead of the toolkit's
+	// themed one; UITK_NATIVE_DIALOGS=1 turns it on for every dialog.
+	// Without a portal the toolkit's dialog shows.
+	Native bool
 }
+
+// NativeDialogsEnv set to 1 makes every file dialog the desktop's own.
+const NativeDialogsEnv = "UITK_NATIVE_DIALOGS"
 
 // FileDialog is a modal list + path field. It does not open a platform dialog.
 type FileDialog struct {
@@ -288,11 +298,52 @@ func (fd *FileDialog) Show(from widget.Component) bool {
 	return widget.ShowOverlay(from, fd.overlay)
 }
 
-// ShowFileDialog mounts a stub file picker on the window that hosts from.
+// ShowFileDialog shows a file dialog for the window that hosts from: the
+// toolkit's themed one, or the desktop's own (Native, UITK_NATIVE_DIALOGS)
+// when the portal answers, in which case it returns nil and OnPick or
+// OnCancel run on the UI goroutine when the user is done.
 func ShowFileDialog(from widget.Component, opts FileDialogOptions) *FileDialog {
+	if (opts.Native || style.NativeDialogs() || os.Getenv(NativeDialogsEnv) == "1") && showNativeFileDialog(from, opts) {
+		return nil
+	}
 	fd := NewFileDialog(opts)
 	fd.Show(from)
 	return fd
+}
+
+// openNative is the portal call (a seam for tests).
+var openNative = platform.OpenFileChooser
+
+func showNativeFileDialog(from widget.Component, opts FileDialogOptions) bool {
+	timers, ok := from.Host().(widget.Timers)
+	if !ok || timers == nil {
+		return false
+	}
+	co := platform.FileChooserOptions{Title: opts.Title, Save: opts.Mode == FileSave}
+	if opts.Path != "" {
+		if st, err := os.Stat(opts.Path); err == nil && st.IsDir() {
+			co.Folder, _ = filepath.Abs(opts.Path)
+		} else if abs, err := filepath.Abs(opts.Path); err == nil {
+			co.Folder, co.Name = filepath.Dir(abs), filepath.Base(abs)
+		}
+	}
+	if pats := strings.FieldsFunc(opts.Filter, func(r rune) bool { return r == ' ' || r == ';' || r == ',' }); len(pats) > 0 {
+		co.Filters = []platform.FileFilter{{Name: strings.Join(pats, " "), Patterns: pats}}
+	}
+	return openNative(co, func(paths []string) {
+		// Back on the UI goroutine through the window's timers.
+		timers.AfterFunc(0, func() {
+			if len(paths) == 0 {
+				if opts.OnCancel != nil {
+					opts.OnCancel()
+				}
+				return
+			}
+			if opts.OnPick != nil {
+				opts.OnPick(paths[0])
+			}
+		})
+	})
 }
 
 // ReadDirEntries lists a real directory for apps that want to wire the stub.
