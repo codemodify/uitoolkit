@@ -76,14 +76,17 @@ when a screen reader starts. Then it:
 - connects to the accessibility bus and has the registry embed the app
   under the desktop;
 - exports every node at `/org/a11y/atspi/accessible/<id>` with the
-  Accessible, Application, Component, Action, Value and Text interfaces;
+  Accessible, Application, Component, Action, Value, Text and EditableText
+  interfaces (fields take text from assistive technology and automation
+  tools such as dogtail);
 - announces the active window (`window:activate`) and focus moves
   (`object:state-changed:focused`), including a view's current row, tab or
   tool;
 - announces changes on the focused object: `object:state-changed:checked`
   (and `selected`, `expanded`, `pressed`, `indeterminate`, `sensitive`),
-  plus name and value changes. Only that object is described each frame,
-  so this stays cheap.
+  plus name and value changes, and for fields `object:text-changed:insert`
+  / `delete` (only what changed) and `object:text-caret-moved`. Only that
+  object is described each frame, so this stays cheap.
 
 Queries read a snapshot of the trees that the UI goroutine rebuilds when
 something has changed since the last query. Actions (DoAction, GrabFocus,
@@ -104,8 +107,7 @@ Nothing touches the desktop's session. It needs at-spi2-core and
 python-gobject.
 
 ## Still to come
-- Text-change events (`object:text-changed:insert` / `delete`) while typing,
-  and changes on objects without the focus.
+- Changes on objects without the focus (a status line updating).
 - Relations (a label that labels a field), the Selection and Table
   interfaces, and items built lazily for very long lists.
 - Windows and macOS adapters.

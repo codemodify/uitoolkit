@@ -57,6 +57,12 @@ func FocusID(c Component) uint64 {
 	return c.ID()
 }
 
+// AccessibleEditor is implemented by editable text components: assistive
+// technology (and automation such as dogtail) replaces their text.
+type AccessibleEditor interface {
+	AccessibleSetText(s string) bool
+}
+
 // itemBits is how many low ID bits number a view's items.
 const itemBits = 24
 
