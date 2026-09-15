@@ -51,7 +51,7 @@ func (t *TabBar) tabRects() []paintengine2d.Rect {
 		return nil
 	}
 	lk := t.Look()
-	f := lk.Font()
+	f := style.ControlFontOf(lk, style.RoleTab)
 	h := t.LocalBounds().Dy()
 	x := float32(4)
 	out := make([]paintengine2d.Rect, n)

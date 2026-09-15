@@ -2286,6 +2286,9 @@ func (lunaEngine) DrawTableCell(l *Classic, ctx *paintengine2d.Context, b painte
 
 // DrawToolBar is an Office command bar: the vertical band gradient with
 // rounded ends, its shadow line and the dotted grip at the left.
+// ToolBarInsets keeps the rebar grip clear of the first button.
+func (lunaEngine) ToolBarInsets(l *Classic) Insets { return Insets{Left: l.S(11), Right: l.S(6)} }
+
 func (lunaEngine) DrawToolBar(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect) {
 	c := lunaColors(l)
 	b = lunaSnap(b)

@@ -62,7 +62,7 @@ func (c *ComboBox) Measure(cons layout.Constraints) paintengine2d.Point {
 	lk := c.Look()
 	m := lk.Metrics()
 	w := float32(160)
-	f := lk.Font()
+	f := style.ControlFontOf(lk, style.RoleCombo)
 	for _, s := range c.Items {
 		tw := f.Advance(s)
 		if ink := f.InkWidth(s); ink > tw {

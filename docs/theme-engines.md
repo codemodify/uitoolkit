@@ -61,6 +61,10 @@ gets the era right:
   own field face, as thick as the `viewFrame` metric (Win95 2px sunken,
   Luna and Aqua 1px, flat looks 0). Views work inside it; `Frameless`
   opts a view out when its pane is already framed.
+- **Text and bars** — `ControlFont(role)` is the face a control is labelled
+  in (Metal's bold buttons); widgets measure labels with it, so a bold look's
+  text fits. `ToolBarInsets` keeps room for a tool bar grip (XP's rebar
+  handle). Odd rows carry `StateAlternate` for striped lists (Aqua).
 - **Tabs** — `TabOutset` grows the selected tab, which the tab bar paints
   last, so it overlaps its neighbours (Win95 and XP: 2px each side).
 - **Shadows** — `PopupShadow(kind)` is how far a floating layer's drop

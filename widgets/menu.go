@@ -127,7 +127,7 @@ func (m *MenuBar) barH() float32 {
 }
 
 func (m *MenuBar) titlesWidth() float32 {
-	f := m.Look().Font()
+	f := style.ControlFontOf(m.Look(), style.RoleMenu)
 	x := float32(8)
 	for _, menu := range m.menus {
 		if menu == nil {
@@ -153,7 +153,7 @@ func (m *MenuBar) Measure(c layout.Constraints) paintengine2d.Point {
 func (m *MenuBar) Arrange(r paintengine2d.Rect) { m.SetBounds(r) }
 
 func (m *MenuBar) titleRects() []paintengine2d.Rect {
-	f := m.Look().Font()
+	f := style.ControlFontOf(m.Look(), style.RoleMenu)
 	h := m.LocalBounds().Dy()
 	x := float32(4)
 	out := make([]paintengine2d.Rect, len(m.menus))
@@ -567,7 +567,7 @@ func (p *PopupMenu) itemH() float32 {
 		h = lk.Metrics().MenuItemH
 	}
 	if lk != nil {
-		if f := lk.Font(); f != nil {
+		if f := style.ControlFontOf(lk, style.RoleMenu); f != nil {
 			if min := f.Height() + 16; min > h {
 				h = min
 			}
@@ -628,7 +628,7 @@ func (p *PopupMenu) measureContent(ch style.MenuChrome) paintengine2d.Point {
 	lk := p.Look()
 	f := (*style.Font)(nil)
 	if lk != nil {
-		f = lk.Font()
+		f = style.ControlFontOf(lk, style.RoleMenu)
 	}
 	var maxLabel, maxAccel float32
 	hasSub := false
@@ -805,7 +805,7 @@ func (p *PopupMenu) ShortcutBounds(i int) paintengine2d.Rect {
 	}
 	f := (*style.Font)(nil)
 	if lk := p.Look(); lk != nil {
-		f = lk.Font()
+		f = style.ControlFontOf(lk, style.RoleMenu)
 	}
 	ch := p.chrome()
 	tw := menuTextWidth(f, p.Items[i].Shortcut)
