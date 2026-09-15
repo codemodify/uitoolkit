@@ -81,10 +81,16 @@ Merged engines:
 | aero, metro, fluent | Windows Vista/7 Aero and 7 Basic; Windows 8, 10, 10 Dark; Windows 11 Fluent and Fluent Dark |
 | keramik, plastik | KDE 3 Keramik, Plastik, Qt 4 Plastique |
 | system7, win31, openlook, amiga, beos, os2 | System 1 and 7, Windows 3.1 and Hot Dog Stand, OPEN LOOK, Workbench 1.3 and 3.1, BeOS, OS/2 Warp 4 |
+| macos, material, flatlaf | OS X Yosemite, macOS Big Sur and Dark; Material 2 and 3, light and dark; FlatLaf Light, Dark, Darcula |
 
-69 packs from 23 engines in all. Running now, each in its own worktree:
-- modern Mac (Yosemite, Big Sur), Material 2 and 3, FlatLaf (`engine/modern`);
-- a clean-room Metal and Nimbus (`engine/java`).
+Also merged: `macos` (OS X Yosemite, macOS Big Sur and Big Sur Dark),
+`material` (Material and Material Dark, Material 3 and Material 3 Dark,
+whose tonal palettes are computed from a seed colour) and `flatlaf` (FlatLaf
+Light, FlatLaf Dark, Darcula).
+
+75 packs from 26 engines in all. Running now, each in its own worktree:
+- a clean-room Metal and Nimbus (`engine/java`);
+- accent colours for the modern engines (`engine/accent`).
 
 Core features the engines drive, added along the way:
 - selected tabs overlap their neighbours;
@@ -164,6 +170,18 @@ Core features the engines drive, added along the way:
   Noir, CDE palettes and Charcoal. They switch live when the desktop does.
   Themes with no sibling stay as chosen. `UITK_COLOR_SCHEME=dark` stands in
   for the desktop. See `docs/settings.md`.
+- **Takes the desktop's accent colour** in themes whose engine recolours
+  around one (`style.AccentEngine`). Breeze does now, and the other modern
+  engines are in progress. `UITK_ACCENT=#e95420` stands in for the
+  desktop's accent.
+- **Honours the desktop's reduced-motion setting** (yours is on): fades,
+  pulses and busy bars stop in every app, as in GTK 4 apps.
+- **Mnemonic underlines** show when each platform showed them: always in
+  Windows 95, only while Alt is held in XP and Plasma, never on the Mac
+  (`HintMnemonics`).
+- **Labels word-wrap** (`Label.Wrap`, QLabel's wordWrap).
+- **Start-up:** the font index and the portal read run alongside display
+  setup.
 - **`UITK_THEME=<pack>`:** runs any app in any theme, like `GTK_THEME`.
 - **`gallery -screenshot DIR -theme <pack>`:** takes every scripted gallery
   shot in one pack.
