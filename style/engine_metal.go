@@ -453,12 +453,13 @@ func (c *mtl) tick(ctx *paintengine2d.Context, box paintengine2d.Rect, col paint
 	p.MoveTo(x+s*0.16, y+s*0.4)
 	p.LineTo(x+s*0.34, y+s*0.8)
 	p.LineTo(x+s*0.86, y+s*0.14)
-	w := s * 0.22
-	if w < 2*c.u {
-		w = 2 * c.u
+	// Two pixels in Metal's 13px box, in proportion at other scales.
+	w := s * 0.25
+	if w < 1.5 {
+		w = 1.5
 	}
 	ctx.DrawPath(p, paintengine2d.Paint{Color: col, Style: paintengine2d.StyleStroke,
-		Stroke: paintengine2d.Stroke{Width: w, Cap: paintengine2d.CapSquare, Join: paintengine2d.JoinMiter, MiterLimit: 4}})
+		Stroke: paintengine2d.Stroke{Width: w, Cap: paintengine2d.CapButt, Join: paintengine2d.JoinMiter, MiterLimit: 4}})
 }
 
 // ---- faces -----------------------------------------------------------------------
