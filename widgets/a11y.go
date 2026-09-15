@@ -164,9 +164,10 @@ func (c *ComboBox) Describe(n *a11y.Node) {
 	}
 	n.Value = c.Text()
 	if c.field != nil {
-		n.State |= a11y.StateEditable
+		// The field inside takes the keyboard for the box.
+		n.State |= a11y.StateEditable | a11y.StateFocusable
 		if c.field.Focused() {
-			n.State |= a11y.StateFocused | a11y.StateFocusable
+			n.State |= a11y.StateFocused
 		}
 	}
 	if n.Name == "" {
@@ -182,8 +183,9 @@ func (f *NumberField) Describe(n *a11y.Node) {
 	n.Value = strconv.FormatFloat(f.Value, 'f', max(f.Decimals, 0), 64)
 	tipDescription(n, f.Tip)
 	// The inner field takes the keyboard; the spin button is what has it.
+	n.State |= a11y.StateFocusable
 	if f.field != nil && f.field.Focused() {
-		n.State |= a11y.StateFocused | a11y.StateFocusable
+		n.State |= a11y.StateFocused
 	}
 	n.Actions = n.Actions.With(a11y.ActionIncrement).With(a11y.ActionDecrement)
 }
@@ -280,14 +282,29 @@ func (s *Splitter) Describe(n *a11y.Node) {
 	rangeNode(n, 0, 1, float64(s.Ratio), 0.05)
 }
 
+// An expander is a named section; its header is the toggle that opens it
+// (the part that takes the keyboard focus).
 func (e *Expander) Describe(n *a11y.Node) {
-	n.Role = a11y.RoleToggleButton
+	n.Role = a11y.RoleGroup
 	nameOr(n, e.Title)
+}
+
+func (h *expanderHead) Describe(n *a11y.Node) {
+	n.Role = a11y.RoleToggleButton
+	nameOr(n, h.owner.Title)
 	n.State |= a11y.StateExpandable
-	if e.Expanded {
-		n.State |= a11y.StateExpanded
+	if h.owner.Expanded {
+		n.State |= a11y.StateExpanded | a11y.StatePressed
 	}
 	n.Actions = n.Actions.With(a11y.ActionDefault)
+}
+
+func (h *expanderHead) AccessibleAction(item int, a a11y.Action) bool {
+	if a != a11y.ActionDefault || !h.Enabled() {
+		return false
+	}
+	h.owner.SetExpanded(!h.owner.Expanded)
+	return true
 }
 
 func (s *StatusBar) Describe(n *a11y.Node) { n.Role = a11y.RoleStatusBar }

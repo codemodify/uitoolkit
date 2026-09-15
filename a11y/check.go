@@ -41,7 +41,16 @@ func Check(root *Node) []Problem {
 		if n.Role.Interactive() && !offscreen && n.Bounds.Empty() {
 			out = append(out, Problem{n, "has no box"})
 		}
+		// A control the keyboard cannot reach. Items (list rows, tabs,
+		// tools, menu items) are reached through their view.
+		if n.Role.Interactive() && !isItem(n.ID) && !n.State.Has(StateFocusable) && !n.State.Has(StateDisabled) {
+			out = append(out, Problem{n, "cannot take the keyboard focus"})
+		}
 		return true
 	})
 	return out
 }
+
+// isItem reports whether id names an item of a view rather than a
+// component (the widget package numbers items above bit 24).
+func isItem(id uint64) bool { return id>>24 != 0 && id&(1<<24-1) != 0 && id>>63 == 0 }
