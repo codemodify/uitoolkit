@@ -24,9 +24,21 @@ import (
 func main() {
 	shot := flag.String("screenshot", "", "write PNG gallery into this directory and exit")
 	headless := flag.Bool("headless", false, "paint offscreen (no X11/Wayland)")
+	theme := flag.String("theme", "", "with -screenshot: take every gallery shot in this theme pack (default: $UITK_THEME, else each shot's own look)")
 	flag.Parse()
 
 	if *shot != "" {
+		name := *theme
+		if name == "" {
+			name = os.Getenv(style.ThemeEnv)
+		}
+		if name != "" {
+			pack, ok := style.LoadTheme(name)
+			if !ok {
+				log.Fatalf("unknown theme %q", name)
+			}
+			shotLook = pack.Look()
+		}
 		if err := writeScreenshots(*shot); err != nil {
 			log.Fatal(err)
 		}
@@ -49,6 +61,9 @@ func main() {
 		log.Fatal(err)
 	}
 }
+
+// shotLook, when set by -theme, replaces the look of every gallery shot.
+var shotLook style.LookAndFeel
 
 func buildGallery(a *app.Application, win *app.Window, light bool) widget.Component {
 	return demo.Gallery(a, win, light)
@@ -171,6 +186,9 @@ func writeScreenshots(dir string) error {
 		},
 	}
 	for _, s := range shots {
+		if shotLook != nil {
+			s.look = shotLook
+		}
 		a := uitoolkit.New(uitoolkit.Options{Look: s.look, Headless: true})
 		w, err := a.NewWindow(platform.WindowOptions{
 			Title: "uitoolkit gallery", Width: 1000, Height: 760, Headless: true,

@@ -1073,6 +1073,28 @@ func (aquaEngine) DrawWindowBackground(l *Classic, ctx *paintengine2d.Context, b
 	aquaColors(l).texture(l, ctx, b)
 }
 
+// PopupShadow: Aqua floats everything on big soft shadows — menus, help
+// tags and, deepest of all, windows and sheets.
+func (aquaEngine) PopupShadow(l *Classic, kind PopupKind) Insets {
+	sp := aquaShadow(l, kind)
+	return ShadowReach(0, sp.dy, sp.blur, 0)
+}
+
+func (aquaEngine) DrawPopupShadow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, kind PopupKind) {
+	sp := aquaShadow(l, kind)
+	DropShadow(ctx, b, sp.r, sp.col, 0, sp.dy, sp.blur, 0)
+}
+
+func aquaShadow(l *Classic, kind PopupKind) baseShadowSpec {
+	switch kind {
+	case PopupTooltip:
+		return baseShadowSpec{col: paintengine2d.RGBA(0, 0, 0, 0.3), dy: l.S(2), blur: l.S(6)}
+	case PopupDialog:
+		return baseShadowSpec{col: paintengine2d.RGBA(0, 0, 0, 0.5), r: l.S(5), dy: l.S(10), blur: l.S(30)}
+	}
+	return baseShadowSpec{col: paintengine2d.RGBA(0, 0, 0, 0.4), r: l.S(5), dy: l.S(5), blur: l.S(16)}
+}
+
 func (aquaEngine) WindowCloseRect(l *Classic, b paintengine2d.Rect) paintengine2d.Rect {
 	return aquaLight(l, b, 0)
 }

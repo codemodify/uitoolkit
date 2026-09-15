@@ -88,6 +88,12 @@ type Engine interface {
 	// WindowCloseRect is where DrawWindowFrame put the close button for a
 	// frame of bounds b (empty when there is none) — hit-testing uses it.
 	WindowCloseRect(l *Classic, b paintengine2d.Rect) paintengine2d.Rect
+	// PopupShadow is how far the drop shadow of a floating layer (menu,
+	// list, tooltip, dialog) reaches outside its bounds; zero for none.
+	PopupShadow(l *Classic, kind PopupKind) Insets
+	// DrawPopupShadow paints that shadow around b, before the layer paints
+	// over b. It must stay within b grown by PopupShadow.
+	DrawPopupShadow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, kind PopupKind)
 
 	// ---- behaviour ------------------------------------------------------
 
@@ -501,6 +507,63 @@ func DrawScrollBarParts(lk LookAndFeel, ctx *paintengine2d.Context, p ScrollPart
 type GroupBoxLook interface {
 	GroupBoxInsets(hasTitle bool) Insets
 	DrawGroupBox(ctx *paintengine2d.Context, b paintengine2d.Rect, title string, raised bool)
+}
+
+// PopupKind says what is floating, for its drop shadow.
+type PopupKind uint8
+
+const (
+	PopupMenu    PopupKind = iota // menus, combo and completion lists
+	PopupTooltip                  // tooltips
+	PopupDialog                   // in-app windows: dialogs, message boxes
+)
+
+// PopupShadowLook drops shadows under floating layers. The window paints
+// them for its popup and tooltip layers; overlays paint their dialog's.
+type PopupShadowLook interface {
+	PopupShadow(kind PopupKind) Insets
+	DrawPopupShadow(ctx *paintengine2d.Context, b paintengine2d.Rect, kind PopupKind)
+}
+
+// PopupShadow implements [PopupShadowLook].
+func (l *Classic) PopupShadow(kind PopupKind) Insets { return l.eng().PopupShadow(l, kind) }
+
+// DrawPopupShadow implements [PopupShadowLook].
+func (l *Classic) DrawPopupShadow(ctx *paintengine2d.Context, b paintengine2d.Rect, kind PopupKind) {
+	l.eng().DrawPopupShadow(l, ctx, b, kind)
+}
+
+// PopupShadowOf is a look's shadow reach for kind (zero when it has none).
+func PopupShadowOf(lk LookAndFeel, kind PopupKind) Insets {
+	if s, ok := lk.(PopupShadowLook); ok {
+		return s.PopupShadow(kind)
+	}
+	return Insets{}
+}
+
+// DrawPopupShadowOf paints lk's shadow for a layer at b, if it has one.
+func DrawPopupShadowOf(lk LookAndFeel, ctx *paintengine2d.Context, b paintengine2d.Rect, kind PopupKind) {
+	if s, ok := lk.(PopupShadowLook); ok {
+		s.DrawPopupShadow(ctx, b, kind)
+	}
+}
+
+// Grow returns r grown by in on each side.
+func (in Insets) Grow(r paintengine2d.Rect) paintengine2d.Rect {
+	return paintengine2d.Rect{
+		Min: paintengine2d.Pt(r.Min.X-in.Left, r.Min.Y-in.Top),
+		Max: paintengine2d.Pt(r.Max.X+in.Right, r.Max.Y+in.Bottom),
+	}
+}
+
+// Zero reports whether every side is zero or less.
+func (in Insets) Zero() bool {
+	return in.Left <= 0 && in.Top <= 0 && in.Right <= 0 && in.Bottom <= 0
+}
+
+// Max is the per-side maximum of two insets.
+func (in Insets) Max(o Insets) Insets {
+	return Insets{Left: max(in.Left, o.Left), Top: max(in.Top, o.Top), Right: max(in.Right, o.Right), Bottom: max(in.Bottom, o.Bottom)}
 }
 
 // TabOutsetLook grows the selected tab so it overlaps its neighbours.
