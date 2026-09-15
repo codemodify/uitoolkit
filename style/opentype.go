@@ -171,6 +171,29 @@ func faceFor(family string, w Weight) (*otFace, error) {
 	return uiReg, nil
 }
 
+// kern is the face's pair kerning (GPOS or kern table) for r0 then r1 at
+// size, in pixels; 0 when the face has none for the pair.
+func (f *otFace) kern(r0, r1 rune, size float32) float32 {
+	if f == nil || f.font == nil {
+		return 0
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	g0, err := f.font.GlyphIndex(&f.buf, r0)
+	if err != nil || g0 == 0 {
+		return 0
+	}
+	g1, err := f.font.GlyphIndex(&f.buf, r1)
+	if err != nil || g1 == 0 {
+		return 0
+	}
+	k, err := f.font.Kern(&f.buf, g0, g1, ppem26(size), font.HintingNone)
+	if err != nil {
+		return 0
+	}
+	return fx32(k)
+}
+
 func (f *otFace) metrics(size float32) (ascent, descent float32) {
 	if f == nil || f.font == nil {
 		return size * 0.8, size * 0.2
@@ -231,6 +254,33 @@ type otAtlas struct {
 
 	cur   atomic.Pointer[paintengine2d.FontAtlas]
 	bytes atomic.Int64
+
+	// kerns caches pair kerning at this size (rune pair → pixels).
+	kernMu sync.Mutex
+	kerns  map[uint64]float32
+}
+
+// kernCap bounds the pair-kerning cache of one face and size.
+const kernCap = 4096
+
+// kern is the pair kerning between r0 and r1 at the atlas's size, in
+// pixels (negative pulls them together).
+func (a *otAtlas) kern(r0, r1 rune) float32 {
+	if a == nil || a.face == nil {
+		return 0
+	}
+	key := uint64(uint32(r0))<<32 | uint64(uint32(r1))
+	a.kernMu.Lock()
+	defer a.kernMu.Unlock()
+	if v, ok := a.kerns[key]; ok {
+		return v
+	}
+	v := a.face.kern(r0, r1, a.size)
+	if a.kerns == nil || len(a.kerns) >= kernCap {
+		a.kerns = make(map[uint64]float32, 64)
+	}
+	a.kerns[key] = v
+	return v
 }
 
 func newOTAtlas(face *otFace, size float32) *otAtlas {
