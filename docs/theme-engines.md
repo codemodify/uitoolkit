@@ -162,6 +162,23 @@ did (hover and pressed shades, the text on the accent), and recompute any
 chrome states built from the palette. Historical looks with fixed palettes
 leave it out.
 
+### Optional hooks
+
+An engine implements these only when its platform differs from the base:
+- `ViewBackground(l, st)`: what an item view's rows sit on. A sidebar
+  (`st.Sidebar()`) can have a pane of its own, such as Aqua's source list.
+- `SliderTravel(l, b)`: where the slider thumb's centre travels, so tick
+  marks and clicks line up with a thumb sized the engine's own way.
+- `DrawSliderTicks(l, ctx, b, xs, st)`: tick marks in the platform's
+  style.
+- `ComboTextRect(l, b)`: where an editable combo box (`st.Editable()`) puts
+  its field. Windows looks draw the editable box as a field with an arrow
+  button, and must not fill it with the selection colour when focused.
+- `Accented(tok, accent)`: see Accent colours above.
+- `l.WeightFont(WeightMedium)` and `WeightSemibold`: Material's medium
+  labels and Fluent's semibold headings; the installed weight, or the
+  nearest drawn heavier.
+
 ### Item views
 
 `DrawListRow`, `DrawTreeRow` and `DrawTableCell` get the item state:
