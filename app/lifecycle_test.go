@@ -203,6 +203,12 @@ func TestQuitFromAnotherGoroutineIsRaceFree(t *testing.T) {
 	}
 	w.SetContent(widgets.NewLabel("x"))
 	done := runAsync(t, a)
+	// Run clears a quit that came before it (see TestRunClearsPreviousQuit):
+	// quit once the loop is running, or a slow start (go test -race)
+	// swallows every Quit.
+	for deadline := time.Now().Add(3 * time.Second); !a.Looping() && time.Now().Before(deadline); {
+		time.Sleep(time.Millisecond)
+	}
 	var wg sync.WaitGroup
 	for i := 0; i < 8; i++ {
 		wg.Add(1)
