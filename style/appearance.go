@@ -78,6 +78,31 @@ type Appearance struct {
 	// system title bar and borders") or DecorationsToolkit (the toolkit for
 	// every window).
 	Decorations DecorationsPref
+	// CaptionButtons is where a frame uitoolkit draws puts its caption
+	// buttons: CaptionButtonsDesktop (the desktop's button layout, the
+	// default) or CaptionButtonsTheme (the look's own: the Mac's traffic
+	// lights on the left, GNOME's lone close, KDE's window menu).
+	CaptionButtons CaptionButtonsPref
+}
+
+// CaptionButtonsPref is the look.json "captionButtons" preference.
+type CaptionButtonsPref string
+
+const (
+	// CaptionButtonsDesktop is the default (the zero value; written
+	// "desktop" or left out of look.json).
+	CaptionButtonsDesktop CaptionButtonsPref = ""
+	CaptionButtonsTheme   CaptionButtonsPref = "theme"
+)
+
+// ParseCaptionButtonsPref accepts desktop / theme (and look); anything else
+// is the desktop's layout.
+func ParseCaptionButtonsPref(s string) CaptionButtonsPref {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "theme", "look":
+		return CaptionButtonsTheme
+	}
+	return CaptionButtonsDesktop
 }
 
 // DecorationsPref is the look.json "decorations" preference.
@@ -199,6 +224,7 @@ func (a Appearance) Normalize() Appearance {
 	a.Icons = ParseIconSet(string(a.Icons))
 	a.IconSize = ParseIconSize(string(a.IconSize))
 	a.Decorations = ParseDecorationsPref(string(a.Decorations))
+	a.CaptionButtons = ParseCaptionButtonsPref(string(a.CaptionButtons))
 	if strings.TrimSpace(a.Name) == "" {
 		a.Name = StarterName(a.Theme)
 	}

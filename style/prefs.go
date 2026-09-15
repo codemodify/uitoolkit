@@ -36,6 +36,8 @@ type appearanceFileJSON struct {
 	NativeDialogs bool `json:"nativeDialogs,omitempty"`
 	// Decorations: "auto" (omitted), "system" or "toolkit".
 	Decorations string `json:"decorations,omitempty"`
+	// CaptionButtons: "desktop" (omitted) or "theme".
+	CaptionButtons string `json:"captionButtons,omitempty"`
 }
 
 // ConfigDir is $XDG_CONFIG_HOME/uitoolkit (or ~/.config/uitoolkit).
@@ -118,6 +120,7 @@ func resolveAppearance(raw appearanceFileJSON) Appearance {
 	a.FollowDesktop = raw.FollowDesktop
 	a.NativeDialogs = raw.NativeDialogs
 	a.Decorations = ParseDecorationsPref(raw.Decorations)
+	a.CaptionButtons = ParseCaptionButtonsPref(raw.CaptionButtons)
 	return a.Normalize()
 }
 
@@ -163,10 +166,11 @@ func SaveAppearance(a Appearance) error {
 		Icons:    string(a.Icons),
 		IconSize: string(a.IconSize),
 
-		ReduceMotion:  a.ReduceMotion,
-		FollowDesktop: a.FollowDesktop,
-		NativeDialogs: a.NativeDialogs,
-		Decorations:   decorationsJSON(a.Decorations),
+		ReduceMotion:   a.ReduceMotion,
+		FollowDesktop:  a.FollowDesktop,
+		NativeDialogs:  a.NativeDialogs,
+		Decorations:    decorationsJSON(a.Decorations),
+		CaptionButtons: string(ParseCaptionButtonsPref(string(a.CaptionButtons))),
 	})
 }
 

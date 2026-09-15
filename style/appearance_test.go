@@ -324,3 +324,26 @@ func TestDecorationsPrefRoundTrip(t *testing.T) {
 		t.Fatalf("auto is left out of look.json: %s", raw)
 	}
 }
+
+func TestCaptionButtonsPrefRoundTrip(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	for in, want := range map[string]CaptionButtonsPref{
+		"theme": CaptionButtonsTheme, "look": CaptionButtonsTheme, "desktop": CaptionButtonsDesktop,
+		"": CaptionButtonsDesktop, "bogus": CaptionButtonsDesktop,
+	} {
+		if got := ParseCaptionButtonsPref(in); got != want {
+			t.Errorf("ParseCaptionButtonsPref(%q) = %q want %q", in, got, want)
+		}
+	}
+	ap := DefaultAppearance()
+	if ap.CaptionButtons != CaptionButtonsDesktop {
+		t.Fatalf("default %q", ap.CaptionButtons)
+	}
+	ap.CaptionButtons = CaptionButtonsTheme
+	if err := SaveAppearance(ap); err != nil {
+		t.Fatal(err)
+	}
+	if got := LoadAppearance().CaptionButtons; got != CaptionButtonsTheme {
+		t.Fatalf("loaded %q", got)
+	}
+}

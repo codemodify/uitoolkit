@@ -135,6 +135,7 @@ func (a *Application) ApplyAppearance(ap style.Appearance) {
 	style.SetNativeDialogs(ap.NativeDialogs)
 	if !a.headless {
 		a.setDecorationsPref(ap.Decorations)
+		a.SetCaptionButtons(ap.CaptionButtons)
 	}
 	a.following = ap.FollowDesktop
 	if a.look == nil {

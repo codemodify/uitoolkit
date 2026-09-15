@@ -112,6 +112,11 @@ func (w *Window) applyLook(base style.LookAndFeel) {
 		return
 	}
 	w.look = lookAtScale(base, w.scale)
+	if w.caption != nil {
+		// The frame is the new look's (and, with the theme's button
+		// layout, so are the caption buttons' places).
+		w.rebuildCaption()
+	}
 	w.RequestLayout()
 }
 

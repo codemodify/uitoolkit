@@ -885,3 +885,34 @@ func TestBrowserTabsInTheTitleBar(t *testing.T) {
 		t.Fatal("page tabs in the title bar's accessible tree")
 	}
 }
+
+// "captionButtons": "theme" puts the caption buttons where the look does
+// (the Mac's traffic lights on the left), and follows a change of look.
+func TestThemeCaptionButtons(t *testing.T) {
+	r := newFrameRig(t, platform.DecorationsClient)
+	mac, ok := style.LoadTheme("bigsur")
+	if !ok {
+		t.Fatal("no bigsur pack")
+	}
+	r.a.SetLook(mac.Look())
+	r.a.SetCaptionButtons(style.CaptionButtonsTheme)
+	r.a.PumpOnce()
+	left, right := r.hb.Controls()
+	if got := left.Shown(); len(got) != 3 || got[0] != platform.CaptionClose || len(right.Shown()) != 0 {
+		t.Fatalf("theme layout: left %v right %v", got, right.Shown())
+	}
+	// Another look, another layout: Windows 11 keeps them on the right.
+	win11, _ := style.LoadTheme("fluent")
+	r.a.SetLook(win11.Look())
+	r.a.PumpOnce()
+	if got := right.Shown(); len(got) != 3 || got[2] != platform.CaptionClose || len(left.Shown()) != 0 {
+		t.Fatalf("fluent's layout: left %v right %v", left.Shown(), got)
+	}
+	// Back to the desktop's layout.
+	r.a.SetLook(mac.Look())
+	r.a.SetCaptionButtons(style.CaptionButtonsDesktop)
+	r.a.PumpOnce()
+	if len(left.Shown()) != 0 || len(right.Shown()) != 3 {
+		t.Fatalf("desktop layout: left %v right %v", left.Shown(), right.Shown())
+	}
+}
