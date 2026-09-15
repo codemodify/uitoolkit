@@ -1,6 +1,10 @@
 package widgets
 
 import (
+	"math"
+	"os"
+	"time"
+
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/layout"
 	"github.com/codemodify/uitoolkit/platform"
@@ -22,6 +26,7 @@ type Button struct {
 	// Qt's QAbstractButton / Win32 BUTTON behaviour.
 	outside bool
 	fade    stateFade // hover / focus cross-fade (the look's HintHoverFadeMs)
+	pulsing bool      // a default-button pulse frame is scheduled
 }
 
 func (b *Button) Tooltip() string { return b.Tip }
@@ -62,7 +67,43 @@ func (b *Button) Arrange(r paintengine2d.Rect) { b.SetBounds(r) }
 
 func (b *Button) Paint(ctx *paintengine2d.Context) {
 	lk, r := b.Look(), b.LocalBounds()
-	b.fade.paint(b, ctx, r, b.PaintState(), func(ctx *paintengine2d.Context, st style.ControlState) { lk.DrawButton(ctx, r, st, b.Text) })
+	b.fade.paint(b, ctx, r, b.PaintState(), func(ctx *paintengine2d.Context, st style.ControlState) {
+		if p, ok := b.pulse(st); ok {
+			// The default button swells toward its hover look and back.
+			ctx.DrawCrossFade(r, p,
+				func(ctx *paintengine2d.Context) { lk.DrawButton(ctx, r, st, b.Text) },
+				func(ctx *paintengine2d.Context) { lk.DrawButton(ctx, r, st|style.StateHovered, b.Text) })
+			return
+		}
+		lk.DrawButton(ctx, r, st, b.Text)
+	})
+}
+
+// pulseFrame is how often a pulsing default button repaints.
+const pulseFrame = 40 * time.Millisecond
+
+// pulse is how far the default button has swollen toward its hover look,
+// for looks whose default button pulses (style.HintDefaultPulseMs), and
+// asks for the next frame. Only a resting default button in an active
+// window pulses.
+func (b *Button) pulse(st style.ControlState) (float32, bool) {
+	if !st.Primary() || st&(style.StateHovered|style.StatePressed|style.StateDisabled|style.StateBackdrop) != 0 {
+		return 0, false
+	}
+	ms := style.LookHint(b.Look(), style.HintDefaultPulseMs)
+	if ms <= 0 || os.Getenv(AnimationsEnv) == "0" {
+		return 0, false
+	}
+	period := time.Duration(ms) * time.Millisecond
+	t := float64(fadeNow().UnixNano()%int64(period)) / float64(period)
+	if !b.pulsing {
+		b.pulsing = true
+		widget.After(b, pulseFrame, func() {
+			b.pulsing = false
+			b.Invalidate()
+		})
+	}
+	return float32(0.5-0.5*math.Cos(2*math.Pi*t)) * 0.8, true
 }
 
 func (b *Button) MouseEnter() { b.hovered = true; b.Base.MouseEnter() }

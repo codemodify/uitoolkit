@@ -217,6 +217,11 @@ const (
 	// 200ms button transitions, WinUI's 83ms); 0 switches at once, as the
 	// older eras did. Presses never fade.
 	HintHoverFadeMs
+	// HintDefaultPulseMs: the period, in milliseconds, of the default
+	// button's pulse in an active window (Mac OS X's throbbing blue,
+	// Vista's breathing glow): it swells toward its hover look and back.
+	// 0: a still default button.
+	HintDefaultPulseMs
 )
 
 // LookHint reads a style hint from any look (0 for non-engine looks).
