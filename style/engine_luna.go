@@ -67,7 +67,8 @@ func (lunaEngine) ID() string { return "luna" }
 // corners.
 func (lunaEngine) DefaultMetrics() ChromeMetrics {
 	return ChromeMetrics{
-		Radius: 3, RadiusSmall: 3,
+		ViewFrame: 1,
+		Radius:    3, RadiusSmall: 3,
 		ControlH: 30, FieldH: 28, ComboH: 28,
 		Checkbox: 13, Radio: 13,
 		MenuItemH: 26, MenuBarH: 26, TabH: 28, RowH: 22,

@@ -38,16 +38,19 @@ type TableView struct {
 	OnContext  func(row int, windowPos paintengine2d.Point)
 	Mono       bool
 	OffsetY    float32
-	hovered    int
-	hoverCol   int
-	pressCol   int
-	resizeCol  int
-	resizeX    float32
-	resizeW    float32
-	vbar       scrollDrag
-	rows       rowSceneCache
-	lastRow    int
-	lastAt     time.Time
+	// Frameless drops the look's view frame (a table that already sits in
+	// a framed pane).
+	Frameless bool
+	hovered   int
+	hoverCol  int
+	pressCol  int
+	resizeCol int
+	resizeX   float32
+	resizeW   float32
+	vbar      scrollDrag
+	rows      rowSceneCache
+	lastRow   int
+	lastAt    time.Time
 }
 
 // doubleClickInterval is the window for a second press on the same row to
@@ -106,6 +109,12 @@ func (t *TableView) headerH() float32 {
 
 func (t *TableView) contentH() float32 { return float32(t.RowCount) * t.rowH() }
 
+// frame is the look's view frame around the table (zero on flat looks).
+func (t *TableView) frame() style.Insets { return viewFrame(t.Look(), t.Frameless) }
+
+// inner is the viewport in view space (inside the frame): header + body.
+func (t *TableView) inner() paintengine2d.Rect { return viewInner(t.LocalBounds(), t.frame()) }
+
 // MaxOffset is max(0, content − body viewport).
 func (t *TableView) MaxOffset() float32 {
 	return layout.MaxScroll(t.contentH(), t.bodyH())
@@ -116,7 +125,7 @@ func (t *TableView) clamp() {
 }
 
 func (t *TableView) vparts() style.ScrollParts {
-	return vScrollParts(t.Look(), paintengine2d.XYWH(0, t.headerH(), t.LocalBounds().Dx(), t.bodyH()), t.contentH(), t.OffsetY)
+	return vScrollParts(t.Look(), paintengine2d.XYWH(0, t.headerH(), t.inner().Dx(), t.bodyH()), t.contentH(), t.OffsetY)
 }
 
 func (t *TableView) vaxis() scrollAxis {
@@ -131,12 +140,13 @@ func (t *TableView) vaxis() scrollAxis {
 
 // rowsW is the row width: the view minus the gutter a visible bar takes.
 func (t *TableView) rowsW() float32 {
-	return t.LocalBounds().Dx() - scrollGutter(t.Look(), t.MaxOffset() > 0)
+	return t.inner().Dx() - scrollGutter(t.Look(), t.MaxOffset() > 0)
 }
 
 func (t *TableView) scrollTrack() (track, thumb paintengine2d.Rect) {
 	sp := t.vparts()
-	return sp.Track, sp.Thumb
+	in := t.frame()
+	return fromView(sp.Track, in), fromView(sp.Thumb, in)
 }
 
 // VisibleRange is the half-open [lo, hi) window of body rows that Paint draws.
@@ -153,7 +163,7 @@ func (t *TableView) ScrollTrack() (track, thumb paintengine2d.Rect) { return t.s
 
 // RowBounds is the current on-screen rect of row i (may sit above the header
 // in local space; Paint clips it to the body).
-func (t *TableView) RowBounds(i int) paintengine2d.Rect { return t.rowRect(i) }
+func (t *TableView) RowBounds(i int) paintengine2d.Rect { return fromView(t.rowRect(i), t.frame()) }
 
 // ScrollTo sets OffsetY (clamped) without requiring a wheel event.
 func (t *TableView) ScrollTo(y float32) {
@@ -163,7 +173,7 @@ func (t *TableView) ScrollTo(y float32) {
 }
 
 func (t *TableView) bodyH() float32 {
-	h := t.LocalBounds().Dy() - t.headerH()
+	h := t.inner().Dy() - t.headerH()
 	if h < 0 {
 		return 0
 	}
@@ -348,8 +358,8 @@ func (t *TableView) colEdgeAt(x float32) int {
 	return -1
 }
 
-// ColumnDividerAt is the column whose right edge is near x, or -1.
-func (t *TableView) ColumnDividerAt(x float32) int { return t.colEdgeAt(x) }
+// ColumnDividerAt is the column whose right edge is near local x, or -1.
+func (t *TableView) ColumnDividerAt(x float32) int { return t.colEdgeAt(x - t.frame().Left) }
 
 // ResizingColumn is the header divider being dragged, or -1.
 func (t *TableView) ResizingColumn() int { return t.resizeCol }
@@ -359,7 +369,8 @@ func (t *TableView) CursorAt(local paintengine2d.Point) platform.Cursor {
 	if t.resizeCol >= 0 {
 		return platform.CursorColResize
 	}
-	if local.Y >= 0 && local.Y < t.headerH() && t.colEdgeAt(local.X) >= 0 {
+	p := toView(local, t.frame())
+	if p.Y >= 0 && p.Y < t.headerH() && t.colEdgeAt(p.X) >= 0 {
 		return platform.CursorColResize
 	}
 	return platform.CursorDefault
@@ -460,8 +471,11 @@ func (t *TableView) visibleRange() (lo, hi int) {
 
 func (t *TableView) Paint(ctx *paintengine2d.Context) {
 	t.clamp()
-	b := t.LocalBounds()
 	lk := t.Look()
+	if beginViewFrame(ctx, lk, t.LocalBounds(), t.frame(), t.State()) {
+		defer ctx.Restore()
+	}
+	b := t.inner()
 	rw := t.rowsW()
 	hh := t.headerH()
 	ctx.DrawRect(b, paintengine2d.Fill(lk.Palette().Field))
@@ -536,7 +550,7 @@ func (t *TableView) rowRect(i int) paintengine2d.Rect {
 	}
 	rh := t.rowH()
 	y := t.headerH() + float32(i)*rh - t.OffsetY
-	return paintengine2d.XYWH(0, y, t.LocalBounds().Dx(), rh)
+	return paintengine2d.XYWH(0, y, t.inner().Dx(), rh)
 }
 
 // Invalidate drops retained row scenes so CellText / flag changes
@@ -548,7 +562,7 @@ func (t *TableView) Invalidate() {
 
 func (t *TableView) invalidateRow(i int) {
 	if r := t.rowRect(i); !r.Empty() {
-		t.InvalidateRect(r.Inset(-1))
+		t.InvalidateRect(fromView(r, t.frame()).Inset(-1))
 	}
 }
 
@@ -557,18 +571,19 @@ func (t *TableView) invalidateHeader() {
 	if hh <= 0 {
 		return
 	}
-	t.InvalidateRect(paintengine2d.XYWH(0, 0, t.LocalBounds().Dx(), hh).Inset(-1))
+	t.InvalidateRect(fromView(paintengine2d.XYWH(0, 0, t.inner().Dx(), hh), t.frame()).Inset(-1))
 }
 
 func (t *TableView) MouseEnter() {}
 
 func (t *TableView) MouseMove(e widget.MouseEvent) bool {
+	p := toView(e.Pos, t.frame())
 	if t.resizeCol >= 0 {
-		t.setColWidthPx(t.resizeCol, t.resizeW+(e.Pos.X-t.resizeX))
+		t.setColWidthPx(t.resizeCol, t.resizeW+(p.X-t.resizeX))
 		t.applyCursor(e.Pos)
 		return true
 	}
-	if handled, dirty := t.vbar.move(e.Pos, t.vaxis()); handled || dirty {
+	if handled, dirty := t.vbar.move(p, t.vaxis()); handled || dirty {
 		if dirty {
 			t.Invalidate()
 		}
@@ -576,9 +591,9 @@ func (t *TableView) MouseMove(e widget.MouseEvent) bool {
 			return true
 		}
 	}
-	if e.Pos.Y < t.headerH() {
+	if p.Y < t.headerH() {
 		t.applyCursor(e.Pos)
-		c := t.colAt(e.Pos.X)
+		c := t.colAt(p.X)
 		if c != t.hoverCol || t.hovered != -1 {
 			oldRow := t.hovered
 			t.hoverCol = c
@@ -588,7 +603,10 @@ func (t *TableView) MouseMove(e widget.MouseEvent) bool {
 		}
 		return true
 	}
-	h := t.indexAt(e.Pos.Y)
+	h := t.indexAt(p.Y)
+	if p.Y >= t.inner().Dy() {
+		h = -1
+	}
 	if h != t.hovered || t.hoverCol != -1 {
 		oldRow, oldCol := t.hovered, t.hoverCol
 		t.hovered = h
@@ -620,22 +638,23 @@ func (t *TableView) MouseExit() {
 
 func (t *TableView) MousePress(e widget.MouseEvent) bool {
 	t.RequestFocus()
-	if t.vbar.press(t, e.Pos, t.vaxis()) {
+	p := toView(e.Pos, t.frame())
+	if t.vbar.press(t, p, t.vaxis()) {
 		t.Invalidate()
 		return true
 	}
-	if e.Pos.Y < t.headerH() {
-		if edge := t.colEdgeAt(e.Pos.X); edge >= 0 {
+	if p.Y < t.headerH() {
+		if edge := t.colEdgeAt(p.X); edge >= 0 {
 			widths := t.colWidths()
 			t.resizeCol = edge
-			t.resizeX = e.Pos.X
+			t.resizeX = p.X
 			t.resizeW = widths[edge]
 			t.pressCol = -1
 			t.applyCursor(e.Pos)
 			t.Invalidate()
 			return true
 		}
-		c := t.colAt(e.Pos.X)
+		c := t.colAt(p.X)
 		t.pressCol = c
 		if c >= 0 && c < len(t.Columns) && t.Columns[c].Sortable {
 			t.sortBy(c)
@@ -643,7 +662,10 @@ func (t *TableView) MousePress(e widget.MouseEvent) bool {
 		t.Invalidate()
 		return true
 	}
-	i := t.indexAt(e.Pos.Y)
+	i := t.indexAt(p.Y)
+	if p.Y >= t.inner().Dy() {
+		i = -1
+	}
 	if i >= 0 {
 		t.Selected = i
 		t.Invalidate()

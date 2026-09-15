@@ -56,6 +56,11 @@ gets the era right:
 - **Frames** — `GroupBoxInsets/DrawGroupBox` (titled frames),
   `WindowFrameInsets/DrawWindowFrame` (in-app dialogs: caption, close),
   `DrawWindowBackground` (pinstripes, brushed metal) and `DrawTabPane`.
+- **View frames** — `ViewFrameInsets` / `DrawViewFrame` frame lists,
+  trees and tables (Qt's `PE_Frame`). By default the frame is the engine's
+  own field face, as thick as the `viewFrame` metric (Win95 2px sunken,
+  Luna and Aqua 1px, flat looks 0). Views work inside it; `Frameless`
+  opts a view out when its pane is already framed.
 - **Tabs** — `TabOutset` grows the selected tab, which the tab bar paints
   last, so it overlaps its neighbours (Win95 and XP: 2px each side).
 - **Shadows** — `PopupShadow(kind)` is how far a floating layer's drop
@@ -146,7 +151,7 @@ state bitset (`Hovered`, `Pressed`, `Disabled`, `Focused`, `Checked`,
 {
   "label": "Luna Blue", "family": "light", "engine": "luna",
   "year": 2001, "lineage": "Windows", "summary": "Windows XP default.",
-  "metrics": { "controlH": 28, "scroll": 17, "radius": 3, "square": false },
+  "metrics": { "controlH": 28, "scroll": 17, "radius": 3, "square": false, "viewFrame": 1 },
   "colors":  { "background": "#ece9d8", "accent": "#316ac5", "selection": "#316ac5" },
   "extra":   { "btnTop": "#ffffff", "btnBottom": "#d6d0c5", "hot": "#f8b330" },
   "params":  { "glossy": 1 }

@@ -88,6 +88,12 @@ type Engine interface {
 	// WindowCloseRect is where DrawWindowFrame put the close button for a
 	// frame of bounds b (empty when there is none) — hit-testing uses it.
 	WindowCloseRect(l *Classic, b paintengine2d.Rect) paintengine2d.Rect
+	// ViewFrameInsets is the frame around scrolling views (lists, trees,
+	// tables): Win95's sunken well, a hairline, or zero (flat).
+	ViewFrameInsets(l *Classic) Insets
+	// DrawViewFrame paints the view's background and that frame over b,
+	// the whole view; rows then paint inside the insets.
+	DrawViewFrame(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState)
 	// PopupShadow is how far the drop shadow of a floating layer (menu,
 	// list, tooltip, dialog) reaches outside its bounds; zero for none.
 	PopupShadow(l *Classic, kind PopupKind) Insets
@@ -507,6 +513,35 @@ func DrawScrollBarParts(lk LookAndFeel, ctx *paintengine2d.Context, p ScrollPart
 type GroupBoxLook interface {
 	GroupBoxInsets(hasTitle bool) Insets
 	DrawGroupBox(ctx *paintengine2d.Context, b paintengine2d.Rect, title string, raised bool)
+}
+
+// ViewFrameLook frames scrolling views (Qt's PE_Frame around item views).
+type ViewFrameLook interface {
+	ViewFrameInsets() Insets
+	DrawViewFrame(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState)
+}
+
+// ViewFrameInsets implements [ViewFrameLook].
+func (l *Classic) ViewFrameInsets() Insets { return l.eng().ViewFrameInsets(l) }
+
+// DrawViewFrame implements [ViewFrameLook].
+func (l *Classic) DrawViewFrame(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState) {
+	l.eng().DrawViewFrame(l, ctx, b, st)
+}
+
+// ViewFrameInsetsOf is a look's view frame (zero when it has none).
+func ViewFrameInsetsOf(lk LookAndFeel) Insets {
+	if v, ok := lk.(ViewFrameLook); ok {
+		return v.ViewFrameInsets()
+	}
+	return Insets{}
+}
+
+// DrawViewFrameOf paints lk's view frame over b, if it has one.
+func DrawViewFrameOf(lk LookAndFeel, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState) {
+	if v, ok := lk.(ViewFrameLook); ok {
+		v.DrawViewFrame(ctx, b, st)
+	}
 }
 
 // PopupKind says what is floating, for its drop shadow.

@@ -85,6 +85,7 @@ type ChromeMetrics struct {
 	FocusWidth float32
 	SwitchW    float32
 	SwitchH    float32
+	ViewFrame  float32 // frame around list / tree / table views
 }
 
 // MergeChromeMetrics fills every zero field of over from base (over wins).
@@ -113,6 +114,7 @@ func MergeChromeMetrics(base, over ChromeMetrics) ChromeMetrics {
 	out.MenuItemH = pick(base.MenuItemH, over.MenuItemH)
 	out.MenuBarH = pick(base.MenuBarH, over.MenuBarH)
 	out.TabH = pick(base.TabH, over.TabH)
+	out.ViewFrame = pick(base.ViewFrame, over.ViewFrame)
 	out.RowH = pick(base.RowH, over.RowH)
 	out.TitleBar = pick(base.TitleBar, over.TitleBar)
 	out.HeaderH = pick(base.HeaderH, over.HeaderH)
@@ -326,6 +328,7 @@ func ApplyChromeMetrics(m Metrics, cm ChromeMetrics) Metrics {
 	set(&m.MenuItemH, cm.MenuItemH)
 	set(&m.MenuBarH, cm.MenuBarH)
 	set(&m.TabH, cm.TabH)
+	set(&m.ViewFrame, cm.ViewFrame)
 	set(&m.RowH, cm.RowH)
 	set(&m.TitleBar, cm.TitleBar)
 	set(&m.HeaderH, cm.HeaderH)
@@ -509,6 +512,7 @@ type chromeMetricsJSON struct {
 	FocusWidth  *float32 `json:"focusWidth,omitempty"`
 	SwitchW     *float32 `json:"switchW,omitempty"`
 	SwitchH     *float32 `json:"switchH,omitempty"`
+	ViewFrame   *float32 `json:"viewFrame,omitempty"`
 }
 
 // geometry pairs the engine-level JSON fields with their ChromeMetrics
@@ -528,6 +532,7 @@ func (j *chromeMetricsJSON) geometry(cm *ChromeMetrics) []struct {
 		{"menuItemH", &j.MenuItemH, &cm.MenuItemH},
 		{"menuBarH", &j.MenuBarH, &cm.MenuBarH},
 		{"tabH", &j.TabH, &cm.TabH},
+		{"viewFrame", &j.ViewFrame, &cm.ViewFrame},
 		{"rowH", &j.RowH, &cm.RowH},
 		{"titleBar", &j.TitleBar, &cm.TitleBar},
 		{"headerH", &j.HeaderH, &cm.HeaderH},

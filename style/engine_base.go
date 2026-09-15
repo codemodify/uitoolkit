@@ -1,6 +1,10 @@
 package style
 
-import "github.com/codemodify/paintengine2d"
+import (
+	"math"
+
+	"github.com/codemodify/paintengine2d"
+)
 
 // BaseEngine is the stock painter: the five legacy bevel languages
 // (classic-3d, luna-hottrack, soft-shadow, fluent-accent, none) driven by
@@ -143,6 +147,22 @@ func (BaseEngine) DrawWindowFrame(l *Classic, ctx *paintengine2d.Context, b pain
 		}
 		DrawCross(ctx, cb.Inset(cb.Dx()*0.3), fg, l.S(1.4))
 	}
+}
+
+// ViewFrameInsets: the ViewFrame metric on every side, in whole pixels so
+// rows never overlap the frame's lines (the stock looks keep 0: flat).
+func (BaseEngine) ViewFrameInsets(l *Classic) Insets {
+	v := float32(math.Ceil(float64(l.metrics.ViewFrame)))
+	return Insets{Top: v, Right: v, Bottom: v, Left: v}
+}
+
+// DrawViewFrame: a view is framed like a text field (the look's field
+// face) unless the look has no frame.
+func (BaseEngine) DrawViewFrame(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState) {
+	if l.eng().ViewFrameInsets(l).Zero() {
+		return
+	}
+	l.eng().Face(l, ctx, b, RoleField, st&^(StateHovered|StatePressed))
 }
 
 // PopupShadow: the stock looks float menus, tooltips and dialogs on a soft
