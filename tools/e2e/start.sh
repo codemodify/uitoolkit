@@ -11,6 +11,11 @@ rm -f "/run/user/$(id -u)/uitk-e2e-$N" "/run/user/$(id -u)/uitk-e2e-$N.lock"
 before=$(ls /tmp/.X11-unix/)
 (
   export KWIN_SCREENSHOT_NO_PERMISSION_CHECKS=1 KWIN_WAYLAND_NO_PERMISSION_CHECKS=1
+  # KWin's own settings stay in the instance: with the user's config dir a
+  # nested session saved its virtual output (and any kscreen-doctor scale)
+  # into their real ~/.config/kwinoutputconfig.json.
+  export XDG_CONFIG_HOME="$D/kwin-config" XDG_CACHE_HOME="$D/kwin-cache"
+  mkdir -p "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME"
   unset DISPLAY WAYLAND_DISPLAY
   exec setsid dbus-run-session -- bash -c "echo \$DBUS_SESSION_BUS_ADDRESS > '$D/bus.addr'; exec kwin_wayland --virtual --no-lockscreen --no-global-shortcuts --socket uitk-e2e-$N --xwayland --width $W --height $H --scale $S"
 ) > "$D/kwin.log" 2>&1 &
