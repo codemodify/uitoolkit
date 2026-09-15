@@ -78,6 +78,7 @@ func (a *Application) watchDesktop() (wait func()) {
 		r := <-ch
 		a.desktopStop = r.stop
 		if r.ok {
+			a.desktop = r.prefs
 			style.SetDesktopReduceMotion(r.prefs.ReducedMotion)
 			if !a.schemeForced {
 				style.SetDesktopColorScheme(styleScheme(r.prefs.ColorScheme))
@@ -92,6 +93,13 @@ func (a *Application) watchDesktop() (wait func()) {
 // desktopPrefsChanged applies a change of the desktop's preferences on the
 // UI goroutine.
 func (a *Application) desktopPrefsChanged(p platform.DesktopPrefs) {
+	was := a.desktop
+	a.desktop = p
+	if was.ButtonLayout != p.ButtonLayout || was.TitlebarDoubleClick != p.TitlebarDoubleClick ||
+		was.TitlebarMiddleClick != p.TitlebarMiddleClick || was.TitlebarRightClick != p.TitlebarRightClick ||
+		was.DoubleClickTime != p.DoubleClickTime || was.DragThreshold != p.DragThreshold {
+		a.reloadTitleBarPrefs()
+	}
 	style.SetDesktopReduceMotion(p.ReducedMotion)
 	changed := false
 	if s := styleScheme(p.ColorScheme); !a.schemeForced && style.DesktopColorScheme() != s {
@@ -125,6 +133,9 @@ func (a *Application) ApplyAppearance(ap style.Appearance) {
 	}
 	style.SetReduceMotion(ap.ReduceMotion)
 	style.SetNativeDialogs(ap.NativeDialogs)
+	if !a.headless {
+		a.setDecorationsPref(ap.Decorations)
+	}
 	a.following = ap.FollowDesktop
 	if a.look == nil {
 		a.SetLook(ap.Look())

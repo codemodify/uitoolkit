@@ -45,17 +45,19 @@ never needs those libraries.
 ## Cursors (0.18.2)
 
 Pointer shapes are **host-provided**. `platform.Cursor` stays a small
-logical enum (`default`, `col-resize`, `row-resize`, `text`). Widgets
-(`TableView` column dividers, `Splitter` sash, text fields) call
-`Window.SetCursor`; each backend maps that to the compositor or OS
-theme. uitoolkit does not draw 24×24 ARGB cursor glyphs.
+logical enum (`default`, `col-resize`, `row-resize`, `text`, the eight
+window-edge resize shapes `n-resize` … `sw-resize`, `move`, `grab`,
+`grabbing`). Widgets (`TableView` column dividers, `Splitter` sash, text
+fields) and the window frame's resize edges (`Edges.ResizeCursor`) call
+`Window.SetCursor`; each backend maps that to the compositor or OS theme.
+uitoolkit does not draw 24×24 ARGB cursor glyphs.
 
 | Backend | How |
 | --- | --- |
-| Wayland | Prefer `wp_cursor_shape_manager_v1` (`default`, `col_resize`, `row_resize`, `text`). Else `wl_cursor_theme_load` from `XCURSOR_THEME` / `XCURSOR_SIZE` and `wl_pointer_set_cursor` with the theme buffer. Both need a pointer-enter serial. |
-| X11 | `XcursorLibraryLoadCursor` (`left_ptr`, `sb_h_double_arrow`, `sb_v_double_arrow`, `xterm`) when libXcursor is available, else `XCreateFontCursor` (`XC_left_ptr`, `XC_sb_h_double_arrow`, `XC_sb_v_double_arrow`, `XC_xterm`). |
-| Win32 | `LoadCursorW` + `SetCursor` with `IDC_ARROW`, `IDC_SIZEWE`, `IDC_SIZENS`, `IDC_IBEAM`. |
-| AppKit | `NSCursor` `arrowCursor`, `resizeLeftRightCursor`, `resizeUpDownCursor`, `IBeamCursor`. |
+| Wayland | Prefer `wp_cursor_shape_manager_v1` (`default`, `col_resize`, `row_resize`, `text`, `n_resize` … `sw_resize`, `move`, `grab`, `grabbing`). Else `wl_cursor_theme_load` from `XCURSOR_THEME` / `XCURSOR_SIZE` and `wl_pointer_set_cursor` with the theme buffer (CSS names such as `n-resize`, then the legacy `top_side` …). Both need a pointer-enter serial. |
+| X11 | `XcursorLibraryLoadCursor` (`left_ptr`, `sb_h_double_arrow`, `sb_v_double_arrow`, `xterm`, `top_side` … `bottom_left_corner`, `fleur`) when libXcursor is available, else `XCreateFontCursor` (`XC_left_ptr`, `XC_sb_h_double_arrow`, `XC_sb_v_double_arrow`, `XC_xterm`, `XC_top_side` … `XC_bottom_left_corner`, `XC_fleur`). |
+| Win32 | `LoadCursorW` + `SetCursor` with `IDC_ARROW`, `IDC_SIZEWE`, `IDC_SIZENS`, `IDC_SIZENWSE`, `IDC_SIZENESW`, `IDC_SIZEALL`, `IDC_HAND`, `IDC_IBEAM`. |
+| AppKit | `NSCursor` `arrowCursor`, `resizeLeftRightCursor`, `resizeUpDownCursor`, `IBeamCursor` (no public diagonal resize cursors: corners keep the arrow). |
 | offscreen | Records the last logical `SetCursor` (tests / screenshots). |
 
 ## X11 notes (0.3.0 / 0.5.0)
@@ -76,7 +78,21 @@ theme. uitoolkit does not draw 24×24 ARGB cursor glyphs.
 - Resize uses `NorthWestGravity`, `XResizeWindow`, and a rebuilt pixmap;
   the toolkit full-repaints so expose after configure is not garbage.
 - EWMH: `Window.SetFullscreen` / `SetMaximized` send `_NET_WM_STATE`.
-  Close is `WM_DELETE_WINDOW`.
+  Close is `WM_DELETE_WINDOW`. The window's own `_NET_WM_STATE` and
+  `_NET_WM_ALLOWED_ACTIONS` are read back on `PropertyNotify`
+  (`EventWindowState`, `EventCapabilities`): maximized, full screen,
+  hidden, one-way maximize as tiled edges, and activated from
+  `_NET_WM_STATE_FOCUSED` (focus events where the window manager does not
+  set it).
+- Window frames (see [decorations.md](decorations.md)): a toolkit-drawn
+  frame sets `_MOTIF_WM_HINTS` {flags 2, decorations 0} before the window
+  is mapped (removed again for the window manager's frame); button presses
+  keep their root position, button and time, and `StartSystemMove` /
+  `StartSystemResize` ungrab the pointer and send `_NET_WM_MOVERESIZE`
+  (move 8, edges 0–7) to the root when `_NET_SUPPORTED` lists it; the
+  window menu is `_GTK_SHOW_WINDOW_MENU`; `Minimize` is `XIconifyWindow`.
+  `Hide` keeps a window unmapped until `Show` (a repaint used to map it
+  again).
 - `ClipboardSet` owns **CLIPBOARD** and **PRIMARY**. `ClipboardGet`
   converts UTF8_STRING (then XA_STRING). Transfers larger than
   `UITK_X11_INCR_THRESHOLD` (default 16KiB, or ¼ of `XMaxRequestSize`)
@@ -177,11 +193,18 @@ request `EGL_ALPHA_SIZE` 0.
   `zwp_primary_selection_device_manager_v1`,
   `zxdg_decoration_manager_v1`, `wp_fractional_scale_manager_v1`,
   `wp_viewporter`, `xdg_activation_v1`, `wp_cursor_shape_manager_v1`.
-- Each window is an `xdg_toplevel`. Configure width/height are
-  surface-local (logical); the present buffer is `ceil(logical * scale)`.
-  States maximized / fullscreen / resizing / activated are parsed.
-  `xdg_toplevel.close` is `EventClose`. Server-side decorations are
-  requested when `xdg-decoration` is present.
+- Each window is an `xdg_toplevel`; `xdg_wm_base` is bound up to v6.
+  Configure width/height are surface-local (logical); the present buffer
+  is `ceil(logical * scale)`. The toplevel's states (maximized,
+  fullscreen, resizing, activated, the four tiled edges, suspended) and
+  `wm_capabilities` are applied with the `xdg_surface.configure` that
+  follows them and reported as `EventWindowState` / `EventCapabilities`
+  (`Window.WindowState()`); `activated` drives the window's active /
+  backdrop look. `configure_bounds` keeps a window the client sizes
+  itself inside the work area. `xdg_toplevel.close` is `EventClose`.
+  Decorations are negotiated with `xdg-decoration` (see
+  [decorations.md](decorations.md)): a mode is always requested and the
+  compositor's `configure(mode)` answer is obeyed.
 - When `UITK_PAINT=auto|gpu` and EGL init succeeds, present is
   **`wl_egl_window` + `eglSwapBuffers`** (paintengine2d `GPUDevice`).
   Resize calls `wl_egl_window_resize` and `GPUDevice.Resize`. A failed
@@ -218,7 +241,13 @@ request `EGL_ALPHA_SIZE` 0.
   Resize rebuilds the pixmap and free present slots.
 - Seat: pointer (motion, buttons, axis) with coordinates multiplied by
   buffer scale; keyboard via **xkbcommon** (keymap, mods, UTF-8,
-  compose / dead keys) plus compositor `repeat_info`.
+  compose / dead keys) plus compositor `repeat_info`. The last button
+  press's serial and the buttons held are kept per seat: `StartSystemMove`
+  / `StartSystemResize` send `xdg_toplevel.move` / `resize` with it while
+  the button is down (KWin and Mutter want that), `ShowWindowMenu` sends
+  `show_window_menu` at surface-local logical coordinates, `Minimize` is
+  `set_minimized` (Hide still drops the role). `UITK_XDG_DECORATION=0`
+  ignores `zxdg_decoration_manager_v1` (GNOME's path, for testing).
 - Clipboard: `wl_data_device` copy/paste (`text/plain;charset=utf-8`).
   Primary selection when the compositor binds
   `zwp_primary_selection_v1` (Weston does). Middle-click paste uses
@@ -311,9 +340,19 @@ dbusmenu and skipped `ContextMenu`.
 (the protocol has no unset_minimized). Tray context menu is a toolkit
 `PopupMenu` via SNI `ContextMenu`. Callbacks post to the UI loop.
 
+## Window frames
+
+Who draws a window's frame — the desktop or uitoolkit — and how an app puts
+its own title bar in it (`Window.SetTitleBar`, `widgets.HeaderBar`) is in
+[decorations.md](decorations.md). The platform side is the optional
+`FrameSurface` capability (negotiated `Decorations`, `WindowState`,
+`Capabilities`, `StartSystemMove`, `StartSystemResize`, `ShowWindowMenu`,
+`Minimize`, `SuitsClientFrame`), implemented by the Wayland and X11
+top-level surfaces and by `Offscreen`, which records the calls for tests.
+
 ## Deferred
 
-- AT-SPI / accessibility
 - IME candidate-window theming (the IM draws its own window)
-- Client-side decoration chrome beyond the existing TitleBar widget
+- Themed window frames, shadows and rounded corners for toolkit-drawn frames
+  (Phases 2–3 of [decorations.md](decorations.md#phases))
 - Win32 and AppKit **windows** (tray landed in 0.16.0)

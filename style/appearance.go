@@ -72,6 +72,35 @@ type Appearance struct {
 	// NativeDialogs shows the desktop's own file dialogs (the XDG portal's)
 	// instead of the toolkit's themed ones.
 	NativeDialogs bool
+	// Decorations is who draws the frame of a window: DecorationsAuto (the
+	// toolkit for windows with their own title bar), DecorationsSystem (the
+	// desktop's title bar and borders wherever it has them — Settings' "Use
+	// system title bar and borders") or DecorationsToolkit (the toolkit for
+	// every window).
+	Decorations DecorationsPref
+}
+
+// DecorationsPref is the look.json "decorations" preference.
+type DecorationsPref string
+
+const (
+	// DecorationsAuto is the default (the zero value; written "auto" or
+	// left out of look.json).
+	DecorationsAuto    DecorationsPref = ""
+	DecorationsSystem  DecorationsPref = "system"
+	DecorationsToolkit DecorationsPref = "toolkit"
+)
+
+// ParseDecorationsPref accepts auto / system / toolkit (and the platform's
+// server / client); anything else is auto.
+func ParseDecorationsPref(s string) DecorationsPref {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "system", "server", "native":
+		return DecorationsSystem
+	case "toolkit", "client", "custom":
+		return DecorationsToolkit
+	}
+	return DecorationsAuto
 }
 
 // DefaultAppearance is the default theme ([DefaultThemeName], a light
@@ -169,6 +198,7 @@ func (a Appearance) Normalize() Appearance {
 	a.Corners = ParseCorners(string(a.Corners))
 	a.Icons = ParseIconSet(string(a.Icons))
 	a.IconSize = ParseIconSize(string(a.IconSize))
+	a.Decorations = ParseDecorationsPref(string(a.Decorations))
 	if strings.TrimSpace(a.Name) == "" {
 		a.Name = StarterName(a.Theme)
 	}
