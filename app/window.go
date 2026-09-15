@@ -42,6 +42,9 @@ type Window struct {
 	animPeriod time.Duration
 	layers     *widget.SceneCache
 	scene      *paintengine2d.Scene
+	// paths keeps recorded shapes across frames, so a steady UI does not
+	// clone every path it records each frame.
+	paths      *paintengine2d.PathCache
 	cursor     platform.Cursor
 	paints     int
 	closeHides bool
@@ -1133,6 +1136,11 @@ func (w *Window) frameImmediate(rects []paintengine2d.Rect) {
 func (w *Window) frameScene(rects []paintengine2d.Rect) {
 	ww, hh := w.surf.Size()
 	rec := paintengine2d.NewRecorder(ww, hh)
+	if w.paths == nil {
+		w.paths = paintengine2d.NewPathCache()
+	}
+	rec.UsePathCache(w.paths)
+	defer w.paths.EndFrame()
 	rec.Clear(w.look.Palette().Background)
 	ctx := paintengine2d.NewContextDevice(rec)
 	w.paintBackground(ctx, paintengine2d.XYWH(0, 0, float32(ww), float32(hh)))

@@ -1137,6 +1137,7 @@ type wlSlot struct {
 const maxSlotStale = 32
 
 type wlSurface struct {
+	soft       softDevice // software devices of the buffers (no GPU)
 	id         int
 	conn       *wlConn
 	surf       *C.struct_wl_surface
