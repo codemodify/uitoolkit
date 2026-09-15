@@ -783,6 +783,9 @@ func (metroEngine) StyleHint(l *Classic, h StyleHint) int {
 	if h == HintDialogPrimaryFirst {
 		return 1
 	}
+	if h == HintMnemonics {
+		return MnemonicsOnAlt // Windows hides the underlines until Alt
+	}
 	return 0
 }
 
@@ -1028,7 +1031,7 @@ func (e metroEngine) DrawComboBox(l *Classic, ctx *paintengine2d.Context, b pain
 		metroEngine{}.Arrow(l, ctx, ab, DirDown, glyph)
 	}
 	tb := paintengine2d.XYWH(b.Min.X+2*lw, b.Min.Y+3*lw, ab.Min.X-b.Min.X-2*lw, b.Dy()-6*lw)
-	if !c.win10 && st.Focused() && !open && !st.Disabled() {
+	if !c.win10 && st.Focused() && !open && !st.Disabled() && !st.Editable() {
 		tb = winSnap(tb)
 		ctx.DrawRect(tb, paintengine2d.Fill(c.accent))
 		fg = c.onAccent
