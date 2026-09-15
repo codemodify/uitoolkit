@@ -276,8 +276,16 @@ func (h *HeaderBar) Paint(ctx *paintengine2d.Context) {
 func (h *HeaderBar) titleRect() paintengine2d.Rect {
 	var r paintengine2d.Rect
 	if h.strip > 0 {
-		lw, rw := h.controlsW()
-		r = paintengine2d.XYWH(lw, 0, max(h.LocalBounds().Dx()-lw-rw, 0), h.strip)
+		// The strip's own space, right up to the buttons (the look pads
+		// its title).
+		x0, x1 := float32(0), h.LocalBounds().Dx()
+		if h.lead.Visible() {
+			x0 = h.lead.Bounds().Max.X
+		}
+		if h.trail.Visible() {
+			x1 = h.trail.Bounds().Min.X
+		}
+		r = paintengine2d.XYWH(x0, 0, max(x1-x0, 0), h.strip)
 	} else {
 		rb, fb := h.row.Bounds(), h.free.Bounds()
 		r = paintengine2d.XYWH(rb.Min.X+fb.Min.X, rb.Min.Y, fb.Dx(), rb.Dy())
