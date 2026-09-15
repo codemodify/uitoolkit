@@ -112,6 +112,15 @@ drawn by its pack's engine.
 
 ![libadwaita, macOS Big Sur, Material 3 and Fluent, light and dark](docs/screenshots/themes/themes-2020s.webp)
 
+### The web and its apps
+
+The web engine draws the looks developers live in today: the design
+systems of GitHub (Primer), Vercel (Geist), shadcn/ui and Linear, the
+editor palettes Dracula, Nord, Tokyo Night, Catppuccin and Rosé Pine, and
+SourceGit's own theme.
+
+![Dracula, Nord, Tokyo Night, Catppuccin, Rosé Pine, GitHub Primer, Vercel Geist, SourceGit, shadcn/ui and Linear, light and dark](docs/screenshots/themes/themes-web.webp)
+
 The full list, with what each pack reproduces, is in
 [docs/themes.md](docs/themes.md). How engines work, and how to write one,
 is in [docs/theme-engines.md](docs/theme-engines.md).
