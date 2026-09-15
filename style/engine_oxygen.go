@@ -68,6 +68,9 @@ func (oxygenEngine) DefaultMetrics() ChromeMetrics {
 // form labels right-aligned against their fields (as KDE's guidelines and
 // Oxygen have them) and left-aligned tabs.
 func (oxygenEngine) StyleHint(l *Classic, h StyleHint) int {
+	if h == HintHoverFadeMs {
+		return 150 // Oxygen's glowing hover
+	}
 	switch h {
 	case HintDialogPrimaryFirst, HintFormLabelsRight:
 		return 1
