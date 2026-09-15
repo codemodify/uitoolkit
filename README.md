@@ -3,10 +3,12 @@
 **Pure-Go desktop UI toolkit.** Retained widget tree, layout, themes, and
 X11 and Wayland window backends. Every pixel is painted with
 [`github.com/codemodify/paintengine2d`](https://github.com/codemodify/paintengine2d)
-(v0.9.0+). Default UI is **Titillium Web**; mono / code is **JetBrains Mono**
-(OFL, embedded). Outlines are rasterized through paintengine2d into a white
-atlas and tinted with `Paint.Color`. There is no second rasterizer, no Skia,
-no Gio renderer, and no Electron.
+(v0.9.0+). Each theme reads in its era's typeface when it is installed
+(Tahoma for XP, Segoe UI for Windows 10, Cantarell for GNOME…); the bundled
+**Titillium Web** and **JetBrains Mono** (OFL, embedded) stand in otherwise.
+Outlines are rasterized through paintengine2d into a white atlas and tinted
+with `Paint.Color`. There is no second rasterizer, no Skia, no Gio renderer,
+and no Electron.
 
 ```go
 app := uitoolkit.New(uitoolkit.Options{Look: uitoolkit.DarkLook()})
@@ -34,6 +36,34 @@ go get github.com/codemodify/paintengine2d@v0.9.0
 | Tray | `StatusItem` — Linux SNI + fdo notifications; Win32 notify area; macOS `NSStatusItem` (CGO) |
 | CGO | optional — tests and screenshots are `CGO_ENABLED=0` |
 | License | MIT |
+
+## Highlights
+
+- **Themes that change shapes, not just colours.** 28 engines (like Qt's
+  QStyle) draw 78 packs spanning four decades: System 1 to macOS Big Sur,
+  Windows 3.1 to 11, Motif, CDE, NeXT, Amiga, BeOS, OS/2, KDE 3 to Plasma,
+  GNOME 2 to libadwaita, Material 2 and 3, Swing's Metal and Nimbus, and
+  FlatLaf. See [docs/theme-engines.md](docs/theme-engines.md).
+- **Desktop integration.**
+  - Follows the desktop's light or dark mode and accent colour (the XDG
+    portal).
+  - Honours its reduced-motion setting.
+  - Uses the desktop's own file dialogs on request.
+  - Takes files and text dropped from other apps (Wayland).
+  - Offers system-tray items.
+- **Accessibility.** An accessibility tree for every window, an audit
+  (`a11y.Check`) for app tests, and an AT-SPI2 bridge, so Orca and other
+  assistive technology read and drive the apps. See
+  [docs/accessibility.md](docs/accessibility.md).
+- **Input and display.**
+  - Per-monitor and fractional scaling, with layout rounded to device
+    pixels.
+  - IME (text-input-v3, XIM).
+  - Precise and kinetic touchpad scrolling.
+  - Mnemonics shown the way each platform showed them.
+- **Low cost at rest.** Damage-tracked partial repaints, and a GPU path
+  where there is one. An idle app does not wake: look.json is watched with
+  inotify, and the desktop's settings through D-Bus.
 
 ## Screenshots
 
