@@ -196,6 +196,7 @@ type Metrics struct {
 	AccordionH  float32
 	RowH        float32 // list / table / tree row
 	RowPad      float32 // ink padding inside a row
+	ViewFrame   float32 // frame around list / tree / table views (0: flat)
 }
 
 // ScaleMetrics multiplies spatial LookAndFeel metrics by display scale.
@@ -231,6 +232,7 @@ func ScaleMetrics(m Metrics, scale float32) Metrics {
 	m.MenuBarH = s(m.MenuBarH)
 	m.MenuItemH = s(m.MenuItemH)
 	m.TabH = s(m.TabH)
+	m.ViewFrame = s(m.ViewFrame)
 	m.TreeIndent = s(m.TreeIndent)
 	m.StatusBarH = s(m.StatusBarH)
 	m.ToolBarH = s(m.ToolBarH)

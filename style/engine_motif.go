@@ -81,7 +81,8 @@ func (motifEngine) ID() string { return "motif" }
 // highlight band and a 2px shadow, 16px scroll bars, XmScale troughs.
 func (motifEngine) DefaultMetrics() ChromeMetrics {
 	return ChromeMetrics{
-		Square: true, BevelDepth: 2,
+		ViewFrame: 2,
+		Square:    true, BevelDepth: 2,
 		ControlH: 32, FieldH: 30, ComboH: 30,
 		Checkbox: 14, Radio: 17,
 		MenuItemH: 26, MenuBarH: 30, TabH: 30, RowH: 22,
@@ -1022,6 +1023,12 @@ func (motifEngine) WindowFrameInsets(l *Classic) Insets {
 func (motifEngine) PopupShadow(*Classic, PopupKind) Insets { return Insets{} }
 
 func (motifEngine) DrawPopupShadow(*Classic, *paintengine2d.Context, paintengine2d.Rect, PopupKind) {}
+
+// ViewFrameInsets: lists sit in a sunken shadow of the pack's thickness.
+func (motifEngine) ViewFrameInsets(l *Classic) Insets {
+	t := motifColors(l).px(l)
+	return Insets{Top: t, Right: t, Bottom: t, Left: t}
+}
 
 func (motifEngine) WindowCloseRect(l *Classic, b paintengine2d.Rect) paintengine2d.Rect {
 	return motifMwm(l, b).menu

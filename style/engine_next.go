@@ -79,7 +79,8 @@ func (nextEngine) ID() string { return "next" }
 // 15px, scrollers 20px with their black outline, menu cells 20 → 24px.
 func (nextEngine) DefaultMetrics() ChromeMetrics {
 	return ChromeMetrics{
-		Square: true, BevelDepth: 1,
+		ViewFrame: 2,
+		Square:    true, BevelDepth: 1,
 		ControlH: 28, FieldH: 26, ComboH: 26,
 		Checkbox: 15, Radio: 15,
 		MenuItemH: 24, MenuBarH: 26, TabH: 26, RowH: 22,
