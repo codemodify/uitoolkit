@@ -51,6 +51,7 @@ type TableView struct {
 	rows      rowSceneCache
 	lastRow   int
 	lastAt    time.Time
+	reveal    int // row+1 to bring into view at the next Arrange
 }
 
 // doubleClickInterval is the window for a second press on the same row to
@@ -90,7 +91,29 @@ func (t *TableView) Measure(c layout.Constraints) paintengine2d.Point {
 	return c.Constrain(paintengine2d.Pt(w, h))
 }
 
-func (t *TableView) Arrange(r paintengine2d.Rect) { t.SetBounds(r); t.clamp() }
+func (t *TableView) Arrange(r paintengine2d.Rect) {
+	t.SetBounds(r)
+	if t.reveal > 0 {
+		i := t.reveal - 1
+		t.reveal = 0
+		t.ensureVisible(i)
+	}
+	t.clamp()
+}
+
+// EnsureVisible scrolls the least needed to bring row i into view. Called
+// before the table is laid out, it applies at the first Arrange.
+func (t *TableView) EnsureVisible(i int) {
+	if i < 0 || i >= t.RowCount {
+		return
+	}
+	if t.bodyH() <= 0 {
+		t.reveal = i + 1
+		return
+	}
+	t.ensureVisible(i)
+	t.Invalidate()
+}
 
 func (t *TableView) rowH() float32 {
 	return style.FittedRowHeight(t.Look(), t.RowHeight)
