@@ -62,8 +62,9 @@ go get github.com/codemodify/paintengine2d@v0.9.0
   - Precise and kinetic touchpad scrolling.
   - Mnemonics shown the way each platform showed them.
 - **Low cost at rest.** Damage-tracked partial repaints, and a GPU path
-  where there is one. An idle app does not wake: look.json is watched with
-  inotify, and the desktop's settings through D-Bus.
+  where there is one. An idle app does not poll: look.json is watched with
+  inotify and the desktop's settings through D-Bus, so it wakes only for
+  its caret or a tray item's one-second safety check.
 
 ## Screenshots
 
