@@ -123,7 +123,7 @@ func TestFrameHitTestTable(t *testing.T) {
 		}
 	}
 	// The caption sits inside the hairline border, the content below it.
-	if g := w.geom; g.border != 1 || g.caption.Min != paintengine2d.Pt(1, 1) || g.content.Min.Y != g.caption.Max.Y ||
+	if g := w.geom; g.border != (style.Insets{Top: 1, Right: 1, Bottom: 1, Left: 1}) || g.caption.Min != paintengine2d.Pt(1, 1) || g.content.Min.Y != g.caption.Max.Y ||
 		w.Content().Bounds() != g.content {
 		t.Fatalf("geometry %+v content %v", w.geom, w.Content().Bounds())
 	}
@@ -138,7 +138,7 @@ func TestFrameHitTestTable(t *testing.T) {
 	if got, _ := w.NonClientHit(paintengine2d.Pt(2, 200)); got != RegionClient {
 		t.Errorf("maximized left edge: %v", got)
 	}
-	if w.geom.border != 0 || w.geom.caption.Min != (paintengine2d.Point{}) {
+	if w.geom.border != (style.Insets{}) || w.geom.caption.Min != (paintengine2d.Point{}) {
 		t.Errorf("maximized geometry %+v", w.geom)
 	}
 	// Tiled on the left (a quick tile): only the right edge resizes.
@@ -706,5 +706,106 @@ func TestTitleBarWidgetIsWrapped(t *testing.T) {
 	}
 	if got, _ := r.w.NonClientHit(center(stop)); got != RegionClient {
 		t.Fatalf("no-drag label: %v", got)
+	}
+}
+
+// A stacked frame (Windows 95: the era's caption strip with the title and
+// the buttons) puts the app's title bar in a row under the strip; both are
+// caption where nothing else is.
+func TestStackedFrame(t *testing.T) {
+	t.Setenv(platform.EnvDecorations, "")
+	pack, ok := style.LoadTheme("win95")
+	if !ok {
+		t.Fatal("no win95 pack")
+	}
+	a := New(Options{Look: pack.Look(), Headless: true})
+	a.SetTitleBarPrefs(platform.DefaultTitleBarPrefs(""))
+	w, err := a.NewWindow(platform.WindowOptions{Title: "Stacked", Width: 600, Height: 400, Headless: true, Decorations: platform.DecorationsClient})
+	if err != nil {
+		t.Fatal(err)
+	}
+	o := w.Surface().(*platform.Offscreen)
+	fetch := 0
+	tools := widgets.NewToolBar(widgets.ToolText("Fetch", func() { fetch++ }))
+	hb := widgets.NewHeaderBar([]widget.Component{tools}, nil, nil)
+	body := widgets.NewButton("Body", nil)
+	w.SetContent(widgets.NewColumn(body))
+	w.SetTitleBar(hb)
+	a.PumpOnce()
+	w.Capture()
+	spec := style.DecorationOf(w.Look(), hb.DecorationState())
+	if !spec.Stacked || !hb.Stacked() {
+		t.Fatalf("win95 frames are stacked: %+v", spec)
+	}
+	strip, bar := hb.FrameParts()
+	if strip.Dy() < spec.Caption || bar.Empty() {
+		t.Fatalf("strip %v bar %v caption %v", strip, bar, spec.Caption)
+	}
+	o0 := widget.DeviceOrigin(hb)
+	stripDev := strip.Translate(o0)
+	// The tool bar is in the row under the strip; the content under both.
+	if tb := widget.DeviceBounds(tools); tb.Min.Y < stripDev.Max.Y {
+		t.Fatalf("tool bar %v inside the strip %v", tb, stripDev)
+	}
+	if cb := w.Content().Bounds(); cb.Min.Y < widget.DeviceBounds(hb).Max.Y {
+		t.Fatalf("content %v overlaps the title bar %v", cb, widget.DeviceBounds(hb))
+	}
+	// The border is the look's (Win95's four pixels), not a hairline.
+	if w.geom.border.Left != spec.Border.Left || spec.Border.Left < 2 {
+		t.Fatalf("border %+v spec %+v", w.geom.border, spec.Border)
+	}
+	_, right := hb.Controls()
+	cl := right.ButtonRect(platform.CaptionClose).Translate(widget.DeviceOrigin(right))
+	if cl.Empty() || cl.Max.Y > stripDev.Max.Y+0.5 {
+		t.Fatalf("close %v outside the strip %v", cl, stripDev)
+	}
+	mid := func(r paintengine2d.Rect) paintengine2d.Point {
+		return paintengine2d.Pt((r.Min.X+r.Max.X)/2, (r.Min.Y+r.Max.Y)/2)
+	}
+	if got, _ := w.NonClientHit(mid(cl)); got != RegionClose {
+		t.Fatalf("close button: %v", got)
+	}
+	if got, _ := w.NonClientHit(paintengine2d.Pt(200, mid(stripDev).Y)); got != RegionCaption {
+		t.Fatalf("the strip's free space: %v", got)
+	}
+	tbar := widget.DeviceBounds(tools)
+	if got, _ := w.NonClientHit(paintengine2d.Pt(400, mid(tbar).Y)); got != RegionCaption {
+		t.Fatalf("the row's free space: %v", got)
+	}
+	fr := tools.ItemRect(0).Translate(widget.DeviceOrigin(tools))
+	if got, _ := w.NonClientHit(mid(fr)); got != RegionClient {
+		t.Fatalf("a tool in the row: %v", got)
+	}
+	// The strip shows the window title, for assistive technology too.
+	tree := w.AccessibleTree()
+	if tb := tree.Children[0]; tb.Role != a11y.RoleTitleBar || len(tb.Children) == 0 || tb.Children[0].Role != a11y.RoleLabel || tb.Children[0].Name != "Stacked" {
+		t.Fatalf("title bar %+v", tree.Children[0])
+	}
+	// A drag from the strip moves the window; a click on the tool works.
+	p := paintengine2d.Pt(200, mid(stripDev).Y)
+	w.dispatch(platform.Event{Kind: platform.EventMouseDown, Pos: p, Button: platform.ButtonLeft})
+	w.dispatch(platform.Event{Kind: platform.EventMouseMove, Pos: p.Add(paintengine2d.Pt(30, 0)), Button: platform.ButtonLeft})
+	if o.FrameCalls().Moves != 1 {
+		t.Fatal("the strip moves the window")
+	}
+	c := mid(fr)
+	w.dispatch(platform.Event{Kind: platform.EventMouseDown, Pos: c, Button: platform.ButtonLeft})
+	w.dispatch(platform.Event{Kind: platform.EventMouseUp, Pos: c, Button: platform.ButtonLeft})
+	if fetch != 1 {
+		t.Fatalf("tool clicks %d", fetch)
+	}
+	// Maximized: no border, the strip at the top.
+	o.SimulateWindowState(platform.WindowState{Activated: true, Maximized: true})
+	a.PumpOnce()
+	w.Capture()
+	if w.geom.border != (style.Insets{}) || widget.DeviceBounds(hb).Min != (paintengine2d.Point{}) {
+		t.Fatalf("maximized: border %+v title bar %v", w.geom.border, widget.DeviceBounds(hb))
+	}
+	// Without the app's own title bar the frame is the strip alone.
+	w.SetTitleBar(nil)
+	a.PumpOnce()
+	w.Capture()
+	if st, b := w.Caption().FrameParts(); !b.Empty() || st.Dy() != widget.DeviceBounds(w.Caption()).Dy() {
+		t.Fatalf("default caption: strip %v bar %v", st, b)
 	}
 }
