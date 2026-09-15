@@ -41,7 +41,7 @@ func (c *Checkbox) SetChecked(v bool) {
 func (c *Checkbox) Measure(cons layout.Constraints) paintengine2d.Point {
 	lk := c.Look()
 	m := lk.Metrics()
-	w := m.Checkbox + 8 + style.ControlFontOf(lk, style.RoleCheck).Advance(c.Text) + 4
+	w := m.Checkbox + style.Dip(lk, 8) + style.ControlFontOf(lk, style.RoleCheck).Advance(c.Text) + style.Dip(lk, 4)
 	return cons.Constrain(paintengine2d.Pt(w, m.ControlH))
 }
 
