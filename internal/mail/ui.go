@@ -353,10 +353,19 @@ func (s *session) build() widget.Component {
 
 	s.mainBar = s.composeBar()
 	s.listBar = s.toolBar()
-	slot := widgets.NewSpacer()
-	chromeRow := widgets.NewRow(s.menuBar(), s.mainBar, slot, s.qf, s.listBar).WithGap(8).WithAlign(layout.AlignCenter)
-	chromeRow.AddFlex(slot, 1)
-	chrome := []widget.Component{chromeRow, split}
+	// Thunderbird's single chrome row — the menu button, Fetch / Write, free
+	// space, the quick filter and its tool bar — is the window's title bar:
+	// the caption of the frame uitoolkit draws (caption buttons at the
+	// desktop's sides, the free space moves the window), or the first row
+	// under the desktop's own frame.
+	head := widgets.NewHeaderBar([]widget.Component{s.menuBar(), s.mainBar}, nil, []widget.Component{s.qf, s.listBar})
+	var chrome []widget.Component
+	if s.win != nil {
+		s.win.SetTitleBar(head)
+	} else {
+		chrome = append(chrome, head)
+	}
+	chrome = append(chrome, split)
 	if s.status != nil {
 		chrome = append(chrome, s.status)
 	}
@@ -2336,8 +2345,17 @@ func (s *session) viewSource() {
 }
 
 // PrepareShot selects Ada’s Inbox welcome message and optionally opens File.
+// WalkWindow visits w's title bar (Mail's chrome row lives there) and then
+// its content.
+func WalkWindow(w *app.Window, fn func(widget.Component)) {
+	if tb := w.TitleBar(); tb != nil {
+		widget.Walk(tb, fn)
+	}
+	widget.Walk(w.Content(), fn)
+}
+
 func PrepareShot(w *app.Window, openMenu int) {
-	widget.Walk(w.Content(), func(c widget.Component) {
+	WalkWindow(w, func(c widget.Component) {
 		if tv, ok := c.(*widgets.TableView); ok && len(tv.Columns) >= 5 {
 			tv.Selected = 0
 			if tv.OnSelect != nil {
@@ -2360,7 +2378,7 @@ func PrepareShot(w *app.Window, openMenu int) {
 
 // PrepareShotCards forces card view for screenshots.
 func PrepareShotCards(w *app.Window) {
-	widget.Walk(w.Content(), func(c widget.Component) {
+	WalkWindow(w, func(c widget.Component) {
 		if cl, ok := c.(*widgets.CardList); ok {
 			cl.SetVisible(true)
 			if cl.Count > 0 {
