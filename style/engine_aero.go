@@ -1816,6 +1816,34 @@ func aeroPacks() []ThemePack {
 	}
 }
 
+// aeroWindowColour is Windows 7's default window colour, Sky (#74b8fc),
+// which tints the glass to the pack's frame colours.
+var aeroWindowColour = Hex("#74b8fc")
+
+// aeroGlassKeys are the glass frame's gradient stops, active and inactive.
+var aeroGlassKeys = [...]string{"glass0", "glass1", "glass2", "glassOff0", "glassOff1", "glassOff2"}
+
+// Accented is the window colour of Windows Vista and 7: under Aero Glass it
+// tinted the glass of the window frames and captions, and the glass takes
+// the accent as its window colour — each stop makes the step from the
+// accent that the default Sky glass makes from Sky (accentShift). The
+// controls never followed the window colour and keep their blues, and
+// Windows 7 Basic's opaque frames keep theirs.
+func (aeroEngine) Accented(tok ThemeTokens, accent paintengine2d.Color) ThemeTokens {
+	if accentP(tok, "glass", 1) == 0 {
+		return tok
+	}
+	own := func(k string) paintengine2d.Color { return accentX(tok, k, Hex(aeroBase[k])) }
+	// The window colour this pack's glass is the tint of: Sky for the
+	// shipped pack.
+	ref := accentShift(own("glass1"), Hex(aeroBase["glass1"]), aeroWindowColour)
+	tok = CloneTokenMaps(tok)
+	for _, k := range aeroGlassKeys {
+		tok.Extra[k] = accentShift(accent, ref, own(k))
+	}
+	return tok
+}
+
 // ---- helpers shared by the Windows engines (aero, metro, fluent) ----------------------
 
 // winPx is one device line at the look's scale: 1 at 1x, 2 at 2x.
