@@ -51,11 +51,13 @@ go get github.com/codemodify/paintengine2d@v0.9.0
     portal).
   - Honours its reduced-motion setting.
   - Uses the desktop's own file dialogs on request.
-  - Draws its own title bar where an app puts one in (tabs or a tool bar in
-    the caption, caption buttons in the desktop's layout), handing moves,
-    resizes and the window menu to the desktop; "Use system title bar and
-    borders" gives the desktop's frame back. See
-    [docs/decorations.md](docs/decorations.md).
+  - Draws its own title bar where an app puts one in (browser-style tabs or
+    a tool bar in the caption, caption buttons in the desktop's layout or
+    the theme's), in each theme's own style — Windows 95's navy caption,
+    XP's blue one, Aqua's traffic lights, libadwaita's round buttons,
+    SourceGit's flat cells — handing moves, resizes and the window menu to
+    the desktop; "Use system title bar and borders" gives the desktop's
+    frame back. See [docs/decorations.md](docs/decorations.md).
   - Takes files and text dropped from other apps (Wayland).
   - Offers system-tray items.
 - **Accessibility.** An accessibility tree for every window, an audit
