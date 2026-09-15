@@ -1,6 +1,7 @@
 package widgets
 
 import (
+	"math"
 	"time"
 
 	"github.com/codemodify/paintengine2d"
@@ -38,16 +39,35 @@ type TableView struct {
 	OnContext  func(row int, windowPos paintengine2d.Point)
 	Mono       bool
 	OffsetY    float32
-	hovered    int
-	hoverCol   int
-	pressCol   int
-	resizeCol  int
-	resizeX    float32
-	resizeW    float32
-	vbar       scrollDrag
-	rows       rowSceneCache
-	lastRow    int
-	lastAt     time.Time
+	// Frameless drops the look's view frame (a table that already sits in
+	// a framed pane).
+	Frameless bool
+	// Mode selects one row (the default) or several: SelectExtended is the
+	// mail-client convention (Ctrl toggles, Shift extends, Ctrl+A).
+	// Selected stays the current row either way.
+	Mode SelectionMode
+	// OnSelectionChange reports the selected rows, ascending, whenever the
+	// set changes in SelectExtended or SelectMulti.
+	OnSelectionChange func(rows []int)
+	sel               rowSelection
+	hovered           int
+	hoverCol          int
+	pressCol          int
+	resizeCol         int
+	resizeX           float32
+	resizeW           float32
+	vbar              scrollDrag
+	rows              rowSceneCache
+	lastRow           int
+	lastAt            time.Time
+	reveal            int // row+1 to bring into view at the next Arrange
+	find              typeAhead
+	// SearchColumn is the column type-ahead find matches (-1: the first
+	// flexible column, usually the main text).
+	SearchColumn int
+	// DisableTypeAhead turns off type-ahead find, for views whose letters
+	// are commands (Mail's n / p / r).
+	DisableTypeAhead bool
 }
 
 // doubleClickInterval is the window for a second press on the same row to
@@ -59,7 +79,7 @@ func NewTableView(cols []TableColumn, rows int, cell func(row, col int) string, 
 	t := &TableView{
 		Columns: cols, RowCount: rows, RowHeight: 28, Selected: -1,
 		SortCol: -1, SortAsc: true, CellText: cell, OnSelect: on,
-		hovered: -1, hoverCol: -1, pressCol: -1, resizeCol: -1, lastRow: -1,
+		hovered: -1, hoverCol: -1, pressCol: -1, resizeCol: -1, lastRow: -1, SearchColumn: -1,
 	}
 	t.Init(t)
 	t.SetWantsFocus(true)
@@ -87,7 +107,29 @@ func (t *TableView) Measure(c layout.Constraints) paintengine2d.Point {
 	return c.Constrain(paintengine2d.Pt(w, h))
 }
 
-func (t *TableView) Arrange(r paintengine2d.Rect) { t.SetBounds(r); t.clamp() }
+func (t *TableView) Arrange(r paintengine2d.Rect) {
+	t.SetBounds(r)
+	if t.reveal > 0 {
+		i := t.reveal - 1
+		t.reveal = 0
+		t.ensureVisible(i)
+	}
+	t.clamp()
+}
+
+// EnsureVisible scrolls the least needed to bring row i into view. Called
+// before the table is laid out, it applies at the first Arrange.
+func (t *TableView) EnsureVisible(i int) {
+	if i < 0 || i >= t.RowCount {
+		return
+	}
+	if t.bodyH() <= 0 {
+		t.reveal = i + 1
+		return
+	}
+	t.ensureVisible(i)
+	t.Invalidate()
+}
 
 func (t *TableView) rowH() float32 {
 	return style.FittedRowHeight(t.Look(), t.RowHeight)
@@ -106,6 +148,12 @@ func (t *TableView) headerH() float32 {
 
 func (t *TableView) contentH() float32 { return float32(t.RowCount) * t.rowH() }
 
+// frame is the look's view frame around the table (zero on flat looks).
+func (t *TableView) frame() style.Insets { return viewFrame(t.Look(), t.Frameless) }
+
+// inner is the viewport in view space (inside the frame): header + body.
+func (t *TableView) inner() paintengine2d.Rect { return viewInner(t.LocalBounds(), t.frame()) }
+
 // MaxOffset is max(0, content − body viewport).
 func (t *TableView) MaxOffset() float32 {
 	return layout.MaxScroll(t.contentH(), t.bodyH())
@@ -115,11 +163,29 @@ func (t *TableView) clamp() {
 	t.OffsetY = layout.ClampScroll(t.OffsetY, t.contentH(), t.bodyH())
 }
 
+func (t *TableView) vparts() style.ScrollParts {
+	return vScrollParts(t.Look(), paintengine2d.XYWH(0, t.headerH(), t.inner().Dx(), t.bodyH()), t.contentH(), t.OffsetY)
+}
+
+func (t *TableView) vaxis() scrollAxis {
+	return scrollAxis{
+		vertical: true,
+		parts:    t.vparts,
+		get:      func() (float32, float32) { return t.OffsetY, t.MaxOffset() },
+		set:      func(y float32) { t.OffsetY = y; t.clamp(); t.Invalidate() },
+		steps:    func() (float32, float32) { return t.rowH(), t.bodyH() * 0.9 },
+	}
+}
+
+// rowsW is the row width: the view minus the gutter a visible bar takes.
+func (t *TableView) rowsW() float32 {
+	return t.inner().Dx() - scrollGutter(t.Look(), t.MaxOffset() > 0)
+}
+
 func (t *TableView) scrollTrack() (track, thumb paintengine2d.Rect) {
-	b := t.LocalBounds()
-	body := paintengine2d.XYWH(0, t.headerH(), b.Dx(), t.bodyH())
-	bar, gap := overflowBarSize(t.Look())
-	return vScrollThumb(body, t.contentH(), t.OffsetY, bar, gap)
+	sp := t.vparts()
+	in := t.frame()
+	return fromView(sp.Track, in), fromView(sp.Thumb, in)
 }
 
 // VisibleRange is the half-open [lo, hi) window of body rows that Paint draws.
@@ -136,7 +202,7 @@ func (t *TableView) ScrollTrack() (track, thumb paintengine2d.Rect) { return t.s
 
 // RowBounds is the current on-screen rect of row i (may sit above the header
 // in local space; Paint clips it to the body).
-func (t *TableView) RowBounds(i int) paintengine2d.Rect { return t.rowRect(i) }
+func (t *TableView) RowBounds(i int) paintengine2d.Rect { return fromView(t.rowRect(i), t.frame()) }
 
 // ScrollTo sets OffsetY (clamped) without requiring a wheel event.
 func (t *TableView) ScrollTo(y float32) {
@@ -146,7 +212,7 @@ func (t *TableView) ScrollTo(y float32) {
 }
 
 func (t *TableView) bodyH() float32 {
-	h := t.LocalBounds().Dy() - t.headerH()
+	h := t.inner().Dy() - t.headerH()
 	if h < 0 {
 		return 0
 	}
@@ -156,13 +222,17 @@ func (t *TableView) bodyH() float32 {
 // ColumnWidths is the current header/cell layout in device pixels.
 func (t *TableView) ColumnWidths() []float32 { return t.colWidths() }
 
+// RowsWidth is the width the columns fill: the view minus the gutter a
+// visible scrollbar takes, so no cell text runs under the bar.
+func (t *TableView) RowsWidth() float32 { return t.rowsW() }
+
 func (t *TableView) colWidths() []float32 {
 	n := len(t.Columns)
 	out := make([]float32, n)
 	if n == 0 {
 		return out
 	}
-	total := t.LocalBounds().Dx()
+	total := t.rowsW()
 	if total < 1 {
 		return out
 	}
@@ -250,6 +320,15 @@ func (t *TableView) colWidths() []float32 {
 			out[give] = 1
 		}
 	}
+	// Whole-pixel column edges: two cells meeting on a fraction would each
+	// half-cover the shared pixel, and a selected row would show a seam.
+	var acc, prev float32
+	for i := range out {
+		acc += out[i]
+		edge := float32(math.Floor(float64(acc) + 0.5))
+		out[i] = edge - prev
+		prev = edge
+	}
 	return out
 }
 
@@ -327,8 +406,8 @@ func (t *TableView) colEdgeAt(x float32) int {
 	return -1
 }
 
-// ColumnDividerAt is the column whose right edge is near x, or -1.
-func (t *TableView) ColumnDividerAt(x float32) int { return t.colEdgeAt(x) }
+// ColumnDividerAt is the column whose right edge is near local x, or -1.
+func (t *TableView) ColumnDividerAt(x float32) int { return t.colEdgeAt(x - t.frame().Left) }
 
 // ResizingColumn is the header divider being dragged, or -1.
 func (t *TableView) ResizingColumn() int { return t.resizeCol }
@@ -338,7 +417,8 @@ func (t *TableView) CursorAt(local paintengine2d.Point) platform.Cursor {
 	if t.resizeCol >= 0 {
 		return platform.CursorColResize
 	}
-	if local.Y >= 0 && local.Y < t.headerH() && t.colEdgeAt(local.X) >= 0 {
+	p := toView(local, t.frame())
+	if p.Y >= 0 && p.Y < t.headerH() && t.colEdgeAt(p.X) >= 0 {
 		return platform.CursorColResize
 	}
 	return platform.CursorDefault
@@ -387,10 +467,9 @@ func (t *TableView) paintHeader(ctx *paintengine2d.Context, lk style.LookAndFeel
 	for i, col := range t.Columns {
 		w := widths[i]
 		hb := paintengine2d.XYWH(x, 0, w, hh)
-		st := t.State()
-		if i != t.hoverCol {
-			st &^= style.StateHovered
-		} else {
+		// A press on a body row must not paint every header pressed.
+		st := t.State() &^ (style.StateHovered | style.StatePressed)
+		if i == t.hoverCol {
 			st |= style.StateHovered
 		}
 		if i == t.pressCol {
@@ -402,6 +481,7 @@ func (t *TableView) paintHeader(ctx *paintengine2d.Context, lk style.LookAndFeel
 }
 
 func (t *TableView) paintRow(ctx *paintengine2d.Context, lk style.LookAndFeel, widths []float32, row int, y, rh float32) {
+	st := t.rowState(row)
 	cx := float32(0)
 	for col := range t.Columns {
 		w := widths[col]
@@ -417,9 +497,25 @@ func (t *TableView) paintRow(ctx *paintengine2d.Context, lk style.LookAndFeel, w
 		if t.CellBold != nil && t.CellBold(row, col) {
 			face = lk.BoldFont()
 		}
-		lk.DrawTableCell(ctx, cell, row == t.Selected, row == t.hovered, label, t.Columns[col].Align, face)
+		cst := st
+		if col == 0 {
+			cst |= style.StateFirst
+		}
+		if col == len(t.Columns)-1 {
+			cst |= style.StateLast
+		}
+		lk.DrawTableCell(ctx, cell, cst, label, t.Columns[col].Align, face)
 		cx += w
 	}
+	if st.Focused() {
+		// Cells do not know their row: the focus mark spans it.
+		style.DrawItemFocusOf(lk, ctx, paintengine2d.XYWH(0, y, cx, rh), st)
+	}
+}
+
+// rowState is row i's item state for the look.
+func (t *TableView) rowState(i int) style.ControlState {
+	return widget.RowItemState(t, i, t.IsSelected(i), i == t.hovered, i == t.Selected)
 }
 
 func (t *TableView) visibleRange() (lo, hi int) {
@@ -440,8 +536,12 @@ func (t *TableView) visibleRange() (lo, hi int) {
 
 func (t *TableView) Paint(ctx *paintengine2d.Context) {
 	t.clamp()
-	b := t.LocalBounds()
 	lk := t.Look()
+	if beginViewFrame(ctx, lk, t.LocalBounds(), t.frame(), t.State()) {
+		defer ctx.Restore()
+	}
+	b := t.inner()
+	rw := t.rowsW()
 	hh := t.headerH()
 	ctx.DrawRect(b, paintengine2d.Fill(lk.Palette().Field))
 	widths := t.colWidths()
@@ -452,11 +552,11 @@ func (t *TableView) Paint(ctx *paintengine2d.Context) {
 		// The body viewport goes on the band group, so the sticky header
 		// keeps its own clip and the rows slide under it.
 		o := rowOrigin(ctx)
-		t.rows.ready(o.X, o.Y, b.Dx(), rh, lookSig(lk))
-		recordScrollingRows(rec, ctx, &t.rows, t.ID()^(1<<32), body, b.Dx(), rh, t.OffsetY, hh, lo, hi,
+		t.rows.ready(o.X, o.Y, rw, rh, lookSig(lk))
+		recordScrollingRows(rec, ctx, &t.rows, t.ID()^(1<<32), body, rw, rh, t.OffsetY, hh, lo, hi,
 			func(i int) uint64 { return t.ID()<<32 | uint64(i) + 1 },
 			func(i int) uint64 {
-				extra := bits32(b.Dx())
+				extra := bits32(rw)
 				if t.Mono {
 					extra ^= 0x4d
 				}
@@ -466,7 +566,7 @@ func (t *TableView) Paint(ctx *paintengine2d.Context) {
 				for col := range t.Columns {
 					extra ^= bits32(widths[col]) << uint(col%16)
 				}
-				sig := newRowSig(i == t.Selected, i == t.hovered, extra)
+				sig := newRowSig(t.IsSelected(i), i == t.hovered, extra^uint64(t.rowState(i))<<40)
 				for col := range t.Columns {
 					if t.CellText != nil {
 						sig.str(t.CellText(i, col))
@@ -491,10 +591,11 @@ func (t *TableView) Paint(ctx *paintengine2d.Context) {
 	}
 	// Sticky header after the body so a leaked row cannot cover the labels.
 	t.paintHeader(ctx, lk, widths, hh)
-	track, thumb := t.scrollTrack()
-	paintOverflowBar(ctx, lk, track, thumb, t.vbar.over, t.vbar.active)
-	if t.Focused() {
-		lk.DrawFocusRing(ctx, b.Inset(-2))
+	t.vbar.paint(t, ctx, lk, t.vparts(), true, t.OffsetY)
+	// The current row carries the focus mark; a focused table without one
+	// rings itself.
+	if t.Focused() && (t.Selected < 0 || t.Selected >= t.RowCount) {
+		lk.DrawFocusRing(ctx, b)
 	}
 }
 
@@ -516,7 +617,7 @@ func (t *TableView) rowRect(i int) paintengine2d.Rect {
 	}
 	rh := t.rowH()
 	y := t.headerH() + float32(i)*rh - t.OffsetY
-	return paintengine2d.XYWH(0, y, t.LocalBounds().Dx(), rh)
+	return paintengine2d.XYWH(0, y, t.inner().Dx(), rh)
 }
 
 // Invalidate drops retained row scenes so CellText / flag changes
@@ -528,7 +629,7 @@ func (t *TableView) Invalidate() {
 
 func (t *TableView) invalidateRow(i int) {
 	if r := t.rowRect(i); !r.Empty() {
-		t.InvalidateRect(r.Inset(-1))
+		t.InvalidateRect(fromView(r, t.frame()).Inset(-1))
 	}
 }
 
@@ -537,31 +638,29 @@ func (t *TableView) invalidateHeader() {
 	if hh <= 0 {
 		return
 	}
-	t.InvalidateRect(paintengine2d.XYWH(0, 0, t.LocalBounds().Dx(), hh).Inset(-1))
+	t.InvalidateRect(fromView(paintengine2d.XYWH(0, 0, t.inner().Dx(), hh), t.frame()).Inset(-1))
 }
 
 func (t *TableView) MouseEnter() {}
 
 func (t *TableView) MouseMove(e widget.MouseEvent) bool {
+	p := toView(e.Pos, t.frame())
 	if t.resizeCol >= 0 {
-		t.setColWidthPx(t.resizeCol, t.resizeW+(e.Pos.X-t.resizeX))
+		t.setColWidthPx(t.resizeCol, t.resizeW+(p.X-t.resizeX))
 		t.applyCursor(e.Pos)
 		return true
 	}
-	track, thumb := t.scrollTrack()
-	if off, apply, handled, dirty := t.vbar.move(e.Pos, track, thumb, true, t.MaxOffset()); apply || handled || dirty {
-		if apply {
-			t.OffsetY = off
-			t.clamp()
+	if handled, dirty := t.vbar.move(t, p, t.vaxis()); handled || dirty {
+		if dirty {
+			t.Invalidate()
 		}
-		t.Invalidate()
-		if apply || handled {
+		if handled {
 			return true
 		}
 	}
-	if e.Pos.Y < t.headerH() {
+	if p.Y < t.headerH() {
 		t.applyCursor(e.Pos)
-		c := t.colAt(e.Pos.X)
+		c := t.colAt(p.X)
 		if c != t.hoverCol || t.hovered != -1 {
 			oldRow := t.hovered
 			t.hoverCol = c
@@ -571,7 +670,10 @@ func (t *TableView) MouseMove(e widget.MouseEvent) bool {
 		}
 		return true
 	}
-	h := t.indexAt(e.Pos.Y)
+	h := t.indexAt(p.Y)
+	if p.Y >= t.inner().Dy() {
+		h = -1
+	}
 	if h != t.hovered || t.hoverCol != -1 {
 		oldRow, oldCol := t.hovered, t.hoverCol
 		t.hovered = h
@@ -591,7 +693,7 @@ func (t *TableView) MouseExit() {
 	t.hovered = -1
 	t.hoverCol = -1
 	t.pressCol = -1
-	t.vbar.over = false
+	t.vbar.exit()
 	if t.resizeCol < 0 {
 		widget.ApplyCursor(t.Host(), platform.CursorDefault)
 	}
@@ -603,25 +705,23 @@ func (t *TableView) MouseExit() {
 
 func (t *TableView) MousePress(e widget.MouseEvent) bool {
 	t.RequestFocus()
-	track, thumb := t.scrollTrack()
-	if off, ok := t.vbar.press(e.Pos, track, thumb, true, t.OffsetY, t.MaxOffset(), t.bodyH()*0.9); ok {
-		t.OffsetY = off
-		t.clamp()
+	p := toView(e.Pos, t.frame())
+	if t.vbar.press(t, p, t.vaxis()) {
 		t.Invalidate()
 		return true
 	}
-	if e.Pos.Y < t.headerH() {
-		if edge := t.colEdgeAt(e.Pos.X); edge >= 0 {
+	if p.Y < t.headerH() {
+		if edge := t.colEdgeAt(p.X); edge >= 0 {
 			widths := t.colWidths()
 			t.resizeCol = edge
-			t.resizeX = e.Pos.X
+			t.resizeX = p.X
 			t.resizeW = widths[edge]
 			t.pressCol = -1
 			t.applyCursor(e.Pos)
 			t.Invalidate()
 			return true
 		}
-		c := t.colAt(e.Pos.X)
+		c := t.colAt(p.X)
 		t.pressCol = c
 		if c >= 0 && c < len(t.Columns) && t.Columns[c].Sortable {
 			t.sortBy(c)
@@ -629,14 +729,29 @@ func (t *TableView) MousePress(e widget.MouseEvent) bool {
 		t.Invalidate()
 		return true
 	}
-	i := t.indexAt(e.Pos.Y)
+	i := t.indexAt(p.Y)
+	if p.Y >= t.inner().Dy() {
+		i = -1
+	}
 	if i >= 0 {
+		changed := false
+		if t.Mode != SelectSingle {
+			if e.Button == platform.ButtonRight {
+				changed = t.sel.contextClick(i)
+			} else {
+				changed = t.sel.click(t.Mode, i, e.Mods)
+			}
+		}
 		t.Selected = i
 		t.Invalidate()
 		if t.OnSelect != nil {
 			t.OnSelect(i)
 		}
-		if e.Button == platform.ButtonLeft {
+		if changed {
+			t.selectionChanged()
+		}
+		// A Ctrl or Shift click edits the selection; it never activates.
+		if e.Button == platform.ButtonLeft && !e.Mods.Ctrl() && !e.Mods.Shift() {
 			if i == t.lastRow && time.Since(t.lastAt) < doubleClickInterval {
 				t.lastRow = -1
 				t.activate(i)
@@ -687,6 +802,63 @@ func (t *TableView) activate(row int) {
 // Activate commits row (the programmatic form of Return / double click).
 func (t *TableView) Activate(row int) { t.activate(row) }
 
+// IsSelected reports whether row i is selected (in SelectSingle, whether it
+// is the current row).
+func (t *TableView) IsSelected(i int) bool {
+	if i < 0 || i >= t.RowCount {
+		return false
+	}
+	if t.Mode == SelectSingle {
+		return i == t.Selected
+	}
+	return t.sel.has(i)
+}
+
+// SelectedRows is the selection in ascending order.
+func (t *TableView) SelectedRows() []int {
+	if t.Mode == SelectSingle {
+		if t.Selected >= 0 && t.Selected < t.RowCount {
+			return []int{t.Selected}
+		}
+		return nil
+	}
+	t.sel.drop(t.RowCount)
+	return t.sel.rows()
+}
+
+// SetSelectedRows replaces the selection; the last row given becomes the
+// current row and the anchor. It does not call the callbacks.
+func (t *TableView) SetSelectedRows(rows []int) {
+	t.sel.clear()
+	for _, r := range rows {
+		if r >= 0 && r < t.RowCount {
+			t.sel.add(r)
+			t.Selected = r
+			t.sel.anchor = r
+		}
+	}
+	if len(rows) == 0 {
+		t.Selected = -1
+	}
+	t.Invalidate()
+}
+
+// SelectAll selects every row (SelectExtended / SelectMulti) and reports it.
+func (t *TableView) SelectAll() {
+	if t.Mode == SelectSingle || t.RowCount == 0 {
+		return
+	}
+	t.sel.addRange(0, t.RowCount-1)
+	t.Invalidate()
+	t.selectionChanged()
+}
+
+func (t *TableView) selectionChanged() {
+	if t.OnSelectionChange != nil && t.Mode != SelectSingle {
+		t.OnSelectionChange(t.SelectedRows())
+	}
+}
+
 func (t *TableView) sortBy(col int) {
 	if t.SortCol == col {
 		t.SortAsc = !t.SortAsc
@@ -708,7 +880,7 @@ func (t *TableView) MouseWheel(e widget.MouseEvent) bool {
 		return false
 	}
 	before := t.OffsetY
-	t.OffsetY += wheelDelta(e.Scroll.Y, t.rowH())
+	t.OffsetY += wheelDelta(e.Scroll.Y, t.rowH(), e.Precise)
 	t.clamp()
 	if t.OffsetY == before {
 		return false
@@ -720,6 +892,13 @@ func (t *TableView) MouseWheel(e widget.MouseEvent) bool {
 func (t *TableView) KeyPress(e widget.KeyEvent) bool {
 	if !t.Enabled() || t.RowCount <= 0 {
 		return false
+	}
+	if contextKey(e) {
+		if t.OnContext == nil {
+			return false
+		}
+		t.OnContext(t.Selected, contextPoint(t, t.RowBounds(t.Selected)))
+		return true
 	}
 	next := t.Selected
 	page := int(t.bodyH()/t.rowH()) - 1
@@ -739,27 +918,85 @@ func (t *TableView) KeyPress(e widget.KeyEvent) bool {
 		next = 0
 	case platform.KeyEnd:
 		next = t.RowCount - 1
-	case platform.KeyReturn, platform.KeySpace:
+	case platform.KeySpace:
+		// Space toggles the current row in Multi (Ctrl+Space in Extended).
+		if t.Mode == SelectMulti || (t.Mode == SelectExtended && e.Mods.Ctrl()) {
+			if t.Selected >= 0 {
+				t.sel.toggle(t.Selected)
+				t.sel.anchor = t.Selected
+				t.Invalidate()
+				t.selectionChanged()
+			}
+			return true
+		}
 		t.activate(t.Selected)
 		return true
+	case platform.KeyReturn:
+		t.activate(t.Selected)
+		return true
+	case platform.KeyA:
+		if e.Mods.Ctrl() && t.Mode != SelectSingle {
+			t.SelectAll()
+			return true
+		}
+		return false
 	default:
 		return false
 	}
+	t.navigate(next, e.Mods)
+	return true
+}
+
+// navigate makes row next current the way keyboard navigation does: plain
+// moves select it, Shift extends and Ctrl only moves (SelectExtended).
+func (t *TableView) navigate(next int, mods platform.Modifiers) {
 	if next < 0 {
 		next = 0
 	}
 	if next >= t.RowCount {
 		next = t.RowCount - 1
 	}
-	if next != t.Selected {
+	changed := false
+	if t.Mode != SelectSingle {
+		changed = t.sel.moveTo(t.Mode, next, mods)
+	}
+	if next != t.Selected || changed {
 		t.Selected = next
 		t.ensureVisible(next)
 		t.Invalidate()
 		if t.OnSelect != nil {
 			t.OnSelect(next)
 		}
+		if changed {
+			t.selectionChanged()
+		}
 	}
-	return true
+}
+
+// searchColumn is the column type-ahead matches.
+func (t *TableView) searchColumn() int {
+	if t.SearchColumn >= 0 && t.SearchColumn < len(t.Columns) {
+		return t.SearchColumn
+	}
+	for i, c := range t.Columns {
+		if c.Width <= 0 {
+			return i
+		}
+	}
+	return 0
+}
+
+// TextInput is type-ahead find on the search column.
+func (t *TableView) TextInput(r rune) bool {
+	if !t.Enabled() || t.CellText == nil || len(t.Columns) == 0 || t.DisableTypeAhead {
+		return false
+	}
+	col := t.searchColumn()
+	i, searched := t.find.next(r, t.Selected, t.RowCount, func(row int) string { return t.CellText(row, col) })
+	if i >= 0 {
+		t.navigate(i, 0)
+	}
+	return searched
 }
 
 func (t *TableView) ensureVisible(i int) {

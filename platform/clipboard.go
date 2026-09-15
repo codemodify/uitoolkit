@@ -60,9 +60,3 @@ func ClipboardSet(s string) {
 	clipMu.Unlock()
 	clipboardNativeSet(s)
 }
-
-func memoryClipboard() string {
-	clipMu.Lock()
-	defer clipMu.Unlock()
-	return clip
-}

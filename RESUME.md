@@ -1,138 +1,337 @@
-# Resume here — code review fixes, 2026-09-13
+# Resume here — end-to-end fixes and theme engines, 2026-09-15
 
-Everything from the review pass is merged into `dev` in **both** repos. Nothing is
-pushed: the sandbox that did the work could read GitHub but had no credentials, so
-there is no PR for this work and `origin` still points at the pre-review `dev`.
+Everything is on feature branches, pushed to GitHub. `dev` is untouched in both
+repos.
 
-## Where things are
+| repo | branch | worktree |
+| --- | --- | --- |
+| uitoolkit | `feat/theme-engines` (includes `feat/e2e-era-themes`) | `~/go/src/github.com/codemodify/uitoolkit-core` |
+| paintengine2d | `feat/e2e-era-themes` | `~/go/src/github.com/codemodify/paintengine2d` |
 
-| | uitoolkit | paintengine2d |
-|---|---|---|
-| `dev` (merged) | `c1a983d` | `a66bc6d` |
-| version | 0.19.1 → **0.20.0** | 0.10.0 → **0.11.0** |
-| commits | 6 + merge | 4 + merge |
-| change | 130 files, +14,666 / −2,148 | 31 files, +3,301 / −362 |
+The two branches go together: uitoolkit uses paintengine2d's new APIs
+(`PathCache`, `BackdropBlur`, `DrawCrossFade`, `ImagePattern`, through the
+relative `replace ../paintengine2d` in `go.mod`), so check out both before
+building, and merge paintengine2d first. `~/go/src/github.com/codemodify/uitoolkit`
+itself sits on `feat/e2e-era-themes`; the theme work is in the `uitoolkit-core`
+worktree.
 
-- `fix/review-2026-09-13` still exists in both repos — the same commits, unmerged.
-- `dev-before-review-merge` is a tag on the pre-merge `dev` in both repos.
+Before merging to `dev`:
+- Your local `dev` holds the 2026-09-13 review merge, which was never pushed
+  (9 commits in uitoolkit, 5 in paintengine2d). Both feature branches are
+  built on it, so a pull request against `origin/dev` includes those commits.
+- Commit `6194388` accidentally added a 9 MB `uitk-themesheet` binary (removed
+  again in `306e12c`), and `4f1eab2` does not build on its own (`014fef6`
+  completes it). Squash-merge, or filter both out of the history.
 
-**To undo the whole thing:** `git reset --hard dev-before-review-merge` in each repo.
+## Decisions (answered 2026-09-15)
 
-## Push it / open the PR
+1. **The default theme is Metal (Ocean)** (`metal-ocean`, Swing's own
+   default since Java 5), replacing Classic 95 Dark. Apps show it until the
+   user picks a theme; `dark` and `light` remain the Classic 95 packs.
+2. **Apps do not follow the desktop by default.** Following its light or
+   dark mode and accent colour stays a Settings switch (look.json
+   `followDesktop`), off unless switched on.
+3. **The OpenJDK-derived `engine/metal` branch is deleted.** Metal (Steel,
+   Ocean) and Nimbus are the clean-room engines, from published facts.
+4. **The real-hardware pass may use the laptop**, through the nested-KWin
+   rig only.
 
-Run these from a shell that has your GitHub credentials (the sandbox had none).
-Either push `dev` straight up, or push the branch and open a PR in your usual style:
+## Real-hardware pass (2026-09-15, nested KWin on your GPU)
 
-```sh
-# option A — push the merged dev
-cd ~/go/src/github.com/codemodify/paintengine2d && git push origin dev
-cd ~/go/src/github.com/codemodify/uitoolkit   && git push origin dev
+Run through the rig in `tools/e2e/` (nested KWin on the real GPU, never your
+session). Verified there:
+1. **The original glitches: gone.** The gallery in ten themes (Metal Ocean,
+   Fluent, Aero, Luna, Breeze, Adwaita, Big Sur, Material 3, Windows 95,
+   Aqua) went through hover, a menu, the About dialog, a tab, a combo popup
+   and a theme switch. Every frame matched a full-frame repaint.
+2. **GPU paths: match the CPU.** All 78 themes' galleries on the GPU are
+   within 0.03% of the CPU render. Fluent's acrylic and Big Sur's vibrant
+   menus, and Aero's glass dialogs, render.
+3. **Fractional scale 1.75: correct.** At a real 1.75 output apps are asked
+   for 1.75 (`preferred_scale` 210) and draw 1750×1330 buffers for a
+   1000×760 window, crisp. The two tests that failed on your session were
+   wrong about scale and timing, and are fixed.
+6. **Alt underlines: fixed.** They never showed on a live compositor (Alt
+   only re-presented the cached frame); now they show while Alt is held.
 
-# option B — PR per repo (engine first: the toolkit depends on it)
-cd ~/go/src/github.com/codemodify/paintengine2d
-git push -u origin fix/review-2026-09-13
-gh pr create --base dev --head fix/review-2026-09-13 \
-  --title "Engine review fixes: damage replay, group clips, EGL lifetime (v0.11.0)"
+Also found and fixed there: a crash ("concurrent map writes") when a window
+opened while the app was still serving a clipboard it owned after its last
+window closed.
 
-cd ~/go/src/github.com/codemodify/uitoolkit
-git push -u origin fix/review-2026-09-13
-gh pr create --base dev --head fix/review-2026-09-13 \
-  --title "Toolkit review fixes: partial redraw, focus lifecycle, mail hardening (v0.20.0)"
-```
+Still to try on your own desktop, since they need its services:
+4. **Desktop following.** Switch Plasma between light and dark, or change
+   its accent, with "Match the desktop" on in Settings.
+5. **The tray.** Mail's tray menu should respond at once.
+7. **Touchpad scrolling.** Slow two-finger scrolls follow the fingers; a
+   quick swipe glides and slows down; a wheel notch scrolls three lines.
+8. **Drag and drop.** Files from Dolphin into Mail's compose window.
+9. **Native file dialogs.** Settings, "Use the desktop's file dialogs",
+   then Attach in Mail's compose window.
+10. **Orca**, if you install it: the bridge starts when Orca does.
 
-If you take option B, reset `dev` back first (`git reset --hard dev-before-review-merge`)
-so the PR is not already merged into it.
+## What the glitching was
 
-## Building — read this first
+Found on real hardware with the nested-KWin rig in `tools/e2e/`; the findings
+are in `docs/e2e/2026-09-14/`.
 
-`go.mod` now requires `paintengine2d v0.11.0` **and carries a relative replace** to
-`../paintengine2d`. That is deliberate: the old `v0.9.0` pin only resolved because
-that version happened to sit in your module cache, so the toolkit was silently
-compiling against an engine two releases old. Both repos must be on the same
-revision for the build to mean anything.
+- **The main cause:** paintengine2d's EGL buffer-age ring recorded full-frame
+  presents as "no damage", so partial presents showed two-frame-old buffers.
+  Closed dialogs came back, menus flickered, theme switches reverted.
+- **Wayland:**
+  - frames painted while a frame callback was pending were dropped;
+  - a focused text field spun an IME repaint loop (about 3,500 repaints per
+    second);
+  - there were no pointer-leave events.
+- **Widgets, menus and focus:** about 50 more findings, including hover
+  leaking into toolbars, tab bars and table headers; menu keyboard
+  navigation and accelerators; modality; focus rings clipped away; contrast;
+  the paperclip glyph; and Mail multi-selection.
 
-Drop the `replace` from `go.mod` once you tag and push `paintengine2d v0.11.0`, and
-regenerate `go.sum` (`GOFLAGS=-mod=mod go get github.com/codemodify/paintengine2d@v0.11.0`).
+All of these are fixed, with tests, and re-verified on your GPU in the
+nested-KWin rig (see the real-hardware pass above).
 
-`go.work` and `go.work.sum` are now gitignored if you prefer a workspace instead.
+## Theme engines
 
-## Running
+**See them all:** the Theme Atlas, https://claude.ai/artifact/FDfGxoNiUnPuyU9TMEy9aZ
+(private until you share it), shows every pack's live preview and full gallery.
 
-```sh
-go run ./examples/gallery          # widget gallery
-go run ./examples/mail             # mail client, in-memory demo store
-go run ./cmd/uitest-driver         # scripted UI drive, no display needed
-go run ./examples/gallery -screenshot /tmp/shots   # render PNGs headlessly
-```
+A theme is now an **engine** (Go code that decides the shapes, like Qt's
+`QStyle`) plus **packs** (colours, metrics and parameters). The guide is
+`docs/theme-engines.md`; `go run ./cmd/uitk-themesheet -list` lists every
+pack.
 
-Escape hatches added in this pass:
+Merged engines:
 
-- `UITK_PAINT_FULLFRAME=1` — restore the old full-frame repaint (bypasses the new
-  partial-redraw path). Useful to A/B the damage work, or if a compositor misbehaves.
-- `UITK_PAINT_MSAA=0` — turn off the engine's new multisample target.
+| engine | packs |
+| --- | --- |
+| win95 | Windows 95, 98, 2000, Hot Dog Stand, High Contrast, Windows 95 Dark |
+| luna | XP Luna Blue, Olive, Silver, Royale, Royale Noir |
+| aqua | Aqua, Graphite, Graphite Night, Brushed Metal |
+| platinum | Mac OS 8 Platinum, Platinum Lime |
+| motif | Motif, CDE (six schemes), IRIX Indigo Magic, HP VUE |
+| next | NeXTSTEP, OPENSTEP, NeXTSTEP Night, Window Maker (four themes) |
+| fusion | Qt Fusion, Fusion Dark |
+| oxygen | KDE 4 Oxygen |
+| breeze | KDE Plasma Breeze, Breeze Dark |
+| clearlooks, bluecurve | GNOME 2 Clearlooks, Human, Qt Cleanlooks; Red Hat Bluecurve |
+| adwaita | GNOME Adwaita, Adwaita Dark, Adwaita (GTK 3) |
+| aero, metro, fluent | Windows Vista/7 Aero and 7 Basic; Windows 8, 10, 10 Dark; Windows 11 Fluent and Fluent Dark |
+| keramik, plastik | KDE 3 Keramik, Plastik, Qt 4 Plastique |
+| system7, win31, openlook, amiga, beos, os2 | System 1 and 7, Windows 3.1 and Hot Dog Stand, OPEN LOOK, Workbench 1.3 and 3.1, BeOS, OS/2 Warp 4 |
+| macos, material, flatlaf | OS X Yosemite, macOS Big Sur and Dark; Material 2 and 3, light and dark; FlatLaf Light, Dark, Darcula |
+| metal, nimbus | Swing's Metal (Steel 1998, Ocean 2004) and Nimbus (2008), clean-room |
 
-## Verification that was run
+Also merged: `macos` (OS X Yosemite, macOS Big Sur and Big Sur Dark),
+`material` (Material and Material Dark, Material 3 and Material 3 Dark,
+whose tonal palettes are computed from a seed colour) and `flatlaf` (FlatLaf
+Light, FlatLaf Dark, Darcula).
 
-Green in both repos, with and without the workspace: `go build`, `go vet`, `go test`,
-`go test -race`, `gofmt -l`, `GOOS=darwin go vet`, `GOOS=windows go vet`,
-`CGO_ENABLED=0 go build`. Ran in a Linux container with EGL/GLES/X11/Wayland headers;
-there was no GPU or display, so GL-dependent tests skip rather than run.
+78 packs from 28 engines in all. Every agent branch is merged, the last
+being sidebar styles and tool-bar buttons for macOS, Adwaita, Fluent and
+Material (`engine/sidebar`).
 
-**Not verified on real hardware:** anything needing an actual X11/Wayland server or a
-GPU — the Wayland role/unmap changes, partial present against real buffer age, MSAA,
-tray behaviour on a live desktop. Worth a manual pass on your box.
+Core features the engines drive, added along the way:
+- selected tabs overlap their neighbours;
+- menu, tooltip and dialog drop shadows;
+- list, tree and table view frames;
+- per-axis scroll arrows;
+- window backgrounds and tab panes;
+- group boxes and in-app dialog windows;
+- item states: selected, current, unfocused, and backdrop when the window is
+  inactive, each engine following its platform's rules;
+- **whole-pixel layout:** component bounds and table column edges are
+  rounded to device pixels (WPF / Avalonia layout rounding). This removed the
+  seam every engine showed at column edges in a selected table row, and makes
+  every engine's 1px lines land on real pixels;
+- **every theme reads in its era's typeface** when installed (fontconfig):
+  Tahoma for XP, Segoe UI for Vista to 11, Lucida Grande for Aqua, Helvetica
+  (or Nimbus Sans) for NeXT and Motif, Cantarell for GNOME, Noto Sans for
+  Plasma, Roboto for Material, then open look-alikes; the bundled Titillium
+  Web is the last resort. `theme.json` can list its own `fonts`;
+  `UITK_SYSTEM_FONTS=0` keeps the bundled faces;
+- **transient overlay scroll bars** (libadwaita, Fluent): the content keeps
+  its full width and the bar shows while scrolling or hovered, then fades;
+- **hover and focus cross-fade** where the platform animated (Aero and Adwaita
+  200ms, Windows 10, Breeze and Oxygen 150ms, Fluent 83ms); presses stay
+  instant; `UITK_ANIMATIONS=0` turns fades off;
+- **spin boxes** put their buttons where the platform did: inside the field's
+  frame (Windows, KDE, GNOME side by side "− +"), beside it (Mac OS, Motif);
+- engine hooks from the Windows engines' wish list: table cells know their
+  place in the row (one rounded selection box across a row), tabs overlap by a
+  border so neighbours share one line, tree expanders light up under the
+  pointer, packs can pin the colour of selected text (Windows' white on blue);
+- message boxes read "Yes No Cancel" under Windows and KDE, and a pack's look
+  keeps the pack's own corners;
+- **materials:** backdrop blur on CPU and GPU (Fluent's acrylic menus, Aero's
+  blurred glass frames), group opacity and true cross-fades, tiled image
+  patterns (Plastik's dithered groove);
+- **text is kerned** (the fonts' GPOS / kern pairs), with carets, hit-testing
+  and eliding on the kerned layout;
+- **tree branch lines** end where their branches do (last-child elbows);
+  KDE 3's three-arrow scroll bars; fixed-size thumbs (Mac, Windows 3.1,
+  OPEN LOOK); menus take each look's row height;
+- **`ButtonBox`** puts dialog buttons in the platform's order (Qt's
+  QDialogButtonBox), live with the theme; Mail and the file dialog use it;
+- busy bars animate themselves; the default button throbs in Aqua and
+  breathes in Aero; a saved "reduce motion" preference and a Settings switch
+  turn every animation off;
+- labels honour newlines, and paddings scale with the display.
 
-## What changed, in one line each
+## Toolkit features added
 
-- **engine/raster** — strict rectangle detection (triangles were being filled as rects),
-  NaN/overflow-guarded curve flattening (a huge control point cost 9.8 s and 1.4 GB),
-  explicit opacity so alpha 0 is invisible, active-edge-list scanline.
-- **engine/scene** — damage replay no longer skips the clear or double-blends; parent-space
-  `GroupNode.Clip` so "scroll = new Xform" actually works; shared immutable clip masks.
-- **engine/gpu** — EGL displays refcounted (closing one window used to kill every other
-  window's device), buffer-age-aware partial present, id-keyed LRU texture cache, MSAA,
-  surfaced GL/EGL errors, adoptable external context. `go test -race` runs at all now.
-- **platform** — close is a *request* again (close-to-tray works), Wayland detaches its
-  buffer before re-roling (was a protocol error that killed the client), clipboard cache
-  invalidated, non-Latin keyboard layouts, 16bpp visuals, Windows tray thread.
-- **style** — glyph atlas is copy-on-write (was an unguarded data race), pixel-snapped
-  glyphs (crisper stems — the chrome goldens moved for this, verified), `.notdef` for
-  missing runes, bounded atlas memory, theme name sanitising.
-- **widgets** — dismissed popups no longer execute items, modals trap focus, TextArea
-  paint 25 ms → 2.2 ms, TreeView mouse move 1.5 ms → 218 ns.
-- **app** — partial redraw restored (one invalidated button 6.68 ms → 0.215 ms), scene
-  cache reuse guarded by origin/size/clip, focus and hover swept on teardown, `Quit`
-  race fixed, per-window DPI, `Post` never runs on the caller's goroutine.
-- **mail** — path traversal that could `RemoveAll` outside the data dir, unauthenticated
-  socket, plaintext credential fallbacks, Bcc leaking into headers, header injection,
-  a master-key bug that made every stored OAuth token undecryptable, COPYUID/UID remap,
-  deadlines, atomic store writes, I/O off the UI thread.
+- **Item views:**
+  - multi-selection: Ctrl, Shift, Shift+arrows, Ctrl+A and right-click rules,
+    in lists, tables and card lists;
+  - type-ahead find;
+  - Menu key / Shift+F10 context menus;
+  - `EnsureVisible`;
+  - a focus mark on the current row.
+- **Mail:** its message list multi-selects in both the table and card views,
+  so bulk actions act on every selected message.
+- **New widgets:**
+  - `Grid` and `Form` layouts (QGridLayout, QFormLayout; form labels are
+    right-aligned in Mac looks);
+  - `Calendar` and `DateField`;
+  - `ColorButton` with a drop-down picker;
+  - `Segmented`, a view switch of joined toggle buttons;
+  - `Picture` for PNG, JPEG and GIF images.
 
-Full detail: `claude/review-2026-09-13.md` and `claude/fixes-landed-2026-09-13.md` in the
-Claude project, plus the per-commit messages (`git log dev-before-review-merge..dev`).
+  The gallery's Form tab shows them.
+- **Windows know when they're inactive:** captions, selections and Aqua's
+  default button follow it; odd list rows can be striped (Aqua).
+- **Settings:** restructured as a theme browser with a live, themed preview
+  application.
+- **Follows the desktop's light or dark mode:** Settings → "Match the
+  desktop's light or dark mode" (look.json `followDesktop`). Apps read the
+  XDG portal's `color-scheme`, as GTK 4 and Qt 6 apps do, and show the
+  saved theme's sibling: Breeze and Breeze Dark, Luna Olive and Royale
+  Noir, CDE palettes and Charcoal. They switch live when the desktop does.
+  Themes with no sibling stay as chosen. `UITK_COLOR_SCHEME=dark` stands in
+  for the desktop. See `docs/settings.md`.
+- **Takes the desktop's accent colour** in themes whose engine recolours
+  around one (`style.AccentEngine`): Breeze, Fluent, Windows 10, Adwaita
+  (snapped to GNOME's nine accents, as libadwaita does), macOS Big Sur,
+  Material 2 and 3 (Material You: the accent becomes the seed), FlatLaf,
+  Fusion, Oxygen, and Aero's glass. Each derives its shades the way its
+  platform did. `UITK_ACCENT=#e95420` stands in for the desktop's accent.
+- **Honours the desktop's reduced-motion setting** (yours is on): fades,
+  pulses and busy bars stop in every app, as in GTK 4 apps.
+- **Mnemonic underlines** show when each platform showed them: always in
+  Windows 95, only while Alt is held in XP and Plasma, never on the Mac
+  (`HintMnemonics`).
+- **Labels word-wrap** (`Label.Wrap`, QLabel's wordWrap).
+- **Editable combo boxes** (`ComboBox.SetEditable`): type a value or pick
+  one, with inline completion (QComboBox's editable).
+- **Slider tick marks** (`Slider.Ticks`). Pressing the thumb takes hold of
+  it where it was pressed; it used to jump a few pixels in most looks.
+- **Progress text** (`ProgressBar.ShowText`): in the bar where it fits,
+  beside thin bars.
+- **HiDPI:** the base look (the default Classic 95 themes) and the widgets'
+  default sizes and paddings now scale with the display. At 1.75x, which is
+  your laptop's scale, labels crowded their controls and lines came out
+  thin.
+- **Sidebars** (`ListView.Sidebar`, `TreeView.Sidebar`) and a new
+  `ViewBackground` engine hook. Styled in Aqua (Leopard's source list),
+  macOS Yosemite and Big Sur, libadwaita, Fluent's navigation pane and
+  Material's drawers.
+- **The desktop's own file dialogs** through the XDG portal (Settings:
+  "Use the desktop's file dialogs"), modal to the window on X11.
+- **Drops from other apps** (Wayland): files and text, `DropZone`; Mail's
+  compose window attaches dropped files.
+- **Touchpad scrolling** follows the fingers (a bug made slow scrolls jump
+  by lines), with kinetic flings; wheels scroll three lines a notch.
+- **Medium and semibold weights** for looks that need them (Material,
+  Fluent, macOS).
+- **Idle cost:** look.json is watched with inotify, not polled every
+  300ms, and tray apps sleep up to 1s instead of 100ms.
+- **Start-up:** the font index and the portal read run alongside display
+  setup.
+- **`UITK_THEME=<pack>`:** runs any app in any theme, like `GTK_THEME`.
+- **`gallery -screenshot DIR -theme <pack>`:** takes every scripted gallery
+  shot in one pack.
 
-## Picking it up again
+## Accessibility
 
-- **VS Code:** open either repo folder. The Claude Code extension keeps its own session
-  history — it will not see this session's conversation.
-- **CLI with the conversation:** `claude --teleport session_01WQNdhvLTRmryrevTeAGdBW`
-  (wants clean git state; the branch is local-only, so push it first if teleport
-  insists on finding it on `origin`).
-- **Just the code:** it is already on `dev`. `cd` in and run `claude`.
+uitoolkit had no accessibility layer, so screen readers could not see its
+apps. Now:
+- **The model** (`a11y`): every window is a tree of roles, names, states,
+  values and actions. Every stock widget describes itself; views list their
+  items, and actions (press, toggle, select, expand) reach the widgets.
+- **The audit**: `a11y.Check` flags controls without a name, duplicate IDs
+  and similar problems. Tests run it over every gallery page, Settings and
+  Mail; it found unnamed controls in all three, now fixed.
+- **The Linux bridge** (AT-SPI2): Orca and other assistive technology read
+  and drive the apps. It stays off until a screen reader runs (your desktop
+  says none does).
+- **The smoke test**: `tools/a11y/smoke.sh` proves the bridge in a private
+  D-Bus session with a real libatspi client. It checks roles, names, values
+  and text, actions, and the focus and "checked" announcements.
 
-## Known loose ends
+It also announces changes on the focused object (a ticked check box, typed
+text, caret moves), and supports EditableText (for automation tools such as
+dogtail), Selection, and Table with TableCell (Orca's row and column
+navigation). Label.For names a control after its caption. The audit also
+covers Files, Notes and Inspector, and flags controls the keyboard cannot
+reach. See `docs/accessibility.md`. Still to do: relations and the Windows
+and macOS adapters.
 
-- The gallery header prints the *toolkit* version next to the engine's name
-  ("paintengine2d · v0.20.0"). Cosmetic, not fixed.
-- Deferred deliberately, with reasons, in `claude/fixes-landed-2026-09-13.md`:
-  dmabuf/EGLImage import and fence export (the main gap for the compositor plan),
-  paged font atlases, the macOS tray rewrite (compiles nowhere without a real Mac).
-- `mail.png` in the repo root is untracked and predates this work.
+## Gaps against Qt and GTK (my proposed order)
 
-## If you want the window manager next
+1. **Complex text:** bidirectional text (Arabic, Hebrew) and shaping for
+   scripts that need it (Arabic joining, Indic), plus right-to-left
+   layout mirroring. Text is kerned but not shaped. A pure-Go HarfBuzz port
+   (go-text/typesetting, BSD) could do the shaping.
+2. **Drag and drop, the rest:** X11's XDND, and dragging out of uitoolkit
+   apps (drag sources). Drops onto windows work on Wayland.
+3. **Other platforms:** Windows and macOS backends, with UI Automation and
+   NSAccessibility adapters for the accessibility tree that now exists.
+4. **Portals:** a parent window for native dialogs on Wayland
+   (xdg-foreign), OpenURI, notifications through the portal.
+5. **Widgets:**
+   - a rich-text editor;
+   - dock widgets (QDockWidget);
+   - an MDI area;
+   - a wizard;
+   - touchpad gestures (pinch, swipe), and kinetic scrolling on X11
+     (Wayland has it).
+6. **Printing.**
 
-The engine is ready enough — correct damage, parent-space clips, adoptable EGL context,
-ARGB present. What is missing is buffer import and fences on the engine side, and a
-`platform` backend that is server-shaped: everything there today is a client of one
-toplevel. That is a new backend over DRM/KMS + GBM + libinput implementing the existing
-`Backend`/`Surface`/`Event` interfaces, not an extension of `wayland_linux.go`.
+## Performance
+
+`BenchmarkGalleryRepaint` and `BenchmarkGallerySmallRepaint` in
+`examples/gallery` repaint the gallery in each engine.
+
+- paintengine2d keeps recorded paths across frames and allocates draw ops in
+  slabs.
+- Its CPU fast path now takes gradient rects, and rect lists whose pixels don't
+  touch.
+- Textured looks batch their stripes.
+- Open strokes with square caps no longer draw a stray band (their outline
+  was left unclosed).
+- `Context.SetAlpha` (global alpha) and `Context.DrawLayer` (group opacity)
+  drive the fades; GPU gradients now honour `Paint.Opacity`, which they
+  ignored before.
+
+The result: a hover repaint on the stock look went from 321 to 152
+allocations, and on Aqua from 4,376 to 356. The gallery peaks at about 35 MB
+RSS.
+
+## Checks that ran
+
+`go build`, `go vet`, gofmt and `go test ./...` pass in both repos, as does
+`go test -race ./...` for uitoolkit, with no data races. Contract tests cover
+every pack:
+- controls paint inside their bounds;
+- shadows stay within their reach;
+- keyboard focus is visible;
+- text meets contrast checks.
+
+On a live compositor (nested KWin at 1.75), the platform tests pass 30
+runs in a row and run race-clean; before the clipboard fix, 3 in 11 runs
+crashed.
+
+A slip on 2026-09-15: one `go test ./platform` ran without unsetting
+`WAYLAND_DISPLAY`, so its live-compositor tests opened test windows on the
+real session for under a second. The two that failed there
+(`TestWaylandSurfacePresent` expected 160px where 1.75 gives 280;
+`TestWaylandPresentOpaqueColor` read the first frame too early) are fixed.

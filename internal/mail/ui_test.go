@@ -159,8 +159,13 @@ func TestMailSubjectColumnFillsThreadPane(t *testing.T) {
 	for _, x := range ws {
 		sum += x
 	}
-	if d := sum - table.LocalBounds().Dx(); d > 1 || d < -1 {
-		t.Fatalf("columns %v sum %v != table %v", ws, sum, table.LocalBounds().Dx())
+	// Columns fill the rows area: the table minus the scrollbar gutter, so
+	// the When column never runs under the bar.
+	if d := sum - table.RowsWidth(); d > 1 || d < -1 {
+		t.Fatalf("columns %v sum %v != rows %v (table %v)", ws, sum, table.RowsWidth(), table.LocalBounds().Dx())
+	}
+	if table.MaxOffset() > 0 && table.RowsWidth() >= table.LocalBounds().Dx() {
+		t.Fatalf("rows %v should leave a scrollbar gutter in table %v", table.RowsWidth(), table.LocalBounds().Dx())
 	}
 	w.Inject(platform.Event{Kind: platform.EventResize, Width: 1100, Height: 720})
 	a.PumpOnce()
@@ -1457,7 +1462,7 @@ func TestMailStarRendersAfterToggle(t *testing.T) {
 	}
 	img := paintengine2d.NewImage(32, 28)
 	ctx := paintengine2d.NewContext(img)
-	table.Look().DrawTableCell(ctx, paintengine2d.XYWH(0, 0, 28, 28), true, false, "★", style.AlignStart, table.Look().Font())
+	table.Look().DrawTableCell(ctx, paintengine2d.XYWH(0, 0, 28, 28), style.StateChecked, "★", style.AlignStart, table.Look().Font())
 	if ink := cellInk(img, 0, 26); ink < 8 {
 		t.Fatalf("star glyph missing in 28px cell, ink=%d", ink)
 	}

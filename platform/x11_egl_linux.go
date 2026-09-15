@@ -73,7 +73,7 @@ func (s *x11Surface) PaintDevice() paintengine2d.Device {
 		return s.gpu
 	}
 	if s != nil && s.img != nil {
-		return paintengine2d.NewCPUDevice(s.img)
+		return s.soft.of(s.img)
 	}
 	return nil
 }

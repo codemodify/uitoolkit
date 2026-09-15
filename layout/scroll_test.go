@@ -6,6 +6,9 @@ func TestClampScrollStopsAtEnd(t *testing.T) {
 	if got := MaxScroll(100, 40); got != 60 {
 		t.Fatalf("max %v", got)
 	}
+	if got := MaxScroll(40.4, 40); got != 0 {
+		t.Fatalf("sub-pixel overflow scrolls %v", got)
+	}
 	if got := MaxScroll(20, 40); got != 0 {
 		t.Fatalf("short content max %v", got)
 	}

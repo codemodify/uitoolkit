@@ -4,6 +4,7 @@ package demo
 import (
 	"fmt"
 	"sort"
+	"time"
 
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit"
@@ -28,6 +29,9 @@ func Gallery(a *app.Application, win *app.Window, light bool) widget.Component {
 		status.Set(0, fmt.Sprintf("Columns  %d", int(v)))
 	})
 	columns.Tip = "Layout columns (spinner)"
+	columns.SetAccessibleName("Columns")
+	slider.SetAccessibleName("Volume")
+	slider.Ticks, slider.TickInterval = widgets.TicksBelow, 10
 	engine := widgets.NewComboBox([]string{
 		"paintengine2d", "Software raster", "Offscreen pixmap",
 	}, 0, func(i int) {
@@ -37,8 +41,16 @@ func Gallery(a *app.Application, win *app.Window, light bool) widget.Component {
 		}
 	})
 	engine.Placeholder = "Paint engine"
+	// An editable combo box: type a size or pick one.
+	size := widgets.NewComboBox([]string{"8", "9", "10", "11", "12", "14", "16", "18", "24", "36", "48", "72"}, 4, func(i int) {
+		status.Set(0, "Font size picked")
+	})
+	size.SetEditable(true)
+	size.SetAccessibleName("Font size")
+	size.OnSubmit = func(s string) { status.Set(0, "Font size "+s) }
 
 	progress := widgets.NewProgressBar(0.42)
+	progress.ShowText = true
 	progressLbl := widgets.NewLabel("Build  42%")
 	busy := widgets.NewBusyBar(0.35)
 
@@ -135,9 +147,10 @@ func Gallery(a *app.Application, win *app.Window, light bool) widget.Component {
 	})
 
 	buttons := widgets.NewPanel("Buttons",
-		widgets.NewRow(primary, plain, disabled).WithGap(10),
-		widgets.NewRow(about, ask, warn).WithGap(10),
-		widgets.NewRow(other, themeBtn).WithGap(10),
+		// Each group folds onto another line when the column is narrow.
+		wrapRow(primary, plain, disabled),
+		wrapRow(about, ask, warn),
+		wrapRow(other, themeBtn),
 		clickLbl,
 	)
 
@@ -165,6 +178,8 @@ func Gallery(a *app.Application, win *app.Window, light bool) widget.Component {
 		columns,
 		widgets.NewLabel("Paint engine"),
 		engine,
+		widgets.NewLabel("Font size (type or pick)"),
+		size,
 		widgets.NewLabel("Theme preset"),
 		radios,
 		volume,
@@ -370,7 +385,20 @@ func Gallery(a *app.Application, win *app.Window, light bool) widget.Component {
 		nil,
 	)
 	formNotes.MinRows = 4
+	// A dialog form: labels line up in their own column (right-aligned in
+	// Mac looks), fields take the rest.
+	account := widgets.NewForm()
+	account.AddRow("Name", widgets.NewTextField("Ada Lovelace", "Full name", nil))
+	account.AddRow("Email", widgets.NewTextField("ada@example.com", "Address", nil))
+	account.AddRow("Server type", widgets.NewComboBox([]string{"IMAP", "POP3", "Exchange"}, 0, nil))
+	account.AddRow("Port", widgets.NewNumberField(1, 65535, 993, 1, nil))
+	account.AddRow("Renews", widgets.NewDateField(time.Date(2026, time.September, 14, 0, 0, 0, 0, time.Local), nil))
+	account.AddRow("Label colour", widgets.NewColorButton(paintengine2d.RGB(0.13, 0.43, 0.47), nil))
+	account.AddRow("Show as", widgets.NewSegmented([]string{"List", "Cards", "Columns"}, 1, nil))
+	account.AddWide(widgets.NewCheckbox("Use TLS", true, nil))
 	form := widgets.NewPanel("Form",
+		account,
+		widgets.NewSeparator(),
 		widgets.NewLabel("TextArea, accordion, switch, separator, spacer."),
 		formNotes,
 		widgets.NewSeparator(),
@@ -447,4 +475,11 @@ func Gallery(a *app.Application, win *app.Window, light bool) widget.Component {
 	root.AddFlex(split, 1)
 	_ = light
 	return root
+}
+
+// wrapRow is a row of controls that wraps when it runs out of width.
+func wrapRow(children ...widget.Component) *widgets.Wrap {
+	w := widgets.NewWrap(children...)
+	w.Gap = 10
+	return w
 }

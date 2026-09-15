@@ -1,6 +1,10 @@
 package uitoolkit
 
 import (
+	"io"
+	"time"
+
+	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/app"
 	"github.com/codemodify/uitoolkit/layout"
 	"github.com/codemodify/uitoolkit/platform"
@@ -28,6 +32,7 @@ type (
 	MessageButtons    = widgets.MessageButtons
 	MessageResult     = widgets.MessageResult
 	MessageBoxOptions = widgets.MessageBoxOptions
+	ButtonRole        = widgets.ButtonRole
 	TableColumn       = widgets.TableColumn
 	FileInfo          = widgets.FileInfo
 	FileDialogMode    = widgets.FileDialogMode
@@ -43,6 +48,7 @@ type (
 	StatusMenuChrome  = platform.StatusMenuChrome
 	Notification      = platform.Notification
 	Appearance        = style.Appearance
+	ColorScheme       = style.ColorScheme
 	ThemeName         = style.ThemeName
 	CornerStyle       = style.CornerStyle
 	IconSetName       = style.IconSetName
@@ -54,9 +60,16 @@ type (
 	ChromeMetrics     = style.ChromeMetrics
 	ThemeEraGroup     = style.ThemeEraGroup
 	IconSetInfo       = style.IconSetInfo
+	SelectionMode     = widgets.SelectionMode
+	Track             = widgets.Track
+	GridCell          = widgets.GridCell
+	ImageFit          = widgets.ImageFit
 )
 
 const (
+	SchemeNoPreference     = style.SchemeNoPreference
+	SchemeDark             = style.SchemeDark
+	SchemeLight            = style.SchemeLight
 	DensityDefault         = style.DensityDefault
 	DensityCompact         = style.DensityCompact
 	DensityRelaxed         = style.DensityRelaxed
@@ -88,9 +101,71 @@ const (
 	BevelFluentAccent      = style.BevelFluentAccent
 	HostMenu               = platform.HostMenu
 	ToolkitMenu            = platform.ToolkitMenu
+	SelectSingle           = widgets.SelectSingle
+	SelectExtended         = widgets.SelectExtended
+	SelectMulti            = widgets.SelectMulti
+	FitContain             = widgets.FitContain
+	FitCover               = widgets.FitCover
+	FitStretch             = widgets.FitStretch
+	FitNone                = widgets.FitNone
 )
 
 func New(opts Options) *Application { return app.New(opts) }
+
+// NewGrid is a row / column layout (QGridLayout, WPF Grid).
+func NewGrid() *widgets.Grid { return widgets.NewGrid() }
+
+// NewForm is a label / field form layout (QFormLayout).
+func NewForm() *widgets.Form { return widgets.NewForm() }
+
+// Auto, Px and Flex size grid tracks.
+func Auto() widgets.Track               { return widgets.Auto() }
+func Px(v float32) widgets.Track        { return widgets.Px(v) }
+func Flex(weight float32) widgets.Track { return widgets.Flex(weight) }
+
+// NewCalendar is a month view (QCalendarWidget).
+func NewCalendar(selected time.Time, on func(time.Time)) *widgets.Calendar {
+	return widgets.NewCalendar(selected, on)
+}
+
+// NewDateField is a date entry with a drop-down calendar (QDateEdit).
+func NewDateField(value time.Time, on func(time.Time)) *widgets.DateField {
+	return widgets.NewDateField(value, on)
+}
+
+// NewColorButton shows a colour and drops a picker down (GtkColorButton).
+func NewColorButton(col paintengine2d.Color, on func(paintengine2d.Color)) *widgets.ColorButton {
+	return widgets.NewColorButton(col, on)
+}
+
+// Dialog button roles: where a ButtonBox puts a button for the look's
+// platform.
+const (
+	RoleAccept      = widgets.RoleAccept
+	RoleReject      = widgets.RoleReject
+	RoleDestructive = widgets.RoleDestructive
+	RoleAction      = widgets.RoleAction
+	RoleHelp        = widgets.RoleHelp
+)
+
+// NewWrap flows children into lines that fold when the width runs out
+// (Qt's flow layout, GTK's FlowBox, WPF's WrapPanel).
+func NewWrap(children ...Component) *widgets.Wrap { return widgets.NewWrap(children...) }
+
+// NewButtonBox lays a dialog's buttons out in the order of the look's
+// platform ("OK Cancel" on Windows and KDE, "Cancel OK" on Mac and GNOME).
+func NewButtonBox() *widgets.ButtonBox { return widgets.NewButtonBox() }
+
+// NewSegmented is a row of joined toggle buttons, one chosen (a view switch).
+func NewSegmented(segments []string, selected int, on func(int)) *widgets.Segmented {
+	return widgets.NewSegmented(segments, selected, on)
+}
+
+// NewPicture shows a raster image.
+func NewPicture(img *paintengine2d.Image) *widgets.Picture { return widgets.NewPicture(img) }
+
+// LoadPicture decodes a PNG, JPEG or GIF into a Picture.
+func LoadPicture(r io.Reader) (*widgets.Picture, error) { return widgets.LoadPicture(r) }
 
 func StatusItemAvailable() bool { return platform.StatusItemAvailable() }
 func StatusMenuFromItems(items []*widgets.MenuItem) []platform.StatusMenuItem {
@@ -203,8 +278,12 @@ func IconSizePixels(sz style.IconSize) float32 {
 func WithAppearance(look style.LookAndFeel, a style.Appearance) style.LookAndFeel {
 	return style.WithAppearance(look, a)
 }
-func Dark() style.Palette  { return style.Dark() }
-func Light() style.Palette { return style.Light() }
+
+// SchemeVariant is the pack that shows name in a light or dark desktop
+// (breeze → breeze-night for SchemeDark).
+func SchemeVariant(name string, s style.ColorScheme) string { return style.SchemeVariant(name, s) }
+func Dark() style.Palette                                   { return style.Dark() }
+func Light() style.Palette                                  { return style.Light() }
 
 func NewColumn(children ...widget.Component) *widgets.FlexBox {
 	return widgets.NewColumn(children...)

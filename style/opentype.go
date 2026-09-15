@@ -14,13 +14,55 @@ import (
 	"github.com/codemodify/uitoolkit/fonts"
 )
 
-// Weight selects Regular or Bold of a bundled family.
+// Weight is a face's weight on the CSS / OpenType scale.
 type Weight int
 
 const (
 	WeightRegular Weight = 400
-	WeightBold    Weight = 700
+	// WeightMedium is Material's button and tab weight (Roboto Medium).
+	WeightMedium Weight = 500
+	// WeightSemibold is Fluent's and macOS's heading weight (Segoe UI
+	// Semibold, SF Pro Semibold).
+	WeightSemibold Weight = 600
+	WeightBold     Weight = 700
 )
+
+// synthFor is how much heavier (a fraction of the size) a face of weight
+// have draws to stand in for w: synthBold from regular to bold, in
+// proportion between.
+func synthFor(w, have Weight) float32 {
+	if w <= have {
+		return 0
+	}
+	return synthBold * float32(w-have) / float32(WeightBold-WeightRegular)
+}
+
+// emboldened is base drawn heavier by amount, a face of its own that
+// shares base's outlines (cached).
+var emboldenedFaces = struct {
+	mu sync.Mutex
+	m  map[embKey]*otFace
+}{m: map[embKey]*otFace{}}
+
+type embKey struct {
+	base   *otFace
+	amount float32
+}
+
+func emboldened(base *otFace, amount float32) *otFace {
+	if base == nil || amount <= 0 {
+		return base
+	}
+	k := embKey{base, amount}
+	emboldenedFaces.mu.Lock()
+	defer emboldenedFaces.mu.Unlock()
+	if f, ok := emboldenedFaces.m[k]; ok {
+		return f
+	}
+	f := &otFace{font: base.font, src: base.src, name: base.name, embolden: base.embolden + amount}
+	emboldenedFaces.m[k] = f
+	return f
+}
 
 const (
 	FamilyUI   = fonts.FamilyUI
@@ -61,13 +103,17 @@ func FontFor(l LookAndFeel, role FontRole) *Font {
 	return l.Font()
 }
 
-// otFace is a parsed bundled TTF used to rasterize glyphs into a white atlas.
+// otFace is a parsed TTF / OTF used to rasterize glyphs into a white atlas.
 type otFace struct {
 	font *sfnt.Font
 	src  []byte
 	name string
 	mu   sync.Mutex
 	buf  sfnt.Buffer
+	// embolden draws the outline heavier by this fraction of the size: a
+	// bold synthesized from a regular face (a variable font's bold instance,
+	// which sfnt cannot draw).
+	embolden float32
 }
 
 var (
@@ -116,8 +162,22 @@ func parseFace(name string, load func() ([]byte, error)) (*otFace, error) {
 		return nil, err
 	}
 	// Copy: sfnt keeps a view of the bytes.
-	buf := append([]byte(nil), src...)
-	f, err := sfnt.Parse(buf)
+	return parseFaceBytes(name, append([]byte(nil), src...), 0)
+}
+
+// parseFaceBytes parses face index of buf (a single font or a collection).
+// sfnt keeps a view of buf.
+func parseFaceBytes(name string, buf []byte, index int) (*otFace, error) {
+	var f *sfnt.Font
+	var err error
+	if len(buf) >= 4 && string(buf[:4]) == "ttcf" {
+		var c *sfnt.Collection
+		if c, err = sfnt.ParseCollection(buf); err == nil {
+			f, err = c.Font(index)
+		}
+	} else {
+		f, err = sfnt.Parse(buf)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("style: parse %s: %w", name, err)
 	}
@@ -133,18 +193,49 @@ func faceFor(family string, w Weight) (*otFace, error) {
 	if err := LoadEmbeddedFonts(); err != nil {
 		return nil, err
 	}
-	switch family {
-	case FamilyMono, "jetbrains mono", "mono":
+	switch bundledFamily(family) {
+	case FamilyMono:
 		if w >= WeightBold {
 			return monoBold, nil
 		}
-		return monoReg, nil
+		return emboldened(monoReg, synthFor(w, WeightRegular)), nil
+	case FamilyUI:
 	default:
-		if w >= WeightBold {
-			return uiBold, nil
+		// An installed face (a pack's era font); not installed, the
+		// bundled UI face stands in.
+		if f := systemOTFace(family, w); f != nil {
+			return f, nil
 		}
-		return uiReg, nil
 	}
+	if w >= WeightBold {
+		return uiBold, nil
+	}
+	// Titillium Web ships regular and bold: medium and semibold are the
+	// regular drawn a little heavier.
+	return emboldened(uiReg, synthFor(w, WeightRegular)), nil
+}
+
+// kern is the face's pair kerning (GPOS or kern table) for r0 then r1 at
+// size, in pixels; 0 when the face has none for the pair.
+func (f *otFace) kern(r0, r1 rune, size float32) float32 {
+	if f == nil || f.font == nil {
+		return 0
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	g0, err := f.font.GlyphIndex(&f.buf, r0)
+	if err != nil || g0 == 0 {
+		return 0
+	}
+	g1, err := f.font.GlyphIndex(&f.buf, r1)
+	if err != nil || g1 == 0 {
+		return 0
+	}
+	k, err := f.font.Kern(&f.buf, g0, g1, ppem26(size), font.HintingNone)
+	if err != nil {
+		return 0
+	}
+	return fx32(k)
 }
 
 func (f *otFace) metrics(size float32) (ascent, descent float32) {
@@ -207,6 +298,33 @@ type otAtlas struct {
 
 	cur   atomic.Pointer[paintengine2d.FontAtlas]
 	bytes atomic.Int64
+
+	// kerns caches pair kerning at this size (rune pair → pixels).
+	kernMu sync.Mutex
+	kerns  map[uint64]float32
+}
+
+// kernCap bounds the pair-kerning cache of one face and size.
+const kernCap = 4096
+
+// kern is the pair kerning between r0 and r1 at the atlas's size, in
+// pixels (negative pulls them together).
+func (a *otAtlas) kern(r0, r1 rune) float32 {
+	if a == nil || a.face == nil {
+		return 0
+	}
+	key := uint64(uint32(r0))<<32 | uint64(uint32(r1))
+	a.kernMu.Lock()
+	defer a.kernMu.Unlock()
+	if v, ok := a.kerns[key]; ok {
+		return v
+	}
+	v := a.face.kern(r0, r1, a.size)
+	if a.kerns == nil || len(a.kerns) >= kernCap {
+		a.kerns = make(map[uint64]float32, 64)
+	}
+	a.kerns[key] = v
+	return v
 }
 
 func newOTAtlas(face *otFace, size float32) *otAtlas {
@@ -397,6 +515,9 @@ func (d *atlasDraft) rasterize(r rune) error {
 	if r == ' ' && advance < a.size*0.2 {
 		advance = a.size * 0.3
 	}
+	if tf.embolden > 0 {
+		advance += tf.embolden * a.size
+	}
 	if len(segs) == 0 {
 		return d.blitPath(r, nil, advance)
 	}
@@ -504,6 +625,10 @@ func (d *atlasDraft) bakeCell(p *paintengine2d.Path, advance float32) (paintengi
 		return paintengine2d.AtlasCell{Advance: advance}, nil
 	}
 	b := p.Bounds()
+	heavy := a.face.embolden * a.size
+	if heavy > 0 {
+		b = b.Inset(-heavy * 0.5)
+	}
 	xmin, ymin, xmax, ymax := b.Min.X, b.Min.Y, b.Max.X, b.Max.Y
 	if xmax <= xmin {
 		xmax = xmin + 1
@@ -529,7 +654,13 @@ func (d *atlasDraft) bakeCell(p *paintengine2d.Path, advance float32) (paintengi
 	tmp := paintengine2d.NewImage(gw, gh)
 	ctx := paintengine2d.NewContext(tmp)
 	ctx.Translate(-xmin+pad, -ymin+pad)
-	ctx.DrawPath(p, paintengine2d.Fill(paintengine2d.White))
+	ink := paintengine2d.Fill(paintengine2d.White)
+	if heavy > 0 {
+		// Synthesized bold: the outline stroked round as well as filled.
+		ink.Style = paintengine2d.StyleStrokeAndFill
+		ink.Stroke = paintengine2d.Stroke{Width: heavy, Join: paintengine2d.JoinRound}
+	}
+	ctx.DrawPath(p, ink)
 	blitGlyph(d.img, ax, ay, tmp)
 	d.img.Bump()
 	return paintengine2d.AtlasCell{

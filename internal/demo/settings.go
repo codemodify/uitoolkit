@@ -11,117 +11,574 @@ import (
 	"github.com/codemodify/uitoolkit/widgets"
 )
 
-// SettingsApp is the toolkit appearance editor. Theme (palette), corners,
-// icon set, and icon size are independent. Picker changes preview locally
-// via Application.SetLook. Apply writes look.json
-// {theme, corners, icons, iconSize}. Closing without Apply discards staged changes.
-// Appearance is two-pane: a scrollable Built-in theme list on the left,
-// Corners/Icons/preview on the right. Apply stays pinned under the splitter.
+// Settings pages.
+const (
+	pageThemes = iota
+	pagePacks
+	pageAbout
+)
+
+var settingsPages = []string{"Themes", "Packs & icons", "About"}
+
+// Theme browser filters: every built-in pack, one decade, or user packs.
+var themeFilters = []string{"All decades", "1980s", "1990s", "2000s", "2010s", "2020s", "My themes"}
+
+const filterUser = 6
+
+// SettingsApp is the toolkit appearance editor. The theme browser previews
+// the staged appearance — theme, corners, icon set, icon size — in a live,
+// interactive mini application rendered in that theme (a ThemeScope), while
+// Settings itself keeps the applied look. Apply writes look.json and every
+// app that watches it (and Settings) switches; Revert drops the staged
+// change. Closing without Apply discards it.
 func SettingsApp(a *app.Application, win *app.Window) widget.Component {
 	saved := style.LoadAppearance().Normalize()
-	return buildSettings(a, win, saved, saved, 0)
+	return buildSettings(a, win, saved, saved, pageThemes)
 }
 
-func buildSettings(a *app.Application, win *app.Window, saved, staged style.Appearance, section int) widget.Component {
-	saved = saved.Normalize()
-	staged = staged.Normalize()
-	if section < 0 || section > 1 {
-		section = 0
+// SettingsAppStaged is SettingsApp with a theme already staged (not
+// applied): screenshots and docs use it to show the preview in a theme
+// other than the one Settings runs in.
+func SettingsAppStaged(a *app.Application, win *app.Window, theme string) widget.Component {
+	saved := style.LoadAppearance().Normalize()
+	staged := saved
+	if pack, ok := style.LoadTheme(theme); ok {
+		staged.Name, staged.Theme = pack.Name, pack.Palette
 	}
+	return buildSettings(a, win, saved, staged, pageThemes)
+}
 
-	st := staged.Name + " · " + string(staged.Corners) + " · " + string(staged.Icons) + " · " + string(staged.IconSize)
-	if staged != saved {
-		st += " · unapplied"
-	}
-	status := widgets.NewStatusBar(st, style.AppearancePath(), "v"+uitoolkit.Version)
-	chrome := widgets.NewTitleBar("Settings", "Theme, corners, icons, and icon size for every uitoolkit app")
+// settingsState is the model behind one build of the Settings content.
+type settingsState struct {
+	a      *app.Application
+	win    *app.Window
+	saved  style.Appearance
+	staged style.Appearance
+	page   int
+	filter int
+	// listOff keeps the theme browser's scroll position across rebuilds:
+	// picking a theme below the fold used to jump the list to the top.
+	listOff float32
+	// scheme is the desktop's light / dark preference the page was built in.
+	scheme style.ColorScheme
+}
 
-	preview := func(next style.Appearance) {
-		next = next.Normalize()
-		a.SetLook(next.Look())
-		win.SetContent(buildSettings(a, win, saved, next, section))
+func (s *settingsState) rebuild() {
+	s.win.SetContent(buildSettingsState(s))
+}
+
+func buildSettings(a *app.Application, win *app.Window, saved, staged style.Appearance, page int) widget.Component {
+	s := &settingsState{a: a, win: win, saved: saved.Normalize(), staged: staged.Normalize(), page: page}
+	// The preview draws the staged theme's light or dark sibling: redraw
+	// it when the desktop switches.
+	a.OnLookChange(func() {
+		if now := style.DesktopColorScheme(); now != s.scheme {
+			s.rebuild()
+		}
+	})
+	return buildSettingsState(s)
+}
+
+func buildSettingsState(s *settingsState) widget.Component {
+	s.scheme = style.DesktopColorScheme()
+	if s.page < 0 || s.page >= len(settingsPages) {
+		s.page = pageThemes
 	}
-	persist := func() {
-		next := staged.Normalize()
+	status := widgets.NewStatusBar(s.statusText(), style.AppearancePath(), "v"+uitoolkit.Version)
+	chrome := widgets.NewTitleBar("Settings", "Themes from every decade for every uitoolkit app")
+
+	// Stage a change: Settings keeps its look; the preview follows.
+	stage := func(next style.Appearance) {
+		s.staged = next.Normalize()
+		s.rebuild()
+	}
+	apply := func() {
+		next := s.staged.Normalize()
 		if err := style.SaveAppearance(next); err != nil {
 			status.Set(0, err.Error())
 			return
 		}
-		a.SetLook(next.Look())
-		win.SetContent(buildSettings(a, win, next, next, section))
+		s.saved = next
+		s.a.ApplyAppearance(next)
+		s.rebuild()
+	}
+	revert := func() {
+		s.staged = s.saved
+		s.rebuild()
 	}
 
-	themeBuiltin := style.ListBuiltinThemes()
-	themeUser := style.ListUserThemes()
-	onTheme := func(p style.ThemePack) {
-		next := staged
-		next.Name = p.Name
-		next.Theme = p.Palette
-		preview(next)
+	var page widget.Component
+	switch s.page {
+	case pagePacks:
+		page = s.packsPage(status, stage)
+	case pageAbout:
+		page = widgets.NewScrollView(s.aboutPage())
+	default:
+		page = s.themesPage(status, stage)
 	}
-	// One Built-in list (era is in each Display name). Stacked per-era
-	// ListViews each measure at full content height and overflow the pane.
-	builtinTheme := pickerSection("Built-in", len(themeBuiltin), func(i int) string {
-		return themeBuiltin[i].Display()
-	}, indexTheme(themeBuiltin, staged.Name), func(i int) {
-		if i >= 0 && i < len(themeBuiltin) {
-			onTheme(themeBuiltin[i])
+
+	nav := widgets.NewListView(len(settingsPages), func(i int) string { return settingsPages[i] }, func(i int) {
+		s.page = i
+		s.rebuild()
+	})
+	nav.Selected = s.page
+	nav.RowHeight = 32
+	nav.Sidebar = true
+	side := widgets.NewColumn(
+		widgets.NewTitle("Settings"),
+		widgets.NewLabel("v"+uitoolkit.Version),
+		nav,
+	).WithGap(8).WithPad(10)
+	side.AddFlex(nav, 1)
+
+	right := widgets.NewPad(10, page)
+	split := widgets.NewSplitter(true, side, right)
+	split.Ratio = 0.18
+
+	applyBtn := widgets.NewButton("Apply", apply)
+	applyBtn.Primary = true
+	revertBtn := widgets.NewButton("Revert", revert)
+	if s.staged == s.saved {
+		applyBtn.SetEnabled(false)
+		revertBtn.SetEnabled(false)
+	}
+	hint := widgets.NewLabel("Apply writes look.json; running apps switch live. Closing without Apply discards the staged theme.")
+	actions := widgets.NewRow(applyBtn, revertBtn, hint).WithGap(12).WithPad(8)
+
+	root := widgets.NewColumn(chrome, split, actions, status)
+	root.AddFlex(split, 1)
+	return root
+}
+
+func (s *settingsState) statusText() string {
+	st := s.staged.Name + " · " + string(s.staged.Corners) + " · " + string(s.staged.Icons) + " · " + string(s.staged.IconSize)
+	if s.staged != s.saved {
+		st += " · unapplied"
+	}
+	return st
+}
+
+// ---- Themes page --------------------------------------------------------------
+
+// themeRow is one entry of the theme browser.
+type themeRow struct {
+	pack style.ThemePack
+	user bool
+}
+
+func (s *settingsState) themeRows() []themeRow {
+	var rows []themeRow
+	if s.filter != filterUser {
+		for _, p := range style.ListBuiltinThemes() {
+			if s.filter == 0 || style.Decade(p.Year) == themeFilters[s.filter] {
+				rows = append(rows, themeRow{pack: p})
+			}
+		}
+	}
+	if s.filter == 0 || s.filter == filterUser {
+		for _, p := range style.ListUserThemes() {
+			rows = append(rows, themeRow{pack: p, user: true})
+		}
+	}
+	return rows
+}
+
+func themeRowText(r themeRow) string {
+	switch {
+	case r.user:
+		return "User  ·  " + r.pack.Display()
+	case r.pack.Year > 0:
+		return fmt.Sprintf("%d  ·  %s", r.pack.Year, r.pack.Display())
+	default:
+		return r.pack.Display()
+	}
+}
+
+func (s *settingsState) themesPage(status *widgets.StatusBar, stage func(style.Appearance)) widget.Component {
+	rows := s.themeRows()
+	sel := -1
+	for i, r := range rows {
+		if r.pack.Name == s.staged.Name {
+			sel = i
+		}
+	}
+	filters := widgets.NewComboBox(themeFilters, s.filter, func(i int) {
+		s.filter = i
+		s.listOff = 0
+		s.rebuild()
+	})
+	var list *widgets.ListView
+	list = widgets.NewListView(len(rows), func(i int) string { return themeRowText(rows[i]) }, func(i int) {
+		if i < 0 || i >= len(rows) {
+			return
+		}
+		s.listOff = list.OffsetY
+		next := s.staged
+		next.Name = rows[i].pack.Name
+		next.Theme = rows[i].pack.Palette
+		stage(next)
+	})
+	list.Selected = sel
+	list.RowHeight = 28
+	list.OffsetY = s.listOff
+	// The staged theme may sit below the fold (Aqua is row 30): bring it
+	// into view; a row the user just clicked is already there.
+	list.EnsureVisible(sel)
+	filters.SetAccessibleName("Decade")
+	list.SetAccessibleName("Themes")
+	browser := widgets.NewColumn(widgets.NewLabel("Themes"), filters, list).WithGap(6)
+	browser.AddFlex(list, 1)
+
+	// Pack details.
+	pack, _ := style.LoadTheme(s.staged.Name)
+	meta := []string{}
+	if pack.Year > 0 {
+		meta = append(meta, fmt.Sprint(pack.Year))
+	}
+	if pack.Lineage != "" {
+		meta = append(meta, pack.Lineage)
+	}
+	eng := pack.Tokens.Engine
+	if eng == "" {
+		eng = "base"
+	}
+	meta = append(meta, "engine "+eng)
+	if pack.Source == style.ThemeSourceUser {
+		meta = append(meta, "user pack")
+	}
+	info := widgets.NewColumn(
+		widgets.NewTitle(pack.Display()),
+		widgets.NewLabel(strings.Join(meta, "  ·  ")),
+	).WithGap(2)
+	if pack.Summary != "" {
+		summary := widgets.NewLabel(pack.Summary)
+		summary.Wrap = true
+		info.Add(summary)
+	}
+	shown := pack
+	if note := s.followNote(pack, &shown); note != "" {
+		n := widgets.NewLabel(note)
+		n.Wrap = true
+		info.Add(n)
+	}
+
+	// The live preview: a small application window in the staged theme —
+	// its frame, caption and every control come from that theme.
+	frame := widgets.NewPanel("Preview — "+shown.Display(), PreviewApp(func(msg string) { status.Set(0, msg) }))
+	frame.Window = true
+	scope := widgets.NewThemeScope(s.staged.Look(), frame)
+
+	// Options that shape the staged look (shown live in the preview).
+	cornerSel := 0
+	switch s.staged.Corners {
+	case style.CornersRound:
+		cornerSel = 1
+	case style.CornersSquare:
+		cornerSel = 2
+	}
+	corners := widgets.NewComboBox([]string{"Theme shape", "Round", "Square"}, cornerSel, func(i int) {
+		next := s.staged
+		next.Corners = []style.CornerStyle{style.CornersTheme, style.CornersRound, style.CornersSquare}[i]
+		stage(next)
+	})
+	sizeSel := 1
+	switch s.staged.IconSize {
+	case style.IconSizeSmall:
+		sizeSel = 0
+	case style.IconSizeLarge:
+		sizeSel = 2
+	}
+	sizes := widgets.NewComboBox([]string{"Small", "Medium", "Large"}, sizeSel, func(i int) {
+		next := s.staged
+		next.IconSize = []style.IconSize{style.IconSizeSmall, style.IconSizeMedium, style.IconSizeLarge}[i]
+		stage(next)
+	})
+	sets := append(style.ListBuiltinIconSets(), style.ListUserIconSets()...)
+	names := make([]string, len(sets))
+	iconSel := 0
+	for i, set := range sets {
+		names[i] = set.Label
+		if set.Name == s.staged.Icons {
+			iconSel = i
+		}
+	}
+	icons := widgets.NewComboBox(names, iconSel, func(i int) {
+		if i < 0 || i >= len(sets) {
+			return
+		}
+		next := s.staged
+		next.Icons = sets[i].Name
+		stage(next)
+	})
+	// Hover fades, the default button's pulse, busy bars: off for users
+	// who get unwell from motion (GTK's gtk-enable-animations).
+	motion := widgets.NewSwitch("Animations", !s.staged.ReduceMotion, func(on bool) {
+		next := s.staged
+		next.ReduceMotion = !on
+		stage(next)
+	})
+	corners.SetAccessibleName("Corners")
+	sizes.SetAccessibleName("Icon size")
+	icons.SetAccessibleName("Icons")
+	// Two rows of label / control pairs, so no label is cut short.
+	options := widgets.NewGrid()
+	options.Cols = []widgets.Track{widgets.Auto(), widgets.Flex(1), widgets.Auto(), widgets.Flex(1)}
+	options.Place(widgets.NewLabel("Corners"), 0, 0)
+	options.Place(corners, 0, 1)
+	options.Place(widgets.NewLabel("Icon size"), 0, 2)
+	options.Place(sizes, 0, 3)
+	options.Place(widgets.NewLabel("Icons"), 1, 0)
+	options.Place(icons, 1, 1)
+	options.PlaceSpan(motion, 1, 2, 1, 2)
+	// GNOME's and Plasma's light / dark setting and accent colour: the
+	// theme shows its sibling (Breeze and Breeze Dark) to match the
+	// desktop, recoloured around its accent where the engine takes one.
+	follow := widgets.NewSwitch("Match the desktop's light or dark mode and accent colour", s.staged.FollowDesktop, func(on bool) {
+		next := s.staged
+		next.FollowDesktop = on
+		stage(next)
+	})
+	options.PlaceSpan(follow, 2, 0, 1, 4)
+	// The desktop's own file dialogs (the XDG portal's), as Qt and GTK
+	// apps can use, instead of the themed ones.
+	native := widgets.NewSwitch("Use the desktop's file dialogs", s.staged.NativeDialogs, func(on bool) {
+		next := s.staged
+		next.NativeDialogs = on
+		stage(next)
+	})
+	options.PlaceSpan(native, 3, 0, 1, 4)
+	if style.DesktopReducesMotion() {
+		options.PlaceSpan(widgets.NewLabel("The desktop asks for reduced motion, so animations stay off."), 4, 0, 1, 4)
+	}
+
+	preview := widgets.NewColumn(info, scope, options).WithGap(10)
+	preview.AddFlex(scope, 1)
+
+	body := widgets.NewRow(browser, preview).WithGap(14)
+	body.AddFlex(browser, 4)
+	body.AddFlex(preview, 7)
+	return body
+}
+
+// followNote says what following the desktop does to the staged pack, and
+// sets shown to the pack the preview draws.
+func (s *settingsState) followNote(pack style.ThemePack, shown *style.ThemePack) string {
+	if !s.staged.FollowDesktop {
+		return ""
+	}
+	var note string
+	scheme := s.a.DesktopColorScheme()
+	eff := s.staged.Effective()
+	switch {
+	case scheme == style.SchemeNoPreference:
+		note = "The desktop has no light or dark preference: the theme shows as it is."
+	case eff.Name != s.staged.Name:
+		if p, ok := style.LoadTheme(eff.Name); ok {
+			*shown = p
+		}
+		note = fmt.Sprintf("The desktop prefers %s: %s shows as %s.", scheme, pack.Display(), shown.Display())
+	case (scheme == style.SchemeDark) != (pack.Palette == style.ThemeDark):
+		note = fmt.Sprintf("The desktop prefers %s, but %s has no %s version.", scheme, pack.Display(), scheme)
+	}
+	if _, ok := style.DesktopAccent(); ok && style.TakesAccent(*shown) {
+		note = strings.TrimSpace(note + " It takes the desktop's accent colour.")
+	}
+	return note
+}
+
+// PreviewApp is a small, fully interactive application used to preview a
+// theme: menu bar, tool bar, tabs with every kind of control, lists, a
+// tree, a table and a status bar. Settings shows it inside a ThemeScope.
+func PreviewApp(say func(string)) widget.Component {
+	if say == nil {
+		say = func(string) {}
+	}
+	menu := widgets.NewMenuBar(
+		widgets.NewMenu("&File",
+			widgets.ItemIconAccel(style.IconNew, "&New", "Ctrl+N", func() { say("New") }),
+			widgets.ItemIconAccel(style.IconOpen, "&Open…", "Ctrl+O", func() { say("Open") }),
+			widgets.ItemIconAccel(style.IconSave, "&Save", "Ctrl+S", func() { say("Save") }),
+			widgets.Sep(),
+			widgets.Item("E&xit", func() { say("Exit") }),
+		),
+		widgets.NewMenu("&Edit",
+			widgets.ItemIconAccel(style.IconCut, "Cu&t", "Ctrl+X", nil),
+			widgets.ItemIconAccel(style.IconCopy, "&Copy", "Ctrl+C", nil),
+			widgets.ItemIconAccel(style.IconPaste, "&Paste", "Ctrl+V", nil),
+		),
+		widgets.NewMenu("&View",
+			widgets.CheckItem("Status &bar", true, nil),
+			widgets.CheckItem("&Word wrap", false, nil),
+		),
+		widgets.NewMenu("&Help", widgets.Item("&About", func() { say("About") })),
+	)
+	bold := widgets.ToolIconBtn(style.IconPen, "", nil)
+	bold.Toggle, bold.Down = true, true
+	tools := widgets.NewToolBar(
+		widgets.ToolIconBtn(style.IconNew, "", func() { say("New") }),
+		widgets.ToolIconBtn(style.IconOpen, "", func() { say("Open") }),
+		widgets.ToolIconBtn(style.IconSave, "", func() { say("Save") }),
+		widgets.ToolDivider(),
+		widgets.ToolIconBtn(style.IconCut, "", nil),
+		widgets.ToolIconBtn(style.IconCopy, "", nil),
+		widgets.ToolIconBtn(style.IconPaste, "", nil),
+		widgets.ToolDivider(),
+		bold,
+		widgets.ToolIconBtn(style.IconMail, "Send", func() { say("Send") }),
+	)
+
+	ok := widgets.NewButton("Default", func() { say("Default button") })
+	ok.Primary = true
+	normal := widgets.NewButton("Button", func() { say("Button") })
+	off := widgets.NewButton("Disabled", nil)
+	off.SetEnabled(false)
+	dialog := widgets.NewButton("Dialog…", nil)
+	dialog.OnClick = func() {
+		widgets.Confirm(dialog, "Save changes?", "Your document has unsaved changes.", func(yes bool) {
+			say(fmt.Sprint("Save changes: ", yes))
+		})
+	}
+	progress := widgets.NewProgressBar(0.62)
+	left := widgets.NewColumn(
+		widgets.NewRow(ok, normal).WithGap(8),
+		widgets.NewRow(off, dialog).WithGap(8),
+		widgets.NewCheckbox("Check box", true, nil),
+		widgets.NewCheckbox("Unchecked", false, nil),
+		widgets.NewRadioGroup([]string{"Radio one", "Radio two"}, 0, nil),
+	).WithGap(8)
+	combo := widgets.NewComboBox([]string{"Combo box", "Second choice", "Third choice"}, 0, nil)
+	combo.SetAccessibleName("Choice")
+	spin := widgets.NewNumberField(0, 99, 3, 1, nil)
+	spin.SetAccessibleName("Count")
+	slider := widgets.NewSlider(0, 100, 40, nil)
+	slider.SetAccessibleName("Level")
+	right := widgets.NewColumn(
+		widgets.NewTextField("Ada Lovelace", "Name", nil),
+		widgets.NewRow(combo, spin).WithGap(8),
+		widgets.NewSwitch("Switch", true, nil),
+		slider,
+		progress,
+	).WithGap(8)
+	controls := widgets.NewRow(left, right).WithGap(16).WithPad(8)
+	controls.AddFlex(right, 1)
+
+	tree := widgets.NewTreeView(previewTree())
+	tree.SetPreferred(160, 0)
+	table := widgets.NewTableView(
+		[]widgets.TableColumn{{Title: "Name", Width: 120}, {Title: "Size", Width: 60, Align: style.AlignEnd}, {Title: "Kind", Width: 90}},
+		8, func(row, col int) string {
+			return [][]string{
+				{"README.md", "4 KB", "Text"}, {"go.mod", "1 KB", "Module"}, {"look.go", "38 KB", "Go"},
+				{"engine.go", "21 KB", "Go"}, {"theme.json", "2 KB", "JSON"}, {"icons", "—", "Folder"},
+				{"fonts", "—", "Folder"}, {"LICENSE", "1 KB", "Text"},
+			}[row][col]
+		}, nil)
+	table.Selected = 2
+	lists := widgets.NewSplitter(true, tree, table)
+	lists.Ratio = 0.36
+
+	text := widgets.NewTextArea("Themes change shapes, not just colours:\nbevels, gel buttons, chamfered tabs,\nscrollbar arrows and window captions.", "", nil)
+	tabs := widgets.NewTabView(
+		widgets.Tab{Title: "Controls", Content: controls},
+		widgets.Tab{Title: "Lists", Content: lists},
+		widgets.Tab{Title: "Text", Content: text},
+	)
+
+	sb := widgets.NewStatusBar("Ready", "Ln 1, Col 1", "100%")
+	win := widgets.NewColumn(menu, tools, tabs, sb)
+	win.AddFlex(tabs, 1)
+	return win
+}
+
+func previewTree() *widgets.TreeNode {
+	inbox := widgets.NewTreeNode("Inbox")
+	inbox.Bold = true
+	return widgets.NewTreeNode("Mail",
+		inbox,
+		widgets.NewTreeNode("Archives", widgets.NewTreeNode("2025"), widgets.NewTreeNode("2026")),
+		widgets.NewTreeNode("Sent"),
+		widgets.NewTreeNode("Trash"),
+	)
+}
+
+// ---- Packs & icons page ---------------------------------------------------
+
+func (s *settingsState) packsPage(status *widgets.StatusBar, stage func(style.Appearance)) widget.Component {
+	userThemes := style.ListUserThemes()
+	userSel := indexTheme(userThemes, s.staged.Name)
+	themes := pickerSection("User", len(userThemes), func(i int) string {
+		return userThemes[i].Display()
+	}, userSel, func(i int) {
+		if i >= 0 && i < len(userThemes) {
+			next := s.staged
+			next.Name = userThemes[i].Name
+			next.Theme = userThemes[i].Palette
+			stage(next)
 		}
 	})
-	userThemeSel := indexTheme(themeUser, staged.Name)
-	userTheme := pickerSection("User", len(themeUser), func(i int) string {
-		return themeUser[i].Display()
-	}, userThemeSel, func(i int) {
-		if i >= 0 && i < len(themeUser) {
-			onTheme(themeUser[i])
-		}
+	themeCol := widgets.NewColumn(widgets.NewTitle("Theme packs"),
+		widgets.NewLabel("Built-in packs live in the theme browser. Export saves the staged theme's colours and metrics as a pack you can edit."),
+		themes).WithGap(8)
+	var exportHost widget.Component
+	exportBtn := widgets.NewButton("Export current theme…", func() {
+		promptExportName(exportHost, func(name string) {
+			pack, err := style.ExportAppearance(strings.TrimSpace(name), s.staged)
+			if err != nil {
+				status.Set(0, err.Error())
+				return
+			}
+			next := s.staged
+			next.Name = pack.Name
+			next.Theme = pack.Palette
+			stage(next)
+		})
 	})
-	if userThemeSel >= 0 {
-		var delThemeHost widget.Component
-		delTheme := widgets.NewButton("Delete", func() {
-			name := themeUser[userThemeSel].Name
-			widgets.Confirm(delThemeHost, "Delete theme?",
-				"Remove "+name+" from disk? This cannot be undone.",
-				func(yes bool) {
-					if !yes {
-						return
-					}
-					if err := style.DeleteUserTheme(name); err != nil {
+	exportHost = exportBtn
+	themeCol.Add(exportBtn)
+	if userSel >= 0 {
+		var delHost widget.Component
+		del := widgets.NewButton("Delete", func() {
+			name := userThemes[userSel].Name
+			widgets.Confirm(delHost, "Delete theme?", "Remove "+name+" from disk? This cannot be undone.", func(yes bool) {
+				if !yes {
+					return
+				}
+				if err := style.DeleteUserTheme(name); err != nil {
+					status.Set(0, err.Error())
+					return
+				}
+				next := style.AfterUserThemeDeleted(s.staged, name)
+				if s.saved.Name == name {
+					if err := style.SaveAppearance(next); err != nil {
 						status.Set(0, err.Error())
 						return
 					}
-					next := style.AfterUserThemeDeleted(staged, name)
-					newSaved := saved
-					if saved.Name == name {
-						if err := style.SaveAppearance(next); err != nil {
-							status.Set(0, err.Error())
-							return
-						}
-						newSaved = next
-					}
-					a.SetLook(next.Look())
-					win.SetContent(buildSettings(a, win, newSaved, next, section))
-				})
+					s.saved = next
+				}
+				s.a.ApplyAppearance(s.saved)
+				stage(next)
+			})
 		})
-		delThemeHost = delTheme
-		userTheme = widgets.NewColumn(userTheme, delTheme).WithGap(4)
+		delHost = del
+		themeCol.Add(del)
 	}
+	themeCol.AddFlex(themes, 1)
 
 	iconBuiltin := style.ListBuiltinIconSets()
 	iconUser := style.ListUserIconSets()
-	onIcon := func(s style.IconSetInfo) {
-		next := staged
-		next.Icons = s.Name
-		preview(next)
+	onIcon := func(set style.IconSetInfo) {
+		next := s.staged
+		next.Icons = set.Name
+		stage(next)
 	}
 	builtinIcons := pickerSection("Built-in", len(iconBuiltin), func(i int) string {
 		return iconBuiltin[i].Label
-	}, indexIcon(iconBuiltin, staged.Icons), func(i int) {
+	}, indexIcon(iconBuiltin, s.staged.Icons), func(i int) {
 		if i >= 0 && i < len(iconBuiltin) {
 			onIcon(iconBuiltin[i])
 		}
 	})
-	userIconSel := indexIcon(iconUser, staged.Icons)
+	userIconSel := indexIcon(iconUser, s.staged.Icons)
 	userIcons := pickerSection("User", len(iconUser), func(i int) string {
 		return iconUser[i].Label
 	}, userIconSel, func(i int) {
@@ -129,242 +586,77 @@ func buildSettings(a *app.Application, win *app.Window, saved, staged style.Appe
 			onIcon(iconUser[i])
 		}
 	})
-	if userIconSel >= 0 {
-		var delIconHost widget.Component
-		delIcon := widgets.NewButton("Delete", func() {
-			name := iconUser[userIconSel].Name
-			widgets.Confirm(delIconHost, "Delete icon set?",
-				"Remove "+string(name)+" from disk? This cannot be undone.",
-				func(yes bool) {
-					if !yes {
-						return
-					}
-					if err := style.DeleteUserIconSet(name); err != nil {
-						status.Set(0, err.Error())
-						return
-					}
-					next := staged
-					if next.Icons == name {
-						next.Icons = style.IconSetClassic
-					}
-					newSaved := saved
-					if saved.Icons == name {
-						if err := style.SaveAppearance(next); err != nil {
-							status.Set(0, err.Error())
-							return
-						}
-						newSaved = next
-					}
-					a.SetLook(next.Look())
-					win.SetContent(buildSettings(a, win, newSaved, next, section))
-				})
-		})
-		delIconHost = delIcon
-		userIcons = widgets.NewColumn(userIcons, delIcon).WithGap(4)
-	}
-
-	cornerSel := 0
-	if staged.Corners == style.CornersSquare {
-		cornerSel = 1
-	}
-	corners := widgets.NewRadioGroup([]string{"Round", "Square"}, cornerSel, func(i int) {
-		next := staged
-		if i == 1 {
-			next.Corners = style.CornersSquare
-		} else {
-			next.Corners = style.CornersRound
-		}
-		preview(next)
-	})
-	cornerCol := widgets.NewColumn(widgets.NewLabel("Corners"), corners).WithGap(4)
-
-	sizeSel := 1
-	switch staged.IconSize {
-	case style.IconSizeSmall:
-		sizeSel = 0
-	case style.IconSizeLarge:
-		sizeSel = 2
-	}
-	sizes := widgets.NewRadioGroup([]string{"Small", "Medium", "Large"}, sizeSel, func(i int) {
-		next := staged
-		switch i {
-		case 0:
-			next.IconSize = style.IconSizeSmall
-		case 2:
-			next.IconSize = style.IconSizeLarge
-		default:
-			next.IconSize = style.IconSizeMedium
-		}
-		preview(next)
-	})
-	sizeCol := widgets.NewColumn(widgets.NewLabel("Icon size"), sizes).WithGap(4)
-
-	var exportHost widget.Component
-	exportBtn := widgets.NewButton("Export current theme…", func() {
-		promptExportName(exportHost, func(name string) {
-			name = strings.TrimSpace(name)
-			pack, err := style.ExportAppearance(name, staged)
-			if err != nil {
-				status.Set(0, err.Error())
-				return
-			}
-			next := staged
-			next.Name = pack.Name
-			next.Theme = pack.Palette
-			preview(next)
-		})
-	})
-	exportHost = exportBtn
-
-	detail := widgets.NewColumn(
-		widgets.NewLabel("Theme  "+staged.Name),
-		widgets.NewLabel("Palette  "+string(staged.Theme)),
-		widgets.NewLabel("Corners  "+string(staged.Corners)),
-		widgets.NewLabel("Icons  "+string(staged.Icons)),
-		widgets.NewLabel("Icon size  "+string(staged.IconSize)+" ("+fmt.Sprintf("%.0f", style.IconSizePixels(staged.IconSize))+"px)"),
-		widgets.NewLabel("look.json stores theme, corners, icons, and iconSize independently."),
-		widgets.NewLabel("Export writes theme tokens (palette, bevel, metrics); corners/icons/size stay prefs."),
-		widgets.NewLabel("Built-in era packs span Classic 95 through FlatLaf. User packs overlay the same schema."),
-		widgets.NewLabel("Delete (under User) removes that pack from disk after confirm."),
-		widgets.NewRow(exportBtn).WithGap(8),
-	).WithGap(6)
-	pickerCol := widgets.NewColumn(widgets.NewLabel("Theme"), builtinTheme, userTheme).WithGap(8)
-	pickerCol.AddFlex(builtinTheme, 1)
-	if len(themeUser) > 0 {
-		pickerCol.AddFlex(userTheme, 1)
-	}
-	iconCol := widgets.NewColumn(widgets.NewLabel("Icons"), builtinIcons, userIcons).WithGap(8)
+	iconCol := widgets.NewColumn(widgets.NewTitle("Icon sets"), builtinIcons, userIcons).WithGap(8)
 	iconCol.AddFlex(builtinIcons, 1)
 	if len(iconUser) > 0 {
 		iconCol.AddFlex(userIcons, 1)
 	}
+	if userIconSel >= 0 {
+		var delHost widget.Component
+		del := widgets.NewButton("Delete", func() {
+			name := iconUser[userIconSel].Name
+			widgets.Confirm(delHost, "Delete icon set?", "Remove "+string(name)+" from disk? This cannot be undone.", func(yes bool) {
+				if !yes {
+					return
+				}
+				if err := style.DeleteUserIconSet(name); err != nil {
+					status.Set(0, err.Error())
+					return
+				}
+				next := s.staged
+				if next.Icons == name {
+					next.Icons = style.IconSetClassic
+				}
+				if s.saved.Icons == name {
+					if err := style.SaveAppearance(next); err != nil {
+						status.Set(0, err.Error())
+						return
+					}
+					s.saved = next
+				}
+				s.a.ApplyAppearance(s.saved)
+				stage(next)
+			})
+		})
+		delHost = del
+		iconCol.Add(del)
+	}
+	body := widgets.NewRow(themeCol, iconCol).WithGap(20)
+	body.AddFlex(themeCol, 1)
+	body.AddFlex(iconCol, 1)
+	return body
+}
 
-	primary := widgets.NewButton("Primary action", func() { status.Set(0, "Primary") })
-	primary.Primary = true
-	secondary := widgets.NewButton("Secondary", func() { status.Set(0, "Secondary") })
-	disabled := widgets.NewButton("Disabled", nil)
-	disabled.SetEnabled(false)
+// ---- About page -----------------------------------------------------------------
 
-	field := widgets.NewTextField("Ada Lovelace", "Display name", func(s string) {
-		status.Set(0, "Field: "+s)
-	})
-	combo := widgets.NewComboBox([]string{"Classic look", "Squared chrome", "Sharp icons"}, 0, func(i int) {
-		status.Set(0, fmt.Sprintf("Combo %d", i))
-	})
-	check := widgets.NewCheckbox("Enable notifications", true, nil)
-	sw := widgets.NewSwitch("Compact density", false, nil)
-	slider := widgets.NewSlider(0, 100, 60, func(v float32) {
-		status.Set(0, fmt.Sprintf("Slider %d", int(v+0.5)))
-	})
-
-	newBtn := widgets.ToolIconBtn(style.IconNew, "", func() { status.Set(0, "New") })
-	newBtn.Tip = "New"
-	openBtn := widgets.ToolIconBtn(style.IconOpen, "", func() { status.Set(0, "Open") })
-	openBtn.Tip = "Open"
-	saveBtn := widgets.ToolIconBtn(style.IconSave, "", func() { status.Set(0, "Save") })
-	saveBtn.Tip = "Save"
-	cutBtn := widgets.ToolIconBtn(style.IconCut, "", nil)
-	copyBtn := widgets.ToolIconBtn(style.IconCopy, "", nil)
-	pasteBtn := widgets.ToolIconBtn(style.IconPaste, "", nil)
-	undoBtn := widgets.ToolIconBtn(style.IconUndo, "", nil)
-	redoBtn := widgets.ToolIconBtn(style.IconRedo, "", nil)
-	searchBtn := widgets.ToolIconBtn(style.IconSearch, "", nil)
-	mailBtn := widgets.ToolIconBtn(style.IconMail, "", nil)
-	downBtn := widgets.ToolIconBtn(style.IconDownload, "", nil)
-	penBtn := widgets.ToolIconBtn(style.IconPen, "", nil)
-	infoBtn := widgets.ToolIconBtn(style.IconInfo, "", nil)
-	warnBtn := widgets.ToolIconBtn(style.IconWarning, "", nil)
-	errBtn := widgets.ToolIconBtn(style.IconError, "", nil)
-	toolbar := widgets.NewToolBar(
-		newBtn, openBtn, saveBtn, widgets.ToolDivider(),
-		cutBtn, copyBtn, pasteBtn, undoBtn, redoBtn, widgets.ToolDivider(),
-		searchBtn, mailBtn, downBtn, penBtn, widgets.ToolDivider(),
-		infoBtn, warnBtn, errBtn,
-	)
-
-	previewPane := widgets.NewPanel("Live preview",
-		widgets.NewRow(primary, secondary, disabled).WithGap(10),
-		widgets.NewLabel("Icon set preview (chrome + Mail Fetch / Write stems)"),
-		toolbar,
-		widgets.NewRow(field, combo).WithGap(10),
-		widgets.NewRow(check, sw).WithGap(16),
-		slider,
-	)
-
-	options := widgets.NewRow(cornerCol, sizeCol, iconCol).WithGap(16)
-	options.AddFlex(iconCol, 2)
-	inspect := widgets.NewColumn(options, previewPane, detail).WithGap(12)
-	inspectScroll := widgets.NewScrollView(inspect)
-	body := widgets.NewRow(pickerCol, inspectScroll).WithGap(16)
-	body.AddFlex(pickerCol, 5)
-	body.AddFlex(inspectScroll, 7)
-
-	appearance := widgets.NewColumn(
-		widgets.NewTitle("Appearance"),
-		widgets.NewLabel("Shared by Mail, gallery, and any app that calls PreferredLook()."),
-		body,
-	).WithGap(10).WithPad(4)
-	appearance.AddFlex(body, 1)
-
-	aboutPath := widgets.NewMonoTextView(style.AppearancePath(), "")
-	aboutPath.MinRows = 2
-	aboutPath.Wrap = true
-	themesPath := widgets.NewMonoTextView(style.ThemesDir()+"/<name>/theme.json", "")
-	themesPath.MinRows = 2
-	themesPath.Wrap = true
-	iconsPath := widgets.NewMonoTextView(style.IconsDir()+"/<set>/*.png", "")
-	iconsPath.MinRows = 2
-	iconsPath.Wrap = true
-	about := widgets.NewColumn(
+func (s *settingsState) aboutPage() widget.Component {
+	mono := func(text string) widget.Component {
+		v := widgets.NewMonoTextView(text, "")
+		v.MinRows = 2
+		v.Wrap = true
+		return v
+	}
+	engines := strings.Join(style.EngineIDs(), ", ")
+	return widgets.NewColumn(
 		widgets.NewTitle("About"),
 		widgets.NewLabel("uitoolkit v"+uitoolkit.Version),
-		widgets.NewLabel("LookAndFeel Classic — Titillium Web + JetBrains Mono."),
+		widgets.NewLabel(fmt.Sprintf("%d built-in themes from %d theme engines: %s.", len(style.ListBuiltinThemes()), len(style.EngineIDs()), engines)),
+		widgets.NewLabel("A theme is a pack (colours, metrics) painted by an engine (shapes): Windows 95 bevels, Aqua gel, Motif shadows…"),
 		widgets.NewLabel("Prefs file (theme + corners + icons + iconSize, written on Apply):"),
-		aboutPath,
-		widgets.NewLabel("User theme packs (exported tokens; listed under User; Delete removes the folder after confirm):"),
-		themesPath,
-		widgets.NewLabel("Icon sets: Built-in = lucide/phosphor/tabler/heroicons/material-symbols when copied (wide stem coverage: chrome, Mail, UI), plus drawn classic/sharp. User = any other folder:"),
-		iconsPath,
-		widgets.NewLabel("After pulling a new uitoolkit, copy the repo icons/ folders again — packs are not embedded or auto-installed."),
-		widgets.NewLabel("Era packs are embedded (Classic 95, Motif/CDE, NeXT, Luna, Aqua, Fusion, Breeze, Fluent, Material, FlatLaf). Corners, icons, and icon size stay separate prefs."),
-		widgets.NewLabel("Other apps watch look.json and call SetLook(PreferredLook())."),
-		widgets.NewButton("Open appearance", func() {
-			win.SetContent(buildSettings(a, win, saved, staged, 0))
+		mono(style.AppearancePath()),
+		widgets.NewLabel("User theme packs (exported; edit the JSON to make your own):"),
+		mono(style.ThemesDir()+"/<name>/theme.json"),
+		widgets.NewLabel("Icon sets (copy the repo icons/ folders here after every pull):"),
+		mono(style.IconsDir()+"/<set>/*.png"),
+		widgets.NewLabel("Other apps watch look.json and switch live on Apply."),
+		widgets.NewButton("Browse themes", func() {
+			s.page = pageThemes
+			s.rebuild()
 		}),
 	).WithGap(10).WithPad(4)
-
-	sections := []string{"Appearance", "About"}
-	nav := widgets.NewListView(len(sections), func(i int) string { return sections[i] }, func(i int) {
-		win.SetContent(buildSettings(a, win, saved, staged, i))
-	})
-	nav.Selected = section
-	nav.RowHeight = 32
-	side := widgets.NewColumn(
-		widgets.NewTitle("Settings"),
-		widgets.NewLabel("v"+uitoolkit.Version),
-		nav,
-	).WithGap(8).WithPad(10)
-
-	var page widget.Component = appearance
-	if section == 1 {
-		page = widgets.NewScrollView(about)
-	}
-	right := widgets.NewPad(12, page)
-	split := widgets.NewSplitter(true, side, right)
-	split.Ratio = 0.24
-
-	applyBtn := widgets.NewButton("Apply", persist)
-	applyBtn.Primary = true
-	if staged == saved {
-		applyBtn.SetEnabled(false)
-	}
-	hint := widgets.NewLabel("Apply writes theme, corners, icons, and iconSize to look.json. Close without Apply discards staged changes.")
-	actions := widgets.NewRow(applyBtn, hint).WithGap(12).WithPad(8)
-
-	root := widgets.NewColumn(chrome, split, actions, status)
-	root.AddFlex(split, 1)
-	return root
 }
+
+// ---- helpers ------------------------------------------------------------------
 
 func pickerSection(title string, count int, text func(int) string, selected int, on func(int)) widget.Component {
 	head := widgets.NewLabel(title)
@@ -415,12 +707,16 @@ func promptExportName(from widget.Component, on func(string)) {
 	ok.Primary = true
 	field.OnSubmit = func(string) { finish(true) }
 	card := widgets.NewPanel("Export theme",
-		widgets.NewLabel("Name the theme pack. Written to ~/.config/uitoolkit/themes/<name>/theme.json with tokens (colors, bevel, metrics). Corners, icons, and icon size stay in look.json."),
+		widgets.NewLabel("Name the theme pack. It is written to ~/.config/uitoolkit/themes/<name>/theme.json with the theme's colours, engine and metrics. Corners, icons and icon size stay in look.json."),
 		field,
-		widgets.NewRow(cancel, ok).WithGap(8),
+		widgets.NewButtonBox().AddButton(cancel, widgets.RoleReject).AddButton(ok, widgets.RoleAccept),
 	)
+	card.Window = true
 	card.Raised = true
+	card.OnClose = func() { finish(false) }
 	overlay = widgets.NewOverlay(card)
+	overlay.Modal = true
+	overlay.InitialFocus = field
 	overlay.MinCardH = 200
 	widget.ShowOverlay(from, overlay)
 }

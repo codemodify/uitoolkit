@@ -17,7 +17,12 @@ import (
 
 // Window is a widget host that paints into a platform.Surface.
 type Window struct {
-	app        *Application
+	app *Application
+	// altHeld: the Alt key is down (mnemonic underlines show in looks
+	// that hide them otherwise).
+	altHeld bool
+	// dropOver is the drop target a drag from another app is over.
+	dropOver   widget.Component
 	surf       platform.Surface
 	root       widget.Component
 	overlay    widget.Component
@@ -42,6 +47,12 @@ type Window struct {
 	animPeriod time.Duration
 	layers     *widget.SceneCache
 	scene      *paintengine2d.Scene
+	// paths keeps recorded shapes across frames, so a steady UI does not
+	// clone every path it records each frame.
+	paths *paintengine2d.PathCache
+	// inactive: the window lost keyboard focus (selections dim, GTK's
+	// backdrop). Windows start active; offscreen ones never change.
+	inactive   bool
 	cursor     platform.Cursor
 	paints     int
 	closeHides bool
@@ -149,6 +160,20 @@ func (w *Window) SetContent(c widget.Component) {
 }
 
 func (w *Window) Content() widget.Component { return w.root }
+
+// Active reports whether the window has keyboard focus (widget.ActiveHost).
+func (w *Window) Active() bool { return !w.inactive }
+
+// setActive repaints everything when the window gains or loses keyboard
+// focus: selections, focus marks and default buttons follow it.
+func (w *Window) setActive(active bool) {
+	if w.inactive == !active {
+		return
+	}
+	w.inactive = !active
+	w.dropScene()
+	w.fullInvalidate()
+}
 
 func (w *Window) SetOverlay(c widget.Component) {
 	if w.overlay == c {
@@ -309,6 +334,12 @@ func (w *Window) Invalidate(c widget.Component, local paintengine2d.Rect) {
 	if r.Empty() {
 		r = dev
 	}
+	if c.Parent() == nil && c != w.root && (local.Empty() || local == c.LocalBounds()) {
+		// A floating layer shown, moved or hidden: its drop shadow lies
+		// outside it and must be repainted too.
+		lk := w.layerLook(c)
+		r = style.PopupShadowOf(lk, style.PopupMenu).Max(style.PopupShadowOf(lk, style.PopupTooltip)).Grow(r)
+	}
 	w.dirty.Add(r.Inset(-1))
 	if w.layers != nil {
 		w.layers.Invalidate(c.ID())
@@ -406,6 +437,30 @@ func (w *Window) needsPaint() bool {
 	return !w.laid || w.full || !w.dirty.Empty()
 }
 
+// AfterFunc runs fn on the UI thread after d (widget.Timers). The returned
+// stop cancels it if it has not run yet.
+func (w *Window) AfterFunc(d time.Duration, fn func()) (stop func()) {
+	if w == nil || fn == nil {
+		return func() {}
+	}
+	var cancelled atomic.Bool
+	t := time.AfterFunc(d, func() {
+		if cancelled.Load() {
+			return
+		}
+		w.app.Post(func() {
+			if cancelled.Load() || w.Closed() {
+				return
+			}
+			fn()
+		})
+	})
+	return func() {
+		cancelled.Store(true)
+		t.Stop()
+	}
+}
+
 // RequestAnim asks Run to wake at least every d (busy indicators).
 // d <= 0 clears the request so idle can sleep on the display fd.
 func (w *Window) RequestAnim(d time.Duration) { w.animPeriod = d }
@@ -474,6 +529,8 @@ func (w *Window) dispatch(ev platform.Event) {
 	case platform.EventExpose:
 		w.dirty.Add(paintengine2d.XYWH(ev.Pos.X, ev.Pos.Y, float32(ev.Width), float32(ev.Height)))
 	case platform.EventFocusOut:
+		w.setAltHeld(false)
+		w.setActive(false)
 		w.resetIME()
 		w.dismissTooltip()
 		w.capture = nil
@@ -492,6 +549,7 @@ func (w *Window) dispatch(ev platform.Event) {
 			}
 		}
 	case platform.EventFocusIn:
+		w.setActive(true)
 		// Toolkit status menus arm FocusOut-dismiss after a short delay
 		// so map/focus churn on Wayland does not kill the first frame.
 		w.syncIMECursor()
@@ -527,7 +585,18 @@ func (w *Window) dispatch(ev platform.Event) {
 		w.mouseMove(ev)
 	case platform.EventScroll:
 		w.bubbleWheel(ev)
+	case platform.EventPointerLeave:
+		w.pointerLeft()
+	case platform.EventDragMotion:
+		w.dragMotion(ev)
+	case platform.EventDragLeave:
+		w.dragLeave()
+	case platform.EventDrop:
+		w.drop(ev)
 	case platform.EventKeyDown:
+		if ev.Key == platform.KeyAlt {
+			w.setAltHeld(true)
+		}
 		if ev.Key == platform.KeyTab {
 			w.tab(!ev.Mods.Shift())
 			return
@@ -537,8 +606,14 @@ func (w *Window) dispatch(ev platform.Event) {
 				return
 			}
 		}
-		if ev.Mods.Alt() && w.root != nil {
-			if handleAlt(w.root, ev.Key) {
+		if ev.Mods.Alt() {
+			// While a modal overlay is up its mnemonics are the only ones:
+			// Alt+F used to open the main menu above a dialog.
+			scope := w.root
+			if w.overlay != nil {
+				scope = w.overlay
+			}
+			if scope != nil && handleAlt(scope, ev.Key) {
 				return
 			}
 		}
@@ -555,8 +630,18 @@ func (w *Window) dispatch(ev platform.Event) {
 				return
 			}
 		}
-		w.bubbleKey(widget.KeyEvent{Key: ev.Key, Mods: ev.Mods})
+		if w.bubbleKey(widget.KeyEvent{Key: ev.Key, Mods: ev.Mods}) {
+			return
+		}
+		// Keys nobody took run menu accelerators (Ctrl+N, F1, Ctrl+Q …),
+		// but not under a modal overlay.
+		if w.overlay == nil && w.root != nil {
+			handleAccel(w.root, ev.Key, ev.Mods)
+		}
 	case platform.EventKeyUp:
+		if ev.Key == platform.KeyAlt {
+			w.setAltHeld(false)
+		}
 		if t := w.keyTarget(); t != nil {
 			t.KeyRelease(widget.KeyEvent{Key: ev.Key, Mods: ev.Mods})
 		}
@@ -564,6 +649,24 @@ func (w *Window) dispatch(ev platform.Event) {
 		if t := w.keyTarget(); t != nil {
 			t.TextInput(ev.Rune)
 		}
+	}
+}
+
+// AltHeld reports whether the Alt key is down in the window.
+func (w *Window) AltHeld() bool { return w != nil && w.altHeld }
+
+// setAltHeld records the Alt key and, in looks that show mnemonic
+// underlines only while it is held, repaints them.
+func (w *Window) setAltHeld(v bool) {
+	if w.altHeld == v {
+		return
+	}
+	w.altHeld = v
+	if style.LookHint(w.look, style.HintMnemonics) == style.MnemonicsOnAlt {
+		// Every label with a mnemonic draws differently now: re-record,
+		// since a full present only replays the retained scene.
+		w.dropScene()
+		w.fullInvalidate()
 	}
 }
 
@@ -575,7 +678,13 @@ func (w *Window) bubbleWheel(ev platform.Event) {
 		if !c.Enabled() || !c.Visible() {
 			continue
 		}
-		if c.MouseWheel(widget.MouseEvent{Pos: local(c, ev.Pos), Scroll: ev.Scroll, Mods: ev.Mods}) {
+		if c.MouseWheel(widget.MouseEvent{Pos: local(c, ev.Pos), Scroll: ev.Scroll, Mods: ev.Mods, Precise: ev.ScrollPrecise}) {
+			// Content moved under a still pointer: re-hit-test so the row
+			// (or widget) now under it becomes hot, not the one that
+			// scrolled away.
+			if w.capture == nil {
+				w.rehover(ev.Pos, ev.Mods)
+			}
 			return
 		}
 	}
@@ -644,16 +753,46 @@ func (w *Window) keyTarget() widget.Component {
 	return widget.KeyTarget(w.focus, w.overlay)
 }
 
-func (w *Window) bubbleKey(e widget.KeyEvent) {
+// bubbleKey offers a key to the focused widget and its ancestors and
+// reports whether one of them took it.
+func (w *Window) bubbleKey(e widget.KeyEvent) bool {
 	start := w.keyTarget()
 	if start == nil {
-		return
+		return false
 	}
 	for c := start; c != nil; c = c.Parent() {
 		if c.KeyPress(e) {
-			return
+			return true
 		}
 	}
+	return false
+}
+
+// focusOnClick reports whether a click should focus c. Widgets that take
+// keyboard focus only through Tab / mnemonics (a menu bar, a tool bar —
+// Qt's Qt::TabFocus policy) implement FocusOnClick() false, so clicking
+// them leaves focus with the field the user was typing in.
+func focusOnClick(c widget.Component) bool {
+	if f, ok := c.(interface{ FocusOnClick() bool }); ok {
+		return f.FocusOnClick()
+	}
+	return true
+}
+
+// handleAccel runs the first menu accelerator under root that matches.
+func handleAccel(root widget.Component, key platform.Key, mods platform.Modifiers) bool {
+	handled := false
+	widget.Walk(root, func(c widget.Component) {
+		if handled {
+			return
+		}
+		if a, ok := c.(interface {
+			HandleAccelerator(platform.Key, platform.Modifiers) bool
+		}); ok && a.HandleAccelerator(key, mods) {
+			handled = true
+		}
+	})
+	return handled
 }
 
 func (w *Window) showTip(text string, pos paintengine2d.Point) {
@@ -708,11 +847,11 @@ func (w *Window) mouseDown(ev platform.Event) {
 	}
 	t := w.hit(ev.Pos)
 	w.capture = t
-	if t != nil && t.WantsFocus() {
+	if t != nil && t.WantsFocus() && focusOnClick(t) {
 		w.RequestFocus(t)
-	} else if t == nil || !t.WantsFocus() {
-		// click on inert chrome keeps focus unless it is the overlay dimmer
 	}
+	// A click on inert chrome (or on a widget with a tab-only focus policy)
+	// keeps focus where it was.
 	if t != nil {
 		lp := local(t, ev.Pos)
 		t.MousePress(widget.MouseEvent{Pos: lp, Button: ev.Button, Mods: ev.Mods})
@@ -729,13 +868,56 @@ func (w *Window) mouseUp(ev platform.Event) {
 		lp := local(t, ev.Pos)
 		t.MouseRelease(widget.MouseEvent{Pos: lp, Button: ev.Button, Mods: ev.Mods})
 	}
+	captured := w.capture != nil
 	w.capture = nil
+	if captured {
+		// A drag that ended over another widget hands hover to it (the
+		// pressed button used to stay hot until the pointer moved again).
+		w.rehover(ev.Pos, ev.Mods)
+	}
 	hit := w.hit(ev.Pos)
 	if hit != nil {
 		w.syncCursor(hit, local(hit, ev.Pos))
 	} else {
 		w.SetCursor(platform.CursorDefault)
 	}
+}
+
+// rehover re-hit-tests hover at pos after the content moved under a still
+// pointer (wheel scroll) or a capture ended. Unlike real motion it never
+// arms a tooltip.
+func (w *Window) rehover(pos paintengine2d.Point, mods platform.Modifiers) {
+	t := w.hit(pos)
+	if t != w.hover {
+		if w.hover != nil {
+			w.hover.MouseExit()
+		}
+		w.hover = t
+		if t != nil {
+			t.MouseEnter()
+		}
+	}
+	if t != nil {
+		lp := local(t, pos)
+		t.MouseMove(widget.MouseEvent{Pos: lp, Mods: mods})
+		w.syncCursor(t, lp)
+	}
+}
+
+// pointerLeft clears hover and pending tooltips when the pointer leaves the
+// window. A drag in progress keeps its capture: the release still comes.
+func (w *Window) pointerLeft() {
+	if w.capture != nil {
+		return
+	}
+	if w.hover != nil {
+		w.hover.MouseExit()
+		w.hover = nil
+	}
+	w.dismissTooltip()
+	w.tipHover = nil
+	w.lastTip = ""
+	w.SetCursor(platform.CursorDefault)
 }
 
 func (w *Window) mouseMove(ev platform.Event) {
@@ -814,6 +996,7 @@ func (w *Window) tab(forward bool) {
 	}
 	w.RequestFocus(list[idx])
 	widget.MarkKeyboardFocus(list[idx])
+	widget.RevealFocus(list[idx])
 }
 
 func (w *Window) layout() {
@@ -899,7 +1082,8 @@ func (w *Window) frame() {
 	}
 	rects := w.paintRects()
 	if platform.WantScene() {
-		w.frameScene(rects)
+		// A backdrop blur can widen what is repainted.
+		rects = w.frameScene(rects)
 	} else {
 		w.frameImmediate(rects)
 	}
@@ -922,10 +1106,56 @@ func (w *Window) paintLayers(ctx *paintengine2d.Context, dirty *paintengine2d.Da
 		widget.PaintTree(w.overlay, ctx, dirty)
 	}
 	if w.popup != nil {
-		widget.PaintCascade(w.popup, ctx, dirty)
+		widget.WalkCascade(w.popup, func(c widget.Component) {
+			w.paintShadow(ctx, c, style.PopupMenu, dirty)
+			widget.PaintTree(c, ctx, dirty)
+		})
 	}
 	if w.tooltip != nil {
+		w.paintShadow(ctx, w.tooltip, style.PopupTooltip, dirty)
 		widget.PaintTree(w.tooltip, ctx, dirty)
+	}
+}
+
+// layerLook is the look a floating layer paints with: its own (inherited
+// from the widget that opened it) or the window's.
+func (w *Window) layerLook(c widget.Component) style.LookAndFeel {
+	if l, ok := c.(interface{ Look() style.LookAndFeel }); ok {
+		if lk := l.Look(); lk != nil {
+			return lk
+		}
+	}
+	return w.look
+}
+
+// paintShadow drops the look's shadow under a floating layer, just before
+// the layer paints over it. dirty (device pixels) skips it when no dirty box
+// reaches the shadow.
+func (w *Window) paintShadow(ctx *paintengine2d.Context, c widget.Component, kind style.PopupKind, dirty *paintengine2d.Damage) {
+	if c == nil || !c.Visible() {
+		return
+	}
+	lk := w.layerLook(c)
+	out := style.PopupShadowOf(lk, kind)
+	if out.Zero() {
+		return
+	}
+	b := c.Bounds()
+	reach := out.Grow(b)
+	if dirty != nil && !dirty.Empty() && !dirty.Overlaps(ctx.Matrix().TransformRect(reach)) {
+		return
+	}
+	ctx.Save()
+	ctx.ClipRect(reach)
+	style.DrawPopupShadowOf(lk, ctx, b, kind)
+	ctx.Restore()
+}
+
+// paintBackground lets the look paint the window background (Aqua
+// pinstripes, brushed metal); the flat clear already covers the rest.
+func (w *Window) paintBackground(ctx *paintengine2d.Context, full paintengine2d.Rect) {
+	if bl, ok := w.look.(style.WindowBackgroundLook); ok {
+		bl.DrawWindowBackground(ctx, full)
 	}
 }
 
@@ -935,8 +1165,11 @@ func (w *Window) frameImmediate(rects []paintengine2d.Rect) {
 		return
 	}
 	bg := w.look.Palette().Background
+	ww, hh := w.surf.Size()
+	full := paintengine2d.XYWH(0, 0, float32(ww), float32(hh))
 	if len(rects) == 0 {
 		ctx.Clear(bg)
+		w.paintBackground(ctx, full)
 		w.paintLayers(ctx, nil)
 		return
 	}
@@ -950,16 +1183,23 @@ func (w *Window) frameImmediate(rects []paintengine2d.Rect) {
 		ctx.Save()
 		ctx.ClipDeviceRect(r)
 		ctx.DrawRect(r, paintengine2d.Fill(bg))
+		w.paintBackground(ctx, full)
 		w.paintLayers(ctx, &one)
 		ctx.Restore()
 	}
 }
 
-func (w *Window) frameScene(rects []paintengine2d.Rect) {
+func (w *Window) frameScene(rects []paintengine2d.Rect) []paintengine2d.Rect {
 	ww, hh := w.surf.Size()
 	rec := paintengine2d.NewRecorder(ww, hh)
+	if w.paths == nil {
+		w.paths = paintengine2d.NewPathCache()
+	}
+	rec.UsePathCache(w.paths)
+	defer w.paths.EndFrame()
 	rec.Clear(w.look.Palette().Background)
 	ctx := paintengine2d.NewContextDevice(rec)
+	w.paintBackground(ctx, paintengine2d.XYWH(0, 0, float32(ww), float32(hh)))
 	// The recording is always a complete display list for the window;
 	// partial redraw happens at replay, where the engine clips every op to
 	// the dirty box. Recording a subset would make the next partial replay
@@ -971,23 +1211,28 @@ func (w *Window) frameScene(rects []paintengine2d.Rect) {
 		widget.RecordTree(w.overlay, rec, ctx, nil, w.layers, true)
 	}
 	if w.popup != nil {
-		widget.RecordCascade(w.popup, rec, ctx, nil, w.layers, true)
+		widget.WalkCascade(w.popup, func(c widget.Component) {
+			w.paintShadow(ctx, c, style.PopupMenu, nil)
+			widget.RecordTree(c, rec, ctx, nil, w.layers, true)
+		})
 	}
 	if w.tooltip != nil {
+		w.paintShadow(ctx, w.tooltip, style.PopupTooltip, nil)
 		widget.RecordTree(w.tooltip, rec, ctx, nil, w.layers, true)
 	}
 	w.layers.EndFrame()
 	w.scene = rec.Finish()
 	dev := platform.SurfaceDevice(w.surf)
 	if dev == nil {
-		return
+		return rects
 	}
 	if len(rects) == 0 {
 		paintengine2d.DrawScene(w.scene, dev)
-		return
+		return rects
 	}
 	dmg := paintengine2d.Damage{Rects: rects}
 	paintengine2d.DrawSceneDamage(w.scene, dev, &dmg)
+	return dmg.Rects
 }
 
 // Scene is the last retained graph (tests / inspector).
@@ -1101,3 +1346,12 @@ func (w *Window) Visible() bool {
 
 // Idle is used by tests that want a timestamp.
 func (w *Window) Idle() time.Time { return time.Now() }
+
+// PortalParent names the window as the parent of a desktop portal dialog
+// ("x11:<id>"; empty where the platform cannot say).
+func (w *Window) PortalParent() string {
+	if p, ok := w.surf.(platform.PortalParenter); ok {
+		return p.PortalParent()
+	}
+	return ""
+}

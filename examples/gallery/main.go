@@ -24,9 +24,26 @@ import (
 func main() {
 	shot := flag.String("screenshot", "", "write PNG gallery into this directory and exit")
 	headless := flag.Bool("headless", false, "paint offscreen (no X11/Wayland)")
+	theme := flag.String("theme", "", "with -screenshot: take every gallery shot in this theme pack (default: $UITK_THEME, else each shot's own look)")
+	tab := flag.Int("tab", 0, "with -headless: the gallery tab to show (0 Scroll, 1 List, 2 Tree, 3 Table, 4 Form)")
 	flag.Parse()
+	if (*shot != "" || *headless) && os.Getenv(widgets.AnimationsEnv) == "" {
+		// Stills are the same every run: no fade or pulse caught mid-way.
+		os.Setenv(widgets.AnimationsEnv, "0")
+	}
 
 	if *shot != "" {
+		name := *theme
+		if name == "" {
+			name = os.Getenv(style.ThemeEnv)
+		}
+		if name != "" {
+			pack, ok := style.LoadTheme(name)
+			if !ok {
+				log.Fatalf("unknown theme %q", name)
+			}
+			shotLook = pack.Look()
+		}
 		if err := writeScreenshots(*shot); err != nil {
 			log.Fatal(err)
 		}
@@ -40,6 +57,9 @@ func main() {
 		log.Fatal(err)
 	}
 	win.SetContent(buildGallery(a, win, a.Look().Name() == "light"))
+	if *tab > 0 {
+		selectGalleryTab(win, *tab)
+	}
 	if *headless {
 		_ = win.WritePNG("gallery.png")
 		fmt.Println("wrote gallery.png")
@@ -49,6 +69,9 @@ func main() {
 		log.Fatal(err)
 	}
 }
+
+// shotLook, when set by -theme, replaces the look of every gallery shot.
+var shotLook style.LookAndFeel
 
 func buildGallery(a *app.Application, win *app.Window, light bool) widget.Component {
 	return demo.Gallery(a, win, light)
@@ -171,6 +194,9 @@ func writeScreenshots(dir string) error {
 		},
 	}
 	for _, s := range shots {
+		if shotLook != nil {
+			s.look = shotLook
+		}
 		a := uitoolkit.New(uitoolkit.Options{Look: s.look, Headless: true})
 		w, err := a.NewWindow(platform.WindowOptions{
 			Title: "uitoolkit gallery", Width: 1000, Height: 760, Headless: true,

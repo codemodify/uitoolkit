@@ -91,6 +91,8 @@ type MenuBar struct {
 	press  int
 	focus  int
 	keyNav bool
+	// prevFocus had focus before the bar was activated; it gets it back.
+	prevFocus widget.Component
 }
 
 // NewMenuBar constructs a menu bar.
@@ -100,6 +102,10 @@ func NewMenuBar(menus ...*Menu) *MenuBar {
 	m.SetWantsFocus(true)
 	return m
 }
+
+// FocusOnClick is false: clicking a title opens the menu without moving
+// focus away from the widget the user was working in.
+func (m *MenuBar) FocusOnClick() bool { return false }
 
 // Menus returns the attached menus.
 func (m *MenuBar) Menus() []*Menu { return m.menus }
@@ -121,14 +127,15 @@ func (m *MenuBar) barH() float32 {
 }
 
 func (m *MenuBar) titlesWidth() float32 {
-	f := m.Look().Font()
-	x := float32(8)
+	lk := m.Look()
+	f := style.ControlFontOf(lk, style.RoleMenu)
+	x := style.Dip(lk, 8)
 	for _, menu := range m.menus {
 		if menu == nil {
 			continue
 		}
 		label, _, _ := ParseMnemonic(menu.Title)
-		x += f.Advance(label) + 20
+		x += f.Advance(label) + style.Dip(lk, 20)
 	}
 	return x
 }
@@ -147,13 +154,14 @@ func (m *MenuBar) Measure(c layout.Constraints) paintengine2d.Point {
 func (m *MenuBar) Arrange(r paintengine2d.Rect) { m.SetBounds(r) }
 
 func (m *MenuBar) titleRects() []paintengine2d.Rect {
-	f := m.Look().Font()
+	lk := m.Look()
+	f := style.ControlFontOf(lk, style.RoleMenu)
 	h := m.LocalBounds().Dy()
-	x := float32(4)
+	x := style.Dip(lk, 4)
 	out := make([]paintengine2d.Rect, len(m.menus))
 	for i, menu := range m.menus {
 		label, _, _ := ParseMnemonic(menu.Title)
-		tw := f.Advance(label) + 20
+		tw := f.Advance(label) + style.Dip(lk, 20)
 		out[i] = paintengine2d.XYWH(x, 0, tw, h)
 		x += tw
 	}
@@ -175,6 +183,7 @@ func (m *MenuBar) Paint(ctx *paintengine2d.Context) {
 	ctx.Save()
 	ctx.ClipRect(m.LocalBounds())
 	rects := m.titleRects()
+	cues := mnemonicShown(m, m.keyNav)
 	for i, menu := range m.menus {
 		// The bar's widget StateHovered is true for any pointer on the
 		// strip (including empty space). Titles must not inherit it or
@@ -191,6 +200,9 @@ func (m *MenuBar) Paint(ctx *paintengine2d.Context) {
 			st &^= style.StateFocused
 		}
 		label, _, idx := ParseMnemonic(menu.Title)
+		if !cues {
+			idx = -1
+		}
 		lk.DrawMenuTitle(ctx, rects[i], st, label, idx, i == m.open)
 	}
 	ctx.Restore()
@@ -249,7 +261,9 @@ func (m *MenuBar) MousePress(e widget.MouseEvent) bool {
 		return false
 	}
 	m.keyNav = false
-	m.RequestFocus()
+	// A click opens a menu without taking focus (Win32, GTK): the popup
+	// holds focus while it is open and hands it back to its owner.
+	m.rememberFocus()
 	i := m.titleAt(e.Pos.X)
 	m.press = i
 	if i < 0 {
@@ -315,6 +329,7 @@ func (m *MenuBar) HandleAlt(key platform.Key) bool {
 		_, k, _ := ParseMnemonic(menu.Title)
 		if k != platform.KeyUnknown && k == key {
 			m.keyNav = true
+			m.rememberFocus()
 			m.RequestFocus()
 			m.focus = i
 			m.Open(i)
@@ -352,12 +367,23 @@ func (m *MenuBar) Open(i int) {
 		m.focus = -1
 		m.Invalidate()
 	}
+	// Left / Right on a row without a submenu walk the bar.
+	pop.OnNavigate = func(dir int) {
+		n := len(m.menus)
+		m.keyNav = true
+		m.focus = (i + dir + n) % n
+		m.Open(m.focus)
+	}
+	// Opened from the keyboard: the first item is current and painted so,
+	// and its mnemonics show until it closes.
+	pop.keyNav = m.keyNav
+	pop.cues = m.keyNav
 	origin := widget.DeviceOrigin(m)
 	tb := rects[i]
 	anchor := paintengine2d.XYWH(origin.X+tb.Min.X, origin.Y+tb.Min.Y, tb.Dx(), tb.Dy())
 	// Flush under the title so DrawMenuTitle(open) shares an edge with the popup.
 	widget.PlacePopupForAnchor(m, pop, anchor, 0, 0)
-	pop.RestoreFocusTo(m)
+	pop.RestoreFocusTo(m.focusReturn())
 	prev := m.open
 	// Set before ShowPopup: the outgoing popup's OnDismiss runs inside it and
 	// must see that a sibling menu is now the current one.
@@ -368,6 +394,78 @@ func (m *MenuBar) Open(i int) {
 		return
 	}
 	m.open = prev
+}
+
+// rememberFocus records who had focus before the bar was activated, so it
+// gets focus back when the menu closes (it used to stay on the bar, and
+// typing went nowhere after picking Edit ▸ Copy).
+func (m *MenuBar) rememberFocus() {
+	f := widget.FocusOwner(m)
+	if f == nil || f == m {
+		return
+	}
+	if _, isMenu := f.(*PopupMenu); isMenu {
+		return
+	}
+	m.prevFocus = f
+}
+
+// focusReturn is where focus goes when the open menu closes.
+func (m *MenuBar) focusReturn() widget.Component {
+	if m.prevFocus != nil && m.prevFocus.Visible() && m.prevFocus.Host() != nil {
+		return m.prevFocus
+	}
+	return m
+}
+
+// HandleAccelerator runs the enabled menu item whose Shortcut is key+mods
+// (the window calls it for keys the focused widget did not take).
+func (m *MenuBar) HandleAccelerator(key platform.Key, mods platform.Modifiers) bool {
+	if !m.Enabled() || !m.Visible() {
+		return false
+	}
+	const mask = platform.ModCtrl | platform.ModShift | platform.ModAlt | platform.ModSuper
+	var hit func(items []*MenuItem) bool
+	hit = func(items []*MenuItem) bool {
+		for _, it := range items {
+			if it == nil || it.Separator || it.Disabled {
+				continue
+			}
+			if it.HasSubmenu() {
+				if hit(it.Submenu) {
+					return true
+				}
+				continue
+			}
+			k, want, ok := ParseAccel(it.Shortcut)
+			if !ok || k != key || mods&mask != want {
+				continue
+			}
+			if m.open >= 0 {
+				m.Close()
+			}
+			if it.RadioGroup != "" {
+				for _, o := range items {
+					if o != nil && o.RadioGroup == it.RadioGroup {
+						o.Checked = o == it
+					}
+				}
+			} else if it.Checkable {
+				it.Checked = !it.Checked
+			}
+			if it.OnClick != nil {
+				it.OnClick()
+			}
+			return true
+		}
+		return false
+	}
+	for _, menu := range m.menus {
+		if menu != nil && hit(menu.Items) {
+			return true
+		}
+	}
+	return false
 }
 
 // Close dismisses the open menu.
@@ -384,14 +482,20 @@ var _ widget.CascadeHost = (*PopupMenu)(nil)
 // PopupMenu is a floating list of MenuItems (drop-down or context menu).
 type PopupMenu struct {
 	widget.Base
-	Items      []*MenuItem
-	OnPick     func(*MenuItem)
-	OnDismiss  func()
+	Items     []*MenuItem
+	OnPick    func(*MenuItem)
+	OnDismiss func()
+	// OnNavigate walks to the adjacent menu of a menu bar (dir -1 / +1)
+	// for Left / Right on a row that has no submenu.
+	OnNavigate func(dir int)
 	OffsetY    float32
 	hover      int
 	press      int
 	focus      int
 	keyNav     bool
+	// cues: opened from the keyboard, so mnemonic underlines show until
+	// it closes (pointer moves do not hide them, unlike keyNav).
+	cues       bool
 	vbar       scrollDrag
 	cascade    *PopupMenu
 	cascadeIdx int
@@ -469,13 +573,15 @@ func (p *PopupMenu) restoreFocus() {
 
 func (p *PopupMenu) itemH() float32 {
 	lk := p.Look()
-	h := float32(28)
+	h := style.Dip(lk, 28)
 	if lk != nil && lk.Metrics().MenuItemH > 0 {
 		h = lk.Metrics().MenuItemH
 	}
 	if lk != nil {
-		if f := lk.Font(); f != nil {
-			if min := f.Height() + 16; min > h {
+		// The look's row height rules (24px Windows 95 rows, 32px Fluent
+		// ones); it only grows when the menu font's line would not fit.
+		if f := style.ControlFontOf(lk, style.RoleMenu); f != nil {
+			if min := f.Height() + style.Dip(lk, 2); min > h {
 				h = min
 			}
 		}
@@ -485,7 +591,7 @@ func (p *PopupMenu) itemH() float32 {
 
 func (p *PopupMenu) rowH(it *MenuItem) float32 {
 	if it != nil && it.Separator {
-		return 8
+		return style.Dip(p.Look(), 8)
 	}
 	return p.itemH()
 }
@@ -535,7 +641,7 @@ func (p *PopupMenu) measureContent(ch style.MenuChrome) paintengine2d.Point {
 	lk := p.Look()
 	f := (*style.Font)(nil)
 	if lk != nil {
-		f = lk.Font()
+		f = style.ControlFontOf(lk, style.RoleMenu)
 	}
 	var maxLabel, maxAccel float32
 	hasSub := false
@@ -583,8 +689,7 @@ func (p *PopupMenu) ContentSize() paintengine2d.Point { return p.contentSize() }
 func (p *PopupMenu) Measure(c layout.Constraints) paintengine2d.Point {
 	sz := p.contentSize()
 	if c.HasMaxH() && sz.Y > c.MaxH {
-		bar, gap := overflowBarSize(p.Look())
-		sz.X += bar + gap
+		sz.X += style.ScrollGutter(p.Look())
 	}
 	out := c.Constrain(sz)
 	if out.Y+0.5 < sz.Y && out.X < sz.X {
@@ -612,9 +717,25 @@ func (p *PopupMenu) clamp() {
 	p.OffsetY = layout.ClampScroll(p.OffsetY, p.contentH(), p.LocalBounds().Dy())
 }
 
+func (p *PopupMenu) vparts() style.ScrollParts {
+	return vScrollParts(p.Look(), p.LocalBounds(), p.contentH(), p.OffsetY)
+}
+
+func (p *PopupMenu) vaxis() scrollAxis {
+	return scrollAxis{
+		vertical: true,
+		parts:    p.vparts,
+		get:      func() (float32, float32) { return p.OffsetY, p.MaxOffset() },
+		set:      func(y float32) { p.OffsetY = y; p.clamp(); p.Invalidate() },
+		steps: func() (float32, float32) {
+			return p.Look().Metrics().MenuItemH, p.LocalBounds().Dy() * 0.9
+		},
+	}
+}
+
 func (p *PopupMenu) scrollTrack() (track, thumb paintengine2d.Rect) {
-	bar, gap := overflowBarSize(p.Look())
-	return vScrollThumb(p.LocalBounds(), p.contentH(), p.OffsetY, bar, gap)
+	sp := p.vparts()
+	return sp.Track, sp.Thumb
 }
 
 // ScrollTrack is the overflow bar (empty thumb when every item fits).
@@ -624,8 +745,7 @@ func (p *PopupMenu) innerWidth() float32 {
 	ch := p.chrome()
 	w := p.LocalBounds().Dx() - ch.PadL - ch.PadR
 	if p.MaxOffset() > 0 {
-		bar, gap := overflowBarSize(p.Look())
-		w -= bar + gap
+		w -= style.ScrollGutter(p.Look())
 	}
 	if w < 0 {
 		w = 0
@@ -698,7 +818,7 @@ func (p *PopupMenu) ShortcutBounds(i int) paintengine2d.Rect {
 	}
 	f := (*style.Font)(nil)
 	if lk := p.Look(); lk != nil {
-		f = lk.Font()
+		f = style.ControlFontOf(lk, style.RoleMenu)
 	}
 	ch := p.chrome()
 	tw := menuTextWidth(f, p.Items[i].Shortcut)
@@ -769,6 +889,7 @@ func (p *PopupMenu) Paint(ctx *paintengine2d.Context) {
 	lk.DrawMenuFrame(ctx, b)
 	ctx.Save()
 	ctx.ClipRect(b.Inset(2))
+	cues := mnemonicShown(p, p.cues)
 	for i, it := range p.Items {
 		if it == nil {
 			continue
@@ -784,6 +905,9 @@ func (p *PopupMenu) Paint(ctx *paintengine2d.Context) {
 			st |= style.StatePressed
 		}
 		label, _, idx := ParseMnemonic(it.Text)
+		if !cues {
+			idx = -1
+		}
 		lk.DrawMenuItem(ctx, p.rowBounds(i), st, style.MenuRow{
 			Label: label, Shortcut: it.Shortcut, Underline: idx,
 			Separator: it.Separator, Checked: it.Checked, Radio: it.isRadio(),
@@ -791,8 +915,7 @@ func (p *PopupMenu) Paint(ctx *paintengine2d.Context) {
 		})
 	}
 	ctx.Restore()
-	track, thumb := p.scrollTrack()
-	paintOverflowBar(ctx, lk, track, thumb, p.vbar.over, p.vbar.active)
+	p.vbar.paint(p, ctx, lk, p.vparts(), true, p.OffsetY)
 }
 
 func (p *PopupMenu) invalidateRow(i int) {
@@ -806,13 +929,8 @@ func (p *PopupMenu) MouseMove(e widget.MouseEvent) bool {
 	if p.dead {
 		return false
 	}
-	track, thumb := p.scrollTrack()
-	if off, apply, handled, hoverDirty := p.vbar.move(e.Pos, track, thumb, true, p.MaxOffset()); handled {
-		if apply {
-			p.OffsetY = off
-			p.clamp()
-		}
-		if apply || hoverDirty {
+	if handled, dirty := p.vbar.move(p, e.Pos, p.vaxis()); handled {
+		if dirty {
 			p.Invalidate()
 		}
 		return true
@@ -838,6 +956,7 @@ func (p *PopupMenu) MouseExit() {
 		return
 	}
 	p.hover = -1
+	p.vbar.exit()
 	p.Invalidate()
 }
 
@@ -856,10 +975,7 @@ func (p *PopupMenu) MousePress(e widget.MouseEvent) bool {
 	if p.dead {
 		return false
 	}
-	track, thumb := p.scrollTrack()
-	if off, ok := p.vbar.press(e.Pos, track, thumb, true, p.OffsetY, p.MaxOffset(), p.LocalBounds().Dy()*0.9); ok {
-		p.OffsetY = off
-		p.clamp()
+	if p.vbar.press(p, e.Pos, p.vaxis()) {
 		p.Invalidate()
 		return true
 	}
@@ -891,7 +1007,7 @@ func (p *PopupMenu) MouseWheel(e widget.MouseEvent) bool {
 		return false
 	}
 	before := p.OffsetY
-	p.OffsetY += wheelDelta(e.Scroll.Y, p.itemH())
+	p.OffsetY += wheelDelta(e.Scroll.Y, p.itemH(), e.Precise)
 	p.clamp()
 	if p.OffsetY == before {
 		return false
@@ -904,15 +1020,31 @@ func (p *PopupMenu) KeyPress(e widget.KeyEvent) bool {
 	if p.dead {
 		return false
 	}
+	wasKey := p.keyNav
 	p.keyNav = true
 	if p.focus < 0 {
 		p.focus = firstEnabled(p.Items)
 	}
 	switch e.Key {
 	case platform.KeyUp:
+		if !wasKey && p.hover < 0 {
+			// Nothing was highlighted yet: land on the last item.
+			p.focus = lastEnabled(p.Items)
+			p.hover = p.focus
+			p.Invalidate()
+			return true
+		}
 		p.moveFocus(-1)
 		return true
 	case platform.KeyDown:
+		if !wasKey && p.hover < 0 {
+			// Nothing was highlighted yet (mouse-opened menu): the first
+			// Down lands on the first item instead of skipping it.
+			p.focus = firstEnabled(p.Items)
+			p.hover = p.focus
+			p.Invalidate()
+			return true
+		}
 		p.moveFocus(1)
 		return true
 	case platform.KeyHome:
@@ -930,8 +1062,13 @@ func (p *PopupMenu) KeyPress(e widget.KeyEvent) bool {
 			p.openCascade(p.focus)
 			if p.cascade != nil {
 				p.cascade.keyNav = true
+				p.cascade.cues = true
 				p.cascade.RequestFocus()
 			}
+			return true
+		}
+		if root := p.rootMenu(); root.OnNavigate != nil {
+			root.OnNavigate(1)
 			return true
 		}
 	case platform.KeyLeft:
@@ -940,6 +1077,10 @@ func (p *PopupMenu) KeyPress(e widget.KeyEvent) bool {
 			parent.closeCascade()
 			parent.keyNav = true
 			parent.RequestFocus()
+			return true
+		}
+		if p.OnNavigate != nil {
+			p.OnNavigate(-1)
 			return true
 		}
 	case platform.KeyReturn, platform.KeySpace:
@@ -1005,6 +1146,15 @@ func lastEnabled(items []*MenuItem) int {
 		}
 	}
 	return 0
+}
+
+// rootMenu is the top of a cascade (the popup a menu bar opened).
+func (p *PopupMenu) rootMenu() *PopupMenu {
+	r := p
+	for r.parentMenu != nil {
+		r = r.parentMenu
+	}
+	return r
 }
 
 func (p *PopupMenu) moveFocus(dir int) {

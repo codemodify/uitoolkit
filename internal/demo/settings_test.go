@@ -14,57 +14,57 @@ import (
 	"github.com/codemodify/uitoolkit/widgets"
 )
 
-func TestSettingsAppAppliesAndPersists(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	want := style.Appearance{Theme: style.ThemeLight, Corners: style.CornersSquare, Icons: style.IconSetSharp}
-	if err := style.SaveAppearance(want); err != nil {
-		t.Fatal(err)
-	}
+func openSettings(t *testing.T, w, h int) (*app.Application, *app.Window) {
+	t.Helper()
 	a := uitoolkit.New(uitoolkit.Options{Look: style.PreferredLook(), Headless: true, Scale: 1, DisableLookWatch: true})
-	w, err := a.NewWindow(platform.WindowOptions{Title: "settings", Width: 960, Height: 780, Headless: true})
+	win, err := a.NewWindow(platform.WindowOptions{Title: "settings", Width: w, Height: h, Headless: true})
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer w.Close()
-	w.SetContent(SettingsApp(a, w))
+	t.Cleanup(func() { win.Close() })
+	win.SetContent(SettingsApp(a, win))
 	a.PumpOnce()
-	if w.Content() == nil {
-		t.Fatal("no content")
+	return a, win
+}
+
+// The staged theme shows in the preview scope while Settings keeps the
+// applied look; Apply persists it and switches Settings.
+func TestSettingsAppAppliesAndPersists(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	want := style.Appearance{Theme: style.ThemeLight, Corners: style.CornersSquare, Icons: style.IconSetSharp}.Normalize()
+	if err := style.SaveAppearance(want); err != nil {
+		t.Fatal(err)
 	}
-	if findMenuBar(w.Content()) {
-		t.Fatal("settings must not have a menu bar")
+	a, w := openSettings(t, 1024, 780)
+	if findMenuBarOutsidePreview(w.Content()) {
+		t.Fatal("settings must not have a menu bar (the preview app may)")
 	}
-	if findRadio(w.Content(), "Dark graphite") != nil || findRadio(w.Content(), "Round corners") != nil {
-		t.Fatal("old triad radio labels must be gone")
+	for _, opt := range []string{"Theme shape", "Round", "Square"} {
+		if findCombo(w.Content(), opt) == nil {
+			t.Fatalf("corners option %q missing", opt)
+		}
 	}
-	if findRadio(w.Content(), "Round") == nil || findRadio(w.Content(), "Square") == nil {
-		t.Fatal("corners should be a separate Round / Square control")
-	}
-	if findRadio(w.Content(), "Small") == nil || findRadio(w.Content(), "Medium") == nil || findRadio(w.Content(), "Large") == nil {
-		t.Fatal("icon size should be a separate Small / Medium / Large control")
-	}
-	if !findLabel(w.Content(), "Built-in") || !findLabel(w.Content(), "User") {
-		t.Fatal("Theme and Icons lists should split Built-in vs User")
+	for _, opt := range []string{"Small", "Medium", "Large"} {
+		if findCombo(w.Content(), opt) == nil {
+			t.Fatalf("icon size option %q missing", opt)
+		}
 	}
 	got := style.LookAppearance(a.Look())
 	if got.Theme != style.ThemeLight || got.Corners != style.CornersSquare || got.Icons != style.IconSetSharp {
 		t.Fatalf("look %+v", got)
 	}
-	if style.LoadAppearance() != want.Normalize() {
-		t.Fatalf("prefs %+v", style.LoadAppearance())
-	}
 
 	clickTheme(t, w, "Classic 95 Dark")
 	a.PumpOnce()
-	if a.Look().Name() != "dark" {
-		t.Fatalf("preview theme %s", a.Look().Name())
+	staged := previewAppearance(t, w)
+	if staged.Name != "dark" || staged.Corners != style.CornersSquare || staged.Icons != style.IconSetSharp {
+		t.Fatalf("preview should show dark and keep corners/icons: %+v", staged)
 	}
-	live := style.LookAppearance(a.Look())
-	if live.Name != "dark" || live.Corners != style.CornersSquare || live.Icons != style.IconSetSharp {
-		t.Fatalf("preview should keep corners/icons %+v", live)
+	if a.Look().Name() != "light" {
+		t.Fatalf("Settings keeps the applied look while previewing, got %s", a.Look().Name())
 	}
-	if style.LoadAppearance() != want.Normalize() {
-		t.Fatalf("toggle must not write prefs: %+v", style.LoadAppearance())
+	if style.LoadAppearance() != want {
+		t.Fatalf("staging must not write prefs: %+v", style.LoadAppearance())
 	}
 	if findApply(w.Content()) == nil || !findApply(w.Content()).Enabled() {
 		t.Fatal("Apply should be enabled after a staged change")
@@ -76,36 +76,40 @@ func TestSettingsAppAppliesAndPersists(t *testing.T) {
 	if saved.Name != "dark" || saved.Theme != style.ThemeDark || saved.Corners != style.CornersSquare || saved.Icons != style.IconSetSharp {
 		t.Fatalf("applied prefs %+v", saved)
 	}
+	if a.Look().Name() != "dark" {
+		t.Fatalf("Apply switches Settings too, got %s", a.Look().Name())
+	}
 	if findApply(w.Content()).Enabled() {
 		t.Fatal("Apply should disable once saved matches staged")
 	}
 
-	clickCorners(t, w, "Round")
+	pickCombo(t, w, "Round")
 	a.PumpOnce()
-	if style.LookAppearance(a.Look()).Corners != style.CornersRound || style.LookAppearance(a.Look()).Name != "dark" {
-		t.Fatalf("corners preview %+v", style.LookAppearance(a.Look()))
+	if p := previewAppearance(t, w); p.Corners != style.CornersRound || p.Name != "dark" {
+		t.Fatalf("corners preview %+v", p)
 	}
 	clickApply(t, w)
 	a.PumpOnce()
-	saved = style.LoadAppearance()
-	if saved.Name != "dark" || saved.Corners != style.CornersRound || saved.Icons != style.IconSetSharp {
+	if saved = style.LoadAppearance(); saved.Name != "dark" || saved.Corners != style.CornersRound || saved.Icons != style.IconSetSharp {
 		t.Fatalf("corners apply %+v", saved)
+	}
+
+	// Revert drops a staged change.
+	clickTheme(t, w, "Windows 95")
+	a.PumpOnce()
+	clickNamed(t, w.Content(), "Revert")
+	a.PumpOnce()
+	if p := previewAppearance(t, w); p.Name != "dark" {
+		t.Fatalf("revert should restore the applied theme in the preview: %+v", p)
 	}
 }
 
 func TestSettingsApplyNotifiesOtherApp(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	if err := style.SaveAppearance(style.DefaultAppearance()); err != nil {
+	if err := style.SaveAppearance(style.DefaultAppearance().WithPalette(style.ThemeDark)); err != nil {
 		t.Fatal(err)
 	}
-	settingsApp := uitoolkit.New(uitoolkit.Options{Headless: true, Scale: 1, DisableLookWatch: true})
-	sw, err := settingsApp.NewWindow(platform.WindowOptions{Title: "settings", Width: 960, Height: 780, Headless: true})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer sw.Close()
-	sw.SetContent(SettingsApp(settingsApp, sw))
-	settingsApp.PumpOnce()
+	settingsApp, sw := openSettings(t, 1024, 780)
 
 	listener := app.New(app.Options{Headless: true, Scale: 1})
 	lw, err := listener.NewWindow(platform.WindowOptions{Title: "mail", Width: 320, Height: 200, Headless: true})
@@ -146,13 +150,8 @@ func TestSettingsExportThemeByName(t *testing.T) {
 	if err := style.SaveAppearance(style.Appearance{Theme: style.ThemeLight, Corners: style.CornersRound, Icons: style.IconSetClassic}); err != nil {
 		t.Fatal(err)
 	}
-	a := uitoolkit.New(uitoolkit.Options{Headless: true, Scale: 1, DisableLookWatch: true})
-	w, err := a.NewWindow(platform.WindowOptions{Title: "settings", Width: 960, Height: 780, Headless: true})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer w.Close()
-	w.SetContent(SettingsApp(a, w))
+	a, w := openSettings(t, 1024, 780)
+	clickSettingsNav(t, w, "Packs & icons")
 	a.PumpOnce()
 
 	clickExportLook(t, w)
@@ -176,27 +175,19 @@ func TestSettingsExportThemeByName(t *testing.T) {
 		t.Fatalf("exported pack: %s", raw)
 	}
 	if strings.Contains(string(raw), `"corners"`) || strings.Contains(string(raw), `"icons"`) {
-		t.Fatalf("export should be palette only: %s", raw)
+		t.Fatalf("export keeps corners/icons in look.json: %s", raw)
 	}
 	pack, ok := style.LoadTheme("ocean")
 	if !ok || pack.Source != style.ThemeSourceUser || pack.Palette != style.ThemeLight {
 		t.Fatalf("load exported %+v ok=%v", pack, ok)
 	}
-	if findThemeList(w.Content()) == nil {
-		t.Fatal("theme picker missing after export")
+	if !listed(w.Content(), "ocean") {
+		t.Fatal("exported pack not listed on Packs")
 	}
-	listed := false
-	widget.Walk(w.Content(), func(c widget.Component) {
-		if l, ok := c.(*widgets.ListView); ok && l.ItemText != nil {
-			for i := 0; i < l.Count; i++ {
-				if strings.Contains(l.ItemText(i), "ocean") {
-					listed = true
-				}
-			}
-		}
-	})
-	if !listed {
-		t.Fatal("exported pack not listed")
+	clickSettingsNav(t, w, "Themes")
+	a.PumpOnce()
+	if !listed(w.Content(), "ocean") {
+		t.Fatal("exported pack not listed in the theme browser")
 	}
 }
 
@@ -206,34 +197,23 @@ func TestSettingsDeleteUserTheme(t *testing.T) {
 	if err := style.SaveAppearance(style.Appearance{Theme: style.ThemeLight, Corners: style.CornersSquare, Icons: style.IconSetSharp}); err != nil {
 		t.Fatal(err)
 	}
-	a := uitoolkit.New(uitoolkit.Options{Headless: true, Scale: 1, DisableLookWatch: true})
-	w, err := a.NewWindow(platform.WindowOptions{Title: "settings", Width: 960, Height: 780, Headless: true})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer w.Close()
-	w.SetContent(SettingsApp(a, w))
-	a.PumpOnce()
-	if findButton(w.Content(), "Delete") != nil {
-		t.Fatal("Delete must not appear for built-in themes")
-	}
-
 	if _, err := style.ExportAppearance("ocean", style.LoadAppearance()); err != nil {
 		t.Fatal(err)
 	}
-	w.SetContent(SettingsApp(a, w))
-	a.PumpOnce()
+	a, w := openSettings(t, 1024, 780)
 	clickTheme(t, w, "ocean")
 	a.PumpOnce()
-	if findButton(w.Content(), "Delete") == nil {
-		t.Fatal("Delete should appear for a selected user theme")
-	}
 	clickApply(t, w)
 	a.PumpOnce()
 	if style.LoadAppearance().Name != "ocean" {
 		t.Fatalf("apply ocean %+v", style.LoadAppearance())
 	}
 
+	clickSettingsNav(t, w, "Packs & icons")
+	a.PumpOnce()
+	if findButton(w.Content(), "Delete") == nil {
+		t.Fatal("Delete should appear for a selected user theme")
+	}
 	clickNamed(t, w.Content(), "Delete")
 	a.PumpOnce()
 	if w.Overlay() == nil {
@@ -258,17 +238,7 @@ func TestSettingsDeleteUserTheme(t *testing.T) {
 	if findButton(w.Content(), "Delete") != nil {
 		t.Fatal("Delete should hide after falling back to a builtin")
 	}
-	listed := false
-	widget.Walk(w.Content(), func(c widget.Component) {
-		if l, ok := c.(*widgets.ListView); ok && l.ItemText != nil {
-			for i := 0; i < l.Count; i++ {
-				if l.ItemText(i) == "ocean" {
-					listed = true
-				}
-			}
-		}
-	})
-	if listed {
+	if listed(w.Content(), "ocean") {
 		t.Fatal("deleted pack still listed")
 	}
 }
@@ -280,21 +250,11 @@ func TestSettingsIconSetApplyWritesLookJSON(t *testing.T) {
 		t.Fatal(err)
 	}
 	installSettingsIconSet(t, dir, "lucide")
-	a := uitoolkit.New(uitoolkit.Options{Headless: true, Scale: 1, DisableLookWatch: true})
-	w, err := a.NewWindow(platform.WindowOptions{Title: "settings", Width: 960, Height: 780, Headless: true})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer w.Close()
-	w.SetContent(SettingsApp(a, w))
+	a, w := openSettings(t, 1024, 780)
+	pickCombo(t, w, "Lucide")
 	a.PumpOnce()
-	if findIconList(w.Content()) == nil {
-		t.Fatal("missing icon picker")
-	}
-	clickIconSet(t, w, "Lucide")
-	a.PumpOnce()
-	if style.LookAppearance(a.Look()).Icons != style.IconSetLucide {
-		t.Fatalf("preview icons %+v", style.LookAppearance(a.Look()))
+	if p := previewAppearance(t, w); p.Icons != style.IconSetLucide {
+		t.Fatalf("preview icons %+v", p)
 	}
 	if style.LoadAppearance().Icons != style.IconSetClassic {
 		t.Fatal("unapplied icon change leaked")
@@ -312,6 +272,12 @@ func TestSettingsIconSetApplyWritesLookJSON(t *testing.T) {
 	if !strings.Contains(string(raw), `"icons": "lucide"`) {
 		t.Fatalf("look.json: %s", raw)
 	}
+	// The Packs page lists icon sets too.
+	clickSettingsNav(t, w, "Packs & icons")
+	a.PumpOnce()
+	if findIconList(w.Content()) == nil {
+		t.Fatal("missing icon set list on Packs & icons")
+	}
 }
 
 func TestSettingsIconSizeApplyWritesLookJSON(t *testing.T) {
@@ -319,18 +285,11 @@ func TestSettingsIconSizeApplyWritesLookJSON(t *testing.T) {
 	if err := style.SaveAppearance(style.DefaultAppearance()); err != nil {
 		t.Fatal(err)
 	}
-	a := uitoolkit.New(uitoolkit.Options{Headless: true, Scale: 1, DisableLookWatch: true})
-	w, err := a.NewWindow(platform.WindowOptions{Title: "settings", Width: 960, Height: 780, Headless: true})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer w.Close()
-	w.SetContent(SettingsApp(a, w))
+	a, w := openSettings(t, 1024, 780)
+	pickCombo(t, w, "Large")
 	a.PumpOnce()
-	clickIconSize(t, w, "Large")
-	a.PumpOnce()
-	if style.LookAppearance(a.Look()).IconSize != style.IconSizeLarge {
-		t.Fatalf("preview size %+v", style.LookAppearance(a.Look()))
+	if p := previewAppearance(t, w); p.IconSize != style.IconSizeLarge {
+		t.Fatalf("preview size %+v", p)
 	}
 	if style.LoadAppearance().IconSize != style.IconSizeMedium {
 		t.Fatal("unapplied icon size leaked")
@@ -348,6 +307,139 @@ func TestSettingsIconSizeApplyWritesLookJSON(t *testing.T) {
 	if !strings.Contains(string(raw), `"iconSize": "large"`) {
 		t.Fatalf("look.json: %s", raw)
 	}
+}
+
+func TestSettingsThemeListScrollsAllBuiltins(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if err := style.SaveAppearance(style.DefaultAppearance()); err != nil {
+		t.Fatal(err)
+	}
+	a, w := openSettings(t, 820, 560)
+
+	packs := style.ListBuiltinThemes()
+	if len(packs) < 8 {
+		t.Fatalf("expected era packs, got %d", len(packs))
+	}
+	list := findThemeList(w.Content())
+	if list == nil {
+		t.Fatal("missing theme picker")
+	}
+	if list.Count != len(packs) {
+		t.Fatalf("theme list count=%d want %d", list.Count, len(packs))
+	}
+	for _, p := range packs {
+		found := false
+		for i := 0; i < list.Count; i++ {
+			if rowName(list.ItemText(i)) == p.Display() {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("missing theme %q", p.Display())
+		}
+	}
+	if list.MaxOffset() <= 0 {
+		t.Fatalf("theme list should overflow at 820×560, view=%v rows=%d", list.LocalBounds().Dy(), list.Count)
+	}
+	if _, thumb := list.ScrollTrack(); thumb.Empty() {
+		t.Fatal("overflow theme list should show scrollbar chrome")
+	}
+	last := packs[len(packs)-1]
+	list.ScrollTo(list.MaxOffset())
+	off := list.OffsetY
+	list.OnSelect(list.Count - 1)
+	a.PumpOnce()
+	if p := previewAppearance(t, w); p.Name != last.Name {
+		t.Fatalf("preview last theme %+v want %s", p, last.Name)
+	}
+	// Picking a theme below the fold keeps the list where it was (it used
+	// to jump back to the top — real-hardware finding).
+	if list = findThemeList(w.Content()); list == nil || list.OffsetY < off-1 {
+		t.Fatalf("theme list scrolled back after selection: offset %v want %v", list.OffsetY, off)
+	}
+	apply := findApply(w.Content())
+	if apply == nil || !apply.Enabled() {
+		t.Fatal("Apply should stay reachable and enabled after staging")
+	}
+	if nestedInScroll(apply) {
+		t.Fatal("Apply must stay pinned outside the scroll region")
+	}
+
+	// Decade filter.
+	pickCombo(t, w, "1990s")
+	a.PumpOnce()
+	list = findThemeListAny(w.Content())
+	if list == nil || list.Count == 0 {
+		t.Fatal("1990s filter shows nothing")
+	}
+	for i := 0; i < list.Count; i++ {
+		if !strings.HasPrefix(list.ItemText(i), "199") {
+			t.Fatalf("1990s filter shows %q", list.ItemText(i))
+		}
+	}
+
+	clickSettingsNav(t, w, "About")
+	a.PumpOnce()
+	if findApply(w.Content()) == nil || nestedInScroll(findApply(w.Content())) {
+		t.Fatal("Apply must stay pinned on About")
+	}
+	aboutScroll := findScrollView(w.Content())
+	if aboutScroll == nil {
+		t.Fatal("About should scroll")
+	}
+	if aboutScroll.MaxOffset() <= 0 {
+		t.Fatalf("About should overflow at 820×560, content=%v view=%v", aboutScroll.ContentHeight(), aboutScroll.LocalBounds().Dy())
+	}
+}
+
+func TestSettingsAppPaintsPreview(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true, Scale: 1})
+	w, err := a.NewWindow(platform.WindowOptions{Title: "settings", Width: 1024, Height: 780, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+	w.SetContent(SettingsAppStaged(a, w, "win98"))
+	img := w.Capture()
+	if img == nil {
+		t.Fatal("capture")
+	}
+	ink := 0
+	for y := 80; y < img.Height-40; y++ {
+		for x := 300; x < img.Width-20; x++ {
+			_, _, _, al := img.PremulAt(x, y)
+			if al > 30 {
+				ink++
+			}
+		}
+	}
+	if ink < 800 {
+		t.Fatalf("right pane looks empty (ink=%d)", ink)
+	}
+	if p := previewAppearance(t, w); p.Name != "win98" {
+		t.Fatalf("staged preview %+v", p)
+	}
+	if a.Look().Name() == "win98" {
+		t.Fatal("staging must not re-theme Settings")
+	}
+	if findApply(w.Content()) == nil || !findApply(w.Content()).Enabled() {
+		t.Fatal("Apply should be enabled with a staged theme")
+	}
+	if findThemeList(w.Content()) == nil {
+		t.Fatal("missing theme picker")
+	}
+}
+
+// ---- helpers --------------------------------------------------------------------
+
+// rowName is the theme name of a browser row ("1995  ·  Windows 95" →
+// "Windows 95"); other lists' rows come back unchanged.
+func rowName(text string) string {
+	if i := strings.LastIndex(text, "·"); i >= 0 {
+		return strings.TrimSpace(text[i+len("·"):])
+	}
+	return text
 }
 
 func installSettingsIconSet(t *testing.T, xdg, name string) {
@@ -375,153 +467,34 @@ func installSettingsIconSet(t *testing.T, xdg, name string) {
 	}
 }
 
-func clickIconSet(t *testing.T, w *app.Window, name string) {
+// previewAppearance is the appearance the live preview is painting.
+func previewAppearance(t *testing.T, w *app.Window) style.Appearance {
 	t.Helper()
-	list := findIconList(w.Content())
-	if list == nil || list.OnSelect == nil {
-		t.Fatal("no icon picker")
-	}
-	for i := 0; i < list.Count; i++ {
-		if strings.Contains(list.ItemText(i), name) {
-			list.OnSelect(i)
-			return
+	var scope *widgets.ThemeScope
+	widget.Walk(w.Content(), func(c widget.Component) {
+		if s, ok := c.(*widgets.ThemeScope); ok {
+			scope = s
 		}
+	})
+	if scope == nil {
+		t.Fatal("no theme preview")
 	}
-	t.Fatalf("no icon set %q", name)
+	return style.LookAppearance(scope.Theme())
 }
 
-func TestSettingsThemeListScrollsAllBuiltins(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	if err := style.SaveAppearance(style.DefaultAppearance()); err != nil {
-		t.Fatal(err)
-	}
-	a := uitoolkit.New(uitoolkit.Options{Headless: true, Scale: 1, DisableLookWatch: true})
-	w, err := a.NewWindow(platform.WindowOptions{Title: "settings", Width: 720, Height: 520, Headless: true})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer w.Close()
-	w.SetContent(SettingsApp(a, w))
-	a.PumpOnce()
-
-	packs := style.ListBuiltinThemes()
-	if len(packs) < 8 {
-		t.Fatalf("expected era packs, got %d", len(packs))
-	}
-	list := findThemeList(w.Content())
-	if list == nil {
-		t.Fatal("missing theme picker")
-	}
-	if list.Count != len(packs) {
-		t.Fatalf("theme list count=%d want %d (one Built-in list)", list.Count, len(packs))
-	}
-	seen := map[string]bool{}
-	for i := 0; i < list.Count; i++ {
-		seen[list.ItemText(i)] = true
-	}
-	for _, p := range packs {
-		if !seen[p.Display()] {
-			t.Fatalf("missing theme %q", p.Display())
+func insidePreview(c widget.Component) bool {
+	for p := c; p != nil; p = p.Parent() {
+		if _, ok := p.(*widgets.ThemeScope); ok {
+			return true
 		}
 	}
-	if list.MaxOffset() <= 0 {
-		t.Fatalf("theme list should overflow at 720×520, view=%v rows=%d", list.LocalBounds().Dy(), list.Count)
-	}
-	if _, thumb := list.ScrollTrack(); thumb.Empty() {
-		t.Fatal("overflow theme list should show scrollbar chrome")
-	}
-	last := packs[len(packs)-1]
-	list.ScrollTo(list.MaxOffset())
-	lo, hi := list.VisibleRange()
-	if lastIdx := list.Count - 1; lastIdx < lo || lastIdx >= hi {
-		t.Fatalf("last theme not in view after scroll lo=%d hi=%d count=%d", lo, hi, list.Count)
-	}
-	if list.OnSelect == nil {
-		t.Fatal("theme list has no OnSelect")
-	}
-	list.OnSelect(list.Count - 1)
-	a.PumpOnce()
-	live := style.LookAppearance(a.Look())
-	if live.Name != last.Name {
-		t.Fatalf("preview last theme %+v want %s", live, last.Name)
-	}
-	apply := findApply(w.Content())
-	if apply == nil || !apply.Enabled() {
-		t.Fatal("Apply should stay reachable and enabled after staging")
-	}
-	if nestedInScroll(apply) {
-		t.Fatal("Apply must stay pinned outside the scroll region")
-	}
-	if findRadio(w.Content(), "Round") == nil || findRadio(w.Content(), "Square") == nil {
-		t.Fatal("Corners options must stay reachable")
-	}
-	if findRadio(w.Content(), "Small") == nil || findRadio(w.Content(), "Large") == nil {
-		t.Fatal("Icon size options must stay reachable")
-	}
-	if findIconList(w.Content()) == nil {
-		t.Fatal("missing icon picker")
-	}
-
-	clickSettingsNav(t, w, "About")
-	a.PumpOnce()
-	if findApply(w.Content()) == nil {
-		t.Fatal("Apply missing on About")
-	}
-	if nestedInScroll(findApply(w.Content())) {
-		t.Fatal("Apply must stay pinned on About")
-	}
-	aboutScroll := findScrollView(w.Content())
-	if aboutScroll == nil {
-		t.Fatal("About should scroll")
-	}
-	if aboutScroll.MaxOffset() <= 0 {
-		t.Fatalf("About should overflow at 720×520, content=%v view=%v", aboutScroll.ContentHeight(), aboutScroll.LocalBounds().Dy())
-	}
+	return false
 }
 
-func TestSettingsAppPaintsPreview(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true, Scale: 1})
-	w, err := a.NewWindow(platform.WindowOptions{Title: "settings", Width: 960, Height: 780, Headless: true})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer w.Close()
-	w.SetContent(SettingsApp(a, w))
-	img := w.Capture()
-	if img == nil {
-		t.Fatal("capture")
-	}
-	ink := 0
-	for y := 80; y < img.Height-40; y++ {
-		for x := 280; x < img.Width-20; x++ {
-			_, _, _, al := img.PremulAt(x, y)
-			if al > 30 {
-				ink++
-			}
-		}
-	}
-	if ink < 800 {
-		t.Fatalf("right pane looks empty (ink=%d)", ink)
-	}
-	if findMenuBar(w.Content()) {
-		t.Fatal("settings must not have a menu bar")
-	}
-	if findApply(w.Content()) == nil {
-		t.Fatal("missing Apply")
-	}
-	if findThemeList(w.Content()) == nil {
-		t.Fatal("missing theme picker")
-	}
-	if findIconList(w.Content()) == nil {
-		t.Fatal("missing icon picker")
-	}
-}
-
-func findMenuBar(root widget.Component) bool {
+func findMenuBarOutsidePreview(root widget.Component) bool {
 	found := false
 	widget.Walk(root, func(c widget.Component) {
-		if _, ok := c.(*widgets.MenuBar); ok {
+		if _, ok := c.(*widgets.MenuBar); ok && !insidePreview(c) {
 			found = true
 		}
 	})
@@ -535,28 +508,51 @@ func findApply(root widget.Component) *widgets.Button {
 func findButton(root widget.Component, text string) *widgets.Button {
 	var btn *widgets.Button
 	widget.Walk(root, func(c widget.Component) {
-		if b, ok := c.(*widgets.Button); ok && b.Text == text {
+		if b, ok := c.(*widgets.Button); ok && b.Text == text && !insidePreview(c) {
 			btn = b
 		}
 	})
 	return btn
 }
 
-func findRadio(root widget.Component, label string) *widgets.RadioButton {
-	var rb *widgets.RadioButton
+// findCombo is the Settings combo (outside the preview) offering item.
+func findCombo(root widget.Component, item string) *widgets.ComboBox {
+	var cb *widgets.ComboBox
 	widget.Walk(root, func(c widget.Component) {
-		if r, ok := c.(*widgets.RadioButton); ok && r.Text == label {
-			rb = r
+		if box, ok := c.(*widgets.ComboBox); ok && !insidePreview(c) {
+			for _, it := range box.Items {
+				if it == item {
+					cb = box
+				}
+			}
 		}
 	})
-	return rb
+	return cb
 }
 
-func findLabel(root widget.Component, text string) bool {
+func pickCombo(t *testing.T, w *app.Window, item string) {
+	t.Helper()
+	cb := findCombo(w.Content(), item)
+	if cb == nil || cb.OnChange == nil {
+		t.Fatalf("no combo offering %q", item)
+	}
+	for i, it := range cb.Items {
+		if it == item {
+			cb.OnChange(i)
+			return
+		}
+	}
+}
+
+func listed(root widget.Component, name string) bool {
 	found := false
 	widget.Walk(root, func(c widget.Component) {
-		if l, ok := c.(*widgets.Label); ok && l.Text == text {
-			found = true
+		if l, ok := c.(*widgets.ListView); ok && l.ItemText != nil && !insidePreview(c) {
+			for i := 0; i < l.Count; i++ {
+				if rowName(l.ItemText(i)) == name {
+					found = true
+				}
+			}
 		}
 	})
 	return found
@@ -565,14 +561,28 @@ func findLabel(root widget.Component, text string) bool {
 func findThemeList(root widget.Component) *widgets.ListView {
 	var list *widgets.ListView
 	widget.Walk(root, func(c widget.Component) {
-		if l, ok := c.(*widgets.ListView); ok && l.ItemText != nil {
+		if l, ok := c.(*widgets.ListView); ok && l.ItemText != nil && !insidePreview(c) {
 			for i := 0; i < l.Count; i++ {
-				if l.ItemText(i) == "dark" || l.ItemText(i) == "light" ||
-					strings.Contains(l.ItemText(i), "Classic 95") {
+				if strings.Contains(l.ItemText(i), "Classic 95") {
 					list = l
 					return
 				}
 			}
+		}
+	})
+	return list
+}
+
+// findThemeListAny is the theme browser whatever its filter shows (the
+// list that is neither the nav nor an icon list).
+func findThemeListAny(root widget.Component) *widgets.ListView {
+	var list *widgets.ListView
+	widget.Walk(root, func(c widget.Component) {
+		if l, ok := c.(*widgets.ListView); ok && l.ItemText != nil && !insidePreview(c) && l.Count > 0 {
+			if l.ItemText(0) == "Themes" {
+				return // the nav
+			}
+			list = l
 		}
 	})
 	return list
@@ -599,16 +609,17 @@ func findIconList(root widget.Component) *widgets.ListView {
 	return list
 }
 
+// clickTheme selects a theme in the browser by its display name (rows are
+// "1995  ·  Windows 95"; an exact suffix wins over a longer name).
 func clickTheme(t *testing.T, w *app.Window, label string) {
 	t.Helper()
 	var found *widgets.ListView
-	var idx int
+	idx := -1
 	widget.Walk(w.Content(), func(c widget.Component) {
-		if l, ok := c.(*widgets.ListView); ok && l.ItemText != nil && l.OnSelect != nil {
+		if l, ok := c.(*widgets.ListView); ok && l.ItemText != nil && l.OnSelect != nil && !insidePreview(c) {
 			for i := 0; i < l.Count; i++ {
-				if strings.EqualFold(l.ItemText(i), label) || strings.Contains(strings.ToLower(l.ItemText(i)), strings.ToLower(label)) {
-					found = l
-					idx = i
+				if rowName(l.ItemText(i)) == label {
+					found, idx = l, i
 				}
 			}
 		}
@@ -617,26 +628,6 @@ func clickTheme(t *testing.T, w *app.Window, label string) {
 		t.Fatalf("no theme %q", label)
 	}
 	found.OnSelect(idx)
-}
-
-func clickIconSize(t *testing.T, w *app.Window, label string) {
-	t.Helper()
-	rb := findRadio(w.Content(), label)
-	if rb == nil {
-		t.Fatalf("no icon size radio %q", label)
-	}
-	rb.MousePress(widget.MouseEvent{})
-	rb.MouseRelease(widget.MouseEvent{})
-}
-
-func clickCorners(t *testing.T, w *app.Window, label string) {
-	t.Helper()
-	rb := findRadio(w.Content(), label)
-	if rb == nil {
-		t.Fatalf("no corners radio %q", label)
-	}
-	rb.MousePress(widget.MouseEvent{})
-	rb.MouseRelease(widget.MouseEvent{})
 }
 
 func clickExportLook(t *testing.T, w *app.Window) {
@@ -650,7 +641,12 @@ func clickExportLook(t *testing.T, w *app.Window) {
 
 func clickNamed(t *testing.T, root widget.Component, text string) {
 	t.Helper()
-	btn := findButton(root, text)
+	var btn *widgets.Button
+	widget.Walk(root, func(c widget.Component) {
+		if b, ok := c.(*widgets.Button); ok && b.Text == text {
+			btn = b
+		}
+	})
 	if btn == nil || btn.OnClick == nil {
 		t.Fatalf("no button %q", text)
 	}
@@ -696,13 +692,8 @@ func clickSettingsNav(t *testing.T, w *app.Window, name string) {
 	t.Helper()
 	var nav *widgets.ListView
 	widget.Walk(w.Content(), func(c widget.Component) {
-		if l, ok := c.(*widgets.ListView); ok && l.ItemText != nil && l.OnSelect != nil {
-			for i := 0; i < l.Count; i++ {
-				if l.ItemText(i) == "Appearance" {
-					nav = l
-					return
-				}
-			}
+		if l, ok := c.(*widgets.ListView); ok && l.ItemText != nil && l.OnSelect != nil && l.Count > 0 && l.ItemText(0) == "Themes" {
+			nav = l
 		}
 	})
 	if nav == nil {
@@ -724,4 +715,64 @@ func clickApply(t *testing.T, w *app.Window) {
 		t.Fatal("no Apply button")
 	}
 	apply.OnClick()
+}
+
+func findSwitch(root widget.Component, text string) *widgets.Switch {
+	var sw *widgets.Switch
+	widget.Walk(root, func(c widget.Component) {
+		if s, ok := c.(*widgets.Switch); ok && s.Text == text && !insidePreview(c) {
+			sw = s
+		}
+	})
+	return sw
+}
+
+func findLabelWith(root widget.Component, part string) bool {
+	found := false
+	widget.Walk(root, func(c widget.Component) {
+		if l, ok := c.(*widgets.Label); ok && strings.Contains(l.Text, part) && !insidePreview(c) {
+			found = true
+		}
+	})
+	return found
+}
+
+// Following the desktop is staged like any other option: the preview
+// shows the sibling for the desktop's scheme and says so; Apply saves it.
+func TestSettingsFollowDesktop(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv(app.ColorSchemeEnv, "dark")
+	defer style.SetDesktopColorScheme(style.SchemeNoPreference)
+	if err := style.SaveAppearance(style.Appearance{Name: "breeze", Theme: style.ThemeLight}); err != nil {
+		t.Fatal(err)
+	}
+	a, w := openSettings(t, 1024, 780)
+	const label = "Match the desktop's light or dark mode and accent colour"
+	sw := findSwitch(w.Content(), label)
+	if sw == nil {
+		t.Fatal("no follow-the-desktop switch")
+	}
+	if sw.On {
+		t.Fatal("switch on before it was chosen")
+	}
+	sw.OnChange(true)
+	a.PumpOnce()
+	if got := previewAppearance(t, w).Name; got != "breeze-night" {
+		t.Fatalf("preview %s, want breeze-night", got)
+	}
+	if !findLabelWith(w.Content(), "shows as Breeze Dark") {
+		t.Fatal("no note on what the desktop's scheme does")
+	}
+	clickApply(t, w)
+	a.PumpOnce()
+	saved := style.LoadAppearance()
+	if !saved.FollowDesktop || saved.Name != "breeze" {
+		t.Fatalf("saved %+v", saved)
+	}
+	if c, ok := a.Look().(*style.Classic); !ok || c.Pack() != "breeze-night" {
+		t.Fatalf("applied look %v", a.Look())
+	}
+	if sw := findSwitch(w.Content(), label); sw == nil || !sw.On {
+		t.Fatal("switch should show the saved choice")
+	}
 }
