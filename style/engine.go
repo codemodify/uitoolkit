@@ -202,8 +202,8 @@ const (
 	// HintTabsCentered: 1 centres tabs over their pane (Aqua segmented).
 	HintTabsCentered
 	// HintFormLabelsRight: 1 right-aligns form labels against their fields
-	// (Mac OS, NeXT); 0 left-aligns them (Windows, GTK, KDE). Qt's
-	// SH_FormLayoutLabelAlignment.
+	// (Mac OS, NeXT, KDE's Oxygen and Breeze); 0 left-aligns them (Windows,
+	// GTK, Qt's Fusion). Qt's SH_FormLayoutLabelAlignment.
 	HintFormLabelsRight
 )
 
