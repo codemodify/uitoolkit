@@ -23,7 +23,12 @@ as Qt's buddy labels do. A tool button with only an icon takes its tooltip,
 or else the action its icon stands for ("Save").
 
 Name everything else yourself: an icon-only button, a field whose label is
-a separate widget, a slider next to a caption.
+a separate widget, a slider next to a caption. A caption label can name
+its control directly, as Qt's buddy labels do:
+
+```go
+col := widgets.NewColumn(widgets.NewLabel("Priority").For(priority), priority)
+```
 
 ```go
 volume := widgets.NewSlider(0, 100, 60, nil)
