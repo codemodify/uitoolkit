@@ -663,7 +663,10 @@ func (w *Window) setAltHeld(v bool) {
 	}
 	w.altHeld = v
 	if style.LookHint(w.look, style.HintMnemonics) == style.MnemonicsOnAlt {
-		w.Invalidate(nil, paintengine2d.Rect{})
+		// Every label with a mnemonic draws differently now: re-record,
+		// since a full present only replays the retained scene.
+		w.dropScene()
+		w.fullInvalidate()
 	}
 }
 

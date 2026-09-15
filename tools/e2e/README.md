@@ -19,6 +19,13 @@ own Wayland socket `uitk-e2e-N`, own Xwayland (display number in `N/display`), o
     ./theme-tour.sh N [PACK...]  # gallery in every pack on the GPU + the same pack on the CPU, in pairs
 
 - The first window is placed at the same spot every time if it is the only window.
+- The injector releases every key it holds when it exits: to screenshot with a
+  key held (Alt for mnemonic underlines), run `./in.sh N key+ 56 sleep 2500 key- 56 &`
+  and take the shot during the sleep.
+- `start.sh`'s SCALE only enlarges the virtual screen; its output stays at scale 1.
+  For a real fractional scale, set it on the nested output:
+  `WAYLAND_DISPLAY=uitk-e2e-N DBUS_SESSION_BUS_ADDRESS=$(cat N/bus.addr) kscreen-doctor output.Virtual-0.scale.1.75`
+  (apps then get `preferred_scale` 210 and draw 1.75x buffers).
 - Coordinates are logical px of the 1280x860 virtual screen (x2 if SCALE=2 in the png).
 - X11 backend: `UITK_BACKEND=x11 ./run.sh N ./gallery` (runs on the nested Xwayland).
 - Paint escape hatches: UITK_PAINT_FULLFRAME=1 (no partial redraw), UITK_PAINT_MSAA=0.
