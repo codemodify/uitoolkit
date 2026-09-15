@@ -29,6 +29,9 @@ type appearanceFileJSON struct {
 	IconSize string `json:"iconSize,omitempty"`
 	// ReduceMotion turns animations off.
 	ReduceMotion bool `json:"reduceMotion,omitempty"`
+	// FollowDesktop swaps the theme for its light or dark sibling to match
+	// the desktop.
+	FollowDesktop bool `json:"followDesktop,omitempty"`
 }
 
 // ConfigDir is $XDG_CONFIG_HOME/uitoolkit (or ~/.config/uitoolkit).
@@ -108,6 +111,7 @@ func resolveAppearance(raw appearanceFileJSON) Appearance {
 		a.IconSize = ParseIconSize(raw.IconSize)
 	}
 	a.ReduceMotion = raw.ReduceMotion
+	a.FollowDesktop = raw.FollowDesktop
 	return a.Normalize()
 }
 
@@ -128,7 +132,10 @@ func LoadAppearance() Appearance {
 		raw = appearanceFileJSON{}
 	}
 	if env := strings.TrimSpace(os.Getenv(ThemeEnv)); env != "" {
+		// The pack asked for is the pack shown: no swapping it for its
+		// light or dark sibling.
 		raw.Theme = env
+		raw.FollowDesktop = false
 		ok = true
 	}
 	if !ok {
@@ -150,6 +157,7 @@ func SaveAppearance(a Appearance) error {
 		Icons:    string(a.Icons),
 		IconSize: string(a.IconSize),
 
-		ReduceMotion: a.ReduceMotion,
+		ReduceMotion:  a.ReduceMotion,
+		FollowDesktop: a.FollowDesktop,
 	})
 }

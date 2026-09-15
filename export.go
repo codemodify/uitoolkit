@@ -48,6 +48,7 @@ type (
 	StatusMenuChrome  = platform.StatusMenuChrome
 	Notification      = platform.Notification
 	Appearance        = style.Appearance
+	ColorScheme       = style.ColorScheme
 	ThemeName         = style.ThemeName
 	CornerStyle       = style.CornerStyle
 	IconSetName       = style.IconSetName
@@ -66,6 +67,9 @@ type (
 )
 
 const (
+	SchemeNoPreference     = style.SchemeNoPreference
+	SchemeDark             = style.SchemeDark
+	SchemeLight            = style.SchemeLight
 	DensityDefault         = style.DensityDefault
 	DensityCompact         = style.DensityCompact
 	DensityRelaxed         = style.DensityRelaxed
@@ -274,8 +278,12 @@ func IconSizePixels(sz style.IconSize) float32 {
 func WithAppearance(look style.LookAndFeel, a style.Appearance) style.LookAndFeel {
 	return style.WithAppearance(look, a)
 }
-func Dark() style.Palette  { return style.Dark() }
-func Light() style.Palette { return style.Light() }
+
+// SchemeVariant is the pack that shows name in a light or dark desktop
+// (breeze → breeze-night for SchemeDark).
+func SchemeVariant(name string, s style.ColorScheme) string { return style.SchemeVariant(name, s) }
+func Dark() style.Palette                                   { return style.Dark() }
+func Light() style.Palette                                  { return style.Light() }
 
 func NewColumn(children ...widget.Component) *widgets.FlexBox {
 	return widgets.NewColumn(children...)

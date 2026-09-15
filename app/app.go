@@ -53,6 +53,12 @@ type Application struct {
 	posted           []func()
 	statusMenu       *Window
 	hidingStatusMenu bool
+	// schemeStop ends the watch on the desktop's light / dark preference
+	// (nil while the appearance does not follow it); schemeRead is set
+	// once the preference has been asked for.
+	schemeStop func()
+	schemeRead bool
+	lookHooks  []*func()
 }
 
 // New constructs an application. Default look is PreferredLook
@@ -62,10 +68,11 @@ type Application struct {
 // stays 1× unless UITK_SCALE / GDK_SCALE / QT_SCALE_FACTOR is set.
 func New(opts Options) *Application {
 	watch := opts.WatchLook
-	if opts.Look == nil {
-		ap := style.LoadAppearance()
+	preferred := opts.Look == nil
+	var ap style.Appearance
+	if preferred {
+		ap = style.LoadAppearance()
 		style.SetReduceMotion(ap.ReduceMotion)
-		opts.Look = ap.Look()
 		watch = true
 	}
 	if opts.DisableLookWatch {
@@ -89,16 +96,21 @@ func New(opts Options) *Application {
 			auto = true
 		}
 	}
-	base := lookAtScale(opts.Look, 1)
 	a := &Application{
-		look:      lookAtScale(base, opts.Scale),
-		base:      base,
 		scale:     opts.Scale,
 		autoScale: auto,
 		headless:  opts.Headless,
 		backend:   backend,
 		watchLook: watch,
 	}
+	if preferred {
+		// Ask the desktop for its light / dark preference before the
+		// look is built: a theme that follows it starts in the right one.
+		a.followDesktop(ap.FollowDesktop)
+		opts.Look = ap.Look()
+	}
+	a.base = lookAtScale(opts.Look, 1)
+	a.look = lookAtScale(a.base, opts.Scale)
 	if watch {
 		a.lookWatch = newLookFileStamp()
 	}
@@ -120,6 +132,29 @@ func (a *Application) SetLook(l style.LookAndFeel) {
 	a.look = lookAtScale(a.base, a.scale)
 	for _, w := range a.Windows() {
 		w.applyLook(a.base)
+	}
+	for _, fn := range append([]*func(){}, a.lookHooks...) {
+		(*fn)()
+	}
+}
+
+// OnLookChange runs fn on the UI goroutine after every change of the app's
+// look: a theme applied in Settings, the desktop turning dark. Content that
+// caches something drawn in the old look (a theme preview) rebuilds there.
+// remove unregisters fn.
+func (a *Application) OnLookChange(fn func()) (remove func()) {
+	if a == nil || fn == nil {
+		return func() {}
+	}
+	p := &fn
+	a.lookHooks = append(a.lookHooks, p)
+	return func() {
+		for i, q := range a.lookHooks {
+			if q == p {
+				a.lookHooks = append(a.lookHooks[:i:i], a.lookHooks[i+1:]...)
+				return
+			}
+		}
 	}
 }
 

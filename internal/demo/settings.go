@@ -59,6 +59,8 @@ type settingsState struct {
 	// listOff keeps the theme browser's scroll position across rebuilds:
 	// picking a theme below the fold used to jump the list to the top.
 	listOff float32
+	// scheme is the desktop's light / dark preference the page was built in.
+	scheme style.ColorScheme
 }
 
 func (s *settingsState) rebuild() {
@@ -66,10 +68,22 @@ func (s *settingsState) rebuild() {
 }
 
 func buildSettings(a *app.Application, win *app.Window, saved, staged style.Appearance, page int) widget.Component {
-	return buildSettingsState(&settingsState{a: a, win: win, saved: saved.Normalize(), staged: staged.Normalize(), page: page})
+	s := &settingsState{a: a, win: win, saved: saved.Normalize(), staged: staged.Normalize(), page: page}
+	// The preview draws the staged theme's light or dark sibling: redraw
+	// it when the desktop switches.
+	a.OnLookChange(func() {
+		if now := style.DesktopColorScheme(); now != s.scheme {
+			s.rebuild()
+		}
+	})
+	return buildSettingsState(s)
 }
 
 func buildSettingsState(s *settingsState) widget.Component {
+	if s.staged.FollowDesktop {
+		s.a.DesktopColorScheme() // ask the desktop, once
+	}
+	s.scheme = style.DesktopColorScheme()
 	if s.page < 0 || s.page >= len(settingsPages) {
 		s.page = pageThemes
 	}
@@ -88,8 +102,7 @@ func buildSettingsState(s *settingsState) widget.Component {
 			return
 		}
 		s.saved = next
-		style.SetReduceMotion(next.ReduceMotion)
-		s.a.SetLook(next.Look())
+		s.a.ApplyAppearance(next)
 		s.rebuild()
 	}
 	revert := func() {
@@ -240,10 +253,14 @@ func (s *settingsState) themesPage(status *widgets.StatusBar, stage func(style.A
 	if pack.Summary != "" {
 		info.Add(widgets.NewLabel(pack.Summary))
 	}
+	shown := pack
+	if note := s.followNote(pack, &shown); note != "" {
+		info.Add(widgets.NewLabel(note))
+	}
 
 	// The live preview: a small application window in the staged theme —
 	// its frame, caption and every control come from that theme.
-	frame := widgets.NewPanel("Preview — "+pack.Display(), PreviewApp(func(msg string) { status.Set(0, msg) }))
+	frame := widgets.NewPanel("Preview — "+shown.Display(), PreviewApp(func(msg string) { status.Set(0, msg) }))
 	frame.Window = true
 	scope := widgets.NewThemeScope(s.staged.Look(), frame)
 
@@ -306,6 +323,14 @@ func (s *settingsState) themesPage(status *widgets.StatusBar, stage func(style.A
 	options.Place(widgets.NewLabel("Icons"), 1, 0)
 	options.Place(icons, 1, 1)
 	options.PlaceSpan(motion, 1, 2, 1, 2)
+	// GNOME's and Plasma's light / dark setting: the theme shows its
+	// sibling (Breeze and Breeze Dark) to match the desktop.
+	follow := widgets.NewSwitch("Match the desktop's light or dark mode", s.staged.FollowDesktop, func(on bool) {
+		next := s.staged
+		next.FollowDesktop = on
+		stage(next)
+	})
+	options.PlaceSpan(follow, 2, 0, 1, 4)
 
 	preview := widgets.NewColumn(info, scope, options).WithGap(10)
 	preview.AddFlex(scope, 1)
@@ -314,6 +339,29 @@ func (s *settingsState) themesPage(status *widgets.StatusBar, stage func(style.A
 	body.AddFlex(browser, 4)
 	body.AddFlex(preview, 7)
 	return body
+}
+
+// followNote says what following the desktop does to the staged pack, and
+// sets shown to the pack the preview draws.
+func (s *settingsState) followNote(pack style.ThemePack, shown *style.ThemePack) string {
+	if !s.staged.FollowDesktop {
+		return ""
+	}
+	scheme := s.a.DesktopColorScheme()
+	if scheme == style.SchemeNoPreference {
+		return "The desktop has no light or dark preference: the theme shows as it is."
+	}
+	eff := s.staged.Effective()
+	if eff.Name != s.staged.Name {
+		if p, ok := style.LoadTheme(eff.Name); ok {
+			*shown = p
+		}
+		return fmt.Sprintf("The desktop prefers %s: %s shows as %s.", scheme, pack.Display(), shown.Display())
+	}
+	if (scheme == style.SchemeDark) != (pack.Palette == style.ThemeDark) {
+		return fmt.Sprintf("The desktop prefers %s, but %s has no %s version.", scheme, pack.Display(), scheme)
+	}
+	return ""
 }
 
 // PreviewApp is a small, fully interactive application used to preview a
@@ -482,7 +530,7 @@ func (s *settingsState) packsPage(status *widgets.StatusBar, stage func(style.Ap
 					}
 					s.saved = next
 				}
-				s.a.SetLook(s.saved.Look())
+				s.a.ApplyAppearance(s.saved)
 				stage(next)
 			})
 		})
@@ -541,7 +589,7 @@ func (s *settingsState) packsPage(status *widgets.StatusBar, stage func(style.Ap
 					}
 					s.saved = next
 				}
-				s.a.SetLook(s.saved.Look())
+				s.a.ApplyAppearance(s.saved)
 				stage(next)
 			})
 		})

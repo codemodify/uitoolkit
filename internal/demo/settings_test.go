@@ -716,3 +716,63 @@ func clickApply(t *testing.T, w *app.Window) {
 	}
 	apply.OnClick()
 }
+
+func findSwitch(root widget.Component, text string) *widgets.Switch {
+	var sw *widgets.Switch
+	widget.Walk(root, func(c widget.Component) {
+		if s, ok := c.(*widgets.Switch); ok && s.Text == text && !insidePreview(c) {
+			sw = s
+		}
+	})
+	return sw
+}
+
+func findLabelWith(root widget.Component, part string) bool {
+	found := false
+	widget.Walk(root, func(c widget.Component) {
+		if l, ok := c.(*widgets.Label); ok && strings.Contains(l.Text, part) && !insidePreview(c) {
+			found = true
+		}
+	})
+	return found
+}
+
+// Following the desktop is staged like any other option: the preview
+// shows the sibling for the desktop's scheme and says so; Apply saves it.
+func TestSettingsFollowDesktop(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv(app.ColorSchemeEnv, "dark")
+	defer style.SetDesktopColorScheme(style.SchemeNoPreference)
+	if err := style.SaveAppearance(style.Appearance{Name: "breeze", Theme: style.ThemeLight}); err != nil {
+		t.Fatal(err)
+	}
+	a, w := openSettings(t, 1024, 780)
+	const label = "Match the desktop's light or dark mode"
+	sw := findSwitch(w.Content(), label)
+	if sw == nil {
+		t.Fatal("no follow-the-desktop switch")
+	}
+	if sw.On {
+		t.Fatal("switch on before it was chosen")
+	}
+	sw.OnChange(true)
+	a.PumpOnce()
+	if got := previewAppearance(t, w).Name; got != "breeze-night" {
+		t.Fatalf("preview %s, want breeze-night", got)
+	}
+	if !findLabelWith(w.Content(), "shows as Breeze Dark") {
+		t.Fatal("no note on what the desktop's scheme does")
+	}
+	clickApply(t, w)
+	a.PumpOnce()
+	saved := style.LoadAppearance()
+	if !saved.FollowDesktop || saved.Name != "breeze" {
+		t.Fatalf("saved %+v", saved)
+	}
+	if c, ok := a.Look().(*style.Classic); !ok || c.Pack() != "breeze-night" {
+		t.Fatalf("applied look %v", a.Look())
+	}
+	if sw := findSwitch(w.Content(), label); sw == nil || !sw.On {
+		t.Fatal("switch should show the saved choice")
+	}
+}

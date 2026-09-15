@@ -181,9 +181,7 @@ func (a *Application) ReloadPreferredLook() {
 	// Icon files may have changed with the set; drop cached stats so the
 	// new set is picked up on the next paint.
 	style.InvalidateIconCache()
-	next := style.LoadAppearance()
-	style.SetReduceMotion(next.ReduceMotion)
-	a.SetLook(style.WithAppearance(a.look, next))
+	a.ApplyAppearance(style.LoadAppearance())
 }
 
 func (a *Application) pollLookFile() {
