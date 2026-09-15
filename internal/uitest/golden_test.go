@@ -9,7 +9,7 @@ import (
 // prints the new values — do not silently accept a dirty-rect glyph change.
 var chromeStripHash = map[float32]uint64{
 	1: 0x2080c72771f4446c,
-	2: 0x7471a09621e25a7d,
+	2: 0x62cee790388b5867,
 }
 
 func TestChromeStripGolden(t *testing.T) {

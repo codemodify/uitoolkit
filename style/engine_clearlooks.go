@@ -2370,7 +2370,7 @@ func (e clearlooksEngine) DrawTableHeader(l *Classic, ctx *paintengine2d.Context
 func (e clearlooksEngine) DrawTableCell(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, align Align, face *Font) {
 	fg := l.Engine().Face(l, ctx, b, RoleRow, st&^StateFocused)
 	f := l.faceOrBody(face)
-	pad := tableCellPad(b.Dx(), f.Advance(label))
+	pad := l.tableCellPad(b.Dx(), f.Advance(label))
 	label = f.Fit(label, max(b.Dx()-pad*2, 4))
 	tw := f.Advance(label)
 	x := b.Min.X + pad
