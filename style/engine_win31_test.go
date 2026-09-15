@@ -106,6 +106,69 @@ func TestWin31ThumbIsSquare(t *testing.T) {
 	}
 }
 
+// Scroll arrows carry the small system buttons' bevel: one white pixel on
+// the top and left, two grey on the bottom and right (push buttons have
+// two of each).
+func TestWin31SmallButtonBevel(t *testing.T) {
+	lk := retroLook(t, "win31", 1)
+	white, grey, face := Hex("#ffffff"), Hex("#808080"), Hex("#c0c0c0")
+	img := paintengine2d.NewImage(40, 220)
+	view := paintengine2d.XYWH(0, 0, 17, 200)
+	DrawScrollBarParts(lk, paintengine2d.NewContext(img), ScrollGeometry(lk, view, true, 2000, 200, 0, false), true, ScrollState{})
+	// The up arrow's 15-pixel face spans (1, 1) to (15, 15); its glyph
+	// sits in (5, 5) to (11, 11).
+	for _, p := range []struct {
+		x, y int
+		want paintengine2d.Color
+		what string
+	}{
+		{8, 1, white, "top highlight"}, {8, 2, face, "face under one highlight row"},
+		{1, 8, white, "left highlight"}, {2, 8, face, "face beside one highlight column"},
+		{8, 15, grey, "outer bottom shadow"}, {8, 14, grey, "inner bottom shadow"}, {8, 13, face, "face over the shadow"},
+		{15, 8, grey, "outer right shadow"}, {14, 8, grey, "inner right shadow"}, {13, 8, face, "face beside the shadow"},
+	} {
+		if !retroNear(img, p.x, p.y, p.want) {
+			t.Errorf("up arrow (%d, %d): want %s", p.x, p.y, p.what)
+		}
+	}
+}
+
+// A drop-down list's button touches its field; an editable combo's stands
+// eight pixels off its edit box, where the edit text stops.
+func TestWin31EditableComboStandsApart(t *testing.T) {
+	for _, scale := range []float32{1, 2} {
+		lk := retroLook(t, "win31", scale)
+		s := int(scale)
+		b := paintengine2d.XYWH(0, 0, 200*scale, 24*scale)
+		at := func(img *paintengine2d.Image, cx, cy int, c paintengine2d.Color) bool {
+			return retroNear(img, cx*s+s/2, cy*s+s/2, c)
+		}
+		paint := func(st ControlState) *paintengine2d.Image {
+			img := paintengine2d.NewImage(200*s, 24*s)
+			lk.DrawComboBox(paintengine2d.NewContext(img), b, st, "12", false)
+			return img
+		}
+		black, white := Hex("#000000"), Hex("#ffffff")
+		// The button is 17 cells with its lines, from cell 183.
+		list := paint(StateNone)
+		if !at(list, 183, 12, black) || !at(list, 178, 12, white) || !at(list, 174, 12, white) {
+			t.Fatalf("@%gx: the drop-down list's field should run to the button's divider", scale)
+		}
+		edit := paint(StateEditable)
+		if !at(edit, 174, 12, black) || !at(edit, 183, 12, black) || !at(edit, 173, 12, white) {
+			t.Fatalf("@%gx: edit box and button each want a black frame", scale)
+		}
+		for cx := 175; cx < 183; cx++ {
+			if _, _, _, a := edit.PremulAt(cx*s+s/2, 12*s); a != 0 {
+				t.Fatalf("@%gx: the gap at cell %d is painted", scale, cx)
+			}
+		}
+		if r := ComboTextRectOf(lk, b); r.Empty() || r.Min.X < 0 || r.Max.X > 175*scale {
+			t.Fatalf("@%gx: edit text box %v runs past the edit box", scale, r)
+		}
+	}
+}
+
 // The control-menu box sits at the left of the caption, where
 // WindowCloseRect reports it: grey, with the bar glyph, navy beyond.
 func TestWin31ControlMenuBoxAgreesWithPaint(t *testing.T) {
