@@ -158,7 +158,7 @@ func (t *ToolBar) itemBoxW(it *ToolItem, btn float32) float32 {
 		return btn
 	}
 	textW := t.Look().Font().InkWidth(it.Text)
-	if adv := t.Look().Font().Advance(it.Text); adv > textW {
+	if adv := style.ControlFontOf(t.Look(), style.RoleTool).Advance(it.Text); adv > textW {
 		textW = adv
 	}
 	w := pad*2 + textW
@@ -172,7 +172,8 @@ func (t *ToolBar) itemBoxW(it *ToolItem, btn float32) float32 {
 // not expand to MaxW: a Row/Flex parent decides growth via Flex weights.
 func (t *ToolBar) contentW() float32 {
 	btn := t.toolBtnW(t.barH())
-	x := float32(6)
+	in := style.ToolBarInsetsOf(t.Look())
+	x := in.Left
 	for _, it := range t.items {
 		if it == nil || it.Sep {
 			x += 8 + style.ToolItemGap
@@ -180,7 +181,7 @@ func (t *ToolBar) contentW() float32 {
 		}
 		x += t.itemBoxW(it, btn) + style.ToolItemGap
 	}
-	return x + 6
+	return x + in.Right
 }
 
 func (t *ToolBar) Measure(c layout.Constraints) paintengine2d.Point {
@@ -192,7 +193,7 @@ func (t *ToolBar) Arrange(r paintengine2d.Rect) { t.SetBounds(r) }
 func (t *ToolBar) itemRects() []paintengine2d.Rect {
 	h := t.LocalBounds().Dy()
 	btn := t.toolBtnW(h)
-	x := float32(6)
+	x := style.ToolBarInsetsOf(t.Look()).Left
 	y := (h - btn) * 0.5
 	if y < 2 {
 		y = 2
