@@ -233,9 +233,20 @@ or `widget.RowItemState`, which add `Focused`, `Inactive`, `Backdrop` and
   "metrics": { "controlH": 28, "scroll": 17, "radius": 3, "square": false, "viewFrame": 1 },
   "colors":  { "background": "#ece9d8", "accent": "#316ac5", "selection": "#316ac5" },
   "extra":   { "btnTop": "#ffffff", "btnBottom": "#d6d0c5", "hot": "#f8b330" },
-  "params":  { "glossy": 1 }
+  "params":  { "glossy": 1 },
+  "fonts":   { "ui": ["Tahoma", "Verdana", "DejaVu Sans"], "mono": ["Courier New"] }
 }
 ```
 
 `colors` are the shared palette (every engine understands them); `extra` and
 `params` are engine-specific and documented at the top of each engine file.
+
+`fonts` lists typefaces, most wanted first; the first one installed wins
+(fontconfig), and the bundled Titillium Web / JetBrains Mono stand in when
+none is. A pack that names none reads in its era's typefaces
+(`style/fonts_era.go`): XP's Tahoma, Vista's Segoe UI, Aqua's Lucida Grande,
+NeXT and Motif's Helvetica, GNOME's Cantarell, Plasma's Noto Sans, each
+followed by open look-alikes (Nimbus Sans for Helvetica, Liberation for Arial
+and Courier New, Selawik and Noto Sans for Segoe UI). A variable font's bold
+is drawn by emboldening its regular outline. `UITK_SYSTEM_FONTS=0` keeps
+every look on the bundled faces (reproducible screenshots).

@@ -22,12 +22,16 @@ type Classic struct {
 	tokens  ThemeTokens
 	engine  Engine
 	memo    lookMemo // engine-derived paint data, built once per look
-	body    *Font
-	title   *Font
-	bold    *Font
-	muted   *Font
-	onAcc   *Font
-	mono    *Font
+	// uiFamily / monoFamily are the typefaces the look reads in: its
+	// era's when installed, else the bundled faces.
+	uiFamily   string
+	monoFamily string
+	body       *Font
+	title      *Font
+	bold       *Font
+	muted      *Font
+	onAcc      *Font
+	mono       *Font
 }
 
 // NewClassic builds fonts for p. Name is "dark" or "light" typically.
@@ -75,6 +79,7 @@ func newClassic(name string, p Palette, m Metrics, corners CornerStyle, icons Ic
 	p = ResolveMenuChrome(p)
 	p = ResolveBevelChromeFor(p, tokens.Family)
 	density, scale := inferDensityScale(m)
+	ui, mono := lookFamilies(tokens)
 	return &Classic{
 		palette:  p,
 		metrics:  m,
@@ -87,13 +92,15 @@ func newClassic(name string, p Palette, m Metrics, corners CornerStyle, icons Ic
 		scale:    scale,
 		tokens:   tokens,
 		engine:   engineFor(tokens),
-		// OpenType atlases (Titillium / JetBrains Mono); Color tints at draw.
-		body:  BakeFont(m.FontSize, p.Text),
-		title: BakeTitleFont(m.TitleSize, p.Text),
-		bold:  BakeFamily(FamilyUI, WeightBold, m.FontSize, p.Text),
-		muted: BakeFont(m.FontSize, p.TextMuted),
-		onAcc: BakeFont(m.FontSize, p.TextOnAccent),
-		mono:  BakeMonoFont(m.FontSize, p.Text),
+		// OpenType atlases of the look's typefaces; Color tints at draw.
+		uiFamily:   ui,
+		monoFamily: mono,
+		body:       BakeFamily(ui, WeightRegular, m.FontSize, p.Text),
+		title:      BakeFamily(ui, WeightBold, m.TitleSize, p.Text),
+		bold:       BakeFamily(ui, WeightBold, m.FontSize, p.Text),
+		muted:      BakeFamily(ui, WeightRegular, m.FontSize, p.TextMuted),
+		onAcc:      BakeFamily(ui, WeightRegular, m.FontSize, p.TextOnAccent),
+		mono:       BakeFamily(mono, WeightRegular, m.FontSize, p.Text),
 	}
 }
 
@@ -225,6 +232,23 @@ func (l *Classic) MutedFont() *Font    { return l.muted }
 func (l *Classic) OnAccentFont() *Font { return l.onAcc }
 func (l *Classic) MonoFont() *Font     { return l.mono }
 
+// UIFamily is the typeface the look reads in: its era's when installed,
+// else the bundled Titillium Web.
+func (l *Classic) UIFamily() string {
+	if l == nil || l.uiFamily == "" {
+		return FamilyUI
+	}
+	return l.uiFamily
+}
+
+// MonoFamily is the look's code and log typeface.
+func (l *Classic) MonoFamily() string {
+	if l == nil || l.monoFamily == "" {
+		return FamilyMono
+	}
+	return l.monoFamily
+}
+
 func (l *Classic) faceOrBody(face *Font) *Font {
 	if face != nil {
 		return face
@@ -233,8 +257,8 @@ func (l *Classic) faceOrBody(face *Font) *Font {
 }
 
 func (l *Classic) mutedFor(face *Font) *Font {
-	if face != nil && face.Family == FamilyMono {
-		return BakeMonoFont(face.Size, l.palette.TextMuted)
+	if face != nil && face.Family == l.MonoFamily() {
+		return BakeFamily(face.Family, WeightRegular, face.Size, l.palette.TextMuted)
 	}
 	return l.muted
 }
@@ -1578,7 +1602,7 @@ func (l *Classic) fontFor(col paintengine2d.Color) *Font {
 		return l.onAcc
 	}
 	if col != (paintengine2d.Color{}) && !nearColor(col, l.palette.Text) {
-		return BakeFont(l.metrics.FontSize, col)
+		return BakeFamily(l.UIFamily(), WeightRegular, l.metrics.FontSize, col)
 	}
 	return l.body
 }

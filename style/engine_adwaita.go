@@ -1629,7 +1629,7 @@ type adwHeaderFontKey struct{}
 
 func adwHeaderFont(l *Classic) *Font {
 	return l.Memo(adwHeaderFontKey{}, func() any {
-		return BakeFamily(FamilyUI, WeightBold, l.metrics.FontSize*0.82, l.palette.Text)
+		return BakeFamily(l.UIFamily(), WeightBold, l.metrics.FontSize*0.82, l.palette.Text)
 	}).(*Font)
 }
 

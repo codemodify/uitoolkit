@@ -259,7 +259,7 @@ func tokensForAppearance(a Appearance) ThemeTokens {
 		if tok.Empty() {
 			tok = ThemeTokens{Family: pack.Palette, Palette: paletteForFamily(pack.Palette)}
 		}
-		return tok.Resolve()
+		return withEraFonts(tok.Resolve(), pack.Name)
 	}
 	if pack, ok := LoadTheme(StarterName(a.Theme)); ok {
 		return pack.Tokens.Resolve()
