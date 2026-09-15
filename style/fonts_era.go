@@ -88,6 +88,12 @@ var eraEngineFonts = map[string]FontPrefs{
 	// FlatLaf takes the platform's UI font: Segoe UI in its reference
 	// screenshots, Inter when an app bundles FlatLaf's; IntelliJ's mono.
 	"flatlaf": {UI: append([]string{"Segoe UI", "Inter"}, segoe[1:]...), Mono: append([]string{"JetBrains Mono"}, consolas...)},
+	// Swing's Metal: the "Dialog" logical font, Lucida Sans in the JDK.
+	"metal": {UI: []string{"Lucida Sans", "Lucida Sans Unicode", "Lucida Grande", "Arial", "Liberation Sans", "Arimo", "DejaVu Sans"},
+		Mono: []string{"Lucida Sans Typewriter", "Lucida Console", "Courier New", "Liberation Mono", "Cousine", "DejaVu Sans Mono"}},
+	// Nimbus: SansSerif 12, DejaVu Sans on Linux JDKs.
+	"nimbus": {UI: []string{"DejaVu Sans", "Bitstream Vera Sans", "Segoe UI", "Tahoma", "Liberation Sans", "Noto Sans"},
+		Mono: []string{"DejaVu Sans Mono", "Bitstream Vera Sans Mono", "Liberation Mono", "Courier New"}},
 }
 
 // eraPackFonts override the engine's typefaces for one pack.

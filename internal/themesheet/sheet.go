@@ -107,7 +107,13 @@ func (s *sheet) buttons(x, y float32) {
 	for i, st := range tools {
 		s.lk.DrawToolButton(s.ctx, s.r(x+float32(i)*44, y+94, 40, 34), st, "", icons[i])
 	}
-	s.lk.DrawToolButton(s.ctx, s.r(x+312, y+94, 90, 34), stH, "Fetch", style.IconOpen)
+	// As wide as a tool bar would make it, in the look's tool font.
+	fr := s.r(x+312, y+94, 90, 34)
+	pad, side, gap := style.ToolButtonChromeFor(s.lk, fr.Dy())
+	if fw := pad*2 + side + gap + style.ControlFontOf(s.lk, style.RoleTool).Advance("Fetch"); fw > fr.Dx() {
+		fr.Max.X = fr.Min.X + fw
+	}
+	s.lk.DrawToolButton(s.ctx, fr, stH, "Fetch", style.IconOpen)
 }
 
 func (s *sheet) toggles(x, y float32) {

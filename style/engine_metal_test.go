@@ -357,7 +357,11 @@ func TestMetalFocusRectangle(t *testing.T) {
 		if found < 60 {
 			t.Fatalf("%s: a focused button shows %d primary 2 focus pixels", n, found)
 		}
-		if nxNear(img, 64, 8, c.p2) {
+		// Above the label's line (by the font the look reads in), the face
+		// shows no focus colour.
+		f := lk.ControlFont(RoleButton)
+		above := int(4+(28-f.Height())*0.5) - 4
+		if above > 5 && nxNear(img, 64, above, c.p2) {
 			t.Fatalf("%s: the focus rectangle hugs the label, not the whole face", n)
 		}
 	}
@@ -412,7 +416,8 @@ func TestMetalTabSlant(t *testing.T) {
 		if !nxNear(img, 60, 1, c.tabEdgeIdle) || !nxNear(img, 10, 20, c.tabEdgeIdle) || !nxNear(img, 109, 20, c.tabEdgeIdle) {
 			t.Fatalf("%s: the tab is not outlined along its top and sides", n)
 		}
-		if !nxNear(img, 60, 15, c.tabIdle) {
+		// Sampled clear of the centred label.
+		if !nxNear(img, 100, 18, c.tabIdle) {
 			t.Fatalf("%s: an unselected tab is filled with %s", n, colorHexPadded(c.tabIdle))
 		}
 		lk.DrawTab(ctx, paintengine2d.XYWH(10, 0, 100, 30), StateNone, "", true)
