@@ -40,11 +40,17 @@ type Application struct {
 	// autoScale is set when no explicit Options.Scale / env override was
 	// given, so each Window may take its display scale from its own
 	// surface (per-monitor DPI) instead of the process-wide guess.
-	autoScale        bool
-	headless         bool
-	backend          platform.Backend
-	windows          []*Window
-	quit             atomic.Bool
+	autoScale bool
+	headless  bool
+	backend   platform.Backend
+	windows   []*Window
+	quit      atomic.Bool
+	// trimOwed, stir: see trim.go. trimAt and stirSeen belong to the run
+	// loop.
+	trimOwed         atomic.Bool
+	stir             atomic.Uint64
+	stirSeen         uint64
+	trimAt           time.Time
 	onQuit           func()
 	watchLook        bool
 	lookWatch        *lookFileStamp
@@ -161,6 +167,7 @@ func (a *Application) SetLook(l style.LookAndFeel) {
 	if l == nil {
 		return
 	}
+	a.owesTrim()
 	a.base = lookAtScale(l, 1)
 	a.look = lookAtScale(a.base, a.scale)
 	for _, w := range a.Windows() {
@@ -246,6 +253,7 @@ func (a *Application) BackendName() string { return a.backend.Name() }
 
 // NewWindow opens a surface and attaches a retained widget host.
 func (a *Application) NewWindow(opts platform.WindowOptions) (*Window, error) {
+	a.owesTrim()
 	if opts.Headless || a.headless {
 		opts.Headless = true
 	}
@@ -352,6 +360,7 @@ func (a *Application) Run() error {
 	if len(a.Windows()) == 0 && !a.trayHolds() {
 		return fmt.Errorf("uitoolkit: Run with no windows")
 	}
+	a.owesTrim()
 	// Clear a quit left over from a previous Run so an application can be
 	// restarted (a tray app that reopens its window after Quit).
 	a.quit.Store(false)
@@ -399,6 +408,7 @@ func (a *Application) Run() error {
 		if a.a11y != nil {
 			a.a11y.sync()
 		}
+		a.maybeTrim(time.Now())
 		// Count survivors after pump/frame: a window that closed itself
 		// while draining its burst must not hold the loop open for
 		// another iteration.
@@ -500,6 +510,9 @@ func (a *Application) waitTimeout(now, nextBlink time.Time) time.Duration {
 		if deadline.IsZero() || t.Before(deadline) {
 			deadline = t
 		}
+	}
+	if t := a.trimDeadline(); !t.IsZero() && (deadline.IsZero() || t.Before(deadline)) {
+		deadline = t
 	}
 	if deadline.IsZero() {
 		return -1
