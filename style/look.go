@@ -220,6 +220,7 @@ func (l *Classic) setPack(name string) *Classic {
 	}
 	return l
 }
+
 func (l *Classic) Font() *Font      { return l.body }
 func (l *Classic) TitleFont() *Font { return l.title }
 func (l *Classic) BoldFont() *Font {
@@ -228,6 +229,7 @@ func (l *Classic) BoldFont() *Font {
 	}
 	return l.body
 }
+
 func (l *Classic) MutedFont() *Font    { return l.muted }
 func (l *Classic) OnAccentFont() *Font { return l.onAcc }
 func (l *Classic) MonoFont() *Font     { return l.mono }
@@ -657,13 +659,9 @@ func (l *Classic) baseDrawMenuItem(ctx *paintengine2d.Context, b paintengine2d.R
 	if ty < b.Min.Y {
 		ty = b.Min.Y
 	}
-	fg := p.Text
-	font := l.body
-	if st.Disabled() {
-		fg = p.TextMuted
-		font = l.muted
-	} else {
-		fg = l.eng().MenuTextColor(l, st.Hovered() || st.Pressed())
+	fg, font := p.TextMuted, l.muted
+	if !st.Disabled() {
+		fg, font = l.eng().MenuTextColor(l, st.Hovered() || st.Pressed()), l.body
 	}
 	l.drawMenuGutter(ctx, b, ch, row, fg)
 	label, shortcut, underline := row.Label, row.Shortcut, row.Underline
@@ -1558,17 +1556,6 @@ func (l *Classic) drawTextUnderline(ctx *paintengine2d.Context, f *Font, text st
 	ctx.DrawRect(paintengine2d.XYWH(x0, y, x1-x0, 1.2), paintengine2d.Fill(col))
 }
 
-func (l *Classic) drawCentered(ctx *paintengine2d.Context, f *Font, text string, b paintengine2d.Rect) {
-	if f == nil || text == "" {
-		return
-	}
-	col := f.Color
-	if col == (paintengine2d.Color{}) {
-		col = l.palette.Text
-	}
-	l.drawFittedText(ctx, f, text, b, col, AlignCenter, 8)
-}
-
 func (l *Classic) drawFittedText(ctx *paintengine2d.Context, f *Font, text string, b paintengine2d.Rect, col paintengine2d.Color, align Align, pad float32) {
 	if f == nil || text == "" || b.Empty() {
 		return
@@ -1688,13 +1675,6 @@ func clamp1(v float32) float32 {
 		return 1
 	}
 	return v
-}
-
-func btoi(v bool) int {
-	if v {
-		return 1
-	}
-	return 0
 }
 
 // ---- LookAndFeel: every control is painted by the look's engine ----------

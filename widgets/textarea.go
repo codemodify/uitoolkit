@@ -363,11 +363,6 @@ func (t *TextArea) scrollTrackV() (track, thumb paintengine2d.Rect) {
 	return sp.Track, sp.Thumb
 }
 
-func (t *TextArea) scrollTrackH() (track, thumb paintengine2d.Rect) {
-	sp := t.hparts()
-	return sp.Track, sp.Thumb
-}
-
 func (t *TextArea) blink() bool {
 	if !t.Focused() {
 		return false
@@ -991,11 +986,6 @@ func (t *TextArea) changed() {
 	if t.OnChange != nil {
 		t.OnChange(t.Text)
 	}
-}
-
-func layoutArea(f *style.Font, text string, maxW float32, wrap bool) []style.TextLine {
-	lines, _ := layoutAreaMax(f, text, maxW, wrap)
-	return lines
 }
 
 // layoutAreaMax wraps text and also reports the widest line advance (used for
