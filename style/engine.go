@@ -552,6 +552,23 @@ func ToolBarInsetsOf(lk LookAndFeel) Insets {
 // ToolBarInsets is the tool bar's room around its items.
 func (l *Classic) ToolBarInsets() Insets { return l.eng().ToolBarInsets(l) }
 
+// DrawArrow paints the look's arrow glyph (scroll buttons, spinners) in b.
+func (l *Classic) DrawArrow(ctx *paintengine2d.Context, b paintengine2d.Rect, dir Direction, col paintengine2d.Color) {
+	l.eng().Arrow(l, ctx, b, dir, col)
+}
+
+// DrawArrowOf paints lk's arrow glyph pointing dir in b (a plain triangle
+// for looks without one), for widgets that need era-correct arrows.
+func DrawArrowOf(lk LookAndFeel, ctx *paintengine2d.Context, b paintengine2d.Rect, dir Direction, col paintengine2d.Color) {
+	if a, ok := lk.(interface {
+		DrawArrow(*paintengine2d.Context, paintengine2d.Rect, Direction, paintengine2d.Color)
+	}); ok {
+		a.DrawArrow(ctx, b, dir, col)
+		return
+	}
+	FillArrow(ctx, b, dir, col)
+}
+
 // ControlFontLook names the face a look labels a control role with.
 type ControlFontLook interface {
 	ControlFont(role Role) *Font
