@@ -21,6 +21,7 @@ Engines so far, each a good model for its family:
 | `motif` | Motif, CDE, IRIX, HP VUE | colour derivation, shadow thickness per pack |
 | `next` | NeXTSTEP, OPENSTEP, Window Maker | textures as pack data, dithers |
 | `fusion`, `oxygen`, `breeze` | Qt Fusion, KDE 4, Plasma | modern flat and glow looks, tone models |
+| `web` | SourceGit, Primer, shadcn/ui, Geist, Linear, the editor palettes | a parametric engine: one idiom, every difference a param (see [The web engine](#the-web-engine)) |
 | `base` | the stock looks | defaults every engine inherits |
 
 ## Where this comes from
@@ -91,6 +92,10 @@ gets the era right:
   last, so it overlaps its neighbours (Win95 and XP: 2px each side).
   `TabOverlap` lays every tab over its neighbour's border, so two tabs share
   one line (Aero and Metro: 1px; Qt's `PM_TabBarTabOverlap`).
+  `BrowserTabEngine` draws document tabs in a title bar, browser style (one
+  outlined tab whose feet flare into the tool bar, bare labels between thin
+  separators, as SourceGit's repository tabs); `DrawBrowserTabOf` and
+  `BrowserTabOutsetOf` fall back to the look's ordinary tab.
 - **Shadows** — `PopupShadow(kind)` is how far a floating layer's drop
   shadow reaches past its bounds, and `DrawPopupShadow` paints it before the
   layer (`PopupMenu` for menus and lists, `PopupTooltip`, `PopupDialog`).
@@ -203,6 +208,11 @@ To draw one selection box across a row, paint the row box over
 where the row goes on, so the cells join into one box (Aero's Explorer
 selection, Fluent's list item and pill).
 
+A selected list row carries `SelectedAbove` / `SelectedBelow` when the row
+next to it is selected too, so an engine can join a run of selected rows
+into one box: square the corners they share, keep the outer ones round
+(SourceGit's sidebar lists, macOS's inset lists).
+
 Tree rows carry their branch chain (Qt's `State_Sibling`): `st.HasNextSibling(d)`
 says whether the node at depth `d` on the row's chain (its ancestors, then
 the row itself) has a sibling after it. Draw a branch line through the row
@@ -215,6 +225,44 @@ List and tree painters mark a `Focused` row themselves — default
 Motif the solid location cursor; tables call `DrawItemFocus` over the whole
 row after its cells. Looks whose fields have a focus ring (`FieldFocusRing`)
 may leave `ItemFocus` empty and let the view frame ring the focused view.
+
+## The web engine
+
+`web` (`style/engine_web*.go`) paints today's flat design systems —
+SourceGit (Avalonia's Fluent theme as SourceGit restyles it), GitHub's
+Primer, shadcn/ui, Vercel's Geist, Linear — and the editor palettes people
+carry between apps (Catppuccin, Nord, Dracula, Tokyo Night, Rosé Pine).
+They share one idiom: flat faces in a 1px hairline, small radii, a keyboard
+focus ring, underlined or segmented tabs, pill switches, menus of rounded
+rows on a rounded popover, overlay scroll bars. So the engine is
+parametric: each difference is a `params` number or an `extra` colour, and
+another design system is a pack, not an engine. The top of `engine_web.go`
+lists every key with its default; the ones that decide the shapes:
+
+| params | values [default] | packs |
+| --- | --- | --- |
+| `radius`, `fieldRadius`, `comboRadius`, `overlayRadius`, `cardRadius`, `viewRadius`, `windowRadius`, `checkRadius`, `rowRadius`, `sideRadius`, `menuRowRadius` | corners in px [`radius` 6; the others follow it, or 8 for overlays and cards, 4 for check boxes, 6 for rows] | SourceGit 3 with square fields, Primer 6 and 12px overlays, shadcn 8, Linear 4 with 8px inputs |
+| `focusStyle` | 0 a ring outside the face, 1 a band inside it [1], 2 Avalonia's dotted adorner | shadcn and Geist 0, Linear and the palettes 1, SourceGit 2 |
+| `focusWidth`, `focusGap`, `focusAlpha` | the ring [2, 0, 1] | shadcn 3px at 50%, Geist 2px beyond a 2px gap |
+| `hoverBorder`, `checkFocus` | the accent border under the pointer; focus as a 2px accent border on check boxes and radios [0, 0] | SourceGit |
+| `primaryStyle` | the default button: 0 the accent [0], 1 the text colour, 2 the pack's `primary` | shadcn and Geist 1, Primer 2 (its green) |
+| `tabStyle` | 0 underline [0], 1 segmented, 2 browser; `tabLine`, `tabLineGap`, `tabFit`, `tabAccent`, `tabDim` | SourceGit's 1px accent pipe 2px up, Primer's coral line, shadcn and Linear 1 |
+| `checkStyle`, `radioStyle`, `radioSize`, `switchShape`, `knob` | unfilled with an accent tick or filled [1]; ring and dot or filled [1]; pill [0] or rounded switch | SourceGit unfilled, 14px radios; Primer's rounded switch |
+| `menuHighlight`, `menuInset`, `menuSep` | a wash [0] or the accent under the row, its inset from the popover's sides, separators from the label column | |
+| `rowInset`, `sideInset`, `rowBar`, `listSel`, `sideSel`, `sideOffWash`, … | rows boxed in from the sides or full width, the selection's alpha focused / hovered / unfocused per list, sidebar and table, an accent bar | SourceGit's joined sidebar boxes, Primer's bar |
+| `scrollIdle`, `scrollInset`, `scrollArrows` | transient bars: the idle thumb's width [2], the gap [2], arrows while expanded [0] | SourceGit 2px with arrows, Linear 6px |
+| `captionStyle`, `captionButton` | a caption strip with a centred bold title and a close cell that turns red (0), or a web dialog's header and icon close button (1) [1] | SourceGit 0: a 28px strip, a 48px cell |
+| `accentFollows` | 1: the pack takes the desktop's accent (`AccentEngine`) and derives Avalonia's shades from it | SourceGit |
+
+A focus ring outside the face needs room: controls keep a margin as wide
+as gap plus ring on every side of their face (`focusStyle` 0 packs size
+their controls to include it: shadcn's 36px buttons in 42px), and the ring
+goes over the face's edge where a control has none (a tool bar's buttons).
+With an outside ring a pack's `fieldRing` colour gives focused fields
+Geist's halo in place of the ring. The text size is the `fontSize` metric
+(13px SourceGit and Linear, 14px the rest), and the typefaces are each
+system's own (Inter, Mona Sans, Geist) before the engine's Inter-first
+stack.
 
 ## Writing an engine
 
@@ -299,11 +347,12 @@ look may implement; use the `…Of` helpers, which fall back when a look
 does not: `ControlFontOf` (measure labels), `DrawArrowOf` (era arrows),
 `DrawItemFocusOf` (current-row mark), `ViewFrameInsetsOf` /
 `DrawViewFrameOf`, `PopupShadowOf` / `DrawPopupShadowOf`, `TabOutsetOf`,
-`TabOverlapOf`, `ToolBarInsetsOf` and `LookHint`. A scrolling view gives up
-`ScrollGutter` to its bar (nothing for transient bars) and lets
-`scrollDrag` show, fade and hit-test it. Build row states with `widget.ItemState`
-or `widget.RowItemState`, which add `Focused`, `Inactive`, `Backdrop` and
-`Alternate` for you.
+`TabOverlapOf`, `BrowserTabOutsetOf` / `DrawBrowserTabOf`, `ToolBarInsetsOf`
+and `LookHint`. A scrolling view gives up `ScrollGutter` to its bar (nothing
+for transient bars) and lets `scrollDrag` show, fade and hit-test it. Build
+row states with `widget.ItemState` or `widget.RowItemState`, which add
+`Focused`, `Inactive`, `Backdrop` and `Alternate` for you; a list with
+several rows selected adds `SelectedAbove` / `SelectedBelow` itself.
 
 ## Pack schema (`theme.json`)
 
@@ -321,6 +370,9 @@ or `widget.RowItemState`, which add `Focused`, `Inactive`, `Backdrop` and
 
 `colors` are the shared palette (every engine understands them); `extra` and
 `params` are engine-specific and documented at the top of each engine file.
+`metrics.fontSize` is the body text size in pixels at scale 1 (unset: 16,
+the toolkit's own); a pack whose design sets text at 13 or 14px sizes the
+rest of its metrics in the same pixels.
 
 `fonts` lists typefaces, most wanted first; the first one installed wins
 (fontconfig), and the bundled Titillium Web / JetBrains Mono stand in when
