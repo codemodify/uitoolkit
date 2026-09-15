@@ -956,6 +956,36 @@ func DrawBrowserTabOf(lk LookAndFeel, ctx *paintengine2d.Context, b paintengine2
 	lk.DrawTab(ctx, b, st, label, selected)
 }
 
+// ToolGroupEngine is an optional engine hook for tool bars whose buttons
+// share one piece of chrome per group (macOS Tahoe's glass capsules): the
+// tool bar paints DrawToolGroup under each run of n buttons between
+// separators, b spanning the run, then the buttons over it, and its
+// separators are only the space between the groups. A group's shadow may
+// fall a few pixels past b, inside the tool bar.
+type ToolGroupEngine interface {
+	DrawToolGroup(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, n int)
+}
+
+// ToolGroupsOf reports whether lk paints its tool bar buttons on shared
+// group chrome ([ToolGroupEngine]).
+func ToolGroupsOf(lk LookAndFeel) bool {
+	if c, ok := lk.(*Classic); ok && c != nil {
+		_, ok := c.eng().(ToolGroupEngine)
+		return ok
+	}
+	return false
+}
+
+// DrawToolGroupOf paints lk's group chrome under a run of n tool bar
+// buttons spanning b (nothing for a look without groups).
+func DrawToolGroupOf(lk LookAndFeel, ctx *paintengine2d.Context, b paintengine2d.Rect, n int) {
+	if c, ok := lk.(*Classic); ok && c != nil && ctx != nil {
+		if e, ok := c.eng().(ToolGroupEngine); ok {
+			e.DrawToolGroup(c, ctx, b, n)
+		}
+	}
+}
+
 // ViewBackgroundLook says what an item view's rows sit on.
 type ViewBackgroundLook interface {
 	ViewBackground(st ControlState) paintengine2d.Color
