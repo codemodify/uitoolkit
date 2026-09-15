@@ -210,6 +210,9 @@ func (s *settingsState) themesPage(status *widgets.StatusBar, stage func(style.A
 	list.Selected = sel
 	list.RowHeight = 28
 	list.OffsetY = s.listOff
+	// The staged theme may sit below the fold (Aqua is row 30): bring it
+	// into view; a row the user just clicked is already there.
+	list.EnsureVisible(sel)
 	browser := widgets.NewColumn(widgets.NewLabel("Themes"), filters, list).WithGap(6)
 	browser.AddFlex(list, 1)
 

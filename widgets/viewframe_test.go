@@ -82,3 +82,21 @@ func TestTableRowBoundsAreLocalInsideFrame(t *testing.T) {
 		t.Fatalf("divider at local x %v = %d, want column 0", in.Left+w[0], got)
 	}
 }
+
+// EnsureVisible before layout waits for the first Arrange, then scrolls
+// just enough (the Settings theme list opens on the staged pack).
+func TestListEnsureVisibleBeforeLayout(t *testing.T) {
+	l := NewListView(100, func(i int) string { return fmt.Sprint(i) }, nil)
+	l.SetHost(&fakeWindow{look: style.DarkLook()})
+	l.EnsureVisible(60)
+	l.Arrange(paintengine2d.XYWH(0, 0, 200, 200))
+	lo, hi := l.VisibleRange()
+	if 60 < lo || 60 >= hi {
+		t.Fatalf("row 60 not in view after the first Arrange: rows [%d,%d)", lo, hi)
+	}
+	off := l.OffsetY
+	l.EnsureVisible(lo + 1)
+	if l.OffsetY != off {
+		t.Fatalf("revealing a visible row scrolled from %v to %v", off, l.OffsetY)
+	}
+}
