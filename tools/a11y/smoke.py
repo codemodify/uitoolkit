@@ -100,6 +100,27 @@ third = tablist.get_child_at_index(2)
 check(Atspi.Selection.is_child_selected(tablist, 2) and third.get_state_set().contains(Atspi.StateType.SELECTED),
       "selecting the third tab through the Selection interface")
 
+# Table: open the Table tab and read it by row and column, as Orca does.
+table_tab = next((o for o in nodes if o.get_role() == R.PAGE_TAB and o.get_name() == "Table"), None)
+if table_tab is not None:
+    Atspi.Action.do_action(table_tab, 0)
+    time.sleep(0.3)
+    nodes.clear()
+    walk(win)
+tables = [o for o in nodes if o.get_role() == R.TABLE]
+check(bool(tables), "the Table tab shows a table")
+if tables:
+    tb = tables[0]
+    rows, cols = Atspi.Table.get_n_rows(tb), Atspi.Table.get_n_columns(tb)
+    check(rows > 0 and cols > 0, "the table has %d rows and %d columns" % (rows, cols))
+    cell = Atspi.Table.get_accessible_at(tb, 1, 0)
+    check(cell is not None and cell.get_role() == R.TABLE_CELL, "a cell by row and column")
+    hdr = Atspi.Table.get_column_header(tb, 0)
+    check(hdr is not None and hdr.get_name() != "", "column 0's header reads %r" % (hdr.get_name() if hdr else None))
+    if cell is not None:
+        r, c, _, _ = Atspi.TableCell.get_row_column_span(cell)[-4:]
+        check(r == 1 and c == 0, "the cell knows its place (row %s, column %s)" % (r, c))
+
 # Focus: grabbing the entry's focus announces it, as Orca expects.
 from gi.repository import GLib  # noqa: E402
 
