@@ -769,3 +769,24 @@ func (l *ListView) AccessibleItemCount() int  { return l.Count }
 func (t *TableView) AccessibleItemCount() int { return t.RowCount * (len(t.Columns) + 1) }
 func (l *CardList) AccessibleItemCount() int  { return l.Count }
 func (t *TreeView) AccessibleItemCount() int  { return len(t.flatten()) }
+
+// AccessibleSetText replaces the field's text (AT-SPI's EditableText),
+// as typing would, and puts the caret at its end.
+func (t *TextField) AccessibleSetText(s string) bool {
+	if !t.Enabled() || (t.Accept != nil && !t.Accept(s)) {
+		return false
+	}
+	t.caret = runeCount(s)
+	t.SetText(s)
+	return true
+}
+
+// AccessibleSetText replaces the area's text unless it is read-only.
+func (t *TextArea) AccessibleSetText(s string) bool {
+	if !t.Enabled() || t.ReadOnly || (t.Accept != nil && !t.Accept(s)) {
+		return false
+	}
+	t.caret = runeCount(s)
+	t.SetText(s)
+	return true
+}

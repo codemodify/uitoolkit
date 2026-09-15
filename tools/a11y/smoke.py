@@ -114,6 +114,28 @@ for _ in range(100):
 check(bool(got) and got[-1].get_role() == R.ENTRY, "focusing the entry announces it (object:state-changed:focused)")
 check(entry.get_state_set().contains(Atspi.StateType.FOCUSED), "the entry reports focused")
 
+# Editing the focused entry through EditableText announces the change and
+# the text reads back.
+edits = []
+
+
+def on_text(ev):
+    edits.append((ev.type, ev.detail1, ev.detail2))
+
+
+texts = Atspi.EventListener.new(on_text)
+texts.register("object:text-changed")
+Atspi.EditableText.set_text_contents(entry, "Ada King")
+for _ in range(100):
+    ctx.iteration(False)
+    if len(edits) >= 2:
+        break
+    time.sleep(0.02)
+check(Atspi.Text.get_text(entry, 0, -1) == "Ada King", "EditableText sets the entry's text")
+kinds = sorted(k for k, _, _ in edits)
+check(any("insert" in k for k in kinds) and any("delete" in k for k in kinds),
+      "the edit is announced as text removed and inserted (%s)" % ", ".join(kinds))
+
 # A change on the focused object is announced: tick the check box that has
 # the focus and expect object:state-changed:checked.
 changes = []

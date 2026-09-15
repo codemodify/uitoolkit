@@ -23,6 +23,30 @@ func (w *Window) AccessibleTree() *a11y.Node {
 	return root
 }
 
+// AccessibleSetText replaces the text of the editable node with the given
+// ID; it reports whether it did.
+func (w *Window) AccessibleSetText(id uint64, s string) bool {
+	comp, item := widget.SplitItemID(id)
+	if item >= 0 {
+		return false
+	}
+	var hit widget.Component
+	for _, c := range []widget.Component{w.root, w.overlay, w.popup} {
+		if c == nil {
+			continue
+		}
+		widget.Walk(c, func(x widget.Component) {
+			if hit == nil && x.ID() == comp {
+				hit = x
+			}
+		})
+	}
+	if ed, ok := hit.(widget.AccessibleEditor); ok {
+		return ed.AccessibleSetText(s)
+	}
+	return false
+}
+
 // AccessibleAction performs an assistive technology's action on the node
 // with the given ID (a component, or an item of a view); it reports
 // whether anything did it.
