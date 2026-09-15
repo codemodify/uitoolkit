@@ -1343,3 +1343,12 @@ func (w *Window) Visible() bool {
 
 // Idle is used by tests that want a timestamp.
 func (w *Window) Idle() time.Time { return time.Now() }
+
+// PortalParent names the window as the parent of a desktop portal dialog
+// ("x11:<id>"; empty where the platform cannot say).
+func (w *Window) PortalParent() string {
+	if p, ok := w.surf.(platform.PortalParenter); ok {
+		return p.PortalParent()
+	}
+	return ""
+}

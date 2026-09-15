@@ -320,6 +320,10 @@ func showNativeFileDialog(from widget.Component, opts FileDialogOptions) bool {
 		return false
 	}
 	co := platform.FileChooserOptions{Title: opts.Title, Save: opts.Mode == FileSave}
+	if p, ok := from.Host().(interface{ PortalParent() string }); ok {
+		// The dialog opens as the window's child (modal to it).
+		co.ParentWindow = p.PortalParent()
+	}
 	if opts.Path != "" {
 		if st, err := os.Stat(opts.Path); err == nil && st.IsDir() {
 			co.Folder, _ = filepath.Abs(opts.Path)
