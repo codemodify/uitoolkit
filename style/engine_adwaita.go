@@ -1694,7 +1694,7 @@ func (e adwaitaEngine) DrawTableCell(l *Classic, ctx *paintengine2d.Context, b p
 	c := adwColors(l)
 	fg := c.row(ctx, b, st&^StateFocused)
 	f := l.faceOrBody(face)
-	pad := tableCellPad(b.Dx(), f.Advance(label))
+	pad := l.tableCellPad(b.Dx(), f.Advance(label))
 	label = f.Fit(label, max(b.Dx()-pad*2, 4))
 	tw := f.Advance(label)
 	x := b.Min.X + pad

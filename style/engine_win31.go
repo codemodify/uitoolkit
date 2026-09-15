@@ -1236,7 +1236,7 @@ func (e win31Engine) DrawTreeRow(l *Classic, ctx *paintengine2d.Context, b paint
 func (e win31Engine) DrawTableCell(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, align Align, face *Font) {
 	fg := e.Face(l, ctx, b, RoleRow, st&^StateFocused)
 	f := l.faceOrBody(face)
-	pad := tableCellPad(b.Dx(), f.Advance(label))
+	pad := l.tableCellPad(b.Dx(), f.Advance(label))
 	l.drawFittedText(ctx, f, label, paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad*2, b.Dy()), fg, align, 0)
 }
 

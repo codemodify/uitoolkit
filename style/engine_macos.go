@@ -1861,7 +1861,7 @@ func (e macosEngine) DrawTableCell(l *Classic, ctx *paintengine2d.Context, b pai
 	fg := c.row(l, ctx, box, st, r)
 	ctx.Restore()
 	f := l.faceOrBody(face)
-	pad := tableCellPad(b.Dx(), f.Advance(label))
+	pad := l.tableCellPad(b.Dx(), f.Advance(label))
 	if st.First() && c.bigSur {
 		pad = max(pad, l.S(14))
 	}

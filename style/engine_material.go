@@ -1785,7 +1785,7 @@ func (e materialEngine) DrawTableCell(l *Classic, ctx *paintengine2d.Context, b 
 	}
 	ctx.Restore()
 	f := l.faceOrBody(face)
-	pad := tableCellPad(b.Dx(), f.Advance(label))
+	pad := l.tableCellPad(b.Dx(), f.Advance(label))
 	if st.First() {
 		pad = max(pad, l.S(12))
 	}
