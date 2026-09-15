@@ -127,14 +127,15 @@ func (m *MenuBar) barH() float32 {
 }
 
 func (m *MenuBar) titlesWidth() float32 {
-	f := style.ControlFontOf(m.Look(), style.RoleMenu)
-	x := float32(8)
+	lk := m.Look()
+	f := style.ControlFontOf(lk, style.RoleMenu)
+	x := style.Dip(lk, 8)
 	for _, menu := range m.menus {
 		if menu == nil {
 			continue
 		}
 		label, _, _ := ParseMnemonic(menu.Title)
-		x += f.Advance(label) + 20
+		x += f.Advance(label) + style.Dip(lk, 20)
 	}
 	return x
 }
@@ -153,13 +154,14 @@ func (m *MenuBar) Measure(c layout.Constraints) paintengine2d.Point {
 func (m *MenuBar) Arrange(r paintengine2d.Rect) { m.SetBounds(r) }
 
 func (m *MenuBar) titleRects() []paintengine2d.Rect {
-	f := style.ControlFontOf(m.Look(), style.RoleMenu)
+	lk := m.Look()
+	f := style.ControlFontOf(lk, style.RoleMenu)
 	h := m.LocalBounds().Dy()
-	x := float32(4)
+	x := style.Dip(lk, 4)
 	out := make([]paintengine2d.Rect, len(m.menus))
 	for i, menu := range m.menus {
 		label, _, _ := ParseMnemonic(menu.Title)
-		tw := f.Advance(label) + 20
+		tw := f.Advance(label) + style.Dip(lk, 20)
 		out[i] = paintengine2d.XYWH(x, 0, tw, h)
 		x += tw
 	}

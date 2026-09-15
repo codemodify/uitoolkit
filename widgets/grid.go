@@ -1,6 +1,8 @@
 package widgets
 
 import (
+	"math"
+
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/layout"
 	"github.com/codemodify/uitoolkit/style"
@@ -218,7 +220,7 @@ func (g *Grid) columns(avail float32) []float32 {
 	content := make([]float32, nc)
 	var spans [][3]float32
 	g.visible(func(c widget.Component, cell *GridCell) {
-		w := c.Measure(layout.Unbounded()).X
+		w := ceilPx(c.Measure(layout.Unbounded()).X)
 		if cell.ColSpan == 1 {
 			if cell.Col < nc && w > content[cell.Col] {
 				content[cell.Col] = w
@@ -249,7 +251,7 @@ func (g *Grid) rows(cols []float32, avail float32) []float32 {
 	var spans [][3]float32
 	g.visible(func(c widget.Component, cell *GridCell) {
 		cw := spanLen(cols, cell.Col, cell.ColSpan, g.ColGap)
-		h := c.Measure(layout.Constraints{MaxW: cw, MaxH: -1}).Y
+		h := ceilPx(c.Measure(layout.Constraints{MaxW: cw, MaxH: -1}).Y)
 		if cell.RowSpan == 1 {
 			if cell.Row < nr && h > content[cell.Row] {
 				content[cell.Row] = h
@@ -378,3 +380,7 @@ func (f *Form) Arrange(r paintengine2d.Rect) {
 	}
 	f.Grid.Arrange(r)
 }
+
+// ceilPx rounds a measured length up to whole pixels, so a child sized to
+// its content keeps that width after layout rounding.
+func ceilPx(v float32) float32 { return float32(math.Ceil(float64(v) - 1e-3)) }

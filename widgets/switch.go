@@ -46,7 +46,7 @@ func (s *Switch) Measure(c layout.Constraints) paintengine2d.Point {
 	if tw <= 0 {
 		tw = 42
 	}
-	w := tw + 8 + style.ControlFontOf(lk, style.RoleCheck).Advance(s.Text) + 4
+	w := tw + style.Dip(lk, 8) + style.ControlFontOf(lk, style.RoleCheck).Advance(s.Text) + style.Dip(lk, 4)
 	return c.Constrain(paintengine2d.Pt(w, m.ControlH))
 }
 

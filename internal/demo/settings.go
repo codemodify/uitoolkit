@@ -6,7 +6,6 @@ import (
 
 	"github.com/codemodify/uitoolkit"
 	"github.com/codemodify/uitoolkit/app"
-	"github.com/codemodify/uitoolkit/layout"
 	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
 	"github.com/codemodify/uitoolkit/widgets"
@@ -290,14 +289,6 @@ func (s *settingsState) themesPage(status *widgets.StatusBar, stage func(style.A
 		next.Icons = sets[i].Name
 		stage(next)
 	})
-	options := widgets.NewRow(
-		widgets.NewLabel("Corners"), corners,
-		widgets.NewLabel("Icon size"), sizes,
-		widgets.NewLabel("Icons"), icons,
-	).WithGap(8).WithAlign(layout.AlignCenter)
-	options.AddFlex(corners, 1)
-	options.AddFlex(sizes, 1)
-	options.AddFlex(icons, 1)
 	// Hover fades, the default button's pulse, busy bars: off for users
 	// who get unwell from motion (GTK's gtk-enable-animations).
 	motion := widgets.NewSwitch("Animations", !s.staged.ReduceMotion, func(on bool) {
@@ -305,8 +296,18 @@ func (s *settingsState) themesPage(status *widgets.StatusBar, stage func(style.A
 		next.ReduceMotion = !on
 		stage(next)
 	})
+	// Two rows of label / control pairs, so no label is cut short.
+	options := widgets.NewGrid()
+	options.Cols = []widgets.Track{widgets.Auto(), widgets.Flex(1), widgets.Auto(), widgets.Flex(1)}
+	options.Place(widgets.NewLabel("Corners"), 0, 0)
+	options.Place(corners, 0, 1)
+	options.Place(widgets.NewLabel("Icon size"), 0, 2)
+	options.Place(sizes, 0, 3)
+	options.Place(widgets.NewLabel("Icons"), 1, 0)
+	options.Place(icons, 1, 1)
+	options.PlaceSpan(motion, 1, 2, 1, 2)
 
-	preview := widgets.NewColumn(info, scope, options, motion).WithGap(10)
+	preview := widgets.NewColumn(info, scope, options).WithGap(10)
 	preview.AddFlex(scope, 1)
 
 	body := widgets.NewRow(browser, preview).WithGap(14)

@@ -558,11 +558,11 @@ func TestMenuBarHelpNearRightEdgeFitsAboutMail(t *testing.T) {
 		_ = uitest.MountHost(h, mb, paintengine2d.XYWH(0, 0, winW, winH))
 		help := len(mb.Menus()) - 1
 		f := mb.Look().Font()
-		tx := float32(4)
+		tx := style.Dip(mb.Look(), 4)
 		var helpMinX float32
 		for i, menu := range mb.Menus() {
 			label, _, _ := widgets.ParseMnemonic(menu.Title)
-			tw := f.Advance(label) + 20
+			tw := f.Advance(label) + style.Dip(mb.Look(), 20)
 			if i == help {
 				helpMinX = tx
 			}

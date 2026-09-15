@@ -1,6 +1,10 @@
 package layout
 
-import "github.com/codemodify/paintengine2d"
+import (
+	"math"
+
+	"github.com/codemodify/paintengine2d"
+)
 
 // Child is the layout protocol a flex parent talks to.
 type Child interface {
@@ -40,7 +44,7 @@ func (f Flex) Measure(c Constraints, items []Item) paintengine2d.Point {
 			continue
 		}
 		n++
-		sz := it.Node.Measure(childConstraints(inner, f.Axis, false))
+		sz := wholePx(it.Node.Measure(childConstraints(inner, f.Axis, false)))
 		mw, cw := split(sz, f.Axis)
 		main += mw
 		if cw > cross {
@@ -85,7 +89,7 @@ func (f Flex) Arrange(bounds paintengine2d.Rect, items []Item) {
 			continue
 		}
 		n++
-		sz := it.Node.Measure(cc)
+		sz := wholePx(it.Node.Measure(cc))
 		ms = append(ms, measured{it, sz})
 		mw, _ := split(sz, f.Axis)
 		if it.Flex > 0 {
@@ -184,4 +188,12 @@ func childConstraints(parent Constraints, axis Axis, stretch bool) Constraints {
 		return Constraints{MinH: parent.MinH, MaxH: parent.MaxH, MaxW: parent.MaxW}
 	}
 	return Constraints{MinW: parent.MinW, MaxW: parent.MaxW, MaxH: parent.MaxH}
+}
+
+// wholePx rounds a measured size up to whole pixels. Components land on
+// whole pixels (layout rounding rounds each edge); a whole-pixel size keeps
+// its exact width wherever it lands, so a label measured to its text is
+// never shaved a fraction short and elided.
+func wholePx(p paintengine2d.Point) paintengine2d.Point {
+	return paintengine2d.Pt(float32(math.Ceil(float64(p.X)-1e-3)), float32(math.Ceil(float64(p.Y)-1e-3)))
 }
