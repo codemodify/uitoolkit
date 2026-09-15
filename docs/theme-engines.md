@@ -104,7 +104,9 @@ gets the era right:
   (inside the clip) on every device: paint a translucent tint over it next
   for acrylic, glass or vibrancy (Fluent's flyouts, Aero's glass frames).
   `ctx.DrawLayer` fades a group as one, `ctx.DrawCrossFade` mixes two
-  drawings.
+  drawings. `DitherTile` and `DevicePattern` tile a 50% dither (or any
+  image, through `paintengine2d.ImagePattern`) anchored to the device grid,
+  for the eras before true colour.
 - **Controls** — the 34 `Draw*` methods, same signatures as `LookAndFeel`
   plus the look. Override when the era's layout differs (Win95 combos
   highlight their text; Aqua centres tabs).
