@@ -3,6 +3,9 @@ package platform
 import "testing"
 
 func TestKeyFromKeysym(t *testing.T) {
+	if KeyFromKeysym(0xffe9) != KeyAlt || KeyFromKeysym(0xffea) != KeyAlt {
+		t.Fatal("Alt_L / Alt_R")
+	}
 	if KeyFromKeysym(0xff1b) != KeyEscape {
 		t.Fatal("Escape")
 	}

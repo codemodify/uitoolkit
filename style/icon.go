@@ -32,6 +32,23 @@ const (
 	IconPen
 )
 
+var toolIconLabels = [...]string{
+	IconNew: "New", IconOpen: "Open", IconSave: "Save", IconCut: "Cut",
+	IconCopy: "Copy", IconPaste: "Paste", IconUndo: "Undo", IconRedo: "Redo",
+	IconSearch: "Search", IconInfo: "Information", IconWarning: "Warning",
+	IconError: "Error", IconQuestion: "Question", IconMail: "Mail",
+	IconDownload: "Download", IconPen: "Edit",
+}
+
+// Label is the action the icon stands for, in words ("Save"): what
+// assistive technology says for a tool button that shows only the icon.
+func (i ToolIcon) Label() string {
+	if i > IconNone && int(i) < len(toolIconLabels) {
+		return toolIconLabels[i]
+	}
+	return ""
+}
+
 // toolIconFiles maps each chrome action to its PNG basename (no extension).
 var toolIconFiles = []struct {
 	icon ToolIcon

@@ -131,6 +131,30 @@ func TestLoadAppearanceReadsTriad(t *testing.T) {
 	}
 }
 
+// UITK_THEME picks the theme for one process (GTK_THEME-style) while the
+// other saved prefs still apply; without a file it still works.
+func TestLoadAppearanceThemeEnvOverride(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv(ThemeEnv, "win95")
+	if got := LoadAppearance(); got.Name != "win95" {
+		t.Fatalf("no file: theme %q, want win95", got.Name)
+	}
+	if err := SaveAppearance(Appearance{Name: "light", Theme: ThemeLight, Corners: CornersSquare, Icons: IconSetSharp, IconSize: IconSizeLarge}); err != nil {
+		t.Fatal(err)
+	}
+	got := LoadAppearance()
+	if got.Name != "win95" || got.Icons != IconSetSharp || got.IconSize != IconSizeLarge || got.Corners != CornersSquare {
+		t.Fatalf("with file: %+v, want win95 with the saved icons/size/corners", got)
+	}
+	if lk := PreferredLook().(*Classic); lk.Engine().ID() != "win95" {
+		t.Fatalf("preferred look engine %q, want win95", lk.Engine().ID())
+	}
+	t.Setenv(ThemeEnv, "")
+	if got := LoadAppearance(); got.Name != "light" {
+		t.Fatalf("override cleared: theme %q, want the saved light", got.Name)
+	}
+}
+
 func TestLoadAppearanceMigratesCompoundNames(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	path := AppearancePath()
@@ -142,9 +166,13 @@ func TestLoadAppearanceMigratesCompoundNames(t *testing.T) {
 		want Appearance
 	}{
 		{`{"theme":"light-square-sharp","icons":"phosphor"}`, Appearance{Name: "light", Theme: ThemeLight, Corners: CornersSquare, Icons: IconSetPhosphor, IconSize: IconSizeMedium}},
-		{`{"theme":"dark-round-classic","icons":"lucide"}`, Appearance{Name: "dark", Theme: ThemeDark, Corners: CornersRound, Icons: IconSetLucide, IconSize: IconSizeMedium}},
-		{`{"theme":"dark-round"}`, Appearance{Name: "dark", Theme: ThemeDark, Corners: CornersRound, Icons: IconSetClassic, IconSize: IconSizeMedium}},
-		{`{"theme":"light-square","corners":"round","icons":"sharp"}`, Appearance{Name: "light", Theme: ThemeLight, Corners: CornersRound, Icons: IconSetSharp, IconSize: IconSizeMedium}},
+		// Pre-v2 "round" was the written-out default: it now means "keep
+		// the theme's native shape".
+		{`{"theme":"dark-round-classic","icons":"lucide"}`, Appearance{Name: "dark", Theme: ThemeDark, Corners: CornersTheme, Icons: IconSetLucide, IconSize: IconSizeMedium}},
+		{`{"theme":"dark-round"}`, Appearance{Name: "dark", Theme: ThemeDark, Corners: CornersTheme, Icons: IconSetClassic, IconSize: IconSizeMedium}},
+		{`{"theme":"light-square","corners":"round","icons":"sharp"}`, Appearance{Name: "light", Theme: ThemeLight, Corners: CornersTheme, Icons: IconSetSharp, IconSize: IconSizeMedium}},
+		// v2 files keep an explicit round override.
+		{`{"version":2,"theme":"light","corners":"round","icons":"sharp"}`, Appearance{Name: "light", Theme: ThemeLight, Corners: CornersRound, Icons: IconSetSharp, IconSize: IconSizeMedium}},
 	}
 	for _, tc := range cases {
 		if err := os.WriteFile(path, []byte(tc.raw+"\n"), 0o600); err != nil {
@@ -176,7 +204,8 @@ func TestLoadAppearanceReadsIconSize(t *testing.T) {
 	}
 }
 
-func TestLoadAppearanceBareDarkIsDefault(t *testing.T) {
+// A bare {"theme":"dark"} is the dark starter, otherwise the defaults.
+func TestLoadAppearanceBareDarkIsTheDarkStarter(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	path := AppearancePath()
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
@@ -185,8 +214,8 @@ func TestLoadAppearanceBareDarkIsDefault(t *testing.T) {
 	if err := os.WriteFile(path, []byte(`{"theme":"dark"}`+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if LoadAppearance() != DefaultAppearance() {
-		t.Fatalf("%+v", LoadAppearance())
+	if want := DefaultAppearance().WithPalette(ThemeDark); LoadAppearance() != want {
+		t.Fatalf("%+v, want %+v", LoadAppearance(), want)
 	}
 }
 

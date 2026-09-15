@@ -12,13 +12,18 @@ import (
 	"sort"
 	"strings"
 	"sync"
+
+	"github.com/codemodify/paintengine2d"
 )
 
 //go:embed themes/*/theme.json
 var starterFS embed.FS
 
-// DefaultThemeName is the embedded dark palette starter.
-const DefaultThemeName = "dark"
+// DefaultThemeName is the look apps show until the user picks one, and
+// what an unusable look.json theme falls back to: Swing's Metal in its
+// Ocean theme, Java's default since 2004. The embedded "dark" and "light"
+// packs stay the palette starters (see [StarterName]).
+const DefaultThemeName = "metal-ocean"
 
 // ThemeSource says whether a pack is compiled in or loaded from disk.
 type ThemeSource string
@@ -39,6 +44,12 @@ type ThemePack struct {
 	Palette ThemeName // dark / light family (Mail View + legacy)
 	Era     string
 	Tokens  ThemeTokens
+	// Year the look shipped (sorts the Settings browser; 0 = unknown).
+	Year int
+	// Lineage groups related packs ("Windows", "Mac OS", "Unix", "KDE", ...).
+	Lineage string
+	// Summary is a one-line description for the theme browser.
+	Summary string
 }
 
 type themeFileJSON struct {
@@ -51,6 +62,13 @@ type themeFileJSON struct {
 	Elevation int                `json:"elevation,omitempty"`
 	Metrics   *chromeMetricsJSON `json:"metrics,omitempty"`
 	Colors    map[string]string  `json:"colors,omitempty"`
+	Engine    string             `json:"engine,omitempty"`
+	Year      int                `json:"year,omitempty"`
+	Lineage   string             `json:"lineage,omitempty"`
+	Summary   string             `json:"summary,omitempty"`
+	Extra     map[string]string  `json:"extra,omitempty"`
+	Params    map[string]float32 `json:"params,omitempty"`
+	Fonts     *FontPrefs         `json:"fonts,omitempty"`
 	Corners   string             `json:"corners,omitempty"` // ignored; look.json owns corners
 	Icons     string             `json:"icons,omitempty"`   // ignored; look.json owns icons
 }
@@ -58,7 +76,8 @@ type themeFileJSON struct {
 var (
 	themeNameRe = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,63}$`)
 
-	embeddedOnce sync.Once
+	embeddedMu   sync.Mutex
+	embeddedGen  = -1
 	embeddedPack map[string]ThemePack
 )
 
@@ -133,8 +152,9 @@ func (p ThemePack) Display() string {
 	return p.Name
 }
 
-// Appearance resolves the pack into palette knobs. Corners and icons
-// stay at defaults; callers overlay look.json prefs.
+// Appearance resolves the pack into palette knobs. Corners keep the pack's
+// own shape (Metro and Win95 square, Aqua round) and icons stay at the
+// default; callers overlay look.json prefs.
 func (p ThemePack) Appearance() Appearance {
 	fam := p.Palette
 	if p.Tokens.Family != "" {
@@ -143,12 +163,12 @@ func (p ThemePack) Appearance() Appearance {
 	return Appearance{
 		Name:    p.Name,
 		Theme:   ParseTheme(string(fam)),
-		Corners: CornersRound,
+		Corners: CornersTheme,
 		Icons:   IconSetClassic,
 	}.Normalize()
 }
 
-// Look builds a Classic look from the pack palette (1× metrics, round).
+// Look builds a Classic look from the pack (1× metrics, the pack's corners).
 func (p ThemePack) Look() *Classic {
 	return p.Appearance().Look()
 }
@@ -170,16 +190,30 @@ func parseThemeFile(name string, raw []byte, src ThemeSource) (ThemePack, error)
 		label = name
 	}
 	era := strings.TrimSpace(doc.Era)
+	year, lineage, summary := doc.Year, strings.TrimSpace(doc.Lineage), strings.TrimSpace(doc.Summary)
 	tok := tokensFromJSON(doc)
 	if base, ok := builtinEraPack(name); ok {
 		if era == "" {
 			era = base.Era
 		}
+		if year == 0 {
+			year = base.Year
+		}
+		if lineage == "" {
+			lineage = base.Lineage
+		}
+		if summary == "" {
+			summary = base.Summary
+		}
 		if label == name && base.Label != "" {
 			label = base.Label
 		}
-		if tok.Empty() || (len(doc.Colors) == 0 && doc.Bevel == "") {
+		if tok.Empty() || (len(doc.Colors) == 0 && doc.Bevel == "" && doc.Engine == "" && len(doc.Extra) == 0 && len(doc.Params) == 0) {
+			fonts := tok.Fonts
 			tok = base.Tokens
+			if !fonts.Empty() {
+				tok = mergeTokens(tok, ThemeTokens{Fonts: fonts})
+			}
 		} else {
 			tok = mergeTokens(base.Tokens, tok)
 		}
@@ -199,6 +233,9 @@ func parseThemeFile(name string, raw []byte, src ThemeSource) (ThemePack, error)
 		Palette: tok.Family,
 		Era:     era,
 		Tokens:  tok,
+		Year:    year,
+		Lineage: lineage,
+		Summary: summary,
 	}, nil
 }
 
@@ -217,7 +254,57 @@ func themeDoc(label, era string, tok ThemeTokens) themeFileJSON {
 		Elevation: tok.Metrics.Elevation,
 		Metrics:   tok.Metrics.json(),
 		Colors:    tokensToColorMap(tok),
+		Engine:    tok.Engine,
+		Extra:     extraToHex(tok.Extra),
+		Params:    copyParams(tok.Params),
+		Fonts:     fontPrefsDoc(tok.Fonts),
 	}
+}
+
+// fontPrefsDoc is prefs for theme.json (nil when they name nothing).
+func fontPrefsDoc(f FontPrefs) *FontPrefs {
+	if f.Empty() {
+		return nil
+	}
+	return &FontPrefs{UI: append([]string(nil), f.UI...), Mono: append([]string(nil), f.Mono...)}
+}
+
+// cleanFontPrefs trims the names and drops empty ones.
+func cleanFontPrefs(f FontPrefs) FontPrefs {
+	clean := func(in []string) []string {
+		var out []string
+		for _, s := range in {
+			if s = strings.TrimSpace(s); s != "" {
+				out = append(out, s)
+			}
+		}
+		return out
+	}
+	return FontPrefs{UI: clean(f.UI), Mono: clean(f.Mono)}
+}
+
+func extraToHex(m map[string]paintengine2d.Color) map[string]string {
+	if len(m) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(m))
+	for k, c := range m {
+		if h := colorHexPadded(c); h != "" {
+			out[k] = h
+		}
+	}
+	return out
+}
+
+func copyParams(m map[string]float32) map[string]float32 {
+	if len(m) == 0 {
+		return nil
+	}
+	out := make(map[string]float32, len(m))
+	for k, v := range m {
+		out[k] = v
+	}
+	return out
 }
 
 func mergeTokens(base, over ThemeTokens) ThemeTokens {
@@ -230,6 +317,35 @@ func mergeTokens(base, over ThemeTokens) ThemeTokens {
 	}
 	if over.Era != "" {
 		out.Era = over.Era
+	}
+	if over.Engine != "" {
+		out.Engine = over.Engine
+	}
+	if len(over.Extra) > 0 {
+		m := make(map[string]paintengine2d.Color, len(base.Extra)+len(over.Extra))
+		for k, v := range base.Extra {
+			m[k] = v
+		}
+		for k, v := range over.Extra {
+			m[k] = v
+		}
+		out.Extra = m
+	}
+	if len(over.Fonts.UI) > 0 {
+		out.Fonts.UI = over.Fonts.UI
+	}
+	if len(over.Fonts.Mono) > 0 {
+		out.Fonts.Mono = over.Fonts.Mono
+	}
+	if len(over.Params) > 0 {
+		m := make(map[string]float32, len(base.Params)+len(over.Params))
+		for k, v := range base.Params {
+			m[k] = v
+		}
+		for k, v := range over.Params {
+			m[k] = v
+		}
+		out.Params = m
 	}
 	out.Palette = overlayPalette(base.Palette, over.Palette)
 	out.Metrics = mergeChromeMetrics(base.Metrics, over.Metrics)
@@ -267,39 +383,20 @@ func mergeTokens(base, over ThemeTokens) ThemeTokens {
 }
 
 func mergeChromeMetrics(base, over ChromeMetrics) ChromeMetrics {
-	out := base
-	if over.Radius != 0 {
-		out.Radius = over.Radius
-	}
-	if over.RadiusSmall != 0 {
-		out.RadiusSmall = over.RadiusSmall
-	}
-	if over.BevelDepth != 0 {
-		out.BevelDepth = over.BevelDepth
-	}
-	if over.GutterWidth != 0 {
-		out.GutterWidth = over.GutterWidth
-	}
-	if over.Scroll != 0 {
-		out.Scroll = over.Scroll
-	}
-	if over.ControlH != 0 {
-		out.ControlH = over.ControlH
-	}
-	if over.FieldH != 0 {
-		out.FieldH = over.FieldH
-	}
-	if over.ComboH != 0 {
-		out.ComboH = over.ComboH
-	}
-	if over.Elevation != 0 {
-		out.Elevation = over.Elevation
-	}
-	return out
+	return MergeChromeMetrics(base, over)
 }
 
 func loadEmbedded() map[string]ThemePack {
-	embeddedOnce.Do(func() {
+	eraPackIndex()
+	packMu.Lock()
+	gen := packGen
+	packMu.Unlock()
+	embeddedMu.Lock()
+	defer embeddedMu.Unlock()
+	if embeddedPack != nil && embeddedGen == gen {
+		return embeddedPack
+	}
+	func() {
 		embeddedPack = map[string]ThemePack{}
 		for name, p := range eraPackIndex() {
 			p.Source = ThemeSourceBuiltin
@@ -323,7 +420,8 @@ func loadEmbedded() map[string]ThemePack {
 			}
 			return nil
 		})
-	})
+	}()
+	embeddedGen = gen
 	return embeddedPack
 }
 
@@ -543,6 +641,9 @@ func ExportAppearance(name string, a Appearance) (ThemePack, error) {
 		Palette: tok.Family,
 		Era:     tok.Era,
 		Tokens:  tok,
+	}
+	if live, ok := LoadTheme(a.Name); ok {
+		pack.Year, pack.Lineage = live.Year, live.Lineage
 	}
 	doc := themeDoc(pack.Label, pack.Era, tok)
 	if err := writeJSONFile(ThemeFile(clean), doc); err != nil {

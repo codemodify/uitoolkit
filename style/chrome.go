@@ -47,7 +47,26 @@ func (l *Classic) tokensOr() ThemeTokens {
 	return l.Tokens()
 }
 
+// faceColors is the fill, border and label colour of a face; the label is
+// always made readable on the fill (every early return included).
 func (l *Classic) faceColors(role chromeRole, st ControlState) (fill, border, fg paintengine2d.Color) {
+	fill, border, fg = l.faceColorsRaw(role, st)
+	return fill, border, l.readableFg(fg, fill, l.roleBase(role))
+}
+
+// roleBase is what a role's face is painted over: rows, fields, combos and
+// indicators sit on the field (view) colour, everything else on the window.
+func (l *Classic) roleBase(role chromeRole) paintengine2d.Color {
+	switch role {
+	case roleRow, roleField, roleCombo, roleCheck:
+		if !colorUnset(l.palette.Field) {
+			return l.palette.Field
+		}
+	}
+	return l.palette.Background
+}
+
+func (l *Classic) faceColorsRaw(role chromeRole, st ControlState) (fill, border, fg paintengine2d.Color) {
 	p := l.palette
 	t := l.tokensOr()
 	fg = p.Text
@@ -160,6 +179,19 @@ func (l *Classic) faceColors(role chromeRole, st ControlState) (fill, border, fg
 	if st.Checked() && (role == roleRow || role == roleTab) {
 		fill = t.Selected.Fill
 		border = t.Selected.Border
+		classic := t.Bevel == BevelClassic3D || t.Bevel == BevelLunaHottrack
+		if role == roleRow && (st.Backdrop() || (classic && st.Inactive())) {
+			// A subdued selection: the classic looks grey it to the face
+			// colour whenever the view loses focus (Windows); the modern
+			// ones keep it until the window goes to the back, then wash it
+			// out (GTK's backdrop).
+			if classic {
+				fill = p.SurfaceAlt
+			} else {
+				fill = fill.WithAlpha(fill.A * 0.45)
+			}
+			return fill, paintengine2d.Color{}, p.Text
+		}
 		if t.Bevel == BevelClassic3D || t.Bevel == BevelLunaHottrack {
 			if t.Selected.Fill.A > 0.7 {
 				fg = p.TextOnAccent
@@ -207,13 +239,15 @@ func (l *Classic) faceColors(role chromeRole, st ControlState) (fill, border, fg
 				fill = p.Accent
 			}
 		case roleRow:
+			// Hover must never look like selection: a pack whose hot fill
+			// is its selection gets a light wash of it instead (hovered and
+			// selected rows used to be pixel-identical in every theme).
 			fill = t.Hot.Fill
-			if t.Bevel == BevelNone || t.Bevel == BevelFluentAccent || t.Bevel == BevelSoftShadow {
-				if fill.A > 0.95 {
-					fill = fill.WithAlpha(0.55)
-				}
-			}
 			border = t.Hot.Border
+			if sameFaceRGB(fill, t.Selected.Fill) || t.Bevel == BevelNone || t.Bevel == BevelFluentAccent || t.Bevel == BevelSoftShadow {
+				fill = t.Selected.Fill.WithAlpha(0.22)
+				border = paintengine2d.Color{}
+			}
 		case roleSplitter:
 			fill = p.Accent
 			border = p.Accent
@@ -241,6 +275,27 @@ func (l *Classic) faceColors(role chromeRole, st ControlState) (fill, border, fg
 	return fill, border, fg
 }
 
+// readableFg keeps a label readable on the fill it sits on: filled rows,
+// tabs and menu items fall back to TextOnAccent, then black / white
+// (light-theme selected rows drew black on navy).
+func (l *Classic) readableFg(fg, fill, base paintengine2d.Color) paintengine2d.Color {
+	if colorUnset(fill) || fill.A < 0.05 {
+		return fg
+	}
+	bg := fill
+	if fill.A < 1 {
+		bg = Mix(base, fill, fill.A)
+	}
+	if ContrastRatio(fg, bg) >= 3 {
+		return fg
+	}
+	return ReadableOn(bg, 3, l.palette.TextOnAccent, l.palette.Text)
+}
+
+func sameFaceRGB(a, b paintengine2d.Color) bool {
+	return !colorUnset(a) && a.R == b.R && a.G == b.G && a.B == b.B
+}
+
 func (l *Classic) faceRadius(role chromeRole) float32 {
 	m := l.metrics
 	r := m.RadiusSmall
@@ -261,7 +316,13 @@ func (l *Classic) faceRadius(role chromeRole) float32 {
 	return r
 }
 
+// paintFace paints a control face through the look's engine.
 func (l *Classic) paintFace(ctx *paintengine2d.Context, b paintengine2d.Rect, role chromeRole, st ControlState) (fg paintengine2d.Color) {
+	return l.eng().Face(l, ctx, b, role, st)
+}
+
+// basePaintFace is the stock token-driven face (fill + bevel language).
+func (l *Classic) basePaintFace(ctx *paintengine2d.Context, b paintengine2d.Rect, role chromeRole, st ControlState) (fg paintengine2d.Color) {
 	if ctx == nil || b.Empty() {
 		return
 	}
@@ -439,13 +500,6 @@ func DrawHotTrack(ctx *paintengine2d.Context, b paintengine2d.Rect, fill, border
 	}
 	ctx.DrawRoundRect(b, radius, radius, paintengine2d.Fill(fill))
 	ctx.DrawRoundRect(b.Inset(0.5), radius, radius, paintengine2d.StrokePaint(border, 1))
-}
-
-func (l *Classic) paintFocus(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState) {
-	if ctx == nil || !st.Focused() || st.Disabled() {
-		return
-	}
-	l.DrawFocusRing(ctx, b)
 }
 
 func (l *Classic) menuInvertText() bool {

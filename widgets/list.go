@@ -18,9 +18,28 @@ type ListView struct {
 	OnSelect  func(i int)
 	OnContext func(i int, windowPos paintengine2d.Point)
 	OffsetY   float32
-	hovered   int
-	vbar      scrollDrag
-	rows      rowSceneCache
+	// Frameless drops the look's view frame (a list that already sits in a
+	// framed pane).
+	Frameless bool
+	// Sidebar paints the list as a sidebar (a settings page list, a
+	// mail app's folders): macOS source lists, libadwaita's navigation
+	// sidebar, WinUI's navigation pane, where the look has one.
+	Sidebar bool
+	// Mode selects one row (the default) or several (SelectExtended: Ctrl
+	// toggles, Shift extends, Ctrl+A). Selected stays the current row.
+	Mode SelectionMode
+	// OnSelectionChange reports the selected rows, ascending, whenever the
+	// set changes in SelectExtended or SelectMulti.
+	OnSelectionChange func(rows []int)
+	sel               rowSelection
+	hovered           int
+	vbar              scrollDrag
+	rows              rowSceneCache
+	reveal            int // row+1 to bring into view at the next Arrange
+	find              typeAhead
+	// DisableTypeAhead turns off type-ahead find, for views whose letters
+	// are commands (Mail's n / p / r).
+	DisableTypeAhead bool
 }
 
 func NewListView(count int, text func(int) string, on func(int)) *ListView {
@@ -35,14 +54,36 @@ func (l *ListView) Measure(c layout.Constraints) paintengine2d.Point {
 	if c.HasMaxH() && h > c.MaxH {
 		h = c.MaxH
 	}
-	w := float32(200)
+	w := style.Dip(l.Look(), 200)
 	if c.HasMaxW() {
 		w = c.MaxW
 	}
 	return c.Constrain(paintengine2d.Pt(w, h))
 }
 
-func (l *ListView) Arrange(r paintengine2d.Rect) { l.SetBounds(r); l.clamp() }
+func (l *ListView) Arrange(r paintengine2d.Rect) {
+	l.SetBounds(r)
+	if l.reveal > 0 {
+		i := l.reveal - 1
+		l.reveal = 0
+		l.ensureVisible(i)
+	}
+	l.clamp()
+}
+
+// EnsureVisible scrolls the least needed to bring row i into view. Called
+// before the list is laid out, it applies at the first Arrange.
+func (l *ListView) EnsureVisible(i int) {
+	if i < 0 || i >= l.Count {
+		return
+	}
+	if l.inner().Dy() <= 0 {
+		l.reveal = i + 1
+		return
+	}
+	l.ensureVisible(i)
+	l.Invalidate()
+}
 
 func (l *ListView) rowH() float32 {
 	return style.FittedRowHeight(l.Look(), l.RowHeight)
@@ -50,19 +91,48 @@ func (l *ListView) rowH() float32 {
 
 func (l *ListView) contentH() float32 { return float32(l.Count) * l.rowH() }
 
+// frame is the look's view frame around the list (zero on flat looks).
+func (l *ListView) frame() style.Insets { return viewFrame(l.Look(), l.Frameless) }
+
+// inner is the viewport in view space (inside the frame).
+func (l *ListView) inner() paintengine2d.Rect { return viewInner(l.LocalBounds(), l.frame()) }
+
 // MaxOffset is max(0, content − viewport).
 func (l *ListView) MaxOffset() float32 {
-	return layout.MaxScroll(l.contentH(), l.LocalBounds().Dy())
+	return layout.MaxScroll(l.contentH(), l.inner().Dy())
 }
 
 func (l *ListView) clamp() {
-	l.OffsetY = layout.ClampScroll(l.OffsetY, l.contentH(), l.LocalBounds().Dy())
+	l.OffsetY = layout.ClampScroll(l.OffsetY, l.contentH(), l.inner().Dy())
+}
+
+func (l *ListView) vparts() style.ScrollParts {
+	return vScrollParts(l.Look(), l.inner(), l.contentH(), l.OffsetY)
+}
+
+func (l *ListView) vaxis() scrollAxis {
+	return scrollAxis{
+		vertical: true,
+		parts:    l.vparts,
+		get:      func() (float32, float32) { return l.OffsetY, l.MaxOffset() },
+		set:      func(y float32) { l.OffsetY = y; l.clamp(); l.Invalidate() },
+		steps:    func() (float32, float32) { return l.rowH(), l.inner().Dy() * 0.9 },
+	}
+}
+
+// rowsW is the row width: the view minus the gutter a visible bar takes.
+func (l *ListView) rowsW() float32 {
+	return l.inner().Dx() - scrollGutter(l.Look(), l.MaxOffset() > 0)
 }
 
 func (l *ListView) scrollTrack() (track, thumb paintengine2d.Rect) {
-	bar, gap := overflowBarSize(l.Look())
-	return vScrollThumb(l.LocalBounds(), l.contentH(), l.OffsetY, bar, gap)
+	sp := l.vparts()
+	in := l.frame()
+	return fromView(sp.Track, in), fromView(sp.Thumb, in)
 }
+
+// HoverIndex is the row under the pointer, or -1.
+func (l *ListView) HoverIndex() int { return l.hovered }
 
 // VisibleRange is the half-open [lo, hi) window of rows that Paint draws.
 func (l *ListView) VisibleRange() (lo, hi int) { return l.visibleRange() }
@@ -83,7 +153,7 @@ func (l *ListView) visibleRange() (lo, hi int) {
 		return 0, 0
 	}
 	lo = int(l.OffsetY / rh)
-	hi = int((l.OffsetY+l.LocalBounds().Dy())/rh) + 1
+	hi = int((l.OffsetY+l.inner().Dy())/rh) + 1
 	if lo < 0 {
 		lo = 0
 	}
@@ -95,24 +165,28 @@ func (l *ListView) visibleRange() (lo, hi int) {
 
 func (l *ListView) Paint(ctx *paintengine2d.Context) {
 	l.clamp()
-	b := l.LocalBounds()
 	lk := l.Look()
-	ctx.DrawRect(b, paintengine2d.Fill(lk.Palette().Field))
+	if beginViewFrame(ctx, lk, l.LocalBounds(), l.frame(), l.viewState()) {
+		defer ctx.Restore()
+	}
+	b := l.inner()
+	rw := l.rowsW()
+	ctx.DrawRect(b, paintengine2d.Fill(style.ViewBackgroundOf(lk, l.viewState())))
 	rh := l.rowH()
 	lo, hi := l.visibleRange()
 	if rec, ok := ctx.Device().(*paintengine2d.Recorder); ok {
 		// Rows carry the viewport on their band group, not in their own
 		// clips, so no ctx.ClipRect(b) here.
 		o := rowOrigin(ctx)
-		l.rows.ready(o.X, o.Y, b.Dx(), rh, lookSig(lk))
-		recordScrollingRows(rec, ctx, &l.rows, l.ID()^(1<<32), b, b.Dx(), rh, l.OffsetY, 0, lo, hi,
+		l.rows.ready(o.X, o.Y, rw, rh, lookSig(lk))
+		recordScrollingRows(rec, ctx, &l.rows, l.ID()^(1<<32), b, rw, rh, l.OffsetY, 0, lo, hi,
 			func(i int) uint64 { return l.ID()<<32 | uint64(i) + 1 },
 			func(i int) uint64 {
 				label := ""
 				if l.ItemText != nil {
 					label = l.ItemText(i)
 				}
-				sig := newRowSig(i == l.Selected, i == l.hovered, bits32(b.Dx()))
+				sig := newRowSig(l.IsSelected(i), i == l.hovered, bits32(rw)^uint64(l.rowState(i))<<40)
 				sig.str(label)
 				return sig.sum()
 			},
@@ -121,7 +195,7 @@ func (l *ListView) Paint(ctx *paintengine2d.Context) {
 				if l.ItemText != nil {
 					label = l.ItemText(i)
 				}
-				lk.DrawListRow(ctx, paintengine2d.XYWH(0, 0, b.Dx(), rh), i == l.Selected, i == l.hovered, label)
+				lk.DrawListRow(ctx, paintengine2d.XYWH(0, 0, rw, rh), l.rowState(i), label)
 			},
 		)
 	} else {
@@ -129,19 +203,20 @@ func (l *ListView) Paint(ctx *paintengine2d.Context) {
 		ctx.ClipRect(b)
 		for i := lo; i < hi; i++ {
 			y := float32(i)*rh - l.OffsetY
-			row := paintengine2d.XYWH(0, y, b.Dx(), rh)
+			row := paintengine2d.XYWH(0, y, rw, rh)
 			label := ""
 			if l.ItemText != nil {
 				label = l.ItemText(i)
 			}
-			lk.DrawListRow(ctx, row, i == l.Selected, i == l.hovered, label)
+			lk.DrawListRow(ctx, row, l.rowState(i), label)
 		}
 		ctx.Restore()
 	}
-	track, thumb := l.scrollTrack()
-	paintOverflowBar(ctx, lk, track, thumb, l.vbar.over, l.vbar.active)
-	if l.Focused() {
-		lk.DrawFocusRing(ctx, b.Inset(-2))
+	l.vbar.paint(l, ctx, lk, l.vparts(), true, l.OffsetY)
+	// The current row carries the focus mark; a focused list without one
+	// rings itself.
+	if l.Focused() && (l.Selected < 0 || l.Selected >= l.Count) {
+		lk.DrawFocusRing(ctx, b)
 	}
 }
 
@@ -155,30 +230,31 @@ func (l *ListView) rowRect(i int) paintengine2d.Rect {
 	}
 	rh := l.rowH()
 	y := float32(i)*rh - l.OffsetY
-	return paintengine2d.XYWH(0, y, l.LocalBounds().Dx(), rh)
+	return paintengine2d.XYWH(0, y, l.inner().Dx(), rh)
 }
 
 func (l *ListView) invalidateRow(i int) {
 	if r := l.rowRect(i); !r.Empty() {
-		l.InvalidateRect(r.Inset(-1))
+		l.InvalidateRect(fromView(r, l.frame()).Inset(-1))
 	}
 }
 
 func (l *ListView) MouseEnter() {}
 
 func (l *ListView) MouseMove(e widget.MouseEvent) bool {
-	track, thumb := l.scrollTrack()
-	if off, apply, handled, dirty := l.vbar.move(e.Pos, track, thumb, true, l.MaxOffset()); apply || handled || dirty {
-		if apply {
-			l.OffsetY = off
-			l.clamp()
+	p := toView(e.Pos, l.frame())
+	if handled, dirty := l.vbar.move(l, p, l.vaxis()); handled || dirty {
+		if dirty {
+			l.Invalidate()
 		}
-		l.Invalidate()
-		if apply || handled {
+		if handled {
 			return true
 		}
 	}
-	h := l.indexAt(e.Pos.Y)
+	h := l.indexAt(p.Y)
+	if p.Y < 0 || p.Y >= l.inner().Dy() {
+		h = -1
+	}
 	if h != l.hovered {
 		old := l.hovered
 		l.hovered = h
@@ -191,7 +267,7 @@ func (l *ListView) MouseMove(e widget.MouseEvent) bool {
 func (l *ListView) MouseExit() {
 	old := l.hovered
 	l.hovered = -1
-	l.vbar.over = false
+	l.vbar.exit()
 	l.invalidateRow(old)
 }
 
@@ -205,19 +281,31 @@ func (l *ListView) MouseRelease(widget.MouseEvent) bool {
 
 func (l *ListView) MousePress(e widget.MouseEvent) bool {
 	l.RequestFocus()
-	track, thumb := l.scrollTrack()
-	if off, ok := l.vbar.press(e.Pos, track, thumb, true, l.OffsetY, l.MaxOffset(), l.LocalBounds().Dy()*0.9); ok {
-		l.OffsetY = off
-		l.clamp()
+	p := toView(e.Pos, l.frame())
+	if l.vbar.press(l, p, l.vaxis()) {
 		l.Invalidate()
 		return true
 	}
-	i := l.indexAt(e.Pos.Y)
+	i := l.indexAt(p.Y)
+	if p.Y < 0 || p.Y >= l.inner().Dy() {
+		i = -1
+	}
 	if i >= 0 {
+		changed := false
+		if l.Mode != SelectSingle {
+			if e.Button == platform.ButtonRight {
+				changed = l.sel.contextClick(i)
+			} else {
+				changed = l.sel.click(l.Mode, i, e.Mods)
+			}
+		}
 		l.Selected = i
 		l.Invalidate()
 		if l.OnSelect != nil {
 			l.OnSelect(i)
+		}
+		if changed {
+			l.selectionChanged()
 		}
 	}
 	if e.Button == platform.ButtonRight && l.OnContext != nil {
@@ -235,7 +323,7 @@ func (l *ListView) MouseWheel(e widget.MouseEvent) bool {
 		return false
 	}
 	before := l.OffsetY
-	l.OffsetY += wheelDelta(e.Scroll.Y, l.rowH())
+	l.OffsetY += wheelDelta(e.Scroll.Y, l.rowH(), e.Precise)
 	l.clamp()
 	if l.OffsetY == before {
 		return false
@@ -248,8 +336,15 @@ func (l *ListView) KeyPress(e widget.KeyEvent) bool {
 	if !l.Enabled() || l.Count <= 0 {
 		return false
 	}
+	if contextKey(e) {
+		if l.OnContext == nil {
+			return false
+		}
+		l.OnContext(l.Selected, contextPoint(l, fromView(l.rowRect(l.Selected), l.frame())))
+		return true
+	}
 	next := l.Selected
-	page := int(l.LocalBounds().Dy()/l.rowH()) - 1
+	page := int(l.inner().Dy()/l.rowH()) - 1
 	if page < 1 {
 		page = 1
 	}
@@ -266,36 +361,157 @@ func (l *ListView) KeyPress(e widget.KeyEvent) bool {
 		next = 0
 	case platform.KeyEnd:
 		next = l.Count - 1
-	case platform.KeyReturn, platform.KeySpace:
+	case platform.KeySpace:
+		// Space toggles the current row in Multi (Ctrl+Space in Extended).
+		if l.Mode == SelectMulti || (l.Mode == SelectExtended && e.Mods.Ctrl()) {
+			if l.Selected >= 0 {
+				l.sel.toggle(l.Selected)
+				l.sel.anchor = l.Selected
+				l.Invalidate()
+				l.selectionChanged()
+			}
+			return true
+		}
 		if l.Selected >= 0 && l.OnSelect != nil {
 			l.OnSelect(l.Selected)
 		}
 		return true
+	case platform.KeyReturn:
+		if l.Selected >= 0 && l.OnSelect != nil {
+			l.OnSelect(l.Selected)
+		}
+		return true
+	case platform.KeyA:
+		if e.Mods.Ctrl() && l.Mode != SelectSingle {
+			l.SelectAll()
+			return true
+		}
+		return false
 	default:
 		return false
 	}
+	l.navigate(next, e.Mods)
+	return true
+}
+
+// navigate makes row next current the way keyboard navigation does: plain
+// moves select it, Shift extends and Ctrl only moves (SelectExtended).
+func (l *ListView) navigate(next int, mods platform.Modifiers) {
 	if next < 0 {
 		next = 0
 	}
 	if next >= l.Count {
 		next = l.Count - 1
 	}
-	if next != l.Selected {
+	changed := false
+	if l.Mode != SelectSingle {
+		changed = l.sel.moveTo(l.Mode, next, mods)
+	}
+	if next != l.Selected || changed {
 		l.Selected = next
 		l.ensureVisible(next)
 		l.Invalidate()
 		if l.OnSelect != nil {
 			l.OnSelect(next)
 		}
+		if changed {
+			l.selectionChanged()
+		}
 	}
-	return true
+}
+
+// TextInput is type-ahead find: typing jumps to the next row whose text
+// starts with what was typed.
+func (l *ListView) TextInput(r rune) bool {
+	if !l.Enabled() || l.ItemText == nil || l.DisableTypeAhead {
+		return false
+	}
+	i, searched := l.find.next(r, l.Selected, l.Count, l.ItemText)
+	if i >= 0 {
+		l.navigate(i, 0)
+	}
+	return searched
+}
+
+// rowState is row i's item state for the look.
+func (l *ListView) rowState(i int) style.ControlState {
+	st := widget.RowItemState(l, i, l.IsSelected(i), i == l.hovered, i == l.Selected)
+	if l.Sidebar {
+		st |= style.StateSidebar
+	}
+	return st
+}
+
+// viewState is the list's own state for its frame.
+func (l *ListView) viewState() style.ControlState {
+	if l.Sidebar {
+		return l.State() | style.StateSidebar
+	}
+	return l.State()
+}
+
+// IsSelected reports whether row i is selected (in SelectSingle, whether it
+// is the current row).
+func (l *ListView) IsSelected(i int) bool {
+	if i < 0 || i >= l.Count {
+		return false
+	}
+	if l.Mode == SelectSingle {
+		return i == l.Selected
+	}
+	return l.sel.has(i)
+}
+
+// SelectedRows is the selection in ascending order.
+func (l *ListView) SelectedRows() []int {
+	if l.Mode == SelectSingle {
+		if l.Selected >= 0 && l.Selected < l.Count {
+			return []int{l.Selected}
+		}
+		return nil
+	}
+	l.sel.drop(l.Count)
+	return l.sel.rows()
+}
+
+// SetSelectedRows replaces the selection; the last row given becomes the
+// current row and the anchor. It does not call the callbacks.
+func (l *ListView) SetSelectedRows(rows []int) {
+	l.sel.clear()
+	for _, r := range rows {
+		if r >= 0 && r < l.Count {
+			l.sel.add(r)
+			l.Selected = r
+			l.sel.anchor = r
+		}
+	}
+	if len(rows) == 0 {
+		l.Selected = -1
+	}
+	l.Invalidate()
+}
+
+// SelectAll selects every row (SelectExtended / SelectMulti) and reports it.
+func (l *ListView) SelectAll() {
+	if l.Mode == SelectSingle || l.Count == 0 {
+		return
+	}
+	l.sel.addRange(0, l.Count-1)
+	l.Invalidate()
+	l.selectionChanged()
+}
+
+func (l *ListView) selectionChanged() {
+	if l.OnSelectionChange != nil && l.Mode != SelectSingle {
+		l.OnSelectionChange(l.SelectedRows())
+	}
 }
 
 func (l *ListView) ensureVisible(i int) {
 	rh := l.rowH()
 	top := float32(i) * rh
 	bot := top + rh
-	view := l.LocalBounds().Dy()
+	view := l.inner().Dy()
 	if top < l.OffsetY {
 		l.OffsetY = top
 	}

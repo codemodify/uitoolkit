@@ -16,6 +16,7 @@ type Checkbox struct {
 	OnChange func(bool)
 	hovered  bool
 	pressed  bool
+	fade     stateFade // hover / focus cross-fade (the look's HintHoverFadeMs)
 }
 
 func NewCheckbox(text string, checked bool, on func(bool)) *Checkbox {
@@ -40,7 +41,7 @@ func (c *Checkbox) SetChecked(v bool) {
 func (c *Checkbox) Measure(cons layout.Constraints) paintengine2d.Point {
 	lk := c.Look()
 	m := lk.Metrics()
-	w := m.Checkbox + 8 + lk.Font().Advance(c.Text) + 4
+	w := m.Checkbox + style.Dip(lk, 8) + style.ControlFontOf(lk, style.RoleCheck).Advance(c.Text) + style.Dip(lk, 4)
 	return cons.Constrain(paintengine2d.Pt(w, m.ControlH))
 }
 
@@ -51,7 +52,10 @@ func (c *Checkbox) Paint(ctx *paintengine2d.Context) {
 	if c.hovered {
 		st |= style.StateHovered
 	}
-	c.Look().DrawCheckbox(ctx, c.LocalBounds(), st, c.Checked, c.Text)
+	lk, r := c.Look(), c.LocalBounds()
+	c.fade.paint(c, ctx, r, st, func(ctx *paintengine2d.Context, st style.ControlState) {
+		lk.DrawCheckbox(ctx, r, st, c.Checked, c.Text)
+	})
 }
 
 func (c *Checkbox) MouseEnter() { c.hovered = true; c.Base.MouseEnter() }

@@ -31,6 +31,9 @@ func (n *TreeNode) Leaf() bool { return n == nil || len(n.Children) == 0 }
 type treeRow struct {
 	node  *TreeNode
 	depth int
+	// chain has bit d set when the node at depth d on this row's chain
+	// (its ancestors, then itself) has a sibling after it.
+	chain uint16
 }
 
 // TreeView is an expand/collapse hierarchical list with selection.
@@ -43,7 +46,14 @@ type TreeView struct {
 	OnSelect  func(*TreeNode)
 	OnToggle  func(*TreeNode)
 	OnContext func(*TreeNode, paintengine2d.Point)
+	// Frameless drops the look's view frame (a tree that already sits in a
+	// framed pane).
+	Frameless bool
+	// Sidebar paints the tree as a sidebar (a mail app's folders), where
+	// the look has a sidebar style (see ListView.Sidebar).
+	Sidebar   bool
 	hover     *TreeNode
+	hoverExp  bool // the pointer is on the hovered row's expander
 	lastClick *TreeNode
 	lastAt    time.Time
 	vbar      scrollDrag
@@ -51,6 +61,11 @@ type TreeView struct {
 	flat      []treeRow
 	index     map[*TreeNode]int
 	flatValid bool
+	reveal    *TreeNode // brought into view at the next Arrange
+	find      typeAhead
+	// DisableTypeAhead turns off type-ahead find, for views whose letters
+	// are commands (Mail's n / p / r).
+	DisableTypeAhead bool
 }
 
 // NewTreeView constructs a tree.
@@ -79,20 +94,28 @@ func (t *TreeView) flatten() []treeRow {
 	} else {
 		clear(t.index)
 	}
-	var walk func([]*TreeNode, int)
-	walk = func(nodes []*TreeNode, depth int) {
-		for _, n := range nodes {
+	var walk func([]*TreeNode, int, uint16)
+	walk = func(nodes []*TreeNode, depth int, chain uint16) {
+		last := len(nodes) - 1
+		for last >= 0 && nodes[last] == nil {
+			last--
+		}
+		for i, n := range nodes {
 			if n == nil {
 				continue
 			}
+			own := chain
+			if i < last && depth < 16 {
+				own |= 1 << depth
+			}
 			t.index[n] = len(t.flat)
-			t.flat = append(t.flat, treeRow{node: n, depth: depth})
+			t.flat = append(t.flat, treeRow{node: n, depth: depth, chain: own})
 			if n.Expanded && len(n.Children) > 0 {
-				walk(n.Children, depth+1)
+				walk(n.Children, depth+1, own)
 			}
 		}
 	}
-	walk(t.Roots, 0)
+	walk(t.Roots, 0, 0)
 	t.flatValid = true
 	return t.flat
 }
@@ -134,18 +157,44 @@ func (t *TreeView) Refresh() {
 
 func (t *TreeView) contentH() float32 { return float32(len(t.flatten())) * t.rowH() }
 
+// frame is the look's view frame around the tree (zero on flat looks).
+func (t *TreeView) frame() style.Insets { return viewFrame(t.Look(), t.Frameless) }
+
+// inner is the viewport in view space (inside the frame).
+func (t *TreeView) inner() paintengine2d.Rect { return viewInner(t.LocalBounds(), t.frame()) }
+
 // MaxOffset is max(0, content − viewport).
 func (t *TreeView) MaxOffset() float32 {
-	return layout.MaxScroll(t.contentH(), t.LocalBounds().Dy())
+	return layout.MaxScroll(t.contentH(), t.inner().Dy())
 }
 
 func (t *TreeView) clamp() {
-	t.OffsetY = layout.ClampScroll(t.OffsetY, t.contentH(), t.LocalBounds().Dy())
+	t.OffsetY = layout.ClampScroll(t.OffsetY, t.contentH(), t.inner().Dy())
+}
+
+func (t *TreeView) vparts() style.ScrollParts {
+	return vScrollParts(t.Look(), t.inner(), t.contentH(), t.OffsetY)
+}
+
+func (t *TreeView) vaxis() scrollAxis {
+	return scrollAxis{
+		vertical: true,
+		parts:    t.vparts,
+		get:      func() (float32, float32) { return t.OffsetY, t.MaxOffset() },
+		set:      func(y float32) { t.OffsetY = y; t.clamp(); t.Invalidate() },
+		steps:    func() (float32, float32) { return t.rowH(), t.inner().Dy() * 0.9 },
+	}
+}
+
+// rowsW is the row width: the view minus the gutter a visible bar takes.
+func (t *TreeView) rowsW() float32 {
+	return t.inner().Dx() - scrollGutter(t.Look(), t.MaxOffset() > 0)
 }
 
 func (t *TreeView) scrollTrack() (track, thumb paintengine2d.Rect) {
-	bar, gap := overflowBarSize(t.Look())
-	return vScrollThumb(t.LocalBounds(), t.contentH(), t.OffsetY, bar, gap)
+	sp := t.vparts()
+	in := t.frame()
+	return fromView(sp.Track, in), fromView(sp.Thumb, in)
 }
 
 // VisibleRange is the half-open [lo, hi) window of flattened rows Paint draws.
@@ -156,7 +205,7 @@ func (t *TreeView) VisibleRange() (lo, hi int) {
 		return 0, 0
 	}
 	lo = int(t.OffsetY / rh)
-	hi = int((t.OffsetY+t.LocalBounds().Dy())/rh) + 1
+	hi = int((t.OffsetY+t.inner().Dy())/rh) + 1
 	if lo < 0 {
 		lo = 0
 	}
@@ -184,20 +233,50 @@ func (t *TreeView) Measure(c layout.Constraints) paintengine2d.Point {
 	if c.HasMaxH() && h > c.MaxH {
 		h = c.MaxH
 	}
-	w := float32(200)
+	w := style.Dip(t.Look(), 200)
 	if c.HasMaxW() {
 		w = c.MaxW
 	}
 	return c.Constrain(paintengine2d.Pt(w, h))
 }
 
-func (t *TreeView) Arrange(r paintengine2d.Rect) { t.SetBounds(r); t.clamp() }
+func (t *TreeView) Arrange(r paintengine2d.Rect) {
+	t.SetBounds(r)
+	if n := t.reveal; n != nil {
+		t.reveal = nil
+		t.ensureVisible(n)
+	}
+	t.clamp()
+}
+
+// EnsureVisible scrolls the least needed to bring n's row into view (n
+// must be visible: its ancestors expanded). Called before the tree is laid
+// out, it applies at the first Arrange.
+func (t *TreeView) EnsureVisible(n *TreeNode) {
+	if n == nil {
+		return
+	}
+	if t.inner().Dy() <= 0 {
+		t.reveal = n
+		return
+	}
+	t.ensureVisible(n)
+	t.Invalidate()
+}
 
 func (t *TreeView) Paint(ctx *paintengine2d.Context) {
 	t.clamp()
-	b := t.LocalBounds()
 	lk := t.Look()
-	ctx.DrawRect(b, paintengine2d.Fill(lk.Palette().Field))
+	vst := t.State()
+	if t.Sidebar {
+		vst |= style.StateSidebar
+	}
+	if beginViewFrame(ctx, lk, t.LocalBounds(), t.frame(), vst) {
+		defer ctx.Restore()
+	}
+	b := t.inner()
+	rw := t.rowsW()
+	ctx.DrawRect(b, paintengine2d.Fill(style.ViewBackgroundOf(lk, vst)))
 	rows := t.flatten()
 	rh := t.rowH()
 	lo := int(t.OffsetY / rh)
@@ -210,14 +289,14 @@ func (t *TreeView) Paint(ctx *paintengine2d.Context) {
 	}
 	if rec, ok := ctx.Device().(*paintengine2d.Recorder); ok {
 		o := rowOrigin(ctx)
-		t.rows.ready(o.X, o.Y, b.Dx(), rh, lookSig(lk))
-		recordScrollingRows(rec, ctx, &t.rows, t.ID()^(1<<32), b, b.Dx(), rh, t.OffsetY, 0, lo, hi,
+		t.rows.ready(o.X, o.Y, rw, rh, lookSig(lk))
+		recordScrollingRows(rec, ctx, &t.rows, t.ID()^(1<<32), b, rw, rh, t.OffsetY, 0, lo, hi,
 			func(i int) uint64 { return t.ID()<<32 | uint64(i) + 1 },
 			func(i int) uint64 { return t.rowSig(rows[i]) },
 			func(i int) {
 				n := rows[i].node
-				row := paintengine2d.XYWH(0, 0, b.Dx(), rh)
-				lk.DrawTreeRow(ctx, row, n == t.Selected, n == t.hover, n.Expanded, n.Leaf(), rows[i].depth, n.Label, n.Bold)
+				row := paintengine2d.XYWH(0, 0, rw, rh)
+				lk.DrawTreeRow(ctx, row, t.rowState(n), n.Expanded, n.Leaf(), rows[i].depth, n.Label, n.Bold)
 				paintTreeSwatch(ctx, row, n.Color)
 			},
 		)
@@ -226,17 +305,18 @@ func (t *TreeView) Paint(ctx *paintengine2d.Context) {
 		ctx.ClipRect(b)
 		for i := lo; i < hi; i++ {
 			y := float32(i)*rh - t.OffsetY
-			row := paintengine2d.XYWH(0, y, b.Dx(), rh)
+			row := paintengine2d.XYWH(0, y, rw, rh)
 			n := rows[i].node
-			lk.DrawTreeRow(ctx, row, n == t.Selected, n == t.hover, n.Expanded, n.Leaf(), rows[i].depth, n.Label, n.Bold)
+			lk.DrawTreeRow(ctx, row, t.rowState(n), n.Expanded, n.Leaf(), rows[i].depth, n.Label, n.Bold)
 			paintTreeSwatch(ctx, row, n.Color)
 		}
 		ctx.Restore()
 	}
-	track, thumb := t.scrollTrack()
-	paintOverflowBar(ctx, lk, track, thumb, t.vbar.over, t.vbar.active)
-	if t.Focused() {
-		lk.DrawFocusRing(ctx, b.Inset(-2))
+	t.vbar.paint(t, ctx, lk, t.vparts(), true, t.OffsetY)
+	// The current row carries the focus mark; a focused tree without one
+	// rings itself.
+	if t.Focused() && t.indexOf(t.Selected) < 0 {
+		lk.DrawFocusRing(ctx, b)
 	}
 }
 
@@ -260,7 +340,24 @@ func (t *TreeView) rowSig(row treeRow) uint64 {
 		// keep its cached row.
 		extra ^= bits32(c.R)*31 ^ bits32(c.G)*131 ^ bits32(c.B)*313 ^ bits32(c.A)*1013
 	}
-	return visualSig(n == t.Selected, n == t.hover, extra, n.Label)
+	st := uint64(t.rowState(n))
+	return visualSig(n == t.Selected, n == t.hover, extra^st<<32^st>>32, n.Label)
+}
+
+// rowState is n's item state for the look, with its branch-line chain.
+func (t *TreeView) rowState(n *TreeNode) style.ControlState {
+	i := t.indexOf(n)
+	st := widget.RowItemState(t, i, n == t.Selected, n == t.hover, n == t.Selected)
+	if i >= 0 {
+		st |= style.TreeChain(t.flatten()[i].chain)
+	}
+	if n == t.hover && t.hoverExp {
+		st |= style.StateExpanderHot
+	}
+	if t.Sidebar {
+		st |= style.StateSidebar
+	}
+	return st
 }
 
 func paintTreeSwatch(ctx *paintengine2d.Context, row paintengine2d.Rect, col paintengine2d.Color) {
@@ -302,7 +399,8 @@ func (t *TreeView) nodeAt(y float32) *TreeNode {
 	return t.flatten()[i].node
 }
 
-func (t *TreeView) expanderHit(e widget.MouseEvent, n *TreeNode, depth int) bool {
+// expanderHit reports whether view-space x hits n's expander arrow.
+func (t *TreeView) expanderHit(px float32, n *TreeNode, depth int) bool {
 	if n == nil || n.Leaf() {
 		return false
 	}
@@ -320,7 +418,7 @@ func (t *TreeView) expanderHit(e widget.MouseEvent, n *TreeNode, depth int) bool
 	if hit < 12 {
 		hit = 12
 	}
-	return e.Pos.X >= x-2 && e.Pos.X <= x+hit
+	return px >= x-2 && px <= x+hit
 }
 
 func (t *TreeView) invalidateNode(n *TreeNode) {
@@ -330,27 +428,33 @@ func (t *TreeView) invalidateNode(n *TreeNode) {
 	}
 	rh := t.rowH()
 	y := float32(i)*rh - t.OffsetY
-	t.InvalidateRect(paintengine2d.XYWH(0, y, t.LocalBounds().Dx(), rh).Inset(-1))
+	t.InvalidateRect(fromView(paintengine2d.XYWH(0, y, t.inner().Dx(), rh), t.frame()).Inset(-1))
 }
 
 func (t *TreeView) MouseEnter() {}
 
 func (t *TreeView) MouseMove(e widget.MouseEvent) bool {
-	track, thumb := t.scrollTrack()
-	if off, apply, handled, dirty := t.vbar.move(e.Pos, track, thumb, true, t.MaxOffset()); apply || handled || dirty {
-		if apply {
-			t.OffsetY = off
-			t.clamp()
+	p := toView(e.Pos, t.frame())
+	if handled, dirty := t.vbar.move(t, p, t.vaxis()); handled || dirty {
+		if dirty {
+			t.Invalidate()
 		}
-		t.Invalidate()
-		if apply || handled {
+		if handled {
 			return true
 		}
 	}
-	n := t.nodeAt(e.Pos.Y)
-	if n != t.hover {
+	var n *TreeNode
+	exp := false
+	if p.Y >= 0 && p.Y < t.inner().Dy() {
+		if i := t.rowAt(p.Y); i >= 0 {
+			row := t.flatten()[i]
+			n = row.node
+			exp = t.expanderHit(p.X, n, row.depth)
+		}
+	}
+	if n != t.hover || exp != t.hoverExp {
 		old := t.hover
-		t.hover = n
+		t.hover, t.hoverExp = n, exp
 		t.invalidateNode(old)
 		t.invalidateNode(n)
 	}
@@ -359,8 +463,8 @@ func (t *TreeView) MouseMove(e widget.MouseEvent) bool {
 
 func (t *TreeView) MouseExit() {
 	old := t.hover
-	t.hover = nil
-	t.vbar.over = false
+	t.hover, t.hoverExp = nil, false
+	t.vbar.exit()
 	t.invalidateNode(old)
 }
 
@@ -369,15 +473,13 @@ func (t *TreeView) MousePress(e widget.MouseEvent) bool {
 		return false
 	}
 	t.RequestFocus()
-	track, thumb := t.scrollTrack()
-	if off, ok := t.vbar.press(e.Pos, track, thumb, true, t.OffsetY, t.MaxOffset(), t.LocalBounds().Dy()*0.9); ok {
-		t.OffsetY = off
-		t.clamp()
+	p := toView(e.Pos, t.frame())
+	if t.vbar.press(t, p, t.vaxis()) {
 		t.Invalidate()
 		return true
 	}
-	i := t.rowAt(e.Pos.Y)
-	if i < 0 {
+	i := t.rowAt(p.Y)
+	if i < 0 || p.Y < 0 || p.Y >= t.inner().Dy() {
 		return true
 	}
 	rows := t.flatten()
@@ -390,7 +492,7 @@ func (t *TreeView) MousePress(e widget.MouseEvent) bool {
 		}
 		return true
 	}
-	if t.expanderHit(e, n, rows[i].depth) {
+	if t.expanderHit(p.X, n, rows[i].depth) {
 		t.Toggle(n)
 		return true
 	}
@@ -421,7 +523,7 @@ func (t *TreeView) MouseWheel(e widget.MouseEvent) bool {
 		return false
 	}
 	before := t.OffsetY
-	t.OffsetY += wheelDelta(e.Scroll.Y, t.rowH())
+	t.OffsetY += wheelDelta(e.Scroll.Y, t.rowH(), e.Precise)
 	t.clamp()
 	if t.OffsetY == before {
 		return false
@@ -437,6 +539,18 @@ func (t *TreeView) KeyPress(e widget.KeyEvent) bool {
 	rows := t.flatten()
 	if len(rows) == 0 {
 		return false
+	}
+	if contextKey(e) {
+		if t.OnContext == nil {
+			return false
+		}
+		var row paintengine2d.Rect
+		if i := t.indexOf(t.Selected); i >= 0 {
+			rh := t.rowH()
+			row = fromView(paintengine2d.XYWH(0, float32(i)*rh-t.OffsetY, t.inner().Dx(), rh), t.frame())
+		}
+		t.OnContext(t.Selected, contextPoint(t, row))
+		return true
 	}
 	// -1 means "nothing selected yet": the first Down / Up must land on the
 	// first row, not skip it.
@@ -463,7 +577,7 @@ func (t *TreeView) KeyPress(e widget.KeyEvent) bool {
 		t.selectNode(rows[len(rows)-1].node)
 		return true
 	case platform.KeyPageDown:
-		page := int(t.LocalBounds().Dy()/t.rowH()) - 1
+		page := int(t.inner().Dy()/t.rowH()) - 1
 		if page < 1 {
 			page = 1
 		}
@@ -477,7 +591,7 @@ func (t *TreeView) KeyPress(e widget.KeyEvent) bool {
 		t.selectNode(rows[next].node)
 		return true
 	case platform.KeyPageUp:
-		page := int(t.LocalBounds().Dy()/t.rowH()) - 1
+		page := int(t.inner().Dy()/t.rowH()) - 1
 		if page < 1 {
 			page = 1
 		}
@@ -515,6 +629,19 @@ func (t *TreeView) KeyPress(e widget.KeyEvent) bool {
 		return true
 	}
 	return false
+}
+
+// TextInput is type-ahead find over the visible (expanded) rows.
+func (t *TreeView) TextInput(r rune) bool {
+	if !t.Enabled() || t.DisableTypeAhead {
+		return false
+	}
+	rows := t.flatten()
+	i, searched := t.find.next(r, t.indexOf(t.Selected), len(rows), func(i int) string { return rows[i].node.Label })
+	if i >= 0 {
+		t.selectNode(rows[i].node)
+	}
+	return searched
 }
 
 func (t *TreeView) parentOf(n *TreeNode) *TreeNode {
@@ -578,7 +705,7 @@ func (t *TreeView) ensureVisible(n *TreeNode) {
 	rh := t.rowH()
 	top := float32(i) * rh
 	bot := top + rh
-	view := t.LocalBounds().Dy()
+	view := t.inner().Dy()
 	if top < t.OffsetY {
 		t.OffsetY = top
 	}

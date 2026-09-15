@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -371,5 +372,304 @@ func TestAltOpensMenu(t *testing.T) {
 	}
 	if mb.OpenIndex() != 0 {
 		t.Fatalf("open %d", mb.OpenIndex())
+	}
+}
+
+// Leaving the window must clear hover and cancel the pending tooltip. There
+// used to be no leave event at all: buttons stayed hot and tooltips popped
+// up after the pointer was gone (Wayland and X11).
+func TestPointerLeaveClearsHoverAndTooltip(t *testing.T) {
+	a := New(Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{Width: 400, Height: 200, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	btn := widgets.NewButton("Save", nil)
+	btn.Tip = "Write the file"
+	w.SetContent(widgets.NewPad(20, btn))
+	a.PumpOnce()
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	w.SetClock(func() time.Time { return now })
+	w.SetTooltipDelay(400 * time.Millisecond)
+	bb := btn.Bounds()
+	pos := paintengine2d.Pt(20+bb.Min.X+8, 20+bb.Min.Y+8)
+	w.dispatch(platform.Event{Kind: platform.EventMouseMove, Pos: pos})
+	if !btn.State().Hovered() {
+		t.Fatal("button should be hovered")
+	}
+	w.dispatch(platform.Event{Kind: platform.EventPointerLeave})
+	if btn.State().Hovered() {
+		t.Fatal("hover must clear when the pointer leaves the window")
+	}
+	now = now.Add(time.Second)
+	a.PumpOnce()
+	if w.Tooltip() != nil {
+		t.Fatal("no tooltip may appear after the pointer left")
+	}
+}
+
+// A modal message box stays until answered: clicks on the dimmer do not
+// dismiss it (a double-click on "Confirm…" used to open and close it), the
+// default button has focus, and the look orders the buttons.
+func TestMessageBoxModalFocusAndOrder(t *testing.T) {
+	for _, tc := range []struct {
+		theme        string
+		primaryFirst bool
+	}{{"dark", false}, {"win95", true}} {
+		pack, ok := style.LoadTheme(tc.theme)
+		if !ok {
+			t.Fatalf("theme %s", tc.theme)
+		}
+		a := New(Options{Look: pack.Look(), Headless: true})
+		w, err := a.NewWindow(platform.WindowOptions{Width: 520, Height: 360, Headless: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		w.SetContent(widgets.NewLabel("host"))
+		a.PumpOnce()
+		got := widgets.ResultNone
+		widgets.ShowMessageBox(w.Content(), widgets.MessageBoxOptions{
+			Title: "Confirm", Message: "Proceed?", Kind: widgets.MessageQuestion,
+			Buttons: widgets.ButtonsYesNo, OnResult: func(r widgets.MessageResult) { got = r },
+		})
+		a.PumpOnce()
+		ov := w.Overlay()
+		if ov == nil {
+			t.Fatal("overlay")
+		}
+		var buttons []*widgets.Button
+		widget.Walk(ov, func(c widget.Component) {
+			if b, ok := c.(*widgets.Button); ok {
+				buttons = append(buttons, b)
+			}
+		})
+		if len(buttons) != 2 {
+			t.Fatalf("%s: %d buttons", tc.theme, len(buttons))
+		}
+		if first := buttons[0].Text; (first == "Yes") != tc.primaryFirst {
+			t.Fatalf("%s: first button %q, primaryFirst=%v", tc.theme, first, tc.primaryFirst)
+		}
+		if f, ok := w.Focus().(*widgets.Button); !ok || f.Text != "Yes" {
+			t.Fatalf("%s: default button must have focus, got %T %v", tc.theme, w.Focus(), w.Focus())
+		}
+		// Click on the dimmer, well outside the card.
+		w.dispatch(platform.Event{Kind: platform.EventMouseDown, Pos: paintengine2d.Pt(4, 4), Button: platform.ButtonLeft})
+		w.dispatch(platform.Event{Kind: platform.EventMouseUp, Pos: paintengine2d.Pt(4, 4), Button: platform.ButtonLeft})
+		a.PumpOnce()
+		if w.Overlay() == nil || got != widgets.ResultNone {
+			t.Fatalf("%s: a click outside dismissed the modal box (result %v)", tc.theme, got)
+		}
+		w.dispatch(platform.Event{Kind: platform.EventKeyDown, Key: platform.KeyEscape})
+		a.PumpOnce()
+		if got != widgets.ResultNo || w.Overlay() != nil {
+			t.Fatalf("%s: Escape should answer No and close, got %v", tc.theme, got)
+		}
+	}
+}
+
+// menuFixture is a window with a text field and a File / Edit menu bar.
+func menuFixture(t *testing.T) (*Application, *Window, *widgets.TextField, *widgets.MenuBar, map[string]int) {
+	t.Helper()
+	a := New(Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{Width: 520, Height: 320, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fired := map[string]int{}
+	bar := widgets.NewMenuBar(
+		widgets.NewMenu("&File",
+			widgets.ItemAccel("&New", "Ctrl+N", func() { fired["new"]++ }),
+			widgets.ItemAccel("&Help", "F1", func() { fired["help"]++ }),
+		),
+		widgets.NewMenu("&Edit",
+			widgets.ItemAccel("&Copy", "Ctrl+C", func() { fired["copy"]++ }),
+		),
+	)
+	field := widgets.NewTextField("hello", "", nil)
+	w.SetContent(widgets.NewColumn(bar, field))
+	a.PumpOnce()
+	return a, w, field, bar, fired
+}
+
+// Shortcuts shown in menus work window-wide — except for keys the focused
+// widget takes (Ctrl+C in a field copies text) and under a modal overlay.
+func TestMenuAcceleratorsDispatch(t *testing.T) {
+	a, w, field, _, fired := menuFixture(t)
+	key := func(k platform.Key, m platform.Modifiers) {
+		w.dispatch(platform.Event{Kind: platform.EventKeyDown, Key: k, Mods: m})
+		a.PumpOnce()
+	}
+	key(platform.KeyN, platform.ModCtrl)
+	key(platform.KeyF1, 0)
+	if fired["new"] != 1 || fired["help"] != 1 {
+		t.Fatalf("accelerators with no focus: %v", fired)
+	}
+	field.RequestFocus()
+	key(platform.KeyN, platform.ModCtrl)
+	if fired["new"] != 2 {
+		t.Fatalf("Ctrl+N with a field focused: %v", fired)
+	}
+	key(platform.KeyC, platform.ModCtrl)
+	if fired["copy"] != 0 {
+		t.Fatal("Ctrl+C belongs to the focused text field")
+	}
+	key(platform.KeyN, platform.ModCtrl|platform.ModShift)
+	if fired["new"] != 2 {
+		t.Fatal("Ctrl+Shift+N must not match Ctrl+N")
+	}
+	widgets.Info(w.Content(), "Modal", "A modal box", nil)
+	a.PumpOnce()
+	key(platform.KeyN, platform.ModCtrl)
+	if fired["new"] != 2 {
+		t.Fatal("accelerators must not fire under a modal overlay")
+	}
+	key(platform.KeyF, platform.ModAlt)
+	if w.Popup() != nil {
+		t.Fatal("Alt+F must not open the main menu above a modal dialog")
+	}
+}
+
+// Picking from a menu gives focus back to the widget that had it (it stayed
+// on the bar and typing went nowhere).
+func TestMenuPickReturnsFocus(t *testing.T) {
+	a, w, field, bar, fired := menuFixture(t)
+	field.RequestFocus()
+	a.PumpOnce()
+	edit := bar.TitleRect(1)
+	o := widget.DeviceOrigin(bar)
+	pos := paintengine2d.Pt(o.X+edit.Min.X+4, o.Y+edit.Min.Y+4)
+	w.dispatch(platform.Event{Kind: platform.EventMouseDown, Pos: pos, Button: platform.ButtonLeft})
+	w.dispatch(platform.Event{Kind: platform.EventMouseUp, Pos: pos, Button: platform.ButtonLeft})
+	a.PumpOnce()
+	if w.Popup() == nil {
+		t.Fatal("Edit did not open")
+	}
+	w.dispatch(platform.Event{Kind: platform.EventKeyDown, Key: platform.KeyReturn})
+	a.PumpOnce()
+	if fired["copy"] != 1 {
+		t.Fatalf("Copy not activated: %v", fired)
+	}
+	if w.Focus() != field {
+		t.Fatalf("focus after the menu closed: %T, want the text field", w.Focus())
+	}
+}
+
+// Left / Right walk the bar while a dropdown is open, and a keyboard-opened
+// menu highlights its first item.
+func TestMenuKeyboardWalksOpenMenus(t *testing.T) {
+	a, w, _, bar, _ := menuFixture(t)
+	w.dispatch(platform.Event{Kind: platform.EventKeyDown, Key: platform.KeyF, Mods: platform.ModAlt})
+	a.PumpOnce()
+	pop, ok := w.Popup().(*widgets.PopupMenu)
+	if !ok || bar.OpenIndex() != 0 {
+		t.Fatalf("Alt+F did not open File (open=%d)", bar.OpenIndex())
+	}
+	if pop.HighlightedIndex() != 0 {
+		t.Fatalf("keyboard-opened menu should highlight the first item, got %d", pop.HighlightedIndex())
+	}
+	w.dispatch(platform.Event{Kind: platform.EventKeyDown, Key: platform.KeyRight})
+	a.PumpOnce()
+	if bar.OpenIndex() != 1 {
+		t.Fatalf("Right should open Edit, open=%d", bar.OpenIndex())
+	}
+	w.dispatch(platform.Event{Kind: platform.EventKeyDown, Key: platform.KeyLeft})
+	a.PumpOnce()
+	if bar.OpenIndex() != 0 {
+		t.Fatalf("Left should go back to File, open=%d", bar.OpenIndex())
+	}
+}
+
+// Wheel-scrolling under a still pointer moves the hover to the row now
+// under it (it stayed on the row that scrolled away).
+func TestWheelScrollRehovers(t *testing.T) {
+	a := New(Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{Width: 300, Height: 200, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	list := widgets.NewListView(100, func(i int) string { return fmt.Sprint("row ", i) }, nil)
+	w.SetContent(list)
+	a.PumpOnce()
+	pos := paintengine2d.Pt(40, 60)
+	w.dispatch(platform.Event{Kind: platform.EventMouseMove, Pos: pos})
+	before := list.HoverIndex()
+	w.dispatch(platform.Event{Kind: platform.EventScroll, Pos: pos, Scroll: paintengine2d.Pt(0, 1)})
+	a.PumpOnce()
+	if list.OffsetY <= 0 {
+		t.Fatal("wheel did not scroll")
+	}
+	if got := list.HoverIndex(); got == before || got < 0 {
+		t.Fatalf("hover stayed on row %d after scrolling (now %d)", before, got)
+	}
+}
+
+// A press dragged off a button pops it up (releasing outside does not
+// click) and the release hands hover to what is under the pointer.
+func TestButtonPressDragOff(t *testing.T) {
+	a := New(Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{Width: 400, Height: 200, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	clicks := 0
+	btn := widgets.NewButton("Press", func() { clicks++ })
+	other := widgets.NewButton("Other", nil)
+	w.SetContent(widgets.NewRow(btn, other).WithGap(20))
+	a.PumpOnce()
+	in := paintengine2d.Pt(btn.Bounds().Min.X+8, btn.Bounds().Min.Y+8)
+	out := paintengine2d.Pt(other.Bounds().Min.X+8, other.Bounds().Min.Y+8)
+	w.dispatch(platform.Event{Kind: platform.EventMouseMove, Pos: in})
+	w.dispatch(platform.Event{Kind: platform.EventMouseDown, Pos: in, Button: platform.ButtonLeft})
+	if !btn.PaintState().Pressed() {
+		t.Fatal("pressed")
+	}
+	w.dispatch(platform.Event{Kind: platform.EventMouseMove, Pos: out, Button: platform.ButtonLeft})
+	if btn.PaintState().Pressed() {
+		t.Fatal("a press dragged off the button must pop it up")
+	}
+	w.dispatch(platform.Event{Kind: platform.EventMouseMove, Pos: in, Button: platform.ButtonLeft})
+	if !btn.PaintState().Pressed() {
+		t.Fatal("dragging back re-presses")
+	}
+	w.dispatch(platform.Event{Kind: platform.EventMouseMove, Pos: out, Button: platform.ButtonLeft})
+	w.dispatch(platform.Event{Kind: platform.EventMouseUp, Pos: out, Button: platform.ButtonLeft})
+	if clicks != 0 {
+		t.Fatal("releasing outside must not click")
+	}
+	if btn.PaintState().Hovered() || !other.PaintState().Hovered() {
+		t.Fatalf("hover after release: pressed-button hot=%v other hot=%v", btn.PaintState().Hovered(), other.PaintState().Hovered())
+	}
+}
+
+// Tab to a control below the fold of a ScrollView scrolls it into view.
+func TestTabRevealsFocusInScrollView(t *testing.T) {
+	a := New(Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{Width: 300, Height: 200, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	col := widgets.NewColumn()
+	var last *widgets.Button
+	for i := 0; i < 20; i++ {
+		last = widgets.NewButton(fmt.Sprint("Button ", i), nil)
+		col.Add(last)
+	}
+	sv := widgets.NewScrollView(col)
+	w.SetContent(sv)
+	a.PumpOnce()
+	for i := 0; i < 40 && w.Focus() != last; i++ {
+		w.dispatch(platform.Event{Kind: platform.EventKeyDown, Key: platform.KeyTab})
+		a.PumpOnce()
+		b, ok := w.Focus().(*widgets.Button)
+		if !ok {
+			continue
+		}
+		top := b.Bounds().Min.Y + col.Bounds().Min.Y
+		if top < 0 || top+b.Bounds().Dy() > sv.LocalBounds().Dy() {
+			t.Fatalf("%s focused but not visible: top=%v view=%v offset=%v", b.Text, top, sv.LocalBounds().Dy(), sv.OffsetY)
+		}
+	}
+	if w.Focus() != last {
+		t.Fatal("never reached the last button")
 	}
 }

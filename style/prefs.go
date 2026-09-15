@@ -20,10 +20,20 @@ const appearanceFile = "look.json"
 // dark-round, …) migrate to palette + corners. Pack-level corners/icons
 // are ignored.
 type appearanceFileJSON struct {
+	// Version 2 introduced corners "theme" (the theme's native shape) as
+	// the default; older files carry "round" as the written-out default.
+	Version  int    `json:"version,omitempty"`
 	Theme    string `json:"theme"`
 	Corners  string `json:"corners,omitempty"`
 	Icons    string `json:"icons,omitempty"`
 	IconSize string `json:"iconSize,omitempty"`
+	// ReduceMotion turns animations off.
+	ReduceMotion bool `json:"reduceMotion,omitempty"`
+	// FollowDesktop swaps the theme for its light or dark sibling to match
+	// the desktop.
+	FollowDesktop bool `json:"followDesktop,omitempty"`
+	// NativeDialogs uses the desktop's own file dialogs.
+	NativeDialogs bool `json:"nativeDialogs,omitempty"`
 }
 
 // ConfigDir is $XDG_CONFIG_HOME/uitoolkit (or ~/.config/uitoolkit).
@@ -85,8 +95,16 @@ func resolveAppearance(raw appearanceFileJSON) Appearance {
 	}
 	if strings.TrimSpace(raw.Corners) != "" {
 		a.Corners = ParseCorners(raw.Corners)
+		if raw.Version < 2 && a.Corners == CornersRound {
+			// Pre-v2 files wrote "round" as the default, before themes had
+			// shapes of their own: read it as "keep the theme's shape".
+			a.Corners = CornersTheme
+		}
 	} else if hasCorners {
 		a.Corners = cornersFromName
+		if a.Corners == CornersRound {
+			a.Corners = CornersTheme
+		}
 	}
 	if strings.TrimSpace(raw.Icons) != "" {
 		a.Icons = ParseIconSet(raw.Icons)
@@ -94,31 +112,56 @@ func resolveAppearance(raw appearanceFileJSON) Appearance {
 	if strings.TrimSpace(raw.IconSize) != "" {
 		a.IconSize = ParseIconSize(raw.IconSize)
 	}
+	a.ReduceMotion = raw.ReduceMotion
+	a.FollowDesktop = raw.FollowDesktop
+	a.NativeDialogs = raw.NativeDialogs
 	return a.Normalize()
 }
 
 // LoadAppearance reads XDG look.json. Missing or invalid files yield defaults.
 // Compound theme ids and a legacy triad both resolve to independent
 // theme / corners / icons fields.
+//
+// UITK_THEME=<pack> overrides the saved theme for this process, like
+// GTK_THEME or QT_STYLE_OVERRIDE (UITK_THEME=win95 ./app); corners, icons
+// and icon size still come from look.json. The override is never written
+// back unless the user saves from Settings.
 func LoadAppearance() Appearance {
-	b, err := os.ReadFile(AppearancePath())
-	if err != nil {
-		return DefaultAppearance()
-	}
 	var raw appearanceFileJSON
-	if json.Unmarshal(b, &raw) != nil {
+	ok := false
+	if b, err := os.ReadFile(AppearancePath()); err == nil && json.Unmarshal(b, &raw) == nil {
+		ok = true
+	} else {
+		raw = appearanceFileJSON{}
+	}
+	if env := strings.TrimSpace(os.Getenv(ThemeEnv)); env != "" {
+		// The pack asked for is the pack shown: no swapping it for its
+		// light or dark sibling.
+		raw.Theme = env
+		raw.FollowDesktop = false
+		ok = true
+	}
+	if !ok {
 		return DefaultAppearance()
 	}
 	return resolveAppearance(raw)
 }
 
+// ThemeEnv names the environment variable that overrides the saved theme.
+const ThemeEnv = "UITK_THEME"
+
 // SaveAppearance writes look.json with theme, corners, icons, and iconSize (mode 0600).
 func SaveAppearance(a Appearance) error {
 	a = a.Normalize()
 	return writeJSONFile(AppearancePath(), appearanceFileJSON{
+		Version:  2,
 		Theme:    a.Name,
 		Corners:  string(a.Corners),
 		Icons:    string(a.Icons),
 		IconSize: string(a.IconSize),
+
+		ReduceMotion:  a.ReduceMotion,
+		FollowDesktop: a.FollowDesktop,
+		NativeDialogs: a.NativeDialogs,
 	})
 }

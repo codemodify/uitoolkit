@@ -20,12 +20,18 @@ type Classic struct {
 	density Density
 	scale   float32
 	tokens  ThemeTokens
-	body    *Font
-	title   *Font
-	bold    *Font
-	muted   *Font
-	onAcc   *Font
-	mono    *Font
+	engine  Engine
+	memo    lookMemo // engine-derived paint data, built once per look
+	// uiFamily / monoFamily are the typefaces the look reads in: its
+	// era's when installed, else the bundled faces.
+	uiFamily   string
+	monoFamily string
+	body       *Font
+	title      *Font
+	bold       *Font
+	muted      *Font
+	onAcc      *Font
+	mono       *Font
 }
 
 // NewClassic builds fonts for p. Name is "dark" or "light" typically.
@@ -73,6 +79,7 @@ func newClassic(name string, p Palette, m Metrics, corners CornerStyle, icons Ic
 	p = ResolveMenuChrome(p)
 	p = ResolveBevelChromeFor(p, tokens.Family)
 	density, scale := inferDensityScale(m)
+	ui, mono := lookFamilies(tokens)
 	return &Classic{
 		palette:  p,
 		metrics:  m,
@@ -84,13 +91,16 @@ func newClassic(name string, p Palette, m Metrics, corners CornerStyle, icons Ic
 		density:  density,
 		scale:    scale,
 		tokens:   tokens,
-		// OpenType atlases (Titillium / JetBrains Mono); Color tints at draw.
-		body:  BakeFont(m.FontSize, p.Text),
-		title: BakeTitleFont(m.TitleSize, p.Text),
-		bold:  BakeFamily(FamilyUI, WeightBold, m.FontSize, p.Text),
-		muted: BakeFont(m.FontSize, p.TextMuted),
-		onAcc: BakeFont(m.FontSize, p.TextOnAccent),
-		mono:  BakeMonoFont(m.FontSize, p.Text),
+		engine:   engineFor(tokens),
+		// OpenType atlases of the look's typefaces; Color tints at draw.
+		uiFamily:   ui,
+		monoFamily: mono,
+		body:       BakeFamily(ui, WeightRegular, m.FontSize, p.Text),
+		title:      BakeFamily(ui, WeightBold, m.TitleSize, p.Text),
+		bold:       BakeFamily(ui, WeightBold, m.FontSize, p.Text),
+		muted:      BakeFamily(ui, WeightRegular, m.FontSize, p.TextMuted),
+		onAcc:      BakeFamily(ui, WeightRegular, m.FontSize, p.TextOnAccent),
+		mono:       BakeFamily(mono, WeightRegular, m.FontSize, p.Text),
 	}
 }
 
@@ -210,6 +220,7 @@ func (l *Classic) setPack(name string) *Classic {
 	}
 	return l
 }
+
 func (l *Classic) Font() *Font      { return l.body }
 func (l *Classic) TitleFont() *Font { return l.title }
 func (l *Classic) BoldFont() *Font {
@@ -218,9 +229,56 @@ func (l *Classic) BoldFont() *Font {
 	}
 	return l.body
 }
+
+// WeightFont is the look's UI face at weight w (Material's medium button
+// labels, Fluent's semibold headings): an installed face of that weight,
+// or the nearest drawn heavier. Built on first use.
+func (l *Classic) WeightFont(w Weight) *Font {
+	switch {
+	case w <= WeightRegular:
+		return l.body
+	case w >= WeightBold:
+		return l.BoldFont()
+	}
+	return l.Memo(weightFontKey{w}, func() any {
+		return BakeFamily(l.UIFamily(), w, l.metrics.FontSize, l.palette.Text)
+	}).(*Font)
+}
+
+type weightFontKey struct{ w Weight }
+
+// WeightFontOf is any look's UI face at weight w (bold for semibold and
+// up, regular below, when the look cannot say).
+func WeightFontOf(lk LookAndFeel, w Weight) *Font {
+	if c, ok := lk.(*Classic); ok && c != nil {
+		return c.WeightFont(w)
+	}
+	if w >= WeightSemibold {
+		return lk.BoldFont()
+	}
+	return lk.Font()
+}
+
 func (l *Classic) MutedFont() *Font    { return l.muted }
 func (l *Classic) OnAccentFont() *Font { return l.onAcc }
 func (l *Classic) MonoFont() *Font     { return l.mono }
+
+// UIFamily is the typeface the look reads in: its era's when installed,
+// else the bundled Titillium Web.
+func (l *Classic) UIFamily() string {
+	if l == nil || l.uiFamily == "" {
+		return FamilyUI
+	}
+	return l.uiFamily
+}
+
+// MonoFamily is the look's code and log typeface.
+func (l *Classic) MonoFamily() string {
+	if l == nil || l.monoFamily == "" {
+		return FamilyMono
+	}
+	return l.monoFamily
+}
 
 func (l *Classic) faceOrBody(face *Font) *Font {
 	if face != nil {
@@ -230,13 +288,13 @@ func (l *Classic) faceOrBody(face *Font) *Font {
 }
 
 func (l *Classic) mutedFor(face *Font) *Font {
-	if face != nil && face.Family == FamilyMono {
-		return BakeMonoFont(face.Size, l.palette.TextMuted)
+	if face != nil && face.Family == l.MonoFamily() {
+		return BakeFamily(face.Family, WeightRegular, face.Size, l.palette.TextMuted)
 	}
 	return l.muted
 }
 
-func (l *Classic) DrawPanel(ctx *paintengine2d.Context, b paintengine2d.Rect, raised bool) {
+func (l *Classic) baseDrawPanel(ctx *paintengine2d.Context, b paintengine2d.Rect, raised bool) {
 	p := l.palette
 	fill := p.Surface
 	if raised {
@@ -249,13 +307,13 @@ func (l *Classic) DrawPanel(ctx *paintengine2d.Context, b paintengine2d.Rect, ra
 	l.paintBezel(ctx, b, fill, p.Border, rolePanel, st)
 }
 
-func (l *Classic) DrawButton(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string) {
+func (l *Classic) baseDrawButton(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string) {
 	if st.Pressed() && !st.Disabled() && l.tokensOr().Bevel == BevelClassic3D {
 		b = b.Translate(paintengine2d.Pt(0, 1))
 	}
 	col := l.paintFace(ctx, b, roleButton, st)
 	if st.Focused() {
-		l.DrawFocusRing(ctx, b.Inset(-2))
+		l.DrawFocusRing(ctx, b)
 	}
 	face := l.body
 	if st.Disabled() {
@@ -266,12 +324,35 @@ func (l *Classic) DrawButton(ctx *paintengine2d.Context, b paintengine2d.Rect, s
 	l.drawFittedText(ctx, face, label, b, col, AlignCenter, 8)
 }
 
-func (l *Classic) DrawLabel(ctx *paintengine2d.Context, b paintengine2d.Rect, text string, col paintengine2d.Color, align Align) {
+func (l *Classic) baseDrawLabel(ctx *paintengine2d.Context, b paintengine2d.Rect, text string, col paintengine2d.Color, align Align) {
+	col = l.onWindow(col)
 	f := l.fontFor(col)
 	l.drawFittedText(ctx, f, text, b, col, align, 2)
 }
 
-func (l *Classic) DrawCheckbox(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, checked bool, label string) {
+// onWindow nudges a coloured label or glyph until it reads on the window
+// background (3:1): Classic 95 Dark drew accent links and info icons navy
+// on dark grey. Colours that already read are returned unchanged.
+func (l *Classic) onWindow(col paintengine2d.Color) paintengine2d.Color {
+	bg := l.palette.Background
+	if colorUnset(col) || colorUnset(bg) || ContrastRatio(col, bg) >= 3 {
+		return col
+	}
+	toward := paintengine2d.RGB(1, 1, 1)
+	if RelLuminance(bg) > 0.4 {
+		toward = paintengine2d.RGB(0, 0, 0)
+	}
+	for t := float32(0.1); t <= 1; t += 0.1 {
+		c := Mix(col, toward, t)
+		if ContrastRatio(c, bg) >= 3 {
+			c.A = col.A
+			return c
+		}
+	}
+	return col
+}
+
+func (l *Classic) baseDrawCheckbox(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, checked bool, label string) {
 	p := l.palette
 	m := l.metrics
 	side := m.Checkbox
@@ -279,36 +360,23 @@ func (l *Classic) DrawCheckbox(ctx *paintengine2d.Context, b paintengine2d.Rect,
 	if checked {
 		st |= StateChecked
 	}
-	l.paintFace(ctx, box, roleCheck, st)
-	if checked {
-		chk := paintengine2d.NewPath()
-		chk.MoveTo(box.Min.X+4, box.Min.Y+side*0.52)
-		chk.LineTo(box.Min.X+side*0.42, box.Max.Y-4.5)
-		chk.LineTo(box.Max.X-3.5, box.Min.Y+4)
-		cap, join := paintengine2d.CapRound, paintengine2d.JoinRound
-		if l.square() {
-			cap, join = paintengine2d.CapSquare, paintengine2d.JoinMiter
-		}
-		ctx.DrawPath(chk, paintengine2d.Paint{
-			Color:  p.TextOnAccent,
-			Style:  paintengine2d.StyleStroke,
-			Stroke: paintengine2d.Stroke{Width: 2.1, Cap: cap, Join: join, MiterLimit: 4},
-		})
-	}
-	if st.Focused() {
-		l.DrawFocusRing(ctx, box.Inset(-2))
-	}
+	l.eng().CheckIndicator(l, ctx, box, st, checked)
 	if label != "" {
 		f := l.body
 		if st.Disabled() {
 			f = l.muted
 		}
-		lb := paintengine2d.XYWH(box.Max.X+8, b.Min.Y, b.Max.X-(box.Max.X+8), b.Dy())
+		lb := paintengine2d.XYWH(box.Max.X+l.S(8), b.Min.Y, b.Max.X-(box.Max.X+l.S(8)), b.Dy())
 		l.drawFittedText(ctx, f, label, lb, p.Text, AlignStart, 0)
+		if st.Focused() {
+			l.DrawFocusRing(ctx, labelFocusRect(f, label, lb, b))
+		}
+	} else if st.Focused() {
+		l.DrawFocusRing(ctx, box.Intersect(b))
 	}
 }
 
-func (l *Classic) DrawSlider(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, t float32) {
+func (l *Classic) baseDrawSlider(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, t float32) {
 	p := l.palette
 	m := l.metrics
 	if t < 0 {
@@ -320,7 +388,7 @@ func (l *Classic) DrawSlider(ctx *paintengine2d.Context, b paintengine2d.Rect, s
 	cy := (b.Min.Y + b.Max.Y) * 0.5
 	x0 := b.Min.X + m.Thumb*0.5
 	x1 := b.Max.X - m.Thumb*0.5
-	track := paintengine2d.XYWH(x0, cy-2, x1-x0, 4)
+	track := paintengine2d.XYWH(x0, cy-l.S(2), x1-x0, l.S(4))
 	tr := l.rx(2)
 	trackCol := p.Track
 	fillCol := p.Accent
@@ -330,7 +398,7 @@ func (l *Classic) DrawSlider(ctx *paintengine2d.Context, b paintengine2d.Rect, s
 	}
 	ctx.DrawRoundRect(track, tr, tr, paintengine2d.Fill(trackCol))
 	fillW := (x1 - x0) * t
-	ctx.DrawRoundRect(paintengine2d.XYWH(x0, cy-2, fillW, 4), tr, tr, paintengine2d.Fill(fillCol))
+	ctx.DrawRoundRect(paintengine2d.XYWH(x0, cy-l.S(2), fillW, l.S(4)), tr, tr, paintengine2d.Fill(fillCol))
 	tx := x0 + (x1-x0)*t
 	rad := m.Thumb * 0.5
 	if !st.Disabled() && (st.Hovered() || st.Pressed()) {
@@ -350,22 +418,19 @@ func (l *Classic) DrawSlider(ctx *paintengine2d.Context, b paintengine2d.Rect, s
 		ctx.DrawCircle(paintengine2d.Pt(tx-rad*0.25, cy-rad*0.25), rad*0.35, paintengine2d.Fill(p.Highlight))
 	}
 	if st.Focused() {
-		l.DrawFocusRing(ctx, paintengine2d.XYWH(tx-rad-3, cy-rad-3, rad*2+6, rad*2+6))
+		l.DrawFocusRing(ctx, paintengine2d.XYWH(tx-rad-l.S(3), cy-rad-l.S(3), rad*2+l.S(6), rad*2+l.S(6)).Intersect(b))
 	}
 }
 
-func (l *Classic) DrawTextField(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, text, placeholder string, caret, selA, selB int, blink bool, scrollX float32, face *Font) {
+func (l *Classic) baseDrawTextField(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, text, placeholder string, caret, selA, selB int, blink bool, scrollX float32, face *Font) {
 	p := l.palette
-	m := l.metrics
-	l.paintFace(ctx, b, roleField, st)
-	if st.Focused() && !st.Disabled() && l.tokensOr().Bevel != BevelLunaHottrack && l.tokensOr().Bevel != BevelFluentAccent {
-		l.DrawFocusRing(ctx, b.Inset(-2))
+	if !st.Frameless() {
+		l.paintFace(ctx, b, roleField, st)
+		if st.Focused() && !st.Disabled() && l.eng().FieldFocusRing(l) {
+			l.DrawFocusRing(ctx, b)
+		}
 	}
-	pad := m.FieldPad
-	if pad <= 0 {
-		pad = 8
-	}
-	inner := paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad*2, b.Dy())
+	inner := l.fieldTextBox(b)
 	ctx.Save()
 	ctx.ClipRect(inner)
 	f := l.faceOrBody(face)
@@ -378,6 +443,8 @@ func (l *Classic) DrawTextField(ctx *paintengine2d.Context, b paintengine2d.Rect
 	}
 	ty := inner.Min.Y + (inner.Dy()-font.Height())*0.5
 	ox := inner.Min.X - scrollX
+	var selBox paintengine2d.Rect
+	var selCol paintengine2d.Color
 	if selA != selB && text != "" {
 		if selA > selB {
 			selA, selB = selB, selA
@@ -388,17 +455,31 @@ func (l *Classic) DrawTextField(ctx *paintengine2d.Context, b paintengine2d.Rect
 		if !st.Focused() {
 			sel = p.Selection.WithAlpha(0.14)
 		}
-		ctx.DrawRect(paintengine2d.XYWH(x0, ty+1, x1-x0, f.Height()-2), paintengine2d.Fill(sel))
+		selBox = paintengine2d.XYWH(x0, ty+1, x1-x0, f.Height()-2)
+		ctx.DrawRect(selBox, paintengine2d.Fill(sel))
+		selCol = l.selectedText(sel)
 	}
-	font.Draw(ctx, show, paintengine2d.Pt(ox, ty), p.Text)
+	col := l.fieldText()
+	if font == muted || st.Disabled() {
+		col = p.TextMuted
+	}
+	font.Draw(ctx, show, paintengine2d.Pt(ox, ty), col)
+	if !selBox.Empty() && selCol != col {
+		// Selected text in the highlighted-text colour (Qt's
+		// HighlightedText): a dark selection hid black text.
+		ctx.Save()
+		ctx.ClipRect(selBox)
+		font.Draw(ctx, show, paintengine2d.Pt(ox, ty), selCol)
+		ctx.Restore()
+	}
 	if st.Focused() && blink && text == show {
 		cx := ox + f.CaretX(text, caret)
-		ctx.DrawRect(paintengine2d.XYWH(cx, ty+2, 1.6, f.Height()-4), paintengine2d.Fill(p.Accent))
+		ctx.DrawRect(paintengine2d.XYWH(cx, ty+l.S(2), max(1.6, l.S(1.6)), f.Height()-l.S(4)), paintengine2d.Fill(l.caretColor()))
 	}
 	ctx.Restore()
 }
 
-func (l *Classic) DrawScrollBar(ctx *paintengine2d.Context, track, thumb paintengine2d.Rect, st ControlState) {
+func (l *Classic) baseDrawScrollBar(ctx *paintengine2d.Context, track, thumb paintengine2d.Rect, st ControlState) {
 	l.paintFace(ctx, track, roleTrack, StateNone)
 	if !thumb.Empty() {
 		l.paintFace(ctx, thumb, roleThumb, st)
@@ -406,7 +487,7 @@ func (l *Classic) DrawScrollBar(ctx *paintengine2d.Context, track, thumb painten
 	t := l.tokensOr()
 	if t.Bevel == BevelClassic3D && track.Dy() >= 28 && track.Dx() >= 10 {
 		// Arrow wells (visual only) at the ends of a vertical track.
-		ah := float32(10)
+		ah := l.S(10)
 		if s := LookScale(l); s > 1 {
 			ah *= s
 		}
@@ -417,100 +498,118 @@ func (l *Classic) DrawScrollBar(ctx *paintengine2d.Context, track, thumb painten
 	}
 }
 
-func (l *Classic) DrawFocusRing(ctx *paintengine2d.Context, b paintengine2d.Rect) {
+// baseDrawFocusRing paints keyboard focus INSIDE b (the control's own
+// rect). Widgets paint clipped to their bounds, so a ring drawn around the
+// control — the old b.Inset(-2) convention — was clipped away and Tab
+// focus was invisible on buttons, fields, lists and scroll views.
+func (l *Classic) baseDrawFocusRing(ctx *paintengine2d.Context, b paintengine2d.Rect) {
 	p := l.palette
 	m := l.metrics
 	t := l.tokensOr()
+	if b.Dx() < 4 || b.Dy() < 4 {
+		return
+	}
 	r := m.Radius
 	rs := m.RadiusSmall
-	if rs > 0 {
-		rs += 1
-	}
 	col := t.Focus.Border
 	if colorUnset(col) {
 		col = p.Focus
 	}
 	switch t.Bevel {
 	case BevelClassic3D:
-		ctx.DrawRect(b.Inset(1), paintengine2d.StrokePaint(p.Text, 1))
+		// Windows / Motif: a dotted rectangle just inside the bevel.
+		DottedRect(ctx, b.Inset(l.S(3)), p.Text)
 	case BevelLunaHottrack:
-		DrawHotTrack(ctx, b.Inset(0.5), col.WithAlpha(0.08), col, l.rx(1))
+		DrawHotTrack(ctx, b.Inset(1.5), col.WithAlpha(0.08), col, l.rx(1))
 	case BevelFluentAccent:
-		ctx.DrawRoundRect(b.Inset(0.5), rs, rs, paintengine2d.StrokePaint(col, 1.5))
-	case BevelSoftShadow:
-		ctx.DrawRoundRect(b, r, r, paintengine2d.StrokePaint(col.WithAlpha(0.35), m.FocusWidth+2))
-		ctx.DrawRoundRect(b.Inset(1.25), rs, rs, paintengine2d.StrokePaint(col.WithAlpha(0.90), 1.15))
-	default:
-		ctx.DrawRoundRect(b, r, r, paintengine2d.StrokePaint(col.WithAlpha(0.40), m.FocusWidth+1.5))
-		ctx.DrawRoundRect(b.Inset(1.25), rs, rs, paintengine2d.StrokePaint(col.WithAlpha(0.92), 1.15))
+		ctx.DrawRoundRect(b.Inset(1), rs, rs, paintengine2d.StrokePaint(col, 1.5))
+	default: // soft-shadow and none: soft outer band, crisp inner line
+		fw := m.FocusWidth
+		if fw < 1 {
+			fw = 1
+		}
+		ctx.DrawRoundRect(b.Inset(fw*0.5+0.5), r, r, paintengine2d.StrokePaint(col.WithAlpha(0.40), fw+1))
+		ctx.DrawRoundRect(b.Inset(fw+1.25), rs, rs, paintengine2d.StrokePaint(col.WithAlpha(0.92), 1.15))
 	}
 }
 
-func (l *Classic) DrawSplitter(ctx *paintengine2d.Context, b paintengine2d.Rect, vertical bool, st ControlState) {
+func (l *Classic) baseDrawSplitter(ctx *paintengine2d.Context, b paintengine2d.Rect, vertical bool, st ControlState) {
 	col, _, _ := l.faceColors(roleSplitter, st)
 	if vertical {
 		x := (b.Min.X + b.Max.X) * 0.5
-		ctx.DrawRect(paintengine2d.XYWH(x-1, b.Min.Y+8, 2, b.Dy()-16), paintengine2d.Fill(col))
+		ctx.DrawRect(paintengine2d.XYWH(x-l.S(1), b.Min.Y+l.S(8), l.S(2), b.Dy()-l.S(16)), paintengine2d.Fill(col))
 	} else {
 		y := (b.Min.Y + b.Max.Y) * 0.5
-		ctx.DrawRect(paintengine2d.XYWH(b.Min.X+8, y-1, b.Dx()-16, 2), paintengine2d.Fill(col))
+		ctx.DrawRect(paintengine2d.XYWH(b.Min.X+l.S(8), y-l.S(1), b.Dx()-l.S(16), l.S(2)), paintengine2d.Fill(col))
 	}
 }
 
-func (l *Classic) DrawListRow(ctx *paintengine2d.Context, b paintengine2d.Rect, selected, hovered bool, label string) {
-	st := StateNone
-	if hovered {
-		st |= StateHovered
+func (l *Classic) baseDrawListRow(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string) {
+	fg := l.fieldText()
+	inner := b.Inset(l.S(2))
+	if st.Checked() || st.Hovered() {
+		fg = l.paintFace(ctx, inner, roleRow, st&^StateFocused)
 	}
-	if selected {
-		st |= StateChecked
-	}
-	fg := l.palette.Text
-	inner := b.Inset(2)
-	if selected || hovered {
-		fg = l.paintFace(ctx, inner, roleRow, st)
-	}
-	if l.menuInvertText() && selected {
+	if l.menuInvertText() && st.Checked() && !st.Inactive() {
 		fg = l.palette.TextOnAccent
 	}
-	lb := paintengine2d.XYWH(b.Min.X+10, b.Min.Y, b.Dx()-14, b.Dy())
+	lb := paintengine2d.XYWH(b.Min.X+l.S(10), b.Min.Y, b.Dx()-l.S(14), b.Dy())
 	l.drawFittedText(ctx, l.body, label, lb, fg, AlignStart, 0)
+	if st.Focused() {
+		l.eng().ItemFocus(l, ctx, b, st)
+	}
 }
 
-func (l *Classic) DrawOverlay(ctx *paintengine2d.Context, b paintengine2d.Rect) {
+// baseItemFocus rings the current row one pixel inside, in the focus colour
+// (or, on a filled selection, a colour readable on it).
+func (l *Classic) baseItemFocus(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState) {
+	if b.Dx() < 4 || b.Dy() < 4 {
+		return
+	}
+	col := l.palette.Focus
+	if colorUnset(col) {
+		col = l.palette.Accent
+	}
+	if st.Checked() {
+		fill, _, fg := l.faceColors(roleRow, st&^StateFocused)
+		if !colorUnset(fill) && fill.A > 0.5 {
+			col = fg
+		}
+	}
+	w := l.S(1)
+	r := l.metrics.RadiusSmall
+	ctx.DrawRoundRect(b.Inset(w*1.5), r, r, paintengine2d.StrokePaint(col.WithAlpha(0.85), w))
+}
+
+func (l *Classic) baseDrawOverlay(ctx *paintengine2d.Context, b paintengine2d.Rect) {
 	ctx.DrawRect(b, paintengine2d.Fill(l.palette.Overlay))
 }
 
-func (l *Classic) DrawMenuBar(ctx *paintengine2d.Context, b paintengine2d.Rect) {
+func (l *Classic) baseDrawMenuBar(ctx *paintengine2d.Context, b paintengine2d.Rect) {
 	l.paintBezel(ctx, b, l.palette.SurfaceAlt, l.palette.Divider, roleBar, StateNone)
 }
 
-func (l *Classic) DrawMenuTitle(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, underline int, open bool) {
-	p := l.palette
+func (l *Classic) baseDrawMenuTitle(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, underline int, open bool) {
 	if open || st.Pressed() || (st.Hovered() && !st.Disabled()) {
 		// Open titles drop the bottom stroke so the popup shares an edge.
 		hl := b.Inset(1)
 		if open {
 			hl.Max.Y = b.Max.Y
 		}
-		l.drawMenuHighlight(ctx, hl, open)
+		l.eng().MenuHighlight(l, ctx, hl, open)
 	}
-	fg := p.Text
-	if (open || st.Pressed() || (st.Hovered() && !st.Disabled())) && l.menuInvertText() {
-		fg = p.TextOnAccent
-	}
+	fg := l.eng().MenuTextColor(l, open || st.Pressed() || (st.Hovered() && !st.Disabled()))
 	l.drawLabeled(ctx, l.body, label, underline, b, fg)
 	if st.Focused() && !open {
 		l.DrawFocusRing(ctx, b.Inset(1))
 	}
 }
 
-func (l *Classic) DrawMenuFrame(ctx *paintengine2d.Context, b paintengine2d.Rect) {
+func (l *Classic) baseDrawMenuFrame(ctx *paintengine2d.Context, b paintengine2d.Rect) {
 	p := l.palette
 	m := l.metrics
-	// Keep the drop shadow inside the arranged box so PaintTree clip
-	// cannot leave a sliver artifact under the last row.
-	ctx.DrawRoundRect(b.Inset(1).Translate(paintengine2d.Pt(1, 2)), m.RadiusSmall, m.RadiusSmall, paintengine2d.Fill(p.Shadow))
+	// The drop shadow is the engine's PopupShadow, painted outside b by the
+	// window's popup layer.
 	ctx.DrawRoundRect(b.Inset(1), m.RadiusSmall, m.RadiusSmall, paintengine2d.Fill(p.SurfaceAlt))
 	// Classic XP icon gutter: a slightly darker strip to the label origin.
 	ch := MenuChromeFor(l)
@@ -522,7 +621,7 @@ func (l *Classic) DrawMenuFrame(ctx *paintengine2d.Context, b paintengine2d.Rect
 	ctx.DrawRoundRect(b.Inset(1.5), m.RadiusSmall, m.RadiusSmall, paintengine2d.StrokePaint(p.Border, m.Border+0.4))
 }
 
-func (l *Classic) drawMenuHighlight(ctx *paintengine2d.Context, b paintengine2d.Rect, attachBottom bool) {
+func (l *Classic) baseMenuHighlight(ctx *paintengine2d.Context, b paintengine2d.Rect, attachBottom bool) {
 	if b.Dx() < 2 || b.Dy() < 2 {
 		return
 	}
@@ -548,7 +647,7 @@ func (l *Classic) drawMenuHighlight(ctx *paintengine2d.Context, b paintengine2d.
 	case BevelFluentAccent:
 		ctx.DrawRoundRect(b, r, r, paintengine2d.Fill(fill))
 		acc := p.Accent
-		ctx.DrawRect(paintengine2d.XYWH(b.Min.X, b.Min.Y+2, 3, b.Dy()-4), paintengine2d.Fill(acc))
+		ctx.DrawRect(paintengine2d.XYWH(b.Min.X, b.Min.Y+l.S(2), l.S(3), b.Dy()-l.S(4)), paintengine2d.Fill(acc))
 	default:
 		ctx.DrawRoundRect(b, r, r, paintengine2d.Fill(fill))
 		if !colorUnset(border) {
@@ -563,10 +662,10 @@ func (l *Classic) drawMenuHighlight(ctx *paintengine2d.Context, b paintengine2d.
 func (l *Classic) menuItemHighlightBounds(item paintengine2d.Rect) paintengine2d.Rect {
 	ch := MenuChromeFor(l)
 	// Full row (icon gutter + label), 1px inside the popup frame / clip.
-	return paintengine2d.XYWH(item.Min.X-ch.PadL+2, item.Min.Y+1, item.Dx()+ch.PadL+ch.PadR-4, item.Dy()-2)
+	return paintengine2d.XYWH(item.Min.X-ch.PadL+l.S(2), item.Min.Y+l.S(1), item.Dx()+ch.PadL+ch.PadR-l.S(4), item.Dy()-l.S(2))
 }
 
-func (l *Classic) DrawMenuItem(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, row MenuRow) {
+func (l *Classic) baseDrawMenuItem(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, row MenuRow) {
 	p := l.palette
 	ch := MenuChromeFor(l)
 	if row.Separator {
@@ -578,19 +677,15 @@ func (l *Classic) DrawMenuItem(ctx *paintengine2d.Context, b paintengine2d.Rect,
 		return
 	}
 	if (st.Hovered() || st.Pressed()) && !st.Disabled() {
-		l.drawMenuHighlight(ctx, l.menuItemHighlightBounds(b), false)
+		l.eng().MenuHighlight(l, ctx, l.menuItemHighlightBounds(b), false)
 	}
 	ty := b.Min.Y + (b.Dy()-l.body.Height())*0.5
 	if ty < b.Min.Y {
 		ty = b.Min.Y
 	}
-	fg := p.Text
-	font := l.body
-	if st.Disabled() {
-		fg = p.TextMuted
-		font = l.muted
-	} else if (st.Hovered() || st.Pressed()) && l.menuInvertText() {
-		fg = p.TextOnAccent
+	fg, font := p.TextMuted, l.muted
+	if !st.Disabled() {
+		fg, font = l.eng().MenuTextColor(l, st.Hovered() || st.Pressed()), l.body
 	}
 	l.drawMenuGutter(ctx, b, ch, row, fg)
 	label, shortcut, underline := row.Label, row.Shortcut, row.Underline
@@ -615,7 +710,11 @@ func (l *Classic) DrawMenuItem(ctx *paintengine2d.Context, b paintengine2d.Rect,
 		if row.Submenu {
 			sx = ch.ArrowMinX(b.Max.X) - tw
 		}
-		l.muted.Draw(ctx, shortcut, paintengine2d.Pt(sx, ty), p.TextMuted)
+		scCol := p.TextMuted
+		if (st.Hovered() || st.Pressed()) && !st.Disabled() {
+			scCol = fg // muted grey vanished on dark hot rows (Aqua blue)
+		}
+		l.muted.Draw(ctx, shortcut, paintengine2d.Pt(sx, ty), scCol)
 		labelRight = sx - ch.AccelGap
 	}
 	lx := ch.LabelMinX(b.Min.X)
@@ -705,24 +804,24 @@ func drawMenuRadio(ctx *paintengine2d.Context, b paintengine2d.Rect, on bool, co
 	}
 }
 
-func (l *Classic) DrawTabBar(ctx *paintengine2d.Context, b paintengine2d.Rect) {
+func (l *Classic) baseDrawTabBar(ctx *paintengine2d.Context, b paintengine2d.Rect) {
 	l.paintBezel(ctx, b, l.palette.SurfaceAlt, l.palette.Divider, roleBar, StateNone)
 }
 
-func (l *Classic) DrawTab(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, selected bool) {
+func (l *Classic) baseDrawTab(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, selected bool) {
 	if selected {
 		st |= StateChecked
 	}
-	box := b.Inset(3)
+	box := b.Inset(l.S(3))
 	if selected {
-		box = paintengine2d.XYWH(b.Min.X+2, b.Min.Y+4, b.Dx()-4, b.Dy()-4)
+		box = paintengine2d.XYWH(b.Min.X+l.S(2), b.Min.Y+l.S(4), b.Dx()-l.S(4), b.Dy()-l.S(4))
 	}
 	fg := l.palette.Text
 	if selected || (st.Hovered() && !st.Disabled()) || st.Pressed() {
 		fg = l.paintFace(ctx, box, roleTab, st)
 	}
 	if selected && l.tokensOr().Bevel == BevelFluentAccent {
-		ctx.DrawRect(paintengine2d.XYWH(b.Min.X+6, b.Max.Y-3, b.Dx()-12, 3), paintengine2d.Fill(l.palette.Accent))
+		ctx.DrawRect(paintengine2d.XYWH(b.Min.X+l.S(6), b.Max.Y-l.S(3), b.Dx()-l.S(12), l.S(3)), paintengine2d.Fill(l.palette.Accent))
 	}
 	font := l.body
 	if !selected {
@@ -731,28 +830,22 @@ func (l *Classic) DrawTab(ctx *paintengine2d.Context, b paintengine2d.Rect, st C
 	}
 	l.drawFittedText(ctx, font, label, b, fg, AlignCenter, 8)
 	if st.Focused() {
-		l.DrawFocusRing(ctx, b.Inset(2))
+		l.DrawFocusRing(ctx, b.Inset(l.S(2)))
 	}
 }
 
-func (l *Classic) DrawTreeRow(ctx *paintengine2d.Context, b paintengine2d.Rect, selected, hovered, expanded, leaf bool, depth int, label string, bold bool) {
+func (l *Classic) baseDrawTreeRow(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, expanded, leaf bool, depth int, label string, bold bool) {
 	p := l.palette
 	m := l.metrics
-	st := StateNone
-	if hovered {
-		st |= StateHovered
-	}
-	if selected {
-		st |= StateChecked
-	}
-	if selected || hovered {
-		l.paintFace(ctx, b.Inset(2), roleRow, st)
+	fg := l.fieldText()
+	if st.Checked() || st.Hovered() {
+		fg = l.paintFace(ctx, b.Inset(l.S(2)), roleRow, st&^StateFocused)
 	}
 	indent := m.TreeIndent
 	if indent <= 0 {
 		indent = 16
 	}
-	pad := float32(8)
+	pad := l.S(8)
 	if m.RowPad > 0 {
 		pad = m.RowPad + 2
 	}
@@ -760,6 +853,9 @@ func (l *Classic) DrawTreeRow(ctx *paintengine2d.Context, b paintengine2d.Rect, 
 	cy := (b.Min.Y + b.Max.Y) * 0.5
 	guide := p.Divider.WithAlpha(0.85)
 	for d := 0; d < depth; d++ {
+		if d < depth-1 && !st.HasNextSibling(d+1) {
+			continue // that ancestor's children end above
+		}
 		gx := b.Min.X + pad + float32(d)*indent + 3
 		ctx.DrawRect(paintengine2d.XYWH(gx, b.Min.Y, 1, b.Dy()), paintengine2d.Fill(guide))
 	}
@@ -783,7 +879,11 @@ func (l *Classic) DrawTreeRow(ctx *paintengine2d.Context, b paintengine2d.Rect, 
 			chev.LineTo(x, cy+u*0.55)
 			chev.Close()
 		}
-		ctx.DrawPath(chev, paintengine2d.Fill(p.TextMuted))
+		col := p.TextMuted
+		if st.ExpanderHot() {
+			col = fg
+		}
+		ctx.DrawPath(chev, paintengine2d.Fill(col))
 	}
 	face := l.body
 	if bold {
@@ -791,11 +891,14 @@ func (l *Classic) DrawTreeRow(ctx *paintengine2d.Context, b paintengine2d.Rect, 
 	}
 	ctx.Save()
 	ctx.ClipRect(b)
-	face.Draw(ctx, label, paintengine2d.Pt(x+14, b.Min.Y+(b.Dy()-face.Height())*0.5), p.Text)
+	face.Draw(ctx, label, paintengine2d.Pt(x+14, b.Min.Y+(b.Dy()-face.Height())*0.5), fg)
 	ctx.Restore()
+	if st.Focused() {
+		l.eng().ItemFocus(l, ctx, b, st)
+	}
 }
 
-func (l *Classic) DrawStatusBar(ctx *paintengine2d.Context, b paintengine2d.Rect, parts []string) {
+func (l *Classic) baseDrawStatusBar(ctx *paintengine2d.Context, b paintengine2d.Rect, parts []string) {
 	p := l.palette
 	l.paintBezel(ctx, b, p.SurfaceAlt, p.Divider, roleBar, StateNone)
 	if len(parts) == 0 {
@@ -803,17 +906,18 @@ func (l *Classic) DrawStatusBar(ctx *paintengine2d.Context, b paintengine2d.Rect
 	}
 	n := float32(len(parts))
 	slot := b.Dx() / n
-	ty := b.Min.Y + (b.Dy()-l.body.Height())*0.5
 	for i, s := range parts {
 		x := b.Min.X + slot*float32(i)
 		if i > 0 {
-			ctx.DrawRect(paintengine2d.XYWH(x, b.Min.Y+6, 1, b.Dy()-12), paintengine2d.Fill(p.Divider))
+			ctx.DrawRect(paintengine2d.XYWH(x, b.Min.Y+l.S(6), 1, b.Dy()-l.S(12)), paintengine2d.Fill(p.Divider))
 		}
-		l.body.Draw(ctx, s, paintengine2d.Pt(x+10, ty), p.TextMuted)
+		// Each part fits its own slot (a long path used to run into the
+		// next part — Settings' status bar).
+		l.drawFittedText(ctx, l.body, s, paintengine2d.XYWH(x+10, b.Min.Y, slot-16, b.Dy()), p.TextMuted, AlignStart, 0)
 	}
 }
 
-func (l *Classic) DrawToolBar(ctx *paintengine2d.Context, b paintengine2d.Rect) {
+func (l *Classic) baseDrawToolBar(ctx *paintengine2d.Context, b paintengine2d.Rect) {
 	l.paintBezel(ctx, b, l.palette.SurfaceAlt, l.palette.Divider, roleBar, StateNone)
 }
 
@@ -849,16 +953,16 @@ func ToolButtonChromeFor(lk LookAndFeel, h float32) (pad, iconSide, iconGap floa
 	return pad, iconSide, iconGap
 }
 
-func (l *Classic) DrawToolButton(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, icon ToolIcon) {
+func (l *Classic) baseDrawToolButton(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, icon ToolIcon) {
 	p := l.palette
 	well := b.Inset(1)
+	fg := p.Text
 	if st.Toggle() || (st.Hovered() && !st.Disabled()) || (st.Pressed() && !st.Disabled()) {
-		l.paintFace(ctx, well, roleTool, st)
+		fg = l.paintFace(ctx, well, roleTool, st)
 	}
 	if st.Focused() {
 		l.DrawFocusRing(ctx, b.Inset(1))
 	}
-	fg := p.Text
 	font := l.body
 	if st.Disabled() {
 		fg = p.TextMuted
@@ -886,7 +990,7 @@ func (l *Classic) DrawToolButton(ctx *paintengine2d.Context, b paintengine2d.Rec
 	}
 }
 
-func (l *Classic) DrawProgressBar(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, t float32, indeterminate bool, phase float32) {
+func (l *Classic) baseDrawProgressBar(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, t float32, indeterminate bool, phase float32) {
 	p := l.palette
 	m := l.metrics
 	if t < 0 {
@@ -914,7 +1018,7 @@ func (l *Classic) DrawProgressBar(ctx *paintengine2d.Context, b paintengine2d.Re
 	}
 	ctx.DrawRoundRect(b, r, r, paintengine2d.Fill(track))
 	ctx.DrawRoundRect(b.Inset(0.5), r, r, paintengine2d.StrokePaint(p.Border.WithAlpha(0.55), 1))
-	inner := b.Inset(2)
+	inner := b.Inset(l.S(2))
 	if inner.Empty() {
 		return
 	}
@@ -939,7 +1043,7 @@ func (l *Classic) DrawProgressBar(ctx *paintengine2d.Context, b paintengine2d.Re
 	}
 }
 
-func (l *Classic) DrawRadio(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, selected bool, label string) {
+func (l *Classic) baseDrawRadio(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, selected bool, label string) {
 	p := l.palette
 	m := l.metrics
 	side := m.Radio
@@ -954,45 +1058,39 @@ func (l *Classic) DrawRadio(ctx *paintengine2d.Context, b paintengine2d.Rect, st
 	}
 	cx := b.Min.X + side*0.5
 	cy := (b.Min.Y + b.Max.Y) * 0.5
-	fill, border, _ := l.faceColors(roleCheck, st)
-	ctx.DrawCircle(paintengine2d.Pt(cx, cy), side*0.5, paintengine2d.Fill(fill))
-	if l.tokensOr().Bevel == BevelClassic3D {
-		// Inset well: light on bottom-right, dark on top-left.
-		ctx.DrawCircle(paintengine2d.Pt(cx, cy), side*0.5-0.5, paintengine2d.StrokePaint(l.palette.BevelDark, 1))
-		ctx.DrawCircle(paintengine2d.Pt(cx+0.6, cy+0.6), side*0.5-1.4, paintengine2d.StrokePaint(l.palette.BevelLight, 1))
-	} else {
-		if colorUnset(border) {
-			border = p.FieldBorder
-		}
-		ctx.DrawCircle(paintengine2d.Pt(cx, cy), side*0.5-0.5, paintengine2d.StrokePaint(border, 1))
-	}
-	if selected {
-		ctx.DrawCircle(paintengine2d.Pt(cx, cy), side*0.18+1.2, paintengine2d.Fill(p.TextOnAccent))
-	}
-	if st.Focused() {
-		l.DrawFocusRing(ctx, paintengine2d.XYWH(cx-side*0.5-2, cy-side*0.5-2, side+4, side+4))
-	}
+	l.eng().RadioIndicator(l, ctx, paintengine2d.XYWH(cx-side*0.5, cy-side*0.5, side, side), st, selected)
 	if label != "" {
 		f := l.body
 		if st.Disabled() {
 			f = l.muted
 		}
-		lb := paintengine2d.XYWH(b.Min.X+side+8, b.Min.Y, b.Max.X-(b.Min.X+side+8), b.Dy())
+		lb := paintengine2d.XYWH(b.Min.X+side+l.S(8), b.Min.Y, b.Max.X-(b.Min.X+side+l.S(8)), b.Dy())
 		l.drawFittedText(ctx, f, label, lb, p.Text, AlignStart, 0)
+		if st.Focused() {
+			l.DrawFocusRing(ctx, labelFocusRect(f, label, lb, b))
+		}
+	} else if st.Focused() {
+		l.DrawFocusRing(ctx, paintengine2d.XYWH(cx-side*0.5, cy-side*0.5, side, side).Intersect(b))
 	}
 }
 
-func (l *Classic) DrawComboBox(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, text string, open bool) {
+func (l *Classic) baseDrawComboBox(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, text string, open bool) {
 	p := l.palette
 	m := l.metrics
 	if open {
 		st |= StatePressed
 	}
-	l.paintFace(ctx, b, roleCombo, st)
-	if st.Focused() && !open && l.tokensOr().Bevel != BevelLunaHottrack && l.tokensOr().Bevel != BevelFluentAccent {
-		l.DrawFocusRing(ctx, b.Inset(-2))
+	var faceFg paintengine2d.Color
+	if st.Editable() {
+		// A field with an arrow button: the text is typed, not picked.
+		faceFg = l.paintFace(ctx, b, roleField, st&^(StateHovered|StatePressed))
+	} else {
+		faceFg = l.paintFace(ctx, b, roleCombo, st)
 	}
-	chevW := float32(22)
+	if st.Focused() && !open && l.eng().FieldFocusRing(l) {
+		l.DrawFocusRing(ctx, b)
+	}
+	chevW := l.S(22)
 	btn := paintengine2d.XYWH(b.Max.X-chevW, b.Min.Y, chevW, b.Dy())
 	if l.tokensOr().Bevel == BevelClassic3D || l.tokensOr().Bevel == BevelLunaHottrack {
 		l.paintFace(ctx, btn.Inset(1), roleButton, st)
@@ -1003,7 +1101,7 @@ func (l *Classic) DrawComboBox(ctx *paintengine2d.Context, b paintengine2d.Rect,
 	}
 	inner := paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad-chevW, b.Dy())
 	f := l.body
-	col := p.Text
+	col := faceFg
 	if text == "" {
 		f = l.muted
 		col = p.TextMuted
@@ -1034,10 +1132,27 @@ func (l *Classic) DrawComboBox(ctx *paintengine2d.Context, b paintengine2d.Rect,
 		chev.LineTo(cx, cy+4)
 		chev.Close()
 	}
-	ctx.DrawPath(chev, paintengine2d.Fill(p.TextMuted))
+	chevCol := p.TextMuted
+	if ContrastRatio(chevCol, l.faceBackdrop(roleCombo, st)) < 3 {
+		chevCol = faceFg
+	}
+	ctx.DrawPath(chev, paintengine2d.Fill(chevCol))
 }
 
-func (l *Classic) DrawTitleBar(ctx *paintengine2d.Context, b paintengine2d.Rect, title, subtitle string) {
+// faceBackdrop is the opaque colour a face of role / state ends up as.
+func (l *Classic) faceBackdrop(role chromeRole, st ControlState) paintengine2d.Color {
+	fill, _, _ := l.faceColorsRaw(role, st)
+	base := l.roleBase(role)
+	if colorUnset(fill) {
+		return base
+	}
+	if fill.A < 1 {
+		return Mix(base, fill, fill.A)
+	}
+	return fill
+}
+
+func (l *Classic) baseDrawTitleBar(ctx *paintengine2d.Context, b paintengine2d.Rect, title, subtitle string) {
 	p := l.palette
 	l.paintBezel(ctx, b, p.SurfaceAlt, p.Divider, roleBar, StateNone)
 	pad := l.metrics.Pad
@@ -1062,11 +1177,11 @@ func (l *Classic) DrawTitleBar(ctx *paintengine2d.Context, b paintengine2d.Rect,
 	}
 }
 
-func (l *Classic) DrawMessageIcon(ctx *paintengine2d.Context, b paintengine2d.Rect, icon ToolIcon) {
+func (l *Classic) baseDrawMessageIcon(ctx *paintengine2d.Context, b paintengine2d.Rect, icon ToolIcon) {
 	if icon == IconNone {
 		return
 	}
-	l.drawToolIcon(ctx, b, icon, l.messageIconColor(icon))
+	l.drawToolIcon(ctx, b, icon, l.onWindow(l.messageIconColor(icon)))
 }
 
 func (l *Classic) messageIconColor(icon ToolIcon) paintengine2d.Color {
@@ -1110,15 +1225,16 @@ func (l *Classic) square() bool {
 	return l.metrics.Radius <= 0 && l.metrics.RadiusSmall <= 0
 }
 
-func (l *Classic) DrawTableHeader(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, sorted, asc bool) {
+func (l *Classic) baseDrawTableHeader(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, sorted, asc bool) {
 	p := l.palette
 	l.paintBezel(ctx, b, p.SurfaceAlt, p.Divider, roleBar, StateNone)
+	fg := p.Text
 	if st.Pressed() || (st.Hovered() && !st.Disabled()) {
-		l.paintFace(ctx, b.Inset(1), roleRow, st)
+		fg = l.paintFace(ctx, b.Inset(1), roleRow, st)
 	}
-	ctx.DrawRect(paintengine2d.XYWH(b.Max.X-1, b.Min.Y+6, 1, b.Dy()-12), paintengine2d.Fill(p.Divider))
+	ctx.DrawRect(paintengine2d.XYWH(b.Max.X-1, b.Min.Y+l.S(6), 1, b.Dy()-l.S(12)), paintengine2d.Fill(p.Divider))
 	ctx.DrawRect(paintengine2d.XYWH(b.Min.X, b.Max.Y-1, b.Dx(), 1), paintengine2d.Fill(p.Divider))
-	pad := float32(8)
+	pad := l.S(8)
 	chevW := float32(0)
 	if sorted {
 		chevW = 14
@@ -1133,7 +1249,7 @@ func (l *Classic) DrawTableHeader(ctx *paintengine2d.Context, b paintengine2d.Re
 	inner := paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, innerW, b.Dy())
 	ctx.Save()
 	ctx.ClipRect(inner)
-	l.body.Draw(ctx, l.body.Fit(label, inner.Dx()), paintengine2d.Pt(inner.Min.X, ty), p.Text)
+	l.body.Draw(ctx, l.body.Fit(label, inner.Dx()), paintengine2d.Pt(inner.Min.X, ty), fg)
 	ctx.Restore()
 	if sorted {
 		cx := b.Max.X - 12
@@ -1153,20 +1269,14 @@ func (l *Classic) DrawTableHeader(ctx *paintengine2d.Context, b paintengine2d.Re
 	}
 }
 
-func (l *Classic) DrawTableCell(ctx *paintengine2d.Context, b paintengine2d.Rect, selected, hovered bool, label string, align Align, face *Font) {
+func (l *Classic) baseDrawTableCell(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, align Align, face *Font) {
 	p := l.palette
-	st := StateNone
-	if hovered {
-		st |= StateHovered
-	}
-	if selected {
-		st |= StateChecked
-	}
-	if selected || hovered {
-		l.paintFace(ctx, b, roleRow, st)
+	fg := l.fieldText()
+	if st.Checked() || st.Hovered() {
+		fg = l.paintFace(ctx, b, roleRow, st&^StateFocused)
 	}
 	f := l.faceOrBody(face)
-	pad := tableCellPad(b.Dx(), f.Advance(label))
+	pad := l.tableCellPad(b.Dx(), f.Advance(label))
 	avail := b.Dx() - pad*2
 	if avail < 4 {
 		avail = 4
@@ -1183,31 +1293,40 @@ func (l *Classic) DrawTableCell(ctx *paintengine2d.Context, b paintengine2d.Rect
 	ty := b.Min.Y + (b.Dy()-f.Height())*0.5
 	ctx.Save()
 	ctx.ClipRect(b.Inset(1))
-	f.Draw(ctx, label, paintengine2d.Pt(x, ty), p.Text)
+	f.Draw(ctx, label, paintengine2d.Pt(x, ty), fg)
 	ctx.Restore()
-	ctx.DrawRect(paintengine2d.XYWH(b.Max.X-1, b.Min.Y, 1, b.Dy()), paintengine2d.Fill(p.Divider.WithAlpha(0.55)))
+	// The column guide stops at a selected row: the selection reads as one
+	// bar across the row (Explorer's details view, Finder's list).
+	if !st.Checked() {
+		ctx.DrawRect(paintengine2d.XYWH(b.Max.X-1, b.Min.Y, 1, b.Dy()), paintengine2d.Fill(p.Divider.WithAlpha(0.55)))
+	}
 }
 
 // tableCellPad keeps the default 8px inset unless the full label already
 // fits the cell with a tighter pad (28px ★/📎 columns). Fit must not
 // replace a glyph that the column can show.
-func tableCellPad(cellW, textW float32) float32 {
-	pad := float32(8)
-	if textW > 0 && textW <= cellW-4 && cellW-pad*2 < textW {
+func (l *Classic) tableCellPad(cellW, textW float32) float32 {
+	pad := l.S(8)
+	if textW > 0 && textW <= cellW-l.S(4) && cellW-pad*2 < textW {
 		pad = (cellW - textW) * 0.5
-		if pad < 2 {
-			pad = 2
+		if pad < l.S(2) {
+			pad = l.S(2)
 		}
 	}
 	return pad
 }
 
-func (l *Classic) DrawSpinner(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, upHover, downHover, upPress, downPress bool) {
+func (l *Classic) baseDrawSpinner(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, upHover, downHover, upPress, downPress bool) {
 	p := l.palette
 	m := l.metrics
 	r := m.RadiusSmall
-	ctx.DrawRoundRect(b, r, r, paintengine2d.Fill(p.SurfaceAlt))
-	ctx.DrawRoundRect(b.Inset(0.5), r, r, paintengine2d.StrokePaint(p.FieldBorder, 1))
+	if st.Frameless() {
+		// Inside the field's frame: a divider against the text.
+		ctx.DrawRect(paintengine2d.XYWH(b.Min.X, b.Min.Y+l.S(2), 1, b.Dy()-l.S(4)), paintengine2d.Fill(p.Divider))
+	} else {
+		ctx.DrawRoundRect(b, r, r, paintengine2d.Fill(p.SurfaceAlt))
+		ctx.DrawRoundRect(b.Inset(0.5), r, r, paintengine2d.StrokePaint(p.FieldBorder, 1))
+	}
 	mid := (b.Min.Y + b.Max.Y) * 0.5
 	up := paintengine2d.XYWH(b.Min.X, b.Min.Y, b.Dx(), mid-b.Min.Y)
 	down := paintengine2d.XYWH(b.Min.X, mid, b.Dx(), b.Max.Y-mid)
@@ -1241,12 +1360,12 @@ func (l *Classic) DrawSpinner(ctx *paintengine2d.Context, b paintengine2d.Rect, 
 	ctx.DrawPath(dnC, paintengine2d.Fill(col))
 }
 
-func (l *Classic) DrawTextArea(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, lines []TextLine, caret, selA, selB int, blink bool, scrollX, scrollY float32, placeholder string, face *Font) {
+func (l *Classic) baseDrawTextArea(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, lines []TextLine, caret, selA, selB int, blink bool, scrollX, scrollY float32, placeholder string, face *Font) {
 	p := l.palette
 	m := l.metrics
 	l.paintFace(ctx, b, roleField, st)
-	if st.Focused() && l.tokensOr().Bevel != BevelLunaHottrack && l.tokensOr().Bevel != BevelFluentAccent {
-		l.DrawFocusRing(ctx, b.Inset(-2))
+	if st.Focused() && l.eng().FieldFocusRing(l) {
+		l.DrawFocusRing(ctx, b)
 	}
 	pad := m.FieldPad
 	if pad <= 0 {
@@ -1302,10 +1421,17 @@ func (l *Classic) DrawTextArea(ctx *paintengine2d.Context, b paintengine2d.Rect,
 			if x1-x0 < 3 && selB > line.End-1 {
 				x1 = inner.Max.X
 			}
-			ctx.DrawRect(paintengine2d.XYWH(x0, y+1, x1-x0, f.Height()-2), paintengine2d.Fill(p.Selection))
-		}
-		if line.Text != "" {
-			f.Draw(ctx, line.Text, paintengine2d.Pt(ox, y), p.Text)
+			selBox := paintengine2d.XYWH(x0, y+1, x1-x0, f.Height()-2)
+			ctx.DrawRect(selBox, paintengine2d.Fill(p.Selection))
+			if line.Text != "" {
+				f.Draw(ctx, line.Text, paintengine2d.Pt(ox, y), l.fieldText())
+				ctx.Save()
+				ctx.ClipRect(selBox)
+				f.Draw(ctx, line.Text, paintengine2d.Pt(ox, y), l.selectedText(p.Selection))
+				ctx.Restore()
+			}
+		} else if line.Text != "" {
+			f.Draw(ctx, line.Text, paintengine2d.Pt(ox, y), l.fieldText())
 		}
 		if st.Focused() && blink && caret >= line.Start && caret <= line.End {
 			onThis := caret < line.End || i == len(lines)-1
@@ -1318,14 +1444,14 @@ func (l *Classic) DrawTextArea(ctx *paintengine2d.Context, b paintengine2d.Rect,
 					col = 0
 				}
 				cx := ox + f.CaretX(line.Text, col)
-				ctx.DrawRect(paintengine2d.XYWH(cx, y+1, 1.6, f.Height()-2), paintengine2d.Fill(p.Accent))
+				ctx.DrawRect(paintengine2d.XYWH(cx, y+l.S(1), max(1.6, l.S(1.6)), f.Height()-l.S(2)), paintengine2d.Fill(l.caretColor()))
 			}
 		}
 	}
 	ctx.Restore()
 }
 
-func (l *Classic) DrawSwitch(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, on bool, label string) {
+func (l *Classic) baseDrawSwitch(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, on bool, label string) {
 	p := l.palette
 	m := l.metrics
 	tw, th := m.SwitchW, m.SwitchH
@@ -1369,19 +1495,19 @@ func (l *Classic) DrawSwitch(ctx *paintengine2d.Context, b paintengine2d.Rect, s
 	ctx.DrawCircle(paintengine2d.Pt(kx, cy+0.6), kr+0.6, paintengine2d.Fill(p.Shadow))
 	ctx.DrawCircle(paintengine2d.Pt(kx, cy), kr, paintengine2d.Fill(knob))
 	if st.Focused() {
-		l.DrawFocusRing(ctx, track.Inset(-3))
+		l.DrawFocusRing(ctx, track)
 	}
 	if label != "" {
 		f := l.body
 		if st.Disabled() {
 			f = l.muted
 		}
-		lb := paintengine2d.XYWH(track.Max.X+8, b.Min.Y, b.Max.X-(track.Max.X+8), b.Dy())
+		lb := paintengine2d.XYWH(track.Max.X+l.S(8), b.Min.Y, b.Max.X-(track.Max.X+l.S(8)), b.Dy())
 		l.drawFittedText(ctx, f, label, lb, p.Text, AlignStart, 0)
 	}
 }
 
-func (l *Classic) DrawAccordionHeader(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, title string, expanded bool) {
+func (l *Classic) baseDrawAccordionHeader(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, title string, expanded bool) {
 	p := l.palette
 	l.paintBezel(ctx, b, p.SurfaceAlt, p.Divider, roleBar, StateNone)
 	if st.Pressed() || (st.Hovered() && !st.Disabled()) {
@@ -1408,22 +1534,21 @@ func (l *Classic) DrawAccordionHeader(ctx *paintengine2d.Context, b paintengine2
 	}
 }
 
-func (l *Classic) DrawSeparator(ctx *paintengine2d.Context, b paintengine2d.Rect, vertical bool) {
+func (l *Classic) baseDrawSeparator(ctx *paintengine2d.Context, b paintengine2d.Rect, vertical bool) {
 	p := l.palette
 	if vertical {
 		x := (b.Min.X + b.Max.X) * 0.5
-		ctx.DrawRect(paintengine2d.XYWH(x, b.Min.Y+4, 1, b.Dy()-8), paintengine2d.Fill(p.Divider))
+		ctx.DrawRect(paintengine2d.XYWH(x, b.Min.Y+l.S(4), 1, b.Dy()-l.S(8)), paintengine2d.Fill(p.Divider))
 		return
 	}
 	y := (b.Min.Y + b.Max.Y) * 0.5
 	ctx.DrawRect(paintengine2d.XYWH(b.Min.X, y, b.Dx(), 1), paintengine2d.Fill(p.Divider))
 }
 
-func (l *Classic) DrawTooltip(ctx *paintengine2d.Context, b paintengine2d.Rect, text string) {
+func (l *Classic) baseDrawTooltip(ctx *paintengine2d.Context, b paintengine2d.Rect, text string) {
 	p := l.palette
 	m := l.metrics
 	r := m.RadiusSmall
-	ctx.DrawRoundRect(b.Translate(paintengine2d.Pt(1.5, 2)), r, r, paintengine2d.Fill(p.Shadow))
 	ctx.DrawRoundRect(b, r, r, paintengine2d.Fill(p.SurfaceAlt))
 	ctx.DrawRoundRect(b.Inset(0.5), r, r, paintengine2d.StrokePaint(p.Border, m.Border))
 	pad := m.TooltipPad
@@ -1458,26 +1583,23 @@ func (l *Classic) drawTextUnderline(ctx *paintengine2d.Context, f *Font, text st
 		x1 = x0 + 6
 	}
 	y := origin.Y + f.Height() - 2
-	ctx.DrawRect(paintengine2d.XYWH(x0, y, x1-x0, 1.2), paintengine2d.Fill(col))
-}
-
-func (l *Classic) drawCentered(ctx *paintengine2d.Context, f *Font, text string, b paintengine2d.Rect) {
-	if f == nil || text == "" {
-		return
-	}
-	col := f.Color
-	if col == (paintengine2d.Color{}) {
-		col = l.palette.Text
-	}
-	l.drawFittedText(ctx, f, text, b, col, AlignCenter, 8)
+	ctx.DrawRect(paintengine2d.XYWH(x0, y, x1-x0, max(1.2, l.S(1.2))), paintengine2d.Fill(col))
 }
 
 func (l *Classic) drawFittedText(ctx *paintengine2d.Context, f *Font, text string, b paintengine2d.Rect, col paintengine2d.Color, align Align, pad float32) {
 	if f == nil || text == "" || b.Empty() {
 		return
 	}
+	th := f.Height()
+	clip := b
+	if th > b.Dy() {
+		// Shorter than a line: centre anyway and overflow evenly, so a
+		// tight era metric trims line gap rather than the descenders.
+		grow := (th - b.Dy()) * 0.5
+		clip = paintengine2d.Rect{Min: paintengine2d.Pt(b.Min.X, b.Min.Y-grow), Max: paintengine2d.Pt(b.Max.X, b.Max.Y+grow)}
+	}
 	ctx.Save()
-	ctx.ClipRect(b)
+	ctx.ClipRect(clip)
 	maxW := b.Dx() - pad
 	if maxW < 4 {
 		maxW = 4
@@ -1487,7 +1609,6 @@ func (l *Classic) drawFittedText(ctx *paintengine2d.Context, f *Font, text strin
 		show = f.Fit(show, maxW)
 	}
 	tw := f.Advance(show)
-	th := f.Height()
 	x := b.Min.X
 	switch align {
 	case AlignCenter:
@@ -1496,9 +1617,6 @@ func (l *Classic) drawFittedText(ctx *paintengine2d.Context, f *Font, text strin
 		x = b.Max.X - tw - 2
 	}
 	y := b.Min.Y + (b.Dy()-th)*0.5
-	if y < b.Min.Y {
-		y = b.Min.Y
-	}
 	f.Draw(ctx, show, paintengine2d.Pt(x, y), col)
 	ctx.Restore()
 }
@@ -1511,9 +1629,67 @@ func (l *Classic) fontFor(col paintengine2d.Color) *Font {
 		return l.onAcc
 	}
 	if col != (paintengine2d.Color{}) && !nearColor(col, l.palette.Text) {
-		return BakeFont(l.metrics.FontSize, col)
+		return BakeFamily(l.UIFamily(), WeightRegular, l.metrics.FontSize, col)
 	}
 	return l.body
+}
+
+type fieldTextKey struct{}
+
+// fieldText is the text colour on the field / view background: the window
+// text when it reads there, else black or white (NeXT has dark chrome and
+// white fields; its lists and text fields drew white on white).
+func (l *Classic) fieldText() paintengine2d.Color {
+	return l.Memo(fieldTextKey{}, func() any {
+		if colorUnset(l.palette.Field) {
+			return l.palette.Text
+		}
+		return ReadableOn(l.palette.Field, 4.5, l.palette.Text)
+	}).(paintengine2d.Color)
+}
+
+// selectedText is the colour of text over a text selection of colour sel:
+// the pack's "selectionText" extra when it pins one (Windows' HighlightText
+// is white even on its light blues), else the most readable text colour.
+func (l *Classic) selectedText(sel paintengine2d.Color) paintengine2d.Color {
+	if c, ok := l.tokens.Extra["selectionText"]; ok {
+		return c
+	}
+	bg := sel
+	if colorUnset(bg) {
+		return l.fieldText()
+	}
+	if bg.A < 1 {
+		base := l.palette.Field
+		if colorUnset(base) {
+			base = l.palette.Background
+		}
+		bg = Mix(base, sel, sel.A)
+	}
+	return ReadableOn(bg, 4.5, l.fieldText(), l.palette.TextOnAccent)
+}
+
+// caretColor is the text caret: the pack's "caret" extra, else the text
+// colour (the old accent caret vanished on dark fields — navy on grey).
+func (l *Classic) caretColor() paintengine2d.Color {
+	return l.X("caret", l.fieldText())
+}
+
+// labelFocusRect is the focus rectangle around a check / radio label (the
+// Windows convention), kept inside the control rect.
+func labelFocusRect(f *Font, label string, lb, b paintengine2d.Rect) paintengine2d.Rect {
+	w := lb.Dx()
+	if f != nil {
+		if tw := f.Advance(label); tw+6 < w {
+			w = tw + 6
+		}
+	}
+	h := b.Dy() - 2
+	if f != nil && f.Height()+6 < h {
+		h = f.Height() + 6
+	}
+	r := paintengine2d.XYWH(lb.Min.X-3, b.Min.Y+(b.Dy()-h)*0.5, w, h)
+	return r.Intersect(b)
 }
 
 func nearColor(a, b paintengine2d.Color) bool {
@@ -1531,9 +1707,201 @@ func clamp1(v float32) float32 {
 	return v
 }
 
-func btoi(v bool) int {
-	if v {
-		return 1
+// ---- LookAndFeel: every control is painted by the look's engine ----------
+
+func (l *Classic) DrawPanel(ctx *paintengine2d.Context, b paintengine2d.Rect, raised bool) {
+	l.eng().DrawPanel(l, ctx, b, raised)
+}
+
+func (l *Classic) DrawButton(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string) {
+	l.eng().DrawButton(l, ctx, b, st, label)
+}
+
+func (l *Classic) DrawLabel(ctx *paintengine2d.Context, b paintengine2d.Rect, text string, col paintengine2d.Color, align Align) {
+	l.eng().DrawLabel(l, ctx, b, text, col, align)
+}
+
+func (l *Classic) DrawCheckbox(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, checked bool, label string) {
+	l.eng().DrawCheckbox(l, ctx, b, st, checked, label)
+}
+
+func (l *Classic) DrawSlider(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, t float32) {
+	l.eng().DrawSlider(l, ctx, b, st, t)
+}
+
+func (l *Classic) DrawTextField(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, text, placeholder string, caret, selA, selB int, blink bool, scrollX float32, face *Font) {
+	if st.Frameless() {
+		// Inside a frame its parent drew (a spin box): the text alone, as
+		// the engine's own fields type it when it paints their text.
+		if e, ok := l.eng().(FramelessTextEngine); ok {
+			e.DrawFramelessText(l, ctx, b, st, text, placeholder, caret, selA, selB, blink, scrollX, face)
+			return
+		}
+		l.baseDrawTextField(ctx, b, st, text, placeholder, caret, selA, selB, blink, scrollX, face)
+		return
 	}
-	return 0
+	l.eng().DrawTextField(l, ctx, b, st, text, placeholder, caret, selA, selB, blink, scrollX, face)
+}
+
+func (l *Classic) DrawScrollBar(ctx *paintengine2d.Context, track, thumb paintengine2d.Rect, st ControlState) {
+	l.eng().DrawScrollBar(l, ctx, track, thumb, st)
+}
+
+func (l *Classic) DrawFocusRing(ctx *paintengine2d.Context, b paintengine2d.Rect) {
+	l.eng().DrawFocusRing(l, ctx, b)
+}
+
+func (l *Classic) DrawSplitter(ctx *paintengine2d.Context, b paintengine2d.Rect, vertical bool, st ControlState) {
+	l.eng().DrawSplitter(l, ctx, b, vertical, st)
+}
+
+func (l *Classic) DrawListRow(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string) {
+	l.eng().DrawListRow(l, ctx, b, st, label)
+}
+
+func (l *Classic) DrawOverlay(ctx *paintengine2d.Context, b paintengine2d.Rect) {
+	l.eng().DrawOverlay(l, ctx, b)
+}
+
+func (l *Classic) DrawMenuBar(ctx *paintengine2d.Context, b paintengine2d.Rect) {
+	l.eng().DrawMenuBar(l, ctx, b)
+}
+
+func (l *Classic) DrawMenuTitle(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, underline int, open bool) {
+	l.eng().DrawMenuTitle(l, ctx, b, st, label, underline, open)
+}
+
+func (l *Classic) DrawMenuFrame(ctx *paintengine2d.Context, b paintengine2d.Rect) {
+	l.eng().DrawMenuFrame(l, ctx, b)
+}
+
+func (l *Classic) DrawMenuItem(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, row MenuRow) {
+	l.eng().DrawMenuItem(l, ctx, b, st, row)
+}
+
+func (l *Classic) DrawTabBar(ctx *paintengine2d.Context, b paintengine2d.Rect) {
+	l.eng().DrawTabBar(l, ctx, b)
+}
+
+func (l *Classic) DrawTab(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, selected bool) {
+	l.eng().DrawTab(l, ctx, b, st, label, selected)
+}
+
+func (l *Classic) DrawTreeRow(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, expanded, leaf bool, depth int, label string, bold bool) {
+	l.eng().DrawTreeRow(l, ctx, b, st, expanded, leaf, depth, label, bold)
+}
+
+func (l *Classic) DrawStatusBar(ctx *paintengine2d.Context, b paintengine2d.Rect, parts []string) {
+	l.eng().DrawStatusBar(l, ctx, b, parts)
+}
+
+func (l *Classic) DrawToolBar(ctx *paintengine2d.Context, b paintengine2d.Rect) {
+	l.eng().DrawToolBar(l, ctx, b)
+}
+
+func (l *Classic) DrawToolButton(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, icon ToolIcon) {
+	l.eng().DrawToolButton(l, ctx, b, st, label, icon)
+}
+
+func (l *Classic) DrawProgressBar(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, t float32, indeterminate bool, phase float32) {
+	l.eng().DrawProgressBar(l, ctx, b, st, t, indeterminate, phase)
+}
+
+func (l *Classic) DrawRadio(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, selected bool, label string) {
+	l.eng().DrawRadio(l, ctx, b, st, selected, label)
+}
+
+func (l *Classic) DrawComboBox(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, text string, open bool) {
+	l.eng().DrawComboBox(l, ctx, b, st, text, open)
+}
+
+func (l *Classic) DrawTitleBar(ctx *paintengine2d.Context, b paintengine2d.Rect, title, subtitle string) {
+	l.eng().DrawTitleBar(l, ctx, b, title, subtitle)
+}
+
+func (l *Classic) DrawMessageIcon(ctx *paintengine2d.Context, b paintengine2d.Rect, icon ToolIcon) {
+	l.eng().DrawMessageIcon(l, ctx, b, icon)
+}
+
+func (l *Classic) DrawTableHeader(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, sorted, asc bool) {
+	l.eng().DrawTableHeader(l, ctx, b, st, label, sorted, asc)
+}
+
+func (l *Classic) DrawTableCell(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, align Align, face *Font) {
+	l.eng().DrawTableCell(l, ctx, b, st, label, align, face)
+}
+
+func (l *Classic) DrawSpinner(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, upHover, downHover, upPress, downPress bool) {
+	l.eng().DrawSpinner(l, ctx, b, st, upHover, downHover, upPress, downPress)
+}
+
+func (l *Classic) DrawTooltip(ctx *paintengine2d.Context, b paintengine2d.Rect, text string) {
+	l.eng().DrawTooltip(l, ctx, b, text)
+}
+
+func (l *Classic) DrawTextArea(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, lines []TextLine, caret, selA, selB int, blink bool, scrollX, scrollY float32, placeholder string, face *Font) {
+	l.eng().DrawTextArea(l, ctx, b, st, lines, caret, selA, selB, blink, scrollX, scrollY, placeholder, face)
+}
+
+func (l *Classic) DrawSwitch(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, on bool, label string) {
+	l.eng().DrawSwitch(l, ctx, b, st, on, label)
+}
+
+func (l *Classic) DrawAccordionHeader(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, title string, expanded bool) {
+	l.eng().DrawAccordionHeader(l, ctx, b, st, title, expanded)
+}
+
+func (l *Classic) DrawSeparator(ctx *paintengine2d.Context, b paintengine2d.Rect, vertical bool) {
+	l.eng().DrawSeparator(l, ctx, b, vertical)
+}
+
+// baseCheckIndicator is the stock checkbox well + tick.
+func (l *Classic) baseCheckIndicator(ctx *paintengine2d.Context, box paintengine2d.Rect, st ControlState, checked bool) {
+	side := box.Dx()
+	if checked {
+		st |= StateChecked
+	}
+	l.paintFace(ctx, box, roleCheck, st)
+	if !checked {
+		return
+	}
+	chk := paintengine2d.NewPath()
+	chk.MoveTo(box.Min.X+4, box.Min.Y+side*0.52)
+	chk.LineTo(box.Min.X+side*0.42, box.Max.Y-4.5)
+	chk.LineTo(box.Max.X-3.5, box.Min.Y+4)
+	cap, join := paintengine2d.CapRound, paintengine2d.JoinRound
+	if l.square() {
+		cap, join = paintengine2d.CapSquare, paintengine2d.JoinMiter
+	}
+	ctx.DrawPath(chk, paintengine2d.Paint{
+		Color:  l.palette.TextOnAccent,
+		Style:  paintengine2d.StyleStroke,
+		Stroke: paintengine2d.Stroke{Width: 2.1, Cap: cap, Join: join, MiterLimit: 4},
+	})
+}
+
+// baseRadioIndicator is the stock round radio well + dot.
+func (l *Classic) baseRadioIndicator(ctx *paintengine2d.Context, box paintengine2d.Rect, st ControlState, selected bool) {
+	p := l.palette
+	side := box.Dx()
+	if selected {
+		st |= StateChecked
+	}
+	cx := (box.Min.X + box.Max.X) * 0.5
+	cy := (box.Min.Y + box.Max.Y) * 0.5
+	fill, border, _ := l.faceColors(roleCheck, st)
+	ctx.DrawCircle(paintengine2d.Pt(cx, cy), side*0.5, paintengine2d.Fill(fill))
+	if l.tokensOr().Bevel == BevelClassic3D {
+		// Inset well: light on bottom-right, dark on top-left.
+		ctx.DrawCircle(paintengine2d.Pt(cx, cy), side*0.5-0.5, paintengine2d.StrokePaint(p.BevelDark, 1))
+		ctx.DrawCircle(paintengine2d.Pt(cx+0.6, cy+0.6), side*0.5-1.4, paintengine2d.StrokePaint(p.BevelLight, 1))
+	} else {
+		if colorUnset(border) {
+			border = p.FieldBorder
+		}
+		ctx.DrawCircle(paintengine2d.Pt(cx, cy), side*0.5-0.5, paintengine2d.StrokePaint(border, 1))
+	}
+	if selected {
+		ctx.DrawCircle(paintengine2d.Pt(cx, cy), side*0.18+1.2, paintengine2d.Fill(p.TextOnAccent))
+	}
 }

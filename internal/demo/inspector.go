@@ -122,6 +122,7 @@ func InspectorApp(win *app.Window) widget.Component {
 		mark("UI scale")
 		refresh()
 	})
+	scale.SetAccessibleName("Scale")
 	font := widgets.NewNumberField(10, 28, 16, 1, func(v float64) {
 		setPref(prefs, "font.size", fmt.Sprintf("%d", int(v)))
 		mark("Font size")
@@ -130,14 +131,14 @@ func InspectorApp(win *app.Window) widget.Component {
 	font.Tip = "UI font size"
 
 	appearance := widgets.NewExpander("Appearance", true, widgets.NewColumn(
-		widgets.NewLabel("Theme"),
+		widgets.NewLabel("Theme").For(theme),
 		theme,
 		dark,
 		compact,
 		scaleLbl,
 		scale,
 		widgets.NewSeparator(),
-		widgets.NewLabel("Font size"),
+		widgets.NewLabel("Font size").For(font),
 		font,
 	).WithGap(6))
 	session := widgets.NewExpander("Session", false, widgets.NewColumn(
@@ -189,7 +190,7 @@ func InspectorApp(win *app.Window) widget.Component {
 		widgets.NewSeparator(),
 		widgets.NewButton("License…", func() {
 			widgets.Info(win.Content(), "License",
-				"MIT. Paints only with paintengine2d. UI: Titillium Web.", nil)
+				"The Free License. Paints only with paintengine2d. UI: Titillium Web.", nil)
 		}),
 		widgets.NewSpacer(),
 	).WithGap(10).WithPad(16)

@@ -46,9 +46,14 @@ type ToolBar struct {
 	press  int
 	focus  int
 	keyNav bool
+	fades  []stateFade // one per tool: hover cross-fades
 }
 
 // NewToolBar constructs a toolbar.
+// FocusOnClick is false: a tool button runs its command and leaves focus
+// with the document or field (Win32 / Qt toolbars).
+func (t *ToolBar) FocusOnClick() bool { return false }
+
 func NewToolBar(items ...*ToolItem) *ToolBar {
 	t := &ToolBar{items: items, hover: -1, press: -1, focus: firstTool(items)}
 	t.Init(t)
@@ -130,7 +135,7 @@ func (t *ToolBar) barH() float32 {
 func (t *ToolBar) toolBtnW(h float32) float32 {
 	btn := t.Look().Metrics().ToolBtn
 	if btn <= 0 {
-		btn = h - 6
+		btn = h - style.Dip(t.Look(), 6)
 		if btn < 8 {
 			btn = 8
 		}
@@ -154,7 +159,7 @@ func (t *ToolBar) itemBoxW(it *ToolItem, btn float32) float32 {
 		return btn
 	}
 	textW := t.Look().Font().InkWidth(it.Text)
-	if adv := t.Look().Font().Advance(it.Text); adv > textW {
+	if adv := style.ControlFontOf(t.Look(), style.RoleTool).Advance(it.Text); adv > textW {
 		textW = adv
 	}
 	w := pad*2 + textW
@@ -168,7 +173,8 @@ func (t *ToolBar) itemBoxW(it *ToolItem, btn float32) float32 {
 // not expand to MaxW: a Row/Flex parent decides growth via Flex weights.
 func (t *ToolBar) contentW() float32 {
 	btn := t.toolBtnW(t.barH())
-	x := float32(6)
+	in := style.ToolBarInsetsOf(t.Look())
+	x := in.Left
 	for _, it := range t.items {
 		if it == nil || it.Sep {
 			x += 8 + style.ToolItemGap
@@ -176,7 +182,7 @@ func (t *ToolBar) contentW() float32 {
 		}
 		x += t.itemBoxW(it, btn) + style.ToolItemGap
 	}
-	return x + 6
+	return x + in.Right
 }
 
 func (t *ToolBar) Measure(c layout.Constraints) paintengine2d.Point {
@@ -188,7 +194,7 @@ func (t *ToolBar) Arrange(r paintengine2d.Rect) { t.SetBounds(r) }
 func (t *ToolBar) itemRects() []paintengine2d.Rect {
 	h := t.LocalBounds().Dy()
 	btn := t.toolBtnW(h)
-	x := float32(6)
+	x := style.ToolBarInsetsOf(t.Look()).Left
 	y := (h - btn) * 0.5
 	if y < 2 {
 		y = 2
@@ -221,6 +227,9 @@ func (t *ToolBar) Paint(ctx *paintengine2d.Context) {
 	lk := t.Look()
 	lk.DrawToolBar(ctx, t.LocalBounds())
 	rects := t.itemRects()
+	if len(t.fades) != len(t.items) {
+		t.fades = make([]stateFade, len(t.items))
+	}
 	for i, it := range t.items {
 		if it == nil {
 			continue
@@ -231,7 +240,10 @@ func (t *ToolBar) Paint(ctx *paintengine2d.Context) {
 			ctx.DrawRect(paintengine2d.XYWH(x, b.Min.Y, 1, b.Dy()), paintengine2d.Fill(lk.Palette().Divider))
 			continue
 		}
-		st := t.State()
+		// The bar's own hover/press cover the whole strip; each tool takes
+		// them only from the index under the pointer. Tools in a bar are
+		// auto-raise: flat until the pointer is over them.
+		st := t.State()&^(style.StateHovered|style.StatePressed) | style.StateAutoRaise
 		if i != t.focus || !t.keyNav {
 			st &^= style.StateFocused
 		}
@@ -250,7 +262,10 @@ func (t *ToolBar) Paint(ctx *paintengine2d.Context) {
 		if it.Disabled {
 			st |= style.StateDisabled
 		}
-		lk.DrawToolButton(ctx, rects[i], st, it.Text, it.Icon)
+		r := rects[i]
+		t.fades[i].paint(t, ctx, r, st, func(ctx *paintengine2d.Context, st style.ControlState) {
+			lk.DrawToolButton(ctx, r, st, it.Text, it.Icon)
+		})
 	}
 }
 

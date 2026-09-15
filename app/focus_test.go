@@ -233,3 +233,64 @@ func TestTooltipStaysDismissed(t *testing.T) {
 		})
 	}
 }
+
+// The window tracks the Alt key for mnemonic underlines; losing focus
+// (Alt+Tab) forgets it.
+func TestWindowTracksAlt(t *testing.T) {
+	a := New(Options{Look: style.DarkLook(), Headless: true, Scale: 1})
+	w, err := a.NewWindow(platform.WindowOptions{Width: 200, Height: 120, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+	w.SetContent(widgets.NewLabel("x"))
+	w.dispatch(platform.Event{Kind: platform.EventKeyDown, Key: platform.KeyAlt, Mods: platform.ModAlt})
+	if !w.AltHeld() {
+		t.Fatal("Alt down")
+	}
+	w.dispatch(platform.Event{Kind: platform.EventKeyUp, Key: platform.KeyAlt})
+	if w.AltHeld() {
+		t.Fatal("Alt up")
+	}
+	w.dispatch(platform.Event{Kind: platform.EventKeyDown, Key: platform.KeyAlt, Mods: platform.ModAlt})
+	w.dispatch(platform.Event{Kind: platform.EventFocusOut})
+	if w.AltHeld() {
+		t.Fatal("focus out forgets Alt")
+	}
+}
+
+// In a look that underlines mnemonics only while Alt is held (XP), the
+// frame after Alt must redraw them: a full present alone replayed the
+// retained menu bar, so no underline showed on a live compositor.
+func TestAltRedrawsMnemonicUnderlines(t *testing.T) {
+	p, ok := style.LoadTheme("luna")
+	if !ok || style.LookHint(p.Look(), style.HintMnemonics) != style.MnemonicsOnAlt {
+		t.Fatal("luna underlines mnemonics on Alt")
+	}
+	a := New(Options{Look: p.Look(), Headless: true, Scale: 1})
+	w, err := a.NewWindow(platform.WindowOptions{Width: 300, Height: 80, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+	w.SetContent(widgets.NewMenuBar(
+		widgets.NewMenu("&File", widgets.Item("&Open", nil)),
+		widgets.NewMenu("&Edit", widgets.Item("&Copy", nil)),
+	))
+	w.frame()
+	idle := w.surf.Buffer().Clone()
+	w.dispatch(platform.Event{Kind: platform.EventKeyDown, Key: platform.KeyAlt, Mods: platform.ModAlt})
+	w.frame()
+	held := w.surf.Buffer().Clone()
+	if diffPixels(t, idle, held) == 0 {
+		t.Fatal("holding Alt left the menu bar without its underlines")
+	}
+	if n := diffPixels(t, held, fullRepaint(w)); n != 0 {
+		t.Fatalf("the frame with Alt held differs from a full repaint in %d pixels", n)
+	}
+	w.dispatch(platform.Event{Kind: platform.EventKeyUp, Key: platform.KeyAlt})
+	w.frame()
+	if n := diffPixels(t, idle, w.surf.Buffer().Clone()); n != 0 {
+		t.Fatalf("releasing Alt left %d pixels changed", n)
+	}
+}

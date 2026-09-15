@@ -77,7 +77,7 @@ static Window ui_create(Display* d, int x, int y, int w, int h, const char* titl
 	swa.colormap = DefaultColormap(d, s);
 	swa.override_redirect = popup ? True : False;
 	swa.event_mask = ExposureMask|KeyPressMask|KeyReleaseMask|ButtonPressMask|ButtonReleaseMask|
-		PointerMotionMask|StructureNotifyMask|FocusChangeMask|PropertyChangeMask;
+		PointerMotionMask|LeaveWindowMask|StructureNotifyMask|FocusChangeMask|PropertyChangeMask;
 	unsigned long mask = CWBackPixel|CWBorderPixel|CWBitGravity|CWColormap|CWEventMask;
 	if (popup) {
 		mask |= CWOverrideRedirect;
@@ -184,6 +184,7 @@ static unsigned long ui_green_mask(Display* d) { return DefaultVisual(d, Default
 static unsigned long ui_blue_mask(Display* d) { return DefaultVisual(d, DefaultScreen(d))->blue_mask; }
 
 static int ui_event_type(XEvent* e) { return e->type; }
+static int ui_cross_mode(XEvent* e) { return e->xcrossing.mode; }
 static Window ui_event_window(XEvent* e) { return e->xany.window; }
 
 static int ui_expose_x(XEvent* e) { return e->xexpose.x; }
@@ -794,6 +795,7 @@ type x11Conn struct {
 }
 
 type x11Surface struct {
+	soft       softDevice // software devices of the buffers (no GPU)
 	conn       *x11Conn
 	win        C.Window
 	gc         C.GC
@@ -1419,25 +1421,14 @@ func (s *x11Surface) translate(xe *C.XEvent) []Event {
 		btn := int(C.ui_btn(xe))
 		x, y := float32(C.ui_btn_x(xe)), float32(C.ui_btn_y(xe))
 		mods := xmods(uint(C.ui_btn_state(xe)))
-		kind := EventMouseDown
-		if C.ui_event_type(xe) == C.ButtonRelease {
-			kind = EventMouseUp
+		return x11ButtonEvents(btn, C.ui_event_type(xe) == C.ButtonRelease, paintengine2d.Pt(x, y), mods)
+	case C.LeaveNotify:
+		// Grab and ungrab crossings (menus, the implicit button grab
+		// ending) are not the pointer leaving the window.
+		if C.ui_cross_mode(xe) != C.NotifyNormal {
+			return nil
 		}
-		if btn == 4 || btn == 5 || btn == 6 || btn == 7 {
-			ev := Event{Kind: EventScroll, Pos: paintengine2d.Pt(x, y), Mods: mods}
-			switch btn {
-			case 4:
-				ev.Scroll = paintengine2d.Pt(0, -48)
-			case 5:
-				ev.Scroll = paintengine2d.Pt(0, 48)
-			case 6:
-				ev.Scroll = paintengine2d.Pt(-48, 0)
-			case 7:
-				ev.Scroll = paintengine2d.Pt(48, 0)
-			}
-			return []Event{ev}
-		}
-		return []Event{{Kind: kind, Pos: paintengine2d.Pt(x, y), Button: xbutton(btn), Mods: mods}}
+		return []Event{{Kind: EventPointerLeave}}
 	case C.MotionNotify:
 		return []Event{{
 			Kind: EventMouseMove,
@@ -1542,6 +1533,34 @@ func (s *x11Surface) Close() error {
 		s.conn.release()
 	}
 	return nil
+}
+
+// x11ButtonEvents maps a core ButtonPress / ButtonRelease. Buttons 4–7 are
+// wheel steps: X sends a press and a release for every notch, and only the
+// press may scroll (the release used to scroll a second time).
+func x11ButtonEvents(btn int, release bool, pos paintengine2d.Point, mods Modifiers) []Event {
+	if btn >= 4 && btn <= 7 {
+		if release {
+			return nil
+		}
+		ev := Event{Kind: EventScroll, Pos: pos, Mods: mods}
+		switch btn {
+		case 4:
+			ev.Scroll = paintengine2d.Pt(0, -48)
+		case 5:
+			ev.Scroll = paintengine2d.Pt(0, 48)
+		case 6:
+			ev.Scroll = paintengine2d.Pt(-48, 0)
+		case 7:
+			ev.Scroll = paintengine2d.Pt(48, 0)
+		}
+		return []Event{ev}
+	}
+	kind := EventMouseDown
+	if release {
+		kind = EventMouseUp
+	}
+	return []Event{{Kind: kind, Pos: pos, Button: xbutton(btn), Mods: mods}}
 }
 
 func xbutton(b int) MouseButton {
@@ -1691,6 +1710,10 @@ func xkey(ks C.KeySym) Key {
 		return KeyF11
 	case C.XK_F12:
 		return KeyF12
+	case C.XK_Menu:
+		return KeyMenu
+	case C.XK_Alt_L, C.XK_Alt_R, C.XK_Meta_L, C.XK_Meta_R:
+		return KeyAlt
 	}
 	return KeyUnknown
 }
@@ -2203,4 +2226,13 @@ func (s *x11Surface) SetIMECursor(x, y, w, h int) {
 	x11Mu.Lock()
 	C.ui_set_spot(s.ic, C.int(x), C.int(spotY))
 	x11Mu.Unlock()
+}
+
+// PortalParent is the window's id for the desktop portal ("x11:<hex id>"),
+// so the desktop's dialogs open as its children.
+func (s *x11Surface) PortalParent() string {
+	if s == nil || s.win == 0 {
+		return ""
+	}
+	return fmt.Sprintf("x11:%x", uint64(s.win))
 }

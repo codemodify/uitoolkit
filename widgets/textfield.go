@@ -14,15 +14,18 @@ import (
 // feeds preedit and commit through IMETarget.
 type TextField struct {
 	widget.Base
-	Text         string
-	Placeholder  string
-	OnChange     func(string)
-	OnSubmit     func(string)
-	OnEscape     func()
-	OnFocusLost  func()
-	Accept       func(string) bool
-	Mono         bool
-	Password     bool // paint bullets; Text stays the real value
+	Text        string
+	Placeholder string
+	OnChange    func(string)
+	OnSubmit    func(string)
+	OnEscape    func()
+	OnFocusLost func()
+	Accept      func(string) bool
+	Mono        bool
+	Password    bool // paint bullets; Text stays the real value
+	// Frameless paints the text alone: the field sits inside a frame its
+	// parent drew (a spin box's field shares its frame with the buttons).
+	Frameless    bool
 	caret        int
 	selA, selB   int
 	blinkOn      bool
@@ -103,7 +106,7 @@ func (t *TextField) SetCaretBlink(on bool) { t.blinkOn = on }
 
 func (t *TextField) Measure(c layout.Constraints) paintengine2d.Point {
 	h := style.FieldHeight(t.Look().Metrics())
-	return c.Constrain(paintengine2d.Pt(180, h))
+	return c.Constrain(paintengine2d.Pt(style.Dip(t.Look(), 180), h))
 }
 
 func (t *TextField) Arrange(r paintengine2d.Rect) { t.SetBounds(r) }
@@ -130,7 +133,11 @@ func (t *TextField) blink() bool {
 
 func (t *TextField) Paint(ctx *paintengine2d.Context) {
 	text, caret, selA, selB := t.visual()
-	t.Look().DrawTextField(ctx, t.LocalBounds(), t.State(), text, t.Placeholder, caret, selA, selB, t.blink(), t.scrollX, t.font())
+	st := t.State()
+	if t.Frameless {
+		st |= style.StateFrameless
+	}
+	t.Look().DrawTextField(ctx, t.LocalBounds(), st, text, t.Placeholder, caret, selA, selB, t.blink(), t.scrollX, t.font())
 	if t.preedit != "" {
 		drawPreeditBar(ctx, t.Look(), t.LocalBounds(), t.fieldPad(), text, selA, selB, t.scrollX, false, t.font())
 	}
@@ -174,7 +181,6 @@ func (t *TextField) IMEPreedit(s string, caret int) {
 	if !t.Enabled() {
 		return
 	}
-	t.preedit = s
 	n := runeCount(s)
 	if caret < 0 {
 		caret = n
@@ -182,6 +188,10 @@ func (t *TextField) IMEPreedit(s string, caret int) {
 	if caret > n {
 		caret = n
 	}
+	if s == t.preedit && caret == t.preeditCaret {
+		return // nothing changed: no repaint (IME done storms)
+	}
+	t.preedit = s
 	t.preeditCaret = caret
 	t.ensureCaretVisible()
 	t.Invalidate()

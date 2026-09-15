@@ -10,6 +10,7 @@ import (
 // Offscreen is a pixmap surface with no OS window. Used for tests,
 // screenshots, and Application.Headless.
 type Offscreen struct {
+	soft   softDevice // software devices of the buffers (no GPU)
 	title  string
 	img    *paintengine2d.Image
 	closed bool
@@ -18,6 +19,9 @@ type Offscreen struct {
 	cursor Cursor
 	wake   chan struct{}
 	wakes  atomic.Int32
+	// drop is a simulated drop's data by type (SimulateDrop).
+	drop      map[string][]byte
+	dropTaken *bool
 }
 
 // NewOffscreen allocates a CPU pixmap of the requested size.
@@ -64,7 +68,7 @@ func (o *Offscreen) PaintDevice() paintengine2d.Device {
 	if o == nil || o.img == nil {
 		return nil
 	}
-	return paintengine2d.NewCPUDevice(o.img)
+	return o.soft.of(o.img)
 }
 
 func (o *Offscreen) UsesGPU() bool { return false }
