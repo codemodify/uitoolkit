@@ -15,8 +15,13 @@ import "github.com/codemodify/paintengine2d"
 //   - Check boxes are 13-pixel squares crossed corner to corner; radio
 //     buttons 13-pixel circles with a 7-pixel dot; both thicken their
 //     outline to two pixels while pressed.
-//   - Scroll bars are 17 pixels with black lines: bevelled arrow buttons,
-//     the plain light grey shaft and a square thumb that never changes size.
+//   - Scroll bars are 17 pixels with black lines: arrow buttons and a
+//     square thumb that never changes size on the plain light grey shaft.
+//     They, the drop-down button and the caption's arrows have the small
+//     system buttons' bevel: one white pixel on the top and left, two dark
+//     grey on the bottom and right.
+//   - A drop-down list's button touches its field; an editable combo's
+//     stands eight pixels off its edit box, in a frame of its own.
 //   - Windows and dialogs: the navy caption with its bold white title, the
 //     control-menu box at the left (double-click closed a window — there
 //     was no close button), minimize and maximize arrows at the right, and
@@ -65,7 +70,7 @@ func (win31Engine) DefaultMetrics() ChromeMetrics {
 		MenuItemH: 22, MenuBarH: 22, TabH: 26, RowH: 20,
 		TitleBar: 24, HeaderH: 22, ProgressH: 18, SliderH: 24, Thumb: 11,
 		Scroll: 17, Pad: 10, FieldPad: 3, FocusWidth: 1, Border: 1,
-		ToolBarH: 34, StatusBarH: 22, SpinnerW: 17, SwitchW: 36, SwitchH: 18,
+		ToolBarH: 34, StatusBarH: 23, SpinnerW: 17, SwitchW: 36, SwitchH: 18,
 	}
 }
 
@@ -148,6 +153,36 @@ func w31raised(hi, lo *rpInk, g rpGrid, x, y, w, h int) {
 		n = 1
 	}
 	rpEdge(hi, lo, g, x, y, w, h, n)
+}
+
+// w31small adds the bevel of the small system buttons (scroll arrows and
+// thumb, the drop-down button, the caption's arrows) inside the w × h
+// cells at (x, y): one cell of highlight on the top and left, two of
+// shadow on the bottom and right.
+func w31small(hi, lo *rpInk, g rpGrid, x, y, w, h int) {
+	rpEdge(hi, lo, g, x, y, w, h, 1)
+	if w < 6 || h < 6 {
+		return
+	}
+	lo.cells(g, x+1, y+h-2, w-2, 1)
+	lo.cells(g, x+w-2, y+1, 1, h-3)
+}
+
+// w31comboGap is the air between an editable combo's edit box and its
+// button (CBS_DROPDOWN); a drop-down list's button touches its field.
+const w31comboGap = 8
+
+// w31combo splits a combo box's cells: the button, as wide as a scroll
+// bar with its lines, starts at bx; the field (the edit box, when split)
+// is fw cells wide.
+func w31combo(g rpGrid, editable bool) (bx, fw int, split bool) {
+	bx = g.w - min(g.h, 17)
+	split = editable && bx-w31comboGap >= 12
+	fw = bx
+	if split {
+		fw -= w31comboGap
+	}
+	return bx, fw, split
 }
 
 // button paints a push button's body — outline without corner pixels
@@ -458,7 +493,7 @@ func (e win31Engine) DrawScrollBarParts(l *Classic, ctx *paintengine2d.Context, 
 			lo.cells(fg, 0, 1, 1, fg.h-1)
 			off = 1
 		} else {
-			w31raised(&hi, &lo, fg, 0, 0, fg.w, fg.h)
+			w31small(&hi, &lo, fg, 0, 0, fg.w, fg.h)
 		}
 		m := arrow.turn(a.dir)
 		ox, oy := (fg.w-m.w)/2+off, (fg.h-m.h)/2+off
@@ -487,7 +522,7 @@ func (e win31Engine) DrawScrollBarParts(l *Classic, ctx *paintengine2d.Context, 
 			black.frame(tg, 0, 0, tg.w, tg.h, 1)
 			face := tg.inset(1)
 			ctx.DrawRect(face.rect(), paintengine2d.Fill(c.face))
-			w31raised(&hi, &lo, face, 0, 0, face.w, face.h)
+			w31small(&hi, &lo, face, 0, 0, face.w, face.h)
 		}
 	}
 	etch.fill(ctx, c.hi)
@@ -702,9 +737,7 @@ func (e win31Engine) DrawWindowFrame(l *Classic, ctx *paintengine2d.Context, b p
 		mx := x + w - h
 		black.cells(g, mx-1, y, 1, h)
 		ctx.DrawRect(g.at(mx, y, h, h), paintengine2d.Fill(c.face))
-		rpEdge(&hi, &lo, g, mx, y, h, h, 1)
-		lo.cells(g, mx+1, y+h-2, h-2, 1)
-		lo.cells(g, mx+h-2, y+1, 1, h-3)
+		w31small(&hi, &lo, g, mx, y, h, h)
 		t := w31tri(7, DirUp)
 		t.emit(&glyph, g, mx+(h-t.w)/2, y+(h-t.h)/2)
 		right = mx - 1
@@ -821,6 +854,8 @@ func (e win31Engine) DrawSwitch(l *Classic, ctx *paintengine2d.Context, b painte
 // DrawComboBox is the drop-down list: a black frame round the field and,
 // across a black divider, the bevelled button with its arrow over a bar.
 // A focused list highlights its text in navy with the XOR dots round it.
+// An editable combo (the drop-down combo box) is an edit box with the
+// button standing apart, eight pixels on, in its own frame.
 func (e win31Engine) DrawComboBox(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, text string, open bool) {
 	c := w31colors(l)
 	u := rpU(l)
@@ -828,12 +863,18 @@ func (e win31Engine) DrawComboBox(l *Classic, ctx *paintengine2d.Context, b pain
 	if g.w < 12 || g.h < 8 {
 		return
 	}
-	bw := min(g.h, 17)
-	ctx.DrawRect(g.rect(), paintengine2d.Fill(c.win))
+	bx, fw, split := w31combo(g, st.Editable())
+	bw := g.w - bx
 	var black, hi, lo, glyph rpInk
-	black.frame(g, 0, 0, g.w, g.h, 1)
-	bx := g.w - bw
-	black.cells(g, bx, 1, 1, g.h-2)
+	if split {
+		ctx.DrawRect(g.at(0, 0, fw, g.h), paintengine2d.Fill(c.win))
+		black.frame(g, 0, 0, fw, g.h, 1)
+		black.frame(g, bx, 0, bw, g.h, 1)
+	} else {
+		ctx.DrawRect(g.rect(), paintengine2d.Fill(c.win))
+		black.frame(g, 0, 0, g.w, g.h, 1)
+		black.cells(g, bx, 1, 1, g.h-2)
+	}
 	btn := g.sub(bx+1, 1, bw-2, g.h-2)
 	ctx.DrawRect(btn.rect(), paintengine2d.Fill(c.face))
 	pressed := (open || st.Pressed()) && !st.Disabled()
@@ -843,7 +884,7 @@ func (e win31Engine) DrawComboBox(l *Classic, ctx *paintengine2d.Context, b pain
 		lo.cells(btn, 0, 1, 1, btn.h-1)
 		off = 1
 	} else {
-		w31raised(&hi, &lo, btn, 0, 0, btn.w, btn.h)
+		w31small(&hi, &lo, btn, 0, 0, btn.w, btn.h)
 	}
 	// The glyph: a stem, the 7-5-3-1 triangle, a blank row, a bar.
 	m := rpNewMask(7, 9)
@@ -861,8 +902,12 @@ func (e win31Engine) DrawComboBox(l *Classic, ctx *paintengine2d.Context, b pain
 	}
 	glyph.fill(ctx, gcol)
 	black.fill(ctx, c.frame)
+	if split {
+		// The frameless field inside draws the text.
+		return
+	}
 	// The field, with a white margin.
-	fg := g.sub(2, 2, bx-3, g.h-4)
+	fg := g.sub(2, 2, fw-3, g.h-4)
 	tc := c.text
 	if st.Focused() && !open && !st.Disabled() && !st.Editable() {
 		ctx.DrawRect(fg.rect(), paintengine2d.Fill(c.sel))
@@ -870,6 +915,18 @@ func (e win31Engine) DrawComboBox(l *Classic, ctx *paintengine2d.Context, b pain
 		w31focus(ctx, fg, 0, 0, fg.w, fg.h, c.sel)
 	}
 	c.label(l, ctx, l.BoldFont(), text, fg.at(2, 0, fg.w-3, fg.h), tc, AlignStart, st.Disabled(), c.win)
+}
+
+// ComboTextRect: an editable combo's text fills its edit box, left of the
+// gap and the button; the frameless field keeps its text FieldPad from
+// the box's edge, two pixels clear of the black line.
+func (win31Engine) ComboTextRect(l *Classic, b paintengine2d.Rect) paintengine2d.Rect {
+	g := rpGridOf(b, rpU(l))
+	if g.w < 12 || g.h < 8 {
+		return paintengine2d.Rect{}
+	}
+	_, fw, _ := w31combo(g, true)
+	return g.at(0, 1, fw, g.h-2)
 }
 
 func (c *w31) fieldOpts(l *Classic) rpFieldOpts {
@@ -927,7 +984,7 @@ func (e win31Engine) DrawSpinner(l *Classic, ctx *paintengine2d.Context, b paint
 			lo.cells(fg, 0, 1, 1, fg.h-1)
 			off = 1
 		} else {
-			rpEdge(&hi, &lo, fg, 0, 0, fg.w, fg.h, 1)
+			w31small(&hi, &lo, fg, 0, 0, fg.w, fg.h)
 		}
 		t := w31tri(min(7, fg.w-4), dir)
 		t.emit(&glyph, fg, (fg.w-t.w)/2+off, (fg.h-t.h)/2+off)
