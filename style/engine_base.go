@@ -155,6 +155,8 @@ func (BaseEngine) DrawWindowBackground(l *Classic, ctx *paintengine2d.Context, b
 	ctx.DrawRect(b, paintengine2d.Fill(l.palette.Background))
 }
 
+func (BaseEngine) TabOutset(l *Classic) Insets { return Insets{} }
+
 func (BaseEngine) DrawTabPane(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect) {
 	l.DrawPanel(ctx, b, false)
 }

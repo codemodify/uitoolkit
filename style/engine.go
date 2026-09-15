@@ -80,6 +80,9 @@ type Engine interface {
 	// brushed metal, textures). It must depend only on window coordinates:
 	// partial redraw repaints any sub-rect of it under a clip.
 	DrawWindowBackground(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect)
+	// TabOutset grows the selected tab's rect so it can overlap its
+	// neighbours; it is painted after them. Zero for most looks.
+	TabOutset(l *Classic) Insets
 	// DrawTabPane paints the page under a tab bar (TabView).
 	DrawTabPane(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect)
 	// WindowCloseRect is where DrawWindowFrame put the close button for a
@@ -498,6 +501,23 @@ func DrawScrollBarParts(lk LookAndFeel, ctx *paintengine2d.Context, p ScrollPart
 type GroupBoxLook interface {
 	GroupBoxInsets(hasTitle bool) Insets
 	DrawGroupBox(ctx *paintengine2d.Context, b paintengine2d.Rect, title string, raised bool)
+}
+
+// TabOutsetLook grows the selected tab so it overlaps its neighbours.
+type TabOutsetLook interface {
+	TabOutset() Insets
+}
+
+// TabOutset implements [TabOutsetLook].
+func (l *Classic) TabOutset() Insets { return l.eng().TabOutset(l) }
+
+// TabOutsetOf is the selected-tab outset of any look (zero when the look
+// has none), already at display scale.
+func TabOutsetOf(lk LookAndFeel) Insets {
+	if t, ok := lk.(TabOutsetLook); ok {
+		return t.TabOutset()
+	}
+	return Insets{}
 }
 
 // WindowBackgroundLook paints a window background beyond a flat colour.

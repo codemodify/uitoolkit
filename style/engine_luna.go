@@ -1656,13 +1656,20 @@ func (lunaEngine) DrawTabBar(l *Classic, ctx *paintengine2d.Context, b paintengi
 // DrawTab is tabItem.bmp: rounded top corners, a white-to-beige face and
 // the orange top edge when hot or selected; the selected tab is taller and
 // opens into the pane.
+// TabOutset: XP's selected tab is 2px wider on each side than its slot.
+func (lunaEngine) TabOutset(l *Classic) Insets {
+	return Insets{Left: snap(l.S(2)), Right: snap(l.S(2))}
+}
+
 func (lunaEngine) DrawTab(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, selected bool) {
 	c := lunaColors(l)
 	b = lunaSnap(b)
 	lw := lunaPx(l)
 	t := b
 	if !selected {
-		t = paintengine2d.XYWH(b.Min.X+lw, b.Min.Y+snap(l.S(2)), b.Dx()-2*lw, b.Dy()-snap(l.S(2))-lw)
+		// Unselected tabs touch and sit 2px lower on the pane edge; the
+		// selected one is grown by TabOutset and overlaps them.
+		t = paintengine2d.XYWH(b.Min.X, b.Min.Y+snap(l.S(2)), b.Dx(), b.Dy()-snap(l.S(2))-lw)
 	}
 	if t.Dx() < 6*lw || t.Dy() < 6*lw {
 		return

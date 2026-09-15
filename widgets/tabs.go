@@ -85,8 +85,10 @@ func (t *TabBar) indexAt(x float32) int {
 
 func (t *TabBar) Paint(ctx *paintengine2d.Context) {
 	lk := t.Look()
-	lk.DrawTabBar(ctx, t.LocalBounds())
-	for i, title := range t.Titles {
+	b := t.LocalBounds()
+	lk.DrawTabBar(ctx, b)
+	rects := t.tabRects()
+	state := func(i int) style.ControlState {
 		// The bar's own hover/press describe the whole strip; each tab takes
 		// hover and press only from the index under the pointer.
 		st := t.State() &^ (style.StateHovered | style.StatePressed)
@@ -105,7 +107,20 @@ func (t *TabBar) Paint(ctx *paintengine2d.Context) {
 		if i == len(t.Titles)-1 {
 			st |= style.StateLast
 		}
-		lk.DrawTab(ctx, t.tabRects()[i], st, title, i == t.Selected)
+		return st
+	}
+	for i, title := range t.Titles {
+		if i != t.Selected {
+			lk.DrawTab(ctx, rects[i], state(i), title, false)
+		}
+	}
+	// The selected tab paints last, grown by the look's outset, so it can
+	// overlap its neighbours (Win95, XP, Platinum and Motif tabs do).
+	if i := t.Selected; i >= 0 && i < len(t.Titles) {
+		r := rects[i]
+		out := style.TabOutsetOf(lk)
+		r = paintengine2d.XYWH(r.Min.X-out.Left, r.Min.Y-out.Top, r.Dx()+out.Left+out.Right, r.Dy()+out.Top+out.Bottom).Intersect(b)
+		lk.DrawTab(ctx, r, state(i), t.Titles[i], true)
 	}
 }
 

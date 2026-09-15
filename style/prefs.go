@@ -111,17 +111,31 @@ func resolveAppearance(raw appearanceFileJSON) Appearance {
 // LoadAppearance reads XDG look.json. Missing or invalid files yield defaults.
 // Compound theme ids and a legacy triad both resolve to independent
 // theme / corners / icons fields.
+//
+// UITK_THEME=<pack> overrides the saved theme for this process, like
+// GTK_THEME or QT_STYLE_OVERRIDE (UITK_THEME=win95 ./app); corners, icons
+// and icon size still come from look.json. The override is never written
+// back unless the user saves from Settings.
 func LoadAppearance() Appearance {
-	b, err := os.ReadFile(AppearancePath())
-	if err != nil {
-		return DefaultAppearance()
-	}
 	var raw appearanceFileJSON
-	if json.Unmarshal(b, &raw) != nil {
+	ok := false
+	if b, err := os.ReadFile(AppearancePath()); err == nil && json.Unmarshal(b, &raw) == nil {
+		ok = true
+	} else {
+		raw = appearanceFileJSON{}
+	}
+	if env := strings.TrimSpace(os.Getenv(ThemeEnv)); env != "" {
+		raw.Theme = env
+		ok = true
+	}
+	if !ok {
 		return DefaultAppearance()
 	}
 	return resolveAppearance(raw)
 }
+
+// ThemeEnv names the environment variable that overrides the saved theme.
+const ThemeEnv = "UITK_THEME"
 
 // SaveAppearance writes look.json with theme, corners, icons, and iconSize (mode 0600).
 func SaveAppearance(a Appearance) error {

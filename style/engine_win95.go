@@ -428,6 +428,12 @@ func (e win95Engine) DrawWindowFrame(l *Classic, ctx *paintengine2d.Context, b p
 	}
 }
 
+// TabOutset: the selected tab is 2px wider on each side and overlaps its
+// neighbours.
+func (win95Engine) TabOutset(l *Classic) Insets {
+	return Insets{Left: l.S(2), Right: l.S(2)}
+}
+
 // WindowCloseRect is the bevelled close button at the caption's right end.
 func (win95Engine) WindowCloseRect(l *Classic, b paintengine2d.Rect) paintengine2d.Rect {
 	in := l.S(3)
@@ -516,7 +522,7 @@ func (e win95Engine) DrawComboBox(l *Classic, ctx *paintengine2d.Context, b pain
 	}
 	e.Arrow(l, ctx, g, DirDown, col)
 	// The selected text of a focused drop-list is highlighted navy.
-	tb := paintengine2d.XYWH(in.Min.X+l.S(2), in.Min.Y+l.S(2), btn.Min.X-in.Min.X-l.S(4), in.Dy()-l.S(4))
+	tb := paintengine2d.XYWH(in.Min.X+l.S(1), in.Min.Y+l.S(1), btn.Min.X-in.Min.X-l.S(2), in.Dy()-l.S(2))
 	tc := c.text
 	if st.Disabled() {
 		tc = c.gray
@@ -562,8 +568,9 @@ func (e win95Engine) DrawTab(l *Classic, ctx *paintengine2d.Context, b paintengi
 	c := w95colors(l)
 	t := b
 	if !selected {
-		// Unselected tabs sit 2px lower and narrower than the selected one.
-		t = paintengine2d.XYWH(b.Min.X+l.S(2), b.Min.Y+l.S(2), b.Dx()-l.S(4), b.Dy()-l.S(2))
+		// Unselected tabs sit 2px lower, touching each other; the selected
+		// one is grown by TabOutset and painted over its neighbours.
+		t = paintengine2d.XYWH(b.Min.X, b.Min.Y+l.S(2), b.Dx(), b.Dy()-l.S(2))
 	}
 	ch := l.S(2) // chamfer
 	ctx.DrawRect(paintengine2d.XYWH(t.Min.X+1, t.Min.Y+1, t.Dx()-2, t.Dy()-1), paintengine2d.Fill(c.face))
@@ -577,6 +584,9 @@ func (e win95Engine) DrawTab(l *Classic, ctx *paintengine2d.Context, b paintengi
 	if selected {
 		// Open the page edge under the selected tab.
 		ctx.DrawRect(paintengine2d.XYWH(t.Min.X+1, b.Max.Y-1, t.Dx()-3, 1), paintengine2d.Fill(c.face))
+	} else {
+		// Unselected tabs stand on the page edge.
+		ctx.DrawRect(paintengine2d.XYWH(t.Min.X, b.Max.Y-1, t.Dx(), 1), paintengine2d.Fill(c.hi))
 	}
 	fg := c.text
 	if st.Disabled() {

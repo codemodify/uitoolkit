@@ -204,13 +204,40 @@ func (s *sheet) tabsMenus(x, y float32) {
 	s.heading(x, y, "Tabs")
 	bar := s.r(x, y+22, 540, 32)
 	s.lk.DrawTabBar(s.ctx, bar)
+	// Adjacent tabs as a TabBar lays them out: the selected one (second, so
+	// both neighbours show any overlap) paints last, grown by the outset.
 	tabs := []struct {
 		n   string
 		st  style.ControlState
 		sel bool
-	}{{"Selected", stN, true}, {"Hover", stH, false}, {"Pressed", stP, false}, {"Normal", stN, false}, {"Disabled", stD, false}}
+	}{{"Normal", stN, false}, {"Selected", stN, true}, {"Hover", stH, false}, {"Pressed", stP, false}, {"Disabled", stD, false}}
+	tabRect := func(i int) paintengine2d.Rect {
+		r := s.r(x+float32(i)*100, y+22, 100, 32)
+		if tabs[i].sel {
+			out := style.TabOutsetOf(s.lk)
+			r = paintengine2d.XYWH(r.Min.X-out.Left, r.Min.Y-out.Top, r.Dx()+out.Left+out.Right, r.Dy()+out.Top+out.Bottom)
+		}
+		return r
+	}
+	tabState := func(i int) style.ControlState {
+		st := tabs[i].st
+		if i == 0 {
+			st |= style.StateFirst
+		}
+		if i == len(tabs)-1 {
+			st |= style.StateLast
+		}
+		return st
+	}
 	for i, t := range tabs {
-		s.lk.DrawTab(s.ctx, s.r(x+float32(i)*100, y+22, 96, 32), t.st, t.n, t.sel)
+		if !t.sel {
+			s.lk.DrawTab(s.ctx, tabRect(i), tabState(i), t.n, false)
+		}
+	}
+	for i, t := range tabs {
+		if t.sel {
+			s.lk.DrawTab(s.ctx, tabRect(i), tabState(i), t.n, true)
+		}
 	}
 	s.lk.DrawTab(s.ctx, s.r(x+440, y+60, 96, 32), stF, "Focused", true)
 
