@@ -185,7 +185,7 @@ func (c *Calendar) Paint(ctx *paintengine2d.Context) {
 				bs |= style.StatePressed
 			}
 		}
-		lk.DrawToolButton(ctx, r, bs, "", style.IconNone)
+		lk.DrawToolButton(ctx, r, bs|style.StateAutoRaise, "", style.IconNone)
 		style.DrawArrowOf(lk, ctx, r.Inset(r.Dx()*0.25), arrow, p.Text)
 	}
 	title := fmt.Sprintf("%s %d", c.shown.Month(), c.shown.Year())
@@ -223,7 +223,9 @@ func (c *Calendar) Paint(ctx *paintengine2d.Context) {
 				ds |= style.StatePressed
 			}
 		}
-		lk.DrawToolButton(ctx, r, ds, fmt.Sprint(d.Day()), style.IconNone)
+		// Day cells are items of the calendar, flat until hovered (a Mac
+		// date picker draws no bezel round each day).
+		lk.DrawToolButton(ctx, r, ds|style.StateAutoRaise, fmt.Sprint(d.Day()), style.IconNone)
 		if d.Equal(today) {
 			w := style.Dip(lk, 1)
 			ctx.DrawRoundRect(r.Inset(w*1.5), lk.Metrics().RadiusSmall, lk.Metrics().RadiusSmall, paintengine2d.StrokePaint(p.Accent, w))

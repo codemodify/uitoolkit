@@ -2119,11 +2119,9 @@ func (metalEngine) DrawSplitter(l *Classic, ctx *paintengine2d.Context, b painte
 	if (st.Pressed() || st.Focused() || st.Hovered()) && !st.Disabled() {
 		tile = c.gripHotBumps
 	}
-	g := b.Inset(2 * u)
+	g := paintengine2d.XYWH(b.Min.X+l.S(4), b.Min.Y+2*u, b.Dx()-l.S(8), b.Dy()-4*u)
 	if vertical {
 		g = paintengine2d.XYWH(b.Min.X+2*u, b.Min.Y+l.S(4), b.Dx()-4*u, b.Dy()-l.S(8))
-	} else {
-		g = paintengine2d.XYWH(b.Min.X+l.S(4), b.Min.Y+2*u, b.Dx()-l.S(8), b.Dy()-4*u)
 	}
 	c.bumps(ctx, g, tile)
 }

@@ -105,7 +105,8 @@ func (s *sheet) buttons(x, y float32) {
 	tools := []style.ControlState{stN, stH, stP, style.StateToggle, style.StateToggle | style.StateChecked, style.StateToggle | style.StateChecked | stH, stD}
 	icons := []style.ToolIcon{style.IconNew, style.IconOpen, style.IconSave, style.IconCut, style.IconCopy, style.IconPaste, style.IconSave}
 	for i, st := range tools {
-		s.lk.DrawToolButton(s.ctx, s.r(x+float32(i)*44, y+94, 40, 34), st, "", icons[i])
+		// A tool bar's tools (auto-raise), as in real tool bars.
+		s.lk.DrawToolButton(s.ctx, s.r(x+float32(i)*44, y+94, 40, 34), st|style.StateAutoRaise, "", icons[i])
 	}
 	// As wide as a tool bar would make it, in the look's tool font.
 	fr := s.r(x+312, y+94, 90, 34)
