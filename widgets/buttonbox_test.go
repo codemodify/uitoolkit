@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/codemodify/paintengine2d"
+	"github.com/codemodify/uitoolkit/layout"
 	"github.com/codemodify/uitoolkit/style"
 )
 
@@ -51,5 +52,23 @@ func TestButtonBoxFollowsThePlatform(t *testing.T) {
 		if x.b.Text == "Save" && !x.b.Primary {
 			t.Error("the accept button should be the default")
 		}
+	}
+}
+
+// A label's newlines start new lines (QLabel, GtkLabel): its height grows
+// with them, and no line-break glyph is drawn.
+func TestLabelLines(t *testing.T) {
+	l := NewLabel("Backend: memory\nHealth: ok\nConfig: ~/.config")
+	l.SetLook(style.DarkLook())
+	l.SetHost(&host{})
+	one := NewLabel("Backend: memory")
+	one.SetLook(style.DarkLook())
+	one.SetHost(&host{})
+	h3, h1 := l.Measure(layout.Unbounded()).Y, one.Measure(layout.Unbounded()).Y
+	if h3 < h1*2.5 {
+		t.Fatalf("three lines measure %v, one line %v", h3, h1)
+	}
+	if l.Measure(layout.Unbounded()).X != one.Measure(layout.Unbounded()).X {
+		t.Fatal("the widest line sets the width")
 	}
 }
