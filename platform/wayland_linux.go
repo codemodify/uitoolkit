@@ -2666,6 +2666,12 @@ func uitkWlRegistryGlobal(id C.uintptr_t, reg *C.struct_wl_registry, name C.uint
 		c.primMan = (*C.struct_zwp_primary_selection_device_manager_v1)(C.ui_wl_bind(reg, name, C.ui_wl_prim_man_iface(), 1))
 		c.bindSeatExtras()
 	case "zxdg_decoration_manager_v1":
+		if os.Getenv(EnvXdgDecoration) == "0" {
+			// Testing: behave as on GNOME, which has no server-side
+			// decorations (KWin then treats every window as drawing its
+			// own frame).
+			break
+		}
 		c.decoMan = (*C.struct_zxdg_decoration_manager_v1)(C.ui_wl_bind(reg, name, C.ui_wl_deco_man_iface(), 1))
 	case "wp_fractional_scale_manager_v1":
 		c.fracMan = (*C.struct_wp_fractional_scale_manager_v1)(C.ui_wl_bind(reg, name, C.ui_wl_frac_man_iface(), 1))
