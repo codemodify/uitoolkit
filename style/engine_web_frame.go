@@ -28,9 +28,6 @@ func (webEngine) Decoration(l *Classic, st DecorationState) DecorationSpec {
 		Radius:  [4]float32{r, r, r, r},
 		Shadow:  ShadowReach(0, 0, l.S(12), 0),
 	}
-	if st.Maximized || st.Tiled != 0 {
-		s.Radius = [4]float32{}
-	}
 	return s
 }
 

@@ -124,6 +124,7 @@ func frameState(h widget.FrameHost, custom bool) style.DecorationState {
 		st.Active = h.Active()
 		st.Maximized = ws.Maximized
 		st.Tiled = style.Edges(ws.Tiled)
+		st.Solid = ws.Solid
 	}
 	return st
 }

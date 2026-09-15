@@ -40,6 +40,9 @@ func NewOffscreen(opts WindowOptions) *Offscreen {
 		img:   paintengine2d.NewImage(w, h),
 		wake:  make(chan struct{}, 1),
 	}
+	// The requested size is the window's; a frame's margin is added to the
+	// pixmap around it (offscreen_frame.go).
+	o.frame.geomW, o.frame.geomH = w, h
 	o.frame.deco, o.frame.decoSet = requestedDecorations(opts.Decorations), true
 	if opts.Popup {
 		o.frame.deco = DecorationsNone
@@ -56,6 +59,9 @@ func (o *Offscreen) Scale() float32               { return 1 }
 func (o *Offscreen) SetCursor(c Cursor)           { o.cursor = c }
 func (o *Offscreen) Cursor() Cursor               { return o.cursor }
 
+// Resize sizes the *window* — the pixmap is that plus the frame's margin,
+// as a compositor's surface is (a window without a frame of the toolkit's
+// has no margin, so the two are the same).
 func (o *Offscreen) Resize(w, h int) error {
 	if w < 1 {
 		w = 1
@@ -63,10 +69,11 @@ func (o *Offscreen) Resize(w, h int) error {
 	if h < 1 {
 		h = 1
 	}
-	if o.img.Width == w && o.img.Height == h {
+	if o.frame.geomW == w && o.frame.geomH == h {
 		return nil
 	}
-	o.img = paintengine2d.NewImage(w, h)
+	o.frame.geomW, o.frame.geomH = w, h
+	o.resizeSurface()
 	o.queue = append(o.queue, Event{Kind: EventResize, Width: w, Height: h})
 	return nil
 }

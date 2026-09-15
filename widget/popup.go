@@ -147,6 +147,15 @@ type SurfaceSizer interface {
 	SurfaceSize() (int, int)
 }
 
+// WindowRecter is implemented by app.Window: the visible window inside the
+// surface, in surface coordinates. A frame the toolkit draws keeps an
+// invisible margin around the window for its shadow, and a menu, a combo
+// list or a tooltip must stay inside the window, not float in the margin
+// where the compositor may clip it and clicks pass through.
+type WindowRecter interface {
+	WindowRect() paintengine2d.Rect
+}
+
 // PreparePopup attaches from's host (look, scale, popup layer) before Measure.
 func PreparePopup(from, popup Component) {
 	if from == nil || popup == nil {
@@ -176,16 +185,41 @@ func popupCap(popup Component, maxW, maxH float32) (float32, float32) {
 	if maxH <= 0 {
 		maxH = 480
 	}
-	if sz, ok := popupSurface(popup); ok {
-		ww, hh := sz.SurfaceSize()
-		if ww > 8 {
-			maxW = float32(ww) - 8
+	if box, ok := popupWindowRect(popup); ok {
+		if box.Dx() > 8 {
+			maxW = box.Dx() - 8
 		}
-		if hh > 8 {
-			maxH = float32(hh) - 8
+		if box.Dy() > 8 {
+			maxH = box.Dy() - 8
 		}
 	}
 	return maxW, maxH
+}
+
+// popupWindowRect is the box a popup must stay inside: the host's visible
+// window, else its whole surface.
+func popupWindowRect(c Component) (paintengine2d.Rect, bool) {
+	if c == nil {
+		return paintengine2d.Rect{}, false
+	}
+	h := c.Host()
+	if h == nil {
+		return paintengine2d.Rect{}, false
+	}
+	if wr, ok := h.(WindowRecter); ok {
+		if box := wr.WindowRect(); box.Dx() > 8 && box.Dy() > 8 {
+			return box, true
+		}
+	}
+	sz, ok := h.(SurfaceSizer)
+	if !ok {
+		return paintengine2d.Rect{}, false
+	}
+	ww, hh := sz.SurfaceSize()
+	if ww < 1 || hh < 1 {
+		return paintengine2d.Rect{}, false
+	}
+	return paintengine2d.XYWH(0, 0, float32(ww), float32(hh)), true
 }
 
 // PlacePopupForAnchor sizes popup (host look already applied) and places it
@@ -206,14 +240,15 @@ func PlacePopupForAnchor(from, popup Component, anchor paintengine2d.Rect, minW,
 		w = minW
 	}
 	inset := float32(4)
-	surfW, surfH := popupSurfaceWH(popup)
+	box := popupSurfaceBox(popup)
+	surfH := box.Max.Y
 
 	// Vertical: flip or scroll (v0.10.8). Height may shrink; width must not
 	// be reduced to the leftover strip beside the anchor.
 	below, above := float32(1e9), float32(1e9)
-	if surfH > 0 {
-		below = surfH - inset - (anchor.Max.Y + gap)
-		above = anchor.Min.Y - gap - inset
+	if !box.Empty() {
+		below = box.Max.Y - inset - (anchor.Max.Y + gap)
+		above = anchor.Min.Y - gap - (box.Min.Y + inset)
 		if below < 0 {
 			below = 0
 		}
@@ -246,12 +281,12 @@ func PlacePopupForAnchor(from, popup Component, anchor paintengine2d.Rect, minW,
 		}
 	}
 
-	x, w := shiftPopupX(anchor.Min.X, w, surfW, inset)
+	x, w := shiftPopupAxis(anchor.Min.X, w, box.Min.X, box.Max.X, inset)
 	y := anchor.Max.Y + gap
 	if !placeBelow {
 		y = anchor.Min.Y - gap - h
 	}
-	y, h = shiftPopupY(y, h, surfH, inset)
+	y, h = shiftPopupAxis(y, h, box.Min.Y, box.Max.Y, inset)
 	popup.Arrange(paintengine2d.XYWH(x, y, w, h))
 }
 
@@ -266,7 +301,7 @@ func PlacePopup(popup Component, origin paintengine2d.Point, maxW, maxH float32)
 	intrinsic := popup.Measure(layout.Unbounded())
 	w, h := intrinsic.X, intrinsic.Y
 	_, capH := popupCap(popup, maxW, maxH)
-	surfW, surfH := popupSurfaceWH(popup)
+	box := popupSurfaceBox(popup)
 	if h > capH {
 		sz := popup.Measure(layout.Constraints{MaxW: -1, MaxH: capH})
 		w, h = sz.X, sz.Y
@@ -278,8 +313,8 @@ func PlacePopup(popup Component, origin paintengine2d.Point, maxW, maxH float32)
 		}
 	}
 	inset := float32(4)
-	x, w := shiftPopupX(origin.X, w, surfW, inset)
-	y, h := shiftPopupY(origin.Y, h, surfH, inset)
+	x, w := shiftPopupAxis(origin.X, w, box.Min.X, box.Max.X, inset)
+	y, h := shiftPopupAxis(origin.Y, h, box.Min.Y, box.Max.Y, inset)
 	popup.Arrange(paintengine2d.XYWH(x, y, w, h))
 }
 
@@ -294,13 +329,14 @@ func PlacePopupBeside(from, popup Component, anchor paintengine2d.Rect) {
 	intrinsic := popup.Measure(layout.Unbounded())
 	w, h := intrinsic.X, intrinsic.Y
 	inset := float32(4)
-	surfW, surfH := popupSurfaceWH(popup)
+	box := popupSurfaceBox(popup)
+	surfW, surfH := box.Dx(), box.Dy()
 
 	right := float32(1e9)
 	left := float32(1e9)
 	if surfW > 0 {
-		right = surfW - inset - anchor.Max.X
-		left = anchor.Min.X - inset
+		right = box.Max.X - inset - anchor.Max.X
+		left = anchor.Min.X - (box.Min.X + inset)
 		if right < 0 {
 			right = 0
 		}
@@ -346,8 +382,8 @@ func PlacePopupBeside(from, popup Component, anchor paintengine2d.Rect) {
 			w = intrinsic.X
 		}
 	}
-	x, w = shiftPopupX(x, w, surfW, inset)
-	y, h = shiftPopupY(y, h, surfH, inset)
+	x, w = shiftPopupAxis(x, w, box.Min.X, box.Max.X, inset)
+	y, h = shiftPopupAxis(y, h, box.Min.Y, box.Max.Y, inset)
 	popup.Arrange(paintengine2d.XYWH(x, y, w, h))
 }
 
@@ -420,67 +456,51 @@ func ClampToSurface(from, popup Component) {
 	if from == nil || popup == nil {
 		return
 	}
-	sz, ok := popupSurface(from)
+	box, ok := popupWindowRect(from)
 	if !ok {
-		sz, ok = popupSurface(popup)
+		box, ok = popupWindowRect(popup)
 	}
 	if !ok {
-		return
-	}
-	ww, hh := sz.SurfaceSize()
-	if ww < 1 || hh < 1 {
 		return
 	}
 	inset := float32(4)
 	b := popup.Bounds()
 	w, h := b.Dx(), b.Dy()
-	x, w := shiftPopupX(b.Min.X, w, float32(ww), inset)
-	y, h := shiftPopupY(b.Min.Y, h, float32(hh), inset)
+	x, w := shiftPopupAxis(b.Min.X, w, box.Min.X, box.Max.X, inset)
+	y, h := shiftPopupAxis(b.Min.Y, h, box.Min.Y, box.Max.Y, inset)
 	popup.Arrange(paintengine2d.XYWH(x, y, w, h))
 }
 
-func popupSurfaceWH(c Component) (w, h float32) {
-	sz, ok := popupSurface(c)
-	if !ok {
-		return 0, 0
+// popupSurfaceBox is the box a popup is placed in (an empty box when the
+// host cannot say).
+func popupSurfaceBox(c Component) paintengine2d.Rect {
+	box, ok := popupWindowRect(c)
+	if !ok || box.Dx() <= 8 || box.Dy() <= 8 {
+		return paintengine2d.Rect{}
 	}
-	ww, hh := sz.SurfaceSize()
-	if ww > 8 {
-		w = float32(ww)
-	}
-	if hh > 8 {
-		h = float32(hh)
-	}
-	return w, h
+	return box
 }
 
-// shiftPopupX translates so the full width stays on-screen. Width is only
-// reduced when the popup is wider than the surface itself — never to squeeze
-// into the leftover strip beside a right-edge anchor.
-func shiftPopupX(x, w, surfW, inset float32) (float32, float32) {
-	return shiftPopupAxis(x, w, surfW, inset)
-}
-
-func shiftPopupY(y, h, surfH, inset float32) (float32, float32) {
-	return shiftPopupAxis(y, h, surfH, inset)
-}
-
-func shiftPopupAxis(pos, size, surf, inset float32) (float32, float32) {
-	if surf <= 0 {
+// shiftPopupAxis translates so the full size stays inside [lo, hi] (the
+// visible window, which a frame's margin keeps the popup out of). The size
+// is only reduced when the popup is larger than that — never to squeeze it
+// into the leftover strip beside an edge anchor.
+func shiftPopupAxis(pos, size, lo, hi, inset float32) (float32, float32) {
+	if hi <= lo {
 		return pos, size
 	}
 	if inset < 0 {
 		inset = 0
 	}
-	max := surf - inset
-	if pos+size > max {
-		pos = max - size
+	lo, hi = lo+inset, hi-inset
+	if pos+size > hi {
+		pos = hi - size
 	}
-	if pos < inset {
-		pos = inset
+	if pos < lo {
+		pos = lo
 	}
-	if pos+size > max {
-		size = max - pos
+	if pos+size > hi {
+		size = hi - pos
 		if size < 1 {
 			size = 1
 		}

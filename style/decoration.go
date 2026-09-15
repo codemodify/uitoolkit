@@ -49,9 +49,13 @@ type DecorationState struct {
 	Active bool
 	// Maximized: no border, and the maximize button restores.
 	Maximized bool
-	// Tiled are the edges against a screen edge or a tiled neighbour
-	// (square corners and no shadow there once frames have them).
+	// Tiled are the edges against a screen edge or a tiled neighbour:
+	// square corners and no shadow there.
 	Tiled Edges
+	// Solid: the desktop does not composite the window (X11 without a
+	// compositing manager), where a translucent margin would simply be
+	// black: the frame is square and shadowless, as GTK's .solid-csd is.
+	Solid bool
 	// Custom: the app's own title bar (tabs, a tool bar) fills the caption,
 	// not just the window title.
 	Custom bool
@@ -98,10 +102,12 @@ type DecorationSpec struct {
 	// the theme's layout to the desktop's (look.json "captionButtons");
 	// empty: the desktop's.
 	Layout string
-	// Radius (the outer corners, top-left clockwise) and Shadow (how far
-	// the frame's drop shadow reaches) are what the look wants once frames
-	// can be translucent (docs/decorations.md, Phase 3). Frames are square
-	// and shadowless until then.
+	// Radius are the outer corners, top-left clockwise, and Shadow how far
+	// the frame's drop shadow reaches past the window on each side — the
+	// invisible margin the window asks the compositor for, which also
+	// holds the resize handles (docs/decorations.md). DecorationOf drops
+	// both where the window is maximized, tiled or uncomposited, so an
+	// engine states the look's own frame and nothing else.
 	Radius [4]float32
 	Shadow Insets
 }
@@ -162,7 +168,12 @@ func decorationFor(lk LookAndFeel) (*Classic, DecorationEngine) {
 	return c, frameAdapter{}
 }
 
-// DecorationOf is lk's window frame in state st, in device pixels.
+// DecorationOf is lk's window frame in state st, in device pixels. The
+// state's own rules are applied here, for every look alike: a maximized
+// window has no border, no corners and no shadow (its edges are the
+// screen's); an uncomposited one is square and shadowless (nothing behind
+// it would show through); a tiled edge loses its shadow and the corners
+// beside it, since the window touches a neighbour there.
 func DecorationOf(lk LookAndFeel, st DecorationState) DecorationSpec {
 	if lk == nil {
 		return DecorationSpec{}
@@ -172,7 +183,48 @@ func DecorationOf(lk LookAndFeel, st DecorationState) DecorationSpec {
 	if st.Maximized {
 		s.Border = Insets{}
 	}
+	if st.Maximized || st.Solid {
+		s.Radius, s.Shadow = [4]float32{}, Insets{}
+		return s
+	}
+	s.Radius = tiledRadius(s.Radius, st.Tiled)
+	s.Shadow = tiledShadow(s.Shadow, st.Tiled)
 	return s
+}
+
+// tiledRadius squares off every corner with a tiled edge beside it: a
+// window quick-tiled to the left of the screen is square at all four, one
+// tiled only on its left keeps its right corners round.
+func tiledRadius(r [4]float32, tiled Edges) [4]float32 {
+	if tiled == 0 {
+		return r
+	}
+	corner := [4]Edges{EdgeTop | EdgeLeft, EdgeTop | EdgeRight, EdgeBottom | EdgeRight, EdgeBottom | EdgeLeft}
+	for i, e := range corner {
+		if tiled&e != 0 {
+			r[i] = 0
+		}
+	}
+	return r
+}
+
+// tiledShadow drops the shadow on the tiled edges (xdg-shell: a tiled edge
+// is adjacent to another part of the tiling grid, so nothing of ours
+// belongs outside it).
+func tiledShadow(in Insets, tiled Edges) Insets {
+	if tiled&EdgeTop != 0 {
+		in.Top = 0
+	}
+	if tiled&EdgeBottom != 0 {
+		in.Bottom = 0
+	}
+	if tiled&EdgeLeft != 0 {
+		in.Left = 0
+	}
+	if tiled&EdgeRight != 0 {
+		in.Right = 0
+	}
+	return in
 }
 
 // DrawDecorationOf paints lk's window frame: the border and the caption band.
@@ -200,6 +252,30 @@ func DrawCaptionButtonOf(lk LookAndFeel, ctx *paintengine2d.Context, b paintengi
 	}
 	c, e := decorationFor(lk)
 	e.DrawCaptionButton(c, ctx, b, k, cs, st)
+}
+
+// DecorationShadowEngine is an optional engine hook: the drop shadow a
+// window frame casts on the desktop, painted outside the visible window b.
+// An engine without it drops its dialog shadow (PopupDialog), which is the
+// same shadow its in-app windows cast.
+type DecorationShadowEngine interface {
+	DrawDecorationShadow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st DecorationState)
+}
+
+// DrawDecorationShadowOf paints lk's window shadow around the visible
+// window b. The window paints it into the margin DecorationSpec.Shadow
+// asked for — once, into a cached nine-patch (app/frameshadow.go).
+func DrawDecorationShadowOf(lk LookAndFeel, ctx *paintengine2d.Context, b paintengine2d.Rect, st DecorationState) {
+	if lk == nil || ctx == nil || b.Empty() {
+		return
+	}
+	if c, ok := lk.(*Classic); ok && c != nil {
+		if e, ok := c.eng().(DecorationShadowEngine); ok {
+			e.DrawDecorationShadow(c, ctx, b, st)
+			return
+		}
+	}
+	DrawPopupShadowOf(lk, ctx, b, PopupDialog)
 }
 
 // NativeDecoration reports whether lk's engine paints window frames itself

@@ -43,9 +43,6 @@ func (macosEngine) Decoration(l *Classic, st DecorationState) DecorationSpec {
 		Radius:        [4]float32{r, r, r, r},
 		Shadow:        macosEngine{}.PopupShadow(l, PopupDialog),
 	}
-	if st.Maximized || st.Tiled != 0 {
-		s.Radius = [4]float32{}
-	}
 	return s
 }
 
