@@ -34,6 +34,8 @@ type appearanceFileJSON struct {
 	FollowDesktop bool `json:"followDesktop,omitempty"`
 	// NativeDialogs uses the desktop's own file dialogs.
 	NativeDialogs bool `json:"nativeDialogs,omitempty"`
+	// Decorations: "auto" (omitted), "system" or "toolkit".
+	Decorations string `json:"decorations,omitempty"`
 }
 
 // ConfigDir is $XDG_CONFIG_HOME/uitoolkit (or ~/.config/uitoolkit).
@@ -115,6 +117,7 @@ func resolveAppearance(raw appearanceFileJSON) Appearance {
 	a.ReduceMotion = raw.ReduceMotion
 	a.FollowDesktop = raw.FollowDesktop
 	a.NativeDialogs = raw.NativeDialogs
+	a.Decorations = ParseDecorationsPref(raw.Decorations)
 	return a.Normalize()
 }
 
@@ -163,5 +166,12 @@ func SaveAppearance(a Appearance) error {
 		ReduceMotion:  a.ReduceMotion,
 		FollowDesktop: a.FollowDesktop,
 		NativeDialogs: a.NativeDialogs,
+		Decorations:   decorationsJSON(a.Decorations),
 	})
+}
+
+// decorationsJSON is the look.json value of d (left out for auto, the
+// default).
+func decorationsJSON(d DecorationsPref) string {
+	return string(ParseDecorationsPref(string(d)))
 }
