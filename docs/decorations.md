@@ -9,7 +9,10 @@ around it. Either way the desktop keeps window management: every move,
 resize, snap and the window menu is handed back to the compositor or window
 manager from the user's button press, never emulated.
 
-This is Phase 1 of [the design](#phases): an opaque toolkit-drawn frame.
+Phases 1 and 2 of [the design](#phases) are done: an opaque toolkit-drawn
+frame, painted by the look — Windows 95's navy caption and bevelled buttons,
+XP's blue one, Aqua's traffic lights, libadwaita's round buttons, SourceGit's
+flat 48×30 cells — with tabs or a tool bar in the title bar.
 
 ## For apps: a title bar
 
@@ -43,12 +46,24 @@ caption space (Chromium's tab-strip menu). Any other component passed to
 Mail is the pilot: its Thunderbird-style row (the M menu, Fetch / Write, free
 space, the quick filter and its tool bar) is its title bar.
 
-A SourceGit-style window puts its tabs in the centre:
+A SourceGit- or Chromium-style window puts document tabs in the centre
+([tabs in the title bar](#tabs-in-the-title-bar)):
 
 ```go
-tabs := widgets.NewTabBar("uitoolkit", "paintengine2d")
-win.SetTitleBar(widgets.NewHeaderBar(nil, tabs, []widget.Component{widgets.NewToolBar(fetch, push)}))
+tabs := widgets.NewBrowserTabs("uitoolkit", "paintengine2d")
+tabs.OnNew = func() { tabs.Select(tabs.AddTab(widgets.BrowserTab{Title: "New"})) }
+win.SetTitleBar(widgets.NewHeaderBar([]widget.Component{menuBar}, tabs, nil))
 ```
+
+How the header bar and the frame meet is the look's: a **merged** frame
+makes the header bar the caption, one row with the caption buttons at its
+sides (GTK's header bars, Windows 10 and 11, macOS, Chromium, SourceGit); a
+**stacked** frame keeps the era's own caption — the window title and the
+caption buttons in the era's strip — and puts the header bar in a row under
+it, the way the tool bars of Windows 95, XP, the classic Mac and Motif sat
+under their title bars. Either way the header bar's free space moves the
+window, and in a merged caption a menu bar, tool bar or tab strip paints no
+bar of its own: the caption band is their background.
 
 ### What moves the window
 
@@ -61,6 +76,7 @@ inside a button is never caption:
 | `HeaderBar`, `FlexBox` rows / columns, `Stack`, `Pad`, `Spacer`, `Label`, `Separator`, `Picture`, `TitleBar` | everywhere (their children decide for themselves) |
 | `ToolBar` | between buttons and on dividers |
 | `TabBar` | after the last tab |
+| `BrowserTabs` | everywhere but its tabs, their close buttons, "+" and the scroll arrows |
 | `MenuBar` | after the last title |
 | `WindowControls` | gaps between caption buttons |
 | anything else | nowhere: it is a control |
@@ -78,7 +94,7 @@ implements `CaptionAt(p paintengine2d.Point) bool` to take part.
 | click | nothing — clicks and double-clicks keep working because the move waits for the threshold |
 | double-click (within the desktop's double-click time, both on caption) | the desktop's double-click action, default toggle maximize |
 | middle click | the desktop's middle-click action, default none |
-| right click | the header bar's own menu, else the desktop's window menu, else the toolkit's (Restore / Maximize, Minimize, Close) |
+| right click | the menu of the component under the pointer (`widget.CaptionMenuer`: a tab strip's), else the header bar's own (`OnContextMenu`), else the desktop's window menu, else the toolkit's (Restore / Maximize, Minimize, Close) |
 | press on a resize edge or corner | the desktop resizes from there (on the press) |
 | right click on a caption button | the window menu |
 
@@ -93,28 +109,112 @@ hides on close keeps its window).
 edge, a caption button — from the last layout, the way Win32's
 `WM_NCHITTEST` wants it.
 
-### Frame layout (Phase 1)
+### Frame layout
 
-- A 1-device-pixel border in the look's border colour; none when maximized.
-- The caption inside it: the header bar, at least as tall as the caption
-  buttons (30 px) and a line of title.
-- Resize band: 4 px inside the left, right and bottom edges and the top
-  4 px of the caption, with 16 px corner zones; none while maximized or full
-  screen, and none on tiled edges (a quick-tiled window resizes only from its
-  free sides). The band wins over the caption buttons of a restored window;
-  a maximized window's buttons reach the screen's edge.
+- The look's border (`DecorationSpec.Border`, whole device pixels): a
+  hairline in the plain and modern looks, Windows 95's 4 px raised frame,
+  XP's five lines, Windows 7's glass, Motif's resize handles; none when
+  maximized (the era's frames went off the screen).
+- The caption inside it: a merged frame's header bar, at least as tall as
+  the look's caption and its buttons; or a stacked frame's strip (the look's
+  caption height) with the header bar's row under it when the app gave the
+  header bar items of its own.
+- Resize band: the border, at least 4 px, inside the left, right and bottom
+  edges and at the top of the caption, with 16 px corner zones; none while
+  maximized or full screen, and none on tiled edges (a quick-tiled window
+  resizes only from its free sides). The band wins over the caption buttons
+  of a restored window; a maximized window's buttons reach the screen's
+  edge: each button's hit box runs up to the caption's top and the outermost
+  one out to the window's side.
 - Full screen: no frame and no caption buttons; the header bar stays the top
   row.
 - A modal dialog dims the content, not the caption: the window can still be
   moved, minimized and closed, while the header bar's own controls are inert.
+- Frames are opaque and square: rounded corners, shadows and translucent
+  glass are Phase 3. The spec already carries the look's wishes for them
+  (`Radius`, `Shadow`).
 
-Caption buttons are generic glyphs (✕, a bar, a square, two squares for
-restore, a small window for the window menu) drawn crisp at any scale over
-the look's tool-button face; close turns red under the pointer; they are
-dimmed while the window is in the backdrop, hidden for actions the desktop
-cannot do (`wm_capabilities`, `_NET_WM_ALLOWED_ACTIONS`), out of the Tab
-order, and named Minimize, Maximize or Restore, Close and Window Menu for
-assistive technology.
+Caption buttons are the look's (see [the looks](#the-looks)): sized and
+spaced by the look, hover and pressed states, the restore glyph while
+maximized, the backdrop look while the window is inactive. They are hidden
+for actions the desktop cannot do (`wm_capabilities`,
+`_NET_WM_ALLOWED_ACTIONS`), out of the Tab order, and named Minimize,
+Maximize or Restore, Close and Window Menu for assistive technology.
+
+## Tabs in the title bar
+
+`widgets.BrowserTabs` is a strip of document tabs, browser style —
+Chromium's tab strip, SourceGit's repository tabs, Dolphin's folder tabs.
+As a header bar's centre it takes the caption's whole height, so its tabs
+stand on the content below and the selected one joins it (SourceGit's
+concave feet in the web looks, the look's own notebook tab elsewhere):
+
+- the tabs, their close buttons (on the selected tab and the one under the
+  pointer), the "+" (shown when `OnNew` is set) and the scroll arrows are
+  controls; the rest of the strip is caption: a drag moves the window, a
+  double click maximizes, a right click opens `OnContextMenu(-1, at)` or the
+  window menu. At least 24 px at the end are always caption.
+- tabs share the width, at most `MaxTabWidth` (200 px); below `MinTabWidth`
+  (80 px) the strip scrolls — the wheel, two arrow buttons at its end — and
+  keeps the selected tab in view. Elided titles are the tab's tool tip.
+- a press selects (browsers select on the press); a drag past 8 px moves the
+  tab and the others make room (`OnReorder`); a middle click closes; closing
+  the selected tab selects the next one. `OnClose` asks the app, which
+  removes the tab with `RemoveTab`; `NoClose` keeps a tab (a window's last).
+- keys: Left, Right, Home, End with the focus (a click does not take it, as
+  in browsers; Tab reaches the strip); `Shortcut(e)` from the app's own key
+  handler gives Ctrl+Tab, Ctrl+Shift+Tab, Ctrl+PageUp / PageDown, Ctrl+W,
+  Ctrl+F4 and Ctrl+T in one call (the window offers Ctrl+Tab to the app
+  before moving the focus with it).
+- assistive technology sees a page tab list of page tabs, each holding its
+  pressable close button, and a New Tab button.
+- under the desktop's frame the strip is simply the header bar's row.
+
+Files is the pilot: its folders open in tabs next to the menu bar in the
+title bar; the tree and the table show the selected tab's folder, and the
+window title follows it. Tab tear-off (dragging a tab out into its own
+window) is Phase 4: the drag keeps the pointer's position, where a
+tear-off check will go, through `xdg-toplevel-drag-v1` where the compositor
+has it.
+
+## The looks
+
+A look paints the frame through `style.DecorationOf` (the measurements in
+a `DecorationState`: active or backdrop, maximized, tiled, a caption with
+the app's own items), `DrawDecorationOf` (border and caption band, under
+the title bar), `DrawCaptionTitleOf` and `DrawCaptionButtonOf`. An engine
+paints its era's frame by implementing the optional `style.DecorationEngine`
+(see [theme-engines.md](theme-engines.md#window-frames)); every other engine
+has its in-app window frame (`DrawWindowFrame`, `WindowCloseRect`) adapted,
+so every pack has a frame in its own look.
+
+| Engines | Frame |
+| --- | --- |
+| `win95` | stacked: the 4 px raised border, the caption bar in the scheme's colour (98's and 2000's gradient), the bold title at its left, bevelled buttons with Marlett-shaped glyphs, close 2 px apart |
+| `luna` | stacked: the scheme's caption gradient, the sizing frame's five lines, the bold shadowed title, XP's glossy 21 px buttons (minimize and maximize in the caption's shade, close red) |
+| `aero` | merged: an opaque approximation of the glass all round, the black title on its glow, the joined button group hanging from the top edge (26 px frosted minimize and maximize that glow blue, the 43 px red close) |
+| `metro` | Windows 8 stacked: the thick flat coloured frame, the centred title, the red close hanging from the top; Windows 10 merged: 46 px flat buttons, red close |
+| `fluent` | merged: Mica, the window stroke, 46 px buttons filling the title bar, WinUI's subtle fills, `#c42b1c` close |
+| `aqua` | stacked: the pinstriped title bar, the centred title, the gel traffic lights |
+| `macos` | merged: 28 px title (52 px unified tool bar), the centred title, 12 px traffic lights |
+| `breeze` | merged: KWin Breeze's look — glyph buttons that fill a circle under the pointer, red for close |
+| `adwaita` | merged: libadwaita's header bar with 24 px round buttons (GTK 3's flat square ones) |
+| `web` | merged: SourceGit's 38 px title bar, 48×30 buttons with a black-25% wash and a pure red close |
+| `motif` | stacked: mwm's resize handles and raised title-bar parts |
+| `flatlaf`, `material` | merged: FlatLaf's title pane; Material's surface with circular icon buttons |
+| `base` | merged: a hairline, flat buttons over the tool face, close red |
+| the others | adapted: their in-app caption as a stacked strip, their own close button, push buttons for the rest |
+
+Glyphs, sizes and colours are the look's; the side and order of the
+buttons are the desktop's, unless the user prefers the look's own layout:
+look.json `"captionButtons": "theme"` (Settings: **Place window buttons as
+the theme does**) puts the Mac's traffic lights on the left, gives GNOME's
+lone close, KDE's window menu on the left. It applies live, to every app.
+
+`go run ./cmd/uitk-themesheet -frames -theme luna -o /tmp/f` renders a
+pack's frames sheet: windows active, in the backdrop, maximized, with the
+close button hot and pressed, maximize hot, with tabs in the title bar
+(active and backdrop) and with KDE's button layout.
 
 ### Keyboard and accessibility
 
@@ -202,8 +302,18 @@ toggle-maximizes on Wayland (X11 does it one way), "lower" works on X11 only,
   protocol states, capabilities, resize-edge and `_NET_WM_MOVERESIZE`
   mappings, `_MOTIF_WM_HINTS`, and parse button layouts and kwinrc / GTK
   files; `widgets/caption_test.go` checks every built-in's caption answer.
+- `style`: every pack's frame at 1, 1.25, 1.5, 1.75 and 2x — borders on
+  whole device pixels, buttons inside the caption, square when maximized —
+  paints inside its window, title box and button boxes; the adapter takes
+  the in-app frame's caption, borders and close button; glyphs stay crisp.
+  `widgets`: the tab strip (layout, caption answers, select, close, new,
+  drag to reorder, overflow and scrolling, keys and shortcuts, tool tips,
+  accessibility). `app`: stacked frames (strip, row, hit tests, a drag from
+  either, the title for AT-SPI), tabs in the title bar (a tab is a control,
+  the strip caption, the strip's menu, Ctrl+Tab to the app), the theme's
+  button layout following the look, the title repainting.
 - `UITK_DECORATIONS=client` gives headless screenshots with the toolkit's
-  frame.
+  frame; `uitk-themesheet -frames` renders every pack's frames.
 - End to end in the nested-KWin rig ([tools/e2e](../tools/e2e/README.md)):
   `UITK_DECORATIONS=client ./run.sh N examples-mail-binary`, drags and
   resizes with `in.sh`, window geometry and state from `./kwin.py`, protocol
@@ -215,13 +325,14 @@ toggle-maximizes on Wayland (X11 does it one way), "lower" works on X11 only,
 
 1. **Phase 0** (done): window state, capabilities and decoration mode
    reported; press serials and root positions kept; resize and move cursors.
-2. **Phase 1** (this): the opaque toolkit frame above — buffers stay opaque
+2. **Phase 1** (done): the opaque toolkit frame above — buffers stay opaque
    (XRGB, full opaque region, window geometry = the whole surface), the
    present path is unchanged.
-3. **Phase 2**: themed frames — a `style.DecorationEngine` so each look
-   paints its era's caption, border and buttons (Win95's gradient caption,
-   Luna's rounded one, Aqua's traffic lights), a restore glyph per engine, and
-   `"captionButtons": "theme"` to follow the look's own layout.
+3. **Phase 2** (done): themed frames — `style.DecorationEngine` with native
+   frames for the engines above and the adapter for the rest, merged and
+   stacked title bars, a restore glyph per engine, `"captionButtons":
+   "theme"`, and document tabs in the title bar (`widgets.BrowserTabs`,
+   Files).
 4. **Phase 3**: shadows and rounded corners — ARGB buffers,
    `set_window_geometry`, input and opaque regions, `_GTK_FRAME_EXTENTS`,
    resize handles in the shadow, per-edge variants for tiled windows, a
@@ -229,6 +340,5 @@ toggle-maximizes on Wayland (X11 does it one way), "lower" works on X11 only,
 5. **Phase 4**: KWin's server-decoration palette, `xdg-toplevel-icon`,
    `_NET_WM_SYNC_REQUEST`, tab tear-off, Windows and macOS mappings.
 
-Until Phases 2–3 the toolkit's frame is square, shadowless and the same in
-every look apart from the tool-button face under the caption buttons; the
-window's geometry includes the 1 px border.
+Until Phase 3 the toolkit's frame is square and shadowless, and the
+window's geometry includes the look's border.

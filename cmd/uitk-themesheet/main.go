@@ -1,9 +1,14 @@
 // Command uitk-themesheet renders theme sheets: every control of a theme
 // pack in every interesting state, offscreen, as PNG. It is the quickest way
-// to see what an engine paints.
+// to see what an engine paints. -frames renders the window-frames sheet
+// instead: windows whose frame uitoolkit draws in the pack, active, in the
+// backdrop, maximized, with the close button under the pointer, and with the
+// app's own title bar.
 //
 //	go run ./cmd/uitk-themesheet -theme win95 -o /tmp/sheets
 //	go run ./cmd/uitk-themesheet -all -scale 2 -o /tmp/sheets
+//	go run ./cmd/uitk-themesheet -frames -all -o /tmp/frames
+//	go run ./cmd/uitk-themesheet -frames-overview -all -o /tmp/frames
 package main
 
 import (
@@ -13,6 +18,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/internal/themesheet"
 	"github.com/codemodify/uitoolkit/style"
 )
@@ -24,6 +30,8 @@ func main() {
 	out := flag.String("o", ".", "output directory")
 	scale := flag.Float64("scale", 1, "display scale (1, 1.5, 2)")
 	list := flag.Bool("list", false, "print every built-in pack (id, year, lineage, engine, label, summary) tab-separated and exit")
+	frames := flag.Bool("frames", false, "render the window-frames sheet (<pack>-frames.png) instead of the controls sheet")
+	overview := flag.Bool("frames-overview", false, "render the frames of the packs asked for (-theme, -all) as overview pages, 20 packs a page (frames-overview-N.png)")
 	flag.Parse()
 	if *list {
 		for _, p := range style.ListBuiltinThemes() {
@@ -43,6 +51,27 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+	if *overview {
+		var packs []style.ThemePack
+		for _, id := range themes {
+			pack, ok := style.LoadTheme(id)
+			if !ok {
+				fmt.Fprintf(os.Stderr, "uitk-themesheet: unknown theme %q\n", id)
+				os.Exit(1)
+			}
+			packs = append(packs, pack)
+		}
+		for page := 0; page*20 < len(packs); page++ {
+			img := themesheet.RenderFramesOverview(packs[page*20:min((page+1)*20, len(packs))], float32(*scale))
+			path := filepath.Join(*out, fmt.Sprintf("frames-overview-%d.png", page+1))
+			if err := img.WritePNGFile(path); err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
+			fmt.Println(path)
+		}
+		return
+	}
 	for _, id := range themes {
 		pack, ok := style.LoadTheme(id)
 		if !ok {
@@ -61,8 +90,15 @@ func main() {
 		if pack.Year > 0 {
 			title += fmt.Sprintf("  ·  %d", pack.Year)
 		}
-		img := themesheet.Render(lk, title)
+		var img *paintengine2d.Image
 		name := pack.Name
+		if *frames {
+			frame := map[string]string{"native": "native frame", "plain": "plain frame", "adapted": "adapted in-app frame"}[themesheet.FrameKind(pack.Look())]
+			img = themesheet.RenderFrames(pack.Look(), float32(*scale), title+"  ·  "+frame)
+			name += "-frames"
+		} else {
+			img = themesheet.Render(lk, title)
+		}
 		if *scale != 1 {
 			name += fmt.Sprintf("@%gx", *scale)
 		}

@@ -17,9 +17,11 @@ import (
 // nobody), the title bar an app puts in it (SetTitleBar), the frame's
 // geometry and its hit test (resize edges, caption, caption buttons,
 // client), and the caption gestures that hand a move, a resize or the
-// window menu to the desktop. Phase 1 frames are opaque: the window's
-// geometry is the whole surface, a hairline border runs around it and the
-// resize handles sit 4 px inside its edges (the top 4 px of the caption).
+// window menu to the desktop. The look paints the frame (style.DecorationOf
+// and friends: Win95's gradient caption, Aqua's traffic lights, a hairline
+// in plain looks). Frames are opaque and square for now: the window's
+// geometry is the whole surface and the resize handles sit inside its edges
+// (the border, at least 4 px, and the top of the caption).
 
 // NonClientRegion is what a point of a window is to the window system, the
 // region kinds every platform understands (Win32's WM_NCHITTEST codes,
@@ -50,8 +52,9 @@ type frameGeom struct {
 	// framed: the toolkit draws the frame (caption buttons, border,
 	// resize edges).
 	framed bool
-	// border is the hairline around a framed window (0 when maximized).
-	border float32
+	// border is the look's frame around a framed window (none when
+	// maximized).
+	border style.Insets
 	// caption is the title bar's box (empty without one); content the
 	// box of the content and, in a framed window, of the overlay.
 	caption paintengine2d.Rect
@@ -195,7 +198,7 @@ func (w *Window) rebuildCaption() {
 	}
 	if hb != nil {
 		hb.SetHost(w)
-		hb.SetWindowControls(w.app.TitleBarPrefs().Layout, framed)
+		hb.SetWindowControls(w.buttonLayout(hb), framed)
 	}
 	if hb != w.caption {
 		old := w.caption
@@ -208,6 +211,18 @@ func (w *Window) rebuildCaption() {
 	w.laid = false
 	w.dropScene()
 	w.fullInvalidate()
+}
+
+// buttonLayout is where hb's caption buttons go: the desktop's layout, or
+// the look's own when the user prefers it (look.json "captionButtons").
+func (w *Window) buttonLayout(hb *widgets.HeaderBar) platform.ButtonLayout {
+	if w.app.captionPref == style.CaptionButtonsTheme {
+		st := hb.DecorationState()
+		if l := style.DecorationOf(w.look, st).Layout; l != "" {
+			return platform.ParseButtonLayout(l)
+		}
+	}
+	return w.app.TitleBarPrefs().Layout
 }
 
 // decorationsChanged adopts the mode the desktop answered.
@@ -228,9 +243,16 @@ func (w *Window) capsChanged(c platform.WMCaps) {
 	w.rebuildCaption()
 }
 
-// frameBorder is the hairline around a framed window: one device pixel at
-// any scale.
-func (w *Window) frameBorder() float32 { return 1 }
+// frameBorder is the look's border around a framed window, whole device
+// pixels (none when maximized).
+func (w *Window) frameBorder() style.Insets {
+	if w.caption == nil || w.state.Maximized {
+		return style.Insets{}
+	}
+	b := style.DecorationOf(w.look, w.caption.DecorationState()).Border
+	px := func(v float32) float32 { return max(float32(math.Round(float64(v))), 0) }
+	return style.Insets{Top: px(b.Top), Right: px(b.Right), Bottom: px(b.Bottom), Left: px(b.Left)}
+}
 
 // layoutFrame arranges the caption inside full and returns the geometry.
 func (w *Window) layoutFrame(full paintengine2d.Rect) frameGeom {
@@ -241,9 +263,9 @@ func (w *Window) layoutFrame(full paintengine2d.Rect) frameGeom {
 	}
 	g.framed = w.framed()
 	inner := full
-	if g.framed && !w.state.Maximized {
+	if g.framed {
 		g.border = w.frameBorder()
-		inner = full.Inset(g.border)
+		inner = g.border.Apply(full)
 	}
 	sz := w.caption.Measure(layout.Loose(inner.Dx(), inner.Dy()))
 	h := min(float32(math.Ceil(float64(sz.Y)-1e-3)), inner.Dy())
@@ -318,7 +340,8 @@ func (w *Window) resizeEdgesAt(p paintengine2d.Point) platform.Edges {
 	}
 	ww, hh := w.surf.Size()
 	W, H := float32(ww), float32(hh)
-	band := max(w.geom.border, float32(math.Round(float64(style.Dip(w.look, 4)))))
+	bd := w.geom.border
+	band := max(bd.Left, bd.Right, bd.Top, bd.Bottom, float32(math.Round(float64(style.Dip(w.look, 4)))))
 	corner := float32(math.Round(float64(style.Dip(w.look, 16))))
 	if p.X < 0 || p.Y < 0 || p.X >= W || p.Y >= H {
 		return 0
@@ -439,6 +462,16 @@ func (w *Window) captionPress(ev platform.Event) {
 		w.runTitleAction(p.MiddleClick, ev.Pos)
 	case platform.ButtonRight:
 		w.capClick = captionClick{}
+		// The component's own menu (a tab strip's), then the header bar's,
+		// then the desktop's action.
+		for c := widget.HitRoot(w.caption, ev.Pos); c != nil; c = c.Parent() {
+			if m, ok := c.(widget.CaptionMenuer); ok && m.CaptionMenu(ev.Pos) {
+				return
+			}
+			if c == widget.Component(w.caption) {
+				break
+			}
+		}
 		if w.caption.OnContextMenu != nil && w.caption.OnContextMenu(ev.Pos) {
 			return
 		}
@@ -602,28 +635,22 @@ func (w *Window) RequestClose() {
 	})
 }
 
-// paintFrame paints the hairline border of a framed window, and the rule
-// under the toolkit's default caption.
-func (w *Window) paintFrame(ctx *paintengine2d.Context) {
+// paintDecoration paints the look's frame of a framed window — its border
+// and the caption band — under the title bar.
+func (w *Window) paintDecoration(ctx *paintengine2d.Context) {
 	g := w.geom
-	if !g.framed {
-		return
-	}
-	pal := w.look.Palette()
-	if w.caption == w.defaultCaption && !g.caption.Empty() {
-		ctx.DrawRect(paintengine2d.XYWH(g.caption.Min.X, g.caption.Max.Y-1, g.caption.Dx(), 1), paintengine2d.Fill(pal.Divider))
-	}
-	b := g.border
-	if b <= 0 {
+	if !g.framed || w.caption == nil {
 		return
 	}
 	ww, hh := w.surf.Size()
-	W, H := float32(ww), float32(hh)
-	fill := paintengine2d.Fill(pal.Border)
-	ctx.DrawRect(paintengine2d.XYWH(0, 0, W, b), fill)
-	ctx.DrawRect(paintengine2d.XYWH(0, H-b, W, b), fill)
-	ctx.DrawRect(paintengine2d.XYWH(0, b, b, H-2*b), fill)
-	ctx.DrawRect(paintengine2d.XYWH(W-b, b, b, H-2*b), fill)
+	f := style.DecorationFrame{Window: paintengine2d.XYWH(0, 0, float32(ww), float32(hh))}
+	cap, bar := w.caption.FrameParts()
+	o := widget.DeviceOrigin(w.caption)
+	f.Caption = cap.Translate(o)
+	if !bar.Empty() {
+		f.Bar = bar.Translate(o)
+	}
+	style.DrawDecorationOf(w.look, ctx, f, w.caption.DecorationState())
 }
 
 // ---- the desktop's title-bar conventions ------------------------------------
@@ -720,6 +747,23 @@ func (a *Application) titleBarPrefsChanged() {
 		}
 	}
 }
+
+// SetCaptionButtons puts the caption buttons of every frame the toolkit
+// draws where the desktop's layout puts them (CaptionButtonsDesktop, the
+// default) or where the look's own does (CaptionButtonsTheme): the user's
+// look.json "captionButtons".
+func (a *Application) SetCaptionButtons(p style.CaptionButtonsPref) {
+	p = style.ParseCaptionButtonsPref(string(p))
+	if a == nil || p == a.captionPref {
+		return
+	}
+	a.captionPref = p
+	a.titleBarPrefsChanged()
+}
+
+// CaptionButtons is where frames the toolkit draws put their caption
+// buttons (see SetCaptionButtons).
+func (a *Application) CaptionButtons() style.CaptionButtonsPref { return a.captionPref }
 
 // setDecorationsPref applies the user's decorations preference (look.json).
 func (a *Application) setDecorationsPref(p style.DecorationsPref) {

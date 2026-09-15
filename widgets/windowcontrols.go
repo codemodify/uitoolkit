@@ -13,11 +13,14 @@ import (
 
 // WindowControls are a window's caption buttons on one side of its title
 // bar — minimize, maximize (restore when maximized), close, the window menu
-// — in the order the desktop's button layout gives. They are painted as
-// generic glyphs over the look's tool-button face, hidden for actions the
-// desktop cannot do (a window manager that cannot minimize gets no minimize
-// button), kept out of the Tab order, and exposed to assistive technology
-// as buttons named Minimize, Maximize or Restore, Close and Window Menu.
+// — in the order the desktop's button layout gives. The look paints them
+// (style.DrawCaptionButtonOf: Win95's bevelled boxes, XP's glossy ones,
+// Aqua's traffic lights, generic glyphs over the tool face elsewhere) at the
+// size and spacing of its frame (style.DecorationOf). They are hidden for
+// actions the desktop cannot do (a window manager that cannot minimize gets
+// no minimize button), kept out of the Tab order, and exposed to assistive
+// technology as buttons named Minimize, Maximize or Restore, Close and
+// Window Menu.
 //
 // A window that draws its own frame puts them into its title bar
 // (Window.SetTitleBar and HeaderBar); apps rarely make them directly.
@@ -26,6 +29,9 @@ type WindowControls struct {
 	buttons []platform.CaptionButton
 	hover   int
 	press   int
+	// lead: the buttons sit at the caption's left end, their outer side
+	// the left.
+	lead bool
 }
 
 // NewWindowControls makes caption buttons, left to right.
@@ -42,6 +48,15 @@ func (c *WindowControls) SetButtons(buttons []platform.CaptionButton) {
 	c.hover, c.press = -1, -1
 	c.RequestLayout()
 	c.Invalidate()
+}
+
+// SetLeading tells the buttons they sit at the caption's left end (their
+// outer padding goes on the left).
+func (c *WindowControls) SetLeading(lead bool) {
+	if c.lead != lead {
+		c.lead = lead
+		c.RequestLayout()
+	}
 }
 
 // Buttons are the configured buttons, including ones the desktop cannot do.
@@ -89,50 +104,138 @@ func (c *WindowControls) Shown() []platform.CaptionButton {
 	return out
 }
 
-// buttonW is one caption button's width; spacerW a spacer's.
-func (c *WindowControls) buttonW() float32 {
-	return float32(math.Round(float64(style.Dip(c.Look(), 40))))
+// DecorationState is the frame state the buttons paint in: the header bar's
+// (the window's active and maximized states), else an active window's.
+func (c *WindowControls) DecorationState() style.DecorationState {
+	for p := c.Parent(); p != nil; p = p.Parent() {
+		if hb, ok := p.(*HeaderBar); ok {
+			return hb.DecorationState()
+		}
+	}
+	return frameState(c.frameHost(), false)
 }
+
+// frameState is the frame state of the window h (an active, restored
+// window without one).
+func frameState(h widget.FrameHost, custom bool) style.DecorationState {
+	st := style.DecorationState{Active: true, Custom: custom}
+	if h != nil {
+		ws := h.WindowState()
+		st.Active = h.Active()
+		st.Maximized = ws.Maximized
+		st.Tiled = style.Edges(ws.Tiled)
+	}
+	return st
+}
+
+// spec is the look's frame in the window's current state.
+func (c *WindowControls) spec() style.DecorationSpec {
+	return style.DecorationOf(c.Look(), c.DecorationState())
+}
+
 func (c *WindowControls) spacerW() float32 {
 	return float32(math.Round(float64(style.Dip(c.Look(), 10))))
 }
 
-// MinHeight is the least height the buttons want (the caption band grows
-// to fit them).
+// MinHeight is the least height the buttons want (the caption grows to fit
+// them).
 func (c *WindowControls) MinHeight() float32 {
-	return float32(math.Round(float64(style.Dip(c.Look(), 30))))
+	s := c.spec()
+	if h := max(s.Button.Y, s.CloseButton.Y); h > 0 {
+		return max(s.ButtonPad.Top+h, s.Caption)
+	}
+	return max(s.Caption, s.ButtonPad.Top+float32(math.Round(float64(style.Dip(c.Look(), 24)))))
+}
+
+// size is shown button b's box in spec s (a spacer's width and no height).
+func (c *WindowControls) size(s style.DecorationSpec, b platform.CaptionButton) paintengine2d.Point {
+	if b == platform.CaptionSpacer {
+		return paintengine2d.Pt(c.spacerW(), 0)
+	}
+	return s.ButtonBox(style.CaptionButton(b))
+}
+
+// gap is the room between shown buttons a and b in spec s.
+func gap(s style.DecorationSpec, a, b platform.CaptionButton) float32 {
+	g := s.ButtonGap
+	if a == platform.CaptionClose || b == platform.CaptionClose {
+		g += s.CloseGap
+	}
+	return g
+}
+
+// width is the room the shown buttons take in spec s, the outer padding
+// included.
+func (c *WindowControls) width(s style.DecorationSpec) float32 {
+	shown := c.Shown()
+	if len(shown) == 0 {
+		return 0
+	}
+	var w float32
+	for i, b := range shown {
+		w += c.size(s, b).X
+		if i > 0 {
+			w += gap(s, shown[i-1], b)
+		}
+	}
+	if c.lead {
+		return w + s.ButtonPad.Left
+	}
+	return w + s.ButtonPad.Right
 }
 
 func (c *WindowControls) Measure(cons layout.Constraints) paintengine2d.Point {
-	var w float32
-	for _, b := range c.Shown() {
-		if b == platform.CaptionSpacer {
-			w += c.spacerW()
-		} else {
-			w += c.buttonW()
-		}
-	}
-	return cons.Constrain(paintengine2d.Pt(w, c.MinHeight()))
+	return cons.Constrain(paintengine2d.Pt(c.width(c.spec()), c.MinHeight()))
 }
 
 func (c *WindowControls) Arrange(r paintengine2d.Rect) { c.SetBounds(r) }
 
-// rects are the shown buttons' boxes, full height so a maximized window's
-// buttons reach the screen edge.
+// rects are the shown buttons' boxes, as the look places them.
 func (c *WindowControls) rects() []paintengine2d.Rect {
+	s := c.spec()
 	shown := c.Shown()
 	h := c.LocalBounds().Dy()
+	top := s.ButtonPad.Top
+	if s.CenterButtons && h > s.Caption {
+		top += float32(math.Round(float64(h-s.Caption) * 0.5))
+	}
 	out := make([]paintengine2d.Rect, len(shown))
-	var x float32
+	x := float32(0)
+	if c.lead {
+		x = s.ButtonPad.Left
+	}
 	for i, b := range shown {
-		w := c.buttonW()
-		if b == platform.CaptionSpacer {
-			w = c.spacerW()
+		if i > 0 {
+			x += gap(s, shown[i-1], b)
 		}
-		out[i] = paintengine2d.XYWH(x, 0, w, h)
-		x += w
+		sz := c.size(s, b)
+		bh := sz.Y
+		if bh <= 0 {
+			bh = max(h-s.ButtonPad.Top, 0)
+		}
+		out[i] = paintengine2d.XYWH(x, top, sz.X, bh)
+		x += sz.X
 	}
 	return out
+}
+
+// hitRects are the boxes that take the pointer: each button's box run up to
+// the caption's top edge, the outermost one out to the window's side too, so
+// a flick into a maximized window's corner hits it (Fitts's law, as Windows
+// does). Gaps between buttons stay caption.
+func (c *WindowControls) hitRects() []paintengine2d.Rect {
+	rs := c.rects()
+	w := c.LocalBounds().Dx()
+	for i := range rs {
+		rs[i].Min.Y = 0
+		if c.lead && i == 0 {
+			rs[i].Min.X = 0
+		}
+		if !c.lead && i == len(rs)-1 {
+			rs[i].Max.X = w
+		}
+	}
+	return rs
 }
 
 // ButtonAt is the caption button at local point p (CaptionNone for none
@@ -144,11 +247,12 @@ func (c *WindowControls) ButtonAt(p paintengine2d.Point) platform.CaptionButton 
 	return platform.CaptionNone
 }
 
-// ButtonRect is where button b is, in local coordinates (empty when it is
-// not shown).
+// ButtonRect is where button b is painted, in local coordinates (empty when
+// it is not shown).
 func (c *WindowControls) ButtonRect(b platform.CaptionButton) paintengine2d.Rect {
+	shown := c.Shown()
 	for i, r := range c.rects() {
-		if c.Shown()[i] == b {
+		if shown[i] == b {
 			return r
 		}
 	}
@@ -157,7 +261,7 @@ func (c *WindowControls) ButtonRect(b platform.CaptionButton) paintengine2d.Rect
 
 func (c *WindowControls) indexAt(p paintengine2d.Point) int {
 	shown := c.Shown()
-	for i, r := range c.rects() {
+	for i, r := range c.hitRects() {
 		if r.Contains(p) && shown[i] != platform.CaptionSpacer {
 			return i
 		}
@@ -165,7 +269,7 @@ func (c *WindowControls) indexAt(p paintengine2d.Point) int {
 	return -1
 }
 
-// CaptionAt: the gaps of spacers are caption, the buttons are controls.
+// CaptionAt: the gaps and spacers are caption, the buttons are controls.
 func (c *WindowControls) CaptionAt(p paintengine2d.Point) bool { return c.indexAt(p) < 0 }
 
 // Tooltip names the hovered button.
@@ -197,98 +301,26 @@ func (c *WindowControls) buttonName(b platform.CaptionButton) string {
 func (c *WindowControls) Paint(ctx *paintengine2d.Context) {
 	lk := c.Look()
 	shown := c.Shown()
-	h := c.frameHost()
-	active, maximized := true, false
-	if h != nil {
-		active, maximized = h.Active(), h.WindowState().Maximized
-	}
+	ds := c.DecorationState()
 	for i, r := range c.rects() {
 		b := shown[i]
 		if b == platform.CaptionSpacer {
 			continue
 		}
-		st := style.StateAutoRaise
-		if !active {
-			st |= style.StateBackdrop
-		}
+		var cs style.ControlState
 		if i == c.hover {
-			st |= style.StateHovered
+			cs |= style.StateHovered
 		}
 		if i == c.press {
-			st |= style.StatePressed
+			cs |= style.StatePressed | style.StateHovered
 		}
-		var fg paintengine2d.Color
-		if b == platform.CaptionClose && (i == c.hover || i == c.press) {
-			// Close turns red under the pointer (Windows, Breeze, Chromium).
-			bg := lk.Palette().Danger
-			if i == c.press {
-				bg = bg.Lerp(paintengine2d.RGB(0, 0, 0), 0.2)
-			}
-			ctx.DrawRect(r, paintengine2d.Fill(bg))
-			fg = paintengine2d.RGB(1, 1, 1)
-		} else {
-			fg = style.DrawFaceOf(lk, ctx, r, style.RoleTool, st)
-		}
-		if !active && i != c.hover {
-			fg = fg.WithAlpha(fg.A * 0.55)
-		}
-		drawCaptionGlyph(ctx, lk, r, b, maximized, fg)
-	}
-}
-
-// drawCaptionGlyph draws a generic caption-button glyph centred in r:
-// an ✕ for close, a bar for minimize, a square for maximize, two for
-// restore, a small window for the window menu. Lines are whole device
-// pixels so they stay crisp at any scale.
-func drawCaptionGlyph(ctx *paintengine2d.Context, lk style.LookAndFeel, r paintengine2d.Rect, b platform.CaptionButton, maximized bool, col paintengine2d.Color) {
-	round := func(v float32) float32 { return float32(math.Round(float64(v))) }
-	s := round(style.Dip(lk, 10))
-	lw := max(1, round(style.Dip(lk, 1)))
-	x0 := round(r.Min.X + (r.Dx()-s)*0.5)
-	y0 := round(r.Min.Y + (r.Dy()-s)*0.5)
-	g := paintengine2d.XYWH(x0, y0, s, s)
-	fill := paintengine2d.Fill(col)
-	frame := func(q paintengine2d.Rect) {
-		ctx.DrawRect(paintengine2d.XYWH(q.Min.X, q.Min.Y, q.Dx(), lw), fill)
-		ctx.DrawRect(paintengine2d.XYWH(q.Min.X, q.Max.Y-lw, q.Dx(), lw), fill)
-		ctx.DrawRect(paintengine2d.XYWH(q.Min.X, q.Min.Y+lw, lw, q.Dy()-2*lw), fill)
-		ctx.DrawRect(paintengine2d.XYWH(q.Max.X-lw, q.Min.Y+lw, lw, q.Dy()-2*lw), fill)
-	}
-	switch b {
-	case platform.CaptionClose:
-		var p paintengine2d.Path
-		p.MoveTo(g.Min.X, g.Min.Y)
-		p.LineTo(g.Max.X, g.Max.Y)
-		p.MoveTo(g.Max.X, g.Min.Y)
-		p.LineTo(g.Min.X, g.Max.Y)
-		ctx.DrawPath(&p, paintengine2d.StrokePaint(col, lw*1.15))
-	case platform.CaptionMinimize:
-		ctx.DrawRect(paintengine2d.XYWH(g.Min.X, round(g.Min.Y+s*0.5), s, lw), fill)
-	case platform.CaptionMaximize:
-		if !maximized {
-			frame(g)
-			return
-		}
-		// Restore: a square in front of another, the back one showing
-		// its top and right edges.
-		d := max(lw*2, round(style.Dip(lk, 2)))
-		back := paintengine2d.XYWH(g.Min.X+d, g.Min.Y, s-d, s-d)
-		front := paintengine2d.XYWH(g.Min.X, g.Min.Y+d, s-d, s-d)
-		ctx.DrawRect(paintengine2d.XYWH(back.Min.X, back.Min.Y, back.Dx(), lw), fill)
-		ctx.DrawRect(paintengine2d.XYWH(back.Max.X-lw, back.Min.Y, lw, back.Dy()), fill)
-		ctx.DrawRect(paintengine2d.XYWH(back.Min.X, back.Min.Y, lw, front.Min.Y-back.Min.Y), fill)
-		ctx.DrawRect(paintengine2d.XYWH(front.Max.X, back.Max.Y-lw, back.Max.X-front.Max.X, lw), fill)
-		frame(front)
-	case platform.CaptionMenu:
-		w := paintengine2d.XYWH(g.Min.X, round(g.Min.Y+s*0.1), s, round(s*0.8))
-		frame(w)
-		ctx.DrawRect(paintengine2d.XYWH(w.Min.X, w.Min.Y, w.Dx(), max(lw*2, round(s*0.25))), fill)
+		style.DrawCaptionButtonOf(lk, ctx, r, style.CaptionButton(b), cs, ds)
 	}
 }
 
 func (c *WindowControls) invalidateButton(i int) {
-	if rs := c.rects(); i >= 0 && i < len(rs) {
-		c.InvalidateRect(rs[i].Inset(-1))
+	if rs := c.hitRects(); i >= 0 && i < len(rs) {
+		c.InvalidateRect(rs[i].Union(c.rects()[i]).Inset(-1))
 	}
 }
 
