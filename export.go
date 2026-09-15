@@ -32,6 +32,7 @@ type (
 	MessageButtons    = widgets.MessageButtons
 	MessageResult     = widgets.MessageResult
 	MessageBoxOptions = widgets.MessageBoxOptions
+	ButtonRole        = widgets.ButtonRole
 	TableColumn       = widgets.TableColumn
 	FileInfo          = widgets.FileInfo
 	FileDialogMode    = widgets.FileDialogMode
@@ -132,6 +133,20 @@ func NewDateField(value time.Time, on func(time.Time)) *widgets.DateField {
 func NewColorButton(col paintengine2d.Color, on func(paintengine2d.Color)) *widgets.ColorButton {
 	return widgets.NewColorButton(col, on)
 }
+
+// Dialog button roles: where a ButtonBox puts a button for the look's
+// platform.
+const (
+	RoleAccept      = widgets.RoleAccept
+	RoleReject      = widgets.RoleReject
+	RoleDestructive = widgets.RoleDestructive
+	RoleAction      = widgets.RoleAction
+	RoleHelp        = widgets.RoleHelp
+)
+
+// NewButtonBox lays a dialog's buttons out in the order of the look's
+// platform ("OK Cancel" on Windows and KDE, "Cancel OK" on Mac and GNOME).
+func NewButtonBox() *widgets.ButtonBox { return widgets.NewButtonBox() }
 
 // NewSegmented is a row of joined toggle buttons, one chosen (a view switch).
 func NewSegmented(segments []string, selected int, on func(int)) *widgets.Segmented {

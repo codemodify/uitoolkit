@@ -292,7 +292,7 @@ func OpenTagEditor(a *app.Application, initial Tag, nameLocked bool, onSave func
 			widgets.NewLabel("Color"),
 			color,
 			widgets.NewLabel(hint),
-			widgets.NewRow(widgets.NewSpacer(), cancel, save).WithGap(8),
+			widgets.NewButtonBox().AddButton(cancel, widgets.RoleReject).AddButton(save, widgets.RoleAccept),
 		).WithGap(8)),
 	).WithGap(0)
 	win.SetContent(root)
