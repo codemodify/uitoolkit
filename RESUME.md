@@ -112,6 +112,7 @@ Core features the engines drive, added along the way:
     right-aligned in Mac looks);
   - `Calendar` and `DateField`;
   - `ColorButton` with a drop-down picker;
+  - `Segmented`, a view switch of joined toggle buttons;
   - `Picture` for PNG, JPEG and GIF images.
 
   The gallery's Form tab shows them.
