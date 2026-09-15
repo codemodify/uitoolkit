@@ -225,7 +225,10 @@ func (t *ToolBar) itemAt(p paintengine2d.Point) int {
 
 func (t *ToolBar) Paint(ctx *paintengine2d.Context) {
 	lk := t.Look()
-	lk.DrawToolBar(ctx, t.LocalBounds())
+	if !inMergedCaption(t) {
+		// In a title bar the toolkit draws, the caption is the bar.
+		lk.DrawToolBar(ctx, t.LocalBounds())
+	}
 	rects := t.itemRects()
 	if len(t.fades) != len(t.items) {
 		t.fades = make([]stateFade, len(t.items))

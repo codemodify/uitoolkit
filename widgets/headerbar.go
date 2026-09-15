@@ -126,6 +126,18 @@ func (h *HeaderBar) spec() style.DecorationSpec {
 // strip above its row (see style.DecorationSpec.Stacked).
 func (h *HeaderBar) Stacked() bool { return h.framed && h.spec().Stacked }
 
+// inMergedCaption reports whether c is in the caption of a merged frame the
+// toolkit draws: the look's caption band is its background, so bars there
+// (a menu bar, a tab strip) paint none of their own.
+func inMergedCaption(c widget.Component) bool {
+	for p := c.Parent(); p != nil; p = p.Parent() {
+		if hb, ok := p.(*HeaderBar); ok {
+			return hb.Framed() && !hb.Stacked()
+		}
+	}
+	return false
+}
+
 // FrameParts are the caption band and, under a stacked frame's strip, the
 // title-bar row, in the header bar's own coordinates: the parts the look's
 // frame paints under it.

@@ -334,14 +334,7 @@ func (t *BrowserTabs) tabHeight() float32 {
 
 // onCaption reports whether the strip is in a merged frame's caption, where
 // the look's caption band is its background.
-func (t *BrowserTabs) onCaption() bool {
-	for p := t.Parent(); p != nil; p = p.Parent() {
-		if hb, ok := p.(*HeaderBar); ok {
-			return hb.Framed() && !hb.Stacked()
-		}
-	}
-	return false
-}
+func (t *BrowserTabs) onCaption() bool { return inMergedCaption(t) }
 
 // geom lays the strip out in its bounds.
 func (t *BrowserTabs) geom() stripGeom {
