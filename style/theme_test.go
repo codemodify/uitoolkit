@@ -204,7 +204,8 @@ func TestLoadAppearanceReadsIconSize(t *testing.T) {
 	}
 }
 
-func TestLoadAppearanceBareDarkIsDefault(t *testing.T) {
+// A bare {"theme":"dark"} is the dark starter, otherwise the defaults.
+func TestLoadAppearanceBareDarkIsTheDarkStarter(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	path := AppearancePath()
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
@@ -213,8 +214,8 @@ func TestLoadAppearanceBareDarkIsDefault(t *testing.T) {
 	if err := os.WriteFile(path, []byte(`{"theme":"dark"}`+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if LoadAppearance() != DefaultAppearance() {
-		t.Fatalf("%+v", LoadAppearance())
+	if want := DefaultAppearance().WithPalette(ThemeDark); LoadAppearance() != want {
+		t.Fatalf("%+v, want %+v", LoadAppearance(), want)
 	}
 }
 

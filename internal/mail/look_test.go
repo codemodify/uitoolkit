@@ -44,7 +44,7 @@ func TestMailRebuildDoesNotClobberLookJSON(t *testing.T) {
 
 func TestMailWatchLookAppliesSettingsPack(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	if err := style.SaveAppearance(style.DefaultAppearance()); err != nil {
+	if err := style.SaveAppearance(style.DefaultAppearance().WithPalette(style.ThemeDark)); err != nil {
 		t.Fatal(err)
 	}
 	s, a, _, stop := openMailLookSession(t, style.PreferredLook(), true, AppOptions{ShowFilter: true, Light: false})
