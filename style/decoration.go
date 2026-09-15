@@ -467,7 +467,7 @@ func adapterFrame(l *Classic, w paintengine2d.Rect, st DecorationState) painteng
 func (a frameAdapter) DrawDecoration(l *Classic, ctx *paintengine2d.Context, f DecorationFrame, st DecorationState) {
 	e := l.eng()
 	fr := adapterFrame(l, f.Window, st)
-	ws := WindowState{Active: st.Active}
+	ws := WindowState{Active: st.Active, NoButtons: true}
 	for _, part := range FrameParts(f, a.Decoration(l, st).Border) {
 		if part.Empty() {
 			continue
@@ -488,7 +488,7 @@ func (frameAdapter) DrawCaptionTitle(l *Classic, ctx *paintengine2d.Context, b p
 	fr := paintengine2d.XYWH(b.Min.X-in.Left, b.Min.Y, b.Dx()+in.Left+in.Right, max(in.Top*4, snap(l.S(240))))
 	ctx.Save()
 	ctx.ClipRect(b)
-	l.eng().DrawWindowFrame(l, ctx, fr, title, WindowState{Active: st.Active})
+	l.eng().DrawWindowFrame(l, ctx, fr, title, WindowState{Active: st.Active, NoButtons: true})
 	ctx.Restore()
 }
 
@@ -497,13 +497,20 @@ func (frameAdapter) DrawCaptionTitle(l *Classic, ctx *paintengine2d.Context, b p
 // its size with generic glyphs.
 func (a frameAdapter) DrawCaptionButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, k CaptionButton, cs ControlState, st DecorationState) {
 	e := l.eng()
-	if k == CaptionClose {
+	// The in-app frame's close button is the engine's own — or, where that
+	// is a window menu box (Windows 3.1's control-menu box), the window
+	// menu's.
+	own := CaptionClose
+	if adapterMenuBox[e.ID()] {
+		own = CaptionMenu
+	}
+	if k == own {
 		_, cr, _ := adapterGeom(l)
 		if !cr.Empty() {
 			fr := adapterProbe(l).Translate(paintengine2d.Pt(b.Min.X-cr.Min.X, b.Min.Y-cr.Min.Y))
 			ctx.Save()
 			ctx.ClipRect(b)
-			e.DrawWindowFrame(l, ctx, fr, "", WindowState{Active: st.Active, CanClose: true, CloseHot: cs.Hovered(), ClosePress: cs.Pressed()})
+			e.DrawWindowFrame(l, ctx, fr, "", WindowState{Active: st.Active, CanClose: true, CloseHot: cs.Hovered(), ClosePress: cs.Pressed(), NoButtons: true})
 			ctx.Restore()
 			return
 		}
@@ -516,8 +523,31 @@ func (a frameAdapter) DrawCaptionButton(l *Classic, ctx *paintengine2d.Context, 
 	}
 	fg := e.Face(l, ctx, b, RoleButton, fs)
 	side := min(b.Dx(), b.Dy())
+	if adapterArrows[e.ID()] && (k == CaptionMinimize || k == CaptionMaximize) {
+		// Windows 3.x: minimize a down arrow, maximize an up one, restore
+		// both.
+		g := b.Inset(side * 0.3)
+		switch {
+		case k == CaptionMinimize:
+			FillArrow(ctx, g, DirDown, fg)
+		case st.Maximized:
+			h := g.Dy() * 0.5
+			FillArrow(ctx, paintengine2d.XYWH(g.Min.X, g.Min.Y, g.Dx(), h), DirUp, fg)
+			FillArrow(ctx, paintengine2d.XYWH(g.Min.X, g.Min.Y+h, g.Dx(), h), DirDown, fg)
+		default:
+			FillArrow(ctx, g, DirUp, fg)
+		}
+		return
+	}
 	DrawCaptionGlyph(ctx, b, k, st.Maximized, fg, side*0.45, max(l.S(1), side/16))
 }
+
+// adapterMenuBox are the engines whose in-app close box is a window menu
+// box; adapterArrows those whose minimize and maximize were arrows.
+var (
+	adapterMenuBox = map[string]bool{"win31": true}
+	adapterArrows  = map[string]bool{"win31": true}
+)
 
 // adapterLayouts are the caption buttons of the desktops the adapted engines
 // imitate, for the "theme" button layout.

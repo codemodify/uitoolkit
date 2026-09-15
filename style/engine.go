@@ -258,6 +258,10 @@ type WindowState struct {
 	ClosePress  bool
 	CanClose    bool
 	Maximizable bool
+	// NoButtons: paint the frame and its caption without any caption
+	// buttons beyond the close one (zoom, collapse, depth gadgets): a
+	// top-level window's frame adapted from this one paints its own.
+	NoButtons bool
 }
 
 // ---- scrollbar geometry -------------------------------------------------
