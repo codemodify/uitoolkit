@@ -347,8 +347,20 @@ func (s *settingsState) themesPage(status *widgets.StatusBar, stage func(style.A
 		stage(next)
 	})
 	options.PlaceSpan(native, 3, 0, 1, 4)
+	// Chromium's switch: windows that draw their own title bar (Mail's,
+	// with its tool bar in it) get the desktop's title bar and borders
+	// instead, and their title bar becomes the first row.
+	system := widgets.NewSwitch("Use system title bar and borders", s.staged.Decorations == style.DecorationsSystem, func(on bool) {
+		next := s.staged
+		next.Decorations = style.DecorationsAuto
+		if on {
+			next.Decorations = style.DecorationsSystem
+		}
+		stage(next)
+	})
+	options.PlaceSpan(system, 4, 0, 1, 4)
 	if style.DesktopReducesMotion() {
-		options.PlaceSpan(widgets.NewLabel("The desktop asks for reduced motion, so animations stay off."), 4, 0, 1, 4)
+		options.PlaceSpan(widgets.NewLabel("The desktop asks for reduced motion, so animations stay off."), 5, 0, 1, 4)
 	}
 
 	preview := widgets.NewColumn(info, scope, options).WithGap(10)
