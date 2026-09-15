@@ -1,6 +1,9 @@
 package uitoolkit
 
 import (
+	"io"
+
+	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/app"
 	"github.com/codemodify/uitoolkit/layout"
 	"github.com/codemodify/uitoolkit/platform"
@@ -54,6 +57,10 @@ type (
 	ChromeMetrics     = style.ChromeMetrics
 	ThemeEraGroup     = style.ThemeEraGroup
 	IconSetInfo       = style.IconSetInfo
+	SelectionMode     = widgets.SelectionMode
+	Track             = widgets.Track
+	GridCell          = widgets.GridCell
+	ImageFit          = widgets.ImageFit
 )
 
 const (
@@ -88,9 +95,33 @@ const (
 	BevelFluentAccent      = style.BevelFluentAccent
 	HostMenu               = platform.HostMenu
 	ToolkitMenu            = platform.ToolkitMenu
+	SelectSingle           = widgets.SelectSingle
+	SelectExtended         = widgets.SelectExtended
+	SelectMulti            = widgets.SelectMulti
+	FitContain             = widgets.FitContain
+	FitCover               = widgets.FitCover
+	FitStretch             = widgets.FitStretch
+	FitNone                = widgets.FitNone
 )
 
 func New(opts Options) *Application { return app.New(opts) }
+
+// NewGrid is a row / column layout (QGridLayout, WPF Grid).
+func NewGrid() *widgets.Grid { return widgets.NewGrid() }
+
+// NewForm is a label / field form layout (QFormLayout).
+func NewForm() *widgets.Form { return widgets.NewForm() }
+
+// Auto, Px and Flex size grid tracks.
+func Auto() widgets.Track               { return widgets.Auto() }
+func Px(v float32) widgets.Track        { return widgets.Px(v) }
+func Flex(weight float32) widgets.Track { return widgets.Flex(weight) }
+
+// NewPicture shows a raster image.
+func NewPicture(img *paintengine2d.Image) *widgets.Picture { return widgets.NewPicture(img) }
+
+// LoadPicture decodes a PNG, JPEG or GIF into a Picture.
+func LoadPicture(r io.Reader) (*widgets.Picture, error) { return widgets.LoadPicture(r) }
 
 func StatusItemAvailable() bool { return platform.StatusItemAvailable() }
 func StatusMenuFromItems(items []*widgets.MenuItem) []platform.StatusMenuItem {
