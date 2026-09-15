@@ -25,6 +25,7 @@ func main() {
 	shot := flag.String("screenshot", "", "write PNG gallery into this directory and exit")
 	headless := flag.Bool("headless", false, "paint offscreen (no X11/Wayland)")
 	theme := flag.String("theme", "", "with -screenshot: take every gallery shot in this theme pack (default: $UITK_THEME, else each shot's own look)")
+	tab := flag.Int("tab", 0, "with -headless: the gallery tab to show (0 Scroll, 1 List, 2 Tree, 3 Table, 4 Form)")
 	flag.Parse()
 
 	if *shot != "" {
@@ -52,6 +53,9 @@ func main() {
 		log.Fatal(err)
 	}
 	win.SetContent(buildGallery(a, win, a.Look().Name() == "light"))
+	if *tab > 0 {
+		selectGalleryTab(win, *tab)
+	}
 	if *headless {
 		_ = win.WritePNG("gallery.png")
 		fmt.Println("wrote gallery.png")
