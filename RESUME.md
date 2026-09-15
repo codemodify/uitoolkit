@@ -122,9 +122,9 @@ Also merged: `macos` (OS X Yosemite, macOS Big Sur and Big Sur Dark),
 whose tonal palettes are computed from a seed colour) and `flatlaf` (FlatLaf
 Light, FlatLaf Dark, Darcula).
 
-78 packs from 28 engines in all. Running now in its own worktree: sidebar
-styles and toolbar tool buttons for macOS, Adwaita, Fluent, Material and
-Metal (`engine/sidebar`).
+78 packs from 28 engines in all. Every agent branch is merged, the last
+being sidebar styles and tool-bar buttons for macOS, Adwaita, Fluent and
+Material (`engine/sidebar`).
 
 Core features the engines drive, added along the way:
 - selected tabs overlap their neighbours;
@@ -227,8 +227,19 @@ Core features the engines drive, added along the way:
   your laptop's scale, labels crowded their controls and lines came out
   thin.
 - **Sidebars** (`ListView.Sidebar`, `TreeView.Sidebar`) and a new
-  `ViewBackground` engine hook: Aqua draws Leopard's source list; more
-  engines are in progress.
+  `ViewBackground` engine hook. Styled in Aqua (Leopard's source list),
+  macOS Yosemite and Big Sur, libadwaita, Fluent's navigation pane and
+  Material's drawers.
+- **The desktop's own file dialogs** through the XDG portal (Settings:
+  "Use the desktop's file dialogs"), modal to the window on X11.
+- **Drops from other apps** (Wayland): files and text, `DropZone`; Mail's
+  compose window attaches dropped files.
+- **Touchpad scrolling** follows the fingers (a bug made slow scrolls jump
+  by lines), with kinetic flings; wheels scroll three lines a notch.
+- **Medium and semibold weights** for looks that need them (Material,
+  Fluent, macOS).
+- **Idle cost:** look.json is watched with inotify, not polled every
+  300ms, and tray apps sleep up to 1s instead of 100ms.
 - **Start-up:** the font index and the portal read run alongside display
   setup.
 - **`UITK_THEME=<pack>`:** runs any app in any theme, like `GTK_THEME`.
@@ -253,9 +264,12 @@ apps. Now:
   and text, actions, and the focus and "checked" announcements.
 
 It also announces changes on the focused object (a ticked check box, typed
-text, caret moves) and supports EditableText, for automation tools such as
-dogtail. See `docs/accessibility.md`. Still to do: relations, the Selection
-and Table interfaces, and the Windows and macOS adapters.
+text, caret moves), and supports EditableText (for automation tools such as
+dogtail), Selection, and Table with TableCell (Orca's row and column
+navigation). Label.For names a control after its caption. The audit also
+covers Files, Notes and Inspector, and flags controls the keyboard cannot
+reach. See `docs/accessibility.md`. Still to do: relations and the Windows
+and macOS adapters.
 
 ## Gaps against Qt and GTK (my proposed order)
 
