@@ -131,6 +131,30 @@ func TestLoadAppearanceReadsTriad(t *testing.T) {
 	}
 }
 
+// UITK_THEME picks the theme for one process (GTK_THEME-style) while the
+// other saved prefs still apply; without a file it still works.
+func TestLoadAppearanceThemeEnvOverride(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv(ThemeEnv, "win95")
+	if got := LoadAppearance(); got.Name != "win95" {
+		t.Fatalf("no file: theme %q, want win95", got.Name)
+	}
+	if err := SaveAppearance(Appearance{Name: "light", Theme: ThemeLight, Corners: CornersSquare, Icons: IconSetSharp, IconSize: IconSizeLarge}); err != nil {
+		t.Fatal(err)
+	}
+	got := LoadAppearance()
+	if got.Name != "win95" || got.Icons != IconSetSharp || got.IconSize != IconSizeLarge || got.Corners != CornersSquare {
+		t.Fatalf("with file: %+v, want win95 with the saved icons/size/corners", got)
+	}
+	if lk := PreferredLook().(*Classic); lk.Engine().ID() != "win95" {
+		t.Fatalf("preferred look engine %q, want win95", lk.Engine().ID())
+	}
+	t.Setenv(ThemeEnv, "")
+	if got := LoadAppearance(); got.Name != "light" {
+		t.Fatalf("override cleared: theme %q, want the saved light", got.Name)
+	}
+}
+
 func TestLoadAppearanceMigratesCompoundNames(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	path := AppearancePath()

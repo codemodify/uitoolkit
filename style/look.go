@@ -1527,8 +1527,16 @@ func (l *Classic) drawFittedText(ctx *paintengine2d.Context, f *Font, text strin
 	if f == nil || text == "" || b.Empty() {
 		return
 	}
+	th := f.Height()
+	clip := b
+	if th > b.Dy() {
+		// Shorter than a line: centre anyway and overflow evenly, so a
+		// tight era metric trims line gap rather than the descenders.
+		grow := (th - b.Dy()) * 0.5
+		clip = paintengine2d.Rect{Min: paintengine2d.Pt(b.Min.X, b.Min.Y-grow), Max: paintengine2d.Pt(b.Max.X, b.Max.Y+grow)}
+	}
 	ctx.Save()
-	ctx.ClipRect(b)
+	ctx.ClipRect(clip)
 	maxW := b.Dx() - pad
 	if maxW < 4 {
 		maxW = 4
@@ -1538,7 +1546,6 @@ func (l *Classic) drawFittedText(ctx *paintengine2d.Context, f *Font, text strin
 		show = f.Fit(show, maxW)
 	}
 	tw := f.Advance(show)
-	th := f.Height()
 	x := b.Min.X
 	switch align {
 	case AlignCenter:
@@ -1547,9 +1554,6 @@ func (l *Classic) drawFittedText(ctx *paintengine2d.Context, f *Font, text strin
 		x = b.Max.X - tw - 2
 	}
 	y := b.Min.Y + (b.Dy()-th)*0.5
-	if y < b.Min.Y {
-		y = b.Min.Y
-	}
 	f.Draw(ctx, show, paintengine2d.Pt(x, y), col)
 	ctx.Restore()
 }
