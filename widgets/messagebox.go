@@ -109,20 +109,20 @@ func NewMessageBox(opts MessageBoxOptions) *MessageBox {
 	mb.overlay = NewOverlay(card)
 	mb.overlay.Modal = true
 	mb.overlay.OnClose = func() { mb.finish(mb.cancelResult()) }
-	// The default button takes focus and Enter; its position follows the
-	// look (Windows / KDE: "OK Cancel", Mac / GNOME: "Cancel OK").
+	// The default button takes focus and Enter; the order follows the look.
+	// actionButtons lists them the Mac / GNOME way, default last ("Cancel
+	// No Yes"); Windows / KDE read the same row backwards ("Yes No Cancel").
 	primary := actions[len(actions)-1]
 	mb.overlay.InitialFocus = primary
 	mb.overlay.OnPresented = func() {
 		if style.LookHint(mb.overlay.Look(), style.HintDialogPrimaryFirst) == 0 {
 			return
 		}
-		ordered := append([]widget.Component{primary}, actions[:len(actions)-1]...)
 		for _, c := range actions {
 			row.Remove(c)
 		}
-		for _, c := range ordered {
-			row.Add(c)
+		for i := len(actions) - 1; i >= 0; i-- {
+			row.Add(actions[i])
 		}
 	}
 	return mb
