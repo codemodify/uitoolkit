@@ -177,9 +177,9 @@ func TestMissingRuneGetsNotdef(t *testing.T) {
 // TestFontCacheEvictsPastBudget pins finding 6: the size cache never evicted.
 func TestFontCacheEvictsPastBudget(t *testing.T) {
 	old := fontCacheBudget
-	// Sheets start small and grow to what they hold (about 128–512 KB at
-	// these sizes), so 1 MB keeps only a few.
-	fontCacheBudget = 1 << 20
+	// Sheets are one byte a pixel and grow to what they hold (about
+	// 32–128 KB at these sizes), so 256 KB keeps only a few.
+	fontCacheBudget = 256 << 10
 	defer func() { fontCacheBudget = old }()
 	for i := 0; i < 24; i++ {
 		BakeFont(12+float32(i)*0.5, paintengine2d.White)
