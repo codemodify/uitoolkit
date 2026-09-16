@@ -150,6 +150,32 @@ func KeyTarget(focus, overlay Component) Component {
 	return focus
 }
 
+// FocusWatcher is implemented by containers that paint differently when
+// the focus moves in or out of them, rather than onto them: a dock panel's
+// title bar marks the panel the keyboard is in, whichever of its widgets
+// actually holds the focus. FocusGained and FocusLost only reach the two
+// components at either end of the move, so a container needs this instead.
+type FocusWatcher interface {
+	// FocusMoved is called after the host focus changed; now is the
+	// component that holds it, or nil.
+	FocusMoved(now Component)
+}
+
+// NotifyFocusMoved tells every FocusWatcher under roots that the focus is
+// now on c. The host calls it after each move.
+func NotifyFocusMoved(now Component, roots ...Component) {
+	for _, r := range roots {
+		if r == nil {
+			continue
+		}
+		Walk(r, func(n Component) {
+			if w, ok := n.(FocusWatcher); ok {
+				w.FocusMoved(now)
+			}
+		})
+	}
+}
+
 // Revealer is implemented by scrolling containers that can bring a
 // descendant into view (widgets.ScrollView).
 type Revealer interface {
