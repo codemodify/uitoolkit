@@ -1,6 +1,10 @@
 package platform
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/codemodify/paintengine2d"
+)
 
 func TestDragActionHasAndOne(t *testing.T) {
 	both := DragCopy | DragMove
@@ -62,3 +66,74 @@ func TestNegotiateDragAction(t *testing.T) {
 		}
 	}
 }
+
+func TestOffscreenCarriesAToplevel(t *testing.T) {
+	src := NewOffscreen(WindowOptions{Width: 200, Height: 100})
+	torn := NewOffscreen(WindowOptions{Width: 120, Height: 80})
+	if !DragsToplevels(src) {
+		t.Fatal("the offscreen desktop carries windows")
+	}
+	if AttachToplevel(src, torn, 10, 4) {
+		t.Fatal("nothing to attach to before the drag starts")
+	}
+	if !src.StartDrag(DragPayload{Types: []string{"text/plain"}, Toplevel: true}) {
+		t.Fatal("StartDrag")
+	}
+	if !AttachToplevel(src, torn, 10, 4) {
+		t.Fatal("AttachToplevel")
+	}
+	if got, dx, dy := src.DragToplevel(); got != Surface(torn) || dx != 10 || dy != 4 {
+		t.Fatalf("DragToplevel: got %v %d,%d", got, dx, dy)
+	}
+	src.Move(40, 30)
+	src.SimulateDragOver(paintengine2d.Pt(60, 20))
+	// The window hangs off the pointer by the offset, in root
+	// coordinates: the source window's own position plus the pointer.
+	if x, y, ok := torn.Position(); !ok || x != 40+60-10 || y != 30+20-4 {
+		t.Fatalf("carried to %d,%d (ok=%v)", x, y, ok)
+	}
+	src.SimulateDragRelease()
+	if !src.DragDropped() || src.DragEnded() != DragNone {
+		t.Fatalf("a release over nothing is a drop that took nothing: dropped=%v action=%v",
+			src.DragDropped(), src.DragEnded())
+	}
+}
+
+func TestOffscreenWithoutToplevelDrag(t *testing.T) {
+	src := NewOffscreen(WindowOptions{Width: 200, Height: 100})
+	torn := NewOffscreen(WindowOptions{Width: 120, Height: 80})
+	src.SetDragsToplevels(false)
+	if DragsToplevels(src) {
+		t.Fatal("this desktop has no toplevel drag")
+	}
+	if !src.StartDrag(DragPayload{Types: []string{"text/plain"}, Toplevel: true}) {
+		t.Fatal("StartDrag")
+	}
+	if AttachToplevel(src, torn, 0, 0) {
+		t.Fatal("a desktop without the protocol carries nothing")
+	}
+	src.CancelDrag()
+	if src.DragDropped() {
+		t.Fatal("a cancelled drag was never dropped")
+	}
+}
+
+func TestSurfacePosition(t *testing.T) {
+	o := NewOffscreen(WindowOptions{Width: 100, Height: 100, X: 12, Y: 34})
+	if x, y, ok := SurfacePosition(o); !ok || x != 12 || y != 34 {
+		t.Fatalf("the window was opened at 12,34: got %d,%d (ok=%v)", x, y, ok)
+	}
+	MoveSurface(o, 200, 100)
+	if x, y, _ := SurfacePosition(o); x != 200 || y != 100 {
+		t.Fatalf("after a move: got %d,%d", x, y)
+	}
+	// A surface with no position at all — every Wayland toplevel — says
+	// so rather than making one up.
+	if _, _, ok := SurfacePosition(noPosition{o}); ok {
+		t.Fatal("a surface that is not told its position must answer false")
+	}
+}
+
+// noPosition is a Surface without the position capability, which is what
+// a Wayland toplevel is.
+type noPosition struct{ Surface }

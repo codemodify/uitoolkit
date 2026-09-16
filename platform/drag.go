@@ -82,6 +82,55 @@ type DragPayload struct {
 	// is the one it would rather the target took.
 	Actions   DragAction
 	Preferred DragAction
+	// Toplevel says the drag may carry a window of its own — a tab torn
+	// out of a strip, a floating panel dragged back to its host. A
+	// backend whose protocol wants it said before the drag starts
+	// prepares it then (Wayland's xdg_toplevel_drag_v1 can only be made
+	// before wl_data_device.start_drag); the window itself is handed over
+	// later, with [AttachToplevel].
+	Toplevel bool
+}
+
+// ToplevelDragSurface is implemented by surfaces whose drag can carry a
+// window under the pointer: Wayland's xdg-toplevel-drag-v1 (KWin 6,
+// Mutter 47), and on X11 the client placing its own windows, which X11
+// lets it do. A compositor with neither still runs the drag — it just
+// carries the picture alone, and the window a tear-off makes appears at
+// the drop, wherever the compositor puts it, which is the fallback
+// Chromium ships for the same reason.
+type ToplevelDragSurface interface {
+	// DragsToplevels reports whether a drag from this surface can carry a
+	// window. It is asked before the drag starts, because the answer
+	// decides whether the window is made now or at the drop.
+	DragsToplevels() bool
+	// AttachToplevel hands win to the drag running out of this surface:
+	// from now on the desktop moves it with the pointer, dx and dy inside
+	// it under the pointer. It reports whether the window is carried.
+	// Attaching an unmapped window is best: a compositor may only honour
+	// the offset for one it has not placed yet.
+	AttachToplevel(win Surface, dx, dy int) bool
+}
+
+// EnvToplevelDrag set to 0 makes the Wayland backend ignore
+// xdg-toplevel-drag-v1, so a tear-off takes the fallback path (the drag
+// carries the picture alone and the window appears at the drop) on a
+// compositor that has the protocol. For testing.
+const EnvToplevelDrag = "UITK_TOPLEVEL_DRAG"
+
+// DragsToplevels reports whether a drag started on s can carry a window.
+func DragsToplevels(s Surface) bool {
+	t, ok := s.(ToplevelDragSurface)
+	return ok && t.DragsToplevels()
+}
+
+// AttachToplevel hands win to the drag running on s (see
+// [ToplevelDragSurface]). It reports whether the window is carried.
+func AttachToplevel(s, win Surface, dx, dy int) bool {
+	if s == nil || win == nil {
+		return false
+	}
+	t, ok := s.(ToplevelDragSurface)
+	return ok && t.AttachToplevel(win, dx, dy)
 }
 
 // DragSurface is implemented by surfaces that can start a drag of their

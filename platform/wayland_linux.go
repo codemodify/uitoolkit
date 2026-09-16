@@ -27,6 +27,7 @@ package platform
 #include "viewporter-client-protocol.h"
 #include "xdg-activation-v1-client-protocol.h"
 #include "cursor-shape-v1-client-protocol.h"
+#include "xdg-toplevel-drag-v1-client-protocol.h"
 #include "wayland_dmabuf.h"
 #include "wayland_sync.h"
 #include "wayland_cursor.h"
@@ -602,6 +603,10 @@ static const struct wl_interface *ui_wl_output_iface(void) { return &wl_output_i
 static const struct wl_interface *ui_wl_ti_man_iface(void) { return &zwp_text_input_manager_v3_interface; }
 static const struct wl_interface *ui_wl_prim_man_iface(void) { return &zwp_primary_selection_device_manager_v1_interface; }
 static const struct wl_interface *ui_wl_deco_man_iface(void) { return &zxdg_decoration_manager_v1_interface; }
+static const struct wl_interface *ui_wl_top_drag_man_iface(void) { return &xdg_toplevel_drag_manager_v1_interface; }
+static void ui_wl_top_drag_man_destroy(struct xdg_toplevel_drag_manager_v1 *m) {
+	if (m) xdg_toplevel_drag_manager_v1_destroy(m);
+}
 static const struct wl_interface *ui_wl_frac_man_iface(void) { return &wp_fractional_scale_manager_v1_interface; }
 static const struct wl_interface *ui_wl_viewporter_iface(void) { return &wp_viewporter_interface; }
 
@@ -1151,8 +1156,13 @@ type wlConn struct {
 	outScale    float32
 
 	// drag is a drag started out of one of this connection's windows
-	// (wayland_dnd_linux.go).
+	// (wayland_dnd_linux.go); topDragMan is xdg-toplevel-drag-v1, which
+	// lets such a drag carry a window, and topDragDead the objects of
+	// drags the client withdrew, destroyed once the next drag proves the
+	// compositor has finished with them.
 	drag        wlDrag
+	topDragMan  *C.struct_xdg_toplevel_drag_manager_v1
+	topDragDead []*C.struct_xdg_toplevel_drag_v1
 	dataMan     *C.struct_wl_data_device_manager
 	dataDev     *C.struct_wl_data_device
 	dataSrc     *C.struct_wl_data_source
@@ -1529,6 +1539,11 @@ func (c *wlConn) closeLocked() {
 	if c.dataMan != nil {
 		C.ui_wl_data_man_destroy(c.dataMan)
 		c.dataMan = nil
+	}
+	c.dropDeadToplevelDrags()
+	if c.topDragMan != nil {
+		C.ui_wl_top_drag_man_destroy(c.topDragMan)
+		c.topDragMan = nil
 	}
 	if c.primSrc != nil {
 		C.ui_wl_prim_source_destroy(c.primSrc)
@@ -2774,6 +2789,13 @@ func uitkWlRegistryGlobal(id C.uintptr_t, reg *C.struct_wl_registry, name C.uint
 			break
 		}
 		c.decoMan = (*C.struct_zxdg_decoration_manager_v1)(C.ui_wl_bind(reg, name, C.ui_wl_deco_man_iface(), 1))
+	case "xdg_toplevel_drag_manager_v1":
+		if os.Getenv(EnvToplevelDrag) == "0" {
+			// Testing: behave as a compositor without it, so a tear-off
+			// takes the fallback path on a desktop that has the protocol.
+			break
+		}
+		c.topDragMan = (*C.struct_xdg_toplevel_drag_manager_v1)(C.ui_wl_bind(reg, name, C.ui_wl_top_drag_man_iface(), 1))
 	case "wp_fractional_scale_manager_v1":
 		c.fracMan = (*C.struct_wp_fractional_scale_manager_v1)(C.ui_wl_bind(reg, name, C.ui_wl_frac_man_iface(), 1))
 	case "wp_viewporter":

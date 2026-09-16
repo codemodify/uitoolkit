@@ -915,14 +915,26 @@ type x11Drag struct {
 	action   DragAction
 	// icon is the picture that follows the pointer.
 	icon xdndIcon
+	// attach is a window this drag carries — a tab torn out of its
+	// strip, a floating panel on its way back — with hx, hy where in it
+	// the pointer sits. Wayland has a compositor move it
+	// (xdg-toplevel-drag-v1); on X11 a client places its own windows, so
+	// the drag moves it itself on every motion. It is left out of the
+	// search for a target: a window carried by the drag is not something
+	// the drag can be dropped on.
+	attach  C.Window
+	attachH struct{ x, y int }
 	// sends are the INCR transfers of our data still in flight; ended
 	// stops a drag that has already reported its result.
 	ended bool
 	// dropped is set from XdndDrop until XdndFinished; a source must
-	// keep serving the data until then.
-	dropped bool
-	dropAt  time.Time
-	cursor  Cursor
+	// keep serving the data until then. released is the user letting the
+	// button go, drop or no drop, which is what tells a drop on the
+	// desktop from a drag called off with Escape.
+	dropped  bool
+	released bool
+	dropAt   time.Time
+	cursor   Cursor
 	// mods are the modifier keys held at the last motion: on X11 the
 	// source, not the compositor, turns Shift into a move.
 	mods uint
@@ -1017,6 +1029,42 @@ func (s *x11Surface) Dragging() bool {
 	return s.conn != nil && s.conn.drag.active
 }
 
+// DragsToplevels implements [ToplevelDragSurface]. An X11 client places
+// its own windows, so a drag here can always carry one — no protocol
+// needed, and no window manager has to help.
+func (s *x11Surface) DragsToplevels() bool { return true }
+
+// AttachToplevel implements [ToplevelDragSurface]: win follows the
+// pointer for the rest of the drag, dx, dy inside it under the pointer.
+func (s *x11Surface) AttachToplevel(win Surface, dx, dy int) bool {
+	x11Mu.Lock()
+	defer x11Mu.Unlock()
+	c := s.conn
+	if c == nil || !c.drag.active {
+		return false
+	}
+	w, ok := win.(*x11Surface)
+	if !ok || w.conn != c || w.win == 0 || w.closed {
+		return false
+	}
+	c.drag.attach = w.win
+	// The window holds the frame's margin too, and the offset is inside
+	// the window the user sees: the margin puts the two apart.
+	c.drag.attachH.x, c.drag.attachH.y = dx+w.frame.Margin.Left, dy+w.frame.Margin.Top
+	rx, ry, _ := rootPointer(c)
+	c.dragMoveAttached(rx, ry)
+	C.ui_x_flush(c.dpy)
+	return true
+}
+
+// dragMoveAttached puts the window the drag carries under the pointer.
+func (c *x11Conn) dragMoveAttached(rx, ry int) {
+	if c.drag.attach == 0 || c.dpy == nil {
+		return
+	}
+	C.ui_x_move(c.dpy, c.drag.attach, C.int(rx-c.drag.attachH.x), C.int(ry-c.drag.attachH.y))
+}
+
 // rootPointer is where the pointer is on the screen now, and which
 // modifiers are held there.
 func rootPointer(c *x11Conn) (int, int, uint) {
@@ -1073,8 +1121,15 @@ func (c *x11Conn) dragMotionTo(rx, ry int, mods uint) {
 	}
 	c.drag.mods = mods
 	c.dragMoveIcon(rx, ry)
+	c.dragMoveAttached(rx, ry)
 	tree := x11Tree{c: c}
-	skip := func(w uint32) bool { return c.drag.icon.win != 0 && C.Window(w) == c.drag.icon.win }
+	// The picture and the window the drag carries are both under the
+	// pointer and neither is a target: the drop goes to whatever they are
+	// over.
+	skip := func(w uint32) bool {
+		return (c.drag.icon.win != 0 && C.Window(w) == c.drag.icon.win) ||
+			(c.drag.attach != 0 && C.Window(w) == c.drag.attach)
+	}
 	found := XDNDFindTarget(tree, uint32(C.ui_x_root(c.dpy)), rx, ry, skip)
 	if found.Window != c.drag.target.Window {
 		xdndTrace("target at %d,%d: window=%#x proxy=%#x version=%d",
@@ -1144,6 +1199,7 @@ func (c *x11Conn) dragRelease() {
 	if !c.drag.active {
 		return
 	}
+	c.drag.released = true
 	if !c.drag.target.Valid() || !c.drag.accepted {
 		c.dragLeaveTarget()
 		c.dragEnd(DragNone)
@@ -1209,7 +1265,7 @@ func (c *x11Conn) dragEnd(action DragAction) {
 		return
 	}
 	xdndTrace("drag ended, the target performed %v", action)
-	win := c.drag.win
+	win, released := c.drag.win, c.drag.released
 	c.dragRelease_ungrab()
 	if c.dpy != nil && win != 0 {
 		C.ui_x_del_prop(c.dpy, win, c.xdnd.at(XATypeList))
@@ -1223,7 +1279,7 @@ func (c *x11Conn) dragEnd(action DragAction) {
 		c.keep = false
 	}
 	if s := c.surfaces[win]; s != nil {
-		c.queues[win] = append(c.queues[win], Event{Kind: EventDragEnd, Action: action})
+		c.queues[win] = append(c.queues[win], Event{Kind: EventDragEnd, Action: action, Dropped: released})
 		// The drag ended between polls; wake the loop so the source
 		// hears about it without waiting for the next input.
 		C.ui_x_wake(c.dpy, c.helper)
