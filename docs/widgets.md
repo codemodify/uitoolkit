@@ -355,6 +355,22 @@ target that does more than copy says so with `widget.DropActions`, or on
 the collection widgets by setting `DropActions`; the desktop's modifiers
 (Shift for a move, Ctrl for a copy) then reach it.
 
+When a drag offers more than one action and its source leaves the choice
+to the user, the window puts the **Copy / Move / Link menu** under the
+pointer at the drop — the menu a file manager shows — and reports back
+what was picked; dismissing it refuses the drop. The menu is a themed
+`widgets.PopupMenu` and is driven by the keyboard like any other. Nothing
+in an app has to ask for this: it follows from `DropActions` allowing more
+than one action.
+
+Holding a modifier settles the question instead, exactly as before: the
+X11 source then names the action rather than `XdndActionAsk`, and a
+Wayland compositor answers with it rather than `ask`, so a drop with Shift
+or Ctrl held never sees the menu. On Wayland it is the *target* that has
+to offer the choice (`wl_data_offer.set_actions` with `ask` preferred), so
+the toolkit offers it whenever the source's own actions include `ask`;
+where a compositor refuses, the drag falls back on its plain action.
+
 Drops arrive the same way on both backends: `wl_data_device` on Wayland,
 XDND on X11 (see [platform.md](platform.md)).
 

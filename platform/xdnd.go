@@ -235,10 +235,12 @@ type XDNDActions struct {
 	Copy, Move, Link, Ask, Private uint32
 }
 
-// Action is the action an atom names. An unknown atom, and the Ask and
-// Private actions this toolkit does not offer, count as a copy: the spec
-// lets a target fall back on copying, and a drag that shows no action at
-// all is worse for the user than one that copies.
+// Action is the action an atom names. XdndActionAsk is [DragAsk] — the
+// source asking for the user to be shown the choice, which is a question
+// and not an action. An unknown atom and the Private action this toolkit
+// does not offer count as a copy: the spec lets a target fall back on
+// copying, and a drag that shows no action at all is worse for the user
+// than one that copies.
 func (t XDNDActions) Action(atom uint32) DragAction {
 	switch {
 	case atom == 0:
@@ -247,6 +249,8 @@ func (t XDNDActions) Action(atom uint32) DragAction {
 		return DragMove
 	case atom == t.Link:
 		return DragLink
+	case t.Ask != 0 && atom == t.Ask:
+		return DragAsk
 	default:
 		return DragCopy
 	}
