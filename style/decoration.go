@@ -520,12 +520,18 @@ func FrameParts(f DecorationFrame, border Insets) []paintengine2d.Rect {
 // ---- the adapter ------------------------------------------------------------
 
 // frameAdapter paints a top-level frame with an engine's in-app window frame
-// (DrawWindowFrame, WindowCloseRect), for the engines that have no frame of
-// their own: a stacked frame whose strip is the in-app caption, the frame's
+// (DrawWindowFrame, WindowCloseRect), for an engine that has no frame of its
+// own: a stacked frame whose strip is the in-app caption, the frame's
 // borders around the window, the engine's own close button wherever the
 // button layout puts it, and minimize, maximize and the window menu as push
 // buttons with generic glyphs at the close button's size. Only the frame's
 // parts are painted: the in-app window's body would cover the content.
+//
+// Every engine in the toolkit now paints its era's frame itself, so nothing
+// reaches the adapter today; it is what a new engine gets for free until it
+// implements [DecorationEngine]. It states no button layout (the desktop's
+// is used), leaves the frame square, and takes its shadow from the one the
+// engine drops under a dialog — which is the shadow its in-app windows cast.
 type frameAdapter struct{}
 
 // adapterProbe is the sample in-app window the adapter measures the engine's
@@ -557,15 +563,7 @@ func (frameAdapter) Decoration(l *Classic, st DecorationState) DecorationSpec {
 		Border:    Insets{Right: in.Right, Bottom: in.Bottom, Left: in.Left},
 		Caption:   in.Top,
 		ButtonGap: max(snap(l.S(2)), 1),
-		Layout:    adapterLayouts[l.eng().ID()],
-	}
-	era := adapterEras[l.eng().ID()]
-	if era.rounded {
-		r := l.metrics.RadiusSmall
-		s.Radius = [4]float32{r, r, 0, 0}
-	}
-	if era.shadow {
-		s.Shadow = ShadowLayersReach(adapterShadow(l, DecorationState{Active: true}))
+		Shadow:    PopupShadowOf(l, PopupDialog),
 	}
 	if cr.Empty() {
 		side := snap(max(min(s.Caption-l.S(6), l.S(22)), l.S(12)))
@@ -638,14 +636,7 @@ func (frameAdapter) DrawCaptionTitle(l *Classic, ctx *paintengine2d.Context, b p
 // its size with generic glyphs.
 func (a frameAdapter) DrawCaptionButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, k CaptionButton, cs ControlState, st DecorationState) {
 	e := l.eng()
-	// The in-app frame's close button is the engine's own — or, where that
-	// is a window menu box (Windows 3.1's control-menu box), the window
-	// menu's.
-	own := CaptionClose
-	if adapterMenuBox[e.ID()] {
-		own = CaptionMenu
-	}
-	if k == own {
+	if k == CaptionClose {
 		_, cr, _ := adapterGeom(l)
 		if !cr.Empty() {
 			fr := adapterProbe(l).Translate(paintengine2d.Pt(b.Min.X-cr.Min.X, b.Min.Y-cr.Min.Y))
@@ -664,88 +655,7 @@ func (a frameAdapter) DrawCaptionButton(l *Classic, ctx *paintengine2d.Context, 
 	}
 	fg := e.Face(l, ctx, b, RoleButton, fs)
 	side := min(b.Dx(), b.Dy())
-	if adapterArrows[e.ID()] && (k == CaptionMinimize || k == CaptionMaximize) {
-		// Windows 3.x: minimize a down arrow, maximize an up one, restore
-		// both.
-		g := b.Inset(side * 0.3)
-		switch {
-		case k == CaptionMinimize:
-			FillArrow(ctx, g, DirDown, fg)
-		case st.Maximized:
-			h := g.Dy() * 0.5
-			FillArrow(ctx, paintengine2d.XYWH(g.Min.X, g.Min.Y, g.Dx(), h), DirUp, fg)
-			FillArrow(ctx, paintengine2d.XYWH(g.Min.X, g.Min.Y+h, g.Dx(), h), DirDown, fg)
-		default:
-			FillArrow(ctx, g, DirUp, fg)
-		}
-		return
-	}
 	DrawCaptionGlyph(ctx, b, k, st.Maximized, fg, side*0.45, max(l.S(1), side/16))
-}
-
-// adapterEra says what an adapted engine's desktop could do for its
-// windows. Before compositing arrived a window manager drew a frame
-// straight on the screen: no shadow under it, and square corners unless
-// the decoration shaped its own (KDE 3's Plastik and Keramik, GNOME 2's
-// Clearlooks and Bluecurve all rounded their title bar's top corners with
-// the Shape extension). Oxygen (KDE 4) and Fusion came with compositing
-// and had real shadows.
-type adapterEra struct{ rounded, shadow bool }
-
-var adapterEras = map[string]adapterEra{
-	"keramik":    {rounded: true},
-	"plastik":    {rounded: true},
-	"clearlooks": {rounded: true},
-	"bluecurve":  {rounded: true},
-	"oxygen":     {rounded: true, shadow: true},
-	"fusion":     {shadow: true},
-}
-
-// adapterShadow is the modest shadow a composited desktop drops under an
-// adapted frame.
-func adapterShadow(l *Classic, st DecorationState) []WindowShadow {
-	if !st.Active {
-		return []WindowShadow{{Color: shadowBlack(0.16), DY: l.S(2), Blur: l.S(10)}}
-	}
-	return []WindowShadow{{Color: shadowBlack(0.3), DY: l.S(6), Blur: l.S(24)}}
-}
-
-func (frameAdapter) DrawDecorationShadow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st DecorationState) {
-	if !adapterEras[l.eng().ID()].shadow {
-		return
-	}
-	DrawShadowLayers(ctx, b, DecorationOf(l, st).Radius, adapterShadow(l, st))
-}
-
-// adapterMenuBox are the engines whose in-app close box is a window menu
-// box; adapterArrows those whose minimize and maximize were arrows.
-var (
-	adapterMenuBox = map[string]bool{"win31": true}
-	adapterArrows  = map[string]bool{"win31": true}
-)
-
-// adapterLayouts are the caption buttons of the desktops the adapted engines
-// imitate, for the "theme" button layout.
-var adapterLayouts = map[string]string{
-	"win31":      "icon:minimize,maximize",
-	"motif":      "icon:minimize,maximize",
-	"os2":        "icon:minimize,maximize",
-	"next":       "minimize:close",
-	"openlook":   "icon:",
-	"amiga":      "close:maximize",
-	"beos":       "close:maximize",
-	"platinum":   "close:maximize",
-	"system7":    "close:maximize",
-	"keramik":    "icon:minimize,maximize,close",
-	"plastik":    "icon:minimize,maximize,close",
-	"oxygen":     "icon:minimize,maximize,close",
-	"clearlooks": "icon:minimize,maximize,close",
-	"bluecurve":  "icon:minimize,maximize,close",
-	"flatlaf":    ":minimize,maximize,close",
-	"metal":      ":minimize,maximize,close",
-	"nimbus":     ":minimize,maximize,close",
-	"material":   ":minimize,maximize,close",
-	"fusion":     ":minimize,maximize,close",
 }
 
 // ---- shared painters --------------------------------------------------------
