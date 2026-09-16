@@ -20,6 +20,9 @@ type Stack struct {
 	current int
 	head    *stackHead
 	strip   *stackStrip
+	// wasActive is the last state the title bar was painted in, so a
+	// focus move that does not cross the stack's edge repaints nothing.
+	wasActive bool
 }
 
 // NewStack is a stack of panels, the first one current.
@@ -279,9 +282,22 @@ func (s *Stack) Paint(ctx *paintengine2d.Context) {
 }
 
 // active reports whether the keyboard focus is inside the stack, so its
-// title bar paints as the current panel's (Qt Creator and VS Code both
-// mark the pane that has the focus).
+// title bar marks the pane the keyboard is in (Qt Creator and VS Code both
+// mark theirs).
 func (s *Stack) active() bool { return widget.FocusWithin(s) }
+
+// FocusMoved implements widget.FocusWatcher: the title bar is repainted
+// when the focus crosses the stack's edge, since nothing else would ask
+// it to — the two components at either end of the move repaint
+// themselves, and the bar is neither.
+func (s *Stack) FocusMoved(now widget.Component) {
+	in := now != nil && widget.Contains(s, now)
+	if in == s.wasActive {
+		return
+	}
+	s.wasActive = in
+	s.head.Invalidate()
+}
 
 // raise makes the stack the one the keyboard is in, moving the focus into
 // the current panel's content when it is not already inside.
@@ -454,11 +470,19 @@ func (h *stackHead) Paint(ctx *paintengine2d.Context) {
 	}
 	lk := h.Look()
 	cur := h.stack.Current()
+	active := h.stack.active()
 	st := h.State() &^ (style.StateHovered | style.StatePressed)
-	if h.stack.active() {
+	if active {
 		st |= style.StateChecked
 	}
 	fg := style.DrawFaceOf(lk, ctx, b, style.RoleBar, st)
+	if active {
+		// A rule along the foot of the title bar marks the panel the
+		// keyboard is in, as Qt Creator and VS Code mark theirs. The face
+		// alone is not enough: plenty of packs paint a checked bar exactly
+		// like an unchecked one.
+		h.drawActiveRule(ctx, b)
+	}
 	if cur == nil {
 		return
 	}
@@ -491,6 +515,25 @@ func (h *stackHead) Paint(ctx *paintengine2d.Context) {
 		}
 		h.drawGlyph(ctx, r, part, bfg)
 	}
+}
+
+// drawActiveRule underlines the title bar of the panel the keyboard is in.
+// It is the pack's accent where that shows against the bar, and its focus
+// or selection colour otherwise.
+func (h *stackHead) drawActiveRule(ctx *paintengine2d.Context, b paintengine2d.Rect) {
+	p := h.Look().Palette()
+	ink := p.Accent
+	for _, c := range []paintengine2d.Color{p.Accent, p.Focus, p.Selection, p.Text} {
+		if c.A > 0 {
+			ink = c
+			break
+		}
+	}
+	w := maxF(1, style.Dip(h.Look(), 2))
+	if w > b.Dy() {
+		w = b.Dy()
+	}
+	ctx.DrawRect(paintengine2d.XYWH(b.Min.X, b.Max.Y-w, b.Dx(), w), paintengine2d.Fill(ink))
 }
 
 // drawGlyph paints a title bar button's mark: the caption cross for close,
