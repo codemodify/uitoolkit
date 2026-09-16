@@ -2,6 +2,7 @@ package dock
 
 import (
 	"github.com/codemodify/paintengine2d"
+	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
 )
 
@@ -41,9 +42,34 @@ type WindowOpener interface {
 	OpenFloat(title string, geom paintengine2d.Rect) (FloatWindow, error)
 }
 
-// defaultFloatSize is how big a panel's window is when it has never
-// floated and the app did not say.
-var defaultFloatSize = paintengine2d.Pt(320, 400)
+// firstFloatGeometry is how big a panel's window is the first time it
+// floats: the room the panel had docked, but never so thin or so short
+// that the window is useless and never more than most of the host — a log
+// docked along the whole bottom edge would otherwise float as a window the
+// width of the app and a few lines tall.
+func (h *Host) firstFloatGeometry(p *Panel) paintengine2d.Rect {
+	lk := h.Look()
+	w, hh := style.Dip(lk, 320), style.Dip(lk, 400)
+	if b := h.rectOf(p); !b.Empty() {
+		w, hh = b.Dx(), b.Dy()
+	}
+	floorW, floorH := style.Dip(lk, 260), style.Dip(lk, 200)
+	if w < floorW {
+		w = floorW
+	}
+	if hh < floorH {
+		hh = floorH
+	}
+	if host := h.LocalBounds(); !host.Empty() {
+		if capW := host.Dx() * 0.7; w > capW {
+			w = capW
+		}
+		if capH := host.Dy() * 0.85; hh > capH {
+			hh = capH
+		}
+	}
+	return paintengine2d.XYWH(0, 0, w, hh)
+}
 
 // FloatPanel takes p out of the tree and into a window of its own. geom is
 // where to put the window; an empty rect uses the panel's remembered
@@ -61,11 +87,7 @@ func (h *Host) FloatPanel(p *Panel, geom paintengine2d.Rect) bool {
 		geom = p.geom
 	}
 	if geom.Empty() {
-		b := h.rectOf(p)
-		if b.Empty() {
-			b = paintengine2d.XYWH(0, 0, defaultFloatSize.X, defaultFloatSize.Y)
-		}
-		geom = paintengine2d.XYWH(0, 0, b.Dx(), b.Dy())
+		geom = h.firstFloatGeometry(p)
 	}
 	h.detach(p)
 	// The panel keeps the same chrome it had docked — a stack of one —
