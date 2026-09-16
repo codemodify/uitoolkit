@@ -97,9 +97,19 @@ type DragPayload struct {
 	// Data reads one of Types. Reporting false refuses that type.
 	Data func(mime string) ([]byte, bool)
 	// Icon follows the pointer; Hotspot is the point in it that sits
-	// under the pointer. A nil Icon drags without a picture.
+	// under the pointer, in the icon's own pixels. A nil Icon drags
+	// without a picture.
 	Icon    *paintengine2d.Image
 	Hotspot paintengine2d.Point
+	// Scale is the display scale the icon was drawn at — how many of its
+	// pixels go to one logical pixel. Zero means the surface's own.
+	//
+	// A backend whose protocol speaks logical units needs it: Wayland
+	// puts the icon on a surface of its own, and without knowing what the
+	// picture's pixels are worth it can only guess at a whole number,
+	// which on a 1.5 or 1.75 display is the difference between a sharp
+	// icon at the right size and a soft one at the wrong one.
+	Scale float32
 	// Actions are what the source allows (DragCopy when zero); Preferred
 	// is the one it would rather the target took.
 	Actions   DragAction
