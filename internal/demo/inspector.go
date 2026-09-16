@@ -3,9 +3,12 @@ package demo
 import (
 	"fmt"
 	"sort"
+	"strings"
+	"time"
 
 	"github.com/codemodify/uitoolkit"
 	"github.com/codemodify/uitoolkit/app"
+	"github.com/codemodify/uitoolkit/dock"
 	"github.com/codemodify/uitoolkit/widget"
 	"github.com/codemodify/uitoolkit/widgets"
 )
@@ -14,7 +17,15 @@ type prefRow struct {
 	Key, Value, Scope string
 }
 
-// InspectorApp is a small preferences inspector: table, toolbar, tabs, message box.
+// InspectorApp is a docking preferences inspector: the table of settings
+// in the centre, an outline, a properties panel and a log docked around
+// it. Every panel can be dragged to another side, stacked as a tab on
+// another, collapsed, floated in a window of its own and closed — and the
+// arrangement is remembered between runs.
+//
+// It is the pilot for the dock package, so it exercises the parts an app
+// is meant to use: dock.Host, a saved layout, and a reset back to the
+// default.
 func InspectorApp(win *app.Window) widget.Component {
 	prefs := []prefRow{
 		{"theme", "dark", "user"},
@@ -27,25 +38,50 @@ func InspectorApp(win *app.Window) widget.Component {
 		{"editor.minimap", "false", "project"},
 	}
 	sel := 0
+	scope := "" // the outline's filter: "", "user" or "project"
 
 	status := widgets.NewStatusBar("Ready.", prefs[0].Key, "v"+uitoolkit.Version)
-	mark := func(msg string) {
+
+	logLines := []string{"inspector started"}
+	logView := widgets.NewMonoTextView(strings.Join(logLines, "\n"), "Nothing yet")
+	logView.MinRows = 3
+	note := func(msg string) {
 		status.Set(0, msg)
+		logLines = append(logLines, time.Now().Format("15:04:05")+"  "+msg)
+		if len(logLines) > 200 {
+			logLines = logLines[len(logLines)-200:]
+		}
+		logView.SetText(strings.Join(logLines, "\n"))
 	}
 
+	// ---- the centre: the preference table --------------------------------
+
 	var table *widgets.TableView
+	shown := func() []prefRow {
+		if scope == "" {
+			return prefs
+		}
+		out := make([]prefRow, 0, len(prefs))
+		for _, p := range prefs {
+			if p.Scope == scope {
+				out = append(out, p)
+			}
+		}
+		return out
+	}
 	refresh := func() {
-		table.RowCount = len(prefs)
-		if sel >= len(prefs) {
-			sel = len(prefs) - 1
+		rows := shown()
+		table.RowCount = len(rows)
+		if sel >= len(rows) {
+			sel = len(rows) - 1
 		}
 		if sel < 0 {
 			sel = 0
 		}
 		table.Selected = sel
 		table.Invalidate()
-		if sel >= 0 && sel < len(prefs) {
-			status.Set(1, prefs[sel].Key)
+		if sel >= 0 && sel < len(rows) {
+			status.Set(1, rows[sel].Key)
 		}
 	}
 
@@ -54,22 +90,24 @@ func InspectorApp(win *app.Window) widget.Component {
 		{Title: "Value", Width: 90, Sortable: true},
 		{Title: "Scope", Width: 80, Sortable: true},
 	}, len(prefs), func(row, col int) string {
-		if row < 0 || row >= len(prefs) {
+		rows := shown()
+		if row < 0 || row >= len(rows) {
 			return ""
 		}
 		switch col {
 		case 1:
-			return prefs[row].Value
+			return rows[row].Value
 		case 2:
-			return prefs[row].Scope
+			return rows[row].Scope
 		default:
-			return prefs[row].Key
+			return rows[row].Key
 		}
 	}, func(i int) {
-		if i >= 0 && i < len(prefs) {
+		rows := shown()
+		if i >= 0 && i < len(rows) {
 			sel = i
-			status.Set(1, prefs[i].Key)
-			status.Set(0, "Inspect "+prefs[i].Key)
+			status.Set(1, rows[i].Key)
+			note("Inspect " + rows[i].Key)
 		}
 	})
 	table.Selected = 0
@@ -93,11 +131,37 @@ func InspectorApp(win *app.Window) widget.Component {
 		refresh()
 	}
 
+	// ---- the left panel: the outline -------------------------------------
+
+	all := widgets.NewTreeNode("All preferences")
+	user := widgets.NewTreeNode("User")
+	project := widgets.NewTreeNode("Project")
+	outline := widgets.NewTreeView(all, user, project)
+	outline.Selected = all
+	outline.Frameless = true
+	outline.Sidebar = true
+	outline.OnSelect = func(n *widgets.TreeNode) {
+		switch n {
+		case user:
+			scope = "user"
+		case project:
+			scope = "project"
+		default:
+			scope = ""
+		}
+		sel = 0
+		refresh()
+		note("Outline: " + n.Label)
+	}
+
+	// ---- the right panel: the editors ------------------------------------
+
 	theme := widgets.NewComboBox([]string{"Dark graphite", "Light paper", "High contrast"}, 0, func(i int) {
 		names := []string{"dark", "light", "contrast"}
 		if i >= 0 && i < len(names) {
 			setPref(prefs, "theme", names[i])
-			mark("Theme: " + names[i])
+			note("Theme: " + names[i])
+			refresh()
 		}
 	})
 	dark := widgets.NewSwitch("Dark chrome", true, func(v bool) {
@@ -106,26 +170,25 @@ func InspectorApp(win *app.Window) widget.Component {
 		} else {
 			setPref(prefs, "theme", "light")
 		}
-		mark("Dark chrome")
+		note("Dark chrome")
 		refresh()
 	})
-	compact := widgets.NewSwitch("Compact metrics", false, func(bool) { mark("Compact metrics") })
 	wrap := widgets.NewSwitch("Wrap editor", true, func(v bool) {
 		setPref(prefs, "editor.wrap", boolStr(v))
-		mark("Wrap editor")
+		note("Wrap editor")
 		refresh()
 	})
 	scaleLbl := widgets.NewLabel("UI scale  100%")
 	scale := widgets.NewSlider(50, 200, 100, func(v float32) {
 		scaleLbl.SetText(fmt.Sprintf("UI scale  %d%%", int(v+0.5)))
 		setPref(prefs, "ui.scale", fmt.Sprintf("%.2f", float64(v)/100))
-		mark("UI scale")
+		note("UI scale")
 		refresh()
 	})
 	scale.SetAccessibleName("Scale")
 	font := widgets.NewNumberField(10, 28, 16, 1, func(v float64) {
 		setPref(prefs, "font.size", fmt.Sprintf("%d", int(v)))
-		mark("Font size")
+		note("Font size")
 		refresh()
 	})
 	font.Tip = "UI font size"
@@ -134,7 +197,7 @@ func InspectorApp(win *app.Window) widget.Component {
 		widgets.NewLabel("Theme").For(theme),
 		theme,
 		dark,
-		compact,
+		wrap,
 		scaleLbl,
 		scale,
 		widgets.NewSeparator(),
@@ -144,67 +207,68 @@ func InspectorApp(win *app.Window) widget.Component {
 	session := widgets.NewExpander("Session", false, widgets.NewColumn(
 		widgets.NewSwitch("Autosave", true, func(v bool) {
 			setPref(prefs, "autosave", boolStr(v))
-			mark("Autosave")
+			note("Autosave")
 			refresh()
 		}),
 		widgets.NewSwitch("Restore last session", false, func(v bool) {
 			setPref(prefs, "restore.session", boolStr(v))
-			mark("Restore session")
+			note("Restore session")
 			refresh()
 		}),
 		widgets.NewSwitch("Desktop notifications", true, func(v bool) {
 			setPref(prefs, "notify.desktop", boolStr(v))
-			mark("Notifications")
+			note("Notifications")
 			refresh()
 		}),
 	).WithGap(6))
-	acc := widgets.NewAccordion(true, appearance, session)
+	editors := widgets.NewScrollView(widgets.NewColumn(
+		widgets.NewAccordion(true, appearance, session),
+	).WithGap(8).WithPad(8))
 
-	general := widgets.NewScrollView(widgets.NewColumn(
-		widgets.NewLabel("Project preferences — accordion groups, switches, sliders."),
-		acc,
-		widgets.NewSeparator(),
-		widgets.NewSpacerSize(0, 8),
-	).WithGap(10).WithPad(8))
+	// ---- the dock host ---------------------------------------------------
 
-	notes := widgets.NewMonoTextArea(
-		"// inspector — JetBrains Mono\noverride wrap = true\nfont.size = 16\n",
-		"Notes",
-		func(string) { mark("Notes edited") },
-	)
-	notes.MinRows = 5
-	editorBody := widgets.NewColumn(
-		table,
-		widgets.NewSeparator(),
-		widgets.NewRow(widgets.NewLabel("Editor notes"), wrap).WithGap(12),
-		notes,
-	).WithGap(8).WithPad(8)
-	editorBody.AddFlex(table, 1)
-	editorBody.AddFlex(notes, 1)
-	editor := widgets.NewPad(0, editorBody)
+	host := dock.NewHost(table)
+	outlinePanel := dock.NewPanel("outline", "Outline", outline)
+	propsPanel := dock.NewPanel("properties", "Properties", editors)
+	logPanel := dock.NewPanel("log", "Log", widgets.NewPad(4, logView))
+	outlinePanel.SetMinSize(140, 80)
+	propsPanel.SetMinSize(200, 120)
+	logPanel.SetMinSize(160, 60)
+	host.Dock(outlinePanel, dock.SideLeft)
+	host.Dock(propsPanel, dock.SideRight)
+	host.Dock(logPanel, dock.SideBottom)
+	// The arrangement above is what "Reset layout" goes back to, so record
+	// it before any saved one is read over the top.
+	host.SetDefaultLayout()
+	app.DockHost(win, host)
 
-	about := widgets.NewColumn(
-		widgets.NewTitle("Inspector"),
-		widgets.NewLabel("A second sample app on uitoolkit v"+uitoolkit.Version+"."),
-		widgets.NewLabel("Table + ToolBar + Tabs + MessageBox, plus Switch / TextArea / Accordion."),
-		widgets.NewSeparator(),
-		widgets.NewButton("License…", func() {
-			widgets.Info(win.Content(), "License",
-				"The Free License. Paints only with paintengine2d. UI: Titillium Web.", nil)
-		}),
-		widgets.NewSpacer(),
-	).WithGap(10).WithPad(16)
+	// ---- the tool bar ----------------------------------------------------
 
-	tabs := widgets.NewTabView(
-		widgets.Tab{Title: "General", Content: general},
-		widgets.Tab{Title: "Editor", Content: editor},
-		widgets.Tab{Title: "About", Content: about},
-	)
-	tabs.OnChange = func(i int) {
-		names := []string{"General", "Editor", "About"}
-		if i >= 0 && i < len(names) {
-			status.Set(0, "Tab: "+names[i])
+	panels := []*dock.Panel{outlinePanel, propsPanel, logPanel}
+	toggles := make([]*widgets.ToolItem, len(panels))
+	var tools *widgets.ToolBar
+	syncToggles := func() {
+		for i, p := range panels {
+			toggles[i].Down = !p.Closed()
 		}
+		if tools != nil {
+			tools.Invalidate()
+		}
+	}
+	for i, p := range panels {
+		p := p
+		toggles[i] = widgets.ToolToggle(p.Title(), true, func() {
+			if p.Closed() {
+				p.Show()
+				note(p.Title() + " shown")
+			} else {
+				p.Close()
+				note(p.Title() + " hidden")
+			}
+			syncToggles()
+		})
+		toggles[i].Tip = "Show or hide the " + p.Title() + " panel"
+		p.OnShown = func(bool) { syncToggles() }
 	}
 
 	snapshot := append([]prefRow(nil), prefs...)
@@ -213,7 +277,7 @@ func InspectorApp(win *app.Window) widget.Component {
 	apply := widgets.ToolText("Apply", func() {
 		snapshot = append([]prefRow(nil), prefs...)
 		widgets.Info(win.Content(), "Applied",
-			"Preferences written for this session.", func() { status.Set(0, "Applied") })
+			"Preferences written for this session.", func() { note("Applied") })
 	})
 	apply.Tip = "Keep the current values"
 	revert := widgets.ToolText("Revert", func() {
@@ -221,12 +285,12 @@ func InspectorApp(win *app.Window) widget.Component {
 			"Restore the last applied preference snapshot.",
 			func(yes bool) {
 				if !yes {
-					status.Set(0, "Revert cancelled")
+					note("Revert cancelled")
 					return
 				}
 				prefs = append([]prefRow(nil), snapshot...)
 				refresh()
-				status.Set(0, "Reverted")
+				note("Reverted")
 			})
 	})
 	revert.Tip = "Restore last apply"
@@ -238,25 +302,47 @@ func InspectorApp(win *app.Window) widget.Component {
 			Buttons: widgets.ButtonsYesNo,
 			OnResult: func(r widgets.MessageResult) {
 				if r != widgets.ResultYes {
-					status.Set(0, "Defaults cancelled")
+					note("Defaults cancelled")
 					return
 				}
 				prefs = append([]prefRow(nil), defaults...)
 				refresh()
-				status.Set(0, "Defaults restored")
+				note("Defaults restored")
 			},
 		})
 	})
 	reset.Tip = "Factory snapshot"
-	aboutTool := widgets.ToolText("About", func() { tabs.Select(2) })
-	aboutTool.Tip = "About Inspector"
-	tools := widgets.NewToolBar(
-		apply, revert, widgets.ToolDivider(), reset, widgets.ToolDivider(), aboutTool,
-	)
+	resetLayout := widgets.ToolText("Reset layout", func() {
+		host.ResetLayout()
+		syncToggles()
+		note("Layout reset")
+	})
+	resetLayout.Tip = "Put every panel back where it started"
+
+	items := []*widgets.ToolItem{apply, revert, widgets.ToolDivider(), reset, widgets.ToolDivider()}
+	items = append(items, toggles...)
+	items = append(items, widgets.ToolDivider(), resetLayout)
+	tools = widgets.NewToolBar(items...)
+
+	// ---- the layout an app remembers -------------------------------------
+
+	if saved := loadDockLayout("inspector"); len(saved) > 0 {
+		if err := host.ApplyLayoutJSON(saved); err != nil {
+			// A layout from another version, or a broken file: the default
+			// arrangement stands and the app says so rather than coming up
+			// wrong.
+			note("The saved layout could not be read; using the default")
+		}
+	}
+	syncToggles()
+	host.OnLayoutChanged = func() {
+		saveDockLayout("inspector", host)
+		syncToggles()
+	}
 
 	chrome := widgets.NewTitleBar("Inspector", "project preferences  ·  v"+uitoolkit.Version)
-	root := widgets.NewColumn(tools, chrome, tabs, status).WithGap(0)
-	root.AddFlex(tabs, 1)
+	root := widgets.NewColumn(tools, chrome, host, status).WithGap(0)
+	root.AddFlex(host, 1)
 	return root
 }
 

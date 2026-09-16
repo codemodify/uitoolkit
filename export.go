@@ -6,6 +6,7 @@ import (
 
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/app"
+	"github.com/codemodify/uitoolkit/dock"
 	"github.com/codemodify/uitoolkit/layout"
 	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
@@ -38,6 +39,11 @@ type (
 	FileDialogMode    = widgets.FileDialogMode
 	FileDialogOptions = widgets.FileDialogOptions
 	Density           = style.Density
+	DockHostWidget    = dock.Host
+	DockPanel         = dock.Panel
+	DockSide          = dock.Side
+	DockLayout        = dock.Layout
+	DockFeatures      = dock.Features
 	CardContent       = widgets.CardContent
 	CardBadge         = widgets.CardBadge
 	Cursor            = platform.Cursor
@@ -101,6 +107,15 @@ const (
 	BevelFluentAccent      = style.BevelFluentAccent
 	HostMenu               = platform.HostMenu
 	ToolkitMenu            = platform.ToolkitMenu
+	DockLeft               = dock.SideLeft
+	DockRight              = dock.SideRight
+	DockTop                = dock.SideTop
+	DockBottom             = dock.SideBottom
+	DockClosable           = dock.FeatureClosable
+	DockFloatable          = dock.FeatureFloatable
+	DockMovable            = dock.FeatureMovable
+	DockCollapsible        = dock.FeatureCollapsible
+	DockDefaultFeatures    = dock.DefaultFeatures
 	SelectSingle           = widgets.SelectSingle
 	SelectExtended         = widgets.SelectExtended
 	SelectMulti            = widgets.SelectMulti
@@ -328,6 +343,21 @@ func NewCardList(count int, card func(int) widgets.CardContent, on func(int)) *w
 func NewSplitter(vertical bool, a, b widget.Component) *widgets.Splitter {
 	return widgets.NewSplitter(vertical, a, b)
 }
+
+// NewDockHost is a central widget with dock areas on its four sides
+// (QMainWindow's docking, the panels of VS Code and Qt Creator). Give it
+// windows for floating panels with app.DockHost.
+func NewDockHost(centre widget.Component) *dock.Host { return dock.NewHost(centre) }
+
+// NewDockPanel is one dockable panel. name is what a saved layout calls it
+// and must be stable across runs; title is what its title bar shows.
+func NewDockPanel(name, title string, content widget.Component) *dock.Panel {
+	return dock.NewPanel(name, title, content)
+}
+
+// DockHost gives a dock host real windows for its floating panels and
+// docks them all back as win closes.
+func DockHost(win *Window, host *dock.Host)             { app.DockHost(win, host) }
 func NewOverlay(card widget.Component) *widgets.Overlay { return widgets.NewOverlay(card) }
 func DialogCard(title, body string, actions ...widget.Component) *widgets.Panel {
 	return widgets.DialogCard(title, body, actions...)

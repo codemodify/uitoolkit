@@ -68,11 +68,22 @@ Also merged to `dev` and pushed:
   without a compositing manager the frame goes solid by itself. Each era
   gets the shadow and corners its windows had. paintengine2d gained
   `BlendDestOut` for the corners (its `dev`, `f852dbc`).
+- **Dockable panels** (`dock`, branch `feat/dock`). QMainWindow's docking
+  and QDockWidget, the panels of VS Code and Qt Creator: a central widget
+  with dock areas on its four sides, panels that split, tab, collapse and
+  float in real toplevels, every pane honouring its minimum size. Dragging
+  a title bar marks where the panel would land in the pack's own accent
+  (`style.DockLook`, with a default built from the palette so all 121 packs
+  have one). The whole arrangement goes out and comes back as JSON.
+  `widget.FocusWatcher` is new: containers that paint by where the focus is
+  now hear about every move. Inspector is the pilot.
 - **Next:**
   - title-bar phase 4: tab tear-off, KWin's server-decoration palette,
     `_NET_WM_SYNC_REQUEST`;
   - drag and drop on X11, and dragging out of apps;
-  - dockable panels;
+  - tearing a dock panel off through the compositor (the same
+    `xdg-toplevel-drag-v1` as tab tear-off), and a floating panel's real
+    position back from the window manager;
   - the 31 adapted looks could get frames of their own (NeXT, Platinum,
     System 7, Amiga, BeOS, OS/2, Windows 3.1, KDE 3 and GNOME 2).
 - **Off the list** (the user's call, 2026-09-15): releases and tags; IME and
@@ -346,7 +357,6 @@ and macOS adapters.
    (xdg-foreign), OpenURI, notifications through the portal.
 5. **Widgets:**
    - a rich-text editor;
-   - dock widgets (QDockWidget);
    - an MDI area;
    - a wizard;
    - touchpad gestures (pinch, swipe), and kinetic scrolling on X11
