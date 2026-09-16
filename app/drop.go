@@ -39,22 +39,26 @@ func (w *Window) dragMotion(ev platform.Event) {
 // action for the drop itself.
 func (w *Window) acceptDrag(t widget.DropTarget, c widget.Component, ev platform.Event) {
 	w.dropAction = platform.DragNone
-	mime := ""
+	mime, allowed := "", platform.DragNone
 	if t != nil {
-		offered := ev.Actions
-		if offered == platform.DragNone {
-			// A source that names no action means a copy: every drag
-			// did before the protocols grew actions.
-			offered = platform.DragCopy
-		}
-		if a := dropActionFor(c, offered, ev.Action); a != platform.DragNone {
+		allowed = allowedDropActions(c, offeredActions(ev))
+		if a := platform.NegotiateDragAction(offeredActions(ev), ev.Action, allowed); a != platform.DragNone {
 			w.dropAction = a
 			mime = widget.PickDropMime(t.DropTypes(), ev.Mimes)
 		}
 	}
 	if n, ok := w.surf.(platform.DropNegotiator); ok {
-		n.AcceptDrag(mime, w.dropAction)
+		n.AcceptDrag(mime, allowed, w.dropAction)
 	}
+}
+
+// offeredActions is what the drag's source allows. A source that names
+// none means a copy: every drag did before the protocols grew actions.
+func offeredActions(ev platform.Event) platform.DragAction {
+	if ev.Actions == platform.DragNone {
+		return platform.DragCopy
+	}
+	return ev.Actions
 }
 
 func (w *Window) dragLeave() {
@@ -75,11 +79,7 @@ func (w *Window) drop(ev platform.Event) {
 		w.finishDrop(rcv, "", false, platform.DragNone)
 		return
 	}
-	offered := ev.Actions
-	if offered == platform.DragNone {
-		offered = platform.DragCopy
-	}
-	action := dropActionFor(c, offered, ev.Action)
+	action := dropActionFor(c, offeredActions(ev), ev.Action)
 	mime := widget.PickDropMime(t.DropTypes(), ev.Mimes)
 	if action == platform.DragNone {
 		w.finishDrop(rcv, "", false, platform.DragNone)
@@ -115,7 +115,7 @@ func (w *Window) finishDrop(rcv platform.DropReceiver, mime string, taken bool, 
 	}
 	w.dropAction = action
 	if n, ok := w.surf.(platform.DropNegotiator); ok {
-		n.AcceptDrag(mime, action)
+		n.AcceptDrag(mime, action, action)
 	}
 	if rcv != nil {
 		rcv.FinishDrop(taken)

@@ -261,3 +261,27 @@ func paintDropRow(ctx *paintengine2d.Context, lk style.LookAndFeel, b paintengin
 	ctx.DrawRoundRect(b, r, r, paintengine2d.Fill(acc.WithAlpha(0.18)))
 	ctx.DrawRoundRect(b.Inset(0.5), r, r, paintengine2d.StrokePaint(acc, max(1, style.Dip(lk, 1))))
 }
+
+// DropActionFor is what a drop on the tree would do: what DropActions
+// allows of the drag's own set, and a copy when it says nothing.
+func (t *TreeView) DropActionFor(offered platform.DragAction) platform.DragAction {
+	return dropActions(t.DropActions, offered)
+}
+
+// DropActionFor is what a drop on the tab strip would do.
+func (t *BrowserTabs) DropActionFor(offered platform.DragAction) platform.DragAction {
+	return dropActions(t.DropActions, offered)
+}
+
+// dropActions narrows what a target allows to what the drag offers. A
+// target that allows nothing in particular copies, which every drop
+// target can manage.
+func dropActions(allowed, offered platform.DragAction) platform.DragAction {
+	if allowed == platform.DragNone {
+		return platform.DragCopy
+	}
+	if both := allowed & offered; both != platform.DragNone {
+		return both
+	}
+	return allowed
+}

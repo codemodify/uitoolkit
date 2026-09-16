@@ -101,8 +101,42 @@ type DragSurface interface {
 // target, while a drag is over it, whether it would take a drop and what
 // it would do with it: XDND answers every XdndPosition with an
 // XdndStatus, Wayland calls wl_data_offer.accept and set_actions. The app
-// package calls this for every [EventDragMotion]; mime "" (or DragNone)
-// refuses, which is what makes the source show a "no drop" cursor.
+// package calls this for every [EventDragMotion]; mime "" (or DragNone
+// for action) refuses, which is what makes the source show a "no drop"
+// cursor.
+//
+// allowed is every action the target would take and action the one it
+// would take now. Both are needed: Wayland's compositor picks the action
+// from the user's modifiers out of what the target allows, so a target
+// that named only the one action it had settled on would pin the drag to
+// it and Shift for a move could never do anything.
 type DropNegotiator interface {
-	AcceptDrag(mime string, action DragAction)
+	AcceptDrag(mime string, allowed, action DragAction)
+}
+
+// ModifierDragAction is the action the user is asking for with the keys
+// they hold, narrowed to what the drag allows: Shift moves, Ctrl copies,
+// the two together link — the convention every X11 desktop shares. A
+// Wayland compositor does this itself and reports the result; on X11 it
+// is the drag's source that has to.
+//
+// fallback is what the source would rather have when no modifier says
+// otherwise; with none of it allowed, the first action the drag allows.
+func ModifierDragAction(mods Modifiers, allows, fallback DragAction) DragAction {
+	var want DragAction
+	switch {
+	case mods.Ctrl() && mods.Shift():
+		want = DragLink
+	case mods.Shift():
+		want = DragMove
+	case mods.Ctrl():
+		want = DragCopy
+	}
+	if want != DragNone && allows.Has(want) {
+		return want
+	}
+	if one := fallback.One(); one != DragNone && allows.Has(one) {
+		return one
+	}
+	return allows.One()
 }
