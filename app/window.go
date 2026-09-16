@@ -22,7 +22,12 @@ type Window struct {
 	// that hide them otherwise).
 	altHeld bool
 	// dropOver is the drop target a drag from another app is over.
-	dropOver   widget.Component
+	dropOver widget.Component
+	// dropAction is what the drag over the window now would do on a drop
+	// (the source is told); dragArm is a press here that could become a
+	// drag of our own.
+	dropAction platform.DragAction
+	dragArm    dragGesture
 	surf       platform.Surface
 	root       widget.Component
 	overlay    widget.Component
@@ -744,7 +749,12 @@ func (w *Window) dispatch(ev platform.Event) {
 		w.dragLeave()
 	case platform.EventDrop:
 		w.drop(ev)
+	case platform.EventDragEnd:
+		w.dragEnded(ev.Action)
 	case platform.EventKeyDown:
+		if w.dragKey(ev) {
+			return
+		}
 		if ev.Key == platform.KeyAlt {
 			w.setAltHeld(true)
 		}
@@ -1044,6 +1054,7 @@ func (w *Window) mouseDown(ev platform.Event) {
 	}
 	t := w.hit(ev.Pos)
 	w.capture = t
+	w.armDrag(t, ev.Pos)
 	if t != nil && t.WantsFocus() && focusOnClick(t) {
 		w.RequestFocus(t)
 	}
@@ -1058,6 +1069,9 @@ func (w *Window) mouseDown(ev platform.Event) {
 
 func (w *Window) mouseUp(ev platform.Event) {
 	if w.frameMouseUp() {
+		return
+	}
+	if w.dragPointerUp(ev) {
 		return
 	}
 	t := w.capture
@@ -1122,6 +1136,9 @@ func (w *Window) pointerLeft() {
 
 func (w *Window) mouseMove(ev platform.Event) {
 	if w.frameMouseMove(ev) {
+		return
+	}
+	if w.dragPointerMove(ev) {
 		return
 	}
 	t := w.capture
