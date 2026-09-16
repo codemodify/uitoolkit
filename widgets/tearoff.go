@@ -1,7 +1,6 @@
 package widgets
 
 import (
-	"math"
 	"strings"
 
 	"github.com/codemodify/paintengine2d"
@@ -328,7 +327,6 @@ func (t *BrowserTabs) insertIndexAt(p paintengine2d.Point) int {
 // caretRect is the gap before tab i, as a bar the width of a caret: at
 // the left edge of that tab's slot, or after the last tab.
 func (t *BrowserTabs) caretRect(i int, g stripGeom) paintengine2d.Rect {
-	w := max(t.dip(2), 2)
 	x := g.view.Min.X
 	top, h := g.view.Max.Y-g.tabH, g.tabH
 	switch {
@@ -341,25 +339,16 @@ func (t *BrowserTabs) caretRect(i int, g stripGeom) paintengine2d.Rect {
 		x = last.Max.X - style.TabOverlapOf(t.Look())
 		top, h = last.Min.Y, last.Dy()
 	}
-	x = float32(math.Round(float64(x - w*0.5)))
-	return paintengine2d.XYWH(x, top, w, h).Intersect(t.LocalBounds())
+	return style.DropCaretRect(t.Look(), x, top, top+h, true).Intersect(t.LocalBounds())
 }
 
 // paintInsertCaret draws the bar in the gap a torn-off tab would land in.
+// It is the same caret a list, a tree and a table draw between two rows,
+// turned on its side, so a pack that themes one themes them all.
 func (t *BrowserTabs) paintInsertCaret(ctx *paintengine2d.Context, g stripGeom) {
 	r := t.caretRect(t.dropAt, g)
 	if r.Empty() {
 		return
 	}
-	acc := t.Look().Palette().Accent
-	ctx.DrawRect(r, paintengine2d.Fill(acc))
-	// A wedge at the top, so the caret reads as an insertion point and
-	// not as the edge of a tab.
-	w := r.Dx() * 2
-	p := paintengine2d.NewPath()
-	p.MoveTo(r.Min.X-w, r.Min.Y)
-	p.LineTo(r.Max.X+w, r.Min.Y)
-	p.LineTo((r.Min.X+r.Max.X)*0.5, r.Min.Y+w*1.5)
-	p.Close()
-	ctx.DrawPath(p, paintengine2d.Fill(acc))
+	style.DrawDropCaretOf(t.Look(), ctx, r, true)
 }
