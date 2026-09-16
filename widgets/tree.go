@@ -52,8 +52,12 @@ type TreeView struct {
 	OnDrag     func(*TreeNode) *widget.Drag
 	OnDropNode func(*TreeNode, widget.DropEvent) bool
 	DropMimes  []string
-	OnToggle   func(*TreeNode)
-	OnContext  func(*TreeNode, paintengine2d.Point)
+	// DropActions is what a drop here may do — copying alone when zero.
+	// A folder that takes files usually allows a move as well, which is
+	// what lets the drag's source remove its original.
+	DropActions platform.DragAction
+	OnToggle    func(*TreeNode)
+	OnContext   func(*TreeNode, paintengine2d.Point)
 	// Frameless drops the look's view frame (a tree that already sits in a
 	// framed pane).
 	Frameless bool

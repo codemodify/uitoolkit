@@ -14,8 +14,9 @@ type offscreenDrag struct {
 	// (DropNegotiator): the type it would read and what it would do.
 	// A backend sends these to the source, so a test can read them to
 	// see what the source would have been shown.
-	mime   string
-	action DragAction
+	mime    string
+	allowed DragAction
+	action  DragAction
 	// ended is the action the drag finished with, once it has.
 	ended DragAction
 }
@@ -44,9 +45,13 @@ func (o *Offscreen) Dragging() bool { return o.dragOut.running }
 // AcceptDrag implements [DropNegotiator]: it records what the window says
 // it would do with the drag over it, which is what a real backend would
 // send back to the source.
-func (o *Offscreen) AcceptDrag(mime string, a DragAction) {
-	o.dragOut.mime, o.dragOut.action = mime, a
+func (o *Offscreen) AcceptDrag(mime string, allowed, a DragAction) {
+	o.dragOut.mime, o.dragOut.allowed, o.dragOut.action = mime, allowed, a
 }
+
+// DragAllowed is every action the window said a drop where the pointer
+// is could perform, which is what a compositor picks from.
+func (o *Offscreen) DragAllowed() DragAction { return o.dragOut.allowed }
 
 // DragAccepted is the window's last answer about a drag over it: the type
 // it would read it as, and what it would do. An empty type means it takes

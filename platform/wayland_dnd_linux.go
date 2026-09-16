@@ -554,7 +554,7 @@ func wlOfferActions(a C.uint32_t) DragAction {
 // AcceptDrag implements [DropNegotiator]: the window says what it would
 // do with the drag over it, and the compositor tells the source. An
 // offer accepted for no type is what makes the source show a refusal.
-func (s *wlSurface) AcceptDrag(mime string, a DragAction) {
+func (s *wlSurface) AcceptDrag(mime string, allowed, a DragAction) {
 	c := s.conn
 	if c == nil || c.dndOffer == nil {
 		return
@@ -570,7 +570,10 @@ func (s *wlSurface) AcceptDrag(mime string, a DragAction) {
 		// is how a target says "not here".
 		C.ui_wd_offer_actions(c.dndOffer, 0, 0)
 	} else {
-		C.ui_wd_offer_actions(c.dndOffer, wlDragActions(a), wlDragActions(a))
+		// Everything this target would take, and the one it would take
+		// now. Naming only the latter would pin the compositor to it,
+		// and the user's Shift for a move could never change anything.
+		C.ui_wd_offer_actions(c.dndOffer, wlDragActions(allowed|a), wlDragActions(a))
 	}
 	if c.dpy != nil {
 		C.ui_wd_flush(c.dpy)

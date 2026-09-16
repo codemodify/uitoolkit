@@ -366,3 +366,29 @@ func TestXDNDAtomNamesMatchTheIndex(t *testing.T) {
 		}
 	}
 }
+
+// On X11 it is the source that turns the user's modifiers into an action:
+// Shift moves, Ctrl copies, the two together link — but never into
+// something the drag does not allow.
+func TestModifierDragAction(t *testing.T) {
+	all := DragCopy | DragMove | DragLink
+	for _, tc := range []struct {
+		name     string
+		mods     Modifiers
+		allows   DragAction
+		fallback DragAction
+		want     DragAction
+	}{
+		{"shift moves", ModShift, all, DragCopy, DragMove},
+		{"ctrl copies", ModCtrl, all, DragMove, DragCopy},
+		{"both link", ModShift | ModCtrl, all, DragCopy, DragLink},
+		{"nothing held takes the source's preference", 0, all, DragMove, DragMove},
+		{"no preference takes the first allowed", 0, all, DragNone, DragCopy},
+		{"a move the drag forbids falls back", ModShift, DragCopy, DragCopy, DragCopy},
+		{"a preference the drag forbids falls back", 0, DragLink, DragCopy, DragLink},
+	} {
+		if got := ModifierDragAction(tc.mods, tc.allows, tc.fallback); got != tc.want {
+			t.Fatalf("%s: got %v want %v", tc.name, got, tc.want)
+		}
+	}
+}
