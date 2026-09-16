@@ -176,6 +176,51 @@ window) is Phase 4: the drag keeps the pointer's position, where a
 tear-off check will go, through `xdg-toplevel-drag-v1` where the compositor
 has it.
 
+## Floating dock panels
+
+A dock panel in a window of its own (`app.DockHost`, see
+[widgets.md](widgets.md#dockable-panels)) is an ordinary toplevel: it goes
+through the same `resolveDecorations` as every other window, so it wears
+the toolkit's frame where the app does and the desktop's where the app
+does, without asking for anything of its own. Nothing about it is a popup
+or an override-redirect window — the desktop moves, resizes, stacks and
+lists it like any other.
+
+Under either frame the panel keeps the title bar it had docked, inside the
+window. That is a second row of chrome under the caption, which is what Qt
+Creator and Visual Studio do and is deliberate: it is the affordance that
+docks the panel back, and it means one implementation of the title bar,
+its buttons, its keyboard handling and its accessibility serves a panel
+whether it is docked or floating.
+
+The desktop's close button hides the panel rather than destroying the
+window, through `Window.SetOnCloseRequest`, so showing the panel again
+brings the same window back. `app.DockHost` also docks every panel back as
+the main window closes, so no panel is left in a window of its own keeping
+a finished app alive.
+
+Dragging the panel's title bar inside its window moves the window, through
+`Window.StartMove` — the desktop's own interactive move, which is what a
+floating tool window's title bar does everywhere.
+
+Two things a client cannot do, so nothing here promises them. It is not
+told where the desktop put a window, and on Wayland it cannot ask for a
+position at all: a saved layout restores a floating panel's size exactly
+and its position only where the window manager honours the request. And a
+drag that starts in one window and ends in another needs both windows'
+positions to be meaningful, so docking a floating panel back is its title
+bar's dock button (or the keyboard, or a saved layout), not a drag —
+dragging a panel from the host out onto the desktop still floats it, since
+that drag never leaves the window it started in.
+
+Both wait on the same Phase 4 work as tab tear-off: `xdg-toplevel-drag-v1`
+where the compositor has it, and a position capability on `platform.Surface`
+(the `HostMover` / `MoveSurface` pair already there has no reader) for X11,
+where `ConfigureNotify` already carries the coordinates and is throwing them
+away. `dock.WindowOpener` is the seam a compositor-side tear-off would be
+built behind; nothing in the dock package assumes a panel's window only
+appears on a button press.
+
 ## The looks
 
 A look paints the frame through `style.DecorationOf` (the measurements in
