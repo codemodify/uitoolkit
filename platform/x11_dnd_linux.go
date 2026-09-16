@@ -260,8 +260,9 @@ static Window ui_x_kid_at(Window* kids, int i) { return kids[i]; }
 static void ui_x_free_kids(Window* kids) { if (kids) XFree(kids); }
 
 // ui_x_win_geom is a window's box in its parent's coordinates. mapped is
-// false for a window that is not on screen and for an input-only one:
-// neither can ever be a drop target.
+// false only for a window that is not on screen: an InputOnly window is a
+// perfectly good drop target, and the proxy a compositor puts up to
+// bridge an X11 drag to a Wayland client is exactly that.
 static int ui_x_win_geom(Display* d, Window w, int* x, int* y, int* ww, int* hh, int* mapped) {
 	XWindowAttributes a;
 	memset(&a, 0, sizeof(a));
@@ -270,7 +271,7 @@ static int ui_x_win_geom(Display* d, Window w, int* x, int* y, int* ww, int* hh,
 	*y = a.y;
 	*ww = a.width;
 	*hh = a.height;
-	*mapped = (a.map_state == IsViewable) && (a.class == InputOutput);
+	*mapped = (a.map_state == IsViewable);
 	return 1;
 }
 
@@ -1076,6 +1077,8 @@ func (c *x11Conn) dragMotionTo(rx, ry int, mods uint) {
 	skip := func(w uint32) bool { return c.drag.icon.win != 0 && C.Window(w) == c.drag.icon.win }
 	found := XDNDFindTarget(tree, uint32(C.ui_x_root(c.dpy)), rx, ry, skip)
 	if found.Window != c.drag.target.Window {
+		xdndTrace("target at %d,%d: window=%#x proxy=%#x version=%d",
+			rx, ry, found.Window, found.Proxy, found.Version)
 		c.dragLeaveTarget()
 		c.drag.target = found
 		if found.Valid() {
