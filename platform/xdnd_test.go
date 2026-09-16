@@ -395,3 +395,28 @@ func TestModifierDragAction(t *testing.T) {
 		}
 	}
 }
+
+// What a drop may do is the source's list plus the action it asked for.
+//
+// XdndActionList is optional and the requested action is not, so a source
+// may ask for an action it never listed; going by the list alone would
+// narrow such a drag back to the list's first action and ignore the
+// modifier the user is holding.
+func TestMergeDragOfferKeepsTheRequestedAction(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		listed, asked DragAction
+		want          DragAction
+	}{
+		{"asked for an action it never listed", DragCopy, DragMove, DragCopy | DragMove},
+		{"a list that already has it", DragCopy | DragMove, DragMove, DragCopy | DragMove},
+		{"no list at all", DragNone, DragLink, DragLink},
+		{"a source that says nothing", DragNone, DragNone, DragCopy},
+		{"the question is not an action", DragCopy | DragMove | DragAsk, DragAsk, DragCopy | DragMove},
+		{"nothing but the question", DragAsk, DragAsk, DragCopy},
+	} {
+		if got := MergeDragOffer(tc.listed, tc.asked); got != tc.want {
+			t.Errorf("%s: listed %v asked %v gives %v, want %v", tc.name, tc.listed, tc.asked, got, tc.want)
+		}
+	}
+}
