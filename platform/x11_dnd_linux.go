@@ -642,15 +642,17 @@ func (c *x11Conn) xdndPosition(win C.Window, m XDNDMessage) {
 	}
 	c.drop.prefer = c.xdnd.actions.Action(action)
 	// XDND names one action per position; a source that would allow more
-	// says so in XdndActionList.
-	c.drop.offered = c.drop.prefer
+	// says so in XdndActionList. XdndActionAsk is not one of them — it is
+	// the source asking for the user to pick out of that list — so it
+	// stays on the requested action alone and never in the offered set.
+	c.drop.offered = c.drop.prefer.Actions()
 	var list [8]C.Atom
 	if n := C.ui_x_prop_atoms(c.dpy, c.drop.source, c.xdnd.at(XAActionList), &list[0], C.int(len(list))); n > 0 {
 		var all DragAction
 		for i := 0; i < int(n); i++ {
 			all |= c.xdnd.actions.Action(uint32(list[i]))
 		}
-		if all != DragNone {
+		if all = all.Actions(); all != DragNone {
 			c.drop.offered = all
 		}
 	}

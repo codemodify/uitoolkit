@@ -60,6 +60,12 @@ func (w *Window) acceptDrag(t widget.DropTarget, c widget.Component, ev platform
 		if a := platform.NegotiateDragAction(offeredActions(ev), ev.Action, allowed); a != platform.DragNone {
 			w.dropAction = a
 			mime = widget.PickDropMime(t.DropTypes(), ev.Mimes)
+			// Say that the user may be asked, where asking is the
+			// target's to offer: a Wayland compositor answers with ask
+			// only for a target that named it (dropask.go).
+			if wantsDropAsk(ev, allowed) {
+				allowed |= platform.DragAsk
+			}
 		}
 	}
 	if n, ok := w.surf.(platform.DropNegotiator); ok {
@@ -100,6 +106,27 @@ func (w *Window) drop(ev platform.Event) {
 		w.finishDrop(rcv, "", false, platform.DragNone)
 		return
 	}
+	// The drag left the choice to the user: the menu goes up at the drop
+	// point and the drop waits for it. Nothing has been read or handed
+	// over yet, so a dismissed menu is a clean refusal (dropask.go).
+	if choices := dropAsks(ev, allowedDropActions(c, offeredActions(ev))); choices != platform.DragNone {
+		asked := w.askDropAction(ev.Pos, choices, func(a platform.DragAction) {
+			if a == platform.DragNone {
+				w.finishDrop(rcv, "", false, platform.DragNone)
+				return
+			}
+			w.deliverDrop(rcv, t, c, ev, mime, a)
+		})
+		if asked {
+			return
+		}
+	}
+	w.deliverDrop(rcv, t, c, ev, mime, action)
+}
+
+// deliverDrop hands the drop to the target with the action settled, reads
+// the data it takes, and closes the protocol with the source.
+func (w *Window) deliverDrop(rcv platform.DropReceiver, t widget.DropTarget, c widget.Component, ev platform.Event, mime string, action platform.DragAction) {
 	// A drag this application started is served from the drag itself:
 	// the bytes never go through the desktop, and the payload — which
 	// has no type at all — reaches the target with them.

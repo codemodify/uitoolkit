@@ -16,6 +16,17 @@ const (
 	DragCopy DragAction = 1 << 0
 	DragMove DragAction = 1 << 1
 	DragLink DragAction = 1 << 2
+	// DragAsk is not an action but a question: it says the user should be
+	// asked which of the actions on offer to run, which is the menu a
+	// file manager puts under the pointer when a file is dropped with no
+	// modifier held. XDND names it XdndActionAsk and Wayland
+	// wl_data_device_manager.dnd_action ask; on Wayland it is the target
+	// that has to ask for it, so the toolkit does when the source allows
+	// it (see [DragAction.Asks]).
+	//
+	// It is deliberately outside the order actions are picked in, so
+	// [DragAction.One] never returns it and no drop can perform it.
+	DragAsk DragAction = 1 << 3
 )
 
 // dragActionOrder is the preference between actions both sides allow:
@@ -25,6 +36,14 @@ var dragActionOrder = [...]DragAction{DragCopy, DragMove, DragLink}
 
 // Has reports whether a is (or contains) b.
 func (a DragAction) Has(b DragAction) bool { return b != 0 && a&b == b }
+
+// Asks reports that a carries [DragAsk]: the user is to be asked which
+// action to perform.
+func (a DragAction) Asks() bool { return a&DragAsk != 0 }
+
+// Actions is a without the question: the actions alone, which is what a
+// drop may actually perform.
+func (a DragAction) Actions() DragAction { return a &^ DragAsk }
 
 // One is the single action a carries: the first of copy, move and link in
 // it. DragNone when it is empty.
@@ -45,6 +64,9 @@ func (a DragAction) String() string {
 		return "move"
 	case DragLink:
 		return "link"
+	}
+	if a.Asks() {
+		return "ask"
 	}
 	return "none"
 }

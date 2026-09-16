@@ -257,6 +257,8 @@ type wlDrag struct {
 // (wl_data_device_manager.dnd_action). Wayland has copy, move and ask;
 // it has no link, so a link-only drag is offered as a copy — a drag the
 // compositor thinks does nothing shows the user a refusal everywhere.
+// Wayland knows copy, move and ask, and no link at all: a drag that
+// offers one gets what is left of it here.
 func wlDragActions(a DragAction) C.uint32_t {
 	var out C.uint32_t
 	if a.Has(DragCopy) {
@@ -264,6 +266,9 @@ func wlDragActions(a DragAction) C.uint32_t {
 	}
 	if a.Has(DragMove) {
 		out |= 2
+	}
+	if a.Asks() {
+		out |= 4
 	}
 	if out == 0 {
 		out = 1
@@ -278,6 +283,8 @@ func wlDragAction(a C.uint32_t) DragAction {
 		return DragCopy
 	case 2:
 		return DragMove
+	case 4:
+		return DragAsk
 	}
 	return DragNone
 }
@@ -625,7 +632,9 @@ func uitkWlOfferActions(id C.uintptr_t, offer *C.struct_wl_data_offer, actions, 
 // compositor has settled on for it.
 type wlOfferAction struct{ source, chosen DragAction }
 
-// wlOfferActions maps a dnd_action bit field back to a set of actions.
+// wlOfferActions maps a dnd_action bit field back to a set of actions. A
+// source that names ask is saying it would let the user choose, which is
+// what the target needs to know before it may ask for the choice itself.
 func wlOfferActions(a C.uint32_t) DragAction {
 	var out DragAction
 	if a&1 != 0 {
@@ -633,6 +642,9 @@ func wlOfferActions(a C.uint32_t) DragAction {
 	}
 	if a&2 != 0 {
 		out |= DragMove
+	}
+	if a&4 != 0 {
+		out |= DragAsk
 	}
 	return out
 }
@@ -659,7 +671,16 @@ func (s *wlSurface) AcceptDrag(mime string, allowed, a DragAction) {
 		// Everything this target would take, and the one it would take
 		// now. Naming only the latter would pin the compositor to it,
 		// and the user's Shift for a move could never change anything.
-		C.ui_wd_offer_actions(c.dndOffer, wlDragActions(allowed|a), wlDragActions(a))
+		//
+		// On Wayland it is the target that asks for the user to be shown
+		// the choice, so a target willing to ask says so by naming ask as
+		// the action it would rather have; the compositor then answers
+		// wl_data_offer.action with ask unless a modifier settles it.
+		prefer := a
+		if allowed.Asks() {
+			prefer = DragAsk
+		}
+		C.ui_wd_offer_actions(c.dndOffer, wlDragActions(allowed|a), wlDragActions(prefer))
 	}
 	if c.dpy != nil {
 		C.ui_wd_flush(c.dpy)
