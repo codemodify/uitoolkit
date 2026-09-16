@@ -228,9 +228,10 @@ a `DecorationState`: active or backdrop, maximized, tiled, a caption with
 the app's own items), `DrawDecorationOf` (border and caption band, under
 the title bar), `DrawCaptionTitleOf` and `DrawCaptionButtonOf`. An engine
 paints its era's frame by implementing the optional `style.DecorationEngine`
-(see [theme-engines.md](theme-engines.md#window-frames)); every other engine
-has its in-app window frame (`DrawWindowFrame`, `WindowCloseRect`) adapted,
-so every pack has a frame in its own look.
+(see [theme-engines.md](theme-engines.md#window-frames)), and all 29 of them
+do: every pack wears the frame its original had. An engine without the hook
+— a new one — has its in-app window frame (`DrawWindowFrame`,
+`WindowCloseRect`) adapted until it grows its own.
 
 The table's corners and shadow are what the era had — the shadow's numbers
 are its reach past the window at 1x, top / right / bottom / left:
@@ -249,8 +250,23 @@ are its reach past the window at 1x, top / right / bottom / left:
 | `web` | merged: SourceGit's 38 px title bar, 48×30 buttons with a black-25% wash and a pure red close | 8 px | 7/7/7/7 |
 | `motif` | stacked: mwm's resize handles and raised title-bar parts | square | none |
 | `flatlaf`, `material` | merged: FlatLaf's title pane; Material's surface with circular icon buttons | square | FlatLaf 5/9/13/9; Material's elevation 7/10/14/10 |
+| `system7` | stacked: the title bar's six stripes broken by the 11 px close box at the left, the zoom box at the right and the bold title in its own margin; System 7's colour chrome bevels bar and boxes in lavender and navy | square | none |
+| `platinum` | stacked: the black outline with the Platinum bevel inside it, a bar of raised ridges round the centred title, the close box left, collapse and zoom right | square | none |
+| `amiga` | stacked: Intuition's borders and gadgets — 3.1's raised frame, recessed body, FILLPEN bar and close, zoom and depth gadgets; 1.3's white borders on blue, drag-bar stripes (ghosted in the backdrop) and the gadgets behind their blue lines | square | none |
+| `next` | stacked: the black frame line, the title bar with miniaturize at its left and close at its right — NeXT's 15 px raised buttons, Window Maker's square tiles — and the notched resize bar as the bottom border | square | none |
+| `beos` | stacked: the yellow tab with its bevel, close box and zoom box over the five-pixel border (the tab is the caption's full width) | square | none |
+| `os2` | stacked: Warp 4's sizing border, the mini icon, the sunken #2B00AA title well and the Close, Hide and Maximize glyphs | square | none |
+| `win31` | stacked: the sizing frame, the navy caption with its centred bold title, the control-menu box and the arrow buttons (both arrows while maximized) | square | none |
+| `openlook` | stacked: olwm's black outline with the L-shaped resize corners, the header recessed while focused, the abbreviated menu button — the only control OPEN LOOK put on a frame | square | none |
+| `keramik` | stacked: the rounded gel slab, the title riding in its bubble, round gel buttons | 7 px top | none |
+| `plastik` | stacked: the four-pixel border read from the outside in, the lit title bar, square buttons | 3 px top | none |
+| `oxygen` | stacked: the window's own gradient running on through the caption, the embossed centred title, round slabs, the float frame's rim | 5 px top | 7/17/27/17 |
+| `clearlooks` (and `bluecurve`) | stacked: Metacity's title bar in three bands lit along its top, the centred bold title over its shadow, small rounded buttons | 5 px top (Bluecurve square) | none |
+| `metal` | stacked: the grooved five-line border with solid corners, primary 3 (Ocean's wash) with the bumps, flush black-edged buttons | square | none |
+| `nimbus` | stacked: the rounded glossed bar, the centred bold title, round-cornered buttons, close glowing red | 6 px top | 5/9/13/9 |
+| `fusion` | stacked: the MDI title bar Qt itself paints — the highlight gradient, chamfered top, centred title, bevelled boxes | 4 px top | 7/13/19/13 |
 | `base` | merged: a hairline, flat buttons over the tool face, close red | square | 7/13/19/13 |
-| the others | adapted: their in-app caption as a stacked strip, their own close button, push buttons for the rest | rounded top for KDE 3's Plastik and Keramik and GNOME 2's Clearlooks and Bluecurve, square otherwise | Oxygen and Fusion 7/13/19/13, the pre-compositing eras none |
+| the adapter | nothing reaches it: it is the fallback a new engine gets until it paints its own frame — its in-app caption as a stacked strip, its own close button, push buttons for the rest | square | the engine's dialog shadow |
 
 Glyphs, sizes and colours are the look's; the side and order of the
 buttons are the desktop's, unless the user prefers the look's own layout:
@@ -430,8 +446,11 @@ toggle-maximizes on Wayland (X11 does it one way), "lower" works on X11 only,
   files; `widgets/caption_test.go` checks every built-in's caption answer.
 - `style`: every pack's frame at 1, 1.25, 1.5, 1.75 and 2x — borders on
   whole device pixels, buttons inside the caption, square when maximized —
-  paints inside its window, title box and button boxes; the adapter takes
-  the in-app frame's caption, borders and close button; glyphs stay crisp.
+  paints inside its window, title box and button boxes; every engine has a
+  frame of its own and paints its caption band; corners and shadows are the
+  era's and each look's own button layout is its desktop's; the adapter,
+  driven directly, still takes the in-app frame's caption, borders and close
+  button; glyphs stay crisp.
   `widgets`: the tab strip (layout, caption answers, select, close, new,
   drag to reorder, overflow and scrolling, keys and shortcuts, tool tips,
   accessibility). `app`: stacked frames (strip, row, hit tests, a drag from
@@ -468,11 +487,11 @@ toggle-maximizes on Wayland (X11 does it one way), "lower" works on X11 only,
 2. **Phase 1** (done): the opaque toolkit frame above — buffers stay opaque
    (XRGB, full opaque region, window geometry = the whole surface), the
    present path is unchanged.
-3. **Phase 2** (done): themed frames — `style.DecorationEngine` with native
-   frames for the engines above and the adapter for the rest, merged and
-   stacked title bars, a restore glyph per engine, `"captionButtons":
-   "theme"`, and document tabs in the title bar (`widgets.BrowserTabs`,
-   Files).
+3. **Phase 2** (done): themed frames — `style.DecorationEngine` with a
+   native frame for every engine (the adapter is now only what a new engine
+   gets before it writes one), merged and stacked title bars, a restore
+   glyph per engine, `"captionButtons": "theme"`, and document tabs in the
+   title bar (`widgets.BrowserTabs`, Files).
 4. **Phase 3** (done): shadows and rounded corners — alpha buffers where a
    frame needs them (`wl_shm` ARGB8888, an EGL alpha config, an X11 32-bit
    visual with compositing-manager detection), `set_window_geometry`, input
