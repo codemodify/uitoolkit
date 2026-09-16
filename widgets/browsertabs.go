@@ -59,6 +59,12 @@ type BrowserTabs struct {
 	// OnReorder reports that the user dragged tab from to index to (the
 	// strip has moved it; the selection follows it).
 	OnReorder func(from, to int)
+	// OnDropTab takes a drop on tab i — dropping files on a folder tab is
+	// how a file manager moves them there — and DropMimes narrows what it
+	// takes (text/uri-list when empty). The tab under a drag is
+	// highlighted while it is over the strip.
+	OnDropTab func(i int, e widget.DropEvent) bool
+	DropMimes []string
 	// OnContextMenu runs for a right-click on tab i, or on the strip's
 	// caption space (i -1), at window point at; it reports whether it
 	// showed a menu (else the window menu shows for the caption space).
@@ -68,8 +74,11 @@ type BrowserTabs struct {
 	MaxTabWidth, MinTabWidth float32
 
 	hover, press stripHit
-	scroll       float32
-	drag         tabDrag
+	// dropTab is the tab a drag from another app (or another view) is
+	// over, -1 for none.
+	dropTab int
+	scroll  float32
+	drag    tabDrag
 }
 
 // stripPart is what a point of the strip is.
@@ -104,7 +113,7 @@ type tabDrag struct {
 // NewBrowserTabs makes a strip with a tab for each title, the first
 // selected.
 func NewBrowserTabs(titles ...string) *BrowserTabs {
-	t := &BrowserTabs{hover: stripHit{tab: -1}, press: stripHit{tab: -1}}
+	t := &BrowserTabs{hover: stripHit{tab: -1}, press: stripHit{tab: -1}, dropTab: -1}
 	t.Init(t)
 	t.SetWantsFocus(true)
 	t.SetFocusVisibleOnly(true)
@@ -642,6 +651,11 @@ func (t *BrowserTabs) Paint(ctx *paintengine2d.Context) {
 	}
 	if t.drag.active {
 		paint(t.drag.tab, t.drag.tab == t.sel)
+	}
+	// The tab a drag from elsewhere is over, on top of the tabs: what a
+	// drop would land on has to be unmistakable.
+	if t.dropTab >= 0 && t.dropTab < len(t.tabs) {
+		paintDropRow(ctx, lk, t.slotOf(t.dropTab, g))
 	}
 	ctx.Restore()
 	if g.overflow {

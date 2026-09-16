@@ -44,11 +44,22 @@ type TreeView struct {
 	RowHeight float32
 	OffsetY   float32
 	OnSelect  func(*TreeNode)
-	OnToggle  func(*TreeNode)
-	OnContext func(*TreeNode, paintengine2d.Point)
+	// OnDrag is what a press on a node drags out of the tree
+	// (widget.DragSource); nil drags nothing. OnDropNode takes a drop on
+	// a node — dropping files on a folder — and DropMimes narrows what it
+	// takes (text/uri-list when empty). The node under a drag is
+	// highlighted while it is over the tree.
+	OnDrag     func(*TreeNode) *widget.Drag
+	OnDropNode func(*TreeNode, widget.DropEvent) bool
+	DropMimes  []string
+	OnToggle   func(*TreeNode)
+	OnContext  func(*TreeNode, paintengine2d.Point)
 	// Frameless drops the look's view frame (a tree that already sits in a
 	// framed pane).
 	Frameless bool
+	// dropRow is the row a drag from another app (or another view) is
+	// over, -1 for none.
+	dropRow int
 	// Sidebar paints the tree as a sidebar (a mail app's folders), where
 	// the look has a sidebar style (see ListView.Sidebar).
 	Sidebar   bool
@@ -70,7 +81,7 @@ type TreeView struct {
 
 // NewTreeView constructs a tree.
 func NewTreeView(roots ...*TreeNode) *TreeView {
-	t := &TreeView{Roots: roots, RowHeight: 24}
+	t := &TreeView{Roots: roots, RowHeight: 24, dropRow: -1}
 	t.Init(t)
 	t.SetWantsFocus(true)
 	return t
@@ -310,6 +321,14 @@ func (t *TreeView) Paint(ctx *paintengine2d.Context) {
 			lk.DrawTreeRow(ctx, row, t.rowState(n), n.Expanded, n.Leaf(), rows[i].depth, n.Label, n.Bold)
 			paintTreeSwatch(ctx, row, n.Color)
 		}
+		ctx.Restore()
+	}
+	// The row a drag is over, over the rows themselves and under the
+	// scrollbar: what a drop would land on has to be unmistakable.
+	if t.dropRow >= 0 && t.dropRow < len(rows) {
+		ctx.Save()
+		ctx.ClipRect(b)
+		paintDropRow(ctx, lk, paintengine2d.XYWH(0, float32(t.dropRow)*rh-t.OffsetY, rw, rh))
 		ctx.Restore()
 	}
 	t.vbar.paint(t, ctx, lk, t.vparts(), true, t.OffsetY)
