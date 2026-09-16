@@ -74,8 +74,8 @@ gets the era right:
   `WindowFrameInsets/DrawWindowFrame` (in-app dialogs: caption, close),
   `DrawWindowBackground` (pinstripes, brushed metal) and `DrawTabPane`.
   Top-level windows whose frame the toolkit draws use the optional
-  `DecorationEngine` ([Window frames](#window-frames)), else the in-app
-  frame adapted.
+  `DecorationEngine` ([Window frames](#window-frames)) — every engine here
+  has one — else the in-app frame adapted.
 - **View frames** — `ViewFrameInsets` / `DrawViewFrame` frame lists,
   trees and tables (Qt's `PE_Frame`). By default the frame is the engine's
   own field face, as thick as the `viewFrame` metric (Win95 2px sunken,
@@ -297,29 +297,35 @@ func (lunaEngine) DrawCaptionButton(l *Classic, ctx *paintengine2d.Context, b pa
   screen (`DecorationState.Solid`) is square and shadowless; a tiled edge
   loses its shadow and the corners beside it. An engine states its look's
   own frame and nothing else.
-- **What each era had.** Windows 95 to XP, Windows 8, Motif, NeXT and the
-  other pre-compositing looks are square and shadowless, as they were; KDE
-  3's Plastik and Keramik and GNOME 2's Clearlooks and Bluecurve keep the
-  rounded top corners their decorations shaped. Windows XP rounds its top
+- **What each era had.** Windows 95 to XP, Windows 8, Motif, NeXT and
+  Window Maker, the Mac through Mac OS 9, Intuition, BeOS, OS/2 Warp,
+  Windows 3.1, OPEN LOOK and Swing's Metal are square and shadowless, as
+  they were; KDE 3's Plastik and Keramik and GNOME 2's Clearlooks keep the
+  rounded top corners their decorations shaped (Bluecurve, square
+  everywhere by Red Hat's design, does not). Windows XP rounds its top
   corners (7px) without a shadow. The composited eras carry both: Aqua
   (5px top corners, a deep soft shadow), macOS (10px all round on Big Sur,
   4 before), Windows 7's glass (6px), Windows 10 (square, a tight shadow),
   Windows 11 (8px, DWM's shadow), Plasma's Breeze (3px top, its Large
   shadow), GNOME's Adwaita (12px, `0 3px 9px 1px` black at half alpha),
   SourceGit and the web packs (8px, a 12px ring), FlatLaf and Material
-  (square, their own elevation), Oxygen and Fusion through the adapter.
+  (square, their own elevation), KDE 4's Oxygen (5px top, a wide soft
+  shadow), Nimbus (6px top, its dialog shadow) and Qt's Fusion (a 4px
+  chamfer, the modest shadow of its era).
 
-Engines without the hook get their in-app window frame adapted: the caption
-of `DrawWindowFrame` as a stacked strip (only its parts are painted, never
-its body over the content; `WindowState.NoButtons` asks for it without
-zoom or depth boxes), its borders round the window, its own close button
-moved to wherever the button layout puts it (the in-app frame is painted
-translated so its `WindowCloseRect` lands on the button, clipped to it),
-push buttons at its size with generic glyphs for the rest, and the title
-laid out by the engine over the free space. Native frames exist for
-`win95`, `luna`, `aero`, `metro`, `fluent`, `aqua`, `macos`, `breeze`,
-`adwaita`, `web`, `motif`, `flatlaf` and `material`; the base look has the
-plain frame.
+Every engine in the toolkit paints its era's frame itself, so nothing
+reaches the adapter today; it is the fallback a new engine gets for free
+until it implements the hook. It takes the engine's in-app window frame:
+the caption of `DrawWindowFrame` as a stacked strip (only its parts are
+painted, never its body over the content; `WindowState.NoButtons` asks for
+it without zoom or depth boxes), its borders round the window, its own
+close button moved to wherever the button layout puts it (the in-app frame
+is painted translated so its `WindowCloseRect` lands on the button, clipped
+to it), push buttons at its size with generic glyphs for the rest, and the
+title laid out by the engine over the free space. The frame stays square,
+takes the shadow the engine drops under a dialog and states no button
+layout of its own, so the desktop's is used. The base look, which is no
+era, has the plain frame instead.
 
 Check a frame with `go run ./cmd/uitk-themesheet -frames -theme luna -o
 /tmp/f` (and `-scale 1.75`): real windows active, in the backdrop,
