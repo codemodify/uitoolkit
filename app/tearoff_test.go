@@ -56,7 +56,12 @@ func newTearRig(t *testing.T, open bool) *tearRig {
 			r.torn = win
 			return win
 		},
-		Done: func(res widget.TearResult) { r.res, r.ended = res, true },
+		Done: func(res widget.TearResult, win widget.TearOffWindow) {
+			r.res, r.ended = res, true
+			if win != nil && res != widget.TearKept {
+				win.Close()
+			}
+		},
 	}
 	if !w.StartTearOff(d, tear) {
 		t.Fatal("StartTearOff")
@@ -171,7 +176,12 @@ func TestTearOffWithoutToplevelDragOpensAtTheDrop(t *testing.T) {
 					r.torn = win
 					return win
 				},
-				Done: func(res widget.TearResult) { r.res, r.ended = res, true },
+				Done: func(res widget.TearResult, win widget.TearOffWindow) {
+					r.res, r.ended = res, true
+					if win != nil && res != widget.TearKept {
+						win.Close()
+					}
+				},
 			})
 			if !ok {
 				t.Fatal("StartTearOff")

@@ -155,7 +155,7 @@ func TestTearOffEndingsPutTheTabBackOrLeaveItOut(t *testing.T) {
 			if r.host.started != 1 {
 				t.Fatal("no tear-off")
 			}
-			r.host.tear.Done(tc.res)
+			r.host.tear.Done(tc.res, r.host.window)
 			if got := r.titles(); len(got) != len(tc.want) || got[0] != tc.want[0] || got[1] != tc.want[1] {
 				t.Fatalf("got %v want %v", got, tc.want)
 			}
@@ -176,7 +176,7 @@ func TestTearOffWithoutACarriedWindowKeepsTheTab(t *testing.T) {
 	if got := r.titles(); len(got) != 3 {
 		t.Fatalf("the tab stays until the drop: %v", got)
 	}
-	r.host.tear.Done(widget.TearKept)
+	r.host.tear.Done(widget.TearKept, r.host.window)
 	if got := r.titles(); len(got) != 2 || got[1] != "notes" {
 		t.Fatalf("at the drop it leaves: %v", got)
 	}

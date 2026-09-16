@@ -101,14 +101,25 @@ func (t *BrowserTabs) TearOffTab(i int, at paintengine2d.Point) bool {
 		// tore off lands roughly under it.
 		Offset: widget.DeviceOrigin(t).Add(at),
 		Open:   func() widget.TearOffWindow { return t.OnTearOff(i, tab) },
-		Done: func(res widget.TearResult) {
+		Done: func(res widget.TearResult, win widget.TearOffWindow) {
 			switch res {
 			case widget.TearCancelled:
+				// Nothing happened: the window the tab was carried in has
+				// no reason to exist and the tab goes back where it was.
+				if win != nil {
+					win.Close()
+				}
 				if carried {
 					t.InsertTab(i, tab)
 					t.Select(i)
 				}
-			case widget.TearKept, widget.TearMerged:
+			case widget.TearMerged:
+				// Another strip holds the tab now.
+				if win != nil {
+					win.Close()
+				}
+				fallthrough
+			case widget.TearKept:
 				if !carried {
 					t.RemoveTab(i)
 				}
