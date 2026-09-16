@@ -7,8 +7,8 @@ tries `GPUDevice` and falls back to the CPU pixmap.
 | Backend | When | Present | Clipboard | Scale | IME | Cursor |
 | --- | --- | --- | --- | --- | --- | --- |
 | **offscreen** | `Headless`, `UITK_BACKEND=offscreen`, or no display | no-op | in-process | env or 1 | n/a | last `SetCursor` |
-| **Wayland** | Linux + CGO + `WAYLAND_DISPLAY` | **`wl_egl_window` + `eglSwapBuffers`** when `UITK_PAINT=auto\|gpu` and EGL works; else v0.4.1 **`wl_shm` XRGB8888** (opaque). **linux-dmabuf** only if `UITK_WAYLAND_PRESENT=dmabuf` on the CPU path | `wl_data_device` + primary when the compositor offers it | `wl_output` scale, `wp_fractional_scale_v1` + viewporter, env | `zwp_text_input_v3` preedit / commit | host cursors: `wp_cursor_shape_v1` when advertised, else `wl_cursor_theme` (`XCURSOR_THEME` / `XCURSOR_SIZE`) + `wl_pointer_set_cursor` (enter serial); re-applied on pointer enter |
-| **X11** | Linux + CGO + `DISPLAY` | **EGL window + `eglSwapBuffers`** when EGL works; else dirty-rect `XPutImage` / MIT-SHM | CLIPBOARD + PRIMARY, ICCCM **INCR** | Xft.dpi, RandR mm, screen mm, env | XIM preedit callbacks + compose / dead keys | host cursors: `XcursorLibraryLoadCursor` theme names, else `XCreateFontCursor` + `XDefineCursor` |
+| **Wayland** | Linux + CGO + `WAYLAND_DISPLAY` | **`wl_egl_window` + `eglSwapBuffers`** when `UITK_PAINT=auto\|gpu` and EGL works; else v0.4.1 **`wl_shm` XRGB8888** (opaque). **linux-dmabuf** only if `UITK_WAYLAND_PRESENT=dmabuf` on the CPU path | `wl_data_device` + primary when the compositor offers it (drag and drop rides the same device) | `wl_output` scale, `wp_fractional_scale_v1` + viewporter, env | `zwp_text_input_v3` preedit / commit | host cursors: `wp_cursor_shape_v1` when advertised, else `wl_cursor_theme` (`XCURSOR_THEME` / `XCURSOR_SIZE`) + `wl_pointer_set_cursor` (enter serial); re-applied on pointer enter |
+| **X11** | Linux + CGO + `DISPLAY` | **EGL window + `eglSwapBuffers`** when EGL works; else dirty-rect `XPutImage` / MIT-SHM | CLIPBOARD + PRIMARY, ICCCM **INCR**; drag and drop is **XDND 5** | Xft.dpi, RandR mm, screen mm, env | XIM preedit callbacks + compose / dead keys | host cursors: `XcursorLibraryLoadCursor` theme names, else `XCreateFontCursor` + `XDefineCursor` |
 | Win32 / AppKit | stub windows; **tray** is `Shell_NotifyIcon` / `NSStatusItem` | — | — | — | — | host cursors: `LoadCursorW` (`IDC_ARROW` / `SIZEWE` / `SIZENS` / `IBEAM`); AppKit `NSCursor` (arrow / resizeLeftRight / resizeUpDown / IBeam) |
 
 Auto-select: Wayland if `WAYLAND_DISPLAY` is set **and** a compositor
@@ -381,6 +381,75 @@ region — byte for byte the path every window took before.
 
 linux-dmabuf stays on the opaque `XRGB` formats; a frame that needs alpha
 presents through `wl_shm` instead (the dmabuf path is opt-in and CPU-only).
+
+## Drag and drop
+
+Both halves on both backends: a window takes drops from any application,
+and a drag started in one is carried to any other. The toolkit-facing API
+is in [widgets.md](widgets.md); what follows is what the backends do.
+
+Shared, and testable without a display (`platform/drag.go`,
+`platform/xdnd.go`): `DragAction` is a bit set of copy / move / link, so a
+source can offer several and a target answer with one;
+`NegotiateDragAction` settles what a drop performs; `ModifierDragAction`
+is the desktop-wide convention (Shift moves, Ctrl copies, both link) for
+the backend that has to apply it itself.
+
+The seams a surface implements are `DragSurface` (`StartDrag`,
+`CancelDrag`, `Dragging`), `DropReceiver` (`ReceiveDrop`, `FinishDrop`)
+and `DropNegotiator` (`AcceptDrag`). `AcceptDrag` takes both the set of
+actions the target allows and the one it would take now: a compositor
+picks from the set with the user's modifiers, so a target that named only
+its current choice would pin the drag to it.
+
+**Wayland.** Taking a drop is `wl_data_device` — the offer is accepted
+for the type the window will read, `set_actions` says what it would do,
+and the drop is read from a pipe and finished. Dragging out is
+`wl_data_source` with the offered types and `set_actions`, and
+`wl_data_device.start_drag` from the serial of the press that began it:
+without that serial a compositor refuses the drag, and rightly, since
+nothing else proves a user asked for it. The picture that follows the
+pointer is a surface of its own with an ARGB `wl_shm` buffer, attached
+with the hotspot as its offset. `dnd_drop_performed` takes the picture
+away while the source stays alive to answer for the data;
+`dnd_finished` (or `cancelled`) reports the action the target performed.
+Escape needs nothing from the client: the compositor owns the pointer
+during a drag and cancels it itself.
+
+**X11** is XDND version 5, the whole conversation
+(`platform/x11_dnd_linux.go`). Every toplevel advertises `XdndAware`;
+as a target the window answers each `XdndPosition` with an `XdndStatus`
+(which is what tells the source whether the drop will be taken, and with
+which action), reads `XdndTypeList` when a source offers more than three
+types, converts `XdndSelection` at the timestamp the drop named — so a
+second drag cannot hand over the first one's data — in ICCCM **INCR**
+pieces when it is too big for one property, and closes with
+`XdndFinished`.
+
+As a source it takes `XdndSelection`, grabs the pointer and the keyboard,
+and walks the window tree on every move to find the target under the
+pointer: down through a reparenting manager's frame, following
+`XdndProxy` (which is read from, and messaged at, the proxy while the
+messages still name the window under the pointer), and passing over its
+own icon window. An **input-only** window counts — the proxy a compositor
+puts up to bridge an X11 drag to a Wayland client is exactly that. The
+cursor shows what the last `XdndStatus` agreed to. On release it sends
+`XdndDrop`, gives the pointer back at once, and keeps serving the
+selection until `XdndFinished` or a timeout, which the spec tells a
+source to have rather than block on a misbehaving target. The drag's
+picture is an override-redirect window on the ARGB visual with an empty
+input shape; without such a visual the drag runs on the cursor alone.
+
+Escape reaches an X11 drag two ways: as a key event on the grab, taken
+before `XFilterEvent` so a composing input method cannot swallow it, and
+by asking the server which keys are down — there are setups where a
+grabbed key event never arrives at all. `UITK_XDND_DEBUG=1` traces a
+drag's progress to stderr.
+
+**Offscreen** implements the source side too, so all of this is testable
+with no display: it stands in for the desktop, and a test moves the drag,
+drops it, and reads back what the source was told
+(`platform/offscreen_drag.go`).
 
 ## Deferred
 
