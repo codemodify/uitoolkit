@@ -56,7 +56,10 @@ type Window struct {
 	cursor     platform.Cursor
 	paints     int
 	closeHides bool
-	statusMenu bool
+	// onCloseRequest, when set, decides what a desktop close does: false
+	// keeps the window (a floating dock panel hides itself instead).
+	onCloseRequest func() bool
+	statusMenu     bool
 	// sweeping guards dropDeadRefs against re-entry: clearing focus runs
 	// FocusLost, which widgets may answer by dismissing another layer.
 	sweeping        bool
@@ -648,6 +651,9 @@ func (w *Window) dispatch(ev platform.Event) {
 			} else {
 				w.Hide()
 			}
+			return
+		}
+		if w.onCloseRequest != nil && !w.onCloseRequest() {
 			return
 		}
 		if w.closeHides {
@@ -1612,6 +1618,13 @@ func (w *Window) Closed() bool { return w == nil || w.closed.Load() }
 
 // SetCloseHides maps the window-manager close button to Hide (close-to-tray).
 func (w *Window) SetCloseHides(on bool) { w.closeHides = on }
+
+// SetOnCloseRequest hands the desktop's close button to the app: fn runs
+// before the window would close and returning false keeps it open (a
+// document with unsaved work, a floating dock panel that hides itself
+// instead). Alt+F4 and the window menu's Close go through it too, since
+// they ask the same way. nil restores the default.
+func (w *Window) SetOnCloseRequest(fn func() bool) { w.onCloseRequest = fn }
 
 // Raise maps and activates the native window (X11 _NET_ACTIVE_WINDOW).
 func (w *Window) Raise() {
