@@ -32,10 +32,20 @@ type filePlace struct {
 // Its folders open in tabs in the window's title bar (Dolphin's folder tabs
 // in Chromium's place): the tree and the table show the selected tab's
 // folder, "+" or Ctrl+T opens Home in a new tab, Ctrl+W closes one,
-// Ctrl+Tab switches, and a tab dragged along the strip moves.
-func FilesApp(win *app.Window) widget.Component {
+// Ctrl+Tab switches, a tab dragged along the strip moves, and a tab
+// dragged out of the strip becomes a Files window of its own — dropped
+// back on another window's strip it joins that one.
+func FilesApp(win *app.Window) widget.Component { return filesApp(win, nil) }
+
+// filesApp is FilesApp with the folders its window opens with: nil for
+// the two a fresh window shows, one place for a window a torn-off tab
+// made.
+func filesApp(win *app.Window, open []int) widget.Component {
 	places := samplePlaces()
 	place := 1
+	if len(open) > 0 && open[0] >= 0 && open[0] < len(places) {
+		place = open[0]
+	}
 	if place >= len(places) {
 		place = 0
 	}
@@ -430,6 +440,9 @@ func FilesApp(win *app.Window) widget.Component {
 						tabs.Select(openTab(i+1, p))
 					}
 				}),
+				widgets.Item("Move Tab to New Window", func() {
+					tabs.TearOffTab(i, at)
+				}),
 				widgets.Sep(),
 				widgets.ItemAccel("Close Tab", "Ctrl+W", func() { tabs.CloseTab(i) }),
 				widgets.Item("Close Other Tabs", func() {
@@ -445,8 +458,58 @@ func FilesApp(win *app.Window) widget.Component {
 		widgets.ShowContextMenu(tabs, at, items...)
 		return true
 	}
+	// A tab dragged out of the strip opens a Files window of its own
+	// showing that folder, and the desktop carries it under the pointer
+	// (docs/decorations.md). Dropped on another Files window's strip it
+	// joins that one instead.
+	tabs.OnTearOff = func(_ int, tab widgets.BrowserTab) widget.TearOffWindow {
+		p, ok := tab.Data.(int)
+		a := win.App()
+		if !ok || a == nil {
+			return nil
+		}
+		w, hh := 1040, 680
+		if win != nil {
+			if cw, ch := win.Size(); cw > 0 && ch > 0 {
+				w, hh = cw, ch
+			}
+		}
+		w2, err := a.NewWindow(platform.WindowOptions{
+			Title: places[p].Label + " — Files", Width: w, Height: hh,
+			MinWidth: 720, MinHeight: 480,
+		})
+		if err != nil {
+			mark(err.Error())
+			return nil
+		}
+		w2.SetContent(filesApp(w2, []int{p}))
+		return w2
+	}
+	tabs.OnMergeTab = func(at int, tab widgets.BrowserTab, _ widget.DropEvent) bool {
+		p, ok := tab.Data.(int)
+		if !ok {
+			// From another Files process there is no index, only the
+			// title the private type carries.
+			if p, ok = placeNamed(places, tab.Title); !ok {
+				return false
+			}
+		}
+		tabs.Select(openTab(at, p))
+		mark("Merged " + places[p].Label)
+		return true
+	}
+	// Besides the tab itself, a folder tab carries its path as text, so
+	// dropping one in a terminal or an editor says where it was.
+	tabs.OnTabDrag = func(_ int, tab widgets.BrowserTab) *widget.Drag {
+		if p, ok := tab.Data.(int); ok {
+			return widget.DragText(places[p].Path)
+		}
+		return nil
+	}
 	openTab(0, place)
-	openTab(1, 0)
+	if len(open) == 0 {
+		openTab(1, 0)
+	}
 	tabs.Select(0)
 
 	// The tabs are the window's title bar: the caption of the frame the
@@ -577,4 +640,16 @@ func main() {
 			},
 		},
 	}
+}
+
+// placeNamed is the folder a label names, for a tab that arrived from
+// another Files process: the private type carries the title and the
+// document behind it is this process's own.
+func placeNamed(places []filePlace, label string) (int, bool) {
+	for i, p := range places {
+		if p.Label == label {
+			return i, true
+		}
+	}
+	return 0, false
 }
