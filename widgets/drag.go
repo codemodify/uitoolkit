@@ -206,47 +206,9 @@ func (t *TreeView) clearDropRow() {
 	}
 }
 
-// ---- document tabs -------------------------------------------------------------
-
-// DropTypes: what OnDropTab takes, if anything.
-func (t *BrowserTabs) DropTypes() []string {
-	if t.OnDropTab == nil {
-		return nil
-	}
-	if len(t.DropMimes) > 0 {
-		return t.DropMimes
-	}
-	return []string{"text/uri-list"}
-}
-
-// Drop hands the drop to the tab under it — dropping a file on a folder
-// tab is how a file manager moves it there.
-func (t *BrowserTabs) Drop(e widget.DropEvent) bool {
-	hit := t.hitAt(e.Pos)
-	t.clearDropTab()
-	if hit.tab < 0 || hit.tab >= t.Len() || t.OnDropTab == nil {
-		return false
-	}
-	return t.OnDropTab(hit.tab, e)
-}
-
-// DragOver highlights the tab a drag is over.
-func (t *BrowserTabs) DragOver(pos paintengine2d.Point) {
-	hit := t.hitAt(pos)
-	if hit.tab != t.dropTab {
-		t.dropTab = hit.tab
-		t.Invalidate()
-	}
-}
-
-func (t *BrowserTabs) DragLeave() { t.clearDropTab() }
-
-func (t *BrowserTabs) clearDropTab() {
-	if t.dropTab != -1 {
-		t.dropTab = -1
-		t.Invalidate()
-	}
-}
+// The document tabs' own halves of this — what a tab dragged out of the
+// strip offers, and what the strip takes from one dragged in — are in
+// tearoff.go.
 
 // ---- the highlight -------------------------------------------------------------
 
