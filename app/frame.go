@@ -668,6 +668,7 @@ func (w *Window) StartResize(edges platform.Edges) bool {
 // until the gesture ends.
 func (w *Window) releasePointer() {
 	w.capPress = captionGesture{}
+	w.dragArm = dragGesture{}
 	w.capture = nil
 	if w.hover != nil {
 		w.hover.MouseExit()

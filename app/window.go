@@ -687,6 +687,9 @@ func (w *Window) dispatch(ev platform.Event) {
 		w.resetIME()
 		w.dismissTooltip()
 		w.capture = nil
+		// A press waiting to become a drag dies with the focus: the
+		// button went up somewhere we will never hear about.
+		w.dragArm = dragGesture{}
 		// The pointer is no longer ours: leave no widget stuck in its
 		// hover state behind an alt-tab.
 		if w.hover != nil {
