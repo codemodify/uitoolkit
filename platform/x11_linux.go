@@ -2790,12 +2790,9 @@ func (s *x11Surface) SetFrame(f Frame) {
 	if f.Alpha && !s.argb() {
 		s.recreateOnVisual(true)
 	}
-	if !f.Alpha && s.frame.Alpha && s.argb() && f.Margin.Zero() {
-		// Nothing translucent left to paint: the ARGB visual is harmless
-		// (every pixel is opaque) and re-creating the window would flash,
-		// so it stays until the window is made again.
-		_ = f
-	}
+	// A window that stops needing alpha keeps its 32-bit visual: every
+	// pixel is opaque then (and _NET_WM_OPAQUE_REGION says so), and
+	// re-creating the window to go back would flash for nothing.
 	s.frame = f
 	x11Mu.Lock()
 	s.applyFrameLocked()
