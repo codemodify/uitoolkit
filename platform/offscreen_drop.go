@@ -22,10 +22,12 @@ func (o *Offscreen) ReceiveDrop(mime string) ([]byte, bool) {
 	return d, ok
 }
 
-// FinishDrop implements DropReceiver; DropTaken reports how it ended.
+// FinishDrop implements DropReceiver; DropTaken reports how it ended. A
+// drop that finished a drag of this surface's own also ends that drag.
 func (o *Offscreen) FinishDrop(ok bool) {
 	o.dropTaken = &ok
 	o.drop = nil
+	o.dropFinished(ok)
 }
 
 // DropTaken reports whether the last simulated drop was taken (nil: not

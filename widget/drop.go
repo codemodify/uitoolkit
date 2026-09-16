@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/codemodify/paintengine2d"
+	"github.com/codemodify/uitoolkit/platform"
 )
 
 // DropTarget is implemented by components that take things dragged from
@@ -23,7 +24,7 @@ type DropHover interface {
 	DragLeave()
 }
 
-// DropEvent is a drop from another app.
+// DropEvent is a drop: from another app, or from this one.
 type DropEvent struct {
 	Pos  paintengine2d.Point // in the target's local space
 	Mime string
@@ -32,6 +33,17 @@ type DropEvent struct {
 	Paths []string
 	// Text is a text drop's text.
 	Text string
+	// Action is what the source and target settled on: a copy unless
+	// both agreed to move or link. A target that moved the data must
+	// say so — the source removes its original on the strength of it.
+	Action platform.DragAction
+	// Payload and Source are set only when the drag started in this
+	// application ([Drag.Payload], [Drag.Source]): the payload never
+	// went through a type at all, and the source is the component it
+	// came from, so a target can tell a real move from a drop on
+	// itself.
+	Payload any
+	Source  Component
 }
 
 // textMimes are the names text goes by, UTF-8 first.
