@@ -309,6 +309,16 @@ func TestStripMarksTabsAndFilesApart(t *testing.T) {
 	if r.s.dropTab != 1 || r.s.dropAt != -1 {
 		t.Fatalf("a file lands on a tab: dropAt=%d dropTab=%d", r.s.dropAt, r.s.dropTab)
 	}
+	// A tab merge is a move: a copy would leave the tab in both windows,
+	// and on Wayland it is the target's answer that settles it.
+	r.s.DragOverMime(r.center(1), TabMimeType)
+	if got := r.s.DropActionFor(platform.DragCopy | platform.DragMove); got != platform.DragMove {
+		t.Fatalf("a tab over the strip would %v, want a move", got)
+	}
+	r.s.DragOverMime(r.center(1), "text/uri-list")
+	if got := r.s.DropActionFor(platform.DragCopy | platform.DragMove); got != platform.DragCopy {
+		t.Fatalf("a file over the strip would %v, want the strip's own answer", got)
+	}
 	r.s.DragLeave()
 	if r.s.dropTab != -1 || r.s.dropAt != -1 {
 		t.Fatal("the marks go with the drag")

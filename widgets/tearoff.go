@@ -60,7 +60,16 @@ func (t *BrowserTabs) tornOut(p paintengine2d.Point) bool {
 	if p.Y >= -band && p.Y <= b.Dy()+band {
 		return false
 	}
-	return t.TearOffTab(t.drag.tab, p)
+	// The window is picked up by the point the user took hold of, not by
+	// where the pointer has wandered to since: the tab then lands back
+	// under the pointer in the window it is going into. For a window
+	// dragged whole (a strip's last tab) it is the pointer now, so the
+	// window it is already in does not jump.
+	at := t.drag.from
+	if len(t.tabs) < 2 {
+		at = p
+	}
+	return t.TearOffTab(t.drag.tab, at)
 }
 
 // TearOffTab takes tab i out of the strip and into a window of its own
