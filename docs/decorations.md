@@ -9,10 +9,13 @@ around it. Either way the desktop keeps window management: every move,
 resize, snap and the window menu is handed back to the compositor or window
 manager from the user's button press, never emulated.
 
-Phases 1 and 2 of [the design](#phases) are done: an opaque toolkit-drawn
-frame, painted by the look — Windows 95's navy caption and bevelled buttons,
-XP's blue one, Aqua's traffic lights, libadwaita's round buttons, SourceGit's
-flat 48×30 cells — with tabs or a tool bar in the title bar.
+Phases 1 to 3 of [the design](#phases) are done — the toolkit-drawn frame
+painted by the look (Windows 95's navy caption and bevelled buttons, XP's
+blue one, Aqua's traffic lights, libadwaita's round buttons, SourceGit's
+flat 48×30 cells), with tabs or a tool bar in the title bar, shadows and
+rounded corners — and so is Phase 4's [tear-off](#tear-off): a tab dragged
+out of its strip, or a dock panel dragged out of its host, becomes a
+window the desktop carries under the pointer.
 
 ## For apps: a title bar
 
@@ -171,10 +174,47 @@ concave feet in the web looks, the look's own notebook tab elsewhere):
 
 Files is the pilot: its folders open in tabs next to the menu bar in the
 title bar; the tree and the table show the selected tab's folder, and the
-window title follows it. Tab tear-off (dragging a tab out into its own
-window) is Phase 4: the drag keeps the pointer's position, where a
-tear-off check will go, through `xdg-toplevel-drag-v1` where the compositor
-has it.
+window title follows it.
+
+### Tearing a tab out
+
+A tab dragged along the strip is being reordered; the same tab pulled
+clear of the strip (16 px past its edge) leaves the window for one of its
+own, which the desktop carries under the pointer until the user drops it.
+It is the browser gesture, and it is [one drag](#tear-off) shared with the
+dock:
+
+```go
+tabs.OnTearOff = func(i int, tab widgets.BrowserTab) widget.TearOffWindow {
+    w, _ := a.NewWindow(platform.WindowOptions{Title: tab.Title, Width: 1040, Height: 680})
+    w.SetContent(myApp(w, tab))       // the app decides what the window holds
+    return w
+}
+tabs.OnMergeTab = func(at int, tab widgets.BrowserTab, e widget.DropEvent) bool {
+    tabs.Select(tabs.InsertTab(at, tab))  // a tab dragged in from another window
+    return true
+}
+```
+
+- **Out**: `OnTearOff` is asked for the window, the toolkit takes the tab
+  out of the strip and hands the window to the drag. `TearOffTab(i, at)`
+  is the same thing from a menu item ("Move Tab to New Window").
+- **In**: dropping it over another strip merges it there, at the gap an
+  accent caret marks — the strip tells that drop from a file dropped on a
+  tab and marks the two differently. A tab moves rather than copies: it is
+  in one window or the other.
+- **The last tab** drags its whole window instead: there is nothing to
+  tear off, so dropping it on another strip merges it and closes the
+  window it came from, and dropping it anywhere else has moved the window.
+- **Nowhere**: a drop on the desktop leaves the new window where it fell;
+  Escape puts the tab back and the window goes.
+- The drag offers `widgets.TabMimeType` (`application/x-uitoolkit-tab`,
+  carrying the tab's title) first, so another window of the application
+  knows one of its own, and whatever the app offers for the document
+  behind it after that (`OnTabDrag`) — so the same drag that merges a tab
+  into another window drops its folder into a file manager. A drop from
+  another application has the title alone; the whole `BrowserTab` rides
+  along in `DropEvent.Payload` in-process.
 
 ## Floating dock panels
 
@@ -199,27 +239,62 @@ brings the same window back. `app.DockHost` also docks every panel back as
 the main window closes, so no panel is left in a window of its own keeping
 a finished app alive.
 
-Dragging the panel's title bar inside its window moves the window, through
-`Window.StartMove` — the desktop's own interactive move, which is what a
-floating tool window's title bar does everywhere.
+Dragging the panel's title bar drags the whole window, and the host it
+came from lights up as it passes over: dropping it there docks the panel
+back where the indicator says, and dropping it anywhere else has moved the
+window. A panel dragged the other way — out of the host, past its edge —
+floats into a window that follows the pointer. Both are the same
+[tear-off](#tear-off) as a tab's, so a user rearranges an app by dragging
+alone and the float button is a second way rather than the only one.
 
-Two things a client cannot do, so nothing here promises them. It is not
-told where the desktop put a window, and on Wayland it cannot ask for a
-position at all: a saved layout restores a floating panel's size exactly
-and its position only where the window manager honours the request. And a
-drag that starts in one window and ends in another needs both windows'
-positions to be meaningful, so docking a floating panel back is its title
-bar's dock button (or the keyboard, or a saved layout), not a drag —
-dragging a panel from the host out onto the desktop still floats it, since
-that drag never leaves the window it started in.
+Where the desktop cannot carry a window the title bar falls back to
+`Window.StartMove`, the desktop's own interactive move, as a floating tool
+window's title bar does everywhere, and the dock button is the way back
+in.
 
-Both wait on the same Phase 4 work as tab tear-off: `xdg-toplevel-drag-v1`
-where the compositor has it, and a position capability on `platform.Surface`
-(the `HostMover` / `MoveSurface` pair already there has no reader) for X11,
-where `ConfigureNotify` already carries the coordinates and is throwing them
-away. `dock.WindowOpener` is the seam a compositor-side tear-off would be
-built behind; nothing in the dock package assumes a panel's window only
-appears on a button press.
+`Window.Position()` answers where the desktop put a window, for the
+backends that are told: X11 from `ConfigureNotify` (translated to the root
+only when someone asks, so an interactive move costs no round trip), and
+never on Wayland, where a toplevel has no position at all. A saved layout
+therefore restores a floating panel's size exactly and its position only
+on X11 — and the tear-off does not need it, because the drag protocol
+carries the window instead.
+
+## Tear-off
+
+Dragging a tab out of its strip and dragging a dock panel out of its host
+are one mechanism: a drag that carries a window. The drag itself is an
+ordinary one — the same `widget.Drag`, the same drop targets, a private
+type first so another window of the application knows its own — with a
+window riding under the pointer, which is what lets the same gesture drop
+the thing back into another window.
+
+```go
+widget.StartTearOff(c, drag, &widget.TearOff{
+    Open:   func() widget.TearOffWindow { return openTheWindowFor(thing) },
+    Offset: grab,                       // where in it the pointer sits
+    Done:   func(res widget.TearResult, win widget.TearOffWindow) { … },
+})
+```
+
+Three ways it ends, and the window's fate differs in each: **merged** — a
+target took the content away (it performed a move), so the window that
+carried it has nothing left in it; **kept** — the pointer was let go over
+nothing, so the window stays where the desktop left it; **cancelled** —
+Escape, so nothing happened and the source takes its content back. Closing
+the window is the source's, since only the source knows whether the drag
+made that window or merely moved one that was already there.
+
+| | Carrying the window | Where it comes from |
+| --- | --- | --- |
+| Wayland with `xdg-toplevel-drag-v1` (KWin ≥ 6.0, Mutter ≥ 47) | the compositor moves it, as though the window itself were in an interactive move | `get_xdg_toplevel_drag` on the `wl_data_source` **before** `start_drag` — the protocol allows it nowhere else — then `attach(toplevel, dx, dy)` once the tear-off has a window, best while it is still unmapped |
+| X11 | the toolkit moves it itself on every motion of the drag | an X11 client places its own windows; the carried window is left out of the search for a drop target, as the Wayland protocol also requires |
+| Wayland without the protocol | it does not | the drag runs all the same, carrying its picture, and the window is made at the drop — wherever the compositor puts it. `widget.DragsWindows(c)` is what a source asks to know which it is in, because that decides whether its content leaves now or at the drop (Chromium's fallback tab dragging, for the same reason) |
+
+`platform.ToplevelDragSurface` is the seam (`DragsToplevels`,
+`AttachToplevel`); `UITK_TOPLEVEL_DRAG=0` makes the Wayland backend ignore
+the protocol, which is how the fallback path is exercised on a compositor
+that has it.
 
 ## The looks
 
@@ -476,6 +551,14 @@ toggle-maximizes on Wayland (X11 does it one way), "lower" works on X11 only,
   ignore `zxdg_decoration_manager_v1`: GNOME's path, on KWin.
   `./kwin.py N` is the oracle for the margin: `bufferGeometry` minus
   `frameGeometry` is exactly it, and it goes when the window is maximized.
+  Tear-off is checked there too, on both backends: a tab dragged out of
+  Files becomes a second window holding that folder, one dragged onto
+  another window's strip merges into it (`kwin.py` counts the windows
+  before and after), Escape puts the tab back, and the Inspector's panels
+  go out and come back the same way. Note that a drag has to be one
+  `in.sh` invocation — the injector's button goes up when it exits — and
+  that `WAYLAND_DEBUG=1` shows `xdg_toplevel_drag_v1.attach` with the
+  offset the window is carried by.
   Put a second window behind one with a shadow to see the shadow composite
   and to check that a click in the outer margin reaches it, while one in
   the resize band resizes.
@@ -500,5 +583,11 @@ toggle-maximizes on Wayland (X11 does it one way), "lower" works on X11 only,
    solid frame without a compositing manager, and every window coordinate —
    events, popups, the caret rectangle, accessibility, screenshots —
    following the margin ([the shadow's margin](#the-shadows-margin)).
-5. **Phase 4**: KWin's server-decoration palette, `xdg-toplevel-icon`,
-   `_NET_WM_SYNC_REQUEST`, tab tear-off, Windows and macOS mappings.
+5. **Phase 4** (tear-off done): a drag that carries a window — Wayland's
+   `xdg-toplevel-drag-v1`, X11 placing its own, and the fallback that makes
+   the window at the drop — behind `widget.TearOff`, with a tab dragged out
+   of its strip and a dock panel dragged out of its host as the two users
+   of it, and `Window.Position()` for the backends that are told where a
+   window is ([tear-off](#tear-off)). Still to do: KWin's
+   server-decoration palette, `xdg-toplevel-icon`, `_NET_WM_SYNC_REQUEST`,
+   Windows and macOS mappings.

@@ -192,7 +192,8 @@ request `EGL_ALPHA_SIZE` 0.
   `wp_linux_drm_syncobj_v1`, `zwp_text_input_manager_v3`,
   `zwp_primary_selection_device_manager_v1`,
   `zxdg_decoration_manager_v1`, `wp_fractional_scale_manager_v1`,
-  `wp_viewporter`, `xdg_activation_v1`, `wp_cursor_shape_manager_v1`.
+  `wp_viewporter`, `xdg_activation_v1`, `wp_cursor_shape_manager_v1`,
+  `xdg_toplevel_drag_manager_v1`.
 - Each window is an `xdg_toplevel`; `xdg_wm_base` is bound up to v6.
   Configure width/height are surface-local (logical); the present buffer
   is `ceil(logical * scale)`. The toplevel's states (maximized,
@@ -400,7 +401,23 @@ The seams a surface implements are `DragSurface` (`StartDrag`,
 and `DropNegotiator` (`AcceptDrag`). `AcceptDrag` takes both the set of
 actions the target allows and the one it would take now: a compositor
 picks from the set with the user's modifiers, so a target that named only
-its current choice would pin the drag to it.
+its current choice would pin the drag to it. `EventDragEnd` reports the
+action the target performed and `Dropped`, whether the pointer was let go
+at all — a drag that ends with nothing performed is a window left on the
+desktop when it was dropped and a window that should never have existed
+when it was cancelled.
+
+A drag can also carry a window: `ToplevelDragSurface` (`DragsToplevels`,
+`AttachToplevel`) is what tear-off is built on (see
+[decorations.md](decorations.md#tear-off)). Wayland binds
+`xdg_toplevel_drag_manager_v1` and makes the drag object from the data
+source before `start_drag`, which is the only moment the protocol allows;
+X11 moves the window itself on every motion, since an X11 client places
+its own windows, and leaves it out of the search for a target. A window's
+position comes back through `HostPositioner` (`Position`), which X11
+answers from the last `ConfigureNotify` and Wayland does not implement at
+all: a toplevel has no position there, which is why the drag protocol
+exists.
 
 **Wayland.** Taking a drop is `wl_data_device` — the offer is accepted
 for the type the window will read, `set_actions` says what it would do,

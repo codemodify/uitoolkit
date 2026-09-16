@@ -24,6 +24,16 @@ type DropHover interface {
 	DragLeave()
 }
 
+// DropHoverMime is a DropHover whose highlight depends on what is being
+// dragged: mime is the type the drop would be read in ([PickDropMime] of
+// the target's types and the drag's), so a tab strip can mark where a
+// torn-off tab would go and where a file would land differently. A target
+// that implements it is asked this way and never through DragOver.
+type DropHoverMime interface {
+	DropHover
+	DragOverMime(pos paintengine2d.Point, mime string)
+}
+
 // DropEvent is a drop: from another app, or from this one.
 type DropEvent struct {
 	Pos  paintengine2d.Point // in the target's local space

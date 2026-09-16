@@ -30,6 +30,15 @@ type dragRun struct {
 	// is in: its highlight has to be taken back when the drag leaves.
 	over    widget.Component
 	overWin *Window
+	// tear is the window half of a tear-off drag, torn the window it
+	// opened (nil until it has one: a desktop that cannot carry a window
+	// makes it at the drop instead), and dropped whether the pointer was
+	// let go rather than the drag called off — which is the difference
+	// between a torn-off window left on the desktop and one that never
+	// should have existed (tearoff.go).
+	tear    *widget.TearOff
+	torn    widget.TearOffWindow
+	dropped bool
 }
 
 // StartDrag begins a drag of d. It implements [widget.DragHost], so a
@@ -37,7 +46,11 @@ type dragRun struct {
 // arms comes through here too. It reports false when no drag could start:
 // nothing to offer, or one is already running (a desktop has one pointer,
 // so it can only carry one drag).
-func (w *Window) StartDrag(d *widget.Drag) bool {
+func (w *Window) StartDrag(d *widget.Drag) bool { return w.startDrag(d, nil) }
+
+// startDrag begins a drag, with the window half of a tear-off when there
+// is one (tearoff.go).
+func (w *Window) startDrag(d *widget.Drag, tear *widget.TearOff) bool {
 	if w == nil || w.Closed() || d == nil || len(d.Types) == 0 || w.app == nil {
 		return false
 	}
@@ -45,7 +58,7 @@ func (w *Window) StartDrag(d *widget.Drag) bool {
 		return false
 	}
 	w.dragArm = dragGesture{}
-	run := &dragRun{d: d, win: w}
+	run := &dragRun{d: d, win: w, tear: tear}
 	if !d.Local {
 		if ds, ok := w.surf.(platform.DragSurface); ok {
 			w.app.drag = run
@@ -56,11 +69,16 @@ func (w *Window) StartDrag(d *widget.Drag) bool {
 				Hotspot:   d.Hotspot,
 				Actions:   d.Allowed(),
 				Preferred: d.Preferred,
+				// A drag that may carry a window has to say so before it
+				// starts: Wayland's toplevel-drag object can be made at
+				// no other moment.
+				Toplevel: tear != nil,
 			}) {
 				// The desktop has the pointer now: the release, and every
 				// move until the drop, go to it and not to the widget the
 				// press landed on.
 				w.releasePointer()
+				run.carry()
 				return true
 			}
 			w.app.drag = nil
@@ -72,6 +90,7 @@ func (w *Window) StartDrag(d *widget.Drag) bool {
 	run.local = true
 	w.app.drag = run
 	w.releasePointer()
+	run.carry()
 	return true
 }
 
@@ -165,9 +184,10 @@ func (w *Window) dragKey(ev platform.Event) bool {
 
 // dragEnded is the desktop reporting how a drag this window started
 // finished: the action the target performed, or none when it was
-// cancelled or refused.
-func (w *Window) dragEnded(action platform.DragAction) {
+// cancelled or refused, and whether the pointer was let go at all.
+func (w *Window) dragEnded(action platform.DragAction, dropped bool) {
 	if run := w.dragRun(); run != nil {
+		run.dropped = run.dropped || dropped
 		run.finish(action)
 	}
 }
@@ -202,13 +222,12 @@ func (r *dragRun) motion(w *Window, pos paintengine2d.Point) {
 		r.leave()
 		r.over, r.overWin = c, w
 	}
-	action := platform.DragNone
+	action, mime := platform.DragNone, ""
 	if t != nil {
 		action = dropActionFor(c, r.d.Allowed(), r.d.Preferred)
+		mime = widget.PickDropMime(t.DropTypes(), r.d.Types)
 	}
-	if h, ok := c.(widget.DropHover); ok {
-		h.DragOver(local(c, pos))
-	}
+	hoverDrag(c, local(c, pos), mime)
 	w.SetCursor(platform.DragCursor(action))
 }
 
@@ -224,6 +243,7 @@ func (r *dragRun) leave() {
 // the source what became of it.
 func (r *dragRun) drop(w *Window, pos paintengine2d.Point) {
 	r.leave()
+	r.dropped = true
 	action := platform.DragNone
 	if t, c := w.dropTarget(pos, r.d.Types); t != nil {
 		act := dropActionFor(c, r.d.Allowed(), r.d.Preferred)
@@ -238,7 +258,8 @@ func (r *dragRun) drop(w *Window, pos paintengine2d.Point) {
 	r.finish(action)
 }
 
-// finish ends the drag once and tells its source the action that ran.
+// finish ends the drag once and tells its source the action that ran, and
+// a tear-off what became of its window.
 func (r *dragRun) finish(action platform.DragAction) {
 	if r == nil || r.ended {
 		return
@@ -253,6 +274,7 @@ func (r *dragRun) finish(action platform.DragAction) {
 	if r.d != nil && r.d.Done != nil {
 		r.d.Done(action)
 	}
+	r.finishTear(action)
 }
 
 // allowedDropActions is every action the component under the pointer

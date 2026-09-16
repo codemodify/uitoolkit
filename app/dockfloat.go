@@ -77,10 +77,10 @@ func (o *dockOpener) OpenFloat(title string, geom paintengine2d.Rect) (dock.Floa
 // dockWindow is one floating panel's toplevel.
 type dockWindow struct {
 	win *Window
-	// want is the geometry the window was asked for. A client is not told
-	// where the desktop actually put it — on Wayland it cannot even ask —
-	// so the origin a layout saves is the one we asked for, while the size
-	// is the real one.
+	// want is the geometry the window was asked for, which is what the
+	// origin falls back to where the backend is not told where the
+	// desktop put the window (Wayland, always). The size is always the
+	// real one.
 	want paintengine2d.Rect
 }
 
@@ -101,7 +101,18 @@ func (d *dockWindow) Raise() { d.win.Raise() }
 
 func (d *dockWindow) Close() { d.win.Close() }
 
-// Geometry is the window's real size at the position it was asked for.
+// TearOffWindow is the toplevel as a drag can carry it, so dragging the
+// panel's title bar over its host docks it back there.
+func (d *dockWindow) TearOffWindow() widget.TearOffWindow {
+	if d.win == nil || d.win.Closed() {
+		return nil
+	}
+	return d.win
+}
+
+// Geometry is the window's real size, at the position the desktop put it
+// where the backend is told (X11) and the one it was asked for where it
+// is not (Wayland, where a toplevel has no position at all).
 func (d *dockWindow) Geometry() paintengine2d.Rect {
 	if d.win == nil || d.win.Closed() {
 		return d.want
@@ -110,5 +121,9 @@ func (d *dockWindow) Geometry() paintengine2d.Rect {
 	if w < 1 || h < 1 {
 		return d.want
 	}
-	return paintengine2d.XYWH(d.want.Min.X, d.want.Min.Y, float32(w), float32(h))
+	at := d.want.Min
+	if x, y, ok := d.win.Position(); ok {
+		at = paintengine2d.Pt(float32(x), float32(y))
+	}
+	return paintengine2d.XYWH(at.X, at.Y, float32(w), float32(h))
 }

@@ -288,6 +288,12 @@ static int ui_expose_h(XEvent* e) { return e->xexpose.height; }
 
 static int ui_cfg_w(XEvent* e) { return e->xconfigure.width; }
 static int ui_cfg_h(XEvent* e) { return e->xconfigure.height; }
+static int ui_cfg_x(XEvent* e) { return e->xconfigure.x; }
+static int ui_cfg_y(XEvent* e) { return e->xconfigure.y; }
+// A window manager sends a synthetic ConfigureNotify whose x, y are the
+// window's position on the root (ICCCM 4.2.3); the real one from a
+// reparenting manager carries the position inside the frame instead.
+static int ui_cfg_synthetic(XEvent* e) { return e->xconfigure.send_event ? 1 : 0; }
 
 static int ui_btn(XEvent* e) { return e->xbutton.button; }
 static int ui_btn_x(XEvent* e) { return e->xbutton.x; }
@@ -1072,6 +1078,14 @@ type x11Surface struct {
 	// opts are what the window was made with, so it can be re-created on
 	// another visual when the frame starts or stops needing alpha.
 	opts WindowOptions
+	// posX, posY are where the last ConfigureNotify put the X window and
+	// posKnown that one has arrived. posRoot says those coordinates were
+	// already root-relative — a synthetic configure from the window
+	// manager — so a reparenting manager's frame-relative ones are
+	// translated when they are asked for rather than on every configure
+	// of an interactive move.
+	posX, posY        int
+	posKnown, posRoot bool
 	// The last button press: root position, button and time, which
 	// _NET_WM_MOVERESIZE needs; buttons is the set held now.
 	pressRootX, pressRootY int
@@ -1696,6 +1710,11 @@ func (s *x11Surface) translate(xe *C.XEvent) []Event {
 		r := paintengine2d.XYWH(float32(C.ui_expose_x(xe)), float32(C.ui_expose_y(xe)), float32(C.ui_expose_w(xe)), float32(C.ui_expose_h(xe)))
 		return []Event{{Kind: EventExpose, Pos: r.Min, Width: int(r.Dx()), Height: int(r.Dy())}}
 	case C.ConfigureNotify:
+		// Where the window manager put the window, for whoever asks
+		// ([HostPositioner]): a drag that carries a window needs it, and
+		// a saved layout keeps a floating panel's place with it.
+		s.posX, s.posY = int(C.ui_cfg_x(xe)), int(C.ui_cfg_y(xe))
+		s.posRoot, s.posKnown = C.ui_cfg_synthetic(xe) != 0, true
 		w, h := int(C.ui_cfg_w(xe)), int(C.ui_cfg_h(xe))
 		if w != s.img.Width || h != s.img.Height {
 			if w < 1 {
@@ -2474,8 +2493,35 @@ func (s *x11Surface) Move(x, y int) {
 		return
 	}
 	x11Mu.Lock()
-	C.ui_move(s.conn.dpy, s.win, C.int(x), C.int(y))
+	// The caller places the window the user sees; the X window is that
+	// plus the margin the frame's shadow lives in.
+	C.ui_move(s.conn.dpy, s.win, C.int(x-s.frame.Margin.Left), C.int(y-s.frame.Margin.Top))
 	x11Mu.Unlock()
+}
+
+// Position implements [HostPositioner]: where the window manager has put
+// the window, in root coordinates, counting from the window the user sees
+// rather than from the margin around it. It is the last ConfigureNotify's
+// answer, translated to the root here when the manager's configure was
+// frame-relative, so an interactive move costs no round trip.
+func (s *x11Surface) Position() (int, int, bool) {
+	if s == nil || s.conn == nil || s.conn.dpy == nil || s.win == 0 {
+		return 0, 0, false
+	}
+	x11Mu.Lock()
+	defer x11Mu.Unlock()
+	if s.closed {
+		return 0, 0, false
+	}
+	x, y := s.posX, s.posY
+	if !s.posKnown || !s.posRoot {
+		var rx, ry C.int
+		if C.ui_to_root(s.conn.dpy, s.win, 0, 0, &rx, &ry) == 0 && !s.posKnown {
+			return 0, 0, false
+		}
+		x, y = int(rx), int(ry)
+	}
+	return x + s.frame.Margin.Left, y + s.frame.Margin.Top, true
 }
 
 func (s *x11Surface) Wake() {
@@ -2485,6 +2531,27 @@ func (s *x11Surface) Wake() {
 	x11Mu.Lock()
 	C.ui_wake(s.conn.dpy, s.conn.helper)
 	x11Mu.Unlock()
+}
+
+// x11DragPoll is how often the loop wakes while a drag of ours runs.
+const x11DragPoll = 40 * time.Millisecond
+
+// WakeAt implements [WakeScheduler]: a drag of ours keeps the loop
+// ticking even while the connection is idle. Both of the drag's safety
+// nets need it — the key state is polled for an Escape that never
+// arrived as a key event (a compositor's own XWayland drag bridge can
+// hold the keyboard), and a target that took the drop and never answered
+// has to time out — and a pointer held still delivers nothing to wake on.
+func (s *x11Surface) WakeAt() time.Time {
+	if s == nil || s.conn == nil {
+		return time.Time{}
+	}
+	x11Mu.Lock()
+	defer x11Mu.Unlock()
+	if !s.conn.drag.active {
+		return time.Time{}
+	}
+	return time.Now().Add(x11DragPoll)
 }
 
 func (s *x11Surface) Show() { s.Raise() }
