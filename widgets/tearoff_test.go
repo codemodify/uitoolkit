@@ -18,11 +18,17 @@ type tearHost struct {
 	tear    *widget.TearOff
 	window  widget.TearOffWindow
 	started int
+	closed  int
 	// refuse makes StartTearOff fail, as a second drag would.
 	refuse bool
 }
 
 func (h *tearHost) DragsWindows() bool { return h.carries }
+
+// The host is itself a window a drag can carry, which is what a strip's
+// last tab is dragged as.
+func (h *tearHost) Surface() platform.Surface { return nil }
+func (h *tearHost) Close()                    { h.closed++ }
 
 func (h *tearHost) StartTearOff(d *widget.Drag, t *widget.TearOff) bool {
 	if h.refuse {
@@ -182,10 +188,39 @@ func TestTearOffWithoutACarriedWindowKeepsTheTab(t *testing.T) {
 	}
 }
 
-// A window's last tab never tears off: there would be nothing left
-// behind, and dragging a window by its caption already means that.
-func TestLastTabNeverTearsOff(t *testing.T) {
+// A window's last tab drags the window itself: there is nothing to tear
+// off, since the window holds that one tab. Dropped on another strip it
+// joins that one and its window closes; dropped anywhere else the window
+// has only been moved.
+func TestLastTabDragsItsWindow(t *testing.T) {
 	r := newTearRig(t, true)
+	r.s.RemoveTab(2)
+	r.s.RemoveTab(1)
+	c := r.center(0)
+	r.dragTabTo(0, paintengine2d.Pt(c.X, 34+40))
+	if r.host.started != 1 {
+		t.Fatalf("the window itself should be dragged: started=%d", r.host.started)
+	}
+	if r.host.window != widget.TearOffWindow(r.host) {
+		t.Fatalf("the drag carries %v, want the window the strip is in", r.host.window)
+	}
+	if r.s.Len() != 1 || len(r.torn) != 0 {
+		t.Fatalf("no window is opened for it: len=%d opened=%v", r.s.Len(), r.torn)
+	}
+	r.host.tear.Done(widget.TearKept, r.host.window)
+	if r.s.Len() != 1 || r.host.closed != 0 {
+		t.Fatal("dropped on the desktop the window was only moved")
+	}
+	r.host.tear.Done(widget.TearMerged, r.host.window)
+	if r.s.Len() != 0 || r.host.closed != 1 {
+		t.Fatalf("merged elsewhere the window goes: len=%d closed=%d", r.s.Len(), r.host.closed)
+	}
+}
+
+// Without a desktop that carries windows there is nothing to drag a last
+// tab as: the caption already moves the window.
+func TestLastTabWithoutACarriedWindowStays(t *testing.T) {
+	r := newTearRig(t, false)
 	r.s.RemoveTab(2)
 	r.s.RemoveTab(1)
 	c := r.center(0)
