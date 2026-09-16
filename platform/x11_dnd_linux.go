@@ -423,6 +423,7 @@ import "C"
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 	"unsafe"
 
@@ -433,6 +434,24 @@ import (
 // drag is a conversation with another application, and when one goes
 // wrong there is nothing on screen to say which half stopped talking.
 var xdndDebug = os.Getenv("UITK_XDND_DEBUG") == "1"
+
+// dragActionSet names every action in a set, for a trace where only the
+// first of them ([DragAction.String]) would hide the rest.
+func dragActionSet(a DragAction) string {
+	var out []string
+	for _, one := range dragActionOrder {
+		if a.Has(one) {
+			out = append(out, one.String())
+		}
+	}
+	if a.Asks() {
+		out = append(out, "ask")
+	}
+	if len(out) == 0 {
+		return "none"
+	}
+	return strings.Join(out, "+")
+}
 
 func xdndTrace(format string, args ...any) {
 	if xdndDebug {
@@ -642,21 +661,18 @@ func (c *x11Conn) xdndPosition(win C.Window, m XDNDMessage) {
 	}
 	c.drop.prefer = c.xdnd.actions.Action(action)
 	// XDND names one action per position; a source that would allow more
-	// says so in XdndActionList.
-	c.drop.offered = c.drop.prefer
+	// says so in XdndActionList. XdndActionAsk is not one of them — it is
+	// the source asking for the user to pick out of that list — so it
+	// stays on the requested action alone and never in the offered set.
+	var listed DragAction
 	var list [8]C.Atom
 	if n := C.ui_x_prop_atoms(c.dpy, c.drop.source, c.xdnd.at(XAActionList), &list[0], C.int(len(list))); n > 0 {
-		var all DragAction
 		for i := 0; i < int(n); i++ {
-			all |= c.xdnd.actions.Action(uint32(list[i]))
-		}
-		if all != DragNone {
-			c.drop.offered = all
+			listed |= c.xdnd.actions.Action(uint32(list[i]))
 		}
 	}
-	if c.drop.offered == DragNone {
-		c.drop.offered = DragCopy
-	}
+	c.drop.offered = MergeDragOffer(listed, c.drop.prefer)
+	xdndTrace("position from %#x: asks %v, offers %s", uint32(c.drop.source), c.drop.prefer, dragActionSet(c.drop.offered))
 	// Root coordinates to the window's: the app knows nothing of the
 	// screen, and the frame's margin is part of our window.
 	var wx, wy C.int
@@ -940,6 +956,22 @@ type x11Drag struct {
 	mods uint
 }
 
+// carries reports that the drag is still following the pointer, rather
+// than merely waiting for the target to finish with the data.
+//
+// XdndDrop ends the pointer half of a drag: [x11Conn.dragRelease] gives
+// the grab back and takes the picture down the moment it is sent, and the
+// spec has the source say nothing more until XdndFinished. The drag stays
+// alive only to serve the selection. Forgetting that costs twice over —
+// the pointer's own motion, no longer grabbed, would be swallowed by the
+// drag instead of reaching the window under it, and would be forwarded as
+// another XdndPosition, which a target reads as a fresh drag and answers
+// by putting its drop mark back up over a drop it has already taken. The
+// window such a drag carried is usually closed by then (a dock panel
+// docking back into its host), so moving it is an error on a dead window
+// as well.
+func (d *x11Drag) carries() bool { return d.active && !d.dropped }
+
 // xdndIcon is the override-redirect window a drag's picture lives in.
 type xdndIcon struct {
 	win  C.Window
@@ -1081,7 +1113,7 @@ func rootPointer(c *x11Conn) (int, int, uint) {
 // release its grab delivers, Escape on its keyboard grab, and the icon
 // window's exposures. It reports whether the event was the drag's.
 func (c *x11Conn) dragHandle(xe *C.XEvent) bool {
-	if !c.drag.active {
+	if !c.drag.carries() {
 		return false
 	}
 	switch C.ui_x_type(xe) {
@@ -1116,7 +1148,7 @@ func (c *x11Conn) dragHandle(xe *C.XEvent) bool {
 // the one it left that the drag is gone and the one it entered that it
 // has arrived, and asks for a position either way.
 func (c *x11Conn) dragMotionTo(rx, ry int, mods uint) {
-	if !c.drag.active || c.dpy == nil {
+	if !c.drag.carries() || c.dpy == nil {
 		return
 	}
 	c.drag.mods = mods

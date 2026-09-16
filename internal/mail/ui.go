@@ -1948,7 +1948,21 @@ func (s *session) attachmentBytes(m Message, i int) ([]byte, error) {
 	if pid == "" {
 		return nil, fmt.Errorf("no such attachment")
 	}
-	p, err := s.cli.GetPart(m.ID, pid)
+	name := ""
+	if i >= 0 && i < len(s.attNames) {
+		name = s.attNames[i]
+	}
+	return s.partBytes(m.ID, pid, name)
+}
+
+// partBytes reads one part's bytes: what mailclientd hands back, or the
+// file it points at for a part it has already spilled to disk.
+//
+// It takes the part's id rather than an index, so a caller that means to
+// run it off the UI goroutine can settle which part it wants first — the
+// index and the names beside it belong to the window (attach_drag.go).
+func (s *session) partBytes(id MessageID, pid, name string) ([]byte, error) {
+	p, err := s.cli.GetPart(id, pid)
 	if err != nil {
 		return nil, err
 	}
@@ -1956,7 +1970,7 @@ func (s *session) attachmentBytes(m Message, i int) ([]byte, error) {
 		return os.ReadFile(p.Path)
 	}
 	if len(p.Data) == 0 {
-		return nil, fmt.Errorf("attachment %q is empty", s.attNames[i])
+		return nil, fmt.Errorf("attachment %q is empty", name)
 	}
 	return p.Data, nil
 }

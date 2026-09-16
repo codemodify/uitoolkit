@@ -25,6 +25,25 @@ type ListView struct {
 	// mail app's folders): macOS source lists, libadwaita's navigation
 	// sidebar, WinUI's navigation pane, where the look has one.
 	Sidebar bool
+	// OnDrag is what a press on a selected row drags out of the list
+	// (widget.DragSource); nil drags nothing. It is handed the selection,
+	// the current row alone when nothing is selected — the list knows
+	// about rows, not about what they hold.
+	OnDrag func(rows []int) *widget.Drag
+	// OnDropAt takes a drop *between* two rows, at the place among them
+	// it would take — index 0 above the first row, Count below the last.
+	// Setting it is what turns the list into one you can reorder: an
+	// insertion caret then follows the pointer down the gaps. OnDropRow
+	// takes a drop *onto* a row; with both set the top and bottom
+	// quarters of a row are its gaps and the middle half is the row.
+	// DropMimes narrows what they take (text/uri-list when empty).
+	OnDropAt  func(index int, e widget.DropEvent) bool
+	OnDropRow func(row int, e widget.DropEvent) bool
+	DropMimes []string
+	// DropActions is what a drop here may do — copying alone when zero.
+	// A list that reorders itself wants a move as well, which is what
+	// lets the drag's source take the original row away.
+	DropActions platform.DragAction
 	// Mode selects one row (the default) or several (SelectExtended: Ctrl
 	// toggles, Shift extends, Ctrl+A). Selected stays the current row.
 	Mode SelectionMode
@@ -33,17 +52,21 @@ type ListView struct {
 	OnSelectionChange func(rows []int)
 	sel               rowSelection
 	hovered           int
-	vbar              scrollDrag
-	rows              rowSceneCache
-	reveal            int // row+1 to bring into view at the next Arrange
-	find              typeAhead
+	// dropRow is the row a drag is over, -1 for none; dropAt is the gap
+	// it would be inserted into instead, -1 for none.
+	dropRow int
+	dropAt  int
+	vbar    scrollDrag
+	rows    rowSceneCache
+	reveal  int // row+1 to bring into view at the next Arrange
+	find    typeAhead
 	// DisableTypeAhead turns off type-ahead find, for views whose letters
 	// are commands (Mail's n / p / r).
 	DisableTypeAhead bool
 }
 
 func NewListView(count int, text func(int) string, on func(int)) *ListView {
-	l := &ListView{Count: count, RowHeight: 28, Selected: -1, ItemText: text, OnSelect: on, hovered: -1}
+	l := &ListView{Count: count, RowHeight: 28, Selected: -1, ItemText: text, OnSelect: on, hovered: -1, dropRow: -1, dropAt: -1}
 	l.Init(l)
 	l.SetWantsFocus(true)
 	return l
@@ -214,6 +237,17 @@ func (l *ListView) Paint(ctx *paintengine2d.Context) {
 			lk.DrawListRow(ctx, row, l.rowState(i), label)
 		}
 		ctx.Restore()
+	}
+	// Where a drag would land, over the rows and under the scrollbar: a
+	// drop onto a row tints it, one between two rows gets the caret.
+	if l.dropRow >= 0 && l.dropRow < l.Count {
+		ctx.Save()
+		ctx.ClipRect(b)
+		paintDropRow(ctx, lk, paintengine2d.XYWH(0, float32(l.dropRow)*rh-l.OffsetY, rw, rh))
+		ctx.Restore()
+	}
+	if l.dropAt >= 0 {
+		paintDropCaret(ctx, lk, l.dropAt, l.Count, 0, rw, 0, rh, l.OffsetY, b)
 	}
 	l.vbar.paint(l, ctx, lk, l.vparts(), true, l.OffsetY)
 	// The current row carries the focus mark; a focused list without one
