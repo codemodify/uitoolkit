@@ -942,6 +942,22 @@ type x11Drag struct {
 	mods uint
 }
 
+// carries reports that the drag is still following the pointer, rather
+// than merely waiting for the target to finish with the data.
+//
+// XdndDrop ends the pointer half of a drag: [x11Conn.dragRelease] gives
+// the grab back and takes the picture down the moment it is sent, and the
+// spec has the source say nothing more until XdndFinished. The drag stays
+// alive only to serve the selection. Forgetting that costs twice over —
+// the pointer's own motion, no longer grabbed, would be swallowed by the
+// drag instead of reaching the window under it, and would be forwarded as
+// another XdndPosition, which a target reads as a fresh drag and answers
+// by putting its drop mark back up over a drop it has already taken. The
+// window such a drag carried is usually closed by then (a dock panel
+// docking back into its host), so moving it is an error on a dead window
+// as well.
+func (d *x11Drag) carries() bool { return d.active && !d.dropped }
+
 // xdndIcon is the override-redirect window a drag's picture lives in.
 type xdndIcon struct {
 	win  C.Window
@@ -1083,7 +1099,7 @@ func rootPointer(c *x11Conn) (int, int, uint) {
 // release its grab delivers, Escape on its keyboard grab, and the icon
 // window's exposures. It reports whether the event was the drag's.
 func (c *x11Conn) dragHandle(xe *C.XEvent) bool {
-	if !c.drag.active {
+	if !c.drag.carries() {
 		return false
 	}
 	switch C.ui_x_type(xe) {
@@ -1118,7 +1134,7 @@ func (c *x11Conn) dragHandle(xe *C.XEvent) bool {
 // the one it left that the drag is gone and the one it entered that it
 // has arrived, and asks for a position either way.
 func (c *x11Conn) dragMotionTo(rx, ry int, mods uint) {
-	if !c.drag.active || c.dpy == nil {
+	if !c.drag.carries() || c.dpy == nil {
 		return
 	}
 	c.drag.mods = mods

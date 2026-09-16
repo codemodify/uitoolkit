@@ -1852,6 +1852,14 @@ func (s *x11Surface) Close() error {
 		if s.conn.drop.active && s.conn.drop.win == s.win {
 			s.conn.xdndEnd(false)
 		}
+		if s.conn.drop.active && s.conn.drop.source == s.win {
+			// The window that started the drag is going with it: taking
+			// the drop closed it, which is what a dock panel docking
+			// back into its host does. There is nobody left to send
+			// XdndFinished to, and sending it anyway is a BadWindow on a
+			// window the server has already forgotten.
+			s.conn.drop.source = 0
+		}
 	}
 	if s.ic != nil {
 		C.ui_destroy_ic(s.ic)
