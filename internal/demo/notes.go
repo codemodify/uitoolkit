@@ -136,6 +136,12 @@ func NotesApp(win *app.Window) widget.Component {
 			label = notes[vis[rows[0]]].Title
 		}
 		d.Image, d.Hotspot = widget.DragLabel(win.Look(), label, win.Scale())
+		// The same drag reorders the list when it lands back in it: the
+		// rows ride along in the payload, which never goes through a
+		// type at all, so a drop here knows these are its own notes and
+		// a drop anywhere else still gets the text.
+		d.Payload = notesMove(append([]int(nil), rows...))
+		d.Actions = platform.DragCopy | platform.DragMove
 		d.Done = func(action platform.DragAction) {
 			if action == platform.DragNone {
 				status.SetText("Drag cancelled")
@@ -144,6 +150,44 @@ func NotesApp(win *app.Window) widget.Component {
 			status.SetText("Dragged " + label)
 		}
 		return d
+	}
+	// Dropping between two rows: notes from this list move there, and
+	// text from anywhere else becomes a new note in that place.
+	table.DropMimes = []string{"text/plain"}
+	table.DropActions = platform.DragCopy | platform.DragMove
+	table.OnDropAt = func(at int, e widget.DropEvent) bool {
+		vis := visible()
+		if at < 0 || at > len(vis) {
+			return false
+		}
+		if mv, ok := e.Payload.(notesMove); ok && e.Source == table {
+			moved := moveNotes(&notes, vis, mv, at)
+			if moved < 0 {
+				return false
+			}
+			sel = moved
+			refresh()
+			loadEditor()
+			status.SetText(fmt.Sprintf("Moved %d note(s)", len(mv)))
+			return true
+		}
+		text := strings.TrimSpace(e.Text)
+		if text == "" {
+			return false
+		}
+		n := Note{Title: firstLine(text), Body: text, Priority: 5}
+		where := len(notes)
+		if at < len(vis) {
+			where = vis[at]
+		}
+		notes = append(notes, Note{})
+		copy(notes[where+1:], notes[where:])
+		notes[where] = n
+		sel = where
+		refresh()
+		loadEditor()
+		status.SetText("Added " + n.Title)
+		return true
 	}
 	table.OnSort = func(col int, asc bool) {
 		vis := visible()
@@ -371,4 +415,74 @@ func indexOf(xs []int, v int) int {
 		}
 	}
 	return -1
+}
+
+// notesMove is what a drag of notes carries inside the process: the rows
+// it picked up, in the order the list showed them.
+type notesMove []int
+
+// moveNotes moves the notes at the given visible rows into the gap before
+// visible row at, keeping their order. It reports where the first of them
+// ended up, or -1 when there was nothing to move.
+//
+// The gap belongs to the row below it, so the note that row holds is the
+// anchor the block is inserted before; past the last row the anchor is the
+// end of the list. Taking the moved notes out cannot shift the anchor,
+// because it is found while walking the old list, not by index.
+func moveNotes(notes *[]Note, vis []int, rows notesMove, at int) int {
+	picked := map[int]bool{}
+	var order []int
+	for _, r := range rows {
+		if r < 0 || r >= len(vis) || picked[vis[r]] {
+			continue
+		}
+		picked[vis[r]] = true
+		order = append(order, vis[r])
+	}
+	if len(order) == 0 {
+		return -1
+	}
+	sort.Ints(order)
+	anchor := -1 // -1: the end of the list
+	if at < len(vis) {
+		anchor = vis[at]
+	}
+	old := *notes
+	out := make([]Note, 0, len(old))
+	first := -1
+	insert := func() {
+		first = len(out)
+		for _, i := range order {
+			out = append(out, old[i])
+		}
+	}
+	for i := range old {
+		if i == anchor {
+			insert()
+		}
+		if !picked[i] {
+			out = append(out, old[i])
+		}
+	}
+	if first < 0 {
+		insert()
+	}
+	*notes = out
+	return first
+}
+
+// firstLine is a title for a note made out of dropped text.
+func firstLine(text string) string {
+	line := text
+	if i := strings.IndexAny(line, "\r\n"); i >= 0 {
+		line = line[:i]
+	}
+	line = strings.TrimSpace(line)
+	if line == "" {
+		line = "Note"
+	}
+	if r := []rune(line); len(r) > 40 {
+		line = string(r[:40]) + "…"
+	}
+	return line
 }

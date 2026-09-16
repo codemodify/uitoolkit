@@ -9,13 +9,19 @@ around it. Either way the desktop keeps window management: every move,
 resize, snap and the window menu is handed back to the compositor or window
 manager from the user's button press, never emulated.
 
-Phases 1 to 3 of [the design](#phases) are done — the toolkit-drawn frame
+Phases 1 to 4 of [the design](#phases) are done: the toolkit-drawn frame
 painted by the look (Windows 95's navy caption and bevelled buttons, XP's
 blue one, Aqua's traffic lights, libadwaita's round buttons, SourceGit's
 flat 48×30 cells), with tabs or a tool bar in the title bar, shadows and
-rounded corners — and so is Phase 4's [tear-off](#tear-off): a tab dragged
-out of its strip, or a dock panel dragged out of its host, becomes a
-window the desktop carries under the pointer.
+rounded corners, and the [tear-off](#tear-off) drag — a tab dragged out of
+its strip, or a dock panel dragged out of its host, becomes a window the
+desktop carries under the pointer.
+
+What is [still open](#still-open) is the decoration work that sits beside
+the frame rather than in it: the palette KWin offers a server-decorated
+window, a window icon for the desktops that want one from the client,
+`_NET_WM_SYNC_REQUEST` for flicker-free X11 resizing, and the Windows and
+macOS mappings.
 
 ## For apps: a title bar
 
@@ -583,11 +589,35 @@ toggle-maximizes on Wayland (X11 does it one way), "lower" works on X11 only,
    solid frame without a compositing manager, and every window coordinate —
    events, popups, the caret rectangle, accessibility, screenshots —
    following the margin ([the shadow's margin](#the-shadows-margin)).
-5. **Phase 4** (tear-off done): a drag that carries a window — Wayland's
+5. **Phase 4** (done): a drag that carries a window — Wayland's
    `xdg-toplevel-drag-v1`, X11 placing its own, and the fallback that makes
    the window at the drop — behind `widget.TearOff`, with a tab dragged out
    of its strip and a dock panel dragged out of its host as the two users
    of it, and `Window.Position()` for the backends that are told where a
-   window is ([tear-off](#tear-off)). Still to do: KWin's
-   server-decoration palette, `xdg-toplevel-icon`, `_NET_WM_SYNC_REQUEST`,
-   Windows and macOS mappings.
+   window is ([tear-off](#tear-off)).
+
+## Still open
+
+Nothing below blocks a window from being drawn, moved or torn off; each is
+a desktop integration the frame work did not need.
+
+- **KWin's server-decoration palette.** A server-decorated window can name
+  a colour scheme for its frame (`org_kde_kwin_server_decoration_palette`
+  on Wayland, `_KDE_NET_WM_COLOR_SCHEME` on X11), which is how a KDE app's
+  title bar follows the app's own pack instead of the desktop's. Without
+  it a uitoolkit window under KWin's frame gets Breeze's colours whatever
+  pack it is wearing — right for a native-feeling app, wrong for the
+  gallery showing off an era.
+- **A window icon from the client** (`xdg-toplevel-icon-v1`). Wayland has
+  no `WM_CLASS`-free way to give a window its icon otherwise, so task
+  switchers fall back on the desktop file — which a `go run` build has
+  none of. X11's `_NET_WM_ICON` is not set either.
+- **`_NET_WM_SYNC_REQUEST`.** An X11 window manager resizing a window has
+  no way to know when the client has finished painting the new size, so a
+  drag-resize of a large window shows the tearing every X11 toolkit
+  answers with this protocol's counter handshake. Wayland has no such
+  problem: the configure/ack_configure round trip already does it.
+- **Windows and macOS mappings.** The decoration mode, the frame metrics
+  and the caption buttons are modelled on what the Linux protocols say;
+  neither `WM_NCCALCSIZE`/`DWM` nor `NSWindow`'s title-bar accessory views
+  has been mapped onto them yet.

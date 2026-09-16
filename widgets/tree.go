@@ -52,6 +52,15 @@ type TreeView struct {
 	OnDrag     func(*TreeNode) *widget.Drag
 	OnDropNode func(*TreeNode, widget.DropEvent) bool
 	DropMimes  []string
+	// OnDropAt takes a drop *between* two rows: the node it would become
+	// a child of (nil for a root) and the place among that node's
+	// children it would take. Setting it is what turns the tree into a
+	// view you can reorder — the top and bottom quarters of every row
+	// then mark the gaps either side of it with an insertion caret, and
+	// only the middle of a row still drops onto it. Leave it nil and the
+	// tree behaves as it always did: every row is a target for a drop
+	// onto it.
+	OnDropAt func(parent *TreeNode, index int, e widget.DropEvent) bool
 	// DropActions is what a drop here may do — copying alone when zero.
 	// A folder that takes files usually allows a move as well, which is
 	// what lets the drag's source remove its original.
@@ -62,8 +71,12 @@ type TreeView struct {
 	// framed pane).
 	Frameless bool
 	// dropRow is the row a drag from another app (or another view) is
-	// over, -1 for none.
-	dropRow int
+	// over, -1 for none; dropAt is the gap it would be inserted into
+	// instead, -1 for none, and dropDepth how deep in the tree that gap
+	// sits, which is where its caret starts.
+	dropRow   int
+	dropAt    int
+	dropDepth int
 	// Sidebar paints the tree as a sidebar (a mail app's folders), where
 	// the look has a sidebar style (see ListView.Sidebar).
 	Sidebar   bool
@@ -85,7 +98,7 @@ type TreeView struct {
 
 // NewTreeView constructs a tree.
 func NewTreeView(roots ...*TreeNode) *TreeView {
-	t := &TreeView{Roots: roots, RowHeight: 24, dropRow: -1}
+	t := &TreeView{Roots: roots, RowHeight: 24, dropRow: -1, dropAt: -1}
 	t.Init(t)
 	t.SetWantsFocus(true)
 	return t
@@ -327,13 +340,21 @@ func (t *TreeView) Paint(ctx *paintengine2d.Context) {
 		}
 		ctx.Restore()
 	}
-	// The row a drag is over, over the rows themselves and under the
-	// scrollbar: what a drop would land on has to be unmistakable.
+	// Where a drag would land, over the rows themselves and under the
+	// scrollbar: what a drop would do has to be unmistakable. A drop onto
+	// a row tints the whole row, the way a file manager lights up the
+	// folder a file would go into; a drop between two rows gets the
+	// insertion caret instead, indented to the level it would land at so
+	// that the end of a folder's children and the gap before the folder's
+	// next sibling are told apart on sight.
 	if t.dropRow >= 0 && t.dropRow < len(rows) {
 		ctx.Save()
 		ctx.ClipRect(b)
 		paintDropRow(ctx, lk, paintengine2d.XYWH(0, float32(t.dropRow)*rh-t.OffsetY, rw, rh))
 		ctx.Restore()
+	}
+	if t.dropAt >= 0 {
+		paintDropCaret(ctx, lk, t.dropAt, len(rows), t.indentX(t.dropDepth), rw, 0, rh, t.OffsetY, b)
 	}
 	t.vbar.paint(t, ctx, lk, t.vparts(), true, t.OffsetY)
 	// The current row carries the focus mark; a focused tree without one
@@ -422,21 +443,52 @@ func (t *TreeView) nodeAt(y float32) *TreeNode {
 	return t.flatten()[i].node
 }
 
+// indent is the look's tree indentation: the gap before a root row, and
+// how much further in each level sits.
+func (t *TreeView) indent() (pad, indent float32) {
+	m := t.Look().Metrics()
+	indent = m.TreeIndent
+	if indent <= 0 {
+		indent = 16
+	}
+	pad = 8
+	if m.RowPad > 0 {
+		pad = m.RowPad + 2
+	}
+	return pad, indent
+}
+
+// indentX is the view-space x a row at this depth begins at — where its
+// expander sits, and where the caret for a gap at that depth starts.
+func (t *TreeView) indentX(depth int) float32 {
+	pad, indent := t.indent()
+	if depth < 0 {
+		depth = 0
+	}
+	return pad + float32(depth)*indent
+}
+
+// depthAtX is the depth view-space x points at, as a drag's pointer does
+// when it picks which of the levels a gap between two rows belongs to.
+func (t *TreeView) depthAtX(px float32) int {
+	pad, indent := t.indent()
+	if indent <= 0 {
+		return 0
+	}
+	d := int((px - pad) / indent)
+	if d < 0 {
+		return 0
+	}
+	return d
+}
+
 // expanderHit reports whether view-space x hits n's expander arrow.
 func (t *TreeView) expanderHit(px float32, n *TreeNode, depth int) bool {
 	if n == nil || n.Leaf() {
 		return false
 	}
-	m := t.Look().Metrics()
-	indent := m.TreeIndent
-	if indent <= 0 {
-		indent = 16
-	}
-	pad := float32(8)
-	if m.RowPad > 0 {
-		pad = m.RowPad + 2
-	}
-	x := pad + float32(depth)*indent
+	_, indent := t.indent()
+	x := t.indentX(depth)
 	hit := indent * 0.45
 	if hit < 12 {
 		hit = 12

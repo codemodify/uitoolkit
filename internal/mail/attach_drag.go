@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/platform"
@@ -15,11 +16,18 @@ import (
 // client's compose window.
 //
 // The other side of a drag wants a path, not bytes, so the attachment is
-// written out when the drag starts. That fetch is synchronous: the drag
-// has to know whether there is a file at all before it offers one, and a
-// drag that begins by promising a path it cannot produce is worse than no
-// drag. Attachments are small and the store is usually local; a slow one
-// costs the moment between the press and the drag taking hold.
+// written out to a scratch file. Where that file will be is settled at
+// the press — it is a name and a directory, and costs nothing — but the
+// bytes are fetched off the UI goroutine while the drag is already
+// running, because a mailclientd round trip for a part the store has not
+// cached can take seconds, and doing it at the press froze the window
+// between the press and the drag taking hold.
+//
+// The drag is therefore a promise: the path is offered at once, and the
+// fetch has the whole of the drag to land. A target only asks for the
+// data at the drop, so by then it nearly always has; what little wait is
+// left is bounded (attachDragWait) and answered with a refusal rather
+// than a path to a file that is not there.
 
 // attachScratch is where dragged attachments are written, made once per
 // process.
@@ -37,8 +45,35 @@ func attachScratchDir() string {
 	return attachScratch.dir
 }
 
-// dragAttachment is the drag of attachment i: its file, written out, and
-// offered as a uri-list the way every file drag is.
+// attachDragWait is how long a target asking for the data may be made to
+// wait for the fetch the press started. It is generous: by the time
+// anything asks, the drag has already been going for as long as the user
+// took to move the pointer, so the wait is nearly always nothing at all,
+// and giving up early would refuse a drop the user meant. A variable so
+// a test need not sit through it.
+var attachDragWait = 10 * time.Second
+
+// attachPromise is the file an attachment drag promises: where it will
+// be, and the fetch putting it there.
+type attachPromise struct {
+	path string
+	done chan struct{}
+	err  error // written before done is closed, read after
+}
+
+// ready waits for the fetch and reports whether the file is there.
+func (p *attachPromise) ready() bool {
+	select {
+	case <-p.done:
+	case <-time.After(attachDragWait):
+		return false
+	}
+	return p.err == nil
+}
+
+// dragAttachment is the drag of attachment i: the file it will be written
+// to, offered as a uri-list the way every file drag is, with the fetch
+// running off the UI goroutine behind it.
 func (s *session) dragAttachment(i int) *widget.Drag {
 	m, ok := s.primary()
 	if !ok || i < 0 || i >= len(s.attNames) {
@@ -48,9 +83,11 @@ func (s *session) dragAttachment(i int) *widget.Drag {
 	if dir == "" {
 		return nil
 	}
-	data, err := s.attachmentBytes(m, i)
-	if err != nil {
-		s.mark("Drag: " + err.Error())
+	// Which part this is, and what it is called, are the window's to
+	// answer and are settled here; only the bytes are fetched later.
+	pid := s.attachPartID(m, i)
+	if pid == "" {
+		s.mark("Drag: no such attachment")
 		return nil
 	}
 	name := attachFileName(s.attNames[i])
@@ -62,13 +99,38 @@ func (s *session) dragAttachment(i int) *widget.Drag {
 		return nil
 	}
 	path := filepath.Join(sub, name)
-	if err := writeFileAtomic(path, data, 0o600); err != nil {
-		s.mark("Drag: " + err.Error())
-		return nil
-	}
 	d := widget.DragFiles(path)
 	if d == nil {
 		return nil
+	}
+	pr := &attachPromise{path: path, done: make(chan struct{})}
+	// No done callback: it would be delivered on the UI goroutine, which
+	// is the very goroutine waiting on the promise, and the two would
+	// hold each other. The worker closes the channel itself, and whoever
+	// asks for the data reports what went wrong.
+	s.async(func() (any, error) {
+		defer close(pr.done)
+		data, err := s.partBytes(m.ID, pid, name)
+		if err == nil {
+			err = writeFileAtomic(path, data, 0o600)
+		}
+		pr.err = err
+		return nil, err
+	}, nil)
+	offer := d.Data
+	d.Data = func(mime string) ([]byte, bool) {
+		if !pr.ready() {
+			// The target asked and there is nothing to give it. Refusing
+			// the type is what makes the drop fail cleanly, instead of
+			// handing over a path to a file that was never written.
+			if pr.err != nil {
+				s.mark("Drag: " + pr.err.Error())
+			} else {
+				s.mark("Drag: " + name + " is still being fetched")
+			}
+			return nil, false
+		}
+		return offer(mime)
 	}
 	// An attachment is a copy: the message keeps it whatever the target
 	// does, so offering a move would promise something untrue.
