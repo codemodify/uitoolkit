@@ -608,11 +608,17 @@ func (h *stackHead) MousePress(e widget.MouseEvent) bool {
 		}
 		if cur.Floating() {
 			// The panel is in a window of its own, so its title bar drags
-			// the window — the desktop's own interactive move, which is
-			// what a floating tool window's title bar does everywhere.
-			// Docking it back is the title bar's dock button: a drag from
-			// one window onto another needs both windows' positions, and a
-			// client is not told them (see docs/decorations.md).
+			// the whole window. Where the desktop can carry a window under
+			// the pointer the drag is the toolkit's, so the host can light
+			// up as the window passes over it and a drop there docks the
+			// panel back (tearoff.go); where it cannot, it is the
+			// desktop's own interactive move, as a floating tool window's
+			// title bar does everywhere, and the dock button is the way
+			// back in.
+			if host := hostOf(h); host != nil &&
+				host.dragFloatingPanel(h, cur, paintengine2d.Pt(e.Pos.X, e.Pos.Y)) {
+				return true
+			}
 			cur.win.StartMove()
 			return true
 		}

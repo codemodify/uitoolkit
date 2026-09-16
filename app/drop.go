@@ -107,6 +107,18 @@ func (w *Window) drop(ev platform.Event) {
 		data, _ := run.d.Read(mime)
 		taken := t.Drop(run.d.DropEvent(local(c, ev.Pos), mime, data, action))
 		w.finishDrop(rcv, mime, taken, action)
+		if run.win == nil || run.win.Closed() {
+			// Taking the drop closed the window the drag came from: a
+			// floating dock panel docked back into this one, which is
+			// what the protocol asks a client to do with a window it
+			// snaps into another (xdg-toplevel-drag). That window will
+			// never report the end of the drag, so the drop is its end.
+			run.dropped = true
+			if !taken {
+				action = platform.DragNone
+			}
+			run.finish(action)
+		}
 		return
 	}
 	if rcv == nil {

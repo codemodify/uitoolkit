@@ -493,6 +493,9 @@ type fakeOpener struct{ wins []*fakeWindow }
 
 func (f *fakeOpener) OpenFloat(title string, geom paintengine2d.Rect) (FloatWindow, error) {
 	w := &fakeWindow{title: title, geom: geom}
+	// A desktop that can carry a window under a drag hands one out with
+	// every float, so a floating panel can be dragged back (tearoff.go).
+	w.tear = &fakeTearWindow{win: w}
 	f.wins = append(f.wins, w)
 	return w, nil
 }
@@ -505,7 +508,19 @@ type fakeWindow struct {
 	closed  bool
 	moves   int
 	onClose func() bool
+	// tear is the window as a drag can carry it, nil for a desktop that
+	// cannot carry one.
+	tear *fakeTearWindow
 }
+
+// fakeTearWindow is a float window as a tear-off drag carries it.
+type fakeTearWindow struct {
+	uitest.Host
+	win *fakeWindow
+}
+
+func (w *fakeTearWindow) Surface() platform.Surface { return nil }
+func (w *fakeTearWindow) Close()                    { w.win.Close() }
 
 func (w *fakeWindow) SetTitle(t string)                { w.title = t }
 func (w *fakeWindow) SetContent(c widget.Component)    { w.content = c }
@@ -516,6 +531,12 @@ func (w *fakeWindow) Show()                            { w.shown = true }
 func (w *fakeWindow) Hide()                            { w.shown = false }
 func (w *fakeWindow) Raise()                           {}
 func (w *fakeWindow) Close()                           { w.closed = true }
+func (w *fakeWindow) TearOffWindow() widget.TearOffWindow {
+	if w.tear == nil {
+		return nil
+	}
+	return w.tear
+}
 
 func TestPanelFloatsIntoItsOwnWindow(t *testing.T) {
 	r := newRig(t)
