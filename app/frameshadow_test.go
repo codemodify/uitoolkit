@@ -82,12 +82,13 @@ func TestFrameAlphaIsOneInsideTheWindow(t *testing.T) {
 			t.Fatalf("window pixel %d,%d has alpha %d: a window's content is opaque", x, y, a)
 		}
 	}
-	// The corners really are cut out, and the far margin is empty.
-	if _, _, _, a := img.PremulAt(x0, y0); a != 0 {
-		t.Fatalf("the top-left corner pixel has alpha %d, want 0", a)
+	// The corners really are cut out: what is left there is the shadow
+	// curving round them, never the window's own opaque content.
+	if _, _, _, a := img.PremulAt(x0, y0); a > 120 {
+		t.Fatalf("the top-left corner pixel has alpha %d: the corner is not cut out", a)
 	}
-	if _, _, _, a := img.PremulAt(x1-1, y1-1); a != 0 {
-		t.Fatalf("the bottom-right corner pixel has alpha %d, want 0", a)
+	if _, _, _, a := img.PremulAt(x1-1, y1-1); a > 120 {
+		t.Fatalf("the bottom-right corner pixel has alpha %d: the corner is not cut out", a)
 	}
 	if _, _, _, a := img.PremulAt(0, 0); a != 0 {
 		t.Fatalf("the buffer's own corner has alpha %d, want 0 (nothing but shadow lives there)", a)

@@ -431,6 +431,18 @@ static void ui_wl_region(struct wl_compositor *c, struct wl_surface *s, int kind
 	wl_region_destroy(r);
 }
 
+// ui_wl_region_none puts a region back to its default: input everywhere
+// (a NULL input region is infinite — an empty one would take no clicks at
+// all), nothing opaque. NULL, never an empty region.
+static void ui_wl_region_none(struct wl_surface *s, int kind) {
+	if (!s) return;
+	if (kind == 0) {
+		wl_surface_set_input_region(s, NULL);
+	} else {
+		wl_surface_set_opaque_region(s, NULL);
+	}
+}
+
 static void uitk_buf_rel(void *data, struct wl_buffer *buf) {
 	(void)buf;
 	uintptr_t packed = (uintptr_t)data;
@@ -4232,9 +4244,11 @@ func (s *wlSurface) applyFrameLocked(surfW, surfH int) {
 	}
 	if m.Zero() && !s.frame.Alpha {
 		// No frame of ours (or an opaque one): the whole surface is the
-		// window, opaque, and takes input — the v0.4.1 behaviour.
+		// window, opaque, and takes input everywhere — the v0.4.1
+		// behaviour. The input region goes back to NULL (infinite); an
+		// empty region would make the window deaf to every click.
 		C.ui_wl_opaque(s.conn.compositor, s.surf, C.int(surfW), C.int(surfH))
-		C.ui_wl_region(s.conn.compositor, s.surf, 0, nil, 0)
+		C.ui_wl_region_none(s.surf, 0)
 		return
 	}
 	// Input: the window plus the resize band in the shadow. The rest of
@@ -4247,7 +4261,7 @@ func (s *wlSurface) applyFrameLocked(surfW, surfH int) {
 	// opaque that is not — a compositor skips what is behind it.
 	rects := flatRects(OpaqueRects(box, s.frame.Radius, s.deviceScale()))
 	if len(rects) == 0 {
-		C.ui_wl_region(s.conn.compositor, s.surf, 1, nil, 0)
+		C.ui_wl_region_none(s.surf, 1)
 		return
 	}
 	C.ui_wl_region(s.conn.compositor, s.surf, 1, &rects[0], C.int(len(rects)/4))

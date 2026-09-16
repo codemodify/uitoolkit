@@ -103,9 +103,9 @@ func buildShadowPatch(lk style.LookAndFeel, st style.DecorationState, m platform
 	ctx.Clear(paintengine2d.Transparent)
 	win := paintengine2d.XYWH(ml, mt, float32(pw)-ml-mr, float32(ph)-mt-mb)
 	style.DrawDecorationShadowOf(lk, ctx, win, st)
-	// Inside the window the patch must add nothing: the window paints
-	// there itself, and a shadow under an opaque surface is wasted work.
-	punchRoundRect(ctx, win, radius)
+	// Inside the window the patch must hold nothing: the window paints
+	// there itself, and the patch goes on last, over it.
+	eraseRoundRect(ctx, win, radius)
 	return img
 }
 
@@ -205,6 +205,22 @@ func cornerBox(win paintengine2d.Rect, i int, r float32) paintengine2d.Rect {
 		return paintengine2d.XYWH(win.Max.X-r, win.Max.Y-r, r, r)
 	}
 	return paintengine2d.XYWH(win.Min.X, win.Max.Y-r, r, r)
+}
+
+// eraseRoundRect erases the rounded window b itself, leaving what lies
+// outside it (a shadow's nine-patch keeps only what falls beyond the
+// window's own shape).
+func eraseRoundRect(ctx *paintengine2d.Context, b paintengine2d.Rect, radius [4]float32) {
+	if ctx == nil || b.Empty() {
+		return
+	}
+	p := paintengine2d.NewPath()
+	addRoundRectRadii(p, b, radius)
+	ctx.DrawPath(p, paintengine2d.Paint{
+		Color:     paintengine2d.White,
+		Blend:     paintengine2d.BlendDestOut,
+		AntiAlias: true,
+	})
 }
 
 // punchRoundRect erases everything outside the rounded window b from the
