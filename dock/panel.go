@@ -4,6 +4,7 @@ import (
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/a11y"
 	"github.com/codemodify/uitoolkit/layout"
+	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
 )
 
@@ -117,15 +118,25 @@ func (p *Panel) SetContent(c widget.Component) {
 
 // SetMinSize is the smallest content box the panel will be squeezed into.
 // Splits honour it: a sash stops rather than shrink a panel past it.
+//
+// The size is in design pixels and grows with the display scale, as every
+// other measurement in the toolkit does — a panel wide enough for its
+// content at 1× is wide enough for it on a HiDPI screen too.
 func (p *Panel) SetMinSize(w, h float32) {
 	p.min = paintengine2d.Pt(w, h)
 	p.RequestLayout()
 }
 
-// MinContent is the panel's own minimum, never under the floor every panel
-// gets so no neighbour can squeeze it away entirely.
+// MinSize is the panel's own minimum as it was set, in design pixels.
+func (p *Panel) MinSize() paintengine2d.Point { return p.min }
+
+// MinContent is the panel's own minimum at the display's scale, never
+// under the floor every panel gets so no neighbour can squeeze it away
+// entirely.
 func (p *Panel) MinContent() paintengine2d.Point {
-	return maxPt(p.min, minPanelSize(p.Look()))
+	lk := p.Look()
+	scaled := paintengine2d.Pt(style.Dip(lk, p.min.X), style.Dip(lk, p.min.Y))
+	return maxPt(scaled, minPanelSize(lk))
 }
 
 // Closed reports whether the panel is hidden. A closed panel keeps its
