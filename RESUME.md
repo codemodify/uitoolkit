@@ -85,12 +85,19 @@ Also merged to `dev` and pushed:
   of the app and inside it alike; lists, trees, tabs and text are sources.
   Files, Mail's attachments and Notes drag out; verified against Dolphin in
   the rig, all four directions.
+- **Tear-off: a drag that carries a window** (branch `feat/tearoff`).
+  Wayland binds `xdg-toplevel-drag-v1` (the drag object made from the data
+  source before `start_drag`, the toplevel attached with the grab offset);
+  X11 moves its own window on every motion and now answers
+  `Window.Position()` from `ConfigureNotify`; a compositor with neither
+  makes the window at the drop instead. `widget.TearOff` is the seam, and
+  two things use it: a tab dragged out of a strip (`BrowserTabs.OnTearOff`
+  / `OnMergeTab`, with the last tab dragging its whole window) and a dock
+  panel dragged out of its host or back into it. Files and the Inspector
+  are the pilots; verified in the rig on both backends.
 - **Next:**
-  - title-bar phase 4: tab tear-off, KWin's server-decoration palette,
-    `_NET_WM_SYNC_REQUEST`;
-  - tearing a dock panel off through the compositor (the same
-    `xdg-toplevel-drag-v1` as tab tear-off), and a floating panel's real
-    position back from the window manager;
+  - title-bar phase 4's remainder: KWin's server-decoration palette,
+    `xdg-toplevel-icon`, `_NET_WM_SYNC_REQUEST`;
   - the 31 adapted looks could get frames of their own (NeXT, Platinum,
     System 7, Amiga, BeOS, OS/2, Windows 3.1, KDE 3 and GNOME 2).
 - **Off the list** (the user's call, 2026-09-15): releases and tags; IME and
