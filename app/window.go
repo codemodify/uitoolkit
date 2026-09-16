@@ -152,6 +152,16 @@ func (w *Window) syncScale() bool {
 	return true
 }
 
+// App is the application this window belongs to, so a component with its
+// window in hand can open another one — a tab torn out of its strip goes
+// into a window of the same application.
+func (w *Window) App() *Application {
+	if w == nil {
+		return nil
+	}
+	return w.app
+}
+
 func (w *Window) Look() style.LookAndFeel   { return w.look }
 func (w *Window) Scale() float32            { return w.scale }
 func (w *Window) Focus() widget.Component   { return w.focus }
