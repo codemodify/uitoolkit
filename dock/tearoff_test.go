@@ -277,3 +277,29 @@ func TestFloatGeometryWithoutAWindowPosition(t *testing.T) {
 		t.Fatalf("the offset %v is not inside the window %v", off, g)
 	}
 }
+
+// A panel that goes out of the window and comes back leaves nothing
+// behind: the area it lands in holds the one stack and no empty pane.
+func TestPanelOutAndBackLeavesNoEmptyPane(t *testing.T) {
+	r := newTearRig(t, true)
+	r.Drag(r.gripOf(t, r.tree), r.belowTheHost())
+	tear := r.tear(t)
+	if !r.tree.Floating() {
+		t.Fatal("the panel should be floating mid-drag")
+	}
+	b := r.host.LocalBounds()
+	at := paintengine2d.Pt(b.Min.X+4, b.Min.Y+b.Dy()*0.5)
+	r.host.DragOver(at)
+	if !r.host.Drop(widget.DropEvent{Pos: at, Mime: PanelMimeType, Payload: r.tree, Action: platform.DragMove}) {
+		t.Fatal("the host refused the panel")
+	}
+	tear.Tear.Done(widget.TearMerged, tear.Window)
+	r.Layout()
+	area := r.host.Area(SideLeft)
+	if len(area.kids) != 1 {
+		t.Fatalf("the left area holds %d panes, want the one the panel came back into", len(area.kids))
+	}
+	if got, want := r.host.rectOf(stackOf(t, r.tree)), r.host.rectOf(area); got != want {
+		t.Errorf("the stack at %v does not fill its area %v", got, want)
+	}
+}
