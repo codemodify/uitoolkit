@@ -105,7 +105,9 @@ type ToplevelDragSurface interface {
 	DragsToplevels() bool
 	// AttachToplevel hands win to the drag running out of this surface:
 	// from now on the desktop moves it with the pointer, dx and dy inside
-	// it under the pointer. It reports whether the window is carried.
+	// it under the pointer — device pixels, the unit [Surface.Size]
+	// speaks, which a backend whose protocol wants another converts. It
+	// reports whether the window is carried.
 	// Attaching an unmapped window is best: a compositor may only honour
 	// the offset for one it has not placed yet.
 	AttachToplevel(win Surface, dx, dy int) bool

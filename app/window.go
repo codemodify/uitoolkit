@@ -767,7 +767,7 @@ func (w *Window) dispatch(ev platform.Event) {
 	case platform.EventDrop:
 		w.drop(ev)
 	case platform.EventDragEnd:
-		w.dragEnded(ev.Action)
+		w.dragEnded(ev.Action, ev.Dropped)
 	case platform.EventKeyDown:
 		if w.dragKey(ev) {
 			return

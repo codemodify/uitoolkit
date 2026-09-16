@@ -28,10 +28,25 @@ func (w *Window) dragMotion(ev platform.Event) {
 		w.dragLeave()
 		w.dropOver = c
 	}
-	if h, ok := c.(widget.DropHover); ok {
-		h.DragOver(local(c, ev.Pos))
+	mime := ""
+	if t != nil {
+		mime = widget.PickDropMime(t.DropTypes(), ev.Mimes)
 	}
+	hoverDrag(c, local(c, ev.Pos), mime)
 	w.acceptDrag(t, c, ev)
+}
+
+// hoverDrag tells the component under the pointer that a drag is over it,
+// with the type a drop there would be read in where it asks for that
+// ([widget.DropHoverMime]): a tab strip marks where a torn-off tab would
+// land and where a file would land differently.
+func hoverDrag(c widget.Component, pos paintengine2d.Point, mime string) {
+	switch h := c.(type) {
+	case widget.DropHoverMime:
+		h.DragOverMime(pos, mime)
+	case widget.DropHover:
+		h.DragOver(pos)
+	}
 }
 
 // acceptDrag tells the drag's source whether this window takes a drop
