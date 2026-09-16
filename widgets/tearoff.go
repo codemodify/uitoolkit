@@ -50,11 +50,9 @@ func (t *BrowserTabs) tabMime() string {
 func (t *BrowserTabs) tearBand() float32 { return t.dip(16) }
 
 // tornOut reports whether the tab being dragged has been pulled clear of
-// the strip, and tears it off when it has. A strip with one tab keeps it:
-// there would be nothing left behind, and dragging a window by its
-// caption is what that gesture already means.
+// the strip, and tears it off when it has.
 func (t *BrowserTabs) tornOut(p paintengine2d.Point) bool {
-	if t.OnTearOff == nil || len(t.tabs) < 2 || !t.drag.active {
+	if t.OnTearOff == nil || !t.drag.active {
 		return false
 	}
 	band := t.tearBand()
@@ -75,9 +73,18 @@ func (t *BrowserTabs) tornOut(p paintengine2d.Point) bool {
 // It is what a tab dragged out of the strip does, and a menu item ("Move
 // Tab to New Window") can call it with the middle of the tab. It reports
 // whether the tab left.
+//
+// A strip's last tab has nowhere to go — the window it is in is that one
+// tab — so it drags the window itself instead: dropped on another
+// window's strip it joins that one and its window closes, dropped on the
+// desktop it has simply been moved, which is what browsers do with the
+// last tab of a window.
 func (t *BrowserTabs) TearOffTab(i int, at paintengine2d.Point) bool {
 	if t.OnTearOff == nil || i < 0 || i >= len(t.tabs) {
 		return false
+	}
+	if len(t.tabs) < 2 {
+		return t.dragWholeWindow(i, at)
 	}
 	tab := t.tabs[i]
 	d := t.tabDrag(i, tab)
@@ -135,6 +142,39 @@ func (t *BrowserTabs) TearOffTab(i int, at paintengine2d.Point) bool {
 		t.Select(i)
 	}
 	return false
+}
+
+// dragWholeWindow drags the window a strip's last tab lives in. There is
+// nothing to tear off there — the window holds that one tab — so the
+// drag carries the window itself, which another window's strip can take
+// the tab out of. Where the desktop cannot carry a window there is
+// nothing to do: dragging the caption already moves it.
+func (t *BrowserTabs) dragWholeWindow(i int, at paintengine2d.Point) bool {
+	win, ok := t.Host().(widget.TearOffWindow)
+	if !ok || !widget.DragsWindows(t) {
+		return false
+	}
+	d := t.tabDrag(i, t.tabs[i])
+	t.drag = tabDrag{}
+	t.press = stripHit{tab: -1}
+	tear := &widget.TearOff{
+		Offset: widget.DeviceOrigin(t).Add(at),
+		Open:   func() widget.TearOffWindow { return win },
+		Done: func(res widget.TearResult, w widget.TearOffWindow) {
+			if res != widget.TearMerged {
+				// Dropped on the desktop the window has only been moved,
+				// and a cancelled drag never moved anything.
+				return
+			}
+			// The tab is in another window now and it was all this one
+			// held.
+			t.RemoveTab(i)
+			if w != nil {
+				w.Close()
+			}
+		},
+	}
+	return widget.StartTearOff(t, d, tear)
 }
 
 // tabDrag is what tab i carries out of the window: the strip's own
