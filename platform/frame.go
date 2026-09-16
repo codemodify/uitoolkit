@@ -155,6 +155,55 @@ func FrameMargin(want, scale float32) int {
 	return int(math.Round(float64(l0) * float64(scale)))
 }
 
+// FrameRect is a box of a window's surface, in whatever unit the caller
+// works in (logical pixels on Wayland, device pixels on X11).
+type FrameRect struct{ X, Y, W, H int }
+
+// InputRect is where a press reaches a window whose frame the toolkit
+// draws: the visible window win grown by the resize band in the shadow.
+// The rest of the margin is not the window's — it clicks through to
+// whatever is behind it.
+func InputRect(win FrameRect, margin, input FrameInsets) FrameRect {
+	l := min(input.Left, margin.Left)
+	t := min(input.Top, margin.Top)
+	r := min(input.Right, margin.Right)
+	b := min(input.Bottom, margin.Bottom)
+	return FrameRect{X: win.X - l, Y: win.Y - t, W: win.W + l + r, H: win.H + t + b}
+}
+
+// OpaqueRects is the window less the squares its rounded corners live in —
+// what a compositor may take as solid. radius is in device pixels
+// (top-left clockwise) and scale converts it to win's unit, rounded up so
+// nothing translucent is ever claimed opaque. An empty result means
+// "nothing is certainly opaque".
+func OpaqueRects(win FrameRect, radius [4]float32, scale float32) []FrameRect {
+	if win.W < 1 || win.H < 1 {
+		return nil
+	}
+	if scale <= 0 {
+		scale = 1
+	}
+	up := func(v float32) int {
+		if v <= 0 {
+			return 0
+		}
+		return int(math.Ceil(float64(v / scale)))
+	}
+	tl, tr, br, bl := up(radius[0]), up(radius[1]), up(radius[2]), up(radius[3])
+	top, bottom := max(tl, tr), max(br, bl)
+	if top+bottom >= win.H {
+		return nil
+	}
+	out := []FrameRect{{X: win.X, Y: win.Y + top, W: win.W, H: win.H - top - bottom}}
+	if top > 0 && win.W-tl-tr > 0 {
+		out = append(out, FrameRect{X: win.X + tl, Y: win.Y, W: win.W - tl - tr, H: top})
+	}
+	if bottom > 0 && win.W-bl-br > 0 {
+		out = append(out, FrameRect{X: win.X + bl, Y: win.Y + win.H - bottom, W: win.W - bl - br, H: bottom})
+	}
+	return out
+}
+
 // SurfaceFrame is the frame s was last told about (the zero frame when it
 // cannot hold one).
 func SurfaceFrame(s Surface) Frame {

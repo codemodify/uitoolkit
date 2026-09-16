@@ -36,6 +36,10 @@ type offscreenFrame struct {
 	// exactly as a compositor's surface does.
 	frame        Frame
 	geomW, geomH int
+	// imeRect is the caret rectangle the app last gave the simulated
+	// input method (surface device pixels), imeOn whether it is enabled.
+	imeRect [4]int
+	imeOn   bool
 }
 
 // Decorations is the requested mode; an offscreen window has no desktop
@@ -209,3 +213,36 @@ func (o *Offscreen) SetMoveResize(on bool) { o.frame.noMoveResize = !on }
 // Offscreen is a full FrameSurface: a compile-time check, so a capability
 // the backends grow does not silently stop being one here.
 var _ FrameSurface = (*Offscreen)(nil)
+
+// ---- the simulated input method ------------------------------------------
+
+// SetIMECursor records where the app says the caret is, in surface device
+// pixels (IMESurface). A frame's margin is part of those coordinates —
+// what a compositor's candidate window is placed against — so tests can
+// check that the toolkit offsets them.
+func (o *Offscreen) SetIMECursor(x, y, w, h int) {
+	if o == nil {
+		return
+	}
+	o.frame.imeRect = [4]int{x, y, w, h}
+}
+
+// SetIMEEnabled records the app's request (IMESurface).
+func (o *Offscreen) SetIMEEnabled(on bool) {
+	if o != nil {
+		o.frame.imeOn = on
+	}
+}
+
+// IMECursor is the caret rectangle last handed to the input method, and
+// whether the input method is on.
+func (o *Offscreen) IMECursor() (x, y, w, h int, on bool) {
+	if o == nil {
+		return 0, 0, 0, 0, false
+	}
+	r := o.frame.imeRect
+	return r[0], r[1], r[2], r[3], o.frame.imeOn
+}
+
+// Offscreen drives a simulated input method too (compile-time check).
+var _ IMESurface = (*Offscreen)(nil)

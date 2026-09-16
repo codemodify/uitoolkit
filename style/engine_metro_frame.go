@@ -24,9 +24,11 @@ func (metroEngine) Decoration(l *Classic, st DecorationState) DecorationSpec {
 		s.Border = Insets{Top: lw, Right: lw, Bottom: lw, Left: lw}
 		s.Caption = capH
 		s.Button = paintengine2d.Pt(snap(l.S(46)), 0)
-		s.Shadow = metroEngine{}.PopupShadow(l, PopupDialog)
+		s.Shadow = ShadowLayersReach(metroWindowShadow(l, DecorationState{Active: true}))
 		return s
 	}
+	// Windows 8 windows were flat on the desktop: a thick coloured frame
+	// and no shadow at all.
 	fw := metroFrameW(l)
 	h := snap(capH * 0.62)
 	s.Stacked = true
@@ -113,4 +115,20 @@ func (metroEngine) DrawCaptionButton(l *Classic, ctx *paintengine2d.Context, b p
 		col = fgOff
 	}
 	DrawCaptionGlyph(ctx, b, k, st.Maximized, col, g, w)
+}
+
+// metroWindowShadow is the tight shadow a Windows 10 window casts (Windows
+// 8's flat windows had none).
+func metroWindowShadow(l *Classic, st DecorationState) []WindowShadow {
+	if !st.Active {
+		return []WindowShadow{{Color: shadowBlack(0.14), DY: l.S(1), Blur: l.S(8)}}
+	}
+	return []WindowShadow{{Color: shadowBlack(0.25), DY: l.S(3), Blur: l.S(14)}}
+}
+
+func (metroEngine) DrawDecorationShadow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st DecorationState) {
+	if !metroColors(l).win10 {
+		return
+	}
+	DrawShadowLayers(ctx, b, DecorationOf(l, st).Radius, metroWindowShadow(l, st))
 }

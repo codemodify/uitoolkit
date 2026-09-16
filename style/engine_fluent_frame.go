@@ -21,8 +21,25 @@ func (fluentEngine) Decoration(l *Classic, st DecorationState) DecorationSpec {
 		Layout:  ":minimize,maximize,close",
 		Radius:  [4]float32{r, r, r, r},
 	}
-	s.Shadow = fluentEngine{}.PopupShadow(l, PopupDialog)
+	s.Shadow = ShadowLayersReach(fluentWindowShadow(l, DecorationState{Active: true}))
 	return s
+}
+
+// fluentWindowShadow is the shadow DWM drops under a Windows 11 window:
+// soft, a little below the window, and shallower when it is not active
+// (measured off Windows 11 screenshots).
+func fluentWindowShadow(l *Classic, st DecorationState) []WindowShadow {
+	if !st.Active {
+		return []WindowShadow{{Color: shadowBlack(0.16), DY: l.S(2), Blur: l.S(10)}}
+	}
+	return []WindowShadow{
+		{Color: shadowBlack(0.28), DY: l.S(8), Blur: l.S(28)},
+		{Color: shadowBlack(0.12), DY: l.S(1), Blur: l.S(4)},
+	}
+}
+
+func (fluentEngine) DrawDecorationShadow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st DecorationState) {
+	DrawShadowLayers(ctx, b, DecorationOf(l, st).Radius, fluentWindowShadow(l, st))
 }
 
 func (fluentEngine) DrawDecoration(l *Classic, ctx *paintengine2d.Context, f DecorationFrame, st DecorationState) {

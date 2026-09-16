@@ -32,13 +32,34 @@ func (adwaitaEngine) Decoration(l *Classic, st DecorationState) DecorationSpec {
 		CenterTitle:   true,
 		Layout:        ":close",
 		Radius:        [4]float32{r, r, r, r},
-		Shadow:        adwaitaEngine{}.PopupShadow(l, PopupDialog),
+		Shadow:        ShadowLayersReach(adwaitaWindowShadow(l, DecorationState{Active: true})),
 	}
 	if c.gtk3 {
 		s.ButtonGap, s.ButtonPad.Left, s.ButtonPad.Right = 0, snap(l.S(6))-lw, snap(l.S(6))-lw
 		s.Radius = [4]float32{r * 0.66, r * 0.66, 0, 0}
 	}
 	return s
+}
+
+// adwaitaWindowShadow is GNOME's window shadow, the one Adwaita's
+// stylesheet gives a client-decorated window: 0 3px 9px 1px black at half
+// alpha with a hairline layer under it, and a shallower pair in the
+// backdrop.
+func adwaitaWindowShadow(l *Classic, st DecorationState) []WindowShadow {
+	if !st.Active {
+		return []WindowShadow{
+			{Color: shadowBlack(0.2), DY: l.S(2), Blur: l.S(6), Spread: l.S(2)},
+			{Color: shadowBlack(0.1), Blur: 0, Spread: l.S(1)},
+		}
+	}
+	return []WindowShadow{
+		{Color: shadowBlack(0.5), DY: l.S(3), Blur: l.S(9), Spread: l.S(1)},
+		{Color: shadowBlack(0.23), Blur: 0, Spread: l.S(1)},
+	}
+}
+
+func (adwaitaEngine) DrawDecorationShadow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st DecorationState) {
+	DrawShadowLayers(ctx, b, DecorationOf(l, st).Radius, adwaitaWindowShadow(l, st))
 }
 
 func (adwaitaEngine) DrawDecoration(l *Classic, ctx *paintengine2d.Context, f DecorationFrame, st DecorationState) {
