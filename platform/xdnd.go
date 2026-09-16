@@ -298,6 +298,28 @@ func (t XDNDActions) List(a, preferred DragAction) []uint32 {
 	return out
 }
 
+// MergeDragOffer is everything a drop may do: what the source listed in
+// XdndActionList, plus the action it asked for in the XdndPosition that
+// carried it.
+//
+// The two are merged rather than the list taken alone because the list is
+// an optional property and the requested action is not: a source is free
+// to ask for an action it never listed, and the spec has the target
+// honour what it was asked for. Going by the list alone would narrow such
+// a drag back to the list's first action and quietly ignore the modifier
+// the user is holding. (KDE's own sources do list all three, so this
+// costs them nothing.)
+//
+// A source that says nothing at all means a copy, which is what every
+// drag did before the protocol grew actions. The question [DragAsk] asks
+// is not an action and never survives.
+func MergeDragOffer(listed, requested DragAction) DragAction {
+	if out := (listed | requested).Actions(); out != DragNone {
+		return out
+	}
+	return DragCopy
+}
+
 // XDNDTree is the X window tree a drag's source looks through for the
 // target under the pointer. x11_linux.go implements it with XQueryTree
 // and XGetWindowAttributes; the tests implement it with a table, which is
