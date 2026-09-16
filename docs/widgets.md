@@ -305,6 +305,44 @@ strip also takes a tab dragged out of another window (`OnMergeTab`), and
 marks that one with a caret in the gap it would land in rather than a
 highlight on a tab.
 
+### Onto a row, or between two
+
+A drop *onto* a row means one thing (into this folder) and a drop *between*
+two rows another (put it here), so the two look different and are reached
+differently:
+
+| | hook | mark |
+|---|---|---|
+| Onto a row | `ListView.OnDropRow`, `TableView.OnDropRow`, `TreeView.OnDropNode` | the row tints in the pack's accent |
+| Between two rows | `ListView.OnDropAt`, `TableView.OnDropAt`, `TreeView.OnDropAt` | an insertion caret in the gap |
+
+```go
+list.OnDropAt = func(i int, e widget.DropEvent) bool { insert(i, e.Paths); return true }
+list.DropActions = platform.DragCopy | platform.DragMove // a reorder is a move
+```
+
+Set only `OnDropRow` (or `OnDropNode`) and every row behaves as it always
+did — the whole row is a target for a drop onto it. Set `OnDropAt` as well
+and each row splits in three: its top and bottom quarters are the gaps
+either side of it, the middle half is still the row. Set `OnDropAt` alone —
+a list you can only reorder — and there is no middle at all: the caret
+jumps at each row's midpoint, so it always follows the pointer.
+
+The gap past the last row is `Count` (`RowCount`, the end of the tree), so
+a drop under the rows lands at the end. `TreeView.OnDropAt` is told the
+node the row would hang under and the place it would take among that
+node's children — `nil` for a root — and the pointer's own x settles the
+gaps that could mean more than one level, which is the gap after a folder's
+last child and equally the gap before that folder's next sibling: aim at
+the indent of the level you mean, and the caret moves in and out to show
+which one it read.
+
+The caret is a theme decision. A pack paints its own by implementing
+`style.DropCaretLook`; every other pack gets `style.DrawDropCaretOf`'s
+default, a bar in the pack's accent with a wedge at its leading end, built
+from the palette so no engine needs art of its own. It is the same caret
+the tab strip draws between two tabs, turned on its side.
+
 A target whose highlight depends on what is being dragged implements
 `widget.DropHoverMime` instead of `DropHover`: it is told the type a drop
 there would be read in, which is how the strip tells its two kinds of drop

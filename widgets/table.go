@@ -52,9 +52,25 @@ type TableView struct {
 	// OnDrag is what a press on a selected row drags out of the table
 	// (widget.DragSource): the rows are the selection, and nil drags
 	// nothing. Without it the table drags nothing at all.
-	OnDrag    func(rows []int) *widget.Drag
-	sel       rowSelection
-	hovered   int
+	OnDrag func(rows []int) *widget.Drag
+	// OnDropAt takes a drop *between* two rows, at the place among them
+	// it would take — index 0 above the first row, RowCount below the
+	// last. Setting it is what turns the table into one you can reorder:
+	// an insertion caret then follows the pointer down the gaps.
+	// OnDropRow takes a drop *onto* a row; with both set the top and
+	// bottom quarters of a row are its gaps and the middle half is the
+	// row. DropMimes narrows what they take (text/uri-list when empty).
+	OnDropAt  func(index int, e widget.DropEvent) bool
+	OnDropRow func(row int, e widget.DropEvent) bool
+	DropMimes []string
+	// DropActions is what a drop here may do — copying alone when zero.
+	DropActions platform.DragAction
+	sel         rowSelection
+	hovered     int
+	// dropRow is the row a drag is over, -1 for none; dropAt is the gap
+	// it would be inserted into instead, -1 for none.
+	dropRow   int
+	dropAt    int
 	hoverCol  int
 	pressCol  int
 	resizeCol int
@@ -84,6 +100,7 @@ func NewTableView(cols []TableColumn, rows int, cell func(row, col int) string, 
 		Columns: cols, RowCount: rows, RowHeight: 28, Selected: -1,
 		SortCol: -1, SortAsc: true, CellText: cell, OnSelect: on,
 		hovered: -1, hoverCol: -1, pressCol: -1, resizeCol: -1, lastRow: -1, SearchColumn: -1,
+		dropRow: -1, dropAt: -1,
 	}
 	t.Init(t)
 	t.SetWantsFocus(true)
@@ -592,6 +609,18 @@ func (t *TableView) Paint(ctx *paintengine2d.Context) {
 			t.paintRow(ctx, lk, widths, row, y, rh)
 		}
 		ctx.Restore()
+	}
+	// Where a drag would land, over the rows and inside the body: a drop
+	// onto a row tints it, one between two rows gets the caret. Both are
+	// drawn before the header, which the body's rows slide under.
+	if t.dropRow >= 0 && t.dropRow < t.RowCount {
+		ctx.Save()
+		ctx.ClipRect(body)
+		paintDropRow(ctx, lk, paintengine2d.XYWH(0, hh+float32(t.dropRow)*rh-t.OffsetY, rw, rh))
+		ctx.Restore()
+	}
+	if t.dropAt >= 0 {
+		paintDropCaret(ctx, lk, t.dropAt, t.RowCount, 0, rw, hh, rh, t.OffsetY, body)
 	}
 	// Sticky header after the body so a leaked row cannot cover the labels.
 	t.paintHeader(ctx, lk, widths, hh)
