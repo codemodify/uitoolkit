@@ -105,6 +105,11 @@ func (h *Host) dragMove(at paintengine2d.Point) {
 		}
 		d.active = true
 	}
+	// Dragged clear of the window, the panel leaves it for one of its own
+	// and the desktop carries it from there (tearoff.go).
+	if h.tornOut(p, at) {
+		return
+	}
 	target := h.targetAt(p)
 	if target.same(d.target) && h.ind.Visible() {
 		return
