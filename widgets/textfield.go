@@ -25,11 +25,18 @@ type TextField struct {
 	Password    bool // paint bullets; Text stays the real value
 	// Frameless paints the text alone: the field sits inside a frame its
 	// parent drew (a spin box's field shares its frame with the buttons).
-	Frameless    bool
-	caret        int
-	selA, selB   int
-	blinkOn      bool
-	dragging     bool
+	Frameless  bool
+	caret      int
+	selA, selB int
+	blinkOn    bool
+	dragging   bool
+	// dragSel is a press inside the selection waiting to become a drag of
+	// that text (drag.go); dragAt is where it landed, so a press that
+	// stays a click still moves the caret there. selfDrop records a drop
+	// of our own drag back into this same widget.
+	dragSel      bool
+	selfDrop     bool
+	dragAt       int
 	scrollX      float32
 	preedit      string
 	preeditCaret int
@@ -307,8 +314,16 @@ func (t *TextField) MousePress(e widget.MouseEvent) bool {
 		t.replaceSel(platform.ClipboardPrimaryGet())
 		return true
 	}
+	// A press inside the selection may be the start of a drag of that
+	// text: the caret does not move and the selection stays until the
+	// release, when it collapses if no drag took it.
+	at := t.indexAt(e.Pos.X)
+	if !e.Mods.Shift() && pressInSelection(at, t.selA, t.selB) {
+		t.dragSel, t.selfDrop, t.dragAt = true, false, at
+		return true
+	}
 	t.dragging = true
-	t.caret = t.indexAt(e.Pos.X)
+	t.caret = at
 	if e.Mods.Shift() {
 		t.selB = t.caret
 	} else {
@@ -320,6 +335,11 @@ func (t *TextField) MousePress(e widget.MouseEvent) bool {
 }
 
 func (t *TextField) MouseMove(e widget.MouseEvent) bool {
+	if t.dragSel {
+		// Waiting to see whether this press becomes a drag of the
+		// selection; it must not extend it in the meantime.
+		return true
+	}
 	if !t.dragging && e.Button != platform.ButtonLeft {
 		return false
 	}
@@ -331,6 +351,16 @@ func (t *TextField) MouseMove(e widget.MouseEvent) bool {
 }
 
 func (t *TextField) MouseRelease(widget.MouseEvent) bool {
+	if t.dragSel {
+		// The press inside the selection never became a drag: it was a
+		// click, and a click puts the caret where it landed.
+		t.dragSel = false
+		t.caret = t.dragAt
+		t.selA, t.selB = t.caret, t.caret
+		t.ensureCaretVisible()
+		t.Invalidate()
+		return true
+	}
 	t.dragging = false
 	return true
 }

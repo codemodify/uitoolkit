@@ -109,6 +109,9 @@ func (t *TextField) Drop(e widget.DropEvent) bool {
 	if !t.Enabled() || e.Text == "" {
 		return false
 	}
+	// A drop of this field's own drag: the text is inserted here, so a
+	// move must not also take the original away (drag.go).
+	t.selfDrop = e.Source == widget.Component(t)
 	t.caret = t.indexAt(e.Pos.X)
 	t.selA, t.selB = t.caret, t.caret
 	t.replaceSel(strings.Join(strings.Fields(strings.ReplaceAll(e.Text, "\n", " ")), " "))
@@ -123,6 +126,9 @@ func (t *TextArea) Drop(e widget.DropEvent) bool {
 	if !t.Enabled() || t.ReadOnly || e.Text == "" {
 		return false
 	}
+	// A drop of this area's own drag: the text is inserted here, so a
+	// move must not also take the original away (drag.go).
+	t.selfDrop = e.Source == widget.Component(t)
 	t.caret = t.indexAt(e.Pos.X, e.Pos.Y)
 	t.selA, t.selB = t.caret, t.caret
 	t.replaceSel(e.Text)
