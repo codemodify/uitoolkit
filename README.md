@@ -99,6 +99,13 @@ Apps start in Metal (Ocean). Settings previews and applies any pack, and
 *Each dot is a pack, placed by the year its original shipped and the
 platform it came from. The rust dot is the default, Metal (Ocean).*
 
+Each theme also draws the window frame its original had, from the Mac's
+close box to SourceGit's flat cells. The app paints its own title bar,
+borders and buttons; the desktop still moves, resizes, snaps and closes
+the window.
+
+![Window frames from System 1 in 1984 to macOS Tahoe in 2025, each in its own era's style](docs/screenshots/themes/frames.webp)
+
 Every tile below is the same small app, the Settings window's preview,
 drawn by its pack's engine.
 
