@@ -1637,16 +1637,19 @@ func (c *x11Conn) drainLocked() {
 		if t := C.ui_event_time(&xe); t != 0 {
 			c.serverTime = t
 		}
+		// A drag of ours holds the pointer and the keyboard: the motion,
+		// the release and Escape are the drag's, not any widget's — and
+		// not the input method's either, which is why this comes before
+		// XFilterEvent. A composing XIM swallowed the Escape that was
+		// meant to cancel the drag.
+		if c.drag.active && c.dragHandle(&xe) {
+			continue
+		}
 		if C.ui_filter(c.dpy, &xe) != 0 {
 			continue
 		}
 		if c.fixesEvent > 0 && int(C.ui_event_type(&xe)) == c.fixesEvent+C.XFixesSelectionNotify {
 			c.compositingChangedLocked()
-			continue
-		}
-		// A drag of ours holds the pointer and the keyboard: the motion,
-		// the release and Escape are the drag's, not any widget's.
-		if c.drag.active && c.dragHandle(&xe) {
 			continue
 		}
 		switch C.ui_event_type(&xe) {
@@ -1681,7 +1684,9 @@ func (c *x11Conn) drainLocked() {
 		c.queues[win] = append(c.queues[win], s.translate(&xe)...)
 	}
 	// A target that took a drop and never answered must not hold the
-	// drag — and the user's move — open for the rest of the session.
+	// drag — and the user's move — open for the rest of the session;
+	// and Escape ends a drag even where the grab never delivers it.
+	c.dragCheckEscape()
 	c.dragTimedOut()
 }
 
