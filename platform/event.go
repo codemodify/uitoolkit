@@ -137,12 +137,17 @@ const (
 	// X11 LeaveNotify). Hover and pending tooltips must not survive it.
 	EventPointerLeave
 	// EventDragMotion: something dragged from another app is over the
-	// window at Pos (Mimes are what it offers); EventDragLeave: it left;
-	// EventDrop: it was dropped at Pos. The data is read with the
-	// surface's DropReceiver.
+	// window at Pos (Mimes are what it offers, Actions what may be done
+	// with it); EventDragLeave: it left; EventDrop: it was dropped at
+	// Pos. The data is read with the surface's DropReceiver.
 	EventDragMotion
 	EventDragLeave
 	EventDrop
+	// EventDragEnd: a drag this window started (DragSurface.StartDrag)
+	// ended. Action is what the target did with it — DragNone when
+	// nothing took it, so a cancelled drag and a refused one look the
+	// same to the source, as they should.
+	EventDragEnd
 	// EventWindowState: the desktop changed the window's state (State):
 	// maximized, full screen, activated, tiled, suspended.
 	EventWindowState
@@ -180,6 +185,11 @@ type Event struct {
 	IMEDelAfter  int    // text-input-v3 delete_surrounding bytes after caret
 	// Mimes are the types a drag offers (EventDragMotion, EventDrop).
 	Mimes []string
+	// Actions are what a drag's source allows (EventDragMotion,
+	// EventDrop); Action is the one it prefers there, and on
+	// EventDragEnd the one the target performed.
+	Actions DragAction
+	Action  DragAction
 	// ScrollPrecise: Scroll is in device pixels from a touchpad or other
 	// continuous source; otherwise it counts wheel notches.
 	ScrollPrecise bool
