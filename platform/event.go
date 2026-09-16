@@ -190,6 +190,13 @@ type Event struct {
 	// EventDragEnd the one the target performed.
 	Actions DragAction
 	Action  DragAction
+	// Dropped (EventDragEnd) says the user let the pointer go rather than
+	// calling the drag off: the drop happened, whether or not anything
+	// took it. A drag that carries a window needs the difference — a
+	// window dropped on the desktop stays where it was let go, a
+	// cancelled one goes away again (wl_data_source.dnd_drop_performed
+	// against cancelled, XdndDrop against a lost grab or Escape).
+	Dropped bool
 	// ScrollPrecise: Scroll is in device pixels from a touchpad or other
 	// continuous source; otherwise it counts wheel notches.
 	ScrollPrecise bool
