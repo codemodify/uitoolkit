@@ -19,9 +19,11 @@ type Offscreen struct {
 	cursor Cursor
 	wake   chan struct{}
 	wakes  atomic.Int32
-	// drop is a simulated drop's data by type (SimulateDrop).
+	// drop is a simulated drop's data by type (SimulateDrop); dragOut is
+	// a drag started *from* this surface (offscreen_drag.go).
 	drop      map[string][]byte
 	dropTaken *bool
+	dragOut   offscreenDrag
 	// frame is the simulated desktop behind FrameSurface (offscreen_frame.go).
 	frame offscreenFrame
 }
