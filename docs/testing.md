@@ -124,6 +124,46 @@ passes, select a thread row, open the message context menu (full labels
 (unless `-short`) open compose and type into the editable body. No
 Delete / Junk / Send / Move.
 
+## Drag and drop
+
+The protocol is testable without a display, and it is meant to be: a drag
+is a conversation between two applications, and almost none of it needs
+pixels.
+
+- **The wire format and the policy** are pure Go: XDND's client messages,
+  the version two sides settle on, the search for the window under the
+  pointer (over an interface the tests fill with a table — reparenting
+  frames, stacking order, `XdndProxy`, unmapped windows), the action
+  negotiation and the modifier convention. `platform/xdnd_test.go`,
+  `platform/drag_test.go`.
+- **The drag source's state machine** runs on the offscreen backend,
+  which implements `DragSurface` and `DropNegotiator` and stands in for
+  the desktop:
+
+```go
+off := w.Surface().(*platform.Offscreen)
+off.Inject(platform.Event{Kind: platform.EventMouseDown, Pos: from, Button: platform.ButtonLeft})
+off.Inject(platform.Event{Kind: platform.EventMouseMove, Pos: far, Button: platform.ButtonLeft})
+a.PumpOnce()                        // the press has become a drag
+p, _ := off.DragOffer()             // the types, actions and icon it offered
+off.SimulateDragOver(pos); a.PumpOnce()
+mime, action := off.DragAccepted()  // what the window told the source
+off.SimulateDragDrop(pos); a.PumpOnce()
+off.DragEnded()                     // the action the source was told ran
+```
+
+  `off.CancelDrag()` is Escape, `off.DragData(mime)` reads what a target
+  would have got. `app/drag_test.go` covers the press threshold, the
+  negotiation, the payload an in-process drop carries, cancelling, and a
+  refused drop reporting nothing performed.
+- **Widget behaviour** — what a press drags, what a row or tab takes —
+  belongs in `widgets/drag_test.go`, with no window at all.
+- **The backends themselves** need the nested-KWin rig (`tools/e2e`), two
+  applications and a real file manager. What only that can show: the drag
+  icon on screen, a drag between two processes, a drop to and from
+  Dolphin or Nautilus, and the desktop's own modifiers choosing a move.
+  `UITK_XDND_DEBUG=1` traces an X11 drag when one goes quiet.
+
 ## Adding a regression test
 
 When you fix a UI bug, add a `go test` that would have failed on the
@@ -142,5 +182,8 @@ broken code:
   `TestMenuBarHelpNearRightEdgeFitsAboutMail`, Mail driver `context-menu`.
 - ComboBox overlap / clipped rows: `TestComboBoxPopupClearsFieldAndFitsLabels`
   plus the gallery driver `combo-popup` step.
+- Drag and drop: the protocol in `platform/xdnd_test.go` and
+  `platform/drag_test.go`, the source's state machine in
+  `app/drag_test.go`, what a widget drags in `widgets/drag_test.go`.
 
 Do not land a “looks fine on my machine” fix without a test.

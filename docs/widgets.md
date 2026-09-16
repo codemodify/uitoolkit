@@ -222,6 +222,72 @@ onto components that implement `widget.DropTarget`:
 `widgets.NewDropZone(child, onFiles)` wraps content that takes files, with a
 highlight while a drag is over it; set `OnText` for text. Text fields and
 areas take dropped text where it is dropped. Mail's compose window attaches
-dropped files. On Wayland the drop comes through `wl_data_device` (the
-drag's offer is accepted for copying, read and finished); X11's XDND is not
-done yet.
+dropped files. Trees and browser-tab strips take a drop on the row or tab
+under the pointer (`OnDropNode`, `OnDropTab`), which they light up.
+
+A drop also says what was done with it. `e.Action` is `DragCopy`,
+`DragMove` or `DragLink` — a target that reports a move is what lets the
+drag's source remove its original, so only report one you performed. A
+target that does more than copy says so with `widget.DropActions`, or on
+the collection widgets by setting `DropActions`; the desktop's modifiers
+(Shift for a move, Ctrl for a copy) then reach it.
+
+Drops arrive the same way on both backends: `wl_data_device` on Wayland,
+XDND on X11 (see [platform.md](platform.md)).
+
+## Dragging out
+
+A component says what a press drags by implementing `widget.DragSource`.
+The window does the rest: once the press has moved past the same
+threshold a window move uses, it asks the component under it — then its
+ancestors — and hands what it gets to the desktop.
+
+```go
+type fileRow struct{ widget.Base; path string }
+
+func (r *fileRow) DragAt(paintengine2d.Point) *widget.Drag {
+    d := widget.DragFiles(r.path)          // a uri-list, and the path as text
+    d.Image, d.Hotspot = widget.DragLabel(r.Look(), filepath.Base(r.path), 1)
+    d.Actions = platform.DragCopy | platform.DragMove
+    d.Done = func(a platform.DragAction) {
+        if a == platform.DragMove {
+            r.removeFromView()             // the target says it took it
+        }
+    }
+    return d
+}
+```
+
+- `widget.DragFiles(paths...)` and `widget.DragText(s)` build the common
+  ones; `widget.NewDrag(types, data)` takes anything else. A text drag is
+  offered under every name text goes by, so an old X11 client that only
+  knows `STRING` still takes it.
+- `Image` follows the pointer and `Hotspot` is the point in it under the
+  pointer. `widget.DragLabel` draws a chip of text for something with no
+  natural picture; `widget.DragSnapshot(c)` paints a component as it looks.
+- `Done` is told the action the target performed, or `DragNone` when
+  nothing took it — a cancelled drag and a refused one look the same,
+  which is what a source needs to know.
+- `Window.StartDrag(d)` starts one directly, for a widget that would
+  rather decide for itself, and `Window.CancelDrag()` calls it off.
+
+The same `Drag` drives a drag that never leaves the application.
+`Payload` rides along in-process and reaches the target in
+`e.Payload` untouched, with `e.Source` naming the component it came from —
+so reordering a list, or moving an item between two views, costs no
+encoding and no round trip. Setting `Local` keeps the drag inside the
+process altogether; without it the drag also reaches other applications
+and still serves its payload when it lands back on one of our own
+windows.
+
+The collection widgets are drag sources already: `TableView.OnDrag` gets
+the selected rows and `TreeView.OnDrag` the node under the press, each
+returning the `*widget.Drag` those rows are worth. Text fields and areas
+drag their selection — a press inside it waits to see whether it becomes
+a drag before moving the caret. Files drags its rows out as real files
+and takes them into another folder or tab; Mail drags an attachment out;
+Notes drags a note, or the selected text.
+
+Escape cancels a drag. On Wayland the compositor does it (a drag owns the
+pointer, so the application sees no keys at all); on X11 the drag holds
+the keyboard itself.
