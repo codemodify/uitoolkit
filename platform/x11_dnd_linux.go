@@ -280,13 +280,17 @@ static int ui_x_from_root(Display* d, Window w, int rx, int ry, int* x, int* y) 
 	return XTranslateCoordinates(d, DefaultRootWindow(d), w, rx, ry, x, y, &child);
 }
 
-static int ui_x_pointer(Display* d, int* rx, int* ry) {
+// ui_x_pointer is where the pointer is and which modifiers are held: on
+// X11 it is the drag's source that turns Shift into a move, so the source
+// has to know what the user is holding.
+static int ui_x_pointer(Display* d, int* rx, int* ry, unsigned int* mask) {
 	Window root = None, child = None;
 	int wx = 0, wy = 0;
-	unsigned int mask = 0;
+	*mask = 0;
 	if (!d) return 0;
-	return XQueryPointer(d, DefaultRootWindow(d), &root, &child, rx, ry, &wx, &wy, &mask);
+	return XQueryPointer(d, DefaultRootWindow(d), &root, &child, rx, ry, &wx, &wy, mask);
 }
+static unsigned int ui_x_mot_state(XEvent* e) { return e->xmotion.state; }
 
 static int ui_x_grab_ptr(Display* d, Window w, Cursor cur, Time t) {
 	return XGrabPointer(d, w, False,
@@ -716,7 +720,10 @@ func (c *x11Conn) xdndEnd(finished bool) {
 
 // AcceptDrag implements [DropNegotiator]: the app says what it would do
 // with the drag over the window, and the source is told at once.
-func (s *x11Surface) AcceptDrag(mime string, a DragAction) {
+// allowed is not sent: XdndStatus carries exactly one action, and on X11
+// it is the source that picks it from the user's modifiers.
+func (s *x11Surface) AcceptDrag(mime string, allowed, a DragAction) {
+	_ = allowed
 	x11Mu.Lock()
 	defer x11Mu.Unlock()
 	c := s.conn
@@ -886,6 +893,9 @@ type x11Drag struct {
 	dropped bool
 	dropAt  time.Time
 	cursor  Cursor
+	// mods are the modifier keys held at the last motion: on X11 the
+	// source, not the compositor, turns Shift into a move.
+	mods uint
 }
 
 // xdndIcon is the override-redirect window a drag's picture lives in.
@@ -949,6 +959,7 @@ func (s *x11Surface) StartDrag(p DragPayload) bool {
 	C.ui_x_grab_kbd(c.dpy, s.win, when)
 	c.dragMakeIcon(s, p)
 	c.dragMotionTo(rootPointer(c))
+
 	C.ui_x_flush(c.dpy)
 	return true
 }
@@ -969,14 +980,16 @@ func (s *x11Surface) Dragging() bool {
 	return s.conn != nil && s.conn.drag.active
 }
 
-// rootPointer is where the pointer is on the screen now.
-func rootPointer(c *x11Conn) (int, int) {
+// rootPointer is where the pointer is on the screen now, and which
+// modifiers are held there.
+func rootPointer(c *x11Conn) (int, int, uint) {
 	var rx, ry C.int
+	var mask C.uint
 	if c.dpy == nil {
-		return 0, 0
+		return 0, 0, 0
 	}
-	C.ui_x_pointer(c.dpy, &rx, &ry)
-	return int(rx), int(ry)
+	C.ui_x_pointer(c.dpy, &rx, &ry, &mask)
+	return int(rx), int(ry), uint(mask)
 }
 
 // dragHandle takes the events a running drag owns: the pointer motion and
@@ -988,7 +1001,7 @@ func (c *x11Conn) dragHandle(xe *C.XEvent) bool {
 	}
 	switch C.ui_x_type(xe) {
 	case C.MotionNotify:
-		c.dragMotionTo(int(C.ui_x_root_x(xe)), int(C.ui_x_root_y(xe)))
+		c.dragMotionTo(int(C.ui_x_root_x(xe)), int(C.ui_x_root_y(xe)), uint(C.ui_x_mot_state(xe)))
 		return true
 	case C.ButtonRelease:
 		c.dragRelease()
@@ -1017,10 +1030,11 @@ func (c *x11Conn) dragHandle(xe *C.XEvent) bool {
 // dragMotionTo follows the pointer: it finds the window under it, tells
 // the one it left that the drag is gone and the one it entered that it
 // has arrived, and asks for a position either way.
-func (c *x11Conn) dragMotionTo(rx, ry int) {
+func (c *x11Conn) dragMotionTo(rx, ry int, mods uint) {
 	if !c.drag.active || c.dpy == nil {
 		return
 	}
+	c.drag.mods = mods
 	c.dragMoveIcon(rx, ry)
 	tree := x11Tree{c: c}
 	skip := func(w uint32) bool { return c.drag.icon.win != 0 && C.Window(w) == c.drag.icon.win }
@@ -1043,10 +1057,9 @@ func (c *x11Conn) dragMotionTo(rx, ry int) {
 		c.dragCursor(CursorNoDrop)
 		return
 	}
-	action := c.drag.payload.Preferred.One()
-	if action == DragNone {
-		action = c.drag.payload.Actions.One()
-	}
+	// The action the user is asking for with the modifiers they hold;
+	// XDND puts exactly one in every position message.
+	action := ModifierDragAction(xmods(mods), c.drag.payload.Actions, c.drag.payload.Preferred)
 	c.sendXdnd(C.Window(c.drag.target.Send()), C.Window(c.drag.target.Window), XAPosition,
 		EncodeXdndPosition(uint32(c.drag.win), rx, ry, uint32(c.serverTime),
 			c.xdnd.actions.Atom(action)))

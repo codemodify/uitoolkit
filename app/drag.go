@@ -255,13 +255,17 @@ func (r *dragRun) finish(action platform.DragAction) {
 	}
 }
 
-// dropActionFor is what the component under the pointer would do with a
-// drag: what it says when it has an opinion ([widget.DropActions]), a
-// copy otherwise — the action every target is assumed to manage.
-func dropActionFor(c widget.Component, offered, preferred platform.DragAction) platform.DragAction {
-	allowed := platform.DragCopy
+// allowedDropActions is every action the component under the pointer
+// would take: what it says when it has an opinion ([widget.DropActions]),
+// a copy otherwise — the action every target is assumed to manage.
+func allowedDropActions(c widget.Component, offered platform.DragAction) platform.DragAction {
 	if da, ok := c.(widget.DropActions); ok {
-		allowed = da.DropActionFor(offered)
+		return da.DropActionFor(offered)
 	}
-	return platform.NegotiateDragAction(offered, preferred, allowed)
+	return platform.DragCopy
+}
+
+// dropActionFor is the one action a drop on c would perform.
+func dropActionFor(c widget.Component, offered, preferred platform.DragAction) platform.DragAction {
+	return platform.NegotiateDragAction(offered, preferred, allowedDropActions(c, offered))
 }

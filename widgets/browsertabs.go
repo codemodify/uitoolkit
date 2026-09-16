@@ -65,6 +65,8 @@ type BrowserTabs struct {
 	// highlighted while it is over the strip.
 	OnDropTab func(i int, e widget.DropEvent) bool
 	DropMimes []string
+	// DropActions is what a drop here may do — copying alone when zero.
+	DropActions platform.DragAction
 	// OnContextMenu runs for a right-click on tab i, or on the strip's
 	// caption space (i -1), at window point at; it reports whether it
 	// showed a menu (else the window menu shows for the caption space).
