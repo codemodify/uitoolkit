@@ -28,6 +28,7 @@ package platform
 #include <sys/mman.h>
 #include <time.h>
 #include <unistd.h>
+#include "xdg-toplevel-drag-v1-client-protocol.h"
 
 extern void uitkWlDragSend(uintptr_t id, char *mime, int fd);
 extern void uitkWlDragTarget(uintptr_t id, char *mime);
@@ -95,6 +96,19 @@ static void ui_wd_start(struct wl_data_device *d, struct wl_data_source *src,
 }
 
 static void ui_wd_source_destroy(struct wl_data_source *s) { if (s) wl_data_source_destroy(s); }
+
+// xdg-toplevel-drag-v1: a window carried by the drag. The object is made
+// from the data source before start_drag — the protocol allows it nowhere
+// else — and the window is attached to it later, when the tear-off has
+// one. The offset is where in the window the pointer sits, in the
+// window's own geometry, so the window does not jump as it is picked up.
+static struct xdg_toplevel_drag_v1 *ui_wd_top_drag(struct xdg_toplevel_drag_manager_v1 *m, struct wl_data_source *s) {
+	return (m && s) ? xdg_toplevel_drag_manager_v1_get_xdg_toplevel_drag(m, s) : NULL;
+}
+static void ui_wd_top_attach(struct xdg_toplevel_drag_v1 *d, struct xdg_toplevel *t, int dx, int dy) {
+	if (d && t) xdg_toplevel_drag_v1_attach(d, t, (int32_t)dx, (int32_t)dy);
+}
+static void ui_wd_top_drag_destroy(struct xdg_toplevel_drag_v1 *d) { if (d) xdg_toplevel_drag_v1_destroy(d); }
 
 // The target half's two answers to a drag over the window: the type it
 // would read the drop as, and what it would do with it.
@@ -227,8 +241,16 @@ type wlDrag struct {
 	action DragAction
 	// dropped is set by dnd_drop_performed: the pointer is up and the
 	// target is reading, and the source must stay alive until it says it
-	// is done.
+	// is done. It is also what tells a drop on the desktop from a drag
+	// the user called off.
 	dropped bool
+	// top is the xdg_toplevel_drag_v1 this drag may carry a window on,
+	// and attached the surface carried now. protoEnd records that the
+	// compositor has said the drag is over (dnd_drop_performed or
+	// cancelled), which is the only moment top may be destroyed.
+	top      *C.struct_xdg_toplevel_drag_v1
+	attached int
+	protoEnd bool
 }
 
 // wlDragActions maps the toolkit's actions to the protocol's bit field
@@ -283,6 +305,10 @@ func (s *wlSurface) StartDrag(p DragPayload) bool {
 	if p.Actions == DragNone {
 		p.Actions = DragCopy
 	}
+	// The drag before this one is certainly over — its press is: so its
+	// toplevel-drag object, kept back when the client withdrew the drag
+	// itself, can go now.
+	c.dropDeadToplevelDrags()
 	src := C.ui_wd_source(c.dataMan, C.uintptr_t(c.id))
 	if src == nil {
 		return false
@@ -294,6 +320,12 @@ func (s *wlSurface) StartDrag(p DragPayload) bool {
 	}
 	C.ui_wd_set_actions(src, wlDragActions(p.Actions))
 	c.drag = wlDrag{src: src, payload: p, surf: s.id}
+	// A drag that may carry a window needs its toplevel-drag object made
+	// now: the protocol takes get_xdg_toplevel_drag only before
+	// start_drag, long before the tear-off has a window to attach.
+	if p.Toplevel && c.topDragMan != nil {
+		c.drag.top = C.ui_wd_top_drag(c.topDragMan, src)
+	}
 	c.dragMakeIcon(s, p)
 	C.ui_wd_start(c.dataDev, src, s.surf, c.drag.icon, C.uint32_t(c.pressSerial))
 	C.ui_wd_flush(c.dpy)
@@ -315,6 +347,50 @@ func (s *wlSurface) CancelDrag() {
 
 // Dragging implements [DragSurface].
 func (s *wlSurface) Dragging() bool { return s.conn != nil && s.conn.drag.src != nil }
+
+// DragsToplevels implements [ToplevelDragSurface]: whether the compositor
+// has xdg-toplevel-drag-v1 (KWin 6, Mutter 47). Without it a tear-off
+// falls back to a plain drag and makes its window at the drop.
+func (s *wlSurface) DragsToplevels() bool { return s.conn != nil && s.conn.topDragMan != nil }
+
+// AttachToplevel implements [ToplevelDragSurface]: the compositor moves
+// win with the pointer for the rest of the drag, as though the window
+// itself were in an interactive move. dx, dy are where in win the pointer
+// sits, in the window's own geometry.
+func (s *wlSurface) AttachToplevel(win Surface, dx, dy int) bool {
+	c := s.conn
+	if c == nil || c.drag.src == nil || c.drag.top == nil {
+		return false
+	}
+	w, ok := win.(*wlSurface)
+	if !ok || w.conn != c || w.top == nil || w.closed {
+		return false
+	}
+	// The offset is surface-local — logical pixels, the coordinates the
+	// window geometry is in — while the caller counts device pixels.
+	scale := w.deviceScale()
+	if scale <= 0 {
+		scale = 1
+	}
+	C.ui_wd_top_attach(c.drag.top, w.top, C.int(float32(dx)/scale), C.int(float32(dy)/scale))
+	if c.dpy != nil {
+		C.ui_wd_flush(c.dpy)
+	}
+	c.drag.attached = w.id
+	return true
+}
+
+// dropDeadToplevelDrags destroys the toplevel-drag objects held back from
+// drags the client withdrew itself. Destroying one while its drag runs is
+// a protocol error, and a drag whose source we destroyed sends no event
+// to say when it ended, so they wait here until the next drag (or the
+// connection going away) proves the compositor is done with them.
+func (c *wlConn) dropDeadToplevelDrags() {
+	for _, d := range c.topDragDead {
+		C.ui_wd_top_drag_destroy(d)
+	}
+	c.topDragDead = nil
+}
 
 // dragMakeIcon builds the surface the compositor moves with the pointer.
 // start_drag gives it the drag-icon role; a nil one is legal and means
@@ -385,13 +461,22 @@ func (c *wlConn) dragEnd(action DragAction) {
 	if c.drag.src == nil {
 		return
 	}
-	surf := c.drag.surf
+	surf, dropped := c.drag.surf, c.drag.dropped
 	c.dragFreeIcon()
+	if top := c.drag.top; top != nil {
+		// Only a drag the compositor has ended may have its
+		// toplevel-drag destroyed; one the client withdrew waits.
+		if c.drag.protoEnd {
+			C.ui_wd_top_drag_destroy(top)
+		} else {
+			c.topDragDead = append(c.topDragDead, top)
+		}
+	}
 	C.ui_wd_source_destroy(c.drag.src)
 	c.drag = wlDrag{}
 	c.clipKeepLocked()
 	if s := wlSurfaces[surf]; s != nil {
-		s.push(Event{Kind: EventDragEnd, Action: action})
+		s.push(Event{Kind: EventDragEnd, Action: action, Dropped: dropped})
 	}
 }
 
@@ -457,7 +542,7 @@ func uitkWlDragDropped(id C.uintptr_t) {
 	// The button is up and the target has the offer. The icon's job is
 	// over; the source stays alive until dnd_finished, because the
 	// target may only now ask for the data.
-	c.drag.dropped = true
+	c.drag.dropped, c.drag.protoEnd = true, true
 	c.dragFreeIcon()
 	if c.dpy != nil {
 		C.ui_wd_flush(c.dpy)
@@ -482,6 +567,7 @@ func uitkWlDragCancelled(id C.uintptr_t) {
 	// cancelled after a drop is the protocol saying the source may go:
 	// the compositor sends it once the data has been taken. Before a
 	// drop it is the real thing — Escape, or no target would have it.
+	c.drag.protoEnd = true
 	if c.drag.dropped {
 		c.dragEnd(c.drag.action)
 		return

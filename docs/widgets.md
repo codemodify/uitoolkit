@@ -237,7 +237,12 @@ own accent (`style.DrawDropIndicatorOf`, overridable per look with
 - the thin band along the host's border — a new area down that whole side;
 - the middle of a pane — the panel joins it as another tab;
 - a pane's edges — the panel splits it, above, below or beside;
-- off the host — the panel floats.
+- dragged clear of the window — the panel floats into a window of its own
+  that follows the pointer, and a floating panel's title bar drags that
+  window back: the host lights up as it passes over, and a drop there docks
+  the panel where the indicator says. One gesture both ways (see
+  [decorations.md](decorations.md#tear-off)), so an app is rearranged by
+  dragging alone.
 
 Escape gives the drag up.
 
@@ -246,12 +251,12 @@ Escape gives the drag up.
 toplevel the desktop moves, resizes and stacks, wearing whichever frame the
 app's decoration setting asks for — see [decorations.md](decorations.md).
 It keeps the same title bar it had docked, whose float button now offers to
-dock it back. Dragging that title bar moves the window, through the
-desktop's own interactive move, as a floating tool window's title bar does
-everywhere — docking back is the button, not the drag, because a drag from
-one window onto another needs both windows' positions and a client is not
-told them. Without an opener nothing floats and no float button appears, so
-a headless app needs no special case.
+dock it back — and whose drag handle drags the window itself, back over the
+host to dock it there. Where the desktop cannot carry a window under a drag
+(a Wayland compositor without `xdg-toplevel-drag-v1`) that title bar falls
+back to the desktop's own interactive move, as a floating tool window's does
+everywhere, and the button is the way back in. Without an opener nothing
+floats and no float button appears, so a headless app needs no special case.
 
 **Keyboard and accessibility.** Tab reaches every title bar, its buttons
 and the tab strip; arrow keys walk the buttons and the tabs, Space and
@@ -274,13 +279,14 @@ another version of the format is refused whole, with `ErrLayoutVersion`, so
 the app can fall back. `SetDefaultLayout` records the arrangement an app
 ships with and `ResetLayout` goes back to it.
 
-The floating geometry a layout saves is best effort: a client is not told
-where the desktop put its windows, and a Wayland client cannot ask for a
-position at all, so the size comes back exactly and the position only where
-the window manager honours it (X11). Tearing a panel off through the
-compositor — dragging it straight out of the window with
-`xdg-toplevel-drag`, so the pointer never lets go — is not done;
-`dock.WindowOpener` is where it would go.
+The floating geometry a layout saves is still best effort, and now for one
+reason only: a Wayland toplevel has no position. X11 answers where the
+window manager put the window (`Window.Position()`, from `ConfigureNotify`)
+and a layout comes back exactly; on Wayland the size comes back and the
+position is the one that was asked for, which the compositor is free to
+ignore. Dragging a panel between the host and a window of its own needs no
+position either way — the drag carries the window
+([decorations.md](decorations.md#tear-off)).
 
 ## Drops from other apps
 
@@ -294,7 +300,15 @@ onto components that implement `widget.DropTarget`:
 highlight while a drag is over it; set `OnText` for text. Text fields and
 areas take dropped text where it is dropped. Mail's compose window attaches
 dropped files. Trees and browser-tab strips take a drop on the row or tab
-under the pointer (`OnDropNode`, `OnDropTab`), which they light up.
+under the pointer (`OnDropNode`, `OnDropTab`), which they light up; a tab
+strip also takes a tab dragged out of another window (`OnMergeTab`), and
+marks that one with a caret in the gap it would land in rather than a
+highlight on a tab.
+
+A target whose highlight depends on what is being dragged implements
+`widget.DropHoverMime` instead of `DropHover`: it is told the type a drop
+there would be read in, which is how the strip tells its two kinds of drop
+apart.
 
 A drop also says what was done with it. `e.Action` is `DragCopy`,
 `DragMove` or `DragLink` — a target that reports a move is what lets the
@@ -361,4 +375,13 @@ Notes drags a note, or the selected text.
 
 Escape cancels a drag. On Wayland the compositor does it (a drag owns the
 pointer, so the application sees no keys at all); on X11 the drag holds
-the keyboard itself.
+the keyboard itself and polls the key state as well, for the setups where
+a grabbed key never reaches the client — on Xwayland it never does,
+because the compositor takes the keyboard for the drag it mirrors on the
+Wayland side.
+
+A drag can also carry a window of its own: `widget.StartTearOff` is a drag
+with a window riding under the pointer, which is what a tab dragged out of
+its strip and a dock panel dragged out of its host are made of. See
+[decorations.md](decorations.md#tear-off) for the mechanism and
+[the tab strip](decorations.md#tearing-a-tab-out) for the API.

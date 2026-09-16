@@ -17,8 +17,17 @@ type offscreenDrag struct {
 	mime    string
 	allowed DragAction
 	action  DragAction
-	// ended is the action the drag finished with, once it has.
-	ended DragAction
+	// ended is the action the drag finished with, once it has, and
+	// dropped whether the pointer was let go rather than the drag called
+	// off.
+	ended   DragAction
+	dropped bool
+	// carries is whether this desktop can move a window with the drag
+	// (SetDragsToplevels); win is the window one is carrying now and dx,
+	// dy where in it the pointer sits.
+	carries bool
+	win     *Offscreen
+	dx, dy  int
 }
 
 // StartDrag implements [DragSurface]: it begins a drag whose data the
@@ -31,16 +40,54 @@ func (o *Offscreen) StartDrag(p DragPayload) bool {
 	if p.Actions == DragNone {
 		p.Actions = DragCopy
 	}
-	o.dragOut = offscreenDrag{payload: p, running: true}
+	o.dragOut = offscreenDrag{payload: p, running: true, carries: o.dragOut.carries}
 	return true
 }
 
-// CancelDrag implements [DragSurface]: the drag ends with nothing taken,
-// as Escape ends a real one.
-func (o *Offscreen) CancelDrag() { o.EndDrag(DragNone) }
+// CancelDrag implements [DragSurface]: the drag ends with nothing taken
+// and the pointer never let go, as Escape ends a real one.
+func (o *Offscreen) CancelDrag() { o.endDrag(DragNone, false) }
 
 // Dragging implements [DragSurface].
 func (o *Offscreen) Dragging() bool { return o.dragOut.running }
+
+// SetDragsToplevels says whether this desktop can carry a window under a
+// drag (it can, until a test says otherwise). Turning it off is the
+// compositor without xdg-toplevel-drag-v1, where a tear-off runs as a
+// plain drag and makes its window at the drop.
+func (o *Offscreen) SetDragsToplevels(v bool) { o.dragOut.carries = v }
+
+// DragsToplevels implements [ToplevelDragSurface].
+func (o *Offscreen) DragsToplevels() bool { return o.dragOut.carries }
+
+// AttachToplevel implements [ToplevelDragSurface]: win follows the
+// pointer for the rest of the drag, dx, dy inside it under the pointer.
+func (o *Offscreen) AttachToplevel(win Surface, dx, dy int) bool {
+	w, ok := win.(*Offscreen)
+	if !o.dragOut.running || !o.dragOut.carries || !ok || w == nil || w.closed {
+		return false
+	}
+	o.dragOut.win, o.dragOut.dx, o.dragOut.dy = w, dx, dy
+	return true
+}
+
+// DragToplevel is the window the running drag carries, and where in it
+// the pointer sits.
+func (o *Offscreen) DragToplevel() (Surface, int, int) {
+	if o.dragOut.win == nil {
+		return nil, 0, 0
+	}
+	return o.dragOut.win, o.dragOut.dx, o.dragOut.dy
+}
+
+// carryToplevel puts the window the drag carries under the pointer, as a
+// compositor moving it does. pos is in this surface's own coordinates.
+func (o *Offscreen) carryToplevel(pos paintengine2d.Point) {
+	if o.dragOut.win == nil {
+		return
+	}
+	o.dragOut.win.Move(o.posX+int(pos.X)-o.dragOut.dx, o.posY+int(pos.Y)-o.dragOut.dy)
+}
 
 // AcceptDrag implements [DropNegotiator]: it records what the window says
 // it would do with the drag over it, which is what a real backend would
@@ -91,6 +138,7 @@ func (o *Offscreen) SimulateDragOver(pos paintengine2d.Point) {
 	if !o.dragOut.running {
 		return
 	}
+	o.carryToplevel(pos)
 	o.Inject(o.dragEvent(EventDragMotion, pos))
 }
 
@@ -110,7 +158,19 @@ func (o *Offscreen) SimulateDragDrop(pos paintengine2d.Point) {
 	if !o.dragOut.running {
 		return
 	}
+	o.carryToplevel(pos)
+	o.dragOut.dropped = true
 	o.Inject(o.dragEvent(EventDrop, pos))
+}
+
+// SimulateDragRelease is the pointer let go where nothing takes the drop:
+// the drag is over, with nothing performed, but it was dropped and not
+// called off — which is what leaves a torn-off window on the desktop.
+func (o *Offscreen) SimulateDragRelease() {
+	if !o.dragOut.running {
+		return
+	}
+	o.endDrag(DragNone, true)
 }
 
 // dropFinished ends a drag of this surface's own once the window has
@@ -124,7 +184,7 @@ func (o *Offscreen) dropFinished(taken bool) {
 	if !taken {
 		a = DragNone
 	}
-	o.EndDrag(a)
+	o.endDrag(a, true)
 }
 
 // dragEvent is one drag event carrying what the running drag offers.
@@ -141,11 +201,21 @@ func (o *Offscreen) dragEvent(kind EventKind, pos paintengine2d.Point) Event {
 
 // EndDrag ends the running drag with the action the target performed, as
 // a backend does when the desktop reports the drop finished.
-func (o *Offscreen) EndDrag(a DragAction) {
+func (o *Offscreen) EndDrag(a DragAction) { o.endDrag(a, true) }
+
+// endDrag ends the drag, saying whether the pointer was let go (a drop,
+// whatever came of it) or the drag was called off.
+func (o *Offscreen) endDrag(a DragAction, dropped bool) {
 	if !o.dragOut.running {
 		return
 	}
 	o.dragOut.running = false
 	o.dragOut.ended = a
-	o.Inject(Event{Kind: EventDragEnd, Action: a})
+	o.dragOut.dropped = dropped
+	o.dragOut.win = nil
+	o.Inject(Event{Kind: EventDragEnd, Action: a, Dropped: dropped})
 }
+
+// DragDropped reports whether the last drag ended with the pointer let go
+// rather than called off.
+func (o *Offscreen) DragDropped() bool { return o.dragOut.dropped }

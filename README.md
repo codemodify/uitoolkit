@@ -64,6 +64,11 @@ go get github.com/codemodify/paintengine2d@v0.9.0
     icon, copy / move / link, and a payload that stays in-process for a
     drag between its own views (`wl_data_device` on Wayland, XDND on
     X11).
+  - Tear-off: a tab dragged out of its strip, or a dock panel dragged out
+    of its host, becomes a window the desktop carries under the pointer,
+    and dropping it on another window's strip merges it back
+    (`xdg-toplevel-drag-v1` on Wayland, the client's own window placement
+    on X11, and a window made at the drop where a compositor has neither).
   - Offers system-tray items.
 - **Accessibility.** An accessibility tree for every window, an audit
   (`a11y.Check`) for app tests, and an AT-SPI2 bridge, so Orca and other
