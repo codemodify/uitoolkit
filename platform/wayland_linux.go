@@ -1355,6 +1355,11 @@ type wlSurface struct {
 	// remapped surface), and applied with the next buffer commit.
 	frame     Frame
 	frameSent bool
+	// geomSet: a window geometry has been stated. Once it has, every
+	// later frame has to state one too — a window that drops its margin
+	// (maximized, tiled, uncomposited) would otherwise keep the geometry
+	// of the one it had, and the compositor would place it by that.
+	geomSet bool
 	// gpuAlpha is whether the EGL config behind gpu has an alpha channel;
 	// a frame that starts or stops needing one rebinds the device.
 	gpuAlpha bool
@@ -1764,6 +1769,7 @@ func (s *wlSurface) unmapToplevelLocked() {
 	s.mapped = false
 	s.scaleSet = 0
 	s.frameSent = false
+	s.geomSet = false
 	s.opaqueW, s.opaqueH = 0, 0
 	s.framePending = false
 	s.frameSince = time.Time{}
@@ -4234,10 +4240,11 @@ func (s *wlSurface) applyFrameLocked(surfW, surfH int) {
 	s.opaqueW, s.opaqueH = surfW, surfH
 	m := s.marginLogical()
 	win := [4]int{m.Left, m.Top, surfW - m.Width(), surfH - m.Height()}
-	if s.xdg != nil && (!m.Zero() || s.frame.Alpha) {
+	if s.xdg != nil && (!m.Zero() || s.frame.Alpha || s.geomSet) {
 		// The visible window, so the compositor snaps and tiles to it and
 		// not to the shadow around it.
 		C.ui_wl_set_geometry(s.xdg, C.int(win[0]), C.int(win[1]), C.int(win[2]), C.int(win[3]))
+		s.geomSet = true
 	}
 	if s.conn.compositor == nil {
 		return
