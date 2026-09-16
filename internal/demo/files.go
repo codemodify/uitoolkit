@@ -9,6 +9,7 @@ import (
 	"github.com/codemodify/uitoolkit"
 	"github.com/codemodify/uitoolkit/app"
 	"github.com/codemodify/uitoolkit/layout"
+	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
 	"github.com/codemodify/uitoolkit/widgets"
@@ -143,6 +144,30 @@ func FilesApp(win *app.Window) widget.Component {
 		sortFileRows(rows, col, asc)
 		refreshTable()
 	}
+	// Dragging rows out hands another application real files (files_drag.go);
+	// dropping them on a folder in the tree, or on a folder tab, moves them
+	// there without anything leaving the process.
+	table.OnDrag = func(rows []int) *widget.Drag {
+		d := filesDragRows(win, places, place, rows)
+		if d == nil {
+			return nil
+		}
+		from := place
+		d.Done = func(action platform.DragAction) {
+			switch action {
+			case platform.DragMove:
+				if from == place {
+					refreshTable()
+				}
+				mark(fmt.Sprintf("Moved %d item(s)", len(rows)))
+			case platform.DragNone:
+				mark("Drag cancelled")
+			default:
+				mark(fmt.Sprintf("Copied %d item(s)", len(rows)))
+			}
+		}
+		return d
+	}
 
 	roots := make([]*widgets.TreeNode, 0, len(places))
 	placeIndex := func(name string) int {
@@ -202,6 +227,17 @@ func FilesApp(win *app.Window) widget.Component {
 		if win != nil {
 			win.SetTitle(places[i].Label + " — Files")
 		}
+	}
+	// A folder in the places tree takes files: the drag's own rows move
+	// into it, and files from another application are listed in it.
+	tree.OnDropNode = func(n *widgets.TreeNode, e widget.DropEvent) bool {
+		i, ok := n.Data.(int)
+		if !ok || !filesDropInto(places, i, e) {
+			return false
+		}
+		refreshTable()
+		mark(filesDropMessage(e, places[i].Label))
+		return true
 	}
 	tree.OnSelect = func(n *widgets.TreeNode) {
 		if n == nil {
@@ -369,6 +405,17 @@ func FilesApp(win *app.Window) widget.Component {
 		mark("Closed " + title)
 	}
 	tabs.OnReorder = func(from, to int) { mark(fmt.Sprintf("Moved %s to %d", tabs.Tab(to).Title, to+1)) }
+	// A folder tab takes files too — dropping a file on another tab is how
+	// a file manager moves it there without opening the folder first.
+	tabs.OnDropTab = func(i int, e widget.DropEvent) bool {
+		dst, ok := tabs.Tab(i).Data.(int)
+		if !ok || !filesDropInto(places, dst, e) {
+			return false
+		}
+		refreshTable()
+		mark(filesDropMessage(e, places[dst].Label))
+		return true
+	}
 	tabs.OnContextMenu = func(i int, at paintengine2d.Point) bool {
 		items := []*widgets.MenuItem{widgets.ItemAccel("New Tab", "Ctrl+T", newTab)}
 		if i >= 0 {

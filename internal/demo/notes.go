@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/app"
 	"github.com/codemodify/uitoolkit/layout"
+	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
 	"github.com/codemodify/uitoolkit/widgets"
@@ -108,6 +110,41 @@ func NotesApp(win *app.Window) widget.Component {
 		loadEditor()
 	})
 	table.Selected = 0
+	// A note dragged out of the list goes as its text, so it can be
+	// dropped into an editor, a mail body, or the note editor here. The
+	// text in the editor drags out on its own: a press inside the
+	// selection carries it (widgets/drag.go).
+	table.OnDrag = func(rows []int) *widget.Drag {
+		vis := visible()
+		var parts []string
+		for _, i := range rows {
+			if i < 0 || i >= len(vis) {
+				continue
+			}
+			n := notes[vis[i]]
+			parts = append(parts, n.Title+"\n\n"+n.Body)
+		}
+		if len(parts) == 0 {
+			return nil
+		}
+		d := widget.DragText(strings.Join(parts, "\n\n---\n\n"))
+		if d == nil {
+			return nil
+		}
+		label := fmt.Sprintf("%d notes", len(parts))
+		if len(parts) == 1 {
+			label = notes[vis[rows[0]]].Title
+		}
+		d.Image, d.Hotspot = widget.DragLabel(win.Look(), label, win.Scale())
+		d.Done = func(action platform.DragAction) {
+			if action == platform.DragNone {
+				status.SetText("Drag cancelled")
+				return
+			}
+			status.SetText("Dragged " + label)
+		}
+		return d
+	}
 	table.OnSort = func(col int, asc bool) {
 		vis := visible()
 		sort.SliceStable(vis, func(i, j int) bool {
