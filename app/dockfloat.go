@@ -90,6 +90,9 @@ func (d *dockWindow) SetContent(c widget.Component) { d.win.SetContent(c) }
 
 func (d *dockWindow) SetOnCloseRequest(fn func() bool) { d.win.SetOnCloseRequest(fn) }
 
+// StartMove hands the window to the desktop's interactive move.
+func (d *dockWindow) StartMove() bool { return d.win.StartMove() }
+
 func (d *dockWindow) Show() { d.win.Show() }
 
 func (d *dockWindow) Hide() { d.win.Hide() }

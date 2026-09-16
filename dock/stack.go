@@ -606,6 +606,16 @@ func (h *stackHead) MousePress(e widget.MouseEvent) bool {
 		if cur.features&FeatureMovable == 0 {
 			return true
 		}
+		if cur.Floating() {
+			// The panel is in a window of its own, so its title bar drags
+			// the window — the desktop's own interactive move, which is
+			// what a floating tool window's title bar does everywhere.
+			// Docking it back is the title bar's dock button: a drag from
+			// one window onto another needs both windows' positions, and a
+			// client is not told them (see docs/decorations.md).
+			cur.win.StartMove()
+			return true
+		}
 		if host := hostOf(h); host != nil {
 			host.beginDrag(h.stack, cur, widget.LocalToWindow(h, paintengine2d.XYWH(e.Pos.X, e.Pos.Y, 0, 0)).Min)
 		}

@@ -199,15 +199,27 @@ brings the same window back. `app.DockHost` also docks every panel back as
 the main window closes, so no panel is left in a window of its own keeping
 a finished app alive.
 
-Two things a client cannot do, so a saved layout does not promise them:
-it is not told where the desktop put a window, and on Wayland it cannot ask
-for a position at all — a layout restores a floating panel's size exactly
-and its position only where the window manager honours the request. And
-tearing a panel straight out of the window with the pointer still down is
-the same Phase 4 `xdg-toplevel-drag-v1` work as tab tear-off; today a panel
-floats from its float button, from its own drag leaving the host, or from a
-saved layout. `dock.WindowOpener` is the seam a compositor-side tear-off
-would be built behind.
+Dragging the panel's title bar inside its window moves the window, through
+`Window.StartMove` — the desktop's own interactive move, which is what a
+floating tool window's title bar does everywhere.
+
+Two things a client cannot do, so nothing here promises them. It is not
+told where the desktop put a window, and on Wayland it cannot ask for a
+position at all: a saved layout restores a floating panel's size exactly
+and its position only where the window manager honours the request. And a
+drag that starts in one window and ends in another needs both windows'
+positions to be meaningful, so docking a floating panel back is its title
+bar's dock button (or the keyboard, or a saved layout), not a drag —
+dragging a panel from the host out onto the desktop still floats it, since
+that drag never leaves the window it started in.
+
+Both wait on the same Phase 4 work as tab tear-off: `xdg-toplevel-drag-v1`
+where the compositor has it, and a position capability on `platform.Surface`
+(the `HostMover` / `MoveSurface` pair already there has no reader) for X11,
+where `ConfigureNotify` already carries the coordinates and is throwing them
+away. `dock.WindowOpener` is the seam a compositor-side tear-off would be
+built behind; nothing in the dock package assumes a panel's window only
+appears on a button press.
 
 ## The looks
 
