@@ -65,6 +65,16 @@ type BrowserTabs struct {
 	// highlighted while it is over the strip.
 	OnDropTab func(i int, e widget.DropEvent) bool
 	DropMimes []string
+	// OnTearOff is asked for a window for tab i, dragged out of the strip
+	// (tearoff.go). OnMergeTab takes a tab dragged out of another window
+	// and dropped here, OnTabDrag says what a torn-off tab offers besides
+	// the tab itself, and TabMime is the private type it is offered
+	// under. Without OnTearOff a tab never leaves the strip, and without
+	// OnMergeTab none arrives.
+	OnTearOff  func(i int, tab BrowserTab) widget.TearOffWindow
+	OnMergeTab func(at int, tab BrowserTab, e widget.DropEvent) bool
+	OnTabDrag  func(i int, tab BrowserTab) *widget.Drag
+	TabMime    string
 	// DropActions is what a drop here may do — copying alone when zero.
 	DropActions platform.DragAction
 	// OnContextMenu runs for a right-click on tab i, or on the strip's
@@ -77,8 +87,11 @@ type BrowserTabs struct {
 
 	hover, press stripHit
 	// dropTab is the tab a drag from another app (or another view) is
-	// over, -1 for none.
+	// over, -1 for none; dropAt is where a tab dragged out of another
+	// window would be inserted, -1 for none — the two are the strip's two
+	// answers to a drag over it, and only one is ever showing.
 	dropTab int
+	dropAt  int
 	scroll  float32
 	drag    tabDrag
 }
@@ -115,7 +128,7 @@ type tabDrag struct {
 // NewBrowserTabs makes a strip with a tab for each title, the first
 // selected.
 func NewBrowserTabs(titles ...string) *BrowserTabs {
-	t := &BrowserTabs{hover: stripHit{tab: -1}, press: stripHit{tab: -1}, dropTab: -1}
+	t := &BrowserTabs{hover: stripHit{tab: -1}, press: stripHit{tab: -1}, dropTab: -1, dropAt: -1}
 	t.Init(t)
 	t.SetWantsFocus(true)
 	t.SetFocusVisibleOnly(true)
@@ -655,9 +668,14 @@ func (t *BrowserTabs) Paint(ctx *paintengine2d.Context) {
 		paint(t.drag.tab, t.drag.tab == t.sel)
 	}
 	// The tab a drag from elsewhere is over, on top of the tabs: what a
-	// drop would land on has to be unmistakable.
+	// drop would land on has to be unmistakable. A tab dragged out of
+	// another window lands between two tabs rather than on one, so that
+	// gets a caret in the gap instead.
 	if t.dropTab >= 0 && t.dropTab < len(t.tabs) {
 		paintDropRow(ctx, lk, t.slotOf(t.dropTab, g))
+	}
+	if t.dropAt >= 0 {
+		t.paintInsertCaret(ctx, g)
 	}
 	ctx.Restore()
 	if g.overflow {
@@ -831,6 +849,12 @@ func (t *BrowserTabs) MouseMove(e widget.MouseEvent) bool {
 		}
 	}
 	if t.drag.active {
+		// Dragged clear of the strip, the tab leaves the window
+		// altogether (tearoff.go); inside it, it is only being moved
+		// along the strip and the others make room.
+		if t.tornOut(e.Pos) {
+			return true
+		}
 		g := t.geom()
 		lo := g.view.Min.X
 		hi := max(g.view.Max.X-g.tabW, lo)
