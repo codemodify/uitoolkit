@@ -57,15 +57,17 @@ func (h *Host) tornOut(p, at paintengine2d.Point) bool {
 	}
 	h.drag = nil
 	h.hideIndicator()
-	return h.tearOffPanel(pan, d.from, at)
+	// The panel is picked up by the point the user took hold of, not by
+	// where the pointer has wandered to since.
+	return h.tearOffPanel(pan, d.from, d.start, at)
 }
 
 // tearOffPanel floats pan out of stack from and hands its window to a
 // drag, so the desktop carries it under the pointer until the user drops
 // it: over the host it docks again, anywhere else it stays floating, and
 // Escape puts it back where it was.
-func (h *Host) tearOffPanel(pan *Panel, from *Stack, at paintengine2d.Point) bool {
-	geom, off := h.floatGeometryAt(pan, from, at)
+func (h *Host) tearOffPanel(pan *Panel, from *Stack, grab, at paintengine2d.Point) bool {
+	geom, off := h.floatGeometryAt(pan, from, grab, at)
 	// Where the desktop carries the window the panel leaves now, so the
 	// user drags the panel itself; where it cannot, the panel stays put
 	// and the window is made at the drop.
@@ -178,13 +180,14 @@ func floatTearWindow(pan *Panel) widget.TearOffWindow {
 
 // floatGeometryAt is where a panel torn out of the host floats: the size
 // it would float at anyway, put so that the point the user took hold of
-// stays under the pointer, and the offset inside that window the pointer
-// is at.
+// stays under the pointer. grab is the press, in the host's coordinates,
+// and at the pointer now, in the window's; the offset that comes back is
+// where in the floating window the pointer will sit.
 //
 // The position is a request. X11 honours it, and a Wayland compositor is
 // not even asked — it places the window itself and then carries it under
 // the pointer, which is the whole point of the drag protocol.
-func (h *Host) floatGeometryAt(pan *Panel, from *Stack, at paintengine2d.Point) (paintengine2d.Rect, paintengine2d.Point) {
+func (h *Host) floatGeometryAt(pan *Panel, from *Stack, grab, at paintengine2d.Point) (paintengine2d.Rect, paintengine2d.Point) {
 	geom := pan.geom
 	if geom.Empty() {
 		geom = h.firstFloatGeometry(pan)
@@ -194,10 +197,9 @@ func (h *Host) floatGeometryAt(pan *Panel, from *Stack, at paintengine2d.Point) 
 	off := paintengine2d.Pt(geom.Dx()*0.5, style.Dip(h.Look(), 12))
 	if from != nil {
 		if b := h.rectOf(from); !b.Empty() {
-			local := h.toLocal(at)
 			off = paintengine2d.Pt(
-				min(max(local.X-b.Min.X, 0), max(geom.Dx()-1, 0)),
-				min(max(local.Y-b.Min.Y, 0), max(geom.Dy()-1, 0)))
+				min(max(grab.X-b.Min.X, 0), max(geom.Dx()-1, 0)),
+				min(max(grab.Y-b.Min.Y, 0), max(geom.Dy()-1, 0)))
 		}
 	}
 	x, y, ok := hostWindowPosition(h)

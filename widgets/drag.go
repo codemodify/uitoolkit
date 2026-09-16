@@ -230,8 +230,16 @@ func (t *TreeView) DropActionFor(offered platform.DragAction) platform.DragActio
 	return dropActions(t.DropActions, offered)
 }
 
-// DropActionFor is what a drop on the tab strip would do.
+// DropActionFor is what a drop on the tab strip would do: a tab dragged
+// out of another window moves — it is in one window or the other, and a
+// copy would leave two of it — while anything else does what DropActions
+// allows. The strip knows which it is looking at because the caret is up
+// (DragOverMime, tearoff.go); Wayland needs the answer that way round,
+// since there a target's preference is all the compositor has to go on.
 func (t *BrowserTabs) DropActionFor(offered platform.DragAction) platform.DragAction {
+	if t.dropAt >= 0 && offered.Has(platform.DragMove) {
+		return platform.DragMove
+	}
 	return dropActions(t.DropActions, offered)
 }
 
