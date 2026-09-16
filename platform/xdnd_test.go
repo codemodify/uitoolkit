@@ -164,9 +164,12 @@ func TestXDNDActionsMapping(t *testing.T) {
 		{11, DragMove},
 		{12, DragLink},
 		{0, DragNone},
-		// Ask and Private are not offered: the spec lets a target fall
-		// back on copying rather than refuse.
-		{13, DragCopy},
+		// Ask is the source asking for the user to be shown the choice,
+		// which is a question and not an action of its own.
+		{13, DragAsk},
+		// Private is not offered, and an unknown atom means nothing to
+		// us: the spec lets a target fall back on copying rather than
+		// refuse the drop outright.
 		{14, DragCopy},
 		{999, DragCopy},
 	} {
