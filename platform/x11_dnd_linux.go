@@ -423,6 +423,7 @@ import "C"
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 	"unsafe"
 
@@ -433,6 +434,24 @@ import (
 // drag is a conversation with another application, and when one goes
 // wrong there is nothing on screen to say which half stopped talking.
 var xdndDebug = os.Getenv("UITK_XDND_DEBUG") == "1"
+
+// dragActionSet names every action in a set, for a trace where only the
+// first of them ([DragAction.String]) would hide the rest.
+func dragActionSet(a DragAction) string {
+	var out []string
+	for _, one := range dragActionOrder {
+		if a.Has(one) {
+			out = append(out, one.String())
+		}
+	}
+	if a.Asks() {
+		out = append(out, "ask")
+	}
+	if len(out) == 0 {
+		return "none"
+	}
+	return strings.Join(out, "+")
+}
 
 func xdndTrace(format string, args ...any) {
 	if xdndDebug {
@@ -645,20 +664,15 @@ func (c *x11Conn) xdndPosition(win C.Window, m XDNDMessage) {
 	// says so in XdndActionList. XdndActionAsk is not one of them — it is
 	// the source asking for the user to pick out of that list — so it
 	// stays on the requested action alone and never in the offered set.
-	c.drop.offered = c.drop.prefer.Actions()
+	var listed DragAction
 	var list [8]C.Atom
 	if n := C.ui_x_prop_atoms(c.dpy, c.drop.source, c.xdnd.at(XAActionList), &list[0], C.int(len(list))); n > 0 {
-		var all DragAction
 		for i := 0; i < int(n); i++ {
-			all |= c.xdnd.actions.Action(uint32(list[i]))
-		}
-		if all = all.Actions(); all != DragNone {
-			c.drop.offered = all
+			listed |= c.xdnd.actions.Action(uint32(list[i]))
 		}
 	}
-	if c.drop.offered == DragNone {
-		c.drop.offered = DragCopy
-	}
+	c.drop.offered = MergeDragOffer(listed, c.drop.prefer)
+	xdndTrace("position from %#x: asks %v, offers %s", uint32(c.drop.source), c.drop.prefer, dragActionSet(c.drop.offered))
 	// Root coordinates to the window's: the app knows nothing of the
 	// screen, and the frame's margin is part of our window.
 	var wx, wy C.int
