@@ -6,14 +6,22 @@ import "github.com/codemodify/paintengine2d"
 // and screenshots): a drag over pos offering the data by type, then the
 // drop. ReceiveDrop hands the data back.
 func (o *Offscreen) SimulateDrop(pos paintengine2d.Point, data map[string][]byte) {
+	o.SimulateDropAction(pos, data, DragNone, DragNone)
+}
+
+// SimulateDropAction is [Offscreen.SimulateDrop] for a drag whose source
+// says what may be done with it: offered is everything it allows and
+// action the one it asks for — [DragAsk] among them being how a source
+// asks for the user to be shown the choice.
+func (o *Offscreen) SimulateDropAction(pos paintengine2d.Point, data map[string][]byte, offered, action DragAction) {
 	var mimes []string
 	for m := range data {
 		mimes = append(mimes, m)
 	}
 	o.drop = data
 	o.dropTaken = nil
-	o.Inject(Event{Kind: EventDragMotion, Pos: pos, Mimes: mimes})
-	o.Inject(Event{Kind: EventDrop, Pos: pos, Mimes: mimes})
+	o.Inject(Event{Kind: EventDragMotion, Pos: pos, Mimes: mimes, Actions: offered, Action: action})
+	o.Inject(Event{Kind: EventDrop, Pos: pos, Mimes: mimes, Actions: offered, Action: action})
 }
 
 // ReceiveDrop implements DropReceiver for simulated drops.

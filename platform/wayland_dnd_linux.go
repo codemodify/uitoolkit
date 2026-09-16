@@ -29,6 +29,7 @@ package platform
 #include <time.h>
 #include <unistd.h>
 #include "xdg-toplevel-drag-v1-client-protocol.h"
+#include "viewporter-client-protocol.h"
 
 extern void uitkWlDragSend(uintptr_t id, char *mime, int fd);
 extern void uitkWlDragTarget(uintptr_t id, char *mime);
@@ -142,6 +143,16 @@ static void ui_wd_damage(struct wl_surface *s, int w, int h) {
 static void ui_wd_scale(struct wl_surface *s, int scale) {
 	if (s && scale > 0) wl_surface_set_buffer_scale(s, scale);
 }
+// wp_viewporter, for an icon drawn at a fractional scale: the buffer stays
+// at scale 1 and the viewport says what its pixels come to in logical ones,
+// which is how every window of this toolkit carries a fractional scale.
+static struct wp_viewport *ui_wd_viewport(struct wp_viewporter *v, struct wl_surface *s) {
+	return (v && s) ? wp_viewporter_get_viewport(v, s) : NULL;
+}
+static void ui_wd_viewport_dest(struct wp_viewport *v, int w, int h) {
+	if (v && w > 0 && h > 0) wp_viewport_set_destination(v, w, h);
+}
+static void ui_wd_viewport_destroy(struct wp_viewport *v) { if (v) wp_viewport_destroy(v); }
 static void ui_wd_commit(struct wl_surface *s) { if (s) wl_surface_commit(s); }
 static void ui_wd_flush(struct wl_display *d) { if (d) wl_display_flush(d); }
 
@@ -219,6 +230,7 @@ static ssize_t ui_wd_write_all(int fd, const char *p, size_t n, int ms) {
 import "C"
 
 import (
+	"math"
 	"time"
 	"unsafe"
 
@@ -234,6 +246,7 @@ type wlDrag struct {
 	surf int
 	// icon is the surface the compositor moves with the pointer.
 	icon     *C.struct_wl_surface
+	iconView *C.struct_wp_viewport
 	iconBuf  *C.struct_wl_buffer
 	iconMem  unsafe.Pointer
 	iconSize int
@@ -257,6 +270,8 @@ type wlDrag struct {
 // (wl_data_device_manager.dnd_action). Wayland has copy, move and ask;
 // it has no link, so a link-only drag is offered as a copy — a drag the
 // compositor thinks does nothing shows the user a refusal everywhere.
+// Wayland knows copy, move and ask, and no link at all: a drag that
+// offers one gets what is left of it here.
 func wlDragActions(a DragAction) C.uint32_t {
 	var out C.uint32_t
 	if a.Has(DragCopy) {
@@ -264,6 +279,9 @@ func wlDragActions(a DragAction) C.uint32_t {
 	}
 	if a.Has(DragMove) {
 		out |= 2
+	}
+	if a.Asks() {
+		out |= 4
 	}
 	if out == 0 {
 		out = 1
@@ -278,6 +296,8 @@ func wlDragAction(a C.uint32_t) DragAction {
 		return DragCopy
 	case 2:
 		return DragMove
+	case 4:
+		return DragAsk
 	}
 	return DragNone
 }
@@ -425,22 +445,93 @@ func (c *wlConn) dragMakeIcon(s *wlSurface, p DragPayload) {
 		return
 	}
 	// The picture was drawn at the window's scale, so the buffer covers
-	// that many logical pixels fewer. A fractional scale has no integer
-	// to say here; the icon then draws a little large, which is far
-	// better than a scaled-down blur.
-	if s.bufScale > 1 {
-		C.ui_wd_scale(surf, C.int(s.bufScale))
+	// that many logical pixels fewer. A whole scale is what
+	// set_buffer_scale is for; a fractional one has no integer to say,
+	// and is carried the way every window of this toolkit carries it —
+	// buffer scale 1 and a viewport whose destination is the logical size
+	// the picture's pixels come to (wayland_linux.go, present).
+	sc := dragIconScale(s, p)
+	lw, lh := iconLogical(w, h, sc)
+	if vp := c.dragIconViewport(surf, sc); vp != nil {
+		C.ui_wd_viewport_dest(vp, C.int(lw), C.int(lh))
+	} else if n := int(sc + 0.5); n > 1 {
+		C.ui_wd_scale(surf, C.int(n))
 	}
 	// The hotspot is where in the picture the pointer sits, so the icon
-	// hangs back from the pointer by exactly that much.
-	C.ui_wd_attach(surf, buf, C.int(-int(p.Hotspot.X)), C.int(-int(p.Hotspot.Y)))
+	// hangs back from the pointer by exactly that much. It arrives in the
+	// picture's own pixels and the offset is in the surface's logical
+	// ones, so it is worth the scale less.
+	C.ui_wd_attach(surf, buf,
+		C.int(-logicalLen(p.Hotspot.X, sc)), C.int(-logicalLen(p.Hotspot.Y, sc)))
 	C.ui_wd_damage(surf, C.int(w), C.int(h))
 	C.ui_wd_commit(surf)
 	c.drag.icon, c.drag.iconBuf, c.drag.iconMem, c.drag.iconSize = surf, buf, mem, size
 }
 
+// dragIconViewport gives the icon surface a viewport when it needs one: a
+// scale that is not a whole number, and a compositor with wp_viewporter.
+// Without one the icon falls back on the nearest whole buffer scale,
+// which is the best the core protocol can say.
+func (c *wlConn) dragIconViewport(surf *C.struct_wl_surface, scale float32) *C.struct_wp_viewport {
+	if c.viewporter == nil || wholeScale(scale) {
+		return nil
+	}
+	vp := C.ui_wd_viewport(c.viewporter, surf)
+	c.drag.iconView = vp
+	return vp
+}
+
+// dragIconScale is the scale the drag's picture was drawn at: what the
+// window that started it said, and the surface's own when it said
+// nothing.
+func dragIconScale(s *wlSurface, p DragPayload) float32 {
+	if p.Scale > 0 {
+		return p.Scale
+	}
+	if s != nil {
+		if sc := s.deviceScale(); sc > 0 {
+			return sc
+		}
+	}
+	return 1
+}
+
+// wholeScale reports that a scale is an integer, within the slack a
+// compositor's 120ths can leave behind.
+func wholeScale(scale float32) bool {
+	d := scale - float32(int(scale+0.5))
+	return d > -0.01 && d < 0.01
+}
+
+// iconLogical is the logical size a picture of w by h pixels drawn at
+// scale comes to, never less than one pixel each way.
+func iconLogical(w, h int, scale float32) (int, int) {
+	lw, lh := logicalLen(float32(w), scale), logicalLen(float32(h), scale)
+	if lw < 1 {
+		lw = 1
+	}
+	if lh < 1 {
+		lh = 1
+	}
+	return lw, lh
+}
+
+// logicalLen is a device length in the surface's logical units, rounded
+// to the nearest whole one: a hotspot or an edge half a logical pixel out
+// is a picture that sits visibly off the pointer.
+func logicalLen(v float32, scale float32) int {
+	if scale <= 0 {
+		scale = 1
+	}
+	return int(math.Round(float64(v / scale)))
+}
+
 // dragFreeIcon lets the icon surface and its buffer go.
 func (c *wlConn) dragFreeIcon() {
+	if c.drag.iconView != nil {
+		C.ui_wd_viewport_destroy(c.drag.iconView)
+		c.drag.iconView = nil
+	}
 	if c.drag.icon != nil {
 		C.ui_wd_surface_destroy(c.drag.icon)
 		c.drag.icon = nil
@@ -625,7 +716,9 @@ func uitkWlOfferActions(id C.uintptr_t, offer *C.struct_wl_data_offer, actions, 
 // compositor has settled on for it.
 type wlOfferAction struct{ source, chosen DragAction }
 
-// wlOfferActions maps a dnd_action bit field back to a set of actions.
+// wlOfferActions maps a dnd_action bit field back to a set of actions. A
+// source that names ask is saying it would let the user choose, which is
+// what the target needs to know before it may ask for the choice itself.
 func wlOfferActions(a C.uint32_t) DragAction {
 	var out DragAction
 	if a&1 != 0 {
@@ -633,6 +726,9 @@ func wlOfferActions(a C.uint32_t) DragAction {
 	}
 	if a&2 != 0 {
 		out |= DragMove
+	}
+	if a&4 != 0 {
+		out |= DragAsk
 	}
 	return out
 }
@@ -659,7 +755,16 @@ func (s *wlSurface) AcceptDrag(mime string, allowed, a DragAction) {
 		// Everything this target would take, and the one it would take
 		// now. Naming only the latter would pin the compositor to it,
 		// and the user's Shift for a move could never change anything.
-		C.ui_wd_offer_actions(c.dndOffer, wlDragActions(allowed|a), wlDragActions(a))
+		//
+		// On Wayland it is the target that asks for the user to be shown
+		// the choice, so a target willing to ask says so by naming ask as
+		// the action it would rather have; the compositor then answers
+		// wl_data_offer.action with ask unless a modifier settles it.
+		prefer := a
+		if allowed.Asks() {
+			prefer = DragAsk
+		}
+		C.ui_wd_offer_actions(c.dndOffer, wlDragActions(allowed|a), wlDragActions(prefer))
 	}
 	if c.dpy != nil {
 		C.ui_wd_flush(c.dpy)

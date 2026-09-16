@@ -239,6 +239,12 @@ func DragSnapshot(c Component) *paintengine2d.Image {
 // snapshot: a rounded chip of accent-tinted text ("3 files"), at the
 // window's scale. Its hotspot is a little inside the top-left corner, so
 // the chip sits under the pointer without covering what is beneath it.
+//
+// scale is the display scale the picture is wanted at. A look is usually
+// already baked at its window's scale, and its metrics are then in device
+// pixels; only what the look does not already carry is applied here, so
+// passing a window's own look and its own scale draws the chip once, and
+// passing an unscaled look with a scale of 2 draws it twice as large.
 func DragLabel(lk style.LookAndFeel, text string, scale float32) (*paintengine2d.Image, paintengine2d.Point) {
 	if lk == nil || text == "" {
 		return nil, paintengine2d.Point{}
@@ -246,11 +252,15 @@ func DragLabel(lk style.LookAndFeel, text string, scale float32) (*paintengine2d
 	if scale < 1 {
 		scale = 1
 	}
+	k := scale / style.LookScale(lk)
+	if k < 0.01 {
+		k = 1
+	}
 	f := lk.Font()
 	pad := style.Dip(lk, 8)
 	w := f.Advance(text) + 2*pad
 	h := f.Height() + style.Dip(lk, 6)
-	iw, ih := int(w*scale+0.5), int(h*scale+0.5)
+	iw, ih := int(w*k+0.5), int(h*k+0.5)
 	if iw < 1 || ih < 1 {
 		return nil, paintengine2d.Point{}
 	}
@@ -260,12 +270,15 @@ func DragLabel(lk style.LookAndFeel, text string, scale float32) (*paintengine2d
 		return nil, paintengine2d.Point{}
 	}
 	ctx.Clear(paintengine2d.Transparent)
-	ctx.Scale(scale, scale)
+	ctx.Scale(k, k)
 	pal := lk.Palette()
 	r := lk.Metrics().Radius
 	box := paintengine2d.XYWH(0, 0, w, h)
 	ctx.DrawRoundRect(box, r, r, paintengine2d.Fill(pal.Accent.WithAlpha(0.92)))
 	ctx.DrawRoundRect(box.Inset(0.5), r, r, paintengine2d.StrokePaint(pal.TextOnAccent.WithAlpha(0.35), 1))
 	f.Draw(ctx, text, paintengine2d.Pt(pad, (h-f.Height())*0.5), pal.TextOnAccent)
-	return img, paintengine2d.Pt(style.Dip(lk, 6), style.Dip(lk, 6))
+	// The hotspot is in the picture's own pixels, as every backend takes
+	// it, so it follows the same k the picture was drawn at.
+	hot := style.Dip(lk, 6) * k
+	return img, paintengine2d.Pt(hot, hot)
 }
