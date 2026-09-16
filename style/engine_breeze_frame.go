@@ -28,12 +28,25 @@ func (breezeEngine) Decoration(l *Classic, st DecorationState) DecorationSpec {
 		CenterTitle:   true,
 		Layout:        "icon:minimize,maximize,close",
 		Radius:        [4]float32{r, r, 0, 0},
-		Shadow:        breezeEngine{}.PopupShadow(l, PopupDialog),
-	}
-	if st.Maximized || st.Tiled != 0 {
-		s.Radius = [4]float32{}
+		Shadow:        ShadowLayersReach(breezeWindowShadow(l, DecorationState{Active: true})),
 	}
 	return s
+}
+
+// breezeWindowShadow follows KWin's Breeze decoration, whose shadow is
+// "Large" out of the box and lighter behind an inactive window.
+func breezeWindowShadow(l *Classic, st DecorationState) []WindowShadow {
+	if !st.Active {
+		return []WindowShadow{{Color: shadowBlack(0.18), DY: l.S(4), Blur: l.S(16)}}
+	}
+	return []WindowShadow{
+		{Color: shadowBlack(0.35), DY: l.S(12), Blur: l.S(40)},
+		{Color: shadowBlack(0.12), DY: l.S(1), Blur: l.S(4)},
+	}
+}
+
+func (breezeEngine) DrawDecorationShadow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st DecorationState) {
+	DrawShadowLayers(ctx, b, DecorationOf(l, st).Radius, breezeWindowShadow(l, st))
 }
 
 func (breezeEngine) DrawDecoration(l *Classic, ctx *paintengine2d.Context, f DecorationFrame, st DecorationState) {

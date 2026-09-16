@@ -60,11 +60,19 @@ Also merged to `dev` and pushed:
   One palettes. Platform engines can now hand a later era to an engine of
   their own (`style.EraEngine`), and tool bars can share group chrome
   (`style.ToolGroupEngine`, Tahoe's glass capsules). 121 packs, 29 engines.
+- **Frames with shadows and rounded corners** (phase 3). A look with a
+  shadow puts its window inside a larger surface: the margin around it
+  holds the shadow and the resize handles, while the desktop is told where
+  the window really is (`set_window_geometry`, `_GTK_FRAME_EXTENTS`, input
+  and opaque regions). Alpha buffers only where a frame needs them; on X11
+  without a compositing manager the frame goes solid by itself. Each era
+  gets the shadow and corners its windows had. paintengine2d gained
+  `BlendDestOut` for the corners (its `dev`, `f852dbc`).
 - **Next:**
-  - shadows, rounded corners and resize handles in the shadow (phase 3),
-    under way on `feat/frame-shadows`;
-  - then: tab tear-off (phase 4), drag and drop on X11 and dragging out of
-    apps, dockable panels;
+  - title-bar phase 4: tab tear-off, KWin's server-decoration palette,
+    `_NET_WM_SYNC_REQUEST`;
+  - drag and drop on X11, and dragging out of apps;
+  - dockable panels;
   - the 31 adapted looks could get frames of their own (NeXT, Platinum,
     System 7, Amiga, BeOS, OS/2, Windows 3.1, KDE 3 and GNOME 2).
 - **Off the list** (the user's call, 2026-09-15): releases and tags; IME and

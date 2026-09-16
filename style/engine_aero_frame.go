@@ -40,12 +40,25 @@ func (aeroEngine) Decoration(l *Classic, st DecorationState) DecorationSpec {
 		ButtonGap:   -lw,
 		Layout:      ":minimize,maximize,close",
 		Radius:      [4]float32{r, r, r * 0.5, r * 0.5},
-		Shadow:      aeroEngine{}.PopupShadow(l, PopupDialog),
-	}
-	if st.Maximized || st.Tiled != 0 {
-		s.Radius = [4]float32{}
+		Shadow:      ShadowLayersReach(aeroWindowShadow(l, DecorationState{Active: true})),
 	}
 	return s
+}
+
+// aeroWindowShadow is the shadow Windows 7's glass windows cast: a soft
+// one under the active window, a tighter one otherwise.
+func aeroWindowShadow(l *Classic, st DecorationState) []WindowShadow {
+	if !st.Active {
+		return []WindowShadow{{Color: shadowBlack(0.18), DY: l.S(3), Blur: l.S(12)}}
+	}
+	return []WindowShadow{
+		{Color: shadowBlack(0.3), DY: l.S(6), Blur: l.S(22)},
+		{Color: shadowBlack(0.12), DY: 0, Blur: l.S(4)},
+	}
+}
+
+func (aeroEngine) DrawDecorationShadow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st DecorationState) {
+	DrawShadowLayers(ctx, b, DecorationOf(l, st).Radius, aeroWindowShadow(l, st))
 }
 
 func (aeroEngine) DrawDecoration(l *Classic, ctx *paintengine2d.Context, f DecorationFrame, st DecorationState) {
