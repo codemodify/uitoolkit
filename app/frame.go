@@ -287,13 +287,14 @@ func (w *Window) frameBorder() style.Insets {
 
 // resizeBandDip is how far outside the visible window a press still resizes
 // it — the band inside the shadow (Chromium's 10-DIP kResizeBorder, GTK's
-// 12px handle, SourceGit's 12px ring) — and cornerBandDip how far a corner
-// reaches along each edge (Chromium's kResizeAreaCornerSize).
+// 12px handle, SourceGit's 12px ring) — cornerBandDip how far a corner
+// reaches along each edge (Chromium's kResizeAreaCornerSize), and
+// insideBandDip the band a frame without a shadow keeps inside its own
+// edges instead.
 const (
-	resizeBandDip  = 10
-	cornerBandDip  = 16
-	insideBandDip  = 4
-	shadowMarginOf = "docs/decorations.md"
+	resizeBandDip = 10
+	cornerBandDip = 16
+	insideBandDip = 4
 )
 
 // resizeBand is the resize band and the corner zone in device pixels.

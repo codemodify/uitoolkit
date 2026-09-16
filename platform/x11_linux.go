@@ -2930,6 +2930,12 @@ func (s *x11Surface) applyFrameLocked() {
 		return
 	}
 	m := s.frame.Margin
+	// The size hints are about the X window, which holds the margin too:
+	// without that the window manager would let the visible window shrink
+	// past the app's minimum by the shadow's width (GTK adds it as well).
+	if mw, mh := s.opts.MinWidth, s.opts.MinHeight; mw > 0 || mh > 0 {
+		C.ui_resize_hints(c.dpy, s.win, C.int(max(mw, 1)+m.Width()), C.int(max(mh, 1)+m.Height()))
+	}
 	if m.Zero() {
 		C.ui_delete_prop(c.dpy, s.win, c.atomExtents)
 		C.ui_shape_input_all(c.dpy, s.win)
