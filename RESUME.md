@@ -33,6 +33,12 @@ Also merged to `dev` and pushed:
 | `ff2cc6b` | `docs/themes-web` | the Settings preview no longer jumps; README sheets and timeline |
 | `6dbe277` | `feat/titlebar` | tabs in the title bar, and a title bar in every look (phase 2) |
 | `476dc19` | `engine/modern` | 18 more packs of today's looks; 121 in all |
+| `374a4e6` | `feat/frame-shadows` | shadows, rounded corners, resize in the shadow (phase 3) |
+| `6f7dae2` | `feat/dock` | dockable panels: areas, tabs, floating, saved layouts |
+| `f0d7673` | `feat/dnd` | drag and drop both ways on both backends |
+| `c74ca22` | `style/frames` | the last 31 packs paint their era's own frame |
+| `cb485cd` | `feat/tearoff` | a drag can carry a window: tab tear-off, dock in and out |
+| `af30748` | `fix/drag-polish` | the drop caret, the Copy/Move/Link menu, a crisp drag icon |
 
 - **Today's themes.** The 29th engine, `web`, draws the looks developers
   use now: GitHub's Primer (light, dark, dark dimmed), Vercel's Geist,
@@ -95,11 +101,33 @@ Also merged to `dev` and pushed:
   / `OnMergeTab`, with the last tab dragging its whole window) and a dock
   panel dragged out of its host or back into it. Files and the Inspector
   are the pilots; verified in the rig on both backends.
+- **Tear-off, and every era's frame** (phases 2 to 4 are done).
+  `feat/tearoff`: a drag can carry a window — a tab dragged out of the
+  strip becomes a window that follows the pointer
+  (`xdg-toplevel-drag-v1` on Wayland, the toolkit moving its own window on
+  X11), dropping it on another strip merges it, Escape puts it back, and a
+  strip's last tab drags its window (Chromium's rule). Dock panels use the
+  same path in and out. `style/frames`: the 31 packs that were on the
+  adapter now paint their own frame (the Mac's close and zoom boxes,
+  NeXT's, Intuition's gadgets, BeOS's tab, OS/2's, Windows 3.1's, OPEN
+  LOOK's, Keramik, Plastik, Oxygen, Metacity, Metal, Nimbus, Fusion), so
+  every engine pack has one and the adapter is only what a new engine gets
+  for free.
+- **Drag polish** (`fix/drag-polish`): the insertion caret a drop between
+  rows should have, through one `style.DropCaretLook` hook (lists, trees,
+  tables and the tab strip); a themed Copy / Move / Link menu when a source
+  asks (XDND's ask action); the drag icon at the real fractional scale; and
+  an X11 bug where a source kept claiming pointer motion after its own
+  drop, which put a stale drop indicator on screen and threw two BadWindow
+  errors.
 - **Next:**
   - title-bar phase 4's remainder: KWin's server-decoration palette,
     `xdg-toplevel-icon`, `_NET_WM_SYNC_REQUEST`;
-  - the 31 adapted looks could get frames of their own (NeXT, Platinum,
-    System 7, Amiga, BeOS, OS/2, Windows 3.1, KDE 3 and GNOME 2).
+  - Wayland's ask action end to end: no source in the rig sets it (Qt and
+    KIO never send `XdndActionAsk`), so it is headless-tested only;
+  - a tab merged into another application carries its title only;
+  - Escape during an X11 drag is unproven on real hardware (KWin takes the
+    keyboard for the drag it mirrors; both paths are implemented).
 - **Off the list** (the user's call, 2026-09-15): releases and tags; IME and
   right-to-left text; Windows and macOS backends (pinned until Linux is
   polished); printing.
