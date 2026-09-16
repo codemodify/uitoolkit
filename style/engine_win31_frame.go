@@ -125,10 +125,11 @@ func (e win31Engine) DrawCaptionButton(l *Classic, ctx *paintengine2d.Context, b
 	black.cells(g, 0, 0, 1, g.h)
 	box := g.sub(1, 0, g.w-1, g.h)
 	ctx.DrawRect(box.rect(), paintengine2d.Fill(c.face))
-	w31small(&hi, &lo, box, 0, 0, box.w, box.h)
 	if cs.Pressed() {
-		// Pressed: the bevel goes, as 3.1's small buttons did.
-		hi = rpInk{}
+		// Pressed: the bevel turns over, as 3.1's small buttons did.
+		w31small(&lo, &hi, box, 0, 0, box.w, box.h)
+	} else {
+		w31small(&hi, &lo, box, 0, 0, box.w, box.h)
 	}
 	switch {
 	case k == CaptionMinimize:
