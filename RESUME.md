@@ -77,10 +77,17 @@ Also merged to `dev` and pushed:
   have one). The whole arrangement goes out and comes back as JSON.
   `widget.FocusWatcher` is new: containers that paint by where the focus is
   now hear about every move. Inspector is the pilot.
+- **Drag and drop, both ways on both backends** (branch `feat/dnd`).
+  X11's XDND 5 is implemented (both halves: drops onto uitoolkit windows
+  and drags out of them, `XdndTypeList`, actions, INCR, proxies), and
+  Wayland gained the source side (`wl_data_source`, an ARGB drag icon,
+  action negotiation). `widget.Drag` and `Window.StartDrag` drive drags out
+  of the app and inside it alike; lists, trees, tabs and text are sources.
+  Files, Mail's attachments and Notes drag out; verified against Dolphin in
+  the rig, all four directions.
 - **Next:**
   - title-bar phase 4: tab tear-off, KWin's server-decoration palette,
     `_NET_WM_SYNC_REQUEST`;
-  - drag and drop on X11, and dragging out of apps;
   - tearing a dock panel off through the compositor (the same
     `xdg-toplevel-drag-v1` as tab tear-off), and a floating panel's real
     position back from the window manager;
@@ -349,8 +356,11 @@ and macOS adapters.
    scripts that need it (Arabic joining, Indic), plus right-to-left
    layout mirroring. Text is kerned but not shaped. A pure-Go HarfBuzz port
    (go-text/typesetting, BSD) could do the shaping.
-2. **Drag and drop, the rest:** X11's XDND, and dragging out of uitoolkit
-   apps (drag sources). Drops onto windows work on Wayland.
+2. **Drag and drop, what is left:** both halves work on both backends —
+   XDND 5 on X11, `wl_data_device` / `wl_data_source` on Wayland, with a
+   drag icon, action negotiation and in-process payloads. Still missing:
+   a drop indicator between rows for reordering a list, and XDND's "ask"
+   action (the Copy / Move / Link menu a file manager shows on a drop).
 3. **Other platforms:** Windows and macOS backends, with UI Automation and
    NSAccessibility adapters for the accessibility tree that now exists.
 4. **Portals:** a parent window for native dialogs on Wayland

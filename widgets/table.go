@@ -49,19 +49,23 @@ type TableView struct {
 	// OnSelectionChange reports the selected rows, ascending, whenever the
 	// set changes in SelectExtended or SelectMulti.
 	OnSelectionChange func(rows []int)
-	sel               rowSelection
-	hovered           int
-	hoverCol          int
-	pressCol          int
-	resizeCol         int
-	resizeX           float32
-	resizeW           float32
-	vbar              scrollDrag
-	rows              rowSceneCache
-	lastRow           int
-	lastAt            time.Time
-	reveal            int // row+1 to bring into view at the next Arrange
-	find              typeAhead
+	// OnDrag is what a press on a selected row drags out of the table
+	// (widget.DragSource): the rows are the selection, and nil drags
+	// nothing. Without it the table drags nothing at all.
+	OnDrag    func(rows []int) *widget.Drag
+	sel       rowSelection
+	hovered   int
+	hoverCol  int
+	pressCol  int
+	resizeCol int
+	resizeX   float32
+	resizeW   float32
+	vbar      scrollDrag
+	rows      rowSceneCache
+	lastRow   int
+	lastAt    time.Time
+	reveal    int // row+1 to bring into view at the next Arrange
+	find      typeAhead
 	// SearchColumn is the column type-ahead find matches (-1: the first
 	// flexible column, usually the main text).
 	SearchColumn int
