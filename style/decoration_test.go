@@ -18,6 +18,18 @@ var decorationStates = []DecorationState{
 
 func whole(v float32) bool { return v == float32(math.Round(float64(v))) }
 
+// themePack is the built-in pack named name.
+func themePack(t *testing.T, name string) ThemePack {
+	t.Helper()
+	for _, p := range ListBuiltinThemes() {
+		if p.Name == name {
+			return p
+		}
+	}
+	t.Fatalf("no built-in pack %q", name)
+	return ThemePack{}
+}
+
 // Every look's frame is sane in every state and at every scale: a caption
 // that holds its buttons, borders on whole device pixels, none while
 // maximized.
@@ -128,21 +140,130 @@ func TestDecorationPaintsInsideItsBoxes(t *testing.T) {
 	}
 }
 
-// Engines without a frame of their own get their in-app window's: its
-// caption height, its borders and its close button's size.
-func TestDecorationAdapterUsesTheInAppFrame(t *testing.T) {
+// Every engine paints its era's own frame; only the base look, which is no
+// era, falls back to the plain one.
+func TestEveryEnginePaintsItsOwnFrame(t *testing.T) {
 	for _, p := range ListBuiltinThemes() {
 		lk := p.Look()
-		if _, native := lk.eng().(DecorationEngine); native || lk.eng().ID() == baseEngine.ID() {
+		if lk.eng().ID() == baseEngine.ID() {
+			if NativeDecoration(lk) {
+				t.Fatalf("%s: the base engine has no frame of its own", p.Name)
+			}
 			continue
 		}
+		if !NativeDecoration(lk) {
+			t.Fatalf("%s (engine %s): no DecorationEngine — the frame would be adapted", p.Name, lk.eng().ID())
+		}
+	}
+}
+
+// The adapter is what an engine without a frame of its own would get, and
+// nothing in the toolkit reaches it any more — so it is driven directly:
+// it takes the in-app window's caption height, borders and close button,
+// leaves the frame square and states no layout of its own.
+func TestDecorationAdapterUsesTheInAppFrame(t *testing.T) {
+	for _, name := range []string{"win31", "os2warp", "next", "keramik", "oxygen"} {
+		p := themePack(t, name)
+		lk := p.Look()
 		in := lk.eng().WindowFrameInsets(lk)
-		s := DecorationOf(lk, DecorationState{Active: true})
+		s := frameAdapter{}.Decoration(lk, DecorationState{Active: true})
 		if !s.Stacked || s.Caption != snap(in.Top) || s.Border.Left != snap(in.Left) || s.Border.Bottom != snap(in.Bottom) {
 			t.Fatalf("%s: adapted spec %+v from insets %+v", p.Name, s, in)
 		}
 		if cr := lk.eng().WindowCloseRect(lk, adapterProbe(lk)); !cr.Empty() && s.Button != winSnap(cr).Size() {
 			t.Fatalf("%s: buttons %v, the in-app close is %v", p.Name, s.Button, cr.Size())
+		}
+		if s.Radius != ([4]float32{}) || s.Layout != "" {
+			t.Fatalf("%s: the adapter states a look of its own: %+v", p.Name, s)
+		}
+		// It paints inside the boxes it is given, like any other frame.
+		win := paintengine2d.XYWH(8, 8, 360, 200)
+		inner := s.Border.Apply(win)
+		f := DecorationFrame{Window: win, Caption: paintengine2d.XYWH(inner.Min.X, inner.Min.Y, inner.Dx(), float32(math.Ceil(float64(s.Caption))))}
+		img := paintengine2d.NewImage(int(win.Max.X)+8, int(win.Max.Y)+8)
+		frameAdapter{}.DrawDecoration(lk, paintengine2d.NewContext(img), f, DecorationState{Active: true})
+		if x, y, bad := paintedOutside(img, win, 0); bad {
+			t.Fatalf("%s: the adapter paints (%d,%d) outside the window", p.Name, x, y)
+		}
+	}
+}
+
+// An engine's frame paints its caption band: one that drew nothing there
+// would leave the window's background showing through as its title bar.
+// (The plain frame is the exception by design: its caption *is* the window
+// background, under a rule.)
+func TestDecorationPaintsItsCaption(t *testing.T) {
+	for _, p := range ListBuiltinThemes() {
+		lk := p.Look()
+		if !NativeDecoration(lk) {
+			continue
+		}
+		s := DecorationOf(lk, DecorationState{Active: true})
+		win := paintengine2d.XYWH(0, 0, 360, 200)
+		inner := s.Border.Apply(win)
+		capH := float32(math.Ceil(float64(s.Caption)))
+		f := DecorationFrame{Window: win, Caption: paintengine2d.XYWH(inner.Min.X, inner.Min.Y, inner.Dx(), capH)}
+		img := paintengine2d.NewImage(int(win.Max.X), int(win.Max.Y))
+		DrawDecorationOf(lk, paintengine2d.NewContext(img), f, DecorationState{Active: true})
+		x, y := int(f.Caption.Min.X+f.Caption.Dx()*0.5), int(f.Caption.Min.Y+capH*0.5)
+		if _, _, _, a := img.At(x, y).RGBA(); a == 0 {
+			t.Fatalf("%s: nothing painted in the caption at (%d,%d)", p.Name, x, y)
+		}
+	}
+}
+
+// Corners and shadows are the era's: a desktop that drew frames straight on
+// the screen had neither, the ones that shaped their decorations rounded
+// their title bar's top corners, and only a compositing desktop cast a
+// shadow.
+func TestDecorationCornersAndShadowsPerEra(t *testing.T) {
+	type era struct{ rounded, shadow bool }
+	eras := map[string]era{
+		// Drawn straight on the screen: square, no shadow.
+		"system1": {}, "system7": {}, "platinum": {}, "platinum-lime": {},
+		"amiga13": {}, "amiga31": {}, "beos": {}, "os2warp": {},
+		"win31": {}, "win-hotdog": {}, "openlook": {},
+		"next": {}, "openstep": {}, "wmaker-default": {},
+		"metal-steel": {}, "metal-ocean": {},
+		// Bluecurve is square everywhere, by Red Hat's design.
+		"bluecurve": {},
+		// Shaped decorations, still no compositor.
+		"keramik": {rounded: true}, "plastik": {rounded: true}, "plastique": {rounded: true},
+		"clearlooks": {rounded: true}, "cleanlooks": {rounded: true}, "human": {rounded: true},
+		// Composited desktops.
+		"oxygen": {rounded: true, shadow: true},
+		"fusion": {rounded: true, shadow: true}, "fusion-night": {rounded: true, shadow: true},
+		"nimbus": {rounded: true, shadow: true},
+	}
+	for name, want := range eras {
+		s := DecorationOf(themePack(t, name).Look(), DecorationState{Active: true})
+		rounded := s.Radius[0] > 0 && s.Radius[1] > 0
+		if rounded != want.rounded || s.Radius[2] != 0 || s.Radius[3] != 0 {
+			t.Errorf("%s: corners %v, wanted rounded=%v on the top two only", name, s.Radius, want.rounded)
+		}
+		if got := s.Shadow != (Insets{}); got != want.shadow {
+			t.Errorf("%s: shadow %+v, wanted %v", name, s.Shadow, want.shadow)
+		}
+	}
+}
+
+// A look's own button layout is the one its desktop had, on the side it had
+// it: the Mac, the Amiga and BeOS close at the left, NeXT miniaturizes at
+// the left and closes at the right, Windows 3.1 and OS/2 open the window
+// menu at the left, OPEN LOOK has nothing but that menu.
+func TestDecorationThemeLayouts(t *testing.T) {
+	want := map[string]string{
+		"system7": "close:maximize", "platinum": "close:minimize,maximize",
+		"amiga31": "close:maximize", "beos": "close:maximize",
+		"next": "minimize:close", "wmaker-default": "minimize:close",
+		"win31": "icon:minimize,maximize", "os2warp": "icon:close,minimize,maximize",
+		"openlook": "icon:", "keramik": "icon:minimize,maximize,close",
+		"clearlooks": "icon:minimize,maximize,close", "metal-ocean": "icon:minimize,maximize,close",
+		"nimbus": ":minimize,maximize,close", "fusion": ":minimize,maximize,close",
+	}
+	for name, layout := range want {
+		if got := DecorationOf(themePack(t, name).Look(), DecorationState{Active: true}).Layout; got != layout {
+			t.Errorf("%s: layout %q, wanted %q", name, got, layout)
 		}
 	}
 }
