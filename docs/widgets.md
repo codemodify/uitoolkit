@@ -246,9 +246,12 @@ Escape gives the drag up.
 toplevel the desktop moves, resizes and stacks, wearing whichever frame the
 app's decoration setting asks for — see [decorations.md](decorations.md).
 It keeps the same title bar it had docked, whose float button now offers to
-dock it back, and dropping it on the host docks it where it lands. Without
-an opener nothing floats and no float button appears, so a headless app
-needs no special case.
+dock it back. Dragging that title bar moves the window, through the
+desktop's own interactive move, as a floating tool window's title bar does
+everywhere — docking back is the button, not the drag, because a drag from
+one window onto another needs both windows' positions and a client is not
+told them. Without an opener nothing floats and no float button appears, so
+a headless app needs no special case.
 
 **Keyboard and accessibility.** Tab reaches every title bar, its buttons
 and the tab strip; arrow keys walk the buttons and the tabs, Space and
