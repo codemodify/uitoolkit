@@ -347,13 +347,45 @@ its own title bar in it (`Window.SetTitleBar`, `widgets.HeaderBar`) is in
 [decorations.md](decorations.md). The platform side is the optional
 `FrameSurface` capability (negotiated `Decorations`, `WindowState`,
 `Capabilities`, `StartSystemMove`, `StartSystemResize`, `ShowWindowMenu`,
-`Minimize`, `SuitsClientFrame`), implemented by the Wayland and X11
-top-level surfaces and by `Offscreen`, which records the calls for tests.
+`Minimize`, `SuitsClientFrame`, `SetFrame`), implemented by the Wayland and
+X11 top-level surfaces and by `Offscreen`, which records the calls for
+tests.
+
+### The frame's margin, regions and buffers
+
+`SetFrame(platform.Frame)` is how a toolkit-drawn frame tells the window
+system about itself, in device pixels: `Margin` is the invisible band
+around the visible window where its drop shadow lives, `Input` how far into
+that band a press still reaches the window (the resize handles; the rest
+clicks through), `Radius` the visible window's corner radii and `Alpha`
+whether the buffer needs an alpha channel at all. The surface grows by the
+margin at once — `Surface.Size()` is the buffer, `Surface.Resize(w, h)` and
+`EventResize` are the *window* — and the window system hears about it with
+the next present, in the same commit as the pixels it describes.
+`platform.FrameMargin` picks a margin that is a whole number of logical
+pixels at the surface's scale (Wayland states geometry in logical pixels,
+so 10 device px at 1.75 becomes 12 logical = 21 device).
+
+A frame with neither shadow nor rounded corners (Windows 95, Motif, a
+maximized or tiled window, an X11 screen with no compositing manager) asks
+for nothing: opaque buffers, the full opaque region, the infinite input
+region — byte for byte the path every window took before.
+
+| | Wayland | X11 |
+| --- | --- | --- |
+| Visible window | `xdg_surface.set_window_geometry` (logical px), re-stated for every frame once stated, so a maximized window is not placed by the margin it used to have | `_GTK_FRAME_EXTENTS` (device px; KWin and Mutter honour it when moving, snapping, tiling and maximizing) |
+| Input | `wl_surface.set_input_region` = the window grown by the resize band; `NULL` (infinite), never an empty region, when there is no margin | XShape `ShapeInput` rectangle; the mask is reset when the margin goes |
+| Opaque | `wl_surface.set_opaque_region` = the window less its rounded corners (rounded inward); the whole surface when opaque | `_NET_WM_OPAQUE_REGION`, the same rects |
+| Alpha buffers | `wl_shm` **ARGB8888** premultiplied (the slots are remade when the frame starts or stops needing alpha), EGL config with `EGL_ALPHA_SIZE 8`; the GPU device is rebound on the same `wl_surface` when that changes, so the EGL display is never torn down | a 32-bit TrueColor visual with its own colormap: an X window's visual is fixed at creation, so the window is re-created on one the first time a frame asks (before it is ever mapped, in the usual flow) — `XShmPutImage` and EGL then keep the alpha instead of forcing it opaque |
+| Composited? | always | `_NET_WM_CM_S<screen>` at connect, watched with XFixes: without an owner every window reports `WindowState.Solid` and its frame goes square and shadowless, live |
+
+linux-dmabuf stays on the opaque `XRGB` formats; a frame that needs alpha
+presents through `wl_shm` instead (the dmabuf path is opt-in and CPU-only).
 
 ## Deferred
 
 - IME candidate-window theming (the IM draws its own window)
-- Shadows, rounded corners and translucency for toolkit-drawn frames
-  (Phase 3 of [decorations.md](decorations.md#phases); the themed frames of
-  Phase 2 are done)
+- `_NET_WM_SYNC_REQUEST` (smooth interactive resizes on X11), KWin's
+  server-decoration palette, `xdg-toplevel-icon-v1` (Phase 4 of
+  [decorations.md](decorations.md#phases))
 - Win32 and AppKit **windows** (tray landed in 0.16.0)

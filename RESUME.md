@@ -45,11 +45,17 @@ Also merged to `dev` and pushed:
   system title bar and borders"; `UITK_DECORATIONS` and look.json's
   `"decorations"` choose too. GNOME, which has no server frames, now gets a
   frame. How it works: `docs/decorations.md`.
+- **Frames with shadows and rounded corners** (phase 3 of
+  `docs/decorations.md`): a look with a shadow puts its window inside a
+  larger surface, and the margin around it holds the shadow and the resize
+  handles while the desktop is told where the window really is
+  (`set_window_geometry`, `_GTK_FRAME_EXTENTS`, input and opaque regions).
+  Alpha buffers only where a frame needs them; without a compositing
+  manager on X11 the frame goes solid by itself.
 - **Next, not started:**
-  - title-bar phases 2 to 4 (`docs/decorations.md`): frames drawn by each
-    engine; then shadows, rounded corners and resize handles in the shadow;
-    then browser-style tabs in the title bar with tear-off, as SourceGit and
-    Chromium have;
+  - title-bar phase 4 (`docs/decorations.md`): browser-style tabs in the
+    title bar with tear-off, as SourceGit and Chromium have, KWin's
+    server-decoration palette, `_NET_WM_SYNC_REQUEST`;
   - more of today's packs: macOS Tahoe, Breeze 6, Material 3 Expressive,
     JetBrains' Islands, VS Code's 2026 themes, Adwaita 48.
 
