@@ -254,6 +254,48 @@ func DrawCaptionButtonOf(lk LookAndFeel, ctx *paintengine2d.Context, b paintengi
 	e.DrawCaptionButton(c, ctx, b, k, cs, st)
 }
 
+// WindowShadow is one layer of the drop shadow a window frame casts on the
+// desktop, in device pixels: black at some alpha, offset down, blurred and
+// spread. A look's shadow is one or two of these ([DrawShadowLayers]);
+// eras before compositing had none at all.
+type WindowShadow struct {
+	Color            paintengine2d.Color
+	DY, Blur, Spread float32
+}
+
+// ShadowLayersReach is how far layers reach past the window on each side —
+// the invisible margin a frame asks for. Take it from the *active*
+// window's shadow whatever the state, so gaining or losing focus never
+// resizes the window (Chromium does the same).
+func ShadowLayersReach(layers []WindowShadow) Insets {
+	var out Insets
+	for _, s := range layers {
+		out = out.Max(ShadowReach(0, s.DY, s.Blur, s.Spread))
+	}
+	return out
+}
+
+// DrawShadowLayers paints a window's shadow around b, corner radii r
+// (top-left clockwise), one layer over the next.
+func DrawShadowLayers(ctx *paintengine2d.Context, b paintengine2d.Rect, r [4]float32, layers []WindowShadow) {
+	if ctx == nil || b.Empty() {
+		return
+	}
+	rad := float32(0)
+	for _, v := range r {
+		rad = max(rad, v)
+	}
+	for _, s := range layers {
+		if s.Color.A <= 0 {
+			continue
+		}
+		DropShadow(ctx, b, rad, s.Color, 0, s.DY, s.Blur, s.Spread)
+	}
+}
+
+// Black is a shadow colour at alpha a.
+func shadowBlack(a float32) paintengine2d.Color { return paintengine2d.RGBA(0, 0, 0, a) }
+
 // DecorationShadowEngine is an optional engine hook: the drop shadow a
 // window frame casts on the desktop, painted outside the visible window b.
 // An engine without it drops its dialog shadow (PopupDialog), which is the
@@ -269,11 +311,13 @@ func DrawDecorationShadowOf(lk LookAndFeel, ctx *paintengine2d.Context, b painte
 	if lk == nil || ctx == nil || b.Empty() {
 		return
 	}
-	if c, ok := lk.(*Classic); ok && c != nil {
-		if e, ok := c.eng().(DecorationShadowEngine); ok {
-			e.DrawDecorationShadow(c, ctx, b, st)
-			return
-		}
+	// The frame's painter: the engine's own, the plain frame or the
+	// adapter over an in-app window frame — whichever draws this look's
+	// frame also drops its shadow.
+	c, e := decorationFor(lk)
+	if sh, ok := e.(DecorationShadowEngine); ok {
+		sh.DrawDecorationShadow(c, ctx, b, st)
+		return
 	}
 	DrawPopupShadowOf(lk, ctx, b, PopupDialog)
 }
@@ -366,8 +410,22 @@ func (d plainDecoration) Decoration(_ *Classic, st DecorationState) DecorationSp
 		Caption: r(32),
 		Button:  paintengine2d.Pt(r(40), 0),
 		Layout:  "",
-		Shadow:  PopupShadowOf(lk, PopupDialog),
+		// The toolkit's own frame is square — its look is the 95 bevel —
+		// with the soft shadow of a modern desktop under it.
+		Shadow: ShadowLayersReach(plainShadow(lk, DecorationState{Active: true})),
 	}
+}
+
+// plainShadow is the shadow under a plain frame.
+func plainShadow(lk LookAndFeel, st DecorationState) []WindowShadow {
+	if !st.Active {
+		return []WindowShadow{{Color: shadowBlack(0.16), DY: Dip(lk, 2), Blur: Dip(lk, 10)}}
+	}
+	return []WindowShadow{{Color: shadowBlack(0.3), DY: Dip(lk, 6), Blur: Dip(lk, 24)}}
+}
+
+func (d plainDecoration) DrawDecorationShadow(_ *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st DecorationState) {
+	DrawShadowLayers(ctx, b, [4]float32{}, plainShadow(d.lk, st))
 }
 
 func (d plainDecoration) DrawDecoration(_ *Classic, ctx *paintengine2d.Context, f DecorationFrame, st DecorationState) {
@@ -500,8 +558,14 @@ func (frameAdapter) Decoration(l *Classic, st DecorationState) DecorationSpec {
 		Caption:   in.Top,
 		ButtonGap: max(snap(l.S(2)), 1),
 		Layout:    adapterLayouts[l.eng().ID()],
-		Radius:    [4]float32{l.metrics.RadiusSmall, l.metrics.RadiusSmall, 0, 0},
-		Shadow:    l.eng().PopupShadow(l, PopupDialog),
+	}
+	era := adapterEras[l.eng().ID()]
+	if era.rounded {
+		r := l.metrics.RadiusSmall
+		s.Radius = [4]float32{r, r, 0, 0}
+	}
+	if era.shadow {
+		s.Shadow = ShadowLayersReach(adapterShadow(l, DecorationState{Active: true}))
 	}
 	if cr.Empty() {
 		side := snap(max(min(s.Caption-l.S(6), l.S(22)), l.S(12)))
@@ -617,6 +681,40 @@ func (a frameAdapter) DrawCaptionButton(l *Classic, ctx *paintengine2d.Context, 
 		return
 	}
 	DrawCaptionGlyph(ctx, b, k, st.Maximized, fg, side*0.45, max(l.S(1), side/16))
+}
+
+// adapterEra says what an adapted engine's desktop could do for its
+// windows. Before compositing arrived a window manager drew a frame
+// straight on the screen: no shadow under it, and square corners unless
+// the decoration shaped its own (KDE 3's Plastik and Keramik, GNOME 2's
+// Clearlooks and Bluecurve all rounded their title bar's top corners with
+// the Shape extension). Oxygen (KDE 4) and Fusion came with compositing
+// and had real shadows.
+type adapterEra struct{ rounded, shadow bool }
+
+var adapterEras = map[string]adapterEra{
+	"keramik":    {rounded: true},
+	"plastik":    {rounded: true},
+	"clearlooks": {rounded: true},
+	"bluecurve":  {rounded: true},
+	"oxygen":     {rounded: true, shadow: true},
+	"fusion":     {shadow: true},
+}
+
+// adapterShadow is the modest shadow a composited desktop drops under an
+// adapted frame.
+func adapterShadow(l *Classic, st DecorationState) []WindowShadow {
+	if !st.Active {
+		return []WindowShadow{{Color: shadowBlack(0.16), DY: l.S(2), Blur: l.S(10)}}
+	}
+	return []WindowShadow{{Color: shadowBlack(0.3), DY: l.S(6), Blur: l.S(24)}}
+}
+
+func (frameAdapter) DrawDecorationShadow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st DecorationState) {
+	if !adapterEras[l.eng().ID()].shadow {
+		return
+	}
+	DrawShadowLayers(ctx, b, DecorationOf(l, st).Radius, adapterShadow(l, st))
 }
 
 // adapterMenuBox are the engines whose in-app close box is a window menu
