@@ -130,9 +130,8 @@ edge, a caption button — from the last layout, the way Win32's
   row.
 - A modal dialog dims the content, not the caption: the window can still be
   moved, minimized and closed, while the header bar's own controls are inert.
-- Frames are opaque and square: rounded corners, shadows and translucent
-  glass are Phase 3. The spec already carries the look's wishes for them
-  (`Radius`, `Shadow`).
+- A look with a drop shadow puts the window inside a larger surface: see
+  [the shadow's margin](#the-shadows-margin).
 
 Caption buttons are the look's (see [the looks](#the-looks)): sized and
 spaced by the look, hover and pressed states, the restore glyph while
@@ -188,22 +187,25 @@ paints its era's frame by implementing the optional `style.DecorationEngine`
 has its in-app window frame (`DrawWindowFrame`, `WindowCloseRect`) adapted,
 so every pack has a frame in its own look.
 
-| Engines | Frame |
-| --- | --- |
-| `win95` | stacked: the 4 px raised border, the caption bar in the scheme's colour (98's and 2000's gradient), the bold title at its left, bevelled buttons with Marlett-shaped glyphs, close 2 px apart |
-| `luna` | stacked: the scheme's caption gradient, the sizing frame's five lines, the bold shadowed title, XP's glossy 21 px buttons (minimize and maximize in the caption's shade, close red) |
-| `aero` | merged: an opaque approximation of the glass all round, the black title on its glow, the joined button group hanging from the top edge (26 px frosted minimize and maximize that glow blue, the 43 px red close) |
-| `metro` | Windows 8 stacked: the thick flat coloured frame, the centred title, the red close hanging from the top; Windows 10 merged: 46 px flat buttons, red close |
-| `fluent` | merged: Mica, the window stroke, 46 px buttons filling the title bar, WinUI's subtle fills, `#c42b1c` close |
-| `aqua` | stacked: the pinstriped title bar, the centred title, the gel traffic lights |
-| `macos` | merged: 28 px title (52 px unified tool bar), the centred title, 12 px traffic lights |
-| `breeze` | merged: KWin Breeze's look — glyph buttons that fill a circle under the pointer, red for close |
-| `adwaita` | merged: libadwaita's header bar with 24 px round buttons (GTK 3's flat square ones) |
-| `web` | merged: SourceGit's 38 px title bar, 48×30 buttons with a black-25% wash and a pure red close |
-| `motif` | stacked: mwm's resize handles and raised title-bar parts |
-| `flatlaf`, `material` | merged: FlatLaf's title pane; Material's surface with circular icon buttons |
-| `base` | merged: a hairline, flat buttons over the tool face, close red |
-| the others | adapted: their in-app caption as a stacked strip, their own close button, push buttons for the rest |
+The table's corners and shadow are what the era had — the shadow's numbers
+are its reach past the window at 1x, top / right / bottom / left:
+
+| Engines | Frame | Corners | Shadow |
+| --- | --- | --- | --- |
+| `win95` | stacked: the 4 px raised border, the caption bar in the scheme's colour (98's and 2000's gradient), the bold title at its left, bevelled buttons with Marlett-shaped glyphs, close 2 px apart | square | none |
+| `luna` | stacked: the scheme's caption gradient, the sizing frame's five lines, the bold shadowed title, XP's glossy 21 px buttons (minimize and maximize in the caption's shade, close red) | 7 px top | none (XP had none) |
+| `aero` | merged: an opaque approximation of the glass all round, the black title on its glow, the joined button group hanging from the top edge (26 px frosted minimize and maximize that glow blue, the 43 px red close) | 6 px top, 3 bottom | 6/12/18/12 |
+| `metro` | Windows 8 stacked: the thick flat coloured frame, the centred title, the red close hanging from the top; Windows 10 merged: 46 px flat buttons, red close | square | Windows 8 none; Windows 10 5/8/11/8 |
+| `fluent` | merged: Mica, the window stroke, 46 px buttons filling the title bar, WinUI's subtle fills, `#c42b1c` close | 8 px | 7/15/23/15 |
+| `aqua` | stacked: the pinstriped title bar, the centred title, the gel traffic lights | 5 px top | 7/21/35/21 |
+| `macos` | merged: 28 px title (52 px unified tool bar), the centred title, 12 px traffic lights | 10 px (4 before Big Sur) | 7/25/43/25 |
+| `breeze` | merged: KWin Breeze's look — glyph buttons that fill a circle under the pointer, red for close | 3 px top | 9/21/33/21 |
+| `adwaita` | merged: libadwaita's header bar with 24 px round buttons (GTK 3's flat square ones) | 12 px (8 on GTK 3) | 4/7/10/7 |
+| `web` | merged: SourceGit's 38 px title bar, 48×30 buttons with a black-25% wash and a pure red close | 8 px | 7/7/7/7 |
+| `motif` | stacked: mwm's resize handles and raised title-bar parts | square | none |
+| `flatlaf`, `material` | merged: FlatLaf's title pane; Material's surface with circular icon buttons | square | FlatLaf 5/9/13/9; Material's elevation 7/10/14/10 |
+| `base` | merged: a hairline, flat buttons over the tool face, close red | square | 7/13/19/13 |
+| the others | adapted: their in-app caption as a stacked strip, their own close button, push buttons for the rest | rounded top for KDE 3's Plastik and Keramik and GNOME 2's Clearlooks and Bluecurve, square otherwise | Oxygen and Fusion 7/13/19/13, the pre-compositing eras none |
 
 Glyphs, sizes and colours are the look's; the side and order of the
 buttons are the desktop's, unless the user prefers the look's own layout:
@@ -229,6 +231,85 @@ close button hot and pressed, maximize hot, with tabs in the title bar
   content and the caption buttons, which AT-SPI clients can press. Under the
   desktop's frame the header bar is a plain pane (the real title bar is the
   desktop's).
+
+## The shadow's margin
+
+A look that gives its windows a drop shadow (`DecorationSpec.Shadow`: the
+Mac's, GNOME's, Plasma's, Windows 11's) gets a surface larger than the
+window. The band around the visible window — the **margin** — holds the
+shadow and nothing else, and the window system is told where the window
+really is, so nothing outside the toolkit ever measures the shadow:
+
+```
+surface  = the buffer, window + margin        (Surface.Size, SurfaceSize)
+window   = what the user sees and the desktop moves, snaps and tiles
+           (Window.Size, Window.WindowRect; Wayland's window geometry,
+            X11's _GTK_FRAME_EXTENTS)
+margin   = max(the look's shadow reach, the 10 px resize band), per edge,
+           as whole logical pixels; zero where there is no shadow
+```
+
+- **Resize handles live in the shadow**: a band 10 logical px outside the
+  visible window, with 16 px corner zones — Chromium's `kResizeBorder`,
+  GTK's 12 px handle, SourceGit's ring. The rest of the margin is not the
+  window's: a press there goes to whatever is behind it (`set_input_region`
+  on Wayland, an XShape input region on X11). Without a shadow the band
+  stays inside, as before: the look's border, at least 4 px, and the top
+  4 px of the caption.
+- **The corners are cut out of the painted surface** (paintengine2d's
+  dest-out operator), so everything else is still painted rectangular and
+  fast, and the desktop shows through the curve with the shadow around it.
+  The opaque region leaves the corners out, so a compositor never takes a
+  see-through pixel for a solid one.
+- **The shadow costs nothing per frame**: it is rasterised once into a
+  nine-patch — four corner tiles and the one-pixel strips between them,
+  keyed by look, state, scale and margin, so a resize reuses it — and
+  blitted into the margin. Partial redraws are clipped to the visible
+  window, so a hover, a caret or a menu never repaints the margin at all.
+  A window's shadow differs between the active and the backdrop look, but
+  its *reach* is always the active one's: focus never resizes a window.
+- **Everything in window coordinates follows the margin.** Pointer, touch
+  and drop coordinates are the surface's, and the window is laid out inside
+  it, so a widget is where the user sees it; menus, combo lists and
+  tooltips clamp to the window, never into the margin; the caret rectangle
+  the input method gets is surface-local, as text-input wants it;
+  accessible extents are relative to the window; `Capture` (and an app's
+  `-screenshot`) crops to the window, while `CaptureSurface` keeps the
+  shadow.
+
+### Per state
+
+| State | Margin | Corners | Shadow |
+| --- | --- | --- | --- |
+| Restored | the look's, at least the resize band | the look's | yes |
+| Maximized | none | square | none |
+| Full screen | no frame at all | | |
+| Tiled (`xdg_toplevel` `tiled_*`, KWin quick tile) | none on the tiled edges | square where a tiled edge meets | none on those edges |
+| No compositing manager (X11) | none | square | none — `WindowState.Solid`, GTK's `.solid-csd` |
+
+KWin sends `tiled_*` for quick tiles and screen-anchored tiles, so a
+window tiled to the left keeps its shadow only on its free right edge.
+EWMH has no tiled state at all, so an X11 quick tile keeps its shadow (as
+GTK's windows do); `_GTK_FRAME_EXTENTS` still puts the window itself in the
+right place.
+
+### Alpha only where a frame needs it
+
+`Frame.Alpha` is set only when there is a shadow or a rounded corner to
+paint. Without it the buffers stay opaque (`XRGB8888`, an EGL config with
+no alpha, the screen's own visual on X11) and the opaque region is the
+whole surface — the path every window took before Phase 3, so an opaque
+window can never present see-through. With it, the content is still opaque
+to its last pixel: the tests assert alpha = 1 everywhere inside the window
+on the CPU and GPU paths, and the margin is the only place anything
+translucent is painted.
+
+On X11 a translucent frame needs a 32-bit visual, which a window is born
+with: a window that has to change visual is re-created (invisible before
+the first map, which is where a frame is normally decided). Compositing is
+watched through `_NET_WM_CM_S<screen>` with XFixes, so a compositor
+stopping turns every frame solid without a restart, and starting brings the
+shadows back for windows created after it.
 
 ## Who draws the frame
 
@@ -312,14 +393,28 @@ toggle-maximizes on Wayland (X11 does it one way), "lower" works on X11 only,
   either, the title for AT-SPI), tabs in the title bar (a tab is a control,
   the strip caption, the strip's menu, Ctrl+Tab to the app), the theme's
   button layout following the look, the title repainting.
+- The translucent frame: alpha 1 everywhere inside the window (on the CPU
+  and, replaying the recorded scene, on the GPU), shadow pixels only in the
+  margin, the margin and the corners per state (maximized, tiled per edge,
+  uncomposited), the shadow patch reused across resizes and rebuilt when
+  the state changes, partial damage never reaching the margin, and the
+  window coordinates of events, drops, popups, tooltips, the caret
+  rectangle, accessible extents and `Capture`. `platform` tests the margin
+  rounding, the input band and the opaque region's geometry.
 - `UITK_DECORATIONS=client` gives headless screenshots with the toolkit's
-  frame; `uitk-themesheet -frames` renders every pack's frames.
+  frame; `uitk-themesheet -frames` renders every pack's frames, over a desk
+  colour so their shadows show.
 - End to end in the nested-KWin rig ([tools/e2e](../tools/e2e/README.md)):
   `UITK_DECORATIONS=client ./run.sh N examples-mail-binary`, drags and
   resizes with `in.sh`, window geometry and state from `./kwin.py`, protocol
   traces with `WAYLAND_DEBUG=1`; `UITK_BACKEND=x11` for the X11 path on the
   instance's Xwayland. `UITK_XDG_DECORATION=0` makes the Wayland backend
   ignore `zxdg_decoration_manager_v1`: GNOME's path, on KWin.
+  `./kwin.py N` is the oracle for the margin: `bufferGeometry` minus
+  `frameGeometry` is exactly it, and it goes when the window is maximized.
+  Put a second window behind one with a shadow to see the shadow composite
+  and to check that a click in the outer margin reaches it, while one in
+  the resize band resizes.
 
 ## Phases
 
@@ -333,12 +428,13 @@ toggle-maximizes on Wayland (X11 does it one way), "lower" works on X11 only,
    stacked title bars, a restore glyph per engine, `"captionButtons":
    "theme"`, and document tabs in the title bar (`widgets.BrowserTabs`,
    Files).
-4. **Phase 3**: shadows and rounded corners — ARGB buffers,
-   `set_window_geometry`, input and opaque regions, `_GTK_FRAME_EXTENTS`,
+4. **Phase 3** (done): shadows and rounded corners — alpha buffers where a
+   frame needs them (`wl_shm` ARGB8888, an EGL alpha config, an X11 32-bit
+   visual with compositing-manager detection), `set_window_geometry`, input
+   and opaque regions, `_GTK_FRAME_EXTENTS` and an XShape input region,
    resize handles in the shadow, per-edge variants for tiled windows, a
-   solid frame without a compositing manager.
+   solid frame without a compositing manager, and every window coordinate —
+   events, popups, the caret rectangle, accessibility, screenshots —
+   following the margin ([the shadow's margin](#the-shadows-margin)).
 5. **Phase 4**: KWin's server-decoration palette, `xdg-toplevel-icon`,
    `_NET_WM_SYNC_REQUEST`, tab tear-off, Windows and macOS mappings.
-
-Until Phase 3 the toolkit's frame is square and shadowless, and the
-window's geometry includes the look's border.
