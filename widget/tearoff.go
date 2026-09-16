@@ -26,8 +26,8 @@ type TearOffWindow interface {
 	// Surface is the window's native surface: the drag attaches it, so
 	// the desktop carries the window under the pointer.
 	Surface() platform.Surface
-	// Close destroys the window. A cancelled tear-off, and one merged
-	// into another window, close the window the tear-off made.
+	// Close destroys the window, which is what a source does with one
+	// whose content has gone somewhere else ([TearOff.Done]).
 	Close()
 }
 
@@ -41,9 +41,10 @@ const (
 	// TearKept: the pointer was let go where nothing took the drop. The
 	// window stays where the desktop put it, holding the content.
 	TearKept
-	// TearMerged: a target took the drop — another window's tab strip,
-	// the dock host the panel came from. Whoever took it holds the
-	// content now and the torn-off window is closed.
+	// TearMerged: a target took the content away (it performed a move) —
+	// another window's tab strip, the dock host the panel came from.
+	// Whoever took it holds it now, so the window that carried it has
+	// nothing left in it.
 	TearMerged
 )
 
@@ -61,10 +62,12 @@ type TearOff struct {
 	// Offset is where in that window the pointer sits, in the window's
 	// own coordinates, so the window does not jump as it is picked up.
 	Offset paintengine2d.Point
-	// Done is how it ended. The window is closed for TearMerged and
-	// TearCancelled before Done runs, so a source has only its own
-	// content to put back.
-	Done func(TearResult)
+	// Done is how it ended, with the window it ended with (nil when none
+	// was ever opened). Closing that window is the source's: a merged
+	// tear-off's window has nothing left in it and a cancelled one should
+	// never have existed, while a window the drag only moved — a floating
+	// panel dragged back to its host — is the panel's own and stays.
+	Done func(res TearResult, win TearOffWindow)
 }
 
 // TearOffHost is implemented by app.Window: start a drag that carries a

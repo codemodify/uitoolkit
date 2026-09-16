@@ -13,12 +13,17 @@ import (
 //
 // Three ways it can end, and the window's fate differs in each:
 //
-//	merged    a target took the drop — another window's tab strip, the
-//	          dock host — so the window it was carried in is closed
+//	merged    a target took the content away — another window's tab
+//	          strip, the dock host — so the window it was carried in has
+//	          nothing left in it
 //	kept      the pointer was let go over nothing: the window stays
 //	          where the desktop left it
-//	cancelled Escape, or the drag never started: the window closes and
-//	          the source takes its content back
+//	cancelled Escape, or the drag never started: nothing happened and the
+//	          source takes its content back
+//
+// What becomes of the window is the source's ([widget.TearOff.Done]): the
+// one case where it must live on is a window the drag only moved, and
+// only the source knows that it did.
 //
 // Who moves the window under the pointer is the desktop's: a Wayland
 // compositor with xdg-toplevel-drag-v1 carries it, and on X11 the toolkit
@@ -111,11 +116,15 @@ func (r *dragRun) openTorn(t *widget.TearOff) bool {
 	return true
 }
 
-// finishTear is what became of a tear-off's window once the drag is over.
-// A target took the drop, so the window that carried it goes; or the
-// pointer was let go over nothing, so the window stays — and is opened
-// now if the desktop could not carry it; or the drag was called off and
-// nothing happened at all.
+// finishTear is what became of a tear-off once the drag is over. A target
+// took the content away, so the window that carried it has nothing left
+// in it; or the pointer was let go over nothing, so the window stays —
+// and is opened now if the desktop could not carry it; or the drag was
+// called off and nothing happened at all.
+//
+// Only a move takes the content: a target that copied it — a file manager
+// taking the folder behind a tab — leaves the torn-off window standing,
+// which is what a copy means.
 func (r *dragRun) finishTear(action platform.DragAction) {
 	if r == nil || r.tear == nil {
 		return
@@ -124,7 +133,7 @@ func (r *dragRun) finishTear(action platform.DragAction) {
 	r.tear = nil
 	res := widget.TearCancelled
 	switch {
-	case action != platform.DragNone:
+	case action.Has(platform.DragMove):
 		res = widget.TearMerged
 	case r.dropped:
 		res = widget.TearKept
@@ -134,11 +143,9 @@ func (r *dragRun) finishTear(action platform.DragAction) {
 			res = widget.TearCancelled
 		}
 	}
-	if res != widget.TearKept && r.torn != nil {
-		r.torn.Close()
-	}
+	win := r.torn
 	r.torn = nil
 	if t.Done != nil {
-		t.Done(res)
+		t.Done(res, win)
 	}
 }
