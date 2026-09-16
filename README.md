@@ -59,7 +59,11 @@ go get github.com/codemodify/paintengine2d@v0.9.0
     SourceGit's flat cells — handing moves, resizes and the window menu to
     the desktop; "Use system title bar and borders" gives the desktop's
     frame back. See [docs/decorations.md](docs/decorations.md).
-  - Takes files and text dropped from other apps (Wayland).
+  - Drag and drop both ways on both backends: takes files and text
+    dropped from other apps, and drags its own out to them — with a drag
+    icon, copy / move / link, and a payload that stays in-process for a
+    drag between its own views (`wl_data_device` on Wayland, XDND on
+    X11).
   - Offers system-tray items.
 - **Accessibility.** An accessibility tree for every window, an audit
   (`a11y.Check`) for app tests, and an AT-SPI2 bridge, so Orca and other

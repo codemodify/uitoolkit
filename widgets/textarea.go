@@ -13,19 +13,26 @@ import (
 // does not accept keyboard text input.
 type TextArea struct {
 	widget.Base
-	Text         string
-	Placeholder  string
-	Wrap         bool
-	ReadOnly     bool
-	MinRows      int
-	OnChange     func(string)
-	OnFocusLost  func()
-	Accept       func(string) bool
-	Mono         bool
-	caret        int
-	selA, selB   int
-	blinkOn      bool
-	dragging     bool
+	Text        string
+	Placeholder string
+	Wrap        bool
+	ReadOnly    bool
+	MinRows     int
+	OnChange    func(string)
+	OnFocusLost func()
+	Accept      func(string) bool
+	Mono        bool
+	caret       int
+	selA, selB  int
+	blinkOn     bool
+	dragging    bool
+	// dragSel is a press inside the selection waiting to become a drag of
+	// that text (drag.go); dragAt is where it landed, so a press that
+	// stays a click still moves the caret there. selfDrop records a drop
+	// of our own drag back into this same widget.
+	dragSel      bool
+	selfDrop     bool
+	dragAt       int
 	scrollX      float32
 	scrollY      float32
 	lines        []style.TextLine
@@ -611,9 +618,17 @@ func (t *TextArea) MousePress(e widget.MouseEvent) bool {
 		t.replaceSel(platform.ClipboardPrimaryGet())
 		return true
 	}
+	// A press inside the selection may be the start of a drag of that
+	// text: the caret does not move and the selection stays until the
+	// release, when it collapses if no drag took it.
+	at := t.indexAt(e.Pos.X, e.Pos.Y)
+	if !e.Mods.Shift() && pressInSelection(at, t.selA, t.selB) {
+		t.dragSel, t.selfDrop, t.dragAt = true, false, at
+		return true
+	}
 	t.dragging = true
 	t.havePref = false
-	t.caret = t.indexAt(e.Pos.X, e.Pos.Y)
+	t.caret = at
 	if e.Mods.Shift() {
 		t.selB = t.caret
 	} else {
@@ -638,6 +653,11 @@ func (t *TextArea) MouseMove(e widget.MouseEvent) bool {
 			}
 		}
 	}
+	if t.dragSel {
+		// Waiting to see whether this press becomes a drag of the
+		// selection; it must not extend it in the meantime.
+		return true
+	}
 	if !t.dragging && e.Button != platform.ButtonLeft {
 		return false
 	}
@@ -649,6 +669,16 @@ func (t *TextArea) MouseMove(e widget.MouseEvent) bool {
 }
 
 func (t *TextArea) MouseRelease(widget.MouseEvent) bool {
+	if t.dragSel {
+		// The press inside the selection never became a drag: it was a
+		// click, and a click puts the caret where it landed.
+		t.dragSel, t.havePref = false, false
+		t.caret = t.dragAt
+		t.selA, t.selB = t.caret, t.caret
+		t.ensureCaretVisible()
+		t.Invalidate()
+		return true
+	}
 	t.dragging = false
 	v, h := t.vbar.release(), t.hbar.release()
 	if v || h {

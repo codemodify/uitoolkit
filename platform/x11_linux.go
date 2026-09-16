@@ -936,6 +936,9 @@ func (X11Backend) NewSurface(opts WindowOptions) (Surface, error) {
 	}
 	s.rebuildImageLocked()
 	c.surfaces[win] = s
+	// XdndAware goes on the toplevel window before it is mapped, so a
+	// drag over it finds a target from the very first frame.
+	s.setXdndAwareLocked()
 	x11Mu.Unlock()
 	s.tryBindGPU()
 	return s, nil
@@ -1009,6 +1012,13 @@ type x11Conn struct {
 
 	// cursors caches one X cursor per shape.
 	cursors map[Cursor]C.Cursor
+
+	// XDND (x11_dnd_linux.go): the interned atoms, the drag another
+	// client has over one of our windows, and the drag one of them
+	// started.
+	xdnd xdndAtoms
+	drop x11Drop
+	drag x11Drag
 }
 
 type x11Surface struct {
@@ -1627,6 +1637,14 @@ func (c *x11Conn) drainLocked() {
 		if t := C.ui_event_time(&xe); t != 0 {
 			c.serverTime = t
 		}
+		// A drag of ours holds the pointer and the keyboard: the motion,
+		// the release and Escape are the drag's, not any widget's — and
+		// not the input method's either, which is why this comes before
+		// XFilterEvent. A composing XIM swallowed the Escape that was
+		// meant to cancel the drag.
+		if c.drag.active && c.dragHandle(&xe) {
+			continue
+		}
 		if C.ui_filter(c.dpy, &xe) != 0 {
 			continue
 		}
@@ -1635,6 +1653,10 @@ func (c *x11Conn) drainLocked() {
 			continue
 		}
 		switch C.ui_event_type(&xe) {
+		case C.ClientMessage:
+			if c.handleXdndMessage(&xe) {
+				continue
+			}
 		case C.SelectionRequest:
 			c.handleSelReq(&xe)
 			continue
@@ -1661,6 +1683,11 @@ func (c *x11Conn) drainLocked() {
 		}
 		c.queues[win] = append(c.queues[win], s.translate(&xe)...)
 	}
+	// A target that took a drop and never answered must not hold the
+	// drag — and the user's move — open for the rest of the session;
+	// and Escape ends a drag even where the grab never delivers it.
+	c.dragCheckEscape()
+	c.dragTimedOut()
 }
 
 func (s *x11Surface) translate(xe *C.XEvent) []Event {
@@ -1797,6 +1824,16 @@ func (s *x11Surface) Close() error {
 		s.conn.unregister(s.win)
 	}
 	x11Mu.Lock()
+	// A window that is going cannot finish a drag it started or a drop
+	// it was taking; both sides have to be let go of.
+	if s.conn != nil {
+		if s.conn.drag.active && s.conn.drag.win == s.win {
+			s.conn.dragCancel()
+		}
+		if s.conn.drop.active && s.conn.drop.win == s.win {
+			s.conn.xdndEnd(false)
+		}
+	}
 	if s.ic != nil {
 		C.ui_destroy_ic(s.ic)
 		s.ic = nil
@@ -2021,6 +2058,13 @@ type incrSendState struct {
 }
 
 func (c *x11Conn) handleSelReq(xe *C.XEvent) {
+	// A drag of ours owns XdndSelection while it runs and answers for
+	// it itself; the clipboard knows nothing about that selection.
+	if c.drag.active && C.ui_sr_selection(xe) == c.xdnd.at(XASelection) {
+		if c.dragSelRequest(xe) {
+			return
+		}
+	}
 	req := C.ui_sr_requestor(xe)
 	target := C.ui_sr_target(xe)
 	prop := C.ui_sr_property(xe)
@@ -2083,6 +2127,11 @@ func (c *x11Conn) handleSelReq(xe *C.XEvent) {
 
 func (c *x11Conn) handleSelClear(xe *C.XEvent) {
 	sel := C.ui_sc_selection(xe)
+	if c.drag.active && sel == c.xdnd.at(XASelection) {
+		// Another client took the drag selection: ours cannot complete.
+		c.dragCancel()
+		return
+	}
 	if sel == c.atomClipboard {
 		c.ownClip = false
 	}
@@ -2096,6 +2145,9 @@ func (c *x11Conn) handleSelClear(xe *C.XEvent) {
 }
 
 func (c *x11Conn) handleSelNotify(xe *C.XEvent) {
+	if c.xdndSelNotify(xe) {
+		return
+	}
 	prop := C.ui_sn_property(xe)
 	if prop == 0 {
 		c.pasteDone = true
@@ -2143,6 +2195,11 @@ func (c *x11Conn) handleProperty(xe *C.XEvent) {
 			C.ui_xfree(unsafe.Pointer(data))
 		} else if data != nil {
 			C.ui_xfree(unsafe.Pointer(data))
+		}
+		// A drop's data arrives in the same pieces as a paste's, into
+		// its own buffer.
+		if c.xdndIncrPiece(piece) {
+			return
 		}
 		var done bool
 		c.incrRecv.buf, done = AppendINCRPiece(c.incrRecv.buf, piece)
@@ -2906,6 +2963,9 @@ func (s *x11Surface) recreateOnVisual(argb bool) {
 	s.ic, s.ximCbs = x11CreateIC(c.im, s.win)
 	c.surfaces[s.win] = s
 	s.setMotifLocked()
+	// A new window on another visual is a new X window: it takes drops
+	// only once it says so again.
+	s.setXdndAwareLocked()
 	s.mapped = false
 	s.rebuildImageLocked()
 	if mapped && !s.hidden {

@@ -44,7 +44,11 @@ type Application struct {
 	headless  bool
 	backend   platform.Backend
 	windows   []*Window
-	quit      atomic.Bool
+	// drag is the drag running out of one of these windows, if any. It
+	// belongs to the application, not to a window: a drag started in one
+	// is dropped on another, and a desktop carries only one at a time.
+	drag *dragRun
+	quit atomic.Bool
 	// trimOwed, stir: see trim.go. trimAt and stirSeen belong to the run
 	// loop.
 	trimOwed         atomic.Bool

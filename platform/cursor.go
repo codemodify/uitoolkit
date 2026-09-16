@@ -27,6 +27,14 @@ const (
 	CursorMove
 	CursorGrab
 	CursorGrabbing
+	// The drag shapes: what a drop here would do, and CursorNoDrop where
+	// nothing takes it. A drag the desktop moves (Wayland, and any
+	// compositor that draws the drag itself) shows its own; these are
+	// what an X11 drag source sets on its pointer grab.
+	CursorDragCopy
+	CursorDragMove
+	CursorDragLink
+	CursorNoDrop
 )
 
 var cursorNames = [...]string{
@@ -35,6 +43,22 @@ var cursorNames = [...]string{
 	CursorResizeE: "e-resize", CursorResizeW: "w-resize", CursorResizeNE: "ne-resize",
 	CursorResizeNW: "nw-resize", CursorResizeSE: "se-resize", CursorResizeSW: "sw-resize",
 	CursorMove: "move", CursorGrab: "grab", CursorGrabbing: "grabbing",
+	CursorDragCopy: "copy", CursorDragMove: "move", CursorDragLink: "alias",
+	CursorNoDrop: "no-drop",
+}
+
+// DragCursor is the pointer shape for what a drop would do here: the
+// action's own shape, and "no drop" where nothing takes it.
+func DragCursor(a DragAction) Cursor {
+	switch a.One() {
+	case DragCopy:
+		return CursorDragCopy
+	case DragMove:
+		return CursorDragMove
+	case DragLink:
+		return CursorDragLink
+	}
+	return CursorNoDrop
 }
 
 func (c Cursor) String() string {
@@ -49,7 +73,10 @@ const (
 	wlShapeDefault   uint32 = 1
 	wlShapePointer   uint32 = 4
 	wlShapeText      uint32 = 9
+	wlShapeAlias     uint32 = 11
+	wlShapeCopy      uint32 = 12
 	wlShapeMove      uint32 = 13
+	wlShapeNoDrop    uint32 = 14
 	wlShapeGrab      uint32 = 16
 	wlShapeGrabbing  uint32 = 17
 	wlShapeEResize   uint32 = 18
@@ -96,6 +123,14 @@ func waylandCursorShape(c Cursor) uint32 {
 		return wlShapeGrab
 	case CursorGrabbing:
 		return wlShapeGrabbing
+	case CursorDragCopy:
+		return wlShapeCopy
+	case CursorDragMove:
+		return wlShapeMove
+	case CursorDragLink:
+		return wlShapeAlias
+	case CursorNoDrop:
+		return wlShapeNoDrop
 	default:
 		return wlShapeDefault
 	}
@@ -115,6 +150,13 @@ var edgeThemeNames = map[Cursor][]string{
 	CursorMove:     {"move", "fleur", "size_all", "all-scroll"},
 	CursorGrab:     {"grab", "openhand", "hand1"},
 	CursorGrabbing: {"grabbing", "closedhand", "fleur"},
+	// The drag shapes go by their CSS names in a modern theme and by the
+	// old X ones in the themes that predate them; "dnd-none" is what a
+	// refused drop is called in several themes that have no "no-drop".
+	CursorDragCopy: {"copy", "dnd-copy", "copyright"},
+	CursorDragMove: {"dnd-move", "move", "fleur"},
+	CursorDragLink: {"alias", "dnd-link", "link"},
+	CursorNoDrop:   {"no-drop", "dnd-none", "forbidden", "circle"},
 }
 
 func waylandThemeCursorNames(c Cursor) []string {

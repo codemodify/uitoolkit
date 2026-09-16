@@ -1756,6 +1756,7 @@ func (s *session) rebuildAttachRows() {
 	for i, name := range s.attNames {
 		i, name := i, name
 		hit := newAttachHit("📎  "+name, func() { s.selectAttachment(i) })
+		hit.Drag = func() *widget.Drag { return s.dragAttachment(i) }
 		open := widgets.NewButton("Open", func() {
 			s.attachSel = i
 			s.paintAttachSelection()
@@ -1991,12 +1992,15 @@ type attachBlob struct {
 	Data []byte
 }
 
-// attachHit is the clickable name on an attachment row (select; double-click opens).
+// attachHit is the clickable name on an attachment row (select; double-click
+// opens; dragging it out hands the file to another application).
 type attachHit struct {
 	widget.Base
 	Text     string
 	Selected bool
 	OnPress  func()
+	// Drag is what a press on the row drags out (attach_drag.go).
+	Drag func() *widget.Drag
 }
 
 func attachFileName(name string) string {
