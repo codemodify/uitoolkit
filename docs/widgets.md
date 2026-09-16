@@ -134,6 +134,7 @@ names) is in [compare.md](compare.md).
 | Panel | `Panel` | `QGroupBox` / `GroupBox` | `GtkFrame` | `HeaderedContentControl` ≈ | `widget.Card` ≈ | `GroupBox` | `GroupBox` | `NSBox` | `GroupBox` | [thumb](screenshots/compare/panel.png) |
 | Scroll | `ScrollView` | `QScrollArea` / `ScrollView` | `GtkScrolledWindow` | `ScrollViewer` | `container.Scroll` | `AutoScroll` | `ScrollViewer` | `NSScrollView` | `ScrollView` | [thumb](screenshots/compare/scrollview.png) · [gallery](screenshots/gallery-scroll.png) |
 | Splitter | `Splitter` | `QSplitter` / `SplitView` | `GtkPaned` | `GridSplitter` | `container.Split` | `SplitContainer` | `GridSplitter` | `NSSplitView` | `HSplitView` / `VSplitView` | [thumb](screenshots/compare/splitter.png) |
+| Dockable panels | `dock.Host` + `dock.Panel` (four areas, tabs, float, saved layout) | `QMainWindow::addDockWidget` + `QDockWidget` | — (`GtkPaned` / `AdwToolbarView` ≈) | `Dock.Avalonia` (third party) ≈ | — | `DockPanel` (docking only, no float / tab) ≈ | `DockPanel` ≈ | — | — | — |
 | Overlay | `Overlay` / `DialogCard` | `QDialog` ≈ | `GtkOverlay` | `Overlay` / `Popup` | dialog overlay ≈ | — | `Popup` | `NSPanel` ≈ | `overlay` / `sheet` | [gallery](screenshots/gallery-dialog.png) |
 | Expander | `Expander` | `QToolBox` page ≈ | `GtkExpander` | `Expander` | accordion item ≈ | — | `Expander` | `NSDisclosureTriangle` ≈ | `DisclosureGroup` | [thumb](screenshots/compare/accordion.png) |
 | Accordion | `Accordion` | `QToolBox` ≈ | `GtkExpander` stack ≈ | `Expander` stack ≈ | `widget.Accordion` | — | `Expander` stack ≈ | — | `DisclosureGroup` stack ≈ | [thumb](screenshots/compare/accordion.png) · [gallery](screenshots/gallery-accordion.png) |
@@ -210,6 +211,73 @@ XDG desktop portal's FileChooser, as Qt and GTK apps do, and as sandboxed
 (Flatpak) apps must. `Filter`, the starting `Path` and Save mode carry
 over. `OnPick` or `OnCancel` run on the UI goroutine when the user is done.
 Without a portal the toolkit's dialog shows.
+
+## Dockable panels
+
+`dock.NewHost(centre)` is a central widget with dock areas on its four
+sides — Qt's `QMainWindow` docking, the panels of VS Code, Qt Creator and
+the JetBrains IDEs. `dock.NewPanel(name, title, content)` makes a panel and
+`host.Dock(panel, dock.SideLeft)` puts it in an area. The Inspector demo is
+the pilot: `go run ./examples/inspector`.
+
+A panel's title bar carries its name, a drag handle and buttons for
+collapse, float and close; `SetFeatures` takes any of them away, as Qt's
+`setFeatures` does. Panels dropped onto each other share a box and grow a
+tab strip; panels dropped beside each other split it. Every pane honours
+its own `SetMinSize` (a design size, so it grows on a HiDPI screen): space
+is shared by weight, a pane that would fall under its minimum takes the
+minimum and the rest share what is left, and a sash stops rather than
+squeeze a neighbour past it. Collapsing a panel leaves its title bar and
+gives the room back to the others.
+
+Dragging a title bar shows where the panel would land, marked in the pack's
+own accent (`style.DrawDropIndicatorOf`, overridable per look with
+`style.DockLook`):
+
+- the thin band along the host's border — a new area down that whole side;
+- the middle of a pane — the panel joins it as another tab;
+- a pane's edges — the panel splits it, above, below or beside;
+- off the host — the panel floats.
+
+Escape gives the drag up.
+
+**Floating.** With an opener (`app.DockHost(win, host)`, or
+`host.SetWindowOpener(app.DockWindows(a))`) a panel floats in a real
+toplevel the desktop moves, resizes and stacks, wearing whichever frame the
+app's decoration setting asks for — see [decorations.md](decorations.md).
+It keeps the same title bar it had docked, whose float button now offers to
+dock it back, and dropping it on the host docks it where it lands. Without
+an opener nothing floats and no float button appears, so a headless app
+needs no special case.
+
+**Keyboard and accessibility.** Tab reaches every title bar, its buttons
+and the tab strip; arrow keys walk the buttons and the tabs, Space and
+Return press one. F6 moves the focus from one panel to the next (Shift+F6
+back, as Windows and Qt Creator do) and Ctrl+W closes the panel the
+keyboard is in. A rule in the accent under a title bar says which panel
+that is. Panels are `RoleGroup` named by their title, stacks `RolePane` or
+`RoleTabPanel`, tabs `RoleTabList` / `RoleTab`, and each sash is a
+`RoleSplitter` named for the two panes it lies between, with its position
+as a 0..1 range that assistive technology can read.
+
+**Layouts.** `host.LayoutJSON()` writes the whole arrangement — areas,
+splits, tab order, sash shares, closed and collapsed panels, floating
+geometry — and `host.ApplyLayoutJSON(b)` reads it back. Panels are named by
+their component name (`SetName`, as Qt saves docks by `objectName`), so
+retitling one keeps its place. A layout that names a panel the app no
+longer has skips it, and one that forgets a panel docks it where it is, so
+an app that gained a panel still comes up with all of them; a layout from
+another version of the format is refused whole, with `ErrLayoutVersion`, so
+the app can fall back. `SetDefaultLayout` records the arrangement an app
+ships with and `ResetLayout` goes back to it.
+
+The floating geometry a layout saves is best effort: a client is not told
+where the desktop put its windows, and a Wayland client cannot ask for a
+position at all, so the size comes back exactly and the position only where
+the window manager honours it (X11). Tearing a panel off through the
+compositor — dragging it straight out of the window with
+`xdg-toplevel-drag`, so the pointer never lets go — is not done;
+`dock.WindowOpener` is where it would go.
 
 ## Drops from other apps
 

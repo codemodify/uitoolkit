@@ -7,6 +7,9 @@
 //	app       — event-driven run loop, retained scene (UITK_SCENE), windows, DPI, input routing
 //	widget    — Component tree, focus, hit-test, Invalidate / Damage
 //	layout    — row, column, stack, flex
+//	dock      — dockable panels: a central widget with dock areas on its four
+//	            sides, panels that split, tab, collapse, float in windows of
+//	            their own, and a layout saved and read back as JSON
 //	widgets   — Button, Label, TextField, TextArea, TextView, NumberField, Checkbox,
 //	            Switch, Slider, ScrollView, MenuBar, TabView, TreeView,
 //	            TableView, CardList, StatusBar, ToolBar, ComboBox, ProgressBar,
