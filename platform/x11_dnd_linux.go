@@ -23,6 +23,7 @@ package platform
 #include <X11/Xutil.h>
 #include <X11/Xatom.h>
 #include <X11/XKBlib.h>
+#include <X11/keysym.h>
 #include <X11/extensions/shape.h>
 #include <X11/extensions/Xrender.h>
 #include <poll.h>
@@ -308,6 +309,21 @@ static int ui_x_grab_kbd(Display* d, Window w, Time t) {
 }
 static void ui_x_ungrab_kbd(Display* d) { if (d) XUngrabKeyboard(d, CurrentTime); }
 
+// ui_x_escape_held asks the server which keys are down, rather than
+// waiting for a key event. A drag holds a keyboard grab, and there are
+// setups where a grabbed key event never reaches the client at all
+// (Xwayland hands the grab to the compositor); the key's state is still
+// there to be read.
+static int ui_x_escape_held(Display* d) {
+	char keys[32];
+	KeyCode kc;
+	if (!d) return 0;
+	kc = XKeysymToKeycode(d, XK_Escape);
+	if (kc == 0) return 0;
+	XQueryKeymap(d, keys);
+	return (keys[kc >> 3] & (1 << (kc & 7))) != 0;
+}
+
 // ---- the drag's picture --------------------------------------------------------
 
 // ui_x_argb finds a 32-bit visual with an alpha channel, and a colormap
@@ -404,11 +420,24 @@ static void ui_x_free_colormap(Display* d, Colormap c) { if (d && c) XFreeColorm
 import "C"
 
 import (
+	"fmt"
+	"os"
 	"time"
 	"unsafe"
 
 	"github.com/codemodify/paintengine2d"
 )
+
+// xdndDebug traces a drag's progress to stderr (UITK_XDND_DEBUG=1). A
+// drag is a conversation with another application, and when one goes
+// wrong there is nothing on screen to say which half stopped talking.
+var xdndDebug = os.Getenv("UITK_XDND_DEBUG") == "1"
+
+func xdndTrace(format string, args ...any) {
+	if xdndDebug {
+		fmt.Fprintf(os.Stderr, "uitk-xdnd: "+format+"\n", args...)
+	}
+}
 
 // xdndAtoms are the interned XDND atoms, plus the two properties this
 // implementation keeps for itself: one a drop's data arrives in, one a
@@ -950,13 +979,20 @@ func (s *x11Surface) StartDrag(p DragPayload) bool {
 		C.ui_x_prop32(c.dpy, s.win, c.xdnd.at(XAActionList), C.XA_ATOM, &list[0], C.int(len(list)))
 	}
 	c.drag = x11Drag{active: true, payload: p, win: s.win, cursor: CursorNoDrop}
+	xdndTrace("drag started, offering %v", p.Types)
 	c.keep = true
-	if C.ui_x_grab_ptr(c.dpy, s.win, c.xcursor(CursorNoDrop), when) != C.GrabSuccess {
+	if r := C.ui_x_grab_ptr(c.dpy, s.win, c.xcursor(CursorNoDrop), when); r != C.GrabSuccess {
+		// Without the pointer there is no drag: something else has it.
+		xdndTrace("pointer grab refused: %d", int(r))
 		c.dragEnd(DragNone)
 		return false
 	}
 	// The keyboard too, so Escape reaches us wherever the pointer is.
-	C.ui_x_grab_kbd(c.dpy, s.win, when)
+	if r := C.ui_x_grab_kbd(c.dpy, s.win, when); r != C.GrabSuccess {
+		// Not fatal: the drag runs on the pointer grab alone, and
+		// dragCheckEscape still calls it off.
+		xdndTrace("keyboard grab refused: %d", int(r))
+	}
 	c.dragMakeIcon(s, p)
 	c.dragMotionTo(rootPointer(c))
 
@@ -1169,6 +1205,7 @@ func (c *x11Conn) dragEnd(action DragAction) {
 	if !c.drag.active {
 		return
 	}
+	xdndTrace("drag ended, the target performed %v", action)
 	win := c.drag.win
 	c.dragRelease_ungrab()
 	if c.dpy != nil && win != 0 {
@@ -1187,6 +1224,18 @@ func (c *x11Conn) dragEnd(action DragAction) {
 		// The drag ended between polls; wake the loop so the source
 		// hears about it without waiting for the next input.
 		C.ui_x_wake(c.dpy, c.helper)
+	}
+}
+
+// dragCheckEscape cancels a drag whose Escape never arrived as a key
+// event. The grab is the first way Escape is seen and this the second:
+// between them a drag can always be called off.
+func (c *x11Conn) dragCheckEscape() {
+	if !c.drag.active || c.drag.dropped || c.dpy == nil {
+		return
+	}
+	if C.ui_x_escape_held(c.dpy) != 0 {
+		c.dragCancel()
 	}
 }
 
