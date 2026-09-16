@@ -84,6 +84,11 @@ func (h *Host) tearOffPanel(pan *Panel, from *Stack, grab, at paintengine2d.Poin
 			return floatTearWindow(pan)
 		},
 		Done: func(res widget.TearResult, _ widget.TearOffWindow) {
+			// Nothing is being dragged any more, so nothing is marked:
+			// the desktop can deliver a last motion after the drop, and
+			// the indicator would be left standing over the layout it
+			// helped make.
+			h.hideIndicator()
 			switch res {
 			case widget.TearCancelled:
 				// Nothing happened: the panel goes back where it was,
@@ -128,6 +133,7 @@ func (h *Host) dragFloatingPanel(c widget.Component, pan *Panel, at paintengine2
 		Offset: widget.DeviceOrigin(c).Add(at),
 		Open:   func() widget.TearOffWindow { return win },
 		Done: func(res widget.TearResult, _ widget.TearOffWindow) {
+			h.hideIndicator()
 			// The window is the panel's own: docking back closes it
 			// (Host.Drop), and anything else leaves it standing where the
 			// desktop put it — which is worth remembering.
