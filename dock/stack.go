@@ -390,20 +390,28 @@ func (h *stackHead) canFloat() bool {
 	return host != nil && host.opener != nil
 }
 
-// btnSize is the side of a title bar button's box.
+// btnSize is the width of a title bar button's box. It is narrower than
+// the bar is tall — three square buttons at the bar's height would eat a
+// narrow sidebar's title, and Qt's and Visual Studio's dock buttons are
+// slim for the same reason.
 func (h *stackHead) btnSize() float32 {
 	s := h.LocalBounds().Dy()
 	if s <= 0 {
 		s = h.stack.headH()
 	}
+	if wide := style.Dip(h.Look(), 18); s > wide {
+		s = wide
+	}
 	return s
 }
 
-// buttonRect is the box of the i'th button of buttons().
+// buttonRect is the box of the i'th button of buttons(), counted from the
+// right edge.
 func (h *stackHead) buttonRect(i int) paintengine2d.Rect {
 	b := h.LocalBounds()
 	sz := h.btnSize()
-	x := b.Max.X - float32(i+1)*sz
+	pad := style.Dip(h.Look(), 2)
+	x := b.Max.X - pad - float32(i+1)*sz
 	return paintengine2d.XYWH(x, b.Min.Y, sz, b.Dy())
 }
 
@@ -412,7 +420,7 @@ func (h *stackHead) titleRect() paintengine2d.Rect {
 	b := h.LocalBounds()
 	n := float32(len(h.buttons()))
 	pad := style.Dip(h.Look(), 6)
-	right := b.Max.X - n*h.btnSize()
+	right := b.Max.X - pad - n*h.btnSize()
 	return paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, maxF(0, right-b.Min.X-pad), b.Dy())
 }
 
