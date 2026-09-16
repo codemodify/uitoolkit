@@ -14,6 +14,7 @@ import (
 
 	"github.com/godbus/dbus/v5"
 
+	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/a11y"
 	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/widget"
@@ -643,15 +644,22 @@ func (a atspiApplication) GetLocale(msg dbus.Message, lctype uint32) (string, *d
 
 type atspiComponent struct{ b *atspiBridge }
 
-// extents is o's box in logical pixels. Screen coordinates (0) are the
-// window's too: a Wayland client cannot know where its window is.
+// extents is o's box in logical pixels, relative to the visible window —
+// the margin a frame the toolkit draws keeps for its shadow is not part of
+// the window as far as anything outside is concerned. Screen coordinates
+// (0) are the window's too: a Wayland client cannot know where its window
+// is.
 func (o *atspiObj) extents() atspiRect {
 	r := o.node.Bounds
 	s := float32(1)
-	if o.win != nil && o.win.scale > 0 {
-		s = o.win.scale
+	var org paintengine2d.Point
+	if o.win != nil {
+		if o.win.scale > 0 {
+			s = o.win.scale
+		}
+		org = o.win.WindowRect().Min
 	}
-	return atspiRect{int32(r.Min.X / s), int32(r.Min.Y / s), int32(r.Dx() / s), int32(r.Dy() / s)}
+	return atspiRect{int32((r.Min.X - org.X) / s), int32((r.Min.Y - org.Y) / s), int32(r.Dx() / s), int32(r.Dy() / s)}
 }
 
 func (c atspiComponent) GetExtents(msg dbus.Message, coord uint32) (atspiRect, *dbus.Error) {

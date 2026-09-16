@@ -26,10 +26,7 @@ func (webEngine) Decoration(l *Classic, st DecorationState) DecorationSpec {
 		Button:  paintengine2d.Pt(snap(l.S(48)), snap(l.S(30))),
 		Layout:  ":minimize,maximize,close",
 		Radius:  [4]float32{r, r, r, r},
-		Shadow:  ShadowReach(0, 0, l.S(12), 0),
-	}
-	if st.Maximized || st.Tiled != 0 {
-		s.Radius = [4]float32{}
+		Shadow:  ShadowLayersReach(webWindowShadow(l, DecorationState{Active: true})),
 	}
 	return s
 }
@@ -81,4 +78,18 @@ func (webEngine) DrawBrowserTabBar(l *Classic, ctx *paintengine2d.Context, b pai
 	px := c.px(l)
 	ctx.DrawRect(b, paintengine2d.Fill(c.titleBar))
 	ctx.DrawRect(paintengine2d.XYWH(b.Min.X, b.Max.Y-px, b.Dx(), px), paintengine2d.Fill(c.border0))
+}
+
+// webWindowShadow is SourceGit's own frame shadow — a 12px blur of black
+// at 38% around the window — dimmed in the backdrop.
+func webWindowShadow(l *Classic, st DecorationState) []WindowShadow {
+	a := float32(0.38)
+	if !st.Active {
+		a = 0.2
+	}
+	return []WindowShadow{{Color: shadowBlack(a), Blur: l.S(12)}}
+}
+
+func (webEngine) DrawDecorationShadow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st DecorationState) {
+	DrawShadowLayers(ctx, b, DecorationOf(l, st).Radius, webWindowShadow(l, st))
 }

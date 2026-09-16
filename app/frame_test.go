@@ -72,6 +72,26 @@ func (r *frameRig) freeSpace() paintengine2d.Point {
 	return paintengine2d.Pt((tb.Max.X+lb.Min.X)/2, (tb.Min.Y+tb.Max.Y)/2)
 }
 
+// win is the visible window inside the surface. A look with a drop shadow
+// keeps a margin around it, so every frame coordinate hangs off this box
+// rather than off the buffer's corner.
+func (r *frameRig) win() paintengine2d.Rect { return r.w.WindowRect() }
+
+// outside is a point dx, dy device pixels outside the window's edge — in
+// the shadow, where the resize band of a shadowed frame lives.
+func (r *frameRig) edge(side platform.Edges, along float32) paintengine2d.Point {
+	win := r.win()
+	switch side {
+	case platform.EdgeLeft:
+		return paintengine2d.Pt(win.Min.X-2, along)
+	case platform.EdgeRight:
+		return paintengine2d.Pt(win.Max.X+1, along)
+	case platform.EdgeTop:
+		return paintengine2d.Pt(along, win.Min.Y-2)
+	}
+	return paintengine2d.Pt(along, win.Max.Y+1)
+}
+
 func (r *frameRig) button(b platform.CaptionButton) paintengine2d.Point {
 	left, right := r.hb.Controls()
 	for _, c := range []*widgets.WindowControls{left, right} {
@@ -91,21 +111,29 @@ func TestFrameHitTestTable(t *testing.T) {
 	}
 	fetch := r.tools.ItemRect(0).Translate(widget.DeviceOrigin(r.tools))
 	toolGap := widget.DeviceBounds(r.tools)
+	win := r.win()
+	if win.Dx() != 600 || win.Dy() != 400 {
+		t.Fatalf("the window keeps the size the app asked for: %v", win)
+	}
+	if sw, sh := w.SurfaceSize(); float32(sw) <= win.Dx() || float32(sh) <= win.Dy() {
+		t.Fatalf("the surface grows by the shadow's margin: %dx%d for %v", sw, sh, win)
+	}
 	cases := []struct {
 		name  string
 		p     paintengine2d.Point
 		want  NonClientRegion
 		edges platform.Edges
 	}{
-		{"top-left corner", paintengine2d.Pt(0, 0), RegionResize, platform.EdgeTop | platform.EdgeLeft},
-		{"top edge (caption's top 4 px)", paintengine2d.Pt(300, 2), RegionResize, platform.EdgeTop},
-		{"left edge", paintengine2d.Pt(2, 200), RegionResize, platform.EdgeLeft},
-		{"right edge", paintengine2d.Pt(598, 200), RegionResize, platform.EdgeRight},
-		{"bottom edge", paintengine2d.Pt(300, 398), RegionResize, platform.EdgeBottom},
-		{"bottom-right corner", paintengine2d.Pt(599, 399), RegionResize, platform.EdgeBottom | platform.EdgeRight},
-		{"bottom-left corner along the left edge", paintengine2d.Pt(1, 390), RegionResize, platform.EdgeBottom | platform.EdgeLeft},
-		{"a restored window's corner resizes over the close button", paintengine2d.Pt(597, 2), RegionResize, platform.EdgeTop | platform.EdgeRight},
-		{"close button inside the bands", paintengine2d.Pt(590, 6), RegionClose, 0},
+		{"top-left corner", paintengine2d.Pt(win.Min.X-2, win.Min.Y-2), RegionResize, platform.EdgeTop | platform.EdgeLeft},
+		{"top edge", r.edge(platform.EdgeTop, 300), RegionResize, platform.EdgeTop},
+		{"left edge", r.edge(platform.EdgeLeft, 200), RegionResize, platform.EdgeLeft},
+		{"right edge", r.edge(platform.EdgeRight, 200), RegionResize, platform.EdgeRight},
+		{"bottom edge", r.edge(platform.EdgeBottom, 300), RegionResize, platform.EdgeBottom},
+		{"bottom-right corner", paintengine2d.Pt(win.Max.X+1, win.Max.Y+1), RegionResize, platform.EdgeBottom | platform.EdgeRight},
+		{"bottom-left corner along the left edge", paintengine2d.Pt(win.Min.X-1, win.Max.Y-10), RegionResize, platform.EdgeBottom | platform.EdgeLeft},
+		{"the far margin is not the window's", paintengine2d.Pt(win.Min.X-14, 200), RegionClient, 0},
+		{"the band is outside: the close button keeps its corner", paintengine2d.Pt(win.Max.X-3, win.Min.Y+2), RegionClose, 0},
+		{"close button inside the window", paintengine2d.Pt(win.Max.X-10, win.Min.Y+6), RegionClose, 0},
 		{"close button", r.button(platform.CaptionClose), RegionClose, 0},
 		{"maximize button", r.button(platform.CaptionMaximize), RegionMaximize, 0},
 		{"minimize button", r.button(platform.CaptionMinimize), RegionMinimize, 0},
@@ -123,7 +151,8 @@ func TestFrameHitTestTable(t *testing.T) {
 		}
 	}
 	// The caption sits inside the hairline border, the content below it.
-	if g := w.geom; g.border != (style.Insets{Top: 1, Right: 1, Bottom: 1, Left: 1}) || g.caption.Min != paintengine2d.Pt(1, 1) || g.content.Min.Y != g.caption.Max.Y ||
+	if g := w.geom; g.border != (style.Insets{Top: 1, Right: 1, Bottom: 1, Left: 1}) ||
+		g.caption.Min != paintengine2d.Pt(win.Min.X+1, win.Min.Y+1) || g.content.Min.Y != g.caption.Max.Y ||
 		w.Content().Bounds() != g.content {
 		t.Fatalf("geometry %+v content %v", w.geom, w.Content().Bounds())
 	}
@@ -141,16 +170,24 @@ func TestFrameHitTestTable(t *testing.T) {
 	if w.geom.border != (style.Insets{}) || w.geom.caption.Min != (paintengine2d.Point{}) {
 		t.Errorf("maximized geometry %+v", w.geom)
 	}
-	// Tiled on the left (a quick tile): only the right edge resizes.
+	// Tiled on the left (a quick tile): the margin, the shadow and the
+	// corners go on those edges, and only the free right edge resizes.
 	r.o.SimulateWindowState(platform.WindowState{Activated: true, Tiled: platform.EdgeLeft | platform.EdgeTop | platform.EdgeBottom})
 	r.a.PumpOnce()
-	if got, _ := w.NonClientHit(paintengine2d.Pt(2, 200)); got != RegionClient {
+	if m := w.geom.margin; m.Left != 0 || m.Top != 0 || m.Bottom != 0 || m.Right == 0 {
+		t.Errorf("tiled margins %+v", m)
+	}
+	win = r.win()
+	if win.Min != (paintengine2d.Point{}) {
+		t.Errorf("a window tiled to the left starts at the buffer's corner: %v", win)
+	}
+	if got, _ := w.NonClientHit(paintengine2d.Pt(win.Min.X+2, 200)); got != RegionClient {
 		t.Errorf("tiled left edge: %v", got)
 	}
-	if got, e := w.NonClientHit(paintengine2d.Pt(598, 200)); got != RegionResize || e != platform.EdgeRight {
+	if got, e := w.NonClientHit(r.edge(platform.EdgeRight, 200)); got != RegionResize || e != platform.EdgeRight {
 		t.Errorf("tiled right edge: %v %v", got, e)
 	}
-	if got, e := w.NonClientHit(paintengine2d.Pt(598, 398)); got != RegionResize || e != platform.EdgeRight {
+	if got, e := w.NonClientHit(paintengine2d.Pt(win.Max.X+1, win.Max.Y-2)); got != RegionResize || e != platform.EdgeRight {
 		t.Errorf("a corner with a tiled side resizes the free side: %v %v", got, e)
 	}
 	// Full screen: no frame, no caption gestures.
@@ -283,12 +320,14 @@ func TestDragFromControlDoesNotMove(t *testing.T) {
 
 func TestFrameResizeEdges(t *testing.T) {
 	r := newFrameRig(t, platform.DecorationsClient)
-	r.ev(platform.EventMouseMove, 2, 200, platform.ButtonNone)
+	left := r.edge(platform.EdgeLeft, 200)
+	win := r.win()
+	r.ev(platform.EventMouseMove, left.X, left.Y, platform.ButtonNone)
 	if r.w.Cursor() != platform.CursorResizeW {
 		t.Fatalf("cursor over the left edge: %v", r.w.Cursor())
 	}
-	r.ev(platform.EventMouseDown, 2, 200, platform.ButtonLeft)
-	r.ev(platform.EventMouseDown, 599, 399, platform.ButtonLeft)
+	r.ev(platform.EventMouseDown, left.X, left.Y, platform.ButtonLeft)
+	r.ev(platform.EventMouseDown, win.Max.X+1, win.Max.Y+1, platform.ButtonLeft)
 	calls := r.o.FrameCalls()
 	if len(calls.Resizes) != 2 || calls.Resizes[0] != platform.EdgeLeft || calls.Resizes[1] != platform.EdgeBottom|platform.EdgeRight {
 		t.Fatalf("resizes %v", calls.Resizes)
