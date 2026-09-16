@@ -345,3 +345,24 @@ func TestXDNDFindTargetSurvivesALoop(t *testing.T) {
 		t.Fatalf("got %+v", got)
 	}
 }
+
+// The names and the indexes are two halves of one table: a name added to
+// one without the other would intern the wrong atom for every message.
+func TestXDNDAtomNamesMatchTheIndex(t *testing.T) {
+	if len(XDNDAtomNames) != xdndAtomCount {
+		t.Fatalf("%d names for %d atoms", len(XDNDAtomNames), xdndAtomCount)
+	}
+	for i, want := range map[XDNDAtom]string{
+		XAAware: "XdndAware", XASelection: "XdndSelection", XAEnter: "XdndEnter",
+		XAPosition: "XdndPosition", XAStatus: "XdndStatus", XALeave: "XdndLeave",
+		XADrop: "XdndDrop", XAFinished: "XdndFinished", XATypeList: "XdndTypeList",
+		XAActionCopy: "XdndActionCopy", XAActionMove: "XdndActionMove",
+		XAActionLink: "XdndActionLink", XAActionAsk: "XdndActionAsk",
+		XAActionPrivate: "XdndActionPrivate", XAActionList: "XdndActionList",
+		XAProxy: "XdndProxy",
+	} {
+		if got := XDNDAtomNames[i]; got != want {
+			t.Fatalf("atom %d is %q, want %q", int(i), got, want)
+		}
+	}
+}
