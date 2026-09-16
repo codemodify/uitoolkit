@@ -56,6 +56,7 @@ extern void uitkWlExplicitRelease(uintptr_t sid, int slot);
 extern void uitkWlOutputScale(uintptr_t id, struct wl_output *out, int32_t factor);
 extern void uitkWlRegistryRemove(uintptr_t id, uint32_t name);
 extern void uitkWlDataOffer(uintptr_t id, struct wl_data_offer *offer);
+extern void uitkWlOfferActions(uintptr_t id, struct wl_data_offer *offer, uint32_t actions, uint32_t chosen);
 extern void uitkWlDataOfferMime(uintptr_t id, struct wl_data_offer *offer, char *mime);
 extern void uitkWlSelection(uintptr_t id, struct wl_data_offer *offer);
 extern void uitkWlPtrFrame(uintptr_t id);
@@ -623,9 +624,15 @@ static void ui_wl_data_man_destroy(struct wl_data_device_manager *m) { if (m) wl
 static void uitk_doffer_offer(void *data, struct wl_data_offer *o, const char *mime) {
 	uitkWlDataOfferMime((uintptr_t)data, o, (char*)mime);
 }
-static void uitk_doffer_src(void *data, struct wl_data_offer *o, uint32_t src) { (void)data; (void)o; (void)src; }
+// source_actions: everything the drag's source allows. action: the one
+// the compositor has settled on, which follows the user's modifiers
+// (Shift for a move, Ctrl for a copy) — so it is the source's preference
+// as far as the target is concerned.
+static void uitk_doffer_src(void *data, struct wl_data_offer *o, uint32_t src) {
+	uitkWlOfferActions((uintptr_t)data, o, src, 0xffffffffu);
+}
 static void uitk_doffer_action(void *data, struct wl_data_offer *o, uint32_t dnd) {
-	(void)data; (void)o; (void)dnd;
+	uitkWlOfferActions((uintptr_t)data, o, 0xffffffffu, dnd);
 }
 static const struct wl_data_offer_listener uitk_doffer_listener = {
 	.offer = uitk_doffer_offer,
@@ -1143,6 +1150,9 @@ type wlConn struct {
 	curTheme    *C.struct_wl_cursor_theme
 	outScale    float32
 
+	// drag is a drag started out of one of this connection's windows
+	// (wayland_dnd_linux.go).
+	drag        wlDrag
 	dataMan     *C.struct_wl_data_device_manager
 	dataDev     *C.struct_wl_data_device
 	dataSrc     *C.struct_wl_data_source
@@ -1157,6 +1167,9 @@ type wlConn struct {
 	offerMimes map[*C.struct_wl_data_offer][]string
 	dndOffer   *C.struct_wl_data_offer
 	dndSerial  uint32
+	// offerActs is what each live offer's source allows and the action
+	// the compositor has settled on for it (wayland_dnd_linux.go).
+	offerActs  map[*C.struct_wl_data_offer]wlOfferAction
 	dndSurf    int
 	dndDropped bool
 	dndPos     paintengine2d.Point // device pixels in the surface
@@ -3541,17 +3554,21 @@ func uitkWlDndEnter(id C.uintptr_t, serial C.uint32_t, surf *C.struct_wl_surface
 	}
 	c.dndSurf = s.id
 	mimes := c.offerMimes[offer]
+	// A first, provisional answer so the source sees something at once;
+	// the window replaces it with the real one (AcceptDrag) as soon as
+	// it has routed the motion to a target.
 	if m := dropMime(mimes); m != "" {
 		cm := C.CString(m)
 		C.ui_wl_offer_accept(offer, serial, cm)
 		C.free(unsafe.Pointer(cm))
-		C.ui_wl_offer_actions(offer, 1, 1) // copy
+		acts := c.offerActs[offer]
+		C.ui_wl_offer_actions(offer, waylandDndActions(acts.source), waylandDndActions(acts.chosen))
 	} else {
 		C.ui_wl_offer_accept(offer, serial, nil)
 	}
 	dx, dy := s.toDevice(float32(C.ui_wl_fixed(x)), float32(C.ui_wl_fixed(y)))
 	c.dndPos = paintengine2d.Pt(dx, dy)
-	s.push(Event{Kind: EventDragMotion, Pos: c.dndPos, Mimes: mimes})
+	s.push(c.dndEvent(EventDragMotion, mimes))
 }
 
 //export uitkWlDndMotion
@@ -3563,7 +3580,7 @@ func uitkWlDndMotion(id C.uintptr_t, x, y C.wl_fixed_t) {
 	if s := wlSurfaces[c.dndSurf]; s != nil {
 		dx, dy := s.toDevice(float32(C.ui_wl_fixed(x)), float32(C.ui_wl_fixed(y)))
 		c.dndPos = paintengine2d.Pt(dx, dy)
-		s.push(Event{Kind: EventDragMotion, Pos: c.dndPos, Mimes: c.offerMimes[c.dndOffer]})
+		s.push(c.dndEvent(EventDragMotion, c.offerMimes[c.dndOffer]))
 	}
 }
 
@@ -3589,7 +3606,7 @@ func uitkWlDndDrop(id C.uintptr_t) {
 	}
 	c.dndDropped = true
 	if s := wlSurfaces[c.dndSurf]; s != nil {
-		s.push(Event{Kind: EventDrop, Pos: c.dndPos, Mimes: c.offerMimes[c.dndOffer]})
+		s.push(c.dndEvent(EventDrop, c.offerMimes[c.dndOffer]))
 	}
 }
 
@@ -3602,6 +3619,7 @@ func (c *wlConn) dndDrop(taken bool) {
 		C.ui_wl_offer_finish(c.dndOffer)
 	}
 	delete(c.offerMimes, c.dndOffer)
+	delete(c.offerActs, c.dndOffer)
 	C.ui_wl_data_offer_destroy(c.dndOffer)
 	c.dndOffer, c.dndDropped = nil, false
 }
@@ -3631,6 +3649,7 @@ func uitkWlSelection(id C.uintptr_t, offer *C.struct_wl_data_offer) {
 	}
 	// The clipboard keeps its preferred type; forget the list.
 	delete(c.offerMimes, offer)
+	delete(c.offerActs, offer)
 	// The cache is only valid while we hold a live source of our own.
 	c.clip.selectionChanged(c.dataSrc != nil)
 }
