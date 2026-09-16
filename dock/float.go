@@ -21,6 +21,10 @@ type FloatWindow interface {
 	// SetOnCloseRequest is called when the desktop asks the window to
 	// close; returning false keeps the window open.
 	SetOnCloseRequest(fn func() bool)
+	// StartMove hands the window to the desktop's own interactive move,
+	// which is what dragging a floating panel's title bar does. It reports
+	// whether the desktop took it.
+	StartMove() bool
 	Show()
 	Hide()
 	Raise()

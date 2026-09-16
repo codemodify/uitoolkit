@@ -503,6 +503,7 @@ type fakeWindow struct {
 	geom    paintengine2d.Rect
 	shown   bool
 	closed  bool
+	moves   int
 	onClose func() bool
 }
 
@@ -510,6 +511,7 @@ func (w *fakeWindow) SetTitle(t string)                { w.title = t }
 func (w *fakeWindow) SetContent(c widget.Component)    { w.content = c }
 func (w *fakeWindow) SetOnCloseRequest(fn func() bool) { w.onClose = fn }
 func (w *fakeWindow) Geometry() paintengine2d.Rect     { return w.geom }
+func (w *fakeWindow) StartMove() bool                  { w.moves++; return true }
 func (w *fakeWindow) Show()                            { w.shown = true }
 func (w *fakeWindow) Hide()                            { w.shown = false }
 func (w *fakeWindow) Raise()                           {}
@@ -613,6 +615,27 @@ func TestDraggingAFloatingPanelBackDocksIt(t *testing.T) {
 	}
 	if r.host.Area(SideTop).Empty() {
 		t.Error("the panel did not land in the top area")
+	}
+}
+
+func TestAFloatingPanelsTitleBarMovesItsWindow(t *testing.T) {
+	r := newRig(t)
+	o := &fakeOpener{}
+	r.host.SetWindowOpener(o)
+	r.host.FloatPanel(r.tree, paintengine2d.XYWH(0, 0, 300, 400))
+	r.Layout()
+	// The floating panel's chrome is in another window, so its title bar
+	// hands the drag to the desktop rather than guessing at coordinates
+	// the two windows do not share.
+	st := stackOf(t, r.tree)
+	st.Arrange(paintengine2d.XYWH(0, 0, 300, 400)) // as its own window would
+	head := st.head
+	head.MousePress(widget.MouseEvent{Pos: paintengine2d.Pt(6, 4), Button: platform.ButtonLeft})
+	if o.wins[0].moves != 1 {
+		t.Errorf("the title bar asked the desktop to move the window %d times, want 1", o.wins[0].moves)
+	}
+	if r.host.dragArmed() {
+		t.Error("the title bar started an in-window dock drag from another window")
 	}
 }
 
