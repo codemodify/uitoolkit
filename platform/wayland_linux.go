@@ -4239,20 +4239,27 @@ func (s *wlSurface) applyFrameLocked(surfW, surfH int) {
 	}
 	// Input: the window plus the resize band in the shadow. The rest of
 	// the margin is not ours and clicks through to whatever is behind.
-	in := s.inputLogical()
-	band := []C.int{
-		C.int(win[0] - in.Left), C.int(win[1] - in.Top),
-		C.int(win[2] + in.Width()), C.int(win[3] + in.Height()),
-	}
+	box := FrameRect{X: win[0], Y: win[1], W: win[2], H: win[3]}
+	in := InputRect(box, m, s.inputLogical())
+	band := []C.int{C.int(in.X), C.int(in.Y), C.int(in.W), C.int(in.H)}
 	C.ui_wl_region(s.conn.compositor, s.surf, 0, &band[0], 1)
 	// Opaque: the window less its rounded corners. Nothing is claimed
 	// opaque that is not — a compositor skips what is behind it.
-	rects := s.opaqueRects(win)
+	rects := flatRects(OpaqueRects(box, s.frame.Radius, s.deviceScale()))
 	if len(rects) == 0 {
 		C.ui_wl_region(s.conn.compositor, s.surf, 1, nil, 0)
 		return
 	}
 	C.ui_wl_region(s.conn.compositor, s.surf, 1, &rects[0], C.int(len(rects)/4))
+}
+
+// flatRects is rects as the flat x, y, w, h list the C helper takes.
+func flatRects(rects []FrameRect) []C.int {
+	out := make([]C.int, 0, len(rects)*4)
+	for _, r := range rects {
+		out = append(out, C.int(r.X), C.int(r.Y), C.int(r.W), C.int(r.H))
+	}
+	return out
 }
 
 // inputLogical is how far the resize band reaches into the margin, in
@@ -4275,36 +4282,6 @@ func (s *wlSurface) inputLogical() FrameInsets {
 		Bottom: px(in.Bottom, m.Bottom),
 		Left:   px(in.Left, m.Left),
 	}
-}
-
-// opaqueRects is the window less the squares its rounded corners live in,
-// as up to three rects of four ints (logical pixels, rounded inward).
-func (s *wlSurface) opaqueRects(win [4]int) []C.int {
-	sc := s.deviceScale()
-	if sc <= 0 {
-		sc = 1
-	}
-	r := s.frame.Radius
-	up := func(v float32) int {
-		if v <= 0 {
-			return 0
-		}
-		return int(math.Ceil(float64(v / sc)))
-	}
-	tl, tr, br, bl := up(r[0]), up(r[1]), up(r[2]), up(r[3])
-	x, y, w, h := win[0], win[1], win[2], win[3]
-	top, bottom := max(tl, tr), max(br, bl)
-	if top+bottom >= h || w < 1 {
-		return nil
-	}
-	out := []C.int{C.int(x), C.int(y + top), C.int(w), C.int(h - top - bottom)}
-	if top > 0 && w-tl-tr > 0 {
-		out = append(out, C.int(x+tl), C.int(y), C.int(w-tl-tr), C.int(top))
-	}
-	if bottom > 0 && w-bl-br > 0 {
-		out = append(out, C.int(x+bl), C.int(y+h-bottom), C.int(w-bl-br), C.int(bottom))
-	}
-	return out
 }
 
 // Minimize iconifies the window (xdg_toplevel.set_minimized), keeping its

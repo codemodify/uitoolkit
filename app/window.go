@@ -233,9 +233,10 @@ func (w *Window) windowStateChanged(st platform.WindowState) {
 	case was.Fullscreen != st.Fullscreen:
 		// No frame at all in full screen.
 		w.rebuildCaption()
-	case was.Maximized != st.Maximized || was.Tiled != st.Tiled || was.Constrained != st.Constrained:
-		// The frame (borders, resize edges, the restore glyph) depends on
-		// these.
+	case was.Maximized != st.Maximized || was.Tiled != st.Tiled || was.Constrained != st.Constrained ||
+		was.Solid != st.Solid:
+		// The frame (borders, resize edges, the restore glyph, the margin
+		// its shadow lives in) depends on these.
 		w.laid = false
 		w.dropScene()
 		w.fullInvalidate()

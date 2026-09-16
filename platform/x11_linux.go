@@ -852,7 +852,6 @@ import "C"
 import (
 	"fmt"
 	"log"
-	"math"
 	"os"
 	"sync"
 	"sync/atomic"
@@ -2937,12 +2936,8 @@ func (s *x11Surface) applyFrameLocked() {
 	} else {
 		ext := [4]C.ulong{C.ulong(m.Left), C.ulong(m.Right), C.ulong(m.Top), C.ulong(m.Bottom)}
 		C.ui_change_prop32(c.dpy, s.win, c.atomExtents, C.XA_CARDINAL, &ext[0], 4)
-		in := s.frame.Input
-		x := m.Left - min(in.Left, m.Left)
-		y := m.Top - min(in.Top, m.Top)
-		w := s.geomW + min(in.Left, m.Left) + min(in.Right, m.Right)
-		h := s.geomH + min(in.Top, m.Top) + min(in.Bottom, m.Bottom)
-		C.ui_shape_input(c.dpy, s.win, C.int(x), C.int(y), C.int(w), C.int(h))
+		in := InputRect(FrameRect{X: m.Left, Y: m.Top, W: s.geomW, H: s.geomH}, m, s.frame.Input)
+		C.ui_shape_input(c.dpy, s.win, C.int(in.X), C.int(in.Y), C.int(in.W), C.int(in.H))
 	}
 	// The opaque region is the window less its rounded corners, in window
 	// (X) coordinates: a compositor that knows what is solid need not
@@ -2957,32 +2952,14 @@ func (s *x11Surface) applyFrameLocked() {
 }
 
 // opaqueRects is the window less the squares its rounded corners live in,
-// as _NET_WM_OPAQUE_REGION's flat list of x, y, width, height.
+// as _NET_WM_OPAQUE_REGION's flat list of x, y, width, height (device
+// pixels: X11 has no logical ones).
 func (s *x11Surface) opaqueRects() []C.ulong {
 	m := s.frame.Margin
-	x, y := m.Left, m.Top
-	w, h := s.geomW, s.geomH
-	if w < 1 || h < 1 {
-		return nil
-	}
-	up := func(v float32) int {
-		if v <= 0 {
-			return 0
-		}
-		return int(math.Ceil(float64(v)))
-	}
-	r := s.frame.Radius
-	tl, tr, br, bl := up(r[0]), up(r[1]), up(r[2]), up(r[3])
-	top, bottom := max(tl, tr), max(br, bl)
-	if top+bottom >= h {
-		return nil
-	}
-	out := []C.ulong{C.ulong(x), C.ulong(y + top), C.ulong(w), C.ulong(h - top - bottom)}
-	if top > 0 && w-tl-tr > 0 {
-		out = append(out, C.ulong(x+tl), C.ulong(y), C.ulong(w-tl-tr), C.ulong(top))
-	}
-	if bottom > 0 && w-bl-br > 0 {
-		out = append(out, C.ulong(x+bl), C.ulong(y+h-bottom), C.ulong(w-bl-br), C.ulong(bottom))
+	box := FrameRect{X: m.Left, Y: m.Top, W: s.geomW, H: s.geomH}
+	var out []C.ulong
+	for _, r := range OpaqueRects(box, s.frame.Radius, 1) {
+		out = append(out, C.ulong(r.X), C.ulong(r.Y), C.ulong(r.W), C.ulong(r.H))
 	}
 	return out
 }

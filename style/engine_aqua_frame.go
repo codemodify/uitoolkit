@@ -34,8 +34,25 @@ func (aquaEngine) Decoration(l *Classic, st DecorationState) DecorationSpec {
 		CenterTitle: true,
 		Layout:      "close,minimize,maximize:",
 		Radius:      [4]float32{r, r, 0, 0},
-		Shadow:      aquaEngine{}.PopupShadow(l, PopupDialog),
+		Shadow:      ShadowLayersReach(aquaWindowShadow(l, DecorationState{Active: true})),
 	}
+}
+
+// aquaWindowShadow is Aqua's famous drop shadow: deep and soft under the
+// active window, faint under the others (measured off Mac OS X 10.4
+// screenshots — Apple published no numbers).
+func aquaWindowShadow(l *Classic, st DecorationState) []WindowShadow {
+	if !st.Active {
+		return []WindowShadow{{Color: shadowBlack(0.2), DY: l.S(3), Blur: l.S(12)}}
+	}
+	return []WindowShadow{
+		{Color: shadowBlack(0.38), DY: l.S(14), Blur: l.S(40)},
+		{Color: shadowBlack(0.16), DY: l.S(2), Blur: l.S(6)},
+	}
+}
+
+func (aquaEngine) DrawDecorationShadow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st DecorationState) {
+	DrawShadowLayers(ctx, b, DecorationOf(l, st).Radius, aquaWindowShadow(l, st))
 }
 
 func (aquaEngine) DrawDecoration(l *Classic, ctx *paintengine2d.Context, f DecorationFrame, st DecorationState) {

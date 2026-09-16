@@ -18,7 +18,7 @@ func (flatlafEngine) Decoration(l *Classic, st DecorationState) DecorationSpec {
 		Caption: h,
 		Button:  paintengine2d.Pt(snap(l.S(44)), snap(l.S(30))),
 		Layout:  ":minimize,maximize,close",
-		Shadow:  flatlafEngine{}.PopupShadow(l, PopupDialog),
+		Shadow:  ShadowLayersReach(flatlafWindowShadow(l, DecorationState{Active: true})),
 	}
 }
 
@@ -53,4 +53,17 @@ func (flatlafEngine) DrawCaptionButton(l *Classic, ctx *paintengine2d.Context, b
 		close: c.close, closePress: Mix(c.close, paintengine2d.RGB(1, 1, 1), 0.3), onClose: paintengine2d.RGB(1, 1, 1),
 		min: g, max: g, cls: g, lw: flatPx(l),
 	}.draw(ctx, flatSnap(b), k, cs, st)
+}
+
+// flatlafWindowShadow is the drop shadow FlatLaf's own window decorations
+// paint around a frame.
+func flatlafWindowShadow(l *Classic, st DecorationState) []WindowShadow {
+	if !st.Active {
+		return []WindowShadow{{Color: shadowBlack(0.14), DY: l.S(2), Blur: l.S(8)}}
+	}
+	return []WindowShadow{{Color: shadowBlack(0.25), DY: l.S(4), Blur: l.S(16)}}
+}
+
+func (flatlafEngine) DrawDecorationShadow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st DecorationState) {
+	DrawShadowLayers(ctx, b, DecorationOf(l, st).Radius, flatlafWindowShadow(l, st))
 }
