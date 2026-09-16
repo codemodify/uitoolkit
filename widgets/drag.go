@@ -206,47 +206,9 @@ func (t *TreeView) clearDropRow() {
 	}
 }
 
-// ---- document tabs -------------------------------------------------------------
-
-// DropTypes: what OnDropTab takes, if anything.
-func (t *BrowserTabs) DropTypes() []string {
-	if t.OnDropTab == nil {
-		return nil
-	}
-	if len(t.DropMimes) > 0 {
-		return t.DropMimes
-	}
-	return []string{"text/uri-list"}
-}
-
-// Drop hands the drop to the tab under it — dropping a file on a folder
-// tab is how a file manager moves it there.
-func (t *BrowserTabs) Drop(e widget.DropEvent) bool {
-	hit := t.hitAt(e.Pos)
-	t.clearDropTab()
-	if hit.tab < 0 || hit.tab >= t.Len() || t.OnDropTab == nil {
-		return false
-	}
-	return t.OnDropTab(hit.tab, e)
-}
-
-// DragOver highlights the tab a drag is over.
-func (t *BrowserTabs) DragOver(pos paintengine2d.Point) {
-	hit := t.hitAt(pos)
-	if hit.tab != t.dropTab {
-		t.dropTab = hit.tab
-		t.Invalidate()
-	}
-}
-
-func (t *BrowserTabs) DragLeave() { t.clearDropTab() }
-
-func (t *BrowserTabs) clearDropTab() {
-	if t.dropTab != -1 {
-		t.dropTab = -1
-		t.Invalidate()
-	}
-}
+// The document tabs' own halves of this — what a tab dragged out of the
+// strip offers, and what the strip takes from one dragged in — are in
+// tearoff.go.
 
 // ---- the highlight -------------------------------------------------------------
 
@@ -268,8 +230,16 @@ func (t *TreeView) DropActionFor(offered platform.DragAction) platform.DragActio
 	return dropActions(t.DropActions, offered)
 }
 
-// DropActionFor is what a drop on the tab strip would do.
+// DropActionFor is what a drop on the tab strip would do: a tab dragged
+// out of another window moves — it is in one window or the other, and a
+// copy would leave two of it — while anything else does what DropActions
+// allows. The strip knows which it is looking at because the caret is up
+// (DragOverMime, tearoff.go); Wayland needs the answer that way round,
+// since there a target's preference is all the compositor has to go on.
 func (t *BrowserTabs) DropActionFor(offered platform.DragAction) platform.DragAction {
+	if t.dropAt >= 0 && offered.Has(platform.DragMove) {
+		return platform.DragMove
+	}
 	return dropActions(t.DropActions, offered)
 }
 

@@ -15,9 +15,15 @@ type FloatWindow interface {
 	// SetContent puts the panel's chrome and content in the window.
 	SetContent(c widget.Component)
 	// Geometry is where the window is and how big, in screen pixels. The
-	// origin is best effort: a Wayland client is not told where its
-	// windows are, so it is the position the window was asked for.
+	// origin is best effort: X11 answers where the window manager put the
+	// window, while a Wayland client is not told where its windows are,
+	// so there it is the position the window was asked for.
 	Geometry() paintengine2d.Rect
+	// TearOffWindow is the window as a drag can carry it, so dragging a
+	// floating panel's title bar back over its host docks it there
+	// (tearoff.go). nil where an implementation has no such window — the
+	// panel then docks back by its button, its menu or the keyboard.
+	TearOffWindow() widget.TearOffWindow
 	// SetOnCloseRequest is called when the desktop asks the window to
 	// close; returning false keeps the window open.
 	SetOnCloseRequest(fn func() bool)
@@ -35,11 +41,10 @@ type FloatWindow interface {
 // host one with [Host.SetWindowOpener]; without it panels cannot float,
 // and the float button does not appear.
 //
-// Tearing a panel off through the compositor — dragging it straight out of
-// the window with xdg-toplevel-drag, so the pointer never lets go — would
-// be another implementation of this interface plus a drag hand-off; see
-// docs/decorations.md. Nothing in the dock package assumes the window
-// appears only on a button press.
+// It is what a panel dragged out of the window goes through too
+// (tearoff.go): the window opens in the middle of the drag, under the
+// pointer, and the desktop carries it from there. Nothing here assumes
+// the window appears only on a button press.
 type WindowOpener interface {
 	// OpenFloat opens a window for a panel. geom is where to put it; an
 	// empty rect asks for the desktop's own choice.
