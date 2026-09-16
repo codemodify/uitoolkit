@@ -366,7 +366,13 @@ func (s *wlSurface) AttachToplevel(win Surface, dx, dy int) bool {
 	if !ok || w.conn != c || w.top == nil || w.closed {
 		return false
 	}
-	C.ui_wd_top_attach(c.drag.top, w.top, C.int(dx), C.int(dy))
+	// The offset is surface-local — logical pixels, the coordinates the
+	// window geometry is in — while the caller counts device pixels.
+	scale := w.deviceScale()
+	if scale <= 0 {
+		scale = 1
+	}
+	C.ui_wd_top_attach(c.drag.top, w.top, C.int(float32(dx)/scale), C.int(float32(dy)/scale))
 	if c.dpy != nil {
 		C.ui_wd_flush(c.dpy)
 	}
