@@ -383,12 +383,14 @@ static int ui_wl_memfd(size_t size, void **map) {
 	return fd;
 }
 
-static struct wl_buffer *ui_wl_buffer(struct wl_shm *shm, int fd, int w, int h, int stride, size_t size) {
+// alpha 0: XRGB8888, where the compositor ignores the alpha byte — an
+// opaque window can never present see-through. alpha 1: ARGB8888
+// (premultiplied), which a frame with a shadow or rounded corners needs.
+static struct wl_buffer *ui_wl_buffer(struct wl_shm *shm, int fd, int w, int h, int stride, size_t size, int alpha) {
 	struct wl_shm_pool *pool = wl_shm_create_pool(shm, fd, (int32_t)size);
 	if (!pool) return NULL;
-	// XRGB8888: compositor ignores alpha. ARGB8888 + empty/wrong A
-	// composites as a fully transparent window on Mutter/Weston.
-	struct wl_buffer *buf = wl_shm_pool_create_buffer(pool, 0, w, h, stride, WL_SHM_FORMAT_XRGB8888);
+	uint32_t fmt = alpha ? WL_SHM_FORMAT_ARGB8888 : WL_SHM_FORMAT_XRGB8888;
+	struct wl_buffer *buf = wl_shm_pool_create_buffer(pool, 0, w, h, stride, fmt);
 	wl_shm_pool_destroy(pool);
 	return buf;
 }
@@ -400,6 +402,45 @@ static void ui_wl_opaque(struct wl_compositor *c, struct wl_surface *s, int w, i
 	wl_region_add(r, 0, 0, w, h);
 	wl_surface_set_opaque_region(s, r);
 	wl_region_destroy(r);
+}
+
+// The window's visible bounds inside the surface: what the compositor
+// aligns, snaps, tiles and maximizes, with the invisible shadow margin
+// left out (xdg_surface.set_window_geometry, logical pixels).
+static void ui_wl_set_geometry(struct xdg_surface *xs, int x, int y, int w, int h) {
+	if (xs && w > 0 && h > 0) xdg_surface_set_window_geometry(xs, x, y, w, h);
+}
+
+// ui_wl_region sets one of the surface's regions from n rects of four
+// ints (x, y, w, h; logical pixels). kind 0 is the input region — where a
+// press reaches the window, so the rest of the shadow margin clicks
+// through — and kind 1 the opaque one.
+static void ui_wl_region(struct wl_compositor *c, struct wl_surface *s, int kind, int *rects, int n) {
+	if (!c || !s) return;
+	struct wl_region *r = wl_compositor_create_region(c);
+	if (!r) return;
+	for (int i = 0; i < n; i++) {
+		int *q = rects + i * 4;
+		if (q[2] > 0 && q[3] > 0) wl_region_add(r, q[0], q[1], q[2], q[3]);
+	}
+	if (kind == 0) {
+		wl_surface_set_input_region(s, r);
+	} else {
+		wl_surface_set_opaque_region(s, r);
+	}
+	wl_region_destroy(r);
+}
+
+// ui_wl_region_none puts a region back to its default: input everywhere
+// (a NULL input region is infinite — an empty one would take no clicks at
+// all), nothing opaque. NULL, never an empty region.
+static void ui_wl_region_none(struct wl_surface *s, int kind) {
+	if (!s) return;
+	if (kind == 0) {
+		wl_surface_set_input_region(s, NULL);
+	} else {
+		wl_surface_set_opaque_region(s, NULL);
+	}
 }
 
 static void uitk_buf_rel(void *data, struct wl_buffer *buf) {
@@ -1208,6 +1249,9 @@ type wlSlot struct {
 	stride int
 	busy   bool
 	dma    unsafe.Pointer // *ui_dmabuf_bo
+	// alpha: the buffer was made ARGB8888 for a translucent frame; it is
+	// destroyed and remade when the frame stops needing alpha.
+	alpha bool
 	// valid is set once the buffer holds a complete frame; stale is the
 	// damage presented through the other buffers since then. A buffer
 	// comes back into use frames later, so copying only the current
@@ -1305,6 +1349,20 @@ type wlSurface struct {
 	pendCapsSet  bool
 	pendDeco     Decorations
 	pendDecoSet  bool
+	// frame is what the app told us about the frame it draws (margin,
+	// resize band, corners, alpha); frameSent is cleared whenever the
+	// window system has to hear it again (a new margin, a new size, a
+	// remapped surface), and applied with the next buffer commit.
+	frame     Frame
+	frameSent bool
+	// geomSet: a window geometry has been stated. Once it has, every
+	// later frame has to state one too — a window that drops its margin
+	// (maximized, tiled, uncomposited) would otherwise keep the geometry
+	// of the one it had, and the compositor would place it by that.
+	geomSet bool
+	// gpuAlpha is whether the EGL config behind gpu has an alpha channel;
+	// a frame that starts or stops needing one rebinds the device.
+	gpuAlpha bool
 	// boundsW / boundsH are the latest configure_bounds (logical px; 0 when
 	// unknown): the largest size that fits the screen's work area, which
 	// ConfigureBounds reports. The window's size is not clamped to it: a
@@ -1710,6 +1768,8 @@ func (s *wlSurface) unmapToplevelLocked() {
 	s.configured = false
 	s.mapped = false
 	s.scaleSet = 0
+	s.frameSent = false
+	s.geomSet = false
 	s.opaqueW, s.opaqueH = 0, 0
 	s.framePending = false
 	s.frameSince = time.Time{}
@@ -1938,7 +1998,30 @@ func (s *wlSurface) setBuffer(bw, bh int) {
 	s.img = paintengine2d.NewImage(bw, bh)
 }
 
-func (s *wlSurface) bufferWH() (int, int) {
+// marginLogical is the frame's margin in logical pixels — what the
+// compositor speaks. The app picks margins that are whole logical pixels at
+// this scale (platform.FrameMargin), so this is exact rather than rounded.
+func (s *wlSurface) marginLogical() FrameInsets {
+	m := s.frame.Margin
+	if m.Zero() {
+		return FrameInsets{}
+	}
+	sc := s.deviceScale()
+	if sc <= 0 {
+		sc = 1
+	}
+	px := func(v int) int {
+		if v <= 0 {
+			return 0
+		}
+		return int(math.Round(float64(float32(v) / sc)))
+	}
+	return FrameInsets{Top: px(m.Top), Right: px(m.Right), Bottom: px(m.Bottom), Left: px(m.Left)}
+}
+
+// surfaceLogical is the whole surface in logical pixels: the window's
+// geometry plus the frame's margin around it.
+func (s *wlSurface) surfaceLogical() (int, int) {
 	lw, lh := s.logicalW, s.logicalH
 	if lw < 1 {
 		lw = s.wantW
@@ -1952,6 +2035,12 @@ func (s *wlSurface) bufferWH() (int, int) {
 	if lh < 1 {
 		lh = 1
 	}
+	m := s.marginLogical()
+	return lw + m.Width(), lh + m.Height()
+}
+
+func (s *wlSurface) bufferWH() (int, int) {
+	lw, lh := s.surfaceLogical()
 	sc := s.deviceScale()
 	w := int(math.Ceil(float64(float32(lw) * sc)))
 	h := int(math.Ceil(float64(float32(lh) * sc)))
@@ -2038,23 +2127,20 @@ func (s *wlSurface) present(dirty []paintengine2d.Rect, flushOnly bool) error {
 			return nil
 		}
 	}
+	surfW, surfH := s.surfaceLogical()
 	if s.frac > 1 && s.viewport != nil {
 		if s.scaleSet != 1 {
 			C.ui_wl_set_buf_scale(s.surf, 1)
 			s.scaleSet = 1
 		}
-		C.ui_wl_viewport_dest(s.viewport, C.int(s.logicalW), C.int(s.logicalH))
+		C.ui_wl_viewport_dest(s.viewport, C.int(surfW), C.int(surfH))
 	} else if sc := int(s.deviceScale() + 0.1); sc > 1 {
 		if s.scaleSet != sc {
 			C.ui_wl_set_buf_scale(s.surf, C.int32_t(sc))
 			s.scaleSet = sc
 		}
 	}
-	if s.conn.compositor != nil && s.logicalW > 0 && s.logicalH > 0 &&
-		(s.opaqueW != s.logicalW || s.opaqueH != s.logicalH) {
-		C.ui_wl_opaque(s.conn.compositor, s.surf, C.int(s.logicalW), C.int(s.logicalH))
-		s.opaqueW, s.opaqueH = s.logicalW, s.logicalH
-	}
+	s.applyFrameLocked(surfW, surfH)
 	if s.gpu != nil {
 		// Frame-callback pacing: with an occluded or throttled surface
 		// the compositor stops sending frame events, and a blocking
@@ -2328,7 +2414,7 @@ func (s *wlSurface) freeSlot() (int, bool) {
 
 func (s *wlSurface) ensureSlot(i, w, h int) error {
 	sl := &s.slots[i]
-	if sl.buf != nil && sl.w == w && sl.h == h {
+	if sl.buf != nil && sl.w == w && sl.h == h && sl.alpha == s.frame.Alpha {
 		return nil
 	}
 	s.destroySlot(i)
@@ -2355,14 +2441,14 @@ func (s *wlSurface) ensureShmSlot(i, w, h int) error {
 	if fd < 0 || mem == nil {
 		return fmt.Errorf("platform: wl_shm memfd failed")
 	}
-	buf := C.ui_wl_buffer(s.conn.shm, C.int(fd), C.int(w), C.int(h), C.int(stride), C.size_t(size))
+	buf := C.ui_wl_buffer(s.conn.shm, C.int(fd), C.int(w), C.int(h), C.int(stride), C.size_t(size), C.int(btoi(s.frame.Alpha)))
 	C.ui_wl_close_fd(C.int(fd))
 	if buf == nil {
 		C.ui_wl_munmap(mem, C.size_t(size))
 		return fmt.Errorf("platform: wl_shm_pool_create_buffer failed")
 	}
 	C.ui_wl_buf_listen(buf, C.uintptr_t(s.id), C.int(i))
-	s.slots[i] = wlSlot{buf: buf, mem: mem, size: size, fd: -1, w: w, h: h, stride: stride}
+	s.slots[i] = wlSlot{buf: buf, mem: mem, size: size, fd: -1, w: w, h: h, stride: stride, alpha: s.frame.Alpha}
 	return nil
 }
 
@@ -2409,7 +2495,9 @@ func (s *wlSurface) copyRect(slot int, r paintengine2d.Rect) {
 	if sl.dma != nil && s.conn != nil {
 		swizzle = s.conn.dmaSwizzle
 	}
-	copyImageRect(dst, stride, s.img, r, swizzle, true)
+	// opaque forces the alpha byte to 0xff: right for every XRGB buffer,
+	// wrong for a frame whose margin and corners must stay see-through.
+	copyImageRect(dst, stride, s.img, r, swizzle, !s.frame.Alpha)
 }
 
 func (s *wlSurface) Poll() []Event {
@@ -4099,6 +4187,124 @@ func (s *wlSurface) ShowWindowMenu(p paintengine2d.Point) bool {
 	return true
 }
 
+// SetFrame takes the frame the toolkit draws (FrameSurface). The surface
+// grows by the margin at once — the app lays this frame out at the new size
+// — and the window system hears about it with the next buffer commit, so
+// the geometry, the regions and the pixels it describes are one atomic
+// update.
+func (s *wlSurface) SetFrame(f Frame) {
+	if s == nil || s.closed || f == s.frame {
+		return
+	}
+	alphaWas := s.frame.Alpha
+	s.frame = f
+	s.frameSent = false
+	if alphaWas != f.Alpha {
+		// The buffers are the wrong format now: shm slots are remade on
+		// the next present, the GPU needs a config with (or without) an
+		// alpha channel, which means a new EGL surface.
+		for i := range s.slots {
+			if !s.slots[i].busy {
+				s.destroySlot(i)
+			}
+		}
+		s.rebindGPUAlpha(f.Alpha)
+	}
+	bw, bh := s.bufferWH()
+	if s.bufW != bw || s.bufH != bh {
+		s.setBuffer(bw, bh)
+		s.blank = true
+	}
+}
+
+// Frame is the frame last set (FrameSurface).
+func (s *wlSurface) Frame() Frame {
+	if s == nil {
+		return Frame{}
+	}
+	return s.frame
+}
+
+// applyFrameLocked puts the window geometry and the surface's regions on
+// the wire, just before the buffer they belong to is committed. Everything
+// here is double-buffered surface state: it takes effect with that commit.
+func (s *wlSurface) applyFrameLocked(surfW, surfH int) {
+	if s.conn == nil || s.surf == nil || surfW < 1 || surfH < 1 {
+		return
+	}
+	changed := !s.frameSent || s.opaqueW != surfW || s.opaqueH != surfH
+	if !changed {
+		return
+	}
+	s.frameSent = true
+	s.opaqueW, s.opaqueH = surfW, surfH
+	m := s.marginLogical()
+	win := [4]int{m.Left, m.Top, surfW - m.Width(), surfH - m.Height()}
+	if s.xdg != nil && (!m.Zero() || s.frame.Alpha || s.geomSet) {
+		// The visible window, so the compositor snaps and tiles to it and
+		// not to the shadow around it.
+		C.ui_wl_set_geometry(s.xdg, C.int(win[0]), C.int(win[1]), C.int(win[2]), C.int(win[3]))
+		s.geomSet = true
+	}
+	if s.conn.compositor == nil {
+		return
+	}
+	if m.Zero() && !s.frame.Alpha {
+		// No frame of ours (or an opaque one): the whole surface is the
+		// window, opaque, and takes input everywhere — the v0.4.1
+		// behaviour. The input region goes back to NULL (infinite); an
+		// empty region would make the window deaf to every click.
+		C.ui_wl_opaque(s.conn.compositor, s.surf, C.int(surfW), C.int(surfH))
+		C.ui_wl_region_none(s.surf, 0)
+		return
+	}
+	// Input: the window plus the resize band in the shadow. The rest of
+	// the margin is not ours and clicks through to whatever is behind.
+	box := FrameRect{X: win[0], Y: win[1], W: win[2], H: win[3]}
+	in := InputRect(box, m, s.inputLogical())
+	band := []C.int{C.int(in.X), C.int(in.Y), C.int(in.W), C.int(in.H)}
+	C.ui_wl_region(s.conn.compositor, s.surf, 0, &band[0], 1)
+	// Opaque: the window less its rounded corners. Nothing is claimed
+	// opaque that is not — a compositor skips what is behind it.
+	rects := flatRects(OpaqueRects(box, s.frame.Radius, s.deviceScale()))
+	if len(rects) == 0 {
+		C.ui_wl_region_none(s.surf, 1)
+		return
+	}
+	C.ui_wl_region(s.conn.compositor, s.surf, 1, &rects[0], C.int(len(rects)/4))
+}
+
+// flatRects is rects as the flat x, y, w, h list the C helper takes.
+func flatRects(rects []FrameRect) []C.int {
+	out := make([]C.int, 0, len(rects)*4)
+	for _, r := range rects {
+		out = append(out, C.int(r.X), C.int(r.Y), C.int(r.W), C.int(r.H))
+	}
+	return out
+}
+
+// inputLogical is how far the resize band reaches into the margin, in
+// logical pixels (never further than the margin itself).
+func (s *wlSurface) inputLogical() FrameInsets {
+	m, in := s.marginLogical(), s.frame.Input
+	sc := s.deviceScale()
+	if sc <= 0 {
+		sc = 1
+	}
+	px := func(v, cap int) int {
+		if v <= 0 {
+			return 0
+		}
+		return min(max(int(math.Round(float64(float32(v)/sc))), 1), cap)
+	}
+	return FrameInsets{
+		Top:    px(in.Top, m.Top),
+		Right:  px(in.Right, m.Right),
+		Bottom: px(in.Bottom, m.Bottom),
+		Left:   px(in.Left, m.Left),
+	}
+}
+
 // Minimize iconifies the window (xdg_toplevel.set_minimized), keeping its
 // role: the taskbar brings it back. Hide, by contrast, drops the role.
 func (s *wlSurface) Minimize() {
@@ -4108,3 +4314,6 @@ func (s *wlSurface) Minimize() {
 	C.ui_wl_set_minimized(s.top)
 	C.ui_wl_flush(s.conn.dpy)
 }
+
+// wlSurface is a full FrameSurface (compile-time check).
+var _ FrameSurface = (*wlSurface)(nil)

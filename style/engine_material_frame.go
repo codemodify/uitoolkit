@@ -23,7 +23,7 @@ func (materialEngine) Decoration(l *Classic, st DecorationState) DecorationSpec 
 		ButtonPad:     Insets{Top: snap((h - side) * 0.5), Left: snap(l.S(8)) - px, Right: snap(l.S(8)) - px},
 		CenterButtons: true,
 		Layout:        ":minimize,maximize,close",
-		Shadow:        materialEngine{}.PopupShadow(l, PopupDialog),
+		Shadow:        ShadowLayersReach(materialWindowShadow(l, DecorationState{Active: true})),
 	}
 }
 
@@ -68,4 +68,20 @@ func (materialEngine) DrawCaptionButton(l *Classic, ctx *paintengine2d.Context, 
 	}
 	s := snap(min(b.Dx(), b.Dy()) * 20 / 32 * 0.6)
 	DrawCaptionGlyph(ctx, b, k, st.Maximized, fg, s, max(snap(l.S(1.5)), 1))
+}
+
+// materialWindowShadow is Material's elevation under a window: the key and
+// ambient pair of a raised surface.
+func materialWindowShadow(l *Classic, st DecorationState) []WindowShadow {
+	if !st.Active {
+		return []WindowShadow{{Color: shadowBlack(0.2), DY: l.S(2), Blur: l.S(6)}}
+	}
+	return []WindowShadow{
+		{Color: shadowBlack(0.2), DY: l.S(8), Blur: l.S(10)},
+		{Color: shadowBlack(0.14), DY: l.S(3), Blur: l.S(14), Spread: l.S(2)},
+	}
+}
+
+func (materialEngine) DrawDecorationShadow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st DecorationState) {
+	DrawShadowLayers(ctx, b, DecorationOf(l, st).Radius, materialWindowShadow(l, st))
 }

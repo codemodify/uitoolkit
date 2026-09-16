@@ -55,6 +55,10 @@ func (s *wlSurface) tryBindGPU() {
 		Platform: paintengine2d.EGLPlatformWayland,
 		Width:    bw,
 		Height:   bh,
+		// An alpha visual only where the frame needs one: an opaque window
+		// on an ARGB config that ever left alpha short of 1 would present
+		// see-through.
+		Alpha: s.frame.Alpha,
 	})
 	if err != nil {
 		C.ui_wl_egl_destroy(win)
@@ -62,12 +66,36 @@ func (s *wlSurface) tryBindGPU() {
 	}
 	s.eglWin = unsafe.Pointer(win)
 	s.gpu = dev
+	s.gpuAlpha = s.frame.Alpha
 	// The buffer is this size now: a configure that arrived since the
 	// surface was made (configure_bounds, a compositor's size) changed it,
 	// and a present that thought otherwise never resized the EGL window.
 	s.bufW, s.bufH = bw, bh
 	if egl, _, _ := dev.EGLHandles(); egl != 0 {
 		C.ui_wl_egl_no_vsync(C.uintptr_t(egl))
+	}
+}
+
+// rebindGPUAlpha swaps the GPU device for one whose EGL config matches the
+// frame's need for an alpha channel. The new device is made before the old
+// one goes, so the EGL display stays initialised (tearing it down and back
+// up costs a driver reload); the app repaints everything after a frame
+// change anyway, so nothing is copied over.
+func (s *wlSurface) rebindGPUAlpha(alpha bool) {
+	if s == nil || s.gpu == nil || s.gpuAlpha == alpha {
+		return
+	}
+	old, oldWin := s.gpu, s.eglWin
+	s.gpu, s.eglWin = nil, nil
+	s.tryBindGPU()
+	if s.gpu == nil {
+		// Nothing better to fall back on: keep the device we had.
+		s.gpu, s.eglWin = old, oldWin
+		return
+	}
+	_ = old.Close()
+	if oldWin != nil {
+		C.ui_wl_egl_destroy((*C.struct_wl_egl_window)(oldWin))
 	}
 }
 

@@ -1,6 +1,7 @@
 package platform
 
 import (
+	"math"
 	"os"
 	"strings"
 
@@ -81,6 +82,146 @@ func DecorationsFromEnv() (Decorations, bool) {
 		return DecorationsAuto, false
 	}
 	return d, true
+}
+
+// FrameInsets is a band around a window's edges, in whole device pixels.
+type FrameInsets struct {
+	Top, Right, Bottom, Left int
+}
+
+// Zero reports whether every side is zero.
+func (in FrameInsets) Zero() bool {
+	return in.Top == 0 && in.Right == 0 && in.Bottom == 0 && in.Left == 0
+}
+
+// Width and Height are how much the band adds to a window's size.
+func (in FrameInsets) Width() int  { return in.Left + in.Right }
+func (in FrameInsets) Height() int { return in.Top + in.Bottom }
+
+// Frame is what a window whose frame the toolkit draws tells the window
+// system. All of it is in device pixels, in surface coordinates.
+//
+// The surface is the visible window grown by Margin: an invisible band
+// holding the drop shadow, with the resize handles Input deep inside it and
+// the rest clicking through to whatever is behind. The compositor is told
+// the visible window (Wayland's xdg_surface.set_window_geometry, X11's
+// _GTK_FRAME_EXTENTS), so snapping, tiling and the task bar ignore the
+// shadow.
+type Frame struct {
+	// Margin is the invisible band: zero for a frame with no shadow, and
+	// zero on an edge that is maximized or tiled against another window.
+	Margin FrameInsets
+	// Input is how far into Margin a press still reaches the window (the
+	// resize band in the shadow); the rest of the margin is not ours.
+	Input FrameInsets
+	// Radius are the visible window's corner radii — top-left, top-right,
+	// bottom-right, bottom-left — which the opaque region leaves out.
+	Radius [4]float32
+	// Alpha: the buffer needs an alpha channel (there is a shadow or a
+	// rounded corner). Without it the backend keeps its opaque buffers and
+	// the full opaque region, as for a window with no frame of ours.
+	Alpha bool
+}
+
+// Zero reports whether f asks for nothing: no margin, no rounded corner, no
+// alpha — an opaque frame that fills its surface.
+func (f Frame) Zero() bool {
+	return f.Margin.Zero() && !f.Alpha && f.Radius == [4]float32{}
+}
+
+// FrameMargin is a margin of at least want device pixels that is also a
+// whole number of logical pixels at scale: Wayland states a window's
+// geometry in logical pixels, so a margin that is not one would leave the
+// visible window a fraction of a pixel off the compositor's idea of it. It
+// looks a few logical pixels ahead and then gives up and rounds — at 1.75
+// a 10px margin becomes 12 logical (21 device), at 1.5 it stays 10 (15).
+func FrameMargin(want, scale float32) int {
+	if want <= 0 {
+		return 0
+	}
+	if scale <= 0 {
+		scale = 1
+	}
+	l0 := int(math.Ceil(float64(want/scale) - 1e-4))
+	if l0 < 1 {
+		l0 = 1
+	}
+	for l := l0; l <= l0+8; l++ {
+		d := float64(l) * float64(scale)
+		if math.Abs(d-math.Round(d)) < 1e-3 {
+			return int(math.Round(d))
+		}
+	}
+	return int(math.Round(float64(l0) * float64(scale)))
+}
+
+// FrameRect is a box of a window's surface, in whatever unit the caller
+// works in (logical pixels on Wayland, device pixels on X11).
+type FrameRect struct{ X, Y, W, H int }
+
+// InputRect is where a press reaches a window whose frame the toolkit
+// draws: the visible window win grown by the resize band in the shadow.
+// The rest of the margin is not the window's — it clicks through to
+// whatever is behind it.
+func InputRect(win FrameRect, margin, input FrameInsets) FrameRect {
+	l := min(input.Left, margin.Left)
+	t := min(input.Top, margin.Top)
+	r := min(input.Right, margin.Right)
+	b := min(input.Bottom, margin.Bottom)
+	return FrameRect{X: win.X - l, Y: win.Y - t, W: win.W + l + r, H: win.H + t + b}
+}
+
+// OpaqueRects is the window less the squares its rounded corners live in —
+// what a compositor may take as solid. radius is in device pixels
+// (top-left clockwise) and scale converts it to win's unit, rounded up so
+// nothing translucent is ever claimed opaque. An empty result means
+// "nothing is certainly opaque".
+func OpaqueRects(win FrameRect, radius [4]float32, scale float32) []FrameRect {
+	if win.W < 1 || win.H < 1 {
+		return nil
+	}
+	if scale <= 0 {
+		scale = 1
+	}
+	up := func(v float32) int {
+		if v <= 0 {
+			return 0
+		}
+		return int(math.Ceil(float64(v / scale)))
+	}
+	tl, tr, br, bl := up(radius[0]), up(radius[1]), up(radius[2]), up(radius[3])
+	top, bottom := max(tl, tr), max(br, bl)
+	if top+bottom >= win.H {
+		return nil
+	}
+	out := []FrameRect{{X: win.X, Y: win.Y + top, W: win.W, H: win.H - top - bottom}}
+	if top > 0 && win.W-tl-tr > 0 {
+		out = append(out, FrameRect{X: win.X + tl, Y: win.Y, W: win.W - tl - tr, H: top})
+	}
+	if bottom > 0 && win.W-bl-br > 0 {
+		out = append(out, FrameRect{X: win.X + bl, Y: win.Y + win.H - bottom, W: win.W - bl - br, H: bottom})
+	}
+	return out
+}
+
+// SurfaceFrame is the frame s was last told about (the zero frame when it
+// cannot hold one).
+func SurfaceFrame(s Surface) Frame {
+	if f, ok := s.(FrameSurface); ok {
+		return f.Frame()
+	}
+	return Frame{}
+}
+
+// SetSurfaceFrame tells s about the frame the toolkit draws, where it can
+// take one. It reports whether the surface took it.
+func SetSurfaceFrame(s Surface, f Frame) bool {
+	fs, ok := s.(FrameSurface)
+	if !ok {
+		return false
+	}
+	fs.SetFrame(f)
+	return true
 }
 
 // Edges is a set of window edges. A resize edge is one side or a corner
@@ -224,6 +365,11 @@ type WindowState struct {
 	Tiled Edges
 	// Constrained are the edges that cannot be resized (xdg-shell v7).
 	Constrained Edges
+	// Solid: the desktop does not composite the window (X11 without a
+	// compositing manager), so a frame the toolkit draws must be solid —
+	// no shadow, no rounded corners, nothing translucent, since alpha is
+	// simply ignored there. Wayland always composites.
+	Solid bool
 }
 
 // xdgStateFromMask decodes the backend's xdg_toplevel.configure state set:
@@ -320,6 +466,15 @@ type FrameSurface interface {
 	// ShowWindowMenu asks the desktop for its window menu at p (surface
 	// device pixels); false means it cannot, and the toolkit shows its own.
 	ShowWindowMenu(p paintengine2d.Point) bool
+	// SetFrame tells the window system about the frame the toolkit draws
+	// (see [Frame]): the invisible margin, the resize band inside it, the
+	// corner radii and whether the buffer needs alpha. The surface grows
+	// by the margin at once — Size() is the buffer, the visible window is
+	// Size() less the margin — and the window system is told with the next
+	// Present, in the same commit as the buffer.
+	SetFrame(f Frame)
+	// Frame is the frame last set.
+	Frame() Frame
 	// Minimize iconifies the window (keeping it: unlike Hide, the taskbar
 	// or the overview brings it back).
 	Minimize()

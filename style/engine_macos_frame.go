@@ -41,12 +41,26 @@ func (macosEngine) Decoration(l *Classic, st DecorationState) DecorationSpec {
 		CenterTitle:   true,
 		Layout:        "close,minimize,maximize:",
 		Radius:        [4]float32{r, r, r, r},
-		Shadow:        macosEngine{}.PopupShadow(l, PopupDialog),
-	}
-	if st.Maximized || st.Tiled != 0 {
-		s.Radius = [4]float32{}
+		Shadow:        ShadowLayersReach(macosWindowShadow(l, DecorationState{Active: true})),
 	}
 	return s
+}
+
+// macosWindowShadow is the Mac's window shadow: a large soft one under the
+// key window and a much smaller one under the others. Apple publishes no
+// numbers; these are measured off screenshots of Big Sur and Yosemite.
+func macosWindowShadow(l *Classic, st DecorationState) []WindowShadow {
+	if !st.Active {
+		return []WindowShadow{{Color: shadowBlack(0.18), DY: l.S(4), Blur: l.S(16)}}
+	}
+	return []WindowShadow{
+		{Color: shadowBlack(0.34), DY: l.S(18), Blur: l.S(48)},
+		{Color: shadowBlack(0.14), DY: l.S(2), Blur: l.S(8)},
+	}
+}
+
+func (macosEngine) DrawDecorationShadow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st DecorationState) {
+	DrawShadowLayers(ctx, b, DecorationOf(l, st).Radius, macosWindowShadow(l, st))
 }
 
 func (macosEngine) DrawDecoration(l *Classic, ctx *paintengine2d.Context, f DecorationFrame, st DecorationState) {

@@ -19,9 +19,15 @@ import (
 // client), and the caption gestures that hand a move, a resize or the
 // window menu to the desktop. The look paints the frame (style.DecorationOf
 // and friends: Win95's gradient caption, Aqua's traffic lights, a hairline
-// in plain looks). Frames are opaque and square for now: the window's
-// geometry is the whole surface and the resize handles sit inside its edges
-// (the border, at least 4 px, and the top of the caption).
+// in plain looks).
+//
+// A look with a drop shadow puts the visible window inside a larger
+// surface: the margin around it holds the shadow, the resize handles live
+// in it, and the rest of it clicks through (frameshadow.go paints it, and
+// platform.Frame tells the window system where the window really is). A
+// look without one keeps the window's geometry the whole surface and its
+// resize handles inside its edges (the border, at least 4 px, and the top
+// of the caption).
 
 // NonClientRegion is what a point of a window is to the window system, the
 // region kinds every platform understands (Win32's WM_NCHITTEST codes,
@@ -52,6 +58,17 @@ type frameGeom struct {
 	// framed: the toolkit draws the frame (caption buttons, border,
 	// resize edges).
 	framed bool
+	// window is the visible window inside the surface: the whole surface
+	// for a frame without a shadow, and the surface less margin for one
+	// with (margin holds the shadow and the resize band).
+	window paintengine2d.Rect
+	margin platform.FrameInsets
+	// input is how far into margin a press still reaches the window.
+	input platform.FrameInsets
+	// radius are the visible window's corner radii (top-left clockwise);
+	// shadow says the look drops one into the margin.
+	radius [4]float32
+	shadow bool
 	// border is the look's frame around a framed window (none when
 	// maximized).
 	border style.Insets
@@ -59,6 +76,12 @@ type frameGeom struct {
 	// box of the content and, in a framed window, of the overlay.
 	caption paintengine2d.Rect
 	content paintengine2d.Rect
+}
+
+// translucent reports whether the frame needs an alpha channel: it has a
+// shadow to drop in the margin, or corners to cut out of the window.
+func (g frameGeom) translucent() bool {
+	return g.framed && (g.shadow || g.radius != [4]float32{})
 }
 
 // captionGesture is a left press on caption space, waiting to become a move
@@ -243,20 +266,98 @@ func (w *Window) capsChanged(c platform.WMCaps) {
 	w.rebuildCaption()
 }
 
+// frameSpec is the look's frame in the window's current state.
+func (w *Window) frameSpec() style.DecorationSpec {
+	if w.caption == nil {
+		return style.DecorationSpec{}
+	}
+	return style.DecorationOf(w.look, w.caption.DecorationState())
+}
+
 // frameBorder is the look's border around a framed window, whole device
 // pixels (none when maximized).
 func (w *Window) frameBorder() style.Insets {
 	if w.caption == nil || w.state.Maximized {
 		return style.Insets{}
 	}
-	b := style.DecorationOf(w.look, w.caption.DecorationState()).Border
+	b := w.frameSpec().Border
 	px := func(v float32) float32 { return max(float32(math.Round(float64(v))), 0) }
 	return style.Insets{Top: px(b.Top), Right: px(b.Right), Bottom: px(b.Bottom), Left: px(b.Left)}
 }
 
-// layoutFrame arranges the caption inside full and returns the geometry.
+// resizeBandDip is how far outside the visible window a press still resizes
+// it — the band inside the shadow (Chromium's 10-DIP kResizeBorder, GTK's
+// 12px handle, SourceGit's 12px ring) — cornerBandDip how far a corner
+// reaches along each edge (Chromium's kResizeAreaCornerSize), and
+// insideBandDip the band a frame without a shadow keeps inside its own
+// edges instead.
+const (
+	resizeBandDip = 10
+	cornerBandDip = 16
+	insideBandDip = 4
+)
+
+// resizeBand is the resize band and the corner zone in device pixels.
+func (w *Window) resizeBand() (band, corner float32) {
+	rnd := func(v float32) float32 { return float32(math.Round(float64(v))) }
+	return rnd(style.Dip(w.look, resizeBandDip)), rnd(style.Dip(w.look, cornerBandDip))
+}
+
+// wantFrame is what the window system should know about the frame now: the
+// margin the shadow needs (whole logical pixels, so the visible window
+// starts on a pixel of the compositor's grid at any scale), how deep the
+// resize band reaches into it, the corner radii and whether the buffer
+// needs alpha. A window with no frame of the toolkit's, a maximized or
+// full-screen one and one on an uncomposited X11 screen ask for nothing.
+func (w *Window) wantFrame() platform.Frame {
+	if !w.framed() || w.caption == nil {
+		return platform.Frame{}
+	}
+	spec := w.frameSpec()
+	// DecorationOf has already dropped the shadow and the corners where
+	// the window is maximized, tiled or uncomposited.
+	band, _ := w.resizeBand()
+	sc := max(w.scale, 1)
+	edge := func(reach float32) int {
+		if reach <= 0 {
+			return 0
+		}
+		return platform.FrameMargin(max(reach, band), sc)
+	}
+	f := platform.Frame{Radius: spec.Radius}
+	f.Margin = platform.FrameInsets{
+		Top:    edge(spec.Shadow.Top),
+		Right:  edge(spec.Shadow.Right),
+		Bottom: edge(spec.Shadow.Bottom),
+		Left:   edge(spec.Shadow.Left),
+	}
+	f.Input = platform.FrameInsets{
+		Top:    min(f.Margin.Top, int(band)),
+		Right:  min(f.Margin.Right, int(band)),
+		Bottom: min(f.Margin.Bottom, int(band)),
+		Left:   min(f.Margin.Left, int(band)),
+	}
+	f.Alpha = !f.Margin.Zero() || f.Radius != [4]float32{}
+	return f
+}
+
+// applyFrame hands the frame to the window system before the window lays
+// itself out: the surface grows by the margin at once, so this frame is
+// painted at the size the compositor is told about in the same commit.
+func (w *Window) applyFrame() {
+	f := w.wantFrame()
+	if f == w.shape {
+		return
+	}
+	w.shape = f
+	platform.SetSurfaceFrame(w.surf, f)
+	w.shadow.drop()
+}
+
+// layoutFrame arranges the caption inside the surface box full and returns
+// the geometry.
 func (w *Window) layoutFrame(full paintengine2d.Rect) frameGeom {
-	g := frameGeom{content: full}
+	g := frameGeom{content: full, window: full}
 	if w.caption == nil {
 		w.geom = g
 		return g
@@ -264,8 +365,16 @@ func (w *Window) layoutFrame(full paintengine2d.Rect) frameGeom {
 	g.framed = w.framed()
 	inner := full
 	if g.framed {
+		m := w.shape.Margin
+		g.margin, g.input = m, w.shape.Input
+		g.radius = w.shape.Radius
+		g.shadow = !m.Zero()
+		g.window = paintengine2d.Rect{
+			Min: paintengine2d.Pt(full.Min.X+float32(m.Left), full.Min.Y+float32(m.Top)),
+			Max: paintengine2d.Pt(full.Max.X-float32(m.Right), full.Max.Y-float32(m.Bottom)),
+		}
 		g.border = w.frameBorder()
-		inner = g.border.Apply(full)
+		inner = g.border.Apply(g.window)
 	}
 	sz := w.caption.Measure(layout.Loose(inner.Dx(), inner.Dy()))
 	h := min(float32(math.Ceil(float64(sz.Y)-1e-3)), inner.Dy())
@@ -329,47 +438,60 @@ func (w *Window) captionButtonAt(p paintengine2d.Point) platform.CaptionButton {
 	return platform.CaptionNone
 }
 
-// resizeEdgesAt is the resize edge under p: a 4 px band inside the left,
-// right and bottom edges and the top 4 px of the caption, reaching 16 px
-// along each edge from a corner for the corners; none while maximized or
-// on a tiled or constrained edge.
+// resizeEdgesAt is the resize edge under p. Without a shadow the band runs
+// inside the window: the look's border, at least 4 px, and the top 4 px of
+// the caption. With one it runs outside, in the margin (the shadow), where
+// Chromium, GTK and SourceGit put theirs, and the margin beyond it is not
+// the window's at all. Corners reach 16 px along each edge; there is no
+// band at all while maximized or on a tiled or constrained edge.
 func (w *Window) resizeEdgesAt(p paintengine2d.Point) platform.Edges {
 	st := w.state
-	if !w.geom.framed || st.Maximized || st.Fullscreen {
+	g := w.geom
+	if !g.framed || st.Maximized || st.Fullscreen {
 		return 0
 	}
-	ww, hh := w.surf.Size()
-	W, H := float32(ww), float32(hh)
-	bd := w.geom.border
-	band := max(bd.Left, bd.Right, bd.Top, bd.Bottom, float32(math.Round(float64(style.Dip(w.look, 4)))))
-	corner := float32(math.Round(float64(style.Dip(w.look, 16))))
-	if p.X < 0 || p.Y < 0 || p.X >= W || p.Y >= H {
+	win := g.window
+	bd := g.border
+	inside := max(bd.Left, bd.Right, bd.Top, bd.Bottom, float32(math.Round(float64(style.Dip(w.look, insideBandDip)))))
+	_, corner := w.resizeBand()
+	// Each side's band: out from the visible window into the margin, or in
+	// from its edge where there is no margin.
+	out := func(v int) float32 { return float32(v) }
+	l, r := out(g.input.Left), out(g.input.Right)
+	t, b := out(g.input.Top), out(g.input.Bottom)
+	if p.X < win.Min.X-l || p.Y < win.Min.Y-t || p.X >= win.Max.X+r || p.Y >= win.Max.Y+b {
 		return 0
+	}
+	in := func(band float32) float32 {
+		if band > 0 {
+			return 0
+		}
+		return inside
 	}
 	var e platform.Edges
 	switch {
-	case p.X < band:
+	case p.X < win.Min.X+in(l):
 		e |= platform.EdgeLeft
-	case p.X >= W-band:
+	case p.X >= win.Max.X-in(r):
 		e |= platform.EdgeRight
 	}
 	switch {
-	case p.Y < band:
+	case p.Y < win.Min.Y+in(t):
 		e |= platform.EdgeTop
-	case p.Y >= H-band:
+	case p.Y >= win.Max.Y-in(b):
 		e |= platform.EdgeBottom
 	}
 	if e == platform.EdgeTop || e == platform.EdgeBottom {
-		if p.X < corner {
+		if p.X < win.Min.X+corner {
 			e |= platform.EdgeLeft
-		} else if p.X >= W-corner {
+		} else if p.X >= win.Max.X-corner {
 			e |= platform.EdgeRight
 		}
 	}
 	if e == platform.EdgeLeft || e == platform.EdgeRight {
-		if p.Y < corner {
+		if p.Y < win.Min.Y+corner {
 			e |= platform.EdgeTop
-		} else if p.Y >= H-corner {
+		} else if p.Y >= win.Max.Y-corner {
 			e |= platform.EdgeBottom
 		}
 	}
@@ -642,8 +764,7 @@ func (w *Window) paintDecoration(ctx *paintengine2d.Context) {
 	if !g.framed || w.caption == nil {
 		return
 	}
-	ww, hh := w.surf.Size()
-	f := style.DecorationFrame{Window: paintengine2d.XYWH(0, 0, float32(ww), float32(hh))}
+	f := style.DecorationFrame{Window: g.window}
 	cap, bar := w.caption.FrameParts()
 	o := widget.DeviceOrigin(w.caption)
 	f.Caption = cap.Translate(o)

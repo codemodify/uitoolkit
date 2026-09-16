@@ -19,9 +19,6 @@ func (lunaEngine) Decoration(l *Classic, st DecorationState) DecorationSpec {
 	side := snap(h * 21 / 29)
 	right := snap(h*4/29) + lunaPx(l) - fw
 	r := l.rx(7)
-	if st.Maximized || st.Tiled != 0 {
-		r = 0
-	}
 	return DecorationSpec{
 		Stacked:   true,
 		Border:    Insets{Right: fw, Bottom: fw, Left: fw},
