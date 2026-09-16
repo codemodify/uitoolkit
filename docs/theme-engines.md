@@ -270,6 +270,32 @@ func (lunaEngine) DrawCaptionButton(l *Classic, ctx *paintengine2d.Context, b pa
   pressed state, `st.Maximized` for the restore glyph.
 - `DrawCaptionGlyph` draws the generic crisp glyphs (a cross, a bar, a
   square, two for restore, a small window) for engines without their own.
+- **Shadow and corners.** `Shadow` is the invisible margin the window asks
+  the compositor for; the resize handles live in it, and the look paints it
+  through the optional `DrawDecorationShadow(l, ctx, b, st)` — `b` is the
+  visible window, and the toolkit rasterises it once into a nine-patch per
+  look, state, scale and margin. Build the shadow out of `WindowShadow`
+  layers (colour, offset down, blur, spread, device px) with
+  `DrawShadowLayers`, and take `Shadow` from `ShadowLayersReach` of the
+  **active** window's layers whatever the state, so gaining or losing focus
+  never resizes the window. An engine without the hook drops its dialog
+  shadow (`PopupShadow(PopupDialog)`).
+  `DecorationOf` applies the state's own rules for every look: a maximized
+  window has no border, corners or shadow; a window on an uncomposited X11
+  screen (`DecorationState.Solid`) is square and shadowless; a tiled edge
+  loses its shadow and the corners beside it. An engine states its look's
+  own frame and nothing else.
+- **What each era had.** Windows 95 to XP, Windows 8, Motif, NeXT and the
+  other pre-compositing looks are square and shadowless, as they were; KDE
+  3's Plastik and Keramik and GNOME 2's Clearlooks and Bluecurve keep the
+  rounded top corners their decorations shaped. Windows XP rounds its top
+  corners (7px) without a shadow. The composited eras carry both: Aqua
+  (5px top corners, a deep soft shadow), macOS (10px all round on Big Sur,
+  4 before), Windows 7's glass (6px), Windows 10 (square, a tight shadow),
+  Windows 11 (8px, DWM's shadow), Plasma's Breeze (3px top, its Large
+  shadow), GNOME's Adwaita (12px, `0 3px 9px 1px` black at half alpha),
+  SourceGit and the web packs (8px, a 12px ring), FlatLaf and Material
+  (square, their own elevation), Oxygen and Fusion through the adapter.
 
 Engines without the hook get their in-app window frame adapted: the caption
 of `DrawWindowFrame` as a stacked strip (only its parts are painted, never
