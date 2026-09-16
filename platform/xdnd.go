@@ -66,6 +66,11 @@ const (
 	XAProxy
 )
 
+// xdndAtomCount is how many there are, so a backend can hold them in a
+// fixed array. TestXDNDAtomNamesMatchTheIndex keeps it and the names in
+// step.
+const xdndAtomCount = int(XAProxy) + 1
+
 // XDNDMessage is one XDND client message's five data words as they go on
 // the wire (ClientMessage, format 32).
 type XDNDMessage [5]uint32
