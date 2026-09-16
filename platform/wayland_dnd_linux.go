@@ -29,6 +29,7 @@ package platform
 #include <time.h>
 #include <unistd.h>
 #include "xdg-toplevel-drag-v1-client-protocol.h"
+#include "viewporter-client-protocol.h"
 
 extern void uitkWlDragSend(uintptr_t id, char *mime, int fd);
 extern void uitkWlDragTarget(uintptr_t id, char *mime);
@@ -142,6 +143,16 @@ static void ui_wd_damage(struct wl_surface *s, int w, int h) {
 static void ui_wd_scale(struct wl_surface *s, int scale) {
 	if (s && scale > 0) wl_surface_set_buffer_scale(s, scale);
 }
+// wp_viewporter, for an icon drawn at a fractional scale: the buffer stays
+// at scale 1 and the viewport says what its pixels come to in logical ones,
+// which is how every window of this toolkit carries a fractional scale.
+static struct wp_viewport *ui_wd_viewport(struct wp_viewporter *v, struct wl_surface *s) {
+	return (v && s) ? wp_viewporter_get_viewport(v, s) : NULL;
+}
+static void ui_wd_viewport_dest(struct wp_viewport *v, int w, int h) {
+	if (v && w > 0 && h > 0) wp_viewport_set_destination(v, w, h);
+}
+static void ui_wd_viewport_destroy(struct wp_viewport *v) { if (v) wp_viewport_destroy(v); }
 static void ui_wd_commit(struct wl_surface *s) { if (s) wl_surface_commit(s); }
 static void ui_wd_flush(struct wl_display *d) { if (d) wl_display_flush(d); }
 
@@ -219,6 +230,7 @@ static ssize_t ui_wd_write_all(int fd, const char *p, size_t n, int ms) {
 import "C"
 
 import (
+	"math"
 	"time"
 	"unsafe"
 
@@ -234,6 +246,7 @@ type wlDrag struct {
 	surf int
 	// icon is the surface the compositor moves with the pointer.
 	icon     *C.struct_wl_surface
+	iconView *C.struct_wp_viewport
 	iconBuf  *C.struct_wl_buffer
 	iconMem  unsafe.Pointer
 	iconSize int
@@ -432,22 +445,93 @@ func (c *wlConn) dragMakeIcon(s *wlSurface, p DragPayload) {
 		return
 	}
 	// The picture was drawn at the window's scale, so the buffer covers
-	// that many logical pixels fewer. A fractional scale has no integer
-	// to say here; the icon then draws a little large, which is far
-	// better than a scaled-down blur.
-	if s.bufScale > 1 {
-		C.ui_wd_scale(surf, C.int(s.bufScale))
+	// that many logical pixels fewer. A whole scale is what
+	// set_buffer_scale is for; a fractional one has no integer to say,
+	// and is carried the way every window of this toolkit carries it —
+	// buffer scale 1 and a viewport whose destination is the logical size
+	// the picture's pixels come to (wayland_linux.go, present).
+	sc := dragIconScale(s, p)
+	lw, lh := iconLogical(w, h, sc)
+	if vp := c.dragIconViewport(surf, sc); vp != nil {
+		C.ui_wd_viewport_dest(vp, C.int(lw), C.int(lh))
+	} else if n := int(sc + 0.5); n > 1 {
+		C.ui_wd_scale(surf, C.int(n))
 	}
 	// The hotspot is where in the picture the pointer sits, so the icon
-	// hangs back from the pointer by exactly that much.
-	C.ui_wd_attach(surf, buf, C.int(-int(p.Hotspot.X)), C.int(-int(p.Hotspot.Y)))
+	// hangs back from the pointer by exactly that much. It arrives in the
+	// picture's own pixels and the offset is in the surface's logical
+	// ones, so it is worth the scale less.
+	C.ui_wd_attach(surf, buf,
+		C.int(-logicalLen(p.Hotspot.X, sc)), C.int(-logicalLen(p.Hotspot.Y, sc)))
 	C.ui_wd_damage(surf, C.int(w), C.int(h))
 	C.ui_wd_commit(surf)
 	c.drag.icon, c.drag.iconBuf, c.drag.iconMem, c.drag.iconSize = surf, buf, mem, size
 }
 
+// dragIconViewport gives the icon surface a viewport when it needs one: a
+// scale that is not a whole number, and a compositor with wp_viewporter.
+// Without one the icon falls back on the nearest whole buffer scale,
+// which is the best the core protocol can say.
+func (c *wlConn) dragIconViewport(surf *C.struct_wl_surface, scale float32) *C.struct_wp_viewport {
+	if c.viewporter == nil || wholeScale(scale) {
+		return nil
+	}
+	vp := C.ui_wd_viewport(c.viewporter, surf)
+	c.drag.iconView = vp
+	return vp
+}
+
+// dragIconScale is the scale the drag's picture was drawn at: what the
+// window that started it said, and the surface's own when it said
+// nothing.
+func dragIconScale(s *wlSurface, p DragPayload) float32 {
+	if p.Scale > 0 {
+		return p.Scale
+	}
+	if s != nil {
+		if sc := s.deviceScale(); sc > 0 {
+			return sc
+		}
+	}
+	return 1
+}
+
+// wholeScale reports that a scale is an integer, within the slack a
+// compositor's 120ths can leave behind.
+func wholeScale(scale float32) bool {
+	d := scale - float32(int(scale+0.5))
+	return d > -0.01 && d < 0.01
+}
+
+// iconLogical is the logical size a picture of w by h pixels drawn at
+// scale comes to, never less than one pixel each way.
+func iconLogical(w, h int, scale float32) (int, int) {
+	lw, lh := logicalLen(float32(w), scale), logicalLen(float32(h), scale)
+	if lw < 1 {
+		lw = 1
+	}
+	if lh < 1 {
+		lh = 1
+	}
+	return lw, lh
+}
+
+// logicalLen is a device length in the surface's logical units, rounded
+// to the nearest whole one: a hotspot or an edge half a logical pixel out
+// is a picture that sits visibly off the pointer.
+func logicalLen(v float32, scale float32) int {
+	if scale <= 0 {
+		scale = 1
+	}
+	return int(math.Round(float64(v / scale)))
+}
+
 // dragFreeIcon lets the icon surface and its buffer go.
 func (c *wlConn) dragFreeIcon() {
+	if c.drag.iconView != nil {
+		C.ui_wd_viewport_destroy(c.drag.iconView)
+		c.drag.iconView = nil
+	}
 	if c.drag.icon != nil {
 		C.ui_wd_surface_destroy(c.drag.icon)
 		c.drag.icon = nil

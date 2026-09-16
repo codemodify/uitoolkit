@@ -63,10 +63,14 @@ func (w *Window) startDrag(d *widget.Drag, tear *widget.TearOff) bool {
 		if ds, ok := w.surf.(platform.DragSurface); ok {
 			w.app.drag = run
 			if ds.StartDrag(platform.DragPayload{
-				Types:     d.Types,
-				Data:      d.Read,
-				Icon:      d.Image,
-				Hotspot:   d.Hotspot,
+				Types:   d.Types,
+				Data:    d.Read,
+				Icon:    d.Image,
+				Hotspot: d.Hotspot,
+				// The picture was drawn at this window's scale, which is
+				// the only place that knows it: a fractional scale has no
+				// whole number a surface could carry instead.
+				Scale:     w.Scale(),
 				Actions:   d.Allowed(),
 				Preferred: d.Preferred,
 				// A drag that may carry a window has to say so before it
