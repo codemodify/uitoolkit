@@ -1294,6 +1294,7 @@ func (c *x11Conn) dragCheckEscape() {
 		return
 	}
 	if C.ui_x_escape_held(c.dpy) != 0 {
+		xdndTrace("escape held: the drag is off")
 		c.dragCancel()
 	}
 }

@@ -2533,6 +2533,27 @@ func (s *x11Surface) Wake() {
 	x11Mu.Unlock()
 }
 
+// x11DragPoll is how often the loop wakes while a drag of ours runs.
+const x11DragPoll = 40 * time.Millisecond
+
+// WakeAt implements [WakeScheduler]: a drag of ours keeps the loop
+// ticking even while the connection is idle. Both of the drag's safety
+// nets need it — the key state is polled for an Escape that never
+// arrived as a key event (a compositor's own XWayland drag bridge can
+// hold the keyboard), and a target that took the drop and never answered
+// has to time out — and a pointer held still delivers nothing to wake on.
+func (s *x11Surface) WakeAt() time.Time {
+	if s == nil || s.conn == nil {
+		return time.Time{}
+	}
+	x11Mu.Lock()
+	defer x11Mu.Unlock()
+	if !s.conn.drag.active {
+		return time.Time{}
+	}
+	return time.Now().Add(x11DragPoll)
+}
+
 func (s *x11Surface) Show() { s.Raise() }
 
 func (s *x11Surface) Hide() {
