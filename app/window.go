@@ -500,6 +500,14 @@ func (w *Window) RequestFocus(c widget.Component) {
 	if c != nil {
 		c.FocusGained()
 	}
+	// Containers that paint by where the focus is rather than by holding
+	// it — a dock panel's title bar — hear about every move. The caption
+	// is a concrete type, so it only joins the roots when there is one.
+	roots := []widget.Component{w.root, w.overlay, w.popup}
+	if w.caption != nil {
+		roots = append(roots, w.caption)
+	}
+	widget.NotifyFocusMoved(c, roots...)
 	w.syncIMECursor()
 }
 
