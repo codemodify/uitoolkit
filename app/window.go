@@ -87,14 +87,15 @@ type Window struct {
 	wrapCaption    *widgets.HeaderBar
 	defaultCaption *widgets.HeaderBar
 	// decor is the decoration mode in effect, caps what the desktop can
-	// do for the window, geom the frame's last layout, shape what the
+	// do for the window, geom the frame's last layout, sysFrame what the
 	// window system was last told about the frame (the margin holding the
-	// shadow, the resize band in it, the corner radii, alpha) and shadow
-	// the cached nine-patch that margin is painted from.
+	// shadow, the resize band in it, the corner radii, alpha, and the
+	// window's silhouette) and shadow the cached nine-patch that margin is
+	// painted from.
 	decor    platform.Decorations
 	caps     platform.WMCaps
 	geom     frameGeom
-	shape    platform.Frame
+	sysFrame platform.Frame
 	shadow   frameShadow
 	capPress captionGesture
 	capClick captionClick
