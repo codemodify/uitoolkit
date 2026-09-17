@@ -69,9 +69,9 @@ var minSlice = [4]int{3, 3, 3, 3}
 // deepest step so the content never runs into the cut.
 const (
 	minCaption = 18
-	minChin    = 14 // the depth of the bottom band that steps in
-	minStep    = 6  // the first step's width
-	minWaist   = 14 // the second step's width
+	minChin    = 16 // the depth of the bottom band that steps in
+	minStep    = 8  // the first step's width
+	minWaist   = 24 // the second step's width
 )
 
 // Minim builds the skin's plan.
@@ -120,7 +120,7 @@ func Minim() *Plan {
 		minPlate(ctx, w, h, hex(minPhoL), hex(minPhos), hex(minPhoD))
 	})
 	l.face("button.checked", func(ctx *paintengine2d.Context, w, h float32) {
-		minPlate(ctx, w, h, hex(minAmbLo), hex(minAmber), hex("#5e3d14"))
+		minPlate(ctx, w, h, hex(minPhoD), hex(minPhoL), hex("#0a1f15"))
 	})
 
 	l.row(minH)
@@ -146,8 +146,12 @@ func Minim() *Plan {
 		minPlate(ctx, w, h, hex(minHot), hex(minFaceH), hex(minFaceL))
 	})
 	l.face("tool.pressed", in(minDown))
+	// A tool that is on is sunk with a phosphor rule under it rather than
+	// lit up: the glyph on it is drawn in the accent by the app, and an
+	// accent glyph on an accent face is a glyph nobody can read.
 	l.face("tool.checked", func(ctx *paintengine2d.Context, w, h float32) {
-		minPlate(ctx, w, h, hex(minAmbLo), hex("#c9913c"), hex("#5e3d14"))
+		minPlate(ctx, w, h, hex("#1b2320"), hex(minFaceL), hex(minFaceH))
+		px(ctx, 2, h-3, w-4, 1, hex(minPhos))
 	})
 	l.face("row.hover", func(ctx *paintengine2d.Context, w, h float32) {
 		px(ctx, 0, 0, w, h, hex("#1d2622"))
@@ -323,7 +327,7 @@ func Minim() *Plan {
 
 	p.Text = []TextRole{
 		{Name: "control", Color: minText, Hover: "#ffffff", Pressed: minText,
-			Disabled: minGone, Checked: "#1a1206", Default: "#07170f"},
+			Disabled: minGone, Checked: minPhos, Default: "#07170f"},
 		{Name: "onLight", Color: minInk, Disabled: minGone},
 		{Name: "caption", Color: minPhos, Disabled: minDim, Bold: true},
 	}

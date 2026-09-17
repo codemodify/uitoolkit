@@ -87,3 +87,16 @@ func MoveSurface(s Surface, x, y int) {
 		m.Move(x, y)
 	}
 }
+
+// SurfaceMoves reports whether s can be placed by the client at all (see
+// [HostMover]). It is the other half of [SurfacePosition], and an app that
+// keeps two windows stuck together has to ask both: X11 and the offscreen
+// backend answer yes, Wayland answers no and that is the protocol rather
+// than an omission.
+func SurfaceMoves(s Surface) bool {
+	if s == nil {
+		return false
+	}
+	_, ok := s.(HostMover)
+	return ok
+}
