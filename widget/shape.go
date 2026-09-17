@@ -3,6 +3,7 @@ package widget
 import (
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/platform"
+	"github.com/codemodify/uitoolkit/style"
 )
 
 // A component's own silhouette.
@@ -14,8 +15,16 @@ import (
 // goes to whatever is behind it in the tree, exactly as a press outside a
 // shaped window's silhouette goes to the window behind it.
 //
-// The cost of this to a component that does not ask is one nil check in
-// HitTest. The shape is consulted only for components that have one.
+// A component that says nothing asks its *look* instead, and only when it
+// names the face it paints ([ShapeRole]): a look whose round button is a
+// picture of a disc knows where the disc is, and nothing else does. The look
+// is asked once per size and its answer is remembered, so a skinned button
+// costs one comparison a hit test and an ordinary look costs a type
+// assertion that fails.
+//
+// The cost of all of this to a component that neither asks nor names a face
+// — every widget in the toolkit but one, and every component an app writes —
+// is two nil checks and one failed type assertion in HitTest.
 
 // SetHitShape gives the component a silhouette to take input inside,
 // stated in its own local device pixels. A press outside it is not the
@@ -78,6 +87,73 @@ func (b *Base) hitsShape(p paintengine2d.Point) bool {
 		return true
 	}
 	return r.Contains(int(p.X), int(p.Y))
+}
+
+// ShapeRole is what a component implements to let its look shape it: the
+// face it paints, as an engine role. A look with a silhouette for that face
+// ([style.ControlShapeEngine]) then decides where the control really is, and
+// a press outside it falls through to whatever is behind — which is how a
+// skin's round button stops taking clicks in its corners.
+//
+// It is only for a component whose box *is* one face. A check box is its
+// indicator and its label, and shaping the pair by the indicator's art would
+// make most of the control deaf.
+//
+// A component that says nothing here, and every look without the hook, keeps
+// the whole box — the default, and what every widget in the toolkit did
+// before any of this existed.
+type ShapeRole interface {
+	ShapeRole() style.Role
+}
+
+// lookShape is a component's silhouette as its look last gave it, with
+// everything that could change the answer beside it. A component's own
+// shape needs no such key — it is handed in — but a look's depends on the
+// look, the face and the size, and building one rasterises art.
+type lookShape struct {
+	look  style.LookAndFeel
+	role  style.Role
+	w, h  int
+	shape *platform.Shape // nil: the look shapes this face as its whole box
+}
+
+// hitsLookShape reports whether local point p is inside the silhouette the
+// component's look gives the face it paints. True for a component that names
+// no face, for a look with no silhouette for it, and whenever the answer
+// cannot be worked out — a control nobody can click is a worse failure than
+// a square one.
+func (b *Base) hitsLookShape(p paintengine2d.Point) bool {
+	r, ok := b.me().(ShapeRole)
+	if !ok {
+		return true
+	}
+	lb := b.LocalBounds()
+	w, h := int(lb.Dx()), int(lb.Dy())
+	if w < 1 || h < 1 {
+		return true
+	}
+	lk, role := b.resolveLook(), r.ShapeRole()
+	c := b.lookShape
+	if c == nil || c.look != lk || c.role != role || c.w != w || c.h != h {
+		c = &lookShape{look: lk, role: role, w: w, h: h}
+		c.shape = platform.NewShapeSilhouette(style.ControlShapeOf(lk, lb, role))
+		b.lookShape = c
+	}
+	if c.shape == nil {
+		return true
+	}
+	ras := c.shape.Raster(w, h)
+	return ras == nil || ras.Contains(int(p.X), int(p.Y))
+}
+
+// hitsSilhouette reports whether local point p is the component's at all:
+// its own silhouette where it has one, else its look's for the face it
+// paints, else — for everything that says nothing — its whole box.
+func (b *Base) hitsSilhouette(p paintengine2d.Point) bool {
+	if b.hitShape != nil || b.hitFn != nil {
+		return b.hitsShape(p)
+	}
+	return b.hitsLookShape(p)
 }
 
 // SetTransparent marks the component as painting nothing solid over its
