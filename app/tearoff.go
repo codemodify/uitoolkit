@@ -67,6 +67,29 @@ func (w *Window) Position() (x, y int, ok bool) {
 	return platform.SurfacePosition(w.surf)
 }
 
+// Move asks the desktop to put this window at x, y, in the same root pixels
+// [Window.Position] answers in, and reports whether the desktop let it.
+//
+// It is [Window.Position]'s other half and it has the same shape: X11
+// clients place their own windows, so it works there and in tests; a
+// Wayland toplevel has no position and cannot be given one, so it answers
+// false and does nothing. An app that keeps two windows stuck together —
+// a player with its playlist under it — asks [Window.CanMove] first and
+// says so in its own interface when the answer is no, rather than
+// pretending the windows moved.
+func (w *Window) Move(x, y int) bool {
+	if !w.CanMove() {
+		return false
+	}
+	platform.MoveSurface(w.surf, x, y)
+	return true
+}
+
+// CanMove reports whether this desktop lets the client place the window.
+func (w *Window) CanMove() bool {
+	return w != nil && !w.Closed() && platform.SurfaceMoves(w.surf)
+}
+
 // carry opens the window a tear-off goes into and hands it to the drag,
 // where the desktop can carry one. Where it cannot, nothing happens here:
 // the window is made at the drop instead, and the source keeps showing
