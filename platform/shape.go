@@ -83,6 +83,13 @@ type ShapeRaster struct {
 	// Opaque is the fully covered pixels only — what a compositor may take
 	// as solid, and only if the window paints them solid.
 	Opaque []FrameRect
+	// Cut is where the silhouette does *not* fully cover the surface: the
+	// space outside it, its holes, and the antialiased pixels along every
+	// edge. A window paints rectangular and then erases these boxes, so a
+	// silhouette costs the pixels it actually cuts rather than the whole
+	// window. Empty means the shape covers its box solidly and there is
+	// nothing to erase.
+	Cut []FrameRect
 	// Bounds is the smallest box holding Rects (empty when the shape is).
 	Bounds FrameRect
 	// Clamped: the shape needed more than [ShapeRectLimit] rectangles, so
@@ -270,8 +277,20 @@ func (s *Shape) rasterise(w, h int) *ShapeRaster {
 	if len(r.Opaque) > ShapeRectLimit {
 		r.Opaque = nil
 	}
+	// Everything that is not fully covered has to be erased from what the
+	// window paints. This is the same pass read the other way round.
+	r.Cut = maskRects(r.Mask, w, h, w, 255, true)
+	if len(r.Cut) > ShapeRectLimit {
+		r.Cut = []FrameRect{{X: 0, Y: 0, W: w, H: h}}
+	}
 	return r
 }
+
+// shapeScratchBytes caps the scratch image a rasterisation may allocate.
+// The shape is drawn in horizontal strips that fit inside it, so a
+// full-screen silhouette on a 4K display costs about a megabyte in passing
+// rather than the thirty-three its own size would.
+const shapeScratchBytes = 1 << 20
 
 // rasterPathMask draws the path white on nothing and hands back the alpha
 // channel as a coverage mask.
@@ -281,25 +300,34 @@ func (s *Shape) rasterise(w, h int) *ShapeRaster {
 // rasteriser takes FormatA8 as a source (a glyph sheet, an icon) but not as
 // a render target — every blend writes four bytes at a one-byte-per-pixel
 // index — so an A8 target runs past the end of its own buffer. The scratch
-// image is transient and dropped as soon as the mask is taken from it.
+// is dropped as soon as the mask has been taken from it.
 func rasterPathMask(path *paintengine2d.Path, rule paintengine2d.FillRule, w, h int) []uint8 {
 	mask := make([]uint8, w*h)
-	img := paintengine2d.NewImage(w, h)
+	strip := max(shapeScratchBytes/(w*4), 1)
+	img := paintengine2d.NewImage(w, min(strip, h))
 	ctx := paintengine2d.NewContext(img)
 	if ctx == nil {
 		return mask
 	}
-	ctx.Clear(paintengine2d.Transparent)
 	paint := paintengine2d.Fill(paintengine2d.White)
 	paint.FillRule = rule
 	paint.AntiAlias = true
-	ctx.DrawPath(path, paint)
 	stride := img.RowStride()
-	for y := 0; y < h; y++ {
-		row := img.Pix[y*stride:]
-		out := mask[y*w:]
-		for x := 0; x < w; x++ {
-			out[x] = row[x*4+3] // premultiplied RGBA8: alpha last
+	for top := 0; top < h; top += strip {
+		rows := min(strip, h-top)
+		ctx.Clear(paintengine2d.Transparent)
+		// Slide the path up so this strip's rows land at the top of the
+		// scratch; the rasteriser clips the rest away for us.
+		ctx.Save()
+		ctx.Translate(0, float32(-top))
+		ctx.DrawPath(path, paint)
+		ctx.Restore()
+		for y := 0; y < rows; y++ {
+			row := img.Pix[y*stride:]
+			out := mask[(top+y)*w:]
+			for x := 0; x < w; x++ {
+				out[x] = row[x*4+3] // premultiplied RGBA8: alpha last
+			}
 		}
 	}
 	return mask
@@ -365,8 +393,19 @@ func lerp8(a, b uint8, t float32) uint8 {
 // mask is w*h bytes, row-major, with the given stride (at least w). The
 // rectangles come out in the mask's own pixel unit; the caller scales them.
 func MaskRects(mask []uint8, w, h, stride int, threshold uint8) []FrameRect {
+	return maskRects(mask, w, h, stride, threshold, false)
+}
+
+// maskRects is MaskRects, covering the pixels at or above threshold, or —
+// with below — the ones under it, which is the same walk with the test
+// turned round.
+func maskRects(mask []uint8, w, h, stride int, threshold uint8, below bool) []FrameRect {
 	if w < 1 || h < 1 || stride < w || len(mask) < (h-1)*stride+w {
 		return nil
+	}
+	in := func(v uint8) bool { return v >= threshold }
+	if below {
+		in = func(v uint8) bool { return v < threshold }
 	}
 	var out []FrameRect
 	// open holds the rectangles of the row group being extended, each one
@@ -383,14 +422,14 @@ func MaskRects(mask []uint8, w, h, stride int, threshold uint8) []FrameRect {
 		row := mask[y*stride : y*stride+w]
 		x := 0
 		for x < w {
-			for x < w && row[x] < threshold {
+			for x < w && !in(row[x]) {
 				x++
 			}
 			if x >= w {
 				break
 			}
 			s := x
-			for x < w && row[x] >= threshold {
+			for x < w && in(row[x]) {
 				x++
 			}
 			cur = append(cur, s, x)

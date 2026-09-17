@@ -110,8 +110,10 @@ type Window struct {
 	eraser      *paintengine2d.Image
 	eraserFor   *platform.ShapeRaster
 	// shapeShade is the blurred silhouette a shaped window casts instead
-	// of the nine-patch shadow.
+	// of the nine-patch shadow, and glassTint the colour an app chose for
+	// its glass (the look's own when it is fully transparent).
 	shapeShade shapeShadow
+	glassTint  paintengine2d.Color
 	// shapeCur is what shapeFn last built, for the size and scale in
 	// shapeCurW / shapeCurH / shapeCurScale: a fresh Shape every frame
 	// would rasterise itself afresh every frame.
@@ -1462,6 +1464,13 @@ func (w *Window) paintShadow(ctx *paintengine2d.Context, c widget.Component, kin
 // paintBackground lets the look paint the window background (Aqua
 // pinstripes, brushed metal); the flat clear already covers the rest.
 func (w *Window) paintBackground(ctx *paintengine2d.Context, full paintengine2d.Rect) {
+	if w.wantsGlass() {
+		// The window is a pane over the blurred desktop: the look's own
+		// background is opaque — a gradient, a texture, a flat fill — and
+		// painting it here would hide every bit of the blur. The glass
+		// tint windowFill already laid down is the background now.
+		return
+	}
 	if bl, ok := w.look.(style.WindowBackgroundLook); ok {
 		bl.DrawWindowBackground(ctx, full)
 	}
@@ -1499,10 +1508,13 @@ func (w *Window) seeThrough() bool {
 // blurred behind it (an opaque fill over a blurred desktop would show none
 // of the blur).
 func (w *Window) windowFill() paintengine2d.Color {
-	if w.wantsGlass() {
-		return style.GlassTint(w.look, glassAlpha)
+	if !w.wantsGlass() {
+		return w.look.Palette().Background
 	}
-	return w.look.Palette().Background
+	if w.glassTint.A > 0 {
+		return w.glassTint
+	}
+	return style.GlassTint(w.look, glassAlpha)
 }
 
 // glassAlpha is how much of the blurred desktop shows through a window

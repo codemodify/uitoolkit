@@ -68,6 +68,15 @@ func (w *Window) Shape() *platform.Shape {
 	return w.currentShape()
 }
 
+// ShapeActive reports whether the window's silhouette is in effect right
+// now. It is false for a window with no shape, and false while the window
+// is maximized, full-screen or tiled, where the shape is dropped — so an
+// app that draws its own silhouette asks this before drawing it, and draws
+// a plain rectangle when the answer is no. Painting a hole into a window
+// that no longer has one is how a shaped app looks broken when it is
+// maximized.
+func (w *Window) ShapeActive() bool { return w.shapeRaster() != nil }
+
 // SetShapeOpaque says the window paints every pixel inside its shape
 // solid, so the compositor may skip whatever is behind them. It is off by
 // default, because it is the one setting here that is visible corruption
@@ -105,6 +114,25 @@ func (w *Window) SetGlass(on bool) {
 	w.glass = on
 	w.shapeChanged()
 }
+
+// SetGlassTint is the colour the window's background takes over the blurred
+// desktop. It has to be translucent — an opaque tint shows none of the blur
+// — and a fully transparent one (the default) means "the look's own", which
+// is [style.GlassTint].
+//
+// This is the app's say over how much of the desktop shows: a panel that is
+// mostly glass wants a low alpha, a document window a high one.
+func (w *Window) SetGlassTint(c paintengine2d.Color) {
+	if w == nil || w.glassTint == c {
+		return
+	}
+	w.glassTint = c
+	w.shapeChanged()
+}
+
+// GlassTint is the colour set by [Window.SetGlassTint] (fully transparent
+// when the window takes the look's own).
+func (w *Window) GlassTint() paintengine2d.Color { return w.glassTint }
 
 // Glass reports whether the window asked for glass (not whether it got it).
 func (w *Window) Glass() bool { return w != nil && w.glass }
@@ -264,21 +292,35 @@ func (w *Window) paintWindowShape(ctx *paintengine2d.Context, dirty *paintengine
 	if r == nil || ctx == nil {
 		return
 	}
+	if len(r.Cut) == 0 {
+		// The silhouette covers its box solidly: there is nothing to
+		// erase, and a shaped window that happens to be a rectangle costs
+		// exactly what an unshaped one costs.
+		return
+	}
 	img := w.shapeEraser(r)
 	if img == nil {
 		return
 	}
 	win := w.windowBox()
-	dst := paintengine2d.XYWH(win.Min.X, win.Min.Y, float32(r.W), float32(r.H))
-	if dirty != nil && !dirty.Empty() && !dirty.Overlaps(dst) {
-		return
+	paint := paintengine2d.Paint{
+		Color:  paintengine2d.White,
+		Blend:  paintengine2d.BlendDestOut,
+		Filter: paintengine2d.FilterNearest,
 	}
-	ctx.DrawImageRectPaint(img, paintengine2d.XYWH(0, 0, float32(r.W), float32(r.H)), dst,
-		paintengine2d.Paint{
-			Color:  paintengine2d.White,
-			Blend:  paintengine2d.BlendDestOut,
-			Filter: paintengine2d.FilterNearest,
-		})
+	// Only the boxes the silhouette actually cuts: the space outside it,
+	// its holes and its antialiased edges. Blitting the whole window would
+	// spend most of its time erasing nothing — a few milliseconds a frame
+	// on a large window — and the compositor was told about these very
+	// boxes, so nothing else can need erasing.
+	for _, c := range r.Cut {
+		src := paintengine2d.XYWH(float32(c.X), float32(c.Y), float32(c.W), float32(c.H))
+		dst := src.Translate(paintengine2d.Pt(win.Min.X, win.Min.Y))
+		if dirty != nil && !dirty.Empty() && !dirty.Overlaps(dst) {
+			continue
+		}
+		ctx.DrawImageRectPaint(img, src, dst, paint)
+	}
 }
 
 // shapeEraser is the inverse of the shape's coverage as an 8-bit image,
