@@ -85,6 +85,10 @@ type skinAssets struct {
 	gen   uint64
 	files map[string]*skinFileEntry
 	cuts  map[skinVariantKey]*skinVariant
+	// hits are the coverage masks faces are hit-tested against, derived by
+	// painting a sprite at one size (engine_skin_shape.go). A nil value is
+	// a real answer: "this face fills its box".
+	hits map[skinHitKey]*paintengine2d.Image
 }
 
 type skinFileEntry struct {
@@ -97,6 +101,7 @@ type skinFileEntry struct {
 var skinCache = &skinAssets{
 	files: map[string]*skinFileEntry{},
 	cuts:  map[skinVariantKey]*skinVariant{},
+	hits:  map[skinHitKey]*paintengine2d.Image{},
 }
 
 // sync drops everything when the process-wide asset generation has moved
@@ -107,6 +112,7 @@ func (c *skinAssets) syncGen() {
 		c.gen = gen
 		c.files = map[string]*skinFileEntry{}
 		c.cuts = map[skinVariantKey]*skinVariant{}
+		c.hits = map[skinHitKey]*paintengine2d.Image{}
 	}
 }
 
@@ -117,6 +123,7 @@ func InvalidateSkinCache() {
 	skinCache.mu.Lock()
 	skinCache.files = map[string]*skinFileEntry{}
 	skinCache.cuts = map[skinVariantKey]*skinVariant{}
+	skinCache.hits = map[skinHitKey]*paintengine2d.Image{}
 	skinCache.gen = IconGeneration()
 	skinCache.mu.Unlock()
 	invalidateSkinPacks()
@@ -168,6 +175,13 @@ func (sk *Skin) sheetImage(file string) *paintengine2d.Image {
 			for k := range c.cuts {
 				if k.sprite != nil && sk.owns(k.sprite.Sheet, file) {
 					delete(c.cuts, k)
+				}
+			}
+			// The masks faces are hit-tested against are painted from those
+			// cuts, so they go the same way.
+			for k := range c.hits {
+				if k.sprite != nil && sk.owns(k.sprite.Sheet, file) {
+					delete(c.hits, k)
 				}
 			}
 		}

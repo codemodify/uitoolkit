@@ -21,9 +21,10 @@ import (
 // full-screen and tiled — exactly as the frame's corners and shadow are
 // dropped there today.
 
-// SetShape gives the window a silhouette, or nil for the plain rectangle
-// every window has by default. The shape is stated in the visible window's
-// device pixels, so a 500-logical-pixel window at 1.75 is shaped at 875.
+// SetShape gives the window a silhouette of the app's own, or nil to go
+// back to whatever its look declares — which for nearly every look is the
+// plain rectangle. The shape is stated in the visible window's device
+// pixels, so a 500-logical-pixel window at 1.75 is shaped at 875.
 //
 // A shape that has to follow the window's size — nearly all of them do —
 // wants [Window.SetShapeFunc] instead: this one is rasterised at whatever
@@ -58,9 +59,11 @@ func (w *Window) SetShapeFunc(fn func(size paintengine2d.Point, scale float32) *
 	w.shapeChanged()
 }
 
-// Shape is the silhouette in effect now: the one last set, or the one the
-// callback built for the window's current size. nil means the window is the
-// plain rectangle it has always been.
+// Shape is the silhouette in effect now: the app's own — the one last set,
+// or the one its callback built for the window's current size — and
+// otherwise the one the window's look declares for its frame (a skin's
+// outline, BeOS's tab). nil means the window is the plain rectangle every
+// window is by default.
 func (w *Window) Shape() *platform.Shape {
 	if w == nil {
 		return nil
@@ -154,20 +157,35 @@ func (w *Window) shapeChanged() {
 	w.eraser, w.eraserFor = nil, nil
 	w.wipe, w.wipeFor = nil, nil
 	w.shapeShade = shapeShadow{}
+	w.lookShapeCur = nil
 	w.laid = false
 	w.dropScene()
 	w.fullInvalidate()
 }
 
-// currentShape is the shape the app asked for, built by the callback where
+// currentShape is the silhouette in effect: the app's own where it asked for
+// one, and otherwise the look's ([Window.lookShape]).
+//
+// The app wins. A window that sets a shape of its own is describing a
+// picture it draws itself, and a look has no way to know what that is; a
+// window that sets none takes whatever silhouette its frame has, exactly as
+// it takes the frame's corners and shadow.
+//
+// It takes no notice of the window's state; shapeRaster does that.
+func (w *Window) currentShape() *platform.Shape {
+	if s := w.appShape(); s != nil {
+		return s
+	}
+	return w.lookShape()
+}
+
+// appShape is the shape the app asked for, built by the callback where
 // there is one and remembered until the size or the scale it was built for
 // changes. The memo matters: a callback returns a fresh Shape every time,
 // and a fresh Shape has an empty rasterisation cache, so calling it once a
 // frame would re-rasterise the silhouette on every frame — tens of
 // milliseconds for a window of any size.
-//
-// It takes no notice of the window's state; shapeRaster does that.
-func (w *Window) currentShape() *platform.Shape {
+func (w *Window) appShape() *platform.Shape {
 	if w.shapeFn == nil {
 		return w.shape
 	}
@@ -180,6 +198,57 @@ func (w *Window) currentShape() *platform.Shape {
 	w.shapeCurW, w.shapeCurH, w.shapeCurScale = ww, hh, sc
 	return w.shapeCur
 }
+
+// lookShape is the silhouette the window's look declares for its frame
+// (style.WindowShapeOf), built at the window's current size and remembered
+// until something that could change it does.
+//
+// It is asked only of a window the toolkit frames. Where the desktop draws
+// the frame the window is the rectangle inside it, and cutting a tab out of
+// that would leave the desktop's own border round a hole; a full-screen
+// window is not framed either, which is how the third of the three states
+// that drop a silhouette is honoured here rather than in style.
+//
+// The memo is what keeps this off the frame's cost. Everything that can
+// change the answer is in the key — the size, the scale, the look, the
+// frame's state and the title, which is what a fitted caption is measured
+// by — so a window that repaints without moving asks the look once.
+func (w *Window) lookShape() *platform.Shape {
+	if w.caption == nil || !w.framed() {
+		return nil
+	}
+	ww, hh := w.shapeSize()
+	key := lookShapeKey{
+		w: ww, h: hh, scale: max(w.scale, 1),
+		look: w.look, st: w.caption.DecorationState(), title: w.Title(),
+	}
+	if w.lookShapeCur != nil && w.lookShapeKey == key {
+		return w.lookShapeCur.shape
+	}
+	// The look states its outline in the visible window's own coordinates,
+	// so the frame it is handed has the window at the origin; the shape's
+	// rectangles are moved by the shadow's margin on the way out
+	// (applyShapeToFrame), as an app's own shape is.
+	win := paintengine2d.XYWH(0, 0, float32(ww), float32(hh))
+	f := style.DecorationFrame{Window: win, Caption: w.captionBox(w.innerBox(win, true), true)}
+	s := platform.NewShapeSilhouette(style.WindowShapeOf(w.look, f, key.st))
+	w.lookShapeKey, w.lookShapeCur = key, &lookShapeMemo{shape: s}
+	return s
+}
+
+// lookShapeKey is everything that can change the look's answer about a
+// window's silhouette. lookShapeMemo holds the answer, nil shape included:
+// "this look frames a rectangle" is the common case and re-asking would be
+// the expensive way to learn nothing.
+type lookShapeKey struct {
+	w, h  int
+	scale float32
+	look  style.LookAndFeel
+	st    style.DecorationState
+	title string
+}
+
+type lookShapeMemo struct{ shape *platform.Shape }
 
 // shapeSize is the visible window's size in device pixels: the surface less
 // the margin it is currently keeping for its shadow. The margin grows the
