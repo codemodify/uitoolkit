@@ -274,859 +274,309 @@
   "skin": 1,
   "sprites": {
     "arrow.down": {
-      "at": [
-        0,
-        288,
-        20,
-        20
-      ],
+      "at": [0, 288, 20, 20],
       "sheet": "chrome",
       "tint": true
     },
     "arrow.left": {
-      "at": [
-        44,
-        288,
-        20,
-        20
-      ],
+      "at": [44, 288, 20, 20],
       "sheet": "chrome",
       "tint": true
     },
     "arrow.right": {
-      "at": [
-        66,
-        288,
-        20,
-        20
-      ],
+      "at": [66, 288, 20, 20],
       "sheet": "chrome",
       "tint": true
     },
     "arrow.up": {
-      "at": [
-        22,
-        288,
-        20,
-        20
-      ],
+      "at": [22, 288, 20, 20],
       "sheet": "chrome",
       "tint": true
     },
     "bar.normal": {
-      "at": [
-        232,
-        160,
-        56,
-        30
-      ],
+      "at": [232, 160, 56, 30],
       "sheet": "chrome",
-      "slice": [
-        9,
-        12,
-        9,
-        12
-      ]
+      "slice": [9, 12, 9, 12]
     },
     "button.checked": {
-      "at": [
-        348,
-        0,
-        56,
-        30
-      ],
+      "at": [348, 0, 56, 30],
       "sheet": "chrome",
-      "slice": [
-        9,
-        12,
-        9,
-        12
-      ]
+      "slice": [9, 12, 9, 12]
     },
     "button.default": {
-      "at": [
-        290,
-        0,
-        56,
-        30
-      ],
+      "at": [290, 0, 56, 30],
       "sheet": "chrome",
-      "slice": [
-        9,
-        12,
-        9,
-        12
-      ]
+      "slice": [9, 12, 9, 12]
     },
     "button.disabled": {
-      "at": [
-        174,
-        0,
-        56,
-        30
-      ],
+      "at": [174, 0, 56, 30],
       "sheet": "chrome",
-      "slice": [
-        9,
-        12,
-        9,
-        12
-      ]
+      "slice": [9, 12, 9, 12]
     },
     "button.focus": {
-      "at": [
-        232,
-        0,
-        56,
-        30
-      ],
+      "at": [232, 0, 56, 30],
       "sheet": "chrome",
-      "slice": [
-        9,
-        12,
-        9,
-        12
-      ]
+      "slice": [9, 12, 9, 12]
     },
     "button.hover": {
-      "at": [
-        58,
-        0,
-        56,
-        30
-      ],
+      "at": [58, 0, 56, 30],
       "sheet": "chrome",
-      "slice": [
-        9,
-        12,
-        9,
-        12
-      ]
+      "slice": [9, 12, 9, 12]
     },
     "button.normal": {
-      "at": [
-        0,
-        0,
-        56,
-        30
-      ],
+      "at": [0, 0, 56, 30],
       "sheet": "chrome",
-      "slice": [
-        9,
-        12,
-        9,
-        12
-      ]
+      "slice": [9, 12, 9, 12]
     },
     "button.pressed": {
-      "at": [
-        116,
-        0,
-        56,
-        30
-      ],
+      "at": [116, 0, 56, 30],
       "sheet": "chrome",
-      "slice": [
-        9,
-        12,
-        9,
-        12
-      ]
+      "slice": [9, 12, 9, 12]
     },
     "caption.inactive": {
-      "at": [
-        164,
-        192,
-        96,
-        34
-      ],
+      "at": [164, 192, 96, 34],
       "sheet": "chrome",
-      "slice": [
-        10,
-        12,
-        6,
-        12
-      ]
+      "slice": [10, 12, 6, 12]
     },
     "caption.normal": {
-      "at": [
-        66,
-        192,
-        96,
-        34
-      ],
+      "at": [66, 192, 96, 34],
       "sheet": "chrome",
-      "slice": [
-        10,
-        12,
-        6,
-        12
-      ]
+      "slice": [10, 12, 6, 12]
     },
     "check.checked": {
-      "at": [
-        44,
-        266,
-        20,
-        20
-      ],
+      "at": [44, 266, 20, 20],
       "sheet": "chrome",
-      "slice": [
-        6,
-        6,
-        6,
-        6
-      ]
+      "slice": [6, 6, 6, 6]
     },
     "check.disabled": {
-      "at": [
-        66,
-        266,
-        20,
-        20
-      ],
+      "at": [66, 266, 20, 20],
       "sheet": "chrome",
-      "slice": [
-        6,
-        6,
-        6,
-        6
-      ]
+      "slice": [6, 6, 6, 6]
     },
     "check.hover": {
-      "at": [
-        22,
-        266,
-        20,
-        20
-      ],
+      "at": [22, 266, 20, 20],
       "sheet": "chrome",
-      "slice": [
-        6,
-        6,
-        6,
-        6
-      ]
+      "slice": [6, 6, 6, 6]
     },
     "check.normal": {
-      "at": [
-        0,
-        266,
-        20,
-        20
-      ],
+      "at": [0, 266, 20, 20],
       "sheet": "chrome",
-      "slice": [
-        6,
-        6,
-        6,
-        6
-      ]
+      "slice": [6, 6, 6, 6]
     },
     "combo.disabled": {
-      "at": [
-        174,
-        64,
-        56,
-        30
-      ],
+      "at": [174, 64, 56, 30],
       "sheet": "chrome",
-      "slice": [
-        9,
-        12,
-        9,
-        12
-      ]
+      "slice": [9, 12, 9, 12]
     },
     "combo.focus": {
-      "at": [
-        232,
-        64,
-        56,
-        30
-      ],
+      "at": [232, 64, 56, 30],
       "sheet": "chrome",
-      "slice": [
-        9,
-        12,
-        9,
-        12
-      ]
+      "slice": [9, 12, 9, 12]
     },
     "combo.hover": {
-      "at": [
-        58,
-        64,
-        56,
-        30
-      ],
+      "at": [58, 64, 56, 30],
       "sheet": "chrome",
-      "slice": [
-        9,
-        12,
-        9,
-        12
-      ]
+      "slice": [9, 12, 9, 12]
     },
     "combo.normal": {
-      "at": [
-        0,
-        64,
-        56,
-        30
-      ],
+      "at": [0, 64, 56, 30],
       "sheet": "chrome",
-      "slice": [
-        9,
-        12,
-        9,
-        12
-      ]
+      "slice": [9, 12, 9, 12]
     },
     "combo.pressed": {
-      "at": [
-        116,
-        64,
-        56,
-        30
-      ],
+      "at": [116, 64, 56, 30],
       "sheet": "chrome",
-      "slice": [
-        9,
-        12,
-        9,
-        12
-      ]
+      "slice": [9, 12, 9, 12]
     },
     "expander.open": {
-      "at": [
-        88,
-        288,
-        20,
-        20
-      ],
+      "at": [88, 288, 20, 20],
       "sheet": "chrome",
       "tint": true
     },
     "expander.shut": {
-      "at": [
-        110,
-        288,
-        20,
-        20
-      ],
+      "at": [110, 288, 20, 20],
       "sheet": "chrome",
       "tint": true
     },
     "field.disabled": {
-      "at": [
-        174,
-        32,
-        56,
-        30
-      ],
+      "at": [174, 32, 56, 30],
       "sheet": "chrome",
-      "slice": [
-        9,
-        12,
-        9,
-        12
-      ]
+      "slice": [9, 12, 9, 12]
     },
     "field.focus": {
-      "at": [
-        116,
-        32,
-        56,
-        30
-      ],
+      "at": [116, 32, 56, 30],
       "sheet": "chrome",
-      "slice": [
-        9,
-        12,
-        9,
-        12
-      ]
+      "slice": [9, 12, 9, 12]
     },
     "field.hover": {
-      "at": [
-        58,
-        32,
-        56,
-        30
-      ],
+      "at": [58, 32, 56, 30],
       "sheet": "chrome",
-      "slice": [
-        9,
-        12,
-        9,
-        12
-      ]
+      "slice": [9, 12, 9, 12]
     },
     "field.normal": {
-      "at": [
-        0,
-        32,
-        56,
-        30
-      ],
+      "at": [0, 32, 56, 30],
       "sheet": "chrome",
-      "slice": [
-        9,
-        12,
-        9,
-        12
-      ]
+      "slice": [9, 12, 9, 12]
     },
     "fill.normal": {
-      "at": [
-        126,
-        242,
-        40,
-        22
-      ],
+      "at": [126, 242, 40, 22],
       "sheet": "chrome",
-      "slice": [
-        8,
-        8,
-        8,
-        8
-      ]
+      "slice": [8, 8, 8, 8]
     },
     "focus.ring": {
-      "at": [
-        132,
-        288,
-        24,
-        24
-      ],
+      "at": [132, 288, 24, 24],
       "middle": "none",
       "sheet": "chrome",
-      "slice": [
-        9,
-        9,
-        9,
-        9
-      ]
+      "slice": [9, 9, 9, 9]
     },
     "knob.disabled": {
-      "at": [
-        192,
-        242,
-        22,
-        22
-      ],
+      "at": [192, 242, 22, 22],
       "sheet": "chrome"
     },
     "knob.normal": {
-      "at": [
-        168,
-        242,
-        22,
-        22
-      ],
+      "at": [168, 242, 22, 22],
       "sheet": "chrome"
     },
     "mark.check": {
-      "at": [
-        176,
-        266,
-        20,
-        20
-      ],
+      "at": [176, 266, 20, 20],
       "sheet": "chrome",
       "tint": true
     },
     "mark.radio": {
-      "at": [
-        198,
-        266,
-        20,
-        20
-      ],
+      "at": [198, 266, 20, 20],
       "sheet": "chrome",
       "tint": true
     },
     "menu.frame": {
-      "at": [
-        290,
-        160,
-        56,
-        30
-      ],
+      "at": [290, 160, 56, 30],
       "sheet": "chrome",
-      "slice": [
-        9,
-        12,
-        9,
-        12
-      ]
+      "slice": [9, 12, 9, 12]
     },
     "menu.hover": {
-      "at": [
-        0,
-        160,
-        56,
-        30
-      ],
+      "at": [0, 160, 56, 30],
       "sheet": "chrome",
-      "slice": [
-        9,
-        12,
-        9,
-        12
-      ]
+      "slice": [9, 12, 9, 12]
     },
     "panel.normal": {
-      "at": [
-        174,
-        160,
-        56,
-        30
-      ],
+      "at": [174, 160, 56, 30],
       "sheet": "chrome",
-      "slice": [
-        9,
-        12,
-        9,
-        12
-      ]
+      "slice": [9, 12, 9, 12]
     },
     "radio.checked": {
-      "at": [
-        132,
-        266,
-        20,
-        20
-      ],
+      "at": [132, 266, 20, 20],
       "sheet": "chrome"
     },
     "radio.disabled": {
-      "at": [
-        154,
-        266,
-        20,
-        20
-      ],
+      "at": [154, 266, 20, 20],
       "sheet": "chrome"
     },
     "radio.hover": {
-      "at": [
-        110,
-        266,
-        20,
-        20
-      ],
+      "at": [110, 266, 20, 20],
       "sheet": "chrome"
     },
     "radio.normal": {
-      "at": [
-        88,
-        266,
-        20,
-        20
-      ],
+      "at": [88, 266, 20, 20],
       "sheet": "chrome"
     },
     "row.checked": {
-      "at": [
-        116,
-        160,
-        56,
-        30
-      ],
+      "at": [116, 160, 56, 30],
       "sheet": "chrome",
-      "slice": [
-        9,
-        12,
-        9,
-        12
-      ]
+      "slice": [9, 12, 9, 12]
     },
     "row.hover": {
-      "at": [
-        58,
-        160,
-        56,
-        30
-      ],
+      "at": [58, 160, 56, 30],
       "sheet": "chrome",
-      "slice": [
-        9,
-        12,
-        9,
-        12
-      ]
+      "slice": [9, 12, 9, 12]
     },
     "splitter.hover": {
-      "at": [
-        406,
-        160,
-        56,
-        30
-      ],
+      "at": [406, 160, 56, 30],
       "sheet": "chrome",
-      "slice": [
-        9,
-        12,
-        9,
-        12
-      ]
+      "slice": [9, 12, 9, 12]
     },
     "splitter.normal": {
-      "at": [
-        348,
-        160,
-        56,
-        30
-      ],
+      "at": [348, 160, 56, 30],
       "sheet": "chrome",
-      "slice": [
-        9,
-        12,
-        9,
-        12
-      ]
+      "slice": [9, 12, 9, 12]
     },
     "switch.disabled": {
-      "at": [
-        92,
-        314,
-        44,
-        24
-      ],
+      "at": [92, 314, 44, 24],
       "sheet": "chrome",
-      "slice": [
-        11,
-        11,
-        11,
-        11
-      ]
+      "slice": [11, 11, 11, 11]
     },
     "switch.off": {
-      "at": [
-        0,
-        314,
-        44,
-        24
-      ],
+      "at": [0, 314, 44, 24],
       "sheet": "chrome",
-      "slice": [
-        11,
-        11,
-        11,
-        11
-      ]
+      "slice": [11, 11, 11, 11]
     },
     "switch.on": {
-      "at": [
-        46,
-        314,
-        44,
-        24
-      ],
+      "at": [46, 314, 44, 24],
       "sheet": "chrome",
-      "slice": [
-        11,
-        11,
-        11,
-        11
-      ]
+      "slice": [11, 11, 11, 11]
     },
     "tab.checked": {
-      "at": [
-        116,
-        128,
-        56,
-        30
-      ],
+      "at": [116, 128, 56, 30],
       "sheet": "chrome",
-      "slice": [
-        9,
-        12,
-        9,
-        12
-      ]
+      "slice": [9, 12, 9, 12]
     },
     "tab.hover": {
-      "at": [
-        58,
-        128,
-        56,
-        30
-      ],
+      "at": [58, 128, 56, 30],
       "sheet": "chrome",
-      "slice": [
-        9,
-        12,
-        9,
-        12
-      ]
+      "slice": [9, 12, 9, 12]
     },
     "tab.normal": {
-      "at": [
-        0,
-        128,
-        56,
-        30
-      ],
+      "at": [0, 128, 56, 30],
       "sheet": "chrome",
-      "slice": [
-        9,
-        12,
-        9,
-        12
-      ]
+      "slice": [9, 12, 9, 12]
     },
     "thumb.hover": {
-      "at": [
-        42,
-        242,
-        40,
-        22
-      ],
+      "at": [42, 242, 40, 22],
       "sheet": "chrome",
-      "slice": [
-        8,
-        8,
-        8,
-        8
-      ]
+      "slice": [8, 8, 8, 8]
     },
     "thumb.normal": {
-      "at": [
-        0,
-        242,
-        40,
-        22
-      ],
+      "at": [0, 242, 40, 22],
       "sheet": "chrome",
-      "slice": [
-        8,
-        8,
-        8,
-        8
-      ]
+      "slice": [8, 8, 8, 8]
     },
     "tool.checked": {
-      "at": [
-        232,
-        96,
-        56,
-        30
-      ],
+      "at": [232, 96, 56, 30],
       "sheet": "chrome",
-      "slice": [
-        9,
-        12,
-        9,
-        12
-      ]
+      "slice": [9, 12, 9, 12]
     },
     "tool.disabled": {
-      "at": [
-        174,
-        96,
-        56,
-        30
-      ],
+      "at": [174, 96, 56, 30],
       "sheet": "chrome",
-      "slice": [
-        9,
-        12,
-        9,
-        12
-      ]
+      "slice": [9, 12, 9, 12]
     },
     "tool.hover": {
-      "at": [
-        58,
-        96,
-        56,
-        30
-      ],
+      "at": [58, 96, 56, 30],
       "sheet": "chrome",
-      "slice": [
-        9,
-        12,
-        9,
-        12
-      ]
+      "slice": [9, 12, 9, 12]
     },
     "tool.normal": {
-      "at": [
-        0,
-        96,
-        56,
-        30
-      ],
+      "at": [0, 96, 56, 30],
       "sheet": "chrome",
-      "slice": [
-        9,
-        12,
-        9,
-        12
-      ]
+      "slice": [9, 12, 9, 12]
     },
     "tool.pressed": {
-      "at": [
-        116,
-        96,
-        56,
-        30
-      ],
+      "at": [116, 96, 56, 30],
       "sheet": "chrome",
-      "slice": [
-        9,
-        12,
-        9,
-        12
-      ]
+      "slice": [9, 12, 9, 12]
     },
     "tooltip.normal": {
-      "at": [
-        464,
-        160,
-        56,
-        30
-      ],
+      "at": [464, 160, 56, 30],
       "sheet": "chrome",
-      "slice": [
-        9,
-        12,
-        9,
-        12
-      ]
+      "slice": [9, 12, 9, 12]
     },
     "track.normal": {
-      "at": [
-        84,
-        242,
-        40,
-        22
-      ],
+      "at": [84, 242, 40, 22],
       "sheet": "chrome",
-      "slice": [
-        8,
-        8,
-        8,
-        8
-      ]
+      "slice": [8, 8, 8, 8]
     },
     "window.normal": {
-      "at": [
-        0,
-        192,
-        64,
-        48
-      ],
+      "at": [0, 192, 64, 48],
       "sheet": "chrome",
-      "slice": [
-        2,
-        2,
-        2,
-        2
-      ]
+      "slice": [2, 2, 2, 2]
     }
   },
   "summary": "The toolkit's own skin: amber on charcoal, drawn from paths so every corner is exact at 1.75 as well as at 1 and 2.",
@@ -1155,33 +605,13 @@
     }
   },
   "window": {
-    "border": [
-      1,
-      1,
-      1,
-      1
-    ],
+    "border": [1, 1, 1, 1],
     "caption": 34,
-    "radius": [
-      7,
-      7,
-      0,
-      0
-    ],
+    "radius": [7, 7, 0, 0],
     "shape": [
       {
-        "at": [
-          0,
-          0,
-          0,
-          0
-        ],
-        "radius": [
-          7,
-          7,
-          0,
-          0
-        ],
+        "at": [0, 0, 0, 0],
+        "radius": [7, 7, 0, 0],
         "stretchX": true,
         "stretchY": true
       }
