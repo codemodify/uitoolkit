@@ -61,6 +61,11 @@ type Player struct {
 
 	iMain, iList int
 	skinned      bool
+	// anchored is whether the playlist has been put beside the player yet,
+	// and tries how many times settle has asked — see settle, which waits
+	// for the desktop to place them both and then for it to agree.
+	anchored bool
+	tries    int
 }
 
 // Options is what the command line passes in.
@@ -122,8 +127,8 @@ func New(a *app.Application, opts Options) (*Player, error) {
 func (p *Player) open(a *app.Application, opts Options, title string, w, h int) (*app.Window, error) {
 	return players.OpenSized(a, platform.WindowOptions{
 		Title:       title,
-		MinWidth:    420,
-		MinHeight:   320,
+		MinWidth:    300,
+		MinHeight:   260,
 		Headless:    opts.Headless,
 		Decorations: platform.DecorationsClient,
 	}, w, h, false)
@@ -176,9 +181,40 @@ func (p *Player) SetSkinned(on bool) {
 func (p *Player) advance(dt time.Duration) {
 	p.Transport.Tick(dt)
 	p.Spectrum.Advance(p.Transport.Pos, p.Transport.State == players.Playing, dt)
+	p.settle()
 	p.Desk.Follow()
 	p.refresh()
 }
+
+// settle anchors the playlist once the desktop has said where it put both
+// windows. It cannot be done when they are made: a window manager places a
+// window as it maps it and the app is told afterwards, so an anchor set at
+// construction is set against a player that is still at the origin.
+func (p *Player) settle() {
+	if p.anchored || p.iList < 0 || !p.Desk.Places() || !p.Desk.Adopt() {
+		return
+	}
+	p.tries++
+	p.Desk.Attach(p.iList, p.iMain, players.SideRight)
+	// The anchor has taken when the window is where the bond says. A
+	// window manager may refuse — KWin keeps a window on the screen, and
+	// an anchor that would hang off the right-hand edge is exactly that —
+	// so it is asked a few times and then left alone. The playlist is
+	// then simply loose, and dragging it back to the player's edge snaps
+	// it, which is the same path a user takes anyway.
+	pane := p.Desk.Rack.Pane(p.iList)
+	if x, y, ok := p.List.Position(); ok && x == pane.Box.X && y == pane.Box.Y {
+		p.anchored = true
+		return
+	}
+	if p.tries >= settleTries {
+		p.anchored = true
+	}
+}
+
+// settleTries is how many clock ticks the anchor is asked for before the
+// desktop's answer is taken as final.
+const settleTries = 20
 
 func (p *Player) refresh() {
 	if p.body != nil {
@@ -299,6 +335,7 @@ func newBody(p *Player) *body {
 
 	b.display = newDisplay(p)
 	b.analyser = players.NewAnalyserView(p.Spectrum)
+	b.analyser.Drag = p.Main
 	b.analyser.Gap = 2
 	b.analyser.MinBarW = 3
 	b.status = widgets.NewStatusBar(players.Disclaimer, "")
@@ -503,13 +540,14 @@ func (b *body) Describe(n *a11y.Node) {
 // display is the big well the video would be in: the track over it and the
 // analyser along its floor.
 type display struct {
-	widget.Base
+	players.DragsWindow
 	p *Player
 }
 
 func newDisplay(p *Player) *display {
 	d := &display{p: p}
 	d.Init(d)
+	d.Win = p.Main
 	return d
 }
 
@@ -559,5 +597,3 @@ func (d *display) Describe(n *a11y.Node) {
 		players.Clock(t.Pos), players.Clock(t.Length()), t.State)
 	n.Description = players.Disclaimer
 }
-
-func (d *display) CaptionAt(paintengine2d.Point) bool { return true }
