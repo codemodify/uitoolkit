@@ -378,7 +378,27 @@ region — byte for byte the path every window took before.
 | Input | `wl_surface.set_input_region` = the window grown by the resize band; `NULL` (infinite), never an empty region, when there is no margin | XShape `ShapeInput` rectangle; the mask is reset when the margin goes |
 | Opaque | `wl_surface.set_opaque_region` = the window less its rounded corners (rounded inward); the whole surface when opaque | `_NET_WM_OPAQUE_REGION`, the same rects |
 | Alpha buffers | `wl_shm` **ARGB8888** premultiplied (the slots are remade when the frame starts or stops needing alpha), EGL config with `EGL_ALPHA_SIZE 8`; the GPU device is rebound on the same `wl_surface` when that changes, so the EGL display is never torn down | a 32-bit TrueColor visual with its own colormap: an X window's visual is fixed at creation, so the window is re-created on one the first time a frame asks (before it is ever mapped, in the usual flow) — `XShmPutImage` and EGL then keep the alpha instead of forcing it opaque |
+| Silhouette | `set_input_region` = the shape's rectangles (device px converted **outwards**, so no pixel the window covers goes deaf); the transparent pixels of the ARGB buffer are what you see | `ShapeInput` *and* `ShapeBounding` from the same rectangles, `YXBanded` since the rasteriser emits scanline order — the bounding shape is what cuts the pixels on a screen with no compositing manager |
+| Blur behind | `ext_background_effect_v1` (`get_background_effect` per surface, `set_blur_region`, double-buffered like the rest of the frame); the manager's `capabilities` event comes and goes as desktop effects are switched | `_KDE_NET_WM_BLUR_BEHIND_REGION` (CARDINAL rects; an empty property means the whole window). KWin reads it, everything else ignores it |
 | Composited? | always | `_NET_WM_CM_S<screen>` at connect, watched with XFixes: without an owner every window reports `WindowState.Solid` and its frame goes square and shadowless, live |
+
+`platform.Frame`'s `Shape`, `Opaque` and `Blur` are region lists, so `Frame`
+is no longer comparable with `==`: every backend compares with `Frame.Same`.
+A nil `Shape` is an ordinary rectangular window and takes byte for byte the
+path it took before shapes existed. See [docs/shapes.md](shapes.md) for the
+silhouette itself, the per-state rules and what it costs.
+
+ext-background-effect is generated from wayland-protocols staging like the
+rest:
+
+```bash
+wayland-scanner client-header \
+  /usr/share/wayland-protocols/staging/ext-background-effect/ext-background-effect-v1.xml \
+  platform/ext-background-effect-v1-client-protocol.h
+wayland-scanner private-code \
+  /usr/share/wayland-protocols/staging/ext-background-effect/ext-background-effect-v1.xml \
+  platform/ext-background-effect-v1-protocol.c
+```
 
 linux-dmabuf stays on the opaque `XRGB` formats; a frame that needs alpha
 presents through `wl_shm` instead (the dmabuf path is opt-in and CPU-only).
