@@ -191,21 +191,13 @@ func DrawGlyph(ctx *paintengine2d.Context, b paintengine2d.Rect, g Glyph, col pa
 		ctx.DrawRect(paintengine2d.XYWH(cx-u*0.5, cy-weight/2, u, weight), fill)
 		ctx.DrawRect(paintengine2d.XYWH(cx-weight/2, cy-u*0.5, weight, u), fill)
 	case GlyphSkin:
-		// A square with one corner turned up: the mark for "the picture
-		// over the controls", which is all a skin is.
-		p := paintengine2d.NewPath()
-		p.MoveTo(cx-u, cy-u)
-		p.LineTo(cx+u*0.35, cy-u)
-		p.LineTo(cx+u, cy-u*0.35)
-		p.LineTo(cx+u, cy+u)
-		p.LineTo(cx-u, cy+u)
-		p.Close()
-		ctx.DrawPath(p, stroke)
-		q := paintengine2d.NewPath()
-		q.MoveTo(cx+u*0.35, cy-u)
-		q.LineTo(cx+u*0.35, cy-u*0.35)
-		q.LineTo(cx+u, cy-u*0.35)
-		ctx.DrawPath(q, stroke)
+		// Two plates, one over the other: a picture laid on a control, which
+		// is all a skin is. The one underneath is an outline and the one on
+		// top is solid, so the mark says which is which at any size.
+		side := u * 1.25
+		r := u * 0.28
+		ctx.DrawRoundRect(paintengine2d.XYWH(cx-u, cy-u, side, side), r, r, stroke)
+		ctx.DrawRoundRect(paintengine2d.XYWH(cx+u-side, cy+u-side, side, side), r, r, fill)
 	}
 }
 

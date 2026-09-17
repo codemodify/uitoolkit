@@ -28,6 +28,7 @@ package players
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -123,6 +124,29 @@ func (p *Playlist) Select(i int) bool {
 	}
 	p.cur = i
 	return true
+}
+
+// Find is the tracks whose title, artist or album contain text, without
+// regard to case, as indices into Tracks. An empty query is nil, which
+// means "everything" rather than "nothing" — a filter that emptied the list
+// when it was cleared would be a filter with a bug in it.
+func (p *Playlist) Find(text string) []int {
+	text = strings.TrimSpace(strings.ToLower(text))
+	if p == nil || text == "" {
+		return nil
+	}
+	var out []int
+	for i, t := range p.Tracks {
+		hay := strings.ToLower(t.Title + " " + t.Artist + " " + t.Album)
+		if strings.Contains(hay, text) {
+			out = append(out, i)
+		}
+	}
+	if out == nil {
+		// A query that matches nothing is an empty list, not "everything".
+		out = []int{}
+	}
+	return out
 }
 
 // Total is the playing time of every track in the list.
@@ -663,7 +687,14 @@ func Library() []Track {
 // NewLibrary is the invented library as a playlist.
 func NewLibrary() *Playlist { return NewPlaylist(Library()...) }
 
-// Disclaimer is the line every one of the three apps shows, in its About
-// box and in its status line. It is here rather than in each app so it
-// cannot drift, and so it is impossible to ship one of them without it.
-const Disclaimer = "A visual demo: nothing is decoded and nothing is played."
+// Disclaimer is the line every one of the three apps shows, in a status
+// line or an About box, and Short is the same thing where there is no room
+// for it — a compact player's footer is two hundred and sixty design pixels
+// wide and this has to fit in it at 1x.
+//
+// They are here rather than in each app so they cannot drift, and so that it
+// is impossible to ship one of the three without one.
+const (
+	Disclaimer = "A visual demo — nothing is decoded or played."
+	Short      = "visual demo · nothing is played"
+)
