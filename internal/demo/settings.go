@@ -14,38 +14,62 @@ import (
 // Settings pages.
 const (
 	pageThemes = iota
+	pageAppearance
 	pagePacks
 	pageAbout
 )
 
-var settingsPages = []string{"Themes", "Packs & icons", "About"}
+var settingsPages = []string{"Themes", "Appearance", "Packs & icons", "About"}
 
 // Theme browser filters: every built-in pack, one decade, or user packs.
 var themeFilters = []string{"All decades", "1980s", "1990s", "2000s", "2010s", "2020s", "My themes"}
 
 const filterUser = 6
 
-// SettingsApp is the toolkit appearance editor. The theme browser previews
-// the staged appearance — theme, corners, icon set, icon size — in a live,
-// interactive mini application rendered in that theme (a ThemeScope), while
-// Settings itself keeps the applied look. Apply writes look.json and every
-// app that watches it (and Settings) switches; Revert drops the staged
-// change. Closing without Apply discards it.
+// SettingsApp is the toolkit appearance editor. The Themes page is the
+// toolkit's shop window: pick a pack and it is drawn at once in a live
+// preview window and, under it, in the whole widget gallery — every
+// control the toolkit has, in every state, in that theme — while Settings
+// itself keeps the applied look (a ThemeScope each). Apply writes
+// look.json and every app that watches it (and Settings) switches; Revert
+// drops the staged change. Closing without Apply discards it.
 func SettingsApp(a *app.Application, win *app.Window) widget.Component {
 	saved := style.LoadAppearance().Normalize()
 	return buildSettings(a, win, saved, saved, pageThemes)
 }
 
 // SettingsAppStaged is SettingsApp with a theme already staged (not
-// applied): screenshots and docs use it to show the preview in a theme
-// other than the one Settings runs in.
+// applied): screenshots and docs use it to show the preview and the
+// gallery in a theme other than the one Settings runs in.
 func SettingsAppStaged(a *app.Application, win *app.Window, theme string) widget.Component {
+	return SettingsAppOpen(a, win, theme, "")
+}
+
+// SettingsAppOpen is SettingsApp with a theme staged and a page open by
+// name ("themes", "appearance", "packs", "about"); either may be empty.
+// cmd/uitksettings' -stage and -page take this path.
+func SettingsAppOpen(a *app.Application, win *app.Window, theme, page string) widget.Component {
 	saved := style.LoadAppearance().Normalize()
 	staged := saved
 	if pack, ok := style.LoadTheme(theme); ok {
 		staged.Name, staged.Theme = pack.Name, pack.Palette
 	}
-	return buildSettings(a, win, saved, staged, pageThemes)
+	return buildSettings(a, win, saved, staged, SettingsPage(page))
+}
+
+// SettingsPage is the page a name opens; an unknown or empty name is the
+// theme browser.
+func SettingsPage(name string) int {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "appearance":
+		return pageAppearance
+	case "packs", "packs & icons", "icons":
+		return pagePacks
+	case "about":
+		return pageAbout
+	default:
+		return pageThemes
+	}
 }
 
 // settingsState is the model behind one build of the Settings content.
@@ -56,19 +80,80 @@ type settingsState struct {
 	staged style.Appearance
 	page   int
 	filter int
+	// query narrows the theme browser to what it names: a pack's id,
+	// name, year, family, engine or summary.
+	query string
 	// listOff keeps the theme browser's scroll position across rebuilds:
 	// picking a theme below the fold used to jump the list to the top.
 	listOff float32
+	// browserRatio and previewRatio are where the user left the two
+	// splitters of the Themes page, galleryOff how far down the gallery
+	// was scrolled: all three survive a rebuild.
+	browserRatio float32
+	// browserAuto is the ratio Settings worked out for itself, to tell it
+	// apart from one the user dragged.
+	browserAuto  float32
+	previewRatio float32
+	galleryOff   float32
 	// scheme is the desktop's light / dark preference the page was built in.
 	scheme style.ColorScheme
+
+	// The live parts of the page the staged look feeds. Staging a change
+	// repaints these where they stand instead of rebuilding the page: a
+	// rebuild takes the caret out of the search field, the focus off the
+	// theme list, and the gallery back to the top.
+	rows       []themeRow
+	list       *widgets.ListView
+	bodySplit  *widgets.Splitter
+	rightSplit *widgets.Splitter
+	gallery    *widgets.ScrollView
+	scopes     []*widgets.ThemeScope
+	previewBox *widgets.Panel
+	packTitle  *widgets.Label
+	packMeta   *widgets.Label
+	packText   *widgets.Label
+	packNote   *widgets.Label
+	galleryLbl *widgets.Label
+	applyBtn   *widgets.Button
+	revertBtn  *widgets.Button
+	defaultBtn *widgets.Button
+	hint       *widgets.Label
+	status     *widgets.StatusBar
+}
+
+// capture remembers where the user left the parts of the page they can
+// move, so the next build puts them back.
+func (s *settingsState) capture() {
+	if s.list != nil {
+		s.listOff = s.list.OffsetY
+	}
+	if s.bodySplit != nil {
+		// Only what the user dragged is kept: a ratio still ours is
+		// worked out again from the window, which by now has the size the
+		// desktop gave it rather than the one it asked for.
+		s.browserRatio = 0
+		if s.bodySplit.Ratio != s.browserAuto {
+			s.browserRatio = s.bodySplit.Ratio
+		}
+	}
+	if s.rightSplit != nil {
+		s.previewRatio = s.rightSplit.Ratio
+	}
+	if s.gallery != nil {
+		s.galleryOff = s.gallery.OffsetY
+	}
 }
 
 func (s *settingsState) rebuild() {
+	s.capture()
 	s.win.SetContent(buildSettingsState(s))
 }
 
 func buildSettings(a *app.Application, win *app.Window, saved, staged style.Appearance, page int) widget.Component {
-	s := &settingsState{a: a, win: win, saved: saved.Normalize(), staged: staged.Normalize(), page: page}
+	s := &settingsState{
+		a: a, win: win, saved: saved.Normalize(), staged: staged.Normalize(), page: page,
+		previewRatio: 0.55,
+	}
 	// The preview draws the staged theme's light or dark sibling: redraw
 	// it when the desktop switches.
 	a.OnLookChange(func() {
@@ -84,37 +169,24 @@ func buildSettingsState(s *settingsState) widget.Component {
 	if s.page < 0 || s.page >= len(settingsPages) {
 		s.page = pageThemes
 	}
-	status := widgets.NewStatusBar(s.statusText(), style.AppearancePath(), "v"+uitoolkit.Version)
-	chrome := widgets.NewTitleBar("Settings", "Themes from every decade for every uitoolkit app")
+	// Every live part belongs to the build that made it.
+	s.rows, s.list, s.bodySplit, s.rightSplit, s.gallery = nil, nil, nil, nil, nil
+	s.scopes, s.previewBox = nil, nil
+	s.packTitle, s.packMeta, s.packText, s.packNote, s.galleryLbl = nil, nil, nil, nil, nil
 
-	// Stage a change: Settings keeps its look; the preview follows.
-	stage := func(next style.Appearance) {
-		s.staged = next.Normalize()
-		s.rebuild()
-	}
-	apply := func() {
-		next := s.staged.Normalize()
-		if err := style.SaveAppearance(next); err != nil {
-			status.Set(0, err.Error())
-			return
-		}
-		s.saved = next
-		s.a.ApplyAppearance(next)
-		s.rebuild()
-	}
-	revert := func() {
-		s.staged = s.saved
-		s.rebuild()
-	}
+	s.status = widgets.NewStatusBar("", style.AppearancePath(), "v"+uitoolkit.Version)
+	chrome := widgets.NewTitleBar("Settings", "Themes from every decade for every uitoolkit app")
 
 	var page widget.Component
 	switch s.page {
+	case pageAppearance:
+		page = widgets.NewScrollView(s.appearancePage())
 	case pagePacks:
-		page = s.packsPage(status, stage)
+		page = s.packsPage()
 	case pageAbout:
 		page = widgets.NewScrollView(s.aboutPage())
 	default:
-		page = s.themesPage(status, stage)
+		page = s.themesPage()
 	}
 
 	nav := widgets.NewListView(len(settingsPages), func(i int) string { return settingsPages[i] }, func(i int) {
@@ -135,32 +207,117 @@ func buildSettingsState(s *settingsState) widget.Component {
 	split := widgets.NewSplitter(true, side, right)
 	split.Ratio = 0.18
 
-	applyBtn := widgets.NewButton("Apply", apply)
-	applyBtn.Primary = true
-	revertBtn := widgets.NewButton("Revert", revert)
-	if s.staged == s.saved {
-		applyBtn.SetEnabled(false)
-		revertBtn.SetEnabled(false)
-	}
-	hint := widgets.NewLabel("Apply writes look.json; running apps switch live. Closing without Apply discards the staged theme.")
-	actions := widgets.NewRow(applyBtn, revertBtn, hint).WithGap(12).WithPad(8)
+	s.applyBtn = widgets.NewButton("Apply", s.apply)
+	s.applyBtn.Primary = true
+	s.revertBtn = widgets.NewButton("Revert", s.revert)
+	s.defaultBtn = widgets.NewButton("Defaults", s.restoreDefaults)
+	// One line, elided: a hint that wrapped pushed the buttons off a
+	// small window.
+	s.hint = widgets.NewLabel("")
+	actions := widgets.NewRow(s.applyBtn, s.revertBtn, s.defaultBtn, s.hint).WithGap(12).WithPad(8)
+	actions.AddFlex(s.hint, 1)
 
-	root := widgets.NewColumn(chrome, split, actions, status)
+	s.showStaged()
+
+	root := widgets.NewColumn(chrome, split, actions, s.status)
 	root.AddFlex(split, 1)
 	return root
 }
 
-func (s *settingsState) statusText() string {
-	st := s.staged.Name + " · " + string(s.staged.Corners) + " · " + string(s.staged.Icons) + " · " + string(s.staged.IconSize)
-	if s.staged != s.saved {
-		st += " · unapplied"
+// ---- staging ------------------------------------------------------------------
+
+// stage shows next without rebuilding the page: the preview and the
+// gallery switch theme where they stand, the pack's details follow, and
+// the buttons, the hint and the status bar say what is staged.
+func (s *settingsState) stage(next style.Appearance) {
+	s.staged = next.Normalize()
+	s.showStaged()
+}
+
+func (s *settingsState) apply() {
+	next := s.staged.Normalize()
+	if err := style.SaveAppearance(next); err != nil {
+		s.status.Set(0, err.Error())
+		return
 	}
-	return st
+	s.saved = next
+	s.a.ApplyAppearance(next)
+	s.rebuild()
+}
+
+// revert and Defaults move every option at once, so the page is built
+// again: its combo boxes and switches show the values they now hold.
+func (s *settingsState) revert() {
+	s.staged = s.saved
+	s.rebuild()
+}
+
+func (s *settingsState) restoreDefaults() {
+	s.staged = style.DefaultAppearance().Normalize()
+	s.rebuild()
+}
+
+// showStaged paints the staged appearance into the parts of the page that
+// follow it. Each is nil on the pages that do not show it.
+func (s *settingsState) showStaged() {
+	pack, _ := style.LoadTheme(s.staged.Name)
+	shown := pack
+	note := s.followNote(pack, &shown)
+	look := s.staged.Look()
+	for _, sc := range s.scopes {
+		sc.SetTheme(look)
+	}
+	if s.previewBox != nil {
+		s.previewBox.Title = "Preview — " + shown.Display()
+		s.previewBox.RequestLayout()
+	}
+	if s.galleryLbl != nil {
+		s.galleryLbl.SetText("Every control the toolkit has, in " + shown.Display())
+	}
+	if s.packTitle != nil {
+		s.packTitle.SetText(pack.Display())
+		s.packMeta.SetText(packMetaLine(pack))
+		s.packText.SetText(pack.Summary)
+		s.packNote.SetText(note)
+	}
+	if s.list != nil {
+		s.list.Selected = s.selectedRow()
+		s.list.Invalidate()
+	}
+	unapplied := s.staged != s.saved
+	if s.applyBtn != nil {
+		s.applyBtn.SetEnabled(unapplied)
+		s.revertBtn.SetEnabled(unapplied)
+		s.defaultBtn.SetEnabled(s.staged != style.DefaultAppearance().Normalize())
+		s.hint.SetText(s.hintText())
+	}
+	s.status.Set(0, s.statusText())
+}
+
+// hintText says, beside the buttons, where the staged look has got to.
+func (s *settingsState) hintText() string {
+	if s.staged == s.saved {
+		return "Applied — every uitoolkit app is using this look."
+	}
+	return "Staged, not applied — only the preview and the gallery show it."
+}
+
+// statusText leads with the state, which a narrow status bar would
+// otherwise elide away: what is on screen is never ambiguous.
+func (s *settingsState) statusText() string {
+	state := "applied"
+	if s.staged != s.saved {
+		state = "unapplied"
+	}
+	return strings.Join([]string{state, s.staged.Name, string(s.staged.Corners),
+		string(s.staged.Icons), string(s.staged.IconSize)}, " · ")
 }
 
 // ---- Themes page --------------------------------------------------------------
 
-// themeRow is one entry of the theme browser.
+// themeRow is one entry of the theme browser. A pack is whatever an
+// engine — or a skin of pictures — makes of its tokens; the browser only
+// reads what the pack says about itself.
 type themeRow struct {
 	pack style.ThemePack
 	user bool
@@ -170,19 +327,43 @@ func (s *settingsState) themeRows() []themeRow {
 	var rows []themeRow
 	if s.filter != filterUser {
 		for _, p := range style.ListBuiltinThemes() {
-			if s.filter == 0 || style.Decade(p.Year) == themeFilters[s.filter] {
+			if (s.filter == 0 || style.Decade(p.Year) == themeFilters[s.filter]) && matchesQuery(p, s.query) {
 				rows = append(rows, themeRow{pack: p})
 			}
 		}
 	}
 	if s.filter == 0 || s.filter == filterUser {
 		for _, p := range style.ListUserThemes() {
-			rows = append(rows, themeRow{pack: p, user: true})
+			if matchesQuery(p, s.query) {
+				rows = append(rows, themeRow{pack: p, user: true})
+			}
 		}
 	}
 	return rows
 }
 
+// matchesQuery is what the search field looks at: a pack's id, name,
+// year, family, era, engine and summary, so "kde", "1995", "gel" and
+// "oxygen" all find something. Every word has to match.
+func matchesQuery(p style.ThemePack, q string) bool {
+	q = strings.TrimSpace(q)
+	if q == "" {
+		return true
+	}
+	hay := strings.ToLower(strings.Join([]string{
+		p.Name, p.Display(), p.Lineage, p.Era, p.Summary, p.Tokens.Engine, fmt.Sprint(p.Year),
+	}, " "))
+	for _, word := range strings.Fields(strings.ToLower(q)) {
+		if !strings.Contains(hay, word) {
+			return false
+		}
+	}
+	return true
+}
+
+// themeRowText is one row of the browser: when the look shipped and the
+// pack's name. Its family, engine and summary are under the list, where
+// there is room for them; the search field reads all of them.
 func themeRowText(r themeRow) string {
 	switch {
 	case r.user:
@@ -194,195 +375,202 @@ func themeRowText(r themeRow) string {
 	}
 }
 
-func (s *settingsState) themesPage(status *widgets.StatusBar, stage func(style.Appearance)) widget.Component {
-	rows := s.themeRows()
-	sel := -1
-	for i, r := range rows {
-		if r.pack.Name == s.staged.Name {
-			sel = i
-		}
+// packMetaLine is the line under the pack's name: year, family, and the
+// engine that paints it (a skin pack names its own).
+func packMetaLine(p style.ThemePack) string {
+	var meta []string
+	if p.Year > 0 {
+		meta = append(meta, fmt.Sprint(p.Year))
 	}
-	filters := widgets.NewComboBox(themeFilters, s.filter, func(i int) {
-		s.filter = i
-		s.listOff = 0
-		s.rebuild()
-	})
-	var list *widgets.ListView
-	list = widgets.NewListView(len(rows), func(i int) string { return themeRowText(rows[i]) }, func(i int) {
-		if i < 0 || i >= len(rows) {
-			return
-		}
-		s.listOff = list.OffsetY
-		next := s.staged
-		next.Name = rows[i].pack.Name
-		next.Theme = rows[i].pack.Palette
-		stage(next)
-	})
-	list.Selected = sel
-	list.RowHeight = 28
-	list.OffsetY = s.listOff
-	// The staged theme may sit below the fold (Aqua is row 30): bring it
-	// into view; a row the user just clicked is already there.
-	list.EnsureVisible(sel)
-	filters.SetAccessibleName("Decade")
-	list.SetAccessibleName("Themes")
-	browser := widgets.NewColumn(widgets.NewLabel("Themes"), filters, list).WithGap(6)
-	browser.AddFlex(list, 1)
-
-	// Pack details.
-	pack, _ := style.LoadTheme(s.staged.Name)
-	meta := []string{}
-	if pack.Year > 0 {
-		meta = append(meta, fmt.Sprint(pack.Year))
+	if p.Lineage != "" {
+		meta = append(meta, p.Lineage)
 	}
-	if pack.Lineage != "" {
-		meta = append(meta, pack.Lineage)
-	}
-	eng := pack.Tokens.Engine
+	eng := p.Tokens.Engine
 	if eng == "" {
 		eng = "base"
 	}
 	meta = append(meta, "engine "+eng)
-	if pack.Source == style.ThemeSourceUser {
+	if p.Source == style.ThemeSourceUser {
 		meta = append(meta, "user pack")
 	}
-	info := widgets.NewColumn(
-		widgets.NewTitle(pack.Display()),
-		widgets.NewLabel(strings.Join(meta, "  ·  ")),
-	).WithGap(2)
-	// Three lines whatever the pack says (a user pack may say nothing), so
-	// the preview below stays put as the user arrows through the list.
-	summary := widgets.NewLabel(pack.Summary)
-	summary.Wrap = true
-	summary.MinLines = 3
-	info.Add(summary)
-	shown := pack
-	if note := s.followNote(pack, &shown); note != "" {
-		n := widgets.NewLabel(note)
-		n.Wrap = true
-		info.Add(n)
+	return strings.Join(meta, "  ·  ")
+}
+
+func (s *settingsState) selectedRow() int {
+	for i, r := range s.rows {
+		if r.pack.Name == s.staged.Name {
+			return i
+		}
 	}
+	return -1
+}
+
+// themesPage is the shop window: the browser on the left, and on the
+// right the staged pack drawn twice — a small application window above,
+// the whole widget gallery below — in a splitter the user can size, so
+// the two never fight for the space.
+func (s *settingsState) themesPage() widget.Component {
+	if s.browserRatio == 0 {
+		s.browserRatio = defaultBrowserRatio(s.win)
+		s.browserAuto = s.browserRatio
+	}
+	browser := s.themeBrowser()
 
 	// The live preview: a small application window in the staged theme —
 	// its frame, caption and every control come from that theme.
-	frame := widgets.NewPanel("Preview — "+shown.Display(), PreviewApp(func(msg string) { status.Set(0, msg) }))
-	frame.Window = true
-	scope := widgets.NewThemeScope(s.staged.Look(), frame)
+	s.previewBox = widgets.NewPanel("", PreviewApp(func(msg string) { s.status.Set(0, msg) }))
+	s.previewBox.Window = true
+	preview := s.scoped(s.previewBox)
 
-	// Options that shape the staged look (shown live in the preview).
-	cornerSel := 0
-	switch s.staged.Corners {
-	case style.CornersRound:
-		cornerSel = 1
-	case style.CornersSquare:
-		cornerSel = 2
-	}
-	corners := widgets.NewComboBox([]string{"Theme shape", "Round", "Square"}, cornerSel, func(i int) {
-		next := s.staged
-		next.Corners = []style.CornerStyle{style.CornersTheme, style.CornersRound, style.CornersSquare}[i]
-		stage(next)
+	// Under it the same theme over the whole toolkit: every control in
+	// every state, scrolling on its own.
+	s.galleryLbl = widgets.NewLabel("")
+	var galleryRoot widget.Component
+	s.gallery = GalleryPane(GalleryHost{
+		Light: s.staged.Effective().Theme == style.ThemeLight,
+		// Dialogs go up from inside the scope, so they are drawn in the
+		// staged theme too. The gallery here previews a pack rather than
+		// being an app of its own: its Window, Theme and Quit controls
+		// would open a window in Settings' look, re-theme Settings or
+		// close it, so the host leaves them out and they show disabled.
+		Root: func() widget.Component { return galleryRoot },
 	})
-	sizeSel := 1
-	switch s.staged.IconSize {
-	case style.IconSizeSmall:
-		sizeSel = 0
-	case style.IconSizeLarge:
-		sizeSel = 2
+	galleryRoot = s.gallery
+	s.gallery.OffsetY = s.galleryOff
+	galleryScope := s.scoped(s.gallery)
+	galleryCol := widgets.NewColumn(s.galleryLbl, galleryScope).WithGap(6)
+	galleryCol.AddFlex(galleryScope, 1)
+
+	s.rightSplit = widgets.NewSplitter(false, preview, galleryCol)
+	s.rightSplit.Ratio = s.previewRatio
+	s.rightSplit.SetAccessibleName("Preview and gallery")
+
+	s.bodySplit = widgets.NewSplitter(true, browser, s.rightSplit)
+	s.bodySplit.Ratio = s.browserRatio
+	s.bodySplit.SetAccessibleName("Themes and preview")
+	return s.bodySplit
+}
+
+// defaultBrowserRatio aims the theme browser at about 240 logical pixels
+// whatever the window and the display scale are: a narrow window gives it
+// a bigger share so its rows stay readable, a wide one hands the room to
+// the preview and the gallery. Dragging the sash replaces it.
+func defaultBrowserRatio(win *app.Window) float32 {
+	const want, pad = 240, 30
+	scale := win.Scale()
+	if scale <= 0 {
+		scale = 1
 	}
-	sizes := widgets.NewComboBox([]string{"Small", "Medium", "Large"}, sizeSel, func(i int) {
-		next := s.staged
-		next.IconSize = []style.IconSize{style.IconSizeSmall, style.IconSizeMedium, style.IconSizeLarge}[i]
-		stage(next)
-	})
-	sets := append(style.ListBuiltinIconSets(), style.ListUserIconSets()...)
-	names := make([]string, len(sets))
-	iconSel := 0
-	for i, set := range sets {
-		names[i] = set.Label
-		if set.Name == s.staged.Icons {
-			iconSel = i
+	px, _ := win.Size()
+	// The page is what the navigation sidebar and its padding leave.
+	page := float32(px)/scale*(1-0.18) - pad
+	if page <= 0 {
+		return 0.3
+	}
+	return min(max(want/page, 0.24), 0.45)
+}
+
+// scoped draws c in the staged theme while Settings keeps the applied one.
+func (s *settingsState) scoped(c widget.Component) *widgets.ThemeScope {
+	scope := widgets.NewThemeScope(s.staged.Look(), c)
+	s.scopes = append(s.scopes, scope)
+	return scope
+}
+
+// themeBrowser is the left column: a search field, the decade filter and
+// the packs that pass both. Typing filters the list in place, so the
+// caret stays in the field.
+func (s *settingsState) themeBrowser() widget.Component {
+	s.rows = s.themeRows()
+	s.list = widgets.NewListView(len(s.rows), func(i int) string {
+		if i < 0 || i >= len(s.rows) {
+			return ""
 		}
-	}
-	icons := widgets.NewComboBox(names, iconSel, func(i int) {
-		if i < 0 || i >= len(sets) {
+		return themeRowText(s.rows[i])
+	}, func(i int) {
+		if i < 0 || i >= len(s.rows) {
 			return
 		}
+		s.listOff = s.list.OffsetY
 		next := s.staged
-		next.Icons = sets[i].Name
-		stage(next)
+		next.Name = s.rows[i].pack.Name
+		next.Theme = s.rows[i].pack.Palette
+		s.stage(next)
 	})
-	// Hover fades, the default button's pulse, busy bars: off for users
-	// who get unwell from motion (GTK's gtk-enable-animations).
-	motion := widgets.NewSwitch("Animations", !s.staged.ReduceMotion, func(on bool) {
-		next := s.staged
-		next.ReduceMotion = !on
-		stage(next)
-	})
-	corners.SetAccessibleName("Corners")
-	sizes.SetAccessibleName("Icon size")
-	icons.SetAccessibleName("Icons")
-	// Two rows of label / control pairs, so no label is cut short.
-	options := widgets.NewGrid()
-	options.Cols = []widgets.Track{widgets.Auto(), widgets.Flex(1), widgets.Auto(), widgets.Flex(1)}
-	options.Place(widgets.NewLabel("Corners"), 0, 0)
-	options.Place(corners, 0, 1)
-	options.Place(widgets.NewLabel("Icon size"), 0, 2)
-	options.Place(sizes, 0, 3)
-	options.Place(widgets.NewLabel("Icons"), 1, 0)
-	options.Place(icons, 1, 1)
-	options.PlaceSpan(motion, 1, 2, 1, 2)
-	// GNOME's and Plasma's light / dark setting and accent colour: the
-	// theme shows its sibling (Breeze and Breeze Dark) to match the
-	// desktop, recoloured around its accent where the engine takes one.
-	follow := widgets.NewSwitch("Match the desktop's light or dark mode and accent colour", s.staged.FollowDesktop, func(on bool) {
-		next := s.staged
-		next.FollowDesktop = on
-		stage(next)
-	})
-	options.PlaceSpan(follow, 2, 0, 1, 4)
-	// The desktop's own file dialogs (the XDG portal's), as Qt and GTK
-	// apps can use, instead of the themed ones.
-	native := widgets.NewSwitch("Use the desktop's file dialogs", s.staged.NativeDialogs, func(on bool) {
-		next := s.staged
-		next.NativeDialogs = on
-		stage(next)
-	})
-	options.PlaceSpan(native, 3, 0, 1, 4)
-	// Chromium's switch: windows that draw their own title bar (Mail's,
-	// with its tool bar in it) get the desktop's title bar and borders
-	// instead, and their title bar becomes the first row.
-	system := widgets.NewSwitch("Use system title bar and borders", s.staged.Decorations == style.DecorationsSystem, func(on bool) {
-		next := s.staged
-		next.Decorations = style.DecorationsAuto
-		if on {
-			next.Decorations = style.DecorationsSystem
-		}
-		stage(next)
-	})
-	options.PlaceSpan(system, 4, 0, 1, 4)
-	// Where a title bar the toolkit draws puts its caption buttons: the
-	// desktop's layout, or the theme's own (the Mac's traffic lights on
-	// the left).
-	themeButtons := widgets.NewSwitch("Place window buttons as the theme does", s.staged.CaptionButtons == style.CaptionButtonsTheme, func(on bool) {
-		next := s.staged
-		next.CaptionButtons = style.CaptionButtonsDesktop
-		if on {
-			next.CaptionButtons = style.CaptionButtonsTheme
-		}
-		stage(next)
-	})
-	options.PlaceSpan(themeButtons, 5, 0, 1, 4)
-	if style.DesktopReducesMotion() {
-		options.PlaceSpan(widgets.NewLabel("The desktop asks for reduced motion, so animations stay off."), 6, 0, 1, 4)
+	s.list.RowHeight = 28
+	s.list.OffsetY = s.listOff
+	s.list.Selected = s.selectedRow()
+	// The staged theme may sit below the fold (Aqua is row 30): bring it
+	// into view; a row the user just clicked is already there.
+	s.list.EnsureVisible(s.list.Selected)
+	s.list.SetAccessibleName("Themes")
+
+	count := widgets.NewLabel("")
+	setCount := func() {
+		count.SetText(fmt.Sprintf("%d of %d packs", len(s.rows), len(style.ListThemes())))
 	}
+	setCount()
+	// Narrowing the list rebuilds nothing: the rows behind it change and
+	// the list redraws, so the field keeps the caret and the focus.
+	refilter := func() {
+		s.rows = s.themeRows()
+		s.list.Count = len(s.rows)
+		s.list.Selected = s.selectedRow()
+		s.list.OffsetY = 0
+		s.list.EnsureVisible(s.list.Selected)
+		s.list.RequestLayout()
+		s.list.Invalidate()
+		setCount()
+	}
+	search := widgets.NewTextField(s.query, "Search themes", func(q string) {
+		s.query = q
+		refilter()
+	})
+	search.SetAccessibleName("Search themes")
+	// Return stages the first pack the search found; Escape empties the
+	// field, which is the whole list again.
+	search.OnSubmit = func(string) {
+		if len(s.rows) > 0 {
+			s.list.OnSelect(0)
+		}
+	}
+	search.OnEscape = func() {
+		if s.query == "" {
+			return
+		}
+		search.SetText("")
+	}
+	filters := widgets.NewComboBox(themeFilters, s.filter, func(i int) {
+		s.filter = i
+		s.listOff = 0
+		refilter()
+	})
+	filters.SetAccessibleName("Decade")
 
-	preview := widgets.NewColumn(info, scope, options).WithGap(10)
-	preview.AddFlex(scope, 1)
+	col := widgets.NewColumn(widgets.NewLabel("Themes"), search, filters, s.list, count, s.packDetails()).WithGap(6)
+	col.AddFlex(s.list, 1)
+	return col
+}
 
-	body := widgets.NewRow(browser, preview).WithGap(14)
-	body.AddFlex(browser, 4)
-	body.AddFlex(preview, 7)
-	return body
+// packDetails is what the list has no room for: the staged pack's name,
+// the year and family it comes from, the engine (or skin) that paints it,
+// its one-line summary and what following the desktop does to it. The box
+// is a fixed height so the list above it does not resize as the user
+// arrows down the packs.
+func (s *settingsState) packDetails() widget.Component {
+	s.packTitle = widgets.NewTitle("")
+	s.packMeta = widgets.NewLabel("")
+	s.packMeta.Wrap = true
+	s.packText = widgets.NewLabel("")
+	s.packText.Wrap = true
+	s.packText.MinLines = 2
+	s.packNote = widgets.NewLabel("")
+	s.packNote.Wrap = true
+	s.packNote.MinLines = 1
+	// A summary longer than the box scrolls rather than being cut off,
+	// and on a short column the box gives the list its rows back.
+	return boxedShare(136, 0.28, widgets.NewScrollView(
+		widgets.NewColumn(s.packTitle, s.packMeta, s.packText, s.packNote).WithGap(2)))
 }
 
 // followNote says what following the desktop does to the staged pack, and
@@ -526,9 +714,200 @@ func previewTree() *widgets.TreeNode {
 	)
 }
 
+// ---- Appearance page ------------------------------------------------------
+
+// appearancePage holds everything look.json carries besides the pack
+// itself. Each control says in a line what it does; a strip of the staged
+// theme beside them shows corners, icons and motion as they change, and
+// the Themes page shows them over the whole toolkit.
+func (s *settingsState) appearancePage() widget.Component {
+	cornerSel := 0
+	switch s.staged.Corners {
+	case style.CornersRound:
+		cornerSel = 1
+	case style.CornersSquare:
+		cornerSel = 2
+	}
+	corners := widgets.NewComboBox([]string{"Theme shape", "Round", "Square"}, cornerSel, func(i int) {
+		next := s.staged
+		next.Corners = []style.CornerStyle{style.CornersTheme, style.CornersRound, style.CornersSquare}[i]
+		s.stage(next)
+	})
+	corners.SetAccessibleName("Corners")
+
+	sizeSel := 1
+	switch s.staged.IconSize {
+	case style.IconSizeSmall:
+		sizeSel = 0
+	case style.IconSizeLarge:
+		sizeSel = 2
+	}
+	sizes := widgets.NewComboBox([]string{"Small", "Medium", "Large"}, sizeSel, func(i int) {
+		next := s.staged
+		next.IconSize = []style.IconSize{style.IconSizeSmall, style.IconSizeMedium, style.IconSizeLarge}[i]
+		s.stage(next)
+	})
+	sizes.SetAccessibleName("Icon size")
+
+	sets := append(style.ListBuiltinIconSets(), style.ListUserIconSets()...)
+	names := make([]string, len(sets))
+	iconSel := 0
+	for i, set := range sets {
+		names[i] = set.Label
+		if set.Name == s.staged.Icons {
+			iconSel = i
+		}
+	}
+	icons := widgets.NewComboBox(names, iconSel, func(i int) {
+		if i < 0 || i >= len(sets) {
+			return
+		}
+		next := s.staged
+		next.Icons = sets[i].Name
+		s.stage(next)
+	})
+	icons.SetAccessibleName("Icons")
+
+	// Hover fades, the default button's pulse, busy bars: off for users
+	// who get unwell from motion (GTK's gtk-enable-animations).
+	motion := widgets.NewSwitch("Animations", !s.staged.ReduceMotion, func(on bool) {
+		next := s.staged
+		next.ReduceMotion = !on
+		s.stage(next)
+	})
+	// GNOME's and Plasma's light / dark setting and accent colour: the
+	// theme shows its sibling (Breeze and Breeze Dark) to match the
+	// desktop, recoloured around its accent where the engine takes one.
+	follow := widgets.NewSwitch("Match the desktop's light or dark mode and accent colour", s.staged.FollowDesktop, func(on bool) {
+		next := s.staged
+		next.FollowDesktop = on
+		s.stage(next)
+	})
+	// The desktop's own file dialogs (the XDG portal's), as Qt and GTK
+	// apps can use, instead of the themed ones.
+	native := widgets.NewSwitch("Use the desktop's file dialogs", s.staged.NativeDialogs, func(on bool) {
+		next := s.staged
+		next.NativeDialogs = on
+		s.stage(next)
+	})
+	// Chromium's switch: windows that draw their own title bar (Mail's,
+	// with its tool bar in it) get the desktop's title bar and borders
+	// instead, and their title bar becomes the first row.
+	system := widgets.NewSwitch("Use system title bar and borders", s.staged.Decorations == style.DecorationsSystem, func(on bool) {
+		next := s.staged
+		next.Decorations = style.DecorationsAuto
+		if on {
+			next.Decorations = style.DecorationsSystem
+		}
+		s.stage(next)
+	})
+	// Where a title bar the toolkit draws puts its caption buttons: the
+	// desktop's layout, or the theme's own (the Mac's traffic lights on
+	// the left).
+	themeButtons := widgets.NewSwitch("Place window buttons as the theme does", s.staged.CaptionButtons == style.CaptionButtonsTheme, func(on bool) {
+		next := s.staged
+		next.CaptionButtons = style.CaptionButtonsDesktop
+		if on {
+			next.CaptionButtons = style.CaptionButtonsTheme
+		}
+		s.stage(next)
+	})
+
+	shape := settingsSection("Shape and icons",
+		optionRow("Corners", corners, "The pack's own shape, or rounded or square everywhere."),
+		optionRow("Icon size", sizes, "How big tool bar and menu icons are drawn: 16, 24 or 32 pixels."),
+		optionRow("Icons", icons, "The chrome icon set. Copy a folder into "+style.IconsDir()+" to add one."),
+		optionSwitch(motion, "Hover fades, the default button's pulse and busy bars."),
+	)
+	if style.DesktopReducesMotion() {
+		shape.Add(widgets.NewLabel("The desktop asks for reduced motion, so animations stay off."))
+	}
+	desktop := settingsSection("The desktop",
+		optionSwitch(follow, "Light or dark, and the accent colour, as the desktop asks for them."),
+		optionSwitch(native, "KDE's and GNOME's own Open and Save dialogs, through the XDG portal."),
+	)
+	// Windows: who draws the frame and where its buttons go. A window that
+	// is shaped, transparent or glass behind belongs in this section too.
+	windows := settingsSection("Windows",
+		optionSwitch(system, "The desktop draws the title bar and borders of every window."),
+		optionSwitch(themeButtons, "Close, minimise and maximise where the theme's era put them."),
+	)
+
+	options := widgets.NewColumn(shape, desktop, windows).WithGap(12)
+	// The staged theme beside the options, so corners, icons and their
+	// size are seen changing without going back to the theme browser. It
+	// keeps to its own height at the top of the page.
+	below := widgets.NewSpacer()
+	sample := widgets.NewColumn(s.scoped(appearanceSample()), below)
+	sample.AddFlex(below, 1)
+	body := widgets.NewRow(options, sample).WithGap(16)
+	body.AddFlex(options, 1)
+	return widgets.NewColumn(
+		widgets.NewTitle("Appearance"),
+		widgets.NewLabel("What every uitoolkit app does with the theme. Apply writes these to "+style.AppearancePath()+"."),
+		body,
+	).WithGap(12).WithPad(4)
+}
+
+// settingsSection is a titled group of option rows.
+func settingsSection(title string, rows ...widget.Component) *widgets.Panel {
+	return widgets.NewPanel(title, rows...)
+}
+
+// optionRow is a named control with the line that says what it does.
+func optionRow(label string, control widget.Component, about string) widget.Component {
+	desc := widgets.NewLabel(about)
+	desc.Wrap = true
+	gap := widgets.NewSpacer()
+	head := widgets.NewRow(widgets.NewLabel(label), gap, control).WithGap(10)
+	head.AddFlex(gap, 1)
+	return widgets.NewColumn(head, desc).WithGap(2)
+}
+
+// optionSwitch is a switch whose own text is the setting, with the line
+// that says what turning it on does.
+func optionSwitch(sw *widgets.Switch, about string) widget.Component {
+	desc := widgets.NewLabel(about)
+	desc.Wrap = true
+	return widgets.NewColumn(sw, desc).WithGap(2)
+}
+
+// appearanceSample is a strip of the staged theme beside the options:
+// small enough to sit next to them, wide enough to show corners, icons
+// and the icon size changing.
+func appearanceSample() widget.Component {
+	primary := widgets.NewButton("Default", nil)
+	primary.Primary = true
+	tools := widgets.NewToolBar(
+		widgets.ToolIconBtn(style.IconNew, "", nil),
+		widgets.ToolIconBtn(style.IconOpen, "", nil),
+		widgets.ToolIconBtn(style.IconSave, "", nil),
+		widgets.ToolDivider(),
+		widgets.ToolIconBtn(style.IconCut, "", nil),
+		widgets.ToolIconBtn(style.IconCopy, "", nil),
+	)
+	choice := widgets.NewComboBox([]string{"Combo box", "Second choice"}, 0, nil)
+	choice.SetAccessibleName("Sample choice")
+	level := widgets.NewSlider(0, 100, 40, nil)
+	level.SetAccessibleName("Sample level")
+	sample := widgets.NewPanel("Sample",
+		tools,
+		widgets.NewRow(primary, widgets.NewButton("Button", nil)).WithGap(8),
+		widgets.NewTextField("Ada Lovelace", "Name", nil),
+		choice,
+		widgets.NewCheckbox("Check box", true, nil),
+		level,
+		widgets.NewProgressBar(0.62),
+	)
+	sample.Window = true
+	return sample
+}
+
 // ---- Packs & icons page ---------------------------------------------------
 
-func (s *settingsState) packsPage(status *widgets.StatusBar, stage func(style.Appearance)) widget.Component {
+func (s *settingsState) packsPage() widget.Component {
+	stage := s.stage
+	status := s.status
 	userThemes := style.ListUserThemes()
 	userSel := indexTheme(userThemes, s.staged.Name)
 	themes := pickerSection("User", len(userThemes), func(i int) string {
@@ -555,7 +934,8 @@ func (s *settingsState) packsPage(status *widgets.StatusBar, stage func(style.Ap
 			next := s.staged
 			next.Name = pack.Name
 			next.Theme = pack.Palette
-			stage(next)
+			s.staged = next.Normalize()
+			s.rebuild()
 		})
 	})
 	exportHost = exportBtn
@@ -581,7 +961,8 @@ func (s *settingsState) packsPage(status *widgets.StatusBar, stage func(style.Ap
 					s.saved = next
 				}
 				s.a.ApplyAppearance(s.saved)
-				stage(next)
+				s.staged = next.Normalize()
+				s.rebuild()
 			})
 		})
 		delHost = del
@@ -640,7 +1021,8 @@ func (s *settingsState) packsPage(status *widgets.StatusBar, stage func(style.Ap
 					s.saved = next
 				}
 				s.a.ApplyAppearance(s.saved)
-				stage(next)
+				s.staged = next.Normalize()
+				s.rebuild()
 			})
 		})
 		delHost = del
@@ -655,10 +1037,11 @@ func (s *settingsState) packsPage(status *widgets.StatusBar, stage func(style.Ap
 // ---- About page -----------------------------------------------------------------
 
 func (s *settingsState) aboutPage() widget.Component {
-	mono := func(text string) widget.Component {
+	mono := func(name, text string) widget.Component {
 		v := widgets.NewMonoTextView(text, "")
 		v.MinRows = 2
 		v.Wrap = true
+		v.SetAccessibleName(name)
 		return v
 	}
 	engines := strings.Join(style.EngineIDs(), ", ")
@@ -668,11 +1051,11 @@ func (s *settingsState) aboutPage() widget.Component {
 		widgets.NewLabel(fmt.Sprintf("%d built-in themes from %d theme engines: %s.", len(style.ListBuiltinThemes()), len(style.EngineIDs()), engines)),
 		widgets.NewLabel("A theme is a pack (colours, metrics) painted by an engine (shapes): Windows 95 bevels, Aqua gel, Motif shadows…"),
 		widgets.NewLabel("Prefs file (theme + corners + icons + iconSize, written on Apply):"),
-		mono(style.AppearancePath()),
+		mono("Prefs file", style.AppearancePath()),
 		widgets.NewLabel("User theme packs (exported; edit the JSON to make your own):"),
-		mono(style.ThemesDir()+"/<name>/theme.json"),
+		mono("User theme packs", style.ThemesDir()+"/<name>/theme.json"),
 		widgets.NewLabel("Icon sets (copy the repo icons/ folders here after every pull):"),
-		mono(style.IconsDir()+"/<set>/*.png"),
+		mono("Icon sets", style.IconsDir()+"/<set>/*.png"),
 		widgets.NewLabel("Other apps watch look.json and switch live on Apply."),
 		widgets.NewButton("Browse themes", func() {
 			s.page = pageThemes

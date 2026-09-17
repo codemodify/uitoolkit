@@ -57,8 +57,9 @@ for _, p := range a11y.Check(win.AccessibleTree()) {
 }
 ```
 
-uitoolkit's own tests run it over every page of the gallery, over Settings
-and over Mail.
+uitoolkit's own tests run it over every page of the gallery, over every
+page of Settings — the theme browser carries the gallery a second time,
+under the preview — and over Mail.
 
 ## Actions
 
