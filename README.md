@@ -63,7 +63,8 @@ go get github.com/codemodify/paintengine2d@v0.9.0
     through it you can see the desktop through and click through to
     whatever is behind, on Wayland and X11 and at any scale — and glass,
     the desktop blurred by the compositor behind a translucent window. See
-    [docs/shapes.md](docs/shapes.md).
+    [docs/shapes.md](docs/shapes.md), and the three player demos that wear
+    it for a living ([docs/players.md](docs/players.md)).
   - Drag and drop both ways on both backends: takes files and text
     dropped from other apps, and drags its own out to them — with a drag
     icon, copy / move / link, and a payload that stays in-process for a
@@ -164,7 +165,8 @@ of WinAmp and VLC's skins2, with the things those formats never had (design
 pixels that scale, a fixed vocabulary instead of a scripting language, and a
 base pack painting whatever the skin leaves out). A skin is a pack like any
 other: it lists in Settings, `UITK_THEME` runs an app in one, and it applies
-live. Two ship with the toolkit. See [docs/skins.md](docs/skins.md).
+live. Six ship with the toolkit, three of them worn by the player demos.
+See [docs/skins.md](docs/skins.md).
 
 ## Screenshots
 
@@ -340,6 +342,10 @@ go run ./examples/mail              # in-process daemon + UI (same protocol)
 go run ./examples/mail -headless    # writes mail.png
 go run ./examples/mail -classic     # preview below the thread list
 go run ./examples/mail -light
+go run ./examples/minim              # compact player: three windows that snap together
+go run ./examples/marquee            # big player: Ctrl+M folds it into a stadium
+go run ./examples/lantern            # shaped player: Ctrl+K drops the skin
+go run ./examples/lantern -themed    # ... or start with it already dropped
 go run ./cmd/uitksettings           # theme browser, preview + gallery, look.json
 go run ./cmd/uitksettings -stage aqua        # open with Aqua staged
 go run ./cmd/uitksettings -page appearance   # open on the options page
@@ -505,6 +511,9 @@ container. Layout extras (`Stack`, `Pad`, `Overlay`) are in
 | `go run ./cmd/mailclientd` | Mail daemon: MemoryStore or IMAP/POP3+SMTP cache, Unix JSON-RPC |
 | `go run ./cmd/mailclientui` | Thunderbird-chrome UI only — renders daemon state, no IMAP |
 | `go run ./examples/mail` | Convenience: in-process mailclientd + UI on a temp socket |
+| `go run ./examples/minim` | Compact player: a 275x116 strip whose silhouette is its skin's, with an equaliser and a playlist that snap to its edges and travel with it |
+| `go run ./examples/marquee` | Big player: one control changes the window's size, its layout *and* its outline — the skin's dome for the cabinet, the app's own stadium when folded |
+| `go run ./examples/lantern` | Shaped player with a menu bar and an anchored playlist; Ctrl+K drops the skin and runs the same tree, tab order and accessibility tree in an ordinary theme |
 
 ```bash
 go run ./examples/gallery -screenshot docs/screenshots
