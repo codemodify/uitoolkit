@@ -75,12 +75,13 @@ func New(a *app.Application, opts Options) (*Player, error) {
 	if opts.Compact {
 		w, h = CompactW, CompactH
 	}
-	win, err := a.NewWindow(platform.WindowOptions{
-		Title: "Marquee", Width: w, Height: h,
-		MinWidth: CompactW, MinHeight: CompactH,
+	win, err := players.OpenSized(a, platform.WindowOptions{
+		Title:       "Marquee",
+		MinWidth:    CompactW,
+		MinHeight:   CompactH,
 		Headless:    opts.Headless,
 		Decorations: platform.DecorationsClient,
-	})
+	}, w, h, false)
 	if err != nil {
 		return nil, err
 	}
@@ -92,6 +93,10 @@ func New(a *app.Application, opts Options) (*Player, error) {
 	p.pulse = players.NewPulse(60*time.Millisecond, p.advance)
 	p.SetCompact(opts.Compact)
 	p.refresh()
+	// Something has the keyboard from the first frame. A player's keys are
+	// bare letters that bubble up from whatever is focused, and a window
+	// with no focus at all has nothing for them to bubble from.
+	p.Window.RequestFocus(p.body.play)
 	return p, nil
 }
 
@@ -175,14 +180,20 @@ func (p *Player) Command(c players.Command) {
 
 // Keys is the window's keyboard: the shared transport table, Escape to
 // quit, and one of its own — Ctrl+M folds the player down and back.
-func (p *Player) Keys(e widget.KeyEvent) bool {
+func (p *Player) Keys(w *app.Window, e widget.KeyEvent) bool {
 	if e.Key == platform.KeyEscape {
 		p.App.Quit()
 		return true
 	}
-	if e.Mods.Ctrl() && (e.Rune == 'm' || e.Rune == 'M') {
+	if e.Mods.Ctrl() && e.Key == platform.KeyM {
 		p.SetCompact(!p.compact)
 		return true
+	}
+	if players.Typing(w.Focus()) {
+		// The focus is in something that takes text: its letters are its
+		// own. Nothing the transport answers to is a modifier chord, so
+		// there is nothing left to try.
+		return false
 	}
 	if c := players.CommandFor(e); c != players.CmdNone {
 		p.Command(c)
@@ -491,7 +502,7 @@ func (b *body) paintCompactReadout(ctx *paintengine2d.Context) {
 		t.Track().Label(), pal.Text, t.Pos)
 }
 
-func (b *body) KeyPress(e widget.KeyEvent) bool { return b.p.Keys(e) }
+func (b *body) KeyPress(e widget.KeyEvent) bool { return b.p.Keys(b.p.Window, e) }
 
 // MousePress on the cabinet itself moves the window: the shell between the
 // controls is a drag handle, which is what the face of a player has always

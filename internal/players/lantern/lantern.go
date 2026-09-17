@@ -109,16 +109,24 @@ func New(a *app.Application, opts Options) (*Player, error) {
 	p.Transport.Changed = p.refresh
 	p.pulse = players.NewPulse(60*time.Millisecond, p.advance)
 	p.refresh()
+	// Something has the keyboard from the first frame. A player's keys are
+	// bare letters that bubble up from whatever is focused, and a window
+	// with no focus at all has nothing for them to bubble from.
+	p.Main.RequestFocus(p.body.play)
+	if p.queue != nil {
+		p.List.RequestFocus(p.queue.table)
+	}
 	return p, nil
 }
 
 func (p *Player) open(a *app.Application, opts Options, title string, w, h int) (*app.Window, error) {
-	return a.NewWindow(platform.WindowOptions{
-		Title: title, Width: w, Height: h,
-		MinWidth: 420, MinHeight: 320,
+	return players.OpenSized(a, platform.WindowOptions{
+		Title:       title,
+		MinWidth:    420,
+		MinHeight:   320,
 		Headless:    opts.Headless,
 		Decorations: platform.DecorationsClient,
-	})
+	}, w, h, false)
 }
 
 // Start begins the clock.
@@ -205,23 +213,33 @@ func (p *Player) ListShown() bool {
 }
 
 // Keys is the keyboard both windows share.
-func (p *Player) Keys(e widget.KeyEvent) bool {
+//
+// It is handed the window the key came from: the guard below asks what has
+// the keyboard, and the answer in the playlist window is a text field while
+// the answer in the player is a transport button.
+func (p *Player) Keys(w *app.Window, e widget.KeyEvent) bool {
 	if e.Key == platform.KeyEscape {
 		p.App.Quit()
 		return true
 	}
 	if e.Mods.Ctrl() {
-		switch e.Rune {
-		case 'k', 'K':
+		switch e.Key {
+		case platform.KeyK:
 			p.SetSkinned(!p.skinned)
 			return true
-		case 'l', 'L':
+		case platform.KeyL:
 			p.ShowList(!p.ListShown())
 			return true
-		case 'q', 'Q':
+		case platform.KeyQ:
 			p.App.Quit()
 			return true
 		}
+		return false
+	}
+	if players.Typing(w.Focus()) {
+		// The focus is in something that takes text: its letters are its
+		// own. Nothing the transport answers to is a modifier chord, so
+		// there is nothing left to try.
 		return false
 	}
 	if c := players.CommandFor(e); c != players.CmdNone {
@@ -470,7 +488,7 @@ func (b *body) Paint(ctx *paintengine2d.Context) {
 		players.Countdown(t.Remaining()), pal.TextMuted, style.AlignStart)
 }
 
-func (b *body) KeyPress(e widget.KeyEvent) bool { return b.p.Keys(e) }
+func (b *body) KeyPress(e widget.KeyEvent) bool { return b.p.Keys(b.p.Main, e) }
 
 func (b *body) Describe(n *a11y.Node) {
 	n.Role = a11y.RolePane

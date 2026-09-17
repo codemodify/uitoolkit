@@ -161,7 +161,7 @@ func (e *eqPane) Paint(ctx *paintengine2d.Context) {
 	}
 }
 
-func (e *eqPane) KeyPress(ev widget.KeyEvent) bool { return e.p.Keys(ev) }
+func (e *eqPane) KeyPress(ev widget.KeyEvent) bool { return e.p.Keys(e.p.Eq, ev) }
 
 func (e *eqPane) CaptionAt(paintengine2d.Point) bool { return true }
 
@@ -251,7 +251,7 @@ func (l *listPane) Arrange(r paintengine2d.Rect) {
 	l.shrink.Arrange(paintengine2d.XYWH(b.Dx()-ctl, y+(row-ctl)/2, ctl, ctl))
 }
 
-func (l *listPane) KeyPress(e widget.KeyEvent) bool { return l.p.Keys(e) }
+func (l *listPane) KeyPress(e widget.KeyEvent) bool { return l.p.Keys(l.p.List, e) }
 
 func (l *listPane) Describe(n *a11y.Node) {
 	n.Role = a11y.RoleGroup

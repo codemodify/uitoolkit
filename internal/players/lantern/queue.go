@@ -170,11 +170,7 @@ func (q *queuePane) Arrange(r paintengine2d.Rect) {
 	q.foot.Arrange(paintengine2d.XYWH(0, y+comboH+dip(4), b.Dx(), footH))
 }
 
-func (q *queuePane) KeyPress(e widget.KeyEvent) bool {
-	// A key that reached the pane did not reach the filter field, so the
-	// transport's bare letters are safe here.
-	return q.p.Keys(e)
-}
+func (q *queuePane) KeyPress(e widget.KeyEvent) bool { return q.p.Keys(q.p.List, e) }
 
 func (q *queuePane) Describe(n *a11y.Node) {
 	n.Role = a11y.RoleGroup
