@@ -629,4 +629,4 @@ func sortCells(cells []Cell) {
 }
 
 // Plans is every demo skin the toolkit ships, in the order they are written.
-func Plans() []*Plan { return []*Plan{Nocturne(), Cassette()} }
+func Plans() []*Plan { return []*Plan{Nocturne(), Cassette(), Deck()} }
