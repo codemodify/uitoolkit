@@ -45,6 +45,11 @@ type Base struct {
 	hitCur           *platform.Shape
 	hitCurW, hitCurH int
 	transparent      bool
+	// lookShape is the silhouette the look gave the face this component
+	// paints, remembered for as long as the look, the face and the size
+	// are the same. It stays nil for every component that does not name a
+	// face ([ShapeRole]), which is all but one of them.
+	lookShape *lookShape
 }
 
 type accLabel struct{ name, desc string }
@@ -204,12 +209,13 @@ func (b *Base) HitTest(local paintengine2d.Point) Component {
 	if lb.Empty() || !lb.Contains(local) {
 		return nil
 	}
-	// A component with a silhouette of its own takes input only inside it,
-	// and neither do its children: a press outside goes to whatever is
-	// behind, exactly as it does outside a shaped window. Every component
-	// without one — the default, and every widget in the toolkit — pays a
-	// single nil check here.
-	if (b.hitShape != nil || b.hitFn != nil) && !b.hitsShape(local) {
+	// A component with a silhouette — its own, or the one its look gives
+	// the face it paints — takes input only inside it, and neither do its
+	// children: a press outside goes to whatever is behind, exactly as it
+	// does outside a shaped window. Every component that asks for neither —
+	// the default, and every widget in the toolkit but one — pays two nil
+	// checks and a type assertion here.
+	if !b.hitsSilhouette(local) {
 		return nil
 	}
 	for i := len(b.children) - 1; i >= 0; i-- {

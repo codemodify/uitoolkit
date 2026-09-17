@@ -30,6 +30,12 @@ type Button struct {
 
 func (b *Button) Tooltip() string { return b.Tip }
 
+// ShapeRole is the face a button paints: its whole box is the look's push
+// button, so a look that gives that face a silhouette — a skin whose button
+// art is a disc — decides where the button takes the pointer. Every look
+// without one keeps the box, which is every pack in the toolkit.
+func (b *Button) ShapeRole() style.Role { return style.RoleButton }
+
 // PaintState is the state the button paints with (pressed only while the
 // pointer is over it, hovered only when not dragged off).
 func (b *Button) PaintState() style.ControlState {
