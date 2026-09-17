@@ -2,6 +2,7 @@ package platform
 
 import (
 	"github.com/codemodify/paintengine2d"
+	"github.com/codemodify/uitoolkit/style"
 )
 
 // A window's silhouette: the part of its surface that is really there.
@@ -199,6 +200,28 @@ func NewShapeImage(img *paintengine2d.Image) *Shape {
 		}
 	}
 	return &Shape{mask: mask, maskW: w, maskH: h, maskStride: w}
+}
+
+// NewShapeSilhouette is the shape a look's outline describes
+// ([style.Silhouette]): the path it encloses, or the coverage its artwork's
+// alpha channel gives. nil in, nil out — the plain rectangle.
+//
+// A look states an outline and never builds a shape, because platform
+// imports style rather than the other way round and because rasterising is
+// the expensive half: this is the one place the two meet, and the callers
+// that use it (a window's frame, a component's hit test) each remember the
+// shape it hands back for as long as the outline can not have changed.
+func NewShapeSilhouette(s *style.Silhouette) *Shape {
+	if s == nil {
+		return nil
+	}
+	if s.Mask != nil {
+		return NewShapeImage(s.Mask)
+	}
+	if s.EvenOdd {
+		return NewShapeEvenOdd(s.Path)
+	}
+	return NewShape(s.Path)
 }
 
 // ShapeRect is the plain rectangular silhouette — what every window has
