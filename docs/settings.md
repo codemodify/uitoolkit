@@ -86,8 +86,8 @@ every app that watches the file. **Revert** drops the staged change;
 **Defaults** stages what a fresh install has (it does not write either).
 The three sit pinned under the pages with the line that says which of the
 two states the screen is in — *Applied — every uitoolkit app is using this
-look* or *Staged, not applied* — and the status bar ends in `applied` or
-`unapplied`. Closing without Apply discards the staged change.
+look* or *Staged, not applied* — and the status bar leads with
+`applied` or `unapplied`. Closing without Apply discards the staged change.
 
 ## Screenshot geometry
 

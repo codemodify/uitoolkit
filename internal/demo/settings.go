@@ -302,14 +302,15 @@ func (s *settingsState) hintText() string {
 	return "Staged, not applied — only the preview and the gallery show it."
 }
 
+// statusText leads with the state, which a narrow status bar would
+// otherwise elide away: what is on screen is never ambiguous.
 func (s *settingsState) statusText() string {
-	st := s.staged.Name + " · " + string(s.staged.Corners) + " · " + string(s.staged.Icons) + " · " + string(s.staged.IconSize)
+	state := "applied"
 	if s.staged != s.saved {
-		st += " · unapplied"
-	} else {
-		st += " · applied"
+		state = "unapplied"
 	}
-	return st
+	return strings.Join([]string{state, s.staged.Name, string(s.staged.Corners),
+		string(s.staged.Icons), string(s.staged.IconSize)}, " · ")
 }
 
 // ---- Themes page --------------------------------------------------------------
