@@ -121,6 +121,24 @@ func TestAppsAreAccessible(t *testing.T) {
 	if !found {
 		t.Fatal("settings: the page did not change")
 	}
+
+	// Every page of Settings, including the Themes page with the preview
+	// and the whole widget gallery under it.
+	for _, name := range settingsPages {
+		clickSettingsNav(t, s, name)
+		a.PumpOnce()
+		auditWindow(t, "settings "+name, s)
+	}
+	clickSettingsNav(t, s, "Themes")
+	a.PumpOnce()
+	// The gallery under the preview is in the tree the same as the
+	// standalone window's is.
+	tree = auditWindow(t, "settings themes", s)
+	for _, r := range []a11y.Role{a11y.RoleButton, a11y.RoleCheckBox, a11y.RoleTable, a11y.RoleTree, a11y.RoleSlider} {
+		if count(tree, r) == 0 {
+			t.Errorf("settings: the gallery under the preview has no %s", r)
+		}
+	}
 }
 
 // The other sample apps pass the audit too.
