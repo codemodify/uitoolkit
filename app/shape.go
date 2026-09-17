@@ -152,6 +152,7 @@ func (w *Window) shapeChanged() {
 	}
 	w.shadow.drop()
 	w.eraser, w.eraserFor = nil, nil
+	w.wipe, w.wipeFor = nil, nil
 	w.shapeShade = shapeShadow{}
 	w.laid = false
 	w.dropScene()
@@ -298,28 +299,50 @@ func (w *Window) paintWindowShape(ctx *paintengine2d.Context, dirty *paintengine
 		// exactly what an unshaped one costs.
 		return
 	}
+	win := w.windowBox()
+	off := paintengine2d.Pt(win.Min.X, win.Min.Y)
+	box := func(c platform.FrameRect) (paintengine2d.Rect, paintengine2d.Rect, bool) {
+		src := paintengine2d.XYWH(float32(c.X), float32(c.Y), float32(c.W), float32(c.H))
+		dst := src.Translate(off)
+		if dirty != nil && !dirty.Empty() && !dirty.Overlaps(dst) {
+			return src, dst, false
+		}
+		return src, dst, true
+	}
+	// What the window does not cover at all — the hole in the middle, the
+	// space outside the silhouette — is *wiped*, not blended away: one
+	// path of whole pixels drawn with the dest-out operator, which takes
+	// every sample of every pixel it covers down to nothing. A blended
+	// draw over the same pixels does not promise that, and under
+	// multisampling it left a thread of half-erased pixels along the
+	// boundary that read as a stipple against anything saturated behind
+	// the window.
+	if p := w.shapeWipe(r, off); p != nil {
+		ctx.DrawPath(p, paintengine2d.Paint{
+			Color: paintengine2d.White,
+			Blend: paintengine2d.BlendDestOut,
+		})
+	}
+	// What is left is the antialiased thread along the silhouette's edges,
+	// and only the coverage mask can erase that. The blit goes over the
+	// whole cut rather than over the thread alone: the thread is a run or
+	// two per row and almost never merges, so aiming at it exactly would
+	// mean thousands of tiny draws, while the mask is exact everywhere —
+	// over a pixel already wiped it multiplies zero by zero, and over one
+	// the window covers solidly it multiplies by one.
 	img := w.shapeEraser(r)
 	if img == nil {
 		return
 	}
-	win := w.windowBox()
 	paint := paintengine2d.Paint{
 		Color:  paintengine2d.White,
 		Blend:  paintengine2d.BlendDestOut,
 		Filter: paintengine2d.FilterNearest,
 	}
-	// Only the boxes the silhouette actually cuts: the space outside it,
-	// its holes and its antialiased edges. Blitting the whole window would
-	// spend most of its time erasing nothing — a few milliseconds a frame
-	// on a large window — and the compositor was told about these very
-	// boxes, so nothing else can need erasing.
 	for _, c := range r.Cut {
-		src := paintengine2d.XYWH(float32(c.X), float32(c.Y), float32(c.W), float32(c.H))
-		dst := src.Translate(paintengine2d.Pt(win.Min.X, win.Min.Y))
-		if dirty != nil && !dirty.Empty() && !dirty.Overlaps(dst) {
-			continue
+		if src, dst, want := box(c); want {
+			ctx.DrawImageRectPaint(img, src, dst, paint)
 		}
-		ctx.DrawImageRectPaint(img, src, dst, paint)
 	}
 }
 
@@ -392,4 +415,31 @@ func (w *Window) transparentBoxes() []paintengine2d.Rect {
 		out = widget.TransparentRects(w.caption, out)
 	}
 	return out
+}
+
+// shapeWipe is the silhouette's uncovered region as one path of whole
+// pixels, in surface coordinates, cached beside the eraser. One path fill
+// is worth having: the region of a hole is a rectangle a row, and drawing
+// several hundred of them one at a time costs many times what rasterising
+// them together does.
+//
+// Plain rectangles on purpose. Context.ClearRect would say "wipe" more
+// directly, but it falls back to a blend on any device that does not
+// implement it — the scene recorder is one — and blending transparent over
+// something changes nothing at all. A path fill is recorded, replayed and
+// rasterised the same way everywhere.
+func (w *Window) shapeWipe(r *platform.ShapeRaster, off paintengine2d.Point) *paintengine2d.Path {
+	if len(r.Clear) == 0 {
+		return nil
+	}
+	if w.wipe != nil && w.wipeFor == r && w.wipeAt == off {
+		return w.wipe
+	}
+	p := paintengine2d.NewPath()
+	for _, c := range r.Clear {
+		p.AddRect(paintengine2d.XYWH(off.X+float32(c.X), off.Y+float32(c.Y),
+			float32(c.W), float32(c.H)))
+	}
+	w.wipe, w.wipeFor, w.wipeAt = p, r, off
+	return p
 }

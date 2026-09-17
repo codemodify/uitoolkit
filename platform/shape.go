@@ -88,8 +88,16 @@ type ShapeRaster struct {
 	// edge. A window paints rectangular and then erases these boxes, so a
 	// silhouette costs the pixels it actually cuts rather than the whole
 	// window. Empty means the shape covers its box solidly and there is
-	// nothing to erase.
+	// nothing to erase. It is exactly Clear and Feather together.
 	Cut []FrameRect
+	// Clear is the part of Cut the window does not cover at all: the hole
+	// in the middle, the space outside the silhouette. Those pixels must
+	// end up *entirely* transparent, so they are wiped rather than blended
+	// away — a rectangle wipe writes every sample of every pixel it
+	// touches, which a blended draw does not promise under multisampling.
+	// The rest of Cut is the antialiased thread along the silhouette's
+	// edges, which is what the coverage mask is for.
+	Clear []FrameRect
 	// Bounds is the smallest box holding Rects (empty when the shape is).
 	Bounds FrameRect
 	// Clamped: the shape needed more than [ShapeRectLimit] rectangles, so
@@ -278,10 +286,14 @@ func (s *Shape) rasterise(w, h int) *ShapeRaster {
 		r.Opaque = nil
 	}
 	// Everything that is not fully covered has to be erased from what the
-	// window paints. This is the same pass read the other way round.
-	r.Cut = maskRects(r.Mask, w, h, w, 255, true)
-	if len(r.Cut) > ShapeRectLimit {
+	// window paints, and it matters *how*: the pixels the window does not
+	// cover at all are wiped, and only the antialiased edge between them
+	// and the window is blended away through the mask.
+	r.Cut = maskRectsRange(r.Mask, w, h, w, 0, 254)
+	r.Clear = maskRectsRange(r.Mask, w, h, w, 0, 0)
+	if len(r.Cut) > ShapeRectLimit || len(r.Clear) > ShapeRectLimit {
 		r.Cut = []FrameRect{{X: 0, Y: 0, W: w, H: h}}
+		r.Clear = nil
 	}
 	return r
 }
@@ -393,20 +405,18 @@ func lerp8(a, b uint8, t float32) uint8 {
 // mask is w*h bytes, row-major, with the given stride (at least w). The
 // rectangles come out in the mask's own pixel unit; the caller scales them.
 func MaskRects(mask []uint8, w, h, stride int, threshold uint8) []FrameRect {
-	return maskRects(mask, w, h, stride, threshold, false)
+	return maskRectsRange(mask, w, h, stride, threshold, 255)
 }
 
-// maskRects is MaskRects, covering the pixels at or above threshold, or —
-// with below — the ones under it, which is the same walk with the test
-// turned round.
-func maskRects(mask []uint8, w, h, stride int, threshold uint8, below bool) []FrameRect {
+// maskRectsRange is MaskRects over a band of coverage values, lo to hi
+// inclusive: the silhouette is 128 to 255, what a compositor may call solid
+// is 255 alone, what the window does not cover at all is 0 alone, and its
+// antialiased edge is everything between.
+func maskRectsRange(mask []uint8, w, h, stride int, lo, hi uint8) []FrameRect {
 	if w < 1 || h < 1 || stride < w || len(mask) < (h-1)*stride+w {
 		return nil
 	}
-	in := func(v uint8) bool { return v >= threshold }
-	if below {
-		in = func(v uint8) bool { return v < threshold }
-	}
+	in := func(v uint8) bool { return v >= lo && v <= hi }
 	var out []FrameRect
 	// open holds the rectangles of the row group being extended, each one
 	// started when the group began; prev is that group's runs.

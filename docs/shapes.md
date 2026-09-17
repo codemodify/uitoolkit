@@ -173,8 +173,35 @@ leave gaps the user cannot click and the desktop did not expect.
 | What is solid | `set_opaque_region` | `_NET_WM_OPAQUE_REGION` |
 | Glass | `ext_background_effect_v1` | `_KDE_NET_WM_BLUR_BEHIND_REGION` |
 
-Both take rectangles and nothing else, so the silhouette is rasterised to
-scanline runs first. **The region is hard-edged however smooth the painted
+### Cutting the silhouette out
+
+The window paints rectangular and the silhouette is then cut out of what it
+painted — the same dest-out punch the rounded corners have always used. What
+matters is *how* each pixel is cut, and there are two kinds:
+
+- **The pixels the window does not cover at all** — the hole in the middle,
+  the space outside the silhouette — are *wiped*: one path of whole pixels
+  drawn with the dest-out operator, which takes every sample of every pixel
+  it covers down to nothing.
+- **The antialiased thread along the edges** is blended away through the
+  coverage mask, because only the mask knows how much of each of those
+  pixels is the window.
+
+The distinction is not academic. Blending the whole cut away through the
+mask is exact on the CPU and looks exact on a GPU too — until the GPU is
+multisampling, where a blended draw does not promise to touch every sample
+of a pixel and a thread of half-erased pixels survives just inside the
+boundary. Against a saturated background that reads as a periodic stipple
+around the hole, at 1× and without magnification. A fill of whole pixels
+has no such freedom, so the pixels that must end up *entirely* transparent
+are taken out by one, and `ShapeRaster.Clear` is exactly that region.
+
+`TestUncoveredPixelsAreWipedNotBlended` pins it where a CPU render cannot:
+it rasterises the wipe the paint path actually issues and checks it covers
+every uncovered pixel and no covered one.
+
+Both window systems take rectangles and nothing else, so the silhouette is
+rasterised to scanline runs first. **The region is hard-edged however smooth the painted
 shape is** — that is the one thing about a shaped window that cannot be
 antialiased, on every toolkit and not just this one. The painted edge is
 antialiased; the input edge lands on the nearest whole pixel.
@@ -242,22 +269,32 @@ sits about 9 MB higher again, and that is its animation, not its shape — its
 memory is flat over a minute and it rasterises its silhouette **once**,
 however many frames it paints.
 
-**Time**, per frame at 875×875:
+**Time**, per frame at 875×875. The machine was busy when these were taken,
+so read them as upper bounds and as a comparison within each row rather
+than as absolutes:
 
 | | Opaque | Shaped |
 | --- | --- | --- |
-| Full repaint | 0.61 ms | 2.98 ms |
-| Partial repaint (a 120×40 box) | 19 µs | 153 µs |
-| Asking a window for its silhouette | — | 41 ns |
-| Rasterising it from scratch (a resize) | — | 16 ms, 1.97 MB |
+| Full repaint | 0.37 – 0.46 ms | 6.0 ms |
+| Partial repaint (a 120×40 box) | 11 – 20 µs | 246 µs |
+| Asking a window for its silhouette | — | 22 – 39 ns |
+| Rasterising it from scratch (a resize) | — | 20 ms, 2.03 MB |
 
 The rasterisation is the one expensive thing, and it happens **once per
 resize**, never per frame: a shape caches its own rasterisations and a
-repeat lookup allocates nothing. The per-frame cost is the dest-out punch
-that cuts the silhouette out of the painted window, and it is charged only
-for the boxes the silhouette actually cuts — the space outside it, its holes
-and its antialiased edges — so a shaped window that happens to be a
-rectangle costs what an unshaped one costs.
+repeat lookup allocates nothing. The demo bears that out on real hardware —
+a shaped clock repainting twice a second rasterised its silhouette once
+across a minute.
+
+The per-frame cost is the cut. It is charged only for the boxes the
+silhouette actually cuts — the space outside it, its holes and its
+antialiased edges — so a shaped window that happens to be a rectangle costs
+what an unshaped one costs. Wiping the uncovered part rather than blending
+it adds about 4% to a shaped frame, measured against the same code with the
+wipe removed in the same run; it is not where the cost is.
+
+Everyday repainting is the row that matters: a hover or a caret in a shaped
+window costs a quarter of a millisecond, against a budget of sixteen.
 
 **Rectangle counts** are the number a compositor sees: 51 for a rounded
 panel, 666 for a ring, 728 for a disc with a hub hole, all at 875 px. KWin
@@ -278,7 +315,7 @@ are the other half of the answer.
 
 ## Known gaps
 
-- **The rasteriser is CPU and single-threaded.** 16 ms for an 875 px ring is
+- **The rasteriser is CPU and single-threaded.** 20 ms for an 875 px ring is
   a visible hitch during an interactive resize of a large shaped window. It
   is one pass over the mask and an obvious candidate for the GPU, or for
   rasterising only the rows a resize actually changed.
@@ -302,6 +339,13 @@ are the other half of the answer.
   effect they could keep their real alpha.
 - **dmabuf presents stay opaque**; a shaped window uses shm or EGL with
   alpha. Worth revisiting only if it ever matters for performance.
+- **The renderer's multisampled dest-out is not sample-exact.** Cutting the
+  silhouette out with a blended image draw leaves a thread of half-erased
+  pixels along the boundary when the GPU is multisampling; wiping the
+  uncovered part with a fill sidesteps it (above), but the underlying
+  behaviour is still there for anything else that erases through an image.
+  `UITK_PAINT_MSAA=0` was the switch that first showed which of the two it
+  was.
 
 ## See also
 
