@@ -156,6 +156,14 @@ The full list, with what each pack reproduces, is in
 [docs/themes.md](docs/themes.md). How engines work, and how to write one,
 is in [docs/theme-engines.md](docs/theme-engines.md).
 
+A **skin** is the other kind of theme: one made of pictures rather than
+shapes — sprite sheets and geometry in the toolkit's own JSON, in the spirit
+of WinAmp and VLC's skins2, with the things those formats never had (design
+pixels that scale, a fixed vocabulary instead of a scripting language, and a
+base pack painting whatever the skin leaves out). A skin is a pack like any
+other: it lists in Settings, `UITK_THEME` runs an app in one, and it applies
+live. Two ship with the toolkit. See [docs/skins.md](docs/skins.md).
+
 ## Screenshots
 
 Real frames from the gallery, Notes, Inspector, Files, and Mail, painted through

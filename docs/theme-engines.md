@@ -22,6 +22,7 @@ Engines so far, each a good model for its family:
 | `next` | NeXTSTEP, OPENSTEP, Window Maker | textures as pack data, dithers |
 | `fusion`, `oxygen`, `breeze` | Qt Fusion, KDE 4, Plasma | modern flat and glow looks, tone models |
 | `web` | SourceGit, Primer, shadcn/ui, Geist, Linear, the editor palettes | a parametric engine: one idiom, every difference a param (see [The web engine](#the-web-engine)) |
+| `skin` | Nocturne, Cassette | a theme made of pictures: sprite sheets and geometry instead of shapes, falling through to a base pack for what it does not draw (see [Skins](skins.md)) |
 | `base` | the stock looks | defaults every engine inherits |
 
 ## Where this comes from
