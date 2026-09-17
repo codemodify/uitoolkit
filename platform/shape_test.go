@@ -423,3 +423,68 @@ func TestShapeRasterisesInStripsWithoutASeam(t *testing.T) {
 		}
 	}
 }
+
+func TestCutSplitsIntoWhatIsWipedAndWhatIsBlended(t *testing.T) {
+	// The silhouette's cut is split by *how* a pixel has to be erased.
+	// Clear is what the window does not cover at all, and it is wiped —
+	// every sample of it, by a fill of whole pixels. The rest of Cut is
+	// the antialiased thread along the edges, which only the coverage mask
+	// can erase.
+	//
+	// Getting this wrong is not a small error: a fully transparent pixel
+	// left to a blended image draw survives as a stipple along the
+	// boundary under multisampling, which is what this pins.
+	for _, n := range []int{120, 300, 375, 450, 525, 600} {
+		r := NewShapeEvenOdd(ringPath(float32(n), float32(n))).Raster(n, n)
+		paint := func(rects []FrameRect, name string) map[[2]int]bool {
+			out := map[[2]int]bool{}
+			for _, b := range rects {
+				for y := b.Y; y < b.Y+b.H; y++ {
+					for x := b.X; x < b.X+b.W; x++ {
+						if out[[2]int{x, y}] {
+							t.Fatalf("n=%d: %s covers %d,%d twice", n, name, x, y)
+						}
+						out[[2]int{x, y}] = true
+					}
+				}
+			}
+			return out
+		}
+		clear := paint(r.Clear, "Clear")
+		cut := paint(r.Cut, "Cut")
+		var feathered int
+		for y := 0; y < n; y++ {
+			for x := 0; x < n; x++ {
+				p := [2]int{x, y}
+				switch c := r.Mask[y*n+x]; {
+				case c == 0:
+					if !clear[p] {
+						t.Fatalf("n=%d: uncovered pixel %v is not wiped", n, p)
+					}
+					if !cut[p] {
+						t.Fatalf("n=%d: uncovered pixel %v is not in the cut", n, p)
+					}
+				case c == 255:
+					if cut[p] || clear[p] {
+						t.Fatalf("n=%d: solidly covered pixel %v is erased", n, p)
+					}
+				default:
+					// The antialiased thread: cut, but never wiped
+					// outright — wiping it would square off the edge the
+					// whole design exists to keep smooth.
+					if !cut[p] {
+						t.Fatalf("n=%d: half-covered pixel %v (%d) is not in the cut", n, p, c)
+					}
+					if clear[p] {
+						t.Fatalf("n=%d: half-covered pixel %v (%d) is wiped outright", n, p, c)
+					}
+					feathered++
+				}
+			}
+		}
+		if len(r.Clear) == 0 || feathered == 0 {
+			t.Fatalf("n=%d: a ring has both a hole to wipe and an edge to blend: %d clear rects, %d feathered pixels",
+				n, len(r.Clear), feathered)
+		}
+	}
+}
