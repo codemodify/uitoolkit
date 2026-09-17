@@ -740,6 +740,39 @@ func (f *Fader) AccessibleAction(a a11y.Action) bool {
 	return true
 }
 
+// ---- the shell between the controls --------------------------------------------
+
+// DragsWindow is a component whose own presses move the window it is in.
+//
+// The face of a player between its controls is a drag handle — that is what
+// the whole front of a machine this size has always been — and the toolkit
+// does not bubble a mouse press: w.hit finds the deepest component under the
+// pointer and that one alone is told. So every part of a player's face that
+// is *not* a control has to say so itself, rather than leaving it to the
+// container underneath and finding that a press on the display does nothing.
+//
+// It is embedded in place of widget.Base by the pieces that are pictures:
+// the readouts, the footers, the display wells.
+type DragsWindow struct {
+	widget.Base
+	// Win is the window a press moves. A nil one is inert, which is what a
+	// component wants before it has been given its window.
+	Win *app.Window
+}
+
+// MousePress starts a window move and takes the press.
+func (d *DragsWindow) MousePress(widget.MouseEvent) bool {
+	if d.Win != nil {
+		d.Win.StartMove()
+	}
+	return true
+}
+
+// CaptionAt says this component is part of the window's own face, so a
+// frame that asks — the toolkit's, on a window it draws — treats a press
+// here as one on the caption.
+func (d *DragsWindow) CaptionAt(paintengine2d.Point) bool { return true }
+
 // ---- the analyser ------------------------------------------------------------
 
 // AnalyserView paints a Spectrum: a row of bars with a marker riding the
@@ -763,7 +796,23 @@ type AnalyserView struct {
 	Pixelated bool
 	// Tint overrides the accent the bars are drawn in.
 	Tint paintengine2d.Color
+	// Drag is the window a press on the analyser moves. An analyser sunk
+	// into a player's display is part of its face, and the toolkit does
+	// not bubble a press past the component it lands on.
+	Drag *app.Window
 }
+
+// MousePress moves the window when the analyser is part of a face.
+func (a *AnalyserView) MousePress(widget.MouseEvent) bool {
+	if a.Drag == nil {
+		return false
+	}
+	a.Drag.StartMove()
+	return true
+}
+
+// CaptionAt: an analyser in a player's display is face, not content.
+func (a *AnalyserView) CaptionAt(paintengine2d.Point) bool { return a.Drag != nil }
 
 // NewAnalyserView shows s.
 func NewAnalyserView(s *Spectrum) *AnalyserView {
@@ -874,29 +923,39 @@ func snap(v float32) float32 {
 
 // ---- opening a window whose size is a design -----------------------------------
 
-// OpenSized opens a window whose width and height are stated in *design*
-// pixels — the units a skin's art and a player's proportions are drawn in.
+// WindowSize turns a size in *design* pixels — the units a skin's art and a
+// player's proportions are drawn in — into the numbers this backend's
+// window-geometry calls actually want.
 //
-// platform.WindowOptions speaks device pixels: the numbers go straight to
-// the compositor, which knows nothing about the toolkit's scale. That is
-// right for a window whose size is a preference and wrong for one whose
-// size is a *shape*: a strip that is 275 by 116 at 1x has to ask for 481 by
-// 203 at 1.75, or it opens at 275 device pixels with a silhouette resolved
-// at 1.75 and stands on a chin twice as deep as it was drawn.
-//
-// It is asked twice, which is the other half. The application's scale is a
-// guess until a window exists — a window may open on a monitor the guess
-// did not expect — so the size is set again from the scale the window
-// actually reports.
-//
-// fixed pins the window to that size, for the players whose proportions are
-// the design rather than a starting point.
-func OpenSized(a *app.Application, opts platform.WindowOptions, w, h int, fixed bool) (*app.Window, error) {
+// The two backends do not agree, and no single scale factor reconciles them.
+// An X11 window's size *is* device pixels: the server has no notion of a
+// display scale, so a 275-design-pixel strip on a 1.75 display has to ask
+// for 481. A Wayland toplevel's geometry is **logical** and the compositor
+// multiplies, so the same strip asks for 275 and is handed a 481-pixel
+// buffer. (The offscreen backend behaves like X11, which is what its tests
+// assume.) Asking the wrong way round gives a window nearly twice too large
+// or nearly half too small, and this is what exists to stop that.
+func WindowSize(a *app.Application, w, h int) (int, int) {
 	s := max(a.Scale(), 1)
-	scaled := func(s float32) (int, int) {
-		return max(int(float32(w)*s+0.5), 1), max(int(float32(h)*s+0.5), 1)
+	if a == nil || a.BackendName() == "wayland" {
+		s = 1
 	}
-	opts.Width, opts.Height = scaled(s)
+	return max(int(float32(w)*s+0.5), 1), max(int(float32(h)*s+0.5), 1)
+}
+
+// OpenSized opens a window whose width and height are stated in design
+// pixels (see [WindowSize]).
+//
+// It sizes the window twice, which is the other half of the problem. The
+// application's scale is a guess until a window exists — a window may open
+// on a monitor the guess did not expect — so the size is asked for again
+// from the scale the window actually reports.
+//
+// fixed pins the window's minimum to that size, for the players whose
+// proportions are the design rather than a starting point.
+func OpenSized(a *app.Application, opts platform.WindowOptions, w, h int, fixed bool) (*app.Window, error) {
+	before := max(a.Scale(), 1)
+	opts.Width, opts.Height = WindowSize(a, w, h)
 	if fixed {
 		opts.MinWidth, opts.MinHeight = opts.Width, opts.Height
 	}
@@ -904,8 +963,8 @@ func OpenSized(a *app.Application, opts platform.WindowOptions, w, h int, fixed 
 	if err != nil {
 		return nil, err
 	}
-	if got := max(win.Scale(), 1); got != s {
-		ww, hh := scaled(got)
+	if got := max(win.Scale(), 1); got != before {
+		ww, hh := WindowSize(a, w, h)
 		win.SetSize(ww, hh)
 	}
 	return win, nil
