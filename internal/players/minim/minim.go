@@ -68,6 +68,11 @@ type Player struct {
 
 	// iMain, iEq, iList are the panes in the desk's rack.
 	iMain, iEq, iList int
+	// stacked is whether the three have been put in a stack yet, and tries
+	// how many times settle has asked — see settle, which cannot run until
+	// the desktop has placed them and may not be obeyed when it does.
+	stacked bool
+	tries   int
 }
 
 // Options is what the command line passes in.
@@ -191,8 +196,55 @@ func (p *Player) Pose(pos time.Duration) {
 func (p *Player) advance(dt time.Duration) {
 	p.Transport.Tick(dt)
 	p.Spectrum.Advance(p.Transport.Pos, p.Transport.State == players.Playing, dt)
+	p.settle()
 	p.Desk.Follow()
 	p.refresh()
+}
+
+// settle builds the stack once the desktop has said where it put the
+// windows, and then never again.
+//
+// It cannot be done when the windows are made: a window manager places a
+// window as it maps it and the app is told afterwards, so a stack arranged
+// at construction is arranged around a strip that is still at the origin.
+// On a desktop that will not place windows at all this never runs, which is
+// right — there is nothing to arrange.
+func (p *Player) settle() {
+	if p.stacked || !p.Desk.Places() || !p.Desk.Adopt() {
+		return
+	}
+	p.tries++
+	if p.iEq >= 0 {
+		p.Desk.Attach(p.iEq, p.iMain, players.SideBottom)
+	}
+	if p.iList >= 0 {
+		p.Desk.Attach(p.iList, maxInt(p.iEq, p.iMain), players.SideBottom)
+	}
+	// It has taken when the panes are where their bonds say. A window
+	// manager may refuse a move that would hang a window off the screen,
+	// so it is asked a few times and then left alone; the panes are then
+	// loose, and dragging one back to an edge snaps it as it always does.
+	if p.placed() || p.tries >= settleTries {
+		p.stacked = true
+	}
+}
+
+// settleTries is how many clock ticks the stack is asked for before the
+// desktop's answer is taken as final.
+const settleTries = 20
+
+// placed reports whether every pane's window is where the rack says.
+func (p *Player) placed() bool {
+	for i := 0; i < p.Desk.Rack.Len(); i++ {
+		pane, w := p.Desk.Rack.Pane(i), p.Desk.Window(i)
+		if pane == nil || w == nil || !pane.Shown {
+			continue
+		}
+		if x, y, ok := w.Position(); !ok || x != pane.Box.X || y != pane.Box.Y {
+			return false
+		}
+	}
+	return true
 }
 
 // refresh puts the model back into the controls and repaints. Everything
@@ -297,6 +349,7 @@ func newStrip(p *Player) *strip {
 
 	s.readout = newReadout(p)
 	s.analyser = players.NewAnalyserView(p.Spectrum)
+	s.analyser.Drag = p.Main
 	s.analyser.Pixelated = true
 	s.analyser.Gap = 1
 	s.analyser.MinBarW = 2
@@ -487,13 +540,14 @@ func (s *strip) Describe(n *a11y.Node) {
 // palette, so the same component is a phosphor well under the skin and an
 // ordinary sunken field under any of the other packs.
 type readout struct {
-	widget.Base
+	players.DragsWindow
 	p *Player
 }
 
 func newReadout(p *Player) *readout {
 	r := &readout{p: p}
 	r.Init(r)
+	r.Win = p.Main
 	return r
 }
 
@@ -576,7 +630,3 @@ func (r *readout) Describe(n *a11y.Node) {
 		t.Track().Label(), players.Clock(t.Pos), players.Clock(t.Length()), t.State)
 	n.Description = players.Disclaimer
 }
-
-// CaptionAt: the display is part of the face, so dragging it moves the
-// window.
-func (r *readout) CaptionAt(paintengine2d.Point) bool { return true }

@@ -35,10 +35,23 @@ type Desk struct {
 	// snap by the window manager — and that is what tells the two apart
 	// without watching for a drag we cannot see.
 	want []Box
+	// pending counts the looks since we asked the desktop to move a window
+	// and it has not arrived yet. It is the one piece of hysteresis in
+	// here and it is load-bearing: a move is a *request*, X11 answers it a
+	// frame or two later, and without this Follow reads the old position
+	// back on the very next look, decides the user must have dragged the
+	// window there, and takes it out of the stack it was just put into.
+	pending []int
 	// Moved runs after Follow has moved anything, so a player can repaint
 	// the line that says where its panes are.
 	Moved func()
 }
+
+// movePatience is how many looks a window gets to arrive where it was asked
+// to go before the rack gives up and takes the desktop's answer instead. A
+// window manager that refuses a move — a tiled window, a maximized one —
+// would otherwise be argued with forever.
+const movePatience = 25
 
 // NewDesk is an empty desk whose panes snap within reach pixels.
 func NewDesk(reach int) *Desk { return &Desk{Rack: NewRack(reach)} }
@@ -49,6 +62,7 @@ func (d *Desk) Add(name string, w *app.Window) int {
 	i := d.Rack.Add(name, d.boxOf(w))
 	d.wins = append(d.wins, w)
 	d.want = append(d.want, d.Rack.Pane(i).Box)
+	d.pending = append(d.pending, 0)
 	return i
 }
 
@@ -105,6 +119,12 @@ func (d *Desk) Follow() bool {
 		}
 		// Only a position we did not ask for is the user's.
 		if box.X == d.want[i].X && box.Y == d.want[i].Y {
+			d.pending[i] = 0
+			continue
+		}
+		if d.pending[i] > 0 {
+			// Asked for, not arrived. Wait.
+			d.pending[i]--
 			continue
 		}
 		d.Rack.MoveTo(i, box.X, box.Y)
@@ -118,6 +138,37 @@ func (d *Desk) Follow() bool {
 		d.Moved()
 	}
 	return true
+}
+
+// Adopt takes the box the desktop has actually given every window into the
+// rack, leaving the bonds alone, and reports whether every position is
+// known.
+//
+// It is the thing a rack needs at startup and the reason a stack cannot
+// simply be built when the windows are made. A window manager places a
+// window when it *maps* it, and the application is not told where until a
+// configure comes back afterwards — so every box in a fresh rack is at the
+// origin, and a stack arranged then is arranged around a window that is not
+// there yet. The apps call this on their clock until it answers yes, and
+// then attach their panes once.
+func (d *Desk) Adopt() bool {
+	known := len(d.wins) > 0
+	for i, w := range d.wins {
+		p := d.Rack.Pane(i)
+		if p == nil || w == nil || w.Closed() {
+			continue
+		}
+		x, y, ok := w.Position()
+		if !ok {
+			known = false
+			continue
+		}
+		ww, hh := w.Size()
+		p.Box = Box{X: x, Y: y, W: ww, H: hh}
+		d.want[i] = p.Box
+		d.pending[i] = 0
+	}
+	return known
 }
 
 // Apply puts every window where the rack says it goes, and skips the ones
@@ -135,8 +186,21 @@ func (d *Desk) Apply() {
 		}
 		if w.Move(p.Box.X, p.Box.Y) {
 			d.want[i] = p.Box
+			d.pending[i] = d.patience(w, p.Box)
 		}
 	}
+}
+
+// patience is how many looks a window gets to arrive where it was just
+// asked to go: none at all when it is already there. A backend that places
+// a window as the call is made — the offscreen one, and an X11 server that
+// is not busy — needs no hysteresis, and giving it some would make a real
+// drag half a second later look like a move nobody asked for.
+func (d *Desk) patience(w *app.Window, want Box) int {
+	if x, y, ok := w.Position(); ok && x == want.X && y == want.Y {
+		return 0
+	}
+	return movePatience
 }
 
 // Attach sticks pane i to pane to on a side and moves it there — the
@@ -162,8 +226,10 @@ func (d *Desk) Show(i int, on bool) {
 	// Place it before showing it, so it does not appear at the desktop's
 	// idea of where it goes and then jump to the rack's.
 	if p := d.Rack.Pane(i); p != nil {
-		w.Move(p.Box.X, p.Box.Y)
-		d.want[i] = p.Box
+		if w.Move(p.Box.X, p.Box.Y) {
+			d.want[i] = p.Box
+			d.pending[i] = d.patience(w, p.Box)
+		}
 	}
 	w.Show()
 }

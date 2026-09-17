@@ -212,6 +212,7 @@ func newListPane(p *Player) *listPane {
 	l.list.SetAccessibleName("Playlist")
 	l.foot = &foot{p: p}
 	l.foot.Init(l.foot)
+	l.foot.Win = p.List
 	l.toTop = widgets.NewButton("Top", func() {
 		p.Transport.SelectTrack(0)
 	})
@@ -267,7 +268,7 @@ func (l *listPane) Describe(n *a11y.Node) {
 
 // foot is the playlist's status line: how many tracks and how long they run.
 type foot struct {
-	widget.Base
+	players.DragsWindow
 	p *Player
 }
 
@@ -307,5 +308,3 @@ func (f *foot) Describe(n *a11y.Node) {
 	n.Role = a11y.RoleStatusBar
 	n.Name = f.text()
 }
-
-func (f *foot) CaptionAt(paintengine2d.Point) bool { return true }

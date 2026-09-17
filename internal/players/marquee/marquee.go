@@ -115,7 +115,7 @@ func (p *Player) SetCompact(on bool) {
 	p.compact = on
 	p.body.compact = on
 	if on {
-		p.Window.SetSize(int(float32(CompactW)*p.scale()), int(float32(CompactH)*p.scale()))
+		p.Window.SetSize(players.WindowSize(p.App, CompactW, CompactH))
 		// The stadium: rounded by half its own height, redrawn at every
 		// size and every scale rather than stretched, because it is a
 		// callback and not a fixed shape.
@@ -125,7 +125,7 @@ func (p *Player) SetCompact(on bool) {
 			return platform.NewShape(path)
 		})
 	} else {
-		p.Window.SetSize(int(float32(FullW)*p.scale()), int(float32(FullH)*p.scale()))
+		p.Window.SetSize(players.WindowSize(p.App, FullW, FullH))
 		// nil hands the window back to its look, which for this one is the
 		// skin's brow and dome.
 		p.Window.SetShapeFunc(nil)
@@ -134,9 +134,6 @@ func (p *Player) SetCompact(on bool) {
 	p.Window.RequestLayout()
 	p.refresh()
 }
-
-// scale is the window's display scale, never below one.
-func (p *Player) scale() float32 { return max(p.Window.Scale(), 1) }
 
 // Start begins the clock.
 func (p *Player) Start() {
@@ -242,6 +239,7 @@ func newBody(p *Player) *body {
 
 	b.display = newDisplay(p)
 	b.analyser = players.NewAnalyserView(p.Spectrum)
+	b.analyser.Drag = p.Window
 	b.analyser.Gap = 2
 	b.analyser.MinBarW = 3
 
@@ -527,13 +525,14 @@ func (b *body) Describe(n *a11y.Node) {
 // display is the cabinet's screen: a well with the track over it and the
 // analyser lying along its floor.
 type display struct {
-	widget.Base
+	players.DragsWindow
 	p *Player
 }
 
 func newDisplay(p *Player) *display {
 	d := &display{p: p}
 	d.Init(d)
+	d.Win = p.Window
 	return d
 }
 
@@ -582,5 +581,3 @@ func (d *display) Describe(n *a11y.Node) {
 		players.Clock(t.Pos), players.Clock(t.Length()), t.State)
 	n.Description = players.Disclaimer
 }
-
-func (d *display) CaptionAt(paintengine2d.Point) bool { return true }

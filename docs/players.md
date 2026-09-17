@@ -288,7 +288,39 @@ do, kept here because they are the useful output of writing one:
 - **A window opens with nothing focused**, so keys that bubble from the
   focus reach nobody until the first Tab. All three focus a control on their
   first frame.
+- **A mouse press does not bubble.** `Window.hit` finds the deepest
+  component under the pointer and tells that one alone, so a press on a
+  player's display did nothing until every part of the face that is *not* a
+  control said so itself (`players.DragsWindow`). It is the right design —
+  bubbling presses is how one click ends up doing two things — but "the
+  container will get it" is the natural assumption and it is not true.
+- **`platform.WindowOptions.Resizable` is declared and never read**, and
+  there is no maximum size, so a player whose size *is* its design cannot
+  say it is fixed. A press eight pixels below the strip's top edge lands in
+  the frame's resize band and grew a 275×116 window to 275×308.
+- **Window sizes are device pixels on X11 and logical pixels on Wayland**,
+  and no scale factor reconciles them: an X11 server has no notion of a
+  display scale, so a 275-design-pixel strip at 1.75 asks for 481, while a
+  Wayland toplevel's geometry is logical and the compositor multiplies, so
+  the same strip asks for 275. `players.WindowSize` is the work-around here;
+  the fix belongs in `platform`.
 
-Two small things were added rather than worked around: `app.Window.Move` and
-`CanMove` (Position's other half, over `platform.SurfaceMoves`), and
-`app.Window.SetSize` (Size's other half).
+Two more are about *when* rather than *what*, and only real hardware showed
+them (see the e2e report):
+
+- **A window manager places a window when it maps it**, and the application
+  is told afterwards — so a rack built when its windows are made is built
+  around windows that are all still at the origin. `Desk.Adopt` takes the
+  real boxes in first and each player attaches its panes once that answers
+  yes.
+- **A move is a request.** X11 answers one a frame or two later, so reading
+  the position straight back says the window is where it was and looks
+  exactly like a drag. `Desk` waits for a move it asked for to arrive, and
+  gives up after twenty-five looks so a window manager that refuses one —
+  KWin clamps a window that would hang off the screen — is not argued with
+  forever.
+
+Three small things were added rather than worked around: `app.Window.Move`
+and `CanMove` (Position's other half, over `platform.SurfaceMoves`),
+`app.Window.SetSize` (Size's other half), and `platform.SurfaceMoves`
+itself.
