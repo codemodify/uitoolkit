@@ -22,6 +22,11 @@ func (fluentEngine) Decoration(l *Classic, st DecorationState) DecorationSpec {
 		Radius:  [4]float32{r, r, r, r},
 	}
 	s.Shadow = ShadowLayersReach(fluentWindowShadow(l, DecorationState{Active: true}))
+	// Mica: Windows 11 tints the whole window background with the desktop
+	// behind it. That needs the compositor, so the look asks for glass and
+	// keeps its flat background wherever it cannot have it (style/glass.go).
+	// "acrylic" 0 turns it off along with the flyouts' in-app blur.
+	s.Glass = l.P("acrylic", 1) != 0
 	return s
 }
 
