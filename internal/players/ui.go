@@ -872,6 +872,45 @@ func snap(v float32) float32 {
 	return f
 }
 
+// ---- opening a window whose size is a design -----------------------------------
+
+// OpenSized opens a window whose width and height are stated in *design*
+// pixels — the units a skin's art and a player's proportions are drawn in.
+//
+// platform.WindowOptions speaks device pixels: the numbers go straight to
+// the compositor, which knows nothing about the toolkit's scale. That is
+// right for a window whose size is a preference and wrong for one whose
+// size is a *shape*: a strip that is 275 by 116 at 1x has to ask for 481 by
+// 203 at 1.75, or it opens at 275 device pixels with a silhouette resolved
+// at 1.75 and stands on a chin twice as deep as it was drawn.
+//
+// It is asked twice, which is the other half. The application's scale is a
+// guess until a window exists — a window may open on a monitor the guess
+// did not expect — so the size is set again from the scale the window
+// actually reports.
+//
+// fixed pins the window to that size, for the players whose proportions are
+// the design rather than a starting point.
+func OpenSized(a *app.Application, opts platform.WindowOptions, w, h int, fixed bool) (*app.Window, error) {
+	s := max(a.Scale(), 1)
+	scaled := func(s float32) (int, int) {
+		return max(int(float32(w)*s+0.5), 1), max(int(float32(h)*s+0.5), 1)
+	}
+	opts.Width, opts.Height = scaled(s)
+	if fixed {
+		opts.MinWidth, opts.MinHeight = opts.Width, opts.Height
+	}
+	win, err := a.NewWindow(opts)
+	if err != nil {
+		return nil, err
+	}
+	if got := max(win.Scale(), 1); got != s {
+		ww, hh := scaled(got)
+		win.SetSize(ww, hh)
+	}
+	return win, nil
+}
+
 // ---- the clock ---------------------------------------------------------------
 
 // Pulse is the timer that moves a player: it advances the transport and the
@@ -970,14 +1009,20 @@ func (p *Pulse) Tick() {
 // One table for all three players, because a person who learns the keys in
 // one should not have to learn them again in the next. They are the keys
 // these applications have always used: space plays and pauses, the arrows
-// seek and set the volume, B and Z step (the two keys either side of the
+// seek and set the volume, Z and B step (the two keys either side of the
 // transport row on a keyboard of the era), and the single letters do the
 // toggles.
 //
+// It reads e.Key and not e.Rune. A KeyEvent that reaches a component
+// carries the *key*; the character is a separate event (TextInput), which
+// is what keeps a shortcut table from depending on the keyboard layout's
+// idea of what a key produces. A rune is honoured anyway when a caller
+// passes one, since a test may.
+//
 // Nothing here takes a modifier, which is deliberate: a player's keys have
-// to work while the focus is anywhere in its window, and a window whose
-// bare letters are shortcuts must not also have a text field in it. None of
-// the three does.
+// to work while the focus is anywhere in its window. That is only safe
+// because no player ever hands one of these keys to a text field — see
+// [Typing], which each of the three asks before dispatching.
 func CommandFor(e widget.KeyEvent) Command {
 	if e.Mods.Ctrl() || e.Mods.Alt() {
 		return CmdNone
@@ -993,11 +1038,23 @@ func CommandFor(e widget.KeyEvent) Command {
 		return CmdVolumeUp
 	case platform.KeyDown:
 		return CmdVolumeDown
+	case platform.KeyX, platform.KeyC:
+		return CmdPlayPause
+	case platform.KeyV:
+		return CmdStop
+	case platform.KeyB:
+		return CmdNext
+	case platform.KeyZ:
+		return CmdPrev
+	case platform.KeyM:
+		return CmdMute
+	case platform.KeyS:
+		return CmdShuffle
+	case platform.KeyR:
+		return CmdRepeat
 	}
 	switch e.Rune {
-	case 'x', 'X':
-		return CmdPlayPause
-	case 'c', 'C':
+	case 'x', 'X', 'c', 'C':
 		return CmdPlayPause
 	case 'v', 'V':
 		return CmdStop
@@ -1013,6 +1070,31 @@ func CommandFor(e widget.KeyEvent) Command {
 		return CmdRepeat
 	}
 	return CmdNone
+}
+
+// Typing reports whether c is a control that takes text, so a player's
+// bare-letter keys can stay out of it.
+//
+// A key that nobody takes bubbles up the tree, and a text field does not
+// take a plain letter — the character arrives separately as text input — so
+// a window whose root turns B into "next track" would change track while
+// somebody typed "Beacon" into a filter. Asking the focused component what
+// it *is* rather than what it is made of is the reliable test: the role a
+// component gives the accessibility tree is the same answer a screen reader
+// gets, and a control that is a text field to one is a text field to both.
+func Typing(c widget.Component) bool {
+	d, ok := c.(interface{ Describe(*a11y.Node) })
+	if !ok {
+		return false
+	}
+	var n a11y.Node
+	d.Describe(&n)
+	switch n.Role {
+	case a11y.RoleTextField, a11y.RoleTextArea, a11y.RolePasswordField,
+		a11y.RoleSpinButton, a11y.RoleComboBox:
+		return true
+	}
+	return false
 }
 
 // KeyHelp is the line every player shows for its keys, so the three agree
