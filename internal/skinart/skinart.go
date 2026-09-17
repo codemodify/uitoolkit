@@ -29,6 +29,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/codemodify/paintengine2d"
 )
@@ -369,7 +370,57 @@ func Manifest(p *Plan) ([]byte, error) {
 	if err := enc.Encode(doc); err != nil {
 		return nil, err
 	}
-	return buf.Bytes(), nil
+	return inlineNumberArrays(buf.Bytes()), nil
+}
+
+// inlineNumberArrays puts short arrays of numbers back on one line.
+//
+// encoding/json indents every array element, which turns `"at": [0, 0, 56,
+// 30]` into five lines and a sprite table into something nobody reads. The
+// manifest is meant to be a worked example of the format, so a rect stays a
+// rect.
+func inlineNumberArrays(b []byte) []byte {
+	var out bytes.Buffer
+	out.Grow(len(b))
+	for i := 0; i < len(b); {
+		if b[i] != '[' {
+			out.WriteByte(b[i])
+			i++
+			continue
+		}
+		end := bytes.IndexByte(b[i:], ']')
+		if end < 0 {
+			out.WriteByte(b[i])
+			i++
+			continue
+		}
+		body := b[i+1 : i+end]
+		if !onlyNumbers(body) {
+			out.WriteByte(b[i])
+			i++
+			continue
+		}
+		out.WriteByte('[')
+		out.WriteString(strings.Join(strings.Fields(strings.ReplaceAll(string(body), ",", " ")), ", "))
+		out.WriteByte(']')
+		i += end + 1
+	}
+	return out.Bytes()
+}
+
+func onlyNumbers(b []byte) bool {
+	digits := false
+	for _, c := range b {
+		switch {
+		case c >= '0' && c <= '9':
+			digits = true
+		case c == '-' || c == '+' || c == '.' || c == 'e' || c == 'E' ||
+			c == ',' || c == ' ' || c == '\n' || c == '\t' || c == '\r':
+		default:
+			return false
+		}
+	}
+	return digits
 }
 
 func asSlice(v any) []any {

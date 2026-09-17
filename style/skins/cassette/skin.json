@@ -273,741 +273,266 @@
   "skin": 1,
   "sprites": {
     "arrow.down": {
-      "at": [
-        0,
-        148,
-        16,
-        16
-      ],
+      "at": [0, 148, 16, 16],
       "sheet": "chrome",
       "tint": true
     },
     "arrow.left": {
-      "at": [
-        36,
-        148,
-        16,
-        16
-      ],
+      "at": [36, 148, 16, 16],
       "sheet": "chrome",
       "tint": true
     },
     "arrow.right": {
-      "at": [
-        54,
-        148,
-        16,
-        16
-      ],
+      "at": [54, 148, 16, 16],
       "sheet": "chrome",
       "tint": true
     },
     "arrow.up": {
-      "at": [
-        18,
-        148,
-        16,
-        16
-      ],
+      "at": [18, 148, 16, 16],
       "sheet": "chrome",
       "tint": true
     },
     "bar.normal": {
-      "at": [
-        136,
-        66,
-        32,
-        20
-      ],
+      "at": [136, 66, 32, 20],
       "sheet": "chrome",
-      "slice": [
-        4,
-        5,
-        4,
-        5
-      ]
+      "slice": [4, 5, 4, 5]
     },
     "button.checked": {
-      "at": [
-        204,
-        0,
-        32,
-        20
-      ],
+      "at": [204, 0, 32, 20],
       "sheet": "chrome",
-      "slice": [
-        4,
-        5,
-        4,
-        5
-      ]
+      "slice": [4, 5, 4, 5]
     },
     "button.default": {
-      "at": [
-        170,
-        0,
-        32,
-        20
-      ],
+      "at": [170, 0, 32, 20],
       "sheet": "chrome",
-      "slice": [
-        4,
-        5,
-        4,
-        5
-      ]
+      "slice": [4, 5, 4, 5]
     },
     "button.disabled": {
-      "at": [
-        102,
-        0,
-        32,
-        20
-      ],
+      "at": [102, 0, 32, 20],
       "sheet": "chrome",
-      "slice": [
-        4,
-        5,
-        4,
-        5
-      ]
+      "slice": [4, 5, 4, 5]
     },
     "button.focus": {
-      "at": [
-        136,
-        0,
-        32,
-        20
-      ],
+      "at": [136, 0, 32, 20],
       "sheet": "chrome",
-      "slice": [
-        4,
-        5,
-        4,
-        5
-      ]
+      "slice": [4, 5, 4, 5]
     },
     "button.hover": {
-      "at": [
-        34,
-        0,
-        32,
-        20
-      ],
+      "at": [34, 0, 32, 20],
       "sheet": "chrome",
-      "slice": [
-        4,
-        5,
-        4,
-        5
-      ]
+      "slice": [4, 5, 4, 5]
     },
     "button.normal": {
-      "at": [
-        0,
-        0,
-        32,
-        20
-      ],
+      "at": [0, 0, 32, 20],
       "sheet": "chrome",
-      "slice": [
-        4,
-        5,
-        4,
-        5
-      ]
+      "slice": [4, 5, 4, 5]
     },
     "button.pressed": {
-      "at": [
-        68,
-        0,
-        32,
-        20
-      ],
+      "at": [68, 0, 32, 20],
       "sheet": "chrome",
-      "slice": [
-        4,
-        5,
-        4,
-        5
-      ]
+      "slice": [4, 5, 4, 5]
     },
     "caption.inactive": {
-      "at": [
-        68,
-        88,
-        48,
-        22
-      ],
+      "at": [68, 88, 48, 22],
       "sheet": "chrome",
-      "slice": [
-        4,
-        6,
-        3,
-        6
-      ]
+      "slice": [4, 6, 3, 6]
     },
     "caption.normal": {
-      "at": [
-        18,
-        88,
-        48,
-        22
-      ],
+      "at": [18, 88, 48, 22],
       "sheet": "chrome",
-      "slice": [
-        4,
-        6,
-        3,
-        6
-      ]
+      "slice": [4, 6, 3, 6]
     },
     "check.checked": {
-      "at": [
-        36,
-        130,
-        16,
-        16
-      ],
+      "at": [36, 130, 16, 16],
       "sheet": "chrome",
-      "slice": [
-        5,
-        5,
-        5,
-        5
-      ]
+      "slice": [5, 5, 5, 5]
     },
     "check.disabled": {
-      "at": [
-        54,
-        130,
-        16,
-        16
-      ],
+      "at": [54, 130, 16, 16],
       "sheet": "chrome",
-      "slice": [
-        5,
-        5,
-        5,
-        5
-      ]
+      "slice": [5, 5, 5, 5]
     },
     "check.hover": {
-      "at": [
-        18,
-        130,
-        16,
-        16
-      ],
+      "at": [18, 130, 16, 16],
       "sheet": "chrome",
-      "slice": [
-        5,
-        5,
-        5,
-        5
-      ]
+      "slice": [5, 5, 5, 5]
     },
     "check.normal": {
-      "at": [
-        0,
-        130,
-        16,
-        16
-      ],
+      "at": [0, 130, 16, 16],
       "sheet": "chrome",
-      "slice": [
-        5,
-        5,
-        5,
-        5
-      ]
+      "slice": [5, 5, 5, 5]
     },
     "combo.hover": {
-      "at": [
-        136,
-        22,
-        32,
-        20
-      ],
+      "at": [136, 22, 32, 20],
       "sheet": "chrome",
-      "slice": [
-        4,
-        5,
-        4,
-        5
-      ]
+      "slice": [4, 5, 4, 5]
     },
     "combo.normal": {
-      "at": [
-        102,
-        22,
-        32,
-        20
-      ],
+      "at": [102, 22, 32, 20],
       "sheet": "chrome",
-      "slice": [
-        4,
-        5,
-        4,
-        5
-      ]
+      "slice": [4, 5, 4, 5]
     },
     "combo.pressed": {
-      "at": [
-        170,
-        22,
-        32,
-        20
-      ],
+      "at": [170, 22, 32, 20],
       "sheet": "chrome",
-      "slice": [
-        4,
-        5,
-        4,
-        5
-      ]
+      "slice": [4, 5, 4, 5]
     },
     "expander.open": {
-      "at": [
-        72,
-        148,
-        16,
-        16
-      ],
+      "at": [72, 148, 16, 16],
       "sheet": "chrome",
       "tint": true
     },
     "expander.shut": {
-      "at": [
-        90,
-        148,
-        16,
-        16
-      ],
+      "at": [90, 148, 16, 16],
       "sheet": "chrome",
       "tint": true
     },
     "field.disabled": {
-      "at": [
-        68,
-        22,
-        32,
-        20
-      ],
+      "at": [68, 22, 32, 20],
       "sheet": "chrome",
-      "slice": [
-        4,
-        5,
-        4,
-        5
-      ]
+      "slice": [4, 5, 4, 5]
     },
     "field.focus": {
-      "at": [
-        34,
-        22,
-        32,
-        20
-      ],
+      "at": [34, 22, 32, 20],
       "sheet": "chrome",
-      "slice": [
-        4,
-        5,
-        4,
-        5
-      ]
+      "slice": [4, 5, 4, 5]
     },
     "field.normal": {
-      "at": [
-        0,
-        22,
-        32,
-        20
-      ],
+      "at": [0, 22, 32, 20],
       "sheet": "chrome",
-      "slice": [
-        4,
-        5,
-        4,
-        5
-      ]
+      "slice": [4, 5, 4, 5]
     },
     "fill.normal": {
-      "at": [
-        78,
-        112,
-        24,
-        16
-      ],
+      "at": [78, 112, 24, 16],
       "sheet": "chrome",
-      "slice": [
-        3,
-        3,
-        3,
-        3
-      ]
+      "slice": [3, 3, 3, 3]
     },
     "focus.ring": {
-      "at": [
-        108,
-        148,
-        16,
-        16
-      ],
+      "at": [108, 148, 16, 16],
       "middle": "none",
       "sheet": "chrome",
-      "slice": [
-        4,
-        4,
-        4,
-        4
-      ]
+      "slice": [4, 4, 4, 4]
     },
     "knob.disabled": {
-      "at": [
-        118,
-        112,
-        12,
-        16
-      ],
+      "at": [118, 112, 12, 16],
       "sheet": "chrome"
     },
     "knob.normal": {
-      "at": [
-        104,
-        112,
-        12,
-        16
-      ],
+      "at": [104, 112, 12, 16],
       "sheet": "chrome"
     },
     "mark.check": {
-      "at": [
-        72,
-        130,
-        16,
-        16
-      ],
+      "at": [72, 130, 16, 16],
       "sheet": "chrome",
       "tint": true
     },
     "mark.radio": {
-      "at": [
-        90,
-        130,
-        16,
-        16
-      ],
+      "at": [90, 130, 16, 16],
       "sheet": "chrome",
       "tint": true
     },
     "menu.frame": {
-      "at": [
-        170,
-        66,
-        32,
-        20
-      ],
+      "at": [170, 66, 32, 20],
       "sheet": "chrome",
-      "slice": [
-        4,
-        5,
-        4,
-        5
-      ]
+      "slice": [4, 5, 4, 5]
     },
     "menu.hover": {
-      "at": [
-        68,
-        66,
-        32,
-        20
-      ],
+      "at": [68, 66, 32, 20],
       "sheet": "chrome",
-      "slice": [
-        4,
-        5,
-        4,
-        5
-      ]
+      "slice": [4, 5, 4, 5]
     },
     "panel.normal": {
-      "at": [
-        102,
-        66,
-        32,
-        20
-      ],
+      "at": [102, 66, 32, 20],
       "sheet": "chrome",
-      "slice": [
-        4,
-        5,
-        4,
-        5
-      ]
+      "slice": [4, 5, 4, 5]
     },
     "row.checked": {
-      "at": [
-        34,
-        66,
-        32,
-        20
-      ],
+      "at": [34, 66, 32, 20],
       "sheet": "chrome",
-      "slice": [
-        4,
-        5,
-        4,
-        5
-      ]
+      "slice": [4, 5, 4, 5]
     },
     "row.hover": {
-      "at": [
-        0,
-        66,
-        32,
-        20
-      ],
+      "at": [0, 66, 32, 20],
       "sheet": "chrome",
-      "slice": [
-        4,
-        5,
-        4,
-        5
-      ]
+      "slice": [4, 5, 4, 5]
     },
     "splitter.normal": {
-      "at": [
-        204,
-        66,
-        32,
-        20
-      ],
+      "at": [204, 66, 32, 20],
       "sheet": "chrome",
-      "slice": [
-        4,
-        5,
-        4,
-        5
-      ]
+      "slice": [4, 5, 4, 5]
     },
     "switch.disabled": {
-      "at": [
-        60,
-        166,
-        28,
-        16
-      ],
+      "at": [60, 166, 28, 16],
       "sheet": "chrome",
-      "slice": [
-        4,
-        8,
-        4,
-        8
-      ]
+      "slice": [4, 8, 4, 8]
     },
     "switch.off": {
-      "at": [
-        0,
-        166,
-        28,
-        16
-      ],
+      "at": [0, 166, 28, 16],
       "sheet": "chrome",
-      "slice": [
-        4,
-        8,
-        4,
-        8
-      ]
+      "slice": [4, 8, 4, 8]
     },
     "switch.on": {
-      "at": [
-        30,
-        166,
-        28,
-        16
-      ],
+      "at": [30, 166, 28, 16],
       "sheet": "chrome",
-      "slice": [
-        4,
-        8,
-        4,
-        8
-      ]
+      "slice": [4, 8, 4, 8]
     },
     "tab.checked": {
-      "at": [
-        204,
-        44,
-        32,
-        20
-      ],
+      "at": [204, 44, 32, 20],
       "sheet": "chrome",
-      "slice": [
-        4,
-        5,
-        4,
-        5
-      ]
+      "slice": [4, 5, 4, 5]
     },
     "tab.hover": {
-      "at": [
-        170,
-        44,
-        32,
-        20
-      ],
+      "at": [170, 44, 32, 20],
       "sheet": "chrome",
-      "slice": [
-        4,
-        5,
-        4,
-        5
-      ]
+      "slice": [4, 5, 4, 5]
     },
     "tab.normal": {
-      "at": [
-        136,
-        44,
-        32,
-        20
-      ],
+      "at": [136, 44, 32, 20],
       "sheet": "chrome",
-      "slice": [
-        4,
-        5,
-        4,
-        5
-      ]
+      "slice": [4, 5, 4, 5]
     },
     "thumb.hover": {
-      "at": [
-        26,
-        112,
-        24,
-        16
-      ],
+      "at": [26, 112, 24, 16],
       "sheet": "chrome",
-      "slice": [
-        4,
-        4,
-        4,
-        4
-      ]
+      "slice": [4, 4, 4, 4]
     },
     "thumb.normal": {
-      "at": [
-        0,
-        112,
-        24,
-        16
-      ],
+      "at": [0, 112, 24, 16],
       "sheet": "chrome",
-      "slice": [
-        4,
-        4,
-        4,
-        4
-      ]
+      "slice": [4, 4, 4, 4]
     },
     "tool.checked": {
-      "at": [
-        102,
-        44,
-        32,
-        20
-      ],
+      "at": [102, 44, 32, 20],
       "sheet": "chrome",
-      "slice": [
-        4,
-        5,
-        4,
-        5
-      ]
+      "slice": [4, 5, 4, 5]
     },
     "tool.hover": {
-      "at": [
-        34,
-        44,
-        32,
-        20
-      ],
+      "at": [34, 44, 32, 20],
       "sheet": "chrome",
-      "slice": [
-        4,
-        5,
-        4,
-        5
-      ]
+      "slice": [4, 5, 4, 5]
     },
     "tool.normal": {
-      "at": [
-        0,
-        44,
-        32,
-        20
-      ],
+      "at": [0, 44, 32, 20],
       "sheet": "chrome",
-      "slice": [
-        4,
-        5,
-        4,
-        5
-      ]
+      "slice": [4, 5, 4, 5]
     },
     "tool.pressed": {
-      "at": [
-        68,
-        44,
-        32,
-        20
-      ],
+      "at": [68, 44, 32, 20],
       "sheet": "chrome",
-      "slice": [
-        4,
-        5,
-        4,
-        5
-      ]
+      "slice": [4, 5, 4, 5]
     },
     "tooltip.normal": {
-      "at": [
-        238,
-        66,
-        32,
-        20
-      ],
+      "at": [238, 66, 32, 20],
       "sheet": "chrome",
-      "slice": [
-        4,
-        5,
-        4,
-        5
-      ]
+      "slice": [4, 5, 4, 5]
     },
     "track.normal": {
-      "at": [
-        52,
-        112,
-        24,
-        16
-      ],
+      "at": [52, 112, 24, 16],
       "sheet": "chrome",
-      "slice": [
-        3,
-        3,
-        3,
-        3
-      ]
+      "slice": [3, 3, 3, 3]
     },
     "window.normal": {
-      "at": [
-        0,
-        88,
-        16,
-        16
-      ],
+      "at": [0, 88, 16, 16],
       "middle": "tile",
       "sheet": "chrome"
     }
@@ -1032,12 +557,7 @@
     }
   },
   "window": {
-    "border": [
-      1,
-      2,
-      2,
-      2
-    ],
+    "border": [1, 2, 2, 2],
     "caption": 22,
     "layout": ":minimize,maximize,close"
   },
