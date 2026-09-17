@@ -612,12 +612,14 @@
     "control": {
       "checked": "#e6e9f2",
       "color": "#e6e9f2",
+      "default": "#1a1305",
       "disabled": "#5b6273",
       "hover": "#f2f5fb",
       "pressed": "#9aa2b6"
     },
     "field": {
       "color": "#e6e9f2",
+      "default": "#e6e9f2",
       "disabled": "#5b6273"
     },
     "onAccent": {

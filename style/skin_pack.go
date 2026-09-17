@@ -322,6 +322,17 @@ func (sk *Skin) Pack() ThemePack {
 	if fam != "" {
 		tok.Family = fam
 	}
+	// A skin that paints its own faces has no bevel language: its pressed
+	// state is a sprite, not a one-pixel shift, and its scrollbar is a
+	// picture, not a pair of drawn arrow wells. Leaving the base pack's
+	// bevel in place makes the stock painter add both on top of the art —
+	// which is how a pressed button's bottom edge ended up a pixel outside
+	// its box. A skin that states "bevel" explicitly keeps what it said,
+	// and a skin that binds no faces at all keeps its base's, so a skin
+	// describing nothing is still exactly its base pack.
+	if sk.Tokens.Bevel == "" && sk.bindsAnyFace() {
+		tok.Bevel = BevelNone
+	}
 	tok = tok.Resolve()
 	summary := sk.Summary
 	if summary == "" {
@@ -342,6 +353,17 @@ func (sk *Skin) Pack() ThemePack {
 
 // EraSkin is the Settings grouping label for skins.
 const EraSkin = "Skins"
+
+// bindsAnyFace reports whether the skin paints any of the engine's Role
+// faces itself.
+func (sk *Skin) bindsAnyFace() bool {
+	for _, name := range skinRolePart {
+		if sk.has(name) {
+			return true
+		}
+	}
+	return false
+}
 
 // basePack is the pack painted under the art. A skin that names none takes
 // the toolkit's default, so "base" is never empty and a skin never has to
