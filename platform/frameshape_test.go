@@ -142,10 +142,10 @@ func TestOffscreenSurfaceGrowsByTheMargin(t *testing.T) {
 	if w, h := o.Size(); w != 600+32 || h != 400+34 {
 		t.Fatalf("with a margin: %dx%d", w, h)
 	}
-	if o.Frame() != f {
+	if !o.Frame().Same(f) {
 		t.Fatalf("frame %+v", o.Frame())
 	}
-	if got := o.FrameCalls().Frames; len(got) != 1 || got[0] != f {
+	if got := o.FrameCalls().Frames; len(got) != 1 || !got[0].Same(f) {
 		t.Fatalf("frames %+v", got)
 	}
 	// A resize is of the window; the margin rides along.

@@ -31,6 +31,9 @@ type offscreenFrame struct {
 	calls        FrameCalls
 	noWindowMenu bool
 	noMoveResize bool
+	// glass is whether the simulated desktop blurs behind a window
+	// (SimulateGlass); off by default, as a plain compositor is.
+	glass bool
 	// frame is the client frame's margin and regions; geomW / geomH the
 	// visible window's size, which the pixmap grows past by the margin,
 	// exactly as a compositor's surface does.
@@ -103,7 +106,7 @@ func (o *Offscreen) ShowWindowMenu(p paintengine2d.Point) bool {
 // margin at once, so the window can paint the shadow it just asked for
 // (FrameSurface).
 func (o *Offscreen) SetFrame(f Frame) {
-	if o == nil || f == o.frame.frame {
+	if o == nil || f.Same(o.frame.frame) {
 		return
 	}
 	o.frame.frame = f
@@ -202,6 +205,19 @@ func (o *Offscreen) SimulateCompositing(on bool) {
 	o.SimulateWindowState(st)
 }
 
+// BlurBehindSupported is whether the simulated desktop blurs behind a
+// window (GlassSurface; SimulateGlass switches it).
+func (o *Offscreen) BlurBehindSupported() bool { return o != nil && o.frame.glass }
+
+// SimulateGlass switches the simulated desktop's blur-behind on or off, so
+// a test can run both the real-glass path and the painted fallback
+// (GlassSurface). It takes effect for the next frame the window asks for.
+func (o *Offscreen) SimulateGlass(on bool) {
+	if o != nil {
+		o.frame.glass = on
+	}
+}
+
 // SetWindowMenu switches the simulated desktop's window menu on or off
 // (off exercises the toolkit's own menu).
 func (o *Offscreen) SetWindowMenu(on bool) { o.frame.noWindowMenu = !on }
@@ -211,8 +227,10 @@ func (o *Offscreen) SetWindowMenu(on bool) { o.frame.noWindowMenu = !on }
 func (o *Offscreen) SetMoveResize(on bool) { o.frame.noMoveResize = !on }
 
 // Offscreen is a full FrameSurface: a compile-time check, so a capability
-// the backends grow does not silently stop being one here.
+// the backends grow does not silently stop being one here. It answers for
+// glass too, so the whole shaped-and-glassy path is testable headless.
 var _ FrameSurface = (*Offscreen)(nil)
+var _ GlassSurface = (*Offscreen)(nil)
 
 // ---- the simulated input method ------------------------------------------
 

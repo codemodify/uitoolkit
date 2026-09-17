@@ -153,6 +153,51 @@ static void ui_shape_input_all(Display* d, Window w) {
 	XShapeCombineMask(d, w, ShapeInput, 0, 0, None, ShapeSet);
 }
 
+// ui_shape_rects sets a window's silhouette from n rectangles of four ints
+// each: the input shape (kind 0), which decides where a press lands, or the
+// bounding shape (kind 1), which decides which pixels the window has at
+// all. The bounding shape is the hard-edged fallback for a screen with no
+// compositing manager, where per-pixel alpha is simply ignored and cutting
+// the pixels away is the only way to make a hole. XShape rectangles are
+// device pixels in window coordinates.
+static void ui_shape_rects(Display* d, Window w, int kind, int* rects, int n) {
+	int ev = 0, err = 0;
+	if (!d || !w || !XShapeQueryExtension(d, &ev, &err)) return;
+	XRectangle* r = NULL;
+	int count = 0;
+	if (n > 0) {
+		r = (XRectangle*)calloc((size_t)n, sizeof(XRectangle));
+		if (!r) return;
+		for (int i = 0; i < n; i++) {
+			int* q = rects + i * 4;
+			if (q[2] <= 0 || q[3] <= 0) continue;
+			r[count].x = (short)q[0];
+			r[count].y = (short)q[1];
+			r[count].width = (unsigned short)q[2];
+			r[count].height = (unsigned short)q[3];
+			count++;
+		}
+	}
+	int kk = (kind == 1) ? ShapeBounding : ShapeInput;
+	if (count == 0) {
+		// An empty shape: no pixels, no input. ShapeSet with no
+		// rectangles is the documented way to say that.
+		XShapeCombineRectangles(d, w, kk, 0, 0, NULL, 0, ShapeSet, Unsorted);
+	} else {
+		// The rasteriser emits scanline order, which is exactly YXBanded:
+		// saying so lets the server skip sorting hundreds of rectangles.
+		XShapeCombineRectangles(d, w, kk, 0, 0, r, count, ShapeSet, YXBanded);
+	}
+	free(r);
+}
+
+// ui_shape_none drops a shape, giving every pixel of the window back.
+static void ui_shape_none(Display* d, Window w, int kind) {
+	int ev = 0, err = 0;
+	if (!d || !w || !XShapeQueryExtension(d, &ev, &err)) return;
+	XShapeCombineMask(d, w, (kind == 1) ? ShapeBounding : ShapeInput, 0, 0, None, ShapeSet);
+}
+
 static Window ui_create_visual(Display* d, int x, int y, int w, int h, const char* title, int popup, Visual* vis, Colormap cmap, int depth) {
 	int s = DefaultScreen(d);
 	XSetWindowAttributes swa;
@@ -995,6 +1040,9 @@ type x11Conn struct {
 	fixesEvent  int
 	atomExtents C.Atom
 	atomOpaque  C.Atom
+	// atomBlur is KWin's _KDE_NET_WM_BLUR_BEHIND_REGION: the X11 way to
+	// ask for the desktop behind the window to be blurred.
+	atomBlur C.Atom
 
 	clipText string
 	ownClip  bool
@@ -1028,23 +1076,26 @@ type x11Conn struct {
 }
 
 type x11Surface struct {
-	soft       softDevice // software devices of the buffers (no GPU)
-	conn       *x11Conn
-	win        C.Window
-	gc         C.GC
-	ic         C.XIC
-	ximg       *C.XImage
-	title      string
-	img        *paintengine2d.Image
-	xbuf       []byte
-	xmem       unsafe.Pointer // C.malloc'd XImage backing store (non-SHM)
-	stride     int
-	bpp        int
-	msb        bool
-	rmask      uint32
-	gmask      uint32
-	bmask      uint32
-	mapped     bool
+	soft   softDevice // software devices of the buffers (no GPU)
+	conn   *x11Conn
+	win    C.Window
+	gc     C.GC
+	ic     C.XIC
+	ximg   *C.XImage
+	title  string
+	img    *paintengine2d.Image
+	xbuf   []byte
+	xmem   unsafe.Pointer // C.malloc'd XImage backing store (non-SHM)
+	stride int
+	bpp    int
+	msb    bool
+	rmask  uint32
+	gmask  uint32
+	bmask  uint32
+	mapped bool
+	// shaped: a bounding shape is set, so dropping the shape has to give
+	// the pixels back rather than leave the last silhouette behind.
+	shaped     bool
 	closed     bool
 	shm        bool
 	shmInfo    unsafe.Pointer
@@ -1164,6 +1215,7 @@ func x11OpenLocked() (*x11Conn, error) {
 	c.atomMotif = internAtom(d, "_MOTIF_WM_HINTS")
 	c.atomExtents = internAtom(d, "_GTK_FRAME_EXTENTS")
 	c.atomOpaque = internAtom(d, "_NET_WM_OPAQUE_REGION")
+	c.atomBlur = internAtom(d, "_KDE_NET_WM_BLUR_BEHIND_REGION")
 	c.composited = C.ui_composited(d) != 0
 	c.fixesEvent = int(C.ui_watch_composited(d))
 	c.cursors = map[Cursor]C.Cursor{}
@@ -2916,7 +2968,7 @@ func (s *x11Surface) ShowWindowMenu(p paintengine2d.Point) bool {
 // with: one that has to change is re-created (invisibly before the window
 // is first mapped, where a frame is normally decided).
 func (s *x11Surface) SetFrame(f Frame) {
-	if s == nil || s.closed || s.win == 0 || f == s.frame {
+	if s == nil || s.closed || s.win == 0 || f.Same(s.frame) {
 		return
 	}
 	if f.Alpha && !s.argb() {
@@ -3068,6 +3120,19 @@ func (s *x11Surface) applyFrameLocked() {
 	if mw, mh := s.opts.MinWidth, s.opts.MinHeight; mw > 0 || mh > 0 {
 		C.ui_resize_hints(c.dpy, s.win, C.int(max(mw, 1)+m.Width()), C.int(max(mh, 1)+m.Height()))
 	}
+	if s.frame.Shape != nil {
+		s.applyShapeLocked()
+		s.applyBlurLocked()
+		C.ui_flush(c.dpy)
+		return
+	}
+	if s.shaped {
+		// The shape went away (maximized, tiled, or the app dropped it):
+		// every pixel of the window is the window's again.
+		s.shaped = false
+		C.ui_shape_none(c.dpy, s.win, 1)
+	}
+	s.applyBlurLocked()
 	if m.Zero() {
 		C.ui_delete_prop(c.dpy, s.win, c.atomExtents)
 		C.ui_shape_input_all(c.dpy, s.win)
@@ -3087,6 +3152,91 @@ func (s *x11Surface) applyFrameLocked() {
 		C.ui_change_prop32(c.dpy, s.win, c.atomOpaque, C.XA_CARDINAL, &rects[0], C.int(len(rects)))
 	}
 	C.ui_flush(c.dpy)
+}
+
+// applyShapeLocked states a shaped window's silhouette. X11 has two shapes
+// and a shaped window wants both: ShapeInput decides where a press lands,
+// so a hole takes no clicks and the press reaches whatever is behind;
+// ShapeBounding decides which pixels the window has at all, which is what
+// makes the hole *visible* on a screen with no compositing manager, where
+// the ARGB buffer's transparency counts for nothing. With a compositing
+// manager both are set and KWin honours both, so the fallback needs no
+// separate code path — only a hard edge instead of an antialiased one.
+//
+// XShape works in device pixels, which is what a Frame already holds, so
+// unlike Wayland there is no conversion here.
+func (s *x11Surface) applyShapeLocked() {
+	c := s.conn
+	flat := x11FlatRects(s.frame.Shape)
+	var p *C.int
+	if len(flat) > 0 {
+		p = &flat[0]
+	}
+	C.ui_shape_rects(c.dpy, s.win, 0, p, C.int(len(flat)/4))
+	C.ui_shape_rects(c.dpy, s.win, 1, p, C.int(len(flat)/4))
+	s.shaped = true
+	// The margin is still the shadow band the window manager should ignore
+	// when it places the window, shape or no shape.
+	if m := s.frame.Margin; m.Zero() {
+		C.ui_delete_prop(c.dpy, s.win, c.atomExtents)
+	} else {
+		ext := [4]C.ulong{C.ulong(m.Left), C.ulong(m.Right), C.ulong(m.Top), C.ulong(m.Bottom)}
+		C.ui_change_prop32(c.dpy, s.win, c.atomExtents, C.XA_CARDINAL, &ext[0], 4)
+	}
+	rects := x11ULongRects(s.frame.Opaque)
+	if len(rects) == 0 {
+		C.ui_delete_prop(c.dpy, s.win, c.atomOpaque)
+	} else {
+		C.ui_change_prop32(c.dpy, s.win, c.atomOpaque, C.XA_CARDINAL, &rects[0], C.int(len(rects)))
+	}
+}
+
+// applyBlurLocked states the blur-behind region as
+// _KDE_NET_WM_BLUR_BEHIND_REGION, a flat list of x, y, width, height in
+// window coordinates. KWin is the compositor that reads it; anything else
+// ignores the property, which is the fallback working as intended.
+func (s *x11Surface) applyBlurLocked() {
+	c := s.conn
+	if c.atomBlur == 0 {
+		return
+	}
+	if s.frame.Blur == nil {
+		C.ui_delete_prop(c.dpy, s.win, c.atomBlur)
+		return
+	}
+	rects := x11ULongRects(s.frame.Blur)
+	if len(rects) == 0 {
+		// An empty property is how KWin is told "the whole window".
+		C.ui_change_prop32(c.dpy, s.win, c.atomBlur, C.XA_CARDINAL, nil, 0)
+		return
+	}
+	C.ui_change_prop32(c.dpy, s.win, c.atomBlur, C.XA_CARDINAL, &rects[0], C.int(len(rects)))
+}
+
+// BlurBehindSupported reports whether the desktop blurs behind a window: on
+// X11 that is a compositing manager being there at all (KWin reads the
+// property; a plain X screen has no one to do it). The toolkit already
+// watches the compositing manager come and go (phase 3) (GlassSurface).
+func (s *x11Surface) BlurBehindSupported() bool {
+	return s != nil && s.conn != nil && s.conn.composited && s.conn.atomBlur != 0
+}
+
+// x11FlatRects is rects as the flat x, y, w, h list the C helpers take.
+func x11FlatRects(rects []FrameRect) []C.int {
+	out := make([]C.int, 0, len(rects)*4)
+	for _, r := range rects {
+		out = append(out, C.int(r.X), C.int(r.Y), C.int(r.W), C.int(r.H))
+	}
+	return out
+}
+
+// x11ULongRects is rects as the flat CARDINAL list an X property takes.
+func x11ULongRects(rects []FrameRect) []C.ulong {
+	out := make([]C.ulong, 0, len(rects)*4)
+	for _, r := range rects {
+		out = append(out, C.ulong(r.X), C.ulong(r.Y), C.ulong(r.W), C.ulong(r.H))
+	}
+	return out
 }
 
 // opaqueRects is the window less the squares its rounded corners live in,

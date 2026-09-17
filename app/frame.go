@@ -346,10 +346,10 @@ func (w *Window) wantFrame() platform.Frame {
 // painted at the size the compositor is told about in the same commit.
 func (w *Window) applyFrame() {
 	f := w.wantFrame()
-	if f == w.shape {
+	if f.Same(w.sysFrame) {
 		return
 	}
-	w.shape = f
+	w.sysFrame = f
 	platform.SetSurfaceFrame(w.surf, f)
 	w.shadow.drop()
 }
@@ -365,9 +365,9 @@ func (w *Window) layoutFrame(full paintengine2d.Rect) frameGeom {
 	g.framed = w.framed()
 	inner := full
 	if g.framed {
-		m := w.shape.Margin
-		g.margin, g.input = m, w.shape.Input
-		g.radius = w.shape.Radius
+		m := w.sysFrame.Margin
+		g.margin, g.input = m, w.sysFrame.Input
+		g.radius = w.sysFrame.Radius
 		g.shadow = !m.Zero()
 		g.window = paintengine2d.Rect{
 			Min: paintengine2d.Pt(full.Min.X+float32(m.Left), full.Min.Y+float32(m.Top)),
