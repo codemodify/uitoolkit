@@ -69,7 +69,7 @@ func main() {
 		log.Fatal(err)
 	}
 	if *mode == "backdrop" {
-		win.SetContent(&card{})
+		win.SetContent(newCard())
 	} else {
 		win.SetContent(newPanel(win))
 	}
@@ -82,8 +82,8 @@ func main() {
 		return
 	}
 	a.Post(func() {
-		log.Printf("backend=%s theme=%s scale=%.2f shaped=%v",
-			a.BackendName(), *theme, win.Scale(), win.ShapeActive())
+		log.Printf("backend=%s mode=%s theme=%s scale=%.2f shaped=%v",
+			a.BackendName(), *mode, *theme, win.Scale(), win.ShapeActive())
 	})
 	if err := a.Run(); err != nil {
 		log.Fatal(err)
@@ -177,7 +177,26 @@ func (p *panel) KeyPress(e widget.KeyEvent) bool {
 // card is a test card to put behind the shaped window: a grid whose lines
 // run under the silhouette, so a window dragged across it is obviously
 // letting the desktop through rather than painting a picture of it.
-type card struct{ widget.Base }
+//
+// It counts the presses it receives, which is the other half of the proof. A
+// press beside the shaped window's body is not that window's, and it does
+// not stop in mid-air either: it lands here, on the window behind.
+type card struct {
+	widget.Base
+	hits int
+}
+
+func newCard() *card {
+	c := &card{}
+	c.Init(c)
+	return c
+}
+
+func (c *card) MousePress(widget.MouseEvent) bool {
+	c.hits++
+	c.Invalidate()
+	return true
+}
 
 func (c *card) Paint(ctx *paintengine2d.Context) {
 	b := c.LocalBounds()
@@ -190,4 +209,9 @@ func (c *card) Paint(ctx *paintengine2d.Context) {
 	for y := float32(0); y < b.Dy(); y += step {
 		ctx.DrawRect(paintengine2d.XYWH(0, y, b.Dx(), 2), ink)
 	}
+	lk := c.Look()
+	box := paintengine2d.XYWH(16, b.Dy()-40, b.Dx()-32, 28)
+	ctx.DrawRect(box, paintengine2d.Fill(paintengine2d.RGBA(0, 0, 0, 0.55)))
+	lk.DrawLabel(ctx, box.Inset(8), fmt.Sprintf("backdrop presses: %d", c.hits),
+		paintengine2d.RGB(1, 1, 1), style.AlignStart)
 }

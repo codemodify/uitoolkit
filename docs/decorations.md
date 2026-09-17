@@ -128,6 +128,16 @@ edge, a caption button — from the last layout, the way Win32's
   the look's caption and its buttons; or a stacked frame's strip (the look's
   caption height) with the header bar's row under it when the app gave the
   header bar items of its own.
+- A **fitted caption** (`DecorationSpec.CaptionFits`) is the exception: the
+  band is only as wide as its own contents — the buttons at its two ends and
+  the title between them (`HeaderBar.CaptionFitWidth`) — instead of as wide
+  as the window. It is BeOS's tab, and it is half of a frame whose window is
+  not a rectangle: the other half is the look's silhouette
+  ([`WindowShapeEngine`](shapes.md#for-looks)), which leaves the rest of the
+  top edge to the desktop. A band narrower than its window is a gap unless
+  the window really stops there, so `DecorationOf` drops the fitted caption
+  under exactly the rules that drop the silhouette — maximized and tiled —
+  and the two are never out of step.
 - Resize band: the border, at least 4 px, inside the left, right and bottom
   edges and at the top of the caption, with 16 px corner zones; none while
   maximized or full screen, and none on tiled edges (a quick-tiled window
@@ -435,6 +445,12 @@ corners and its shadow, and gets it back on restore. An uncomposited X11
 screen keeps the shape — XShape still cuts the window, hard-edged — but
 drops its glass, since there is nothing behind it to blur. See
 [docs/shapes.md](shapes.md).
+
+A **look's** silhouette is dropped in the same states and by the same rule,
+and so is the fitted caption that goes with it: the shape and the width of
+the band that sits in it are one decision, made in `DecorationOf` and
+`WindowShapeOf`. A full-screen window never reaches either, because it has
+no frame of the toolkit's at all.
 
 KWin sends `tiled_*` for quick tiles and screen-anchored tiles, so a
 window tiled to the left keeps its shadow only on its free right edge.
