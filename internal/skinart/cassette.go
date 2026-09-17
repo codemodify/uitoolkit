@@ -187,6 +187,13 @@ func Cassette() *Plan {
 		px(ctx, 0, 0, w, 1, hex(casMidHi))
 		px(ctx, 0, h-1, w, 1, hex(casInk))
 	})
+	// This era put raised keys in its title bars, so Cassette does too.
+	l.cell("capbtn.normal", 16, 14, [4]int{3, 3, 3, 3}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
+		casFace(ctx, w, h, hex(casMid), hex(casMidHi), hex(casMidLo))
+	})
+	l.cell("capbtn.pressed", 16, 14, [4]int{3, 3, 3, 3}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
+		casFace(ctx, w, h, hex("#243543"), hex(casMidLo), hex(casMidHi))
+	})
 
 	// ---- small parts ------------------------------------------------------
 
@@ -312,6 +319,9 @@ func Cassette() *Plan {
 		{Part: "window", States: [][2]string{{"normal", "window.normal"}}},
 		{Part: "caption", Text: "caption", States: [][2]string{
 			{"normal", "caption.normal"}, {"inactive", "caption.inactive"},
+		}},
+		{Part: "caption.button", Text: "control", States: [][2]string{
+			{"normal", "capbtn.normal"}, {"pressed", "capbtn.pressed"},
 		}},
 		{Part: "thumb", States: [][2]string{{"normal", "thumb.normal"}, {"hover", "thumb.hover"}}},
 		{Part: "track", States: [][2]string{{"normal", "track.normal"}}},

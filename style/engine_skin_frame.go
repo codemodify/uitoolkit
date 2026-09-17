@@ -154,13 +154,23 @@ func (skinEngine) DrawCaptionButton(l *Classic, ctx *paintengine2d.Context, b pa
 	if !st.Active {
 		cs |= StateInactive
 	}
-	// A caption button is a button: the same art, so a skin that draws one
-	// draws them all. The glyph over it is the toolkit's own, so a caption
-	// button says what it does at every scale and in every skin — nobody
-	// has to guess which unlabelled square closes the window.
-	painted := sk.draw(l, ctx, b, "button", cs)
+	// A caption button takes its own art where the skin gives it any, then
+	// the tool button's — flat until the pointer is on it, which is what
+	// every frame of the last twenty years does — then the push button's,
+	// for a skin whose frame wants raised keys. The glyph over it is the
+	// toolkit's own, so a caption button says what it does at every scale
+	// and in every skin: nobody has to guess which unlabelled square closes
+	// the window.
+	part := "button"
+	for _, candidate := range []string{"caption.button", "tool"} {
+		if sk.has(candidate) {
+			part = candidate
+			break
+		}
+	}
+	painted := sk.draw(l, ctx, b, part, cs)
 	if painted || sk.has("caption") {
-		col := sk.textColor(l, sk.part("button"), cs)
+		col := sk.textColor(l, sk.part(part), cs)
 		if colorUnset(col) {
 			col = l.palette.Text
 			if !st.Active {
