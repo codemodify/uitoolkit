@@ -98,6 +98,15 @@
       },
       "text": "caption"
     },
+    "caption.button": {
+      "states": {
+        "hover": "capbtn.hover",
+        "inactive": "capbtn.normal",
+        "normal": "capbtn.normal",
+        "pressed": "capbtn.pressed"
+      },
+      "text": "caption"
+    },
     "check": {
       "states": {
         "checked": "check.checked",
@@ -330,6 +339,21 @@
     },
     "button.pressed": {
       "at": [116, 0, 56, 30],
+      "sheet": "chrome",
+      "slice": [9, 12, 9, 12]
+    },
+    "capbtn.hover": {
+      "at": [320, 192, 56, 30],
+      "sheet": "chrome",
+      "slice": [9, 12, 9, 12]
+    },
+    "capbtn.normal": {
+      "at": [262, 192, 56, 30],
+      "sheet": "chrome",
+      "slice": [9, 12, 9, 12]
+    },
+    "capbtn.pressed": {
+      "at": [378, 192, 56, 30],
       "sheet": "chrome",
       "slice": [9, 12, 9, 12]
     },

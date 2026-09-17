@@ -102,6 +102,13 @@
       },
       "text": "caption"
     },
+    "caption.button": {
+      "states": {
+        "normal": "capbtn.normal",
+        "pressed": "capbtn.pressed"
+      },
+      "text": "control"
+    },
     "check": {
       "states": {
         "checked": "check.checked",
@@ -331,6 +338,16 @@
       "at": [68, 0, 32, 20],
       "sheet": "chrome",
       "slice": [4, 5, 4, 5]
+    },
+    "capbtn.normal": {
+      "at": [118, 88, 16, 14],
+      "sheet": "chrome",
+      "slice": [3, 3, 3, 3]
+    },
+    "capbtn.pressed": {
+      "at": [136, 88, 16, 14],
+      "sheet": "chrome",
+      "slice": [3, 3, 3, 3]
     },
     "caption.inactive": {
       "at": [68, 88, 48, 22],

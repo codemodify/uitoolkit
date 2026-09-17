@@ -204,6 +204,7 @@ That is why a skin needs a dozen sprites rather than two hundred.
 | `focus` | the keyboard focus ring |
 | `window` | the window background |
 | `caption` | the top-level window's caption band |
+| `caption.button` | its close, maximize and minimize buttons (else `tool`, else `button`) |
 | `menu.frame`, `tooltip` | the frames those float on |
 
 `style.SkinPartNames()` is the same list at run time; a skin that names

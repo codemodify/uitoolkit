@@ -116,9 +116,13 @@ func TestPixelArtDoublesExactly(t *testing.T) {
 // Every sprite the manifest binds is drawn: an empty cell that a part points
 // at is a control that vanishes.
 func TestEveryBoundSpriteHasInk(t *testing.T) {
-	// A few are deliberately empty: a tool button is flat until it is
-	// touched, so its resting and disabled states draw nothing at all.
-	blank := map[string]bool{"tool.normal": true, "tool.disabled": true}
+	// A few are deliberately empty. A tool button is flat until it is
+	// touched, so its resting and disabled states draw nothing at all, and
+	// Nocturne's caption buttons are flat on the band for the same reason —
+	// the glyph over them is what carries the meaning.
+	blank := map[string]bool{
+		"tool.normal": true, "tool.disabled": true, "capbtn.normal": true,
+	}
 	for _, p := range Plans() {
 		bound := map[string]bool{}
 		for _, b := range p.Parts {
