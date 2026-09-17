@@ -14,10 +14,9 @@ import "github.com/codemodify/paintengine2d"
 // that era glowed.
 //
 // Its silhouette is two rects. A shallow brow steps the top corners in, and
-// the body under it carries a bottom radius nearly three times the top one,
-// so the cabinet sits on a dome rather than on a rectangle. The brow cuts
-// only the top eight design pixels, which is *above* where a caption button
-// starts: a framed caption centres its buttons, so the first row one of them
+// the body under it carries a bottom radius four times the top one, so the
+// cabinet sits on a dome rather than on a rectangle. The brow cuts only the
+// top six design pixels, which is *above* where a caption button starts: a framed caption centres its buttons, so the first row one of them
 // occupies is about a fifth of the caption's height down, and a silhouette
 // that bit deeper than that would eat the corner of a close button. Which
 // side those buttons sit on is the desktop's choice and not a skin's, so
@@ -74,11 +73,11 @@ var mqSlice = [4]int{12, 12, 12, 12}
 
 // The frame, in design pixels.
 const (
-	mqCaption = 56
-	mqBrow    = 12  // how deep the brow is
+	mqCaption = 40
+	mqBrow    = 10  // how deep the brow is
 	mqBrowIn  = 60  // and how far in it holds the top corners
 	mqRadTop  = 12  // the frame's own corners
-	mqRadBot  = 34  // the dome the cabinet stands on
+	mqRadBot  = 48  // the dome the cabinet stands on
 	mqBezel   = 16  // the border: content keeps this much shell round it
 	mqFoot    = 26  // and this much at the bottom, clear of the dome
 	mqDisplay = 112 // the display well's own cell height
@@ -219,10 +218,10 @@ func Marquee() *Plan {
 	l.cell("display.normal", 96, mqDisplay, [4]int{14, 14, 14, 14}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
 		mqDisplayWell(ctx, w, h)
 	})
-	l.cell("caption.normal", 128, mqCaption, [4]int{16, 20, 8, 20}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
+	l.cell("caption.normal", 128, mqCaption, [4]int{12, 20, 8, 20}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
 		mqBand(ctx, w, h, hex(mqAccent))
 	})
-	l.cell("caption.inactive", 128, mqCaption, [4]int{16, 20, 8, 20}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
+	l.cell("caption.inactive", 128, mqCaption, [4]int{12, 20, 8, 20}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
 		mqBand(ctx, w, h, paintengine2d.Color{})
 	})
 

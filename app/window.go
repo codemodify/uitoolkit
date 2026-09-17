@@ -214,6 +214,22 @@ func (w *Window) Size() (int, int) {
 	return int(box.Dx()), int(box.Dy())
 }
 
+// SetSize asks for a visible window this many device pixels across. It is
+// [Window.Size]'s other half: the size of the *window* the user sees, not of
+// the surface, which is larger by whatever margin a frame the toolkit draws
+// is keeping for its shadow. An app that wants a 468 by 96 window asks for
+// 468 by 96 and never has to know the margin exists.
+//
+// It is a request like every other window-geometry call. A desktop may give
+// a different size, and a maximized, tiled or full-screen window keeps the
+// one it was given; the answer arrives as an ordinary resize.
+func (w *Window) SetSize(width, height int) {
+	if w == nil || w.Closed() || width < 1 || height < 1 {
+		return
+	}
+	_ = w.surf.Resize(width, height)
+}
+
 // WindowRect is the visible window inside the surface, in surface device
 // pixels (widget.WindowRecter): popups, menus and tooltips stay inside it,
 // never in the margin, where a compositor may clip them and clicks fall
