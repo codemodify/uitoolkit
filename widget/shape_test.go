@@ -5,6 +5,7 @@ import (
 
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/platform"
+	"github.com/codemodify/uitoolkit/style"
 )
 
 // A component's own silhouette, and the promise that not asking for one
@@ -151,5 +152,95 @@ func TestShapeHitAnswersForAnyComponent(t *testing.T) {
 	}
 	if !ShapeHit(root, paintengine2d.Pt(50, 50)) {
 		t.Fatal("the middle is inside the disc")
+	}
+}
+
+// ---- the silhouette a look gives a face -------------------------------------
+
+// facedBox names the face it paints, so its look may shape it.
+type facedBox struct {
+	Base
+	role style.Role
+}
+
+func newFacedBox(b paintengine2d.Rect, role style.Role, lk style.LookAndFeel) *facedBox {
+	f := &facedBox{role: role}
+	f.Init(f)
+	f.SetBounds(b)
+	f.SetLook(lk)
+	return f
+}
+
+func (f *facedBox) ShapeRole() style.Role { return f.role }
+
+// deckLook is the shipped skin whose push-button art is a stadium: the one
+// look in the toolkit that answers a control shape at all.
+func deckLook(t *testing.T) style.LookAndFeel {
+	t.Helper()
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	p, ok := style.LoadTheme("deck")
+	if !ok {
+		t.Skip("the deck skin is not registered in this build")
+	}
+	return p.Look()
+}
+
+// A component that names the face it paints takes the pointer where its look
+// says that face is. Deck's button is a stadium, so a square box at the
+// control's height is a disc: the middle is the button and the corners of the
+// box are not, and a press there falls through to whatever is behind.
+func TestAComponentTakesTheShapeItsLookGivesItsFace(t *testing.T) {
+	lk := deckLook(t)
+	side := lk.Metrics().ControlH
+	box := paintengine2d.XYWH(0, 0, side, side)
+	root := newShapedBox(box)
+	root.SetLook(lk)
+	face := newFacedBox(box, style.RoleButton, lk)
+	root.Add(face)
+
+	mid := paintengine2d.Pt(side/2, side/2)
+	if got := HitRoot(root, mid); got != Component(face) {
+		t.Fatalf("the middle of the disc is not the button: %v", got)
+	}
+	for _, p := range [][2]float32{{1, 1}, {side - 2, 1}, {1, side - 2}, {side - 2, side - 2}} {
+		got := HitRoot(root, paintengine2d.Pt(p[0], p[1]))
+		if got == Component(face) {
+			t.Errorf("corner %v is the button, but its art is a disc", p)
+		}
+		if got != Component(root) {
+			t.Errorf("corner %v fell past the panel behind the button too: %v", p, got)
+		}
+	}
+}
+
+// The same component in a look that paints rectangles is its whole box —
+// which is every pack in the toolkit but the skins, and was every pack
+// before any of this existed.
+func TestALookThatPaintsRectanglesLeavesTheBoxAlone(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	p, ok := style.LoadTheme("breeze-night")
+	if !ok {
+		t.Skip("no breeze-night")
+	}
+	box := paintengine2d.XYWH(0, 0, 40, 40)
+	face := newFacedBox(box, style.RoleButton, p.Look())
+	for _, pt := range [][2]float32{{1, 1}, {38, 1}, {20, 20}, {38, 38}} {
+		if HitRoot(face, paintengine2d.Pt(pt[0], pt[1])) != Component(face) {
+			t.Fatalf("a press at %v missed a control its look did not shape", pt)
+		}
+	}
+}
+
+// A component that sets a silhouette of its own keeps it: the look is only
+// ever the fallback for a component that said nothing.
+func TestAnOwnShapeWinsOverTheLooks(t *testing.T) {
+	lk := deckLook(t)
+	side := lk.Metrics().ControlH
+	face := newFacedBox(paintengine2d.XYWH(0, 0, side, side), style.RoleButton, lk)
+	face.SetHitShape(platform.ShapeRect(side, side))
+	for _, pt := range [][2]float32{{1, 1}, {side - 2, side - 2}} {
+		if HitRoot(face, paintengine2d.Pt(pt[0], pt[1])) != Component(face) {
+			t.Fatalf("a press at %v missed: the component's own shape is its whole box", pt)
+		}
 	}
 }

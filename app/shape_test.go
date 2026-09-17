@@ -527,3 +527,151 @@ func TestUncoveredPixelsAreWipedNotBlended(t *testing.T) {
 		}
 	}
 }
+
+// ---- the silhouette a look declares -----------------------------------------
+
+// framedRig is a window the toolkit frames, in a named pack: the shape of
+// such a window is its look's business, not the app's.
+func framedRig(t *testing.T, pack string, width, height int) *shapeRig {
+	t.Helper()
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	p, ok := style.LoadTheme(pack)
+	if !ok {
+		t.Skipf("no %s pack", pack)
+	}
+	t.Setenv(platform.EnvDecorations, "")
+	r := &shapeRig{}
+	r.a = New(Options{Look: p.Look(), Headless: true})
+	r.a.SetTitleBarPrefs(platform.DefaultTitleBarPrefs(""))
+	w, err := r.a.NewWindow(platform.WindowOptions{
+		Title: "Deck", Width: width, Height: height, Headless: true,
+		Decorations: platform.DecorationsClient,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.w, r.o = w, w.Surface().(*platform.Offscreen)
+	w.SetContent(widgets.NewColumn(widgets.NewButton("Body", nil)))
+	r.o.SimulateWindowState(platform.WindowState{Activated: true})
+	r.a.PumpOnce()
+	return r
+}
+
+// A window that asks for no shape of its own is cut to the one its look
+// declares, and tells the window system about it exactly as an app's own
+// shape is told.
+func TestAWindowTakesTheSilhouetteItsLookDeclares(t *testing.T) {
+	r := framedRig(t, "deck", 500, 360)
+	if r.w.Shape() == nil || r.w.sysFrame.Shape == nil {
+		t.Fatal("a window in a shaped look states no silhouette")
+	}
+	m := r.w.sysFrame.Margin
+	ww, hh := r.w.shapeSize()
+	// Deck's outline is a full-width shoulder over a narrower body: the
+	// middle of the window is the window, and the strip beside the body is
+	// not — that is where the desktop shows through.
+	if !platform.RectsContain(r.w.sysFrame.Shape, m.Left+ww/2, m.Top+hh/2) {
+		t.Fatal("the middle of the window is not the window")
+	}
+	if !platform.RectsContain(r.w.sysFrame.Shape, m.Left+ww/2, m.Top+2) {
+		t.Fatal("the shoulder is not the window")
+	}
+	if platform.RectsContain(r.w.sysFrame.Shape, m.Left+1, m.Top+hh-4) {
+		t.Fatal("the strip beside the body is the window")
+	}
+	// A look's silhouette is a frame's, so a window the desktop frames is
+	// the rectangle inside that frame.
+	if !r.w.framed() {
+		t.Fatal("the rig is not a framed window")
+	}
+}
+
+// The states that drop an app's silhouette drop a look's, and the fitted
+// caption that goes with it comes back with it.
+func TestMaximizeDropsTheLooksSilhouette(t *testing.T) {
+	for _, pack := range []string{"deck", "beos"} {
+		t.Run(pack, func(t *testing.T) {
+			r := framedRig(t, pack, 500, 360)
+			if r.w.sysFrame.Shape == nil {
+				t.Fatal("no silhouette to drop")
+			}
+			wide := r.w.geom.caption.Dx()
+			r.o.SimulateWindowState(platform.WindowState{Activated: true, Maximized: true})
+			r.a.PumpOnce()
+			if r.w.shapeRaster() != nil || r.w.sysFrame.Shape != nil {
+				t.Fatal("a maximized window kept its look's silhouette")
+			}
+			if got := r.w.geom.caption.Dx(); got <= wide {
+				t.Errorf("maximized caption is %v wide, no wider than the fitted %v", got, wide)
+			}
+			r.o.SimulateWindowState(platform.WindowState{Activated: true})
+			r.a.PumpOnce()
+			if r.w.sysFrame.Shape == nil {
+				t.Fatal("restoring did not bring the silhouette back")
+			}
+		})
+	}
+}
+
+// BeOS's caption band is its tab, so the band is narrower than the window
+// and the silhouette stops where the band does.
+func TestTheBeOSCaptionIsItsTab(t *testing.T) {
+	r := framedRig(t, "beos", 600, 400)
+	g := r.w.geom
+	if g.caption.Dx() >= g.window.Dx()*0.8 {
+		t.Fatalf("the tab is %v wide on a %v window: it was not fitted", g.caption.Dx(), g.window.Dx())
+	}
+	m := r.w.sysFrame.Margin
+	x := int(g.caption.Max.X - g.window.Min.X)
+	if !platform.RectsContain(r.w.sysFrame.Shape, m.Left+x-2, m.Top+1) {
+		t.Fatal("the tab's own last column is not the window")
+	}
+	if platform.RectsContain(r.w.sysFrame.Shape, m.Left+x+8, m.Top+1) {
+		t.Fatal("the top edge past the tab is the window")
+	}
+}
+
+// An app that sets its own shape keeps it: a look has no idea what picture
+// the app is drawing, so the app wins and dropping its shape gives the
+// look's back.
+func TestAnAppsOwnShapeWinsOverItsLooks(t *testing.T) {
+	r := framedRig(t, "deck", 500, 360)
+	looks := r.w.Shape()
+	if looks == nil {
+		t.Fatal("no look silhouette to start from")
+	}
+	r.w.SetShapeFunc(ring)
+	r.a.PumpOnce()
+	if got := r.w.Shape(); got == nil || got == looks {
+		t.Fatal("the app's own shape did not win")
+	}
+	ww, hh := r.w.shapeSize()
+	m := r.w.sysFrame.Margin
+	if platform.RectsContain(r.w.sysFrame.Shape, m.Left+ww/2, m.Top+hh/2) {
+		t.Fatal("the ring's hole is not there: this is not the app's shape")
+	}
+	r.w.SetShapeFunc(nil)
+	r.a.PumpOnce()
+	if r.w.Shape() == nil {
+		t.Fatal("dropping the app's shape did not give the look's back")
+	}
+	if !platform.RectsContain(r.w.sysFrame.Shape, m.Left+ww/2, m.Top+hh/2) {
+		t.Fatal("the hole survived the app's shape being dropped")
+	}
+}
+
+// And the promise the other 121 packs rely on: a framed window in a look
+// that declares nothing states no shape at all, and takes the path it took
+// before any of this existed.
+func TestAFramedWindowInAPlainLookStatesNoShape(t *testing.T) {
+	r := framedRig(t, "breeze-night", 500, 360)
+	if r.w.Shape() != nil || r.w.sysFrame.Shape != nil {
+		t.Fatal("a look that declares no silhouette gave a window one")
+	}
+	if r.w.shapeRaster() != nil {
+		t.Fatal("a window in a plain look rasterised a shape")
+	}
+	if r.w.sysFrame.Input == (platform.FrameInsets{}) && !r.w.sysFrame.Margin.Zero() {
+		t.Fatal("a window with a shadow margin lost its resize band")
+	}
+}
