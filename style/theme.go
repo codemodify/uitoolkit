@@ -471,7 +471,9 @@ func ThemeSourceFile(name string) string {
 	}
 	dir, ok := userThemeDirs()[clean]
 	if !ok {
-		return ""
+		// A user skin's manifest is watched the same way, so editing a
+		// skin.json applies live through exactly this machinery.
+		return SkinSourceFile(clean)
 	}
 	return filepath.Join(ThemesDir(), dir, "theme.json")
 }
@@ -506,7 +508,8 @@ func listUserThemeMap() map[string]ThemePack {
 	return out
 }
 
-// ListUserThemes returns exported color themes, sorted by name.
+// ListUserThemes returns exported color themes then installed skins, each
+// sorted by name. A skin is a pack: it lists, applies and reloads as one.
 func ListUserThemes() []ThemePack {
 	users := listUserThemeMap()
 	var names []string
@@ -517,6 +520,11 @@ func ListUserThemes() []ThemePack {
 	out := make([]ThemePack, 0, len(names))
 	for _, n := range names {
 		out = append(out, users[n])
+	}
+	for _, p := range ListUserSkins() {
+		if _, shadowed := users[p.Name]; !shadowed {
+			out = append(out, p)
+		}
 	}
 	return out
 }
@@ -592,6 +600,13 @@ func LoadTheme(name string) (ThemePack, bool) {
 	}
 	if pack, ok := readUserTheme(clean); ok {
 		return pack, true
+	}
+	// An installed skin resolves here, between the user's own packs and the
+	// built-ins, so UITK_THEME, look.json and Settings all reach one the
+	// same way they reach any other pack. Built-in skins need no hook: they
+	// register through RegisterPack like every engine's packs.
+	if sk, ok := LoadSkin(clean); ok && sk.Source == ThemeSourceUser {
+		return sk.Pack(), true
 	}
 	if pack, ok := loadEmbedded()[clean]; ok {
 		return pack, true

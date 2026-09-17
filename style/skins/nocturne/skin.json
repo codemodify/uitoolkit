@@ -1,0 +1,1191 @@
+{
+  "base": "breeze-night",
+  "colors": {
+    "accent": "#e8a33d",
+    "accentHover": "#f6bd63",
+    "accentPress": "#c9822a",
+    "background": "#101319",
+    "bevelDark": "#0a0c10",
+    "bevelLight": "#3a4151",
+    "border": "#2b3140",
+    "danger": "#e06a5a",
+    "divider": "#242a36",
+    "field": "#0d0f15",
+    "fieldBorder": "#2c3343",
+    "focus": "#e8a33d",
+    "highlight": "#ffffff12",
+    "menuGutter": "#1d222b",
+    "menuHover": "#e8a33d3a",
+    "menuHoverBorder": "#e8a33d",
+    "selection": "#e8a33d59",
+    "shadow": "#00000073",
+    "success": "#79c08a",
+    "surface": "#1b1f29",
+    "surfaceAlt": "#191d26",
+    "text": "#e6e9f2",
+    "textMuted": "#9aa2b6",
+    "textOnAccent": "#1a1305",
+    "thumb": "#3b4354",
+    "track": "#0d0f15",
+    "warning": "#e8a33d"
+  },
+  "family": "dark",
+  "label": "Nocturne",
+  "lineage": "uitoolkit",
+  "metrics": {
+    "border": 1,
+    "checkbox": 20,
+    "comboH": 30,
+    "controlH": 30,
+    "fieldH": 30,
+    "focusWidth": 2,
+    "menuItemH": 28,
+    "progressH": 10,
+    "radio": 20,
+    "radius": 5,
+    "radiusSmall": 4,
+    "rowH": 28,
+    "scroll": 12,
+    "sliderH": 8,
+    "switchH": 24,
+    "switchW": 44,
+    "tabH": 32,
+    "thumb": 20,
+    "titleBar": 34
+  },
+  "parts": {
+    "arrow.down": {
+      "states": {
+        "normal": "arrow.down"
+      }
+    },
+    "arrow.left": {
+      "states": {
+        "normal": "arrow.left"
+      }
+    },
+    "arrow.right": {
+      "states": {
+        "normal": "arrow.right"
+      }
+    },
+    "arrow.up": {
+      "states": {
+        "normal": "arrow.up"
+      }
+    },
+    "bar": {
+      "states": {
+        "normal": "bar.normal"
+      }
+    },
+    "button": {
+      "states": {
+        "checked": "button.checked",
+        "default": "button.default",
+        "disabled": "button.disabled",
+        "focus": "button.focus",
+        "hover": "button.hover",
+        "normal": "button.normal",
+        "pressed": "button.pressed"
+      },
+      "text": "control"
+    },
+    "caption": {
+      "states": {
+        "inactive": "caption.inactive",
+        "normal": "caption.normal"
+      },
+      "text": "caption"
+    },
+    "check": {
+      "states": {
+        "checked": "check.checked",
+        "disabled": "check.disabled",
+        "hover": "check.hover",
+        "normal": "check.normal"
+      },
+      "text": "onAccent"
+    },
+    "check.mark": {
+      "states": {
+        "disabled": "mark.check",
+        "normal": "mark.check"
+      }
+    },
+    "combo": {
+      "states": {
+        "disabled": "combo.disabled",
+        "focus": "combo.focus",
+        "hover": "combo.hover",
+        "normal": "combo.normal",
+        "pressed": "combo.pressed"
+      },
+      "text": "control"
+    },
+    "expander.open": {
+      "states": {
+        "normal": "expander.open"
+      }
+    },
+    "expander.shut": {
+      "states": {
+        "normal": "expander.shut"
+      }
+    },
+    "field": {
+      "states": {
+        "disabled": "field.disabled",
+        "focus": "field.focus",
+        "hover": "field.hover",
+        "normal": "field.normal"
+      },
+      "text": "field"
+    },
+    "focus": {
+      "states": {
+        "normal": "focus.ring"
+      }
+    },
+    "menu": {
+      "states": {
+        "hover": "menu.hover",
+        "normal": "menu.hover"
+      },
+      "text": "control"
+    },
+    "menu.frame": {
+      "states": {
+        "normal": "menu.frame"
+      }
+    },
+    "panel": {
+      "states": {
+        "normal": "panel.normal"
+      }
+    },
+    "progress.back": {
+      "states": {
+        "normal": "track.normal"
+      }
+    },
+    "progress.fill": {
+      "states": {
+        "normal": "fill.normal"
+      }
+    },
+    "radio.mark": {
+      "states": {
+        "disabled": "mark.radio",
+        "normal": "mark.radio"
+      }
+    },
+    "row": {
+      "states": {
+        "checked": "row.checked",
+        "hover": "row.hover",
+        "normal": "row.hover"
+      },
+      "text": "control"
+    },
+    "slider.fill": {
+      "states": {
+        "normal": "fill.normal"
+      }
+    },
+    "slider.thumb": {
+      "states": {
+        "disabled": "knob.disabled",
+        "normal": "knob.normal"
+      }
+    },
+    "slider.track": {
+      "states": {
+        "normal": "track.normal"
+      }
+    },
+    "splitter": {
+      "states": {
+        "hover": "splitter.hover",
+        "normal": "splitter.normal"
+      }
+    },
+    "switch.knob": {
+      "states": {
+        "disabled": "knob.disabled",
+        "normal": "knob.normal"
+      }
+    },
+    "switch.track": {
+      "states": {
+        "checked": "switch.on",
+        "disabled": "switch.disabled",
+        "normal": "switch.off"
+      },
+      "text": "control"
+    },
+    "tab": {
+      "states": {
+        "checked": "tab.checked",
+        "hover": "tab.hover",
+        "normal": "tab.normal"
+      },
+      "text": "control"
+    },
+    "thumb": {
+      "states": {
+        "hover": "thumb.hover",
+        "normal": "thumb.normal"
+      }
+    },
+    "tool": {
+      "states": {
+        "checked": "tool.checked",
+        "disabled": "tool.disabled",
+        "hover": "tool.hover",
+        "normal": "tool.normal",
+        "pressed": "tool.pressed"
+      },
+      "text": "control"
+    },
+    "tooltip": {
+      "states": {
+        "normal": "tooltip.normal"
+      },
+      "text": "control"
+    },
+    "track": {
+      "states": {
+        "normal": "track.normal"
+      }
+    },
+    "window": {
+      "states": {
+        "normal": "window.normal"
+      }
+    }
+  },
+  "sheets": {
+    "chrome": {
+      "1x": "art/chrome.png",
+      "2x": "art/chrome@2x.png"
+    }
+  },
+  "skin": 1,
+  "sprites": {
+    "arrow.down": {
+      "at": [
+        0,
+        288,
+        20,
+        20
+      ],
+      "sheet": "chrome",
+      "tint": true
+    },
+    "arrow.left": {
+      "at": [
+        44,
+        288,
+        20,
+        20
+      ],
+      "sheet": "chrome",
+      "tint": true
+    },
+    "arrow.right": {
+      "at": [
+        66,
+        288,
+        20,
+        20
+      ],
+      "sheet": "chrome",
+      "tint": true
+    },
+    "arrow.up": {
+      "at": [
+        22,
+        288,
+        20,
+        20
+      ],
+      "sheet": "chrome",
+      "tint": true
+    },
+    "bar.normal": {
+      "at": [
+        232,
+        160,
+        56,
+        30
+      ],
+      "sheet": "chrome",
+      "slice": [
+        9,
+        12,
+        9,
+        12
+      ]
+    },
+    "button.checked": {
+      "at": [
+        348,
+        0,
+        56,
+        30
+      ],
+      "sheet": "chrome",
+      "slice": [
+        9,
+        12,
+        9,
+        12
+      ]
+    },
+    "button.default": {
+      "at": [
+        290,
+        0,
+        56,
+        30
+      ],
+      "sheet": "chrome",
+      "slice": [
+        9,
+        12,
+        9,
+        12
+      ]
+    },
+    "button.disabled": {
+      "at": [
+        174,
+        0,
+        56,
+        30
+      ],
+      "sheet": "chrome",
+      "slice": [
+        9,
+        12,
+        9,
+        12
+      ]
+    },
+    "button.focus": {
+      "at": [
+        232,
+        0,
+        56,
+        30
+      ],
+      "sheet": "chrome",
+      "slice": [
+        9,
+        12,
+        9,
+        12
+      ]
+    },
+    "button.hover": {
+      "at": [
+        58,
+        0,
+        56,
+        30
+      ],
+      "sheet": "chrome",
+      "slice": [
+        9,
+        12,
+        9,
+        12
+      ]
+    },
+    "button.normal": {
+      "at": [
+        0,
+        0,
+        56,
+        30
+      ],
+      "sheet": "chrome",
+      "slice": [
+        9,
+        12,
+        9,
+        12
+      ]
+    },
+    "button.pressed": {
+      "at": [
+        116,
+        0,
+        56,
+        30
+      ],
+      "sheet": "chrome",
+      "slice": [
+        9,
+        12,
+        9,
+        12
+      ]
+    },
+    "caption.inactive": {
+      "at": [
+        164,
+        192,
+        96,
+        34
+      ],
+      "sheet": "chrome",
+      "slice": [
+        10,
+        12,
+        6,
+        12
+      ]
+    },
+    "caption.normal": {
+      "at": [
+        66,
+        192,
+        96,
+        34
+      ],
+      "sheet": "chrome",
+      "slice": [
+        10,
+        12,
+        6,
+        12
+      ]
+    },
+    "check.checked": {
+      "at": [
+        44,
+        266,
+        20,
+        20
+      ],
+      "sheet": "chrome",
+      "slice": [
+        6,
+        6,
+        6,
+        6
+      ]
+    },
+    "check.disabled": {
+      "at": [
+        66,
+        266,
+        20,
+        20
+      ],
+      "sheet": "chrome",
+      "slice": [
+        6,
+        6,
+        6,
+        6
+      ]
+    },
+    "check.hover": {
+      "at": [
+        22,
+        266,
+        20,
+        20
+      ],
+      "sheet": "chrome",
+      "slice": [
+        6,
+        6,
+        6,
+        6
+      ]
+    },
+    "check.normal": {
+      "at": [
+        0,
+        266,
+        20,
+        20
+      ],
+      "sheet": "chrome",
+      "slice": [
+        6,
+        6,
+        6,
+        6
+      ]
+    },
+    "combo.disabled": {
+      "at": [
+        174,
+        64,
+        56,
+        30
+      ],
+      "sheet": "chrome",
+      "slice": [
+        9,
+        12,
+        9,
+        12
+      ]
+    },
+    "combo.focus": {
+      "at": [
+        232,
+        64,
+        56,
+        30
+      ],
+      "sheet": "chrome",
+      "slice": [
+        9,
+        12,
+        9,
+        12
+      ]
+    },
+    "combo.hover": {
+      "at": [
+        58,
+        64,
+        56,
+        30
+      ],
+      "sheet": "chrome",
+      "slice": [
+        9,
+        12,
+        9,
+        12
+      ]
+    },
+    "combo.normal": {
+      "at": [
+        0,
+        64,
+        56,
+        30
+      ],
+      "sheet": "chrome",
+      "slice": [
+        9,
+        12,
+        9,
+        12
+      ]
+    },
+    "combo.pressed": {
+      "at": [
+        116,
+        64,
+        56,
+        30
+      ],
+      "sheet": "chrome",
+      "slice": [
+        9,
+        12,
+        9,
+        12
+      ]
+    },
+    "expander.open": {
+      "at": [
+        88,
+        288,
+        20,
+        20
+      ],
+      "sheet": "chrome",
+      "tint": true
+    },
+    "expander.shut": {
+      "at": [
+        110,
+        288,
+        20,
+        20
+      ],
+      "sheet": "chrome",
+      "tint": true
+    },
+    "field.disabled": {
+      "at": [
+        174,
+        32,
+        56,
+        30
+      ],
+      "sheet": "chrome",
+      "slice": [
+        9,
+        12,
+        9,
+        12
+      ]
+    },
+    "field.focus": {
+      "at": [
+        116,
+        32,
+        56,
+        30
+      ],
+      "sheet": "chrome",
+      "slice": [
+        9,
+        12,
+        9,
+        12
+      ]
+    },
+    "field.hover": {
+      "at": [
+        58,
+        32,
+        56,
+        30
+      ],
+      "sheet": "chrome",
+      "slice": [
+        9,
+        12,
+        9,
+        12
+      ]
+    },
+    "field.normal": {
+      "at": [
+        0,
+        32,
+        56,
+        30
+      ],
+      "sheet": "chrome",
+      "slice": [
+        9,
+        12,
+        9,
+        12
+      ]
+    },
+    "fill.normal": {
+      "at": [
+        126,
+        242,
+        40,
+        22
+      ],
+      "sheet": "chrome",
+      "slice": [
+        8,
+        8,
+        8,
+        8
+      ]
+    },
+    "focus.ring": {
+      "at": [
+        132,
+        288,
+        24,
+        24
+      ],
+      "middle": "none",
+      "sheet": "chrome",
+      "slice": [
+        9,
+        9,
+        9,
+        9
+      ]
+    },
+    "knob.disabled": {
+      "at": [
+        192,
+        242,
+        22,
+        22
+      ],
+      "sheet": "chrome"
+    },
+    "knob.normal": {
+      "at": [
+        168,
+        242,
+        22,
+        22
+      ],
+      "sheet": "chrome"
+    },
+    "mark.check": {
+      "at": [
+        176,
+        266,
+        20,
+        20
+      ],
+      "sheet": "chrome",
+      "tint": true
+    },
+    "mark.radio": {
+      "at": [
+        198,
+        266,
+        20,
+        20
+      ],
+      "sheet": "chrome",
+      "tint": true
+    },
+    "menu.frame": {
+      "at": [
+        290,
+        160,
+        56,
+        30
+      ],
+      "sheet": "chrome",
+      "slice": [
+        9,
+        12,
+        9,
+        12
+      ]
+    },
+    "menu.hover": {
+      "at": [
+        0,
+        160,
+        56,
+        30
+      ],
+      "sheet": "chrome",
+      "slice": [
+        9,
+        12,
+        9,
+        12
+      ]
+    },
+    "panel.normal": {
+      "at": [
+        174,
+        160,
+        56,
+        30
+      ],
+      "sheet": "chrome",
+      "slice": [
+        9,
+        12,
+        9,
+        12
+      ]
+    },
+    "radio.checked": {
+      "at": [
+        132,
+        266,
+        20,
+        20
+      ],
+      "sheet": "chrome"
+    },
+    "radio.disabled": {
+      "at": [
+        154,
+        266,
+        20,
+        20
+      ],
+      "sheet": "chrome"
+    },
+    "radio.hover": {
+      "at": [
+        110,
+        266,
+        20,
+        20
+      ],
+      "sheet": "chrome"
+    },
+    "radio.normal": {
+      "at": [
+        88,
+        266,
+        20,
+        20
+      ],
+      "sheet": "chrome"
+    },
+    "row.checked": {
+      "at": [
+        116,
+        160,
+        56,
+        30
+      ],
+      "sheet": "chrome",
+      "slice": [
+        9,
+        12,
+        9,
+        12
+      ]
+    },
+    "row.hover": {
+      "at": [
+        58,
+        160,
+        56,
+        30
+      ],
+      "sheet": "chrome",
+      "slice": [
+        9,
+        12,
+        9,
+        12
+      ]
+    },
+    "splitter.hover": {
+      "at": [
+        406,
+        160,
+        56,
+        30
+      ],
+      "sheet": "chrome",
+      "slice": [
+        9,
+        12,
+        9,
+        12
+      ]
+    },
+    "splitter.normal": {
+      "at": [
+        348,
+        160,
+        56,
+        30
+      ],
+      "sheet": "chrome",
+      "slice": [
+        9,
+        12,
+        9,
+        12
+      ]
+    },
+    "switch.disabled": {
+      "at": [
+        92,
+        314,
+        44,
+        24
+      ],
+      "sheet": "chrome",
+      "slice": [
+        11,
+        11,
+        11,
+        11
+      ]
+    },
+    "switch.off": {
+      "at": [
+        0,
+        314,
+        44,
+        24
+      ],
+      "sheet": "chrome",
+      "slice": [
+        11,
+        11,
+        11,
+        11
+      ]
+    },
+    "switch.on": {
+      "at": [
+        46,
+        314,
+        44,
+        24
+      ],
+      "sheet": "chrome",
+      "slice": [
+        11,
+        11,
+        11,
+        11
+      ]
+    },
+    "tab.checked": {
+      "at": [
+        116,
+        128,
+        56,
+        30
+      ],
+      "sheet": "chrome",
+      "slice": [
+        9,
+        12,
+        9,
+        12
+      ]
+    },
+    "tab.hover": {
+      "at": [
+        58,
+        128,
+        56,
+        30
+      ],
+      "sheet": "chrome",
+      "slice": [
+        9,
+        12,
+        9,
+        12
+      ]
+    },
+    "tab.normal": {
+      "at": [
+        0,
+        128,
+        56,
+        30
+      ],
+      "sheet": "chrome",
+      "slice": [
+        9,
+        12,
+        9,
+        12
+      ]
+    },
+    "thumb.hover": {
+      "at": [
+        42,
+        242,
+        40,
+        22
+      ],
+      "sheet": "chrome",
+      "slice": [
+        8,
+        8,
+        8,
+        8
+      ]
+    },
+    "thumb.normal": {
+      "at": [
+        0,
+        242,
+        40,
+        22
+      ],
+      "sheet": "chrome",
+      "slice": [
+        8,
+        8,
+        8,
+        8
+      ]
+    },
+    "tool.checked": {
+      "at": [
+        232,
+        96,
+        56,
+        30
+      ],
+      "sheet": "chrome",
+      "slice": [
+        9,
+        12,
+        9,
+        12
+      ]
+    },
+    "tool.disabled": {
+      "at": [
+        174,
+        96,
+        56,
+        30
+      ],
+      "sheet": "chrome",
+      "slice": [
+        9,
+        12,
+        9,
+        12
+      ]
+    },
+    "tool.hover": {
+      "at": [
+        58,
+        96,
+        56,
+        30
+      ],
+      "sheet": "chrome",
+      "slice": [
+        9,
+        12,
+        9,
+        12
+      ]
+    },
+    "tool.normal": {
+      "at": [
+        0,
+        96,
+        56,
+        30
+      ],
+      "sheet": "chrome",
+      "slice": [
+        9,
+        12,
+        9,
+        12
+      ]
+    },
+    "tool.pressed": {
+      "at": [
+        116,
+        96,
+        56,
+        30
+      ],
+      "sheet": "chrome",
+      "slice": [
+        9,
+        12,
+        9,
+        12
+      ]
+    },
+    "tooltip.normal": {
+      "at": [
+        464,
+        160,
+        56,
+        30
+      ],
+      "sheet": "chrome",
+      "slice": [
+        9,
+        12,
+        9,
+        12
+      ]
+    },
+    "track.normal": {
+      "at": [
+        84,
+        242,
+        40,
+        22
+      ],
+      "sheet": "chrome",
+      "slice": [
+        8,
+        8,
+        8,
+        8
+      ]
+    },
+    "window.normal": {
+      "at": [
+        0,
+        192,
+        64,
+        48
+      ],
+      "sheet": "chrome",
+      "slice": [
+        2,
+        2,
+        2,
+        2
+      ]
+    }
+  },
+  "summary": "The toolkit's own skin: amber on charcoal, drawn from paths so every corner is exact at 1.75 as well as at 1 and 2.",
+  "text": {
+    "caption": {
+      "color": "#e6e9f2",
+      "disabled": "#5b6273"
+    },
+    "control": {
+      "checked": "#e6e9f2",
+      "color": "#e6e9f2",
+      "disabled": "#5b6273",
+      "hover": "#f2f5fb",
+      "pressed": "#9aa2b6"
+    },
+    "field": {
+      "color": "#e6e9f2",
+      "disabled": "#5b6273"
+    },
+    "onAccent": {
+      "checked": "#1a1305",
+      "color": "#1a1305",
+      "disabled": "#5b6273",
+      "hover": "#1a1305",
+      "pressed": "#1a1305"
+    }
+  },
+  "window": {
+    "border": [
+      1,
+      1,
+      1,
+      1
+    ],
+    "caption": 34,
+    "radius": [
+      7,
+      7,
+      0,
+      0
+    ],
+    "shape": [
+      {
+        "at": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "radius": [
+          7,
+          7,
+          0,
+          0
+        ],
+        "stretchX": true,
+        "stretchY": true
+      }
+    ]
+  },
+  "year": 2026
+}
