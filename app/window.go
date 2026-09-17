@@ -125,8 +125,13 @@ type Window struct {
 	shapeCur             *platform.Shape
 	shapeCurW, shapeCurH int
 	shapeCurScale        float32
-	capPress             captionGesture
-	capClick             captionClick
+	// lookShapeCur is the silhouette the look declared for the frame state
+	// in lookShapeKey — nil shape and all, which is what every look that
+	// frames a rectangle says (app/shape.go, lookShape).
+	lookShapeCur *lookShapeMemo
+	lookShapeKey lookShapeKey
+	capPress     captionGesture
+	capClick     captionClick
 }
 
 func newWindow(a *Application, surf platform.Surface, opts platform.WindowOptions) *Window {

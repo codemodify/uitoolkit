@@ -169,6 +169,27 @@ func (h *HeaderBar) controlsW() (left, right float32) {
 	return left, right
 }
 
+// CaptionFitWidth is how wide the caption band has to be to hold its
+// contents and nothing more: the caption buttons at its two ends and the
+// window title between them. It is what a look asking for a fitted caption
+// (style.DecorationSpec.CaptionFits) is measured by — BeOS's tab, which was
+// as wide as its title and left the rest of the window's top edge to the
+// desktop.
+//
+// It is the strip's width, not the row's: a header bar with the app's own
+// items keeps those in the row *under* a stacked frame's strip, and a tab
+// sized to a tool bar would be the whole window.
+//
+// 0 when the header bar is not a toolkit-drawn frame's caption, which is
+// the only state where a caption narrower than its window means nothing.
+func (h *HeaderBar) CaptionFitWidth() float32 {
+	if h == nil || !h.framed {
+		return 0
+	}
+	lw, rw := h.controlsW()
+	return float32(math.Ceil(float64(lw + h.titleWidth() + rw)))
+}
+
 // minCaption is the least caption height of a toolkit-drawn frame: the
 // look's caption, room for the caption buttons and a line of title.
 func (h *HeaderBar) minCaption(s style.DecorationSpec) float32 {
