@@ -143,7 +143,7 @@ func (s *settingsState) rebuild() {
 func buildSettings(a *app.Application, win *app.Window, saved, staged style.Appearance, page int) widget.Component {
 	s := &settingsState{
 		a: a, win: win, saved: saved.Normalize(), staged: staged.Normalize(), page: page,
-		browserRatio: 0.26, previewRatio: 0.55,
+		previewRatio: 0.55,
 	}
 	// The preview draws the staged theme's light or dark sibling: redraw
 	// it when the desktop switches.
@@ -400,6 +400,9 @@ func (s *settingsState) selectedRow() int {
 // the whole widget gallery below — in a splitter the user can size, so
 // the two never fight for the space.
 func (s *settingsState) themesPage() widget.Component {
+	if s.browserRatio == 0 {
+		s.browserRatio = defaultBrowserRatio(s.win)
+	}
 	browser := s.themeBrowser()
 
 	// The live preview: a small application window in the staged theme —
@@ -435,6 +438,25 @@ func (s *settingsState) themesPage() widget.Component {
 	s.bodySplit.Ratio = s.browserRatio
 	s.bodySplit.SetAccessibleName("Themes and preview")
 	return s.bodySplit
+}
+
+// defaultBrowserRatio aims the theme browser at about 240 logical pixels
+// whatever the window and the display scale are: a narrow window gives it
+// a bigger share so its rows stay readable, a wide one hands the room to
+// the preview and the gallery. Dragging the sash replaces it.
+func defaultBrowserRatio(win *app.Window) float32 {
+	const want, pad = 240, 30
+	scale := win.Scale()
+	if scale <= 0 {
+		scale = 1
+	}
+	px, _ := win.Size()
+	// The page is what the navigation sidebar and its padding leave.
+	page := float32(px)/scale*(1-0.18) - pad
+	if page <= 0 {
+		return 0.3
+	}
+	return min(max(want/page, 0.24), 0.45)
 }
 
 // scoped draws c in the staged theme while Settings keeps the applied one.
@@ -535,7 +557,7 @@ func (s *settingsState) packDetails() widget.Component {
 	s.packNote.Wrap = true
 	s.packNote.MinLines = 1
 	// A summary longer than the box scrolls rather than being cut off.
-	return boxed(150, widgets.NewScrollView(
+	return boxed(136, widgets.NewScrollView(
 		widgets.NewColumn(s.packTitle, s.packMeta, s.packText, s.packNote).WithGap(2)))
 }
 

@@ -96,7 +96,9 @@ Expressive. Each was researched from
 published facts: design guides, SDK documentation, and pixels measured from
 screenshots of the originals. No code or pixmaps were copied.
 
-Apps start in Metal (Ocean). Settings previews and applies any pack, and
+Apps start in Metal (Ocean). Settings draws any pack twice while you
+browse — a small live application, and under it the whole widget gallery,
+every control in every state — then applies it to every app; and
 `UITK_THEME=<pack>` runs any app in any of them.
 
 ![Theme packs by year and platform](docs/screenshots/themes/timeline.png)
@@ -224,9 +226,13 @@ paintengine2d with Titillium Web (and JetBrains Mono in code views).
 
 ![Inspector](docs/screenshots/inspector.png)
 
-### Settings — theme, corners, and icon sets
+### Settings — the theme browser, with the gallery under the preview
 
 ![Settings](docs/screenshots/settings.png)
+
+Search or filter 121 packs, and the one you pick is drawn at once in the
+preview window and in the whole widget gallery below it, in a splitter you
+can size. See **[docs/settings.md](docs/settings.md)**.
 
 ### Files — projects dogfood
 
@@ -321,7 +327,9 @@ go run ./examples/mail              # in-process daemon + UI (same protocol)
 go run ./examples/mail -headless    # writes mail.png
 go run ./examples/mail -classic     # preview below the thread list
 go run ./examples/mail -light
-go run ./cmd/uitksettings           # theme packs + icon sets (look.json)
+go run ./cmd/uitksettings           # theme browser, preview + gallery, look.json
+go run ./cmd/uitksettings -stage aqua        # open with Aqua staged
+go run ./cmd/uitksettings -page appearance   # open on the options page
 go run ./cmd/uitksettings -headless # writes settings.png
 ```
 
