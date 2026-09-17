@@ -573,7 +573,7 @@
       "disabled": "#87a294"
     },
     "control": {
-      "checked": "#1a1206",
+      "checked": "#63f0a4",
       "color": "#d6e8dd",
       "default": "#07170f",
       "disabled": "#4f615a",
@@ -586,22 +586,22 @@
     }
   },
   "window": {
-    "border": [0, 4, 18, 4],
+    "border": [0, 4, 20, 4],
     "caption": 18,
     "layout": ":minimize,close",
     "shape": [
       {
-        "at": [0, 0, 0, 14],
+        "at": [0, 0, 0, 16],
         "stretchX": true,
         "stretchY": true
       },
       {
-        "at": [6, 0, 6, 7],
+        "at": [8, 0, 8, 8],
         "stretchX": true,
         "stretchY": true
       },
       {
-        "at": [14, 0, 14, 0],
+        "at": [24, 0, 24, 0],
         "stretchX": true,
         "stretchY": true
       }
