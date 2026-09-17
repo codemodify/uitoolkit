@@ -6,6 +6,7 @@ import (
 
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/layout"
+	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
 )
 
@@ -32,6 +33,18 @@ type Base struct {
 	// acc holds an accessible name and description, when set (most
 	// components take theirs from their text).
 	acc *accLabel
+	// hitShape is the component's own silhouette (SetHitShape) and hitFn
+	// the callback that rebuilds it at every size (SetHitShapeFunc); only
+	// one is ever set, and hitCur remembers what the callback last built
+	// for hitCurW by hitCurH. transparent is whether the component paints
+	// nothing solid over its box. All of this is nil / false for every
+	// component that does not ask, which is every component by default:
+	// HitTest pays one nil check for it.
+	hitShape         *platform.Shape
+	hitFn            func(paintengine2d.Point) *platform.Shape
+	hitCur           *platform.Shape
+	hitCurW, hitCurH int
+	transparent      bool
 }
 
 type accLabel struct{ name, desc string }
@@ -189,6 +202,14 @@ func (b *Base) HitTest(local paintengine2d.Point) Component {
 	}
 	lb := b.LocalBounds()
 	if lb.Empty() || !lb.Contains(local) {
+		return nil
+	}
+	// A component with a silhouette of its own takes input only inside it,
+	// and neither do its children: a press outside goes to whatever is
+	// behind, exactly as it does outside a shaped window. Every component
+	// without one — the default, and every widget in the toolkit — pays a
+	// single nil check here.
+	if (b.hitShape != nil || b.hitFn != nil) && !b.hitsShape(local) {
 		return nil
 	}
 	for i := len(b.children) - 1; i >= 0; i-- {
