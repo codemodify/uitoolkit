@@ -113,8 +113,13 @@ func (e *eqPane) Arrange(r paintengine2d.Rect) {
 
 	row := dip(18)
 	e.on.Arrange(paintengine2d.XYWH(0, 0, row, row))
-	e.flat.Arrange(paintengine2d.XYWH(row+dip(4), 0, dip(38), row))
-	px := row + dip(4) + dip(38) + dip(4)
+	// The Flat button takes whatever its own label needs: the word is four
+	// letters in the skin's face and rather more in some of the other
+	// hundred and twenty packs, and a button that elides its own name is a
+	// button nobody can read.
+	flatW := max(e.flat.Measure(layout.Loose(b.Dx(), row)).X, dip(38))
+	e.flat.Arrange(paintengine2d.XYWH(row+dip(4), 0, flatW, row))
+	px := row + dip(4) + flatW + dip(4)
 	e.preset.Arrange(paintengine2d.XYWH(px, 0, max(b.Dx()-px, dip(60)), row))
 
 	// The faders: the preamp, a gap, then the ten bands sharing what is
