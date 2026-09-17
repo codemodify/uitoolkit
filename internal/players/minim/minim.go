@@ -133,6 +133,18 @@ func New(a *app.Application, opts Options) (*Player, error) {
 	p.Equaliser.Changed = p.refresh
 	p.pulse = players.NewPulse(70*time.Millisecond, p.advance)
 	p.refresh()
+	// Something in every window has the keyboard from the first frame. A
+	// player's keys are bare letters that bubble up from whatever is
+	// focused, and a window with no focus at all has nothing for them to
+	// bubble from — so the equaliser and the playlist are given one too,
+	// or the transport keys would be dead in two windows out of three.
+	p.Main.RequestFocus(p.strip.play)
+	if p.eqPane != nil {
+		p.Eq.RequestFocus(p.eqPane.preamp)
+	}
+	if p.listPane != nil {
+		p.List.RequestFocus(p.listPane.list)
+	}
 	return p, nil
 }
 
@@ -142,12 +154,11 @@ func New(a *app.Application, opts Options) (*Player, error) {
 // frames — where the desktop draws the frame, the window is the rectangle
 // inside it and there is nothing to cut.
 func (p *Player) open(a *app.Application, opts Options, title string, w, h int) (*app.Window, error) {
-	return a.NewWindow(platform.WindowOptions{
-		Title: title, Width: w, Height: h,
-		MinWidth: w, MinHeight: h,
+	return players.OpenSized(a, platform.WindowOptions{
+		Title:       title,
 		Headless:    opts.Headless,
 		Decorations: platform.DecorationsClient,
-	})
+	}, w, h, true)
 }
 
 // Start begins the clock and shows the windows.
@@ -212,10 +223,20 @@ func (p *Player) Command(c players.Command) {
 // work wherever the focus is. It returns false for anything it does not
 // know, which is what lets Tab, the arrows inside a list and the focus ring
 // keep working.
-func (p *Player) Keys(e widget.KeyEvent) bool {
+//
+// It is handed the window the key came from rather than reading the main
+// one: the guard below asks what has the keyboard, and in a player with
+// three windows that is a different answer in each.
+func (p *Player) Keys(w *app.Window, e widget.KeyEvent) bool {
 	if e.Key == platform.KeyEscape {
 		p.App.Quit()
 		return true
+	}
+	if players.Typing(w.Focus()) {
+		// The focus is in something that takes text: its letters are its
+		// own. Nothing the transport answers to is a modifier chord, so
+		// there is nothing left to try.
+		return false
 	}
 	if c := players.CommandFor(e); c != players.CmdNone {
 		p.Command(c)
@@ -442,7 +463,7 @@ func (s *strip) MousePress(widget.MouseEvent) bool {
 	return true
 }
 
-func (s *strip) KeyPress(e widget.KeyEvent) bool { return s.p.Keys(e) }
+func (s *strip) KeyPress(e widget.KeyEvent) bool { return s.p.Keys(s.p.Main, e) }
 
 // CaptionAt tells the frame that the strip's own background is caption: a
 // press there moves the window rather than landing in the app.
