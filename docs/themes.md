@@ -2,7 +2,9 @@
 
 > Shapes per theme come from **theme engines** — see
 > [theme-engines.md](theme-engines.md) for the architecture, the rules and
-> how to write one. This page lists the packs and the pack schema.
+> how to write one. A pack whose shapes are *pictures* rather than code is a
+> **skin**; its schema is in [skins.md](skins.md). This page lists the packs
+> and the pack schema.
 
 `uitoolkit` skins are **token packs**, not palette-only recolors. A pack
 names a bevel language, metrics, elevation, and per-state chrome colors.
