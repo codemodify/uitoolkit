@@ -1,0 +1,607 @@
+{
+  "base": "breeze-night",
+  "colors": {
+    "accent": "#4fa8ff",
+    "accentHover": "#a5d6ff",
+    "accentPress": "#2a6cbd",
+    "background": "#242b3a",
+    "bevelDark": "#05070c",
+    "bevelLight": "#5a6880",
+    "border": "#3a4358",
+    "danger": "#e0705e",
+    "divider": "#2a3243",
+    "field": "#070a11",
+    "fieldBorder": "#3a465c",
+    "focus": "#4fa8ff",
+    "highlight": "#ffffff1a",
+    "menuGutter": "#1e2433",
+    "menuHover": "#23446b",
+    "menuHoverBorder": "#4f86c4",
+    "selection": "#4fa8ff4d",
+    "shadow": "#00000088",
+    "success": "#76c89b",
+    "surface": "#2b3347",
+    "surfaceAlt": "#1e2433",
+    "text": "#e9eff8",
+    "textMuted": "#93a2b8",
+    "textOnAccent": "#04121f",
+    "thumb": "#3f4a5e",
+    "track": "#141a26",
+    "warning": "#e0b24a"
+  },
+  "family": "dark",
+  "label": "Marquee",
+  "lineage": "uitoolkit",
+  "metrics": {
+    "border": 1,
+    "checkbox": 20,
+    "comboH": 32,
+    "controlH": 32,
+    "fieldH": 32,
+    "focusWidth": 2,
+    "menuItemH": 28,
+    "progressH": 10,
+    "radio": 20,
+    "radius": 7,
+    "radiusSmall": 5,
+    "rowH": 28,
+    "scroll": 14,
+    "sliderH": 10,
+    "switchH": 22,
+    "switchW": 40,
+    "tabH": 32,
+    "thumb": 22,
+    "titleBar": 56
+  },
+  "parts": {
+    "arrow.down": {
+      "states": {
+        "normal": "arrow.down"
+      }
+    },
+    "arrow.left": {
+      "states": {
+        "normal": "arrow.left"
+      }
+    },
+    "arrow.right": {
+      "states": {
+        "normal": "arrow.right"
+      }
+    },
+    "arrow.up": {
+      "states": {
+        "normal": "arrow.up"
+      }
+    },
+    "bar": {
+      "states": {
+        "normal": "bar.normal"
+      }
+    },
+    "button": {
+      "states": {
+        "checked": "button.checked",
+        "default": "button.default",
+        "disabled": "button.disabled",
+        "focus": "button.focus",
+        "hover": "button.hover",
+        "normal": "button.normal",
+        "pressed": "button.pressed"
+      },
+      "text": "control"
+    },
+    "caption": {
+      "states": {
+        "inactive": "caption.inactive",
+        "normal": "caption.normal"
+      },
+      "text": "caption"
+    },
+    "caption.button": {
+      "states": {
+        "hover": "capbtn.hover",
+        "normal": "capbtn.normal",
+        "pressed": "capbtn.pressed"
+      },
+      "text": "control"
+    },
+    "check": {
+      "states": {
+        "checked": "check.checked",
+        "disabled": "check.disabled",
+        "hover": "check.hover",
+        "normal": "check.normal"
+      },
+      "text": "control"
+    },
+    "check.mark": {
+      "states": {
+        "disabled": "mark.check",
+        "normal": "mark.check"
+      }
+    },
+    "combo": {
+      "states": {
+        "hover": "combo.hover",
+        "normal": "combo.normal",
+        "pressed": "combo.pressed"
+      },
+      "text": "control"
+    },
+    "expander.open": {
+      "states": {
+        "normal": "expander.open"
+      }
+    },
+    "expander.shut": {
+      "states": {
+        "normal": "expander.shut"
+      }
+    },
+    "field": {
+      "states": {
+        "disabled": "field.disabled",
+        "focus": "field.focus",
+        "normal": "field.normal"
+      },
+      "text": "control"
+    },
+    "focus": {
+      "states": {
+        "normal": "focus.ring"
+      }
+    },
+    "menu": {
+      "states": {
+        "hover": "menu.hover",
+        "normal": "menu.hover"
+      },
+      "text": "control"
+    },
+    "menu.frame": {
+      "states": {
+        "normal": "menu.frame"
+      }
+    },
+    "panel": {
+      "states": {
+        "normal": "panel.normal"
+      }
+    },
+    "progress.back": {
+      "states": {
+        "normal": "slot.normal"
+      }
+    },
+    "progress.fill": {
+      "states": {
+        "normal": "slot.fill"
+      }
+    },
+    "radio.mark": {
+      "states": {
+        "disabled": "mark.radio",
+        "normal": "mark.radio"
+      }
+    },
+    "row": {
+      "states": {
+        "checked": "row.checked",
+        "hover": "row.hover",
+        "normal": "row.hover"
+      },
+      "text": "control"
+    },
+    "slider.fill": {
+      "states": {
+        "normal": "slot.fill"
+      }
+    },
+    "slider.thumb": {
+      "states": {
+        "disabled": "knob.disabled",
+        "normal": "knob.normal"
+      }
+    },
+    "slider.track": {
+      "states": {
+        "normal": "slot.normal"
+      }
+    },
+    "splitter": {
+      "states": {
+        "normal": "splitter.normal"
+      }
+    },
+    "switch.knob": {
+      "states": {
+        "disabled": "knob.disabled",
+        "normal": "knob.normal"
+      }
+    },
+    "switch.track": {
+      "states": {
+        "checked": "switch.on",
+        "disabled": "switch.disabled",
+        "normal": "switch.off"
+      }
+    },
+    "tab": {
+      "states": {
+        "checked": "tab.checked",
+        "hover": "tab.hover",
+        "normal": "tab.normal"
+      },
+      "text": "control"
+    },
+    "thumb": {
+      "states": {
+        "hover": "thumb.hover",
+        "normal": "thumb.normal"
+      }
+    },
+    "tool": {
+      "states": {
+        "checked": "tool.checked",
+        "hover": "tool.hover",
+        "normal": "tool.normal",
+        "pressed": "tool.pressed"
+      },
+      "text": "control"
+    },
+    "tooltip": {
+      "states": {
+        "normal": "tooltip.normal"
+      },
+      "text": "control"
+    },
+    "track": {
+      "states": {
+        "normal": "track.normal"
+      }
+    },
+    "window": {
+      "states": {
+        "normal": "window.normal"
+      }
+    }
+  },
+  "sheets": {
+    "chrome": {
+      "1x": "art/chrome.png",
+      "2x": "art/chrome@2x.png"
+    }
+  },
+  "skin": 1,
+  "sprites": {
+    "arrow.down": {
+      "at": [0, 362, 20, 20],
+      "sheet": "chrome",
+      "tint": true
+    },
+    "arrow.left": {
+      "at": [44, 362, 20, 20],
+      "sheet": "chrome",
+      "tint": true
+    },
+    "arrow.right": {
+      "at": [66, 362, 20, 20],
+      "sheet": "chrome",
+      "tint": true
+    },
+    "arrow.up": {
+      "at": [22, 362, 20, 20],
+      "sheet": "chrome",
+      "tint": true
+    },
+    "bar.normal": {
+      "at": [86, 136, 84, 32],
+      "sheet": "chrome",
+      "slice": [12, 12, 12, 12]
+    },
+    "button.checked": {
+      "at": [516, 0, 84, 32],
+      "sheet": "chrome",
+      "slice": [12, 12, 12, 12]
+    },
+    "button.default": {
+      "at": [430, 0, 84, 32],
+      "sheet": "chrome",
+      "slice": [12, 12, 12, 12]
+    },
+    "button.disabled": {
+      "at": [258, 0, 84, 32],
+      "sheet": "chrome",
+      "slice": [12, 12, 12, 12]
+    },
+    "button.focus": {
+      "at": [344, 0, 84, 32],
+      "sheet": "chrome",
+      "slice": [12, 12, 12, 12]
+    },
+    "button.hover": {
+      "at": [86, 0, 84, 32],
+      "sheet": "chrome",
+      "slice": [12, 12, 12, 12]
+    },
+    "button.normal": {
+      "at": [0, 0, 84, 32],
+      "sheet": "chrome",
+      "slice": [12, 12, 12, 12]
+    },
+    "button.pressed": {
+      "at": [172, 0, 84, 32],
+      "sheet": "chrome",
+      "slice": [12, 12, 12, 12]
+    },
+    "capbtn.hover": {
+      "at": [32, 284, 30, 30],
+      "sheet": "chrome",
+      "slice": [8, 8, 8, 8]
+    },
+    "capbtn.normal": {
+      "at": [0, 284, 30, 30],
+      "sheet": "chrome",
+      "slice": [8, 8, 8, 8]
+    },
+    "capbtn.pressed": {
+      "at": [64, 284, 30, 30],
+      "sheet": "chrome",
+      "slice": [8, 8, 8, 8]
+    },
+    "caption.inactive": {
+      "at": [294, 170, 128, 56],
+      "sheet": "chrome",
+      "slice": [16, 20, 8, 20]
+    },
+    "caption.normal": {
+      "at": [164, 170, 128, 56],
+      "sheet": "chrome",
+      "slice": [16, 20, 8, 20]
+    },
+    "check.checked": {
+      "at": [44, 340, 20, 20],
+      "sheet": "chrome",
+      "slice": [6, 6, 6, 6]
+    },
+    "check.disabled": {
+      "at": [66, 340, 20, 20],
+      "sheet": "chrome",
+      "slice": [6, 6, 6, 6]
+    },
+    "check.hover": {
+      "at": [22, 340, 20, 20],
+      "sheet": "chrome",
+      "slice": [6, 6, 6, 6]
+    },
+    "check.normal": {
+      "at": [0, 340, 20, 20],
+      "sheet": "chrome",
+      "slice": [6, 6, 6, 6]
+    },
+    "combo.hover": {
+      "at": [344, 34, 84, 32],
+      "sheet": "chrome",
+      "slice": [12, 12, 12, 12]
+    },
+    "combo.normal": {
+      "at": [258, 34, 84, 32],
+      "sheet": "chrome",
+      "slice": [12, 12, 12, 12]
+    },
+    "combo.pressed": {
+      "at": [430, 34, 84, 32],
+      "sheet": "chrome",
+      "slice": [12, 12, 12, 12]
+    },
+    "display.normal": {
+      "at": [66, 170, 96, 112],
+      "sheet": "chrome",
+      "slice": [14, 14, 14, 14]
+    },
+    "expander.open": {
+      "at": [88, 362, 20, 20],
+      "sheet": "chrome",
+      "tint": true
+    },
+    "expander.shut": {
+      "at": [110, 362, 20, 20],
+      "sheet": "chrome",
+      "tint": true
+    },
+    "field.disabled": {
+      "at": [172, 34, 84, 32],
+      "sheet": "chrome",
+      "slice": [12, 12, 12, 12]
+    },
+    "field.focus": {
+      "at": [86, 34, 84, 32],
+      "sheet": "chrome",
+      "slice": [12, 12, 12, 12]
+    },
+    "field.normal": {
+      "at": [0, 34, 84, 32],
+      "sheet": "chrome",
+      "slice": [12, 12, 12, 12]
+    },
+    "focus.ring": {
+      "at": [132, 362, 24, 24],
+      "middle": "none",
+      "sheet": "chrome",
+      "slice": [9, 9, 9, 9]
+    },
+    "knob.disabled": {
+      "at": [168, 316, 16, 22],
+      "sheet": "chrome",
+      "slice": [6, 6, 6, 6]
+    },
+    "knob.normal": {
+      "at": [150, 316, 16, 22],
+      "sheet": "chrome",
+      "slice": [6, 6, 6, 6]
+    },
+    "mark.check": {
+      "at": [88, 340, 20, 20],
+      "sheet": "chrome",
+      "tint": true
+    },
+    "mark.radio": {
+      "at": [110, 340, 20, 20],
+      "sheet": "chrome",
+      "tint": true
+    },
+    "menu.frame": {
+      "at": [172, 136, 84, 32],
+      "sheet": "chrome",
+      "slice": [12, 12, 12, 12]
+    },
+    "menu.hover": {
+      "at": [258, 102, 84, 32],
+      "sheet": "chrome",
+      "slice": [12, 12, 12, 12]
+    },
+    "panel.normal": {
+      "at": [0, 136, 84, 32],
+      "sheet": "chrome",
+      "slice": [12, 12, 12, 12]
+    },
+    "row.checked": {
+      "at": [430, 68, 84, 32],
+      "sheet": "chrome",
+      "slice": [12, 12, 12, 12]
+    },
+    "row.hover": {
+      "at": [344, 68, 84, 32],
+      "sheet": "chrome",
+      "slice": [12, 12, 12, 12]
+    },
+    "slot.fill": {
+      "at": [120, 316, 28, 10],
+      "sheet": "chrome",
+      "slice": [4, 6, 4, 6]
+    },
+    "slot.normal": {
+      "at": [90, 316, 28, 10],
+      "sheet": "chrome",
+      "slice": [4, 6, 4, 6]
+    },
+    "splitter.normal": {
+      "at": [344, 136, 84, 32],
+      "sheet": "chrome",
+      "slice": [12, 12, 12, 12]
+    },
+    "switch.disabled": {
+      "at": [84, 388, 40, 22],
+      "sheet": "chrome",
+      "slice": [6, 12, 6, 12]
+    },
+    "switch.off": {
+      "at": [0, 388, 40, 22],
+      "sheet": "chrome",
+      "slice": [6, 12, 6, 12]
+    },
+    "switch.on": {
+      "at": [42, 388, 40, 22],
+      "sheet": "chrome",
+      "slice": [6, 12, 6, 12]
+    },
+    "tab.checked": {
+      "at": [172, 102, 84, 32],
+      "sheet": "chrome",
+      "slice": [12, 12, 12, 12]
+    },
+    "tab.hover": {
+      "at": [86, 102, 84, 32],
+      "sheet": "chrome",
+      "slice": [12, 12, 12, 12]
+    },
+    "tab.normal": {
+      "at": [0, 102, 84, 32],
+      "sheet": "chrome",
+      "slice": [12, 12, 12, 12]
+    },
+    "thumb.hover": {
+      "at": [30, 316, 28, 20],
+      "sheet": "chrome",
+      "slice": [8, 8, 8, 8]
+    },
+    "thumb.normal": {
+      "at": [0, 316, 28, 20],
+      "sheet": "chrome",
+      "slice": [8, 8, 8, 8]
+    },
+    "tool.checked": {
+      "at": [258, 68, 84, 32],
+      "sheet": "chrome",
+      "slice": [12, 12, 12, 12]
+    },
+    "tool.hover": {
+      "at": [86, 68, 84, 32],
+      "sheet": "chrome",
+      "slice": [12, 12, 12, 12]
+    },
+    "tool.normal": {
+      "at": [0, 68, 84, 32],
+      "sheet": "chrome",
+      "slice": [12, 12, 12, 12]
+    },
+    "tool.pressed": {
+      "at": [172, 68, 84, 32],
+      "sheet": "chrome",
+      "slice": [12, 12, 12, 12]
+    },
+    "tooltip.normal": {
+      "at": [258, 136, 84, 32],
+      "sheet": "chrome",
+      "slice": [12, 12, 12, 12]
+    },
+    "track.normal": {
+      "at": [60, 316, 28, 20],
+      "sheet": "chrome",
+      "slice": [8, 8, 8, 8]
+    },
+    "window.normal": {
+      "at": [0, 170, 64, 96],
+      "sheet": "chrome",
+      "slice": [12, 12, 12, 12]
+    }
+  },
+  "summary": "Brushed steel and glass over a deep blue display, on a domed cabinet — the skin the big player demo wears.",
+  "text": {
+    "caption": {
+      "bold": true,
+      "color": "#e9eff8",
+      "disabled": "#93a2b8"
+    },
+    "control": {
+      "checked": "#a5d6ff",
+      "color": "#e9eff8",
+      "default": "#04121f",
+      "disabled": "#5a6579",
+      "hover": "#ffffff",
+      "pressed": "#93a2b8"
+    }
+  },
+  "window": {
+    "border": [0, 16, 26, 16],
+    "caption": 56,
+    "layout": ":minimize,maximize,close",
+    "radius": [12, 12, 0, 0],
+    "shape": [
+      {
+        "at": [60, 0, 60, 12],
+        "radius": [10, 10, 0, 0],
+        "stretchX": true,
+        "stretchY": true
+      },
+      {
+        "at": [0, 8, 0, 0],
+        "radius": [12, 12, 34, 34],
+        "stretchX": true,
+        "stretchY": true
+      }
+    ]
+  },
+  "year": 2026
+}

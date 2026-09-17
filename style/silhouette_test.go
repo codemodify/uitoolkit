@@ -94,13 +94,18 @@ func probeFrame(w, h, capW, capH float32) DecorationFrame {
 // silhouette frames a rectangle with a full-width caption, and nothing about
 // this feature changed that for any of them.
 //
-// Two packs say otherwise, on purpose and by name: BeOS, whose tab is its
-// window's real outline, and Deck, the skin drawn to demonstrate the format.
-// The other two skins carry the hook (every skin does) and declare no shape,
-// which is the case worth pinning: having the hook is not having an outline.
+// Five packs say otherwise, on purpose and by name: BeOS, whose tab is its
+// window's real outline; Deck, the skin drawn to demonstrate the format; and
+// the three the player demos wear — Minim's stepped chin, Marquee's brow and
+// dome, and Lantern's asymmetric skirt. Nocturne and Cassette carry the hook
+// (every skin does) and declare no shape, which is the case worth pinning:
+// having the hook is not having an outline.
 func TestOnlyTheLooksThatMeanToDeclareASilhouette(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	shaped := map[string]bool{"beos": true, "deck": true}
+	shaped := map[string]bool{
+		"beos": true, "deck": true,
+		"minim": true, "marquee": true, "lantern": true,
+	}
 	fitted := map[string]bool{"beos": true}
 	st := DecorationState{Active: true}
 	for _, p := range ListBuiltinThemes() {

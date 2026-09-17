@@ -1,0 +1,611 @@
+{
+  "base": "win95",
+  "colors": {
+    "accent": "#63f0a4",
+    "accentHover": "#8cf7bd",
+    "accentPress": "#2a9160",
+    "background": "#262e2b",
+    "bevelDark": "#1c2421",
+    "bevelLight": "#4c5a54",
+    "border": "#080c0a",
+    "danger": "#e0705e",
+    "divider": "#1d2622",
+    "field": "#04140c",
+    "fieldBorder": "#16362a",
+    "focus": "#63f0a4",
+    "highlight": "#3e4a45",
+    "menuGutter": "#222a27",
+    "menuHover": "#123f2a",
+    "menuHoverBorder": "#63f0a4",
+    "selection": "#63f0a455",
+    "shadow": "#00000088",
+    "success": "#63f0a4",
+    "surface": "#2b3430",
+    "surfaceAlt": "#222a27",
+    "text": "#d6e8dd",
+    "textMuted": "#87a294",
+    "textOnAccent": "#07170f",
+    "thumb": "#313c38",
+    "track": "#151c19",
+    "warning": "#f0b455"
+  },
+  "design": {
+    "pixelated": true
+  },
+  "family": "dark",
+  "label": "Minim",
+  "lineage": "uitoolkit",
+  "metrics": {
+    "bevelDepth": 1,
+    "border": 1,
+    "checkbox": 16,
+    "comboH": 18,
+    "controlH": 18,
+    "fieldH": 18,
+    "focusWidth": 1,
+    "menuItemH": 18,
+    "progressH": 8,
+    "radio": 16,
+    "radius": 0,
+    "radiusSmall": 0,
+    "rowH": 16,
+    "scroll": 14,
+    "sliderH": 8,
+    "switchH": 16,
+    "switchW": 26,
+    "tabH": 18,
+    "thumb": 14,
+    "titleBar": 18
+  },
+  "parts": {
+    "arrow.down": {
+      "states": {
+        "normal": "arrow.down"
+      }
+    },
+    "arrow.left": {
+      "states": {
+        "normal": "arrow.left"
+      }
+    },
+    "arrow.right": {
+      "states": {
+        "normal": "arrow.right"
+      }
+    },
+    "arrow.up": {
+      "states": {
+        "normal": "arrow.up"
+      }
+    },
+    "bar": {
+      "states": {
+        "normal": "bar.normal"
+      }
+    },
+    "button": {
+      "states": {
+        "checked": "button.checked",
+        "default": "button.default",
+        "disabled": "button.disabled",
+        "focus": "button.focus",
+        "hover": "button.hover",
+        "normal": "button.normal",
+        "pressed": "button.pressed"
+      },
+      "text": "control"
+    },
+    "caption": {
+      "states": {
+        "inactive": "caption.inactive",
+        "normal": "caption.normal"
+      },
+      "text": "caption"
+    },
+    "caption.button": {
+      "states": {
+        "hover": "capbtn.hover",
+        "normal": "capbtn.normal",
+        "pressed": "capbtn.pressed"
+      },
+      "text": "control"
+    },
+    "check": {
+      "states": {
+        "checked": "check.checked",
+        "disabled": "check.disabled",
+        "hover": "check.hover",
+        "normal": "check.normal"
+      },
+      "text": "control"
+    },
+    "check.mark": {
+      "states": {
+        "disabled": "mark.check",
+        "normal": "mark.check"
+      }
+    },
+    "combo": {
+      "states": {
+        "hover": "combo.hover",
+        "normal": "combo.normal",
+        "pressed": "combo.pressed"
+      },
+      "text": "control"
+    },
+    "expander.open": {
+      "states": {
+        "normal": "expander.open"
+      }
+    },
+    "expander.shut": {
+      "states": {
+        "normal": "expander.shut"
+      }
+    },
+    "field": {
+      "states": {
+        "disabled": "field.disabled",
+        "focus": "field.focus",
+        "normal": "field.normal"
+      },
+      "text": "control"
+    },
+    "focus": {
+      "states": {
+        "normal": "focus.ring"
+      }
+    },
+    "menu": {
+      "states": {
+        "hover": "menu.hover",
+        "normal": "menu.hover"
+      },
+      "text": "control"
+    },
+    "menu.frame": {
+      "states": {
+        "normal": "menu.frame"
+      }
+    },
+    "panel": {
+      "states": {
+        "normal": "panel.normal"
+      }
+    },
+    "progress.back": {
+      "states": {
+        "normal": "slot.normal"
+      }
+    },
+    "progress.fill": {
+      "states": {
+        "normal": "slot.fill"
+      }
+    },
+    "radio.mark": {
+      "states": {
+        "disabled": "mark.radio",
+        "normal": "mark.radio"
+      }
+    },
+    "row": {
+      "states": {
+        "checked": "row.checked",
+        "hover": "row.hover",
+        "normal": "row.hover"
+      },
+      "text": "control"
+    },
+    "slider.fill": {
+      "states": {
+        "normal": "slot.fill"
+      }
+    },
+    "slider.thumb": {
+      "states": {
+        "disabled": "knob.disabled",
+        "normal": "knob.normal"
+      }
+    },
+    "slider.track": {
+      "states": {
+        "normal": "slot.normal"
+      }
+    },
+    "splitter": {
+      "states": {
+        "normal": "splitter.normal"
+      }
+    },
+    "switch.knob": {
+      "states": {
+        "disabled": "knob.disabled",
+        "normal": "knob.normal"
+      }
+    },
+    "switch.track": {
+      "states": {
+        "checked": "switch.on",
+        "disabled": "switch.disabled",
+        "normal": "switch.off"
+      }
+    },
+    "tab": {
+      "states": {
+        "checked": "tab.checked",
+        "hover": "tab.hover",
+        "normal": "tab.normal"
+      },
+      "text": "control"
+    },
+    "thumb": {
+      "states": {
+        "hover": "thumb.hover",
+        "normal": "thumb.normal"
+      }
+    },
+    "tool": {
+      "states": {
+        "checked": "tool.checked",
+        "hover": "tool.hover",
+        "normal": "tool.normal",
+        "pressed": "tool.pressed"
+      },
+      "text": "control"
+    },
+    "tooltip": {
+      "states": {
+        "normal": "tooltip.normal"
+      },
+      "text": "control"
+    },
+    "track": {
+      "states": {
+        "normal": "track.normal"
+      }
+    },
+    "window": {
+      "states": {
+        "normal": "window.normal"
+      }
+    }
+  },
+  "sheets": {
+    "chrome": {
+      "1x": "art/chrome.png",
+      "2x": "art/chrome@2x.png",
+      "pixelated": true
+    }
+  },
+  "skin": 1,
+  "sprites": {
+    "arrow.down": {
+      "at": [0, 156, 16, 16],
+      "sheet": "chrome",
+      "tint": true
+    },
+    "arrow.left": {
+      "at": [36, 156, 16, 16],
+      "sheet": "chrome",
+      "tint": true
+    },
+    "arrow.right": {
+      "at": [54, 156, 16, 16],
+      "sheet": "chrome",
+      "tint": true
+    },
+    "arrow.up": {
+      "at": [18, 156, 16, 16],
+      "sheet": "chrome",
+      "tint": true
+    },
+    "bar.normal": {
+      "at": [160, 60, 30, 18],
+      "sheet": "chrome",
+      "slice": [3, 3, 3, 3]
+    },
+    "button.checked": {
+      "at": [192, 0, 30, 18],
+      "sheet": "chrome",
+      "slice": [3, 3, 3, 3]
+    },
+    "button.default": {
+      "at": [160, 0, 30, 18],
+      "sheet": "chrome",
+      "slice": [3, 3, 3, 3]
+    },
+    "button.disabled": {
+      "at": [96, 0, 30, 18],
+      "sheet": "chrome",
+      "slice": [3, 3, 3, 3]
+    },
+    "button.focus": {
+      "at": [128, 0, 30, 18],
+      "sheet": "chrome",
+      "slice": [3, 3, 3, 3]
+    },
+    "button.hover": {
+      "at": [32, 0, 30, 18],
+      "sheet": "chrome",
+      "slice": [3, 3, 3, 3]
+    },
+    "button.normal": {
+      "at": [0, 0, 30, 18],
+      "sheet": "chrome",
+      "slice": [3, 3, 3, 3]
+    },
+    "button.pressed": {
+      "at": [64, 0, 30, 18],
+      "sheet": "chrome",
+      "slice": [3, 3, 3, 3]
+    },
+    "capbtn.hover": {
+      "at": [134, 100, 14, 12],
+      "sheet": "chrome",
+      "slice": [3, 3, 3, 3]
+    },
+    "capbtn.normal": {
+      "at": [118, 100, 14, 12],
+      "sheet": "chrome",
+      "slice": [3, 3, 3, 3]
+    },
+    "capbtn.pressed": {
+      "at": [150, 100, 14, 12],
+      "sheet": "chrome",
+      "slice": [3, 3, 3, 3]
+    },
+    "caption.inactive": {
+      "at": [68, 100, 48, 18],
+      "sheet": "chrome",
+      "slice": [4, 8, 4, 8]
+    },
+    "caption.normal": {
+      "at": [18, 100, 48, 18],
+      "sheet": "chrome",
+      "slice": [4, 8, 4, 8]
+    },
+    "check.checked": {
+      "at": [36, 138, 16, 16],
+      "sheet": "chrome",
+      "slice": [5, 5, 5, 5]
+    },
+    "check.disabled": {
+      "at": [54, 138, 16, 16],
+      "sheet": "chrome",
+      "slice": [5, 5, 5, 5]
+    },
+    "check.hover": {
+      "at": [18, 138, 16, 16],
+      "sheet": "chrome",
+      "slice": [5, 5, 5, 5]
+    },
+    "check.normal": {
+      "at": [0, 138, 16, 16],
+      "sheet": "chrome",
+      "slice": [5, 5, 5, 5]
+    },
+    "combo.hover": {
+      "at": [128, 20, 30, 18],
+      "sheet": "chrome",
+      "slice": [3, 3, 3, 3]
+    },
+    "combo.normal": {
+      "at": [96, 20, 30, 18],
+      "sheet": "chrome",
+      "slice": [3, 3, 3, 3]
+    },
+    "combo.pressed": {
+      "at": [160, 20, 30, 18],
+      "sheet": "chrome",
+      "slice": [3, 3, 3, 3]
+    },
+    "expander.open": {
+      "at": [72, 156, 16, 16],
+      "sheet": "chrome",
+      "tint": true
+    },
+    "expander.shut": {
+      "at": [90, 156, 16, 16],
+      "sheet": "chrome",
+      "tint": true
+    },
+    "field.disabled": {
+      "at": [64, 20, 30, 18],
+      "sheet": "chrome",
+      "slice": [3, 3, 3, 3]
+    },
+    "field.focus": {
+      "at": [32, 20, 30, 18],
+      "sheet": "chrome",
+      "slice": [3, 3, 3, 3]
+    },
+    "field.normal": {
+      "at": [0, 20, 30, 18],
+      "sheet": "chrome",
+      "slice": [3, 3, 3, 3]
+    },
+    "focus.ring": {
+      "at": [108, 156, 16, 16],
+      "middle": "none",
+      "sheet": "chrome",
+      "slice": [4, 4, 4, 4]
+    },
+    "knob.disabled": {
+      "at": [122, 120, 10, 16],
+      "sheet": "chrome"
+    },
+    "knob.normal": {
+      "at": [110, 120, 10, 16],
+      "sheet": "chrome"
+    },
+    "mark.check": {
+      "at": [72, 138, 16, 16],
+      "sheet": "chrome",
+      "tint": true
+    },
+    "mark.radio": {
+      "at": [90, 138, 16, 16],
+      "sheet": "chrome",
+      "tint": true
+    },
+    "menu.frame": {
+      "at": [0, 80, 30, 18],
+      "sheet": "chrome",
+      "slice": [3, 3, 3, 3]
+    },
+    "menu.hover": {
+      "at": [96, 60, 30, 18],
+      "sheet": "chrome",
+      "slice": [3, 3, 3, 3]
+    },
+    "panel.normal": {
+      "at": [128, 60, 30, 18],
+      "sheet": "chrome",
+      "slice": [3, 3, 3, 3]
+    },
+    "row.checked": {
+      "at": [160, 40, 30, 18],
+      "sheet": "chrome",
+      "slice": [3, 3, 3, 3]
+    },
+    "row.hover": {
+      "at": [128, 40, 30, 18],
+      "sheet": "chrome",
+      "slice": [3, 3, 3, 3]
+    },
+    "slot.fill": {
+      "at": [88, 120, 20, 8],
+      "sheet": "chrome",
+      "slice": [3, 3, 3, 3]
+    },
+    "slot.normal": {
+      "at": [66, 120, 20, 8],
+      "sheet": "chrome",
+      "slice": [3, 3, 3, 3]
+    },
+    "splitter.normal": {
+      "at": [64, 80, 30, 18],
+      "sheet": "chrome",
+      "slice": [3, 3, 3, 3]
+    },
+    "switch.disabled": {
+      "at": [56, 174, 26, 16],
+      "sheet": "chrome",
+      "slice": [4, 8, 4, 8]
+    },
+    "switch.off": {
+      "at": [0, 174, 26, 16],
+      "sheet": "chrome",
+      "slice": [4, 8, 4, 8]
+    },
+    "switch.on": {
+      "at": [28, 174, 26, 16],
+      "sheet": "chrome",
+      "slice": [4, 8, 4, 8]
+    },
+    "tab.checked": {
+      "at": [64, 60, 30, 18],
+      "sheet": "chrome",
+      "slice": [3, 3, 3, 3]
+    },
+    "tab.hover": {
+      "at": [32, 60, 30, 18],
+      "sheet": "chrome",
+      "slice": [3, 3, 3, 3]
+    },
+    "tab.normal": {
+      "at": [0, 60, 30, 18],
+      "sheet": "chrome",
+      "slice": [3, 3, 3, 3]
+    },
+    "thumb.hover": {
+      "at": [22, 120, 20, 14],
+      "sheet": "chrome",
+      "slice": [3, 3, 3, 3]
+    },
+    "thumb.normal": {
+      "at": [0, 120, 20, 14],
+      "sheet": "chrome",
+      "slice": [3, 3, 3, 3]
+    },
+    "tool.checked": {
+      "at": [96, 40, 30, 18],
+      "sheet": "chrome",
+      "slice": [3, 3, 3, 3]
+    },
+    "tool.hover": {
+      "at": [32, 40, 30, 18],
+      "sheet": "chrome",
+      "slice": [3, 3, 3, 3]
+    },
+    "tool.normal": {
+      "at": [0, 40, 30, 18],
+      "sheet": "chrome",
+      "slice": [3, 3, 3, 3]
+    },
+    "tool.pressed": {
+      "at": [64, 40, 30, 18],
+      "sheet": "chrome",
+      "slice": [3, 3, 3, 3]
+    },
+    "tooltip.normal": {
+      "at": [32, 80, 30, 18],
+      "sheet": "chrome",
+      "slice": [3, 3, 3, 3]
+    },
+    "track.normal": {
+      "at": [44, 120, 20, 14],
+      "sheet": "chrome",
+      "slice": [3, 3, 3, 3]
+    },
+    "window.normal": {
+      "at": [0, 100, 16, 16],
+      "middle": "tile",
+      "sheet": "chrome"
+    }
+  },
+  "summary": "A pixel front panel with a phosphor display, and a window that stands on a stepped chin — the skin the compact player demo wears.",
+  "text": {
+    "caption": {
+      "bold": true,
+      "color": "#63f0a4",
+      "disabled": "#87a294"
+    },
+    "control": {
+      "checked": "#1a1206",
+      "color": "#d6e8dd",
+      "default": "#07170f",
+      "disabled": "#4f615a",
+      "hover": "#ffffff",
+      "pressed": "#d6e8dd"
+    },
+    "onLight": {
+      "color": "#080c0a",
+      "disabled": "#4f615a"
+    }
+  },
+  "window": {
+    "border": [0, 4, 18, 4],
+    "caption": 18,
+    "layout": ":minimize,close",
+    "shape": [
+      {
+        "at": [0, 0, 0, 14],
+        "stretchX": true,
+        "stretchY": true
+      },
+      {
+        "at": [6, 0, 6, 7],
+        "stretchX": true,
+        "stretchY": true
+      },
+      {
+        "at": [14, 0, 14, 0],
+        "stretchX": true,
+        "stretchY": true
+      }
+    ]
+  },
+  "year": 2026
+}
