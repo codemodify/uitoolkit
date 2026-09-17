@@ -121,12 +121,62 @@ type Frame struct {
 	// rounded corner). Without it the backend keeps its opaque buffers and
 	// the full opaque region, as for a window with no frame of ours.
 	Alpha bool
+
+	// Shape, when non-nil, is the window's silhouette (see [Shape]):
+	// exactly where the window is, and so exactly where a press reaches it.
+	// Everything else — the margin, and a hole in the middle as much as the
+	// space around a disc — is not the window at all: the desktop shows
+	// through it and a press lands on whatever is behind.
+	//
+	// It replaces Margin and Input entirely: a shaped window that wants a
+	// resize band puts the band in the shape itself. An empty but non-nil
+	// Shape is a window that takes no input anywhere (a click-through
+	// overlay); a nil Shape is an ordinary rectangular window, and takes
+	// exactly the path it took before shapes existed.
+	Shape []FrameRect
+	// Opaque, when non-nil, replaces the rounded-rect opaque region: the
+	// pixels a compositor may treat as solid and skip drawing behind.
+	// Claiming a translucent pixel here is visible corruption, so it holds
+	// only pixels the window really does paint solid.
+	Opaque []FrameRect
+	// Blur is where the compositor should blur what is *behind* the window
+	// — real glass, not the window's own pixels (ext_background_effect_v1
+	// on Wayland, _KDE_NET_WM_BLUR_BEHIND_REGION on X11). Nil asks for
+	// none. A desktop that cannot blur ignores it, so a look that asks
+	// keeps whatever it paints for itself.
+	Blur []FrameRect
 }
 
 // Zero reports whether f asks for nothing: no margin, no rounded corner, no
-// alpha — an opaque frame that fills its surface.
+// alpha, no shape and no blur — an opaque frame that fills its surface.
 func (f Frame) Zero() bool {
-	return f.Margin.Zero() && !f.Alpha && f.Radius == [4]float32{}
+	return f.Margin.Zero() && !f.Alpha && f.Radius == [4]float32{} &&
+		f.Shape == nil && f.Opaque == nil && f.Blur == nil
+}
+
+// Same reports whether f and g ask for the same thing. Frame stopped being
+// comparable with == when it grew regions, and every backend compares the
+// frame it is handed against the one it already applied.
+func (f Frame) Same(g Frame) bool {
+	if f.Margin != g.Margin || f.Input != g.Input || f.Radius != g.Radius || f.Alpha != g.Alpha {
+		return false
+	}
+	return sameRects(f.Shape, g.Shape) && sameRects(f.Opaque, g.Opaque) && sameRects(f.Blur, g.Blur)
+}
+
+// sameRects compares two region lists, telling "no region" (nil) apart from
+// "the empty region" (non-nil, no rectangles): the first leaves the
+// surface's own default in place, the second states that nothing is there.
+func sameRects(a, b []FrameRect) bool {
+	if len(a) != len(b) || (a == nil) != (b == nil) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // FrameMargin is a margin of at least want device pixels that is also a
@@ -535,4 +585,27 @@ type Lowerer interface {
 // way only (X11's _NET_WM_STATE_MAXIMIZED_VERT / _HORZ; xdg-shell cannot).
 type AxisMaximizer interface {
 	ToggleMaximizeAxis(vertical bool)
+}
+
+// GlassSurface is an optional Surface capability: the desktop can blur what
+// lies *behind* the window, so a translucent window becomes real glass over
+// the desktop rather than over its own pixels. Wayland asks
+// ext_background_effect_v1, X11 sets _KDE_NET_WM_BLUR_BEHIND_REGION; the
+// region itself is [Frame.Blur].
+//
+// The answer changes while the window is up — KWin drops the capability
+// when desktop effects are switched off — so it is asked afresh rather than
+// cached, and a look that asks for glass must still paint something that
+// stands on its own without it.
+type GlassSurface interface {
+	// BlurBehindSupported reports whether the desktop blurs behind a
+	// window now.
+	BlurBehindSupported() bool
+}
+
+// SurfaceBlurBehind reports whether s's desktop can blur what is behind the
+// window (false for a surface that cannot say).
+func SurfaceBlurBehind(s Surface) bool {
+	g, ok := s.(GlassSurface)
+	return ok && g.BlurBehindSupported()
 }

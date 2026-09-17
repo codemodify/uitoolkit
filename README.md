@@ -59,6 +59,11 @@ go get github.com/codemodify/paintengine2d@v0.9.0
     SourceGit's flat cells — handing moves, resizes and the window menu to
     the desktop; "Use system title bar and borders" gives the desktop's
     frame back. See [docs/decorations.md](docs/decorations.md).
+  - Windows of any shape: a silhouette instead of a rectangle, with a hole
+    through it you can see the desktop through and click through to
+    whatever is behind, on Wayland and X11 and at any scale — and glass,
+    the desktop blurred by the compositor behind a translucent window. See
+    [docs/shapes.md](docs/shapes.md).
   - Drag and drop both ways on both backends: takes files and text
     dropped from other apps, and drags its own out to them — with a drag
     icon, copy / move / link, and a payload that stays in-process for a

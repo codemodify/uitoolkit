@@ -429,6 +429,13 @@ margin   = max(the look's shadow reach, the 10 px resize band), per edge,
 | Tiled (`xdg_toplevel` `tiled_*`, KWin quick tile) | none on the tiled edges | square where a tiled edge meets | none on those edges |
 | No compositing manager (X11) | none | square | none — `WindowState.Solid`, GTK's `.solid-csd` |
 
+A window's **silhouette** follows the same rules one step further: a
+maximized, full-screen or tiled window drops its shape as it drops its
+corners and its shadow, and gets it back on restore. An uncomposited X11
+screen keeps the shape — XShape still cuts the window, hard-edged — but
+drops its glass, since there is nothing behind it to blur. See
+[docs/shapes.md](shapes.md).
+
 KWin sends `tiled_*` for quick tiles and screen-anchored tiles, so a
 window tiled to the left keeps its shadow only on its free right edge.
 EWMH has no tiled state at all, so an X11 quick tile keeps its shadow (as
@@ -437,8 +444,8 @@ right place.
 
 ### Alpha only where a frame needs it
 
-`Frame.Alpha` is set only when there is a shadow or a rounded corner to
-paint. Without it the buffers stay opaque (`XRGB8888`, an EGL config with
+`Frame.Alpha` is set only when there is a shadow, a rounded corner, a
+silhouette or glass to paint. Without it the buffers stay opaque (`XRGB8888`, an EGL config with
 no alpha, the screen's own visual on X11) and the opaque region is the
 whole surface — the path every window took before Phase 3, so an opaque
 window can never present see-through. With it, the content is still opaque
@@ -567,7 +574,10 @@ toggle-maximizes on Wayland (X11 does it one way), "lower" works on X11 only,
   offset the window is carried by.
   Put a second window behind one with a shadow to see the shadow composite
   and to check that a click in the outer margin reaches it, while one in
-  the resize band resizes.
+  the resize band resizes. `examples/shapes -mode backdrop` is the test
+  card to put behind a shaped or glassy window: a patch of it seen through
+  a hole says which patch it is, so moving the window shows a different one
+  and a blur of it is unmistakable.
 
 ## Phases
 
@@ -595,6 +605,18 @@ toggle-maximizes on Wayland (X11 does it one way), "lower" works on X11 only,
    of its strip and a dock panel dragged out of its host as the two users
    of it, and `Window.Position()` for the backends that are told where a
    window is ([tear-off](#tear-off)).
+6. **Phase 5** (done): shaped and transparent windows — `platform.Shape`,
+   `Surface.SetShape` on both backends, glass through
+   `ext_background_effect_v1` and `_KDE_NET_WM_BLUR_BEHIND_REGION`, a
+   silhouette in the window's frame state with the maximize / tile /
+   full-screen rules above, `Capture` and damage following it, a shadow
+   that blurs the silhouette's mask rather than a rounded rectangle, and a
+   widget-level hit shape with the bounding box as the default
+   ([docs/shapes.md](shapes.md)).
+
+Phase 3's ARGB buffers, regions and compositing-manager detection are what
+phase 5 is built on: a silhouette is the same machinery told a more
+interesting region.
 
 ## Still open
 

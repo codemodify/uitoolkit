@@ -110,6 +110,13 @@ type DecorationSpec struct {
 	// engine states the look's own frame and nothing else.
 	Radius [4]float32
 	Shadow Insets
+	// Glass: the look wants the desktop blurred behind its windows, so a
+	// translucent background is real glass over the desktop rather than
+	// the approximation the look paints for itself (style/glass.go). It is
+	// a request, not a promise — DecorationOf drops it on an uncomposited
+	// screen, and a desktop that cannot blur ignores it — so a look that
+	// sets it must still look right without it.
+	Glass bool
 }
 
 // ButtonBox is the box of caption button k in s: the close button's own
@@ -182,6 +189,11 @@ func DecorationOf(lk LookAndFeel, st DecorationState) DecorationSpec {
 	s := e.Decoration(c, st)
 	if st.Maximized {
 		s.Border = Insets{}
+	}
+	if st.Solid {
+		// Nothing composites the window: there is no desktop behind it to
+		// blur, and alpha counts for nothing.
+		s.Glass = false
 	}
 	if st.Maximized || st.Solid {
 		s.Radius, s.Shadow = [4]float32{}, Insets{}
