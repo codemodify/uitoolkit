@@ -1,0 +1,254 @@
+{
+  "base": "breeze-night",
+  "colors": {
+    "accent": "#3fd0c9",
+    "accentHover": "#82f0eb",
+    "accentPress": "#28a8a2",
+    "background": "#1e242c",
+    "bevelDark": "#070a0e",
+    "bevelLight": "#3d4756",
+    "border": "#343d48",
+    "danger": "#e0705e",
+    "divider": "#2a323c",
+    "field": "#0b0f14",
+    "fieldBorder": "#333c47",
+    "focus": "#3fd0c9",
+    "highlight": "#ffffff12",
+    "menuGutter": "#1d232b",
+    "menuHover": "#3fd0c93a",
+    "menuHoverBorder": "#3fd0c9",
+    "selection": "#3fd0c959",
+    "shadow": "#00000080",
+    "success": "#76c89b",
+    "surface": "#232932",
+    "surfaceAlt": "#1b2028",
+    "text": "#e8eef2",
+    "textMuted": "#94a2ad",
+    "textOnAccent": "#042120",
+    "thumb": "#3b4553",
+    "track": "#0b0f14",
+    "warning": "#e0b24a"
+  },
+  "family": "dark",
+  "label": "Deck",
+  "lineage": "uitoolkit",
+  "metrics": {
+    "border": 1,
+    "checkbox": 20,
+    "comboH": 36,
+    "controlH": 36,
+    "fieldH": 36,
+    "focusWidth": 2,
+    "menuItemH": 28,
+    "progressH": 10,
+    "radio": 20,
+    "radius": 8,
+    "radiusSmall": 6,
+    "rowH": 28,
+    "scroll": 12,
+    "sliderH": 8,
+    "switchH": 24,
+    "switchW": 44,
+    "tabH": 34,
+    "thumb": 20,
+    "titleBar": 46
+  },
+  "parts": {
+    "bar": {
+      "states": {
+        "normal": "bar.normal"
+      }
+    },
+    "button": {
+      "states": {
+        "checked": "button.checked",
+        "default": "button.default",
+        "disabled": "button.disabled",
+        "focus": "button.focus",
+        "hover": "button.hover",
+        "normal": "button.normal",
+        "pressed": "button.pressed"
+      },
+      "text": "control"
+    },
+    "caption": {
+      "states": {
+        "inactive": "caption.inactive",
+        "normal": "caption.normal"
+      },
+      "text": "caption"
+    },
+    "caption.button": {
+      "states": {
+        "hover": "capbtn.hover",
+        "normal": "capbtn.normal",
+        "pressed": "capbtn.pressed"
+      },
+      "text": "control"
+    },
+    "field": {
+      "states": {
+        "disabled": "field.disabled",
+        "focus": "field.focus",
+        "normal": "field.normal"
+      },
+      "text": "control"
+    },
+    "focus": {
+      "states": {
+        "normal": "focus.ring"
+      }
+    },
+    "panel": {
+      "states": {
+        "normal": "panel.normal"
+      }
+    },
+    "window": {
+      "states": {
+        "normal": "window.normal"
+      }
+    }
+  },
+  "sheets": {
+    "chrome": {
+      "1x": "art/chrome.png",
+      "2x": "art/chrome@2x.png"
+    }
+  },
+  "skin": 1,
+  "sprites": {
+    "bar.normal": {
+      "at": [42, 76, 40, 32],
+      "sheet": "chrome",
+      "slice": [2, 4, 2, 4]
+    },
+    "button.checked": {
+      "at": [444, 0, 72, 36],
+      "sheet": "chrome",
+      "slice": [0, 18, 0, 18]
+    },
+    "button.default": {
+      "at": [370, 0, 72, 36],
+      "sheet": "chrome",
+      "slice": [0, 18, 0, 18]
+    },
+    "button.disabled": {
+      "at": [222, 0, 72, 36],
+      "sheet": "chrome",
+      "slice": [0, 18, 0, 18]
+    },
+    "button.focus": {
+      "at": [296, 0, 72, 36],
+      "sheet": "chrome",
+      "slice": [0, 18, 0, 18]
+    },
+    "button.hover": {
+      "at": [74, 0, 72, 36],
+      "sheet": "chrome",
+      "slice": [0, 18, 0, 18]
+    },
+    "button.normal": {
+      "at": [0, 0, 72, 36],
+      "sheet": "chrome",
+      "slice": [0, 18, 0, 18]
+    },
+    "button.pressed": {
+      "at": [148, 0, 72, 36],
+      "sheet": "chrome",
+      "slice": [0, 18, 0, 18]
+    },
+    "capbtn.hover": {
+      "at": [26, 184, 24, 28],
+      "sheet": "chrome",
+      "slice": [12, 0, 12, 0]
+    },
+    "capbtn.normal": {
+      "at": [0, 184, 24, 28],
+      "sheet": "chrome",
+      "slice": [12, 0, 12, 0]
+    },
+    "capbtn.pressed": {
+      "at": [52, 184, 24, 28],
+      "sheet": "chrome",
+      "slice": [12, 0, 12, 0]
+    },
+    "caption.inactive": {
+      "at": [148, 118, 96, 46],
+      "sheet": "chrome",
+      "slice": [16, 16, 5, 16]
+    },
+    "caption.normal": {
+      "at": [50, 118, 96, 46],
+      "sheet": "chrome",
+      "slice": [16, 16, 5, 16]
+    },
+    "field.disabled": {
+      "at": [148, 38, 72, 36],
+      "sheet": "chrome",
+      "slice": [0, 18, 0, 18]
+    },
+    "field.focus": {
+      "at": [74, 38, 72, 36],
+      "sheet": "chrome",
+      "slice": [0, 18, 0, 18]
+    },
+    "field.normal": {
+      "at": [0, 38, 72, 36],
+      "sheet": "chrome",
+      "slice": [0, 18, 0, 18]
+    },
+    "focus.ring": {
+      "at": [84, 76, 40, 40],
+      "middle": "none",
+      "sheet": "chrome",
+      "slice": [16, 16, 16, 16]
+    },
+    "panel.normal": {
+      "at": [0, 76, 40, 32],
+      "sheet": "chrome",
+      "slice": [8, 8, 8, 8]
+    },
+    "window.normal": {
+      "at": [0, 118, 48, 64],
+      "sheet": "chrome",
+      "slice": [8, 8, 8, 8]
+    }
+  },
+  "summary": "The toolkit's shaped skin: a window cut to a deck's outline, with the desktop beside it, and round buttons that take the pointer only on their ink.",
+  "text": {
+    "caption": {
+      "bold": true,
+      "color": "#e8eef2",
+      "disabled": "#94a2ad"
+    },
+    "control": {
+      "checked": "#82f0eb",
+      "color": "#e8eef2",
+      "default": "#042120",
+      "disabled": "#5a646f",
+      "hover": "#ffffff",
+      "pressed": "#94a2ad"
+    }
+  },
+  "window": {
+    "border": [0, 26, 26, 26],
+    "caption": 46,
+    "layout": ":minimize,maximize,close",
+    "radius": [24, 24, 0, 0],
+    "shape": [
+      {
+        "at": [0, 0, 0, 46],
+        "radius": [24, 24, 0, 0],
+        "stretchX": true
+      },
+      {
+        "at": [18, 40, 18, 0],
+        "radius": [0, 0, 22, 22],
+        "stretchX": true,
+        "stretchY": true
+      }
+    ]
+  },
+  "year": 2026
+}

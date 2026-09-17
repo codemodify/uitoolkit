@@ -102,6 +102,14 @@ type DecorationSpec struct {
 	// the theme's layout to the desktop's (look.json "captionButtons");
 	// empty: the desktop's.
 	Layout string
+	// CaptionFits makes the caption band only as wide as its contents — the
+	// buttons at its ends and the title between them — instead of the
+	// window's full width. It is BeOS's tab, and it goes with a silhouette
+	// ([WindowShapeEngine]) that leaves the rest of the top edge to the
+	// desktop: a caption narrower than the window is a band with a gap
+	// beside it unless the window really stops there. DecorationOf drops it
+	// wherever it drops the silhouette, so the two are never out of step.
+	CaptionFits bool
 	// Radius are the outer corners, top-left clockwise, and Shadow how far
 	// the frame's drop shadow reaches past the window on each side — the
 	// invisible margin the window asks the compositor for, which also
@@ -187,6 +195,13 @@ func DecorationOf(lk LookAndFeel, st DecorationState) DecorationSpec {
 	}
 	c, e := decorationFor(lk)
 	s := e.Decoration(c, st)
+	if st.Maximized || st.Tiled != 0 {
+		// A fitted caption is half of a silhouette — the half the window
+		// lays out — so it is dropped exactly where WindowShapeOf drops the
+		// other half. A narrow band on a window that fills its box would
+		// leave a gap along the top edge with nothing behind it.
+		s.CaptionFits = false
+	}
 	if st.Maximized {
 		s.Border = Insets{}
 	}

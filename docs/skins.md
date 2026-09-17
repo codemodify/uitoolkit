@@ -21,10 +21,11 @@ style/skins/<name>/skin.json        skins the toolkit ships (embedded)
 ~/.config/uitoolkit/skins/<name>.uskin   or the same thing as one zip
 ```
 
-Two skins ship with the toolkit: **Nocturne**, amber on charcoal, drawn from
-paths so it is exact at every scale; and **Cassette**, a six-colour pixel
-skin with two-pixel bevels that exercises the `pixelated` path. Both are
-generated — see [The demo skins](#the-demo-skins).
+Three skins ship with the toolkit: **Nocturne**, amber on charcoal, drawn
+from paths so it is exact at every scale; **Cassette**, a six-colour pixel
+skin with two-pixel bevels that exercises the `pixelated` path; and **Deck**,
+whose window is not a rectangle and whose buttons take the pointer only on
+their ink. All three are generated — see [The demo skins](#the-demo-skins).
 
 ## The three rules
 
@@ -43,7 +44,10 @@ language, no bytecode and no expression of any kind in the format, and the
 parts a skin may bind are a fixed table. A skinned button is still a
 `widgets.Button` — it has a name, a role, a keyboard route, an accessibility
 node and a focus ring — that happens to be painted from a sprite. Tab reaches
-it, Orca reads it, a magnifier follows it.
+it, Orca reads it, a magnifier follows it. A skin whose window is not a
+rectangle and whose button is a disc ([Shape](#shape)) is no exception: the
+art says where those are, and everything that is not a pointer — the tab
+order, the mnemonics, the accessibility tree — never looks at it.
 
 **3. A skin is always a partial override.** Anything it does not describe is
 painted by its **base pack's own engine**, so a skin over `win95` keeps
@@ -131,9 +135,12 @@ version; everything else has a default.
     "caption": 34,
     "radius": [7, 7, 0, 0],     // top-left clockwise
     "layout": ":minimize,maximize,close",
-    // The silhouette, for when the toolkit can cut a window to one.
+    // The silhouette the window is cut to: a union of rounded rects that
+    // stretch with it, or { "art": "<sprite>" } for a skin whose window is
+    // a picture. See "Shape" below.
     "shape": [
-      { "at": [0, 0, 0, 0], "radius": [7, 7, 0, 0],
+      { "at": [0, 0, 0, 46], "radius": [24, 24, 0, 0], "stretchX": true },
+      { "at": [18, 40, 18, 0], "radius": [0, 0, 22, 22],
         "stretchX": true, "stretchY": true }
     ]
   },
@@ -360,24 +367,96 @@ from its inner rect. That is clamp-to-edge, done by hand. It also means no
 blit can ever reach a neighbouring sprite on the sheet, which is the other
 artefact an atlas would otherwise have.
 
-## What a skin cannot do yet
+## Shape
 
-**Shape its window.** A skin paints inside an ordinary rectangular window.
-The manifest already carries `window.shape` — a union of rounded rects in
-design pixels, with a per-rect flag saying whether it stretches with the
-window — and it is validated, resolved (`style.SkinWindowRects`) and tested,
-so a skin written today is a complete document. Nothing consumes it until the
-shaped-window work lands.
+A skin's window does not have to be a rectangle, and its controls do not have
+to take the pointer across their whole box. Both come from the same place a
+skin's everything else comes from — the manifest and the art — and both are
+cut by the shaped-window machinery in [docs/shapes.md](shapes.md).
+
+### The window
+
+`window.shape` is the silhouette. It takes two forms, because skins come in
+two kinds:
+
+```jsonc
+// A union of rounded rects in design pixels. Each says whether it stretches
+// with the window: under stretchX the third number is a margin from the
+// right edge rather than a width, and under stretchY the fourth is a margin
+// from the bottom.
+"shape": [
+  { "at": [0, 0, 0, 46], "radius": [24, 24, 0, 0], "stretchX": true },
+  { "at": [18, 40, 18, 0], "radius": [0, 0, 22, 22], "stretchX": true, "stretchY": true }
+]
+
+// Or: the alpha channel of a sprite *is* the outline.
+"shape": { "art": "window.normal" }
+```
+
+Reach for the rectangles. They are resolved against the window at the display
+scale, so the outline is redrawn at every size and exact at 1.25, 1.5 and
+1.75 rather than stretched, and the window can still be dragged to any size.
+Two rects that overlap are one silhouette — the union is filled nonzero — so
+a tab meets the body under it with no seam.
 
 The form was chosen over an SVG path string deliberately: nothing in the
 toolkit parses path strings, and a rect union is already what both consumers
 want — a compositor input or opaque region *is* a rect list, and hit-testing
 one is a loop rather than a rasterisation.
 
-**Shape its controls.** Same reason. A skin's round button takes the pointer
-in its bounding box. The art's own alpha is the obvious source for a per-
-control hit shape, and every sprite is already cut into its own image, so a
-coverage threshold is a read of its pixels.
+The `art` form is for the skin the rectangles cannot describe: the fixed
+panel whose edge is in the picture and nowhere else, which is the shape a
+WinAmp region file was. It is a bitmap, so it resamples at any size but its
+own — the trade the art made when it was drawn.
+
+Two things follow from the silhouette being a *frame's*:
+
+- It is dropped while the window is maximized or tiled, and comes back on
+  restore, exactly as the frame's corners and shadow are. An uncomposited X11
+  screen keeps it, hard-edged, because XShape is the only thing that works
+  there at all.
+- **Keep the content inside it.** `window.border` is what does that: the
+  content box is the window less the border, so a skin whose body is drawn in
+  from the window's edge states a border at least that wide. Deck's body is
+  18 design pixels in and its border is 26, which leaves eight pixels of
+  shell between the content and the cut.
+
+A silhouette that is the plain window box, rounded no more than
+`window.radius` already rounds it, is not a silhouette and is not used. It
+would describe nothing the frame does not do already, and it is not free: a
+shaped window's input region *replaces* the resize band in its shadow margin,
+so it would be resized from inside its own edges instead of from the band
+outside them. Nocturne's `shape` is exactly that, and Nocturne is still a
+rectangle.
+
+### The controls
+
+A skinned control is where its art is. Nothing is declared for this: the
+engine reads the alpha of the sprite the control's face is painted from, and
+a press outside the ink falls through to whatever is behind — so a round
+button stops taking clicks in its corners.
+
+The mask is taken by **painting** the sprite into a scratch the size of the
+control, not by reading the sheet. A face is a nine-slice, and where its ink
+lands depends on how its corners and middles were fitted to that particular
+box; only the painter knows that. It is cached per sprite, size and scale
+beside the cut sheets, and dropped with them when a PNG is re-saved.
+
+The coverage threshold is near the bottom rather than at half, on purpose.
+The question it answers is "did the art mark this pixel at all", because what
+it is for is refusing the *empty* corners of a round face; half would make a
+face drawn as a pale wash — a ghost button, a glassy toggle — entirely
+unclickable, and rounding this far out rounds an antialiased edge outwards,
+which is the right way to round for input. Art that fills its box solidly
+says so by saying nothing and keeps the box it always had, which is the
+common case and the cheap one; art that could not be drawn at all keeps it
+too, because a control nobody can click is a worse failure than a square one.
+
+Only a component whose box *is* one face asks — `widgets.Button` today. A
+check box is its indicator and its label, and shaping the pair by the
+indicator's art would make most of the control deaf.
+
+## What a skin cannot do yet
 
 **Lay out a fixed panel.** There is no absolute-layout half of this format
 (WinAmp's 275×116 window, VLC's `<Layout>`). A skin re-skins ordinary widgets
@@ -427,14 +506,22 @@ something true about the art:
 `TestSkinArtIsReproducible` regenerates into a temporary directory and
 compares byte for byte, so art changed and not committed fails the build.
 
-| | Nocturne | Cassette |
-| --- | --- | --- |
-| look | amber on charcoal, lit from above | six colours, two-pixel bevels |
-| drawn as | paths and gradients | whole pixels on a grid |
-| `pixelated` | no | yes |
-| base pack | `breeze-night` | `win95` |
-| sheet | 404×338 at 1×, 60 sprites | 236×182 at 1×, 52 sprites |
-| exercises | nine-slice, tint, scale sets, `middle: none` | nearest sampling at whole multiples, `middle: tile`, exact doubling |
+| | Nocturne | Cassette | Deck |
+| --- | --- | --- | --- |
+| look | amber on charcoal, lit from above | six colours, two-pixel bevels | graphite and one cold accent |
+| drawn as | paths and gradients | whole pixels on a grid | paths and gradients |
+| `pixelated` | no | yes | no |
+| base pack | `breeze-night` | `win95` | `breeze-night` |
+| sheet | 520×338 at 1×, 65 sprites | 270×182 at 1×, 55 sprites | 516×212 at 1×, 19 sprites |
+| exercises | nine-slice, tint, scale sets, `middle: none` | nearest sampling at whole multiples, `middle: tile`, exact doubling | `window.shape`, a control cut from its own alpha, a deliberately partial skin |
+
+Deck is the shaped one. Its outline is a full-width shoulder with the title
+plate inlaid in it over a body drawn in on both sides, so the desktop steps
+in under both shoulders and every corner is round; its push button is a
+stadium whose caps are half the control height, so a box square at that
+height is a disc and the corners of the box are not the button. It binds
+nine parts and leaves the rest to `breeze-night`, because a shaped skin is a
+partial override like any other.
 
 ## Looking at one
 
@@ -452,6 +539,11 @@ go run ./cmd/uitksettings -stage nocturne -screenshot /tmp/shots
 
 # What the generator would write.
 go run ./cmd/uitk-skingen -list
+
+# A shaped skin over a test card: the desktop beside the silhouette, and a
+# round button that takes the pointer only on its ink.
+go run ./examples/skinshape -mode backdrop &
+go run ./examples/skinshape -theme deck
 ```
 
 ## What does not change, whatever the skin
