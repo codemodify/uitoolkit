@@ -109,10 +109,222 @@ func buildShadowPatch(lk style.LookAndFeel, st style.DecorationState, m platform
 	return img
 }
 
+// ---- the shadow around a silhouette ---------------------------------------
+//
+// A nine-patch cannot carry the shadow of an arbitrary shape: it works
+// because a rectangle's shadow is the same all along each edge, and a
+// silhouette's is not. A shaped window's shadow is a real blur of its
+// coverage mask instead — one image the size of the window and its margin,
+// built once per (shape, size, look, state) and blitted whole, so it costs
+// a resize rather than a frame.
+//
+// The look's own numbers decide what the blur looks like: the margin it
+// asked for is the reach, the difference between the top and bottom margins
+// is how far its shadow falls, and its colour comes from its own rectangular
+// shadow, probed once. A shaped window in any of the 121 packs therefore
+// casts the shadow of that pack rather than a generic one.
+
+// shapeShadow is a shaped window's cached shadow image.
+type shapeShadow struct {
+	key shapeShadowKey
+	img *paintengine2d.Image
+	// ox, oy are where the image goes relative to the visible window's
+	// top-left corner, in device pixels (negative: up and to the left).
+	ox, oy int
+}
+
+type shapeShadowKey struct {
+	look   style.LookAndFeel
+	raster *platform.ShapeRaster
+	margin [4]int
+	active bool
+	custom bool
+}
+
+// shapeShadowPatch is the blurred silhouette for the window's current
+// shape, or nil when it casts no shadow.
+func (w *Window) shapeShadowPatch(r *platform.ShapeRaster) *shapeShadow {
+	g := w.geom
+	if r == nil || !g.framed || !g.shadow || w.caption == nil {
+		return nil
+	}
+	st := w.caption.DecorationState()
+	key := shapeShadowKey{
+		look:   w.look,
+		raster: r,
+		margin: [4]int{g.margin.Top, g.margin.Right, g.margin.Bottom, g.margin.Left},
+		active: st.Active,
+		custom: st.Custom,
+	}
+	if w.shapeShade.img != nil && w.shapeShade.key == key {
+		return &w.shapeShade
+	}
+	w.shapeShade = shapeShadow{key: key}
+	w.shapeShade.img, w.shapeShade.ox, w.shapeShade.oy =
+		buildShapeShadow(w.look, st, g.margin, r)
+	if w.shapeShade.img == nil {
+		return nil
+	}
+	return &w.shapeShade
+}
+
+// buildShapeShadow blurs the silhouette's coverage into the margin around
+// it, tints it with the look's shadow colour and erases the window's own
+// shape from it, so the image adds nothing where the window paints itself.
+func buildShapeShadow(lk style.LookAndFeel, st style.DecorationState, m platform.FrameInsets, r *platform.ShapeRaster) (*paintengine2d.Image, int, int) {
+	ml, mr := m.Left, m.Right
+	mt, mb := m.Top, m.Bottom
+	pw, ph := r.W+ml+mr, r.H+mt+mb
+	if pw < 3 || ph < 3 || pw > 8192 || ph > 8192 {
+		return nil, 0, 0
+	}
+	// The reach sideways is the blur; the difference between the top and
+	// bottom margins is how far the look drops its shadow, since a shadow
+	// offset down needs that much more room below than above.
+	radius := max((ml+mr)/2, 1)
+	dy := (mb - mt) / 2
+	col := probeShadowColor(lk, st, m)
+	if col.A <= 0 {
+		return nil, 0, 0
+	}
+	// Coverage of the silhouette, laid into the larger box and blurred.
+	cov := make([]uint8, pw*ph)
+	for y := 0; y < r.H; y++ {
+		copy(cov[(y+mt+dy)*pw+ml:(y+mt+dy)*pw+ml+r.W], r.Mask[y*r.W:(y+1)*r.W])
+	}
+	blurMask(cov, pw, ph, radius)
+
+	img := paintengine2d.NewImage(pw, ph)
+	stride := img.RowStride()
+	for y := 0; y < ph; y++ {
+		row := img.Pix[y*stride:]
+		for x := 0; x < pw; x++ {
+			a := float32(cov[y*pw+x]) / 255 * col.A
+			// Inside the window the image must hold nothing: the window
+			// paints there itself, and this goes on over the top of it.
+			if ix, iy := x-ml, y-mt; ix >= 0 && iy >= 0 && ix < r.W && iy < r.H {
+				a *= 1 - float32(r.Mask[iy*r.W+ix])/255
+			}
+			if a <= 0 {
+				continue
+			}
+			// Premultiplied RGBA8: every channel already carries alpha.
+			i := x * 4
+			row[i+0] = uint8(col.R * a * 255)
+			row[i+1] = uint8(col.G * a * 255)
+			row[i+2] = uint8(col.B * a * 255)
+			row[i+3] = uint8(a * 255)
+		}
+	}
+	return img, -ml, -mt
+}
+
+// probeShadowColor asks the look for its own rectangular shadow and reads
+// the pixel just outside the window's edge: the densest part of the shadow,
+// which is the colour a blurred silhouette should be tinted with. It is one
+// small rasterisation per cache key, not per frame.
+func probeShadowColor(lk style.LookAndFeel, st style.DecorationState, m platform.FrameInsets) paintengine2d.Color {
+	ml, mt := max(m.Left, 1), max(m.Top, 1)
+	pw, ph := ml*2+8, mt*2+8
+	img := paintengine2d.NewImage(pw, ph)
+	ctx := paintengine2d.NewContext(img)
+	if ctx == nil {
+		return paintengine2d.Transparent
+	}
+	ctx.Clear(paintengine2d.Transparent)
+	win := paintengine2d.XYWH(float32(ml), float32(mt), float32(pw-2*ml), float32(ph-2*mt))
+	style.DrawDecorationShadowOf(lk, ctx, win, st)
+	// Just outside the left edge, half way down: past the window itself
+	// and in the thickest part of the shadow.
+	c := img.NRGBAAt(ml-1, ph/2)
+	return paintengine2d.RGBA(float32(c.R)/255, float32(c.G)/255, float32(c.B)/255, float32(c.A)/255)
+}
+
+// blurMask box-blurs an 8-bit coverage mask in place, three passes each
+// way, which is close enough to a Gaussian that no one can tell and far
+// cheaper. radius is in pixels.
+func blurMask(mask []uint8, w, h, radius int) {
+	if radius < 1 || w < 1 || h < 1 {
+		return
+	}
+	// Three box passes of a third of the reach each add up to the reach.
+	r := max(radius/3, 1)
+	tmp := make([]uint8, len(mask))
+	for pass := 0; pass < 3; pass++ {
+		boxBlurRows(mask, tmp, w, h, r)
+		boxBlurCols(tmp, mask, w, h, r)
+	}
+}
+
+// boxBlurRows averages each row of src into dst over a window of 2r+1.
+func boxBlurRows(src, dst []uint8, w, h, r int) {
+	win := 2*r + 1
+	for y := 0; y < h; y++ {
+		row := src[y*w : (y+1)*w]
+		out := dst[y*w : (y+1)*w]
+		var sum int
+		for i := -r; i <= r; i++ {
+			sum += int(row[clampIdx(i, w)])
+		}
+		for x := 0; x < w; x++ {
+			out[x] = uint8(sum / win)
+			sum += int(row[clampIdx(x+r+1, w)]) - int(row[clampIdx(x-r, w)])
+		}
+	}
+}
+
+// boxBlurCols is boxBlurRows down the columns.
+func boxBlurCols(src, dst []uint8, w, h, r int) {
+	win := 2*r + 1
+	for x := 0; x < w; x++ {
+		var sum int
+		for i := -r; i <= r; i++ {
+			sum += int(src[clampIdx(i, h)*w+x])
+		}
+		for y := 0; y < h; y++ {
+			dst[y*w+x] = uint8(sum / win)
+			sum += int(src[clampIdx(y+r+1, h)*w+x]) - int(src[clampIdx(y-r, h)*w+x])
+		}
+	}
+}
+
+// clampIdx holds an index inside [0, n): the edges of the mask repeat, so
+// a shape that runs to the edge of its box does not fade there.
+func clampIdx(i, n int) int {
+	if i < 0 {
+		return 0
+	}
+	if i >= n {
+		return n - 1
+	}
+	return i
+}
+
+// paintShapeShadow blits the blurred silhouette into place.
+func (w *Window) paintShapeShadow(ctx *paintengine2d.Context, r *platform.ShapeRaster, dirty *paintengine2d.Damage) {
+	s := w.shapeShadowPatch(r)
+	if s == nil || s.img == nil {
+		return
+	}
+	win := w.windowBox()
+	dst := paintengine2d.XYWH(win.Min.X+float32(s.ox), win.Min.Y+float32(s.oy),
+		float32(s.img.Width), float32(s.img.Height))
+	if dirty != nil && !dirty.Empty() && !dirty.Overlaps(dst) {
+		return
+	}
+	ctx.DrawImageRectPaint(s.img, paintengine2d.XYWH(0, 0, float32(s.img.Width), float32(s.img.Height)), dst,
+		paintengine2d.Paint{Color: paintengine2d.White, Filter: paintengine2d.FilterNearest})
+}
+
 // paintFrameShadow blits the cached patch into the margin around win: four
 // corner tiles at their natural size and four one-pixel strips stretched
-// along the edges between them.
+// along the edges between them. A shaped window takes the blurred
+// silhouette instead — a nine-patch cannot follow a silhouette's edge.
 func (w *Window) paintFrameShadow(ctx *paintengine2d.Context, dirty *paintengine2d.Damage) {
+	if r := w.shapeRaster(); r != nil {
+		w.paintShapeShadow(ctx, r, dirty)
+		return
+	}
 	s := w.shadowPatch()
 	if s == nil || s.img == nil {
 		return
@@ -175,6 +387,11 @@ func (w *Window) paintFrameShadow(ctx *paintengine2d.Context, dirty *paintengine
 func (w *Window) paintFrameCorners(ctx *paintengine2d.Context, dirty *paintengine2d.Damage) {
 	g := w.geom
 	if !g.framed || g.radius == [4]float32{} {
+		return
+	}
+	if w.shapeRaster() != nil {
+		// A silhouette replaces the corners: it is punched out of the same
+		// pixels, and it already runs round them.
 		return
 	}
 	win := g.window

@@ -310,6 +310,18 @@ func (w *Window) resizeBand() (band, corner float32) {
 // needs alpha. A window with no frame of the toolkit's, a maximized or
 // full-screen one and one on an uncomposited X11 screen ask for nothing.
 func (w *Window) wantFrame() platform.Frame {
+	f := w.wantDecorFrame()
+	// The silhouette and the glass go on last, and over the top of what
+	// the look asked for: a shaped window's input region is its shape and
+	// nothing else. A window with neither leaves f exactly as it was
+	// before shapes existed.
+	w.applyShapeToFrame(&f, f.Margin)
+	return f
+}
+
+// wantDecorFrame is the frame the look's decoration asks for: the margin,
+// the resize band, the corners and the alpha.
+func (w *Window) wantDecorFrame() platform.Frame {
 	if !w.framed() || w.caption == nil {
 		return platform.Frame{}
 	}
@@ -345,6 +357,13 @@ func (w *Window) wantFrame() platform.Frame {
 // itself out: the surface grows by the margin at once, so this frame is
 // painted at the size the compositor is told about in the same commit.
 func (w *Window) applyFrame() {
+	// The desktop's answer about glass changes while the app runs (KWin
+	// drops it when desktop effects go off), and every look reads it
+	// through style.GlassBehind, so it is refreshed here — once a layout,
+	// beside everything else the window system has to say.
+	if _, ok := w.surf.(platform.GlassSurface); ok {
+		style.SetGlassAvailable(platform.SurfaceBlurBehind(w.surf))
+	}
 	f := w.wantFrame()
 	if f.Same(w.sysFrame) {
 		return
