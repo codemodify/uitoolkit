@@ -8,6 +8,7 @@
 //	shapes -mode panel      # a rectangular panel
 //	shapes -glass           # ask the desktop to blur what is behind
 //	shapes -mode opaque     # the same window, unshaped: the baseline
+//	shapes -mode backdrop   # a test card to put *behind* the others
 //
 // Drag it with the left button, press Escape to quit. It prints one line
 // per silhouette with the rectangle count it needed, and counts the presses
@@ -36,7 +37,7 @@ import (
 )
 
 func main() {
-	mode := flag.String("mode", "clock", "clock | ring | panel | opaque")
+	mode := flag.String("mode", "clock", "clock | ring | panel | opaque | backdrop")
 	glass := flag.Bool("glass", false, "ask the desktop to blur what is behind the window")
 	size := flag.Int("size", 420, "window size in logical pixels")
 	shot := flag.String("shot", "", "paint one frame offscreen, write this PNG and exit")
@@ -60,7 +61,7 @@ func main() {
 
 	f := newFace(*mode, win)
 	win.SetContent(f)
-	if *mode != "opaque" {
+	if *mode != "opaque" && *mode != "backdrop" {
 		// The silhouette follows the window: SetShapeFunc is called again
 		// at every size and scale, so its edge is drawn afresh at 1.75
 		// rather than stretched from the shape of some other size.
@@ -76,6 +77,9 @@ func main() {
 	}
 	if *glass {
 		win.SetGlass(true)
+		// Let plenty of the blurred desktop through: this demo is here to
+		// show the blur, not to be a readable document window.
+		win.SetGlassTint(a.Look().Palette().Background.WithAlpha(0.35))
 	}
 
 	if headless {
@@ -147,15 +151,13 @@ func newFace(mode string, win *app.Window) *face {
 	f := &face{mode: mode, win: win}
 	f.Init(f)
 	f.SetWantsFocus(true)
-	if mode != "opaque" {
-		// The widget takes input only where the window really is. The
-		// window's input region already tells the compositor that; saying
-		// it here too is what a widget inside a shaped window does, and it
-		// is what keeps hover and the cursor honest at the edge.
-		f.SetHitShapeFunc(func(sz paintengine2d.Point) *platform.Shape {
-			return shapeFor(mode, sz)
-		})
-	}
+	// No widget-level hit shape here on purpose. The window's own input
+	// region already keeps every press in the hole away from this app, and
+	// a second silhouette at the widget level would only be one more thing
+	// to keep in step — it would still be refusing presses in the hole
+	// after the window was maximized and gave its hole up.
+	// widget.Base.SetHitShape is for a component that is a shape *inside*
+	// a window, which is a different job.
 	return f
 }
 
@@ -164,28 +166,37 @@ func (f *face) Paint(ctx *paintengine2d.Context) {
 	w, h := b.Dx(), b.Dy()
 	pal := f.Look().Palette()
 
-	// How much of what is behind shows through. With real glass the
-	// compositor has blurred the desktop already, so far more of it can
-	// show without the window becoming unreadable.
-	alpha := float32(0.93)
-	if f.win.Glass() && f.win.GlassAvailable() {
-		alpha = 0.45
+	// With real glass the window's own background is already the tint over
+	// the blurred desktop: painting another coat of it here would hide the
+	// blur this demo exists to show.
+	glass := f.win.Glass() && f.win.GlassAvailable()
+	body := pal.Background.WithAlpha(0.93)
+	if glass {
+		body = paintengine2d.Transparent
 	}
-	body := pal.Background.WithAlpha(alpha)
 
-	if s := shapeFor(f.mode, paintengine2d.Pt(w, h)); s != nil {
+	// Maximized, full-screen and tiled windows give their silhouette up,
+	// as they give their corners and their shadow up: paint the plain
+	// rectangle the window actually is, not the hole it used to have.
+	if s := f.shape(w, h); s != nil {
 		path, rule := s.Path()
-		fill := paintengine2d.Fill(body)
-		fill.FillRule, fill.AntiAlias = rule, true
-		ctx.DrawPath(path, fill)
+		if body.A > 0 {
+			fill := paintengine2d.Fill(body)
+			fill.FillRule, fill.AntiAlias = rule, true
+			ctx.DrawPath(path, fill)
+		}
 		rim := paintengine2d.StrokePaint(pal.Accent, max(min(w, h)*0.012, 2))
 		rim.FillRule, rim.AntiAlias = rule, true
 		ctx.DrawPath(path, rim)
-	} else {
-		ctx.DrawRect(b, paintengine2d.Fill(pal.Background))
+	} else if body.A > 0 {
+		ctx.DrawRect(b, paintengine2d.Fill(body))
 	}
 
-	if f.mode == "clock" {
+	if f.mode == "backdrop" {
+		f.paintBackdrop(ctx, b)
+		return
+	}
+	if f.mode == "clock" && f.win.ShapeActive() {
 		f.paintClock(ctx, b, pal)
 	}
 	// One pip per press the app actually received. A click in the hole
@@ -198,10 +209,56 @@ func (f *face) Paint(ctx *paintengine2d.Context) {
 		f.caption(), pal.Text, style.AlignCenter)
 }
 
+// paintBackdrop is the test card that goes behind a shaped or glassy
+// window: a coarse colour grid with two diagonals across it. A patch of it
+// seen through a hole says exactly which patch it is, so moving the window
+// shows a different one — which a painted fake of the desktop could not do
+// — and a blur of it is unmistakable, which a flat grey one is not.
+func (f *face) paintBackdrop(ctx *paintengine2d.Context, b paintengine2d.Rect) {
+	cols, rows := 8, 5
+	cw, ch := b.Dx()/float32(cols), b.Dy()/float32(rows)
+	pal := []paintengine2d.Color{
+		paintengine2d.RGBA(0.86, 0.20, 0.24, 1), paintengine2d.RGBA(0.96, 0.60, 0.13, 1),
+		paintengine2d.RGBA(0.98, 0.87, 0.21, 1), paintengine2d.RGBA(0.30, 0.76, 0.35, 1),
+		paintengine2d.RGBA(0.16, 0.56, 0.86, 1), paintengine2d.RGBA(0.48, 0.30, 0.78, 1),
+	}
+	for r := 0; r < rows; r++ {
+		for c := 0; c < cols; c++ {
+			ctx.DrawRect(paintengine2d.XYWH(b.Min.X+float32(c)*cw, b.Min.Y+float32(r)*ch, cw, ch),
+				paintengine2d.Fill(pal[(r*cols+c)%len(pal)]))
+			// A row of white pips whose count names the cell.
+			px := b.Min.X + float32(c)*cw + cw*0.5
+			py := b.Min.Y + float32(r)*ch + ch*0.5
+			for k := 0; k <= (r*cols+c)%6; k++ {
+				ctx.DrawRect(paintengine2d.XYWH(px-26+float32(k)*10, py-5, 7, 11),
+					paintengine2d.Fill(paintengine2d.RGBA(1, 1, 1, 0.95)))
+			}
+		}
+	}
+	d := paintengine2d.NewPath()
+	d.MoveTo(b.Min.X, b.Min.Y)
+	d.LineTo(b.Max.X, b.Max.Y)
+	d.MoveTo(b.Max.X, b.Min.Y)
+	d.LineTo(b.Min.X, b.Max.Y)
+	ctx.DrawPath(d, paintengine2d.StrokePaint(paintengine2d.RGBA(0, 0, 0, 0.85), 14))
+}
+
+// shape is the silhouette to paint: none while the window's own is dropped.
+func (f *face) shape(w, h float32) *platform.Shape {
+	if !f.win.ShapeActive() {
+		return nil
+	}
+	return shapeFor(f.mode, paintengine2d.Pt(w, h))
+}
+
 func (f *face) caption() string {
 	switch {
 	case f.mode == "opaque":
 		return "unshaped baseline"
+	case f.mode == "backdrop":
+		return ""
+	case !f.win.ShapeActive():
+		return "maximized: the silhouette is dropped"
 	case f.win.Glass() && f.win.GlassAvailable():
 		return "glass: the desktop is blurred"
 	case f.win.Glass():
