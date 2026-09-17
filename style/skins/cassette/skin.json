@@ -564,6 +564,7 @@
     "control": {
       "checked": "#f2e9c9",
       "color": "#f2e9c9",
+      "default": "#101820",
       "disabled": "#5a7d8c",
       "hover": "#ffffff",
       "pressed": "#f2e9c9"

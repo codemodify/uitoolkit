@@ -127,12 +127,19 @@ func skinStateName(st ControlState) string {
 		return "checkedHover"
 	case st.Checked():
 		return "checked"
+	// The default button keeps its own face under the pointer. Its art is
+	// the accent, and swapping it for the ordinary hover face would make
+	// the one button the dialog is steering you to look like the others.
+	case st.Primary() && st.Pressed():
+		return "defaultPressed"
+	case st.Primary() && st.Hovered():
+		return "defaultHover"
+	case st.Primary():
+		return "default"
 	case st.Pressed():
 		return "pressed"
 	case st.Hovered():
 		return "hover"
-	case st.Primary():
-		return "default"
 	case st.Focused():
 		return "focus"
 	case st.Inactive() || st.Backdrop():
@@ -188,6 +195,20 @@ func (sk *Skin) drawState(l *Classic, ctx *paintengine2d.Context, b paintengine2
 	return sk.skinDraw(ctx, sk.box(l, b, p), sp, l.Scale(), tint)
 }
 
+// bindsDefault reports whether the part draws a face of its own for the
+// default button.
+func (p *SkinPart) bindsDefault() bool {
+	if p == nil {
+		return false
+	}
+	for _, s := range []string{"default", "defaultHover", "defaultPressed"} {
+		if p.States[s] != nil {
+			return true
+		}
+	}
+	return false
+}
+
 // has reports whether the skin binds a part at all.
 func (sk *Skin) has(name string) bool { return sk.part(name).art("normal") != nil }
 
@@ -227,6 +248,12 @@ func (sk *Skin) textColor(l *Classic, p *SkinPart, st ControlState) paintengine2
 	switch {
 	case st.Disabled():
 		return pick(t.Disabled, t.Color)
+	// The default ink belongs to the default *face*. A part that drew no
+	// distinct one is not showing the accent, so it keeps its ordinary ink:
+	// StatePrimary reaches more parts than the button, and dark on-accent
+	// text on an ordinary field would be unreadable.
+	case st.Primary() && p.bindsDefault():
+		return pick(t.Default, t.Color)
 	case st.Checked():
 		return pick(t.Checked, t.Hover, t.Color)
 	case st.Pressed():
@@ -479,7 +506,10 @@ func (skinEngine) DrawSwitch(l *Classic, ctx *paintengine2d.Context, b paintengi
 		l.drawFittedText(ctx, l.body, label, lb, ink, AlignStart, 0)
 	}
 	if st.Focused() && !st.Disabled() {
-		l.DrawFocusRing(ctx, track.Inset(-l.S(2)))
+		// The ring sits just outside the track, clipped to the control's own
+		// box: a switch's box is the track plus its label, so there is room
+		// to the right but rarely any above.
+		l.DrawFocusRing(ctx, track.Inset(-l.S(2)).Intersect(b))
 	}
 }
 

@@ -97,6 +97,7 @@ version; everything else has a default.
     "control": {
       "color": "#e6e9f2", "hover": "#f2f5fb", "pressed": "#9aa2b6",
       "disabled": "#5b6273", "checked": "#e6e9f2",
+      "default": "#1a1305",   // the ink on the default button's accent face
       "size": 14, "bold": false
     }
   },
@@ -218,8 +219,10 @@ A part carries art per state. The state names are the toolkit's own
 `ControlState` bits:
 
 ```
-normal  hover  pressed  disabled  focus  checked  checkedHover
-checkedPressed  default  inactive
+normal  hover  pressed  disabled  focus
+checked  checkedHover  checkedPressed
+default  defaultHover  defaultPressed
+inactive
 ```
 
 A state with no art of its own resolves along a fixed chain, so **art for
@@ -235,13 +238,35 @@ one more:
 | `checked` | `pressed`, `hover`, `normal` |
 | `checkedHover`, `checkedPressed` | `checked`, `pressed`, `hover`, `normal` |
 | `default` | `hover`, `normal` |
+| `defaultHover` | `default`, `hover`, `normal` |
+| `defaultPressed` | `default`, `pressed`, `hover`, `normal` |
 | `inactive` | `disabled`, `normal` |
 
 The state a control is in is read in the order a person would read it:
 disabled first (it outranks everything), then the on/off axis, then the
-pointer, then focus, then the default button, then a backdrop window.
+default button, then the pointer, then focus, then a backdrop window.
+
+The default button keeps its own face under the pointer rather than taking
+the ordinary hover one — its art is the accent, and the one button a dialog
+is steering you to should not look like the others while you are reaching for
+it. That is why it has its own hover and pressed states, exactly as `checked`
+does. Its ink is the `default` colour of its text role, and that colour
+applies only where the part actually drew a default face: `StatePrimary`
+reaches more parts than the button, and dark on-accent text on an ordinary
+field would be unreadable.
 
 `normal` is required as soon as a part names any art at all.
+
+### Bevels
+
+A skin that binds any of the thirteen `Role` faces gets `"bevel": "none"`
+unless it states otherwise, whatever its base pack says. A bevel language is
+an instruction to the stock painter — shift a pressed button down a pixel,
+draw arrow wells at the ends of a scrollbar — and a skin that paints its own
+faces already said all of that in its art. Leaving the base's bevel in place
+makes the stock painter add it *on top of* the pictures. A skin that binds no
+faces at all keeps its base's bevel, so a skin describing nothing is still
+exactly its base pack.
 
 ## The fallback rules
 

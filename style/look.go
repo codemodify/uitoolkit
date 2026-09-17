@@ -491,6 +491,12 @@ func (l *Classic) baseDrawScrollBar(ctx *paintengine2d.Context, track, thumb pai
 		if s := LookScale(l); s > 1 {
 			ah *= s
 		}
+		// Two wells have to fit inside the track. Without this the far well
+		// starts above the track's top on a short one — a scrollbar painting
+		// outside its own box, which a skin's art made visible.
+		if ah*2 > track.Dy() {
+			ah = track.Dy() / 2
+		}
 		up := paintengine2d.XYWH(track.Min.X, track.Min.Y, track.Dx(), ah)
 		dn := paintengine2d.XYWH(track.Min.X, track.Max.Y-ah, track.Dx(), ah)
 		l.paintBezel(ctx, up, l.palette.SurfaceAlt, l.palette.Border, roleButton, StateNone)

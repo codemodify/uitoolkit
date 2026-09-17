@@ -105,10 +105,10 @@ type PartBinding struct {
 
 // TextRole is one named label role.
 type TextRole struct {
-	Name                                     string
-	Color, Hover, Pressed, Disabled, Checked string
-	Size                                     float32
-	Bold                                     bool
+	Name                                              string
+	Color, Hover, Pressed, Disabled, Checked, Default string
+	Size                                              float32
+	Bold                                              bool
 }
 
 // WindowSpec is the frame the skin asks for.
@@ -292,6 +292,7 @@ func Manifest(p *Plan) ([]byte, error) {
 			for _, kv := range [][2]string{
 				{"color", t.Color}, {"hover", t.Hover}, {"pressed", t.Pressed},
 				{"disabled", t.Disabled}, {"checked", t.Checked},
+				{"default", t.Default},
 			} {
 				if kv[1] != "" {
 					r[kv[0]] = kv[1]
