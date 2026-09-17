@@ -109,6 +109,11 @@ type Window struct {
 	glass       bool
 	eraser      *paintengine2d.Image
 	eraserFor   *platform.ShapeRaster
+	// wipe is the silhouette's uncovered region as one path (wipeFor is
+	// the rasterisation it was built from, wipeAt where it was placed).
+	wipe    *paintengine2d.Path
+	wipeFor *platform.ShapeRaster
+	wipeAt  paintengine2d.Point
 	// shapeShade is the blurred silhouette a shaped window casts instead
 	// of the nine-patch shadow, and glassTint the colour an app chose for
 	// its glass (the look's own when it is fully transparent).
@@ -1527,11 +1532,16 @@ const glassAlpha = 0.78
 // than blend over it, or every frame would stack another coat of tint on
 // the last.
 func (w *Window) fillWindow(ctx *paintengine2d.Context, box paintengine2d.Rect, fill paintengine2d.Color) {
-	if fill.A >= 1 {
-		ctx.DrawRect(box, paintengine2d.Fill(fill))
-		return
+	if fill.A < 1 {
+		// A translucent fill has to replace what is under it, not blend
+		// over it, or every frame would stack another coat of tint on the
+		// last: take the box down to nothing first.
+		ctx.DrawRect(box, paintengine2d.Paint{
+			Color: paintengine2d.White,
+			Blend: paintengine2d.BlendDestOut,
+		})
 	}
-	ctx.ClearRect(box, fill)
+	ctx.DrawRect(box, paintengine2d.Fill(fill))
 }
 
 func (w *Window) frameImmediate(rects []paintengine2d.Rect) {

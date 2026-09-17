@@ -1,11 +1,13 @@
 package app
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
+	"github.com/codemodify/uitoolkit/widget"
 	"github.com/codemodify/uitoolkit/widgets"
 )
 
@@ -363,5 +365,165 @@ func TestShapedWindowPaintsItsHoleThrough(t *testing.T) {
 	// Outside the rounded corner too.
 	if _, _, _, a := img.PremulAt(0, 0); a != 0 {
 		t.Fatalf("the corner outside the silhouette has alpha %d", a)
+	}
+}
+
+// ringFace paints what examples/shapes paints: the silhouette filled, then
+// a rim stroked along it, both even-odd. It is here so the edge test sees
+// the same pixels a real shaped app puts on the boundary.
+type ringFace struct{ widget.Base }
+
+func newRingFace() *ringFace {
+	f := &ringFace{}
+	f.Init(f)
+	return f
+}
+
+func (f *ringFace) Paint(ctx *paintengine2d.Context) {
+	b := f.LocalBounds()
+	w, h := b.Dx(), b.Dy()
+	path, rule := ring(paintengine2d.Pt(w, h), 1).Path()
+	pal := f.Look().Palette()
+	fill := paintengine2d.Fill(pal.Background.WithAlpha(0.93))
+	fill.FillRule, fill.AntiAlias = rule, true
+	ctx.DrawPath(path, fill)
+	rim := paintengine2d.StrokePaint(pal.Accent, max(min(w, h)*0.012, 2))
+	rim.FillRule, rim.AntiAlias = rule, true
+	ctx.DrawPath(path, rim)
+}
+
+func TestNothingSurvivesInsideTheCut(t *testing.T) {
+	// The edge test. Every pixel the silhouette does not cover has to end
+	// up *exactly* transparent — not nearly — and no pixel anywhere in the
+	// cut may keep more than its own coverage.
+	//
+	// What this guards against is a thread of half-erased pixels along the
+	// boundary: it showed up as a stipple just inside the hole, visible at
+	// 1x against a saturated background, because the cut was blended away
+	// with the coverage mask instead of the uncovered part being wiped.
+	// A blended draw does not promise to touch every sample of a pixel;
+	// a rectangle wipe does.
+	for _, n := range []int{200, 300, 420} {
+		r := newShapeRig(t, n, n)
+		r.w.SetContent(newRingFace())
+		r.w.SetShapeFunc(ring)
+		r.a.PumpOnce()
+		r.w.frame()
+		// And again after a partial repaint across the hole's edge, which
+		// is what a hover or an activation change does to a live window.
+		r.w.dirty.Reset()
+		r.w.full = false
+		r.w.dirty.Add(paintengine2d.XYWH(0, float32(n)/3, float32(n), float32(n)/3))
+		r.w.frame()
+
+		img, ras := r.w.surf.Buffer(), r.w.shapeRaster()
+		if img == nil || ras == nil {
+			t.Fatalf("n=%d: nothing painted", n)
+		}
+		var survivors, notClear int
+		var first string
+		for y := 0; y < ras.H; y++ {
+			for x := 0; x < ras.W; x++ {
+				c := ras.Mask[y*ras.W+x]
+				_, _, _, a := img.PremulAt(x, y)
+				if c == 0 && a != 0 {
+					notClear++
+					if first == "" {
+						first = fmt.Sprintf("(%d,%d) is uncovered but alpha %d", x, y, a)
+					}
+				}
+				if int(a) > int(c) {
+					survivors++
+					if first == "" {
+						first = fmt.Sprintf("(%d,%d) coverage %d but alpha %d", x, y, c, a)
+					}
+				}
+			}
+		}
+		if notClear > 0 || survivors > 0 {
+			t.Fatalf("n=%d: %d uncovered pixels are not transparent and %d keep more than their coverage: %s",
+				n, notClear, survivors, first)
+		}
+	}
+}
+
+// wipeWatcher is a device that records what erased what: the path of every
+// dest-out fill (a wipe, which writes every sample of every pixel it
+// covers) and the box of every image blit (a blend through the coverage
+// mask, which does not promise to).
+type wipeWatcher struct {
+	*paintengine2d.Recorder
+	wipes []*paintengine2d.Path
+	blits []paintengine2d.Rect
+}
+
+func (w *wipeWatcher) Fill(p *paintengine2d.Path, m paintengine2d.Matrix, paint paintengine2d.Paint, c paintengine2d.Clip) {
+	if paint.Blend == paintengine2d.BlendDestOut {
+		q := p.Clone()
+		q.Transform(m)
+		w.wipes = append(w.wipes, q)
+	}
+	w.Recorder.Fill(p, m, paint, c)
+}
+
+func (w *wipeWatcher) Blit(src *paintengine2d.Image, srcRect, dstRect paintengine2d.Rect, m paintengine2d.Matrix, paint paintengine2d.Paint, c paintengine2d.Clip) {
+	w.blits = append(w.blits, m.TransformRect(dstRect))
+	w.Recorder.Blit(src, srcRect, dstRect, m, paint, c)
+}
+
+// wiped rasterises every recorded wipe, so the test asks which pixels were
+// really taken out rather than trusting a bounding box: the wipe is one
+// path of many rectangles and its bounds are the whole window.
+func (w *wipeWatcher) wiped(width, height int) []uint8 {
+	img := paintengine2d.NewImage(width, height)
+	ctx := paintengine2d.NewContext(img)
+	ctx.Clear(paintengine2d.Transparent)
+	for _, p := range w.wipes {
+		ctx.DrawPath(p, paintengine2d.Fill(paintengine2d.White))
+	}
+	out := make([]uint8, width*height)
+	stride := img.RowStride()
+	for y := 0; y < height; y++ {
+		row := img.Pix[y*stride:]
+		for x := 0; x < width; x++ {
+			out[y*width+x] = row[x*4+3]
+		}
+	}
+	return out
+}
+
+func TestUncoveredPixelsAreWipedNotBlended(t *testing.T) {
+	// The mechanism behind TestNothingSurvivesInsideTheCut, pinned where a
+	// CPU render cannot see it. A pixel the silhouette does not cover has
+	// to be taken out by a wipe, which writes every sample of it; leaving
+	// it to an image blit through the coverage mask is what put a stipple
+	// along the hole's boundary on a multisampled GPU, and no amount of
+	// rendering on the CPU would have shown it.
+	r := newShapeRig(t, 300, 300)
+	r.w.SetContent(newRingFace())
+	r.w.SetShapeFunc(ring)
+	r.a.PumpOnce()
+	ras := r.w.shapeRaster()
+	if ras == nil {
+		t.Fatal("no silhouette")
+	}
+	watch := &wipeWatcher{Recorder: paintengine2d.NewRecorder(ras.W, ras.H)}
+	ctx := paintengine2d.NewContextDevice(watch)
+	r.w.paintWindowShape(ctx, nil)
+	if len(watch.wipes) == 0 {
+		t.Fatal("a ring has a hole to wipe and nothing was wiped")
+	}
+	wiped := watch.wiped(ras.W, ras.H)
+	for y := 0; y < ras.H; y++ {
+		for x := 0; x < ras.W; x++ {
+			c := ras.Mask[y*ras.W+x]
+			switch {
+			case c == 0 && wiped[y*ras.W+x] != 255:
+				t.Fatalf("uncovered pixel (%d,%d) is not wiped (wipe coverage %d)",
+					x, y, wiped[y*ras.W+x])
+			case c == 255 && wiped[y*ras.W+x] != 0:
+				t.Fatalf("solidly covered pixel (%d,%d) is wiped away", x, y)
+			}
+		}
 	}
 }
