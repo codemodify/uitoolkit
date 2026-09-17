@@ -25,6 +25,12 @@ go run ./examples/skinshape -mode backdrop           # the test card again
 go run ./examples/skinshape                          # the Deck skin's outline
 go run ./examples/skinshape -theme beos              # BeOS's tab
 go run ./examples/skinshape -theme breeze-night      # a look that frames a rectangle
+
+# And three whole applications built on both halves (docs/players.md): a
+# skin's outline, and — when the big one folds down — the app's own.
+go run ./examples/minim
+go run ./examples/marquee                            # Ctrl+M
+go run ./examples/lantern                            # Ctrl+K drops the skin
 ```
 
 Put the backdrop up first, the shaped window over it, and click the hole:
@@ -431,6 +437,9 @@ are the other half of the answer.
 
 ## See also
 
+- [docs/players.md](players.md) — three applications that wear all of this:
+  a skin's silhouette, an app's own, windows that snap to one another, and
+  what a desktop that will not place a window does to that.
 - [docs/decorations.md](decorations.md) — the window frame the silhouette
   sits inside, and the phase 3 work (ARGB buffers, `set_input_region`, the
   X11 32-bit visual, the compositing-manager fallback) this is built on.

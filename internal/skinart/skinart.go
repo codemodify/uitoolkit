@@ -629,4 +629,13 @@ func sortCells(cells []Cell) {
 }
 
 // Plans is every demo skin the toolkit ships, in the order they are written.
-func Plans() []*Plan { return []*Plan{Nocturne(), Cassette(), Deck()} }
+//
+// The first three are the format's own worked examples; the last three are
+// the ones the player demos wear (internal/players). They are generated the
+// same way and ship the same way for the same reason: a demo whose skin had
+// to be installed by hand before it looked like anything is a demo nobody
+// runs, and a skin the toolkit ships is a skin the reproducibility test
+// regenerates and compares.
+func Plans() []*Plan {
+	return []*Plan{Nocturne(), Cassette(), Deck(), Minim(), Marquee(), Lantern()}
+}

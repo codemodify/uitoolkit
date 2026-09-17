@@ -134,8 +134,15 @@ go run ./examples/gallery      # widget gallery
 go run ./examples/mail         # mail client, in-memory demo store
 go run ./examples/notes
 go run ./examples/files
+go run ./examples/minim        # compact player: three windows that snap together
+go run ./examples/marquee      # big player: Ctrl+M folds it into a stadium
+go run ./examples/lantern      # shaped player: Ctrl+K drops the skin
 go run ./cmd/uitest-driver     # scripted UI drive, no display needed
 ```
+
+The three players are visual demos of skins and shaped windows and play
+nothing at all — there is no audio or video dependency anywhere in this
+toolkit. See [docs/players.md](players.md).
 
 Escape hatches added in the review pass:
 
