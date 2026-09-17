@@ -16,10 +16,10 @@ import (
 // that says nothing about windows still gets its base pack's frame and a
 // skin that says everything gets its own.
 //
-// The frame is a rectangle for now. The manifest already carries a
-// silhouette (SkinWindow.Shape) and it is validated and reported, but
-// nothing consumes it until the shaped-window work lands — see docs/skins.md
-// and the engineering note at the bottom of this file.
+// The frame need not be a rectangle. The "window" block's "shape" is the
+// silhouette the window is cut to, and WindowShape at the bottom of this
+// file is what hands it to the frame — under the same rules that drop the
+// corners and the shadow.
 
 // skinCaptionMin is the shortest caption a skin may ask for: the frame tests
 // require at least 8 device pixels of caption on every pack at every scale,
@@ -198,44 +198,49 @@ func skinWhole(v float32) float32 {
 	return r
 }
 
-// ---- what the shaped-window work has to give us ---------------------------
+// ---- the silhouette -------------------------------------------------------
+
+// WindowShape is the outline a skin's window really has, so the desktop
+// shows through everywhere it is not.
 //
-// SkinWindow.Shape is a union of rounded rects in design pixels, with a
-// per-rect flag saying whether it stretches with the window. That form was
-// chosen over an SVG path string because nothing in the toolkit parses path
-// strings, and because a rect union is already what the two consumers want:
-// a compositor input/opaque region is a rect list, and a hit test over one
-// is a loop rather than a rasterisation.
+// A skin says it in one of two ways and this reads both (skin.go,
+// loadWindowShape): a union of rounded rects in design pixels, resolved
+// against the window at the look's scale and therefore exact at every one;
+// or the alpha channel of a sprite, for a skin whose window is one picture.
+// A skin that says neither frames a rectangle, which is what both demo
+// skins but Deck do.
 //
-// To turn it on, this engine needs exactly two things from the shaped-window
-// work, and nothing else:
-//
-//  1. A field on DecorationSpec carrying the silhouette — whatever type that
-//     work settles on — which DecorationOf drops under the same rules it
-//     already drops Radius and Shadow (maximized, tiled, uncomposited). This
-//     file would fill it in Decoration() from SkinWindow.Shape, scaled by
-//     l.Scale()/Design.Scale and resolved against the window's bounds, which
-//     is the one function skinWindowRects below already is.
-//  2. A per-control hook — an optional interface on Engine answering a
-//     silhouette for a role in a box — so a skin's round button takes the
-//     pointer where it looks round. The art's own alpha is the obvious
-//     source, and skin_assets.go already has every sprite cut into its own
-//     image, so a coverage threshold is a read of pieces[pieceWhole].Pix.
-//
-// Both are additive: a skin that states no shape asks for none, and the 121
-// packs are untouched.
+// The rect form is the one to reach for and it was chosen over an SVG path
+// string deliberately: nothing in the toolkit parses path strings, and a
+// rect union is already what both consumers want — a compositor's input
+// region is a rect list, and hit-testing one is a loop rather than a
+// rasterisation.
+func (skinEngine) WindowShape(l *Classic, f DecorationFrame, st DecorationState) *Silhouette {
+	sk := skinFor(l)
+	if sk == nil || sk.Window == nil {
+		return nil
+	}
+	if sp := sk.Window.ShapeArt; sp != nil {
+		// The art *is* the outline: cut at the sheet scale the window's own
+		// size asks for, and resampled from there, exactly as the same
+		// sprite is when it is painted.
+		if v := sk.variant(sp, sk.assetTarget(sp, l.Scale())); v != nil {
+			return &Silhouette{Mask: v.pieces[pieceWhole]}
+		}
+		return nil
+	}
+	return SilhouetteOfRects(sk.skinWindowRects(f.Window, l.Scale())...)
+}
 
 // skinWindowRects resolves a skin's silhouette against a window box, in
-// device pixels. It is unused until a DecorationSpec can carry a shape;
-// SkinWindowRects exports it so the lint command can show an author what
-// their shape resolves to, and so the behaviour is tested before anything
-// depends on it.
-func (sk *Skin) skinWindowRects(win paintengine2d.Rect, scale float32) []paintengine2d.Rect {
+// device pixels. SkinWindowRects exports it so the lint command can show an
+// author what their shape resolves to.
+func (sk *Skin) skinWindowRects(win paintengine2d.Rect, scale float32) []SilhouetteRect {
 	if sk == nil || sk.Window == nil || len(sk.Window.Shape) == 0 {
 		return nil
 	}
 	s := scale / sk.Design.Scale
-	out := make([]paintengine2d.Rect, 0, len(sk.Window.Shape))
+	out := make([]SilhouetteRect, 0, len(sk.Window.Shape))
 	for _, r := range sk.Window.Shape {
 		x := win.Min.X + r.X*s
 		y := win.Min.Y + r.Y*s
@@ -250,13 +255,49 @@ func (sk *Skin) skinWindowRects(win paintengine2d.Rect, scale float32) []painten
 		if w <= 0 || h <= 0 {
 			continue
 		}
-		out = append(out, paintengine2d.XYWH(x, y, w, h))
+		out = append(out, SilhouetteRect{
+			Rect: paintengine2d.XYWH(x, y, w, h),
+			// A corner radius is art, not geometry: it is scaled and then
+			// clamped to the box it rounds, so a small window keeps a
+			// sensible outline instead of an hourglass.
+			Radius: skinCorners(r.Radius, s, w, h),
+		})
+	}
+	return out
+}
+
+// skinCorners scales a rect's corner radii and keeps them inside the rect:
+// two radii down one edge may never add up to more than that edge.
+func skinCorners(r [4]float32, s, w, h float32) [4]float32 {
+	out := [4]float32{r[0] * s, r[1] * s, r[2] * s, r[3] * s}
+	k := float32(1)
+	for _, p := range [4][3]float32{
+		{out[0], out[1], w}, {out[3], out[2], w},
+		{out[0], out[3], h}, {out[1], out[2], h},
+	} {
+		if sum := p[0] + p[1]; sum > p[2] && sum > 0 {
+			k = min(k, p[2]/sum)
+		}
+	}
+	if k < 1 {
+		for i := range out {
+			out[i] *= k
+		}
 	}
 	return out
 }
 
 // SkinWindowRects is a skin's silhouette resolved against a window box at a
-// display scale, as device-pixel rects. Empty for a skin with no shape.
+// display scale, as device-pixel rects. Empty for a skin with no shape, or
+// for one whose silhouette is a sprite's alpha rather than rectangles.
 func SkinWindowRects(sk *Skin, win paintengine2d.Rect, scale float32) []paintengine2d.Rect {
-	return sk.skinWindowRects(win, scale)
+	rects := sk.skinWindowRects(win, scale)
+	if len(rects) == 0 {
+		return nil
+	}
+	out := make([]paintengine2d.Rect, len(rects))
+	for i, r := range rects {
+		out[i] = r.Rect
+	}
+	return out
 }
