@@ -21,11 +21,14 @@ style/skins/<name>/skin.json        skins the toolkit ships (embedded)
 ~/.config/uitoolkit/skins/<name>.uskin   or the same thing as one zip
 ```
 
-Three skins ship with the toolkit: **Nocturne**, amber on charcoal, drawn
-from paths so it is exact at every scale; **Cassette**, a six-colour pixel
-skin with two-pixel bevels that exercises the `pixelated` path; and **Deck**,
-whose window is not a rectangle and whose buttons take the pointer only on
-their ink. All three are generated — see [The demo skins](#the-demo-skins).
+Six skins ship with the toolkit. Three are the format's worked examples:
+**Nocturne**, amber on charcoal, drawn from paths so it is exact at every
+scale; **Cassette**, a six-colour pixel skin with two-pixel bevels that
+exercises the `pixelated` path; and **Deck**, whose window is not a
+rectangle and whose buttons take the pointer only on their ink. Three more
+are worn by the player demos ([docs/players.md](players.md)): **Minim**,
+**Marquee** and **Lantern**. All six are generated — see
+[The demo skins](#the-demo-skins).
 
 ## The three rules
 
@@ -515,6 +518,29 @@ compares byte for byte, so art changed and not committed fails the build.
 | sheet | 520×338 at 1×, 65 sprites | 270×182 at 1×, 55 sprites | 516×212 at 1×, 19 sprites |
 | exercises | nine-slice, tint, scale sets, `middle: none` | nearest sampling at whole multiples, `middle: tile`, exact doubling | `window.shape`, a control cut from its own alpha, a deliberately partial skin |
 
+And the three the players wear. They are skins for a *particular app* rather
+than worked examples of the format, which is a different job: each is as
+complete as the app it dresses needs and no more, and each declares a
+silhouette the app never mentions.
+
+| | Minim | Marquee | Lantern |
+| --- | --- | --- | --- |
+| look | a pixel front panel, phosphor green on graphite | brushed steel and glass over a deep blue display | matte charcoal and one indigo light, no gloss anywhere |
+| drawn as | whole pixels on a grid | paths, gradients and a gloss | paths and flat gradients |
+| `pixelated` | yes | no | no |
+| base pack | `win95` | `breeze-night` | `breeze-night` |
+| sheet | 222×190 at 1×, 57 sprites | 600×410 at 1×, 58 sprites | 516×286 at 1×, 48 sprites |
+| `window.shape` | three stretching rects: the window steps in twice and stands on a chin | two: a shallow brow across the top, and a body on a 48-pixel dome | one: the window's own box, swept round by 52 at the bottom left and 10 at the bottom right |
+| exercises | a pixel sheet in a window whose size *is* its design | an app's own shape taking precedence over the look's (the compact mode) | a single rect that is a silhouette because it is rounder than the frame, and a deliberately partial binding |
+
+All three keep out of both top corners, which is the constraint a shaped
+skin has and it is worth stating: a framed caption centres its buttons about
+a fifth of its height down, and which *side* they sit on is the desktop's
+choice rather than the skin's — `style.CaptionButtonsDesktop` is the default
+and a skin's `layout` is consulted only when the user has asked for the
+look's own. A silhouette that bit into a top corner would eat a close button
+on half the desktops it ran on.
+
 Deck is the shaped one. Its outline is a full-width shoulder with the title
 plate inlaid in it over a body drawn in on both sides, so the desktop steps
 in under both shoulders and every corner is round; its push button is a
@@ -544,6 +570,11 @@ go run ./cmd/uitk-skingen -list
 # round button that takes the pointer only on its ink.
 go run ./examples/skinshape -mode backdrop &
 go run ./examples/skinshape -theme deck
+
+# Three whole applications wearing one (docs/players.md).
+go run ./examples/minim
+go run ./examples/marquee
+go run ./examples/lantern
 ```
 
 ## What does not change, whatever the skin
