@@ -37,8 +37,10 @@ func TestSettingsAppAppliesAndPersists(t *testing.T) {
 	}
 	a, w := openSettings(t, 1024, 780)
 	if findMenuBarOutsidePreview(w.Content()) {
-		t.Fatal("settings must not have a menu bar (the preview app may)")
+		t.Fatal("settings must not have a menu bar (the preview app and the gallery may)")
 	}
+	clickSettingsNav(t, w, "Appearance")
+	a.PumpOnce()
 	for _, opt := range []string{"Theme shape", "Round", "Square"} {
 		if findCombo(w.Content(), opt) == nil {
 			t.Fatalf("corners option %q missing", opt)
@@ -49,6 +51,8 @@ func TestSettingsAppAppliesAndPersists(t *testing.T) {
 			t.Fatalf("icon size option %q missing", opt)
 		}
 	}
+	clickSettingsNav(t, w, "Themes")
+	a.PumpOnce()
 	got := style.LookAppearance(a.Look())
 	if got.Theme != style.ThemeLight || got.Corners != style.CornersSquare || got.Icons != style.IconSetSharp {
 		t.Fatalf("look %+v", got)
@@ -83,6 +87,8 @@ func TestSettingsAppAppliesAndPersists(t *testing.T) {
 		t.Fatal("Apply should disable once saved matches staged")
 	}
 
+	clickSettingsNav(t, w, "Appearance")
+	a.PumpOnce()
 	pickCombo(t, w, "Round")
 	a.PumpOnce()
 	if p := previewAppearance(t, w); p.Corners != style.CornersRound || p.Name != "dark" {
@@ -95,6 +101,8 @@ func TestSettingsAppAppliesAndPersists(t *testing.T) {
 	}
 
 	// Revert drops a staged change.
+	clickSettingsNav(t, w, "Themes")
+	a.PumpOnce()
 	clickTheme(t, w, "Windows 95")
 	a.PumpOnce()
 	clickNamed(t, w.Content(), "Revert")
@@ -251,6 +259,8 @@ func TestSettingsIconSetApplyWritesLookJSON(t *testing.T) {
 	}
 	installSettingsIconSet(t, dir, "lucide")
 	a, w := openSettings(t, 1024, 780)
+	clickSettingsNav(t, w, "Appearance")
+	a.PumpOnce()
 	pickCombo(t, w, "Lucide")
 	a.PumpOnce()
 	if p := previewAppearance(t, w); p.Icons != style.IconSetLucide {
@@ -286,6 +296,8 @@ func TestSettingsIconSizeApplyWritesLookJSON(t *testing.T) {
 		t.Fatal(err)
 	}
 	a, w := openSettings(t, 1024, 780)
+	clickSettingsNav(t, w, "Appearance")
+	a.PumpOnce()
 	pickCombo(t, w, "Large")
 	a.PumpOnce()
 	if p := previewAppearance(t, w); p.IconSize != style.IconSizeLarge {
@@ -747,6 +759,8 @@ func TestSettingsFollowDesktop(t *testing.T) {
 		t.Fatal(err)
 	}
 	a, w := openSettings(t, 1024, 780)
+	clickSettingsNav(t, w, "Appearance")
+	a.PumpOnce()
 	const label = "Match the desktop's light or dark mode and accent colour"
 	sw := findSwitch(w.Content(), label)
 	if sw == nil {
@@ -760,9 +774,14 @@ func TestSettingsFollowDesktop(t *testing.T) {
 	if got := previewAppearance(t, w).Name; got != "breeze-night" {
 		t.Fatalf("preview %s, want breeze-night", got)
 	}
+	// The browser says what the desktop's scheme does to the pack.
+	clickSettingsNav(t, w, "Themes")
+	a.PumpOnce()
 	if !findLabelWith(w.Content(), "shows as Breeze Dark") {
 		t.Fatal("no note on what the desktop's scheme does")
 	}
+	clickSettingsNav(t, w, "Appearance")
+	a.PumpOnce()
 	clickApply(t, w)
 	a.PumpOnce()
 	saved := style.LoadAppearance()
@@ -782,6 +801,8 @@ func TestSettingsFollowDesktop(t *testing.T) {
 func TestSettingsSystemTitleBarSwitch(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	a, w := openSettings(t, 1024, 780)
+	clickSettingsNav(t, w, "Appearance")
+	a.PumpOnce()
 	const label = "Use system title bar and borders"
 	sw := findSwitch(w.Content(), label)
 	if sw == nil {
@@ -818,6 +839,8 @@ func TestSettingsSystemTitleBarSwitch(t *testing.T) {
 func TestSettingsThemeCaptionButtonsSwitch(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	a, w := openSettings(t, 1024, 780)
+	clickSettingsNav(t, w, "Appearance")
+	a.PumpOnce()
 	const label = "Place window buttons as the theme does"
 	sw := findSwitch(w.Content(), label)
 	if sw == nil || sw.On {

@@ -1,36 +1,109 @@
 # Settings
 
-`cmd/uitksettings` is the toolkit appearance editor and theme browser.
+`cmd/uitksettings` is the toolkit appearance editor and theme browser. It
+is the toolkit's shop window: picking a pack draws it twice at once — a
+small live application, and under it the whole widget gallery, every
+control the toolkit has in every state — so a theme can be judged without
+launching anything.
 
 ## Run
 
 ```bash
 go run ./cmd/uitksettings
-go run ./cmd/uitksettings -stage win98              # open with Windows 98 staged in the preview
+go run ./cmd/uitksettings -stage win98              # open with Windows 98 staged
+go run ./cmd/uitksettings -page appearance          # open on the options page
 go run ./cmd/uitksettings -headless                 # settings.png in cwd
 go run ./cmd/uitksettings -stage aqua -screenshot docs/screenshots
 ```
 
+`-page` takes `themes` (the default), `appearance`, `packs` or `about`.
+
 ## Pages
 
-- **Themes** — the theme browser. Every built-in pack listed by year
-  (`1995 · Windows 95`), filterable by decade or *My themes*; the selected
-  pack's name, year, lineage, engine and summary; a **live preview**: a small
-  but fully interactive application window (menu bar, tool bar, tabs with
-  every control, tree, table, dialogs, status bar) painted entirely in the
-  staged theme — frame, caption and all — while Settings itself keeps the
-  applied look (`widgets.ThemeScope`). Under the preview: **Corners**
-  (Theme shape / Round / Square), **Icon size** and **Icons**, all shown
-  live; **Animations** (hover fades, the default button's pulse, busy
-  bars); and **Match the desktop's light or dark mode** (see below).
-- **Packs & icons** — user theme packs (export the staged theme, delete
-  user packs) and icon sets (built-in and user, delete user sets).
-- **About** — versions, the engine list, and the files Settings reads and
-  writes.
+### Themes — browse and judge
 
-**Apply** writes `look.json` and switches Settings and every app that
-watches the file; **Revert** drops the staged change. Both stay pinned under
-the pages. Closing without Apply discards the staged change.
+The **browser** on the left: a **search field** (a pack is found by its
+id, name, year, family, engine or what its summary says — every word has
+to match; Return stages the first hit, Escape empties the field), the
+**decade filter** (*All decades*, one decade, or *My themes*), the packs
+that pass both listed by year (`1995 · Windows 95`), a count of what is
+showing, and under the list the **details** the rows have no room for:
+the pack's name, its year, family and engine, its one-line summary, and
+what following the desktop does to it. The details box keeps its height,
+so the list does not resize as you arrow down the packs; a long summary
+scrolls inside it.
+
+On the right, the staged pack drawn twice in a splitter you can size:
+
+- the **preview** — a small but fully interactive application window
+  (menu bar, tool bar, tabs with every control, tree, table, dialogs,
+  status bar) painted entirely in the staged theme, frame, caption and
+  all;
+- the **gallery** — the same showcase `examples/gallery` is, as one
+  scrolling column: tool bar, the Buttons and Fields panels, then the
+  ScrollView, ListView, TreeView, TableView and Form panels, and a status
+  bar. Its Window, Theme and Quit controls are disabled here: the gallery
+  is previewing a pack, not running as an app of its own.
+
+Both are `widgets.ThemeScope`s, so Settings itself keeps the applied look.
+Staging a pack switches them where they stand — the caret stays in the
+search field, the focus on the list, the gallery where you scrolled it.
+
+The browser starts about 240 logical pixels wide whatever the window and
+display scale are, so its rows stay readable on a small window; dragging
+either sash replaces the split, and both survive Apply, Revert and
+Defaults.
+
+### Appearance — what every app does with the theme
+
+Everything `look.json` carries besides the pack, each with the line that
+says what it does, and a strip of the staged theme beside them so corners,
+icons and their size are seen changing:
+
+- **Shape and icons** — **Corners** (Theme shape / Round / Square),
+  **Icon size** (16 / 24 / 32), **Icons** (the chrome set), **Animations**
+  (hover fades, the default button's pulse, busy bars).
+- **The desktop** — **Match the desktop's light or dark mode and accent
+  colour** (see below) and **Use the desktop's file dialogs**.
+- **Windows** — **Use system title bar and borders** and **Place window
+  buttons as the theme does**. A window that is shaped, transparent or
+  glass behind belongs in this section.
+
+### Packs & icons
+
+User theme packs (export the staged theme, delete user packs) and icon
+sets (built-in and user, delete user sets).
+
+### About
+
+Versions, the engine list, and the files Settings reads and writes.
+
+## Staged, applied, reverted
+
+The theme, the gallery and the preview show what is **staged**. Nothing is
+written until **Apply**, which saves `look.json` and switches Settings and
+every app that watches the file. **Revert** drops the staged change;
+**Defaults** stages what a fresh install has (it does not write either).
+The three sit pinned under the pages with the line that says which of the
+two states the screen is in — *Applied — every uitoolkit app is using this
+look* or *Staged, not applied* — and the status bar leads with
+`applied` or `unapplied`. Closing without Apply discards the staged change.
+
+## Screenshot geometry
+
+The Theme Atlas crops the preview panel out of `uitksettings -stage ID
+-screenshot out.png`. In the default 1024×860 window at scale 1, with the
+default look applied, the panel is the same rectangle in every pack:
+
+```
+x 445, y 58, 569 × 381        crop box (445, 58) – (1014, 439)
+```
+
+`TestSettingsPreviewPanelKeepsItsPlace` pins those numbers; a layout
+change that moves them fails it, and the new ones belong here. (They were
+`x 504, y 175, 510 × 387` before the gallery went under the preview.)
+The applied look sets Settings' own metrics, so take atlas shots with a
+clean `XDG_CONFIG_HOME`.
 
 ## Prefs file
 
@@ -131,8 +204,9 @@ and a night twin where that era had one) ship in the binary and are
 so existing `look.json` files keep working. Until the user picks one,
 apps show the default theme, Metal (Ocean) (`style.DefaultThemeName`).
 
-Settings lists them in one Built-in list (each row is the pack display
-name, e.g. Classic 95 Dark, Luna Night). User exports live under **User**.
+Settings lists them in the theme browser, a row each, by year (`1995 ·
+Windows 95`); user exports show as `User · <name>` and again under
+**User** on Packs & icons.
 
 ```
 $XDG_CONFIG_HOME/uitoolkit/themes/<name>/theme.json
