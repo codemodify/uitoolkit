@@ -103,7 +103,7 @@ func GalleryWindow(host GalleryHost) widget.Component {
 // own panel, and the status bar. Settings shows it in a ThemeScope under
 // the theme preview, so a pack can be judged on every control at once
 // instead of a tab at a time.
-func GalleryPane(host GalleryHost) widget.Component {
+func GalleryPane(host GalleryHost) *widgets.ScrollView {
 	p := buildGalleryParts(host)
 	col := widgets.NewColumn(
 		p.tools,
@@ -147,20 +147,45 @@ func (p galleryParts) tabs() []widgets.Tab {
 	return out
 }
 
-// boxed holds a child to a fixed height, so a view that would grow
-// without bound — a list, a tree, a table — keeps its size in the
-// gallery's scrolling column. Height 0 leaves the child its own.
-func boxed(h float32, c widget.Component) widget.Component {
+// fixedHeight holds its child to a height given in 1x pixels and follows
+// the look's display scale, so a view that would otherwise grow without
+// bound — a list as tall as all its rows, a tree as tall as its nodes —
+// keeps its size in a column that scrolls.
+type fixedHeight struct {
+	widget.Base
+	h float32
+}
+
+// boxed is child at h 1x pixels tall; height 0 leaves it its own.
+func boxed(h float32, child widget.Component) widget.Component {
 	if h <= 0 {
-		return c
+		return child
 	}
-	g := widgets.NewGrid()
-	g.Rows = []widgets.Track{widgets.Px(h)}
-	g.Cols = []widgets.Track{widgets.Flex(1)}
-	g.ColGap, g.RowGap = 0, 0
-	cell := g.Place(c, 0, 0)
-	cell.VAlign = layout.AlignStretch
-	return g
+	b := &fixedHeight{h: h}
+	b.Init(b)
+	if child != nil {
+		b.Add(child)
+	}
+	return b
+}
+
+func (b *fixedHeight) Measure(c layout.Constraints) paintengine2d.Point {
+	h := style.Dip(b.Look(), b.h)
+	var w float32
+	if kids := b.Children(); len(kids) > 0 {
+		w = kids[0].Measure(layout.Constraints{MinW: c.MinW, MaxW: c.MaxW, MaxH: h}).X
+	}
+	if c.HasMaxW() {
+		w = c.MaxW
+	}
+	return c.Constrain(paintengine2d.Pt(w, h))
+}
+
+func (b *fixedHeight) Arrange(r paintengine2d.Rect) {
+	b.SetBounds(r)
+	if kids := b.Children(); len(kids) > 0 {
+		kids[0].Arrange(paintengine2d.XYWH(0, 0, r.Dx(), r.Dy()))
+	}
 }
 
 func buildGalleryParts(host GalleryHost) galleryParts {

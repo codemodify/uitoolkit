@@ -3,6 +3,7 @@
 //	go run ./cmd/uitksettings
 //	go run ./cmd/uitksettings -headless          # writes settings.png
 //	go run ./cmd/uitksettings -screenshot docs/screenshots
+//	go run ./cmd/uitksettings -page appearance -headless
 //
 // The theme picker previews embedded starters and exported user packs.
 // The icon picker lists classic/sharp plus wide premiere PNG sets
@@ -29,6 +30,7 @@ func main() {
 	headless := flag.Bool("headless", false, "paint offscreen and write settings.png")
 	shot := flag.String("screenshot", "", "write settings.png into this directory (or file) and exit")
 	stage := flag.String("stage", "", "open with this theme staged in the preview (not applied)")
+	page := flag.String("page", "", "open on this page: themes (default), appearance, packs, about")
 	flag.Parse()
 
 	a := uitoolkit.New(uitoolkit.Options{
@@ -42,8 +44,8 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	if *stage != "" {
-		win.SetContent(demo.SettingsAppStaged(a, win, *stage))
+	if *stage != "" || *page != "" {
+		win.SetContent(demo.SettingsAppOpen(a, win, *stage, *page))
 	} else {
 		win.SetContent(demo.SettingsApp(a, win))
 	}
