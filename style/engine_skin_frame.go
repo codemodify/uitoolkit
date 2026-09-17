@@ -229,7 +229,43 @@ func (skinEngine) WindowShape(l *Classic, f DecorationFrame, st DecorationState)
 		}
 		return nil
 	}
-	return SilhouetteOfRects(sk.skinWindowRects(f.Window, l.Scale())...)
+	rects := sk.skinWindowRects(f.Window, l.Scale())
+	if skinShapeIsTheFrame(rects, f.Window, DecorationOf(l, st).Radius) {
+		return nil
+	}
+	return SilhouetteOfRects(rects...)
+}
+
+// skinShapeIsTheFrame reports whether a resolved silhouette is the window's
+// own box, rounded no more than the frame already rounds it.
+//
+// Such a silhouette describes nothing the frame does not do already, and it
+// is not free: a shaped window states its input region as the shape and
+// *replaces* the resize band its shadow margin held, so it is resized from
+// inside its own edges instead of from the band outside them. A skin whose
+// "shape" is the plain window — Nocturne's, written when nothing consumed
+// the key — would trade that band for corners it already had.
+//
+// The radius is compared against the one in effect rather than the one the
+// manifest states, which is what makes an uncomposited screen come out
+// right: DecorationOf squares the corners there because alpha counts for
+// nothing, so the silhouette stops being redundant and cuts them for real.
+func skinShapeIsTheFrame(rects []SilhouetteRect, win paintengine2d.Rect, radius [4]float32) bool {
+	if len(rects) != 1 {
+		return false
+	}
+	r := rects[0]
+	near := func(a, b float32) bool { return a-b < 0.5 && b-a < 0.5 }
+	if !near(r.Rect.Min.X, win.Min.X) || !near(r.Rect.Min.Y, win.Min.Y) ||
+		!near(r.Rect.Max.X, win.Max.X) || !near(r.Rect.Max.Y, win.Max.Y) {
+		return false
+	}
+	for i, v := range r.Radius {
+		if v > radius[i]+0.5 {
+			return false
+		}
+	}
+	return true
 }
 
 // skinWindowRects resolves a skin's silhouette against a window box, in
