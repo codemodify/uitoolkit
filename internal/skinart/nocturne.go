@@ -370,9 +370,9 @@ func Nocturne() *Plan {
 	// ---- bindings ---------------------------------------------------------
 
 	p.Text = []TextRole{
-		{Name: "control", Color: nocText, Hover: "#f2f5fb", Pressed: nocDim, Disabled: nocGone, Checked: nocText},
+		{Name: "control", Color: nocText, Hover: "#f2f5fb", Pressed: nocDim, Disabled: nocGone, Checked: nocText, Default: nocOnAcc},
 		{Name: "onAccent", Color: nocOnAcc, Hover: nocOnAcc, Pressed: nocOnAcc, Disabled: nocGone, Checked: nocOnAcc},
-		{Name: "field", Color: nocText, Disabled: nocGone},
+		{Name: "field", Color: nocText, Disabled: nocGone, Default: nocText},
 		{Name: "caption", Color: nocText, Disabled: nocGone},
 	}
 	p.Parts = []PartBinding{

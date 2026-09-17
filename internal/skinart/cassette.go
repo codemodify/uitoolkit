@@ -281,7 +281,7 @@ func Cassette() *Plan {
 	// ---- bindings ---------------------------------------------------------
 
 	p.Text = []TextRole{
-		{Name: "control", Color: casCream, Hover: "#ffffff", Pressed: casCream, Disabled: casSteel, Checked: casCream},
+		{Name: "control", Color: casCream, Hover: "#ffffff", Pressed: casCream, Disabled: casSteel, Checked: casCream, Default: casInk},
 		{Name: "onDark", Color: casInk, Disabled: casSteel},
 		{Name: "caption", Color: casCream, Disabled: "#9db0bb", Bold: true},
 	}

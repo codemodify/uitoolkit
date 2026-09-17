@@ -255,6 +255,10 @@ type SkinText struct {
 	Pressed  paintengine2d.Color
 	Disabled paintengine2d.Color
 	Checked  paintengine2d.Color
+	// Default is the ink on the default button, whose face is usually the
+	// accent: light text that reads on every other state does not read on
+	// it, so it gets a colour of its own.
+	Default paintengine2d.Color
 	// Size is the face's size in design pixels (0: the pack's), Bold the
 	// weight. Widgets measure labels with the face the engine names, so a
 	// skin whose buttons are bold gets buttons wide enough for them.
@@ -343,7 +347,7 @@ var skinPartNames = map[string]string{
 var skinStateNames = []string{
 	"normal", "hover", "pressed", "disabled",
 	"focus", "checked", "checkedHover", "checkedPressed",
-	"default", "inactive",
+	"default", "defaultHover", "defaultPressed", "inactive",
 }
 
 // skinStateFallback is how a missing state resolves. It is the whole reason
@@ -361,6 +365,8 @@ var skinStateFallback = map[string][]string{
 	"checkedHover":   {"checked", "pressed", "hover", "normal"},
 	"checkedPressed": {"checked", "pressed", "hover", "normal"},
 	"default":        {"hover", "normal"},
+	"defaultHover":   {"default", "hover", "normal"},
+	"defaultPressed": {"default", "pressed", "hover", "normal"},
 	"inactive":       {"disabled", "normal"},
 }
 
@@ -482,6 +488,7 @@ type skinTextJSON struct {
 	Pressed  string   `json:"pressed,omitempty"`
 	Disabled string   `json:"disabled,omitempty"`
 	Checked  string   `json:"checked,omitempty"`
+	Default  string   `json:"default,omitempty"`
 	Size     *float32 `json:"size,omitempty"`
 	Bold     bool     `json:"bold,omitempty"`
 }
@@ -778,6 +785,7 @@ func (sk *Skin) parseText(key string, raw []byte, name string) (*SkinText, error
 		{"pressed", doc.Pressed, &t.Pressed},
 		{"disabled", doc.Disabled, &t.Disabled},
 		{"checked", doc.Checked, &t.Checked},
+		{"default", doc.Default, &t.Default},
 	} {
 		if err := col(f.name, f.s, f.dst); err != nil {
 			return nil, err
