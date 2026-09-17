@@ -12,13 +12,19 @@ is still a themed window with the same widget tree, the same keyboard
 handling and the same accessibility tree; `SetShape` is a request a look or
 an app makes, not a separate kind of window.
 
-Run the demo:
+Run the demos:
 
 ```bash
 go run ./examples/shapes                 # a clock: a disc with a hole at the hub
 go run ./examples/shapes -mode ring      # a rounded panel with a big hole
 go run ./examples/shapes -mode panel -glass
 go run ./examples/shapes -mode backdrop -size 1100   # a test card to put behind
+
+# The same silhouette asked for by a *look* rather than by the app.
+go run ./examples/skinshape -mode backdrop           # the test card again
+go run ./examples/skinshape                          # the Deck skin's outline
+go run ./examples/skinshape -theme beos              # BeOS's tab
+go run ./examples/skinshape -theme breeze-night      # a look that frames a rectangle
 ```
 
 Put the backdrop up first, the shaped window over it, and click the hole:
@@ -96,6 +102,63 @@ draws its own outline, and a title bar around a disc would be a rectangle
 around it. A shaped window with the toolkit's frame works too: the
 silhouette is stated in the visible window's coordinates and moved by the
 shadow margin.
+
+## For looks
+
+A silhouette does not have to be the app's. A **look** can declare one, and
+then every window in that look is cut to it without the app knowing: a
+skin's outline, BeOS's tab. The app's own shape wins where it set one — a
+window drawing its own picture knows what it is and a look does not — and a
+window that set none takes its look's, exactly as it takes the frame's
+corners and shadow.
+
+Two optional engine hooks, in `style/silhouette.go`:
+
+```go
+// The window's outline, in the visible window's own device pixels.
+type WindowShapeEngine interface {
+	WindowShape(l *Classic, f DecorationFrame, st DecorationState) *Silhouette
+}
+
+// The outline of one face: where a round button really is.
+type ControlShapeEngine interface {
+	ControlShape(l *Classic, b paintengine2d.Rect, role Role) *Silhouette
+}
+```
+
+A `style.Silhouette` is a *description* — a `paintengine2d.Path` (with a
+fill rule) or an image whose alpha is the coverage — rather than a
+`platform.Shape`, because `platform` imports `style` and not the other way
+round, and because rasterising is the expensive half:
+`platform.NewShapeSilhouette` is the one place the two meet.
+`style.SilhouetteOfRects` builds the common case, a union of rounded
+rectangles filled nonzero so two that overlap are one outline.
+
+- **`WindowShapeOf(lk, f, st)`** applies the per-state rules above for every
+  look alike, exactly as `DecorationOf` applies them to the frame: dropped
+  while maximized or tiled, kept on an uncomposited screen (XShape's
+  bounding shape is the only thing that works there at all). A full-screen
+  window never asks, because it has no toolkit frame.
+- `f` is the frame's geometry **with the visible window at the origin**, so
+  a look states its outline in the coordinates it is handed and the window
+  moves it by the shadow's margin. `f.Caption` is in it because the caption's
+  extent is the one part of a frame a look cannot work out for itself: BeOS's
+  tab is as wide as its title, and the title is the window's. A look that
+  wants a band narrower than its window asks for
+  `DecorationSpec.CaptionFits` ([decorations.md](decorations.md)), which is
+  dropped wherever the silhouette is.
+- **`ControlShapeOf(lk, b, role)`** is the same idea one layer down, and
+  `widget` hit-testing falls back to it for a component that names the face
+  it paints (`widget.ShapeRole`) and has no silhouette of its own. There is
+  deliberately **no `ControlState`**: a hit area that changed with the
+  pointer would decide its own input — a hover face one pixel smaller than
+  the resting one leaves a ring where the control hovers, stops covering the
+  pointer, unhovers, and hovers again.
+
+Bounding box and plain rectangle stay the default. A look that implements
+neither hook is what it always was, which is all 121 engine packs; the cost
+to a component that names no face is two nil checks and a type assertion
+that fails.
 
 ## Glass
 
@@ -224,8 +287,8 @@ fallback rather than a broken window.
 
 A component takes input across its whole box, and always has. That is the
 default, every widget in the toolkit and all 121 packs rely on it, and
-nothing about it has changed — a component that never asks pays one nil
-check in `HitTest`.
+nothing about it has changed — a component that never asks pays two nil
+checks and a failed type assertion in `HitTest`.
 
 A component that wants otherwise says so:
 
@@ -234,6 +297,25 @@ c.SetHitShape(platform.ShapeEllipse(paintengine2d.XYWH(0, 0, 100, 100)))
 c.SetHitShapeFunc(func(size paintengine2d.Point) *platform.Shape { … })
 c.SetTransparent(true) // paints nothing solid over its box
 ```
+
+A component that says nothing of its own asks its **look** instead, and only
+when it names the face it paints:
+
+```go
+func (b *Button) ShapeRole() style.Role { return style.RoleButton }
+```
+
+A look with a silhouette for that face decides where the control is
+(`ControlShapeOf` above) — which is how a skin's round button stops taking
+clicks in the corners of its box. The answer is remembered beside the
+component, keyed by the look, the face and the size, because building one
+rasterises art; a look without the hook, which is every engine pack, leaves
+the box alone.
+
+`ShapeRole` is only for a component whose box *is* one face. A check box is
+its indicator and its label, and shaping the pair by the indicator's art
+would make most of the control deaf; `widgets.Button` is the one widget that
+qualifies today.
 
 A press outside the component's silhouette is not the component's — nor any
 of its children's — and falls through to whatever is behind it in the tree,

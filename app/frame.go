@@ -231,6 +231,9 @@ func (w *Window) rebuildCaption() {
 		}
 		w.capPress, w.capClick = captionGesture{}, captionClick{}
 	}
+	// The caption's buttons are half of what a fitted caption measures, and
+	// therefore half of what a look's silhouette is stated against.
+	w.lookShapeCur = nil
 	w.laid = false
 	w.dropScene()
 	w.fullInvalidate()
@@ -393,15 +396,51 @@ func (w *Window) layoutFrame(full paintengine2d.Rect) frameGeom {
 			Max: paintengine2d.Pt(full.Max.X-float32(m.Right), full.Max.Y-float32(m.Bottom)),
 		}
 		g.border = w.frameBorder()
-		inner = g.border.Apply(g.window)
+		inner = w.innerBox(g.window, true)
 	}
-	sz := w.caption.Measure(layout.Loose(inner.Dx(), inner.Dy()))
-	h := min(float32(math.Ceil(float64(sz.Y)-1e-3)), inner.Dy())
-	g.caption = paintengine2d.XYWH(inner.Min.X, inner.Min.Y, inner.Dx(), h)
+	g.caption = w.captionBox(inner, g.framed)
+	h := g.caption.Dy()
 	g.content = paintengine2d.XYWH(inner.Min.X, inner.Min.Y+h, inner.Dx(), max(0, inner.Dy()-h))
 	w.caption.Arrange(g.caption)
 	w.geom = g
 	return g
+}
+
+// captionBox is where the caption band goes inside the window's inner box:
+// as tall as the header bar measures and, normally, as wide as the window.
+//
+// A look whose frame is a tab rather than a band (DecorationSpec.CaptionFits
+// — BeOS's) gets a caption only as wide as its contents instead, and the
+// rest of the window's top edge is left to the silhouette to cut away. The
+// two go together: DecorationOf drops the fitted caption wherever
+// WindowShapeOf drops the silhouette, so there is never a narrow band on a
+// window that really is a rectangle.
+//
+// It is a function of the look, the window's size and the header bar's
+// content and nothing else, so the silhouette can ask for it before the
+// layout that will use it.
+func (w *Window) captionBox(inner paintengine2d.Rect, framed bool) paintengine2d.Rect {
+	if w.caption == nil {
+		return paintengine2d.Rect{}
+	}
+	sz := w.caption.Measure(layout.Loose(inner.Dx(), inner.Dy()))
+	h := min(float32(math.Ceil(float64(sz.Y)-1e-3)), inner.Dy())
+	width := inner.Dx()
+	if framed && w.frameSpec().CaptionFits {
+		if fit := w.caption.CaptionFitWidth(); fit > 0 {
+			width = min(fit, inner.Dx())
+		}
+	}
+	return paintengine2d.XYWH(inner.Min.X, inner.Min.Y, width, h)
+}
+
+// innerBox is the box a framed window's caption and content share: the
+// visible window less the look's border.
+func (w *Window) innerBox(win paintengine2d.Rect, framed bool) paintengine2d.Rect {
+	if !framed {
+		return win
+	}
+	return w.frameBorder().Apply(win)
 }
 
 // NonClientHit is what window point p (device pixels) is to the window

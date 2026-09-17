@@ -266,9 +266,7 @@ type SkinText struct {
 	Bold bool
 }
 
-// SkinWindow is the frame a skin asks for. Only Border and Caption are read
-// today; Shape is carried, validated and reported so a skin written now is
-// a complete document when shaped windows land.
+// SkinWindow is the frame a skin asks for.
 type SkinWindow struct {
 	Border  Insets
 	Caption float32
@@ -279,6 +277,11 @@ type SkinWindow struct {
 	// in the toolkit parses path strings, and a rect union is the form both
 	// the compositor's input region and a hit test want anyway.
 	Shape []SkinShapeRect
+	// ShapeArt is the other form: a sprite whose alpha channel is the
+	// silhouette, for a skin whose window is one picture rather than a
+	// frame around content. Shape and ShapeArt are alternatives; a manifest
+	// states one or neither.
+	ShapeArt *SkinSprite
 }
 
 // SkinShapeRect is one rounded rect of a silhouette, in design pixels.
@@ -494,11 +497,17 @@ type skinTextJSON struct {
 }
 
 type skinWindowJSON struct {
-	Border  []float32           `json:"border,omitempty"`
-	Caption *float32            `json:"caption,omitempty"`
-	Layout  string              `json:"layout,omitempty"`
-	Radius  []float32           `json:"radius,omitempty"`
-	Shape   []skinShapeRectJSON `json:"shape,omitempty"`
+	Border  []float32       `json:"border,omitempty"`
+	Caption *float32        `json:"caption,omitempty"`
+	Layout  string          `json:"layout,omitempty"`
+	Radius  []float32       `json:"radius,omitempty"`
+	Shape   json.RawMessage `json:"shape,omitempty"`
+}
+
+// skinShapeArtJSON is the other form of "shape": the alpha channel of a
+// sprite, for a skin whose window *is* a picture.
+type skinShapeArtJSON struct {
+	Art json.RawMessage `json:"art"`
 }
 
 type skinShapeRectJSON struct {
@@ -1048,7 +1057,50 @@ func (sk *Skin) loadWindow(raw json.RawMessage) error {
 	if w.Radius, err = rect4("window.radius", doc.Radius, "radius"); err != nil {
 		return err
 	}
-	for i, r := range doc.Shape {
+	if err := sk.loadWindowShape(w, doc.Shape); err != nil {
+		return err
+	}
+	sk.Window = w
+	return nil
+}
+
+// loadWindowShape reads the window's silhouette, which comes in two forms
+// because skins come in two kinds.
+//
+// A skin whose window is a resizable frame describes its outline: a union of
+// rounded rectangles in design pixels, each saying whether it stretches with
+// the window, so the silhouette is redrawn at every size and exact at 1.75
+// as at 1. That is the form to reach for.
+//
+// A skin whose window *is* a picture — a fixed panel whose edge is in the
+// art and nowhere else — names the sprite instead, and its alpha channel is
+// the silhouette. It is a bitmap, so it is resampled at any size but its
+// own, which is the trade the art made when it was drawn.
+func (sk *Skin) loadWindowShape(w *SkinWindow, raw json.RawMessage) error {
+	body := bytes.TrimSpace(raw)
+	if len(body) == 0 {
+		return nil
+	}
+	if body[0] == '{' {
+		var doc skinShapeArtJSON
+		if err := decodeSkinJSON("window.shape", body, &doc); err != nil {
+			return err
+		}
+		if len(doc.Art) == 0 {
+			return skinErr("window.shape", `needs "art": a sprite whose alpha is the silhouette`)
+		}
+		sp, err := sk.spriteRef("window.shape.art", doc.Art, "window.shape")
+		if err != nil {
+			return err
+		}
+		w.ShapeArt = sp
+		return nil
+	}
+	var rects []skinShapeRectJSON
+	if err := decodeSkinJSON("window.shape", body, &rects); err != nil {
+		return err
+	}
+	for i, r := range rects {
 		key := fmt.Sprintf("window.shape[%d]", i)
 		at, err := rect4(joinKey(key, "at"), r.At, "at")
 		if err != nil {
@@ -1075,7 +1127,6 @@ func (sk *Skin) loadWindow(raw json.RawMessage) error {
 			Radius: rad, StretchX: r.StretchX, StretchY: r.StretchY,
 		})
 	}
-	sk.Window = w
 	return nil
 }
 
