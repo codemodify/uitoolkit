@@ -154,14 +154,23 @@ func (p galleryParts) tabs() []widgets.Tab {
 type fixedHeight struct {
 	widget.Base
 	h float32
+	// share caps the height at this much of what the parent offers, so a
+	// box does not swallow a short column; 0 never caps.
+	share float32
 }
 
 // boxed is child at h 1x pixels tall; height 0 leaves it its own.
 func boxed(h float32, child widget.Component) widget.Component {
+	return boxedShare(h, 0, child)
+}
+
+// boxedShare is boxed, but never taller than share of the height it is
+// offered.
+func boxedShare(h, share float32, child widget.Component) widget.Component {
 	if h <= 0 {
 		return child
 	}
-	b := &fixedHeight{h: h}
+	b := &fixedHeight{h: h, share: share}
 	b.Init(b)
 	if child != nil {
 		b.Add(child)
@@ -171,6 +180,9 @@ func boxed(h float32, child widget.Component) widget.Component {
 
 func (b *fixedHeight) Measure(c layout.Constraints) paintengine2d.Point {
 	h := style.Dip(b.Look(), b.h)
+	if b.share > 0 && c.HasMaxH() && h > c.MaxH*b.share {
+		h = c.MaxH * b.share
+	}
 	var w float32
 	if kids := b.Children(); len(kids) > 0 {
 		w = kids[0].Measure(layout.Constraints{MinW: c.MinW, MaxW: c.MaxW, MaxH: h}).X

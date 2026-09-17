@@ -90,6 +90,9 @@ type settingsState struct {
 	// splitters of the Themes page, galleryOff how far down the gallery
 	// was scrolled: all three survive a rebuild.
 	browserRatio float32
+	// browserAuto is the ratio Settings worked out for itself, to tell it
+	// apart from one the user dragged.
+	browserAuto  float32
 	previewRatio float32
 	galleryOff   float32
 	// scheme is the desktop's light / dark preference the page was built in.
@@ -125,7 +128,13 @@ func (s *settingsState) capture() {
 		s.listOff = s.list.OffsetY
 	}
 	if s.bodySplit != nil {
-		s.browserRatio = s.bodySplit.Ratio
+		// Only what the user dragged is kept: a ratio still ours is
+		// worked out again from the window, which by now has the size the
+		// desktop gave it rather than the one it asked for.
+		s.browserRatio = 0
+		if s.bodySplit.Ratio != s.browserAuto {
+			s.browserRatio = s.bodySplit.Ratio
+		}
 	}
 	if s.rightSplit != nil {
 		s.previewRatio = s.rightSplit.Ratio
@@ -402,6 +411,7 @@ func (s *settingsState) selectedRow() int {
 func (s *settingsState) themesPage() widget.Component {
 	if s.browserRatio == 0 {
 		s.browserRatio = defaultBrowserRatio(s.win)
+		s.browserAuto = s.browserRatio
 	}
 	browser := s.themeBrowser()
 
@@ -556,8 +566,9 @@ func (s *settingsState) packDetails() widget.Component {
 	s.packNote = widgets.NewLabel("")
 	s.packNote.Wrap = true
 	s.packNote.MinLines = 1
-	// A summary longer than the box scrolls rather than being cut off.
-	return boxed(136, widgets.NewScrollView(
+	// A summary longer than the box scrolls rather than being cut off,
+	// and on a short column the box gives the list its rows back.
+	return boxedShare(136, 0.28, widgets.NewScrollView(
 		widgets.NewColumn(s.packTitle, s.packMeta, s.packText, s.packNote).WithGap(2)))
 }
 
