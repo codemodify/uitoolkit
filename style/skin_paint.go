@@ -99,7 +99,8 @@ func (sk *Skin) fitBox(b paintengine2d.Rect, v *skinVariant, sp *SkinSprite, sca
 	if n < 1 {
 		n = 1
 	}
-	w, h := float32(img.Width)*n, float32(img.Height)*n
+	src := pieceRect(img)
+	w, h := src.Dx()*n, src.Dy()*n
 	if w > b.Dx() || h > b.Dy() {
 		return b // the box is smaller than one whole multiple: fill it
 	}
@@ -184,15 +185,17 @@ func (sk *Skin) drawSlice(ctx *paintengine2d.Context, b paintengine2d.Rect, v *s
 	return drew
 }
 
-// blitPiece draws one whole image into dst. The source rect is left empty,
-// which means "the whole image": that is the only form that never samples a
-// neighbour, which is why skin_assets.go cuts every piece out separately.
+// blitPiece draws one cut piece into dst.
+//
+// The source is the piece's inner rect — its replicated border is there for
+// the sampler to read and never for the eye to see (skin_assets.go,
+// cutPadded). Each piece is its own image, so no blit can reach another
+// sprite on the sheet.
 func blitPiece(ctx *paintengine2d.Context, img *paintengine2d.Image, dst paintengine2d.Rect, paint paintengine2d.Paint) bool {
 	if ctx == nil || img == nil || dst.Empty() {
 		return false
 	}
-	src := paintengine2d.XYWH(0, 0, float32(img.Width), float32(img.Height))
-	ctx.DrawImageRectPaint(img, src, dst, paint)
+	ctx.DrawImageRectPaint(img, pieceRect(img), dst, paint)
 	return true
 }
 
@@ -207,8 +210,8 @@ func tilePiece(ctx *paintengine2d.Context, img *paintengine2d.Image, cell painte
 	if ctx == nil || img == nil || cell.Empty() {
 		return false
 	}
-	tw := float32(img.Width) * k
-	th := float32(img.Height) * k
+	src := pieceRect(img)
+	tw, th := src.Dx()*k, src.Dy()*k
 	if tw < 0.5 || th < 0.5 {
 		return false
 	}
@@ -220,7 +223,6 @@ func tilePiece(ctx *paintengine2d.Context, img *paintengine2d.Image, cell painte
 	}
 	ctx.Save()
 	ctx.ClipRect(cell)
-	src := paintengine2d.XYWH(0, 0, float32(img.Width), float32(img.Height))
 	for y := cell.Min.Y; y < cell.Max.Y-0.01; y += th {
 		for x := cell.Min.X; x < cell.Max.X-0.01; x += tw {
 			ctx.DrawImageRectPaint(img, src, paintengine2d.XYWH(x, y, tw, th), paint)

@@ -45,6 +45,7 @@ var skinRegistry = struct {
 
 	user    map[string]*Skin
 	userGen uint64
+	userDir string
 	userAt  time.Time
 }{
 	builtin: map[string]*Skin{},
@@ -98,18 +99,23 @@ func loadBuiltinSkins() []*Skin {
 func invalidateSkinPacks() {
 	skinRegistry.mu.Lock()
 	skinRegistry.user = map[string]*Skin{}
+	skinRegistry.userDir = ""
 	skinRegistry.userAt = time.Time{}
 	skinRegistry.mu.Unlock()
 }
 
 // userSkins is every loadable skin under SkinsDir, keyed by its canonical
-// id. The scan is cached on the asset TTL and on the icon cache's
-// generation, so a frame that paints a skinned control costs no syscalls and
-// an installed skin still shows up about a second later.
+// id. The scan is cached on the asset TTL, on the icon cache's generation
+// and on the directory itself, so a frame that paints a skinned control
+// costs no syscalls and an installed skin still shows up about a second
+// later — while an app (or a test) that moves XDG_CONFIG_HOME sees the new
+// directory at once rather than the old one's skins for a second.
 func userSkins() map[string]*Skin {
-	gen := IconGeneration()
+	gen, dir := IconGeneration(), SkinsDir()
 	skinRegistry.mu.RLock()
-	if skinRegistry.user != nil && skinRegistry.userGen == gen && time.Since(skinRegistry.userAt) < skinAssetTTL {
+	fresh := skinRegistry.user != nil && skinRegistry.userGen == gen &&
+		skinRegistry.userDir == dir && time.Since(skinRegistry.userAt) < skinAssetTTL
+	if fresh {
 		m := skinRegistry.user
 		skinRegistry.mu.RUnlock()
 		return m
@@ -121,6 +127,7 @@ func userSkins() map[string]*Skin {
 	skinRegistry.mu.Lock()
 	skinRegistry.user = m
 	skinRegistry.userGen = gen
+	skinRegistry.userDir = dir
 	skinRegistry.userAt = time.Now()
 	skinRegistry.mu.Unlock()
 	return m
@@ -220,14 +227,22 @@ func IsSkin(name string) bool {
 // ListSkins returns every skin this process can paint, built-in first, each
 // as the ThemePack the theme browser already knows how to render.
 func ListSkins() []ThemePack {
-	var out []ThemePack
+	// The skins are taken under the lock and their packs built outside it:
+	// Pack resolves the base through LoadTheme, which reads this registry
+	// again, and an RWMutex is not reentrant.
 	skinRegistry.mu.RLock()
+	builtin := make([]*Skin, 0, len(skinRegistry.order))
 	for _, name := range skinRegistry.order {
 		if sk, ok := skinRegistry.builtin[name]; ok {
-			out = append(out, sk.Pack())
+			builtin = append(builtin, sk)
 		}
 	}
 	skinRegistry.mu.RUnlock()
+
+	out := make([]ThemePack, 0, len(builtin))
+	for _, sk := range builtin {
+		out = append(out, sk.Pack())
+	}
 	for _, sk := range sortedUserSkins() {
 		out = append(out, sk.Pack())
 	}
@@ -289,6 +304,19 @@ func (sk *Skin) Pack() ThemePack {
 		if fam == "" {
 			fam = base.Palette
 		}
+		// The era's typefaces come with the base pack. They are keyed by
+		// the pack's name and its *engine*, and a skin's engine is "skin",
+		// so a skin would otherwise be the only pack in the toolkit reading
+		// in the default face — where a skin over Windows 95 should read in
+		// Windows 95's. Resolved here against the base's own identity; a
+		// skin that states its own "fonts" keeps them.
+		era := withEraFonts(ThemeTokens{Engine: base.Tokens.Engine}, base.Name).Fonts
+		if len(tok.Fonts.UI) == 0 {
+			tok.Fonts.UI = era.UI
+		}
+		if len(tok.Fonts.Mono) == 0 {
+			tok.Fonts.Mono = era.Mono
+		}
 	}
 	tok.Engine = skinEngineID
 	if fam != "" {
@@ -318,23 +346,20 @@ const EraSkin = "Skins"
 // basePack is the pack painted under the art. A skin that names none takes
 // the toolkit's default, so "base" is never empty and a skin never has to
 // restate a whole palette to be usable.
+//
+// A skin may not stand on another skin. One level of fallback is a feature;
+// a graph of them is a puzzle, and a cycle is a hang — a skin whose base is
+// a skin whose base is the first would resolve for ever.
 func (sk *Skin) basePack() (ThemePack, bool) {
-	name := sk.Base
-	if name == "" {
-		name = DefaultThemeName
+	if name := strings.TrimSpace(sk.Base); name != "" && name != sk.Name && !IsSkin(name) {
+		if p, ok := LoadTheme(name); ok && p.Tokens.Engine != skinEngineID {
+			return p, true
+		}
 	}
-	if name == sk.Name {
-		// A skin cannot be its own base; that would recurse through
-		// LoadTheme on every paint.
-		name = DefaultThemeName
-	}
-	p, ok := LoadTheme(name)
-	if !ok || p.Tokens.Engine == skinEngineID {
-		// Refuse a chain of skins for the same reason: one level of
-		// fallback is a feature, a graph of them is a puzzle.
-		return LoadTheme(DefaultThemeName)
-	}
-	return p, true
+	// The toolkit's default, read straight from the built-in packs rather
+	// than through LoadTheme: a user skin installed under that name would
+	// otherwise send the search round again.
+	return builtinEraPack(DefaultThemeName)
 }
 
 // BaseEngineFor is the engine that paints what a skin leaves out: its base

@@ -33,6 +33,10 @@ import (
 	"github.com/codemodify/paintengine2d"
 )
 
+// SkinManifestName is the manifest's file name, kept here so the generator
+// and its tests do not depend on the style package.
+const SkinManifestName = "skin.json"
+
 // Scales are the scale set every demo skin ships. 1 and 2 are the format's
 // required pair: art is chosen upward and drawn down, so a 2× sheet covers
 // every fractional scale up to 2 exactly.
@@ -206,7 +210,7 @@ func Write(dir string, p *Plan) error {
 	if err != nil {
 		return err
 	}
-	return writeIfChanged(filepath.Join(root, "skin.json"), doc)
+	return writeIfChanged(filepath.Join(root, SkinManifestName), doc)
 }
 
 // sheetFile is a sheet's path inside the skin, by the same @2x convention
