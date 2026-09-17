@@ -246,6 +246,16 @@ func Nocturne() *Plan {
 	l.cell("caption.inactive", 96, 34, [4]int{10, 12, 6, 12}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
 		nocCaption(ctx, w, h, hex("#1d212a"), hex("#171a22"), hex("#00000000"))
 	})
+	// Caption buttons are flat on the band until the pointer is on them —
+	// a raised key in a title bar reads as heavy, and the glyph is what
+	// carries the meaning anyway.
+	l.face("capbtn.normal", func(ctx *paintengine2d.Context, w, h float32) {})
+	l.face("capbtn.hover", func(ctx *paintengine2d.Context, w, h float32) {
+		ctx.DrawRoundRect(paintengine2d.XYWH(0, 0, w, h), 4, 4, paintengine2d.Fill(hex("#ffffff1c")))
+	})
+	l.face("capbtn.pressed", func(ctx *paintengine2d.Context, w, h float32) {
+		ctx.DrawRoundRect(paintengine2d.XYWH(0, 0, w, h), 4, 4, paintengine2d.Fill(hex("#00000055")))
+	})
 
 	// ---- small parts ------------------------------------------------------
 
@@ -405,6 +415,10 @@ func Nocturne() *Plan {
 		{Part: "window", States: [][2]string{{"normal", "window.normal"}}},
 		{Part: "caption", Text: "caption", States: [][2]string{
 			{"normal", "caption.normal"}, {"inactive", "caption.inactive"},
+		}},
+		{Part: "caption.button", Text: "caption", States: [][2]string{
+			{"normal", "capbtn.normal"}, {"hover", "capbtn.hover"},
+			{"pressed", "capbtn.pressed"}, {"inactive", "capbtn.normal"},
 		}},
 		{Part: "thumb", States: [][2]string{
 			{"normal", "thumb.normal"}, {"hover", "thumb.hover"},
