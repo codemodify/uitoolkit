@@ -289,7 +289,7 @@ func (sk *Skin) cut(sp *SkinSprite, assetScale float32, file string) *skinVarian
 		return v
 	}
 	if !sp.Sliced() {
-		v.pieces[pieceWhole] = sheet.SubImage(x0, y0, x1, y1)
+		v.pieces[pieceWhole] = cutPadded(sheet, x0, y0, x1, y1)
 		v.ok = v.pieces[pieceWhole] != nil
 		return v
 	}
@@ -317,7 +317,7 @@ func (sk *Skin) cut(sp *SkinSprite, assetScale float32, file string) *skinVarian
 			if cx1 <= cx0 || cy1 <= cy0 {
 				continue
 			}
-			v.pieces[skinPiece(row*3+col)] = sheet.SubImage(cx0, cy0, cx1, cy1)
+			v.pieces[skinPiece(row*3+col)] = cutPadded(sheet, cx0, cy0, cx1, cy1)
 		}
 	}
 	for _, p := range v.pieces {
@@ -331,3 +331,57 @@ func (sk *Skin) cut(sp *SkinSprite, assetScale float32, file string) *skinVarian
 
 // roundTexel snaps a design coordinate to a whole texel.
 func roundTexel(v float32) int { return int(math.Round(float64(v))) }
+
+// skinPad is the border of replicated texels around every cut piece.
+const skinPad = 1
+
+// cutPadded copies a sub-rect of a sheet into an image one texel larger on
+// every side, with the edge texels replicated into the border.
+//
+// This is clamp-to-edge, done by hand, and it is not an optimisation — it is
+// the difference between a nine-slice that looks like one picture and one
+// with a seam down it.
+//
+// paintengine2d's bilinear sampler reads the two texels around each sample
+// and returns *transparent* outside the image; it does not clamp. A
+// nine-slice's middle is almost always stretched wider than its source, so
+// its outermost samples fall half a texel outside it and fade toward
+// nothing — a pale vertical line down every button, exactly where the middle
+// meets the fixed edges. Replicating the border and blitting only the inner
+// rect gives the sampler the neighbouring texel it expects, at both ends,
+// whether the piece is being stretched or squeezed.
+func cutPadded(src *paintengine2d.Image, x0, y0, x1, y1 int) *paintengine2d.Image {
+	w, h := x1-x0, y1-y0
+	if src == nil || w <= 0 || h <= 0 {
+		return nil
+	}
+	out := paintengine2d.NewImage(w+2*skinPad, h+2*skinPad)
+	clamp := func(v, lo, hi int) int {
+		if v < lo {
+			return lo
+		}
+		if v >= hi {
+			return hi - 1
+		}
+		return v
+	}
+	stride := out.RowStride()
+	for j := 0; j < h+2*skinPad; j++ {
+		sy := clamp(y0+j-skinPad, y0, y1)
+		row := j * stride
+		for i := 0; i < w+2*skinPad; i++ {
+			r, g, b, a := src.PremulAt(clamp(x0+i-skinPad, x0, x1), sy)
+			k := row + i*4
+			out.Pix[k+0], out.Pix[k+1], out.Pix[k+2], out.Pix[k+3] = r, g, b, a
+		}
+	}
+	out.Touch()
+	return out
+}
+
+// pieceRect is the drawable part of a padded piece: everything but the
+// replicated border.
+func pieceRect(img *paintengine2d.Image) paintengine2d.Rect {
+	return paintengine2d.XYWH(skinPad, skinPad,
+		float32(img.Width-2*skinPad), float32(img.Height-2*skinPad))
+}
