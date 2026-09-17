@@ -28,6 +28,7 @@ package platform
 #include "xdg-activation-v1-client-protocol.h"
 #include "cursor-shape-v1-client-protocol.h"
 #include "xdg-toplevel-drag-v1-client-protocol.h"
+#include "ext-background-effect-v1-client-protocol.h"
 #include "wayland_dmabuf.h"
 #include "wayland_sync.h"
 #include "wayland_cursor.h"
@@ -38,6 +39,7 @@ extern void uitkWlXdgConfigure(uintptr_t sid, struct xdg_surface *surf, uint32_t
 extern void uitkWlTopConfigure(uintptr_t sid, struct xdg_toplevel *top, int32_t w, int32_t h, uint32_t flags);
 extern void uitkWlTopClose(uintptr_t sid);
 extern void uitkWlTopBounds(uintptr_t sid, int32_t w, int32_t h);
+extern void uitkWlBgCaps(uintptr_t cid, uint32_t flags);
 extern void uitkWlTopCaps(uintptr_t sid, uint32_t mask);
 extern void uitkWlDecoConfigure(uintptr_t sid, uint32_t mode);
 extern void uitkWlSeatCaps(uintptr_t id, struct wl_seat *seat, uint32_t caps);
@@ -443,6 +445,56 @@ static void ui_wl_region_none(struct wl_surface *s, int kind) {
 	} else {
 		wl_surface_set_opaque_region(s, NULL);
 	}
+}
+
+// ---- glass: ext_background_effect_v1 -------------------------------------
+//
+// The compositor blurs what is *behind* the surface, which no amount of
+// painting inside the window can do: a window only ever sees its own
+// pixels. KWin 6.7.5 serves this staging protocol (and no longer serves its
+// old org_kde_kwin_blur).
+
+static struct ext_background_effect_surface_v1 *ui_wl_bg_effect(
+		struct ext_background_effect_manager_v1 *m, struct wl_surface *s) {
+	if (!m || !s) return NULL;
+	return ext_background_effect_manager_v1_get_background_effect(m, s);
+}
+
+// ui_wl_blur_region states the blurred-behind region, or clears it with an
+// empty region when there is nothing to blur.
+static void ui_wl_blur_region(struct wl_compositor *c,
+		struct ext_background_effect_surface_v1 *b, int *rects, int n) {
+	if (!b) return;
+	if (!c || n <= 0) {
+		ext_background_effect_surface_v1_set_blur_region(b, NULL);
+		return;
+	}
+	struct wl_region *r = wl_compositor_create_region(c);
+	if (!r) return;
+	for (int i = 0; i < n; i++) {
+		int *q = rects + i * 4;
+		if (q[2] > 0 && q[3] > 0) wl_region_add(r, q[0], q[1], q[2], q[3]);
+	}
+	ext_background_effect_surface_v1_set_blur_region(b, r);
+	wl_region_destroy(r);
+}
+
+static void ui_wl_bg_destroy(struct ext_background_effect_surface_v1 *b) {
+	if (b) ext_background_effect_surface_v1_destroy(b);
+}
+
+static void uitk_bg_caps(void *data, struct ext_background_effect_manager_v1 *m, uint32_t flags) {
+	(void)m;
+	uitkWlBgCaps((uintptr_t)data, flags);
+}
+static const struct ext_background_effect_manager_v1_listener uitk_bg_listener = {
+	.capabilities = uitk_bg_caps,
+};
+static void ui_wl_bg_listen(struct ext_background_effect_manager_v1 *m, uintptr_t id) {
+	ext_background_effect_manager_v1_add_listener(m, &uitk_bg_listener, (void*)id);
+}
+static const struct wl_interface *ui_wl_bg_man_iface(void) {
+	return &ext_background_effect_manager_v1_interface;
 }
 
 static void uitk_buf_rel(void *data, struct wl_buffer *buf) {
@@ -1227,6 +1279,12 @@ type wlConn struct {
 	fracMan    *C.struct_wp_fractional_scale_manager_v1
 	viewporter *C.struct_wp_viewporter
 	activation *C.struct_xdg_activation_v1
+	// bgMan is ext_background_effect_v1's manager and bgCaps the effects
+	// it says it can do now (bit 0 is blur). The capability comes and goes
+	// while the app runs: KWin drops it when desktop effects are switched
+	// off, and a look that asked for glass has to carry on without it.
+	bgMan  *C.struct_ext_background_effect_manager_v1
+	bgCaps uint32
 	// outputs maps a wl_output proxy to its registry name; outs holds
 	// each output's scale and is the source of truth for surface scale.
 	outputs map[uintptr]uint32
@@ -1383,6 +1441,9 @@ type wlSurface struct {
 	// (maximized, tiled, uncomposited) would otherwise keep the geometry
 	// of the one it had, and the compositor would place it by that.
 	geomSet bool
+	// bgSurf is the surface's background-effect object, made the first
+	// time a frame asks for blur and kept until the surface goes.
+	bgSurf *C.struct_ext_background_effect_surface_v1
 	// gpuAlpha is whether the EGL config behind gpu has an alpha channel;
 	// a frame that starts or stops needing one rebinds the device.
 	gpuAlpha bool
@@ -2657,6 +2718,10 @@ func (s *wlSurface) Close() error {
 		C.ui_wl_frac_destroy(s.fracObj)
 		s.fracObj = nil
 	}
+	if s.bgSurf != nil {
+		C.ui_wl_bg_destroy(s.bgSurf)
+		s.bgSurf = nil
+	}
 	if s.viewport != nil {
 		C.ui_wl_viewport_destroy(s.viewport)
 		s.viewport = nil
@@ -2796,6 +2861,12 @@ func uitkWlRegistryGlobal(id C.uintptr_t, reg *C.struct_wl_registry, name C.uint
 			break
 		}
 		c.topDragMan = (*C.struct_xdg_toplevel_drag_manager_v1)(C.ui_wl_bind(reg, name, C.ui_wl_top_drag_man_iface(), 1))
+	case "ext_background_effect_manager_v1":
+		// Glass: the compositor blurs the desktop behind a window.
+		c.bgMan = (*C.struct_ext_background_effect_manager_v1)(C.ui_wl_bind(reg, name, C.ui_wl_bg_man_iface(), 1))
+		if c.bgMan != nil {
+			C.ui_wl_bg_listen(c.bgMan, C.uintptr_t(id))
+		}
 	case "wp_fractional_scale_manager_v1":
 		c.fracMan = (*C.struct_wp_fractional_scale_manager_v1)(C.ui_wl_bind(reg, name, C.ui_wl_frac_man_iface(), 1))
 	case "wp_viewporter":
@@ -3440,6 +3511,18 @@ func uitkWlOutputDone(id C.uintptr_t, out *C.struct_wl_output) {
 	}
 	_ = out
 	c.refreshSurfaceScales()
+}
+
+// uitkWlBgCaps takes the compositor's background-effect capabilities: bit 0
+// is blur. The event arrives when the global is bound and again whenever
+// the set changes, so a window that asked for glass simply stops getting it
+// when the user switches desktop effects off.
+//
+//export uitkWlBgCaps
+func uitkWlBgCaps(id C.uintptr_t, flags C.uint32_t) {
+	if c := wlConnBy(id); c != nil {
+		c.bgCaps = uint32(flags)
+	}
 }
 
 //export uitkWlSurfEnter
@@ -4234,7 +4317,7 @@ func (s *wlSurface) ShowWindowMenu(p paintengine2d.Point) bool {
 // the geometry, the regions and the pixels it describes are one atomic
 // update.
 func (s *wlSurface) SetFrame(f Frame) {
-	if s == nil || s.closed || f == s.frame {
+	if s == nil || s.closed || f.Same(s.frame) {
 		return
 	}
 	alphaWas := s.frame.Alpha
@@ -4279,6 +4362,7 @@ func (s *wlSurface) applyFrameLocked(surfW, surfH int) {
 	}
 	s.frameSent = true
 	s.opaqueW, s.opaqueH = surfW, surfH
+	s.applyBlurLocked()
 	m := s.marginLogical()
 	win := [4]int{m.Left, m.Top, surfW - m.Width(), surfH - m.Height()}
 	if s.xdg != nil && (!m.Zero() || s.frame.Alpha || s.geomSet) {
@@ -4288,6 +4372,10 @@ func (s *wlSurface) applyFrameLocked(surfW, surfH int) {
 		s.geomSet = true
 	}
 	if s.conn.compositor == nil {
+		return
+	}
+	if s.frame.Shape != nil {
+		s.applyShapeLocked()
 		return
 	}
 	if m.Zero() && !s.frame.Alpha {
@@ -4313,6 +4401,67 @@ func (s *wlSurface) applyFrameLocked(surfW, surfH int) {
 		return
 	}
 	C.ui_wl_region(s.conn.compositor, s.surf, 1, &rects[0], C.int(len(rects)/4))
+}
+
+// applyShapeLocked states a shaped window's silhouette. The input region is
+// exactly the shape, so a hole in the middle takes no clicks at all and the
+// press goes to whatever is behind the window; the look of the hole is the
+// transparent pixels of the ARGB buffer, which the app paints.
+//
+// A wl_region speaks logical pixels and a Frame device ones, so the shape
+// is converted — outwards for input, which must never lose a pixel the
+// window covers, and inwards for the opaque region, which must never gain
+// one it does not paint solid. At a fractional scale those are different
+// rectangles.
+func (s *wlSurface) applyShapeLocked() {
+	sc := s.deviceScale()
+	shape := flatRects(ScaleRects(s.frame.Shape, sc, true))
+	if len(shape) == 0 {
+		// A deliberately empty region: the window takes no input anywhere,
+		// and every press goes through it. NULL would mean the opposite.
+		C.ui_wl_region(s.conn.compositor, s.surf, 0, (*C.int)(nil), 0)
+	} else {
+		C.ui_wl_region(s.conn.compositor, s.surf, 0, &shape[0], C.int(len(shape)/4))
+	}
+	if op := flatRects(ScaleRects(s.frame.Opaque, sc, false)); len(op) > 0 {
+		C.ui_wl_region(s.conn.compositor, s.surf, 1, &op[0], C.int(len(op)/4))
+	} else {
+		C.ui_wl_region_none(s.surf, 1)
+	}
+}
+
+// applyBlurLocked states the blur-behind region. It is double-buffered
+// surface state like the rest of the frame, so it lands with the same
+// commit as the pixels that sit over the blur.
+func (s *wlSurface) applyBlurLocked() {
+	if s.conn == nil || s.conn.bgMan == nil || s.surf == nil {
+		return
+	}
+	if s.frame.Blur == nil && s.bgSurf == nil {
+		// Never asked for glass: do not make the object at all, so an
+		// ordinary window sends nothing extra.
+		return
+	}
+	if s.bgSurf == nil {
+		if s.bgSurf = C.ui_wl_bg_effect(s.conn.bgMan, s.surf); s.bgSurf == nil {
+			return
+		}
+	}
+	// Inwards, like the opaque region: blurring a pixel the window does
+	// not cover would smear the desktop outside the window.
+	if rects := flatRects(ScaleRects(s.frame.Blur, s.deviceScale(), false)); len(rects) > 0 {
+		C.ui_wl_blur_region(s.conn.compositor, s.bgSurf, &rects[0], C.int(len(rects)/4))
+	} else {
+		C.ui_wl_blur_region(s.conn.compositor, s.bgSurf, (*C.int)(nil), 0)
+	}
+}
+
+// BlurBehindSupported reports whether the compositor blurs behind a window
+// now: it serves ext_background_effect_v1 and says blur is among the
+// effects it can do (GlassSurface).
+func (s *wlSurface) BlurBehindSupported() bool {
+	return s != nil && s.conn != nil && s.conn.bgMan != nil &&
+		s.conn.bgCaps&C.EXT_BACKGROUND_EFFECT_MANAGER_V1_CAPABILITY_BLUR != 0
 }
 
 // flatRects is rects as the flat x, y, w, h list the C helper takes.

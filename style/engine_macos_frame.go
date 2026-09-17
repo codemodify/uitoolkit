@@ -43,6 +43,12 @@ func (macosEngine) Decoration(l *Classic, st DecorationState) DecorationSpec {
 		Radius:        [4]float32{r, r, r, r},
 		Shadow:        ShadowLayersReach(macosWindowShadow(l, DecorationState{Active: true})),
 	}
+	// Vibrancy, and Tahoe's Liquid Glass after it: Big Sur onwards the
+	// window itself is a pane over the desktop, which needs the compositor
+	// to blur what is behind it. Yosemite's windows were opaque, so only
+	// Big Sur and later ask. "vibrancy" 0 turns it off along with the
+	// menus' in-app blur (style/glass.go).
+	s.Glass = c.bigSur && l.P("vibrancy", 1) != 0
 	return s
 }
 

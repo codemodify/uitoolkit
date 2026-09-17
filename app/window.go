@@ -87,17 +87,46 @@ type Window struct {
 	wrapCaption    *widgets.HeaderBar
 	defaultCaption *widgets.HeaderBar
 	// decor is the decoration mode in effect, caps what the desktop can
-	// do for the window, geom the frame's last layout, shape what the
+	// do for the window, geom the frame's last layout, sysFrame what the
 	// window system was last told about the frame (the margin holding the
-	// shadow, the resize band in it, the corner radii, alpha) and shadow
-	// the cached nine-patch that margin is painted from.
+	// shadow, the resize band in it, the corner radii, alpha, and the
+	// window's silhouette) and shadow the cached nine-patch that margin is
+	// painted from.
 	decor    platform.Decorations
 	caps     platform.WMCaps
 	geom     frameGeom
-	shape    platform.Frame
+	sysFrame platform.Frame
 	shadow   frameShadow
-	capPress captionGesture
-	capClick captionClick
+	// shape is the window's silhouette (SetShape) and shapeFn the callback
+	// that rebuilds it at every size (SetShapeFunc); only one is ever set.
+	// shapeOpaque is whether its interior may be claimed solid, glass
+	// whether the app asked for the desktop behind to be blurred, and
+	// eraser the cached inverse-coverage image the silhouette is punched
+	// out with (eraserFor is the rasterisation it was built from).
+	shape       *platform.Shape
+	shapeFn     func(paintengine2d.Point, float32) *platform.Shape
+	shapeOpaque bool
+	glass       bool
+	eraser      *paintengine2d.Image
+	eraserFor   *platform.ShapeRaster
+	// wipe is the silhouette's uncovered region as one path (wipeFor is
+	// the rasterisation it was built from, wipeAt where it was placed).
+	wipe    *paintengine2d.Path
+	wipeFor *platform.ShapeRaster
+	wipeAt  paintengine2d.Point
+	// shapeShade is the blurred silhouette a shaped window casts instead
+	// of the nine-patch shadow, and glassTint the colour an app chose for
+	// its glass (the look's own when it is fully transparent).
+	shapeShade shapeShadow
+	glassTint  paintengine2d.Color
+	// shapeCur is what shapeFn last built, for the size and scale in
+	// shapeCurW / shapeCurH / shapeCurScale: a fresh Shape every frame
+	// would rasterise itself afresh every frame.
+	shapeCur             *platform.Shape
+	shapeCurW, shapeCurH int
+	shapeCurScale        float32
+	capPress             captionGesture
+	capClick             captionClick
 }
 
 func newWindow(a *Application, surf platform.Surface, opts platform.WindowOptions) *Window {
@@ -1330,6 +1359,18 @@ func (w *Window) paintRects() []paintengine2d.Rect {
 		// A hover or a caret never touches it.
 		clip = clip.Intersect(g.window)
 	}
+	if r := w.shapeRaster(); r != nil {
+		// Damage stays inside the silhouette. Its bounding box is as far
+		// as this goes on purpose: clipping each damage box against a
+		// silhouette's own rectangles would turn one box into as many as
+		// the shape has rows, and presenting hundreds of slivers costs the
+		// compositor far more than repainting a corner the window does not
+		// own — whose pixels are punched transparent anyway.
+		win := w.windowBox()
+		b := r.Bounds
+		clip = clip.Intersect(paintengine2d.XYWH(
+			win.Min.X+float32(b.X), win.Min.Y+float32(b.Y), float32(b.W), float32(b.H)))
+	}
 	out.ClipTo(clip)
 	if out.Empty() {
 		return nil
@@ -1428,6 +1469,13 @@ func (w *Window) paintShadow(ctx *paintengine2d.Context, c widget.Component, kin
 // paintBackground lets the look paint the window background (Aqua
 // pinstripes, brushed metal); the flat clear already covers the rest.
 func (w *Window) paintBackground(ctx *paintengine2d.Context, full paintengine2d.Rect) {
+	if w.wantsGlass() {
+		// The window is a pane over the blurred desktop: the look's own
+		// background is opaque — a gradient, a texture, a flat fill — and
+		// painting it here would hide every bit of the blur. The glass
+		// tint windowFill already laid down is the background now.
+		return
+	}
 	if bl, ok := w.look.(style.WindowBackgroundLook); ok {
 		bl.DrawWindowBackground(ctx, full)
 	}
@@ -1447,10 +1495,53 @@ func (w *Window) windowBox() paintengine2d.Rect {
 // clearColor is what a frame starts from: the look's background, or
 // nothing at all where the margin around the window must stay see-through.
 func (w *Window) clearColor() paintengine2d.Color {
-	if w.geom.translucent() {
+	if w.seeThrough() {
 		return paintengine2d.Transparent
 	}
 	return w.look.Palette().Background
+}
+
+// seeThrough reports whether the surface starts fully transparent: there is
+// a margin to keep clear for the shadow, a corner to cut, a silhouette
+// whose outside is not the window, or glass to let the desktop through.
+func (w *Window) seeThrough() bool {
+	return w.geom.translucent() || w.shapeRaster() != nil || w.wantsGlass()
+}
+
+// windowFill is the colour the window's own box starts from: the look's
+// background, or the look's glass tint where the desktop is really being
+// blurred behind it (an opaque fill over a blurred desktop would show none
+// of the blur).
+func (w *Window) windowFill() paintengine2d.Color {
+	if !w.wantsGlass() {
+		return w.look.Palette().Background
+	}
+	if w.glassTint.A > 0 {
+		return w.glassTint
+	}
+	return style.GlassTint(w.look, glassAlpha)
+}
+
+// glassAlpha is how much of the blurred desktop shows through a window
+// whose look did not name a glass colour of its own. It sits where Fluent's
+// acrylic, Big Sur's vibrancy and Tahoe's glass each sit.
+const glassAlpha = 0.78
+
+// fillWindow paints box with the window's fill. An opaque fill is drawn as
+// it always was; a translucent one has to replace what is under it rather
+// than blend over it, or every frame would stack another coat of tint on
+// the last.
+func (w *Window) fillWindow(ctx *paintengine2d.Context, box paintengine2d.Rect, fill paintengine2d.Color) {
+	if fill.A < 1 {
+		// A translucent fill has to replace what is under it, not blend
+		// over it, or every frame would stack another coat of tint on the
+		// last: take the box down to nothing first.
+		ctx.DrawRect(box, paintengine2d.Paint{
+			Color: paintengine2d.White,
+			Blend: paintengine2d.BlendDestOut,
+		})
+	}
+	ctx.DrawRect(box, paintengine2d.Fill(fill))
 }
 
 func (w *Window) frameImmediate(rects []paintengine2d.Rect) {
@@ -1458,19 +1549,20 @@ func (w *Window) frameImmediate(rects []paintengine2d.Rect) {
 	if ctx == nil {
 		return
 	}
-	bg := w.look.Palette().Background
+	bg := w.windowFill()
 	win := w.windowBox()
 	if len(rects) == 0 {
 		ctx.Clear(w.clearColor())
 		ctx.Save()
 		ctx.ClipRect(win)
-		if w.geom.translucent() {
-			ctx.DrawRect(win, paintengine2d.Fill(bg))
+		if w.seeThrough() {
+			w.fillWindow(ctx, win, bg)
 		}
 		w.paintBackground(ctx, win)
 		w.paintLayers(ctx, nil)
 		ctx.Restore()
 		w.paintFrameCorners(ctx, nil)
+		w.paintWindowShape(ctx, nil)
 		w.paintFrameShadow(ctx, nil)
 		return
 	}
@@ -1484,14 +1576,16 @@ func (w *Window) frameImmediate(rects []paintengine2d.Rect) {
 		ctx.Save()
 		ctx.ClipDeviceRect(r)
 		ctx.ClipRect(win)
-		ctx.DrawRect(r, paintengine2d.Fill(bg))
+		w.fillWindow(ctx, r, bg)
 		w.paintBackground(ctx, win)
 		w.paintLayers(ctx, &one)
 		ctx.Restore()
-		// A box that reaches a corner takes its bite out again.
+		// A box that reaches a corner, or any part of the silhouette's
+		// edge, takes its bite out again.
 		ctx.Save()
 		ctx.ClipDeviceRect(r)
 		w.paintFrameCorners(ctx, &one)
+		w.paintWindowShape(ctx, &one)
 		ctx.Restore()
 	}
 }
@@ -1509,10 +1603,11 @@ func (w *Window) frameScene(rects []paintengine2d.Rect) []paintengine2d.Rect {
 	win := w.windowBox()
 	ctx.Save()
 	ctx.ClipRect(win)
-	if w.geom.translucent() {
-		// The clear left the whole surface see-through for the shadow; the
-		// window itself starts from the look's background again.
-		ctx.DrawRect(win, paintengine2d.Fill(w.look.Palette().Background))
+	if w.seeThrough() {
+		// The clear left the whole surface see-through for the shadow (or
+		// for the desktop behind a shaped or glassy window); the window
+		// itself starts from the look's background again.
+		w.fillWindow(ctx, win, w.windowFill())
 	}
 	w.paintBackground(ctx, win)
 	// The recording is always a complete display list for the window;
@@ -1540,9 +1635,11 @@ func (w *Window) frameScene(rects []paintengine2d.Rect) []paintengine2d.Rect {
 		widget.RecordTree(w.tooltip, rec, ctx, nil, w.layers, true)
 	}
 	ctx.Restore()
-	// Last, outside the window's clip: the corners are cut out of what was
-	// painted and the shadow goes into the margin around it.
+	// Last, outside the window's clip: the corners (or the whole
+	// silhouette) are cut out of what was painted and the shadow goes into
+	// the margin around it.
 	w.paintFrameCorners(ctx, nil)
+	w.paintWindowShape(ctx, nil)
 	w.paintFrameShadow(ctx, nil)
 	w.layers.EndFrame()
 	w.scene = rec.Finish()
@@ -1572,11 +1669,46 @@ func (w *Window) Capture() *paintengine2d.Image {
 		return nil
 	}
 	g := w.geom
+	if r := w.shapeRaster(); r != nil {
+		return w.cropToShape(img, r)
+	}
 	if !g.framed || g.margin.Zero() {
 		return img
 	}
 	x0, y0, x1, y1 := g.window.IntBounds()
 	return img.SubImage(x0, y0, x1, y1)
+}
+
+// cropToShape is Capture's crop for a shaped window: the silhouette's
+// bounding box rather than the whole window (a shape that does not fill its
+// window would otherwise come back with a transparent margin), with the
+// coverage mask applied to the alpha channel so every pixel outside the
+// silhouette is see-through whatever the paint path left there.
+func (w *Window) cropToShape(img *paintengine2d.Image, r *platform.ShapeRaster) *paintengine2d.Image {
+	win := w.windowBox()
+	ox, oy := int(win.Min.X), int(win.Min.Y)
+	b := r.Bounds
+	out := img.SubImage(ox+b.X, oy+b.Y, ox+b.X+b.W, oy+b.Y+b.H)
+	if out == nil || out.Width < 1 || out.Height < 1 {
+		return out
+	}
+	stride := out.RowStride()
+	for y := 0; y < out.Height; y++ {
+		row := out.Pix[y*stride:]
+		src := r.Mask[(y+b.Y)*r.W:]
+		for x := 0; x < out.Width; x++ {
+			c := uint32(src[x+b.X])
+			if c == 255 {
+				continue
+			}
+			// Premultiplied: every channel scales with the coverage.
+			i := x * 4
+			for k := 0; k < 4; k++ {
+				row[i+k] = uint8((uint32(row[i+k])*c + 127) / 255)
+			}
+		}
+	}
+	return out
 }
 
 // CaptureSurface paints a full frame and returns the whole buffer, margin
