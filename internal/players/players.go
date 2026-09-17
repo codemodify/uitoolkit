@@ -8,10 +8,14 @@
 // a clock that counts, a list of invented tracks, a band of numbers that
 // look like an analyser, and the arithmetic of windows that stick together.
 //
-// Everything in this package is plain data with no toolkit types in it, so
-// the parts that are easy to get wrong — the transport's wrap at the end of
-// a track, the seek bar's fraction, where a snapped window lands — are
-// tested headless without opening a window at all.
+// The model half of it — this file, spectrum.go and rack.go — is plain data
+// with no toolkit type anywhere in it, so the parts that are easy to get
+// wrong are tested headless without opening a window at all: the transport's
+// wrap at the end of a track, the seek bar's fraction, where a snapped
+// window lands. ui.go and desk.go are the other half, the pieces of
+// *interface* all three share — the transport glyphs, the analyser view, the
+// clock that drives them and the driver that keeps real windows stuck
+// together.
 //
 // The three apps are in their own packages beside this one, because a
 // player's whole point is its look and no two of these three share any of
@@ -248,6 +252,8 @@ type Transport struct {
 	// without polling. It is called on whatever goroutine moved the
 	// transport, which in every app here is the UI one.
 	Changed func()
+	// premute is the volume mute took away, so unmuting puts it back.
+	premute float32
 }
 
 // State is what the transport is doing.
@@ -509,6 +515,91 @@ func (t *Transport) changed() {
 		t.Changed()
 	}
 }
+
+// ---- what a keyboard can ask for --------------------------------------------
+
+// Command is one of the things a player's keyboard does. It is here rather
+// than in the apps so that all three answer the same keys, and so that the
+// test which walks the keyboard has one table to walk.
+type Command uint8
+
+// The commands, in the order the keys for them are usually reached for.
+const (
+	CmdNone Command = iota
+	CmdPlayPause
+	CmdStop
+	CmdNext
+	CmdPrev
+	CmdSeekBack
+	CmdSeekForward
+	CmdVolumeUp
+	CmdVolumeDown
+	CmdMute
+	CmdShuffle
+	CmdRepeat
+)
+
+// SeekStep is how far the seek keys move the head, and VolumeStep how much
+// the volume keys move the volume.
+const (
+	SeekStep   = 5 * time.Second
+	VolumeStep = 0.05
+)
+
+// Do applies a command. An unknown one does nothing, so a caller need not
+// check before dispatching.
+//
+// Mute is a memory rather than a flag: the volume it was at is kept on the
+// transport so that unmuting puts it back, which is what every player does
+// and what a bare boolean cannot.
+func (t *Transport) Do(c Command) {
+	if t == nil {
+		return
+	}
+	switch c {
+	case CmdPlayPause:
+		t.Pause()
+	case CmdStop:
+		t.Stop()
+	case CmdNext:
+		t.Next()
+	case CmdPrev:
+		t.Prev()
+	case CmdSeekBack:
+		t.Skip(-SeekStep)
+	case CmdSeekForward:
+		t.Skip(SeekStep)
+	case CmdVolumeUp:
+		t.SetVolume(t.Volume + VolumeStep)
+	case CmdVolumeDown:
+		t.SetVolume(t.Volume - VolumeStep)
+	case CmdMute:
+		t.ToggleMute()
+	case CmdShuffle:
+		t.SetRandom(!t.Random)
+	case CmdRepeat:
+		t.CycleRepeat()
+	}
+}
+
+// ToggleMute drops the volume to nothing and remembers what it was, or puts
+// it back. A transport muted at nothing unmutes to a sensible reading rather
+// than to nothing, so the button is never a no-op.
+func (t *Transport) ToggleMute() {
+	if t.Volume > 0 {
+		t.premute = t.Volume
+		t.SetVolume(0)
+		return
+	}
+	v := t.premute
+	if v <= 0 {
+		v = 0.5
+	}
+	t.SetVolume(v)
+}
+
+// Muted reports whether the volume is at nothing.
+func (t *Transport) Muted() bool { return t != nil && t.Volume <= 0 }
 
 // ---- formatting -------------------------------------------------------------
 
