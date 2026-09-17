@@ -92,7 +92,7 @@ func New(a *app.Application, opts Options) (*Player, error) {
 	}
 	p.Spectrum.Fall = 0.7
 
-	main, err := p.open(a, opts, "Minim", StripW, StripH)
+	main, err := p.open(a, opts, "Minim — a visual demo", StripW, StripH)
 	if err != nil {
 		return nil, err
 	}

@@ -241,13 +241,14 @@ func (l *listPane) Arrange(r paintengine2d.Rect) {
 	lk := l.Look()
 	dip := func(v float32) float32 { return style.Dip(lk, v) }
 	b := l.LocalBounds()
-	row := dip(20)
+	row := dip(32)
 	l.list.Arrange(paintengine2d.XYWH(0, 0, b.Dx(), max(b.Dy()-row-dip(4), dip(40))))
 	y := b.Dy() - row
 	btn := dip(38)
-	l.foot.Arrange(paintengine2d.XYWH(0, y, max(b.Dx()-btn-row-dip(8), 0), row))
-	l.toTop.Arrange(paintengine2d.XYWH(b.Dx()-btn-row-dip(4), y, btn, row))
-	l.shrink.Arrange(paintengine2d.XYWH(b.Dx()-row, y, row, row))
+	ctl := dip(20)
+	l.foot.Arrange(paintengine2d.XYWH(0, y, max(b.Dx()-btn-ctl-dip(8), 0), row))
+	l.toTop.Arrange(paintengine2d.XYWH(b.Dx()-btn-ctl-dip(4), y+(row-ctl)/2, btn, ctl))
+	l.shrink.Arrange(paintengine2d.XYWH(b.Dx()-ctl, y+(row-ctl)/2, ctl, ctl))
 }
 
 func (l *listPane) KeyPress(e widget.KeyEvent) bool { return l.p.Keys(e) }
@@ -266,20 +267,36 @@ type foot struct {
 }
 
 func (f *foot) Measure(c layout.Constraints) paintengine2d.Point {
-	return c.Constrain(paintengine2d.Pt(style.Dip(f.Look(), 120), style.Dip(f.Look(), 20)))
+	return c.Constrain(paintengine2d.Pt(style.Dip(f.Look(), 120), style.Dip(f.Look(), 32)))
 }
 
 func (f *foot) Arrange(b paintengine2d.Rect) { f.SetBounds(b) }
 
+// Paint is two lines: what the queue holds, and what this application is.
+//
+// The second line is here rather than in the strip because the strip is two
+// hundred and sixty-seven design pixels wide with a display, a seek bar and
+// thirteen controls in it, and there is no honest place to put a sentence.
+// The playlist window has the room, so this is where the compact player
+// says out loud what it is — and it says it in the accessibility tree as
+// well, where a window this small is read rather than looked at.
 func (f *foot) Paint(ctx *paintengine2d.Context) {
 	lk, b := f.Look(), f.LocalBounds()
-	lk.DrawLabel(ctx, b, f.text(), lk.Palette().TextMuted, style.AlignStart)
+	pal := lk.Palette()
+	half := b.Dy() / 2
+	lk.DrawLabel(ctx, paintengine2d.XYWH(b.Min.X, b.Min.Y, b.Dx(), half),
+		f.count(), pal.TextMuted, style.AlignStart)
+	tiny := players.ScaledFace(lk.Font(), style.Dip(lk, 10))
+	players.DrawTextIn(ctx, tiny, paintengine2d.XYWH(b.Min.X, b.Min.Y+half, b.Dx(), half),
+		players.Short, style.Mix(pal.TextMuted, pal.Background, 0.2), style.AlignStart)
 }
 
-func (f *foot) text() string {
+func (f *foot) count() string {
 	pl := f.p.Transport.List
 	return fmt.Sprintf("%d tracks · %s", pl.Len(), players.Clock(pl.Total()))
 }
+
+func (f *foot) text() string { return f.count() + " · " + players.Disclaimer }
 
 func (f *foot) Describe(n *a11y.Node) {
 	n.Role = a11y.RoleStatusBar
