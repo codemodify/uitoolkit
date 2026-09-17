@@ -1,4 +1,5 @@
-// Gallery is the widget showcase used by examples/gallery and the uitest-driver.
+// Gallery is the widget showcase used by examples/gallery, the
+// uitest-driver and Settings.
 package demo
 
 import (
@@ -9,13 +10,165 @@ import (
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit"
 	"github.com/codemodify/uitoolkit/app"
+	"github.com/codemodify/uitoolkit/layout"
 	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
 	"github.com/codemodify/uitoolkit/widgets"
 )
 
+// GalleryHost is what the showcase needs from the application around it:
+// where its dialogs go up, and what its Window, Theme and Quit controls
+// do. The standalone window fills all of it in; Settings, which shows the
+// gallery in a ThemeScope under the theme preview, leaves out what would
+// re-theme or close Settings itself (a nil field greys its control out).
+type GalleryHost struct {
+	// Light says which palette the gallery is drawn in: it sets the Dark
+	// chrome switch and the View menu's radio.
+	Light bool
+	// Root is where modal dialogs are shown — the window's content, read
+	// when a dialog opens rather than while the gallery is being built.
+	Root func() widget.Component
+	// NewWindow opens the Window button's second OS window.
+	NewWindow func() error
+	// SwitchTheme flips the palette the gallery is drawn in.
+	SwitchTheme func(light bool)
+	// Quit ends the run loop (File ▸ Quit).
+	Quit func()
+}
+
+// Gallery is the showcase as a window of its own: menu bar, title bar,
+// tool bar, the buttons and fields beside the tabbed views, and a status
+// bar. examples/gallery, the uitest-driver and the screenshot fixtures
+// draw this one.
 func Gallery(a *app.Application, win *app.Window, light bool) widget.Component {
+	return GalleryWindow(GalleryHost{
+		Light: light,
+		Root:  func() widget.Component { return win.Content() },
+		NewWindow: func() error {
+			w2, err := a.NewWindow(platform.WindowOptions{Title: "Second window", Width: 420, Height: 280})
+			if err != nil {
+				return err
+			}
+			w2.SetContent(widgets.NewPanel("Dialog window",
+				widgets.NewLabel("This is a second OS window."),
+				widgets.NewButton("Close", func() { w2.Close() }),
+			))
+			return nil
+		},
+		SwitchTheme: func(light bool) {
+			palette := style.ThemeDark
+			if light {
+				palette = style.ThemeLight
+			}
+			a.SetLook(style.WithTheme(win.Look(), palette))
+			win.SetContent(Gallery(a, win, light))
+		},
+		Quit: a.Quit,
+	})
+}
+
+// GalleryWindow assembles the showcase the way a window wants it: the
+// chrome across the top, the buttons and fields in a scrolling column
+// beside the tabbed views, the status bar along the bottom.
+func GalleryWindow(host GalleryHost) widget.Component {
+	p := buildGalleryParts(host)
+	leftCol := widgets.NewColumn(
+		widgets.NewTitle("uitoolkit"),
+		widgets.NewLabel("paintengine2d  ·  v"+uitoolkit.Version),
+		p.buttons,
+		p.fields,
+	).WithGap(10).WithPad(12)
+	left := widgets.NewScrollView(leftCol)
+
+	tabs := widgets.NewTabView(p.tabs()...)
+	tabs.OnChange = func(i int) {
+		if i >= 0 && i < len(p.views) {
+			p.status.Set(0, "Tab: "+p.views[i].title)
+		}
+	}
+	right := widgets.NewPad(10, tabs)
+
+	split := widgets.NewSplitter(true, left, right)
+	split.Ratio = 0.46
+
+	root := widgets.NewColumn(p.menu, p.chrome, p.tools, split, p.status).WithGap(0)
+	root.AddFlex(split, 1)
+	return root
+}
+
+// GalleryPane assembles the same showcase as one column that scrolls,
+// without the menu bar and title bar a window owns: the tool bar, the
+// buttons and fields, then every tabbed view stacked under them as its
+// own panel, and the status bar. Settings shows it in a ThemeScope under
+// the theme preview, so a pack can be judged on every control at once
+// instead of a tab at a time.
+func GalleryPane(host GalleryHost) widget.Component {
+	p := buildGalleryParts(host)
+	col := widgets.NewColumn(
+		p.tools,
+		widgets.NewWrap(p.buttons, p.fields),
+		widgets.NewSpacerSize(0, 2),
+	).WithGap(10).WithPad(10)
+	for _, v := range p.views {
+		col.Add(boxed(v.height, v.content))
+	}
+	col.Add(p.status)
+	return widgets.NewScrollView(col)
+}
+
+// galleryView is one of the showcase's big views: a tab of the window, a
+// panel stacked in the Settings pane. Height is what the pane holds it to,
+// where the scrolling column bounds nothing and a list would otherwise be
+// as tall as all its rows; 0 leaves the view its own height.
+type galleryView struct {
+	title   string
+	content widget.Component
+	height  float32
+}
+
+// galleryParts is one built set of the showcase's widgets. The window and
+// the Settings pane arrange the same parts differently; neither owns them.
+type galleryParts struct {
+	menu    *widgets.MenuBar
+	chrome  *widgets.TitleBar
+	tools   *widgets.ToolBar
+	buttons *widgets.Panel
+	fields  *widgets.Panel
+	views   []galleryView
+	status  *widgets.StatusBar
+}
+
+func (p galleryParts) tabs() []widgets.Tab {
+	out := make([]widgets.Tab, len(p.views))
+	for i, v := range p.views {
+		out[i] = widgets.Tab{Title: v.title, Content: v.content}
+	}
+	return out
+}
+
+// boxed holds a child to a fixed height, so a view that would grow
+// without bound — a list, a tree, a table — keeps its size in the
+// gallery's scrolling column. Height 0 leaves the child its own.
+func boxed(h float32, c widget.Component) widget.Component {
+	if h <= 0 {
+		return c
+	}
+	g := widgets.NewGrid()
+	g.Rows = []widgets.Track{widgets.Px(h)}
+	g.Cols = []widgets.Track{widgets.Flex(1)}
+	g.ColGap, g.RowGap = 0, 0
+	cell := g.Place(c, 0, 0)
+	cell.VAlign = layout.AlignStretch
+	return g
+}
+
+func buildGalleryParts(host GalleryHost) galleryParts {
+	light := host.Light
+	root := func() widget.Component { return nil }
+	if host.Root != nil {
+		root = host.Root
+	}
 	status := widgets.NewStatusBar("Ready.", "Ln 1, Col 1", "v"+uitoolkit.Version)
 	chrome := widgets.NewTitleBar("Widget gallery", "v"+uitoolkit.Version)
 
@@ -104,11 +257,11 @@ func Gallery(a *app.Application, win *app.Window, light bool) widget.Component {
 	disabled.SetEnabled(false)
 
 	about := widgets.NewButton("About…", func() {
-		widgets.Info(win.Content(), "About uitoolkit",
+		widgets.Info(root(), "About uitoolkit",
 			"Pure Go desktop UI. Paints only with paintengine2d.", nil)
 	})
 	ask := widgets.NewButton("Confirm…", func() {
-		widgets.Confirm(win.Content(), "Quit gallery?",
+		widgets.Confirm(root(), "Quit gallery?",
 			"Close the showcase window and leave the run loop.",
 			func(yes bool) {
 				if yes {
@@ -119,32 +272,33 @@ func Gallery(a *app.Application, win *app.Window, light bool) widget.Component {
 			})
 	})
 	warn := widgets.NewButton("Warn…", func() {
-		widgets.Warn(win.Content(), "Unsaved changes",
+		widgets.Warn(root(), "Unsaved changes",
 			"The current theme preset is not written to disk.", nil)
 	})
 
 	other := widgets.NewButton("Window", func() {
-		w2, err := a.NewWindow(platform.WindowOptions{Title: "Second window", Width: 420, Height: 280})
-		if err != nil {
-			status.Set(0, err.Error())
+		if host.NewWindow == nil {
 			return
 		}
-		w2.SetContent(widgets.NewPanel("Dialog window",
-			widgets.NewLabel("This is a second OS window."),
-			widgets.NewButton("Close", func() { w2.Close() }),
-		))
-	})
-
-	themeBtn := widgets.NewButton("Theme", func() {
-		next := style.LookAppearance(win.Look())
-		if next.Theme == style.ThemeLight {
-			next.Theme = style.ThemeDark
-		} else {
-			next.Theme = style.ThemeLight
+		if err := host.NewWindow(); err != nil {
+			status.Set(0, err.Error())
 		}
-		a.SetLook(style.WithAppearance(win.Look(), next))
-		win.SetContent(Gallery(a, win, next.Theme == style.ThemeLight))
 	})
+	if host.NewWindow == nil {
+		other.SetEnabled(false)
+	}
+
+	// The palette the gallery draws in: the button flips it, the View menu
+	// picks a side. Both are inert where the host owns the look (Settings).
+	switchTheme := func(light bool) {
+		if host.SwitchTheme != nil {
+			host.SwitchTheme(light)
+		}
+	}
+	themeBtn := widgets.NewButton("Theme", func() { switchTheme(!light) })
+	if host.SwitchTheme == nil {
+		themeBtn.SetEnabled(false)
+	}
 
 	buttons := widgets.NewPanel("Buttons",
 		// Each group folds onto another line when the column is narrow.
@@ -155,7 +309,7 @@ func Gallery(a *app.Application, win *app.Window, light bool) widget.Component {
 	)
 
 	openFile := widgets.NewButton("Open file…", func() {
-		widgets.ShowFileDialog(win.Content(), widgets.FileDialogOptions{
+		widgets.ShowFileDialog(root(), widgets.FileDialogOptions{
 			Title:  "Open project file",
 			Path:   "/project/uitoolkit",
 			Filter: "*.go",
@@ -410,19 +564,6 @@ func Gallery(a *app.Application, win *app.Window, light bool) widget.Component {
 		formAcc,
 		widgets.NewSpacerSize(0, 4),
 	)
-	tabs := widgets.NewTabView(
-		widgets.Tab{Title: "Scroll", Content: widgets.NewPanel("ScrollView", scroll)},
-		widgets.Tab{Title: "List", Content: widgets.NewPanel("ListView", listPane)},
-		widgets.Tab{Title: "Tree", Content: widgets.NewPanel("TreeView", treePane)},
-		widgets.Tab{Title: "Table", Content: widgets.NewPanel("TableView", tablePane)},
-		widgets.Tab{Title: "Form", Content: form},
-	)
-	tabs.OnChange = func(i int) {
-		names := []string{"Scroll", "List", "Tree", "Table", "Form"}
-		if i >= 0 && i < len(names) {
-			status.Set(0, "Tab: "+names[i])
-		}
-	}
 
 	menubar := widgets.NewMenuBar(
 		widgets.NewMenu("&File",
@@ -430,7 +571,11 @@ func Gallery(a *app.Application, win *app.Window, light bool) widget.Component {
 			widgets.ItemIconAccel(style.IconOpen, "&Open…", "Ctrl+O", func() { openFile.OnClick() }),
 			widgets.ItemAccel("&About", "F1", func() { about.OnClick() }),
 			widgets.Sep(),
-			widgets.ItemAccel("&Quit", "Ctrl+Q", func() { a.Quit() }),
+			widgets.ItemAccel("&Quit", "Ctrl+Q", func() {
+				if host.Quit != nil {
+					host.Quit()
+				}
+			}),
 		),
 		widgets.NewMenu("&Edit",
 			widgets.ItemAccel("&Copy", "Ctrl+C", func() {
@@ -447,34 +592,26 @@ func Gallery(a *app.Application, win *app.Window, light bool) widget.Component {
 			&widgets.MenuItem{Text: "Undo", Shortcut: "Ctrl+Z", Disabled: true},
 		),
 		widgets.NewMenu("&View",
-			widgets.RadioItem("&Dark", "palette", !light, func() {
-				a.SetLook(style.WithTheme(win.Look(), style.ThemeDark))
-				win.SetContent(Gallery(a, win, false))
-			}),
-			widgets.RadioItem("&Light", "palette", light, func() {
-				a.SetLook(style.WithTheme(win.Look(), style.ThemeLight))
-				win.SetContent(Gallery(a, win, true))
-			}),
+			widgets.RadioItem("&Dark", "palette", !light, func() { switchTheme(false) }),
+			widgets.RadioItem("&Light", "palette", light, func() { switchTheme(true) }),
 		),
 	)
 
-	leftCol := widgets.NewColumn(
-		widgets.NewTitle("uitoolkit"),
-		widgets.NewLabel("paintengine2d  ·  v"+uitoolkit.Version),
-		buttons,
-		fields,
-	).WithGap(10).WithPad(12)
-	left := widgets.NewScrollView(leftCol)
-
-	right := widgets.NewPad(10, tabs)
-
-	split := widgets.NewSplitter(true, left, right)
-	split.Ratio = 0.46
-
-	root := widgets.NewColumn(menubar, chrome, toolbar, split, status).WithGap(0)
-	root.AddFlex(split, 1)
-	_ = light
-	return root
+	return galleryParts{
+		menu:    menubar,
+		chrome:  chrome,
+		tools:   toolbar,
+		buttons: buttons,
+		fields:  fields,
+		status:  status,
+		views: []galleryView{
+			{"Scroll", widgets.NewPanel("ScrollView", scroll), 240},
+			{"List", widgets.NewPanel("ListView", listPane), 340},
+			{"Tree", widgets.NewPanel("TreeView", treePane), 0},
+			{"Table", widgets.NewPanel("TableView", tablePane), 0},
+			{"Form", form, 0},
+		},
+	}
 }
 
 // wrapRow is a row of controls that wraps when it runs out of width.
