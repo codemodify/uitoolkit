@@ -425,7 +425,7 @@ func (skinEngine) DrawSlider(l *Classic, ctx *paintengine2d.Context, b paintengi
 	if x1 < x0 {
 		x0, x1 = b.Min.X+b.Dx()*0.5, b.Min.X+b.Dx()*0.5
 	}
-	cx := x0 + (x1-x0)*clamp01(t)
+	cx := x0 + (x1-x0)*skinClamp01(t)
 	if sk.has("slider.fill") && cx > track.Min.X {
 		sk.draw(l, ctx, paintengine2d.Rect{Min: track.Min, Max: paintengine2d.Pt(cx, track.Max.Y)}, "slider.fill", st)
 	}
@@ -454,13 +454,13 @@ func (skinEngine) DrawProgressBar(l *Classic, ctx *paintengine2d.Context, b pain
 		// of the track, wrapped, so the bar reads as working rather than as
 		// stuck at a value it does not have.
 		w := b.Dx() / 3
-		x := b.Min.X + (b.Dx()+w)*clamp01(phase) - w
+		x := b.Min.X + (b.Dx()+w)*skinClamp01(phase) - w
 		fill = paintengine2d.Rect{
 			Min: paintengine2d.Pt(max(b.Min.X, x), b.Min.Y),
 			Max: paintengine2d.Pt(min(b.Max.X, x+w), b.Max.Y),
 		}
 	} else {
-		fill.Max.X = b.Min.X + b.Dx()*clamp01(t)
+		fill.Max.X = b.Min.X + b.Dx()*skinClamp01(t)
 	}
 	if fill.Dx() > 0.5 {
 		sk.draw(l, ctx, fill, "progress.fill", st)
@@ -831,8 +831,9 @@ func (skinEngine) DrawSeparator(l *Classic, ctx *paintengine2d.Context, b painte
 	under(l).DrawSeparator(l, ctx, b, vertical)
 }
 
-// clamp01 keeps a fraction inside [0, 1].
-func clamp01(t float32) float32 {
+// skinClamp01 keeps a fraction inside [0, 1]. Named for this engine because
+// the style package has more than one caller for the idea.
+func skinClamp01(t float32) float32 {
 	if t < 0 || math.IsNaN(float64(t)) {
 		return 0
 	}
