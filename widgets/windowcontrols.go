@@ -125,6 +125,10 @@ func frameState(h widget.FrameHost, custom bool) style.DecorationState {
 		st.Maximized = ws.Maximized
 		st.Tiled = style.Edges(ws.Tiled)
 		st.Solid = ws.Solid
+		if r, ok := h.(widget.FrameRequests); ok {
+			st.Role = r.FrameRole()
+			st.Caption = r.CaptionHeight()
+		}
 	}
 	return st
 }

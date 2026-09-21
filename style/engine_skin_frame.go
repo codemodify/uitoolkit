@@ -2,6 +2,7 @@ package style
 
 import (
 	"math"
+	"strings"
 
 	"github.com/codemodify/paintengine2d"
 )
@@ -29,10 +30,10 @@ const skinCaptionMin = 8
 func (skinEngine) Decoration(l *Classic, st DecorationState) DecorationSpec {
 	sk := skinFor(l)
 	base := skinBaseDecoration(l, st)
-	if sk == nil || sk.Window == nil {
+	w := sk.windowFor(st.Role)
+	if w == nil {
 		return base
 	}
-	w := sk.Window
 	s := l.Scale() / sk.Design.Scale
 	spec := base
 	if w.Layout != "" {
@@ -41,14 +42,22 @@ func (skinEngine) Decoration(l *Classic, st DecorationState) DecorationSpec {
 	// The border and caption are the skin's own geometry, snapped to whole
 	// device pixels: a frame measured in fractions leaks a seam between the
 	// border and the client at 1.25 and 1.75.
-	if !w.Border.Zero() {
-		spec.Border = Insets{
-			Top:    skinWhole(w.Border.Top * s),
-			Right:  skinWhole(w.Border.Right * s),
-			Bottom: skinWhole(w.Border.Bottom * s),
-			Left:   skinWhole(w.Border.Left * s),
+	whole := func(in Insets) Insets {
+		return Insets{
+			Top:    skinWhole(in.Top * s),
+			Right:  skinWhole(in.Right * s),
+			Bottom: skinWhole(in.Bottom * s),
+			Left:   skinWhole(in.Left * s),
 		}
 	}
+	if !w.Border.Zero() || w.Split {
+		spec.Border = whole(w.Border)
+	}
+	if w.Split {
+		spec.ContentBorder, spec.Split = whole(w.ContentBorder), true
+	}
+	spec.CaptionGap = skinWhole(w.CaptionGap * s)
+	spec.ButtonSide = w.Buttons
 	if w.Caption > 0 {
 		spec.Caption = max(skinWhole(w.Caption*s), l.S(skinCaptionMin))
 		// A caption the skin resized has to resize its buttons with it, or
@@ -75,13 +84,44 @@ func (skinEngine) Decoration(l *Classic, st DecorationState) DecorationSpec {
 			w.Radius[2] * s, w.Radius[3] * s,
 		}
 	}
-	if sk.has("caption") {
+	if sk.framePart("caption", st.Role).art("normal") != nil {
 		// A skin that paints its own caption band keeps the band stacked
 		// above the app's title bar: the art is a picture of a title bar,
 		// and merging it under an app's own header would draw two.
 		spec.Stacked = true
 	}
 	return spec
+}
+
+// windowFor is the frame the skin gives a window the app calls role: that
+// role's variant where the skin states one, its one window block otherwise
+// (nil for a skin that says nothing about windows).
+//
+// A variant is chosen by what the app says the window *is*, never by
+// anything the skin could work out for itself, so a skin cannot dress a
+// window the app did not name — and an app that names none gets exactly the
+// frame every window got before variants existed.
+func (sk *Skin) windowFor(role string) *SkinWindow {
+	if sk == nil || sk.Window == nil {
+		return nil
+	}
+	if role != "" {
+		if v := sk.Window.Variants[role]; v != nil {
+			return v
+		}
+	}
+	return sk.Window
+}
+
+// framePart is one of the frame's parts for a window of role: the variant's
+// rebinding where it has one, the skin's own part otherwise.
+func (sk *Skin) framePart(name, role string) *SkinPart {
+	if w := sk.windowFor(role); w != nil {
+		if p := w.Parts[name]; p != nil {
+			return p
+		}
+	}
+	return sk.part(name)
 }
 
 // skinBaseDecoration is the base pack's frame, which a skin starts from.
@@ -103,7 +143,8 @@ func skinUnderFrame(l *Classic) DecorationEngine {
 
 func (skinEngine) DrawDecoration(l *Classic, ctx *paintengine2d.Context, f DecorationFrame, st DecorationState) {
 	sk := skinFor(l)
-	if sk == nil || !sk.has("caption") {
+	band := sk.framePart("caption", st.Role)
+	if sk == nil || band.art("normal") == nil {
 		skinBaseDrawDecoration(l, ctx, f, st)
 		return
 	}
@@ -115,14 +156,14 @@ func (skinEngine) DrawDecoration(l *Classic, ctx *paintengine2d.Context, f Decor
 	// skin drew a window frame, so the band and the sides meet.
 	if !st.Maximized {
 		spec := skinEngine{}.Decoration(l, st)
-		if !spec.Border.Zero() {
-			if !sk.draw(l, ctx, f.Window, "window", cs) {
+		if !spec.Border.Zero() || spec.Split || spec.CaptionGap > 0 {
+			if !sk.drawPart(l, ctx, f.Window, sk.framePart("window", st.Role), cs) {
 				col := l.palette.Border
 				drawFrameBorder(ctx, f.Window, spec.Border, col)
 			}
 		}
 	}
-	if !sk.draw(l, ctx, f.Caption, "caption", cs) {
+	if !sk.drawPart(l, ctx, f.Caption, band, cs) {
 		skinBaseDrawDecoration(l, ctx, f, st)
 	}
 }
@@ -133,7 +174,8 @@ func skinBaseDrawDecoration(l *Classic, ctx *paintengine2d.Context, f Decoration
 
 func (skinEngine) DrawCaptionTitle(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, title string, st DecorationState) {
 	sk := skinFor(l)
-	if sk == nil || !sk.has("caption") {
+	band := sk.framePart("caption", st.Role)
+	if sk == nil || band.art("normal") == nil {
 		skinUnderFrame(l).DrawCaptionTitle(l, ctx, b, title, st)
 		return
 	}
@@ -141,7 +183,7 @@ func (skinEngine) DrawCaptionTitle(l *Classic, ctx *paintengine2d.Context, b pai
 	if !st.Active {
 		cs = StateInactive
 	}
-	col := sk.textColor(l, sk.part("caption"), cs)
+	col := sk.textColor(l, band, cs)
 	if colorUnset(col) {
 		col = l.palette.Text
 		if !st.Active {
@@ -154,25 +196,56 @@ func (skinEngine) DrawCaptionTitle(l *Classic, ctx *paintengine2d.Context, b pai
 	// the role states one — a fourteen-pixel band cannot hold a title set at
 	// the body size — and it is bold either way, as a caption always was.
 	f := l.bold
-	if t := sk.textFor("caption"); t != nil && t.Size > 0 {
+	t := band.Text
+	if t == nil {
+		t = sk.Text["control"]
+	}
+	if t != nil && t.Size > 0 {
 		f = BakeFamily(l.uiFamily, WeightBold, t.Size*l.Scale()/sk.Design.Scale, col)
 	}
+	if t != nil && t.Upper {
+		// The skin's choice, and only its painting: the window's title is
+		// still the app's, and so is what a screen reader reads.
+		title = strings.ToUpper(title)
+	}
+	var place SkinTitle
+	if w := sk.windowFor(st.Role); w != nil {
+		place = w.Title
+	}
 	pad := l.S(8)
-	if sk.has("caption.title") && f != nil && title != "" {
+	plate := sk.framePart("caption.title", st.Role)
+	if plate.art("normal") != nil && f != nil && title != "" {
 		// The plate behind the title: the gap a ribbed or grooved band
 		// leaves for the words, as wide as the words are. It is the one
 		// piece of a caption that depends on the title, which is why it is
 		// a part of its own rather than something a fixed slice of the
 		// band could say — the band cannot know how long the title is.
+		// Set from the start, it is a tab: the title on a tongue of the
+		// window, as far in as the skin says.
+		room := 2 * skinWhole(l.S(captionTitleRoom))
 		show := title
 		if f.Advance(show) > b.Dx()-pad {
 			show = f.Fit(show, max(b.Dx()-pad, 4))
 		}
-		w := f.Advance(show) + 2*skinWhole(l.S(captionTitleRoom))
-		plate := paintengine2d.XYWH(b.Min.X+(b.Dx()-w)*0.5, b.Min.Y, w, b.Dy())
-		plate.Min.X = float32(math.Round(float64(plate.Min.X)))
-		plate.Max.X = float32(math.Round(float64(plate.Max.X)))
-		sk.draw(l, ctx, plate, "caption.title", cs)
+		w := f.Advance(show) + room
+		x := b.Min.X + (b.Dx()-w)*0.5
+		if place.Start {
+			x = b.Min.X + place.Inset*l.Scale()/sk.Design.Scale
+			w = min(w, b.Max.X-x)
+		}
+		box := paintengine2d.XYWH(x, b.Min.Y, w, b.Dy())
+		box.Min.X = float32(math.Round(float64(box.Min.X)))
+		box.Max.X = float32(math.Round(float64(box.Max.X)))
+		sk.drawPart(l, ctx, box, plate, cs)
+		if place.Start {
+			captionTitle(l, ctx, f, box, show, col, true, 0)
+			return
+		}
+	}
+	if place.Start {
+		inset := place.Inset * l.Scale() / sk.Design.Scale
+		captionTitle(l, ctx, f, paintengine2d.XYWH(b.Min.X+inset, b.Min.Y, max(b.Dx()-inset, 0), b.Dy()), title, col, false, 0)
+		return
 	}
 	captionTitle(l, ctx, f, b, title, col, true, pad)
 }
@@ -198,16 +271,16 @@ func (skinEngine) DrawCaptionButton(l *Classic, ctx *paintengine2d.Context, b pa
 	// toolkit's own, so a caption button says what it does at every scale
 	// and in every skin: nobody has to guess which unlabelled square closes
 	// the window.
-	part := "button"
-	for _, candidate := range []string{"caption.button", "tool"} {
-		if sk.has(candidate) {
-			part = candidate
-			break
+	p := sk.framePart("caption.button", st.Role)
+	if p.art("normal") == nil {
+		p = sk.part("button")
+		if sk.has("tool") {
+			p = sk.part("tool")
 		}
 	}
-	painted := sk.draw(l, ctx, b, part, cs)
-	if painted || sk.has("caption") {
-		col := sk.textColor(l, sk.part(part), cs)
+	painted := sk.drawPart(l, ctx, b, p, cs)
+	if painted || sk.framePart("caption", st.Role).art("normal") != nil {
+		col := sk.textColor(l, p, cs)
 		if colorUnset(col) {
 			col = l.palette.Text
 			if !st.Active {
@@ -254,10 +327,11 @@ func skinWhole(v float32) float32 {
 // rasterisation.
 func (skinEngine) WindowShape(l *Classic, f DecorationFrame, st DecorationState) *Silhouette {
 	sk := skinFor(l)
-	if sk == nil || sk.Window == nil {
+	w := sk.windowFor(st.Role)
+	if w == nil {
 		return nil
 	}
-	if sp := sk.Window.ShapeArt; sp != nil {
+	if sp := w.ShapeArt; sp != nil {
 		// The art *is* the outline: cut at the sheet scale the window's own
 		// size asks for, and resampled from there, exactly as the same
 		// sprite is when it is painted.
@@ -266,7 +340,7 @@ func (skinEngine) WindowShape(l *Classic, f DecorationFrame, st DecorationState)
 		}
 		return nil
 	}
-	rects := sk.skinWindowRects(f.Window, l.Scale())
+	rects := skinShapeRects(w.Shape, f.Window, l.Scale()/sk.Design.Scale)
 	if skinShapeIsTheFrame(rects, f.Window, DecorationOf(l, st).Radius) {
 		return nil
 	}
@@ -312,28 +386,24 @@ func (sk *Skin) skinWindowRects(win paintengine2d.Rect, scale float32) []Silhoue
 	if sk == nil || sk.Window == nil || len(sk.Window.Shape) == 0 {
 		return nil
 	}
-	s := scale / sk.Design.Scale
-	out := make([]SilhouetteRect, 0, len(sk.Window.Shape))
-	for _, r := range sk.Window.Shape {
-		x := win.Min.X + r.X*s
-		y := win.Min.Y + r.Y*s
-		w, h := r.W*s, r.H*s
-		if r.StretchX {
-			// W is a margin from the right edge, not a width.
-			w = win.Dx() - r.X*s - r.W*s
-		}
-		if r.StretchY {
-			h = win.Dy() - r.Y*s - r.H*s
-		}
-		if w <= 0 || h <= 0 {
+	return skinShapeRects(sk.Window.Shape, win, scale/sk.Design.Scale)
+}
+
+// skinShapeRects resolves a list of rects against a box at s device pixels
+// per design pixel, dropping any a small box leaves no room for.
+func skinShapeRects(shape []SkinShapeRect, box paintengine2d.Rect, s float32) []SilhouetteRect {
+	out := make([]SilhouetteRect, 0, len(shape))
+	for _, r := range shape {
+		b := r.resolve(box, s)
+		if b.Dx() <= 0 || b.Dy() <= 0 {
 			continue
 		}
 		out = append(out, SilhouetteRect{
-			Rect: paintengine2d.XYWH(x, y, w, h),
+			Rect: b,
 			// A corner radius is art, not geometry: it is scaled and then
 			// clamped to the box it rounds, so a small window keeps a
 			// sensible outline instead of an hourglass.
-			Radius: skinCorners(r.Radius, s, w, h),
+			Radius: skinCorners(r.Radius, s, b.Dx(), b.Dy()),
 		})
 	}
 	return out

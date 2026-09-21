@@ -70,3 +70,12 @@ type FrameHost interface {
 	// pixels), or the toolkit's own where the desktop has none.
 	ShowWindowMenu(p paintengine2d.Point)
 }
+
+// FrameRequests is what a FrameHost implements to ask its look for a frame
+// of its own: the role the app gave the window, which a look that dresses
+// windows differently chooses a frame by, and a caption height the app
+// asked for (0: the look's). app.Window implements it.
+type FrameRequests interface {
+	FrameRole() string
+	CaptionHeight() float32
+}
