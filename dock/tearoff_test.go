@@ -139,6 +139,49 @@ func TestPanelTornOutAtAScaleIsPlacedInLogicalPixels(t *testing.T) {
 	}
 }
 
+// A floating panel's window's own title bar docks it back too: a drag of
+// that caption carries the window over the host as a drag of the panel's
+// title bar does, rather than only moving it. It is the bar a user reaches
+// for first, and it used to be the desktop's move and nothing more.
+func TestAFloatingPanelsWindowCaptionDocksItBack(t *testing.T) {
+	r := newTearRig(t, true)
+	r.mountFloat(t, r.tree)
+	w := r.opener.wins[0]
+	if w.captionDrag == nil {
+		t.Fatal("the window's caption was never handed to the dock")
+	}
+	at := paintengine2d.Pt(40, 6) // in the window's caption, above the panel
+	if !w.captionDrag(at) {
+		t.Fatal("the dock did not take the caption's drag")
+	}
+	tear := r.tear(t)
+	if pan, _ := tear.Drag.Payload.(*Panel); pan != r.tree {
+		t.Fatalf("the drag carries %#v, want the panel", tear.Drag.Payload)
+	}
+	if tear.Tear.Offset != at {
+		t.Errorf("the window is held at %v, the caption was taken at %v", tear.Tear.Offset, at)
+	}
+	if w.moves != 0 {
+		t.Error("the desktop was asked to move the window as well")
+	}
+	// Dropped on the host's left side it docks there, and its window goes.
+	e := tear.Drag.DropEvent(paintengine2d.Pt(8, box.Dy()*0.5), PanelMimeType, []byte("tree"), platform.DragMove)
+	if !r.host.Drop(e) {
+		t.Fatal("the host refused the panel")
+	}
+	if r.tree.Floating() || !w.closed {
+		t.Errorf("after the drop: floating %v, window closed %v", r.tree.Floating(), w.closed)
+	}
+
+	// Where the desktop cannot carry a window the caption stays the
+	// desktop's move.
+	r2 := newTearRig(t, false)
+	r2.mountFloat(t, r2.tree)
+	if r2.opener.wins[0].captionDrag(at) {
+		t.Error("a desktop that cannot carry a window took the caption's drag")
+	}
+}
+
 // How a torn-off panel's drag can end: put back where it was, left
 // floating where it was dropped, or docked by whoever took it.
 func TestTornOffPanelEndings(t *testing.T) {

@@ -236,11 +236,13 @@ tabs.OnMergeTab = func(at int, tab widgets.BrowserTab, e widget.DropEvent) bool 
 
 A dock panel in a window of its own (`app.DockHost`, see
 [widgets.md](widgets.md#dockable-panels)) is an ordinary toplevel: it goes
-through the same `resolveDecorations` as every other window, so it wears
-the toolkit's frame where the app does and the desktop's where the app
-does, without asking for anything of its own. Nothing about it is a popup
-or an override-redirect window — the desktop moves, resizes, stacks and
-lists it like any other.
+through the same `resolveDecorations` as every other window. Its window
+hands the drags of its own caption to the dock (`Window.SetOnCaptionDrag`),
+which counts as a caption of its own for the default policy, so it wears
+the toolkit's frame where a window with a title bar would — the user's
+"system title bar" preference and `UITK_DECORATIONS` still win. Nothing
+about it is a popup or an override-redirect window — the desktop moves,
+resizes, stacks and lists it like any other.
 
 Under either frame the panel keeps the title bar it had docked, inside the
 window. That is a second row of chrome under the caption, which is what Qt
@@ -255,10 +257,13 @@ brings the same window back. `app.DockHost` also docks every panel back as
 the main window closes, so no panel is left in a window of its own keeping
 a finished app alive.
 
-Dragging the panel's title bar drags the whole window, and the host it
-came from lights up as it passes over: dropping it there docks the panel
-back where the indicator says, and dropping it anywhere else has moved the
-window. A panel dragged the other way — out of the host, past its edge —
+Dragging the panel's title bar — or the window's own caption, where the
+toolkit draws it — drags the whole window, and the host it came from
+lights up as it passes over: dropping it there docks the panel back where
+the indicator says, and dropping it anywhere else has moved the window.
+Under the desktop's frame the window's caption is the desktop's, which
+moves the window without telling the client (on Wayland it cannot), so
+there the panel's own title bar is the one that docks. A panel dragged the other way — out of the host, past its edge —
 floats into a window that follows the pointer. Both are the same
 [tear-off](#tear-off) as a tab's, so a user rearranges an app by dragging
 alone and the float button is a second way rather than the only one.

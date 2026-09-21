@@ -287,7 +287,9 @@ toplevel the desktop moves, resizes and stacks, wearing whichever frame the
 app's decoration setting asks for — see [decorations.md](decorations.md).
 It keeps the same title bar it had docked, whose float button now offers to
 dock it back — and whose drag handle drags the window itself, back over the
-host to dock it there. Where the desktop cannot carry a window under a drag
+host to dock it there. So does the window's own caption where the toolkit
+draws the frame (the default for these windows, `Window.SetOnCaptionDrag`);
+a desktop's own title bar only moves the window. Where the desktop cannot carry a window under a drag
 (a Wayland compositor without `xdg-toplevel-drag-v1`) that title bar falls
 back to the desktop's own interactive move, as a floating tool window's does
 everywhere, and the button is the way back in. Without an opener nothing
