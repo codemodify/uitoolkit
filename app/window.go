@@ -1167,6 +1167,9 @@ func (w *Window) mouseDown(ev platform.Event) {
 	}
 	t := w.hit(ev.Pos)
 	w.capture = t
+	// A drag is armed from the deepest component: startDragFrom walks up
+	// from there on its own, so a row still starts the drag its list
+	// defines whichever of the two takes the press.
 	w.armDrag(t, ev.Pos)
 	if t != nil && t.WantsFocus() && focusOnClick(t) {
 		w.RequestFocus(t)
@@ -1174,10 +1177,39 @@ func (w *Window) mouseDown(ev platform.Event) {
 	// A click on inert chrome (or on a widget with a tab-only focus policy)
 	// keeps focus where it was.
 	if t != nil {
-		lp := local(t, ev.Pos)
-		t.MousePress(widget.MouseEvent{Pos: lp, Button: ev.Button, Mods: ev.Mods})
-		w.syncCursor(t, lp)
+		w.bubblePress(t, ev)
 	}
+}
+
+// bubblePress offers the press to the component under the pointer and then
+// to its ancestors until one takes it (widget.Component.MousePress states
+// the contract). The taker becomes the capture, so the moves and the
+// release follow the gesture rather than the pixel it started on; when
+// nobody takes it the capture stays where it has always been, on the
+// deepest component hit.
+func (w *Window) bubblePress(from widget.Component, ev platform.Event) {
+	for c := from; c != nil; c = c.Parent() {
+		// The component under the pointer is always told, disabled or
+		// not — it has always been, and widgets do their own refusing.
+		// Above it, a disabled or hidden container is skipped and the
+		// walk goes on, as the wheel's does.
+		if c != from && (!c.Enabled() || !c.Visible()) {
+			continue
+		}
+		lp := local(c, ev.Pos)
+		if !c.MousePress(widget.MouseEvent{Pos: lp, Button: ev.Button, Mods: ev.Mods}) {
+			continue
+		}
+		// Only move a capture nobody touched: a handler that handed the
+		// pointer to the desktop (StartMove, StartResize, the window
+		// menu) has already let go of it, and must not get it back.
+		if c != from && w.capture == from {
+			w.capture = c
+		}
+		w.syncCursor(c, lp)
+		return
+	}
+	w.syncCursor(from, local(from, ev.Pos))
 }
 
 func (w *Window) mouseUp(ev platform.Event) {

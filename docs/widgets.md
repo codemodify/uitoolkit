@@ -175,6 +175,39 @@ Regenerate thumbs and gallery frames:
 go run ./examples/gallery -screenshot docs/screenshots
 ```
 
+## What "handled" means
+
+A mouse press, a wheel notch and a key all **bubble**, and all three stop at
+the first component that says it took the event.
+
+| | starts at | walks up to |
+| --- | --- | --- |
+| `MousePress` | the deepest component under the pointer | its ancestors |
+| `MouseWheel` | the deepest component under the pointer | its ancestors |
+| `KeyPress` | the focused component | its ancestors, then the window's menu accelerators |
+
+Returning `true` means **this component is now acting on the event and
+nothing above it should also act** — not "I noticed it". A component that
+only repaints on a press returns `false`, so the container around it stays
+free to do something with the same press; that is what lets a panel full of
+labels drag its window (`Window.StartMove` from the panel's `MousePress`)
+without every label knowing about it.
+
+Two consequences worth stating:
+
+- **The taker becomes the pointer capture.** Every `MouseMove` until the
+  button goes up, and the `MouseRelease`, go to whoever took the press,
+  wherever the pointer has travelled. When nobody takes it the capture is
+  the deepest component hit, so a widget that ignores presses still hears
+  the release over it.
+- **Focus is not part of it.** A click focuses the component it landed on,
+  if that one wants focus, and never the ancestor that took the press: a
+  window dragged by its face must not take the keyboard away from the field
+  the user was typing in.
+
+`MouseRelease` and `MouseMove` do not bubble: they belong to the capture,
+which the press already decided.
+
 ## Sliders and progress bars
 
 `Slider.Ticks` (`TicksBelow`, `TicksAbove`, `TicksBoth`) adds tick marks every
