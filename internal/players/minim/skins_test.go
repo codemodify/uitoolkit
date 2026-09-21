@@ -247,6 +247,10 @@ func TestTheSkinSwitchIsOnTheKeyboard(t *testing.T) {
 // wears it.
 func TestTheSkinMenuListsTheSkinsByName(t *testing.T) {
 	a, p := open(t, SkinClassic, 1)
+	// A right-click on a key is a right-click on the face, not a press.
+	if p.strip.stop.MousePress(widget.MouseEvent{Button: platform.ButtonRight}) {
+		t.Error("a right-click pressed the stop key")
+	}
 	if !p.strip.MousePress(widget.MouseEvent{Button: platform.ButtonRight, Pos: paintengine2d.Pt(2, 60)}) {
 		t.Fatal("the strip did not take a right-click")
 	}
