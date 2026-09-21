@@ -293,6 +293,13 @@ func (a *Application) NewWindow(opts platform.WindowOptions) (*Window, error) {
 	// a title bar), so it never shows with the wrong one.
 	surfOpts := opts
 	surfOpts.Decorations = a.resolveDecorations(opts, false, nil)
+	if !a.autoScale {
+		// An explicit Options.Scale (or UITK_SCALE) pins every window's
+		// metrics; a backend that converts the window's logical size to
+		// device pixels has to use the same number, or the window and
+		// what is drawn in it disagree.
+		surfOpts.Scale = a.scale
+	}
 	surf, err := a.backend.NewSurface(surfOpts)
 	if err != nil {
 		return nil, err

@@ -745,11 +745,11 @@ func (f *Fader) AccessibleAction(a a11y.Action) bool {
 // DragsWindow is a component whose own presses move the window it is in.
 //
 // The face of a player between its controls is a drag handle — that is what
-// the whole front of a machine this size has always been — and the toolkit
-// does not bubble a mouse press: w.hit finds the deepest component under the
-// pointer and that one alone is told. So every part of a player's face that
-// is *not* a control has to say so itself, rather than leaving it to the
-// container underneath and finding that a press on the display does nothing.
+// the whole front of a machine this size has always been. A press bubbles
+// now, so a container could take one its children ignored and move the
+// window from there; this stays because it says which pieces *are* face
+// rather than making every picture's silence mean "drag me", and because
+// CaptionAt has to be answered by the same pieces anyway.
 //
 // It is embedded in place of widget.Base by the pieces that are pictures:
 // the readouts, the footers, the display wells.
@@ -796,9 +796,9 @@ type AnalyserView struct {
 	Pixelated bool
 	// Tint overrides the accent the bars are drawn in.
 	Tint paintengine2d.Color
-	// Drag is the window a press on the analyser moves. An analyser sunk
-	// into a player's display is part of its face, and the toolkit does
-	// not bubble a press past the component it lands on.
+	// Drag is the window a press on the analyser moves: an analyser sunk
+	// into a player's display is part of its face, and says so itself
+	// rather than leaving it to whatever is underneath.
 	Drag *app.Window
 }
 
@@ -924,50 +924,32 @@ func snap(v float32) float32 {
 // ---- opening a window whose size is a design -----------------------------------
 
 // WindowSize turns a size in *design* pixels — the units a skin's art and a
-// player's proportions are drawn in — into the numbers this backend's
-// window-geometry calls actually want.
+// player's proportions are drawn in — into the numbers a window-geometry
+// call wants.
 //
-// The two backends do not agree, and no single scale factor reconciles them.
-// An X11 window's size *is* device pixels: the server has no notion of a
-// display scale, so a 275-design-pixel strip on a 1.75 display has to ask
-// for 481. A Wayland toplevel's geometry is **logical** and the compositor
-// multiplies, so the same strip asks for 275 and is handed a 481-pixel
-// buffer. (The offscreen backend behaves like X11, which is what its tests
-// assume.) Asking the wrong way round gives a window nearly twice too large
-// or nearly half too small, and this is what exists to stop that.
+// There is nothing left to turn: the toolkit states window geometry in
+// logical pixels on every backend, which is the same thing a design pixel
+// is, so this is the identity and only stays for the two callers that read
+// better with it. It used to be the work-around for backends that did not
+// agree — an X11 window's size was device pixels and a Wayland toplevel's
+// logical, so the same strip had to ask for 481 on one and 275 on the
+// other — and platform converts at its own boundary now.
 func WindowSize(a *app.Application, w, h int) (int, int) {
-	s := max(a.Scale(), 1)
-	if a == nil || a.BackendName() == "wayland" {
-		s = 1
-	}
-	return max(int(float32(w)*s+0.5), 1), max(int(float32(h)*s+0.5), 1)
+	return max(w, 1), max(h, 1)
 }
 
 // OpenSized opens a window whose width and height are stated in design
 // pixels (see [WindowSize]).
 //
-// It sizes the window twice, which is the other half of the problem. The
-// application's scale is a guess until a window exists — a window may open
-// on a monitor the guess did not expect — so the size is asked for again
-// from the scale the window actually reports.
-//
-// fixed pins the window's minimum to that size, for the players whose
-// proportions are the design rather than a starting point.
+// fixed says the window's proportions *are* the design rather than a
+// starting point: the desktop is told it may not be resized at all, so
+// there is no resize band anywhere on its edge.
 func OpenSized(a *app.Application, opts platform.WindowOptions, w, h int, fixed bool) (*app.Window, error) {
-	before := max(a.Scale(), 1)
 	opts.Width, opts.Height = WindowSize(a, w, h)
 	if fixed {
-		opts.MinWidth, opts.MinHeight = opts.Width, opts.Height
+		opts.Sizing = platform.SizingFixed
 	}
-	win, err := a.NewWindow(opts)
-	if err != nil {
-		return nil, err
-	}
-	if got := max(win.Scale(), 1); got != before {
-		ww, hh := WindowSize(a, w, h)
-		win.SetSize(ww, hh)
-	}
-	return win, nil
+	return a.NewWindow(opts)
 }
 
 // ---- the clock ---------------------------------------------------------------
@@ -1072,11 +1054,11 @@ func (p *Pulse) Tick() {
 // transport row on a keyboard of the era), and the single letters do the
 // toggles.
 //
-// It reads e.Key and not e.Rune. A KeyEvent that reaches a component
-// carries the *key*; the character is a separate event (TextInput), which
-// is what keeps a shortcut table from depending on the keyboard layout's
-// idea of what a key produces. A rune is honoured anyway when a caller
-// passes one, since a test may.
+// It reads e.Key for the keys that navigate and e.Rune for the letters,
+// which is the split [widget.KeyEvent] states: Rune is the character the
+// key stands for, with no modifier folded in, so the letters here work
+// whichever the layout puts where. The e.Key arm for the same letters
+// stays because it costs a line and a test may send either.
 //
 // Nothing here takes a modifier, which is deliberate: a player's keys have
 // to work while the focus is anywhere in its window. That is only safe

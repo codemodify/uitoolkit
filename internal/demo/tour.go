@@ -551,7 +551,7 @@ func TourWindow(a *app.Application, pages ...int) (*app.Window, error) {
 		title = tourPages[pages[0]].title + " — tour"
 	}
 	win, err := a.NewWindow(platform.WindowOptions{
-		Title: title, Width: 1060, Height: 740, MinWidth: 620, MinHeight: 430, Resizable: true,
+		Title: title, Width: 1060, Height: 740, MinWidth: 620, MinHeight: 430,
 	})
 	if err != nil {
 		return nil, err

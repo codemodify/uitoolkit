@@ -59,9 +59,13 @@ func (o *dockOpener) OpenFloat(title string, geom paintengine2d.Rect) (dock.Floa
 	if w < 1 || h < 1 {
 		w, h = 320, 400
 	}
+	// The dock lays out in device pixels; a window's size is stated in
+	// logical ones. X and Y are root pixels either way.
+	sc := o.app.Scale()
 	opts := platform.WindowOptions{
-		Title: title, Width: w, Height: h,
-		MinWidth: 120, MinHeight: 80,
+		Title: title,
+		Width: platform.LogicalPixels(w, sc), Height: platform.LogicalPixels(h, sc),
+		MinWidth: platform.LogicalPixels(120, sc), MinHeight: platform.LogicalPixels(80, sc),
 		X: int(geom.Min.X), Y: int(geom.Min.Y),
 	}
 	win, err := o.app.NewWindow(opts)
@@ -117,7 +121,8 @@ func (d *dockWindow) Geometry() paintengine2d.Rect {
 	if d.win == nil || d.win.Closed() {
 		return d.want
 	}
-	w, h := d.win.Size()
+	// Root device pixels, to go with the position below.
+	w, h := d.win.PixelSize()
 	if w < 1 || h < 1 {
 		return d.want
 	}

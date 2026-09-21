@@ -281,12 +281,24 @@ static void ui_map(Display* d, Window w) {
 	XFlush(d);
 }
 
-static void ui_resize_hints(Display* d, Window w, int minw, int minh) {
+// WM_NORMAL_HINTS: the window's minimum, and its maximum where it has one.
+// A window manager reads PMinSize == PMaxSize as "not resizable" — it drops
+// the resize edges, greys maximize out and clamps a drag — which is how a
+// fixed-size window is stated on X11.
+static void ui_resize_hints(Display* d, Window w, int minw, int minh, int maxw, int maxh) {
 	XSizeHints hints;
 	memset(&hints, 0, sizeof(hints));
-	hints.flags = PMinSize;
-	hints.min_width = minw;
-	hints.min_height = minh;
+	if (minw > 0 || minh > 0) {
+		hints.flags |= PMinSize;
+		hints.min_width = minw > 0 ? minw : 1;
+		hints.min_height = minh > 0 ? minh : 1;
+	}
+	if (maxw > 0 || maxh > 0) {
+		hints.flags |= PMaxSize;
+		hints.max_width = maxw > 0 ? maxw : 1 << 20;
+		hints.max_height = maxh > 0 ? maxh : 1 << 20;
+	}
+	if (!hints.flags) return;
 	XSetWMNormalHints(d, w, &hints);
 }
 
@@ -927,13 +939,24 @@ func (X11Backend) NewSurface(opts WindowOptions) (Surface, error) {
 	if err != nil {
 		return nil, err
 	}
-	w, h := opts.Width, opts.Height
-	if w < 1 {
-		w = 640
+	// WindowOptions are logical pixels; an X window's size is device
+	// pixels, because an X server has no notion of a display scale. The
+	// two meet here and nowhere else: lw, lh stay the logical size the
+	// app asked for, w, h are what the server is told.
+	lw, lh := opts.Width, opts.Height
+	if lw < 1 {
+		lw = 640
 	}
-	if h < 1 {
-		h = 480
+	if lh < 1 {
+		lh = 480
 	}
+	if opts.Scale > 0 {
+		// The application states the scale it draws at; the connection's
+		// own is only the fallback.
+		c.scale = opts.Scale
+	}
+	scale := c.displayScale()
+	w, h := DevicePixels(lw, scale), DevicePixels(lh, scale)
 	title := opts.Title
 	if title == "" {
 		title = "uitoolkit"
@@ -947,16 +970,6 @@ func (X11Backend) NewSurface(opts WindowOptions) (Surface, error) {
 		popup = 1
 	}
 	win := C.ui_create(c.dpy, C.int(x), C.int(y), C.int(w), C.int(h), ctitle, C.int(popup))
-	if opts.MinWidth > 0 || opts.MinHeight > 0 {
-		mw, mh := opts.MinWidth, opts.MinHeight
-		if mw < 1 {
-			mw = 1
-		}
-		if mh < 1 {
-			mh = 1
-		}
-		C.ui_resize_hints(c.dpy, win, C.int(mw), C.int(mh))
-	}
 	gc := C.ui_gc(c.dpy, win)
 	ic, cbs := x11CreateIC(c.im, win)
 	s := &x11Surface{
@@ -975,8 +988,13 @@ func (X11Backend) NewSurface(opts WindowOptions) (Surface, error) {
 		focused:  true,
 		geomW:    w,
 		geomH:    h,
+		geomLW:   lw,
+		geomLH:   lh,
 		opts:     opts,
+		sizing:   opts.Sizing,
 	}
+	s.limits = limitsFor(s.sizing, opts, lw, lh)
+	s.applySizeHintsLocked()
 	s.state.Solid = !c.composited
 	if opts.Popup {
 		// Override-redirect: no window manager frame to ask about.
@@ -1118,17 +1136,25 @@ type x11Surface struct {
 	focused  bool
 	wantDeco Decorations
 	// frame is the client frame's margin and regions; geomW / geomH the
-	// visible window, which the X window is that plus the margin. vis is
-	// the 32-bit visual the window was created with for a translucent
-	// frame (nil: the screen's default, opaque one).
-	frame        Frame
-	geomW, geomH int
-	vis          *C.Visual
-	visDepth     int
-	cmap         C.Colormap
+	// visible window in device pixels, which the X window is that plus
+	// the margin, and geomLW / geomLH the same window in the logical
+	// pixels the toolkit's window geometry speaks — what Resize was last
+	// given, and what the last EventResize reported. vis is the 32-bit
+	// visual the window was created with for a translucent frame (nil:
+	// the screen's default, opaque one).
+	frame          Frame
+	geomW, geomH   int
+	geomLW, geomLH int
+	vis            *C.Visual
+	visDepth       int
+	cmap           C.Colormap
 	// opts are what the window was made with, so it can be re-created on
-	// another visual when the frame starts or stops needing alpha.
-	opts WindowOptions
+	// another visual when the frame starts or stops needing alpha; sizing
+	// is its resize policy and limits what WM_NORMAL_HINTS last said
+	// (platform.SizingSurface).
+	opts   WindowOptions
+	sizing Sizing
+	limits SizeLimits
 	// posX, posY are where the last ConfigureNotify put the X window and
 	// posKnown that one has arrived. posRoot says those coordinates were
 	// already root-relative — a synthetic configure from the window
@@ -1232,6 +1258,13 @@ func x11OpenLocked() (*x11Conn, error) {
 	c.scale = scaleFromDPI(dpi)
 	if c.scale <= 0 {
 		c.scale = 1
+	}
+	// An explicit UITK_SCALE (or GDK_SCALE, QT_SCALE_FACTOR) is what the
+	// toolkit draws at, so it has to be what a window's geometry is
+	// converted with too: a look at 2x inside a window sized for 1x is a
+	// window with half its content cut off.
+	if env := ScaleFromEnv(); env > 0 {
+		c.scale = env
 	}
 	x11c = c
 	return c, nil
@@ -1365,8 +1398,18 @@ func (s *x11Surface) Buffer() *paintengine2d.Image {
 }
 func (s *x11Surface) Closed() bool { return s.closed }
 func (s *x11Surface) Scale() float32 {
-	if s.conn != nil && s.conn.scale > 0 {
-		return s.conn.scale
+	if s == nil {
+		return 1
+	}
+	return s.conn.displayScale()
+}
+
+// displayScale is the connection's display scale, never zero: what a
+// window's logical size is multiplied by to get the pixels the X server
+// is told about.
+func (c *x11Conn) displayScale() float32 {
+	if c != nil && c.scale > 0 {
+		return c.scale
 	}
 	return 1
 }
@@ -1393,20 +1436,39 @@ func internAtom(d *C.Display, name string) C.Atom {
 	return C.ui_atom(d, cn)
 }
 
-// Resize sizes the *window*: the X window is that plus the frame's margin,
-// the band the shadow lives in (_GTK_FRAME_EXTENTS tells the window manager
-// as much, so it moves and snaps the window, not the shadow).
-func (s *x11Surface) Resize(w, h int) error {
+// Resize sizes the *window*, in logical pixels: the X window is that many
+// device pixels — an X server has no notion of a display scale — plus the
+// frame's margin, the band the shadow lives in (_GTK_FRAME_EXTENTS tells
+// the window manager as much, so it moves and snaps the window, not the
+// shadow).
+func (s *x11Surface) Resize(lw, lh int) error {
 	if s.closed || s.win == 0 {
 		return nil
 	}
-	if w < 1 {
-		w = 1
+	if lw < 1 {
+		lw = 1
 	}
-	if h < 1 {
-		h = 1
+	if lh < 1 {
+		lh = 1
 	}
+	if lw == s.geomLW && lh == s.geomLH {
+		// The size the app was last told, handed back: an EventResize
+		// echoed by the window's own handler. Asking the server for the
+		// device size this rounds to would fight a window manager that
+		// chose a size between two logical pixels.
+		return nil
+	}
+	s.geomLW, s.geomLH = lw, lh
+	w, h := DevicePixels(lw, s.conn.displayScale()), DevicePixels(lh, s.conn.displayScale())
 	s.geomW, s.geomH = w, h
+	if s.sizing == SizingFixed {
+		// The pin follows the window: the app is allowed to resize its
+		// own fixed window, the user is not.
+		s.limits = limitsFor(s.sizing, s.opts, lw, lh)
+		x11Mu.Lock()
+		s.applySizeHintsLocked()
+		x11Mu.Unlock()
+	}
 	m := s.frame.Margin
 	w, h = w+m.Width(), h+m.Height()
 	if s.img.Width == w && s.img.Height == h {
@@ -1783,10 +1845,14 @@ func (s *x11Surface) translate(xe *C.XEvent) []Event {
 				s.rebuildImageLocked()
 			}
 			// The X window holds the frame's margin too; the app hears
-			// about the window inside it.
+			// about the window inside it, in the logical pixels all
+			// window geometry here is stated in.
 			m := s.frame.Margin
 			s.geomW, s.geomH = max(w-m.Width(), 1), max(h-m.Height(), 1)
-			return []Event{{Kind: EventResize, Width: s.geomW, Height: s.geomH}}
+			sc := s.conn.displayScale()
+			s.geomLW = LogicalPixels(s.geomW, sc)
+			s.geomLH = LogicalPixels(s.geomH, sc)
+			return []Event{{Kind: EventResize, Width: s.geomLW, Height: s.geomLH}}
 		}
 	case C.ButtonPress, C.ButtonRelease:
 		btn := int(C.ui_btn(xe))
@@ -2889,7 +2955,65 @@ func (s *x11Surface) RequestDecorations(d Decorations) {
 func (s *x11Surface) WindowState() WindowState { return s.state }
 
 // Capabilities are the window's _NET_WM_ALLOWED_ACTIONS (FrameSurface).
-func (s *x11Surface) Capabilities() WMCaps { return s.caps }
+// Capabilities is what _NET_WM_ALLOWED_ACTIONS says, less what a fixed
+// window cannot have (FrameSurface).
+func (s *x11Surface) Capabilities() WMCaps { return dropResizeCaps(s.caps, s.sizing) }
+
+// Sizing is the window's resize policy (SizingSurface).
+func (s *x11Surface) Sizing() Sizing { return s.sizing }
+
+// SetSizing changes the policy and re-states WM_NORMAL_HINTS
+// (SizingSurface).
+func (s *x11Surface) SetSizing(sz Sizing) {
+	if s == nil || s.sizing == sz {
+		return
+	}
+	s.sizing = sz
+	s.syncLimits()
+}
+
+// SizeLimits is what WM_NORMAL_HINTS last said about the visible window
+// (SizingSurface).
+func (s *x11Surface) SizeLimits() SizeLimits { return s.limits }
+
+// syncLimits recomputes the window's limits for its size and hands them to
+// the window manager.
+func (s *x11Surface) syncLimits() {
+	if s == nil {
+		return
+	}
+	s.limits = limitsFor(s.sizing, s.opts, s.geomLW, s.geomLH)
+	x11Mu.Lock()
+	s.applySizeHintsLocked()
+	x11Mu.Unlock()
+}
+
+// applySizeHintsLocked publishes the window's limits as WM_NORMAL_HINTS.
+//
+// The limits are logical pixels, as all window geometry here is; an X
+// server's are device pixels, so each one is scaled. The hints are about
+// the X window, which holds the frame's margin too: without adding it the
+// window manager would let the visible window shrink past the app's
+// minimum by the shadow's width, and would hold a fixed window at the
+// margin's size short of its own (GTK adds it as well).
+func (s *x11Surface) applySizeHintsLocked() {
+	c := s.conn
+	if c == nil || c.dpy == nil || s.win == 0 {
+		return
+	}
+	l := s.limits
+	m := s.frame.Margin
+	sc := c.displayScale()
+	grow := func(v, margin int) C.int {
+		if v <= 0 {
+			return 0
+		}
+		return C.int(DevicePixels(v, sc) + margin)
+	}
+	C.ui_resize_hints(c.dpy, s.win,
+		grow(l.MinWidth, m.Width()), grow(l.MinHeight, m.Height()),
+		grow(l.MaxWidth, m.Width()), grow(l.MaxHeight, m.Height()))
+}
 
 // SuitsClientFrame: the window manager moves and resizes on request
 // (_NET_WM_MOVERESIZE) and is not a tiling manager.
@@ -2928,6 +3052,9 @@ func (s *x11Surface) StartSystemMove() bool { return s.moveResize(netMoveResizeM
 // StartSystemResize hands the held press to the window manager for an
 // interactive resize from edges.
 func (s *x11Surface) StartSystemResize(edges Edges) bool {
+	if s.sizing == SizingFixed {
+		return false
+	}
 	dir, ok := netMoveResizeDirection(edges)
 	if !ok {
 		return false
@@ -3083,9 +3210,7 @@ func (s *x11Surface) recreateOnVisual(argb bool) {
 		s.gmask = uint32(C.ui_green_mask(c.dpy))
 		s.bmask = uint32(C.ui_blue_mask(c.dpy))
 	}
-	if mw, mh := s.opts.MinWidth, s.opts.MinHeight; mw > 0 || mh > 0 {
-		C.ui_resize_hints(c.dpy, s.win, C.int(max(mw, 1)), C.int(max(mh, 1)))
-	}
+	s.applySizeHintsLocked()
 	s.gc = C.ui_gc(c.dpy, s.win)
 	s.ic, s.ximCbs = x11CreateIC(c.im, s.win)
 	c.surfaces[s.win] = s
@@ -3114,12 +3239,7 @@ func (s *x11Surface) applyFrameLocked() {
 		return
 	}
 	m := s.frame.Margin
-	// The size hints are about the X window, which holds the margin too:
-	// without that the window manager would let the visible window shrink
-	// past the app's minimum by the shadow's width (GTK adds it as well).
-	if mw, mh := s.opts.MinWidth, s.opts.MinHeight; mw > 0 || mh > 0 {
-		C.ui_resize_hints(c.dpy, s.win, C.int(max(mw, 1)+m.Width()), C.int(max(mh, 1)+m.Height()))
-	}
+	s.applySizeHintsLocked()
 	if s.frame.Shape != nil {
 		s.applyShapeLocked()
 		s.applyBlurLocked()

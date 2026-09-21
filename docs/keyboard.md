@@ -14,6 +14,49 @@ floating chrome in one order, everywhere: **tooltip → popup → overlay**.
 Unhandled keys bubble from the focused widget to its ancestors (so a
 NumberField still steps while its inner TextField has focus).
 
+### Where the keyboard starts
+
+A window focuses something when it first opens, so keys that bubble from
+the focus reach somebody before the first click or Tab: the first control
+in the tab order that a *click* would also focus. Chrome reached only with
+Tab, F10 or a mnemonic — a menu bar, a tool bar, a tab strip — is skipped,
+so a window holding nothing else opens with no focus at all; its
+accelerators and mnemonics work anyway, since neither goes through the
+focus. A modal overlay that is already up when the window opens is
+searched instead of the content behind it.
+
+Focus arrives the way a click's does rather than a Tab's, so a look that
+shows its ring only after keyboard navigation draws none until the user
+uses the keyboard, while a field that always shows its caret shows it.
+
+An app overrules this in either of two ways: focus something itself before
+the first frame (`Window.RequestFocus`), or name the component with
+`Window.SetInitialFocus`. The window only chooses when nothing else has,
+and only once — a later Escape that clears the focus leaves it cleared.
+
+### Which field a shortcut reads
+
+`widget.KeyEvent` carries both the key and the character it stands for:
+
+- **`e.Key`** for anything the keyboard *does* — Escape, Tab, Return, the
+  arrows, Home and End, the function keys. Those carry no `Rune`, so a
+  table written over characters cannot fire on one by accident.
+- **`e.Rune`** for a shortcut written as a letter, which is most of them:
+  `e.Rune == 's' && e.Mods.Ctrl()` is Ctrl+S.
+
+`Rune` is the key's identity as a character, not what typing it produces:
+no modifier has been applied, so Shift+A and A are both `'a'` and the
+shift is in `e.Mods`. Which layout the key belongs to is already settled —
+the key labelled A on AZERTY is `KeyA` and its character is `'a'`
+(`platform.KeyChar`).
+
+Text being **typed** never arrives as a KeyEvent. It comes as characters
+through `Component.TextInput`, one per character the layout, Shift, the
+dead keys and the compose key actually produced — which is what a text
+field reads and what an input method drives. A shortcut table must not be
+written over `TextInput`, and a text field must not be written over
+`KeyPress`.
+
 ## TextField
 
 | Key | Action |

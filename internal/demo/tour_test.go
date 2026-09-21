@@ -36,11 +36,10 @@ func tourWindow(t *testing.T, pack string, scale float32, page int) (*app.Applic
 	a := uitoolkit.New(uitoolkit.Options{
 		Look: look, Headless: true, Scale: scale, DisableLookWatch: true,
 	})
-	// An offscreen surface is made in device pixels, so a window asked
-	// for at a fractional scale has to be asked for in those: 1180 x 820
-	// design pixels of page either way.
+	// A window's size is logical pixels at every scale, so the same
+	// 1180 x 820 page comes back as 1180*scale device pixels to capture.
 	win, err := a.NewWindow(platform.WindowOptions{
-		Title: "tour", Width: int(1180 * scale), Height: int(820 * scale), Headless: true,
+		Title: "tour", Width: 1180, Height: 820, Headless: true,
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -1,5 +1,11 @@
 # the three players on real hardware (instance 20)
 
+> This is what the rig found on 2026-09-17 and is kept as it was written.
+> Three of the toolkit gaps it reports — window sizes in two different
+> units, the resize band on a window that asked to be fixed, and a mouse
+> press that does not bubble — have since been fixed; see the struck-out
+> entries in [docs/players.md](../../players.md).
+
 Nested KWin on the real GPU, `tools/e2e` instance 20, KWin ScreenShot2
 captures, Wayland and X11. Nothing was run against the user's session. The
 instance was stopped and `/run/user/1000/uitk-e2e-20*` removed afterwards.

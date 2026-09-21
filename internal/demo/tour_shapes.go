@@ -175,7 +175,7 @@ func (p *shapesPage) open() {
 
 	card, err := a.NewWindow(platform.WindowOptions{
 		Title: "Backdrop — the window under the hole", Width: 620, Height: 420,
-		MinWidth: 240, MinHeight: 180, Resizable: true,
+		MinWidth: 240, MinHeight: 180,
 	})
 	if err != nil {
 		p.note("Could not open the backdrop: " + err.Error())
