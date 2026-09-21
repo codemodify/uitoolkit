@@ -195,7 +195,10 @@ func (h *HeaderBar) CaptionFitWidth() float32 {
 func (h *HeaderBar) minCaption(s style.DecorationSpec) float32 {
 	lk := h.Look()
 	m := max(s.Caption, h.lead.MinHeight(), h.trail.MinHeight())
-	if !s.Stacked {
+	if !s.Stacked && h.DecorationState().Caption <= 0 {
+		// A merged caption holds the app's row, so it is never shorter
+		// than a row — unless the app asked for a band of its own height,
+		// which it means.
 		m = max(m, float32(math.Round(float64(style.Dip(lk, 32)))))
 		if f := lk.BoldFont(); f != nil {
 			m = max(m, float32(math.Ceil(float64(f.Height()+style.Dip(lk, 12)))))
