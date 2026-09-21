@@ -35,10 +35,13 @@ type offscreenFrame struct {
 	// (SimulateGlass); off by default, as a plain compositor is.
 	glass bool
 	// frame is the client frame's margin and regions; geomW / geomH the
-	// visible window's size, which the pixmap grows past by the margin,
-	// exactly as a compositor's surface does.
-	frame        Frame
-	geomW, geomH int
+	// visible window's size in device pixels, which the pixmap grows past
+	// by the margin, exactly as a compositor's surface does, and geomLW /
+	// geomLH the same window in the logical pixels window geometry is
+	// stated in (the two are equal until SimulateScale).
+	frame          Frame
+	geomW, geomH   int
+	geomLW, geomLH int
 	// imeRect is the caret rectangle the app last gave the simulated
 	// input method (surface device pixels), imeOn whether it is enabled.
 	imeRect [4]int
@@ -81,7 +84,7 @@ func (o *Offscreen) SetSizing(s Sizing) {
 		return
 	}
 	o.sizing = s
-	o.limits = limitsFor(s, o.opts, o.frame.geomW, o.frame.geomH)
+	o.limits = limitsFor(s, o.opts, o.frame.geomLW, o.frame.geomLH)
 }
 
 // SizeLimits is what the simulated desktop was told (SizingSurface).
@@ -146,6 +149,8 @@ func (o *Offscreen) resizeSurface() {
 		w, h := o.img.Width, o.img.Height
 		m := o.frame.frame.Margin
 		o.frame.geomW, o.frame.geomH = max(w-m.Width(), 1), max(h-m.Height(), 1)
+		o.frame.geomLW = LogicalPixels(o.frame.geomW, o.Scale())
+		o.frame.geomLH = LogicalPixels(o.frame.geomH, o.Scale())
 	}
 	m := o.frame.frame.Margin
 	w, h := o.frame.geomW+m.Width(), o.frame.geomH+m.Height()

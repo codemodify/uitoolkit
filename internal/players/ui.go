@@ -924,50 +924,32 @@ func snap(v float32) float32 {
 // ---- opening a window whose size is a design -----------------------------------
 
 // WindowSize turns a size in *design* pixels — the units a skin's art and a
-// player's proportions are drawn in — into the numbers this backend's
-// window-geometry calls actually want.
+// player's proportions are drawn in — into the numbers a window-geometry
+// call wants.
 //
-// The two backends do not agree, and no single scale factor reconciles them.
-// An X11 window's size *is* device pixels: the server has no notion of a
-// display scale, so a 275-design-pixel strip on a 1.75 display has to ask
-// for 481. A Wayland toplevel's geometry is **logical** and the compositor
-// multiplies, so the same strip asks for 275 and is handed a 481-pixel
-// buffer. (The offscreen backend behaves like X11, which is what its tests
-// assume.) Asking the wrong way round gives a window nearly twice too large
-// or nearly half too small, and this is what exists to stop that.
+// There is nothing left to turn: the toolkit states window geometry in
+// logical pixels on every backend, which is the same thing a design pixel
+// is, so this is the identity and only stays for the two callers that read
+// better with it. It used to be the work-around for backends that did not
+// agree — an X11 window's size was device pixels and a Wayland toplevel's
+// logical, so the same strip had to ask for 481 on one and 275 on the
+// other — and platform converts at its own boundary now.
 func WindowSize(a *app.Application, w, h int) (int, int) {
-	s := max(a.Scale(), 1)
-	if a == nil || a.BackendName() == "wayland" {
-		s = 1
-	}
-	return max(int(float32(w)*s+0.5), 1), max(int(float32(h)*s+0.5), 1)
+	return max(w, 1), max(h, 1)
 }
 
 // OpenSized opens a window whose width and height are stated in design
 // pixels (see [WindowSize]).
 //
-// It sizes the window twice, which is the other half of the problem. The
-// application's scale is a guess until a window exists — a window may open
-// on a monitor the guess did not expect — so the size is asked for again
-// from the scale the window actually reports.
-//
-// fixed pins the window's minimum to that size, for the players whose
-// proportions are the design rather than a starting point.
+// fixed says the window's proportions *are* the design rather than a
+// starting point: the desktop is told it may not be resized at all, so
+// there is no resize band anywhere on its edge.
 func OpenSized(a *app.Application, opts platform.WindowOptions, w, h int, fixed bool) (*app.Window, error) {
-	before := max(a.Scale(), 1)
 	opts.Width, opts.Height = WindowSize(a, w, h)
 	if fixed {
-		opts.MinWidth, opts.MinHeight = opts.Width, opts.Height
+		opts.Sizing = platform.SizingFixed
 	}
-	win, err := a.NewWindow(opts)
-	if err != nil {
-		return nil, err
-	}
-	if got := max(win.Scale(), 1); got != before {
-		ww, hh := WindowSize(a, w, h)
-		win.SetSize(ww, hh)
-	}
-	return win, nil
+	return a.NewWindow(opts)
 }
 
 // ---- the clock ---------------------------------------------------------------
