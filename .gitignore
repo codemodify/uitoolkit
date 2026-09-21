@@ -11,6 +11,7 @@ examples/files/files
 cmd/uitksettings/uitksettings
 # `go build ./cmd/<name>` from the repo root drops the binary here.
 /uitk-themesheet
+/uitk-skin
 /uitksettings
 /uitest-driver
 /mailclientd
