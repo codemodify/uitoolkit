@@ -28,7 +28,7 @@ go run ./examples/skinshape -theme breeze-night      # a look that frames a rect
 
 # And three whole applications built on both halves (docs/players.md): a
 # skin's outline, and — when the big one folds down — the app's own.
-go run ./examples/minim
+go run ./examples/minim                              # Ctrl+K to minim-silver: round corners
 go run ./examples/marquee                            # Ctrl+M
 go run ./examples/lantern                            # Ctrl+K drops the skin
 ```

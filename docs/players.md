@@ -28,8 +28,10 @@ that would need a media stack if you pick it.
 Every title, artist and album in the invented library was made up for
 `internal/players/players.go`. No skin, bitmap, icon, font, name or mark
 belonging to any real player is in this repository, as art or as a fixture:
-the three skins are generated from paths in `internal/skinart` like the
-other three, and the transport glyphs are drawn in `internal/players/ui.go`.
+the players' five skins are generated from paths and whole pixels in
+`internal/skinart` like the other three, the transport glyphs are drawn in
+`internal/players/ui.go`, and the display alphabets and clock digits Minim's
+panels print in were set by hand on their grids for this toolkit.
 
 ## What each one is for
 
@@ -37,9 +39,9 @@ other three, and the transport glyphs are drawn in `internal/players/ui.go`.
 | --- | --- | --- | --- |
 | shape of it | a strip, 275 × 116 design pixels | a cabinet, 780 × 540, that folds to 468 × 104 | a window with a menu bar, 880 × 560 |
 | windows | three, stacked and travelling together | one, in two shapes | two, one anchored to the other |
-| skin | `minim`, a pixel sheet over `win95` | `marquee`, paths and glass over `breeze-night` | `lantern`, matte, a *partial* skin over `breeze-night` |
-| silhouette | the skin's: steps in twice at the bottom | the skin's brow and dome, **and the app's own stadium** when folded | the skin's asymmetric skirt |
-| what it shows | proportions as design pixels, pixel art at fractional scales, windows that snap | one control changing the size, the layout *and* the outline at once | a skin is a pack: one key drops it |
+| skin | `minim`, a pixel sheet over `win95`, and two panels it switches to live: `minim-classic` and `minim-silver` | `marquee`, paths and glass over `breeze-night` | `lantern`, matte, a *partial* skin over `breeze-night` |
+| silhouette | the skin's: steps in twice at the bottom; round at every corner in silver | the skin's brow and dome, **and the app's own stadium** when folded | the skin's asymmetric skirt |
+| what it shows | proportions as design pixels, pixel art at fractional scales, windows that snap, one widget tree laid out as three different panels | one control changing the size, the layout *and* the outline at once | a skin is a pack: one key drops it |
 
 ### Minim — the compact one
 
@@ -61,6 +63,69 @@ takes whatever hangs from it and leaves what it hung from.
 rather than a frozen one: at 1.75 the window is 481 by 203, the silhouette
 is redrawn at that size rather than stretched, and the art is the 2× sheet
 drawn at a whole multiple because the skin declares itself `pixelated`.
+
+#### Three skins, one tree
+
+```bash
+go run ./examples/minim -theme minim-classic   # the base-skin look of the era
+go run ./examples/minim -theme minim-silver    # the rounded silver-and-blue one
+```
+
+Minim wears three skins and switches between them live, all three windows
+at once:
+
+- **`minim`**, its own: a pixel front panel dressing ordinary widgets.
+- **`minim-classic`**, **Minim Classic**: the base-skin look of the era —
+  slate-blue bevelled chrome, title bands with a gold groove either side of
+  the words, a black display with thin green segments and a small green
+  analyser, an orange volume bar and a green balance bar, grey transport
+  keys, and an equaliser of eleven yellow faders. A pixel skin, exact at 1×
+  and 2×.
+- **`minim-silver`**, **Minim Silver**: the rounded look of the later era —
+  silver chrome under a navy title band, a blue dot-matrix display with big
+  pixel digits, glossy round keys, capsule toggles beside blue lamps, the
+  equaliser under a tab-shaped header, a blue playlist — in windows whose
+  four corners are round, with the desktop showing beyond them. Drawn from
+  paths, exact from 1 to 2.
+
+The two panels are what their names say: pictures of each whole window with
+holes where the keys go, which is how a player of this shape was built. A
+skin cannot lay a panel out, so the player does, one layout per face
+(`internal/players/minim/face.go`), on rects stated once in
+`internal/players/minim/panel` that the skin generator reads too — so the
+art and the layout cannot disagree about where a key is. The panels paint
+their keys, digits, lamps and bitmap capitals by name
+(`style.DrawSkinSprite`, [docs/skins.md](skins.md#sprites-an-app-paints-itself)).
+
+The widget tree is the **same one in every face**. A switch moves and
+repaints the controls, and hides the few one face has and another does not:
+the panels have their own pause key, an eject key and a balance slider, and
+no mute key. The focus, the tab order and the accessibility tree carry
+across a switch, and a control that disappears hands the keyboard to the
+obvious next one rather than to nothing. Under any pack that is not one of
+the panels — `minim` itself, or any of the others — the player is laid out
+as widgets.
+
+The switch is reachable every way a control should be:
+
+| | |
+| --- | --- |
+| the skin key | in the strip's own chrome: the column of option letters in the panels (it reads SKIN), the last toggle in Minim's own row. It steps to the next skin, and its accessible name says which one it is on |
+| **Ctrl+K** | from any of the three windows, the same step: minim → minim-classic → minim-silver → minim |
+| **Ctrl+Shift+K** | drops the skin for `breeze-night` and puts back the one it dropped — Lantern's switch, kept |
+| a menu | a right-click anywhere on the face of any window, or the menu key (Shift+F10) from the keyboard, lists the skins by name with the one being worn ticked, and "No skin" |
+
+The choice is **remembered**: it is written to
+`$XDG_CONFIG_HOME/uitoolkit/minim.json` (the one piece of state the player
+keeps), and `examples/minim` wears it again on the next run unless `-theme`
+names a pack. A `-shot` run is posed, so it neither reads nor writes it.
+
+The panels' extra keys do what is true in a player that plays nothing.
+Eject stops and goes back to the first track. AUTO chooses a preset for
+each track as it comes up. PRESETS lists the presets. MISC opens the skin
+menu; SEL shows the playing track; ADD and REM say plainly that there is
+nothing to add or remove; LIST OPTS jumps to the first track or closes the
+list.
 
 ### Marquee — the one that folds
 
@@ -134,8 +199,9 @@ S      shuffle               R      repeat: off → all → one
 Escape quit
 ```
 
-Marquee adds Ctrl+M (fold), Lantern adds Ctrl+K (skin) and Ctrl+L
-(playlist).
+Minim adds Ctrl+K (next skin), Ctrl+Shift+K (drop the skin) and the menu
+key (the skin menu); Marquee adds Ctrl+M (fold); Lantern adds Ctrl+K (skin)
+and Ctrl+L (playlist).
 
 Bare letters as shortcuts are safe here because no player hands one to a
 text field. There is exactly one field in the three — Lantern's playlist
@@ -177,6 +243,7 @@ internal/players/            the model, and the pieces of interface all three sh
   desk.go                    the same rack with real windows in it
   ui.go                      the glyphs, the transport button, the fader, the clock
 internal/players/minim/      one package per player: its look and its layout, and no more
+  panel/                     Minim's two panel layouts, read by the player and the skin generator
 internal/players/marquee/
 internal/players/lantern/
 internal/players/playertest/ what the three tests do to a window
@@ -191,7 +258,8 @@ being demonstrated.
 
 Three pieces there are worth knowing about.
 
-**`players.Fader`** is a slider stood on end. It is a component rather than
+**`players.Fader`** is a slider stood on end — or on its side, for a seek
+bar whose thumb is a picture (`Horizontal`, `Painter`). It is a component rather than
 a flag on `widgets.Slider` because the toolkit's slider is horizontal by
 construction — it takes its height from the slider metric and draws along
 its width — and ten faders side by side *are* an equaliser while a row of
@@ -242,7 +310,12 @@ permutation beside the list rather than of it, where a snapped window lands.
 Each player is then tested headless for the four things a skinned app has to
 keep: every control on the keyboard, `a11y.Check` clean in the skin *and*
 with the skin dropped, the silhouette at 1, 1.25, 1.5, 1.75 and 2, and a
-themed fallback that is a whole app.
+themed fallback that is a whole app. Minim's switch is tested for the same
+things at every stop: each of its skins paints all three windows at the
+five scales with the display where the layout says, the silver windows are
+round at their corners and nowhere else at every scale, the skin key and
+Ctrl+K go all the way round, the menu lists the skins by name, every panel
+control is on Tab, and the choice is remembered.
 
 The silhouette is checked as **fractions of the window** rather than as
 pixels or as a golden image. That is exactly what a shape stated in design
@@ -287,6 +360,28 @@ since been fixed in the toolkit and are struck through below, under
   consulted only when the user asked for the look's own), so a silhouette
   must stay out of *both* top corners or it eats a close button on half the
   desktops it runs on. Every shape here does.
+
+Minim's panels ran into four more:
+
+- **A skin states one caption for every window it dresses.** Minim
+  Silver's reference has no title band on its equaliser at all, only a
+  tab-shaped header; here the equaliser has the band and draws its tab
+  under it.
+- **A control's pointer shape is read from the part it paints, not from a
+  picture an app paints for it.** Silver's round keys take the pointer
+  across their whole box. The keys are still ordinary buttons with every
+  keyboard and accessibility route; only the corners of the box answer a
+  click they would not have answered in the original.
+- **Pixel art is only ever magnified by whole multiples**, so a pixelated
+  sprite drawn unsliced into a box at 1.75 is drawn at 1× in the middle of
+  it. The classic panel's sprites carry an empty one-pixel margin and are
+  sliced there, which makes the whole picture the stretchable middle
+  ([docs/skins.md](skins.md#sprites-an-app-paints-itself)).
+- **A skin's caption shorter than 24 pixels was grown to 24**: its buttons
+  had the caption's height, and a frame gives such a button at least that.
+  Fixed in the toolkit — a short caption now gets square buttons stood in
+  it — which also gives Minim's own skin the 18-pixel caption it always
+  stated.
 
 Two more are about *when* rather than *what*, and only real hardware showed
 them (see the e2e report):
