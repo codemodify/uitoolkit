@@ -15,10 +15,11 @@ package players
 // desktops this toolkit runs on will do the second (see Rack.Apply in each
 // app, and docs/players.md).
 
-// Box is a window's outline on the desktop, in the root pixels
-// platform.SurfacePosition and Surface.Size speak. Integers, not the
-// toolkit's float rects: a snap that lands half a pixel out is a bug, and
-// a type that cannot express half a pixel cannot have it.
+// Box is a window's outline on the desktop, in the logical pixels
+// app.Window's Position, Size and Move speak, so a box's far edge is its
+// neighbour's near one at any display scale. Integers, not the toolkit's
+// float rects: a snap that lands half a pixel out is a bug, and a type
+// that cannot express half a pixel cannot have it.
 type Box struct{ X, Y, W, H int }
 
 // Right and Bottom are the far edges, exclusive.
@@ -197,7 +198,7 @@ func NewRack(reach int) *Rack {
 
 // DefaultReach is how close is close enough, in logical pixels. Ten is
 // about a fingertip's worth of slop at 1× and grows with the display,
-// since the apps pass it through the look's scale.
+// since a box is in the logical pixels a window's position is.
 const DefaultReach = 10
 
 // Add puts a pane in the rack and returns its index.

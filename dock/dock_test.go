@@ -508,6 +508,8 @@ type fakeWindow struct {
 	closed  bool
 	moves   int
 	onClose func() bool
+	// captionDrag is the hook the dock gave the window's own caption.
+	captionDrag func(at paintengine2d.Point) bool
 	// tear is the window as a drag can carry it, nil for a desktop that
 	// cannot carry one.
 	tear *fakeTearWindow
@@ -531,6 +533,10 @@ func (w *fakeWindow) Show()                            { w.shown = true }
 func (w *fakeWindow) Hide()                            { w.shown = false }
 func (w *fakeWindow) Raise()                           {}
 func (w *fakeWindow) Close()                           { w.closed = true }
+func (w *fakeWindow) SetOnCaptionDrag(fn func(at paintengine2d.Point) bool) {
+	w.captionDrag = fn
+}
+
 func (w *fakeWindow) TearOffWindow() widget.TearOffWindow {
 	if w.tear == nil {
 		return nil
@@ -600,6 +606,36 @@ func TestFloatingPanelDocksBackToItsSideWhenTheStackIsGone(t *testing.T) {
 	r.Layout()
 	if r.host.sideOf(stackOf(t, r.tree)) != SideLeft {
 		t.Error("the panel did not come back to the left area")
+	}
+}
+
+// A panel docked back into an area its float emptied comes back at a
+// usable size at once. The host lays itself out as it docks, and that
+// one pass has to share the area in: it used to leave the area hidden
+// from the share (it was empty when the pass began), so the panel was
+// in the tree and in the layout, and zero pixels wide on screen until
+// something else laid the host out again.
+func TestAPanelDockedBackIntoItsEmptiedAreaHasASize(t *testing.T) {
+	r := newRig(t)
+	r.host.SetWindowOpener(&fakeOpener{})
+	before := r.rectOf(stackOf(t, r.tree))
+	r.host.FloatPanel(r.tree, paintengine2d.XYWH(0, 0, 300, 400))
+	r.Layout()
+	if !r.host.Area(SideLeft).Empty() {
+		t.Fatal("the left area kept the panel that floated")
+	}
+	if !r.host.DockPanel(r.tree) {
+		t.Fatal("the panel refused to dock back")
+	}
+	// No r.Layout() here: what the host arranged as it docked is what
+	// the window shows.
+	got := r.rectOf(stackOf(t, r.tree))
+	min := stackOf(t, r.tree).MinSize()
+	if got.Dx() < min.X || got.Dy() < min.Y {
+		t.Fatalf("the panel came back %v, under its minimum %v", got, min)
+	}
+	if got.Dx() != before.Dx() || got.Dy() != before.Dy() {
+		t.Errorf("the panel came back %gx%g, it left at %gx%g", got.Dx(), got.Dy(), before.Dx(), before.Dy())
 	}
 }
 

@@ -101,41 +101,20 @@ type tourState struct {
 	proof  *widgets.Label
 	status *widgets.StatusBar
 
-	// look is the appearance the tour has applied, whole.
-	//
-	// It is kept rather than read back because style.LookAppearance
-	// recovers from a look only what the look carries — the pack, the
-	// palette, the corners, the icons — and not the preferences that
-	// belong to the application rather than to the look: who draws the
-	// frame, where the caption buttons go, reduced motion, the desktop's
-	// file dialogs. Reading one back and applying it with a new pack in
-	// it would quietly reset the other four, so the Skins page would undo
-	// whatever the Frames page had just been used for.
-	look style.Appearance
-
 	// closers undo what a page left running when the window closes: a
 	// window it opened, a tray item it registered, a look watch.
 	closers []func()
 }
 
-// initAppearance seeds the tour's record: the saved preferences, with the
-// look the application actually came up in written over the parts of it
-// that a look carries (so `-theme` and UITK_THEME are reflected).
-func (t *tourState) initAppearance() {
-	saved := style.LoadAppearance().Normalize()
-	from := style.LookAppearance(t.a.Look())
-	saved.Name, saved.Theme = from.Name, from.Theme
-	saved.Corners, saved.Icons, saved.IconSize = from.Corners, from.Icons, from.IconSize
-	t.look = saved.Normalize()
-}
-
 // apply changes one thing about the appearance and hands the whole of it
 // to the application, then lets every built page restate itself: more
-// than one of them is showing some part of what just changed.
+// than one of them is showing some part of what just changed. It starts
+// from what the application reports, so a change of pack keeps the frame,
+// the caption buttons and the motion preference the other pages set.
 func (t *tourState) apply(change func(*style.Appearance)) {
-	change(&t.look)
-	t.look = t.look.Normalize()
-	t.a.ApplyAppearance(t.look)
+	ap := t.a.Appearance()
+	change(&ap)
+	t.a.ApplyAppearance(ap.Normalize())
 	t.refreshAll()
 }
 
@@ -226,7 +205,6 @@ func (t *tourState) content(open []int) widget.Component {
 	if len(open) == 0 {
 		open = allTourPages()
 	}
-	t.initAppearance()
 	t.strip = widgets.NewBrowserTabs()
 	t.strip.SetAccessibleName("Tour pages")
 	t.wireStrip()

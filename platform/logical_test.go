@@ -1,6 +1,10 @@
 package platform
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/codemodify/paintengine2d"
+)
 
 // Window geometry is logical pixels; a backend whose window system wants
 // device pixels converts at its own boundary. The two halves have to be
@@ -71,6 +75,43 @@ func TestOffscreenSizeIsLogical(t *testing.T) {
 		}
 		if ev.Width != 468 || ev.Height != 104 {
 			t.Errorf("%.2fx: EventResize %dx%d, want 468x104", scale, ev.Width, ev.Height)
+		}
+	}
+}
+
+// A window's position is logical pixels, like its size: at a scale of 2 a
+// window moved to 100, 50 sits at 200, 100 of the desktop's device pixels,
+// says it is at 100, 50, and one carried under the pointer by a drag lands
+// where the pointer's device pixels come to in logical ones.
+func TestPositionIsLogical(t *testing.T) {
+	src := NewOffscreen(WindowOptions{Width: 200, Height: 100, Scale: 2, X: 100, Y: 50})
+	if x, y, ok := src.Position(); !ok || x != 100 || y != 50 {
+		t.Fatalf("opened at %d,%d (ok=%v), asked for 100,50", x, y, ok)
+	}
+	torn := NewOffscreen(WindowOptions{Width: 120, Height: 80, Scale: 2})
+	if !src.StartDrag(DragPayload{Types: []string{"text/plain"}, Toplevel: true}) {
+		t.Fatal("StartDrag")
+	}
+	// The pointer and the offset into the carried window are device
+	// pixels, as every event position is.
+	if !AttachToplevel(src, torn, 20, 10) {
+		t.Fatal("AttachToplevel")
+	}
+	src.SimulateDragOver(paintengine2d.Pt(60, 30))
+	if x, y, ok := torn.Position(); !ok || x != 100+(60-20)/2 || y != 50+(30-10)/2 {
+		t.Fatalf("carried to %d,%d (ok=%v), want %d,%d", x, y, ok, 100+(60-20)/2, 50+(30-10)/2)
+	}
+	src.SimulateDragRelease()
+
+	// Moved and read back, at the scales people run, a position comes back
+	// as it went out.
+	for _, scale := range []float32{1, 1.25, 1.5, 1.75, 2} {
+		o := NewOffscreen(WindowOptions{Width: 10, Height: 10, Scale: scale})
+		for _, v := range []int{-37, 0, 1, 99, 275, 1281} {
+			o.Move(v, v+1)
+			if x, y, _ := o.Position(); x != v || y != v+1 {
+				t.Errorf("%.2fx: moved to %d,%d, reads back %d,%d", scale, v, v+1, x, y)
+			}
 		}
 	}
 }

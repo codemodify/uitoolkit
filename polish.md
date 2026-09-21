@@ -12,12 +12,14 @@ Struck through once fixed; newest findings at the end of their section.
 
 ## Appearance and themes
 
-- **Changing the theme resets the app-level preferences.**
+- ~~**Changing the theme resets the app-level preferences.**
   `style.LookAppearance` does not carry decorations, caption-button placement,
   reduced motion or native dialogs back out, and `Application` has no getter
   for the decorations preference. An app that rebuilds an `Appearance` from its
   look to switch packs silently undoes the rest; the tour keeps its own
-  `style.Appearance` to work round it (`tourState.apply`).
+  `style.Appearance` to work round it (`tourState.apply`).~~
+  `Application.Appearance()` is the whole of it and `Decorations()` the
+  getter; the tour starts every change from it.
 - **Settings' preview draws a shaped skin as a rectangle.** The preview is a
   panel inside the Settings window, so a compositor-level silhouette never
   applies to it. Needs the panel clipped by `style.WindowShapeOf`.
@@ -69,17 +71,32 @@ Struck through once fixed; newest findings at the end of their section.
 
 ## Docking, tabs and tear-off
 
-- **A floating dock panel's title bar cannot start a re-dock drag on
+- ~~**A floating dock panel's title bar cannot start a re-dock drag on
   Wayland**: `dock.Host.dragFloatingPanel` falls back to the desktop's move, so
-  dropping it on the host only moves the window. The dock button works.
-- **`Host.DockPanel` can restore a panel at zero width** when its area's split
+  dropping it on the host only moves the window. The dock button works.~~
+  The panel's own title bar did dock; the bar that did not was the window's,
+  the desktop's frame. The window now takes the toolkit's frame and hands its
+  caption's drags to the dock (`Window.SetOnCaptionDrag`). Under the desktop's
+  frame (the user's "system title bar") that caption still only moves it.
+- ~~**`Host.DockPanel` can restore a panel at zero width** when its area's split
   weight collapsed while it floated: right in the layout JSON, invisible on
-  screen.
-- **On X11 a torn-off window is placed by the window manager**, not under the
+  screen.~~ It was not the weight: `Split.Arrange` shared the space out before
+  it re-showed the area its float had emptied, so the host's own layout as it
+  docked left the panel at the size it was hidden at.
+- ~~**On X11 a torn-off window is placed by the window manager**, not under the
   pointer, even though `DragsWindows()` reports true; KWin also clamps a
-  client-placed window to the screen.
+  client-placed window to the screen.~~ Two causes: the drag kept moving the
+  X window the torn-off one had before it was re-made on an ARGB visual, and
+  KWin pushed a window an application moves back on screen. The drag follows
+  the surface and moves it as a user action (`_NET_MOVERESIZE_WINDOW`,
+  source 2); a client-placed window's hints keep its position.
 - **A tab merged into another application carries its title only**; richer
   data needs the app's own type through `OnTabDrag`.
+- **A drop on the dock host's centre does nothing**: only an edge band, a
+  panel or its tab strip takes a panel, and the indicator shows nothing
+  there — easy to mistake for a broken re-dock.
+- **The tour's dock page keeps its "in a window of its own" note** after a
+  panel is docked by dragging; only its buttons update the note.
 - **Escape during an X11 drag is unproven on real hardware**: under Xwayland
   KWin takes the keyboard for the drag it mirrors. Both cancel paths are
   written; check on a real X server.
@@ -91,13 +108,21 @@ Struck through once fixed; newest findings at the end of their section.
 
 ## Widgets
 
-- **`ListView.Measure` returns exactly rows × row height**, so inside a scroll
-  view the view frame's border clips the last row.
+- ~~**`ListView.Measure` returns exactly rows × row height**, so inside a scroll
+  view the view frame's border clips the last row.~~ `ListView`, `TreeView`
+  and `TableView` all measure their frame now.
 
 ## Platform
 
-- **`Position` and `Move` are still device pixels** while sizes are logical;
-  converting them is the natural follow-up to the size fix.
+- ~~**`Position` and `Move` are still device pixels** while sizes are logical;
+  converting them is the natural follow-up to the size fix.~~ Positions are
+  logical everywhere (`WindowOptions.X`/`Y`, `Move`, `Position`, the dock's
+  float geometry, the players' rack).
+- **An X11 window switched live to the desktop's frame shows no KWin title
+  bar** in the nested rig at 1.75 (it reports `server` and drops its own
+  caption); the same on `dev` (docs/e2e/2026-09-21/release-bugs.md).
+- **The tour's `-shot` still sizes its offscreen windows in device pixels**
+  (`1180 * sc`), from before window sizes became logical.
 - **X11's scale is connection-wide**: the last window's `WindowOptions.Scale`
   sets it for the display (X11's own model, one `Xft.dpi`).
 - **`UITK_SCALE` on a Wayland output at scale 1** draws at the asked scale into

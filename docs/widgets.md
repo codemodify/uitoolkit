@@ -70,6 +70,8 @@ and `SelectMulti` (every click toggles, Space toggles the current row).
 `IsSelected`, set it with `SetSelectedRows`, and follow it with
 `OnSelectionChange`. `EnsureVisible` scrolls a row into view (also before
 the first layout). Views sit in the theme's frame; `Frameless` opts out.
+A view's natural height is its rows (and a table's header) plus that
+frame, so in a scroll view or a column the last row is never under it.
 `Sidebar` on a list or tree paints it as a sidebar (a settings page list,
 mail folders): Aqua's source list, and the sidebar styles of looks that
 have one.
@@ -285,7 +287,9 @@ toplevel the desktop moves, resizes and stacks, wearing whichever frame the
 app's decoration setting asks for — see [decorations.md](decorations.md).
 It keeps the same title bar it had docked, whose float button now offers to
 dock it back — and whose drag handle drags the window itself, back over the
-host to dock it there. Where the desktop cannot carry a window under a drag
+host to dock it there. So does the window's own caption where the toolkit
+draws the frame (the default for these windows, `Window.SetOnCaptionDrag`);
+a desktop's own title bar only moves the window. Where the desktop cannot carry a window under a drag
 (a Wayland compositor without `xdg-toplevel-drag-v1`) that title bar falls
 back to the desktop's own interactive move, as a floating tool window's does
 everywhere, and the button is the way back in. Without an opener nothing
@@ -312,8 +316,10 @@ another version of the format is refused whole, with `ErrLayoutVersion`, so
 the app can fall back. `SetDefaultLayout` records the arrangement an app
 ships with and `ResetLayout` goes back to it.
 
-The floating geometry a layout saves is still best effort, and now for one
-reason only: a Wayland toplevel has no position. X11 answers where the
+The floating geometry a layout saves is in logical pixels, the unit a
+window's size and position are stated in, so a layout saved at one display
+scale opens the same windows at another. It is still best effort, and now
+for one reason only: a Wayland toplevel has no position. X11 answers where the
 window manager put the window (`Window.Position()`, from `ConfigureNotify`)
 and a layout comes back exactly; on Wayland the size comes back and the
 position is the one that was asked for, which the compositor is free to

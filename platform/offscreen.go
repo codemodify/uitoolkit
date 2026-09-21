@@ -21,6 +21,8 @@ type Offscreen struct {
 	wakes  atomic.Int32
 	// posX, posY are where this window sits on the offscreen desktop, so
 	// a test can place windows and read back where a drag carried one.
+	// They are the desktop's device pixels, as an X11 root window's are;
+	// Move and Position speak logical ones and convert at the scale.
 	posX, posY int
 	// drop is a simulated drop's data by type (SimulateDrop); dragOut is
 	// a drag started *from* this surface (offscreen_drag.go).
@@ -58,7 +60,7 @@ func NewOffscreen(opts WindowOptions) *Offscreen {
 		title: opts.Title,
 		img:   paintengine2d.NewImage(DevicePixels(lw, scale), DevicePixels(lh, scale)),
 		wake:  make(chan struct{}, 1),
-		posX:  opts.X, posY: opts.Y,
+		posX:  DevicePosition(opts.X, scale), posY: DevicePosition(opts.Y, scale),
 		scale: scale,
 	}
 	// An offscreen desktop can carry a window under a drag, the way an
@@ -153,8 +155,10 @@ func (o *Offscreen) Show()  { o.hidden = false }
 func (o *Offscreen) Hide()  { o.hidden = true }
 
 // Move implements [HostMover]: the offscreen desktop puts the window
-// where it is asked, as an X11 one does.
-func (o *Offscreen) Move(x, y int) { o.posX, o.posY = x, y }
+// where it is asked, as an X11 one does. x, y are logical pixels.
+func (o *Offscreen) Move(x, y int) {
+	o.posX, o.posY = DevicePosition(x, o.Scale()), DevicePosition(y, o.Scale())
+}
 
 // Position implements [HostPositioner]: where the window is on the
 // offscreen desktop. It is always known — this desktop has no compositor
@@ -163,7 +167,7 @@ func (o *Offscreen) Position() (int, int, bool) {
 	if o == nil || o.closed {
 		return 0, 0, false
 	}
-	return o.posX, o.posY, true
+	return LogicalPosition(o.posX, o.Scale()), LogicalPosition(o.posY, o.Scale()), true
 }
 func (o *Offscreen) Wake() {
 	if o == nil {

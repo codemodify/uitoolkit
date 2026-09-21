@@ -349,7 +349,13 @@ func PreferredLook() LookAndFeel {
 	return LoadAppearance().Look()
 }
 
-// LookAppearance reads pack name / palette / corners / icons / size from a live look.
+// LookAppearance reads pack name / palette / corners / icons / size from a
+// live look — what a look carries, and only that. The preferences that
+// belong to an application rather than to a look (who draws the frame,
+// where the caption buttons go, reduced motion, the desktop's file dialogs,
+// following the desktop's light / dark mode) come back at their defaults:
+// app.Application.Appearance is the whole of it, and what an app that
+// switches packs should start from.
 func LookAppearance(l LookAndFeel) Appearance {
 	a := DefaultAppearance()
 	if l == nil {
