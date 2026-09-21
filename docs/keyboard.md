@@ -14,6 +14,29 @@ floating chrome in one order, everywhere: **tooltip → popup → overlay**.
 Unhandled keys bubble from the focused widget to its ancestors (so a
 NumberField still steps while its inner TextField has focus).
 
+### Which field a shortcut reads
+
+`widget.KeyEvent` carries both the key and the character it stands for:
+
+- **`e.Key`** for anything the keyboard *does* — Escape, Tab, Return, the
+  arrows, Home and End, the function keys. Those carry no `Rune`, so a
+  table written over characters cannot fire on one by accident.
+- **`e.Rune`** for a shortcut written as a letter, which is most of them:
+  `e.Rune == 's' && e.Mods.Ctrl()` is Ctrl+S.
+
+`Rune` is the key's identity as a character, not what typing it produces:
+no modifier has been applied, so Shift+A and A are both `'a'` and the
+shift is in `e.Mods`. Which layout the key belongs to is already settled —
+the key labelled A on AZERTY is `KeyA` and its character is `'a'`
+(`platform.KeyChar`).
+
+Text being **typed** never arrives as a KeyEvent. It comes as characters
+through `Component.TextInput`, one per character the layout, Shift, the
+dead keys and the compose key actually produced — which is what a text
+field reads and what an input method drives. A shortcut table must not be
+written over `TextInput`, and a text field must not be written over
+`KeyPress`.
+
 ## TextField
 
 | Key | Action |

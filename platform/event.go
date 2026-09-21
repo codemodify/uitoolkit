@@ -113,6 +113,39 @@ func KeyRune(k Key) (rune, bool) {
 	return 0, false
 }
 
+// KeyChar is the printable character k stands for, or 0 for a key that
+// stands for none.
+//
+// It is the key's *identity* as a character and not what typing it
+// produces: no modifier is applied, so Shift+A and A are both 'a' and
+// Ctrl+S is 's' — the shift and the control are in the event's Modifiers,
+// where a shortcut table wants them. The keys that navigate rather than
+// type (Tab, Return, Backspace, the arrows, the function keys) have no
+// character at all, so a table written over characters cannot fire on one
+// of them by accident.
+//
+// Which layout a key belongs to has already been settled: Key comes from
+// the layout's own keysym, falling back to the layout-independent one, so
+// the key labelled A on AZERTY is KeyA and its character is 'a'. What the
+// user actually typed — the layout, Shift, dead keys and the compose key
+// all applied — arrives as text (Component.TextInput), never here.
+func KeyChar(k Key) rune {
+	if r, ok := KeyRune(k); ok {
+		return r
+	}
+	switch k {
+	case KeySpace:
+		return ' '
+	case Key3:
+		return '3'
+	case KeyHash:
+		return '#'
+	case KeyComma:
+		return ','
+	}
+	return 0
+}
+
 // EventKind classifies a window event.
 type EventKind int
 
