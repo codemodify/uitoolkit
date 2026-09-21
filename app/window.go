@@ -42,16 +42,21 @@ type Window struct {
 	closed     atomic.Bool
 	blink      bool
 	laid       bool
-	scale      float32
-	tipHover   widget.Component
-	tipSince   time.Time
-	tipPos     paintengine2d.Point
-	tipDelay   time.Duration
-	clock      func() time.Time
-	lastTip    string
-	animPeriod time.Duration
-	layers     *widget.SceneCache
-	scene      *paintengine2d.Scene
+	// initialFocus is the component the window focuses when it first
+	// opens (SetInitialFocus), and openFocused that it has had its one
+	// chance to (focusOnOpen).
+	initialFocus widget.Component
+	openFocused  bool
+	scale        float32
+	tipHover     widget.Component
+	tipSince     time.Time
+	tipPos       paintengine2d.Point
+	tipDelay     time.Duration
+	clock        func() time.Time
+	lastTip      string
+	animPeriod   time.Duration
+	layers       *widget.SceneCache
+	scene        *paintengine2d.Scene
 	// paths keeps recorded shapes across frames, so a steady UI does not
 	// clone every path it records each frame.
 	paths *paintengine2d.PathCache
@@ -1410,7 +1415,91 @@ func (w *Window) layout() {
 	// component that was removed without going through a layer swap stops
 	// being the focus / hover / capture target.
 	w.dropDeadRefs()
+	w.focusOnOpen()
 	w.laid = true
+}
+
+// focusOnOpen gives the keyboard somewhere to go the first time the window
+// is laid out with content in it.
+//
+// A window used to open with nothing focused, so every key that bubbles
+// from the focus — which is every shortcut a widget or a container
+// defines — reached nobody at all until the user clicked or pressed Tab.
+// Qt and GTK both focus the first widget in the tab chain when a window is
+// shown, and this is that.
+//
+// It never takes focus from an app that placed it itself: a window whose
+// content called RequestFocus before its first frame keeps that focus, and
+// this runs once, so a later Escape or content swap that leaves the window
+// unfocused is left alone. SetInitialFocus names the component to start on
+// where the first one in the tab order is the wrong one.
+//
+// Where the focus lands, it lands the way a click's does rather than a
+// Tab's: the ring a look shows only after keyboard navigation stays hidden
+// until the user actually uses the keyboard (GTK's :focus-visible), while
+// a field that always shows its caret shows it, which is what a dialog
+// that opens on a text field should do.
+func (w *Window) focusOnOpen() {
+	if w == nil || w.openFocused || w.statusMenu || w.opts.Popup {
+		return
+	}
+	if w.root == nil && w.overlay == nil {
+		// Nothing to focus yet: an app that calls SetContent after the
+		// first frame still gets its turn.
+		return
+	}
+	w.openFocused = true
+	if w.focus != nil {
+		return
+	}
+	target := w.initialFocus
+	if target == nil {
+		// The caption is deliberately not searched: a window that opened
+		// with its own close button focused would be absurd. The content
+		// is the app, and a modal overlay is the app while it is up.
+		scope := w.root
+		if w.overlay != nil {
+			scope = w.overlay
+		}
+		target = firstOpenFocus(scope)
+	}
+	if target == nil {
+		return
+	}
+	w.RequestFocus(target)
+	widget.MarkPointerFocus(target)
+}
+
+// firstOpenFocus is the component a freshly opened window starts on: the
+// first in the tab order that a *click* would also focus.
+//
+// Chrome that takes focus only from the keyboard — a menu bar, a tool bar,
+// a tab strip, everything with FocusOnClick false (Qt's Qt::TabFocus) — is
+// reached with Tab, F10 or a mnemonic and is never where a window starts,
+// so a window that holds nothing else opens with no focus at all. Its menu
+// accelerators and Alt mnemonics work either way: neither goes through the
+// focus.
+func firstOpenFocus(root widget.Component) widget.Component {
+	for _, c := range widget.Focusables(root) {
+		if focusOnClick(c) {
+			return c
+		}
+	}
+	return nil
+}
+
+// SetInitialFocus names the component the window focuses when it first
+// opens, instead of the first one in the tab order. It must be in the
+// window's content (or its overlay) by the time the first frame is laid
+// out; nil restores the default.
+//
+// An app that places focus itself — RequestFocus before the first frame —
+// does not need this: the window only chooses when nothing else has.
+func (w *Window) SetInitialFocus(c widget.Component) {
+	if w == nil {
+		return
+	}
+	w.initialFocus = c
 }
 
 // EnvFullFrame forces a full repaint and a full present every frame. It is
