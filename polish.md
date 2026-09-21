@@ -12,12 +12,14 @@ Struck through once fixed; newest findings at the end of their section.
 
 ## Appearance and themes
 
-- **Changing the theme resets the app-level preferences.**
+- ~~**Changing the theme resets the app-level preferences.**
   `style.LookAppearance` does not carry decorations, caption-button placement,
   reduced motion or native dialogs back out, and `Application` has no getter
   for the decorations preference. An app that rebuilds an `Appearance` from its
   look to switch packs silently undoes the rest; the tour keeps its own
-  `style.Appearance` to work round it (`tourState.apply`).
+  `style.Appearance` to work round it (`tourState.apply`).~~
+  `Application.Appearance()` is the whole of it and `Decorations()` the
+  getter; the tour starts every change from it.
 - **Settings' preview draws a shaped skin as a rectangle.** The preview is a
   panel inside the Settings window, so a compositor-level silhouette never
   applies to it. Needs the panel clipped by `style.WindowShapeOf`.

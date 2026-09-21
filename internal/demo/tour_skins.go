@@ -50,8 +50,15 @@ type skinsPage struct {
 	started style.Appearance
 }
 
+// restore puts back the pack the tour was in when the page was built, and
+// only the pack: what the other pages changed since — the frame, the
+// caption buttons — is theirs to keep.
+func (p *skinsPage) restore(ap *style.Appearance) {
+	ap.Name, ap.Theme, ap.FollowDesktop = p.started.Name, p.started.Theme, p.started.FollowDesktop
+}
+
 func buildSkinsPage(t *tourState) widget.Component {
-	p := &skinsPage{t: t, started: t.look}
+	p := &skinsPage{t: t, started: t.a.Appearance()}
 	t.own(pageSkins, p)
 
 	search := widgets.NewTextField("", "Search packs", func(s string) {
@@ -92,7 +99,7 @@ func buildSkinsPage(t *tourState) widget.Component {
 	})
 	use.Primary = true
 	back := widgets.NewButton("Back to where we started", func() {
-		p.t.apply(func(ap *style.Appearance) { *ap = p.started })
+		p.t.apply(p.restore)
 		p.note("Back in " + p.started.Name + ".")
 	})
 
@@ -130,7 +137,7 @@ func buildSkinsPage(t *tourState) widget.Component {
 	p.facts = facts
 
 	p.reload()
-	t.onClose(func() { p.t.apply(func(ap *style.Appearance) { *ap = p.started }) })
+	t.onClose(func() { p.t.apply(p.restore) })
 	return tourStage(split, panel)
 }
 
@@ -270,7 +277,7 @@ func (p *skinsPage) refresh() {
 			skins++
 		}
 	}
-	now := p.t.look
+	now := p.t.a.Appearance()
 	pack, ok := p.selected()
 	if !ok {
 		p.facts.SetText(tourFacts(

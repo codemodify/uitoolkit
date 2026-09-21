@@ -568,21 +568,20 @@ func TestTourFramesSwitchAndTabsPageFollows(t *testing.T) {
 	// the headless backend cannot draw.
 	frames.decor.Select(2)
 	a.PumpOnce()
-	if got := tour.look.Decorations; got != style.DecorationsToolkit {
+	if got := a.Decorations(); got != style.DecorationsToolkit {
 		t.Errorf("after asking for the toolkit's frame the preference is %q", got)
 	}
 	frames.decor.Select(1)
 	a.PumpOnce()
-	if got := tour.look.Decorations; got != style.DecorationsSystem {
+	if got := a.Decorations(); got != style.DecorationsSystem {
 		t.Errorf("after asking for the desktop's frame the preference is %q", got)
 	}
 
-	// And a change of pack must not undo it: style.LookAppearance cannot
-	// read these preferences back out of a look, so a page that rebuilt
-	// the appearance from the look would silently reset them.
+	// And a change of pack must not undo it: the tour starts every change
+	// from Application.Appearance, which carries the preference through.
 	tour.apply(func(ap *style.Appearance) { ap.Name = "win95" })
 	a.PumpOnce()
-	if got := tour.look.Decorations; got != style.DecorationsSystem {
+	if got := a.Decorations(); got != style.DecorationsSystem {
 		t.Errorf("changing pack reset the frame preference to %q", got)
 	}
 

@@ -23,6 +23,11 @@ func Animations() bool {
 // SetReduceMotion applies the "reduce motion" preference for the process.
 func SetReduceMotion(v bool) { reduceMotion.Store(v) }
 
+// ReduceMotion reports the user's "reduce motion" preference as it was
+// last applied — the preference alone, not the desktop's setting or
+// UITK_ANIMATIONS (see [Animations] for whether controls animate).
+func ReduceMotion() bool { return reduceMotion.Load() }
+
 // SetDesktopReduceMotion records the desktop's reduced-motion setting for
 // the process; the app package keeps it current.
 func SetDesktopReduceMotion(v bool) { desktopReduce.Store(v) }
