@@ -19,10 +19,10 @@ import (
 //     same rule style/iconset.go applies to @2x icons, and it is why a skin
 //     looks right at 1.75 instead of soft.
 //   - **Every piece is cut into an image of its own.** paintengine2d's
-//     bilinear sampler reads the two texels around each sample and returns
-//     transparent outside the *image* — not outside the source rect — so a
-//     sub-rect blit of a sheet bleeds its neighbour along every seam. Cutting
-//     each sprite (and each of a nine-slice's nine pieces) into its own image
+//     bilinear sampler reads the two texels around each sample and clamps
+//     at the edge of the *image* — not of the source rect — so a sub-rect
+//     blit of a sheet bleeds its neighbour along every seam. Cutting each
+//     sprite (and each of a nine-slice's nine pieces) into its own image
 //     removes that class of artefact entirely, and costs a few hundred small
 //     images per skin.
 //   - **Downscale only, so edges stay put.** With the asset at or above the
@@ -89,6 +89,9 @@ type skinAssets struct {
 	// painting a sprite at one size (engine_skin_shape.go). A nil value is
 	// a real answer: "this face fills its box".
 	hits map[skinHitKey]*paintengine2d.Image
+	// grids are pixel pieces magnified onto the device grid (skin_paint.go,
+	// drawPixelGrid).
+	grids map[pixelGridKey]*pixelGrid
 }
 
 type skinFileEntry struct {
@@ -102,6 +105,7 @@ var skinCache = &skinAssets{
 	files: map[string]*skinFileEntry{},
 	cuts:  map[skinVariantKey]*skinVariant{},
 	hits:  map[skinHitKey]*paintengine2d.Image{},
+	grids: map[pixelGridKey]*pixelGrid{},
 }
 
 // sync drops everything when the process-wide asset generation has moved
@@ -113,6 +117,7 @@ func (c *skinAssets) syncGen() {
 		c.files = map[string]*skinFileEntry{}
 		c.cuts = map[skinVariantKey]*skinVariant{}
 		c.hits = map[skinHitKey]*paintengine2d.Image{}
+		c.grids = map[pixelGridKey]*pixelGrid{}
 	}
 }
 
@@ -124,6 +129,7 @@ func InvalidateSkinCache() {
 	skinCache.files = map[string]*skinFileEntry{}
 	skinCache.cuts = map[skinVariantKey]*skinVariant{}
 	skinCache.hits = map[skinHitKey]*paintengine2d.Image{}
+	skinCache.grids = map[pixelGridKey]*pixelGrid{}
 	skinCache.gen = IconGeneration()
 	skinCache.mu.Unlock()
 	invalidateSkinPacks()
@@ -178,12 +184,13 @@ func (sk *Skin) sheetImage(file string) *paintengine2d.Image {
 				}
 			}
 			// The masks faces are hit-tested against are painted from those
-			// cuts, so they go the same way.
+			// cuts, so they go the same way, and so do the magnifications.
 			for k := range c.hits {
 				if k.sprite != nil && sk.owns(k.sprite.Sheet, file) {
 					delete(c.hits, k)
 				}
 			}
+			c.grids = map[pixelGridKey]*pixelGrid{}
 		}
 		c.files[key] = &skinFileEntry{img: img, mod: mod, size: size, checked: now}
 		return img
@@ -302,8 +309,10 @@ func (sk *Skin) cut(sp *SkinSprite, assetScale float32, file string) *skinVarian
 	if x1 <= x0 || y1 <= y0 || x0 < 0 || y0 < 0 || x1 > sheet.Width || y1 > sheet.Height {
 		return v
 	}
+	// The whole sprite is cut for a sliced one too: a pixel sprite drawn at
+	// its own size is magnified whole (skin_paint.go, drawPixelGrid).
+	v.pieces[pieceWhole] = cutPiece(sheet, x0, y0, x1, y1)
 	if !sp.Sliced() {
-		v.pieces[pieceWhole] = cutPadded(sheet, x0, y0, x1, y1)
 		v.ok = v.pieces[pieceWhole] != nil
 		return v
 	}
@@ -331,7 +340,7 @@ func (sk *Skin) cut(sp *SkinSprite, assetScale float32, file string) *skinVarian
 			if cx1 <= cx0 || cy1 <= cy0 {
 				continue
 			}
-			v.pieces[skinPiece(row*3+col)] = cutPadded(sheet, cx0, cy0, cx1, cy1)
+			v.pieces[skinPiece(row*3+col)] = cutPiece(sheet, cx0, cy0, cx1, cy1)
 		}
 	}
 	for _, p := range v.pieces {
@@ -346,56 +355,24 @@ func (sk *Skin) cut(sp *SkinSprite, assetScale float32, file string) *skinVarian
 // roundTexel snaps a design coordinate to a whole texel.
 func roundTexel(v float32) int { return int(math.Round(float64(v))) }
 
-// skinPad is the border of replicated texels around every cut piece.
-const skinPad = 1
-
-// cutPadded copies a sub-rect of a sheet into an image one texel larger on
-// every side, with the edge texels replicated into the border.
+// cutPiece copies a sub-rect of a sheet into an image of its own.
 //
-// This is clamp-to-edge, done by hand, and it is not an optimisation — it is
-// the difference between a nine-slice that looks like one picture and one
-// with a seam down it.
-//
-// paintengine2d's bilinear sampler reads the two texels around each sample
-// and returns *transparent* outside the image; it does not clamp. A
-// nine-slice's middle is almost always stretched wider than its source, so
-// its outermost samples fall half a texel outside it and fade toward
-// nothing — a pale vertical line down every button, exactly where the middle
-// meets the fixed edges. Replicating the border and blitting only the inner
-// rect gives the sampler the neighbouring texel it expects, at both ends,
-// whether the piece is being stretched or squeezed.
-func cutPadded(src *paintengine2d.Image, x0, y0, x1, y1 int) *paintengine2d.Image {
-	w, h := x1-x0, y1-y0
-	if src == nil || w <= 0 || h <= 0 {
+// It used to copy one texel more on every side, replicated from the edge:
+// paintengine2d's CPU sampler returned transparent past an image, so a
+// stretched nine-slice middle faded over its outermost half texel — a pale
+// line down every button where the middle met the fixed edges — and the
+// border gave it the texel it expected instead. The sampler clamps at the
+// edge now, on the CPU as the GPU always did, which is the same thing done
+// once in the renderer rather than by every caller; the border went with it.
+// TestSkinNineSliceHasNoSeam is what would catch it coming back.
+func cutPiece(src *paintengine2d.Image, x0, y0, x1, y1 int) *paintengine2d.Image {
+	if src == nil || x1 <= x0 || y1 <= y0 {
 		return nil
 	}
-	out := paintengine2d.NewImage(w+2*skinPad, h+2*skinPad)
-	clamp := func(v, lo, hi int) int {
-		if v < lo {
-			return lo
-		}
-		if v >= hi {
-			return hi - 1
-		}
-		return v
-	}
-	stride := out.RowStride()
-	for j := 0; j < h+2*skinPad; j++ {
-		sy := clamp(y0+j-skinPad, y0, y1)
-		row := j * stride
-		for i := 0; i < w+2*skinPad; i++ {
-			r, g, b, a := src.PremulAt(clamp(x0+i-skinPad, x0, x1), sy)
-			k := row + i*4
-			out.Pix[k+0], out.Pix[k+1], out.Pix[k+2], out.Pix[k+3] = r, g, b, a
-		}
-	}
-	out.Touch()
-	return out
+	return src.SubImage(x0, y0, x1, y1)
 }
 
-// pieceRect is the drawable part of a padded piece: everything but the
-// replicated border.
+// pieceRect is the whole of a cut piece, as a source rect.
 func pieceRect(img *paintengine2d.Image) paintengine2d.Rect {
-	return paintengine2d.XYWH(skinPad, skinPad,
-		float32(img.Width-2*skinPad), float32(img.Height-2*skinPad))
+	return paintengine2d.XYWH(0, 0, float32(img.Width), float32(img.Height))
 }
