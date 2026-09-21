@@ -875,7 +875,7 @@ func (w *Window) dispatch(ev platform.Event) {
 			// Ctrl+Tab goes to the widgets and the app first (a tab strip
 			// switches tabs with it); plain Tab, and a Ctrl+Tab nobody
 			// takes, move the focus.
-			if ev.Mods.Ctrl() && w.popup == nil && (w.bubbleKey(widget.KeyEvent{Key: ev.Key, Mods: ev.Mods}) || w.accelerator(ev.Key, ev.Mods)) {
+			if ev.Mods.Ctrl() && w.popup == nil && (w.bubbleKey(keyEvent(ev)) || w.accelerator(ev.Key, ev.Mods)) {
 				return
 			}
 			w.tab(!ev.Mods.Shift())
@@ -906,7 +906,7 @@ func (w *Window) dispatch(ev platform.Event) {
 		}
 		if w.popup != nil {
 			leaf := widget.CascadeLeaf(w.popup)
-			if leaf.KeyPress(widget.KeyEvent{Key: ev.Key, Mods: ev.Mods}) {
+			if leaf.KeyPress(keyEvent(ev)) {
 				return
 			}
 			// The popup owns the keyboard while it is up; bubbling on
@@ -917,7 +917,7 @@ func (w *Window) dispatch(ev platform.Event) {
 				return
 			}
 		}
-		if w.bubbleKey(widget.KeyEvent{Key: ev.Key, Mods: ev.Mods}) {
+		if w.bubbleKey(keyEvent(ev)) {
 			return
 		}
 		// Keys nobody took run menu accelerators (Ctrl+N, F1, Ctrl+Q …).
@@ -927,7 +927,7 @@ func (w *Window) dispatch(ev platform.Event) {
 			w.setAltHeld(false)
 		}
 		if t := w.keyTarget(); t != nil {
-			t.KeyRelease(widget.KeyEvent{Key: ev.Key, Mods: ev.Mods})
+			t.KeyRelease(keyEvent(ev))
 		}
 	case platform.EventText:
 		if t := w.keyTarget(); t != nil {
@@ -1061,6 +1061,18 @@ func (w *Window) keyTarget() widget.Component {
 		return nil
 	}
 	return widget.KeyTarget(w.focus, w.overlay)
+}
+
+// keyEvent is a platform key event as the widgets see it: the key, the
+// modifiers, and the character the key stands for where it stands for one,
+// so a shortcut table written over letters fires. A backend that already
+// put a character on the event keeps its own.
+func keyEvent(ev platform.Event) widget.KeyEvent {
+	r := ev.Rune
+	if r == 0 {
+		r = platform.KeyChar(ev.Key)
+	}
+	return widget.KeyEvent{Key: ev.Key, Rune: r, Mods: ev.Mods}
 }
 
 // bubbleKey offers a key to the focused widget and its ancestors and
