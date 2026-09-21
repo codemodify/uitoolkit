@@ -241,10 +241,19 @@ func SkinSlotRect(lk LookAndFeel, layout, slot string, box paintengine2d.Rect) (
 
 // DrawSkinLayout paints the named layout's own art into box — the picture
 // the slots are holes in. False when there is none.
+//
+// A box within a pixel of the layout's own size is taken to be that size:
+// a panel's box is whole pixels, its design size times 1.75 is not, and
+// the art is drawn at its design size so every slot lands on its hole.
 func DrawSkinLayout(lk LookAndFeel, ctx *paintengine2d.Context, box paintengine2d.Rect, layout string) bool {
 	l, sk, lay := skinLayoutOf(lk, layout)
 	if lay == nil || ctx == nil {
 		return false
+	}
+	s := l.Scale() / sk.Design.Scale
+	w, h := lay.W*s, lay.H*s
+	if dw, dh := box.Dx()-w, box.Dy()-h; dw > -1 && dw < 1 && dh > -1 && dh < 1 {
+		box = paintengine2d.XYWH(box.Min.X, box.Min.Y, w, h)
 	}
 	return sk.panelDraw(ctx, box, lay.Art.art("normal"), l.Scale(), paintengine2d.Color{})
 }
@@ -264,12 +273,12 @@ func DrawSkinSlot(lk LookAndFeel, ctx *paintengine2d.Context, b paintengine2d.Re
 	return sk.panelDraw(ctx, b, sl.Art.art(skinStateName(st)), l.Scale(), paintengine2d.Color{})
 }
 
-// SkinSlotShape is the silhouette of a slot's resting art drawn into a box
-// of size (device pixels, origin at the box's top left), or nil for the
-// whole box: the slot has no art, the art fills its box, or it could not
-// be drawn. It is what makes a round key painted from a slot take the
-// pointer only on its ink.
-func SkinSlotShape(lk LookAndFeel, size paintengine2d.Point, layout, slot string) *Silhouette {
+// SkinSlotShape is the silhouette of a slot's resting art drawn at at in a
+// control whose box is size (device pixels, origin at the box's top left),
+// or nil for the whole box: the slot has no art, the art fills its box, or
+// it could not be drawn. It is what makes a round key painted from a slot
+// take the pointer only on its ink.
+func SkinSlotShape(lk LookAndFeel, size paintengine2d.Point, at paintengine2d.Rect, layout, slot string) *Silhouette {
 	l, sk, lay := skinLayoutOf(lk, layout)
 	if lay == nil {
 		return nil
@@ -282,5 +291,5 @@ func SkinSlotShape(lk LookAndFeel, size paintengine2d.Point, layout, slot string
 	if sp == nil {
 		return nil
 	}
-	return sk.shapeOf(l, sp, size, paintengine2d.XYWH(0, 0, size.X, size.Y), true)
+	return sk.shapeOf(l, sp, size, at, true)
 }

@@ -214,7 +214,7 @@ func (skinEngine) DrawCaptionTitle(l *Classic, ctx *paintengine2d.Context, b pai
 	}
 	pad := l.S(8)
 	plate := sk.framePart("caption.title", st.Role)
-	if plate.art("normal") != nil && f != nil && title != "" {
+	if sp := plate.art(skinStateName(cs)); sp != nil && f != nil && title != "" {
 		// The plate behind the title: the gap a ribbed or grooved band
 		// leaves for the words, as wide as the words are. It is the one
 		// piece of a caption that depends on the title, which is why it is
@@ -222,25 +222,43 @@ func (skinEngine) DrawCaptionTitle(l *Classic, ctx *paintengine2d.Context, b pai
 		// band could say — the band cannot know how long the title is.
 		// Set from the start, it is a tab: the title on a tongue of the
 		// window, as far in as the skin says.
-		room := 2 * skinWhole(l.S(captionTitleRoom))
-		show := title
-		if f.Advance(show) > b.Dx()-pad {
-			show = f.Fit(show, max(b.Dx()-pad, 4))
+		//
+		// The plate's slices are its ends and the words go in its middle:
+		// a plate that is a tab with a long curve at its right end says so
+		// in its right slice, and the words stop short of the curve.
+		k := l.Scale() / sk.Design.Scale
+		room := skinWhole(l.S(captionTitleRoom))
+		in := Insets{
+			Top:    skinWhole(sp.Slice.Top * k),
+			Right:  max(room, skinWhole(sp.Slice.Right*k)),
+			Bottom: skinWhole(sp.Slice.Bottom * k),
+			Left:   max(room, skinWhole(sp.Slice.Left*k)),
 		}
-		w := f.Advance(show) + room
+		x0 := b.Min.X
+		if place.Start {
+			x0 += place.Inset * k
+		}
+		avail := b.Max.X - x0 - in.Left - in.Right
+		if !place.Start {
+			avail = b.Dx() - pad - in.Left - in.Right
+		}
+		show := title
+		if f.Advance(show) > avail {
+			show = f.Fit(show, max(avail, 4))
+		}
+		// Whole pixels, and never narrower than the words: the text is fitted
+		// to the plate's middle again as it is set, and a middle rounded a
+		// hair short of the words would lose their last letter to an ellipsis.
+		w := float32(math.Ceil(float64(f.Advance(show)))) + in.Left + in.Right
 		x := b.Min.X + (b.Dx()-w)*0.5
 		if place.Start {
-			x = b.Min.X + place.Inset*l.Scale()/sk.Design.Scale
-			w = min(w, b.Max.X-x)
+			x = x0
 		}
+		x = float32(math.Round(float64(x)))
 		box := paintengine2d.XYWH(x, b.Min.Y, w, b.Dy())
-		box.Min.X = float32(math.Round(float64(box.Min.X)))
-		box.Max.X = float32(math.Round(float64(box.Max.X)))
 		sk.drawPart(l, ctx, box, plate, cs)
-		if place.Start {
-			captionTitle(l, ctx, f, box, show, col, true, 0)
-			return
-		}
+		captionTitle(l, ctx, f, in.Apply(box), show, col, true, 0)
+		return
 	}
 	if place.Start {
 		inset := place.Inset * l.Scale() / sk.Design.Scale
