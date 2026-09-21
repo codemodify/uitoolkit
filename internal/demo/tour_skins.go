@@ -4,6 +4,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
 	"github.com/codemodify/uitoolkit/widgets"
@@ -59,7 +60,7 @@ func buildSkinsPage(t *tourState) widget.Component {
 	})
 	search.SetAccessibleName("Search packs")
 
-	filter := widgets.NewSegmented([]string{"All", "Skins", "Extremes"}, 0, func(i int) {
+	filter := widgets.NewSegmented([]string{"All", "Skins", "Picks"}, 0, func(i int) {
 		p.only = i
 		p.reload()
 	})
@@ -115,8 +116,12 @@ func buildSkinsPage(t *tourState) widget.Component {
 	)
 	about.Content().Spec.Gap = 7
 
-	right := widgets.NewColumn(p.box, widgets.NewRow(use, back).WithGap(6), about).WithGap(10)
-	right.AddFlex(p.box, 1)
+	// The preview needs height of its own: in the roomier packs the prose
+	// under it would otherwise squeeze it down to its title bar.
+	top := widgets.NewColumn(p.box, widgets.NewRow(use, back).WithGap(6)).WithGap(8)
+	top.AddFlex(p.box, 1)
+	right := widgets.NewSplitter(false, top, tourScroll("About a swap", about))
+	right.Ratio = 0.58
 
 	split := widgets.NewSplitter(true, left, right)
 	split.Ratio = 0.34
@@ -298,12 +303,27 @@ func (p *skinsPage) refresh() {
 	))
 }
 
+// windowShapeState says why this window is or is not cut to its look's
+// outline. "Not" has four different reasons and they are worth telling
+// apart: three of them are the desktop's doing and one is the pack's.
 func windowShapeState(p *skinsPage) string {
-	if p.t.win.ShapeActive() {
+	win := p.t.win
+	if win.ShapeActive() {
 		return "cut to the look's own outline"
 	}
-	if style.WindowShaped(p.t.win.Look()) {
-		return "the look cuts windows, but this one is maximized or tiled"
+	if !style.WindowShaped(win.Look()) {
+		return "a rectangle — this pack does not cut windows"
+	}
+	st := win.WindowState()
+	switch {
+	case st.Maximized:
+		return "a rectangle — a maximized window drops its outline"
+	case st.Fullscreen:
+		return "a rectangle — a full-screen window has no frame at all"
+	case st.Tiled != 0:
+		return "a rectangle — a tiled window drops its outline"
+	case win.Decorations() != platform.DecorationsClient:
+		return "a rectangle — the desktop frames it, so the pack's outline is unused"
 	}
 	return "a rectangle"
 }

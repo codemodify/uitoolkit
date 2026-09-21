@@ -567,7 +567,7 @@ func TourWindow(a *app.Application, pages ...int) (*app.Window, error) {
 // screenshot cannot carry, in the mono face so that they line up.
 func tourStage(stage, readout widget.Component) widget.Component {
 	sp := widgets.NewSplitter(true, widgets.NewPad(10, stage), widgets.NewPad(10, readout))
-	sp.Ratio = 0.6
+	sp.Ratio = 0.55
 	return sp
 }
 
@@ -649,8 +649,11 @@ func tourRow(label string, children ...widget.Component) *widgets.FlexBox {
 // The readout panel is a fixed share of the page and the mono face is a
 // fixed width, so this is a constant rather than a measurement: a value
 // wider than this is folded under its own column instead of wrapping
-// back to the margin, where it would read as another fact.
-const tourFactCols = 58
+// back to the margin, where it would read as another fact. Keep it under
+// what the panel really fits (about 49 characters at the split below) —
+// a fold wider than the panel is wrapped again by the widget, and the
+// two wraps together look like a mistake.
+const tourFactCols = 45
 
 // tourFacts renders a readout: one "name  value" line per fact, the names
 // padded so that the values line up in the mono face. A pair with neither

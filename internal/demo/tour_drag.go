@@ -126,13 +126,16 @@ func buildDragPage(t *tourState) widget.Component {
 	)
 	howto.Content().Spec.Gap = 7
 
-	stage := widgets.NewColumn(
-		lists,
+	// The lists get height of their own rather than their natural one:
+	// a list measures to exactly its rows, and this page needs room
+	// under the last row for the caret that says "at the end".
+	rest := tourScroll("Drag and drop page", widgets.NewColumn(
 		widgets.NewPanel("Anything from another application", zone),
 		widgets.NewPanel("Text drags itself", out),
 		howto,
-	).WithGap(10)
-	stage.AddFlex(lists, 1)
+	).WithGap(10))
+	stage := widgets.NewSplitter(false, lists, rest)
+	stage.Ratio = 0.36
 
 	panel, facts := tourReadout("What the two sides settled on")
 	p.facts = facts
@@ -143,7 +146,7 @@ func buildDragPage(t *tourState) widget.Component {
 			os.RemoveAll(p.dir)
 		}
 	})
-	return tourStage(tourScroll("Drag and drop page", stage), panel)
+	return tourStage(stage, panel)
 }
 
 func (p *dragPage) newList(name string, rows []*tourDoc) *docList {

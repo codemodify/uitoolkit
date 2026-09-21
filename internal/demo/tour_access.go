@@ -74,7 +74,7 @@ func buildAccessPage(t *tourState) widget.Component {
 	probPanel.Content().AddFlex(p.probs, 1)
 
 	trees := widgets.NewSplitter(false, treePanel, probPanel)
-	trees.Ratio = 0.62
+	trees.Ratio = 0.74
 
 	// ---- the keyboard -------------------------------------------------------
 

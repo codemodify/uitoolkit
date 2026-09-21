@@ -307,13 +307,17 @@ type shapePreview struct {
 func newShapePreview(page *shapesPage) *shapePreview {
 	s := &shapePreview{page: page}
 	s.Init(s)
-	s.SetPreferred(104, 104)
 	s.SetAccessibleName("The silhouette")
 	return s
 }
 
+// shapePreviewSide is the stamp's side in design pixels; like every
+// other length here it is the look's to scale.
+const shapePreviewSide = 112
+
 func (s *shapePreview) Measure(c layout.Constraints) paintengine2d.Point {
-	return c.Constrain(paintengine2d.Pt(104, 104))
+	side := style.Dip(s.Look(), shapePreviewSide)
+	return c.Constrain(paintengine2d.Pt(side, side))
 }
 
 func (s *shapePreview) Arrange(b paintengine2d.Rect) { s.SetBounds(b) }
@@ -346,7 +350,10 @@ func (s *shapePreview) Paint(ctx *paintengine2d.Context) {
 		return
 	}
 	path, rule := sh.Path()
-	fill := paintengine2d.Fill(pal.Surface)
+	// Tinted rather than filled with a surface colour: in the flatter
+	// packs the surface is the page's own colour, and the shape would
+	// then be nothing but its outline.
+	fill := paintengine2d.Fill(pal.Accent.WithAlpha(0.30))
 	fill.FillRule, fill.AntiAlias = rule, true
 	ctx.Save()
 	ctx.Translate(b.Min.X, b.Min.Y)
