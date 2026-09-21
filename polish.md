@@ -92,6 +92,11 @@ Struck through once fixed; newest findings at the end of their section.
   source 2); a client-placed window's hints keep its position.
 - **A tab merged into another application carries its title only**; richer
   data needs the app's own type through `OnTabDrag`.
+- **A drop on the dock host's centre does nothing**: only an edge band, a
+  panel or its tab strip takes a panel, and the indicator shows nothing
+  there — easy to mistake for a broken re-dock.
+- **The tour's dock page keeps its "in a window of its own" note** after a
+  panel is docked by dragging; only its buttons update the note.
 - **Escape during an X11 drag is unproven on real hardware**: under Xwayland
   KWin takes the keyboard for the drag it mirrors. Both cancel paths are
   written; check on a real X server.
@@ -113,6 +118,11 @@ Struck through once fixed; newest findings at the end of their section.
   converting them is the natural follow-up to the size fix.~~ Positions are
   logical everywhere (`WindowOptions.X`/`Y`, `Move`, `Position`, the dock's
   float geometry, the players' rack).
+- **An X11 window switched live to the desktop's frame shows no KWin title
+  bar** in the nested rig at 1.75 (it reports `server` and drops its own
+  caption); the same on `dev` (docs/e2e/2026-09-21/release-bugs.md).
+- **The tour's `-shot` still sizes its offscreen windows in device pixels**
+  (`1180 * sc`), from before window sizes became logical.
 - **X11's scale is connection-wide**: the last window's `WindowOptions.Scale`
   sets it for the display (X11's own model, one `Xft.dpi`).
 - **`UITK_SCALE` on a Wayland output at scale 1** draws at the asked scale into
