@@ -457,13 +457,10 @@ func (s *settingsState) themesPage() widget.Component {
 // the preview and the gallery. Dragging the sash replaces it.
 func defaultBrowserRatio(win *app.Window) float32 {
 	const want, pad = 240, 30
-	scale := win.Scale()
-	if scale <= 0 {
-		scale = 1
-	}
-	px, _ := win.Size()
+	// Window.Size is already logical pixels, which is what `want` is in.
+	lw, _ := win.Size()
 	// The page is what the navigation sidebar and its padding leave.
-	page := float32(px)/scale*(1-0.18) - pad
+	page := float32(lw)*(1-0.18) - pad
 	if page <= 0 {
 		return 0.3
 	}

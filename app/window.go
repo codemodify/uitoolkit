@@ -42,16 +42,21 @@ type Window struct {
 	closed     atomic.Bool
 	blink      bool
 	laid       bool
-	scale      float32
-	tipHover   widget.Component
-	tipSince   time.Time
-	tipPos     paintengine2d.Point
-	tipDelay   time.Duration
-	clock      func() time.Time
-	lastTip    string
-	animPeriod time.Duration
-	layers     *widget.SceneCache
-	scene      *paintengine2d.Scene
+	// initialFocus is the component the window focuses when it first
+	// opens (SetInitialFocus), and openFocused that it has had its one
+	// chance to (focusOnOpen).
+	initialFocus widget.Component
+	openFocused  bool
+	scale        float32
+	tipHover     widget.Component
+	tipSince     time.Time
+	tipPos       paintengine2d.Point
+	tipDelay     time.Duration
+	clock        func() time.Time
+	lastTip      string
+	animPeriod   time.Duration
+	layers       *widget.SceneCache
+	scene        *paintengine2d.Scene
 	// paths keeps recorded shapes across frames, so a steady UI does not
 	// clone every path it records each frame.
 	paths *paintengine2d.PathCache
@@ -207,18 +212,38 @@ func (w *Window) Title() string             { return w.surf.Title() }
 // Size is the window itself, which is what an app means by "the window".
 func (w *Window) SurfaceSize() (int, int) { return w.surf.Size() }
 
-// Size is the visible window in device pixels: the surface less the frame's
-// margin (the same box the desktop moves, snaps and tiles).
+// Size is the visible window in **logical pixels** — the units
+// [Window.SetSize] and [platform.WindowOptions] speak, and the units a
+// desktop's own numbers are in. A window opened as 275 by 116 answers 275
+// by 116 at every display scale.
+//
+// [Window.PixelSize] is the same window in device pixels, which is what
+// pairs with [Window.Position] and with every widget rectangle.
 func (w *Window) Size() (int, int) {
+	pw, ph := w.PixelSize()
+	sc := w.Scale()
+	return platform.LogicalPixels(pw, sc), platform.LogicalPixels(ph, sc)
+}
+
+// PixelSize is the visible window in device pixels: the surface less the
+// frame's margin. It is the box widgets are laid out in, and the one
+// [Window.Position] and [Window.Move] answer in.
+func (w *Window) PixelSize() (int, int) {
 	box := w.WindowRect()
 	return int(box.Dx()), int(box.Dy())
 }
 
-// SetSize asks for a visible window this many device pixels across. It is
-// [Window.Size]'s other half: the size of the *window* the user sees, not of
-// the surface, which is larger by whatever margin a frame the toolkit draws
-// is keeping for its shadow. An app that wants a 468 by 96 window asks for
-// 468 by 96 and never has to know the margin exists.
+// SetSize asks for a visible window this many **logical** pixels across —
+// the same units [platform.WindowOptions] states and [Window.Size]
+// answers, so a size an app states once is the same window at every
+// display scale: 275 by 116 is 275 by 116 device pixels at 1 and 481 by
+// 203 at 1.75, with the content drawn at that scale to match.
+//
+// It is [Window.Size]'s other half: the size of the *window* the user
+// sees, not of the surface, which is larger by whatever margin a frame the
+// toolkit draws is keeping for its shadow. An app that wants a 468 by 96
+// window asks for 468 by 96 and never has to know the margin exists, nor
+// which backend it is running on.
 //
 // It is a request like every other window-geometry call. A desktop may give
 // a different size, and a maximized, tiled or full-screen window keeps the
@@ -279,12 +304,48 @@ func (w *Window) Minimize() {
 	}
 }
 
-// ToggleMaximize maximizes the window, or restores a maximized one.
+// ToggleMaximize maximizes the window, or restores a maximized one. A
+// window the desktop may not resize is not maximized either.
 func (w *Window) ToggleMaximize() {
-	if w == nil || w.Closed() {
+	if w == nil || w.Closed() || !w.Resizable() {
 		return
 	}
 	w.SetMaximized(!w.state.Maximized)
+}
+
+// Resizable reports whether the user may resize the window. A window opened
+// with platform.SizingFixed may not: the desktop was told its minimum and
+// its maximum are the same, and the frame the toolkit draws offers no
+// resize band for it either.
+func (w *Window) Resizable() bool {
+	if w == nil {
+		return false
+	}
+	return platform.SurfaceSizing(w.surf) != platform.SizingFixed
+}
+
+// SetResizable pins the window to its current size, or lets the user resize
+// it again. It is [platform.WindowOptions.Sizing] after the window exists —
+// for an app whose window is a design in one mode and free in another — and
+// it reports whether the backend could. A fixed window may still be resized
+// by the application (SetSize), which takes its pin with it.
+func (w *Window) SetResizable(on bool) bool {
+	if w == nil || w.Closed() {
+		return false
+	}
+	sz := platform.SizingFixed
+	if on {
+		sz = platform.SizingResizable
+	}
+	if !platform.SetSurfaceSizing(w.surf, sz) {
+		return false
+	}
+	// The resize band and the maximize button both go with it.
+	if f, ok := w.surf.(platform.FrameSurface); ok {
+		w.caps = f.Capabilities()
+	}
+	w.rebuildCaption()
+	return true
 }
 
 // windowStateChanged adopts the desktop's new state for the window.
@@ -839,7 +900,7 @@ func (w *Window) dispatch(ev platform.Event) {
 			// Ctrl+Tab goes to the widgets and the app first (a tab strip
 			// switches tabs with it); plain Tab, and a Ctrl+Tab nobody
 			// takes, move the focus.
-			if ev.Mods.Ctrl() && w.popup == nil && (w.bubbleKey(widget.KeyEvent{Key: ev.Key, Mods: ev.Mods}) || w.accelerator(ev.Key, ev.Mods)) {
+			if ev.Mods.Ctrl() && w.popup == nil && (w.bubbleKey(keyEvent(ev)) || w.accelerator(ev.Key, ev.Mods)) {
 				return
 			}
 			w.tab(!ev.Mods.Shift())
@@ -870,7 +931,7 @@ func (w *Window) dispatch(ev platform.Event) {
 		}
 		if w.popup != nil {
 			leaf := widget.CascadeLeaf(w.popup)
-			if leaf.KeyPress(widget.KeyEvent{Key: ev.Key, Mods: ev.Mods}) {
+			if leaf.KeyPress(keyEvent(ev)) {
 				return
 			}
 			// The popup owns the keyboard while it is up; bubbling on
@@ -881,7 +942,7 @@ func (w *Window) dispatch(ev platform.Event) {
 				return
 			}
 		}
-		if w.bubbleKey(widget.KeyEvent{Key: ev.Key, Mods: ev.Mods}) {
+		if w.bubbleKey(keyEvent(ev)) {
 			return
 		}
 		// Keys nobody took run menu accelerators (Ctrl+N, F1, Ctrl+Q …).
@@ -891,7 +952,7 @@ func (w *Window) dispatch(ev platform.Event) {
 			w.setAltHeld(false)
 		}
 		if t := w.keyTarget(); t != nil {
-			t.KeyRelease(widget.KeyEvent{Key: ev.Key, Mods: ev.Mods})
+			t.KeyRelease(keyEvent(ev))
 		}
 	case platform.EventText:
 		if t := w.keyTarget(); t != nil {
@@ -1027,6 +1088,18 @@ func (w *Window) keyTarget() widget.Component {
 	return widget.KeyTarget(w.focus, w.overlay)
 }
 
+// keyEvent is a platform key event as the widgets see it: the key, the
+// modifiers, and the character the key stands for where it stands for one,
+// so a shortcut table written over letters fires. A backend that already
+// put a character on the event keeps its own.
+func keyEvent(ev platform.Event) widget.KeyEvent {
+	r := ev.Rune
+	if r == 0 {
+		r = platform.KeyChar(ev.Key)
+	}
+	return widget.KeyEvent{Key: ev.Key, Rune: r, Mods: ev.Mods}
+}
+
 // bubbleKey offers a key to the focused widget and its ancestors and
 // reports whether one of them took it.
 func (w *Window) bubbleKey(e widget.KeyEvent) bool {
@@ -1131,6 +1204,9 @@ func (w *Window) mouseDown(ev platform.Event) {
 	}
 	t := w.hit(ev.Pos)
 	w.capture = t
+	// A drag is armed from the deepest component: startDragFrom walks up
+	// from there on its own, so a row still starts the drag its list
+	// defines whichever of the two takes the press.
 	w.armDrag(t, ev.Pos)
 	if t != nil && t.WantsFocus() && focusOnClick(t) {
 		w.RequestFocus(t)
@@ -1138,10 +1214,39 @@ func (w *Window) mouseDown(ev platform.Event) {
 	// A click on inert chrome (or on a widget with a tab-only focus policy)
 	// keeps focus where it was.
 	if t != nil {
-		lp := local(t, ev.Pos)
-		t.MousePress(widget.MouseEvent{Pos: lp, Button: ev.Button, Mods: ev.Mods})
-		w.syncCursor(t, lp)
+		w.bubblePress(t, ev)
 	}
+}
+
+// bubblePress offers the press to the component under the pointer and then
+// to its ancestors until one takes it (widget.Component.MousePress states
+// the contract). The taker becomes the capture, so the moves and the
+// release follow the gesture rather than the pixel it started on; when
+// nobody takes it the capture stays where it has always been, on the
+// deepest component hit.
+func (w *Window) bubblePress(from widget.Component, ev platform.Event) {
+	for c := from; c != nil; c = c.Parent() {
+		// The component under the pointer is always told, disabled or
+		// not — it has always been, and widgets do their own refusing.
+		// Above it, a disabled or hidden container is skipped and the
+		// walk goes on, as the wheel's does.
+		if c != from && (!c.Enabled() || !c.Visible()) {
+			continue
+		}
+		lp := local(c, ev.Pos)
+		if !c.MousePress(widget.MouseEvent{Pos: lp, Button: ev.Button, Mods: ev.Mods}) {
+			continue
+		}
+		// Only move a capture nobody touched: a handler that handed the
+		// pointer to the desktop (StartMove, StartResize, the window
+		// menu) has already let go of it, and must not get it back.
+		if c != from && w.capture == from {
+			w.capture = c
+		}
+		w.syncCursor(c, lp)
+		return
+	}
+	w.syncCursor(from, local(from, ev.Pos))
 }
 
 func (w *Window) mouseUp(ev platform.Event) {
@@ -1330,7 +1435,91 @@ func (w *Window) layout() {
 	// component that was removed without going through a layer swap stops
 	// being the focus / hover / capture target.
 	w.dropDeadRefs()
+	w.focusOnOpen()
 	w.laid = true
+}
+
+// focusOnOpen gives the keyboard somewhere to go the first time the window
+// is laid out with content in it.
+//
+// A window used to open with nothing focused, so every key that bubbles
+// from the focus — which is every shortcut a widget or a container
+// defines — reached nobody at all until the user clicked or pressed Tab.
+// Qt and GTK both focus the first widget in the tab chain when a window is
+// shown, and this is that.
+//
+// It never takes focus from an app that placed it itself: a window whose
+// content called RequestFocus before its first frame keeps that focus, and
+// this runs once, so a later Escape or content swap that leaves the window
+// unfocused is left alone. SetInitialFocus names the component to start on
+// where the first one in the tab order is the wrong one.
+//
+// Where the focus lands, it lands the way a click's does rather than a
+// Tab's: the ring a look shows only after keyboard navigation stays hidden
+// until the user actually uses the keyboard (GTK's :focus-visible), while
+// a field that always shows its caret shows it, which is what a dialog
+// that opens on a text field should do.
+func (w *Window) focusOnOpen() {
+	if w == nil || w.openFocused || w.statusMenu || w.opts.Popup {
+		return
+	}
+	if w.root == nil && w.overlay == nil {
+		// Nothing to focus yet: an app that calls SetContent after the
+		// first frame still gets its turn.
+		return
+	}
+	w.openFocused = true
+	if w.focus != nil {
+		return
+	}
+	target := w.initialFocus
+	if target == nil {
+		// The caption is deliberately not searched: a window that opened
+		// with its own close button focused would be absurd. The content
+		// is the app, and a modal overlay is the app while it is up.
+		scope := w.root
+		if w.overlay != nil {
+			scope = w.overlay
+		}
+		target = firstOpenFocus(scope)
+	}
+	if target == nil {
+		return
+	}
+	w.RequestFocus(target)
+	widget.MarkPointerFocus(target)
+}
+
+// firstOpenFocus is the component a freshly opened window starts on: the
+// first in the tab order that a *click* would also focus.
+//
+// Chrome that takes focus only from the keyboard — a menu bar, a tool bar,
+// a tab strip, everything with FocusOnClick false (Qt's Qt::TabFocus) — is
+// reached with Tab, F10 or a mnemonic and is never where a window starts,
+// so a window that holds nothing else opens with no focus at all. Its menu
+// accelerators and Alt mnemonics work either way: neither goes through the
+// focus.
+func firstOpenFocus(root widget.Component) widget.Component {
+	for _, c := range widget.Focusables(root) {
+		if focusOnClick(c) {
+			return c
+		}
+	}
+	return nil
+}
+
+// SetInitialFocus names the component the window focuses when it first
+// opens, instead of the first one in the tab order. It must be in the
+// window's content (or its overlay) by the time the first frame is laid
+// out; nil restores the default.
+//
+// An app that places focus itself — RequestFocus before the first frame —
+// does not need this: the window only chooses when nothing else has.
+func (w *Window) SetInitialFocus(c widget.Component) {
+	if w == nil {
+		return
+	}
+	w.initialFocus = c
 }
 
 // EnvFullFrame forces a full repaint and a full present every frame. It is

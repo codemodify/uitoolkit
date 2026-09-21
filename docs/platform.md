@@ -298,12 +298,42 @@ atlases grow.
 On **X11** the window buffer is the pixel size the WM gave; scale only
 grows metrics. On **Wayland** configure size is logical and the shm
 buffer is scaled; pointer events are multiplied so hit-testing matches
-the pixmap. Resize events stay in **logical** units — feeding buffer
-pixels back through `Resize` would re-apply scale and blow up layout.
-Set `UITK_SCALE` to the compositor scale (often `2`) so metrics and
-buffer scale agree. List/table/tree rows and fixed column widths are
-design pixels that grow with the look. EGL, dmabuf, and shm share that
-scale; CPU present still uses damage / attach / commit.
+the pixmap. Set `UITK_SCALE` to the compositor scale (often `2`) so
+metrics and buffer scale agree. List/table/tree rows and fixed column
+widths are design pixels that grow with the look. EGL, dmabuf, and shm
+share that scale; CPU present still uses damage / attach / commit.
+
+### Which pixels a number is in
+
+**Window geometry is logical pixels. Everything else is device pixels.**
+
+| Logical | Device |
+| --- | --- |
+| `WindowOptions.Width`, `Height`, `MinWidth`/`MinHeight`, `MaxWidth`/`MaxHeight` | `Surface.Size`, `Surface.Buffer`, `Present`'s rectangles |
+| `Surface.Resize`, `EventResize.Width`/`Height` | every event position, every widget rectangle |
+| `app.Window.Size`, `SetSize`, `platform.SizeLimits` | `app.Window.PixelSize`, `SurfaceSize`, `WindowRect`, `Position`, `Move` |
+| | `platform.Frame` (margin, input band, radii) |
+
+A window asked for as 275 × 116 is that at any display scale: 275 × 116
+device pixels at 1, 481 × 203 at 1.75, with its content drawn at 1.75 to
+match. An app states its design once and gets the same window on both
+backends — which is the point, because the backends do not agree about
+this and cannot be made to.
+
+Wayland already speaks logical pixels (`xdg_surface.set_window_geometry`,
+and the compositor multiplies). **X11 has no notion of a display scale at
+all** — an X window's size *is* pixels — so the X11 backend converts with
+`platform.DevicePixels` and `LogicalPixels` at that one boundary: on the
+way in for `Resize`, `WindowOptions` and `WM_NORMAL_HINTS`, on the way out
+for the `EventResize` a `ConfigureNotify` becomes. A resize the app echoes
+straight back (which is what `Window.dispatch` does) is recognised as the
+size the window was last told and changes nothing, so a window manager
+that picked a size between two logical pixels is not argued with.
+
+`WindowOptions.Scale` is how an explicit app scale (`Options.Scale`,
+`UITK_SCALE`) reaches that conversion: without it a look drawn at 2×
+would sit in a window sized for 1×. `platform.Offscreen.SimulateScale`
+does the same for tests, so the whole path is exercised headlessly.
 
 ## Status item / tray (0.16.0, 0.17.0, 0.18.1)
 

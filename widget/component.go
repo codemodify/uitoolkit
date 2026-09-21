@@ -43,12 +43,41 @@ type Component interface {
 
 	HitTest(local paintengine2d.Point) Component
 
+	// MousePress reports whether the component *took* the press.
+	//
+	// A press is offered to the deepest component under the pointer and
+	// then, while nobody has taken it, to each of its ancestors in turn —
+	// the walk the wheel makes from the pointer and keys make from the
+	// focus. So a container can act on a press its children ignored (a
+	// panel of labels that drags the window) without every child knowing
+	// about it.
+	//
+	// "Took it" is not "noticed it": it means this component is now acting
+	// on the gesture and nothing above it should also act. A component
+	// that only repaints on a press still returns false, so the container
+	// around it stays free to do something with the same press.
+	//
+	// Whoever takes it becomes the window's pointer capture: every
+	// MouseMove until the button goes up, and the MouseRelease, go there
+	// wherever the pointer has travelled. When nobody takes it the capture
+	// is the deepest component hit, so a widget that ignores presses still
+	// hears the release over it.
+	//
+	// Focus is not part of this. A click focuses the component it landed
+	// on, if that one wants focus, and never the ancestor that took the
+	// press: dragging a window by its face must not take the keyboard away
+	// from the field the user was typing in.
 	MousePress(e MouseEvent) bool
 	MouseRelease(e MouseEvent) bool
 	MouseMove(e MouseEvent) bool
 	MouseEnter()
 	MouseExit()
+	// MouseWheel reports whether the component took the notch; one that
+	// did not lets it bubble to its ancestors.
 	MouseWheel(e MouseEvent) bool
+	// KeyPress reports whether the component took the key; one that did
+	// not lets it bubble to its ancestors, and then to the window's
+	// accelerators.
 	KeyPress(e KeyEvent) bool
 	KeyRelease(e KeyEvent) bool
 	TextInput(r rune) bool

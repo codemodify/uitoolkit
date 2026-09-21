@@ -134,7 +134,9 @@ func Profile(w *app.Window, step int) []int {
 	if s == nil {
 		return nil
 	}
-	ww, hh := w.Size()
+	// A silhouette is rasterised in device pixels, which is what the
+	// window's box is; Size is the logical one.
+	ww, hh := w.PixelSize()
 	r := s.Raster(ww, hh)
 	if r == nil {
 		return nil
@@ -173,7 +175,9 @@ func Outline(w *app.Window, n int) []float64 {
 	if s == nil || n < 2 {
 		return nil
 	}
-	ww, hh := w.Size()
+	// A silhouette is rasterised in device pixels, which is what the
+	// window's box is; Size is the logical one.
+	ww, hh := w.PixelSize()
 	r := s.Raster(ww, hh)
 	if r == nil || ww < 1 {
 		return nil
@@ -217,7 +221,9 @@ func Insets(w *app.Window, at float64) (left, right int) {
 	if s == nil {
 		return 0, 0
 	}
-	ww, hh := w.Size()
+	// A silhouette is rasterised in device pixels, which is what the
+	// window's box is; Size is the logical one.
+	ww, hh := w.PixelSize()
 	r := s.Raster(ww, hh)
 	if r == nil {
 		return 0, 0

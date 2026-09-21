@@ -29,29 +29,49 @@ type Offscreen struct {
 	dragOut   offscreenDrag
 	// frame is the simulated desktop behind FrameSurface (offscreen_frame.go).
 	frame offscreenFrame
+	// opts are the options the window was made with, sizing its resize
+	// policy and limits what the simulated desktop was told about how
+	// large the window may be (platform.SizingSurface).
+	opts   WindowOptions
+	sizing Sizing
+	limits SizeLimits
+	// scale is the simulated display scale (SimulateScale), 1 unless a
+	// test sets one: the window's size is logical pixels and the pixmap
+	// behind it is that many times this.
+	scale float32
 }
 
 // NewOffscreen allocates a CPU pixmap of the requested size.
 func NewOffscreen(opts WindowOptions) *Offscreen {
-	w, h := opts.Width, opts.Height
-	if w < 1 {
-		w = 1
+	lw, lh := opts.Width, opts.Height
+	if lw < 1 {
+		lw = 1
 	}
-	if h < 1 {
-		h = 1
+	if lh < 1 {
+		lh = 1
+	}
+	scale := opts.Scale
+	if scale <= 0 {
+		scale = 1
 	}
 	o := &Offscreen{
 		title: opts.Title,
-		img:   paintengine2d.NewImage(w, h),
+		img:   paintengine2d.NewImage(DevicePixels(lw, scale), DevicePixels(lh, scale)),
 		wake:  make(chan struct{}, 1),
 		posX:  opts.X, posY: opts.Y,
+		scale: scale,
 	}
 	// An offscreen desktop can carry a window under a drag, the way an
 	// X11 one does: a test turns it off to take the fallback path.
 	o.dragOut.carries = true
-	// The requested size is the window's; a frame's margin is added to the
-	// pixmap around it (offscreen_frame.go).
-	o.frame.geomW, o.frame.geomH = w, h
+	// The requested size is the window's, in logical pixels; the pixmap is
+	// that times the display scale, plus a frame's margin around it
+	// (offscreen_frame.go).
+	o.frame.geomLW, o.frame.geomLH = lw, lh
+	o.frame.geomW, o.frame.geomH = DevicePixels(lw, scale), DevicePixels(lh, scale)
+	o.opts = opts
+	o.sizing = opts.Sizing
+	o.limits = limitsFor(o.sizing, opts, lw, lh)
 	o.frame.deco, o.frame.decoSet = requestedDecorations(opts.Decorations), true
 	if opts.Popup {
 		o.frame.deco = DecorationsNone
@@ -64,26 +84,53 @@ func (o *Offscreen) SetTitle(title string)        { o.title = title }
 func (o *Offscreen) Size() (w, h int)             { return o.img.Width, o.img.Height }
 func (o *Offscreen) Buffer() *paintengine2d.Image { return o.img }
 func (o *Offscreen) Closed() bool                 { return o.closed }
-func (o *Offscreen) Scale() float32               { return 1 }
 func (o *Offscreen) SetCursor(c Cursor)           { o.cursor = c }
 func (o *Offscreen) Cursor() Cursor               { return o.cursor }
 
-// Resize sizes the *window* — the pixmap is that plus the frame's margin,
-// as a compositor's surface is (a window without a frame of the toolkit's
-// has no margin, so the two are the same).
-func (o *Offscreen) Resize(w, h int) error {
-	if w < 1 {
-		w = 1
+// Scale is the simulated display scale (1 unless SimulateScale set one).
+func (o *Offscreen) Scale() float32 {
+	if o == nil || o.scale <= 0 {
+		return 1
 	}
-	if h < 1 {
-		h = 1
+	return o.scale
+}
+
+// SimulateScale gives the offscreen desktop a display scale, so a test can
+// see what a window asked for in logical pixels becomes in device ones
+// without a compositor. The window keeps its logical size and the pixmap
+// is rebuilt around it, which is what a real backend does when a window
+// moves to a monitor of another scale.
+func (o *Offscreen) SimulateScale(s float32) {
+	if o == nil || s <= 0 || o.scale == s {
+		return
 	}
-	if o.frame.geomW == w && o.frame.geomH == h {
+	o.scale = s
+	o.frame.geomW = DevicePixels(o.frame.geomLW, s)
+	o.frame.geomH = DevicePixels(o.frame.geomLH, s)
+	o.resizeSurface()
+}
+
+// Resize sizes the *window*, in logical pixels — the pixmap is that times
+// the display scale, plus the frame's margin, as a compositor's surface is
+// (a window without a frame of the toolkit's has no margin, so the pixmap
+// is only the scaled size).
+func (o *Offscreen) Resize(lw, lh int) error {
+	if lw < 1 {
+		lw = 1
+	}
+	if lh < 1 {
+		lh = 1
+	}
+	if o.frame.geomLW == lw && o.frame.geomLH == lh {
 		return nil
 	}
-	o.frame.geomW, o.frame.geomH = w, h
+	o.frame.geomLW, o.frame.geomLH = lw, lh
+	o.frame.geomW = DevicePixels(lw, o.Scale())
+	o.frame.geomH = DevicePixels(lh, o.Scale())
+	// A fixed window's limits are its size: the app moving it moves them.
+	o.limits = limitsFor(o.sizing, o.opts, lw, lh)
 	o.resizeSurface()
-	o.queue = append(o.queue, Event{Kind: EventResize, Width: w, Height: h})
+	o.queue = append(o.queue, Event{Kind: EventResize, Width: lw, Height: lh})
 	return nil
 }
 

@@ -113,6 +113,39 @@ func KeyRune(k Key) (rune, bool) {
 	return 0, false
 }
 
+// KeyChar is the printable character k stands for, or 0 for a key that
+// stands for none.
+//
+// It is the key's *identity* as a character and not what typing it
+// produces: no modifier is applied, so Shift+A and A are both 'a' and
+// Ctrl+S is 's' — the shift and the control are in the event's Modifiers,
+// where a shortcut table wants them. The keys that navigate rather than
+// type (Tab, Return, Backspace, the arrows, the function keys) have no
+// character at all, so a table written over characters cannot fire on one
+// of them by accident.
+//
+// Which layout a key belongs to has already been settled: Key comes from
+// the layout's own keysym, falling back to the layout-independent one, so
+// the key labelled A on AZERTY is KeyA and its character is 'a'. What the
+// user actually typed — the layout, Shift, dead keys and the compose key
+// all applied — arrives as text (Component.TextInput), never here.
+func KeyChar(k Key) rune {
+	if r, ok := KeyRune(k); ok {
+		return r
+	}
+	switch k {
+	case KeySpace:
+		return ' '
+	case Key3:
+		return '3'
+	case KeyHash:
+		return '#'
+	case KeyComma:
+		return ','
+	}
+	return 0
+}
+
 // EventKind classifies a window event.
 type EventKind int
 
@@ -125,6 +158,9 @@ const (
 	EventKeyDown
 	EventKeyUp
 	EventText
+	// EventResize: the window has a new size, in the logical pixels
+	// WindowOptions and Resize speak (Width, Height). The buffer behind
+	// Surface.Size is already that size times the display scale.
 	EventResize
 	EventClose
 	EventExpose
@@ -209,13 +245,30 @@ type Event struct {
 }
 
 // WindowOptions configure a native or offscreen surface.
+//
+// Every size here is in **logical pixels** — see scale.go: a window asked
+// for as 275 by 116 is that at any display scale, and the backend converts
+// where the window system wants device pixels instead.
 type WindowOptions struct {
-	Title           string
-	Width           int
-	Height          int
-	MinWidth        int
-	MinHeight       int
-	Resizable       bool
+	Title     string
+	Width     int
+	Height    int
+	MinWidth  int
+	MinHeight int
+	// MaxWidth, MaxHeight cap the window; zero is no cap.
+	MaxWidth  int
+	MaxHeight int
+	// Sizing says whether the desktop may resize the window at all (see
+	// [Sizing]). The zero value is resizable; SizingFixed pins the window
+	// to the size it opens at, and Min / Max are then that size.
+	Sizing Sizing
+	// Scale is the display scale the toolkit draws at, where the
+	// application has one to state: an explicit app scale, or UITK_SCALE
+	// and friends. A backend whose window geometry is device pixels
+	// converts the sizes above with it, so the window and the metrics
+	// drawn in it agree. Zero — the usual case — means the display's own
+	// scale, which the backend detects for itself.
+	Scale           float32
 	Headless        bool
 	BackgroundPixel uint32
 	// X, Y are root/screen coordinates. Used when Popup is set (X11
@@ -248,7 +301,14 @@ type WindowOptions struct {
 type Surface interface {
 	Title() string
 	SetTitle(title string)
+	// Size is the buffer, in device pixels: what Buffer() is that many
+	// pixels across, and what Present's rectangles are measured in.
 	Size() (w, h int)
+	// Resize asks for a window this many **logical** pixels across (the
+	// unit WindowOptions states, and the one EventResize reports back),
+	// whatever the display scale. The buffer that follows is larger by
+	// the scale, and by the margin a frame the toolkit draws keeps for
+	// its shadow.
 	Resize(w, h int) error
 	Buffer() *paintengine2d.Image
 	Present(dirty []paintengine2d.Rect) error
