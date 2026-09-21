@@ -400,6 +400,25 @@ static void ui_x_put(Display* d, Window w, GC gc, XImage* img, int width, int he
 static void ui_x_map(Display* d, Window w) { if (d && w) { XMapRaised(d, w); XFlush(d); } }
 static void ui_x_move(Display* d, Window w, int x, int y) { if (d && w) XMoveWindow(d, w, x, y); }
 
+// ui_x_move_as_user moves w with _NET_MOVERESIZE_WINDOW: static gravity
+// (x, y are where the client window itself goes, as they are for a window
+// placed before it maps, whatever frame the window manager puts round
+// it), x and y given, and source 2 — a request standing for a direct user
+// action (EWMH), which a window manager does not keep on screen.
+static void ui_x_move_as_user(Display* d, Window w, Atom moveWin, int x, int y) {
+	if (!d || !w) return;
+	XEvent ev;
+	memset(&ev, 0, sizeof(ev));
+	ev.xclient.type = ClientMessage;
+	ev.xclient.window = w;
+	ev.xclient.message_type = moveWin;
+	ev.xclient.format = 32;
+	ev.xclient.data.l[0] = StaticGravity | (1 << 8) | (1 << 9) | (2 << 12);
+	ev.xclient.data.l[1] = x;
+	ev.xclient.data.l[2] = y;
+	XSendEvent(d, DefaultRootWindow(d), False, SubstructureRedirectMask|SubstructureNotifyMask, &ev);
+}
+
 static void ui_x_destroy_win(Display* d, Window w, GC gc) {
 	if (!d) return;
 	if (gc) XFreeGC(d, gc);
@@ -938,7 +957,12 @@ type x11Drag struct {
 	// the drag moves it itself on every motion. It is left out of the
 	// search for a target: a window carried by the drag is not something
 	// the drag can be dropped on.
-	attach  C.Window
+	//
+	// It is kept as the surface, not its X window: a window that takes the
+	// toolkit's frame is re-made on an ARGB visual before it first maps,
+	// and the drag has to go on carrying the new one. attachH is inside
+	// the window the user sees; the frame's margin is added as it moves.
+	attach  *x11Surface
 	attachH struct{ x, y int }
 	// sends are the INCR transfers of our data still in flight; ended
 	// stops a drag that has already reported its result.
@@ -1079,10 +1103,8 @@ func (s *x11Surface) AttachToplevel(win Surface, dx, dy int) bool {
 	if !ok || w.conn != c || w.win == 0 || w.closed {
 		return false
 	}
-	c.drag.attach = w.win
-	// The window holds the frame's margin too, and the offset is inside
-	// the window the user sees: the margin puts the two apart.
-	c.drag.attachH.x, c.drag.attachH.y = dx+w.frame.Margin.Left, dy+w.frame.Margin.Top
+	c.drag.attach = w
+	c.drag.attachH.x, c.drag.attachH.y = dx, dy
 	rx, ry, _ := rootPointer(c)
 	c.dragMoveAttached(rx, ry)
 	C.ui_x_flush(c.dpy)
@@ -1090,11 +1112,37 @@ func (s *x11Surface) AttachToplevel(win Surface, dx, dy int) bool {
 }
 
 // dragMoveAttached puts the window the drag carries under the pointer.
+//
+// A window that is not mapped yet — a tab torn out a moment ago — is told
+// where it is going in WM_NORMAL_HINTS (placeLocked): without that a
+// window manager places a new window by its own policy when it maps it.
+//
+// A mapped one is moved with _NET_MOVERESIZE_WINDOW from a "direct user
+// action" source where the window manager has it, rather than with a bare
+// XMoveWindow: KWin keeps a window an *application* moves inside the
+// screen, so a torn-off window as big as the one it came from — which
+// hangs off an edge wherever the pointer is — would be pushed back on
+// screen and land nowhere near the pointer. A move the user is making is
+// left where it is put, as the window manager's own moves are.
 func (c *x11Conn) dragMoveAttached(rx, ry int) {
-	if c.drag.attach == 0 || c.dpy == nil {
+	w := c.drag.attach
+	if w == nil || w.closed || w.win == 0 || c.dpy == nil {
 		return
 	}
-	C.ui_x_move(c.dpy, c.drag.attach, C.int(rx-c.drag.attachH.x), C.int(ry-c.drag.attachH.y))
+	// The X window holds the frame's margin too, and the offset is inside
+	// the window the user sees: the margin puts the two apart.
+	x := rx - c.drag.attachH.x - w.frame.Margin.Left
+	y := ry - c.drag.attachH.y - w.frame.Margin.Top
+	if !w.mapped {
+		w.placeLocked(x, y)
+		C.ui_x_move(c.dpy, w.win, C.int(x), C.int(y))
+		return
+	}
+	if c.supportsLocked(c.atomMoveWin) {
+		C.ui_x_move_as_user(c.dpy, w.win, c.atomMoveWin, C.int(x), C.int(y))
+		return
+	}
+	C.ui_x_move(c.dpy, w.win, C.int(x), C.int(y))
 }
 
 // rootPointer is where the pointer is on the screen now, and which
@@ -1160,7 +1208,7 @@ func (c *x11Conn) dragMotionTo(rx, ry int, mods uint) {
 	// over.
 	skip := func(w uint32) bool {
 		return (c.drag.icon.win != 0 && C.Window(w) == c.drag.icon.win) ||
-			(c.drag.attach != 0 && C.Window(w) == c.drag.attach)
+			(c.drag.attach != nil && C.Window(w) == c.drag.attach.win)
 	}
 	found := XDNDFindTarget(tree, uint32(C.ui_x_root(c.dpy)), rx, ry, skip)
 	if found.Window != c.drag.target.Window {

@@ -79,9 +79,13 @@ Struck through once fixed; newest findings at the end of their section.
   screen.~~ It was not the weight: `Split.Arrange` shared the space out before
   it re-showed the area its float had emptied, so the host's own layout as it
   docked left the panel at the size it was hidden at.
-- **On X11 a torn-off window is placed by the window manager**, not under the
+- ~~**On X11 a torn-off window is placed by the window manager**, not under the
   pointer, even though `DragsWindows()` reports true; KWin also clamps a
-  client-placed window to the screen.
+  client-placed window to the screen.~~ Two causes: the drag kept moving the
+  X window the torn-off one had before it was re-made on an ARGB visual, and
+  KWin pushed a window an application moves back on screen. The drag follows
+  the surface and moves it as a user action (`_NET_MOVERESIZE_WINDOW`,
+  source 2); a client-placed window's hints keep its position.
 - **A tab merged into another application carries its title only**; richer
   data needs the app's own type through `OnTabDrag`.
 - **Escape during an X11 drag is unproven on real hardware**: under Xwayland
