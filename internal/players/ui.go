@@ -745,11 +745,11 @@ func (f *Fader) AccessibleAction(a a11y.Action) bool {
 // DragsWindow is a component whose own presses move the window it is in.
 //
 // The face of a player between its controls is a drag handle — that is what
-// the whole front of a machine this size has always been — and the toolkit
-// does not bubble a mouse press: w.hit finds the deepest component under the
-// pointer and that one alone is told. So every part of a player's face that
-// is *not* a control has to say so itself, rather than leaving it to the
-// container underneath and finding that a press on the display does nothing.
+// the whole front of a machine this size has always been. A press bubbles
+// now, so a container could take one its children ignored and move the
+// window from there; this stays because it says which pieces *are* face
+// rather than making every picture's silence mean "drag me", and because
+// CaptionAt has to be answered by the same pieces anyway.
 //
 // It is embedded in place of widget.Base by the pieces that are pictures:
 // the readouts, the footers, the display wells.
@@ -796,9 +796,9 @@ type AnalyserView struct {
 	Pixelated bool
 	// Tint overrides the accent the bars are drawn in.
 	Tint paintengine2d.Color
-	// Drag is the window a press on the analyser moves. An analyser sunk
-	// into a player's display is part of its face, and the toolkit does
-	// not bubble a press past the component it lands on.
+	// Drag is the window a press on the analyser moves: an analyser sunk
+	// into a player's display is part of its face, and says so itself
+	// rather than leaving it to whatever is underneath.
 	Drag *app.Window
 }
 
@@ -1054,11 +1054,11 @@ func (p *Pulse) Tick() {
 // transport row on a keyboard of the era), and the single letters do the
 // toggles.
 //
-// It reads e.Key and not e.Rune. A KeyEvent that reaches a component
-// carries the *key*; the character is a separate event (TextInput), which
-// is what keeps a shortcut table from depending on the keyboard layout's
-// idea of what a key produces. A rune is honoured anyway when a caller
-// passes one, since a test may.
+// It reads e.Key for the keys that navigate and e.Rune for the letters,
+// which is the split [widget.KeyEvent] states: Rune is the character the
+// key stands for, with no modifier folded in, so the letters here work
+// whichever the layout puts where. The e.Key arm for the same letters
+// stays because it costs a line and a test may send either.
 //
 // Nothing here takes a modifier, which is deliberate: a player's keys have
 // to work while the focus is anywhere in its window. That is only safe
