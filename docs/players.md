@@ -256,7 +256,9 @@ Real hardware, through the nested-KWin rig, is in
 ## What they ran into
 
 Things a skinned, shaped, multi-window app wanted and the toolkit could not
-do, kept here because they are the useful output of writing one:
+do, kept here because they are the useful output of writing one. Five have
+since been fixed in the toolkit and are struck through below, under
+[Fixed since](#fixed-since); these still stand.
 
 - **A look states the caption's height and an app cannot ask for a shorter
   band.** A player with a compact mode has to choose a caption that suits
@@ -282,28 +284,6 @@ do, kept here because they are the useful output of writing one:
   consulted only when the user asked for the look's own), so a silhouette
   must stay out of *both* top corners or it eats a close button on half the
   desktops it runs on. Every shape here does.
-- **`widget.KeyEvent` carries the key and not the character.** Text arrives
-  as a separate event, so a shortcut table that reads `e.Rune` never fires —
-  which is a fine design, and worth saying in the doc comment on KeyEvent.
-- **A window opens with nothing focused**, so keys that bubble from the
-  focus reach nobody until the first Tab. All three focus a control on their
-  first frame.
-- **A mouse press does not bubble.** `Window.hit` finds the deepest
-  component under the pointer and tells that one alone, so a press on a
-  player's display did nothing until every part of the face that is *not* a
-  control said so itself (`players.DragsWindow`). It is the right design —
-  bubbling presses is how one click ends up doing two things — but "the
-  container will get it" is the natural assumption and it is not true.
-- **`platform.WindowOptions.Resizable` is declared and never read**, and
-  there is no maximum size, so a player whose size *is* its design cannot
-  say it is fixed. A press eight pixels below the strip's top edge lands in
-  the frame's resize band and grew a 275×116 window to 275×308.
-- **Window sizes are device pixels on X11 and logical pixels on Wayland**,
-  and no scale factor reconciles them: an X11 server has no notion of a
-  display scale, so a 275-design-pixel strip at 1.75 asks for 481, while a
-  Wayland toplevel's geometry is logical and the compositor multiplies, so
-  the same strip asks for 275. `players.WindowSize` is the work-around here;
-  the fix belongs in `platform`.
 
 Two more are about *when* rather than *what*, and only real hardware showed
 them (see the e2e report):
@@ -324,3 +304,46 @@ Three small things were added rather than worked around: `app.Window.Move`
 and `CanMove` (Position's other half, over `platform.SurfaceMoves`),
 `app.Window.SetSize` (Size's other half), and `platform.SurfaceMoves`
 itself.
+
+## Fixed since
+
+What each of the five became, with the player work-around it retires:
+
+- ~~**`widget.KeyEvent` carries the key and not the character.** Text
+  arrives as a separate event, so a shortcut table that reads `e.Rune`
+  never fires.~~ **Fixed:** a key event carries both — `Key` for what the
+  keyboard *does*, `Rune` for the character the key stands for, with no
+  modifier folded in. Typing still arrives only as `TextInput`.
+  [docs/keyboard.md](keyboard.md) says which of the two a shortcut reads.
+- ~~**A window opens with nothing focused**, so keys that bubble from the
+  focus reach nobody until the first Tab.~~ **Fixed:** a window focuses the
+  first control a click would focus, at its first laid-out frame, unless
+  the app placed focus itself or named one with `Window.SetInitialFocus`.
+  Chrome reached only with Tab or a mnemonic is skipped.
+- ~~**A mouse press does not bubble.** `Window.hit` finds the deepest
+  component under the pointer and tells that one alone, so a press on a
+  player's display did nothing until every part of the face that is *not*
+  a control said so itself (`players.DragsWindow`).~~ **Fixed:** a press
+  walks up from the component under the pointer until one takes it, as a
+  wheel notch and a key already did, and the contract for what "took it"
+  means is written down in [docs/widgets.md](widgets.md). The taker becomes
+  the pointer capture; focus still goes to what the press landed on.
+  `DragsWindow` is still the clearer way to say "this part of the face is a
+  handle", but it is no longer the only way.
+- ~~**`platform.WindowOptions.Resizable` is declared and never read**, and
+  there is no maximum size, so a player whose size *is* its design cannot
+  say it is fixed. A press eight pixels below the strip's top edge lands in
+  the frame's resize band and grew a 275×116 window to 275×308.~~
+  **Fixed:** `Resizable` became `Sizing` (an enum whose zero value is
+  resizable, beside `Decorations`) with `MaxWidth` and `MaxHeight`.
+  `SizingFixed` states the same minimum and maximum to the desktop, refuses
+  an interactive resize, drops maximize from the window's capabilities and
+  leaves no resize band in the toolkit's own frame. `players.OpenSized`'s
+  `fixed` now means it.
+- ~~**Window sizes are device pixels on X11 and logical pixels on
+  Wayland**, and no scale factor reconciles them.~~ **Fixed:** window
+  geometry is logical pixels everywhere and the X11 backend converts at its
+  own boundary; `app.Window.PixelSize` is the device-pixel box for code
+  that pairs a size with a position. `players.WindowSize` is the identity
+  now — a design pixel *is* a logical pixel — and is kept only because two
+  call sites read better with it.
