@@ -134,3 +134,47 @@ func TestTheCaptionTitleStandsOnAPlate(t *testing.T) {
 		}
 	}
 }
+
+// A sprite an app paints has a silhouette as a part's face does: Minim
+// Silver's round keys are discs in square boxes, so their corners are not
+// the key, at every scale; a sprite that fills its box, a sprite the skin
+// does not have and a look that is not a skin all answer nil — the box.
+func TestAnAppPaintedSpriteHasItsShape(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	p, ok := LoadTheme("minim-silver")
+	if !ok {
+		t.Fatal("minim-silver does not load")
+	}
+	w, h, ok := SkinSpriteSize(p.Look(), "key.play")
+	if !ok {
+		t.Fatal("no key.play")
+	}
+	for _, scale := range []float32{1, 1.25, 1.5, 1.75, 2} {
+		lk := WithScale(p.Look(), scale)
+		size := paintengine2d.Pt(w*scale, h*scale)
+		s := SkinSpriteShape(lk, size, paintengine2d.XYWH(0, 0, size.X, size.Y), "key.play")
+		if s == nil || s.Mask == nil {
+			t.Fatalf("%gx: a round key has no silhouette", scale)
+		}
+		at := func(x, y int) bool {
+			m := s.Mask
+			return m.Pix[y*m.RowStride()+x] > 0
+		}
+		cx, cy := int(size.X/2), int(size.Y/2)
+		if !at(cx, cy) {
+			t.Errorf("%gx: the middle of the key is not the key", scale)
+		}
+		if at(0, 0) || at(s.Mask.Width-1, s.Mask.Height-1) {
+			t.Errorf("%gx: a corner of a round key's box is the key", scale)
+		}
+	}
+	lk := p.Look()
+	full := paintengine2d.Pt(40, 40)
+	if SkinSpriteShape(lk, full, paintengine2d.XYWH(0, 0, 40, 40), "no.such.sprite") != nil {
+		t.Error("a sprite the skin does not have has a silhouette")
+	}
+	plain, _ := LoadTheme("breeze-night")
+	if SkinSpriteShape(plain.Look(), full, paintengine2d.XYWH(0, 0, 40, 40), "key.play") != nil {
+		t.Error("a look that is not a skin shaped a sprite")
+	}
+}
