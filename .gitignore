@@ -23,3 +23,6 @@ go.work.sum
 
 # Claude Cowork session outputs
 /Claude outputs/
+
+# Theme Atlas scratch (tools/atlas/render.sh)
+tools/atlas/out/
