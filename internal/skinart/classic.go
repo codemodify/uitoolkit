@@ -303,13 +303,13 @@ func MinimClassic() *Plan {
 		clPlate(ctx, w, h, false)
 	})
 	l.cell("capbtn.normal", 9, 9, [4]int{2, 2, 2, 2}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		clCapKey(ctx, w, h, hex("#8d93ab"), false)
+		clCapKey(ctx, w, h, hex("#2c2c40"), false)
 	})
 	l.cell("capbtn.hover", 9, 9, [4]int{2, 2, 2, 2}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		clCapKey(ctx, w, h, hex("#aeb4ca"), false)
+		clCapKey(ctx, w, h, hex("#3c3c56"), false)
 	})
 	l.cell("capbtn.pressed", 9, 9, [4]int{2, 2, 2, 2}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		clCapKey(ctx, w, h, hex("#6c7290"), true)
+		clCapKey(ctx, w, h, hex("#1a1a28"), true)
 	})
 	// A skin may re-draw the focus ring and may never remove it: this one
 	// is the dotted rectangle of the era, in the display's green.
@@ -327,7 +327,7 @@ func MinimClassic() *Plan {
 	p.Text = []TextRole{
 		{Name: "control", Color: "#101018", Disabled: "#6c7082"},
 		{Name: "caption", Color: "#f4f6fb", Disabled: "#9aa0b8", Size: 9, Bold: true},
-		{Name: "capkey", Color: "#101018", Hover: "#101018", Pressed: "#f4f6fb", Disabled: "#30303c"},
+		{Name: "capkey", Color: clGold, Hover: clCream, Pressed: clCream, Disabled: "#5c5a50"},
 	}
 	p.Parts = []PartBinding{
 		{Part: "window", States: [][2]string{{"normal", "window.normal"}}},
@@ -453,13 +453,12 @@ func clEqFace(ctx *paintengine2d.Context, w, h float32, f *panel.Face) {
 	// curve is the app's to draw.
 	g := e.Graph
 	gx, gy, gw, gh := float32(g.X()), float32(g.Y()), float32(g.W()), float32(g.H())
-	px(ctx, gx, gy, gw, gh, hex("#2c2c46"))
+	// No well: the era's graph was ruled straight onto the chrome.
 	for i := float32(0); i < 10; i++ {
 		x := gx + 4 + i*float32(int((gw-8)/9))
-		px(ctx, x, gy+1, 1, gh-2, hex("#4a4a66"))
+		px(ctx, x, gy, 1, gh, hex("#5e5e7c"))
+		px(ctx, x+1, gy, 1, gh, hex("#2a2a40"))
 	}
-	px(ctx, gx, gy, gw, 1, hex(clShade))
-	px(ctx, gx, gy+gh-1, gw, 1, hex(clLight))
 
 	fader := func(r panel.R) {
 		x, y, fw, fh := float32(r.X()), float32(r.Y()), float32(r.W()), float32(r.H())
@@ -737,28 +736,40 @@ func clListThumb(ctx *paintengine2d.Context, w, h float32, down bool) {
 
 // clGrooveRows are the groove's rows, top to bottom: the ribbed gold strip a
 // title band of the era ran either side of its words.
-var clGrooveRows = []string{clGoldDk, clCream, clSilver, clGoldDk, clGold, clGoldDk}
+var clGrooveRows = []string{"#403a2c", clCream, clSilver, clGoldDk, clGold, "#baa464"}
+
+// clGrooveDim is the same groove on a window without the focus.
+var clGrooveDim = []string{"#2a2a3c", "#8a8c9a", "#70727e", "#2a2a3c", "#5e606c", "#4c4e5a"}
+
+// clBandBack is the title band's ground: darker than the chrome under it,
+// with a grey rule along its top, so the band reads as a strip of its own.
+func clBandBack(ctx *paintengine2d.Context, w, h float32) {
+	px(ctx, 0, 0, w, h, hex("#141421"))
+	px(ctx, 0, 0, w, 1, hex("#16161e"))
+	px(ctx, 0, 1, w, 1, hex("#55555f"))
+	px(ctx, 0, 2, w, 2, hex("#171724"))
+	px(ctx, 0, h-2, w, 1, hex("#0c0c16"))
+	px(ctx, 0, h-1, w, 1, hex("#05050d"))
+}
 
 // clBand is the caption: the chrome, the Minim mark at the left, and the
 // groove from there to the caption keys. Out of focus, the groove greys.
 func clBand(ctx *paintengine2d.Context, w, h float32, active bool) {
-	clChrome(ctx, w, h)
-	px(ctx, 0, 0, w, 1, hex(clLight))
-	px(ctx, 0, h-1, w, 1, hex(clShade))
+	clBandBack(ctx, w, h)
 	rows := clGrooveRows
 	if !active {
-		rows = []string{"#2a2a3c", "#8a8c9a", "#70727e", "#2a2a3c", "#5e606c", "#2a2a3c"}
+		rows = clGrooveDim
 	}
-	gy := float32(int((h - float32(len(rows))) / 2))
+	gy := float32(4)
 	x0, x1 := float32(20), w-28
 	for i, c := range rows {
 		px(ctx, x0, gy+float32(i), x1-x0, 1, hex(c))
 	}
 	// Rounded ends: the outermost rows stop a pixel short.
-	px(ctx, x0, gy, 1, 1, hex(clBody))
-	px(ctx, x0, gy+float32(len(rows))-1, 1, 1, hex(clBody))
-	px(ctx, x1-1, gy, 1, 1, hex(clBody))
-	px(ctx, x1-1, gy+float32(len(rows))-1, 1, 1, hex(clBody))
+	px(ctx, x0, gy, 1, 1, hex("#141421"))
+	px(ctx, x0, gy+float32(len(rows))-1, 1, 1, hex("#141421"))
+	px(ctx, x1-1, gy, 1, 1, hex("#141421"))
+	px(ctx, x1-1, gy+float32(len(rows))-1, 1, 1, hex("#141421"))
 	markCol := hex(clGold)
 	if !active {
 		markCol = hex("#8a8c9a")
@@ -769,14 +780,12 @@ func clBand(ctx *paintengine2d.Context, w, h float32, active bool) {
 // clPlate is the plate under the title: plain chrome that stops the groove
 // with a rounded end either side of the words.
 func clPlate(ctx *paintengine2d.Context, w, h float32, active bool) {
-	clChrome(ctx, w, h)
-	px(ctx, 0, 0, w, 1, hex(clLight))
-	px(ctx, 0, h-1, w, 1, hex(clShade))
+	clBandBack(ctx, w, h)
 	rows := clGrooveRows
 	if !active {
-		rows = []string{"#2a2a3c", "#8a8c9a", "#70727e", "#2a2a3c", "#5e606c", "#2a2a3c"}
+		rows = clGrooveDim
 	}
-	gy := float32(int((h - float32(len(rows))) / 2))
+	gy := float32(4)
 	// The last two columns of the groove coming in from the left, rounded,
 	// and the first two of the one going out on the right.
 	for i, c := range rows {
@@ -788,7 +797,8 @@ func clPlate(ctx *paintengine2d.Context, w, h float32, active bool) {
 	}
 }
 
-// clCapKey is a caption key: a tiny bevelled square.
+// clCapKey is a caption key: a tiny dark bevelled square the frame prints
+// its mark on in the groove's gold.
 func clCapKey(ctx *paintengine2d.Context, w, h float32, face paintengine2d.Color, down bool) {
 	px(ctx, 0, 0, w, h, hex(clInk))
 	hi, lo := lerpColor(face, paintengine2d.RGB(1, 1, 1), 0.45), lerpColor(face, paintengine2d.RGB(0, 0, 0), 0.45)

@@ -131,8 +131,10 @@ func (e *Eq) Band(i int) R {
 type List struct {
 	// Rows is the list's well and Scroll its scroll bar's groove.
 	Rows, Scroll R
-	// RowH is one row, and Font the size its text is set at.
+	// RowH is one row, and Font the size its text is set at, in the bold
+	// weight when Bold says so.
 	RowH, Font int
+	Bold       bool
 	// Add, Rem, Sel and Misc are the four keys at the bottom left, and
 	// Opts the one at the right.
 	Add, Rem, Sel, Misc, Opts R
@@ -193,8 +195,9 @@ var Classic = &Face{
 	List: List{
 		Rows:   R{11, 5, 244, 175},
 		Scroll: R{258, 5, 9, 175},
-		RowH:   13,
-		Font:   10,
+		RowH:   15,
+		Font:   11,
+		Bold:   true,
 		Add:    R{13, 188, 25, 18},
 		Rem:    R{42, 188, 25, 18},
 		Sel:    R{71, 188, 25, 18},
@@ -259,8 +262,8 @@ var Silver = &Face{
 	List: List{
 		Rows:   R{5, 3, 252, 176},
 		Scroll: R{259, 3, 9, 176},
-		RowH:   13,
-		Font:   10,
+		RowH:   14,
+		Font:   11,
 		Add:    R{12, 188, 22, 20},
 		Rem:    R{38, 188, 22, 20},
 		Sel:    R{64, 188, 22, 20},

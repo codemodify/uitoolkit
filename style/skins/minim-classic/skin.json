@@ -923,10 +923,10 @@
   "summary": "The compact player's base-skin look of the era: slate-blue chrome, gold grooves, a black display with green segments — a pixel panel the player lays its own keys on.",
   "text": {
     "capkey": {
-      "color": "#101018",
-      "disabled": "#30303c",
-      "hover": "#101018",
-      "pressed": "#f4f6fb"
+      "color": "#d4bd7b",
+      "disabled": "#5c5a50",
+      "hover": "#ffefa6",
+      "pressed": "#ffefa6"
     },
     "caption": {
       "bold": true,
