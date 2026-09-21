@@ -95,8 +95,9 @@ Struck through once fixed; newest findings at the end of their section.
 
 ## Widgets
 
-- **`ListView.Measure` returns exactly rows × row height**, so inside a scroll
-  view the view frame's border clips the last row.
+- ~~**`ListView.Measure` returns exactly rows × row height**, so inside a scroll
+  view the view frame's border clips the last row.~~ `ListView`, `TreeView`
+  and `TableView` all measure their frame now.
 
 ## Platform
 

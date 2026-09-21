@@ -70,6 +70,8 @@ and `SelectMulti` (every click toggles, Space toggles the current row).
 `IsSelected`, set it with `SetSelectedRows`, and follow it with
 `OnSelectionChange`. `EnsureVisible` scrolls a row into view (also before
 the first layout). Views sit in the theme's frame; `Frameless` opts out.
+A view's natural height is its rows (and a table's header) plus that
+frame, so in a scroll view or a column the last row is never under it.
 `Sidebar` on a list or tree paints it as a sidebar (a settings page list,
 mail folders): Aqua's source list, and the sidebar styles of looks that
 have one.

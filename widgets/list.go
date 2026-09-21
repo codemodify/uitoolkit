@@ -72,8 +72,12 @@ func NewListView(count int, text func(int) string, on func(int)) *ListView {
 	return l
 }
 
+// Measure is every row and the view frame around them, so a list given its
+// natural height — in a scroll view, a column — shows its last row whole
+// rather than under the frame's bottom edge.
 func (l *ListView) Measure(c layout.Constraints) paintengine2d.Point {
-	h := float32(l.Count) * l.rowH()
+	in := l.frame()
+	h := float32(l.Count)*l.rowH() + in.Top + in.Bottom
 	if c.HasMaxH() && h > c.MaxH {
 		h = c.MaxH
 	}
