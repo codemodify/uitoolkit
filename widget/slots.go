@@ -119,3 +119,27 @@ func (s *Slots) Arrange(lk style.LookAndFeel, box paintengine2d.Rect) (unplaced 
 	}
 	return unplaced
 }
+
+// SlotArtRect is where the slot c was placed in sits, in c's own
+// coordinates — the rect to paint the slot's art in.
+//
+// It is not quite c's box. A component's bounds are whole pixels (SetBounds
+// rounds them), and at 1.25, 1.5 and 1.75 a slot at a design coordinate
+// starts part-way through one; a panel's pieces are drawn on the design
+// grid, so a key painted into its rounded box would sit up to half a pixel
+// off the face it is a hole in. This is the slot's own rect, unrounded,
+// moved into c's coordinates. It assumes what Arrange does: c was placed in
+// its parent's local box. Where the look has no such slot, it is c's box.
+func SlotArtRect(c Component, layout, slot string) paintengine2d.Rect {
+	lb := c.LocalBounds()
+	p := c.Parent()
+	if p == nil {
+		return lb
+	}
+	r, ok := style.SkinSlotRect(c.Look(), layout, slot, p.LocalBounds())
+	if !ok {
+		return lb
+	}
+	o := c.Bounds().Min
+	return r.Translate(paintengine2d.Pt(-o.X, -o.Y))
+}

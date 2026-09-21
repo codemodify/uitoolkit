@@ -135,7 +135,7 @@ type slotKey struct {
 }
 
 func (k *slotKey) ArtShape(lk style.LookAndFeel, size paintengine2d.Point) *style.Silhouette {
-	return style.SkinSlotShape(lk, size, k.layout, k.slot)
+	return style.SkinSlotShape(lk, size, SlotArtRect(k, k.layout, k.slot), k.layout, k.slot)
 }
 
 func TestAControlInASlotTakesTheSlotArtsShape(t *testing.T) {
