@@ -325,6 +325,8 @@ git clone https://github.com/codemodify/uitoolkit.git
 cd uitoolkit
 CGO_ENABLED=0 go test ./...
 go run ./cmd/uitest-driver -short    # headless gallery + fake Mail
+go run ./examples/tour               # the tour: a page per capability
+go run ./examples/tour -page shapes  # one page of it
 go run ./examples/gallery            # Wayland if WAYLAND_DISPLAY, else X11
 UITK_BACKEND=x11 go run ./examples/gallery
 UITK_BACKEND=wayland go run ./examples/gallery
@@ -504,6 +506,7 @@ container. Layout extras (`Stack`, `Pad`, `Overlay`) are in
 
 | Command | What it proves |
 | --- | --- |
+| `go run ./examples/tour` | Everything a page of controls cannot show, a page each: tabs that **are** the window's caption and tear out into windows of their own, docking, a drag that leaves the process, the toolkit's frame against the desktop's, a window with a hole you can click through, skins swapped live, the tray and the clipboard, and the window's own accessibility tree. See [docs/tour.md](docs/tour.md) |
 | `go run ./examples/gallery` | Stock controls, table, textarea, switch, accordion, spinner, tooltip, file stub, toolbar, combo, radio, progress, menus, tabs, tree, themes, scroll, list, message box |
 | `go run ./examples/notes` | A small real app: sortable table, textarea body, priority spinner, file stub, tooltips |
 | `go run ./examples/inspector` | Preferences inspector: table (JetBrains Mono), toolbar, tabs, message box |
@@ -518,6 +521,7 @@ container. Layout extras (`Stack`, `Pad`, `Overlay`) are in
 ```bash
 go run ./examples/gallery -screenshot docs/screenshots
 go run ./examples/mail -screenshot docs/screenshots
+go run ./examples/tour -shot docs/screenshots
 ```
 
 ### Mail — mailclientd + mailclientui

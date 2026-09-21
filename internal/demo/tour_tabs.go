@@ -108,12 +108,20 @@ func buildTabsPage(t *tourState) widget.Component {
 func (p *tabsPage) refresh() {
 	t := p.t
 	if p.where != nil {
-		if t.win.Decorations() == platform.DecorationsClient {
-			p.where.SetText("Right now the toolkit draws this window's frame, so the strip above is the " +
-				"caption: the caption buttons sit beside the tabs and the empty part of the strip moves " +
-				"the window. Switch the frame on the Frames page and the same strip becomes the window's " +
-				"first row under the desktop's title bar, which is what Chromium does.")
-		} else {
+		switch {
+		case t.win.Decorations() == platform.DecorationsClient && stripStacked(t):
+			p.where.SetText("Right now the toolkit draws this window's frame, and this pack stacks it: " +
+				"the era it comes from had a caption strip of its own, so the tabs sit in a row under it " +
+				"rather than in it — Windows 95, Windows XP, classic Mac OS and Motif all did that. Pick " +
+				"a pack whose frame is merged, on the Skins page, and the same tabs move up into the " +
+				"caption beside the caption buttons: GTK, Windows 10, macOS and the web-era packs.")
+		case t.win.Decorations() == platform.DecorationsClient:
+			p.where.SetText("Right now the toolkit draws this window's frame and this pack merges it, so " +
+				"the strip above is the caption itself: the caption buttons sit beside the tabs and the " +
+				"empty part of the strip moves the window. Switch the frame on the Frames page and the " +
+				"same strip becomes the window's first row under the desktop's title bar, which is what " +
+				"Chromium does.")
+		default:
 			p.where.SetText("Right now the desktop draws this window's frame, so the strip above is the " +
 				"window's first row under the desktop's title bar — the same widget, laid out as an " +
 				"ordinary row, which is what Chromium falls back to. Switch the frame on the Frames page " +
@@ -141,17 +149,39 @@ func (p *tabsPage) refresh() {
 		[2]string{"selected", strconv.Itoa(t.strip.Selected()+1) + " of " + strconv.Itoa(t.strip.Len())},
 		[2]string{"decorations", t.win.Decorations().String()},
 		[2]string{"strip is", captionOrRow(t)},
+		[2]string{"caption", captionStyle(t)},
 		[2]string{"tab type", widgets.TabMimeType},
 		[2]string{"a tab moves", platform.DragMove.String()},
-		[2]string{"carries windows", yesNo(carried)},
+		[2]string{"toplevel drag", yesNo(carried)},
 		[2]string{"a tab leaves", when},
 		[2]string{"backend", t.a.BackendName()},
 	))
 }
 
 func captionOrRow(t *tourState) string {
-	if t.win.Decorations() == platform.DecorationsClient {
-		return "the window's caption"
+	switch {
+	case t.win.Decorations() != platform.DecorationsClient:
+		return "the window's first row"
+	case stripStacked(t):
+		return "a row under the caption"
 	}
-	return "the window's first row"
+	return "the window's caption"
+}
+
+// stripStacked reports that the look keeps a caption strip of its own
+// above the header bar (Windows 95, XP, classic Mac, Motif) rather than
+// merging the two into one (GTK, Windows 10, macOS, the web-era packs).
+func stripStacked(t *tourState) bool {
+	hb := t.win.Caption()
+	return hb != nil && hb.Stacked()
+}
+
+func captionStyle(t *tourState) string {
+	if t.win.Decorations() != platform.DecorationsClient {
+		return "the desktop's"
+	}
+	if stripStacked(t) {
+		return "stacked — an era caption above the strip"
+	}
+	return "merged — the strip is the caption"
 }

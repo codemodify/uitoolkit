@@ -246,7 +246,7 @@ func (p *desktopPage) refresh() {
 		[2]string{"", ""},
 		[2]string{"tray host", yesNo(platform.StatusItemAvailable())},
 		[2]string{"tray item", trayState},
-		[2]string{"host draws menus", yesNo(platform.HostMenuNative())},
+		[2]string{"menu chrome", yesNo(platform.HostMenuNative())},
 		[2]string{"", ""},
 		[2]string{"portal dialog", yesNo(platform.FileChooserAvailable())},
 		[2]string{"preferred", nativeDialogName()},
