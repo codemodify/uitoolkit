@@ -397,7 +397,14 @@ func svEqFace(ctx *paintengine2d.Context, w, h float32, f *panel.Face) {
 	// look drew the zero line: everything under it is a cut.
 	pre, last := rectOf(q.Preamp), rectOf(q.Band(9))
 	mid := pre.Min.Y + float32(int(pre.Dy()/2))
-	ctx.DrawRect(paintengine2d.XYWH(pre.Min.X-3, mid, last.Max.X-pre.Min.X+6, pre.Max.Y-mid), paintengine2d.Fill(hex("#d3d7e0")))
+	ctx.DrawRect(paintengine2d.XYWH(pre.Min.X-3, mid, last.Max.X-pre.Min.X+6, pre.Max.Y-mid), paintengine2d.Fill(hex("#c2c6d0")))
+	// A dotted rule between each pair of bands.
+	for i := 0; i < 9; i++ {
+		x := float32(int(rectOf(q.Band(i)).Max.X + (rectOf(q.Band(i+1)).Min.X-rectOf(q.Band(i)).Max.X)/2))
+		for y := pre.Min.Y + 1; y < pre.Max.Y-1; y += 2 {
+			ctx.DrawRect(paintengine2d.XYWH(x, y, 1, 1), paintengine2d.Fill(hex("#8c92a0")))
+		}
+	}
 
 	fader := func(fr paintengine2d.Rect) {
 		cx := fr.Min.X + fr.Dx()/2
@@ -590,17 +597,22 @@ func svCapsule(ctx *paintengine2d.Context, w, h float32, s string, navy, down, o
 	pixLabel(ctx, float32(int((w-float32(pixWidth(s)))/2))+d, float32(int((h-6)/2))+d, s, col)
 }
 
-// svLamp is the small glossy lamp beside a toggle: dark blue off, lit on.
+// svLamp is the small glossy lamp beside a toggle: a quiet blue off, and
+// lit — brighter, with a halo bleeding onto the chrome — on.
 func svLamp(ctx *paintengine2d.Context, x, y float32, on bool) {
 	c := paintengine2d.Pt(x, y)
-	ctx.DrawCircle(c, 3.5, paintengine2d.Fill(hex("#394260")))
-	col := hex("#40588c")
+	col := hex("#4b68a8")
 	if on {
-		col = hex(svBlue)
+		col = hex("#8fb6ff")
+		ctx.DrawCircle(c, 4.8, paintengine2d.Radial(paintengine2d.RadialGradient{
+			Center: c, Radius: 4.8,
+			Stops: []paintengine2d.GradientStop{stop(0, hex("#8fb6ffa0")), stop(1, hex("#8fb6ff00"))},
+		}))
 	}
-	ctx.DrawCircle(c, 2.6, paintengine2d.Radial(paintengine2d.RadialGradient{
+	ctx.DrawCircle(c, 3.2, paintengine2d.Fill(hex("#2c3654")))
+	ctx.DrawCircle(c, 2.5, paintengine2d.Radial(paintengine2d.RadialGradient{
 		Center: paintengine2d.Pt(x-0.8, y-0.8), Radius: 3,
-		Stops: []paintengine2d.GradientStop{stop(0, lerpColor(col, hex("#ffffff"), 0.6)), stop(1, col)},
+		Stops: []paintengine2d.GradientStop{stop(0, lerpColor(col, hex("#ffffff"), 0.65)), stop(1, col)},
 	}))
 }
 
