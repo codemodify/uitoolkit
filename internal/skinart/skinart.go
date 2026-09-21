@@ -637,5 +637,5 @@ func sortCells(cells []Cell) {
 // runs, and a skin the toolkit ships is a skin the reproducibility test
 // regenerates and compares.
 func Plans() []*Plan {
-	return []*Plan{Nocturne(), Cassette(), Deck(), Minim(), Marquee(), Lantern()}
+	return []*Plan{Nocturne(), Cassette(), Deck(), Minim(), Marquee(), Lantern(), MinimClassic()}
 }
