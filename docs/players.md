@@ -327,7 +327,9 @@ Real hardware, through the nested-KWin rig, is in
 [docs/e2e/2026-09-17/players-realhw.md](e2e/2026-09-17/players-realhw.md),
 and the five gaps below that were closed afterwards are checked on the same
 rig in
-[docs/e2e/2026-09-21/toolkit-gaps.md](e2e/2026-09-21/toolkit-gaps.md).
+[docs/e2e/2026-09-21/toolkit-gaps.md](e2e/2026-09-21/toolkit-gaps.md). Minim's three skins, the live switch and Minim Silver's
+round corners are checked there too, on Wayland and X11 at 1 and 1.75, in
+[docs/e2e/2026-09-21/minim-skins-realhw.md](e2e/2026-09-21/minim-skins-realhw.md).
 
 ## What they ran into
 
