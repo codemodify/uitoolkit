@@ -110,7 +110,7 @@ func New(a *app.Application, opts Options) (*Player, error) {
 	}
 	p.Spectrum.Fall = 0.7
 
-	main, err := p.open(a, opts, "Minim — a visual demo", StripW, StripH)
+	main, err := p.open(a, opts, "Minim — a visual demo", layoutStrip, StripW, StripH)
 	if err != nil {
 		return nil, err
 	}
@@ -125,7 +125,7 @@ func New(a *app.Application, opts Options) (*Player, error) {
 	p.iMain = p.Desk.Add("main", main)
 
 	if !opts.NoEq {
-		w, err := p.open(a, opts, "Minim equaliser", StripW, EqH)
+		w, err := p.open(a, opts, "Minim equaliser", layoutEqualiser, StripW, EqH)
 		if err != nil {
 			return nil, err
 		}
@@ -136,7 +136,7 @@ func New(a *app.Application, opts Options) (*Player, error) {
 		p.Desk.Attach(p.iEq, p.iMain, players.SideBottom)
 	}
 	if !opts.NoList {
-		w, err := p.open(a, opts, "Minim playlist", StripW, ListH)
+		w, err := p.open(a, opts, "Minim playlist", layoutPlaylist, StripW, ListH)
 		if err != nil {
 			return nil, err
 		}
@@ -179,12 +179,22 @@ func New(a *app.Application, opts Options) (*Player, error) {
 // had, and a *look's* silhouette is only asked of a window the toolkit
 // frames — where the desktop draws the frame, the window is the rectangle
 // inside it and there is nothing to cut.
-func (p *Player) open(a *app.Application, opts Options, title string, w, h int) (*app.Window, error) {
-	return players.OpenSized(a, platform.WindowOptions{
+//
+// Each is given its role — the name of the layout it is laid out by — so a
+// skin can dress one window differently from the others: Minim Silver's
+// equaliser has a tab for a header where the other two have a band. A look
+// that says nothing about the role gives every window its one frame.
+func (p *Player) open(a *app.Application, opts Options, title, role string, w, h int) (*app.Window, error) {
+	win, err := players.OpenSized(a, platform.WindowOptions{
 		Title:       title,
 		Headless:    opts.Headless,
 		Decorations: platform.DecorationsClient,
 	}, w, h, true)
+	if err != nil {
+		return nil, err
+	}
+	win.SetFrameRole(role)
+	return win, nil
 }
 
 // Start begins the clock and shows the windows.
@@ -358,22 +368,16 @@ func (p *Player) autoPreset() {
 	}
 }
 
-// restyle is what follows a change of face: each window's title, and the
-// focus, which must not be left on a control the new face has hidden.
+// restyle is what follows a change of face: the focus, which must not be
+// left on a control the new face has hidden.
+//
+// The titles do not change. The panels print theirs in capitals, as the era
+// did, and that is each skin's own choice about how its caption reads
+// ("case": "upper" on its caption's text role): the windows keep the
+// player's titles, which is what a screen reader and the desktop's window
+// list read.
 func (p *Player) restyle() {
 	f := faceOf(p.App.Look())
-	titles := [3]string{"Minim — a visual demo", "Minim equaliser", "Minim playlist"}
-	switch f {
-	case faceClassic:
-		titles = [3]string{"MINIM · A VISUAL DEMO", "MINIM EQUALIZER", "MINIM PLAYLIST"}
-	case faceSilver:
-		titles = [3]string{"MINIM · A VISUAL DEMO", "MINIM EQUALIZER", "PLAYLIST"}
-	}
-	for i, w := range []*app.Window{p.Main, p.Eq, p.List} {
-		if w != nil {
-			w.SetTitle(titles[i])
-		}
-	}
 	if p.strip != nil {
 		p.strip.show(f)
 		keepFocus(p.Main, p.strip.play)

@@ -6,7 +6,6 @@ import (
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/a11y"
 	"github.com/codemodify/uitoolkit/internal/players"
-	"github.com/codemodify/uitoolkit/internal/players/minim/panel"
 	"github.com/codemodify/uitoolkit/layout"
 	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
@@ -39,8 +38,15 @@ type tracks struct {
 	// reveal is a row to bring into view at the next layout, plus one: a
 	// row asked for before the list has its size cannot be scrolled to.
 	reveal int
-	// geo is the panel's playlist layout, nil in the widget face.
-	geo *panel.List
+	// geo is where the panel face's rows, groove and first row are in the
+	// list's own box, from the skin's layout; nil in the widget face.
+	geo *listGeo
+}
+
+// listGeo is a panel face's playlist, in the list's own coordinates.
+type listGeo struct {
+	rows, bar paintengine2d.Rect
+	rowH      float32
 }
 
 func newTracks(p *Player) *tracks {
@@ -58,8 +64,8 @@ func (t *tracks) count() int { return t.p.Transport.List.Len() }
 // font as a list view would fit it.
 func (t *tracks) rowH() float32 {
 	lk := t.Look()
-	if t.geo != nil {
-		return style.Dip(lk, float32(t.geo.RowH))
+	if t.geo != nil && t.geo.rowH > 0 {
+		return t.geo.rowH
 	}
 	return style.FittedRowHeight(lk, 28)
 }
@@ -77,7 +83,7 @@ func (t *tracks) frame() style.Insets {
 func (t *tracks) rows() paintengine2d.Rect {
 	lk, b := t.Look(), t.LocalBounds()
 	if t.geo != nil {
-		return box(lk, t.geo.Rows, paintengine2d.Pt(style.Dip(lk, float32(t.geo.Rows.X())), style.Dip(lk, float32(t.geo.Rows.Y()))))
+		return t.geo.rows
 	}
 	in := t.frame().Apply(b)
 	if t.overflows(in.Dy()) {
@@ -89,7 +95,7 @@ func (t *tracks) rows() paintengine2d.Rect {
 func (t *tracks) bar() paintengine2d.Rect {
 	lk, b := t.Look(), t.LocalBounds()
 	if t.geo != nil {
-		return box(lk, t.geo.Scroll, paintengine2d.Pt(style.Dip(lk, float32(t.geo.Rows.X())), style.Dip(lk, float32(t.geo.Rows.Y()))))
+		return t.geo.bar
 	}
 	in := t.frame().Apply(b)
 	if !t.overflows(in.Dy()) {
@@ -118,16 +124,20 @@ func (t *tracks) thumb() paintengine2d.Rect {
 	if t.geo != nil {
 		// A panel's thumb is a picture of a fixed size, as the era's was.
 		if _, th, ok := style.SkinSpriteSize(lk, "list.thumb"); ok {
-			h = style.Dip(lk, th-2*panelMargin)
+			h = style.Dip(lk, th)
 		}
 	}
 	h = max(h, style.Dip(lk, 8))
 	span := g.Dy() - h
-	y := g.Min.Y
+	y := float32(0)
 	if m := t.maxOffset(); m > 0 {
-		y += span * t.offset / m
+		y = span * t.offset / m
 	}
-	return paintengine2d.XYWH(g.Min.X, snapDev(y), g.Dx(), h)
+	if t.geo != nil {
+		// On the panel's grid, like every other piece of it.
+		return paintengine2d.XYWH(g.Min.X, g.Min.Y+snapDesign(y, style.Dip(lk, 1)), g.Dx(), h)
+	}
+	return paintengine2d.XYWH(g.Min.X, snapDev(g.Min.Y+y), g.Dx(), h)
 }
 
 // EnsureVisible scrolls the least needed to show row i. Asked before the
@@ -229,10 +239,10 @@ func (t *tracks) paintPanel(ctx *paintengine2d.Context, lk style.LookAndFeel, in
 	rows := t.rows()
 	rh := t.rowH()
 	base := lk.Font()
-	if t.geo.Bold {
+	if in.rowBold {
 		base = lk.BoldFont()
 	}
-	face := players.ScaledFace(base, style.Dip(lk, float32(t.geo.Font)))
+	face := players.ScaledFace(base, style.Dip(lk, in.rowSize))
 	playing := t.p.Transport.List.Index()
 	pad := style.Dip(lk, 3)
 	ctx.Save()

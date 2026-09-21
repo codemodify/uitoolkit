@@ -1,68 +1,67 @@
 package minim
 
 import (
+	"math"
 	"strings"
 
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/internal/players"
 	"github.com/codemodify/uitoolkit/internal/players/minim/panel"
 	"github.com/codemodify/uitoolkit/style"
+	"github.com/codemodify/uitoolkit/widget"
 )
 
 // The faces.
 //
 // Minim wears three skins, and two of them are not dressings for its widgets
-// but *panels*: pictures of the whole window with holes where the keys go
-// (internal/players/minim/panel says where). A skin cannot lay out a panel —
-// the format re-skins controls and says nothing about where they sit — so
-// the player carries one layout per panel and picks it by the pack it is
-// wearing. The widget tree is the same one in every face: switching skins
-// moves and repaints the controls, hides the few one face has and another
-// does not, and rebuilds nothing, so the focus, the tab order and the
-// accessibility tree survive a switch the way they survive Lantern's.
+// but *panels*: pictures of the whole window with holes where the keys go.
+// Each states where its holes are as a fixed layout — named slots at design
+// coordinates (docs/skins.md, "Fixed layouts") — and the player binds its
+// controls to the slot names and lets the skin place them. It carries no
+// rect of its own for either panel: a key is where the skin it is wearing
+// says, so a panel someone else draws for Minim puts its keys wherever its
+// own art has them.
 //
-// A pack that is not one of Minim's panels — the "minim" skin itself, and
-// every other one of the hundred and twenty-odd — gets the widget face: the
-// ordinary layout, painted by whatever the look paints.
+// The widget tree is the same one in every face: switching skins moves and
+// repaints the controls, hides the few one face has and another does not,
+// and rebuilds nothing, so the focus, the tab order and the accessibility
+// tree survive a switch the way they survive Lantern's.
+//
+// A pack with no Minim layout — the "minim" skin itself, and every other one
+// of the hundred and twenty-odd — gets the widget face: the ordinary
+// layout, painted by whatever the look paints.
 
 // face is which of the layouts a look gets.
 type face uint8
 
 const (
-	faceWidgets face = iota // the "minim" skin, and any pack that is not a panel
+	faceWidgets face = iota // any pack without Minim's layouts
 	faceClassic             // "minim-classic"
 	faceSilver              // "minim-silver"
 )
 
-// faceOf is the face a look gets. It asks for the panel's own background as
-// well as the pack's name, so a skin that has lost its art — or a stranger's
-// skin that borrowed the name — is laid out as widgets rather than as a
-// panel with nothing painted under it.
-func faceOf(lk style.LookAndFeel) face {
-	var f face
-	switch style.LookAppearance(lk).Name {
-	case SkinClassic:
-		f = faceClassic
-	case SkinSilver:
-		f = faceSilver
-	default:
-		return faceWidgets
-	}
-	if _, _, ok := style.SkinSpriteSize(lk, "main.face"); !ok {
-		return faceWidgets
-	}
-	return f
-}
+// The layouts a panel skin states for the three windows, and the frame role
+// each window is given so a skin can dress it differently (the silver
+// equaliser's tab). These names are the player's vocabulary; the rects are
+// the skin's.
+const (
+	layoutStrip     = panel.LayoutStrip
+	layoutEqualiser = panel.LayoutEqualiser
+	layoutPlaylist  = panel.LayoutPlaylist
+)
 
-// geometry is a panel face's layout, nil for the widget face.
-func (f face) geometry() *panel.Face {
-	switch f {
-	case faceClassic:
-		return panel.Classic
-	case faceSilver:
-		return panel.Silver
+// faceOf is the face a look gets. A look is a panel when its skin states the
+// strip's layout; which panel it is — and so which ink its rows and its
+// analyser are set in — is the pack's name, and a panel skin the player does
+// not know by name is set in the classic ink.
+func faceOf(lk style.LookAndFeel) face {
+	if _, ok := style.SkinLayoutOf(lk, layoutStrip); !ok {
+		return faceWidgets
 	}
-	return nil
+	if style.LookAppearance(lk).Name == SkinSilver {
+		return faceSilver
+	}
+	return faceClassic
 }
 
 // panelled reports whether the face is a panel.
@@ -79,6 +78,10 @@ type ink struct {
 	text, row, current, selected, selectedText, info paintengine2d.Color
 	curve, peak                                      paintengine2d.Color
 	ramp                                             []paintengine2d.Color
+	// rowSize is the size the playlist's rows are set at, in design
+	// pixels, and rowBold their weight.
+	rowSize float32
+	rowBold bool
 }
 
 func (f face) ink() *ink {
@@ -100,6 +103,8 @@ var classicInk = ink{
 	info:         rgb(0x00, 0xe0, 0x00),
 	curve:        rgb(0xe4, 0xd1, 0x2f),
 	peak:         rgb(0x9a, 0x9a, 0xa6),
+	rowSize:      11,
+	rowBold:      true,
 	// Green at the floor, then yellow, then orange at the very top: the
 	// climb an analyser of the era drew, one colour per row.
 	ramp: []paintengine2d.Color{
@@ -119,6 +124,7 @@ var silverInk = ink{
 	info:         rgb(0xe6, 0xee, 0xff),
 	curve:        rgb(0x6c, 0x8c, 0xc8),
 	peak:         rgb(0xe6, 0xee, 0xff),
+	rowSize:      11,
 	// A dot-matrix bar: lit rows with a dark row between each, so a bar
 	// reads as a stack of dots rather than as a solid block.
 	ramp: func() []paintengine2d.Color {
@@ -136,63 +142,37 @@ func rgb(r, g, b uint8) paintengine2d.Color {
 
 // ---- painting a panel --------------------------------------------------------------
 
-// panelMargin is the empty design pixel round every panel sprite (see
-// internal/skinart, pixMargin): a sprite is drawn into its box grown by it.
-const panelMargin = 1
-
-// box is a panel rect as a rect in a component's own coordinates at the
-// look's scale, given the component's origin in the panel.
-func box(lk style.LookAndFeel, at panel.R, origin paintengine2d.Point) paintengine2d.Rect {
-	d := func(v int) float32 { return style.Dip(lk, float32(v)) }
-	return paintengine2d.XYWH(d(at.X())-origin.X, d(at.Y())-origin.Y, d(at.W()), d(at.H()))
+// slotRect is where a slot of a layout is in a component's own coordinates,
+// the component's box being the whole layout.
+func slotRect(lk style.LookAndFeel, layout, slot string, box paintengine2d.Rect) paintengine2d.Rect {
+	r, _ := style.SkinSlotRect(lk, layout, slot, box)
+	return r
 }
 
-// panelSize is a panel face's content box for a window h design pixels
-// tall: the whole of it, since the art is drawn for exactly that box.
-func panelSize(lk style.LookAndFeel, g *panel.Face, h int) paintengine2d.Point {
-	return paintengine2d.Pt(style.Dip(lk, float32(g.ContentW())), style.Dip(lk, float32(g.ContentH(h))))
-}
-
-// art paints a panel sprite into a rect of the component's own. It reports
-// false when the look has no such sprite, so the caller can fall back.
+// art paints a panel sprite into a rect of the component's own, at the
+// sprite's own size. It reports false when the look has no such sprite, so
+// the caller can fall back.
 func art(lk style.LookAndFeel, ctx *paintengine2d.Context, r paintengine2d.Rect, name string) bool {
-	m := style.Dip(lk, panelMargin)
-	return style.DrawSkinSprite(lk, ctx, r.Inset(-m), name, paintengine2d.Color{})
+	return style.DrawSkinSprite(lk, ctx, r, name, paintengine2d.Color{})
 }
 
-// keyArt is a key's sprite for a state: "key.play", "key.play.down",
-// "key.eq.on", "key.eq.on.down" — falling back along the same order a skin's
-// part states do, so a key drawn in two states still works in four.
-func keyArt(lk style.LookAndFeel, ctx *paintengine2d.Context, r paintengine2d.Rect, name string, st style.ControlState) bool {
-	var tries []string
-	down := st.Pressed()
-	switch {
-	case st.Checked() && down:
-		tries = []string{name + ".on.down", name + ".on", name + ".down", name}
-	case st.Checked():
-		tries = []string{name + ".on", name}
-	case down:
-		tries = []string{name + ".down", name}
-	default:
-		tries = []string{name}
-	}
-	for _, t := range tries {
-		if art(lk, ctx, r, t) {
-			return true
-		}
-	}
-	return false
-}
-
-// paintAsKey makes a glyph button paint as the named key in a panel face,
-// and as itself in the widget face.
-func paintAsKey(b *players.GlyphButton, name string) {
+// paintAsKey makes a glyph button paint as the art its slot in a panel's
+// layout gives it — at rest, under the pointer, held down, switched on —
+// and take the pointer only on that art; in the widget face it paints as
+// itself.
+func paintAsKey(b *players.GlyphButton, layout, slot string) {
 	b.Painter = func(ctx *paintengine2d.Context, r paintengine2d.Rect, st style.ControlState) bool {
 		lk := b.Look()
 		if !faceOf(lk).panelled() {
 			return false
 		}
-		return keyArt(lk, ctx, r, name, st)
+		return style.DrawSkinSlot(lk, ctx, widget.SlotArtRect(b, layout, slot), layout, slot, st)
+	}
+	b.Shaper = func(lk style.LookAndFeel, size paintengine2d.Point) *style.Silhouette {
+		if !faceOf(lk).panelled() {
+			return nil
+		}
+		return style.SkinSlotShape(lk, size, widget.SlotArtRect(b, layout, slot), layout, slot)
 	}
 }
 
@@ -200,27 +180,32 @@ func paintAsKey(b *players.GlyphButton, name string) {
 // face's background already has printed on it. The thumb is the sprite's own
 // size, and the fader's Travel is set to half of it along its length, so the
 // pointer and the picture agree about where the ends are.
-func paintAsThumb(f *players.Fader, name string) {
-	f.Painter = func(ctx *paintengine2d.Context, r paintengine2d.Rect, t float32, st style.ControlState) bool {
+func paintAsThumb(f *players.Fader, name, layout, slot string) {
+	f.Painter = func(ctx *paintengine2d.Context, _ paintengine2d.Rect, t float32, st style.ControlState) bool {
 		lk := f.Look()
-		sw, sh, ok := style.SkinSpriteSize(lk, name)
+		w, h, ok := style.SkinSpriteSize(lk, name)
 		if !faceOf(lk).panelled() || !ok {
 			// Travel is read by the pointer, which always comes after a
 			// paint, so the paint is where the face's answer is kept.
 			f.Travel = 0
 			return false
 		}
-		w, h := sw-2*panelMargin, sh-2*panelMargin
+		// The groove's own rect, on the face's grid rather than the
+		// fader's whole-pixel box.
+		r := widget.SlotArtRect(f, layout, slot)
 		tw, th := style.Dip(lk, w), style.Dip(lk, h)
+		// The thumb moves in whole design pixels, so it stays on the grid
+		// the face under it is drawn on.
+		d := style.Dip(lk, 1)
 		var thumb paintengine2d.Rect
 		if f.Horizontal {
 			f.Travel = w / 2
-			x := r.Min.X + t*(r.Dx()-tw)
-			thumb = paintengine2d.XYWH(snapDev(x), r.Min.Y+snapDev((r.Dy()-th)/2), tw, th)
+			x := snapDesign(t*(r.Dx()-tw), d)
+			thumb = paintengine2d.XYWH(r.Min.X+x, r.Min.Y+snapDesign((r.Dy()-th)/2, d), tw, th)
 		} else {
 			f.Travel = h / 2
-			y := r.Min.Y + (1-t)*(r.Dy()-th)
-			thumb = paintengine2d.XYWH(r.Min.X+snapDev((r.Dx()-tw)/2), snapDev(y), tw, th)
+			y := snapDesign((1-t)*(r.Dy()-th), d)
+			thumb = paintengine2d.XYWH(r.Min.X+snapDesign((r.Dx()-tw)/2, d), r.Min.Y+y, tw, th)
 		}
 		sprite := name
 		if st.Pressed() {
@@ -230,6 +215,16 @@ func paintAsThumb(f *players.Fader, name string) {
 		}
 		return art(lk, ctx, thumb, sprite)
 	}
+}
+
+// snapDesign rounds v to a whole number of design pixels d device pixels
+// wide: a piece of a panel moved by a fraction of one lands on the grid the
+// rest of the panel is drawn on.
+func snapDesign(v, d float32) float32 {
+	if d <= 0 {
+		return v
+	}
+	return float32(math.Round(float64(v/d))) * d
 }
 
 // snapDev rounds to a whole device pixel, so a thumb that has moved by a
@@ -262,10 +257,9 @@ func pixText(lk style.LookAndFeel, ctx *paintengine2d.Context, x, y float32, s s
 			}
 		}
 		if ctx != nil {
-			m := d(panelMargin)
-			style.DrawSkinSprite(lk, ctx, paintengine2d.XYWH(x-m, y-m, d(w), d(h)), name, col)
+			style.DrawSkinSprite(lk, ctx, paintengine2d.XYWH(x, y, d(w), d(h)), name, col)
 		}
-		x += d(w - 2*panelMargin + 1)
+		x += d(w + 1)
 	}
 	return max(x-x0-d(1), 0)
 }
@@ -295,7 +289,9 @@ func pixScroll(lk style.LookAndFeel, ctx *paintengine2d.Context, b paintengine2d
 	over := w - b.Dx()
 	x := b.Min.X
 	if over > 0 {
-		x -= snapDev(over * float32(players.ScrollK(lk, over, p.Transport.Pos)))
+		// Slid in whole design pixels, so the letters stay on the panel's
+		// grid as they go.
+		x -= snapDesign(over*float32(players.ScrollK(lk, over, p.Transport.Pos)), style.Dip(lk, 1))
 	}
 	ctx.Save()
 	ctx.ClipRect(b)
@@ -303,8 +299,9 @@ func pixScroll(lk style.LookAndFeel, ctx *paintengine2d.Context, b paintengine2d
 	ctx.Restore()
 }
 
-// ledClock paints the clock in the skin's segmented digits.
-func ledClock(lk style.LookAndFeel, ctx *paintengine2d.Context, m *panel.Main, origin paintengine2d.Point, clock string) {
+// ledClock paints the clock in the skin's segmented digits, in the strip's
+// digit and colon slots inside box.
+func ledClock(lk style.LookAndFeel, ctx *paintengine2d.Context, box paintengine2d.Rect, clock string) {
 	// "m:ss" or "mm:ss" to four digits: the era's clock showed minutes and
 	// seconds in two digits each, with a leading zero.
 	digits := strings.ReplaceAll(clock, ":", "")
@@ -313,7 +310,7 @@ func ledClock(lk style.LookAndFeel, ctx *paintengine2d.Context, m *panel.Main, o
 	}
 	digits = digits[len(digits)-4:]
 	for i, r := range digits {
-		art(lk, ctx, box(lk, m.Digits[i], origin), "led."+string(r))
+		art(lk, ctx, slotRect(lk, layoutStrip, "digit."+string(rune('0'+i)), box), "led."+string(r))
 	}
-	art(lk, ctx, box(lk, m.Colon, origin), "led.colon")
+	art(lk, ctx, slotRect(lk, layoutStrip, "colon", box), "led.colon")
 }
