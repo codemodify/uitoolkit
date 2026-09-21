@@ -53,10 +53,19 @@ func (skinEngine) Decoration(l *Classic, st DecorationState) DecorationSpec {
 		spec.Caption = max(skinWhole(w.Caption*s), l.S(skinCaptionMin))
 		// A caption the skin resized has to resize its buttons with it, or
 		// the art and the hit boxes disagree.
-		side := skinWhole(spec.Caption * 0.62)
-		spec.Button = paintengine2d.Pt(max(side, l.S(skinCaptionMin)), 0)
+		side := max(skinWhole(spec.Caption*0.62), l.S(skinCaptionMin))
+		spec.Button = paintengine2d.Pt(side, 0)
 		spec.CloseButton = paintengine2d.Point{}
 		spec.ButtonPad = Insets{Right: skinWhole(spec.Caption * 0.2), Left: skinWhole(spec.Caption * 0.2)}
+		if full := float32(math.Round(float64(l.S(24)))); spec.Caption < full {
+			// A button with no height of its own is the caption's height,
+			// and a frame gives such a button at least 24 pixels to be —
+			// which, under a band shorter than that, grows the band rather
+			// than the button. A skin that states a short caption means
+			// it, so its buttons are square and stood in the middle of it.
+			spec.Button.Y = side
+			spec.ButtonPad.Top = float32(math.Floor(float64(spec.Caption-side) * 0.5))
+		}
 		spec.ButtonGap = skinWhole(spec.Caption * 0.12)
 		spec.CenterButtons = true
 	}
@@ -141,9 +150,37 @@ func (skinEngine) DrawCaptionTitle(l *Classic, ctx *paintengine2d.Context, b pai
 	}
 	// A skin's title is real text in a real font, not a bitmap alphabet: it
 	// has to hold a window name in any language the user reads, and it has
-	// to be legible to a magnifier.
-	captionTitle(l, ctx, l.bold, b, title, col, true, l.S(8))
+	// to be legible to a magnifier. Its size is the caption text role's when
+	// the role states one — a fourteen-pixel band cannot hold a title set at
+	// the body size — and it is bold either way, as a caption always was.
+	f := l.bold
+	if t := sk.textFor("caption"); t != nil && t.Size > 0 {
+		f = BakeFamily(l.uiFamily, WeightBold, t.Size*l.Scale()/sk.Design.Scale, col)
+	}
+	pad := l.S(8)
+	if sk.has("caption.title") && f != nil && title != "" {
+		// The plate behind the title: the gap a ribbed or grooved band
+		// leaves for the words, as wide as the words are. It is the one
+		// piece of a caption that depends on the title, which is why it is
+		// a part of its own rather than something a fixed slice of the
+		// band could say — the band cannot know how long the title is.
+		show := title
+		if f.Advance(show) > b.Dx()-pad {
+			show = f.Fit(show, max(b.Dx()-pad, 4))
+		}
+		w := f.Advance(show) + 2*skinWhole(l.S(captionTitleRoom))
+		plate := paintengine2d.XYWH(b.Min.X+(b.Dx()-w)*0.5, b.Min.Y, w, b.Dy())
+		plate.Min.X = float32(math.Round(float64(plate.Min.X)))
+		plate.Max.X = float32(math.Round(float64(plate.Max.X)))
+		sk.draw(l, ctx, plate, "caption.title", cs)
+	}
+	captionTitle(l, ctx, f, b, title, col, true, pad)
 }
+
+// captionTitleRoom is the room the caption.title plate leaves either side
+// of the words, in design pixels, so they never touch the band. A plate that
+// wants more draws it into its own end slices.
+const captionTitleRoom = 4
 
 func (skinEngine) DrawCaptionButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, k CaptionButton, cs ControlState, st DecorationState) {
 	sk := skinFor(l)

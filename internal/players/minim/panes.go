@@ -6,6 +6,7 @@ import (
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/a11y"
 	"github.com/codemodify/uitoolkit/internal/players"
+	"github.com/codemodify/uitoolkit/internal/players/minim/panel"
 	"github.com/codemodify/uitoolkit/layout"
 	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
@@ -18,7 +19,8 @@ import (
 // the main one, because that is the thing being demonstrated: three windows
 // that behave as one object, snapping flush and travelling together. The
 // arithmetic is in players.Rack and the desktop half is players.Desk; all
-// either window does here is lay itself out.
+// either window does here is lay itself out — in the face its look asks for
+// (face.go), like the strip.
 
 // ---- the equaliser -----------------------------------------------------------
 
@@ -27,11 +29,13 @@ type eqPane struct {
 	widget.Base
 	p *Player
 
-	on     *players.GlyphButton
-	flat   *widgets.Button
-	preset *widgets.ComboBox
-	preamp *players.Fader
-	bands  []*players.Fader
+	on      *players.GlyphButton
+	auto    *players.GlyphButton
+	presets *players.GlyphButton
+	flat    *widgets.Button
+	preset  *widgets.ComboBox
+	preamp  *players.Fader
+	bands   []*players.Fader
 }
 
 func newEqPane(p *Player) *eqPane {
@@ -45,6 +49,13 @@ func newEqPane(p *Player) *eqPane {
 	})
 	e.on.Toggle = true
 	e.on.Checked = p.Equaliser.On
+	e.auto = players.NewGlyphButton(players.GlyphNone, "Auto: a preset per track", func() {
+		p.auto = !p.auto
+		p.lastTrack = -1
+		p.refresh()
+	})
+	e.auto.Toggle = true
+	e.presets = players.NewGlyphButton(players.GlyphNone, "Presets", func() { e.presetMenu() })
 
 	e.flat = widgets.NewButton("Flat", func() { p.Equaliser.Flat() })
 	e.flat.Tip = "Take every band back to zero"
@@ -71,9 +82,18 @@ func newEqPane(p *Player) *eqPane {
 		e.bands = append(e.bands, f)
 	}
 
+	paintAsKey(e.on, "key.on")
+	paintAsKey(e.auto, "key.auto")
+	paintAsKey(e.presets, "key.presets")
+	for _, f := range append([]*players.Fader{e.preamp}, e.bands...) {
+		paintAsThumb(f, "eq.thumb")
+	}
+
 	e.Add(e.on)
+	e.Add(e.auto)
 	e.Add(e.flat)
 	e.Add(e.preset)
+	e.Add(e.presets)
 	e.Add(e.preamp)
 	for _, f := range e.bands {
 		e.Add(f)
@@ -81,10 +101,34 @@ func newEqPane(p *Player) *eqPane {
 	return e
 }
 
+// presetMenu is the PRESETS key: the presets by name, the one in force
+// ticked.
+func (e *eqPane) presetMenu() {
+	var items []*widgets.MenuItem
+	for _, pr := range players.EqPresets() {
+		name := pr.Name
+		items = append(items, widgets.RadioItem(name, "preset", name == e.p.Equaliser.Preset,
+			func() { e.p.Equaliser.Apply(name) }))
+	}
+	o := widget.DeviceOrigin(e.presets)
+	widgets.ShowContextMenu(e.presets, paintengine2d.Pt(o.X, o.Y+e.presets.Bounds().Dy()), items...)
+}
+
+// show puts the controls a face has on and takes the others off: the panels
+// have ON, AUTO and PRESETS keys, the widget face a Flat button and a combo.
+func (e *eqPane) show(f face) {
+	panelled := f.panelled()
+	e.auto.SetVisible(panelled)
+	e.presets.SetVisible(panelled)
+	e.flat.SetVisible(!panelled)
+	e.preset.SetVisible(!panelled)
+}
+
 // sync puts the model back into the faders — after a preset, after Flat.
 func (e *eqPane) sync() {
 	eq := e.p.Equaliser
 	e.on.SetChecked(eq.On)
+	e.auto.SetChecked(e.p.auto)
 	e.preamp.Set(eq.Preamp)
 	for i, f := range e.bands {
 		if i < len(eq.Gains) {
@@ -102,11 +146,38 @@ func (e *eqPane) sync() {
 
 func (e *eqPane) Measure(c layout.Constraints) paintengine2d.Point {
 	lk := e.Look()
+	if g := faceOf(lk).geometry(); g != nil {
+		return c.Constrain(panelSize(lk, g, panel.EqH))
+	}
 	return c.Constrain(paintengine2d.Pt(style.Dip(lk, StripW), style.Dip(lk, 80)))
 }
 
 func (e *eqPane) Arrange(r paintengine2d.Rect) {
 	e.SetBounds(r)
+	f := faceOf(e.Look())
+	e.show(f)
+	if g := f.geometry(); g != nil {
+		e.arrangePanel(&g.Eq)
+		return
+	}
+	e.arrangeWidgets()
+}
+
+func (e *eqPane) arrangePanel(q *panel.Eq) {
+	lk := e.Look()
+	at := func(c widget.Component, r panel.R) { c.Arrange(box(lk, r, paintengine2d.Point{})) }
+	at(e.on, q.On)
+	at(e.auto, q.Auto)
+	at(e.presets, q.Presets)
+	at(e.preamp, q.Preamp)
+	for i, f := range e.bands {
+		at(f, q.Band(i))
+	}
+	e.flat.Arrange(paintengine2d.Rect{})
+	e.preset.Arrange(paintengine2d.Rect{})
+}
+
+func (e *eqPane) arrangeWidgets() {
 	lk := e.Look()
 	dip := func(v float32) float32 { return style.Dip(lk, v) }
 	b := e.LocalBounds()
@@ -135,14 +206,21 @@ func (e *eqPane) Arrange(r paintengine2d.Rect) {
 	for i, f := range e.bands {
 		f.Arrange(paintengine2d.XYWH(x+float32(i)*each, top, each-dip(1), h))
 	}
+	e.auto.Arrange(paintengine2d.Rect{})
+	e.presets.Arrange(paintengine2d.Rect{})
 }
 
 // Paint draws the zero rule behind the faders, which is the one mark that
 // says which way is up on a control whose whole range is a number nobody
-// reads.
+// reads — or, in a panel, the panel and the curve the ten bands make.
 func (e *eqPane) Paint(ctx *paintengine2d.Context) {
 	lk, b := e.Look(), e.LocalBounds()
 	if len(e.bands) == 0 {
+		return
+	}
+	if f := faceOf(lk); f.panelled() {
+		art(lk, ctx, b, "eq.face")
+		e.paintCurve(ctx, lk, &f.geometry().Eq, f.ink())
 		return
 	}
 	pal := lk.Palette()
@@ -166,6 +244,39 @@ func (e *eqPane) Paint(ctx *paintengine2d.Context) {
 	}
 }
 
+// paintCurve draws the response the ten bands make across the graph well,
+// a design pixel at a time so it sits on the panel's grid.
+func (e *eqPane) paintCurve(ctx *paintengine2d.Context, lk style.LookAndFeel, q *panel.Eq, in *ink) {
+	g := box(lk, q.Graph, paintengine2d.Point{})
+	n := q.Graph.W() - 4
+	if n < 2 {
+		return
+	}
+	d := style.Dip(lk, 1)
+	pts := e.p.Equaliser.Curve(n)
+	mid := g.Min.Y + g.Dy()/2
+	amp := g.Dy()/2 - 2*d
+	col := paintengine2d.Fill(in.curve)
+	if !e.p.Equaliser.On {
+		col = paintengine2d.Fill(style.Mix(in.curve, paintengine2d.RGB(0.4, 0.4, 0.45), 0.35))
+	}
+	for i, v := range pts {
+		x := g.Min.X + 2*d + float32(i)*d
+		y := snapDev(mid - v*amp)
+		ctx.DrawRect(paintengine2d.XYWH(snapDev(x), y, max(d, 1), max(d, 1)), col)
+	}
+}
+
+// MousePress on the equaliser's own face moves the stack from there, and
+// opens the skin menu on the secondary button.
+func (e *eqPane) MousePress(ev widget.MouseEvent) bool {
+	if e.p.rightClick(e, ev) {
+		return true
+	}
+	e.p.Eq.StartMove()
+	return true
+}
+
 func (e *eqPane) KeyPress(ev widget.KeyEvent) bool { return e.p.Keys(e.p.Eq, ev) }
 
 func (e *eqPane) CaptionAt(paintengine2d.Point) bool { return true }
@@ -185,10 +296,14 @@ type listPane struct {
 	widget.Base
 	p *Player
 
-	list   *widgets.ListView
+	list   *tracks
 	foot   *foot
 	toTop  *widgets.Button
 	shrink *players.GlyphButton
+
+	// The panel faces' keys along the bottom, and the small transport.
+	add, rem, sel, misc, opts *players.GlyphButton
+	mini                      [6]*players.GlyphButton
 }
 
 func newListPane(p *Player) *listPane {
@@ -196,20 +311,7 @@ func newListPane(p *Player) *listPane {
 	l.Init(l)
 	l.SetManagesChildren(true)
 
-	pl := p.Transport.List
-	// The time goes before the title rather than after it: a row that runs
-	// out of width loses the end of the title, and a playlist that hides
-	// the one number it is there to show would be a strange playlist.
-	l.list = widgets.NewListView(pl.Len(), func(i int) string {
-		t := pl.At(i)
-		return fmt.Sprintf("%2d.  %s   %s", i+1, players.Clock(t.Length), t.Label())
-	}, func(i int) {
-		p.Transport.SelectTrack(i)
-		if p.Transport.State != players.Playing {
-			p.Command(players.CmdPlayPause)
-		}
-	})
-	l.list.SetAccessibleName("Playlist")
+	l.list = newTracks(p)
 	l.foot = &foot{p: p}
 	l.foot.Init(l.foot)
 	l.foot.Win = p.List
@@ -221,11 +323,100 @@ func newListPane(p *Player) *listPane {
 		p.toggle(p.iList)
 	})
 
+	// The four keys of the era's playlist, and its options key. There is
+	// nothing to add or remove — the library is invented and nothing is
+	// played — so each opens a menu that says what it would do and does the
+	// part that is true here, rather than doing nothing silently.
+	l.add = players.NewGlyphButton(players.GlyphNone, "Add", func() {
+		l.menu(l.add, widgets.MenuItem{Text: "Adding files needs a media stack: Minim plays nothing", Disabled: true})
+	})
+	l.rem = players.NewGlyphButton(players.GlyphNone, "Remove", func() {
+		l.menu(l.rem, widgets.MenuItem{Text: "The library is invented and stays as it is", Disabled: true})
+	})
+	l.sel = players.NewGlyphButton(players.GlyphNone, "Select", func() {
+		l.menu(l.sel, widgets.MenuItem{Text: "Show the playing track", OnClick: func() {
+			l.list.EnsureVisible(p.Transport.List.Index())
+		}})
+	})
+	l.misc = players.NewGlyphButton(players.GlyphNone, "Miscellaneous: skins", func() {
+		o := widget.DeviceOrigin(l.misc)
+		p.skinMenu(l.misc, paintengine2d.Pt(o.X, o.Y+l.misc.Bounds().Dy()))
+	})
+	l.opts = players.NewGlyphButton(players.GlyphNone, "List options", func() {
+		l.menu(l.opts,
+			widgets.MenuItem{Text: "Play the first track", OnClick: func() { p.Transport.SelectTrack(0) }},
+			widgets.MenuItem{Text: "Close the playlist", OnClick: func() { p.toggle(p.iList) }})
+	})
+	for b, name := range map[*players.GlyphButton]string{
+		l.add: "key.add", l.rem: "key.rem", l.sel: "key.sel", l.misc: "key.misc", l.opts: "key.opts",
+	} {
+		paintAsKey(b, name)
+	}
+	for i, m := range []struct {
+		g     players.Glyph
+		name  string
+		label string
+		c     players.Command
+	}{
+		{players.GlyphPrev, "mini.prev", "Previous track", players.CmdPrev},
+		{players.GlyphPlay, "mini.play", "Play", players.CmdNone},
+		{players.GlyphPause, "mini.pause", "Pause", players.CmdPlayPause},
+		{players.GlyphStop, "mini.stop", "Stop", players.CmdStop},
+		{players.GlyphNext, "mini.next", "Next track", players.CmdNext},
+		{players.GlyphEject, "mini.eject", "Eject: stop and go back to the first track", players.CmdNone},
+	} {
+		m := m
+		b := players.NewGlyphButton(m.g, m.label, func() {
+			switch m.name {
+			case "mini.play":
+				p.Transport.Play()
+				p.Command(players.CmdNone)
+			case "mini.eject":
+				p.Transport.SelectTrack(0)
+				p.Command(players.CmdStop)
+			default:
+				p.Command(m.c)
+			}
+		})
+		paintAsKey(b, m.name)
+		l.mini[i] = b
+	}
+
 	l.Add(l.list)
 	l.Add(l.foot)
 	l.Add(l.toTop)
 	l.Add(l.shrink)
+	for _, b := range []*players.GlyphButton{l.add, l.rem, l.sel, l.misc} {
+		l.Add(b)
+	}
+	for _, b := range l.mini {
+		l.Add(b)
+	}
+	l.Add(l.opts)
 	return l
+}
+
+// menu opens a small menu under one of the keys.
+func (l *listPane) menu(under *players.GlyphButton, items ...widgets.MenuItem) {
+	rows := make([]*widgets.MenuItem, len(items))
+	for i := range items {
+		rows[i] = &items[i]
+	}
+	o := widget.DeviceOrigin(under)
+	widgets.ShowContextMenu(under, paintengine2d.Pt(o.X, o.Y+under.Bounds().Dy()), rows...)
+}
+
+// show puts on the keys a face has and takes off the others.
+func (l *listPane) show(f face) {
+	panelled := f.panelled()
+	for _, b := range []*players.GlyphButton{l.add, l.rem, l.sel, l.misc, l.opts} {
+		b.SetVisible(panelled)
+	}
+	for _, b := range l.mini {
+		b.SetVisible(panelled)
+	}
+	l.toTop.SetVisible(!panelled)
+	l.shrink.SetVisible(!panelled)
 }
 
 func (l *listPane) sync() {
@@ -235,15 +426,29 @@ func (l *listPane) sync() {
 	}
 	l.list.Invalidate()
 	l.foot.Invalidate()
+	if faceOf(l.Look()).panelled() {
+		// The small display and clock are printed on the pane itself.
+		l.Invalidate()
+	}
 }
 
 func (l *listPane) Measure(c layout.Constraints) paintengine2d.Point {
 	lk := l.Look()
+	if g := faceOf(lk).geometry(); g != nil {
+		return c.Constrain(panelSize(lk, g, panel.ListH))
+	}
 	return c.Constrain(paintengine2d.Pt(style.Dip(lk, StripW), style.Dip(lk, 196)))
 }
 
 func (l *listPane) Arrange(r paintengine2d.Rect) {
 	l.SetBounds(r)
+	f := faceOf(l.Look())
+	l.show(f)
+	if g := f.geometry(); g != nil {
+		l.arrangePanel(&g.List)
+		return
+	}
+	l.list.geo = nil
 	lk := l.Look()
 	dip := func(v float32) float32 { return style.Dip(lk, v) }
 	b := l.LocalBounds()
@@ -255,9 +460,65 @@ func (l *listPane) Arrange(r paintengine2d.Rect) {
 	l.foot.Arrange(paintengine2d.XYWH(0, y, max(b.Dx()-btn-ctl-dip(8), 0), row))
 	l.toTop.Arrange(paintengine2d.XYWH(b.Dx()-btn-ctl-dip(4), y+(row-ctl)/2, btn, ctl))
 	l.shrink.Arrange(paintengine2d.XYWH(b.Dx()-ctl, y+(row-ctl)/2, ctl, ctl))
+	for _, c := range append([]*players.GlyphButton{l.add, l.rem, l.sel, l.misc, l.opts}, l.mini[:]...) {
+		c.Arrange(paintengine2d.Rect{})
+	}
+}
+
+func (l *listPane) arrangePanel(g *panel.List) {
+	lk := l.Look()
+	at := func(c widget.Component, r panel.R) { c.Arrange(box(lk, r, paintengine2d.Point{})) }
+	l.list.geo = g
+	// The list takes its rows and its scroll bar, which sit side by side.
+	at(l.list, panel.R{g.Rows.X(), g.Rows.Y(), g.Scroll.Right() - g.Rows.X(), g.Rows.H()})
+	at(l.foot, g.Info)
+	at(l.add, g.Add)
+	at(l.rem, g.Rem)
+	at(l.sel, g.Sel)
+	at(l.misc, g.Misc)
+	at(l.opts, g.Opts)
+	for i, b := range l.mini {
+		at(b, g.Mini[i])
+	}
+	l.toTop.Arrange(paintengine2d.Rect{})
+	l.shrink.Arrange(paintengine2d.Rect{})
+}
+
+// Paint is the panel, in a panel face, and over it the small display — the
+// playing track's length over the queue's — and the small clock.
+func (l *listPane) Paint(ctx *paintengine2d.Context) {
+	lk := l.Look()
+	f := faceOf(lk)
+	g := f.geometry()
+	if g == nil {
+		return
+	}
+	art(lk, ctx, l.LocalBounds(), "list.face")
+	in, o := f.ink(), paintengine2d.Point{}
+	t := l.p.Transport
+	info := box(lk, g.List.Info, o)
+	line := players.Clock(t.Length()) + "/" + players.Clock(t.List.Total())
+	pixText(lk, ctx, info.Min.X+style.Dip(lk, 3), info.Min.Y+(info.Dy()-style.Dip(lk, 6))/2, line, in.info)
+	clk := box(lk, g.List.Clock, o)
+	c := players.Clock(t.Pos)
+	if t.State == players.Stopped {
+		c = players.Clock(0)
+	}
+	w := pixWidth(lk, c)
+	pixText(lk, ctx, clk.Max.X-w-style.Dip(lk, 3), clk.Min.Y+(clk.Dy()-style.Dip(lk, 6))/2, c, in.info)
+}
+
+func (l *listPane) MousePress(e widget.MouseEvent) bool {
+	if l.p.rightClick(l, e) {
+		return true
+	}
+	l.p.List.StartMove()
+	return true
 }
 
 func (l *listPane) KeyPress(e widget.KeyEvent) bool { return l.p.Keys(l.p.List, e) }
+
+func (l *listPane) CaptionAt(paintengine2d.Point) bool { return true }
 
 func (l *listPane) Describe(n *a11y.Node) {
 	n.Role = a11y.RoleGroup
@@ -285,9 +546,14 @@ func (f *foot) Arrange(b paintengine2d.Rect) { f.SetBounds(b) }
 // thirteen controls in it, and there is no honest place to put a sentence.
 // The playlist window has the room, so this is where the compact player
 // says out loud what it is — and it says it in the accessibility tree as
-// well, where a window this small is read rather than looked at.
+// well, where a window this small is read rather than looked at. A panel
+// face prints its small display here instead, and says what it is in its
+// title bar.
 func (f *foot) Paint(ctx *paintengine2d.Context) {
 	lk, b := f.Look(), f.LocalBounds()
+	if faceOf(lk).panelled() {
+		return
+	}
 	pal := lk.Palette()
 	half := b.Dy() / 2
 	lk.DrawLabel(ctx, paintengine2d.XYWH(b.Min.X, b.Min.Y, b.Dx(), half),

@@ -8,6 +8,8 @@
 // audio stack in this toolkit and there is not going to be one.
 //
 //	minim                          # the strip, the equaliser and the playlist
+//	minim -theme minim-classic     # in the classic panel skin
+//	minim -theme minim-silver      # in the rounded silver one
 //	minim -theme breeze-night      # the same app with the skin dropped
 //	minim -only strip              # the strip on its own
 //	minim -scale 1.75              # at a fractional scale
@@ -18,6 +20,12 @@
 // That needs two things of the desktop — being told where a window is, and
 // being able to put one somewhere — and only X11 offers both; a Wayland
 // toplevel has no position at all. The strip says which of the two it got.
+//
+// The skin key in the strip, Ctrl+K, or a right-click anywhere on the face
+// switches between Minim's three skins live, all three windows at once;
+// Ctrl+Shift+K drops the skin and puts it back. The last choice is kept in
+// $XDG_CONFIG_HOME/uitoolkit/minim.json and worn again on the next run
+// unless -theme says otherwise.
 //
 // Escape quits.
 package main
@@ -37,7 +45,7 @@ import (
 )
 
 func main() {
-	theme := flag.String("theme", minim.Skin, "the pack to run in (a skin, or any of the others)")
+	theme := flag.String("theme", "", "the pack to run in: minim, minim-classic, minim-silver, or any other (default: the last one chosen, else minim)")
 	only := flag.String("only", "", "strip | strip+eq | strip+list (default: all three)")
 	scale := flag.Float64("scale", 0, "display scale (0: the desktop's, or $UITK_SCALE)")
 	shot := flag.String("shot", "", "paint one frame of each window into this directory and exit")
@@ -46,15 +54,21 @@ func main() {
 	log.SetFlags(0)
 	log.SetPrefix("minim: ")
 
-	if *theme != "" {
-		// The same override UITK_THEME=<pack> gives any app. The look is
-		// built when the application is, so it has to be set first.
-		os.Setenv(style.ThemeEnv, *theme)
-	}
 	headless := *shot != ""
+	if *theme == "" {
+		// The skin the player was last switched to, which is the one piece
+		// of state it keeps. A shot is posed, so it is never remembered.
+		*theme = minim.Skin
+		if r := minim.Remembered(); r != "" && !headless {
+			*theme = r
+		}
+	}
+	// The same override UITK_THEME=<pack> gives any app. The look is built
+	// when the application is, so it has to be set first.
+	os.Setenv(style.ThemeEnv, *theme)
 	a := uitoolkit.New(uitoolkit.Options{Headless: headless, Scale: float32(*scale)})
 
-	opts := minim.Options{Headless: headless, Scale: float32(*scale)}
+	opts := minim.Options{Headless: headless, Scale: float32(*scale), Remember: !headless}
 	switch *only {
 	case "strip":
 		opts.NoEq, opts.NoList = true, true

@@ -101,7 +101,7 @@ func TestEveryControlIsOnTheKeyboard(t *testing.T) {
 	for _, c := range []widget.Component{
 		p.strip.prev, p.strip.play, p.strip.stop, p.strip.next,
 		p.strip.mute, p.strip.seek, p.strip.volume,
-		p.strip.shuffle, p.strip.repeat, p.strip.eqBtn, p.strip.listBtn,
+		p.strip.shuffle, p.strip.repeat, p.strip.eqBtn, p.strip.listBtn, p.strip.skinBtn,
 	} {
 		if !playertest.Reaches(ring, c) {
 			t.Errorf("Tab never reaches %v (%q)", c.Name(), nameOf(p.Main, c))

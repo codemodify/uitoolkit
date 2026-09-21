@@ -12,7 +12,10 @@
 //
 //   - A skin is a pack. Minim wears the "minim" skin, which is a pixel sheet
 //     over win95; run it with UITK_THEME=breeze-night and it is the same app
-//     in an ordinary theme, with every control still a control.
+//     in an ordinary theme, with every control still a control. It has two
+//     more, "minim-classic" and "minim-silver", which are panels rather than
+//     dressings (face.go), and the skin key, Ctrl+K or a right-click
+//     switches between all three live (skins.go).
 //   - A skinned window need not be a rectangle. The silhouette is the skin's
 //     (window.shape), so the app never mentions it, and the strip stands on
 //     a stepped chin with the desktop showing through beside it.
@@ -26,15 +29,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/codemodify/paintengine2d"
-	"github.com/codemodify/uitoolkit/a11y"
 	"github.com/codemodify/uitoolkit/app"
 	"github.com/codemodify/uitoolkit/internal/players"
-	"github.com/codemodify/uitoolkit/layout"
 	"github.com/codemodify/uitoolkit/platform"
-	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
-	"github.com/codemodify/uitoolkit/widgets"
 )
 
 // The window sizes, in logical pixels. They are the design pixels the skin
@@ -47,8 +45,9 @@ const (
 	ListH  = 232
 )
 
-// Skin is the pack this player wears. It is an ordinary pack id: anything
-// else in Settings runs the same app.
+// Skin is the pack this player wears by default. It is an ordinary pack id:
+// anything else in Settings runs the same app, and Skins lists the other two
+// it was drawn for.
 const Skin = "minim"
 
 // Player is the three windows and the one model under them.
@@ -73,6 +72,16 @@ type Player struct {
 	// the desktop has placed them and may not be obeyed when it does.
 	stacked bool
 	tries   int
+
+	// lastSkin is the skin Ctrl+Shift+K puts back; remember is whether a
+	// switch is written down for the next run.
+	lastSkin string
+	remember bool
+	// auto is the equaliser's AUTO key: a preset per track. lastTrack is the
+	// track it last chose for, so it chooses once per track and then leaves
+	// the faders to whoever moves them.
+	auto      bool
+	lastTrack int
 }
 
 // Options is what the command line passes in.
@@ -82,6 +91,8 @@ type Options struct {
 	Scale float32
 	// NoEq and NoList open the main strip on its own.
 	NoEq, NoList bool
+	// Remember writes a skin switch down for the next run (skins.go).
+	Remember bool
 }
 
 // New opens the player's windows and wires them to one model.
@@ -94,6 +105,8 @@ func New(a *app.Application, opts Options) (*Player, error) {
 		Equaliser: players.NewEqualizer(),
 		iEq:       -1,
 		iList:     -1,
+		remember:  opts.Remember,
+		lastTrack: -1,
 	}
 	p.Spectrum.Fall = 0.7
 
@@ -137,6 +150,14 @@ func New(a *app.Application, opts Options) (*Player, error) {
 	p.Transport.Changed = p.refresh
 	p.Equaliser.Changed = p.refresh
 	p.pulse = players.NewPulse(70*time.Millisecond, p.advance)
+	if isSkin(p.Worn()) {
+		p.lastSkin = p.Worn()
+	}
+	// A look can change under the player from outside it too — Settings,
+	// an edited look.json, UITK_THEME on a watcher — and the titles and the
+	// focus follow the face whichever way it changed.
+	a.OnLookChange(p.restyle)
+	p.restyle()
 	p.refresh()
 	// Something in every window has the keyboard from the first frame. A
 	// player's keys are bare letters that bubble up from whatever is
@@ -251,6 +272,7 @@ func (p *Player) placed() bool {
 // here is cheap and idempotent, so it runs on every tick rather than being
 // threaded through twenty callbacks.
 func (p *Player) refresh() {
+	p.autoPreset()
 	if p.strip != nil {
 		p.strip.sync()
 	}
@@ -282,6 +304,9 @@ func (p *Player) Command(c players.Command) {
 func (p *Player) Keys(w *app.Window, e widget.KeyEvent) bool {
 	if e.Key == platform.KeyEscape {
 		p.App.Quit()
+		return true
+	}
+	if p.skinKeys(w, e, w.Content()) {
 		return true
 	}
 	if players.Typing(w.Focus()) {
@@ -318,315 +343,66 @@ func maxInt(a, b int) int {
 	return b
 }
 
-// ---- the strip ---------------------------------------------------------------
-
-// strip is the main window's content: a display, a seek bar and a transport
-// row, laid out by hand because a compact player's proportions *are* its
-// design and a flex box would give them away.
-type strip struct {
-	widget.Base
-	p *Player
-
-	readout  *readout
-	analyser *players.AnalyserView
-	seek     *widgets.Slider
-	volume   *widgets.Slider
-
-	prev, play, stop, next *players.GlyphButton
-	mute                   *players.GlyphButton
-	shuffle, repeat        *players.GlyphButton
-	eqBtn, listBtn         *players.GlyphButton
-
-	// seeking is set while the seek bar is being scrubbed, so the clock
-	// does not fight the pointer for the thumb.
-	seeking bool
-}
-
-func newStrip(p *Player) *strip {
-	s := &strip{p: p}
-	s.Init(s)
-	s.SetManagesChildren(true)
-
-	s.readout = newReadout(p)
-	s.analyser = players.NewAnalyserView(p.Spectrum)
-	s.analyser.Drag = p.Main
-	s.analyser.Pixelated = true
-	s.analyser.Gap = 1
-	s.analyser.MinBarW = 2
-	s.analyser.Peaks = true
-
-	s.seek = widgets.NewSlider(0, 1, 0, func(v float32) {
-		if s.seeking {
-			p.Transport.Seek(v)
-		}
-	})
-	s.seek.SetAccessibleName("Seek")
-	s.volume = widgets.NewSlider(0, 100, p.Transport.Volume*100, func(v float32) {
-		p.Transport.SetVolume(v / 100)
-	})
-	s.volume.SetAccessibleName("Volume")
-
-	s.prev = players.NewGlyphButton(players.GlyphPrev, "Previous track", func() { p.Command(players.CmdPrev) })
-	s.play = players.NewGlyphButton(players.GlyphPlay, "Play", func() { p.Command(players.CmdPlayPause) })
-	s.stop = players.NewGlyphButton(players.GlyphStop, "Stop", func() { p.Command(players.CmdStop) })
-	s.next = players.NewGlyphButton(players.GlyphNext, "Next track", func() { p.Command(players.CmdNext) })
-	s.mute = players.NewGlyphButton(players.GlyphVolume, "Mute", func() { p.Command(players.CmdMute) })
-	s.mute.Toggle = true
-
-	s.shuffle = players.NewGlyphButton(players.GlyphShuffle, "Shuffle", func() { p.Command(players.CmdShuffle) })
-	s.shuffle.Toggle = true
-	s.repeat = players.NewGlyphButton(players.GlyphRepeat, "Repeat", func() { p.Command(players.CmdRepeat) })
-	s.repeat.Toggle = true
-	s.eqBtn = players.NewGlyphButton(players.GlyphSliders, "Equaliser window", func() { p.toggle(p.iEq) })
-	s.eqBtn.Toggle = true
-	s.listBtn = players.NewGlyphButton(players.GlyphList, "Playlist window", func() { p.toggle(p.iList) })
-	s.listBtn.Toggle = true
-
-	for _, c := range s.kids() {
-		s.Add(c)
-	}
-	return s
-}
-
-func (s *strip) kids() []widget.Component {
-	return []widget.Component{
-		s.readout, s.analyser, s.seek,
-		s.prev, s.play, s.stop, s.next,
-		s.mute, s.volume,
-		s.shuffle, s.repeat, s.eqBtn, s.listBtn,
-	}
-}
-
-// toggle opens or closes one of the satellite windows.
-func (p *Player) toggle(i int) {
-	pane := p.Desk.Rack.Pane(i)
-	if pane == nil {
+// autoPreset is the equaliser's AUTO key at work: once per track, a preset
+// chosen by the track's place in the library — which is what a player of
+// the era did from a file's genre tag, and what an invented library without
+// tags can do honestly.
+func (p *Player) autoPreset() {
+	i := p.Transport.List.Index()
+	if !p.auto || i == p.lastTrack {
 		return
 	}
-	p.Desk.Show(i, !pane.Shown)
-	p.refresh()
-}
-
-// sync puts the model into the controls: the play button's glyph, the
-// toggles, the seek bar's thumb.
-func (s *strip) sync() {
-	t := s.p.Transport
-	if t.State == players.Playing {
-		s.play.SetGlyph(players.GlyphPause, "Pause")
-	} else {
-		s.play.SetGlyph(players.GlyphPlay, "Play")
-	}
-	s.mute.SetGlyph(glyphForVolume(t), muteLabel(t))
-	s.mute.SetChecked(t.Muted())
-	s.shuffle.SetChecked(t.Random)
-	s.repeat.SetChecked(t.Repeat != players.RepeatOff)
-	if t.Repeat == players.RepeatOne {
-		s.repeat.SetGlyph(players.GlyphRepeatOne, "Repeat one")
-	} else {
-		s.repeat.SetGlyph(players.GlyphRepeat, t.Repeat.String())
-	}
-	if p := s.p.Desk.Rack.Pane(s.p.iEq); p != nil {
-		s.eqBtn.SetChecked(p.Shown)
-	}
-	if p := s.p.Desk.Rack.Pane(s.p.iList); p != nil {
-		s.listBtn.SetChecked(p.Shown)
-	}
-	if !s.seeking {
-		s.seek.Value = t.Fraction()
-	}
-	s.volume.Value = t.Volume * 100
-	s.readout.Invalidate()
-	s.analyser.Invalidate()
-	s.seek.Invalidate()
-	s.volume.Invalidate()
-}
-
-func glyphForVolume(t *players.Transport) players.Glyph {
-	if t.Muted() {
-		return players.GlyphMute
-	}
-	return players.GlyphVolume
-}
-
-func muteLabel(t *players.Transport) string {
-	if t.Muted() {
-		return "Unmute"
-	}
-	return "Mute"
-}
-
-// Arrange is the whole design of the compact player: three rows in eighty
-// design pixels, stated in the units the art was drawn in.
-func (s *strip) Arrange(r paintengine2d.Rect) {
-	s.SetBounds(r)
-	lk := s.Look()
-	dip := func(v float32) float32 { return style.Dip(lk, v) }
-	b := s.LocalBounds()
-	w := b.Dx()
-
-	// Row A: the display, with the analyser inside its right-hand end.
-	displayH := dip(38)
-	display := paintengine2d.XYWH(0, 0, w, displayH)
-	s.readout.Arrange(display)
-	an := dip(AnalyserWidth) - dip(6)
-	s.analyser.Arrange(paintengine2d.XYWH(display.Max.X-an-dip(3), display.Min.Y+dip(4), an, displayH-dip(9)))
-
-	// Row B: the seek bar, the full width of the strip.
-	y := displayH + dip(5)
-	seekH := dip(10)
-	s.seek.Arrange(paintengine2d.XYWH(0, y, w, seekH))
-
-	// Row C: transport, volume, toggles.
-	y += seekH + dip(5)
-	btn := dip(21)
-	x := float32(0)
-	for _, c := range []*players.GlyphButton{s.prev, s.play, s.stop, s.next} {
-		c.Arrange(paintengine2d.XYWH(x, y, btn, btn))
-		x += btn + dip(1)
-	}
-	x += dip(5)
-	s.mute.Arrange(paintengine2d.XYWH(x, y, dip(18), btn))
-	x += dip(19)
-
-	// The toggles are pinned to the right-hand end and the volume slider
-	// takes whatever is between: the row keeps its shape when the strip is
-	// wider than it was drawn.
-	small := dip(19)
-	toggles := []*players.GlyphButton{s.shuffle, s.repeat, s.eqBtn, s.listBtn}
-	tw := float32(len(toggles))*small + float32(len(toggles)-1)*dip(1)
-	tx := w - tw
-	volW := max(tx-dip(6)-x, dip(24))
-	s.volume.Arrange(paintengine2d.XYWH(x, y+(btn-dip(10))/2, volW, dip(10)))
-	for _, c := range toggles {
-		c.Arrange(paintengine2d.XYWH(tx, y+(btn-small)/2, small, small))
-		tx += small + dip(1)
+	p.lastTrack = i
+	if pr := players.EqPresets(); len(pr) > 0 && i >= 0 {
+		p.Equaliser.Apply(pr[i%len(pr)].Name)
 	}
 }
 
-func (s *strip) Measure(c layout.Constraints) paintengine2d.Point {
-	lk := s.Look()
-	return c.Constrain(paintengine2d.Pt(style.Dip(lk, StripW), style.Dip(lk, 80)))
-}
-
-// MousePress on the strip itself starts a window move, so the shell between
-// the controls is a drag handle — which is what the whole face of a player
-// this size has always been.
-func (s *strip) MousePress(widget.MouseEvent) bool {
-	s.p.Main.StartMove()
-	return true
-}
-
-func (s *strip) KeyPress(e widget.KeyEvent) bool { return s.p.Keys(s.p.Main, e) }
-
-// CaptionAt tells the frame that the strip's own background is caption: a
-// press there moves the window rather than landing in the app.
-func (s *strip) CaptionAt(paintengine2d.Point) bool { return true }
-
-func (s *strip) Describe(n *a11y.Node) {
-	n.Role = a11y.RolePane
-	if n.Name == "" {
-		n.Name = "Player"
+// restyle is what follows a change of face: each window's title, and the
+// focus, which must not be left on a control the new face has hidden.
+func (p *Player) restyle() {
+	f := faceOf(p.App.Look())
+	titles := [3]string{"Minim — a visual demo", "Minim equaliser", "Minim playlist"}
+	switch f {
+	case faceClassic:
+		titles = [3]string{"MINIM · A VISUAL DEMO", "MINIM EQUALIZER", "MINIM PLAYLIST"}
+	case faceSilver:
+		titles = [3]string{"MINIM · A VISUAL DEMO", "MINIM EQUALIZER", "PLAYLIST"}
 	}
-	n.Description = players.Disclaimer
-}
-
-// ---- the display -------------------------------------------------------------
-
-// readout is the phosphor well: the clock, the track, and the flags a player
-// of this shape printed beside them.
-//
-// It is painted rather than assembled from labels because the whole of it is
-// one object — a display — and because the colours come from the look's
-// palette, so the same component is a phosphor well under the skin and an
-// ordinary sunken field under any of the other packs.
-type readout struct {
-	players.DragsWindow
-	p *Player
-}
-
-func newReadout(p *Player) *readout {
-	r := &readout{p: p}
-	r.Init(r)
-	r.Win = p.Main
-	return r
-}
-
-func (r *readout) Measure(c layout.Constraints) paintengine2d.Point {
-	return c.Constrain(paintengine2d.Pt(style.Dip(r.Look(), 200), style.Dip(r.Look(), 38)))
-}
-
-func (r *readout) Arrange(b paintengine2d.Rect) { r.SetBounds(b) }
-
-// AnalyserWidth is how much of the display's right-hand end the analyser
-// takes, in design pixels. The strip's Arrange puts it there and the
-// readout leaves that much room, so the two agree in one place.
-const AnalyserWidth = 74
-
-func (r *readout) Paint(ctx *paintengine2d.Context) {
-	lk, b := r.Look(), r.LocalBounds()
-	pal := lk.Palette()
-	t := r.p.Transport
-	dip := func(v float32) float32 { return style.Dip(lk, v) }
-	line := max(dip(1), 1)
-
-	// The well. Palette colours, so this is a phosphor display under the
-	// skin and an ordinary sunken field under any other pack.
-	ctx.DrawRect(b, paintengine2d.Fill(pal.Field))
-	ctx.DrawRect(paintengine2d.XYWH(b.Min.X, b.Min.Y, b.Dx(), line), paintengine2d.Fill(pal.FieldBorder))
-	ctx.DrawRect(paintengine2d.XYWH(b.Min.X, b.Max.Y-line, b.Dx(), line), paintengine2d.Fill(pal.FieldBorder))
-
-	pad := dip(4)
-	right := b.Max.X - dip(AnalyserWidth)
-
-	// The clock, in the pack's mono face at a display size: the one number
-	// a player of this shape is read by.
-	clock := players.Clock(t.Pos)
-	if t.State == players.Stopped {
-		clock = players.Clock(0)
+	for i, w := range []*app.Window{p.Main, p.Eq, p.List} {
+		if w != nil {
+			w.SetTitle(titles[i])
+		}
 	}
-	big := players.ScaledFace(lk.MonoFont(), dip(17))
-	cw := big.Advance(clock)
-	players.DrawTextIn(ctx, big, paintengine2d.XYWH(b.Min.X+pad, b.Min.Y+dip(2), cw, dip(22)),
-		clock, pal.Accent, style.AlignStart)
-
-	// The flags beside it: what the transport is doing, and the invented
-	// rate a player of this era printed whether anyone read it or not.
-	tr := t.Track()
-	x := b.Min.X + pad + cw + dip(6)
-	small := players.ScaledFace(lk.Font(), dip(10))
-	players.DrawTextIn(ctx, small, paintengine2d.XYWH(x, b.Min.Y+dip(3), max(right-x-dip(4), 0), dip(20)),
-		fmt.Sprintf("%s · %d kHz · %s", shortState(t.State), tr.Rate, channels(tr)), pal.TextMuted, style.AlignStart)
-
-	// The title under both, scrolling when it does not fit.
-	players.DrawScrollingText(ctx, lk, lk.Font(),
-		paintengine2d.XYWH(b.Min.X+pad, b.Min.Y+dip(23), max(right-b.Min.X-2*pad, 0), dip(14)),
-		tr.Label(), pal.Text, t.Pos)
-}
-
-func shortState(s players.State) string {
-	switch s {
-	case players.Playing:
-		return "play"
-	case players.Paused:
-		return "pause"
+	if p.strip != nil {
+		p.strip.show(f)
+		keepFocus(p.Main, p.strip.play)
 	}
-	return "stop"
-}
-
-func channels(t players.Track) string {
-	if t.Channels >= 2 {
-		return "stereo"
+	if p.eqPane != nil {
+		p.eqPane.show(f)
+		keepFocus(p.Eq, p.eqPane.preamp)
 	}
-	return "mono"
+	if p.listPane != nil {
+		p.listPane.show(f)
+		keepFocus(p.List, p.listPane.list)
+	}
 }
 
-// Describe is the display as a screen reader meets it: one label whose name
-// is everything the well says, so a reader announces the track and the time
-// rather than a blank rectangle.
-func (r *readout) Describe(n *a11y.Node) {
-	t := r.p.Transport
-	n.Role = a11y.RoleLabel
-	n.Name = fmt.Sprintf("%s. %s of %s. %s.",
-		t.Track().Label(), players.Clock(t.Pos), players.Clock(t.Length()), t.State)
-	n.Description = players.Disclaimer
+// keepFocus moves a window's focus to fallback when the control that had it
+// is no longer shown. A face that hides the key the keyboard was on hands the
+// keyboard to the obvious next thing rather than to nothing.
+func keepFocus(w *app.Window, fallback widget.Component) {
+	if w == nil {
+		return
+	}
+	f := w.Focus()
+	if f == nil {
+		return
+	}
+	for c := f; c != nil; c = c.Parent() {
+		if !c.Visible() {
+			w.RequestFocus(fallback)
+			return
+		}
+	}
 }
