@@ -340,6 +340,7 @@ var skinPartNames = map[string]string{
 	"window":         "the window background, tiled or stretched behind everything",
 	"caption":        "the top-level window's caption band",
 	"caption.button": "its close, maximize and minimize buttons (else \"tool\", else \"button\")",
+	"caption.title":  "a plate behind the caption's title, as wide as the title: the gap in a ribbed band",
 	"menu.frame":     "the frame a menu popup is drawn on",
 	"tooltip":        "a tool tip's frame",
 }
