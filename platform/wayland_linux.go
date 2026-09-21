@@ -143,6 +143,10 @@ static void ui_wl_ack(struct xdg_surface *s, uint32_t serial) { xdg_surface_ack_
 static void ui_wl_set_title(struct xdg_toplevel *t, const char *title) { xdg_toplevel_set_title(t, title); }
 static void ui_wl_set_app_id(struct xdg_toplevel *t, const char *id) { xdg_toplevel_set_app_id(t, id); }
 static void ui_wl_set_min(struct xdg_toplevel *t, int w, int h) { xdg_toplevel_set_min_size(t, w, h); }
+// Equal min and max is how xdg-shell states a window that may not be
+// resized: the compositor offers no resize edges and no maximize for it.
+// Zero is "no limit" in the protocol, which is what an unset maximum is.
+static void ui_wl_set_max_size(struct xdg_toplevel *t, int w, int h) { xdg_toplevel_set_max_size(t, w, h); }
 static void ui_wl_commit(struct wl_surface *s) { wl_surface_commit(s); }
 static void ui_wl_attach(struct wl_surface *s, struct wl_buffer *b) { wl_surface_attach(s, b, 0, 0); }
 
@@ -1090,28 +1094,24 @@ func (WaylandBackend) NewSurface(opts WindowOptions) (Surface, error) {
 	if title == "" {
 		title = "uitoolkit"
 	}
-	mw, mh := opts.MinWidth, opts.MinHeight
-	if opts.Popup {
-		if mw < 1 {
-			mw = 1
+	// A resizable toplevel that names no minimum gets one anyway, so a
+	// compositor cannot shrink it to nothing; a fixed one's minimum is its
+	// size, and a floor of 200 by 120 would fight it.
+	fitOpts := opts
+	if opts.Sizing != SizingFixed && !opts.Popup {
+		if fitOpts.MinWidth < 1 {
+			fitOpts.MinWidth = 200
 		}
-		if mh < 1 {
-			mh = 1
-		}
-	} else {
-		if mw < 1 {
-			mw = 200
-		}
-		if mh < 1 {
-			mh = 120
+		if fitOpts.MinHeight < 1 {
+			fitOpts.MinHeight = 120
 		}
 	}
 	s := &wlSurface{
 		conn:     c,
 		title:    title,
 		appID:    "uitoolkit",
-		minW:     mw,
-		minH:     mh,
+		sizeOpts: fitOpts,
+		sizing:   opts.Sizing,
 		logicalW: w,
 		logicalH: h,
 		wantW:    w,
@@ -1130,6 +1130,7 @@ func (WaylandBackend) NewSurface(opts WindowOptions) (Surface, error) {
 		s.bufScale = sc
 		bw, bh = w*sc, h*sc
 	}
+	s.limits = limitsFor(s.sizing, fitOpts, w, h)
 	s.img = paintengine2d.NewImage(bw, bh)
 	s.bufW, s.bufH = bw, bh
 	wlMu.Lock()
@@ -1347,15 +1348,20 @@ type wlSlot struct {
 const maxSlotStale = 32
 
 type wlSurface struct {
-	soft       softDevice // software devices of the buffers (no GPU)
-	id         int
-	conn       *wlConn
-	surf       *C.struct_wl_surface
-	xdg        *C.struct_xdg_surface
-	top        *C.struct_xdg_toplevel
-	title      string
-	appID      string
-	minW, minH int
+	soft  softDevice // software devices of the buffers (no GPU)
+	id    int
+	conn  *wlConn
+	surf  *C.struct_wl_surface
+	xdg   *C.struct_xdg_surface
+	top   *C.struct_xdg_toplevel
+	title string
+	appID string
+	// sizeOpts are the options the window's limits are computed from (its
+	// minimum already defaulted), sizing its resize policy and limits what
+	// xdg_toplevel was last told (platform.SizingSurface).
+	sizeOpts WindowOptions
+	sizing   Sizing
+	limits   SizeLimits
 	// img is the CPU pixmap, nil while the GPU paints the window (a
 	// device-size pixmap beside the GPU surface would only hold memory:
 	// 12.5 MB for a 1280×800 window at 1.75x). bufW × bufH is the buffer's
@@ -1806,7 +1812,7 @@ func (s *wlSurface) bindToplevelLocked() {
 		app := C.CString(appID)
 		C.ui_wl_set_app_id(s.top, app)
 		C.free(unsafe.Pointer(app))
-		C.ui_wl_set_min(s.top, C.int(s.minW), C.int(s.minH))
+		s.applyLimitsLocked()
 		if s.conn.decoMan != nil && !s.popup {
 			// Created before the first buffer is attached (version 1 of
 			// xdg-decoration requires it), and always with an explicit
@@ -2063,6 +2069,11 @@ func (s *wlSurface) Resize(w, h int) error {
 	}
 	s.logicalW, s.logicalH = w, h
 	s.wantW, s.wantH = w, h
+	if s.sizing == SizingFixed {
+		// The pin follows the window: the app is allowed to resize its
+		// own fixed window, the user is not.
+		s.syncLimits()
+	}
 	bw, bh := s.bufferWH()
 	if s.bufW == bw && s.bufH == bh {
 		return nil
@@ -4248,7 +4259,51 @@ func (s *wlSurface) RequestDecorations(d Decorations) {
 func (s *wlSurface) WindowState() WindowState { return s.state }
 
 // Capabilities are the compositor's wm_capabilities (FrameSurface).
-func (s *wlSurface) Capabilities() WMCaps { return s.caps }
+// Capabilities is what xdg_toplevel.wm_capabilities said, less what a fixed
+// window cannot have (FrameSurface).
+func (s *wlSurface) Capabilities() WMCaps { return dropResizeCaps(s.caps, s.sizing) }
+
+// Sizing is the window's resize policy (SizingSurface).
+func (s *wlSurface) Sizing() Sizing { return s.sizing }
+
+// SetSizing changes the policy and re-states the toplevel's limits
+// (SizingSurface).
+func (s *wlSurface) SetSizing(sz Sizing) {
+	if s == nil || s.sizing == sz {
+		return
+	}
+	s.sizing = sz
+	s.syncLimits()
+}
+
+// SizeLimits is what xdg_toplevel was last told (SizingSurface).
+func (s *wlSurface) SizeLimits() SizeLimits { return s.limits }
+
+// syncLimits recomputes the window's limits for its size and states them.
+func (s *wlSurface) syncLimits() {
+	if s == nil {
+		return
+	}
+	s.limits = limitsFor(s.sizing, s.sizeOpts, s.logicalW, s.logicalH)
+	wlMu.Lock()
+	s.applyLimitsLocked()
+	if s.conn != nil && s.conn.dpy != nil {
+		C.ui_wl_flush(s.conn.dpy)
+	}
+	wlMu.Unlock()
+}
+
+// applyLimitsLocked states the toplevel's minimum and maximum. xdg-shell
+// takes logical pixels of the window's geometry, which is what SizeLimits
+// holds, so nothing is converted here.
+func (s *wlSurface) applyLimitsLocked() {
+	if s == nil || s.top == nil {
+		return
+	}
+	l := s.limits
+	C.ui_wl_set_min(s.top, C.int(max(l.MinWidth, 0)), C.int(max(l.MinHeight, 0)))
+	C.ui_wl_set_max_size(s.top, C.int(max(l.MaxWidth, 0)), C.int(max(l.MaxHeight, 0)))
+}
 
 // ConfigureBounds is the compositor's recommended largest window size
 // (xdg_toplevel.configure_bounds, logical px); zero when it has not said.
@@ -4282,6 +4337,9 @@ func (s *wlSurface) StartSystemMove() bool {
 // StartSystemResize hands the held button press to the compositor for an
 // interactive resize from edges (xdg_toplevel.resize).
 func (s *wlSurface) StartSystemResize(edges Edges) bool {
+	if s.sizing == SizingFixed {
+		return false
+	}
 	e := xdgResizeEdge(edges)
 	if e == 0 || !s.heldPress() {
 		return false

@@ -29,6 +29,12 @@ type Offscreen struct {
 	dragOut   offscreenDrag
 	// frame is the simulated desktop behind FrameSurface (offscreen_frame.go).
 	frame offscreenFrame
+	// opts are the options the window was made with, sizing its resize
+	// policy and limits what the simulated desktop was told about how
+	// large the window may be (platform.SizingSurface).
+	opts   WindowOptions
+	sizing Sizing
+	limits SizeLimits
 }
 
 // NewOffscreen allocates a CPU pixmap of the requested size.
@@ -52,6 +58,9 @@ func NewOffscreen(opts WindowOptions) *Offscreen {
 	// The requested size is the window's; a frame's margin is added to the
 	// pixmap around it (offscreen_frame.go).
 	o.frame.geomW, o.frame.geomH = w, h
+	o.opts = opts
+	o.sizing = opts.Sizing
+	o.limits = limitsFor(o.sizing, opts, w, h)
 	o.frame.deco, o.frame.decoSet = requestedDecorations(opts.Decorations), true
 	if opts.Popup {
 		o.frame.deco = DecorationsNone
@@ -82,6 +91,8 @@ func (o *Offscreen) Resize(w, h int) error {
 		return nil
 	}
 	o.frame.geomW, o.frame.geomH = w, h
+	// A fixed window's limits are its size: the app moving it moves them.
+	o.limits = limitsFor(o.sizing, o.opts, w, h)
 	o.resizeSurface()
 	o.queue = append(o.queue, Event{Kind: EventResize, Width: w, Height: h})
 	return nil

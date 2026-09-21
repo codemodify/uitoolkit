@@ -346,6 +346,11 @@ func (w *Window) wantDecorFrame() platform.Frame {
 		Bottom: edge(spec.Shadow.Bottom),
 		Left:   edge(spec.Shadow.Left),
 	}
+	if !w.Resizable() {
+		// Nothing to reach into the margin for: a fixed window's input
+		// region is the window, and the shadow around it clicks through.
+		band = 0
+	}
 	f.Input = platform.FrameInsets{
 		Top:    min(f.Margin.Top, int(band)),
 		Right:  min(f.Margin.Right, int(band)),
@@ -501,11 +506,13 @@ func (w *Window) captionButtonAt(p paintengine2d.Point) platform.CaptionButton {
 // the caption. With one it runs outside, in the margin (the shadow), where
 // Chromium, GTK and SourceGit put theirs, and the margin beyond it is not
 // the window's at all. Corners reach 16 px along each edge; there is no
-// band at all while maximized or on a tiled or constrained edge.
+// band at all while maximized or on a tiled or constrained edge, and none
+// on a window whose size is fixed (platform.SizingFixed) — its whole edge
+// is client space, so a press eight pixels in is the app's.
 func (w *Window) resizeEdgesAt(p paintengine2d.Point) platform.Edges {
 	st := w.state
 	g := w.geom
-	if !g.framed || st.Maximized || st.Fullscreen {
+	if !g.framed || st.Maximized || st.Fullscreen || !w.Resizable() {
 		return 0
 	}
 	win := g.window
