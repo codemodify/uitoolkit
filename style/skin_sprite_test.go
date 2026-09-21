@@ -16,8 +16,8 @@ func TestAnAppPaintsASkinSpriteByName(t *testing.T) {
 		t.Fatal("minim-classic does not load")
 	}
 	w, h, ok := SkinSpriteSize(p.Look(), "led.8")
-	if !ok || w != 11 || h != 15 {
-		t.Fatalf("led.8 is %gx%g (%v), want the 9x13 digit and its margin", w, h, ok)
+	if !ok || w != 9 || h != 13 {
+		t.Fatalf("led.8 is %gx%g (%v), want the 9x13 digit", w, h, ok)
 	}
 	for _, scale := range []float32{1, 1.25, 1.5, 1.75, 2} {
 		InvalidateSkinCache()

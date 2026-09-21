@@ -5,17 +5,16 @@
 // Minim wears three skins. The first, "minim", dresses the ordinary widgets
 // of an ordinary layout. The other two, "minim-classic" and "minim-silver",
 // are panels: the window is a picture with holes in it where the controls
-// are, which is how a player of this shape was always built. A skin cannot
-// lay a panel out — the format re-skins widgets and says nothing about where
-// they go (docs/skins.md, "What a skin cannot do yet") — so the app does it,
-// and the art has to agree with the app to the pixel.
+// are, which is how a player of this shape was always built.
 //
-// This package is how they agree. The generator (internal/skinart) draws each
-// face's backgrounds with its wells, grooves and printed labels at these
-// rects, and the player (internal/players/minim) lays its controls out on the
-// same rects, so neither can move a key without the other following. It is
-// the same rule the generator already keeps for its own sheets — the cell
-// layout is stated once, in Go — carried one step further, to the app.
+// This package is where the generator (internal/skinart) reads them from. It
+// draws each face's backgrounds with its wells, grooves and printed labels at
+// these rects, and writes the same rects into each skin's manifest as a
+// fixed layout (Layouts): named slots the player binds its controls to
+// (docs/skins.md, "Fixed layouts"). The player does not import this package
+// at all — it asks the skin it is wearing where each slot is — so the art and
+// the layout cannot disagree about where a key is, and a skin someone else
+// draws for the player places its keys wherever its own art has them.
 //
 // Every rect is {x, y, w, h} in the window's *content* box: the window less
 // the skin's border and caption, which are stated here too because the art
@@ -57,9 +56,12 @@ const (
 // Face is one panel face: its frame, and the three windows' layouts.
 type Face struct {
 	// Caption is the title band's height and Border the frame round the
-	// content (top, right, bottom, left), in design pixels.
-	Caption int
-	Border  [4]int
+	// content (top, right, bottom, left), in design pixels. EqCaption is
+	// the equaliser's own where it has a caption of its own (a window
+	// variant, docs/skins.md): the silver face's is its tab. Zero: Caption.
+	Caption   int
+	EqCaption int
+	Border    [4]int
 
 	Main Main
 	Eq   Eq
@@ -69,8 +71,19 @@ type Face struct {
 // ContentW is the content box's width.
 func (f *Face) ContentW() int { return WindowW - f.Border[1] - f.Border[3] }
 
-// ContentH is the content box's height for a window of height h.
+// ContentH is the content box's height for a window of height h under the
+// face's own caption.
 func (f *Face) ContentH(h int) int { return h - f.Caption - f.Border[0] - f.Border[2] }
+
+// EqContentH is the equaliser's content height, under its own caption.
+func (f *Face) EqContentH() int { return EqH - f.eqCaption() - f.Border[0] - f.Border[2] }
+
+func (f *Face) eqCaption() int {
+	if f.EqCaption > 0 {
+		return f.EqCaption
+	}
+	return f.Caption
+}
 
 // Main is the strip.
 type Main struct {
@@ -106,8 +119,6 @@ type Main struct {
 
 // Eq is the equaliser.
 type Eq struct {
-	// Tab is the silver face's "EQUALIZER" tab; empty in the classic.
-	Tab R
 	// On, Auto and Presets are the three keys along the top, and Graph
 	// the well the curve is drawn in.
 	On, Auto, Presets, Graph R
@@ -215,8 +226,9 @@ var Classic = &Face{
 // Silver is the rounded silver-and-blue look of the later era: silver
 // chrome, a blue dot-matrix display, glossy round keys and capsule toggles.
 var Silver = &Face{
-	Caption: 15,
-	Border:  [4]int{0, 1, 1, 1},
+	Caption:   15,
+	EqCaption: 13,
+	Border:    [4]int{0, 1, 1, 1},
 	Main: Main{
 		Skin:      R{9, 8, 7, 40},
 		Display:   R{4, 3, 265, 54},
@@ -247,17 +259,19 @@ var Silver = &Face{
 		Repeat:    R{207, 71, 33, 19},
 		Mark:      R{245, 74, 16, 16},
 	},
+	// The equaliser's header is its tab, which is its caption (EqCaption):
+	// the face under it starts at the tab's foot, so the keys come up to
+	// the top and the faders take the room the tab left.
 	Eq: Eq{
-		Tab:      R{18, 0, 76, 13},
-		On:       R{14, 16, 22, 11},
-		Auto:     R{39, 16, 30, 11},
-		Presets:  R{222, 15, 42, 12},
-		Graph:    R{88, 14, 110, 14},
-		Preamp:   R{14, 31, 14, 57},
-		Bands:    R{79, 31, 14, 57},
+		On:       R{14, 4, 22, 11},
+		Auto:     R{39, 4, 30, 11},
+		Presets:  R{222, 3, 42, 12},
+		Graph:    R{88, 2, 110, 14},
+		Preamp:   R{14, 19, 14, 71},
+		Bands:    R{79, 19, 14, 71},
 		BandStep: 18,
-		Labels:   R{8, 90, 257, 8},
-		DB:       R{35, 31, 38, 57},
+		Labels:   R{8, 92, 257, 8},
+		DB:       R{35, 19, 38, 71},
 	},
 	List: List{
 		Rows:   R{5, 3, 252, 176},
@@ -276,4 +290,95 @@ var Silver = &Face{
 		},
 		Clock: R{186, 200, 34, 9},
 	},
+}
+
+// ---- the layouts the skins state -------------------------------------------------
+
+// The names of the three layouts, and of the slots in them, are the player's
+// vocabulary: it binds its controls to these names and asks the skin where
+// each one is. A skin drawn for Minim states these three.
+const (
+	LayoutStrip     = "minim.strip"
+	LayoutEqualiser = "minim.equaliser"
+	LayoutPlaylist  = "minim.playlist"
+)
+
+// Slot is one named rect of a layout, and the sprite its control is painted
+// from, when it is one of the keys ("" for a slot whose control paints
+// itself or that the player prints into).
+type Slot struct {
+	Name string
+	R    R
+	Key  string
+}
+
+// Layout is one window's layout: its content size, the face under it and
+// its slots.
+type Layout struct {
+	Name  string
+	W, H  int
+	Face  string
+	Slots []Slot
+}
+
+// Layouts are the face's three layouts, as the skin states them.
+func (f *Face) Layouts() []Layout {
+	m, q, li := f.Main, f.Eq, f.List
+	strip := Layout{Name: LayoutStrip, W: f.ContentW(), H: f.ContentH(MainH), Face: "main.face", Slots: []Slot{
+		{"skin", m.Skin, "key.skin"},
+		{"display", m.Display, ""},
+		{"state", m.State, ""},
+		{"colon", m.Colon, ""},
+		{"analyser", m.Analyser, ""},
+		{"title", m.TitleText, ""},
+		{"rate", m.RateText, ""},
+		{"freq", m.FreqText, ""},
+		{"mono", m.Mono, ""},
+		{"stereo", m.Stereo, ""},
+		{"volume", m.Volume, ""},
+		{"balance", m.Balance, ""},
+		{"eq", m.EQ, "key.eq"},
+		{"pl", m.PL, "key.pl"},
+		{"seek", m.Seek, ""},
+		{"prev", m.Prev, "key.prev"},
+		{"play", m.Play, "key.play"},
+		{"pause", m.Pause, "key.pause"},
+		{"stop", m.Stop, "key.stop"},
+		{"next", m.Next, "key.next"},
+		{"eject", m.Eject, "key.eject"},
+		{"shuffle", m.Shuffle, "key.shuffle"},
+		{"repeat", m.Repeat, "key.repeat"},
+	}}
+	for i, d := range m.Digits {
+		strip.Slots = append(strip.Slots, Slot{Name: "digit." + string(rune('0'+i)), R: d})
+	}
+	eq := Layout{Name: LayoutEqualiser, W: f.ContentW(), H: f.EqContentH(), Face: "eq.face", Slots: []Slot{
+		{"on", q.On, "key.on"},
+		{"auto", q.Auto, "key.auto"},
+		{"presets", q.Presets, "key.presets"},
+		{"graph", q.Graph, ""},
+		{"preamp", q.Preamp, ""},
+	}}
+	for i := 0; i < 10; i++ {
+		eq.Slots = append(eq.Slots, Slot{Name: "band." + string(rune('0'+i)), R: q.Band(i)})
+	}
+	list := Layout{Name: LayoutPlaylist, W: f.ContentW(), H: f.ContentH(ListH), Face: "list.face", Slots: []Slot{
+		// The list takes its rows and its scroll bar, which sit side by
+		// side; the rows, the bar and the first row are where it paints.
+		{"list", R{li.Rows.X(), li.Rows.Y(), li.Scroll.Right() - li.Rows.X(), li.Rows.H()}, ""},
+		{"rows", li.Rows, ""},
+		{"scroll", li.Scroll, ""},
+		{"row", R{li.Rows.X(), li.Rows.Y(), li.Rows.W(), li.RowH}, ""},
+		{"info", li.Info, ""},
+		{"clock", li.Clock, ""},
+		{"add", li.Add, "key.add"},
+		{"rem", li.Rem, "key.rem"},
+		{"sel", li.Sel, "key.sel"},
+		{"misc", li.Misc, "key.misc"},
+		{"opts", li.Opts, "key.opts"},
+	}}
+	for i, g := range []string{"prev", "play", "pause", "stop", "next", "eject"} {
+		list.Slots = append(list.Slots, Slot{Name: "mini." + string(rune('0'+i)), R: li.Mini[i], Key: "mini." + g})
+	}
+	return []Layout{strip, eq, list}
 }

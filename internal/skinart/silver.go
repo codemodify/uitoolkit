@@ -23,9 +23,14 @@ import (
 // The rounded window is the skin's own: window.shape is one rect the size of
 // the window with a radius on every corner, resolved at the display scale,
 // so the corners are round at every size rather than a picture of round
-// corners. The equaliser's tab-shaped header is drawn on its face under the
-// caption band, because a skin states one caption for every window it
-// dresses (see docs/players.md, "What they ran into").
+// corners. The equaliser has no title band: its header is a tab with its
+// name on it, which is a caption of its own — a window variant for the
+// role the player gives that window (docs/skins.md, "Windows that are not
+// alike") — so the tab is the band's title plate, set from the start.
+//
+// Its round keys and capsules brighten under the pointer, which the later
+// look did and the classic one did not; the layouts bind the hover faces,
+// and a key the pointer is not on falls back to its resting face.
 
 // The silver palette.
 const (
@@ -71,15 +76,15 @@ func MinimSilver() *Plan {
 
 	// ---- the three faces -------------------------------------------------
 	cw := f.ContentW()
-	l.row(f.ContentH(panel.MainH) + 2*pixMargin)
+	l.row(f.ContentH(panel.MainH))
 	l.panel("main.face", cw, f.ContentH(panel.MainH), false, func(ctx *paintengine2d.Context, w, h float32) {
 		svMainFace(ctx, w, h, f)
 	})
-	l.row(f.ContentH(panel.EqH) + 2*pixMargin)
-	l.panel("eq.face", cw, f.ContentH(panel.EqH), false, func(ctx *paintengine2d.Context, w, h float32) {
+	l.row(f.EqContentH())
+	l.panel("eq.face", cw, f.EqContentH(), false, func(ctx *paintengine2d.Context, w, h float32) {
 		svEqFace(ctx, w, h, f)
 	})
-	l.row(f.ContentH(panel.ListH) + 2*pixMargin)
+	l.row(f.ContentH(panel.ListH))
 	l.panel("list.face", cw, f.ContentH(panel.ListH), false, func(ctx *paintengine2d.Context, w, h float32) {
 		svListFace(ctx, w, h, f)
 	})
@@ -89,24 +94,31 @@ func MinimSilver() *Plan {
 	type key struct {
 		name   string
 		r      panel.R
-		draw   func(ctx *paintengine2d.Context, w, h float32, down, on bool)
+		draw   func(ctx *paintengine2d.Context, w, h float32, down, on, hover bool)
 		toggle bool
 	}
-	round := func(g string) func(*paintengine2d.Context, float32, float32, bool, bool) {
-		return func(ctx *paintengine2d.Context, w, h float32, down, on bool) {
+	round := func(g string) func(*paintengine2d.Context, float32, float32, bool, bool, bool) {
+		return func(ctx *paintengine2d.Context, w, h float32, down, on, hover bool) {
 			svRoundKey(ctx, w, h, down)
+			if hover {
+				d := min(w, h)
+				svHoverRing(ctx, paintengine2d.XYWH((w-d)/2, (h-d)/2, d, d), d/2)
+			}
 			svGlyphMark(ctx, w, h, g, down)
 		}
 	}
-	capsule := func(s string, navy bool) func(*paintengine2d.Context, float32, float32, bool, bool) {
-		return func(ctx *paintengine2d.Context, w, h float32, down, on bool) {
-			svCapsule(ctx, w, h, s, navy, down, on)
+	capsule := func(s string, navy bool) func(*paintengine2d.Context, float32, float32, bool, bool, bool) {
+		return func(ctx *paintengine2d.Context, w, h float32, down, on, hover bool) {
+			svCapsule(ctx, w, h, s, navy, down, on, hover)
 		}
 	}
-	lamp := func(g string) func(*paintengine2d.Context, float32, float32, bool, bool) {
-		return func(ctx *paintengine2d.Context, w, h float32, down, on bool) {
+	lamp := func(g string) func(*paintengine2d.Context, float32, float32, bool, bool, bool) {
+		return func(ctx *paintengine2d.Context, w, h float32, down, on, hover bool) {
 			cw := h + 5
 			svCapsuleShape(ctx, paintengine2d.XYWH(0, 0, cw, h), down, false)
+			if hover {
+				svHoverRing(ctx, paintengine2d.XYWH(0, 0, cw, h), h/2)
+			}
 			svGlyphMark(ctx, cw, h, g, down)
 			svLamp(ctx, cw+2+(w-cw-2)/2, h/2, on)
 		}
@@ -133,23 +145,24 @@ func MinimSilver() *Plan {
 	}
 	for _, k := range keys {
 		k := k
-		l.row(k.r.H() + 2*pixMargin)
-		states := []string{"", ".down"}
+		l.row(k.r.H())
+		states := []string{"", ".hover", ".down"}
 		if k.toggle {
-			states = append(states, ".on", ".on.down")
+			states = append(states, ".on", ".on.hover", ".on.down")
 		}
 		for _, st := range states {
 			down := strings.HasSuffix(st, "down")
 			on := strings.HasPrefix(st, ".on")
+			hover := strings.HasSuffix(st, "hover")
 			l.panel("key."+k.name+st, k.r.W(), k.r.H(), false, func(ctx *paintengine2d.Context, w, h float32) {
-				k.draw(ctx, w, h, down, on)
+				k.draw(ctx, w, h, down, on, hover)
 			})
 		}
 	}
 
 	// The skin key: its word in dim dots, stood in a column at the display's
 	// left edge where the later look kept a column of little marks.
-	l.row(m.Skin.H() + 2*pixMargin)
+	l.row(m.Skin.H())
 	for _, st := range []string{"", ".down"} {
 		col := hex(svInkDim)
 		if st != "" {
@@ -164,7 +177,7 @@ func MinimSilver() *Plan {
 	}
 
 	// The small transport on the playlist's display: white marks on blue.
-	l.row(8 + 2*pixMargin)
+	l.row(8)
 	for i, g := range []string{"prev", "play", "pause", "stop", "next", "eject"} {
 		r := li.Mini[i]
 		for _, st := range []string{"", ".down"} {
@@ -180,7 +193,7 @@ func MinimSilver() *Plan {
 	}
 
 	// ---- the display ---------------------------------------------------------
-	l.row(14 + 2*pixMargin)
+	l.row(14)
 	for _, d := range "0123456789-" {
 		d := d
 		l.panel("led."+string(d), 10, 14, false, func(ctx *paintengine2d.Context, w, h float32) {
@@ -191,7 +204,7 @@ func MinimSilver() *Plan {
 		svDot(ctx, 1, 4, hex(svInk))
 		svDot(ctx, 1, 8, hex(svInk))
 	})
-	l.row(9 + 2*pixMargin)
+	l.row(9)
 	l.panel("state.play", m.State.W(), m.State.H(), false, func(ctx *paintengine2d.Context, w, h float32) {
 		svDot(ctx, 0, 0, hex(svInk))
 		for i := float32(0); i < 3; i++ {
@@ -227,7 +240,7 @@ func MinimSilver() *Plan {
 	})
 
 	// ---- the thumbs -----------------------------------------------------------
-	l.row(18 + 2*pixMargin)
+	l.row(18)
 	for _, st := range []string{"", ".down"} {
 		down := st != ""
 		l.panel("thumb"+st, 16, 9, false, func(ctx *paintengine2d.Context, w, h float32) {
@@ -281,11 +294,33 @@ func MinimSilver() *Plan {
 	l.cell("focus.ring", 8, 8, [4]int{2, 2, 2, 2}, "none", false, func(ctx *paintengine2d.Context, w, h float32) {
 		outline(ctx, paintengine2d.XYWH(0, 0, w, h), 2, 1, hex("#5f8fe8"))
 	})
+
+	// The equaliser's caption: pale chrome with a rule along its foot, and
+	// the tab its name is on as the title's plate — as wide as the name,
+	// set from the band's start.
+	eqCap := f.EqCaption
+	l.row(eqCap)
+	for _, st := range []struct {
+		suffix string
+		active bool
+	}{{"", true}, {".inactive", false}} {
+		st := st
+		l.cell("eq.caption"+st.suffix, 64, eqCap, [4]int{0, 30, 0, 20}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
+			svEqBand(ctx, w, h, st.active)
+		})
+		l.cell("eq.tab"+st.suffix, 26, eqCap, [4]int{2, 14, 0, 6}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
+			svTab(ctx, w, h, st.active)
+		})
+	}
 	l.close()
 
+	// The titles are set in capitals, as the look printed them: a choice
+	// the skin makes about how its art reads, and only about that — the
+	// windows keep the titles the player gave them.
 	p.Text = []TextRole{
 		{Name: "control", Color: "#1d212a", Disabled: "#7c818c"},
-		{Name: "caption", Color: "#c9cfdb", Disabled: "#7f889c", Size: 10, Bold: true},
+		{Name: "caption", Color: "#c9cfdb", Disabled: "#7f889c", Size: 10, Bold: true, Upper: true},
+		{Name: "tab", Color: "#2d3240", Disabled: "#7c818c", Size: 8, Bold: true, Upper: true},
 		{Name: "capkey", Color: "#141a2c", Hover: "#141a2c", Pressed: "#ffffff", Disabled: "#50586a"},
 	}
 	p.Parts = []PartBinding{
@@ -315,9 +350,30 @@ func MinimSilver() *Plan {
 		Shape: []ShapeRect{
 			{At: [4]int{0, 0, 0, 0}, Radius: [4]int{svCorner, svCorner, svCorner, svCorner}, StretchX: true, StretchY: true},
 		},
+		// The equaliser's own caption: its tab.
+		Variants: map[string]*WindowSpec{
+			"minim.equaliser": {
+				Caption:    eqCap,
+				TitleStart: true,
+				TitleInset: svTabInset,
+				Parts: []PartBinding{
+					{Part: "caption", Text: "tab", States: [][2]string{
+						{"normal", "eq.caption"}, {"inactive", "eq.caption.inactive"},
+					}},
+					{Part: "caption.title", States: [][2]string{
+						{"normal", "eq.tab"}, {"inactive", "eq.tab.inactive"},
+					}},
+				},
+			},
+		},
 	}
+	p.Layouts = minimLayouts(f, sh)
 	return p
 }
+
+// svTabInset is how far in from the equaliser's left edge its tab starts,
+// in design pixels.
+const svTabInset = 18
 
 // svCorner is the radius of the window's four corners, in design pixels.
 const svCorner = 7
@@ -364,27 +420,12 @@ func svMainFace(ctx *paintengine2d.Context, w, h float32, f *panel.Face) {
 	svGrip(ctx, w, h)
 }
 
-// svEqFace is the equaliser: pale silver, the tab its name is on, the graph,
-// the scale, eleven grooves, and the dark strip the frequencies are on.
+// svEqFace is the equaliser under its tab: pale silver, the graph, the
+// scale, eleven grooves, and the dark strip the frequencies are on.
 func svEqFace(ctx *paintengine2d.Context, w, h float32, f *panel.Face) {
 	q := f.Eq
 	r := paintengine2d.XYWH(0, 0, w, h)
 	vgrad(ctx, r, 0, stop(0, hex("#e9ebf0")), stop(1, hex("#c6cad4")))
-
-	// The tab, and the rule its foot runs into.
-	t := rectOf(q.Tab)
-	tab := paintengine2d.NewPath()
-	tab.MoveTo(t.Min.X, t.Max.Y)
-	tab.LineTo(t.Min.X, t.Min.Y+4)
-	tab.QuadTo(t.Min.X, t.Min.Y, t.Min.X+4, t.Min.Y)
-	tab.LineTo(t.Max.X-8, t.Min.Y)
-	tab.CubicTo(t.Max.X-3, t.Min.Y, t.Max.X-2, t.Max.Y, t.Max.X+6, t.Max.Y)
-	tab.Close()
-	ctx.DrawPath(tab, paintengine2d.Fill(hex("#f6f7fa")))
-	st := paintengine2d.StrokePaint(hex("#6c7282"), 1)
-	ctx.DrawPath(tab, st)
-	ctx.DrawRect(paintengine2d.XYWH(t.Max.X+6, t.Max.Y-0.5, w-t.Max.X-12, 1), paintengine2d.Fill(hex("#8a90a0")))
-	pixLabel(ctx, t.Min.X+float32(int((t.Dx()-float32(pixWidth("EQUALIZER")))/2)), t.Min.Y+4, "EQUALIZER", hex("#2d3240"))
 
 	// The graph: a pale well with a rule at the middle and a faint grid.
 	g := rectOf(q.Graph)
@@ -571,7 +612,7 @@ func svCapsuleShape(ctx *paintengine2d.Context, r paintengine2d.Rect, down, knob
 
 // svCapsule is a capsule key with a word on it: white with dark letters, or
 // navy with white ones (the equaliser's ON and AUTO), lit blue when on.
-func svCapsule(ctx *paintengine2d.Context, w, h float32, s string, navy, down, on bool) {
+func svCapsule(ctx *paintengine2d.Context, w, h float32, s string, navy, down, on, hover bool) {
 	r := paintengine2d.XYWH(0, 0, w, h)
 	col := hex(svGlyph)
 	if navy {
@@ -593,11 +634,68 @@ func svCapsule(ctx *paintengine2d.Context, w, h float32, s string, navy, down, o
 			ctx.DrawRoundRect(r.Inset(1.5), rad-1.5, rad-1.5, paintengine2d.Fill(hex("#8fb2f040")))
 		}
 	}
+	if hover {
+		svHoverRing(ctx, r, h/2)
+	}
 	d := float32(0)
 	if down {
 		d = 0.5
 	}
 	pixLabel(ctx, float32(int((w-float32(pixWidth(s)))/2))+d, float32(int((h-6)/2))+d, s, col)
+}
+
+// svHoverRing is what a key does under the pointer: a blue light round the
+// inside of its rim, the colour of the lamps, and a breath of shine over the
+// face.
+func svHoverRing(ctx *paintengine2d.Context, r paintengine2d.Rect, rad float32) {
+	ctx.DrawRoundRect(r.Inset(1), rad-1, rad-1, paintengine2d.Fill(hex("#ffffff28")))
+	ctx.DrawRoundRect(r.Inset(1.6), rad-1.6, rad-1.6, paintengine2d.StrokePaint(hex("#5f8fe8d8"), 1.2))
+}
+
+// svEqBand is the equaliser's caption: the chrome of its face carried up to
+// a dark rim along the top, round at the window's corners, with the rule the
+// tab's foot runs into along the bottom.
+func svEqBand(ctx *paintengine2d.Context, w, h float32, active bool) {
+	r := paintengine2d.XYWH(0, 0, w, h)
+	ctx.DrawRoundRectCorners(r, svCorner, svCorner, 0, 0, paintengine2d.Fill(hex(svRim)))
+	top, bot := hex("#f1f2f6"), hex("#e9ebf0")
+	if !active {
+		top, bot = hex("#e0e2e8"), hex("#d8dbe2")
+	}
+	ctx.DrawRoundRectCorners(paintengine2d.XYWH(0, 1, w, h-1), svCorner-1, svCorner-1, 0, 0, paintengine2d.Linear(paintengine2d.LinearGradient{
+		Start: paintengine2d.Pt(0, 1), End: paintengine2d.Pt(0, h),
+		Stops: []paintengine2d.GradientStop{stop(0, top), stop(1, bot)},
+	}))
+	ctx.DrawRect(paintengine2d.XYWH(0, h-1, w, 1), paintengine2d.Fill(hex("#8a90a0")))
+}
+
+// svTab is the tab the equaliser's name is on: white, outlined, square at
+// its foot where it joins the face, a small round corner at its top left and
+// a long curve down to the rule at its right.
+func svTab(ctx *paintengine2d.Context, w, h float32, active bool) {
+	ink := hex("#6c7282")
+	fill := hex("#f6f7fa")
+	if !active {
+		ink, fill = hex("#8d93a0"), hex("#eceef2")
+	}
+	// The tab stands on the band's rim, one pixel down.
+	top := float32(2)
+	tab := paintengine2d.NewPath()
+	tab.MoveTo(0.5, h)
+	tab.LineTo(0.5, top+4)
+	tab.QuadTo(0.5, top+0.5, 4.5, top+0.5)
+	tab.LineTo(w-13, top+0.5)
+	tab.CubicTo(w-6, top+0.5, w-7, h-0.5, w, h-0.5)
+	tab.LineTo(w, h)
+	tab.Close()
+	ctx.DrawPath(tab, paintengine2d.Fill(fill))
+	edge := paintengine2d.NewPath()
+	edge.MoveTo(0.5, h)
+	edge.LineTo(0.5, top+4)
+	edge.QuadTo(0.5, top+0.5, 4.5, top+0.5)
+	edge.LineTo(w-13, top+0.5)
+	edge.CubicTo(w-6, top+0.5, w-7, h-0.5, w, h-0.5)
+	ctx.DrawPath(edge, paintengine2d.StrokePaint(ink, 1))
 }
 
 // svLamp is the small glossy lamp beside a toggle: a quiet blue off, and

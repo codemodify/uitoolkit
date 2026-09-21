@@ -236,6 +236,11 @@ type GlyphButton struct {
 	// what it looks like, and a look the painter has nothing for falls back
 	// to the face and the mark.
 	Painter func(ctx *paintengine2d.Context, b paintengine2d.Rect, st style.ControlState) bool
+	// Shaper, when set, is the silhouette of what Painter paints, for a
+	// box of size — a round key painted as a picture takes the pointer on
+	// the picture (widget.ArtShape). Nil, or a nil answer, leaves the
+	// button to its face's shape.
+	Shaper func(lk style.LookAndFeel, size paintengine2d.Point) *style.Silhouette
 
 	hovered, pressed, outside bool
 }
@@ -256,6 +261,15 @@ func (b *GlyphButton) Tooltip() string { return b.Label }
 // ShapeRole is the face the button paints, so a skin that gives that face a
 // silhouette decides where the pointer has to be.
 func (b *GlyphButton) ShapeRole() style.Role { return b.Role }
+
+// ArtShape is the silhouette of the picture Painter paints, when the button
+// is painted as one (Shaper).
+func (b *GlyphButton) ArtShape(lk style.LookAndFeel, size paintengine2d.Point) *style.Silhouette {
+	if b.Shaper == nil {
+		return nil
+	}
+	return b.Shaper(lk, size)
+}
 
 // SetGlyph swaps the mark — play becomes pause — and repaints.
 func (b *GlyphButton) SetGlyph(g Glyph, label string) {

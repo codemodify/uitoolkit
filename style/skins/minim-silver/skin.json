@@ -5,6 +5,389 @@
   },
   "family": "light",
   "label": "Minim Silver",
+  "layouts": {
+    "minim.equaliser": {
+      "art": "eq.face",
+      "size": [273, 102],
+      "slots": {
+        "auto": {
+          "art": {
+            "checked": "key.auto.on",
+            "checkedHover": "key.auto.on.hover",
+            "checkedPressed": "key.auto.on.down",
+            "hover": "key.auto.hover",
+            "normal": "key.auto",
+            "pressed": "key.auto.down"
+          },
+          "at": [39, 4, 30, 11]
+        },
+        "band.0": {
+          "at": [79, 19, 14, 71]
+        },
+        "band.1": {
+          "at": [97, 19, 14, 71]
+        },
+        "band.2": {
+          "at": [115, 19, 14, 71]
+        },
+        "band.3": {
+          "at": [133, 19, 14, 71]
+        },
+        "band.4": {
+          "at": [151, 19, 14, 71]
+        },
+        "band.5": {
+          "at": [169, 19, 14, 71]
+        },
+        "band.6": {
+          "at": [187, 19, 14, 71]
+        },
+        "band.7": {
+          "at": [205, 19, 14, 71]
+        },
+        "band.8": {
+          "at": [223, 19, 14, 71]
+        },
+        "band.9": {
+          "at": [241, 19, 14, 71]
+        },
+        "graph": {
+          "at": [88, 2, 110, 14]
+        },
+        "on": {
+          "art": {
+            "checked": "key.on.on",
+            "checkedHover": "key.on.on.hover",
+            "checkedPressed": "key.on.on.down",
+            "hover": "key.on.hover",
+            "normal": "key.on",
+            "pressed": "key.on.down"
+          },
+          "at": [14, 4, 22, 11]
+        },
+        "preamp": {
+          "at": [14, 19, 14, 71]
+        },
+        "presets": {
+          "art": {
+            "checked": "key.presets",
+            "checkedHover": "key.presets.hover",
+            "checkedPressed": "key.presets.down",
+            "hover": "key.presets.hover",
+            "normal": "key.presets",
+            "pressed": "key.presets.down"
+          },
+          "at": [222, 3, 42, 12]
+        }
+      }
+    },
+    "minim.playlist": {
+      "art": "list.face",
+      "size": [273, 216],
+      "slots": {
+        "add": {
+          "art": {
+            "checked": "key.add",
+            "checkedHover": "key.add.hover",
+            "checkedPressed": "key.add.down",
+            "hover": "key.add.hover",
+            "normal": "key.add",
+            "pressed": "key.add.down"
+          },
+          "at": [12, 188, 22, 20]
+        },
+        "clock": {
+          "at": [186, 200, 34, 9]
+        },
+        "info": {
+          "at": [120, 183, 104, 30]
+        },
+        "list": {
+          "at": [5, 3, 263, 176]
+        },
+        "mini.0": {
+          "art": {
+            "checked": "mini.prev",
+            "checkedPressed": "mini.prev.down",
+            "normal": "mini.prev",
+            "pressed": "mini.prev.down"
+          },
+          "at": [126, 201, 7, 7]
+        },
+        "mini.1": {
+          "art": {
+            "checked": "mini.play",
+            "checkedPressed": "mini.play.down",
+            "normal": "mini.play",
+            "pressed": "mini.play.down"
+          },
+          "at": [134, 201, 7, 7]
+        },
+        "mini.2": {
+          "art": {
+            "checked": "mini.pause",
+            "checkedPressed": "mini.pause.down",
+            "normal": "mini.pause",
+            "pressed": "mini.pause.down"
+          },
+          "at": [142, 201, 7, 7]
+        },
+        "mini.3": {
+          "art": {
+            "checked": "mini.stop",
+            "checkedPressed": "mini.stop.down",
+            "normal": "mini.stop",
+            "pressed": "mini.stop.down"
+          },
+          "at": [150, 201, 7, 7]
+        },
+        "mini.4": {
+          "art": {
+            "checked": "mini.next",
+            "checkedPressed": "mini.next.down",
+            "normal": "mini.next",
+            "pressed": "mini.next.down"
+          },
+          "at": [158, 201, 7, 7]
+        },
+        "mini.5": {
+          "art": {
+            "checked": "mini.eject",
+            "checkedPressed": "mini.eject.down",
+            "normal": "mini.eject",
+            "pressed": "mini.eject.down"
+          },
+          "at": [166, 201, 8, 7]
+        },
+        "misc": {
+          "art": {
+            "checked": "key.misc",
+            "checkedHover": "key.misc.hover",
+            "checkedPressed": "key.misc.down",
+            "hover": "key.misc.hover",
+            "normal": "key.misc",
+            "pressed": "key.misc.down"
+          },
+          "at": [90, 188, 22, 20]
+        },
+        "opts": {
+          "art": {
+            "checked": "key.opts",
+            "checkedHover": "key.opts.hover",
+            "checkedPressed": "key.opts.down",
+            "hover": "key.opts.hover",
+            "normal": "key.opts",
+            "pressed": "key.opts.down"
+          },
+          "at": [236, 188, 22, 20]
+        },
+        "rem": {
+          "art": {
+            "checked": "key.rem",
+            "checkedHover": "key.rem.hover",
+            "checkedPressed": "key.rem.down",
+            "hover": "key.rem.hover",
+            "normal": "key.rem",
+            "pressed": "key.rem.down"
+          },
+          "at": [38, 188, 22, 20]
+        },
+        "row": {
+          "at": [5, 3, 252, 14]
+        },
+        "rows": {
+          "at": [5, 3, 252, 176]
+        },
+        "scroll": {
+          "at": [259, 3, 9, 176]
+        },
+        "sel": {
+          "art": {
+            "checked": "key.sel",
+            "checkedHover": "key.sel.hover",
+            "checkedPressed": "key.sel.down",
+            "hover": "key.sel.hover",
+            "normal": "key.sel",
+            "pressed": "key.sel.down"
+          },
+          "at": [64, 188, 22, 20]
+        }
+      }
+    },
+    "minim.strip": {
+      "art": "main.face",
+      "size": [273, 100],
+      "slots": {
+        "analyser": {
+          "at": [21, 30, 66, 17]
+        },
+        "balance": {
+          "at": [175, 44, 40, 10]
+        },
+        "colon": {
+          "at": [69, 11, 4, 14]
+        },
+        "digit.0": {
+          "at": [44, 11, 10, 14]
+        },
+        "digit.1": {
+          "at": [57, 11, 10, 14]
+        },
+        "digit.2": {
+          "at": [75, 11, 10, 14]
+        },
+        "digit.3": {
+          "at": [88, 11, 10, 14]
+        },
+        "display": {
+          "at": [4, 3, 265, 54]
+        },
+        "eject": {
+          "art": {
+            "checked": "key.eject",
+            "checkedHover": "key.eject.hover",
+            "checkedPressed": "key.eject.down",
+            "hover": "key.eject.hover",
+            "normal": "key.eject",
+            "pressed": "key.eject.down"
+          },
+          "at": [136, 72, 17, 17]
+        },
+        "eq": {
+          "art": {
+            "checked": "key.eq.on",
+            "checkedHover": "key.eq.on.hover",
+            "checkedPressed": "key.eq.on.down",
+            "hover": "key.eq.hover",
+            "normal": "key.eq",
+            "pressed": "key.eq.down"
+          },
+          "at": [222, 43, 19, 12]
+        },
+        "freq": {
+          "at": [160, 29, 10, 6]
+        },
+        "mono": {
+          "at": [205, 28, 24, 8]
+        },
+        "next": {
+          "art": {
+            "checked": "key.next",
+            "checkedHover": "key.next.hover",
+            "checkedPressed": "key.next.down",
+            "hover": "key.next.hover",
+            "normal": "key.next",
+            "pressed": "key.next.down"
+          },
+          "at": [107, 70, 21, 21]
+        },
+        "pause": {
+          "art": {
+            "checked": "key.pause",
+            "checkedHover": "key.pause.hover",
+            "checkedPressed": "key.pause.down",
+            "hover": "key.pause.hover",
+            "normal": "key.pause",
+            "pressed": "key.pause.down"
+          },
+          "at": [61, 70, 21, 21]
+        },
+        "pl": {
+          "art": {
+            "checked": "key.pl.on",
+            "checkedHover": "key.pl.on.hover",
+            "checkedPressed": "key.pl.on.down",
+            "hover": "key.pl.hover",
+            "normal": "key.pl",
+            "pressed": "key.pl.down"
+          },
+          "at": [243, 43, 19, 12]
+        },
+        "play": {
+          "art": {
+            "checked": "key.play",
+            "checkedHover": "key.play.hover",
+            "checkedPressed": "key.play.down",
+            "hover": "key.play.hover",
+            "normal": "key.play",
+            "pressed": "key.play.down"
+          },
+          "at": [38, 70, 21, 21]
+        },
+        "prev": {
+          "art": {
+            "checked": "key.prev",
+            "checkedHover": "key.prev.hover",
+            "checkedPressed": "key.prev.down",
+            "hover": "key.prev.hover",
+            "normal": "key.prev",
+            "pressed": "key.prev.down"
+          },
+          "at": [15, 70, 21, 21]
+        },
+        "rate": {
+          "at": [110, 29, 15, 6]
+        },
+        "repeat": {
+          "art": {
+            "checked": "key.repeat.on",
+            "checkedHover": "key.repeat.on.hover",
+            "checkedPressed": "key.repeat.on.down",
+            "hover": "key.repeat.hover",
+            "normal": "key.repeat",
+            "pressed": "key.repeat.down"
+          },
+          "at": [207, 71, 33, 19]
+        },
+        "seek": {
+          "at": [12, 58, 250, 9]
+        },
+        "shuffle": {
+          "art": {
+            "checked": "key.shuffle.on",
+            "checkedHover": "key.shuffle.on.hover",
+            "checkedPressed": "key.shuffle.on.down",
+            "hover": "key.shuffle.hover",
+            "normal": "key.shuffle",
+            "pressed": "key.shuffle.down"
+          },
+          "at": [168, 71, 33, 19]
+        },
+        "skin": {
+          "art": {
+            "checked": "key.skin",
+            "checkedPressed": "key.skin.down",
+            "normal": "key.skin",
+            "pressed": "key.skin.down"
+          },
+          "at": [9, 8, 7, 40]
+        },
+        "state": {
+          "at": [21, 13, 9, 7]
+        },
+        "stereo": {
+          "at": [238, 28, 28, 8]
+        },
+        "stop": {
+          "art": {
+            "checked": "key.stop",
+            "checkedHover": "key.stop.hover",
+            "checkedPressed": "key.stop.down",
+            "hover": "key.stop.hover",
+            "normal": "key.stop",
+            "pressed": "key.stop.down"
+          },
+          "at": [84, 70, 21, 21]
+        },
+        "title": {
+          "at": [110, 12, 152, 6]
+        },
+        "volume": {
+          "at": [104, 44, 66, 10]
+        }
+      }
+    }
+  },
   "lineage": "uitoolkit",
   "metrics": {
     "menuItemH": 20
@@ -51,870 +434,834 @@
   "skin": 1,
   "sprites": {
     "capbtn.hover": {
-      "at": [193, 937, 9, 9],
+      "at": [193, 885, 9, 9],
       "sheet": "chrome",
       "slice": [3, 3, 3, 3]
     },
     "capbtn.normal": {
-      "at": [182, 937, 9, 9],
+      "at": [182, 885, 9, 9],
       "sheet": "chrome",
       "slice": [3, 3, 3, 3]
     },
     "capbtn.pressed": {
-      "at": [204, 937, 9, 9],
+      "at": [204, 885, 9, 9],
       "sheet": "chrome",
       "slice": [3, 3, 3, 3]
     },
     "caption.inactive": {
-      "at": [88, 937, 64, 15],
+      "at": [88, 885, 64, 15],
       "sheet": "chrome",
       "slice": [0, 30, 0, 20]
     },
     "caption.normal": {
-      "at": [22, 937, 64, 15],
+      "at": [22, 885, 64, 15],
       "sheet": "chrome",
       "slice": [0, 30, 0, 20]
     },
     "caption.plate": {
-      "at": [154, 937, 12, 15],
+      "at": [154, 885, 12, 15],
       "sheet": "chrome",
       "slice": [0, 4, 0, 4]
     },
     "caption.plate.inactive": {
-      "at": [168, 937, 12, 15],
+      "at": [168, 885, 12, 15],
       "sheet": "chrome",
       "slice": [0, 4, 0, 4]
     },
-    "eq.face": {
-      "at": [0, 104, 275, 102],
+    "eq.caption": {
+      "at": [0, 907, 64, 13],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "slice": [0, 30, 0, 20]
+    },
+    "eq.caption.inactive": {
+      "at": [94, 907, 64, 13],
+      "sheet": "chrome",
+      "slice": [0, 30, 0, 20]
+    },
+    "eq.face": {
+      "at": [0, 102, 273, 102],
+      "sheet": "chrome"
+    },
+    "eq.tab": {
+      "at": [66, 907, 26, 13],
+      "sheet": "chrome",
+      "slice": [2, 14, 0, 6]
+    },
+    "eq.tab.inactive": {
+      "at": [160, 907, 26, 13],
+      "sheet": "chrome",
+      "slice": [2, 14, 0, 6]
     },
     "eq.thumb": {
-      "at": [51, 915, 14, 14],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [47, 865, 12, 12],
+      "sheet": "chrome"
     },
     "eq.thumb.down": {
-      "at": [129, 915, 14, 14],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [117, 865, 12, 12],
+      "sheet": "chrome"
     },
     "focus.ring": {
-      "at": [215, 937, 8, 8],
+      "at": [215, 885, 8, 8],
       "middle": "none",
       "sheet": "chrome",
       "slice": [2, 2, 2, 2]
     },
     "font.20": {
-      "at": [0, 905, 5, 8],
+      "at": [0, 857, 3, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "font.2014": {
-      "at": [457, 905, 7, 8],
+      "at": [335, 857, 5, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "font.21": {
-      "at": [7, 905, 3, 8],
+      "at": [5, 857, 1, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "font.22": {
-      "at": [12, 905, 5, 8],
+      "at": [8, 857, 3, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "font.23": {
-      "at": [19, 905, 7, 8],
+      "at": [13, 857, 5, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "font.25": {
-      "at": [28, 905, 6, 8],
+      "at": [20, 857, 4, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "font.26": {
-      "at": [36, 905, 7, 8],
+      "at": [26, 857, 5, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "font.27": {
-      "at": [45, 905, 3, 8],
+      "at": [33, 857, 1, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "font.28": {
-      "at": [50, 905, 4, 8],
+      "at": [36, 857, 2, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "font.29": {
-      "at": [56, 905, 4, 8],
+      "at": [40, 857, 2, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "font.2a": {
-      "at": [62, 905, 5, 8],
+      "at": [44, 857, 3, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "font.2b": {
-      "at": [69, 905, 5, 8],
+      "at": [49, 857, 3, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "font.2c": {
-      "at": [76, 905, 4, 8],
+      "at": [54, 857, 2, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "font.2d": {
-      "at": [82, 905, 5, 8],
+      "at": [58, 857, 3, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "font.2e": {
-      "at": [89, 905, 3, 8],
+      "at": [63, 857, 1, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "font.2f": {
-      "at": [94, 905, 5, 8],
+      "at": [66, 857, 3, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "font.30": {
-      "at": [101, 905, 6, 8],
+      "at": [71, 857, 4, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "font.31": {
-      "at": [109, 905, 5, 8],
+      "at": [77, 857, 3, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "font.32": {
-      "at": [116, 905, 6, 8],
+      "at": [82, 857, 4, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "font.33": {
-      "at": [124, 905, 6, 8],
+      "at": [88, 857, 4, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "font.34": {
-      "at": [132, 905, 6, 8],
+      "at": [94, 857, 4, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "font.35": {
-      "at": [140, 905, 6, 8],
+      "at": [100, 857, 4, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "font.36": {
-      "at": [148, 905, 6, 8],
+      "at": [106, 857, 4, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "font.37": {
-      "at": [156, 905, 6, 8],
+      "at": [112, 857, 4, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "font.38": {
-      "at": [164, 905, 6, 8],
+      "at": [118, 857, 4, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "font.39": {
-      "at": [172, 905, 6, 8],
+      "at": [124, 857, 4, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "font.3a": {
-      "at": [180, 905, 3, 8],
+      "at": [130, 857, 1, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "font.3b": {
-      "at": [185, 905, 4, 8],
+      "at": [133, 857, 2, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "font.3c": {
-      "at": [191, 905, 5, 8],
+      "at": [137, 857, 3, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "font.3d": {
-      "at": [198, 905, 5, 8],
+      "at": [142, 857, 3, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "font.3e": {
-      "at": [205, 905, 5, 8],
+      "at": [147, 857, 3, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "font.3f": {
-      "at": [212, 905, 6, 8],
+      "at": [152, 857, 4, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "font.41": {
-      "at": [220, 905, 6, 8],
+      "at": [158, 857, 4, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "font.42": {
-      "at": [228, 905, 6, 8],
+      "at": [164, 857, 4, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "font.43": {
-      "at": [236, 905, 6, 8],
+      "at": [170, 857, 4, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "font.44": {
-      "at": [244, 905, 6, 8],
+      "at": [176, 857, 4, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "font.45": {
-      "at": [252, 905, 6, 8],
+      "at": [182, 857, 4, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "font.46": {
-      "at": [260, 905, 6, 8],
+      "at": [188, 857, 4, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "font.47": {
-      "at": [268, 905, 6, 8],
+      "at": [194, 857, 4, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "font.48": {
-      "at": [276, 905, 6, 8],
+      "at": [200, 857, 4, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "font.49": {
-      "at": [284, 905, 5, 8],
+      "at": [206, 857, 3, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "font.4a": {
-      "at": [291, 905, 6, 8],
+      "at": [211, 857, 4, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "font.4b": {
-      "at": [299, 905, 6, 8],
+      "at": [217, 857, 4, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "font.4c": {
-      "at": [307, 905, 6, 8],
+      "at": [223, 857, 4, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "font.4d": {
-      "at": [315, 905, 7, 8],
+      "at": [229, 857, 5, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "font.4e": {
-      "at": [324, 905, 6, 8],
+      "at": [236, 857, 4, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "font.4f": {
-      "at": [332, 905, 6, 8],
+      "at": [242, 857, 4, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "font.50": {
-      "at": [340, 905, 6, 8],
+      "at": [248, 857, 4, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "font.51": {
-      "at": [348, 905, 6, 8],
+      "at": [254, 857, 4, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "font.52": {
-      "at": [356, 905, 6, 8],
+      "at": [260, 857, 4, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "font.53": {
-      "at": [364, 905, 6, 8],
+      "at": [266, 857, 4, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "font.54": {
-      "at": [372, 905, 7, 8],
+      "at": [272, 857, 5, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "font.55": {
-      "at": [381, 905, 6, 8],
+      "at": [279, 857, 4, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "font.56": {
-      "at": [389, 905, 7, 8],
+      "at": [285, 857, 5, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "font.57": {
-      "at": [398, 905, 7, 8],
+      "at": [292, 857, 5, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "font.58": {
-      "at": [407, 905, 6, 8],
+      "at": [299, 857, 4, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "font.59": {
-      "at": [415, 905, 7, 8],
+      "at": [305, 857, 5, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "font.5a": {
-      "at": [424, 905, 6, 8],
+      "at": [312, 857, 4, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "font.5b": {
-      "at": [432, 905, 4, 8],
+      "at": [318, 857, 2, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "font.5d": {
-      "at": [438, 905, 4, 8],
+      "at": [322, 857, 2, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "font.5f": {
-      "at": [444, 905, 6, 8],
+      "at": [326, 857, 4, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "font.b7": {
-      "at": [452, 905, 3, 8],
+      "at": [332, 857, 1, 6],
       "sheet": "chrome",
-      "slice": [1, 1, 1, 1],
       "tint": true
     },
     "key.add": {
-      "at": [0, 698, 24, 22],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [0, 668, 22, 20],
+      "sheet": "chrome"
     },
     "key.add.down": {
-      "at": [26, 698, 24, 22],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [48, 668, 22, 20],
+      "sheet": "chrome"
+    },
+    "key.add.hover": {
+      "at": [24, 668, 22, 20],
+      "sheet": "chrome"
     },
     "key.auto": {
-      "at": [0, 667, 32, 13],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [0, 641, 30, 11],
+      "sheet": "chrome"
     },
     "key.auto.down": {
-      "at": [34, 667, 32, 13],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [64, 641, 30, 11],
+      "sheet": "chrome"
+    },
+    "key.auto.hover": {
+      "at": [32, 641, 30, 11],
+      "sheet": "chrome"
     },
     "key.auto.on": {
-      "at": [68, 667, 32, 13],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [96, 641, 30, 11],
+      "sheet": "chrome"
     },
     "key.auto.on.down": {
-      "at": [102, 667, 32, 13],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [160, 641, 30, 11],
+      "sheet": "chrome"
+    },
+    "key.auto.on.hover": {
+      "at": [128, 641, 30, 11],
+      "sheet": "chrome"
     },
     "key.eject": {
-      "at": [0, 553, 19, 19],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [0, 539, 17, 17],
+      "sheet": "chrome"
     },
     "key.eject.down": {
-      "at": [21, 553, 19, 19],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [38, 539, 17, 17],
+      "sheet": "chrome"
+    },
+    "key.eject.hover": {
+      "at": [19, 539, 17, 17],
+      "sheet": "chrome"
     },
     "key.eq": {
-      "at": [0, 620, 21, 14],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [0, 600, 19, 12],
+      "sheet": "chrome"
     },
     "key.eq.down": {
-      "at": [23, 620, 21, 14],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [42, 600, 19, 12],
+      "sheet": "chrome"
+    },
+    "key.eq.hover": {
+      "at": [21, 600, 19, 12],
+      "sheet": "chrome"
     },
     "key.eq.on": {
-      "at": [46, 620, 21, 14],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [63, 600, 19, 12],
+      "sheet": "chrome"
     },
     "key.eq.on.down": {
-      "at": [69, 620, 21, 14],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [105, 600, 19, 12],
+      "sheet": "chrome"
+    },
+    "key.eq.on.hover": {
+      "at": [84, 600, 19, 12],
+      "sheet": "chrome"
     },
     "key.misc": {
-      "at": [0, 770, 24, 22],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [0, 734, 22, 20],
+      "sheet": "chrome"
     },
     "key.misc.down": {
-      "at": [26, 770, 24, 22],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [48, 734, 22, 20],
+      "sheet": "chrome"
+    },
+    "key.misc.hover": {
+      "at": [24, 734, 22, 20],
+      "sheet": "chrome"
     },
     "key.next": {
-      "at": [0, 528, 23, 23],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [0, 516, 21, 21],
+      "sheet": "chrome"
     },
     "key.next.down": {
-      "at": [25, 528, 23, 23],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [46, 516, 21, 21],
+      "sheet": "chrome"
+    },
+    "key.next.hover": {
+      "at": [23, 516, 21, 21],
+      "sheet": "chrome"
     },
     "key.on": {
-      "at": [0, 652, 24, 13],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [0, 628, 22, 11],
+      "sheet": "chrome"
     },
     "key.on.down": {
-      "at": [26, 652, 24, 13],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [48, 628, 22, 11],
+      "sheet": "chrome"
+    },
+    "key.on.hover": {
+      "at": [24, 628, 22, 11],
+      "sheet": "chrome"
     },
     "key.on.on": {
-      "at": [52, 652, 24, 13],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [72, 628, 22, 11],
+      "sheet": "chrome"
     },
     "key.on.on.down": {
-      "at": [78, 652, 24, 13],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [120, 628, 22, 11],
+      "sheet": "chrome"
+    },
+    "key.on.on.hover": {
+      "at": [96, 628, 22, 11],
+      "sheet": "chrome"
     },
     "key.opts": {
-      "at": [0, 794, 24, 22],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [0, 756, 22, 20],
+      "sheet": "chrome"
     },
     "key.opts.down": {
-      "at": [26, 794, 24, 22],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [48, 756, 22, 20],
+      "sheet": "chrome"
+    },
+    "key.opts.hover": {
+      "at": [24, 756, 22, 20],
+      "sheet": "chrome"
     },
     "key.pause": {
-      "at": [0, 478, 23, 23],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [0, 470, 21, 21],
+      "sheet": "chrome"
     },
     "key.pause.down": {
-      "at": [25, 478, 23, 23],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [46, 470, 21, 21],
+      "sheet": "chrome"
+    },
+    "key.pause.hover": {
+      "at": [23, 470, 21, 21],
+      "sheet": "chrome"
     },
     "key.pl": {
-      "at": [0, 636, 21, 14],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [0, 614, 19, 12],
+      "sheet": "chrome"
     },
     "key.pl.down": {
-      "at": [23, 636, 21, 14],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [42, 614, 19, 12],
+      "sheet": "chrome"
+    },
+    "key.pl.hover": {
+      "at": [21, 614, 19, 12],
+      "sheet": "chrome"
     },
     "key.pl.on": {
-      "at": [46, 636, 21, 14],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [63, 614, 19, 12],
+      "sheet": "chrome"
     },
     "key.pl.on.down": {
-      "at": [69, 636, 21, 14],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [105, 614, 19, 12],
+      "sheet": "chrome"
+    },
+    "key.pl.on.hover": {
+      "at": [84, 614, 19, 12],
+      "sheet": "chrome"
     },
     "key.play": {
-      "at": [0, 453, 23, 23],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [0, 447, 21, 21],
+      "sheet": "chrome"
     },
     "key.play.down": {
-      "at": [25, 453, 23, 23],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [46, 447, 21, 21],
+      "sheet": "chrome"
+    },
+    "key.play.hover": {
+      "at": [23, 447, 21, 21],
+      "sheet": "chrome"
     },
     "key.presets": {
-      "at": [0, 682, 44, 14],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [0, 654, 42, 12],
+      "sheet": "chrome"
     },
     "key.presets.down": {
-      "at": [46, 682, 44, 14],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [88, 654, 42, 12],
+      "sheet": "chrome"
+    },
+    "key.presets.hover": {
+      "at": [44, 654, 42, 12],
+      "sheet": "chrome"
     },
     "key.prev": {
-      "at": [0, 428, 23, 23],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [0, 424, 21, 21],
+      "sheet": "chrome"
     },
     "key.prev.down": {
-      "at": [25, 428, 23, 23],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [46, 424, 21, 21],
+      "sheet": "chrome"
+    },
+    "key.prev.hover": {
+      "at": [23, 424, 21, 21],
+      "sheet": "chrome"
     },
     "key.rem": {
-      "at": [0, 722, 24, 22],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [0, 690, 22, 20],
+      "sheet": "chrome"
     },
     "key.rem.down": {
-      "at": [26, 722, 24, 22],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [48, 690, 22, 20],
+      "sheet": "chrome"
+    },
+    "key.rem.hover": {
+      "at": [24, 690, 22, 20],
+      "sheet": "chrome"
     },
     "key.repeat": {
-      "at": [0, 597, 35, 21],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [0, 579, 33, 19],
+      "sheet": "chrome"
     },
     "key.repeat.down": {
-      "at": [37, 597, 35, 21],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [70, 579, 33, 19],
+      "sheet": "chrome"
+    },
+    "key.repeat.hover": {
+      "at": [35, 579, 33, 19],
+      "sheet": "chrome"
     },
     "key.repeat.on": {
-      "at": [74, 597, 35, 21],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [105, 579, 33, 19],
+      "sheet": "chrome"
     },
     "key.repeat.on.down": {
-      "at": [111, 597, 35, 21],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [175, 579, 33, 19],
+      "sheet": "chrome"
+    },
+    "key.repeat.on.hover": {
+      "at": [140, 579, 33, 19],
+      "sheet": "chrome"
     },
     "key.sel": {
-      "at": [0, 746, 24, 22],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [0, 712, 22, 20],
+      "sheet": "chrome"
     },
     "key.sel.down": {
-      "at": [26, 746, 24, 22],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [48, 712, 22, 20],
+      "sheet": "chrome"
+    },
+    "key.sel.hover": {
+      "at": [24, 712, 22, 20],
+      "sheet": "chrome"
     },
     "key.shuffle": {
-      "at": [0, 574, 35, 21],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [0, 558, 33, 19],
+      "sheet": "chrome"
     },
     "key.shuffle.down": {
-      "at": [37, 574, 35, 21],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [70, 558, 33, 19],
+      "sheet": "chrome"
+    },
+    "key.shuffle.hover": {
+      "at": [35, 558, 33, 19],
+      "sheet": "chrome"
     },
     "key.shuffle.on": {
-      "at": [74, 574, 35, 21],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [105, 558, 33, 19],
+      "sheet": "chrome"
     },
     "key.shuffle.on.down": {
-      "at": [111, 574, 35, 21],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [175, 558, 33, 19],
+      "sheet": "chrome"
+    },
+    "key.shuffle.on.hover": {
+      "at": [140, 558, 33, 19],
+      "sheet": "chrome"
     },
     "key.skin": {
-      "at": [0, 818, 9, 42],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [0, 778, 7, 40],
+      "sheet": "chrome"
     },
     "key.skin.down": {
-      "at": [11, 818, 9, 42],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [9, 778, 7, 40],
+      "sheet": "chrome"
     },
     "key.stop": {
-      "at": [0, 503, 23, 23],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [0, 493, 21, 21],
+      "sheet": "chrome"
     },
     "key.stop.down": {
-      "at": [25, 503, 23, 23],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [46, 493, 21, 21],
+      "sheet": "chrome"
+    },
+    "key.stop.hover": {
+      "at": [23, 493, 21, 21],
+      "sheet": "chrome"
     },
     "lamp.mono": {
-      "at": [39, 892, 26, 10],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [33, 846, 24, 8],
+      "sheet": "chrome"
     },
     "lamp.stereo": {
-      "at": [67, 892, 30, 10],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [59, 846, 28, 8],
+      "sheet": "chrome"
     },
     "led.-": {
-      "at": [140, 874, 12, 16],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [120, 830, 10, 14],
+      "sheet": "chrome"
     },
     "led.0": {
-      "at": [0, 874, 12, 16],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [0, 830, 10, 14],
+      "sheet": "chrome"
     },
     "led.1": {
-      "at": [14, 874, 12, 16],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [12, 830, 10, 14],
+      "sheet": "chrome"
     },
     "led.2": {
-      "at": [28, 874, 12, 16],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [24, 830, 10, 14],
+      "sheet": "chrome"
     },
     "led.3": {
-      "at": [42, 874, 12, 16],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [36, 830, 10, 14],
+      "sheet": "chrome"
     },
     "led.4": {
-      "at": [56, 874, 12, 16],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [48, 830, 10, 14],
+      "sheet": "chrome"
     },
     "led.5": {
-      "at": [70, 874, 12, 16],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [60, 830, 10, 14],
+      "sheet": "chrome"
     },
     "led.6": {
-      "at": [84, 874, 12, 16],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [72, 830, 10, 14],
+      "sheet": "chrome"
     },
     "led.7": {
-      "at": [98, 874, 12, 16],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [84, 830, 10, 14],
+      "sheet": "chrome"
     },
     "led.8": {
-      "at": [112, 874, 12, 16],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [96, 830, 10, 14],
+      "sheet": "chrome"
     },
     "led.9": {
-      "at": [126, 874, 12, 16],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [108, 830, 10, 14],
+      "sheet": "chrome"
     },
     "led.colon": {
-      "at": [154, 874, 6, 16],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [132, 830, 4, 14],
+      "sheet": "chrome"
     },
     "list.face": {
-      "at": [0, 208, 275, 218],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [0, 206, 273, 216],
+      "sheet": "chrome"
     },
     "list.thumb": {
-      "at": [67, 915, 9, 20],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [61, 865, 7, 18],
+      "sheet": "chrome"
     },
     "list.thumb.down": {
-      "at": [145, 915, 9, 20],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [131, 865, 7, 18],
+      "sheet": "chrome"
     },
     "main.face": {
-      "at": [0, 0, 275, 102],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [0, 0, 273, 100],
+      "sheet": "chrome"
     },
     "mini.eject": {
-      "at": [110, 862, 10, 9],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [90, 820, 8, 7],
+      "sheet": "chrome"
     },
     "mini.eject.down": {
-      "at": [122, 862, 10, 9],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [100, 820, 8, 7],
+      "sheet": "chrome"
     },
     "mini.next": {
-      "at": [88, 862, 9, 9],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [72, 820, 7, 7],
+      "sheet": "chrome"
     },
     "mini.next.down": {
-      "at": [99, 862, 9, 9],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [81, 820, 7, 7],
+      "sheet": "chrome"
     },
     "mini.pause": {
-      "at": [44, 862, 9, 9],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [36, 820, 7, 7],
+      "sheet": "chrome"
     },
     "mini.pause.down": {
-      "at": [55, 862, 9, 9],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [45, 820, 7, 7],
+      "sheet": "chrome"
     },
     "mini.play": {
-      "at": [22, 862, 9, 9],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [18, 820, 7, 7],
+      "sheet": "chrome"
     },
     "mini.play.down": {
-      "at": [33, 862, 9, 9],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [27, 820, 7, 7],
+      "sheet": "chrome"
     },
     "mini.prev": {
-      "at": [0, 862, 9, 9],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [0, 820, 7, 7],
+      "sheet": "chrome"
     },
     "mini.prev.down": {
-      "at": [11, 862, 9, 9],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [9, 820, 7, 7],
+      "sheet": "chrome"
     },
     "mini.stop": {
-      "at": [66, 862, 9, 9],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [54, 820, 7, 7],
+      "sheet": "chrome"
     },
     "mini.stop.down": {
-      "at": [77, 862, 9, 9],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [63, 820, 7, 7],
+      "sheet": "chrome"
     },
     "seek.thumb": {
-      "at": [20, 915, 29, 11],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [18, 865, 27, 9],
+      "sheet": "chrome"
     },
     "seek.thumb.down": {
-      "at": [98, 915, 29, 11],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [88, 865, 27, 9],
+      "sheet": "chrome"
     },
     "state.pause": {
-      "at": [13, 892, 11, 9],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [11, 846, 9, 7],
+      "sheet": "chrome"
     },
     "state.play": {
-      "at": [0, 892, 11, 9],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [0, 846, 9, 7],
+      "sheet": "chrome"
     },
     "state.stop": {
-      "at": [26, 892, 11, 9],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [22, 846, 9, 7],
+      "sheet": "chrome"
     },
     "thumb": {
-      "at": [0, 915, 18, 11],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [0, 865, 16, 9],
+      "sheet": "chrome"
     },
     "thumb.down": {
-      "at": [78, 915, 18, 11],
-      "sheet": "chrome",
-      "slice": [1, 1, 1, 1]
+      "at": [70, 865, 16, 9],
+      "sheet": "chrome"
     },
     "window.normal": {
-      "at": [0, 937, 20, 20],
+      "at": [0, 885, 20, 20],
       "sheet": "chrome",
       "slice": [8, 8, 8, 8]
     }
@@ -929,6 +1276,7 @@
     },
     "caption": {
       "bold": true,
+      "case": "upper",
       "color": "#c9cfdb",
       "disabled": "#7f889c",
       "size": 10
@@ -936,6 +1284,13 @@
     "control": {
       "color": "#1d212a",
       "disabled": "#7c818c"
+    },
+    "tab": {
+      "bold": true,
+      "case": "upper",
+      "color": "#2d3240",
+      "disabled": "#7c818c",
+      "size": 8
     }
   },
   "window": {
@@ -949,7 +1304,31 @@
         "stretchX": true,
         "stretchY": true
       }
-    ]
+    ],
+    "variants": {
+      "minim.equaliser": {
+        "caption": 13,
+        "parts": {
+          "caption": {
+            "states": {
+              "inactive": "eq.caption.inactive",
+              "normal": "eq.caption"
+            },
+            "text": "tab"
+          },
+          "caption.title": {
+            "states": {
+              "inactive": "eq.tab.inactive",
+              "normal": "eq.tab"
+            }
+          }
+        },
+        "title": {
+          "align": "start",
+          "inset": 18
+        }
+      }
+    }
   },
   "year": 2026
 }

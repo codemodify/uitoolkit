@@ -103,8 +103,8 @@ func TestEverySkinPaintsEveryWindowAtEveryScale(t *testing.T) {
 			if want := map[string]face{SkinClassic: faceClassic, SkinSilver: faceSilver}[id]; f != want {
 				t.Errorf("%s@%gx: laid out as face %d, want %d", id, scale, f, want)
 			}
-			if g := f.geometry(); g != nil {
-				checkDisplay(t, id, scale, p, g)
+			if f.panelled() {
+				checkDisplay(t, id, scale, p)
 			}
 		}
 	}
@@ -113,15 +113,18 @@ func TestEverySkinPaintsEveryWindowAtEveryScale(t *testing.T) {
 // checkDisplay samples the middle of the clock's well in the strip and asks
 // that it be the display's colour — near black in the classic panel, blue in
 // the silver one — rather than chrome, which is what it would be if the art
-// and the layout had drifted apart.
-func checkDisplay(t *testing.T, id string, scale float32, p *Player, g *panel.Face) {
+// and the skin's layout had drifted apart.
+func checkDisplay(t *testing.T, id string, scale float32, p *Player) {
 	t.Helper()
 	img := p.Main.Capture()
 	o := widget.DeviceOrigin(p.strip)
-	d := g.Main.Display
+	d, ok := style.SkinSlotRect(p.strip.Look(), layoutStrip, "display", p.strip.LocalBounds())
+	if !ok {
+		t.Fatalf("%s@%gx: the skin states no display slot", id, scale)
+	}
 	// A point between the clock and the analyser: the well's own colour.
-	x := int(o.X + float32(d.X()+4)*scale)
-	y := int(o.Y + float32(d.Bottom()-3)*scale)
+	x := int(o.X + d.Min.X + 4*scale)
+	y := int(o.Y + d.Max.Y - 3*scale)
 	if x >= img.Width || y >= img.Height {
 		t.Fatalf("%s@%gx: the display is off the window", id, scale)
 	}

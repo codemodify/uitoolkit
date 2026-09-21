@@ -7,7 +7,6 @@ import (
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/a11y"
 	"github.com/codemodify/uitoolkit/internal/players"
-	"github.com/codemodify/uitoolkit/internal/players/minim/panel"
 	"github.com/codemodify/uitoolkit/layout"
 	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
@@ -37,6 +36,10 @@ type strip struct {
 	eject, mute                   *players.GlyphButton
 	shuffle, repeat               *players.GlyphButton
 	eqBtn, listBtn, skinBtn       *players.GlyphButton
+
+	// slots is where each control goes in a panel face: the skin's strip
+	// layout says where each slot is.
+	slots *widget.Slots
 }
 
 func newStrip(p *Player) *strip {
@@ -100,17 +103,23 @@ func newStrip(p *Player) *strip {
 	s.listBtn.Toggle = true
 	s.skinBtn = players.NewGlyphButton(players.GlyphSkin, "Skin", func() { p.NextSkin() })
 
-	// In a panel face every key is a picture of itself (face.go).
-	for b, name := range map[*players.GlyphButton]string{
-		s.prev: "key.prev", s.play: "key.play", s.pause: "key.pause", s.stop: "key.stop",
-		s.next: "key.next", s.eject: "key.eject", s.shuffle: "key.shuffle", s.repeat: "key.repeat",
-		s.eqBtn: "key.eq", s.listBtn: "key.pl", s.skinBtn: "key.skin",
+	// In a panel face every control sits in a slot of the skin's strip
+	// layout, and every key is the picture its slot gives it (face.go). The
+	// mute key has no slot: the panels have none, and it is hidden there.
+	s.slots = widget.NewSlots(layoutStrip).
+		Bind("display", s.readout).Bind("analyser", s.analyser).Bind("seek", s.seek).
+		Bind("volume", s.volume).Bind("balance", s.balance)
+	for b, slot := range map[*players.GlyphButton]string{
+		s.prev: "prev", s.play: "play", s.pause: "pause", s.stop: "stop",
+		s.next: "next", s.eject: "eject", s.shuffle: "shuffle", s.repeat: "repeat",
+		s.eqBtn: "eq", s.listBtn: "pl", s.skinBtn: "skin",
 	} {
-		paintAsKey(b, name)
+		s.slots.Bind(slot, b)
+		paintAsKey(b, layoutStrip, slot)
 	}
-	paintAsThumb(s.seek, "seek.thumb")
-	paintAsThumb(s.volume, "thumb")
-	paintAsThumb(s.balance, "thumb")
+	paintAsThumb(s.seek, "seek.thumb", layoutStrip, "seek")
+	paintAsThumb(s.volume, "thumb", layoutStrip, "volume")
+	paintAsThumb(s.balance, "thumb", layoutStrip, "balance")
 
 	for _, c := range s.kids() {
 		s.Add(c)
@@ -218,32 +227,15 @@ func (s *strip) Arrange(r paintengine2d.Rect) {
 	f := faceOf(s.Look())
 	s.show(f)
 	s.styleAnalyser(f)
-	if g := f.geometry(); g != nil {
-		s.arrangePanel(&g.Main)
+	if f.panelled() {
+		// Every control on its hole in the panel, where the skin says. A
+		// control the skin has no slot for is left where the face's show
+		// put it — off — rather than anywhere the skin did not say.
+		s.slots.Arrange(s.Look(), s.LocalBounds())
+		s.mute.Arrange(paintengine2d.Rect{})
 		return
 	}
 	s.arrangeWidgets()
-}
-
-// arrangePanel puts every control on its hole in the panel.
-func (s *strip) arrangePanel(m *panel.Main) {
-	lk := s.Look()
-	at := func(c widget.Component, r panel.R) {
-		c.Arrange(box(lk, r, paintengine2d.Point{}))
-	}
-	at(s.readout, m.Display)
-	at(s.analyser, m.Analyser)
-	at(s.seek, m.Seek)
-	at(s.volume, m.Volume)
-	at(s.balance, m.Balance)
-	for c, r := range map[*players.GlyphButton]panel.R{
-		s.prev: m.Prev, s.play: m.Play, s.pause: m.Pause, s.stop: m.Stop, s.next: m.Next,
-		s.eject: m.Eject, s.shuffle: m.Shuffle, s.repeat: m.Repeat,
-		s.eqBtn: m.EQ, s.listBtn: m.PL, s.skinBtn: m.Skin,
-	} {
-		at(c, r)
-	}
-	s.mute.Arrange(paintengine2d.Rect{})
 }
 
 // arrangeWidgets is Minim's own face: three rows in eighty design pixels,
@@ -312,8 +304,8 @@ func (s *strip) styleAnalyser(f face) {
 
 func (s *strip) Measure(c layout.Constraints) paintengine2d.Point {
 	lk := s.Look()
-	if g := faceOf(lk).geometry(); g != nil {
-		return c.Constrain(panelSize(lk, g, panel.MainH))
+	if sz, ok := s.slots.Measure(lk, c); ok {
+		return sz
 	}
 	return c.Constrain(paintengine2d.Pt(style.Dip(lk, StripW), style.Dip(lk, 80)))
 }
@@ -324,16 +316,15 @@ func (s *strip) Measure(c layout.Constraints) paintengine2d.Point {
 func (s *strip) Paint(ctx *paintengine2d.Context) {
 	lk := s.Look()
 	f := faceOf(lk)
-	g := f.geometry()
-	if g == nil {
+	if !f.panelled() {
 		return
 	}
-	art(lk, ctx, s.LocalBounds(), "main.face")
-	m := &g.Main
+	b := s.LocalBounds()
+	style.DrawSkinLayout(lk, ctx, b, layoutStrip)
+	at := func(slot string) paintengine2d.Rect { return slotRect(lk, layoutStrip, slot, b) }
 	in := f.ink()
 	t := s.p.Transport
 	tr := t.Track()
-	o := paintengine2d.Point{}
 
 	state := "state.stop"
 	switch t.State {
@@ -342,25 +333,25 @@ func (s *strip) Paint(ctx *paintengine2d.Context) {
 	case players.Paused:
 		state = "state.pause"
 	}
-	art(lk, ctx, box(lk, m.State, o), state)
+	art(lk, ctx, at("state"), state)
 	if t.State != players.Stopped {
-		ledClock(lk, ctx, m, o, players.Clock(t.Pos))
+		ledClock(lk, ctx, b, players.Clock(t.Pos))
 	}
 
 	// The title as the era printed it: the track's place, the artist and
 	// title, and its length.
 	title := fmt.Sprintf("%d. %s (%s)", t.List.Index()+1, tr.Label(), players.Clock(tr.Length))
-	pixScroll(lk, ctx, box(lk, m.TitleText, o), title, in.text, s.p)
+	pixScroll(lk, ctx, at("title"), title, in.text, s.p)
 
-	rt, ft := box(lk, m.RateText, o), box(lk, m.FreqText, o)
+	rt, ft := at("rate"), at("freq")
 	rate := fmt.Sprint(kbps(tr))
 	pixText(lk, ctx, rt.Max.X-pixWidth(lk, rate), rt.Min.Y, rate, in.text)
 	freq := fmt.Sprint(tr.Rate)
 	pixText(lk, ctx, ft.Max.X-pixWidth(lk, freq), ft.Min.Y, freq, in.text)
 	if tr.Channels >= 2 {
-		art(lk, ctx, box(lk, m.Stereo, o), "lamp.stereo")
+		art(lk, ctx, at("stereo"), "lamp.stereo")
 	} else {
-		art(lk, ctx, box(lk, m.Mono, o), "lamp.mono")
+		art(lk, ctx, at("mono"), "lamp.mono")
 	}
 }
 
