@@ -119,6 +119,18 @@ func (h *Host) tearOffPanel(pan *Panel, from *Stack, grab, at paintengine2d.Poin
 // the drag started; without a desktop that can carry a window it does
 // not, and the title bar falls back to the desktop's interactive move.
 func (h *Host) dragFloatingPanel(c widget.Component, pan *Panel, at paintengine2d.Point) bool {
+	if c == nil {
+		return false
+	}
+	// The window is already under the pointer: the offset is where in it
+	// the user took hold, so it does not jump.
+	return h.dragFloatingWindow(c, pan, widget.DeviceOrigin(c).Add(at))
+}
+
+// dragFloatingWindow is dragFloatingPanel from a point in the floating
+// window's own coordinates — the press on its caption, which is not in
+// any of the panel's components. c is any component in that window.
+func (h *Host) dragFloatingWindow(c widget.Component, pan *Panel, at paintengine2d.Point) bool {
 	if c == nil || pan == nil || !pan.Floating() || pan.features&FeatureMovable == 0 {
 		return false
 	}
@@ -130,9 +142,7 @@ func (h *Host) dragFloatingPanel(c widget.Component, pan *Panel, at paintengine2
 		return false
 	}
 	tear := &widget.TearOff{
-		// The window is already under the pointer: the offset is where in
-		// it the user took hold, so it does not jump.
-		Offset: widget.DeviceOrigin(c).Add(at),
+		Offset: at,
 		Open:   func() widget.TearOffWindow { return win },
 		Done: func(res widget.TearResult, _ widget.TearOffWindow) {
 			h.hideIndicator()

@@ -41,6 +41,16 @@ type FloatWindow interface {
 	Close()
 }
 
+// CaptionDragger is a FloatWindow whose own caption can start the drag
+// that docks its panel back: fn runs when a press on the window's title
+// bar becomes a drag, with the pointer in the window's coordinates, and
+// reports whether the drag was taken. app.DockWindows' windows are one,
+// under the toolkit's frame; a desktop's own title bar moves its window
+// without asking, so there the panel's title bar is the way back.
+type CaptionDragger interface {
+	SetOnCaptionDrag(fn func(at paintengine2d.Point) bool)
+}
+
 // WindowOpener opens the windows floating panels live in. An app gives the
 // host one with [Host.SetWindowOpener]; without it panels cannot float,
 // and the float button does not appear.
@@ -140,6 +150,15 @@ func (h *Host) FloatPanel(p *Panel, geom paintengine2d.Rect) bool {
 		return false // the window hides with the panel rather than dying
 	})
 	win.SetContent(st)
+	// The window's own title bar docks the panel back too, where the
+	// window can hand its caption's drags over (app.DockWindows' can,
+	// under the toolkit's frame): otherwise the bar a user reaches for
+	// first only moves the window.
+	if cw, ok := win.(CaptionDragger); ok {
+		cw.SetOnCaptionDrag(func(at paintengine2d.Point) bool {
+			return h.dragFloatingWindow(st, p, at)
+		})
+	}
 	if !p.closed {
 		win.Show()
 	}

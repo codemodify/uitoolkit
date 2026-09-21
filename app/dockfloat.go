@@ -97,6 +97,13 @@ func (d *dockWindow) SetOnCloseRequest(fn func() bool) { d.win.SetOnCloseRequest
 // StartMove hands the window to the desktop's interactive move.
 func (d *dockWindow) StartMove() bool { return d.win.StartMove() }
 
+// SetOnCaptionDrag lets the dock take a drag of the window's own caption,
+// so dragging a floating panel by its window's title bar docks it back
+// the way dragging the panel's title bar does (Window.SetOnCaptionDrag).
+func (d *dockWindow) SetOnCaptionDrag(fn func(at paintengine2d.Point) bool) {
+	d.win.SetOnCaptionDrag(fn)
+}
+
 func (d *dockWindow) Show() { d.win.Show() }
 
 func (d *dockWindow) Hide() { d.win.Hide() }

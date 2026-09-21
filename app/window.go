@@ -87,7 +87,10 @@ type Window struct {
 	// titleBar is the app's title bar (SetTitleBar); caption the header bar
 	// laid out on top: titleBar itself, wrapCaption around it, or the
 	// defaultCaption of a toolkit-drawn frame (frame.go).
-	titleBar       widget.Component
+	titleBar widget.Component
+	// onCaptionDrag takes a drag of the caption before the desktop's
+	// interactive move does (SetOnCaptionDrag).
+	onCaptionDrag  func(at paintengine2d.Point) bool
 	caption        *widgets.HeaderBar
 	wrapCaption    *widgets.HeaderBar
 	defaultCaption *widgets.HeaderBar

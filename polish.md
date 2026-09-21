@@ -71,9 +71,13 @@ Struck through once fixed; newest findings at the end of their section.
 
 ## Docking, tabs and tear-off
 
-- **A floating dock panel's title bar cannot start a re-dock drag on
+- ~~**A floating dock panel's title bar cannot start a re-dock drag on
   Wayland**: `dock.Host.dragFloatingPanel` falls back to the desktop's move, so
-  dropping it on the host only moves the window. The dock button works.
+  dropping it on the host only moves the window. The dock button works.~~
+  The panel's own title bar did dock; the bar that did not was the window's,
+  the desktop's frame. The window now takes the toolkit's frame and hands its
+  caption's drags to the dock (`Window.SetOnCaptionDrag`). Under the desktop's
+  frame (the user's "system title bar") that caption still only moves it.
 - ~~**`Host.DockPanel` can restore a panel at zero width** when its area's split
   weight collapsed while it floated: right in the layout JSON, invisible on
   screen.~~ It was not the weight: `Split.Arrange` shared the space out before

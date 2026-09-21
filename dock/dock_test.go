@@ -508,6 +508,8 @@ type fakeWindow struct {
 	closed  bool
 	moves   int
 	onClose func() bool
+	// captionDrag is the hook the dock gave the window's own caption.
+	captionDrag func(at paintengine2d.Point) bool
 	// tear is the window as a drag can carry it, nil for a desktop that
 	// cannot carry one.
 	tear *fakeTearWindow
@@ -531,6 +533,10 @@ func (w *fakeWindow) Show()                            { w.shown = true }
 func (w *fakeWindow) Hide()                            { w.shown = false }
 func (w *fakeWindow) Raise()                           {}
 func (w *fakeWindow) Close()                           { w.closed = true }
+func (w *fakeWindow) SetOnCaptionDrag(fn func(at paintengine2d.Point) bool) {
+	w.captionDrag = fn
+}
+
 func (w *fakeWindow) TearOffWindow() widget.TearOffWindow {
 	if w.tear == nil {
 		return nil

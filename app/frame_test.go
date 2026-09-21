@@ -235,6 +235,42 @@ func TestFrameServerModeHeaderBarIsFirstRow(t *testing.T) {
 	}
 }
 
+// A drag of the caption goes to the app first when it asks for it: taken,
+// the desktop is never asked to move the window (a floating dock panel's
+// window carries itself back over its host instead); refused, the desktop
+// moves it as it would have. A click is still a click.
+func TestCaptionDragGoesToTheAppFirst(t *testing.T) {
+	r := newFrameRig(t, platform.DecorationsClient)
+	var got []paintengine2d.Point
+	take := true
+	r.w.SetOnCaptionDrag(func(at paintengine2d.Point) bool {
+		got = append(got, at)
+		return take
+	})
+	p := r.freeSpace()
+	r.click(p.X, p.Y)
+	if len(got) != 0 {
+		t.Fatal("a click on the caption ran the drag hook")
+	}
+	r.now = r.now.Add(time.Second)
+	r.ev(platform.EventMouseDown, p.X, p.Y, platform.ButtonLeft)
+	r.ev(platform.EventMouseMove, p.X+20, p.Y, platform.ButtonLeft)
+	r.ev(platform.EventMouseUp, p.X+20, p.Y, platform.ButtonLeft)
+	if len(got) != 1 || got[0] != paintengine2d.Pt(p.X+20, p.Y) {
+		t.Fatalf("the hook saw %v, want one drag at %v", got, paintengine2d.Pt(p.X+20, p.Y))
+	}
+	if n := r.o.FrameCalls().Moves; n != 0 {
+		t.Fatalf("the app took the drag, and the desktop was still asked to move the window %d times", n)
+	}
+	take = false
+	r.now = r.now.Add(time.Second)
+	r.ev(platform.EventMouseDown, p.X, p.Y, platform.ButtonLeft)
+	r.ev(platform.EventMouseMove, p.X+20, p.Y, platform.ButtonLeft)
+	if n := r.o.FrameCalls().Moves; len(got) != 2 || n != 1 {
+		t.Fatalf("refused, the drag should be the desktop's move: hook %d, moves %d", len(got), n)
+	}
+}
+
 func TestCaptionDragThresholdClickAndDoubleClick(t *testing.T) {
 	r := newFrameRig(t, platform.DecorationsClient)
 	p := r.freeSpace()
