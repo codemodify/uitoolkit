@@ -271,8 +271,10 @@ type WindowOptions struct {
 	Scale           float32
 	Headless        bool
 	BackgroundPixel uint32
-	// X, Y are root/screen coordinates. Used when Popup is set (X11
-	// override-redirect / _NET_WM_WINDOW_TYPE_POPUP_MENU). Wayland
+	// X, Y are where on the desktop the window goes, in logical pixels
+	// like the size (X11 converts to root device pixels); zero for both
+	// leaves it to the desktop. A popup (X11 override-redirect /
+	// _NET_WM_WINDOW_TYPE_POPUP_MENU) is always put there. Wayland
 	// toplevels cannot be placed by the client.
 	X, Y int
 	// Popup requests a short-lived menu surface: no taskbar, no

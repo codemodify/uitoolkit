@@ -163,8 +163,8 @@ func (d *Desk) Adopt() bool {
 			known = false
 			continue
 		}
-		// The rack's boxes are the root device pixels a position is in.
-		ww, hh := w.PixelSize()
+		// The rack's boxes are the logical pixels a position is in.
+		ww, hh := w.Size()
 		p.Box = Box{X: x, Y: y, W: ww, H: hh}
 		d.want[i] = p.Box
 		d.pending[i] = 0
@@ -235,7 +235,7 @@ func (d *Desk) Show(i int, on bool) {
 	w.Show()
 }
 
-// boxOf is where a window is and how big it is, in the root pixels the rack
+// boxOf is where a window is and how big it is, in the logical pixels the rack
 // speaks. A window the desktop will not tell us about — every Wayland one —
 // keeps the box the rack already had, so the model stays coherent and only
 // the *following* is lost.
@@ -243,7 +243,7 @@ func (d *Desk) boxOf(w *app.Window) Box {
 	if w == nil || w.Closed() {
 		return Box{}
 	}
-	ww, hh := w.PixelSize()
+	ww, hh := w.Size()
 	x, y, ok := w.Position()
 	if !ok {
 		if p, i := d.paneFor(w); p != nil {

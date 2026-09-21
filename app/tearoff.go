@@ -55,12 +55,12 @@ func (w *Window) DragsWindows() bool {
 	return w != nil && !w.Closed() && platform.DragsToplevels(w.surf)
 }
 
-// Position is where the desktop put this window, in root device pixels —
-// the ones [Window.PixelSize] answers in, not the logical ones
-// [Window.Size] does — and whether it is known at all. A Wayland client is never
-// told (and cannot ask), so it answers false there; X11 answers from the
-// last ConfigureNotify and the offscreen backend from where a test put
-// the window.
+// Position is where the desktop put this window, in logical pixels — the
+// ones [Window.Size] answers in, so a window's position and size add up
+// to its far edge at any display scale — and whether it is known at all.
+// A Wayland client is never told (and cannot ask), so it answers false
+// there; X11 answers from the last ConfigureNotify and the offscreen
+// backend from where a test put the window.
 func (w *Window) Position() (x, y int, ok bool) {
 	if w == nil || w.Closed() {
 		return 0, 0, false
@@ -68,8 +68,9 @@ func (w *Window) Position() (x, y int, ok bool) {
 	return platform.SurfacePosition(w.surf)
 }
 
-// Move asks the desktop to put this window at x, y, in the same root pixels
-// [Window.Position] answers in, and reports whether the desktop let it.
+// Move asks the desktop to put this window at x, y, in the same logical
+// pixels [Window.Position] answers in, and reports whether the desktop let
+// it.
 //
 // It is [Window.Position]'s other half and it has the same shape: X11
 // clients place their own windows, so it works there and in tests; a

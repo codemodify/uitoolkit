@@ -1,6 +1,7 @@
 package dock
 
 import (
+	"math"
 	"testing"
 
 	"github.com/codemodify/paintengine2d"
@@ -101,6 +102,40 @@ func TestPanelDraggedOutOfTheWindowFloats(t *testing.T) {
 	geom := r.opener.wins[0].geom
 	if geom.Min.X != 100+want.X-tear.Tear.Offset.X || geom.Min.Y != 50+want.Y-tear.Tear.Offset.Y {
 		t.Fatalf("the window was asked for at %v, offset %v", geom, tear.Tear.Offset)
+	}
+}
+
+// At a display scale the host lays out in device pixels and a window is
+// placed and sized in logical ones: a panel torn out is asked for at the
+// pointer less the point taken hold of, both divided by the scale, and at
+// the logical size of the room it had docked.
+func TestPanelTornOutAtAScaleIsPlacedInLogicalPixels(t *testing.T) {
+	r := newTearRig(t, true)
+	r.Host.SetScale(2)
+	r.Layout()
+	docked := r.rectOf(r.tree)
+	grip := r.gripOf(t, r.tree)
+	r.MousePress(grip, platform.ButtonLeft)
+	r.Session.MouseMove(paintengine2d.Pt(grip.X+40, grip.Y+40))
+	r.Session.MouseMove(r.belowTheHost())
+	if !r.tree.Floating() {
+		t.Fatal("dragged out of the window, the panel should float")
+	}
+	tear := r.tear(t)
+	at, off := r.belowTheHost(), tear.Tear.Offset
+	geom := r.opener.wins[0].geom
+	wantX := 100 + float32(math.Round(float64((at.X-off.X)/2)))
+	wantY := 50 + float32(math.Round(float64((at.Y-off.Y)/2)))
+	if geom.Min.X != wantX || geom.Min.Y != wantY {
+		t.Errorf("the window was asked for at %v, want %g,%g (pointer %v, offset %v, scale 2)",
+			geom.Min, wantX, wantY, at, off)
+	}
+	if want := float32(math.Round(float64(docked.Dy() / 2))); geom.Dy() != want {
+		t.Errorf("the window is %g logical pixels tall, want %g: the %g device pixels it had docked",
+			geom.Dy(), want, docked.Dy())
+	}
+	if off.X < 0 || off.X >= geom.Dx()*2 || off.Y < 0 || off.Y >= geom.Dy()*2 {
+		t.Errorf("the offset %v is outside the window it is in (%gx%g device pixels)", off, geom.Dx()*2, geom.Dy()*2)
 	}
 }
 

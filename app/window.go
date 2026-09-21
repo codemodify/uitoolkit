@@ -217,8 +217,9 @@ func (w *Window) SurfaceSize() (int, int) { return w.surf.Size() }
 // desktop's own numbers are in. A window opened as 275 by 116 answers 275
 // by 116 at every display scale.
 //
-// [Window.PixelSize] is the same window in device pixels, which is what
-// pairs with [Window.Position] and with every widget rectangle.
+// It pairs with [Window.Position] and [Window.Move], which are logical
+// pixels too. [Window.PixelSize] is the same window in device pixels,
+// which is what pairs with every widget rectangle.
 func (w *Window) Size() (int, int) {
 	pw, ph := w.PixelSize()
 	sc := w.Scale()
@@ -226,8 +227,7 @@ func (w *Window) Size() (int, int) {
 }
 
 // PixelSize is the visible window in device pixels: the surface less the
-// frame's margin. It is the box widgets are laid out in, and the one
-// [Window.Position] and [Window.Move] answer in.
+// frame's margin. It is the box widgets are laid out in.
 func (w *Window) PixelSize() (int, int) {
 	box := w.WindowRect()
 	return int(box.Dx()), int(box.Dy())

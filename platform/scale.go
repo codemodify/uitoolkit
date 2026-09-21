@@ -50,6 +50,12 @@ func parseScale(s string) float32 {
 // device pixels at 1, 481 by 203 at 1.75 — so an application states its
 // design once and the same numbers give the same window on every backend.
 //
+// So is where a window is: [WindowOptions]'s X and Y, [HostMover] and
+// [HostPositioner] place and report a window in logical pixels of the
+// desktop, the same unit as its size, so an app that puts one window
+// against another's edge adds numbers of one kind (Qt's QWindow::position
+// does the same).
+//
 // Everything else stays device pixels: [Surface.Size] and [Surface.Buffer]
 // are the pixmap, event positions are in it, and so is every rectangle a
 // widget is laid out in.
@@ -83,6 +89,27 @@ func LogicalPixels(v int, scale float32) int {
 		scale = 1
 	}
 	return max(int(math.Round(float64(float32(v)/scale))), 1)
+}
+
+// DevicePosition is a logical window position — a coordinate on the
+// desktop, not a size — in device pixels. Unlike [DevicePixels] it keeps
+// zero and negative values (a window may sit left of or above the
+// primary screen's origin).
+func DevicePosition(v int, scale float32) int {
+	if scale <= 0 {
+		scale = 1
+	}
+	return int(math.Round(float64(float32(v) * scale)))
+}
+
+// LogicalPosition is DevicePosition's inverse. A position that made the
+// round trip out comes back unchanged at any scale of 1 or more, so a
+// window asked to go somewhere reports that it is there.
+func LogicalPosition(v int, scale float32) int {
+	if scale <= 0 {
+		scale = 1
+	}
+	return int(math.Round(float64(float32(v) / scale)))
 }
 
 func scaleFromDPI(dpi float32) float32 {
