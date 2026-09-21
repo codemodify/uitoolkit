@@ -2,6 +2,7 @@ package app
 
 import (
 	"errors"
+	"math"
 
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/dock"
@@ -55,18 +56,17 @@ func (o *dockOpener) OpenFloat(title string, geom paintengine2d.Rect) (dock.Floa
 	if o.app == nil {
 		return nil, errNoApplication
 	}
-	w, h := int(geom.Dx()), int(geom.Dy())
+	// The dock states a floating window's geometry the way a window's is
+	// stated, in logical pixels, position and size alike.
+	w, h := int(math.Round(float64(geom.Dx()))), int(math.Round(float64(geom.Dy())))
 	if w < 1 || h < 1 {
 		w, h = 320, 400
 	}
-	// The dock lays out in device pixels; a window's size is stated in
-	// logical ones. X and Y are root pixels either way.
-	sc := o.app.Scale()
 	opts := platform.WindowOptions{
 		Title: title,
-		Width: platform.LogicalPixels(w, sc), Height: platform.LogicalPixels(h, sc),
-		MinWidth: platform.LogicalPixels(120, sc), MinHeight: platform.LogicalPixels(80, sc),
-		X: int(geom.Min.X), Y: int(geom.Min.Y),
+		Width: w, Height: h,
+		MinWidth: 120, MinHeight: 80,
+		X: int(math.Round(float64(geom.Min.X))), Y: int(math.Round(float64(geom.Min.Y))),
 	}
 	win, err := o.app.NewWindow(opts)
 	if err != nil {
@@ -121,8 +121,8 @@ func (d *dockWindow) Geometry() paintengine2d.Rect {
 	if d.win == nil || d.win.Closed() {
 		return d.want
 	}
-	// Root device pixels, to go with the position below.
-	w, h := d.win.PixelSize()
+	// Logical pixels, to go with the position below.
+	w, h := d.win.Size()
 	if w < 1 || h < 1 {
 		return d.want
 	}

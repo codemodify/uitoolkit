@@ -450,6 +450,13 @@ What each of the five became, with the player work-around it retires:
   Wayland**, and no scale factor reconciles them.~~ **Fixed:** window
   geometry is logical pixels everywhere and the X11 backend converts at its
   own boundary; `app.Window.PixelSize` is the device-pixel box for code
-  that pairs a size with a position. `players.WindowSize` is the identity
-  now — a design pixel *is* a logical pixel — and is kept only because two
-  call sites read better with it.
+  that pairs a size with a widget rectangle. `players.WindowSize` is the
+  identity now — a design pixel *is* a logical pixel — and is kept only
+  because two call sites read better with it.
+- ~~**Window positions were still device pixels**~~ while sizes were
+  logical. **Fixed:** `Position`, `Move` and `WindowOptions.X`/`Y` are
+  logical too, so a rack's box is a position and a `Size` in one unit, and
+  its reach (`DefaultReach`) grows with the display without the apps
+  scaling it. At a fractional scale on X11 two windows snapped flush can
+  still meet a device pixel apart: each edge is rounded to the root's
+  pixels on its own.

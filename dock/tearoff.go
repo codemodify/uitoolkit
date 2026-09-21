@@ -1,6 +1,8 @@
 package dock
 
 import (
+	"math"
+
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
@@ -190,6 +192,9 @@ func floatTearWindow(pan *Panel) widget.TearOffWindow {
 // and at the pointer now, in the window's; the offset that comes back is
 // where in the floating window the pointer will sit.
 //
+// The geometry is a window's, in logical pixels, while grab, at and the
+// offset are the host's device pixels: the host's scale converts.
+//
 // The position is a request. X11 honours it, and a Wayland compositor is
 // not even asked — it places the window itself and then carries it under
 // the pointer, which is the whole point of the drag protocol.
@@ -198,14 +203,16 @@ func (h *Host) floatGeometryAt(pan *Panel, from *Stack, grab, at paintengine2d.P
 	if geom.Empty() {
 		geom = h.firstFloatGeometry(pan)
 	}
+	sc := h.scale()
 	// Where in the panel's own box the pointer took hold, kept inside the
 	// window it is about to be in.
-	off := paintengine2d.Pt(geom.Dx()*0.5, style.Dip(h.Look(), 12))
+	devW, devH := geom.Dx()*sc, geom.Dy()*sc
+	off := paintengine2d.Pt(devW*0.5, style.Dip(h.Look(), 12))
 	if from != nil {
 		if b := h.rectOf(from); !b.Empty() {
 			off = paintengine2d.Pt(
-				min(max(grab.X-b.Min.X, 0), max(geom.Dx()-1, 0)),
-				min(max(grab.Y-b.Min.Y, 0), max(geom.Dy()-1, 0)))
+				min(max(grab.X-b.Min.X, 0), max(devW-1, 0)),
+				min(max(grab.Y-b.Min.Y, 0), max(devH-1, 0)))
 		}
 	}
 	x, y, ok := hostWindowPosition(h)
@@ -214,11 +221,15 @@ func (h *Host) floatGeometryAt(pan *Panel, from *Stack, grab, at paintengine2d.P
 		// can be asked for: the desktop places it.
 		return paintengine2d.XYWH(0, 0, geom.Dx(), geom.Dy()), off
 	}
-	return paintengine2d.XYWH(float32(x)+at.X-off.X, float32(y)+at.Y-off.Y, geom.Dx(), geom.Dy()), off
+	return paintengine2d.XYWH(
+		float32(x)+float32(math.Round(float64((at.X-off.X)/sc))),
+		float32(y)+float32(math.Round(float64((at.Y-off.Y)/sc))),
+		geom.Dx(), geom.Dy()), off
 }
 
-// hostWindowPosition is where the desktop put the host's window, where
-// the backend is told at all (X11 is, Wayland is not).
+// hostWindowPosition is where the desktop put the host's window, in
+// logical pixels, where the backend is told at all (X11 is, Wayland is
+// not).
 func hostWindowPosition(h *Host) (int, int, bool) {
 	w, ok := h.Host().(interface{ Position() (int, int, bool) })
 	if !ok {

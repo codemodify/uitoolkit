@@ -268,8 +268,8 @@ Where the desktop cannot carry a window the title bar falls back to
 window's title bar does everywhere, and the dock button is the way back
 in.
 
-`Window.Position()` answers where the desktop put a window, for the
-backends that are told: X11 from `ConfigureNotify` (translated to the root
+`Window.Position()` answers where the desktop put a window, in logical
+pixels like its size, for the backends that are told: X11 from `ConfigureNotify` (translated to the root
 only when someone asks, so an interactive move costs no round trip), and
 never on Wayland, where a toplevel has no position at all. A saved layout
 therefore restores a floating panel's size exactly and its position only

@@ -101,8 +101,10 @@ Struck through once fixed; newest findings at the end of their section.
 
 ## Platform
 
-- **`Position` and `Move` are still device pixels** while sizes are logical;
-  converting them is the natural follow-up to the size fix.
+- ~~**`Position` and `Move` are still device pixels** while sizes are logical;
+  converting them is the natural follow-up to the size fix.~~ Positions are
+  logical everywhere (`WindowOptions.X`/`Y`, `Move`, `Position`, the dock's
+  float geometry, the players' rack).
 - **X11's scale is connection-wide**: the last window's `WindowOptions.Scale`
   sets it for the display (X11's own model, one `Xft.dpi`).
 - **`UITK_SCALE` on a Wayland output at scale 1** draws at the asked scale into

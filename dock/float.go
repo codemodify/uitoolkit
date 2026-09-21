@@ -1,6 +1,8 @@
 package dock
 
 import (
+	"math"
+
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
@@ -14,10 +16,12 @@ type FloatWindow interface {
 	SetTitle(title string)
 	// SetContent puts the panel's chrome and content in the window.
 	SetContent(c widget.Component)
-	// Geometry is where the window is and how big, in screen pixels. The
-	// origin is best effort: X11 answers where the window manager put the
-	// window, while a Wayland client is not told where its windows are,
-	// so there it is the position the window was asked for.
+	// Geometry is where the window is and how big, in the logical pixels
+	// a window's size and position are stated in (so a layout saved at
+	// one display scale opens the same window at another). The origin is
+	// best effort: X11 answers where the window manager put the window,
+	// while a Wayland client is not told where its windows are, so there
+	// it is the position the window was asked for.
 	Geometry() paintengine2d.Rect
 	// TearOffWindow is the window as a drag can carry it, so dragging a
 	// floating panel's title bar back over its host docks it there
@@ -46,8 +50,10 @@ type FloatWindow interface {
 // pointer, and the desktop carries it from there. Nothing here assumes
 // the window appears only on a button press.
 type WindowOpener interface {
-	// OpenFloat opens a window for a panel. geom is where to put it; an
-	// empty rect asks for the desktop's own choice.
+	// OpenFloat opens a window for a panel. geom is where to put it, in
+	// logical pixels (see FloatWindow.Geometry); an empty rect asks for the
+	// desktop's own choice, and one at the origin for the desktop to
+	// place a window of that size.
 	OpenFloat(title string, geom paintengine2d.Rect) (FloatWindow, error)
 }
 
@@ -55,7 +61,9 @@ type WindowOpener interface {
 // floats: the room the panel had docked, but never so thin or so short
 // that the window is useless and never more than most of the host — a log
 // docked along the whole bottom edge would otherwise float as a window the
-// width of the app and a few lines tall.
+// width of the app and a few lines tall. The host lays out in device
+// pixels and a window is sized in logical ones, so it comes back divided
+// by the host's scale.
 func (h *Host) firstFloatGeometry(p *Panel) paintengine2d.Rect {
 	lk := h.Look()
 	w, hh := style.Dip(lk, 320), style.Dip(lk, 400)
@@ -77,12 +85,23 @@ func (h *Host) firstFloatGeometry(p *Panel) paintengine2d.Rect {
 			hh = capH
 		}
 	}
-	return paintengine2d.XYWH(0, 0, w, hh)
+	sc := h.scale()
+	return paintengine2d.XYWH(0, 0, float32(math.Round(float64(w/sc))), float32(math.Round(float64(hh/sc))))
+}
+
+// scale is the display scale the host is laid out at: device pixels per
+// logical one.
+func (h *Host) scale() float32 {
+	if host := h.Host(); host != nil && host.Scale() > 0 {
+		return host.Scale()
+	}
+	return 1
 }
 
 // FloatPanel takes p out of the tree and into a window of its own. geom is
-// where to put the window; an empty rect uses the panel's remembered
-// geometry, else a default size. It reports whether the panel floated.
+// where to put the window, in logical pixels (see FloatWindow.Geometry);
+// an empty rect uses the panel's remembered geometry, else a default size.
+// It reports whether the panel floated.
 func (h *Host) FloatPanel(p *Panel, geom paintengine2d.Rect) bool {
 	if p == nil || h.opener == nil || p.features&FeatureFloatable == 0 {
 		return false

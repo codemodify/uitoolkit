@@ -964,7 +964,7 @@ func (X11Backend) NewSurface(opts WindowOptions) (Surface, error) {
 	ctitle := C.CString(title)
 	defer C.free(unsafe.Pointer(ctitle))
 	x11Mu.Lock()
-	x, y := opts.X, opts.Y
+	x, y := DevicePosition(opts.X, scale), DevicePosition(opts.Y, scale)
 	popup := 0
 	if opts.Popup {
 		popup = 1
@@ -2619,14 +2619,17 @@ func (s *x11Surface) Move(x, y int) {
 		return
 	}
 	x11Mu.Lock()
-	// The caller places the window the user sees; the X window is that
-	// plus the margin the frame's shadow lives in.
-	C.ui_move(s.conn.dpy, s.win, C.int(x-s.frame.Margin.Left), C.int(y-s.frame.Margin.Top))
+	// The caller places the window the user sees, in logical pixels; the
+	// X window is in root device pixels, and is that plus the margin the
+	// frame's shadow lives in.
+	sc := s.conn.displayScale()
+	dx, dy := DevicePosition(x, sc), DevicePosition(y, sc)
+	C.ui_move(s.conn.dpy, s.win, C.int(dx-s.frame.Margin.Left), C.int(dy-s.frame.Margin.Top))
 	x11Mu.Unlock()
 }
 
 // Position implements [HostPositioner]: where the window manager has put
-// the window, in root coordinates, counting from the window the user sees
+// the window, in logical pixels, counting from the window the user sees
 // rather than from the margin around it. It is the last ConfigureNotify's
 // answer, translated to the root here when the manager's configure was
 // frame-relative, so an interactive move costs no round trip.
@@ -2647,7 +2650,8 @@ func (s *x11Surface) Position() (int, int, bool) {
 		}
 		x, y = int(rx), int(ry)
 	}
-	return x + s.frame.Margin.Left, y + s.frame.Margin.Top, true
+	sc := s.conn.displayScale()
+	return LogicalPosition(x+s.frame.Margin.Left, sc), LogicalPosition(y+s.frame.Margin.Top, sc), true
 }
 
 func (s *x11Surface) Wake() {
@@ -3168,7 +3172,7 @@ func (s *x11Surface) recreateOnVisual(argb bool) {
 	x11Mu.Lock()
 	defer x11Mu.Unlock()
 	mapped := s.mapped
-	x, y := s.opts.X, s.opts.Y
+	x, y := DevicePosition(s.opts.X, c.displayScale()), DevicePosition(s.opts.Y, c.displayScale())
 	if mapped {
 		var rx, ry C.int
 		if C.ui_to_root(c.dpy, s.win, 0, 0, &rx, &ry) != 0 {

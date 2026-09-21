@@ -314,8 +314,10 @@ another version of the format is refused whole, with `ErrLayoutVersion`, so
 the app can fall back. `SetDefaultLayout` records the arrangement an app
 ships with and `ResetLayout` goes back to it.
 
-The floating geometry a layout saves is still best effort, and now for one
-reason only: a Wayland toplevel has no position. X11 answers where the
+The floating geometry a layout saves is in logical pixels, the unit a
+window's size and position are stated in, so a layout saved at one display
+scale opens the same windows at another. It is still best effort, and now
+for one reason only: a Wayland toplevel has no position. X11 answers where the
 window manager put the window (`Window.Position()`, from `ConfigureNotify`)
 and a layout comes back exactly; on Wayland the size comes back and the
 position is the one that was asked for, which the compositor is free to
