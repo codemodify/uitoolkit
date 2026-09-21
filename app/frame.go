@@ -952,6 +952,17 @@ func (a *Application) SetCaptionButtons(p style.CaptionButtonsPref) {
 // buttons (see SetCaptionButtons).
 func (a *Application) CaptionButtons() style.CaptionButtonsPref { return a.captionPref }
 
+// Decorations is the user's preference for who draws the frame of the
+// application's windows (look.json "decorations", or what ApplyAppearance
+// last set). What a window actually got — the desktop has the last word —
+// is [Window.Decorations].
+func (a *Application) Decorations() style.DecorationsPref {
+	if a == nil {
+		return style.DecorationsAuto
+	}
+	return a.decorPref
+}
+
 // setDecorationsPref applies the user's decorations preference (look.json).
 func (a *Application) setDecorationsPref(p style.DecorationsPref) {
 	p = style.ParseDecorationsPref(string(p))

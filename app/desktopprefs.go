@@ -133,14 +133,42 @@ func (a *Application) ApplyAppearance(ap style.Appearance) {
 	}
 	style.SetReduceMotion(ap.ReduceMotion)
 	style.SetNativeDialogs(ap.NativeDialogs)
-	if !a.headless {
-		a.setDecorationsPref(ap.Decorations)
-		a.SetCaptionButtons(ap.CaptionButtons)
-	}
+	// Kept offscreen too, so what Appearance reports is what was applied;
+	// the frame policy gives an offscreen window no frame of the toolkit's
+	// whatever the preference says (resolveDecorations).
+	a.setDecorationsPref(ap.Decorations)
+	a.SetCaptionButtons(ap.CaptionButtons)
 	a.following = ap.FollowDesktop
 	if a.look == nil {
 		a.SetLook(ap.Look())
 		return
 	}
 	a.SetLook(style.WithAppearance(a.look, ap))
+}
+
+// Appearance is the whole appearance the application runs in: what its
+// look carries — the pack, the palette, the corners, the icons — and the
+// preferences that are the application's rather than the look's: who
+// draws the frame, where the caption buttons go, reduced motion, the
+// desktop's file dialogs, and following the desktop's light / dark mode.
+//
+// It is ApplyAppearance's other half. An app that switches packs changes
+// what it means to in the value this returns and hands the rest back
+// untouched; one built from style.LookAppearance alone would quietly
+// reset every preference a look cannot carry.
+//
+// While the look follows the desktop, Name is the sibling on screen
+// (a dark pack's light sibling in a light session); applied again, it follows
+// the same way.
+func (a *Application) Appearance() style.Appearance {
+	if a == nil {
+		return style.DefaultAppearance()
+	}
+	ap := style.LookAppearance(a.look)
+	ap.Decorations = a.decorPref
+	ap.CaptionButtons = a.captionPref
+	ap.ReduceMotion = style.ReduceMotion()
+	ap.NativeDialogs = style.NativeDialogs()
+	ap.FollowDesktop = a.following
+	return ap.Normalize()
 }

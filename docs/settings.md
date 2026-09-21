@@ -301,7 +301,22 @@ or dark reloads the same way while the appearance follows it, and
 `Application.OnLookChange` callbacks run after every change (Settings
 redraws its preview there).
 `Application.ApplyAppearance(ap)` applies an `Appearance` without saving
-it: theme, corners, icons, motion and following the desktop.
+it: theme, corners, icons, motion, the file dialogs, who draws the frame,
+where the caption buttons go and following the desktop.
+`Application.Appearance()` is its other half — the whole appearance the
+app runs in — so an app that switches packs starts from it:
+
+```go
+ap := app.Appearance()
+ap.Name = "win95"
+app.ApplyAppearance(ap) // the frame, the caption buttons and motion stay
+```
+
+`style.LookAppearance(look)` reads back only what a look carries (pack,
+palette, corners, icons); the preferences that are the application's come
+back at their defaults, so an appearance rebuilt from it and applied would
+reset them. `Application.Decorations()` and `CaptionButtons()` read the
+two frame preferences on their own.
 
 `Application.New` enables the watcher **by default when `Options.Look` is
 nil** (that path already uses `PreferredLook()`). This is the least
@@ -365,7 +380,7 @@ corners, the icon set, and icon size on top.
 | `PreferredLook`, `LookAppearance`, `WithIconSize`, `IconSizePixels` | `style` / `uitoolkit` |
 | `Options.WatchLook`, `Options.DisableLookWatch` | `app` / `uitoolkit` |
 | `Application.WatchingLook`, `Application.ReloadPreferredLook` | `app` |
-| `Application.ApplyAppearance`, `Application.OnLookChange`, `Application.DesktopColorScheme`, `ColorSchemeEnv` | `app` |
+| `Application.ApplyAppearance`, `Application.Appearance`, `Application.Decorations`, `Application.OnLookChange`, `Application.DesktopColorScheme`, `ColorSchemeEnv` | `app` |
 | `ColorScheme`, `SchemeVariant`, `Appearance.Effective`, `SetDesktopColorScheme`, `DesktopReducesMotion` | `style` / `uitoolkit` |
 | `AccentEngine`, `SetDesktopAccent`, `DesktopAccent`, `TakesAccent`, `CloneTokenMaps` | `style` |
 | `DesktopPrefs`, `ReadDesktopPrefs`, `WatchDesktopPrefs` (the portal) | `platform` |
