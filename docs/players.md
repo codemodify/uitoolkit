@@ -251,7 +251,10 @@ scale, which a bitmap stretched to fit would not give — and a failure names
 the row that is wrong instead of handing back two pictures.
 
 Real hardware, through the nested-KWin rig, is in
-[docs/e2e/2026-09-17/players-realhw.md](e2e/2026-09-17/players-realhw.md).
+[docs/e2e/2026-09-17/players-realhw.md](e2e/2026-09-17/players-realhw.md),
+and the five gaps below that were closed afterwards are checked on the same
+rig in
+[docs/e2e/2026-09-21/toolkit-gaps.md](e2e/2026-09-21/toolkit-gaps.md).
 
 ## What they ran into
 
