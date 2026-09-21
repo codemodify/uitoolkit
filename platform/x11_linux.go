@@ -281,13 +281,25 @@ static void ui_map(Display* d, Window w) {
 	XFlush(d);
 }
 
-// WM_NORMAL_HINTS: the window's minimum, and its maximum where it has one.
+// WM_NORMAL_HINTS: the window's minimum, its maximum where it has one, and
+// the position the client put it at where it placed it itself.
 // A window manager reads PMinSize == PMaxSize as "not resizable" — it drops
 // the resize edges, greys maximize out and clamps a drag — which is how a
 // fixed-size window is stated on X11.
-static void ui_resize_hints(Display* d, Window w, int minw, int minh, int maxw, int maxh) {
+static void ui_resize_hints(Display* d, Window w, int minw, int minh, int maxw, int maxh, int placed, int x, int y) {
 	XSizeHints hints;
 	memset(&hints, 0, sizeof(hints));
+	if (placed) {
+		// The client placed the window: a window manager maps it there
+		// rather than where its own placement policy would. Static
+		// gravity makes the position the client window's own, not its
+		// frame's, which is what Position reads back and what a move of
+		// the mapped window means too.
+		hints.flags |= USPosition | PPosition | PWinGravity;
+		hints.x = x;
+		hints.y = y;
+		hints.win_gravity = StaticGravity;
+	}
 	if (minw > 0 || minh > 0) {
 		hints.flags |= PMinSize;
 		hints.min_width = minw > 0 ? minw : 1;
@@ -994,6 +1006,9 @@ func (X11Backend) NewSurface(opts WindowOptions) (Surface, error) {
 		sizing:   opts.Sizing,
 	}
 	s.limits = limitsFor(s.sizing, opts, lw, lh)
+	if opts.Popup || opts.X != 0 || opts.Y != 0 {
+		s.placed, s.placeX, s.placeY = true, x, y
+	}
 	s.applySizeHintsLocked()
 	s.state.Solid = !c.composited
 	if opts.Popup {
@@ -1045,6 +1060,7 @@ type x11Conn struct {
 	atomActFull   C.Atom
 	atomSupported C.Atom
 	atomMoveRes   C.Atom
+	atomMoveWin   C.Atom
 	atomShowMenu  C.Atom
 	atomMotif     C.Atom
 	// supported is the window manager's _NET_SUPPORTED, read once (nil
@@ -1155,6 +1171,12 @@ type x11Surface struct {
 	opts   WindowOptions
 	sizing Sizing
 	limits SizeLimits
+	// placed says the client chose where the X window goes — a position
+	// in its WindowOptions, a Move or a drag carrying it before it was
+	// mapped — and placeX, placeY where, in root device pixels: what
+	// WM_NORMAL_HINTS states so the window manager maps it there.
+	placed         bool
+	placeX, placeY int
 	// posX, posY are where the last ConfigureNotify put the X window and
 	// posKnown that one has arrived. posRoot says those coordinates were
 	// already root-relative — a synthetic configure from the window
@@ -1237,6 +1259,7 @@ func x11OpenLocked() (*x11Conn, error) {
 	c.atomActFull = internAtom(d, "_NET_WM_ACTION_FULLSCREEN")
 	c.atomSupported = internAtom(d, "_NET_SUPPORTED")
 	c.atomMoveRes = internAtom(d, "_NET_WM_MOVERESIZE")
+	c.atomMoveWin = internAtom(d, "_NET_MOVERESIZE_WINDOW")
 	c.atomShowMenu = internAtom(d, "_GTK_SHOW_WINDOW_MENU")
 	c.atomMotif = internAtom(d, "_MOTIF_WM_HINTS")
 	c.atomExtents = internAtom(d, "_GTK_FRAME_EXTENTS")
@@ -2623,8 +2646,12 @@ func (s *x11Surface) Move(x, y int) {
 	// X window is in root device pixels, and is that plus the margin the
 	// frame's shadow lives in.
 	sc := s.conn.displayScale()
-	dx, dy := DevicePosition(x, sc), DevicePosition(y, sc)
-	C.ui_move(s.conn.dpy, s.win, C.int(dx-s.frame.Margin.Left), C.int(dy-s.frame.Margin.Top))
+	dx := DevicePosition(x, sc) - s.frame.Margin.Left
+	dy := DevicePosition(y, sc) - s.frame.Margin.Top
+	if !s.mapped {
+		s.placeLocked(dx, dy)
+	}
+	C.ui_move(s.conn.dpy, s.win, C.int(dx), C.int(dy))
 	x11Mu.Unlock()
 }
 
@@ -3014,9 +3041,26 @@ func (s *x11Surface) applySizeHintsLocked() {
 		}
 		return C.int(DevicePixels(v, sc) + margin)
 	}
+	placed := C.int(0)
+	if s.placed {
+		placed = 1
+	}
 	C.ui_resize_hints(c.dpy, s.win,
 		grow(l.MinWidth, m.Width()), grow(l.MinHeight, m.Height()),
-		grow(l.MaxWidth, m.Width()), grow(l.MaxHeight, m.Height()))
+		grow(l.MaxWidth, m.Width()), grow(l.MaxHeight, m.Height()),
+		placed, C.int(s.placeX), C.int(s.placeY))
+}
+
+// placeLocked records that the client put the (unmapped) X window at x, y
+// of the root, so WM_NORMAL_HINTS says so and the window manager maps it
+// there. The hints are all a window manager reads at map time: an
+// XMoveWindow before the map alone is overruled by its placement policy.
+func (s *x11Surface) placeLocked(x, y int) {
+	if s.placed && s.placeX == x && s.placeY == y {
+		return
+	}
+	s.placed, s.placeX, s.placeY = true, x, y
+	s.applySizeHintsLocked()
 }
 
 // SuitsClientFrame: the window manager moves and resizes on request
@@ -3173,6 +3217,11 @@ func (s *x11Surface) recreateOnVisual(argb bool) {
 	defer x11Mu.Unlock()
 	mapped := s.mapped
 	x, y := DevicePosition(s.opts.X, c.displayScale()), DevicePosition(s.opts.Y, c.displayScale())
+	if s.placed {
+		// Wherever it was put since — a Move, a drag carrying it — and
+		// not only where it was made.
+		x, y = s.placeX, s.placeY
+	}
 	if mapped {
 		var rx, ry C.int
 		if C.ui_to_root(c.dpy, s.win, 0, 0, &rx, &ry) != 0 {
