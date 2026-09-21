@@ -55,8 +55,9 @@ func (w *Window) DragsWindows() bool {
 	return w != nil && !w.Closed() && platform.DragsToplevels(w.surf)
 }
 
-// Position is where the desktop put this window, in the same pixels its
-// size is in, and whether it is known at all. A Wayland client is never
+// Position is where the desktop put this window, in root device pixels —
+// the ones [Window.PixelSize] answers in, not the logical ones
+// [Window.Size] does — and whether it is known at all. A Wayland client is never
 // told (and cannot ask), so it answers false there; X11 answers from the
 // last ConfigureNotify and the offscreen backend from where a test put
 // the window.

@@ -158,6 +158,9 @@ const (
 	EventKeyDown
 	EventKeyUp
 	EventText
+	// EventResize: the window has a new size, in the logical pixels
+	// WindowOptions and Resize speak (Width, Height). The buffer behind
+	// Surface.Size is already that size times the display scale.
 	EventResize
 	EventClose
 	EventExpose
@@ -242,6 +245,10 @@ type Event struct {
 }
 
 // WindowOptions configure a native or offscreen surface.
+//
+// Every size here is in **logical pixels** — see scale.go: a window asked
+// for as 275 by 116 is that at any display scale, and the backend converts
+// where the window system wants device pixels instead.
 type WindowOptions struct {
 	Title     string
 	Width     int
@@ -254,7 +261,14 @@ type WindowOptions struct {
 	// Sizing says whether the desktop may resize the window at all (see
 	// [Sizing]). The zero value is resizable; SizingFixed pins the window
 	// to the size it opens at, and Min / Max are then that size.
-	Sizing          Sizing
+	Sizing Sizing
+	// Scale is the display scale the toolkit draws at, where the
+	// application has one to state: an explicit app scale, or UITK_SCALE
+	// and friends. A backend whose window geometry is device pixels
+	// converts the sizes above with it, so the window and the metrics
+	// drawn in it agree. Zero — the usual case — means the display's own
+	// scale, which the backend detects for itself.
+	Scale           float32
 	Headless        bool
 	BackgroundPixel uint32
 	// X, Y are root/screen coordinates. Used when Popup is set (X11
@@ -287,7 +301,14 @@ type WindowOptions struct {
 type Surface interface {
 	Title() string
 	SetTitle(title string)
+	// Size is the buffer, in device pixels: what Buffer() is that many
+	// pixels across, and what Present's rectangles are measured in.
 	Size() (w, h int)
+	// Resize asks for a window this many **logical** pixels across (the
+	// unit WindowOptions states, and the one EventResize reports back),
+	// whatever the display scale. The buffer that follows is larger by
+	// the scale, and by the margin a frame the toolkit draws keeps for
+	// its shadow.
 	Resize(w, h int) error
 	Buffer() *paintengine2d.Image
 	Present(dirty []paintengine2d.Rect) error

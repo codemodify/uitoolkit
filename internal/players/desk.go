@@ -163,7 +163,8 @@ func (d *Desk) Adopt() bool {
 			known = false
 			continue
 		}
-		ww, hh := w.Size()
+		// The rack's boxes are the root device pixels a position is in.
+		ww, hh := w.PixelSize()
 		p.Box = Box{X: x, Y: y, W: ww, H: hh}
 		d.want[i] = p.Box
 		d.pending[i] = 0
@@ -242,7 +243,7 @@ func (d *Desk) boxOf(w *app.Window) Box {
 	if w == nil || w.Closed() {
 		return Box{}
 	}
-	ww, hh := w.Size()
+	ww, hh := w.PixelSize()
 	x, y, ok := w.Position()
 	if !ok {
 		if p, i := d.paneFor(w); p != nil {

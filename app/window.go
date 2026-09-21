@@ -212,18 +212,38 @@ func (w *Window) Title() string             { return w.surf.Title() }
 // Size is the window itself, which is what an app means by "the window".
 func (w *Window) SurfaceSize() (int, int) { return w.surf.Size() }
 
-// Size is the visible window in device pixels: the surface less the frame's
-// margin (the same box the desktop moves, snaps and tiles).
+// Size is the visible window in **logical pixels** — the units
+// [Window.SetSize] and [platform.WindowOptions] speak, and the units a
+// desktop's own numbers are in. A window opened as 275 by 116 answers 275
+// by 116 at every display scale.
+//
+// [Window.PixelSize] is the same window in device pixels, which is what
+// pairs with [Window.Position] and with every widget rectangle.
 func (w *Window) Size() (int, int) {
+	pw, ph := w.PixelSize()
+	sc := w.Scale()
+	return platform.LogicalPixels(pw, sc), platform.LogicalPixels(ph, sc)
+}
+
+// PixelSize is the visible window in device pixels: the surface less the
+// frame's margin. It is the box widgets are laid out in, and the one
+// [Window.Position] and [Window.Move] answer in.
+func (w *Window) PixelSize() (int, int) {
 	box := w.WindowRect()
 	return int(box.Dx()), int(box.Dy())
 }
 
-// SetSize asks for a visible window this many device pixels across. It is
-// [Window.Size]'s other half: the size of the *window* the user sees, not of
-// the surface, which is larger by whatever margin a frame the toolkit draws
-// is keeping for its shadow. An app that wants a 468 by 96 window asks for
-// 468 by 96 and never has to know the margin exists.
+// SetSize asks for a visible window this many **logical** pixels across —
+// the same units [platform.WindowOptions] states and [Window.Size]
+// answers, so a size an app states once is the same window at every
+// display scale: 275 by 116 is 275 by 116 device pixels at 1 and 481 by
+// 203 at 1.75, with the content drawn at that scale to match.
+//
+// It is [Window.Size]'s other half: the size of the *window* the user
+// sees, not of the surface, which is larger by whatever margin a frame the
+// toolkit draws is keeping for its shadow. An app that wants a 468 by 96
+// window asks for 468 by 96 and never has to know the margin exists, nor
+// which backend it is running on.
 //
 // It is a request like every other window-geometry call. A desktop may give
 // a different size, and a maximized, tiled or full-screen window keeps the
