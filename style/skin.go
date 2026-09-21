@@ -136,6 +136,11 @@ type Skin struct {
 	// silhouette, and the variants it dresses particular windows in.
 	Window *SkinWindow
 
+	// Layouts are fixed panels: named slots at design coordinates that an
+	// app binds its own widgets to (skin_layout.go). A skin places; it never
+	// adds a control, a route or an action.
+	Layouts map[string]*SkinLayout
+
 	// Tokens are the colours, metrics and params for what art does not
 	// cover, in theme.json's own vocabulary.
 	Tokens ThemeTokens
@@ -470,6 +475,7 @@ type skinFileJSON struct {
 	Parts   map[string]json.RawMessage `json:"parts,omitempty"`
 	Text    map[string]json.RawMessage `json:"text,omitempty"`
 	Window  json.RawMessage            `json:"window,omitempty"`
+	Layouts map[string]json.RawMessage `json:"layouts,omitempty"`
 
 	Colors  map[string]string  `json:"colors,omitempty"`
 	Metrics *chromeMetricsJSON `json:"metrics,omitempty"`
@@ -729,6 +735,7 @@ func parseSkin(name string, raw []byte, fsys fs.FS) (*Skin, error) {
 		Sprites: map[string]*SkinSprite{},
 		Parts:   map[string]*SkinPart{},
 		Text:    map[string]*SkinText{},
+		Layouts: map[string]*SkinLayout{},
 		fsys:    fsys,
 	}
 	if sk.Label == "" {
@@ -757,6 +764,9 @@ func parseSkin(name string, raw []byte, fsys fs.FS) (*Skin, error) {
 		return nil, err
 	}
 	if err := sk.loadWindow(doc.Window); err != nil {
+		return nil, err
+	}
+	if err := sk.loadLayouts(doc.Layouts); err != nil {
 		return nil, err
 	}
 	if err := sk.loadTokens(doc); err != nil {
