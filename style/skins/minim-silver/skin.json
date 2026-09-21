@@ -1,0 +1,955 @@
+{
+  "base": "luna",
+  "colors": {
+    "focus": "#5f8fe8"
+  },
+  "family": "light",
+  "label": "Minim Silver",
+  "lineage": "uitoolkit",
+  "metrics": {
+    "menuItemH": 20
+  },
+  "parts": {
+    "caption": {
+      "states": {
+        "inactive": "caption.inactive",
+        "normal": "caption.normal"
+      },
+      "text": "caption"
+    },
+    "caption.button": {
+      "states": {
+        "hover": "capbtn.hover",
+        "normal": "capbtn.normal",
+        "pressed": "capbtn.pressed"
+      },
+      "text": "capkey"
+    },
+    "caption.title": {
+      "states": {
+        "inactive": "caption.plate.inactive",
+        "normal": "caption.plate"
+      }
+    },
+    "focus": {
+      "states": {
+        "normal": "focus.ring"
+      }
+    },
+    "window": {
+      "states": {
+        "normal": "window.normal"
+      }
+    }
+  },
+  "sheets": {
+    "chrome": {
+      "1x": "art/chrome.png",
+      "2x": "art/chrome@2x.png"
+    }
+  },
+  "skin": 1,
+  "sprites": {
+    "capbtn.hover": {
+      "at": [193, 937, 9, 9],
+      "sheet": "chrome",
+      "slice": [3, 3, 3, 3]
+    },
+    "capbtn.normal": {
+      "at": [182, 937, 9, 9],
+      "sheet": "chrome",
+      "slice": [3, 3, 3, 3]
+    },
+    "capbtn.pressed": {
+      "at": [204, 937, 9, 9],
+      "sheet": "chrome",
+      "slice": [3, 3, 3, 3]
+    },
+    "caption.inactive": {
+      "at": [88, 937, 64, 15],
+      "sheet": "chrome",
+      "slice": [0, 30, 0, 20]
+    },
+    "caption.normal": {
+      "at": [22, 937, 64, 15],
+      "sheet": "chrome",
+      "slice": [0, 30, 0, 20]
+    },
+    "caption.plate": {
+      "at": [154, 937, 12, 15],
+      "sheet": "chrome",
+      "slice": [0, 4, 0, 4]
+    },
+    "caption.plate.inactive": {
+      "at": [168, 937, 12, 15],
+      "sheet": "chrome",
+      "slice": [0, 4, 0, 4]
+    },
+    "eq.face": {
+      "at": [0, 104, 275, 102],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "eq.thumb": {
+      "at": [51, 915, 14, 14],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "eq.thumb.down": {
+      "at": [129, 915, 14, 14],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "focus.ring": {
+      "at": [215, 937, 8, 8],
+      "middle": "none",
+      "sheet": "chrome",
+      "slice": [2, 2, 2, 2]
+    },
+    "font.20": {
+      "at": [0, 905, 5, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "font.2014": {
+      "at": [457, 905, 7, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "font.21": {
+      "at": [7, 905, 3, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "font.22": {
+      "at": [12, 905, 5, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "font.23": {
+      "at": [19, 905, 7, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "font.25": {
+      "at": [28, 905, 6, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "font.26": {
+      "at": [36, 905, 7, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "font.27": {
+      "at": [45, 905, 3, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "font.28": {
+      "at": [50, 905, 4, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "font.29": {
+      "at": [56, 905, 4, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "font.2a": {
+      "at": [62, 905, 5, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "font.2b": {
+      "at": [69, 905, 5, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "font.2c": {
+      "at": [76, 905, 4, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "font.2d": {
+      "at": [82, 905, 5, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "font.2e": {
+      "at": [89, 905, 3, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "font.2f": {
+      "at": [94, 905, 5, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "font.30": {
+      "at": [101, 905, 6, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "font.31": {
+      "at": [109, 905, 5, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "font.32": {
+      "at": [116, 905, 6, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "font.33": {
+      "at": [124, 905, 6, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "font.34": {
+      "at": [132, 905, 6, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "font.35": {
+      "at": [140, 905, 6, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "font.36": {
+      "at": [148, 905, 6, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "font.37": {
+      "at": [156, 905, 6, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "font.38": {
+      "at": [164, 905, 6, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "font.39": {
+      "at": [172, 905, 6, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "font.3a": {
+      "at": [180, 905, 3, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "font.3b": {
+      "at": [185, 905, 4, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "font.3c": {
+      "at": [191, 905, 5, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "font.3d": {
+      "at": [198, 905, 5, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "font.3e": {
+      "at": [205, 905, 5, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "font.3f": {
+      "at": [212, 905, 6, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "font.41": {
+      "at": [220, 905, 6, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "font.42": {
+      "at": [228, 905, 6, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "font.43": {
+      "at": [236, 905, 6, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "font.44": {
+      "at": [244, 905, 6, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "font.45": {
+      "at": [252, 905, 6, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "font.46": {
+      "at": [260, 905, 6, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "font.47": {
+      "at": [268, 905, 6, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "font.48": {
+      "at": [276, 905, 6, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "font.49": {
+      "at": [284, 905, 5, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "font.4a": {
+      "at": [291, 905, 6, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "font.4b": {
+      "at": [299, 905, 6, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "font.4c": {
+      "at": [307, 905, 6, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "font.4d": {
+      "at": [315, 905, 7, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "font.4e": {
+      "at": [324, 905, 6, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "font.4f": {
+      "at": [332, 905, 6, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "font.50": {
+      "at": [340, 905, 6, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "font.51": {
+      "at": [348, 905, 6, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "font.52": {
+      "at": [356, 905, 6, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "font.53": {
+      "at": [364, 905, 6, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "font.54": {
+      "at": [372, 905, 7, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "font.55": {
+      "at": [381, 905, 6, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "font.56": {
+      "at": [389, 905, 7, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "font.57": {
+      "at": [398, 905, 7, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "font.58": {
+      "at": [407, 905, 6, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "font.59": {
+      "at": [415, 905, 7, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "font.5a": {
+      "at": [424, 905, 6, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "font.5b": {
+      "at": [432, 905, 4, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "font.5d": {
+      "at": [438, 905, 4, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "font.5f": {
+      "at": [444, 905, 6, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "font.b7": {
+      "at": [452, 905, 3, 8],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1],
+      "tint": true
+    },
+    "key.add": {
+      "at": [0, 698, 24, 22],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "key.add.down": {
+      "at": [26, 698, 24, 22],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "key.auto": {
+      "at": [0, 667, 32, 13],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "key.auto.down": {
+      "at": [34, 667, 32, 13],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "key.auto.on": {
+      "at": [68, 667, 32, 13],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "key.auto.on.down": {
+      "at": [102, 667, 32, 13],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "key.eject": {
+      "at": [0, 553, 19, 19],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "key.eject.down": {
+      "at": [21, 553, 19, 19],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "key.eq": {
+      "at": [0, 620, 21, 14],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "key.eq.down": {
+      "at": [23, 620, 21, 14],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "key.eq.on": {
+      "at": [46, 620, 21, 14],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "key.eq.on.down": {
+      "at": [69, 620, 21, 14],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "key.misc": {
+      "at": [0, 770, 24, 22],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "key.misc.down": {
+      "at": [26, 770, 24, 22],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "key.next": {
+      "at": [0, 528, 23, 23],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "key.next.down": {
+      "at": [25, 528, 23, 23],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "key.on": {
+      "at": [0, 652, 24, 13],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "key.on.down": {
+      "at": [26, 652, 24, 13],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "key.on.on": {
+      "at": [52, 652, 24, 13],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "key.on.on.down": {
+      "at": [78, 652, 24, 13],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "key.opts": {
+      "at": [0, 794, 24, 22],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "key.opts.down": {
+      "at": [26, 794, 24, 22],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "key.pause": {
+      "at": [0, 478, 23, 23],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "key.pause.down": {
+      "at": [25, 478, 23, 23],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "key.pl": {
+      "at": [0, 636, 21, 14],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "key.pl.down": {
+      "at": [23, 636, 21, 14],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "key.pl.on": {
+      "at": [46, 636, 21, 14],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "key.pl.on.down": {
+      "at": [69, 636, 21, 14],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "key.play": {
+      "at": [0, 453, 23, 23],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "key.play.down": {
+      "at": [25, 453, 23, 23],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "key.presets": {
+      "at": [0, 682, 44, 14],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "key.presets.down": {
+      "at": [46, 682, 44, 14],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "key.prev": {
+      "at": [0, 428, 23, 23],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "key.prev.down": {
+      "at": [25, 428, 23, 23],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "key.rem": {
+      "at": [0, 722, 24, 22],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "key.rem.down": {
+      "at": [26, 722, 24, 22],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "key.repeat": {
+      "at": [0, 597, 35, 21],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "key.repeat.down": {
+      "at": [37, 597, 35, 21],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "key.repeat.on": {
+      "at": [74, 597, 35, 21],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "key.repeat.on.down": {
+      "at": [111, 597, 35, 21],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "key.sel": {
+      "at": [0, 746, 24, 22],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "key.sel.down": {
+      "at": [26, 746, 24, 22],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "key.shuffle": {
+      "at": [0, 574, 35, 21],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "key.shuffle.down": {
+      "at": [37, 574, 35, 21],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "key.shuffle.on": {
+      "at": [74, 574, 35, 21],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "key.shuffle.on.down": {
+      "at": [111, 574, 35, 21],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "key.skin": {
+      "at": [0, 818, 9, 42],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "key.skin.down": {
+      "at": [11, 818, 9, 42],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "key.stop": {
+      "at": [0, 503, 23, 23],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "key.stop.down": {
+      "at": [25, 503, 23, 23],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "lamp.mono": {
+      "at": [39, 892, 26, 10],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "lamp.stereo": {
+      "at": [67, 892, 30, 10],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "led.-": {
+      "at": [140, 874, 12, 16],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "led.0": {
+      "at": [0, 874, 12, 16],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "led.1": {
+      "at": [14, 874, 12, 16],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "led.2": {
+      "at": [28, 874, 12, 16],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "led.3": {
+      "at": [42, 874, 12, 16],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "led.4": {
+      "at": [56, 874, 12, 16],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "led.5": {
+      "at": [70, 874, 12, 16],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "led.6": {
+      "at": [84, 874, 12, 16],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "led.7": {
+      "at": [98, 874, 12, 16],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "led.8": {
+      "at": [112, 874, 12, 16],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "led.9": {
+      "at": [126, 874, 12, 16],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "led.colon": {
+      "at": [154, 874, 6, 16],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "list.face": {
+      "at": [0, 208, 275, 218],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "list.thumb": {
+      "at": [67, 915, 9, 20],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "list.thumb.down": {
+      "at": [145, 915, 9, 20],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "main.face": {
+      "at": [0, 0, 275, 102],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "mini.eject": {
+      "at": [110, 862, 10, 9],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "mini.eject.down": {
+      "at": [122, 862, 10, 9],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "mini.next": {
+      "at": [88, 862, 9, 9],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "mini.next.down": {
+      "at": [99, 862, 9, 9],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "mini.pause": {
+      "at": [44, 862, 9, 9],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "mini.pause.down": {
+      "at": [55, 862, 9, 9],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "mini.play": {
+      "at": [22, 862, 9, 9],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "mini.play.down": {
+      "at": [33, 862, 9, 9],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "mini.prev": {
+      "at": [0, 862, 9, 9],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "mini.prev.down": {
+      "at": [11, 862, 9, 9],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "mini.stop": {
+      "at": [66, 862, 9, 9],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "mini.stop.down": {
+      "at": [77, 862, 9, 9],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "seek.thumb": {
+      "at": [20, 915, 29, 11],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "seek.thumb.down": {
+      "at": [98, 915, 29, 11],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "state.pause": {
+      "at": [13, 892, 11, 9],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "state.play": {
+      "at": [0, 892, 11, 9],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "state.stop": {
+      "at": [26, 892, 11, 9],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "thumb": {
+      "at": [0, 915, 18, 11],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "thumb.down": {
+      "at": [78, 915, 18, 11],
+      "sheet": "chrome",
+      "slice": [1, 1, 1, 1]
+    },
+    "window.normal": {
+      "at": [0, 937, 20, 20],
+      "sheet": "chrome",
+      "slice": [8, 8, 8, 8]
+    }
+  },
+  "summary": "The compact player's rounded look of the later era: silver chrome, a blue dot-matrix display, glossy round keys — a shaped panel with the desktop beyond its corners.",
+  "text": {
+    "capkey": {
+      "color": "#141a2c",
+      "disabled": "#50586a",
+      "hover": "#141a2c",
+      "pressed": "#ffffff"
+    },
+    "caption": {
+      "bold": true,
+      "color": "#c9cfdb",
+      "disabled": "#7f889c",
+      "size": 10
+    },
+    "control": {
+      "color": "#1d212a",
+      "disabled": "#7c818c"
+    }
+  },
+  "window": {
+    "border": [0, 1, 1, 1],
+    "caption": 15,
+    "layout": ":minimize,close",
+    "shape": [
+      {
+        "at": [0, 0, 0, 0],
+        "radius": [7, 7, 7, 7],
+        "stretchX": true,
+        "stretchY": true
+      }
+    ]
+  },
+  "year": 2026
+}

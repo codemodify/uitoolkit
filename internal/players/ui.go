@@ -229,6 +229,13 @@ type GlyphButton struct {
 	// button that happens to look pressed.
 	Toggle  bool
 	OnClick func()
+	// Painter, when set, paints the button in place of the look's face and
+	// the glyph, and reports whether it did. It is how a player whose skin
+	// draws each key as a picture of its own puts that picture on an
+	// ordinary button: the button is still the component, the art is only
+	// what it looks like, and a look the painter has nothing for falls back
+	// to the face and the mark.
+	Painter func(ctx *paintengine2d.Context, b paintengine2d.Rect, st style.ControlState) bool
 
 	hovered, pressed, outside bool
 }
@@ -294,6 +301,14 @@ func (b *GlyphButton) Arrange(r paintengine2d.Rect) { b.SetBounds(r) }
 func (b *GlyphButton) Paint(ctx *paintengine2d.Context) {
 	lk, r := b.Look(), b.LocalBounds()
 	st := b.PaintState()
+	if b.Painter != nil && b.Painter(ctx, r, st) {
+		// A picture of a key is still a key, and a key the keyboard is on
+		// says so: the painter never gets to leave the ring out.
+		if st.Focused() {
+			lk.DrawFocusRing(ctx, r)
+		}
+		return
+	}
 	if b.Role == style.RoleButton {
 		lk.DrawButton(ctx, r, st, "")
 	} else {
@@ -329,8 +344,11 @@ func (b *GlyphButton) MouseExit() {
 	b.Base.MouseExit()
 }
 
-func (b *GlyphButton) MousePress(widget.MouseEvent) bool {
-	if !b.Enabled() {
+// MousePress takes the primary button only: a right-click on a key is a
+// right-click on the face it sits in, and bubbles there, rather than a
+// press of the key.
+func (b *GlyphButton) MousePress(e widget.MouseEvent) bool {
+	if !b.Enabled() || e.Button != platform.ButtonLeft {
 		return false
 	}
 	b.MarkPointerFocus()
@@ -480,6 +498,22 @@ func DrawScrollingText(ctx *paintengine2d.Context, lk style.LookAndFeel, f *styl
 		return
 	}
 	over := w - b.Dx()
+	k := ScrollK(lk, over, pos)
+	y := b.Min.Y + (b.Dy()-f.Height())/2
+	ctx.Save()
+	ctx.ClipRect(b)
+	f.Draw(ctx, text, paintengine2d.Pt(b.Min.X-over*float32(k), y), col)
+	ctx.Restore()
+}
+
+// ScrollK is how far through its slide a line over pixels too wide for its
+// box is at pos: 0 with its start showing, 1 with its end. It is
+// DrawScrollingText's phase on its own, for a display that sets its line in
+// something other than a font.
+func ScrollK(lk style.LookAndFeel, over float32, pos time.Duration) float64 {
+	if over <= 0 {
+		return 0
+	}
 	// Seconds: a rest, a slide at about twenty-six design pixels a second,
 	// a rest, and the slide back.
 	const rest = 2.2
@@ -490,22 +524,15 @@ func DrawScrollingText(ctx *paintengine2d.Context, lk style.LookAndFeel, f *styl
 	cycle := 2 * (rest + slide)
 	t := pos.Seconds()
 	t -= cycle * float64(int(t/cycle))
-	var k float64 // 0 at the start of the line, 1 at its end
 	switch {
 	case t < rest:
-		k = 0
+		return 0
 	case t < rest+slide:
-		k = (t - rest) / slide
+		return (t - rest) / slide
 	case t < 2*rest+slide:
-		k = 1
-	default:
-		k = 1 - (t-2*rest-slide)/slide
+		return 1
 	}
-	y := b.Min.Y + (b.Dy()-f.Height())/2
-	ctx.Save()
-	ctx.ClipRect(b)
-	f.Draw(ctx, text, paintengine2d.Pt(b.Min.X-over*float32(k), y), col)
-	ctx.Restore()
+	return 1 - (t-2*rest-slide)/slide
 }
 
 // ---- a fader -----------------------------------------------------------------
@@ -531,6 +558,21 @@ type Fader struct {
 	// Format turns the value into what a screen reader reads and what a
 	// tooltip shows ("+4.5 dB"). Nil reads the bare number.
 	Format func(float32) string
+	// Horizontal lays the fader on its side: a seek bar, a volume or a
+	// balance slider that a skin draws as a picture of its own. The
+	// toolkit's slider is horizontal already; this is for the one whose
+	// art is not the look's slider parts.
+	Horizontal bool
+	// Painter, when set, paints the fader in place of the look's slider
+	// and reports whether it did; t is the value as a fraction of the
+	// range. It is what lets a skin draw an orange volume bar beside a
+	// green balance bar, which one set of slider parts cannot say. The
+	// focus ring is drawn either way.
+	Painter func(ctx *paintengine2d.Context, b paintengine2d.Rect, t float32, st style.ControlState) bool
+	// Travel is how far in from each end the thumb's centre stops, in
+	// design pixels: half the thumb a painter draws, so the pointer and
+	// the picture agree about where the ends are. Zero keeps the default.
+	Travel float32
 
 	hovered, drag bool
 }
@@ -585,6 +627,13 @@ func (f *Fader) Tooltip() string {
 	return f.Label + "  " + f.Format(f.Value)
 }
 
+// Dragging reports whether the pointer is moving the fader, so a model that
+// also moves it — a clock under a seek bar — can keep its hands off.
+func (f *Fader) Dragging() bool { return f.drag }
+
+// Fraction is the value as a fraction of the range, 0 at Min.
+func (f *Fader) Fraction() float32 { return f.t() }
+
 func (f *Fader) t() float32 {
 	if f.Max <= f.Min {
 		return 0
@@ -594,6 +643,9 @@ func (f *Fader) t() float32 {
 
 func (f *Fader) Measure(c layout.Constraints) paintengine2d.Point {
 	lk := f.Look()
+	if f.Horizontal {
+		return c.Constrain(paintengine2d.Pt(style.Dip(lk, 64), lk.Metrics().SliderH+style.Dip(lk, 8)))
+	}
 	return c.Constrain(paintengine2d.Pt(lk.Metrics().SliderH+style.Dip(lk, 8), style.Dip(lk, 64)))
 }
 
@@ -613,6 +665,19 @@ func (f *Fader) Paint(ctx *paintengine2d.Context) {
 	}
 	if f.drag {
 		st |= style.StatePressed
+	}
+	if f.Painter != nil && f.Painter(ctx, b, f.t(), st) {
+		if st.Focused() {
+			lk.DrawFocusRing(ctx, b)
+		}
+		return
+	}
+	if f.Horizontal {
+		lk.DrawSlider(ctx, b, st, f.t())
+		if f.Focused() {
+			lk.DrawFocusRing(ctx, b)
+		}
+		return
 	}
 	ctx.Save()
 	// Rotate about the box's centre, then draw the slider in the box with
@@ -637,13 +702,13 @@ func (f *Fader) MouseExit() {
 }
 
 func (f *Fader) MousePress(e widget.MouseEvent) bool {
-	if !f.Enabled() {
+	if !f.Enabled() || e.Button != platform.ButtonLeft {
 		return false
 	}
 	f.MarkPointerFocus()
 	f.RequestFocus()
 	f.drag = true
-	f.setFromY(e.Pos.Y)
+	f.setFrom(e.Pos)
 	return true
 }
 
@@ -651,7 +716,7 @@ func (f *Fader) MouseMove(e widget.MouseEvent) bool {
 	if !f.drag {
 		return false
 	}
-	f.setFromY(e.Pos.Y)
+	f.setFrom(e.Pos)
 	return true
 }
 
@@ -661,16 +726,27 @@ func (f *Fader) MouseRelease(widget.MouseEvent) bool {
 	return true
 }
 
-// setFromY puts the value where the pointer is, with the track's ends
+// setFrom puts the value where the pointer is, with the track's ends
 // trimmed by half a thumb so the two extremes are reachable.
-func (f *Fader) setFromY(y float32) {
+func (f *Fader) setFrom(p paintengine2d.Point) {
 	b := f.LocalBounds()
-	pad := min(style.Dip(f.Look(), 8), b.Dy()/4)
-	span := b.Dy() - 2*pad
+	long, at := b.Dy(), p.Y
+	if f.Horizontal {
+		long, at = b.Dx(), p.X
+	}
+	travel := f.Travel
+	if travel <= 0 {
+		travel = 8
+	}
+	pad := min(style.Dip(f.Look(), travel), long/4)
+	span := long - 2*pad
 	if span <= 0 {
 		return
 	}
-	t := 1 - clamp01((y-pad)/span)
+	t := clamp01((at - pad) / span)
+	if !f.Horizontal {
+		t = 1 - t
+	}
 	f.SetValue(f.Min + t*(f.Max-f.Min))
 }
 
@@ -686,10 +762,16 @@ func (f *Fader) KeyPress(e widget.KeyEvent) bool {
 		page = (f.Max - f.Min) / 4
 	}
 	switch e.Key {
-	case platform.KeyUp:
+	case platform.KeyUp, platform.KeyRight:
+		if e.Key == platform.KeyRight && !f.Horizontal {
+			return false
+		}
 		f.MarkKeyboardFocus()
 		f.SetValue(f.Value + step)
-	case platform.KeyDown:
+	case platform.KeyDown, platform.KeyLeft:
+		if e.Key == platform.KeyLeft && !f.Horizontal {
+			return false
+		}
 		f.MarkKeyboardFocus()
 		f.SetValue(f.Value - step)
 	case platform.KeyPageUp:
@@ -698,12 +780,14 @@ func (f *Fader) KeyPress(e widget.KeyEvent) bool {
 	case platform.KeyPageDown:
 		f.MarkKeyboardFocus()
 		f.SetValue(f.Value - page)
-	case platform.KeyHome:
+	case platform.KeyHome, platform.KeyEnd:
+		// Home is the top of a fader and the start of a bar on its side.
 		f.MarkKeyboardFocus()
-		f.SetValue(f.Max)
-	case platform.KeyEnd:
-		f.MarkKeyboardFocus()
-		f.SetValue(f.Min)
+		if (e.Key == platform.KeyHome) != f.Horizontal {
+			f.SetValue(f.Max)
+		} else {
+			f.SetValue(f.Min)
+		}
 	default:
 		return false
 	}
@@ -714,7 +798,9 @@ func (f *Fader) KeyPress(e widget.KeyEvent) bool {
 // reading a screen reader can say out loud.
 func (f *Fader) Describe(n *a11y.Node) {
 	n.Role = a11y.RoleSlider
-	n.State |= a11y.StateVertical
+	if !f.Horizontal {
+		n.State |= a11y.StateVertical
+	}
 	if n.Name == "" {
 		n.Name = f.Label
 	}
@@ -760,8 +846,13 @@ type DragsWindow struct {
 	Win *app.Window
 }
 
-// MousePress starts a window move and takes the press.
-func (d *DragsWindow) MousePress(widget.MouseEvent) bool {
+// MousePress starts a window move and takes the press. Only the primary
+// button moves a window; any other bubbles to whatever holds the face, which
+// is where a player puts its context menu.
+func (d *DragsWindow) MousePress(e widget.MouseEvent) bool {
+	if e.Button != platform.ButtonLeft {
+		return false
+	}
 	if d.Win != nil {
 		d.Win.StartMove()
 	}
@@ -796,6 +887,13 @@ type AnalyserView struct {
 	Pixelated bool
 	// Tint overrides the accent the bars are drawn in.
 	Tint paintengine2d.Color
+	// Ramp, when set, colours a bar by height instead: the analyser's
+	// height is cut into len(Ramp) equal rows, bottom first, and a bar is
+	// each row's colour where it reaches it. It is the green-to-red climb
+	// of an analyser of this era, which a single tint cannot draw.
+	Ramp []paintengine2d.Color
+	// PeakTint overrides the markers' colour.
+	PeakTint paintengine2d.Color
 	// Drag is the window a press on the analyser moves: an analyser sunk
 	// into a player's display is part of its face, and says so itself
 	// rather than leaving it to whatever is underneath.
@@ -803,8 +901,8 @@ type AnalyserView struct {
 }
 
 // MousePress moves the window when the analyser is part of a face.
-func (a *AnalyserView) MousePress(widget.MouseEvent) bool {
-	if a.Drag == nil {
+func (a *AnalyserView) MousePress(e widget.MouseEvent) bool {
+	if a.Drag == nil || e.Button != platform.ButtonLeft {
 		return false
 	}
 	a.Drag.StartMove()
@@ -858,6 +956,9 @@ func (a *AnalyserView) Paint(ctx *paintengine2d.Context) {
 	per := float32(a.Spectrum.Bands()) / float32(n)
 	fill := paintengine2d.Fill(col)
 	peak := paintengine2d.Fill(style.Mix(col, lk.Palette().Text, 0.55))
+	if a.PeakTint.A > 0 {
+		peak = paintengine2d.Fill(a.PeakTint)
+	}
 	radius := float32(0)
 	if !a.Pixelated {
 		radius = min(barW/3, style.Dip(lk, 2))
@@ -880,7 +981,9 @@ func (a *AnalyserView) Paint(ctx *paintengine2d.Context) {
 			x = snap(x)
 			h = snap(h)
 		}
-		if h >= 1 {
+		if h >= 1 && len(a.Ramp) > 0 {
+			a.paintRamp(ctx, b, x, barW, h)
+		} else if h >= 1 {
 			r := paintengine2d.XYWH(x, b.Max.Y-h, barW, h)
 			if radius > 0 {
 				ctx.DrawRoundRectCorners(r, radius, radius, 0, 0, fill)
@@ -899,6 +1002,25 @@ func (a *AnalyserView) Paint(ctx *paintengine2d.Context) {
 		if py >= b.Min.Y && py+pt <= b.Max.Y {
 			ctx.DrawRect(paintengine2d.XYWH(x, py, barW, pt), peak)
 		}
+	}
+}
+
+// paintRamp draws one bar of height h as rows of the ramp's colours.
+func (a *AnalyserView) paintRamp(ctx *paintengine2d.Context, b paintengine2d.Rect, x, w, h float32) {
+	n := len(a.Ramp)
+	row := b.Dy() / float32(n)
+	top := b.Max.Y - h
+	for k := 0; k < n; k++ {
+		y1 := b.Max.Y - float32(k)*row
+		y0 := y1 - row
+		if a.Pixelated {
+			y0, y1 = snap(y0), snap(y1)
+		}
+		if y1 <= top {
+			break
+		}
+		y0 = max(y0, top)
+		ctx.DrawRect(paintengine2d.XYWH(x, y0, w, y1-y0), paintengine2d.Fill(a.Ramp[k]))
 	}
 }
 
