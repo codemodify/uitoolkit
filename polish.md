@@ -74,9 +74,11 @@ Struck through once fixed; newest findings at the end of their section.
 - **A floating dock panel's title bar cannot start a re-dock drag on
   Wayland**: `dock.Host.dragFloatingPanel` falls back to the desktop's move, so
   dropping it on the host only moves the window. The dock button works.
-- **`Host.DockPanel` can restore a panel at zero width** when its area's split
+- ~~**`Host.DockPanel` can restore a panel at zero width** when its area's split
   weight collapsed while it floated: right in the layout JSON, invisible on
-  screen.
+  screen.~~ It was not the weight: `Split.Arrange` shared the space out before
+  it re-showed the area its float had emptied, so the host's own layout as it
+  docked left the panel at the size it was hidden at.
 - **On X11 a torn-off window is placed by the window manager**, not under the
   pointer, even though `DragsWindows()` reports true; KWin also clamps a
   client-placed window to the screen.
