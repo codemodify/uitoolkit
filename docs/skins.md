@@ -21,13 +21,14 @@ style/skins/<name>/skin.json        skins the toolkit ships (embedded)
 ~/.config/uitoolkit/skins/<name>.uskin   or the same thing as one zip
 ```
 
-Six skins ship with the toolkit. Three are the format's worked examples:
+Eight skins ship with the toolkit. Three are the format's worked examples:
 **Nocturne**, amber on charcoal, drawn from paths so it is exact at every
 scale; **Cassette**, a six-colour pixel skin with two-pixel bevels that
 exercises the `pixelated` path; and **Deck**, whose window is not a
-rectangle and whose buttons take the pointer only on their ink. Three more
+rectangle and whose buttons take the pointer only on their ink. Five more
 are worn by the player demos ([docs/players.md](players.md)): **Minim**,
-**Marquee** and **Lantern**. All six are generated — see
+and the two panels it switches to, **Minim Classic** and **Minim Silver**;
+**Marquee**; and **Lantern**. All eight are generated — see
 [The demo skins](#the-demo-skins).
 
 ## The three rules
@@ -135,7 +136,8 @@ version; everything else has a default.
   // ---- the window -----------------------------------------------------
   "window": {
     "border": [1, 1, 1, 1],     // top, right, bottom, left
-    "caption": 34,
+    "caption": 34,              // any height, down to 8: below 24 the
+                                // caption buttons are square and centred
     "radius": [7, 7, 0, 0],     // top-left clockwise
     "layout": ":minimize,maximize,close",
     // The silhouette the window is cut to: a union of rounded rects that
@@ -216,6 +218,7 @@ That is why a skin needs a dozen sprites rather than two hundred.
 | `window` | the window background |
 | `caption` | the top-level window's caption band |
 | `caption.button` | its close, maximize and minimize buttons (else `tool`, else `button`) |
+| `caption.title` | a plate behind the caption's title, as wide as the title: the gap in a ribbed band |
 | `menu.frame`, `tooltip` | the frames those float on |
 
 `style.SkinPartNames()` is the same list at run time; a skin that names
@@ -459,13 +462,55 @@ Only a component whose box *is* one face asks — `widgets.Button` today. A
 check box is its indicator and its label, and shaping the pair by the
 indicator's art would make most of the control deaf.
 
+## Sprites an app paints itself
+
+A part is the only thing the engine paints from a skin, and the parts are a
+fixed table. A sprite that no part binds was always allowed in a manifest;
+it is simply one that only an app knowing its name will ever draw. Two calls
+are that app's way in:
+
+```go
+style.DrawSkinSprite(lk, ctx, box, "led.8", paintengine2d.Color{}) // false: not a skin, or no such sprite
+w, h, ok := style.SkinSpriteSize(lk, "font.41")                     // design pixels
+```
+
+They paint by exactly the rules a part is painted by — the asset chosen
+upward, nine-slice on whole pixels, nearest at whole multiples for a
+pixelated sheet, the tint for a glyph marked `tint` — and they add nothing
+to the format: a look that is not a skin, or a skin without that sprite,
+answers false and the app paints its own. That is what keeps a panel drawn
+this way a partial override like everything else.
+
+Minim's two panel skins are built on them (docs/players.md). Their faces
+are pictures of whole windows with the wells and printed labels in them,
+and their keys, digits, lamps and bitmap capitals are loose sprites the
+player lays out itself. The layout is stated once, in
+`internal/players/minim/panel`, and both the generator and the player read
+it, so the art and the app cannot drift apart.
+
+One convention makes such a panel scale evenly on a pixelated sheet, and it
+is worth copying. A pixelated sprite drawn unsliced into a box at 1.75 is
+drawn at 1× in the middle of the box, because pixel art is only ever
+magnified by whole multiples. Give every panel sprite an empty one-pixel
+margin and slice it there: the edges are then nothing, the whole picture is
+the middle, and the middle stretches — nearest — to the box. The app draws
+each sprite into its box grown by the margin. At 1 and 2 it is exact; at
+1.25, 1.5 and 1.75 it is the 1× picture magnified.
+
 ## What a skin cannot do yet
 
-**Lay out a fixed panel.** There is no absolute-layout half of this format
-(WinAmp's 275×116 window, VLC's `<Layout>`). A skin re-skins ordinary widgets
-at ordinary layout. That is the half where every invariant — accessibility,
-keyboard, HiDPI, translation — holds for free rather than having to be
-enforced.
+**Lay out a fixed panel on its own.** There is no absolute-layout half of
+this format (WinAmp's 275×116 window, VLC's `<Layout>`). A skin re-skins
+ordinary widgets at ordinary layout. That is the half where every invariant
+— accessibility, keyboard, HiDPI, translation — holds for free rather than
+having to be enforced. An *app* can lay a panel out and paint a skin's
+sprites into it ([above](#sprites-an-app-paints-itself)), and Minim does;
+the skin still says nothing about where anything goes.
+
+**Give one window a caption the others do not have.** A skin states one
+caption band for every window it dresses. A look whose equaliser has a tab
+for a header and no title band — Minim Silver's reference does — gets the
+band on every window and draws its tab under it.
 
 **Carry behaviour.** Not a gap: a decision. No scripting, no bytecode, no
 action vocabulary. Anything an app needs beyond painting it writes in Go.
@@ -518,10 +563,10 @@ compares byte for byte, so art changed and not committed fails the build.
 | sheet | 520×338 at 1×, 65 sprites | 270×182 at 1×, 55 sprites | 516×212 at 1×, 19 sprites |
 | exercises | nine-slice, tint, scale sets, `middle: none` | nearest sampling at whole multiples, `middle: tile`, exact doubling | `window.shape`, a control cut from its own alpha, a deliberately partial skin |
 
-And the three the players wear. They are skins for a *particular app* rather
+And the ones the players wear. They are skins for a *particular app* rather
 than worked examples of the format, which is a different job: each is as
-complete as the app it dresses needs and no more, and each declares a
-silhouette the app never mentions.
+complete as the app it dresses needs and no more, and each of these three
+declares a silhouette the app never mentions.
 
 | | Minim | Marquee | Lantern |
 | --- | --- | --- | --- |
@@ -533,13 +578,38 @@ silhouette the app never mentions.
 | `window.shape` | three stretching rects: the window steps in twice and stands on a chin | two: a shallow brow across the top, and a body on a 48-pixel dome | one: the window's own box, swept round by 52 at the bottom left and 10 at the bottom right |
 | exercises | a pixel sheet in a window whose size *is* its design | an app's own shape taking precedence over the look's (the compact mode) | a single rect that is a silhouette because it is rounder than the frame, and a deliberately partial binding |
 
-All three keep out of both top corners, which is the constraint a shaped
-skin has and it is worth stating: a framed caption centres its buttons about
+Minim switches between three skins, and the second two are *panels* rather
+than dressings: pictures of the whole of each window with holes where the
+keys go, which is how a player of that shape was always built. Each is after
+a well-known look of its era, and each is drawn from scratch — the
+proportions and positions are the published facts of the 275×116 format
+and colours sampled as numbers; no bitmap, alphabet or mark of anybody's is
+in them.
+
+| | Minim Classic | Minim Silver |
+| --- | --- | --- |
+| look | the base-skin look of the era: slate-blue bevelled chrome, gold grooves either side of the title, a black display with green segments, grey keys, orange volume, green balance, yellow equaliser faders | the rounded look of the later era: silver chrome, a navy title band, a blue dot-matrix display, glossy round keys, capsule toggles with blue lamps, a tabbed equaliser |
+| drawn as | whole pixels on a grid | paths, gradients and gloss |
+| `pixelated` | yes — the 2× sheet is the 1× doubled | no |
+| base pack | `win95` | `luna` |
+| sheet | 464×935 at 1×, 161 sprites | 464×957 at 1×, 161 sprites |
+| `window.shape` | none: a rectangle, as the original was | one rect the size of the window with a 7-pixel radius on every corner, rounder than the (square) frame, so the desktop shows beyond all four |
+| exercises | `caption.title` (the gap in the groove), a 14-pixel caption, sprites an app paints itself, the one-pixel margin that scales a pixel panel evenly | a rounded silhouette on every window of a stack, a path-drawn panel at fractional scales |
+
+Both bind only the frame — the window, the caption, its plate, its keys —
+and the focus ring. Everything else a player opens over them, a menu or a
+tooltip, is their base pack's, which is what the desktop under a player of
+that era looked like anyway.
+
+Minim, Marquee and Lantern keep out of both top corners, which is the
+constraint a shaped skin has and it is worth stating: a framed caption centres its buttons about
 a fifth of its height down, and which *side* they sit on is the desktop's
 choice rather than the skin's — `style.CaptionButtonsDesktop` is the default
 and a skin's `layout` is consulted only when the user has asked for the
 look's own. A silhouette that bit into a top corner would eat a close button
-on half the desktops it ran on.
+on half the desktops it ran on. Minim Silver does round its top corners, by
+seven design pixels, which is less than the room its fifteen-pixel caption
+leaves above and beside a key: the close button is whole on either side.
 
 Deck is the shaped one. Its outline is a full-width shoulder with the title
 plate inlaid in it over a body drawn in on both sides, so the desktop steps
@@ -572,7 +642,8 @@ go run ./examples/skinshape -mode backdrop &
 go run ./examples/skinshape -theme deck
 
 # Three whole applications wearing one (docs/players.md).
-go run ./examples/minim
+go run ./examples/minim                     # Ctrl+K: minim, minim-classic, minim-silver
+go run ./examples/minim -theme minim-silver
 go run ./examples/marquee
 go run ./examples/lantern
 ```
