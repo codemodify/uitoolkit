@@ -124,23 +124,25 @@ func isSkin(id string) bool {
 	return false
 }
 
-// skinMenu opens the menu of skins at a point in from's window.
+// skinMenu opens the menu of skins at a point in from's window: the three
+// by name and the themed fallback, the one being worn ticked.
+//
+// It is four rows and no more, on purpose. A menu is drawn inside the window
+// it opens from, and the strip is a hundred and sixteen design pixels tall:
+// a fifth row, a separator or a shortcut column would have the menu scroll
+// or cut its own labels off in the one window it is most often opened from.
+// The keys are on the skin key's name and in docs/players.md instead.
 func (p *Player) skinMenu(from widget.Component, at paintengine2d.Point) {
 	cur := p.Worn()
 	var items []*widgets.MenuItem
 	for _, id := range append(append([]string(nil), Skins...), Themed) {
 		id := id
+		label := SkinLabel(id)
 		if id == Themed {
-			items = append(items, widgets.Sep())
+			label = "No skin"
 		}
-		it := widgets.RadioItem(SkinLabel(id), "skin", id == cur, func() { p.SetSkin(id) })
-		if id == Themed {
-			it.Shortcut = "Ctrl+Shift+K"
-		}
-		items = append(items, it)
+		items = append(items, widgets.RadioItem(label, "skin", id == cur, func() { p.SetSkin(id) }))
 	}
-	items = append(items, widgets.Sep(),
-		widgets.ItemAccel("Next skin", "Ctrl+K", func() { p.NextSkin() }))
 	widgets.ShowContextMenu(from, at, items...)
 }
 

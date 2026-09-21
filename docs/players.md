@@ -361,7 +361,7 @@ since been fixed in the toolkit and are struck through below, under
   must stay out of *both* top corners or it eats a close button on half the
   desktops it runs on. Every shape here does.
 
-Minim's panels ran into four more:
+Minim's panels ran into five more:
 
 - **A skin states one caption for every window it dresses.** Minim
   Silver's reference has no title band on its equaliser at all, only a
@@ -377,6 +377,12 @@ Minim's panels ran into four more:
   it. The classic panel's sprites carry an empty one-pixel margin and are
   sliced there, which makes the whole picture the stretchable middle
   ([docs/skins.md](skins.md#sprites-an-app-paints-itself)).
+- **A menu is drawn inside the window it opens from.** The strip is 116
+  design pixels tall, so the skin menu is four rows and nothing else — no
+  separator, no shortcut column — and the panel skins set 20-pixel menu
+  rows so the four fit without a scroll bar. A menu that could leave its
+  window (a Wayland xdg_popup, an X11 override-redirect window) would lift
+  that limit for every compact app.
 - **A skin's caption shorter than 24 pixels was grown to 24**: its buttons
   had the caption's height, and a frame gives such a button at least that.
   Fixed in the toolkit — a short caption now gets square buttons stood in

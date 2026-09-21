@@ -6,6 +6,9 @@
   "family": "light",
   "label": "Minim Silver",
   "lineage": "uitoolkit",
+  "metrics": {
+    "menuItemH": 20
+  },
   "parts": {
     "caption": {
       "states": {
