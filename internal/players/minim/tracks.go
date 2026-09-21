@@ -36,6 +36,9 @@ type tracks struct {
 	hovered  int
 	// grab is where on the thumb a drag took it, -1 when no drag is on.
 	grab float32
+	// reveal is a row to bring into view at the next layout, plus one: a
+	// row asked for before the list has its size cannot be scrolled to.
+	reveal int
 	// geo is the panel's playlist layout, nil in the widget face.
 	geo *panel.List
 }
@@ -127,12 +130,15 @@ func (t *tracks) thumb() paintengine2d.Rect {
 	return paintengine2d.XYWH(g.Min.X, snapDev(y), g.Dx(), h)
 }
 
-// EnsureVisible scrolls the least needed to show row i.
+// EnsureVisible scrolls the least needed to show row i. Asked before the
+// list is laid out at its size, it waits for the layout.
 func (t *tracks) EnsureVisible(i int) {
 	rh, view := t.rowH(), t.rows().Dy()
-	if view <= 0 {
+	t.reveal = i + 1
+	if view < rh {
 		return
 	}
+	t.reveal = 0
 	top := float32(i) * rh
 	if top < t.offset {
 		t.offset = top
@@ -167,6 +173,9 @@ func (t *tracks) Measure(c layout.Constraints) paintengine2d.Point {
 
 func (t *tracks) Arrange(r paintengine2d.Rect) {
 	t.SetBounds(r)
+	if t.reveal > 0 {
+		t.EnsureVisible(t.reveal - 1)
+	}
 	t.clamp()
 }
 
@@ -219,7 +228,11 @@ func (t *tracks) Paint(ctx *paintengine2d.Context) {
 func (t *tracks) paintPanel(ctx *paintengine2d.Context, lk style.LookAndFeel, in *ink) {
 	rows := t.rows()
 	rh := t.rowH()
-	face := players.ScaledFace(lk.Font(), style.Dip(lk, float32(t.geo.Font)))
+	base := lk.Font()
+	if t.geo.Bold {
+		base = lk.BoldFont()
+	}
+	face := players.ScaledFace(base, style.Dip(lk, float32(t.geo.Font)))
 	playing := t.p.Transport.List.Index()
 	pad := style.Dip(lk, 3)
 	ctx.Save()
