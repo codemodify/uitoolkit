@@ -73,7 +73,7 @@ func buildDockPage(t *tourState) widget.Component {
 	logView.SetAccessibleName("Log")
 
 	swatches := widgets.NewWrap()
-	for _, s := range []string{"Accent", "Surface", "Text", "Muted", "Warning", "Error"} {
+	for _, s := range []string{"Accent", "Surface", "Text", "Muted"} {
 		swatches.Add(widgets.NewButton(s, nil))
 	}
 
@@ -86,7 +86,7 @@ func buildDockPage(t *tourState) widget.Component {
 	panels := []*dock.Panel{
 		mk("outline", "Outline", outline, 150, 90),
 		mk("notes", "Notes", widgets.NewPad(4, notes), 190, 110),
-		mk("palette", "Palette", widgets.NewPad(6, swatches), 150, 80),
+		mk("palette", "Palette", tourScroll("Palette", widgets.NewPad(6, swatches)), 150, 80),
 		mk("log", "Log", widgets.NewPad(4, logView), 170, 70),
 	}
 	p.host.Dock(panels[0], dock.SideLeft)
