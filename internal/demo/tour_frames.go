@@ -50,7 +50,7 @@ func buildFramesPage(t *tourState) widget.Component {
 	// framed and unframed windows of one app looks broken.
 	decorNames := []string{"Auto — let the policy decide", "The desktop's frame", "The toolkit's frame"}
 	decorPrefs := []style.DecorationsPref{style.DecorationsAuto, style.DecorationsSystem, style.DecorationsToolkit}
-	p.decor = widgets.NewRadioGroup(decorNames, indexOfDecorPref(decorPrefs, t.look.Decorations), func(i int) {
+	p.decor = widgets.NewRadioGroup(decorNames, indexOfDecorPref(decorPrefs, t.a.Decorations()), func(i int) {
 		t.apply(func(ap *style.Appearance) { ap.Decorations = decorPrefs[i] })
 		p.note("Asked for " + decorNames[i] + " — the desktop has the last word.")
 	})
@@ -64,9 +64,8 @@ func buildFramesPage(t *tourState) widget.Component {
 	}
 	p.caps = widgets.NewRadioGroup(capNames, start, func(i int) {
 		// The caption-button preference is the application's, and unlike
-		// the frame it has a setter of its own; the record is kept in step
-		// so that a later change of pack does not undo it.
-		t.look.CaptionButtons = capPrefs[i]
+		// the frame it has a setter of its own; Application.Appearance reads
+		// it back, so a later change of pack does not undo it.
 		t.a.SetCaptionButtons(capPrefs[i])
 		p.note("Caption buttons: " + capNames[i] + ".")
 	})
@@ -181,7 +180,7 @@ func (p *framesPage) refresh() {
 	}
 	p.facts.SetText(tourFacts(
 		[2]string{"backend", t.a.BackendName()},
-		[2]string{"asked for", decorPrefName(t.look.Decorations)},
+		[2]string{"asked for", decorPrefName(t.a.Decorations())},
 		[2]string{"in effect", t.win.Decorations().String()},
 		[2]string{"tab strip", captionOrRow(t)},
 		[2]string{"", ""},

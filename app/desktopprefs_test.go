@@ -124,3 +124,46 @@ func TestAppTakesDesktopAccent(t *testing.T) {
 		t.Fatalf("selection %v after the desktop's accent changed", got)
 	}
 }
+
+// Switching pack the way an app does — read the appearance back, change
+// the pack, apply it — keeps every preference that belongs to the
+// application rather than to the look. style.LookAppearance alone brings
+// them back at their defaults, which is how a theme switch used to reset
+// the frame, the caption buttons, motion and the file dialogs.
+func TestAppearanceRoundTripsTheApplicationsPreferences(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	defer style.SetReduceMotion(false)
+	defer style.SetNativeDialogs(false)
+	a := New(Options{Look: style.DarkLook(), Headless: true, Scale: 1, DisableLookWatch: true})
+
+	ap := a.Appearance()
+	ap.Decorations = style.DecorationsSystem
+	ap.CaptionButtons = style.CaptionButtonsTheme
+	ap.ReduceMotion = true
+	ap.NativeDialogs = true
+	a.ApplyAppearance(ap)
+	if a.Decorations() != style.DecorationsSystem {
+		t.Fatalf("Decorations() = %q after applying the desktop's frame", a.Decorations())
+	}
+
+	next := a.Appearance()
+	next.Name = "win95"
+	a.ApplyAppearance(next)
+
+	got := a.Appearance()
+	if got.Name != "win95" {
+		t.Errorf("the pack is %q, want win95", got.Name)
+	}
+	if got.Decorations != style.DecorationsSystem || a.Decorations() != style.DecorationsSystem {
+		t.Errorf("changing pack reset the frame preference to %q", got.Decorations)
+	}
+	if got.CaptionButtons != style.CaptionButtonsTheme || a.CaptionButtons() != style.CaptionButtonsTheme {
+		t.Errorf("changing pack reset the caption buttons to %q", got.CaptionButtons)
+	}
+	if !got.ReduceMotion || !style.ReduceMotion() {
+		t.Error("changing pack turned reduced motion off")
+	}
+	if !got.NativeDialogs || !style.NativeDialogs() {
+		t.Error("changing pack turned the desktop's file dialogs off")
+	}
+}

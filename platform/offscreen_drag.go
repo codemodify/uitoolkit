@@ -86,7 +86,9 @@ func (o *Offscreen) carryToplevel(pos paintengine2d.Point) {
 	if o.dragOut.win == nil {
 		return
 	}
-	o.dragOut.win.Move(o.posX+int(pos.X)-o.dragOut.dx, o.posY+int(pos.Y)-o.dragOut.dy)
+	// Both are device pixels, and so is the desktop underneath them.
+	w := o.dragOut.win
+	w.posX, w.posY = o.posX+int(pos.X)-o.dragOut.dx, o.posY+int(pos.Y)-o.dragOut.dy
 }
 
 // AcceptDrag implements [DropNegotiator]: it records what the window says

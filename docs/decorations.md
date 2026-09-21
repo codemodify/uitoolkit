@@ -236,11 +236,13 @@ tabs.OnMergeTab = func(at int, tab widgets.BrowserTab, e widget.DropEvent) bool 
 
 A dock panel in a window of its own (`app.DockHost`, see
 [widgets.md](widgets.md#dockable-panels)) is an ordinary toplevel: it goes
-through the same `resolveDecorations` as every other window, so it wears
-the toolkit's frame where the app does and the desktop's where the app
-does, without asking for anything of its own. Nothing about it is a popup
-or an override-redirect window — the desktop moves, resizes, stacks and
-lists it like any other.
+through the same `resolveDecorations` as every other window. Its window
+hands the drags of its own caption to the dock (`Window.SetOnCaptionDrag`),
+which counts as a caption of its own for the default policy, so it wears
+the toolkit's frame where a window with a title bar would — the user's
+"system title bar" preference and `UITK_DECORATIONS` still win. Nothing
+about it is a popup or an override-redirect window — the desktop moves,
+resizes, stacks and lists it like any other.
 
 Under either frame the panel keeps the title bar it had docked, inside the
 window. That is a second row of chrome under the caption, which is what Qt
@@ -255,10 +257,13 @@ brings the same window back. `app.DockHost` also docks every panel back as
 the main window closes, so no panel is left in a window of its own keeping
 a finished app alive.
 
-Dragging the panel's title bar drags the whole window, and the host it
-came from lights up as it passes over: dropping it there docks the panel
-back where the indicator says, and dropping it anywhere else has moved the
-window. A panel dragged the other way — out of the host, past its edge —
+Dragging the panel's title bar — or the window's own caption, where the
+toolkit draws it — drags the whole window, and the host it came from
+lights up as it passes over: dropping it there docks the panel back where
+the indicator says, and dropping it anywhere else has moved the window.
+Under the desktop's frame the window's caption is the desktop's, which
+moves the window without telling the client (on Wayland it cannot), so
+there the panel's own title bar is the one that docks. A panel dragged the other way — out of the host, past its edge —
 floats into a window that follows the pointer. Both are the same
 [tear-off](#tear-off) as a tab's, so a user rearranges an app by dragging
 alone and the float button is a second way rather than the only one.
@@ -268,8 +273,8 @@ Where the desktop cannot carry a window the title bar falls back to
 window's title bar does everywhere, and the dock button is the way back
 in.
 
-`Window.Position()` answers where the desktop put a window, for the
-backends that are told: X11 from `ConfigureNotify` (translated to the root
+`Window.Position()` answers where the desktop put a window, in logical
+pixels like its size, for the backends that are told: X11 from `ConfigureNotify` (translated to the root
 only when someone asks, so an interactive move costs no round trip), and
 never on Wayland, where a toplevel has no position at all. A saved layout
 therefore restores a floating panel's size exactly and its position only
@@ -304,7 +309,7 @@ made that window or merely moved one that was already there.
 | | Carrying the window | Where it comes from |
 | --- | --- | --- |
 | Wayland with `xdg-toplevel-drag-v1` (KWin ≥ 6.0, Mutter ≥ 47) | the compositor moves it, as though the window itself were in an interactive move | `get_xdg_toplevel_drag` on the `wl_data_source` **before** `start_drag` — the protocol allows it nowhere else — then `attach(toplevel, dx, dy)` once the tear-off has a window, best while it is still unmapped |
-| X11 | the toolkit moves it itself on every motion of the drag | an X11 client places its own windows; the carried window is left out of the search for a drop target, as the Wayland protocol also requires |
+| X11 | the toolkit moves it itself on every motion of the drag: before it maps through `WM_NORMAL_HINTS` (`USPosition`, static gravity), so the window manager maps it under the pointer rather than where it cascades new windows; once mapped with `_NET_MOVERESIZE_WINDOW` from a *user* source, because KWin keeps a window an application moves inside the screen and a torn-off window as big as its parent would otherwise be pushed back on screen, nowhere near the pointer | an X11 client places its own windows; the carried window is left out of the search for a drop target, as the Wayland protocol also requires. The drag follows the surface, not its X window, since a window taking the toolkit's frame is re-made on an ARGB visual before it first maps |
 | Wayland without the protocol | it does not | the drag runs all the same, carrying its picture, and the window is made at the drop — wherever the compositor puts it. `widget.DragsWindows(c)` is what a source asks to know which it is in, because that decides whether its content leaves now or at the drop (Chromium's fallback tab dragging, for the same reason) |
 
 `platform.ToplevelDragSurface` is the seam (`DragsToplevels`,

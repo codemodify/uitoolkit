@@ -107,13 +107,17 @@ func NewTableView(cols []TableColumn, rows int, cell func(row, col int) string, 
 	return t
 }
 
+// Measure is the header, every row and the view frame around them (see
+// ListView.Measure), never under four rows.
 func (t *TableView) Measure(c layout.Constraints) paintengine2d.Point {
+	in := t.frame()
 	h := t.headerH() + float32(t.RowCount)*t.rowH()
-	if pref := t.Preferred(); pref.Y > h {
-		h = pref.Y
-	}
 	if h < t.headerH()+t.rowH()*4 {
 		h = t.headerH() + t.rowH()*4
+	}
+	h += in.Top + in.Bottom
+	if pref := t.Preferred(); pref.Y > h {
+		h = pref.Y
 	}
 	if c.HasMaxH() && h > c.MaxH {
 		h = c.MaxH

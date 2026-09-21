@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/codemodify/paintengine2d"
 )
@@ -217,5 +218,57 @@ func TestX11WheelScrollsOncePerNotch(t *testing.T) {
 	}
 	if ev := x11ButtonEvents(1, true, paintengine2d.Pt(1, 2), 0); len(ev) != 1 || ev[0].Kind != EventMouseUp {
 		t.Fatalf("left release: %+v", ev)
+	}
+}
+
+// A window the client places maps where it was put, not where the window
+// manager's own policy would have put it — whether the position came with
+// the window or from a Move before its first frame. WM_NORMAL_HINTS is all
+// a window manager reads at map time, and the size hints written after
+// the window was made used to replace the position flags with nothing, so
+// KWin centred or cascaded the window instead: a torn-off tab appeared at
+// the desktop's spot for new windows rather than under the pointer.
+//
+// It needs a window manager to mean anything (the e2e rig's nested KWin
+// with its Xwayland: DISPLAY=$(cat tools/e2e/N/display)).
+func TestX11PlacedWindowMapsWhereItWasPut(t *testing.T) {
+	if os.Getenv("DISPLAY") == "" {
+		t.Skip("no DISPLAY")
+	}
+	b := X11Backend{}
+	for _, tc := range []struct {
+		name  string
+		opts  WindowOptions
+		moveX int
+		moveY int
+	}{
+		{"opened at a position", WindowOptions{Title: "placed", Width: 220, Height: 140, X: 310, Y: 230, Scale: 1}, 0, 0},
+		{"moved before it maps", WindowOptions{Title: "moved", Width: 220, Height: 140, Scale: 1}, 370, 190},
+	} {
+		s, err := b.NewSurface(tc.opts)
+		if err != nil {
+			t.Fatal(err)
+		}
+		wantX, wantY := tc.opts.X, tc.opts.Y
+		if tc.moveX != 0 || tc.moveY != 0 {
+			MoveSurface(s, tc.moveX, tc.moveY)
+			wantX, wantY = tc.moveX, tc.moveY
+		}
+		NewPaintContext(s).Clear(paintengine2d.RGB(0.2, 0.5, 0.3))
+		if err := s.Present(nil); err != nil {
+			t.Fatal(err)
+		}
+		x, y, ok := 0, 0, false
+		for deadline := time.Now().Add(3 * time.Second); time.Now().Before(deadline); {
+			s.Poll()
+			if x, y, ok = SurfacePosition(s); ok && x == wantX && y == wantY {
+				break
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+		if !ok || x != wantX || y != wantY {
+			t.Errorf("%s: the window mapped at %d,%d (known=%v), put at %d,%d", tc.name, x, y, ok, wantX, wantY)
+		}
+		s.Close()
 	}
 }

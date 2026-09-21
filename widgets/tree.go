@@ -253,11 +253,15 @@ func (t *TreeView) ScrollTo(y float32) {
 	t.Invalidate()
 }
 
+// Measure is every visible row and the view frame around them (see
+// ListView.Measure).
 func (t *TreeView) Measure(c layout.Constraints) paintengine2d.Point {
+	in := t.frame()
 	h := t.contentH()
 	if h <= 0 {
 		h = 80
 	}
+	h += in.Top + in.Bottom
 	if c.HasMaxH() && h > c.MaxH {
 		h = c.MaxH
 	}

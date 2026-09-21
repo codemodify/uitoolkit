@@ -202,10 +202,12 @@ func (a *Application) ShowStatusMenu(x, y int32, items []platform.StatusMenuItem
 	}
 	mw, mh := measureStatusMenu(a.Look(), a.Scale(), rows)
 	px, py := statusMenuScreenPos(x, y, mw, mh)
-	// The menu is measured in the look's device pixels and placed in root
-	// ones; a window's size is stated in logical pixels.
+	// The menu is measured in the look's device pixels and the tray names
+	// a point in root ones; a window's size and position are stated in
+	// logical pixels.
 	lw := platform.LogicalPixels(mw, a.Scale())
 	lh := platform.LogicalPixels(mh, a.Scale())
+	px, py = platform.LogicalPosition(px, a.Scale()), platform.LogicalPosition(py, a.Scale())
 	w := a.statusMenu
 	if w == nil || w.Closed() {
 		opts := platform.WindowOptions{

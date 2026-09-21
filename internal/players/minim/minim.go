@@ -118,10 +118,10 @@ func New(a *app.Application, opts Options) (*Player, error) {
 	p.strip = newStrip(p)
 	main.SetContent(p.strip)
 
-	// The rack's reach grows with the display, like every other measurement
-	// in the toolkit: ten pixels of slop at 1× is a fingertip, and ten
-	// device pixels at 2× is half of one.
-	p.Desk = players.NewDesk(int(players.DefaultReach * max(main.Scale(), 1)))
+	// The rack speaks logical pixels, so its reach grows with the display
+	// like every other measurement in the toolkit: ten pixels of slop is a
+	// fingertip at 1× and at 2× alike.
+	p.Desk = players.NewDesk(players.DefaultReach)
 	p.iMain = p.Desk.Add("main", main)
 
 	if !opts.NoEq {

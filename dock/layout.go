@@ -62,9 +62,11 @@ type LayoutNode struct {
 	Current int      `json:"current,omitempty"`
 }
 
-// LayoutFloat is one floating panel's window. The position is best effort:
-// a Wayland client is not told where its windows are and cannot place
-// them, so there only the size comes back.
+// LayoutFloat is one floating panel's window, in logical pixels — the unit
+// a window's size and position are stated in, so a layout saved at one
+// display scale opens the same windows at another. The position is best
+// effort: a Wayland client is not told where its windows are and cannot
+// place them, so there only the size comes back.
 type LayoutFloat struct {
 	Panel string  `json:"panel"`
 	X     float32 `json:"x"`

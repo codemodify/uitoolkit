@@ -290,12 +290,17 @@ func (s *Split) Measure(c layout.Constraints) paintengine2d.Point {
 
 func (s *Split) Arrange(r paintengine2d.Rect) {
 	s.SetBounds(r)
-	live, panes, _ := s.panes()
+	// Which panes are worth space is settled before the space is shared
+	// out: a pane that was hidden while it was empty — an area whose only
+	// panel floated — and has just been given a panel back must be in
+	// this share, or it is shown at the zero size it was hidden at until
+	// something else happens to lay the host out again.
 	for _, k := range s.kids {
 		if k != nil {
 			k.SetVisible(!k.Empty())
 		}
 	}
+	live, panes, _ := s.panes()
 	for j, i := range live {
 		s.kids[i].Arrange(panes[j])
 	}

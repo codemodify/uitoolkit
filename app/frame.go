@@ -148,8 +148,9 @@ func (a *Application) offscreen() bool {
 // resolveDecorations is the decoration policy, first match wins:
 // UITK_DECORATIONS; WindowOptions.Decorations; no frame of the toolkit's
 // for an offscreen window; the user's preference (look.json "decorations");
-// the toolkit's frame for a window with a title bar where the desktop can
-// move and resize it on request; the desktop's frame otherwise.
+// the toolkit's frame for a window with a caption of its own (a title bar,
+// or a caption whose drags the app takes) where the desktop can move and
+// resize it on request; the desktop's frame otherwise.
 func (a *Application) resolveDecorations(opts platform.WindowOptions, titleBar bool, surf platform.Surface) platform.Decorations {
 	if opts.Popup {
 		return platform.DecorationsNone
@@ -177,10 +178,40 @@ func (a *Application) resolveDecorations(opts platform.WindowOptions, titleBar b
 	return platform.DecorationsServer
 }
 
+// SetOnCaptionDrag gives the app a drag of the window's caption before the
+// desktop's interactive move gets it. fn runs when a left press on caption
+// space passes the drag threshold, with the pointer in window coordinates;
+// returning true says the app took the drag — a floating dock panel's
+// window starts a drag that carries it back over its host
+// ([dock.Host], app.DockWindows) — and false leaves it the desktop's move.
+// nil removes it.
+//
+// Only a caption the toolkit draws can do this: a desktop's own title bar
+// moves its window without asking the client. So a window with a hook
+// gets the toolkit's frame under the default decoration policy, as a
+// window with a title bar of its own does; the user's "Use system title
+// bar and borders", WindowOptions.Decorations and UITK_DECORATIONS still
+// have the last word, and under the desktop's frame the hook never runs.
+func (w *Window) SetOnCaptionDrag(fn func(at paintengine2d.Point) bool) {
+	if w == nil {
+		return
+	}
+	had := w.onCaptionDrag != nil
+	w.onCaptionDrag = fn
+	if had != (fn != nil) {
+		w.syncDecorations()
+	}
+}
+
+// ownsCaption reports whether the window has a caption of its own to
+// show — a title bar, or a caption whose drags the app takes — which is
+// what earns it the toolkit's frame under the default policy.
+func (w *Window) ownsCaption() bool { return w.titleBar != nil || w.onCaptionDrag != nil }
+
 // syncDecorations asks the surface for the mode the policy picks now and
 // rebuilds the caption for the mode in effect.
 func (w *Window) syncDecorations() {
-	want := w.app.resolveDecorations(w.opts, w.titleBar != nil, w.surf)
+	want := w.app.resolveDecorations(w.opts, w.ownsCaption(), w.surf)
 	if f, ok := w.surf.(platform.FrameSurface); ok {
 		f.RequestDecorations(want)
 		w.decor = f.Decorations()
@@ -675,6 +706,9 @@ func (w *Window) frameMouseMove(ev platform.Event) bool {
 			w.capPress.armed = false
 			// A drag is no click: it does not start a double click.
 			w.capClick = captionClick{}
+			if w.onCaptionDrag != nil && w.onCaptionDrag(ev.Pos) {
+				return true
+			}
 			w.StartMove()
 		}
 		return true
@@ -951,6 +985,17 @@ func (a *Application) SetCaptionButtons(p style.CaptionButtonsPref) {
 // CaptionButtons is where frames the toolkit draws put their caption
 // buttons (see SetCaptionButtons).
 func (a *Application) CaptionButtons() style.CaptionButtonsPref { return a.captionPref }
+
+// Decorations is the user's preference for who draws the frame of the
+// application's windows (look.json "decorations", or what ApplyAppearance
+// last set). What a window actually got — the desktop has the last word —
+// is [Window.Decorations].
+func (a *Application) Decorations() style.DecorationsPref {
+	if a == nil {
+		return style.DecorationsAuto
+	}
+	return a.decorPref
+}
 
 // setDecorationsPref applies the user's decorations preference (look.json).
 func (a *Application) setDecorationsPref(p style.DecorationsPref) {

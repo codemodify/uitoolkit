@@ -127,7 +127,7 @@ func buildDragPage(t *tourState) widget.Component {
 	howto.Content().Spec.Gap = 7
 
 	// The lists get height of their own rather than their natural one:
-	// a list measures to exactly its rows, and this page needs room
+	// a list measures to its rows and its frame, and this page needs room
 	// under the last row for the caret that says "at the end".
 	rest := tourScroll("Drag and drop page", widgets.NewColumn(
 		widgets.NewPanel("Anything from another application", zone),

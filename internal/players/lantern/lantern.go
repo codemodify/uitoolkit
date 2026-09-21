@@ -95,7 +95,7 @@ func New(a *app.Application, opts Options) (*Player, error) {
 	p.body = newBody(p)
 	main.SetContent(p.body)
 
-	p.Desk = players.NewDesk(int(players.DefaultReach * max(main.Scale(), 1)))
+	p.Desk = players.NewDesk(players.DefaultReach)
 	p.iMain = p.Desk.Add("main", main)
 
 	if !opts.NoList {

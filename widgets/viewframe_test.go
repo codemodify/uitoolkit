@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/codemodify/paintengine2d"
+	"github.com/codemodify/uitoolkit/layout"
 	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
 )
@@ -98,5 +99,46 @@ func TestListEnsureVisibleBeforeLayout(t *testing.T) {
 	l.EnsureVisible(lo + 1)
 	if l.OffsetY != off {
 		t.Fatalf("revealing a visible row scrolled from %v to %v", off, l.OffsetY)
+	}
+}
+
+// A view measures its view frame as well as its rows: given the height it
+// asks for — which is what a scroll view or a column gives it — every row
+// fits inside the frame and nothing is left to scroll. A list that
+// measured its rows alone lost its last row under the frame's bottom edge.
+func TestViewsMeasureTheirFrame(t *testing.T) {
+	lk := win95Look(t)
+	in := style.ViewFrameInsetsOf(lk)
+	if in.Top+in.Bottom <= 0 {
+		t.Fatal("win95 has no view frame to measure")
+	}
+	text := func(i int) string { return fmt.Sprint(i) }
+	list := NewListView(7, text, nil)
+	tree := NewTreeView(NewTreeNode("root",
+		NewTreeNode("a"), NewTreeNode("b"), NewTreeNode("c"), NewTreeNode("d")))
+	table := NewTableView([]TableColumn{{Title: "A", Width: 80}}, 9, func(r, c int) string { return text(r) }, nil)
+
+	views := []struct {
+		name string
+		c    widget.Component
+		// room is the height the rows (and a table's header) need inside
+		// the frame; max is how far the view can scroll once arranged.
+		room func() float32
+		max  func() float32
+	}{
+		{"list", list, func() float32 { return list.contentH() }, list.MaxOffset},
+		{"tree", tree, func() float32 { return tree.contentH() }, tree.MaxOffset},
+		{"table", table, func() float32 { return table.headerH() + table.contentH() }, table.MaxOffset},
+	}
+	for _, v := range views {
+		v.c.SetHost(&fakeWindow{look: lk})
+		m := v.c.Measure(layout.Constraints{MaxW: 300, MaxH: -1})
+		if want := v.room() + in.Top + in.Bottom; m.Y < want {
+			t.Errorf("%s measures %g tall, want at least %g (its rows and its frame)", v.name, m.Y, want)
+		}
+		v.c.Arrange(paintengine2d.XYWH(0, 0, 300, m.Y))
+		if got := v.max(); got > 0 {
+			t.Errorf("%s at the height it asked for still scrolls %g px: its last row is clipped", v.name, got)
+		}
 	}
 }

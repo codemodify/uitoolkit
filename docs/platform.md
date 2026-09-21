@@ -305,14 +305,24 @@ share that scale; CPU present still uses damage / attach / commit.
 
 ### Which pixels a number is in
 
-**Window geometry is logical pixels. Everything else is device pixels.**
+**Window geometry — size and position — is logical pixels. Everything
+else is device pixels.**
 
 | Logical | Device |
 | --- | --- |
-| `WindowOptions.Width`, `Height`, `MinWidth`/`MinHeight`, `MaxWidth`/`MaxHeight` | `Surface.Size`, `Surface.Buffer`, `Present`'s rectangles |
+| `WindowOptions.Width`, `Height`, `MinWidth`/`MinHeight`, `MaxWidth`/`MaxHeight`, `X`, `Y` | `Surface.Size`, `Surface.Buffer`, `Present`'s rectangles |
 | `Surface.Resize`, `EventResize.Width`/`Height` | every event position, every widget rectangle |
-| `app.Window.Size`, `SetSize`, `platform.SizeLimits` | `app.Window.PixelSize`, `SurfaceSize`, `WindowRect`, `Position`, `Move` |
-| | `platform.Frame` (margin, input band, radii) |
+| `app.Window.Size`, `SetSize`, `Position`, `Move`, `platform.SizeLimits` | `app.Window.PixelSize`, `SurfaceSize`, `WindowRect` |
+| `HostMover.Move`, `HostPositioner.Position`, `dock` float geometry and its layout JSON | `platform.Frame` (margin, input band, radii) |
+
+A window's position and its size add up: the window at `Position()` that
+is `Size()` wide ends where a window moved to `x + w` begins, at any
+scale, so an app that keeps windows side by side (the players' rack) does
+arithmetic in one unit. `platform.DevicePosition` / `LogicalPosition`
+convert a position the way `DevicePixels` / `LogicalPixels` convert a
+size, keeping zero and negative values; at a fractional scale each edge
+rounds to the root's pixels on its own, so two such windows can meet a
+device pixel apart. Qt's `QWindow::position()` is the same idea.
 
 A window asked for as 275 × 116 is that at any display scale: 275 × 116
 device pixels at 1, 481 × 203 at 1.75, with its content drawn at 1.75 to
@@ -325,7 +335,8 @@ and the compositor multiplies). **X11 has no notion of a display scale at
 all** — an X window's size *is* pixels — so the X11 backend converts with
 `platform.DevicePixels` and `LogicalPixels` at that one boundary: on the
 way in for `Resize`, `WindowOptions` and `WM_NORMAL_HINTS`, on the way out
-for the `EventResize` a `ConfigureNotify` becomes. A resize the app echoes
+for the `EventResize` a `ConfigureNotify` becomes — and positions the same
+way, for `Move`, `WindowOptions.X`/`Y` and `Position`. A resize the app echoes
 straight back (which is what `Window.dispatch` does) is recognised as the
 size the window was last told and changes nothing, so a window manager
 that picked a size between two logical pixels is not argued with.
