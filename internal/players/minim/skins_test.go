@@ -260,9 +260,13 @@ func TestTheSkinMenuListsTheSkinsByName(t *testing.T) {
 		names[it.Text] = it
 	}
 	for _, id := range append(append([]string(nil), Skins...), Themed) {
-		it := names[SkinLabel(id)]
+		label := SkinLabel(id)
+		if id == Themed {
+			label = "No skin"
+		}
+		it := names[label]
 		if it == nil {
-			t.Fatalf("the menu has no %q: %v", SkinLabel(id), pop.Items)
+			t.Fatalf("the menu has no %q: %v", label, pop.Items)
 		}
 		if it.Checked != (id == SkinClassic) {
 			t.Errorf("%q ticked = %v", it.Text, it.Checked)

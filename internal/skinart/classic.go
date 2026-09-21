@@ -345,6 +345,9 @@ func MinimClassic() *Plan {
 	p.Colors = map[string]string{
 		"focus": clLCD,
 	}
+	// A menu opens inside the window it is asked from, and the strip is 116
+	// design pixels tall: rows of 20 let the skin menu's four fit in it.
+	p.Metrics = map[string]float32{"menuItemH": 20}
 	p.Window = &WindowSpec{
 		Border:  f.Border,
 		Caption: f.Caption,

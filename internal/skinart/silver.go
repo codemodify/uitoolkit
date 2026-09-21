@@ -302,6 +302,9 @@ func MinimSilver() *Plan {
 		{Part: "focus", States: [][2]string{{"normal", "focus.ring"}}},
 	}
 	p.Colors = map[string]string{"focus": "#5f8fe8"}
+	// A menu opens inside the window it is asked from, and the strip is 116
+	// design pixels tall: rows of 20 let the skin menu's four fit in it.
+	p.Metrics = map[string]float32{"menuItemH": 20}
 	// Four round corners, and a window that is the shape they make: one
 	// rect the size of the window, rounder than the frame (which is square),
 	// so it is a silhouette and the desktop shows beyond every corner.

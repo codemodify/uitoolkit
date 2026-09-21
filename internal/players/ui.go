@@ -344,8 +344,11 @@ func (b *GlyphButton) MouseExit() {
 	b.Base.MouseExit()
 }
 
-func (b *GlyphButton) MousePress(widget.MouseEvent) bool {
-	if !b.Enabled() {
+// MousePress takes the primary button only: a right-click on a key is a
+// right-click on the face it sits in, and bubbles there, rather than a
+// press of the key.
+func (b *GlyphButton) MousePress(e widget.MouseEvent) bool {
+	if !b.Enabled() || e.Button != platform.ButtonLeft {
 		return false
 	}
 	b.MarkPointerFocus()
@@ -699,7 +702,7 @@ func (f *Fader) MouseExit() {
 }
 
 func (f *Fader) MousePress(e widget.MouseEvent) bool {
-	if !f.Enabled() {
+	if !f.Enabled() || e.Button != platform.ButtonLeft {
 		return false
 	}
 	f.MarkPointerFocus()

@@ -9,6 +9,9 @@
   "family": "dark",
   "label": "Minim Classic",
   "lineage": "uitoolkit",
+  "metrics": {
+    "menuItemH": 20
+  },
   "parts": {
     "caption": {
       "states": {
