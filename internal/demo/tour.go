@@ -649,11 +649,13 @@ func tourRow(label string, children ...widget.Component) *widgets.FlexBox {
 // The readout panel is a fixed share of the page and the mono face is a
 // fixed width, so this is a constant rather than a measurement: a value
 // wider than this is folded under its own column instead of wrapping
-// back to the margin, where it would read as another fact. Keep it under
-// what the panel really fits (about 49 characters at the split below) —
-// a fold wider than the panel is wrapped again by the widget, and the
-// two wraps together look like a mistake.
-const tourFactCols = 45
+// back to the margin, where it would read as another fact. It is kept
+// well under what the panel fits at the tour's own size, because the
+// panel is a share of a window the user can make smaller: a fold wider
+// than the panel is wrapped again by the widget, and the two wraps
+// together read as a mistake. Keep every label to 13 characters, which
+// is what leaves a value room beside one.
+const tourFactCols = 38
 
 // tourFacts renders a readout: one "name  value" line per fact, the names
 // padded so that the values line up in the mono face. A pair with neither
@@ -673,6 +675,15 @@ func tourFacts(pairs ...[2]string) string {
 			continue
 		}
 		b.WriteString(p[0])
+		// A value that is one long word — a MIME type, a path — cannot be
+		// folded at all, so it goes on the next line where it has the
+		// whole width rather than overflowing beside its label.
+		if !strings.ContainsAny(p[1], " \n") && len(p[1]) > tourFactCols-w-2 {
+			b.WriteString("\n  ")
+			b.WriteString(p[1])
+			b.WriteByte('\n')
+			continue
+		}
 		b.WriteString(strings.Repeat(" ", w-len(p[0])+2))
 		b.WriteString(foldValue(p[1], tourFactCols-w-2, gap))
 		b.WriteByte('\n')

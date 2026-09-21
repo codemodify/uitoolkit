@@ -285,14 +285,14 @@ func (p *shapesPage) refresh() {
 		[2]string{"clamped", yesNo(clamped)},
 		[2]string{"", ""},
 		[2]string{"glass asked", yesNo(p.shaped.Glass())},
-		[2]string{"glass available", yesNo(p.shaped.GlassAvailable())},
+		[2]string{"glass here", yesNo(p.shaped.GlassAvailable())},
 		[2]string{"opaque screen", yesNo(st.Solid)},
 		[2]string{"", ""},
 		[2]string{"presses: ring", strconv.Itoa(ring)},
 		[2]string{"presses: card", strconv.Itoa(cardHits) + "  (the ones through the hole)"},
 		[2]string{"", ""},
 		[2]string{"backend", p.t.a.BackendName()},
-		[2]string{"carries windows", yesNo(widget.DragsWindows(p.t.strip))},
+		[2]string{"toplevel drag", yesNo(widget.DragsWindows(p.t.strip))},
 	))
 }
 
@@ -461,9 +461,16 @@ func (f *tourFace) paintCard(ctx *paintengine2d.Context, b paintengine2d.Rect, l
 		}
 	}
 	// The count of presses that landed here — the ones that went through
-	// the hole are in this number and in no other.
-	lk.DrawLabel(ctx, paintengine2d.XYWH(b.Min.X, b.Min.Y+b.Dy()*0.44, b.Dx(), b.Dy()*0.12),
-		"presses on the card: "+strconv.Itoa(f.clicks), paintengine2d.RGBA(1, 1, 1, 1), style.AlignCenter)
+	// the hole are in this number and in no other. It goes in the bottom
+	// left on a plate of its own: the middle is behind the shaped window
+	// the user is aiming through, and over these colours plain white
+	// text cannot be read at all.
+	pw, ph := b.Dx()*0.52, style.Dip(lk, 30)
+	plate := paintengine2d.XYWH(b.Min.X+b.Dx()*0.03, b.Max.Y-ph-b.Dy()*0.04, pw, ph)
+	r := style.Dip(lk, 6)
+	ctx.DrawRoundRect(plate, r, r, paintengine2d.Fill(paintengine2d.RGBA(0, 0, 0, 0.72)))
+	lk.DrawLabel(ctx, plate, "presses on the card: "+strconv.Itoa(f.clicks),
+		paintengine2d.RGBA(1, 1, 1, 1), style.AlignCenter)
 	_ = pal
 }
 
@@ -494,9 +501,20 @@ func (f *tourFace) MousePress(e widget.MouseEvent) bool {
 	if f.page != nil {
 		f.page.refresh()
 	}
+	if f.card {
+		// A press that came through the hole is a press on this window,
+		// so the desktop raises it — and the shaped window the user is
+		// aiming through disappears behind it after one go. Putting the
+		// ring back on top is what a real heads-up window would do, and
+		// it is what makes the hole worth clicking twice.
+		if f.page != nil && f.page.shaped != nil && !f.page.shaped.Closed() {
+			f.page.shaped.Raise()
+		}
+		return true
+	}
 	// Dragging the window is what proves the hole belongs to it: the card
 	// behind slides past the hole as the window moves.
-	if e.Button == platform.ButtonLeft && !f.card {
+	if e.Button == platform.ButtonLeft {
 		f.win.StartMove()
 	}
 	return true

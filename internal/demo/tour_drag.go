@@ -221,7 +221,7 @@ func (l *docList) drag(rows []int) *widget.Drag {
 	d.Image, d.Hotspot = widget.DragLabel(l.view.Look(), label, tourScale(p.t.win))
 	p.lastDrag = tourFacts(
 		[2]string{"dragging", label + " out of " + l.name},
-		[2]string{"offers", strings.Join(d.Types, "\n"+strings.Repeat(" ", 11))},
+		[2]string{"offers", strings.Join(d.Types, "\n")},
 		[2]string{"allows", actionList(d.Actions)},
 		[2]string{"prefers", d.Preferred.String()},
 		[2]string{"picture", label},

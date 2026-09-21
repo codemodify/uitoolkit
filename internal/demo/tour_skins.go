@@ -290,7 +290,7 @@ func (p *skinsPage) refresh() {
 		[2]string{"family", string(pack.Palette)},
 		[2]string{"a skin", yesNo(style.IsSkin(pack.Name))},
 		[2]string{"cuts windows", yesNo(style.WindowShaped(look))},
-		[2]string{"shapes controls", yesNo(style.ControlShapes(look))},
+		[2]string{"cuts controls", yesNo(style.ControlShapes(look))},
 		[2]string{"wants glass", yesNo(style.WantsGlass(look))},
 		[2]string{"", ""},
 		[2]string{"in use now", now.Name},

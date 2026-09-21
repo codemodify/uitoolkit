@@ -130,6 +130,7 @@ Both repos must be on the same revision — `go.mod` resolves the engine from
 `../paintengine2d` while the `replace` is in place.
 
 ```sh
+go run ./examples/tour         # the tour: a page per capability (docs/tour.md)
 go run ./examples/gallery      # widget gallery
 go run ./examples/mail         # mail client, in-memory demo store
 go run ./examples/notes
