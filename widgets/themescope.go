@@ -99,6 +99,16 @@ func (s *ThemeScope) Arrange(r paintengine2d.Rect) {
 
 // Paint fills the scope with its theme's window background, so the preview
 // is not seen against the surrounding theme.
+//
+// A scope whose child cuts itself to a shape (widget.PaintClipper) — an
+// in-app window cut to its look's silhouette — fills only that shape: the
+// child fills the whole scope, and a background painted beyond its outline
+// would put back the rectangle the outline took away.
 func (s *ThemeScope) Paint(ctx *paintengine2d.Context) {
+	if pc, ok := s.child.(widget.PaintClipper); ok {
+		ctx.Save()
+		defer ctx.Restore()
+		pc.PaintClip(ctx)
+	}
 	ctx.DrawRect(s.LocalBounds(), paintengine2d.Fill(s.Look().Palette().Background))
 }
