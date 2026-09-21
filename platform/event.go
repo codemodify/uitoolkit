@@ -210,12 +210,18 @@ type Event struct {
 
 // WindowOptions configure a native or offscreen surface.
 type WindowOptions struct {
-	Title           string
-	Width           int
-	Height          int
-	MinWidth        int
-	MinHeight       int
-	Resizable       bool
+	Title     string
+	Width     int
+	Height    int
+	MinWidth  int
+	MinHeight int
+	// MaxWidth, MaxHeight cap the window; zero is no cap.
+	MaxWidth  int
+	MaxHeight int
+	// Sizing says whether the desktop may resize the window at all (see
+	// [Sizing]). The zero value is resizable; SizingFixed pins the window
+	// to the size it opens at, and Min / Max are then that size.
+	Sizing          Sizing
 	Headless        bool
 	BackgroundPixel uint32
 	// X, Y are root/screen coordinates. Used when Popup is set (X11

@@ -279,12 +279,48 @@ func (w *Window) Minimize() {
 	}
 }
 
-// ToggleMaximize maximizes the window, or restores a maximized one.
+// ToggleMaximize maximizes the window, or restores a maximized one. A
+// window the desktop may not resize is not maximized either.
 func (w *Window) ToggleMaximize() {
-	if w == nil || w.Closed() {
+	if w == nil || w.Closed() || !w.Resizable() {
 		return
 	}
 	w.SetMaximized(!w.state.Maximized)
+}
+
+// Resizable reports whether the user may resize the window. A window opened
+// with platform.SizingFixed may not: the desktop was told its minimum and
+// its maximum are the same, and the frame the toolkit draws offers no
+// resize band for it either.
+func (w *Window) Resizable() bool {
+	if w == nil {
+		return false
+	}
+	return platform.SurfaceSizing(w.surf) != platform.SizingFixed
+}
+
+// SetResizable pins the window to its current size, or lets the user resize
+// it again. It is [platform.WindowOptions.Sizing] after the window exists —
+// for an app whose window is a design in one mode and free in another — and
+// it reports whether the backend could. A fixed window may still be resized
+// by the application (SetSize), which takes its pin with it.
+func (w *Window) SetResizable(on bool) bool {
+	if w == nil || w.Closed() {
+		return false
+	}
+	sz := platform.SizingFixed
+	if on {
+		sz = platform.SizingResizable
+	}
+	if !platform.SetSurfaceSizing(w.surf, sz) {
+		return false
+	}
+	// The resize band and the maximize button both go with it.
+	if f, ok := w.surf.(platform.FrameSurface); ok {
+		w.caps = f.Capabilities()
+	}
+	w.rebuildCaption()
+	return true
 }
 
 // windowStateChanged adopts the desktop's new state for the window.

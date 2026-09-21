@@ -68,8 +68,24 @@ func (o *Offscreen) RequestDecorations(d Decorations) {
 // WindowState is the simulated state (FrameSurface).
 func (o *Offscreen) WindowState() WindowState { return o.frame.state }
 
-// Capabilities are the simulated desktop's (FrameSurface).
-func (o *Offscreen) Capabilities() WMCaps { return o.frame.caps }
+// Capabilities are the simulated desktop's (FrameSurface). A fixed window
+// cannot be maximized, whatever the desktop can do.
+func (o *Offscreen) Capabilities() WMCaps { return dropResizeCaps(o.frame.caps, o.sizing) }
+
+// Sizing is the window's resize policy (SizingSurface).
+func (o *Offscreen) Sizing() Sizing { return o.sizing }
+
+// SetSizing changes the policy and re-states the limits (SizingSurface).
+func (o *Offscreen) SetSizing(s Sizing) {
+	if o == nil || o.sizing == s {
+		return
+	}
+	o.sizing = s
+	o.limits = limitsFor(s, o.opts, o.frame.geomW, o.frame.geomH)
+}
+
+// SizeLimits is what the simulated desktop was told (SizingSurface).
+func (o *Offscreen) SizeLimits() SizeLimits { return o.limits }
 
 // SuitsClientFrame is true: the simulated desktop moves and resizes.
 func (o *Offscreen) SuitsClientFrame() bool { return !o.frame.noMoveResize }
@@ -83,9 +99,10 @@ func (o *Offscreen) StartSystemMove() bool {
 	return true
 }
 
-// StartSystemResize records a resize from edges (FrameSurface).
+// StartSystemResize records a resize from edges (FrameSurface). A fixed
+// window refuses one, as a desktop does.
 func (o *Offscreen) StartSystemResize(edges Edges) bool {
-	if o.frame.noMoveResize || !edges.Valid() {
+	if o.frame.noMoveResize || !edges.Valid() || o.sizing == SizingFixed {
 		return false
 	}
 	o.frame.calls.Resizes = append(o.frame.calls.Resizes, edges)
