@@ -244,3 +244,85 @@ func TestAnOwnShapeWinsOverTheLooks(t *testing.T) {
 		}
 	}
 }
+
+// ---- the silhouette of art a component paints by name ----------------------
+
+// artBox paints itself from a named sprite of its look's skin, as a panel's
+// key does, and so is shaped by that sprite's art; it may name a face too.
+type artBox struct {
+	Base
+	sprite string
+	role   style.Role
+	named  bool
+}
+
+func (a *artBox) ArtShape(lk style.LookAndFeel, size paintengine2d.Point) *style.Silhouette {
+	if a.sprite == "" {
+		return nil
+	}
+	return style.SkinSpriteShape(lk, size, paintengine2d.XYWH(0, 0, size.X, size.Y), a.sprite)
+}
+
+// facedArtBox is an artBox that also names a face.
+type facedArtBox struct{ artBox }
+
+func (f *facedArtBox) ShapeRole() style.Role { return f.role }
+
+// A component painted from a sprite by name takes the pointer on the
+// sprite's ink, exactly as one painted from a face does: Deck's resting
+// button sprite is a stadium, a disc in a square box, and the corners of
+// the box fall through.
+func TestAComponentPaintedFromASpriteTakesItsShape(t *testing.T) {
+	lk := deckLook(t)
+	side := lk.Metrics().ControlH
+	box := paintengine2d.XYWH(0, 0, side, side)
+	root := newShapedBox(box)
+	root.SetLook(lk)
+	key := &artBox{sprite: "button.normal"}
+	key.Init(key)
+	key.SetBounds(box)
+	root.Add(key)
+	if got := HitRoot(root, paintengine2d.Pt(side/2, side/2)); got != Component(key) {
+		t.Fatalf("the middle of the sprite is not the key: %v", got)
+	}
+	for _, p := range [][2]float32{{1, 1}, {side - 2, 1}, {1, side - 2}, {side - 2, side - 2}} {
+		if got := HitRoot(root, paintengine2d.Pt(p[0], p[1])); got != Component(root) {
+			t.Errorf("corner %v went to %v, not through to the panel behind the key", p, got)
+		}
+	}
+	// A sprite the skin does not have, and a look that is not a skin, give
+	// the whole box.
+	key.sprite = "no.such.sprite"
+	key.lookShape = nil
+	if HitRoot(root, paintengine2d.Pt(1, 1)) != Component(key) {
+		t.Error("a sprite the skin does not have shaped the key")
+	}
+}
+
+// The art's silhouette comes before the face's, and a component whose art
+// has none falls back to the face it names.
+func TestArtShapeComesBeforeTheFace(t *testing.T) {
+	lk := deckLook(t)
+	side := lk.Metrics().ControlH
+	box := paintengine2d.XYWH(0, 0, side, side)
+	// The field face is a rounded rect that fills a square box: the button
+	// art decides, and the corner is refused.
+	both := &facedArtBox{artBox{sprite: "button.normal", role: style.RoleField}}
+	both.Init(both)
+	both.SetBounds(box)
+	both.SetLook(lk)
+	if HitRoot(both, paintengine2d.Pt(1, 1)) == Component(both) {
+		t.Error("the face's box won over the art's disc")
+	}
+	// No art: the button face it names shapes it.
+	faceOnly := &facedArtBox{artBox{role: style.RoleButton}}
+	faceOnly.Init(faceOnly)
+	faceOnly.SetBounds(box)
+	faceOnly.SetLook(lk)
+	if HitRoot(faceOnly, paintengine2d.Pt(1, 1)) == Component(faceOnly) {
+		t.Error("with no art to ask, the face's silhouette was not used")
+	}
+	if HitRoot(faceOnly, paintengine2d.Pt(side/2, side/2)) != Component(faceOnly) {
+		t.Error("the middle of the face missed")
+	}
+}

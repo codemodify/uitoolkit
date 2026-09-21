@@ -106,6 +106,21 @@ type ShapeRole interface {
 	ShapeRole() style.Role
 }
 
+// ArtShape is what a component implements when it paints itself from a
+// skin's art by name — a sprite (style.DrawSkinSprite) or a layout slot's
+// art (style.DrawSkinSlot) — rather than from one of the look's faces: its
+// silhouette for a box of size, in local device pixels, or nil for none
+// (style.SkinSpriteShape and style.SkinSlotShape are the answers).
+//
+// The art a component paints is the look's, so the answer is asked of the
+// look like a ShapeRole face's is, remembered per look and size, and it
+// takes precedence over ShapeRole: a key painted as a picture of a disc is
+// the disc, whatever face the look would have painted under it. A nil
+// answer falls back to ShapeRole, and to the whole box after that.
+type ArtShape interface {
+	ArtShape(lk style.LookAndFeel, size paintengine2d.Point) *style.Silhouette
+}
+
 // lookShape is a component's silhouette as its look last gave it, with
 // everything that could change the answer beside it. A component's own
 // shape needs no such key — it is handed in — but a look's depends on the
@@ -113,18 +128,20 @@ type ShapeRole interface {
 type lookShape struct {
 	look  style.LookAndFeel
 	role  style.Role
+	art   bool
 	w, h  int
 	shape *platform.Shape // nil: the look shapes this face as its whole box
 }
 
 // hitsLookShape reports whether local point p is inside the silhouette the
-// component's look gives the face it paints. True for a component that names
-// no face, for a look with no silhouette for it, and whenever the answer
-// cannot be worked out — a control nobody can click is a worse failure than
-// a square one.
+// component's look gives the art or the face it paints. True for a
+// component that names neither, for a look with no silhouette for it, and
+// whenever the answer cannot be worked out — a control nobody can click is a
+// worse failure than a square one.
 func (b *Base) hitsLookShape(p paintengine2d.Point) bool {
-	r, ok := b.me().(ShapeRole)
-	if !ok {
+	r, isRole := b.me().(ShapeRole)
+	a, isArt := b.me().(ArtShape)
+	if !isRole && !isArt {
 		return true
 	}
 	lb := b.LocalBounds()
@@ -132,11 +149,22 @@ func (b *Base) hitsLookShape(p paintengine2d.Point) bool {
 	if w < 1 || h < 1 {
 		return true
 	}
-	lk, role := b.resolveLook(), r.ShapeRole()
+	lk := b.resolveLook()
+	var role style.Role
+	if isRole {
+		role = r.ShapeRole()
+	}
 	c := b.lookShape
-	if c == nil || c.look != lk || c.role != role || c.w != w || c.h != h {
-		c = &lookShape{look: lk, role: role, w: w, h: h}
-		c.shape = platform.NewShapeSilhouette(style.ControlShapeOf(lk, lb, role))
+	if c == nil || c.look != lk || c.role != role || c.art != isArt || c.w != w || c.h != h {
+		c = &lookShape{look: lk, role: role, art: isArt, w: w, h: h}
+		var sil *style.Silhouette
+		if isArt {
+			sil = a.ArtShape(lk, paintengine2d.Pt(lb.Dx(), lb.Dy()))
+		}
+		if sil == nil && isRole {
+			sil = style.ControlShapeOf(lk, lb, role)
+		}
+		c.shape = platform.NewShapeSilhouette(sil)
 		b.lookShape = c
 	}
 	if c.shape == nil {
