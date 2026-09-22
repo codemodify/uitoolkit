@@ -26,6 +26,7 @@ import (
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit"
 	"github.com/codemodify/uitoolkit/app"
+	"github.com/codemodify/uitoolkit/icons"
 	"github.com/codemodify/uitoolkit/layout"
 	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
@@ -51,6 +52,8 @@ func main() {
 		opts.Look = pack.Look()
 	}
 	a := uitoolkit.New(opts)
+	// The window icon the desktop shows in its title bar, task bar and switcher.
+	a.SetIcon(icons.AppIconRGB("more", 0x5a, 0x6b, 0x7d)...)
 	win, err := a.NewWindow(platform.WindowOptions{
 		Title: "Popups", Width: 360, Height: 150, Headless: headless,
 	})

@@ -107,6 +107,12 @@ type DecorationSpec struct {
 	// centre, pushed aside by the buttons where they leave no room there;
 	// otherwise it is the space between them.
 	CenterTitle bool
+	// TitleRoom is the room the look keeps round its window title in a
+	// stacked frame's strip, where it differs from the header bar's own
+	// (zero): the title's box is the strip's free space less it, and a
+	// fitted caption is measured by it. BeOS's tab keeps R5's 19 and 17
+	// pixels between its title and its boxes.
+	TitleRoom TitleRoom
 	// Layout is the look's own caption-button layout in GNOME's syntax
 	// ("close,minimize,maximize:" on the Mac), used when the user prefers
 	// the theme's layout to the desktop's (look.json "captionButtons");
@@ -160,6 +166,30 @@ type DecorationSpec struct {
 	// window's content keeps its opaque background — Windows 7's Aero
 	// Glass, as against Mica or vibrancy, which tint the whole window.
 	GlassFrame bool
+}
+
+// TitleRoom is the room a caption keeps round its window title, in device
+// pixels: Lead and Trail beside a group of caption buttons on that side,
+// LeadEdge and TrailEdge where the side has none and the title runs to the
+// caption's end. The zero TitleRoom is "the header bar's own".
+type TitleRoom struct {
+	Lead, Trail, LeadEdge, TrailEdge float32
+}
+
+// Zero reports whether r states no room of its own.
+func (r TitleRoom) Zero() bool { return r == TitleRoom{} }
+
+// Sides is the room on the lead and the trail side, given which of them
+// have caption buttons.
+func (r TitleRoom) Sides(lead, trail bool) (l, t float32) {
+	l, t = r.LeadEdge, r.TrailEdge
+	if lead {
+		l = r.Lead
+	}
+	if trail {
+		t = r.Trail
+	}
+	return l, t
 }
 
 // ButtonSide is a side of the caption for the caption buttons.
@@ -356,6 +386,41 @@ func DrawCaptionTitleOf(lk LookAndFeel, ctx *paintengine2d.Context, b paintengin
 	}
 	c, e := decorationFor(lk)
 	e.DrawCaptionTitle(c, ctx, b, title, st)
+}
+
+// CaptionTitleSpanEngine is an optional engine hook for a look that dresses
+// the whole of a stacked caption's free space rather than only the title's
+// box: Platinum's ridges run from the buttons up to its title, and Window
+// Maker bevels the bar between its tiles as a piece of its own. The window
+// hands it free — the strip's space between the two groups of caption
+// buttons — and bar, the whole strip, so a title the look centres on the
+// window is centred on bar and kept inside free, the way the era's own
+// window manager placed it. It paints even when title is empty.
+//
+// A look with the hook states CenterTitle false: the box it is handed is
+// the free space, and centring is its own business.
+type CaptionTitleSpanEngine interface {
+	DrawCaptionTitleSpan(l *Classic, ctx *paintengine2d.Context, free, bar paintengine2d.Rect, title string, st DecorationState)
+}
+
+// DrawCaptionTitleSpanOf paints the title of a stacked caption whose free
+// space is free and whose whole strip is bar, where lk's engine dresses the
+// free space itself ([CaptionTitleSpanEngine]). It reports false, painting
+// nothing, for every other look, which paint their title with
+// [DrawCaptionTitleOf].
+func DrawCaptionTitleSpanOf(lk LookAndFeel, ctx *paintengine2d.Context, free, bar paintengine2d.Rect, title string, st DecorationState) bool {
+	if lk == nil || ctx == nil {
+		return false
+	}
+	c, e := decorationFor(lk)
+	sp, ok := e.(CaptionTitleSpanEngine)
+	if !ok {
+		return false
+	}
+	if free.Dx() >= 1 && free.Dy() >= 4 {
+		sp.DrawCaptionTitleSpan(c, ctx, free, bar, title, st)
+	}
+	return true
 }
 
 // DrawCaptionButtonOf paints caption button k in its box b.

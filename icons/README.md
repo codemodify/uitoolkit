@@ -5,6 +5,12 @@ and a **wide** extra stem vocabulary (Mail, Settings, gallery, Files,
 Notes, future apps). They are **not** embedded and are **not** copied on
 install. Copy a set into your config directory, then pick it in Settings.
 
+One exception: the Go package here (`github.com/codemodify/uitoolkit/icons`)
+embeds thirteen Lucide glyphs at 48 px (and Lucide's `LICENSE`), from which
+`icons.AppIcon` draws the window icons the examples wear — the glyph in
+white on a rounded tile of the app's colour, 16 to 128 px — handed to the
+desktop with `Application.SetIcon` (xdg-toplevel-icon-v1, `_NET_WM_ICON`).
+
 The old hand-drawn `filled` / `outline` / `duotone` SVG folders are
 **gone**. Use these packs. Glyphs are official upstream SVGs rendered by
 `icons/render.sh` — not hand-drawn.

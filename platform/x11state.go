@@ -76,7 +76,16 @@ func netAllowedCaps(bits uint32, windowMenu bool) WMCaps {
 // window manager reads: flags, functions, decorations, input mode, status).
 const (
 	motifHintsDecorations = 1 << 1
+	motifDecorAll         = 1 << 0
 )
+
+// motifDecorateAll is _MOTIF_WM_HINTS asking for every decoration: what a
+// window that asked for none says to have them back. Removing the
+// property says nothing to a window manager that has already read it —
+// KWin re-reads the hints when they change and acts only on hints that
+// state decorations, so a window whose "no frame" property was deleted kept
+// no frame at all.
+var motifDecorateAll = [5]uint32{motifHintsDecorations, 0, motifDecorAll, 0, 0}
 
 // motifHints is the _MOTIF_WM_HINTS value asking the window manager for no
 // frame (a client-side frame, or none at all). ok is false for a window

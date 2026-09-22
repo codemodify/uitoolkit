@@ -37,8 +37,11 @@ type HeaderBar struct {
 	// custom: the app gave the header bar items of its own.
 	custom bool
 	// strip is a stacked frame's caption strip height in the last layout
-	// (0: merged, or no frame).
-	strip float32
+	// (0: merged, or no frame), and stripW its width: the header bar's own,
+	// or a fitted caption's (style.DecorationSpec.CaptionFits) — BeOS's
+	// tab, as wide as its buttons and title while the row under it keeps
+	// the window's width.
+	strip, stripW float32
 	// ShowTitle paints the window's title in the free space when the header
 	// bar has no centre (a stacked frame's strip always shows it).
 	ShowTitle bool
@@ -146,7 +149,7 @@ func (h *HeaderBar) FrameParts() (caption, bar paintengine2d.Rect) {
 	if h.strip <= 0 {
 		return b, paintengine2d.Rect{}
 	}
-	caption = paintengine2d.XYWH(0, 0, b.Dx(), min(h.strip, b.Dy()))
+	caption = paintengine2d.XYWH(0, 0, min(h.stripW, b.Dx()), min(h.strip, b.Dy()))
 	if h.custom && b.Dy() > h.strip {
 		bar = paintengine2d.XYWH(0, h.strip, b.Dx(), b.Dy()-h.strip)
 	}
@@ -186,6 +189,12 @@ func (h *HeaderBar) CaptionFitWidth() float32 {
 	if h == nil || !h.framed {
 		return 0
 	}
+	if room := h.spec().TitleRoom; !room.Zero() {
+		// The look's own room round its title, straight from the buttons'
+		// boxes: no gap of the row's between them.
+		l, t := room.Sides(h.lead.Visible(), h.trail.Visible())
+		return float32(math.Ceil(float64(h.lead.width(h.lead.spec()) + l + h.titleAdvance() + t + h.trail.width(h.trail.spec()))))
+	}
 	lw, rw := h.controlsW()
 	return float32(math.Ceil(float64(lw + h.titleWidth() + rw)))
 }
@@ -213,10 +222,11 @@ func (h *HeaderBar) Measure(c layout.Constraints) paintengine2d.Point {
 		strip := h.minCaption(s)
 		sz := paintengine2d.Pt(0, strip)
 		if h.custom {
-			inner := c.Inset(0, strip)
+			il, ir := rowInset(s)
+			inner := c.Inset(il+ir, strip)
 			inner.MinH = 0
 			row := h.row.Measure(inner)
-			sz = paintengine2d.Pt(row.X, strip+row.Y)
+			sz = paintengine2d.Pt(row.X+il+ir, strip+row.Y)
 		}
 		return c.Constrain(sz)
 	}
@@ -238,10 +248,17 @@ func (h *HeaderBar) Arrange(r paintengine2d.Rect) {
 	w, ht := r.Dx(), r.Dy()
 	s := h.spec()
 	band := ht
-	h.strip = 0
+	h.strip, h.stripW = 0, w
 	if h.framed && s.Stacked {
 		h.strip = min(h.minCaption(s), ht)
 		band = h.strip
+		if s.CaptionFits {
+			// The strip is only as wide as what it holds; the row under
+			// it, the app's own items, keeps the window's width.
+			if fit := h.CaptionFitWidth(); fit > 0 {
+				h.stripW = min(fit, w)
+			}
+		}
 	}
 	if h.lead.Visible() {
 		h.lead.Arrange(paintengine2d.XYWH(0, 0, h.lead.Measure(layout.Unbounded()).X, band))
@@ -250,14 +267,15 @@ func (h *HeaderBar) Arrange(r paintengine2d.Rect) {
 	}
 	if h.trail.Visible() {
 		tw := h.trail.Measure(layout.Unbounded()).X
-		h.trail.Arrange(paintengine2d.XYWH(w-tw, 0, tw, band))
+		h.trail.Arrange(paintengine2d.XYWH(h.stripW-tw, 0, tw, band))
 	} else {
 		h.trail.Arrange(paintengine2d.Rect{})
 	}
 	var rowBox paintengine2d.Rect
 	switch {
 	case h.strip > 0 && h.custom:
-		rowBox = paintengine2d.XYWH(0, h.strip, w, max(ht-h.strip, 0))
+		il, ir := rowInset(s)
+		rowBox = paintengine2d.XYWH(il, h.strip, max(w-il-ir, 0), max(ht-h.strip, 0))
 	case h.strip > 0:
 		// A stacked frame's caption holding only the title: no row.
 	default:
@@ -272,6 +290,19 @@ func (h *HeaderBar) Arrange(r paintengine2d.Rect) {
 		cb := h.center.Bounds()
 		h.center.Arrange(paintengine2d.XYWH(cb.Min.X, 0, cb.Dx(), rowBox.Dy()))
 	}
+}
+
+// rowInset is how far a stacked frame's row stands in from the strip above
+// it on each side: where the look borders its content more deeply than its
+// caption (DecorationSpec.Split — BeOS's tab stands on the window's corner,
+// its content five pixels in), the app's row is content and keeps to the
+// content's border.
+func rowInset(s style.DecorationSpec) (l, r float32) {
+	if !s.Split {
+		return 0, 0
+	}
+	whole := func(v float32) float32 { return max(float32(math.Round(float64(v))), 0) }
+	return whole(s.ContentBorder.Left - s.Border.Left), whole(s.ContentBorder.Right - s.Border.Right)
 }
 
 // showsTitle reports whether the header bar paints the window title: a
@@ -290,12 +321,16 @@ func (h *HeaderBar) Paint(ctx *paintengine2d.Context) {
 	if t, ok := h.Host().(interface{ Title() string }); ok {
 		title = t.Title()
 	}
-	if title == "" {
-		return
-	}
 	lk := h.Look()
 	if h.framed {
-		style.DrawCaptionTitleOf(lk, ctx, h.titleRect(), title, h.DecorationState())
+		st := h.DecorationState()
+		band, _ := h.FrameParts()
+		if !style.DrawCaptionTitleSpanOf(lk, ctx, h.titleRect(), band, title, st) && title != "" {
+			style.DrawCaptionTitleOf(lk, ctx, h.titleRect(), title, st)
+		}
+		return
+	}
+	if title == "" {
 		return
 	}
 	col := lk.Palette().Text
@@ -316,12 +351,16 @@ func (h *HeaderBar) titleRect() paintengine2d.Rect {
 	if h.strip > 0 {
 		// The strip's own space, right up to the buttons (the look pads
 		// its title).
-		x0, x1 := float32(0), h.LocalBounds().Dx()
+		x0, x1 := float32(0), h.stripW
 		if h.lead.Visible() {
 			x0 = h.lead.Bounds().Max.X
 		}
 		if h.trail.Visible() {
 			x1 = h.trail.Bounds().Min.X
+		}
+		if room := h.spec().TitleRoom; !room.Zero() {
+			l, t := room.Sides(h.lead.Visible(), h.trail.Visible())
+			x0, x1 = x0+l, x1-t
 		}
 		r = paintengine2d.XYWH(x0, 0, max(x1-x0, 0), h.strip)
 	} else {
@@ -339,6 +378,12 @@ func (h *HeaderBar) titleRect() paintengine2d.Rect {
 // titleWidth is about what a look's centred title needs: the title in the
 // bold font (the widest a title bar uses) and the looks' pads round it.
 func (h *HeaderBar) titleWidth() float32 {
+	return h.titleAdvance() + 2*style.Dip(h.Look(), 12)
+}
+
+// titleAdvance is the window title's width in the bold font, the one a
+// title bar uses.
+func (h *HeaderBar) titleAdvance() float32 {
 	title := ""
 	if t, ok := h.Host().(interface{ Title() string }); ok {
 		title = t.Title()
@@ -348,7 +393,7 @@ func (h *HeaderBar) titleWidth() float32 {
 	if f == nil {
 		f = lk.Font()
 	}
-	return f.Advance(title) + 2*style.Dip(lk, 12)
+	return f.Advance(title)
 }
 
 // CaptionAt: the header bar's own space is caption.

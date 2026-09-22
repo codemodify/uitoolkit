@@ -17,11 +17,12 @@ rounded corners, and the [tear-off](#tear-off) drag — a tab dragged out of
 its strip, or a dock panel dragged out of its host, becomes a window the
 desktop carries under the pointer.
 
-What is [still open](#still-open) is the decoration work that sits beside
-the frame rather than in it: the palette KWin offers a server-decorated
-window, a window icon for the desktops that want one from the client,
-`_NET_WM_SYNC_REQUEST` for flicker-free X11 resizing, and the Windows and
-macOS mappings.
+The work beside the frame is done too: under the desktop's own frame a
+window [dresses it](#dressing-the-desktops-frame) in its look's colours
+(KWin's server-decoration palette), every window can carry an icon
+(`xdg-toplevel-icon-v1`, `_NET_WM_ICON`), and X11 resizes keep in step with
+the client (`_NET_WM_SYNC_REQUEST`). What is [still open](#still-open) is
+the Windows and macOS mappings.
 
 ## For apps: a title bar
 
@@ -347,10 +348,10 @@ are its reach past the window at 1x, top / right / bottom / left:
 | `motif` | stacked: mwm's resize handles and raised title-bar parts | square | none |
 | `flatlaf`, `material` | merged: FlatLaf's title pane; Material's surface with circular icon buttons | square | FlatLaf 5/9/13/9; Material's elevation 7/10/14/10 |
 | `system7` | stacked: the title bar's six stripes broken by the 11 px close box at the left, the zoom box at the right and the bold title in its own margin; System 7's colour chrome bevels bar and boxes in lavender and navy | square | none |
-| `platinum` | stacked: the black outline with the Platinum bevel inside it, a bar of raised ridges round the centred title, the close box left, collapse and zoom right | square | none |
+| `platinum` | stacked: the black outline with the Platinum bevel inside it, a bar of raised ridges out from the title — centred on the whole bar, as Mac OS 8 put it — to the boxes, the close box left, collapse and zoom right | square | none |
 | `amiga` | stacked: Intuition's borders and gadgets — 3.1's raised frame, recessed body, FILLPEN bar and close, zoom and depth gadgets; 1.3's white borders on blue, drag-bar stripes (ghosted in the backdrop) and the gadgets behind their blue lines | square | none |
-| `next` | stacked: the black frame line, the title bar with miniaturize at its left and close at its right — NeXT's 15 px raised buttons, Window Maker's square tiles — and the notched resize bar as the bottom border | square | none |
-| `beos` | stacked: the yellow tab with its bevel, close box and zoom box over the five-pixel border (the tab is the caption's full width) | square | none |
+| `next` | stacked: the black frame line, the title bar with miniaturize at its left and close at its right — NeXT's 15 px raised buttons, Window Maker's square tiles with the bar between them bevelled as a piece of its own — and the notched resize bar as the bottom border | square | none |
+| `beos` | stacked: the yellow tab standing on the window's corner, as wide as its close box, title and zoom box with R5's gaps (19 and 17 pixels round the title), over the five-pixel border round the content; full width when maximized or tiled | square | none |
 | `os2` | stacked: Warp 4's sizing border, the mini icon, the sunken #2B00AA title well and the Close, Hide and Maximize glyphs | square | none |
 | `win31` | stacked: the sizing frame, the navy caption with its centred bold title, the control-menu box and the arrow buttons (both arrows while maximized) | square | none |
 | `openlook` | stacked: olwm's black outline with the L-shaped resize corners, the header recessed while focused, the abbreviated menu button — the only control OPEN LOOK put on a frame | square | none |
@@ -363,6 +364,16 @@ are its reach past the window at 1x, top / right / bottom / left:
 | `fusion` | stacked: the MDI title bar Qt itself paints — the highlight gradient, chamfered top, centred title, bevelled boxes | 4 px top | 7/13/19/13 |
 | `base` | merged: a hairline, flat buttons over the tool face, close red | square | 7/13/19/13 |
 | the adapter | nothing reaches it: it is the fallback a new engine gets until it paints its own frame — its in-app caption as a stacked strip, its own close button, push buttons for the rest | square | the engine's dialog shadow |
+
+A look whose free caption is part of its picture — Platinum's ridges,
+Window Maker's middle section — implements
+`style.CaptionTitleSpanEngine`: it is handed both the free space between
+the button groups and the whole strip, and centres its title on the one
+while dressing the other. A look that keeps its own room round the title
+states it (`DecorationSpec.TitleRoom`, BeOS's 19 and 17 pixels), and a
+fitted caption is measured by it. `app/frame_fidelity_test.go` holds
+BeOS's tab, Platinum's title and Window Maker's seams to the looks'
+in-app windows, pixel by pixel, at 1 and 1.75.
 
 Glyphs, sizes and colours are the look's; the side and order of the
 buttons are the desktop's, unless the user prefers the look's own layout:
@@ -544,6 +555,39 @@ xdg-shell cannot express fall back: "maximize vertically / horizontally only"
 toggle-maximizes on Wayland (X11 does it one way), "lower" works on X11 only,
 "shade" and "on all desktops" do nothing.
 
+## Dressing the desktop's frame
+
+Where the desktop draws the frame, the window still says how to dress it
+(`app/dress.go`, `platform/windowdress.go`).
+
+- **Colours.** KWin paints each window's frame in a colour scheme of the
+  window's choosing. A window hands it its look's
+  (`style.KDEColorScheme`): the title bar — the scheme's Header set,
+  active and inactive, and its `[WM]` group — in the look's own caption
+  colours, read off its frame painted offscreen, and every other set from
+  its palette. So a Luna window under KWin's Breeze frame has a blue title
+  bar with a white title, lighter blue in the backdrop; Aqua's and
+  Tahoe's are their light greys. The file is written once per look under
+  the user's cache directory (`$XDG_CACHE_HOME/uitoolkit/colors`, named
+  after its contents, so KWin never shows a stale one), never under the
+  config directory where KDE keeps the user's own schemes. It is sent
+  whenever the look or the frame changes, even while the toolkit draws the
+  frame, so a live switch to the desktop's comes up in the right colours.
+  Nothing is written or sent where the desktop does not take one;
+  `UITK_DECORATION_PALETTE=0` keeps the desktop's own colours everywhere.
+  Wayland: `org_kde_kwin_server_decoration_palette`, only where KWin
+  advertises it; X11: `_KDE_NET_WM_COLOR_SCHEME` under KWin.
+- **Icon.** `Application.SetIcon(images...)` gives every window its icon,
+  square images at the sizes the app has; `Window.SetIcon` one of its own.
+  The desktop shows it in the frame's title bar, the task bar and the task
+  switcher, and a program run from its build tree has no desktop entry to
+  take one from otherwise. The examples wear one made by
+  `icons.AppIcon` — a Lucide glyph in white on a tile of the app's colour,
+  16 to 128 px, 96 among them because that is the size KWin asks for.
+- **Resizing on X11.** `_NET_WM_SYNC_REQUEST`: the window manager waits
+  for the frame at each new size before it shows it and takes the next
+  step ([platform.md](platform.md#_net_wm_sync_request)).
+
 ## Testing
 
 - Headless: `app/frame_test.go` (hit-test table, drag threshold vs click vs
@@ -593,6 +637,12 @@ toggle-maximizes on Wayland (X11 does it one way), "lower" works on X11 only,
   `in.sh` invocation — the injector's button goes up when it exits — and
   that `WAYLAND_DEBUG=1` shows `xdg_toplevel_drag_v1.attach` with the
   offset the window is carried by.
+  The rig's KWin wears Breeze (`start.sh` seeds its kwinrc), so the
+  palette shows as it does on a stock Plasma; `./kwin.py N` reads a
+  window's `colorScheme`, KWin's debug console (`showDebugConsole` on the
+  instance's bus) lists windows with their icons, and
+  `./resize-shot.sh` drags a resize edge and shoots mid-drag, with
+  `UITK_X11_SYNC=0` for the comparison.
   Put a second window behind one with a shadow to see the shadow composite
   and to check that a click in the outer margin reaches it, while one in
   the resize band resizes. `examples/shapes -mode backdrop` is the test
@@ -641,25 +691,16 @@ interesting region.
 
 ## Still open
 
-Nothing below blocks a window from being drawn, moved or torn off; each is
-a desktop integration the frame work did not need.
+Nothing below blocks a window from being drawn, moved or torn off.
 
-- **KWin's server-decoration palette.** A server-decorated window can name
-  a colour scheme for its frame (`org_kde_kwin_server_decoration_palette`
-  on Wayland, `_KDE_NET_WM_COLOR_SCHEME` on X11), which is how a KDE app's
-  title bar follows the app's own pack instead of the desktop's. Without
-  it a uitoolkit window under KWin's frame gets Breeze's colours whatever
-  pack it is wearing — right for a native-feeling app, wrong for the
-  gallery showing off an era.
-- **A window icon from the client** (`xdg-toplevel-icon-v1`). Wayland has
-  no `WM_CLASS`-free way to give a window its icon otherwise, so task
-  switchers fall back on the desktop file — which a `go run` build has
-  none of. X11's `_NET_WM_ICON` is not set either.
-- **`_NET_WM_SYNC_REQUEST`.** An X11 window manager resizing a window has
-  no way to know when the client has finished painting the new size, so a
-  drag-resize of a large window shows the tearing every X11 toolkit
-  answers with this protocol's counter handshake. Wayland has no such
-  problem: the configure/ack_configure round trip already does it.
+- ~~**KWin's server-decoration palette.**~~ [Done](#dressing-the-desktops-frame):
+  the desktop's frame wears the look's colours on both backends.
+- ~~**A window icon from the client**~~: `Application.SetIcon`,
+  `xdg-toplevel-icon-v1` and `_NET_WM_ICON`.
+- ~~**`_NET_WM_SYNC_REQUEST`.**~~ The basic handshake, on every X11
+  toplevel. The extended one (`_NET_WM_FRAME_DRAWN`) is not done; in the
+  nested rig, where Xwayland hands KWin only whole buffers, the two show
+  no difference a screenshot can catch.
 - **Windows and macOS mappings.** The decoration mode, the frame metrics
   and the caption buttons are modelled on what the Linux protocols say;
   neither `WM_NCCALCSIZE`/`DWM` nor `NSWindow`'s title-bar accessory views

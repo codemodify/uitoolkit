@@ -19,6 +19,10 @@ before=$(ls /tmp/.X11-unix/)
   # into their real ~/.config/kwinoutputconfig.json.
   export XDG_CONFIG_HOME="$D/kwin-config" XDG_CACHE_HOME="$D/kwin-cache"
   mkdir -p "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME"
+  # The desktop's frame is Breeze, as on a stock Plasma: with no kwinrc of
+  # its own a nested KWin falls back on another decoration.
+  grep -qs '^\[org.kde.kdecoration2\]' "$XDG_CONFIG_HOME/kwinrc" ||
+    printf '\n[org.kde.kdecoration2]\nlibrary=org.kde.breeze\ntheme=Breeze\n' >> "$XDG_CONFIG_HOME/kwinrc"
   unset DISPLAY WAYLAND_DISPLAY
   exec setsid dbus-run-session -- bash -c "echo \$DBUS_SESSION_BUS_ADDRESS > '$D/bus.addr'; exec kwin_wayland --virtual --no-lockscreen --no-global-shortcuts --socket uitk-e2e-$N --xwayland --width $W --height $H --scale $S"
 ) > "$D/kwin.log" 2>&1 &

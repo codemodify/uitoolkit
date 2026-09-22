@@ -82,27 +82,58 @@ func (platinumEngine) DrawDecoration(l *Classic, ctx *paintengine2d.Context, f D
 	ctx.DrawRect(paintengine2d.XYWH(f.Caption.Min.X, f.Caption.Max.Y-u, f.Caption.Dx(), u), paintengine2d.Fill(c.black))
 }
 
-// DrawCaptionTitle is the bold title with the bar's ridges running out from
-// it to the buttons on either side, as Platinum filled the free bar.
-func (platinumEngine) DrawCaptionTitle(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, title string, st DecorationState) {
+// DrawCaptionTitle is the title in b alone: b is both the free space and
+// the bar (DrawCaptionTitleSpan is what a window's caption calls).
+func (e platinumEngine) DrawCaptionTitle(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, title string, st DecorationState) {
+	e.DrawCaptionTitleSpan(l, ctx, b, b, title, st)
+}
+
+// DrawCaptionTitleSpan is the bold title centred on the whole bar — Mac OS
+// 8 centred it on the window, not in the room its boxes left — kept 8
+// pixels clear of the ridges, which run out from it to 4 pixels short of
+// the boxes on either side (to the bar's ends where there is none), as
+// DrawWindowFrame lays out its own bar.
+func (platinumEngine) DrawCaptionTitleSpan(l *Classic, ctx *paintengine2d.Context, free, bar paintengine2d.Rect, title string, st DecorationState) {
 	c := platColors(l)
 	u := platFrameU(l)
-	bar := paintengine2d.XYWH(b.Min.X, b.Min.Y, b.Dx(), max(b.Dy()-3*u, 0))
+	strip := func(r paintengine2d.Rect) paintengine2d.Rect {
+		return paintengine2d.XYWH(r.Min.X, r.Min.Y, r.Dx(), max(r.Dy()-3*u, 0))
+	}
+	fb, bb := strip(free), strip(bar)
+	// A box is its widget less the etch round it (DrawCaptionButton).
+	left, right := bb.Min.X+2*u, bb.Max.X-2*u
+	if fb.Min.X > bb.Min.X+0.5 {
+		left = fb.Min.X - u + l.S(4)
+	}
+	if fb.Max.X < bb.Max.X-0.5 {
+		right = fb.Max.X + u - l.S(4)
+	}
 	f := l.BoldFont()
-	tw := min(f.Advance(title), bar.Dx())
-	tx := snap(bar.Min.X + (bar.Dx()-tw)*0.5)
+	gap := l.S(8)
+	tw := float32(0)
+	if title != "" {
+		tw = min(f.Advance(title), max(right-left-2*gap, 0))
+	}
+	tx := snap(bb.Min.X + (bb.Dx()-tw)*0.5)
+	tx = max(min(tx, right-gap-tw), left+gap)
+	if st.Active {
+		// Ridges only on the active window, as on the Mac.
+		cy := bb.Min.Y + bb.Dy()*0.5
+		if tw <= 0 {
+			c.ridges(ctx, left, right, cy, u, 6)
+		} else {
+			c.ridges(ctx, left, tx-gap, cy, u, 6)
+			c.ridges(ctx, tx+tw+gap, right, cy, u, 6)
+		}
+	}
+	if tw <= 0 {
+		return
+	}
 	col := c.text
 	if !st.Active {
 		col = c.dim
 	}
-	if st.Active {
-		// Ridges only on the active window, as on the Mac.
-		gap := l.S(8)
-		cy := bar.Min.Y + bar.Dy()*0.5
-		c.ridges(ctx, bar.Min.X+l.S(4), tx-gap, cy, u, 6)
-		c.ridges(ctx, tx+tw+gap, bar.Max.X-l.S(4), cy, u, 6)
-	}
-	l.drawFittedText(ctx, f, title, paintengine2d.XYWH(tx, bar.Min.Y, tw, bar.Dy()), col, AlignStart, 0)
+	l.drawFittedText(ctx, f, title, paintengine2d.XYWH(tx, bb.Min.Y, tw, bb.Dy()), col, AlignStart, 0)
 }
 
 func (platinumEngine) DrawCaptionButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, k CaptionButton, cs ControlState, st DecorationState) {

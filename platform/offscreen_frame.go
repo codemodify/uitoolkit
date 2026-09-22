@@ -18,6 +18,12 @@ type FrameCalls struct {
 	// the frames (margin, resize band, corners, alpha) handed over.
 	Requests []Decorations
 	Frames   []Frame
+	// Palettes are the colour schemes named for the desktop's frame, in
+	// order (only while the simulated desktop takes one:
+	// SimulateDecorationPalette), and Icons the icons given, each as its
+	// image sizes.
+	Palettes []string
+	Icons    [][]int
 }
 
 // offscreenFrame is Offscreen's FrameSurface state: a desktop that grants
@@ -34,6 +40,10 @@ type offscreenFrame struct {
 	// glass is whether the simulated desktop blurs behind a window
 	// (SimulateGlass); off by default, as a plain compositor is.
 	glass bool
+	// palette is whether the simulated desktop takes a frame palette
+	// (SimulateDecorationPalette), and paletteSet the one it was given.
+	palette    bool
+	paletteSet string
 	// frame is the client frame's margin and regions; geomW / geomH the
 	// visible window's size in device pixels, which the pixmap grows past
 	// by the margin, exactly as a compositor's surface does, and geomLW /
@@ -286,3 +296,33 @@ func (o *Offscreen) IMECursor() (x, y, w, h int, on bool) {
 
 // Offscreen drives a simulated input method too (compile-time check).
 var _ IMESurface = (*Offscreen)(nil)
+
+// SimulateDecorationPalette makes the simulated desktop take a colour
+// scheme for its frame, as KWin does, or stop taking one.
+func (o *Offscreen) SimulateDecorationPalette(on bool) { o.frame.palette = on }
+
+// DecorationPaletteSupported reports whether the simulated desktop takes a
+// frame palette (DecorationPaletteSurface).
+func (o *Offscreen) DecorationPaletteSupported() bool { return o.frame.palette }
+
+// SetDecorationPalette records the palette when it changes
+// (DecorationPaletteSurface).
+func (o *Offscreen) SetDecorationPalette(path string) {
+	if !o.frame.palette || path == o.frame.paletteSet {
+		return
+	}
+	o.frame.paletteSet = path
+	o.frame.calls.Palettes = append(o.frame.calls.Palettes, path)
+}
+
+// DecorationPalette is the palette the simulated desktop was last given.
+func (o *Offscreen) DecorationPalette() string { return o.frame.paletteSet }
+
+// SetIcon records the icon's sizes (IconSurface).
+func (o *Offscreen) SetIcon(images []*paintengine2d.Image) {
+	var sizes []int
+	for _, im := range iconImages(images) {
+		sizes = append(sizes, im.Width)
+	}
+	o.frame.calls.Icons = append(o.frame.calls.Icons, sizes)
+}

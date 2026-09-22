@@ -40,6 +40,7 @@ import (
 
 	"github.com/codemodify/uitoolkit"
 	"github.com/codemodify/uitoolkit/app"
+	"github.com/codemodify/uitoolkit/icons"
 	"github.com/codemodify/uitoolkit/internal/players/minim"
 	"github.com/codemodify/uitoolkit/style"
 )
@@ -67,6 +68,8 @@ func main() {
 	// when the application is, so it has to be set first.
 	os.Setenv(style.ThemeEnv, *theme)
 	a := uitoolkit.New(uitoolkit.Options{Headless: headless, Scale: float32(*scale)})
+	// The window icon the desktop shows in its title bar, task bar and switcher.
+	a.SetIcon(icons.AppIconRGB("list", 0x3a, 0x9a, 0x4a)...)
 
 	opts := minim.Options{Headless: headless, Scale: float32(*scale), Remember: !headless}
 	switch *only {
