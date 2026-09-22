@@ -12,9 +12,11 @@ const (
 	atspiRoleCheckBox       = 7
 	atspiRoleCheckMenuItem  = 8
 	atspiRoleComboBox       = 11
+	atspiRoleDesktopFrame   = 14
 	atspiRoleDialog         = 16
 	atspiRoleFrame          = 23
 	atspiRoleImage          = 27
+	atspiRoleInternalFrame  = 28
 	atspiRoleLabel          = 29
 	atspiRoleList           = 31
 	atspiRoleListItem       = 32
@@ -104,6 +106,8 @@ var atspiRoles = map[a11y.Role]uint32{
 	a11y.RoleToolTip:       atspiRoleToolTip,
 	a11y.RoleLink:          atspiRoleLink,
 	a11y.RoleTitleBar:      atspiRoleTitleBar,
+	a11y.RoleDesktopPane:   atspiRoleDesktopFrame,
+	a11y.RoleInternalFrame: atspiRoleInternalFrame,
 }
 
 // atspiRoleNames are AT-SPI's names for the roles used here (what
@@ -111,7 +115,7 @@ var atspiRoles = map[a11y.Role]uint32{
 var atspiRoleNames = map[uint32]string{
 	atspiRoleAlert: "alert", atspiRoleCalendar: "calendar", atspiRoleCheckBox: "check box",
 	atspiRoleCheckMenuItem: "check menu item", atspiRoleComboBox: "combo box", atspiRoleDialog: "dialog",
-	atspiRoleFrame: "frame", atspiRoleImage: "image", atspiRoleLabel: "label", atspiRoleList: "list",
+	atspiRoleFrame: "frame", atspiRoleDesktopFrame: "desktop frame", atspiRoleInternalFrame: "internal frame", atspiRoleImage: "image", atspiRoleLabel: "label", atspiRoleList: "list",
 	atspiRoleListItem: "list item", atspiRoleMenu: "menu", atspiRoleMenuBar: "menu bar",
 	atspiRoleMenuItem: "menu item", atspiRolePageTab: "page tab", atspiRolePageTabList: "page tab list",
 	atspiRolePanel: "panel", atspiRolePasswordText: "password text", atspiRoleProgressBar: "progress bar",
