@@ -53,6 +53,190 @@ func (sk *Skin) skinDraw(ctx *paintengine2d.Context, b paintengine2d.Rect, sp *S
 	return sk.drawSlice(ctx, b, v, sp, scale, paint)
 }
 
+// panelDraw paints a sprite that is a piece of a panel — an app's sprite
+// (DrawSkinSprite) or a layout's art (DrawSkinSlot, DrawSkinLayout) — into
+// b. It is skinDraw, with one addition for pixel art.
+//
+// A pixel sprite drawn at its own size — a panel's key, a digit, a whole
+// face — is magnified by the display scale itself, nearest, on the device
+// grid (drawPixelGrid), rather than drawn at a whole multiple and centred:
+// a panel's pieces are placed by design coordinates and have to meet, and a
+// key drawn at 1× in the middle of a hole drawn at 1.75 does not meet
+// anything. Its slices, if it has any, are for boxes of other sizes; at its
+// own size there is nothing for them to absorb. A control face keeps the
+// whole-multiple rule (skinDraw), which is what a pixel skin's buttons,
+// fields and checks were drawn for.
+func (sk *Skin) panelDraw(ctx *paintengine2d.Context, b paintengine2d.Rect, sp *SkinSprite, scale float32, tint paintengine2d.Color) bool {
+	if sk == nil || ctx == nil || sp == nil || b.Empty() {
+		return false
+	}
+	if sp.Sheet == nil || !sp.Sheet.Pixelated || !sk.ownSize(b, sp, scale) {
+		return sk.skinDraw(ctx, b, sp, scale, tint)
+	}
+	v := sk.variant(sp, sk.assetTarget(sp, scale))
+	if v == nil {
+		return false
+	}
+	paint := paintengine2d.Paint{Filter: paintengine2d.FilterNearest}
+	if sp.Tint && !colorUnset(tint) {
+		paint.Color = tint
+	}
+	return drawPixelGrid(ctx, v.pieces[pieceWhole], b, paint)
+}
+
+// ownSize reports whether b is the sprite's own size at the display scale,
+// to within half a device pixel either way.
+func (sk *Skin) ownSize(b paintengine2d.Rect, sp *SkinSprite, scale float32) bool {
+	s := scale / sk.Design.Scale
+	dw, dh := b.Dx()-sp.W*s, b.Dy()-sp.H*s
+	return dw > -0.5 && dw < 0.5 && dh > -0.5 && dh < 0.5
+}
+
+// drawPixelGrid magnifies a pixel-art piece into b, nearest, with every
+// texel landing on whole device pixels on one grid shared by everything
+// drawn this way in the same window.
+//
+// At a whole scale that is plain doubling. At 1.25, 1.5 and 1.75 it cannot
+// be even — a texel at 1.75 covers two device pixels three times in four
+// and one the fourth, because 1.75 pixels do not exist — so the question is
+// only *which* texels get the narrow column, and the answer here is the
+// same everywhere: a texel whose left edge is at device x covers the pixels
+// whose centres fall in [x, x + k). A panel's pieces all have boxes on the
+// same design grid, so a key's texels continue its face's exactly, with no
+// double-width or missing column where one sprite meets the next — which is
+// what made the panels look uneven before, when each piece was fitted to a
+// rounded box of its own with a stretch of its own.
+//
+// The picture is magnified here, on the CPU, into an image whose pixels are
+// the device's, and blitted one to one at a whole pixel: the same answer on
+// the CPU and the GPU (which would antialias a quad's fractional edge), and
+// the same answer for a pixel whose centre falls exactly on a texel edge —
+// which at 1.25, 1.5 and 1.75 is most of them, since design coordinates
+// times those scales are exact binary fractions.
+func drawPixelGrid(ctx *paintengine2d.Context, img *paintengine2d.Image, b paintengine2d.Rect, paint paintengine2d.Paint) bool {
+	if ctx == nil || img == nil || b.Empty() {
+		return false
+	}
+	paint.Filter = paintengine2d.FilterNearest
+	m := ctx.Matrix()
+	if !m.IsTranslation() {
+		ctx.DrawImageRectPaint(img, pieceRect(img), b, paint)
+		return true
+	}
+	// The box in device pixels, and the texel size along each axis.
+	x0, y0 := b.Min.X+m.E, b.Min.Y+m.F
+	kx, ky := b.Dx()/float32(img.Width), b.Dy()/float32(img.Height)
+	g := pixelGridImage(img, x0, y0, kx, ky)
+	if g == nil {
+		return false
+	}
+	dst := paintengine2d.XYWH(float32(g.px)-m.E, float32(g.py)-m.F, float32(g.img.Width), float32(g.img.Height))
+	ctx.DrawImageRectPaint(g.img, pieceRect(g.img), dst, paint)
+	return true
+}
+
+// pixelGrid is a piece magnified onto the device grid: the image, and the
+// device pixel its top-left pixel goes on.
+type pixelGrid struct {
+	img    *paintengine2d.Image
+	px, py int
+}
+
+// pixelGridKey identifies one magnification: the piece, the texel size, and
+// where on the device grid the piece starts, as the fraction of a pixel —
+// which is all that changes the picture; the whole part only moves it.
+type pixelGridKey struct {
+	piece  *paintengine2d.Image
+	kx, ky float32
+	fx, fy int32 // 1/4096ths of a pixel
+}
+
+// pixelGridMax caps the magnifications kept at once. A panel has a few
+// hundred pieces at a handful of phases; the cap is reached only by an app
+// that moves pixel sprites by fractions every frame.
+const pixelGridMax = 1024
+
+// pixelGridImage is img magnified by (kx, ky) with its top left at device
+// (x0, y0), from the cache when it has been made before.
+func pixelGridImage(img *paintengine2d.Image, x0, y0, kx, ky float32) *pixelGrid {
+	if kx <= 0 || ky <= 0 {
+		return nil
+	}
+	ix, fx := splitPixel(x0)
+	iy, fy := splitPixel(y0)
+	key := pixelGridKey{piece: img, kx: kx, ky: ky, fx: fx, fy: fy}
+	skinCache.mu.Lock()
+	skinCache.syncGen()
+	g, ok := skinCache.grids[key]
+	skinCache.mu.Unlock()
+	if !ok {
+		g = magnifyOnGrid(img, float64(fx)/4096, float64(fy)/4096, float64(kx), float64(ky))
+		skinCache.mu.Lock()
+		if len(skinCache.grids) >= pixelGridMax {
+			skinCache.grids = map[pixelGridKey]*pixelGrid{}
+		}
+		skinCache.grids[key] = g
+		skinCache.mu.Unlock()
+	}
+	if g == nil {
+		return nil
+	}
+	return &pixelGrid{img: g.img, px: g.px + ix, py: g.py + iy}
+}
+
+// splitPixel is v's whole pixel and its fraction in 1/4096ths, rounded so a
+// value a float's breadth off a fraction lands on it.
+func splitPixel(v float32) (int, int32) {
+	q := int64(math.Round(float64(v) * 4096))
+	whole := q >> 12 // floor, negatives included
+	return int(whole), int32(q - whole<<12)
+}
+
+// magnifyOnGrid lays img's texels on the device grid: texel i along an axis
+// starts at f + i·k, and a device pixel is the texel its centre falls in.
+// px, py are relative to the whole pixel f is a fraction of.
+func magnifyOnGrid(img *paintengine2d.Image, fx, fy, kx, ky float64) *pixelGrid {
+	cols, c0 := gridSpans(img.Width, fx, kx)
+	rows, r0 := gridSpans(img.Height, fy, ky)
+	if len(cols) == 0 || len(rows) == 0 {
+		return nil
+	}
+	out := paintengine2d.NewImage(len(cols), len(rows))
+	stride := out.RowStride()
+	for j, ty := range rows {
+		o := j * stride
+		for i, tx := range cols {
+			r, g, b, a := img.PremulAt(tx, ty)
+			out.Pix[o+i*4+0], out.Pix[o+i*4+1], out.Pix[o+i*4+2], out.Pix[o+i*4+3] = r, g, b, a
+		}
+	}
+	out.Touch()
+	return &pixelGrid{img: out, px: c0, py: r0}
+}
+
+// gridSpans maps n texels starting at device f with k pixels each onto
+// device pixels: for each pixel from the first one returned, the texel its
+// centre is in. A centre exactly on a texel edge belongs to the texel that
+// starts there — decided in texel units with a margin far below a pixel, so
+// two pieces that meet decide it the same way.
+func gridSpans(n int, f, k float64) ([]int, int) {
+	const eps = 1e-6
+	texel := func(p int) int { return int(math.Floor((float64(p)+0.5-f)/k + eps)) }
+	first := int(math.Floor(f - 1))
+	for texel(first) < 0 {
+		first++
+	}
+	var out []int
+	for p := first; ; p++ {
+		t := texel(p)
+		if t >= n {
+			break
+		}
+		out = append(out, t)
+	}
+	return out, first
+}
+
 // texelScale is how many device pixels one texel of the chosen asset covers.
 // Pixelated art takes the whole part of it, so its pixels stay square.
 func (sk *Skin) texelScale(sp *SkinSprite, v *skinVariant, scale float32) float32 {
@@ -187,10 +371,9 @@ func (sk *Skin) drawSlice(ctx *paintengine2d.Context, b paintengine2d.Rect, v *s
 
 // blitPiece draws one cut piece into dst.
 //
-// The source is the piece's inner rect — its replicated border is there for
-// the sampler to read and never for the eye to see (skin_assets.go,
-// cutPadded). Each piece is its own image, so no blit can reach another
-// sprite on the sheet.
+// Each piece is its own image, so no blit can reach another sprite on the
+// sheet, and the sampler clamps at an image's edge, so a stretched piece
+// keeps its edge colour to its edge (skin_assets.go, cutPiece).
 func blitPiece(ctx *paintengine2d.Context, img *paintengine2d.Image, dst paintengine2d.Rect, paint paintengine2d.Paint) bool {
 	if ctx == nil || img == nil || dst.Empty() {
 		return false

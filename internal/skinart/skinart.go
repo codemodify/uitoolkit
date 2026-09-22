@@ -93,6 +93,25 @@ type Plan struct {
 	Metrics map[string]float32
 	Params  map[string]float32
 	Window  *WindowSpec
+	// Layouts are the fixed panels the skin states: named slots an app
+	// binds its controls to.
+	Layouts []LayoutSpec
+}
+
+// LayoutSpec is one fixed layout: its size, the art under it and its slots.
+type LayoutSpec struct {
+	Name  string
+	W, H  int
+	Art   string
+	Slots []SlotSpec
+}
+
+// SlotSpec is one slot: its rect, and the sprite per state its control is
+// painted from (none for a control that paints itself).
+type SlotSpec struct {
+	Name string
+	At   [4]int
+	Art  [][2]string // ordered {state, sprite} pairs
 }
 
 // PartBinding binds one part.
@@ -109,6 +128,8 @@ type TextRole struct {
 	Color, Hover, Pressed, Disabled, Checked, Default string
 	Size                                              float32
 	Bold                                              bool
+	// Upper sets the role in capitals ("case": "upper").
+	Upper bool
 }
 
 // WindowSpec is the frame the skin asks for.
@@ -118,6 +139,15 @@ type WindowSpec struct {
 	Layout  string
 	Radius  [4]int
 	Shape   []ShapeRect
+	// TitleStart and TitleInset set the title from the band's start, on
+	// its plate: a tab.
+	TitleStart bool
+	TitleInset int
+	// Parts rebind the frame's own parts, in a variant.
+	Parts []PartBinding
+	// Variants are the frames of windows an app gives a role, keyed by
+	// that role; each states only what differs.
+	Variants map[string]*WindowSpec
 }
 
 // ShapeRect is one rounded rect of the silhouette the skin declares for the
@@ -304,56 +334,44 @@ func Manifest(p *Plan) ([]byte, error) {
 			if t.Bold {
 				r["bold"] = true
 			}
+			if t.Upper {
+				r["case"] = "upper"
+			}
 			text[t.Name] = r
 		}
 		put("text", text)
 	}
 
-	parts := map[string]any{}
-	for _, b := range p.Parts {
-		states := map[string]any{}
-		for _, kv := range b.States {
-			states[kv[0]] = kv[1]
-		}
-		obj := map[string]any{"states": states}
-		if b.Text != "" {
-			obj["text"] = b.Text
-		}
-		if b.Pad != [4]int{} {
-			obj["pad"] = []int{b.Pad[0], b.Pad[1], b.Pad[2], b.Pad[3]}
-		}
-		parts[b.Part] = obj
-	}
-	put("parts", parts)
+	put("parts", partsJSON(p.Parts))
 
 	if p.Window != nil {
-		w := map[string]any{}
-		if p.Window.Border != [4]int{} {
-			w["border"] = p.Window.Border[:]
-		}
-		if p.Window.Caption > 0 {
-			w["caption"] = p.Window.Caption
-		}
-		if p.Window.Layout != "" {
-			w["layout"] = p.Window.Layout
-		}
-		if p.Window.Radius != [4]int{} {
-			w["radius"] = p.Window.Radius[:]
-		}
-		for _, r := range p.Window.Shape {
-			e := map[string]any{"at": r.At[:]}
-			if r.Radius != [4]int{} {
-				e["radius"] = r.Radius[:]
+		put("window", windowJSON(p.Window))
+	}
+	if len(p.Layouts) > 0 {
+		layouts := map[string]any{}
+		for _, lay := range p.Layouts {
+			slots := map[string]any{}
+			for _, sl := range lay.Slots {
+				e := map[string]any{"at": sl.At[:]}
+				switch {
+				case len(sl.Art) == 1 && sl.Art[0][0] == "normal":
+					e["art"] = sl.Art[0][1]
+				case len(sl.Art) > 0:
+					art := map[string]any{}
+					for _, kv := range sl.Art {
+						art[kv[0]] = kv[1]
+					}
+					e["art"] = art
+				}
+				slots[sl.Name] = e
 			}
-			if r.StretchX {
-				e["stretchX"] = true
+			obj := map[string]any{"size": []int{lay.W, lay.H}, "slots": slots}
+			if lay.Art != "" {
+				obj["art"] = lay.Art
 			}
-			if r.StretchY {
-				e["stretchY"] = true
-			}
-			w["shape"] = append(asSlice(w["shape"]), e)
+			layouts[lay.Name] = obj
 		}
-		put("window", w)
+		put("layouts", layouts)
 	}
 	if len(p.Colors) > 0 {
 		put("colors", p.Colors)
@@ -372,6 +390,70 @@ func Manifest(p *Plan) ([]byte, error) {
 		return nil, err
 	}
 	return inlineNumberArrays(buf.Bytes()), nil
+}
+
+// partsJSON is a list of part bindings as the manifest's "parts" object.
+func partsJSON(bs []PartBinding) map[string]any {
+	parts := map[string]any{}
+	for _, b := range bs {
+		states := map[string]any{}
+		for _, kv := range b.States {
+			states[kv[0]] = kv[1]
+		}
+		obj := map[string]any{"states": states}
+		if b.Text != "" {
+			obj["text"] = b.Text
+		}
+		if b.Pad != [4]int{} {
+			obj["pad"] = []int{b.Pad[0], b.Pad[1], b.Pad[2], b.Pad[3]}
+		}
+		parts[b.Part] = obj
+	}
+	return parts
+}
+
+// windowJSON is a window block, or one of its variants.
+func windowJSON(ws *WindowSpec) map[string]any {
+	w := map[string]any{}
+	if ws.Border != [4]int{} {
+		w["border"] = ws.Border[:]
+	}
+	if ws.Caption > 0 {
+		w["caption"] = ws.Caption
+	}
+	if ws.Layout != "" {
+		w["layout"] = ws.Layout
+	}
+	if ws.Radius != [4]int{} {
+		w["radius"] = ws.Radius[:]
+	}
+	if ws.TitleStart {
+		w["title"] = map[string]any{"align": "start", "inset": ws.TitleInset}
+	}
+	for _, r := range ws.Shape {
+		e := map[string]any{"at": r.At[:]}
+		if r.Radius != [4]int{} {
+			e["radius"] = r.Radius[:]
+		}
+		if r.StretchX {
+			e["stretchX"] = true
+		}
+		if r.StretchY {
+			e["stretchY"] = true
+		}
+		w["shape"] = append(asSlice(w["shape"]), e)
+	}
+	if len(ws.Parts) > 0 {
+		w["parts"] = partsJSON(ws.Parts)
+	}
+	if len(ws.Variants) > 0 {
+		vs := map[string]any{}
+		for name, v := range ws.Variants {
+			vs[name] = windowJSON(v)
+		}
+		w["variants"] = vs
+	}
+	return w
 }
 
 // inlineNumberArrays puts short arrays of numbers back on one line.

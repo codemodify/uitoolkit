@@ -22,7 +22,7 @@ import (
 // The glyphs reach the app as ordinary sprites named "font.<hex>" (the rune
 // in lower-case hex: "font.41" is A) and "led.<digit>". The app measures a
 // line with style.SkinSpriteSize and sets it glyph by glyph; a letter's
-// advance is its sprite's width less the margin, plus one pixel of space.
+// advance is its sprite's width plus one pixel of space.
 
 // pixGlyphs is the capital face. Each glyph is six rows of '#' and '.', as
 // wide as the letter needs: three pixels for the narrow ones, five for M, W
@@ -109,36 +109,24 @@ func PixFontRunes() []rune {
 // PixFontSprite is the sprite name a glyph is published under.
 func PixFontSprite(r rune) string { return fmt.Sprintf("font.%x", r) }
 
-// pixMargin is the empty border round every panel sprite, in design pixels.
+// panel places a panel sprite: a piece of a window's picture that the app
+// draws at its own size — a face, a key, a digit, a lamp.
 //
-// It is what makes a pixel sheet's panel art scale evenly. A pixelated sheet
-// is sampled nearest at whole multiples, and a sprite drawn unsliced into a
-// box at 1.75 is drawn at 1× in the middle of it; one sliced one pixel in
-// all round, with that pixel empty, has nothing in its edges and its whole
-// picture in the middle — which stretches, nearest, to the box. So a panel
-// assembled from these is the 1× picture magnified at every scale and the
-// 2× sheet exactly at 2, and the app draws each sprite into its box grown by
-// the margin.
-const pixMargin = 1
-
-// panel places a sprite with the empty margin round it: the cell is the art
-// plus a margin each side, sliced at the margin, and draw is handed the
-// art's own size with the origin moved inside the margin.
+// It is unsliced. A panel's pieces are drawn where the layout puts them and
+// at the size they were drawn, and the toolkit magnifies a pixel sheet's
+// pieces onto the device grid at every scale (style.DrawSkinSprite). They
+// used to carry an empty one-pixel margin, sliced there, so that a pixel
+// piece stretched nearest instead of being drawn at 1× in the middle of its
+// box; the toolkit does that itself now, on a grid every piece shares, which
+// the margin could not give.
 func (l *lay) panel(name string, w, h int, tint bool, draw func(ctx *paintengine2d.Context, w, h float32)) {
-	m := pixMargin
-	l.cell(name, w+2*m, h+2*m, [4]int{m, m, m, m}, "", tint, func(ctx *paintengine2d.Context, cw, ch float32) {
-		ctx.Save()
-		ctx.Translate(float32(m), float32(m))
-		ctx.ClipRect(paintengine2d.XYWH(0, 0, float32(w), float32(h)))
-		draw(ctx, float32(w), float32(h))
-		ctx.Restore()
-	})
+	l.cell(name, w, h, [4]int{}, "", tint, draw)
 }
 
 // pixText lays the whole capital face out as tinted panel sprites, one row
 // of cells, each glyph drawn as whole pixels by dot.
 func pixText(l *lay, dot func(ctx *paintengine2d.Context, x, y float32)) {
-	l.row(6 + 2*pixMargin)
+	l.row(6)
 	for _, r := range PixFontRunes() {
 		rows := pixGlyphs[r]
 		w := len(rows[0])

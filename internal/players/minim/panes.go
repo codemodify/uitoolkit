@@ -6,7 +6,6 @@ import (
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/a11y"
 	"github.com/codemodify/uitoolkit/internal/players"
-	"github.com/codemodify/uitoolkit/internal/players/minim/panel"
 	"github.com/codemodify/uitoolkit/layout"
 	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
@@ -36,6 +35,9 @@ type eqPane struct {
 	preset  *widgets.ComboBox
 	preamp  *players.Fader
 	bands   []*players.Fader
+
+	// slots is where each control goes in a panel face.
+	slots *widget.Slots
 }
 
 func newEqPane(p *Player) *eqPane {
@@ -82,11 +84,17 @@ func newEqPane(p *Player) *eqPane {
 		e.bands = append(e.bands, f)
 	}
 
-	paintAsKey(e.on, "key.on")
-	paintAsKey(e.auto, "key.auto")
-	paintAsKey(e.presets, "key.presets")
-	for _, f := range append([]*players.Fader{e.preamp}, e.bands...) {
-		paintAsThumb(f, "eq.thumb")
+	e.slots = widget.NewSlots(layoutEqualiser).
+		Bind("on", e.on).Bind("auto", e.auto).Bind("presets", e.presets).Bind("preamp", e.preamp)
+	for i, f := range e.bands {
+		e.slots.Bind("band."+string(rune('0'+i)), f)
+	}
+	paintAsKey(e.on, layoutEqualiser, "on")
+	paintAsKey(e.auto, layoutEqualiser, "auto")
+	paintAsKey(e.presets, layoutEqualiser, "presets")
+	paintAsThumb(e.preamp, "eq.thumb", layoutEqualiser, "preamp")
+	for i, f := range e.bands {
+		paintAsThumb(f, "eq.thumb", layoutEqualiser, "band."+string(rune('0'+i)))
 	}
 
 	e.Add(e.on)
@@ -146,8 +154,8 @@ func (e *eqPane) sync() {
 
 func (e *eqPane) Measure(c layout.Constraints) paintengine2d.Point {
 	lk := e.Look()
-	if g := faceOf(lk).geometry(); g != nil {
-		return c.Constrain(panelSize(lk, g, panel.EqH))
+	if sz, ok := e.slots.Measure(lk, c); ok {
+		return sz
 	}
 	return c.Constrain(paintengine2d.Pt(style.Dip(lk, StripW), style.Dip(lk, 80)))
 }
@@ -156,25 +164,13 @@ func (e *eqPane) Arrange(r paintengine2d.Rect) {
 	e.SetBounds(r)
 	f := faceOf(e.Look())
 	e.show(f)
-	if g := f.geometry(); g != nil {
-		e.arrangePanel(&g.Eq)
+	if f.panelled() {
+		e.slots.Arrange(e.Look(), e.LocalBounds())
+		e.flat.Arrange(paintengine2d.Rect{})
+		e.preset.Arrange(paintengine2d.Rect{})
 		return
 	}
 	e.arrangeWidgets()
-}
-
-func (e *eqPane) arrangePanel(q *panel.Eq) {
-	lk := e.Look()
-	at := func(c widget.Component, r panel.R) { c.Arrange(box(lk, r, paintengine2d.Point{})) }
-	at(e.on, q.On)
-	at(e.auto, q.Auto)
-	at(e.presets, q.Presets)
-	at(e.preamp, q.Preamp)
-	for i, f := range e.bands {
-		at(f, q.Band(i))
-	}
-	e.flat.Arrange(paintengine2d.Rect{})
-	e.preset.Arrange(paintengine2d.Rect{})
 }
 
 func (e *eqPane) arrangeWidgets() {
@@ -219,8 +215,8 @@ func (e *eqPane) Paint(ctx *paintengine2d.Context) {
 		return
 	}
 	if f := faceOf(lk); f.panelled() {
-		art(lk, ctx, b, "eq.face")
-		e.paintCurve(ctx, lk, &f.geometry().Eq, f.ink())
+		style.DrawSkinLayout(lk, ctx, b, layoutEqualiser)
+		e.paintCurve(ctx, lk, slotRect(lk, layoutEqualiser, "graph", b), f.ink())
 		return
 	}
 	pal := lk.Palette()
@@ -244,15 +240,14 @@ func (e *eqPane) Paint(ctx *paintengine2d.Context) {
 	}
 }
 
-// paintCurve draws the response the ten bands make across the graph well,
+// paintCurve draws the response the ten bands make across the graph well g,
 // a design pixel at a time so it sits on the panel's grid.
-func (e *eqPane) paintCurve(ctx *paintengine2d.Context, lk style.LookAndFeel, q *panel.Eq, in *ink) {
-	g := box(lk, q.Graph, paintengine2d.Point{})
-	n := q.Graph.W() - 4
+func (e *eqPane) paintCurve(ctx *paintengine2d.Context, lk style.LookAndFeel, g paintengine2d.Rect, in *ink) {
+	d := style.Dip(lk, 1)
+	n := int(g.Dx()/d+0.5) - 4
 	if n < 2 {
 		return
 	}
-	d := style.Dip(lk, 1)
 	pts := e.p.Equaliser.Curve(n)
 	mid := g.Min.Y + g.Dy()/2
 	amp := g.Dy()/2 - 2*d
@@ -262,8 +257,8 @@ func (e *eqPane) paintCurve(ctx *paintengine2d.Context, lk style.LookAndFeel, q 
 	}
 	for i, v := range pts {
 		x := g.Min.X + 2*d + float32(i)*d
-		y := snapDev(mid - v*amp)
-		ctx.DrawRect(paintengine2d.XYWH(snapDev(x), y, max(d, 1), max(d, 1)), col)
+		y := g.Min.Y + snapDesign(mid-g.Min.Y-v*amp, d)
+		ctx.DrawRect(paintengine2d.XYWH(x, y, d, d), col)
 	}
 }
 
@@ -304,6 +299,9 @@ type listPane struct {
 	// The panel faces' keys along the bottom, and the small transport.
 	add, rem, sel, misc, opts *players.GlyphButton
 	mini                      [6]*players.GlyphButton
+
+	// slots is where each control goes in a panel face.
+	slots *widget.Slots
 }
 
 func newListPane(p *Player) *listPane {
@@ -347,10 +345,12 @@ func newListPane(p *Player) *listPane {
 			widgets.MenuItem{Text: "Play the first track", OnClick: func() { p.Transport.SelectTrack(0) }},
 			widgets.MenuItem{Text: "Close the playlist", OnClick: func() { p.toggle(p.iList) }})
 	})
-	for b, name := range map[*players.GlyphButton]string{
-		l.add: "key.add", l.rem: "key.rem", l.sel: "key.sel", l.misc: "key.misc", l.opts: "key.opts",
+	l.slots = widget.NewSlots(layoutPlaylist).Bind("list", l.list).Bind("info", l.foot)
+	for b, slot := range map[*players.GlyphButton]string{
+		l.add: "add", l.rem: "rem", l.sel: "sel", l.misc: "misc", l.opts: "opts",
 	} {
-		paintAsKey(b, name)
+		l.slots.Bind(slot, b)
+		paintAsKey(b, layoutPlaylist, slot)
 	}
 	for i, m := range []struct {
 		g     players.Glyph
@@ -378,7 +378,9 @@ func newListPane(p *Player) *listPane {
 				p.Command(m.c)
 			}
 		})
-		paintAsKey(b, m.name)
+		slot := "mini." + string(rune('0'+i))
+		l.slots.Bind(slot, b)
+		paintAsKey(b, layoutPlaylist, slot)
 		l.mini[i] = b
 	}
 
@@ -434,8 +436,8 @@ func (l *listPane) sync() {
 
 func (l *listPane) Measure(c layout.Constraints) paintengine2d.Point {
 	lk := l.Look()
-	if g := faceOf(lk).geometry(); g != nil {
-		return c.Constrain(panelSize(lk, g, panel.ListH))
+	if sz, ok := l.slots.Measure(lk, c); ok {
+		return sz
 	}
 	return c.Constrain(paintengine2d.Pt(style.Dip(lk, StripW), style.Dip(lk, 196)))
 }
@@ -444,8 +446,8 @@ func (l *listPane) Arrange(r paintengine2d.Rect) {
 	l.SetBounds(r)
 	f := faceOf(l.Look())
 	l.show(f)
-	if g := f.geometry(); g != nil {
-		l.arrangePanel(&g.List)
+	if f.panelled() {
+		l.arrangePanel()
 		return
 	}
 	l.list.geo = nil
@@ -465,20 +467,19 @@ func (l *listPane) Arrange(r paintengine2d.Rect) {
 	}
 }
 
-func (l *listPane) arrangePanel(g *panel.List) {
-	lk := l.Look()
-	at := func(c widget.Component, r panel.R) { c.Arrange(box(lk, r, paintengine2d.Point{})) }
-	l.list.geo = g
-	// The list takes its rows and its scroll bar, which sit side by side.
-	at(l.list, panel.R{g.Rows.X(), g.Rows.Y(), g.Scroll.Right() - g.Rows.X(), g.Rows.H()})
-	at(l.foot, g.Info)
-	at(l.add, g.Add)
-	at(l.rem, g.Rem)
-	at(l.sel, g.Sel)
-	at(l.misc, g.Misc)
-	at(l.opts, g.Opts)
-	for i, b := range l.mini {
-		at(b, g.Mini[i])
+// arrangePanel puts every control on its slot, and tells the list where in
+// its own box the panel's rows, its scroll groove and its first row are.
+func (l *listPane) arrangePanel() {
+	lk, b := l.Look(), l.LocalBounds()
+	l.slots.Arrange(lk, b)
+	at := func(slot string) paintengine2d.Rect { return slotRect(lk, layoutPlaylist, slot, b) }
+	// In the list's own coordinates: its box is whole pixels, and the rows
+	// are drawn where the skin's rects are.
+	o := l.list.Bounds().Min
+	l.list.geo = &listGeo{
+		rows: at("rows").Translate(paintengine2d.Pt(-o.X, -o.Y)),
+		bar:  at("scroll").Translate(paintengine2d.Pt(-o.X, -o.Y)),
+		rowH: at("row").Dy(),
 	}
 	l.toTop.Arrange(paintengine2d.Rect{})
 	l.shrink.Arrange(paintengine2d.Rect{})
@@ -489,17 +490,17 @@ func (l *listPane) arrangePanel(g *panel.List) {
 func (l *listPane) Paint(ctx *paintengine2d.Context) {
 	lk := l.Look()
 	f := faceOf(lk)
-	g := f.geometry()
-	if g == nil {
+	if !f.panelled() {
 		return
 	}
-	art(lk, ctx, l.LocalBounds(), "list.face")
-	in, o := f.ink(), paintengine2d.Point{}
+	b := l.LocalBounds()
+	style.DrawSkinLayout(lk, ctx, b, layoutPlaylist)
+	in := f.ink()
 	t := l.p.Transport
-	info := box(lk, g.List.Info, o)
+	info := slotRect(lk, layoutPlaylist, "info", b)
 	line := players.Clock(t.Length()) + "/" + players.Clock(t.List.Total())
 	pixText(lk, ctx, info.Min.X+style.Dip(lk, 3), info.Min.Y+(info.Dy()-style.Dip(lk, 6))/2, line, in.info)
-	clk := box(lk, g.List.Clock, o)
+	clk := slotRect(lk, layoutPlaylist, "clock", b)
 	c := players.Clock(t.Pos)
 	if t.State == players.Stopped {
 		c = players.Clock(0)
