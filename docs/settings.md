@@ -63,8 +63,8 @@ icons and their size are seen changing:
 - **Shape and icons** — **Corners** (Theme shape / Round / Square),
   **Icon size** (16 / 24 / 32), **Icons** (the chrome set), **Animations**
   (hover fades, the default button's pulse, busy bars).
-- **The desktop** — **Match the desktop's light or dark mode and accent
-  colour** (see below) and **Use the desktop's file dialogs**.
+- **The desktop** — **Follow the desktop's colours**, its light or dark
+  mode and its accent (see below), and **Use the desktop's file dialogs**.
 - **Windows** — **Use system title bar and borders** and **Place window
   buttons as the theme does**. A window that is shaped, transparent or
   glass behind belongs in this section.
