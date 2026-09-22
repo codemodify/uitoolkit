@@ -267,6 +267,11 @@ func (c *tahoeSet) paintGlass(l *Classic, ctx *paintengine2d.Context, b painteng
 		return
 	}
 	r = min(r, b.Dx()*0.5, b.Dy()*0.5)
+	if blur {
+		// A menu on a surface of its own has none of the window's content
+		// under it: the compositor's glass, or nothing to blur at all.
+		tint, blur = LayerMaterial(tint, l.Palette().Background)
+	}
 	if blur && tint.A < 1 && l.P("vibrancy", 1) != 0 {
 		ctx.Save()
 		ctx.ClipRoundRect(b, r, r)
@@ -807,7 +812,11 @@ func (tahoeEngine) DrawViewFrame(l *Classic, ctx *paintengine2d.Context, b paint
 		return
 	}
 	if st.Sidebar() {
-		ctx.DrawRect(b, paintengine2d.Fill(c.win))
+		if !GlassBehind(l) {
+			// Without real glass the panel is laid over the window colour
+			// (pre-flattened); with it, over the blurred desktop itself.
+			ctx.DrawRect(b, paintengine2d.Fill(c.win))
+		}
 		p := b.Inset(tahoeSideInset(l))
 		if p.Dx() < 8 || p.Dy() < 8 {
 			return
@@ -843,6 +852,10 @@ func (e tahoeEngine) ViewBackground(l *Classic, st ControlState) paintengine2d.C
 	switch {
 	case st.Sidebar() && st.Backdrop():
 		return c.flat(c.sideOff)
+	case st.Sidebar() && GlassBehind(l):
+		// The rows sit on the glass panel itself: nothing opaque under
+		// them, or the blur would stop at the first row.
+		return paintengine2d.Transparent
 	case st.Sidebar():
 		return c.side
 	}
