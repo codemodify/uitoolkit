@@ -314,7 +314,7 @@ func PopupOrigin(winMin paintengine2d.Point, placed FrameRect, margin FrameInset
 // business and would read as the root's own if it were passed on.
 func popupInput(k EventKind) bool {
 	switch k {
-	case EventMouseDown, EventMouseUp, EventMouseMove, EventScroll, EventPointerLeave,
+	case EventMouseDown, EventMouseUp, EventMouseMove, EventScroll, EventPointerLeave, EventGesture,
 		EventKeyDown, EventKeyUp, EventText, EventFocusIn, EventFocusOut,
 		EventIMEPreedit, EventIMECommit, EventIMECancel:
 		return true
@@ -326,7 +326,7 @@ func popupInput(k EventKind) bool {
 // position moved by the popup's origin.
 func popupEvent(ev Event, origin paintengine2d.Point) Event {
 	switch ev.Kind {
-	case EventMouseDown, EventMouseUp, EventMouseMove, EventScroll:
+	case EventMouseDown, EventMouseUp, EventMouseMove, EventScroll, EventGesture:
 		ev.Pos = paintengine2d.Pt(ev.Pos.X+origin.X, ev.Pos.Y+origin.Y)
 	}
 	return ev
