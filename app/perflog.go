@@ -19,7 +19,8 @@ import (
 //
 // With it set, SIGUSR1 also writes a heap profile (after a collection) to
 // <file>.heap.<n>.pb.gz and a line with the goroutine count and the live
-// heap, and <file>.goroutines.<n>.txt with every goroutine's stack. Unset,
+// heap, and <file>.goroutines.<n>.txt with every goroutine's stack; SIGUSR2
+// writes five seconds of CPU profile to <file>.cpu.<n>.pb.gz. Unset,
 // the loop takes no timings at all.
 const EnvPerfLog = "UITK_PERF_LOG"
 
@@ -63,12 +64,22 @@ func perfMark(what string) {
 	perf.mu.Unlock()
 }
 
-// perfDumps writes a heap profile and the goroutines on every SIGUSR1.
+// perfDumps writes a heap profile and the goroutines on every SIGUSR1,
+// and five seconds of CPU profile on every SIGUSR2.
 func perfDumps(path string) {
 	ch := make(chan os.Signal, 1)
-	signal.Notify(ch, syscall.SIGUSR1)
+	signal.Notify(ch, syscall.SIGUSR1, syscall.SIGUSR2)
 	for n := 1; ; n++ {
-		<-ch
+		if <-ch == syscall.SIGUSR2 {
+			if f, err := os.Create(fmt.Sprintf("%s.cpu.%d.pb.gz", path, n)); err == nil {
+				if pprof.StartCPUProfile(f) == nil {
+					time.Sleep(5 * time.Second)
+					pprof.StopCPUProfile()
+				}
+				f.Close()
+			}
+			continue
+		}
 		runtime.GC()
 		if f, err := os.Create(fmt.Sprintf("%s.heap.%d.pb.gz", path, n)); err == nil {
 			_ = pprof.WriteHeapProfile(f)
