@@ -1078,6 +1078,10 @@ type x11Conn struct {
 	// atomBlur is KWin's _KDE_NET_WM_BLUR_BEHIND_REGION: the X11 way to
 	// ask for the desktop behind the window to be blurred.
 	atomBlur C.Atom
+	// atomColorScheme and atomIcon are KWin's _KDE_NET_WM_COLOR_SCHEME and
+	// EWMH's _NET_WM_ICON (x11_dress_linux.go), interned when first used.
+	atomColorScheme C.Atom
+	atomIcon        C.Atom
 
 	clipText string
 	ownClip  bool
@@ -1201,6 +1205,8 @@ type x11Surface struct {
 	// open from this surface, oldest first.
 	pop  *x11Popup
 	kids []*x11Surface
+	// dress is the window's palette and icon (x11_dress_linux.go).
+	dress x11Dress
 }
 
 var (
@@ -3344,8 +3350,10 @@ func (s *x11Surface) recreateOnVisual(argb bool) {
 	c.surfaces[s.win] = s
 	s.setMotifLocked()
 	// A new window on another visual is a new X window: it takes drops
-	// only once it says so again.
+	// only once it says so again, and wears its palette and icon only
+	// once it is given them again.
 	s.setXdndAwareLocked()
+	s.reapplyDressLocked()
 	s.mapped = false
 	s.rebuildImageLocked()
 	if mapped && !s.hidden {
