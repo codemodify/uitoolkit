@@ -19,9 +19,10 @@ import (
 // design and a flex box would give them away.
 //
 // It is laid out one of three ways (face.go). The widget face is Minim's own
-// row of glyphs; the two panel faces put the same controls, and the three a
-// panel of the era also had — a pause key of its own, an eject key and a
-// balance slider — where their panel's art has holes for them.
+// row of glyphs, placed here; in the two panel faces the skin places the
+// same controls, and the three a panel of the era also had — a pause key of
+// its own, an eject key and a balance slider — on the slots of its strip
+// layout, where its art has holes for them.
 type strip struct {
 	widget.Base
 	p *Player
