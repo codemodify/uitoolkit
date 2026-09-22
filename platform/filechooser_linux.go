@@ -3,6 +3,7 @@
 package platform
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"strings"
@@ -47,8 +48,18 @@ func OpenFileChooser(opts FileChooserOptions, done func(paths []string)) bool {
 
 var chooserToken atomic.Uint64
 
+// portalToken is a fresh handle_token for a portal request.
+func portalToken() string {
+	return fmt.Sprintf("uitk%d_%d", time.Now().UnixNano()%1e9, chooserToken.Add(1))
+}
+
 func openFileChooser(conn *dbus.Conn, dest string, opts FileChooserOptions, done func(paths []string)) bool {
-	token := fmt.Sprintf("uitk%d_%d", time.Now().UnixNano()%1e9, chooserToken.Add(1))
+	// No portal running and none to start: the toolkit's dialog, at once.
+	timeout, ok := busServiceTimeout(conn, dest)
+	if !ok {
+		return false
+	}
+	token := portalToken()
 	// The Request object's path is known before the call: subscribe first,
 	// so a quick answer is not missed.
 	sender := strings.ReplaceAll(strings.TrimPrefix(conn.Names()[0], ":"), ".", "_")
@@ -111,7 +122,9 @@ func openFileChooser(conn *dbus.Conn, dest string, opts FileChooserOptions, done
 		}
 	}
 	var handle dbus.ObjectPath
-	if err := conn.Object(dest, portalPath).Call(method, 0, opts.ParentWindow, opts.Title, options).Store(&handle); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	if err := conn.Object(dest, portalPath).CallWithContext(ctx, method, 0, opts.ParentWindow, opts.Title, options).Store(&handle); err != nil {
 		cleanup()
 		return false
 	}
