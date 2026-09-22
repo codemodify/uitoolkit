@@ -145,9 +145,15 @@ when available.
 **X11:** ToolkitMenu places the popup at root `(x,y)` (typically above
 a bottom panel). `Window.Raise` sends `_NET_ACTIVE_WINDOW`.
 
-XEmbed `_NET_SYSTEM_TRAY` is **not** implemented. Portal
-`org.freedesktop.portal.Notification` is not used (SNI + fdo cover the
-same toasts outside a sandbox).
+XEmbed `_NET_SYSTEM_TRAY` is **not** implemented.
+
+A notification does not need a tray item: `platform.Notifier`
+(`Application.NewNotifier`) sends one with buttons through
+`org.freedesktop.portal.Notification` or the notification server, and
+brings its clicks back as the app's action names — see
+[platform.md](platform.md#portals). Mail's new-mail notification goes
+through it; `StatusItem.Notify` stays for the tray's own toast, and no
+longer answers other notifications' clicks.
 
 ```bash
 # Debian/Ubuntu

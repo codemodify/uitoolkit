@@ -40,5 +40,22 @@ own Wayland socket `uitk-e2e-N`, own Xwayland (display number in `N/display`), o
   window move starts only past the drag threshold (8 px; KDE 10), so move a few
   px first, then on: `move 700 50 down move 714 52 sleep 150 move 820 160 up`.
 - Client-side frames: `UITK_DECORATIONS=client ./run.sh N BIN` (see docs/decorations.md).
+- Portals: there is no xdg-desktop-portal on an instance's bus, and none must be
+  started there. `./fakeportal-bin -bus "$(cat N/bus.addr)" -importer ./importer
+  [-click button-0 -after 3s] > N/fakeportal.log 2>&1 &` (built by build.sh; run it
+  with `WAYLAND_DISPLAY=uitk-e2e-N DISPLAY=$(cat N/display)`, and kill its PID when
+  done) owns the portal and notification names, logs every call, makes a file
+  dialog a real window that is the child of the window the call named (importer:
+  xdg-foreign's importer on Wayland, WM_TRANSIENT_FOR on X11), and clicks each
+  notification after -after. Read the dialog's parent with kwin.py
+  (`w.transientFor`). start.sh points the instance bus's activation environment at
+  the nested session, so nothing it starts can reach the user's desktop.
+- Mouse thumb buttons: `./in.sh N click back`, `click forward`.
+- Fake input cannot make touchpad gestures or finger scrolls (no gesture requests,
+  no axis source): those are tested headlessly.
+- X11 wheel: on Xwayland a `wheel` reaches the app only when a `move` came before it
+  in the same in.sh call (`move X Y sleep 300 wheel 0.6666667 sleep 100 move X Y+1`).
+  `wheel 1` is 15 units, a notch and a half on Xwayland (it divides by 10);
+  `wheel 0.6666667` is exactly one notch on both backends.
 - NEVER run apps or `go test ./platform` against the user's real session (wayland-0 / :0):
   always export WAYLAND_DISPLAY=uitk-e2e-N DISPLAY=$(cat N/display) for tests that open windows.
