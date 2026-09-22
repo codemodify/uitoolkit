@@ -61,10 +61,12 @@ func (p *ProgressBar) textW() float32 {
 }
 
 // busyPeriod is one cycle of a busy bar's animation; busyFrame how often
-// it repaints.
+// it repaints; busyHidden how often a bar scrolled out of sight looks
+// whether it is back, without repainting.
 const (
 	busyPeriod = 1600 * time.Millisecond
 	busyFrame  = 33 * time.Millisecond
+	busyHidden = 500 * time.Millisecond
 )
 
 // NewProgressBar builds a determinate bar at value (clamped to 0..1).
@@ -153,8 +155,8 @@ func (p *ProgressBar) Paint(ctx *paintengine2d.Context) {
 }
 
 // phase is where a busy bar's animation is now, and asks for the next
-// frame: the loop runs only while the bar is painted, so a hidden bar costs
-// nothing.
+// frame: the loop runs only while the bar is painted, so a bar that is not
+// in the tree costs nothing.
 func (p *ProgressBar) phase() float32 {
 	if !p.Indeterminate || p.Manual || !style.Animations() {
 		return p.Phase
@@ -166,13 +168,24 @@ func (p *ProgressBar) phase() float32 {
 	t := float32(now.Sub(p.started)%busyPeriod) / float32(busyPeriod)
 	if !p.pending {
 		p.pending = true
-		widget.After(p, busyFrame, func() {
-			p.pending = false
-			p.Invalidate()
-		})
+		widget.After(p, busyFrame, p.tick)
 	}
 	ph := p.Phase + t
 	return ph - float32(int(ph))
+}
+
+// tick repaints the bar for its next frame — if it can be seen. A scroll
+// view records all of its content, so a bar scrolled out of sight is still
+// painted, and it kept the gallery repainting 30 times a second behind a
+// still window. Out of sight it only looks again now and then, and a
+// scroll that brings it back finds it moving within busyHidden.
+func (p *ProgressBar) tick() {
+	if widget.Exposed(p) {
+		p.pending = false
+		p.Invalidate()
+		return
+	}
+	widget.After(p, busyHidden, p.tick)
 }
 
 func clamp01(v float32) float32 {
