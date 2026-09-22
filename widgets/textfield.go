@@ -476,10 +476,14 @@ func (t *TextField) KeyPress(e widget.KeyEvent) bool {
 			return true
 		}
 	case platform.KeyReturn:
+		// A field with nothing to do on Return lets it bubble, so the
+		// dialog or wizard around it presses its default button (a
+		// QLineEdit's Return reaches QDialog's default button the same way).
 		if t.OnSubmit != nil {
 			t.OnSubmit(t.Text)
+			return true
 		}
-		return true
+		return false
 	}
 	return false
 }
