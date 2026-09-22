@@ -35,6 +35,12 @@ type filePlace struct {
 // Ctrl+Tab switches, a tab dragged along the strip moves, and a tab
 // dragged out of the strip becomes a Files window of its own — dropped
 // back on another window's strip it joins that one.
+//
+// Each tab keeps the folders it went through: Back and Forward on the tool
+// bar, Alt+Left and Alt+Right, the mouse's back and forward buttons and a
+// three-finger swipe across the touchpad go back and forward, as in
+// Dolphin, Nautilus and every browser; a double-click on a folder in the
+// listing opens it.
 func FilesApp(win *app.Window) widget.Component { return filesApp(win, nil) }
 
 // filesApp is FilesApp with the folders its window opens with: nil for
@@ -64,6 +70,8 @@ func filesApp(win *app.Window, open []int) widget.Component {
 
 	var table *widgets.TableView
 	var tree *widgets.TreeView
+	var backBtn, fwdBtn *widgets.ToolItem
+	syncHistory := func() {}
 
 	loadPreview := func() {
 		if place < 0 || place >= len(places) {
@@ -149,6 +157,13 @@ func filesApp(win *app.Window, open []int) widget.Component {
 		}
 	}
 	table.SetSelectedRows([]int{0})
+	// A double-click (or Return) on a folder that is a place opens it.
+	var openRow func(row int)
+	table.OnActivate = func(row int) {
+		if openRow != nil {
+			openRow(row)
+		}
+	}
 	table.OnSort = func(col int, asc bool) {
 		rows := places[place].Rows
 		sortFileRows(rows, col, asc)
@@ -237,6 +252,63 @@ func filesApp(win *app.Window, open []int) widget.Component {
 		if win != nil {
 			win.SetTitle(places[i].Label + " — Files")
 		}
+		syncHistory()
+	}
+	// visit shows place i in the selected tab, as a step in its history
+	// (back returns to where it was); travel moves through the history.
+	visit := func(i int) {
+		t := tabs.Selected()
+		if t < 0 {
+			showPlace(i)
+			return
+		}
+		ft := tabFolder(tabs, t)
+		if ft.place != i {
+			ft.back = append(ft.back, ft.place)
+			ft.fwd = nil
+			ft.place = i
+		}
+		tabs.SetTab(t, widgets.BrowserTab{Title: places[i].Label, Data: ft})
+		if n := nodeOf[i]; n != nil {
+			tree.Selected = n
+			tree.Invalidate()
+		}
+		showPlace(i)
+	}
+	travel := func(forward bool) bool {
+		t := tabs.Selected()
+		if t < 0 {
+			return false
+		}
+		ft := tabFolder(tabs, t)
+		i, ok := ft.travel(forward)
+		if !ok {
+			return false
+		}
+		tabs.SetTab(t, widgets.BrowserTab{Title: places[i].Label, Data: ft})
+		if n := nodeOf[i]; n != nil {
+			tree.Selected = n
+			tree.Invalidate()
+		}
+		showPlace(i)
+		if forward {
+			mark("Forward to " + places[i].Label)
+		} else {
+			mark("Back to " + places[i].Label)
+		}
+		return true
+	}
+	openRow = func(row int) {
+		rows := places[place].Rows
+		if row < 0 || row >= len(rows) {
+			return
+		}
+		sel = row
+		loadPreview()
+		if j := placeIndex(rows[row].Name); rows[row].Dir && j >= 0 {
+			visit(j)
+			mark("Opened " + places[j].Label)
+		}
 	}
 	// A folder in the places tree takes files: the drag's own rows move
 	// into it, and files from another application are listed in it.
@@ -262,10 +334,7 @@ func filesApp(win *app.Window, open []int) widget.Component {
 			return
 		}
 		// The tree navigates the selected tab, as a browser's address bar does.
-		if t := tabs.Selected(); t >= 0 {
-			tabs.SetTab(t, widgets.BrowserTab{Title: places[i].Label, Data: i})
-		}
-		showPlace(i)
+		visit(i)
 		mark("Place  " + places[i].Label)
 	}
 
@@ -340,7 +409,23 @@ func filesApp(win *app.Window, open []int) widget.Component {
 	saveBtn.Tip = "Save"
 	searchBtn := widgets.ToolIconBtn(style.IconSearch, "", func() { mark("Search") })
 	searchBtn.Tip = "Search"
-	tools := widgets.NewToolBar(newBtn, openBtn, saveBtn, widgets.ToolDivider(), searchBtn)
+	backBtn = widgets.ToolText("‹ Back", func() { travel(false) })
+	backBtn.Tip = "Back (Alt+Left)"
+	fwdBtn = widgets.ToolText("Forward ›", func() { travel(true) })
+	fwdBtn.Tip = "Forward (Alt+Right)"
+	tools := widgets.NewToolBar(backBtn, fwdBtn, widgets.ToolDivider(), newBtn, openBtn, saveBtn, widgets.ToolDivider(), searchBtn)
+	syncHistory = func() {
+		var ft *folderTab
+		if t := tabs.Selected(); t >= 0 {
+			ft, _ = tabs.Tab(t).Data.(*folderTab)
+		}
+		back, fwd := ft != nil && len(ft.back) > 0, ft != nil && len(ft.fwd) > 0
+		if backBtn.Disabled == !back && fwdBtn.Disabled == !fwd {
+			return
+		}
+		backBtn.Disabled, fwdBtn.Disabled = !back, !fwd
+		tools.Invalidate()
+	}
 
 	filter := widgets.NewTextField("", "Filter this folder", func(s string) {
 		mark("Filter  " + s)
@@ -387,12 +472,12 @@ func filesApp(win *app.Window, open []int) widget.Component {
 		}
 	}
 	openTab := func(at, p int) int {
-		tabs.InsertTab(at, widgets.BrowserTab{Title: places[p].Label, Data: p})
+		tabs.InsertTab(at, widgets.BrowserTab{Title: places[p].Label, Data: &folderTab{place: p}})
 		keepOne()
 		return at
 	}
 	selectTab := func(i int) {
-		p, ok := tabs.Tab(i).Data.(int)
+		p, ok := tabPlace(tabs.Tab(i).Data)
 		if !ok || p < 0 || p >= len(places) {
 			return
 		}
@@ -423,7 +508,7 @@ func filesApp(win *app.Window, open []int) widget.Component {
 	// a file manager moves it there without opening the folder first.
 	tabs.DropActions = platform.DragCopy | platform.DragMove
 	tabs.OnDropTab = func(i int, e widget.DropEvent) bool {
-		dst, ok := tabs.Tab(i).Data.(int)
+		dst, ok := tabPlace(tabs.Tab(i).Data)
 		if !ok || !filesDropInto(places, dst, e) {
 			return false
 		}
@@ -436,7 +521,7 @@ func filesApp(win *app.Window, open []int) widget.Component {
 		if i >= 0 {
 			items = append(items,
 				widgets.Item("Duplicate Tab", func() {
-					if p, ok := tabs.Tab(i).Data.(int); ok {
+					if p, ok := tabPlace(tabs.Tab(i).Data); ok {
 						tabs.Select(openTab(i+1, p))
 					}
 				}),
@@ -463,7 +548,7 @@ func filesApp(win *app.Window, open []int) widget.Component {
 	// (docs/decorations.md). Dropped on another Files window's strip it
 	// joins that one instead.
 	tabs.OnTearOff = func(_ int, tab widgets.BrowserTab) widget.TearOffWindow {
-		p, ok := tab.Data.(int)
+		p, ok := tabPlace(tab.Data)
 		a := win.App()
 		if !ok || a == nil {
 			return nil
@@ -486,7 +571,7 @@ func filesApp(win *app.Window, open []int) widget.Component {
 		return w2
 	}
 	tabs.OnMergeTab = func(at int, tab widgets.BrowserTab, _ widget.DropEvent) bool {
-		p, ok := tab.Data.(int)
+		p, ok := tabPlace(tab.Data)
 		if !ok {
 			// From another Files process there is no index, only the
 			// title the private type carries.
@@ -501,7 +586,7 @@ func filesApp(win *app.Window, open []int) widget.Component {
 	// Besides the tab itself, a folder tab carries its path as text, so
 	// dropping one in a terminal or an editor says where it was.
 	tabs.OnTabDrag = func(_ int, tab widgets.BrowserTab) *widget.Drag {
-		if p, ok := tab.Data.(int); ok {
+		if p, ok := tabPlace(tab.Data); ok {
 			return widget.DragText(places[p].Path)
 		}
 		return nil
@@ -528,7 +613,66 @@ func filesApp(win *app.Window, open []int) widget.Component {
 	col.AddFlex(split, 1)
 
 	loadPreview()
-	return newShortcutRoot(col, tabs.Shortcut)
+	root := newShortcutRoot(col, func(e widget.KeyEvent) bool {
+		// Alt+Left and Alt+Right go back and forward, on both desktops.
+		if e.Mods.Alt() && !e.Mods.Ctrl() && (e.Key == platform.KeyLeft || e.Key == platform.KeyRight) {
+			travel(e.Key == platform.KeyRight)
+			return true
+		}
+		return tabs.Shortcut(e)
+	})
+	// The mouse's back and forward buttons and a sideways swipe
+	// (widget.HistoryNavigator).
+	root.navigate = travel
+	return root
+}
+
+// folderTab is what a Files tab holds: the folder it shows and the ones it
+// can go back and forward to, so each tab has a history of its own — and
+// keeps it when it is torn off into a window of its own.
+type folderTab struct {
+	place     int
+	back, fwd []int
+}
+
+// travel moves one step back or forward; ok is false at either end.
+func (f *folderTab) travel(forward bool) (int, bool) {
+	from, to := &f.back, &f.fwd
+	if forward {
+		from, to = &f.fwd, &f.back
+	}
+	if len(*from) == 0 {
+		return 0, false
+	}
+	next := (*from)[len(*from)-1]
+	*from = (*from)[:len(*from)-1]
+	*to = append(*to, f.place)
+	f.place = next
+	return next, true
+}
+
+// tabFolder is tab i's folderTab, made for a tab that has none.
+func tabFolder(tabs *widgets.BrowserTabs, i int) *folderTab {
+	tab := tabs.Tab(i)
+	if ft, ok := tab.Data.(*folderTab); ok {
+		return ft
+	}
+	p, _ := tabPlace(tab.Data)
+	ft := &folderTab{place: p}
+	tab.Data = ft
+	tabs.SetTab(i, tab)
+	return ft
+}
+
+// tabPlace is the folder a tab shows.
+func tabPlace(d any) (int, bool) {
+	switch v := d.(type) {
+	case *folderTab:
+		return v.place, true
+	case int:
+		return v, true
+	}
+	return 0, false
 }
 
 // shortcutRoot is a window's content root with the app's own keys: those
@@ -536,6 +680,8 @@ func filesApp(win *app.Window, open []int) widget.Component {
 type shortcutRoot struct {
 	widget.Base
 	onKey func(widget.KeyEvent) bool
+	// navigate, if set, goes back or forward (widget.HistoryNavigator).
+	navigate func(forward bool) bool
 }
 
 func newShortcutRoot(child widget.Component, onKey func(widget.KeyEvent) bool) *shortcutRoot {
@@ -555,6 +701,11 @@ func (r *shortcutRoot) Arrange(b paintengine2d.Rect) {
 }
 
 func (r *shortcutRoot) KeyPress(e widget.KeyEvent) bool { return r.onKey != nil && r.onKey(e) }
+
+// NavigateHistory implements widget.HistoryNavigator.
+func (r *shortcutRoot) NavigateHistory(forward bool) bool {
+	return r.navigate != nil && r.navigate(forward)
+}
 
 // lookFaces are the typefaces the window's look reads in (its era's when
 // installed, else the bundled Titillium Web and JetBrains Mono).
