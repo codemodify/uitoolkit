@@ -93,3 +93,50 @@ func clamp01(v float32) float32 {
 	}
 	return v
 }
+
+// Backdrop is what lies behind a floating layer — a menu, a flyout, a
+// list — that a look paints a translucent material on.
+type Backdrop uint8
+
+const (
+	// BackdropWindow: the layer is drawn inside its window, over the
+	// window's own content, which the look blurs itself
+	// ([paintengine2d.Context.BackdropBlur]). What every popup had before
+	// popups became surfaces, and what they still have wherever they are
+	// not (headless, UITK_POPUPS=layer).
+	BackdropWindow Backdrop = iota
+	// BackdropGlass: the layer is a surface of its own and the compositor
+	// blurs the desktop behind it. There is nothing of the window's to
+	// blur; the material keeps its real alpha.
+	BackdropGlass
+	// BackdropNone: the layer is a surface of its own over a desktop
+	// nobody blurs. A translucent tint would show the desktop raw, so the
+	// look flattens it over its own background, as it does for a window
+	// without glass.
+	BackdropNone
+)
+
+// layerBackdrop is the backdrop of the layer being painted now. Painting
+// happens on the UI goroutine one layer at a time; the app package sets it
+// around each popup surface it paints.
+var layerBackdrop atomic.Uint32
+
+// SetLayerBackdrop says what lies behind the layer about to be painted and
+// returns what was said before, so the caller can put it back.
+func SetLayerBackdrop(b Backdrop) Backdrop {
+	return Backdrop(layerBackdrop.Swap(uint32(b)))
+}
+
+// LayerBackdrop is what lies behind the layer being painted: what a look's
+// menu or flyout material asks before it blurs, tints or flattens.
+func LayerBackdrop() Backdrop { return Backdrop(layerBackdrop.Load()) }
+
+// FlattenOver is c composited over an opaque bg: a translucent tint made
+// solid, what a material is on a backdrop nobody blurs.
+func FlattenOver(c, bg paintengine2d.Color) paintengine2d.Color {
+	if c.A >= 1 {
+		return c
+	}
+	a := clamp01(c.A)
+	return paintengine2d.RGBA(c.R*a+bg.R*(1-a), c.G*a+bg.G*(1-a), c.B*a+bg.B*(1-a), 1)
+}
