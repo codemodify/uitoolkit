@@ -507,3 +507,30 @@ func BenchmarkRichTextTyping(b *testing.B) {
 		ed.Paint(ctx)
 	}
 }
+
+// With no OnLink, an editor opens a link with the desktop's application for
+// it, as every other link the toolkit shows does (OpenLink).
+func TestRichTextOpensLinksByDefault(t *testing.T) {
+	got := make(chan string, 1)
+	old := openURI
+	openURI = func(uri string, _ platform.OpenURIOptions) error {
+		got <- uri
+		return nil
+	}
+	defer func() { openURI = old }()
+	ed, _, _ := richHarness(t, `<p>go <a href="https://example.com">there</a></p>`, 400, 120)
+	if ed.OnLink != nil {
+		t.Fatal("OnLink should start nil")
+	}
+	if !ed.AccessibleAction(0, a11y.ActionDefault) {
+		t.Fatal("the link's action was refused")
+	}
+	select {
+	case u := <-got:
+		if u != "https://example.com" {
+			t.Fatalf("opened %q", u)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("nothing was opened")
+	}
+}

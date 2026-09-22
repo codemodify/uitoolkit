@@ -47,7 +47,8 @@ type RichText struct {
 	// OnSelectionChange runs when the caret or the selection moves.
 	OnSelectionChange func()
 	// OnLink is asked to follow a link (Ctrl+click, a click when read-only,
-	// Return on a link from assistive technology).
+	// Return on a link from assistive technology). Nil opens it with the
+	// desktop's application for it (OpenLink).
 	OnLink func(href string)
 	// OnLinkRequest, when set, is asked for a link's target when the user
 	// asks to make one (Ctrl+K, the tool bar), with the current one; it
@@ -933,8 +934,8 @@ func (t *RichText) KeyPress(e widget.KeyEvent) bool {
 		return true
 	case platform.KeyReturn:
 		if ctrl {
-			if href := d.LinkAt(sel.Caret); href != "" && t.OnLink != nil {
-				t.OnLink(href)
+			if href := d.LinkAt(sel.Caret); href != "" {
+				t.followLink(href)
 				return true
 			}
 		}
@@ -1065,8 +1066,8 @@ func (t *RichText) readOnlyKey(e widget.KeyEvent) bool {
 		}
 	}
 	if e.Key == platform.KeyReturn {
-		if href := t.doc.LinkAt(t.doc.Selection().Caret); href != "" && t.OnLink != nil {
-			t.OnLink(href)
+		if href := t.doc.LinkAt(t.doc.Selection().Caret); href != "" {
+			t.followLink(href)
 			return true
 		}
 	}
@@ -1166,8 +1167,8 @@ func (t *RichText) MousePress(e widget.MouseEvent) bool {
 	}
 	// Links follow on Ctrl+click, or on a plain click when nothing can be
 	// edited.
-	if href := t.linkUnder(e.Pos); href != "" && (e.Mods.Ctrl() || t.ReadOnly) && t.OnLink != nil {
-		t.OnLink(href)
+	if href := t.linkUnder(e.Pos); href != "" && (e.Mods.Ctrl() || t.ReadOnly) {
+		t.followLink(href)
 		return true
 	}
 	now := time.Now()
@@ -1366,4 +1367,14 @@ func (t *RichText) showMenu(p paintengine2d.Point) {
 // afterIdle runs fn on c's UI thread soon, when there is time.
 func afterIdle(c widget.Component, fn func()) (stop func()) {
 	return widget.After(c, 16*time.Millisecond, fn)
+}
+
+// followLink follows href through OnLink, or opens it with the desktop's
+// application for it when the app gave no OnLink.
+func (t *RichText) followLink(href string) {
+	if t.OnLink != nil {
+		t.OnLink(href)
+		return
+	}
+	OpenLink(t, href, nil)
 }
