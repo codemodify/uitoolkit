@@ -11,7 +11,7 @@ it, so an app pays nothing while no assistive technology is running.
 | --- | --- |
 | `a11y` | the model: `Node` (role, name, description, value, state, bounds, range, position in set, level, caret, shortcut, actions, children), `Check` |
 | `widget` | `Accessible` (`Describe(*a11y.Node)`), `AccessibleItems` for views whose items are not components, `AccessibleActor`, `SetAccessibleName`, `AccessibleTree` |
-| `widgets` | every stock widget describes itself: buttons, check boxes, radios, switches, fields, spin buttons, sliders, progress bars, combo and date fields, lists, trees, tables (headers, rows, cells), card lists, tabs, segmented controls, tool bars, menu bars and menus, status bars, group boxes, dialogs, message boxes |
+| `widgets` | every stock widget describes itself: buttons, check boxes, radios, switches, fields, spin buttons, sliders, progress bars, combo and date fields, lists, trees, tables (headers, rows, cells), card lists, tabs, segmented controls, tool bars, menu bars and menus, status bars, group boxes, dialogs, message boxes, the rich-text editor (its links as link nodes), MDI areas and their windows (desktop pane, internal frames), wizards (a dialog saying its step) |
 | `app` | `Window.AccessibleTree()` (content, then any dialog, menu or tooltip over it), `Window.AccessibleAction(id, action)` |
 | platform adapter | AT-SPI2 on Linux (`app/atspi_linux.go`); UI Automation and NSAccessibility later |
 

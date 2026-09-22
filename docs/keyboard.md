@@ -82,6 +82,49 @@ Same as TextField, except **Return** inserts a newline (no `OnSubmit`).
 | PageUp / PageDown | Jump by a viewport of lines |
 | Wheel | Scroll; unwrapped areas also take horizontal wheel |
 
+## RichText
+
+The TextArea keys, plus:
+
+| Key | Action |
+| --- | --- |
+| Ctrl+Up / Ctrl+Down | Previous / next paragraph |
+| Ctrl+Backspace / Ctrl+Delete | Delete a word |
+| Return | New paragraph (a heading is followed by body text; on an empty list item, up a level, then out of the list) |
+| Ctrl+Z / Ctrl+Shift+Z, Ctrl+Y | Undo / redo |
+| Ctrl+C / X / V, Ctrl+Shift+V | Copy, cut, paste with formatting; paste as plain text |
+| Ctrl+B / I / U, Alt+Shift+5 | Bold, italic, underline, strikethrough |
+| Ctrl+\\ | Clear formatting |
+| Ctrl+Alt+1–6, Ctrl+Alt+0 | Heading 1–6, body text |
+| Ctrl+Shift+8 / Ctrl+Shift+7 | Bulleted / numbered list |
+| Ctrl+] / Ctrl+[ | List item a level in / out |
+| Ctrl+Shift+L / E / R | Align left / centre / right |
+| Ctrl+K | Link |
+| Ctrl+Return, Ctrl+click | Follow the link at the caret / under the pointer |
+| Menu, Shift+F10 | Context menu |
+
+Tab leaves the editor, as in every field (Ctrl+] indents a list). The
+format bar's buttons are walked with Left / Right and pressed with Space
+or Return.
+
+## MDIArea
+
+| Key | Action |
+| --- | --- |
+| Ctrl+Tab / Ctrl+F6 | Next window (**Shift**: previous) |
+| Ctrl+F4 / Ctrl+W | Close the active window (it may ask first) |
+| Alt+- | The active window's menu (Restore, Move, Size, Minimize, Maximize, Close, Next) |
+| Arrows, then Return / Escape | Move or size from the window menu (**Ctrl**: a pixel at a time); keep / put back |
+| Return | On a minimised window that has the keyboard: restore it |
+
+## Wizard
+
+| Key | Action |
+| --- | --- |
+| Return | Next, or Finish on the last page (a text area keeps its Return) |
+| Escape | Cancel |
+| Alt+B / N / F / S / H | Back, Next (Apply), Finish, Skip, Help |
+
 ## NumberField / Spinner
 
 Same as TextField, plus:

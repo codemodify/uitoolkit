@@ -160,6 +160,34 @@ Struck through once fixed; newest findings at the end of their section.
   view the view frame's border clips the last row.~~ `ListView`, `TreeView`
   and `TableView` all measure their frame now.
 
+- **Rich text: no table, no line break inside a paragraph, no paragraph
+  indent outside lists**, and italic is the upright face slanted (no italic
+  face is bundled). `<br>` starts a new paragraph on load. Each would be a
+  block kind or a span style of its own in `richtext`.
+- **The rich clipboard is HTML in-process only**: the platform clipboard
+  offers text, and the HTML flavour stays in the process for as long as the
+  clipboard holds its text (`SetClipboardHTML`). Offering `text/html` to
+  other applications needs `platform` to own a selection in more than one
+  type (X11 TARGETS, `wl_data_source.offer`); a drag already does.
+- **A drop inside the rich-text editor is always a move**: the window
+  prefers whatever action the compositor last reported, so a source's
+  preferred move never counts on Wayland, and the editor asks for a move of
+  its own selection itself. Letting `app` prefer the source's action for
+  its own drags would give Ctrl+drag a copy back.
+- **The rich-text editor lays out a paragraph as one piece**: a paragraph
+  of tens of thousands of characters re-lays whole on every key. Ordinary
+  documents never notice (a paragraph re-lays in microseconds).
+- **MDI: no maximised window's buttons in the menu bar** (Windows put a
+  maximised child's buttons at the menu bar's end) and no icons for
+  minimised windows (they are caption strips, as since Windows 95).
+- **Toolkit buttons draw no mnemonics**: the wizard's Alt+B / N / F keys
+  work, but nothing underlines them.
+- **An access key's letter can reach a field it focuses**: Alt+letter's
+  character arrives as text after the key has moved the focus, so a
+  mnemonic that focuses a text field types its letter there. The wizard
+  moves its focus a moment later; the window could drop text while Alt is
+  held.
+
 ## Platform
 
 - ~~**`Position` and `Move` are still device pixels** while sizes are logical;
@@ -172,6 +200,9 @@ Struck through once fixed; newest findings at the end of their section.
 - ~~**The tour's `-shot` still sizes its offscreen windows in device pixels**
   (`1180 * sc`), from before window sizes became logical.~~ 1180 × 820
   logical at every scale.
+- **The first pointer press after a window maps was lost** twice in the
+  Wayland rig (docs/e2e/2026-09-22/widgets-breadth.md); the same press a
+  moment later worked. Cause not established.
 - **X11's scale is connection-wide**: the last window's `WindowOptions.Scale`
   sets it for the display (X11's own model, one `Xft.dpi`).
 - **`UITK_SCALE` on a Wayland output at scale 1** draws at the asked scale into
