@@ -107,15 +107,41 @@ type tourState struct {
 }
 
 // apply changes one thing about the appearance and hands the whole of it
-// to the application, then lets every built page restate itself: more
-// than one of them is showing some part of what just changed. It starts
-// from what the application reports, so a change of pack keeps the frame,
-// the caption buttons and the motion preference the other pages set.
+// to the application. It starts from what the application reports, so a
+// change of pack keeps the frame, the caption buttons and the motion
+// preference the other pages set. There is one appearance, the
+// application's, and no tour window keeps a copy: every one of them
+// restates its pages when it changes (content's OnLookChange), whichever
+// window changed it.
 func (t *tourState) apply(change func(*style.Appearance)) {
 	ap := t.a.Appearance()
 	change(&ap)
 	t.a.ApplyAppearance(ap.Normalize())
-	t.refreshAll()
+}
+
+// tourStarts is the appearance each application was in when its first
+// tour window opened: what the Skins page's "Back to where we started"
+// puts back, from whichever window it is pressed in, and what the last
+// tour window to close leaves the application in.
+var tourStarts = map[*app.Application]style.Appearance{}
+
+// started is the appearance the tour started in.
+func (t *tourState) started() style.Appearance {
+	if ap, ok := tourStarts[t.a]; ok {
+		return ap
+	}
+	return t.a.Appearance()
+}
+
+// lastWindow reports whether no other tour window of the application is
+// open: the one closing is the tour's last.
+func (t *tourState) lastWindow() bool {
+	for _, w := range t.a.Windows() {
+		if w != t.win && !w.Closed() && tourIn(w) != nil {
+			return false
+		}
+	}
+	return true
 }
 
 // TourApp is the tour with every page open. It puts the tab strip in the
@@ -174,6 +200,9 @@ func TourPageNames() []string {
 }
 
 func newTour(a *app.Application, win *app.Window) *tourState {
+	if _, ok := tourStarts[a]; !ok {
+		tourStarts[a] = a.Appearance()
+	}
 	return &tourState{a: a, win: win, built: map[int]widget.Component{}, owned: map[int]any{}}
 }
 
@@ -216,6 +245,10 @@ func (t *tourState) content(open []int) widget.Component {
 	t.syncCloseButtons()
 	t.win.SetTitleBar(t.strip)
 	t.installCloseHook()
+	// A change of appearance made anywhere — a page of this window, a page
+	// of another tour window, Settings through look.json — is restated by
+	// every page that shows part of it.
+	t.onClose(t.a.OnLookChange(t.refreshAll))
 
 	first := t.pageAt(0)
 	t.head = widgets.NewTitle(tourPages[first].title)
@@ -515,10 +548,27 @@ func (t *tourState) installCloseHook() {
 }
 
 func (t *tourState) closeAll() {
+	last := t.lastWindow()
 	for i := len(t.closers) - 1; i >= 0; i-- {
 		t.closers[i]()
 	}
 	t.closers = nil
+	if last {
+		delete(tourStarts, t.a)
+	}
+}
+
+// selectQuietly moves a radio group to what the application now says
+// without running its OnChange: another window made the change, and
+// making it again from here would only say so twice.
+func selectQuietly(g *widgets.RadioGroup, i int) {
+	if g == nil || g.Selected() == i {
+		return
+	}
+	fn := g.OnChange
+	g.OnChange = nil
+	g.Select(i)
+	g.OnChange = fn
 }
 
 // TourWindow opens a tour window of its own holding the given pages: what
