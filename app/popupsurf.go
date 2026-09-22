@@ -444,13 +444,16 @@ func (w *Window) paintedShape(c widget.Component) *platform.Shape {
 }
 
 // closePops closes the popup surfaces from index from on, the deepest
-// submenu first.
+// submenu first. A menu that closes leaves its pixmap, its buffers and the
+// garbage of painting it behind, so the heap is owed a trim: without one
+// Files kept 7 MB more after twenty menus than before the first.
 func (w *Window) closePops(from int) {
 	for i := len(w.pops) - 1; i >= from && i >= 0; i-- {
 		_ = w.pops[i].surf.Close()
 	}
 	if from < len(w.pops) {
 		w.pops = w.pops[:from]
+		w.app.owesTrim()
 	}
 }
 
