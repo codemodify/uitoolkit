@@ -127,7 +127,9 @@ func buildShadowPatch(lk style.LookAndFeel, st style.DecorationState, m platform
 // shapeShadow is a shaped window's cached shadow image.
 type shapeShadow struct {
 	key shapeShadowKey
+	// img is the shadow's coverage (FormatA8), drawn tinted col.
 	img *paintengine2d.Image
+	col paintengine2d.Color
 	// ox, oy are where the image goes relative to the visible window's
 	// top-left corner, in device pixels (negative: up and to the left).
 	ox, oy int
@@ -159,30 +161,23 @@ func (w *Window) shapeShadowPatch(r *platform.ShapeRaster) *shapeShadow {
 	if w.shapeShade.img != nil && w.shapeShade.key == key {
 		return &w.shapeShade
 	}
-	w.shapeShade = shapeShadow{key: key}
-	w.shapeShade.img, w.shapeShade.ox, w.shapeShade.oy =
-		buildShapeShadow(w.look, st, g.margin, r)
+	w.shapeShade = shapeShadow{key: key, col: probeShadowColor(w.look, st, g.margin)}
+	w.shapeShade.img = buildShadeImage(r, g.margin, w.shapeShade.col)
+	w.shapeShade.ox, w.shapeShade.oy = -g.margin.Left, -g.margin.Top
 	if w.shapeShade.img == nil {
 		return nil
 	}
 	return &w.shapeShade
 }
 
-// buildShapeShadow blurs the silhouette's coverage into the margin around
-// it, tints it with the look's shadow colour and erases the window's own
-// shape from it, so the image adds nothing where the window paints itself.
-func buildShapeShadow(lk style.LookAndFeel, st style.DecorationState, m platform.FrameInsets, r *platform.ShapeRaster) (*paintengine2d.Image, int, int) {
-	img := buildShadeImage(r, m, probeShadowColor(lk, st, m))
-	if img == nil {
-		return nil, 0, 0
-	}
-	return img, -m.Left, -m.Top
-}
-
-// buildShadeImage is silhouette r blurred into margin m around it and
-// tinted col, with r's own shape erased from it: the image goes at r's
-// top-left corner less the margin. A shaped window's shadow and a shaped
-// popup's are both this.
+// buildShadeImage is silhouette r blurred into margin m around it, with
+// r's own shape erased from it: the image goes at r's top-left corner less
+// the margin. A shaped window's shadow and a shaped popup's are both this.
+//
+// It is coverage only (FormatA8), drawn tinted in the shadow's colour: a
+// shadow is one colour at varying strength, and as RGBA it was four times
+// the size — a whole window's worth of pixels, 9.9 MB of Lantern's heap
+// for its two windows at 1.75x, and as much again in the GPU's copy.
 func buildShadeImage(r *platform.ShapeRaster, m platform.FrameInsets, col paintengine2d.Color) *paintengine2d.Image {
 	ml, mr := m.Left, m.Right
 	mt, mb := m.Top, m.Bottom
@@ -196,34 +191,23 @@ func buildShadeImage(r *platform.ShapeRaster, m platform.FrameInsets, col painte
 	radius := max((ml+mr)/2, 1)
 	dy := (mb - mt) / 2
 	// Coverage of the silhouette, laid into the larger box and blurred.
-	cov := make([]uint8, pw*ph)
+	img := paintengine2d.NewImageA8(pw, ph)
+	cov := img.Pix
+	stride := img.RowStride()
 	for y := 0; y < r.H; y++ {
 		if yy := y + mt + dy; yy >= 0 && yy < ph {
-			copy(cov[yy*pw+ml:yy*pw+ml+r.W], r.Mask[y*r.W:(y+1)*r.W])
+			copy(cov[yy*stride+ml:yy*stride+ml+r.W], r.Mask[y*r.W:(y+1)*r.W])
 		}
 	}
 	blurMask(cov, pw, ph, radius)
-
-	img := paintengine2d.NewImage(pw, ph)
-	stride := img.RowStride()
-	for y := 0; y < ph; y++ {
-		row := img.Pix[y*stride:]
-		for x := 0; x < pw; x++ {
-			a := float32(cov[y*pw+x]) / 255 * col.A
-			// Inside the window the image must hold nothing: the window
-			// paints there itself, and this goes on over the top of it.
-			if ix, iy := x-ml, y-mt; ix >= 0 && iy >= 0 && ix < r.W && iy < r.H {
-				a *= 1 - float32(r.Mask[iy*r.W+ix])/255
+	// Inside the window the image must hold nothing: the window paints
+	// there itself, and this goes on over the top of it.
+	for y := 0; y < r.H; y++ {
+		row := cov[(y+mt)*stride+ml:]
+		for x, in := range r.Mask[y*r.W : (y+1)*r.W] {
+			if in != 0 {
+				row[x] = uint8((int(row[x])*(255-int(in)) + 127) / 255)
 			}
-			if a <= 0 {
-				continue
-			}
-			// Premultiplied RGBA8: every channel already carries alpha.
-			i := x * 4
-			row[i+0] = uint8(col.R * a * 255)
-			row[i+1] = uint8(col.G * a * 255)
-			row[i+2] = uint8(col.B * a * 255)
-			row[i+3] = uint8(a * 255)
 		}
 	}
 	return img
@@ -323,7 +307,7 @@ func (w *Window) paintShapeShadow(ctx *paintengine2d.Context, r *platform.ShapeR
 		return
 	}
 	ctx.DrawImageRectPaint(s.img, paintengine2d.XYWH(0, 0, float32(s.img.Width), float32(s.img.Height)), dst,
-		paintengine2d.Paint{Color: paintengine2d.White, Filter: paintengine2d.FilterNearest})
+		paintengine2d.Paint{Color: s.col, Filter: paintengine2d.FilterNearest})
 }
 
 // paintFrameShadow blits the cached patch into the margin around win: four
