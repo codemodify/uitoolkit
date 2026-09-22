@@ -47,20 +47,39 @@ Struck through once fixed; newest findings at the end of their section.
 
 ## Window frames and shapes
 
-- **Shaped popups, menus and tooltips are still rectangles** (they are
-  in-window layers), so a skin's silhouette stops at its window.
+- ~~**Shaped popups, menus and tooltips are still rectangles** (they are
+  in-window layers), so a skin's silhouette stops at its window.~~ Menus,
+  submenus, combo lists, context menus and tooltips are surfaces of their
+  own (`xdg_popup`, X11 override-redirect) that run past their window, each
+  with its own shadow, and take a silhouette from their component's hit
+  shape or the look's `PopupShapeEngine` (docs/platform.md#popups,
+  docs/shapes.md#popups). Headless and under `UITK_POPUPS=layer` they stay
+  in-window.
+- **A skin cannot state a popup silhouette in `skin.json` yet**; the look
+  hook is there for the skin engine to implement.
+- **On X11 under Xwayland a click on the bare desktop does not dismiss a
+  menu**: an X grab cannot see presses on non-X surfaces (Qt and GTK share
+  it). A real X server is fine.
 - **Caption buttons are not hit-shaped** — their boxes belong to the window
   system, which takes rectangles.
-- **A shaped window loses its outer resize band**: the input region replaces
-  it. Deck's 26 px bezel has never been dragged by hand.
-- **Rasterising a large silhouette takes ~16 ms on the CPU, single-threaded**,
-  a visible hitch while resizing a big shaped window. Cache is fine; the cold
-  path wants the GPU or a second thread.
+- ~~**A shaped window loses its outer resize band**: the input region replaces
+  it. Deck's 26 px bezel has never been dragged by hand.~~ A resizable shaped
+  window keeps a band along its silhouette's outer edge (docs/shapes.md#the-resize-band).
+- ~~**Rasterising a large silhouette takes ~16 ms on the CPU, single-threaded**,
+  a visible hitch while resizing a big shaped window.~~ 1600x1200: 19 ms to
+  2.6 ms (the renderer's spans summed once a row, straight into a one-byte
+  image, in four bands side by side), and its band 1.3 ms.
 - **Damage is clipped to the silhouette's bounding box**, not its rectangles —
-  deliberate, but a ring repaints its hole's pixels.
-- **Big Sur's and Tahoe's sidebars and macOS's menu bar pre-flatten their
-  tints**; with real glass behind them they could keep true alpha.
-- **Aero's glass is still an opaque approximation** — no blur behind.
+  measured and kept: clipping to the rows was slower in every case (1.66 to
+  2.5 ms over a ring's hole, 0.09 to 0.14 ms on its rim), before counting
+  the compositor's side.
+- ~~**Big Sur's and Tahoe's sidebars and macOS's menu bar pre-flatten their
+  tints**; with real glass behind them they could keep true alpha.~~ They
+  do over real glass (`style.GlassBehind`), and menus on their own surfaces
+  follow what is behind them (`style.LayerMaterial`).
+- ~~**Aero's glass is still an opaque approximation** — no blur behind.~~
+  Real glass behind the frame (`DecorationSpec.GlassFrame`); the client area
+  stays opaque.
 - **BeOS's tab uses the header bar's title padding**, a few pixels wider than
   R5's 19/17-cell gaps (the in-app frame keeps R5's exact metrics).
 - **Platinum's title centres in the caption's free space**, so it sits a few
@@ -189,7 +208,11 @@ Struck through once fixed; newest findings at the end of their section.
   always did (paintengine2d `fix/sampler-clamp`); the skins' border is gone.
 - **Multisampled dest-out is not sample-exact** on the GPU; the shapes work
   wipes whole pixels first for that reason, and anything else that erases
-  through an image will meet it.
+  through an image will meet it. Investigated, not fixable cleanly from the
+  renderer: on Mesa iris (Intel, 4x MSAA) whole 2x2 blocks next to a change
+  in the eraser go unwritten whatever the filter, texture format or texel
+  choice; per-sample shading hides most but not all. The wipe stays;
+  paintengine2d keeps an opt-in probe (`PE_PROBE_MSAA_DESTOUT=1`).
 
 ## Tooling
 
