@@ -1296,6 +1296,11 @@ type wlConn struct {
 	// off, and a look that asked for glass has to carry on without it.
 	bgMan  *C.struct_ext_background_effect_manager_v1
 	bgCaps uint32
+	// paletteMan is KWin's server-decoration palette manager and iconMan
+	// xdg-toplevel-icon's (wayland_dress_linux.go); nil where the
+	// compositor does not advertise them.
+	paletteMan unsafe.Pointer
+	iconMan    unsafe.Pointer
 	// outputs maps a wl_output proxy to its registry name; outs holds
 	// each output's scale and is the source of truth for surface scale.
 	outputs map[uintptr]uint32
@@ -1460,6 +1465,8 @@ type wlSurface struct {
 	// bgSurf is the surface's background-effect object, made the first
 	// time a frame asks for blur and kept until the surface goes.
 	bgSurf *C.struct_ext_background_effect_surface_v1
+	// dress is the window's palette and icon (wayland_dress_linux.go).
+	dress wlDress
 	// gpuAlpha is whether the EGL config behind gpu has an alpha channel;
 	// a frame that starts or stops needing one rebinds the device.
 	gpuAlpha bool
@@ -1655,6 +1662,7 @@ func (c *wlConn) closeLocked() {
 		C.ui_wl_deco_man_destroy(c.decoMan)
 		c.decoMan = nil
 	}
+	c.destroyDressLocked()
 	if c.fracMan != nil {
 		C.ui_wl_frac_man_destroy(c.fracMan)
 		c.fracMan = nil
@@ -1827,6 +1835,9 @@ func (s *wlSurface) bindToplevelLocked() {
 		C.ui_wl_set_app_id(s.top, app)
 		C.free(unsafe.Pointer(app))
 		s.applyLimitsLocked()
+		// The icon belongs to the role: a new one (Show after Hide) is
+		// told again.
+		s.applyIconLocked()
 		if s.conn.decoMan != nil && !s.popup {
 			// Created before the first buffer is attached (version 1 of
 			// xdg-decoration requires it), and always with an explicit
@@ -2757,6 +2768,7 @@ func (s *wlSurface) Close() error {
 		C.ui_wl_bg_destroy(s.bgSurf)
 		s.bgSurf = nil
 	}
+	s.closeDress()
 	if s.viewport != nil {
 		C.ui_wl_viewport_destroy(s.viewport)
 		s.viewport = nil
@@ -2952,6 +2964,11 @@ func uitkWlRegistryGlobal(id C.uintptr_t, reg *C.struct_wl_registry, name C.uint
 		if c.bgMan != nil {
 			C.ui_wl_bg_listen(c.bgMan, C.uintptr_t(id))
 		}
+	case "org_kde_kwin_server_decoration_palette_manager":
+		// KWin's frame in a colour scheme of the window's choosing.
+		c.bindPaletteManager(reg, name)
+	case "xdg_toplevel_icon_manager_v1":
+		c.bindIconManager(reg, name)
 	case "wp_fractional_scale_manager_v1":
 		c.fracMan = (*C.struct_wp_fractional_scale_manager_v1)(C.ui_wl_bind(reg, name, C.ui_wl_frac_man_iface(), 1))
 	case "wp_viewporter":
