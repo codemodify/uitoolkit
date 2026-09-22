@@ -70,6 +70,12 @@ type (
 	Track             = widgets.Track
 	GridCell          = widgets.GridCell
 	ImageFit          = widgets.ImageFit
+	RichTextEditor    = widgets.RichText
+	RichTextBar       = widgets.RichTextBar
+	MDIArea           = widgets.MDIArea
+	MDIWindow         = widgets.MDIWindow
+	Wizard            = widgets.Wizard
+	WizardPage        = widgets.WizardPage
 )
 
 const (
@@ -178,6 +184,23 @@ func NewSegmented(segments []string, selected int, on func(int)) *widgets.Segmen
 
 // NewPicture shows a raster image.
 func NewPicture(img *paintengine2d.Image) *widgets.Picture { return widgets.NewPicture(img) }
+
+// NewRichText is a rich-text editor over an empty document.
+func NewRichText(placeholder string) *widgets.RichText { return widgets.NewRichText(placeholder) }
+
+// NewRichTextHTML is a rich-text editor over the document html describes.
+func NewRichTextHTML(html string) *widgets.RichText { return widgets.NewRichTextHTML(html) }
+
+// NewRichTextBar is the formatting tool bar for ed.
+func NewRichTextBar(ed *widgets.RichText) *widgets.RichTextBar { return widgets.NewRichTextBar(ed) }
+
+// NewMDIArea is an area that holds windows inside a window.
+func NewMDIArea() *widgets.MDIArea { return widgets.NewMDIArea() }
+
+// NewWizard is a wizard over pages.
+func NewWizard(title string, pages ...*widgets.WizardPage) *widgets.Wizard {
+	return widgets.NewWizard(title, pages...)
+}
 
 // LoadPicture decodes a PNG, JPEG or GIF into a Picture.
 func LoadPicture(r io.Reader) (*widgets.Picture, error) { return widgets.LoadPicture(r) }

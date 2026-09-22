@@ -647,6 +647,9 @@ func buildGalleryParts(host GalleryHost) galleryParts {
 			{"Tree", widgets.NewPanel("TreeView", treePane), 0},
 			{"Table", widgets.NewPanel("TableView", tablePane), 0},
 			{"Form", form, 0},
+			{"Rich text", fillPanel("RichText", richTextView(status)), 420},
+			{"MDI", fillPanel("MDIArea", mdiView(status)), 420},
+			{"Wizard", fillPanel("Wizard", wizardView(status)), 400},
 		},
 	}
 }
