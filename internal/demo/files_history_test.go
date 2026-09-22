@@ -140,3 +140,51 @@ func TestShapeStampPinches(t *testing.T) {
 		t.Fatal("the stamp took a swipe")
 	}
 }
+
+// Back and Forward on the tool bar are greyed while there is nowhere to go.
+func TestFilesHistoryButtons(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true, Scale: 1, DisableLookWatch: true})
+	w, err := a.NewWindow(platform.WindowOptions{Title: "Files", Width: 1040, Height: 700, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+	root := FilesApp(w).(*shortcutRoot)
+	w.SetContent(root)
+	a.PumpOnce()
+	var back, fwd *widgets.ToolItem
+	var find func(widget.Component)
+	find = func(c widget.Component) {
+		if tb, ok := c.(*widgets.ToolBar); ok {
+			for _, it := range tb.Items() {
+				switch it.Text {
+				case "‹ Back":
+					back = it
+				case "Forward ›":
+					fwd = it
+				}
+			}
+		}
+		for _, k := range c.Children() {
+			find(k)
+		}
+	}
+	find(root)
+	if back == nil || fwd == nil {
+		t.Fatal("no Back / Forward")
+	}
+	if !back.Disabled || !fwd.Disabled {
+		t.Fatalf("a fresh window: back disabled %v, forward disabled %v", back.Disabled, fwd.Disabled)
+	}
+	strip := findStrip(w.TitleBar())
+	strip.Select(1)
+	findTable(root).OnActivate(0)
+	if back.Disabled || !fwd.Disabled {
+		t.Fatal("after opening a folder Back should be live, Forward not")
+	}
+	root.NavigateHistory(false)
+	if !back.Disabled || fwd.Disabled {
+		t.Fatal("after going back Forward should be live, Back not")
+	}
+}
