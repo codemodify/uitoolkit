@@ -38,7 +38,7 @@ func DrawSkinSprite(lk LookAndFeel, ctx *paintengine2d.Context, b paintengine2d.
 	if sp == nil {
 		return false
 	}
-	return sk.skinDraw(ctx, b, sp, l.Scale(), tint)
+	return sk.panelDraw(ctx, b, sp, l.Scale(), tint)
 }
 
 // SkinSpriteSize is the named sprite's size in the skin's design pixels, and

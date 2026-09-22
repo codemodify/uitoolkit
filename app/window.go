@@ -94,6 +94,11 @@ type Window struct {
 	caption        *widgets.HeaderBar
 	wrapCaption    *widgets.HeaderBar
 	defaultCaption *widgets.HeaderBar
+	// frameRole and captionAsk are what the app told the frame about this
+	// window (framerole.go): which of the look's frames it wears, and a
+	// caption height of its own.
+	frameRole  string
+	captionAsk float32
 	// decor is the decoration mode in effect, caps what the desktop can
 	// do for the window, geom the frame's last layout, sysFrame what the
 	// window system was last told about the frame (the margin holding the

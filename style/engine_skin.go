@@ -176,7 +176,12 @@ func (sk *Skin) part(name string) *SkinPart {
 // draw paints the named part's art for st into b, returning false when the
 // skin has nothing for it so the caller can fall through.
 func (sk *Skin) draw(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, name string, st ControlState) bool {
-	p := sk.part(name)
+	return sk.drawPart(l, ctx, b, sk.part(name), st)
+}
+
+// drawPart is draw for a part already looked up — a window variant's
+// rebinding of a frame part, say.
+func (sk *Skin) drawPart(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, p *SkinPart, st ControlState) bool {
 	sp := p.art(skinStateName(st))
 	if sp == nil {
 		return false

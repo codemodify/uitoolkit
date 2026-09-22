@@ -59,6 +59,16 @@ type DecorationState struct {
 	// Custom: the app's own title bar (tabs, a tool bar) fills the caption,
 	// not just the window title.
 	Custom bool
+	// Role is what the app calls this window (Window.SetFrameRole): its
+	// equaliser, its playlist. A look that dresses windows differently — a
+	// skin's window variants — chooses the frame by it; every other look
+	// ignores it. Empty: the look's one frame.
+	Role string
+	// Caption is a caption height the app asked for (Window.SetCaptionHeight),
+	// in logical pixels: a compact mode that wants a thinner band than the
+	// look's. Zero: the look's own. [DecorationOf] applies it for every
+	// look, and the caption's buttons shrink to stand in it.
+	Caption float32
 }
 
 // DecorationSpec is a look's window frame in one state, in device pixels.
@@ -118,6 +128,26 @@ type DecorationSpec struct {
 	// engine states the look's own frame and nothing else.
 	Radius [4]float32
 	Shadow Insets
+	// ContentBorder is the border round the content where it differs from
+	// the one round the caption (Split): the caption band keeps Border's
+	// top, left and right, and the content under it is inset by
+	// ContentBorder's left, right and bottom instead. It is how a frame
+	// whose silhouette is wide at the top and narrow below — a shoulder over
+	// a waist — keeps its content inside the narrow part without starving
+	// the caption. DecorationOf drops it where the window is maximized.
+	ContentBorder Insets
+	Split         bool
+	// CaptionGap is room between the caption band and the content, which
+	// the frame leaves to the window's background — or, under a silhouette
+	// that cuts it away, to the desktop: a window in two pieces. It is
+	// dropped where the window is maximized.
+	CaptionGap float32
+	// ButtonSide is the side the look's art puts the caption buttons on,
+	// whatever the desktop's layout says; zero leaves them where the
+	// desktop (or the user's choice of the look's Layout) puts them. The
+	// buttons themselves are still the desktop's — only their side is the
+	// look's.
+	ButtonSide ButtonSide
 	// Glass: the look wants the desktop blurred behind its windows, so a
 	// translucent background is real glass over the desktop rather than
 	// the approximation the look paints for itself (style/glass.go). It is
@@ -126,6 +156,17 @@ type DecorationSpec struct {
 	// sets it must still look right without it.
 	Glass bool
 }
+
+// ButtonSide is a side of the caption for the caption buttons.
+type ButtonSide uint8
+
+const (
+	// ButtonsDesktop leaves the buttons where the desktop puts them.
+	ButtonsDesktop ButtonSide = iota
+	// ButtonsLeft and ButtonsRight put all of them at one end.
+	ButtonsLeft
+	ButtonsRight
+)
 
 // ButtonBox is the box of caption button k in s: the close button's own
 // when it has one.
@@ -195,6 +236,9 @@ func DecorationOf(lk LookAndFeel, st DecorationState) DecorationSpec {
 	}
 	c, e := decorationFor(lk)
 	s := e.Decoration(c, st)
+	if st.Caption > 0 {
+		s = captionAsked(lk, s, st.Caption)
+	}
 	if st.Maximized || st.Tiled != 0 {
 		// A fitted caption is half of a silhouette — the half the window
 		// lays out — so it is dropped exactly where WindowShapeOf drops the
@@ -203,7 +247,12 @@ func DecorationOf(lk LookAndFeel, st DecorationState) DecorationSpec {
 		s.CaptionFits = false
 	}
 	if st.Maximized {
+		// The screen's edges are the window's: nothing is left to inset
+		// the content from, and a gap under the caption would be a strip
+		// of background across a window that fills the screen.
 		s.Border = Insets{}
+		s.ContentBorder, s.Split = Insets{}, false
+		s.CaptionGap = 0
 	}
 	if st.Solid {
 		// Nothing composites the window: there is no desktop behind it to
@@ -216,6 +265,38 @@ func DecorationOf(lk LookAndFeel, st DecorationState) DecorationSpec {
 	}
 	s.Radius = tiledRadius(s.Radius, st.Tiled)
 	s.Shadow = tiledShadow(s.Shadow, st.Tiled)
+	return s
+}
+
+// captionAsked is spec s with the caption the app asked for, h logical
+// pixels, and its buttons fitted to it.
+//
+// The buttons follow the band rather than the other way round: an app that
+// asks for a thin caption means it, so a band shorter than a button gets
+// square buttons stood in its middle — the rule a skin's short caption
+// already follows — instead of a band grown back to the button's height.
+// The band never drops below the eight pixels every frame keeps.
+func captionAsked(lk LookAndFeel, s DecorationSpec, h float32) DecorationSpec {
+	whole := func(v float32) float32 { return float32(math.Round(float64(v))) }
+	least := whole(Dip(lk, 8))
+	s.Caption = max(whole(Dip(lk, h)), least)
+	bh := max(s.Button.Y, s.CloseButton.Y)
+	if bh <= 0 {
+		// A button with no height of its own is the caption's height, and
+		// a frame gives it at least 24 pixels of it.
+		bh = whole(Dip(lk, 24))
+	}
+	if bh+s.ButtonPad.Top <= s.Caption {
+		return s
+	}
+	side := max(whole(s.Caption*0.62), least)
+	s.Button = paintengine2d.Pt(side, side)
+	if s.CloseButton.X > 0 {
+		s.CloseButton = s.Button
+	}
+	s.ButtonPad.Top = float32(math.Floor(float64(s.Caption-side) * 0.5))
+	s.ButtonGap = min(s.ButtonGap, whole(s.Caption*0.12))
+	s.CenterButtons = true
 	return s
 }
 

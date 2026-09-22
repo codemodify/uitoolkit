@@ -271,15 +271,41 @@ func (w *Window) rebuildCaption() {
 }
 
 // buttonLayout is where hb's caption buttons go: the desktop's layout, or
-// the look's own when the user prefers it (look.json "captionButtons").
+// the look's own when the user prefers it (look.json "captionButtons") —
+// all of them moved to one side where the look's art says they sit there
+// (style.DecorationSpec.ButtonSide).
 func (w *Window) buttonLayout(hb *widgets.HeaderBar) platform.ButtonLayout {
-	if w.app.captionPref == style.CaptionButtonsTheme {
-		st := hb.DecorationState()
-		if l := style.DecorationOf(w.look, st).Layout; l != "" {
-			return platform.ParseButtonLayout(l)
+	spec := style.DecorationOf(w.look, hb.DecorationState())
+	l := w.app.TitleBarPrefs().Layout
+	if w.app.captionPref == style.CaptionButtonsTheme && spec.Layout != "" {
+		l = platform.ParseButtonLayout(spec.Layout)
+	}
+	return buttonsToSide(l, spec.ButtonSide)
+}
+
+// buttonsToSide moves every button of l to one side, keeping which buttons
+// there are — the desktop's choice — and turning the moved ones round, so
+// the button that was outermost on its side (close, almost always) is
+// outermost on the new one.
+func buttonsToSide(l platform.ButtonLayout, side style.ButtonSide) platform.ButtonLayout {
+	turned := func(bs []platform.CaptionButton) []platform.CaptionButton {
+		out := make([]platform.CaptionButton, len(bs))
+		for i, b := range bs {
+			out[len(bs)-1-i] = b
+		}
+		return out
+	}
+	switch side {
+	case style.ButtonsLeft:
+		if len(l.Right) > 0 {
+			l = platform.ButtonLayout{Left: append(append([]platform.CaptionButton(nil), l.Left...), turned(l.Right)...)}
+		}
+	case style.ButtonsRight:
+		if len(l.Left) > 0 {
+			l = platform.ButtonLayout{Right: append(turned(l.Left), l.Right...)}
 		}
 	}
-	return w.app.TitleBarPrefs().Layout
+	return l
 }
 
 // decorationsChanged adopts the mode the desktop answered.
@@ -437,6 +463,9 @@ func (w *Window) layoutFrame(full paintengine2d.Rect) frameGeom {
 	g.caption = w.captionBox(inner, g.framed)
 	h := g.caption.Dy()
 	g.content = paintengine2d.XYWH(inner.Min.X, inner.Min.Y+h, inner.Dx(), max(0, inner.Dy()-h))
+	if g.framed {
+		g.content = w.contentBox(g.window, g.caption)
+	}
 	w.caption.Arrange(g.caption)
 	w.geom = g
 	return g
@@ -468,6 +497,33 @@ func (w *Window) captionBox(inner paintengine2d.Rect, framed bool) paintengine2d
 		}
 	}
 	return paintengine2d.XYWH(inner.Min.X, inner.Min.Y, width, h)
+}
+
+// contentBox is where a framed window's content goes under its caption: the
+// visible window less the look's border, below the caption band.
+//
+// Two things a look may say move it off the caption's box, and both are
+// frame geometry a silhouette usually goes with: a gap between the band and
+// the content (DecorationSpec.CaptionGap), and a border round the content
+// that differs from the one round the caption (ContentBorder) — a shoulder
+// wider than the waist under it. DecorationOf drops both where the window
+// is maximized, so a maximized window's content is the box under its band.
+func (w *Window) contentBox(win, caption paintengine2d.Rect) paintengine2d.Rect {
+	spec := w.frameSpec()
+	px := func(v float32) float32 { return max(float32(math.Round(float64(v))), 0) }
+	in := w.frameBorder()
+	if spec.Split && !w.state.Maximized {
+		b := spec.ContentBorder
+		in = style.Insets{Right: px(b.Right), Bottom: px(b.Bottom), Left: px(b.Left)}
+	}
+	top := caption.Max.Y + px(spec.CaptionGap)
+	r := paintengine2d.Rect{
+		Min: paintengine2d.Pt(win.Min.X+in.Left, top),
+		Max: paintengine2d.Pt(win.Max.X-in.Right, win.Max.Y-in.Bottom),
+	}
+	r.Max.X = max(r.Max.X, r.Min.X)
+	r.Max.Y = max(r.Max.Y, r.Min.Y)
+	return r
 }
 
 // innerBox is the box a framed window's caption and content share: the

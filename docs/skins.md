@@ -106,7 +106,8 @@ version; everything else has a default.
       "color": "#e6e9f2", "hover": "#f2f5fb", "pressed": "#9aa2b6",
       "disabled": "#5b6273", "checked": "#e6e9f2",
       "default": "#1a1305",   // the ink on the default button's accent face
-      "size": 14, "bold": false
+      "size": 14, "bold": false,
+      "case": "upper"         // set in capitals: painting only (see below)
     }
   },
 
@@ -135,19 +136,42 @@ version; everything else has a default.
 
   // ---- the window -----------------------------------------------------
   "window": {
-    "border": [1, 1, 1, 1],     // top, right, bottom, left
+    "border": [1, 1, 1, 1],     // top, right, bottom, left — or
+                                // { "caption": […], "content": […] }
     "caption": 34,              // any height, down to 8: below 24 the
                                 // caption buttons are square and centred
+    "captionGap": 0,            // room between the caption and the content
     "radius": [7, 7, 0, 0],     // top-left clockwise
     "layout": ":minimize,maximize,close",
+    "buttons": "right",         // the side the art puts them on (else the desktop's)
+    "title": { "align": "center" },   // or "start", with an "inset"
     // The silhouette the window is cut to: a union of rounded rects that
-    // stretch with it, or { "art": "<sprite>" } for a skin whose window is
-    // a picture. See "Shape" below.
+    // stretch with it or pin to an edge, or { "art": "<sprite>" } for a
+    // skin whose window is a picture. See "Shape" below.
     "shape": [
       { "at": [0, 0, 0, 46], "radius": [24, 24, 0, 0], "stretchX": true },
       { "at": [18, 40, 18, 0], "radius": [0, 0, 22, 22],
         "stretchX": true, "stretchY": true }
-    ]
+    ],
+    // Windows the app gives a role, dressed differently. See "Windows
+    // that are not alike" below.
+    "variants": {
+      "minim.equaliser": { "caption": 13, "parts": { "caption": { "…": "…" } } }
+    }
+  },
+
+  // ---- fixed layouts --------------------------------------------------
+  // Named slots at design coordinates that an app binds its own widgets
+  // to. See "Fixed layouts" below.
+  "layouts": {
+    "minim.strip": {
+      "size": [273, 101], "art": "main.face",
+      "slots": {
+        "play": { "at": [38, 70, 21, 21],
+                  "art": { "normal": "key.play", "pressed": "key.play.down" } },
+        "display": { "at": [4, 3, 265, 54] }
+      }
+    }
   },
 
   // ---- what art does not cover ----------------------------------------
@@ -359,19 +383,45 @@ with every pixel doubled, which is what Cassette's is.
 What the toolkit refuses to do is silently bilinear-upscale a 1× sheet to 1.75
 and call it supported.
 
+**5. A panel's pixel pieces share one device grid.** A pixel sprite an app
+draws at its own size — a panel's key, a digit, a whole face
+([Sprites an app paints itself](#sprites-an-app-paints-itself),
+[Fixed layouts](#fixed-layouts)) — is magnified by the display scale
+itself, nearest, onto the device grid: a texel whose left edge is at
+device x covers the pixels whose centres fall in [x, x + scale). At 1.75 a
+texel is two pixels three times in four and one the fourth, because 1.75
+pixels do not exist; what the grid decides is that every piece agrees which
+— so a key continues the face it is a hole in, with no double-width or
+missing column where two sprites meet. The piece is magnified on the CPU
+and blitted one to one at a whole pixel, so the GPU paints the same hard
+edge. A control face keeps rule 4.
+
+That is as exact as the toolkit can make it, and on X11 and offscreen it is
+what reaches the screen. **On Wayland at a fractional scale the compositor
+has the last word**: a surface's size is stated in whole logical pixels, and
+a window whose logical size times the scale is not a whole number — Minim's
+275 × 1.75 = 481¼ — is stretched by that quarter pixel when it is composited.
+KWin's screenshots of Minim Classic at 1.75 show it as a one-pixel softening
+along some key edges that the same build on X11 at 1.75 does not have. A
+window sized to a multiple of four logical pixels would avoid it; the
+players keep their design sizes, and the docs say so rather than hiding it.
+
 ### One implementation note that matters
 
-paintengine2d's bilinear sampler reads the two texels around each sample and
-returns *transparent* outside the image; it does not clamp. A nine-slice's
-middle is almost always stretched wider than its source, so its outermost
-samples fall half a texel outside it and fade toward nothing — a pale vertical
-line down every button, exactly where the middle meets the fixed edges.
+paintengine2d's bilinear sampler reads the two texels around each sample.
+Past the edge of an image it **clamps** — reads the edge texel — on the CPU as
+the GPU (GL_CLAMP_TO_EDGE) always did. It used to return transparent there on
+the CPU, and a nine-slice's middle, which is almost always stretched wider
+than its source, faded over its outermost half texel: a pale vertical line
+down every button, exactly where the middle meets the fixed edges. The skins
+worked round it with a one-texel border replicated round every cut piece.
+The sampler is fixed and the border is gone; `TestSkinNineSliceHasNoSeam`
+fails against a renderer that does not clamp.
 
-So every sprite, and every one of a nine-slice's nine pieces, is cut into an
-image of its own with a one-texel border replicated from its edge, and blitted
-from its inner rect. That is clamp-to-edge, done by hand. It also means no
-blit can ever reach a neighbouring sprite on the sheet, which is the other
-artefact an atlas would otherwise have.
+Every sprite, and every one of a nine-slice's nine pieces, is still cut into
+an image of its own. The clamp is at the edge of the *image*, not of a source
+rect, so that is what keeps a blit from reaching a neighbouring sprite on the
+sheet — the other artefact an atlas would otherwise have.
 
 ## Shape
 
@@ -389,10 +439,12 @@ two kinds:
 // A union of rounded rects in design pixels. Each says whether it stretches
 // with the window: under stretchX the third number is a margin from the
 // right edge rather than a width, and under stretchY the fourth is a margin
-// from the bottom.
+// from the bottom. Under fromRight / fromBottom a fixed-size rect is pinned
+// to the far edge instead, its first (second) number the margin from it.
 "shape": [
   { "at": [0, 0, 0, 46], "radius": [24, 24, 0, 0], "stretchX": true },
-  { "at": [18, 40, 18, 0], "radius": [0, 0, 22, 22], "stretchX": true, "stretchY": true }
+  { "at": [18, 40, 18, 0], "radius": [0, 0, 22, 22], "stretchX": true, "stretchY": true },
+  { "at": [12, 0, 60, 20], "radius": [6, 6, 0, 0], "fromRight": true }  // a tab at the top right
 ]
 
 // Or: the alpha channel of a sprite *is* the outline.
@@ -425,7 +477,12 @@ Two things follow from the silhouette being a *frame's*:
   content box is the window less the border, so a skin whose body is drawn in
   from the window's edge states a border at least that wide. Deck's body is
   18 design pixels in and its border is 26, which leaves eight pixels of
-  shell between the content and the cut.
+  shell between the content and the cut. A silhouette wide at the top and
+  narrow below states the border as `{"caption": [top, right, 0, left],
+  "content": [0, right, bottom, left]}` — the band keeps the first, the
+  content under it the second — and `captionGap` leaves room between the
+  two, which a silhouette can cut away: a window in two pieces with a slot
+  of desktop between them. Maximized, both are dropped with the border.
 
 A silhouette that is the plain window box, rounded no more than
 `window.radius` already rounds it, is not a silhouette and is not used. It
@@ -462,6 +519,14 @@ Only a component whose box *is* one face asks — `widgets.Button` today. A
 check box is its indicator and its label, and shaping the pair by the
 indicator's art would make most of the control deaf.
 
+A control an app paints from art by name rather than from a face — a key a
+panel paints with `DrawSkinSprite`, or with a slot's art — says so with
+`widget.ArtShape`, and its hit shape is that art's, taken the same way:
+`style.SkinSpriteShape` for a sprite drawn where the app draws it,
+`style.SkinSlotShape` for a slot's resting art. Minim Silver's round keys
+take the pointer on their ink by it. An art shape comes before a face's, and
+a nil one falls back to the face and then to the box.
+
 ## Sprites an app paints itself
 
 A part is the only thing the engine paints from a skin, and the parts are a
@@ -483,37 +548,161 @@ this way a partial override like everything else.
 
 Minim's two panel skins are built on them (docs/players.md). Their faces
 are pictures of whole windows with the wells and printed labels in them,
-and their keys, digits, lamps and bitmap capitals are loose sprites the
-player lays out itself. The layout is stated once, in
-`internal/players/minim/panel`, and both the generator and the player read
-it, so the art and the app cannot drift apart.
+and their digits, lamps, thumbs and bitmap capitals are loose sprites the
+player paints itself, where the skin's [fixed layout](#fixed-layouts) says.
 
-One convention makes such a panel scale evenly on a pixelated sheet, and it
-is worth copying. A pixelated sprite drawn unsliced into a box at 1.75 is
-drawn at 1× in the middle of the box, because pixel art is only ever
-magnified by whole multiples. Give every panel sprite an empty one-pixel
-margin and slice it there: the edges are then nothing, the whole picture is
-the middle, and the middle stretches — nearest — to the box. The app draws
-each sprite into its box grown by the margin. At 1 and 2 it is exact; at
-1.25, 1.5 and 1.75 it is the 1× picture magnified.
+A pixel sprite drawn at its own size is magnified onto the device grid
+([HiDPI](#hidpi), rule 5), so a panel drawn from these scales evenly with
+nothing special in the art. (The panels used to carry an empty one-pixel
+margin round every sprite, sliced there, to get the same stretch out of the
+nine-slice painter; the margin could not put neighbouring pieces on one grid,
+and it is gone.)
 
-## What a skin cannot do yet
+A sprite an app paints has a hit shape too (`style.SkinSpriteShape`,
+[The controls](#the-controls)).
 
-**Lay out a fixed panel on its own.** There is no absolute-layout half of
-this format (WinAmp's 275×116 window, VLC's `<Layout>`). A skin re-skins
-ordinary widgets at ordinary layout. That is the half where every invariant
-— accessibility, keyboard, HiDPI, translation — holds for free rather than
-having to be enforced. An *app* can lay a panel out and paint a skin's
-sprites into it ([above](#sprites-an-app-paints-itself)), and Minim does;
-the skin still says nothing about where anything goes.
+## Fixed layouts
 
-**Give one window a caption the others do not have.** A skin states one
-caption band for every window it dresses. A look whose equaliser has a tab
-for a header and no title band — Minim Silver's reference does — gets the
-band on every window and draws its tab under it.
+A skin re-skins ordinary widgets at ordinary layout, and for a form or an
+editor that is the whole story. A player is not a form: WinAmp's 275×116 and
+VLC's `<Layout>` were panels — a picture with holes in it, a control in each
+hole — and a panel's proportions are its design. `"layouts"` is that half of
+the format, with the rule that makes it safe kept:
+
+**A skin places. It never adds.**
+
+```jsonc
+"layouts": {
+  "minim.strip": {
+    "size": [273, 101],            // the box it was drawn for, design pixels
+    "art": "main.face",            // painted behind the slots (optional)
+    "slots": {
+      "play":    { "at": [38, 70, 21, 21],
+                   "art": { "normal": "key.play", "hover": "key.play.hover",
+                            "pressed": "key.play.down" } },
+      "digit.0": { "at": [44, 11, 10, 14] },
+      "badge":   { "at": [4, 2, 16, 10], "fromRight": true },
+      "foot":    { "at": [0, 6, 0, 8], "stretchX": true, "fromBottom": true }
+    }
+  }
+}
+```
+
+A slot is a rect in the silhouette's vocabulary — pinned to the top left,
+pinned to the right or the bottom, or stretching — and may carry art per
+state, resolved along the same fallback chain a part's states are, so a key
+drawn at rest and held down still has a face when it is hovered or switched
+on. A slot art that is one sprite name is that sprite in every state.
+
+The *app* binds its own components to slot names and the toolkit places
+them:
+
+```go
+slots := widget.NewSlots("minim.strip").
+	Bind("display", readout).
+	Bind("play", play).
+	Bind("stop", stop)
+if slots.Available(lk) {
+	for _, c := range slots.Arrange(lk, box) {
+		// the skin has no slot for c: the app's to hide or to place itself
+	}
+}
+```
+
+What that keeps, and the tests pin:
+
+- **No behaviour.** A slot has a rect and art. There is no action, route or
+  expression in the format; a key it does not know is refused by name.
+- **No reordering.** Placing moves components and nothing else, so the tab
+  order and the accessibility tree are still the order the app added its
+  components in.
+- **No hiding.** A component whose slot the skin leaves out is handed back
+  to the app. Whether a control exists is the app's decision; a skin that
+  could take one out of the tab order would be deciding what the app can do.
+- **A partial override.** A look with no such layout — any pack that is not
+  a skin drawn for the app — places nothing, and the app lays itself out its
+  own way.
+
+`style.SkinSlotRect` is a slot's rect in a box (for what the app prints into
+— a clock's digits, a lamp — as well as what it places), `SkinLayoutSize`
+what a panel laid out by it measures, `DrawSkinLayout` and `DrawSkinSlot` its
+art, and `widget.SlotArtRect` the slot's own unrounded rect in a component's
+coordinates: a component's bounds are whole pixels and a slot at 1.75 is not,
+and a key painted into its rounded box would sit half a pixel off its hole.
+
+Minim's two panel skins state three layouts each, `minim.strip`,
+`minim.equaliser` and `minim.playlist`, generated from the same rects the
+faces are drawn round (`internal/players/minim/panel`); the player reads
+every rect it uses from the skin and carries none of its own.
+
+## Windows that are not alike
+
+A skin states one frame for the windows it dresses, and an app can say two
+things about one of its windows that only the app knows:
+
+```go
+eq.SetFrameRole("minim.equaliser") // what this window is
+compact.SetCaptionHeight(22)       // a caption of its own height, logical pixels
+```
+
+A skin gives a role a frame of its own under `window.variants`:
+
+```jsonc
+"variants": {
+  "minim.equaliser": {
+    "caption": 13,
+    "title": { "align": "start", "inset": 18 },
+    "parts": {
+      "caption":       { "states": { "normal": "eq.caption" }, "text": "tab" },
+      "caption.title": { "states": { "normal": "eq.tab" } }
+    }
+  }
+}
+```
+
+A variant restates any of the window's keys — its border, caption, gap,
+radius, shape, layout, button side, title placement — and may rebind the
+frame's own parts, and only those: `caption`, `caption.button`,
+`caption.title` and `window`. A variant that could rebind a button would be
+a second skin. What it does not state is the window's. A role the skin has
+no variant for, and a window with no role, wear the window's own frame, so a
+skin can never dress a window the app did not name.
+
+Minim Silver's equaliser is the worked example: its header is a tab with its
+name on it and no title band, which is a 13-pixel caption of pale chrome whose
+title plate is the tab, set from the start. A plate's slices are its ends
+and the words are set in its middle, so a tab with a long curve at its right
+end stops its title short of the curve.
+
+`SetCaptionHeight` works in every look, not only skins: `DecorationOf`
+applies it and the caption's buttons shrink to stand in the band — square,
+centred — rather than growing it back. A merged caption that holds the app's
+row is not held to its usual minimum when the app asked.
+
+Two more window keys belong here. **`buttons`**, `"left"` or `"right"`, is the
+side a skin's art puts the caption buttons on: they are still the desktop's
+buttons, in the desktop's choice of which, moved to that side and turned
+round so the outermost stays outermost. A silhouette that bites into one top
+corner can say so and keep its close button. **`"case": "upper"`** on a text
+role sets it in capitals — Minim's panels print their titles that way, as the
+era did — and it is painting only: the window keeps the title the app gave
+it, and that is what a screen reader and the desktop's window list read.
+
+## What a skin cannot do
 
 **Carry behaviour.** Not a gap: a decision. No scripting, no bytecode, no
-action vocabulary. Anything an app needs beyond painting it writes in Go.
+action vocabulary. A layout places an app's controls and a variant dresses
+an app's window; anything an app needs beyond painting and placing it writes
+in Go.
+
+**Lay out a panel it was not drawn for.** A fixed layout is a promise
+between one skin and one app, by the app's names; a skin cannot place the
+controls of an app that does not bind them, and an app that binds them in a
+skin with no such layout lays itself out its own way.
+
+**Leave its window.** Menus and tooltips are drawn inside the window they
+open from, so a shaped skin's menu is a rectangle, and a strip 116 pixels
+tall holds a four-row menu (docs/players.md).
 
 ## Writing one
 
@@ -527,6 +716,11 @@ action vocabulary. Anything an app needs beyond painting it writes in Go.
 4. Add parts one at a time. Each one you bind is one more control that is
    yours; each one you leave is one more that is your base pack's, and
    correct either way.
+5. Lint it: `go run ./cmd/uitk-skin lint ~/.config/uitoolkit/skins/<name>`
+   (or a `.uskin`, or a skin's name). It prints the loader's refusal keyed by
+   the manifest key it came from, or — for a skin that loads — what you would
+   want to hear before shipping: states a control falls back from, sprites
+   nothing binds, art too small for 2×. `-strict` fails on warnings too.
 
 Edit the manifest while an app is running and it re-applies: the look watcher
 already stamps the pack's file, and a skin's manifest is that file. A re-saved
@@ -592,22 +786,24 @@ in them.
 | drawn as | whole pixels on a grid | paths, gradients and gloss |
 | `pixelated` | yes — the 2× sheet is the 1× doubled | no |
 | base pack | `win95` | `luna` |
-| sheet | 464×935 at 1×, 161 sprites | 464×957 at 1×, 161 sprites |
+| sheet | 340×879 at 1×, 161 sprites | 340×920 at 1×, 189 sprites |
 | `window.shape` | none: a rectangle, as the original was | one rect the size of the window with a 7-pixel radius on every corner, rounder than the (square) frame, so the desktop shows beyond all four |
-| exercises | `caption.title` (the gap in the groove), a 14-pixel caption, sprites an app paints itself, the one-pixel margin that scales a pixel panel evenly | a rounded silhouette on every window of a stack, a path-drawn panel at fractional scales |
+| exercises | `caption.title` (the gap in the groove), a 14-pixel caption, fixed layouts, a pixel panel on one device grid at fractional scales | fixed layouts with hover faces, a window variant (the equaliser's tab), round keys shaped by their art, a path-drawn panel at fractional scales |
 
 Both bind only the frame — the window, the caption, its plate, its keys —
-and the focus ring. Everything else a player opens over them, a menu or a
-tooltip, is their base pack's, which is what the desktop under a player of
-that era looked like anyway.
+and the focus ring, and state the player's three layouts. Everything else a
+player opens over them, a menu or a tooltip, is their base pack's, which is
+what the desktop under a player of that era looked like anyway.
 
 Minim, Marquee and Lantern keep out of both top corners, which is the
 constraint a shaped skin has and it is worth stating: a framed caption centres its buttons about
 a fifth of its height down, and which *side* they sit on is the desktop's
-choice rather than the skin's — `style.CaptionButtonsDesktop` is the default
-and a skin's `layout` is consulted only when the user has asked for the
-look's own. A silhouette that bit into a top corner would eat a close button
-on half the desktops it ran on. Minim Silver does round its top corners, by
+choice unless the skin says otherwise — `style.CaptionButtonsDesktop` is the
+default, a skin's `layout` is consulted only when the user has asked for the
+look's own, and a skin's `buttons` moves them to the side its art has room
+on. None of the demo skins states a side, so each keeps out of both corners:
+a silhouette that bit into a top corner would eat a close button on half the
+desktops it ran on. Minim Silver does round its top corners, by
 seven design pixels, which is less than the room its fifteen-pixel caption
 leaves above and beside a key: the close button is whole on either side.
 
@@ -630,8 +826,12 @@ go run ./cmd/uitk-themesheet -frames -theme nocturne -o /tmp/sheets
 # A whole app.
 env -u WAYLAND_DISPLAY -u DISPLAY UITK_THEME=nocturne go run ./examples/gallery -headless
 
-# Settings, with the skin staged in the live preview.
-go run ./cmd/uitksettings -stage nocturne -screenshot /tmp/shots
+# What an author would want to know about one.
+go run ./cmd/uitk-skin lint nocturne deck ~/.config/uitoolkit/skins/mine
+
+# Settings, with the skin staged in the live preview — cut to the skin's
+# silhouette, for a shaped one.
+go run ./cmd/uitksettings -stage deck -screenshot /tmp/shots
 
 # What the generator would write.
 go run ./cmd/uitk-skingen -list

@@ -282,6 +282,9 @@ func recordNode(c Component, rec *paintengine2d.Recorder, ctx *paintengine2d.Con
 	}
 
 	g := rec.BeginGroup(c.ID(), paintengine2d.Identity())
+	if pc, ok := c.(PaintClipper); ok {
+		pc.PaintClip(ctx)
+	}
 	c.Paint(ctx)
 	if sl, ok := c.(SceneLayer); ok {
 		if ch := sl.SceneChild(); ch != nil {

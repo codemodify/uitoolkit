@@ -25,11 +25,10 @@ import (
 // written down as a number; no pixel of anybody's skin is in here, and the
 // display's digits and capitals are this toolkit's own (pixfont.go).
 //
-// Nearly everything is a panel sprite (pixfont.go, pixMargin): a picture
-// with an empty pixel round it, sliced there, so at 1.25, 1.5 and 1.75 the
-// whole picture is magnified nearest rather than drawn at 1× in the middle
-// of its box. Only the frame — the band, the plate and the caption keys the
-// engine draws itself — is sliced for real, because those stretch.
+// Nearly everything is a panel sprite (pixfont.go, panel): a piece the
+// player draws at its own size, which the toolkit magnifies onto the device
+// grid at 1.25, 1.5 and 1.75. Only the frame — the band, the plate and the
+// caption keys the engine draws itself — is sliced, because those stretch.
 
 // The classic palette.
 const (
@@ -87,15 +86,15 @@ func MinimClassic() *Plan {
 	// never changes printed on it: the wells, the grooves, the labels, the
 	// mark. The app paints what moves over the top.
 	cw := f.ContentW()
-	l.row(f.ContentH(panel.MainH) + 2*pixMargin)
+	l.row(f.ContentH(panel.MainH))
 	l.panel("main.face", cw, f.ContentH(panel.MainH), false, func(ctx *paintengine2d.Context, w, h float32) {
 		clMainFace(ctx, w, h, f)
 	})
-	l.row(f.ContentH(panel.EqH) + 2*pixMargin)
-	l.panel("eq.face", cw, f.ContentH(panel.EqH), false, func(ctx *paintengine2d.Context, w, h float32) {
+	l.row(f.EqContentH())
+	l.panel("eq.face", cw, f.EqContentH(), false, func(ctx *paintengine2d.Context, w, h float32) {
 		clEqFace(ctx, w, h, f)
 	})
-	l.row(f.ContentH(panel.ListH) + 2*pixMargin)
+	l.row(f.ContentH(panel.ListH))
 	l.panel("list.face", cw, f.ContentH(panel.ListH), false, func(ctx *paintengine2d.Context, w, h float32) {
 		clListFace(ctx, w, h, f)
 	})
@@ -174,7 +173,7 @@ func MinimClassic() *Plan {
 	}
 	for _, k := range keys {
 		k := k
-		l.row(k.r.H() + 2*pixMargin)
+		l.row(k.r.H())
 		states := []string{"", ".down"}
 		if k.toggle {
 			states = append(states, ".on", ".on.down")
@@ -194,7 +193,7 @@ func MinimClassic() *Plan {
 
 	// The option column the skin key stands in: the four letters of what
 	// it does, stood one above the other, on the display's black.
-	l.row(m.Skin.H() + 2*pixMargin)
+	l.row(m.Skin.H())
 	for _, st := range []string{"", ".down"} {
 		down := st != ""
 		l.panel("key.skin"+st, m.Skin.W(), m.Skin.H(), false, func(ctx *paintengine2d.Context, w, h float32) {
@@ -204,7 +203,7 @@ func MinimClassic() *Plan {
 
 	// The small transport under the playlist: marks only, in gold, as the
 	// era printed them straight on the chrome.
-	l.row(8 + 2*pixMargin)
+	l.row(8)
 	for i, g := range []string{"prev", "play", "pause", "stop", "next", "eject"} {
 		r := f.List.Mini[i]
 		for _, st := range []string{"", ".down"} {
@@ -220,7 +219,7 @@ func MinimClassic() *Plan {
 	}
 
 	// ---- the display ------------------------------------------------------
-	l.row(13 + 2*pixMargin)
+	l.row(13)
 	for _, d := range "0123456789-" {
 		d := d
 		l.panel("led."+string(d), 9, 13, false, func(ctx *paintengine2d.Context, w, h float32) {
@@ -231,7 +230,7 @@ func MinimClassic() *Plan {
 		px(ctx, 1, 4, 1, 2, hex(clLCD))
 		px(ctx, 1, 8, 1, 2, hex(clLCD))
 	})
-	l.row(9 + 2*pixMargin)
+	l.row(9)
 	l.panel("state.play", 9, 9, false, func(ctx *paintengine2d.Context, w, h float32) {
 		px(ctx, 0, 1, 2, 2, hex(clLCD)) // the working dot
 		for i := float32(0); i < 4; i++ {
@@ -247,7 +246,7 @@ func MinimClassic() *Plan {
 		px(ctx, 0, 1, 2, 2, hex("#a02010"))
 		px(ctx, 3, 2, 5, 5, hex(clLCD))
 	})
-	l.row(10 + 2*pixMargin)
+	l.row(10)
 	l.panel("lamp.mono", f.Main.Mono.W(), f.Main.Mono.H(), false, func(ctx *paintengine2d.Context, w, h float32) {
 		clLamp(ctx, w, h, "MONO", true)
 	})
@@ -261,7 +260,7 @@ func MinimClassic() *Plan {
 	})
 
 	// ---- the sliders' thumbs ------------------------------------------------
-	l.row(11 + 2*pixMargin)
+	l.row(11)
 	for _, st := range []string{"", ".down"} {
 		down := st != ""
 		l.panel("thumb"+st, 14, 11, false, func(ctx *paintengine2d.Context, w, h float32) {
@@ -326,7 +325,9 @@ func MinimClassic() *Plan {
 	// desktop under a player of this era looked like anyway.
 	p.Text = []TextRole{
 		{Name: "control", Color: "#101018", Disabled: "#6c7082"},
-		{Name: "caption", Color: "#f4f6fb", Disabled: "#9aa0b8", Size: 9, Bold: true},
+		// Capitals, as the era's title bars printed them: the skin's choice
+		// about how its art reads. The windows keep the player's titles.
+		{Name: "caption", Color: "#f4f6fb", Disabled: "#9aa0b8", Size: 9, Bold: true, Upper: true},
 		{Name: "capkey", Color: clGold, Hover: clCream, Pressed: clCream, Disabled: "#5c5a50"},
 	}
 	p.Parts = []PartBinding{
@@ -353,6 +354,7 @@ func MinimClassic() *Plan {
 		Caption: f.Caption,
 		Layout:  ":minimize,close",
 	}
+	p.Layouts = minimLayouts(f, sh)
 	return p
 }
 

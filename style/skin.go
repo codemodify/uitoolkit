@@ -132,11 +132,14 @@ type Skin struct {
 	// Text are the named label roles parts refer to.
 	Text map[string]*SkinText
 
-	// Window is the frame the skin asks for. Its silhouette is carried but
-	// not yet consumed: a skin paints inside an ordinary rectangular window
-	// until the shaped-window work lands (docs/skins.md, "What a skin
-	// cannot do yet").
+	// Window is the frame the skin asks for: its border, caption and
+	// silhouette, and the variants it dresses particular windows in.
 	Window *SkinWindow
+
+	// Layouts are fixed panels: named slots at design coordinates that an
+	// app binds its own widgets to (skin_layout.go). A skin places; it never
+	// adds a control, a route or an action.
+	Layouts map[string]*SkinLayout
 
 	// Tokens are the colours, metrics and params for what art does not
 	// cover, in theme.json's own vocabulary.
@@ -264,14 +267,33 @@ type SkinText struct {
 	// skin whose buttons are bold gets buttons wide enough for them.
 	Size float32
 	Bold bool
+	// Upper sets the role's text in capitals ("case": "upper"). It is a
+	// skin's choice about how its art reads — the era's panels printed
+	// their titles in capitals — and it changes only the painting: the
+	// window keeps the title the app gave it, and that is what the
+	// accessibility tree reads.
+	Upper bool
 }
 
 // SkinWindow is the frame a skin asks for.
 type SkinWindow struct {
-	Border  Insets
-	Caption float32
-	Layout  string
-	Radius  [4]float32
+	// Border is the frame round the window. When Split is set it is the
+	// border round the caption band only — its top, left and right — and
+	// ContentBorder's left, right and bottom inset the content under it:
+	// a frame wide at the top and narrow below.
+	Border        Insets
+	ContentBorder Insets
+	Split         bool
+	Caption       float32
+	// CaptionGap is room between the caption band and the content.
+	CaptionGap float32
+	Layout     string
+	// Buttons is the side the art puts the caption buttons on; zero is
+	// the desktop's.
+	Buttons ButtonSide
+	// Title is where the caption's title sits.
+	Title  SkinTitle
+	Radius [4]float32
 	// Shape is the window's silhouette in design pixels, as a union of
 	// rounded rects. It is deliberately data and not an SVG path: nothing
 	// in the toolkit parses path strings, and a rect union is the form both
@@ -282,17 +304,41 @@ type SkinWindow struct {
 	// frame around content. Shape and ShapeArt are alternatives; a manifest
 	// states one or neither.
 	ShapeArt *SkinSprite
+
+	// Parts rebinds the frame's own parts for this window — only a variant
+	// has any: caption, caption.button, caption.title and window.
+	Parts map[string]*SkinPart
+	// Variants are the frames of windows an app gives a role to
+	// (app.Window.SetFrameRole), keyed by that role and each already
+	// resolved: whatever a variant does not state is this window's.
+	Variants map[string]*SkinWindow
+}
+
+// SkinTitle is where a caption's title is set: centred on the band (the
+// default), or from its start, Inset design pixels in — a title on a tab.
+type SkinTitle struct {
+	Start bool
+	Inset float32
+}
+
+// skinFrameParts are the parts a window variant may rebind: the frame's
+// own. A variant that could rebind a button would be a second skin.
+var skinFrameParts = map[string]bool{
+	"caption": true, "caption.button": true, "caption.title": true, "window": true,
 }
 
 // SkinShapeRect is one rounded rect of a silhouette, in design pixels.
-// Right and Bottom are measured from the window's right and bottom edges
-// when Anchor says so, so a shape follows a resize.
 type SkinShapeRect struct {
 	X, Y, W, H float32
 	Radius     [4]float32
 	// Stretch grows this rect with the window instead of pinning it: X
 	// stretch keeps W as a margin from the right edge, Y from the bottom.
 	StretchX, StretchY bool
+	// FromRight and FromBottom pin a fixed-size rect to the far edges
+	// instead of the near ones: X is then the margin from the window's
+	// right edge to the rect's, Y from its bottom edge to the rect's — a
+	// tab at the top right, a foot a fixed height up from the bottom.
+	FromRight, FromBottom bool
 }
 
 // ---- vocabularies ---------------------------------------------------------
@@ -429,6 +475,7 @@ type skinFileJSON struct {
 	Parts   map[string]json.RawMessage `json:"parts,omitempty"`
 	Text    map[string]json.RawMessage `json:"text,omitempty"`
 	Window  json.RawMessage            `json:"window,omitempty"`
+	Layouts map[string]json.RawMessage `json:"layouts,omitempty"`
 
 	Colors  map[string]string  `json:"colors,omitempty"`
 	Metrics *chromeMetricsJSON `json:"metrics,omitempty"`
@@ -487,6 +534,7 @@ type skinStripJSON struct {
 }
 
 type skinTextJSON struct {
+	Case     string   `json:"case,omitempty"`
 	Color    string   `json:"color,omitempty"`
 	Hover    string   `json:"hover,omitempty"`
 	Pressed  string   `json:"pressed,omitempty"`
@@ -498,11 +546,28 @@ type skinTextJSON struct {
 }
 
 type skinWindowJSON struct {
-	Border  []float32       `json:"border,omitempty"`
-	Caption *float32        `json:"caption,omitempty"`
-	Layout  string          `json:"layout,omitempty"`
-	Radius  []float32       `json:"radius,omitempty"`
-	Shape   json.RawMessage `json:"shape,omitempty"`
+	Border     json.RawMessage            `json:"border,omitempty"`
+	Caption    *float32                   `json:"caption,omitempty"`
+	CaptionGap *float32                   `json:"captionGap,omitempty"`
+	Layout     string                     `json:"layout,omitempty"`
+	Buttons    string                     `json:"buttons,omitempty"`
+	Title      *skinTitleJSON             `json:"title,omitempty"`
+	Radius     []float32                  `json:"radius,omitempty"`
+	Shape      json.RawMessage            `json:"shape,omitempty"`
+	Parts      map[string]json.RawMessage `json:"parts,omitempty"`
+	Variants   map[string]json.RawMessage `json:"variants,omitempty"`
+}
+
+// skinBorderJSON is the other form of "border": one inset for the caption
+// band and another for the content under it.
+type skinBorderJSON struct {
+	Caption []float32 `json:"caption"`
+	Content []float32 `json:"content"`
+}
+
+type skinTitleJSON struct {
+	Align string   `json:"align,omitempty"`
+	Inset *float32 `json:"inset,omitempty"`
 }
 
 // skinShapeArtJSON is the other form of "shape": the alpha channel of a
@@ -512,10 +577,12 @@ type skinShapeArtJSON struct {
 }
 
 type skinShapeRectJSON struct {
-	At       []float32 `json:"at"`
-	Radius   []float32 `json:"radius,omitempty"`
-	StretchX bool      `json:"stretchX,omitempty"`
-	StretchY bool      `json:"stretchY,omitempty"`
+	At         []float32 `json:"at"`
+	Radius     []float32 `json:"radius,omitempty"`
+	StretchX   bool      `json:"stretchX,omitempty"`
+	StretchY   bool      `json:"stretchY,omitempty"`
+	FromRight  bool      `json:"fromRight,omitempty"`
+	FromBottom bool      `json:"fromBottom,omitempty"`
 }
 
 // ---- decoding -------------------------------------------------------------
@@ -668,6 +735,7 @@ func parseSkin(name string, raw []byte, fsys fs.FS) (*Skin, error) {
 		Sprites: map[string]*SkinSprite{},
 		Parts:   map[string]*SkinPart{},
 		Text:    map[string]*SkinText{},
+		Layouts: map[string]*SkinLayout{},
 		fsys:    fsys,
 	}
 	if sk.Label == "" {
@@ -696,6 +764,9 @@ func parseSkin(name string, raw []byte, fsys fs.FS) (*Skin, error) {
 		return nil, err
 	}
 	if err := sk.loadWindow(doc.Window); err != nil {
+		return nil, err
+	}
+	if err := sk.loadLayouts(doc.Layouts); err != nil {
 		return nil, err
 	}
 	if err := sk.loadTokens(doc); err != nil {
@@ -774,6 +845,13 @@ func (sk *Skin) parseText(key string, raw []byte, name string) (*SkinText, error
 		return nil, err
 	}
 	t := &SkinText{Name: name, Bold: doc.Bold}
+	switch strings.ToLower(strings.TrimSpace(doc.Case)) {
+	case "", "as-is":
+	case "upper":
+		t.Upper = true
+	default:
+		return nil, skinErr(joinKey(key, "case"), `must be "upper" or "as-is", found %q`, doc.Case)
+	}
 	col := func(field, s string, dst *paintengine2d.Color) error {
 		if strings.TrimSpace(s) == "" {
 			return nil
@@ -1039,30 +1117,180 @@ func (sk *Skin) loadWindow(raw json.RawMessage) error {
 	if len(raw) == 0 {
 		return nil
 	}
-	var doc skinWindowJSON
-	if err := decodeSkinJSON("window", raw, &doc); err != nil {
-		return err
-	}
-	w := &SkinWindow{Layout: strings.TrimSpace(doc.Layout)}
-	border, err := insets4("window.border", doc.Border, "border")
+	w, err := sk.parseWindow("window", raw, nil)
 	if err != nil {
-		return err
-	}
-	w.Border = border
-	if doc.Caption != nil {
-		if *doc.Caption < 0 {
-			return skinErr("window.caption", "cannot be negative")
-		}
-		w.Caption = *doc.Caption
-	}
-	if w.Radius, err = rect4("window.radius", doc.Radius, "radius"); err != nil {
-		return err
-	}
-	if err := sk.loadWindowShape(w, doc.Shape); err != nil {
 		return err
 	}
 	sk.Window = w
 	return nil
+}
+
+// parseWindow reads a "window" block, or — with base set — one of its
+// variants, which starts from base and overrides only what it states.
+func (sk *Skin) parseWindow(key string, raw json.RawMessage, base *SkinWindow) (*SkinWindow, error) {
+	var doc skinWindowJSON
+	if err := decodeSkinJSON(key, raw, &doc); err != nil {
+		return nil, err
+	}
+	w := &SkinWindow{}
+	if base != nil {
+		*w = *base
+		w.Parts, w.Variants = nil, nil
+		if len(doc.Variants) > 0 {
+			return nil, skinErr(joinKey(key, "variants"), "a variant cannot have variants of its own")
+		}
+	} else if len(doc.Parts) > 0 {
+		return nil, skinErr(joinKey(key, "parts"), `only a window variant rebinds the frame's parts; the skin's own are under "parts"`)
+	}
+	if l := strings.TrimSpace(doc.Layout); l != "" {
+		w.Layout = l
+	}
+	if len(doc.Border) > 0 {
+		if err := sk.parseBorder(joinKey(key, "border"), doc.Border, w); err != nil {
+			return nil, err
+		}
+	}
+	if doc.Caption != nil {
+		if *doc.Caption < 0 {
+			return nil, skinErr(joinKey(key, "caption"), "cannot be negative")
+		}
+		w.Caption = *doc.Caption
+	}
+	if doc.CaptionGap != nil {
+		if *doc.CaptionGap < 0 {
+			return nil, skinErr(joinKey(key, "captionGap"), "cannot be negative")
+		}
+		w.CaptionGap = *doc.CaptionGap
+	}
+	switch strings.ToLower(strings.TrimSpace(doc.Buttons)) {
+	case "":
+	case "desktop":
+		w.Buttons = ButtonsDesktop
+	case "left":
+		w.Buttons = ButtonsLeft
+	case "right":
+		w.Buttons = ButtonsRight
+	default:
+		return nil, skinErr(joinKey(key, "buttons"), `must be "left", "right" or "desktop", found %q`, doc.Buttons)
+	}
+	if t := doc.Title; t != nil {
+		switch strings.ToLower(strings.TrimSpace(t.Align)) {
+		case "", "center", "centre":
+			w.Title = SkinTitle{}
+		case "start":
+			w.Title = SkinTitle{Start: true}
+		default:
+			return nil, skinErr(joinKey(joinKey(key, "title"), "align"), `must be "center" or "start", found %q`, t.Align)
+		}
+		if t.Inset != nil {
+			if *t.Inset < 0 {
+				return nil, skinErr(joinKey(joinKey(key, "title"), "inset"), "cannot be negative")
+			}
+			w.Title.Inset = *t.Inset
+		}
+	}
+	if len(doc.Radius) > 0 {
+		r, err := rect4(joinKey(key, "radius"), doc.Radius, "radius")
+		if err != nil {
+			return nil, err
+		}
+		w.Radius = r
+	}
+	if len(bytes.TrimSpace(doc.Shape)) > 0 {
+		// A variant that states a shape replaces the window's outright: a
+		// union with the one it came from could only ever grow.
+		w.Shape, w.ShapeArt = nil, nil
+		if err := sk.loadWindowShape(key, w, doc.Shape); err != nil {
+			return nil, err
+		}
+	}
+	for name, raw := range doc.Parts {
+		pk := joinKey(joinKey(key, "parts"), name)
+		if !skinFrameParts[name] {
+			return nil, skinErr(pk, "a window variant rebinds only the frame's parts (caption, caption.button, caption.title, window); %q is not one", name)
+		}
+		p, err := sk.parsePart(pk, raw, name)
+		if err != nil {
+			return nil, err
+		}
+		if w.Parts == nil {
+			w.Parts = map[string]*SkinPart{}
+		}
+		w.Parts[name] = p
+	}
+	if base == nil && len(doc.Variants) > 0 {
+		w.Variants = map[string]*SkinWindow{}
+		// Sorted, so the first bad variant is the same one on every load.
+		names := make([]string, 0, len(doc.Variants))
+		for n := range doc.Variants {
+			names = append(names, n)
+		}
+		sort.Strings(names)
+		for _, n := range names {
+			vk := joinKey(joinKey(key, "variants"), n)
+			if strings.TrimSpace(n) == "" {
+				return nil, skinErr(vk, "a variant needs a name: the role an app gives its window")
+			}
+			v, err := sk.parseWindow(vk, doc.Variants[n], w)
+			if err != nil {
+				return nil, err
+			}
+			w.Variants[n] = v
+		}
+	}
+	return w, nil
+}
+
+// parseBorder reads "border": one inset for the whole window, or an object
+// with one for the caption band and one for the content under it.
+func (sk *Skin) parseBorder(key string, raw json.RawMessage, w *SkinWindow) error {
+	body := bytes.TrimSpace(raw)
+	if len(body) > 0 && body[0] == '{' {
+		var doc skinBorderJSON
+		if err := decodeSkinJSON(key, body, &doc); err != nil {
+			return err
+		}
+		if len(doc.Caption) == 0 || len(doc.Content) == 0 {
+			return skinErr(key, `needs both "caption" and "content": [top, right, bottom, left]`)
+		}
+		band, err := insets4(joinKey(key, "caption"), doc.Caption, "border")
+		if err != nil {
+			return err
+		}
+		con, err := insets4(joinKey(key, "content"), doc.Content, "border")
+		if err != nil {
+			return err
+		}
+		// Between the two rows is the caption gap, and it is said once.
+		if band.Bottom != 0 {
+			return skinErr(joinKey(key, "caption"), "bottom must be 0: the room under the caption is window.captionGap")
+		}
+		if con.Top != 0 {
+			return skinErr(joinKey(key, "content"), "top must be 0: the room over the content is window.captionGap")
+		}
+		if negativeInsets(band) || negativeInsets(con) {
+			return skinErr(key, "insets cannot be negative")
+		}
+		w.Border, w.ContentBorder, w.Split = band, con, true
+		return nil
+	}
+	var v []float32
+	if err := decodeSkinJSON(key, body, &v); err != nil {
+		return err
+	}
+	in, err := insets4(key, v, "border")
+	if err != nil {
+		return err
+	}
+	if negativeInsets(in) {
+		return skinErr(key, "insets cannot be negative")
+	}
+	w.Border, w.ContentBorder, w.Split = in, Insets{}, false
+	return nil
+}
+
+func negativeInsets(in Insets) bool {
+	return in.Top < 0 || in.Right < 0 || in.Bottom < 0 || in.Left < 0
 }
 
 // loadWindowShape reads the window's silhouette, which comes in two forms
@@ -1077,20 +1305,21 @@ func (sk *Skin) loadWindow(raw json.RawMessage) error {
 // art and nowhere else — names the sprite instead, and its alpha channel is
 // the silhouette. It is a bitmap, so it is resampled at any size but its
 // own, which is the trade the art made when it was drawn.
-func (sk *Skin) loadWindowShape(w *SkinWindow, raw json.RawMessage) error {
+func (sk *Skin) loadWindowShape(base string, w *SkinWindow, raw json.RawMessage) error {
 	body := bytes.TrimSpace(raw)
 	if len(body) == 0 {
 		return nil
 	}
+	shapeKey := joinKey(base, "shape")
 	if body[0] == '{' {
 		var doc skinShapeArtJSON
-		if err := decodeSkinJSON("window.shape", body, &doc); err != nil {
+		if err := decodeSkinJSON(shapeKey, body, &doc); err != nil {
 			return err
 		}
 		if len(doc.Art) == 0 {
-			return skinErr("window.shape", `needs "art": a sprite whose alpha is the silhouette`)
+			return skinErr(shapeKey, `needs "art": a sprite whose alpha is the silhouette`)
 		}
-		sp, err := sk.spriteRef("window.shape.art", doc.Art, "window.shape")
+		sp, err := sk.spriteRef(joinKey(shapeKey, "art"), doc.Art, "window.shape")
 		if err != nil {
 			return err
 		}
@@ -1098,37 +1327,77 @@ func (sk *Skin) loadWindowShape(w *SkinWindow, raw json.RawMessage) error {
 		return nil
 	}
 	var rects []skinShapeRectJSON
-	if err := decodeSkinJSON("window.shape", body, &rects); err != nil {
+	if err := decodeSkinJSON(shapeKey, body, &rects); err != nil {
 		return err
 	}
 	for i, r := range rects {
-		key := fmt.Sprintf("window.shape[%d]", i)
-		at, err := rect4(joinKey(key, "at"), r.At, "at")
+		sr, err := parseSkinRect(fmt.Sprintf("%s[%d]", shapeKey, i), r)
 		if err != nil {
 			return err
 		}
-		if len(r.At) == 0 {
-			return skinErr(joinKey(key, "at"), "is required: [x, y, w, h]")
-		}
-		// Under stretchX / stretchY the third and fourth numbers are margins
-		// from the far edge rather than a size, so zero is a rect that runs
-		// to the window's edge — the commonest shape there is.
-		if (at[2] <= 0 && !r.StretchX) || (at[3] <= 0 && !r.StretchY) {
-			return skinErr(joinKey(key, "at"), "is empty (%g×%g); with stretchX / stretchY the size is a margin and may be 0", at[2], at[3])
-		}
-		if at[2] < 0 || at[3] < 0 {
-			return skinErr(joinKey(key, "at"), "cannot be negative")
-		}
-		rad, err := rect4(joinKey(key, "radius"), r.Radius, "radius")
-		if err != nil {
-			return err
-		}
-		w.Shape = append(w.Shape, SkinShapeRect{
-			X: at[0], Y: at[1], W: at[2], H: at[3],
-			Radius: rad, StretchX: r.StretchX, StretchY: r.StretchY,
-		})
+		w.Shape = append(w.Shape, sr)
 	}
 	return nil
+}
+
+// parseSkinRect reads one rect of a silhouette or a layout: [x, y, w, h] in
+// design pixels, stretching with the window or pinned to either pair of
+// its edges.
+func parseSkinRect(key string, r skinShapeRectJSON) (SkinShapeRect, error) {
+	at, err := rect4(joinKey(key, "at"), r.At, "at")
+	if err != nil {
+		return SkinShapeRect{}, err
+	}
+	if len(r.At) == 0 {
+		return SkinShapeRect{}, skinErr(joinKey(key, "at"), "is required: [x, y, w, h]")
+	}
+	// Under stretchX / stretchY the third and fourth numbers are margins
+	// from the far edge rather than a size, so zero is a rect that runs to
+	// the window's edge — the commonest shape there is.
+	if (at[2] <= 0 && !r.StretchX) || (at[3] <= 0 && !r.StretchY) {
+		return SkinShapeRect{}, skinErr(joinKey(key, "at"), "is empty (%g×%g); with stretchX / stretchY the size is a margin and may be 0", at[2], at[3])
+	}
+	if at[2] < 0 || at[3] < 0 {
+		return SkinShapeRect{}, skinErr(joinKey(key, "at"), "cannot be negative")
+	}
+	// A rect either stretches to the far edge or is pinned to one edge;
+	// both at once would say two different things about where it ends.
+	if r.StretchX && r.FromRight {
+		return SkinShapeRect{}, skinErr(key, "stretchX and fromRight are alternatives: a rect that stretches is pinned to both edges already")
+	}
+	if r.StretchY && r.FromBottom {
+		return SkinShapeRect{}, skinErr(key, "stretchY and fromBottom are alternatives: a rect that stretches is pinned to both edges already")
+	}
+	rad, err := rect4(joinKey(key, "radius"), r.Radius, "radius")
+	if err != nil {
+		return SkinShapeRect{}, err
+	}
+	return SkinShapeRect{
+		X: at[0], Y: at[1], W: at[2], H: at[3],
+		Radius: rad, StretchX: r.StretchX, StretchY: r.StretchY,
+		FromRight: r.FromRight, FromBottom: r.FromBottom,
+	}, nil
+}
+
+// resolve is the rect in a box at scale s (device pixels per design pixel).
+func (r SkinShapeRect) resolve(box paintengine2d.Rect, s float32) paintengine2d.Rect {
+	x := box.Min.X + r.X*s
+	y := box.Min.Y + r.Y*s
+	w, h := r.W*s, r.H*s
+	switch {
+	case r.StretchX:
+		// W is a margin from the right edge, not a width.
+		w = box.Dx() - r.X*s - r.W*s
+	case r.FromRight:
+		x = box.Max.X - r.X*s - w
+	}
+	switch {
+	case r.StretchY:
+		h = box.Dy() - r.Y*s - r.H*s
+	case r.FromBottom:
+		y = box.Max.Y - r.Y*s - h
+	}
+	return paintengine2d.XYWH(x, y, w, h)
 }
 
 // loadTokens reads the colours, metrics and params a skin states for what
