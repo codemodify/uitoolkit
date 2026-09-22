@@ -42,6 +42,7 @@ stub; there is no native AppKit/SwiftUI control host.
 | Slider | `Slider` | `QSlider` / `Slider` | `GtkScale` | `Slider` | `widget.Slider` | `TrackBar` | `Slider` | `NSSlider` | `Slider` | [thumb](screenshots/compare/slider.png) |
 | Text field | `TextField` / `MonoTextField` / `PasswordField` | `QLineEdit` / `TextField` | `GtkEntry` | `TextBox` | `widget.Entry` | `TextBox` | `PasswordBox` / `TextBox` | `NSSecureTextField` / `NSTextField` | `SecureField` / `TextField` | [thumb](screenshots/compare/textfield.png) |
 | Text area | `TextArea` / `MonoTextArea` | `QTextEdit` / `TextArea` | `GtkTextView` | `TextBox` (AcceptsReturn) | `widget.Entry` (MultiLine) | `TextBox` (Multiline) | `TextBox` | `NSTextView` | `TextEditor` | [thumb](screenshots/compare/textarea.png) · [gallery](screenshots/gallery-textarea.png) |
+| Rich text | `RichText` + `RichTextBar` (`richtext.Doc`, HTML in and out) | `QTextEdit` / `TextArea` (`textFormat: RichText`) | `GtkTextView` + `GtkTextBuffer` tags | — (`TextBox` ≈) | `widget.RichText` (read-only) ≈ | `RichTextBox` | `RichTextBox` | `NSTextView` (rich) | `TextEditor` (`AttributedString`) ≈ | [sheet](screenshots/breadth/richtext-1x.webp) |
 | Number / spinner | `NumberField` / `Spinner` | `QSpinBox` / `SpinBox` | `GtkSpinButton` | `NumericUpDown` | — (`Entry` ≈) | `NumericUpDown` | — (toolkit ≈) | `NSStepper` + field | `Stepper` | [thumb](screenshots/compare/numberfield.png) |
 | Combo box | `ComboBox` | `QComboBox` / `ComboBox` | `GtkDropDown` | `ComboBox` | `widget.Select` | `ComboBox` | `ComboBox` | `NSComboBox` / `NSPopUpButton` | `Picker` | [thumb](screenshots/compare/combobox.png) · [gallery](screenshots/gallery-combo.png) |
 | Progress | `ProgressBar` | `QProgressBar` / `ProgressBar` | `GtkProgressBar` | `ProgressBar` | `widget.ProgressBar` | `ProgressBar` | `ProgressBar` | `NSProgressIndicator` (bar) | `ProgressView` | [thumb](screenshots/compare/progress.png) |
@@ -137,6 +138,7 @@ names) is in [compare.md](compare.md).
 | Scroll | `ScrollView` | `QScrollArea` / `ScrollView` | `GtkScrolledWindow` | `ScrollViewer` | `container.Scroll` | `AutoScroll` | `ScrollViewer` | `NSScrollView` | `ScrollView` | [thumb](screenshots/compare/scrollview.png) · [gallery](screenshots/gallery-scroll.png) |
 | Splitter | `Splitter` | `QSplitter` / `SplitView` | `GtkPaned` | `GridSplitter` | `container.Split` | `SplitContainer` | `GridSplitter` | `NSSplitView` | `HSplitView` / `VSplitView` | [thumb](screenshots/compare/splitter.png) |
 | Dockable panels | `dock.Host` + `dock.Panel` (four areas, tabs, float, saved layout) | `QMainWindow::addDockWidget` + `QDockWidget` | — (`GtkPaned` / `AdwToolbarView` ≈) | `Dock.Avalonia` (third party) ≈ | — | `DockPanel` (docking only, no float / tab) ≈ | `DockPanel` ≈ | — | — | — |
+| Windows inside a window | `MDIArea` / `MDIWindow` (frames of the look, cascade, tile, tabbed view) | `QMdiArea` / `QMdiSubWindow` | — | — | `container.MultipleWindows` ≈ | `IsMdiContainer` + `MdiParent` | — | — | — | [sheet](screenshots/breadth/mdi-1x.webp) |
 | Overlay | `Overlay` / `DialogCard` | `QDialog` ≈ | `GtkOverlay` | `Overlay` / `Popup` | dialog overlay ≈ | — | `Popup` | `NSPanel` ≈ | `overlay` / `sheet` | [gallery](screenshots/gallery-dialog.png) |
 | Expander | `Expander` | `QToolBox` page ≈ | `GtkExpander` | `Expander` | accordion item ≈ | — | `Expander` | `NSDisclosureTriangle` ≈ | `DisclosureGroup` | [thumb](screenshots/compare/accordion.png) |
 | Accordion | `Accordion` | `QToolBox` ≈ | `GtkExpander` stack ≈ | `Expander` stack ≈ | `widget.Accordion` | — | `Expander` stack ≈ | — | `DisclosureGroup` stack ≈ | [thumb](screenshots/compare/accordion.png) · [gallery](screenshots/gallery-accordion.png) |
@@ -147,6 +149,7 @@ names) is in [compare.md](compare.md).
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Message box | `MessageBox` (`Info` / `Confirm` / `Warn`) | `QMessageBox` / `MessageDialog` | `GtkAlertDialog` | dialog `Window` ≈ | `dialog.NewInformation` | `MessageBox` | `MessageBox` | `NSAlert` | `alert` / `confirmationDialog` | [thumb](screenshots/compare/messagebox.png) · [gallery](screenshots/gallery-message.png) |
 | File picker | `FileDialog` (**stub**) | `QFileDialog` / `FileDialog` | `GtkFileDialog` | `OpenFileDialog` | `dialog.NewFileOpen` | `OpenFileDialog` | `OpenFileDialog` | `NSOpenPanel` | `fileImporter` | [thumb](screenshots/compare/filedialog.png) · [gallery](screenshots/gallery-file.png) |
+| Wizard | `Wizard` / `WizardPage` (validation, optional and skipped pages, steps) | `QWizard` / `QWizardPage` | `GtkAssistant` (deprecated in 4.10) | — | — | — | — (`NavigationWindow` ≈) | `NSPageController` ≈ | — | [sheet](screenshots/breadth/wizard-1x.webp) |
 | Tooltip | `Tip` / `TipWrap` | `QToolTip` / `ToolTip` | widget tooltip | `ToolTip` | widget `ToolTip` | `ToolTip` | `ToolTip` | tooltip | `.help()` | [thumb](screenshots/compare/tooltip.png) · [gallery](screenshots/gallery-tooltip.png) |
 
 `FileDialog` is an in-process modal list + path field, not a native portal /
@@ -234,6 +237,118 @@ draw their own ticks with `DrawSliderTicks`.
 bar tall enough to hold it, the text sits in the middle and changes colour
 where the fill ends; beside a thin bar (Fluent, Material, Aqua) it sits to
 the right.
+
+## Rich text
+
+`widgets.NewRichText(placeholder)` (or `NewRichTextHTML(html)`) is a
+rich-text editor, Qt's `QTextEdit` and GTK's `GtkTextView` with tags. It
+edits a `richtext.Doc`, the document model the app reads and writes:
+
+- **Character styles**: bold, italic, underline, strikethrough, monospace,
+  a size in logical pixels, a text colour and a highlight colour, links.
+- **Blocks**: paragraphs, headings 1–6, bulleted and numbered lists nested
+  up to eight levels (a., i. under 1.), left / centre / right alignment,
+  and inline images.
+- **Load and save**: `SetHTML` / `HTML` in a documented subset of HTML
+  (package `richtext`, `html.go`): `<p> <div> <h1>–<h6> <ul> <ol> <li>
+  <blockquote> <pre> <br>`, `text-align`; `<b> <strong> <i> <em> <u> <ins>
+  <s> <strike> <del> <code> <tt> <kbd> <mark> <a href> <font color size>`
+  and `style` with `font-weight`, `font-style`, `text-decoration`,
+  `font-size`, `color`, `background-color`; `<img src alt width height>`
+  from a `data:` URI or the app's `ResolveImage`. Anything else is read for
+  its text; a document saved and read back is the same. `PlainText`
+  exports text with list markers and images' alternative text.
+- **Not supported**: tables, block quotes as their own kind (they read as
+  paragraphs), line breaks inside a block (`<br>` starts a new one),
+  paragraph indents outside lists, fonts other than the look's UI and
+  monospace faces, a real italic face (italic is the upright face slanted,
+  as Pango and Qt synthesise one when a family has none), right-to-left
+  text and input-method preedit (the author's decision for this release).
+
+Editing follows `TextArea` and adds a document's: double-click selects a
+word and triple-click a paragraph (dragging on extends by words or
+paragraphs), the selection drags and drops — a move inside the editor,
+HTML and text to other applications, HTML, text or a fragment in — and the
+clipboard carries HTML beside the text (`SetClipboardHTML` /
+`ClipboardHTML`: the platform clipboard holds the text, the HTML stays in
+the process for as long as the clipboard still holds that text; a drag
+offers both types natively). Undo and redo group a word and the spaces
+after it, a run of Backspaces, a paste or a format change as one step, and
+moving the caret closes a group. Links follow on Ctrl+click (`OnLink`),
+Ctrl+K asks for a target (`OnLinkRequest`, or a small dialog).
+
+`widgets.NewRichTextBar(ed)` is the optional format bar: paragraph style,
+size, character toggles drawn in their own style, text and highlight
+colours, lists and levels, alignment, link, clear formatting, undo and
+redo. Its buttons follow the caret and never take the keyboard from the
+document. It folds onto a second line on a narrow window.
+
+**Long documents.** Each block is laid out on its own and cached by its
+pointer (blocks are values: an edit swaps the blocks it changes and leaves
+the rest); blocks not yet laid out carry an estimated height, and are laid
+out a slice at a time while the editor is idle, keeping the view where it
+is when a block above it changes height. In a 10,200-block document
+(`TestRichTextLongDocument`, `BenchmarkRichTextTyping`): 40 ms to parse
+the HTML and paint the first screen, 0.14 ms a key for the edit and the
+layout, about 2 ms a key including a full CPU repaint of a 640 × 480
+editor, one block re-laid per key.
+
+**Accessibility**: a multi-line text area whose value is the document's
+characters (an image as U+FFFC), with its caret and selection as offsets;
+the links on screen are link nodes that follow on their default action;
+`AccessibleSetText` replaces the text.
+
+## Windows inside a window
+
+`widgets.NewMDIArea()` holds windows inside a window, as Qt's `QMdiArea`
+and the Windows MDI applications did. `area.AddWindow(title, content)`
+opens one, cascaded from the last and active. Each `MDIWindow` wears the
+look's own window frame — the border, caption, caption buttons, corners
+and shadow `style.DecorationOf` gives a real window, so Windows 95's navy
+caption, Aqua's traffic lights and Adwaita's rounded header all appear —
+with the caption buttons where the look puts them, minimise and maximise
+always there. It moves by its caption (its caption always stays in the
+area), resizes by its edges and corners, minimises to a caption strip
+along the area's foot, maximises to fill the area (the maximised state
+passes to the next window activated, as in Windows), restores, and closes
+through `OnCloseRequest`, which may refuse and `Dismiss` it later (after
+asking about unsaved changes). `Cascade`, `Tile`, `TileRows` and
+`TileColumns` arrange them.
+
+Windows stack in activation order; the keyboard follows the active one
+and each window remembers where it was in it (`SetInitialFocus` names
+where it starts). Ctrl+Tab and Ctrl+F6 go to the next window (Shift: back),
+Ctrl+F4 or Ctrl+W asks the active one to close, and Alt+- opens its window
+menu, whose Move and Size let the arrow keys move and size it (Return keeps
+it, Escape puts it back). `area.WindowMenu()` is a Window menu for the menu
+bar that follows the windows as they open and close.
+`SetViewMode(MDITabbed)` shows them as document tabs instead, Qt's tabbed
+view. Assistive technology reads the area as a desktop pane and each window
+as an internal frame (AT-SPI's roles for a multiple-document interface)
+with its caption buttons. `examples/mdi` is a multiple-document editor.
+
+## Wizards
+
+`widgets.NewWizard(title, pages...)` walks through `WizardPage`s with
+Back, Next, Finish and Cancel, as Qt's `QWizard` and GTK's `GtkAssistant`.
+A page can hold Next back until it is complete (`Complete`, with
+`UpdateButtons` when its answer changes), refuse to be left with a message
+(`Validate`), be left out when an earlier choice makes it moot (`Skip`),
+offer the user a Skip (`Optional`), or commit (`Commit`: Next reads Apply
+and Back cannot return past it). `OnFinish`, `OnCancel` (which may refuse)
+and `OnHelp` (which shows Help) are the application's.
+
+The layout follows the look (`Style`, `WizardAuto`): the Windows wizard
+under Windows and KDE looks — a header band with the step's title and
+subtitle, "< Back  Next >  Cancel" at the foot, Help at the left — and
+GNOME's and the Mac's assistant otherwise — a sidebar of the steps with the
+current one marked, the step's title over the page, "Help  Cancel … Back
+Next". `Steps` shows or hides the list of steps in either. Return presses
+Next or Finish and Escape Cancel, as a dialog's default and cancel buttons
+(a text field without `OnSubmit` lets Return through to them); Alt+B, N,
+F, S and H press the buttons. The wizard is a dialog to assistive
+technology, saying its step ("Step 2 of 4: Your account"), the page a
+group and the steps a list. `examples/wizard` sets up an account.
 
 ## Editable combo boxes
 

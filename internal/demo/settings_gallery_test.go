@@ -463,65 +463,72 @@ func census(a *app.Application, w *app.Window) galleryCensus {
 		}
 		out.texts[kind][text] = true
 	}
-	// Counts are per pass and the largest wins: the chrome outside the
-	// tabs is seen again on every one of them.
-	pass := func() {
-		seen := map[string]int{}
-		widget.Walk(w.Content(), func(c widget.Component) {
-			switch v := c.(type) {
-			case *widgets.Button:
-				add("buttons", v.Text)
-			case *widgets.Panel:
-				add("panels", v.Title)
-			case *widgets.Switch:
-				add("switches", v.Text)
-			case *widgets.Checkbox:
-				add("checks", v.Text)
-			case *widgets.Label:
-				add("labels", v.Text)
-			case *widgets.MenuBar:
-				seen["menubar"]++
-			case *widgets.TitleBar:
-				seen["titlebar"]++
-			case *widgets.TabView:
-				seen["tabview"]++
-			case *widgets.ListView:
-				seen["list"]++
-			case *widgets.TreeView:
-				seen["tree"]++
-			case *widgets.TableView:
-				seen["table"]++
-			case *widgets.ComboBox:
-				seen["combo"]++
-			case *widgets.Slider:
-				seen["slider"]++
-			case *widgets.ProgressBar:
-				seen["progress"]++
-			case *widgets.TextField:
-				seen["field"]++
-			case *widgets.TextArea:
-				seen["area"]++
-			case *widgets.ToolBar:
-				seen["toolbar"]++
-			case *widgets.StatusBar:
-				seen["status"]++
-			case *widgets.Form:
-				seen["form"]++
-			case *widgets.Accordion:
-				seen["accordion"]++
-			case *widgets.CardList:
-				seen["cards"]++
-			case *widgets.Segmented:
-				seen["segmented"]++
-			}
-		})
-		for k, n := range seen {
-			if n > out.counts[k] {
-				out.counts[k] = n
-			}
+	// The chrome outside the tab view is counted once, and each tab's
+	// page once, so a kind of control that two tabs both hold (fields in
+	// the form and in the wizard) counts twice, as the pane shows it.
+	var visit func(c widget.Component, seen map[string]int, intoTabs bool)
+	visit = func(c widget.Component, seen map[string]int, intoTabs bool) {
+		if c == nil || !c.Visible() {
+			return
+		}
+		switch v := c.(type) {
+		case *widgets.Button:
+			add("buttons", v.Text)
+		case *widgets.Panel:
+			add("panels", v.Title)
+		case *widgets.Switch:
+			add("switches", v.Text)
+		case *widgets.Checkbox:
+			add("checks", v.Text)
+		case *widgets.Label:
+			add("labels", v.Text)
+		case *widgets.MenuBar:
+			seen["menubar"]++
+		case *widgets.TitleBar:
+			seen["titlebar"]++
+		case *widgets.TabView:
+			seen["tabview"]++
+		case *widgets.ListView:
+			seen["list"]++
+		case *widgets.TreeView:
+			seen["tree"]++
+		case *widgets.TableView:
+			seen["table"]++
+		case *widgets.ComboBox:
+			seen["combo"]++
+		case *widgets.Slider:
+			seen["slider"]++
+		case *widgets.ProgressBar:
+			seen["progress"]++
+		case *widgets.TextField:
+			seen["field"]++
+		case *widgets.TextArea:
+			seen["area"]++
+		case *widgets.ToolBar:
+			seen["toolbar"]++
+		case *widgets.StatusBar:
+			seen["status"]++
+		case *widgets.Form:
+			seen["form"]++
+		case *widgets.Accordion:
+			seen["accordion"]++
+		case *widgets.CardList:
+			seen["cards"]++
+		case *widgets.Segmented:
+			seen["segmented"]++
+		}
+		if _, ok := c.(*widgets.TabView); ok && !intoTabs {
+			return
+		}
+		for _, ch := range c.Children() {
+			visit(ch, seen, intoTabs)
 		}
 	}
-	pass()
+	chrome := map[string]int{}
+	visit(w.Content(), chrome, false)
+	for k, n := range chrome {
+		out.counts[k] += n
+	}
 	var tabs []*widgets.TabView
 	widget.Walk(w.Content(), func(c widget.Component) {
 		if tv, ok := c.(*widgets.TabView); ok {
@@ -532,7 +539,11 @@ func census(a *app.Application, w *app.Window) galleryCensus {
 		for i := range tv.Bar().Titles {
 			tv.Select(i)
 			a.PumpOnce()
-			pass()
+			page := map[string]int{}
+			visit(tv.Page(), page, true)
+			for k, n := range page {
+				out.counts[k] += n
+			}
 		}
 		tv.Select(0)
 		a.PumpOnce()

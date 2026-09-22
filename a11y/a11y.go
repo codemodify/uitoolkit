@@ -65,6 +65,11 @@ const (
 	// RoleTitleBar is a window's title bar when the toolkit draws it: its
 	// content and the caption buttons.
 	RoleTitleBar
+	// RoleDesktopPane holds windows inside a window (an MDI area), and
+	// RoleInternalFrame is one of them: AT-SPI's desktop frame and
+	// internal frame, the roles for a multiple-document interface.
+	RoleDesktopPane
+	RoleInternalFrame
 	roleCount
 )
 
@@ -77,7 +82,7 @@ var roleNames = [roleCount]string{
 	"column header", "tab list", "tab", "tab panel", "menu bar", "menu",
 	"menu item", "check menu item", "radio menu item", "separator",
 	"tool bar", "status bar", "splitter", "image", "calendar", "tool tip",
-	"link", "title bar",
+	"link", "title bar", "desktop pane", "internal frame",
 }
 
 func (r Role) String() string {
