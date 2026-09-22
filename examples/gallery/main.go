@@ -13,6 +13,7 @@ import (
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit"
 	"github.com/codemodify/uitoolkit/app"
+	"github.com/codemodify/uitoolkit/icons"
 	"github.com/codemodify/uitoolkit/internal/demo"
 	"github.com/codemodify/uitoolkit/internal/mail"
 	"github.com/codemodify/uitoolkit/platform"
@@ -50,6 +51,7 @@ func main() {
 		return
 	}
 	a := uitoolkit.New(uitoolkit.Options{Headless: *headless})
+	a.SetIcon(icons.AppIconRGB("layout", 0x1f, 0x8a, 0xc0)...)
 	win, err := a.NewWindow(platform.WindowOptions{
 		Title: "uitoolkit gallery", Width: 1000, Height: 760, MinWidth: 720, MinHeight: 480,
 	})
