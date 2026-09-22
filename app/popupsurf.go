@@ -586,7 +586,7 @@ func (w *Window) paintPops() {
 		if perfOn() {
 			t0 := time.Now()
 			w.paintPop(pl)
-			perfFrame(t0, "popup")
+			perfFrame(t0, "popup", pl.surf)
 			continue
 		}
 		w.paintPop(pl)

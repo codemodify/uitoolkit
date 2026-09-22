@@ -1706,10 +1706,8 @@ func (w *Window) frame() {
 	if w.dirty.Empty() && !w.full {
 		return
 	}
-	var t0 time.Time
 	if perfOn() {
-		t0 = time.Now()
-		defer perfFrame(t0, "window")
+		defer perfFrame(time.Now(), "window", w.surf)
 	}
 	rects := w.paintRects()
 	if platform.WantScene() {

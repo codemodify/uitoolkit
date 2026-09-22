@@ -9,12 +9,14 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/codemodify/uitoolkit/platform"
 )
 
 // EnvPerfLog names a file the run loop appends one line to for every frame
 // it paints, for tools/perf/measure.sh:
 //
-//	frame <end, unix ns> <µs spent> <window|popup>
+//	frame <end, unix ns> <µs spent> <window|popup> <GPU texture bytes>
 //	trim <unix ns>
 //
 // With it set, SIGUSR1 also writes a heap profile (after a collection) to
@@ -48,11 +50,16 @@ func perfOn() bool {
 	return perf.f != nil
 }
 
-// perfFrame logs one painted frame that began at t0.
-func perfFrame(t0 time.Time, what string) {
+// perfFrame logs one painted frame of surf that began at t0, with the
+// bytes of image textures its GPU device holds (0 on the CPU).
+func perfFrame(t0 time.Time, what string, surf platform.Surface) {
 	end := time.Now()
+	tex := 0
+	if d, ok := platform.SurfaceDevice(surf).(interface{ TextureBytes() int }); ok {
+		tex = d.TextureBytes()
+	}
 	perf.mu.Lock()
-	fmt.Fprintf(perf.f, "frame %d %d %s\n", end.UnixNano(), end.Sub(t0).Microseconds(), what)
+	fmt.Fprintf(perf.f, "frame %d %d %s %d\n", end.UnixNano(), end.Sub(t0).Microseconds(), what, tex)
 	perf.mu.Unlock()
 }
 
