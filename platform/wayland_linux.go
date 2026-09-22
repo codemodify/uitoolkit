@@ -1201,12 +1201,22 @@ type wlConn struct {
 	// xdg_toplevel.move / resize need a press whose button is still down.
 	pressSerial uint32
 	buttons     uint8
-	cursor      Cursor
-	curSurf     *C.struct_wl_surface
-	shapeMan    *C.struct_wp_cursor_shape_manager_v1
-	shapeDev    *C.struct_wp_cursor_shape_device_v1
-	curTheme    *C.struct_wl_cursor_theme
-	outScale    float32
+	// grabSerial is the serial of the last button or key press — what an
+	// xdg_popup grab must be made with. ptrLeft is the family (the top
+	// level's id) the pointer left in the current burst, keyRoot the
+	// family that has the keyboard and keyLeft that it may have lost it:
+	// wayland_popup_linux.go decides at the end of the burst whether the
+	// window lost either, or only handed it to one of its own popups.
+	grabSerial uint32
+	ptrLeft    int
+	keyRoot    int
+	keyLeft    bool
+	cursor     Cursor
+	curSurf    *C.struct_wl_surface
+	shapeMan   *C.struct_wp_cursor_shape_manager_v1
+	shapeDev   *C.struct_wp_cursor_shape_device_v1
+	curTheme   *C.struct_wl_cursor_theme
+	outScale   float32
 
 	// drag is a drag started out of one of this connection's windows
 	// (wayland_dnd_linux.go); topDragMan is xdg-toplevel-drag-v1, which
@@ -1459,6 +1469,10 @@ type wlSurface struct {
 	// size change between making the EGL window and the first frame
 	// presents that frame at the old size.
 	boundsW, boundsH int
+	// pop is set on a popup (wayland_popup_linux.go), and kids are the
+	// popups open from this surface, oldest first.
+	pop  *wlPopup
+	kids []*wlSurface
 }
 
 var (
@@ -2211,7 +2225,11 @@ func (s *wlSurface) present(dirty []paintengine2d.Rect, flushOnly bool) error {
 	bw, bh := s.bufferWH()
 	if s.bufW != bw || s.bufH != bh {
 		s.setBuffer(bw, bh)
-		s.queue = append(s.queue, Event{Kind: EventResize, Width: s.logicalW, Height: s.logicalH})
+		if s.pop == nil {
+			// A popup's size is the compositor's answer, which its root
+			// already heard about (EventPopupPlaced).
+			s.queue = append(s.queue, Event{Kind: EventResize, Width: s.logicalW, Height: s.logicalH})
+		}
 		// The new pixmap is empty. Committing it now paints a black or
 		// transparent flash over the window for one frame; the resize
 		// event just queued makes the app repaint immediately.
@@ -2606,6 +2624,9 @@ func (s *wlSurface) Poll() []Event {
 	}
 	if !s.closed {
 		C.ui_wl_pump(s.conn.dpy)
+		// A leave with no enter of the same family in the burst was the
+		// window really losing the pointer or the keyboard.
+		s.conn.flushLeaves()
 		// Frame-done / buffer-release just arrived: present whatever a
 		// throttled frame could not.
 		s.flushDeferred()
@@ -2707,6 +2728,9 @@ func (s *wlSurface) Close() error {
 		return nil
 	}
 	s.closed = true
+	// Popups go before the surface they hang from, and a popup's
+	// xdg_popup before its xdg_surface.
+	s.closePopupLocked()
 	s.closeGPU()
 	wlMu.Lock()
 	delete(wlSurfaces, s.id)
@@ -2760,7 +2784,57 @@ func (s *wlSurface) Close() error {
 	return nil
 }
 
+// makePopupSurfaceLocked gives popup p its wl_surface, its fractional
+// scale and viewport objects and its xdg_surface — everything a top level
+// has but the role (wayland_popup_linux.go adds an xdg_popup). The C
+// helpers live in this file's preamble, which is why this does too.
+func (c *wlConn) makePopupSurfaceLocked(p *wlSurface) bool {
+	p.surf = C.ui_wl_surface(c.compositor)
+	if p.surf == nil {
+		return false
+	}
+	wlByNative[uintptr(unsafe.Pointer(p.surf))] = p.id
+	if c.fracMan != nil {
+		if p.fracObj = C.ui_wl_frac(c.fracMan, p.surf); p.fracObj != nil {
+			C.ui_wl_frac_listen(p.fracObj, C.uintptr_t(p.id))
+		}
+	}
+	if c.viewporter != nil {
+		p.viewport = C.ui_wl_viewport(c.viewporter, p.surf)
+	}
+	p.xdg = C.ui_wl_xdg_surface(c.wm, p.surf)
+	if p.xdg == nil {
+		return false
+	}
+	C.ui_wl_xdg_listen(p.xdg, C.uintptr_t(p.id))
+	return true
+}
+
+// commitSurface commits s's pending state.
+func (s *wlSurface) commitSurface() {
+	if s.surf != nil {
+		C.ui_wl_commit(s.surf)
+	}
+}
+
+// roundtrip waits until the compositor has answered every request so far.
+func (c *wlConn) roundtrip() {
+	if c != nil && c.dpy != nil {
+		C.ui_wl_roundtrip(c.dpy)
+	}
+}
+
+// push queues ev for the app. A popup's goes to its root window with its
+// position moved into the root's coordinates: the app hears a popup's input
+// as its window's (popup.go).
 func (s *wlSurface) push(ev Event) {
+	if s.pop != nil && s.pop.root != nil {
+		if popupInput(ev.Kind) {
+			r := s.pop.root
+			r.queue = append(r.queue, popupEvent(ev, s.Origin()))
+		}
+		return
+	}
 	s.queue = append(s.queue, ev)
 }
 
@@ -2976,8 +3050,10 @@ func uitkWlXdgConfigure(sid C.uintptr_t, surf *C.struct_xdg_surface, serial C.ui
 		wlByNative[uintptr(unsafe.Pointer(s.surf))] = s.id
 	}
 	// xdg_surface.configure makes everything announced before it current
-	// at once: the toplevel's states, its capabilities, the decoration mode.
+	// at once: the toplevel's states, its capabilities, the decoration mode
+	// — or a popup's place.
 	s.applyPendingConfigure()
+	s.applyPopupConfigure()
 }
 
 // applyPendingConfigure adopts the state, capabilities and decoration mode
@@ -3103,6 +3179,7 @@ func uitkWlPtrEnter(id C.uintptr_t, serial C.uint32_t, surf *C.struct_wl_surface
 	c.px = float32(C.ui_wl_fixed(x))
 	c.py = float32(C.ui_wl_fixed(y))
 	if s := wlSurfNative(surf); s != nil {
+		c.enterPointer(s)
 		c.ptrSurf = s.id
 		dx, dy := s.toDevice(c.px, c.py)
 		s.push(Event{Kind: EventMouseMove, Pos: paintengine2d.Pt(dx, dy), Mods: c.mods})
@@ -3119,9 +3196,9 @@ func uitkWlPtrLeave(id C.uintptr_t) {
 		return
 	}
 	c.kin.stop()
-	if s := wlSurfaces[c.ptrSurf]; s != nil {
-		s.push(Event{Kind: EventPointerLeave, Mods: c.mods})
-	}
+	// Told at the end of the burst, unless the pointer only moved to a
+	// popup of the same window (or back).
+	c.leavePointer(wlSurfaces[c.ptrSurf])
 	c.ptrSurf = 0
 	// A new enter starts with no button held (an interactive move or
 	// resize takes the pointer away mid-press, and the release goes to
@@ -3155,6 +3232,7 @@ func uitkWlPtrButton(id C.uintptr_t, button, state, serial C.uint32_t) {
 	bit := wlButtonBit(uint32(button))
 	if state == 1 {
 		c.pressSerial = uint32(serial)
+		c.grabSerial = uint32(serial)
 		c.buttons |= bit
 	} else {
 		c.buttons &^= bit
@@ -3268,8 +3346,10 @@ func uitkWlKeyEnter(id C.uintptr_t, surf *C.struct_wl_surface, serial C.uint32_t
 	c.serial = uint32(serial)
 	if s := wlSurfNative(surf); s != nil {
 		c.keySurf = s.id
-		s.push(Event{Kind: EventFocusIn})
-		if c.tiWanted {
+		if c.enterKeyboard(s) {
+			s.popRoot().push(Event{Kind: EventFocusIn})
+		}
+		if c.tiWanted && s.pop == nil {
 			wlEnableTextInput(c, s)
 		}
 	}
@@ -3281,9 +3361,10 @@ func uitkWlKeyLeave(id C.uintptr_t) {
 	if c == nil {
 		return
 	}
-	if s := wlSurfaces[c.keySurf]; s != nil {
-		s.push(Event{Kind: EventFocusOut})
-		s.push(Event{Kind: EventIMECancel})
+	// Told at the end of the burst, unless the keyboard only went to a
+	// popup of the same window (a menu's grab) or back.
+	if c.keyRoot != 0 {
+		c.keyLeft = true
 	}
 	c.keySurf = 0
 	c.heldDown = false
@@ -3302,6 +3383,9 @@ func uitkWlKey(id C.uintptr_t, key, state, serial C.uint32_t) {
 		return
 	}
 	pressed := state == 1
+	if pressed {
+		c.grabSerial = uint32(serial)
+	}
 	C.ui_xkb_update_key(c.xkbState, key, C.int(btoi(pressed)))
 	c.mods = wlMods(c)
 	ks := uint64(C.ui_xkb_sym(c.xkbState, key))
