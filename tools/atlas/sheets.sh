@@ -16,7 +16,7 @@ sheet() { # name, awk filter over packs.tsv ($2 year, $4 engine)
   done < <(awk -F'\t' "$filter" "$OUT/packs.tsv")
   [ ${#args[@]} -gt 0 ] || return 0
   magick montage -font Noto-Sans-Regular -pointsize 15 -fill '#23272e' -background '#eef0f2' \
-    "${args[@]}" -tile 5x -geometry 320x214+10+8 "$OUT/raw-$name.png"
+    "${args[@]}" -tile 5x -geometry 320x241+10+8 "$OUT/raw-$name.png"
   magick "$OUT/raw-$name.png" -strip -quality 82 -define webp:method=6 "$DEST/themes-$name.webp"
   rm -f "$OUT/raw-$name.png"
   echo "$name: $(( ${#args[@]} / 3 )) packs, $(( $(stat -c %s "$DEST/themes-$name.webp") / 1024 )) KB"

@@ -152,7 +152,7 @@ func (s *settingsState) rebuild() {
 func buildSettings(a *app.Application, win *app.Window, saved, staged style.Appearance, page int) widget.Component {
 	s := &settingsState{
 		a: a, win: win, saved: saved.Normalize(), staged: staged.Normalize(), page: page,
-		previewRatio: 0.55,
+		previewRatio: 0.62,
 	}
 	// The preview draws the staged theme's light or dark sibling: redraw
 	// it when the desktop switches.
@@ -649,24 +649,34 @@ func PreviewApp(say func(string)) widget.Component {
 		})
 	}
 	progress := widgets.NewProgressBar(0.62)
+	// Four rows a side, the check boxes beside the radios: one control
+	// per row ran to six, which a pack with 36-pixel controls cannot fit
+	// in the preview at Settings' default split.
+	checks := widgets.NewColumn(
+		widgets.NewCheckbox("Check box", true, nil),
+		widgets.NewCheckbox("Unchecked", false, nil),
+	).WithGap(4) // a radio group's own gap, so the two pairs line up
 	left := widgets.NewColumn(
 		widgets.NewRow(ok, normal).WithGap(8),
 		widgets.NewRow(off, dialog).WithGap(8),
-		widgets.NewCheckbox("Check box", true, nil),
-		widgets.NewCheckbox("Unchecked", false, nil),
-		widgets.NewRadioGroup([]string{"Radio one", "Radio two"}, 0, nil),
+		widgets.NewRow(checks, widgets.NewRadioGroup([]string{"Radio one", "Radio two"}, 0, nil)).WithGap(16),
 	).WithGap(8)
-	combo := widgets.NewComboBox([]string{"Combo box", "Second choice", "Third choice"}, 0, nil)
+	combo := widgets.NewComboBox([]string{"Combo box", "Second", "Third"}, 0, nil)
 	combo.SetAccessibleName("Choice")
 	spin := widgets.NewNumberField(0, 99, 3, 1, nil)
 	spin.SetAccessibleName("Count")
 	slider := widgets.NewSlider(0, 100, 40, nil)
 	slider.SetAccessibleName("Level")
+	// The combo box gives way: the spin box's arrows are what a narrow
+	// preview would otherwise cut off.
+	choice := widgets.NewRow(combo, spin).WithGap(8)
+	choice.AddFlex(combo, 1)
+	toggle := widgets.NewRow(widgets.NewSwitch("Switch", true, nil), slider).WithGap(12)
+	toggle.AddFlex(slider, 1)
 	right := widgets.NewColumn(
 		widgets.NewTextField("Ada Lovelace", "Name", nil),
-		widgets.NewRow(combo, spin).WithGap(8),
-		widgets.NewSwitch("Switch", true, nil),
-		slider,
+		choice,
+		toggle,
 		progress,
 	).WithGap(8)
 	controls := widgets.NewRow(left, right).WithGap(16).WithPad(8)
