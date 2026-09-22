@@ -3,6 +3,7 @@
 package platform
 
 import (
+	"syscall"
 	"testing"
 	"time"
 )
@@ -37,5 +38,20 @@ func TestWakeLoopIncrements(t *testing.T) {
 	}
 	if !waitLoopWake(50 * time.Millisecond) {
 		t.Fatal("waitLoopWake after WakeLoop")
+	}
+}
+
+// Drain leaves the pipe empty: a poller watching its descriptor would
+// otherwise find it readable for ever.
+func TestFDWakerDrainEmpties(t *testing.T) {
+	w := newFDWaker()
+	defer w.Close()
+	for i := 0; i < 3; i++ {
+		w.Signal()
+	}
+	w.Drain()
+	var buf [8]byte
+	if n, err := syscall.Read(w.FD(), buf[:]); n > 0 || err != syscall.EAGAIN {
+		t.Fatalf("pipe still holds data after Drain: n=%d err=%v", n, err)
 	}
 }

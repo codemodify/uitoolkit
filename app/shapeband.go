@@ -32,11 +32,21 @@ type shapeBand struct {
 	margin platform.FrameInsets
 	out    int
 	w, h   int
-	// edges holds each surface pixel's edges (platform.Edges bits), zero
-	// outside the band.
-	edges []uint8
+	// runs are the band's pixels a row at a time, each run one set of
+	// edges (platform.Edges bits); row y's runs are runs[rows[y]:rows[y+1]]
+	// and a pixel in none is outside the band. A byte a surface pixel was
+	// 1.4 MB for each of Lantern's windows at 1.75x, for a band a few
+	// pixels wide.
+	runs []bandRun
+	rows []int32
 	// rects is the band as rectangles, for the input region.
 	rects []platform.FrameRect
+}
+
+// bandRun is pixels x0 to x1 (exclusive) of a row with the same edges.
+type bandRun struct {
+	x0, x1 int32
+	e      uint8
 }
 
 // buildShapeBand works out the band around r inside a surface with margin
@@ -47,7 +57,8 @@ func buildShapeBand(r *platform.ShapeRaster, m platform.FrameInsets, out, in, co
 	if gw < 1 || gh < 1 || gw*gh > 8192*8192 {
 		return nil
 	}
-	b := &shapeBand{raster: r, margin: m, out: out, w: gw, h: gh, edges: make([]uint8, gw*gh)}
+	b := &shapeBand{raster: r, margin: m, out: out, w: gw, h: gh}
+	edges := make([]uint8, gw*gh)
 	bb := r.Bounds
 	// Near the ends of a straight edge a press takes the corner, as a
 	// rectangular frame's does: a side's pixels within corner of the box's
@@ -58,7 +69,7 @@ func buildShapeBand(r *platform.ShapeRaster, m platform.FrameInsets, out, in, co
 		x0, x1 = max(x0, 0), min(x1, gw)
 		y0, y1 = max(y0, 0), min(y1, gh)
 		for y := y0; y < y1; y++ {
-			row := b.edges[y*gw:]
+			row := edges[y*gw:]
 			ey := e
 			if e&(platform.EdgeLeft|platform.EdgeRight) != 0 {
 				if y < cy0 {
@@ -135,8 +146,33 @@ func buildShapeBand(r *platform.ShapeRaster, m platform.FrameInsets, out, in, co
 		edgeCols(0, len(rects), 1, true)
 		edgeCols(len(rects)-1, -1, -1, false)
 	}
-	b.rects = platform.MaskRectsRange(b.edges, gw, gh, gw, 1, 255)
+	b.rects = platform.MaskRectsRange(edges, gw, gh, gw, 1, 255)
+	b.keepRuns(edges)
 	return b
+}
+
+// keepRuns keeps edges, one byte a surface pixel, as the runs of each row.
+func (b *shapeBand) keepRuns(edges []uint8) {
+	b.rows = make([]int32, b.h+1)
+	for y := 0; y < b.h; y++ {
+		b.rows[y] = int32(len(b.runs))
+		row := edges[y*b.w : (y+1)*b.w]
+		for x := 0; x < b.w; {
+			e := row[x]
+			if e == 0 {
+				x++
+				continue
+			}
+			x0 := x
+			for x < b.w && row[x] == e {
+				x++
+			}
+			b.runs = append(b.runs, bandRun{x0: int32(x0), x1: int32(x), e: e})
+		}
+	}
+	b.rows[b.h] = int32(len(b.runs))
+	// A copy the size it needs: append grew the array up to twice that.
+	b.runs = append([]bandRun(nil), b.runs...)
 }
 
 // at is the edges a press at surface point x, y resizes, zero outside the
@@ -145,7 +181,13 @@ func (b *shapeBand) at(x, y int) platform.Edges {
 	if b == nil || x < 0 || y < 0 || x >= b.w || y >= b.h {
 		return 0
 	}
-	e := platform.Edges(b.edges[y*b.w+x])
+	var e platform.Edges
+	for _, r := range b.runs[b.rows[y]:b.rows[y+1]] {
+		if int(r.x0) <= x && x < int(r.x1) {
+			e = platform.Edges(r.e)
+			break
+		}
+	}
 	// Opposite sides at once is a sliver thinner than the band itself:
 	// the left and the top win.
 	if e&platform.EdgeLeft != 0 {

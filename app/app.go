@@ -52,10 +52,20 @@ type Application struct {
 	quit atomic.Bool
 	// trimOwed, stir: see trim.go. trimAt and stirSeen belong to the run
 	// loop.
-	trimOwed         atomic.Bool
-	stir             atomic.Uint64
-	stirSeen         uint64
-	trimAt           time.Time
+	trimOwed atomic.Bool
+	stir     atomic.Uint64
+	stirSeen uint64
+	trimAt   time.Time
+	// blinkStir and inputAt: the stir count blinking last saw and when it
+	// last moved, which is when the caret was last given a reason to
+	// blink. Run's goroutine only.
+	blinkStir uint64
+	inputAt   time.Time
+	// scaled are the base look at each scale a window has asked for, all
+	// built from scaledFor (scaledLook); lookMu guards the three.
+	lookMu           sync.Mutex
+	scaled           map[float32]style.LookAndFeel
+	scaledFor        style.LookAndFeel
 	onQuit           func()
 	watchLook        bool
 	lookWatch        *lookFileStamp
@@ -202,7 +212,7 @@ func (a *Application) SetLook(l style.LookAndFeel) {
 	}
 	a.owesTrim()
 	a.base = lookAtScale(l, 1)
-	a.look = lookAtScale(a.base, a.scale)
+	a.look = a.scaledLook(a.scale)
 	for _, w := range a.Windows() {
 		w.applyLook(a.base)
 	}
@@ -246,6 +256,29 @@ func lookScaleOf(look style.LookAndFeel) float32 {
 // lookAtScale rebuilds look at an absolute display scale. style.WithScale
 // multiplies onto whatever scale the look already carries, so the ratio is
 // what gets applied; metrics are rebuilt from the pack defaults either way.
+// scaledLook is the app's look at scale, the same one for every window at
+// that scale. A look keeps what its engine derives and caches (Memo), and
+// what is keyed on it — a frame's shadow patch — is shared only between
+// windows holding the same look: every window used to rebuild its own, so
+// two windows of an app at 1.75x had two of everything. Scaled looks last
+// until the base look changes.
+func (a *Application) scaledLook(scale float32) style.LookAndFeel {
+	a.lookMu.Lock()
+	defer a.lookMu.Unlock()
+	if a.scaledFor != a.base {
+		a.scaledFor, a.scaled = a.base, nil
+	}
+	if l, ok := a.scaled[scale]; ok {
+		return l
+	}
+	l := lookAtScale(a.base, scale)
+	if a.scaled == nil {
+		a.scaled = make(map[float32]style.LookAndFeel)
+	}
+	a.scaled[scale] = l
+	return l
+}
+
 func lookAtScale(look style.LookAndFeel, scale float32) style.LookAndFeel {
 	if look == nil || scale <= 0 {
 		return look
@@ -328,6 +361,24 @@ func (a *Application) Windows() []*Window {
 }
 
 const caretBlinkPeriod = 530 * time.Millisecond
+
+// caretBlinkTimeout is how long a caret blinks after the last input before
+// it stays lit, as GTK's gtk-cursor-blink-timeout (10 s by default) has it.
+// A caret left blinking in an idle window woke the app, its GPU driver and
+// the compositor twice a second for as long as the window stayed open:
+// Settings, Notes and the rich-text editor sat at 130–190 wake-ups a
+// second doing nothing.
+const caretBlinkTimeout = 10 * time.Second
+
+// blinking reports whether carets blink now: one wants to (the focused
+// text of an active window), motion is not reduced, and the last input
+// came within caretBlinkTimeout. Run's goroutine only.
+func (a *Application) blinking(now time.Time) bool {
+	if s := a.stir.Load(); s != a.blinkStir || a.inputAt.IsZero() {
+		a.blinkStir, a.inputAt = s, now
+	}
+	return style.Animations() && now.Sub(a.inputAt) < caretBlinkTimeout && a.anyCaret()
+}
 
 // Run waits on the display connection and paints only when a window is
 // dirty, a caret blinks, a tooltip is due, or (on Wayland) a key repeat
@@ -423,11 +474,29 @@ func (a *Application) Run() error {
 		a.pollLookFile()
 		a.runPosted()
 		now := time.Now()
-		if a.anyCaret() && (nextBlink.IsZero() || !now.Before(nextBlink)) {
+		blink := a.blinking(now)
+		switch {
+		case !blink:
+			nextBlink = time.Time{}
+		case nextBlink.IsZero():
+			// Blinking starts (or starts again) from a lit caret, which
+			// goes dark one period from now.
 			for _, w := range a.Windows() {
-				w.toggleBlink()
+				w.steadyCaret()
 			}
 			nextBlink = now.Add(caretBlinkPeriod)
+		case !now.Before(nextBlink):
+			for _, w := range a.Windows() {
+				if w.wantsBlink() {
+					w.toggleBlink()
+				}
+			}
+			nextBlink = now.Add(caretBlinkPeriod)
+		}
+		for _, w := range a.Windows() {
+			if !blink || !w.wantsBlink() {
+				w.steadyCaret()
+			}
 		}
 		for _, w := range a.Windows() {
 			// Closed() is true only for a surface the display server
@@ -521,12 +590,9 @@ func (a *Application) anyNeedsPaint() bool {
 
 func (a *Application) waitTimeout(now, nextBlink time.Time) time.Duration {
 	var deadline time.Time
-	if a.anyCaret() {
-		if nextBlink.IsZero() {
-			deadline = now.Add(caretBlinkPeriod)
-		} else {
-			deadline = nextBlink
-		}
+	if !nextBlink.IsZero() && a.anyCaret() {
+		// Zero while no caret blinks (blinking): nothing to wake for.
+		deadline = nextBlink
 	}
 	for _, w := range a.Windows() {
 		if w.Closed() {
