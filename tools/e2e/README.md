@@ -15,10 +15,13 @@ own Wayland socket `uitk-e2e-N`, own Xwayland (display number in `N/display`), o
     ./in.sh N move X Y sleep 150 click sleep 300     # inject input (compositor coords)
     ./shot.sh N name             # screenshot -> N/shots/name.png  (then Read the png)
     python3 crop.py out.png x0 y0 x1 y1 a.png b.png ...   # stack same crop from several shots
+    python3 crop_test.py         # crop.py against PNGs of every filter, colour type and depth
     ./kwin.py N 'JS'             # run a KWin script: OUT(x) prints (window geometry / state oracle, maximize, tile)
     ./stop.sh N                  # stop app + compositor when done
     ./theme-tour.sh N [PACK...]  # gallery in every pack on the GPU + the same pack on the CPU, in pairs
 
+- `crop.py` decodes any PNG (every filter type, palette, 16-bit, Adam7), so it
+  reads the toolkit's own `WritePNG` stills as well as KWin's; python3 only.
 - The first window is placed at the same spot every time if it is the only window.
 - The injector releases every key it holds when it exits: to screenshot with a
   key held (Alt for mnemonic underlines), run `./in.sh N key+ 56 sleep 2500 key- 56 &`

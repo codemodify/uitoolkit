@@ -69,7 +69,11 @@ type Window struct {
 	// onCloseRequest, when set, decides what a desktop close does: false
 	// keeps the window (a floating dock panel hides itself instead).
 	onCloseRequest func() bool
-	statusMenu     bool
+	// resizeHooks run when a layout finds the window at a new logical
+	// size (OnResize); resizeSeen is the size they last heard.
+	resizeHooks []*func(width, height int)
+	resizeSeen  [2]int
+	statusMenu  bool
 	// sweeping guards dropDeadRefs against re-entry: clearing focus runs
 	// FocusLost, which widgets may answer by dismissing another layer.
 	sweeping        bool
@@ -1421,6 +1425,7 @@ func (w *Window) layout() {
 	ww, hh := w.surf.Size()
 	box := paintengine2d.XYWH(0, 0, float32(ww), float32(hh))
 	g := w.layoutFrame(box)
+	w.noteResize()
 	if w.root != nil {
 		_ = w.root.Measure(layout.Tight(g.content.Dx(), g.content.Dy()))
 		w.root.Arrange(g.content)

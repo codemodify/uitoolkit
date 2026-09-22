@@ -16,7 +16,7 @@ headless "$OUT/bin/sheet" -list > "$OUT/packs.tsv"
 
 # Where the preview panel sits in a 1024x860 Settings window at scale 1, with
 # an empty config (docs/settings.md, "Screenshot geometry").
-CROP=569x381+445+58
+CROP=569x429+445+58
 fail=0
 while IFS=$'\t' read -r id _; do
   if headless "$OUT/bin/settings" -stage "$id" -screenshot "$OUT/full/$id.png" >/dev/null 2>&1; then

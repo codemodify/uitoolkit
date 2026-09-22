@@ -13,7 +13,8 @@ go run ./cmd/uitksettings
 go run ./cmd/uitksettings -stage win98              # open with Windows 98 staged
 go run ./cmd/uitksettings -page appearance          # open on the options page
 go run ./cmd/uitksettings -headless                 # settings.png in cwd
-go run ./cmd/uitksettings -stage aqua -screenshot docs/screenshots
+go run ./cmd/uitksettings -stage aqua -screenshot out/
+tools/shots/demos.sh                               # docs/screenshots/settings.webp and the other demos
 ```
 
 `-page` takes `themes` (the default), `appearance`, `packs` or `about`.
@@ -49,10 +50,17 @@ Both are `widgets.ThemeScope`s, so Settings itself keeps the applied look.
 Staging a pack switches them where they stand — the caret stays in the
 search field, the focus on the list, the gallery where you scrolled it.
 
-The browser starts about 240 logical pixels wide whatever the window and
-display scale are, so its rows stay readable on a small window; dragging
-either sash replaces the split, and both survive Apply, Revert and
-Defaults.
+The browser is about 240 logical pixels wide whatever the window and
+display scale are, so its rows stay readable on a small window, and it
+keeps that share while the window is resized (`Window.OnResize`).
+Dragging either sash replaces the split: a dragged split stays through
+every resize after, and both survive Apply, Revert and Defaults.
+
+The preview takes 62% of the right-hand splitter, enough for its Controls
+tab — four rows a side — to show every row in every pack with
+desktop-sized controls. Material's, shadcn's and Geist's 40- to 48-pixel
+touch targets are the exception: those ten packs clip the tab's last row
+until the sash is dragged down.
 
 ### Appearance — what every app does with the theme
 
@@ -63,8 +71,8 @@ icons and their size are seen changing:
 - **Shape and icons** — **Corners** (Theme shape / Round / Square),
   **Icon size** (16 / 24 / 32), **Icons** (the chrome set), **Animations**
   (hover fades, the default button's pulse, busy bars).
-- **The desktop** — **Match the desktop's light or dark mode and accent
-  colour** (see below) and **Use the desktop's file dialogs**.
+- **The desktop** — **Follow the desktop's colours**, its light or dark
+  mode and its accent (see below), and **Use the desktop's file dialogs**.
 - **Windows** — **Use system title bar and borders** and **Place window
   buttons as the theme does**. A window that is shaped, transparent or
   glass behind belongs in this section.
@@ -96,12 +104,14 @@ The Theme Atlas crops the preview panel out of `uitksettings -stage ID
 default look applied, the panel is the same rectangle in every pack:
 
 ```
-x 445, y 58, 569 × 381        crop box (445, 58) – (1014, 439)
+x 445, y 58, 569 × 429        crop box (445, 58) – (1014, 487)
 ```
 
 `TestSettingsPreviewPanelKeepsItsPlace` pins those numbers; a layout
 change that moves them fails it, and the new ones belong here. (They were
-`x 504, y 175, 510 × 387` before the gallery went under the preview.)
+`x 504, y 175, 510 × 387` before the gallery went under the preview, and
+`569 × 381` until the preview took 62% of the split instead of 55%, so
+its Controls tab shows every row.)
 The applied look sets Settings' own metrics, so take atlas shots with a
 clean `XDG_CONFIG_HOME`.
 

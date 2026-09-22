@@ -15,6 +15,7 @@
 //	tour -theme win95           # any of the packs, skins included
 //	tour -scale 1.75            # at a fractional scale
 //	tour -shot out/             # one PNG per page, then exit
+//	tour -sheet pages.png       # every page on one contact sheet, then exit
 //	tour -headless              # paint offscreen, write tour.png, exit
 //
 // The tour's own navigation is its first page: the tabs along the top are
@@ -30,6 +31,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit"
 	"github.com/codemodify/uitoolkit/app"
 	"github.com/codemodify/uitoolkit/internal/demo"
@@ -42,6 +44,7 @@ func main() {
 	theme := flag.String("theme", "", "the pack to run in (a skin, or any of the others)")
 	scale := flag.Float64("scale", 0, "display scale (0: the desktop's, or $UITK_SCALE)")
 	shot := flag.String("shot", "", "write one PNG per page into this directory and exit")
+	sheet := flag.String("sheet", "", "write a contact sheet of the pages to this PNG and exit")
 	headless := flag.Bool("headless", false, "paint offscreen and write tour.png")
 	flag.Parse()
 	log.SetFlags(0)
@@ -65,7 +68,7 @@ func main() {
 		os.Setenv(style.ThemeEnv, *theme)
 	}
 
-	offscreen := *headless || *shot != ""
+	offscreen := *headless || *shot != "" || *sheet != ""
 	if offscreen && os.Getenv(style.AnimationsEnv) == "" {
 		// Stills are the same every run: no fade or busy bar caught
 		// halfway through.
@@ -74,9 +77,17 @@ func main() {
 
 	a := uitoolkit.New(uitoolkit.Options{Headless: offscreen, Scale: float32(*scale)})
 
-	if *shot != "" {
-		if err := writeShots(a, *shot, pages); err != nil {
-			log.Fatal(err)
+	if *shot != "" || *sheet != "" {
+		if *shot != "" {
+			if err := writeShots(a, *shot, pages); err != nil {
+				log.Fatal(err)
+			}
+		}
+		if *sheet != "" {
+			if err := writeSheet(a, *sheet, pages); err != nil {
+				log.Fatal(err)
+			}
+			fmt.Println("wrote", *sheet)
 		}
 		return
 	}
@@ -131,39 +142,59 @@ func writeShots(a *app.Application, dir string, pages []int) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	if len(pages) == 0 {
-		pages = make([]int, len(demo.TourPageNames()))
-		for i := range pages {
-			pages[i] = i
-		}
-	}
-	// An offscreen surface is sized in device pixels, so a still at a
-	// fractional scale is asked for in those: the same 1180 x 820 design
-	// pixels of page at every scale.
-	sc := a.Scale()
-	if sc <= 0 {
-		sc = 1
-	}
-	for _, p := range pages {
-		win, err := a.NewWindow(platform.WindowOptions{
-			Title: "uitoolkit tour", Width: int(1180 * sc), Height: int(820 * sc), Headless: true,
-		})
+	for _, p := range shotPages(pages) {
+		img, err := shootPage(a, p)
 		if err != nil {
 			return err
 		}
-		win.SetContent(demo.TourAppOpen(a, win, p))
-		// Two pumps: the first lays the page out, the second lets
-		// anything the page posted for after its first frame land.
-		a.PumpOnce()
-		a.PumpOnce()
 		name := filepath.Join(dir, "tour-"+shotName(demo.TourPageNames()[p])+".png")
-		if err := win.WritePNG(name); err != nil {
+		if err := img.WritePNGFile(name); err != nil {
 			return err
 		}
 		fmt.Println("wrote", name)
-		win.Close()
 	}
 	return nil
+}
+
+// shotPages is the pages a still or a sheet shows: the ones asked for, or
+// every page in order.
+func shotPages(pages []int) []int {
+	if len(pages) > 0 {
+		return pages
+	}
+	all := make([]int, len(demo.TourPageNames()))
+	for i := range all {
+		all[i] = i
+	}
+	return all
+}
+
+// Every still is the same page design: shotW x shotH logical pixels, which
+// is shotW*scale device pixels across at a display scale — window sizes
+// are logical, so a still at 1.75 is the same page drawn finer, not a
+// bigger page.
+const shotW, shotH = 1180, 820
+
+// shootPage paints page p alone in an offscreen tour window and returns
+// the picture.
+func shootPage(a *app.Application, p int) (*paintengine2d.Image, error) {
+	win, err := a.NewWindow(platform.WindowOptions{
+		Title: "uitoolkit tour", Width: shotW, Height: shotH, Headless: true,
+	})
+	if err != nil {
+		return nil, err
+	}
+	defer win.Close()
+	win.SetContent(demo.TourAppOpen(a, win, p))
+	// Two pumps: the first lays the page out, the second lets anything the
+	// page posted for after its first frame land.
+	a.PumpOnce()
+	a.PumpOnce()
+	img := win.Capture()
+	if img == nil {
+		return nil, fmt.Errorf("page %s: no picture", demo.TourPageNames()[p])
+	}
+	return img, nil
 }
 
 func shotName(s string) string {
