@@ -476,35 +476,89 @@ and macOS adapters.
 The result: a hover repaint on the stock look went from 321 to 152
 allocations, and on Aqua from 4,376 to 356.
 
-### Memory (branch `feat/memory`, both repos)
+### Memory, start-up and idle (branch `perf/release`, 2026-09-22)
 
-Measured on the GPU in the nested KWin at a real 1.75 scale, 10 s after
-launch; "own" is private dirty memory, what the app itself costs. The rest
-of resident memory is the GPU driver's shared libraries (Mesa, LLVM: about
-38 MB, shared by every GL app) and the binary's clean pages.
+Measured on the GPU in the nested KWin (instance 31) at a real 1.75 output
+scale and at 1×, one app at a time, by `tools/perf/measure.sh`, which
+regenerates the whole table in one command — the method, every column and
+the three ways a reading can lie are in [docs/perf.md](docs/perf.md).
+"own" is settled private dirty memory 10 s after the launch, the median of
+three launches: what the app itself costs. The rest of resident memory is
+the GPU driver's shared libraries (Mesa, LLVM: about 38 MB, shared by every
+GL app) and the binary's clean pages.
 
-| app | before: resident / own | after: resident / own |
-| --- | --- | --- |
-| Mail | 140 / 80 MB | 91 / 36 MB |
-| gallery | 103 / 65 MB | 83 / 30 MB |
-| Settings | 100 / 46 MB | 82 / 31 MB |
-| Files | 98 / 45 MB | 82 / 31 MB |
-| Notes | 97 / 44 MB | 78 / 28 MB |
-| Inspector | 91 / 37 MB | 79 / 28 MB |
+The machine: Arch, KDE Plasma 6 / KWin 6.7.5, kernel 7.2.6, Intel Core
+Ultra 7 265U with its Arrow Lake graphics (Mesa 26.2.3), Go 1.27.1.
 
-- **Glyph sheets start small** (128² or 256²) and double as they fill; the
-  512² and 768² first sheets were mostly empty, 47 MB of Mail's 53 MB live
-  heap.
+| app | own 1× | own 1.75 | 1.75 on `dev` | 1.75 on 2026-09-15 | start | idle, 10 s |
+| --- | --- | --- | --- | --- | --- | --- |
+| Settings | 33.3 | 31.3 | 32.8 | 29.8 | 124 ms | 0 ms / 14 wakes |
+| gallery | 31.1 | 29.5 | 39.4 | 36.4 | 115 ms | 0 ms / 197 |
+| Mail | 31.0 | 30.7 | 32.0 | 30.8 | 163 ms | 0 ms / 60 |
+| Files | 28.3 | 31.0 | 30.3 | 27.8 | 108 ms | 0 ms / 0 |
+| Notes | 27.3 | 28.8 | 27.3 | 28.2 | 98 ms | 0 ms / 5 |
+| Inspector | 26.6 | 28.6 | 27.0 | 27.1 | 93 ms | 0 ms / 0 |
+| tour | 30.5 | 32.0 | 30.0 | — | 107 ms | 0 ms / 0 |
+| Minim | 43.4 | 47.2 | 47.7 | — | 121 ms | 1950 ms / 26 357 |
+| Marquee | 38.8 | 56.4 | 66.3 | — | 194 ms | 730 ms / 15 043 |
+| Lantern | 45.0 | 63.3 | 80.8 | — | 198 ms | 820 ms / 16 426 |
+| rich text | 30.6 | 33.7 | 32.0 | — | 119 ms | 10 ms / 11 |
+| MDI | 29.6 | 29.3 | 31.4 | — | 110 ms | 0 ms / 19 |
+| wizard | 25.8 | 27.4 | 29.0 | — | 86 ms | 0 ms / 0 |
+
+Memory in MB. The 2026-09-15 column is that day's code built and measured
+again today — the figures that day's table recorded (Mail 36, gallery 30,
+Settings 31, Files 31, Notes 28, Inspector 28 MB) were taken on another
+Mesa and another Go, and only a same-day build compares. **Nothing
+regressed**: the apps that existed then cost what they cost then, the
+players and the tour are what shaped windows, skins and three windows each
+cost, and everything shed what this pass found.
+
+- **An app that animates nothing is idle**: no CPU at all in ten quiet
+  seconds. What is left is the loop's own — Mail's tray safety net once a
+  second, the gallery's busy bar looking whether it is back in sight twice
+  a second, a caret blinking out its ten seconds. The players animate
+  because they are playing.
+- **A caret stops blinking** ten seconds after the last input (GTK's
+  `gtk-cursor-blink-timeout`), in an inactive window, and with reduced
+  motion. It was 130–190 wake-ups a second, for as long as a window stayed
+  open.
+- **A busy bar out of sight stops repainting.** A scroll view records all of
+  its content, so the gallery's bar, below the fold, kept it repainting 30
+  times a second — since before 2026-09-15.
+- **A closed menu owes the heap a trim**: thirty menus left Files 7.6 MB
+  heavier, and now 1.9.
+- **A shaped window's shadow is one-byte coverage** and its resize band is
+  kept as runs, not a byte a pixel: Lantern 80.8 → 63.3 MB.
+- **Desktop font files are mapped**, not read into the heap (1.8 MB an app
+  in the Breeze packs), and **windows at one scale share their look** and
+  its shadow patch.
+- **The run loop waits in the Go poller**, not in a `poll` inside cgo: a
+  goroutine in a cgo call keeps its P, and sysmon then polls for 10 ms
+  after every frame (some sixty wake-ups).
+- **Glyph sheets start small** (128² or 256²), are one-byte coverage masks,
+  and the process-wide cache holds at most 48 MB of them.
 - **Idle trim:** two seconds after a burst of allocation (start-up, a
-  window, a theme, new content) with no events, the free heap goes back to
-  the OS once. Go otherwise keeps up to twice the live heap.
-- **No CPU copies beside the GPU:** the Wayland window's device-size pixmap
-  and the GPU device's readback image are made only when the CPU path or a
-  screenshot needs them.
+  window, a theme, new content, a menu closing) with no events, the free
+  heap goes back to the OS once. Go otherwise keeps up to twice the live
+  heap.
 
-Next candidates: one-byte (alpha) glyph sheets, 4× smaller, for about 3–5
-MB per app and less GPU memory (a new image format in paintengine2d); the
-same pixmap change for X11.
+Both of 2026-09-15's next candidates are answered: the glyph sheets are
+one-byte masks (`bd24952`), and an X11 window's `XImage` costs nothing
+while the GPU paints — its shm segment is mapped but never written, and its
+resident size is 0.
+
+Next candidates, in the order they are worth doing:
+
+1. **Batch the GPU's blits.** A skinned player spends most of its frame in
+   GL calls, one upload and one draw per quad; folding a draw's eight calls
+   into one C call took 4% off Minim's frame, and batching quads that share
+   a program and a texture would take much more.
+2. **Free a GPU texture when its image dies.** A device keeps up to 64 MB of
+   them, evicted least-recently-used, so textures of images nothing points
+   at any more live until the budget pushes them out.
+3. **The X11 loop still waits in cgo**, as Wayland's did: sysmon polls for
+   10 ms after every frame it paints.
 
 ## Checks that ran
 
