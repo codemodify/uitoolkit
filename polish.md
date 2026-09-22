@@ -25,11 +25,21 @@ Struck through once fixed; newest findings at the end of their section.
   applies to it. Needs the panel clipped by `style.WindowShapeOf`.~~ A
   window panel is cut to its look's silhouette (`widget.PaintClipper`) and
   keeps its body inside the look's border.
-- **Settings' theme browser width is not recomputed on a live resize** —
+- ~~**Settings' theme browser width is not recomputed on a live resize** —
   only on a rebuild (page change, Apply, Revert). There is no window-resize
-  hook in `app.Window` to hang it on.
-- **The preview app's Controls tab clips its last radio row** at Settings'
-  default split; dragging the sash fixes it.
+  hook in `app.Window` to hang it on.~~ `Window.OnResize`; the browser keeps
+  its share until the sash is dragged.
+- ~~**The preview app's Controls tab clips its last radio row** at Settings'
+  default split; dragging the sash fixes it.~~ Four rows a side and a 62%
+  split: every pack with desktop-sized controls shows it whole (the preview
+  panel moved to 569 × 429; the atlas follows).
+- **Material's, shadcn's and Geist's packs still clip the preview's Controls
+  tab** (ten packs, 40- to 48-pixel controls): the tab needs up to 86 more
+  pixels than the preview has at the default split. A preview sized for them
+  would leave the gallery a sliver in every other pack; a per-pack height
+  would give the Theme Atlas uneven tiles.
+- ~~**Settings' Appearance, Packs and About pages elided their prose** at the
+  window's edge (the About page lost most of its engine list).~~ It wraps.
 - ~~**Skins have no lint command.** `style.LoadSkin` already produces the keyed
   errors; `uitk-skin lint` would be a ~40-line `main`.~~ `uitk-skin lint`,
   with `style.LintSkin`'s warnings: fallback states, unbound sprites, art too
@@ -128,8 +138,13 @@ Struck through once fixed; newest findings at the end of their section.
 - **A drop on the dock host's centre does nothing**: only an edge band, a
   panel or its tab strip takes a panel, and the indicator shows nothing
   there — easy to mistake for a broken re-dock.
-- **The tour's dock page keeps its "in a window of its own" note** after a
-  panel is docked by dragging; only its buttons update the note.
+- ~~**The tour's dock page keeps its "in a window of its own" note** after a
+  panel is docked by dragging; only its buttons update the note.~~ The page
+  notes a panel floating or docking however it happened.
+- ~~**The tour's "+" menu opened at the strip's left end**, a window's width
+  from the button.~~ It drops from the "+" (`BrowserTabs.NewTabButton`).
+- ~~**The tour's Access page cut its linter verdict off** in the roomier
+  packs.~~ The list has room for two rows.
 - **Escape during an X11 drag is unproven on real hardware**: under Xwayland
   KWin takes the keyboard for the drag it mirrors. Both cancel paths are
   written; check on a real X server.
@@ -154,8 +169,9 @@ Struck through once fixed; newest findings at the end of their section.
 - **An X11 window switched live to the desktop's frame shows no KWin title
   bar** in the nested rig at 1.75 (it reports `server` and drops its own
   caption); the same on `dev` (docs/e2e/2026-09-21/release-bugs.md).
-- **The tour's `-shot` still sizes its offscreen windows in device pixels**
-  (`1180 * sc`), from before window sizes became logical.
+- ~~**The tour's `-shot` still sizes its offscreen windows in device pixels**
+  (`1180 * sc`), from before window sizes became logical.~~ 1180 × 820
+  logical at every scale.
 - **X11's scale is connection-wide**: the last window's `WindowOptions.Scale`
   sets it for the display (X11's own model, one `Xft.dpi`).
 - **`UITK_SCALE` on a Wayland output at scale 1** draws at the asked scale into
@@ -177,7 +193,13 @@ Struck through once fixed; newest findings at the end of their section.
 
 ## Tooling
 
-- **`tools/e2e/crop.py` assumes filter-0 PNG rows**, so it garbles the
-  toolkit's own `WritePNG` output (KWin's screenshots are fine).
-- **The tour's `-shot` renders one page per window**; there is no combined
-  contact sheet.
+- ~~**`tools/e2e/crop.py` assumes filter-0 PNG rows**, so it garbles the
+  toolkit's own `WritePNG` output (KWin's screenshots are fine).~~ Every
+  filter, colour type, depth and Adam7; `crop_test.py`.
+- ~~**The tour's `-shot` renders one page per window**; there is no combined
+  contact sheet.~~ `tour -sheet`.
+- **The tour's readouts wrap twice in a narrow window**: they are folded at
+  38 mono columns, which a readout panel of a 700-pixel window does not have,
+  so the text view wraps the folds again. Folding to the panel's measured
+  width would need the readout to refold on resize (`Window.OnResize` now
+  offers the moment).
