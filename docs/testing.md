@@ -46,6 +46,17 @@ entry point.
 
 ## How to run
 
+**Run tests through `tools/testenv.sh`** on a desktop machine. It gives the
+command no display, a private D-Bus session bus that can start no services,
+and runtime, config, cache and data dirs of its own. Unsetting
+`DBUS_SESSION_BUS_ADDRESS` alone is not enough: godbus and the platform
+layer both fall back to `$XDG_RUNTIME_DIR/bus`, the real session bus, where
+a tray, notification or portal test would reach the desktop it runs on.
+
+```bash
+tools/testenv.sh go test -p 2 ./...
+```
+
 Headless widget + driver suite (no display, no CGO):
 
 ```bash
