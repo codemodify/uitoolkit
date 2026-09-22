@@ -1,50 +1,61 @@
-# Resume here — uitoolkit, as of 2026-09-21
+# Resume here — uitoolkit, as of 2026-09-22
 
 ## Now
 
-Everything is merged to `dev` and pushed, in both repos. The only local
+Everything is merged to `dev` and pushed, in both repos: uitoolkit `c6658ec`
+(plus the atlas commit on top) and paintengine2d `6206e36`. The only local
 checkouts are `~/go/src/github.com/codemodify/uitoolkit` (the original
 folder), `uitoolkit-core` (`dev`) and `paintengine2d` (`dev`); the per-agent
 worktrees are gone, their branches kept.
 
+**The goal since 2026-09-21 is a solid release for Linux.** Nothing is
+tagged: uitoolkit's `go.mod` still builds paintengine2d from
+`replace ../paintengine2d`, so a release needs paintengine2d tagged first and
+the replace dropped. **That decision is the author's and has not been taken.**
+
 **History was rewritten on 2026-09-21** so every commit in both repos carries
 one author, `codemodify <codemodify@linux.com>`, with no co-author trailers.
 Every commit hash changed; hashes quoted further down this file predate the
-rewrite (find them by message). Anyone with an older clone re-clones.
+rewrite (find them by message). Anyone with an older clone re-clones. One
+loose end: the GitHub pull-request refs (18 in uitoolkit, 11 in paintengine2d)
+still hold the old commits, so the old authors are reachable there.
 
-Merged since 2026-09-17, newest last:
+Merged on 2026-09-22, the seven groups the author picked, newest last:
 
 | branch | what |
 | --- | --- |
-| `feat/shapes` | transparent and arbitrarily shaped windows: a silhouette kept through resize, scale and maximize, a hole you see and click through, component hit shapes, real glass where the compositor offers it (`ext_background_effect` on Wayland, KWin's blur property on X11) — `docs/shapes.md`, `examples/shapes` |
-| paintengine2d `fix/a8-dest` | drawing into a one-byte coverage image (`NewImageA8`) works; every CPU write path took four bytes per pixel |
-| `feat/skin` | skins, a theme made of pictures: `skin.json` (sprite sheets, nine-slice, state maps, 34 parts), from a directory or a `.uskin` archive, listed and live-reloaded like any pack; anything left out falls back to a base pack — `docs/skins.md` |
-| `feat/settings-gallery` | Settings rebuilt (Themes, Appearance, Packs & icons, About), a searchable theme browser, and the whole widget gallery under the live preview in the staged theme — `docs/settings.md` |
-| `feat/skin-shapes` | a look declares its window's silhouette and its controls' hit shapes (`style.Silhouette`); BeOS's tab is the window's real outline; the Deck skin; `examples/skinshape` |
-| `feat/players` | three visual-only player demos in our own art — Minim (compact, snapping equaliser and playlist), Marquee (folds to a stadium), Lantern (anchored playlist; Ctrl+K drops the skin) — `docs/players.md` |
-| `feat/showcase` | `examples/tour`: a page per capability a gallery cannot show (title-bar tabs and tear-off, docking, drag and drop, frames, shapes, skins, desktop, accessibility), each with a readout of what the toolkit reports |
-| `fix/toolkit-gaps` | five defects the players found: `WindowOptions.Sizing` (fixed-size windows), presses bubbling, key events carrying the character, windows opening focused, and logical window sizes on both backends |
-| `tools/atlas` | the Theme Atlas and the README theme sheets rebuilt by tools in the repo (`tools/atlas`), not scratch scripts |
+| `feat/minim-skins` | Minim ships three skins — its own, a WinAmp-era Classic and a brushed Silver — and a button that cycles them |
+| `fix/release-bugs` | the six release bugs: a theme change no longer resets app preferences, re-docked panels keep their width, ListView stops clipping its last row, re-docking by drag works on Wayland, X11 tear-off lands under the pointer, positions are logical not device pixels |
+| `feat/skins-2` | the ten skin gaps: per-window captions, skin-declared layouts, sprite hit shapes, `cmd/uitk-skin lint` |
+| `feat/apps-polish` | Settings, the tour, the players, Files, Inspector and Mail gone over end to end |
+| `feat/shapes-2` | menus and combo popups are real windows (`xdg_popup` with a grab, override-redirect on X11), glass and the hole survive them |
+| `feat/frames-2` | frame fidelity: KWin's server-side palette, `xdg-toplevel-icon-v1`, `_NET_WM_SYNC_REQUEST`, per-era shadows and corners |
+| `feat/widgets-breadth` | against Qt and GTK: `widgets.RichText` (an HTML subset), `widgets.MDIArea`, `widgets.Wizard` |
+| `feat/input-portals` | touchpad gestures (`zwp_pointer_gestures_v1`, XInput 2.4), X11 kinetic scrolling, and the portals: xdg-foreign, OpenURI, notifications |
+| `perf/release` | every app measured again on one day against a rebuilt 2026-09-15 tree: **no memory regression**, and idle wakeups are gone — gallery 32,109/min → 174, Notes 1315 → 0, Lantern 80.8 MB → 63.3 MB at 1.75× — `docs/perf.md` |
 
-The theme list holds **127 packs**: 121 drawn by 29 engines and 6 skins
-(Nocturne, Cassette, Deck, and the players' Minim, Marquee and Lantern), all
-generated by `cmd/uitk-skingen` so the artwork is the repo's own.
+The theme list holds **129 packs**: 121 drawn by 29 engines and 8 skins
+(Nocturne, Cassette, Deck, and the players' Minim, Minim Classic, Minim
+Silver, Marquee and Lantern), all generated by `cmd/uitk-skingen` so the
+artwork is the repo's own. The [Theme Atlas](https://claude.ai/artifact/FDfGxoNiUnPuyU9TMEy9aZ)
+shows every one of them; `tools/atlas` rebuilds it.
 
 **What to try:** `examples/tour` first, then Settings (`cmd/uitksettings`),
 the players (`examples/minim`, `marquee`, `lantern`), Files (title-bar tabs,
 drag out), Inspector (docking), Mail.
 
-**Next:** nothing in flight. Mail's full-fledged rewrite is **paused** (the
-author's call, 2026-09-21). Every known rough edge is listed in
-[polish.md](polish.md).
+**Next:** nothing in flight. Every known rough edge is listed in
+[polish.md](polish.md). Pinned by the author, not to be started unasked:
+Mail's full-fledged rewrite, the on-desktop verification list, the GitHub PR
+refs and other housekeeping, the Windows and macOS backends, IME and
+right-to-left text, printing.
 
-**Decisions standing** (the author's): no releases or tags, everything on
-`dev`; Linux first, Windows and macOS pinned; no IME or right-to-left work; no
-printing; skins are JSON of our own design (never XML, never WinAmp's, VLC's
-or Microsoft's files) and may replace painting and layout but never add
-behaviour; the players are visual only, with our own artwork; commits carry
-the author alone.
-
+**Decisions standing** (the author's): Linux first; Windows and macOS pinned;
+no IME or right-to-left work; no printing; skins are JSON of our own design
+(never XML, never WinAmp's, VLC's or Microsoft's files) and may replace
+painting and layout but never add behaviour; the players are visual only,
+with our own artwork; commits carry the author alone; never run tests or apps
+against the author's own desktop — `tools/testenv.sh` or the nested-KWin rig.
 ---
 
 ## Earlier: end-to-end fixes and theme engines, 2026-09-15
