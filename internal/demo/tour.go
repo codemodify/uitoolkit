@@ -484,8 +484,15 @@ func (t *tourState) openMenu() {
 		t.note("Every page is already open in this window.")
 		return
 	}
+	// It drops from the "+" that asked for it, as a browser's does; from
+	// the strip's start if the strip has no "+" to drop from.
 	at := widget.DeviceOrigin(t.strip)
-	at.Y += t.strip.Bounds().Dy()
+	if nb := t.strip.NewTabButton(); !nb.Empty() {
+		at.X += nb.Min.X
+		at.Y += nb.Max.Y
+	} else {
+		at.Y += t.strip.Bounds().Dy()
+	}
 	widgets.ShowContextMenu(t.strip, at, items...)
 }
 
