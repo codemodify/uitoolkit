@@ -77,7 +77,9 @@ func buildAccessPage(t *tourState) widget.Component {
 	probPanel.Content().AddFlex(p.probs, 1)
 
 	trees := widgets.NewSplitter(false, treePanel, probPanel)
-	trees.Ratio = 0.74
+	// The linter's list keeps room for two rows of its verdict in the
+	// roomier packs too.
+	trees.Ratio = 0.62
 
 	// ---- the keyboard -------------------------------------------------------
 
@@ -201,10 +203,6 @@ func (p *accessPage) applyScale() {
 // read rebuilds everything this page shows about the window it is in.
 func (p *accessPage) read() {
 	win := p.t.win
-	if p.motion != nil && p.motion.On != style.Animations() {
-		p.motion.On = style.Animations()
-		p.motion.Invalidate()
-	}
 	root := win.AccessibleTree()
 
 	p.tree.SetRoots([]*widgets.TreeNode{a11yTreeNode(root)})
