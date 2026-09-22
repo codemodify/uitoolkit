@@ -124,7 +124,13 @@ static int ui_pop_workarea(Display* d, int px, int py, int* ox, int* oy, int* ow
 		int x0 = mx > ax ? mx : ax, y0 = my > ay ? my : ay;
 		int x1 = (mx + mw) < (ax + aw) ? (mx + mw) : (ax + aw);
 		int y1 = (my + mh) < (ay + ah) ? (my + mh) : (ay + ah);
-		if (x1 > x0 && y1 > y0) { mx = x0; my = y0; mw = x1 - x0; mh = y1 - y0; }
+		// A panel takes a strip of a screen, never most of it: a work area
+		// under 60% of the monitor either way is in some other unit — KWin
+		// states it in logical pixels on a scaled Xwayland, whose windows
+		// are placed in device ones — and the monitor is the better guess.
+		if (x1 > x0 && y1 > y0 && (x1 - x0) * 10 >= mw * 6 && (y1 - y0) * 10 >= mh * 6) {
+			mx = x0; my = y0; mw = x1 - x0; mh = y1 - y0;
+		}
 	}
 	if (data) XFree(data);
 	*ox = mx; *oy = my; *ow = mw; *oh = mh;
@@ -135,6 +141,8 @@ import "C"
 
 import (
 	"errors"
+	"log"
+	"os"
 
 	"github.com/codemodify/paintengine2d"
 )
@@ -241,6 +249,9 @@ func (s *x11Surface) OpenPopup(opts PopupOptions) (PopupSurface, error) {
 	x11Mu.Lock()
 	area, _ := s.workAreaLocked(pl.Anchor)
 	placed := SolvePopup(pl, area)
+	if os.Getenv("UITK_POPUP_DEBUG") != "" {
+		log.Printf("uitk x11 popup: place %+v area %+v -> %+v", pl, area, placed)
+	}
 	sc := c.displayScale()
 	f := opts.Frame
 	if !c.composited {
