@@ -799,7 +799,7 @@ func (s *settingsState) appearancePage() widget.Component {
 	// GNOME's and Plasma's light / dark setting and accent colour: the
 	// theme shows its sibling (Breeze and Breeze Dark) to match the
 	// desktop, recoloured around its accent where the engine takes one.
-	follow := widgets.NewSwitch("Match the desktop's light or dark mode and accent colour", s.staged.FollowDesktop, func(on bool) {
+	follow := widgets.NewSwitch("Follow the desktop's colours", s.staged.FollowDesktop, func(on bool) {
 		next := s.staged
 		next.FollowDesktop = on
 		s.stage(next)
@@ -841,7 +841,7 @@ func (s *settingsState) appearancePage() widget.Component {
 		optionSwitch(motion, "Hover fades, the default button's pulse and busy bars."),
 	)
 	if style.DesktopReducesMotion() {
-		shape.Add(widgets.NewLabel("The desktop asks for reduced motion, so animations stay off."))
+		shape.Add(wrapped("The desktop asks for reduced motion, so animations stay off."))
 	}
 	desktop := settingsSection("The desktop",
 		optionSwitch(follow, "Light or dark, and the accent colour, as the desktop asks for them."),
@@ -865,9 +865,17 @@ func (s *settingsState) appearancePage() widget.Component {
 	body.AddFlex(options, 1)
 	return widgets.NewColumn(
 		widgets.NewTitle("Appearance"),
-		widgets.NewLabel("What every uitoolkit app does with the theme. Apply writes these to "+style.AppearancePath()+"."),
+		wrapped("What every uitoolkit app does with the theme. Apply writes these to "+style.AppearancePath()+"."),
 		body,
 	).WithGap(12).WithPad(4)
+}
+
+// wrapped is a label that wraps: prose on these pages is read, and a line
+// elided at the window's edge hides the part that says where a file is.
+func wrapped(text string) *widgets.Label {
+	l := widgets.NewLabel(text)
+	l.Wrap = true
+	return l
 }
 
 // settingsSection is a titled group of option rows.
@@ -942,7 +950,7 @@ func (s *settingsState) packsPage() widget.Component {
 		}
 	})
 	themeCol := widgets.NewColumn(widgets.NewTitle("Theme packs"),
-		widgets.NewLabel("Built-in packs live in the theme browser. Export saves the staged theme's colours and metrics as a pack you can edit."),
+		wrapped("Built-in packs live in the theme browser. Export saves the staged theme's colours and metrics as a pack you can edit."),
 		themes).WithGap(8)
 	var exportHost widget.Component
 	exportBtn := widgets.NewButton("Export current theme…", func() {
@@ -1069,15 +1077,15 @@ func (s *settingsState) aboutPage() widget.Component {
 	return widgets.NewColumn(
 		widgets.NewTitle("About"),
 		widgets.NewLabel("uitoolkit v"+uitoolkit.Version),
-		widgets.NewLabel(fmt.Sprintf("%d built-in themes from %d theme engines: %s.", len(style.ListBuiltinThemes()), len(style.EngineIDs()), engines)),
-		widgets.NewLabel("A theme is a pack (colours, metrics) painted by an engine (shapes): Windows 95 bevels, Aqua gel, Motif shadows…"),
-		widgets.NewLabel("Prefs file (theme + corners + icons + iconSize, written on Apply):"),
+		wrapped(fmt.Sprintf("%d built-in themes from %d theme engines: %s.", len(style.ListBuiltinThemes()), len(style.EngineIDs()), engines)),
+		wrapped("A theme is a pack (colours, metrics) painted by an engine (shapes): Windows 95 bevels, Aqua gel, Motif shadows…"),
+		wrapped("Prefs file (theme + corners + icons + iconSize, written on Apply):"),
 		mono("Prefs file", style.AppearancePath()),
-		widgets.NewLabel("User theme packs (exported; edit the JSON to make your own):"),
+		wrapped("User theme packs (exported; edit the JSON to make your own):"),
 		mono("User theme packs", style.ThemesDir()+"/<name>/theme.json"),
-		widgets.NewLabel("Icon sets (copy the repo icons/ folders here after every pull):"),
+		wrapped("Icon sets (copy the repo icons/ folders here after every pull):"),
 		mono("Icon sets", style.IconsDir()+"/<set>/*.png"),
-		widgets.NewLabel("Other apps watch look.json and switch live on Apply."),
+		wrapped("Other apps watch look.json and switch live on Apply."),
 		widgets.NewButton("Browse themes", func() {
 			s.page = pageThemes
 			s.rebuild()
