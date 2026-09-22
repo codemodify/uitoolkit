@@ -1743,7 +1743,7 @@ func (w *Window) paintShadow(ctx *paintengine2d.Context, c widget.Component, kin
 // paintBackground lets the look paint the window background (Aqua
 // pinstripes, brushed metal); the flat clear already covers the rest.
 func (w *Window) paintBackground(ctx *paintengine2d.Context, full paintengine2d.Rect) {
-	if w.wantsGlass() {
+	if w.wantsGlass() && !style.GlassFrameOnly(w.look) {
 		// The window is a pane over the blurred desktop: the look's own
 		// background is opaque — a gradient, a texture, a flat fill — and
 		// painting it here would hide every bit of the blur. The glass
@@ -1787,7 +1787,9 @@ func (w *Window) seeThrough() bool {
 // blurred behind it (an opaque fill over a blurred desktop would show none
 // of the blur).
 func (w *Window) windowFill() paintengine2d.Color {
-	if !w.wantsGlass() {
+	if !w.wantsGlass() || (style.GlassFrameOnly(w.look) && !w.glass) {
+		// Aero's glass is the frame's: the frame takes the window's
+		// background out from under itself, and the content keeps it.
 		return w.look.Palette().Background
 	}
 	if w.glassTint.A > 0 {

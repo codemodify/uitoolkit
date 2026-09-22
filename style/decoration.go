@@ -155,6 +155,11 @@ type DecorationSpec struct {
 	// screen, and a desktop that cannot blur ignores it — so a look that
 	// sets it must still look right without it.
 	Glass bool
+	// GlassFrame narrows Glass to the frame: the desktop shows, blurred,
+	// through the look's translucent caption and borders only, and the
+	// window's content keeps its opaque background — Windows 7's Aero
+	// Glass, as against Mica or vibrancy, which tint the whole window.
+	GlassFrame bool
 }
 
 // ButtonSide is a side of the caption for the caption buttons.
@@ -257,7 +262,7 @@ func DecorationOf(lk LookAndFeel, st DecorationState) DecorationSpec {
 	if st.Solid {
 		// Nothing composites the window: there is no desktop behind it to
 		// blur, and alpha counts for nothing.
-		s.Glass = false
+		s.Glass, s.GlassFrame = false, false
 	}
 	if st.Maximized || st.Solid {
 		s.Radius, s.Shadow = [4]float32{}, Insets{}
