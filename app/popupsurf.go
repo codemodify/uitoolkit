@@ -64,7 +64,9 @@ type popSilhouette struct {
 	derived bool
 	eraser  *paintengine2d.Image
 	wipe    *paintengine2d.Path
-	shade   *paintengine2d.Image
+	// shade is the shadow's coverage (FormatA8), drawn tinted shadeCol.
+	shade    *paintengine2d.Image
+	shadeCol paintengine2d.Color
 }
 
 type popShapeKey struct {
@@ -642,8 +644,8 @@ func (w *Window) paintPopShade(ctx *paintengine2d.Context, pl *popLayer, lk styl
 		return
 	}
 	if pl.sil.shade == nil {
-		col := probePopupShadowColor(lk, pl.kind)
-		pl.sil.shade = buildShadeImage(r, m, col)
+		pl.sil.shadeCol = probePopupShadowColor(lk, pl.kind)
+		pl.sil.shade = buildShadeImage(r, m, pl.sil.shadeCol)
 	}
 	img := pl.sil.shade
 	if img == nil {
@@ -652,7 +654,7 @@ func (w *Window) paintPopShade(ctx *paintengine2d.Context, pl *popLayer, lk styl
 	b := pl.c.Bounds()
 	dst := paintengine2d.XYWH(b.Min.X-float32(m.Left), b.Min.Y-float32(m.Top), float32(img.Width), float32(img.Height))
 	ctx.DrawImageRectPaint(img, paintengine2d.XYWH(0, 0, float32(img.Width), float32(img.Height)), dst,
-		paintengine2d.Paint{Color: paintengine2d.White, Filter: paintengine2d.FilterNearest})
+		paintengine2d.Paint{Color: pl.sil.shadeCol, Filter: paintengine2d.FilterNearest})
 }
 
 // probePopupShadowColor reads the densest pixel of the look's own popup
