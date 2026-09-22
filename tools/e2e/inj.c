@@ -1,7 +1,7 @@
 // inj — inject pointer/keyboard input into the nested KWin via org_kde_kwin_fake_input.
 // usage: inj CMD... where CMD is one of
 //   move X Y        absolute pointer motion (logical px)
-//   click [BTN]     press+release (BTN: left|right|middle, default left)
+//   click [BTN]     press+release (BTN: left|right|middle|back|forward, default left)
 //   down [BTN] / up [BTN]
 //   wheel DY        vertical axis (positive = down), in 15-unit clicks
 //   key CODE        evdev keycode press+release; key+ CODE / key- CODE for hold
@@ -26,6 +26,8 @@ static uint32_t btn(const char *s) {
 	if (!s || !strcmp(s, "left")) return 0x110;
 	if (!strcmp(s, "right")) return 0x111;
 	if (!strcmp(s, "middle")) return 0x112;
+	if (!strcmp(s, "back")) return 0x113;    /* BTN_SIDE */
+	if (!strcmp(s, "forward")) return 0x114; /* BTN_EXTRA */
 	return 0x110;
 }
 
@@ -45,7 +47,8 @@ int main(int argc, char **argv) {
 			i += 2;
 		} else if (!strcmp(c, "click") || !strcmp(c, "down") || !strcmp(c, "up")) {
 			const char *b = NULL;
-			if (i + 1 < argc && (!strcmp(argv[i + 1], "left") || !strcmp(argv[i + 1], "right") || !strcmp(argv[i + 1], "middle"))) b = argv[++i];
+			if (i + 1 < argc && (!strcmp(argv[i + 1], "left") || !strcmp(argv[i + 1], "right") || !strcmp(argv[i + 1], "middle") ||
+			                      !strcmp(argv[i + 1], "back") || !strcmp(argv[i + 1], "forward"))) b = argv[++i];
 			if (strcmp(c, "up")) org_kde_kwin_fake_input_button(fi, btn(b), 1);
 			if (!strcmp(c, "click")) { wl_display_roundtrip(dpy); usleep(30000); }
 			if (strcmp(c, "down")) org_kde_kwin_fake_input_button(fi, btn(b), 0);
