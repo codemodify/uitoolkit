@@ -52,10 +52,15 @@ type Application struct {
 	quit atomic.Bool
 	// trimOwed, stir: see trim.go. trimAt and stirSeen belong to the run
 	// loop.
-	trimOwed         atomic.Bool
-	stir             atomic.Uint64
-	stirSeen         uint64
-	trimAt           time.Time
+	trimOwed atomic.Bool
+	stir     atomic.Uint64
+	stirSeen uint64
+	trimAt   time.Time
+	// blinkStir and inputAt: the stir count blinking last saw and when it
+	// last moved, which is when the caret was last given a reason to
+	// blink. Run's goroutine only.
+	blinkStir        uint64
+	inputAt          time.Time
 	onQuit           func()
 	watchLook        bool
 	lookWatch        *lookFileStamp
@@ -329,6 +334,24 @@ func (a *Application) Windows() []*Window {
 
 const caretBlinkPeriod = 530 * time.Millisecond
 
+// caretBlinkTimeout is how long a caret blinks after the last input before
+// it stays lit, as GTK's gtk-cursor-blink-timeout (10 s by default) has it.
+// A caret left blinking in an idle window woke the app, its GPU driver and
+// the compositor twice a second for as long as the window stayed open:
+// Settings, Notes and the rich-text editor sat at 130–190 wake-ups a
+// second doing nothing.
+const caretBlinkTimeout = 10 * time.Second
+
+// blinking reports whether carets blink now: one wants to (the focused
+// text of an active window), motion is not reduced, and the last input
+// came within caretBlinkTimeout. Run's goroutine only.
+func (a *Application) blinking(now time.Time) bool {
+	if s := a.stir.Load(); s != a.blinkStir || a.inputAt.IsZero() {
+		a.blinkStir, a.inputAt = s, now
+	}
+	return style.Animations() && now.Sub(a.inputAt) < caretBlinkTimeout && a.anyCaret()
+}
+
 // Run waits on the display connection and paints only when a window is
 // dirty, a caret blinks, a tooltip is due, or (on Wayland) a key repeat
 // fires. Idle gallery no longer wakes at 60 Hz.
@@ -423,11 +446,29 @@ func (a *Application) Run() error {
 		a.pollLookFile()
 		a.runPosted()
 		now := time.Now()
-		if a.anyCaret() && (nextBlink.IsZero() || !now.Before(nextBlink)) {
+		blink := a.blinking(now)
+		switch {
+		case !blink:
+			nextBlink = time.Time{}
+		case nextBlink.IsZero():
+			// Blinking starts (or starts again) from a lit caret, which
+			// goes dark one period from now.
 			for _, w := range a.Windows() {
-				w.toggleBlink()
+				w.steadyCaret()
 			}
 			nextBlink = now.Add(caretBlinkPeriod)
+		case !now.Before(nextBlink):
+			for _, w := range a.Windows() {
+				if w.wantsBlink() {
+					w.toggleBlink()
+				}
+			}
+			nextBlink = now.Add(caretBlinkPeriod)
+		}
+		for _, w := range a.Windows() {
+			if !blink || !w.wantsBlink() {
+				w.steadyCaret()
+			}
 		}
 		for _, w := range a.Windows() {
 			// Closed() is true only for a surface the display server
@@ -521,12 +562,9 @@ func (a *Application) anyNeedsPaint() bool {
 
 func (a *Application) waitTimeout(now, nextBlink time.Time) time.Duration {
 	var deadline time.Time
-	if a.anyCaret() {
-		if nextBlink.IsZero() {
-			deadline = now.Add(caretBlinkPeriod)
-		} else {
-			deadline = nextBlink
-		}
+	if !nextBlink.IsZero() && a.anyCaret() {
+		// Zero while no caret blinks (blinking): nothing to wake for.
+		deadline = nextBlink
 	}
 	for _, w := range a.Windows() {
 		if w.Closed() {

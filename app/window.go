@@ -758,13 +758,30 @@ func (w *Window) toggleBlink() {
 }
 
 func (w *Window) wantsBlink() bool {
-	if w == nil || w.focus == nil || w.state.Suspended {
-		// A suspended window is not visible: no caret to blink (and no
-		// wake-ups for it).
+	if w == nil || w.focus == nil || w.state.Suspended || w.inactive {
+		// A suspended window is not visible, and an inactive one is not
+		// where the keys go: no caret to blink (and no wake-ups for it).
 		return false
 	}
 	_, ok := w.focus.(interface{ SetCaretBlink(bool) })
 	return ok
+}
+
+// steadyCaret leaves the caret lit and still: its window stopped blinking
+// it (no input for a while, reduced motion, the window went inactive), and
+// a caret stopped half-way through a blink would vanish until the next key.
+func (w *Window) steadyCaret() {
+	if w == nil || w.blink {
+		return
+	}
+	w.blink = true
+	if w.focus == nil {
+		return
+	}
+	if b, ok := w.focus.(interface{ SetCaretBlink(bool) }); ok {
+		b.SetCaretBlink(true)
+		w.focus.Invalidate()
+	}
 }
 
 func (w *Window) needsPaint() bool {
