@@ -471,32 +471,38 @@ func (w *Window) layoutFrame(full paintengine2d.Rect) frameGeom {
 	return g
 }
 
-// captionBox is where the caption band goes inside the window's inner box:
-// as tall as the header bar measures and, normally, as wide as the window.
-//
-// A look whose frame is a tab rather than a band (DecorationSpec.CaptionFits
-// — BeOS's) gets a caption only as wide as its contents instead, and the
-// rest of the window's top edge is left to the silhouette to cut away. The
-// two go together: DecorationOf drops the fitted caption wherever
-// WindowShapeOf drops the silhouette, so there is never a narrow band on a
-// window that really is a rectangle.
-//
-// It is a function of the look, the window's size and the header bar's
-// content and nothing else, so the silhouette can ask for it before the
-// layout that will use it.
+// captionBox is where the header bar goes inside the window's inner box:
+// as tall as it measures and as wide as the window. A look whose caption
+// is a tab rather than a band (DecorationSpec.CaptionFits — BeOS's) fits
+// the strip inside it to its contents (HeaderBar.FrameParts), and a row of
+// the app's own items under the strip keeps the window's width.
 func (w *Window) captionBox(inner paintengine2d.Rect, framed bool) paintengine2d.Rect {
 	if w.caption == nil {
 		return paintengine2d.Rect{}
 	}
 	sz := w.caption.Measure(layout.Loose(inner.Dx(), inner.Dy()))
 	h := min(float32(math.Ceil(float64(sz.Y)-1e-3)), inner.Dy())
-	width := inner.Dx()
-	if framed && w.frameSpec().CaptionFits {
+	return paintengine2d.XYWH(inner.Min.X, inner.Min.Y, inner.Dx(), h)
+}
+
+// captionBand is the caption band a look's silhouette is stated against:
+// the caption box, only as wide as its contents where the look fits it to
+// them. The rest of the window's top edge is left to the silhouette to cut
+// away. The two go together: DecorationOf drops the fitted caption
+// wherever WindowShapeOf drops the silhouette, so there is never a narrow
+// band on a window that really is a rectangle.
+//
+// It is a function of the look, the window's size and the header bar's
+// content and nothing else, so the silhouette can ask for it before the
+// layout that will use it.
+func (w *Window) captionBand(inner paintengine2d.Rect, framed bool) paintengine2d.Rect {
+	b := w.captionBox(inner, framed)
+	if framed && !b.Empty() && w.frameSpec().CaptionFits {
 		if fit := w.caption.CaptionFitWidth(); fit > 0 {
-			width = min(fit, inner.Dx())
+			b.Max.X = b.Min.X + min(fit, b.Dx())
 		}
 	}
-	return paintengine2d.XYWH(inner.Min.X, inner.Min.Y, width, h)
+	return b
 }
 
 // contentBox is where a framed window's content goes under its caption: the

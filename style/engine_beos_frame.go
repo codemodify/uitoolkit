@@ -38,12 +38,22 @@ func (beosEngine) Decoration(l *Classic, st DecorationState) DecorationSpec {
 	th := beTabH(l)
 	return DecorationSpec{
 		Stacked: true,
-		Border:  Insets{Right: beFrame * u, Bottom: beFrame * u, Left: beFrame * u},
+		// The tab stands on the window's corner, not inside its frame: the
+		// caption runs from the window's left edge, which puts the close
+		// box four pixels in from the tab's corner, and only the content
+		// is inset by the five-pixel border.
+		Border:        Insets{Bottom: beFrame * u},
+		ContentBorder: Insets{Right: beFrame * u, Bottom: beFrame * u, Left: beFrame * u},
+		Split:         true,
 		// The tab, whose last row is the frame's top line, and the frame.
 		Caption:   float32(th-1+beFrame) * u,
 		Button:    paintengine2d.Pt(14*u, 14*u),
 		ButtonGap: 3 * u,
 		ButtonPad: Insets{Top: float32(beBoxY(l)) * u, Right: 4 * u, Left: 4 * u},
+		// R5's tab: the title 19 pixels after the close box and 17 before
+		// the zoom box, 10 and 12 from the tab's ends where a box is missing
+		// (DrawWindowFrame's own layout).
+		TitleRoom: TitleRoom{Lead: 19 * u, Trail: 17 * u, LeadEdge: 10 * u, TrailEdge: 12 * u},
 		Layout:    "close:maximize",
 		// The tab is as wide as its contents; DecorationOf drops this
 		// wherever it drops the silhouette that goes with it.
@@ -141,11 +151,17 @@ func (beosEngine) DrawCaptionTitle(l *Classic, ctx *paintengine2d.Context, b pai
 		col = c.tabOffText
 	}
 	g := rpGridAt(ctx, b, u)
-	if g.w < 12 {
+	if g.w < 4 {
 		return
 	}
-	// The title stands clear of the close box, as it did on the tab.
-	l.drawFittedText(ctx, l.BoldFont(), title, g.at(10, 1, g.w-14, min(th-1, g.h-1)), col, AlignStart, 0)
+	// b is already clear of the boxes by R5's gaps (DecorationSpec.TitleRoom).
+	// The title is measured in whole cells, as DrawWindowFrame measures it:
+	// a fitted tab's band is sized in device pixels, and at a fractional
+	// scale its box can fall a cell short of a title that fits, with 17
+	// cells of gap still clear of the zoom box after it.
+	f := l.BoldFont()
+	tw := min(int(f.Advance(title)/u+0.99), g.w+1)
+	l.drawFittedText(ctx, f, title, g.at(0, 1, max(tw, g.w), min(th-1, g.h-1)), col, AlignStart, 0)
 }
 
 func (beosEngine) DrawCaptionButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, k CaptionButton, cs ControlState, st DecorationState) {

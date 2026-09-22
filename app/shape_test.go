@@ -586,6 +586,14 @@ func TestAWindowTakesTheSilhouetteItsLookDeclares(t *testing.T) {
 	}
 }
 
+// captionStrip is the caption band the frame paints, in window device
+// pixels: a stacked frame's strip, fitted to its contents where the look
+// asks.
+func (w *Window) captionStrip() paintengine2d.Rect {
+	c, _ := w.caption.FrameParts()
+	return c.Translate(widget.DeviceOrigin(w.caption))
+}
+
 // The states that drop an app's silhouette drop a look's, and the fitted
 // caption that goes with it comes back with it.
 func TestMaximizeDropsTheLooksSilhouette(t *testing.T) {
@@ -595,13 +603,13 @@ func TestMaximizeDropsTheLooksSilhouette(t *testing.T) {
 			if r.w.sysFrame.Shape == nil {
 				t.Fatal("no silhouette to drop")
 			}
-			wide := r.w.geom.caption.Dx()
+			wide := r.w.captionStrip().Dx()
 			r.o.SimulateWindowState(platform.WindowState{Activated: true, Maximized: true})
 			r.a.PumpOnce()
 			if r.w.shapeRaster() != nil || r.w.sysFrame.Shape != nil {
 				t.Fatal("a maximized window kept its look's silhouette")
 			}
-			if got := r.w.geom.caption.Dx(); got <= wide {
+			if got := r.w.captionStrip().Dx(); got <= wide {
 				t.Errorf("maximized caption is %v wide, no wider than the fitted %v", got, wide)
 			}
 			r.o.SimulateWindowState(platform.WindowState{Activated: true})
@@ -618,11 +626,15 @@ func TestMaximizeDropsTheLooksSilhouette(t *testing.T) {
 func TestTheBeOSCaptionIsItsTab(t *testing.T) {
 	r := framedRig(t, "beos", 600, 400)
 	g := r.w.geom
-	if g.caption.Dx() >= g.window.Dx()*0.8 {
-		t.Fatalf("the tab is %v wide on a %v window: it was not fitted", g.caption.Dx(), g.window.Dx())
+	band := r.w.captionStrip()
+	if band.Dx() >= g.window.Dx()*0.8 {
+		t.Fatalf("the tab is %v wide on a %v window: it was not fitted", band.Dx(), g.window.Dx())
+	}
+	if lb := r.w.captionBand(r.w.innerBox(g.window, true), true); lb.Max.X != band.Max.X {
+		t.Fatalf("the silhouette's tab ends at %v, the painted one at %v", lb.Max.X, band.Max.X)
 	}
 	m := r.w.sysFrame.Margin
-	x := int(g.caption.Max.X - g.window.Min.X)
+	x := int(band.Max.X - g.window.Min.X)
 	if !platform.RectsContain(r.w.sysFrame.Shape, m.Left+x-2, m.Top+1) {
 		t.Fatal("the tab's own last column is not the window")
 	}
