@@ -22,3 +22,30 @@ func After(c Component, d time.Duration, fn func()) (stop func()) {
 	}
 	return func() {}
 }
+
+// Exposed reports whether any of c can be seen: c and every ancestor are
+// visible, and c's box survives being clipped by each ancestor's in turn —
+// a scroll view's viewport clips its content, so a widget scrolled out of
+// sight is not exposed. An animation uses it to stop asking for frames
+// nobody would see.
+func Exposed(c Component) bool {
+	if c == nil || !c.Visible() {
+		return false
+	}
+	r := c.LocalBounds()
+	for {
+		if r.Empty() {
+			return false
+		}
+		r = r.Translate(c.Bounds().Min)
+		p := c.Parent()
+		if p == nil {
+			return true
+		}
+		if !p.Visible() {
+			return false
+		}
+		r = r.Intersect(p.LocalBounds())
+		c = p
+	}
+}
