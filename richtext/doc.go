@@ -50,6 +50,9 @@ type step struct {
 	before, after Selection
 	lastRune      rune
 	sealed        bool
+	// group holds the steps of a transaction (Transact), undone and
+	// redone together.
+	group []step
 }
 
 // Doc is a rich-text document with a selection and an edit history.
@@ -81,6 +84,7 @@ type Doc struct {
 	// block ends in one newline); valid below startsOK.
 	starts   []int
 	startsOK int
+	inTx     int
 }
 
 type watcher struct {
@@ -445,7 +449,14 @@ func (d *Doc) Undo() bool {
 	}
 	s := d.undo[n-1]
 	d.undo = d.undo[:n-1]
-	d.replace(s.at, len(s.now), s.old)
+	if s.group != nil {
+		for i := len(s.group) - 1; i >= 0; i-- {
+			g := s.group[i]
+			d.replace(g.at, len(g.now), g.old)
+		}
+	} else {
+		d.replace(s.at, len(s.now), s.old)
+	}
 	d.sel = Selection{d.clamp(s.before.Anchor), d.clamp(s.before.Caret)}
 	d.typing = nil
 	s.sealed = true
@@ -461,7 +472,13 @@ func (d *Doc) Redo() bool {
 	}
 	s := d.redo[n-1]
 	d.redo = d.redo[:n-1]
-	d.replace(s.at, len(s.old), s.now)
+	if s.group != nil {
+		for _, g := range s.group {
+			d.replace(g.at, len(g.old), g.now)
+		}
+	} else {
+		d.replace(s.at, len(s.old), s.now)
+	}
 	d.sel = Selection{d.clamp(s.after.Anchor), d.clamp(s.after.Caret)}
 	d.typing = nil
 	d.undo = append(d.undo, s)
@@ -515,9 +532,55 @@ func (d *Doc) edit(kind editKind, at, n int, nb []*Block, after Selection, r run
 	if limit <= 0 {
 		limit = 1000
 	}
-	if len(d.undo) > limit {
+	if len(d.undo) > limit && d.inTx == 0 {
 		d.undo = append(d.undo[:0], d.undo[len(d.undo)-limit:]...)
 	}
+}
+
+// Transact runs fn and makes every edit it makes one undo step.
+func (d *Doc) Transact(fn func()) {
+	n := len(d.undo)
+	before := d.sel
+	d.inTx++
+	fn()
+	d.inTx--
+	switch k := len(d.undo) - n; {
+	case k == 1:
+		d.undo[n].sealed = true
+	case k > 1:
+		group := append([]step(nil), d.undo[n:]...)
+		d.undo = append(d.undo[:n], step{group: group, before: before, after: d.sel, sealed: true})
+	}
+}
+
+// Move moves the text from a to c to the place to, as one step, and
+// selects it there (a drag of the selection dropped in the same
+// document). It reports false, and does nothing, when to is inside the
+// text moved.
+func (d *Doc) Move(a, c, to Pos) bool {
+	a, c, to = d.clamp(a), d.clamp(c), d.clamp(to)
+	if c.Less(a) {
+		a, c = c, a
+	}
+	if a == c || !to.Less(a) && !c.Less(to) {
+		return false
+	}
+	frag := d.Slice(a, c)
+	if c.Less(to) {
+		if to.Block == c.Block {
+			to = Pos{a.Block, a.Off + to.Off - c.Off}
+		} else {
+			to.Block -= c.Block - a.Block
+		}
+	}
+	d.Transact(func() {
+		d.sel = Selection{a, c}
+		d.DeleteSelection()
+		d.sel = Selection{to, to}
+		d.InsertDoc(frag)
+		d.sel = Selection{to, d.sel.Caret}
+	})
+	return true
 }
 
 func isSpace(r rune) bool { return r == ' ' || r == '\t' || r == '\n' }
@@ -631,8 +694,7 @@ func (d *Doc) InsertImage(im *Image) {
 // insert replaces the selection with the blocks of frag: the first joins
 // the block the selection starts in, the last takes the text after the
 // selection, and whole blocks between are put in as they are. keepKind
-// keeps the first block's kind (typing); otherwise a fragment that starts
-// at a block's start brings its own (pasting a heading onto an empty line).
+// keeps the first block's kind (typing).
 func (d *Doc) insert(frag []*Block, kind editKind, r rune, keepKind bool) {
 	a, c := d.sel.Range()
 	first, last := d.blocks[a.Block], d.blocks[c.Block]
@@ -640,7 +702,11 @@ func (d *Doc) insert(frag []*Block, kind editKind, r rune, keepKind bool) {
 	tail := sliceSpans(last, c.Off, last.n)
 	out := make([]*Block, 0, len(frag))
 	b0 := first.clone()
-	if !keepKind && a.Off == 0 && (frag[0].n > 0 || len(frag) > 1) && (first.n == 0 || frag[0].Kind != Paragraph) {
+	if !keepKind && a.Off == 0 && (len(frag) > 1 || c.Off == last.n) && (frag[0].n > 0 || len(frag) > 1) {
+		// The fragment's first block starts the block and, unless more
+		// blocks follow, fills it: it brings its own form (a heading
+		// pasted onto an empty line). Pasted into the middle of a block
+		// it takes that block's.
 		b0.Kind, b0.Level, b0.Align = frag[0].Kind, frag[0].Level, frag[0].Align
 	}
 	var caret Pos
