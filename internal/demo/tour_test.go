@@ -804,3 +804,31 @@ func windowShowsText(win *app.Window, want string) bool {
 	})
 	return found
 }
+
+// The status line follows a panel docked back by a drag as it follows the
+// buttons: a panel that has left its window does not stay "in a window of
+// its own".
+func TestTourDockNoteFollowsADrag(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	a, win := tourWindow(t, "", 1, pageDock)
+	defer win.Close()
+	tour := stateOf(t, win)
+	p := tour.page(pageDock).(*dockPage)
+	outline := p.host.Panel("outline")
+
+	clickNamed(t, win.Content(), "Float")
+	a.PumpOnce()
+	if !outline.Floating() || !strings.Contains(tour.status.Parts()[1], "window of its own") {
+		t.Fatalf("after Float: floating=%v, the status says %q", outline.Floating(), tour.status.Parts()[1])
+	}
+	// Back into the host the way a drop does it — the host's own call, no
+	// button of the page's involved.
+	p.host.DockPanel(outline)
+	a.PumpOnce()
+	if outline.Floating() {
+		t.Fatal("the panel did not dock")
+	}
+	if got := tour.status.Parts()[1]; strings.Contains(got, "window of its own") || !strings.Contains(got, "docked") {
+		t.Errorf("after docking by drag the status says %q", got)
+	}
+}
