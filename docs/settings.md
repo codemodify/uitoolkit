@@ -96,12 +96,14 @@ The Theme Atlas crops the preview panel out of `uitksettings -stage ID
 default look applied, the panel is the same rectangle in every pack:
 
 ```
-x 445, y 58, 569 × 381        crop box (445, 58) – (1014, 439)
+x 445, y 58, 569 × 429        crop box (445, 58) – (1014, 487)
 ```
 
 `TestSettingsPreviewPanelKeepsItsPlace` pins those numbers; a layout
 change that moves them fails it, and the new ones belong here. (They were
-`x 504, y 175, 510 × 387` before the gallery went under the preview.)
+`x 504, y 175, 510 × 387` before the gallery went under the preview, and
+`569 × 381` until the preview took 62% of the split instead of 55%, so
+its Controls tab shows every row.)
 The applied look sets Settings' own metrics, so take atlas shots with a
 clean `XDG_CONFIG_HOME`.
 
