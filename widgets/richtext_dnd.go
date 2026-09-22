@@ -249,10 +249,10 @@ func (t *RichText) AccessibleAction(item int, act a11y.Action) bool {
 		return false
 	}
 	links := t.visibleLinks()
-	if item >= len(links) || t.OnLink == nil {
+	if item >= len(links) {
 		return false
 	}
-	t.OnLink(links[item].href)
+	t.followLink(links[item].href)
 	return true
 }
 

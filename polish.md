@@ -202,8 +202,8 @@ Struck through once fixed; newest findings at the end of their section.
   two-finger horizontal overscroll instead. That needs the scroll views to
   hand an overscroll up rather than swallow it.
 - **Only one pinch-zoom view.** `Picture.Zoomable` and the tour's stamp take
-  a pinch; the rich-text editor, when it lands, should zoom its text on one
-  and open its links with `widgets.OpenLink`.
+  a pinch; the rich-text editor should zoom its text on one. (Its links now
+  open with `widgets.OpenLink` when the app sets no `OnLink`.)
 - **`Button` still takes a right or middle press as a click** (so does every
   widget that ignores `e.Button`); the thumb buttons no longer reach widgets
   at all.
