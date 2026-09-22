@@ -116,6 +116,7 @@ type session struct {
 	askedEmpty                                 bool
 	trayMu                                     sync.Mutex
 	tray                                       platform.StatusItem
+	notes                                      mailNotifier
 	mainBar                                    widget.Component
 	listBar                                    *widgets.ToolBar
 	hdrFrom, hdrSubj, hdrDate, hdrTo, hdrExtra *widgets.Label
