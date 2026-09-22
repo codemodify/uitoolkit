@@ -174,7 +174,7 @@ func newWindow(a *Application, surf platform.Surface, opts platform.WindowOption
 		layers:   widget.NewSceneCache(),
 	}
 	w.scale = a.windowScale(surf)
-	w.look = lookAtScale(a.base, w.scale)
+	w.look = a.scaledLook(w.scale)
 	w.dirty.Pad = 1
 	w.opts = opts
 	w.decor = platform.SurfaceDecorations(surf)
@@ -192,7 +192,11 @@ func (w *Window) applyLook(base style.LookAndFeel) {
 	if w == nil || base == nil {
 		return
 	}
-	w.look = lookAtScale(base, w.scale)
+	if w.app != nil && base == w.app.base {
+		w.look = w.app.scaledLook(w.scale)
+	} else {
+		w.look = lookAtScale(base, w.scale)
+	}
 	if w.caption != nil {
 		// The frame is the new look's (and, with the theme's button
 		// layout, so are the caption buttons' places).
@@ -216,7 +220,7 @@ func (w *Window) syncScale() bool {
 		return false
 	}
 	w.scale = next
-	w.look = lookAtScale(w.app.base, next)
+	w.look = w.app.scaledLook(next)
 	w.laid = false
 	w.dropScene()
 	w.fullInvalidate()
@@ -2098,6 +2102,8 @@ func (w *Window) Close() {
 	w.tipHover = nil
 	w.dropScene()
 	w.scene = nil
+	// The shadow patch is shared with the app's other windows.
+	w.shadow.drop()
 	_ = w.surf.Close()
 	if w.app != nil {
 		w.app.remove(w)

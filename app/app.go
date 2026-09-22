@@ -59,8 +59,13 @@ type Application struct {
 	// blinkStir and inputAt: the stir count blinking last saw and when it
 	// last moved, which is when the caret was last given a reason to
 	// blink. Run's goroutine only.
-	blinkStir        uint64
-	inputAt          time.Time
+	blinkStir uint64
+	inputAt   time.Time
+	// scaled are the base look at each scale a window has asked for, all
+	// built from scaledFor (scaledLook); lookMu guards the three.
+	lookMu           sync.Mutex
+	scaled           map[float32]style.LookAndFeel
+	scaledFor        style.LookAndFeel
 	onQuit           func()
 	watchLook        bool
 	lookWatch        *lookFileStamp
@@ -207,7 +212,7 @@ func (a *Application) SetLook(l style.LookAndFeel) {
 	}
 	a.owesTrim()
 	a.base = lookAtScale(l, 1)
-	a.look = lookAtScale(a.base, a.scale)
+	a.look = a.scaledLook(a.scale)
 	for _, w := range a.Windows() {
 		w.applyLook(a.base)
 	}
@@ -251,6 +256,29 @@ func lookScaleOf(look style.LookAndFeel) float32 {
 // lookAtScale rebuilds look at an absolute display scale. style.WithScale
 // multiplies onto whatever scale the look already carries, so the ratio is
 // what gets applied; metrics are rebuilt from the pack defaults either way.
+// scaledLook is the app's look at scale, the same one for every window at
+// that scale. A look keeps what its engine derives and caches (Memo), and
+// what is keyed on it — a frame's shadow patch — is shared only between
+// windows holding the same look: every window used to rebuild its own, so
+// two windows of an app at 1.75x had two of everything. Scaled looks last
+// until the base look changes.
+func (a *Application) scaledLook(scale float32) style.LookAndFeel {
+	a.lookMu.Lock()
+	defer a.lookMu.Unlock()
+	if a.scaledFor != a.base {
+		a.scaledFor, a.scaled = a.base, nil
+	}
+	if l, ok := a.scaled[scale]; ok {
+		return l
+	}
+	l := lookAtScale(a.base, scale)
+	if a.scaled == nil {
+		a.scaled = make(map[float32]style.LookAndFeel)
+	}
+	a.scaled[scale] = l
+	return l
+}
+
 func lookAtScale(look style.LookAndFeel, scale float32) style.LookAndFeel {
 	if look == nil || scale <= 0 {
 		return look
