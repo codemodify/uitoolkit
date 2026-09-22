@@ -231,7 +231,7 @@ func (w *Window) lookShape() *platform.Shape {
 	// rectangles are moved by the shadow's margin on the way out
 	// (applyShapeToFrame), as an app's own shape is.
 	win := paintengine2d.XYWH(0, 0, float32(ww), float32(hh))
-	f := style.DecorationFrame{Window: win, Caption: w.captionBox(w.innerBox(win, true), true)}
+	f := style.DecorationFrame{Window: win, Caption: w.captionBand(w.innerBox(win, true), true)}
 	s := platform.NewShapeSilhouette(style.WindowShapeOf(w.look, f, key.st))
 	w.lookShapeKey, w.lookShapeCur = key, &lookShapeMemo{shape: s}
 	return s

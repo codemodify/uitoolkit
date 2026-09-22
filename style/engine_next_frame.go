@@ -37,10 +37,9 @@ func (nextEngine) Decoration(l *Classic, st DecorationState) DecorationSpec {
 		Stacked: true,
 		Border:  nxFrameBorder(l),
 		Caption: bar,
-		// The theme's own title alignment: centred unless it justifies left
-		// or right, where the title keeps to the bar's free space.
-		CenterTitle: c.justify == 1,
-		Layout:      "minimize:close",
+		// The title keeps to the bar's free space, aligned as the theme's
+		// TitleJustify asks (DrawCaptionTitleSpan).
+		Layout: "minimize:close",
 	}
 	if c.wm {
 		// Window Maker: square tiles cut from the bar's ends.
@@ -82,19 +81,45 @@ func (e nextEngine) DrawDecoration(l *Classic, ctx *paintengine2d.Context, f Dec
 	e.resizeBar(l, ctx, paintengine2d.XYWH(w.Min.X+u, w.Max.Y-rh, w.Dx()-2*u, rh-u))
 }
 
-func (nextEngine) DrawCaptionTitle(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, title string, st DecorationState) {
+func (e nextEngine) DrawCaptionTitle(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, title string, st DecorationState) {
+	e.DrawCaptionTitleSpan(l, ctx, b, b, title, st)
+}
+
+// DrawCaptionTitleSpan lays the bar out between the buttons as
+// DrawWindowFrame does: Window Maker's middle section is a piece of its own,
+// bevelled between the tiles — its highlight down the seam beside the
+// miniaturize tile, its shadow beside the close tile — and the title is
+// aligned in it (NeXT's in the room two pixels clear of its buttons) as the
+// theme's TitleJustify asks.
+func (nextEngine) DrawCaptionTitleSpan(l *Classic, ctx *paintengine2d.Context, free, bar paintengine2d.Rect, title string, st DecorationState) {
 	c := nxColors(l)
 	u := nxU(l)
-	txt := c.ftitleTxt
+	tex, txt := &c.ftitle, c.ftitleTxt
 	if !st.Active {
-		txt = c.utitleTxt
+		tex, txt = &c.utitle, c.utitleTxt
+	}
+	lead, trail := free.Min.X > bar.Min.X+0.5, free.Max.X < bar.Max.X-0.5
+	left, right := free.Min.X, free.Max.X
+	if c.wm {
+		if lead || trail {
+			tex.raised(ctx, nxSnap(paintengine2d.XYWH(free.Min.X, bar.Min.Y, free.Dx(), bar.Dy())), u)
+		}
+	} else {
+		if lead {
+			left += 2 * u
+		}
+		if trail {
+			right -= 2 * u
+		}
+	}
+	if title == "" {
+		return
 	}
 	f := l.bold
 	if f == nil {
 		f = l.body
 	}
-	pad := l.S(6)
-	tb := paintengine2d.XYWH(b.Min.X+pad, b.Min.Y+u, b.Dx()-2*pad, b.Dy()-3*u)
+	tb := paintengine2d.XYWH(left+l.S(6), bar.Min.Y+u, right-left-l.S(12), bar.Dy()-3*u)
 	l.drawFittedText(ctx, f, title, tb, txt, nxAlign(c.justify), 0)
 }
 
