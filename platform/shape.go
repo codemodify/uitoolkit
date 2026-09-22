@@ -1,6 +1,9 @@
 package platform
 
 import (
+	"runtime"
+	"sync"
+
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/style"
 )
@@ -294,7 +297,27 @@ func (s *Shape) rasterise(w, h int) *ShapeRaster {
 	// Half covered is in: a pixel the shape owns more of than it does not.
 	// The same threshold decides the input region and the hit test, so the
 	// app never believes it owns a pixel the compositor gave away.
-	r.Rects = MaskRects(r.Mask, w, h, w, 128)
+	// Four regions from one mask, each its own pass over it, and none of
+	// them depending on another: they are worked out side by side.
+	//
+	// Half covered is the silhouette. Only a fully covered pixel may be
+	// called solid: the antialiased edge is translucent, and claiming it
+	// opaque is visible corruption. Everything not fully covered has to be
+	// erased from what the window paints, and it matters *how*: the pixels
+	// the window does not cover at all are wiped, and only the antialiased
+	// edge between them and the window is blended away through the mask.
+	var wg sync.WaitGroup
+	bands := [4]struct{ lo, hi uint8 }{{128, 255}, {255, 255}, {0, 254}, {0, 0}}
+	var got [4][]FrameRect
+	for i := range bands {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			got[i] = maskRectsRange(r.Mask, w, h, w, bands[i].lo, bands[i].hi)
+		}(i)
+	}
+	wg.Wait()
+	r.Rects = got[0]
 	r.Bounds = BoundsOfRects(r.Rects)
 	if len(r.Rects) > ShapeRectLimit {
 		r.Clamped = true
@@ -302,18 +325,15 @@ func (s *Shape) rasterise(w, h int) *ShapeRaster {
 		r.Opaque = r.Rects
 		return r
 	}
-	// Only a fully covered pixel may be called solid: the antialiased edge
-	// is translucent, and claiming it opaque is visible corruption.
-	r.Opaque = MaskRects(r.Mask, w, h, w, 255)
+	r.Opaque = got[1]
 	if len(r.Opaque) > ShapeRectLimit {
 		r.Opaque = nil
 	}
-	// Everything that is not fully covered has to be erased from what the
-	// window paints, and it matters *how*: the pixels the window does not
-	// cover at all are wiped, and only the antialiased edge between them
-	// and the window is blended away through the mask.
-	r.Cut = maskRectsRange(r.Mask, w, h, w, 0, 254)
-	r.Clear = maskRectsRange(r.Mask, w, h, w, 0, 0)
+	r.Cut, r.Clear = got[2], got[3]
+	if len(r.Cut) > ShapeRectLimit || len(r.Clear) > ShapeRectLimit {
+		r.Cut = []FrameRect{{X: 0, Y: 0, W: w, H: h}}
+		r.Clear = nil
+	}
 	if len(r.Cut) > ShapeRectLimit || len(r.Clear) > ShapeRectLimit {
 		r.Cut = []FrameRect{{X: 0, Y: 0, W: w, H: h}}
 		r.Clear = nil
@@ -321,51 +341,57 @@ func (s *Shape) rasterise(w, h int) *ShapeRaster {
 	return r
 }
 
-// shapeScratchBytes caps the scratch image a rasterisation may allocate.
-// The shape is drawn in horizontal strips that fit inside it, so a
-// full-screen silhouette on a 4K display costs about a megabyte in passing
-// rather than the thirty-three its own size would.
-const shapeScratchBytes = 1 << 20
-
-// rasterPathMask draws the path white on nothing and hands back the alpha
-// channel as a coverage mask.
+// rasterPathMask draws the path on nothing, straight into a one-byte
+// coverage image — paintengine2d's FormatA8, which its CPU device draws
+// into as well as reads — whose bytes are the mask: no scratch and no copy.
 //
-// It rasterises into an RGBA image and picks the alpha out, rather than
-// drawing straight into paintengine2d's own 8-bit mask format: the CPU
-// rasteriser takes FormatA8 as a source (a glyph sheet, an icon) but not as
-// a render target — every blend writes four bytes at a one-byte-per-pixel
-// index — so an A8 target runs past the end of its own buffer. The scratch
-// is dropped as soon as the mask has been taken from it.
+// A large silhouette is drawn in horizontal bands side by side, each band
+// an A8 image over its own rows of the one mask, so the cold path of a
+// resize costs a fraction of one core's time. The bands share nothing but
+// the path, which only is read.
 func rasterPathMask(path *paintengine2d.Path, rule paintengine2d.FillRule, w, h int) []uint8 {
 	mask := make([]uint8, w*h)
-	strip := max(shapeScratchBytes/(w*4), 1)
-	img := paintengine2d.NewImage(w, min(strip, h))
-	ctx := paintengine2d.NewContext(img)
-	if ctx == nil {
-		return mask
-	}
 	paint := paintengine2d.Fill(paintengine2d.White)
 	paint.FillRule = rule
 	paint.AntiAlias = true
-	stride := img.RowStride()
-	for top := 0; top < h; top += strip {
-		rows := min(strip, h-top)
-		ctx.Clear(paintengine2d.Transparent)
-		// Slide the path up so this strip's rows land at the top of the
-		// scratch; the rasteriser clips the rest away for us.
-		ctx.Save()
+	draw := func(top, rows int) {
+		img := &paintengine2d.Image{Width: w, Height: rows, Stride: w,
+			Pix: mask[top*w : (top+rows)*w], Format: paintengine2d.FormatA8}
+		ctx := paintengine2d.NewContext(img)
+		if ctx == nil {
+			return
+		}
 		ctx.Translate(0, float32(-top))
 		ctx.DrawPath(path, paint)
-		ctx.Restore()
-		for y := 0; y < rows; y++ {
-			row := img.Pix[y*stride:]
-			out := mask[(top+y)*w:]
-			for x := 0; x < w; x++ {
-				out[x] = row[x*4+3] // premultiplied RGBA8: alpha last
-			}
-		}
 	}
+	n := shapeBands(w, h)
+	if n == 1 {
+		draw(0, h)
+		return mask
+	}
+	var wg sync.WaitGroup
+	step := (h + n - 1) / n
+	for top := 0; top < h; top += step {
+		wg.Add(1)
+		go func(top, rows int) {
+			defer wg.Done()
+			draw(top, rows)
+		}(top, min(step, h-top))
+	}
+	wg.Wait()
 	return mask
+}
+
+// shapeBands is how many bands a w*h silhouette is drawn in: one for a
+// small one, where starting goroutines costs more than it saves, and at
+// most four — enough to take a large one well under a frame without taking
+// the whole machine for it.
+func shapeBands(w, h int) int {
+	n := min(runtime.GOMAXPROCS(0), 4)
+	if w*h < 256*256 || h < 64 || n < 2 {
+		return 1
+	}
+	return n
 }
 
 // resampleMask stretches a coverage mask to w*h, bilinearly: a skin's
@@ -431,6 +457,11 @@ func MaskRects(mask []uint8, w, h, stride int, threshold uint8) []FrameRect {
 	return maskRectsRange(mask, w, h, stride, threshold, 255)
 }
 
+// MaskRectsRange is MaskRects over a band of values, lo to hi inclusive.
+func MaskRectsRange(mask []uint8, w, h, stride int, lo, hi uint8) []FrameRect {
+	return maskRectsRange(mask, w, h, stride, lo, hi)
+}
+
 // maskRectsRange is MaskRects over a band of coverage values, lo to hi
 // inclusive: the silhouette is 128 to 255, what a compositor may call solid
 // is 255 alone, what the window does not cover at all is 0 alone, and its
@@ -439,7 +470,9 @@ func maskRectsRange(mask []uint8, w, h, stride int, lo, hi uint8) []FrameRect {
 	if w < 1 || h < 1 || stride < w || len(mask) < (h-1)*stride+w {
 		return nil
 	}
-	in := func(v uint8) bool { return v >= lo && v <= hi }
+	// v is in [lo, hi] exactly when v-lo, wrapping, is at most hi-lo: one
+	// unsigned compare a pixel, which is most of what this loop does.
+	span := hi - lo
 	var out []FrameRect
 	// open holds the rectangles of the row group being extended, each one
 	// started when the group began; prev is that group's runs.
@@ -455,14 +488,14 @@ func maskRectsRange(mask []uint8, w, h, stride int, lo, hi uint8) []FrameRect {
 		row := mask[y*stride : y*stride+w]
 		x := 0
 		for x < w {
-			for x < w && !in(row[x]) {
+			for x < w && row[x]-lo > span {
 				x++
 			}
 			if x >= w {
 				break
 			}
 			s := x
-			for x < w && in(row[x]) {
+			for x < w && row[x]-lo <= span {
 				x++
 			}
 			cur = append(cur, s, x)

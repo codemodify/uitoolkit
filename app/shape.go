@@ -157,6 +157,7 @@ func (w *Window) shapeChanged() {
 	w.eraser, w.eraserFor = nil, nil
 	w.wipe, w.wipeFor = nil, nil
 	w.shapeShade = shapeShadow{}
+	w.band = nil
 	w.lookShapeCur = nil
 	w.laid = false
 	w.dropScene()
@@ -298,10 +299,13 @@ func (w *Window) applyShapeToFrame(f *platform.Frame, margin platform.FrameInset
 	r := w.shapeRaster()
 	if r != nil {
 		f.Shape = platform.OffsetRects(r.Rects, margin.Left, margin.Top)
-		// The shape takes the whole job over: the resize band the frame
-		// would have kept in the margin is not in the silhouette, so a
-		// shaped window is resized from its own edges or not at all.
+		// The shape takes the whole job over, bar one thing: a window the
+		// user may resize keeps a band along the silhouette's outer edge
+		// (shapeband.go), which takes presses too.
 		f.Input = platform.FrameInsets{}
+		if b := w.shapeBandFor(r, margin); b != nil {
+			f.Shape = append(append([]platform.FrameRect(nil), f.Shape...), b.rects...)
+		}
 		// Transparent pixels are the whole point, so the buffer needs an
 		// alpha channel whatever the look asked for.
 		f.Alpha = true
@@ -370,6 +374,17 @@ func (w *Window) paintWindowShape(ctx *paintengine2d.Context, dirty *paintengine
 	}
 	win := w.windowBox()
 	off := paintengine2d.Pt(win.Min.X, win.Min.Y)
+	punchSilhouette(ctx, r, off, w.shapeWipe(r, off), w.shapeEraser(r), dirty)
+}
+
+// punchSilhouette erases everything outside silhouette r, whose top-left
+// corner is at off, from what ctx has painted — a shaped window's and a
+// shaped popup's cut alike. wipe is r's uncovered region as a path at off
+// (shapeWipePath) and eraser its inverse coverage (shapeEraserImage).
+func punchSilhouette(ctx *paintengine2d.Context, r *platform.ShapeRaster, off paintengine2d.Point, wipe *paintengine2d.Path, eraser *paintengine2d.Image, dirty *paintengine2d.Damage) {
+	if r == nil || ctx == nil || len(r.Cut) == 0 {
+		return
+	}
 	box := func(c platform.FrameRect) (paintengine2d.Rect, paintengine2d.Rect, bool) {
 		src := paintengine2d.XYWH(float32(c.X), float32(c.Y), float32(c.W), float32(c.H))
 		dst := src.Translate(off)
@@ -386,8 +401,8 @@ func (w *Window) paintWindowShape(ctx *paintengine2d.Context, dirty *paintengine
 	// multisampling it left a thread of half-erased pixels along the
 	// boundary that read as a stipple against anything saturated behind
 	// the window.
-	if p := w.shapeWipe(r, off); p != nil {
-		ctx.DrawPath(p, paintengine2d.Paint{
+	if wipe != nil {
+		ctx.DrawPath(wipe, paintengine2d.Paint{
 			Color: paintengine2d.White,
 			Blend: paintengine2d.BlendDestOut,
 		})
@@ -399,8 +414,7 @@ func (w *Window) paintWindowShape(ctx *paintengine2d.Context, dirty *paintengine
 	// mean thousands of tiny draws, while the mask is exact everywhere —
 	// over a pixel already wiped it multiplies zero by zero, and over one
 	// the window covers solidly it multiplies by one.
-	img := w.shapeEraser(r)
-	if img == nil {
+	if eraser == nil {
 		return
 	}
 	paint := paintengine2d.Paint{
@@ -410,7 +424,7 @@ func (w *Window) paintWindowShape(ctx *paintengine2d.Context, dirty *paintengine
 	}
 	for _, c := range r.Cut {
 		if src, dst, want := box(c); want {
-			ctx.DrawImageRectPaint(img, src, dst, paint)
+			ctx.DrawImageRectPaint(eraser, src, dst, paint)
 		}
 	}
 }
@@ -424,6 +438,12 @@ func (w *Window) shapeEraser(r *platform.ShapeRaster) *paintengine2d.Image {
 	if w.eraser != nil && w.eraserFor == r {
 		return w.eraser
 	}
+	w.eraser, w.eraserFor = shapeEraserImage(r), r
+	return w.eraser
+}
+
+// shapeEraserImage is r's inverse coverage as an 8-bit image.
+func shapeEraserImage(r *platform.ShapeRaster) *paintengine2d.Image {
 	img := paintengine2d.NewImageA8(r.W, r.H)
 	stride := img.RowStride()
 	for y := 0; y < r.H; y++ {
@@ -433,7 +453,6 @@ func (w *Window) shapeEraser(r *platform.ShapeRaster) *paintengine2d.Image {
 			row[x] = 255 - src[x]
 		}
 	}
-	w.eraser, w.eraserFor = img, r
 	return img
 }
 
@@ -504,11 +523,20 @@ func (w *Window) shapeWipe(r *platform.ShapeRaster, off paintengine2d.Point) *pa
 	if w.wipe != nil && w.wipeFor == r && w.wipeAt == off {
 		return w.wipe
 	}
+	w.wipe, w.wipeFor, w.wipeAt = shapeWipePath(r, off), r, off
+	return w.wipe
+}
+
+// shapeWipePath is r's uncovered region as one path of whole pixels at off
+// (nil when the silhouette leaves nothing entirely uncovered).
+func shapeWipePath(r *platform.ShapeRaster, off paintengine2d.Point) *paintengine2d.Path {
+	if len(r.Clear) == 0 {
+		return nil
+	}
 	p := paintengine2d.NewPath()
 	for _, c := range r.Clear {
 		p.AddRect(paintengine2d.XYWH(off.X+float32(c.X), off.Y+float32(c.Y),
 			float32(c.W), float32(c.H)))
 	}
-	w.wipe, w.wipeFor, w.wipeAt = p, r, off
 	return p
 }

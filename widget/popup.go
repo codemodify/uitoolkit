@@ -156,6 +156,68 @@ type WindowRecter interface {
 	WindowRect() paintengine2d.Rect
 }
 
+// PopupAreaHost is implemented by app.Window when its popups are surfaces
+// of their own (a Wayland xdg_popup, an X11 override-redirect window)
+// rather than layers drawn inside it. A popup is then placed in the box
+// PopupArea answers — the work area of the monitor the window is on, in the
+// window's device pixels, so it may run past the window's edges and does
+// wherever it has to — instead of being squeezed into [WindowRecter]'s box.
+// ok is false while popups are drawn inside the window.
+type PopupAreaHost interface {
+	PopupArea() (box paintengine2d.Rect, ok bool)
+}
+
+// PopupSide is where a popup went relative to what it hangs from.
+type PopupSide uint8
+
+const (
+	// PopupBelow and PopupAbove: under or over the anchor, left edges
+	// aligned (a menu bar's menu, a combo box's list).
+	PopupBelow PopupSide = iota
+	PopupAbove
+	// PopupRight and PopupLeft: beside the anchor, top edges aligned (a
+	// submenu beside its row).
+	PopupRight
+	PopupLeft
+	// PopupAt: from a point, down and to the right (a context menu at the
+	// pointer, a tooltip below it).
+	PopupAt
+)
+
+// PopupAnchor is what a popup hangs from, as the Place* functions leave it:
+// the anchor's box in window device pixels and the side of it the popup
+// went to. A popup that is a surface of its own hands both to the window
+// system (xdg_positioner), which flips and slides it against the screen's
+// edges exactly as the placement here does against the window's.
+type PopupAnchor struct {
+	Rect paintengine2d.Rect
+	Side PopupSide
+}
+
+type anchored interface{ anchorSlot() **PopupAnchor }
+
+func (b *Base) anchorSlot() **PopupAnchor { return &b.anchor }
+
+// SetPopupAnchor records what popup hangs from. The Place* functions call
+// it; a popup placed by hand (a tooltip) states its own.
+func SetPopupAnchor(popup Component, a PopupAnchor) {
+	if s, ok := popup.(anchored); ok {
+		cp := a
+		*s.anchorSlot() = &cp
+	}
+}
+
+// PopupAnchorOf is what popup hangs from, when it was placed by one of the
+// Place* functions or SetPopupAnchor.
+func PopupAnchorOf(popup Component) (PopupAnchor, bool) {
+	if s, ok := popup.(anchored); ok {
+		if a := *s.anchorSlot(); a != nil {
+			return *a, true
+		}
+	}
+	return PopupAnchor{}, false
+}
+
 // PreparePopup attaches from's host (look, scale, popup layer) before Measure.
 func PreparePopup(from, popup Component) {
 	if from == nil || popup == nil {
@@ -196,7 +258,8 @@ func popupCap(popup Component, maxW, maxH float32) (float32, float32) {
 	return maxW, maxH
 }
 
-// popupWindowRect is the box a popup must stay inside: the host's visible
+// popupWindowRect is the box a popup must stay inside: the screen's work
+// area where popups are surfaces of their own, else the host's visible
 // window, else its whole surface.
 func popupWindowRect(c Component) (paintengine2d.Rect, bool) {
 	if c == nil {
@@ -205,6 +268,11 @@ func popupWindowRect(c Component) (paintengine2d.Rect, bool) {
 	h := c.Host()
 	if h == nil {
 		return paintengine2d.Rect{}, false
+	}
+	if pa, ok := h.(PopupAreaHost); ok {
+		if box, ok := pa.PopupArea(); ok && box.Dx() > 8 && box.Dy() > 8 {
+			return box, true
+		}
 	}
 	if wr, ok := h.(WindowRecter); ok {
 		if box := wr.WindowRect(); box.Dx() > 8 && box.Dy() > 8 {
@@ -288,6 +356,16 @@ func PlacePopupForAnchor(from, popup Component, anchor paintengine2d.Rect, minW,
 	}
 	y, h = shiftPopupAxis(y, h, box.Min.Y, box.Max.Y, inset)
 	popup.Arrange(paintengine2d.XYWH(x, y, w, h))
+	side := PopupBelow
+	if !placeBelow {
+		side = PopupAbove
+	}
+	// The gap belongs to the anchor: a window system that flips the popup
+	// keeps it the same distance off on the other side.
+	SetPopupAnchor(popup, PopupAnchor{Rect: paintengine2d.Rect{
+		Min: paintengine2d.Pt(anchor.Min.X, anchor.Min.Y-gap),
+		Max: paintengine2d.Pt(anchor.Max.X, anchor.Max.Y+gap),
+	}, Side: side})
 }
 
 // PlacePopup sizes popup to its intrinsic Measure and positions its top-left
@@ -316,6 +394,7 @@ func PlacePopup(popup Component, origin paintengine2d.Point, maxW, maxH float32)
 	x, w := shiftPopupAxis(origin.X, w, box.Min.X, box.Max.X, inset)
 	y, h := shiftPopupAxis(origin.Y, h, box.Min.Y, box.Max.Y, inset)
 	popup.Arrange(paintengine2d.XYWH(x, y, w, h))
+	SetPopupAnchor(popup, PopupAnchor{Rect: paintengine2d.XYWH(origin.X, origin.Y, 1, 1), Side: PopupAt})
 }
 
 // PlacePopupBeside sizes popup and places it to the right of anchor (a
@@ -385,6 +464,11 @@ func PlacePopupBeside(from, popup Component, anchor paintengine2d.Rect) {
 	x, w = shiftPopupAxis(x, w, box.Min.X, box.Max.X, inset)
 	y, h = shiftPopupAxis(y, h, box.Min.Y, box.Max.Y, inset)
 	popup.Arrange(paintengine2d.XYWH(x, y, w, h))
+	side := PopupRight
+	if !placeRight {
+		side = PopupLeft
+	}
+	SetPopupAnchor(popup, PopupAnchor{Rect: anchor, Side: side})
 }
 
 // CascadeHost is a popup that may show a sibling cascade (submenu) menu.

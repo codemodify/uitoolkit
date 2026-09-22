@@ -594,7 +594,8 @@ func macUpDown(l *Classic, ctx *paintengine2d.Context, cap paintengine2d.Rect, c
 // vibrant paints a material: what lies under b, blurred, under a
 // translucent tint (the menu and menu bar vibrancy).
 func (c *macSet) vibrant(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, r float32, tint paintengine2d.Color) {
-	if l.P("vibrancy", 1) != 0 && tint.A < 1 {
+	tint, blur := LayerMaterial(tint, l.Palette().Background)
+	if blur && l.P("vibrancy", 1) != 0 && tint.A < 1 {
 		ctx.Save()
 		ctx.ClipRoundRect(b, r, r)
 		ctx.BackdropBlur(b, l.S(16))
@@ -1216,7 +1217,7 @@ func (macosEngine) DrawViewFrame(l *Classic, ctx *paintengine2d.Context, b paint
 		// A source list has no bezel and no focus halo: its pane runs to
 		// the view's edges, and its accent selection shows the focus.
 		if !b.Empty() {
-			ctx.DrawRect(b, paintengine2d.Fill(c.pane(st)))
+			ctx.DrawRect(b, paintengine2d.Fill(c.pane(l, st)))
 		}
 		return
 	}
@@ -1244,19 +1245,28 @@ func (e macosEngine) ViewBackground(l *Classic, st ControlState) paintengine2d.C
 	if !st.Sidebar() {
 		return e.BaseEngine.ViewBackground(l, st)
 	}
-	return macColors(l).pane(st)
+	return macColors(l).pane(l, st)
 }
 
 // pane is the sidebar's pane: the vibrant grey of the source list (a light
 // grey in the light appearance, a dark one in the dark), flattened over a
 // neutral desktop since the window's own background is all a toolkit window
 // can blur. The material turns inactive, flat and neutral, with its window.
-func (c *macSet) pane(st ControlState) paintengine2d.Color {
+func (c *macSet) pane(l *Classic, st ControlState) paintengine2d.Color {
 	if st.Backdrop() {
 		return c.sideOff
 	}
+	if c.bigSur && GlassBehind(l) {
+		// Real glass behind the window: the pane keeps the material's own
+		// alpha rather than the flattened grey.
+		return c.side.WithAlpha(macSideGlassAlpha)
+	}
 	return c.side
 }
+
+// macSideGlassAlpha is how much of the blurred desktop a Big Sur sidebar
+// lets through when the compositor really blurs behind the window.
+const macSideGlassAlpha = 0.62
 
 // sideRow paints a sidebar row's selection and returns its text colour.
 // Yosemite's selection is a flat bar across the row, Big Sur's a rounded
@@ -1773,7 +1783,12 @@ func (macosEngine) DrawPanel(l *Classic, ctx *paintengine2d.Context, b paintengi
 func (macosEngine) DrawMenuBar(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect) {
 	c := macColors(l)
 	b = macSnap(b)
-	ctx.DrawRect(b, paintengine2d.Fill(Mix(c.win, c.menu, c.menu.A)))
+	fill := Mix(c.win, c.menu, c.menu.A)
+	if c.bigSur && GlassBehind(l) {
+		// Over real glass the bar's material keeps its own alpha.
+		fill = c.menu
+	}
+	ctx.DrawRect(b, paintengine2d.Fill(fill))
 	ctx.DrawRect(paintengine2d.XYWH(b.Min.X, b.Max.Y-macPx(l), b.Dx(), macPx(l)), paintengine2d.Fill(c.sep))
 }
 

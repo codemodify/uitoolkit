@@ -41,6 +41,10 @@ type Offscreen struct {
 	// test sets one: the window's size is logical pixels and the pixmap
 	// behind it is that many times this.
 	scale float32
+	// pops is the simulated popup support (offscreen_popup.go): on a top
+	// level, whether popups open as surfaces and the work area they are
+	// placed in; on a popup, what it hangs from and where it went.
+	pops offscreenPopups
 }
 
 // NewOffscreen allocates a CPU pixmap of the requested size.
@@ -225,12 +229,26 @@ func (o *Offscreen) Wait(timeout time.Duration) bool {
 }
 
 func (o *Offscreen) Close() error {
+	if o.closed {
+		return nil
+	}
+	o.closePopups()
 	o.closed = true
 	return nil
 }
 
-// Inject appends a synthetic event (tests and scripted screenshots).
-func (o *Offscreen) Inject(ev Event) { o.queue = append(o.queue, ev) }
+// Inject appends a synthetic event (tests and scripted screenshots). An
+// event injected into a popup arrives on its root window, translated, as a
+// real one does.
+func (o *Offscreen) Inject(ev Event) {
+	if p := o.pops.popup; p != nil && p.root != nil {
+		if popupInput(ev.Kind) {
+			p.root.queue = append(p.root.queue, popupEvent(ev, o.Origin()))
+		}
+		return
+	}
+	o.queue = append(o.queue, ev)
+}
 
 // OffscreenBackend always succeeds and never talks to a display.
 type OffscreenBackend struct{}

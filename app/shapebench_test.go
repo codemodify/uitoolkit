@@ -88,3 +88,17 @@ func BenchmarkShapeRasterCold(b *testing.B) {
 		}
 	}
 }
+
+// BenchmarkShapeBandLarge is the resize band a large resizable shaped
+// window works out on a resize, beside its silhouette.
+func BenchmarkShapeBandLarge(b *testing.B) {
+	r := ring(paintengine2d.Pt(1600, 1200), 1).Raster(1600, 1200)
+	m := platform.FrameInsets{Top: 20, Right: 20, Bottom: 20, Left: 20}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if buildShapeBand(r, m, 10, 4, 16) == nil {
+			b.Fatal("no band")
+		}
+	}
+}
