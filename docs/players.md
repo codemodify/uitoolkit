@@ -11,6 +11,16 @@ go run ./examples/marquee    # the big one: a cabinet that folds down
 go run ./examples/lantern    # the shaped one: a menu bar, and a switch
 ```
 
+![Minim in its three skins — Minim, Minim Classic and Minim Silver — each as the strip, the equaliser and the playlist snapped together](screenshots/minim.webp)
+
+| | |
+|---|---|
+| ![Marquee's cabinet, and folded into its stadium](screenshots/marquee.webp) | ![Lantern and its playlist in its skin, and with the skin dropped](screenshots/lantern.webp) |
+| **Marquee** — the cabinet, and folded down | **Lantern** — in its skin, and with it dropped |
+
+Each player's `-shot DIR` poses it at 1:37 and writes every window;
+`tools/shots/demos.sh` puts those together as the pictures above.
+
 ## They play nothing
 
 **Nothing here is decoded and nothing is played.** There is no audio stack,
