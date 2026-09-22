@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
 )
@@ -85,6 +86,12 @@ type Application struct {
 	// captionPref is where toolkit frames put their caption buttons: the
 	// desktop's layout or the look's own (look.json "captionButtons").
 	captionPref style.CaptionButtonsPref
+	// palettes are the colour-scheme files written for the desktop's
+	// frame, by look, and paletteWarned is set once writing one failed
+	// (dress.go); icon is every window's icon (SetIcon).
+	palettes      map[style.LookAndFeel]string
+	paletteWarned bool
+	icon          []*paintengine2d.Image
 }
 
 // trayWakeCap is the longest a tray-holding loop sleeps. Tray events

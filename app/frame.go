@@ -262,6 +262,9 @@ func (w *Window) rebuildCaption() {
 		}
 		w.capPress, w.capClick = captionGesture{}, captionClick{}
 	}
+	// The desktop's frame, wherever it takes a palette, is in the look's
+	// colours.
+	w.syncDecorationPalette()
 	// The caption's buttons are half of what a fitted caption measures, and
 	// therefore half of what a look's silhouette is stated against.
 	w.lookShapeCur = nil
