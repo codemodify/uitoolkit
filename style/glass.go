@@ -62,6 +62,15 @@ func WantsGlass(lk LookAndFeel) bool {
 	return DecorationOf(lk, DecorationState{Active: true}).Glass
 }
 
+// GlassFrameOnly reports whether lk's glass is its frame's alone
+// ([DecorationSpec.GlassFrame]): the window's content stays opaque.
+func GlassFrameOnly(lk LookAndFeel) bool {
+	if lk == nil {
+		return false
+	}
+	return DecorationOf(lk, DecorationState{Active: true}).GlassFrame
+}
+
 // GlassTint is the colour a window's background takes when it is really
 // glass: the look's own "glassWindow" token where its pack defines one, and
 // otherwise its window background at alpha. The result is always
@@ -139,4 +148,20 @@ func FlattenOver(c, bg paintengine2d.Color) paintengine2d.Color {
 	}
 	a := clamp01(c.A)
 	return paintengine2d.RGBA(c.R*a+bg.R*(1-a), c.G*a+bg.G*(1-a), c.B*a+bg.B*(1-a), 1)
+}
+
+// LayerMaterial is how a look paints a translucent material on a floating
+// layer — a menu's vibrancy, a flyout's acrylic — given what is behind the
+// layer now: blur is whether to blur the window's own content under it
+// (the layer is drawn inside its window), and tint the colour to lay down,
+// its real alpha over the compositor's glass, flattened over bg where
+// nobody blurs the desktop behind a surface of its own.
+func LayerMaterial(tint, bg paintengine2d.Color) (paintengine2d.Color, bool) {
+	switch LayerBackdrop() {
+	case BackdropGlass:
+		return tint, false
+	case BackdropNone:
+		return FlattenOver(tint, bg), false
+	}
+	return tint, true
 }
