@@ -7,6 +7,7 @@ import (
 	"log"
 
 	"github.com/codemodify/uitoolkit"
+	"github.com/codemodify/uitoolkit/icons"
 	"github.com/codemodify/uitoolkit/internal/demo"
 	"github.com/codemodify/uitoolkit/platform"
 )
@@ -16,6 +17,8 @@ func main() {
 	flag.Parse()
 
 	a := uitoolkit.New(uitoolkit.Options{Headless: *headless})
+	// The window icon the desktop shows in its title bar, task bar and switcher.
+	a.SetIcon(icons.AppIconRGB("pencil", 0xc9, 0xa2, 0x27)...)
 	win, err := a.NewWindow(platform.WindowOptions{
 		Title: "Notes", Width: 860, Height: 540, MinWidth: 520, MinHeight: 360,
 	})

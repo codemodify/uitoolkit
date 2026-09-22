@@ -34,6 +34,7 @@ import (
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit"
 	"github.com/codemodify/uitoolkit/app"
+	"github.com/codemodify/uitoolkit/icons"
 	"github.com/codemodify/uitoolkit/internal/demo"
 	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
@@ -76,6 +77,8 @@ func main() {
 	}
 
 	a := uitoolkit.New(uitoolkit.Options{Headless: offscreen, Scale: float32(*scale)})
+	// The window icon the desktop shows in its title bar, task bar and switcher.
+	a.SetIcon(icons.AppIconRGB("home", 0x3f, 0x51, 0xb5)...)
 
 	if *shot != "" || *sheet != "" {
 		if *shot != "" {

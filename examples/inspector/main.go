@@ -7,6 +7,7 @@ import (
 	"log"
 
 	"github.com/codemodify/uitoolkit"
+	"github.com/codemodify/uitoolkit/icons"
 	"github.com/codemodify/uitoolkit/internal/demo"
 	"github.com/codemodify/uitoolkit/platform"
 )
@@ -16,6 +17,8 @@ func main() {
 	flag.Parse()
 
 	a := uitoolkit.New(uitoolkit.Options{Headless: *headless})
+	// The window icon the desktop shows in its title bar, task bar and switcher.
+	a.SetIcon(icons.AppIconRGB("search", 0x2a, 0x9d, 0x8f)...)
 	win, err := a.NewWindow(platform.WindowOptions{
 		Title: "Inspector", Width: 860, Height: 580, MinWidth: 560, MinHeight: 400,
 	})
