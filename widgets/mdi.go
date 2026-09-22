@@ -110,6 +110,7 @@ type MDIWindow struct {
 	OnClose      func()
 	area         *MDIArea
 	initialFocus widget.Component
+	unplaced     bool
 	title        string
 	client       *mdiClient
 	state        mdiState
@@ -165,8 +166,14 @@ func (a *MDIArea) AddWindow(title string, content widget.Component) *MDIWindow {
 	w.Add(w.client)
 	a.wins = append(a.wins, w)
 	a.Add(w)
-	w.normal = a.nextPlace(w)
-	a.placed++
+	if a.Host() != nil && !a.LocalBounds().Empty() {
+		w.normal = a.nextPlace(w)
+		a.placed++
+	} else {
+		// Not in a window yet: its look, scale and size are not known,
+		// so it is placed on the area's first layout.
+		w.unplaced = true
+	}
 	a.syncTabs()
 	a.changed()
 	a.Activate(w)
@@ -511,7 +518,25 @@ func (a *MDIArea) restack(wins []*MDIWindow) {
 	a.Invalidate()
 }
 
-func (a *MDIArea) iconW() float32   { return float32(math.Round(float64(style.Dip(a.Look(), 170)))) }
+// iconW is a minimised window's width: its caption buttons, and room for
+// a title beside them however big the look draws them.
+func (a *MDIArea) iconW() float32 {
+	lk := a.Look()
+	w := style.Dip(lk, 170)
+	if len(a.wins) > 0 {
+		s := a.wins[0].specFor(mdiMinimized, false)
+		var bw float32
+		for _, k := range []style.CaptionButton{style.CaptionMaximize, style.CaptionClose} {
+			if sz := s.ButtonBox(k); sz.X > 0 {
+				bw += sz.X + s.ButtonGap
+			} else {
+				bw += style.Dip(lk, 24)
+			}
+		}
+		w = max(w, bw+s.ButtonPad.Left+s.ButtonPad.Right+s.CloseGap+s.Border.Left+s.Border.Right+style.Dip(lk, 110))
+	}
+	return float32(math.Round(float64(w)))
+}
 func (a *MDIArea) iconGap() float32 { return float32(math.Round(float64(style.Dip(a.Look(), 2)))) }
 func (a *MDIArea) iconH() float32 {
 	if len(a.wins) == 0 {
@@ -546,6 +571,15 @@ func (a *MDIArea) Arrange(r paintengine2d.Rect) {
 	a.SetBounds(r)
 	a.rescale()
 	b := a.LocalBounds()
+	if !b.Empty() {
+		for _, w := range a.wins {
+			if w.unplaced {
+				w.unplaced = false
+				w.normal = a.nextPlace(w)
+				a.placed++
+			}
+		}
+	}
 	if a.mode == MDITabbed {
 		th := a.tabs.Measure(layout.Loose(b.Dx(), b.Dy())).Y
 		a.tabs.Arrange(paintengine2d.XYWH(0, 0, b.Dx(), th))
@@ -1264,8 +1298,9 @@ func mdiButtonsToSide(l platform.ButtonLayout, side style.ButtonSide) platform.B
 
 // mdiButton is a caption button and its box.
 type mdiButton struct {
-	k platform.CaptionButton
-	r paintengine2d.Rect
+	k    platform.CaptionButton
+	r    paintengine2d.Rect
+	left bool // in the left group
 }
 
 // buttonRects are the caption buttons' boxes in local coordinates.
@@ -1309,7 +1344,7 @@ func (w *MDIWindow) buttonRects() []mdiButton {
 		}
 		sz := size(b)
 		if b != platform.CaptionSpacer {
-			out = append(out, mdiButton{b, paintengine2d.XYWH(x, top, sz.X, sz.Y)})
+			out = append(out, mdiButton{b, paintengine2d.XYWH(x, top, sz.X, sz.Y), true})
 		}
 		x += sz.X
 	}
@@ -1322,7 +1357,7 @@ func (w *MDIWindow) buttonRects() []mdiButton {
 		sz := size(b)
 		x -= sz.X
 		if b != platform.CaptionSpacer {
-			out = append(out, mdiButton{b, paintengine2d.XYWH(x, top, sz.X, sz.Y)})
+			out = append(out, mdiButton{b, paintengine2d.XYWH(x, top, sz.X, sz.Y), false})
 		}
 	}
 	return out
@@ -1336,7 +1371,7 @@ func (w *MDIWindow) titleRect() paintengine2d.Rect {
 	cap := w.caption()
 	x0, x1 := cap.Min.X, cap.Max.X
 	for _, b := range w.buttonRects() {
-		if b.r.Min.X < (cap.Min.X+cap.Max.X)*0.5 {
+		if b.left {
 			x0 = max(x0, b.r.Max.X)
 		} else {
 			x1 = min(x1, b.r.Min.X)
