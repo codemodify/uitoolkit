@@ -35,7 +35,13 @@ type desktopPage struct {
 	tray  platform.StatusItem
 	trayB *widgets.Button
 	notes *widgets.Button
-	facts *widgets.TextArea
+	// notifier sends the page's notifications (made on first use), and
+	// sent counts them so each replaces the last.
+	notifier *platform.Notifier
+	sent     int
+	// opened is how the last link went.
+	opened string
+	facts  *widgets.TextArea
 	// picked is the last path a file dialog came back with.
 	picked string
 	// clip is what the app last read out of the clipboard.
@@ -80,23 +86,12 @@ func buildDesktopPage(t *tourState) widget.Component {
 	// ---- the tray ---------------------------------------------------------
 
 	p.trayB = widgets.NewButton("Put an icon in the tray", func() { p.toggleTray() })
-	p.notes = widgets.NewButton("Send a notification", func() {
-		if p.tray == nil {
-			p.note("Put the icon in the tray first — the notification goes through it.")
-			return
-		}
-		err := p.tray.Notify(platform.Notification{
-			Title: "uitoolkit tour",
-			Body:  "This came from the tray item the page registered, at " + time.Now().Format("15:04:05") + ".",
-		})
-		if err != nil {
-			p.note("The notification was refused: " + err.Error())
-			return
-		}
-		p.note("Sent — the desktop shows it if it has a notification daemon.")
-	})
-	tray := widgets.NewPanel("The system tray",
+	p.notes = widgets.NewButton("Send a notification", func() { p.notify() })
+	tray := widgets.NewPanel("The system tray and notifications",
 		widgets.NewRow(p.trayB, p.notes).WithGap(6),
+		tourNote("The notification needs no tray icon: it goes to the notification portal, or "+
+			"straight to the desktop's notification server outside a sandbox, with two buttons; "+
+			"clicking it raises this window and says which was clicked."),
 		tourNote("The icon is a StatusNotifierItem on Linux, which is what Plasma, Waybar and the "+
 			"GNOME extensions read; the menu under it is a real dbusmenu the desktop draws itself, so "+
 			"it looks like every other tray menu rather than like us."),
@@ -122,10 +117,28 @@ func buildDesktopPage(t *tourState) widget.Component {
 	)
 	dialogs.Content().Spec.Gap = 8
 
+	// ---- links ---------------------------------------------------------------
+
+	web := widgets.NewLinkButton("The project's page", "https://github.com/codemodify/uitoolkit")
+	home := widgets.NewLinkButton("Your home folder", homeOrRoot())
+	for _, l := range []*widgets.LinkButton{web, home} {
+		l := l
+		l.OnError = func(err error) { p.opened = err.Error(); p.note("Could not open " + l.URI + ": " + err.Error()) }
+	}
+	web.OnOpen = func(uri string) { p.open(web, uri) }
+	home.OnOpen = func(uri string) { p.open(home, uri) }
+	links := widgets.NewPanel("Links",
+		widgets.NewRow(web, home).WithGap(12),
+		tourNote("A link opens in the desktop's application for it through the OpenURI portal — the "+
+			"browser, the file manager — as this window's request, so an \"Open with…\" the desktop "+
+			"asks is this window's child. With no portal, xdg-open opens it."),
+	)
+	links.Content().Spec.Gap = 8
+
 	panel, facts := tourReadout("What this desktop offers")
 	p.facts = facts
 
-	stage := widgets.NewColumn(clip, tray, dialogs, widgets.NewSpacer()).WithGap(10)
+	stage := widgets.NewColumn(clip, tray, links, dialogs, widgets.NewSpacer()).WithGap(10)
 	stage.AddFlex(widgets.NewSpacer(), 1)
 
 	p.refresh()
@@ -167,6 +180,60 @@ func (p *desktopPage) toggleTray() {
 	}
 	p.tray = item
 	p.note("Registered through " + item.Backend() + " — live host: " + yesNo(item.Alive()) + ".")
+}
+
+// notify sends a notification with two buttons; a click comes back here.
+func (p *desktopPage) notify() {
+	if p.notifier == nil {
+		p.notifier = p.t.a.NewNotifier(platform.NotifierOptions{AppName: "uitoolkit tour"})
+	}
+	p.sent++
+	n := platform.DesktopNotification{
+		ID:       "tour",
+		Title:    "uitoolkit tour",
+		Body:     "Notification " + strconv.Itoa(p.sent) + ", sent at " + time.Now().Format("15:04:05") + ".",
+		IconName: "dialog-information",
+		Actions: []platform.NotificationAction{
+			{ID: "raise", Label: "Raise the tour"},
+			{ID: "thanks", Label: "Thanks"},
+		},
+		OnActivate: func(action string) {
+			p.t.win.Show()
+			p.t.win.Raise()
+			if action == "" {
+				action = "the notification itself"
+			}
+			p.note("Clicked: " + action + ".")
+		},
+	}
+	notifier := p.notifier
+	go func() {
+		// The desktop is asked off the UI goroutine; a notification
+		// service D-Bus has to start first may take a moment.
+		_, err := notifier.Send(n)
+		p.t.a.Post(func() {
+			if err != nil {
+				p.note("Nothing to show it: " + err.Error())
+				return
+			}
+			p.note("Sent through " + notifier.Backend() + ".")
+		})
+	}()
+}
+
+// open opens a link as its window asks, and says how it went.
+func (p *desktopPage) open(l *widgets.LinkButton, uri string) {
+	p.t.win.OpenURI(uri, func(err error) {
+		if err != nil {
+			p.opened = err.Error()
+			if l.OnError != nil {
+				l.OnError(err)
+			}
+			return
+		}
+		p.opened = uri
+		p.note("Asked the desktop to open " + uri + ".")
+	})
 }
 
 func (p *desktopPage) dropTray() {
@@ -220,9 +287,6 @@ func (p *desktopPage) refresh() {
 		}
 		p.trayB.Invalidate()
 	}
-	if p.notes != nil {
-		p.notes.SetEnabled(p.tray != nil)
-	}
 	if p.seen != nil {
 		p.seen.SetText("CLIPBOARD now: " + oneLine(platform.ClipboardGet()) +
 			"\nPRIMARY now: " + oneLine(platform.ClipboardPrimaryGet()))
@@ -247,6 +311,8 @@ func (p *desktopPage) refresh() {
 		[2]string{"tray host", yesNo(platform.StatusItemAvailable())},
 		[2]string{"tray item", trayState},
 		[2]string{"menu chrome", yesNo(platform.HostMenuNative())},
+		[2]string{"notifications", notifierState(p.notifier)},
+		[2]string{"last link", orNone(p.opened)},
 		[2]string{"", ""},
 		[2]string{"portal dialog", yesNo(platform.FileChooserAvailable())},
 		[2]string{"preferred", nativeDialogName()},
@@ -280,4 +346,18 @@ func oneLine(s string) string {
 		one = string([]rune(one)[:44]) + "…"
 	}
 	return strconv.Quote(one) + " (" + plural(len(s), "byte") + ")"
+}
+
+func notifierState(n *platform.Notifier) string {
+	if n == nil || n.Backend() == "" {
+		return "none sent yet"
+	}
+	return "through " + n.Backend()
+}
+
+func orNone(s string) string {
+	if s == "" {
+		return "none opened yet"
+	}
+	return s
 }

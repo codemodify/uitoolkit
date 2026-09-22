@@ -27,6 +27,11 @@ func TestMailTrayFakeClickRaises(t *testing.T) {
 	}
 	defer cli.Close()
 
+	rec := &recNotifier{}
+	old := newMailNotifier
+	newMailNotifier = func(*app.Application) mailNotifier { return rec }
+	defer func() { newMailNotifier = old }()
+
 	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true})
 	w, err := a.NewWindow(platform.WindowOptions{Title: "Mail", Width: 640, Height: 400, Headless: true})
 	if err != nil {
@@ -88,7 +93,7 @@ func TestMailTrayFakeClickRaises(t *testing.T) {
 	}
 }
 
-func TestMailNotifyEventShowsToast(t *testing.T) {
+func TestMailNotifyEventSendsNotification(t *testing.T) {
 	IsolateTestEnvTB(t)
 	t.Setenv("UITK_TRAY", "fake")
 	sock, stop, err := StartDemo(context.Background())
@@ -101,6 +106,11 @@ func TestMailNotifyEventShowsToast(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer cli.Close()
+
+	rec := &recNotifier{}
+	old := newMailNotifier
+	newMailNotifier = func(*app.Application) mailNotifier { return rec }
+	defer func() { newMailNotifier = old }()
 
 	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true})
 	w, err := a.NewWindow(platform.WindowOptions{Title: "Mail", Width: 640, Height: 400, Headless: true})
@@ -128,15 +138,22 @@ func TestMailNotifyEventShowsToast(t *testing.T) {
 	}
 	deadline := time.Now().Add(time.Second)
 	for time.Now().Before(deadline) {
-		if len(tray.Notes) > 0 {
-			if tray.Notes[0].Title == "" {
-				t.Fatal("empty toast title")
+		if rec.count() > 0 {
+			rec.mu.Lock()
+			n := rec.sent[0]
+			rec.mu.Unlock()
+			if n.Title == "" || n.ID != "new-mail" {
+				t.Fatalf("notification %+v", n)
+			}
+			// A desktop notification of its own, not the tray's toast.
+			if len(tray.Notes) != 0 {
+				t.Fatalf("the tray toasted too: %+v", tray.Notes)
 			}
 			return
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	t.Fatal("mail.notify should toast on the tray")
+	t.Fatal("mail.notify should send a desktop notification")
 }
 
 func TestMailTrayNativeNeverPanics(t *testing.T) {

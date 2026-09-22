@@ -232,6 +232,13 @@ func (s *linuxStatusItem) listenBus() {
 				}
 				id, _ := sig.Body[0].(uint32)
 				s.mu.Lock()
+				if _, sent := s.noteFn[id]; !sent && id != s.notifyID {
+					// Another notification's click: the server tells every
+					// listener, and this item did not send that one (a
+					// Notifier of the same app, or another app).
+					s.mu.Unlock()
+					continue
+				}
 				fn := s.noteFn[id]
 				if fn == nil {
 					fn = s.opts.OnNotifyClick

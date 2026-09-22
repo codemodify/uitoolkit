@@ -13,6 +13,14 @@ func (s *session) attachTray() {
 	if s == nil || s.app == nil {
 		return
 	}
+	if s.notifier() == nil {
+		// New mail is a desktop notification of its own — the portal's
+		// or the notification server's — whose click opens the window,
+		// whether or not the tray has an icon.
+		s.trayMu.Lock()
+		s.notes = newMailNotifier(s.app)
+		s.trayMu.Unlock()
+	}
 	if s.statusItem() == nil {
 		look := s.app.Look()
 		item, err := s.app.NewStatusItem(platform.StatusItemOptions{
@@ -48,6 +56,23 @@ func (s *session) statusItem() platform.StatusItem {
 	s.trayMu.Lock()
 	defer s.trayMu.Unlock()
 	return s.tray
+}
+
+// newMailNotifier makes the window's notifier (a seam for tests).
+var newMailNotifier = func(a *app.Application) mailNotifier {
+	return a.NewNotifier(platform.NotifierOptions{AppName: "Mail", DesktopEntry: "mailclientui"})
+}
+
+// mailNotifier is what Mail needs of a platform.Notifier.
+type mailNotifier interface {
+	Send(platform.DesktopNotification) (string, error)
+	Close()
+}
+
+func (s *session) notifier() mailNotifier {
+	s.trayMu.Lock()
+	defer s.trayMu.Unlock()
+	return s.notes
 }
 
 func (s *session) setStatusItem(it platform.StatusItem) {
@@ -119,6 +144,9 @@ func (s *session) quitFromTray() {
 		_ = it.Close()
 		s.setStatusItem(nil)
 	}
+	if n := s.notifier(); n != nil {
+		n.Close()
+	}
 	if s.app != nil {
 		s.app.Quit()
 	}
@@ -136,15 +164,31 @@ func (s *session) onDaemonEvent(ev Event) {
 		if title == "" {
 			title = "New mail"
 		}
-		if it := s.statusItem(); it != nil {
-			_ = it.Notify(platform.Notification{
-				Title:   title,
-				Body:    ev.Body,
-				OnClick: s.showMain,
-			})
+		if n := s.notifier(); n != nil {
+			// One notification for new mail, replaced by the next rather
+			// than stacked (Thunderbird's and KMail's way); this runs on
+			// the daemon's event goroutine, so the D-Bus call may wait.
+			_, _ = n.Send(newMailNotification(title, ev.Body, s.showMain))
 		}
 		if s.refresher != nil {
 			s.refresher.request()
 		}
+	}
+}
+
+// newMailNotification is the desktop notification for new mail: a click on
+// it, or on its button, opens the window.
+func newMailNotification(title, body string, open func()) platform.DesktopNotification {
+	return platform.DesktopNotification{
+		ID:       "new-mail",
+		Title:    title,
+		Body:     body,
+		IconName: "mail-unread",
+		Actions:  []platform.NotificationAction{{ID: "open", Label: "Open Mail"}},
+		OnActivate: func(string) {
+			if open != nil {
+				open()
+			}
+		},
 	}
 }

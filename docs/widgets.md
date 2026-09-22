@@ -130,7 +130,8 @@ names) is in [compare.md](compare.md).
 | Segmented control | `Segmented` (joined toggle buttons, one chosen) | `QButtonGroup` + tool buttons ≈ | linked `GtkToggleButton`s | `SegmentedControl` ≈ | `widget.RadioGroup` (horizontal) ≈ | toolbar radio buttons ≈ | `ToggleButton` group ≈ | `NSSegmentedControl` | `Picker(.segmented)` | [gallery](screenshots/gallery-accordion.png) |
 | Dialog button box | `ButtonBox` (roles; platform order, live with the theme) | `QDialogButtonBox` | `GtkDialog` action area ≈ | — | `dialog.NewCustomConfirm` ≈ | — | — | — | — | — |
 | Colour picker | `ColorButton` (palette + saturation / value square + hue) | `QColorDialog` / `ColorDialog` | `GtkColorDialogButton` | `ColorPicker` | `dialog.NewColorPicker` | `ColorDialog` | toolkit ≈ | `NSColorWell` | `ColorPicker` | [gallery](screenshots/gallery-accordion.png) |
-| Picture | `Picture` (contain / cover / stretch / natural, HiDPI, pixelated) | `QLabel` pixmap / `Image` | `GtkPicture` | `Image` | `canvas.Image` | `PictureBox` | `Image` | `NSImageView` | `Image` | — |
+| Picture | `Picture` (contain / cover / stretch / natural, HiDPI, pixelated; `Zoomable`: pinch and Ctrl+wheel zoom, pan) | `QLabel` pixmap / `Image` | `GtkPicture` | `Image` | `canvas.Image` | `PictureBox` | `Image` | `NSImageView` | `Image` | — |
+| Link | `LinkButton` (opens a URI through the OpenURI portal, as the window's child) | `QLabel` link / `Text` link | `GtkLinkButton` | `HyperlinkButton` | `widget.Hyperlink` | `LinkLabel` | `Hyperlink` | `NSTextField` link ≈ | `Link` | — |
 | Form | `Form` (label column + fields) | `QFormLayout` | `GtkGrid` ≈ | `Grid` ≈ | `widget.Form` | `TableLayoutPanel` ≈ | `Grid` ≈ | `NSGridView` ≈ | `Form` | [gallery](screenshots/gallery-accordion.png) |
 | Spacer | `Spacer` | `QSpacerItem` / `Item` | `GtkBox` expand | — | `layout.Spacer` | — | — | — | `Spacer` | [thumb](screenshots/compare/layout.png) |
 | Separator | `Separator` / `VSeparator` | `QFrame` / `ToolSeparator` | `GtkSeparator` | `Separator` | `widget.Separator` | `ToolStripSeparator` | `Separator` | `NSBox` (separator) | `Divider` | [thumb](screenshots/compare/layout.png) |
@@ -223,6 +224,46 @@ Two consequences worth stating:
 
 `MouseRelease` and `MouseMove` do not bubble: they belong to the capture,
 which the press already decided.
+
+## Touchpad gestures
+
+A pinch, a three-finger swipe and fingers held still on the pad reach
+components that implement `widget.GestureTarget` — `Gesture(GestureEvent)
+bool` — with the same shape of contract as a press, which is Qt's for
+`QGestureEvent` and GTK's for its gesture controllers:
+
+| | starts at | walks up to | then |
+| --- | --- | --- | --- |
+| a gesture's begin | the deepest component under the pointer | its ancestors, until one returns `true` | every update and the end or cancel go to that one alone, wherever the pointer is |
+
+A `GestureEvent` has the kind (`GesturePinch`, `GestureSwipe`,
+`GestureHold`), the phase (`GestureBegin`, any number of `GestureUpdate`,
+then one `GestureEnd` or `GestureCancel`), the fingers, the pointer's
+position in the component, `Delta` (how far the fingers moved since the last
+event, device pixels), and for a pinch `Scale` (the spread relative to the
+begin: a zoom that started at `z` is `z·Scale`) and `Rotation` (degrees
+turned since the last event, clockwise). A cancel means the desktop took the
+gesture over or a finger was added: undo, do not act. A gesture nobody takes
+at its begin is dropped; a component taken out of the window mid-gesture
+hears no more of it.
+
+Two fingers moving together are not a gesture: they scroll, as
+`MouseWheel` with `Precise`, and glide on after they lift on both backends
+([platform.md](platform.md#touchpad-gestures-and-scrolling)).
+
+**Back and forward.** `widget.HistoryNavigator` — `NavigateHistory(forward
+bool) bool` — is a component with a history (a file manager's folders, a
+browser's pages). The window calls it, from the component under the pointer
+up, for the mouse's back and forward buttons and for a sideways swipe that no
+`GestureTarget` took: fingers moving right go back, as a page slides back
+into view, once they have travelled 96 logical pixels mostly sideways. The
+thumb buttons press, focus and drag nothing. Alt+Left and Alt+Right are the
+component's own keys. Files implements it per tab.
+
+Where it is used: `Picture.Zoomable` zooms about the fingers with a pinch
+(and about the pointer with Ctrl and the wheel) from its Fit size up to
+`MaxZoom` and pans once larger than its box; the tour's silhouette stamp
+zooms and turns; Files goes back and forward.
 
 ## Sliders and progress bars
 
@@ -371,7 +412,20 @@ it shows the desktop's own dialog instead: KDE's or GNOME's, through the
 XDG desktop portal's FileChooser, as Qt and GTK apps do, and as sandboxed
 (Flatpak) apps must. `Filter`, the starting `Path` and Save mode carry
 over. `OnPick` or `OnCancel` run on the UI goroutine when the user is done.
-Without a portal the toolkit's dialog shows.
+Without a portal the toolkit's dialog shows, at once.
+
+The desktop's dialog is the window's child — modal to it and centred on it
+— on both backends: the window names itself to the portal as `x11:<id>`, or
+on Wayland by a handle it exports through xdg-foreign
+([platform.md](platform.md#portals)).
+
+## Links
+
+`LinkButton` is a hyperlink, and `OpenLink(from, uri, done)` is how every
+link the toolkit shows is opened: through the OpenURI portal as the window's
+request (the desktop's "Open with…" is the window's child), with xdg-open
+where there is no portal. A file or folder path opens in the application for
+it. `Window.OpenURI` is the same for an app's own links.
 
 ## Dockable panels
 

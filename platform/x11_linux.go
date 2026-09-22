@@ -1025,6 +1025,7 @@ func (X11Backend) NewSurface(opts WindowOptions) (Surface, error) {
 	// drag over it finds a target from the very first frame; so does the
 	// sync counter, which the window manager reads when it manages it.
 	s.setXdndAwareLocked()
+	s.selectXI2Locked()
 	s.setupSyncLocked()
 	x11Mu.Unlock()
 	s.tryBindGPU()
@@ -1127,6 +1128,10 @@ type x11Conn struct {
 	// told only if it did not go to another window of the same family
 	// (x11_popup_linux.go).
 	leaves map[*x11Surface]bool
+
+	// xi is XInput 2: smooth scrolling and touchpad gestures
+	// (x11_xi2_linux.go).
+	xi x11XI2
 }
 
 type x11Surface struct {
@@ -1298,6 +1303,7 @@ func x11OpenLocked() (*x11Conn, error) {
 	c.atomBlur = internAtom(d, "_KDE_NET_WM_BLUR_BEHIND_REGION")
 	c.composited = C.ui_composited(d) != 0
 	c.fixesEvent = int(C.ui_watch_composited(d))
+	c.initXI2Locked()
 	c.cursors = map[Cursor]C.Cursor{}
 	c.maxReq = int(C.ui_max_req(d))
 	C.ui_detectable_repeat(d)
@@ -1845,6 +1851,9 @@ func (c *x11Conn) drainLocked() {
 			c.compositingChangedLocked()
 			continue
 		}
+		if C.ui_event_type(&xe) == C.GenericEvent && c.handleXI2Locked(&xe) {
+			continue
+		}
 		switch C.ui_event_type(&xe) {
 		case C.ClientMessage:
 			if c.handleXdndMessage(&xe) {
@@ -1883,6 +1892,7 @@ func (c *x11Conn) drainLocked() {
 		c.deliverLocked(s, s.translate(&xe))
 	}
 	c.flushLeavesLocked()
+	c.flushScrollLocked()
 	c.retryGrabsLocked()
 	c.syncOverdueLocked()
 	// A target that took a drop and never answered must not hold the
@@ -1938,22 +1948,15 @@ func (s *x11Surface) translate(xe *C.XEvent) []Event {
 		x, y := float32(C.ui_btn_x(xe)), float32(C.ui_btn_y(xe))
 		mods := xmods(uint(C.ui_btn_state(xe)))
 		release := C.ui_event_type(xe) == C.ButtonRelease
-		if bit := x11ButtonBit(btn); bit != 0 {
-			if release {
-				s.buttons &^= bit
-			} else {
-				s.buttons |= bit
-				s.pressRootX, s.pressRootY = int(C.ui_btn_xroot(xe)), int(C.ui_btn_yroot(xe))
-				s.pressButton = btn
-				s.pressTime = C.ui_btn_time(xe)
-			}
-		}
-		return x11ButtonEvents(btn, release, paintengine2d.Pt(x, y), mods)
+		return s.buttonLocked(btn, release, paintengine2d.Pt(x, y), int(C.ui_btn_xroot(xe)), int(C.ui_btn_yroot(xe)), mods, C.ui_btn_time(xe))
 	case C.LeaveNotify:
 		// Grab and ungrab crossings (menus, the implicit button grab
 		// ending) are not the pointer leaving the window.
 		if C.ui_cross_mode(xe) != C.NotifyNormal {
 			return nil
+		}
+		if s.conn.xi.scroll != nil {
+			s.conn.xi.scroll.stop()
 		}
 		return []Event{{Kind: EventPointerLeave}}
 	case C.MotionNotify:
@@ -2100,7 +2103,8 @@ func (s *x11Surface) Close() error {
 
 // x11ButtonEvents maps a core ButtonPress / ButtonRelease. Buttons 4–7 are
 // wheel steps: X sends a press and a release for every notch, and only the
-// press may scroll (the release used to scroll a second time).
+// press may scroll (the release used to scroll a second time). A notch is
+// Scroll ±1 — three lines in every widget, as a Wayland wheel's notch.
 func x11ButtonEvents(btn int, release bool, pos paintengine2d.Point, mods Modifiers) []Event {
 	if btn >= 4 && btn <= 7 {
 		if release {
@@ -2109,13 +2113,13 @@ func x11ButtonEvents(btn int, release bool, pos paintengine2d.Point, mods Modifi
 		ev := Event{Kind: EventScroll, Pos: pos, Mods: mods}
 		switch btn {
 		case 4:
-			ev.Scroll = paintengine2d.Pt(0, -48)
+			ev.Scroll = paintengine2d.Pt(0, -1)
 		case 5:
-			ev.Scroll = paintengine2d.Pt(0, 48)
+			ev.Scroll = paintengine2d.Pt(0, 1)
 		case 6:
-			ev.Scroll = paintengine2d.Pt(-48, 0)
+			ev.Scroll = paintengine2d.Pt(-1, 0)
 		case 7:
-			ev.Scroll = paintengine2d.Pt(48, 0)
+			ev.Scroll = paintengine2d.Pt(1, 0)
 		}
 		return []Event{ev}
 	}
@@ -2134,6 +2138,10 @@ func xbutton(b int) MouseButton {
 		return ButtonMiddle
 	case 3:
 		return ButtonRight
+	case 8:
+		return ButtonBack
+	case 9:
+		return ButtonForward
 	}
 	return ButtonNone
 }
@@ -2781,8 +2789,13 @@ func (s *x11Surface) WakeAt() time.Time {
 	x11Mu.Lock()
 	defer x11Mu.Unlock()
 	if !s.conn.drag.active {
-		// A sync request nobody answers wakes the loop to answer it.
-		return s.syncDeadlineLocked()
+		// A sync request nobody answers wakes the loop to answer it, and
+		// a finger scroll's glide wakes it to go on.
+		at := s.syncDeadlineLocked()
+		if g := s.conn.scrollWakeLocked(); !g.IsZero() && (at.IsZero() || g.Before(at)) {
+			at = g
+		}
+		return at
 	}
 	return time.Now().Add(x11DragPoll)
 }
@@ -2862,7 +2875,16 @@ func (s *x11Surface) PortalParent() string {
 	if s == nil || s.win == 0 {
 		return ""
 	}
-	return fmt.Sprintf("x11:%x", uint64(s.win))
+	return x11PortalParent(uint64(s.win))
+}
+
+// x11PortalParent is the portal's name for an X window: "x11:" and its id
+// in hex, as the XDG portal documents it.
+func x11PortalParent(win uint64) string {
+	if win == 0 {
+		return ""
+	}
+	return fmt.Sprintf("x11:%x", win)
 }
 
 // ---- client-side frame support (FrameSurface) ----------------------------
@@ -3168,6 +3190,7 @@ func (s *x11Surface) moveResize(dir uint32) bool {
 		return false
 	}
 	C.ui_ungrab_pointer(c.dpy)
+	c.ungrabXI2Locked()
 	// Source 1: a normal application.
 	C.ui_root_message(c.dpy, s.win, c.atomMoveRes, C.long(s.pressRootX), C.long(s.pressRootY), C.long(dir), C.long(s.pressButton), 1)
 	// The window manager owns the pointer now; the release goes to it.
@@ -3209,6 +3232,7 @@ func (s *x11Surface) ShowWindowMenu(p paintengine2d.Point) bool {
 		return false
 	}
 	C.ui_ungrab_pointer(c.dpy)
+	c.ungrabXI2Locked()
 	// {device id, x_root, y_root}; the core pointer's device when unknown.
 	C.ui_root_message(c.dpy, s.win, c.atomShowMenu, 0, C.long(rx), C.long(ry), 0, 0)
 	s.buttons = 0
@@ -3389,6 +3413,7 @@ func (s *x11Surface) recreateOnVisual(argb bool) {
 	// only once it says so again, and wears its palette and icon only
 	// once it is given them again.
 	s.setXdndAwareLocked()
+	s.selectXI2Locked()
 	s.reapplyDressLocked()
 	s.setupSyncLocked()
 	s.mapped = false

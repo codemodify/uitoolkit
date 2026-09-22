@@ -3,8 +3,9 @@ package mail
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"strings"
+
+	"github.com/codemodify/uitoolkit/platform"
 )
 
 // NotifyEvent is broadcast as mail.notify and optionally shown on the desktop.
@@ -79,14 +80,15 @@ func formatNewMailNotice(store Store, accountID string, n int, vipOnly bool) (ti
 	return who, subj
 }
 
+// daemonNotes is the daemon's notifier, for new mail while no window is
+// open to tell (the window sends its own; see session.onDaemonEvent).
+var daemonNotes = platform.NewNotifier(platform.NotifierOptions{AppName: "Mail", DesktopEntry: "mailclientui"})
+
 func notifyDesktop(title, body string) {
 	if os.Getenv("UITK_MAIL_NO_NOTIFY") != "" {
 		return
 	}
 	if os.Getenv("DISPLAY") == "" && os.Getenv("WAYLAND_DISPLAY") == "" {
-		return
-	}
-	if _, err := exec.LookPath("notify-send"); err != nil {
 		return
 	}
 	title = strings.TrimSpace(title)
@@ -97,8 +99,9 @@ func notifyDesktop(title, body string) {
 	if len(body) > 180 {
 		body = body[:180] + "…"
 	}
-	cmd := exec.Command("notify-send", "-a", "Mail", "--", title, body)
-	_ = cmd.Start()
+	// Off the caller's goroutine: the daemon answers its clients while
+	// the desktop is asked.
+	go daemonNotes.Send(newMailNotification(title, body, nil))
 }
 
 func classifySender(m Message, override map[string]string) string {

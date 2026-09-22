@@ -33,5 +33,12 @@ for i in $(seq 1 50); do
   [ -n "$new" ] && break; sleep 0.1
 done
 echo ":${new#X}" > "$D/display"
+# Whatever the instance's bus starts by D-Bus activation (a portal backend,
+# a notification server) starts in the nested session with the instance's
+# own dirs: with the environment dbus-run-session gave it, a Qt or GTK
+# service would connect to wayland-0 — the user's desktop.
+DBUS_SESSION_BUS_ADDRESS="$(cat "$D/bus.addr")" dbus-update-activation-environment \
+  WAYLAND_DISPLAY="uitk-e2e-$N" DISPLAY="$(cat "$D/display")" \
+  XDG_CONFIG_HOME="$D/cfg" XDG_DATA_HOME="$D/data" XDG_CACHE_HOME="$D/cache" 2>/dev/null
 sleep 1
 echo "instance $N up: WAYLAND_DISPLAY=uitk-e2e-$N DISPLAY=$(cat "$D/display")"
