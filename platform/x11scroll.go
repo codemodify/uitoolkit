@@ -144,11 +144,26 @@ func (x *x11Scroller) hasScroll(id int) bool { return x.devices[id] != nil }
 
 // reset forgets every valuator's last value: after the pointer entered a
 // window or the device changed, the next value is a new start, not a
-// scroll by the difference.
+// scroll by the difference — unless the backend reads where they stand
+// (seed), which it does, so that the first notch after is not lost.
 func (x *x11Scroller) reset() {
 	for _, d := range x.devices {
 		for i := range d.vals {
 			d.vals[i].have = false
+		}
+	}
+}
+
+// seed records where one of a device's valuators stands, read from the
+// server rather than from an event.
+func (x *x11Scroller) seed(id, number int, value float64, known bool) {
+	d := x.devices[id]
+	if d == nil {
+		return
+	}
+	for i := range d.vals {
+		if d.vals[i].number == number {
+			d.vals[i].last, d.vals[i].have = value, known
 		}
 	}
 }

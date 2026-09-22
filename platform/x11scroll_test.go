@@ -248,3 +248,28 @@ func TestX11ScrollResetOnEnter(t *testing.T) {
 		t.Fatal("hasScroll")
 	}
 }
+
+// Where the server says the valuators stand (read at a device switch or an
+// enter) is where the next scroll is measured from: the first notch after
+// is a notch, not a starting point.
+func TestX11ScrollSeededValues(t *testing.T) {
+	x := scrollRig()
+	t0 := time.Unix(8000, 0)
+	x.reset()
+	x.seed(5, 2, 42, true)
+	x.seed(5, 3, 7, true)
+	x.seed(9, 2, 1, true) // no such device: nothing
+	_, dy, precise, ok := x.motion(t0, 5, map[int]float64{2: 57})
+	if !ok || precise || dy != 1 {
+		t.Fatalf("the first notch after a seed: %v precise %v ok %v", dy, precise, ok)
+	}
+	dx, _, _, ok := x.motion(t0.Add(time.Millisecond), 5, map[int]float64{3: 22})
+	if !ok || dx != 1 {
+		t.Fatalf("horizontal after a seed: %v %v", dx, ok)
+	}
+	// An unknown value seeds nothing: the next one is a start again.
+	x.seed(5, 2, 0, false)
+	if _, _, _, ok := x.motion(t0.Add(2*time.Millisecond), 5, map[int]float64{2: 500}); ok {
+		t.Fatal("scrolled from an unknown start")
+	}
+}
