@@ -107,14 +107,14 @@ type MDIWindow struct {
 	// changes first, and Dismiss it afterwards.
 	OnCloseRequest func() bool
 	// OnClose is told the window has closed.
-	OnClose func()
-
-	area    *MDIArea
-	title   string
-	client  *mdiClient
-	state   mdiState
-	restore mdiState           // what a minimised window restores to
-	normal  paintengine2d.Rect // device pixels in the area, the visible window
+	OnClose      func()
+	area         *MDIArea
+	initialFocus widget.Component
+	title        string
+	client       *mdiClient
+	state        mdiState
+	restore      mdiState           // what a minimised window restores to
+	normal       paintengine2d.Rect // device pixels in the area, the visible window
 	// pointer
 	hot, down  platform.CaptionButton
 	drag       int // 0 none, 1 move, 2 resize
@@ -138,6 +138,17 @@ func NewMDIArea() *MDIArea {
 	a := &MDIArea{}
 	a.Init(a)
 	return a
+}
+
+// SetHost: an area that arrives in a window with nothing focused yet
+// puts the keyboard in its active window, so the window's own first-focus
+// rule (the first control in Tab order, the bottom window's) does not
+// raise another one over it.
+func (a *MDIArea) SetHost(h widget.Host) {
+	a.Base.SetHost(h)
+	if h != nil && h.Focus() == nil && a.active != nil {
+		a.active.takeFocus()
+	}
 }
 
 // AddWindow opens a window holding content, cascaded from the last one
@@ -995,8 +1006,22 @@ func (w *MDIWindow) Dismiss() {
 	}
 }
 
+// SetInitialFocus names what takes the keyboard when the window is
+// activated and has not had it yet — the document rather than the tool
+// bar above it; otherwise the window's first control does. Called on the
+// active window it moves the keyboard there now.
+func (w *MDIWindow) SetInitialFocus(c widget.Component) {
+	w.initialFocus = c
+	if c != nil && w.IsActive() && widget.FocusWithin(w) {
+		if h := w.Host(); h != nil {
+			h.RequestFocus(c)
+			w.lastFocus = c
+		}
+	}
+}
+
 // takeFocus puts the keyboard in the window: where it last was, else on
-// the window's first control, else on the window itself.
+// its initial focus or its first control, else on the window itself.
 func (w *MDIWindow) takeFocus() {
 	h := w.Host()
 	if h == nil || widget.FocusWithin(w) {
@@ -1004,6 +1029,11 @@ func (w *MDIWindow) takeFocus() {
 	}
 	if w.lastFocus != nil && widget.LiveUnder(w.lastFocus, w) && w.lastFocus.Visible() && w.lastFocus.Enabled() {
 		h.RequestFocus(w.lastFocus)
+		return
+	}
+	if f := w.initialFocus; f != nil && widget.LiveUnder(f, w) && f.Visible() && f.Enabled() {
+		h.RequestFocus(f)
+		widget.MarkKeyboardFocus(f)
 		return
 	}
 	if widget.FocusFirstIn(w.client) {
