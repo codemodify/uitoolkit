@@ -417,3 +417,53 @@ func newDropBox() *dropBox {
 
 func (d *dropBox) DropTypes() []string        { return []string{"text/plain"} }
 func (d *dropBox) Drop(widget.DropEvent) bool { return true }
+
+// Windows in the same look and state share one shadow patch, which lives
+// as long as a window holds it.
+func TestShadowPatchShared(t *testing.T) {
+	key := frameShadowKey{margin: [4]int{7, 7, 7, 7}, active: true}
+	builds := 0
+	build := func(extX, extY *float32) *paintengine2d.Image {
+		builds++
+		*extX, *extY = 3, 3
+		return paintengine2d.NewImage(8, 8)
+	}
+	a, _, _ := acquireShadowPatch(key, build)
+	b, _, _ := acquireShadowPatch(key, build)
+	if a != b || builds != 1 {
+		t.Fatalf("two windows built %d patches", builds)
+	}
+	releaseShadowPatch(key)
+	releaseShadowPatch(key)
+	sharedShadows.mu.Lock()
+	_, kept := sharedShadows.m[key]
+	sharedShadows.mu.Unlock()
+	if kept {
+		t.Fatal("the patch outlived the windows that used it")
+	}
+	if c, _, _ := acquireShadowPatch(key, build); c == a || builds != 2 {
+		t.Fatal("a released patch was handed out again")
+	}
+	releaseShadowPatch(key)
+}
+
+// Two windows at one scale hold one look, so what is cached on the look
+// (and the shadow patch keyed by it) is not built twice.
+func TestWindowsShareScaledLook(t *testing.T) {
+	a := New(Options{Look: style.DarkLook(), Headless: true, Scale: 1.75})
+	w1, err := a.NewWindow(platform.WindowOptions{Width: 100, Height: 80, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w2, err := a.NewWindow(platform.WindowOptions{Width: 120, Height: 90, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w1.Look() != w2.Look() {
+		t.Fatal("two windows at one scale built two looks")
+	}
+	a.SetLook(style.LightLook())
+	if w1.Look() != w2.Look() || w1.Look() == nil {
+		t.Fatal("after a theme change the windows hold different looks")
+	}
+}

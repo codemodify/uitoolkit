@@ -2,6 +2,7 @@ package app
 
 import (
 	"math"
+	"sync"
 
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/platform"
@@ -41,10 +42,60 @@ type frameShadow struct {
 	invalid bool
 }
 
-// drop forgets the patch (the look, the state or the margin changed).
+// drop forgets the patch (the look, the state or the margin changed, or
+// the window closed).
 func (s *frameShadow) drop() {
+	if s.img != nil {
+		releaseShadowPatch(s.key)
+	}
 	s.img = nil
 	s.key = frameShadowKey{}
+}
+
+// sharedShadows are the patches the open windows use, one per key: every
+// window of an app in one look and state casts the same shadow, and each
+// used to rasterise and keep its own. An entry lives as long as a window
+// holds it — a cache that outlived its windows would keep their looks
+// alive too.
+var sharedShadows struct {
+	mu sync.Mutex
+	m  map[frameShadowKey]*sharedShadow
+}
+
+type sharedShadow struct {
+	img        *paintengine2d.Image
+	extX, extY float32
+	refs       int
+}
+
+// acquireShadowPatch is the patch for key, built by build the first time a
+// window asks for it; the caller releases it with releaseShadowPatch.
+func acquireShadowPatch(key frameShadowKey, build func(extX, extY *float32) *paintengine2d.Image) (*paintengine2d.Image, float32, float32) {
+	sharedShadows.mu.Lock()
+	defer sharedShadows.mu.Unlock()
+	if e := sharedShadows.m[key]; e != nil {
+		e.refs++
+		return e.img, e.extX, e.extY
+	}
+	e := &sharedShadow{refs: 1}
+	if e.img = build(&e.extX, &e.extY); e.img == nil {
+		return nil, 0, 0
+	}
+	if sharedShadows.m == nil {
+		sharedShadows.m = make(map[frameShadowKey]*sharedShadow)
+	}
+	sharedShadows.m[key] = e
+	return e.img, e.extX, e.extY
+}
+
+func releaseShadowPatch(key frameShadowKey) {
+	sharedShadows.mu.Lock()
+	defer sharedShadows.mu.Unlock()
+	if e := sharedShadows.m[key]; e != nil {
+		if e.refs--; e.refs <= 0 {
+			delete(sharedShadows.m, key)
+		}
+	}
 }
 
 // shadowPatch is the cached nine-patch for the window's current frame, or
@@ -65,12 +116,15 @@ func (w *Window) shadowPatch() *frameShadow {
 	if w.shadow.img != nil && w.shadow.key == key {
 		return &w.shadow
 	}
-	w.shadow.key = key
-	w.shadow.m = key.margin
-	w.shadow.img = buildShadowPatch(w.look, st, g.margin, g.radius, &w.shadow.extX, &w.shadow.extY)
-	if w.shadow.img == nil {
+	w.shadow.drop()
+	img, ex, ey := acquireShadowPatch(key, func(extX, extY *float32) *paintengine2d.Image {
+		return buildShadowPatch(w.look, st, g.margin, g.radius, extX, extY)
+	})
+	if img == nil {
 		return nil
 	}
+	w.shadow.key, w.shadow.m = key, key.margin
+	w.shadow.img, w.shadow.extX, w.shadow.extY = img, ex, ey
 	return &w.shadow
 }
 
