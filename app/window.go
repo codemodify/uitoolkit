@@ -174,7 +174,7 @@ func newWindow(a *Application, surf platform.Surface, opts platform.WindowOption
 		layers:   widget.NewSceneCache(),
 	}
 	w.scale = a.windowScale(surf)
-	w.look = lookAtScale(a.base, w.scale)
+	w.look = a.scaledLook(w.scale)
 	w.dirty.Pad = 1
 	w.opts = opts
 	w.decor = platform.SurfaceDecorations(surf)
@@ -192,7 +192,11 @@ func (w *Window) applyLook(base style.LookAndFeel) {
 	if w == nil || base == nil {
 		return
 	}
-	w.look = lookAtScale(base, w.scale)
+	if w.app != nil && base == w.app.base {
+		w.look = w.app.scaledLook(w.scale)
+	} else {
+		w.look = lookAtScale(base, w.scale)
+	}
 	if w.caption != nil {
 		// The frame is the new look's (and, with the theme's button
 		// layout, so are the caption buttons' places).
@@ -216,7 +220,7 @@ func (w *Window) syncScale() bool {
 		return false
 	}
 	w.scale = next
-	w.look = lookAtScale(w.app.base, next)
+	w.look = w.app.scaledLook(next)
 	w.laid = false
 	w.dropScene()
 	w.fullInvalidate()
@@ -758,13 +762,30 @@ func (w *Window) toggleBlink() {
 }
 
 func (w *Window) wantsBlink() bool {
-	if w == nil || w.focus == nil || w.state.Suspended {
-		// A suspended window is not visible: no caret to blink (and no
-		// wake-ups for it).
+	if w == nil || w.focus == nil || w.state.Suspended || w.inactive {
+		// A suspended window is not visible, and an inactive one is not
+		// where the keys go: no caret to blink (and no wake-ups for it).
 		return false
 	}
 	_, ok := w.focus.(interface{ SetCaretBlink(bool) })
 	return ok
+}
+
+// steadyCaret leaves the caret lit and still: its window stopped blinking
+// it (no input for a while, reduced motion, the window went inactive), and
+// a caret stopped half-way through a blink would vanish until the next key.
+func (w *Window) steadyCaret() {
+	if w == nil || w.blink {
+		return
+	}
+	w.blink = true
+	if w.focus == nil {
+		return
+	}
+	if b, ok := w.focus.(interface{ SetCaretBlink(bool) }); ok {
+		b.SetCaretBlink(true)
+		w.focus.Invalidate()
+	}
 }
 
 func (w *Window) needsPaint() bool {
@@ -1685,6 +1706,9 @@ func (w *Window) frame() {
 	if w.dirty.Empty() && !w.full {
 		return
 	}
+	if perfOn() {
+		defer perfFrame(time.Now(), "window", w.surf)
+	}
 	rects := w.paintRects()
 	if platform.WantScene() {
 		// A backdrop blur can widen what is repainted.
@@ -2076,6 +2100,8 @@ func (w *Window) Close() {
 	w.tipHover = nil
 	w.dropScene()
 	w.scene = nil
+	// The shadow patch is shared with the app's other windows.
+	w.shadow.drop()
 	_ = w.surf.Close()
 	if w.app != nil {
 		w.app.remove(w)

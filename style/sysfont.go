@@ -220,7 +220,7 @@ func systemOTFace(family string, w Weight) *otFace {
 	if f, ok := systemOTFaces.m[key]; ok {
 		return f
 	}
-	src, err := os.ReadFile(face.file)
+	src, err := readFontFile(face.file)
 	if err != nil {
 		systemOTFaces.m[key] = nil
 		return nil

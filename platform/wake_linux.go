@@ -54,18 +54,26 @@ func (w *fdWaker) Signal() {
 	_, _ = w.w.Write(b[:])
 }
 
+// Drain empties the pipe. It reads the descriptor directly until it
+// would block: a Read under a deadline already past fails before it
+// reads anything, which left the pipe readable for ever and a poller
+// waiting on it spinning.
 func (w *fdWaker) Drain() {
 	if w == nil || w.r == nil {
 		return
 	}
-	_ = w.r.SetReadDeadline(time.Now())
-	var buf [64]byte
-	for {
-		if _, err := w.r.Read(buf[:]); err != nil {
-			break
-		}
+	rc, err := w.r.SyscallConn()
+	if err != nil {
+		return
 	}
-	_ = w.r.SetReadDeadline(time.Time{})
+	_ = rc.Read(func(fd uintptr) bool {
+		var buf [64]byte
+		for {
+			if n, err := syscall.Read(int(fd), buf[:]); n <= 0 || err != nil {
+				return true
+			}
+		}
+	})
 }
 
 func (w *fdWaker) Wait(timeout time.Duration) bool {
@@ -125,6 +133,14 @@ func waitLoopWake(timeout time.Duration) bool {
 	w := loopWaker
 	loopWakerMu.Unlock()
 	return w.Wait(timeout)
+}
+
+// drainLoopWake empties the loop waker after a wait saw it signalled.
+func drainLoopWake() {
+	loopWakerMu.Lock()
+	w := loopWaker
+	loopWakerMu.Unlock()
+	w.Drain()
 }
 
 func loopWakeFD() int {
