@@ -602,6 +602,10 @@ func (w *Window) resizeEdgesAt(p paintengine2d.Point) platform.Edges {
 	if !g.framed || st.Maximized || st.Fullscreen || !w.Resizable() {
 		return 0
 	}
+	if w.shapeRaster() != nil {
+		// A silhouette's band follows the silhouette, not the box.
+		return w.shapeBandEdges(p)
+	}
 	win := g.window
 	bd := g.border
 	inside := max(bd.Left, bd.Right, bd.Top, bd.Bottom, float32(math.Round(float64(style.Dip(w.look, insideBandDip)))))
@@ -674,6 +678,12 @@ func near(a, b paintengine2d.Point, d float32) bool {
 // reports whether it did; caption buttons and the app's own space go on to
 // the widgets.
 func (w *Window) frameMouseDown(ev platform.Event) bool {
+	if e := w.shapeBandEdges(ev.Pos); e != 0 && ev.Button == platform.ButtonLeft {
+		// The band along a shaped window's silhouette, framed or not.
+		w.dismissOpenPopup()
+		w.StartResize(e)
+		return true
+	}
 	if w.caption == nil {
 		return false
 	}
@@ -769,10 +779,16 @@ func (w *Window) frameMouseMove(ev platform.Event) bool {
 		}
 		return true
 	}
-	if w.caption == nil || w.capture != nil {
+	if w.capture != nil {
 		return false
 	}
-	if r, e := w.NonClientHit(ev.Pos); r == RegionResize {
+	r, e := RegionClient, w.shapeBandEdges(ev.Pos)
+	if e != 0 {
+		r = RegionResize
+	} else if w.caption != nil {
+		r, e = w.NonClientHit(ev.Pos)
+	}
+	if r == RegionResize {
 		if w.hover != nil {
 			w.hover.MouseExit()
 			w.hover = nil
