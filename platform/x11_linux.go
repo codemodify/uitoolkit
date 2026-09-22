@@ -1171,6 +1171,9 @@ type x11Surface struct {
 	caps     WMCaps
 	focused  bool
 	wantDeco Decorations
+	// motifSet: _MOTIF_WM_HINTS has been written on the window, so the
+	// window manager has read a "no frame" it must be told to undo.
+	motifSet bool
 	// frame is the client frame's margin and regions; geomW / geomH the
 	// visible window in device pixels, which the X window is that plus
 	// the margin, and geomLW / geomLH the same window in the logical
@@ -2909,11 +2912,17 @@ func (s *x11Surface) setMotifLocked() {
 		return
 	}
 	hints, ok := motifHints(s.wantDeco)
-	if !ok {
+	if !ok && !s.motifSet {
 		C.ui_delete_prop(c.dpy, s.win, c.atomMotif)
 		C.ui_flush(c.dpy)
 		return
 	}
+	if !ok {
+		// The window had asked for no frame: it asks for the frame back
+		// rather than withdrawing the question (motifDecorateAll).
+		hints = motifDecorateAll
+	}
+	s.motifSet = true
 	var v [5]C.ulong
 	for i, h := range hints {
 		v[i] = C.ulong(h)
