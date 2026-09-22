@@ -11,12 +11,17 @@ go run ./examples/tour -page shapes     # one page (see -page list)
 go run ./examples/tour -page tabs,frames
 go run ./examples/tour -theme win95     # any of the packs, skins included
 go run ./examples/tour -scale 1.75
-go run ./examples/tour -shot docs/screenshots   # one still per page
+go run ./examples/tour -shot out/       # one still per page (PNG)
+go run ./examples/tour -sheet pages.png # every page on one contact sheet
+tools/shots/demos.sh                    # docs/screenshots: the stills and the sheet, as WebP
 ```
+
+Stills are the tour's own 1180 × 820 page at every scale: `-scale 1.75`
+draws the same page finer (2065 × 1435 device pixels), not a bigger one.
 
 ## The navigation is page one
 
-![The tour's Tabs page](screenshots/tour-tabs.png)
+![The tour's Tabs page](screenshots/tour-tabs.webp)
 
 The tabs along the top are not a tab bar under the caption: they **are**
 the window's title bar (`Window.SetTitleBar` with a
@@ -84,16 +89,27 @@ and one in the status bar saying what to do.
 
 | | |
 |---|---|
-| ![Docking](screenshots/tour-docking.png) | ![Drag and drop](screenshots/tour-drag-and-drop.png) |
+| ![Docking](screenshots/tour-docking.webp) | ![Drag and drop](screenshots/tour-drag-and-drop.webp) |
 | **Docking** — four sides, tabs, splits, floats, and the layout as JSON | **Drag and drop** — two lists, a drop zone, and the negotiated action |
-| ![Frames](screenshots/tour-frames.png) | ![Shapes](screenshots/tour-shapes.png) |
+| ![Frames](screenshots/tour-frames.webp) | ![Shapes](screenshots/tour-shapes.webp) |
 | **Frames** — whose frame, which button order, and what maximizing costs | **Shapes** — the silhouette, measured in rects |
-| ![Skins](screenshots/tour-skins.png) | ![Desktop](screenshots/tour-desktop.png) |
+| ![Skins](screenshots/tour-skins.webp) | ![Desktop](screenshots/tour-desktop.webp) |
 | **Skins** — a preview in one pack inside a window running another | **Desktop** — clipboard, tray, notification, both file dialogs |
-| ![Access](screenshots/tour-access.png) | |
+| ![Access](screenshots/tour-access.webp) | |
 | **Access** — the tree, the linter, the tab order, motion and scale | |
 
+All of them at once:
+
+![Every page of the tour on one sheet](screenshots/tour-pages.webp)
+
 ## Two windows
+
+Every tour window runs in the application's one appearance. A pack
+applied, a frame asked for, the caption buttons moved or motion switched
+off in one window shows at once in every other's choices and readouts,
+"Back to where we started" means where the tour started from whichever
+window it is pressed in, and closing a window that is not the last leaves
+the look to the ones still open.
 
 Several pages are better with two of them, and the tour makes the second
 one the way the app itself teaches: pull a tab out. A drag between the
@@ -134,7 +150,14 @@ Headless, in `internal/demo/tour_test.go`:
 - the tab strip reorders, keeps a window's last page, tears a page out
   into a window of its own and takes one back at the caret;
 - a dock panel floats, docks back, tabs with another, and the arrangement
-  survives a JSON round trip;
+  survives a JSON round trip; a panel docked back by a drag updates the
+  page's note as the buttons do;
+- two tour windows share one appearance: a pack, the frame, the caption
+  buttons and motion changed in one show in the other;
+- "+"'s menu drops from the "+";
+- `-shot` is 1180 × 820 device pixels at 1× and 2065 × 1435 at 1.75, and
+  `-sheet` puts the pages side by side at half size
+  (`examples/tour/main_test.go`);
 - a row dragged between the two lists lands at the caret and is moved or
   copied according to the action the target reported;
 - every silhouette the Shapes page offers rasterises to a region with the
@@ -142,3 +165,6 @@ Headless, in `internal/demo/tour_test.go`:
 
 On real hardware, in the nested-KWin rig (`tools/e2e`), on **Wayland and
 X11**: see [docs/e2e/2026-09-21/tour-realhw.md](e2e/2026-09-21/tour-realhw.md).
+Every page again on both backends after the polish pass (instance 27),
+with a page torn into a window of its own and the caption-button choice
+made there showing in the first window at once.

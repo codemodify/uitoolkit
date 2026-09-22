@@ -180,8 +180,36 @@ See [docs/skins.md](docs/skins.md).
 
 ## Screenshots
 
-Real frames from the gallery, Notes, Inspector, Files, and Mail, painted through
-paintengine2d with Titillium Web (and JetBrains Mono in code views).
+Real frames from the tour, the players, Settings, the gallery, Notes,
+Inspector, Files and Mail, painted through paintengine2d with Titillium Web
+(and JetBrains Mono in code views).
+
+### The tour — what a window of this toolkit can do
+
+The tabs are the window's own title bar, and pull out into windows of their
+own; a page each for docking, drag and drop, frames, shaped windows, skins,
+the desktop and accessibility, each with what the toolkit reports. See
+**[docs/tour.md](docs/tour.md)**.
+
+![The tour's Tabs page: the strip is the window's caption](docs/screenshots/tour-tabs.webp)
+
+| | |
+|---|---|
+| ![The Shapes page: a window with a hole you can click through](docs/screenshots/tour-shapes.webp) | ![The Skins page: every pack, swapped live under the running window](docs/screenshots/tour-skins.webp) |
+
+### The players — skins and shaped windows at work
+
+Visual-only demos in the repo's own art. Minim in its three skins, each as
+the strip, the equaliser and the playlist snapped together:
+
+![Minim in Minim, Minim Classic and Minim Silver](docs/screenshots/minim.webp)
+
+| | |
+|---|---|
+| ![Marquee: the cabinet, and folded into its stadium](docs/screenshots/marquee.webp) | ![Lantern in its skin, and with the skin dropped](docs/screenshots/lantern.webp) |
+| **Marquee** — the cabinet, and folded down | **Lantern** — in its skin, and with it dropped |
+
+See **[docs/players.md](docs/players.md)**.
 
 ### Widget gallery — dark
 
@@ -253,9 +281,9 @@ paintengine2d with Titillium Web (and JetBrains Mono in code views).
 
 ### Settings — the theme browser, with the gallery under the preview
 
-![Settings](docs/screenshots/settings.png)
+![Settings: the theme browser, the preview and the gallery under it](docs/screenshots/settings.webp)
 
-Search or filter 127 packs, and the one you pick is drawn at once in the
+Search or filter 129 packs, and the one you pick is drawn at once in the
 preview window and in the whole widget gallery below it, in a splitter you
 can size. See **[docs/settings.md](docs/settings.md)**.
 
@@ -325,7 +353,7 @@ Regenerate:
 ```bash
 go run ./examples/gallery -screenshot docs/screenshots
 go run ./examples/mail -screenshot docs/screenshots
-go run ./cmd/uitksettings -screenshot docs/screenshots
+tools/shots/demos.sh    # the tour, the players and Settings, headless, as WebP
 ```
 
 ## Quickstart
@@ -531,7 +559,7 @@ container. Layout extras (`Stack`, `Pad`, `Overlay`) are in
 ```bash
 go run ./examples/gallery -screenshot docs/screenshots
 go run ./examples/mail -screenshot docs/screenshots
-go run ./examples/tour -shot docs/screenshots
+tools/shots/demos.sh    # the tour's pages and sheet, the players, Settings
 ```
 
 ### Mail — mailclientd + mailclientui
