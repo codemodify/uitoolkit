@@ -347,6 +347,7 @@ static unsigned long ui_vis_blue(Visual* v) { return v ? v->blue_mask : 0; }
 static void ui_free_colormap(Display* d, Colormap c) { if (d && c) XFreeColormap(d, c); }
 
 static int ui_event_type(XEvent* e) { return e->type; }
+static int ui_focus_mode(XEvent* e) { return e->xfocus.mode; }
 static int ui_cross_mode(XEvent* e) { return e->xcrossing.mode; }
 static Window ui_event_window(XEvent* e) { return e->xany.window; }
 
@@ -1107,6 +1108,11 @@ type x11Conn struct {
 	xdnd xdndAtoms
 	drop x11Drop
 	drag x11Drag
+
+	// leaves are the windows the pointer left in the burst being drained,
+	// told only if it did not go to another window of the same family
+	// (x11_popup_linux.go).
+	leaves map[*x11Surface]bool
 }
 
 type x11Surface struct {
@@ -1191,6 +1197,10 @@ type x11Surface struct {
 	pressButton            int
 	pressTime              C.Time
 	buttons                uint8
+	// pop is set on a popup (x11_popup_linux.go), and kids are the popups
+	// open from this surface, oldest first.
+	pop  *x11Popup
+	kids []*x11Surface
 }
 
 var (
@@ -1715,6 +1725,13 @@ func (s *x11Surface) Present(dirty []paintengine2d.Rect) error {
 	if s.closed || s.conn.dpy == nil || s.ximg == nil {
 		return nil
 	}
+	if s.pop != nil && !s.mapped {
+		// An override-redirect window is viewable as soon as it is mapped,
+		// and what is put into an unmapped one is lost: map first.
+		C.ui_map(s.conn.dpy, s.win)
+		s.mapped = true
+		defer s.mappedPopupLocked()
+	}
 	for _, r := range dirty {
 		s.copyRect(r)
 		x0, y0, x1, y1 := r.IntBounds()
@@ -1832,8 +1849,16 @@ func (c *x11Conn) drainLocked() {
 		if s == nil {
 			continue
 		}
-		c.queues[win] = append(c.queues[win], s.translate(&xe)...)
+		if s.pop != nil && C.ui_event_type(&xe) == C.Expose {
+			// A popup keeps its last frame: put it back rather than ask
+			// the app, which hears nothing about a popup's own window.
+			s.reputLocked()
+			continue
+		}
+		c.deliverLocked(s, s.translate(&xe))
 	}
+	c.flushLeavesLocked()
+	c.retryGrabsLocked()
 	// A target that took a drop and never answered must not hold the
 	// drag — and the user's move — open for the rest of the session;
 	// and Escape ends a drag even where the grab never delivers it.
@@ -1945,11 +1970,22 @@ func (s *x11Surface) translate(xe *C.XEvent) []Event {
 		}
 		return out
 	case C.FocusIn:
+		if C.ui_focus_mode(xe) == C.NotifyUngrab {
+			// The end of a keyboard grab — a menu of ours, a window
+			// manager's key binding — hands back focus the window never
+			// lost (the grab's start is ignored below).
+			return nil
+		}
 		C.ui_set_ic_focus(s.ic)
 		return append([]Event{{Kind: EventFocusIn}}, s.focusChangedLocked(true)...)
 	case C.FocusOut:
+		if C.ui_focus_mode(xe) == C.NotifyGrab {
+			// A keyboard grab — a menu of ours taking the keys, as Qt and
+			// GTK menus do — is not the window losing the focus.
+			return nil
+		}
 		C.ui_unset_ic_focus(s.ic)
-		out := []Event{{Kind: EventFocusOut}, {Kind: EventIMECancel}}
+		out := append([]Event{{Kind: EventFocusOut}, {Kind: EventIMECancel}}, s.popupsLostLocked()...)
 		if leftover := C.ui_reset_ic(s.ic); leftover != nil {
 			txt := C.GoString(leftover)
 			C.ui_xfree(unsafe.Pointer(leftover))
@@ -1978,6 +2014,10 @@ func (s *x11Surface) Close() error {
 	if s.closed && (s.conn == nil || s.conn.dpy == nil) {
 		return nil
 	}
+	// Popups go before the window they hang from, a popup's grab with it.
+	x11Mu.Lock()
+	s.closePopupsLocked()
+	x11Mu.Unlock()
 	s.closed = true
 	s.closeGPU()
 	if s.conn != nil {
@@ -3181,6 +3221,41 @@ func (s *x11Surface) Frame() Frame {
 	return s.frame
 }
 
+// visualLocked is the visual a window is made on: a 32-bit one with an
+// alpha channel where argb asks and a compositing manager can use it, else
+// the screen's default (nil).
+func (c *x11Conn) visualLocked(argb bool) (*C.Visual, C.Colormap, C.int) {
+	var vis *C.Visual
+	var cmap C.Colormap
+	depth := C.int(0)
+	if !argb || !c.composited || C.ui_argb_visual(c.dpy, &vis, &cmap, &depth) == 0 {
+		return nil, 0, 0
+	}
+	return vis, cmap, depth
+}
+
+// visualMasksLocked is vis's colour masks (the screen default's for nil).
+func (c *x11Conn) visualMasksLocked(vis *C.Visual) (r, g, b uint32) {
+	if vis != nil {
+		return uint32(C.ui_vis_red(vis)), uint32(C.ui_vis_green(vis)), uint32(C.ui_vis_blue(vis))
+	}
+	return uint32(C.ui_red_mask(c.dpy)), uint32(C.ui_green_mask(c.dpy)), uint32(C.ui_blue_mask(c.dpy))
+}
+
+// reputLocked puts the window's last frame back whole (a popup exposed).
+func (s *x11Surface) reputLocked() {
+	if s.ximg == nil || s.img == nil || s.conn == nil || s.conn.dpy == nil || s.win == 0 {
+		return
+	}
+	w, h := C.uint(s.img.Width), C.uint(s.img.Height)
+	if s.shm {
+		C.ui_shm_put(s.conn.dpy, s.win, s.gc, s.ximg, 0, 0, 0, 0, w, h)
+	} else {
+		C.ui_put(s.conn.dpy, s.win, s.gc, s.ximg, 0, 0, 0, 0, w, h)
+	}
+	C.ui_flush(s.conn.dpy)
+}
+
 // argb reports whether the window was created on a visual with an alpha
 // channel.
 func (s *x11Surface) argb() bool { return s != nil && s.vis != nil }
@@ -3346,7 +3421,14 @@ func (s *x11Surface) applyShapeLocked() {
 		p = &flat[0]
 	}
 	C.ui_shape_rects(c.dpy, s.win, 0, p, C.int(len(flat)/4))
-	C.ui_shape_rects(c.dpy, s.win, 1, p, C.int(len(flat)/4))
+	if s.pop != nil && c.composited {
+		// A popup's shadow lies outside its silhouette, in its margin; with
+		// a compositing manager its alpha already cuts the silhouette, and
+		// a bounding shape would cut the shadow away too.
+		C.ui_shape_none(c.dpy, s.win, 1)
+	} else {
+		C.ui_shape_rects(c.dpy, s.win, 1, p, C.int(len(flat)/4))
+	}
 	s.shaped = true
 	// The margin is still the shadow band the window manager should ignore
 	// when it places the window, shape or no shape.
