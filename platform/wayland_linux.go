@@ -1253,6 +1253,9 @@ type wlConn struct {
 	// surface kinSurf.
 	kin     kinetic
 	kinSurf int
+	// gest is zwp_pointer_gestures_v1 and the touchpad gesture in
+	// progress (wayland_gesture_linux.go).
+	gest wlGestures
 
 	primMan      *C.struct_zwp_primary_selection_device_manager_v1
 	primDev      *C.struct_zwp_primary_selection_device_v1
@@ -1301,6 +1304,9 @@ type wlConn struct {
 	// compositor does not advertise them.
 	paletteMan unsafe.Pointer
 	iconMan    unsafe.Pointer
+	// exporter is xdg-foreign's zxdg_exporter_v2, which names a window
+	// for a portal dialog to be the child of (wayland_foreign_linux.go).
+	exporter unsafe.Pointer
 	// outputs maps a wl_output proxy to its registry name; outs holds
 	// each output's scale and is the source of truth for surface scale.
 	outputs map[uintptr]uint32
@@ -1480,6 +1486,9 @@ type wlSurface struct {
 	// popups open from this surface, oldest first.
 	pop  *wlPopup
 	kids []*wlSurface
+
+	// export is the window exported for a portal dialog (xdg-foreign).
+	export wlExport
 }
 
 var (
@@ -1874,6 +1883,7 @@ func (s *wlSurface) unmapToplevelLocked() {
 	s.decoSent = 0
 	s.decoAnswer = DecorationsAuto
 	s.pendStateSet, s.pendCapsSet, s.pendDecoSet = false, false, false
+	s.unexportLocked()
 	if s.top != nil {
 		C.ui_wl_top_destroy(s.top)
 		s.top = nil
@@ -2777,6 +2787,7 @@ func (s *wlSurface) Close() error {
 		C.ui_wl_deco_destroy(s.deco)
 		s.deco = nil
 	}
+	s.unexportLocked()
 	if s.top != nil {
 		C.ui_wl_top_destroy(s.top)
 		s.top = nil
@@ -2975,6 +2986,10 @@ func uitkWlRegistryGlobal(id C.uintptr_t, reg *C.struct_wl_registry, name C.uint
 		c.viewporter = (*C.struct_wp_viewporter)(C.ui_wl_bind(reg, name, C.ui_wl_viewporter_iface(), 1))
 	case "xdg_activation_v1":
 		c.activation = (*C.struct_xdg_activation_v1)(C.ui_wl_bind(reg, name, C.ui_wl_act_iface(), 1))
+	case "zwp_pointer_gestures_v1":
+		c.bindGestures(reg, name, ver)
+	case "zxdg_exporter_v2":
+		c.bindExporter(reg, name)
 	case "wp_cursor_shape_manager_v1":
 		v := ver
 		if v > 1 {
@@ -3175,6 +3190,7 @@ func uitkWlSeatCaps(id C.uintptr_t, seat *C.struct_wl_seat, caps C.uint32_t) {
 		c.pointer = C.ui_wl_pointer(seat)
 		if c.pointer != nil {
 			C.ui_wl_ptr_listen(c.pointer, id)
+			c.pointerGestures()
 		}
 	}
 	if caps&capKeyboard != 0 && c.keyboard == nil {
@@ -3213,6 +3229,7 @@ func uitkWlPtrLeave(id C.uintptr_t) {
 		return
 	}
 	c.kin.stop()
+	c.cancelGesture()
 	// Told at the end of the burst, unless the pointer only moved to a
 	// popup of the same window (or back).
 	c.leavePointer(wlSurfaces[c.ptrSurf])
@@ -3534,6 +3551,10 @@ func wlButton(code uint32) MouseButton {
 		return ButtonRight
 	case 0x112:
 		return ButtonMiddle
+	case 0x113: // BTN_SIDE
+		return ButtonBack
+	case 0x114: // BTN_EXTRA
+		return ButtonForward
 	}
 	return ButtonNone
 }
