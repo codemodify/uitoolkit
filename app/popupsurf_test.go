@@ -485,3 +485,82 @@ func (diamondPopups) PopupShape(l *style.Classic, b paintengine2d.Rect, kind sty
 	p.Close()
 	return &style.Silhouette{Path: p}
 }
+
+// A glass look's menu on a surface of its own asks the compositor to blur
+// behind it, stopping at the menu's own rounded corners, and keeps its
+// tint's alpha; where nobody blurs, the tint is flattened solid.
+func TestGlassPopupSurface(t *testing.T) {
+	p, ok := style.LoadTheme("tahoe")
+	if !ok {
+		t.Skip("no tahoe pack")
+	}
+	for _, glass := range []bool{false, true} {
+		t.Run(fmt.Sprint(glass), func(t *testing.T) {
+			r := newPopRig(t, 1, 200, 100, true)
+			r.o.SimulateGlass(glass)
+			r.a.SetLook(p.Look())
+			r.a.PumpOnce()
+			r.bar.Open(1)
+			r.a.PumpOnce()
+			if len(r.w.pops) != 1 {
+				t.Fatal("no surface")
+			}
+			pl := r.w.pops[0]
+			f := pl.surf.Frame()
+			b := r.menu().Bounds()
+			img := pl.surf.Buffer()
+			m := f.Margin
+			_, _, _, mid := img.At(m.Left+int(b.Dx())/2, m.Top+int(b.Dy())-3).RGBA()
+			_, _, _, corner := img.At(m.Left, m.Top).RGBA()
+			if !glass {
+				if f.Blur != nil {
+					t.Fatalf("blur %v without glass", f.Blur)
+				}
+				if mid != 0xffff {
+					t.Fatalf("menu alpha %d without glass: the tint was not flattened", mid>>8)
+				}
+				return
+			}
+			if len(f.Blur) < 3 {
+				t.Fatalf("blur region %v: want the rounded menu's rows", f.Blur)
+			}
+			if mid == 0xffff || mid == 0 {
+				t.Fatalf("menu alpha %d over glass: want the tint's own", mid>>8)
+			}
+			if corner>>8 > 48 {
+				// Only the shadow's faint edge is there.
+				t.Fatalf("rounded corner alpha %d", corner>>8)
+			}
+		})
+	}
+}
+
+// Aero's glass is the frame's: over real glass the caption lets the blurred
+// desktop through and the content stays opaque.
+func TestAeroGlassFrameKeepsContentOpaque(t *testing.T) {
+	p, ok := style.LoadTheme("aero")
+	if !ok {
+		t.Skip("no aero pack")
+	}
+	a := New(Options{Look: p.Look(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{Width: 320, Height: 200, Headless: true, Decorations: platform.DecorationsClient})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.Surface().(*platform.Offscreen).SimulateGlass(true)
+	w.SetTitleBar(widgets.NewLabel("Aero"))
+	w.SetContent(widgets.NewLabel("content"))
+	a.PumpOnce()
+	img := w.Capture()
+	if f := platform.SurfaceFrame(w.Surface()); f.Blur == nil {
+		t.Fatal("no blur asked for")
+	}
+	cb := w.geom.content.Translate(paintengine2d.Pt(-w.windowBox().Min.X, -w.windowBox().Min.Y))
+	if _, _, _, ca := img.At(int(cb.Max.X)-4, int(cb.Max.Y)-4).RGBA(); ca != 0xffff {
+		t.Fatalf("content alpha %d: Aero's content is opaque", ca>>8)
+	}
+	bx, by := int(cb.Min.X)-2, int(cb.Max.Y)-10
+	if _, _, _, ba := img.At(bx, by).RGBA(); ba == 0xffff {
+		t.Fatalf("left border alpha %d at %d,%d: the frame should be glass", ba>>8, bx, by)
+	}
+}
