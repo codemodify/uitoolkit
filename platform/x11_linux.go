@@ -1022,8 +1022,10 @@ func (X11Backend) NewSurface(opts WindowOptions) (Surface, error) {
 	s.rebuildImageLocked()
 	c.surfaces[win] = s
 	// XdndAware goes on the toplevel window before it is mapped, so a
-	// drag over it finds a target from the very first frame.
+	// drag over it finds a target from the very first frame; so does the
+	// sync counter, which the window manager reads when it manages it.
 	s.setXdndAwareLocked()
+	s.setupSyncLocked()
 	x11Mu.Unlock()
 	s.tryBindGPU()
 	return s, nil
@@ -1078,6 +1080,18 @@ type x11Conn struct {
 	// atomBlur is KWin's _KDE_NET_WM_BLUR_BEHIND_REGION: the X11 way to
 	// ask for the desktop behind the window to be blurred.
 	atomBlur C.Atom
+	// atomColorScheme and atomIcon are KWin's _KDE_NET_WM_COLOR_SCHEME and
+	// EWMH's _NET_WM_ICON (x11_dress_linux.go), interned when first used.
+	atomColorScheme C.Atom
+	atomIcon        C.Atom
+	// syncState is whether the server speaks XSync for
+	// _NET_WM_SYNC_REQUEST (x11_sync_linux.go): 0 not asked yet, 1 yes,
+	// -1 no (or UITK_X11_SYNC=0); the atoms it needs come with it.
+	syncState       int
+	atomProtocols   C.Atom
+	atomDelete      C.Atom
+	atomSyncReq     C.Atom
+	atomSyncCounter C.Atom
 
 	clipText string
 	ownClip  bool
@@ -1157,6 +1171,9 @@ type x11Surface struct {
 	caps     WMCaps
 	focused  bool
 	wantDeco Decorations
+	// motifSet: _MOTIF_WM_HINTS has been written on the window, so the
+	// window manager has read a "no frame" it must be told to undo.
+	motifSet bool
 	// frame is the client frame's margin and regions; geomW / geomH the
 	// visible window in device pixels, which the X window is that plus
 	// the margin, and geomLW / geomLH the same window in the logical
@@ -1201,6 +1218,10 @@ type x11Surface struct {
 	// open from this surface, oldest first.
 	pop  *x11Popup
 	kids []*x11Surface
+	// dress is the window's palette and icon (x11_dress_linux.go), and
+	// sync its _NET_WM_SYNC_REQUEST counter (x11_sync_linux.go).
+	dress x11Dress
+	sync  x11Sync
 }
 
 var (
@@ -1699,6 +1720,7 @@ func (s *x11Surface) Present(dirty []paintengine2d.Rect) error {
 				C.ui_map(s.conn.dpy, s.win)
 				s.mapped = true
 			}
+			s.syncPresentedLocked()
 			if s.conn.dpy != nil {
 				C.ui_flush(s.conn.dpy)
 			}
@@ -1760,6 +1782,9 @@ func (s *x11Surface) Present(dirty []paintengine2d.Rect) error {
 		C.ui_map(s.conn.dpy, s.win)
 		s.mapped = true
 	}
+	// After the pixels, on the same connection: the window manager sees
+	// the counter move only once the frame is in the window.
+	s.syncPresentedLocked()
 	C.ui_flush(s.conn.dpy)
 	return nil
 }
@@ -1859,6 +1884,7 @@ func (c *x11Conn) drainLocked() {
 	}
 	c.flushLeavesLocked()
 	c.retryGrabsLocked()
+	c.syncOverdueLocked()
 	// A target that took a drop and never answered must not hold the
 	// drag — and the user's move — open for the rest of the session;
 	// and Escape ends a drag even where the grab never delivers it.
@@ -1878,7 +1904,12 @@ func (s *x11Surface) translate(xe *C.XEvent) []Event {
 		s.posX, s.posY = int(C.ui_cfg_x(xe)), int(C.ui_cfg_y(xe))
 		s.posRoot, s.posKnown = C.ui_cfg_synthetic(xe) != 0, true
 		w, h := int(C.ui_cfg_w(xe)), int(C.ui_cfg_h(xe))
-		if w != s.img.Width || h != s.img.Height {
+		resized := w != s.img.Width || h != s.img.Height
+		// A resize step the window manager asked a sync for is answered
+		// by the frame that shows the new size; a configure that left the
+		// size alone, at once.
+		s.syncConfiguredLocked(resized)
+		if resized {
 			if w < 1 {
 				w = 1
 			}
@@ -2000,6 +2031,9 @@ func (s *x11Surface) translate(xe *C.XEvent) []Event {
 		s.closed = true
 		return []Event{{Kind: EventClose}}
 	case C.ClientMessage:
+		if s.syncMessageLocked(xe) {
+			return nil
+		}
 		if C.ui_is_delete(s.conn.dpy, xe) != 0 {
 			// WM_DELETE_WINDOW is a *request*. The app may veto it
 			// (close-to-tray). Surface.Closed stays false until
@@ -2051,6 +2085,7 @@ func (s *x11Surface) Close() error {
 		s.ximCbs = nil
 	}
 	s.destroyImageLocked()
+	s.closeSyncLocked()
 	if s.conn != nil && s.conn.dpy != nil {
 		C.ui_destroy_win(s.conn.dpy, s.win, s.gc)
 		s.win = 0
@@ -2746,7 +2781,8 @@ func (s *x11Surface) WakeAt() time.Time {
 	x11Mu.Lock()
 	defer x11Mu.Unlock()
 	if !s.conn.drag.active {
-		return time.Time{}
+		// A sync request nobody answers wakes the loop to answer it.
+		return s.syncDeadlineLocked()
 	}
 	return time.Now().Add(x11DragPoll)
 }
@@ -2876,11 +2912,17 @@ func (s *x11Surface) setMotifLocked() {
 		return
 	}
 	hints, ok := motifHints(s.wantDeco)
-	if !ok {
+	if !ok && !s.motifSet {
 		C.ui_delete_prop(c.dpy, s.win, c.atomMotif)
 		C.ui_flush(c.dpy)
 		return
 	}
+	if !ok {
+		// The window had asked for no frame: it asks for the frame back
+		// rather than withdrawing the question (motifDecorateAll).
+		hints = motifDecorateAll
+	}
+	s.motifSet = true
 	var v [5]C.ulong
 	for i, h := range hints {
 		v[i] = C.ulong(h)
@@ -3344,8 +3386,11 @@ func (s *x11Surface) recreateOnVisual(argb bool) {
 	c.surfaces[s.win] = s
 	s.setMotifLocked()
 	// A new window on another visual is a new X window: it takes drops
-	// only once it says so again.
+	// only once it says so again, and wears its palette and icon only
+	// once it is given them again.
 	s.setXdndAwareLocked()
+	s.reapplyDressLocked()
+	s.setupSyncLocked()
 	s.mapped = false
 	s.rebuildImageLocked()
 	if mapped && !s.hidden {

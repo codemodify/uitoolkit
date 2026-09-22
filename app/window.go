@@ -158,6 +158,10 @@ type Window struct {
 	pops        []*popLayer
 	tipPop      *popLayer
 	popsRefused bool
+	// icon is the window's own icon (SetIcon; nil: the application's), and
+	// iconSent whether its surface was given one (dress.go).
+	icon     []*paintengine2d.Image
+	iconSent bool
 }
 
 func newWindow(a *Application, surf platform.Surface, opts platform.WindowOptions) *Window {
@@ -175,6 +179,7 @@ func newWindow(a *Application, surf platform.Surface, opts platform.WindowOption
 		w.caps = f.Capabilities()
 	}
 	w.rebuildCaption()
+	w.applyIcon()
 	return w
 }
 
@@ -189,6 +194,9 @@ func (w *Window) applyLook(base style.LookAndFeel) {
 		// The frame is the new look's (and, with the theme's button
 		// layout, so are the caption buttons' places).
 		w.rebuildCaption()
+	} else {
+		// So is the desktop's frame, where it takes the look's colours.
+		w.syncDecorationPalette()
 	}
 	w.RequestLayout()
 }

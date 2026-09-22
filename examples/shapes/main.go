@@ -31,6 +31,7 @@ import (
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit"
 	"github.com/codemodify/uitoolkit/app"
+	"github.com/codemodify/uitoolkit/icons"
 	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
@@ -47,6 +48,8 @@ func main() {
 
 	headless := *shot != ""
 	a := uitoolkit.New(uitoolkit.Options{Headless: headless})
+	// The window icon the desktop shows in its title bar, task bar and switcher.
+	a.SetIcon(icons.AppIconRGB("cards", 0xc0, 0x40, 0x7a)...)
 	win, err := a.NewWindow(platform.WindowOptions{
 		Title: "Shapes — " + *mode, Width: *size, Height: *size,
 		MinWidth: 160, MinHeight: 160, Headless: headless,

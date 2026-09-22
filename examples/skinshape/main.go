@@ -31,6 +31,7 @@ import (
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit"
 	"github.com/codemodify/uitoolkit/app"
+	"github.com/codemodify/uitoolkit/icons"
 	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
@@ -55,6 +56,8 @@ func main() {
 	}
 	headless := *shot != ""
 	a := uitoolkit.New(uitoolkit.Options{Headless: headless, Scale: float32(*scale)})
+	// The window icon the desktop shows in its title bar, task bar and switcher.
+	a.SetIcon(icons.AppIconRGB("columns", 0xc8, 0x4a, 0x3a)...)
 	opts := platform.WindowOptions{
 		Title: "Deck", Width: *width, Height: *height,
 		MinWidth: 320, MinHeight: 200, Headless: headless,

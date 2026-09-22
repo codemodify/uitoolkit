@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/codemodify/uitoolkit"
+	"github.com/codemodify/uitoolkit/icons"
 	"github.com/codemodify/uitoolkit/internal/players/marquee"
 	"github.com/codemodify/uitoolkit/style"
 )
@@ -49,6 +50,8 @@ func main() {
 	}
 	headless := *shot != ""
 	a := uitoolkit.New(uitoolkit.Options{Headless: headless, Scale: float32(*scale)})
+	// The window icon the desktop shows in its title bar, task bar and switcher.
+	a.SetIcon(icons.AppIconRGB("star", 0x7b, 0x4f, 0xc9)...)
 
 	p, err := marquee.New(a, marquee.Options{
 		Headless: headless, Scale: float32(*scale), Compact: *compact,

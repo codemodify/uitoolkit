@@ -212,7 +212,12 @@ func TestMotifHints(t *testing.T) {
 		t.Errorf("none %v %v", h, ok)
 	}
 	if _, ok := motifHints(DecorationsServer); ok {
-		t.Error("the window manager's frame removes the hint")
+		t.Error("a window that never asked keeps no hint")
+	}
+	// A window that asked for no frame asks for all of it back:
+	// flags = MWM_HINTS_DECORATIONS, decorations = MWM_DECOR_ALL (1).
+	if motifDecorateAll != [5]uint32{2, 0, 1, 0, 0} {
+		t.Errorf("decorate all %v", motifDecorateAll)
 	}
 }
 
