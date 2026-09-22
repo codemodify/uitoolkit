@@ -341,6 +341,15 @@ straight back (which is what `Window.dispatch` does) is recognised as the
 size the window was last told and changes nothing, so a window manager
 that picked a size between two logical pixels is not argued with.
 
+`Window.OnResize(func(w, h int))` hears the window's logical size before
+the first layout and before every layout at a size it has not heard: the
+desktop resizing or maximizing it, `SetSize`, a new display scale that
+changes it. It runs ahead of that layout, so content can change its
+proportions there and be arranged at the new size in the same frame —
+Settings keeps its theme browser at its share of the window that way. An
+echoed resize at the same size is not news, and the function it returns
+unregisters the hook.
+
 `WindowOptions.Scale` is how an explicit app scale (`Options.Scale`,
 `UITK_SCALE`) reaches that conversion: without it a look drawn at 2×
 would sit in a window sized for 1×. `platform.Offscreen.SimulateScale`
