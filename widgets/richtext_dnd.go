@@ -43,7 +43,11 @@ func (t *RichText) DragAt(paintengine2d.Point) *widget.Drag {
 		return text(mime)
 	}
 	editable := t.editable()
-	if !editable {
+	if editable {
+		// Text dragged in an editor moves unless Ctrl asks for a copy, as
+		// in Qt's and GTK's text views.
+		d.Actions, d.Preferred = platform.DragCopy|platform.DragMove, platform.DragMove
+	} else {
 		d.Actions, d.Preferred = platform.DragCopy, platform.DragCopy
 	}
 	d.Payload = frag
@@ -69,9 +73,15 @@ func (t *RichText) DragAt(paintengine2d.Point) *widget.Drag {
 // DropTypes: HTML first, then text.
 func (t *RichText) DropTypes() []string { return []string{"text/html", "text/plain"} }
 
-// DropActionFor: text dropped in an editor moves, as it does in Qt's and
-// GTK's; the desktop's Ctrl makes it a copy.
+// DropActionFor: a drag of this editor's own selection moves it — the
+// compositor settles a drag's action from what the target prefers, so
+// the target says it, rather than hoping the source's preference counts;
+// a copy within the document is Ctrl+C and Ctrl+V. Text from elsewhere
+// is copied or moved as the desktop's modifiers say.
 func (t *RichText) DropActionFor(offered platform.DragAction) platform.DragAction {
+	if t.dragSel && offered.Has(platform.DragMove) {
+		return platform.DragMove
+	}
 	return dropActions(platform.DragCopy|platform.DragMove, offered)
 }
 
