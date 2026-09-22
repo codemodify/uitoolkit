@@ -146,6 +146,17 @@ its own), and a theme switch is the expensive frame: everything is measured,
 arranged and recorded again (Mail 15 ms, the tour 13 ms). A frame's budget
 at 60 Hz is 16 ms.
 
+### The partial-redraw oracle
+
+`tools/perf/oracle.sh 31` runs every app twice — as it paints, and with
+`UITK_PAINT_FULLFRAME=1` — through the same scripted input, and compares
+the compositor's screenshot after each step. Every app but the three
+players is clean: the odd step differs in four pixels by one or two levels
+in 255, in symmetric pairs at an antialiased corner's edge, and the same
+four turn up on `dev`. The players animate on their own clock, so their two
+runs are never the same frame; their differences are the spectrum and the
+clock, not the redraw.
+
 ### What this pass changed
 
 | | before | after |
