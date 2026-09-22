@@ -161,6 +161,9 @@ func buildSettings(a *app.Application, win *app.Window, saved, staged style.Appe
 			s.rebuild()
 		}
 	})
+	// The theme browser keeps its share as the window is resized, until
+	// the user drags the sash: then the split is theirs.
+	win.OnResize(func(int, int) { s.followWindow() })
 	return buildSettingsState(s)
 }
 
@@ -449,6 +452,17 @@ func (s *settingsState) themesPage() widget.Component {
 	s.bodySplit.Ratio = s.browserRatio
 	s.bodySplit.SetAccessibleName("Themes and preview")
 	return s.bodySplit
+}
+
+// followWindow works the browser's share out again for the window's new
+// size, unless the user has dragged the sash since Settings last set it.
+func (s *settingsState) followWindow() {
+	if s.bodySplit == nil || s.bodySplit.Ratio != s.browserAuto {
+		return
+	}
+	s.browserAuto = defaultBrowserRatio(s.win)
+	s.bodySplit.Ratio = s.browserAuto
+	s.bodySplit.RequestLayout()
 }
 
 // defaultBrowserRatio aims the theme browser at about 240 logical pixels
