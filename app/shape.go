@@ -157,6 +157,7 @@ func (w *Window) shapeChanged() {
 	w.eraser, w.eraserFor = nil, nil
 	w.wipe, w.wipeFor = nil, nil
 	w.shapeShade = shapeShadow{}
+	w.band = nil
 	w.lookShapeCur = nil
 	w.laid = false
 	w.dropScene()
@@ -298,10 +299,13 @@ func (w *Window) applyShapeToFrame(f *platform.Frame, margin platform.FrameInset
 	r := w.shapeRaster()
 	if r != nil {
 		f.Shape = platform.OffsetRects(r.Rects, margin.Left, margin.Top)
-		// The shape takes the whole job over: the resize band the frame
-		// would have kept in the margin is not in the silhouette, so a
-		// shaped window is resized from its own edges or not at all.
+		// The shape takes the whole job over, bar one thing: a window the
+		// user may resize keeps a band along the silhouette's outer edge
+		// (shapeband.go), which takes presses too.
 		f.Input = platform.FrameInsets{}
+		if b := w.shapeBandFor(r, margin); b != nil {
+			f.Shape = append(append([]platform.FrameRect(nil), f.Shape...), b.rects...)
+		}
 		// Transparent pixels are the whole point, so the buffer needs an
 		// alpha channel whatever the look asked for.
 		f.Alpha = true

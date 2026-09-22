@@ -147,8 +147,10 @@ type Window struct {
 	// frames a rectangle says (app/shape.go, lookShape).
 	lookShapeCur *lookShapeMemo
 	lookShapeKey lookShapeKey
-	capPress     captionGesture
-	capClick     captionClick
+	// band is the resize band along the silhouette's edge (shapeband.go).
+	band     *shapeBand
+	capPress captionGesture
+	capClick captionClick
 	// pops are the popup layer and its open submenus on surfaces of their
 	// own, parent first, and tipPop the tooltip's (popupsurf.go);
 	// popsRefused is set once the window system refused one, and the
@@ -360,6 +362,7 @@ func (w *Window) SetResizable(on bool) bool {
 		return false
 	}
 	// The resize band and the maximize button both go with it.
+	w.band = nil
 	if f, ok := w.surf.(platform.FrameSurface); ok {
 		w.caps = f.Capabilities()
 	}
