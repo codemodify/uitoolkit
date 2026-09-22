@@ -12,6 +12,14 @@ import (
 // The gallery's document views: the rich-text editor, windows inside a
 // window and a wizard. Each is what an application would build, small.
 
+// fillPanel is a titled panel whose body c takes all the room the panel
+// is given (a document view, not a form).
+func fillPanel(title string, c widget.Component) *widgets.Panel {
+	p := widgets.NewPanel(title)
+	p.Content().AddFlex(c, 1)
+	return p
+}
+
 // RichTextSample is the document the gallery's editor opens with: a bit
 // of everything the editor does.
 const RichTextSample = `<h1>Release notes</h1>
@@ -55,8 +63,7 @@ func mdiView(status *widgets.StatusBar) widget.Component {
 		title := fmt.Sprintf("Untitled %d", n)
 		body := widgets.NewTextArea(fmt.Sprintf("%s\n\nDrag the caption to move it, an edge to resize it.", title), "", nil)
 		body.SetAccessibleName(title)
-		w := area.AddWindow(title, widgets.NewPad(4, body))
-		w.SetGeometry(w.Geometry()) // keep the cascade place
+		area.AddWindow(title, widgets.NewPad(4, body))
 	}
 	for range 3 {
 		open()
