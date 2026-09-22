@@ -129,6 +129,20 @@ The widget reports `OnSort`; the app reorders `CellText`.
 | Esc | Close the open menu / combo (also handled globally) |
 | Letter | Mnemonic or first-letter match inside a popup |
 
+## Links
+
+| Key | Action |
+| --- | --- |
+| Return / Space | Open the link (`LinkButton`) |
+
+## Files
+
+| Key | Action |
+| --- | --- |
+| **Alt+Left** / **Alt+Right** | Back / forward through the tab's folders (the mouse's thumb buttons and a sideways three-finger swipe do the same) |
+| Return (in the listing) | Open the selected folder |
+| **Ctrl+T** / **Ctrl+W** / **Ctrl+Tab** | New tab / close tab / next tab |
+
 ## Mail (mailclientui)
 
 Single-letter Thunderbird bindings apply when focus is **not** a TextField / TextArea (Quick Filter and compose stay typeable). See [mail.md](mail.md).

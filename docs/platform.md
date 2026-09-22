@@ -36,7 +36,7 @@ UITK_PAINT=cpu  go run ./examples/gallery   # force CPU + shm / XPutImage
 UITK_PAINT=gpu  go run ./examples/gallery   # prefer EGL; CPU if init fails
 ```
 
-CGO Linux links `libX11`, `libXext`, `libXrandr`, `libwayland-client`,
+CGO Linux links `libX11`, `libXext`, `libXrandr`, `libXi`, `libwayland-client`,
 `libwayland-cursor`, `libwayland-egl`, and `libxkbcommon`. Theme
 cursors on X11 load `libXcursor.so.1` at runtime when present.
 paintengine2d's GPUDevice also needs EGL / GLES2. `CGO_ENABLED=0`
@@ -105,7 +105,10 @@ uitoolkit does not draw 24×24 ARGB cursor glyphs.
   (fallback: `XIMPreeditNothing`). Preedit draw/caret callbacks become
   `EventIMEPreedit` and land in TextField / TextArea as underlined
   composition. Candidate windows stay with the IM (ibus / fcitx / XIM).
-  Focus-out calls `XmbResetIC` and `EventIMECancel`.
+  Focus-out calls `XmbResetIC` and `EventIMECancel`. The pointer comes
+  through XInput 2 where the server has it (smooth scrolling, gestures:
+  see [Touchpad gestures and scrolling](#touchpad-gestures-and-scrolling));
+  a wheel notch is `Scroll` ±1 as on Wayland, three lines in a widget.
 - Scale: `UITK_SCALE` / `GDK_SCALE` / `QT_SCALE_FACTOR` / `GDK_DPI_SCALE`,
   then Xft.dpi, then RandR output mm vs CRTC pixels, then screen mm.
   Buffer and event coordinates stay device pixels; metrics grow with scale.
@@ -195,7 +198,8 @@ request `EGL_ALPHA_SIZE` 0.
   `zwp_primary_selection_device_manager_v1`,
   `zxdg_decoration_manager_v1`, `wp_fractional_scale_manager_v1`,
   `wp_viewporter`, `xdg_activation_v1`, `wp_cursor_shape_manager_v1`,
-  `xdg_toplevel_drag_manager_v1`.
+  `xdg_toplevel_drag_manager_v1`, `zwp_pointer_gestures_v1` (touchpad
+  gestures) and `zxdg_exporter_v2` (a window named to a portal dialog).
 - Each window is an `xdg_toplevel`; `xdg_wm_base` is bound up to v6.
   Configure width/height are surface-local (logical); the present buffer
   is `ceil(logical * scale)`. The toplevel's states (maximized,
@@ -279,7 +283,8 @@ wayland-scanner private-code \
 # xdg-decoration-unstable-v1, fractional-scale-v1, viewporter,
 # linux-dmabuf-unstable-v1, linux-explicit-synchronization-unstable-v1,
 # linux-drm-syncobj-v1, xdg-activation-v1, cursor-shape-v1,
-# xdg-toplevel-icon-v1 (staging)
+# xdg-toplevel-icon-v1 (staging), pointer-gestures-unstable-v1,
+# xdg-foreign-unstable-v2
 ```
 
 KWin's `org_kde_kwin_server_decoration_palette` is the exception: its XML
@@ -625,6 +630,118 @@ drag's progress to stderr.
 with no display: it stands in for the desktop, and a test moves the drag,
 drops it, and reads back what the source was told
 (`platform/offscreen_drag.go`).
+
+## Touchpad gestures and scrolling
+
+`EventGesture` carries a touchpad's pinch, swipe and hold (`GestureKind`,
+`GesturePhase`, `Fingers`, `Delta`, `Scale`, `Rotation`; the contract is in
+`platform/gesture.go` and, for widgets, [widgets.md](widgets.md#touchpad-gestures)).
+A shared tracker keeps it whatever the window system sends: nothing without a
+begin, a begin over an open gesture cancels that one, `Scale` from 1 at the
+begin and kept through an end that carries none. A popup's gesture reaches
+its root window like its other input.
+
+| | Wayland | X11 |
+| --- | --- | --- |
+| Gestures | `zwp_pointer_gestures_v1` up to version 3: swipe, pinch and hold objects made for the seat's pointer; deltas converted to device pixels | XInput 2.4 (`XI_GesturePinch*`, `XI_GestureSwipe*`; Xorg 21.1+, Xwayland 22+, libXi 1.8+ to build them): pinch and swipe. **No hold**: XInput has none. A server older than 2.4 sends no gestures at all |
+| Two-finger scroll | `wl_pointer.axis` with `axis_source` finger: device pixels, `ScrollPrecise` | XInput 2.1 scroll valuators (below): pixels, `ScrollPrecise` |
+| Glide after the fingers lift | `axis_stop` releases it; `kinetic.go` | synthesised: the scroll going quiet for 60 ms is the lift; the same `kinetic.go` curve |
+| Glide stops | a new scroll, a click, the pointer leaving, **fingers resting on the pad** (hold) | a new scroll, a click, the pointer leaving, a new pinch or swipe |
+| Wheel | `axis` / 10 per notch: `Scroll` ±1, not precise; never glides | the valuator's increment is a notch: `Scroll` ±1 (a high-resolution wheel's fractions as fractions), not precise; never glides. Emulated buttons 4–7 are dropped by their `XIPointerEmulated` flag; real ones (XTest, a device without valuators) are notches |
+
+**X11's smooth scrolling.** XInput reports a scroll as motion on a device's
+scroll valuators — a running total per axis, and an increment that is one
+notch — and says neither where the scroll came from nor when the fingers
+lifted. So, as GTK and Qt do: a touchpad is known by its XInput properties
+(`libinput Tapping Enabled`, `Synaptics Finger`) or its name; a device with
+libinput or evdev properties and neither is a mouse. Xwayland has one pointer
+for every device and cannot say, so there the scroll itself is read: a wheel
+moves in whole 120ths of a notch (what `value120` is), fingers by accelerated
+fractions of a pixel that almost never land on one; a run that showed a
+finger stays one until it pauses. A finger's scroll is `pxPerNotch` pixels a
+notch — the driver's `libinput Scrolling Pixel Distance` where there is one,
+Xwayland's 10 where not — times the display scale. The valuators are seeded
+with where they stand at a device switch (from the `XI_DeviceChanged` event)
+and on entering a window (asked of the server), so the first notch after is
+not lost. Motion, buttons and enter are selected through XInput 2 on the
+toplevels and popups; a press so selected grabs the device the XInput 2 way,
+so a system move or resize lets go of that grab too (`XIUngrabDevice`).
+
+`UITK_X11_XI2=0` keeps the core events (wheel buttons, no gestures, no
+smooth scrolling); `UITK_X11_DEBUG=1` logs the XInput version, the scroll
+devices and every scroll, `=2` every pointer event.
+
+The mouse's thumb buttons are `ButtonBack` and `ButtonForward` (X11 8 and
+9, `BTN_SIDE` and `BTN_EXTRA`); the app turns them into history navigation
+rather than presses.
+
+Tests: the tracker's contract (`gesture_test.go`), the Wayland objects and
+events on the wire against the fake compositor
+(`wayland_gesture_linux_test.go`), the X11 classification, notches, the
+velocity, the deceleration, stopping on a touch and no glide on a wheel
+(`x11scroll_test.go`), and delivery in the window (`app/gesture_test.go`).
+The e2e rig's fake input has no gestures and no axis source, so gestures and
+the glide are proven headlessly; wheel notches, the thumb buttons and
+XInput 2 clicks, menus and system moves were checked in the rig on both
+backends.
+
+## Portals
+
+Every call to a desktop service checks first that it is running or that
+D-Bus can start it (`NameHasOwner`, `ListActivatableNames`) and carries a
+deadline: two seconds for a running service, five for one D-Bus has to
+start. With no portal, the fallback — the toolkit's dialog, xdg-open, an
+`ErrNoNotifications` — comes at once. A notification server is never
+started by activation (its activatable name can be a helper that waits for
+a shell).
+
+**A parent for the desktop's dialogs (xdg-foreign).** A surface that is a
+`PortalParenter` names itself for the portal's `parent_window`: `x11:<hex
+id>` on X11; on Wayland the toplevel is exported with `zxdg_exporter_v2`
+the first time it is asked, and the compositor's handle becomes
+`wayland:<handle>`, kept for as long as the window has its role (Hide and
+Close revoke it; a compositor without the exporter gives no parent). The
+desktop's dialog is then the window's child: KWin keeps it above the window,
+modal and centred on it. `FileDialogOptions.Native` uses it; so do
+`OpenURI` and `widgets.OpenLink`.
+
+**OpenURI.** `platform.OpenURI(uri, OpenURIOptions)` opens a link through
+`org.freedesktop.portal.OpenURI` (`ParentWindow`, `Ask` for "Open with…",
+`ActivationToken`); a local file goes by descriptor to `OpenFile`, a folder
+to `OpenDirectory`, as the portal wants. No portal, or a portal that
+refuses: `xdg-open`. A URI that looks like an option is refused.
+`UITK_OPENURI=xdg-open` skips the portal, `off` opens nothing.
+`Window.OpenURI` and `widgets.OpenLink` do it off the UI goroutine.
+
+**Notifications.** `platform.Notifier` (`Application.NewNotifier`, which
+dispatches clicks on the UI goroutine and sends nothing from a headless app)
+sends a `DesktopNotification` — `ID` (the same ID replaces it), title,
+body, a theme icon name or pixels, buttons, priority — and calls
+`OnActivate` with `""` for a click on it or the button's ID. It speaks both
+services:
+
+| | `org.freedesktop.portal.Notification` | `org.freedesktop.Notifications` |
+| --- | --- | --- |
+| Send | `AddNotification(id, a{sv})`: `title`, `body`, `icon` a serialised GIcon (`("themed", names)` or `("bytes", PNG)`), `priority`, `default-action`, `buttons` `aa{sv}` | `Notify(app_name, replaces_id, icon, summary, body, actions, hints, -1)`: actions `default`, then a key and label per button; hints `urgency`, `desktop-entry`, `image-data` for pixels |
+| Replace | the same id | `replaces_id` of the last one with that ID |
+| Click | `ActionInvoked(id, action, …)` | `ActionInvoked(id, key)`; `NotificationClosed` forgets it |
+| Withdraw | `RemoveNotification` | `CloseNotification` |
+
+Which: in a Flatpak or Snap sandbox the portal (the only way out); outside
+one the notification server when it is running — what GTK's and KDE's
+unsandboxed apps use, since the portal names an unsandboxed app by nothing
+and GNOME's cannot show a notification for it — and the portal otherwise.
+`UITK_NOTIFY=portal|fdo|off` decides outright. Button action names on the bus
+are the notifier's own (`button-N`), never the app's, so any ID the app
+likes is valid.
+
+Tests run every call against fakes on a private `dbus-daemon` that can
+start nothing (`portal_linux_test.go`): the exact arguments, the clicks
+back, replacement, the order, and the quick failures with nothing on the
+bus. In the e2e rig, `tools/e2e/fakeportal` stands in for the portal and the
+notification server on the instance's own bus, and its `importer` helper
+makes the file dialog a real window that imports the handle (see
+[tools/e2e/README.md](../tools/e2e/README.md)).
 
 ## Deferred
 
