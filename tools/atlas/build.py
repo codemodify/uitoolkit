@@ -109,6 +109,35 @@ DECADE_NOTE = {
 
 W_IMG, H_IMG = 569, 429  # the Settings preview panel (docs/settings.md, "Screenshot geometry")
 
+# One sprite sheet per decade instead of one file per preview: a page may
+# publish at most 255 files, and the previews alone are half of that.
+SPRITE_COLS = 6
+sprite = {}  # pack id -> (sheet name, cols, rows, col, row)
+
+
+def build_sprites():
+    os.makedirs(os.path.join(OUT, "sprites"), exist_ok=True)
+    for d in sorted(decades):
+        ps = decades[d]
+        cols = min(SPRITE_COLS, len(ps))
+        rows = -(-len(ps) // cols)
+        for i, p in enumerate(ps):
+            sprite[p["id"]] = (str(d), cols, rows, i % cols, i // cols)
+        subprocess.run(
+            ["magick", "montage"] + [os.path.join(OUT, "previews", p["id"] + ".png") for p in ps]
+            + ["-tile", f"{cols}x", "-geometry", f"{W_IMG}x{H_IMG}+0+0", "-background", "none",
+               "-define", "webp:lossless=true", os.path.join(OUT, "sprites", f"{d}.webp")], check=True)
+        kb = os.path.getsize(os.path.join(OUT, "sprites", f"{d}.webp")) // 1024
+        print(f"sprite {d}s: {len(ps)} previews, {cols}x{rows}, {kb} KB")
+
+
+def cell_style(p):
+    name, cols, rows, col, row = sprite[p["id"]]
+    x = col / (cols - 1) * 100 if cols > 1 else 0
+    y = row / (rows - 1) * 100 if rows > 1 else 0
+    return (f"background-image:url(sprites/{name}.webp);background-size:{cols * 100}% {rows * 100}%;"
+            f"background-position:{x:.4f}% {y:.4f}%")
+
 
 def card(p):
     tags = []
@@ -119,7 +148,7 @@ def card(p):
     kind = "skin" if p["engine"] == "skin" else "engine " + p["engine"]
     return f'''<article class="card" id="p-{esc(p["id"])}" data-lineage="{esc(p["lineage"])}">
   <button class="shot" type="button" data-id="{esc(p["id"])}" data-label="{esc(p["label"])}" aria-label="Open {esc(p["label"])} full size">
-    <img src="previews/{esc(p["id"])}.png" width="{W_IMG}" height="{H_IMG}" loading="lazy" alt="The Settings preview window drawn in {esc(p["label"])}">
+    <span class="cell" role="img" aria-label="The Settings preview window drawn in {esc(p["label"])}" style="{cell_style(p)}"></span>
   </button>
   <div class="caption">
     <h3>{esc(p["label"])}</h3>
@@ -130,6 +159,8 @@ def card(p):
   </div>
 </article>'''
 
+
+build_sprites()
 
 sections = []
 for d in sorted(decades):

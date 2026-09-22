@@ -226,6 +226,10 @@
     overflow: hidden;
   }
   .shot img { display: block; width: 100%; height: 100%; object-fit: cover; }
+  /* Cards draw from one sprite sheet per decade: 129 previews would put the
+     page over the 255-file limit. Percentage sizing keeps the cells sharp at
+     any card width. */
+  .shot .cell { display: block; width: 100%; height: 100%; background-repeat: no-repeat; }
   .shot:hover { border-color: var(--accent); }
   .caption { display: grid; gap: 5px; }
   .caption h3 { margin: 0; font: 600 17px/1.3 var(--sans); }
