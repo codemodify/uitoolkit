@@ -10,6 +10,11 @@ const (
 	ButtonLeft
 	ButtonMiddle
 	ButtonRight
+	// ButtonBack and ButtonForward are a mouse's thumb buttons (X11
+	// buttons 8 and 9, evdev BTN_SIDE and BTN_EXTRA): a browser's and a
+	// file manager's back and forward.
+	ButtonBack
+	ButtonForward
 )
 
 // Key is a physical / logical key for focus and shortcuts.
@@ -204,6 +209,10 @@ const (
 	// window activated (xdg_popup.popup_done, a broken X11 grab). The app
 	// dismisses it; the surface is still open until it does.
 	EventPopupDone
+	// EventGesture: a touchpad gesture (Gesture) at Phase, with the
+	// pointer at Pos. See [GestureKind] and [GesturePhase] for the
+	// contract; Fingers, Delta, Scale and Rotation carry the gesture.
+	EventGesture
 )
 
 // DropReceiver is implemented by surfaces that take drops from other
@@ -252,6 +261,19 @@ type Event struct {
 	State WindowState
 	Decor Decorations
 	Caps  WMCaps
+	// Gesture and Phase say which touchpad gesture an EventGesture is
+	// and where in it; Fingers is how many fingers make it. Delta is how
+	// far the fingers (a pinch: the point between them) moved since the
+	// last event, in device pixels; Scale is a pinch's spread relative to
+	// its begin (1 at the begin, 2 when the fingers are twice as far
+	// apart); Rotation is the degrees a pinch turned since the last
+	// event, clockwise.
+	Gesture  GestureKind
+	Phase    GesturePhase
+	Fingers  int
+	Delta    paintengine2d.Point
+	Scale    float32
+	Rotation float32
 	// Popup is the popup an EventPopupPlaced or EventPopupDone is about.
 	// Every other event from a popup arrives on its root window with Pos
 	// already in that window's coordinates, as if the popup were part of
