@@ -38,7 +38,7 @@ func TestATSPIStates(t *testing.T) {
 }
 
 func TestATSPIRolesCovered(t *testing.T) {
-	for r := a11y.RoleUnknown; r <= a11y.RoleTitleBar; r++ {
+	for r := a11y.RoleUnknown; r <= a11y.RoleInternalFrame; r++ {
 		v, ok := atspiRoles[r]
 		if !ok {
 			t.Errorf("no AT-SPI role for %s", r)
