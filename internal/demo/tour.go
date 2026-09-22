@@ -190,6 +190,15 @@ func TourPageIndex(name string) int {
 	return -1
 }
 
+// TourPageTitle is page i's heading ("Tabs in the title bar"), empty for
+// no page.
+func TourPageTitle(i int) string {
+	if i < 0 || i >= len(tourPages) {
+		return ""
+	}
+	return tourPages[i].title
+}
+
 // TourPageNames are the page names a command line takes, in order.
 func TourPageNames() []string {
 	out := make([]string, len(tourPages))

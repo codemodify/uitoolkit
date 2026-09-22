@@ -15,6 +15,7 @@
 //	tour -theme win95           # any of the packs, skins included
 //	tour -scale 1.75            # at a fractional scale
 //	tour -shot out/             # one PNG per page, then exit
+//	tour -sheet pages.png       # every page on one contact sheet, then exit
 //	tour -headless              # paint offscreen, write tour.png, exit
 //
 // The tour's own navigation is its first page: the tabs along the top are
@@ -43,6 +44,7 @@ func main() {
 	theme := flag.String("theme", "", "the pack to run in (a skin, or any of the others)")
 	scale := flag.Float64("scale", 0, "display scale (0: the desktop's, or $UITK_SCALE)")
 	shot := flag.String("shot", "", "write one PNG per page into this directory and exit")
+	sheet := flag.String("sheet", "", "write a contact sheet of the pages to this PNG and exit")
 	headless := flag.Bool("headless", false, "paint offscreen and write tour.png")
 	flag.Parse()
 	log.SetFlags(0)
@@ -66,7 +68,7 @@ func main() {
 		os.Setenv(style.ThemeEnv, *theme)
 	}
 
-	offscreen := *headless || *shot != ""
+	offscreen := *headless || *shot != "" || *sheet != ""
 	if offscreen && os.Getenv(style.AnimationsEnv) == "" {
 		// Stills are the same every run: no fade or busy bar caught
 		// halfway through.
@@ -75,9 +77,17 @@ func main() {
 
 	a := uitoolkit.New(uitoolkit.Options{Headless: offscreen, Scale: float32(*scale)})
 
-	if *shot != "" {
-		if err := writeShots(a, *shot, pages); err != nil {
-			log.Fatal(err)
+	if *shot != "" || *sheet != "" {
+		if *shot != "" {
+			if err := writeShots(a, *shot, pages); err != nil {
+				log.Fatal(err)
+			}
+		}
+		if *sheet != "" {
+			if err := writeSheet(a, *sheet, pages); err != nil {
+				log.Fatal(err)
+			}
+			fmt.Println("wrote", *sheet)
 		}
 		return
 	}
