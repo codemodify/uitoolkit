@@ -324,20 +324,19 @@ func (p *htmlParser) text(t string) {
 		}
 		return
 	}
-	// Collapse white space as a browser does.
+	// Collapse white space as a browser does: a run of it is one space,
+	// kept with the text before it, and none at a block's start.
 	var b strings.Builder
 	for _, r := range t {
 		if r == ' ' || r == '\t' || r == '\n' || r == '\r' || r == '\f' {
+			if !p.space && (b.Len() > 0 || p.cur != nil && len(p.spans) > 0) {
+				b.WriteByte(' ')
+			}
 			p.space = true
 			continue
 		}
-		if p.space {
-			if p.cur != nil && len(p.spans) > 0 || b.Len() > 0 {
-				b.WriteByte(' ')
-			}
-			p.space = false
-		}
-		if r == ' ' {
+		p.space = false
+		if r == '\u00a0' {
 			r = ' '
 		}
 		b.WriteRune(r)
@@ -533,9 +532,6 @@ func (p *htmlParser) image(t htmlToken) {
 	im.Pixels = DecodeDataURI(src)
 	if im.Pixels == nil && p.resolve != nil && src != "" {
 		im.Pixels = p.resolve(src)
-	}
-	if p.space && p.cur != nil && len(p.spans) > 0 {
-		p.spans = append(p.spans, Span{Text: " ", Style: p.style()})
 	}
 	p.space = false
 	p.begin()
