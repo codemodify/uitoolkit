@@ -388,39 +388,32 @@ func TestFrameSameComparesRegions(t *testing.T) {
 	}
 }
 
-func TestShapeRasterisesInStripsWithoutASeam(t *testing.T) {
-	// A shape larger than one scratch strip is drawn a strip at a time, so
-	// its peak memory does not follow its size. The joins must leave
-	// nothing behind: a seam would be a row of pixels the compositor is
-	// told the window does not cover, straight across it.
-	const n = 900
-	strip := shapeScratchBytes / (n * 4)
-	if strip >= n {
-		t.Fatalf("a %d px shape fits in one strip (%d rows): nothing joins", n, strip)
-	}
-	p := paintengine2d.NewPath()
-	p.AddRect(paintengine2d.XYWH(0, 0, n, n))
-	r := NewShape(p).Raster(n, n)
-	// A full rectangle is one merged rectangle, however many strips it
-	// took: every row has the same run, seam or no seam.
-	if len(r.Rects) != 1 || r.Rects[0] != (FrameRect{X: 0, Y: 0, W: n, H: n}) {
-		t.Fatalf("a full square rasterised to %+v", r.Rects)
-	}
+func TestShapeMaskIsTheRenderersCoverage(t *testing.T) {
+	// The mask is drawn straight into a one-byte coverage image. It must
+	// be the same coverage the renderer gives the same path in RGBA —
+	// the alpha channel of a white fill — to within rounding, so what the
+	// window paints and what the compositor is told agree.
+	const n = 300
+	path := ringPath(n, n)
+	mask := rasterPathMask(path, paintengine2d.FillEvenOdd, n, n)
+	img := paintengine2d.NewImage(n, n)
+	ctx := paintengine2d.NewContext(img)
+	ctx.Clear(paintengine2d.Transparent)
+	paint := paintengine2d.Fill(paintengine2d.White)
+	paint.FillRule = paintengine2d.FillEvenOdd
+	paint.AntiAlias = true
+	ctx.DrawPath(path, paint)
+	stride := img.RowStride()
 	for y := 0; y < n; y++ {
-		if r.Mask[y*n+n/2] != 255 {
-			t.Fatalf("row %d of the mask is not covered (strip height %d)", y, strip)
+		for x := 0; x < n; x++ {
+			a, m := int(img.Pix[y*stride+x*4+3]), int(mask[y*n+x])
+			if a-m > 1 || m-a > 1 {
+				t.Fatalf("pixel %d,%d: mask %d, rendered alpha %d", x, y, m, a)
+			}
 		}
 	}
-	// And a shape with a hole keeps the hole exactly where it belongs
-	// across a join.
-	ring := NewShapeEvenOdd(ringPath(n, n)).Raster(n, n)
-	if ring.Contains(n/2, n/2) {
-		t.Fatal("the hole closed up")
-	}
-	for y := strip - 2; y <= strip+2 && y < n; y++ {
-		if !ring.Contains(2, y) {
-			t.Fatalf("row %d at a strip join lost the body", y)
-		}
+	if r := NewShapeEvenOdd(path).Raster(n, n); r.Contains(n/2, n/2) || !r.Contains(2, n/2) {
+		t.Fatal("the ring's hole or rim is wrong")
 	}
 }
 

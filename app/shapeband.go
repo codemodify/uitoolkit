@@ -48,109 +48,94 @@ func buildShapeBand(r *platform.ShapeRaster, m platform.FrameInsets, out, in, co
 		return nil
 	}
 	b := &shapeBand{raster: r, margin: m, out: out, w: gw, h: gh, edges: make([]uint8, gw*gh)}
+	bb := r.Bounds
+	// Near the ends of a straight edge a press takes the corner, as a
+	// rectangular frame's does: a side's pixels within corner of the box's
+	// ends take the neighbouring side too.
+	cx0, cx1 := bb.X+m.Left+corner, bb.X+bb.W+m.Left-corner
+	cy0, cy1 := bb.Y+m.Top+corner, bb.Y+bb.H+m.Top-corner
 	mark := func(x0, x1, y0, y1 int, e platform.Edges) {
 		x0, x1 = max(x0, 0), min(x1, gw)
 		y0, y1 = max(y0, 0), min(y1, gh)
 		for y := y0; y < y1; y++ {
 			row := b.edges[y*gw:]
+			ey := e
+			if e&(platform.EdgeLeft|platform.EdgeRight) != 0 {
+				if y < cy0 {
+					ey |= platform.EdgeTop
+				} else if y >= cy1 {
+					ey |= platform.EdgeBottom
+				}
+			}
 			for x := x0; x < x1; x++ {
-				row[x] |= uint8(e)
+				ex := ey
+				if e&(platform.EdgeTop|platform.EdgeBottom) != 0 {
+					if x < cx0 {
+						ex |= platform.EdgeLeft
+					} else if x >= cx1 {
+						ex |= platform.EdgeRight
+					}
+				}
+				row[x] |= uint8(ex)
 			}
 		}
 	}
-	// Rows: each one's outermost covered pixels are the left and right
-	// edges there; columns likewise for the top and bottom. An end counts
-	// only where it faces outwards — within a quarter of the box of the
-	// box's own side — so the step beside BeOS's tab, or the notch of a
-	// concave skin, is not an edge of the window.
-	bb := r.Bounds
+	// The silhouette's rectangles come in scanline order, a row group at a
+	// time (every rectangle of a group starts on the same row and is as
+	// tall), so a group's first and last rectangles are its rows' ends.
+	//
+	// An end counts only where it faces outwards — within a quarter of the
+	// box of the box's own side — so the step beside BeOS's tab, or the
+	// notch of a concave skin, is not an edge of the window.
 	reachX := max(out+in, bb.W/4)
 	reachY := max(out+in, bb.H/4)
-	for y := 0; y < r.H; y++ {
-		row := r.Mask[y*r.W : (y+1)*r.W]
-		lo, hi := -1, -1
-		for x, c := range row {
-			if c >= 128 {
-				if lo < 0 {
-					lo = x
-				}
-				hi = x
-			}
+	rects := r.Rects
+	for i := 0; i < len(rects); {
+		g := rects[i]
+		lo, hi := g.X, g.X+g.W
+		j := i + 1
+		for ; j < len(rects) && rects[j].Y == g.Y; j++ {
+			lo, hi = min(lo, rects[j].X), max(hi, rects[j].X+rects[j].W)
 		}
-		if lo < 0 {
-			continue
-		}
-		gy := y + m.Top
+		y0, y1 := g.Y+m.Top, g.Y+g.H+m.Top
 		if lo < bb.X+reachX {
-			mark(lo+m.Left-out, lo+m.Left+in, gy, gy+1, platform.EdgeLeft)
+			mark(lo+m.Left-out, lo+m.Left+in, y0, y1, platform.EdgeLeft)
 		}
-		if hi+1 > bb.X+bb.W-reachX {
-			mark(hi+1+m.Left-in, hi+1+m.Left+out, gy, gy+1, platform.EdgeRight)
+		if hi > bb.X+bb.W-reachX {
+			mark(hi+m.Left-in, hi+m.Left+out, y0, y1, platform.EdgeRight)
 		}
+		i = j
 	}
-	for x := 0; x < r.W; x++ {
-		lo, hi := -1, -1
-		for y := 0; y < r.H; y++ {
-			if r.Mask[y*r.W+x] >= 128 {
-				if lo < 0 {
-					lo = y
+	// Each column's top: the first rectangle over it, top down, which for
+	// anything but a deep notch is found within a few groups; its bottom
+	// likewise, bottom up.
+	edgeCols := func(from, to, step int, top bool) {
+		seen := make([]bool, r.W)
+		left := r.W
+		for i := from; i != to && left > 0; i += step {
+			g := rects[i]
+			for x := g.X; x < g.X+g.W; x++ {
+				if seen[x] {
+					continue
 				}
-				hi = y
+				seen[x] = true
+				left--
+				gx := x + m.Left
+				if top {
+					if g.Y < bb.Y+reachY {
+						mark(gx, gx+1, g.Y+m.Top-out, g.Y+m.Top+in, platform.EdgeTop)
+					}
+				} else if end := g.Y + g.H; end > bb.Y+bb.H-reachY {
+					mark(gx, gx+1, end+m.Top-in, end+m.Top+out, platform.EdgeBottom)
+				}
 			}
 		}
-		if lo < 0 {
-			continue
-		}
-		gx := x + m.Left
-		if lo < bb.Y+reachY {
-			mark(gx, gx+1, lo+m.Top-out, lo+m.Top+in, platform.EdgeTop)
-		}
-		if hi+1 > bb.Y+bb.H-reachY {
-			mark(gx, gx+1, hi+1+m.Top-in, hi+1+m.Top+out, platform.EdgeBottom)
-		}
 	}
-	// Near the ends of a straight edge a press takes the corner, as a
-	// rectangular frame's does.
-	x0, x1 := bb.X+m.Left, bb.X+bb.W+m.Left
-	y0, y1 := bb.Y+m.Top, bb.Y+bb.H+m.Top
-	for y := 0; y < gh; y++ {
-		row := b.edges[y*gw:]
-		for x := 0; x < gw; x++ {
-			e := platform.Edges(row[x])
-			switch e {
-			case platform.EdgeTop, platform.EdgeBottom:
-				if x < x0+corner {
-					e |= platform.EdgeLeft
-				} else if x >= x1-corner {
-					e |= platform.EdgeRight
-				}
-			case platform.EdgeLeft, platform.EdgeRight:
-				if y < y0+corner {
-					e |= platform.EdgeTop
-				} else if y >= y1-corner {
-					e |= platform.EdgeBottom
-				}
-			}
-			if !e.Valid() && e != 0 {
-				// Opposite sides at once: a sliver thinner than the band
-				// itself. The first one found wins.
-				if e&platform.EdgeLeft != 0 && e&platform.EdgeRight != 0 {
-					e &^= platform.EdgeRight
-				}
-				if e&platform.EdgeTop != 0 && e&platform.EdgeBottom != 0 {
-					e &^= platform.EdgeBottom
-				}
-			}
-			row[x] = uint8(e)
-		}
+	if len(rects) > 0 {
+		edgeCols(0, len(rects), 1, true)
+		edgeCols(len(rects)-1, -1, -1, false)
 	}
-	on := make([]uint8, gw*gh)
-	for i, e := range b.edges {
-		if e != 0 {
-			on[i] = 255
-		}
-	}
-	b.rects = platform.MaskRects(on, gw, gh, gw, 255)
+	b.rects = platform.MaskRectsRange(b.edges, gw, gh, gw, 1, 255)
 	return b
 }
 
@@ -160,7 +145,16 @@ func (b *shapeBand) at(x, y int) platform.Edges {
 	if b == nil || x < 0 || y < 0 || x >= b.w || y >= b.h {
 		return 0
 	}
-	return platform.Edges(b.edges[y*b.w+x])
+	e := platform.Edges(b.edges[y*b.w+x])
+	// Opposite sides at once is a sliver thinner than the band itself:
+	// the left and the top win.
+	if e&platform.EdgeLeft != 0 {
+		e &^= platform.EdgeRight
+	}
+	if e&platform.EdgeTop != 0 {
+		e &^= platform.EdgeBottom
+	}
+	return e
 }
 
 // shapeBandFor is the band around the window's silhouette r, or nil where
