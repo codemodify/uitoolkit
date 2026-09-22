@@ -152,6 +152,17 @@ names) is in [compare.md](compare.md).
 `FileDialog` is an in-process modal list + path field, not a native portal /
 COM picker.
 
+Menus, combo lists, context menus and tooltips open as **surfaces of their
+own** (an `xdg_popup`, an X11 override-redirect window) and may run past
+their window, as Qt's and GTK's do; headless they stay inside it
+([platform.md](platform.md#popups)). A popup placed with
+`widget.PlacePopupForAnchor`, `PlacePopupBeside` or `PlacePopup` records what
+it hangs from (`widget.PopupAnchorOf`), which the window system flips and
+slides against the screen; one placed by hand says so with
+`widget.SetPopupAnchor`. A popup component with a hit shape
+(`SetHitShapeFunc`) is cut to it — surface, shadow and input region
+([shapes.md](shapes.md#popups)).
+
 Pointer shapes (`TableView` column dividers, `Splitter` sash, text
 fields) use the **host** cursor theme — compositor `wp_cursor_shape_v1`
 or XCURSOR on Wayland, Xcursor / X font cursors on X11, `LoadCursorW`

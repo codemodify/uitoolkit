@@ -166,6 +166,55 @@ neither hook is what it always was, which is all 121 engine packs; the cost
 to a component that names no face is two nil checks and a type assertion
 that fails.
 
+## The resize band
+
+A silhouette is the window's input region, so the band a frame keeps in its
+shadow's margin — where a press resizes the window — would go with it. A
+shaped window the user may resize keeps one along its silhouette's **outer**
+edge instead (`app/shapeband.go`): up to 10 DIP outside the silhouette
+wherever the surface has room (the margin, or the space the silhouette
+leaves in its box), and 4 DIP just inside it, as a frame without a shadow
+keeps inside its border. The band is part of the input region, and a press
+in it starts the desktop's resize from the edge it is on.
+
+- A row's outermost covered pixels are the left and right edges there, a
+  column's the top and bottom; a diagonal is both, which is a corner, and a
+  press near the ends of a straight edge takes the corner too, as a
+  rectangular frame's does.
+- Only an end that faces outwards counts — within a quarter of the box of
+  the box's own side — so the step beside BeOS's tab, or a concave skin's
+  notch, is not an edge. A hole never is: a ring is resized from its rim.
+- A fixed-size window (`platform.SizingFixed`) keeps none, and neither does
+  a maximized, full-screen or tiled one (which has no silhouette then).
+
+It is worked out once per rasterisation from the silhouette's rectangles,
+not per frame: 1.3 ms for a 1600x1200 window.
+
+## Popups
+
+Menus, combo lists, submenus and tooltips are surfaces of their own
+([platform.md](platform.md#popups)), which is what lets them take a
+silhouette like a window does. Each popup's surface carries its own shadow
+in its own margin, and its frame is one of three things, in order:
+
+1. **the popup component's own hit shape** (`widget.Base.SetHitShapeFunc`):
+   the surface is cut to it with the same wipe and eraser as a shaped
+   window, its shadow is the silhouette blurred in the colour of the look's
+   own popup shadow, and its input region is the silhouette —
+   `examples/popups`' Round menu is a disc;
+2. **the look's**, `style.PopupShapeOf` — an optional engine hook,
+   `PopupShapeEngine.PopupShape(l, b, kind)`, beside the window and control
+   hooks, so a skin's or a look's menu can be the shape its art is;
+3. **the plain box** — a look's rounded menu frame is transparent in its
+   corners on a surface of its own, with nothing claimed opaque.
+
+Where the popup is glass (below), the blur behind it must stop at its
+rounded corners: the outline is then read from what the popup paints, once
+per size and look, and the blur region is that.
+
+A silhouette needs a surface. A popup drawn inside its window (headless,
+`UITK_POPUPS=layer`) is the rectangle it always was.
+
 ## Glass
 
 Glass is the *desktop* blurred behind the window. It is not
@@ -212,9 +261,37 @@ The switch is in one place, `style/glass.go`:
 - everything else asks `style.GlassBehind(look)`, so the painted
   approximation and the real thing are never both on and never both off.
 
-The four `ctx.BackdropBlur` calls in the engines are unchanged. They blur
-what is under a *menu* or a flyout, which is the window's own content, and
-they are still right.
+The four `ctx.BackdropBlur` calls in the engines blur what is under a *menu*
+or a flyout, which is the window's own content — while the menu is drawn
+inside its window. On a surface of its own there is nothing of the window's
+under it, so a menu's material asks `style.LayerMaterial`, which reads what
+the app says is behind the layer being painted (`style.LayerBackdrop`):
+
+| Behind the layer | Blur the window's pixels | Tint |
+| --- | --- | --- |
+| the window (`BackdropWindow`) | yes | as the look states it |
+| the compositor's glass (`BackdropGlass`) | no | its real alpha |
+| a desktop nobody blurs (`BackdropNone`) | no | flattened solid over the look's background |
+
+The popup's surface asks for blur behind itself whenever its look wants
+glass and the desktop can blur, so Fluent's acrylic flyouts, Big Sur's
+vibrant menus and Tahoe's glass menus are real glass over whatever is
+behind the window.
+
+The same switch keeps **true alpha** in the materials the looks used to
+pre-flatten: over real glass Big Sur's sidebar pane keeps its material's
+alpha, Tahoe's sidebar panel is laid over the blurred desktop rather than
+the window colour (its rows have no opaque ground of their own), and the
+macOS menu bar keeps its tint's alpha. Without glass they are what they
+were.
+
+**Aero** asks for glass too, but only for its frame
+(`DecorationSpec.GlassFrame`): over a compositor that blurs, the caption
+and borders take the window's background out from under themselves and lay
+the glass gradient down translucent, and the client area keeps its opaque
+background — Windows 7's Aero Glass, as against Mica or vibrancy, which
+tint the whole window. An inactive window's frame stays opaque, as Windows
+7's did; Aero Basic has no glass at all.
 
 ## Per-state rules
 
@@ -366,7 +443,27 @@ than as absolutes:
 | Full repaint | 0.37 – 0.46 ms | 6.0 ms |
 | Partial repaint (a 120×40 box) | 11 – 20 µs | 246 µs |
 | Asking a window for its silhouette | — | 22 – 39 ns |
-| Rasterising it from scratch (a resize) | — | 20 ms, 2.03 MB |
+| Rasterising it from scratch (a resize) | — | 1.2 ms, 1.08 MB (was 7.5 ms) |
+
+A large window's cold path, 1600x1200 device pixels (a rounded panel with a
+round hole), measured with `go test -bench 'Shape(Mask|Raster)Large'
+./platform`:
+
+| | before | after |
+| --- | --- | --- |
+| The coverage mask | 14.8 ms | 1.5 ms |
+| The whole rasterisation (mask and its four rectangle lists) | 19.3 ms | 2.6 ms |
+| The resize band beside it (`BenchmarkShapeBandLarge`, app) | 6.8 ms | 1.3 ms |
+
+Three things did it. The renderer (paintengine2d) now adds a span's whole
+pixels once a row, as a difference array, rather than once for each of its
+eight sub-scanlines, and fills a one-byte image without the per-pixel blend
+dispatch: 13.8 ms to 3.8 ms on one core. The mask is drawn straight into a
+one-byte coverage image over its own bytes (`NewImageA8`) — no RGBA scratch,
+no copy — in up to four horizontal bands side by side. And the four
+rectangle lists are worked out side by side too, one unsigned compare a
+pixel. The UI thread waits on the bands; the work itself is spread over up
+to four cores and done in a sixth of a frame.
 
 The rasterisation is the one expensive thing, and it happens **once per
 resize**, never per frame: a shape caches its own rasterisations and a
@@ -403,37 +500,26 @@ are the other half of the answer.
 
 ## Known gaps
 
-- **The rasteriser is CPU and single-threaded.** 20 ms for an 875 px ring is
-  a visible hitch during an interactive resize of a large shaped window. It
-  is one pass over the mask and an obvious candidate for the GPU, or for
-  rasterising only the rows a resize actually changed.
-- **A shape's coverage is rasterised through an RGBA scratch image**, a strip
-  at a time, because paintengine2d's CPU device takes its 8-bit `FormatA8`
-  as a source but not as a render target — every blend writes four bytes at
-  a one-byte-per-pixel index, so an A8 target runs past the end of its own
-  buffer (it panics; see `platform.rasterPathMask`). Fixing that in the
-  renderer would remove a copy and a quarter of the scratch.
-- **Shaped popups, menus and tooltips** are not done. They are in-window
-  overlay layers here, not separate surfaces, so they need the same work one
-  level down.
 - **Damage is clipped to the silhouette's bounding box**, not to its
-  rectangles. Clipping each damage box against a silhouette's own rows would
-  turn one box into as many as the shape has rows, and presenting hundreds
-  of slivers costs the compositor more than repainting a corner the window
-  does not own — whose pixels are punched transparent anyway.
-- **The looks' pre-flattened materials.** Big Sur's and Tahoe's sidebars and
-  macOS's menu bar still flatten their translucent tints over the window
-  colour, which was the right thing when no real blur existed. With glass in
-  effect they could keep their real alpha.
+  rectangles — measured, and kept. Clipping to the rows made every case
+  slower on the window's own side before the compositor sees a single extra
+  rectangle: a 375 px box over a ring's hole went from 1.66 ms (one box) to
+  2.5 ms (64 boxes), a hover on its rim from 0.09 ms to 0.14 ms (two), at
+  875 px. Each box repaints the tree clipped to it; the pixels saved are
+  punched transparent anyway.
 - **dmabuf presents stay opaque**; a shaped window uses shm or EGL with
   alpha. Worth revisiting only if it ever matters for performance.
-- **The renderer's multisampled dest-out is not sample-exact.** Cutting the
-  silhouette out with a blended image draw leaves a thread of half-erased
-  pixels along the boundary when the GPU is multisampling; wiping the
-  uncovered part with a fill sidesteps it (above), but the underlying
-  behaviour is still there for anything else that erases through an image.
-  `UITK_PAINT_MSAA=0` was the switch that first showed which of the two it
-  was.
+- **The renderer's multisampled dest-out through an image is not
+  sample-exact** on Mesa's iris (Intel, 4x MSAA): whole 2x2 blocks next to a
+  change in the eraser are left unwritten, whatever the filter, the texture
+  format or how the texel is chosen, and never without multisampling.
+  Per-sample shading hides most of it but not all, which is not a clean fix,
+  so the wipe of whole pixels above stays. paintengine2d keeps a probe of it
+  (`PE_PROBE_MSAA_DESTOUT=1 go test -run TestGPUDestOutImageIsSampleExact`).
+- **A skin cannot yet state a popup silhouette in `skin.json`**; the look
+  hook (`PopupShapeEngine`) is there for the skin engine to implement.
+- **On X11 under Xwayland a click on the bare desktop does not dismiss a
+  menu** (see [platform.md](platform.md#popups)).
 
 ## See also
 

@@ -453,6 +453,57 @@ wayland-scanner private-code \
 linux-dmabuf stays on the opaque `XRGB` formats; a frame that needs alpha
 presents through `wl_shm` instead (the dmabuf path is opt-in and CPU-only).
 
+## Popups
+
+Menus, submenus, combo lists, context menus, the drop-action menu and
+tooltips open as surfaces of their own, so they may run past their window —
+Minim's 275x116 strip opens its skin menu below itself, a combo list in a
+small dialog reaches the bottom of the screen. The code is
+`platform/popup.go` (the vocabulary), `wayland_popup_linux.go`,
+`x11_popup_linux.go`, `offscreen_popup.go`, and `app/popupsurf.go`.
+
+| | Wayland | X11 |
+| --- | --- | --- |
+| Surface | `xdg_popup` from the window's (or the parent menu's) `xdg_surface` | override-redirect window, `_NET_WM_WINDOW_TYPE_POPUP_MENU` / `_TOOLTIP`, transient for the window |
+| Placement | `xdg_positioner`: anchor rect, anchor edge, gravity, flip / slide / resize, `set_reactive`; the compositor places it | `platform.SolvePopup` — the same semantics — in the work area of the monitor under the anchor (RandR box cut to `_NET_WORKAREA`) |
+| A menu's input | `xdg_popup.grab` with the serial of the press or key that opened it | owner-events `XGrabPointer` + `XGrabKeyboard` once the window is mapped (retried while another client holds a grab) |
+| Dismissed by the desktop | `popup_done` → `EventPopupDone` | the window losing the keyboard for real (`FocusOut`, not a grab's) → `EventPopupDone` |
+| Moved | `xdg_popup.reposition` (v3), answered synchronously | `XMoveResizeWindow` |
+| A tooltip | no grab, empty input region | no grab, empty input shape |
+
+**Input stays the window's.** Every event on a popup's surface is queued on
+its *root* window with the position moved into the root's device pixels
+(`PopupSurface.Origin`), so the app's hit-testing, hover, capture and
+click-outside dismissal are unchanged — the popup component is still the
+window's popup layer and its accessibility tree is the same tree. A pointer
+or keyboard moving between a window and its own popups is not the window
+losing it: a leave followed by an enter in the same family, in one burst of
+events, is no event at all. Only input goes to the root; a popup's own
+configure, resize or close never does.
+
+Placement is stated in **logical pixels relative to the root's visible box**
+whatever the parent, and the app arranges the component where the window
+system answered (`Placed`, `Origin` — rounded to the root's device grid, so a
+menu is as crisp at 1.75 as at 1). Before the answer, the widgets place the
+popup against `Window.PopupArea`: the work area on X11 and offscreen, and on
+Wayland — where a client never learns where it is — a screen-sized guess
+around the window from `configure_bounds`, which the compositor corrects.
+
+**Fallback.** Headless and offscreen windows draw popups inside themselves as
+they always did; so does a window whose compositor refused a popup (it is
+remembered, and logged once). `UITK_POPUPS=layer` forces it everywhere, for
+comparison; `Window.PopupSurfaces` says which a window has. Tests turn the
+surfaces on with `Offscreen.SimulatePopups(workArea)` and can refuse them
+(`SimulatePopupsRefused`) or take one down (`SimulatePopupDone`).
+`UITK_POPUP_DEBUG=1` logs X11 placements.
+
+Known: under Xwayland an X client's grab cannot see a press on a surface that
+is not an X window, so a click on the bare desktop does not dismiss an X11
+menu there (Qt and GTK share it); on a real X server it does. KWin states
+`_NET_WORKAREA` in logical pixels on a scaled Xwayland while windows are
+placed in device ones; a work area under 60% of its monitor is ignored for
+the monitor.
+
 ## Drag and drop
 
 Both halves on both backends: a window takes drops from any application,
