@@ -98,9 +98,9 @@ Struck through once fixed; newest findings at the end of their section.
   (colouring the desktop's own frame to match the look), `xdg-toplevel-icon`,
   and `_NET_WM_SYNC_REQUEST` for tear-free X11 resizes.~~ All three
   (docs/decorations.md#dressing-the-desktops-frame).
-- **The gallery wears no window icon yet**: every other example does; the
+- ~~**The gallery wears no window icon yet**: every other example does; the
   gallery was being reworked on another branch (`a.SetIcon(icons.AppIconRGB(...)...)`
-  after `uitoolkit.New`).
+  after `uitoolkit.New`).~~ It wears the `layout` glyph now.
 - **The extended `_NET_WM_SYNC_REQUEST`** (`_NET_WM_FRAME_DRAWN`) is not
   done, and the nested rig cannot show the basic one's effect: Xwayland
   hands KWin only whole buffers, so mid-resize shots with and without it
