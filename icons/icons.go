@@ -22,8 +22,9 @@ var glyphs embed.FS
 
 // AppIconSizes are the sizes AppIcon draws: the title bar's 16 to 24
 // pixels at 1x and 2x, the task bar's and the task switcher's 32 to 64,
-// and 128 for a switcher that shows it big.
-var AppIconSizes = []int{16, 22, 24, 32, 48, 64, 128}
+// 96 — the size KWin asks for (xdg-toplevel-icon's icon_size) — and 128
+// for a switcher that shows it big.
+var AppIconSizes = []int{16, 22, 24, 32, 48, 64, 96, 128}
 
 // AppIcon is a window icon made from the Lucide glyph stem: the glyph in
 // white on a rounded tile of colour bg, lit from the top, at every size in
