@@ -596,6 +596,7 @@ func filesApp(win *app.Window, open []int) widget.Component {
 		openTab(1, 0)
 	}
 	tabs.Select(0)
+	syncHistory()
 
 	// The tabs are the window's title bar: the caption of the frame the
 	// toolkit draws (the caption buttons beside them, the empty strip moves
