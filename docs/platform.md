@@ -86,7 +86,9 @@ uitoolkit does not draw 24×24 ARGB cursor glyphs.
   set it).
 - Window frames (see [decorations.md](decorations.md)): a toolkit-drawn
   frame sets `_MOTIF_WM_HINTS` {flags 2, decorations 0} before the window
-  is mapped (removed again for the window manager's frame); button presses
+  is mapped; switched to the window manager's frame, a window that had
+  asked for none asks for all of it back ({flags 2, decorations 1}) —
+  KWin ignores the property going away; button presses
   keep their root position, button and time, and `StartSystemMove` /
   `StartSystemResize` ungrab the pointer and send `_NET_WM_MOVERESIZE`
   (move 8, edges 0–7) to the root when `_NET_SUPPORTED` lists it; the
@@ -276,8 +278,15 @@ wayland-scanner private-code \
 # same for text-input-unstable-v3, primary-selection-unstable-v1,
 # xdg-decoration-unstable-v1, fractional-scale-v1, viewporter,
 # linux-dmabuf-unstable-v1, linux-explicit-synchronization-unstable-v1,
-# linux-drm-syncobj-v1, xdg-activation-v1, cursor-shape-v1
+# linux-drm-syncobj-v1, xdg-activation-v1, cursor-shape-v1,
+# xdg-toplevel-icon-v1 (staging)
 ```
+
+KWin's `org_kde_kwin_server_decoration_palette` is the exception: its XML
+is KDE's and LGPL, so `platform/kde_palette.h` / `kde_palette_linux.c`
+spell its two interfaces out by hand from the protocol's facts (the
+names, `create(new_id, wl_surface)`, `set_palette(string)`, `release`)
+rather than generating them.
 
 ```bash
 # Paint + present (Linux + CGO)
@@ -401,6 +410,34 @@ its own title bar in it (`Window.SetTitleBar`, `widgets.HeaderBar`) is in
 `Minimize`, `SuitsClientFrame`, `SetFrame`), implemented by the Wayland and
 X11 top-level surfaces and by `Offscreen`, which records the calls for
 tests.
+
+### The window's dress
+
+Two more optional capabilities say how the desktop should dress a window
+it lists or frames (`platform/windowdress.go`), and `Offscreen` records
+both (`FrameCalls.Palettes`, `.Icons`; `SimulateDecorationPalette`):
+
+| | Wayland | X11 |
+| --- | --- | --- |
+| Frame palette (`DecorationPaletteSurface`) | `org_kde_kwin_server_decoration_palette_manager.create` on the `wl_surface` the first time there is a palette, then `set_palette(path)` once per change; `set_palette("")` gives KWin's own colours back, `release` goes with the surface. Only where KWin advertises the manager | `_KDE_NET_WM_COLOR_SCHEME` (STRING, the path) while the window manager is KWin; removed for none |
+| Icon (`IconSurface`) | `xdg-toplevel-icon-v1`: one `wl_shm` pool, an ARGB8888 (premultiplied, stride 4 × side) buffer per square size, `create_icon`, `add_buffer(buffer, 1)` for each, `set_icon(toplevel, icon)`; a new icon replaces it and the old icon is destroyed before its buffers. Re-sent on every new role (Show after Hide). KWin asks for 96 px (`icon_size`) | `_NET_WM_ICON`: width, height and straight (not premultiplied) ARGB CARDINALs per size, smallest first |
+
+Both are put back on an X window made afresh on another visual.
+`platform/wlfake_linux_test.go` is a compositor on a socket pair
+(`WAYLAND_SOCKET`) that checks the Wayland requests on the wire and reads
+the icon's pixels back through the pool's descriptor.
+
+### `_NET_WM_SYNC_REQUEST`
+
+An X11 toplevel lists `_NET_WM_SYNC_REQUEST` in `WM_PROTOCOLS` and names an
+XSync counter in `_NET_WM_SYNC_REQUEST_COUNTER` before it is mapped. A
+request's value is answered (`XSyncSetCounter`) by the first frame put on
+the window after the `ConfigureNotify` that resized it, once its pixels
+are on the connection; a configure that kept the size is answered at once,
+and a request nothing answers within 250 ms is answered anyway (the loop
+wakes for it), so the window manager never stalls on an app that did not
+repaint (`platform/xsync.go` is the state machine). `UITK_X11_SYNC=0`
+leaves the protocol out.
 
 ### The frame's margin, regions and buffers
 
@@ -592,7 +629,7 @@ drops it, and reads back what the source was told
 ## Deferred
 
 - IME candidate-window theming (the IM draws its own window)
-- `_NET_WM_SYNC_REQUEST` (smooth interactive resizes on X11), KWin's
-  server-decoration palette, `xdg-toplevel-icon-v1` (Phase 4 of
-  [decorations.md](decorations.md#phases))
+- The extended `_NET_WM_SYNC_REQUEST` (a second counter and
+  `_NET_WM_FRAME_DRAWN` / `_NET_WM_FRAME_TIMINGS`): the basic handshake is
+  in place
 - Win32 and AppKit **windows** (tray landed in 0.16.0)

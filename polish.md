@@ -80,14 +80,32 @@ Struck through once fixed; newest findings at the end of their section.
 - ~~**Aero's glass is still an opaque approximation** — no blur behind.~~
   Real glass behind the frame (`DecorationSpec.GlassFrame`); the client area
   stays opaque.
-- **BeOS's tab uses the header bar's title padding**, a few pixels wider than
-  R5's 19/17-cell gaps (the in-app frame keeps R5's exact metrics).
-- **Platinum's title centres in the caption's free space**, so it sits a few
+- ~~**BeOS's tab uses the header bar's title padding**, a few pixels wider than
+  R5's 19/17-cell gaps (the in-app frame keeps R5's exact metrics).~~ R5's
+  gaps (`DecorationSpec.TitleRoom`), and the tab stands on the window's
+  corner (its close box was 5 px too far in); held to the in-app tab at 1
+  and 1.75.
+- ~~**Platinum's title centres in the caption's free space**, so it sits a few
   pixels right of where Mac OS 8 put it; **Window Maker's** tile seam lacks the
-  middle section's 1 px highlight.
-- **Still open from the decorations plan**: KWin's server-decoration palette
+  middle section's 1 px highlight.~~ Both through
+  `style.CaptionTitleSpanEngine`: the title centred on the whole bar, the
+  middle section bevelled between the tiles.
+- ~~**A fitted caption squeezed the app's row under it**~~ (BeOS with tabs in
+  the title bar: the tab strip shrank to the tab's width). The strip is
+  fitted inside a full-width header bar; the row keeps the window's width
+  and the content's border.
+- ~~**Still open from the decorations plan**: KWin's server-decoration palette
   (colouring the desktop's own frame to match the look), `xdg-toplevel-icon`,
-  and `_NET_WM_SYNC_REQUEST` for tear-free X11 resizes.
+  and `_NET_WM_SYNC_REQUEST` for tear-free X11 resizes.~~ All three
+  (docs/decorations.md#dressing-the-desktops-frame).
+- **The gallery wears no window icon yet**: every other example does; the
+  gallery was being reworked on another branch (`a.SetIcon(icons.AppIconRGB(...)...)`
+  after `uitoolkit.New`).
+- **The extended `_NET_WM_SYNC_REQUEST`** (`_NET_WM_FRAME_DRAWN`) is not
+  done, and the nested rig cannot show the basic one's effect: Xwayland
+  hands KWin only whole buffers, so mid-resize shots with and without it
+  look the same (docs/e2e/2026-09-22/frames-2-realhw.md). Worth a look on a
+  real X server.
 
 ## Skins, from building the players
 
@@ -185,9 +203,11 @@ Struck through once fixed; newest findings at the end of their section.
   converting them is the natural follow-up to the size fix.~~ Positions are
   logical everywhere (`WindowOptions.X`/`Y`, `Move`, `Position`, the dock's
   float geometry, the players' rack).
-- **An X11 window switched live to the desktop's frame shows no KWin title
+- ~~**An X11 window switched live to the desktop's frame shows no KWin title
   bar** in the nested rig at 1.75 (it reports `server` and drops its own
-  caption); the same on `dev` (docs/e2e/2026-09-21/release-bugs.md).
+  caption); the same on `dev` (docs/e2e/2026-09-21/release-bugs.md).~~
+  Deleting `_MOTIF_WM_HINTS` tells KWin nothing; the window now asks for
+  every decoration back.
 - ~~**The tour's `-shot` still sizes its offscreen windows in device pixels**
   (`1180 * sc`), from before window sizes became logical.~~ 1180 × 820
   logical at every scale.
