@@ -32,6 +32,7 @@ import (
 
 	"github.com/codemodify/uitoolkit"
 	"github.com/codemodify/uitoolkit/app"
+	"github.com/codemodify/uitoolkit/icons"
 	"github.com/codemodify/uitoolkit/internal/players/lantern"
 	"github.com/codemodify/uitoolkit/style"
 )
@@ -58,6 +59,8 @@ func main() {
 
 	headless := *shot != ""
 	a := uitoolkit.New(uitoolkit.Options{Headless: headless, Scale: float32(*scale)})
+	// The window icon the desktop shows in its title bar, task bar and switcher.
+	a.SetIcon(icons.AppIconRGB("sun", 0xe0, 0x7a, 0x1f)...)
 	p, err := lantern.New(a, lantern.Options{
 		Headless: headless, Scale: float32(*scale),
 		NoList: *only == "main", Themed: *themed,

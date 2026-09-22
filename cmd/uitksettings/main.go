@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 
 	"github.com/codemodify/uitoolkit"
+	"github.com/codemodify/uitoolkit/icons"
 	"github.com/codemodify/uitoolkit/internal/demo"
 	"github.com/codemodify/uitoolkit/platform"
 )
@@ -37,6 +38,8 @@ func main() {
 		Headless:         *headless || *shot != "",
 		DisableLookWatch: true, // stage locally; Apply is the only writer
 	})
+	// The window icon the desktop shows in its title bar, task bar and switcher.
+	a.SetIcon(icons.AppIconRGB("settings", 0x60, 0x70, 0x80)...)
 	win, err := a.NewWindow(platform.WindowOptions{
 		Title: "Settings", Width: 1024, Height: 860, MinWidth: 720, MinHeight: 520,
 		Headless: *headless || *shot != "",
