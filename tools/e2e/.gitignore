@@ -3,3 +3,9 @@ fake-input.c
 fake-input-client.h
 [0-9]*/
 __pycache__/
+importer
+fakeportal-bin
+xdg-shell-client-protocol.h
+xdg-shell-protocol.c
+xdg-foreign-unstable-v2-client-protocol.h
+xdg-foreign-unstable-v2-protocol.c
