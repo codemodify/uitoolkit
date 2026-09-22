@@ -1175,8 +1175,12 @@ func (WaylandBackend) NewSurface(opts WindowOptions) (Surface, error) {
 }
 
 type wlConn struct {
-	id         int
-	dpy        *C.struct_wl_display
+	id  int
+	dpy *C.struct_wl_display
+	// poll is the run loop's wait on dpy (wayland_wait_linux.go);
+	// pollFailed: none could be made, and the loop polls in C.
+	poll       *wlPoller
+	pollFailed bool
 	reg        *C.struct_wl_registry
 	compositor *C.struct_wl_compositor
 	shm        *C.struct_wl_shm
@@ -1719,6 +1723,8 @@ func (c *wlConn) closeLocked() {
 		C.ui_wl_reg_destroy(c.reg)
 		c.reg = nil
 	}
+	c.poll.close()
+	c.poll = nil
 	if c.dpy != nil {
 		C.ui_wl_disconnect(c.dpy)
 		c.dpy = nil
@@ -2668,6 +2674,9 @@ func (s *wlSurface) Poll() []Event {
 func (s *wlSurface) Wait(timeout time.Duration) bool {
 	if s == nil || s.closed || s.conn == nil || s.conn.dpy == nil {
 		return false
+	}
+	if n, ok := s.conn.waitDisplay(timeout); ok {
+		return n
 	}
 	n := C.ui_wl_wait_fds(s.conn.dpy, C.int(loopWakeFD()), C.int(waitMillis(timeout)))
 	return n != 0
