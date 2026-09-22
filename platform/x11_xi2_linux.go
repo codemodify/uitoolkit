@@ -12,7 +12,7 @@ package platform
 #include <string.h>
 
 extern void uitkXIDevice(int id, char *name, char *props, int pxdist);
-extern void uitkXIScrollClass(int id, int number, int vertical, double increment);
+extern void uitkXIScrollClass(int id, int number, int vertical, double increment, double value, int known);
 
 // XInput 2.4's gesture events; a libXi older than 1.8 builds without them.
 #ifdef XI_GesturePinchBegin
@@ -69,6 +69,34 @@ static void ui_xi2_select_root(Display *d) {
 	XISelectEvents(d, DefaultRootWindow(d), &em, 1);
 }
 
+// ui_xi2_scroll_classes reports a device's scroll valuators with where
+// each stands now, so the first scroll after a scan is a scroll and not a
+// starting point.
+static void ui_xi2_scroll_classes(int id, int n, XIAnyClassInfo **classes) {
+	for (int c = 0; c < n; c++) {
+		if (classes[c]->type != XIScrollClass) continue;
+		XIScrollClassInfo *s = (XIScrollClassInfo *)classes[c];
+		double value = 0;
+		int known = 0;
+		for (int v = 0; v < n; v++) {
+			if (classes[v]->type != XIValuatorClass) continue;
+			XIValuatorClassInfo *vi = (XIValuatorClassInfo *)classes[v];
+			if (vi->number == s->number) { value = vi->value; known = 1; }
+		}
+		uitkXIScrollClass(id, s->number, s->scroll_type == XIScrollTypeVertical, s->increment, value, known);
+	}
+}
+
+// ui_xi2_values re-reads one device's scroll valuators (the pointer entered
+// a window, or the master switched to it).
+static void ui_xi2_values(Display *d, int id) {
+	int n = 0;
+	XIDeviceInfo *info = XIQueryDevice(d, id, &n);
+	if (!info) return;
+	for (int i = 0; i < n; i++) ui_xi2_scroll_classes(info[i].deviceid, info[i].num_classes, info[i].classes);
+	XIFreeDeviceInfo(info);
+}
+
 // ui_xi2_scan reports every pointer device's name, property names and
 // scroll valuators (uitkXIDevice, then uitkXIScrollClass for each).
 static void ui_xi2_scan(Display *d) {
@@ -78,7 +106,10 @@ static void ui_xi2_scan(Display *d) {
 	Atom pxAtom = XInternAtom(d, "libinput Scrolling Pixel Distance", True);
 	for (int i = 0; i < n; i++) {
 		XIDeviceInfo *dev = &info[i];
-		if (dev->use != XISlavePointer && dev->use != XIMasterPointer) continue;
+		// Any pointer with scroll valuators, floating ones too: Xwayland
+		// leaves its pointer floating until the pointer first enters one
+		// of its windows.
+		if (dev->use == XIMasterKeyboard || dev->use == XISlaveKeyboard) continue;
 		int scrolls = 0;
 		for (int c = 0; c < dev->num_classes; c++)
 			if (dev->classes[c]->type == XIScrollClass) scrolls++;
@@ -115,11 +146,7 @@ static void ui_xi2_scan(Display *d) {
 		if (props) XFree(props);
 		uitkXIDevice(dev->deviceid, dev->name, joined ? joined : "", pxdist);
 		free(joined);
-		for (int c = 0; c < dev->num_classes; c++) {
-			if (dev->classes[c]->type != XIScrollClass) continue;
-			XIScrollClassInfo *s = (XIScrollClassInfo *)dev->classes[c];
-			uitkXIScrollClass(dev->deviceid, s->number, s->scroll_type == XIScrollTypeVertical, s->increment);
-		}
+		ui_xi2_scroll_classes(dev->deviceid, dev->num_classes, dev->classes);
 	}
 	XIFreeDeviceInfo(info);
 }
@@ -162,8 +189,17 @@ static int ui_xi2_decode(Display *d, XEvent *xe, int opcode, struct uitk_xi *out
 		break;
 	}
 	case XI_DeviceChanged: {
+		// It carries where the new device's valuators stand: those are
+		// what its next motion is measured from (read here, not asked
+		// for later, when a scroll may already be on its way).
 		XIDeviceChangedEvent *e = ck->data;
 		out->deviceid = e->deviceid; out->sourceid = e->sourceid; out->detail = e->reason;
+		ui_xi2_scroll_classes(e->sourceid, e->num_classes, e->classes);
+		break;
+	}
+	case XI_HierarchyChanged: {
+		XIHierarchyEvent *e = ck->data;
+		out->flags = e->flags;
 		break;
 	}
 	case XI_Enter: {
@@ -213,6 +249,7 @@ static void ui_xi2_ungrab(Display *d, int deviceid) {
 import "C"
 
 import (
+	"log"
 	"os"
 	"strings"
 	"time"
@@ -241,6 +278,9 @@ type x11XI2 struct {
 	// gest is the gesture in progress, over gestWin.
 	gest    gestureTracker
 	gestWin C.Window
+	// debug logs the devices and every scroll (UITK_X11_DEBUG); trace
+	// every pointer event and valuator too (UITK_X11_DEBUG=2).
+	debug, trace bool
 	// pointer is the master pointer the last XInput 2 press came from,
 	// for ungrabbing it when the window manager takes the pointer over.
 	pointer int
@@ -261,10 +301,29 @@ func uitkXIDevice(id C.int, name, props *C.char, pxdist C.int) {
 }
 
 //export uitkXIScrollClass
-func uitkXIScrollClass(id, number, vertical C.int, increment C.double) {
-	if d := x11ScanDevs[int(id)]; d != nil {
-		d.vals = append(d.vals, x11Valuator{number: int(number), vertical: vertical != 0, increment: float64(increment)})
+func uitkXIScrollClass(id, number, vertical C.int, increment, value C.double, known C.int) {
+	if x11ScanValues != nil {
+		// A re-read of where the valuators stand.
+		x11ScanValues.seed(int(id), int(number), float64(value), known != 0)
+		return
 	}
+	if d := x11ScanDevs[int(id)]; d != nil {
+		d.vals = append(d.vals, x11Valuator{number: int(number), vertical: vertical != 0, increment: float64(increment),
+			last: float64(value), have: known != 0})
+	}
+}
+
+// x11ScanValues takes a device's valuators re-read (ui_xi2_values).
+var x11ScanValues *x11Scroller
+
+// valuesXI2Locked re-reads where device id's scroll valuators stand.
+func (c *x11Conn) valuesXI2Locked(id int) {
+	if !c.xi.scroll.hasScroll(id) {
+		return
+	}
+	x11ScanValues = c.xi.scroll
+	C.ui_xi2_values(c.dpy, C.int(id))
+	x11ScanValues = nil
 }
 
 // initXI2Locked asks the server for XInput 2 and, where it speaks it,
@@ -281,9 +340,14 @@ func (c *x11Conn) initXI2Locked() {
 		return
 	}
 	c.xi.minor, c.xi.opcode = minor, int(opcode)
+	c.xi.debug = os.Getenv("UITK_X11_DEBUG") != ""
+	c.xi.trace = os.Getenv("UITK_X11_DEBUG") == "2"
 	c.xi.gestures = minor >= 4 && C.ui_xi2_gestures_built() != 0
 	c.xi.scroll = newX11Scroller()
 	C.ui_xi2_select_root(c.dpy)
+	if c.xi.debug {
+		log.Printf("uitk x11: XInput 2.%d, gestures %v", minor, c.xi.gestures)
+	}
 	c.scanXI2Locked()
 }
 
@@ -297,6 +361,9 @@ func (c *x11Conn) scanXI2Locked() {
 	sc.devices = map[int]*x11ScrollDevice{}
 	for id, d := range devs {
 		sc.setDevice(id, d.kind, d.pxPerNotch, d.vals)
+		if c.xi.debug {
+			log.Printf("uitk x11: scroll device %d: kind %d, %v px a notch, valuators %+v", id, d.kind, d.pxPerNotch, d.vals)
+		}
 	}
 }
 
@@ -328,7 +395,10 @@ func (c *x11Conn) handleXI2Locked(xe *C.XEvent) bool {
 		return false
 	}
 	var e C.struct_uitk_xi
-	if C.ui_xi2_decode(c.dpy, xe, C.int(c.xi.opcode), &e) == 0 {
+	x11ScanValues = c.xi.scroll
+	ok := C.ui_xi2_decode(c.dpy, xe, C.int(c.xi.opcode), &e) != 0
+	x11ScanValues = nil
+	if !ok {
 		return false
 	}
 	if e.time != 0 {
@@ -336,7 +406,11 @@ func (c *x11Conn) handleXI2Locked(xe *C.XEvent) bool {
 	}
 	switch int(e.evtype) {
 	case C.XI_HierarchyChanged:
-		c.scanXI2Locked()
+		// Xwayland floats and attaches its pointer as it comes and goes:
+		// only a device added or taken away changes what there is.
+		if int(e.flags)&(C.XIMasterAdded|C.XIMasterRemoved|C.XISlaveAdded|C.XISlaveRemoved) != 0 {
+			c.scanXI2Locked()
+		}
 		return true
 	case C.XI_DeviceChanged:
 		// The master pointer switching from one device to another (the
@@ -344,8 +418,6 @@ func (c *x11Conn) handleXI2Locked(xe *C.XEvent) bool {
 		// whose valuators themselves changed is read again.
 		if int(e.detail) == C.XIDeviceChange {
 			c.scanXI2Locked()
-		} else {
-			c.xi.scroll.reset()
 		}
 		return true
 	}
@@ -355,9 +427,20 @@ func (c *x11Conn) handleXI2Locked(xe *C.XEvent) bool {
 	}
 	pos := paintengine2d.Pt(float32(e.x), float32(e.y))
 	mods := xmods(uint(e.mods))
+	if c.xi.trace {
+		vals := map[int]float64{}
+		for i := 0; i < int(e.nval); i++ {
+			vals[int(e.valnum[i])] = float64(e.val[i])
+		}
+		log.Printf("uitk x11: XI %d device %d source %d detail %d flags %#x at %v valuators %v",
+			int(e.evtype), int(e.deviceid), int(e.sourceid), int(e.detail), int(e.flags), pos, vals)
+	}
 	switch ev := int(e.evtype); {
 	case ev == C.XI_Enter:
+		// Scrolled elsewhere meanwhile: where the valuators stand now is
+		// the new start.
 		c.xi.scroll.reset()
+		c.valuesXI2Locked(int(e.sourceid))
 	case ev == C.XI_Motion:
 		values := make(map[int]float64, int(e.nval))
 		for i := 0; i < int(e.nval); i++ {
@@ -367,6 +450,9 @@ func (c *x11Conn) handleXI2Locked(xe *C.XEvent) bool {
 		dx, dy, precise, ok := c.xi.scroll.motion(time.Now(), int(e.sourceid), values)
 		evs := []Event{{Kind: EventMouseMove, Pos: pos, Mods: mods}}
 		if ok {
+			if c.xi.debug {
+				log.Printf("uitk x11: scroll from device %d: %v, %v precise %v", int(e.sourceid), dx, dy, precise)
+			}
 			evs = append(evs, Event{Kind: EventScroll, Pos: pos, Scroll: paintengine2d.Pt(dx, dy), Mods: mods, ScrollPrecise: precise})
 			if precise {
 				c.xi.scrollWin, c.xi.scrollPos, c.xi.scrollMods = s.win, pos, mods
