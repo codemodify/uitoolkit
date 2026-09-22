@@ -210,3 +210,40 @@ func ControlShapes(lk LookAndFeel) bool {
 	_, ok = c.eng().(ControlShapeEngine)
 	return ok
 }
+
+// ---- popups -----------------------------------------------------------------
+
+// PopupShapeEngine is an optional engine hook: the silhouette of a popup of
+// kind in this look — a menu, a combo list, a tooltip — so a skin's menu can
+// be the shape its artwork is rather than the rectangle around it. An
+// engine without it floats rectangles (rounded, where its frame paints the
+// corners so), which is every look that does not say otherwise.
+//
+// b is the popup's box with its origin at (0, 0), in device pixels. The
+// silhouette is honoured where the popup is a surface of its own; a popup
+// drawn inside its window (headless, UITK_POPUPS=layer) stays the
+// rectangle it always was.
+type PopupShapeEngine interface {
+	PopupShape(l *Classic, b paintengine2d.Rect, kind PopupKind) *Silhouette
+}
+
+// PopupShapeOf is lk's silhouette for a popup of kind in box b, or nil for
+// the plain box.
+func PopupShapeOf(lk LookAndFeel, b paintengine2d.Rect, kind PopupKind) *Silhouette {
+	if lk == nil || b.Empty() {
+		return nil
+	}
+	c, ok := lk.(*Classic)
+	if !ok || c == nil {
+		return nil
+	}
+	e, ok := c.eng().(PopupShapeEngine)
+	if !ok {
+		return nil
+	}
+	s := e.PopupShape(c, b, kind)
+	if s.Empty() {
+		return nil
+	}
+	return s
+}
