@@ -3,6 +3,7 @@ package widgets
 import (
 	"math"
 	"strconv"
+	"time"
 
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/a11y"
@@ -116,6 +117,9 @@ type Wizard struct {
 	bCancel  *Button
 	laidFor  WizardStyle
 	side     paintengine2d.Rect
+	// byAlt: the page is changing on an access key, whose character is
+	// still to arrive as text; the focus moves once it has gone by.
+	byAlt bool
 }
 
 // NewWizard is a wizard over pages, showing the first.
@@ -361,18 +365,29 @@ func (w *Wizard) show(i int, focus bool) {
 	w.RequestLayout()
 	w.Invalidate()
 	if focus {
-		// The keyboard starts on the new page's first control, else on
-		// the button that moves on.
-		if !widget.FocusFirstIn(w.holder) {
-			if w.bFinish.Visible() {
-				widget.FocusFirstIn(w.bFinish)
-			} else {
-				widget.FocusFirstIn(w.bNext)
-			}
+		if w.byAlt {
+			// Alt+N's "n" is still on its way as text: a field focused
+			// now would take it.
+			widget.After(w, 60*time.Millisecond, w.focusPage)
+		} else {
+			w.focusPage()
 		}
 	}
 	if from != i && w.OnPageChange != nil {
 		w.OnPageChange(from, i)
+	}
+}
+
+// focusPage puts the keyboard on the page's first control, else on the
+// button that moves on.
+func (w *Wizard) focusPage() {
+	if widget.FocusFirstIn(w.holder) {
+		return
+	}
+	if w.bFinish.Visible() {
+		widget.FocusFirstIn(w.bFinish)
+	} else {
+		widget.FocusFirstIn(w.bNext)
 	}
 }
 
@@ -602,7 +617,9 @@ func (w *Wizard) HandleAlt(key platform.Key) bool {
 		if !b.Visible() || !b.Enabled() || b.OnClick == nil {
 			return false
 		}
+		w.byAlt = true
 		b.OnClick()
+		w.byAlt = false
 		return true
 	}
 	switch key {
@@ -670,10 +687,15 @@ func (b *wizardPageBox) Measure(c layout.Constraints) paintengine2d.Point {
 	return b.content.Measure(c)
 }
 
+// Arrange gives the page its natural height at the top (a field stays a
+// field's height); content that wants the room — a list, a text area in a
+// column with a flexible child — measures as tall as it is given.
 func (b *wizardPageBox) Arrange(r paintengine2d.Rect) {
 	b.SetBounds(r)
 	if b.content != nil {
-		b.content.Arrange(b.LocalBounds())
+		lb := b.LocalBounds()
+		sz := b.content.Measure(layout.Constraints{MinW: lb.Dx(), MaxW: lb.Dx(), MaxH: lb.Dy()})
+		b.content.Arrange(paintengine2d.XYWH(0, 0, lb.Dx(), min(max(sz.Y, 0), lb.Dy())))
 	}
 }
 
