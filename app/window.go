@@ -162,6 +162,9 @@ type Window struct {
 	// iconSent whether its surface was given one (dress.go).
 	icon     []*paintengine2d.Image
 	iconSent bool
+
+	// gest is the touchpad gesture in progress (gesture.go).
+	gest gestureState
 }
 
 func newWindow(a *Application, surf platform.Surface, opts platform.WindowOptions) *Window {
@@ -936,9 +939,15 @@ func (w *Window) dispatch(ev platform.Event) {
 	case platform.EventIMECancel:
 		w.resetIME()
 	case platform.EventMouseDown:
-		w.mouseDown(ev)
+		if !w.thumbButton(ev) {
+			w.mouseDown(ev)
+		}
 	case platform.EventMouseUp:
-		w.mouseUp(ev)
+		if !w.thumbButton(ev) {
+			w.mouseUp(ev)
+		}
+	case platform.EventGesture:
+		w.gesture(ev)
 	case platform.EventMouseMove:
 		w.mouseMove(ev)
 	case platform.EventScroll:

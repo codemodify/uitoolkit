@@ -30,6 +30,13 @@ type wlFake struct {
 	pools   map[uint32][]byte // wl_shm_pool id -> its mapping
 	bufs    map[uint32][]byte // wl_buffer id -> its bytes
 	done    chan struct{}
+	// ids are the objects of an interface the client made, in order
+	// ("wl_surface", "wl_pointer", the gesture objects); top is the
+	// wl_surface of the first xdg_surface; exports counts the toplevels
+	// exported (xdg-foreign), whose handles are "handle-<n>".
+	ids     map[string][]uint32
+	top     uint32
+	exports int
 }
 
 // startWlFake starts the fake on one end of a socket pair and points
@@ -47,6 +54,7 @@ func startWlFake(t *testing.T, globals ...string) *wlFake {
 		pools:   map[uint32][]byte{},
 		bufs:    map[uint32][]byte{},
 		done:    make(chan struct{}),
+		ids:     map[string][]uint32{},
 	}
 	t.Setenv("WAYLAND_SOCKET", fmt.Sprint(pair[1]))
 	t.Setenv(EnvPaint, "cpu")
@@ -177,10 +185,35 @@ func (f *wlFake) request(obj uint32, op uint16, body []byte) {
 		name, _, id := a.s(), a.u(), a.u()
 		f.objs[id] = name
 		f.logf("bind %s", name)
+		if name == "wl_seat" {
+			f.send(id, 0, uint32(1)) // capabilities: a pointer
+		}
 	case iface == "wl_compositor" && op == 0:
-		f.objs[a.u()] = "wl_surface"
+		id := a.u()
+		f.objs[id] = "wl_surface"
+		f.ids["wl_surface"] = append(f.ids["wl_surface"], id)
 	case iface == "xdg_wm_base" && op == 2:
-		f.objs[a.u()] = "xdg_surface"
+		id, surf := a.u(), a.u()
+		f.objs[id] = "xdg_surface"
+		if f.top == 0 {
+			f.top = surf
+		}
+	case iface == "wl_seat" && op == 0: // get_pointer
+		f.made(a.u(), "wl_pointer")
+	case iface == "zwp_pointer_gestures_v1" && op == 0:
+		f.made(a.u(), "zwp_pointer_gesture_swipe_v1")
+	case iface == "zwp_pointer_gestures_v1" && op == 1:
+		f.made(a.u(), "zwp_pointer_gesture_pinch_v1")
+	case iface == "zwp_pointer_gestures_v1" && op == 3:
+		f.made(a.u(), "zwp_pointer_gesture_hold_v1")
+	case iface == "zxdg_exporter_v2" && op == 1: // export_toplevel
+		id, surf := a.u(), a.u()
+		f.objs[id] = "zxdg_exported_v2"
+		f.exports++
+		f.logf("export_toplevel on a %s", f.objs[surf])
+		f.send(id, 0, fmt.Sprintf("handle-%d", f.exports))
+	case iface == "zxdg_exported_v2" && op == 0:
+		f.logf("exported.destroy")
 	case iface == "xdg_surface" && op == 1:
 		f.objs[a.u()] = "xdg_toplevel"
 	case iface == "wl_shm" && op == 0: // create_pool(id, fd, size)
@@ -225,6 +258,36 @@ func (f *wlFake) request(obj uint32, op uint16, body []byte) {
 		f.logf("icon.add_buffer %d scale %d", b, scale)
 	}
 }
+
+// made records an object the client made.
+func (f *wlFake) made(id uint32, iface string) {
+	f.objs[id] = iface
+	f.ids[iface] = append(f.ids[iface], id)
+	f.logf("made %s", iface)
+}
+
+// first is the first object of an interface the client made (0: none).
+func (f *wlFake) first(iface string) uint32 {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if ids := f.ids[iface]; len(ids) > 0 {
+		return ids[0]
+	}
+	return 0
+}
+
+// toplevel is the wl_surface of the window.
+func (f *wlFake) toplevel() uint32 {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.top
+}
+
+// emit sends an event to the client.
+func (f *wlFake) emit(obj uint32, op uint16, args ...any) { f.send(obj, op, args...) }
+
+// fixed is v as a wl_fixed_t argument.
+func fixed(v float64) uint32 { return uint32(int32(v * 256)) }
 
 // fakeSurface is a Wayland window on the fake compositor.
 func fakeSurface(t *testing.T) *wlSurface {

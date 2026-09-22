@@ -1,7 +1,9 @@
 package demo
 
 import (
+	"math"
 	"strconv"
+	"time"
 
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/a11y"
@@ -26,7 +28,7 @@ func init() {
 	p.title = "Shaped and transparent windows"
 	p.proof = "A window's silhouette is a path: this one has a hole you can see the desktop through " +
 		"and click through, and glass behind it where the compositor offers any."
-	p.try = "Open the pair, then click in the hole — the card behind counts it."
+	p.try = "Open the pair, then click in the hole — the card behind counts it. On a touchpad, pinch the stamp."
 	p.build = buildShapesPage
 }
 
@@ -298,14 +300,20 @@ func (p *shapesPage) refresh() {
 
 // shapePreview draws the chosen silhouette at the size of a stamp, so
 // that the page says what "a hole in the middle" means before anything is
-// opened — and so that a still of this page shows a shape at all.
+// opened — and so that a still of this page shows a shape at all. Two
+// fingers pinching on a touchpad zoom it and turn it (a
+// widget.GestureTarget); a double-click puts it back.
 type shapePreview struct {
 	widget.Base
 	page *shapesPage
+	// zoom and turn are what pinches made of it (1 and 0 untouched), and
+	// zoom0 the zoom the pinch in progress started from.
+	zoom, zoom0, turn float32
+	lastClick         time.Time
 }
 
 func newShapePreview(page *shapesPage) *shapePreview {
-	s := &shapePreview{page: page}
+	s := &shapePreview{page: page, zoom: 1}
 	s.Init(s)
 	s.SetAccessibleName("The silhouette")
 	return s
@@ -321,6 +329,42 @@ func (s *shapePreview) Measure(c layout.Constraints) paintengine2d.Point {
 }
 
 func (s *shapePreview) Arrange(b paintengine2d.Rect) { s.SetBounds(b) }
+
+// Gesture zooms and turns the stamp with a pinch.
+func (s *shapePreview) Gesture(e widget.GestureEvent) bool {
+	if e.Kind != platform.GesturePinch {
+		return false
+	}
+	switch e.Phase {
+	case platform.GestureBegin:
+		s.zoom0 = s.zoom
+	case platform.GestureUpdate:
+		s.zoom = min(max(s.zoom0*e.Scale, 0.4), 3)
+		s.turn = float32(math.Mod(float64(s.turn+e.Rotation), 360))
+		s.Invalidate()
+	case platform.GestureCancel:
+		s.zoom = s.zoom0
+		s.Invalidate()
+	case platform.GestureEnd:
+		s.page.note("Pinched to " + strconv.Itoa(int(s.zoom*100+0.5)) + "%, turned " +
+			strconv.Itoa(int(s.turn)) + "° — double-click the stamp to put it back.")
+	}
+	return true
+}
+
+// MousePress puts a pinched stamp back on a double-click.
+func (s *shapePreview) MousePress(e widget.MouseEvent) bool {
+	if e.Button != platform.ButtonLeft {
+		return false
+	}
+	now := time.Now()
+	if now.Sub(s.lastClick) < 400*time.Millisecond && (s.zoom != 1 || s.turn != 0) {
+		s.zoom, s.turn = 1, 0
+		s.Invalidate()
+	}
+	s.lastClick = now
+	return false
+}
 
 func (s *shapePreview) Describe(n *a11y.Node) {
 	n.Role = a11y.RoleImage
@@ -350,6 +394,17 @@ func (s *shapePreview) Paint(ctx *paintengine2d.Context) {
 		return
 	}
 	path, rule := sh.Path()
+	ctx.Save()
+	ctx.ClipRect(b)
+	if s.zoom != 1 || s.turn != 0 {
+		// About the stamp's centre, as the fingers see it.
+		cx, cy := b.Min.X+b.Dx()/2, b.Min.Y+b.Dy()/2
+		ctx.Translate(cx, cy)
+		ctx.Rotate(s.turn * math.Pi / 180)
+		ctx.Scale(s.zoom, s.zoom)
+		ctx.Translate(-cx, -cy)
+	}
+	defer ctx.Restore()
 	// Tinted rather than filled with a surface colour: in the flatter
 	// packs the surface is the page's own colour, and the shape would
 	// then be nothing but its outline.

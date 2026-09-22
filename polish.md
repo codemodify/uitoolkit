@@ -196,6 +196,17 @@ Struck through once fixed; newest findings at the end of their section.
 - ~~**`ListView.Measure` returns exactly rows × row height**, so inside a scroll
   view the view frame's border clips the last row.~~ `ListView`, `TreeView`
   and `TableView` all measure their frame now.
+- **No two-finger swipe for back and forward.** Files goes back on a
+  three-finger swipe (and the thumb buttons, Alt+Left); GNOME takes
+  three-finger swipes for itself, and Nautilus and Epiphany go back on a
+  two-finger horizontal overscroll instead. That needs the scroll views to
+  hand an overscroll up rather than swallow it.
+- **Only one pinch-zoom view.** `Picture.Zoomable` and the tour's stamp take
+  a pinch; the rich-text editor, when it lands, should zoom its text on one
+  and open its links with `widgets.OpenLink`.
+- **`Button` still takes a right or middle press as a click** (so does every
+  widget that ignores `e.Button`); the thumb buttons no longer reach widgets
+  at all.
 
 - **Rich text: no table, no line break inside a paragraph, no paragraph
   indent outside lists**, and italic is the upright face slanted (no italic
@@ -246,6 +257,29 @@ Struck through once fixed; newest findings at the end of their section.
   sets it for the display (X11's own model, one `Xft.dpi`).
 - **`UITK_SCALE` on a Wayland output at scale 1** draws at the asked scale into
   a 1× buffer. Use a real output scale instead.
+- **X11 has no hold gesture** (XInput 2.4 has pinch and swipe only), so on X11
+  fingers resting on the pad do not stop a glide — a new scroll, a click or a
+  pinch does.
+- **X11 tells a touchpad by its properties or name**, and on Xwayland (one
+  pointer for every device) by the scroll's granularity: a finger scroll
+  landing on whole 120ths of a notch reads as a wheel until the next
+  fraction. A lift is inferred from 60 ms of quiet, so fingers that flick and
+  then rest start a glide that the next touch stops. Both are what XInput
+  allows; GTK 3 and Qt give X11 no glide at all.
+- **Notifications from an unsandboxed app go to the notification server**,
+  not the portal, while one runs (the portal cannot name the app; GNOME's
+  refuses it). xdg-desktop-portal 1.19's host app registry would let the
+  portal name it; not used yet. The server's `ActivationToken` signal is not
+  used either, so a click raises the window with the app's own activation
+  request, which a compositor may refuse for a window not in focus (KWin
+  granted it in the rig).
+- **A notification whose app has quit does nothing when clicked**: bringing the
+  app back needs a D-Bus-activatable desktop file, which the demos do not
+  install.
+- **Portal flows are proven against a fake**: the real xdg-desktop-portal is
+  never started in the rig, where its backends and document portal would
+  reach the user's desktop and `/run/user/<uid>/doc`. The xdg-foreign handle
+  and the dialog's parenting are real (KWin's exporter and importer).
 - **Platform facts, not bugs**, that apps must live with: Wayland windows
   cannot place themselves (Minim's snapping windows cannot follow there); a
   window manager places a window when it maps it; an X11 move is answered a
