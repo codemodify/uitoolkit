@@ -1209,12 +1209,16 @@ func (fluentEngine) DrawMenuFrame(l *Classic, ctx *paintengine2d.Context, b pain
 	r := l.rx(8)
 	if l.P("acrylic", 1) != 0 {
 		// In-app acrylic: what lies under the flyout, blurred, through a
-		// light tint of the flyout colour.
-		ctx.Save()
-		ctx.ClipRoundRect(b, r, r)
-		ctx.BackdropBlur(b, l.S(16))
-		ctx.Restore()
-		ctx.DrawRoundRect(b, r, r, paintengine2d.Fill(c.flyout.WithAlpha(0.85)))
+		// light tint of the flyout colour — or, on a surface of its own,
+		// the compositor's blur (or a solid flyout where there is none).
+		tint, blur := LayerMaterial(c.flyout.WithAlpha(0.85), c.flyout)
+		if blur {
+			ctx.Save()
+			ctx.ClipRoundRect(b, r, r)
+			ctx.BackdropBlur(b, l.S(16))
+			ctx.Restore()
+		}
+		ctx.DrawRoundRect(b, r, r, paintengine2d.Fill(tint))
 	} else {
 		ctx.DrawRoundRect(b, r, r, paintengine2d.Fill(c.flyout))
 	}

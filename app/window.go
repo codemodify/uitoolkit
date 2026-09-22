@@ -147,8 +147,17 @@ type Window struct {
 	// frames a rectangle says (app/shape.go, lookShape).
 	lookShapeCur *lookShapeMemo
 	lookShapeKey lookShapeKey
-	capPress     captionGesture
-	capClick     captionClick
+	// band is the resize band along the silhouette's edge (shapeband.go).
+	band     *shapeBand
+	capPress captionGesture
+	capClick captionClick
+	// pops are the popup layer and its open submenus on surfaces of their
+	// own, parent first, and tipPop the tooltip's (popupsurf.go);
+	// popsRefused is set once the window system refused one, and the
+	// window draws its popups inside itself from then on.
+	pops        []*popLayer
+	tipPop      *popLayer
+	popsRefused bool
 }
 
 func newWindow(a *Application, surf platform.Surface, opts platform.WindowOptions) *Window {
@@ -353,6 +362,7 @@ func (w *Window) SetResizable(on bool) bool {
 		return false
 	}
 	// The resize band and the maximize button both go with it.
+	w.band = nil
 	if f, ok := w.surf.(platform.FrameSurface); ok {
 		w.caps = f.Capabilities()
 	}
@@ -475,7 +485,7 @@ func (w *Window) SetPopup(c widget.Component) {
 		}
 	}
 	w.dropDeadRefs()
-	w.fullInvalidate()
+	w.popupLayerChanged()
 }
 
 func (w *Window) Popup() widget.Component { return w.popup }
@@ -490,6 +500,19 @@ func (w *Window) DismissPopup() {
 		d.Dismissed()
 	}
 	w.dropDeadRefs()
+	w.popupLayerChanged()
+}
+
+// popupLayerChanged repaints what a popup opening or closing changes: the
+// whole window while popups are drawn inside it, and nothing of the
+// window's where they are surfaces of their own — the window under a menu
+// looks the same with it or without it, and the popup's own surface comes
+// and goes on the next frame (syncPopups).
+func (w *Window) popupLayerChanged() {
+	if w.popupsOnSurfaces() {
+		w.markPopsDirty()
+		return
+	}
 	w.fullInvalidate()
 }
 
@@ -602,6 +625,22 @@ func (w *Window) Invalidate(c widget.Component, local paintengine2d.Rect) {
 		w.fullInvalidate()
 		return
 	}
+	if pl := w.popLayerOf(c); pl != nil {
+		// A popup on a surface of its own repaints that surface, whole:
+		// nothing of the window's is under it.
+		pl.dirty = true
+		return
+	}
+	if w.popupsOnSurfaces() {
+		r := c
+		for r.Parent() != nil {
+			r = r.Parent()
+		}
+		if w.onPopSurface(r) {
+			// Its surface opens on the next frame and paints it then.
+			return
+		}
+	}
 	dev := widget.DeviceBounds(c)
 	r := local.Translate(dev.Min)
 	if r.Empty() {
@@ -678,6 +717,7 @@ func (w *Window) RequestLayout() {
 }
 
 func (w *Window) fullInvalidate() {
+	w.markPopsDirty()
 	ww, hh := w.surf.Size()
 	w.dirty.Reset()
 	w.dirty.Add(paintengine2d.XYWH(0, 0, float32(ww), float32(hh)))
@@ -720,7 +760,7 @@ func (w *Window) needsPaint() bool {
 	if w == nil || w.Closed() {
 		return false
 	}
-	return !w.laid || w.full || !w.dirty.Empty()
+	return !w.laid || w.full || !w.dirty.Empty() || w.popsDirty()
 }
 
 // AfterFunc runs fn on the UI thread after d (widget.Timers). The returned
@@ -824,6 +864,10 @@ func (w *Window) dispatch(ev platform.Event) {
 		w.decorationsChanged(ev.Decor)
 	case platform.EventCapabilities:
 		w.capsChanged(ev.Caps)
+	case platform.EventPopupPlaced:
+		w.popupPlaced(ev.Popup)
+	case platform.EventPopupDone:
+		w.popupDone(ev.Popup)
 	case platform.EventFocusOut:
 		w.setAltHeld(false)
 		if !w.stateKnown {
@@ -1174,6 +1218,12 @@ func (w *Window) showTip(text string, pos paintengine2d.Point) {
 	if w.root == nil && w.overlay != nil {
 		widget.ClampToSurface(w.overlay, bubble)
 	}
+	// Below and to the right of the pointer, by the gap: a window system
+	// that places the bubble itself flips it above or left of the pointer
+	// by the same gap.
+	widget.SetPopupAnchor(bubble, widget.PopupAnchor{
+		Rect: paintengine2d.Rect{Min: pos, Max: origin}, Side: widget.PopupAt,
+	})
 	w.SetTooltip(bubble)
 }
 
@@ -1611,6 +1661,10 @@ func (w *Window) frame() {
 		w.fullInvalidate()
 	}
 	w.tickTips()
+	// Popups on surfaces of their own open, move, close and paint first:
+	// the window itself no longer paints them.
+	w.syncPopups()
+	w.paintPops()
 	if w.dirty.Empty() && !w.full {
 		return
 	}
@@ -1643,13 +1697,13 @@ func (w *Window) paintLayers(ctx *paintengine2d.Context, dirty *paintengine2d.Da
 	if w.overlay != nil {
 		widget.PaintTree(w.overlay, ctx, dirty)
 	}
-	if w.popup != nil {
+	if w.popup != nil && !w.onPopSurface(w.popup) {
 		widget.WalkCascade(w.popup, func(c widget.Component) {
 			w.paintShadow(ctx, c, style.PopupMenu, dirty)
 			widget.PaintTree(c, ctx, dirty)
 		})
 	}
-	if w.tooltip != nil {
+	if w.tooltip != nil && !w.onPopSurface(w.tooltip) {
 		w.paintShadow(ctx, w.tooltip, style.PopupTooltip, dirty)
 		widget.PaintTree(w.tooltip, ctx, dirty)
 	}
@@ -1692,7 +1746,7 @@ func (w *Window) paintShadow(ctx *paintengine2d.Context, c widget.Component, kin
 // paintBackground lets the look paint the window background (Aqua
 // pinstripes, brushed metal); the flat clear already covers the rest.
 func (w *Window) paintBackground(ctx *paintengine2d.Context, full paintengine2d.Rect) {
-	if w.wantsGlass() {
+	if w.wantsGlass() && !style.GlassFrameOnly(w.look) {
 		// The window is a pane over the blurred desktop: the look's own
 		// background is opaque — a gradient, a texture, a flat fill — and
 		// painting it here would hide every bit of the blur. The glass
@@ -1736,7 +1790,9 @@ func (w *Window) seeThrough() bool {
 // blurred behind it (an opaque fill over a blurred desktop would show none
 // of the blur).
 func (w *Window) windowFill() paintengine2d.Color {
-	if !w.wantsGlass() {
+	if !w.wantsGlass() || (style.GlassFrameOnly(w.look) && !w.glass) {
+		// Aero's glass is the frame's: the frame takes the window's
+		// background out from under itself, and the content keeps it.
 		return w.look.Palette().Background
 	}
 	if w.glassTint.A > 0 {
@@ -1847,13 +1903,13 @@ func (w *Window) frameScene(rects []paintengine2d.Rect) []paintengine2d.Rect {
 	if w.overlay != nil {
 		widget.RecordTree(w.overlay, rec, ctx, nil, w.layers, true)
 	}
-	if w.popup != nil {
+	if w.popup != nil && !w.onPopSurface(w.popup) {
 		widget.WalkCascade(w.popup, func(c widget.Component) {
 			w.paintShadow(ctx, c, style.PopupMenu, nil)
 			widget.RecordTree(c, rec, ctx, nil, w.layers, true)
 		})
 	}
-	if w.tooltip != nil {
+	if w.tooltip != nil && !w.onPopSurface(w.tooltip) {
 		w.paintShadow(ctx, w.tooltip, style.PopupTooltip, nil)
 		widget.RecordTree(w.tooltip, rec, ctx, nil, w.layers, true)
 	}
@@ -1988,6 +2044,9 @@ func (w *Window) Close() {
 	if w.app != nil && w.app.statusMenu == w {
 		w.app.statusMenu = nil
 	}
+	// Popups go before the window they hang from.
+	w.closePops(0)
+	w.closeTipPop()
 	w.popup = nil
 	w.overlay = nil
 	w.root = nil

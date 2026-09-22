@@ -172,25 +172,35 @@ func (w *Window) shapeShadowPatch(r *platform.ShapeRaster) *shapeShadow {
 // it, tints it with the look's shadow colour and erases the window's own
 // shape from it, so the image adds nothing where the window paints itself.
 func buildShapeShadow(lk style.LookAndFeel, st style.DecorationState, m platform.FrameInsets, r *platform.ShapeRaster) (*paintengine2d.Image, int, int) {
+	img := buildShadeImage(r, m, probeShadowColor(lk, st, m))
+	if img == nil {
+		return nil, 0, 0
+	}
+	return img, -m.Left, -m.Top
+}
+
+// buildShadeImage is silhouette r blurred into margin m around it and
+// tinted col, with r's own shape erased from it: the image goes at r's
+// top-left corner less the margin. A shaped window's shadow and a shaped
+// popup's are both this.
+func buildShadeImage(r *platform.ShapeRaster, m platform.FrameInsets, col paintengine2d.Color) *paintengine2d.Image {
 	ml, mr := m.Left, m.Right
 	mt, mb := m.Top, m.Bottom
 	pw, ph := r.W+ml+mr, r.H+mt+mb
-	if pw < 3 || ph < 3 || pw > 8192 || ph > 8192 {
-		return nil, 0, 0
+	if pw < 3 || ph < 3 || pw > 8192 || ph > 8192 || col.A <= 0 {
+		return nil
 	}
 	// The reach sideways is the blur; the difference between the top and
 	// bottom margins is how far the look drops its shadow, since a shadow
 	// offset down needs that much more room below than above.
 	radius := max((ml+mr)/2, 1)
 	dy := (mb - mt) / 2
-	col := probeShadowColor(lk, st, m)
-	if col.A <= 0 {
-		return nil, 0, 0
-	}
 	// Coverage of the silhouette, laid into the larger box and blurred.
 	cov := make([]uint8, pw*ph)
 	for y := 0; y < r.H; y++ {
-		copy(cov[(y+mt+dy)*pw+ml:(y+mt+dy)*pw+ml+r.W], r.Mask[y*r.W:(y+1)*r.W])
+		if yy := y + mt + dy; yy >= 0 && yy < ph {
+			copy(cov[yy*pw+ml:yy*pw+ml+r.W], r.Mask[y*r.W:(y+1)*r.W])
+		}
 	}
 	blurMask(cov, pw, ph, radius)
 
@@ -216,7 +226,7 @@ func buildShapeShadow(lk style.LookAndFeel, st style.DecorationState, m platform
 			row[i+3] = uint8(a * 255)
 		}
 	}
-	return img, -ml, -mt
+	return img
 }
 
 // probeShadowColor asks the look for its own rectangular shadow and reads

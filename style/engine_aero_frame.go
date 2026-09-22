@@ -42,6 +42,11 @@ func (aeroEngine) Decoration(l *Classic, st DecorationState) DecorationSpec {
 		Radius:      [4]float32{r, r, r * 0.5, r * 0.5},
 		Shadow:      ShadowLayersReach(aeroWindowShadow(l, DecorationState{Active: true})),
 	}
+	// Aero Glass is the frame's: the desktop blurred behind the caption and
+	// the borders, the client area opaque. Windows 7 Basic ("glass" 0) has
+	// none.
+	s.Glass = aeroColors(l).glass
+	s.GlassFrame = s.Glass
 	return s
 }
 
@@ -61,6 +66,10 @@ func (aeroEngine) DrawDecorationShadow(l *Classic, ctx *paintengine2d.Context, b
 	DrawShadowLayers(ctx, b, DecorationOf(l, st).Radius, aeroWindowShadow(l, st))
 }
 
+// aeroGlassAlpha is how opaque Aero's glass colour is over the blurred
+// desktop: most of what is behind shows, as on Windows 7.
+const aeroGlassAlpha = 0.55
+
 func (aeroEngine) DrawDecoration(l *Classic, ctx *paintengine2d.Context, f DecorationFrame, st DecorationState) {
 	c := aeroColors(l)
 	lw := winPx(l)
@@ -69,6 +78,15 @@ func (aeroEngine) DrawDecoration(l *Classic, ctx *paintengine2d.Context, f Decor
 	grad := c.glassGrad
 	if !st.Active {
 		grad = c.glassOff
+	}
+	// real: the desktop is really blurred behind this frame now.
+	real := c.glass && st.Active && GlassBehind(l)
+	if real {
+		tint := make([]paintengine2d.GradientStop, len(grad))
+		for i, g := range grad {
+			tint[i] = paintengine2d.GradientStop{Offset: g.Offset, Color: g.Color.WithAlpha(g.Color.A * aeroGlassAlpha)}
+		}
+		grad = tint
 	}
 	glassBox := w
 	if st.Maximized {
@@ -82,6 +100,12 @@ func (aeroEngine) DrawDecoration(l *Classic, ctx *paintengine2d.Context, f Decor
 		}
 		ctx.Save()
 		ctx.ClipRect(part)
+		if real {
+			// The compositor blurs the desktop behind the frame: take the
+			// window's own background out from under it and lay the glass
+			// down translucent, so the blur shows through.
+			ctx.DrawRect(part, paintengine2d.Paint{Color: paintengine2d.White, Blend: paintengine2d.BlendDestOut})
+		}
 		ctx.DrawRect(part, VGradient(glassBox, grad...))
 		if c.glass {
 			sh := paintengine2d.XYWH(w.Min.X, w.Min.Y, w.Dx(), f.Caption.Max.Y-w.Min.Y)

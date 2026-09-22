@@ -626,8 +626,17 @@ func TestTheBeOSCaptionIsItsTab(t *testing.T) {
 	if !platform.RectsContain(r.w.sysFrame.Shape, m.Left+x-2, m.Top+1) {
 		t.Fatal("the tab's own last column is not the window")
 	}
-	if platform.RectsContain(r.w.sysFrame.Shape, m.Left+x+8, m.Top+1) {
+	sil := platform.OffsetRects(r.w.shapeRaster().Rects, m.Left, m.Top)
+	if platform.RectsContain(sil, m.Left+x+8, m.Top+1) {
 		t.Fatal("the top edge past the tab is the window")
+	}
+	// The step beside the tab is no edge of the window: no resize band
+	// there, and no input.
+	if e := r.w.shapeBandEdges(paintengine2d.Pt(float32(m.Left+x+3), float32(m.Top+4))); e != 0 {
+		t.Fatalf("beside the tab: edges %v, want none", e)
+	}
+	if platform.RectsContain(r.w.sysFrame.Shape, m.Left+x+8, m.Top+1) {
+		t.Fatal("the input region reaches past the tab")
 	}
 }
 
@@ -673,5 +682,57 @@ func TestAFramedWindowInAPlainLookStatesNoShape(t *testing.T) {
 	}
 	if r.w.sysFrame.Input == (platform.FrameInsets{}) && !r.w.sysFrame.Margin.Zero() {
 		t.Fatal("a window with a shadow margin lost its resize band")
+	}
+}
+
+// A shaped window the user may resize keeps a band along its silhouette's
+// outer edge — outside it where there is room, a thin strip inside it —
+// and a press there starts a resize from the edge it is on; a fixed window
+// keeps none, and a hole is never an edge.
+func TestShapedWindowKeepsAResizeBand(t *testing.T) {
+	for _, fixed := range []bool{false, true} {
+		t.Run(fmt.Sprint("fixed=", fixed), func(t *testing.T) {
+			a := New(Options{Look: style.LightLook(), Headless: true})
+			opts := platform.WindowOptions{Width: 400, Height: 400, Headless: true, Decorations: platform.DecorationsNone}
+			if fixed {
+				opts.Sizing = platform.SizingFixed
+			}
+			w, err := a.NewWindow(opts)
+			if err != nil {
+				t.Fatal(err)
+			}
+			w.SetContent(widgets.NewLabel(""))
+			w.SetShapeFunc(ring)
+			a.PumpOnce()
+			o := w.Surface().(*platform.Offscreen)
+			// The ring's rim at its left, half way down; its hole.
+			left := paintengine2d.Pt(2, 200)
+			hole := paintengine2d.Pt(200, 200)
+			top := paintengine2d.Pt(200, 2)
+			if fixed {
+				if e := w.shapeBandEdges(left); e != 0 {
+					t.Fatalf("a fixed window resizes from %v", e)
+				}
+				return
+			}
+			if e := w.shapeBandEdges(left); e != platform.EdgeLeft {
+				t.Fatalf("left rim: %v", e)
+			}
+			if e := w.shapeBandEdges(top); e != platform.EdgeTop {
+				t.Fatalf("top rim: %v", e)
+			}
+			if e := w.shapeBandEdges(hole); e != 0 {
+				t.Fatalf("the hole resizes %v", e)
+			}
+			// The band takes presses: it is in the input region.
+			if !platform.RectsContain(w.sysFrame.Shape, 1, 200) {
+				t.Fatal("the band is not in the input region")
+			}
+			w.Inject(platform.Event{Kind: platform.EventMouseDown, Pos: left, Button: platform.ButtonLeft})
+			a.PumpOnce()
+			if rs := o.FrameCalls().Resizes; len(rs) != 1 || rs[0] != platform.EdgeLeft {
+				t.Fatalf("resizes %v", rs)
+			}
+		})
 	}
 }

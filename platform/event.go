@@ -194,6 +194,16 @@ const (
 	// EventCapabilities: what the desktop can do for the window changed
 	// (Caps).
 	EventCapabilities
+	// EventPopupPlaced: the window system put one of the window's popups
+	// (Popup) somewhere other than where it was last told — it flipped or
+	// slid it against the screen's edge, or shrank it — and its new place
+	// is [PopupSurface.Placed].
+	EventPopupPlaced
+	// EventPopupDone: the window system took one of the window's popups
+	// (Popup) down on its own — a click outside the application, another
+	// window activated (xdg_popup.popup_done, a broken X11 grab). The app
+	// dismisses it; the surface is still open until it does.
+	EventPopupDone
 )
 
 // DropReceiver is implemented by surfaces that take drops from other
@@ -242,6 +252,11 @@ type Event struct {
 	State WindowState
 	Decor Decorations
 	Caps  WMCaps
+	// Popup is the popup an EventPopupPlaced or EventPopupDone is about.
+	// Every other event from a popup arrives on its root window with Pos
+	// already in that window's coordinates, as if the popup were part of
+	// it (platform.PopupSurface).
+	Popup Surface
 }
 
 // WindowOptions configure a native or offscreen surface.

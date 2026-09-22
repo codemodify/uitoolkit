@@ -50,6 +50,9 @@ type Base struct {
 	// are the same. It stays nil for every component that does not name a
 	// face ([ShapeRole]), which is all but one of them.
 	lookShape *lookShape
+	// anchor is what the component hangs from when it is a popup: set by
+	// the Place* functions (widget/popup.go), nil for everything else.
+	anchor *PopupAnchor
 }
 
 type accLabel struct{ name, desc string }
