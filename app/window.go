@@ -1685,6 +1685,11 @@ func (w *Window) frame() {
 	if w.dirty.Empty() && !w.full {
 		return
 	}
+	var t0 time.Time
+	if perfOn() {
+		t0 = time.Now()
+		defer perfFrame(t0, "window")
+	}
 	rects := w.paintRects()
 	if platform.WantScene() {
 		// A backdrop blur can widen what is repainted.

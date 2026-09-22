@@ -3,6 +3,7 @@ package app
 import (
 	"log"
 	"math"
+	"time"
 
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/platform"
@@ -577,6 +578,12 @@ func (w *Window) paintPops() {
 			continue
 		}
 		pl.dirty = false
+		if perfOn() {
+			t0 := time.Now()
+			w.paintPop(pl)
+			perfFrame(t0, "popup")
+			continue
+		}
 		w.paintPop(pl)
 	}
 }

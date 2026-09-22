@@ -54,6 +54,9 @@ func (a *Application) maybeTrim(now time.Time) {
 	}
 	a.trimOwed.Store(false)
 	a.trimAt = time.Time{}
+	if perfOn() {
+		perfMark("trim")
+	}
 	go trimHeap()
 }
 
