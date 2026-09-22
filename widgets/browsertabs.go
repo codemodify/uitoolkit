@@ -426,6 +426,10 @@ func (t *BrowserTabs) geom() stripGeom {
 	return g
 }
 
+// NewTabButton is the "+" button's box in the strip's own coordinates —
+// where a menu of new tabs drops from — and empty when there is no OnNew.
+func (t *BrowserTabs) NewTabButton() paintengine2d.Rect { return t.geom().newBtn }
+
 // closeRect is tab slot s's close button.
 func (t *BrowserTabs) closeRect(s paintengine2d.Rect) paintengine2d.Rect {
 	side := min(t.dip(18), s.Dy()-t.dip(4))

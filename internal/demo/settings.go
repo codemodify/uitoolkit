@@ -152,7 +152,7 @@ func (s *settingsState) rebuild() {
 func buildSettings(a *app.Application, win *app.Window, saved, staged style.Appearance, page int) widget.Component {
 	s := &settingsState{
 		a: a, win: win, saved: saved.Normalize(), staged: staged.Normalize(), page: page,
-		previewRatio: 0.55,
+		previewRatio: 0.62,
 	}
 	// The preview draws the staged theme's light or dark sibling: redraw
 	// it when the desktop switches.
@@ -161,6 +161,9 @@ func buildSettings(a *app.Application, win *app.Window, saved, staged style.Appe
 			s.rebuild()
 		}
 	})
+	// The theme browser keeps its share as the window is resized, until
+	// the user drags the sash: then the split is theirs.
+	win.OnResize(func(int, int) { s.followWindow() })
 	return buildSettingsState(s)
 }
 
@@ -451,6 +454,17 @@ func (s *settingsState) themesPage() widget.Component {
 	return s.bodySplit
 }
 
+// followWindow works the browser's share out again for the window's new
+// size, unless the user has dragged the sash since Settings last set it.
+func (s *settingsState) followWindow() {
+	if s.bodySplit == nil || s.bodySplit.Ratio != s.browserAuto {
+		return
+	}
+	s.browserAuto = defaultBrowserRatio(s.win)
+	s.bodySplit.Ratio = s.browserAuto
+	s.bodySplit.RequestLayout()
+}
+
 // defaultBrowserRatio aims the theme browser at about 240 logical pixels
 // whatever the window and the display scale are: a narrow window gives it
 // a bigger share so its rows stay readable, a wide one hands the room to
@@ -649,24 +663,34 @@ func PreviewApp(say func(string)) widget.Component {
 		})
 	}
 	progress := widgets.NewProgressBar(0.62)
+	// Four rows a side, the check boxes beside the radios: one control
+	// per row ran to six, which a pack with 36-pixel controls cannot fit
+	// in the preview at Settings' default split.
+	checks := widgets.NewColumn(
+		widgets.NewCheckbox("Check box", true, nil),
+		widgets.NewCheckbox("Unchecked", false, nil),
+	).WithGap(4) // a radio group's own gap, so the two pairs line up
 	left := widgets.NewColumn(
 		widgets.NewRow(ok, normal).WithGap(8),
 		widgets.NewRow(off, dialog).WithGap(8),
-		widgets.NewCheckbox("Check box", true, nil),
-		widgets.NewCheckbox("Unchecked", false, nil),
-		widgets.NewRadioGroup([]string{"Radio one", "Radio two"}, 0, nil),
+		widgets.NewRow(checks, widgets.NewRadioGroup([]string{"Radio one", "Radio two"}, 0, nil)).WithGap(16),
 	).WithGap(8)
-	combo := widgets.NewComboBox([]string{"Combo box", "Second choice", "Third choice"}, 0, nil)
+	combo := widgets.NewComboBox([]string{"Combo box", "Second", "Third"}, 0, nil)
 	combo.SetAccessibleName("Choice")
 	spin := widgets.NewNumberField(0, 99, 3, 1, nil)
 	spin.SetAccessibleName("Count")
 	slider := widgets.NewSlider(0, 100, 40, nil)
 	slider.SetAccessibleName("Level")
+	// The combo box gives way: the spin box's arrows are what a narrow
+	// preview would otherwise cut off.
+	choice := widgets.NewRow(combo, spin).WithGap(8)
+	choice.AddFlex(combo, 1)
+	toggle := widgets.NewRow(widgets.NewSwitch("Switch", true, nil), slider).WithGap(12)
+	toggle.AddFlex(slider, 1)
 	right := widgets.NewColumn(
 		widgets.NewTextField("Ada Lovelace", "Name", nil),
-		widgets.NewRow(combo, spin).WithGap(8),
-		widgets.NewSwitch("Switch", true, nil),
-		slider,
+		choice,
+		toggle,
 		progress,
 	).WithGap(8)
 	controls := widgets.NewRow(left, right).WithGap(16).WithPad(8)
@@ -775,7 +799,7 @@ func (s *settingsState) appearancePage() widget.Component {
 	// GNOME's and Plasma's light / dark setting and accent colour: the
 	// theme shows its sibling (Breeze and Breeze Dark) to match the
 	// desktop, recoloured around its accent where the engine takes one.
-	follow := widgets.NewSwitch("Match the desktop's light or dark mode and accent colour", s.staged.FollowDesktop, func(on bool) {
+	follow := widgets.NewSwitch("Follow the desktop's colours", s.staged.FollowDesktop, func(on bool) {
 		next := s.staged
 		next.FollowDesktop = on
 		s.stage(next)
@@ -817,7 +841,7 @@ func (s *settingsState) appearancePage() widget.Component {
 		optionSwitch(motion, "Hover fades, the default button's pulse and busy bars."),
 	)
 	if style.DesktopReducesMotion() {
-		shape.Add(widgets.NewLabel("The desktop asks for reduced motion, so animations stay off."))
+		shape.Add(wrapped("The desktop asks for reduced motion, so animations stay off."))
 	}
 	desktop := settingsSection("The desktop",
 		optionSwitch(follow, "Light or dark, and the accent colour, as the desktop asks for them."),
@@ -841,9 +865,17 @@ func (s *settingsState) appearancePage() widget.Component {
 	body.AddFlex(options, 1)
 	return widgets.NewColumn(
 		widgets.NewTitle("Appearance"),
-		widgets.NewLabel("What every uitoolkit app does with the theme. Apply writes these to "+style.AppearancePath()+"."),
+		wrapped("What every uitoolkit app does with the theme. Apply writes these to "+style.AppearancePath()+"."),
 		body,
 	).WithGap(12).WithPad(4)
+}
+
+// wrapped is a label that wraps: prose on these pages is read, and a line
+// elided at the window's edge hides the part that says where a file is.
+func wrapped(text string) *widgets.Label {
+	l := widgets.NewLabel(text)
+	l.Wrap = true
+	return l
 }
 
 // settingsSection is a titled group of option rows.
@@ -918,7 +950,7 @@ func (s *settingsState) packsPage() widget.Component {
 		}
 	})
 	themeCol := widgets.NewColumn(widgets.NewTitle("Theme packs"),
-		widgets.NewLabel("Built-in packs live in the theme browser. Export saves the staged theme's colours and metrics as a pack you can edit."),
+		wrapped("Built-in packs live in the theme browser. Export saves the staged theme's colours and metrics as a pack you can edit."),
 		themes).WithGap(8)
 	var exportHost widget.Component
 	exportBtn := widgets.NewButton("Export current theme…", func() {
@@ -1045,15 +1077,15 @@ func (s *settingsState) aboutPage() widget.Component {
 	return widgets.NewColumn(
 		widgets.NewTitle("About"),
 		widgets.NewLabel("uitoolkit v"+uitoolkit.Version),
-		widgets.NewLabel(fmt.Sprintf("%d built-in themes from %d theme engines: %s.", len(style.ListBuiltinThemes()), len(style.EngineIDs()), engines)),
-		widgets.NewLabel("A theme is a pack (colours, metrics) painted by an engine (shapes): Windows 95 bevels, Aqua gel, Motif shadows…"),
-		widgets.NewLabel("Prefs file (theme + corners + icons + iconSize, written on Apply):"),
+		wrapped(fmt.Sprintf("%d built-in themes from %d theme engines: %s.", len(style.ListBuiltinThemes()), len(style.EngineIDs()), engines)),
+		wrapped("A theme is a pack (colours, metrics) painted by an engine (shapes): Windows 95 bevels, Aqua gel, Motif shadows…"),
+		wrapped("Prefs file (theme + corners + icons + iconSize, written on Apply):"),
 		mono("Prefs file", style.AppearancePath()),
-		widgets.NewLabel("User theme packs (exported; edit the JSON to make your own):"),
+		wrapped("User theme packs (exported; edit the JSON to make your own):"),
 		mono("User theme packs", style.ThemesDir()+"/<name>/theme.json"),
-		widgets.NewLabel("Icon sets (copy the repo icons/ folders here after every pull):"),
+		wrapped("Icon sets (copy the repo icons/ folders here after every pull):"),
 		mono("Icon sets", style.IconsDir()+"/<set>/*.png"),
-		widgets.NewLabel("Other apps watch look.json and switch live on Apply."),
+		wrapped("Other apps watch look.json and switch live on Apply."),
 		widgets.NewButton("Browse themes", func() {
 			s.page = pageThemes
 			s.rebuild()

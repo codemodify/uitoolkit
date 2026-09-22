@@ -46,19 +46,18 @@ type skinsPage struct {
 	query string
 	// only narrows the list: 0 every pack, 1 skins, 2 the extremes.
 	only int
-	// started is the look the tour was in, so it can be put back.
-	started style.Appearance
 }
 
-// restore puts back the pack the tour was in when the page was built, and
-// only the pack: what the other pages changed since — the frame, the
-// caption buttons — is theirs to keep.
+// restore puts back the pack the tour started in, and only the pack: what
+// the other pages changed since — the frame, the caption buttons — is
+// theirs to keep.
 func (p *skinsPage) restore(ap *style.Appearance) {
-	ap.Name, ap.Theme, ap.FollowDesktop = p.started.Name, p.started.Theme, p.started.FollowDesktop
+	start := p.t.started()
+	ap.Name, ap.Theme, ap.FollowDesktop = start.Name, start.Theme, start.FollowDesktop
 }
 
 func buildSkinsPage(t *tourState) widget.Component {
-	p := &skinsPage{t: t, started: t.a.Appearance()}
+	p := &skinsPage{t: t}
 	t.own(pageSkins, p)
 
 	search := widgets.NewTextField("", "Search packs", func(s string) {
@@ -100,7 +99,7 @@ func buildSkinsPage(t *tourState) widget.Component {
 	use.Primary = true
 	back := widgets.NewButton("Back to where we started", func() {
 		p.t.apply(p.restore)
-		p.note("Back in " + p.started.Name + ".")
+		p.note("Back in " + p.t.started().Name + ".")
 	})
 
 	p.box = widgets.NewPanel("Preview", widgets.NewLabel(""))
@@ -137,7 +136,13 @@ func buildSkinsPage(t *tourState) widget.Component {
 	p.facts = facts
 
 	p.reload()
-	t.onClose(func() { p.t.apply(p.restore) })
+	// The look is the whole application's: a torn-off window closing
+	// leaves it to the windows still open, and the last one puts it back.
+	t.onClose(func() {
+		if p.t.lastWindow() {
+			p.t.apply(p.restore)
+		}
+	})
 	return tourStage(split, panel)
 }
 

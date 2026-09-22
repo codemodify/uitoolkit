@@ -39,6 +39,9 @@ type accessPage struct {
 	order *widgets.TextArea
 	facts *widgets.TextArea
 	busy  *widgets.ProgressBar
+	// motion is the animations switch; it shows the application's
+	// preference, which another tour window may change.
+	motion *widgets.Switch
 	// scope shows the same controls at a scale of their own.
 	scope     *widgets.ThemeScope
 	scaleBox  *widgets.Panel
@@ -74,7 +77,9 @@ func buildAccessPage(t *tourState) widget.Component {
 	probPanel.Content().AddFlex(p.probs, 1)
 
 	trees := widgets.NewSplitter(false, treePanel, probPanel)
-	trees.Ratio = 0.74
+	// The linter's list keeps room for two rows of its verdict in the
+	// roomier packs too.
+	trees.Ratio = 0.62
 
 	// ---- the keyboard -------------------------------------------------------
 
@@ -95,8 +100,9 @@ func buildAccessPage(t *tourState) widget.Component {
 	p.busy = widgets.NewBusyBar(0)
 	p.busy.SetAccessibleName("A busy indicator")
 	motion := widgets.NewSwitch("Animations", style.Animations(), func(on bool) {
-		style.SetReduceMotion(!on)
-		p.t.win.Content().Invalidate()
+		// Through the appearance, so every tour window's switch and
+		// readout follow.
+		p.t.apply(func(ap *style.Appearance) { ap.ReduceMotion = !on })
 		if on {
 			p.note("Animations on: the bar travels, hovers fade, the default button breathes.")
 		} else {
@@ -105,6 +111,7 @@ func buildAccessPage(t *tourState) widget.Component {
 		p.refresh()
 	})
 	motion.SetAccessibleName("Animations")
+	p.motion = motion
 	hoverMe := widgets.NewButton("Hover me", nil)
 	hoverMe.Tip = "With animations on the hover fades in; with them off it snaps"
 	defaultish := widgets.NewButton("A default button", nil)
@@ -236,6 +243,10 @@ func (p *accessPage) refresh() {
 		return
 	}
 	win := p.t.win
+	if p.motion != nil && p.motion.On != style.Animations() {
+		p.motion.On = style.Animations()
+		p.motion.Invalidate()
+	}
 	root := win.AccessibleTree()
 	focused := "nothing has the focus"
 	root.Walk(func(n *a11y.Node) bool {

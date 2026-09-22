@@ -38,6 +38,10 @@ type dockPage struct {
 	// saved is the layout the user put by with "Remember", to show that a
 	// layout survives being written down and read back.
 	saved []byte
+	// floating is which panels were in windows of their own at the last
+	// change, so a panel that floats or docks by a drag — which no button
+	// here hears about — still gets the status line it would have got.
+	floating map[string]bool
 }
 
 func buildDockPage(t *tourState) widget.Component {
@@ -105,7 +109,10 @@ func buildDockPage(t *tourState) widget.Component {
 	t.onClose(p.host.CloseFloating)
 	t.installCloseHook()
 
-	p.host.OnLayoutChanged = func() { p.refresh() }
+	p.host.OnLayoutChanged = func() {
+		p.noteDrags()
+		p.refresh()
+	}
 
 	// ---- the same moves, without a drag ----------------------------------
 
@@ -280,6 +287,27 @@ func (p *dockPage) chosen() *dock.Panel {
 func (p *dockPage) note(s string) {
 	p.t.note(s)
 	p.refresh()
+}
+
+// noteDrags says what a change of layout did to a panel's window: a panel
+// dragged out of the host is in one of its own now, and one dragged back
+// over it has left it. A button that floats or docks a panel says the
+// same thing, and a more particular one, after this has run.
+func (p *dockPage) noteDrags() {
+	if p.floating == nil {
+		p.floating = map[string]bool{}
+	}
+	for _, pan := range p.host.Panels() {
+		now := pan.Floating()
+		was := p.floating[pan.Name()]
+		p.floating[pan.Name()] = now
+		switch {
+		case now && !was:
+			p.t.note(pan.Title() + " is in a window of its own — drag it back over the host to dock it.")
+		case was && !now:
+			p.t.note(pan.Title() + " is docked again.")
+		}
+	}
 }
 
 // refresh restates where every panel is, and prints the layout the host

@@ -30,6 +30,9 @@ func init() {
 	p.build = buildFramesPage
 }
 
+// decorPrefs are the frame choices, in the order the page lists them.
+var decorPrefs = []style.DecorationsPref{style.DecorationsAuto, style.DecorationsSystem, style.DecorationsToolkit}
+
 type framesPage struct {
 	t     *tourState
 	facts *widgets.TextArea
@@ -49,7 +52,6 @@ func buildFramesPage(t *tourState) widget.Component {
 	// no per-window override on purpose, because a desktop with a mix of
 	// framed and unframed windows of one app looks broken.
 	decorNames := []string{"Auto — let the policy decide", "The desktop's frame", "The toolkit's frame"}
-	decorPrefs := []style.DecorationsPref{style.DecorationsAuto, style.DecorationsSystem, style.DecorationsToolkit}
 	p.decor = widgets.NewRadioGroup(decorNames, indexOfDecorPref(decorPrefs, t.a.Decorations()), func(i int) {
 		t.apply(func(ap *style.Appearance) { ap.Decorations = decorPrefs[i] })
 		p.note("Asked for " + decorNames[i] + " — the desktop has the last word.")
@@ -63,10 +65,10 @@ func buildFramesPage(t *tourState) widget.Component {
 		start = 1
 	}
 	p.caps = widgets.NewRadioGroup(capNames, start, func(i int) {
-		// The caption-button preference is the application's, and unlike
-		// the frame it has a setter of its own; Application.Appearance reads
-		// it back, so a later change of pack does not undo it.
-		t.a.SetCaptionButtons(capPrefs[i])
+		// The caption-button preference is the application's, like the
+		// frame: through the appearance, so every tour window hears it and a
+		// later change of pack does not undo it.
+		t.apply(func(ap *style.Appearance) { ap.CaptionButtons = capPrefs[i] })
 		p.note("Caption buttons: " + capNames[i] + ".")
 	})
 	p.caps.SetAccessibleName("Where the caption buttons go")
@@ -165,6 +167,14 @@ func (p *framesPage) refresh() {
 		return
 	}
 	t := p.t
+	// The choices show what the application is set to, which another tour
+	// window may have changed.
+	selectQuietly(p.decor, indexOfDecorPref(decorPrefs, t.a.Decorations()))
+	capsNow := 0
+	if t.a.CaptionButtons() == style.CaptionButtonsTheme {
+		capsNow = 1
+	}
+	selectQuietly(p.caps, capsNow)
 	st := t.win.WindowState()
 	caps := t.win.FrameCaps()
 	prefs := t.a.TitleBarPrefs()
