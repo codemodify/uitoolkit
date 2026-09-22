@@ -11,10 +11,11 @@
 // draws each face's backgrounds with its wells, grooves and printed labels at
 // these rects, and writes the same rects into each skin's manifest as a
 // fixed layout (Layouts): named slots the player binds its controls to
-// (docs/skins.md, "Fixed layouts"). The player does not import this package
-// at all — it asks the skin it is wearing where each slot is — so the art and
-// the layout cannot disagree about where a key is, and a skin someone else
-// draws for the player places its keys wherever its own art has them.
+// (docs/skins.md, "Fixed layouts"). The player takes nothing from this
+// package but the layouts' names — it asks the skin it is wearing where each
+// slot is — so the art and the layout cannot disagree about where a key is,
+// and a skin someone else draws for the player places its keys wherever its
+// own art has them.
 //
 // Every rect is {x, y, w, h} in the window's *content* box: the window less
 // the skin's border and caption, which are stated here too because the art

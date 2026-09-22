@@ -83,19 +83,34 @@ at once:
   and 2×.
 - **`minim-silver`**, **Minim Silver**: the rounded look of the later era —
   silver chrome under a navy title band, a blue dot-matrix display with big
-  pixel digits, glossy round keys, capsule toggles beside blue lamps, the
-  equaliser under a tab-shaped header, a blue playlist — in windows whose
-  four corners are round, with the desktop showing beyond them. Drawn from
-  paths, exact from 1 to 2.
+  pixel digits, glossy round keys that brighten under the pointer, capsule
+  toggles beside blue lamps, an equaliser whose header is a tab with its name
+  on it and no title band at all, a blue playlist — in windows whose four
+  corners are round, with the desktop showing beyond them. Drawn from paths,
+  exact from 1 to 2.
 
 The two panels are what their names say: pictures of each whole window with
-holes where the keys go, which is how a player of this shape was built. A
-skin cannot lay a panel out, so the player does, one layout per face
-(`internal/players/minim/face.go`), on rects stated once in
-`internal/players/minim/panel` that the skin generator reads too — so the
-art and the layout cannot disagree about where a key is. The panels paint
-their keys, digits, lamps and bitmap capitals by name
+holes where the keys go, which is how a player of this shape was built.
+**Each skin says where its holes are**: it states three fixed layouts —
+`minim.strip`, `minim.equaliser`, `minim.playlist` — whose named slots the
+player binds its controls to with `widget.Slots`
+([docs/skins.md](skins.md#fixed-layouts)). The player carries no rect of its
+own for either panel; it reads every one it uses from the skin it is
+wearing, including the ones it prints into — the clock's digits, the lamps,
+the scrolling title, the playlist's rows. The rects are generated from
+`internal/players/minim/panel`, the same numbers the faces are drawn round,
+so the art and the layout cannot disagree about where a key is. A key's
+look in every state is its slot's art; the digits, lamps, thumbs and bitmap
+capitals are sprites the player paints by name
 (`style.DrawSkinSprite`, [docs/skins.md](skins.md#sprites-an-app-paints-itself)).
+
+Each window is given a role, the name of its layout
+(`app.Window.SetFrameRole`), and that is how Minim Silver's equaliser gets
+its tab: the skin states a caption for the `minim.equaliser` role — thirteen
+pixels of pale chrome whose title plate is the tab — and the other two
+windows keep the navy band ([docs/skins.md](skins.md#windows-that-are-not-alike)).
+The windows keep the player's titles in every face; the panels print them in
+capitals because their caption text roles say `"case": "upper"`.
 
 The widget tree is the **same one in every face**. A switch moves and
 repaints the controls, and hides the few one face has and another does not:
@@ -323,62 +338,70 @@ pixels and resolved against the window buys — the same numbers at every
 scale, which a bitmap stretched to fit would not give — and a failure names
 the row that is wrong instead of handing back two pictures.
 
+The panels on the skins' own layouts are tested for what placing may and may
+not do: every control is on its slot at every scale, the tab order is the
+widget face's, less the keys one face has and the other does not; the silver
+equaliser wears its own caption and the other two windows the band; a round
+key refuses its corners and takes its middle; Silver's keys have a hover face
+and Classic's do not; the titles are the player's in every face; and at 1.25,
+1.5 and 1.75 Minim Classic's transport row is nothing but colours of its own
+art.
+
 Real hardware, through the nested-KWin rig, is in
 [docs/e2e/2026-09-17/players-realhw.md](e2e/2026-09-17/players-realhw.md),
 and the five gaps below that were closed afterwards are checked on the same
 rig in
 [docs/e2e/2026-09-21/toolkit-gaps.md](e2e/2026-09-21/toolkit-gaps.md). Minim's three skins, the live switch and Minim Silver's
 round corners are checked there too, on Wayland and X11 at 1 and 1.75, in
-[docs/e2e/2026-09-21/minim-skins-realhw.md](e2e/2026-09-21/minim-skins-realhw.md).
+[docs/e2e/2026-09-21/minim-skins-realhw.md](e2e/2026-09-21/minim-skins-realhw.md),
+and the skin gaps closed after that — the silver equaliser's own caption,
+the round keys' corners, Classic at 1.75 and Settings' preview of Deck — in
+[docs/e2e/2026-09-21/skins-2-realhw.md](e2e/2026-09-21/skins-2-realhw.md).
 
 ## What they ran into
 
 Things a skinned, shaped, multi-window app wanted and the toolkit could not
-do, kept here because they are the useful output of writing one. Five have
-since been fixed in the toolkit and are struck through below, under
-[Fixed since](#fixed-since); these still stand.
+do, kept here because they are the useful output of writing one. Most have
+since been fixed in the toolkit and are struck through, here and under
+[Fixed since](#fixed-since); what is not struck through still stands.
 
-- **A look states the caption's height and an app cannot ask for a shorter
-  band.** A player with a compact mode has to choose a caption that suits
-  its *smallest* window; Marquee's came down from 56 design pixels to 40 for
-  that reason alone.
-- **`window.shape` rects anchor to the top and the left only.** A rect may
-  stretch to a margin from the right or the bottom edge, but there is no
-  fixed-size box anchored to either — so a tab at the top right, or a band a
-  fixed distance up from the bottom, cannot be stated. All three silhouettes
-  here are shaped by what *is* expressible.
-- **`window.border` is one inset for the whole window.** A silhouette that
-  varies down the window — wide at the top, narrow at the bottom — still has
-  to keep its content inside a single rectangle, so the border has to clear
-  the deepest intrusion on each side. Deck sidestepped it with a symmetric
-  waist; Marquee's dome and Lantern's skirt are sized so a modest border
-  clears them.
-- **A skin cannot ask for a gap between its caption band and the content.**
-  The sketch that fell out of this was a window in two pieces with a slot of
-  desktop between them, which is a striking outline and not expressible: the
-  content starts where the caption ends.
-- **Which side the caption buttons sit on is the desktop's**
-  (`style.CaptionButtonsDesktop` is the default and a skin's `layout` is
-  consulted only when the user asked for the look's own), so a silhouette
-  must stay out of *both* top corners or it eats a close button on half the
-  desktops it runs on. Every shape here does.
+- ~~**A look states the caption's height and an app cannot ask for a
+  shorter band.**~~ **Fixed:** `app.Window.SetCaptionHeight` asks for a
+  caption of the app's own height in any look, and the caption's buttons
+  shrink to stand in it. Marquee's caption stays at the 40 design pixels its
+  art was redrawn for.
+- ~~**`window.shape` rects anchor to the top and the left only.**~~
+  **Fixed:** `fromRight` and `fromBottom` pin a fixed-size rect to the far
+  edges — a tab at the top right, a foot a fixed height up from the bottom.
+- ~~**`window.border` is one inset for the whole window.**~~ **Fixed:**
+  `"border": {"caption": […], "content": […]}` insets the caption band and
+  the content under it differently, for a silhouette wide at the top and
+  narrow below.
+- ~~**A skin cannot ask for a gap between its caption band and the
+  content.**~~ **Fixed:** `captionGap`. The window in two pieces with a
+  slot of desktop between them is a `captionGap` and a silhouette that cuts
+  it away.
+- ~~**Which side the caption buttons sit on is the desktop's.**~~
+  **Fixed:** a skin's `"buttons": "left" | "right"` moves the desktop's
+  buttons to the side its art has room on. None of the players' skins states
+  one; their silhouettes keep out of both corners.
 
 Minim's panels ran into five more:
 
-- **A skin states one caption for every window it dresses.** Minim
-  Silver's reference has no title band on its equaliser at all, only a
-  tab-shaped header; here the equaliser has the band and draws its tab
-  under it.
-- **A control's pointer shape is read from the part it paints, not from a
-  picture an app paints for it.** Silver's round keys take the pointer
-  across their whole box. The keys are still ordinary buttons with every
-  keyboard and accessibility route; only the corners of the box answer a
-  click they would not have answered in the original.
-- **Pixel art is only ever magnified by whole multiples**, so a pixelated
+- ~~**A skin states one caption for every window it dresses.**~~ **Fixed:**
+  window variants, chosen by the role the app gives a window. Minim Silver's
+  equaliser has its tab for a header and no title band.
+- ~~**A control's pointer shape is read from the part it paints, not from a
+  picture an app paints for it.**~~ **Fixed:** `widget.ArtShape`, with
+  `style.SkinSpriteShape` and `style.SkinSlotShape`: Silver's round keys
+  refuse the corners of their boxes.
+- ~~**Pixel art is only ever magnified by whole multiples**, so a pixelated
   sprite drawn unsliced into a box at 1.75 is drawn at 1× in the middle of
-  it. The classic panel's sprites carry an empty one-pixel margin and are
-  sliced there, which makes the whole picture the stretchable middle
-  ([docs/skins.md](skins.md#sprites-an-app-paints-itself)).
+  it.~~ **Fixed:** a pixel sprite an app draws at its own size is magnified
+  onto one device grid every piece shares, and the one-pixel margin the
+  classic panel carried to get round it is gone. On Wayland at 1.75 the
+  compositor still stretches a 275-pixel window by a quarter of a pixel
+  ([docs/skins.md](skins.md#hidpi), rule 5).
 - **A menu is drawn inside the window it opens from.** The strip is 116
   design pixels tall, so the skin menu is four rows and nothing else — no
   separator, no shortcut column — and the panel skins set 20-pixel menu
@@ -390,6 +413,19 @@ Minim's panels ran into five more:
   Fixed in the toolkit — a short caption now gets square buttons stood in
   it — which also gives Minim's own skin the 18-pixel caption it always
   stated.
+
+And three that writing the panels on the skins' own layouts closed:
+
+- ~~**A skin cannot lay a panel out**, so the player carried one layout per
+  face on rects it shared with the generator.~~ **Fixed:** fixed layouts
+  ([docs/skins.md](skins.md#fixed-layouts)); the player binds its controls
+  to slot names and carries no rects.
+- ~~**Panel keys have no hover state.**~~ **Fixed:** a slot's art has states,
+  Silver's keys have hover faces, Classic's — whose era had none — fall back
+  to rest.
+- ~~**The panels turned window titles upper-case**, which is what a screen
+  reader then read.~~ **Fixed:** the titles are the player's in every face;
+  capitals are each panel skin's `"case": "upper"`.
 
 Two more are about *when* rather than *what*, and only real hardware showed
 them (see the e2e report):
