@@ -13,7 +13,8 @@ go run ./cmd/uitksettings
 go run ./cmd/uitksettings -stage win98              # open with Windows 98 staged
 go run ./cmd/uitksettings -page appearance          # open on the options page
 go run ./cmd/uitksettings -headless                 # settings.png in cwd
-go run ./cmd/uitksettings -stage aqua -screenshot docs/screenshots
+go run ./cmd/uitksettings -stage aqua -screenshot out/
+tools/shots/demos.sh                               # docs/screenshots/settings.webp and the other demos
 ```
 
 `-page` takes `themes` (the default), `appearance`, `packs` or `about`.
@@ -49,10 +50,17 @@ Both are `widgets.ThemeScope`s, so Settings itself keeps the applied look.
 Staging a pack switches them where they stand — the caret stays in the
 search field, the focus on the list, the gallery where you scrolled it.
 
-The browser starts about 240 logical pixels wide whatever the window and
-display scale are, so its rows stay readable on a small window; dragging
-either sash replaces the split, and both survive Apply, Revert and
-Defaults.
+The browser is about 240 logical pixels wide whatever the window and
+display scale are, so its rows stay readable on a small window, and it
+keeps that share while the window is resized (`Window.OnResize`).
+Dragging either sash replaces the split: a dragged split stays through
+every resize after, and both survive Apply, Revert and Defaults.
+
+The preview takes 62% of the right-hand splitter, enough for its Controls
+tab — four rows a side — to show every row in every pack with
+desktop-sized controls. Material's, shadcn's and Geist's 40- to 48-pixel
+touch targets are the exception: those ten packs clip the tab's last row
+until the sash is dragged down.
 
 ### Appearance — what every app does with the theme
 
