@@ -324,7 +324,20 @@ more. It is painted from the same three parts inside a turned frame, so a
 skinned vertical slider is skinned from `slider.track`, `slider.fill` and
 `slider.thumb` with no art of its own; `TicksAbove` is then the left-hand
 row and `TicksBelow` the right. Arrow keys are unchanged — Up and Right are
-more either way — and a screen reader is told which way it runs.
+more either way — and a screen reader is told which way it runs. **Home is
+the top of a vertical slider** and End the bottom: up is more, so the
+horizontal convention turned on its side would read backwards.
+
+`Step` is one arrow key and `Page` one Page Up or Down (Shift takes a
+quarter of a step). Both are zero by default, which is the twentieth and the
+tenth of the range they always were. `Label` and `Format` are what the
+slider is called and how its value is said — `"Preamp"`, `"+4.5 dB"` — and
+they are what a screen reader reads and what the tooltip shows, which is
+`Tip` where the app sets one and "Preamp  +4.5 dB" where it does not.
+`Reading()` is that string, for an app that prints the value beside the
+slider and wants the same words. A screen reader steps the slider by `Step`
+through `ActionIncrement` and `ActionDecrement`, and that step counts as the
+user's own input.
 
 `Slider.Painter` and `Slider.Travel` are the slider's half of [art on a
 control](#art-on-a-control): the painter draws the whole control and is told
@@ -376,6 +389,30 @@ Three things the hooks deliberately do not do:
 `Slider` takes a `Painter` too, with the value handed to it (see
 [Sliders](#sliders-and-progress-bars)).
 
+### A mark on the look's own face
+
+A `Painter` replaces the face. A transport key wants the opposite: the
+pack's button face, its hover cross-fade and its pressed state, with a play
+or pause mark drawn on it. That is `Content`, a `ButtonContentPainter` on
+`Button` and `ToolButton`:
+
+```go
+b.Content = func(ctx *paintengine2d.Context, r paintengine2d.Rect, st style.ControlState) {
+	DrawGlyph(ctx, r, glyph, GlyphInk(b.Look(), st), style.Dip(b.Look(), 1.6))
+}
+```
+
+It is drawn inside the face, after the look drew it, for whatever state the
+face was drawn in — a cross-fade between two states draws the mark on each,
+so a mark that is a different ink when the key is hot fades with the face
+under it. An app that redrew the face itself to get its mark on top would
+lose the cross-fade and everything else the era's engine does, which is
+what a hand-rolled glyph button used to do.
+
+The two are exclusive and in that order: a `Painter` that takes the box
+paints the mark itself, because a picture of a key has its glyph in it
+already.
+
 ### A list on a skin's grid
 
 A panel's playlist is a well printed in the art with a groove beside it and
@@ -407,6 +444,42 @@ nothing is painted there.
 Everything else is the list it always was — the selection modes, type-ahead,
 drag and drop, the accessibility tree, `EnsureVisible`. The hook is geometry
 and nothing else, and a nil answer is a list without the hook.
+
+Geometry was not all of it. A skin engine hands `DrawListRow` to the pack
+underneath it — that is the rule that keeps a skinned form a form — so a
+list in a panel's printed well painted the pack's rows in the pack's font,
+where the art wants eleven design pixels of green on black. Two painters
+say the rest of it, and both answer the `Painter` contract above: they are
+asked first, they report whether they took it, and a `false` leaves the
+look's own drawing exactly as it was.
+
+```go
+l.RowPaint = func(ctx *paintengine2d.Context, b paintengine2d.Rect, i int, st style.ControlState) bool
+l.ScrollPaint = func(ctx *paintengine2d.Context, track, thumb paintengine2d.Rect, st style.ControlState) bool
+```
+
+`RowPaint` is the row — its type, its ink, its playing mark — and nothing
+else: the selection, the keys, the wheel, type-ahead, drag and drop and the
+accessibility tree are the list's either way. A list with one paints row by
+row rather than from its scrolled row cache, since what the painter draws is
+the app's own and the list cannot know when it changed. `ScrollPaint` is the
+groove and the thumb, for the skin whose thumb is a loose sprite of its own
+(`style.DrawSkinSprite`) riding a groove printed in the art; a skin pack's
+own scroll parts need none of it, because its engine has already overridden
+them.
+
+Both rects are in the box the list was about to paint into, so a painter
+draws relative to what it is handed and never goes looking for the widget's
+own box.
+
+`ItemDetail` is a second column at the row's right-hand end — a track's
+length beside its title, a file's size beside its name — in the look's own
+row face. A row with one is painted as the look's table cells, a first and a
+last with the detail aligned to the end, because a list row is one label and
+a second column is the look's business: its cell padding, and the column
+guide a look that rules its columns draws between them. A screen reader
+reads the pair as one row ("Blue Monday, 7:29"). Three columns with a header
+over them is a `TableView`.
 
 ## Rich text
 

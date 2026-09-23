@@ -222,6 +222,25 @@ func (f *NumberField) Describe(n *a11y.Node) {
 // AccessibleLeaf: the spin button's text field is part of it.
 func (f *NumberField) AccessibleLeaf() bool { return true }
 
+// AccessibleAction steps the spin button from the accessibility tree. It
+// was advertised above and not implemented, so a screen reader offered a
+// step and nothing moved. A reader's step is the user's own, and goes
+// through the same nudge a stepper button does, so OnInput reports it.
+func (f *NumberField) AccessibleAction(_ int, a a11y.Action) bool {
+	if !f.Enabled() {
+		return false
+	}
+	switch a {
+	case a11y.ActionIncrement:
+		f.nudge(1)
+	case a11y.ActionDecrement:
+		f.nudge(-1)
+	default:
+		return false
+	}
+	return true
+}
+
 func (s *Slider) Describe(n *a11y.Node) {
 	n.Role = a11y.RoleSlider
 	if s.Vertical {
@@ -229,10 +248,34 @@ func (s *Slider) Describe(n *a11y.Node) {
 	} else {
 		n.State |= a11y.StateHorizontal
 	}
-	step := float64(s.Max-s.Min) / 100
-	rangeNode(n, float64(s.Min), float64(s.Max), float64(s.Value), step)
-	n.Value = strconv.FormatFloat(float64(s.Value), 'f', -1, 32)
+	nameOr(n, s.Label)
+	tipDescription(n, s.Tip)
+	// The step a reader is told about is the step it gets: the one an
+	// arrow key moves, so "increment" and Up agree.
+	rangeNode(n, float64(s.Min), float64(s.Max), float64(s.Value), float64(s.step(false)))
+	n.Value = s.Reading()
 	n.Actions = n.Actions.With(a11y.ActionIncrement).With(a11y.ActionDecrement)
+}
+
+// AccessibleAction steps the slider from the accessibility tree. It was
+// advertised above and not implemented, so a screen reader offered to move
+// a slider and could not. A reader's step is the user's own — it goes
+// through the setter with the mark on, so OnInput reports it like an arrow
+// key (widgets/oninput.go).
+func (s *Slider) AccessibleAction(_ int, a a11y.Action) bool {
+	if !s.Enabled() {
+		return false
+	}
+	step := s.step(false)
+	switch a {
+	case a11y.ActionIncrement:
+		s.user.did(func() { s.SetValue(s.Value + step) })
+	case a11y.ActionDecrement:
+		s.user.did(func() { s.SetValue(s.Value - step) })
+	default:
+		return false
+	}
+	return true
 }
 
 func (p *ProgressBar) Describe(n *a11y.Node) {
@@ -369,6 +412,13 @@ func (l *ListView) AccessibleItems() []*a11y.Node {
 		text := ""
 		if l.ItemText != nil {
 			text = l.ItemText(i)
+		}
+		// A row with a second column is read as one row: a screen reader
+		// says "Blue Monday, 7:29", which is what the eye takes off it.
+		if l.ItemDetail != nil {
+			if d := l.ItemDetail(i); d != "" {
+				text = strings.TrimPrefix(text+", "+d, ", ")
+			}
 		}
 		n := item(l, i, a11y.RoleListItem, text, l.rowRect(i).Translate(in))
 		n.State |= a11y.StateSelectable
