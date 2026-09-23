@@ -20,6 +20,25 @@ import (
 // half-skinned app is a coherent app in a real look.
 type ButtonPainter func(ctx *paintengine2d.Context, b paintengine2d.Rect, st style.ControlState) bool
 
+// ButtonContentPainter draws *inside* the look's face, after the look has
+// drawn it, in the box the face was drawn in.
+//
+// It is the other half of [ButtonPainter], and the two answer different
+// questions. A skinned key is a picture instead of a face, and that is a
+// Painter: it takes the box and the look draws nothing. A transport key is
+// the look's own face with a play mark on it, and that is a content
+// painter: the face, its hover and press states and the era's cross-fade
+// are all still the engine's, and the app only adds the mark. An app that
+// redrew the face itself to get its mark on top would lose every one of
+// them, which is what a player's transport row used to do.
+//
+// It is drawn for whatever state the face was drawn in — a cross-fade
+// between two states draws it twice, once on each — so a mark that is a
+// different ink when the key is hot fades with the face under it. It is
+// not called when a [ButtonPainter] took the box: a picture of a key has
+// its mark painted in it already.
+type ButtonContentPainter func(ctx *paintengine2d.Context, b paintengine2d.Rect, st style.ControlState)
+
 // ButtonShaper is the silhouette of what a [ButtonPainter] paints, for a
 // box of that size ([widget.ArtShape]): a round key painted as a picture
 // takes the pointer on the picture and a press in the corner of its box
@@ -39,6 +58,11 @@ type Button struct {
 	// way — a skin never removes it (docs/skins.md).
 	Painter ButtonPainter
 	Shaper  ButtonShaper
+	// Content draws the app's own mark on the look's face, leaving the
+	// face, its states and its cross-fade to the engine; Painter replaces
+	// the face outright. Reach for Content for a glyph on an ordinary
+	// button, for Painter when the button *is* a picture.
+	Content ButtonContentPainter
 	hovered bool
 	pressed bool
 	// outside is set while a press is dragged off the button: it pops up
@@ -110,12 +134,21 @@ func (b *Button) Paint(ctx *paintengine2d.Context) {
 		if p, ok := b.pulse(st); ok {
 			// The default button swells toward its hover look and back.
 			ctx.DrawCrossFade(r, p,
-				func(ctx *paintengine2d.Context) { lk.DrawButton(ctx, r, st, b.Text) },
-				func(ctx *paintengine2d.Context) { lk.DrawButton(ctx, r, st|style.StateHovered, b.Text) })
+				func(ctx *paintengine2d.Context) { b.face(ctx, lk, r, st) },
+				func(ctx *paintengine2d.Context) { b.face(ctx, lk, r, st|style.StateHovered) })
 			return
 		}
-		lk.DrawButton(ctx, r, st, b.Text)
+		b.face(ctx, lk, r, st)
 	})
+}
+
+// face is the look's button with the app's mark on it, which is one state
+// of it: a cross-fade draws the pair and the mark travels with its face.
+func (b *Button) face(ctx *paintengine2d.Context, lk style.LookAndFeel, r paintengine2d.Rect, st style.ControlState) {
+	lk.DrawButton(ctx, r, st, b.Text)
+	if b.Content != nil {
+		b.Content(ctx, r, st)
+	}
 }
 
 // pulseFrame is how often a pulsing default button repaints.
@@ -236,9 +269,12 @@ type ToolButton struct {
 	Checked bool
 	Toggle  bool
 	OnClick func()
-	// Painter and Shaper are as Button's: the art, and where it really is.
+	// Painter, Shaper and Content are as Button's: the art, where it
+	// really is, and the app's own mark drawn on the look's face — which
+	// is what a transport key is.
 	Painter ButtonPainter
 	Shaper  ButtonShaper
+	Content ButtonContentPainter
 	hovered bool
 	pressed bool
 	// outside is set while a press is dragged off the button, exactly as
@@ -326,6 +362,9 @@ func (b *ToolButton) Paint(ctx *paintengine2d.Context) {
 	}
 	b.fade.paint(b, ctx, r, st, func(ctx *paintengine2d.Context, st style.ControlState) {
 		lk.DrawToolButton(ctx, r, st, b.Text, b.Icon)
+		if b.Content != nil {
+			b.Content(ctx, r, st)
+		}
 	})
 }
 
