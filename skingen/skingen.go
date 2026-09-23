@@ -51,9 +51,11 @@
 //	if err := skingen.Write("/tmp/skins", p); err != nil { ... }
 //
 // That writes /tmp/skins/mine/art/chrome.png, chrome@2x.png and skin.json,
-// which style.LoadSkin reads and style.LintSkin (or
-// `go run ./cmd/uitk-skin lint /tmp/skins/mine`) checks. docs/skins.md walks
-// the same example through to an installed pack.
+// which style.LoadSkinFS reads and style.LintSkin (or
+// `go run ./cmd/uitk-skin lint /tmp/skins/mine`) checks. docs/skins.md,
+// "Writing one in Go", has the same plan as a whole program — with the
+// hover and pressed faces a button wants — and walks it through to an
+// installed pack.
 //
 // Starting from a blank sheet is not the only way in, and usually not the
 // best one: [Plans] returns the eight shipped art plans — [Nocturne],

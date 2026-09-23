@@ -9,6 +9,7 @@ package skingen_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/codemodify/paintengine2d"
@@ -17,20 +18,45 @@ import (
 	"github.com/codemodify/uitoolkit/style"
 )
 
-// smallestPlan is the worked example in the package doc and in docs/skins.md,
-// kept here so the three cannot drift apart: the least a plan can say and
-// still produce a skin the loader accepts.
+// shippedSkins is the packs in the repository, which the plans below wrote.
+const shippedSkins = "../style/skins"
+
+// smallestPlan is the worked example of docs/skins.md, "Writing one in Go",
+// kept here so the two cannot drift apart: the least a plan can say and
+// still produce a skin worth installing.
 func smallestPlan() *skingen.Plan {
+	face := func(fill, edge string) func(*paintengine2d.Context, float32, float32) {
+		return func(ctx *paintengine2d.Context, w, h float32) {
+			r := paintengine2d.XYWH(0.5, 0.5, w-1, h-1)
+			ctx.DrawRoundRect(r, 6, 6, paintengine2d.Fill(skingen.Hex(fill)))
+			ctx.DrawRoundRect(r, 6, 6, paintengine2d.StrokePaint(skingen.Hex(edge), 1))
+		}
+	}
 	return &skingen.Plan{
-		Name: "mine", Label: "Mine", Base: "breeze-night",
-		Sheets: []*skingen.Sheet{{Name: "chrome", W: 96, H: 32, Cells: []skingen.Cell{{
-			Name: "button.normal", X: 0, Y: 0, W: 32, H: 32, Slice: [4]int{6, 6, 6, 6},
-			Draw: func(ctx *paintengine2d.Context, w, h float32) {
-				ctx.DrawRoundRect(paintengine2d.XYWH(0.5, 0.5, w-1, h-1), 6, 6,
-					paintengine2d.Fill(skingen.Hex("#40444c")))
+		Name:  "mine",
+		Label: "Mine",
+		Base:  "breeze-night", // everything this skin does not bind
+		Sheets: []*skingen.Sheet{{
+			Name: "chrome", W: 96, H: 32,
+			Cells: []skingen.Cell{
+				{Name: "button.normal", X: 0, Y: 0, W: 32, H: 32,
+					Slice: [4]int{6, 6, 6, 6}, Draw: face("#40444c", "#0b0e12")},
+				{Name: "button.hover", X: 32, Y: 0, W: 32, H: 32,
+					Slice: [4]int{6, 6, 6, 6}, Draw: face("#4c515b", "#0b0e12")},
+				{Name: "button.pressed", X: 64, Y: 0, W: 32, H: 32,
+					Slice: [4]int{6, 6, 6, 6}, Draw: face("#2b2f36", "#0b0e12")},
 			},
-		}}}},
-		Parts: []skingen.PartBinding{{Part: "button", States: [][2]string{{"normal", "button.normal"}}}},
+		}},
+		Parts: []skingen.PartBinding{{
+			Part: "button",
+			States: [][2]string{
+				{"normal", "button.normal"},
+				{"hover", "button.hover"},
+				{"pressed", "button.pressed"},
+			},
+			Text: "button",
+		}},
+		Text: []skingen.TextRole{{Name: "button", Color: "#e8eef2"}},
 	}
 }
 
@@ -65,14 +91,17 @@ func TestTheSmallestPlanWritesASkinThatLoads(t *testing.T) {
 		t.Error("the button the plan binds did not reach the skin")
 	}
 
-	// It lints. A one-part skin is terse, not wrong: the lint has things to
-	// say about a button with no pressed face, and nothing to say about the
-	// pack itself. What must not appear is a complaint about the art or the
-	// manifest, because the generator wrote both.
-	for _, w := range style.LintSkin(sk) {
-		if w.Key == "sheets.chrome.2x" || w.Key == "sprites" {
-			t.Errorf("the generator's own output warns: %s", w)
+	// It lints, and the one thing the lint has to say is the one line
+	// docs/skins.md prints: a button with no disabled face, which is terse
+	// rather than wrong. Nothing about the sheets or the sprites, because
+	// the generator wrote those and they cannot be inconsistent.
+	got := style.LintSkin(sk)
+	if len(got) != 1 || got[0].Key != "parts.button.states" ||
+		!strings.Contains(got[0].Msg, `no "disabled" art`) {
+		for _, w := range got {
+			t.Logf("%s", w)
 		}
+		t.Errorf("the lint said %d things, want the one documented warning", len(got))
 	}
 }
 
