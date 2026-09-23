@@ -36,6 +36,7 @@ stub; there is no native AppKit/SwiftUI control host.
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Label | `Label` / `Title` | `QLabel` / `Text` | `GtkLabel` | `TextBlock` | `widget.Label` | `Label` | `TextBlock` | `NSTextField` | `Text` | [thumb](screenshots/compare/label.png) |
 | Button | `Button` | `QPushButton` / `Button` | `GtkButton` | `Button` | `widget.Button` | `Button` | `Button` | `NSButton` | `Button` | [thumb](screenshots/compare/button.png) |
+| Tool button | `ToolButton` | `QToolButton` | `GtkButton` (flat) | `Button` (flat) ≈ | `widget.Button` ≈ | `ToolStripButton` | `Button` (`ToolBar`) | `NSButton` (recessed) | `Button` (`.borderless`) | [thumb](screenshots/compare/toolbar.png) |
 | Checkbox | `Checkbox` | `QCheckBox` / `CheckBox` | `GtkCheckButton` | `CheckBox` | `widget.Check` | `CheckBox` | `CheckBox` | `NSButton` (checkbox) | `Toggle` ≈ | [thumb](screenshots/compare/checkbox.png) |
 | Switch | `Switch` | `Switch` (Quick); Widgets ≈ `QCheckBox` | `GtkSwitch` | `ToggleSwitch` | `widget.Check` ≈ | — (`CheckBox` ≈) | `ToggleButton` ≈ | `NSSwitch` | `Toggle` | [thumb](screenshots/compare/switch.png) |
 | Radio | `RadioButton` / `RadioGroup` | `QRadioButton` / `RadioButton` | `GtkCheckButton` (group) | `RadioButton` | `widget.RadioGroup` | `RadioButton` | `RadioButton` | `NSButton` (radio) | `Picker` ≈ | [thumb](screenshots/compare/radio.png) |
@@ -278,6 +279,41 @@ draw their own ticks with `DrawSliderTicks`.
 bar tall enough to hold it, the text sits in the middle and changes colour
 where the fill ends; beside a thin bar (Fluent, Material, Aqua) it sits to
 the right.
+
+## Art on a control
+
+A skin dresses the look's faces, and for a form that is the whole story. A
+panel is not a form: its keys are pictures, drawn where its layout says, and
+what the app needs is somewhere to hang one. `Button` and `ToolButton` have
+two hooks for it:
+
+```go
+b := widgets.NewToolButton("", style.IconNone, play)
+b.Painter = func(ctx *paintengine2d.Context, r paintengine2d.Rect, st style.ControlState) bool {
+	return style.DrawSkinSlot(lk, ctx, widget.SlotArtRect(b, "player.strip", "play"), "player.strip", "play", st)
+}
+b.Shaper = func(lk style.LookAndFeel, size paintengine2d.Point) *style.Silhouette {
+	return style.SkinSlotShape(lk, size, widget.SlotArtRect(b, "player.strip", "play"), "player.strip", "play")
+}
+```
+
+`Painter` is asked before the look paints and reports whether it took over;
+`Shaper` is the silhouette of what it painted, so a round key takes the
+pointer on the picture and a press in the corner of its box falls through to
+the panel behind it (`widget.ArtShape`).
+
+Three things the hooks deliberately do not do:
+
+- **They do not change the widget.** A painted button still takes the focus,
+  still works from Return and Space, still names itself in the accessibility
+  tree, still shows its tooltip. A `Painter` replaces the *look's* drawing
+  and nothing else.
+- **They do not remove the focus ring.** The ring is drawn over whatever the
+  painter drew, which is the rule the skin engine keeps too
+  ([docs/skins.md](skins.md)): no picture can ship a keyboard trap.
+- **They do not have to answer.** A painter that has no art for this look
+  returns false and the look's own face is drawn, so an app half-dressed by a
+  skin is a coherent app in a real look rather than a grid of holes.
 
 ## Rich text
 
