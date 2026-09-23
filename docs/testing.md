@@ -15,34 +15,21 @@ Peers do the same thing with different names:
 
 uitoolkit’s analogue is `internal/uitest` (Measure/Arrange, inject
 Mouse/Wheel/Key, optional paint / scene record, geometry assertions)
-plus `internal/apptest` (scripted gallery + Mail).
+plus `internal/apptest` (scripted gallery + Settings).
 
-## Mail safety (non-negotiable)
+## Mail safety — moved with the app
 
-**Do not delete, junk, archive, move, expunge, empty trash, or send
-real mail.** The automated driver and `go test` Mail paths must never
-touch a live IMAP/POP3 account.
+Mail lives in its own repository now
+([comms-mail](https://github.com/codemodify/comms-mail)), and the rule that
+never let a test touch a real mailbox went with it: the in-memory `StartDemo`
+fixture, the isolated temp config, the refusal of any socket that is not a
+disposable one. Nothing in this repository speaks IMAP any more.
 
-1. Never connect the driver to a live daemon from the user’s
-   `~/.config/uitoolkit/mail.json` / production credentials / QQ / real
-   accounts.
-2. Mail UI tests use an **in-memory** `StartDemo` / `MemoryStore`
-   fixture (or an isolated temp config that cannot be the user’s
-   mailbox). Default is the **fake backend**.
-3. Do not call destructive RPCs (`Delete`, `Junk`, `Archive`,
-   `Expunge`, Empty Trash, `Move`, `Send`) against a real daemon.
-4. Prefer driving **gallery** and headless widget trees. For Mail,
-   inject synthetic lists via `StartDemo` or `mailapp.Open` on that
-   fixture.
-5. `mailapp.IsolateTestEnv` / `IsolateTestEnvTB` point XDG +
-   `UITK_MAIL_CONFIG` at a temp dir, force `UITK_MAIL=memory`, and
-   unset `UITK_MAIL_HOST` / `USER` / `PASS` / `SOCK`. The driver
-   refuses any socket that is not a `StartDemo` temp path
-   (`mailclientd-*` directory) and refuses any backend other than
-   `memory`.
-
-`cmd/mailclientui` against a user-started daemon is **not** a test
-entry point.
+What stays here is the shape of that rule, because every app in the family
+needs it: **a test must not be able to reach the thing the user actually
+cares about.** In this repository that is the desktop rather than a mailbox —
+see `tools/testenv.sh` below, which is why no test can open a window on the
+session it runs in.
 
 ## How to run
 
@@ -63,7 +50,7 @@ Headless widget + driver suite (no display, no CGO):
 CGO_ENABLED=0 go test ./...
 ```
 
-Full-paint benches (Mail / gallery / list) live in `internal/apptest`.
+Full-paint benches (Settings / gallery / list) live in `internal/apptest`.
 See [perf.md](perf.md) for the v0.15.0 command line and numbers.
 
 Tray tests use `UITK_TRAY=fake` or the stub (`docs/tray.md`). Do not
@@ -81,7 +68,7 @@ Scripted app driver (same checks, prints one line per step):
 go run ./cmd/uitest-driver
 go run ./cmd/uitest-driver -short
 go run ./cmd/uitest-driver -app=gallery
-go run ./cmd/uitest-driver -app=mail
+go run ./cmd/uitest-driver -app=settings
 go run ./cmd/uitest-driver -compare
 ```
 
@@ -96,9 +83,8 @@ Linux CGO build (Wayland/X11) — required on a real desktop, not just
 `CGO_ENABLED=0 go test`:
 
 ```bash
-CGO_ENABLED=1 go build ./cmd/mailclientui
-CGO_ENABLED=1 go build ./cmd/mailclientd
-CGO_ENABLED=0 go build ./cmd/uitksettings
+CGO_ENABLED=1 go build ./cmd/uitksettings
+CGO_ENABLED=1 go build ./examples/tour
 ```
 
 Settings (`cmd/uitksettings`) **Apply** writes theme, corners, and icons
@@ -129,11 +115,11 @@ assert the popup clears the field and fits labels, resize, drag every
 splitter to several ratios, scroll lists/tables/trees/cards/ScrollViews
 to top / mid / end and back, select rows.
 
-**Mail** (in-process `StartDemo` only): same geometry/scroll/splitter
-passes, select a thread row, open the message context menu (full labels
-+ all items), focus the message `TextView` and type (must fail), and
-(unless `-short`) open compose and type into the editable body. No
-Delete / Junk / Send / Move.
+**Settings**: the same geometry / scroll / splitter passes, select rows in
+the theme browser, open a row context menu (full labels, all items, Escape
+dismisses), focus a read-only preview and type into it (must fail), and
+(unless `-short`) open each page in turn in its own window — a page builds
+its controls when it is first shown, which is where construction breaks.
 
 ## Drag and drop
 
