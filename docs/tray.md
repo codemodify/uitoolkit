@@ -218,7 +218,7 @@ superseded by v0.17.0 HostMenu.
 ```bash
 # Tests (always stub/fake; no bus required)
 CGO_ENABLED=0 go test ./...
-UITK_TRAY=fake go test ./platform ./app ./internal/mail
+UITK_TRAY=fake go test ./platform ./app ./examples/mail/mailapp
 
 # Linux desktop
 go run ./cmd/mailclientui          # UI owns the tray (HostMenu)

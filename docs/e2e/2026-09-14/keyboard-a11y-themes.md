@@ -21,7 +21,7 @@
 ## BUG 3: Menu accelerators shown in menus (Ctrl+N, Ctrl+O, F1, Ctrl+Q) do nothing
 - app: gallery (toolkit-wide: no accelerator dispatch exists) ; severity: major ; confidence: high ; partialOnly: false
 - repro: gallery; press Ctrl+Q (no focus, and again with focus on a button): app keeps running. F1: no About dialog. Ctrl+N: no second window.
-- rootCause: MenuItem.Shortcut (widgets/menu.go:14) is display-only (used only at menu.go:563/681/788 for layout/paint). app/window.go dispatch (KeyDown, ~530-560) only handles Tab/Escape/Alt-mnemonics/popup/bubbleKey; bubbleKey returns when no focus (window.go:648) and no widget matches Shortcut strings. Only mail has its own handler (internal/mail/keys.go wrapShortcuts).
+- rootCause: MenuItem.Shortcut (widgets/menu.go:14) is display-only (used only at menu.go:563/681/788 for layout/paint). app/window.go dispatch (KeyDown, ~530-560) only handles Tab/Escape/Alt-mnemonics/popup/bubbleKey; bubbleKey returns when no focus (window.go:648) and no widget matches Shortcut strings. Only mail has its own handler (examples/mail/mailapp/keys.go wrapShortcuts).
 - proposedFix: parse Shortcut into (mods,key) (e.g. widgets.ParseAccel) and have MenuBar implement a window-level accelerator hook (like HandleAlt): in Window.dispatch KeyDown, after popup handling and before/after bubbleKey (when unhandled), walk MenuBars and fire the first enabled item whose accel matches; also fire with no focus.
 - files: widgets/menu.go, app/window.go, widgets/mnemonic.go
 - evidence: shots/q0..q4.png (identical), app alive after Ctrl+Q
