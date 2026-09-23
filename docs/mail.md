@@ -7,7 +7,7 @@ Thunderbird-chrome mail client on uitoolkit **v0.10.13**. Two processes:
 | **mailclientd** | Owns accounts, IMAP/POP3/SMTP, OAuth tokens, local cache, folders, messages, tags, filters, identities, smart folders, VIP, categories, outbox, search, mutations. |
 | **mailclientui** | Renders chrome, owns the **status item / tray**, and sends JSON-RPC commands. **No IMAP, POP3, SMTP, or OAuth HTTP** in this process. |
 
-Shared types and the RPC client/server live in [`internal/mail`](../internal/mail).
+Shared types and the RPC client/server live in [`examples/mail/mailapp`](../examples/mail/mailapp).
 
 ## What changed in the hardening pass (read this if you are upgrading)
 

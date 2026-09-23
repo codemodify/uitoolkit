@@ -10,8 +10,8 @@ import (
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit"
 	"github.com/codemodify/uitoolkit/app"
+	"github.com/codemodify/uitoolkit/examples/mail/mailapp"
 	"github.com/codemodify/uitoolkit/internal/demo"
-	"github.com/codemodify/uitoolkit/internal/mail"
 	"github.com/codemodify/uitoolkit/internal/uitest"
 	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
@@ -146,22 +146,22 @@ func runMail(opts Options) []Result {
 		return []Result{{App: "mail", Step: "isolate", Err: err}}
 	}
 	defer os.RemoveAll(dir)
-	if err := mail.IsolateTestEnv(dir); err != nil {
+	if err := mailapp.IsolateTestEnv(dir); err != nil {
 		return []Result{{App: "mail", Step: "isolate", Err: err}}
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	sock, stop, err := mail.StartDemo(ctx)
+	sock, stop, err := mailapp.StartDemo(ctx)
 	if err != nil {
 		return []Result{{App: "mail", Step: "startdemo", Err: err}}
 	}
 	defer stop()
-	if !mail.IsDisposableMailSocket(sock) {
+	if !mailapp.IsDisposableMailSocket(sock) {
 		return []Result{{App: "mail", Step: "socket", Err: fmt.Errorf("refusing non-disposable socket %s", sock)}}
 	}
 
-	cli, err := mail.DialWait(sock, 2*time.Second)
+	cli, err := mailapp.DialWait(sock, 2*time.Second)
 	if err != nil {
 		return []Result{{App: "mail", Step: "dial", Err: err}}
 	}
@@ -170,7 +170,7 @@ func runMail(opts Options) []Result {
 	if err != nil {
 		return []Result{{App: "mail", Step: "status", Err: err}}
 	}
-	if err := mail.AssertMemoryBackend(st.Backend); err != nil {
+	if err := mailapp.AssertMemoryBackend(st.Backend); err != nil {
 		return []Result{{App: "mail", Step: "backend", Err: err}}
 	}
 
@@ -182,7 +182,7 @@ func runMail(opts Options) []Result {
 		return []Result{{App: "mail", Step: "window", Err: err}}
 	}
 	defer w.Close()
-	w.SetContent(mail.Open(a, w, cli, mail.AppOptions{ShowFilter: true}))
+	w.SetContent(mailapp.Open(a, w, cli, mailapp.AppOptions{ShowFilter: true}))
 	a.PumpOnce()
 
 	// Mail's chrome row is the window's title bar: check it with the content.
@@ -537,11 +537,11 @@ func typeIntoReadOnlyViews(a *app.Application, w *app.Window) error {
 	return last
 }
 
-func driveCompose(a *app.Application, cli *mail.Client) error {
-	if err := mail.AssertMemoryBackend(mustBackend(cli)); err != nil {
+func driveCompose(a *app.Application, cli *mailapp.Client) error {
+	if err := mailapp.AssertMemoryBackend(mustBackend(cli)); err != nil {
 		return err
 	}
-	cw, err := mail.OpenCompose(a, cli, mail.ComposeOptions{})
+	cw, err := mailapp.OpenCompose(a, cli, mailapp.ComposeOptions{})
 	if err != nil {
 		return err
 	}
@@ -567,7 +567,7 @@ func driveCompose(a *app.Application, cli *mail.Client) error {
 	return checkTree(cw.Content())
 }
 
-func mustBackend(cli *mail.Client) string {
+func mustBackend(cli *mailapp.Client) string {
 	st, err := cli.Status()
 	if err != nil {
 		return ""
