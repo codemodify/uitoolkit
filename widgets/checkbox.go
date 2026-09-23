@@ -14,9 +14,14 @@ type Checkbox struct {
 	Text     string
 	Checked  bool
 	OnChange func(bool)
-	hovered  bool
-	pressed  bool
-	fade     stateFade // hover / focus cross-fade (the look's HintHoverFadeMs)
+	// OnInput fires only when the user ticked it — a click, Space, a
+	// screen reader's press — and never for SetChecked from the app. It
+	// fires after OnChange (widgets/oninput.go).
+	OnInput func(bool)
+	user    userEdit
+	hovered bool
+	pressed bool
+	fade    stateFade // hover / focus cross-fade (the look's HintHoverFadeMs)
 }
 
 func NewCheckbox(text string, checked bool, on func(bool)) *Checkbox {
@@ -35,6 +40,9 @@ func (c *Checkbox) SetChecked(v bool) {
 	c.Invalidate()
 	if c.OnChange != nil {
 		c.OnChange(v)
+	}
+	if c.user.is() && c.OnInput != nil {
+		c.OnInput(v)
 	}
 }
 
@@ -81,7 +89,7 @@ func (c *Checkbox) MouseRelease(e widget.MouseEvent) bool {
 	c.pressed = false
 	c.Invalidate()
 	if was && c.Enabled() && c.LocalBounds().Contains(e.Pos) {
-		c.SetChecked(!c.Checked)
+		c.user.did(func() { c.SetChecked(!c.Checked) })
 	}
 	return true
 }
@@ -92,7 +100,7 @@ func (c *Checkbox) KeyPress(e widget.KeyEvent) bool {
 	}
 	c.MarkKeyboardFocus()
 	if e.Key == platform.KeySpace || e.Key == platform.KeyReturn {
-		c.SetChecked(!c.Checked)
+		c.user.did(func() { c.SetChecked(!c.Checked) })
 		return true
 	}
 	return false

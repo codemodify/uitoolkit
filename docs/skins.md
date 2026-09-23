@@ -561,6 +561,21 @@ and it is gone.)
 A sprite an app paints has a hit shape too (`style.SkinSpriteShape`,
 [The controls](#the-controls)).
 
+And it has somewhere to be painted. `widgets.Button` and `widgets.ToolButton`
+take a `Painter` and a `Shaper`, and `widgets.Slider` a `Painter` and a
+`Travel`, so the art above goes on an ordinary widget rather than on a
+component the app has to write itself
+([docs/widgets.md](widgets.md#art-on-a-control)). The widget is unchanged
+underneath: the same focus, keys, tooltip and accessibility tree, with the
+skin's picture in place of the look's face — and the focus ring over it,
+because a skin never takes that away.
+
+A list is the other half of that: `widgets.ListView.RowGeo` takes the rows
+rect, the groove and the row height from a layout's slots, so a playlist on
+a panel is a list view on the skin's grid rather than a component the app
+has to write
+([docs/widgets.md](widgets.md#a-list-on-a-skins-grid)).
+
 ## Fixed layouts
 
 A skin re-skins ordinary widgets at ordinary layout, and for a form or an

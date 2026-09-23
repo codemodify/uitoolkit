@@ -14,9 +14,13 @@ type Switch struct {
 	Text     string
 	On       bool
 	OnChange func(bool)
-	hovered  bool
-	pressed  bool
-	fade     stateFade // hover / focus cross-fade (the look's HintHoverFadeMs)
+	// OnInput fires only when the user flipped it, never for SetOn from
+	// the app, and after OnChange (widgets/oninput.go).
+	OnInput func(bool)
+	user    userEdit
+	hovered bool
+	pressed bool
+	fade    stateFade // hover / focus cross-fade (the look's HintHoverFadeMs)
 }
 
 // NewSwitch builds a toggle. on is the initial value.
@@ -36,6 +40,9 @@ func (s *Switch) SetOn(v bool) {
 	s.Invalidate()
 	if s.OnChange != nil {
 		s.OnChange(v)
+	}
+	if s.user.is() && s.OnInput != nil {
+		s.OnInput(v)
 	}
 }
 
@@ -87,7 +94,7 @@ func (s *Switch) MouseRelease(e widget.MouseEvent) bool {
 	s.pressed = false
 	s.Invalidate()
 	if was && s.Enabled() && s.LocalBounds().Contains(e.Pos) {
-		s.SetOn(!s.On)
+		s.user.did(func() { s.SetOn(!s.On) })
 	}
 	return true
 }
@@ -98,7 +105,7 @@ func (s *Switch) KeyPress(e widget.KeyEvent) bool {
 	}
 	s.MarkKeyboardFocus()
 	if e.Key == platform.KeySpace || e.Key == platform.KeyReturn {
-		s.SetOn(!s.On)
+		s.user.did(func() { s.SetOn(!s.On) })
 		return true
 	}
 	return false

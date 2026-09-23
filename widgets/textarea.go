@@ -19,6 +19,9 @@ type TextArea struct {
 	ReadOnly    bool
 	MinRows     int
 	OnChange    func(string)
+	// OnInput fires only for text the user put there, never for SetText
+	// from the app, and after OnChange (widgets/oninput.go).
+	OnInput     func(string)
 	OnFocusLost func()
 	Accept      func(string) bool
 	Mono        bool
@@ -45,6 +48,7 @@ type TextArea struct {
 	preeditCaret int
 	vbar         scrollDrag
 	hbar         scrollDrag
+	user         userEdit
 }
 
 // NewTextArea builds a wrapping multi-line field.
@@ -99,6 +103,9 @@ func (t *TextArea) SetText(s string) {
 	t.Invalidate()
 	if t.OnChange != nil {
 		t.OnChange(s)
+	}
+	if t.user.is() && t.OnInput != nil {
+		t.OnInput(s)
 	}
 }
 
@@ -1009,12 +1016,16 @@ func (t *TextArea) replaceSel(s string) {
 	t.changed()
 }
 
+// changed is every edit the user makes; the app's go through SetText.
 func (t *TextArea) changed() {
 	t.relayout()
 	t.ensureCaretVisible()
 	t.Invalidate()
 	if t.OnChange != nil {
 		t.OnChange(t.Text)
+	}
+	if t.OnInput != nil {
+		t.OnInput(t.Text)
 	}
 }
 
