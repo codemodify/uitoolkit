@@ -240,13 +240,12 @@ Struck through once fixed; newest findings at the end of their section.
 - **`Button` still takes a right or middle press as a click** (so does every
   widget that ignores `e.Button`); the thumb buttons no longer reach widgets
   at all.
-- **`Slider` and `NumberField` advertise increment and decrement in the
-  accessibility tree and implement neither.** Both `Describe` methods add
-  `a11y.ActionIncrement` and `ActionDecrement`, and neither widget has an
-  `AccessibleAction`, so a screen reader offers to step them and nothing
-  happens. `RadioButton` had the same gap for `ActionDefault` and it is
-  fixed; these two want a step size decided first (the slider has none of
-  its own — its keys use a twentieth of the range).
+- ~~**`Slider` and `NumberField` advertise increment and decrement in the
+  accessibility tree and implement neither.**~~ Both step now.
+  `Slider.Step` is the size that was missing — one arrow key, one
+  increment, and the step a reader is told about — and the spin button
+  steps through the same nudge its stepper buttons do. Either counts as the
+  user's own input, so a view bound to a model hears it on `OnInput`.
 - **`ComboBox` has no `OnInput`.** `Select` calls `OnChange` whoever picked,
   and `OnEdit` reports typed text whether the app or the user typed it, so a
   combo box driven from a model has exactly the re-entry the other nine had.
@@ -257,12 +256,20 @@ Struck through once fixed; newest findings at the end of their section.
   `Slider` take a `Painter`; a `ToolItem` is a record on a strip and not a
   component, so it has nowhere to hang one and no silhouette of its own. A
   skinned strip has to be built from loose `ToolButton`s.
-- **A placed `ListView` (`RowGeo`) still paints the look's scroll bar in the
-  skin's groove.** That is right for a skin, whose engine already overrides
-  the thumb and track parts, and wrong for a panel whose thumb is a loose
-  sprite the app paints itself (`style.DrawSkinSprite`): there is no painter
-  hook on the list to draw one over the groove. `ScrollTrack` reports where
-  it would go, which is enough to lay one out and not to draw it.
+- ~~**A placed `ListView` (`RowGeo`) still paints the look's scroll bar in
+  the skin's groove.**~~ `ListView.ScrollPaint` takes the groove and the
+  thumb, and `RowPaint` the rows, so a panel's playlist is a list view in
+  the skin's own ink with the skin's own thumb.
+- **A row's ink is not readable from outside a look.** `ListView.ItemDetail`
+  paints its second column as the look's table cells, guide and all, rather
+  than as a list row with a second piece of text on it, because
+  `DrawListRow` takes one label and nothing exposes the colour it draws it
+  in. A `ListRowInkOf` beside `ViewBackgroundOf` would let a list put a
+  detail, a badge or a playing mark in the row's own ink without borrowing
+  the table's cell; it wants an engine method, which is thirty engines.
+- **`TableView` always has a header.** A two-column list with no header is
+  a `ListView` with `ItemDetail` (a playlist's title and length), and a
+  three-column one has to grow a header it does not want.
 
 - **Rich text: no table, no line break inside a paragraph, no paragraph
   indent outside lists**, and italic is the upright face slanted (no italic
