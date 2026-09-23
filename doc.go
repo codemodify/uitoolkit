@@ -23,6 +23,9 @@
 //	            XDG themes/<name>/theme.json and PNG icon sets
 //	            (~/.config/uitoolkit/icons/<set>/*.png; look.json stores
 //	            theme + icons; live watch)
+//	skingen   — draws skin packs from Go: sprite sheets at every scale and
+//	            the skin.json that binds them, plus the art plans of all
+//	            eight shipped skins, to fork (cmd/uitk-skingen)
 //
 // All pixels go through paintengine2d.Context (CPU scanline or Linux
 // EGL/GLES2 GPUDevice). There is no second rasterizer.

@@ -39,7 +39,9 @@ Every title, artist and album in the invented library was made up for
 `internal/players/players.go`. No skin, bitmap, icon, font, name or mark
 belonging to any real player is in this repository, as art or as a fixture:
 the players' five skins are generated from paths and whole pixels in
-`internal/skinart` like the other three, the transport glyphs are drawn in
+`skingen` like the other three (and that generator is public API, so a skin
+for a player of somebody else's is made the same way — see
+[docs/skins.md](skins.md#writing-one-in-go)), the transport glyphs are drawn in
 `internal/players/ui.go`, and the display alphabets and clock digits Minim's
 panels print in were set by hand on their grids for this toolkit.
 
@@ -108,7 +110,7 @@ player binds its controls to with `widget.Slots`
 own for either panel; it reads every one it uses from the skin it is
 wearing, including the ones it prints into — the clock's digits, the lamps,
 the scrolling title, the playlist's rows. The rects are generated from
-`internal/players/minim/panel`, the same numbers the faces are drawn round,
+`skingen/panel`, the same numbers the faces are drawn round,
 so the art and the layout cannot disagree about where a key is. A key's
 look in every state is its slot's art; the digits, lamps, thumbs and bitmap
 capitals are sprites the player paints by name
@@ -270,13 +272,14 @@ internal/players/            the model, and the pieces of interface all three sh
   players.go  spectrum.go    the transport, the playlist, the analyser, the equaliser
   ui.go                      the glyphs, the transport button, the fader, the clock
 internal/players/minim/      one package per player: its look and its layout, and no more
-  panel/                     Minim's two panel layouts, read by the player and the skin generator
 internal/players/marquee/
 internal/players/lantern/
 internal/players/playertest/ what the three tests do to a window
 rack/                        windows that stick together: the arithmetic and the
                              desktop half, a public package the players import
                              like any other application would
+skingen/panel/               Minim's two panel layouts: the generator's input, and
+                             the three layout names and window sizes the player uses
 ```
 
 The line between the shared package and each player is worth stating:

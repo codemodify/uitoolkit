@@ -6,8 +6,8 @@ import (
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/app"
 	"github.com/codemodify/uitoolkit/internal/players"
-	"github.com/codemodify/uitoolkit/internal/players/minim/panel"
 	"github.com/codemodify/uitoolkit/internal/players/playertest"
+	"github.com/codemodify/uitoolkit/skingen/panel"
 	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
 )

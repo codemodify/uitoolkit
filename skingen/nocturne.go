@@ -1,4 +1,4 @@
-package skinart
+package skingen
 
 import "github.com/codemodify/paintengine2d"
 
@@ -87,7 +87,7 @@ func Nocturne() *Plan {
 	// reads "lit from above" and "lit from below" as "out" and "in".
 	raised := func(c0, c1, hi, edge string) func(*paintengine2d.Context, float32, float32) {
 		return func(ctx *paintengine2d.Context, w, h float32) {
-			nocFace(ctx, w, h, hex(c0), hex(c1), hex(edge), hex(hi), nocR)
+			nocFace(ctx, w, h, Hex(c0), Hex(c1), Hex(edge), Hex(hi), nocR)
 		}
 	}
 
@@ -95,20 +95,20 @@ func Nocturne() *Plan {
 	l.face("button.normal", raised(nocFace0, nocFace1, nocLight, nocInk))
 	l.face("button.hover", raised(nocHot0, nocHot1, "#ffffff2c", nocInk))
 	l.face("button.pressed", func(ctx *paintengine2d.Context, w, h float32) {
-		nocSunkFace(ctx, w, h, hex(nocDown0), hex(nocDown1), hex(nocInk), nocR)
+		nocSunkFace(ctx, w, h, Hex(nocDown0), Hex(nocDown1), Hex(nocInk), nocR)
 	})
 	l.face("button.disabled", func(ctx *paintengine2d.Context, w, h float32) {
-		nocFace(ctx, w, h, hex(nocOff0), hex(nocOff1), hex("#0f1116"), paintengine2d.Color{}, nocR)
+		nocFace(ctx, w, h, Hex(nocOff0), Hex(nocOff1), Hex("#0f1116"), paintengine2d.Color{}, nocR)
 	})
 	l.face("button.focus", func(ctx *paintengine2d.Context, w, h float32) {
-		nocFace(ctx, w, h, hex(nocFace0), hex(nocFace1), hex(nocLight), hex(nocInk), nocR)
-		outline(ctx, paintengine2d.XYWH(1, 1, w-2, h-2), nocR-1, 2, hex(nocAccent).WithAlpha(0.85))
+		nocFace(ctx, w, h, Hex(nocFace0), Hex(nocFace1), Hex(nocLight), Hex(nocInk), nocR)
+		outline(ctx, paintengine2d.XYWH(1, 1, w-2, h-2), nocR-1, 2, Hex(nocAccent).WithAlpha(0.85))
 	})
 	l.face("button.default", func(ctx *paintengine2d.Context, w, h float32) {
-		nocFace(ctx, w, h, hex(nocAccHi), hex(nocAccLo), hex("#a6661c"), hex("#ffffff55"), nocR)
+		nocFace(ctx, w, h, Hex(nocAccHi), Hex(nocAccLo), Hex("#a6661c"), Hex("#ffffff55"), nocR)
 	})
 	l.face("button.checked", func(ctx *paintengine2d.Context, w, h float32) {
-		nocSunkFace(ctx, w, h, hex("#3a2a12"), hex("#4a3517"), hex("#8a5f1e"), nocR)
+		nocSunkFace(ctx, w, h, Hex("#3a2a12"), Hex("#4a3517"), Hex("#8a5f1e"), nocR)
 	})
 
 	// Fields are the same surface with the light reversed: sunk, with the
@@ -119,8 +119,8 @@ func Nocturne() *Plan {
 	l.field("field.focus", nocAccent, true)
 	l.face("field.disabled", func(ctx *paintengine2d.Context, w, h float32) {
 		b := paintengine2d.XYWH(0, 0, w, h)
-		ctx.DrawRoundRect(b, nocR, nocR, paintengine2d.Fill(hex("#14171e")))
-		outline(ctx, b, nocR, 1, hex("#23272f"))
+		ctx.DrawRoundRect(b, nocR, nocR, paintengine2d.Fill(Hex("#14171e")))
+		outline(ctx, b, nocR, 1, Hex("#23272f"))
 	})
 
 	// A combo box is a field with a button's face on it: the era's own
@@ -129,14 +129,14 @@ func Nocturne() *Plan {
 	l.face("combo.normal", raised(nocFace0, nocFace1, nocLight, nocInk))
 	l.face("combo.hover", raised(nocHot0, nocHot1, "#ffffff2c", nocInk))
 	l.face("combo.pressed", func(ctx *paintengine2d.Context, w, h float32) {
-		nocSunkFace(ctx, w, h, hex(nocDown0), hex(nocDown1), hex(nocInk), nocR)
+		nocSunkFace(ctx, w, h, Hex(nocDown0), Hex(nocDown1), Hex(nocInk), nocR)
 	})
 	l.face("combo.disabled", func(ctx *paintengine2d.Context, w, h float32) {
-		nocFace(ctx, w, h, hex(nocOff0), hex(nocOff1), hex("#0f1116"), paintengine2d.Color{}, nocR)
+		nocFace(ctx, w, h, Hex(nocOff0), Hex(nocOff1), Hex("#0f1116"), paintengine2d.Color{}, nocR)
 	})
 	l.face("combo.focus", func(ctx *paintengine2d.Context, w, h float32) {
-		nocFace(ctx, w, h, hex(nocFace0), hex(nocFace1), hex(nocLight), hex(nocInk), nocR)
-		outline(ctx, paintengine2d.XYWH(1, 1, w-2, h-2), nocR-1, 2, hex(nocAccent).WithAlpha(0.85))
+		nocFace(ctx, w, h, Hex(nocFace0), Hex(nocFace1), Hex(nocLight), Hex(nocInk), nocR)
+		outline(ctx, paintengine2d.XYWH(1, 1, w-2, h-2), nocR-1, 2, Hex(nocAccent).WithAlpha(0.85))
 	})
 
 	// A tool button is flat until it is touched — the toolbar convention
@@ -145,35 +145,35 @@ func Nocturne() *Plan {
 	l.face("tool.normal", func(ctx *paintengine2d.Context, w, h float32) {})
 	l.face("tool.hover", func(ctx *paintengine2d.Context, w, h float32) {
 		b := paintengine2d.XYWH(0.5, 0.5, w-1, h-1)
-		vgrad(ctx, b, nocR, stop(0, hex("#ffffff16")), stop(1, hex("#ffffff08")))
-		outline(ctx, paintengine2d.XYWH(0, 0, w, h), nocR, 1, hex("#ffffff1a"))
+		vgrad(ctx, b, nocR, stop(0, Hex("#ffffff16")), stop(1, Hex("#ffffff08")))
+		outline(ctx, paintengine2d.XYWH(0, 0, w, h), nocR, 1, Hex("#ffffff1a"))
 	})
 	l.face("tool.pressed", func(ctx *paintengine2d.Context, w, h float32) {
-		ctx.DrawRoundRect(paintengine2d.XYWH(0, 0, w, h), nocR, nocR, paintengine2d.Fill(hex("#00000055")))
-		outline(ctx, paintengine2d.XYWH(0, 0, w, h), nocR, 1, hex("#00000066"))
+		ctx.DrawRoundRect(paintengine2d.XYWH(0, 0, w, h), nocR, nocR, paintengine2d.Fill(Hex("#00000055")))
+		outline(ctx, paintengine2d.XYWH(0, 0, w, h), nocR, 1, Hex("#00000066"))
 	})
 	l.face("tool.disabled", func(ctx *paintengine2d.Context, w, h float32) {})
 	l.face("tool.checked", func(ctx *paintengine2d.Context, w, h float32) {
 		b := paintengine2d.XYWH(0, 0, w, h)
-		ctx.DrawRoundRect(b, nocR, nocR, paintengine2d.Fill(hex(nocAccent).WithAlpha(0.20)))
-		outline(ctx, b, nocR, 1, hex(nocAccent).WithAlpha(0.55))
+		ctx.DrawRoundRect(b, nocR, nocR, paintengine2d.Fill(Hex(nocAccent).WithAlpha(0.20)))
+		outline(ctx, b, nocR, 1, Hex(nocAccent).WithAlpha(0.55))
 	})
 
 	// Tabs: the selected one is a raised face with its bottom edge open, so
 	// it joins the pane below instead of floating over it.
 	l.row(nocH)
 	l.face("tab.normal", func(ctx *paintengine2d.Context, w, h float32) {
-		ctx.DrawRect(paintengine2d.XYWH(0, h-1, w, 1), paintengine2d.Fill(hex(nocInk)))
+		ctx.DrawRect(paintengine2d.XYWH(0, h-1, w, 1), paintengine2d.Fill(Hex(nocInk)))
 	})
 	l.face("tab.hover", func(ctx *paintengine2d.Context, w, h float32) {
-		vgrad(ctx, paintengine2d.XYWH(0, 0, w, h-1), nocR, stop(0, hex("#ffffff12")), stop(1, hex("#ffffff04")))
-		ctx.DrawRect(paintengine2d.XYWH(0, h-1, w, 1), paintengine2d.Fill(hex(nocInk)))
+		vgrad(ctx, paintengine2d.XYWH(0, 0, w, h-1), nocR, stop(0, Hex("#ffffff12")), stop(1, Hex("#ffffff04")))
+		ctx.DrawRect(paintengine2d.XYWH(0, h-1, w, 1), paintengine2d.Fill(Hex(nocInk)))
 	})
 	l.face("tab.checked", func(ctx *paintengine2d.Context, w, h float32) {
 		b := paintengine2d.XYWH(0.5, 0.5, w-1, h+nocR)
 		ctx.DrawRoundRectCorners(b, nocR, nocR, 0, 0, paintengine2d.Linear(paintengine2d.LinearGradient{
 			Start: paintengine2d.Pt(0, 0), End: paintengine2d.Pt(0, h),
-			Stops: []paintengine2d.GradientStop{stop(0, hex("#2c3341")), stop(1, hex(nocSurface))},
+			Stops: []paintengine2d.GradientStop{stop(0, Hex("#2c3341")), stop(1, Hex(nocSurface))},
 		}))
 		p := paintengine2d.NewPath()
 		p.MoveTo(0.5, h)
@@ -182,55 +182,55 @@ func Nocturne() *Plan {
 		p.LineTo(w-nocR, 0.5)
 		p.QuadTo(w-0.5, 0.5, w-0.5, nocR)
 		p.LineTo(w-0.5, h)
-		ctx.DrawPath(p, paintengine2d.StrokePaint(hex(nocInk), 1))
+		ctx.DrawPath(p, paintengine2d.StrokePaint(Hex(nocInk), 1))
 		// The accent bar along the top is the only mark that says which tab
 		// you are on; it reads at a glance and it survives a colour-blind
 		// eye, which a hue change alone does not.
-		ctx.DrawRect(paintengine2d.XYWH(nocR, 1, w-nocR*2, 2), paintengine2d.Fill(hex(nocAccent)))
+		ctx.DrawRect(paintengine2d.XYWH(nocR, 1, w-nocR*2, 2), paintengine2d.Fill(Hex(nocAccent)))
 	})
 
 	// ---- surfaces ---------------------------------------------------------
 
 	l.row(nocH)
 	l.face("menu.hover", func(ctx *paintengine2d.Context, w, h float32) {
-		ctx.DrawRoundRect(paintengine2d.XYWH(0, 0, w, h), nocR, nocR, paintengine2d.Fill(hex(nocAccent).WithAlpha(0.22)))
+		ctx.DrawRoundRect(paintengine2d.XYWH(0, 0, w, h), nocR, nocR, paintengine2d.Fill(Hex(nocAccent).WithAlpha(0.22)))
 	})
 	l.face("row.hover", func(ctx *paintengine2d.Context, w, h float32) {
-		ctx.DrawRoundRect(paintengine2d.XYWH(0, 0, w, h), 4, 4, paintengine2d.Fill(hex("#ffffff0e")))
+		ctx.DrawRoundRect(paintengine2d.XYWH(0, 0, w, h), 4, 4, paintengine2d.Fill(Hex("#ffffff0e")))
 	})
 	l.face("row.checked", func(ctx *paintengine2d.Context, w, h float32) {
-		ctx.DrawRoundRect(paintengine2d.XYWH(0, 0, w, h), 4, 4, paintengine2d.Fill(hex(nocAccent).WithAlpha(0.26)))
-		ctx.DrawRect(paintengine2d.XYWH(0, 2, 2, h-4), paintengine2d.Fill(hex(nocAccent)))
+		ctx.DrawRoundRect(paintengine2d.XYWH(0, 0, w, h), 4, 4, paintengine2d.Fill(Hex(nocAccent).WithAlpha(0.26)))
+		ctx.DrawRect(paintengine2d.XYWH(0, 2, 2, h-4), paintengine2d.Fill(Hex(nocAccent)))
 	})
 	l.face("panel.normal", func(ctx *paintengine2d.Context, w, h float32) {
 		b := paintengine2d.XYWH(0, 0, w, h)
-		ctx.DrawRoundRect(b, nocR+1, nocR+1, paintengine2d.Fill(hex(nocPanel)))
-		outline(ctx, b, nocR+1, 1, hex("#262c38"))
+		ctx.DrawRoundRect(b, nocR+1, nocR+1, paintengine2d.Fill(Hex(nocPanel)))
+		outline(ctx, b, nocR+1, 1, Hex("#262c38"))
 	})
 	l.face("bar.normal", func(ctx *paintengine2d.Context, w, h float32) {
-		vgrad(ctx, paintengine2d.XYWH(0, 0, w, h), 0, stop(0, hex("#20242f")), stop(1, hex(nocSurface)))
-		ctx.DrawRect(paintengine2d.XYWH(0, 0, w, 1), paintengine2d.Fill(hex(nocLight)))
-		ctx.DrawRect(paintengine2d.XYWH(0, h-1, w, 1), paintengine2d.Fill(hex(nocInk)))
+		vgrad(ctx, paintengine2d.XYWH(0, 0, w, h), 0, stop(0, Hex("#20242f")), stop(1, Hex(nocSurface)))
+		ctx.DrawRect(paintengine2d.XYWH(0, 0, w, 1), paintengine2d.Fill(Hex(nocLight)))
+		ctx.DrawRect(paintengine2d.XYWH(0, h-1, w, 1), paintengine2d.Fill(Hex(nocInk)))
 	})
 	l.face("menu.frame", func(ctx *paintengine2d.Context, w, h float32) {
 		b := paintengine2d.XYWH(0, 0, w, h)
-		ctx.DrawRoundRect(b, nocR+2, nocR+2, paintengine2d.Fill(hex("#1d2129")))
-		outline(ctx, b, nocR+2, 1, hex("#333b4a"))
+		ctx.DrawRoundRect(b, nocR+2, nocR+2, paintengine2d.Fill(Hex("#1d2129")))
+		outline(ctx, b, nocR+2, 1, Hex("#333b4a"))
 	})
 	// A splitter is drawn into a box that may be tall and thin or short and
 	// wide, and Face is not told which. So its art is a grip that reads the
 	// same either way: a flat seam with a small cluster of dots at its
 	// centre, which the nine-slice keeps centred at any length.
 	l.face("splitter.normal", func(ctx *paintengine2d.Context, w, h float32) {
-		nocGrip(ctx, w, h, hex("#4a5366"))
+		nocGrip(ctx, w, h, Hex("#4a5366"))
 	})
 	l.face("splitter.hover", func(ctx *paintengine2d.Context, w, h float32) {
-		nocGrip(ctx, w, h, hex(nocAccent))
+		nocGrip(ctx, w, h, Hex(nocAccent))
 	})
 	l.face("tooltip.normal", func(ctx *paintengine2d.Context, w, h float32) {
 		b := paintengine2d.XYWH(0, 0, w, h)
-		ctx.DrawRoundRect(b, 4, 4, paintengine2d.Fill(hex("#2a303c")))
-		outline(ctx, b, 4, 1, hex("#434c5e"))
+		ctx.DrawRoundRect(b, 4, 4, paintengine2d.Fill(Hex("#2a303c")))
+		outline(ctx, b, 4, 1, Hex("#434c5e"))
 	})
 
 	// The window background and the caption band. Both stretch the whole
@@ -238,77 +238,77 @@ func Nocturne() *Plan {
 	// stretch would distort.
 	l.row(48)
 	l.cell("window.normal", 64, 48, [4]int{2, 2, 2, 2}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		vgrad(ctx, paintengine2d.XYWH(0, 0, w, h), 0, stop(0, hex(nocWindow0)), stop(1, hex(nocWindow1)))
+		vgrad(ctx, paintengine2d.XYWH(0, 0, w, h), 0, stop(0, Hex(nocWindow0)), stop(1, Hex(nocWindow1)))
 	})
 	l.cell("caption.normal", 96, 34, [4]int{10, 12, 6, 12}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		nocCaption(ctx, w, h, hex("#262d3a"), hex("#1a1e27"), hex(nocAccent).WithAlpha(0.55))
+		nocCaption(ctx, w, h, Hex("#262d3a"), Hex("#1a1e27"), Hex(nocAccent).WithAlpha(0.55))
 	})
 	l.cell("caption.inactive", 96, 34, [4]int{10, 12, 6, 12}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		nocCaption(ctx, w, h, hex("#1d212a"), hex("#171a22"), hex("#00000000"))
+		nocCaption(ctx, w, h, Hex("#1d212a"), Hex("#171a22"), Hex("#00000000"))
 	})
 	// Caption buttons are flat on the band until the pointer is on them —
 	// a raised key in a title bar reads as heavy, and the glyph is what
 	// carries the meaning anyway.
 	l.face("capbtn.normal", func(ctx *paintengine2d.Context, w, h float32) {})
 	l.face("capbtn.hover", func(ctx *paintengine2d.Context, w, h float32) {
-		ctx.DrawRoundRect(paintengine2d.XYWH(0, 0, w, h), 4, 4, paintengine2d.Fill(hex("#ffffff1c")))
+		ctx.DrawRoundRect(paintengine2d.XYWH(0, 0, w, h), 4, 4, paintengine2d.Fill(Hex("#ffffff1c")))
 	})
 	l.face("capbtn.pressed", func(ctx *paintengine2d.Context, w, h float32) {
-		ctx.DrawRoundRect(paintengine2d.XYWH(0, 0, w, h), 4, 4, paintengine2d.Fill(hex("#00000055")))
+		ctx.DrawRoundRect(paintengine2d.XYWH(0, 0, w, h), 4, 4, paintengine2d.Fill(Hex("#00000055")))
 	})
 
 	// ---- small parts ------------------------------------------------------
 
 	l.row(22)
 	l.cell("thumb.normal", 40, 22, [4]int{8, 8, 8, 8}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		vgrad(ctx, paintengine2d.XYWH(1, 1, w-2, h-2), (h-2)/2, stop(0, hex("#454e60")), stop(1, hex("#333a48")))
+		vgrad(ctx, paintengine2d.XYWH(1, 1, w-2, h-2), (h-2)/2, stop(0, Hex("#454e60")), stop(1, Hex("#333a48")))
 	})
 	l.cell("thumb.hover", 40, 22, [4]int{8, 8, 8, 8}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		vgrad(ctx, paintengine2d.XYWH(1, 1, w-2, h-2), (h-2)/2, stop(0, hex("#576274")), stop(1, hex("#434b5c")))
+		vgrad(ctx, paintengine2d.XYWH(1, 1, w-2, h-2), (h-2)/2, stop(0, Hex("#576274")), stop(1, Hex("#434b5c")))
 	})
 	l.cell("track.normal", 40, 22, [4]int{8, 8, 8, 8}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
 		b := paintengine2d.XYWH(0.5, 0.5, w-1, h-1)
-		ctx.DrawRoundRect(b, (h-1)/2, (h-1)/2, paintengine2d.Fill(hex(nocSunk)))
-		outline(ctx, paintengine2d.XYWH(0, 0, w, h), h/2, 1, hex("#242a36"))
+		ctx.DrawRoundRect(b, (h-1)/2, (h-1)/2, paintengine2d.Fill(Hex(nocSunk)))
+		outline(ctx, paintengine2d.XYWH(0, 0, w, h), h/2, 1, Hex("#242a36"))
 	})
 	l.cell("fill.normal", 40, 22, [4]int{8, 8, 8, 8}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		vgrad(ctx, paintengine2d.XYWH(1, 1, w-2, h-2), (h-2)/2, stop(0, hex(nocAccHi)), stop(1, hex(nocAccLo)))
+		vgrad(ctx, paintengine2d.XYWH(1, 1, w-2, h-2), (h-2)/2, stop(0, Hex(nocAccHi)), stop(1, Hex(nocAccLo)))
 	})
 	l.cell("knob.normal", 22, 22, [4]int{0, 0, 0, 0}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		nocKnob(ctx, w, h, hex("#eef1f8"), hex("#b9c0d0"))
+		nocKnob(ctx, w, h, Hex("#eef1f8"), Hex("#b9c0d0"))
 	})
 	l.cell("knob.disabled", 22, 22, [4]int{0, 0, 0, 0}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		nocKnob(ctx, w, h, hex("#767d8d"), hex("#565d6b"))
+		nocKnob(ctx, w, h, Hex("#767d8d"), Hex("#565d6b"))
 	})
 
 	// Check boxes and radios. The well is a field; the mark is a glyph the
 	// engine tints, so one drawing serves every state.
 	l.row(20)
 	l.cell("check.normal", 20, 20, [4]int{6, 6, 6, 6}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		nocWell(ctx, w, h, 4, hex(nocSunk), hex(nocSunkE))
+		nocWell(ctx, w, h, 4, Hex(nocSunk), Hex(nocSunkE))
 	})
 	l.cell("check.hover", 20, 20, [4]int{6, 6, 6, 6}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		nocWell(ctx, w, h, 4, hex("#12151c"), hex("#3d465a"))
+		nocWell(ctx, w, h, 4, Hex("#12151c"), Hex("#3d465a"))
 	})
 	l.cell("check.checked", 20, 20, [4]int{6, 6, 6, 6}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
 		b := paintengine2d.XYWH(0.5, 0.5, w-1, h-1)
-		vgrad(ctx, b, 4, stop(0, hex(nocAccHi)), stop(1, hex(nocAccLo)))
-		outline(ctx, paintengine2d.XYWH(0, 0, w, h), 4, 1, hex("#9c6620"))
+		vgrad(ctx, b, 4, stop(0, Hex(nocAccHi)), stop(1, Hex(nocAccLo)))
+		outline(ctx, paintengine2d.XYWH(0, 0, w, h), 4, 1, Hex("#9c6620"))
 	})
 	l.cell("check.disabled", 20, 20, [4]int{6, 6, 6, 6}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		nocWell(ctx, w, h, 4, hex("#14171e"), hex("#262b35"))
+		nocWell(ctx, w, h, 4, Hex("#14171e"), Hex("#262b35"))
 	})
 	l.cell("radio.normal", 20, 20, [4]int{0, 0, 0, 0}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		nocRadio(ctx, w, h, hex(nocSunk), hex(nocSunkE))
+		nocRadio(ctx, w, h, Hex(nocSunk), Hex(nocSunkE))
 	})
 	l.cell("radio.hover", 20, 20, [4]int{0, 0, 0, 0}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		nocRadio(ctx, w, h, hex("#12151c"), hex("#3d465a"))
+		nocRadio(ctx, w, h, Hex("#12151c"), Hex("#3d465a"))
 	})
 	l.cell("radio.checked", 20, 20, [4]int{0, 0, 0, 0}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		nocRadio(ctx, w, h, hex(nocAccent), hex("#9c6620"))
+		nocRadio(ctx, w, h, Hex(nocAccent), Hex("#9c6620"))
 	})
 	l.cell("radio.disabled", 20, 20, [4]int{0, 0, 0, 0}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		nocRadio(ctx, w, h, hex("#14171e"), hex("#262b35"))
+		nocRadio(ctx, w, h, Hex("#14171e"), Hex("#262b35"))
 	})
 	l.glyph("mark.check", 20, func(ctx *paintengine2d.Context, w, h float32) {
 		p := paintengine2d.NewPath()
@@ -344,26 +344,26 @@ func Nocturne() *Plan {
 	// It is drawn as a frame with an empty middle, so it lays over whatever
 	// face it marks instead of covering it.
 	l.cell("focus.ring", 24, 24, [4]int{9, 9, 9, 9}, "none", false, func(ctx *paintengine2d.Context, w, h float32) {
-		outline(ctx, paintengine2d.XYWH(0, 0, w, h), 6, 1, hex(nocAccent).WithAlpha(0.25))
-		outline(ctx, paintengine2d.XYWH(1, 1, w-2, h-2), 5, 2, hex(nocAccent))
+		outline(ctx, paintengine2d.XYWH(0, 0, w, h), 6, 1, Hex(nocAccent).WithAlpha(0.25))
+		outline(ctx, paintengine2d.XYWH(1, 1, w-2, h-2), 5, 2, Hex(nocAccent))
 	})
 
 	// Switches: a pill track that takes the accent when it is on.
 	l.row(24)
 	l.cell("switch.off", 44, 24, [4]int{11, 11, 11, 11}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
 		b := paintengine2d.XYWH(0.5, 0.5, w-1, h-1)
-		ctx.DrawRoundRect(b, (h-1)/2, (h-1)/2, paintengine2d.Fill(hex("#12151c")))
-		outline(ctx, paintengine2d.XYWH(0, 0, w, h), h/2, 1, hex("#394152"))
+		ctx.DrawRoundRect(b, (h-1)/2, (h-1)/2, paintengine2d.Fill(Hex("#12151c")))
+		outline(ctx, paintengine2d.XYWH(0, 0, w, h), h/2, 1, Hex("#394152"))
 	})
 	l.cell("switch.on", 44, 24, [4]int{11, 11, 11, 11}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
 		b := paintengine2d.XYWH(0.5, 0.5, w-1, h-1)
-		vgrad(ctx, b, (h-1)/2, stop(0, hex(nocAccHi)), stop(1, hex(nocAccLo)))
-		outline(ctx, paintengine2d.XYWH(0, 0, w, h), h/2, 1, hex("#9c6620"))
+		vgrad(ctx, b, (h-1)/2, stop(0, Hex(nocAccHi)), stop(1, Hex(nocAccLo)))
+		outline(ctx, paintengine2d.XYWH(0, 0, w, h), h/2, 1, Hex("#9c6620"))
 	})
 	l.cell("switch.disabled", 44, 24, [4]int{11, 11, 11, 11}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
 		b := paintengine2d.XYWH(0.5, 0.5, w-1, h-1)
-		ctx.DrawRoundRect(b, (h-1)/2, (h-1)/2, paintengine2d.Fill(hex("#15181f")))
-		outline(ctx, paintengine2d.XYWH(0, 0, w, h), h/2, 1, hex("#262b35"))
+		ctx.DrawRoundRect(b, (h-1)/2, (h-1)/2, paintengine2d.Fill(Hex("#15181f")))
+		outline(ctx, paintengine2d.XYWH(0, 0, w, h), h/2, 1, Hex("#262b35"))
 	})
 	l.close()
 
@@ -497,9 +497,9 @@ func Nocturne() *Plan {
 // rim where the keyboard is.
 func (l *lay) field(name, rim string, focused bool) {
 	l.face(name, func(ctx *paintengine2d.Context, w, h float32) {
-		nocWell(ctx, w, h, nocR, hex(nocSunk), hex(rim))
+		nocWell(ctx, w, h, nocR, Hex(nocSunk), Hex(rim))
 		if focused {
-			outline(ctx, paintengine2d.XYWH(1, 1, w-2, h-2), nocR-1, 2, hex(nocAccent).WithAlpha(0.85))
+			outline(ctx, paintengine2d.XYWH(1, 1, w-2, h-2), nocR-1, 2, Hex(nocAccent).WithAlpha(0.85))
 		}
 	})
 }
@@ -522,7 +522,7 @@ func nocFace(ctx *paintengine2d.Context, w, h float32, c0, c1, edge, hi painteng
 func nocSunkFace(ctx *paintengine2d.Context, w, h float32, c0, c1, edge paintengine2d.Color, r float32) {
 	b := paintengine2d.XYWH(0.5, 0.5, w-1, h-1)
 	vgrad(ctx, b, r, stop(0, c0), stop(1, c1))
-	innerShadow(ctx, b, r, 3, hex(nocDark))
+	innerShadow(ctx, b, r, 3, Hex(nocDark))
 	outline(ctx, paintengine2d.XYWH(0, 0, w, h), r, 1, edge)
 }
 
@@ -530,7 +530,7 @@ func nocSunkFace(ctx *paintengine2d.Context, w, h float32, c0, c1, edge painteng
 func nocWell(ctx *paintengine2d.Context, w, h float32, r float32, fill, rim paintengine2d.Color) {
 	b := paintengine2d.XYWH(0.5, 0.5, w-1, h-1)
 	ctx.DrawRoundRect(b, r, r, paintengine2d.Fill(fill))
-	innerShadow(ctx, b, r, 3, hex(nocDark))
+	innerShadow(ctx, b, r, 3, Hex(nocDark))
 	outline(ctx, paintengine2d.XYWH(0, 0, w, h), r, 1, rim)
 }
 
@@ -546,7 +546,7 @@ func nocRadio(ctx *paintengine2d.Context, w, h float32, fill, rim paintengine2d.
 func nocKnob(ctx *paintengine2d.Context, w, h float32, top, bottom paintengine2d.Color) {
 	c := paintengine2d.Pt(w/2, h/2)
 	rad := min(w, h)/2 - 1.5
-	ctx.DrawCircle(c, rad+1, paintengine2d.Fill(hex("#00000055")))
+	ctx.DrawCircle(c, rad+1, paintengine2d.Fill(Hex("#00000055")))
 	ctx.DrawCircle(c, rad, paintengine2d.Linear(paintengine2d.LinearGradient{
 		Start: paintengine2d.Pt(0, h/2-rad), End: paintengine2d.Pt(0, h/2+rad),
 		Stops: []paintengine2d.GradientStop{stop(0, top), stop(1, bottom)},
@@ -556,7 +556,7 @@ func nocKnob(ctx *paintengine2d.Context, w, h float32, top, bottom paintengine2d
 // nocGrip is a splitter's handle: a 2×2 cluster of dots on a flat seam,
 // which reads as a grip whichever way the splitter runs.
 func nocGrip(ctx *paintengine2d.Context, w, h float32, dot paintengine2d.Color) {
-	ctx.DrawRect(paintengine2d.XYWH(0, 0, w, h), paintengine2d.Fill(hex(nocSurface)))
+	ctx.DrawRect(paintengine2d.XYWH(0, 0, w, h), paintengine2d.Fill(Hex(nocSurface)))
 	cx, cy := w/2, h/2
 	for _, d := range [][2]float32{{-3, -3}, {1, -3}, {-3, 1}, {1, 1}} {
 		ctx.DrawRect(paintengine2d.XYWH(cx+d[0], cy+d[1], 2, 2), paintengine2d.Fill(dot))
@@ -574,10 +574,10 @@ func nocCaption(ctx *paintengine2d.Context, w, h float32, c0, c1, accent painten
 	}))
 	ctx.Save()
 	ctx.ClipRoundRect(b, 7, 7)
-	ctx.DrawRect(paintengine2d.XYWH(0, 0, w, 1), paintengine2d.Fill(hex("#ffffff1e")))
+	ctx.DrawRect(paintengine2d.XYWH(0, 0, w, 1), paintengine2d.Fill(Hex("#ffffff1e")))
 	ctx.Restore()
 	if accent.A > 0 {
 		ctx.DrawRect(paintengine2d.XYWH(0, h-2, w, 1), paintengine2d.Fill(accent))
 	}
-	ctx.DrawRect(paintengine2d.XYWH(0, h-1, w, 1), paintengine2d.Fill(hex(nocInk)))
+	ctx.DrawRect(paintengine2d.XYWH(0, h-1, w, 1), paintengine2d.Fill(Hex(nocInk)))
 }

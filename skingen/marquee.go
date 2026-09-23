@@ -1,4 +1,4 @@
-package skinart
+package skingen
 
 import "github.com/codemodify/paintengine2d"
 
@@ -101,39 +101,39 @@ func Marquee() *Plan {
 	// ---- faces ------------------------------------------------------------
 	plate := func(c0, c1, edge, hi string) func(*paintengine2d.Context, float32, float32) {
 		return func(ctx *paintengine2d.Context, w, h float32) {
-			mqPlate(ctx, w, h, hex(c0), hex(c1), hex(edge), hex(hi))
+			mqPlate(ctx, w, h, Hex(c0), Hex(c1), Hex(edge), Hex(hi))
 		}
 	}
 	l.row(mqH)
 	l.face("button.normal", plate(mqFace0, mqFace1, mqInk, mqLight))
 	l.face("button.hover", plate(mqHot0, mqHot1, mqInk, "#ffffff36"))
 	l.face("button.pressed", func(ctx *paintengine2d.Context, w, h float32) {
-		mqSunk(ctx, w, h, hex(mqDown0), hex(mqDown1), hex(mqInk))
+		mqSunk(ctx, w, h, Hex(mqDown0), Hex(mqDown1), Hex(mqInk))
 	})
 	l.face("button.disabled", plate(mqOff0, mqOff1, "#0d1119", "#00000000"))
 	l.face("button.focus", func(ctx *paintengine2d.Context, w, h float32) {
-		mqPlate(ctx, w, h, hex(mqFace0), hex(mqFace1), hex(mqInk), hex(mqLight))
-		outline(ctx, paintengine2d.XYWH(1.5, 1.5, w-3, h-3), mqRad-1, 2, hex(mqAccent).WithAlpha(0.95))
+		mqPlate(ctx, w, h, Hex(mqFace0), Hex(mqFace1), Hex(mqInk), Hex(mqLight))
+		outline(ctx, paintengine2d.XYWH(1.5, 1.5, w-3, h-3), mqRad-1, 2, Hex(mqAccent).WithAlpha(0.95))
 	})
 	l.face("button.default", plate(mqAccHi, mqAccLo, "#1d4d85", "#ffffff5c"))
 	l.face("button.checked", func(ctx *paintengine2d.Context, w, h float32) {
-		mqSunk(ctx, w, h, hex("#12304f"), hex("#193f66"), hex("#1d4d85"))
+		mqSunk(ctx, w, h, Hex("#12304f"), Hex("#193f66"), Hex("#1d4d85"))
 	})
 
 	l.row(mqH)
 	l.face("field.normal", func(ctx *paintengine2d.Context, w, h float32) {
-		mqWell(ctx, w, h, hex(mqDeep1), hex("#3a465c"))
+		mqWell(ctx, w, h, Hex(mqDeep1), Hex("#3a465c"))
 	})
 	l.face("field.focus", func(ctx *paintengine2d.Context, w, h float32) {
-		mqWell(ctx, w, h, hex(mqDeep1), hex(mqAccent))
+		mqWell(ctx, w, h, Hex(mqDeep1), Hex(mqAccent))
 	})
 	l.face("field.disabled", func(ctx *paintengine2d.Context, w, h float32) {
-		mqWell(ctx, w, h, hex("#0d1119"), hex("#2a3243"))
+		mqWell(ctx, w, h, Hex("#0d1119"), Hex("#2a3243"))
 	})
 	l.face("combo.normal", plate(mqFace0, mqFace1, mqInk, mqLight))
 	l.face("combo.hover", plate(mqHot0, mqHot1, mqInk, "#ffffff36"))
 	l.face("combo.pressed", func(ctx *paintengine2d.Context, w, h float32) {
-		mqSunk(ctx, w, h, hex(mqDown0), hex(mqDown1), hex(mqInk))
+		mqSunk(ctx, w, h, Hex(mqDown0), Hex(mqDown1), Hex(mqInk))
 	})
 
 	// A tool button is nothing until the pointer finds it: a transport bar
@@ -142,63 +142,63 @@ func Marquee() *Plan {
 	l.row(mqH)
 	l.face("tool.normal", func(ctx *paintengine2d.Context, w, h float32) {})
 	l.face("tool.hover", func(ctx *paintengine2d.Context, w, h float32) {
-		mqPlate(ctx, w, h, hex(mqHot0), hex(mqHot1), hex("#ffffff1a"), hex("#ffffff30"))
+		mqPlate(ctx, w, h, Hex(mqHot0), Hex(mqHot1), Hex("#ffffff1a"), Hex("#ffffff30"))
 	})
 	l.face("tool.pressed", func(ctx *paintengine2d.Context, w, h float32) {
-		mqSunk(ctx, w, h, hex(mqDown0), hex(mqDown1), hex("#ffffff14"))
+		mqSunk(ctx, w, h, Hex(mqDown0), Hex(mqDown1), Hex("#ffffff14"))
 	})
 	l.face("tool.checked", func(ctx *paintengine2d.Context, w, h float32) {
-		mqSunk(ctx, w, h, hex("#12304f"), hex("#193f66"), hex(mqAccLo))
+		mqSunk(ctx, w, h, Hex("#12304f"), Hex("#193f66"), Hex(mqAccLo))
 	})
 	l.face("row.hover", func(ctx *paintengine2d.Context, w, h float32) {
-		ctx.DrawRect(paintengine2d.XYWH(0, 0, w, h), paintengine2d.Fill(hex("#243048")))
+		ctx.DrawRect(paintengine2d.XYWH(0, 0, w, h), paintengine2d.Fill(Hex("#243048")))
 	})
 	l.face("row.checked", func(ctx *paintengine2d.Context, w, h float32) {
-		vgrad(ctx, paintengine2d.XYWH(0, 0, w, h), 0, stop(0, hex("#2a5a94")), stop(1, hex("#1c3f6c")))
-		px(ctx, 0, 0, w, 1, hex("#4a86c9"))
+		vgrad(ctx, paintengine2d.XYWH(0, 0, w, h), 0, stop(0, Hex("#2a5a94")), stop(1, Hex("#1c3f6c")))
+		px(ctx, 0, 0, w, 1, Hex("#4a86c9"))
 	})
 
 	l.row(mqH)
 	l.face("tab.normal", func(ctx *paintengine2d.Context, w, h float32) {
-		vgrad(ctx, paintengine2d.XYWH(0.5, 2.5, w-1, h-2), 6, stop(0, hex("#333d51")), stop(1, hex("#212938")))
-		px(ctx, 0, h-1, w, 1, hex(mqInk))
+		vgrad(ctx, paintengine2d.XYWH(0.5, 2.5, w-1, h-2), 6, stop(0, Hex("#333d51")), stop(1, Hex("#212938")))
+		px(ctx, 0, h-1, w, 1, Hex(mqInk))
 	})
 	l.face("tab.hover", func(ctx *paintengine2d.Context, w, h float32) {
-		vgrad(ctx, paintengine2d.XYWH(0.5, 2.5, w-1, h-2), 6, stop(0, hex("#414d65")), stop(1, hex("#283243")))
-		px(ctx, 0, h-1, w, 1, hex(mqInk))
+		vgrad(ctx, paintengine2d.XYWH(0.5, 2.5, w-1, h-2), 6, stop(0, Hex("#414d65")), stop(1, Hex("#283243")))
+		px(ctx, 0, h-1, w, 1, Hex(mqInk))
 	})
 	l.face("tab.checked", func(ctx *paintengine2d.Context, w, h float32) {
-		vgrad(ctx, paintengine2d.XYWH(0.5, 0.5, w-1, h), 6, stop(0, hex("#55637c")), stop(1, hex("#2d3850")))
-		ctx.DrawRect(paintengine2d.XYWH(2, 0, w-4, 2), paintengine2d.Fill(hex(mqAccent)))
+		vgrad(ctx, paintengine2d.XYWH(0.5, 0.5, w-1, h), 6, stop(0, Hex("#55637c")), stop(1, Hex("#2d3850")))
+		ctx.DrawRect(paintengine2d.XYWH(2, 0, w-4, 2), paintengine2d.Fill(Hex(mqAccent)))
 	})
 	l.face("menu.hover", func(ctx *paintengine2d.Context, w, h float32) {
-		vgrad(ctx, paintengine2d.XYWH(0.5, 0.5, w-1, h-1), 4, stop(0, hex("#39628f")), stop(1, hex("#23446b")))
-		outline(ctx, paintengine2d.XYWH(0, 0, w, h), 4, 1, hex("#4f86c4"))
+		vgrad(ctx, paintengine2d.XYWH(0.5, 0.5, w-1, h-1), 4, stop(0, Hex("#39628f")), stop(1, Hex("#23446b")))
+		outline(ctx, paintengine2d.XYWH(0, 0, w, h), 4, 1, Hex("#4f86c4"))
 	})
 
 	l.row(mqH)
 	l.face("panel.normal", func(ctx *paintengine2d.Context, w, h float32) {
-		vgrad(ctx, paintengine2d.XYWH(0.5, 0.5, w-1, h-1), 8, stop(0, hex("#2b3347")), stop(1, hex("#1e2433")))
-		outline(ctx, paintengine2d.XYWH(0, 0, w, h), 8, 1, hex("#3a4358"))
+		vgrad(ctx, paintengine2d.XYWH(0.5, 0.5, w-1, h-1), 8, stop(0, Hex("#2b3347")), stop(1, Hex("#1e2433")))
+		outline(ctx, paintengine2d.XYWH(0, 0, w, h), 8, 1, Hex("#3a4358"))
 	})
 	l.face("bar.normal", func(ctx *paintengine2d.Context, w, h float32) {
 		vgrad(ctx, paintengine2d.XYWH(0, 0, w, h), 0,
-			stop(0, hex("#404b5e")), stop(0.5, hex("#2c3546")), stop(0.52, hex("#262e3e")), stop(1, hex("#1b2230")))
-		px(ctx, 0, 0, w, 1, hex("#5a6880"))
-		px(ctx, 0, h-1, w, 1, hex(mqInk))
+			stop(0, Hex("#404b5e")), stop(0.5, Hex("#2c3546")), stop(0.52, Hex("#262e3e")), stop(1, Hex("#1b2230")))
+		px(ctx, 0, 0, w, 1, Hex("#5a6880"))
+		px(ctx, 0, h-1, w, 1, Hex(mqInk))
 	})
 	l.face("menu.frame", func(ctx *paintengine2d.Context, w, h float32) {
-		ctx.DrawRoundRect(paintengine2d.XYWH(0.5, 0.5, w-1, h-1), 8, 8, paintengine2d.Fill(hex("#262e3e")))
-		outline(ctx, paintengine2d.XYWH(0, 0, w, h), 8, 1, hex("#4a5568"))
+		ctx.DrawRoundRect(paintengine2d.XYWH(0.5, 0.5, w-1, h-1), 8, 8, paintengine2d.Fill(Hex("#262e3e")))
+		outline(ctx, paintengine2d.XYWH(0, 0, w, h), 8, 1, Hex("#4a5568"))
 	})
 	l.face("tooltip.normal", func(ctx *paintengine2d.Context, w, h float32) {
-		ctx.DrawRoundRect(paintengine2d.XYWH(0.5, 0.5, w-1, h-1), 6, 6, paintengine2d.Fill(hex("#0d1420")))
-		outline(ctx, paintengine2d.XYWH(0, 0, w, h), 6, 1, hex(mqAccLo))
+		ctx.DrawRoundRect(paintengine2d.XYWH(0.5, 0.5, w-1, h-1), 6, 6, paintengine2d.Fill(Hex("#0d1420")))
+		outline(ctx, paintengine2d.XYWH(0, 0, w, h), 6, 1, Hex(mqAccLo))
 	})
 	l.face("splitter.normal", func(ctx *paintengine2d.Context, w, h float32) {
-		vgrad(ctx, paintengine2d.XYWH(0, 0, w, h), 0, stop(0, hex("#333c4e")), stop(1, hex("#232a38")))
+		vgrad(ctx, paintengine2d.XYWH(0, 0, w, h), 0, stop(0, Hex("#333c4e")), stop(1, Hex("#232a38")))
 		for _, d := range [][2]float32{{-4, -4}, {1, -4}, {-4, 1}, {1, 1}} {
-			ctx.DrawRoundRect(paintengine2d.XYWH(w/2+d[0], h/2+d[1], 3, 3), 1, 1, paintengine2d.Fill(hex("#5c6a82")))
+			ctx.DrawRoundRect(paintengine2d.XYWH(w/2+d[0], h/2+d[1], 3, 3), 1, 1, paintengine2d.Fill(Hex("#5c6a82")))
 		}
 	})
 
@@ -211,7 +211,7 @@ func Marquee() *Plan {
 	l.row(96)
 	l.cell("window.normal", 64, 96, [4]int{12, 12, 12, 12}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
 		vgrad(ctx, paintengine2d.XYWH(0, 0, w, h), 0,
-			stop(0, hex(mqShell0)), stop(0.28, hex("#2a3243")), stop(1, hex(mqShell1)))
+			stop(0, Hex(mqShell0)), stop(0.28, Hex("#2a3243")), stop(1, Hex(mqShell1)))
 	})
 	// The display well, as its own part of the cabinet: sunk, cold, with a
 	// hairline of sky along its top edge.
@@ -219,7 +219,7 @@ func Marquee() *Plan {
 		mqDisplayWell(ctx, w, h)
 	})
 	l.cell("caption.normal", 128, mqCaption, [4]int{12, 20, 8, 20}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		mqBand(ctx, w, h, hex(mqAccent))
+		mqBand(ctx, w, h, Hex(mqAccent))
 	})
 	l.cell("caption.inactive", 128, mqCaption, [4]int{12, 20, 8, 20}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
 		mqBand(ctx, w, h, paintengine2d.Color{})
@@ -235,7 +235,7 @@ func Marquee() *Plan {
 	} {
 		cell := s
 		l.cell(cell.name, 30, 30, [4]int{8, 8, 8, 8}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-			mqPlate(ctx, w, h, hex(cell.c0), hex(cell.c1), hex(mqInk), hex(cell.hi))
+			mqPlate(ctx, w, h, Hex(cell.c0), Hex(cell.c1), Hex(mqInk), Hex(cell.hi))
 		})
 	}
 
@@ -243,41 +243,41 @@ func Marquee() *Plan {
 
 	l.row(20)
 	l.cell("thumb.normal", 28, 20, [4]int{8, 8, 8, 8}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		mqPlate(ctx, w, h, hex(mqFace0), hex(mqFace1), hex(mqInk), hex(mqLight))
+		mqPlate(ctx, w, h, Hex(mqFace0), Hex(mqFace1), Hex(mqInk), Hex(mqLight))
 	})
 	l.cell("thumb.hover", 28, 20, [4]int{8, 8, 8, 8}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		mqPlate(ctx, w, h, hex(mqHot0), hex(mqHot1), hex(mqInk), hex("#ffffff36"))
+		mqPlate(ctx, w, h, Hex(mqHot0), Hex(mqHot1), Hex(mqInk), Hex("#ffffff36"))
 	})
 	l.cell("track.normal", 28, 20, [4]int{8, 8, 8, 8}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		mqWell(ctx, w, h, hex("#141a26"), hex("#333c4e"))
+		mqWell(ctx, w, h, Hex("#141a26"), Hex("#333c4e"))
 	})
 	l.cell("slot.normal", 28, 10, [4]int{4, 6, 4, 6}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		mqWell(ctx, w, h, hex(mqDeep1), hex("#39445a"))
+		mqWell(ctx, w, h, Hex(mqDeep1), Hex("#39445a"))
 	})
 	l.cell("slot.fill", 28, 10, [4]int{4, 6, 4, 6}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		vgrad(ctx, paintengine2d.XYWH(0.5, 0.5, w-1, h-1), 4, stop(0, hex(mqAccHi)), stop(1, hex(mqAccLo)))
-		outline(ctx, paintengine2d.XYWH(0, 0, w, h), 4, 1, hex("#1c4a80"))
+		vgrad(ctx, paintengine2d.XYWH(0.5, 0.5, w-1, h-1), 4, stop(0, Hex(mqAccHi)), stop(1, Hex(mqAccLo)))
+		outline(ctx, paintengine2d.XYWH(0, 0, w, h), 4, 1, Hex("#1c4a80"))
 	})
 	l.cell("knob.normal", 16, 22, [4]int{6, 6, 6, 6}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		mqKnob(ctx, w, h, hex("#d6dfec"), hex("#8794a9"))
+		mqKnob(ctx, w, h, Hex("#d6dfec"), Hex("#8794a9"))
 	})
 	l.cell("knob.disabled", 16, 22, [4]int{6, 6, 6, 6}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		mqKnob(ctx, w, h, hex("#5d6678"), hex("#333b49"))
+		mqKnob(ctx, w, h, Hex("#5d6678"), Hex("#333b49"))
 	})
 
 	l.row(20)
 	l.cell("check.normal", 20, 20, [4]int{6, 6, 6, 6}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		mqWell(ctx, w, h, hex(mqDeep1), hex("#3a465c"))
+		mqWell(ctx, w, h, Hex(mqDeep1), Hex("#3a465c"))
 	})
 	l.cell("check.hover", 20, 20, [4]int{6, 6, 6, 6}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		mqWell(ctx, w, h, hex(mqDeep1), hex(mqAccent))
+		mqWell(ctx, w, h, Hex(mqDeep1), Hex(mqAccent))
 	})
 	l.cell("check.checked", 20, 20, [4]int{6, 6, 6, 6}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		vgrad(ctx, paintengine2d.XYWH(0.5, 0.5, w-1, h-1), 4, stop(0, hex(mqAccHi)), stop(1, hex(mqAccLo)))
-		outline(ctx, paintengine2d.XYWH(0, 0, w, h), 4, 1, hex("#1c4a80"))
+		vgrad(ctx, paintengine2d.XYWH(0.5, 0.5, w-1, h-1), 4, stop(0, Hex(mqAccHi)), stop(1, Hex(mqAccLo)))
+		outline(ctx, paintengine2d.XYWH(0, 0, w, h), 4, 1, Hex("#1c4a80"))
 	})
 	l.cell("check.disabled", 20, 20, [4]int{6, 6, 6, 6}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		mqWell(ctx, w, h, hex("#0d1119"), hex("#2a3243"))
+		mqWell(ctx, w, h, Hex("#0d1119"), Hex("#2a3243"))
 	})
 	l.glyph("mark.check", 20, func(ctx *paintengine2d.Context, w, h float32) {
 		p := paintengine2d.NewPath()
@@ -307,19 +307,19 @@ func Marquee() *Plan {
 		chevron(ctx, w, h, "right", 2, paintengine2d.RGB(1, 1, 1))
 	})
 	l.cell("focus.ring", 24, 24, [4]int{9, 9, 9, 9}, "none", false, func(ctx *paintengine2d.Context, w, h float32) {
-		outline(ctx, paintengine2d.XYWH(1, 1, w-2, h-2), 7, 2, hex(mqAccent).WithAlpha(0.95))
+		outline(ctx, paintengine2d.XYWH(1, 1, w-2, h-2), 7, 2, Hex(mqAccent).WithAlpha(0.95))
 	})
 
 	l.row(22)
 	l.cell("switch.off", 40, 22, [4]int{6, 12, 6, 12}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		mqWell(ctx, w, h, hex(mqDeep1), hex("#3a465c"))
+		mqWell(ctx, w, h, Hex(mqDeep1), Hex("#3a465c"))
 	})
 	l.cell("switch.on", 40, 22, [4]int{6, 12, 6, 12}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		vgrad(ctx, paintengine2d.XYWH(0.5, 0.5, w-1, h-1), h/2, stop(0, hex(mqAccHi)), stop(1, hex(mqAccLo)))
-		outline(ctx, paintengine2d.XYWH(0, 0, w, h), h/2, 1, hex("#1c4a80"))
+		vgrad(ctx, paintengine2d.XYWH(0.5, 0.5, w-1, h-1), h/2, stop(0, Hex(mqAccHi)), stop(1, Hex(mqAccLo)))
+		outline(ctx, paintengine2d.XYWH(0, 0, w, h), h/2, 1, Hex("#1c4a80"))
 	})
 	l.cell("switch.disabled", 40, 22, [4]int{6, 12, 6, 12}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		mqWell(ctx, w, h, hex("#0d1119"), hex("#2a3243"))
+		mqWell(ctx, w, h, Hex("#0d1119"), Hex("#2a3243"))
 	})
 	l.close()
 
@@ -455,7 +455,7 @@ func mqPlate(ctx *paintengine2d.Context, w, h float32, c0, c1, edge, hi painteng
 func mqSunk(ctx *paintengine2d.Context, w, h float32, c0, c1, edge paintengine2d.Color) {
 	b := paintengine2d.XYWH(0.5, 0.5, w-1, h-1)
 	vgrad(ctx, b, mqRad, stop(0, c0), stop(1, c1))
-	innerShadow(ctx, b, mqRad, 5, hex(mqDark))
+	innerShadow(ctx, b, mqRad, 5, Hex(mqDark))
 	outline(ctx, paintengine2d.XYWH(0, 0, w, h), mqRad, 1, edge)
 }
 
@@ -466,7 +466,7 @@ func mqWell(ctx *paintengine2d.Context, w, h float32, fill, rim paintengine2d.Co
 	r := min(h/2, 6)
 	b := paintengine2d.XYWH(0.5, 0.5, w-1, h-1)
 	ctx.DrawRoundRect(b, r, r, paintengine2d.Fill(fill))
-	innerShadow(ctx, b, r, 4, hex(mqDark))
+	innerShadow(ctx, b, r, 4, Hex(mqDark))
 	outline(ctx, paintengine2d.XYWH(0, 0, w, h), r, 1, rim)
 }
 
@@ -480,7 +480,7 @@ func mqSheen(ctx *paintengine2d.Context, b paintengine2d.Rect, radius float32) {
 	ctx.DrawRect(top, paintengine2d.Linear(paintengine2d.LinearGradient{
 		Start: paintengine2d.Pt(top.Min.X, top.Min.Y),
 		End:   paintengine2d.Pt(top.Min.X, top.Max.Y),
-		Stops: []paintengine2d.GradientStop{stop(0, hex(mqGlass)), stop(1, hex(mqGlass).WithAlpha(0))},
+		Stops: []paintengine2d.GradientStop{stop(0, Hex(mqGlass)), stop(1, Hex(mqGlass).WithAlpha(0))},
 	}))
 	ctx.Restore()
 }
@@ -489,11 +489,11 @@ func mqSheen(ctx *paintengine2d.Context, b paintengine2d.Rect, radius float32) {
 // the eye finds its middle without being told.
 func mqKnob(ctx *paintengine2d.Context, w, h float32, face, edge paintengine2d.Color) {
 	b := paintengine2d.XYWH(0.5, 0.5, w-1, h-1)
-	vgrad(ctx, b, 5, stop(0, face), stop(1, hex("#96a3b8")))
+	vgrad(ctx, b, 5, stop(0, face), stop(1, Hex("#96a3b8")))
 	mqSheen(ctx, b, 5)
 	outline(ctx, paintengine2d.XYWH(0, 0, w, h), 5, 1, edge)
-	ctx.DrawRect(paintengine2d.XYWH(3, h/2-1, w-6, 1), paintengine2d.Fill(hex("#00000044")))
-	ctx.DrawRect(paintengine2d.XYWH(3, h/2, w-6, 1), paintengine2d.Fill(hex("#ffffff77")))
+	ctx.DrawRect(paintengine2d.XYWH(3, h/2-1, w-6, 1), paintengine2d.Fill(Hex("#00000044")))
+	ctx.DrawRect(paintengine2d.XYWH(3, h/2, w-6, 1), paintengine2d.Fill(Hex("#ffffff77")))
 }
 
 // mqDisplayWell is the screen the cabinet is built round: a cold gradient
@@ -501,13 +501,13 @@ func mqKnob(ctx *paintengine2d.Context, w, h float32, face, edge paintengine2d.C
 // shell's own shadow falling into it.
 func mqDisplayWell(ctx *paintengine2d.Context, w, h float32) {
 	b := paintengine2d.XYWH(0.5, 0.5, w-1, h-1)
-	vgrad(ctx, b, 8, stop(0, hex(mqDeep0)), stop(0.6, hex("#0b1119")), stop(1, hex(mqDeep1)))
-	innerShadow(ctx, b, 8, 10, hex("#000000aa"))
+	vgrad(ctx, b, 8, stop(0, Hex(mqDeep0)), stop(0.6, Hex("#0b1119")), stop(1, Hex(mqDeep1)))
+	innerShadow(ctx, b, 8, 10, Hex("#000000aa"))
 	ctx.Save()
 	ctx.ClipRoundRect(b, 8, 8)
-	ctx.DrawRect(paintengine2d.XYWH(0, 1, w, 1), paintengine2d.Fill(hex("#3b6da1")))
+	ctx.DrawRect(paintengine2d.XYWH(0, 1, w, 1), paintengine2d.Fill(Hex("#3b6da1")))
 	ctx.Restore()
-	outline(ctx, paintengine2d.XYWH(0, 0, w, h), 8, 1, hex("#0a0f18"))
+	outline(ctx, paintengine2d.XYWH(0, 0, w, h), 8, 1, Hex("#0a0f18"))
 }
 
 // mqBand is the caption: brushed steel with a turn at its waist, a
@@ -517,13 +517,13 @@ func mqBand(ctx *paintengine2d.Context, w, h float32, accent paintengine2d.Color
 	ctx.DrawRect(paintengine2d.XYWH(0, 0, w, h), paintengine2d.Linear(paintengine2d.LinearGradient{
 		Start: paintengine2d.Pt(0, 0), End: paintengine2d.Pt(0, h),
 		Stops: []paintengine2d.GradientStop{
-			stop(0, hex("#4a5568")), stop(0.48, hex("#303a4d")),
-			stop(0.52, hex("#28303f")), stop(1, hex("#1a2029")),
+			stop(0, Hex("#4a5568")), stop(0.48, Hex("#303a4d")),
+			stop(0.52, Hex("#28303f")), stop(1, Hex("#1a2029")),
 		},
 	}))
-	px(ctx, 0, 0, w, 1, hex("#6a788f"))
+	px(ctx, 0, 0, w, 1, Hex("#6a788f"))
 	if accent.A > 0 {
 		ctx.DrawRect(paintengine2d.XYWH(10, h-4, w-20, 2), paintengine2d.Fill(accent))
 	}
-	px(ctx, 0, h-1, w, 1, hex(mqInk))
+	px(ctx, 0, h-1, w, 1, Hex(mqInk))
 }
