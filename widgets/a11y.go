@@ -58,6 +58,27 @@ func (b *Button) AccessibleAction(item int, a a11y.Action) bool {
 	return true
 }
 
+func (b *ToolButton) Describe(n *a11y.Node) {
+	n.Role = a11y.RoleButton
+	if b.Toggle {
+		n.Role = a11y.RoleToggleButton
+	}
+	nameOr(n, b.Text)
+	tipDescription(n, b.Tip)
+	if b.Checked {
+		n.State |= a11y.StateChecked | a11y.StatePressed
+	}
+	n.Actions = n.Actions.With(a11y.ActionDefault)
+}
+
+func (b *ToolButton) AccessibleAction(item int, a a11y.Action) bool {
+	if a != a11y.ActionDefault || !b.Enabled() {
+		return false
+	}
+	b.fire()
+	return true
+}
+
 func (c *Checkbox) Describe(n *a11y.Node) {
 	n.Role = a11y.RoleCheckBox
 	nameOr(n, c.Text)
