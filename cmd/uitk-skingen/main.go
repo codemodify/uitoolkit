@@ -4,7 +4,7 @@
 // The art of a skin that ships with the toolkit is generated, not painted:
 // it is then demonstrably the toolkit's own work, it can be re-cut at any
 // scale, and the manifest that binds it cannot drift from it, because both
-// come out of the same Go description (internal/skinart).
+// come out of the same Go description (the public skingen package).
 //
 //	go run ./cmd/uitk-skingen              # rewrite style/skins/
 //	go run ./cmd/uitk-skingen -o /tmp/s    # somewhere else
@@ -20,7 +20,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/codemodify/uitoolkit/internal/skinart"
+	"github.com/codemodify/uitoolkit/skingen"
 )
 
 func main() {
@@ -28,7 +28,7 @@ func main() {
 	list := flag.Bool("list", false, "print the skins and their sheets, and exit")
 	flag.Parse()
 
-	plans := skinart.Plans()
+	plans := skingen.Plans()
 	if *list {
 		for _, p := range plans {
 			for _, sh := range p.Sheets {
@@ -39,7 +39,7 @@ func main() {
 		return
 	}
 	for _, p := range plans {
-		if err := skinart.Write(*out, p); err != nil {
+		if err := skingen.Write(*out, p); err != nil {
 			fmt.Fprintf(os.Stderr, "uitk-skingen: %v\n", err)
 			os.Exit(1)
 		}

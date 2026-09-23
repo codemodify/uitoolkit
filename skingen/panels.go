@@ -1,10 +1,10 @@
-package skinart
+package skingen
 
-import "github.com/codemodify/uitoolkit/internal/players/minim/panel"
+import "github.com/codemodify/uitoolkit/skingen/panel"
 
 // The fixed layouts Minim's two panel skins state.
 //
-// The rects are panel's (internal/players/minim/panel), the same numbers
+// The rects are panel's (skingen/panel), the same numbers
 // the faces were drawn round, so the slots the manifest states and the holes
 // in the art are one set of numbers. The player reads nothing but the
 // manifest: it binds its controls to the slot names and asks the skin where

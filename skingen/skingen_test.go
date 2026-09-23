@@ -1,4 +1,4 @@
-package skinart
+package skingen
 
 import (
 	"bytes"
@@ -8,7 +8,7 @@ import (
 )
 
 // shippedDir is where uitk-skingen writes, relative to this package.
-const shippedDir = "../../style/skins"
+const shippedDir = "../style/skins"
 
 // The art in the repo is what this package draws. Regenerating into a
 // temporary directory and comparing byte for byte is what makes "generated,

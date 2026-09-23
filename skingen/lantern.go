@@ -1,4 +1,4 @@
-package skinart
+package skingen
 
 import "github.com/codemodify/paintengine2d"
 
@@ -108,39 +108,39 @@ func Lantern() *Plan {
 	// ---- faces ------------------------------------------------------------
 	matte := func(c0, c1, edge, hi string) func(*paintengine2d.Context, float32, float32) {
 		return func(ctx *paintengine2d.Context, w, h float32) {
-			lnPlate(ctx, w, h, hex(c0), hex(c1), hex(edge), hex(hi))
+			lnPlate(ctx, w, h, Hex(c0), Hex(c1), Hex(edge), Hex(hi))
 		}
 	}
 	l.row(lnH)
 	l.face("button.normal", matte(lnFace0, lnFace1, lnInk, lnLight))
 	l.face("button.hover", matte(lnHot0, lnHot1, lnInk, "#ffffff24"))
 	l.face("button.pressed", func(ctx *paintengine2d.Context, w, h float32) {
-		lnSunk(ctx, w, h, hex(lnDown), hex("#20202a"), hex(lnInk))
+		lnSunk(ctx, w, h, Hex(lnDown), Hex("#20202a"), Hex(lnInk))
 	})
 	l.face("button.disabled", matte(lnOff, "#1e1e28", "#101017", "#00000000"))
 	l.face("button.focus", func(ctx *paintengine2d.Context, w, h float32) {
-		lnPlate(ctx, w, h, hex(lnFace0), hex(lnFace1), hex(lnInk), hex(lnLight))
-		outline(ctx, paintengine2d.XYWH(1.5, 1.5, w-3, h-3), lnRad-1, 2, hex(lnAccent))
+		lnPlate(ctx, w, h, Hex(lnFace0), Hex(lnFace1), Hex(lnInk), Hex(lnLight))
+		outline(ctx, paintengine2d.XYWH(1.5, 1.5, w-3, h-3), lnRad-1, 2, Hex(lnAccent))
 	})
 	l.face("button.default", matte(lnAccent, lnAccLo, "#3d3196", "#ffffff44"))
 	l.face("button.checked", func(ctx *paintengine2d.Context, w, h float32) {
-		lnSunk(ctx, w, h, hex("#2a2258"), hex("#332a68"), hex(lnAccLo))
+		lnSunk(ctx, w, h, Hex("#2a2258"), Hex("#332a68"), Hex(lnAccLo))
 	})
 
 	l.row(lnH)
 	l.face("field.normal", func(ctx *paintengine2d.Context, w, h float32) {
-		lnWellFace(ctx, w, h, hex(lnWell), hex(lnRim))
+		lnWellFace(ctx, w, h, Hex(lnWell), Hex(lnRim))
 	})
 	l.face("field.focus", func(ctx *paintengine2d.Context, w, h float32) {
-		lnWellFace(ctx, w, h, hex(lnWell), hex(lnAccent))
+		lnWellFace(ctx, w, h, Hex(lnWell), Hex(lnAccent))
 	})
 	l.face("field.disabled", func(ctx *paintengine2d.Context, w, h float32) {
-		lnWellFace(ctx, w, h, hex("#101017"), hex("#2b2b39"))
+		lnWellFace(ctx, w, h, Hex("#101017"), Hex("#2b2b39"))
 	})
 	l.face("combo.normal", matte(lnFace0, lnFace1, lnInk, lnLight))
 	l.face("combo.hover", matte(lnHot0, lnHot1, lnInk, "#ffffff24"))
 	l.face("combo.pressed", func(ctx *paintengine2d.Context, w, h float32) {
-		lnSunk(ctx, w, h, hex(lnDown), hex("#20202a"), hex(lnInk))
+		lnSunk(ctx, w, h, Hex(lnDown), Hex("#20202a"), Hex(lnInk))
 	})
 
 	// A tool button is nothing at rest: the transport row of this look is a
@@ -149,45 +149,45 @@ func Lantern() *Plan {
 	l.face("tool.normal", func(ctx *paintengine2d.Context, w, h float32) {})
 	l.face("tool.hover", func(ctx *paintengine2d.Context, w, h float32) {
 		ctx.DrawRoundRect(paintengine2d.XYWH(0.5, 0.5, w-1, h-1), lnRad, lnRad,
-			paintengine2d.Fill(hex("#ffffff14")))
+			paintengine2d.Fill(Hex("#ffffff14")))
 	})
 	l.face("tool.pressed", func(ctx *paintengine2d.Context, w, h float32) {
 		ctx.DrawRoundRect(paintengine2d.XYWH(0.5, 0.5, w-1, h-1), lnRad, lnRad,
-			paintengine2d.Fill(hex("#00000055")))
+			paintengine2d.Fill(Hex("#00000055")))
 	})
 	l.face("tool.checked", func(ctx *paintengine2d.Context, w, h float32) {
 		ctx.DrawRoundRect(paintengine2d.XYWH(0.5, 0.5, w-1, h-1), lnRad, lnRad,
-			paintengine2d.Fill(hex("#2a2258")))
-		outline(ctx, paintengine2d.XYWH(0, 0, w, h), lnRad, 1, hex(lnAccLo))
+			paintengine2d.Fill(Hex("#2a2258")))
+		outline(ctx, paintengine2d.XYWH(0, 0, w, h), lnRad, 1, Hex(lnAccLo))
 	})
 	l.face("row.hover", func(ctx *paintengine2d.Context, w, h float32) {
-		ctx.DrawRect(paintengine2d.XYWH(0, 0, w, h), paintengine2d.Fill(hex("#232331")))
+		ctx.DrawRect(paintengine2d.XYWH(0, 0, w, h), paintengine2d.Fill(Hex("#232331")))
 	})
 	l.face("row.checked", func(ctx *paintengine2d.Context, w, h float32) {
-		ctx.DrawRect(paintengine2d.XYWH(0, 0, w, h), paintengine2d.Fill(hex("#2a2258")))
-		ctx.DrawRect(paintengine2d.XYWH(0, 0, 3, h), paintengine2d.Fill(hex(lnAccent)))
+		ctx.DrawRect(paintengine2d.XYWH(0, 0, w, h), paintengine2d.Fill(Hex("#2a2258")))
+		ctx.DrawRect(paintengine2d.XYWH(0, 0, 3, h), paintengine2d.Fill(Hex(lnAccent)))
 	})
 	l.face("menu.hover", func(ctx *paintengine2d.Context, w, h float32) {
 		ctx.DrawRoundRect(paintengine2d.XYWH(0.5, 0.5, w-1, h-1), 4, 4,
-			paintengine2d.Fill(hex("#332a68")))
+			paintengine2d.Fill(Hex("#332a68")))
 	})
 
 	l.row(lnH)
 	l.face("panel.normal", func(ctx *paintengine2d.Context, w, h float32) {
-		ctx.DrawRoundRect(paintengine2d.XYWH(0.5, 0.5, w-1, h-1), 8, 8, paintengine2d.Fill(hex("#1f1f29")))
-		outline(ctx, paintengine2d.XYWH(0, 0, w, h), 8, 1, hex("#32323f"))
+		ctx.DrawRoundRect(paintengine2d.XYWH(0.5, 0.5, w-1, h-1), 8, 8, paintengine2d.Fill(Hex("#1f1f29")))
+		outline(ctx, paintengine2d.XYWH(0, 0, w, h), 8, 1, Hex("#32323f"))
 	})
 	l.face("bar.normal", func(ctx *paintengine2d.Context, w, h float32) {
-		vgrad(ctx, paintengine2d.XYWH(0, 0, w, h), 0, stop(0, hex(lnBand0)), stop(1, hex(lnBand1)))
-		px(ctx, 0, h-1, w, 1, hex(lnInk))
+		vgrad(ctx, paintengine2d.XYWH(0, 0, w, h), 0, stop(0, Hex(lnBand0)), stop(1, Hex(lnBand1)))
+		px(ctx, 0, h-1, w, 1, Hex(lnInk))
 	})
 	l.face("menu.frame", func(ctx *paintengine2d.Context, w, h float32) {
-		ctx.DrawRoundRect(paintengine2d.XYWH(0.5, 0.5, w-1, h-1), 8, 8, paintengine2d.Fill(hex("#20202b")))
-		outline(ctx, paintengine2d.XYWH(0, 0, w, h), 8, 1, hex("#3a3a4c"))
+		ctx.DrawRoundRect(paintengine2d.XYWH(0.5, 0.5, w-1, h-1), 8, 8, paintengine2d.Fill(Hex("#20202b")))
+		outline(ctx, paintengine2d.XYWH(0, 0, w, h), 8, 1, Hex("#3a3a4c"))
 	})
 	l.face("tooltip.normal", func(ctx *paintengine2d.Context, w, h float32) {
-		ctx.DrawRoundRect(paintengine2d.XYWH(0.5, 0.5, w-1, h-1), 6, 6, paintengine2d.Fill(hex("#12121a")))
-		outline(ctx, paintengine2d.XYWH(0, 0, w, h), 6, 1, hex(lnAccLo))
+		ctx.DrawRoundRect(paintengine2d.XYWH(0.5, 0.5, w-1, h-1), 6, 6, paintengine2d.Fill(Hex("#12121a")))
+		outline(ctx, paintengine2d.XYWH(0, 0, w, h), 6, 1, Hex(lnAccLo))
 	})
 
 	// ---- the frame --------------------------------------------------------
@@ -198,10 +198,10 @@ func Lantern() *Plan {
 	l.row(72)
 	l.cell("window.normal", 56, 72, [4]int{10, 10, 10, 10}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
 		vgrad(ctx, paintengine2d.XYWH(0, 0, w, h), 0,
-			stop(0, hex(lnShell0)), stop(0.4, hex("#1f1f29")), stop(1, hex(lnShell1)))
+			stop(0, Hex(lnShell0)), stop(0.4, Hex("#1f1f29")), stop(1, Hex(lnShell1)))
 	})
 	l.cell("caption.normal", 96, lnCaption, [4]int{10, 14, 4, 14}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		lnBandArt(ctx, w, h, hex(lnAccent))
+		lnBandArt(ctx, w, h, Hex(lnAccent))
 	})
 	l.cell("caption.inactive", 96, lnCaption, [4]int{10, 14, 4, 14}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
 		lnBandArt(ctx, w, h, paintengine2d.Color{})
@@ -218,8 +218,8 @@ func Lantern() *Plan {
 		cell := s
 		l.cell(cell.name, 20, 20, [4]int{9, 0, 9, 0}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
 			r := min(w, h) / 2
-			ctx.DrawRoundRect(paintengine2d.XYWH(0.5, 0.5, w-1, h-1), r, r, paintengine2d.Fill(hex(cell.fill)))
-			outline(ctx, paintengine2d.XYWH(0, 0, w, h), r, 1, hex(cell.edge))
+			ctx.DrawRoundRect(paintengine2d.XYWH(0.5, 0.5, w-1, h-1), r, r, paintengine2d.Fill(Hex(cell.fill)))
+			outline(ctx, paintengine2d.XYWH(0, 0, w, h), r, 1, Hex(cell.edge))
 		})
 	}
 
@@ -227,45 +227,45 @@ func Lantern() *Plan {
 
 	l.row(18)
 	l.cell("thumb.normal", 26, 18, [4]int{7, 7, 7, 7}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		lnPlate(ctx, w, h, hex(lnFace0), hex(lnFace1), hex(lnInk), hex(lnLight))
+		lnPlate(ctx, w, h, Hex(lnFace0), Hex(lnFace1), Hex(lnInk), Hex(lnLight))
 	})
 	l.cell("thumb.hover", 26, 18, [4]int{7, 7, 7, 7}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		lnPlate(ctx, w, h, hex(lnHot0), hex(lnHot1), hex(lnInk), hex("#ffffff24"))
+		lnPlate(ctx, w, h, Hex(lnHot0), Hex(lnHot1), Hex(lnInk), Hex("#ffffff24"))
 	})
 	l.cell("track.normal", 26, 18, [4]int{7, 7, 7, 7}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		lnWellFace(ctx, w, h, hex("#121219"), hex("#2b2b39"))
+		lnWellFace(ctx, w, h, Hex("#121219"), Hex("#2b2b39"))
 	})
 	// The seek bar: a shallow slot with square-cut ends, because the fill
 	// that runs in it is square-cut too and a round fill in a round slot
 	// leaves a crescent of track at either end.
 	l.cell("slot.normal", 26, 8, [4]int{3, 3, 3, 3}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		ctx.DrawRoundRect(paintengine2d.XYWH(0.5, 0.5, w-1, h-1), 3, 3, paintengine2d.Fill(hex(lnWell)))
-		outline(ctx, paintengine2d.XYWH(0, 0, w, h), 3, 1, hex("#2f2f3e"))
+		ctx.DrawRoundRect(paintengine2d.XYWH(0.5, 0.5, w-1, h-1), 3, 3, paintengine2d.Fill(Hex(lnWell)))
+		outline(ctx, paintengine2d.XYWH(0, 0, w, h), 3, 1, Hex("#2f2f3e"))
 	})
 	l.cell("slot.fill", 26, 8, [4]int{3, 3, 3, 3}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		ctx.DrawRoundRect(paintengine2d.XYWH(0.5, 0.5, w-1, h-1), 3, 3, paintengine2d.Fill(hex(lnAccent)))
-		px(ctx, 1, 1, w-2, 1, hex(lnAccHi))
+		ctx.DrawRoundRect(paintengine2d.XYWH(0.5, 0.5, w-1, h-1), 3, 3, paintengine2d.Fill(Hex(lnAccent)))
+		px(ctx, 1, 1, w-2, 1, Hex(lnAccHi))
 	})
 	l.cell("knob.normal", 14, 18, [4]int{7, 0, 7, 0}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		lnKnob(ctx, w, h, hex("#e2e2ef"), hex("#7b7b96"))
+		lnKnob(ctx, w, h, Hex("#e2e2ef"), Hex("#7b7b96"))
 	})
 	l.cell("knob.disabled", 14, 18, [4]int{7, 0, 7, 0}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		lnKnob(ctx, w, h, hex("#5a5a6d"), hex("#2f2f3d"))
+		lnKnob(ctx, w, h, Hex("#5a5a6d"), Hex("#2f2f3d"))
 	})
 
 	l.row(18)
 	l.cell("check.normal", 18, 18, [4]int{6, 6, 6, 6}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		lnWellFace(ctx, w, h, hex(lnWell), hex(lnRim))
+		lnWellFace(ctx, w, h, Hex(lnWell), Hex(lnRim))
 	})
 	l.cell("check.hover", 18, 18, [4]int{6, 6, 6, 6}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		lnWellFace(ctx, w, h, hex(lnWell), hex(lnAccent))
+		lnWellFace(ctx, w, h, Hex(lnWell), Hex(lnAccent))
 	})
 	l.cell("check.checked", 18, 18, [4]int{6, 6, 6, 6}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		ctx.DrawRoundRect(paintengine2d.XYWH(0.5, 0.5, w-1, h-1), 4, 4, paintengine2d.Fill(hex(lnAccent)))
-		outline(ctx, paintengine2d.XYWH(0, 0, w, h), 4, 1, hex("#3d3196"))
+		ctx.DrawRoundRect(paintengine2d.XYWH(0.5, 0.5, w-1, h-1), 4, 4, paintengine2d.Fill(Hex(lnAccent)))
+		outline(ctx, paintengine2d.XYWH(0, 0, w, h), 4, 1, Hex("#3d3196"))
 	})
 	l.cell("check.disabled", 18, 18, [4]int{6, 6, 6, 6}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		lnWellFace(ctx, w, h, hex("#101017"), hex("#2b2b39"))
+		lnWellFace(ctx, w, h, Hex("#101017"), Hex("#2b2b39"))
 	})
 	l.glyph("mark.check", 18, func(ctx *paintengine2d.Context, w, h float32) {
 		p := paintengine2d.NewPath()
@@ -289,7 +289,7 @@ func Lantern() *Plan {
 		})
 	}
 	l.cell("focus.ring", 22, 22, [4]int{8, 8, 8, 8}, "none", false, func(ctx *paintengine2d.Context, w, h float32) {
-		outline(ctx, paintengine2d.XYWH(1, 1, w-2, h-2), 6, 2, hex(lnAccent))
+		outline(ctx, paintengine2d.XYWH(1, 1, w-2, h-2), 6, 2, Hex(lnAccent))
 	})
 	l.close()
 
@@ -409,7 +409,7 @@ func lnPlate(ctx *paintengine2d.Context, w, h float32, c0, c1, edge, hi painteng
 func lnSunk(ctx *paintengine2d.Context, w, h float32, c0, c1, edge paintengine2d.Color) {
 	b := paintengine2d.XYWH(0.5, 0.5, w-1, h-1)
 	vgrad(ctx, b, lnRad, stop(0, c0), stop(1, c1))
-	innerShadow(ctx, b, lnRad, 4, hex(lnDark))
+	innerShadow(ctx, b, lnRad, 4, Hex(lnDark))
 	outline(ctx, paintengine2d.XYWH(0, 0, w, h), lnRad, 1, edge)
 }
 
@@ -419,7 +419,7 @@ func lnWellFace(ctx *paintengine2d.Context, w, h float32, fill, rim paintengine2
 	r := min(h/2, 4)
 	b := paintengine2d.XYWH(0.5, 0.5, w-1, h-1)
 	ctx.DrawRoundRect(b, r, r, paintengine2d.Fill(fill))
-	innerShadow(ctx, b, r, 3, hex(lnDark))
+	innerShadow(ctx, b, r, 3, Hex(lnDark))
 	outline(ctx, paintengine2d.XYWH(0, 0, w, h), r, 1, rim)
 }
 
@@ -427,20 +427,20 @@ func lnWellFace(ctx *paintengine2d.Context, w, h float32, fill, rim paintengine2
 func lnKnob(ctx *paintengine2d.Context, w, h float32, face, edge paintengine2d.Color) {
 	r := min(w, h) / 2
 	b := paintengine2d.XYWH(0.5, 0.5, w-1, h-1)
-	vgrad(ctx, b, r, stop(0, face), stop(1, hex("#b4b4c8")))
+	vgrad(ctx, b, r, stop(0, face), stop(1, Hex("#b4b4c8")))
 	outline(ctx, paintengine2d.XYWH(0, 0, w, h), r, 1, edge)
-	ctx.DrawRect(paintengine2d.XYWH(3, h/2-1, w-6, 1), paintengine2d.Fill(hex("#00000033")))
+	ctx.DrawRect(paintengine2d.XYWH(3, h/2-1, w-6, 1), paintengine2d.Fill(Hex("#00000033")))
 }
 
 // lnBandArt is the header band: a shallow gradient with the accent rule
 // under an active window's title and nothing under an inactive one's — the
 // one place the skin says which window has the keyboard.
 func lnBandArt(ctx *paintengine2d.Context, w, h float32, accent paintengine2d.Color) {
-	vgrad(ctx, paintengine2d.XYWH(0, 0, w, h), 0, stop(0, hex(lnBand0)), stop(1, hex(lnBand1)))
-	px(ctx, 0, 0, w, 1, hex("#3a3a4c"))
+	vgrad(ctx, paintengine2d.XYWH(0, 0, w, h), 0, stop(0, Hex(lnBand0)), stop(1, Hex(lnBand1)))
+	px(ctx, 0, 0, w, 1, Hex("#3a3a4c"))
 	if accent.A > 0 {
 		ctx.DrawRect(paintengine2d.XYWH(0, h-2, w, 2), paintengine2d.Fill(accent))
 	} else {
-		px(ctx, 0, h-1, w, 1, hex(lnInk))
+		px(ctx, 0, h-1, w, 1, Hex(lnInk))
 	}
 }
