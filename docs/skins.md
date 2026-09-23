@@ -562,9 +562,11 @@ A sprite an app paints has a hit shape too (`style.SkinSpriteShape`,
 [The controls](#the-controls)).
 
 And it has somewhere to be painted. `widgets.Button` and `widgets.ToolButton`
-take a `Painter` and a `Shaper`, and `widgets.Slider` a `Painter` and a
-`Travel`, so the art above goes on an ordinary widget rather than on a
-component the app has to write itself
+take a `Painter` and a `Shaper` — and a `Content`, for the key that wants
+the look's own face with the app's mark on it rather than a picture instead
+of it — and `widgets.Slider` a `Painter` and a `Travel`, so the art above
+goes on an ordinary widget rather than on a component the app has to write
+itself
 ([docs/widgets.md](widgets.md#art-on-a-control)). The widget is unchanged
 underneath: the same focus, keys, tooltip and accessibility tree, with the
 skin's picture in place of the look's face — and the focus ring over it,
@@ -573,7 +575,12 @@ because a skin never takes that away.
 A list is the other half of that: `widgets.ListView.RowGeo` takes the rows
 rect, the groove and the row height from a layout's slots, so a playlist on
 a panel is a list view on the skin's grid rather than a component the app
-has to write
+has to write. `RowPaint` and `ScrollPaint` are the paint that goes with that
+geometry — the skin's own type in the skin's own ink, and a thumb that is a
+loose sprite riding a printed groove — because a skin engine hands a list
+row and a scroll bar to the pack underneath it, which is right for a form
+and wrong for a panel. `ItemDetail` puts a length at the row's right-hand
+end
 ([docs/widgets.md](widgets.md#a-list-on-a-skins-grid)).
 
 ## Fixed layouts
