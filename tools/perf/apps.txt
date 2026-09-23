@@ -6,14 +6,10 @@
 # the same place every time.
 settings  cmd/uitksettings   click 614 118  435 384
 gallery   examples/gallery   click 167 76   832 448
-mail      examples/mail      click 26 80    448 448
 files     examples/files     click 153 134  650 300
 notes     examples/notes     -              370 500
 inspector examples/inspector click 960 322  600 400
 tour      examples/tour      right 290 104  400 400
-minim     examples/minim     click 515 381  690 500
-marquee   examples/marquee   click 286 180  890 400
-lantern   examples/lantern   click 256 200  640 400
 richtext  examples/richtext  click 287 176  640 500
 mdi       examples/mdi       click 187 136  540 390
 wizard    examples/wizard    -              640 450
