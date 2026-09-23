@@ -1009,12 +1009,13 @@ go run ./cmd/uitk-skingen -list
 go run ./examples/skinshape -mode backdrop &
 go run ./examples/skinshape -theme deck
 
-# Three whole applications wearing one (docs/players.md).
-go run ./examples/minim                     # Ctrl+K: minim, minim-classic, minim-silver
-go run ./examples/minim -theme minim-silver
-go run ./examples/marquee
-go run ./examples/lantern
 ```
+
+A whole application wearing one — switching between `minim`,
+`minim-classic` and `minim-silver` live, all its windows at once — is the
+music player in
+[media-player-music](https://github.com/codemodify/media-player-music); what
+the toolkit does for it is in [players.md](players.md).
 
 ## What does not change, whatever the skin
 

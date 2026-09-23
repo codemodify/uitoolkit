@@ -3,8 +3,8 @@
 `StatusItem` is a first-class toolkit API in the same role as Qt
 `QSystemTrayIcon`, KDE `KStatusNotifierItem`, and Electron `Tray`: a
 cross-platform notification-area / menu-bar icon, a context menu, and a
-desktop toast. Mail only calls toolkit APIs (`app.NewStatusItem` /
-`platform.StatusItem`).
+desktop toast. An application only ever calls toolkit APIs
+(`app.NewStatusItem` / `platform.StatusItem`).
 
 **v0.18.1** hardens the v0.17 HostMenu path: empty `GetLayout` stays a
 valid root, `SetMenu` still dedupes `LayoutUpdated`, SNI `IconName`
@@ -151,7 +151,7 @@ A notification does not need a tray item: `platform.Notifier`
 (`Application.NewNotifier`) sends one with buttons through
 `org.freedesktop.portal.Notification` or the notification server, and
 brings its clicks back as the app's action names — see
-[platform.md](platform.md#portals). Mail's new-mail notification goes
+[platform.md](platform.md#portals). A mail client's new-mail notification goes
 through it; `StatusItem.Notify` stays for the tray's own toast, and no
 longer answers other notifications' clicks.
 
@@ -164,7 +164,7 @@ sudo apt install xfce4-indicator-plugin               # Xfce
 echo "$DBUS_SESSION_BUS_ADDRESS"
 ```
 
-Verify Mail on abox / Plasma (HostMenu):
+Verify an app's item on abox / Plasma (HostMenu):
 
 ```bash
 busctl --user get-property \
@@ -182,8 +182,8 @@ toolkit `PopupMenu` when a toolkit window exists. Left-click is
 a stub — only the tray landed.
 
 ```bat
-go build ./cmd/mailclientui
-mailclientui.exe
+go build ./examples/tour
+tour.exe
 ```
 
 ### macOS
@@ -194,7 +194,7 @@ toolkit `PopupMenu` is not used. Without CGO the item is a stub. AppKit
 windows are still a stub.
 
 ```bash
-CGO_ENABLED=1 go build ./cmd/mailclientui
+CGO_ENABLED=1 go build ./examples/tour
 ```
 
 ## History
@@ -218,15 +218,19 @@ superseded by v0.17.0 HostMenu.
 ```bash
 # Tests (always stub/fake; no bus required)
 CGO_ENABLED=0 go test ./...
-UITK_TRAY=fake go test ./platform ./app ./examples/mail/mailapp
+UITK_TRAY=fake go test ./platform ./app
 
-# Linux desktop
-go run ./cmd/mailclientui          # UI owns the tray (HostMenu)
-go run ./examples/mail             # in-process daemon + UI
+# Linux desktop: the tour's Desktop page opens a status item
+go run ./examples/tour -page desktop   # the app owns the tray (HostMenu)
 
-UITK_TRAY=stub go run ./cmd/mailclientui
-UITK_TRAY=fake go run ./cmd/mailclientui
+UITK_TRAY=stub go run ./examples/tour -page desktop
+UITK_TRAY=fake go run ./examples/tour -page desktop
 ```
+
+The application this was built for is the mail client
+([comms-mail](https://github.com/codemodify/comms-mail)): it shows a tray
+item while it runs, a click raises its window, and new mail becomes a
+notification whose click raises it too.
 
 Dependency: [`github.com/godbus/dbus/v5`](https://github.com/godbus/dbus) on
 Linux only (pure Go). Windows and macOS use OS APIs.

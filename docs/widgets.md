@@ -60,7 +60,8 @@ stub; there is no native AppKit/SwiftUI control host.
 | Tabs | `TabView` / `TabBar` / `TabPage` | `QTabWidget` / `TabBar` | `GtkNotebook` | `TabControl` | `container.AppTabs` | `TabControl` | `TabControl` | `NSTabView` | `TabView` | [thumb](screenshots/compare/tabview.png) |
 | Document tabs (browser style, title bar) | `BrowserTabs` | `QTabBar` (documentMode, tabsClosable, movable) ≈ | `AdwTabBar` | `TabView` (Fluent) ≈ | — | — | — | `NSWindow` tab bar ≈ | `TabView` ≈ | — |
 
-`CardList` is a first-class virtualized multi-line row (Mail thread cards).
+`CardList` is a first-class virtualized multi-line row (the mail client's
+thread cards).
 It is not a generic Material “card” container.
 
 `ListView` and `TableView` select like Qt's item views (`Mode`):
@@ -642,9 +643,9 @@ position either way — the drag carries the window
 `dock` arranges panels *inside* one window. `rack` is its opposite and its
 sibling: **separate toplevels that snap flush to one another's edges and
 travel together** — a main window with an equaliser under it and a playlist
-under that, the way a compact music player's windows behaved. The three
-player demos are the pilots: `go run ./examples/minim`, `marquee`,
-`lantern` (see [players.md](players.md)). Nothing owns anything here; a
+under that, the way a compact music player's windows behaved. The
+[music player](https://github.com/codemodify/media-player-music) is the
+pilot (see [players.md](players.md)). Nothing owns anything here; a
 satellite dragged away is simply a window somewhere else, and dragged back
 to within a few pixels of an edge it snaps flush again.
 
@@ -690,9 +691,9 @@ one, and that is the protocol, not an omission here.
 which is what tear-off uses; it cannot place a window that is not being
 dragged.) So on Wayland the rack still snaps and the model is the same, and
 the windows cannot be made to follow. **`Desk.Places()` reports which of
-the two this is**, so an app says so in its own interface — Minim in its
-strip, Lantern in its status line — rather than silently misplacing its
-panels.
+the two this is**, so an app says so in its own interface — the player prints
+it on startup and says so in its status line — rather than silently
+misplacing its panels.
 
 ## Drops from other apps
 
@@ -704,8 +705,8 @@ onto components that implement `widget.DropTarget`:
 
 `widgets.NewDropZone(child, onFiles)` wraps content that takes files, with a
 highlight while a drag is over it; set `OnText` for text. Text fields and
-areas take dropped text where it is dropped. Mail's compose window attaches
-dropped files. Trees and browser-tab strips take a drop on the row or tab
+areas take dropped text where it is dropped. A mail client's compose window attaches
+dropped files this way. Trees and browser-tab strips take a drop on the row or tab
 under the pointer (`OnDropNode`, `OnDropTab`), which they light up; a tab
 strip also takes a tab dragged out of another window (`OnMergeTab`), and
 marks that one with a caret in the gap it would land in rather than a
@@ -830,7 +831,7 @@ the selected rows and `TreeView.OnDrag` the node under the press, each
 returning the `*widget.Drag` those rows are worth. Text fields and areas
 drag their selection — a press inside it waits to see whether it becomes
 a drag before moving the caret. Files drags its rows out as real files
-and takes them into another folder or tab; Mail drags an attachment out;
+and takes them into another folder or tab; a mail client drags an attachment out;
 Notes drags a note, or the selected text.
 
 Escape cancels a drag. On Wayland the compositor does it (a drag owns the

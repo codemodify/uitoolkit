@@ -186,22 +186,15 @@ The widget reports `OnSort`; the app reorders `CellText`.
 | Return (in the listing) | Open the selected folder |
 | **Ctrl+T** / **Ctrl+W** / **Ctrl+Tab** | New tab / close tab / next tab |
 
-## Mail (mailclientui)
+## Single-letter shortcuts in an application
 
-Single-letter Thunderbird bindings apply when focus is **not** a TextField / TextArea (Quick Filter and compose stay typeable). See [mail.md](mail.md).
-
-| Key | Action |
-| --- | --- |
-| **n** / **p** | Next / previous message |
-| **#** (Shift+3) | Delete |
-| **r** | Reply |
-| **f** | Forward |
-| **c** | Compose |
-| **m** | Mark as read |
-| **F5** | Fetch |
-| **Ctrl+F** | Quick Filter |
-| **Ctrl+,** | Preferences |
-| **Ctrl+U** | Message Source (raw RFC822) |
+An application may bind bare letters — the mail client
+([comms-mail](https://github.com/codemodify/comms-mail)) binds the
+Thunderbird set, the music player binds the transport — and the toolkit is
+what makes that safe: a key event carries both `Key` (what the keyboard
+does) and `Rune` (the character the key stands for), and a shortcut table
+can ask the focused component what role it gives the accessibility tree
+before dispatching a letter, so typing into a text field never fires one.
 
 ## FileDialog (stub)
 

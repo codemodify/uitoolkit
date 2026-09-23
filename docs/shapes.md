@@ -26,12 +26,12 @@ go run ./examples/skinshape                          # the Deck skin's outline
 go run ./examples/skinshape -theme beos              # BeOS's tab
 go run ./examples/skinshape -theme breeze-night      # a look that frames a rectangle
 
-# And three whole applications built on both halves (docs/players.md): a
-# skin's outline, and — when the big one folds down — the app's own.
-go run ./examples/minim                              # Ctrl+K to minim-silver: round corners
-go run ./examples/marquee                            # Ctrl+M
-go run ./examples/lantern                            # Ctrl+K drops the skin
 ```
+
+A whole application built on both halves — a skin's outline, and, when it
+folds down, the app's own — is the music player in
+[media-player-music](https://github.com/codemodify/media-player-music); what
+the toolkit does for it is in [players.md](players.md).
 
 Put the backdrop up first, the shaped window over it, and click the hole:
 the app counts every press it receives and a click in the hole adds none.
@@ -523,7 +523,7 @@ are the other half of the answer.
 
 ## See also
 
-- [docs/players.md](players.md) — three applications that wear all of this:
+- [docs/players.md](players.md) — an application that wears all of this:
   a skin's silhouette, an app's own, windows that snap to one another, and
   what a desktop that will not place a window does to that.
 - [docs/decorations.md](decorations.md) — the window frame the silhouette

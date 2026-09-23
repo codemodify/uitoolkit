@@ -53,8 +53,9 @@ caption space (Chromium's tab-strip menu). Any other component passed to
 `SetTitleBar` (a `TitleBar`, a row) becomes the centre of a header bar.
 `SetTitleBar(nil)` goes back to no title bar.
 
-Mail is the pilot: its Thunderbird-style row (the M menu, Fetch / Write, free
-space, the quick filter and its tool bar) is its title bar.
+The pilot is [the mail client](https://github.com/codemodify/comms-mail): its Thunderbird-style row
+(the M menu, Fetch / Write, free space, the quick filter and its tool bar)
+*is* its title bar.
 
 A SourceGit- or Chromium-style window puts document tabs in the centre
 ([tabs in the title bar](#tabs-in-the-title-bar)):
@@ -622,7 +623,7 @@ Where the desktop draws the frame, the window still says how to dress it
   frame; `uitk-themesheet -frames` renders every pack's frames, over a desk
   colour so their shadows show.
 - End to end in the nested-KWin rig ([tools/e2e](../tools/e2e/README.md)):
-  `UITK_DECORATIONS=client ./run.sh N examples-mail-binary`, drags and
+  `UITK_DECORATIONS=client ./run.sh N <app-binary>`, drags and
   resizes with `in.sh`, window geometry and state from `./kwin.py`, protocol
   traces with `WAYLAND_DEBUG=1`; `UITK_BACKEND=x11` for the X11 path on the
   instance's Xwayland. `UITK_XDG_DECORATION=0` makes the Wayland backend
