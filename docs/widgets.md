@@ -139,6 +139,7 @@ names) is in [compare.md](compare.md).
 | Scroll | `ScrollView` | `QScrollArea` / `ScrollView` | `GtkScrolledWindow` | `ScrollViewer` | `container.Scroll` | `AutoScroll` | `ScrollViewer` | `NSScrollView` | `ScrollView` | [thumb](screenshots/compare/scrollview.png) · [gallery](screenshots/gallery-scroll.png) |
 | Splitter | `Splitter` | `QSplitter` / `SplitView` | `GtkPaned` | `GridSplitter` | `container.Split` | `SplitContainer` | `GridSplitter` | `NSSplitView` | `HSplitView` / `VSplitView` | [thumb](screenshots/compare/splitter.png) |
 | Dockable panels | `dock.Host` + `dock.Panel` (four areas, tabs, float, saved layout) | `QMainWindow::addDockWidget` + `QDockWidget` | — (`GtkPaned` / `AdwToolbarView` ≈) | `Dock.Avalonia` (third party) ≈ | — | `DockPanel` (docking only, no float / tab) ≈ | `DockPanel` ≈ | — | — | — |
+| Windows that snap together | `rack.Desk` + `rack.Rack` (separate toplevels that snap flush and travel as one; X11 only) | — | — | — | — | — | — | — | — | [players](players.md) |
 | Windows inside a window | `MDIArea` / `MDIWindow` (frames of the look, cascade, tile, tabbed view) | `QMdiArea` / `QMdiSubWindow` | — | — | `container.MultipleWindows` ≈ | `IsMdiContainer` + `MdiParent` | — | — | — | [sheet](screenshots/breadth/mdi-1x.webp) |
 | Overlay | `Overlay` / `DialogCard` | `QDialog` ≈ | `GtkOverlay` | `Overlay` / `Popup` | dialog overlay ≈ | — | `Popup` | `NSPanel` ≈ | `overlay` / `sheet` | [gallery](screenshots/gallery-dialog.png) |
 | Expander | `Expander` | `QToolBox` page ≈ | `GtkExpander` | `Expander` | accordion item ≈ | — | `Expander` | `NSDisclosureTriangle` ≈ | `DisclosureGroup` | [thumb](screenshots/compare/accordion.png) |
@@ -433,7 +434,9 @@ it. `Window.OpenURI` is the same for an app's own links.
 sides — Qt's `QMainWindow` docking, the panels of VS Code, Qt Creator and
 the JetBrains IDEs. `dock.NewPanel(name, title, content)` makes a panel and
 `host.Dock(panel, dock.SideLeft)` puts it in an area. The Inspector demo is
-the pilot: `go run ./examples/inspector`.
+the pilot: `go run ./examples/inspector`. For windows that stay separate
+toplevels and merely snap to one another, see
+[Windows that snap together](#windows-that-snap-together) below.
 
 A panel's title bar carries its name, a drag handle and buttons for
 collapse, float and close; `SetFeatures` takes any of them away, as Qt's
@@ -506,6 +509,63 @@ position is the one that was asked for, which the compositor is free to
 ignore. Dragging a panel between the host and a window of its own needs no
 position either way — the drag carries the window
 ([decorations.md](decorations.md#tear-off)).
+
+## Windows that snap together
+
+`dock` arranges panels *inside* one window. `rack` is its opposite and its
+sibling: **separate toplevels that snap flush to one another's edges and
+travel together** — a main window with an equaliser under it and a playlist
+under that, the way a compact music player's windows behaved. The three
+player demos are the pilots: `go run ./examples/minim`, `marquee`,
+`lantern` (see [players.md](players.md)). Nothing owns anything here; a
+satellite dragged away is simply a window somewhere else, and dragged back
+to within a few pixels of an edge it snaps flush again.
+
+The package is two halves that ship together:
+
+- **the arithmetic** — `rack.New(reach)` is a `rack.Rack`, `Add(name, box)`
+  puts a window's outline in it and returns an index, and `MoveTo`, `Nudge`,
+  `Resize`, `Attach`, `Detach` and `Show` are what a drag, a keyboard, a
+  resize and a menu item do to it. Every one of those reports the panes
+  whose boxes changed, so a caller tells the desktop about exactly those
+  windows. Boxes are integers in the logical pixels `Window.Position`,
+  `Size` and `Move` speak, so a snap cannot land half a pixel out and the
+  reach (`rack.DefaultReach`, ten) grows with the display on its own.
+- **the desktop half** — `rack.NewDesk(reach)` is the same rack with real
+  `app.Window` values in it. `Add(name, win)` takes a window in (the first
+  is the one the others hang from), `Adopt` takes the boxes the window
+  manager actually gave them, `Attach` sticks one under another, `Show`
+  hides and restores one, and `Follow`, called on a timer, reads where the
+  desktop has put everything, lets a window the user dragged find a new
+  bond and puts whatever hangs from it back underneath.
+
+A pane snaps when the edge that would meet the anchor comes within reach
+*and* the two overlap on the other axis, so a playlist a screen away is not
+"under" the main window however close its top edge is; the position along
+the edge then snaps flush at either end, which is what makes three windows
+line up rather than sit in a staircase. What hangs from a pane travels with
+it, what it hung from stays put, and a pane never bonds to something that
+hangs from itself, so two windows cannot chase each other.
+
+**`Follow` is a timer, not an event**, because neither backend tells an app
+that another of its windows moved: X11 sends the `ConfigureNotify` to the
+window that moved and there is no "one of your toplevels changed" at all.
+Reading four integers a window is the honest way to do this from outside
+the window manager.
+
+**What a desktop may refuse.** A rack needs two things: being told where a
+window is, and being able to put one somewhere. X11 has both — clients
+place their own windows — and so does the offscreen backend, which is why
+every snapping test runs without a compositor. **A Wayland toplevel has no
+position**: a client is never told where its windows are and cannot ask for
+one, and that is the protocol, not an omission here.
+(`xdg-toplevel-drag-v1` carries a window under the pointer *during* a drag,
+which is what tear-off uses; it cannot place a window that is not being
+dragged.) So on Wayland the rack still snaps and the model is the same, and
+the windows cannot be made to follow. **`Desk.Places()` reports which of
+the two this is**, so an app says so in its own interface — Minim in its
+strip, Lantern in its status line — rather than silently misplacing its
+panels.
 
 ## Drops from other apps
 

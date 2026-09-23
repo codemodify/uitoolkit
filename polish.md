@@ -185,6 +185,19 @@ Struck through once fixed; newest findings at the end of their section.
 - **Escape during an X11 drag is unproven on real hardware**: under Xwayland
   KWin takes the keyboard for the drag it mirrors. Both cancel paths are
   written; check on a real X server.
+- **A rack has no way to take a pane out.** `rack.Desk` can hide a pane
+  (`Show`) but not forget one, so an application that closes a satellite
+  window for good leaves a pane behind whose window is `Closed()`; every
+  loop skips it, and the indices stay stable, which is why nothing breaks —
+  but `Bounds()` counts its box unless the app hides it too, and an app that
+  opens and closes panes over a long run grows the rack. A `Remove` would have to renumber every `To`,
+  so the honest fix is a handle rather than an index.
+- **`rack` is not in `export.go`**, where the umbrella package re-exports
+  `dock` (`DockHostWidget`, `DockLeft`, …). An app that imports
+  `uitoolkit` alone for everything else still needs a second import for its
+  snapping windows. Left out deliberately for now: the rack's surface is a
+  whole package's worth of names (`Box`, `Side`, `Bond`, `Pane`) and
+  flattening them into `Rack*` prefixes reads worse than the import does.
 
 ## Drag and drop
 
@@ -306,6 +319,11 @@ Struck through once fixed; newest findings at the end of their section.
   filter, colour type, depth and Adam7; `crop_test.py`.
 - ~~**The tour's `-shot` renders one page per window**; there is no combined
   contact sheet.~~ `tour -sheet`.
+- **`TestRichTextLongDocument` fails under a loaded full-suite run**: it
+  asserts 12 ms a key and measured 12.50 ms with `go test -p 2 ./...` on a
+  busy machine, then passed alone in the same tree. A wall-clock budget in a
+  parallel suite is a coin toss; it wants a budget scaled to the machine or
+  a benchmark rather than a test.
 - **The tour's readouts wrap twice in a narrow window**: they are folded at
   38 mono columns, which a readout panel of a 700-pixel window does not have,
   so the text view wraps the folds again. Folding to the panel's measured

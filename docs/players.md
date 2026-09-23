@@ -241,6 +241,10 @@ the look's faces with a mark on it.
 
 ## The one thing a desktop may refuse
 
+The snapping itself is not the players': it is the `rack` package, which
+any application can use for satellite windows of its own — see
+[widgets.md](widgets.md#windows-that-snap-together).
+
 Windows that stick to one another need two things of a desktop: being told
 where a window is, and being able to put one somewhere. **X11 has both** —
 clients place their own windows — and so does the offscreen backend, which
@@ -254,7 +258,7 @@ drag*; the toolkit uses it for tear-off. It cannot place a window that is
 not being dragged, which is what a rack is.)
 
 So on Wayland the arithmetic still runs — the rack snaps, the model is the
-same, `players.Rack` is tested either way — and the windows simply cannot
+same, `rack.Rack` is tested either way — and the windows simply cannot
 follow. Each player says which of the two it got rather than pretending:
 Minim in its strip, Lantern in its status line ("playlist not placeable
 here"), and both `examples/*` print `places-windows=` on startup.
@@ -264,14 +268,15 @@ here"), and both `examples/*` print `places-windows=` on startup.
 ```
 internal/players/            the model, and the pieces of interface all three share
   players.go  spectrum.go    the transport, the playlist, the analyser, the equaliser
-  rack.go                    the arithmetic of windows that stick together
-  desk.go                    the same rack with real windows in it
   ui.go                      the glyphs, the transport button, the fader, the clock
 internal/players/minim/      one package per player: its look and its layout, and no more
   panel/                     Minim's two panel layouts, read by the player and the skin generator
 internal/players/marquee/
 internal/players/lantern/
 internal/players/playertest/ what the three tests do to a window
+rack/                        windows that stick together: the arithmetic and the
+                             desktop half, a public package the players import
+                             like any other application would
 ```
 
 The line between the shared package and each player is worth stating:
@@ -442,12 +447,12 @@ them (see the e2e report):
 
 - **A window manager places a window when it maps it**, and the application
   is told afterwards — so a rack built when its windows are made is built
-  around windows that are all still at the origin. `Desk.Adopt` takes the
+  around windows that are all still at the origin. `rack.Desk.Adopt` takes the
   real boxes in first and each player attaches its panes once that answers
   yes.
 - **A move is a request.** X11 answers one a frame or two later, so reading
   the position straight back says the window is where it was and looks
-  exactly like a drag. `Desk` waits for a move it asked for to arrive, and
+  exactly like a drag. `rack.Desk` waits for a move it asked for to arrive, and
   gives up after twenty-five looks so a window manager that refuses one —
   KWin clamps a window that would hang off the screen — is not argued with
   forever.
@@ -502,7 +507,7 @@ What each of the five became, with the player work-around it retires:
 - ~~**Window positions were still device pixels**~~ while sizes were
   logical. **Fixed:** `Position`, `Move` and `WindowOptions.X`/`Y` are
   logical too, so a rack's box is a position and a `Size` in one unit, and
-  its reach (`DefaultReach`) grows with the display without the apps
+  its reach (`rack.DefaultReach`) grows with the display without the apps
   scaling it. At a fractional scale on X11 two windows snapped flush can
   still meet a device pixel apart: each edge is rounded to the root's
   pixels on its own.
