@@ -284,13 +284,25 @@ being demonstrated.
 Three pieces there are worth knowing about.
 
 **`players.Fader`** is a slider stood on end — or on its side, for a seek
-bar whose thumb is a picture (`Horizontal`, `Painter`). It is a component rather than
-a flag on `widgets.Slider` because the toolkit's slider is horizontal by
-construction — it takes its height from the slider metric and draws along
-its width — and ten faders side by side *are* an equaliser while a row of
-horizontal ones is a form. It paints by asking the look for a slider inside
-a rotated frame, so a skinned fader is skinned from `slider.track`,
-`slider.fill` and `slider.thumb` with no art of its own.
+bar whose thumb is a picture (`Horizontal`, `Painter`). It was a component
+rather than a flag on `widgets.Slider` because the toolkit's slider was
+horizontal by construction — it took its height from the slider metric and
+drew along its width — and ten faders side by side *are* an equaliser while
+a row of horizontal ones is a form. It paints by asking the look for a
+slider inside a rotated frame, so a skinned fader is skinned from
+`slider.track`, `slider.fill` and `slider.thumb` with no art of its own.
+
+That reasoning has since been taken at its word and moved where it belongs.
+The rotated frame was never the player's idea — it is how *any* vertical
+slider is drawn from one set of parts — and a rack of faders being a mixer
+is a statement about the app, not about the widget. `widgets.Slider` now
+has `Vertical` (`NewVerticalSlider`), painted the same way, along with the
+`Painter` and `Travel` a picture of a thumb needs. What is left of the case
+for a separate component is the player's own vocabulary: `Label`, `Format`,
+`Step` and `Page`, `Dragging`, and `Set` for a preset moving ten at once
+without reporting each. The fader stays for those, and for the players
+already written against it; a new app wanting a fader should reach for the
+slider.
 
 **`players.Pulse`** is one timer for a whole application, not one per
 window: three windows waking separately would advance the same transport

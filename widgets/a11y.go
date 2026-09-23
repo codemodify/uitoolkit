@@ -216,7 +216,11 @@ func (f *NumberField) AccessibleLeaf() bool { return true }
 
 func (s *Slider) Describe(n *a11y.Node) {
 	n.Role = a11y.RoleSlider
-	n.State |= a11y.StateHorizontal
+	if s.Vertical {
+		n.State |= a11y.StateVertical
+	} else {
+		n.State |= a11y.StateHorizontal
+	}
 	step := float64(s.Max-s.Min) / 100
 	rangeNode(n, float64(s.Min), float64(s.Max), float64(s.Value), step)
 	n.Value = strconv.FormatFloat(float64(s.Value), 'f', -1, 32)

@@ -275,6 +275,20 @@ where it was pressed: it never jumps. Pressing the track moves the thumb
 there. Engines place the thumb with the optional `SliderTravel` hook and can
 draw their own ticks with `DrawSliderTicks`.
 
+`NewVerticalSlider` (or `Slider.Vertical`) stands one on end, where up is
+more. It is painted from the same three parts inside a turned frame, so a
+skinned vertical slider is skinned from `slider.track`, `slider.fill` and
+`slider.thumb` with no art of its own; `TicksAbove` is then the left-hand
+row and `TicksBelow` the right. Arrow keys are unchanged — Up and Right are
+more either way — and a screen reader is told which way it runs.
+
+`Slider.Painter` and `Slider.Travel` are the slider's half of [art on a
+control](#art-on-a-control): the painter draws the whole control and is told
+the value as a fraction of the range, and `Travel` is half the thumb that
+painter draws, in design pixels, so the pointer and the picture agree about
+where the ends are. Without a painter the look answers, since it knows its
+own thumb.
+
 `ProgressBar.ShowText` writes the progress ("42%", or `Format`'s text). In a
 bar tall enough to hold it, the text sits in the middle and changes colour
 where the fill ends; beside a thin bar (Fluent, Material, Aqua) it sits to
@@ -314,6 +328,9 @@ Three things the hooks deliberately do not do:
 - **They do not have to answer.** A painter that has no art for this look
   returns false and the look's own face is drawn, so an app half-dressed by a
   skin is a coherent app in a real look rather than a grid of holes.
+
+`Slider` takes a `Painter` too, with the value handed to it (see
+[Sliders](#sliders-and-progress-bars)).
 
 ## Rich text
 
