@@ -1,4 +1,4 @@
-package skinart
+package skingen
 
 import "github.com/codemodify/paintengine2d"
 
@@ -111,51 +111,51 @@ func Deck() *Plan {
 	// the button is.
 	stadium := func(c0, c1, edge, hi string) func(*paintengine2d.Context, float32, float32) {
 		return func(ctx *paintengine2d.Context, w, h float32) {
-			deckPill(ctx, w, h, hex(c0), hex(c1), hex(edge), hex(hi))
+			deckPill(ctx, w, h, Hex(c0), Hex(c1), Hex(edge), Hex(hi))
 		}
 	}
 	l.row(deckH)
 	l.face("button.normal", stadium(deckFace0, deckFace1, deckInk, deckLight))
 	l.face("button.hover", stadium(deckHot0, deckHot1, deckInk, "#ffffff2e"))
 	l.face("button.pressed", func(ctx *paintengine2d.Context, w, h float32) {
-		deckPillSunk(ctx, w, h, hex(deckDown0), hex(deckDown1), hex(deckInk))
+		deckPillSunk(ctx, w, h, Hex(deckDown0), Hex(deckDown1), Hex(deckInk))
 	})
 	l.face("button.disabled", stadium(deckOff0, deckOff1, "#0f1319", "#00000000"))
 	l.face("button.focus", func(ctx *paintengine2d.Context, w, h float32) {
-		deckPill(ctx, w, h, hex(deckFace0), hex(deckFace1), hex(deckInk), hex(deckLight))
-		deckPillRing(ctx, w, h, 2, hex(deckAccent).WithAlpha(0.9))
+		deckPill(ctx, w, h, Hex(deckFace0), Hex(deckFace1), Hex(deckInk), Hex(deckLight))
+		deckPillRing(ctx, w, h, 2, Hex(deckAccent).WithAlpha(0.9))
 	})
 	l.face("button.default", stadium(deckAccHi, deckAccLo, "#1d7873", "#ffffff5a"))
 	l.face("button.checked", func(ctx *paintengine2d.Context, w, h float32) {
-		deckPillSunk(ctx, w, h, hex("#123734"), hex("#18453f"), hex("#1d7873"))
+		deckPillSunk(ctx, w, h, Hex("#123734"), Hex("#18453f"), Hex("#1d7873"))
 	})
 
 	// ---- fields, panels and bars ------------------------------------------
 	l.row(deckH)
 	l.face("field.normal", func(ctx *paintengine2d.Context, w, h float32) {
-		deckWell(ctx, w, h, hex(deckSunk), hex(deckSunkE))
+		deckWell(ctx, w, h, Hex(deckSunk), Hex(deckSunkE))
 	})
 	l.face("field.focus", func(ctx *paintengine2d.Context, w, h float32) {
-		deckWell(ctx, w, h, hex(deckSunk), hex(deckAccent))
+		deckWell(ctx, w, h, Hex(deckSunk), Hex(deckAccent))
 	})
 	l.face("field.disabled", func(ctx *paintengine2d.Context, w, h float32) {
-		deckWell(ctx, w, h, hex("#0d1116"), hex("#262c35"))
+		deckWell(ctx, w, h, Hex("#0d1116"), Hex("#262c35"))
 	})
 
 	l.row(32)
 	l.cell("panel.normal", 40, 32, [4]int{8, 8, 8, 8}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		ctx.DrawRoundRect(paintengine2d.XYWH(0.5, 0.5, w-1, h-1), 6, 6, paintengine2d.Fill(hex("#1e242c")))
-		outline(ctx, paintengine2d.XYWH(0, 0, w, h), 6, 1, hex("#343d48"))
+		ctx.DrawRoundRect(paintengine2d.XYWH(0.5, 0.5, w-1, h-1), 6, 6, paintengine2d.Fill(Hex("#1e242c")))
+		outline(ctx, paintengine2d.XYWH(0, 0, w, h), 6, 1, Hex("#343d48"))
 	})
 	l.cell("bar.normal", 40, 32, [4]int{2, 4, 2, 4}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		vgrad(ctx, paintengine2d.XYWH(0, 0, w, h), 0, stop(0, hex("#252c35")), stop(1, hex("#1c222a")))
-		px(ctx, 0, h-1, w, 1, hex(deckInk))
+		vgrad(ctx, paintengine2d.XYWH(0, 0, w, h), 0, stop(0, Hex("#252c35")), stop(1, Hex("#1c222a")))
+		px(ctx, 0, h-1, w, 1, Hex(deckInk))
 	})
 	// The focus ring: a cap-radius outline that fits round the stadium as
 	// well as round anything square, because a skin may re-draw the ring but
 	// never remove it.
 	l.cell("focus.ring", 40, 40, [4]int{16, 16, 16, 16}, "none", false, func(ctx *paintengine2d.Context, w, h float32) {
-		outline(ctx, paintengine2d.XYWH(1, 1, w-2, h-2), 14, 2, hex(deckAccent).WithAlpha(0.9))
+		outline(ctx, paintengine2d.XYWH(1, 1, w-2, h-2), 14, 2, Hex(deckAccent).WithAlpha(0.9))
 	})
 
 	// ---- the frame --------------------------------------------------------
@@ -166,13 +166,13 @@ func Deck() *Plan {
 	// art's edge would be cut away with the pixels beside it.
 	l.row(64)
 	l.cell("window.normal", 48, 64, [4]int{8, 8, 8, 8}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		vgrad(ctx, paintengine2d.XYWH(0, 0, w, h), 0, stop(0, hex(deckShell0)), stop(0.35, hex("#232932")), stop(1, hex(deckShell1)))
+		vgrad(ctx, paintengine2d.XYWH(0, 0, w, h), 0, stop(0, Hex(deckShell0)), stop(0.35, Hex("#232932")), stop(1, Hex(deckShell1)))
 	})
 	// The title plate, inlaid in the shoulder: darker than the shell it sits
 	// in, with the accent line under an active window's — the one place the
 	// skin says which window has the keyboard.
 	l.cell("caption.normal", 96, deckShoulder, [4]int{16, 16, 5, 16}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		deckPlate(ctx, w, h, hex(deckAccent))
+		deckPlate(ctx, w, h, Hex(deckAccent))
 	})
 	l.cell("caption.inactive", 96, deckShoulder, [4]int{16, 16, 5, 16}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
 		deckPlate(ctx, w, h, paintengine2d.Color{})
@@ -191,7 +191,7 @@ func Deck() *Plan {
 	} {
 		cell := s
 		l.cell(cell.name, 24, 28, [4]int{12, 0, 12, 0}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-			deckCapsule(ctx, w, h, hex(cell.c0), hex(cell.c1), hex(cell.edge))
+			deckCapsule(ctx, w, h, Hex(cell.c0), Hex(cell.c1), Hex(cell.edge))
 		})
 	}
 	l.close()
@@ -285,7 +285,7 @@ func deckPillSunk(ctx *paintengine2d.Context, w, h float32, c0, c1, edge painten
 	r := h / 2
 	b := paintengine2d.XYWH(0.5, 0.5, w-1, h-1)
 	vgrad(ctx, b, r, stop(0, c0), stop(1, c1))
-	innerShadow(ctx, b, r, 4, hex(deckDark))
+	innerShadow(ctx, b, r, 4, Hex(deckDark))
 	outline(ctx, paintengine2d.XYWH(0, 0, w, h), r, 1, edge)
 }
 
@@ -299,7 +299,7 @@ func deckPillRing(ctx *paintengine2d.Context, w, h, width float32, col paintengi
 func deckWell(ctx *paintengine2d.Context, w, h float32, fill, rim paintengine2d.Color) {
 	b := paintengine2d.XYWH(0.5, 0.5, w-1, h-1)
 	ctx.DrawRoundRect(b, 7, 7, paintengine2d.Fill(fill))
-	innerShadow(ctx, b, 7, 4, hex(deckDark))
+	innerShadow(ctx, b, 7, 4, Hex(deckDark))
 	outline(ctx, paintengine2d.XYWH(0, 0, w, h), 7, 1, rim)
 }
 
@@ -319,14 +319,14 @@ func deckPlate(ctx *paintengine2d.Context, w, h float32, accent paintengine2d.Co
 	b := paintengine2d.XYWH(0.5, 0.5, w-1, h-1)
 	ctx.DrawRoundRectCorners(b, 12, 12, 4, 4, paintengine2d.Linear(paintengine2d.LinearGradient{
 		Start: paintengine2d.Pt(0, 0), End: paintengine2d.Pt(0, h),
-		Stops: []paintengine2d.GradientStop{stop(0, hex(deckPlate0)), stop(1, hex(deckPlate1))},
+		Stops: []paintengine2d.GradientStop{stop(0, Hex(deckPlate0)), stop(1, Hex(deckPlate1))},
 	}))
 	ctx.Save()
 	ctx.ClipRoundRect(b, 12, 12)
-	ctx.DrawRect(paintengine2d.XYWH(0, 1, w, 1), paintengine2d.Fill(hex("#ffffff18")))
+	ctx.DrawRect(paintengine2d.XYWH(0, 1, w, 1), paintengine2d.Fill(Hex("#ffffff18")))
 	ctx.Restore()
 	if accent.A > 0 {
 		ctx.DrawRect(paintengine2d.XYWH(6, h-3, w-12, 2), paintengine2d.Fill(accent))
 	}
-	outline(ctx, paintengine2d.XYWH(0, 0, w, h), 12, 1, hex(deckInk))
+	outline(ctx, paintengine2d.XYWH(0, 0, w, h), 12, 1, Hex(deckInk))
 }

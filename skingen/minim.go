@@ -1,4 +1,4 @@
-package skinart
+package skingen
 
 import "github.com/codemodify/paintengine2d"
 
@@ -96,12 +96,12 @@ func Minim() *Plan {
 	// which is the whole grammar of this one.
 	out := func(fill string) func(*paintengine2d.Context, float32, float32) {
 		return func(ctx *paintengine2d.Context, w, h float32) {
-			minPlate(ctx, w, h, hex(fill), hex(minFaceH), hex(minFaceL))
+			minPlate(ctx, w, h, Hex(fill), Hex(minFaceH), Hex(minFaceL))
 		}
 	}
 	in := func(fill string) func(*paintengine2d.Context, float32, float32) {
 		return func(ctx *paintengine2d.Context, w, h float32) {
-			minPlate(ctx, w, h, hex(fill), hex(minFaceL), hex(minFaceH))
+			minPlate(ctx, w, h, Hex(fill), Hex(minFaceL), Hex(minFaceH))
 		}
 	}
 
@@ -110,28 +110,28 @@ func Minim() *Plan {
 	l.face("button.hover", out(minHot))
 	l.face("button.pressed", in(minDown))
 	l.face("button.disabled", func(ctx *paintengine2d.Context, w, h float32) {
-		minPlate(ctx, w, h, hex(minOff), hex("#3a443f"), hex("#1e2623"))
+		minPlate(ctx, w, h, Hex(minOff), Hex("#3a443f"), Hex("#1e2623"))
 	})
 	l.face("button.focus", func(ctx *paintengine2d.Context, w, h float32) {
-		minPlate(ctx, w, h, hex(minFace), hex(minFaceH), hex(minFaceL))
-		minDots(ctx, 3, 3, w-6, h-6, hex(minPhos))
+		minPlate(ctx, w, h, Hex(minFace), Hex(minFaceH), Hex(minFaceL))
+		minDots(ctx, 3, 3, w-6, h-6, Hex(minPhos))
 	})
 	l.face("button.default", func(ctx *paintengine2d.Context, w, h float32) {
-		minPlate(ctx, w, h, hex(minPhoL), hex(minPhos), hex(minPhoD))
+		minPlate(ctx, w, h, Hex(minPhoL), Hex(minPhos), Hex(minPhoD))
 	})
 	l.face("button.checked", func(ctx *paintengine2d.Context, w, h float32) {
-		minPlate(ctx, w, h, hex(minPhoD), hex(minPhoL), hex("#0a1f15"))
+		minPlate(ctx, w, h, Hex(minPhoD), Hex(minPhoL), Hex("#0a1f15"))
 	})
 
 	l.row(minH)
 	l.face("field.normal", func(ctx *paintengine2d.Context, w, h float32) {
-		minWell(ctx, w, h, hex(minWellC), hex(minWellR))
+		minWell(ctx, w, h, Hex(minWellC), Hex(minWellR))
 	})
 	l.face("field.focus", func(ctx *paintengine2d.Context, w, h float32) {
-		minWell(ctx, w, h, hex(minWellC), hex(minPhos))
+		minWell(ctx, w, h, Hex(minWellC), Hex(minPhos))
 	})
 	l.face("field.disabled", func(ctx *paintengine2d.Context, w, h float32) {
-		minWell(ctx, w, h, hex("#141a18"), hex("#2c3833"))
+		minWell(ctx, w, h, Hex("#141a18"), Hex("#2c3833"))
 	})
 	l.face("combo.normal", out(minFace))
 	l.face("combo.hover", out(minHot))
@@ -143,70 +143,70 @@ func Minim() *Plan {
 	l.row(minH)
 	l.face("tool.normal", func(ctx *paintengine2d.Context, w, h float32) {})
 	l.face("tool.hover", func(ctx *paintengine2d.Context, w, h float32) {
-		minPlate(ctx, w, h, hex(minHot), hex(minFaceH), hex(minFaceL))
+		minPlate(ctx, w, h, Hex(minHot), Hex(minFaceH), Hex(minFaceL))
 	})
 	l.face("tool.pressed", in(minDown))
 	// A tool that is on is sunk with a phosphor rule under it rather than
 	// lit up: the glyph on it is drawn in the accent by the app, and an
 	// accent glyph on an accent face is a glyph nobody can read.
 	l.face("tool.checked", func(ctx *paintengine2d.Context, w, h float32) {
-		minPlate(ctx, w, h, hex("#1b2320"), hex(minFaceL), hex(minFaceH))
-		px(ctx, 2, h-3, w-4, 1, hex(minPhos))
+		minPlate(ctx, w, h, Hex("#1b2320"), Hex(minFaceL), Hex(minFaceH))
+		px(ctx, 2, h-3, w-4, 1, Hex(minPhos))
 	})
 	l.face("row.hover", func(ctx *paintengine2d.Context, w, h float32) {
-		px(ctx, 0, 0, w, h, hex("#1d2622"))
+		px(ctx, 0, 0, w, h, Hex("#1d2622"))
 	})
 	l.face("row.checked", func(ctx *paintengine2d.Context, w, h float32) {
-		px(ctx, 0, 0, w, h, hex(minPhoD))
-		px(ctx, 0, 0, 2, h, hex(minPhos))
+		px(ctx, 0, 0, w, h, Hex(minPhoD))
+		px(ctx, 0, 0, 2, h, Hex(minPhos))
 	})
 
 	l.row(minH)
 	l.face("tab.normal", func(ctx *paintengine2d.Context, w, h float32) {
-		px(ctx, 1, 2, w-2, h-3, hex("#28322e"))
-		px(ctx, 1, 2, w-2, 1, hex(minFaceH))
-		px(ctx, 0, h-1, w, 1, hex(minInk))
+		px(ctx, 1, 2, w-2, h-3, Hex("#28322e"))
+		px(ctx, 1, 2, w-2, 1, Hex(minFaceH))
+		px(ctx, 0, h-1, w, 1, Hex(minInk))
 	})
 	l.face("tab.hover", func(ctx *paintengine2d.Context, w, h float32) {
-		px(ctx, 1, 2, w-2, h-3, hex(minHot))
-		px(ctx, 1, 2, w-2, 1, hex(minFaceH))
-		px(ctx, 0, h-1, w, 1, hex(minInk))
+		px(ctx, 1, 2, w-2, h-3, Hex(minHot))
+		px(ctx, 1, 2, w-2, 1, Hex(minFaceH))
+		px(ctx, 0, h-1, w, 1, Hex(minInk))
 	})
 	l.face("tab.checked", func(ctx *paintengine2d.Context, w, h float32) {
-		px(ctx, 1, 0, w-2, h, hex(minFace))
-		px(ctx, 1, 0, w-2, 2, hex(minPhos))
-		px(ctx, 1, 2, 1, h-2, hex(minFaceH))
-		px(ctx, w-2, 2, 1, h-2, hex(minFaceL))
+		px(ctx, 1, 0, w-2, h, Hex(minFace))
+		px(ctx, 1, 0, w-2, 2, Hex(minPhos))
+		px(ctx, 1, 2, 1, h-2, Hex(minFaceH))
+		px(ctx, w-2, 2, 1, h-2, Hex(minFaceL))
 	})
 	l.face("menu.hover", func(ctx *paintengine2d.Context, w, h float32) {
-		px(ctx, 0, 0, w, h, hex(minPhoD))
-		px(ctx, 0, 0, w, 1, hex(minPhoL))
+		px(ctx, 0, 0, w, h, Hex(minPhoD))
+		px(ctx, 0, 0, w, 1, Hex(minPhoL))
 	})
 	l.face("panel.normal", func(ctx *paintengine2d.Context, w, h float32) {
-		px(ctx, 0, 0, w, h, hex("#222a27"))
-		bevel(ctx, w, h, 1, hex(minShellH), hex(minShellL))
+		px(ctx, 0, 0, w, h, Hex("#222a27"))
+		bevel(ctx, w, h, 1, Hex(minShellH), Hex(minShellL))
 	})
 	l.face("bar.normal", func(ctx *paintengine2d.Context, w, h float32) {
-		px(ctx, 0, 0, w, h, hex(minShell))
-		px(ctx, 0, 0, w, 1, hex(minShellH))
-		px(ctx, 0, h-1, w, 1, hex(minInk))
+		px(ctx, 0, 0, w, h, Hex(minShell))
+		px(ctx, 0, 0, w, 1, Hex(minShellH))
+		px(ctx, 0, h-1, w, 1, Hex(minInk))
 	})
 
 	l.row(minH)
 	l.face("menu.frame", func(ctx *paintengine2d.Context, w, h float32) {
-		px(ctx, 0, 0, w, h, hex(minShell))
-		bevel(ctx, w, h, 1, hex(minShellH), hex(minInk))
+		px(ctx, 0, 0, w, h, Hex(minShell))
+		bevel(ctx, w, h, 1, Hex(minShellH), Hex(minInk))
 	})
 	l.face("tooltip.normal", func(ctx *paintengine2d.Context, w, h float32) {
-		px(ctx, 0, 0, w, h, hex(minWellC))
-		bevel(ctx, w, h, 1, hex(minPhoL), hex(minInk))
+		px(ctx, 0, 0, w, h, Hex(minWellC))
+		bevel(ctx, w, h, 1, Hex(minPhoL), Hex(minInk))
 	})
 	// Orientation-neutral, like the other two pixel skins: Face is not told
 	// which way a splitter runs, so the grip is a cluster and not a line.
 	l.face("splitter.normal", func(ctx *paintengine2d.Context, w, h float32) {
-		px(ctx, 0, 0, w, h, hex(minShell))
+		px(ctx, 0, 0, w, h, Hex(minShell))
 		for _, d := range [][2]float32{{-2, -2}, {1, -2}, {-2, 1}, {1, 1}} {
-			px(ctx, w/2+d[0], h/2+d[1], 1, 1, hex(minShellH))
+			px(ctx, w/2+d[0], h/2+d[1], 1, 1, Hex(minShellH))
 		}
 	})
 
@@ -217,65 +217,65 @@ func Minim() *Plan {
 	// grid however big the window is.
 	l.row(16)
 	l.cell("window.normal", 16, 16, [4]int{}, "tile", false, func(ctx *paintengine2d.Context, w, h float32) {
-		minDither(ctx, w, h, hex(minShell), hex("#2b3430"))
+		minDither(ctx, w, h, Hex(minShell), Hex("#2b3430"))
 	})
 	l.cell("caption.normal", 48, minCaption, [4]int{4, 8, 4, 8}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		minBand(ctx, w, h, hex("#1d2622"), hex(minPhos))
+		minBand(ctx, w, h, Hex("#1d2622"), Hex(minPhos))
 	})
 	l.cell("caption.inactive", 48, minCaption, [4]int{4, 8, 4, 8}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		minBand(ctx, w, h, hex("#1d2622"), paintengine2d.Color{})
+		minBand(ctx, w, h, Hex("#1d2622"), paintengine2d.Color{})
 	})
 	l.cell("capbtn.normal", 14, 12, [4]int{3, 3, 3, 3}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		minPlate(ctx, w, h, hex(minFace), hex(minFaceH), hex(minFaceL))
+		minPlate(ctx, w, h, Hex(minFace), Hex(minFaceH), Hex(minFaceL))
 	})
 	l.cell("capbtn.hover", 14, 12, [4]int{3, 3, 3, 3}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		minPlate(ctx, w, h, hex(minHot), hex("#5a6a63"), hex(minFaceL))
+		minPlate(ctx, w, h, Hex(minHot), Hex("#5a6a63"), Hex(minFaceL))
 	})
 	l.cell("capbtn.pressed", 14, 12, [4]int{3, 3, 3, 3}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		minPlate(ctx, w, h, hex(minDown), hex(minFaceL), hex(minFaceH))
+		minPlate(ctx, w, h, Hex(minDown), Hex(minFaceL), Hex(minFaceH))
 	})
 
 	// ---- the small parts --------------------------------------------------
 
 	l.row(14)
 	l.cell("thumb.normal", 20, 14, [4]int{3, 3, 3, 3}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		minPlate(ctx, w, h, hex(minFace), hex(minFaceH), hex(minFaceL))
+		minPlate(ctx, w, h, Hex(minFace), Hex(minFaceH), Hex(minFaceL))
 	})
 	l.cell("thumb.hover", 20, 14, [4]int{3, 3, 3, 3}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		minPlate(ctx, w, h, hex(minHot), hex("#5a6a63"), hex(minFaceL))
+		minPlate(ctx, w, h, Hex(minHot), Hex("#5a6a63"), Hex(minFaceL))
 	})
 	l.cell("track.normal", 20, 14, [4]int{3, 3, 3, 3}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		minWell(ctx, w, h, hex("#151c19"), hex("#2e3a35"))
+		minWell(ctx, w, h, Hex("#151c19"), Hex("#2e3a35"))
 	})
 	// A slider's track is the slot a compact player's seek bar ran in: two
 	// pixels deep with the phosphor showing through behind it.
 	l.cell("slot.normal", 20, 8, [4]int{3, 3, 3, 3}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		minWell(ctx, w, h, hex(minWellC), hex("#2e3a35"))
+		minWell(ctx, w, h, Hex(minWellC), Hex("#2e3a35"))
 	})
 	l.cell("slot.fill", 20, 8, [4]int{3, 3, 3, 3}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		px(ctx, 1, 1, w-2, h-2, hex(minPhoL))
-		px(ctx, 1, 1, w-2, 1, hex(minPhos))
-		px(ctx, 1, h-2, w-2, 1, hex(minPhoD))
+		px(ctx, 1, 1, w-2, h-2, Hex(minPhoL))
+		px(ctx, 1, 1, w-2, 1, Hex(minPhos))
+		px(ctx, 1, h-2, w-2, 1, Hex(minPhoD))
 	})
 	l.cell("knob.normal", 10, 16, [4]int{}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		minKnob(ctx, w, h, hex("#c9d8d0"), hex("#ffffff"), hex("#5b6a63"))
+		minKnob(ctx, w, h, Hex("#c9d8d0"), Hex("#ffffff"), Hex("#5b6a63"))
 	})
 	l.cell("knob.disabled", 10, 16, [4]int{}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		minKnob(ctx, w, h, hex("#53605a"), hex("#6f7d76"), hex("#2c3632"))
+		minKnob(ctx, w, h, Hex("#53605a"), Hex("#6f7d76"), Hex("#2c3632"))
 	})
 
 	l.row(16)
 	l.cell("check.normal", 16, 16, [4]int{5, 5, 5, 5}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		minWell(ctx, w, h, hex(minWellC), hex("#2e3a35"))
+		minWell(ctx, w, h, Hex(minWellC), Hex("#2e3a35"))
 	})
 	l.cell("check.hover", 16, 16, [4]int{5, 5, 5, 5}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		minWell(ctx, w, h, hex(minWellC), hex(minPhos))
+		minWell(ctx, w, h, Hex(minWellC), Hex(minPhos))
 	})
 	l.cell("check.checked", 16, 16, [4]int{5, 5, 5, 5}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		minWell(ctx, w, h, hex(minPhoD), hex(minPhos))
+		minWell(ctx, w, h, Hex(minPhoD), Hex(minPhos))
 	})
 	l.cell("check.disabled", 16, 16, [4]int{5, 5, 5, 5}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		minWell(ctx, w, h, hex("#141a18"), hex("#2c3833"))
+		minWell(ctx, w, h, Hex("#141a18"), Hex("#2c3833"))
 	})
 	l.glyph("mark.check", 16, func(ctx *paintengine2d.Context, w, h float32) {
 		// Placed by hand: a stroked path at sixteen pixels is mush, and the
@@ -307,19 +307,19 @@ func Minim() *Plan {
 	// A skin may re-draw the focus ring and may never remove it. This one is
 	// the dotted rectangle every machine with a keyboard had, in phosphor.
 	l.cell("focus.ring", 16, 16, [4]int{4, 4, 4, 4}, "none", false, func(ctx *paintengine2d.Context, w, h float32) {
-		minDots(ctx, 0, 0, w, h, hex(minPhos))
+		minDots(ctx, 0, 0, w, h, Hex(minPhos))
 	})
 
 	l.row(16)
 	l.cell("switch.off", 26, 16, [4]int{4, 8, 4, 8}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		minWell(ctx, w, h, hex(minWellC), hex("#2e3a35"))
+		minWell(ctx, w, h, Hex(minWellC), Hex("#2e3a35"))
 	})
 	l.cell("switch.on", 26, 16, [4]int{4, 8, 4, 8}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		px(ctx, 1, 1, w-2, h-2, hex(minPhoL))
-		bevel(ctx, w, h, 1, hex(minPhoD), hex(minPhos))
+		px(ctx, 1, 1, w-2, h-2, Hex(minPhoL))
+		bevel(ctx, w, h, 1, Hex(minPhoD), Hex(minPhos))
 	})
 	l.cell("switch.disabled", 26, 16, [4]int{4, 8, 4, 8}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		minWell(ctx, w, h, hex("#141a18"), hex("#2c3833"))
+		minWell(ctx, w, h, Hex("#141a18"), Hex("#2c3833"))
 	})
 	l.close()
 
@@ -450,7 +450,7 @@ func Minim() *Plan {
 func minPlate(ctx *paintengine2d.Context, w, h float32, fill, hi, lo paintengine2d.Color) {
 	px(ctx, 1, 0, w-2, h, fill)
 	px(ctx, 0, 1, w, h-2, fill)
-	ink := hex(minInk)
+	ink := Hex(minInk)
 	px(ctx, 1, 0, w-2, 1, ink)
 	px(ctx, 1, h-1, w-2, 1, ink)
 	px(ctx, 0, 1, 1, h-2, ink)
@@ -466,7 +466,7 @@ func minPlate(ctx *paintengine2d.Context, w, h float32, fill, hi, lo paintengine
 func minWell(ctx *paintengine2d.Context, w, h float32, fill, rim paintengine2d.Color) {
 	px(ctx, 1, 0, w-2, h, fill)
 	px(ctx, 0, 1, w, h-2, fill)
-	ink := hex(minInk)
+	ink := Hex(minInk)
 	px(ctx, 1, 0, w-2, 1, ink)
 	px(ctx, 1, h-1, w-2, 1, ink)
 	px(ctx, 0, 1, 1, h-2, ink)
@@ -490,12 +490,12 @@ func minKnob(ctx *paintengine2d.Context, w, h float32, fill, hi, lo paintengine2
 // the one place the skin says which window is the active one.
 func minBand(ctx *paintengine2d.Context, w, h float32, fill, accent paintengine2d.Color) {
 	px(ctx, 0, 0, w, h, fill)
-	px(ctx, 0, 0, w, 1, hex(minInk))
-	px(ctx, 0, 1, w, 1, hex("#2b3430"))
+	px(ctx, 0, 0, w, 1, Hex(minInk))
+	px(ctx, 0, 1, w, 1, Hex("#2b3430"))
 	if accent.A > 0 {
 		px(ctx, 0, h-2, w, 1, accent)
 	}
-	px(ctx, 0, h-1, w, 1, hex(minInk))
+	px(ctx, 0, h-1, w, 1, Hex(minInk))
 }
 
 // minDither is a checkerboard of two close colours: the panel's texture,
