@@ -6,7 +6,7 @@
 # scripted pointer lands on the same controls.
 #
 #   tools/perf/measure.sh 31 1.75           # every app at 1.75
-#   tools/perf/measure.sh 31 1 mail notes   # just these, at 1x
+#   tools/perf/measure.sh 31 1 files notes  # just these, at 1x
 #
 # It (re)starts instance N at the scale asked for, builds the apps into
 # $RIG/N/perf/bin, and for each app:
