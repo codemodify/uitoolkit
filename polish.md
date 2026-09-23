@@ -148,6 +148,26 @@ Struck through once fixed; newest findings at the end of their section.
 - **Marquee could now ask for its compact caption** (`SetCaptionHeight`) and
   give its full cabinet the 56-pixel band it was first drawn with; its art is
   still the 40-pixel compromise.
+- **`skingen.Scales` is a public mutable package variable.** A third set
+  (3×) is meant to be one entry in it, but a caller who appends one changes
+  the scales of every plan in the process, including the shipped ones, and
+  the reproducibility test would then disagree with the repository. It wants
+  to be a field on `Plan` with the {1, 2} pair as its zero value, which is a
+  breaking change to a package one day old and better made now than later.
+- **`Cell.Middle` and the part, state and slot names are stringly typed** in
+  the generator's public API: `"tile"`, `"none"`, `"button"`, `"pressed"`.
+  Nothing is checked until `style.LoadSkinFS` reads the manifest the plan
+  produced, so a typo in a plan is caught a step later than it was made.
+  `style` already publishes `SkinPartNames`, `SkinStateNames` — a plan could
+  be checked against them by `Manifest` before a byte is written, if
+  `skingen` may import `style` (it deliberately does not today, which is why
+  `SkinManifestName` is declared twice).
+- **The drawing idioms inside the plans are unexported on purpose**
+  (`vgrad`, `outline`, `topLight`, `innerShadow`, `px`, `bevel`, `chevron`,
+  and the `lay` sheet packer). An author forking a plan file copies the ones
+  it uses. If several outside packs end up copying the same handful, that is
+  the signal to publish them as a drawing kit rather than guessing now which
+  ones are general.
 
 ## Docking, tabs and tear-off
 
