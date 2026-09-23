@@ -57,3 +57,20 @@ func beginViewFrame(ctx *paintengine2d.Context, lk style.LookAndFeel, b painteng
 	ctx.Translate(in.Left, in.Top)
 	return true
 }
+
+// beginPlacedView is beginViewFrame for a view whose rows may not be where
+// its frame says: it paints the frame f over b and then moves ctx to where
+// the rows are (in), which is f for an ordinary view and the rows slot a
+// skin's layout named for a placed one. It reports whether it moved ctx;
+// the caller restores it then.
+func beginPlacedView(ctx *paintengine2d.Context, lk style.LookAndFeel, b paintengine2d.Rect, f, in style.Insets, st style.ControlState) bool {
+	if !f.Zero() {
+		style.DrawViewFrameOf(lk, ctx, b, st)
+	}
+	if in.Zero() {
+		return false
+	}
+	ctx.Save()
+	ctx.Translate(in.Left, in.Top)
+	return true
+}

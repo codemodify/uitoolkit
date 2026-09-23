@@ -332,6 +332,38 @@ Three things the hooks deliberately do not do:
 `Slider` takes a `Painter` too, with the value handed to it (see
 [Sliders](#sliders-and-progress-bars)).
 
+### A list on a skin's grid
+
+A panel's playlist is a well printed in the art with a groove beside it and
+rows ten design pixels tall, and none of that is anything the look knows.
+`ListView.RowGeo` is where a skin says so:
+
+```go
+l.RowGeo = func(lk style.LookAndFeel) *widgets.RowGeometry {
+	rows, ok := style.SkinSlotRect(lk, "player.playlist", "rows", box)
+	if !ok {
+		return nil // not this skin: the list is the list it always was
+	}
+	bar, _ := style.SkinSlotRect(lk, "player.playlist", "scroll", box)
+	row, _ := style.SkinSlotRect(lk, "player.playlist", "row", box)
+	return &widgets.RowGeometry{Rows: rows, Bar: bar, RowHeight: row.Dy()}
+}
+```
+
+The rects are in the list's own coordinates. Every field is optional and the
+zero value is "the look's own", so a layout naming only a rows slot keeps the
+look's row height and gets the look's bar inside it. A placed list draws no
+view frame and no background — the art has the well printed in it already —
+and gives up no gutter, because the groove is beside its rows rather than
+over them. `ThumbLength` fixes the thumb at one size, which is what a thumb
+that is a picture is. A `Bar` left empty *with* a `Rows` means the layout
+says there is no bar: the wheel, the keys and `ScrollTo` still scroll and
+nothing is painted there.
+
+Everything else is the list it always was — the selection modes, type-ahead,
+drag and drop, the accessibility tree, `EnsureVisible`. The hook is geometry
+and nothing else, and a nil answer is a list without the hook.
+
 ## Rich text
 
 `widgets.NewRichText(placeholder)` (or `NewRichTextHTML(html)`) is a
