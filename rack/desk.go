@@ -1,4 +1,4 @@
-package players
+package rack
 
 import (
 	"github.com/codemodify/uitoolkit/app"
@@ -54,7 +54,7 @@ type Desk struct {
 const movePatience = 25
 
 // NewDesk is an empty desk whose panes snap within reach pixels.
-func NewDesk(reach int) *Desk { return &Desk{Rack: NewRack(reach)} }
+func NewDesk(reach int) *Desk { return &Desk{Rack: New(reach)} }
 
 // Add puts a window in the rack at wherever the desktop has it, and returns
 // its index. The first window added is the one the others hang from.
