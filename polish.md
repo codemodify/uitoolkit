@@ -245,12 +245,6 @@ Struck through once fixed; newest findings at the end of their section.
   preferred move never counts on Wayland, and the editor asks for a move of
   its own selection itself. Letting `app` prefer the source's action for
   its own drags would give Ctrl+drag a copy back.
-- **`TestRichTextLongDocument` is a wall-clock gate on a shared machine**: it
-  fails typing at over 8 ms a key, which is a real budget when the box is
-  idle and a coin toss when the suite is running beside something else (two
-  runs of `go test ./...` at once fail it, one run passes). It wants the
-  budget taken against a measured baseline, as `tools/perf` does, or moving
-  behind a build tag.
 - **The rich-text editor lays out a paragraph as one piece**: a paragraph
   of tens of thousands of characters re-lays whole on every key. Ordinary
   documents never notice (a paragraph re-lays in microseconds).
