@@ -32,9 +32,9 @@ touch a live IMAP/POP3 account.
 3. Do not call destructive RPCs (`Delete`, `Junk`, `Archive`,
    `Expunge`, Empty Trash, `Move`, `Send`) against a real daemon.
 4. Prefer driving **gallery** and headless widget trees. For Mail,
-   inject synthetic lists via `StartDemo` or `mail.Open` on that
+   inject synthetic lists via `StartDemo` or `mailapp.Open` on that
    fixture.
-5. `mail.IsolateTestEnv` / `IsolateTestEnvTB` point XDG +
+5. `mailapp.IsolateTestEnv` / `IsolateTestEnvTB` point XDG +
    `UITK_MAIL_CONFIG` at a temp dir, force `UITK_MAIL=memory`, and
    unset `UITK_MAIL_HOST` / `USER` / `PASS` / `SOCK`. The driver
    refuses any socket that is not a `StartDemo` temp path

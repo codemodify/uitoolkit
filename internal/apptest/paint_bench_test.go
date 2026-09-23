@@ -6,8 +6,8 @@ import (
 
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/app"
+	"github.com/codemodify/uitoolkit/examples/mail/mailapp"
 	"github.com/codemodify/uitoolkit/internal/demo"
-	"github.com/codemodify/uitoolkit/internal/mail"
 	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
@@ -27,8 +27,8 @@ func benchWindow(b *testing.B, w, h int, content func(*app.Application, *app.Win
 }
 
 func BenchmarkMailFullPaint(b *testing.B) {
-	mail.IsolateTestEnvTB(b)
-	a, w := benchWindow(b, 1280, 800, mail.MailApp)
+	mailapp.IsolateTestEnvTB(b)
+	a, w := benchWindow(b, 1280, 800, mailapp.MailApp)
 	b.ReportAllocs()
 	b.ResetTimer()
 	reused := 0

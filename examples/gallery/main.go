@@ -13,9 +13,9 @@ import (
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit"
 	"github.com/codemodify/uitoolkit/app"
+	"github.com/codemodify/uitoolkit/examples/mail/mailapp"
 	"github.com/codemodify/uitoolkit/icons"
 	"github.com/codemodify/uitoolkit/internal/demo"
-	"github.com/codemodify/uitoolkit/internal/mail"
 	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
@@ -240,7 +240,7 @@ func writeScreenshots(dir string) error {
 	if err := writeFontsShot(filepath.Join(dir, "fonts.png")); err != nil {
 		return err
 	}
-	if err := mail.WriteScreenshots(dir); err != nil {
+	if err := mailapp.WriteScreenshots(dir); err != nil {
 		return err
 	}
 	if err := writeCompareThumbs(dir); err != nil {

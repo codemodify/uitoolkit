@@ -14,8 +14,8 @@ import (
 	"time"
 
 	"github.com/codemodify/uitoolkit"
+	"github.com/codemodify/uitoolkit/examples/mail/mailapp"
 	"github.com/codemodify/uitoolkit/icons"
-	"github.com/codemodify/uitoolkit/internal/mail"
 	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
 )
@@ -25,17 +25,17 @@ func main() {
 	shot := flag.String("screenshot", "", "write mail-*.png into this directory and exit")
 	light := flag.Bool("light", false, "start with LightLook")
 	classic := flag.Bool("classic", false, "classic layout (preview below the thread list)")
-	sock := flag.String("socket", mail.DefaultSocket(), "mailclientd Unix socket")
+	sock := flag.String("socket", mailapp.DefaultSocket(), "mailclientd Unix socket")
 	flag.Parse()
 
 	if *shot != "" {
-		if err := mail.WriteScreenshots(*shot); err != nil {
+		if err := mailapp.WriteScreenshots(*shot); err != nil {
 			log.Fatal(err)
 		}
 		return
 	}
 
-	cli, err := mail.DialWait(*sock, 3*time.Second)
+	cli, err := mailapp.DialWait(*sock, 3*time.Second)
 	if err != nil {
 		log.Fatalf("%v\nStart the daemon first: go run ./cmd/mailclientd", err)
 	}
@@ -45,9 +45,9 @@ func main() {
 	if *light {
 		look = style.WithTheme(look, style.ThemeLight)
 	}
-	layout := mail.LayoutVertical
+	layout := mailapp.LayoutVertical
 	if *classic {
-		layout = mail.LayoutClassic
+		layout = mailapp.LayoutClassic
 	}
 
 	a := uitoolkit.New(uitoolkit.Options{Look: look, Headless: *headless, WatchLook: true})
@@ -59,7 +59,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	win.SetContent(mail.Open(a, win, cli, mail.AppOptions{
+	win.SetContent(mailapp.Open(a, win, cli, mailapp.AppOptions{
 		Light: style.LookAppearance(look).Theme == style.ThemeLight, Layout: layout,
 	}))
 	if *headless {

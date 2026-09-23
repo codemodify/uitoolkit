@@ -73,4 +73,4 @@ hashes button + checkbox + menu row paint so dirty-rect hacks fail CI.
 
 1. Write a `Norm` in `internal/uitest/norms.go` (`Check` must fail on the old bug).
 2. Mention it in the table above and in `widgets/contract_test.go`’s regression map.
-3. Keep Mail as dogfood (`go test ./internal/mail`); chrome fixes stay in the toolkit.
+3. Keep Mail as dogfood (`go test ./examples/mail/mailapp`); chrome fixes stay in the toolkit.
