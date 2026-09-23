@@ -413,6 +413,13 @@ func (l *ListView) AccessibleItems() []*a11y.Node {
 		if l.ItemText != nil {
 			text = l.ItemText(i)
 		}
+		// A row with a second column is read as one row: a screen reader
+		// says "Blue Monday, 7:29", which is what the eye takes off it.
+		if l.ItemDetail != nil {
+			if d := l.ItemDetail(i); d != "" {
+				text = strings.TrimPrefix(text+", "+d, ", ")
+			}
+		}
 		n := item(l, i, a11y.RoleListItem, text, l.rowRect(i).Translate(in))
 		n.State |= a11y.StateSelectable
 		if l.IsSelected(i) {
