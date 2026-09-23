@@ -311,3 +311,29 @@ Struck through once fixed; newest findings at the end of their section.
   so the text view wraps the folds again. Folding to the panel's measured
   width would need the readout to refold on resize (`Window.OnResize` now
   offers the moment).
+
+## Sample apps
+
+- **The Mail daemon links the whole Mail UI.** `examples/mail/mailapp` is one
+  package, so `cmd/mailclientd` — which speaks IMAP, POP3, SMTP and OAuth and
+  never draws anything — compiles and links the 3-pane chrome, the compose
+  window and the tray with it. Measured, the seam is nearly there already:
+  splitting the package into a store/protocol half and a UI half leaves the
+  daemon half compiling on its own once three helpers that are pure message
+  logic move out of UI files — `attachFileName` (`ui.go`, used by
+  `local.go`/`memory.go` to name a cached part), `newMailNotification`
+  (`tray.go`, used by `notify.go`'s daemon notifier) and `replyThreadHeaders`
+  (`compose.go`, RFC 5322 In-Reply-To/References, tested from
+  `hardening_test.go`). The UI half then needs nine unexported helpers
+  exported (`attachFileName`, `firstAddr`, `formatDate`, `groupThreaded`,
+  `newMailNotification`, `providerForAddress`, `replyThreadHeaders`,
+  `sortMessages`, `writeFileAtomic`) and about 1,700 core references
+  qualified across its twelve files — a rewrite, not a move, so it was left
+  for its own pass.
+- **`internal/apptest` imports a sample.** The paint bench and the automated
+  demo driver drive Mail (`mailapp.MailApp`, `StartDemo`, `IsolateTestEnv`,
+  `Open`, `OpenCompose`), so a toolkit-internal test harness now depends on
+  `examples/mail/mailapp` rather than the other way round. It is legal and it
+  is honest dogfooding — the harness drives the app exactly as a third party
+  would — but the arrow points out of the toolkit, and a `go test ./...` of
+  the toolkit now builds a sample.
