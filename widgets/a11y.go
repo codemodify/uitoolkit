@@ -93,11 +93,9 @@ func (c *Checkbox) AccessibleAction(item int, a a11y.Action) bool {
 	if a != a11y.ActionDefault || !c.Enabled() {
 		return false
 	}
-	c.Checked = !c.Checked
-	c.Invalidate()
-	if c.OnChange != nil {
-		c.OnChange(c.Checked)
-	}
+	// A screen reader's press is the user's press: it goes through the
+	// setter, so OnInput reports it like any other tick.
+	c.user.did(func() { c.SetChecked(!c.Checked) })
 	return true
 }
 
@@ -114,6 +112,17 @@ func (r *RadioButton) Describe(n *a11y.Node) {
 	n.Actions = n.Actions.With(a11y.ActionDefault)
 }
 
+// AccessibleAction picks the radio from the accessibility tree, which is
+// what a screen reader's "press" does. It was advertised above and never
+// implemented, so a screen reader could read a radio group and not work it.
+func (r *RadioButton) AccessibleAction(item int, a a11y.Action) bool {
+	if a != a11y.ActionDefault || !r.Enabled() {
+		return false
+	}
+	r.choose()
+	return true
+}
+
 func (s *Switch) Describe(n *a11y.Node) {
 	n.Role = a11y.RoleSwitch
 	nameOr(n, s.Text)
@@ -128,10 +137,9 @@ func (s *Switch) AccessibleAction(item int, a a11y.Action) bool {
 	if a != a11y.ActionDefault || !s.Enabled() {
 		return false
 	}
-	s.SetOn(!s.On)
-	if s.OnChange != nil {
-		s.OnChange(s.On)
-	}
+	// SetOn reports the change itself; calling OnChange again here told
+	// the app twice that one flip had happened.
+	s.user.did(func() { s.SetOn(!s.On) })
 	return true
 }
 
@@ -328,7 +336,7 @@ func (h *expanderHead) AccessibleAction(item int, a a11y.Action) bool {
 	if a != a11y.ActionDefault || !h.Enabled() {
 		return false
 	}
-	h.owner.SetExpanded(!h.owner.Expanded)
+	h.owner.toggleByUser(!h.owner.Expanded)
 	return true
 }
 
@@ -827,7 +835,7 @@ func (t *TextField) AccessibleSetText(s string) bool {
 		return false
 	}
 	t.caret = runeCount(s)
-	t.SetText(s)
+	t.user.did(func() { t.SetText(s) })
 	return true
 }
 
@@ -837,6 +845,6 @@ func (t *TextArea) AccessibleSetText(s string) bool {
 		return false
 	}
 	t.caret = runeCount(s)
-	t.SetText(s)
+	t.user.did(func() { t.SetText(s) })
 	return true
 }

@@ -266,6 +266,48 @@ Where it is used: `Picture.Zoomable` zooms about the fingers with a pinch
 `MaxZoom` and pans once larger than its box; the tour's silhouette stamp
 zooms and turns; Files goes back and forward.
 
+## OnChange, and OnInput
+
+Nine controls report a change twice over, and the difference is who made it.
+
+`OnChange` fires on **every** change, whoever made it — the user, or the app
+calling the setter. That is what a view bound to a model wants and it is not
+going anywhere. It is also a trap for the app driving a control *from* a
+model: a player moving its seek bar from the playback position calls
+`SetValue` thirty times a second, and each call comes straight back into the
+handler that was meant to *answer* the user.
+
+`OnInput` fires **only** when the change came from the user: the pointer, the
+keyboard, or an accessibility action a screen reader ran. An app driving a
+control from a data source listens to `OnInput` and needs no suppress flag.
+
+```go
+seek.OnInput = func(v float32) { transport.SeekTo(v) } // only when dragged
+go func() { for range tick { seek.SetValue(pos()) } }() // never re-entered
+```
+
+| Widget | the app's setter | the user's callback |
+| --- | --- | --- |
+| `Slider` | `SetValue` | `OnInput func(float32)` |
+| `NumberField` | `SetValue` | `OnInput func(float64)` |
+| `Checkbox` | `SetChecked` | `OnInput func(bool)` |
+| `RadioButton` | `SetSelected` | `OnInput func(bool)` |
+| `RadioGroup` | `Select` | `OnInput func(int)` |
+| `Switch` | `SetOn` | `OnInput func(bool)` |
+| `TextField` | `SetText` | `OnInput func(string)` |
+| `TextArea` | `SetText` | `OnInput func(string)` |
+| `Expander` | `SetExpanded` | `OnInput func(bool)` (beside `OnToggle`) |
+
+**`OnChange` first, then `OnInput`** — always, everywhere. Both see the
+control already holding the new value, so a handler reading the widget rather
+than its argument gets the same answer from either.
+
+Two edges worth stating. A control that drives another one as part of the
+user's edit — a spin button writing its inner field — marks its own change
+and not the other's, so each control answers for its own. And an exclusive
+`Accordion` closing one section to open another is the accordion's doing, not
+the user's: only the section the user opened reports input.
+
 ## Sliders and progress bars
 
 `Slider.Ticks` (`TicksBelow`, `TicksAbove`, `TicksBoth`) adds tick marks every
