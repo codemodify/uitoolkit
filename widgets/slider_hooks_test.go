@@ -1,6 +1,7 @@
 package widgets
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/codemodify/paintengine2d"
@@ -167,5 +168,130 @@ func TestVerticalSliderSaysSoInTheTree(t *testing.T) {
 	h.Describe(&hn)
 	if hn.State&a11y.StateHorizontal == 0 {
 		t.Error("a horizontal slider stopped saying so")
+	}
+}
+
+// ---- the label, the reading, the step and the page ------------------------------
+
+func keyed(s *Slider, k platform.Key, mods platform.Modifiers) {
+	s.KeyPress(widget.KeyEvent{Key: k, Mods: mods})
+}
+
+// An arrow key moves by the app's Step and a page key by its Page, and a
+// slider with neither moves the twentieth and the tenth it always did.
+func TestSliderStepAndPageAreTheApps(t *testing.T) {
+	s := NewSlider(-12, 12, 0, nil)
+	s.SetHost(&host{})
+	s.Step, s.Page = 1.5, 6
+	keyed(s, platform.KeyRight, 0)
+	if s.Value != 1.5 {
+		t.Errorf("an arrow key moved to %v, want one step of 1.5", s.Value)
+	}
+	keyed(s, platform.KeyPageUp, 0)
+	if s.Value != 7.5 {
+		t.Errorf("a page key moved to %v, want a page of 6 on top of the step", s.Value)
+	}
+	// Shift is still the finer move: a quarter of a step.
+	s.Value = 0
+	keyed(s, platform.KeyRight, platform.ModShift)
+	if s.Value != 0.375 {
+		t.Errorf("Shift and an arrow moved to %v, want a quarter step", s.Value)
+	}
+	d := NewSlider(0, 100, 50, nil)
+	d.SetHost(&host{})
+	keyed(d, platform.KeyRight, 0)
+	if d.Value != 55 {
+		t.Errorf("a slider with no Step moved to %v, want a twentieth of the range", d.Value)
+	}
+	keyed(d, platform.KeyPageDown, 0)
+	if d.Value != 45 {
+		t.Errorf("a slider with no Page moved to %v, want a tenth of the range", d.Value)
+	}
+}
+
+// Up is more on a slider standing on end, so Home is the top. The
+// horizontal convention turned on its side would put Home at the bottom and
+// read backwards to anyone using it.
+func TestVerticalSliderHomeIsTheTop(t *testing.T) {
+	v := NewVerticalSlider(0, 100, 50, nil)
+	v.SetHost(&host{})
+	keyed(v, platform.KeyHome, 0)
+	if v.Value != 100 {
+		t.Errorf("Home on a vertical slider went to %v, want the top", v.Value)
+	}
+	keyed(v, platform.KeyEnd, 0)
+	if v.Value != 0 {
+		t.Errorf("End on a vertical slider went to %v, want the bottom", v.Value)
+	}
+	h := NewSlider(0, 100, 50, nil)
+	h.SetHost(&host{})
+	keyed(h, platform.KeyHome, 0)
+	if h.Value != 0 {
+		t.Errorf("Home on a horizontal slider went to %v, want the start", h.Value)
+	}
+}
+
+// The tooltip and the accessible value are the reading, not the number.
+func TestSliderReadsItsValueTheAppsWay(t *testing.T) {
+	s := NewSlider(-12, 12, 4.5, nil)
+	s.SetHost(&host{})
+	if got := s.Tooltip(); got != "" {
+		t.Errorf("a slider with nothing to say has the tooltip %q", got)
+	}
+	s.Label = "Preamp"
+	s.Format = func(v float32) string { return fmt.Sprintf("%+.1f dB", v) }
+	if got := s.Tooltip(); got != "Preamp  +4.5 dB" {
+		t.Errorf("the tooltip is %q", got)
+	}
+	var n a11y.Node
+	s.Describe(&n)
+	if n.Name != "Preamp" || n.Value != "+4.5 dB" {
+		t.Errorf("a screen reader hears %q = %q", n.Name, n.Value)
+	}
+	s.Tip = "Output level"
+	if got := s.Tooltip(); got != "Output level" {
+		t.Errorf("an explicit tip became %q", got)
+	}
+}
+
+// The step a reader is offered is the step it gets.
+func TestScreenReaderStepsTheSlider(t *testing.T) {
+	inputs := 0
+	s := NewSlider(0, 100, 50, nil)
+	s.SetHost(&host{})
+	s.Step = 5
+	s.OnInput = func(float32) { inputs++ }
+	var n a11y.Node
+	s.Describe(&n)
+	if !n.Actions.Has(a11y.ActionIncrement) || n.Step != 5 {
+		t.Fatalf("the slider offers %v with a step of %v", n.Actions, n.Step)
+	}
+	if !s.AccessibleAction(0, a11y.ActionIncrement) || s.Value != 55 {
+		t.Errorf("an increment left the slider at %v", s.Value)
+	}
+	if !s.AccessibleAction(0, a11y.ActionDecrement) || s.Value != 50 {
+		t.Errorf("a decrement left the slider at %v", s.Value)
+	}
+	// A reader's step is the user's own, so a view bound to a model hears
+	// it (widgets/oninput.go).
+	if inputs != 2 {
+		t.Errorf("OnInput fired %d times for two accessibility steps", inputs)
+	}
+}
+
+// The spin button had the same gap: it advertised the step and did not move.
+func TestScreenReaderStepsTheNumberField(t *testing.T) {
+	inputs := 0
+	f := NewNumberField(0, 10, 5, 1, nil)
+	f.SetHost(&host{})
+	f.OnInput = func(float64) { inputs++ }
+	if !f.AccessibleAction(0, a11y.ActionIncrement) || f.Value != 6 {
+		t.Errorf("an increment left the spin button at %v", f.Value)
+	}
+	if !f.AccessibleAction(0, a11y.ActionDecrement) || f.Value != 5 {
+		t.Errorf("a decrement left the spin button at %v", f.Value)
+	}
+	if inputs != 2 {
+		t.Errorf("OnInput fired %d times for two accessibility steps", inputs)
 	}
 }

@@ -191,3 +191,74 @@ func TestPaintedButtonStillBehavesLikeOne(t *testing.T) {
 		t.Errorf("the tip of a painted button is %q", b.Tooltip())
 	}
 }
+
+// ---- the content painter -------------------------------------------------------
+
+// mark is a content painter: a square in the middle of the face, which is
+// what a transport glyph is.
+func mark(seen *int, st *style.ControlState) ButtonContentPainter {
+	return func(ctx *paintengine2d.Context, b paintengine2d.Rect, s style.ControlState) {
+		*seen++
+		*st = s
+		side := b.Dy() / 3
+		cx, cy := (b.Min.X+b.Max.X)/2, (b.Min.Y+b.Max.Y)/2
+		ctx.DrawRect(paintengine2d.XYWH(cx-side/2, cy-side/2, side, side),
+			paintengine2d.Fill(paintengine2d.RGB(1, 0, 1)))
+	}
+}
+
+// The content painter draws on the look's face and leaves it standing: the
+// mark is there and the corner of the button is the look's own pixel.
+func TestButtonContentDrawsOnTheLooksFace(t *testing.T) {
+	seen := 0
+	var got style.ControlState
+	b := NewButton("", nil)
+	b.SetHost(&host{})
+	b.Arrange(paintengine2d.XYWH(0, 0, 90, 30))
+	plain := immediatePaint(b, 90, 30)
+	b.Content = mark(&seen, &got)
+	marked := immediatePaint(b, 90, 30)
+	if seen != 1 {
+		t.Fatalf("the content painter was consulted %d times, want once", seen)
+	}
+	if sameImage(plain, marked) {
+		t.Error("the content painter drew and the button did not change")
+	}
+	r1, g1, b1, a1 := plain.PremulAt(3, 3)
+	r2, g2, b2, a2 := marked.PremulAt(3, 3)
+	if r1 != r2 || g1 != g2 || b1 != b2 || a1 != a2 {
+		t.Error("the look's own face was redrawn under the mark")
+	}
+}
+
+// The content painter is told the state the face was drawn in, so a mark
+// that is a different ink when the key is hot moves with it.
+func TestButtonContentIsToldTheState(t *testing.T) {
+	seen := 0
+	var got style.ControlState
+	b := NewToolButton("", style.IconNone, nil)
+	b.Content = mark(&seen, &got)
+	b.SetHost(&host{})
+	b.Arrange(paintengine2d.XYWH(0, 0, 40, 30))
+	b.MouseEnter()
+	immediatePaint(b, 40, 30)
+	if seen == 0 || !got.Hovered() {
+		t.Errorf("a hovered key painted its mark in %v (%d paints)", got, seen)
+	}
+}
+
+// A Painter replaces the face, the mark and all: a picture of a key has its
+// glyph painted in it already, so the content painter is not asked.
+func TestButtonPainterLeavesTheContentPainterOut(t *testing.T) {
+	seen, art := 0, 0
+	var got style.ControlState
+	b := NewButton("", nil)
+	b.Content = mark(&seen, &got)
+	b.Painter = flatArt(&art, &got)
+	b.SetHost(&host{})
+	b.Arrange(paintengine2d.XYWH(0, 0, 90, 30))
+	immediatePaint(b, 90, 30)
+	if art != 1 || seen != 0 {
+		t.Errorf("art painted %d times, content %d: the art paints the mark itself", art, seen)
+	}
+}

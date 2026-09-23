@@ -35,6 +35,36 @@ type RowGeometry struct {
 	ThumbLength float32
 }
 
+// RowPainter paints row i in place of the look's row and reports whether it
+// did, in the box the row would have been drawn in.
+//
+// It is the other half of [RowGeometry]: the geometry hook says where a
+// skin's rows are, and this one says what they are made of. A skin engine
+// hands DrawListRow to the pack underneath it — that is the rule, and it is
+// what keeps a skinned form a form — so a list sitting in a panel's printed
+// well paints the pack's rows in the pack's font, where the art wants
+// eleven design pixels of green on black. A skin is a picture, and a
+// picture has its own type in it.
+//
+// It paints the row and nothing else: the selection, the keyboard, the
+// wheel, type-ahead, drag and drop and the accessibility tree are the
+// list's either way, and a painter with nothing for this look returns false
+// and the look's own row is drawn. A list with one paints row by row rather
+// than from its scrolled row cache, since what the painter draws is the
+// app's own and the list cannot know when it changed.
+type RowPainter func(ctx *paintengine2d.Context, b paintengine2d.Rect, i int, st style.ControlState) bool
+
+// ScrollPainter paints a list's scroll bar in place of the look's and
+// reports whether it did; track is the groove and thumb the part that
+// rides it, both in the box the bar would have been drawn in.
+//
+// It is for the skin whose thumb is a loose sprite of its own
+// (style.DrawSkinSprite) riding a groove printed in the art. A skin pack's
+// own scroll parts need none of this — its engine has already overridden
+// them — so a painter that has no sprite for this look returns false and
+// the look's bar is drawn, groove and all.
+type ScrollPainter func(ctx *paintengine2d.Context, track, thumb paintengine2d.Rect, st style.ControlState) bool
+
 // placed reports whether the geometry says where the rows go at all.
 func (g *RowGeometry) placed() bool { return g != nil && !g.Rows.Empty() }
 
@@ -61,6 +91,25 @@ type ListView struct {
 	// A placed list draws no view frame: the art has the well printed in
 	// it already.
 	RowGeo func(lk style.LookAndFeel) *RowGeometry
+	// RowPaint paints the rows itself, and ScrollPaint the bar, where a
+	// skin's art wants its own type and its own thumb ([RowPainter],
+	// [ScrollPainter]). Both are the skin's way in and neither changes
+	// what the list *is*.
+	RowPaint    RowPainter
+	ScrollPaint ScrollPainter
+	// ItemDetail is a second column at the row's right-hand end: a
+	// track's length beside its title, a file's size beside its name.
+	//
+	// A row with one is painted as the look's own table cells — a first
+	// and a last, the detail aligned to the end — rather than as a list
+	// row, because a list row is one label and a look's second column is
+	// the look's business: its cell padding, and the column guide a look
+	// that rules its columns draws between them. It is the same row a
+	// TableView would paint, without a header over it, and a list of
+	// three columns with a header on them is a TableView.
+	//
+	// Nil is the one-column list a list view has always been.
+	ItemDetail func(i int) string
 	// Sidebar paints the list as a sidebar (a settings page list, a
 	// mail app's folders): macOS source lists, libadwaita's navigation
 	// sidebar, WinUI's navigation pane, where the look has one.
@@ -317,7 +366,7 @@ func (l *ListView) Paint(ctx *paintengine2d.Context) {
 	}
 	rh := l.rowH()
 	lo, hi := l.visibleRange()
-	if rec, ok := ctx.Device().(*paintengine2d.Recorder); ok {
+	if rec, ok := ctx.Device().(*paintengine2d.Recorder); ok && l.RowPaint == nil {
 		// Rows carry the viewport on their band group, not in their own
 		// clips, so no ctx.ClipRect(b) here.
 		o := rowOrigin(ctx)
@@ -334,14 +383,13 @@ func (l *ListView) Paint(ctx *paintengine2d.Context) {
 				st := uint64(l.rowState(i))
 				sig := newRowSig(l.IsSelected(i), i == l.hovered, bits32(rw)^st<<40^st>>24)
 				sig.str(label)
+				if l.ItemDetail != nil {
+					sig.str(l.ItemDetail(i))
+				}
 				return sig.sum()
 			},
 			func(i int) {
-				label := ""
-				if l.ItemText != nil {
-					label = l.ItemText(i)
-				}
-				lk.DrawListRow(ctx, paintengine2d.XYWH(0, 0, rw, rh), l.rowState(i), label)
+				l.drawRow(ctx, lk, paintengine2d.XYWH(0, 0, rw, rh), i)
 			},
 		)
 	} else {
@@ -349,12 +397,7 @@ func (l *ListView) Paint(ctx *paintengine2d.Context) {
 		ctx.ClipRect(b)
 		for i := lo; i < hi; i++ {
 			y := float32(i)*rh - l.OffsetY
-			row := paintengine2d.XYWH(0, y, rw, rh)
-			label := ""
-			if l.ItemText != nil {
-				label = l.ItemText(i)
-			}
-			lk.DrawListRow(ctx, row, l.rowState(i), label)
+			l.drawRow(ctx, lk, paintengine2d.XYWH(0, y, rw, rh), i)
 		}
 		ctx.Restore()
 	}
@@ -369,12 +412,63 @@ func (l *ListView) Paint(ctx *paintengine2d.Context) {
 	if l.dropAt >= 0 {
 		paintDropCaret(ctx, lk, l.dropAt, l.Count, 0, rw, 0, rh, l.OffsetY, b)
 	}
-	l.vbar.paint(l, ctx, lk, l.vparts(), true, l.OffsetY)
+	if sp := l.vparts(); !l.paintedScroll(ctx, sp) {
+		l.vbar.paint(l, ctx, lk, sp, true, l.OffsetY)
+	}
 	// The current row carries the focus mark; a focused list without one
 	// rings itself.
 	if l.Focused() && (l.Selected < 0 || l.Selected >= l.Count) {
 		lk.DrawFocusRing(ctx, b)
 	}
+}
+
+// drawRow paints row i in row: the app's own painter, the look's two cells
+// where there is a detail column, or the look's row.
+func (l *ListView) drawRow(ctx *paintengine2d.Context, lk style.LookAndFeel, row paintengine2d.Rect, i int) {
+	st := l.rowState(i)
+	if l.RowPaint != nil && l.RowPaint(ctx, row, i, st) {
+		return
+	}
+	label := ""
+	if l.ItemText != nil {
+		label = l.ItemText(i)
+	}
+	if l.ItemDetail == nil {
+		lk.DrawListRow(ctx, row, st, label)
+		return
+	}
+	// Two table cells, as a table paints a row of them: the detail is
+	// sized to itself and pushed to the end, so a column of lengths lines
+	// up down the list without the list measuring every row it has not
+	// drawn. The focus mark spans the row, since a cell does not know it.
+	detail := l.ItemDetail(i)
+	face := lk.Font()
+	w := float32(0)
+	if detail != "" {
+		w = min(face.Advance(detail)+lk.Metrics().Pad*2, row.Dx())
+	}
+	lk.DrawTableCell(ctx, paintengine2d.XYWH(row.Min.X, row.Min.Y, row.Dx()-w, row.Dy()), st|style.StateFirst, label, style.AlignStart, face)
+	lk.DrawTableCell(ctx, paintengine2d.XYWH(row.Max.X-w, row.Min.Y, w, row.Dy()), st|style.StateLast, detail, style.AlignEnd, face)
+	if st.Focused() {
+		style.DrawItemFocusOf(lk, ctx, row, st)
+	}
+}
+
+// paintedScroll gives a ScrollPainter the groove and the thumb, and reports
+// whether it took them. A list with nothing to scroll has no bar to paint,
+// and the painter is not asked.
+func (l *ListView) paintedScroll(ctx *paintengine2d.Context, sp style.ScrollParts) bool {
+	if l.ScrollPaint == nil || sp.Thumb.Empty() {
+		return false
+	}
+	st := l.State()
+	if l.vbar.active {
+		st |= style.StatePressed
+	}
+	if l.vbar.over {
+		st |= style.StateHovered
+	}
+	return l.ScrollPaint(ctx, sp.Track, sp.Thumb, st)
 }
 
 func (l *ListView) indexAt(y float32) int {

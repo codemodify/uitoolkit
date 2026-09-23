@@ -2,6 +2,7 @@ package widgets
 
 import (
 	"math"
+	"strconv"
 
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/layout"
@@ -51,10 +52,28 @@ type Slider struct {
 	// stops, in design pixels: half the thumb a Painter draws, so the
 	// pointer and the picture agree about where the ends are. Zero leaves
 	// it to the look (style.SliderTravelOf), which knows its own thumb.
-	Travel  float32
-	user    userEdit
-	hovered bool
-	drag    bool
+	Travel float32
+	// Label is what the slider is called — "62 Hz", "Preamp" — where no
+	// other label names it: its accessible name and the first half of its
+	// tooltip. A slider beside a widgets.Label of its own wants
+	// SetAccessibleName pointed at that one instead and no Label here.
+	Label string
+	// Format turns the value into what the tooltip shows and what a screen
+	// reader reads, which is rarely the bare number: an equaliser's fader
+	// says "+4.5 dB" and a volume says "60%". Nil reads the number.
+	Format func(v float32) string
+	// Tip is the tooltip, as on every other control. Empty, the slider
+	// says itself: the Label and the reading Format makes of the value,
+	// which is what a fader with no room for a label beside it needs.
+	Tip string
+	// Step is one press of an arrow key and one accessibility increment;
+	// Page is one press of Page Up or Page Down. Zero is the look-free
+	// default either way — a twentieth of the range, and a tenth for a
+	// page — and Shift takes a quarter of a step, as it always did.
+	Step, Page float32
+	user       userEdit
+	hovered    bool
+	drag       bool
 	// grabD is where along the track the pointer took hold of the thumb:
 	// pressing the thumb never moves it, only the track does.
 	grabD float32
@@ -100,6 +119,61 @@ func (s *Slider) SetValue(v float32) {
 	if s.user.is() && s.OnInput != nil {
 		s.OnInput(v)
 	}
+}
+
+// Reading is the value as it is said out loud: what Format makes of it, or
+// the bare number. It is the slider's accessible value and half its
+// tooltip, and an app that puts the reading beside the slider itself wants
+// the same string as the screen reader.
+func (s *Slider) Reading() string {
+	if s.Format != nil {
+		return s.Format(s.Value)
+	}
+	return strconv.FormatFloat(float64(s.Value), 'f', -1, 32)
+}
+
+// Tooltip is Tip, or the slider saying itself: "Preamp  +4.5 dB".
+func (s *Slider) Tooltip() string {
+	if s.Tip != "" {
+		return s.Tip
+	}
+	if s.Label == "" {
+		if s.Format == nil {
+			return ""
+		}
+		return s.Reading()
+	}
+	if s.Format == nil {
+		return s.Label
+	}
+	return s.Label + "  " + s.Reading()
+}
+
+// step is one arrow key, and page one Page Up: the app's own, or a
+// twentieth and a tenth of the range. Shift takes a quarter of a step, the
+// finer move a slider has always had.
+func (s *Slider) step(fine bool) float32 {
+	d := s.Step
+	if d <= 0 {
+		d = (s.Max - s.Min) / 20
+	}
+	if fine {
+		d /= 4
+	}
+	if d == 0 {
+		d = 1
+	}
+	return d
+}
+
+func (s *Slider) page() float32 {
+	if s.Page > 0 {
+		return s.Page
+	}
+	if d := (s.Max - s.Min) * 0.1; d != 0 {
+		return d
+	}
+	return 1
 }
 
 func (s *Slider) t() float32 {
@@ -297,14 +371,7 @@ func (s *Slider) keyPress(e widget.KeyEvent) bool {
 		return false
 	}
 	s.MarkKeyboardFocus()
-	span := s.Max - s.Min
-	step := span / 20
-	if e.Mods.Shift() {
-		step = span / 80
-	}
-	if step == 0 {
-		step = 1
-	}
+	step := s.step(e.Mods.Shift())
 	switch e.Key {
 	case platform.KeyLeft, platform.KeyDown:
 		s.SetValue(s.Value - step)
@@ -313,19 +380,31 @@ func (s *Slider) keyPress(e widget.KeyEvent) bool {
 		s.SetValue(s.Value + step)
 		return true
 	case platform.KeyPageDown:
-		s.SetValue(s.Value - span*0.1)
+		s.SetValue(s.Value - s.page())
 		return true
 	case platform.KeyPageUp:
-		s.SetValue(s.Value + span*0.1)
+		s.SetValue(s.Value + s.page())
 		return true
 	case platform.KeyHome:
-		s.SetValue(s.Min)
+		// Home is the start of the travel, which on a slider standing on
+		// end is the top: up is more, so the top is Max. A vertical
+		// slider taking Home to the bottom is the horizontal convention
+		// turned on its side, and reads backwards to anyone using it.
+		s.SetValue(s.end(true))
 		return true
 	case platform.KeyEnd:
-		s.SetValue(s.Max)
+		s.SetValue(s.end(false))
 		return true
 	}
 	return false
+}
+
+// end is the value Home (home) or End reaches.
+func (s *Slider) end(home bool) float32 {
+	if home == s.Vertical {
+		return s.Max
+	}
+	return s.Min
 }
 
 func (s *Slider) MousePress(e widget.MouseEvent) bool {
