@@ -1,4 +1,4 @@
-package players
+package rack
 
 import "testing"
 
@@ -66,7 +66,7 @@ func TestTheNearerEdgeWinsAtACorner(t *testing.T) {
 
 // The whole point of the rack: drag the main strip and the stack follows.
 func TestDraggingTheMainStripCarriesTheStack(t *testing.T) {
-	r := NewRack(10)
+	r := New(10)
 	main := r.Add("main", Box{X: 100, Y: 100, W: 275, H: 116})
 	eq := r.Add("equaliser", Box{X: 100, Y: 216, W: 275, H: 116})
 	pl := r.Add("playlist", Box{X: 100, Y: 332, W: 275, H: 232})
@@ -99,7 +99,7 @@ func TestDraggingTheMainStripCarriesTheStack(t *testing.T) {
 // Dragging a pane in the middle of the stack carries what hangs from it
 // and leaves what it hung from where it was.
 func TestDraggingAPaneCarriesOnlyWhatHangsFromIt(t *testing.T) {
-	r := NewRack(10)
+	r := New(10)
 	main := r.Add("main", Box{X: 0, Y: 0, W: 200, H: 100})
 	eq := r.Add("equaliser", Box{X: 0, Y: 100, W: 200, H: 100})
 	pl := r.Add("playlist", Box{X: 0, Y: 200, W: 200, H: 100})
@@ -127,7 +127,7 @@ func TestDraggingAPaneCarriesOnlyWhatHangsFromIt(t *testing.T) {
 // A pane cannot end up stuck to something that hangs from it, or the two
 // would chase each other forever.
 func TestAPaneNeverBondsToItsOwnDescendant(t *testing.T) {
-	r := NewRack(10)
+	r := New(10)
 	a := r.Add("a", Box{X: 0, Y: 0, W: 100, H: 100})
 	b := r.Add("b", Box{X: 0, Y: 100, W: 100, H: 100})
 	r.MoveTo(b, 0, 100)
@@ -146,7 +146,7 @@ func TestAPaneNeverBondsToItsOwnDescendant(t *testing.T) {
 
 // Resizing the anchor keeps the stack flush under it.
 func TestResizingTheAnchorMovesWhatHangsFromIt(t *testing.T) {
-	r := NewRack(10)
+	r := New(10)
 	r.Add("main", Box{X: 50, Y: 50, W: 400, H: 200})
 	pl := r.Add("playlist", Box{X: 50, Y: 250, W: 400, H: 300})
 	r.MoveTo(pl, 50, 250)
@@ -158,7 +158,7 @@ func TestResizingTheAnchorMovesWhatHangsFromIt(t *testing.T) {
 
 // Detach and Attach are the controls, not the drag.
 func TestAttachAndDetach(t *testing.T) {
-	r := NewRack(10)
+	r := New(10)
 	r.Add("main", Box{X: 10, Y: 10, W: 300, H: 120})
 	pl := r.Add("playlist", Box{X: 900, Y: 700, W: 300, H: 200})
 	r.Attach(pl, 0, SideBottom)
@@ -177,7 +177,7 @@ func TestAttachAndDetach(t *testing.T) {
 }
 
 func TestBoundsCoversEveryShownPane(t *testing.T) {
-	r := NewRack(10)
+	r := New(10)
 	r.Add("main", Box{X: 100, Y: 100, W: 200, H: 100})
 	pl := r.Add("playlist", Box{X: 100, Y: 200, W: 260, H: 150})
 	r.MoveTo(pl, 100, 200)

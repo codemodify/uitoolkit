@@ -12,6 +12,7 @@ import (
 	"github.com/codemodify/uitoolkit/internal/players"
 	"github.com/codemodify/uitoolkit/internal/players/playertest"
 	"github.com/codemodify/uitoolkit/platform"
+	"github.com/codemodify/uitoolkit/rack"
 	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
 )
@@ -216,7 +217,7 @@ func TestTheStackTravelsWithTheStrip(t *testing.T) {
 	}
 	eq := p.Desk.Rack.Pane(p.iEq)
 	list := p.Desk.Rack.Pane(p.iList)
-	if eq.To != p.iMain || eq.Bond.Side != players.SideBottom {
+	if eq.To != p.iMain || eq.Bond.Side != rack.SideBottom {
 		t.Fatalf("the equaliser is bonded to %d on the %v", eq.To, eq.Bond.Side)
 	}
 	if list.To != p.iEq {
@@ -265,7 +266,7 @@ func TestAWindowComesLooseAndSnapsBack(t *testing.T) {
 	a.PumpOnce()
 	p.Desk.Follow()
 	pane := p.Desk.Rack.Pane(p.iList)
-	if pane.To != p.iEq || pane.Bond.Side != players.SideBottom {
+	if pane.To != p.iEq || pane.Bond.Side != rack.SideBottom {
 		t.Fatalf("the playlist did not snap back: bonded to %d on the %v", pane.To, pane.Bond.Side)
 	}
 	if pane.Box.X != eq.X || pane.Box.Y != eq.Bottom() {

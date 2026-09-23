@@ -12,6 +12,7 @@ import (
 	"github.com/codemodify/uitoolkit/internal/players"
 	"github.com/codemodify/uitoolkit/internal/players/playertest"
 	"github.com/codemodify/uitoolkit/platform"
+	"github.com/codemodify/uitoolkit/rack"
 	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
 )
@@ -235,7 +236,7 @@ func TestThePlaylistIsAnchoredAndFollows(t *testing.T) {
 		t.Skip("this backend does not place windows")
 	}
 	pane := p.Desk.Rack.Pane(p.iList)
-	if pane.To != p.iMain || pane.Bond.Side != players.SideRight {
+	if pane.To != p.iMain || pane.Bond.Side != rack.SideRight {
 		t.Fatalf("the playlist is bonded to %d on the %v", pane.To, pane.Bond.Side)
 	}
 	p.Main.Move(120, 90)
@@ -247,7 +248,7 @@ func TestThePlaylistIsAnchoredAndFollows(t *testing.T) {
 	}
 
 	// The control: put it under the player instead.
-	p.Desk.Attach(p.iList, p.iMain, players.SideBottom)
+	p.Desk.Attach(p.iList, p.iMain, rack.SideBottom)
 	a.PumpOnce()
 	if pane.Box.Y != main.Bottom() || pane.Box.X != main.X {
 		t.Errorf("re-anchored to %+v, want flush under %+v", pane.Box, main)

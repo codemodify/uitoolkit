@@ -32,6 +32,7 @@ import (
 	"github.com/codemodify/uitoolkit/app"
 	"github.com/codemodify/uitoolkit/internal/players"
 	"github.com/codemodify/uitoolkit/platform"
+	"github.com/codemodify/uitoolkit/rack"
 	"github.com/codemodify/uitoolkit/widget"
 )
 
@@ -53,7 +54,7 @@ const Skin = "minim"
 // Player is the three windows and the one model under them.
 type Player struct {
 	App  *app.Application
-	Desk *players.Desk
+	Desk *rack.Desk
 
 	Transport *players.Transport
 	Spectrum  *players.Spectrum
@@ -121,7 +122,7 @@ func New(a *app.Application, opts Options) (*Player, error) {
 	// The rack speaks logical pixels, so its reach grows with the display
 	// like every other measurement in the toolkit: ten pixels of slop is a
 	// fingertip at 1× and at 2× alike.
-	p.Desk = players.NewDesk(players.DefaultReach)
+	p.Desk = rack.NewDesk(rack.DefaultReach)
 	p.iMain = p.Desk.Add("main", main)
 
 	if !opts.NoEq {
@@ -133,7 +134,7 @@ func New(a *app.Application, opts Options) (*Player, error) {
 		p.eqPane = newEqPane(p)
 		w.SetContent(p.eqPane)
 		p.iEq = p.Desk.Add("equaliser", w)
-		p.Desk.Attach(p.iEq, p.iMain, players.SideBottom)
+		p.Desk.Attach(p.iEq, p.iMain, rack.SideBottom)
 	}
 	if !opts.NoList {
 		w, err := p.open(a, opts, "Minim playlist", layoutPlaylist, StripW, ListH)
@@ -144,7 +145,7 @@ func New(a *app.Application, opts Options) (*Player, error) {
 		p.listPane = newListPane(p)
 		w.SetContent(p.listPane)
 		p.iList = p.Desk.Add("playlist", w)
-		p.Desk.Attach(p.iList, maxInt(p.iEq, p.iMain), players.SideBottom)
+		p.Desk.Attach(p.iList, maxInt(p.iEq, p.iMain), rack.SideBottom)
 	}
 
 	p.Transport.Changed = p.refresh
@@ -246,10 +247,10 @@ func (p *Player) settle() {
 	}
 	p.tries++
 	if p.iEq >= 0 {
-		p.Desk.Attach(p.iEq, p.iMain, players.SideBottom)
+		p.Desk.Attach(p.iEq, p.iMain, rack.SideBottom)
 	}
 	if p.iList >= 0 {
-		p.Desk.Attach(p.iList, maxInt(p.iEq, p.iMain), players.SideBottom)
+		p.Desk.Attach(p.iList, maxInt(p.iEq, p.iMain), rack.SideBottom)
 	}
 	// It has taken when the panes are where their bonds say. A window
 	// manager may refuse a move that would hang a window off the screen,
