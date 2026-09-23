@@ -1,4 +1,4 @@
-package skinart
+package skingen
 
 import (
 	"fmt"

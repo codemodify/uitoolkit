@@ -1,10 +1,10 @@
-package skinart
+package skingen
 
 import (
 	"strings"
 
 	"github.com/codemodify/paintengine2d"
-	"github.com/codemodify/uitoolkit/internal/players/minim/panel"
+	"github.com/codemodify/uitoolkit/skingen/panel"
 )
 
 // MinimClassic is the compact player's base-skin look of the era: slate-blue
@@ -18,7 +18,7 @@ import (
 // at all. The three window faces are pictures with the wells, grooves and
 // printed labels in them, and the keys, digits, lamps and letters are loose
 // sprites the player paints into its own layout (style.DrawSkinSprite).
-// Where each one goes is internal/players/minim/panel, which this file reads
+// Where each one goes is skingen/panel, which this file reads
 // the same rects from, so the art and the app cannot disagree about a key.
 //
 // Every colour below was chosen by eye against the look of the era and then
@@ -124,7 +124,7 @@ func MinimClassic() *Plan {
 				d = 1
 			}
 			tw := pixWidth(s)
-			pixLabel(ctx, float32(int((w-float32(tw))/2))+d, float32(int((h-6)/2))+d, s, hex(clGlyph))
+			pixLabel(ctx, float32(int((w-float32(tw))/2))+d, float32(int((h-6)/2))+d, s, Hex(clGlyph))
 		}
 	}
 	lampWord := func(s string) func(*paintengine2d.Context, float32, float32, bool) {
@@ -135,7 +135,7 @@ func MinimClassic() *Plan {
 			}
 			tw := pixWidth(s)
 			x := float32(int((w-float32(tw)-4)/2)) + 4
-			pixLabel(ctx, x+d, float32(int((h-6)/2))+d, s, hex(clGlyph))
+			pixLabel(ctx, x+d, float32(int((h-6)/2))+d, s, Hex(clGlyph))
 		}
 	}
 	keys := []key{
@@ -167,8 +167,8 @@ func MinimClassic() *Plan {
 			if down {
 				d = 1
 			}
-			pixLabel(ctx, float32(int((w-float32(pixWidth("LIST")))/2))+d, 2+d, "LIST", hex(clGlyph))
-			pixLabel(ctx, float32(int((w-float32(pixWidth("OPTS")))/2))+d, 10+d, "OPTS", hex(clGlyph))
+			pixLabel(ctx, float32(int((w-float32(pixWidth("LIST")))/2))+d, 2+d, "LIST", Hex(clGlyph))
+			pixLabel(ctx, float32(int((w-float32(pixWidth("OPTS")))/2))+d, 10+d, "OPTS", Hex(clGlyph))
 		}, false},
 	}
 	for _, k := range keys {
@@ -207,9 +207,9 @@ func MinimClassic() *Plan {
 	for i, g := range []string{"prev", "play", "pause", "stop", "next", "eject"} {
 		r := f.List.Mini[i]
 		for _, st := range []string{"", ".down"} {
-			col := hex(clGold)
+			col := Hex(clGold)
 			if st != "" {
-				col = hex(clCream)
+				col = Hex(clCream)
 			}
 			g := g
 			l.panel("mini."+g+st, r.W(), r.H(), false, func(ctx *paintengine2d.Context, w, h float32) {
@@ -223,28 +223,28 @@ func MinimClassic() *Plan {
 	for _, d := range "0123456789-" {
 		d := d
 		l.panel("led."+string(d), 9, 13, false, func(ctx *paintengine2d.Context, w, h float32) {
-			segDigit(ctx, w, h, 1, segDigits[d], hex(clLCD))
+			segDigit(ctx, w, h, 1, segDigits[d], Hex(clLCD))
 		})
 	}
 	l.panel("led.colon", 3, 13, false, func(ctx *paintengine2d.Context, w, h float32) {
-		px(ctx, 1, 4, 1, 2, hex(clLCD))
-		px(ctx, 1, 8, 1, 2, hex(clLCD))
+		px(ctx, 1, 4, 1, 2, Hex(clLCD))
+		px(ctx, 1, 8, 1, 2, Hex(clLCD))
 	})
 	l.row(9)
 	l.panel("state.play", 9, 9, false, func(ctx *paintengine2d.Context, w, h float32) {
-		px(ctx, 0, 1, 2, 2, hex(clLCD)) // the working dot
+		px(ctx, 0, 1, 2, 2, Hex(clLCD)) // the working dot
 		for i := float32(0); i < 4; i++ {
-			px(ctx, 3+i, 1+i, 1, 7-2*i, hex(clLCD))
+			px(ctx, 3+i, 1+i, 1, 7-2*i, Hex(clLCD))
 		}
 	})
 	l.panel("state.pause", 9, 9, false, func(ctx *paintengine2d.Context, w, h float32) {
-		px(ctx, 0, 1, 2, 2, hex(clLCDLo))
-		px(ctx, 3, 1, 2, 7, hex(clLCD))
-		px(ctx, 6, 1, 2, 7, hex(clLCD))
+		px(ctx, 0, 1, 2, 2, Hex(clLCDLo))
+		px(ctx, 3, 1, 2, 7, Hex(clLCD))
+		px(ctx, 6, 1, 2, 7, Hex(clLCD))
 	})
 	l.panel("state.stop", 9, 9, false, func(ctx *paintengine2d.Context, w, h float32) {
-		px(ctx, 0, 1, 2, 2, hex("#a02010"))
-		px(ctx, 3, 2, 5, 5, hex(clLCD))
+		px(ctx, 0, 1, 2, 2, Hex("#a02010"))
+		px(ctx, 3, 2, 5, 5, Hex(clLCD))
 	})
 	l.row(10)
 	l.panel("lamp.mono", f.Main.Mono.W(), f.Main.Mono.H(), false, func(ctx *paintengine2d.Context, w, h float32) {
@@ -282,10 +282,10 @@ func MinimClassic() *Plan {
 	// These are sliced for real: the engine stretches them to the window.
 	l.row(14)
 	l.cell("window.normal", 8, 8, [4]int{2, 2, 2, 2}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		px(ctx, 0, 0, w, h, hex(clInk))
-		px(ctx, 1, 1, w-2, h-2, hex(clLight))
-		px(ctx, 2, 2, w-3, h-3, hex(clShade))
-		px(ctx, 2, 2, w-4, h-4, hex(clBody))
+		px(ctx, 0, 0, w, h, Hex(clInk))
+		px(ctx, 1, 1, w-2, h-2, Hex(clLight))
+		px(ctx, 2, 2, w-3, h-3, Hex(clShade))
+		px(ctx, 2, 2, w-4, h-4, Hex(clBody))
 	})
 	// The band: the mark at the left, then the groove, which runs on under
 	// the title and is stopped either side of it by the plate.
@@ -302,18 +302,18 @@ func MinimClassic() *Plan {
 		clPlate(ctx, w, h, false)
 	})
 	l.cell("capbtn.normal", 9, 9, [4]int{2, 2, 2, 2}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		clCapKey(ctx, w, h, hex("#2c2c40"), false)
+		clCapKey(ctx, w, h, Hex("#2c2c40"), false)
 	})
 	l.cell("capbtn.hover", 9, 9, [4]int{2, 2, 2, 2}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		clCapKey(ctx, w, h, hex("#3c3c56"), false)
+		clCapKey(ctx, w, h, Hex("#3c3c56"), false)
 	})
 	l.cell("capbtn.pressed", 9, 9, [4]int{2, 2, 2, 2}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		clCapKey(ctx, w, h, hex("#1a1a28"), true)
+		clCapKey(ctx, w, h, Hex("#1a1a28"), true)
 	})
 	// A skin may re-draw the focus ring and may never remove it: this one
 	// is the dotted rectangle of the era, in the display's green.
 	l.cell("focus.ring", 8, 8, [4]int{2, 2, 2, 2}, "none", false, func(ctx *paintengine2d.Context, w, h float32) {
-		minDots(ctx, 0, 0, w, h, hex(clLCD))
+		minDots(ctx, 0, 0, w, h, Hex(clLCD))
 	})
 	l.close()
 
@@ -364,7 +364,7 @@ func MinimClassic() *Plan {
 // darker foot, one flat colour per row, which is how a gradient was drawn on
 // a panel with a palette.
 func clChrome(ctx *paintengine2d.Context, w, h float32) {
-	top, bot := hex(clBodyTop), hex(clBodyBot)
+	top, bot := Hex(clBodyTop), Hex(clBodyBot)
 	for y := float32(0); y < h; y++ {
 		px(ctx, 0, y, w, 1, lerpColor(top, bot, y/max(h-1, 1)))
 	}
@@ -373,7 +373,7 @@ func clChrome(ctx *paintengine2d.Context, w, h float32) {
 // clInset is the panel's inner frame: a lit line and a shadowed line a few
 // pixels in from the edge, the tell of a face pressed out of one sheet.
 func clInset(ctx *paintengine2d.Context, x, y, w, h float32) {
-	lit, dark := hex(clLight), hex(clShade)
+	lit, dark := Hex(clLight), Hex(clShade)
 	px(ctx, x, y, w, 1, dark)
 	px(ctx, x, y, 1, h, dark)
 	px(ctx, x+1, y+1, w-2, 1, lit)
@@ -388,37 +388,37 @@ func clInset(ctx *paintengine2d.Context, x, y, w, h float32) {
 // bottom and right. dots puts the display's faint grid in it.
 func clWell(ctx *paintengine2d.Context, r panel.R, dots bool) {
 	x, y, w, h := float32(r.X()), float32(r.Y()), float32(r.W()), float32(r.H())
-	px(ctx, x, y, w, h, hex(clWellC))
+	px(ctx, x, y, w, h, Hex(clWellC))
 	if dots {
 		for yy := y + 2; yy < y+h-1; yy += 2 {
 			for xx := x + 2; xx < x+w-1; xx += 2 {
-				px(ctx, xx, yy, 1, 1, hex(clDot))
+				px(ctx, xx, yy, 1, 1, Hex(clDot))
 			}
 		}
 	}
-	px(ctx, x, y, w, 1, hex(clShade))
-	px(ctx, x, y, 1, h, hex(clShade))
-	px(ctx, x, y+h-1, w, 1, hex(clLight))
-	px(ctx, x+w-1, y, 1, h, hex(clLight))
+	px(ctx, x, y, w, 1, Hex(clShade))
+	px(ctx, x, y, 1, h, Hex(clShade))
+	px(ctx, x, y+h-1, w, 1, Hex(clLight))
+	px(ctx, x+w-1, y, 1, h, Hex(clLight))
 }
 
 // clGroove is a slot sunk into the chrome for a thumb to run in.
 func clGroove(ctx *paintengine2d.Context, r panel.R) {
 	x, y, w, h := float32(r.X()), float32(r.Y()), float32(r.W()), float32(r.H())
-	px(ctx, x, y, w, h, hex("#2a2a42"))
-	px(ctx, x, y, w, 1, hex(clShade))
-	px(ctx, x, y, 1, h, hex(clShade))
-	px(ctx, x+1, y+1, w-2, 1, hex("#222236"))
-	px(ctx, x, y+h-1, w, 1, hex(clLight))
-	px(ctx, x+w-1, y, 1, h, hex(clLight))
+	px(ctx, x, y, w, h, Hex("#2a2a42"))
+	px(ctx, x, y, w, 1, Hex(clShade))
+	px(ctx, x, y, 1, h, Hex(clShade))
+	px(ctx, x+1, y+1, w-2, 1, Hex("#222236"))
+	px(ctx, x, y+h-1, w, 1, Hex(clLight))
+	px(ctx, x+w-1, y, 1, h, Hex(clLight))
 }
 
 // clBar is a coloured bar a slider's thumb rides on, printed on the chrome:
 // a lit top row, the colour, a dark foot, and an outline.
 func clBar(ctx *paintengine2d.Context, x, y, w, h float32, col string) {
-	c := hex(col)
-	px(ctx, x+1, y, w-2, h, hex(clInk))
-	px(ctx, x, y+1, w, h-2, hex(clInk))
+	c := Hex(col)
+	px(ctx, x+1, y, w-2, h, Hex(clInk))
+	px(ctx, x, y+1, w, h-2, Hex(clInk))
 	px(ctx, x+1, y+1, w-2, h-2, c)
 	px(ctx, x+1, y+1, w-2, 1, lerpColor(c, paintengine2d.RGB(1, 1, 1), 0.35))
 	px(ctx, x+1, y+h-2, w-2, 1, lerpColor(c, paintengine2d.RGB(0, 0, 0), 0.35))
@@ -433,8 +433,8 @@ func clMainFace(ctx *paintengine2d.Context, w, h float32, f *panel.Face) {
 	clWell(ctx, m.Title, false)
 	clWell(ctx, m.Rate, false)
 	clWell(ctx, m.Freq, false)
-	pixLabel(ctx, float32(m.Rate.Right()+3), float32(m.RateText.Y()), "KBPS", hex(clLabel))
-	pixLabel(ctx, float32(m.Freq.Right()+3), float32(m.FreqText.Y()), "KHZ", hex(clLabel))
+	pixLabel(ctx, float32(m.Rate.Right()+3), float32(m.RateText.Y()), "KBPS", Hex(clLabel))
+	pixLabel(ctx, float32(m.Freq.Right()+3), float32(m.FreqText.Y()), "KHZ", Hex(clLabel))
 	clLamp(ctx2(ctx, m.Mono), float32(m.Mono.W()), float32(m.Mono.H()), "MONO", false)
 	restore(ctx)
 	clLamp(ctx2(ctx, m.Stereo), float32(m.Stereo.W()), float32(m.Stereo.H()), "STEREO", false)
@@ -461,8 +461,8 @@ func clEqFace(ctx *paintengine2d.Context, w, h float32, f *panel.Face) {
 	// No well: the era's graph was ruled straight onto the chrome.
 	for i := float32(0); i < 10; i++ {
 		x := gx + 4 + i*float32(int((gw-8)/9))
-		px(ctx, x, gy, 1, gh, hex("#5e5e7c"))
-		px(ctx, x+1, gy, 1, gh, hex("#2a2a40"))
+		px(ctx, x, gy, 1, gh, Hex("#5e5e7c"))
+		px(ctx, x+1, gy, 1, gh, Hex("#2a2a40"))
 	}
 
 	fader := func(r panel.R) {
@@ -472,8 +472,8 @@ func clEqFace(ctx *paintengine2d.Context, w, h float32, f *panel.Face) {
 		// the top, the middle and the foot of its travel.
 		clBar(ctx, cx-3, y, 6, fh, clYellow)
 		for _, ty := range []float32{y + 2, y + float32(int(fh/2)) - 1, y + fh - 4} {
-			px(ctx, cx-9, ty, 4, 2, hex("#9aa0b4"))
-			px(ctx, cx+5, ty, 4, 2, hex("#9aa0b4"))
+			px(ctx, cx-9, ty, 4, 2, Hex("#9aa0b4"))
+			px(ctx, cx+5, ty, 4, 2, Hex("#9aa0b4"))
 		}
 	}
 	fader(e.Preamp)
@@ -486,11 +486,11 @@ func clEqFace(ctx *paintengine2d.Context, w, h float32, f *panel.Face) {
 	d := e.DB
 	for i, s := range []string{"+12DB", "+0DB", "-12DB"} {
 		y := float32(d.Y()) + []float32{0, float32(d.H()/2) - 3, float32(d.H()) - 6}[i]
-		pixLabel(ctx, float32(d.X())+float32(d.W()-pixWidth(s))/2, y, s, hex(clDB))
+		pixLabel(ctx, float32(d.X())+float32(d.W()-pixWidth(s))/2, y, s, Hex(clDB))
 	}
 	y := float32(e.Labels.Y())
 	centre := func(r panel.R, s string) {
-		pixLabel(ctx, float32(r.X())+float32(int(float32(r.W()-pixWidth(s))/2)), y, s, hex(clLabel))
+		pixLabel(ctx, float32(r.X())+float32(int(float32(r.W()-pixWidth(s))/2)), y, s, Hex(clLabel))
 	}
 	pre := e.Preamp
 	centre(panel.R{pre.X() - 6, 0, pre.W() + 12, 0}, "PREAMP")
@@ -512,13 +512,13 @@ func clListFace(ctx *paintengine2d.Context, w, h float32, f *panel.Face) {
 	ax := float32(li.Scroll.X() + 1)
 	ay := float32(li.Scroll.Bottom() + 4)
 	for i := float32(0); i < 3; i++ {
-		px(ctx, ax+3-i, ay+i, 1+2*i, 1, hex("#8c90a4"))
-		px(ctx, ax+3-i, ay+10-i, 1+2*i, 1, hex("#8c90a4"))
+		px(ctx, ax+3-i, ay+i, 1+2*i, 1, Hex("#8c90a4"))
+		px(ctx, ax+3-i, ay+10-i, 1+2*i, 1, Hex("#8c90a4"))
 	}
 	for i := float32(0); i < 4; i++ {
-		px(ctx, w-8+2*i, h-4, 1, 1, hex("#8c90a4"))
-		px(ctx, w-6+2*i, h-6, 1, 1, hex("#8c90a4"))
-		px(ctx, w-4, h-8+2*i, 1, 1, hex("#8c90a4"))
+		px(ctx, w-8+2*i, h-4, 1, 1, Hex("#8c90a4"))
+		px(ctx, w-6+2*i, h-6, 1, 1, Hex("#8c90a4"))
+		px(ctx, w-4, h-8+2*i, 1, 1, Hex("#8c90a4"))
 	}
 }
 
@@ -527,10 +527,10 @@ func clListFace(ctx *paintengine2d.Context, w, h float32, f *panel.Face) {
 // clKeyFace is a key of the era: a light face, a bright top and left, a
 // grey foot and right, and a black outline — turned over while it is held.
 func clKeyFace(ctx *paintengine2d.Context, w, h float32, down bool) {
-	px(ctx, 0, 0, w, h, hex(clInk))
-	hi, lo, face := hex(clKeyHi), hex(clKeyLo), hex(clKey)
+	px(ctx, 0, 0, w, h, Hex(clInk))
+	hi, lo, face := Hex(clKeyHi), Hex(clKeyLo), Hex(clKey)
 	if down {
-		hi, lo, face = hex(clKeyLo), hex(clKeyHi), hex(clKeyDn)
+		hi, lo, face = Hex(clKeyLo), Hex(clKeyHi), Hex(clKeyDn)
 	}
 	px(ctx, 1, 1, w-2, h-2, face)
 	px(ctx, 1, 1, w-2, 1, hi)
@@ -549,10 +549,10 @@ func clKeyLamp(ctx *paintengine2d.Context, x, y float32, on, down bool) {
 		x++
 		y++
 	}
-	px(ctx, x, y, 3, 3, hex("#1a3a1a"))
-	col := hex("#2f6a2f")
+	px(ctx, x, y, 3, 3, Hex("#1a3a1a"))
+	col := Hex("#2f6a2f")
 	if on {
-		col = hex("#18e818")
+		col = Hex("#18e818")
 	}
 	px(ctx, x, y, 3, 3, col)
 	px(ctx, x, y, 3, 1, lerpColor(col, paintengine2d.RGB(1, 1, 1), 0.3))
@@ -567,7 +567,7 @@ func clTransportGlyph(ctx *paintengine2d.Context, w, h float32, g string, down b
 		cx++
 		cy++
 	}
-	ink, lit := hex(clGlyph), hex(clGlyHi)
+	ink, lit := Hex(clGlyph), Hex(clGlyHi)
 	tri := func(x, y float32, right bool) {
 		for i := float32(0); i < 5; i++ {
 			col := ink
@@ -618,7 +618,7 @@ func clTransportGlyph(ctx *paintengine2d.Context, w, h float32, g string, down b
 
 // clRepeatGlyph is the repeat key's mark: a loop with an arrowhead.
 func clRepeatGlyph(ctx *paintengine2d.Context, x, y float32) {
-	ink := hex(clGlyph)
+	ink := Hex(clGlyph)
 	px(ctx, x+1, y, 11, 1, ink)
 	px(ctx, x, y+1, 1, 4, ink)
 	px(ctx, x+12, y+1, 1, 4, ink)
@@ -630,11 +630,11 @@ func clRepeatGlyph(ctx *paintengine2d.Context, x, y float32) {
 // stood in a column on the display's black, the way the era stood its
 // option letters.
 func clSkinColumn(ctx *paintengine2d.Context, w, h float32, down bool) {
-	px(ctx, 0, 0, w, h, hex(clWellC))
-	col := hex("#8a8ea4")
+	px(ctx, 0, 0, w, h, Hex(clWellC))
+	col := Hex("#8a8ea4")
 	if down {
-		px(ctx, 0, 0, w, h, hex("#16162a"))
-		col = hex(clLCD)
+		px(ctx, 0, 0, w, h, Hex("#16162a"))
+		col = Hex(clLCD)
 	}
 	x := float32(int((w - 4) / 2))
 	for i, r := range "SKIN" {
@@ -675,15 +675,15 @@ func clMiniGlyph(ctx *paintengine2d.Context, g string, col paintengine2d.Color) 
 
 // clLamp is a channel lamp: the word, green and lit, or grey and dark.
 func clLamp(ctx *paintengine2d.Context, w, h float32, s string, on bool) {
-	col := hex(clDim)
+	col := Hex(clDim)
 	if on {
-		col = hex(clLCD)
+		col = Hex(clLCD)
 	}
 	x := float32(int((w - float32(pixWidth(s))) / 2))
 	y := float32(int((h - 6) / 2))
 	if on {
 		// A glow a pixel wide, the way a lit lamp bled into its bezel.
-		glow := hex("#0c5a0c")
+		glow := Hex("#0c5a0c")
 		for _, d := range [][2]float32{{-1, 0}, {1, 0}, {0, -1}, {0, 1}} {
 			pixLabel(ctx, x+d[0], y+d[1], s, glow)
 		}
@@ -695,45 +695,45 @@ func clLamp(ctx *paintengine2d.Context, w, h float32, s string, on bool) {
 func clThumb(ctx *paintengine2d.Context, w, h float32, down bool) {
 	clKeyFace(ctx, w, h, down)
 	for i := float32(0); i < 3; i++ {
-		px(ctx, 5+2*i, 3, 1, 5, hex(clGlyph))
+		px(ctx, 5+2*i, 3, 1, 5, Hex(clGlyph))
 	}
 }
 
 // clSeekThumb is the seek bar's thumb: a gold bar with the groove's lines on
 // it, so it reads as a piece of the title bands.
 func clSeekThumb(ctx *paintengine2d.Context, w, h float32, down bool) {
-	px(ctx, 0, 0, w, h, hex(clInk))
+	px(ctx, 0, 0, w, h, Hex(clInk))
 	rows := []string{clCream, clGold, clGoldDk, clCream, clSilver, clGoldDk, clGold, clGoldDk}
 	if down {
 		rows = []string{clGold, clGoldDk, clCream, clSilver, clGoldDk, clGold, clCream, clGoldDk}
 	}
 	for i, c := range rows {
-		px(ctx, 1, 1+float32(i), w-2, 1, hex(c))
+		px(ctx, 1, 1+float32(i), w-2, 1, Hex(c))
 	}
-	px(ctx, 1, 1, 1, h-2, hex(clCream))
-	px(ctx, w-2, 1, 1, h-2, hex(clGoldDk))
+	px(ctx, 1, 1, 1, h-2, Hex(clCream))
+	px(ctx, w-2, 1, 1, h-2, Hex(clGoldDk))
 }
 
 // clEqThumb is an equaliser thumb: a small grey key with a dark eye.
 func clEqThumb(ctx *paintengine2d.Context, w, h float32, down bool) {
 	clKeyFace(ctx, w, h, down)
-	px(ctx, 4, 3, 3, 5, hex(clGlyph))
+	px(ctx, 4, 3, 3, 5, Hex(clGlyph))
 }
 
 // clListThumb is the playlist's scroll thumb, gold like the seek bar's.
 func clListThumb(ctx *paintengine2d.Context, w, h float32, down bool) {
-	px(ctx, 0, 0, w, h, hex(clInk))
-	face := hex(clGold)
+	px(ctx, 0, 0, w, h, Hex(clInk))
+	face := Hex(clGold)
 	if down {
-		face = hex(clCream)
+		face = Hex(clCream)
 	}
 	px(ctx, 1, 1, w-2, h-2, face)
-	px(ctx, 1, 1, w-2, 1, hex(clCream))
-	px(ctx, 1, 1, 1, h-2, hex(clCream))
-	px(ctx, w-2, 1, 1, h-2, hex(clGoldDk))
-	px(ctx, 1, h-2, w-2, 1, hex(clGoldDk))
+	px(ctx, 1, 1, w-2, 1, Hex(clCream))
+	px(ctx, 1, 1, 1, h-2, Hex(clCream))
+	px(ctx, w-2, 1, 1, h-2, Hex(clGoldDk))
+	px(ctx, 1, h-2, w-2, 1, Hex(clGoldDk))
 	for i := float32(0); i < 3; i++ {
-		px(ctx, 2, h/2-3+2*i, w-4, 1, hex(clGoldDk))
+		px(ctx, 2, h/2-3+2*i, w-4, 1, Hex(clGoldDk))
 	}
 }
 
@@ -749,12 +749,12 @@ var clGrooveDim = []string{"#2a2a3c", "#8a8c9a", "#70727e", "#2a2a3c", "#5e606c"
 // clBandBack is the title band's ground: darker than the chrome under it,
 // with a grey rule along its top, so the band reads as a strip of its own.
 func clBandBack(ctx *paintengine2d.Context, w, h float32) {
-	px(ctx, 0, 0, w, h, hex("#141421"))
-	px(ctx, 0, 0, w, 1, hex("#16161e"))
-	px(ctx, 0, 1, w, 1, hex("#55555f"))
-	px(ctx, 0, 2, w, 2, hex("#171724"))
-	px(ctx, 0, h-2, w, 1, hex("#0c0c16"))
-	px(ctx, 0, h-1, w, 1, hex("#05050d"))
+	px(ctx, 0, 0, w, h, Hex("#141421"))
+	px(ctx, 0, 0, w, 1, Hex("#16161e"))
+	px(ctx, 0, 1, w, 1, Hex("#55555f"))
+	px(ctx, 0, 2, w, 2, Hex("#171724"))
+	px(ctx, 0, h-2, w, 1, Hex("#0c0c16"))
+	px(ctx, 0, h-1, w, 1, Hex("#05050d"))
 }
 
 // clBand is the caption: the chrome, the Minim mark at the left, and the
@@ -768,16 +768,16 @@ func clBand(ctx *paintengine2d.Context, w, h float32, active bool) {
 	gy := float32(4)
 	x0, x1 := float32(20), w-28
 	for i, c := range rows {
-		px(ctx, x0, gy+float32(i), x1-x0, 1, hex(c))
+		px(ctx, x0, gy+float32(i), x1-x0, 1, Hex(c))
 	}
 	// Rounded ends: the outermost rows stop a pixel short.
-	px(ctx, x0, gy, 1, 1, hex("#141421"))
-	px(ctx, x0, gy+float32(len(rows))-1, 1, 1, hex("#141421"))
-	px(ctx, x1-1, gy, 1, 1, hex("#141421"))
-	px(ctx, x1-1, gy+float32(len(rows))-1, 1, 1, hex("#141421"))
-	markCol := hex(clGold)
+	px(ctx, x0, gy, 1, 1, Hex("#141421"))
+	px(ctx, x0, gy+float32(len(rows))-1, 1, 1, Hex("#141421"))
+	px(ctx, x1-1, gy, 1, 1, Hex("#141421"))
+	px(ctx, x1-1, gy+float32(len(rows))-1, 1, 1, Hex("#141421"))
+	markCol := Hex(clGold)
 	if !active {
-		markCol = hex("#8a8c9a")
+		markCol = Hex("#8a8c9a")
 	}
 	clNote(ctx, 6, float32(int((h-9)/2)), markCol)
 }
@@ -796,8 +796,8 @@ func clPlate(ctx *paintengine2d.Context, w, h float32, active bool) {
 	for i, c := range rows {
 		edge := i == 0 || i == len(rows)-1
 		if !edge {
-			px(ctx, 0, gy+float32(i), 1, 1, hex(c))
-			px(ctx, w-1, gy+float32(i), 1, 1, hex(c))
+			px(ctx, 0, gy+float32(i), 1, 1, Hex(c))
+			px(ctx, w-1, gy+float32(i), 1, 1, Hex(c))
 		}
 	}
 }
@@ -805,7 +805,7 @@ func clPlate(ctx *paintengine2d.Context, w, h float32, active bool) {
 // clCapKey is a caption key: a tiny dark bevelled square the frame prints
 // its mark on in the groove's gold.
 func clCapKey(ctx *paintengine2d.Context, w, h float32, face paintengine2d.Color, down bool) {
-	px(ctx, 0, 0, w, h, hex(clInk))
+	px(ctx, 0, 0, w, h, Hex(clInk))
 	hi, lo := lerpColor(face, paintengine2d.RGB(1, 1, 1), 0.45), lerpColor(face, paintengine2d.RGB(0, 0, 0), 0.45)
 	if down {
 		hi, lo = lo, hi
@@ -822,7 +822,7 @@ func clCapKey(ctx *paintengine2d.Context, w, h float32, face paintengine2d.Color
 // clNote is Minim's own mark: a minim — the half note the player is named
 // for — as a hollow tilted head and a stem, nine pixels high.
 func clNote(ctx *paintengine2d.Context, x, y float32, col paintengine2d.Color) {
-	ink := hex(clInk)
+	ink := Hex(clInk)
 	// The shadow first, a pixel down and right, so the mark stands off the
 	// band the way the era's stamped marks did.
 	for _, pass := range []struct {
@@ -842,7 +842,7 @@ func clNote(ctx *paintengine2d.Context, x, y float32, col paintengine2d.Color) {
 // clMark is the mark printed at the strip's lower right: the note on a
 // small silver lozenge.
 func clMark(ctx *paintengine2d.Context, x, y float32) {
-	sil, dark := hex(clSilver), hex(clInk)
+	sil, dark := Hex(clSilver), Hex(clInk)
 	for i := float32(0); i < 8; i++ {
 		px(ctx, x+7-i, y+i, 2*i+1, 1, dark)
 		px(ctx, x+7-i, y+15-i, 2*i+1, 1, dark)
@@ -852,10 +852,10 @@ func clMark(ctx *paintengine2d.Context, x, y float32) {
 		px(ctx, x+8-i, y+15-i, 2*i-1, 1, sil)
 	}
 	for i := float32(2); i < 7; i++ {
-		px(ctx, x+9-i, y+i, 2*i-3, 1, hex("#6a6e84"))
-		px(ctx, x+9-i, y+15-i, 2*i-3, 1, hex("#6a6e84"))
+		px(ctx, x+9-i, y+i, 2*i-3, 1, Hex("#6a6e84"))
+		px(ctx, x+9-i, y+15-i, 2*i-3, 1, Hex("#6a6e84"))
 	}
-	clNote(ctx, x+4, y+3, hex(clGold))
+	clNote(ctx, x+4, y+3, Hex(clGold))
 }
 
 // ---- small helpers -------------------------------------------------------------

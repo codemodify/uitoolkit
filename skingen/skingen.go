@@ -1,5 +1,18 @@
-// Package skinart draws the sprite sheets of the toolkit's own demo skins,
-// and writes the skin.json that binds them.
+// Package skingen draws skins: it renders sprite sheets from Go drawing
+// code and writes the skin.json that binds them.
+//
+// It is the generator behind every skin the toolkit ships, and it is public
+// so that a skin somebody else writes can be made the same way. The rule
+// the repository holds itself to is that an outside app must be able to do
+// what the repository does with the exported API alone, and a skin is where
+// that rule bites hardest: a third party hand-painting sprites into a PNG
+// and typing the rects into a manifest cannot get near the quality of a
+// pack drawn from paths at two scales with a manifest emitted from the same
+// description. So the whole of it is here — the drawing primitives, the
+// manifest writer, and the art plans of all eight shipped skins, which are
+// meant to be forked.
+//
+// # Why the art is code
 //
 // The art is generated rather than hand-painted for three reasons, and all
 // three are about being able to say something true about it:
@@ -8,18 +21,54 @@
 //     gradients in this package, so there is no question of where a bitmap
 //     came from. The toolkit's licensing rule for engines — facts, never
 //     transcribed code or artwork — extends to skins, and this is how it is
-//     kept.
+//     kept. Metrics, colour values and described behaviour of a historical
+//     look are facts and may be used; its code and its bitmaps may not.
 //   - It is regenerable at any scale. The 1× and 2× sheets are the same
-//     drawing at two scales, and a 3× set is one flag away.
+//     drawing at two scales, and a 3× set is one entry in [Scales].
 //   - The manifest cannot drift from the art. The cell layout is stated once,
 //     in Go, and both the PNGs and skin.json are emitted from it — so a
 //     sprite rect in skin.json is never off by the two pixels somebody moved
 //     a cell by.
 //
+// # Writing a skin
+//
+// A skin is a [Plan]: sheets of [Cell]s that each know how to draw
+// themselves, plus the bindings that say which sprite paints which part of
+// the toolkit in which state. [Write] renders every sheet at every scale
+// and emits the manifest beside them:
+//
+//	p := &skingen.Plan{
+//		Name: "mine", Label: "Mine", Base: "breeze-night",
+//		Sheets: []*skingen.Sheet{{Name: "chrome", W: 96, H: 32, Cells: []skingen.Cell{{
+//			Name: "button.normal", X: 0, Y: 0, W: 32, H: 32, Slice: [4]int{6, 6, 6, 6},
+//			Draw: func(ctx *paintengine2d.Context, w, h float32) {
+//				ctx.DrawRoundRect(paintengine2d.XYWH(0.5, 0.5, w-1, h-1), 6, 6,
+//					paintengine2d.Fill(skingen.Hex("#40444c")))
+//			},
+//		}}}},
+//		Parts: []skingen.PartBinding{{Part: "button", States: [][2]string{{"normal", "button.normal"}}}},
+//	}
+//	if err := skingen.Write("/tmp/skins", p); err != nil { ... }
+//
+// That writes /tmp/skins/mine/art/chrome.png, chrome@2x.png and skin.json,
+// which style.LoadSkin reads and style.LintSkin (or
+// `go run ./cmd/uitk-skin lint /tmp/skins/mine`) checks. docs/skins.md walks
+// the same example through to an installed pack.
+//
+// Starting from a blank sheet is not the only way in, and usually not the
+// best one: [Plans] returns the eight shipped art plans — [Nocturne],
+// [Cassette], [Deck], [Minim], [Marquee], [Lantern], [MinimClassic] and
+// [MinimSilver] — and any of them can be taken as a starting point, renamed
+// and altered. A plan is data all the way down, so an author can keep one
+// pack's chrome and redraw only its keys.
+//
+// # Regenerating what ships
+//
 // `go run ./cmd/uitk-skingen` rewrites style/skins/; TestSkinArtIsReproducible
-// regenerates into a temporary directory and compares, so a change to the
-// drawing that was not committed fails the build.
-package skinart
+// regenerates into a temporary directory and compares byte for byte, so a
+// change to the drawing that was not committed fails the build — which is
+// what makes "generated, not painted" a fact rather than a claim.
+package skingen
 
 import (
 	"bytes"
@@ -524,8 +573,12 @@ func scaleKey(s float32) string {
 // skins use several times, so the drawing below reads as a description of
 // the look rather than as a pile of coordinates.
 
-// hex parses #rgb / #rrggbb / #rrggbbaa into a straight-alpha colour.
-func hex(s string) paintengine2d.Color {
+// Hex parses #rgb / #rrggbb / #rrggbbaa into a straight-alpha colour.
+//
+// Every plan here states its palette as hex strings, and so does the skin
+// format's own "colors" block, so a plan forked into somebody else's package
+// has the one line of vocabulary it needs to keep reading that way.
+func Hex(s string) paintengine2d.Color {
 	if len(s) > 0 && s[0] == '#' {
 		s = s[1:]
 	}
@@ -712,12 +765,17 @@ func sortCells(cells []Cell) {
 
 // Plans is every demo skin the toolkit ships, in the order they are written.
 //
-// The first three are the format's own worked examples; the last three are
-// the ones the player demos wear (internal/players). They are generated the
-// same way and ship the same way for the same reason: a demo whose skin had
-// to be installed by hand before it looked like anything is a demo nobody
-// runs, and a skin the toolkit ships is a skin the reproducibility test
-// regenerates and compares.
+// The first three are the format's own worked examples; the other five are
+// the ones the player demos wear. They are generated the same way and ship
+// the same way for the same reason: a demo whose skin had to be installed by
+// hand before it looked like anything is a demo nobody runs, and a skin the
+// toolkit ships is a skin the reproducibility test regenerates and compares.
+//
+// Each call builds fresh plans, so an author who wants one as a starting
+// point can take it and change it without disturbing the shipped pack: give
+// it a Name and Label of its own, redraw or rebind what should differ, and
+// Write it somewhere. That is a lot less work than a blank sheet, and it is
+// why the plans are exported at all.
 func Plans() []*Plan {
 	return []*Plan{Nocturne(), Cassette(), Deck(), Minim(), Marquee(), Lantern(), MinimClassic(), MinimSilver()}
 }

@@ -1,4 +1,4 @@
-package skinart
+package skingen
 
 import "github.com/codemodify/paintengine2d"
 
@@ -63,12 +63,12 @@ func Cassette() *Plan {
 	// whole grammar of a bevelled interface, and it needs no gradient.
 	out := func(face string) func(*paintengine2d.Context, float32, float32) {
 		return func(ctx *paintengine2d.Context, w, h float32) {
-			casFace(ctx, w, h, hex(face), hex(casMidHi), hex(casMidLo))
+			casFace(ctx, w, h, Hex(face), Hex(casMidHi), Hex(casMidLo))
 		}
 	}
 	in := func(face string) func(*paintengine2d.Context, float32, float32) {
 		return func(ctx *paintengine2d.Context, w, h float32) {
-			casFace(ctx, w, h, hex(face), hex(casMidLo), hex(casMidHi))
+			casFace(ctx, w, h, Hex(face), Hex(casMidLo), Hex(casMidHi))
 		}
 	}
 
@@ -77,26 +77,26 @@ func Cassette() *Plan {
 	l.face("button.hover", out("#384d60"))
 	l.face("button.pressed", in("#243543"))
 	l.face("button.disabled", func(ctx *paintengine2d.Context, w, h float32) {
-		casFace(ctx, w, h, hex("#243139"), hex("#31424e"), hex("#1a242c"))
+		casFace(ctx, w, h, Hex("#243139"), Hex("#31424e"), Hex("#1a242c"))
 	})
 	l.face("button.focus", func(ctx *paintengine2d.Context, w, h float32) {
-		casFace(ctx, w, h, hex(casMid), hex(casMidHi), hex(casMidLo))
-		casDots(ctx, 2, 2, w-4, h-4, hex(casCream))
+		casFace(ctx, w, h, Hex(casMid), Hex(casMidHi), Hex(casMidLo))
+		casDots(ctx, 2, 2, w-4, h-4, Hex(casCream))
 	})
 	l.face("button.default", func(ctx *paintengine2d.Context, w, h float32) {
-		casFace(ctx, w, h, hex(casRust), hex("#e8836c"), hex(casRustLo))
+		casFace(ctx, w, h, Hex(casRust), Hex("#e8836c"), Hex(casRustLo))
 	})
 	l.face("button.checked", in(casRustLo))
 
 	l.row(casH)
 	l.face("field.normal", func(ctx *paintengine2d.Context, w, h float32) {
-		casWell(ctx, w, h, hex(casInk), hex(casSteel))
+		casWell(ctx, w, h, Hex(casInk), Hex(casSteel))
 	})
 	l.face("field.focus", func(ctx *paintengine2d.Context, w, h float32) {
-		casWell(ctx, w, h, hex(casInk), hex(casRust))
+		casWell(ctx, w, h, Hex(casInk), Hex(casRust))
 	})
 	l.face("field.disabled", func(ctx *paintengine2d.Context, w, h float32) {
-		casWell(ctx, w, h, hex("#19242c"), hex("#2f3d47"))
+		casWell(ctx, w, h, Hex("#19242c"), Hex("#2f3d47"))
 	})
 	l.face("combo.normal", out(casMid))
 	l.face("combo.hover", out("#384d60"))
@@ -105,68 +105,68 @@ func Cassette() *Plan {
 	l.row(casH)
 	l.face("tool.normal", func(ctx *paintengine2d.Context, w, h float32) {})
 	l.face("tool.hover", func(ctx *paintengine2d.Context, w, h float32) {
-		bevel(ctx, w, h, 1, hex(casMidHi), hex(casMidLo))
+		bevel(ctx, w, h, 1, Hex(casMidHi), Hex(casMidLo))
 	})
 	l.face("tool.pressed", func(ctx *paintengine2d.Context, w, h float32) {
-		px(ctx, 1, 1, w-2, h-2, hex("#22313c"))
-		bevel(ctx, w, h, 1, hex(casMidLo), hex(casMidHi))
+		px(ctx, 1, 1, w-2, h-2, Hex("#22313c"))
+		bevel(ctx, w, h, 1, Hex(casMidLo), Hex(casMidHi))
 	})
 	l.face("tool.checked", func(ctx *paintengine2d.Context, w, h float32) {
-		casHatch(ctx, w, h, hex("#22313c"), hex(casMid))
-		bevel(ctx, w, h, 1, hex(casMidLo), hex(casMidHi))
+		casHatch(ctx, w, h, Hex("#22313c"), Hex(casMid))
+		bevel(ctx, w, h, 1, Hex(casMidLo), Hex(casMidHi))
 	})
 	l.face("tab.normal", func(ctx *paintengine2d.Context, w, h float32) {
-		px(ctx, 0, 2, w, h-3, hex("#243543"))
-		px(ctx, 0, 2, w, 1, hex(casMidHi))
-		px(ctx, 0, h-1, w, 1, hex(casInk))
+		px(ctx, 0, 2, w, h-3, Hex("#243543"))
+		px(ctx, 0, 2, w, 1, Hex(casMidHi))
+		px(ctx, 0, h-1, w, 1, Hex(casInk))
 	})
 	l.face("tab.hover", func(ctx *paintengine2d.Context, w, h float32) {
-		px(ctx, 0, 2, w, h-3, hex("#2e4253"))
-		px(ctx, 0, 2, w, 1, hex(casMidHi))
-		px(ctx, 0, h-1, w, 1, hex(casInk))
+		px(ctx, 0, 2, w, h-3, Hex("#2e4253"))
+		px(ctx, 0, 2, w, 1, Hex(casMidHi))
+		px(ctx, 0, h-1, w, 1, Hex(casInk))
 	})
 	l.face("tab.checked", func(ctx *paintengine2d.Context, w, h float32) {
-		px(ctx, 0, 0, w, h, hex(casMid))
-		px(ctx, 0, 0, w, 2, hex(casRust))
-		px(ctx, 0, 2, 1, h-2, hex(casMidHi))
-		px(ctx, w-1, 2, 1, h-2, hex(casMidLo))
+		px(ctx, 0, 0, w, h, Hex(casMid))
+		px(ctx, 0, 0, w, 2, Hex(casRust))
+		px(ctx, 0, 2, 1, h-2, Hex(casMidHi))
+		px(ctx, w-1, 2, 1, h-2, Hex(casMidLo))
 	})
 
 	l.row(casH)
 	l.face("row.hover", func(ctx *paintengine2d.Context, w, h float32) {
-		px(ctx, 0, 0, w, h, hex("#243543"))
+		px(ctx, 0, 0, w, h, Hex("#243543"))
 	})
 	l.face("row.checked", func(ctx *paintengine2d.Context, w, h float32) {
-		px(ctx, 0, 0, w, h, hex("#3a5c52"))
-		px(ctx, 0, 0, 2, h, hex(casMint))
+		px(ctx, 0, 0, w, h, Hex("#3a5c52"))
+		px(ctx, 0, 0, 2, h, Hex(casMint))
 	})
 	l.face("menu.hover", func(ctx *paintengine2d.Context, w, h float32) {
-		px(ctx, 0, 0, w, h, hex(casRustLo))
+		px(ctx, 0, 0, w, h, Hex(casRustLo))
 	})
 	l.face("panel.normal", func(ctx *paintengine2d.Context, w, h float32) {
-		px(ctx, 0, 0, w, h, hex("#22313c"))
-		bevel(ctx, w, h, 1, hex(casMidHi), hex(casMidLo))
+		px(ctx, 0, 0, w, h, Hex("#22313c"))
+		bevel(ctx, w, h, 1, Hex(casMidHi), Hex(casMidLo))
 	})
 	l.face("bar.normal", func(ctx *paintengine2d.Context, w, h float32) {
-		px(ctx, 0, 0, w, h, hex(casMid))
-		px(ctx, 0, 0, w, 1, hex(casMidHi))
-		px(ctx, 0, h-1, w, 1, hex(casInk))
+		px(ctx, 0, 0, w, h, Hex(casMid))
+		px(ctx, 0, 0, w, 1, Hex(casMidHi))
+		px(ctx, 0, h-1, w, 1, Hex(casInk))
 	})
 	l.face("menu.frame", func(ctx *paintengine2d.Context, w, h float32) {
-		px(ctx, 0, 0, w, h, hex(casMid))
-		bevel(ctx, w, h, 1, hex(casMidHi), hex(casInk))
+		px(ctx, 0, 0, w, h, Hex(casMid))
+		bevel(ctx, w, h, 1, Hex(casMidHi), Hex(casInk))
 	})
 	// Orientation-neutral, like Nocturne's: Face is not told which way a
 	// splitter runs, so the grip is a dot cluster rather than a line.
 	l.face("splitter.normal", func(ctx *paintengine2d.Context, w, h float32) {
-		px(ctx, 0, 0, w, h, hex(casMid))
+		px(ctx, 0, 0, w, h, Hex(casMid))
 		for _, d := range [][2]float32{{-3, -3}, {1, -3}, {-3, 1}, {1, 1}} {
-			px(ctx, w/2+d[0], h/2+d[1], 2, 2, hex(casMidHi))
+			px(ctx, w/2+d[0], h/2+d[1], 2, 2, Hex(casMidHi))
 		}
 	})
 	l.face("tooltip.normal", func(ctx *paintengine2d.Context, w, h float32) {
-		px(ctx, 0, 0, w, h, hex(casCream))
-		bevel(ctx, w, h, 1, hex("#ffffff"), hex(casSteel))
+		px(ctx, 0, 0, w, h, Hex(casCream))
+		bevel(ctx, w, h, 1, Hex("#ffffff"), Hex(casSteel))
 	})
 
 	// The window is a two-colour dither: the era's answer to a gradient on a
@@ -174,64 +174,64 @@ func Cassette() *Plan {
 	// stays on the grid however big the window is.
 	l.row(16)
 	l.cell("window.normal", 16, 16, [4]int{0, 0, 0, 0}, "tile", false, func(ctx *paintengine2d.Context, w, h float32) {
-		casDither(ctx, w, h, hex(casDeep), hex("#1f303a"))
+		casDither(ctx, w, h, Hex(casDeep), Hex("#1f303a"))
 	})
 	l.cell("caption.normal", 48, 22, [4]int{4, 6, 3, 6}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		px(ctx, 0, 0, w, h, hex(casRustLo))
-		px(ctx, 0, 0, w, 1, hex("#e8836c"))
-		px(ctx, 0, 1, w, 1, hex(casRust))
-		px(ctx, 0, h-1, w, 1, hex(casInk))
+		px(ctx, 0, 0, w, h, Hex(casRustLo))
+		px(ctx, 0, 0, w, 1, Hex("#e8836c"))
+		px(ctx, 0, 1, w, 1, Hex(casRust))
+		px(ctx, 0, h-1, w, 1, Hex(casInk))
 	})
 	l.cell("caption.inactive", 48, 22, [4]int{4, 6, 3, 6}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		px(ctx, 0, 0, w, h, hex("#2c3e4f"))
-		px(ctx, 0, 0, w, 1, hex(casMidHi))
-		px(ctx, 0, h-1, w, 1, hex(casInk))
+		px(ctx, 0, 0, w, h, Hex("#2c3e4f"))
+		px(ctx, 0, 0, w, 1, Hex(casMidHi))
+		px(ctx, 0, h-1, w, 1, Hex(casInk))
 	})
 	// This era put raised keys in its title bars, so Cassette does too.
 	l.cell("capbtn.normal", 16, 14, [4]int{3, 3, 3, 3}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		casFace(ctx, w, h, hex(casMid), hex(casMidHi), hex(casMidLo))
+		casFace(ctx, w, h, Hex(casMid), Hex(casMidHi), Hex(casMidLo))
 	})
 	l.cell("capbtn.pressed", 16, 14, [4]int{3, 3, 3, 3}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		casFace(ctx, w, h, hex("#243543"), hex(casMidLo), hex(casMidHi))
+		casFace(ctx, w, h, Hex("#243543"), Hex(casMidLo), Hex(casMidHi))
 	})
 
 	// ---- small parts ------------------------------------------------------
 
 	l.row(16)
 	l.cell("thumb.normal", 24, 16, [4]int{4, 4, 4, 4}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		casFace(ctx, w, h, hex(casMid), hex(casMidHi), hex(casMidLo))
+		casFace(ctx, w, h, Hex(casMid), Hex(casMidHi), Hex(casMidLo))
 	})
 	l.cell("thumb.hover", 24, 16, [4]int{4, 4, 4, 4}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		casFace(ctx, w, h, hex("#384d60"), hex("#4a6479"), hex(casMidLo))
+		casFace(ctx, w, h, Hex("#384d60"), Hex("#4a6479"), Hex(casMidLo))
 	})
 	l.cell("track.normal", 24, 16, [4]int{3, 3, 3, 3}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		casHatch(ctx, w, h, hex("#1b2a33"), hex("#22333e"))
-		bevel(ctx, w, h, 1, hex(casMidLo), hex(casMidHi))
+		casHatch(ctx, w, h, Hex("#1b2a33"), Hex("#22333e"))
+		bevel(ctx, w, h, 1, Hex(casMidLo), Hex(casMidHi))
 	})
 	l.cell("fill.normal", 24, 16, [4]int{3, 3, 3, 3}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		px(ctx, 0, 0, w, h, hex(casMint))
-		px(ctx, 0, 0, w, 1, hex("#b6dbcb"))
-		px(ctx, 0, h-1, w, 1, hex("#5f8879"))
+		px(ctx, 0, 0, w, h, Hex(casMint))
+		px(ctx, 0, 0, w, 1, Hex("#b6dbcb"))
+		px(ctx, 0, h-1, w, 1, Hex("#5f8879"))
 	})
 	l.cell("knob.normal", 12, 16, [4]int{0, 0, 0, 0}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		casFace(ctx, w, h, hex(casCream), hex("#ffffff"), hex(casSteel))
+		casFace(ctx, w, h, Hex(casCream), Hex("#ffffff"), Hex(casSteel))
 	})
 	l.cell("knob.disabled", 12, 16, [4]int{0, 0, 0, 0}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		casFace(ctx, w, h, hex("#5d6a72"), hex("#7c8a92"), hex("#3a464e"))
+		casFace(ctx, w, h, Hex("#5d6a72"), Hex("#7c8a92"), Hex("#3a464e"))
 	})
 
 	l.row(16)
 	l.cell("check.normal", 16, 16, [4]int{5, 5, 5, 5}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		casWell(ctx, w, h, hex(casInk), hex(casSteel))
+		casWell(ctx, w, h, Hex(casInk), Hex(casSteel))
 	})
 	l.cell("check.hover", 16, 16, [4]int{5, 5, 5, 5}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		casWell(ctx, w, h, hex("#16222b"), hex(casCream))
+		casWell(ctx, w, h, Hex("#16222b"), Hex(casCream))
 	})
 	l.cell("check.checked", 16, 16, [4]int{5, 5, 5, 5}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		casWell(ctx, w, h, hex(casRustLo), hex(casRust))
+		casWell(ctx, w, h, Hex(casRustLo), Hex(casRust))
 	})
 	l.cell("check.disabled", 16, 16, [4]int{5, 5, 5, 5}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		casWell(ctx, w, h, hex("#19242c"), hex("#37454f"))
+		casWell(ctx, w, h, Hex("#19242c"), Hex("#37454f"))
 	})
 	l.glyph("mark.check", 16, func(ctx *paintengine2d.Context, w, h float32) {
 		// A hand-placed tick: seven pixels, the shape a 16×16 icon of the
@@ -262,19 +262,19 @@ func Cassette() *Plan {
 	})
 	// The focus mark of every machine that had one: a dotted rectangle.
 	l.cell("focus.ring", 16, 16, [4]int{4, 4, 4, 4}, "none", false, func(ctx *paintengine2d.Context, w, h float32) {
-		casDots(ctx, 0, 0, w, h, hex(casCream))
+		casDots(ctx, 0, 0, w, h, Hex(casCream))
 	})
 
 	l.row(16)
 	l.cell("switch.off", 28, 16, [4]int{4, 8, 4, 8}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		casWell(ctx, w, h, hex(casInk), hex(casSteel))
+		casWell(ctx, w, h, Hex(casInk), Hex(casSteel))
 	})
 	l.cell("switch.on", 28, 16, [4]int{4, 8, 4, 8}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		px(ctx, 1, 1, w-2, h-2, hex(casRust))
-		bevel(ctx, w, h, 1, hex(casRustLo), hex("#e8836c"))
+		px(ctx, 1, 1, w-2, h-2, Hex(casRust))
+		bevel(ctx, w, h, 1, Hex(casRustLo), Hex("#e8836c"))
 	})
 	l.cell("switch.disabled", 28, 16, [4]int{4, 8, 4, 8}, "", false, func(ctx *paintengine2d.Context, w, h float32) {
-		casWell(ctx, w, h, hex("#19242c"), hex("#37454f"))
+		casWell(ctx, w, h, Hex("#19242c"), Hex("#37454f"))
 	})
 	l.close()
 
@@ -389,15 +389,15 @@ func casFace(ctx *paintengine2d.Context, w, h float32, face, light, dark painten
 	bevel(ctx, w, h, 2, light, dark)
 	// The outermost pixel of the dark edge is the outline, so faces that
 	// touch each other do not share a lit edge.
-	px(ctx, 0, h-1, w, 1, hex(casInk))
-	px(ctx, w-1, 0, 1, h, hex(casInk))
+	px(ctx, 0, h-1, w, 1, Hex(casInk))
+	px(ctx, w-1, 0, 1, h, Hex(casInk))
 }
 
 // casWell is the same thing pressed in, with a rim colour of its own.
 func casWell(ctx *paintengine2d.Context, w, h float32, fill, rim paintengine2d.Color) {
 	px(ctx, 0, 0, w, h, fill)
-	bevel(ctx, w, h, 1, hex(casMidLo), hex(casMidHi))
-	px(ctx, 1, 1, w-2, 1, hex("#00000055"))
+	bevel(ctx, w, h, 1, Hex(casMidLo), Hex(casMidHi))
+	px(ctx, 1, 1, w-2, 1, Hex("#00000055"))
 	px(ctx, 0, 0, w, 1, rim)
 	px(ctx, 0, h-1, w, 1, rim)
 	px(ctx, 0, 0, 1, h, rim)
