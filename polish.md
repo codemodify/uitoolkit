@@ -326,6 +326,16 @@ Struck through once fixed; newest findings at the end of their section.
   filter, colour type, depth and Adam7; `crop_test.py`.
 - ~~**The tour's `-shot` renders one page per window**; there is no combined
   contact sheet.~~ `tour -sheet`.
+- **`TestRichTextLongDocument`'s typing budget is wall-clock and marginal.**
+  It fails the run when 10,200 blocks cost more than 8 ms a key painted, and
+  this machine measures 8.2–9.3 ms whenever another package is rasterising
+  beside it (`go test -p 2 ./...`) or another checkout is building. Seen on
+  2026-09-22 at 4 runs in 6 on feat/skingen and 1 in 3 on the commit it
+  branched from, so it is the budget and the machine, not the branch. The
+  figure the test really means to hold is the incremental-layout one it
+  already checks (200 blocks re-laid for 200 keys) and the un-painted 0.4 ms
+  a key; the painted budget wants either a wider margin or a note that it is
+  only meaningful on an idle machine.
 - **The tour's readouts wrap twice in a narrow window**: they are folded at
   38 mono columns, which a readout panel of a 700-pixel window does not have,
   so the text view wraps the folds again. Folding to the panel's measured
