@@ -18,12 +18,12 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/codemodify/uitoolkit/internal/mail"
+	"github.com/codemodify/uitoolkit/examples/mail/mailapp"
 )
 
 func main() {
-	sock := mail.DefaultSocket()
-	store, err := mail.OpenStore()
+	sock := mailapp.DefaultSocket()
+	store, err := mailapp.OpenStore()
 	if err != nil && store == nil {
 		log.Fatal(err)
 	}
@@ -36,7 +36,7 @@ func main() {
 
 	fmt.Printf("mailclientd  backend=%s  socket=%s\n", store.Backend(), sock)
 	fmt.Println("JSON-RPC 2.0 NDJSON (socket is mode 0600, same-uid only). Docs: docs/mail.md")
-	if err := mail.ListenAndServe(ctx, sock, store); err != nil {
+	if err := mailapp.ListenAndServe(ctx, sock, store); err != nil {
 		// A lock-file clash means another mailclientd already owns the
 		// socket; saying so beats the old silent takeover.
 		log.Fatalf("mailclientd: %v", err)

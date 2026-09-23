@@ -18,8 +18,8 @@ import (
 	"time"
 
 	"github.com/codemodify/uitoolkit"
+	"github.com/codemodify/uitoolkit/examples/mail/mailapp"
 	"github.com/codemodify/uitoolkit/icons"
-	"github.com/codemodify/uitoolkit/internal/mail"
 	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
 )
@@ -32,18 +32,18 @@ func main() {
 	flag.Parse()
 
 	if *shot != "" {
-		if err := mail.WriteScreenshots(*shot); err != nil {
+		if err := mailapp.WriteScreenshots(*shot); err != nil {
 			log.Fatal(err)
 		}
 		return
 	}
 
-	sock, stop, err := mail.StartDemo(context.Background())
+	sock, stop, err := mailapp.StartDemo(context.Background())
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer stop()
-	cli, err := mail.DialWait(sock, 2*time.Second)
+	cli, err := mailapp.DialWait(sock, 2*time.Second)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -53,9 +53,9 @@ func main() {
 	if *light {
 		look = style.WithTheme(look, style.ThemeLight)
 	}
-	layout := mail.LayoutVertical
+	layout := mailapp.LayoutVertical
 	if *classic {
-		layout = mail.LayoutClassic
+		layout = mailapp.LayoutClassic
 	}
 
 	a := uitoolkit.New(uitoolkit.Options{Look: look, Headless: *headless, WatchLook: true})
@@ -67,7 +67,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	win.SetContent(mail.Open(a, win, cli, mail.AppOptions{
+	win.SetContent(mailapp.Open(a, win, cli, mailapp.AppOptions{
 		Light: style.LookAppearance(look).Theme == style.ThemeLight, Layout: layout,
 	}))
 	if *headless {
