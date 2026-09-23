@@ -10,6 +10,9 @@
 //	dock      — dockable panels: a central widget with dock areas on its four
 //	            sides, panels that split, tab, collapse, float in windows of
 //	            their own, and a layout saved and read back as JSON
+//	rack      — dock's opposite: separate toplevel windows that snap flush to
+//	            one another's edges and travel together when one is dragged
+//	            (X11 only: a Wayland toplevel has no position)
 //	widgets   — Button, Label, TextField, TextArea, TextView, NumberField, Checkbox,
 //	            Switch, Slider, ScrollView, MenuBar, TabView, TreeView,
 //	            TableView, CardList, StatusBar, ToolBar, ComboBox, ProgressBar,

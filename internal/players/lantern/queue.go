@@ -7,6 +7,7 @@ import (
 	"github.com/codemodify/uitoolkit/a11y"
 	"github.com/codemodify/uitoolkit/internal/players"
 	"github.com/codemodify/uitoolkit/layout"
+	"github.com/codemodify/uitoolkit/rack"
 	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
 	"github.com/codemodify/uitoolkit/widgets"
@@ -16,8 +17,8 @@ import (
 //
 // It is a window of its own rather than a panel that slides out of the main
 // one, because a playlist that anchors to the edge of the player and travels
-// with it is one of the two things this demo is for. players.Rack is the
-// arithmetic; the window half is players.Desk, and what it needs of a
+// with it is one of the two things this demo is for. rack.Rack is the
+// arithmetic; the window half is rack.Desk, and what it needs of a
 // desktop — being told where a window is and being able to put one
 // somewhere — only X11 offers. The status line at the bottom of the main
 // window says which of the two it got.
@@ -89,9 +90,9 @@ func newQueuePane(p *Player) *queuePane {
 	q.anchor = widgets.NewComboBox([]string{"Right of the player", "Below the player", "Loose"}, 0, func(i int) {
 		switch i {
 		case 0:
-			p.Desk.Attach(p.iList, p.iMain, players.SideRight)
+			p.Desk.Attach(p.iList, p.iMain, rack.SideRight)
 		case 1:
-			p.Desk.Attach(p.iList, p.iMain, players.SideBottom)
+			p.Desk.Attach(p.iList, p.iMain, rack.SideBottom)
 		default:
 			p.Desk.Rack.Detach(p.iList)
 		}
