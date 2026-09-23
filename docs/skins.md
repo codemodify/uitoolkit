@@ -187,7 +187,7 @@ version; everything else has a default.
 A sprite may also be written inline wherever a sprite name is expected, and a
 sheet's sole sprite may omit `"sheet"`. `style/skins/nocturne/skin.json` is
 the full worked example; it is 621 lines and every one of them was generated
-from `internal/skinart/nocturne.go`.
+from `skingen/nocturne.go`.
 
 ### Validation
 
@@ -632,7 +632,7 @@ and a key painted into its rounded box would sit half a pixel off its hole.
 
 Minim's two panel skins state three layouts each, `minim.strip`,
 `minim.equaliser` and `minim.playlist`, generated from the same rects the
-faces are drawn round (`internal/players/minim/panel`); the player reads
+faces are drawn round (`skingen/panel`); the player reads
 every rect it uses from the skin and carries none of its own.
 
 ## Windows that are not alike
@@ -730,9 +730,162 @@ To ship it as one file, zip the directory and name it `<name>.uskin`. An
 archive whose manifest sits in a single top-level folder loads too, since that
 is what most archivers produce.
 
+## Writing one in Go
+
+Hand-painting is the way in, not the way up. Every pack the toolkit ships is
+*drawn from code* by the `skingen` package, and that package is public API —
+`github.com/codemodify/uitoolkit/skingen` — for the plain reason that a skin
+somebody else writes should be able to be as good as the ones in here. What
+it buys, in order of how much it matters:
+
+- **Both scales are the same drawing.** You write a cell once; the 1× and the
+  2× sheet come out of it, and a 3× set is one entry in `skingen.Scales`.
+- **The manifest cannot drift from the art.** The cell layout is stated once,
+  in Go, and both the PNGs and `skin.json` are emitted from it. No rect in
+  the manifest is ever off by the two pixels you moved a sprite by.
+- **The pack is regenerable, so it is reviewable.** Your art is a diff of Go
+  lines rather than of binary blobs, and anyone can rebuild the PNGs from it
+  and check.
+- **Provenance is clean.** Every pixel came from a path you wrote. For this
+  repository that is a licensing requirement (facts about a look — metrics,
+  colour values, described behaviour — never anybody else's code or bitmaps);
+  for you it is the difference between art you can answer for and art you
+  found.
+
+### The smallest one that works
+
+A *plan* is a skin: sheets of cells that know how to draw themselves, plus
+the bindings that say which sprite paints which part in which state. This is
+a whole program, and it writes a whole skin.
+
+```go
+// mkskin writes the smallest skin there is into ~/.config/uitoolkit/skins.
+package main
+
+import (
+	"log"
+	"os"
+	"path/filepath"
+
+	"github.com/codemodify/paintengine2d"
+	"github.com/codemodify/uitoolkit/skingen"
+)
+
+func main() {
+	face := func(fill, edge string) func(*paintengine2d.Context, float32, float32) {
+		return func(ctx *paintengine2d.Context, w, h float32) {
+			r := paintengine2d.XYWH(0.5, 0.5, w-1, h-1)
+			ctx.DrawRoundRect(r, 6, 6, paintengine2d.Fill(skingen.Hex(fill)))
+			ctx.DrawRoundRect(r, 6, 6, paintengine2d.StrokePaint(skingen.Hex(edge), 1))
+		}
+	}
+
+	p := &skingen.Plan{
+		Name:  "mine",
+		Label: "Mine",
+		Base:  "breeze-night", // everything this skin does not bind
+		Sheets: []*skingen.Sheet{{
+			Name: "chrome", W: 96, H: 32,
+			Cells: []skingen.Cell{
+				{Name: "button.normal", X: 0, Y: 0, W: 32, H: 32,
+					Slice: [4]int{6, 6, 6, 6}, Draw: face("#40444c", "#0b0e12")},
+				{Name: "button.hover", X: 32, Y: 0, W: 32, H: 32,
+					Slice: [4]int{6, 6, 6, 6}, Draw: face("#4c515b", "#0b0e12")},
+				{Name: "button.pressed", X: 64, Y: 0, W: 32, H: 32,
+					Slice: [4]int{6, 6, 6, 6}, Draw: face("#2b2f36", "#0b0e12")},
+			},
+		}},
+		Parts: []skingen.PartBinding{{
+			Part: "button",
+			States: [][2]string{
+				{"normal", "button.normal"},
+				{"hover", "button.hover"},
+				{"pressed", "button.pressed"},
+			},
+			Text: "button",
+		}},
+		Text: []skingen.TextRole{{Name: "button", Color: "#e8eef2"}},
+	}
+
+	home, _ := os.UserHomeDir()
+	if err := skingen.Write(filepath.Join(home, ".config", "uitoolkit", "skins"), p); err != nil {
+		log.Fatal(err)
+	}
+}
+```
+
+`go run ./mkskin` writes `mine/art/chrome.png`, `mine/art/chrome@2x.png` and
+`mine/skin.json` — the manifest of the first half of this document, generated:
+
+```json
+{
+  "skin": 1,
+  "label": "Mine",
+  "base": "breeze-night",
+  "sheets": { "chrome": { "1x": "art/chrome.png", "2x": "art/chrome@2x.png" } },
+  "sprites": {
+    "button.normal": { "sheet": "chrome", "at": [0, 0, 32, 32], "slice": [6, 6, 6, 6] },
+    …
+  },
+  "parts": { "button": { "states": { "normal": "button.normal", … }, "text": "button" } },
+  "text": { "button": { "color": "#e8eef2" } }
+}
+```
+
+(The real file is sorted by key, which is why a change to a plan diffs as one
+line rather than as a reshuffle.) Then run anything with `UITK_THEME=mine`,
+and lint it the same way you would lint a painted one:
+
+```bash
+go run ./cmd/uitk-skin lint ~/.config/uitoolkit/skins/mine
+# mine: skin.json: parts.button.states: warning: no "disabled" art: it shows the "normal" face
+```
+
+Which is the whole loop: **fork or write a plan → `Write` → lint → run.**
+Change a colour, re-run, and the look watcher re-applies it about a second
+later in the app you left running.
+
+### Starting from one of ours
+
+Starting from a blank sheet is not the only way in, and usually not the best
+one. `skingen.Plans()` returns all eight shipped plans — `Nocturne()`,
+`Cassette()`, `Deck()`, `Minim()`, `Marquee()`, `Lantern()`,
+`MinimClassic()` and `MinimSilver()` — as data, freshly built on every call,
+so taking one and changing it cannot disturb the pack it came from:
+
+```go
+p := skingen.Nocturne()
+p.Name, p.Label = "nocturne-teal", "Nocturne Teal"
+p.Colors["accent"] = "#3fd0c9"
+skingen.Write(dir, p)
+```
+
+That is a pack of 65 sprites at two scales, yours, in four lines. From there:
+rebind a part (`p.Parts`), redraw one cell (find it in `p.Sheets` by name and
+replace its `Draw`), or copy the plan's source file out of `skingen/` into
+your own package and edit it as a drawing — it is permissively licensed and
+that is what it is there for. The drawing *idioms* inside those files
+(bevels, gradient fills, the sheet packer) are deliberately unexported: they
+are how these eight packs happen to be drawn, not an API anyone should have
+to live with. Copy the ones you want.
+
+`skingen/panel` is the same idea one level up: the rects of Minim's two panel
+faces — every well, key, slider and label — published as numbers, so a panel
+skin for a player-shaped app starts from a measured layout instead of a ruler
+(see [Fixed layouts](#fixed-layouts)).
+
+### How this repository uses it
+
+`go run ./cmd/uitk-skingen` rewrites `style/skins/` from `skingen.Plans()`,
+and `-list` prints what it would write without writing it.
+`TestSkinArtIsReproducible` regenerates every pack into a temporary directory
+and compares byte for byte, so art that was changed and not committed — or a
+PNG somebody edited by hand — fails the build. That test is what lets the
+next section say "generated, not painted" as a fact.
+
 ## The demo skins
 
-Both are **generated**, not painted, by `internal/skinart` and written by
+Both are **generated**, not painted, by the `skingen` package and written by
 `go run ./cmd/uitk-skingen`. Three reasons, all about being able to say
 something true about the art:
 

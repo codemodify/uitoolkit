@@ -176,6 +176,11 @@ pixels that scale, a fixed vocabulary instead of a scripting language, and a
 base pack painting whatever the skin leaves out). A skin is a pack like any
 other: it lists in Settings, `UITK_THEME` runs an app in one, and it applies
 live. Eight ship with the toolkit, five of them worn by the player demos.
+
+The generator that draws them is public API — `uitoolkit/skingen` — including
+the art plan of every shipped pack, so a skin of your own is written the way
+these were (draw the cells in Go; both scales and the manifest come out of
+it) and can start as a fork of one of ours rather than as a blank PNG.
 See [docs/skins.md](docs/skins.md).
 
 ## Screenshots
