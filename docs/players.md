@@ -473,6 +473,24 @@ itself.
 
 What each of the five became, with the player work-around it retires:
 
+- ~~**Nothing public to hang skin art on.** The skin runtime is all exported
+  — `style.SkinLayout`, `DrawSkinSlot`, `SkinSlotShape`, `widget.Slots`,
+  `SlotArtRect`, `ArtShape` — but the two fields that let `paintAsKey` put a
+  panel's art on a key, `Painter` and `Shaper`, existed only on
+  `players.GlyphButton`, so an app outside this repo could read every line of
+  the panels and not reproduce them.~~ **Fixed:** `widgets.Button` and the
+  new `widgets.ToolButton` carry both, `widgets.Slider` carries `Painter` and
+  `Travel`, and `widgets.ListView.RowGeo` takes its rows, groove and row
+  height from a layout's slots — the one thing that made
+  `internal/players/minim/tracks.go` a bespoke list rather than a list view.
+  [docs/widgets.md](widgets.md#art-on-a-control).
+- ~~**A control tells the app about the app's own change.** `OnChange` fires
+  whoever set the value, so a seek bar driven from the playback position
+  re-enters the handler that answers the user, and a player needs a suppress
+  flag — which is what `Fader.Set` and `tracks`'s own paths are.~~ **Fixed:**
+  `OnChange` still fires on every change, and `OnInput` fires only for the
+  user's: pointer, keyboard, or an accessibility action.
+  [docs/widgets.md](widgets.md#onchange-and-oninput).
 - ~~**`widget.KeyEvent` carries the key and not the character.** Text
   arrives as a separate event, so a shortcut table that reads `e.Rune`
   never fires.~~ **Fixed:** a key event carries both — `Key` for what the

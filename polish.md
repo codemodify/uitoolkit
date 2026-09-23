@@ -207,6 +207,29 @@ Struck through once fixed; newest findings at the end of their section.
 - **`Button` still takes a right or middle press as a click** (so does every
   widget that ignores `e.Button`); the thumb buttons no longer reach widgets
   at all.
+- **`Slider` and `NumberField` advertise increment and decrement in the
+  accessibility tree and implement neither.** Both `Describe` methods add
+  `a11y.ActionIncrement` and `ActionDecrement`, and neither widget has an
+  `AccessibleAction`, so a screen reader offers to step them and nothing
+  happens. `RadioButton` had the same gap for `ActionDefault` and it is
+  fixed; these two want a step size decided first (the slider has none of
+  its own — its keys use a twentieth of the range).
+- **`ComboBox` has no `OnInput`.** `Select` calls `OnChange` whoever picked,
+  and `OnEdit` reports typed text whether the app or the user typed it, so a
+  combo box driven from a model has exactly the re-entry the other nine had.
+  It was left out because the change is not one setter — `Select`, `SetText`
+  and the inner field's own edits all reach it — and because an editable
+  combo already reports the user's typing through `OnEdit` on the way in.
+- **`ToolBar` items cannot carry skin art.** `Button`, `ToolButton` and
+  `Slider` take a `Painter`; a `ToolItem` is a record on a strip and not a
+  component, so it has nowhere to hang one and no silhouette of its own. A
+  skinned strip has to be built from loose `ToolButton`s.
+- **A placed `ListView` (`RowGeo`) still paints the look's scroll bar in the
+  skin's groove.** That is right for a skin, whose engine already overrides
+  the thumb and track parts, and wrong for a panel whose thumb is a loose
+  sprite the app paints itself (`style.DrawSkinSprite`): there is no painter
+  hook on the list to draw one over the groove. `ScrollTrack` reports where
+  it would go, which is enough to lay one out and not to draw it.
 
 - **Rich text: no table, no line break inside a paragraph, no paragraph
   indent outside lists**, and italic is the upright face slanted (no italic
@@ -222,6 +245,12 @@ Struck through once fixed; newest findings at the end of their section.
   preferred move never counts on Wayland, and the editor asks for a move of
   its own selection itself. Letting `app` prefer the source's action for
   its own drags would give Ctrl+drag a copy back.
+- **`TestRichTextLongDocument` is a wall-clock gate on a shared machine**: it
+  fails typing at over 8 ms a key, which is a real budget when the box is
+  idle and a coin toss when the suite is running beside something else (two
+  runs of `go test ./...` at once fail it, one run passes). It wants the
+  budget taken against a measured baseline, as `tools/perf` does, or moving
+  behind a build tag.
 - **The rich-text editor lays out a paragraph as one piece**: a paragraph
   of tens of thousands of characters re-lays whole on every key. Ordinary
   documents never notice (a paragraph re-lays in microseconds).

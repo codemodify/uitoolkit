@@ -14,8 +14,15 @@ type Expander struct {
 	Title    string
 	Expanded bool
 	OnToggle func(bool)
-	head     *expanderHead
-	body     widget.Component
+	// OnInput fires only when the user opened or closed the section — a
+	// click on the header, Space, an arrow key, a screen reader's press —
+	// and never for SetExpanded from the app, nor when an exclusive
+	// Accordion closed this section to open another. It fires after
+	// OnToggle (widgets/oninput.go).
+	OnInput func(bool)
+	user    userEdit
+	head    *expanderHead
+	body    widget.Component
 }
 
 // NewExpander builds a titled section. child may be nil.
@@ -51,7 +58,13 @@ func (e *Expander) SetExpanded(v bool) {
 	if e.OnToggle != nil {
 		e.OnToggle(v)
 	}
+	if e.user.is() && e.OnInput != nil {
+		e.OnInput(v)
+	}
 }
+
+// toggleByUser opens or closes the section as the user's own doing.
+func (e *Expander) toggleByUser(v bool) { e.user.did(func() { e.SetExpanded(v) }) }
 
 func (e *Expander) yieldFocusFromBody() {
 	h := e.Host()
@@ -221,7 +234,7 @@ func (h *expanderHead) MousePress(widget.MouseEvent) bool {
 	}
 	h.MarkPointerFocus()
 	h.RequestFocus()
-	h.owner.SetExpanded(!h.owner.Expanded)
+	h.owner.toggleByUser(!h.owner.Expanded)
 	return true
 }
 
@@ -232,16 +245,16 @@ func (h *expanderHead) KeyPress(e widget.KeyEvent) bool {
 	h.MarkKeyboardFocus()
 	switch e.Key {
 	case platform.KeySpace, platform.KeyReturn:
-		h.owner.SetExpanded(!h.owner.Expanded)
+		h.owner.toggleByUser(!h.owner.Expanded)
 		return true
 	case platform.KeyRight:
 		if !h.owner.Expanded {
-			h.owner.SetExpanded(true)
+			h.owner.toggleByUser(true)
 		}
 		return true
 	case platform.KeyLeft:
 		if h.owner.Expanded {
-			h.owner.SetExpanded(false)
+			h.owner.toggleByUser(false)
 		}
 		return true
 	}

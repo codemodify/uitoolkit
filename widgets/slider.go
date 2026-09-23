@@ -32,6 +32,10 @@ type Slider struct {
 	widget.Base
 	Min, Max, Value float32
 	OnChange        func(float32)
+	// OnInput fires only for a change the user made — a drag, a press on
+	// the track, an arrow key — and never when the app called SetValue
+	// itself. It fires after OnChange (widgets/oninput.go).
+	OnInput func(float32)
 	// Ticks puts tick marks under, over or on both sides of the track
 	// (QSlider's tickPosition, WPF's TickPlacement), every TickInterval
 	// (0: a tenth of the range).
@@ -48,6 +52,7 @@ type Slider struct {
 	// pointer and the picture agree about where the ends are. Zero leaves
 	// it to the look (style.SliderTravelOf), which knows its own thumb.
 	Travel  float32
+	user    userEdit
 	hovered bool
 	drag    bool
 	// grabD is where along the track the pointer took hold of the thumb:
@@ -91,6 +96,9 @@ func (s *Slider) SetValue(v float32) {
 	s.Invalidate()
 	if s.OnChange != nil {
 		s.OnChange(v)
+	}
+	if s.user.is() && s.OnInput != nil {
+		s.OnInput(v)
 	}
 }
 
@@ -277,7 +285,14 @@ func (s *Slider) MouseExit() {
 	}
 }
 
+// KeyPress moves the slider, and what it moves is the user's own input.
 func (s *Slider) KeyPress(e widget.KeyEvent) bool {
+	handled := false
+	s.user.did(func() { handled = s.keyPress(e) })
+	return handled
+}
+
+func (s *Slider) keyPress(e widget.KeyEvent) bool {
 	if !s.Enabled() {
 		return false
 	}
@@ -348,8 +363,13 @@ func (s *Slider) MouseRelease(e widget.MouseEvent) bool {
 	return true
 }
 
-// setFromPos puts the value where the pointer is along the slider's axis.
+// setFromPos puts the value where the pointer is along the slider's axis,
+// which is the user moving it.
 func (s *Slider) setFromPos(at float32) {
+	s.user.did(func() { s.setFromPosNow(at) })
+}
+
+func (s *Slider) setFromPosNow(at float32) {
 	at0, at1 := s.travel()
 	if at1 == at0 {
 		return

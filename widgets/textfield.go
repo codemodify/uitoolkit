@@ -17,6 +17,11 @@ type TextField struct {
 	Text        string
 	Placeholder string
 	OnChange    func(string)
+	// OnInput fires only for text the user put there — typing, backspace,
+	// a paste, a cut, an IME commit, a screen reader's edit — and never
+	// for SetText from the app. It fires after OnChange
+	// (widgets/oninput.go).
+	OnInput     func(string)
 	OnSubmit    func(string)
 	OnEscape    func()
 	OnFocusLost func()
@@ -40,6 +45,7 @@ type TextField struct {
 	scrollX      float32
 	preedit      string
 	preeditCaret int
+	user         userEdit
 }
 
 func NewTextField(text, placeholder string, on func(string)) *TextField {
@@ -80,6 +86,9 @@ func (t *TextField) SetText(s string) {
 	t.Invalidate()
 	if t.OnChange != nil {
 		t.OnChange(s)
+	}
+	if t.user.is() && t.OnInput != nil {
+		t.OnInput(s)
 	}
 }
 
@@ -564,11 +573,16 @@ func (t *TextField) replaceSel(s string) {
 	t.changed()
 }
 
+// changed is every edit the user makes — typing, backspace, a paste, a cut,
+// an IME commit — and nothing the app does, which goes through SetText.
 func (t *TextField) changed() {
 	t.ensureCaretVisible()
 	t.Invalidate()
 	if t.OnChange != nil {
 		t.OnChange(t.Text)
+	}
+	if t.OnInput != nil {
+		t.OnInput(t.Text)
 	}
 }
 

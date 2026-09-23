@@ -14,11 +14,17 @@ type RadioButton struct {
 	Text     string
 	Selected bool
 	OnChange func(bool)
-	hovered  bool
-	pressed  bool
-	group    *RadioGroup
-	index    int
-	fade     stateFade // hover / focus cross-fade (the look's HintHoverFadeMs)
+	// OnInput fires only when the user chose this radio — a click, Space,
+	// an arrow through its group, a screen reader's press — and never for
+	// SetSelected from the app. It fires after OnChange
+	// (widgets/oninput.go).
+	OnInput func(bool)
+	user    userEdit
+	hovered bool
+	pressed bool
+	group   *RadioGroup
+	index   int
+	fade    stateFade // hover / focus cross-fade (the look's HintHoverFadeMs)
 }
 
 // NewRadio builds a standalone radio (selects on press; does not uncheck itself).
@@ -38,6 +44,9 @@ func (r *RadioButton) SetSelected(v bool) {
 	r.Invalidate()
 	if r.OnChange != nil {
 		r.OnChange(v)
+	}
+	if r.user.is() && r.OnInput != nil {
+		r.OnInput(v)
 	}
 }
 
@@ -114,12 +123,16 @@ func (r *RadioButton) KeyPress(e widget.KeyEvent) bool {
 	return false
 }
 
+// choose is the user picking this radio: through its group when it is in
+// one, since the group is what unpicks the others.
 func (r *RadioButton) choose() {
-	if r.group != nil {
-		r.group.Select(r.index)
-		return
-	}
-	r.SetSelected(true)
+	r.user.did(func() {
+		if r.group != nil {
+			r.group.selectByUser(r.index)
+			return
+		}
+		r.SetSelected(true)
+	})
 }
 
 // RadioGroup is a column of exclusive RadioButtons.
@@ -127,8 +140,13 @@ type RadioGroup struct {
 	widget.Base
 	selected int
 	OnChange func(int)
-	buttons  []*RadioButton
-	col      *FlexBox
+	// OnInput fires only when the user picked, never for Select from the
+	// app, and after OnChange (widgets/oninput.go). The chosen radio's own
+	// OnInput fires with it.
+	OnInput func(int)
+	user    userEdit
+	buttons []*RadioButton
+	col     *FlexBox
 }
 
 // NewRadioGroup builds radios from labels. selected < 0 means none.
@@ -175,7 +193,21 @@ func (g *RadioGroup) Select(i int) {
 	if g.OnChange != nil {
 		g.OnChange(i)
 	}
+	if !g.user.is() {
+		return
+	}
+	if g.OnInput != nil {
+		g.OnInput(i)
+	}
+	// The radio that came on is the one the user touched, and it reports
+	// for itself; the ones that went off were the group's doing.
+	if rb := g.buttons[i]; rb.OnInput != nil {
+		rb.OnInput(true)
+	}
 }
+
+// selectByUser is Select with the change marked as the user's own.
+func (g *RadioGroup) selectByUser(i int) { g.user.did(func() { g.Select(i) }) }
 
 func (g *RadioGroup) move(dir int) {
 	if len(g.buttons) == 0 {
@@ -193,7 +225,7 @@ func (g *RadioGroup) move(dir int) {
 	if i >= len(g.buttons) {
 		i = len(g.buttons) - 1
 	}
-	g.Select(i)
+	g.selectByUser(i)
 	g.buttons[i].RequestFocus()
 	// Arrow keys moved focus, so the new radio must paint its focus ring
 	// (radios are focus-visible-only).

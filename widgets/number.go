@@ -20,11 +20,16 @@ type NumberField struct {
 	Min, Max, Step, Value float64
 	Decimals              int
 	OnChange              func(float64)
-	Tip                   string
-	field                 *TextField
-	syncing               bool
-	upHover, downHover    bool
-	upPress, downPress    bool
+	// OnInput fires only for a value the user set — a stepper button, an
+	// arrow key, the wheel, typing in the field — and never for SetValue
+	// from the app. It fires after OnChange (widgets/oninput.go).
+	OnInput            func(float64)
+	user               userEdit
+	Tip                string
+	field              *TextField
+	syncing            bool
+	upHover, downHover bool
+	upPress, downPress bool
 }
 
 // NewNumberField builds a spinner. step <= 0 defaults to 1.
@@ -81,6 +86,9 @@ func (n *NumberField) SetValue(v float64) {
 	n.Invalidate()
 	if n.OnChange != nil {
 		n.OnChange(v)
+	}
+	if n.user.is() && n.OnInput != nil {
+		n.OnInput(v)
 	}
 }
 
@@ -257,7 +265,14 @@ func (n *NumberField) focusHere() bool {
 	return n.field != nil && n.field.Focused()
 }
 
+// KeyPress steps or jumps the value, all of it the user's own input.
 func (n *NumberField) KeyPress(e widget.KeyEvent) bool {
+	handled := false
+	n.user.did(func() { handled = n.keyPress(e) })
+	return handled
+}
+
+func (n *NumberField) keyPress(e widget.KeyEvent) bool {
 	if !n.Enabled() {
 		return false
 	}
@@ -294,6 +309,10 @@ func (n *NumberField) KeyPress(e widget.KeyEvent) bool {
 // nudge parses whatever is typed and applies the step in a single SetValue,
 // so stepping after typing reports one OnChange instead of two.
 func (n *NumberField) nudge(dir float64) {
+	n.user.did(func() { n.nudgeNow(dir) })
+}
+
+func (n *NumberField) nudgeNow(dir float64) {
 	v := n.Value
 	if n.field != nil {
 		if parsed, err := strconv.ParseFloat(n.field.Text, 64); err == nil {
@@ -323,9 +342,20 @@ func (n *NumberField) onField(s string) {
 	if n.OnChange != nil {
 		n.OnChange(v)
 	}
+	// onField is only ever reached from the inner editor, which is the
+	// user typing in it.
+	if n.OnInput != nil {
+		n.OnInput(v)
+	}
 }
 
+// commit is what the field was left holding — Return, or the focus moving
+// on — which is still the user's own number.
 func (n *NumberField) commit() {
+	n.user.did(func() { n.commitNow() })
+}
+
+func (n *NumberField) commitNow() {
 	v := n.Value
 	if n.field != nil {
 		if parsed, err := strconv.ParseFloat(n.field.Text, 64); err == nil {
