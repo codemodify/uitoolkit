@@ -47,23 +47,31 @@ Smaller pieces: [text area](screenshots/gallery-textarea.png) ·
 
 ---
 
-## The mail client
+## Applications built with uitoolkit
+
+Two applications grew up in this repository and now live in their own, each
+building on uitoolkit's published module. The frames below were rendered by
+them; how to run them is in their repositories.
+
+### The mail client — [comms-mail](https://github.com/codemodify/comms-mail)
 
 | | |
 |---|---|
 | ![Mail, dark theme](screenshots/mail-dark.png) | ![Mail, light theme](screenshots/mail-light.png) |
-| **Dark** — three-pane, threaded, tags and attachments | **Light** — same store, different pack |
-| ![Mail card list](screenshots/mail-cards.png) | ![Mail classic chrome](screenshots/mail-classic.png) |
-| **Cards** — alternate message-list density | **Classic** — era theme chrome |
-| ![Mail compact density](screenshots/mail-compact.png) | ![Mail smart folders](screenshots/mail-smart.png) |
-| **Compact** | **Smart folders** |
+| **Dark** — three-pane, threaded, tags and attachments | **Light** — the same store, a different pack |
 
-| | | |
-|---|---|---|
-| ![Compose window](screenshots/mail-compose.png) | ![Account setup](screenshots/mail-account.png) | ![Preferences](screenshots/mail-prefs.png) |
-| **Compose** — Bcc no longer ships in the headers | **Account** — TLS mode is now explicit | **Prefs** |
-| ![Filters](screenshots/mail-filters.png) | ![Empty state](screenshots/mail-empty.png) | |
-| **Filters** | **Empty** | |
+### The music player — [media-player-music](https://github.com/codemodify/media-player-music)
+
+![Minim in its three skins, each as the strip, the equaliser and the playlist snapped together](screenshots/minim.webp)
+
+| | |
+|---|---|
+| ![Marquee's cabinet, and folded into its stadium](screenshots/marquee.webp) | ![Lantern in its skin, and with the skin dropped](screenshots/lantern.webp) |
+| **Marquee** — the cabinet, and folded down | **Lantern** — in its skin, and with it dropped |
+
+It is a visual demo of skins and shaped windows and plays nothing at all —
+there is no audio or video dependency anywhere in this toolkit. What the
+toolkit gives it is in [players.md](players.md).
 
 ---
 
@@ -132,18 +140,15 @@ Both repos must be on the same revision — `go.mod` resolves the engine from
 ```sh
 go run ./examples/tour         # the tour: a page per capability (docs/tour.md)
 go run ./examples/gallery      # widget gallery
-go run ./examples/mail         # mail client, in-memory demo store
 go run ./examples/notes
 go run ./examples/files
-go run ./examples/minim        # compact player: three windows that snap together; Ctrl+K: next skin
-go run ./examples/marquee      # big player: Ctrl+M folds it into a stadium
-go run ./examples/lantern      # shaped player: Ctrl+K drops the skin
+go run ./examples/skinshape    # a shaped window over a test card
+go run ./cmd/uitksettings      # theme browser: 129 packs, preview + gallery
 go run ./cmd/uitest-driver     # scripted UI drive, no display needed
 ```
 
-The three players are visual demos of skins and shaped windows and play
-nothing at all — there is no audio or video dependency anywhere in this
-toolkit. See [docs/players.md](players.md).
+The mail client and the music player are not here any more; their
+repositories carry their own instructions.
 
 Escape hatches added in the review pass:
 

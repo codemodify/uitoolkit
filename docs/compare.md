@@ -73,4 +73,7 @@ hashes button + checkbox + menu row paint so dirty-rect hacks fail CI.
 
 1. Write a `Norm` in `internal/uitest/norms.go` (`Check` must fail on the old bug).
 2. Mention it in the table above and in `widgets/contract_test.go`’s regression map.
-3. Keep Mail as dogfood (`go test ./examples/mail/mailapp`); chrome fixes stay in the toolkit.
+3. Chrome fixes stay in the toolkit, never in an application. The mail client
+   ([comms-mail](https://github.com/codemodify/comms-mail)) is the dogfood that
+   found most of these rows; it builds on the published module, so a row it
+   needs has to be a toolkit row.

@@ -281,8 +281,8 @@ Settings groups icon sets the same way as themes:
 - **User** — any other `icons/<name>/` folder that contains at least
   one ToolIcon PNG
 
-The Appearance live preview includes a toolbar strip of chrome + Mail
-Fetch / Write glyphs for the selected set.
+The Appearance live preview includes a toolbar strip of chrome plus the
+mail stems (Fetch / Write) for the selected set.
 
 When a premiere or user set is selected, a missing stem logs once and
 paints **`no-icon`** (pack file, or the embedded placeholder if the
@@ -352,13 +352,14 @@ app := uitoolkit.New(uitoolkit.Options{DisableLookWatch: true})
 `DarkLook` / `LightLook` fixtures stay static unless `WatchLook` is set,
 so gallery screenshot pixels stay deterministic.
 
-Mail, gallery, Files, Notes, and Inspector start from `PreferredLook`
-and watch the file. Mail chrome persist (`mailui.json` density / layout)
-does **not** rewrite `look.json`. `applyLook` applies `PreferredLook`
-plus Mail density and syncs the View menu checkmark from the loaded
-palette. View → Dark / Light is the only Mail write: `SaveAppearance` of
-`WithPalette` (same corners/icons, opposite palette starter). Gallery /
-screenshot fixtures keep explicit `DarkLook` / `LightLook`.
+The gallery, Files, Notes and Inspector start from `PreferredLook` and
+watch the file, and so should any application: an app's own chrome
+preferences (a density, a layout) belong in an app file of its own and must
+**not** rewrite `look.json`. The rule the mail client established is that
+the only write back to `look.json` is a deliberate View → Dark / Light —
+`SaveAppearance` of `WithPalette`, same corners and icons, opposite palette
+starter. Gallery / screenshot fixtures keep explicit `DarkLook` /
+`LightLook`.
 
 Helpers for a live look:
 

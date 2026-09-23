@@ -6,9 +6,11 @@ Struck through once fixed; newest findings at the end of their section.
 
 ## Paused
 
-- **Mail, full fledged.** The last app on the sample list (folders, threads,
-  search, compose with attachments, tray, accessibility and the keyboard
-  throughout). Paused by the author on 2026-09-21.
+- **Mail, full fledged.** Left this repository with the client itself —
+  folders, threads, search, compose with attachments, the tray and the
+  keyboard throughout are
+  [comms-mail](https://github.com/codemodify/comms-mail)'s work now. What
+  the toolkit still owes it stays in the sections below.
 
 ## Appearance and themes
 
@@ -109,6 +111,10 @@ Struck through once fixed; newest findings at the end of their section.
 
 ## Skins, from building the players
 
+*The player left for
+[media-player-music](https://github.com/codemodify/media-player-music); these
+are the toolkit's entries, kept where they were found.*
+
 - ~~**A look owns the caption's height**; an app cannot ask for a shorter one
   (Marquee's compact mode had to live with 40 px).~~ `Window.SetCaptionHeight`.
 - ~~**`window.shape` rects anchor to the top and left only**; a rect cannot pin
@@ -141,13 +147,13 @@ Struck through once fixed; newest findings at the end of their section.
   composites it, which softens a pixel skin's edges there (978 blended pixels
   in Minim Classic's transport row on KWin at 1.75, 0 for the same build on
   X11). Sizing such a window to a multiple of four logical pixels at 1.75
-  would avoid it; the players keep their design sizes.
+  would avoid it; the player keeps its design sizes.
 - **An in-app window panel does not know a shaped skin's caption or border
   art**: Settings' preview is cut to Deck's outline and keeps its body inside
   Deck's border, but its caption is the base engine's in-app caption.
-- **Marquee could now ask for its compact caption** (`SetCaptionHeight`) and
-  give its full cabinet the 56-pixel band it was first drawn with; its art is
-  still the 40-pixel compromise.
+- **The `marquee` skin's caption art is a 40-pixel compromise**, drawn when
+  a look owned the caption's height. `SetCaptionHeight` lifted that, so the
+  art could be redrawn for the 56-pixel band it was first designed with.
 - **`skingen.Scales` is a public mutable package variable.** A third set
   (3×) is meant to be one entry in it, but a caller who appends one changes
   the scales of every plan in the process, including the shipped ones, and
@@ -297,7 +303,7 @@ Struck through once fixed; newest findings at the end of their section.
 - ~~**`Position` and `Move` are still device pixels** while sizes are logical;
   converting them is the natural follow-up to the size fix.~~ Positions are
   logical everywhere (`WindowOptions.X`/`Y`, `Move`, `Position`, the dock's
-  float geometry, the players' rack).
+  float geometry, `rack`).
 - ~~**An X11 window switched live to the desktop's frame shows no KWin title
   bar** in the nested rig at 1.75 (it reports `server` and drops its own
   caption); the same on `dev` (docs/e2e/2026-09-21/release-bugs.md).~~
@@ -337,7 +343,7 @@ Struck through once fixed; newest findings at the end of their section.
   reach the user's desktop and `/run/user/<uid>/doc`. The xdg-foreign handle
   and the dialog's parenting are real (KWin's exporter and importer).
 - **Platform facts, not bugs**, that apps must live with: Wayland windows
-  cannot place themselves (Minim's snapping windows cannot follow there); a
+  cannot place themselves (a rack's satellites cannot follow there); a
   window manager places a window when it maps it; an X11 move is answered a
   frame or two later.
 
@@ -375,26 +381,9 @@ Struck through once fixed; newest findings at the end of their section.
 
 ## Sample apps
 
-- **The Mail daemon links the whole Mail UI.** `examples/mail/mailapp` is one
-  package, so `cmd/mailclientd` — which speaks IMAP, POP3, SMTP and OAuth and
-  never draws anything — compiles and links the 3-pane chrome, the compose
-  window and the tray with it. Measured, the seam is nearly there already:
-  splitting the package into a store/protocol half and a UI half leaves the
-  daemon half compiling on its own once three helpers that are pure message
-  logic move out of UI files — `attachFileName` (`ui.go`, used by
-  `local.go`/`memory.go` to name a cached part), `newMailNotification`
-  (`tray.go`, used by `notify.go`'s daemon notifier) and `replyThreadHeaders`
-  (`compose.go`, RFC 5322 In-Reply-To/References, tested from
-  `hardening_test.go`). The UI half then needs nine unexported helpers
-  exported (`attachFileName`, `firstAddr`, `formatDate`, `groupThreaded`,
-  `newMailNotification`, `providerForAddress`, `replyThreadHeaders`,
-  `sortMessages`, `writeFileAtomic`) and about 1,700 core references
-  qualified across its twelve files — a rewrite, not a move, so it was left
-  for its own pass.
-- **`internal/apptest` imports a sample.** The paint bench and the automated
-  demo driver drive Mail (`mailapp.MailApp`, `StartDemo`, `IsolateTestEnv`,
-  `Open`, `OpenCompose`), so a toolkit-internal test harness now depends on
-  `examples/mail/mailapp` rather than the other way round. It is legal and it
-  is honest dogfooding — the harness drives the app exactly as a third party
-  would — but the arrow points out of the toolkit, and a `go test ./...` of
-  the toolkit now builds a sample.
+*Mail and the players left this repository on 2026-09-23 — for
+[comms-mail](https://github.com/codemodify/comms-mail) and
+[media-player-music](https://github.com/codemodify/media-player-music) — and
+their two entries here went with them: the daemon that linked the whole UI,
+and `internal/apptest` importing a sample to drive. The harness drives
+Settings now, so `go test ./...` of the toolkit builds only the toolkit.*

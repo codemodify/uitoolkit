@@ -28,8 +28,8 @@ CGO_ENABLED=0 go test -bench=BenchmarkFontAdvanceCached -benchmem ./style
 CGO_ENABLED=0 go test -bench=BenchmarkLookWatchSettled -benchmem ./app
 ```
 
-Wayland dogfood (`UITK_SCENE=auto` mailclientui + pprof / perf) is
-still the place to confirm HiDPI; these numbers are CPU `DrawScene`
+Wayland dogfood (`UITK_SCENE=auto` with a real application + pprof / perf)
+is still the place to confirm HiDPI; these numbers are CPU `DrawScene`
 of the offscreen pixmap.
 
 Median of 3 runs on the agent host (Xeon, `CGO_ENABLED=0`):
@@ -133,6 +133,15 @@ device held.
 Memory in MB. The 2026-09-15 column is that day's code built and measured
 again today, not the figures RESUME recorded then: they were taken on
 another Mesa and another Go, and only a same-day build compares.
+
+**Mail, Minim, Marquee and Lantern are no longer in this repository** — they
+moved to [comms-mail](https://github.com/codemodify/comms-mail) and
+[media-player-music](https://github.com/codemodify/media-player-music) on
+2026-09-23 — and `tools/perf/apps.txt` no longer lists them, so a rerun
+produces the other rows only. Their numbers are left here because they were
+measured on one day beside the rest and because the conclusions below rest
+on them: the players were the only apps in the set that animate, and Mail
+was the heaviest window.
 
 **An app that animates nothing is idle.** Every app but the three players
 now takes no CPU at all in ten quiet seconds. The wake-ups left are the
