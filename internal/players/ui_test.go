@@ -6,7 +6,6 @@ import (
 
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/a11y"
-	"github.com/codemodify/uitoolkit/app"
 	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
@@ -227,81 +226,5 @@ func TestThePulseMeasuresRealTimeAndClampsALostOne(t *testing.T) {
 	}
 	if want := 8 * 50 * time.Millisecond; seen[2] != want {
 		t.Errorf("a minute of lost time arrived as %v, want it clamped to %v", seen[2], want)
-	}
-}
-
-// ---- windows that stick together -----------------------------------------------
-
-// The desk half of the rack, with real windows in it. The offscreen backend
-// implements both halves a rack needs — where a window is, and putting one
-// somewhere — so this runs without a compositor, and it is the same code
-// that runs on X11.
-func TestTheDeskMovesRealWindows(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	a := app.New(app.Options{Headless: true, Look: style.DarkLook(), Scale: 1, DisableLookWatch: true})
-	open := func(name string, w, h int) *app.Window {
-		win, err := a.NewWindow(platform.WindowOptions{
-			Title: name, Width: w, Height: h, Headless: true,
-			Decorations: platform.DecorationsClient,
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-		t.Cleanup(func() { win.Close() })
-		return win
-	}
-	main, sat := open("main", 300, 120), open("playlist", 300, 200)
-	a.PumpOnce()
-
-	d := NewDesk(10)
-	if got := d.Places(); got {
-		t.Fatal("an empty desk claims it can place windows")
-	}
-	iMain := d.Add("main", main)
-	iSat := d.Add("playlist", sat)
-	if !d.Places() {
-		t.Fatal("the offscreen backend should place windows")
-	}
-
-	d.Attach(iSat, iMain, SideBottom)
-	mainBox := d.Rack.Pane(iMain).Box
-	if got := d.Rack.Pane(iSat).Box; got.X != mainBox.X || got.Y != mainBox.Bottom() {
-		t.Fatalf("attached at %+v, want flush under %+v", got, mainBox)
-	}
-	if x, y, ok := sat.Position(); !ok || x != mainBox.X || y != mainBox.Bottom() {
-		t.Errorf("the window is at %d,%d; the rack says %+v", x, y, d.Rack.Pane(iSat).Box)
-	}
-
-	// The desktop moves the main window: the satellite follows on the next
-	// look, and Follow says it moved something.
-	main.Move(500, 400)
-	a.PumpOnce()
-	if !d.Follow() {
-		t.Fatal("Follow saw nothing after the main window moved")
-	}
-	if got := d.Rack.Pane(iSat).Box; got.X != 500 || got.Y != 400+120 {
-		t.Errorf("the satellite is at %+v, want 500,%d", got, 400+120)
-	}
-	if x, y, ok := sat.Position(); !ok || x != 500 || y != 520 {
-		t.Errorf("the satellite's window is at %d,%d", x, y)
-	}
-	// And a second look with nothing moved reports nothing, so a player's
-	// timer does not repaint every frame for no reason.
-	if d.Follow() {
-		t.Error("Follow moved something when nothing had changed")
-	}
-
-	// Hiding keeps the bond, and showing puts the window back where it was
-	// before it is mapped, so it never appears in the wrong place first.
-	d.Show(iSat, false)
-	if d.Rack.Pane(iSat).To != iMain {
-		t.Error("hiding the satellite dropped its bond")
-	}
-	main.Move(120, 90)
-	a.PumpOnce()
-	d.Follow()
-	d.Show(iSat, true)
-	if x, y, ok := sat.Position(); !ok || x != 120 || y != 90+120 {
-		t.Errorf("the satellite came back at %d,%d, want 120,%d", x, y, 90+120)
 	}
 }

@@ -27,6 +27,7 @@ import (
 	"github.com/codemodify/uitoolkit/internal/players"
 	"github.com/codemodify/uitoolkit/layout"
 	"github.com/codemodify/uitoolkit/platform"
+	"github.com/codemodify/uitoolkit/rack"
 	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
 	"github.com/codemodify/uitoolkit/widgets"
@@ -49,7 +50,7 @@ const (
 // Player is the two windows and the model under them.
 type Player struct {
 	App  *app.Application
-	Desk *players.Desk
+	Desk *rack.Desk
 
 	Transport *players.Transport
 	Spectrum  *players.Spectrum
@@ -95,7 +96,7 @@ func New(a *app.Application, opts Options) (*Player, error) {
 	p.body = newBody(p)
 	main.SetContent(p.body)
 
-	p.Desk = players.NewDesk(players.DefaultReach)
+	p.Desk = rack.NewDesk(rack.DefaultReach)
 	p.iMain = p.Desk.Add("main", main)
 
 	if !opts.NoList {
@@ -108,7 +109,7 @@ func New(a *app.Application, opts Options) (*Player, error) {
 		w.SetContent(p.queue)
 		p.iList = p.Desk.Add("playlist", w)
 		// Anchored to the main window's right-hand edge, flush at the top.
-		p.Desk.Attach(p.iList, p.iMain, players.SideRight)
+		p.Desk.Attach(p.iList, p.iMain, rack.SideRight)
 	}
 
 	p.Transport.Changed = p.refresh
@@ -195,7 +196,7 @@ func (p *Player) settle() {
 		return
 	}
 	p.tries++
-	p.Desk.Attach(p.iList, p.iMain, players.SideRight)
+	p.Desk.Attach(p.iList, p.iMain, rack.SideRight)
 	// The anchor has taken when the window is where the bond says. A
 	// window manager may refuse — KWin keeps a window on the screen, and
 	// an anchor that would hang off the right-hand edge is exactly that —

@@ -17,7 +17,7 @@ import (
 // They are separate top-level windows rather than panels that fold out of
 // the main one, because that is the thing being demonstrated: three windows
 // that behave as one object, snapping flush and travelling together. The
-// arithmetic is in players.Rack and the desktop half is players.Desk; all
+// arithmetic is in rack.Rack and the desktop half is rack.Desk; all
 // either window does here is lay itself out — in the face its look asks for
 // (face.go), like the strip.
 

@@ -1,19 +1,46 @@
-package players
-
-// Windows that stick to one another.
+// Package rack is top-level windows that stick to one another: a main
+// window with satellites that snap flush to its edges, travel with it when
+// it is dragged, and come loose when one of them is dragged away — what a
+// compact music player's equaliser and playlist did, and what the player
+// demos do here.
 //
-// A compact player of this era was not one window: it was a main strip with
-// an equaliser under it and a playlist under that, and the three behaved as
-// one object. Drag the main strip and the other two came along; drag one of
-// them away and it came loose; drag it back to within a few pixels of an
-// edge and it snapped flush again.
+// It is the sibling of github.com/codemodify/uitoolkit/dock, and its
+// opposite: dock arranges panels *inside* one window, and a floating panel
+// there is a window the host owns and wants back. A rack arranges *separate
+// toplevels* that no one owns — equals that happen to know where one
+// another's edges are, and a satellite dragged off is simply a window
+// somewhere else.
 //
-// All of that is arithmetic on four numbers a window, so it lives here,
-// away from any window at all, and is tested without opening one. What the
-// apps add is the two halves a model cannot have: asking the desktop where
-// a window is, and telling it to put one somewhere. Only one of the two
-// desktops this toolkit runs on will do the second (see Rack.Apply in each
-// app, and docs/players.md).
+// The two halves:
+//
+//	Rack   — the arithmetic: [Box], [Side], [Bond], [Snap], [Pane].
+//	         Four integers a window, no toolkit types, no windows at all,
+//	         and tested without opening one.
+//	Desk   — the same rack over real [app.Window] values: read where the
+//	         desktop has put them, let a window the user dragged find a new
+//	         bond, put whatever hangs from it back underneath.
+//
+// A typical app makes a Desk, adds its windows main-first, attaches the
+// satellites once [Desk.Adopt] says the desktop has placed them, and calls
+// [Desk.Follow] on a timer.
+//
+// # What a desktop may refuse
+//
+// A window that keeps another one stuck to it has to know where it is and
+// be able to put the other one somewhere. X11 clients place their own
+// windows, so both work there, and so does the offscreen backend, which is
+// why every snapping test here runs without a compositor.
+//
+// A Wayland toplevel has no position: a client is never told where its
+// windows are and cannot ask for one, and that is the protocol rather than
+// an omission in this toolkit. So on Wayland the rack still snaps — the
+// arithmetic is the same and the model is the same — but the windows
+// cannot be made to follow. [Desk.Places] reports which of the two this
+// desktop is, so an app can say so in its own interface rather than
+// silently misplacing its panels.
+//
+// See docs/widgets.md and docs/players.md.
+package rack
 
 // Box is a window's outline on the desktop, in the logical pixels
 // app.Window's Position, Size and Move speak, so a box's far edge is its
@@ -188,8 +215,8 @@ type Rack struct {
 	panes []*Pane
 }
 
-// NewRack is an empty rack with a snapping distance.
-func NewRack(reach int) *Rack {
+// New is an empty rack whose panes snap within reach pixels.
+func New(reach int) *Rack {
 	if reach <= 0 {
 		reach = DefaultReach
 	}
@@ -423,6 +450,13 @@ func dedupe(s []int) []int {
 
 func minInt(a, b int) int {
 	if a < b {
+		return a
+	}
+	return b
+}
+
+func maxInt(a, b int) int {
+	if a > b {
 		return a
 	}
 	return b
