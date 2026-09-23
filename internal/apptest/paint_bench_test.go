@@ -6,7 +6,6 @@ import (
 
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/app"
-	"github.com/codemodify/uitoolkit/examples/mail/mailapp"
 	"github.com/codemodify/uitoolkit/internal/demo"
 	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
@@ -26,9 +25,11 @@ func benchWindow(b *testing.B, w, h int, content func(*app.Application, *app.Win
 	return a, win
 }
 
-func BenchmarkMailFullPaint(b *testing.B) {
-	mailapp.IsolateTestEnvTB(b)
-	a, w := benchWindow(b, 1280, 800, mailapp.MailApp)
+// Settings at 1280x800 is this repo's heavy window now that Mail lives in its
+// own repository: a theme browser, a live preview and the whole widget gallery
+// under it, all repainted every iteration.
+func BenchmarkSettingsFullPaint(b *testing.B) {
+	a, w := benchWindow(b, 1280, 800, demo.SettingsApp)
 	b.ReportAllocs()
 	b.ResetTimer()
 	reused := 0

@@ -1,16 +1,12 @@
 package apptest
 
 import (
-	"context"
 	"fmt"
-	"os"
 	"strings"
-	"time"
 
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit"
 	"github.com/codemodify/uitoolkit/app"
-	"github.com/codemodify/uitoolkit/examples/mail/mailapp"
 	"github.com/codemodify/uitoolkit/internal/demo"
 	"github.com/codemodify/uitoolkit/internal/uitest"
 	"github.com/codemodify/uitoolkit/platform"
@@ -21,7 +17,7 @@ import (
 
 // Options configure a driver run.
 type Options struct {
-	// Apps is "gallery", "mail", or "all" (default).
+	// Apps is "gallery", "settings", or "all" (default).
 	Apps string
 	// Short skips compose and extra resize/scroll passes.
 	Short bool
@@ -41,24 +37,25 @@ func (r Result) String() string {
 	return fmt.Sprintf("ok   %s/%s", r.App, r.Step)
 }
 
-// Run exercises gallery and/or the in-memory Mail UI. It never opens the
-// user's mail.json or a live IMAP daemon — see docs/testing.md.
+// Run exercises the gallery and Settings — the two windows in this repo with
+// enough chrome to be worth driving. Mail moved to its own repository and
+// drives itself there; see docs/testing.md.
 func Run(opts Options) []Result {
 	var out []Result
 	apps := strings.ToLower(strings.TrimSpace(opts.Apps))
 	if apps == "" || apps == "all" {
 		out = append(out, runGallery(opts)...)
-		out = append(out, runMail(opts)...)
+		out = append(out, runSettings(opts)...)
 		return out
 	}
 	for _, a := range strings.Split(apps, ",") {
 		switch strings.TrimSpace(a) {
 		case "gallery":
 			out = append(out, runGallery(opts)...)
-		case "mail":
-			out = append(out, runMail(opts)...)
+		case "settings":
+			out = append(out, runSettings(opts)...)
 		default:
-			out = append(out, Result{App: a, Step: "select", Err: fmt.Errorf("unknown app %q (gallery|mail|all)", a)})
+			out = append(out, Result{App: a, Step: "select", Err: fmt.Errorf("unknown app %q (gallery|settings|all)", a)})
 		}
 	}
 	return out
@@ -139,53 +136,21 @@ func runGallery(opts Options) []Result {
 	return out
 }
 
-func runMail(opts Options) []Result {
+func runSettings(opts Options) []Result {
 	var out []Result
-	dir, err := os.MkdirTemp("", "uitest-mail-")
-	if err != nil {
-		return []Result{{App: "mail", Step: "isolate", Err: err}}
-	}
-	defer os.RemoveAll(dir)
-	if err := mailapp.IsolateTestEnv(dir); err != nil {
-		return []Result{{App: "mail", Step: "isolate", Err: err}}
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	sock, stop, err := mailapp.StartDemo(ctx)
-	if err != nil {
-		return []Result{{App: "mail", Step: "startdemo", Err: err}}
-	}
-	defer stop()
-	if !mailapp.IsDisposableMailSocket(sock) {
-		return []Result{{App: "mail", Step: "socket", Err: fmt.Errorf("refusing non-disposable socket %s", sock)}}
-	}
-
-	cli, err := mailapp.DialWait(sock, 2*time.Second)
-	if err != nil {
-		return []Result{{App: "mail", Step: "dial", Err: err}}
-	}
-	defer cli.Close()
-	st, err := cli.Status()
-	if err != nil {
-		return []Result{{App: "mail", Step: "status", Err: err}}
-	}
-	if err := mailapp.AssertMemoryBackend(st.Backend); err != nil {
-		return []Result{{App: "mail", Step: "backend", Err: err}}
-	}
-
 	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true})
 	w, err := a.NewWindow(platform.WindowOptions{
-		Title: "mail-driver", Width: 1280, Height: 800, Headless: true,
+		Title: "settings-driver", Width: 1280, Height: 800, Headless: true,
 	})
 	if err != nil {
-		return []Result{{App: "mail", Step: "window", Err: err}}
+		return []Result{{App: "settings", Step: "window", Err: err}}
 	}
 	defer w.Close()
-	w.SetContent(mailapp.Open(a, w, cli, mailapp.AppOptions{ShowFilter: true}))
+	w.SetContent(demo.SettingsApp(a, w))
 	a.PumpOnce()
 
-	// Mail's chrome row is the window's title bar: check it with the content.
+	// Settings carries its chrome in the title bar, as Mail did: check it
+	// with the content.
 	checkWindow := func() error {
 		if err := checkTree(w.Content()); err != nil {
 			return err
@@ -195,23 +160,46 @@ func runMail(opts Options) []Result {
 		}
 		return nil
 	}
-	step(&out, "mail", "construct", checkWindow)
-	step(&out, "mail", "resize", func() error {
+	step(&out, "settings", "construct", checkWindow)
+	step(&out, "settings", "resize", func() error {
 		w.Inject(platform.Event{Kind: platform.EventResize, Width: 1100, Height: 720})
 		a.PumpOnce()
 		return checkWindow()
 	})
-	step(&out, "mail", "drag-splitters", func() error { return dragSplitters(a, w) })
-	step(&out, "mail", "scroll-lists", func() error { return scrollCollections(a, w, opts.Short) })
-	step(&out, "mail", "select-rows", func() error { return selectRows(a, w) })
-	step(&out, "mail", "context-menu", func() error { return openMailContextMenu(a, w) })
-	step(&out, "mail", "readonly-preview", func() error { return typeIntoReadOnlyViews(a, w) })
+	step(&out, "settings", "drag-splitters", func() error { return dragSplitters(a, w) })
+	step(&out, "settings", "scroll-lists", func() error { return scrollCollections(a, w, opts.Short) })
+	step(&out, "settings", "select-rows", func() error { return selectRows(a, w) })
+	step(&out, "settings", "context-menu", func() error { return openRowContextMenu(a, w) })
+	step(&out, "settings", "readonly-preview", func() error { return typeIntoReadOnlyViews(a, w) })
 	if !opts.Short {
-		step(&out, "mail", "compose-editable", func() error {
-			return driveCompose(a, cli)
-		})
+		// Every page in turn: each one builds its own controls, and the
+		// preview restages the look underneath them.
+		step(&out, "settings", "pages", func() error { return walkSettingsPages(a) })
 	}
 	return out
+}
+
+// walkSettingsPages opens Settings once per page, in a fresh window, because
+// a page is built when it is first shown and the driver is looking for what
+// construction breaks.
+func walkSettingsPages(a *app.Application) error {
+	for _, page := range []string{"Themes", "Appearance", "Packs & icons", "About"} {
+		w, err := a.NewWindow(platform.WindowOptions{
+			Title: "settings-page", Width: 1100, Height: 720, Headless: true,
+		})
+		if err != nil {
+			return err
+		}
+		w.SetContent(demo.SettingsAppOpen(a, w, "", page))
+		a.PumpOnce()
+		err = checkTree(w.Content())
+		w.Close()
+		a.PumpOnce()
+		if err != nil {
+			return fmt.Errorf("page %q: %w", page, err)
+		}
+	}
+	return nil
 }
 
 func dragSplitters(a *app.Application, w *app.Window) error {
@@ -451,25 +439,7 @@ func openGalleryCombo(a *app.Application, w *app.Window) error {
 	return nil
 }
 
-func mailMessageMenuItems() []*widgets.MenuItem {
-	return []*widgets.MenuItem{
-		widgets.Item("Reply", nil),
-		widgets.Item("Forward", nil),
-		widgets.Sep(),
-		widgets.Item("Mark as Read", nil),
-		widgets.Item("Mark as Unread", nil),
-		widgets.Item("Star", nil),
-		widgets.Sep(),
-		widgets.Item("Tag · Important", nil),
-		widgets.Item("Mute Thread", nil),
-		widgets.Item("Add sender to VIP", nil),
-		widgets.Item("Archive", nil),
-		widgets.Item("Junk", nil),
-		widgets.Item("Delete", nil),
-	}
-}
-
-func openMailContextMenu(a *app.Application, w *app.Window) error {
+func openRowContextMenu(a *app.Application, w *app.Window) error {
 	var table *widgets.TableView
 	var cards *widgets.CardList
 	widget.Walk(w.Content(), func(c widget.Component) {
@@ -490,16 +460,16 @@ func openMailContextMenu(a *app.Application, w *app.Window) error {
 		p := paintengine2d.Pt(o.X+48, o.Y+24)
 		w.Inject(platform.Event{Kind: platform.EventMouseDown, Pos: p, Button: platform.ButtonRight})
 	default:
-		// Demo list can be empty (first-run / filter); still size the Mail
-		// message menu — including “Add sender to VIP”.
-		if widgets.ShowContextMenu(w.Content(), paintengine2d.Pt(40, 80), mailMessageMenuItems()...) == nil {
+		// A list can be empty (a filter that matches nothing); still size a
+		// menu long enough to have to fit its items.
+		if widgets.ShowContextMenu(w.Content(), paintengine2d.Pt(40, 80), rowMenuItems()...) == nil {
 			return fmt.Errorf("ShowContextMenu failed")
 		}
 	}
 	a.PumpOnce()
 	pop, ok := w.Popup().(*widgets.PopupMenu)
 	if !ok || pop == nil {
-		return fmt.Errorf("expected mail context menu, got %T", w.Popup())
+		return fmt.Errorf("expected a context menu, got %T", w.Popup())
 	}
 	if err := uitest.CheckMenuFitsItems(pop); err != nil {
 		return err
@@ -537,40 +507,19 @@ func typeIntoReadOnlyViews(a *app.Application, w *app.Window) error {
 	return last
 }
 
-func driveCompose(a *app.Application, cli *mailapp.Client) error {
-	if err := mailapp.AssertMemoryBackend(mustBackend(cli)); err != nil {
-		return err
+// rowMenuItems is a menu with enough items, separators and long labels to
+// make a popup that has to be measured and flipped against a screen edge.
+func rowMenuItems() []*widgets.MenuItem {
+	return []*widgets.MenuItem{
+		widgets.Item("Open", nil),
+		widgets.Item("Open in New Window", nil),
+		widgets.Sep(),
+		widgets.Item("Copy", nil),
+		widgets.Item("Duplicate", nil),
+		widgets.Item("Rename…", nil),
+		widgets.Sep(),
+		widgets.Item("Add to Favourites", nil),
+		widgets.Item("Properties…", nil),
+		widgets.Item("Delete", nil),
 	}
-	cw, err := mailapp.OpenCompose(a, cli, mailapp.ComposeOptions{})
-	if err != nil {
-		return err
-	}
-	defer cw.Close()
-	a.PumpOnce()
-	var body *widgets.TextArea
-	widget.Walk(cw.Content(), func(c widget.Component) {
-		if ta, ok := c.(*widgets.TextArea); ok && !ta.ReadOnly && body == nil {
-			body = ta
-		}
-	})
-	if body == nil {
-		return fmt.Errorf("compose missing editable TextArea")
-	}
-	before := body.Text
-	body.SetSelection(len([]rune(body.Text)), len([]rune(body.Text)))
-	if !body.TextInput('x') {
-		return fmt.Errorf("compose body rejected typing")
-	}
-	if body.Text == before {
-		return fmt.Errorf("compose body did not change")
-	}
-	return checkTree(cw.Content())
-}
-
-func mustBackend(cli *mailapp.Client) string {
-	st, err := cli.Status()
-	if err != nil {
-		return ""
-	}
-	return st.Backend
 }

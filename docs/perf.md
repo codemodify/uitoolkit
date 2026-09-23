@@ -23,7 +23,7 @@ graph; `Surface.Present(nil)` always presents the full buffer.
 ## Headless profile (CI, `CGO_ENABLED=0`)
 
 ```bash
-CGO_ENABLED=0 go test -bench='BenchmarkMailFullPaint|BenchmarkGalleryFullPaint|BenchmarkListHover|BenchmarkListScroll' -benchmem ./internal/apptest
+CGO_ENABLED=0 go test -bench='BenchmarkSettingsFullPaint|BenchmarkGalleryFullPaint|BenchmarkListHover|BenchmarkListScroll' -benchmem ./internal/apptest
 CGO_ENABLED=0 go test -bench=BenchmarkFontAdvanceCached -benchmem ./style
 CGO_ENABLED=0 go test -bench=BenchmarkLookWatchSettled -benchmem ./app
 ```
@@ -36,7 +36,7 @@ Median of 3 runs on the agent host (Xeon, `CGO_ENABLED=0`):
 
 | Bench | v0.14.7 | v0.15.0 |
 | --- | --- | --- |
-| Mail full paint (1280×800) | 63.8 ms · 1305 KB · 8555 allocs · 48 reused | 62.6 ms · 36 KB · 87 allocs · 1 reused (root attach) |
+| Mail full paint (1280×800, historical — Mail now lives in [comms-mail](https://github.com/codemodify/comms-mail); `BenchmarkSettingsFullPaint` is this repo's heavy window) | 63.8 ms · 1305 KB · 8555 allocs · 48 reused | 62.6 ms · 36 KB · 87 allocs · 1 reused (root attach) |
 | Gallery full paint (1100×720) | 18.1 ms · 106 KB · 690 allocs · 0 reused | 18.1 ms · 35 KB · 84 allocs · 1 reused |
 | List hover | 778 µs · 20 KB · 142 allocs | 777 µs · 18 KB · 113 allocs |
 | List scroll | 1.23 ms · 70 KB · 508 allocs | 1.22 ms · 54 KB · 305 allocs |

@@ -1,7 +1,7 @@
-// Command uitest-driver script-drives gallery and the in-memory Mail UI.
+// Command uitest-driver script-drives the gallery and Settings: the two
+// windows here with enough chrome to be worth driving.
 //
-// It never opens the user's mail.json or a live IMAP account. See
-// docs/testing.md (Mail safety).
+// It needs no display and opens nothing of the user's. See docs/testing.md.
 //
 //	go run ./cmd/uitest-driver
 //	go run ./cmd/uitest-driver -short
@@ -19,7 +19,7 @@ import (
 )
 
 func main() {
-	app := flag.String("app", "all", "gallery, mail, or all")
+	app := flag.String("app", "all", "gallery, settings, or all")
 	short := flag.Bool("short", false, "skip compose and extra resize/scroll passes")
 	compare := flag.Bool("compare", false, "print Avalonia/Qt/GTK chrome checklist and exit")
 	flag.Parse()
