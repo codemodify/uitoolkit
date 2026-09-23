@@ -36,6 +36,7 @@ stub; there is no native AppKit/SwiftUI control host.
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Label | `Label` / `Title` | `QLabel` / `Text` | `GtkLabel` | `TextBlock` | `widget.Label` | `Label` | `TextBlock` | `NSTextField` | `Text` | [thumb](screenshots/compare/label.png) |
 | Button | `Button` | `QPushButton` / `Button` | `GtkButton` | `Button` | `widget.Button` | `Button` | `Button` | `NSButton` | `Button` | [thumb](screenshots/compare/button.png) |
+| Tool button | `ToolButton` | `QToolButton` | `GtkButton` (flat) | `Button` (flat) ≈ | `widget.Button` ≈ | `ToolStripButton` | `Button` (`ToolBar`) | `NSButton` (recessed) | `Button` (`.borderless`) | [thumb](screenshots/compare/toolbar.png) |
 | Checkbox | `Checkbox` | `QCheckBox` / `CheckBox` | `GtkCheckButton` | `CheckBox` | `widget.Check` | `CheckBox` | `CheckBox` | `NSButton` (checkbox) | `Toggle` ≈ | [thumb](screenshots/compare/checkbox.png) |
 | Switch | `Switch` | `Switch` (Quick); Widgets ≈ `QCheckBox` | `GtkSwitch` | `ToggleSwitch` | `widget.Check` ≈ | — (`CheckBox` ≈) | `ToggleButton` ≈ | `NSSwitch` | `Toggle` | [thumb](screenshots/compare/switch.png) |
 | Radio | `RadioButton` / `RadioGroup` | `QRadioButton` / `RadioButton` | `GtkCheckButton` (group) | `RadioButton` | `widget.RadioGroup` | `RadioButton` | `RadioButton` | `NSButton` (radio) | `Picker` ≈ | [thumb](screenshots/compare/radio.png) |
@@ -266,6 +267,48 @@ Where it is used: `Picture.Zoomable` zooms about the fingers with a pinch
 `MaxZoom` and pans once larger than its box; the tour's silhouette stamp
 zooms and turns; Files goes back and forward.
 
+## OnChange, and OnInput
+
+Nine controls report a change twice over, and the difference is who made it.
+
+`OnChange` fires on **every** change, whoever made it — the user, or the app
+calling the setter. That is what a view bound to a model wants and it is not
+going anywhere. It is also a trap for the app driving a control *from* a
+model: a player moving its seek bar from the playback position calls
+`SetValue` thirty times a second, and each call comes straight back into the
+handler that was meant to *answer* the user.
+
+`OnInput` fires **only** when the change came from the user: the pointer, the
+keyboard, or an accessibility action a screen reader ran. An app driving a
+control from a data source listens to `OnInput` and needs no suppress flag.
+
+```go
+seek.OnInput = func(v float32) { transport.SeekTo(v) } // only when dragged
+go func() { for range tick { seek.SetValue(pos()) } }() // never re-entered
+```
+
+| Widget | the app's setter | the user's callback |
+| --- | --- | --- |
+| `Slider` | `SetValue` | `OnInput func(float32)` |
+| `NumberField` | `SetValue` | `OnInput func(float64)` |
+| `Checkbox` | `SetChecked` | `OnInput func(bool)` |
+| `RadioButton` | `SetSelected` | `OnInput func(bool)` |
+| `RadioGroup` | `Select` | `OnInput func(int)` |
+| `Switch` | `SetOn` | `OnInput func(bool)` |
+| `TextField` | `SetText` | `OnInput func(string)` |
+| `TextArea` | `SetText` | `OnInput func(string)` |
+| `Expander` | `SetExpanded` | `OnInput func(bool)` (beside `OnToggle`) |
+
+**`OnChange` first, then `OnInput`** — always, everywhere. Both see the
+control already holding the new value, so a handler reading the widget rather
+than its argument gets the same answer from either.
+
+Two edges worth stating. A control that drives another one as part of the
+user's edit — a spin button writing its inner field — marks its own change
+and not the other's, so each control answers for its own. And an exclusive
+`Accordion` closing one section to open another is the accordion's doing, not
+the user's: only the section the user opened reports input.
+
 ## Sliders and progress bars
 
 `Slider.Ticks` (`TicksBelow`, `TicksAbove`, `TicksBoth`) adds tick marks every
@@ -275,10 +318,94 @@ where it was pressed: it never jumps. Pressing the track moves the thumb
 there. Engines place the thumb with the optional `SliderTravel` hook and can
 draw their own ticks with `DrawSliderTicks`.
 
+`NewVerticalSlider` (or `Slider.Vertical`) stands one on end, where up is
+more. It is painted from the same three parts inside a turned frame, so a
+skinned vertical slider is skinned from `slider.track`, `slider.fill` and
+`slider.thumb` with no art of its own; `TicksAbove` is then the left-hand
+row and `TicksBelow` the right. Arrow keys are unchanged — Up and Right are
+more either way — and a screen reader is told which way it runs.
+
+`Slider.Painter` and `Slider.Travel` are the slider's half of [art on a
+control](#art-on-a-control): the painter draws the whole control and is told
+the value as a fraction of the range, and `Travel` is half the thumb that
+painter draws, in design pixels, so the pointer and the picture agree about
+where the ends are. Without a painter the look answers, since it knows its
+own thumb.
+
 `ProgressBar.ShowText` writes the progress ("42%", or `Format`'s text). In a
 bar tall enough to hold it, the text sits in the middle and changes colour
 where the fill ends; beside a thin bar (Fluent, Material, Aqua) it sits to
 the right.
+
+## Art on a control
+
+A skin dresses the look's faces, and for a form that is the whole story. A
+panel is not a form: its keys are pictures, drawn where its layout says, and
+what the app needs is somewhere to hang one. `Button` and `ToolButton` have
+two hooks for it:
+
+```go
+b := widgets.NewToolButton("", style.IconNone, play)
+b.Painter = func(ctx *paintengine2d.Context, r paintengine2d.Rect, st style.ControlState) bool {
+	return style.DrawSkinSlot(lk, ctx, widget.SlotArtRect(b, "player.strip", "play"), "player.strip", "play", st)
+}
+b.Shaper = func(lk style.LookAndFeel, size paintengine2d.Point) *style.Silhouette {
+	return style.SkinSlotShape(lk, size, widget.SlotArtRect(b, "player.strip", "play"), "player.strip", "play")
+}
+```
+
+`Painter` is asked before the look paints and reports whether it took over;
+`Shaper` is the silhouette of what it painted, so a round key takes the
+pointer on the picture and a press in the corner of its box falls through to
+the panel behind it (`widget.ArtShape`).
+
+Three things the hooks deliberately do not do:
+
+- **They do not change the widget.** A painted button still takes the focus,
+  still works from Return and Space, still names itself in the accessibility
+  tree, still shows its tooltip. A `Painter` replaces the *look's* drawing
+  and nothing else.
+- **They do not remove the focus ring.** The ring is drawn over whatever the
+  painter drew, which is the rule the skin engine keeps too
+  ([docs/skins.md](skins.md)): no picture can ship a keyboard trap.
+- **They do not have to answer.** A painter that has no art for this look
+  returns false and the look's own face is drawn, so an app half-dressed by a
+  skin is a coherent app in a real look rather than a grid of holes.
+
+`Slider` takes a `Painter` too, with the value handed to it (see
+[Sliders](#sliders-and-progress-bars)).
+
+### A list on a skin's grid
+
+A panel's playlist is a well printed in the art with a groove beside it and
+rows ten design pixels tall, and none of that is anything the look knows.
+`ListView.RowGeo` is where a skin says so:
+
+```go
+l.RowGeo = func(lk style.LookAndFeel) *widgets.RowGeometry {
+	rows, ok := style.SkinSlotRect(lk, "player.playlist", "rows", box)
+	if !ok {
+		return nil // not this skin: the list is the list it always was
+	}
+	bar, _ := style.SkinSlotRect(lk, "player.playlist", "scroll", box)
+	row, _ := style.SkinSlotRect(lk, "player.playlist", "row", box)
+	return &widgets.RowGeometry{Rows: rows, Bar: bar, RowHeight: row.Dy()}
+}
+```
+
+The rects are in the list's own coordinates. Every field is optional and the
+zero value is "the look's own", so a layout naming only a rows slot keeps the
+look's row height and gets the look's bar inside it. A placed list draws no
+view frame and no background — the art has the well printed in it already —
+and gives up no gutter, because the groove is beside its rows rather than
+over them. `ThumbLength` fixes the thumb at one size, which is what a thumb
+that is a picture is. A `Bar` left empty *with* a `Rows` means the layout
+says there is no bar: the wheel, the keys and `ScrollTo` still scroll and
+nothing is painted there.
+
+Everything else is the list it always was — the selection modes, type-ahead,
+drag and drop, the accessibility tree, `EnsureVisible`. The hook is geometry
+and nothing else, and a nil answer is a list without the hook.
 
 ## Rich text
 

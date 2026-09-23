@@ -8,6 +8,36 @@ import (
 	"github.com/codemodify/uitoolkit/widget"
 )
 
+// RowGeometry is where a list's parts sit inside its own box, in its own
+// coordinates, when a skin's fixed layout places them rather than the look
+// measuring them: a panel's playlist is a well printed in the art with a
+// groove beside it and rows ten design pixels tall, and none of that is
+// anything the look knows.
+//
+// Every field is optional and the zero value is "the look's own", so a
+// layout that names only a rows slot gets the look's row height and the
+// look's bar inside it.
+type RowGeometry struct {
+	// Rows is the box the rows are drawn and hit in. Empty: the view
+	// frame the look would put round them.
+	Rows paintengine2d.Rect
+	// Bar is the groove the scroll thumb rides, beside the rows. Empty
+	// *with* a Rows of its own means the layout says there is no bar: the
+	// wheel, the keys and ScrollTo still scroll, nothing is painted, and
+	// no gutter is taken out of the rows.
+	Bar paintengine2d.Rect
+	// RowHeight is one row, in the same coordinates as Rows. Zero: the
+	// look's RowHeight fitted to its font.
+	RowHeight float32
+	// ThumbLength fixes the thumb at that many of those coordinates — a
+	// thumb that is a picture is one size, as an era's was — instead of
+	// sizing it to how much of the content is in view.
+	ThumbLength float32
+}
+
+// placed reports whether the geometry says where the rows go at all.
+func (g *RowGeometry) placed() bool { return g != nil && !g.Rows.Empty() }
+
 // ListView is a virtualized fixed-height row list. Only visible rows paint.
 type ListView struct {
 	widget.Base
@@ -21,6 +51,16 @@ type ListView struct {
 	// Frameless drops the look's view frame (a list that already sits in a
 	// framed pane).
 	Frameless bool
+	// RowGeo, when set, is asked at every paint and every press where the
+	// rows, the groove and one row are, so a skinned app can drive them
+	// from its skin's layout slots (style.SkinSlotRect, widget.Slots) —
+	// which is the one thing a list view could not take from a skin, and
+	// the reason a player had to write its own list. A nil answer, or a
+	// look that is not that skin, leaves the list exactly as it was.
+	//
+	// A placed list draws no view frame: the art has the well printed in
+	// it already.
+	RowGeo func(lk style.LookAndFeel) *RowGeometry
 	// Sidebar paints the list as a sidebar (a settings page list, a
 	// mail app's folders): macOS source lists, libadwaita's navigation
 	// sidebar, WinUI's navigation pane, where the look has one.
@@ -112,17 +152,52 @@ func (l *ListView) EnsureVisible(i int) {
 	l.Invalidate()
 }
 
+// geo is the skin's answer for this look, or nil.
+func (l *ListView) geo() *RowGeometry {
+	if l.RowGeo == nil {
+		return nil
+	}
+	return l.RowGeo(l.Look())
+}
+
 func (l *ListView) rowH() float32 {
+	if g := l.geo(); g.placed() && g.RowHeight > 0 {
+		return g.RowHeight
+	}
 	return style.FittedRowHeight(l.Look(), l.RowHeight)
 }
 
 func (l *ListView) contentH() float32 { return float32(l.Count) * l.rowH() }
 
-// frame is the look's view frame around the list (zero on flat looks).
-func (l *ListView) frame() style.Insets { return viewFrame(l.Look(), l.Frameless) }
+// frame is the look's view frame around the list (zero on flat looks, and
+// zero for a placed list, whose art has the well printed in it).
+func (l *ListView) frame() style.Insets {
+	if l.geo().placed() {
+		return style.Insets{}
+	}
+	return viewFrame(l.Look(), l.Frameless)
+}
 
-// inner is the viewport in view space (inside the frame).
-func (l *ListView) inner() paintengine2d.Rect { return viewInner(l.LocalBounds(), l.frame()) }
+// pad is the inset from the list's own box to the rows: the view frame, or
+// where the skin's layout put them. Everything but the frame's own painting
+// works from this one — the rows are at its origin, and view space is where
+// the list does all of its maths.
+func (l *ListView) pad() style.Insets {
+	if g := l.geo(); g.placed() {
+		b := l.LocalBounds()
+		return style.Insets{
+			Left:   g.Rows.Min.X,
+			Top:    g.Rows.Min.Y,
+			Right:  b.Dx() - g.Rows.Max.X,
+			Bottom: b.Dy() - g.Rows.Max.Y,
+		}
+	}
+	return l.frame()
+}
+
+// inner is the viewport in view space (inside the frame, or on the rows
+// slot the skin named).
+func (l *ListView) inner() paintengine2d.Rect { return viewInner(l.LocalBounds(), l.pad()) }
 
 // MaxOffset is max(0, content − viewport).
 func (l *ListView) MaxOffset() float32 {
@@ -134,7 +209,39 @@ func (l *ListView) clamp() {
 }
 
 func (l *ListView) vparts() style.ScrollParts {
+	if g := l.geo(); g.placed() {
+		return l.placedParts(g)
+	}
 	return vScrollParts(l.Look(), l.inner(), l.contentH(), l.OffsetY)
+}
+
+// placedParts is the bar in the groove the skin's layout named, in view
+// space. A groove the layout leaves out is a list with no bar at all.
+func (l *ListView) placedParts(g *RowGeometry) style.ScrollParts {
+	if g.Bar.Empty() {
+		return style.ScrollParts{}
+	}
+	in := l.pad()
+	bar := g.Bar.Translate(paintengine2d.Pt(-in.Left, -in.Top))
+	p := style.ScrollParts{Bar: bar, Track: bar}
+	maxOff := l.MaxOffset()
+	if maxOff <= 0 {
+		return p
+	}
+	h := g.ThumbLength
+	if h <= 0 {
+		h = bar.Dy() * min(l.inner().Dy()/max(l.contentH(), 1), 1)
+	}
+	if lo := style.Dip(l.Look(), 8); h < lo {
+		h = lo
+	}
+	if h > bar.Dy() {
+		h = bar.Dy()
+	}
+	y := (bar.Dy() - h) * clampOff(l.OffsetY, maxOff) / maxOff
+	p.Thumb = paintengine2d.XYWH(bar.Min.X, bar.Min.Y+y, bar.Dx(), h)
+	p.Proportion = p.Thumb
+	return p
 }
 
 func (l *ListView) vaxis() scrollAxis {
@@ -147,14 +254,19 @@ func (l *ListView) vaxis() scrollAxis {
 	}
 }
 
-// rowsW is the row width: the view minus the gutter a visible bar takes.
+// rowsW is the row width: the view minus the gutter a visible bar takes. A
+// placed list gives up nothing — the skin's groove is beside its rows, not
+// over them.
 func (l *ListView) rowsW() float32 {
+	if l.geo().placed() {
+		return l.inner().Dx()
+	}
 	return l.inner().Dx() - scrollGutter(l.Look(), l.MaxOffset() > 0)
 }
 
 func (l *ListView) scrollTrack() (track, thumb paintengine2d.Rect) {
 	sp := l.vparts()
-	in := l.frame()
+	in := l.pad()
 	return fromView(sp.Track, in), fromView(sp.Thumb, in)
 }
 
@@ -193,12 +305,16 @@ func (l *ListView) visibleRange() (lo, hi int) {
 func (l *ListView) Paint(ctx *paintengine2d.Context) {
 	l.clamp()
 	lk := l.Look()
-	if beginViewFrame(ctx, lk, l.LocalBounds(), l.frame(), l.viewState()) {
+	if beginPlacedView(ctx, lk, l.LocalBounds(), l.frame(), l.pad(), l.viewState()) {
 		defer ctx.Restore()
 	}
 	b := l.inner()
 	rw := l.rowsW()
-	ctx.DrawRect(b, paintengine2d.Fill(style.ViewBackgroundOf(lk, l.viewState())))
+	if !l.geo().placed() {
+		// A placed list sits on art that is already the background; the
+		// look's would paint over the panel.
+		ctx.DrawRect(b, paintengine2d.Fill(style.ViewBackgroundOf(lk, l.viewState())))
+	}
 	rh := l.rowH()
 	lo, hi := l.visibleRange()
 	if rec, ok := ctx.Device().(*paintengine2d.Recorder); ok {
@@ -276,14 +392,14 @@ func (l *ListView) rowRect(i int) paintengine2d.Rect {
 
 func (l *ListView) invalidateRow(i int) {
 	if r := l.rowRect(i); !r.Empty() {
-		l.InvalidateRect(fromView(r, l.frame()).Inset(-1))
+		l.InvalidateRect(fromView(r, l.pad()).Inset(-1))
 	}
 }
 
 func (l *ListView) MouseEnter() {}
 
 func (l *ListView) MouseMove(e widget.MouseEvent) bool {
-	p := toView(e.Pos, l.frame())
+	p := toView(e.Pos, l.pad())
 	if handled, dirty := l.vbar.move(l, p, l.vaxis()); handled || dirty {
 		if dirty {
 			l.Invalidate()
@@ -322,7 +438,7 @@ func (l *ListView) MouseRelease(widget.MouseEvent) bool {
 
 func (l *ListView) MousePress(e widget.MouseEvent) bool {
 	l.RequestFocus()
-	p := toView(e.Pos, l.frame())
+	p := toView(e.Pos, l.pad())
 	if l.vbar.press(l, p, l.vaxis()) {
 		l.Invalidate()
 		return true
@@ -381,7 +497,7 @@ func (l *ListView) KeyPress(e widget.KeyEvent) bool {
 		if l.OnContext == nil {
 			return false
 		}
-		l.OnContext(l.Selected, contextPoint(l, fromView(l.rowRect(l.Selected), l.frame())))
+		l.OnContext(l.Selected, contextPoint(l, fromView(l.rowRect(l.Selected), l.pad())))
 		return true
 	}
 	next := l.Selected
