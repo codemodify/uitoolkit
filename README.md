@@ -1159,7 +1159,7 @@ Docs: [docs/mail.md](docs/mail.md). Screenshots `mail-*.png` including
 File/Edit/View/Go/Message/Tools/Help, Mail toolbar, folder TreeView,
 thread TableView, Quick Filter, message preview + Source tab, compose
 Window, status unread/online). In-memory maildir-ish `Store` with a
-documented IMAP/SMTP seam (`internal/mail`). Screenshots
+documented IMAP/SMTP seam (`examples/mail/mailapp`). Screenshots
 `docs/screenshots/mail-*.png`. Still paintengine2d **v0.9.0**.
 
 **0.6.1** — ListView, TableView, and TreeView keep per-row scene groups
