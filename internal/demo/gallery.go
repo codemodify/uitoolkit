@@ -89,7 +89,7 @@ func GalleryWindow(host GalleryHost) widget.Component {
 	}
 	right := widgets.NewPad(10, tabs)
 
-	split := widgets.NewSplitter(true, left, right)
+	split := widgets.NewSplitter(widgets.SplitColumns, left, right)
 	split.Ratio = 0.46
 
 	root := widgets.NewColumn(p.menu, p.chrome, p.tools, split, p.status).WithGap(0)

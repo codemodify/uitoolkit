@@ -72,7 +72,7 @@ func TestTableViewColumnResize(t *testing.T) {
 func TestSplitterPanesExclusiveAtRatios(t *testing.T) {
 	left := widgets.NewLabel("AAAA pane A chrome")
 	right := widgets.NewLabel("BBBB pane B chrome that must not overlap A")
-	split := widgets.NewSplitter(true, left, right)
+	split := widgets.NewSplitter(widgets.SplitColumns, left, right)
 	s := uitest.Mount(split, paintengine2d.XYWH(0, 0, 400, 180))
 	for _, ratio := range []float32{0.08, 0.25, 0.5, 0.75, 0.92} {
 		split.Ratio = ratio
@@ -88,7 +88,7 @@ func TestSplitterPanesExclusiveAtRatios(t *testing.T) {
 }
 
 func TestSplitterCursorReturnsAfterDrag(t *testing.T) {
-	split := widgets.NewSplitter(true, widgets.NewLabel("left"), widgets.NewLabel("right"))
+	split := widgets.NewSplitter(widgets.SplitColumns, widgets.NewLabel("left"), widgets.NewLabel("right"))
 	split.Ratio = 0.4
 	s := uitest.Mount(split, paintengine2d.XYWH(0, 0, 400, 160))
 	a, b := split.PaneA(), split.PaneB()

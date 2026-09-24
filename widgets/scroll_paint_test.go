@@ -220,7 +220,7 @@ func TestSplitterScrollViewSceneRecordsChild(t *testing.T) {
 	sv.SetLook(look)
 	side := NewLabel("nav")
 	side.SetLook(look)
-	split := NewSplitter(true, side, sv)
+	split := NewSplitter(SplitColumns, side, sv)
 	split.Ratio = 0.28
 	split.SetLook(look)
 	split.SetHost(&host{})

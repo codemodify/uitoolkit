@@ -459,7 +459,7 @@ func filesApp(win *app.Window, open []int) widget.Component {
 	right.AddFlex(listing, 1)
 	right.AddFlex(pages, 1)
 
-	split := widgets.NewSplitter(true, sidebar, right)
+	split := widgets.NewSplitter(widgets.SplitColumns, sidebar, right)
 	split.Ratio = 0.28
 
 	// The folder tabs.

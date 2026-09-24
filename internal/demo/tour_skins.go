@@ -126,10 +126,10 @@ func buildSkinsPage(t *tourState) widget.Component {
 	// under it would otherwise squeeze it down to its title bar.
 	top := widgets.NewColumn(p.box, widgets.NewRow(use, back).WithGap(6)).WithGap(8)
 	top.AddFlex(p.box, 1)
-	right := widgets.NewSplitter(false, top, tourScroll("About a swap", about))
+	right := widgets.NewSplitter(widgets.SplitRows, top, tourScroll("About a swap", about))
 	right.Ratio = 0.58
 
-	split := widgets.NewSplitter(true, left, right)
+	split := widgets.NewSplitter(widgets.SplitColumns, left, right)
 	split.Ratio = 0.34
 
 	panel, facts := tourReadout("The pack, and what it does to a window")

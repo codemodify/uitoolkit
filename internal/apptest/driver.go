@@ -212,7 +212,7 @@ func dragSplitters(a *app.Application, w *app.Window) error {
 		o := widget.DeviceOrigin(sp)
 		pa, pb := sp.PaneA(), sp.PaneB()
 		var sash, aPt, bPt paintengine2d.Point
-		if sp.Vertical {
+		if sp.Axis == widgets.SplitColumns {
 			sash = paintengine2d.Pt(o.X+(pa.Max.X+pb.Min.X)*0.5, o.Y+24)
 			aPt = paintengine2d.Pt(o.X+sp.LocalBounds().Dx()*0.25, sash.Y)
 			bPt = paintengine2d.Pt(o.X+sp.LocalBounds().Dx()*0.75, sash.Y)

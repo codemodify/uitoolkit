@@ -610,7 +610,7 @@ func TourWindow(a *app.Application, pages ...int) (*app.Window, error) {
 // and on the right what the toolkit says about it — the facts a
 // screenshot cannot carry, in the mono face so that they line up.
 func tourStage(stage, readout widget.Component) widget.Component {
-	sp := widgets.NewSplitter(true, widgets.NewPad(10, stage), widgets.NewPad(10, readout))
+	sp := widgets.NewSplitter(widgets.SplitColumns, widgets.NewPad(10, stage), widgets.NewPad(10, readout))
 	sp.Ratio = 0.55
 	return sp
 }

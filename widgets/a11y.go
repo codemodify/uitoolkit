@@ -350,7 +350,9 @@ func (s *ScrollView) Describe(n *a11y.Node) { n.Role = a11y.RoleScrollPane }
 
 func (s *Splitter) Describe(n *a11y.Node) {
 	n.Role = a11y.RoleSplitter
-	if s.Vertical {
+	// AT-SPI names the orientation of the divider, which is what a reader
+	// says out loud, so this is the one place the old sense is right.
+	if s.sideBySide() {
 		n.State |= a11y.StateVertical
 	} else {
 		n.State |= a11y.StateHorizontal
