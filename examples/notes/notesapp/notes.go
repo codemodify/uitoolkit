@@ -1,4 +1,10 @@
-package demo
+// Package notesapp is the Notes sample: a table of notes with a filter,
+// an editor beside it, priorities, reordering by drag, and text dropped
+// in from another application.
+//
+// examples/notes opens the window and calls [NotesApp]; the application
+// is here, built on the published API and nothing else.
+package notesapp
 
 import (
 	"fmt"
@@ -109,6 +115,7 @@ func NotesApp(win *app.Window) widget.Component {
 		sel = vis[i]
 		loadEditor()
 	})
+	table.SetAccessibleName("Notes")
 	table.Selected = 0
 	// A note dragged out of the list goes as its text, so it can be
 	// dropped into an editor, a mail body, or the note editor here. The

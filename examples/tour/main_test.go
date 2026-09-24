@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/codemodify/uitoolkit"
-	"github.com/codemodify/uitoolkit/internal/demo"
+	"github.com/codemodify/uitoolkit/examples/tour/tourapp"
 	"github.com/codemodify/uitoolkit/style"
 )
 
@@ -36,7 +36,7 @@ func devicePx(v int, s float32) int { return int(math.Round(float64(float32(v) *
 func TestShotsAreThePageDesignAtEveryScale(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv(style.AnimationsEnv, "0")
-	tabs, shapes := demo.TourPageIndex("tabs"), demo.TourPageIndex("shapes")
+	tabs, shapes := tourapp.TourPageIndex("tabs"), tourapp.TourPageIndex("shapes")
 	for _, s := range []float32{1, 1.75} {
 		dir := t.TempDir()
 		a := uitoolkit.New(uitoolkit.Options{Headless: true, Scale: s})

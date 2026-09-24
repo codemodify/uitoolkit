@@ -1,4 +1,4 @@
-package demo
+package settingsapp
 
 import (
 	"os"
@@ -454,9 +454,29 @@ func rowName(text string) string {
 	return text
 }
 
+// repoRoot is the checkout this test runs from, found by walking up to
+// the go.mod rather than counting "..": the app has moved once already.
+func repoRoot(t *testing.T) string {
+	t.Helper()
+	dir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for {
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			return dir
+		}
+		up := filepath.Dir(dir)
+		if up == dir {
+			t.Fatal("no go.mod above the test's directory")
+		}
+		dir = up
+	}
+}
+
 func installSettingsIconSet(t *testing.T, xdg, name string) {
 	t.Helper()
-	src := filepath.Join("..", "..", "icons", name)
+	src := filepath.Join(repoRoot(t), "icons", name)
 	dst := filepath.Join(xdg, "uitoolkit", "icons", name)
 	if err := os.MkdirAll(dst, 0o700); err != nil {
 		t.Fatal(err)

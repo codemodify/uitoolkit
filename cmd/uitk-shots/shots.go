@@ -1,4 +1,14 @@
-// Command gallery is the uitoolkit widget showcase.
+// Command uitk-shots renders the pictures the README and docs show: the
+// widget showcase in several themes and states, each sample application
+// in a window of its own, and the theme comparison thumbnails.
+//
+//	go run ./cmd/uitk-shots docs/screenshots
+//	UITK_THEME=nocturne go run ./cmd/uitk-shots -theme nocturne /tmp/shots
+//
+// It is toolkit tooling rather than a sample: it drives the applications
+// under examples/ from the outside, exactly as their own users would, and
+// is why those applications keep their code in packages instead of in
+// package main.
 package main
 
 import (
@@ -13,60 +23,39 @@ import (
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit"
 	"github.com/codemodify/uitoolkit/app"
-	"github.com/codemodify/uitoolkit/icons"
-	"github.com/codemodify/uitoolkit/internal/demo"
+	"github.com/codemodify/uitoolkit/examples/files/filesapp"
+	"github.com/codemodify/uitoolkit/examples/inspector/inspectorapp"
+	"github.com/codemodify/uitoolkit/examples/notes/notesapp"
 	"github.com/codemodify/uitoolkit/platform"
+	"github.com/codemodify/uitoolkit/showcase"
 	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
 	"github.com/codemodify/uitoolkit/widgets"
 )
 
 func main() {
-	shot := flag.String("screenshot", "", "write PNG gallery into this directory and exit")
-	headless := flag.Bool("headless", false, "paint offscreen (no X11/Wayland)")
-	theme := flag.String("theme", "", "with -screenshot: take every gallery shot in this theme pack (default: $UITK_THEME, else each shot's own look)")
-	tab := flag.Int("tab", 0, "with -headless: the gallery tab to show (0 Scroll, 1 List, 2 Tree, 3 Table, 4 Form)")
+	theme := flag.String("theme", "", "take every showcase shot in this theme pack (default: $UITK_THEME, else each shot's own look)")
 	flag.Parse()
-	if (*shot != "" || *headless) && os.Getenv(widgets.AnimationsEnv) == "" {
+	dir := flag.Arg(0)
+	if dir == "" {
+		dir = filepath.Join("docs", "screenshots")
+	}
+	if os.Getenv(widgets.AnimationsEnv) == "" {
 		// Stills are the same every run: no fade or pulse caught mid-way.
 		os.Setenv(widgets.AnimationsEnv, "0")
 	}
-
-	if *shot != "" {
-		name := *theme
-		if name == "" {
-			name = os.Getenv(style.ThemeEnv)
+	name := *theme
+	if name == "" {
+		name = os.Getenv(style.ThemeEnv)
+	}
+	if name != "" {
+		pack, ok := style.LoadTheme(name)
+		if !ok {
+			log.Fatalf("unknown theme %q", name)
 		}
-		if name != "" {
-			pack, ok := style.LoadTheme(name)
-			if !ok {
-				log.Fatalf("unknown theme %q", name)
-			}
-			shotLook = pack.Look()
-		}
-		if err := writeScreenshots(*shot); err != nil {
-			log.Fatal(err)
-		}
-		return
+		shotLook = pack.Look()
 	}
-	a := uitoolkit.New(uitoolkit.Options{Headless: *headless})
-	a.SetIcon(icons.AppIconRGB("layout", 0x1f, 0x8a, 0xc0)...)
-	win, err := a.NewWindow(platform.WindowOptions{
-		Title: "uitoolkit gallery", Width: 1000, Height: 760, MinWidth: 720, MinHeight: 480,
-	})
-	if err != nil {
-		log.Fatal(err)
-	}
-	win.SetContent(buildGallery(a, win, a.Look().Name() == "light"))
-	if *tab > 0 {
-		selectGalleryTab(win, *tab)
-	}
-	if *headless {
-		_ = win.WritePNG("gallery.png")
-		fmt.Println("wrote gallery.png")
-		return
-	}
-	if err := a.Run(); err != nil {
+	if err := writeScreenshots(dir); err != nil {
 		log.Fatal(err)
 	}
 }
@@ -74,8 +63,10 @@ func main() {
 // shotLook, when set by -theme, replaces the look of every gallery shot.
 var shotLook style.LookAndFeel
 
+// buildGallery is the showcase exactly as examples/gallery shows it, so
+// the pictures are of the sample and not of something assembled here.
 func buildGallery(a *app.Application, win *app.Window, light bool) widget.Component {
-	return demo.Gallery(a, win, light)
+	return showcase.App(a, win, light)
 }
 
 func writeScreenshots(dir string) error {
@@ -378,7 +369,7 @@ func writeNotesShot(path string) error {
 	if err != nil {
 		return err
 	}
-	w.SetContent(demo.NotesApp(w))
+	w.SetContent(notesapp.NotesApp(w))
 	a.PumpOnce()
 	widget.Walk(w.Content(), func(c widget.Component) {
 		if tv, ok := c.(*widgets.TableView); ok {
@@ -566,7 +557,7 @@ func writeFilesShot(path string) error {
 	if err != nil {
 		return err
 	}
-	w.SetContent(demo.FilesApp(w))
+	w.SetContent(filesapp.FilesApp(w))
 	a.PumpOnce()
 	widget.Walk(w.Content(), func(c widget.Component) {
 		if tv, ok := c.(*widgets.TabView); ok {
@@ -598,7 +589,7 @@ func writeInspectorShot(path string) error {
 	if err != nil {
 		return err
 	}
-	w.SetContent(demo.InspectorApp(w))
+	w.SetContent(inspectorapp.InspectorApp(w))
 	a.PumpOnce()
 	widget.Walk(w.Content(), func(c widget.Component) {
 		if tv, ok := c.(*widgets.TabView); ok {

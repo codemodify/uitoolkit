@@ -6,7 +6,7 @@ import (
 
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/app"
-	"github.com/codemodify/uitoolkit/internal/demo"
+	"github.com/codemodify/uitoolkit/examples/tour/tourapp"
 	"github.com/codemodify/uitoolkit/layout"
 	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
@@ -32,8 +32,8 @@ func writeSheet(a *app.Application, path string, pages []int) error {
 		if err != nil {
 			return err
 		}
-		name := widgets.NewTitle(demo.TourPageNames()[p])
-		title := widgets.NewLabel(demo.TourPageTitle(p))
+		name := widgets.NewTitle(tourapp.TourPageNames()[p])
+		title := widgets.NewLabel(tourapp.TourPageTitle(p))
 		head := widgets.NewRow(name, title).WithGap(10 * dip).WithAlign(layout.AlignCenter)
 		cells = append(cells, widgets.NewColumn(head, newThumb(halve(img))).WithGap(6*dip))
 	}

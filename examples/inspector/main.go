@@ -7,8 +7,8 @@ import (
 	"log"
 
 	"github.com/codemodify/uitoolkit"
+	"github.com/codemodify/uitoolkit/examples/inspector/inspectorapp"
 	"github.com/codemodify/uitoolkit/icons"
-	"github.com/codemodify/uitoolkit/internal/demo"
 	"github.com/codemodify/uitoolkit/platform"
 )
 
@@ -25,7 +25,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	win.SetContent(demo.InspectorApp(win))
+	win.SetContent(inspectorapp.InspectorApp(win))
 	if *headless {
 		if err := win.WritePNG("inspector.png"); err != nil {
 			log.Fatal(err)

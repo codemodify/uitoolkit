@@ -1,4 +1,4 @@
-package demo
+package settingsapp
 
 import (
 	"strings"
@@ -7,6 +7,7 @@ import (
 	"github.com/codemodify/uitoolkit"
 	"github.com/codemodify/uitoolkit/app"
 	"github.com/codemodify/uitoolkit/platform"
+	"github.com/codemodify/uitoolkit/showcase"
 	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
 	"github.com/codemodify/uitoolkit/widgets"
@@ -72,10 +73,10 @@ func TestGalleryWindowAndPaneShowTheSameControls(t *testing.T) {
 	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true, Scale: 1, DisableLookWatch: true})
 	// The same host for both, so the comparison is about how the parts
 	// are assembled and not about which controls the host greys out.
-	host := GalleryHost{Root: func() widget.Component { return nil }}
-	win := galleryInWindow(t, a, GalleryWindow(host))
+	host := showcase.Host{Root: func() widget.Component { return nil }}
+	win := galleryInWindow(t, a, showcase.Window(host))
 	defer win.Close()
-	pane := galleryInWindow(t, a, GalleryPane(host))
+	pane := galleryInWindow(t, a, showcase.Pane(host))
 	defer pane.Close()
 
 	got, want := census(a, pane), census(a, win)

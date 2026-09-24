@@ -22,8 +22,8 @@ import (
 	"path/filepath"
 
 	"github.com/codemodify/uitoolkit"
+	"github.com/codemodify/uitoolkit/cmd/uitksettings/settingsapp"
 	"github.com/codemodify/uitoolkit/icons"
-	"github.com/codemodify/uitoolkit/internal/demo"
 	"github.com/codemodify/uitoolkit/platform"
 )
 
@@ -48,9 +48,9 @@ func main() {
 		log.Fatal(err)
 	}
 	if *stage != "" || *page != "" {
-		win.SetContent(demo.SettingsAppOpen(a, win, *stage, *page))
+		win.SetContent(settingsapp.SettingsAppOpen(a, win, *stage, *page))
 	} else {
-		win.SetContent(demo.SettingsApp(a, win))
+		win.SetContent(settingsapp.SettingsApp(a, win))
 	}
 	if *shot != "" || *headless {
 		out := "settings.png"

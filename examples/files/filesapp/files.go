@@ -1,4 +1,13 @@
-package demo
+// Package filesapp is the Files sample: a file browser with a places
+// tree, a sortable table, a tool bar, a menu, history, drag and drop
+// between the two views, and a status bar.
+//
+// It is a package rather than a main because that is what an application
+// of any size is: examples/files is twenty lines that open a window and
+// call [FilesApp], and everything a reader came to learn is here. Nothing
+// under it reaches into the toolkit's internals — it is written against
+// exactly the API a `go get` of uitoolkit hands anyone else.
+package filesapp
 
 import (
 	"fmt"
@@ -150,6 +159,7 @@ func filesApp(win *app.Window, open []int) widget.Component {
 	})
 	// A file manager selects like Explorer and Finder: Ctrl, Shift, Ctrl+A;
 	// typing a name jumps to it.
+	table.SetAccessibleName("Files")
 	table.Mode = widgets.SelectExtended
 	table.OnSelectionChange = func(rows []int) {
 		if len(rows) > 1 {

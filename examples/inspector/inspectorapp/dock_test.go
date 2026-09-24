@@ -1,4 +1,4 @@
-package demo
+package inspectorapp
 
 import (
 	"os"
@@ -83,7 +83,7 @@ func TestInspectorRemembersItsLayout(t *testing.T) {
 	if got := panelSide(t, host, "log"); got != dock.SideTop {
 		t.Fatalf("the log did not move: it is in the %v area", got)
 	}
-	path := dockLayoutPath("inspector")
+	path := dock.LayoutFile(LayoutName)
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("no layout was written to %s: %v", path, err)
 	}
@@ -142,7 +142,7 @@ func TestInspectorSurvivesABrokenLayout(t *testing.T) {
 	if err := os.MkdirAll(dir+"/uitoolkit", 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(dockLayoutPath("inspector"), []byte("{not json"), 0o600); err != nil {
+	if err := os.WriteFile(dock.LayoutFile(LayoutName), []byte("{not json"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	a, w, host := buildInspector(t)

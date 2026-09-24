@@ -1,4 +1,4 @@
-package demo
+package tourapp
 
 import (
 	"os"
@@ -436,4 +436,20 @@ func tourScale(win *app.Window) float32 {
 		return s
 	}
 	return 1
+}
+
+// firstLine is a title for a document made out of dropped text.
+func firstLine(text string) string {
+	line := text
+	if i := strings.IndexAny(line, "\r\n"); i >= 0 {
+		line = line[:i]
+	}
+	line = strings.TrimSpace(line)
+	if line == "" {
+		line = "Note"
+	}
+	if r := []rune(line); len(r) > 40 {
+		line = string(r[:40]) + "…"
+	}
+	return line
 }

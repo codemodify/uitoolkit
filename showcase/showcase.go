@@ -1,6 +1,21 @@
-// Gallery is the widget showcase used by examples/gallery, the
-// uitest-driver and Settings.
-package demo
+// Package showcase draws every control the toolkit has, once, in the
+// look it is given: a widget gallery an application can put on screen.
+//
+// It exists because more than one application wants it. examples/gallery
+// is the standalone showcase; the Settings app shows the same thing under
+// its theme preview, so a theme can be judged on every control at once;
+// and any application with a theme picker of its own can do the same with
+// [Pane].
+//
+// [Window] lays it out as a window's whole content (menu bar, title bar,
+// tool bar, status bar); [Pane] lays it out as one scrolling column with
+// no chrome of its own, for dropping into a page of an existing window.
+// [App] is [Window] wired to a live application, which is what a
+// standalone showcase wants.
+//
+// The showcase never re-themes or closes anything by itself: it asks the
+// [Host] it is given, and a nil field simply greys its control out.
+package showcase
 
 import (
 	"fmt"
@@ -10,19 +25,18 @@ import (
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit"
 	"github.com/codemodify/uitoolkit/app"
-	"github.com/codemodify/uitoolkit/layout"
 	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
 	"github.com/codemodify/uitoolkit/widgets"
 )
 
-// GalleryHost is what the showcase needs from the application around it:
+// Host is what the showcase needs from the application around it:
 // where its dialogs go up, and what its Window, Theme and Quit controls
 // do. The standalone window fills all of it in; Settings, which shows the
 // gallery in a ThemeScope under the theme preview, leaves out what would
 // re-theme or close Settings itself (a nil field greys its control out).
-type GalleryHost struct {
+type Host struct {
 	// Light says which palette the gallery is drawn in: it sets the Dark
 	// chrome switch and the View menu's radio.
 	Light bool
@@ -37,12 +51,12 @@ type GalleryHost struct {
 	Quit func()
 }
 
-// Gallery is the showcase as a window of its own: menu bar, title bar,
-// tool bar, the buttons and fields beside the tabbed views, and a status
-// bar. examples/gallery, the uitest-driver and the screenshot fixtures
-// draw this one.
-func Gallery(a *app.Application, win *app.Window, light bool) widget.Component {
-	return GalleryWindow(GalleryHost{
+// App is the showcase as an application's whole window: [Window] with a
+// [Host] wired to a running application, so File ▸ Quit quits, the Window
+// button opens a second OS window, and the Dark switch re-themes this
+// one. light says which palette it is drawn in.
+func App(a *app.Application, win *app.Window, light bool) widget.Component {
+	return Window(Host{
 		Light: light,
 		Root:  func() widget.Component { return win.Content() },
 		NewWindow: func() error {
@@ -62,17 +76,17 @@ func Gallery(a *app.Application, win *app.Window, light bool) widget.Component {
 				palette = style.ThemeLight
 			}
 			a.SetLook(style.WithTheme(win.Look(), palette))
-			win.SetContent(Gallery(a, win, light))
+			win.SetContent(App(a, win, light))
 		},
 		Quit: a.Quit,
 	})
 }
 
-// GalleryWindow assembles the showcase the way a window wants it: the
-// chrome across the top, the buttons and fields in a scrolling column
+// Window assembles the showcase the way a window wants it: the chrome
+// across the top, the buttons and fields in a scrolling column
 // beside the tabbed views, the status bar along the bottom.
-func GalleryWindow(host GalleryHost) widget.Component {
-	p := buildGalleryParts(host)
+func Window(host Host) widget.Component {
+	p := buildParts(host)
 	leftCol := widgets.NewColumn(
 		widgets.NewTitle("uitoolkit"),
 		widgets.NewLabel("paintengine2d  ·  v"+uitoolkit.Version),
@@ -97,21 +111,21 @@ func GalleryWindow(host GalleryHost) widget.Component {
 	return root
 }
 
-// GalleryPane assembles the same showcase as one column that scrolls,
-// without the menu bar and title bar a window owns: the tool bar, the
+// Pane assembles the same showcase as one column that scrolls, without
+// the menu bar and title bar a window owns: the tool bar, the
 // buttons and fields, then every tabbed view stacked under them as its
 // own panel, and the status bar. Settings shows it in a ThemeScope under
 // the theme preview, so a pack can be judged on every control at once
 // instead of a tab at a time.
-func GalleryPane(host GalleryHost) *widgets.ScrollView {
-	p := buildGalleryParts(host)
+func Pane(host Host) *widgets.ScrollView {
+	p := buildParts(host)
 	col := widgets.NewColumn(
 		p.tools,
 		widgets.NewWrap(p.buttons, p.fields),
 		widgets.NewSpacerSize(0, 2),
 	).WithGap(10).WithPad(10)
 	for _, v := range p.views {
-		col.Add(boxed(v.height, v.content))
+		col.Add(widgets.NewHeightBox(v.height, v.content))
 	}
 	col.Add(p.status)
 	return widgets.NewScrollView(col)
@@ -127,9 +141,9 @@ type galleryView struct {
 	height  float32
 }
 
-// galleryParts is one built set of the showcase's widgets. The window and
+// parts is one built set of the showcase's widgets. The window and
 // the Settings pane arrange the same parts differently; neither owns them.
-type galleryParts struct {
+type parts struct {
 	menu    *widgets.MenuBar
 	chrome  *widgets.TitleBar
 	tools   *widgets.ToolBar
@@ -139,7 +153,7 @@ type galleryParts struct {
 	status  *widgets.StatusBar
 }
 
-func (p galleryParts) tabs() []widgets.Tab {
+func (p parts) tabs() []widgets.Tab {
 	out := make([]widgets.Tab, len(p.views))
 	for i, v := range p.views {
 		out[i] = widgets.Tab{Title: v.title, Content: v.content}
@@ -147,60 +161,7 @@ func (p galleryParts) tabs() []widgets.Tab {
 	return out
 }
 
-// fixedHeight holds its child to a height given in 1x pixels and follows
-// the look's display scale, so a view that would otherwise grow without
-// bound — a list as tall as all its rows, a tree as tall as its nodes —
-// keeps its size in a column that scrolls.
-type fixedHeight struct {
-	widget.Base
-	h float32
-	// share caps the height at this much of what the parent offers, so a
-	// box does not swallow a short column; 0 never caps.
-	share float32
-}
-
-// boxed is child at h 1x pixels tall; height 0 leaves it its own.
-func boxed(h float32, child widget.Component) widget.Component {
-	return boxedShare(h, 0, child)
-}
-
-// boxedShare is boxed, but never taller than share of the height it is
-// offered.
-func boxedShare(h, share float32, child widget.Component) widget.Component {
-	if h <= 0 {
-		return child
-	}
-	b := &fixedHeight{h: h, share: share}
-	b.Init(b)
-	if child != nil {
-		b.Add(child)
-	}
-	return b
-}
-
-func (b *fixedHeight) Measure(c layout.Constraints) paintengine2d.Point {
-	h := style.Dip(b.Look(), b.h)
-	if b.share > 0 && c.HasMaxH() && h > c.MaxH*b.share {
-		h = c.MaxH * b.share
-	}
-	var w float32
-	if kids := b.Children(); len(kids) > 0 {
-		w = kids[0].Measure(layout.Constraints{MinW: c.MinW, MaxW: c.MaxW, MaxH: h}).X
-	}
-	if c.HasMaxW() {
-		w = c.MaxW
-	}
-	return c.Constrain(paintengine2d.Pt(w, h))
-}
-
-func (b *fixedHeight) Arrange(r paintengine2d.Rect) {
-	b.SetBounds(r)
-	if kids := b.Children(); len(kids) > 0 {
-		kids[0].Arrange(paintengine2d.XYWH(0, 0, r.Dx(), r.Dy()))
-	}
-}
-
-func buildGalleryParts(host GalleryHost) galleryParts {
+func buildParts(host Host) parts {
 	light := host.Light
 	root := func() widget.Component { return nil }
 	if host.Root != nil {
@@ -437,6 +398,7 @@ func buildGalleryParts(host GalleryHost) galleryParts {
 	list := widgets.NewListView(len(files), func(i int) string { return files[i] }, func(i int) {
 		selected.SetText("Selected: " + files[i])
 	})
+	list.SetAccessibleName("Files")
 	list.Selected = 0
 	list.OnContext = func(i int, p paintengine2d.Point) {
 		if i >= 0 && i < len(files) {
@@ -466,6 +428,7 @@ func buildGalleryParts(host GalleryHost) galleryParts {
 			Bold: i == 0,
 		}
 	}, nil)
+	cardDemo.SetAccessibleName("Cards")
 	cardDemo.CardHeight = 56
 	listPane := widgets.NewColumn(selected, list, widgets.NewLabel("Cards"), cardDemo).WithGap(6)
 	listPane.AddFlex(list, 1)
@@ -488,6 +451,7 @@ func buildGalleryParts(host GalleryHost) galleryParts {
 	rootNode := widgets.NewTreeNode("uitoolkit", src, docs, widgets.NewTreeNode("go.mod"))
 	rootNode.Expanded = true
 	tree := widgets.NewTreeView(rootNode)
+	tree.SetAccessibleName("Source tree")
 	tree.Selected = src
 	tree.OnSelect = func(n *widgets.TreeNode) {
 		if n != nil {
@@ -548,6 +512,7 @@ func buildGalleryParts(host GalleryHost) galleryParts {
 			status.Set(0, "Table: "+pkgs[i].name)
 		}
 	})
+	table.SetAccessibleName("Packages")
 	table.Selected = 0
 	table.OnSort = func(col int, asc bool) {
 		sort.SliceStable(pkgs, func(i, j int) bool {
@@ -634,7 +599,7 @@ func buildGalleryParts(host GalleryHost) galleryParts {
 		),
 	)
 
-	return galleryParts{
+	return parts{
 		menu:    menubar,
 		chrome:  chrome,
 		tools:   toolbar,

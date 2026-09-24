@@ -34,8 +34,8 @@ import (
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit"
 	"github.com/codemodify/uitoolkit/app"
+	"github.com/codemodify/uitoolkit/examples/tour/tourapp"
 	"github.com/codemodify/uitoolkit/icons"
-	"github.com/codemodify/uitoolkit/internal/demo"
 	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
 )
@@ -52,7 +52,7 @@ func main() {
 	log.SetPrefix("tour: ")
 
 	if strings.EqualFold(*page, "list") {
-		fmt.Println(strings.Join(demo.TourPageNames(), "\n"))
+		fmt.Println(strings.Join(tourapp.TourPageNames(), "\n"))
 		return
 	}
 	pages, err := parsePages(*page)
@@ -95,7 +95,7 @@ func main() {
 		return
 	}
 
-	win, err := demo.TourWindow(a, pages...)
+	win, err := tourapp.TourWindow(a, pages...)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -129,10 +129,10 @@ func parsePages(s string) ([]int, error) {
 		if name == "" {
 			continue
 		}
-		i := demo.TourPageIndex(name)
+		i := tourapp.TourPageIndex(name)
 		if i < 0 {
 			return nil, fmt.Errorf("unknown page %q (one of: %s)", name,
-				strings.Join(demo.TourPageNames(), ", "))
+				strings.Join(tourapp.TourPageNames(), ", "))
 		}
 		out = append(out, i)
 	}
@@ -150,7 +150,7 @@ func writeShots(a *app.Application, dir string, pages []int) error {
 		if err != nil {
 			return err
 		}
-		name := filepath.Join(dir, "tour-"+shotName(demo.TourPageNames()[p])+".png")
+		name := filepath.Join(dir, "tour-"+shotName(tourapp.TourPageNames()[p])+".png")
 		if err := img.WritePNGFile(name); err != nil {
 			return err
 		}
@@ -165,7 +165,7 @@ func shotPages(pages []int) []int {
 	if len(pages) > 0 {
 		return pages
 	}
-	all := make([]int, len(demo.TourPageNames()))
+	all := make([]int, len(tourapp.TourPageNames()))
 	for i := range all {
 		all[i] = i
 	}
@@ -188,14 +188,14 @@ func shootPage(a *app.Application, p int) (*paintengine2d.Image, error) {
 		return nil, err
 	}
 	defer win.Close()
-	win.SetContent(demo.TourAppOpen(a, win, p))
+	win.SetContent(tourapp.TourAppOpen(a, win, p))
 	// Two pumps: the first lays the page out, the second lets anything the
 	// page posted for after its first frame land.
 	a.PumpOnce()
 	a.PumpOnce()
 	img := win.Capture()
 	if img == nil {
-		return nil, fmt.Errorf("page %s: no picture", demo.TourPageNames()[p])
+		return nil, fmt.Errorf("page %s: no picture", tourapp.TourPageNames()[p])
 	}
 	return img, nil
 }
