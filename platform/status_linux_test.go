@@ -640,3 +640,281 @@ var errWatcherOwned = errString("StatusNotifierWatcher already owned")
 type errString string
 
 func (e errString) Error() string { return string(e) }
+
+// nestedStatusMenu is the tree the submenu tests share. Pre-order ids:
+// 1 Show Mail, 2 separator, 3 Folders, 4 Inbox, 5 separator, 6 Archive,
+// 7 2025, 8 Quit.
+func nestedStatusMenu(clicks map[string]int) []StatusMenuItem {
+	hit := func(name string) func() { return func() { clicks[name]++ } }
+	return []StatusMenuItem{
+		{Text: "Show Mail", OnClick: hit("show")},
+		{Separator: true},
+		{Text: "Folders", OnClick: hit("folders"), Submenu: []StatusMenuItem{
+			{Text: "Inbox", OnClick: hit("inbox")},
+			{Separator: true},
+			{Text: "Archive", Submenu: []StatusMenuItem{
+				{Text: "2025", OnClick: hit("2025")},
+			}},
+		}},
+		{Text: "Quit", OnClick: hit("quit")},
+	}
+}
+
+func childLeaf(t *testing.T, children []dbus.Variant, i int) dbusMenuLeaf {
+	t.Helper()
+	if i < 0 || i >= len(children) {
+		t.Fatalf("child %d of %d", i, len(children))
+	}
+	leaf, ok := children[i].Value().(dbusMenuLeaf)
+	if !ok {
+		t.Fatalf("child %d is %T, want dbusMenuLeaf", i, children[i].Value())
+	}
+	return leaf
+}
+
+func TestNestedGetLayoutNumbersTreeInPreOrder(t *testing.T) {
+	s := &linuxStatusItem{
+		opts:    StatusItemOptions{MenuChrome: HostMenu},
+		menu:    nestedStatusMenu(map[string]int{}),
+		menuRev: 7,
+	}
+	rev, layout, err := s.GetLayout(0, -1, nil)
+	if err != nil || rev != 7 || len(layout.Children) != 4 {
+		t.Fatalf("rev=%d children=%d %v", rev, len(layout.Children), err)
+	}
+	// The whole reply still has to have a finite signature: this is the
+	// call godbus makes on the way out, now with two levels of nesting.
+	if sig := dbus.SignatureOf(rev, layout); sig.String() != dbusMenuGetLayoutSig {
+		t.Fatalf("nested reply signature %s", sig)
+	}
+	folders := childLeaf(t, layout.Children, 2)
+	if folders.ID != 3 {
+		t.Fatalf("Folders id %d want 3 (pre-order)", folders.ID)
+	}
+	if folders.Properties["children-display"].Value() != "submenu" {
+		t.Fatalf("Folders props %+v want children-display=submenu", folders.Properties)
+	}
+	if len(folders.Children) != 3 {
+		t.Fatalf("Folders children %d want 3", len(folders.Children))
+	}
+	inbox := childLeaf(t, folders.Children, 0)
+	if inbox.ID != 4 || inbox.Properties["label"].Value() != "Inbox" {
+		t.Fatalf("Inbox %d %+v", inbox.ID, inbox.Properties)
+	}
+	if _, nested := inbox.Properties["children-display"]; nested {
+		t.Fatal("a command row must not claim children-display")
+	}
+	sep := childLeaf(t, folders.Children, 1)
+	if sep.Properties["type"].Value() != "separator" {
+		t.Fatalf("separator inside the submenu lost: %+v", sep.Properties)
+	}
+	archive := childLeaf(t, folders.Children, 2)
+	if archive.ID != 6 || len(archive.Children) != 1 {
+		t.Fatalf("Archive id=%d children=%d", archive.ID, len(archive.Children))
+	}
+	if y := childLeaf(t, archive.Children, 0); y.ID != 7 || y.Properties["label"].Value() != "2025" {
+		t.Fatalf("grandchild %d %+v", y.ID, y.Properties)
+	}
+	if quit := childLeaf(t, layout.Children, 3); quit.ID != 8 {
+		t.Fatalf("Quit id %d want 8 (after the subtree, not 4)", quit.ID)
+	}
+	// Every id in the tree is unique — that is the whole point of the
+	// pre-order walk, and the old id == index+1 scheme could not do it.
+	seen := map[int32]bool{}
+	var walk func(children []dbus.Variant)
+	walk = func(children []dbus.Variant) {
+		for i := range children {
+			leaf := childLeaf(t, children, i)
+			if seen[leaf.ID] {
+				t.Fatalf("duplicate id %d", leaf.ID)
+			}
+			seen[leaf.ID] = true
+			walk(leaf.Children)
+		}
+	}
+	walk(layout.Children)
+	if len(seen) != 8 {
+		t.Fatalf("ids %v want 8 rows", seen)
+	}
+}
+
+func TestGetLayoutHonoursRecursionDepth(t *testing.T) {
+	s := &linuxStatusItem{
+		opts:    StatusItemOptions{MenuChrome: HostMenu},
+		menu:    nestedStatusMenu(map[string]int{}),
+		menuRev: 1,
+	}
+	// 0: the node alone. A host asking "what is this row?" is not asking
+	// for the menu under it.
+	_, none, err := s.GetLayout(0, 0, nil)
+	if err != nil || len(none.Children) != 0 {
+		t.Fatalf("depth 0 children %d %v", len(none.Children), err)
+	}
+	// 1: the immediate children, and no grandchildren.
+	_, one, err := s.GetLayout(0, 1, nil)
+	if err != nil || len(one.Children) != 4 {
+		t.Fatalf("depth 1 children %d %v", len(one.Children), err)
+	}
+	folders := childLeaf(t, one.Children, 2)
+	if len(folders.Children) != 0 {
+		t.Fatalf("depth 1 delivered grandchildren: %d", len(folders.Children))
+	}
+	if folders.Properties["children-display"].Value() != "submenu" {
+		t.Fatal("a truncated parent must still say it has a submenu")
+	}
+	// A subtree root with its own level.
+	_, sub, err := s.GetLayout(3, 1, nil)
+	if err != nil || sub.ID != 3 || len(sub.Children) != 3 {
+		t.Fatalf("subtree %+v %v", sub, err)
+	}
+	if archive := childLeaf(t, sub.Children, 2); len(archive.Children) != 0 {
+		t.Fatalf("depth 1 from id 3 delivered grandchildren: %d", len(archive.Children))
+	}
+	// 2 from the root reaches the grandchild.
+	_, two, err := s.GetLayout(0, 2, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := len(childLeaf(t, two.Children, 2).Children); got != 3 {
+		t.Fatalf("depth 2 children of Folders %d", got)
+	}
+	if got := len(childLeaf(t, childLeaf(t, two.Children, 2).Children, 2).Children); got != 0 {
+		t.Fatalf("depth 2 reached great-grandchildren: %d", got)
+	}
+	// -1: everything.
+	_, all, err := s.GetLayout(0, -1, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := len(childLeaf(t, childLeaf(t, all.Children, 2).Children, 2).Children); got != 1 {
+		t.Fatalf("depth -1 stopped early: %d", got)
+	}
+	// An id that is in no tree is still an answer, not an error.
+	_, unknown, err := s.GetLayout(99, -1, nil)
+	if err != nil || unknown.ID != 99 || len(unknown.Children) != 0 {
+		t.Fatalf("unknown id %+v %v", unknown, err)
+	}
+}
+
+func TestDbusMenuEventOnChildClicksChildNotParent(t *testing.T) {
+	clicks := map[string]int{}
+	s := &linuxStatusItem{
+		opts:    StatusItemOptions{MenuChrome: HostMenu},
+		menu:    nestedStatusMenu(clicks),
+		menuRev: 1,
+	}
+	if err := s.Event(4, "clicked", dbus.MakeVariant(""), 0); err != nil {
+		t.Fatal(err)
+	}
+	if clicks["inbox"] != 1 {
+		t.Fatalf("child id 4 must fire Inbox, got %v", clicks)
+	}
+	if err := s.Event(7, "clicked", dbus.MakeVariant(""), 0); err != nil {
+		t.Fatal(err)
+	}
+	if clicks["2025"] != 1 {
+		t.Fatalf("grandchild id 7 must fire, got %v", clicks)
+	}
+	// A parent is not a command, even though this row was given OnClick.
+	if err := s.Event(3, "clicked", dbus.MakeVariant(""), 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Event(6, "clicked", dbus.MakeVariant(""), 0); err != nil {
+		t.Fatal(err)
+	}
+	if clicks["folders"] != 0 {
+		t.Fatalf("a cascade parent must not fire OnClick, got %v", clicks)
+	}
+	// The separator inside the submenu is inert too.
+	if err := s.Event(5, "clicked", dbus.MakeVariant(""), 0); err != nil {
+		t.Fatal(err)
+	}
+	ids, err := s.EventGroup([]dbusMenuEvent{
+		{ID: 8, EventID: "clicked"},
+		{ID: 42, EventID: "clicked"},
+	})
+	if err != nil || len(ids) != 1 || ids[0] != 42 {
+		t.Fatalf("EventGroup idErrors %v %v", ids, err)
+	}
+	if clicks["quit"] != 1 || clicks["show"] != 0 {
+		t.Fatalf("clicks %v", clicks)
+	}
+}
+
+func TestDbusMenuPropertiesResolveChildIDs(t *testing.T) {
+	s := &linuxStatusItem{
+		opts:    StatusItemOptions{MenuChrome: HostMenu},
+		menu:    nestedStatusMenu(map[string]int{}),
+		menuRev: 1,
+	}
+	v, err := s.GetProperty(7, "label")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.Value() != "2025" {
+		t.Fatalf("GetProperty(7, label) = %v", v.Value())
+	}
+	if v, err := s.GetProperty(3, "children-display"); err != nil || v.Value() != "submenu" {
+		t.Fatalf("parent children-display %v %v", v.Value(), err)
+	}
+	props, err := s.GetGroupProperties([]int32{4, 6, 99}, []string{"label", "children-display"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(props) != 2 {
+		t.Fatalf("group properties %+v want the two known ids", props)
+	}
+	if props[0].ID != 4 || props[0].Properties["label"].Value() != "Inbox" {
+		t.Fatalf("child props %+v", props[0])
+	}
+	if _, ok := props[0].Properties["children-display"]; ok {
+		t.Fatal("Inbox has no submenu")
+	}
+	if props[1].ID != 6 || props[1].Properties["children-display"].Value() != "submenu" {
+		t.Fatalf("nested parent props %+v", props[1])
+	}
+}
+
+func TestAboutToShowNeedsNoUpdateForParents(t *testing.T) {
+	s := &linuxStatusItem{
+		opts:    StatusItemOptions{MenuChrome: HostMenu},
+		menu:    nestedStatusMenu(map[string]int{}),
+		menuRev: 1,
+	}
+	// The layout was delivered in full by GetLayout, so no id needs a
+	// re-fetch before its menu opens — including a submenu parent.
+	for _, id := range []int32{0, 3, 6} {
+		need, err := s.AboutToShow(id)
+		if err != nil || need {
+			t.Fatalf("AboutToShow(%d) = %v %v", id, need, err)
+		}
+	}
+	updates, errIDs, err := s.AboutToShowGroup([]int32{0, 3, 77})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(updates) != 0 {
+		t.Fatalf("updatesNeeded %v", updates)
+	}
+	if len(errIDs) != 1 || errIDs[0] != 77 {
+		t.Fatalf("idErrors %v want [77]", errIDs)
+	}
+}
+
+func TestSetMenuNoticesASubmenuChange(t *testing.T) {
+	s := &linuxStatusItem{menu: nestedStatusMenu(map[string]int{}), menuRev: 2}
+	if err := s.SetMenu(nestedStatusMenu(map[string]int{})); err != nil {
+		t.Fatal(err)
+	}
+	if s.menuRev != 2 {
+		t.Fatalf("same tree must not bump rev, got %d", s.menuRev)
+	}
+	changed := nestedStatusMenu(map[string]int{})
+	changed[2].Submenu[0].Text = "Unread"
+	if err := s.SetMenu(changed); err != nil {
+		t.Fatal(err)
+	}
+	if s.menuRev != 3 {
+		t.Fatalf("a changed child row must bump rev, got %d", s.menuRev)
+	}
+}
