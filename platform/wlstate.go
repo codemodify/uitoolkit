@@ -73,10 +73,14 @@ func pickPresentSlot(busy []bool) (int, bool) {
 type outputSet struct {
 	scale   map[uint32]int32
 	entered map[uint32]bool
+	// boxes is where each output sits on the desktop and how large it is
+	// (see outputBox). Only the connection's set fills it; a surface's
+	// set only ever tracks entered.
+	boxes map[uint32]outputBox
 }
 
 func newOutputSet() *outputSet {
-	return &outputSet{scale: map[uint32]int32{}, entered: map[uint32]bool{}}
+	return &outputSet{scale: map[uint32]int32{}, entered: map[uint32]bool{}, boxes: map[uint32]outputBox{}}
 }
 
 // setScale records wl_output.scale for a registry name.
@@ -94,6 +98,7 @@ func (o *outputSet) remove(name uint32) {
 	}
 	delete(o.scale, name)
 	delete(o.entered, name)
+	delete(o.boxes, name)
 }
 
 // enter / leave track wl_surface.enter and wl_surface.leave.
@@ -159,4 +164,110 @@ func (o *outputSet) enteredNames() map[uint32]bool {
 // anyEntered reports whether the surface has received at least one enter.
 func (o *outputSet) anyEntered() bool {
 	return o != nil && len(o.entered) > 0
+}
+
+// outputBox is one wl_output's place on the desktop, as wl_output tells
+// it: geometry gives the top-left corner in the compositor's global
+// coordinate space, mode gives the size in the monitor's own pixels. The
+// logical size — the unit a layer surface's margins are in — is the mode
+// divided by the output's scale.
+type outputBox struct {
+	// X, Y are wl_output.geometry: global compositor space.
+	X, Y int
+	// ModeW, ModeH are wl_output.mode: physical pixels.
+	ModeW, ModeH int
+	// haveGeom, haveMode: the compositor has sent that event. An output
+	// missing either cannot be matched against a point.
+	haveGeom, haveMode bool
+}
+
+// setGeom records wl_output.geometry for a registry name.
+func (o *outputSet) setGeom(name uint32, x, y int) {
+	if o == nil {
+		return
+	}
+	b := o.boxes[name]
+	b.X, b.Y, b.haveGeom = x, y, true
+	o.boxes[name] = b
+}
+
+// setMode records wl_output.mode (the current one) for a registry name.
+func (o *outputSet) setMode(name uint32, w, h int) {
+	if o == nil || w < 1 || h < 1 {
+		return
+	}
+	b := o.boxes[name]
+	b.ModeW, b.ModeH, b.haveMode = w, h, true
+	o.boxes[name] = b
+}
+
+// logicalBox is an output's rectangle in logical pixels: its global
+// position and its mode divided by its scale. ok is false while either
+// event is still missing.
+func (o *outputSet) logicalBox(name uint32) (FrameRect, bool) {
+	if o == nil {
+		return FrameRect{}, false
+	}
+	b, ok := o.boxes[name]
+	if !ok || !b.haveGeom || !b.haveMode {
+		return FrameRect{}, false
+	}
+	sc := int(o.scale[name])
+	if sc < 1 {
+		sc = 1
+	}
+	return FrameRect{X: b.X, Y: b.Y, W: b.ModeW / sc, H: b.ModeH / sc}, true
+}
+
+// outputAt is the output whose logical rectangle contains the desktop
+// point x, y, and that rectangle. It is how a layer surface picks the
+// monitor to anchor to: zwlr_layer_surface_v1's margins are measured from
+// the edges of one output, so a point in the desktop's global coordinates
+// has to be turned into a point on a named output first.
+//
+// ok is false when no output claims the point — nothing has been told to
+// us yet, the outputs overlap oddly, or the point is off the desktop. The
+// caller then lets the compositor pick the output and uses the global
+// point unchanged, which is right on a single-monitor desktop and the
+// best guess anywhere else.
+func (o *outputSet) outputAt(x, y int) (name uint32, box FrameRect, ok bool) {
+	if o == nil {
+		return 0, FrameRect{}, false
+	}
+	for n := range o.boxes {
+		b, have := o.logicalBox(n)
+		if !have || b.W < 1 || b.H < 1 {
+			continue
+		}
+		if x >= b.X && x < b.X+b.W && y >= b.Y && y < b.Y+b.H {
+			return n, b, true
+		}
+	}
+	return 0, FrameRect{}, false
+}
+
+// layerMargins turns a point in the desktop's global coordinates into the
+// top and left margins of a layer surface anchored to the top-left corner
+// of the output that holds the point, and names that output. When no
+// output claims the point the margins are the point itself and name is 0
+// — the caller then passes no output and lets the compositor choose.
+func (o *outputSet) layerMargins(x, y int) (name uint32, left, top int) {
+	if n, b, ok := o.outputAt(x, y); ok {
+		return n, x - b.X, y - b.Y
+	}
+	return 0, x, y
+}
+
+// layerWindowSize turns the size a layer surface was configured with —
+// the whole surface, in logical pixels — into the window size the rest of
+// the toolkit speaks, which leaves the frame's margin out.
+func layerWindowSize(surfW, surfH int, m FrameInsets) (int, int) {
+	w, h := surfW-m.Width(), surfH-m.Height()
+	if w < 1 {
+		w = 1
+	}
+	if h < 1 {
+		h = 1
+	}
+	return w, h
 }
