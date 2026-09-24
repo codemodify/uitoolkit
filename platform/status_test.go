@@ -249,3 +249,52 @@ func TestSNIPixmapOpaqueRoundTrip(t *testing.T) {
 		t.Fatalf("opaque blue = %v", pix[4:8])
 	}
 }
+
+func TestFakeStatusItemKeepsSubmenuTree(t *testing.T) {
+	t.Setenv("UITK_TRAY", "fake")
+	clicks := map[string]int{}
+	hit := func(name string) func() { return func() { clicks[name]++ } }
+	item, err := NewStatusItem(StatusItemOptions{
+		Title: "Mail",
+		Menu: []StatusMenuItem{
+			{Text: "Show Mail", OnClick: hit("show")},
+			{Text: "Folders", OnClick: hit("folders"), Submenu: []StatusMenuItem{
+				{Text: "Inbox", OnClick: hit("inbox")},
+				{Separator: true},
+				{Text: "Archive", Submenu: []StatusMenuItem{
+					{Text: "2025", OnClick: hit("2025")},
+				}},
+			}},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fake, ok := item.(*FakeStatusItem)
+	if !ok {
+		t.Fatalf("backend %T", item)
+	}
+	menu := fake.Menu()
+	if len(menu) != 2 || len(menu[1].Submenu) != 3 {
+		t.Fatalf("the fake must record the tree as given: %+v", menu)
+	}
+	if !menu[1].Submenu[1].Separator || len(menu[1].Submenu[2].Submenu) != 1 {
+		t.Fatalf("submenu rows %+v", menu[1].Submenu)
+	}
+	fake.ClickMenuPath(1, 0)
+	fake.ClickMenuPath(1, 2, 0)
+	if clicks["inbox"] != 1 || clicks["2025"] != 1 {
+		t.Fatalf("nested clicks %v", clicks)
+	}
+	// A parent is not a command, and a separator never was.
+	fake.ClickMenuPath(1)
+	fake.ClickMenuPath(1, 1)
+	if clicks["folders"] != 0 {
+		t.Fatalf("cascade parent fired OnClick: %v", clicks)
+	}
+	// The snapshot is a copy: mutating it cannot reach the live menu.
+	menu[1].Submenu[0].Text = "gone"
+	if fake.Menu()[1].Submenu[0].Text != "Inbox" {
+		t.Fatal("Menu() must hand out a deep copy")
+	}
+}

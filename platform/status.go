@@ -52,7 +52,22 @@ type StatusMenuItem struct {
 	Separator bool
 	Checked   bool
 	Icon      style.ToolIcon
-	OnClick   func()
+	// Submenu makes this row a cascade parent: the host (Plasma,
+	// AppIndicator, Waybar) or the toolkit PopupMenu opens a child menu
+	// from it. Nesting has no depth limit here; hosts have their own.
+	//
+	// A parent is not a command. When Submenu is non-empty the row's own
+	// OnClick is never called — a host that opens a child menu sends no
+	// "clicked" for the parent row, and an app that relied on both would
+	// do different things on different desktops. Every backend enforces
+	// that (see menuItemClickable), so setting both is not a per-host
+	// accident but a row whose OnClick is dead on all of them.
+	//
+	// Separator wins over Submenu: a rule is not a menu, so children on a
+	// Separator row are dropped rather than exported as an unreachable
+	// branch.
+	Submenu []StatusMenuItem
+	OnClick func()
 }
 
 // StatusMenuChrome selects who draws the tray context menu.
@@ -195,12 +210,19 @@ func StatusItemAvailable() bool {
 	return nativeStatusItemAvailable()
 }
 
+// copyMenu snapshots a menu, children included. The copy is deep in the
+// slices and shallow in the callbacks (that is the point: a backend keeps
+// the app's OnClick), so a caller that keeps mutating the slice it passed
+// to SetMenu cannot change a menu a host is already showing.
 func copyMenu(in []StatusMenuItem) []StatusMenuItem {
 	if len(in) == 0 {
 		return nil
 	}
 	out := make([]StatusMenuItem, len(in))
 	copy(out, in)
+	for i := range out {
+		out[i].Submenu = copyMenu(out[i].Submenu)
+	}
 	return out
 }
 
@@ -214,10 +236,25 @@ func statusIconName(icon StatusIcon) string {
 	return "application-default-icon"
 }
 
-func menuItemClickable(it StatusMenuItem) bool {
-	return !it.Separator && !it.Disabled && it.OnClick != nil
+// menuItemChildren is the rows a menu row actually opens: a separator is
+// a rule and never a parent, whatever the app put in Submenu.
+func menuItemChildren(it StatusMenuItem) []StatusMenuItem {
+	if it.Separator {
+		return nil
+	}
+	return it.Submenu
 }
 
+// menuItemClickable reports whether a row's OnClick may fire. A cascade
+// parent is not a command ([StatusMenuItem.Submenu]), so it never is.
+func menuItemClickable(it StatusMenuItem) bool {
+	return !it.Separator && !it.Disabled && it.OnClick != nil && len(menuItemChildren(it)) == 0
+}
+
+// menuRowsEqual compares the visible shape of two menus, children
+// included, so SetMenu dedupes only menus a host would draw identically.
+// Callbacks are deliberately not compared: funcs are not comparable, and
+// a changed closure over the same rows draws the same menu.
 func menuRowsEqual(a, b []StatusMenuItem) bool {
 	if len(a) != len(b) {
 		return false
@@ -226,6 +263,9 @@ func menuRowsEqual(a, b []StatusMenuItem) bool {
 		if a[i].Text != b[i].Text || a[i].Disabled != b[i].Disabled ||
 			a[i].Separator != b[i].Separator || a[i].Checked != b[i].Checked ||
 			a[i].Icon != b[i].Icon {
+			return false
+		}
+		if !menuRowsEqual(menuItemChildren(a[i]), menuItemChildren(b[i])) {
 			return false
 		}
 	}

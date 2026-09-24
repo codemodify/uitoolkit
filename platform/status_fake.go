@@ -159,12 +159,29 @@ func (f *FakeStatusItem) ContextClick(x, y int32) {
 	invokeStatus(f.opts.Dispatch, func() { fn(x, y) })
 }
 
-// ClickMenu activates menu row i.
-func (f *FakeStatusItem) ClickMenu(i int) {
+// ClickMenu activates top-level menu row i.
+func (f *FakeStatusItem) ClickMenu(i int) { f.ClickMenuPath(i) }
+
+// ClickMenuPath activates a row addressed by index at each level:
+// ClickMenuPath(2, 0) is the first row of the third row's submenu. A
+// cascade parent is not a command, so a path that stops on one fires
+// nothing — the same rule the dbusmenu exporter enforces.
+func (f *FakeStatusItem) ClickMenuPath(path ...int) {
 	f.mu.Lock()
+	rows := f.menu
 	var fn func()
-	if i >= 0 && i < len(f.menu) && menuItemClickable(f.menu[i]) {
-		fn = f.menu[i].OnClick
+	for depth, i := range path {
+		if i < 0 || i >= len(rows) {
+			break
+		}
+		it := rows[i]
+		if depth == len(path)-1 {
+			if menuItemClickable(it) {
+				fn = it.OnClick
+			}
+			break
+		}
+		rows = menuItemChildren(it)
 	}
 	f.mu.Unlock()
 	invokeStatus(f.opts.Dispatch, fn)
