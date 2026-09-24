@@ -204,6 +204,61 @@ func TestOutputSetLayerMarginsUnknown(t *testing.T) {
 	}
 }
 
+// Under fractional scaling wl_output cannot describe the desktop:
+// wl_output.scale is an integer, so the 2880x1800 panel of the KDE
+// session that reported the tray-menu bugs says scale 2 while the
+// compositor's logical space is 1645x1029 at 175%. zxdg_output_v1's
+// logical_size is the only source that says so, and it wins wherever it
+// has arrived.
+func TestOutputSetLogicalBoxFromXdgOutput(t *testing.T) {
+	o := newOutputSet()
+	o.setGeom(1, 0, 0)
+	o.setMode(1, 2880, 1800)
+	o.setScale(1, 2)
+	// Before xdg_output has said anything: mode / integer scale, which
+	// is all wl_output can offer and is 200 logical pixels too narrow.
+	b, ok := o.logicalBox(1)
+	if !ok || b != (FrameRect{W: 1440, H: 900}) {
+		t.Fatalf("wl_output fallback = %+v ok=%v, want 1440x900", b, ok)
+	}
+	// The xdg_output events arrive (asynchronously, after the registry
+	// round trip) and the real logical rectangle replaces it.
+	o.setLogicalPos(1, 0, 0)
+	o.setLogicalSize(1, 1645, 1029)
+	b, ok = o.logicalBox(1)
+	if !ok || b != (FrameRect{W: 1645, H: 1029}) {
+		t.Fatalf("xdg_output box = %+v ok=%v, want 1645x1029", b, ok)
+	}
+	// And a point the integer arithmetic would have said is off the
+	// desktop is now on it, with margins measured from the real corner.
+	if name, left, top := o.layerMargins(1600, 1000); name != 1 || left != 1600 || top != 1000 {
+		t.Fatalf("point on the fractional part of the screen: name=%d %d,%d", name, left, top)
+	}
+}
+
+// Half an xdg_output is no xdg_output: the position without the size (or
+// the other way round) leaves the wl_output arithmetic in place rather
+// than inventing a rectangle. Neither is waited for.
+func TestOutputSetLogicalBoxNeedsBothXdgEvents(t *testing.T) {
+	o := newOutputSet()
+	o.setGeom(1, 0, 0)
+	o.setMode(1, 1920, 1080)
+	o.setScale(1, 1)
+	o.setLogicalPos(1, 0, 0)
+	if b, _ := o.logicalBox(1); b != (FrameRect{W: 1920, H: 1080}) {
+		t.Fatalf("position alone changed the box: %+v", b)
+	}
+	// An xdg_output for an output whose wl_output geometry has not
+	// arrived yet still gives a usable rectangle — the two protocols are
+	// independent.
+	o2 := newOutputSet()
+	o2.setLogicalPos(7, 1645, 0)
+	o2.setLogicalSize(7, 1280, 1024)
+	if b, ok := o2.logicalBox(7); !ok || b != (FrameRect{X: 1645, W: 1280, H: 1024}) {
+		t.Fatalf("xdg_output alone = %+v ok=%v", b, ok)
+	}
+}
+
 // set_size states the whole surface; the toolkit's window size leaves the
 // frame's margin out, so the configure has to be read back through it.
 func TestLayerWindowSize(t *testing.T) {
