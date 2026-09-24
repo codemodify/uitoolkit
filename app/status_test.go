@@ -446,3 +446,141 @@ func TestStatusIconFromToolPaints(t *testing.T) {
 		t.Fatalf("expected tray ink, n=%d", n)
 	}
 }
+
+func TestStatusMenuToItemsNestsCascades(t *testing.T) {
+	picked := 0
+	rows := StatusMenuToItems([]platform.StatusMenuItem{
+		{Text: "Show Mail"},
+		{Separator: true},
+		{Text: "Folders", Icon: style.IconMail, Disabled: true, OnClick: func() { picked += 100 },
+			Submenu: []platform.StatusMenuItem{
+				{Text: "Inbox", OnClick: func() { picked++ }},
+				{Separator: true},
+				{Text: "Archive", Submenu: []platform.StatusMenuItem{{Text: "2025"}}},
+			}},
+	})
+	if len(rows) != 3 {
+		t.Fatalf("rows %d", len(rows))
+	}
+	folders := rows[2]
+	if !folders.HasSubmenu() || folders.Text != "Folders" {
+		t.Fatalf("cascade row %+v", folders)
+	}
+	if !folders.Disabled || folders.Icon != style.IconMail {
+		t.Fatalf("cascade row lost its own properties: %+v", folders)
+	}
+	if folders.OnClick != nil {
+		t.Fatal("a parent is not a command: OnClick must not survive")
+	}
+	if len(folders.Submenu) != 3 {
+		t.Fatalf("children %d", len(folders.Submenu))
+	}
+	if !folders.Submenu[1].Separator {
+		t.Fatalf("a separator inside a submenu must survive: %+v", folders.Submenu[1])
+	}
+	if !folders.Submenu[2].HasSubmenu() || folders.Submenu[2].Submenu[0].Text != "2025" {
+		t.Fatalf("grandchild %+v", folders.Submenu[2])
+	}
+	folders.Submenu[0].OnClick()
+	if picked != 1 {
+		t.Fatalf("child OnClick %d", picked)
+	}
+}
+
+func TestStatusMenuFromItemsKeepsCascades(t *testing.T) {
+	menu := StatusMenuFromItems([]*widgets.MenuItem{
+		widgets.Item("Show Mail", nil),
+		widgets.Submenu("Folders",
+			widgets.Item("Inbox", nil),
+			widgets.Sep(),
+		),
+	})
+	if len(menu) != 2 || len(menu[1].Submenu) != 2 {
+		t.Fatalf("round trip %+v", menu)
+	}
+	if menu[1].Text != "Folders" || !menu[1].Submenu[1].Separator {
+		t.Fatalf("cascade %+v", menu[1])
+	}
+	back := StatusMenuToItems(menu)
+	if !back[1].HasSubmenu() || back[1].Submenu[0].Text != "Inbox" {
+		t.Fatalf("widgets → tray → widgets lost the cascade: %+v", back[1])
+	}
+}
+
+func TestStatusMenuWindowLeavesRoomForTheCascade(t *testing.T) {
+	host := &statusMeasureHost{look: style.DarkLook(), scale: 1}
+	children := []platform.StatusMenuItem{
+		{Text: "A folder with a deliberately long name"},
+		{Text: "Inbox"},
+		{Text: "Drafts"},
+	}
+	flat := StatusMenuToItems([]platform.StatusMenuItem{
+		{Text: "Show Mail"},
+		{Text: "Folders"},
+		{Text: "Quit"},
+	})
+	nested := StatusMenuToItems([]platform.StatusMenuItem{
+		{Text: "Show Mail"},
+		{Text: "Folders", Submenu: children},
+		{Text: "Quit"},
+	})
+	flatW, _ := statusMenuBox(host, flat)
+	childW, childH := statusMenuBox(host, StatusMenuToItems(children))
+	nestedW, nestedH := statusMenuBox(host, nested)
+	// The cascade opens inside this one window and is clamped to it, so
+	// the box is the parent menu plus the widest child, not either alone.
+	if nestedW < flatW+childW {
+		t.Fatalf("cascade box %.0f narrower than parent %.0f + child %.0f", nestedW, flatW, childW)
+	}
+	if nestedH < childH {
+		t.Fatalf("cascade box height %.0f shorter than the child menu %.0f", nestedH, childH)
+	}
+}
+
+func TestTrayCascadeOpensInsideStatusMenuWindow(t *testing.T) {
+	t.Setenv("UITK_TRAY", "fake")
+	a := New(Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{Width: 400, Height: 240, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.SetContent(widgets.NewLabel("mail"))
+	a.PumpOnce()
+	w.Hide()
+	a.ShowStatusMenu(300, 900, []platform.StatusMenuItem{
+		{Text: "Show Mail"},
+		{Text: "Folders", Submenu: []platform.StatusMenuItem{
+			{Text: "Inbox"},
+			{Separator: true},
+			{Text: "Archive"},
+		}},
+		{Text: "Quit"},
+	})
+	menu := a.statusMenu
+	if menu == nil || !menu.Visible() {
+		t.Fatal("status-menu window must be visible")
+	}
+	pop, ok := menu.Popup().(*widgets.PopupMenu)
+	if !ok || pop == nil {
+		t.Fatalf("popup %T", menu.Popup())
+	}
+	if !pop.Items[1].HasSubmenu() {
+		t.Fatalf("row 1 lost its cascade: %+v", pop.Items[1])
+	}
+	menu.RequestFocus(pop)
+	menu.dispatch(platform.Event{Kind: platform.EventKeyDown, Key: platform.KeyDown})
+	menu.dispatch(platform.Event{Kind: platform.EventKeyDown, Key: platform.KeyDown})
+	menu.dispatch(platform.Event{Kind: platform.EventKeyDown, Key: platform.KeyRight})
+	child := pop.CascadeMenu()
+	if child == nil {
+		t.Fatal("Right on a cascade row must open the child menu")
+	}
+	b := child.Bounds()
+	ww, hh := menu.SurfaceSize()
+	if b.Dx() < 8 || b.Dy() < 8 {
+		t.Fatalf("invisible cascade %v", b)
+	}
+	if b.Min.X < 0 || b.Min.Y < 0 || b.Max.X > float32(ww)+1 || b.Max.Y > float32(hh)+1 {
+		t.Fatalf("cascade %v outside the status-menu window %dx%d", b, ww, hh)
+	}
+}
