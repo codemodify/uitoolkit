@@ -407,6 +407,13 @@ func filterEntries(ents []FileInfo, filter string) []FileInfo {
 }
 
 // Preferred size hint so the overlay card is wide enough for a table.
+//
+// In device pixels, like every other Measure: the path field, the table
+// and the button row inside are laid out at the look's scale, so a card
+// asked for in design pixels is too small for its own contents on a
+// scaled desktop — the title clips, the table runs past the right edge
+// and the buttons crowd the bottom.
 func (fd *FileDialog) Measure(c layout.Constraints) paintengine2d.Point {
-	return c.Constrain(paintengine2d.Pt(520, 420))
+	lk := fd.Look()
+	return c.Constrain(paintengine2d.Pt(style.Dip(lk, 520), style.Dip(lk, 420)))
 }
