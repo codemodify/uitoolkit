@@ -409,7 +409,7 @@ stacks) before the engine's Inter-first stack.
 
 4. Look at it: `go run ./cmd/uitk-themesheet -theme luna -o /tmp/s`
    (and `-scale 2`). Read the PNG. Iterate until it matches the era. Then
-   see real apps in it: `go run ./examples/gallery -screenshot /tmp/g
+   see real apps in it: `go run ./cmd/uitk-shots /tmp/g
    -theme luna` takes every scripted gallery shot (menus, combo lists,
    tooltips, message boxes, tables) in your pack, and `UITK_THEME=luna`
    runs any uitoolkit app in it, like `GTK_THEME` or `QT_STYLE_OVERRIDE`.

@@ -1,6 +1,8 @@
 # Settings
 
-`cmd/uitksettings` is the toolkit appearance editor and theme browser. It
+`cmd/uitksettings` is the toolkit appearance editor and theme browser. The
+command opens the window; the application is `cmd/uitksettings/settingsapp`
+beside it, written against the published API like every other sample. It
 is the toolkit's shop window: picking a pack draws it twice at once — a
 small live application, and under it the whole widget gallery, every
 control the toolkit has in every state — so a theme can be judged without
@@ -40,7 +42,8 @@ On the right, the staged pack drawn twice in a splitter you can size:
   (menu bar, tool bar, tabs with every control, tree, table, dialogs,
   status bar) painted entirely in the staged theme, frame, caption and
   all;
-- the **gallery** — the same showcase `examples/gallery` is, as one
+- the **gallery** — the `showcase` package, the same one
+  `examples/gallery` puts in a window of its own, here as one
   scrolling column: tool bar, the Buttons and Fields panels, then the
   ScrollView, ListView, TreeView, TableView and Form panels, and a status
   bar. Its Window, Theme and Quit controls are disabled here: the gallery

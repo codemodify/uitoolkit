@@ -333,7 +333,7 @@ dismiss) vs Avalonia / Qt / GTK: [docs/compare.md](docs/compare.md)
 Regenerate:
 
 ```bash
-go run ./examples/gallery -screenshot docs/screenshots
+go run ./cmd/uitk-shots docs/screenshots
 tools/shots/demos.sh    # the tour and Settings, headless, as WebP
 ```
 
@@ -518,17 +518,36 @@ container. Layout extras (`Stack`, `Pad`, `Overlay`) are in
 
 ## Examples
 
-| Command | What it proves |
-| --- | --- |
-| `go run ./examples/tour` | Everything a page of controls cannot show, a page each: tabs that **are** the window's caption and tear out into windows of their own, docking, a drag that leaves the process, the toolkit's frame against the desktop's, a window with a hole you can click through, skins swapped live, the tray and the clipboard, and the window's own accessibility tree. See [docs/tour.md](docs/tour.md) |
-| `go run ./examples/gallery` | Stock controls, table, textarea, switch, accordion, spinner, tooltip, file stub, toolbar, combo, radio, progress, menus, tabs, tree, themes, scroll, list, message box |
-| `go run ./examples/notes` | A small real app: sortable table, textarea body, priority spinner, file stub, tooltips |
-| `go run ./examples/inspector` | Preferences inspector: table (JetBrains Mono), toolbar, tabs, message box |
-| `go run ./examples/files` | Files / Projects dogfood: tree, table, toolbar, menus, TextArea preview, dialogs |
+Every example under `examples/` is a whole application, written against
+the published API and nothing else. There is no privileged import: what
+these programs call, `go get github.com/codemodify/uitoolkit` gives you,
+so any of them can be copied into a directory of your own and built.
+
+Each one is a short `main.go` that opens a window, and a package beside it
+holding the application — because that is how an application of any size is
+written, and because a sample whose code all lives in `func main` teaches
+nothing about where code goes.
+
+| Command | The application | What it proves |
+| --- | --- | --- |
+| `go run ./examples/tour` | [`examples/tour/tourapp`](examples/tour/tourapp) | Everything a page of controls cannot show, a page each: tabs that **are** the window's caption and tear out into windows of their own, docking, a drag that leaves the process, the toolkit's frame against the desktop's, a window with a hole you can click through, skins swapped live, the tray and the clipboard, and the window's own accessibility tree. See [docs/tour.md](docs/tour.md) |
+| `go run ./examples/gallery` | [`showcase`](showcase) | Stock controls, table, textarea, switch, accordion, spinner, tooltip, file stub, toolbar, combo, radio, progress, menus, tabs, tree, themes, scroll, list, message box. The controls are a package, because Settings shows the same showcase under its theme preview |
+| `go run ./examples/notes` | [`examples/notes/notesapp`](examples/notes/notesapp) | A small real app: sortable table, textarea body, priority spinner, file stub, tooltips |
+| `go run ./examples/inspector` | [`examples/inspector/inspectorapp`](examples/inspector/inspectorapp) | Preferences inspector: panels that dock, float and close, a layout remembered between runs with `dock.Host.SaveLayoutFile`, table (JetBrains Mono), toolbar, message box |
+| `go run ./examples/files` | [`examples/files/filesapp`](examples/files/filesapp) | Files / Projects dogfood: tree, table, toolbar, menus, TextArea preview, history, drag and drop, dialogs |
+| `go run ./cmd/uitksettings` | [`cmd/uitksettings/settingsapp`](cmd/uitksettings/settingsapp) | The appearance editor: theme browser, live preview with the whole showcase under it, icons and corners, `look.json`. See [docs/settings.md](docs/settings.md) |
+
+`examples/mdi`, `examples/popups`, `examples/richtext`, `examples/shapes`,
+`examples/skinshape` and `examples/wizard` are single-file programs: one
+widget or one idea each, small enough to read in a sitting.
+
+A test in the root package fails the build if anything under `examples/`
+or `cmd/` ever imports one of the toolkit's `internal/` packages again —
+the rule the samples exist to prove.
 
 ```bash
-go run ./examples/gallery -screenshot docs/screenshots
-tools/shots/demos.sh    # the tour's pages and sheet, and Settings
+go run ./cmd/uitk-shots docs/screenshots   # the pictures on this page
+tools/shots/demos.sh                       # the tour's pages and sheet, and Settings
 ```
 
 ### Applications built with uitoolkit
@@ -564,7 +583,7 @@ dismiss order, textarea newline/wrap/nav, switch toggle (including
 disabled), accordion exclusive expand and focus yield, expander
 relayout, separator and spacer measure, IME preedit/commit on text
 widgets, and an offscreen paint that produces real pixels.
-`go test ./examples/gallery` regenerates the gallery and compare thumbs and
+`go test ./cmd/uitk-shots` regenerates the gallery and compare thumbs and
 fails if any two share a blob.
 
 Keyboard map: [docs/keyboard.md](docs/keyboard.md). **Esc** closes

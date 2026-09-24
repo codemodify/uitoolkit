@@ -44,10 +44,15 @@ reader says "Folders, tree" rather than just "tree".
 
 `a11y.Check(tree)` works like an accessibility linter. It reports:
 - controls without a name;
+- lists, trees and tables without a name — the row inside one is what the
+  user operates, so `Role.Interactive` says no to these, but a screen
+  reader entering an unnamed one announces it as "list", which says
+  nothing about what is in it;
 - duplicate IDs;
 - more than one focused node;
 - ranges that run backwards;
-- visible controls without a box.
+- visible controls without a box;
+- controls the keyboard cannot reach.
 
 Call it in your tests:
 
@@ -57,8 +62,25 @@ for _, p := range a11y.Check(win.AccessibleTree()) {
 }
 ```
 
-uitoolkit's own tests run it over every page of the gallery, over every
-page of Settings — the theme browser carries the gallery a second time,
+`a11y/a11ytest` is that loop written once, for applications that audit
+more than one window:
+
+```go
+tree := a11ytest.Audit(t, "files", win.AccessibleTree())   // fails with the list
+if a11ytest.Count(tree, a11y.RoleTable) == 0 {             // and then go on asking
+	t.Error("the table is not in the tree")
+}
+row := a11ytest.Find(tree, a11y.RoleListItem, "Dark")
+```
+
+`Audit` fatals on an empty tree — that means the test did not build or
+pump what it thought it did, and every later check would pass vacuously —
+and otherwise reports, so one run lists everything rather than the first
+thing. It lives beside `a11y` rather than in it because a library must not
+import `testing`.
+
+uitoolkit's own tests run it over every page of the showcase, over every
+page of Settings — the theme browser carries the showcase a second time,
 under the preview — and over the tour, Files, Notes and Inspector.
 
 ## Actions

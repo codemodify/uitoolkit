@@ -104,13 +104,37 @@ must update a running Mail look via that watcher.
 A display is **not** required for `go test` or `uitest-driver`. Native
 backends stay behind `CGO` build tags; headless contracts always run.
 
+## The samples build on the published API
+
+`TestSamplesUseOnlyThePublicAPI` (root package) parses every Go file under
+`examples/`, `cmd/`, `showcase/` and `tools/` and fails if one imports a
+`github.com/codemodify/uitoolkit/internal/...` package. The samples are
+the toolkit's first customer: what they can reach is exactly what a
+`go get` gives anyone, so a sample that reached into `internal/` would be
+demonstrating something no reader can do, and would hide the piece of
+public API that is actually missing.
+
+Two commands are exempt, named in the test: `cmd/uitest-driver` (the
+end-to-end rig's other half, which drives a window with `internal/uitest`
+and `internal/apptest`) and `cmd/uitk-themesheet` (the theme atlas, which
+renders with `internal/themesheet`). Neither is a sample. Nothing else
+goes on that list — when the test fails, either use the public API or
+make the thing it needed public.
+
+Each sample's own code lives in a package beside its `main.go`
+(`examples/files/filesapp`, `examples/notes/notesapp`,
+`examples/inspector/inspectorapp`, `examples/tour/tourapp`,
+`cmd/uitksettings/settingsapp`), with the widget gallery in the top-level
+`showcase` package because Settings shows it too. That is also what lets
+the tests and `uitest-driver` drive them as libraries.
+
 ## What the driver covers
 
 After each scripted step it runs `uitest.TreeInvariants` (exclusive
 splitter panes, scroll clamp, thumb-in-track, non-empty visible-row
 window when content remains, table first-row flush under the header).
 
-**Gallery** (`internal/demo.Gallery`): construct, open a ComboBox and
+**Gallery** (`showcase.App`): construct, open a ComboBox and
 assert the popup clears the field and fits labels, resize, drag every
 splitter to several ratios, scroll lists/tables/trees/cards/ScrollViews
 to top / mid / end and back, select rows.
