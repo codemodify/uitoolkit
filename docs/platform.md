@@ -287,6 +287,20 @@ wayland-scanner private-code \
 # xdg-foreign-unstable-v2
 ```
 
+`zwlr_layer_shell_v1` is not in wayland-protocols — it is wlroots'
+(`wlr-layer-shell-unstable-v1.xml`, © 2017 Drew DeVault, MIT). The XML is
+not vendored; the generated pair is, with the upstream copyright intact
+in its header:
+
+```bash
+wayland-scanner client-header \
+  wlr-layer-shell-unstable-v1.xml \
+  platform/wlr-layer-shell-unstable-v1-client-protocol.h
+wayland-scanner private-code \
+  wlr-layer-shell-unstable-v1.xml \
+  platform/wlr-layer-shell-unstable-v1-protocol.c
+```
+
 KWin's `org_kde_kwin_server_decoration_palette` is the exception: its XML
 is KDE's and LGPL, so `platform/kde_palette.h` / `kde_palette_linux.c`
 spell its two interfaces out by hand from the protocol's facts (the
@@ -545,6 +559,66 @@ menu there (Qt and GTK share it); on a real X server it does. KWin states
 `_NET_WORKAREA` in logical pixels on a scaled Xwayland while windows are
 placed in device ones; a work area under 60% of its monitor is ignored for
 the monitor.
+
+### Absolute placement (layer shell)
+
+A popup hangs from a window, and the window system places it. A **tray
+menu** does not: the host names a point in root coordinates
+(`org.kde.StatusNotifierItem.ContextMenu`) and the menu belongs there.
+X11 and the offscreen desktop simply place the window. A Wayland client
+cannot place an `xdg_toplevel` at all — so `WindowOptions.X, Y` were
+silently ignored there, and KWin dropped the toolkit's tray menu in the
+middle of the screen.
+
+`WindowOptions.Place` says which of the two a window means:
+
+| | `PlaceDesktop` (zero) | `PlaceAtScreen` |
+| --- | --- | --- |
+| Meaning | `X, Y` are a hint | the window belongs at `X, Y` and nowhere else |
+| X11 / offscreen | placed | placed |
+| Wayland, layer shell | `xdg_toplevel`, compositor places it | **`zwlr_layer_shell_v1` surface**, placed |
+| Wayland, no layer shell | `xdg_toplevel` | `xdg_toplevel` — the caller was told in advance |
+
+`platform.ScreenPlacementAvailable()` is the question to ask **before**
+committing to something that needs a position; `PlaceSurfaceAtScreen(s,
+x, y)` moves such a window and reports whether it went (the `ScreenPlacer`
+capability, which is deliberately not `HostMover` — Wayland still does
+not place windows in general). `LayerSurfacesAvailable()` and
+`LayerShellVersion()` are the Wayland-specific answers.
+
+The layer surface (`platform/wayland_layer_linux.go`) is configured:
+`overlay` layer, so a menu is above the panel it was opened from; anchor
+`top|left`, which turns the margins into an absolute position;
+`set_margin(top, 0, 0, left)` = the requested point; `set_size` = the
+whole surface, margin included, because a layer surface has no xdg window
+geometry to state a visible box with; `set_exclusive_zone(-1)` so the
+menu neither pushes panels around nor is pushed; keyboard interactivity
+`on_demand` (v4+, else the old boolean) so the menu can hold the keyboard
+for its grab. `configure` is acked on the layer-surface object — there is
+no `xdg_surface` underneath — and `closed` becomes an `EventClose`, after
+which `Show` makes a fresh role.
+
+**Multi-monitor.** Layer-shell margins are measured from the edges of one
+output, and the output is fixed when the role is created. The toolkit
+tracks `wl_output.geometry` and `.mode`, finds the output whose logical
+rectangle holds the requested point, anchors to *that* output and
+subtracts its origin from the margins; a point no output claims is passed
+as-is with no output, letting the compositor choose (right on a single
+monitor, a guess anywhere else). Moving the window to a point on another
+monitor re-creates the role, because the protocol has no `set_output`.
+
+**Compositors.** KDE (KWin, v5 here), sway, Hyprland and wayfire offer
+layer shell. GNOME/Mutter has declined it; there
+`ScreenPlacementAvailable` is false and `app.NewStatusItem` falls back to
+the desktop-drawn tray menu (see [tray.md](tray.md)). `UITK_LAYER_SHELL=0`
+forces that road on a compositor that has the protocol.
+
+**Not tested against a compositor.** The suite covers the fallback
+decision, the output arithmetic (`outputSet.layerMargins`), the configure
+size arithmetic and the `WindowOptions` plumbing;
+`platform.SimulateScreenPlacement(bool)` is the hook that lets a headless
+test walk both roads. Nothing here has an automated test on a real
+Wayland session.
 
 ## Drag and drop
 
