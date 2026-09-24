@@ -120,21 +120,30 @@ func (a *Application) trayHolds() bool {
 	return len(out) > 0
 }
 
-// StatusMenuFromItems copies widget menu rows into a tray menu.
+// StatusMenuFromItems copies widget menu rows into a tray menu,
+// cascades included: a MenuItem.Submenu becomes StatusMenuItem.Submenu.
+// A parent's OnClick is dropped, because a tray parent is not a command
+// (see platform.StatusMenuItem.Submenu) and a PopupMenu never called it
+// either.
 func StatusMenuFromItems(items []*widgets.MenuItem) []platform.StatusMenuItem {
 	out := make([]platform.StatusMenuItem, 0, len(items))
 	for _, it := range items {
 		if it == nil {
 			continue
 		}
-		out = append(out, platform.StatusMenuItem{
+		row := platform.StatusMenuItem{
 			Text:      it.Text,
 			Disabled:  it.Disabled,
 			Separator: it.Separator,
 			Checked:   it.Checked,
 			Icon:      it.Icon,
 			OnClick:   it.OnClick,
-		})
+		}
+		if it.HasSubmenu() && !it.Separator {
+			row.Submenu = StatusMenuFromItems(it.Submenu)
+			row.OnClick = nil
+		}
+		out = append(out, row)
 	}
 	return out
 }
@@ -166,12 +175,26 @@ func platformCopyMenu(in []platform.StatusMenuItem) []platform.StatusMenuItem {
 	return out
 }
 
-// StatusMenuToItems maps tray rows back to toolkit MenuItems (popup chrome).
+// StatusMenuToItems maps tray rows back to toolkit MenuItems (popup
+// chrome), cascades included. This is the ToolkitMenu path on Linux and
+// the only path on Windows, which has no dbusmenu.
 func StatusMenuToItems(items []platform.StatusMenuItem) []*widgets.MenuItem {
 	out := make([]*widgets.MenuItem, 0, len(items))
 	for _, it := range items {
 		if it.Separator {
+			// A separator is a rule, never a parent, even if the app put
+			// children on it (platform.StatusMenuItem.Submenu).
 			out = append(out, widgets.Sep())
+			continue
+		}
+		if len(it.Submenu) > 0 {
+			// widgets.Submenu is the cascade parent: PopupMenu opens the
+			// child on hover or click and never calls OnClick, which is
+			// the rule the tray row promises.
+			row := widgets.Submenu(it.Text, StatusMenuToItems(it.Submenu)...)
+			row.Disabled = it.Disabled
+			row.Icon = it.Icon
+			out = append(out, row)
 			continue
 		}
 		out = append(out, &widgets.MenuItem{
@@ -315,11 +338,16 @@ func (a *Application) hideStatusMenu() {
 	}
 }
 
+// measureStatusMenu sizes the status-menu window. The window holds the
+// whole cascade: a child menu is a popup inside this surface, and
+// widget.PlacePopupBeside clamps it to the surface box, so a window
+// measured for the parent alone would squeeze every submenu on top of
+// it. The box is therefore the parent's width plus the widest chain of
+// children, and the tallest menu in that chain.
 func measureStatusMenu(look style.LookAndFeel, scale float32, items []*widgets.MenuItem) (int, int) {
-	pop := widgets.NewPopupMenu(items...)
-	pop.SetHost(&statusMeasureHost{look: look, scale: scale})
-	sz := pop.Measure(layout.Unbounded())
-	w, h := int(sz.X+0.5), int(sz.Y+0.5)
+	host := &statusMeasureHost{look: look, scale: scale}
+	fw, fh := statusMenuBox(host, items)
+	w, h := int(fw+0.5), int(fh+0.5)
 	if w < 80 {
 		w = 80
 	}
@@ -327,6 +355,33 @@ func measureStatusMenu(look style.LookAndFeel, scale float32, items []*widgets.M
 		h = 24
 	}
 	return w, h
+}
+
+// statusMenuBox is the intrinsic size of a menu and everything it can
+// cascade into: submenus open to the right, so widths add and heights
+// only need the tallest level.
+func statusMenuBox(host *statusMeasureHost, items []*widgets.MenuItem) (float32, float32) {
+	pop := widgets.NewPopupMenu(items...)
+	pop.SetHost(host)
+	sz := pop.Measure(layout.Unbounded())
+	w, h := sz.X, sz.Y
+	var childW, childH float32
+	for _, it := range items {
+		if !it.HasSubmenu() {
+			continue
+		}
+		cw, ch := statusMenuBox(host, it.Submenu)
+		if cw > childW {
+			childW = cw
+		}
+		if ch > childH {
+			childH = ch
+		}
+	}
+	if childH > h {
+		h = childH
+	}
+	return w + childW, h
 }
 
 type statusMeasureHost struct {
