@@ -314,6 +314,13 @@ type WindowOptions struct {
 	// _NET_WM_WINDOW_TYPE_POPUP_MENU) is always put there. Wayland
 	// toplevels cannot be placed by the client.
 	X, Y int
+	// Place says what X, Y mean (see [Placement]). The zero value is a
+	// hint. PlaceAtScreen means the window belongs at that point and
+	// nowhere else — a tray menu at the pointer — and the Wayland backend
+	// then gives it a zwlr_layer_shell_v1 surface instead of an
+	// xdg_toplevel, which is the only Wayland role a client can place.
+	// Ask [ScreenPlacementAvailable] before relying on it.
+	Place Placement
 	// Popup requests a short-lived menu surface: no taskbar, no
 	// decorations when the backend can, positioned at X,Y on X11.
 	Popup bool
