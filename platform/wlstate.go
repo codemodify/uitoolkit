@@ -166,11 +166,24 @@ func (o *outputSet) anyEntered() bool {
 	return o != nil && len(o.entered) > 0
 }
 
-// outputBox is one wl_output's place on the desktop, as wl_output tells
-// it: geometry gives the top-left corner in the compositor's global
-// coordinate space, mode gives the size in the monitor's own pixels. The
-// logical size — the unit a layer surface's margins are in — is the mode
-// divided by the output's scale.
+// outputBox is one wl_output's place on the desktop and its size, from
+// the two protocols that describe it.
+//
+// wl_output tells it in the monitor's own terms: geometry gives the
+// top-left corner in the compositor's global coordinate space, mode gives
+// the size in physical pixels, and wl_output.scale is an *integer*. The
+// logical size — the unit a layer surface's margins are in — is then only
+// ever mode/scale, and under fractional scaling that is the wrong number:
+// a 2880x1800 panel at 175% reports scale 2, so mode/scale says 1440x900
+// where the compositor's logical space is really 1645x1029. A menu
+// constrained to 1440 wide runs 200 logical pixels off the right edge of
+// a screen that is 1645 wide, which is the bug this pair of fields fixes.
+//
+// zxdg_output_v1 (zxdg_output_manager_v1, xdg-output-unstable-v1) exists
+// for exactly this: logical_position and logical_size are the compositor's
+// own logical rectangle, fraction and all. Where the manager is bound
+// those win; where it is absent — an older compositor — the wl_output
+// arithmetic is still the best available answer.
 type outputBox struct {
 	// X, Y are wl_output.geometry: global compositor space.
 	X, Y int
@@ -179,6 +192,17 @@ type outputBox struct {
 	// haveGeom, haveMode: the compositor has sent that event. An output
 	// missing either cannot be matched against a point.
 	haveGeom, haveMode bool
+
+	// LogX, LogY, LogW, LogH are zxdg_output_v1.logical_position and
+	// .logical_size: the output's rectangle in the compositor's logical
+	// coordinate space.
+	LogX, LogY, LogW, LogH int
+	// haveLogPos, haveLogSize: that event has arrived. xdg_output events
+	// come in after the registry round trip like everything else, so an
+	// output can be known through wl_output for a while before its
+	// logical rectangle is; logicalBox falls back for that window rather
+	// than blocking on a round trip.
+	haveLogPos, haveLogSize bool
 }
 
 // setGeom records wl_output.geometry for a registry name.
@@ -201,15 +225,47 @@ func (o *outputSet) setMode(name uint32, w, h int) {
 	o.boxes[name] = b
 }
 
-// logicalBox is an output's rectangle in logical pixels: its global
-// position and its mode divided by its scale. ok is false while either
-// event is still missing.
+// setLogicalPos records zxdg_output_v1.logical_position for a registry
+// name (the wl_output's name: one xdg_output is requested per output).
+func (o *outputSet) setLogicalPos(name uint32, x, y int) {
+	if o == nil {
+		return
+	}
+	b := o.boxes[name]
+	b.LogX, b.LogY, b.haveLogPos = x, y, true
+	o.boxes[name] = b
+}
+
+// setLogicalSize records zxdg_output_v1.logical_size.
+func (o *outputSet) setLogicalSize(name uint32, w, h int) {
+	if o == nil || w < 1 || h < 1 {
+		return
+	}
+	b := o.boxes[name]
+	b.LogW, b.LogH, b.haveLogSize = w, h, true
+	o.boxes[name] = b
+}
+
+// logicalBox is an output's rectangle in the compositor's logical pixels.
+//
+// It is zxdg_output_v1's logical_position and logical_size where the
+// compositor offers xdg-output and the events have arrived — the only
+// source that is right under fractional scaling — and otherwise
+// wl_output's geometry with mode divided by the integer wl_output.scale,
+// which is what every compositor without the manager leaves us (see
+// outputBox). ok is false while there is neither.
 func (o *outputSet) logicalBox(name uint32) (FrameRect, bool) {
 	if o == nil {
 		return FrameRect{}, false
 	}
 	b, ok := o.boxes[name]
-	if !ok || !b.haveGeom || !b.haveMode {
+	if !ok {
+		return FrameRect{}, false
+	}
+	if b.haveLogPos && b.haveLogSize {
+		return FrameRect{X: b.LogX, Y: b.LogY, W: b.LogW, H: b.LogH}, true
+	}
+	if !b.haveGeom || !b.haveMode {
 		return FrameRect{}, false
 	}
 	sc := int(o.scale[name])

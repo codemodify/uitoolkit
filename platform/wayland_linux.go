@@ -1339,6 +1339,14 @@ type wlConn struct {
 	outputs map[uintptr]uint32
 	outObjs map[uint32]*C.struct_wl_output
 	outs    *outputSet
+	// xdgOutMan is zxdg_output_manager_v1 and xdgOutObjs the
+	// zxdg_output_v1 per output: the compositor's own logical rectangle
+	// for each monitor, which is the only thing that is right under
+	// fractional scaling (wayland_xdgoutput_linux.go).
+	xdgOutMan   unsafe.Pointer
+	xdgOutVer   int
+	xdgOutObjs  map[uint32]*C.struct_zxdg_output_v1
+	xdgOutNames map[uintptr]uint32
 
 	dmabuf     unsafe.Pointer // *zwp_linux_dmabuf_v1
 	dmabufFB   unsafe.Pointer // *zwp_linux_dmabuf_feedback_v1
@@ -1719,6 +1727,7 @@ func (c *wlConn) closeLocked() {
 		C.ui_wl_act_destroy(c.activation)
 		c.activation = nil
 	}
+	c.destroyXdgOutputsLocked()
 	for name, out := range c.outObjs {
 		if out != nil {
 			C.ui_wl_out_destroy(out)
@@ -3005,6 +3014,9 @@ func uitkWlRegistryGlobal(id C.uintptr_t, reg *C.struct_wl_registry, name C.uint
 			c.outObjs[uint32(name)] = out
 			c.outs.setScale(uint32(name), 1)
 			C.ui_wl_out_listen(out, id)
+			// The manager may have been announced before this output
+			// or after it; whichever came second asks for the pair.
+			c.requestXdgOutput(uint32(name), out)
 		}
 	case "zwp_text_input_manager_v3":
 		c.textMan = (*C.struct_zwp_text_input_manager_v3)(C.ui_wl_bind(reg, name, C.ui_wl_ti_man_iface(), 1))
@@ -3048,6 +3060,8 @@ func uitkWlRegistryGlobal(id C.uintptr_t, reg *C.struct_wl_registry, name C.uint
 		c.bindGestures(reg, name, ver)
 	case "zwlr_layer_shell_v1":
 		c.bindLayerShell(reg, name, ver)
+	case "zxdg_output_manager_v1":
+		c.bindXdgOutputManager(reg, name, ver)
 	case "zxdg_exporter_v2":
 		c.bindExporter(reg, name)
 	case "wp_cursor_shape_manager_v1":
@@ -3777,6 +3791,7 @@ func uitkWlRegistryRemove(id C.uintptr_t, name C.uint32_t) {
 	}
 	n := uint32(name)
 	if obj, ok := c.outObjs[n]; ok && obj != nil {
+		c.dropXdgOutput(n)
 		delete(c.outputs, uintptr(unsafe.Pointer(obj)))
 		delete(c.outObjs, n)
 		C.ui_wl_out_destroy(obj)
