@@ -158,6 +158,11 @@ type Window struct {
 	pops        []*popLayer
 	tipPop      *popLayer
 	popsRefused bool
+	// popsWereSurfaces remembers that this window's popups have been
+	// surfaces of their own at least once, so a surface waiting for its
+	// first configure does not read as one that cannot open them
+	// (popupSurfacesLikely).
+	popsWereSurfaces bool
 	// icon is the window's own icon (SetIcon; nil: the application's), and
 	// iconSent whether its surface was given one (dress.go).
 	icon     []*paintengine2d.Image
@@ -526,7 +531,12 @@ func (w *Window) DismissPopup() {
 func (w *Window) popupLayerChanged() {
 	if w.popupsOnSurfaces() {
 		w.markPopsDirty()
-		return
+		if w.popChainInWindow() == 0 {
+			return
+		}
+		// A status menu paints its own menu, so a cascade opening or
+		// closing also changes what the window shows — the parent row's
+		// highlight and its submenu arrow.
 	}
 	w.fullInvalidate()
 }

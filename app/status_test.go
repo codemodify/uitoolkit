@@ -557,12 +557,15 @@ func TestStatusMenuFromItemsKeepsCascades(t *testing.T) {
 	}
 }
 
-func TestStatusMenuWindowLeavesRoomForTheCascade(t *testing.T) {
+func TestStatusMenuWindowSizeFollowsWhereTheCascadeGoes(t *testing.T) {
 	host := &statusMeasureHost{look: style.DarkLook(), scale: 1}
 	children := []platform.StatusMenuItem{
 		{Text: "A folder with a deliberately long name"},
 		{Text: "Inbox"},
 		{Text: "Drafts"},
+		{Text: "Sent"},
+		{Text: "Spam"},
+		{Text: "Trash"},
 	}
 	flat := StatusMenuToItems([]platform.StatusMenuItem{
 		{Text: "Show Mail"},
@@ -577,13 +580,51 @@ func TestStatusMenuWindowLeavesRoomForTheCascade(t *testing.T) {
 	flatW, _ := statusMenuBox(host, flat)
 	childW, childH := statusMenuBox(host, StatusMenuToItems(children))
 	nestedW, nestedH := statusMenuBox(host, nested)
-	// The cascade opens inside this one window and is clamped to it, so
-	// the box is the parent menu plus the widest child, not either alone.
+	// Drawn inside the window, the cascade is clamped to it, so the box
+	// is the parent menu plus the widest child, not either alone.
 	if nestedW < flatW+childW {
 		t.Fatalf("cascade box %.0f narrower than parent %.0f + child %.0f", nestedW, flatW, childW)
 	}
 	if nestedH < childH {
 		t.Fatalf("cascade box height %.0f shorter than the child menu %.0f", nestedH, childH)
+	}
+	look, scale := style.DarkLook(), float32(1)
+	inW, inH := measureStatusMenu(look, scale, nested, true)
+	if inW < int(flatW+childW) {
+		t.Fatalf("in-window measure %dx%d leaves no room for the cascade (parent %.0f + child %.0f)",
+			inW, inH, flatW, childW)
+	}
+	// On a surface of its own the cascade is placed against the screen,
+	// not against this window: the window is the parent menu and nothing
+	// more — no width for a child, no empty band under the last row.
+	surfW, surfH := measureStatusMenu(look, scale, nested, false)
+	// The parent menu's own size: statusMenuBox is it plus the widest
+	// child, and the child menu here is taller than the parent, which is
+	// where the empty band under the last row came from.
+	parentW := int(nestedW - childW + 0.5)
+	if surfW != parentW {
+		t.Fatalf("with cascades on surfaces the window is %d wide, want the parent menu's %d", surfW, parentW)
+	}
+	if _, wantH := measureStatusMenu(look, scale, flat, false); surfH != wantH {
+		t.Fatalf("with cascades on surfaces the window is %d tall, want the parent menu's %d", surfH, wantH)
+	}
+	if surfW >= inW {
+		t.Fatalf("a surface cascade should make the window narrower: %d vs %d", surfW, inW)
+	}
+	if surfH >= inH {
+		t.Fatalf("a surface cascade should leave no band for the child: %d vs %d", surfH, inH)
+	}
+}
+
+// A status-menu window keeps its own menu inside itself and puts only the
+// cascades on surfaces, so the surfaces start one layer in.
+func TestStatusMenuKeepsItsOwnMenuInTheWindow(t *testing.T) {
+	w := &Window{statusMenu: true}
+	if n := w.popChainInWindow(); n != 1 {
+		t.Fatalf("status-menu window paints %d popup layers itself, want 1", n)
+	}
+	if n := (&Window{}).popChainInWindow(); n != 0 {
+		t.Fatalf("an ordinary window paints %d popup layers itself, want 0", n)
 	}
 }
 
@@ -731,7 +772,8 @@ func TestShowStatusMenuPlacesItsWindow(t *testing.T) {
 		t.Fatal("no status-menu window")
 	}
 	mw, mh := measureStatusMenu(a.Look(), a.Scale(), StatusMenuToItems(StatusMenuFromItems(
-		[]*widgets.MenuItem{widgets.Item("Raise", func() {}), widgets.Sep(), widgets.Item("Quit", func() {})})))
+		[]*widgets.MenuItem{widgets.Item("Raise", func() {}), widgets.Sep(), widgets.Item("Quit", func() {})})),
+		!a.statusMenuCascadesOnSurfaces())
 	want := statusMenuScreenRect(900, 1040,
 		platform.LogicalPixels(mw, a.Scale()), platform.LogicalPixels(mh, a.Scale()), a.Scale())
 	wantX, wantY := want.X, want.Y

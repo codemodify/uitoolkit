@@ -7,6 +7,7 @@ package platform
 #include <stdint.h>
 #include <wayland-client.h>
 #include "xdg-shell-client-protocol.h"
+#include "wlr-layer-shell-unstable-v1-client-protocol.h"
 
 extern void uitkWlPopConfigure(uintptr_t sid, int32_t x, int32_t y, int32_t w, int32_t h);
 extern void uitkWlPopDone(uintptr_t sid);
@@ -59,6 +60,24 @@ static struct xdg_popup *ui_wl_get_popup(struct xdg_surface *xs, struct xdg_surf
 	return pp;
 }
 
+// ui_wl_get_popup_layer is the same popup hanging from a layer surface,
+// which is how the tray menu's cascades are parented: a layer surface has
+// no xdg_surface to be a parent, so xdg_surface.get_popup is called with a
+// NULL parent and zwlr_layer_surface_v1.get_popup then adopts the popup
+// ("assigns an xdg_popup's parent to this layer_surface"). Everything
+// after this — the positioner, the grab, popup_done, reposition — is the
+// same objects and the same code as an ordinary window's popup.
+static struct xdg_popup *ui_wl_get_popup_layer(struct xdg_surface *xs, void *lsv,
+		struct xdg_positioner *p, uintptr_t sid) {
+	struct zwlr_layer_surface_v1 *ls = lsv;
+	if (!xs || !ls || !p) return NULL;
+	struct xdg_popup *pp = xdg_surface_get_popup(xs, NULL, p);
+	if (!pp) return NULL;
+	xdg_popup_add_listener(pp, &uitk_pop_listener, (void*)sid);
+	zwlr_layer_surface_v1_get_popup(ls, pp);
+	return pp;
+}
+
 static void ui_wl_popup_grab(struct xdg_popup *pp, struct wl_seat *seat, uint32_t serial) {
 	if (pp && seat) xdg_popup_grab(pp, seat, serial);
 }
@@ -77,6 +96,7 @@ import "C"
 
 import (
 	"errors"
+	"unsafe"
 
 	"github.com/codemodify/paintengine2d"
 )
@@ -117,10 +137,22 @@ type wlPopup struct {
 var errWlPopup = errors.New("platform: the compositor did not map the popup")
 
 // PopupsSupported reports whether a popup can be opened from s now: it has
-// its xdg role and has been configured (PopupOpener).
+// a role a popup can hang from — an xdg_surface, or a layer surface, which
+// adopts popups through zwlr_layer_surface_v1.get_popup — and has been
+// configured (PopupOpener). The popup itself always needs xdg_wm_base,
+// whichever of the two its parent is.
 func (s *wlSurface) PopupsSupported() bool {
-	return s != nil && !s.closed && s.conn != nil && s.conn.wm != nil && s.xdg != nil &&
-		s.configured && s.surf != nil
+	return s != nil && !s.closed && s.conn != nil && s.conn.wm != nil &&
+		(s.xdg != nil || s.layerRole() != nil) && s.configured && s.surf != nil
+}
+
+// layerRole is s's live zwlr_layer_surface_v1, or nil where s is not a
+// layer surface or the compositor has taken it away.
+func (s *wlSurface) layerRole() unsafe.Pointer {
+	if s == nil || s.layer.gone {
+		return nil
+	}
+	return s.layer.obj
 }
 
 // OpenPopup opens an xdg_popup from s (PopupOpener). It returns once the
@@ -158,7 +190,14 @@ func (s *wlSurface) OpenPopup(opts PopupOptions) (PopupSurface, error) {
 		return nil, errWlPopup
 	}
 	pos := p.positioner(pl)
-	p.pop.xpop = C.ui_wl_get_popup(p.xdg, s.xdg, pos, C.uintptr_t(p.id))
+	switch {
+	case s.xdg != nil:
+		p.pop.xpop = C.ui_wl_get_popup(p.xdg, s.xdg, pos, C.uintptr_t(p.id))
+	default:
+		// A layer surface (the tray menu): the popup is created parentless
+		// and handed to the layer surface, which becomes its parent.
+		p.pop.xpop = C.ui_wl_get_popup_layer(p.xdg, s.layerRole(), pos, C.uintptr_t(p.id))
+	}
 	C.ui_wl_pos_destroy(pos)
 	if p.pop.xpop == nil {
 		wlMu.Unlock()

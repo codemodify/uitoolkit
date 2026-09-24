@@ -78,15 +78,52 @@ type popShapeKey struct {
 }
 
 // popupsOnSurfaces reports whether this window's popups are surfaces of
-// their own: the backend can open them, UITK_POPUPS does not say otherwise,
-// no compositor has refused one, and the window is not itself a status
-// menu (whose popup is the whole window).
+// their own: the backend can open them, UITK_POPUPS does not say
+// otherwise, and no compositor has refused one.
+//
+// A status-menu window says yes too, but only for its cascades: its own
+// menu is the window (popChainInWindow).
 func (w *Window) popupsOnSurfaces() bool {
-	if w == nil || w.statusMenu || w.popsRefused || w.Closed() {
+	if w == nil || w.popsRefused || w.Closed() {
 		return false
 	}
 	o, ok := w.surf.(platform.PopupOpener)
-	return ok && o.PopupsSupported() && platform.PopupSurfacesAllowed()
+	if !ok || !o.PopupsSupported() || !platform.PopupSurfacesAllowed() {
+		return false
+	}
+	w.popsWereSurfaces = true
+	return true
+}
+
+// popupSurfacesLikely is popupsOnSurfaces without the requirement that the
+// surface be usable *this instant*. A surface between roles — a window
+// that has just been shown again, whose xdg or layer role is waiting for
+// its first configure — can still open popups a moment later, and the
+// status menu is measured before it is shown (statusMenuCascadesOnSurfaces).
+// Without this the tray menu would be sized for an in-window cascade every
+// other time it opened.
+func (w *Window) popupSurfacesLikely() bool {
+	if w == nil || w.popsRefused || w.Closed() || !platform.PopupSurfacesAllowed() {
+		return false
+	}
+	return w.popupsOnSurfaces() || w.popsWereSurfaces
+}
+
+// popChainInWindow is how many popup layers the window paints itself
+// before the first that gets a surface of its own.
+//
+// It is 0 for an ordinary window: every menu it opens is a surface. It is
+// 1 for a status-menu window, which *is* its menu — the window was opened
+// at the parent menu's size, at the point the tray named, with the
+// PopupMenu arranged over the whole of it — so the parent stays inside
+// and only what cascades out of it needs a surface. Anchors are stated
+// relative to the window's visible box, which is exactly where the parent
+// menu's rows are, so the first cascade hangs from the window's surface.
+func (w *Window) popChainInWindow() int {
+	if w != nil && w.statusMenu {
+		return 1
+	}
+	return 0
 }
 
 // PopupSurfaces reports whether the window's menus, lists and tooltips open
@@ -152,6 +189,11 @@ func (w *Window) syncPopups() {
 		return
 	}
 	chain := w.popChain()
+	if n := min(w.popChainInWindow(), len(chain)); n > 0 {
+		// The status menu's own menu is drawn inside the window; the
+		// surfaces start at its first cascade.
+		chain = chain[n:]
+	}
 	keep := 0
 	for keep < len(chain) && keep < len(w.pops) && w.pops[keep].c == chain[keep] && !w.pops[keep].surf.Closed() {
 		keep++
@@ -517,10 +559,12 @@ func (w *Window) onPopSurface(r widget.Component) bool {
 	if r == w.tooltip {
 		return true
 	}
+	n := 0
 	for c := w.popup; c != nil; c = widget.CascadeOf(c) {
 		if c == r {
-			return true
+			return n >= w.popChainInWindow()
 		}
+		n++
 	}
 	return false
 }

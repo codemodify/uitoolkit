@@ -1930,6 +1930,15 @@ func (s *wlSurface) unmapToplevelLocked() {
 	if s == nil {
 		return
 	}
+	// Popups go before the surface they hang from, whether that is an
+	// xdg_toplevel or a layer surface: destroying the parent role with a
+	// live xdg_popup on it is a protocol error, and the tray menu — a
+	// layer surface whose cascades are popups — is hidden this way every
+	// time it closes.
+	for i := len(s.kids) - 1; i >= 0; i-- {
+		_ = s.kids[i].Close()
+	}
+	s.kids = nil
 	// A wl_surface that still has a buffer committed cannot be given a
 	// new xdg role: xdg_wm_base.get_xdg_surface then raises
 	// "xdg_surface must not have a buffer at creation" and the
