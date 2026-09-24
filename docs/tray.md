@@ -247,8 +247,41 @@ requests `xdg_activation_v1` when available. The layer-surface path is
 tested headlessly is the fallback decision, the placement arithmetic and
 which output a point lands on.
 
+### Where the menu goes
+
+SNI gives a **point** and never the icon's rectangle, so both halves of
+"beside the icon, on the screen" are the toolkit's to work out. One
+function does it for every backend — `app.statusMenuScreenRect` over
+`platform.SolveScreenMenu`, which is `platform.SolvePopup` with an anchor
+invented for the point — so X11 and Wayland cannot drift apart:
+
+- **Clear of the point.** The menu is placed a gap away from it
+  (`platform.ScreenMenuPointerGap`, 24 device pixels — roughly a
+  cursor's width — scaled to logical pixels), not with its corner on it.
+  With the corner on the point the menu covered the tray icon it had
+  been opened from. The gap is an approximation of an icon rectangle the
+  protocol does not send.
+- **On the screen.** The rectangle constrained is the **whole surface**:
+  the parent menu plus its widest cascade chain (`measureStatusMenu`),
+  because the submenus open inside this one window. It flips to the
+  other side of the point where it does not fit, slides back on where
+  flipping does not help, and is shrunk only when it is larger than the
+  screen. Constraining the parent alone is what left the submenus off
+  the right edge of the screen.
+- **Against which screen.** `platform.ScreenRectAt` — on Wayland the
+  output holding the point, in the compositor's own logical coordinates
+  (`zxdg_output_v1`, which is the only source that is right under
+  fractional scaling); on X11 the RandR monitor cut to `_NET_WORKAREA`.
+  A backend that cannot say constrains nothing, which is what the
+  toolkit did before it could ask.
+
+The headless tests carry the numbers from the KDE session that reported
+both faults: a 1645x1029 logical desktop (2880x1800 at 175%), the icon at
+device 2305,28, a 988x221 device menu.
+
 **X11:** ToolkitMenu places the popup at root `(x,y)` (typically above
-a bottom panel). `Window.Raise` sends `_NET_ACTIVE_WINDOW`.
+a bottom panel), through the same `SolveScreenMenu`. `Window.Raise` sends
+`_NET_ACTIVE_WINDOW`.
 
 XEmbed `_NET_SYSTEM_TRAY` is **not** implemented.
 
