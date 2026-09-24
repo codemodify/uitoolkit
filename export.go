@@ -216,6 +216,13 @@ func StatusIconFromTool(icon style.ToolIcon, look style.LookAndFeel, size int) p
 	return app.StatusIconFromTool(icon, look, size)
 }
 
+// StatusMenuChromeFor is the tray menu chrome an item asking for want will
+// really get here, and why (see [app.StatusMenuChromeFor]): ToolkitMenu is
+// demoted to HostMenu on a compositor that cannot place the menu window.
+func StatusMenuChromeFor(want platform.StatusMenuChrome) (platform.StatusMenuChrome, string) {
+	return app.StatusMenuChromeFor(want)
+}
+
 func DarkLook() *style.Classic  { return style.DarkLook() }
 func LightLook() *style.Classic { return style.LightLook() }
 func PreferredLook() style.LookAndFeel {

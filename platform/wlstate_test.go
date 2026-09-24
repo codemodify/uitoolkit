@@ -152,3 +152,70 @@ func TestMaxScaleEnteredUsesConnectionScales(t *testing.T) {
 		t.Fatalf("nil entered set = %d, want 3", got)
 	}
 }
+
+// A layer surface is anchored to one output, so the desktop point the
+// tray named has to be turned into a point on the monitor that holds it.
+func TestOutputSetLayerMargins(t *testing.T) {
+	o := newOutputSet()
+	// Two monitors side by side: 1920x1080 at the origin, and a 2x
+	// 3840x2160 panel (1920x1080 logical) to its right.
+	o.setGeom(1, 0, 0)
+	o.setMode(1, 1920, 1080)
+	o.setScale(1, 1)
+	o.setGeom(2, 1920, 0)
+	o.setMode(2, 3840, 2160)
+	o.setScale(2, 2)
+
+	if b, ok := o.logicalBox(2); !ok || b != (FrameRect{X: 1920, Y: 0, W: 1920, H: 1080}) {
+		t.Fatalf("logicalBox(2) = %+v ok=%v", b, ok)
+	}
+	name, left, top := o.layerMargins(100, 40)
+	if name != 1 || left != 100 || top != 40 {
+		t.Fatalf("left monitor: name=%d margins=%d,%d, want 1 100,40", name, left, top)
+	}
+	name, left, top = o.layerMargins(2364, 32)
+	if name != 2 || left != 444 || top != 32 {
+		t.Fatalf("right monitor: name=%d margins=%d,%d, want 2 444,32", name, left, top)
+	}
+}
+
+// A point no output claims — nothing announced yet, or a point off the
+// desktop — leaves the compositor to pick the output and keeps the point
+// as it came.
+func TestOutputSetLayerMarginsUnknown(t *testing.T) {
+	o := newOutputSet()
+	if name, left, top := o.layerMargins(10, 20); name != 0 || left != 10 || top != 20 {
+		t.Fatalf("empty set: name=%d margins=%d,%d, want 0 10,20", name, left, top)
+	}
+	// Geometry without a mode says nothing about the output's size.
+	o.setGeom(1, 0, 0)
+	o.setScale(1, 1)
+	if name, _, _ := o.layerMargins(10, 20); name != 0 {
+		t.Fatalf("output with no mode was matched (name=%d)", name)
+	}
+	o.setMode(1, 800, 600)
+	if name, _, _ := o.layerMargins(900, 20); name != 0 {
+		t.Fatalf("point off the desktop was matched (name=%d)", name)
+	}
+	// An output that leaves the registry takes its box with it.
+	o.remove(1)
+	if _, ok := o.logicalBox(1); ok {
+		t.Fatal("removed output kept its box")
+	}
+}
+
+// set_size states the whole surface; the toolkit's window size leaves the
+// frame's margin out, so the configure has to be read back through it.
+func TestLayerWindowSize(t *testing.T) {
+	m := FrameInsets{Left: 10, Right: 10, Top: 8, Bottom: 12}
+	if w, h := layerWindowSize(220, 120, m); w != 200 || h != 100 {
+		t.Fatalf("layerWindowSize = %d,%d, want 200,100", w, h)
+	}
+	if w, h := layerWindowSize(180, 90, FrameInsets{}); w != 180 || h != 90 {
+		t.Fatalf("no margin: %d,%d, want 180,90", w, h)
+	}
+	// A surface smaller than its own margin still has a positive size.
+	if w, h := layerWindowSize(4, 4, m); w != 1 || h != 1 {
+		t.Fatalf("degenerate: %d,%d, want 1,1", w, h)
+	}
+}

@@ -398,7 +398,7 @@ func (p *desktopPage) refresh() {
 		[2]string{"tray host", yesNo(platform.StatusItemAvailable())},
 		[2]string{"our own icon", oursState},
 		[2]string{"tray item", trayState},
-		[2]string{"menu chrome", yesNo(platform.HostMenuNative())},
+		[2]string{"menu chrome", trayMenuChrome()},
 		[2]string{"notifications", notifierState(p.notifier)},
 		[2]string{"last link", orNone(p.opened)},
 		[2]string{"", ""},
@@ -406,6 +406,19 @@ func (p *desktopPage) refresh() {
 		[2]string{"preferred", nativeDialogName()},
 		[2]string{"last pick", picked},
 	))
+}
+
+// trayMenuChrome is the chrome the tour's tray item really gets, not the
+// one it asked for: on Wayland without zwlr_layer_shell_v1 a ToolkitMenu
+// is demoted to HostMenu, because its window could not be put where the
+// tray clicked.
+func trayMenuChrome() string {
+	chrome, why := app.StatusMenuChromeFor(platform.HostMenu)
+	name := "the desktop's (dbusmenu)"
+	if chrome == platform.ToolkitMenu {
+		name = "the toolkit's (PopupMenu)"
+	}
+	return name + " — " + why
 }
 
 func nativeDialogName() string {

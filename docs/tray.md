@@ -214,18 +214,38 @@ One D-Bus path for every Linux display server. No extra CGO.
 
 | Environment | Icon | HostMenu | ToolkitMenu | Notes |
 | --- | --- | --- | --- | --- |
-| KDE Plasma | yes (SNI) | native dbusmenu | `ContextMenu` popup | Prefer HostMenu |
-| GNOME 45+ | AppIndicator extension | native dbusmenu | only if host calls `ContextMenu` | Extension expects dbusmenu |
-| Sway / Hyprland + Waybar | tray module | dbusmenu | if Waybar sends `ContextMenu` | |
+| KDE Plasma | yes (SNI) | native dbusmenu | `ContextMenu` popup, placed by layer shell | Prefer HostMenu |
+| GNOME 45+ | AppIndicator extension | native dbusmenu | **demoted to HostMenu** — Mutter has no layer shell | Extension expects dbusmenu |
+| Sway / Hyprland + Waybar | tray module | dbusmenu | if Waybar sends `ContextMenu`; layer shell places it | |
 | Xfce / Cinnamon / MATE | usually SNI | dbusmenu | if host calls `ContextMenu` | |
 | Xlibre | same as X11 | same | same | |
 | No session bus / SSH | stub | stub | stub | |
 
-**Wayland:** clients cannot place a toplevel at SNI `(x,y)`. HostMenu
-avoids that (the panel draws the menu). ToolkitMenu still shows a
-visible popup; the compositor chooses where. Close-to-tray Hide drops
-the `xdg_toplevel` role; Show remaps and requests `xdg_activation_v1`
-when available.
+**Wayland:** a client cannot place an `xdg_toplevel` at SNI `(x,y)` —
+the protocol has no request for it. HostMenu sidesteps the whole problem
+(the panel draws the menu). ToolkitMenu needs the position, and gets it
+from **`zwlr_layer_shell_v1`**: the menu window opens as a layer surface
+on the `overlay` layer, anchored top|left with the requested point as its
+margins, exclusive zone −1, on-demand keyboard interactivity for the
+menu's grab. KDE (KWin), sway, Hyprland and wayfire offer the protocol;
+**GNOME/Mutter has declined it**.
+
+Where it is missing, `Application.NewStatusItem` **falls back to
+HostMenu** rather than opening a menu the compositor drops somewhere else
+— before this fix, in the middle of the screen on KWin. The demotion is
+logged once (`uitk tray: ToolkitMenu asked for, HostMenu used: …`), the
+item is registered with the chrome it really has (so it exports a real
+dbusmenu, not `Menu=/NO_DBUSMENU`), and `uitoolkit.StatusMenuChromeFor`
+answers what an item asking for a chrome will actually get, with a reason
+— which is what the tour's Desktop page prints under **menu chrome**.
+`platform.ScreenPlacementAvailable` is the same question one layer down;
+`UITK_LAYER_SHELL=0` makes a KDE machine behave like GNOME.
+
+Close-to-tray Hide drops the `xdg_toplevel` role; Show remaps and
+requests `xdg_activation_v1` when available. The layer-surface path is
+**not exercised by the test suite** — it needs a real compositor. What is
+tested headlessly is the fallback decision, the placement arithmetic and
+which output a point lands on.
 
 **X11:** ToolkitMenu places the popup at root `(x,y)` (typically above
 a bottom panel). `Window.Raise` sends `_NET_ACTIVE_WINDOW`.

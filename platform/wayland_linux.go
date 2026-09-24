@@ -57,6 +57,8 @@ extern void uitkWlKeyRepeat(uintptr_t id, int32_t rate, int32_t delay);
 extern void uitkWlBufRelease(uintptr_t sid, int slot);
 extern void uitkWlExplicitRelease(uintptr_t sid, int slot);
 extern void uitkWlOutputScale(uintptr_t id, struct wl_output *out, int32_t factor);
+extern void uitkWlOutputGeom(uintptr_t id, struct wl_output *out, int32_t x, int32_t y);
+extern void uitkWlOutputMode(uintptr_t id, struct wl_output *out, int32_t w, int32_t h);
 extern void uitkWlRegistryRemove(uintptr_t id, uint32_t name);
 extern void uitkWlDataOffer(uintptr_t id, struct wl_data_offer *offer);
 extern void uitkWlOfferActions(uintptr_t id, struct wl_data_offer *offer, uint32_t actions, uint32_t chosen);
@@ -883,10 +885,14 @@ static void ui_wl_ti_listen(struct zwp_text_input_v3 *t, uintptr_t id) {
 }
 
 static void uitk_out_geom(void *data, struct wl_output *o, int32_t x, int32_t y, int32_t pw, int32_t ph, int32_t sub, const char *make, const char *model, int32_t transform) {
-	(void)data; (void)o; (void)x; (void)y; (void)pw; (void)ph; (void)sub; (void)make; (void)model; (void)transform;
+	(void)pw; (void)ph; (void)sub; (void)make; (void)model; (void)transform;
+	uitkWlOutputGeom((uintptr_t)data, o, x, y);
 }
 static void uitk_out_mode(void *data, struct wl_output *o, uint32_t flags, int32_t w, int32_t h, int32_t refresh) {
-	(void)data; (void)o; (void)flags; (void)w; (void)h; (void)refresh;
+	(void)refresh;
+	// Only the mode in use says how large the monitor is
+	// (WL_OUTPUT_MODE_CURRENT is bit 0).
+	if (flags & 0x1) uitkWlOutputMode((uintptr_t)data, o, w, h);
 }
 static void uitk_out_done(void *data, struct wl_output *o) {
 	uitkWlOutputDone((uintptr_t)data, o);
@@ -1121,6 +1127,15 @@ func (WaylandBackend) NewSurface(opts WindowOptions) (Surface, error) {
 		outs:     newOutputSet(),
 		wantDeco: requestedDecorations(opts.Decorations),
 	}
+	if opts.Place == PlaceAtScreen {
+		// The window has to be where it asks. bindToplevelLocked gives it
+		// a layer surface rather than a toplevel when the compositor
+		// offers one; with no layer shell it is an ordinary toplevel and
+		// the compositor places it, which is why callers that cannot live
+		// with that ask ScreenPlacementAvailable first.
+		s.placeAtScreen = true
+		s.layer.x, s.layer.y = opts.X, opts.Y
+	}
 	if opts.Popup {
 		s.wantDeco = DecorationsNone
 	}
@@ -1308,6 +1323,14 @@ type wlConn struct {
 	// compositor does not advertise them.
 	paletteMan unsafe.Pointer
 	iconMan    unsafe.Pointer
+	// layerShell is zwlr_layer_shell_v1 and layerVer the version bound
+	// (wayland_layer_linux.go): the only way a client puts a surface at
+	// an absolute point of the screen. nil where the compositor has
+	// none — GNOME/Mutter — and the layer above then avoids chromes
+	// that need a position.
+	layerShell unsafe.Pointer
+	layerVer   int
+
 	// exporter is xdg-foreign's zxdg_exporter_v2, which names a window
 	// for a portal dialog to be the child of (wayland_foreign_linux.go).
 	exporter unsafe.Pointer
@@ -1493,6 +1516,13 @@ type wlSurface struct {
 
 	// export is the window exported for a portal dialog (xdg-foreign).
 	export wlExport
+
+	// placeAtScreen is WindowOptions.Place == PlaceAtScreen: this window
+	// belongs at one point of the screen, so it takes the layer-shell
+	// role instead of an xdg_toplevel where the compositor has the
+	// protocol (wayland_layer_linux.go). layer is that role.
+	placeAtScreen bool
+	layer         wlLayer
 }
 
 var (
@@ -1675,6 +1705,7 @@ func (c *wlConn) closeLocked() {
 		C.ui_wl_deco_man_destroy(c.decoMan)
 		c.decoMan = nil
 	}
+	c.destroyLayerShellLocked()
 	c.destroyDressLocked()
 	if c.fracMan != nil {
 		C.ui_wl_frac_man_destroy(c.fracMan)
@@ -1798,6 +1829,16 @@ func (s *wlSurface) SetMaximized(on bool) {
 
 func (s *wlSurface) Raise() {
 	s.hidden = false
+	if s.wantsLayer() {
+		if s.layer.obj == nil || s.layer.gone {
+			s.destroyLayerLocked()
+			s.bindLayerLocked()
+		}
+		if s.conn != nil && s.conn.dpy != nil {
+			C.ui_wl_flush(s.conn.dpy)
+		}
+		return
+	}
 	if s.xdg == nil || s.top == nil {
 		// xdg_toplevel has no unset_minimized. Destroying the role and
 		// remapping is the reliable restore after close-to-tray.
@@ -1826,6 +1867,12 @@ func (s *wlSurface) Hide() {
 
 func (s *wlSurface) bindToplevelLocked() {
 	if s == nil || s.conn == nil || s.conn.wm == nil || s.surf == nil {
+		return
+	}
+	if s.wantsLayer() {
+		// A window that must be at one point of the screen takes the
+		// layer-shell role instead; it has no xdg_surface at all.
+		s.bindLayerLocked()
 		return
 	}
 	if s.xdg != nil || s.top != nil {
@@ -1890,6 +1937,7 @@ func (s *wlSurface) unmapToplevelLocked() {
 	s.decoAnswer = DecorationsAuto
 	s.pendStateSet, s.pendCapsSet, s.pendDecoSet = false, false, false
 	s.unexportLocked()
+	s.destroyLayerLocked()
 	if s.top != nil {
 		C.ui_wl_top_destroy(s.top)
 		s.top = nil
@@ -2797,6 +2845,7 @@ func (s *wlSurface) Close() error {
 		s.deco = nil
 	}
 	s.unexportLocked()
+	s.destroyLayerLocked()
 	if s.top != nil {
 		C.ui_wl_top_destroy(s.top)
 		s.top = nil
@@ -2997,6 +3046,8 @@ func uitkWlRegistryGlobal(id C.uintptr_t, reg *C.struct_wl_registry, name C.uint
 		c.activation = (*C.struct_xdg_activation_v1)(C.ui_wl_bind(reg, name, C.ui_wl_act_iface(), 1))
 	case "zwp_pointer_gestures_v1":
 		c.bindGestures(reg, name, ver)
+	case "zwlr_layer_shell_v1":
+		c.bindLayerShell(reg, name, ver)
 	case "zxdg_exporter_v2":
 		c.bindExporter(reg, name)
 	case "wp_cursor_shape_manager_v1":
@@ -3643,6 +3694,33 @@ func uitkWlOutputScale(id C.uintptr_t, out *C.struct_wl_output, factor C.int32_t
 	c.outs.setScale(name, int32(factor))
 	c.outScale = float32(c.outs.maxScale())
 	c.refreshSurfaceScales()
+}
+
+// uitkWlOutputGeom and uitkWlOutputMode keep where each monitor is and how
+// large it is, which is what a layer surface needs to turn a point in the
+// desktop's global coordinates into margins from one output's corner
+// (outputSet.layerMargins).
+//
+//export uitkWlOutputGeom
+func uitkWlOutputGeom(id C.uintptr_t, out *C.struct_wl_output, x, y C.int32_t) {
+	c := wlConnBy(id)
+	if c == nil {
+		return
+	}
+	if name, ok := c.outputs[uintptr(unsafe.Pointer(out))]; ok {
+		c.outs.setGeom(name, int(x), int(y))
+	}
+}
+
+//export uitkWlOutputMode
+func uitkWlOutputMode(id C.uintptr_t, out *C.struct_wl_output, w, h C.int32_t) {
+	c := wlConnBy(id)
+	if c == nil {
+		return
+	}
+	if name, ok := c.outputs[uintptr(unsafe.Pointer(out))]; ok {
+		c.outs.setMode(name, int(w), int(h))
+	}
 }
 
 //export uitkWlOutputDone
