@@ -12,8 +12,8 @@ import (
 	"strings"
 
 	"github.com/codemodify/uitoolkit"
-	"github.com/codemodify/uitoolkit/internal/demo"
 	"github.com/codemodify/uitoolkit/platform"
+	"github.com/codemodify/uitoolkit/showcase"
 	"github.com/codemodify/uitoolkit/widgets"
 )
 
@@ -27,7 +27,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	ed := uitoolkit.NewRichTextHTML(demo.RichTextSample)
+	ed := uitoolkit.NewRichTextHTML(showcase.RichTextSample)
 	ed.SetAccessibleName("Document")
 	if path != "" {
 		if b, err := os.ReadFile(path); err == nil {

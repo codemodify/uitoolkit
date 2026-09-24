@@ -7,9 +7,10 @@ import (
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit"
 	"github.com/codemodify/uitoolkit/app"
-	"github.com/codemodify/uitoolkit/internal/demo"
+	"github.com/codemodify/uitoolkit/cmd/uitksettings/settingsapp"
 	"github.com/codemodify/uitoolkit/internal/uitest"
 	"github.com/codemodify/uitoolkit/platform"
+	"github.com/codemodify/uitoolkit/showcase"
 	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
 	"github.com/codemodify/uitoolkit/widgets"
@@ -106,7 +107,7 @@ func runGallery(opts Options) []Result {
 		return []Result{{App: "gallery", Step: "window", Err: err}}
 	}
 	defer w.Close()
-	w.SetContent(demo.Gallery(a, w, false))
+	w.SetContent(showcase.App(a, w, false))
 	a.PumpOnce()
 
 	step(&out, "gallery", "construct", func() error { return checkTree(w.Content()) })
@@ -146,7 +147,7 @@ func runSettings(opts Options) []Result {
 		return []Result{{App: "settings", Step: "window", Err: err}}
 	}
 	defer w.Close()
-	w.SetContent(demo.SettingsApp(a, w))
+	w.SetContent(settingsapp.SettingsApp(a, w))
 	a.PumpOnce()
 
 	// Settings carries its chrome in the title bar, as Mail did: check it
@@ -190,7 +191,7 @@ func walkSettingsPages(a *app.Application) error {
 		if err != nil {
 			return err
 		}
-		w.SetContent(demo.SettingsAppOpen(a, w, "", page))
+		w.SetContent(settingsapp.SettingsAppOpen(a, w, "", page))
 		a.PumpOnce()
 		err = checkTree(w.Content())
 		w.Close()

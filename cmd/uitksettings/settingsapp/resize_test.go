@@ -1,4 +1,4 @@
-package demo
+package settingsapp
 
 import (
 	"math"

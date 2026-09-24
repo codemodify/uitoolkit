@@ -1,7 +1,21 @@
-package demo
+// Package inspectorapp is the Inspector sample: a preferences table in
+// the centre with an outline, a properties panel and a log docked around
+// it. Every panel drags to another side, stacks as a tab, collapses,
+// floats in a window of its own and closes — and the arrangement is
+// remembered between runs.
+//
+// It is the pilot for the dock package, so it uses the parts an
+// application is meant to use: [dock.Host], [dock.Host.SaveLayoutFile]
+// and [dock.Host.LoadLayoutFile] for the remembered arrangement, and
+// [dock.Host.ResetLayout] to put everything back.
+//
+// examples/inspector opens the window and calls [InspectorApp].
+package inspectorapp
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"sort"
 	"strings"
 	"time"
@@ -12,6 +26,10 @@ import (
 	"github.com/codemodify/uitoolkit/widget"
 	"github.com/codemodify/uitoolkit/widgets"
 )
+
+// LayoutName is the name the app saves its dock arrangement under; see
+// [dock.LayoutFile].
+const LayoutName = "inspector"
 
 type prefRow struct {
 	Key, Value, Scope string
@@ -110,6 +128,7 @@ func InspectorApp(win *app.Window) widget.Component {
 			note("Inspect " + rows[i].Key)
 		}
 	})
+	table.SetAccessibleName("Preferences")
 	table.Selected = 0
 	table.Mono = true
 	table.OnSort = func(col int, asc bool) {
@@ -137,6 +156,7 @@ func InspectorApp(win *app.Window) widget.Component {
 	user := widgets.NewTreeNode("User")
 	project := widgets.NewTreeNode("Project")
 	outline := widgets.NewTreeView(all, user, project)
+	outline.SetAccessibleName("Scopes")
 	outline.Selected = all
 	outline.Frameless = true
 	outline.Sidebar = true
@@ -326,17 +346,17 @@ func InspectorApp(win *app.Window) widget.Component {
 
 	// ---- the layout an app remembers -------------------------------------
 
-	if saved := loadDockLayout("inspector"); len(saved) > 0 {
-		if err := host.ApplyLayoutJSON(saved); err != nil {
-			// A layout from another version, or a broken file: the default
-			// arrangement stands and the app says so rather than coming up
-			// wrong.
-			note("The saved layout could not be read; using the default")
-		}
+	// dock keeps the arrangement in a file of the app's own under
+	// $XDG_CONFIG_HOME; see dock.LayoutFile.
+	if ok, err := host.LoadLayoutFile(LayoutName); !ok && !errors.Is(err, fs.ErrNotExist) {
+		// A layout from another version, or a broken file: the default
+		// arrangement stands and the app says so rather than coming up
+		// wrong.
+		note("The saved layout could not be read; using the default")
 	}
 	syncToggles()
 	host.OnLayoutChanged = func() {
-		saveDockLayout("inspector", host)
+		_ = host.SaveLayoutFile(LayoutName)
 		syncToggles()
 	}
 

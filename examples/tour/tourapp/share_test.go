@@ -1,4 +1,4 @@
-package demo
+package tourapp
 
 import (
 	"regexp"

@@ -1,4 +1,13 @@
-package demo
+// Package settingsapp is the toolkit's appearance editor: the theme
+// browser, the live preview with the whole widget showcase under it, the
+// icon and corner options, and the Apply that writes look.json.
+//
+// It lives beside its command rather than inside it because the
+// end-to-end driver and its own tests drive it as a library, and because
+// it is a sample like the others: it is written against the published
+// API — [showcase.Pane] for the gallery under the preview, the style
+// package for themes — and nothing under internal/.
+package settingsapp
 
 import (
 	"fmt"
@@ -6,6 +15,7 @@ import (
 
 	"github.com/codemodify/uitoolkit"
 	"github.com/codemodify/uitoolkit/app"
+	"github.com/codemodify/uitoolkit/showcase"
 	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
 	"github.com/codemodify/uitoolkit/widgets"
@@ -196,6 +206,7 @@ func buildSettingsState(s *settingsState) widget.Component {
 		s.page = i
 		s.rebuild()
 	})
+	nav.SetAccessibleName("Pages")
 	nav.Selected = s.page
 	nav.RowHeight = 32
 	nav.Sidebar = true
@@ -429,7 +440,7 @@ func (s *settingsState) themesPage() widget.Component {
 	// every state, scrolling on its own.
 	s.galleryLbl = widgets.NewLabel("")
 	var galleryRoot widget.Component
-	s.gallery = GalleryPane(GalleryHost{
+	s.gallery = showcase.Pane(showcase.Host{
 		Light: s.staged.Effective().Theme == style.ThemeLight,
 		// Dialogs go up from inside the scope, so they are drawn in the
 		// staged theme too. The gallery here previews a pack rather than
@@ -580,7 +591,7 @@ func (s *settingsState) packDetails() widget.Component {
 	s.packNote.MinLines = 1
 	// A summary longer than the box scrolls rather than being cut off,
 	// and on a short column the box gives the list its rows back.
-	return boxedShare(136, 0.28, widgets.NewScrollView(
+	return widgets.NewHeightBoxShare(136, 0.28, widgets.NewScrollView(
 		widgets.NewColumn(s.packTitle, s.packMeta, s.packText, s.packNote).WithGap(2)))
 }
 
@@ -697,6 +708,7 @@ func PreviewApp(say func(string)) widget.Component {
 	controls.AddFlex(right, 1)
 
 	tree := widgets.NewTreeView(previewTree())
+	tree.SetAccessibleName("Folders")
 	tree.SetPreferred(160, 0)
 	table := widgets.NewTableView(
 		[]widgets.TableColumn{{Title: "Name", Width: 120}, {Title: "Size", Width: 60, Align: style.AlignEnd}, {Title: "Kind", Width: 90}},
@@ -707,6 +719,7 @@ func PreviewApp(say func(string)) widget.Component {
 				{"fonts", "—", "Folder"}, {"LICENSE", "1 KB", "Text"},
 			}[row][col]
 		}, nil)
+	table.SetAccessibleName("Files")
 	table.Selected = 2
 	lists := widgets.NewSplitter(widgets.SplitColumns, tree, table)
 	lists.Ratio = 0.36
@@ -1101,6 +1114,7 @@ func pickerSection(title string, count int, text func(int) string, selected int,
 		return widgets.NewColumn(head, widgets.NewLabel("None yet")).WithGap(4)
 	}
 	list := widgets.NewListView(count, text, on)
+	list.SetAccessibleName(title)
 	list.Selected = selected
 	list.RowHeight = 28
 	col := widgets.NewColumn(head, list).WithGap(4)

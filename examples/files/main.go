@@ -7,8 +7,8 @@ import (
 	"log"
 
 	"github.com/codemodify/uitoolkit"
+	"github.com/codemodify/uitoolkit/examples/files/filesapp"
 	"github.com/codemodify/uitoolkit/icons"
-	"github.com/codemodify/uitoolkit/internal/demo"
 	"github.com/codemodify/uitoolkit/platform"
 )
 
@@ -25,7 +25,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	win.SetContent(demo.FilesApp(win))
+	win.SetContent(filesapp.FilesApp(win))
 	if *headless {
 		if err := win.WritePNG("files.png"); err != nil {
 			log.Fatal(err)

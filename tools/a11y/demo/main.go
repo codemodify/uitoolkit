@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/codemodify/uitoolkit/app"
-	"github.com/codemodify/uitoolkit/internal/demo"
 	"github.com/codemodify/uitoolkit/platform"
+	"github.com/codemodify/uitoolkit/showcase"
 	"github.com/codemodify/uitoolkit/style"
 )
 
@@ -20,7 +20,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	w.SetContent(demo.Gallery(a, w, false))
+	w.SetContent(showcase.App(a, w, false))
 	deadline := time.Now().Add(60 * time.Second)
 	for time.Now().Before(deadline) {
 		a.PumpOnce()

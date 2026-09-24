@@ -1,4 +1,4 @@
-package demo
+package tourapp
 
 import (
 	"strings"
@@ -9,7 +9,6 @@ import (
 	"github.com/codemodify/uitoolkit/a11y"
 	"github.com/codemodify/uitoolkit/app"
 	"github.com/codemodify/uitoolkit/dock"
-	"github.com/codemodify/uitoolkit/internal/uitest"
 	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
@@ -85,7 +84,7 @@ func TestTourPagesPaintInEveryLook(t *testing.T) {
 					}
 					// A page that drew nothing is one flat colour.
 					box := paintengine2d.XYWH(0, 0, float32(w), float32(h))
-					ink := uitest.CountNonColor(img, box, win.Look().Palette().Background, 12)
+					ink := countNonColor(img, box, win.Look().Palette().Background, 12)
 					if min := w * h / 100; ink < min {
 						t.Errorf("only %d of %d pixels differ from the background; the page looks blank",
 							ink, w*h)
@@ -859,4 +858,50 @@ func TestTourNewPageMenuDropsFromPlus(t *testing.T) {
 	if got := widget.DeviceOrigin(pop).X; got < x-40 || got > x+40 {
 		t.Errorf("the menu is at x %v, the + at %v", got, x)
 	}
+}
+
+// clickNamed presses the button with this caption, wherever it is under
+// root.
+func clickNamed(t *testing.T, root widget.Component, text string) {
+	t.Helper()
+	var btn *widgets.Button
+	widget.Walk(root, func(c widget.Component) {
+		if b, ok := c.(*widgets.Button); ok && b.Text == text {
+			btn = b
+		}
+	})
+	if btn == nil || btn.OnClick == nil {
+		t.Fatalf("no button %q", text)
+	}
+	btn.OnClick()
+}
+
+// countNonColor counts the pixels of img inside r whose colour is more
+// than slop away from col in any channel. A page that drew nothing is one
+// flat colour, and this is how the test above notices.
+func countNonColor(img *paintengine2d.Image, r paintengine2d.Rect, col paintengine2d.Color, slop int) int {
+	if img == nil || r.Empty() {
+		return 0
+	}
+	ch := func(v float32) int { return int(v*255 + 0.5) }
+	abs := func(v int) int {
+		if v < 0 {
+			return -v
+		}
+		return v
+	}
+	clamp := func(v, hi int) int { return max(0, min(v, hi)) }
+	wr, wg, wb := ch(col.R), ch(col.G), ch(col.B)
+	x0, y0 := clamp(int(r.Min.X), img.Width), clamp(int(r.Min.Y), img.Height)
+	x1, y1 := clamp(int(r.Max.X), img.Width), clamp(int(r.Max.Y), img.Height)
+	n := 0
+	for y := y0; y < y1; y++ {
+		for x := x0; x < x1; x++ {
+			cr, cg, cb, _ := img.PremulAt(x, y)
+			if abs(int(cr)-wr) > slop || abs(int(cg)-wg) > slop || abs(int(cb)-wb) > slop {
+				n++
+			}
+		}
+	}
+	return n
 }

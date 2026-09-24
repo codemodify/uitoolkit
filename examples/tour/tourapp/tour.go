@@ -1,4 +1,11 @@
-package demo
+// Package tourapp is the Tour sample: a page for each thing the toolkit
+// does — tabs that tear off, docking, drag and drop, window shapes,
+// frames, skins, desktop integration and the accessibility tree — each
+// one a small working application rather than a screenshot.
+//
+// examples/tour opens the windows, takes the stills and lays out the
+// contact sheet; the pages are here.
+package tourapp
 
 import (
 	"strconv"

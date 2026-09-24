@@ -6,8 +6,9 @@ import (
 
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/app"
-	"github.com/codemodify/uitoolkit/internal/demo"
+	"github.com/codemodify/uitoolkit/cmd/uitksettings/settingsapp"
 	"github.com/codemodify/uitoolkit/platform"
+	"github.com/codemodify/uitoolkit/showcase"
 	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
 	"github.com/codemodify/uitoolkit/widgets"
@@ -29,7 +30,7 @@ func benchWindow(b *testing.B, w, h int, content func(*app.Application, *app.Win
 // own repository: a theme browser, a live preview and the whole widget gallery
 // under it, all repainted every iteration.
 func BenchmarkSettingsFullPaint(b *testing.B) {
-	a, w := benchWindow(b, 1280, 800, demo.SettingsApp)
+	a, w := benchWindow(b, 1280, 800, settingsapp.SettingsApp)
 	b.ReportAllocs()
 	b.ResetTimer()
 	reused := 0
@@ -45,7 +46,7 @@ func BenchmarkSettingsFullPaint(b *testing.B) {
 
 func BenchmarkGalleryFullPaint(b *testing.B) {
 	a, w := benchWindow(b, 1100, 720, func(a *app.Application, win *app.Window) widget.Component {
-		return demo.Gallery(a, win, false)
+		return showcase.App(a, win, false)
 	})
 	b.ReportAllocs()
 	b.ResetTimer()

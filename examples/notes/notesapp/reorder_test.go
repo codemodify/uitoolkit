@@ -1,4 +1,4 @@
-package demo
+package notesapp
 
 import "testing"
 
