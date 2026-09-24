@@ -349,3 +349,24 @@ func uitkWlLayerClosed(sid C.uintptr_t) {
 	s.layer.gone = true
 	s.push(Event{Kind: EventClose})
 }
+
+// wlScreenRectAt is the logical rectangle of the output holding the
+// desktop point x, y ([ScreenRectAt]) — the rectangle a layer surface's
+// margins are measured in, and so the one a window placed at that point
+// must be constrained to.
+//
+// It answers only from a live connection: the outputs are known through
+// the registry, and opening one here to ask would be a round trip in the
+// middle of opening a menu. With no connection, and while the compositor
+// has not yet sent an output's geometry, it says so and the caller
+// constrains against nothing.
+func wlScreenRectAt(x, y int) (FrameRect, bool) {
+	wlMu.Lock()
+	c := wlc
+	wlMu.Unlock()
+	if c == nil || c.outs == nil {
+		return FrameRect{}, false
+	}
+	_, box, ok := c.outs.outputAt(x, y)
+	return box, ok
+}
