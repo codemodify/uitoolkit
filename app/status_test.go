@@ -277,14 +277,64 @@ func TestStatusMenuOriginIgnoresScreenCoords(t *testing.T) {
 	}
 }
 
-func TestStatusMenuScreenPosAbovePanel(t *testing.T) {
-	x, y := statusMenuScreenPos(100, 1060, 160, 80)
-	if x != 100 || y != 980 {
-		t.Fatalf("want 100,980 got %d,%d", x, y)
+func TestStatusMenuScreenRectAbovePanel(t *testing.T) {
+	restore := platform.SimulateScreenRect(platform.FrameRect{W: 1920, H: 1080})
+	defer restore()
+	gap := platform.ScreenMenuPointerGap
+	// A click on a bottom panel: no room for 80 pixels below 1060, so the
+	// menu flips above the point, a gap clear of it.
+	box := statusMenuScreenRect(100, 1060, 160, 80, 1)
+	if box.X != 100+gap || box.Y != 1060-gap-80 {
+		t.Fatalf("bottom panel: %+v, want x=%d y=%d", box, 100+gap, 1060-gap-80)
 	}
-	zx, zy := statusMenuScreenPos(0, 0, 160, 80)
-	if zx != 0 || zy != 0 {
-		t.Fatalf("0,0 means unset, got %d,%d", zx, zy)
+	if box.Y+box.H > 1060 {
+		t.Fatalf("menu %+v covers the click at y=1060", box)
+	}
+	// A click on a top panel: the menu hangs below the point, still clear
+	// of it.
+	if box := statusMenuScreenRect(100, 20, 160, 80, 1); box.Y != 20+gap {
+		t.Fatalf("top panel: %+v, want y=%d", box, 20+gap)
+	}
+	zero := statusMenuScreenRect(0, 0, 160, 80, 1)
+	if zero.X != 0 || zero.Y != 0 {
+		t.Fatalf("0,0 means unset, got %+v", zero)
+	}
+}
+
+// The two faults reported from a real KDE Wayland session (2880x1800
+// panel, wl_output.scale 2, fractional scale 175%, so a logical desktop
+// of 1645x1029): a tray menu opened at the icon covered the icon, and its
+// submenus — which live in the same surface, to the right of the parent —
+// were off the right edge of the screen entirely.
+func TestStatusMenuScreenRectKDETrayReport(t *testing.T) {
+	const (
+		screenW, screenH = 1645, 1029 // 2880x1800 at 175%, from xdg_output
+		scale            = 1.75
+	)
+	restore := platform.SimulateScreenRect(platform.FrameRect{W: screenW, H: screenH})
+	defer restore()
+	// What the session logged: OnMenu(2305,28) in device pixels, a menu
+	// surface of 988x221 device = 565x126 logical.
+	menuW := platform.LogicalPixels(988, scale)
+	menuH := platform.LogicalPixels(221, scale)
+	box := statusMenuScreenRect(2305, 28, menuW, menuH, scale)
+	if box.X+box.W > screenW || box.Y+box.H > screenH || box.X < 0 || box.Y < 0 {
+		t.Fatalf("menu %+v is not inside the %dx%d screen", box, screenW, screenH)
+	}
+	if box.W != menuW || box.H != menuH {
+		t.Fatalf("menu %+v was shrunk; it fits the screen whole", box)
+	}
+	// It must not cover the icon the tray named.
+	px := platform.LogicalPosition(2305, scale)
+	py := platform.LogicalPosition(28, scale)
+	if px >= box.X && px < box.X+box.W && py >= box.Y && py < box.Y+box.H {
+		t.Fatalf("menu %+v covers the tray point %d,%d", box, px, py)
+	}
+	// Near the right edge there is no room to the right, so it goes to
+	// the left of the point — flipped, not slid, which is what keeps the
+	// cascade on screen too.
+	if box.X >= px {
+		t.Fatalf("menu %+v should have flipped left of %d", box, px)
 	}
 }
 
@@ -663,8 +713,13 @@ func TestStatusMenuChromeDefaultUnchanged(t *testing.T) {
 
 // ShowStatusMenu puts its window where the tray said, on a desktop that
 // places windows: the whole path from SNI coordinates through
-// statusMenuScreenPos and the logical-pixel conversion to the surface.
+// statusMenuScreenRect and the logical-pixel conversion to the surface.
 func TestShowStatusMenuPlacesItsWindow(t *testing.T) {
+	// The offscreen desktop has no monitors to report, so the screen the
+	// menu is constrained to is simulated: without one nothing would flip
+	// and the bottom-panel rule below could not be checked.
+	restore := platform.SimulateScreenRect(platform.FrameRect{W: 1920, H: 1080})
+	defer restore()
 	a := New(Options{Look: style.DarkLook(), Headless: true})
 	a.ShowStatusMenu(900, 1040, StatusMenuFromItems([]*widgets.MenuItem{
 		widgets.Item("Raise", func() {}),
@@ -677,9 +732,9 @@ func TestShowStatusMenuPlacesItsWindow(t *testing.T) {
 	}
 	mw, mh := measureStatusMenu(a.Look(), a.Scale(), StatusMenuToItems(StatusMenuFromItems(
 		[]*widgets.MenuItem{widgets.Item("Raise", func() {}), widgets.Sep(), widgets.Item("Quit", func() {})})))
-	wantX, wantY := statusMenuScreenPos(900, 1040, mw, mh)
-	wantX = platform.LogicalPosition(wantX, a.Scale())
-	wantY = platform.LogicalPosition(wantY, a.Scale())
+	want := statusMenuScreenRect(900, 1040,
+		platform.LogicalPixels(mw, a.Scale()), platform.LogicalPixels(mh, a.Scale()), a.Scale())
+	wantX, wantY := want.X, want.Y
 	x, y, ok := platform.SurfacePosition(w.Surface())
 	if !ok {
 		t.Fatal("the offscreen desktop does not say where the window is")
@@ -688,7 +743,7 @@ func TestShowStatusMenuPlacesItsWindow(t *testing.T) {
 		t.Fatalf("status menu at %d,%d, want %d,%d", x, y, wantX, wantY)
 	}
 	// A bottom-panel click opens the menu above the click, never below.
-	if wantY >= 1040 {
-		t.Fatalf("menu top %d is not above the click at 1040", wantY)
+	if click := platform.LogicalPosition(1040, a.Scale()); wantY >= click {
+		t.Fatalf("menu top %d is not above the click at %d", wantY, click)
 	}
 }

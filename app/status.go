@@ -275,13 +275,22 @@ func (a *Application) ShowStatusMenu(x, y int32, items []platform.StatusMenuItem
 		return
 	}
 	mw, mh := measureStatusMenu(a.Look(), a.Scale(), rows)
-	px, py := statusMenuScreenPos(x, y, mw, mh)
 	// The menu is measured in the look's device pixels and the tray names
 	// a point in root ones; a window's size and position are stated in
-	// logical pixels.
+	// logical pixels, and so is the screen the menu has to fit on.
 	lw := platform.LogicalPixels(mw, a.Scale())
 	lh := platform.LogicalPixels(mh, a.Scale())
-	px, py = platform.LogicalPosition(px, a.Scale()), platform.LogicalPosition(py, a.Scale())
+	box := statusMenuScreenRect(x, y, lw, lh, a.Scale())
+	px, py := box.X, box.Y
+	// The solver may have shrunk the menu to fit a screen smaller than
+	// it; the popup inside the window is arranged to whatever came back.
+	if box.W < lw {
+		mw = platform.DevicePixels(box.W, a.Scale())
+	}
+	if box.H < lh {
+		mh = platform.DevicePixels(box.H, a.Scale())
+	}
+	lw, lh = box.W, box.H
 	w := a.statusMenu
 	if w == nil || w.Closed() {
 		opts := platform.WindowOptions{
@@ -487,23 +496,45 @@ func statusMenuOrigin(winW, winH int, screenX, screenY int32) paintengine2d.Poin
 	return paintengine2d.Pt(ww-inset, hh-inset)
 }
 
-// statusMenuScreenPos maps SNI click coords to the top-left of a
-// menu-sized popup. Clicks on a bottom panel (large Y) open above.
-func statusMenuScreenPos(screenX, screenY int32, menuW, menuH int) (int, int) {
+// statusMenuScreenRect is where the status menu goes: the box the window
+// is opened and placed at, in logical pixels of the desktop.
+//
+// screenX, screenY are the point the host named (SNI ContextMenu, in the
+// display's device pixels); menuW, menuH are the whole surface in logical
+// pixels — the parent menu plus its widest cascade, because the submenus
+// open inside this window (see measureStatusMenu). Both go to
+// [platform.SolveScreenMenu], which is the toolkit's one answer to "where
+// does a menu opened at a point go" and is shared with every other
+// backend: it keeps the menu clear of the point instead of on top of the
+// icon, flips it above the point where there is no room below, slides it
+// back onto the screen, and only shrinks it when it is larger than the
+// screen itself.
+//
+// 0,0 keeps its old meaning — the host named no point — and the caller
+// then leaves the window where the desktop put it.
+func statusMenuScreenRect(screenX, screenY int32, menuW, menuH int, scale float32) platform.FrameRect {
 	if screenX == 0 && screenY == 0 {
-		return 0, 0
+		return platform.FrameRect{W: menuW, H: menuH}
 	}
-	x, y := int(screenX), int(screenY)
-	if menuH > 0 && y >= menuH {
-		y -= menuH
+	x := platform.LogicalPosition(int(screenX), scale)
+	y := platform.LogicalPosition(int(screenY), scale)
+	// The gap is stated in device pixels (a cursor's width), so it is
+	// the same distance on the glass whatever the scale.
+	gap := platform.LogicalPixels(platform.ScreenMenuPointerGap, scale)
+	if gap < 1 {
+		gap = 1
 	}
-	if x < 0 {
-		x = 0
+	area, _ := platform.ScreenRectAt(x, y)
+	box := platform.SolveScreenMenu(x, y, menuW, menuH, area, gap)
+	// A screen the toolkit knows nothing about constrains nothing, so
+	// the old floor stays: never place a window at a negative corner.
+	if box.X < 0 {
+		box.X = 0
 	}
-	if y < 0 {
-		y = 0
+	if box.Y < 0 {
+		box.Y = 0
 	}
-	return x, y
+	return box
 }
 
 func (a *Application) preferredStatusWindow() *Window {

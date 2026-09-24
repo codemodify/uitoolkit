@@ -220,6 +220,28 @@ func (s *x11Surface) workAreaLocked(anchor FrameRect) (FrameRect, bool) {
 	return FrameRect{X: x0, Y: y0, W: max(x1-x0, 0), H: max(y1-y0, 0)}, true
 }
 
+// x11ScreenRectAt is the work area of the monitor holding the desktop
+// point x, y ([ScreenRectAt]): the RandR monitor cut to _NET_WORKAREA, so
+// a menu placed against it stays clear of the panels. In and out in
+// logical pixels of the desktop, which is the unit a window's position is
+// stated in; _NET_WORKAREA itself is in the display's device pixels.
+func x11ScreenRectAt(x, y int) (FrameRect, bool) {
+	x11Mu.Lock()
+	defer x11Mu.Unlock()
+	c := x11c
+	if c == nil || c.dpy == nil {
+		return FrameRect{}, false
+	}
+	sc := c.displayScale()
+	var ax, ay, aw, ah C.int
+	if C.ui_pop_workarea(c.dpy, C.int(DevicePosition(x, sc)), C.int(DevicePosition(y, sc)), &ax, &ay, &aw, &ah) == 0 {
+		return FrameRect{}, false
+	}
+	x0, y0 := ceilDiv(int(ax), sc), ceilDiv(int(ay), sc)
+	x1, y1 := floorDiv(int(ax+aw), sc), floorDiv(int(ay+ah), sc)
+	return FrameRect{X: x0, Y: y0, W: max(x1-x0, 0), H: max(y1-y0, 0)}, true
+}
+
 // PopupWorkArea is the work area of the monitor the window is on, logical
 // pixels relative to its visible box (PopupWorkArea).
 func (s *x11Surface) PopupWorkArea() (FrameRect, bool) {
