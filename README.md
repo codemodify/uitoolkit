@@ -33,7 +33,7 @@ go get github.com/codemodify/paintengine2d@v0.9.0
 | Paint | paintengine2d **v0.9.0** (`Scene` / `Recorder` / GPU rect batches; flatten cache) |
 | Fonts | Titillium Web (UI) + JetBrains Mono (code), OpenType → atlas |
 | Windowing | Linux X11 + Wayland (`wl_egl_window` / eglSwapBuffers, else `wl_shm` / `XPutImage`); offscreen always. Pointers are host cursors (`wp_cursor_shape_v1` / XCURSOR / Xfont / `LoadCursorW` / `NSCursor`) |
-| Tray | `StatusItem` — Linux SNI + fdo notifications; Win32 notify area; macOS `NSStatusItem` (CGO) |
+| Tray | `StatusItem` — Linux SNI + dbusmenu (submenus included) + fdo notifications; Win32 notify area; macOS `NSStatusItem` (CGO) |
 | CGO | optional — tests and screenshots are `CGO_ENABLED=0` |
 | License | [The Free License](LICENSE) |
 
@@ -743,6 +743,14 @@ author forks a plan instead of opening a blank PNG. **`showcase`** — every
 control in the current look, as used by the gallery example and by Settings'
 theme preview. **`a11y/a11ytest`** — the audit loop two departed applications
 had each written for themselves.
+
+*The tray menu nests.* `StatusMenuItem.Submenu` makes a tray row open a
+child menu, on both paths: `com.canonical.dbusmenu` numbers the whole tree
+in pre-order and honours `recursionDepth`, and the toolkit `PopupMenu`
+cascade covers ToolkitMenu and Windows, which has no dbusmenu. A parent is
+not a command — a row with children never fires its own `OnClick`, because
+a host that opens a submenu sends no click for the row it opened it from.
+See [docs/tray.md](docs/tray.md#submenus).
 
 *Smaller additions from the same source.* `dock.Host.SaveLayoutFile` /
 `LoadLayoutFile` (every docking application had rebuilt the same path
