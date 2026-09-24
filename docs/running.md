@@ -5,7 +5,7 @@ Every frame on this page was rendered by this repo at **v0.20.0** painting throu
 involved. Regenerate the stills at any time with:
 
 ```sh
-go run ./examples/gallery -screenshot docs/screenshots
+go run ./cmd/uitk-shots docs/screenshots
 ```
 
 The animation was captured by injecting one event at a time into a headless window and
@@ -86,7 +86,7 @@ toolkit gives it is in [players.md](players.md).
 
 ## Every widget, one frame each
 
-From `go run ./examples/gallery -screenshot`, written to `screenshots/compare/`.
+From `go run ./cmd/uitk-shots`, written to `screenshots/compare/`.
 
 | | | | |
 |---|---|---|---|
@@ -139,12 +139,13 @@ Both repos must be on the same revision — `go.mod` resolves the engine from
 
 ```sh
 go run ./examples/tour         # the tour: a page per capability (docs/tour.md)
-go run ./examples/gallery      # widget gallery
+go run ./examples/gallery      # widget gallery (the showcase package)
 go run ./examples/notes
 go run ./examples/files
 go run ./examples/skinshape    # a shaped window over a test card
 go run ./cmd/uitksettings      # theme browser: 129 packs, preview + gallery
 go run ./cmd/uitest-driver     # scripted UI drive, no display needed
+go run ./cmd/uitk-shots DIR    # the pictures in the README and these docs
 ```
 
 The mail client and the music player are not here any more; their
@@ -165,7 +166,7 @@ There is no committed tool for this; it was a throwaway. The shape of it:
 ```go
 a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true})
 w, _ := a.NewWindow(platform.WindowOptions{Width: 1000, Height: 760, Headless: true})
-w.SetContent(demo.Gallery(a, w, false))
+w.SetContent(showcase.App(a, w, false))
 
 // one event, one pump, one frame
 w.Inject(platform.Event{Kind: platform.EventMouseMove, Pos: paintengine2d.Pt(92, 267)})

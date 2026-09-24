@@ -138,7 +138,7 @@ without one of these the page stays useful and stops claiming:
 
 ## Tested
 
-Headless, in `internal/demo/tour_test.go`:
+Headless, in `examples/tour/tourapp/tour_test.go`:
 
 - every page builds, lays out and paints in **win95, system7, luna,
   bigsur, tahoe, sourcegit and the `deck` skin**, at 1× and 1.75, and is

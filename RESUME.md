@@ -494,7 +494,7 @@ and macOS adapters.
 ## Performance
 
 `BenchmarkGalleryRepaint` and `BenchmarkGallerySmallRepaint` in
-`examples/gallery` repaint the gallery in each engine.
+`cmd/uitk-shots` repaint the gallery in each engine.
 
 - paintengine2d keeps recorded paths across frames and allocates draw ops in
   slabs.
