@@ -688,6 +688,93 @@ are independent look.json fields again; compound pack names migrate
 
 ## Version
 
+**0.20.0** — **The first release meant to be depended on from outside this
+repository.** Everything below follows from one rule the author set on
+22 September: the sample applications are this toolkit's first customer, and
+they may use only what anybody else can use.
+
+*Applications moved out, and proved the API.* Mail
+([comms-mail](https://github.com/codemodify/comms-mail), 26k lines, a daemon
+that links **zero** toolkit packages plus a GUI) and the three players, merged
+into one application whose face switches at runtime
+([media-player-music](https://github.com/codemodify/media-player-music)), now
+live in their own repositories. A third, [comms-chat-lan](https://github.com/codemodify/comms-chat-lan),
+was written from scratch against the published module: a LAN chat server, a
+client daemon, a uitoolkit window and a terminal front end. All three build
+against a tagged or pseudo-versioned uitoolkit with **no `replace` directive
+and no internal imports**. Nothing they needed was missing — which is a
+completeness test no amount of internal review substitutes for, and it is
+where most of the API below came from.
+
+*The examples are real code now.* `internal/demo` — 10,853 lines holding the
+whole implementation of six samples while `examples/*/main.go` were 39-line
+shells in front of them — is gone. Each sample owns its code
+(`examples/files/filesapp`, `examples/notes/notesapp`,
+`examples/inspector/inspectorapp`, `examples/tour/tourapp`,
+`cmd/uitksettings/settingsapp`), so an example can be read, copied and built
+by somebody learning the toolkit. `TestSamplesUseOnlyThePublicAPI` fails the
+build if anything under `examples/` or `cmd/` reaches into the toolkit's
+internal tree again: the rule had been broken twice, so it is enforced rather
+than remembered.
+
+*Art on ordinary controls.* `widgets.Button` and the new
+`widgets.ToolButton` take a `Painter` (replace the look's face entirely) and a
+`Content` painter (draw inside the face the engine already drew, keeping its
+hover cross-fade), plus a `Shaper` for the hit shape. `widgets.Slider` gained
+`Painter`, `Travel`, `Vertical`, `Label`, `Format`, `Tip`, `Step`, `Page` and
+`Reading()`. `widgets.ListView` gained `RowGeo`, `RowPaint`, `ScrollPaint` and
+`ItemDetail`. Together these retired two of the three hand-rolled widgets the
+player samples had needed — a 240-line glyph button and a 290-line fader
+became the stock widgets with a painter.
+
+*Telling the user's edits from the app's.* Nine widgets fire `OnChange`
+whenever a value changes, which means an application driving a control from
+its own data re-enters its own handler. They now also carry **`OnInput`**,
+fired only when the change came from a person — pointer, keyboard, or a
+screen reader's action. `OnChange` first, then `OnInput`, documented once in
+`widgets/oninput.go`.
+
+*New public packages.* **`rack`** — separate top-level windows that snap to
+each other and follow the one being dragged (`dock`'s sibling: `dock` is
+panels inside one window), honest about Wayland, where a client cannot place
+its own windows. **`skingen`** — the generator that draws every shipped skin
+from Go paths and gradients, including all eight plan constructors, so a skin
+author forks a plan instead of opening a blank PNG. **`showcase`** — every
+control in the current look, as used by the gallery example and by Settings'
+theme preview. **`a11y/a11ytest`** — the audit loop two departed applications
+had each written for themselves.
+
+*Smaller additions from the same source.* `dock.Host.SaveLayoutFile` /
+`LoadLayoutFile` (every docking application had rebuilt the same path
+building, mkdir and error swallowing; `LoadLayoutFile` distinguishes a first
+run from a corrupt file). `widgets.HeightBox`, after two packages that cannot
+import each other grew the same private 40-line height cap.
+
+*Accessibility fixes, all real.* `Slider` and `NumberField` advertised
+increment and decrement to screen readers and implemented neither — a reader
+was offered a step that did nothing; the slider also advertised a step size
+(`span/100`) that matched nothing it actually did, including its own arrow
+keys. `Switch` fired `OnChange` twice for one reader action. `RadioButton`
+advertised a default action it never implemented, so a radio group could be
+read but not operated. And `a11y.Check` now insists that a list, tree or
+table carries an accessible name: a silent view used to pass the audit, which
+had let **eleven** unnamed views through in code meant to be exemplary.
+
+*Breaking, and deliberately before the first tag that carries any of this.*
+`widgets.NewSplitter` takes a named `SplitAxis` — `SplitColumns` for panes
+side by side, `SplitRows` for one above the other — because the old boolean
+named the divider rather than the panes, and two separate applications made
+the same mistake. Every other gap those applications found is additive and
+can land later without moving anyone's code.
+
+*Dependency.* paintengine2d is tagged **v0.11.0** and the `replace` directive
+that built it from the folder next door is gone: this module resolves the
+engine from the proxy like any other dependency.
+
+**If you are on v0.19.1**, upgrade: that tag predates the `a11y` package, so
+`go mod tidy` resolving to it breaks any application that follows this
+repository's own accessibility-test pattern.
+
 **0.19.1** — Settings Appearance uses a two-pane layout with a single
 scrollable Built-in theme list (and a scrollable preview / Corners /
 Icons column) so every era pack is reachable. Apply stays pinned below
