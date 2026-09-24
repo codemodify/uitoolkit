@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/codemodify/paintengine2d"
@@ -31,7 +32,8 @@ func (a *Application) NewStatusItem(opts platform.StatusItemOptions) (item platf
 	var holder *statusMenuHolder
 	if a != nil {
 		opts.Dispatch = a.Post
-		if opts.OnMenu == nil && hasStatusMenu(opts.Menu) && wantsToolkitStatusMenu(opts) {
+		chrome := demoteStatusMenuChrome(&opts)
+		if opts.OnMenu == nil && hasStatusMenu(opts.Menu) && chrome == platform.ToolkitMenu {
 			holder = &statusMenuHolder{items: platformCopyMenu(opts.Menu)}
 			opts.OnMenu = func(x, y int32) {
 				a.ShowStatusMenu(x, y, holder.Items())
@@ -54,12 +56,58 @@ func (a *Application) NewStatusItem(opts platform.StatusItemOptions) (item platf
 	return item, nil
 }
 
-func wantsToolkitStatusMenu(opts platform.StatusItemOptions) bool {
-	if opts.MenuChrome == platform.ToolkitMenu {
-		return true
+// demoteStatusMenuChrome settles the chrome this item will really have and
+// writes it back into opts, so an item demoted from ToolkitMenu to
+// HostMenu exports a real dbusmenu instead of the Menu=/NO_DBUSMENU
+// sentinel that asks the host to call ContextMenu. It returns the chrome.
+//
+// Only a demotion is written back. A HostMenu item on a desktop with no
+// dbusmenu (Windows) is served by OnMenu without changing what it asked
+// for, as it always was.
+func demoteStatusMenuChrome(opts *platform.StatusItemOptions) platform.StatusMenuChrome {
+	chrome, why := StatusMenuChromeFor(opts.MenuChrome)
+	if opts.MenuChrome == platform.ToolkitMenu && chrome != platform.ToolkitMenu {
+		// The app asked for its own chrome and cannot have it. It is
+		// entitled to know, once, and not only under UITK_TRAY_DEBUG:
+		// this changes what its menu looks like.
+		opts.MenuChrome = chrome
+		trayChromeFallbackOnce.Do(func() {
+			log.Printf("uitk tray: ToolkitMenu asked for, HostMenu used: %s", why)
+		})
+	}
+	return chrome
+}
+
+// trayChromeFallbackOnce keeps the demotion notice to one line per
+// process, however many tray items the app opens.
+var trayChromeFallbackOnce sync.Once
+
+// StatusMenuChromeFor is the tray menu chrome an item that asked for want
+// will really get here, and one line saying why. It is what
+// [Application.NewStatusItem] decides with, and what a readout should show
+// instead of the chrome the app asked for.
+//
+// ToolkitMenu draws the menu itself, in the app's theme, on a window of
+// its own at the point the host clicked. That needs a window the client
+// can place. X11 and Windows place windows; a Wayland compositor only
+// does where it offers zwlr_layer_shell_v1 (KDE, sway, Hyprland,
+// wayfire). On one that does not — GNOME/Mutter — a ToolkitMenu window
+// lands wherever the compositor drops it, which for KWin was the middle
+// of the screen. A menu in the wrong place is worse than a menu that
+// looks like the desktop's, so the answer there is HostMenu.
+func StatusMenuChromeFor(want platform.StatusMenuChrome) (platform.StatusMenuChrome, string) {
+	if want == platform.ToolkitMenu {
+		if !platform.ScreenPlacementAvailable() {
+			return platform.HostMenu, "this compositor has no zwlr_layer_shell_v1, so a toolkit menu window cannot be put where the tray asked"
+		}
+		return platform.ToolkitMenu, "the app asked for it"
 	}
 	// HostMenu on Linux is dbusmenu. Windows still uses OnMenu (no HMENU).
-	return !platform.HostMenuNative()
+	if platform.HostMenuNative() {
+		return platform.HostMenu, "the desktop draws tray menus (dbusmenu)"
+	}
+	// Nothing native: the toolkit menu is all there is, placeable or not.
+	return platform.ToolkitMenu, "this desktop draws no tray menu of its own"
 }
 
 type statusMenuHolder struct {
@@ -213,8 +261,11 @@ func StatusMenuToItems(items []platform.StatusMenuItem) []*widgets.MenuItem {
 // status-menu window (ToolkitMenu chrome). The window is reused: Hide/Show
 // + rebind, never create/destroy per click. x,y are SNI root/screen
 // coordinates; X11 places the popup there (typically above a bottom
-// panel). Wayland cannot position a toplevel; the compositor still maps
-// a visible menu.
+// panel), and Wayland does through a layer surface
+// ([platform.PlaceAtScreen]) where the compositor offers one. Where it
+// does not, [Application.NewStatusItem] has already chosen HostMenu, so
+// the only way to be here is an app that called this directly — the
+// compositor then places the window and the menu may be anywhere.
 func (a *Application) ShowStatusMenu(x, y int32, items []platform.StatusMenuItem) {
 	if a == nil {
 		return
@@ -242,6 +293,10 @@ func (a *Application) ShowStatusMenu(x, y int32, items []platform.StatusMenuItem
 			Popup:     true,
 			X:         px,
 			Y:         py,
+			// The menu belongs at the point the tray named, not near it:
+			// on Wayland this is what makes the window a layer surface
+			// rather than an unplaceable toplevel.
+			Place: platform.PlaceAtScreen,
 		}
 		var err error
 		w, err = a.NewWindow(opts)
@@ -286,11 +341,12 @@ func (a *Application) bindStatusMenu(w *Window, rows []*widgets.MenuItem, mw, mh
 	pop.RequestFocus()
 	w.Show()
 	w.Raise()
+	placed := true
 	if px != 0 || py != 0 {
-		platform.MoveSurface(w.Surface(), px, py)
+		placed = platform.PlaceSurfaceAtScreen(w.Surface(), px, py)
 	}
-	trayStatusLog("ShowStatusMenu place=%d,%d size=%dx%d popupWin visible=%v reused",
-		px, py, mw, mh, w.Visible())
+	trayStatusLog("ShowStatusMenu place=%d,%d size=%dx%d popupWin visible=%v placed=%v reused",
+		px, py, mw, mh, w.Visible(), placed)
 	return true
 }
 
