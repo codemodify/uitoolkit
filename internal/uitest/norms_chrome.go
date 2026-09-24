@@ -179,7 +179,7 @@ func (b *bleedBox) Paint(ctx *paintengine2d.Context) {
 func checkSplitterClipCursor() error {
 	red := paintengine2d.RGB(0.9, 0.1, 0.1)
 	blue := paintengine2d.RGB(0.1, 0.2, 0.9)
-	split := widgets.NewSplitter(true, newBleedBox(red), newBleedBox(blue))
+	split := widgets.NewSplitter(widgets.SplitColumns, newBleedBox(red), newBleedBox(blue))
 	split.Ratio = 0.4
 	s := Mount(split, paintengine2d.XYWH(0, 0, 300, 120))
 	a, b := split.PaneA(), split.PaneB()

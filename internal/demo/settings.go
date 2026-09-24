@@ -207,7 +207,7 @@ func buildSettingsState(s *settingsState) widget.Component {
 	side.AddFlex(nav, 1)
 
 	right := widgets.NewPad(10, page)
-	split := widgets.NewSplitter(true, side, right)
+	split := widgets.NewSplitter(widgets.SplitColumns, side, right)
 	split.Ratio = 0.18
 
 	s.applyBtn = widgets.NewButton("Apply", s.apply)
@@ -444,11 +444,11 @@ func (s *settingsState) themesPage() widget.Component {
 	galleryCol := widgets.NewColumn(s.galleryLbl, galleryScope).WithGap(6)
 	galleryCol.AddFlex(galleryScope, 1)
 
-	s.rightSplit = widgets.NewSplitter(false, preview, galleryCol)
+	s.rightSplit = widgets.NewSplitter(widgets.SplitRows, preview, galleryCol)
 	s.rightSplit.Ratio = s.previewRatio
 	s.rightSplit.SetAccessibleName("Preview and gallery")
 
-	s.bodySplit = widgets.NewSplitter(true, browser, s.rightSplit)
+	s.bodySplit = widgets.NewSplitter(widgets.SplitColumns, browser, s.rightSplit)
 	s.bodySplit.Ratio = s.browserRatio
 	s.bodySplit.SetAccessibleName("Themes and preview")
 	return s.bodySplit
@@ -708,7 +708,7 @@ func PreviewApp(say func(string)) widget.Component {
 			}[row][col]
 		}, nil)
 	table.Selected = 2
-	lists := widgets.NewSplitter(true, tree, table)
+	lists := widgets.NewSplitter(widgets.SplitColumns, tree, table)
 	lists.Ratio = 0.36
 
 	text := widgets.NewTextArea("Themes change shapes, not just colours:\nbevels, gel buttons, chamfered tabs,\nscrollbar arrows and window captions.", "", nil)

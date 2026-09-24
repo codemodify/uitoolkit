@@ -8,20 +8,46 @@ import (
 	"github.com/codemodify/uitoolkit/widget"
 )
 
+// SplitAxis says how the two panes sit. It describes the panes rather than
+// the divider between them: the old boolean named the divider, so
+// NewSplitter(true, …) produced a side-by-side split, and every reader of
+// the call had to stop and work that out. Two applications made the same
+// mistake, which is how this came to be a named type.
+type SplitAxis uint8
+
+const (
+	// SplitColumns puts the panes side by side, with a divider that runs
+	// up and down between them.
+	SplitColumns SplitAxis = iota
+	// SplitRows stacks the panes, one above the other.
+	SplitRows
+)
+
+func (a SplitAxis) String() string {
+	if a == SplitRows {
+		return "rows"
+	}
+	return "columns"
+}
+
 // Splitter is two panes with a draggable divider. Ratio is the first pane share
 // of the space beside the sash. Arranged panes are exclusive; each is clipped
 // to its rect on paint and hit-test so children cannot overlap the sibling.
 type Splitter struct {
 	widget.Base
-	Vertical bool
-	Ratio    float32
-	A, B     widget.Component
-	drag     bool
-	hovered  bool
+	Axis    SplitAxis
+	Ratio   float32
+	A, B    widget.Component
+	drag    bool
+	hovered bool
 }
 
-func NewSplitter(vertical bool, a, b widget.Component) *Splitter {
-	s := &Splitter{Vertical: vertical, Ratio: 0.4, A: a, B: b}
+// sideBySide is what the look's painters and the hit tests want: whether the
+// divider itself runs up and down.
+func (s *Splitter) sideBySide() bool { return s.Axis == SplitColumns }
+
+func NewSplitter(axis SplitAxis, a, b widget.Component) *Splitter {
+	s := &Splitter{Axis: axis, Ratio: 0.4, A: a, B: b}
 	s.Init(s)
 	s.SetManagesChildren(true)
 	if a != nil {
@@ -63,7 +89,7 @@ func (s *Splitter) panes(box paintengine2d.Rect) (a, div, b paintengine2d.Rect) 
 		bar = 1
 	}
 	w, h := box.Dx(), box.Dy()
-	if s.Vertical {
+	if s.sideBySide() {
 		if w < bar {
 			bar = w
 		}
@@ -158,7 +184,7 @@ func (s *Splitter) Paint(ctx *paintengine2d.Context) {
 	if s.drag {
 		st |= style.StatePressed
 	}
-	s.Look().DrawSplitter(ctx, s.divider(), s.Vertical, st)
+	s.Look().DrawSplitter(ctx, s.divider(), s.sideBySide(), st)
 }
 
 func (s *Splitter) HitTest(local paintengine2d.Point) widget.Component {
@@ -198,7 +224,7 @@ func (s *Splitter) HitTest(local paintengine2d.Point) widget.Component {
 }
 
 func (s *Splitter) resizeCursor() platform.Cursor {
-	if s.Vertical {
+	if s.sideBySide() {
 		return platform.CursorColResize
 	}
 	return platform.CursorRowResize
@@ -248,7 +274,7 @@ func (s *Splitter) MouseMove(e widget.MouseEvent) bool {
 	}
 	b := s.LocalBounds()
 	bar := s.bar()
-	if s.Vertical {
+	if s.sideBySide() {
 		usable := b.Dx() - bar
 		if usable > 0 {
 			s.Ratio = (e.Pos.X - bar*0.5) / usable

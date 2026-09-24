@@ -366,7 +366,7 @@ func writeCompareThumbs(dir string) error {
 			build: func() widget.Component {
 				left := widgets.NewPanel("Left", widgets.NewLabel("Pane A"))
 				right := widgets.NewPanel("Right", widgets.NewLabel("Pane B"))
-				split := widgets.NewSplitter(true, left, right)
+				split := widgets.NewSplitter(widgets.SplitColumns, left, right)
 				split.Ratio = 0.42
 				col := widgets.NewColumn(widgets.NewTitleBar("Splitter", "drag sash"), split).WithGap(0)
 				col.AddFlex(split, 1)

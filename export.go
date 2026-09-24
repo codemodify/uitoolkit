@@ -363,8 +363,16 @@ func NewListView(count int, text func(int) string, on func(int)) *widgets.ListVi
 func NewCardList(count int, card func(int) widgets.CardContent, on func(int)) *widgets.CardList {
 	return widgets.NewCardList(count, card, on)
 }
-func NewSplitter(vertical bool, a, b widget.Component) *widgets.Splitter {
-	return widgets.NewSplitter(vertical, a, b)
+
+// SplitColumns and SplitRows say how a splitter's panes sit. See
+// widgets.SplitAxis.
+const (
+	SplitColumns = widgets.SplitColumns
+	SplitRows    = widgets.SplitRows
+)
+
+func NewSplitter(axis widgets.SplitAxis, a, b widget.Component) *widgets.Splitter {
+	return widgets.NewSplitter(axis, a, b)
 }
 
 // NewDockHost is a central widget with dock areas on its four sides

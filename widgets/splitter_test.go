@@ -45,7 +45,7 @@ func (h *cursorHost) SetCursor(c platform.Cursor) {
 
 func TestSplitterRestoresPointerCursor(t *testing.T) {
 	h := &cursorHost{}
-	split := NewSplitter(true, NewLabel("A"), NewLabel("B"))
+	split := NewSplitter(SplitColumns, NewLabel("A"), NewLabel("B"))
 	split.Ratio = 0.5
 	split.SetHost(h)
 	split.Arrange(paintengine2d.XYWH(0, 0, 400, 200))
@@ -76,7 +76,7 @@ func TestSplitterRestoresPointerCursor(t *testing.T) {
 	if h.cursor != platform.CursorDefault {
 		t.Fatalf("release must restore pointer, got %v", h.cursor)
 	}
-	horiz := NewSplitter(false, NewLabel("A"), NewLabel("B"))
+	horiz := NewSplitter(SplitRows, NewLabel("A"), NewLabel("B"))
 	horiz.SetHost(h)
 	horiz.Arrange(paintengine2d.XYWH(0, 0, 200, 300))
 	hd := horiz.divider()
@@ -88,7 +88,7 @@ func TestSplitterRestoresPointerCursor(t *testing.T) {
 func TestSplitterArrangeAfterDragExclusive(t *testing.T) {
 	left := NewLabel("Date Size columns live here")
 	right := NewLabel("Subject: a very long preview header that must not paint over the list")
-	split := NewSplitter(true, left, right)
+	split := NewSplitter(SplitColumns, left, right)
 	split.Ratio = 0.5
 	split.SetHost(&host{})
 	box := paintengine2d.XYWH(0, 0, 400, 200)
@@ -129,7 +129,7 @@ func TestSplitterArrangeAfterDragExclusive(t *testing.T) {
 func TestSplitterClipsOverflowPaint(t *testing.T) {
 	red := paintengine2d.RGB(0.9, 0.1, 0.1)
 	blue := paintengine2d.RGB(0.1, 0.2, 0.9)
-	split := NewSplitter(true, newOverflowBox(red), newOverflowBox(blue))
+	split := NewSplitter(SplitColumns, newOverflowBox(red), newOverflowBox(blue))
 	split.Ratio = 0.45
 	split.SetHost(&host{})
 	split.SetLook(style.DarkLook())

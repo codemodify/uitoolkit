@@ -76,7 +76,7 @@ func buildAccessPage(t *tourState) widget.Component {
 	probPanel := widgets.NewPanel("a11y.Check", p.probs)
 	probPanel.Content().AddFlex(p.probs, 1)
 
-	trees := widgets.NewSplitter(false, treePanel, probPanel)
+	trees := widgets.NewSplitter(widgets.SplitRows, treePanel, probPanel)
 	// The linter's list keeps room for two rows of its verdict in the
 	// roomier packs too.
 	trees.Ratio = 0.62
@@ -161,7 +161,7 @@ func buildAccessPage(t *tourState) widget.Component {
 	top := widgets.NewColumn(widgets.NewRow(read).WithGap(6), trees).WithGap(8)
 	top.AddFlex(trees, 1)
 	rest := tourScroll("Keyboard, motion and scale", widgets.NewColumn(keys, motionPanel, scalePanel).WithGap(10))
-	stage := widgets.NewSplitter(false, top, rest)
+	stage := widgets.NewSplitter(widgets.SplitRows, top, rest)
 	stage.Ratio = 0.5
 
 	p.applyScale()

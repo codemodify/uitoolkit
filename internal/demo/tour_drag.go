@@ -134,7 +134,7 @@ func buildDragPage(t *tourState) widget.Component {
 		widgets.NewPanel("Text drags itself", out),
 		howto,
 	).WithGap(10))
-	stage := widgets.NewSplitter(false, lists, rest)
+	stage := widgets.NewSplitter(widgets.SplitRows, lists, rest)
 	stage.Ratio = 0.36
 
 	panel, facts := tourReadout("What the two sides settled on")

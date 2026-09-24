@@ -374,7 +374,7 @@ func NotesApp(win *app.Window) widget.Component {
 		widgets.NewLabel("Table, textarea, spinner, file stub."),
 	)
 	right := widgets.NewPad(8, editor)
-	split := widgets.NewSplitter(true, sidebar, right)
+	split := widgets.NewSplitter(widgets.SplitColumns, sidebar, right)
 	split.Ratio = 0.38
 	_ = win
 	_ = layout.AlignStart
