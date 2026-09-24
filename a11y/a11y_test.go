@@ -46,3 +46,31 @@ func TestRolesAndActions(t *testing.T) {
 		t.Fatal("find")
 	}
 }
+
+// A list, a tree or a table with no name is announced as "list": the row
+// inside it is what the user operates, so Role.Interactive says no to it,
+// but it still has to be called something.
+func TestCheckWantsItemViewsNamed(t *testing.T) {
+	box := paintengine2d.XYWH(0, 0, 100, 40)
+	for _, role := range []Role{RoleList, RoleTree, RoleTable} {
+		root := &Node{ID: 1, Role: RoleWindow, Name: "W", Bounds: box, Children: []*Node{
+			{ID: 2, Role: role, Bounds: box},
+		}}
+		problems := Check(root)
+		if len(problems) != 1 || !strings.Contains(problems[0].String(), "has no name") {
+			t.Errorf("an unnamed %s gave %v", role, problems)
+		}
+		root.Children[0].Name = "Inbox"
+		if got := Check(root); len(got) != 0 {
+			t.Errorf("a named %s gave %v", role, got)
+		}
+	}
+	// A row inside one needs no name of its own beyond its text, and an
+	// offscreen view is not on screen to be announced.
+	off := &Node{ID: 1, Role: RoleWindow, Name: "W", Bounds: box, Children: []*Node{
+		{ID: 2, Role: RoleList, Bounds: box, State: StateOffscreen},
+	}}
+	if got := Check(off); len(got) != 0 {
+		t.Errorf("an offscreen list gave %v", got)
+	}
+}
