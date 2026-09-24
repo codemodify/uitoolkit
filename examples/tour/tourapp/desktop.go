@@ -32,9 +32,15 @@ type desktopPage struct {
 	t     *tourState
 	field *widgets.TextField
 	seen  *widgets.Label
-	tray  platform.StatusItem
-	trayB *widgets.Button
-	notes *widgets.Button
+	// Two items, because the interesting thing about the tray is who
+	// draws the menu: tray is HostMenu (the desktop draws a dbusmenu),
+	// trayOurs is ToolkitMenu (we draw a PopupMenu in this theme). Both
+	// can be up at once, which is the only way to compare them.
+	tray     platform.StatusItem
+	trayOurs platform.StatusItem
+	trayB    *widgets.Button
+	trayOurB *widgets.Button
+	notes    *widgets.Button
 	// notifier sends the page's notifications (made on first use), and
 	// sent counts them so each replaces the last.
 	notifier *platform.Notifier
@@ -85,10 +91,14 @@ func buildDesktopPage(t *tourState) widget.Component {
 
 	// ---- the tray ---------------------------------------------------------
 
-	p.trayB = widgets.NewButton("Put an icon in the tray", func() { p.toggleTray() })
+	p.trayB = widgets.NewButton("Put an icon in the tray", func() { p.toggleTray(platform.HostMenu) })
+	p.trayOurB = widgets.NewButton("…and one we draw ourselves", func() { p.toggleTray(platform.ToolkitMenu) })
 	p.notes = widgets.NewButton("Send a notification", func() { p.notify() })
 	tray := widgets.NewPanel("The system tray and notifications",
-		widgets.NewRow(p.trayB, p.notes).WithGap(6),
+		widgets.NewRow(p.trayB, p.trayOurB, p.notes).WithGap(6),
+		tourNote("Two icons, one difference: the first exports a dbusmenu and the desktop draws the "+
+			"menu; the second says Menu=/NO_DBUSMENU, so the desktop asks us and we draw it in this "+
+			"theme. Right-click each. The tree is the same, submenu and all."),
 		tourNote("The notification needs no tray icon: it goes to the notification portal, or "+
 			"straight to the desktop's notification server outside a sandbox, with two buttons; "+
 			"clicking it raises this window and says which was clicked."),
@@ -146,28 +156,26 @@ func buildDesktopPage(t *tourState) widget.Component {
 	return tourStage(tourScroll("Desktop page", stage), panel)
 }
 
-func (p *desktopPage) toggleTray() {
-	if p.tray != nil {
-		p.dropTray()
+func (p *desktopPage) toggleTray(chrome platform.StatusMenuChrome) {
+	ours := chrome == platform.ToolkitMenu
+	if p.itemFor(chrome) != nil {
+		p.dropTrayItem(chrome)
 		p.note("Tray icon removed.")
 		return
 	}
+	id, title, tip := "uitoolkit-tour", "uitoolkit tour", "The tour — the desktop draws this menu"
+	icon := "applications-graphics"
+	if ours {
+		id, title = "uitoolkit-tour-ours", "uitoolkit tour (our chrome)"
+		tip, icon = "The tour — we draw this menu, in the tour's theme", "applications-development"
+	}
 	item, err := p.t.a.NewStatusItem(platform.StatusItemOptions{
-		ID:      "uitoolkit-tour",
-		Title:   "uitoolkit tour",
-		Tooltip: "The tour — click to raise its window",
-		Icon:    platform.StatusIcon{Name: "applications-graphics"},
-		Menu: app.StatusMenuFromItems([]*widgets.MenuItem{
-			widgets.Item("Raise the tour", func() {
-				p.t.win.Show()
-				p.t.win.Raise()
-			}),
-			widgets.Sep(),
-			widgets.Item("Take the icon away", func() {
-				p.dropTray()
-				p.note("Tray icon removed from its own menu.")
-			}),
-		}),
+		ID:         id,
+		Title:      title,
+		Tooltip:    tip,
+		Icon:       platform.StatusIcon{Name: icon},
+		MenuChrome: chrome,
+		Menu:       app.StatusMenuFromItems(p.trayMenu()),
 		OnClick: func() {
 			p.t.win.Show()
 			p.t.win.Raise()
@@ -178,11 +186,65 @@ func (p *desktopPage) toggleTray() {
 		p.note("The tray refused: " + err.Error())
 		return
 	}
-	p.tray = item
-	p.note("Registered through " + item.Backend() + " — live host: " + yesNo(item.Alive()) + ".")
+	if ours {
+		p.trayOurs = item
+	} else {
+		p.tray = item
+	}
+	drawn := "the desktop"
+	if ours {
+		drawn = "us"
+	}
+	p.note("Registered " + title + " through " + item.Backend() + " — live host: " +
+		yesNo(item.Alive()) + ", menu drawn by " + drawn + ".")
+	p.refresh()
 }
 
-// notify sends a notification with two buttons; a click comes back here.
+// trayMenu is the same tree for both icons, so the only difference a
+// person sees when they right-click is who drew it. It is nested two deep
+// on purpose: one level proves less, and a child of a child is the depth
+// that used to make the layout signature panic.
+func (p *desktopPage) trayMenu() []*widgets.MenuItem {
+	return []*widgets.MenuItem{
+		widgets.Item("Raise the tour", func() {
+			p.t.win.Show()
+			p.t.win.Raise()
+		}),
+		widgets.Submenu("Open a page",
+			widgets.Item("Shapes", func() { p.goToPage(pageShapes) }),
+			widgets.Item("Skins", func() { p.goToPage(pageSkins) }),
+			widgets.Item("Docking", func() { p.goToPage(pageDock) }),
+			widgets.Sep(),
+			widgets.Submenu("Further in",
+				widgets.Item("Access", func() { p.goToPage(pageAccess) }),
+				widgets.Item("Drag and drop", func() { p.goToPage(pageDrag) }),
+			),
+		),
+		widgets.Sep(),
+		widgets.Item("Take both icons away", func() {
+			p.dropTray()
+			p.note("Both tray icons removed, from a tray menu.")
+		}),
+	}
+}
+
+// goToPage opens a tour page from the tray menu and brings the window
+// forward with it: a menu item that quietly changed something behind a
+// window nobody can see has not done what it said.
+func (p *desktopPage) goToPage(page int) {
+	p.t.openPage(page)
+	p.t.win.Show()
+	p.t.win.Raise()
+	p.note("Opened the " + tourPages[page].name + " page from the tray menu.")
+}
+
+func (p *desktopPage) itemFor(chrome platform.StatusMenuChrome) platform.StatusItem {
+	if chrome == platform.ToolkitMenu {
+		return p.trayOurs
+	}
+	return p.tray
+}
+
 func (p *desktopPage) notify() {
 	if p.notifier == nil {
 		p.notifier = p.t.a.NewNotifier(platform.NotifierOptions{AppName: "uitoolkit tour"})
@@ -236,12 +298,25 @@ func (p *desktopPage) open(l *widgets.LinkButton, uri string) {
 	})
 }
 
+// dropTray takes both icons away. It is also the window's close handler:
+// an icon left behind by an application that has quit is a bug people
+// remember.
 func (p *desktopPage) dropTray() {
-	if p.tray == nil {
+	p.dropTrayItem(platform.HostMenu)
+	p.dropTrayItem(platform.ToolkitMenu)
+}
+
+func (p *desktopPage) dropTrayItem(chrome platform.StatusMenuChrome) {
+	item := p.itemFor(chrome)
+	if item == nil {
 		return
 	}
-	p.tray.Close()
-	p.tray = nil
+	item.Close()
+	if chrome == platform.ToolkitMenu {
+		p.trayOurs = nil
+	} else {
+		p.tray = nil
+	}
 	p.refresh()
 }
 
@@ -281,11 +356,19 @@ func (p *desktopPage) note(s string) {
 func (p *desktopPage) refresh() {
 	if p.trayB != nil {
 		if p.tray != nil {
-			p.trayB.Text = "Take the icon away"
+			p.trayB.Text = "Take the desktop's icon away"
 		} else {
 			p.trayB.Text = "Put an icon in the tray"
 		}
 		p.trayB.Invalidate()
+	}
+	if p.trayOurB != nil {
+		if p.trayOurs != nil {
+			p.trayOurB.Text = "Take our icon away"
+		} else {
+			p.trayOurB.Text = "…and one we draw ourselves"
+		}
+		p.trayOurB.Invalidate()
 	}
 	if p.seen != nil {
 		p.seen.SetText("CLIPBOARD now: " + oneLine(platform.ClipboardGet()) +
@@ -298,6 +381,10 @@ func (p *desktopPage) refresh() {
 	if p.tray != nil {
 		trayState = p.tray.Backend() + ", live host: " + yesNo(p.tray.Alive())
 	}
+	oursState := "not registered"
+	if p.trayOurs != nil {
+		oursState = p.trayOurs.Backend() + ", we draw the menu"
+	}
 	picked := p.picked
 	if picked == "" {
 		picked = "nothing picked yet"
@@ -309,6 +396,7 @@ func (p *desktopPage) refresh() {
 		[2]string{"primary", oneLine(platform.ClipboardPrimaryGet())},
 		[2]string{"", ""},
 		[2]string{"tray host", yesNo(platform.StatusItemAvailable())},
+		[2]string{"our own icon", oursState},
 		[2]string{"tray item", trayState},
 		[2]string{"menu chrome", yesNo(platform.HostMenuNative())},
 		[2]string{"notifications", notifierState(p.notifier)},
