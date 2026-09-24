@@ -584,3 +584,111 @@ func TestTrayCascadeOpensInsideStatusMenuWindow(t *testing.T) {
 		t.Fatalf("cascade %v outside the status-menu window %dx%d", b, ww, hh)
 	}
 }
+
+// A compositor with no zwlr_layer_shell_v1 cannot put the toolkit's menu
+// window where the tray clicked, so an item that asks for ToolkitMenu is
+// given HostMenu instead — and is told, in the options it ends up with.
+func TestStatusMenuChromeFallsBackWithoutPlacement(t *testing.T) {
+	defer platform.SimulateScreenPlacement(false)()
+	if got, _ := StatusMenuChromeFor(platform.ToolkitMenu); got != platform.HostMenu {
+		t.Fatalf("chrome = %v, want HostMenu", got)
+	}
+	if _, why := StatusMenuChromeFor(platform.ToolkitMenu); why == "" {
+		t.Fatal("no reason given for the demotion")
+	}
+	t.Setenv("UITK_TRAY", "fake")
+	a := New(Options{Look: style.DarkLook(), Headless: true})
+	item, err := a.NewStatusItem(platform.StatusItemOptions{
+		Title:      "Mail",
+		MenuChrome: platform.ToolkitMenu,
+		Menu:       StatusMenuFromItems([]*widgets.MenuItem{widgets.Item("Quit", func() {})}),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fake, ok := item.(*platform.FakeStatusItem)
+	if !ok {
+		t.Fatalf("backend %s", item.Backend())
+	}
+	if fake.MenuChrome() != platform.HostMenu {
+		t.Fatalf("item opened with %v, want HostMenu: a demoted item must export a real host menu", fake.MenuChrome())
+	}
+}
+
+// Where the window can be placed — X11, or a compositor with layer shell
+// — ToolkitMenu is honoured and nothing changes.
+func TestStatusMenuChromeKeptWithPlacement(t *testing.T) {
+	defer platform.SimulateScreenPlacement(true)()
+	if got, _ := StatusMenuChromeFor(platform.ToolkitMenu); got != platform.ToolkitMenu {
+		t.Fatalf("chrome = %v, want ToolkitMenu", got)
+	}
+	t.Setenv("UITK_TRAY", "fake")
+	a := New(Options{Look: style.DarkLook(), Headless: true})
+	item, err := a.NewStatusItem(platform.StatusItemOptions{
+		Title:      "Mail",
+		MenuChrome: platform.ToolkitMenu,
+		Menu:       StatusMenuFromItems([]*widgets.MenuItem{widgets.Item("Quit", func() {})}),
+		// Its own OnMenu, so the item is not wrapped for menu tracking
+		// and the fake underneath can be read straight out.
+		OnMenu: func(int32, int32) {},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fake, ok := item.(*platform.FakeStatusItem)
+	if !ok {
+		t.Fatalf("backend %s", item.Backend())
+	}
+	if fake.MenuChrome() != platform.ToolkitMenu {
+		t.Fatalf("item opened with %v, want ToolkitMenu", fake.MenuChrome())
+	}
+}
+
+// The default — an app that says nothing — is the desktop's own menu on
+// Linux whether or not the compositor can place windows: the fallback
+// only ever takes something away from ToolkitMenu.
+func TestStatusMenuChromeDefaultUnchanged(t *testing.T) {
+	if !platform.HostMenuNative() {
+		t.Skip("no native host menu on this OS")
+	}
+	for _, place := range []bool{true, false} {
+		restore := platform.SimulateScreenPlacement(place)
+		got, _ := StatusMenuChromeFor(platform.HostMenu)
+		restore()
+		if got != platform.HostMenu {
+			t.Fatalf("placement=%v: default chrome = %v, want HostMenu", place, got)
+		}
+	}
+}
+
+// ShowStatusMenu puts its window where the tray said, on a desktop that
+// places windows: the whole path from SNI coordinates through
+// statusMenuScreenPos and the logical-pixel conversion to the surface.
+func TestShowStatusMenuPlacesItsWindow(t *testing.T) {
+	a := New(Options{Look: style.DarkLook(), Headless: true})
+	a.ShowStatusMenu(900, 1040, StatusMenuFromItems([]*widgets.MenuItem{
+		widgets.Item("Raise", func() {}),
+		widgets.Sep(),
+		widgets.Item("Quit", func() {}),
+	}))
+	w := a.statusMenu
+	if w == nil || w.Closed() {
+		t.Fatal("no status-menu window")
+	}
+	mw, mh := measureStatusMenu(a.Look(), a.Scale(), StatusMenuToItems(StatusMenuFromItems(
+		[]*widgets.MenuItem{widgets.Item("Raise", func() {}), widgets.Sep(), widgets.Item("Quit", func() {})})))
+	wantX, wantY := statusMenuScreenPos(900, 1040, mw, mh)
+	wantX = platform.LogicalPosition(wantX, a.Scale())
+	wantY = platform.LogicalPosition(wantY, a.Scale())
+	x, y, ok := platform.SurfacePosition(w.Surface())
+	if !ok {
+		t.Fatal("the offscreen desktop does not say where the window is")
+	}
+	if x != wantX || y != wantY {
+		t.Fatalf("status menu at %d,%d, want %d,%d", x, y, wantX, wantY)
+	}
+	// A bottom-panel click opens the menu above the click, never below.
+	if wantY >= 1040 {
+		t.Fatalf("menu top %d is not above the click at 1040", wantY)
+	}
+}
