@@ -542,6 +542,37 @@ characters (an image as U+FFFC), with its caret and selection as offsets;
 the links on screen are link nodes that follow on their default action;
 `AccessibleSetText` replaces the text.
 
+## Panels, group boxes and cards
+
+`widgets.NewPanel(title, children...)` is a framed surface, and its two
+flags say which kind of frame:
+
+`Raised` makes it a **card** — a dialog, an overlay, anything standing
+above the page. A card's title is a caption band drawn inside its own top
+edge (`DrawPanel` + `DrawTitleBar`), and `Panel`'s insets reserve exactly
+that band, so the body starts below it.
+
+Plain (not raised) makes it a **group box** — the tour's pages, Settings'
+sections — and the look paints it its own way through `style.GroupBoxLook`:
+Win95's etched frame with the title as a legend straddling the top border,
+Breeze's centred heading, Adwaita's heading above a card.
+
+The distinction matters because a legend is drawn *outside* the frame it
+labels, so `GroupBoxInsets` cannot reserve room for it. A card given the
+group box treatment has its caption half above its own top edge, where the
+overlay clips it — which is what a user saw when they opened the file
+dialog in `win8`. So a raised panel never takes the group box path.
+
+`Window` is the third kind: an in-app window with the look's real window
+frame and caption (`style.WindowFrameLook`), a close button when `OnClose`
+is set, and the look's window silhouette as its clip. `DialogCard`, the
+message box and the link sheet are windows; the file dialog's card is a
+plain raised card. `Window` wins over `Raised` when both are set.
+
+`Overlay` centres a card in a dimmed layer. `MinCardW` and `MinCardH` are
+its smallest size in 1x design pixels — `Arrange` scales them by the look
+before comparing them with the measured size, which is in device pixels.
+
 ## Windows inside a window
 
 `widgets.NewMDIArea()` holds windows inside a window, as Qt's `QMdiArea`
