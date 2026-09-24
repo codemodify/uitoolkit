@@ -506,42 +506,32 @@ func (s *linuxStatusItem) GetLayout(parentID int32, recursionDepth int32, proper
 			derr = nil
 		}
 	}()
-	_, _ = recursionDepth, properties
-	s.mu.Lock()
-	items := copyMenu(s.menu)
-	rev = s.menuRev
-	host := s.hostMenu()
-	s.mu.Unlock()
-	if rev == 0 {
-		rev = 1
-	}
+	_ = properties
+	tree, rev, host := s.menuTree()
 	if !host {
 		trayDebug("dbusmenu.GetLayout parent=%d (ToolkitMenu empty; Menu=/NO_DBUSMENU)", parentID)
 		return rev, emptyMenuLayout(), nil
 	}
-	trayDebug("dbusmenu.GetLayout parent=%d rows=%d (HostMenu)", parentID, len(items))
-	if parentID > 0 {
-		i := int(parentID) - 1
-		if i >= 0 && i < len(items) {
-			return rev, dbusMenuLeafNode(parentID, items[i]), nil
+	trayDebug("dbusmenu.GetLayout parent=%d depth=%d rows=%d (HostMenu)", parentID, recursionDepth, len(tree.nodes))
+	if parentID != 0 {
+		if _, ok := tree.nodes[parentID]; !ok {
+			return rev, unknownMenuNode(parentID), nil
 		}
-		return rev, unknownMenuNode(parentID), nil
 	}
-	return rev, buildMenuLayout(items), nil
+	return rev, tree.layoutNode(parentID, recursionDepth), nil
 }
 
-// GetGroupProperties implements com.canonical.dbusmenu.
+// GetGroupProperties implements com.canonical.dbusmenu. Any id in the
+// tree resolves, not only a top-level row.
 func (s *linuxStatusItem) GetGroupProperties(ids []int32, properties []string) ([]dbusMenuProps, *dbus.Error) {
-	s.mu.Lock()
-	items := copyMenu(s.menu)
-	s.mu.Unlock()
+	tree, _, _ := s.menuTree()
 	out := make([]dbusMenuProps, 0, len(ids))
 	for _, id := range ids {
-		i := int(id) - 1
-		if i < 0 || i >= len(items) {
+		node, ok := tree.nodes[id]
+		if !ok {
 			continue
 		}
-		props := menuItemProps(items[i])
+		props := menuItemProps(node.item)
 		if len(properties) > 0 {
 			filtered := make(map[string]dbus.Variant, len(properties))
 			for _, name := range properties {
@@ -556,14 +546,12 @@ func (s *linuxStatusItem) GetGroupProperties(ids []int32, properties []string) (
 	return out, nil
 }
 
-// GetProperty implements com.canonical.dbusmenu.GetProperty.
+// GetProperty implements com.canonical.dbusmenu.GetProperty, for any id
+// in the tree.
 func (s *linuxStatusItem) GetProperty(id int32, name string) (dbus.Variant, *dbus.Error) {
-	s.mu.Lock()
-	items := copyMenu(s.menu)
-	s.mu.Unlock()
-	i := int(id) - 1
-	if i >= 0 && i < len(items) {
-		if v, ok := menuItemProps(items[i])[name]; ok {
+	tree, _, _ := s.menuTree()
+	if node, ok := tree.nodes[id]; ok {
+		if v, ok := menuItemProps(node.item)[name]; ok {
 			return v, nil
 		}
 	}
@@ -580,14 +568,17 @@ func (s *linuxStatusItem) Event(id int32, eventID string, data dbus.Variant, tim
 		_ = s.invokeOnMenu(0, 0, "dbusmenu.Event")
 		return nil
 	}
+	tree, _, _ := s.menuTree()
 	s.mu.Lock()
-	var fn func()
-	i := int(id) - 1
-	if i >= 0 && i < len(s.menu) && menuItemClickable(s.menu[i]) {
-		fn = s.menu[i].OnClick
-	}
 	dispatch := s.opts.Dispatch
 	s.mu.Unlock()
+	var fn func()
+	// A cascade parent is not a command: menuItemClickable says no to it,
+	// so a host that does send "clicked" for the row it opens a submenu
+	// from (some do, alongside AboutToShow) fires nothing.
+	if node, ok := tree.nodes[id]; ok && menuItemClickable(node.item) {
+		fn = node.item.OnClick
+	}
 	if fn != nil {
 		trayDebug("dbusmenu.Event clicked id=%d", id)
 	}
@@ -595,15 +586,13 @@ func (s *linuxStatusItem) Event(id int32, eventID string, data dbus.Variant, tim
 	return nil
 }
 
-// EventGroup implements com.canonical.dbusmenu.EventGroup.
+// EventGroup implements com.canonical.dbusmenu.EventGroup. An id that is
+// nowhere in the tree comes back in idErrors.
 func (s *linuxStatusItem) EventGroup(events []dbusMenuEvent) ([]int32, *dbus.Error) {
-	s.mu.Lock()
-	n := len(s.menu)
-	s.mu.Unlock()
+	tree, _, _ := s.menuTree()
 	var unknown []int32
 	for _, ev := range events {
-		i := int(ev.ID) - 1
-		if ev.ID < 1 || i >= n {
+		if _, ok := tree.nodes[ev.ID]; !ok {
 			unknown = append(unknown, ev.ID)
 			continue
 		}
@@ -613,6 +602,15 @@ func (s *linuxStatusItem) EventGroup(events []dbusMenuEvent) ([]int32, *dbus.Err
 }
 
 // AboutToShow implements com.canonical.dbusmenu.AboutToShow.
+//
+// The answer is "no update needed" for every id, parents included. Hosts
+// call this before opening a menu or a submenu, and the bool means "throw
+// away the layout you have and fetch it again" — not "may I open?". This
+// exporter hands out the whole tree in GetLayout and re-announces it with
+// LayoutUpdated whenever SetMenu changes it, so a child menu is already
+// on the host's side by the time it asks. Answering true would make every
+// submenu hover cost a round of GetLayout for a layout that did not move.
+// A menu built lazily per-open would need the opposite answer.
 func (s *linuxStatusItem) AboutToShow(id int32) (bool, *dbus.Error) {
 	_ = id
 	if !s.hostMenu() {
@@ -621,10 +619,26 @@ func (s *linuxStatusItem) AboutToShow(id int32) (bool, *dbus.Error) {
 	return false, nil
 }
 
-// AboutToShowGroup implements com.canonical.dbusmenu.AboutToShowGroup.
+// AboutToShowGroup implements com.canonical.dbusmenu.AboutToShowGroup:
+// no id needs an update (see [linuxStatusItem.AboutToShow]), and an id
+// that is not in the tree is reported in idErrors rather than silently
+// counted as fine.
 func (s *linuxStatusItem) AboutToShowGroup(ids []int32) ([]int32, []int32, *dbus.Error) {
-	_ = ids
-	return nil, nil, nil
+	if !s.hostMenu() {
+		_ = s.invokeOnMenu(0, 0, "dbusmenu.AboutToShowGroup")
+		return nil, nil, nil
+	}
+	tree, _, _ := s.menuTree()
+	var unknown []int32
+	for _, id := range ids {
+		if id == 0 {
+			continue // the root is always there
+		}
+		if _, ok := tree.nodes[id]; !ok {
+			unknown = append(unknown, id)
+		}
+	}
+	return nil, unknown, nil
 }
 
 // dbusMenuNode is the dbusmenu layout struct: D-Bus type (ia{sv}av).
@@ -671,6 +685,12 @@ func menuItemProps(it StatusMenuItem) map[string]dbus.Variant {
 		return props
 	}
 	props["label"] = dbus.MakeVariant(it.Text)
+	if len(menuItemChildren(it)) > 0 {
+		// The dbusmenu way of saying "this row opens a child menu"; hosts
+		// draw the cascade arrow off this property and never send a
+		// "clicked" for the row itself.
+		props["children-display"] = dbus.MakeVariant("submenu")
+	}
 	if it.Disabled {
 		props["enabled"] = dbus.MakeVariant(false)
 	}
@@ -686,29 +706,130 @@ func menuItemProps(it StatusMenuItem) map[string]dbus.Variant {
 	return props
 }
 
-func dbusMenuLeafNode(id int32, it StatusMenuItem) dbusMenuNode {
-	return dbusMenuNode{
-		ID:         id,
-		Properties: menuItemProps(it),
-		Children:   []dbus.Variant{},
-	}
+// menuNode is one row of a flattened menu: the row itself and the ids of
+// the rows it opens (empty for a command row).
+type menuNode struct {
+	item     StatusMenuItem
+	children []int32
 }
 
-func buildMenuLayout(items []StatusMenuItem) dbusMenuNode {
-	root := emptyMenuLayout()
-	if len(items) == 0 {
-		return root
+// menuTreeIndex is a whole menu addressed the way dbusmenu addresses it:
+// by id. Id 0 is the menu root, which is not a row — its children are
+// the top-level ids in roots.
+type menuTreeIndex struct {
+	nodes map[int32]menuNode
+	roots []int32
+}
+
+// flattenMenu numbers a menu tree in pre-order — 1, 2, 3, …, a parent
+// before the rows under it — and records each row's children.
+//
+// dbusmenu ids are flat: every row in the tree, at any depth, needs one
+// id that is unique across the whole menu, and GetLayout, GetProperty,
+// GetGroupProperties and Event all have to agree about which row an id
+// means. The old rule (id == index + 1 in one flat slice) had no ids left
+// for children and so could not describe a tree at all.
+//
+// Pre-order numbering is stable because it is a pure function of the menu:
+// the same rows always produce the same ids, so the four methods agree
+// without sharing state, and an id a host remembered from GetLayout still
+// names that row when the click comes back. That is also why the index is
+// rebuilt from the menu snapshot on each call instead of being cached
+// beside s.menu: a cache would have to be invalidated everywhere s.menu
+// is touched, and menus are a handful of rows.
+//
+// When the menu does change, SetMenu bumps menuRev and emits
+// LayoutUpdated, which is how a host learns its remembered ids are stale.
+func flattenMenu(items []StatusMenuItem) menuTreeIndex {
+	tree := menuTreeIndex{nodes: map[int32]menuNode{}}
+	next := int32(1)
+	var walk func(rows []StatusMenuItem) []int32
+	walk = func(rows []StatusMenuItem) []int32 {
+		ids := make([]int32, 0, len(rows))
+		for _, it := range rows {
+			id := next
+			next++
+			ids = append(ids, id)
+			node := menuNode{item: it}
+			// The parent is numbered before its subtree, then updated:
+			// walk allocates the children's ids.
+			tree.nodes[id] = node
+			if kids := menuItemChildren(it); len(kids) > 0 {
+				node.children = walk(kids)
+				tree.nodes[id] = node
+			}
+		}
+		return ids
 	}
-	children := make([]dbus.Variant, 0, len(items))
-	for i, it := range items {
-		children = append(children, dbus.MakeVariant(dbusMenuLeaf{
-			ID:         int32(i + 1),
-			Properties: menuItemProps(it),
+	tree.roots = walk(items)
+	return tree
+}
+
+// menuTree snapshots the menu as an id index, with the layout revision
+// and whether this item draws its own menu (HostMenu).
+func (s *linuxStatusItem) menuTree() (menuTreeIndex, uint32, bool) {
+	s.mu.Lock()
+	items := copyMenu(s.menu)
+	rev := s.menuRev
+	host := s.hostMenu()
+	s.mu.Unlock()
+	if rev == 0 {
+		rev = 1
+	}
+	return flattenMenu(items), rev, host
+}
+
+// childIDs is the ids under id, with 0 meaning the menu root.
+func (t menuTreeIndex) childIDs(id int32) []int32 {
+	if id == 0 {
+		return t.roots
+	}
+	return t.nodes[id].children
+}
+
+// layoutNode builds the layout subtree rooted at id (0 is the menu root).
+//
+// depth is the dbusmenu recursionDepth: -1 delivers every level, 0 this
+// node alone with an empty child array, and n this node plus n levels
+// below it. A host that asks for one level gets one level — it uses the
+// answer to decide whether it still has to call GetLayout when a submenu
+// opens.
+func (t menuTreeIndex) layoutNode(id, depth int32) dbusMenuNode {
+	node := dbusMenuNode{ID: id, Children: []dbus.Variant{}}
+	if id == 0 {
+		node.Properties = map[string]dbus.Variant{"children-display": dbus.MakeVariant("submenu")}
+	} else {
+		node.Properties = menuItemProps(t.nodes[id].item)
+	}
+	if depth != 0 {
+		node.Children = t.layoutChildren(t.childIDs(id), depth-1)
+	}
+	return node
+}
+
+// layoutChildren wraps each child as a dbusMenuLeaf variant. Leaves carry
+// their own children the same way, which is how the tree is expressed
+// without a recursive Go type (see [dbusMenuNode]): the nesting lives in
+// the dbus.Variant values, whose signature is fixed at "v".
+func (t menuTreeIndex) layoutChildren(ids []int32, depth int32) []dbus.Variant {
+	out := make([]dbus.Variant, 0, len(ids))
+	for _, id := range ids {
+		leaf := dbusMenuLeaf{
+			ID:         id,
+			Properties: menuItemProps(t.nodes[id].item),
 			Children:   []dbus.Variant{},
-		}))
+		}
+		if depth != 0 {
+			leaf.Children = t.layoutChildren(t.nodes[id].children, depth-1)
+		}
+		out = append(out, dbus.MakeVariant(leaf))
 	}
-	root.Children = children
-	return root
+	return out
+}
+
+// buildMenuLayout is the whole menu as one layout root (recursionDepth -1).
+func buildMenuLayout(items []StatusMenuItem) dbusMenuNode {
+	return flattenMenu(items).layoutNode(0, -1)
 }
 
 // assertFiniteMenuSignature is called before Export so a recursive layout
@@ -728,9 +849,15 @@ func assertFiniteMenuSignature() (err error) {
 	if leaf.String() != dbusMenuLayoutSig {
 		return fmt.Errorf("dbusmenu leaf signature %s, want %s", leaf, dbusMenuLayoutSig)
 	}
+	// Nested on purpose: the depth that could reintroduce the recursive
+	// type is a child of a child, not the top level.
 	layout := buildMenuLayout([]StatusMenuItem{
 		{Text: "Show"},
 		{Separator: true},
+		{Text: "Folders", Submenu: []StatusMenuItem{
+			{Text: "Inbox"},
+			{Text: "More", Submenu: []StatusMenuItem{{Text: "Archive"}}},
+		}},
 		{Text: "Quit", Checked: true},
 	})
 	got := dbus.SignatureOf(uint32(1), layout)
