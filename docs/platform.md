@@ -284,7 +284,7 @@ wayland-scanner private-code \
 # linux-dmabuf-unstable-v1, linux-explicit-synchronization-unstable-v1,
 # linux-drm-syncobj-v1, xdg-activation-v1, cursor-shape-v1,
 # xdg-toplevel-icon-v1 (staging), pointer-gestures-unstable-v1,
-# xdg-foreign-unstable-v2
+# xdg-foreign-unstable-v2, xdg-output-unstable-v1
 ```
 
 `zwlr_layer_shell_v1` is not in wayland-protocols — it is wlroots'
@@ -607,6 +607,44 @@ as-is with no output, letting the compositor choose (right on a single
 monitor, a guess anywhere else). Moving the window to a point on another
 monitor re-creates the role, because the protocol has no `set_output`.
 
+**The logical rectangle** (`outputSet.logicalBox`) comes from
+**`zxdg_output_v1`** — `logical_position` and `logical_size`, the
+compositor's own coordinates — wherever `zxdg_output_manager_v1` is bound
+(KWin advertises version 3; sway, Hyprland, wayfire and Mutter have it
+too). Without the manager it falls back to `wl_output`: geometry, and
+mode divided by `wl_output.scale`.
+
+That fallback is exact for an integer scale and **wrong under fractional
+scaling**, which is why xdg-output is bound at all: a 2880x1800 panel at
+175% still reports `wl_output.scale` 2, so mode/scale says 1440x900 where
+the compositor's logical space is 1645x1029 — and a menu constrained to
+the narrower rectangle hangs 200 logical pixels off the right edge of the
+screen. The `xdg_output` events are asynchronous like the rest of the
+registry: the request goes out as soon as both the output and the manager
+are known, nothing blocks for the reply, and `logicalBox` answers from
+`wl_output` until it arrives.
+
+`platform.ScreenRectAt(x, y)` is that rectangle from the outside, in
+logical pixels of the desktop, for whichever backend this process is on:
+the output holding the point on Wayland, the RandR monitor cut to
+`_NET_WORKAREA` on X11 (a Wayland client is not told where the panels
+are, and a layer surface is not pushed out of their way either), nothing
+elsewhere. `platform.SimulateScreenRect` is the headless hook.
+
+**Where a menu opened at a point goes** is one function,
+`platform.SolveScreenMenu(x, y, w, h, screen, gap)`
+(`platform/screenmenu.go`), used by the X11 and the Wayland paths alike
+so the two cannot drift. It is `SolvePopup` — the same flip / slide /
+resize rules, the same vocabulary — with the anchor rectangle SNI never
+sends filled in: the point grown by `ScreenMenuPointerGap` (24 device
+pixels, about a cursor's width, scaled by the caller), with the menu
+hanging off its bottom-right corner. So the menu is placed *beside* the
+point instead of on top of the icon, flips above it where there is no
+room below, slides back onto the screen where flipping does not help, and
+is shrunk only when it is larger than the screen itself. The rectangle to
+pass is the **whole surface** — for a tray menu, the parent plus its
+widest cascade chain, since the submenus open inside it.
+
 **Compositors.** KDE (KWin, v5 here), sway, Hyprland and wayfire offer
 layer shell. GNOME/Mutter has declined it; there
 `ScreenPlacementAvailable` is false and `app.NewStatusItem` falls back to
@@ -614,8 +652,11 @@ the desktop-drawn tray menu (see [tray.md](tray.md)). `UITK_LAYER_SHELL=0`
 forces that road on a compositor that has the protocol.
 
 **Not tested against a compositor.** The suite covers the fallback
-decision, the output arithmetic (`outputSet.layerMargins`), the configure
-size arithmetic and the `WindowOptions` plumbing;
+decision, the output arithmetic (`outputSet.layerMargins`,
+`outputSet.logicalBox` for both the `xdg_output` and the `wl_output`
+road), the menu-placement arithmetic (`SolveScreenMenu`, with the numbers
+from the KDE session that reported the two faults), the configure size
+arithmetic and the `WindowOptions` plumbing;
 `platform.SimulateScreenPlacement(bool)` is the hook that lets a headless
 test walk both roads. Nothing here has an automated test on a real
 Wayland session.
