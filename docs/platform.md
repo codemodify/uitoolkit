@@ -598,6 +598,16 @@ for its grab. `configure` is acked on the layer-surface object — there is
 no `xdg_surface` underneath — and `closed` becomes an `EventClose`, after
 which `Show` makes a fresh role.
 
+A popup opened from a layer surface (the tray menu's cascades) takes the
+one detour the protocol asks for: it has no `xdg_surface` parent, so the
+popup's own `xdg_surface.get_popup` is called with a **null** parent and
+`zwlr_layer_surface_v1.get_popup` then adopts it. The positioner, the
+grab, `popup_done`, `reposition` and the constraint adjustments are the
+same code and the same objects as an ordinary window's popup
+(`OpenPopup` branches on the parent's role and nothing else). The popups
+are closed before the layer role is destroyed — a parent role may not
+outlive them.
+
 **Multi-monitor.** Layer-shell margins are measured from the edges of one
 output, and the output is fixed when the role is created. The toolkit
 tracks `wl_output.geometry` and `.mode`, finds the output whose logical

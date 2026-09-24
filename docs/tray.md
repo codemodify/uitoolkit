@@ -192,11 +192,28 @@ parent row, is the host's business and is not asserted here.
 
 ### ToolkitMenu and Windows
 
-The cascade opens inside the one reused status-menu window, and
-`PlacePopupBeside` clamps a popup to its surface, so that window is
-measured for the parent menu **plus** the widest chain of children and
-the tallest menu in it. A window measured for the parent alone would
-fold every child menu on top of its parent.
+A cascade is a **surface of its own**, as every other menu in the toolkit
+is: an `xdg_popup` on Wayland — parented to the status menu's layer
+surface through `zwlr_layer_surface_v1.get_popup`, since a layer surface
+has no `xdg_surface` to be a parent and the popup is therefore created
+with `xdg_surface.get_popup(NULL)` first — and an override-redirect
+window on X11. The compositor (or `SolvePopup`) then places it against
+the **screen's** edges, so it is free to run past the status-menu
+window. The status-menu window is measured for the parent menu alone.
+
+Only where a popup cannot be a surface — `UITK_POPUPS=layer`, a
+compositor that refused one, headless and offscreen windows — does the
+cascade open inside the status-menu window, where `PlacePopupBeside`
+clamps it to that surface. The window is then measured for the parent
+menu **plus** the widest chain of children and the tallest menu in it
+(`measureStatusMenu`'s `cascadeInWindow`), because a window measured for
+the parent alone would fold every child menu on top of its parent.
+
+Measuring that way unconditionally is what made the tray menu on KDE
+Wayland a window wide enough for two menus, with an empty band under the
+last row where the tallest child menu's height had been reserved, and a
+cascade squeezed into the sliver the parent left it — scrolling, with
+arrows, on an otherwise empty screen.
 
 ## Per-OS behavior
 
@@ -261,13 +278,14 @@ invented for the point — so X11 and Wayland cannot drift apart:
   With the corner on the point the menu covered the tray icon it had
   been opened from. The gap is an approximation of an icon rectangle the
   protocol does not send.
-- **On the screen.** The rectangle constrained is the **whole surface**:
-  the parent menu plus its widest cascade chain (`measureStatusMenu`),
-  because the submenus open inside this one window. It flips to the
-  other side of the point where it does not fit, slides back on where
-  flipping does not help, and is shrunk only when it is larger than the
-  screen. Constraining the parent alone is what left the submenus off
-  the right edge of the screen.
+- **On the screen.** The rectangle constrained is the whole surface,
+  which is the parent menu — and, only where the cascades are drawn
+  inside the window rather than on surfaces of their own, the chain they
+  need as well (`measureStatusMenu`). It flips to the other side of the
+  point where it does not fit, slides back on where flipping does not
+  help, and is shrunk only when it is larger than the screen. Where the
+  cascades are inside the window, constraining the parent alone is what
+  left the submenus off the right edge of the screen.
 - **Against which screen.** `platform.ScreenRectAt` — on Wayland the
   output holding the point, in the compositor's own logical coordinates
   (`zxdg_output_v1`, which is the only source that is right under

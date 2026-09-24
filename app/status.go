@@ -274,23 +274,12 @@ func (a *Application) ShowStatusMenu(x, y int32, items []platform.StatusMenuItem
 	if len(rows) == 0 {
 		return
 	}
-	mw, mh := measureStatusMenu(a.Look(), a.Scale(), rows)
-	// The menu is measured in the look's device pixels and the tray names
-	// a point in root ones; a window's size and position are stated in
-	// logical pixels, and so is the screen the menu has to fit on.
-	lw := platform.LogicalPixels(mw, a.Scale())
-	lh := platform.LogicalPixels(mh, a.Scale())
-	box := statusMenuScreenRect(x, y, lw, lh, a.Scale())
+	// Whether a cascade will be a surface of its own decides how large
+	// the window has to be, so it is settled before anything is measured.
+	inWindow := !a.statusMenuCascadesOnSurfaces()
+	mw, mh, box := a.statusMenuLayout(x, y, rows, inWindow)
 	px, py := box.X, box.Y
-	// The solver may have shrunk the menu to fit a screen smaller than
-	// it; the popup inside the window is arranged to whatever came back.
-	if box.W < lw {
-		mw = platform.DevicePixels(box.W, a.Scale())
-	}
-	if box.H < lh {
-		mh = platform.DevicePixels(box.H, a.Scale())
-	}
-	lw, lh = box.W, box.H
+	lw, lh := box.W, box.H
 	w := a.statusMenu
 	if w == nil || w.Closed() {
 		opts := platform.WindowOptions{
@@ -315,6 +304,17 @@ func (a *Application) ShowStatusMenu(x, y int32, items []platform.StatusMenuItem
 		}
 		w.statusMenu = true
 		a.statusMenu = w
+		// Until the window existed, whether its cascades would be
+		// surfaces was a guess from the backend; now the surface itself
+		// can be asked. Measure again where the guess was wrong.
+		if now := !w.popupSurfacesLikely(); now != inWindow {
+			inWindow = now
+			mw, mh, box = a.statusMenuLayout(x, y, rows, inWindow)
+			px, py, lw, lh = box.X, box.Y, box.W, box.H
+			if err := w.Surface().Resize(lw, lh); err != nil {
+				trayStatusLog("ShowStatusMenu resize: %v", err)
+			}
+		}
 	} else if err := w.Surface().Resize(lw, lh); err != nil {
 		trayStatusLog("ShowStatusMenu resize: %v", err)
 	}
@@ -354,8 +354,9 @@ func (a *Application) bindStatusMenu(w *Window, rows []*widgets.MenuItem, mw, mh
 	if px != 0 || py != 0 {
 		placed = platform.PlaceSurfaceAtScreen(w.Surface(), px, py)
 	}
-	trayStatusLog("ShowStatusMenu place=%d,%d size=%dx%d popupWin visible=%v placed=%v reused",
-		px, py, mw, mh, w.Visible(), placed)
+	sw, sh := w.SurfaceSize()
+	trayStatusLog("ShowStatusMenu place=%d,%d size=%dx%d appScale=%.3f winScale=%.3f surface=%dx%d menu=%v surfaces=%v visible=%v placed=%v",
+		px, py, mw, mh, a.Scale(), w.Scale(), sw, sh, pop.Bounds(), w.popupsOnSurfaces(), w.Visible(), placed)
 	return true
 }
 
@@ -403,15 +404,74 @@ func (a *Application) hideStatusMenu() {
 	}
 }
 
-// measureStatusMenu sizes the status-menu window. The window holds the
-// whole cascade: a child menu is a popup inside this surface, and
-// widget.PlacePopupBeside clamps it to the surface box, so a window
-// measured for the parent alone would squeeze every submenu on top of
-// it. The box is therefore the parent's width plus the widest chain of
+// statusMenuCascadesOnSurfaces reports whether a submenu opened from the
+// status menu will be a surface of its own — an xdg_popup on the layer
+// surface, an override-redirect window on X11 — rather than a popup drawn
+// inside the status-menu window. It is what decides the window's size
+// (see measureStatusMenu).
+//
+// The live window is the honest answer and is used wherever there is one.
+// The first time the menu opens there is none yet, and the backend's own
+// rules are the best guess; ShowStatusMenu measures again once the window
+// exists and the guess can be checked.
+func (a *Application) statusMenuCascadesOnSurfaces() bool {
+	if a == nil || a.headless || !platform.PopupSurfacesAllowed() {
+		return false
+	}
+	if w := a.statusMenu; w != nil && !w.Closed() {
+		return w.popupSurfacesLikely()
+	}
+	return true
+}
+
+// statusMenuLayout measures the menu and solves where its window goes:
+// the menu's size in the look's device pixels and the window's box in
+// logical pixels of the desktop.
+//
+// The menu is measured in the look's device pixels and the tray names a
+// point in root ones; a window's size and position are stated in logical
+// pixels, and so is the screen the menu has to fit on. The solver may
+// have shrunk the menu to fit a screen smaller than it, and the popup
+// inside the window is then arranged to whatever came back.
+func (a *Application) statusMenuLayout(x, y int32, rows []*widgets.MenuItem, inWindow bool) (int, int, platform.FrameRect) {
+	mw, mh := measureStatusMenu(a.Look(), a.Scale(), rows, inWindow)
+	lw := platform.LogicalPixels(mw, a.Scale())
+	lh := platform.LogicalPixels(mh, a.Scale())
+	box := statusMenuScreenRect(x, y, lw, lh, a.Scale())
+	if box.W < lw {
+		mw = platform.DevicePixels(box.W, a.Scale())
+	}
+	if box.H < lh {
+		mh = platform.DevicePixels(box.H, a.Scale())
+	}
+	return mw, mh, box
+}
+
+// measureStatusMenu sizes the status-menu window: the parent menu alone,
+// which is all the window ever shows.
+//
+// cascadeInWindow is the exception. Where a submenu cannot be a surface
+// of its own — UITK_POPUPS=layer, a compositor that refused a popup,
+// headless and offscreen windows — it is a popup drawn *inside* this
+// window, and widget.PlacePopupBeside clamps it to the surface box: a
+// window measured for the parent alone would squeeze every submenu on top
+// of it. The box is then the parent's width plus the widest chain of
 // children, and the tallest menu in that chain.
-func measureStatusMenu(look style.LookAndFeel, scale float32, items []*widgets.MenuItem) (int, int) {
+//
+// It used to be measured that way always, and that is what made the tray
+// menu a window wide enough for two menus with an empty band under the
+// rows, with the cascade scrolling in the sliver the parent left it.
+func measureStatusMenu(look style.LookAndFeel, scale float32, items []*widgets.MenuItem, cascadeInWindow bool) (int, int) {
 	host := &statusMeasureHost{look: look, scale: scale}
-	fw, fh := statusMenuBox(host, items)
+	var fw, fh float32
+	if cascadeInWindow {
+		fw, fh = statusMenuBox(host, items)
+	} else {
+		pop := widgets.NewPopupMenu(items...)
+		pop.SetHost(host)
+		sz := pop.Measure(layout.Unbounded())
+		fw, fh = sz.X, sz.Y
+	}
 	w, h := int(fw+0.5), int(fh+0.5)
 	if w < 80 {
 		w = 80
@@ -424,7 +484,8 @@ func measureStatusMenu(look style.LookAndFeel, scale float32, items []*widgets.M
 
 // statusMenuBox is the intrinsic size of a menu and everything it can
 // cascade into: submenus open to the right, so widths add and heights
-// only need the tallest level.
+// only need the tallest level. It is the measurement for a window whose
+// cascades are drawn inside it (see measureStatusMenu).
 func statusMenuBox(host *statusMeasureHost, items []*widgets.MenuItem) (float32, float32) {
 	pop := widgets.NewPopupMenu(items...)
 	pop.SetHost(host)
@@ -501,8 +562,9 @@ func statusMenuOrigin(winW, winH int, screenX, screenY int32) paintengine2d.Poin
 //
 // screenX, screenY are the point the host named (SNI ContextMenu, in the
 // display's device pixels); menuW, menuH are the whole surface in logical
-// pixels — the parent menu plus its widest cascade, because the submenus
-// open inside this window (see measureStatusMenu). Both go to
+// pixels — the parent menu, and where its cascades are drawn inside the
+// window rather than on surfaces of their own, the chain they need as
+// well (see measureStatusMenu). Both go to
 // [platform.SolveScreenMenu], which is the toolkit's one answer to "where
 // does a menu opened at a point go" and is shared with every other
 // backend: it keeps the menu clear of the point instead of on top of the
