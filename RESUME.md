@@ -24,16 +24,33 @@ windows, snapping, and the toolkit changes writing them forced;
 changelog links to it. The dated `docs/e2e/**` reports still name the old
 paths: they are records of runs, kept as they were run.
 
-Everything is merged to `dev` and pushed, in both repos: uitoolkit `c6658ec`
-(plus the atlas commit on top) and paintengine2d `6206e36`. The only local
-checkouts are `~/go/src/github.com/codemodify/uitoolkit` (the original
-folder), `uitoolkit-core` (`dev`) and `paintengine2d` (`dev`); the per-agent
-worktrees are gone, their branches kept.
+Everything is merged to `dev` and pushed, across five repositories:
 
-**The goal since 2026-09-21 is a solid release for Linux.** Nothing is
-tagged: uitoolkit's `go.mod` still builds paintengine2d from
-`replace ../paintengine2d`, so a release needs paintengine2d tagged first and
-the replace dropped. **That decision is the author's and has not been taken.**
+| repository | `dev` | what it is |
+| --- | --- | --- |
+| [uitoolkit](https://github.com/codemodify/uitoolkit) | `7c527e0` | the toolkit, version 0.20.0, untagged |
+| [paintengine2d](https://github.com/codemodify/paintengine2d) | `6206e36` | the engine, tagged **v0.11.0** |
+| [comms-mail](https://github.com/codemodify/comms-mail) | `fde66c3` | mail: daemon, GUI, demo launcher |
+| [media-player-music](https://github.com/codemodify/media-player-music) | `ca6f7ee` | one player, three faces |
+| [comms-chat-lan](https://github.com/codemodify/comms-chat-lan) | `7e896b6` | LAN chat: server, clientd, GUI, TUI |
+
+There is now **one checkout per repository** — `~/go/src/github.com/codemodify/<name>`,
+each on `dev`. The per-agent worktrees are gone and `uitoolkit-core` with them;
+that folder was a second worktree of uitoolkit and no longer exists, so a path
+naming it further down this file is history rather than a place. Every feature
+branch is merged into `dev` and pushed.
+
+**The goal since 2026-09-21 is a solid release for Linux, and as of
+2026-09-23 the toolkit is ready to be tagged.** paintengine2d is tagged
+v0.11.0 and the `replace` directive is gone, so uitoolkit resolves the engine
+from the proxy like any other dependency. The 0.20.0 release notes are
+written (README, Version). Three applications build against the published
+module with no `replace` and no internal imports, which is the completeness
+test. **Tagging itself is the author's to do and has not been done.**
+
+One thing to say out loud when it is: anyone on **v0.19.1** is broken if they
+use the `a11y` package, because that tag predates it — `go mod tidy` resolving
+to the newest tag is how the chat app hit it.
 
 **History was rewritten on 2026-09-21** so every commit in both repos carries
 one author, `codemodify <codemodify@linux.com>`, with no co-author trailers.
