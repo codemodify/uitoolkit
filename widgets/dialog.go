@@ -11,8 +11,11 @@ import (
 // Overlay is a dimmed full-window layer with a centered card (dialog pattern).
 type Overlay struct {
 	widget.Base
-	Card     widget.Component
-	OnClose  func()
+	Card    widget.Component
+	OnClose func()
+	// MinCardW and MinCardH are the smallest the card may be, in 1x
+	// design pixels: Arrange scales them by the look (style.Dip) before
+	// comparing them with the measured size, which is in device pixels.
 	MinCardW float32
 	MinCardH float32
 	// Modal overlays ignore clicks outside the card (message boxes,
@@ -71,12 +74,15 @@ func (o *Overlay) Arrange(r paintengine2d.Rect) {
 		return
 	}
 	cs := o.Card.Measure(layout.Loose(r.Dx()*0.8, r.Dy()*0.8))
-	minW, minH := o.MinCardW, o.MinCardH
-	if minW < 280 {
-		minW = 280
+	// The floors are 1x design pixels; the measured size is device
+	// pixels, so they only mean the same thing once scaled.
+	lk := o.Look()
+	minW, minH := style.Dip(lk, o.MinCardW), style.Dip(lk, o.MinCardH)
+	if f := style.Dip(lk, 280); minW < f {
+		minW = f
 	}
-	if minH < 140 {
-		minH = 140
+	if f := style.Dip(lk, 140); minH < f {
+		minH = f
 	}
 	if cs.X < minW {
 		cs.X = minW
