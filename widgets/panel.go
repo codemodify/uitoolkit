@@ -14,7 +14,12 @@ import (
 // window with a caption bar (dialogs, message boxes).
 type Panel struct {
 	widget.Base
-	Title  string
+	Title string
+	// Raised makes the panel a card — a dialog, an overlay — rather than
+	// a group box. A card's title is a caption band inside its own top
+	// edge, and the insets reserve room for it; a group box's title is a
+	// legend on the top border, which is outside the bounds and so cannot
+	// be reserved for. Window, when set, wins over both.
 	Raised bool
 	// Window paints the panel as an in-app window: the look's frame and
 	// caption with Title, and a close button when OnClose is set.
@@ -67,7 +72,10 @@ func (p *Panel) insets() style.Insets {
 		}
 		return style.Insets{Top: in.Top + m.Pad, Right: in.Right + m.Pad, Bottom: in.Bottom + m.Pad, Left: in.Left + m.Pad}
 	}
-	if g, ok := lk.(style.GroupBoxLook); ok {
+	// A raised panel is a card (a dialog, an overlay), not a group box:
+	// a group box hangs its title on the top border, where a card has no
+	// room for it. Cards take the plain pad + title band below.
+	if g, ok := lk.(style.GroupBoxLook); ok && !p.Raised {
 		return g.GroupBoxInsets(p.Title != "")
 	}
 	in := style.Insets{Top: m.Pad, Right: m.Pad, Bottom: m.Pad, Left: m.Pad}
@@ -100,7 +108,7 @@ func (p *Panel) Paint(ctx *paintengine2d.Context) {
 		})
 		return
 	}
-	if g, ok := lk.(style.GroupBoxLook); ok {
+	if g, ok := lk.(style.GroupBoxLook); ok && !p.Raised {
 		g.DrawGroupBox(ctx, b, p.Title, p.Raised)
 		return
 	}
