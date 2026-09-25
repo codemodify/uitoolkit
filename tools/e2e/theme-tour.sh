@@ -1,5 +1,6 @@
 #!/bin/bash
-# theme-tour.sh N [PACK...] — show the gallery in every theme pack (or the
+# theme-tour.sh N [PACK...] — show the tour's Controls page (the widget
+# showcase) in every theme pack (or the
 # packs named) on the real GPU in nested KWin instance N, and render the same
 # pack headless with the CPU rasterizer next to it, so an engine that draws
 # differently on the GPU (gradients, radial lights, paths, shadows) shows up.
@@ -15,7 +16,7 @@ RIG="$(cd "$(dirname "$0")" && pwd)"; N="${1:?instance}"; shift
 ROOT="$(cd "$RIG/../.." && pwd)"; D="$RIG/$N"; OUT="$D/tour"; BIN="$D/bin"
 [ -f "$D/bus.addr" ] || { echo "instance $N is not running: ./start.sh $N"; exit 1; }
 mkdir -p "$OUT" "$BIN"
-(cd "$ROOT" && go build -o "$BIN/gallery" ./examples/gallery && go build -o "$BIN/sheet" ./cmd/uitk-themesheet) || exit 1
+(cd "$ROOT" && go build -o "$BIN/tour" ./examples/uitoolkit-sample-tour && go build -o "$BIN/sheet" ./cmd/uitk-themesheet) || exit 1
 if [ $# -gt 0 ]; then
   PACKS=("$@")
 else
@@ -25,11 +26,11 @@ fi
 for P in "${PACKS[@]}"; do
   # The GPU window, in the nested compositor.
   # Animations off in both, so the GPU and CPU stills catch the same frame.
-  UITK_ANIMATIONS=0 UITK_THEME="$P" RUN_WAIT=3 "$RIG/run.sh" "$N" "$BIN/gallery" >/dev/null
+  UITK_ANIMATIONS=0 UITK_THEME="$P" RUN_WAIT=3 "$RIG/run.sh" "$N" "$BIN/tour" -page controls >/dev/null
   "$RIG/shot.sh" "$N" "tour-$P" >/dev/null && mv "$D/shots/tour-$P.png" "$OUT/$P-gpu.png"
   # The same content on the CPU, headless (never on a display).
   TMP="$(mktemp -d)"
-  (cd "$TMP" && env -u WAYLAND_DISPLAY -u DISPLAY UITK_ANIMATIONS=0 UITK_THEME="$P" XDG_CONFIG_HOME="$TMP/cfg" "$BIN/gallery" -headless >/dev/null 2>&1 && mv gallery.png "$OUT/$P-cpu.png")
+  (cd "$TMP" && env -u WAYLAND_DISPLAY -u DISPLAY UITK_ANIMATIONS=0 UITK_THEME="$P" XDG_CONFIG_HOME="$TMP/cfg" "$BIN/tour" -page controls -headless >/dev/null 2>&1 && mv tour.png "$OUT/$P-cpu.png")
   rm -rf "$TMP"
   grep -qi "panic\|fatal" "$D/app.log" && echo "$P  APP ERROR (see $D/app.log)" | tee -a "$OUT/tour.txt" || echo "$P  ok" >> "$OUT/tour.txt"
 done

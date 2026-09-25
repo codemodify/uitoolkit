@@ -1,17 +1,18 @@
 // Package showcase draws every control the toolkit has, once, in the
 // look it is given: a widget gallery an application can put on screen.
 //
-// It exists because more than one application wants it. examples/gallery
-// is the standalone showcase; the Settings app shows the same thing under
-// its theme preview, so a theme can be judged on every control at once;
-// and any application with a theme picker of its own can do the same with
-// [Pane].
+// It exists because more than one application wants it. The Settings app
+// shows it under its theme preview, so a theme can be judged on every
+// control at once; the tour shows it over three of its pages; cmd/uitk-shots
+// drives it for the README's pictures; and any application with a theme
+// picker of its own can do the same.
 //
 // [Window] lays it out as a window's whole content (menu bar, title bar,
 // tool bar, status bar); [Pane] lays it out as one scrolling column with
-// no chrome of its own, for dropping into a page of an existing window.
-// [App] is [Window] wired to a live application, which is what a
-// standalone showcase wants.
+// no chrome of its own, for dropping into a page of an existing window;
+// [Build] hands over the widgets unarranged, for a caller that wants to
+// divide them between pages of its own. [App] is [Window] wired to a live
+// application, which is what a standalone showcase wants.
 //
 // The showcase never re-themes or closes anything by itself: it asks the
 // [Host] it is given, and a nil field simply greys its control out.
@@ -86,19 +87,21 @@ func App(a *app.Application, win *app.Window, light bool) widget.Component {
 // across the top, the buttons and fields in a scrolling column
 // beside the tabbed views, the status bar along the bottom.
 func Window(host Host) widget.Component {
-	p := buildParts(host)
+	p := Build(host)
 	leftCol := widgets.NewColumn(
 		widgets.NewTitle("uitoolkit"),
 		widgets.NewLabel("paintengine2d  ·  v"+uitoolkit.Version),
-		p.buttons,
-		p.fields,
+		p.Buttons,
+		p.Fields,
 	).WithGap(10).WithPad(12)
 	left := widgets.NewScrollView(leftCol)
 
-	tabs := widgets.NewTabView(p.tabs()...)
+	tabs := widgets.NewTabView(p.Tabs()...)
+	tabs.SetAccessibleName("Views")
+	tabs.Bar().SetAccessibleName("Views")
 	tabs.OnChange = func(i int) {
-		if i >= 0 && i < len(p.views) {
-			p.status.Set(0, "Tab: "+p.views[i].title)
+		if i >= 0 && i < len(p.Views) {
+			p.Status.Set(0, "Tab: "+p.Views[i].Title)
 		}
 	}
 	right := widgets.NewPad(10, tabs)
@@ -106,7 +109,7 @@ func Window(host Host) widget.Component {
 	split := widgets.NewSplitter(widgets.SplitColumns, left, right)
 	split.Ratio = 0.46
 
-	root := widgets.NewColumn(p.menu, p.chrome, p.tools, split, p.status).WithGap(0)
+	root := widgets.NewColumn(p.Menu, p.Chrome, p.Tools, split, p.Status).WithGap(0)
 	root.AddFlex(split, 1)
 	return root
 }
@@ -118,50 +121,87 @@ func Window(host Host) widget.Component {
 // the theme preview, so a pack can be judged on every control at once
 // instead of a tab at a time.
 func Pane(host Host) *widgets.ScrollView {
-	p := buildParts(host)
+	p := Build(host)
 	col := widgets.NewColumn(
-		p.tools,
-		widgets.NewWrap(p.buttons, p.fields),
+		p.Tools,
+		widgets.NewWrap(p.Buttons, p.Fields),
 		widgets.NewSpacerSize(0, 2),
 	).WithGap(10).WithPad(10)
-	for _, v := range p.views {
-		col.Add(widgets.NewHeightBox(v.height, v.content))
+	for _, v := range p.Views {
+		col.Add(widgets.NewHeightBox(v.Height, v.Content))
 	}
-	col.Add(p.status)
+	col.Add(p.Status)
 	return widgets.NewScrollView(col)
 }
 
-// galleryView is one of the showcase's big views: a tab of the window, a
-// panel stacked in the Settings pane. Height is what the pane holds it to,
-// where the scrolling column bounds nothing and a list would otherwise be
-// as tall as all its rows; 0 leaves the view its own height.
-type galleryView struct {
-	title   string
-	content widget.Component
-	height  float32
+// View is one of the showcase's big views: a tab of the window, a panel
+// stacked in the Settings pane, a page of the tour. Height is what a
+// scrolling column holds it to, where nothing bounds it and a list would
+// otherwise be as tall as all its rows; 0 leaves the view its own height.
+type View struct {
+	Title   string
+	Content widget.Component
+	Height  float32
 }
 
-// parts is one built set of the showcase's widgets. The window and
-// the Settings pane arrange the same parts differently; neither owns them.
-type parts struct {
-	menu    *widgets.MenuBar
-	chrome  *widgets.TitleBar
-	tools   *widgets.ToolBar
-	buttons *widgets.Panel
-	fields  *widgets.Panel
-	views   []galleryView
-	status  *widgets.StatusBar
+// Parts is one built set of the showcase's widgets, taken apart. [Window]
+// and [Pane] arrange the same parts differently and neither owns them, and
+// an application that wants the showcase over more than one page — the
+// tour shows the controls, the collections and the documents on three —
+// arranges them itself.
+//
+// Every field is a live widget of one build: put each of them in at most
+// one place, and call [Build] again for another.
+type Parts struct {
+	// Menu and Chrome are the window furniture the showcase draws as
+	// widgets: a menu bar and a TitleBar under the real caption.
+	Menu   *widgets.MenuBar
+	Chrome *widgets.TitleBar
+	// Tools is the tool bar: icon buttons, a divider, a text tool, a toggle.
+	Tools *widgets.ToolBar
+	// Buttons and Fields are the small controls, in two panels.
+	Buttons *widgets.Panel
+	Fields  *widgets.Panel
+	// Views are the big ones, in the order the window tabs them.
+	Views []View
+	// Status is where every control above reports what it just did. It is
+	// one widget: whoever shows the controls should show it too.
+	Status *widgets.StatusBar
 }
 
-func (p parts) tabs() []widgets.Tab {
-	out := make([]widgets.Tab, len(p.views))
-	for i, v := range p.views {
-		out[i] = widgets.Tab{Title: v.title, Content: v.content}
+// Tabs is Views as a tab view's pages.
+func (p Parts) Tabs() []widgets.Tab {
+	out := make([]widgets.Tab, len(p.Views))
+	for i, v := range p.Views {
+		out[i] = widgets.Tab{Title: v.Title, Content: v.Content}
 	}
 	return out
 }
 
-func buildParts(host Host) parts {
+// Named is the view of that title, and whether there is one.
+func (p Parts) Named(title string) (View, bool) {
+	for _, v := range p.Views {
+		if v.Title == title {
+			return v, true
+		}
+	}
+	return View{}, false
+}
+
+// Some is the views of these titles, in the order asked for; a title with
+// no view is skipped.
+func (p Parts) Some(titles ...string) []View {
+	var out []View
+	for _, t := range titles {
+		if v, ok := p.Named(t); ok {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
+// Build is the showcase's widgets, built once and handed over unarranged.
+func Build(host Host) Parts {
 	light := host.Light
 	root := func() widget.Component { return nil }
 	if host.Root != nil {
@@ -176,6 +216,7 @@ func buildParts(host Host) parts {
 	})
 
 	name := widgets.NewTextField("Ada Lovelace", "Display name", nil)
+	name.SetAccessibleName("Display name")
 	columns := widgets.NewNumberField(1, 12, 3, 1, func(v float64) {
 		status.Set(0, fmt.Sprintf("Columns  %d", int(v)))
 	})
@@ -379,16 +420,18 @@ func buildParts(host Host) parts {
 		cutBtn, copyBtn, pasteBtn, widgets.ToolDivider(),
 		aboutTool, snap,
 	)
+	toolbar.SetAccessibleName("Tools")
 
 	long := widgets.NewColumn()
 	for i := 1; i <= 40; i++ {
 		long.Add(widgets.NewLabel(fmt.Sprintf("Row %02d  —  scrollable content", i)))
 	}
 	scroll := widgets.NewScrollView(long)
+	scroll.SetAccessibleName("Rows")
 
 	files := []string{
 		"README.md", "go.mod", "LICENSE", "widget/base.go", "style/look.go",
-		"examples/gallery/main.go", "examples/notes/main.go", "platform/x11_linux.go",
+		"examples/uitoolkit-sample-tour/main.go", "examples/uitoolkit-sample-notes/main.go", "platform/x11_linux.go",
 		"app/window.go", "layout/flex.go",
 	}
 	for i := 0; i < 30; i++ {
@@ -544,10 +587,18 @@ func buildParts(host Host) parts {
 	// A dialog form: labels line up in their own column (right-aligned in
 	// Mac looks), fields take the rest.
 	account := widgets.NewForm()
-	account.AddRow("Name", widgets.NewTextField("Ada Lovelace", "Full name", nil))
-	account.AddRow("Email", widgets.NewTextField("ada@example.com", "Address", nil))
+	// A form's label is drawn beside its row but does not name it to a
+	// screen reader, so each field says what it is itself.
+	accountName := widgets.NewTextField("Ada Lovelace", "Full name", nil)
+	accountName.SetAccessibleName("Account name")
+	accountEmail := widgets.NewTextField("ada@example.com", "Address", nil)
+	accountEmail.SetAccessibleName("Account email")
+	account.AddRow("Name", accountName)
+	account.AddRow("Email", accountEmail)
 	account.AddRow("Server type", widgets.NewComboBox([]string{"IMAP", "POP3", "Exchange"}, 0, nil))
-	account.AddRow("Port", widgets.NewNumberField(1, 65535, 993, 1, nil))
+	port := widgets.NewNumberField(1, 65535, 993, 1, nil)
+	port.SetAccessibleName("Port")
+	account.AddRow("Port", port)
 	account.AddRow("Renews", widgets.NewDateField(time.Date(2026, time.September, 14, 0, 0, 0, 0, time.Local), nil))
 	account.AddRow("Label colour", widgets.NewColorButton(paintengine2d.RGB(0.13, 0.43, 0.47), nil))
 	account.AddRow("Show as", widgets.NewSegmented([]string{"List", "Cards", "Columns"}, 1, nil))
@@ -599,14 +650,16 @@ func buildParts(host Host) parts {
 		),
 	)
 
-	return parts{
-		menu:    menubar,
-		chrome:  chrome,
-		tools:   toolbar,
-		buttons: buttons,
-		fields:  fields,
-		status:  status,
-		views: []galleryView{
+	menubar.SetAccessibleName("Main menu")
+
+	return Parts{
+		Menu:    menubar,
+		Chrome:  chrome,
+		Tools:   toolbar,
+		Buttons: buttons,
+		Fields:  fields,
+		Status:  status,
+		Views: []View{
 			{"Scroll", widgets.NewPanel("ScrollView", scroll), 240},
 			{"List", widgets.NewPanel("ListView", listPane), 340},
 			{"Tree", widgets.NewPanel("TreeView", treePane), 0},

@@ -600,7 +600,7 @@ bar that follows the windows as they open and close.
 `SetViewMode(MDITabbed)` shows them as document tabs instead, Qt's tabbed
 view. Assistive technology reads the area as a desktop pane and each window
 as an internal frame (AT-SPI's roles for a multiple-document interface)
-with its caption buttons. `examples/mdi` is a multiple-document editor.
+with its caption buttons. `examples/uitoolkit-sample-mdi` is a multiple-document editor.
 
 ## Wizards
 
@@ -623,7 +623,7 @@ Next or Finish and Escape Cancel, as a dialog's default and cancel buttons
 (a text field without `OnSubmit` lets Return through to them); Alt+B, N,
 F, S and H press the buttons. The wizard is a dialog to assistive
 technology, saying its step ("Step 2 of 4: Your account"), the page a
-group and the steps a list. `examples/wizard` sets up an account.
+group and the steps a list. `examples/uitoolkit-sample-wizard` sets up an account.
 
 ## Editable combo boxes
 
@@ -667,7 +667,7 @@ it. `Window.OpenURI` is the same for an app's own links.
 sides — Qt's `QMainWindow` docking, the panels of VS Code, Qt Creator and
 the JetBrains IDEs. `dock.NewPanel(name, title, content)` makes a panel and
 `host.Dock(panel, dock.SideLeft)` puts it in an area. The Inspector demo is
-the pilot: `go run ./examples/inspector`. For windows that stay separate
+the pilot: `go run ./examples/uitoolkit-sample-inspector`. For windows that stay separate
 toplevels and merely snap to one another, see
 [Windows that snap together](#windows-that-snap-together) below.
 
@@ -750,7 +750,7 @@ host.OnLayoutChanged = func() { _ = host.SaveLayoutFile("inspector") }
 A first run has no file and a broken file cannot be read; both leave the
 host as it was, and the error tells the two apart
 (`errors.Is(err, fs.ErrNotExist)`) for an app that wants to say so.
-`examples/inspector` is the worked example.
+`examples/uitoolkit-sample-inspector` is the worked example.
 
 The floating geometry a layout saves is in logical pixels, the unit a
 window's size and position are stated in, so a layout saved at one display

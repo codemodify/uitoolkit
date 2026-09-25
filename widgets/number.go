@@ -65,6 +65,18 @@ func (n *NumberField) Tooltip() string { return n.Tip }
 // Field is the inner editor.
 func (n *NumberField) Field() *TextField { return n.field }
 
+// SetAccessibleName names the spin button and the editor inside it. The
+// keyboard lands on the editor — the accessibility tree hides it, since
+// the spin button is an [a11y] leaf, but anything that walks the
+// focusable widgets instead of the tree meets it — so both carry the
+// name rather than only the one a screen reader reads.
+func (n *NumberField) SetAccessibleName(name string) {
+	n.Base.SetAccessibleName(name)
+	if n.field != nil {
+		n.field.SetAccessibleName(name)
+	}
+}
+
 func (n *NumberField) SetEnabled(v bool) {
 	n.Base.SetEnabled(v)
 	if n.field != nil {

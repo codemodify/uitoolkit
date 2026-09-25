@@ -19,21 +19,21 @@ offscreen and X11 keep working.
 
 ```bash
 # Wayland (when a compositor is running)
-WAYLAND_DISPLAY=wayland-0 go run ./examples/gallery
-WAYLAND_DISPLAY=wayland-0 go run ./examples/notes
+WAYLAND_DISPLAY=wayland-0 go run ./examples/uitoolkit-sample-tour -page controls
+WAYLAND_DISPLAY=wayland-0 go run ./examples/uitoolkit-sample-notes
 
 # X11
-DISPLAY=:0 UITK_BACKEND=x11 go run ./examples/gallery
-UITK_BACKEND=x11 go run ./examples/notes
+DISPLAY=:0 UITK_BACKEND=x11 go run ./examples/uitoolkit-sample-tour -page controls
+UITK_BACKEND=x11 go run ./examples/uitoolkit-sample-notes
 
 # Offscreen / CI
-go run ./examples/gallery -headless
+go run ./cmd/uitk-shots -gallery gallery.png   # the showcase, offscreen
 CGO_ENABLED=0 go test ./...
 
 # Paint backend (honors paintengine2d UITK_PAINT)
-UITK_PAINT=auto go run ./examples/gallery   # default: GPU if EGL works
-UITK_PAINT=cpu  go run ./examples/gallery   # force CPU + shm / XPutImage
-UITK_PAINT=gpu  go run ./examples/gallery   # prefer EGL; CPU if init fails
+UITK_PAINT=auto go run ./examples/uitoolkit-sample-tour -page controls   # default: GPU if EGL works
+UITK_PAINT=cpu  go run ./examples/uitoolkit-sample-tour -page controls   # force CPU + shm / XPutImage
+UITK_PAINT=gpu  go run ./examples/uitoolkit-sample-tour -page controls   # prefer EGL; CPU if init fails
 ```
 
 CGO Linux links `libX11`, `libXext`, `libXrandr`, `libXi`, `libwayland-client`,
@@ -131,18 +131,18 @@ clip with the content. Hover and selection re-record rows whose visual
 signature changed.
 
 ```bash
-UITK_SCENE=auto go run ./examples/gallery   # default: retained scene
-UITK_SCENE=off  go run ./examples/gallery   # v0.5 immediate Fill path
+UITK_SCENE=auto go run ./examples/uitoolkit-sample-tour -page controls   # default: retained scene
+UITK_SCENE=off  go run ./examples/uitoolkit-sample-tour -page controls   # v0.5 immediate Fill path
 ```
 
-### Idle CPU on Wayland gallery
+### Idle CPU on Wayland
 
 ```bash
-UITK_PAINT=auto UITK_SCENE=auto go run ./examples/gallery
+UITK_PAINT=auto UITK_SCENE=auto go run ./examples/uitoolkit-sample-tour -page controls
 # another terminal:
-pidof gallery   # or: pgrep -f 'examples/gallery'
-top -p "$(pgrep -n -f 'examples/gallery')"
-# or: pidstat -p "$(pgrep -n -f 'examples/gallery')" 1
+pidof uitoolkit-sample-tour   # or: pgrep -f uitoolkit-sample-tour
+top -p "$(pgrep -n -f uitoolkit-sample-tour)"
+# or: pidstat -p "$(pgrep -n -f uitoolkit-sample-tour)" 1
 ```
 
 Idle (no mouse, no focused text field): the process should sit near **0%**
@@ -309,11 +309,11 @@ rather than generating them.
 
 ```bash
 # Paint + present (Linux + CGO)
-UITK_PAINT=auto go run ./examples/gallery              # GPU if EGL works, else CPU
-UITK_PAINT=cpu go run ./examples/gallery               # CPU pixmap + shm / XPutImage
-UITK_WAYLAND_PRESENT=auto go run ./examples/gallery    # CPU path: wl_shm XRGB8888
-UITK_WAYLAND_PRESENT=shm go run ./examples/gallery     # same as auto; workaround if a window is transparent
-UITK_WAYLAND_PRESENT=dmabuf go run ./examples/gallery  # CPU path experimental; shm if the upload is blank
+UITK_PAINT=auto go run ./examples/uitoolkit-sample-tour -page controls              # GPU if EGL works, else CPU
+UITK_PAINT=cpu go run ./examples/uitoolkit-sample-tour -page controls               # CPU pixmap + shm / XPutImage
+UITK_WAYLAND_PRESENT=auto go run ./examples/uitoolkit-sample-tour -page controls    # CPU path: wl_shm XRGB8888
+UITK_WAYLAND_PRESENT=shm go run ./examples/uitoolkit-sample-tour -page controls     # same as auto; workaround if a window is transparent
+UITK_WAYLAND_PRESENT=dmabuf go run ./examples/uitoolkit-sample-tour -page controls  # CPU path experimental; shm if the upload is blank
 ```
 
 ## HiDPI

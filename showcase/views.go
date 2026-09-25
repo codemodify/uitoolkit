@@ -92,7 +92,9 @@ func mdiView(status *widgets.StatusBar) widget.Component {
 // must hold an @, an optional page and a page only a proxy brings in.
 func wizardView(status *widgets.StatusBar) widget.Component {
 	name := widgets.NewTextField("", "Full name", nil)
+	name.SetAccessibleName("Full name")
 	email := widgets.NewTextField("", "name@example.com", nil)
+	email.SetAccessibleName("Email address")
 	form := widgets.NewForm()
 	form.AddRow("Name", name)
 	form.AddRow("Email", email)
