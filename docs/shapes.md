@@ -15,16 +15,16 @@ an app makes, not a separate kind of window.
 Run the demos:
 
 ```bash
-go run ./examples/shapes                 # a clock: a disc with a hole at the hub
-go run ./examples/shapes -mode ring      # a rounded panel with a big hole
-go run ./examples/shapes -mode panel -glass
-go run ./examples/shapes -mode backdrop -size 1100   # a test card to put behind
+go run ./examples/uitoolkit-sample-shapes                 # a clock: a disc with a hole at the hub
+go run ./examples/uitoolkit-sample-shapes -mode ring      # a rounded panel with a big hole
+go run ./examples/uitoolkit-sample-shapes -mode panel -glass
+go run ./examples/uitoolkit-sample-shapes -mode backdrop -size 1100   # a test card to put behind
 
 # The same silhouette asked for by a *look* rather than by the app.
-go run ./examples/skinshape -mode backdrop           # the test card again
-go run ./examples/skinshape                          # the Deck skin's outline
-go run ./examples/skinshape -theme beos              # BeOS's tab
-go run ./examples/skinshape -theme breeze-night      # a look that frames a rectangle
+go run ./examples/uitoolkit-sample-skinshape -mode backdrop           # the test card again
+go run ./examples/uitoolkit-sample-skinshape                          # the Deck skin's outline
+go run ./examples/uitoolkit-sample-skinshape -theme beos              # BeOS's tab
+go run ./examples/uitoolkit-sample-skinshape -theme breeze-night      # a look that frames a rectangle
 
 ```
 
@@ -201,7 +201,7 @@ in its own margin, and its frame is one of three things, in order:
    the surface is cut to it with the same wipe and eraser as a shaped
    window, its shadow is the silhouette blurred in the colour of the look's
    own popup shadow, and its input region is the silhouette —
-   `examples/popups`' Round menu is a disc;
+   `examples/uitoolkit-sample-popups`' Round menu is a disc;
 2. **the look's**, `style.PopupShapeOf` — an optional engine hook,
    `PopupShapeEngine.PopupShape(l, b, kind)`, beside the window and control
    hooks, so a skin's or a look's menu can be the shape its art is;

@@ -9,7 +9,7 @@ import (
 
 // Saving and restoring an arrangement is every docking application's job,
 // so it is the dock package's, not something each one re-implements: the
-// three functions below are what examples/inspector used to carry itself.
+// three functions below are what examples/uitoolkit-sample-inspector used to carry itself.
 //
 // Each application's arrangement lives in a file of its own, named for
 // the application, so two applications built on the toolkit never write

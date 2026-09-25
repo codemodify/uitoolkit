@@ -27,7 +27,7 @@ func benchWindow(b *testing.B, w, h int, content func(*app.Application, *app.Win
 }
 
 // Settings at 1280x800 is this repo's heavy window now that Mail lives in its
-// own repository: a theme browser, a live preview and the whole widget gallery
+// own repository: a theme browser, a live preview and the whole widget showcase
 // under it, all repainted every iteration.
 func BenchmarkSettingsFullPaint(b *testing.B) {
 	a, w := benchWindow(b, 1280, 800, settingsapp.SettingsApp)
@@ -44,7 +44,7 @@ func BenchmarkSettingsFullPaint(b *testing.B) {
 	b.ReportMetric(float64(reused)/float64(b.N), "reused/op")
 }
 
-func BenchmarkGalleryFullPaint(b *testing.B) {
+func BenchmarkShowcaseFullPaint(b *testing.B) {
 	a, w := benchWindow(b, 1100, 720, func(a *app.Application, win *app.Window) widget.Component {
 		return showcase.App(a, win, false)
 	})

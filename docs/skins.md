@@ -999,7 +999,7 @@ go run ./cmd/uitk-themesheet -theme nocturne -scale 1.75 -o /tmp/sheets
 go run ./cmd/uitk-themesheet -frames -theme nocturne -o /tmp/sheets
 
 # A whole app.
-env -u WAYLAND_DISPLAY -u DISPLAY UITK_THEME=nocturne go run ./examples/gallery -headless
+env -u WAYLAND_DISPLAY -u DISPLAY UITK_THEME=nocturne go run ./cmd/uitk-shots -gallery /tmp/nocturne.png
 
 # What an author would want to know about one.
 go run ./cmd/uitk-skin lint nocturne deck ~/.config/uitoolkit/skins/mine
@@ -1013,8 +1013,8 @@ go run ./cmd/uitk-skingen -list
 
 # A shaped skin over a test card: the desktop beside the silhouette, and a
 # round button that takes the pointer only on its ink.
-go run ./examples/skinshape -mode backdrop &
-go run ./examples/skinshape -theme deck
+go run ./examples/uitoolkit-sample-skinshape -mode backdrop &
+go run ./examples/uitoolkit-sample-skinshape -theme deck
 
 ```
 

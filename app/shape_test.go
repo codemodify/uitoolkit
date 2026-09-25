@@ -368,7 +368,7 @@ func TestShapedWindowPaintsItsHoleThrough(t *testing.T) {
 	}
 }
 
-// ringFace paints what examples/shapes paints: the silhouette filled, then
+// ringFace paints what examples/uitoolkit-sample-shapes paints: the silhouette filled, then
 // a rim stroked along it, both even-odd. It is here so the edge test sees
 // the same pixels a real shaped app puts on the boundary.
 type ringFace struct{ widget.Base }

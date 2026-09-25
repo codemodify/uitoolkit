@@ -18,7 +18,7 @@ DEST=${1:-$REPO/docs/screenshots}
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 mkdir -p "$DEST" "$WORK/bin" "$WORK/cfg"
-(cd "$REPO" && go build -o "$WORK/bin/" ./examples/tour ./cmd/uitksettings)
+(cd "$REPO" && go build -o "$WORK/bin/" ./examples/uitoolkit-sample-tour ./cmd/uitksettings)
 headless() { env -u WAYLAND_DISPLAY -u DISPLAY XDG_CONFIG_HOME="$WORK/cfg" UITK_ANIMATIONS=0 "$@" >/dev/null; }
 webp() { # in.png out.webp
   magick "$1" -strip -define webp:lossless=true -define webp:method=6 "$2"
@@ -26,7 +26,7 @@ webp() { # in.png out.webp
 }
 
 # The tour: a still of every page, and all of them on one sheet.
-headless "$WORK/bin/tour" -shot "$WORK/tour" -sheet "$WORK/tour-pages.png"
+headless "$WORK/bin/uitoolkit-sample-tour" -shot "$WORK/tour" -sheet "$WORK/tour-pages.png"
 for f in "$WORK"/tour/tour-*.png; do
   webp "$f" "$DEST/$(basename "${f%.png}").webp"
 done

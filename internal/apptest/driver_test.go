@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-func TestDriverGalleryAndMail(t *testing.T) {
+func TestDriverEveryApp(t *testing.T) {
 	rs := Run(Options{Apps: "all", Short: testing.Short()})
 	for _, r := range rs {
 		t.Log(r.String())
@@ -14,8 +14,8 @@ func TestDriverGalleryAndMail(t *testing.T) {
 	}
 }
 
-func TestDriverGalleryOnly(t *testing.T) {
-	rs := Run(Options{Apps: "gallery", Short: true})
+func TestDriverShowcaseOnly(t *testing.T) {
+	rs := Run(Options{Apps: "showcase", Short: true})
 	if Failed(rs) {
 		for _, r := range rs {
 			if r.Err != nil {

@@ -1,6 +1,7 @@
 #!/bin/bash
 # render.sh — renders every pack twice into out/: the Settings preview panel
-# (out/previews/<id>.png) and the full widget gallery (out/gallery/<id>.png),
+# (out/previews/<id>.png) and the full widget showcase (out/gallery/<id>.png,
+# taken by `uitk-shots -gallery`),
 # plus out/packs.tsv, the list build.py and sheets.sh read. Headless: nothing
 # opens on the desktop. Takes a few minutes for every pack.
 set -euo pipefail
@@ -10,7 +11,7 @@ OUT=${ATLAS_OUT:-$HERE/out}
 mkdir -p "$OUT/bin" "$OUT/full" "$OUT/previews" "$OUT/gallery" "$OUT/cfg" "$OUT/work"
 (cd "$REPO" && go build -o "$OUT/bin/settings" ./cmd/uitksettings &&
   go build -o "$OUT/bin/sheet" ./cmd/uitk-themesheet &&
-  go build -o "$OUT/bin/gallery" ./examples/gallery)
+  go build -o "$OUT/bin/shots" ./cmd/uitk-shots)
 headless() { env -u WAYLAND_DISPLAY -u DISPLAY XDG_CONFIG_HOME="$OUT/cfg" "$@"; }
 headless "$OUT/bin/sheet" -list > "$OUT/packs.tsv"
 
@@ -25,8 +26,8 @@ while IFS=$'\t' read -r id _; do
     echo "preview failed: $id"; fail=1
   fi
   if (cd "$OUT/work" && UITK_THEME="$id" timeout 60 env -u WAYLAND_DISPLAY -u DISPLAY \
-      XDG_CONFIG_HOME="$OUT/cfg" "$OUT/bin/gallery" -headless -tab 4 >/dev/null 2>&1); then
-    mv "$OUT/work/gallery.png" "$OUT/gallery/$id.png"
+      XDG_CONFIG_HOME="$OUT/cfg" "$OUT/bin/shots" -gallery "$OUT/gallery/$id.png" -tab 4 >/dev/null 2>&1); then
+    :
   else
     echo "gallery failed: $id"; fail=1
   fi

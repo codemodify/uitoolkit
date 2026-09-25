@@ -25,7 +25,7 @@ through the real run loop.
 
 ---
 
-## The gallery
+## The widget showcase
 
 | | |
 |---|---|
@@ -80,7 +80,7 @@ toolkit gives it is in [players.md](players.md).
 | | | |
 |---|---|---|
 | ![File browser example](screenshots/files.png) | ![Notes example](screenshots/notes.png) | ![Widget tree inspector](screenshots/inspector.png) |
-| `examples/files` | `examples/notes` | `examples/inspector` |
+| `examples/uitoolkit-sample-files` | `examples/uitoolkit-sample-notes` | `examples/uitoolkit-sample-inspector` |
 
 ---
 
@@ -138,11 +138,11 @@ Both repos must be on the same revision — `go.mod` resolves the engine from
 `../paintengine2d` while the `replace` is in place.
 
 ```sh
-go run ./examples/tour         # the tour: a page per capability (docs/tour.md)
-go run ./examples/gallery      # widget gallery (the showcase package)
-go run ./examples/notes
-go run ./examples/files
-go run ./examples/skinshape    # a shaped window over a test card
+go run ./examples/uitoolkit-sample-tour         # the tour: a page per capability (docs/tour.md)
+go run ./examples/uitoolkit-sample-tour -page controls   # the same tour, on its widget pages
+go run ./examples/uitoolkit-sample-notes
+go run ./examples/uitoolkit-sample-files
+go run ./examples/uitoolkit-sample-skinshape    # a shaped window over a test card
 go run ./cmd/uitksettings      # theme browser: 129 packs, preview + gallery
 go run ./cmd/uitest-driver     # scripted UI drive, no display needed
 go run ./cmd/uitk-shots DIR    # the pictures in the README and these docs
@@ -154,7 +154,7 @@ repositories carry their own instructions.
 Escape hatches added in the review pass:
 
 - `UITK_PAINT_FULLFRAME=1` — restore the old full-frame repaint, bypassing partial
-  redraw. Run the gallery both ways to feel the difference.
+  redraw. Run the tour's Controls page both ways to feel the difference.
 - `UITK_PAINT_MSAA=0` — turn off the engine's multisample target.
 
 ---
