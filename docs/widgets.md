@@ -686,7 +686,7 @@ field exactly.
 
 `ShowFileDialog` shows the toolkit's own file dialog, drawn in the theme.
 With `FileDialogOptions.Native`, or the `nativeDialogs` preference
-(Settings: "File dialogs"), or `UITK_NATIVE_DIALOGS=1`,
+(Settings: "System file dialogs"), or `UITK_NATIVE_DIALOGS=1`,
 it shows the desktop's own dialog instead: KDE's or GNOME's, through the
 XDG desktop portal's FileChooser, as Qt and GTK apps do, and as sandboxed
 (Flatpak) apps must. `Filter`, the starting `Path` and Save mode carry

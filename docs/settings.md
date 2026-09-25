@@ -160,16 +160,16 @@ in four packs at two scales at both sizes.
 wearing a short word:
 
 ```
-☑ Animations  ☐ File dialogs  ☐ System frame  ☐ Theme buttons  ☐ Desktop colours
+☑ Animations  ☐ System file dialogs  ☐ System frames  ☐ Theme buttons  ☐ OS colors
 ```
 
 | On the box | To a screen reader | What it is |
 | --- | --- | --- |
 | **Animations** | Animations | Hover fades, the default button's pulse, busy bars (GTK's `gtk-enable-animations`). While the desktop itself asks for reduced motion it says so, because the desktop's setting wins over the preference |
-| **File dialogs** | Use the desktop's file dialogs | KDE's and GNOME's own Open and Save, through the XDG portal, instead of the themed ones |
-| **System frame** | System frame: the desktop's title bar and borders | Chromium's switch. Windows that draw their own title bar (Mail's, with its tool bar in it) get the desktop's instead |
+| **System file dialogs** | System file dialogs: the desktop's own Open and Save | KDE's and GNOME's own Open and Save, through the XDG portal, instead of the themed ones |
+| **System frames** | System frames: the desktop's title bar and borders | Chromium's switch. Windows that draw their own title bar (Mail's, with its tool bar in it) get the desktop's instead |
 | **Theme buttons** | Theme buttons: the caption buttons where the theme puts them | Close, minimise and maximise in the theme's era's order (the Mac's traffic lights on the left) rather than the desktop's |
-| **Desktop colours** | Desktop colours: follow the desktop's light or dark mode and its accent | The pack shows its sibling to match the desktop — a chosen *Breeze* draws as *Breeze Dark* — recoloured around the desktop's accent where the engine takes one |
+| **OS colors** | OS colors: follow the desktop's light or dark mode and its accent | The pack shows its sibling to match the desktop — a chosen *Breeze* draws as *Breeze Dark* — recoloured around the desktop's accent where the engine takes one |
 
 **Four of them spent a release in the column**, as switches with a line
 of prose each, where 300 logical pixels elided the labels themselves
@@ -498,7 +498,7 @@ animations off. `followDesktop` shows the pack's light or dark sibling to
 match the desktop. `nativeDialogs` shows the desktop's own file dialogs
 (KDE's, GNOME's, through the XDG portal) instead of the toolkit's themed
 ones. `decorations` is who draws the frame of a window with its own title
-bar: `system` the desktop (**System frame**),
+bar: `system` the desktop (**System frames**),
 `toolkit` uitoolkit for every window, left out for the default.
 `captionButtons` `theme` puts the caption buttons of a frame uitoolkit
 draws where the theme's era put them (the Mac's traffic lights on the

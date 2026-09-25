@@ -64,7 +64,7 @@ func TestSettingsPreviewIsTheWholeRightPane(t *testing.T) {
 	// that says where the colours come from; under it, the three paths.
 	// Both are Settings' own, drawn in the applied look, outside the
 	// preview's scope.
-	follow := findOption(w.Content(), "Desktop colours")
+	follow := findOption(w.Content(), "OS colors")
 	if follow == nil {
 		t.Fatal("no desktop-colours option")
 	}
@@ -82,7 +82,7 @@ func TestSettingsPreviewIsTheWholeRightPane(t *testing.T) {
 		t.Error("the options row is not over the preview")
 	}
 	// And the column beside them is the theme browser and nothing else.
-	for _, word := range []string{"Animations", "File dialogs", "System frame", "Theme buttons"} {
+	for _, word := range []string{"Animations", "System file dialogs", "System frames", "Theme buttons"} {
 		box := findOption(w.Content(), word)
 		if box == nil {
 			t.Fatalf("no %q option on the page", word)
@@ -284,11 +284,11 @@ func TestSettingsKeyboardReachesEverything(t *testing.T) {
 			switch v.Text {
 			case "Animations":
 				want["animations"] = true
-			case "Desktop colours":
+			case "OS colors":
 				want["colours"] = true
-			case "File dialogs":
+			case "System file dialogs":
 				want["file dialogs"] = true
-			case "System frame":
+			case "System frames":
 				want["system frame"] = true
 			case "Theme buttons":
 				want["theme buttons"] = true
