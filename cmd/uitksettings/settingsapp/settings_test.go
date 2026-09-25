@@ -100,15 +100,20 @@ func TestSettingsAppAppliesAndPersists(t *testing.T) {
 		t.Fatalf("corners apply %+v", saved)
 	}
 
-	// Revert drops a staged change.
+	// With Revert gone, Apply is the only writer: a staged pack shows in
+	// the preview and stays out of look.json until it is applied.
 	clickSettingsNav(t, w, "Themes")
 	a.PumpOnce()
 	clickTheme(t, w, "Windows 95")
 	a.PumpOnce()
-	clickNamed(t, w.Content(), "Revert")
-	a.PumpOnce()
-	if p := previewAppearance(t, w); p.Name != "dark" {
-		t.Fatalf("revert should restore the applied theme in the preview: %+v", p)
+	if p := previewAppearance(t, w); p.Name != "win95" {
+		t.Fatalf("the preview should show the staged pack: %+v", p)
+	}
+	if got := style.LoadAppearance().Name; got != "dark" {
+		t.Fatalf("staging wrote look.json: %s", got)
+	}
+	if !findApply(w.Content()).Enabled() {
+		t.Fatal("Apply should be enabled again with a pack staged")
 	}
 }
 
@@ -399,8 +404,16 @@ func TestSettingsThemeListScrollsAllBuiltins(t *testing.T) {
 	if aboutScroll == nil {
 		t.Fatal("About should scroll")
 	}
-	if aboutScroll.MaxOffset() <= 0 {
-		t.Fatalf("About should overflow at 820×560, content=%v view=%v", aboutScroll.ContentHeight(), aboutScroll.LocalBounds().Dy())
+	// The page is three paths now, so it fits at 820×560; on a window
+	// short enough to overflow it scrolls and Apply stays pinned under it.
+	w.Inject(platform.Event{Kind: platform.EventResize, Width: 560, Height: 300})
+	a.PumpOnce()
+	aboutScroll = findScrollView(w.Content())
+	if aboutScroll == nil || aboutScroll.MaxOffset() <= 0 {
+		t.Fatalf("About should overflow at 560×300, content=%v view=%v", aboutScroll.ContentHeight(), aboutScroll.LocalBounds().Dy())
+	}
+	if findApply(w.Content()) == nil || nestedInScroll(findApply(w.Content())) {
+		t.Fatal("Apply must stay pinned on a short About")
 	}
 }
 

@@ -212,36 +212,6 @@ func TestSettingsThemeSearch(t *testing.T) {
 	}
 }
 
-// Defaults stages the appearance a fresh install has, and is off while
-// that is already what is staged.
-func TestSettingsDefaultsButton(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	if err := style.SaveAppearance(style.DefaultAppearance()); err != nil {
-		t.Fatal(err)
-	}
-	a, w := openSettings(t, 1024, 860)
-	def := findButton(w.Content(), "Defaults")
-	if def == nil {
-		t.Fatal("no Defaults button")
-	}
-	if def.Enabled() {
-		t.Fatal("Defaults should be off when the defaults are already staged")
-	}
-	clickTheme(t, w, "Windows 95")
-	a.PumpOnce()
-	if !findButton(w.Content(), "Defaults").Enabled() {
-		t.Fatal("Defaults should come on once something else is staged")
-	}
-	findButton(w.Content(), "Defaults").OnClick()
-	a.PumpOnce()
-	if got := previewAppearance(t, w); got.Name != style.DefaultThemeName {
-		t.Fatalf("Defaults staged %+v", got)
-	}
-	if style.LoadAppearance().Name != style.DefaultThemeName {
-		t.Fatal("Defaults must not write look.json on its own")
-	}
-}
-
 // Tab walks the whole of Settings: the pages, the search field, the theme
 // list, the gallery under the preview, and the buttons that act on it.
 func TestSettingsKeyboardReachesEverything(t *testing.T) {
@@ -250,9 +220,9 @@ func TestSettingsKeyboardReachesEverything(t *testing.T) {
 		t.Fatal(err)
 	}
 	a, w := openSettings(t, 1100, 860)
-	// Nothing is staged yet, so Apply, Revert and Defaults are off and
-	// Tab steps over them, as it should.
-	for _, name := range []string{"Apply", "Revert", "Defaults"} {
+	// Nothing is staged yet, so Apply is off and Tab steps over it, as
+	// it should.
+	for _, name := range []string{"Apply"} {
 		for _, c := range focusRing(t, a, w) {
 			if b, ok := c.(*widgets.Button); ok && b.Text == name {
 				t.Errorf("Tab stops on %s while it is disabled", name)
@@ -271,8 +241,6 @@ func TestSettingsKeyboardReachesEverything(t *testing.T) {
 		"pages":   false,
 		"gallery": false,
 		"apply":   false,
-		"revert":  false,
-		"default": false,
 	}
 	for _, c := range ring {
 		switch v := c.(type) {
@@ -290,10 +258,6 @@ func TestSettingsKeyboardReachesEverything(t *testing.T) {
 			switch v.Text {
 			case "Apply":
 				want["apply"] = true
-			case "Revert":
-				want["revert"] = true
-			case "Defaults":
-				want["default"] = true
 			case "Primary action":
 				want["gallery"] = true
 			}
