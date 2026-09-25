@@ -35,11 +35,13 @@ Struck through once fixed; newest findings at the end of their section.
   default split; dragging the sash fixes it.~~ Four rows a side and a 62%
   split: every pack with desktop-sized controls shows it whole (the preview
   panel moved to 569 × 429; the atlas follows).
-- **Material's, shadcn's and Geist's packs still clip the preview's Controls
+- ~~**Material's, shadcn's and Geist's packs still clip the preview's Controls
   tab** (ten packs, 40- to 48-pixel controls): the tab needs up to 86 more
   pixels than the preview has at the default split. A preview sized for them
   would leave the gallery a sliver in every other pack; a per-pack height
-  would give the Theme Atlas uneven tiles.
+  would give the Theme Atlas uneven tiles.~~ The gallery came out from under
+  the preview, which now has the whole right-hand pane (569 × 782): all 129
+  packs show the tab whole, and the test no longer excepts any.
 - ~~**Settings' Appearance, Packs and About pages elided their prose** at the
   window's edge (the About page lost most of its engine list).~~ It wraps.
 - ~~**Skins have no lint command.** `style.LoadSkin` already produces the keyed

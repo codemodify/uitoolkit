@@ -1,22 +1,21 @@
 # Settings
 
-`cmd/uitksettings` is the toolkit appearance editor and theme browser. The
-command opens the window; the application is `cmd/uitksettings/settingsapp`
+`cmd/uitoolkit-settings` is the toolkit appearance editor and theme browser. The
+command opens the window; the application is `cmd/uitoolkit-settings/settingsapp`
 beside it, written against the published API like every other sample. It
-is the toolkit's shop window: picking a pack draws it twice at once — a
-small live application, and under it the whole widget gallery, every
-control the toolkit has in every state — so a theme can be judged without
-launching anything.
+is the toolkit's shop window: picking a pack draws it at once as a small
+live application, frame and caption and every control, so a theme can be
+judged without launching anything.
 
 ## Run
 
 ```bash
-go run ./cmd/uitksettings
-go run ./cmd/uitksettings -stage win98              # open with Windows 98 staged
-go run ./cmd/uitksettings -page appearance          # open on the options page
-go run ./cmd/uitksettings -headless                 # settings.png in cwd
-go run ./cmd/uitksettings -stage aqua -screenshot out/
-tools/shots/demos.sh                               # docs/screenshots/settings.webp and the other demos
+go run ./cmd/uitoolkit-settings
+go run ./cmd/uitoolkit-settings -stage win98      # open with Windows 98 staged
+go run ./cmd/uitoolkit-settings -page appearance  # open on the options page
+go run ./cmd/uitoolkit-settings -headless         # settings.png in cwd
+go run ./cmd/uitoolkit-settings -stage aqua -screenshot out/
+tools/shots/demos.sh                              # docs/screenshots/settings.webp and the other demos
 ```
 
 `-page` takes `themes` (the default), `appearance`, `packs` or `about`.
@@ -28,43 +27,34 @@ tools/shots/demos.sh                               # docs/screenshots/settings.w
 The **browser** on the left: a **search field** (a pack is found by its
 id, name, year, family, engine or what its summary says — every word has
 to match; Return stages the first hit, Escape empties the field), the
-**decade filter** (*All decades*, one decade, or *My themes*), the packs
-that pass both listed by year (`1995 · Windows 95`), a count of what is
-showing, and under the list the **details** the rows have no room for:
-the pack's name, its year, family and engine, and what following the
-desktop does to it. (The pack's one-line summary is not shown — the
-search field still reads it.) The details box keeps its height, so the
-list does not resize as you arrow down the packs; a long note scrolls
-inside it.
+**decade filter** (*All decades*, one decade, or *My themes*) and the
+packs that pass both, listed by year (`1995 · Windows 95`) down to the
+foot of the column. Nothing else: the count of packs and the box naming
+the selected pack's year, family and engine both went, because each said
+in words what the preview beside them says in the thing itself, and both
+took rows off a list of 129.
 
-On the right, the staged pack drawn twice in a splitter you can size:
+On the right, the whole of the pane, the **preview** — a small but fully
+interactive application window (menu bar, tool bar, tabs with every
+control, tree, table, dialogs, status bar) painted entirely in the staged
+theme, frame, caption and all. Its caption names the pack it is drawing,
+which is where you see that *Breeze* is showing as *Breeze Dark* because
+the desktop asked for dark.
 
-- the **preview** — a small but fully interactive application window
-  (menu bar, tool bar, tabs with every control, tree, table, dialogs,
-  status bar) painted entirely in the staged theme, frame, caption and
-  all;
-- the **gallery** — the `showcase` package, the same one the tour shows
-  over its Controls, Views and Documents pages, here as one
-  scrolling column: tool bar, the Buttons and Fields panels, then the
-  ScrollView, ListView, TreeView, TableView and Form panels, and a status
-  bar. Its Window, Theme and Quit controls are disabled here: the gallery
-  is previewing a pack, not running as an app of its own.
+The whole widget gallery used to sit under the preview in a second
+splitter. It is gone: those are the widgets the tour shows over its
+Controls, Views and Documents pages, and under the preview they halved it
+to answer a question the preview had already answered.
 
-Both are `widgets.ThemeScope`s, so Settings itself keeps the applied look.
-Staging a pack switches them where they stand — the caret stays in the
-search field, the focus on the list, the gallery where you scrolled it.
+The preview is a `widgets.ThemeScope`, so Settings itself keeps the
+applied look. Staging a pack switches it where it stands — the caret
+stays in the search field and the focus on the list.
 
 The browser is about 240 logical pixels wide whatever the window and
 display scale are, so its rows stay readable on a small window, and it
 keeps that share while the window is resized (`Window.OnResize`).
-Dragging either sash replaces the split: a dragged split stays through
-every resize after, and both survive Apply.
-
-The preview takes 62% of the right-hand splitter, enough for its Controls
-tab — four rows a side — to show every row in every pack with
-desktop-sized controls. Material's, shadcn's and Geist's 40- to 48-pixel
-touch targets are the exception: those ten packs clip the tab's last row
-until the sash is dragged down.
+Dragging the sash replaces the split: a dragged split stays through every
+resize after, and survives Apply.
 
 ### Appearance — what every app does with the theme
 
@@ -83,8 +73,15 @@ icons and their size are seen changing:
 
 ### Packs & icons
 
-User theme packs (export the staged theme, delete user packs) and icon
-sets (built-in and user, delete user sets).
+User theme packs (export the staged theme, delete user packs) on the
+left; icon sets (built-in and user, delete user sets) on the right, and
+under them a **preview** of the selected set: two tool bars holding every
+`style.ToolIcon` — new, open, save, cut, copy, paste, undo, redo, then
+search, pen, mail, download and the three message-box faces (info,
+warning, error). It is inside a `ThemeScope` like the theme preview, so
+it is the staged set at the staged icon size while Settings keeps the
+applied one, and picking another set redraws it in place. A set is known
+by what it draws, not by being called *Phosphor*.
 
 ### About
 
@@ -93,14 +90,20 @@ The three paths Settings reads and writes: the **prefs file**, the
 
 ## Staged and applied
 
-The theme, the gallery and the preview show what is **staged**. Nothing is
-written until **Apply**, which saves `look.json` and switches Settings and
-every app that watches the file. Apply is the only button: it sits pinned
-at the **right** of the row under the pages, with the line that says which
-of the two states the screen is in — *Applied — every uitoolkit app is
-using this look* or *Staged, not applied* — at the left of the same row.
-That line is also where a failed Apply, export or delete says what went
-wrong. Closing without Apply discards the staged change.
+The previews show what is **staged**. Nothing is written until **Apply**,
+which saves `look.json` and switches Settings and every app that watches
+the file. Apply is the only button and the only thing in the row under
+the pages: it sits pinned at the **right** of it. The line that used to
+lead that row — *Applied — every uitoolkit app is using this look*, or
+*Staged, not applied* — is gone; Apply being enabled or greyed says the
+same thing in the place you are already looking. Closing without Apply
+discards the staged change.
+
+**When something fails**, an error message box comes up: writing
+`look.json`, exporting a pack and deleting one all touch the disk, and
+that line beside Apply used to be where they reported themselves. A
+modal is what replaced it — a failure nobody is told about looks exactly
+like nothing having happened.
 
 The window has no title bar row of its own and no status bar: the
 navigation sidebar, the page and that one row are all of it. (The
@@ -108,20 +111,22 @@ preview's own status bar belongs to the previewed application and stays.)
 
 ## Screenshot geometry
 
-The Theme Atlas crops the preview panel out of `uitksettings -stage ID
+The Theme Atlas crops the preview panel out of `uitoolkit-settings -stage ID
 -screenshot out.png`. In the default 1024×860 window at scale 1, with the
 default look applied, the panel is the same rectangle in every pack:
 
 ```
-x 445, y 10, 569 × 481        crop box (445, 10) – (1014, 491)
+x 445, y 10, 569 × 782        crop box (445, 10) – (1014, 792)
 ```
 
 `TestSettingsPreviewPanelKeepsItsPlace` pins those numbers; a layout
 change that moves them fails it, and the new ones belong here. (They were
-`x 504, y 175, 510 × 387` before the gallery went under the preview, and
-`569 × 381` until the preview took 62% of the split instead of 55%, so
-its Controls tab shows every row, and `x 445, y 58, 569 × 429` until the
-window's title bar row and status bar came off.)
+`x 504, y 175, 510 × 387` before the gallery went under the preview,
+`569 × 381` until the preview took 62% of the split instead of 55%,
+`x 445, y 58, 569 × 429` until the window's title bar row and status bar
+came off, and `569 × 481` until the gallery came out from under the
+preview and it took the whole right-hand pane.)
+
 The applied look sets Settings' own metrics, so take atlas shots with a
 clean `XDG_CONFIG_HOME`.
 
