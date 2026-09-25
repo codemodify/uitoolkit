@@ -9,8 +9,8 @@ import (
 	"github.com/codemodify/uitoolkit/widgets"
 )
 
-// Page one: the strip at the top of this window is not a tab bar under
-// the caption, it is the caption. Every gesture the page describes is
+// The strip at the top of this window is not a tab bar under the
+// caption, it is the caption. Every gesture the page describes is
 // made on the strip itself, and every one of them has a button here too
 // — partly so the page can be driven from the keyboard, and partly
 // because "drag a tab out of the window" is worth being able to try

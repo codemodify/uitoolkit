@@ -457,8 +457,9 @@ Core features the engines drive, added along the way:
 - **Start-up:** the font index and the portal read run alongside display
   setup.
 - **`UITK_THEME=<pack>`:** runs any app in any theme, like `GTK_THEME`.
-- **`gallery -screenshot DIR -theme <pack>`:** takes every scripted gallery
-  shot in one pack.
+- **`uitk-shots -theme <pack> DIR`:** takes every scripted showcase
+  shot in one pack; `uitk-shots -gallery FILE` takes the one the Theme
+  Atlas shows.
 
 ## Accessibility
 

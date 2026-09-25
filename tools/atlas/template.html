@@ -351,7 +351,7 @@
 <pre><span class="c"># any app, any pack</span>
 UITK_THEME=cde go run ./examples/uitoolkit-sample-tour
 <span class="c"># every scripted gallery shot in one pack</span>
-go run ./examples/gallery -screenshot /tmp/shots -theme luna
+go run ./cmd/uitk-shots -theme luna /tmp/shots
 <span class="c"># every control in every state, every pack</span>
 go run ./cmd/uitk-themesheet -all -o /tmp/sheets
 <span class="c"># the pack list this page was built from</span>

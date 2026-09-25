@@ -1,6 +1,6 @@
 #!/bin/bash
 # run.sh N BIN [ARGS...] — kill instance N's previous app, launch BIN (Wayland backend) in it.
-# Extra env: pass as `env` before, e.g.  UITK_BACKEND=x11 ./run.sh 3 ./gallery
+# Extra env: pass as `env` before, e.g.  UITK_BACKEND=x11 ./run.sh 3 ./uitoolkit-sample-tour
 # Uses private XDG_CONFIG_HOME/XDG_DATA_HOME/XDG_CACHE_HOME under $RIG/N so it never touches
 # ~/.config or ~/.cache (the decoration palettes a window hands KWin are written to the cache),
 # and the instance's own D-Bus session (APP_BUS overrides): on the user's bus an

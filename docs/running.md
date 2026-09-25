@@ -25,7 +25,7 @@ through the real run loop.
 
 ---
 
-## The gallery
+## The widget showcase
 
 | | |
 |---|---|
@@ -139,7 +139,7 @@ Both repos must be on the same revision — `go.mod` resolves the engine from
 
 ```sh
 go run ./examples/uitoolkit-sample-tour         # the tour: a page per capability (docs/tour.md)
-go run ./examples/gallery      # widget gallery (the showcase package)
+go run ./examples/uitoolkit-sample-tour -page controls   # the same tour, on its widget pages
 go run ./examples/uitoolkit-sample-notes
 go run ./examples/uitoolkit-sample-files
 go run ./examples/uitoolkit-sample-skinshape    # a shaped window over a test card
@@ -154,7 +154,7 @@ repositories carry their own instructions.
 Escape hatches added in the review pass:
 
 - `UITK_PAINT_FULLFRAME=1` — restore the old full-frame repaint, bypassing partial
-  redraw. Run the gallery both ways to feel the difference.
+  redraw. Run the tour's Controls page both ways to feel the difference.
 - `UITK_PAINT_MSAA=0` — turn off the engine's multisample target.
 
 ---

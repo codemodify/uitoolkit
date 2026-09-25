@@ -1,12 +1,16 @@
 # The tour
 
-The gallery answers "which widgets are there". The tour answers the other
-question — **what can a window of this toolkit do** — and it is one app
-with a page for each answer, because none of them is a control you can
-put on a page of controls.
+The tour is the one application that shows what the toolkit is. Its first
+three pages answer "which widgets are there" — they are the `showcase`
+package, which used to be a separate program (`examples/gallery`) until
+the two demonstrations were merged. The rest answer the other question,
+**what can a window of this toolkit do**, and there is a page for each
+answer because none of those is a control you can put on a page of
+controls.
 
 ```bash
 go run ./examples/uitoolkit-sample-tour                  # every page, in one window
+go run ./examples/uitoolkit-sample-tour -page controls   # every widget, one page
 go run ./examples/uitoolkit-sample-tour -page shapes     # one page (see -page list)
 go run ./examples/uitoolkit-sample-tour -page tabs,frames
 go run ./examples/uitoolkit-sample-tour -theme win95     # any of the packs, skins included
@@ -19,7 +23,7 @@ tools/shots/demos.sh                    # docs/screenshots: the stills and the s
 Stills are the tour's own 1180 × 820 page at every scale: `-scale 1.75`
 draws the same page finer (2065 × 1435 device pixels), not a bigger one.
 
-## The navigation is page one
+## The navigation is the first capability
 
 ![The tour's Tabs page](screenshots/tour-tabs.webp)
 
@@ -33,8 +37,8 @@ the pointer by the desktop. Drop it on either window's strip and it joins
 that one at the caret; drop it on the desktop and the new window stays;
 press Escape and it goes back.
 
-So the thing the user is already holding to move around the app is the
-first capability the app is there to show. Every gesture has a button on
+So the thing the user is already holding to move around the app is one
+of the capabilities the app is there to show. Every gesture has a button on
 the page as well — partly so the page can be driven from the keyboard,
 partly because "drag a tab out of the window" is worth being able to try
 without committing to a drag.
@@ -49,6 +53,9 @@ you are looking at, and why.
 
 | Page | What it demonstrates |
 | --- | --- |
+| **Controls** | Every small control the toolkit has, in the pack in force: menu bar, title bar and tool bar, the Buttons and Fields panels, the dialogs they open, and the Form. `showcase.Build`. |
+| **Views** | The views that hold rows, tabbed: `ListView` beside the `CardList`, `TreeView`, a sortable `TableView`, and a `ScrollView` of forty rows. |
+| **Documents** | The three composites: `RichText` with its format bar, an `MDIArea` that cascades and tiles, and a `Wizard` that validates a page before it lets you leave it. |
 | **Tabs** | `BrowserTabs` as a window's caption: reorder, close, "+", tear out into a window of its own and drop back. `widgets.TabMimeType`, `widget.TearOff`. |
 | **Docking** | Panels on the four sides of a centre; tabbed together, split, floated into windows of their own, closed, collapsed — and the whole arrangement as JSON, written out and read back on the page. `dock`. |
 | **Drag and drop** | One `widget.Drag` serving a reorder, a move between two lists and a real file leaving the process; the insertion caret, copy / move / link, and what the two sides settled on. |
@@ -82,6 +89,11 @@ from         another application
 action       move
 ```
 
+On the three widget pages the readout is an inventory: how many kinds of
+widget are on the page, how many in all, and the roll of them, counted
+off the live tree rather than written down — so a widget that stopped
+being shown stops being claimed.
+
 Each page also carries one line under its heading saying what it proves,
 and one in the status bar saying what to do.
 
@@ -89,6 +101,10 @@ and one in the status bar saying what to do.
 
 | | |
 |---|---|
+| ![Controls](screenshots/tour-controls.webp) | ![Views](screenshots/tour-views.webp) |
+| **Controls** — the widget set, and a count of what is on the page | **Views** — list and cards, tree, table, scroll |
+| ![Documents](screenshots/tour-documents.webp) | ![Tabs](screenshots/tour-tabs.webp) |
+| **Documents** — rich text, windows in a window, a wizard | **Tabs** — the strip that is the window's caption |
 | ![Docking](screenshots/tour-docking.webp) | ![Drag and drop](screenshots/tour-drag-and-drop.webp) |
 | **Docking** — four sides, tabs, splits, floats, and the layout as JSON | **Drag and drop** — two lists, a drop zone, and the negotiated action |
 | ![Frames](screenshots/tour-frames.webp) | ![Shapes](screenshots/tour-shapes.webp) |

@@ -10,7 +10,7 @@ import (
 	"github.com/codemodify/uitoolkit/widgets"
 )
 
-// Page six: a look is a value, and swapping it under a running window is
+// A look is a value, and swapping it under a running window is
 // a field assignment and a relayout, not a rebuild. Settings already has
 // the browser for all of them; what this page is for is the swap itself
 // — the same widget tree, the same tab order, the same accessibility

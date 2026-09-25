@@ -18,7 +18,9 @@ import (
 
 // Options configure a driver run.
 type Options struct {
-	// Apps is "gallery", "settings", or "all" (default).
+	// Apps is "showcase", "settings", or "all" (default). "gallery" is
+	// taken as "showcase": that is what the showcase was called while it
+	// was a command of its own.
 	Apps string
 	// Short skips compose and extra resize/scroll passes.
 	Short bool
@@ -38,25 +40,28 @@ func (r Result) String() string {
 	return fmt.Sprintf("ok   %s/%s", r.App, r.Step)
 }
 
-// Run exercises the gallery and Settings — the two windows in this repo with
-// enough chrome to be worth driving. Mail moved to its own repository and
-// drives itself there; see docs/testing.md.
+// Run exercises the showcase and Settings — the two windows in this repo
+// with enough chrome to be worth driving. The showcase is the public
+// showcase package, which this drives as a window of its own the way
+// cmd/uitk-shots photographs it; the tour shows the same widgets over
+// three of its pages, and Settings under its theme preview. Mail moved to
+// its own repository and drives itself there; see docs/testing.md.
 func Run(opts Options) []Result {
 	var out []Result
 	apps := strings.ToLower(strings.TrimSpace(opts.Apps))
 	if apps == "" || apps == "all" {
-		out = append(out, runGallery(opts)...)
+		out = append(out, runShowcase(opts)...)
 		out = append(out, runSettings(opts)...)
 		return out
 	}
 	for _, a := range strings.Split(apps, ",") {
 		switch strings.TrimSpace(a) {
-		case "gallery":
-			out = append(out, runGallery(opts)...)
+		case "showcase", "gallery":
+			out = append(out, runShowcase(opts)...)
 		case "settings":
 			out = append(out, runSettings(opts)...)
 		default:
-			out = append(out, Result{App: a, Step: "select", Err: fmt.Errorf("unknown app %q (gallery|settings|all)", a)})
+			out = append(out, Result{App: a, Step: "select", Err: fmt.Errorf("unknown app %q (showcase|settings|all)", a)})
 		}
 	}
 	return out
@@ -97,41 +102,41 @@ func checkPopup(w *app.Window) error {
 	return nil
 }
 
-func runGallery(opts Options) []Result {
+func runShowcase(opts Options) []Result {
 	var out []Result
 	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true})
 	w, err := a.NewWindow(platform.WindowOptions{
-		Title: "gallery-driver", Width: 1000, Height: 760, Headless: true,
+		Title: "showcase-driver", Width: 1000, Height: 760, Headless: true,
 	})
 	if err != nil {
-		return []Result{{App: "gallery", Step: "window", Err: err}}
+		return []Result{{App: "showcase", Step: "window", Err: err}}
 	}
 	defer w.Close()
 	w.SetContent(showcase.App(a, w, false))
 	a.PumpOnce()
 
-	step(&out, "gallery", "construct", func() error { return checkTree(w.Content()) })
-	step(&out, "gallery", "combo-popup", func() error { return openGalleryCombo(a, w) })
-	step(&out, "gallery", "form-popups", func() error { return driveFormPopups(a, w) })
+	step(&out, "showcase", "construct", func() error { return checkTree(w.Content()) })
+	step(&out, "showcase", "combo-popup", func() error { return openShowcaseCombo(a, w) })
+	step(&out, "showcase", "form-popups", func() error { return driveFormPopups(a, w) })
 	sizes := [][2]int{{1000, 760}, {860, 560}}
 	if !opts.Short {
 		sizes = append(sizes, [2]int{1200, 800})
 	}
 	for _, sz := range sizes {
 		ww, hh := sz[0], sz[1]
-		step(&out, "gallery", fmt.Sprintf("resize-%dx%d", ww, hh), func() error {
+		step(&out, "showcase", fmt.Sprintf("resize-%dx%d", ww, hh), func() error {
 			w.Inject(platform.Event{Kind: platform.EventResize, Width: ww, Height: hh})
 			a.PumpOnce()
 			return checkTree(w.Content())
 		})
 	}
-	step(&out, "gallery", "drag-splitters", func() error {
+	step(&out, "showcase", "drag-splitters", func() error {
 		return dragSplitters(a, w)
 	})
-	step(&out, "gallery", "scroll-lists", func() error {
+	step(&out, "showcase", "scroll-lists", func() error {
 		return scrollCollections(a, w, opts.Short)
 	})
-	step(&out, "gallery", "select-rows", func() error {
+	step(&out, "showcase", "select-rows", func() error {
 		return selectRows(a, w)
 	})
 	return out
@@ -411,7 +416,7 @@ func driveFormPopups(a *app.Application, w *app.Window) error {
 	return nil
 }
 
-func openGalleryCombo(a *app.Application, w *app.Window) error {
+func openShowcaseCombo(a *app.Application, w *app.Window) error {
 	var cb *widgets.ComboBox
 	widget.Walk(w.Content(), func(c widget.Component) {
 		if v, ok := c.(*widgets.ComboBox); ok && cb == nil && len(v.Items) > 0 {
@@ -419,7 +424,7 @@ func openGalleryCombo(a *app.Application, w *app.Window) error {
 		}
 	})
 	if cb == nil {
-		return fmt.Errorf("gallery has no ComboBox")
+		return fmt.Errorf("the showcase has no ComboBox")
 	}
 	cb.Open()
 	a.PumpOnce()

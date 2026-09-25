@@ -13,7 +13,7 @@ import (
 	"github.com/codemodify/uitoolkit/widgets"
 )
 
-// Page three: a drag is a conversation between two applications, and the
+// A drag is a conversation between two applications, and the
 // same Drag has to hold both halves of it — the reorder that never
 // leaves the list, and the drop into a file manager that leaves the
 // process entirely. The two lists here reorder, move rows between

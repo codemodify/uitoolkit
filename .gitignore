@@ -4,7 +4,6 @@
 /bin/
 dist/
 .DS_Store
-examples/gallery/gallery
 # Every sample's binary is its directory's name, so one pattern covers
 # them all — built beside their source, or at the repo root.
 examples/*/uitoolkit-sample-*
@@ -15,7 +14,6 @@ cmd/uitksettings/uitksettings
 /uitksettings
 /uitest-driver
 /uitoolkit-sample-*
-/gallery
 /settings.png
 /tmp/
 go.work

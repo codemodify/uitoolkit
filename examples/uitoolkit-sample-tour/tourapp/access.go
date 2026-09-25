@@ -12,7 +12,7 @@ import (
 	"github.com/codemodify/uitoolkit/widgets"
 )
 
-// Page eight: the three things that are invisible until they are wrong.
+// The three things that are invisible until they are wrong.
 //
 // A window is a tree of accessible nodes whether or not anyone is
 // reading it; a linter says whether a screen reader would find anything

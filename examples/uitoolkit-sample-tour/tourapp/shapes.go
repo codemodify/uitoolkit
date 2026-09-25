@@ -15,7 +15,7 @@ import (
 	"github.com/codemodify/uitoolkit/widgets"
 )
 
-// Page five: a window need not be a rectangle. The demonstration cannot
+// A window need not be a rectangle. The demonstration cannot
 // happen in this page — a hole in a page is just a drawing — so the page
 // opens two windows: a test card, and over it a window with a hole in it.
 // What proves the hole is real is that a press inside it is counted by

@@ -349,16 +349,16 @@ The application shots come from the applications: `comms-mail-demo
 git clone https://github.com/codemodify/uitoolkit.git
 cd uitoolkit
 CGO_ENABLED=0 go test ./...
-go run ./cmd/uitest-driver -short    # headless gallery + Settings
+go run ./cmd/uitest-driver -short    # headless showcase + Settings
 go run ./examples/uitoolkit-sample-tour               # the tour: a page per capability
 go run ./examples/uitoolkit-sample-tour -page shapes  # one page of it
-go run ./examples/gallery            # Wayland if WAYLAND_DISPLAY, else X11
-UITK_BACKEND=x11 go run ./examples/gallery
-UITK_BACKEND=wayland go run ./examples/gallery
-UITK_PAINT=auto go run ./examples/gallery   # default: GPU if EGL works
-UITK_PAINT=cpu go run ./examples/gallery    # v0.4.1 CPU present
-UITK_SCENE=off go run ./examples/gallery    # v0.5 immediate paint (no scene graph)
-go run ./examples/gallery -headless  # writes gallery.png
+go run ./examples/uitoolkit-sample-tour -page controls  # every widget, one page
+UITK_BACKEND=x11 go run ./examples/uitoolkit-sample-tour
+UITK_BACKEND=wayland go run ./examples/uitoolkit-sample-tour
+UITK_PAINT=auto go run ./examples/uitoolkit-sample-tour   # default: GPU if EGL works
+UITK_PAINT=cpu go run ./examples/uitoolkit-sample-tour    # v0.4.1 CPU present
+UITK_SCENE=off go run ./examples/uitoolkit-sample-tour    # v0.5 immediate paint (no scene graph)
+go run ./cmd/uitk-shots -gallery gallery.png  # the showcase alone, offscreen
 go run ./examples/uitoolkit-sample-notes
 go run ./examples/uitoolkit-sample-inspector
 go run ./examples/uitoolkit-sample-files
@@ -376,8 +376,8 @@ what the app driver covers.
 
 ```bash
 CGO_ENABLED=0 go test ./...
-go run ./cmd/uitest-driver           # gallery + Settings
-CGO_ENABLED=1 go build ./examples/gallery   # Linux CGO / Wayland
+go run ./cmd/uitest-driver           # showcase + Settings
+CGO_ENABLED=1 go build ./examples/uitoolkit-sample-tour   # Linux CGO / Wayland
 ```
 
 When you fix a UI bug, add a regression test. Headless / CI paints into
@@ -538,8 +538,7 @@ under.
 
 | Command | The application | What it proves |
 | --- | --- | --- |
-| `go run ./examples/uitoolkit-sample-tour` | [`examples/uitoolkit-sample-tour/tourapp`](examples/uitoolkit-sample-tour/tourapp) | Everything a page of controls cannot show, a page each: tabs that **are** the window's caption and tear out into windows of their own, docking, a drag that leaves the process, the toolkit's frame against the desktop's, a window with a hole you can click through, skins swapped live, the tray and the clipboard, and the window's own accessibility tree. See [docs/tour.md](docs/tour.md) |
-| `go run ./examples/gallery` | [`showcase`](showcase) | Stock controls, table, textarea, switch, accordion, spinner, tooltip, file stub, toolbar, combo, radio, progress, menus, tabs, tree, themes, scroll, list, message box. The controls are a package, because Settings shows the same showcase under its theme preview |
+| `go run ./examples/uitoolkit-sample-tour` | [`examples/uitoolkit-sample-tour/tourapp`](examples/uitoolkit-sample-tour/tourapp) | Every widget the toolkit has, over three pages built on the public [`showcase`](showcase) package — the controls, the views that hold rows, the documents — and then everything a page of controls cannot show, a page each: tabs that **are** the window's caption and tear out into windows of their own, docking, a drag that leaves the process, the toolkit's frame against the desktop's, a window with a hole you can click through, skins swapped live, the tray and the clipboard, and the window's own accessibility tree. See [docs/tour.md](docs/tour.md) |
 | `go run ./examples/uitoolkit-sample-notes` | [`examples/uitoolkit-sample-notes/notesapp`](examples/uitoolkit-sample-notes/notesapp) | A small real app: sortable table, textarea body, priority spinner, file stub, tooltips |
 | `go run ./examples/uitoolkit-sample-inspector` | [`examples/uitoolkit-sample-inspector/inspectorapp`](examples/uitoolkit-sample-inspector/inspectorapp) | Preferences inspector: panels that dock, float and close, a layout remembered between runs with `dock.Host.SaveLayoutFile`, table (JetBrains Mono), toolbar, message box |
 | `go run ./examples/uitoolkit-sample-files` | [`examples/uitoolkit-sample-files/filesapp`](examples/uitoolkit-sample-files/filesapp) | Files / Projects dogfood: tree, table, toolbar, menus, TextArea preview, history, drag and drop, dialogs |

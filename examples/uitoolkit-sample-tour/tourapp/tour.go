@@ -1,10 +1,11 @@
 // Package tourapp is the Tour sample: a page for each thing the toolkit
-// does — tabs that tear off, docking, drag and drop, window shapes,
+// does — every control it has, the views and documents built out of
+// them, tabs that tear off, docking, drag and drop, window shapes,
 // frames, skins, desktop integration and the accessibility tree — each
 // one a small working application rather than a screenshot.
 //
-// examples/uitoolkit-sample-tour opens the windows, takes the stills and lays out the
-// contact sheet; the pages are here.
+// examples/uitoolkit-sample-tour opens the windows, takes the stills and
+// lays out the contact sheet; the pages are here.
 package tourapp
 
 import (
@@ -20,9 +21,12 @@ import (
 	"github.com/codemodify/uitoolkit/widgets"
 )
 
-// The tour: one page for each thing a gallery of controls cannot show.
+// The tour: everything the toolkit can show of itself, a page at a time.
 //
-// The gallery answers "which widgets are there". This answers "what can a
+// The first three pages answer "which widgets are there" — they are the
+// showcase package, which was its own program (examples/gallery) until
+// the two demonstrations were merged, divided into the controls, the
+// views that hold rows, and the documents. The rest answer "what can a
 // window of this toolkit do" — carry its own tabs in its caption, hand a
 // panel to a window of its own and take it back, start a drag that leaves
 // the application, draw its own frame or let the desktop draw it, cut a
@@ -30,17 +34,21 @@ import (
 // exist only while something is running: the accessibility tree, the
 // clipboard, the tray, the display's scale.
 //
-// The navigation is the first of those capabilities rather than a sidebar
-// beside it. These pages are tabs in the window's title bar: drag one to
-// reorder it, close it, open it again from "+", and pull one clear of the
-// strip to get a second tour window running that page. Page one is
-// therefore demonstrated by the thing the user is already holding to move
-// around, which is the only honest way to show a tab strip that is a
-// window's caption rather than a widget under one.
+// The navigation is itself one of those capabilities rather than a
+// sidebar beside them. These pages are tabs in the window's title bar:
+// drag one to reorder it, close it, open it again from "+", and pull one
+// clear of the strip to get a second tour window running that page. The
+// Tabs page is therefore demonstrated by the thing the user has been
+// holding to move around since the window opened, which is the only
+// honest way to show a tab strip that is a window's caption rather than
+// a widget under one.
 
 // The pages, in the order the tour opens them.
 const (
-	pageTabs = iota
+	pageControls = iota
+	pageViews
+	pageDocs
+	pageTabs
 	pageDock
 	pageDrag
 	pageFrames
@@ -65,14 +73,17 @@ type tourPage struct {
 // rest) so that a page's text and its build sit together; only the order
 // lives here.
 var tourPages = []tourPage{
-	pageTabs:    {name: "Tabs"},
-	pageDock:    {name: "Docking"},
-	pageDrag:    {name: "Drag and drop"},
-	pageFrames:  {name: "Frames"},
-	pageShapes:  {name: "Shapes"},
-	pageSkins:   {name: "Skins"},
-	pageDesktop: {name: "Desktop"},
-	pageAccess:  {name: "Access"},
+	pageControls: {name: "Controls"},
+	pageViews:    {name: "Views"},
+	pageDocs:     {name: "Documents"},
+	pageTabs:     {name: "Tabs"},
+	pageDock:     {name: "Docking"},
+	pageDrag:     {name: "Drag and drop"},
+	pageFrames:   {name: "Frames"},
+	pageShapes:   {name: "Shapes"},
+	pageSkins:    {name: "Skins"},
+	pageDesktop:  {name: "Desktop"},
+	pageAccess:   {name: "Access"},
 }
 
 // allTourPages is every page, in order.
@@ -177,6 +188,12 @@ func TourPageIndex(name string) int {
 	// The tab titles are what a user reads; these are what a command line
 	// is likely to carry.
 	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "control", "controls", "widgets", "gallery", "showcase":
+		return pageControls
+	case "view", "views", "lists", "list", "table", "tree", "collections":
+		return pageViews
+	case "document", "documents", "docs", "richtext", "rich-text", "mdi", "wizard":
+		return pageDocs
 	case "tab", "tabs", "titlebar", "title-bar":
 		return pageTabs
 	case "dock", "docking", "panels":
