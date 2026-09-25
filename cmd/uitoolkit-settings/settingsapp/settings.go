@@ -15,8 +15,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/codemodify/paintengine2d"
-	"github.com/codemodify/uitoolkit"
 	"github.com/codemodify/uitoolkit/app"
 	"github.com/codemodify/uitoolkit/layout"
 	"github.com/codemodify/uitoolkit/style"
@@ -44,20 +42,13 @@ const (
 // names, and the names of the four pages they came from.
 var settingsSections = []string{"Theme", "Behaviour", "Preview", "Files"}
 
-// inColumn reports whether a section is in the scrolling column: the
-// others are always on screen, so there is nothing to scroll to. Only
-// the theme browser is in it now that the options stand over the
-// preview, and the browser is the top of it, so nothing -page names is
-// under the fold — the column opens where it opens.
-func inColumn(section int) bool { return section == sectionTheme }
-
 // Theme browser filters: every built-in pack, one decade, or user packs.
 var themeFilters = []string{"All decades", "1980s", "1990s", "2000s", "2010s", "2020s", "My themes"}
 
 const filterUser = 6
 
 // SettingsApp is the toolkit appearance editor, and it is one page: the
-// theme browser down a scrolling column on the left, and on the right,
+// theme browser down a column on the left, and on the right,
 // filling the rest of the window at every size, the thing it is
 // browsing for — a small application window whose frame, caption and
 // every control come from the staged pack, with the five on/off options
@@ -70,7 +61,7 @@ const filterUser = 6
 // Closing without Apply discards the staged change.
 func SettingsApp(a *app.Application, win *app.Window) widget.Component {
 	saved := style.LoadAppearance().Normalize()
-	return buildSettings(a, win, saved, saved, sectionTheme, false)
+	return buildSettings(a, win, saved, saved, false)
 }
 
 // SettingsAppStaged is SettingsApp with a theme already staged (not
@@ -90,8 +81,11 @@ func SettingsAppOpen(a *app.Application, win *app.Window, theme, page string) wi
 // SettingsOptions is how the command opens Settings.
 type SettingsOptions struct {
 	// Theme is a pack staged in the preview (not applied), by id; empty
-	// stages the applied one. Page is the section the page opens at, by
-	// any of the names [SettingsPage] takes; empty is the top.
+	// stages the applied one. Page is the section that was asked for, by
+	// any of the names [SettingsPage] takes. It is accepted and it does
+	// nothing: there is one page, nothing on it is under a fold, and
+	// every name resolves to something already on screen. See
+	// [SettingsPage] for why it is still taken.
 	Theme, Page string
 	// PlainPreview leaves the bar of live settings off the preview, so
 	// that the window in the right-hand pane is the sample application
@@ -112,15 +106,18 @@ func SettingsAppWith(a *app.Application, win *app.Window, opt SettingsOptions) w
 	if pack, ok := style.LoadTheme(opt.Theme); ok {
 		staged.Name, staged.Theme = pack.Name, pack.Palette
 	}
-	return buildSettings(a, win, saved, staged, SettingsPage(opt.Page), opt.PlainPreview)
+	return buildSettings(a, win, saved, staged, opt.PlainPreview)
 }
 
-// SettingsPage is the section a name opens the page at; an unknown or
-// empty name is the top of it, which is the theme browser.
+// SettingsPage is the section a name means; an unknown or empty name is
+// the theme browser, which is the column on the left.
 //
-// There is one page now, so -page no longer switches anything: it says
-// which part of the page to start at, and Settings scrolls its column
-// there when the section named is in it. The names of the four pages
+// There is one page, nothing on it scrolls out of reach, and so -page
+// switches nothing and scrolls nothing: every name it takes resolves to
+// something that is already on screen. The flag and this function are
+// kept anyway, because a flag that has stopped mattering must still not
+// be an error: the names are in scripts, in the atlas tooling, in
+// internal/apptest and in the docs of two releases. The names of the four pages
 // Settings used to have keep working, because -page is in scripts, in
 // the atlas tooling and in the docs of two releases — each one resolves
 // to the section that swallowed it. "appearance", "corners" and "icons"
@@ -129,9 +126,7 @@ func SettingsAppWith(a *app.Application, win *app.Window, opt SettingsOptions) w
 // exporting a pack and deleting one are under the theme browser;
 // "about" is Files; "desktop" and "colours" are Behaviour, because
 // following the desktop's colours is one of the five options in that
-// row. Three of the four sections are beside the preview rather than in
-// the column, and a name that resolves to one of those leaves the
-// column where it is: what it names is already on screen.
+// row.
 func SettingsPage(name string) int {
 	switch strings.ToLower(strings.TrimSpace(name)) {
 	case "appearance", "shape", "shape and weight", "shape and motion", "corners", "icons", "icon sets", "preview":
@@ -154,20 +149,13 @@ type settingsState struct {
 	win    *app.Window
 	saved  style.Appearance
 	staged style.Appearance
-	// section is where the page opens; it is used once, on the first
-	// build, and a rebuild keeps the scroll offset instead.
-	section  int
-	revealed bool
-	filter   int
+	filter int
 	// query narrows the theme browser to what it names: a pack's id,
 	// name, year, family, engine or summary.
 	query string
 	// listOff keeps the theme browser's scroll position across rebuilds:
 	// picking a theme below the fold used to jump the list to the top.
 	listOff float32
-	// choicesOff is where the user left the column of choices; Apply
-	// rebuilds the page and must not throw them back to the top of it.
-	choicesOff float32
 	// browserRatio is where the user left the splitter between the
 	// choices and the previews; it survives a rebuild.
 	browserRatio float32
@@ -184,16 +172,9 @@ type settingsState struct {
 	rows       []themeRow
 	list       *widgets.ListView
 	bodySplit  *widgets.Splitter
-	choices    *widgets.ScrollView
-	sections   []widget.Component
 	scopes     []*widgets.ThemeScope
 	previewBox *widgets.Panel
 	applyBtn   *widgets.Button
-	// What Delete acts on follows the staged choice, so the button is
-	// always on the page and goes grey when the staged pack is not one
-	// of the user's own: a button that came and went would move
-	// everything under it every time a pack was picked.
-	delTheme *widgets.Button
 	// The controls the preview carries instead of showing: the sets the
 	// chooser offers, the chooser itself, the size its glyphs are drawn
 	// at and the shape of the window's corners. All three stand on a bar
@@ -216,9 +197,6 @@ func (s *settingsState) capture() {
 	if s.list != nil {
 		s.listOff = s.list.OffsetY
 	}
-	if s.choices != nil {
-		s.choicesOff = s.choices.OffsetY
-	}
 	if s.bodySplit != nil {
 		// Only what the user dragged is kept: a ratio still ours is
 		// worked out again from the window, which by now has the size the
@@ -235,9 +213,9 @@ func (s *settingsState) rebuild() {
 	s.win.SetContent(buildSettingsState(s))
 }
 
-func buildSettings(a *app.Application, win *app.Window, saved, staged style.Appearance, section int, plain bool) widget.Component {
+func buildSettings(a *app.Application, win *app.Window, saved, staged style.Appearance, plain bool) widget.Component {
 	s := &settingsState{
-		a: a, win: win, saved: saved.Normalize(), staged: staged.Normalize(), section: section, plain: plain,
+		a: a, win: win, saved: saved.Normalize(), staged: staged.Normalize(), plain: plain,
 	}
 	// The preview draws the staged theme's light or dark sibling: redraw
 	// it when the desktop switches.
@@ -254,25 +232,16 @@ func buildSettings(a *app.Application, win *app.Window, saved, staged style.Appe
 
 func buildSettingsState(s *settingsState) widget.Component {
 	s.scheme = style.DesktopColorScheme()
-	if s.section < 0 || s.section >= len(settingsSections) {
-		s.section = sectionTheme
-	}
 	// Every live part belongs to the build that made it.
-	s.rows, s.list, s.bodySplit, s.choices = nil, nil, nil, nil
-	s.sections = make([]widget.Component, len(settingsSections))
+	s.rows, s.list, s.bodySplit = nil, nil, nil
 	s.scopes, s.previewBox = nil, nil
-	s.delTheme = nil
 	s.iconSets, s.iconPick, s.iconSize, s.corners = nil, nil, nil, nil
 
 	if s.browserRatio == 0 {
 		s.browserRatio = defaultChoicesRatio(s.win)
 		s.browserAuto = s.browserRatio
 	}
-	s.choices = widgets.NewScrollView(s.choicesColumn())
-	s.choices.SetAccessibleName("Settings")
-	s.choices.OffsetY = s.choicesOff
-
-	s.bodySplit = widgets.NewSplitter(widgets.SplitColumns, s.openAt(), s.previewColumn())
+	s.bodySplit = widgets.NewSplitter(widgets.SplitColumns, s.choicesColumn(), s.previewColumn())
 	s.bodySplit.Ratio = s.browserRatio
 	s.bodySplit.SetAccessibleName("Settings and preview")
 
@@ -292,22 +261,6 @@ func buildSettingsState(s *settingsState) widget.Component {
 	root := widgets.NewColumn(body, actions)
 	root.AddFlex(body, 1)
 	return root
-}
-
-// openAt is the column of choices, wrapped — on the first build only —
-// in the thing that scrolls it to the section -page named. Where that
-// section starts is not known until the column has been measured at the
-// width it got, so it cannot be worked out here; the wrapper does it at
-// the end of the first layout and then gets out of the way.
-func (s *settingsState) openAt() widget.Component {
-	was := s.revealed
-	s.revealed = true
-	if was || s.section == sectionTheme || !inColumn(s.section) || s.sections[s.section] == nil {
-		// The top of the column, or a section that is not in it: what
-		// -page named is beside the preview and already on screen.
-		return s.choices
-	}
-	return newScrollTo(s.choices, s.sections[s.section])
 }
 
 // ---- staging ------------------------------------------------------------------
@@ -363,38 +316,12 @@ func (s *settingsState) showStaged() {
 		s.list.Selected = s.selectedRow()
 		s.list.Invalidate()
 	}
-	// Delete says what it would delete, and is only alive while that is
-	// something of the user's own.
-	if s.delTheme != nil {
-		s.delTheme.SetEnabled(indexTheme(style.ListUserThemes(), s.staged.Name) >= 0)
-	}
 	if s.applyBtn != nil {
 		s.applyBtn.SetEnabled(s.staged != s.saved)
 	}
 }
 
-// ---- the column of choices ------------------------------------------------
-
-// choicesColumn is the left-hand column, and it is the theme browser
-// alone: the one decision on this page that is not about the window on
-// the right but about which of 129 packs that window is to be. The shape
-// and the icons went to the preview's own chrome, where what shows a
-// setting is what sets it; the five on/off options and the three paths
-// went to the pane beside this one, over and under the preview. What is
-// left still scrolls, because a list of 129 packs does not fit in a
-// 520-pixel window and something has to give — and what must not give is
-// the preview beside it, which is why nothing else is in here.
-func (s *settingsState) choicesColumn() widget.Component {
-	s.sections[sectionTheme] = s.themeSection()
-	col := widgets.NewColumn(
-		widgets.NewTitle("Settings"),
-		widgets.NewLabel("v"+uitoolkit.Version),
-		s.sections[sectionTheme],
-	).WithGap(12).WithPad(4)
-	return col
-}
-
-// ---- Theme ------------------------------------------------------------------
+// ---- the column: the theme browser --------------------------------------------
 
 // themeRow is one entry of the theme browser. A pack is whatever an
 // engine — or a skin of pictures — makes of its tokens; the browser only
@@ -466,18 +393,31 @@ func (s *settingsState) selectedRow() int {
 	return -1
 }
 
-// themeSection is the head of the column and the first decision: a
-// search field, the decade filter, the packs that pass both, and the two
-// things that can be done to a pack of the user's own — write one out,
-// and remove one.
+// choicesColumn is the left-hand column, and it is four bare controls:
+// a search field, the decade filter, the list of packs that pass both,
+// and Export. There is no caption over them and no group box around
+// them, because there is nothing for one to tell them apart from: the
+// column is one thing, the browser, and a legend reading Theme over the
+// only list on the page said no more than the list says by being a list
+// of themes. What a screen reader needs instead of that legend is on the
+// two controls themselves — the list is called Themes and the field is
+// called Search themes — and that is where it should have been all
+// along, because a group box's legend names a group, not the list
+// inside it.
 //
-// Export and Delete were a page of their own (Packs) with a second copy
-// of the browser on it to say which pack they meant. The browser here is
-// the only one there is now, so they sit under it and act on what it has
-// staged: Export writes the staged look out as a pack, Delete removes the
-// staged pack when it is one of the user's. Nothing has to be selected
-// twice.
-func (s *settingsState) themeSection() widget.Component {
+// The heading that read Settings and the version under it went with
+// them. A window says what application it is in its title bar, which is
+// the desktop's to draw and says "uitoolkit - Settings" already; a
+// heading repeating it inside the window was the last of the four-page
+// sidebar, which needed something at the top of the column to own the
+// pages under it. The version is not gone: it is what
+// `uitoolkit-settings -version` prints.
+//
+// Everything else that was ever in here has gone to the pane on the
+// right: the shape and the icons to the preview's own chrome, where what
+// shows a setting is what sets it, and the five on/off options and the
+// three paths over and under the preview.
+func (s *settingsState) choicesColumn() widget.Component {
 	s.rows = s.themeRows()
 	s.list = widgets.NewListView(len(s.rows), func(i int) string {
 		if i < 0 || i >= len(s.rows) {
@@ -538,23 +478,41 @@ func (s *settingsState) themeSection() widget.Component {
 	})
 	filters.SetAccessibleName("Decade")
 
-	// The list is held to a height rather than run to the foot of the
-	// window: it is in a column that scrolls now, and a view as tall as
-	// all 129 of its rows would have made the column ten screens long and
-	// given the list no scrollbar of its own. Nine rows is enough to
-	// browse in and leaves the four sections under it within reach.
-	return widgets.NewPanel("Theme",
-		wrapped("The pack every uitoolkit app is drawn from. Picking one stages it in the preview; nothing is written until Apply."),
-		search, filters,
-		widgets.NewHeightBox(252, s.list),
-		s.exportButton(), s.deleteThemeButton(),
-	)
+	// The list runs to the foot of the column: it takes every pixel the
+	// search field, the filter and Export leave, at every window size,
+	// and scrolls its 129 rows inside that on a scrollbar of its own.
+	//
+	// It was held to 252 pixels inside a column that scrolled, which was
+	// the only way to have both a list with a scrollbar and a column
+	// with one — a view as tall as all 129 of its rows would have made
+	// the column ten screens long. That column had nothing else in it
+	// but the browser, so what the arrangement really bought was two
+	// scrollbars an inch apart and 250 pixels of nothing below the
+	// buttons. The column does not scroll at all now. Nothing in it can
+	// overflow: three controls of fixed height and a list that takes
+	// what is left, which is the same promise the preview makes on the
+	// other side of the sash.
+	col := widgets.NewColumn(search, filters, s.list, s.exportButton()).WithGap(8).WithPad(4)
+	col.AddFlex(s.list, 1)
+	// The window opens on the list, not on the search field above it.
+	// A window with no initial focus of its own starts on the first
+	// control a click would focus, which is the field, and a focused
+	// field shows its caret instead of its placeholder — so the top of a
+	// column with no caption over it was an empty box, and the one word
+	// on the page that says what the column is ("Search themes") was the
+	// one word the page would not draw. Opening on the list shows it,
+	// and it is the better place to land anyway: this column is a
+	// browser, and the arrow keys walk it and stage what they reach.
+	s.win.SetInitialFocus(s.list)
+	return col
 }
 
 // exportButton writes the staged look out as a theme pack of the user's
 // own. It is under the browser because the browser is what says which
 // look is staged, and because the pack it writes appears in that same
-// list a line later, as "User · <name>".
+// list a line later, as "User · <name>". It is the only thing under the
+// list now: Delete theme… stood beside it for a release and is gone,
+// the call made for Delete icon set… the release before.
 func (s *settingsState) exportButton() widget.Component {
 	var host widget.Component
 	btn := widgets.NewButton("Export current theme…", func() {
@@ -573,44 +531,6 @@ func (s *settingsState) exportButton() widget.Component {
 	})
 	host = btn
 	return btn
-}
-
-// deleteThemeButton removes the staged pack from disk when it is one the
-// user exported. It lives under the browser — the one place that lists
-// the user's own packs — and it is grey rather than absent while a
-// built-in pack is staged, so that picking a pack never shuffles the
-// rest of the column.
-func (s *settingsState) deleteThemeButton() widget.Component {
-	var host widget.Component
-	s.delTheme = widgets.NewButton("Delete theme…", func() {
-		name := s.staged.Name
-		if indexTheme(style.ListUserThemes(), name) < 0 {
-			return
-		}
-		widgets.Confirm(host, "Delete theme?", "Remove "+name+" from disk? This cannot be undone.", func(yes bool) {
-			if !yes {
-				return
-			}
-			if err := style.DeleteUserTheme(name); err != nil {
-				s.fail("Delete failed", err)
-				return
-			}
-			next := style.AfterUserThemeDeleted(s.staged, name)
-			if s.saved.Name == name {
-				if err := style.SaveAppearance(next); err != nil {
-					s.fail("Delete failed", err)
-					return
-				}
-				s.saved = next
-			}
-			s.a.ApplyAppearance(s.saved)
-			s.staged = next.Normalize()
-			s.rebuild()
-		})
-	})
-	host = s.delTheme
-	s.delTheme.SetEnabled(false)
-	return s.delTheme
 }
 
 // ---- the options, over the preview --------------------------------------------
@@ -917,13 +837,11 @@ func shortPath(p string) string {
 // folded onto four lines at the 720x520 minimum, leaving the preview a
 // caption and a menu bar.
 func (s *settingsState) previewColumn() widget.Component {
-	s.sections[sectionBehaviour] = s.optionsRow()
+	options := s.optionsRow()
 	s.previewBox = widgets.NewPanel("", PreviewAppWith(nil, s.previewControls()))
 	s.previewBox.Window = true
 	preview := s.scoped(s.previewBox)
-	s.sections[sectionPreview] = preview
-	s.sections[sectionFiles] = s.filesSection()
-	col := widgets.NewColumn(s.sections[sectionBehaviour], preview, s.sections[sectionFiles]).WithGap(8)
+	col := widgets.NewColumn(options, preview, s.filesSection()).WithGap(8)
 	col.AddFlex(preview, 1)
 	return col
 }
@@ -1008,12 +926,14 @@ func (s *settingsState) followWindow() {
 	s.bodySplit.RequestLayout()
 }
 
-// defaultChoicesRatio aims the column of choices at about 300 logical
-// pixels whatever the window and the display scale are: a narrow window
-// gives it a bigger share so its rows and its prose stay readable, a wide
-// one hands the room to the previews. It was 240 while the column was the
-// theme browser and nothing else; an option row is a label, a control and
-// a line of prose, and 240 wrapped every one of them to three lines.
+// defaultChoicesRatio aims the column at about 300 logical pixels
+// whatever the window and the display scale are: a narrow window gives
+// it a bigger share so its rows stay readable, a wide one hands the room
+// to the preview. It was 240 when the column was the theme browser and
+// nothing else the first time, and went to 300 for the option rows that
+// have since left. It stays at 300: what sets it now is a row reading
+// "1995  ·  Windows 95" and the word on the Export button, and 240
+// elides the one and wraps the other.
 // Dragging the sash replaces it.
 func defaultChoicesRatio(win *app.Window) float32 {
 	const want, pad = 300, 30
@@ -1284,23 +1204,6 @@ func previewTree() *widgets.TreeNode {
 
 // ---- helpers ------------------------------------------------------------------
 
-// wrapped is a label that wraps: prose on this page is read, and a line
-// elided at the column's edge hides the part that says where a file is.
-func wrapped(text string) *widgets.Label {
-	l := widgets.NewLabel(text)
-	l.Wrap = true
-	return l
-}
-
-func indexTheme(packs []style.ThemePack, name string) int {
-	for i, p := range packs {
-		if p.Name == name {
-			return i
-		}
-	}
-	return -1
-}
-
 func indexIcon(sets []style.IconSetInfo, name style.IconSetName) int {
 	for i, s := range sets {
 		if s.Name == name {
@@ -1308,51 +1211,6 @@ func indexIcon(sets []style.IconSetInfo, name style.IconSetName) int {
 		}
 	}
 	return -1
-}
-
-// scrollTo puts one section of a scrolling column at the top of it, once,
-// at the end of the first layout. -page names a section now that Settings
-// is one page, and where a section starts is not known until the column
-// has been measured at the width the splitter gave it — which happens
-// after the page is built, so it cannot be an offset set when the page is
-// made. This holds the scroll view, lets it lay out, then scrolls it and
-// does nothing ever after.
-type scrollTo struct {
-	widget.Base
-	view    *widgets.ScrollView
-	section widget.Component
-	done    bool
-}
-
-func newScrollTo(view *widgets.ScrollView, section widget.Component) widget.Component {
-	if view == nil || section == nil {
-		return view
-	}
-	b := &scrollTo{view: view, section: section}
-	b.Init(b)
-	b.Add(view)
-	return b
-}
-
-func (b *scrollTo) Measure(c layout.Constraints) paintengine2d.Point {
-	return b.view.Measure(c)
-}
-
-func (b *scrollTo) Arrange(r paintengine2d.Rect) {
-	b.SetBounds(r)
-	b.view.Arrange(paintengine2d.XYWH(0, 0, r.Dx(), r.Dy()))
-	if b.done || r.Empty() {
-		return
-	}
-	b.done = true
-	// The section's top in the scrolled content: every offset from it up
-	// to the view, plus the offset the view is already at (the content is
-	// arranged at -OffsetY).
-	top := b.view.OffsetY
-	for p := widget.Component(b.section); p != nil && p != widget.Component(b.view); p = p.Parent() {
-		top += p.Bounds().Min.Y
-	}
-	b.view.ScrollTo(top - 8)
 }
 
 func promptExportName(from widget.Component, on func(string)) {

@@ -185,9 +185,10 @@ func runSettings(opts Options) []Result {
 	return out
 }
 
-// walkSettingsPages opens Settings once per -page name, in a fresh window,
-// because the page is scrolled to that section as it is first laid out and
-// the driver is looking for what construction breaks.
+// walkSettingsPages opens Settings once per -page name, in a fresh window.
+// The flag no longer moves anything — one page, nothing under a fold — but
+// every name it ever took has to keep building a window rather than
+// failing, and the driver is looking for what construction breaks.
 func walkSettingsPages(a *app.Application) error {
 	// Settings is one page now and -page names a section of it. Both the
 	// section names and the names of the four pages they came from are

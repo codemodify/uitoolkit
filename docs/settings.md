@@ -15,17 +15,21 @@ go run ./cmd/uitoolkit-settings -stage win98      # open with Windows 98 staged
 go run ./cmd/uitoolkit-settings -page appearance  # name a section of the page
 go run ./cmd/uitoolkit-settings -headless         # settings.png in cwd
 go run ./cmd/uitoolkit-settings -stage aqua -screenshot out/
+go run ./cmd/uitoolkit-settings -version          # the toolkit version, and the only place it is stated
 tools/shots/demos.sh                              # docs/screenshots/settings.webp and the other demos
 ```
 
 `-page` names a **section of the one page**: `theme` (the default, the
-top of the column), `behaviour`, `preview`, `files`. Only the theme
-browser is in the column that scrolls now, and it is the top of it, so
-**nothing `-page` can name is under the fold** and every name lands on
-something already on screen: the flag says which part of the page you
-came for and the page opens where it opens. (The mechanism that scrolls
-the column to a section is still there for the day something joins the
-browser in it.) The names of the four pages Settings used to have still
+column on the left), `behaviour`, `preview`, `files`. **Nothing on the
+page scrolls out of reach**, so the flag names what is already on screen
+and changes nothing: it says which part of the page you came for and the
+page opens the way it always opens. The machinery that scrolled the
+column to a named section (`openAt`, `scrollTo`) is **gone** — it went
+with the column's scrollbar, because the column does not scroll any more
+and code that cannot fire is not kept. What is kept is
+`SettingsPage(name)`, which resolves a name to a section, and the flag
+itself, because a flag that has stopped mattering must still not be an
+error. The names of the four pages Settings used to have still
 resolve, because they are in scripts, in the atlas tooling and in the
 docs of two releases: `themes` and `packs` (and `packs & icons`, `theme
 packs`) open **Theme**, `appearance`, `icons` and `corners` open the
@@ -39,9 +43,10 @@ that row. An unknown name is the top of the page.
 There is one page and no navigation. Settings used to be four pages
 behind a sidebar — Themes, Appearance, Packs, About — and they were four
 answers to one question: what does this desktop look like. The window is
-now a splitter: **the theme browser down a scrolling column on the
-left**, and **the preview on the right**, with **Apply** pinned at the
-foot, outside both.
+now a splitter: **the theme browser down a column on the left**, and
+**the preview on the right**, with **Apply** pinned at the foot, outside
+both. Neither side scrolls; the only thing on the page that does is the
+list of packs, inside itself.
 
 The line through the page is no longer between kinds of choice but
 between the browser and the thing it is browsing for. **The preview sets
@@ -57,9 +62,9 @@ display scale are, and it keeps that share while the window is resized
 (`Window.OnResize`). Dragging the sash replaces the split: a dragged
 split stays through every resize after, and survives Apply. It was 240
 when the column was the browser and nothing else the first time; it is
-the browser and nothing else again, and it has kept 300, because a row
-reading `1995 · Windows 95` and the paragraph over the search field are
-what set it, not the option rows that have since left.
+the browser and nothing else again, and it has kept 300, because what
+sets it now is a row reading `1995 · Windows 95` and the word on the
+Export button — 240 elides the one and wraps the other.
 
 ### The preview, on the right
 
@@ -71,7 +76,7 @@ showing as *Breeze Dark* because the desktop asked for dark.
 
 It is a `widgets.ThemeScope`, so Settings itself keeps the applied look.
 Staging a pack switches it where it stands — the caret stays in the
-search field, the focus on the list, the column where it was scrolled.
+search field, the focus on the list, and the list where it was scrolled.
 
 **It sets three of the things it shows**, on a bar of its own —
 `Icons [Classic ▾]  Size [24 ▾] │ Corners [Theme shape ▾]`.
@@ -225,30 +230,78 @@ the operation.
 
 ### The column, on the left
 
-One section, and the one decision on this page that is not about the
-window on the right but about which of 129 packs that window is to be.
+**Four bare controls**, in this order, and nothing around them:
 
-**Theme** — a **search field** (a pack is found by its id, name, year,
-family, engine or what its summary says — every word has to match; Return
-stages the first hit, Escape empties the field), the **decade filter**
-(*All decades*, one decade, or *My themes*) and the packs that pass both,
-listed by year (`1995 · Windows 95`), user exports as `User · <name>`.
-The list is held to a height rather than run to the foot of the window:
-it is in a column that scrolls, and a view as tall as all 129 of its rows
-would have made the column ten screens long and given the list no
-scrollbar of its own.
+```
+[ Search themes            ]
+[ All decades            ▾ ]
+ 1995 · Windows 95
+ 1995 · Windows 95 Dark
+ …                          ← to the foot of the window
+[  Export current theme…   ]
+```
 
-Under the list, the two things that can be done to a pack:
+- a **search field** — a pack is found by its id, name, year, family,
+  engine or what its summary says; every word has to match, Return stages
+  the first hit, Escape empties the field;
+- the **decade filter** — *All decades*, one decade, or *My themes*;
+- the **list of packs** that pass both, by year (`1995 · Windows 95`),
+  user exports as `User · <name>`;
+- **Export current theme…**, which writes the staged look out as a theme
+  pack of the user's own. It was on the Packs page, which needed a second
+  copy of the browser to say which pack it meant; it is under the only
+  browser there is now, and the pack it writes appears in that same list
+  a line later.
 
-- **Export current theme…** writes the staged look out as a theme pack
-  of the user's own. It was on the Packs page, which needed a second copy
-  of the browser to say which pack it meant; it is under the only browser
-  there is now, and the pack it writes appears in that same list a line
-  later.
-- **Delete theme…** removes the staged pack from disk when it is one the
-  user exported, after a Yes/No confirmation. It is **grey rather than
-  absent** while a built-in pack is staged: a button that came and went
-  would move the whole column under it every time a pack was picked.
+**The list runs to the foot of the column.** It takes every pixel the
+three controls around it leave, at every window size, and scrolls its 129
+rows inside itself. It was held to 252 logical pixels — nine rows — inside
+a column that scrolled, which was the only way to have both a list with a
+scrollbar and a column with one; a view as tall as all 129 rows would
+have made the column ten screens long. What that really bought was **two
+scrollbars an inch apart and about 250 pixels of nothing under the
+buttons**. It shows **25–27 packs at 1024×860** and **14–15 at the
+720×520 minimum** now, at scale 1 and at 1.75 alike.
+
+**The column does not scroll at all.** Nothing in it can overflow: three
+controls of fixed height and a list that takes what they leave — the same
+promise the preview makes on the other side of the sash. Settings owns no
+`ScrollView` any more, which is why `openAt` and `scrollTo` went with it
+(see `-page`, above).
+
+**There is no group box and no heading.** The *Theme* legend around these
+four, the paragraph over the search field, the **Settings** heading at the
+top of the column and the **version** label under it are all gone. A
+legend reading *Theme* over the only list on the page said no more than
+the list says by being a list of themes; a window says what application
+it is in its title bar, which the desktop draws and which already reads
+*uitoolkit - Settings*; and the heading was the last of the four-page
+sidebar, which needed something at the top of the column to own the pages
+under it.
+
+**What names the column instead** is on the two controls themselves:
+the list is called **Themes** and the field is called **Search themes**,
+which is where those names belonged all along — a group box's legend
+names a *group*, not the list inside it — and `a11y.Check` fails an
+unnamed list outright, whatever is written above it.
+`TestSettingsIsAccessible` checks both names and that no group called
+*Theme* is left claiming to be one of them.
+
+**The window opens on the list, not on the search field.** A window with
+no initial focus of its own starts on the first control a click would
+focus, which is the field; a focused field shows its caret instead of its
+placeholder, so the top of a captionless column was a bare empty box and
+*Search themes* — the one word on the page that says what the column is —
+was the one word the page would not draw. `Window.SetInitialFocus` puts
+the focus on the list, which shows it, and which is the better place to
+land anyway: this column is a browser, and the arrow keys walk it and
+stage what they reach.
+
+**The version** used to be the label under that heading, and it was the
+only place Settings stated it. It is **`uitoolkit-settings -version`**
+now. It is not in the **Files** block: that block is under the preview,
+and a fourth line in it would be a line off the window the page is about
+— and would move the Theme Atlas crop for a fact about the build.
 
 That is the whole column. **Behaviour** was under it for a release —
 four switches, each with a line of prose — and is the row of five
@@ -258,10 +311,11 @@ options over the preview now; see above.
 
 The **Packs** page is gone. Its two lists were a second theme browser and
 a second icon chooser; the browser and the chooser are on this page, so
-the lists were a duplicate. One of its two actions moved next to the
-thing it acts on — Export and Delete theme… are under the theme browser
-— and the other, Delete icon set…, went round the page for a release
-before going altogether.
+the lists were a duplicate. Both its actions have now gone the same way:
+Delete icon set… went round the page for a release before going
+altogether, and Delete theme… followed it. **Export current theme…** is
+all that is left of that page, under the browser that says what it would
+write.
 
 The **sidebar** is gone with the pages, and with it the `Pages` list a
 screen reader used to drive. There is nothing to drive: one Tab ring
@@ -280,11 +334,27 @@ short words. The column is the browser alone, which is what it was
 before the four pages became one.
 
 **`Delete icon set…` is gone**, from the column where it started and
-from the icons line of **Files** where it spent a release. It was the
-last thing left of the old Packs page. `style.DeleteUserIconSet` stays —
-it is public toolkit API and an application may want it — but Settings
-does not call it any more, and nothing on the **Files** block does
-anything at all now.
+from the icons line of **Files** where it spent a release.
+`style.DeleteUserIconSet` stays — it is public toolkit API and an
+application may want it — but Settings does not call it any more, and
+nothing on the **Files** block does anything at all now.
+
+**`Delete theme…` is gone**, the same call one release later. It stood
+under the browser, grey for all 129 built-in packs and live for the
+handful the user had exported, and what it did was destroy a directory
+after a Yes/No. A pack is a folder; `rm -r ~/.config/uitoolkit/themes/<name>`
+removes it. `style.DeleteUserTheme` and `style.AfterUserThemeDeleted`
+stay, and so do `uitoolkit.DeleteUserTheme` and
+`uitoolkit.AfterUserThemeDeleted` beside them — public toolkit API, and
+an application that offers to remove a pack needs both halves, the delete
+and the rewrite of an appearance that named it. Settings calls neither.
+Everything the app kept for that button went with it: the `delTheme`
+field, the branch of `showStaged` that greyed it, and `indexTheme`, its
+only caller.
+
+The **Theme group box** is gone, with the paragraph under its legend,
+and so are the **Settings heading** and the **version label** at the top
+of the column. See *The column, on the left*.
 
 The **View ▸ Window corners** submenu is gone: the corners are the third
 box on the settings bar. So is the **free-space end of the sample's tool
@@ -297,8 +367,9 @@ for them, is back.
 The preview shows what is **staged**. Nothing is written until **Apply**,
 which saves `look.json` and switches Settings and every app that watches
 the file. Apply is the only button and the only thing in the row under
-the page: it sits pinned at the **right** of it, outside the column that
-scrolls, so the one thing that writes anything cannot scroll away. The line that used to
+the page: it sits pinned at the **right** of it, outside the splitter
+and outside the column, so the one thing that writes anything is on
+screen at every window size. The line that used to
 lead that row — *Applied — every uitoolkit app is using this look*, or
 *Staged, not applied* — is gone; Apply being enabled or greyed says the
 same thing in the place you are already looking. Closing without Apply
@@ -334,7 +405,17 @@ and it took the whole right-hand pane, `x 445, y 10, 569 × 782` until the
 icons took the head of the page, `569 × 630` until the four pages became
 one, `x 317, y 10, 697 × 790` until the colours switch went over the
 preview and the paths under it, and `x 317, y 66, 697 × 620` until the
-behaviour options joined that switch in one row.)
+behaviour options joined that switch in one row. Nothing that has since
+happened to the column on the left has moved them.)
+
+**Changes to the column on the left do not move them.** The splitter's
+ratio is worked out from the *window's* width, not from what the column
+holds, and the column's contents have never had a minimum that could push
+the sash: the browser's list takes what it is given at any width. Taking
+the group box, the heading, the version and Delete theme… out of the
+column, and running the list to the foot of it, was re-measured in the
+eight packs `TestSettingsPreviewPanelKeepsItsPlace` walks and moved
+nothing — the crop is `697x647+317+44` before and after.
 
 **What the preview carries inside itself does not move them; what stands
 over it does.** The settings bar is inside the panel, and the panel takes
@@ -513,15 +594,14 @@ JSON only. Pack-level `corners` / `icons` fields are ignored.
 **tokens**. Corners, icons, and icon size stay in `look.json`.
 A legacy `{ "palette": "dark" }` file still loads.
 
-When a **User** theme is staged, **Delete theme…** under the browser
-confirms (Yes/No) then removes `themes/<name>/` from disk; with a
-built-in pack staged it is there but grey. If the deleted pack was
-selected, Settings falls back to the matching builtin palette (or the
-other one if that name was a shadow). If `look.json` named the deleted
-pack, it is rewritten to the fallback so the selection is not left
-dangling. There is **no Delete for an icon set**: the button that did it
-is gone from the page (a set is a folder — `rm -r` removes it), and
-`style.DeleteUserIconSet` is the API an application would call.
+There is **no Delete on this page**, for a theme or for an icon set:
+both buttons are gone, and a pack and a set are both folders that `rm -r`
+removes. `style.DeleteUserTheme` is the API an application would call for
+a pack, with `style.AfterUserThemeDeleted` for the other half of it: given
+the appearance and the name that was deleted, it falls back to the
+matching builtin palette (or the other one if that name was a shadow), so
+an application can rewrite `look.json` rather than leave the selection
+dangling. `style.DeleteUserIconSet` is the API for a set.
 
 `ListThemes` lists Built-in era packs (not shadowed) then user packs
 (sorted by name). `LoadTheme(name)` **prefers the user pack** when both

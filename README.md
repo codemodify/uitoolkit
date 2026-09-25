@@ -303,8 +303,10 @@ Search or filter 129 packs, and the one you pick is drawn at once as a
 live application window beside the list — frame, caption and every
 control — in a splitter you can size. That window is also where its icon
 set, its icon size and its corner style are chosen: the thing that shows
-a setting is the thing that sets it. See
-**[docs/settings.md](docs/settings.md)**.
+a setting is the thing that sets it. The column beside it is four bare
+controls — search, decade filter, the list, Export — with no heading over
+them and no group box around them, and the list runs to the foot of the
+window. See **[docs/settings.md](docs/settings.md)**.
 
 ### Files — projects dogfood
 
@@ -371,7 +373,8 @@ go run ./examples/uitoolkit-sample-files
 go run ./examples/uitoolkit-sample-files -headless   # writes files.png
 go run ./cmd/uitoolkit-settings                     # theme browser, live preview, look.json
 go run ./cmd/uitoolkit-settings -stage aqua         # open with Aqua staged
-go run ./cmd/uitoolkit-settings -page appearance    # open scrolled to the shape options
+go run ./cmd/uitoolkit-settings -page appearance    # name a section (nothing is under a fold)
+go run ./cmd/uitoolkit-settings -version            # the toolkit version
 go run ./cmd/uitoolkit-settings -headless           # writes settings.png
 ```
 
@@ -770,7 +773,15 @@ See [docs/tray.md](docs/tray.md#submenus).
 *Settings is one page, and its preview sets what it shows.* The four
 pages behind a sidebar were four answers to one question, so they are one
 page: the theme browser down a column, the live application window
-beside it. Three of its settings are on that window rather than in the
+beside it. The column is the browser and **nothing else**: a search
+field, the decade filter, the list of packs running to the foot of the
+window, and **Export current theme…** — no group box around them, no
+heading over them, no version label, and **no Delete theme…** (a pack is
+a folder; `style.DeleteUserTheme` is still the API, Settings just does
+not offer the button). Nothing on the page scrolls but the list itself,
+inside itself; `-page` still takes every name it ever took and now names
+what is already on screen. `uitoolkit-settings -version` is where the
+version went. Three of its settings are on that window rather than in the
 column — the **icon set**, the **icon size** and the **corner style**
 are combo boxes on a bar of their own at the head of it,
 `Icons [Classic ▾] Size [24 ▾] │ Corners [Theme shape ▾]` — because a

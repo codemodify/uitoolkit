@@ -20,7 +20,10 @@ headless "$OUT/bin/sheet" -list > "$OUT/packs.tsv"
 # at the head of the panel is inside this rectangle, not above it, so it did
 # not move when that bar went in; the row of options over the panel is not,
 # and it moved the crop up and made it 27 px taller when it replaced the
-# colours switch and the line of prose under it. Add -plain-preview to the
+# colours switch and the line of prose under it. The column on the left is
+# outside the crop and cannot move it: the splitter's ratio comes from the
+# window's width, not from what the column holds, so stripping that column
+# to four bare controls left these numbers alone. Add -plain-preview to the
 # settings call below for tiles of the sample application without it.
 CROP=697x647+317+44
 fail=0

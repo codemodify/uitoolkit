@@ -23,6 +23,13 @@ import (
 // and made the panel taller: the switch stood over a line of prose, the
 // five check boxes fit on one line at this size, and the 22 pixels that
 // line of prose was taking went to the preview.
+//
+// The column on the left cannot move them either, whatever is taken out
+// of it: the splitter's ratio is worked out from the window's width and
+// the column has no minimum that could push the sash. Stripping it to
+// four bare controls — no group box, no heading, no version, no Delete
+// theme… — and running the list to the foot of it left these numbers
+// exactly where they were.
 const (
 	previewShotX = 317
 	previewShotY = 44

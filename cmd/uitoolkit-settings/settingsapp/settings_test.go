@@ -198,7 +198,15 @@ func TestSettingsExportThemeByName(t *testing.T) {
 	}
 }
 
-func TestSettingsDeleteUserTheme(t *testing.T) {
+// Delete theme… is gone, the call made for Delete icon set… the release
+// before: a button that destroys a directory, standing under the browser
+// grey for all 129 built-in packs and live for the handful of packs the
+// user exported. A pack is a folder and rm -r removes it.
+// style.DeleteUserTheme and style.AfterUserThemeDeleted stay — they are
+// public toolkit API and an application may want the operation — and
+// Settings does not call them any more. Export current theme… stays: it
+// is the half of that pair that makes something.
+func TestSettingsHasNoDeleteThemeButton(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", dir)
 	if err := style.SaveAppearance(style.Appearance{Theme: style.ThemeLight, Corners: style.CornersSquare, Icons: style.IconSetSharp}); err != nil {
@@ -208,49 +216,124 @@ func TestSettingsDeleteUserTheme(t *testing.T) {
 		t.Fatal(err)
 	}
 	a, w := openSettings(t, 1024, 780)
+	if del := findButton(w.Content(), "Delete theme…"); del != nil {
+		t.Error("Delete theme… is back under the browser")
+	}
+	// Not hiding behind a built-in pack being staged either: it was grey
+	// for one of those and live for one of the user's own, so stage
+	// theirs and look again.
 	clickTheme(t, w, "ocean")
 	a.PumpOnce()
-	clickApply(t, w)
-	a.PumpOnce()
-	if style.LoadAppearance().Name != "ocean" {
-		t.Fatalf("apply ocean %+v", style.LoadAppearance())
+	if got := previewAppearance(t, w).Name; got != "ocean" {
+		t.Fatalf("the user's pack is staged as %q", got)
 	}
+	if del := findButton(w.Content(), "Delete theme…"); del != nil {
+		t.Error("Delete theme… comes back when a user pack is staged")
+	}
+	// The pack is still on disk and still in the browser: only the
+	// button went.
+	if _, err := os.Stat(style.ThemeFile("ocean")); err != nil {
+		t.Errorf("the user's pack left disk: %v", err)
+	}
+	if !listed(w.Content(), "ocean") {
+		t.Error("the user's pack is not in the browser")
+	}
+	if findButton(w.Content(), "Export current theme…") == nil {
+		t.Error("Export current theme… went with it")
+	}
+	// And nothing else that acts on a pack crept into the column: one
+	// button under the list, and it is Export.
+	widget.Walk(browserColumn(t, w), func(c widget.Component) {
+		if b, ok := c.(*widgets.Button); ok && b.Text != "Export current theme…" {
+			t.Errorf("the column carries a %q button", b.Text)
+		}
+	})
+}
 
-	// Delete is under the browser that staged the pack, and it is alive
-	// because what is staged is the user's own.
-	del := findButton(w.Content(), "Delete theme…")
-	if del == nil || !del.Enabled() {
-		t.Fatalf("Delete should be live for a staged user theme: %v", del)
+// The column is four bare controls, in this order and with nothing
+// around them: the search field, the decade filter, the list of packs,
+// and Export. The Theme group box that held them is gone and so is the
+// paragraph over the search field; so are the "Settings" heading at the
+// top of the column and the version label under it.
+//
+// What names the column is the two controls a screen reader would
+// otherwise meet unnamed — the list is Themes and the field is Search
+// themes — which is where those names belonged all along: a group box's
+// legend names a group, not the list inside it, and a11y.Check fails an
+// unnamed list whatever is written above it.
+//
+// And the list runs to the foot of the column. It was held to 252
+// pixels, which left about 250 of nothing under the buttons; it takes
+// that now, at every size.
+func TestTheColumnIsBareControls(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if err := style.SaveAppearance(style.DefaultAppearance()); err != nil {
+		t.Fatal(err)
 	}
-	clickNamed(t, w.Content(), "Delete theme…")
-	a.PumpOnce()
-	if w.Overlay() == nil {
-		t.Fatal("delete should confirm")
-	}
-	clickNamed(t, w.Overlay(), "Yes")
-	a.PumpOnce()
-
-	if _, err := os.Stat(style.ThemeFile("ocean")); !os.IsNotExist(err) {
-		t.Fatalf("user theme still on disk: %v", err)
-	}
-	if _, ok := style.LoadTheme("ocean"); ok {
-		t.Fatal("deleted theme still loads")
-	}
-	live := style.LookAppearance(a.Look())
-	if live.Name != "light" || live.Theme != style.ThemeLight || live.Corners != style.CornersSquare || live.Icons != style.IconSetSharp {
-		t.Fatalf("fallback %+v", live)
-	}
-	if style.LoadAppearance() != live {
-		t.Fatalf("look.json left dangling %+v", style.LoadAppearance())
-	}
-	// It goes grey rather than away once a built-in pack is staged: a
-	// button that came and went would move the whole column under it
-	// every time a pack was picked.
-	if del := findButton(w.Content(), "Delete theme…"); del == nil || del.Enabled() {
-		t.Fatalf("Delete should go grey after falling back to a builtin: %v", del)
-	}
-	if listed(w.Content(), "ocean") {
-		t.Fatal("deleted pack still listed")
+	for _, size := range [][2]int{{1024, 860}, {720, 520}} {
+		_, w := openSettings(t, size[0], size[1])
+		col := browserColumn(t, w)
+		kids := col.Children()
+		if len(kids) != 4 {
+			t.Fatalf("at %v: the column has %d children, want search, filter, list, Export", size, len(kids))
+		}
+		if tf, ok := kids[0].(*widgets.TextField); !ok || tf.Placeholder != "Search themes" {
+			t.Errorf("at %v: the column opens with %T, want the search field", size, kids[0])
+		}
+		if cb, ok := kids[1].(*widgets.ComboBox); !ok || cb.AccessibleName() != "Decade" {
+			t.Errorf("at %v: the second control is %T, want the decade filter", size, kids[1])
+		}
+		list, ok := kids[2].(*widgets.ListView)
+		if !ok {
+			t.Fatalf("at %v: the third control is %T, want the theme list", size, kids[2])
+		}
+		export, ok := kids[3].(*widgets.Button)
+		if !ok || export.Text != "Export current theme…" {
+			t.Fatalf("at %v: the column ends in %T, want Export current theme…", size, kids[3])
+		}
+		// No group box around them, no heading over them, no version
+		// under it.
+		if p := findPanelTitled(w.Content(), "Theme"); p != nil {
+			t.Errorf("at %v: the Theme group box is back", size)
+		}
+		widget.Walk(col, func(c widget.Component) {
+			if p, ok := c.(*widgets.Panel); ok {
+				t.Errorf("at %v: the column holds a %q panel", size, p.Title)
+			}
+			if l, ok := c.(*widgets.Label); ok {
+				t.Errorf("at %v: the column holds the label %q", size, l.Text)
+			}
+		})
+		if findLabelWith(w.Content(), "v"+uitoolkit.Version) {
+			t.Errorf("at %v: the version label is back on the page", size)
+		}
+		// The two names a screen reader has instead of a legend.
+		if got := list.AccessibleName(); got != "Themes" {
+			t.Errorf("at %v: the theme list is called %q", size, got)
+		}
+		if got := kids[0].(*widgets.TextField).AccessibleName(); got != "Search themes" {
+			t.Errorf("at %v: the search field is called %q", size, got)
+		}
+		// The list takes the foot of the column: the gap under it is the
+		// column's own gap and no more, and what is under Export is the
+		// column's padding.
+		if gap := export.Bounds().Min.Y - list.Bounds().Max.Y; gap > 16 {
+			t.Errorf("at %v: %v px of nothing between the list and Export", size, gap)
+		}
+		if tail := col.LocalBounds().Dy() - export.Bounds().Max.Y; tail > 16 {
+			t.Errorf("at %v: %v px of nothing under Export", size, tail)
+		}
+		// And it is most of the column rather than a ninth of it.
+		if share := list.LocalBounds().Dy() / col.LocalBounds().Dy(); share < 0.55 {
+			t.Errorf("at %v: the list is %.0f%% of the column", size, 100*share)
+		}
+		// The whole of it scrolls inside the list, not under it.
+		if list.MaxOffset() <= 0 {
+			t.Errorf("at %v: the list of 129 packs does not overflow", size)
+		}
+		if sv := findScrollView(w.Content()); sv != nil {
+			t.Errorf("at %v: the column is back in a scroll view", size)
+		}
 	}
 }
 
@@ -384,8 +467,8 @@ func TestSettingsThemeListScrollsAllBuiltins(t *testing.T) {
 	if apply == nil || !apply.Enabled() {
 		t.Fatal("Apply should stay reachable and enabled after staging")
 	}
-	if nestedInScroll(apply) {
-		t.Fatal("Apply must stay pinned outside the scroll region")
+	if inBrowserColumn(w.Content(), apply) {
+		t.Fatal("Apply must stay pinned outside the column")
 	}
 
 	// Decade filter.
@@ -401,27 +484,25 @@ func TestSettingsThemeListScrollsAllBuiltins(t *testing.T) {
 		}
 	}
 
-	// The browser alone is taller than the window, so the column of
-	// choices still scrolls — and what is at the foot of it, the two
-	// buttons that act on a pack, is reachable by scrolling and not by
-	// navigating. The four behaviour options used to be down here; they
-	// are in the row over the preview now, where nothing scrolls.
-	choices := findScrollView(w.Content())
-	if choices == nil {
-		t.Fatal("the column of choices should scroll")
+	// The list is the only thing on this page that scrolls: the column
+	// around it does not, because there is nothing in it that a window
+	// this size cannot hold — a field, a chooser, a button, and a list
+	// that takes whatever they leave. Two scrollbars an inch apart was
+	// what holding the list to 252 pixels inside a scrolling column
+	// bought, and 250 pixels of nothing under the buttons was what it
+	// cost.
+	if sv := findScrollView(w.Content()); sv != nil {
+		t.Error("the column is back in a scroll view")
 	}
-	if choices.MaxOffset() <= 0 {
-		t.Fatalf("the column should overflow at 820×560, content=%v view=%v",
-			choices.ContentHeight(), choices.LocalBounds().Dy())
+	if b := findButton(w.Content(), "Export current theme…"); b == nil || !inBrowserColumn(w.Content(), b) {
+		t.Error("Export current theme… is not at the foot of the column")
 	}
-	choices.ScrollTo(choices.MaxOffset())
-	a.PumpOnce()
-	if b := findButton(w.Content(), "Delete theme…"); b == nil || !nestedInScroll(b) {
-		t.Error("Delete theme… is not at the foot of the column")
+	if findButton(w.Content(), "Delete theme…") != nil {
+		t.Error("Delete theme… is back under the browser")
 	}
 	for _, opt := range []string{"Animations", "Desktop colours"} {
-		if box := findOption(w.Content(), opt); box == nil || nestedInScroll(box) {
-			t.Errorf("the %q option is in the column that scrolls", opt)
+		if box := findOption(w.Content(), opt); box == nil || inBrowserColumn(w.Content(), box) {
+			t.Errorf("the %q option is in the browser column", opt)
 		}
 	}
 	// The paths are not in this column at all: they are under the
@@ -429,21 +510,24 @@ func TestSettingsThemeListScrollsAllBuiltins(t *testing.T) {
 	if !findLabelWith(w.Content(), "Prefs") {
 		t.Error("the prefs path is not on the page")
 	}
-	if files := findPanelTitled(w.Content(), "Files"); files == nil || nestedInScroll(files) {
-		t.Error("the paths are in the column that scrolls")
+	if files := findPanelTitled(w.Content(), "Files"); files == nil || inBrowserColumn(w.Content(), files) {
+		t.Error("the paths are in the browser column")
 	}
-	if findApply(w.Content()) == nil || nestedInScroll(findApply(w.Content())) {
+	if findApply(w.Content()) == nil || inBrowserColumn(w.Content(), findApply(w.Content())) {
 		t.Fatal("Apply must stay pinned outside the column")
 	}
-	// And it stays pinned on a window short enough that the column is
+	// And it stays pinned on a window short enough that the list is
 	// almost all scrollbar.
 	w.Inject(platform.Event{Kind: platform.EventResize, Width: 720, Height: 520})
 	a.PumpOnce()
-	if findApply(w.Content()) == nil || nestedInScroll(findApply(w.Content())) {
+	if findApply(w.Content()) == nil || inBrowserColumn(w.Content(), findApply(w.Content())) {
 		t.Fatal("Apply must stay pinned at the minimum window size")
 	}
-	if got := findScrollView(w.Content()); got == nil || got.MaxOffset() <= 0 {
-		t.Fatal("the column should still scroll at 720×520")
+	if got := findThemeListAny(w.Content()); got == nil || got.MaxOffset() <= 0 {
+		t.Fatal("the theme list should still scroll at 720×520")
+	}
+	if sv := findScrollView(w.Content()); sv != nil {
+		t.Error("the column scrolls at 720×520")
 	}
 }
 
@@ -820,18 +904,43 @@ func findOverlayField(w *app.Window) *widgets.TextField {
 	return field
 }
 
-func nestedInScroll(c widget.Component) bool {
-	if c == nil {
+// browserColumn is the left-hand column: the theme list's parent, which
+// is the column itself now that the list is a child of it rather than of
+// a height box inside a group box inside a scroll view.
+func browserColumn(t *testing.T, w *app.Window) widget.Component {
+	t.Helper()
+	list := findThemeListAny(w.Content())
+	if list == nil {
+		t.Fatal("no theme browser")
+	}
+	col := list.Parent()
+	if col == nil {
+		t.Fatal("the theme list is not in a column")
+	}
+	return col
+}
+
+// inBrowserColumn reports whether c is in that column. It was
+// nestedInScroll: the column was a scroll view, so being inside that view
+// was what "in the column" meant. The column does not scroll any more —
+// the list takes what the three controls around it leave — so what says a
+// thing is in the column is the column itself.
+func inBrowserColumn(root, c widget.Component) bool {
+	list := findThemeListAny(root)
+	if list == nil || c == nil {
 		return false
 	}
-	for p := c.Parent(); p != nil; p = p.Parent() {
-		if _, ok := p.(*widgets.ScrollView); ok {
+	col := list.Parent()
+	for p := c; p != nil; p = p.Parent() {
+		if p == col {
 			return true
 		}
 	}
 	return false
 }
 
+// findScrollView is what says the column is not back in one: Settings owns
+// no scroll view at all now.
 func findScrollView(root widget.Component) *widgets.ScrollView {
 	var sv *widgets.ScrollView
 	widget.Walk(root, func(c widget.Component) {
@@ -1325,12 +1434,11 @@ func TestSettingsPageNamesStillResolve(t *testing.T) {
 }
 
 // And the name is not only resolved: what it names is on the page the
-// moment the window opens. Nothing scrolls to it any more, because
-// nothing is under the fold — the only section that ever was, Behaviour,
-// is the row over the preview now, and the theme browser is the top of
-// the column it left. The column still scrolls, and Settings still
-// scrolls it to a section that is in it; there is only the one, and it
-// is already at the top.
+// moment the window opens. Nothing scrolls to it, because nothing on the
+// page scrolls out of reach at all — the column that used to is four
+// controls and a list that takes what they leave, and the pane beside it
+// has never scrolled. The machinery that scrolled a column to a section
+// went with the column's scrollbar: what cannot fire is not kept.
 func TestSettingsPageOpensWhereItSays(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	if err := style.SaveAppearance(style.DefaultAppearance()); err != nil {
@@ -1350,8 +1458,14 @@ func TestSettingsPageOpensWhereItSays(t *testing.T) {
 	}
 	for _, page := range []string{"", "theme", "behaviour", "desktop", "appearance", "about"} {
 		_, w := open(page)
-		if got := findScrollView(w.Content()).OffsetY; got != 0 {
-			t.Errorf("-page %q opened the column at %v; nothing it can name is under the fold", page, got)
+		if sv := findScrollView(w.Content()); sv != nil {
+			t.Errorf("-page %q: the page scrolls; nothing it can name is under a fold", page)
+		}
+		// The one thing on the page that scrolls is the theme list, and
+		// what scrolls it is the staged pack being row 30 of 129, not
+		// anything -page said.
+		if list := findThemeListAny(w.Content()); list == nil || list.Selected < 0 {
+			t.Errorf("-page %q: the browser opened with nothing staged", page)
 		}
 	}
 	// Each name's section is on screen, which is the whole of what -page
@@ -1442,7 +1556,7 @@ func TestTheOptionsRowOverThePreview(t *testing.T) {
 	// Settings' own, not the preview's, and outside the column that
 	// scrolls: they must not be able to scroll away from the window they
 	// are about.
-	if insidePreview(row) || nestedInScroll(row) {
+	if insidePreview(row) || inBrowserColumn(w.Content(), row) {
 		t.Error("the options row is inside the preview or in the column that scrolls")
 	}
 	if widget.DeviceOrigin(row).Y >= widget.DeviceOrigin(previewScope(t, w)).Y {
