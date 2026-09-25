@@ -297,7 +297,7 @@ repository.
 
 ### Settings — the theme browser
 
-![Settings: the theme browser and the live preview beside it](docs/screenshots/settings.webp)
+![Settings: the theme browser, the row of options and the live preview beside them](docs/screenshots/settings.webp)
 
 Search or filter 129 packs, and the one you pick is drawn at once as a
 live application window beside the list — frame, caption and every
