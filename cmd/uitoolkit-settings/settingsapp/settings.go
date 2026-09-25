@@ -51,8 +51,8 @@ const filterUser = 6
 // theme browser down a column on the left, and on the right,
 // filling the rest of the window at every size, the thing it is
 // browsing for — a small application window whose frame, caption and
-// every control come from the staged pack, with the five on/off options
-// in a row over it and the files it all lives in under it. Settings
+// every control come from the staged pack, with the settings in a
+// folding row over it and the files it all lives in under it. Settings
 // itself keeps the applied look (the preview is a ThemeScope), so a pack
 // can be judged without living in it.
 //
@@ -128,8 +128,8 @@ func SettingsAppWith(a *app.Application, win *app.Window, opt SettingsOptions) w
 // old name "packs & icons") is Theme, because
 // exporting a pack and deleting one are under the theme browser;
 // "about" is Files; "desktop" and "colours" are Behaviour, because
-// following the desktop's colours is one of the five options in that
-// row.
+// following the desktop's colours is one of the four options that lead
+// that row.
 func SettingsPage(name string) int {
 	switch strings.ToLower(strings.TrimSpace(name)) {
 	case "appearance", "shape", "shape and weight", "shape and motion", "corners", "icons", "icon sets", "preview":
@@ -434,9 +434,9 @@ func (s *settingsState) selectedRow() int {
 // `uitoolkit-settings -version` prints.
 //
 // Everything else that was ever in here has gone to the pane on the
-// right: the shape and the icons to the preview's own chrome, where what
-// shows a setting is what sets it, and the five on/off options and the
-// three paths over and under the preview.
+// right: the four on/off options and the three choosers for the shape
+// and the icons in one folding row over the preview, and the three paths
+// under it.
 func (s *settingsState) choicesColumn() widget.Component {
 	s.rows = s.themeRows()
 	s.list = widgets.NewListView(len(s.rows), func(i int) string {
