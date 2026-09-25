@@ -9,7 +9,7 @@
 # the tour and the panel under Settings' theme preview — so the row that
 # ran `gallery` is gone rather than replaced: `settings` measures the same
 # widgets as an embedded pane, and `tour` measures them as a page.
-settings  cmd/uitksettings                    click 614 118  435 384
+settings  cmd/uitoolkit-settings              click 614 118  435 384
 files     examples/uitoolkit-sample-files     click 153 134  650 300
 notes     examples/uitoolkit-sample-notes     -              370 500
 inspector examples/uitoolkit-sample-inspector click 960 322  600 400

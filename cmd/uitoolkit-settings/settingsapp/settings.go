@@ -58,7 +58,7 @@ func SettingsAppStaged(a *app.Application, win *app.Window, theme string) widget
 
 // SettingsAppOpen is SettingsApp with a theme staged and a page open by
 // name ("themes", "appearance", "packs", "about"); either may be empty.
-// cmd/uitksettings' -stage and -page take this path.
+// cmd/uitoolkit-settings' -stage and -page take this path.
 func SettingsAppOpen(a *app.Application, win *app.Window, theme, page string) widget.Component {
 	saved := style.LoadAppearance().Normalize()
 	staged := saved

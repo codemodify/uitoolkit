@@ -1,7 +1,7 @@
 # Settings
 
-`cmd/uitksettings` is the toolkit appearance editor and theme browser. The
-command opens the window; the application is `cmd/uitksettings/settingsapp`
+`cmd/uitoolkit-settings` is the toolkit appearance editor and theme browser. The
+command opens the window; the application is `cmd/uitoolkit-settings/settingsapp`
 beside it, written against the published API like every other sample. It
 is the toolkit's shop window: picking a pack draws it twice at once — a
 small live application, and under it the whole widget gallery, every
@@ -11,12 +11,12 @@ launching anything.
 ## Run
 
 ```bash
-go run ./cmd/uitksettings
-go run ./cmd/uitksettings -stage win98              # open with Windows 98 staged
-go run ./cmd/uitksettings -page appearance          # open on the options page
-go run ./cmd/uitksettings -headless                 # settings.png in cwd
-go run ./cmd/uitksettings -stage aqua -screenshot out/
-tools/shots/demos.sh                               # docs/screenshots/settings.webp and the other demos
+go run ./cmd/uitoolkit-settings
+go run ./cmd/uitoolkit-settings -stage win98      # open with Windows 98 staged
+go run ./cmd/uitoolkit-settings -page appearance  # open on the options page
+go run ./cmd/uitoolkit-settings -headless         # settings.png in cwd
+go run ./cmd/uitoolkit-settings -stage aqua -screenshot out/
+tools/shots/demos.sh                              # docs/screenshots/settings.webp and the other demos
 ```
 
 `-page` takes `themes` (the default), `appearance`, `packs` or `about`.
@@ -108,7 +108,7 @@ preview's own status bar belongs to the previewed application and stays.)
 
 ## Screenshot geometry
 
-The Theme Atlas crops the preview panel out of `uitksettings -stage ID
+The Theme Atlas crops the preview panel out of `uitoolkit-settings -stage ID
 -screenshot out.png`. In the default 1024×860 window at scale 1, with the
 default look applied, the panel is the same rectangle in every pack:
 
