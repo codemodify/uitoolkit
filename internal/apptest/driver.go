@@ -193,7 +193,7 @@ func walkSettingsPages(a *app.Application) error {
 	// section names and the names of the four pages they came from are
 	// driven, because both are what scripts pass.
 	for _, page := range []string{
-		"Theme", "Where the colours come from", "Shape and weight", "Behaviour", "Files",
+		"Theme", "Behaviour", "Where the colours come from", "Preview", "Files",
 		"Themes", "Appearance", "Packs", "About",
 	} {
 		w, err := a.NewWindow(platform.WindowOptions{
