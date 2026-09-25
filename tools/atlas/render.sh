@@ -16,7 +16,10 @@ headless() { env -u WAYLAND_DISPLAY -u DISPLAY XDG_CONFIG_HOME="$OUT/cfg" "$@"; 
 headless "$OUT/bin/sheet" -list > "$OUT/packs.tsv"
 
 # Where the preview panel sits in a 1024x860 Settings window at scale 1, with
-# an empty config (docs/settings.md, "Screenshot geometry").
+# an empty config (docs/settings.md, "Screenshot geometry"). The settings bar
+# at the head of the panel is inside this rectangle, not above it, so it did
+# not move when that bar went in. Add -plain-preview to the settings call
+# below for tiles of the sample application without it.
 CROP=697x620+317+66
 fail=0
 while IFS=$'\t' read -r id _; do

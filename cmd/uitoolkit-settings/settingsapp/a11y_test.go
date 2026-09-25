@@ -29,18 +29,26 @@ func TestSettingsIsAccessible(t *testing.T) {
 	tree := a11ytest.Audit(t, "settings", s.AccessibleTree())
 
 	// The theme browser and the preview's own lists; the decade filter,
-	// the two icon choosers on the preview's tool bar and the preview's
+	// the three choosers on the preview's settings bar and the preview's
 	// own sample combo box.
-	if a11ytest.Count(tree, a11y.RoleList) < 1 || a11ytest.Count(tree, a11y.RoleComboBox) < 4 {
+	if a11ytest.Count(tree, a11y.RoleList) < 1 || a11ytest.Count(tree, a11y.RoleComboBox) < 5 {
 		t.Errorf("settings: lists %d, combos %d",
 			a11ytest.Count(tree, a11y.RoleList), a11ytest.Count(tree, a11y.RoleComboBox))
 	}
 	// Every chooser Settings owns is named, so a screen reader says what
 	// is being chosen rather than reading anonymous combo boxes — and a
 	// chooser on a tool bar has nothing but its name to say it by.
-	for _, name := range []string{"Decade", "Icons", "Icon size"} {
+	for _, name := range []string{"Decade", "Icons", "Icon size", "Window corners"} {
 		if a11ytest.Find(tree, a11y.RoleComboBox, name) == nil {
 			t.Errorf("settings: no %s chooser in the tree", name)
+		}
+	}
+	// The words in front of them are in the tree as the static text they
+	// are, and each is the beginning of the name of the chooser it
+	// stands for: a screen reader reads out what the screen says.
+	for _, word := range PreviewSettingsWords {
+		if a11ytest.Find(tree, a11y.RoleLabel, word) == nil {
+			t.Errorf("settings: the word %q is not on the preview's settings bar", word)
 		}
 	}
 	// The options are switches, and a screen reader has to find them as
@@ -72,15 +80,20 @@ func TestSettingsIsAccessible(t *testing.T) {
 		}
 	}
 	// The preview's tool bar is named buttons, so the set it is drawn in
-	// is not a mystery to a screen reader either, and the bar is in the
-	// tree as a tool bar with the two choosers on it.
-	for _, name := range []string{"New", "Save", "Send"} {
+	// is not a mystery to a screen reader either, and both bars are in
+	// the tree: the sample's tools and the settings over them.
+	for _, name := range []string{"New", "Save", "Paste", "Send"} {
 		if a11ytest.Find(tree, a11y.RoleButton, name) == nil {
 			t.Errorf("settings: the preview's tool bar has no %s button", name)
 		}
 	}
-	if a11ytest.Count(tree, a11y.RoleToolBar) < 1 {
-		t.Error("settings: the preview's tool bar is not in the tree")
+	if a11ytest.Count(tree, a11y.RoleToolBar) < 2 {
+		t.Error("settings: the preview's two bars are not both in the tree")
+	}
+	for _, name := range []string{"Tools", "Appearance"} {
+		if a11ytest.Find(tree, a11y.RoleToolBar, name) == nil {
+			t.Errorf("settings: no %s bar in the tree", name)
+		}
 	}
 
 	// Scrolling the column of choices does not take anything out of the

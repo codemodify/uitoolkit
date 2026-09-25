@@ -4,6 +4,7 @@
 //	go run ./cmd/uitoolkit-settings -headless          # writes settings.png
 //	go run ./cmd/uitoolkit-settings -screenshot docs/screenshots
 //	go run ./cmd/uitoolkit-settings -page appearance -headless
+//	go run ./cmd/uitoolkit-settings -plain-preview -screenshot out.png
 //
 // Settings is one page: the theme browser and the behaviour switches
 // down a column on the left, and on the right, never scrolling away, the
@@ -11,12 +12,14 @@
 // staged pack, with the switch that says where its colours come from
 // over it and the three config paths under it.
 //
-// The preview sets three of the things it shows: the icon set and the
-// size its glyphs are drawn at are combo boxes at the right-hand end of
-// its own tool bar (the bar they are drawn on), and its corner style is
-// in its own View ▸ Window corners. Everything else in that window is a
-// sample. The icon chooser lists classic/sharp plus wide premiere PNG
-// sets copied into ~/.config/uitoolkit/icons/<set>/.
+// The preview sets three of the things it shows: the icon set, the size
+// its glyphs are drawn at and its corner style are combo boxes on a bar
+// of their own over the sample's menu bar, each behind the word that
+// says what it sets — Icons, Size, Corners. Everything else in that
+// window is a sample. The icon chooser lists classic/sharp plus wide
+// premiere PNG sets copied into ~/.config/uitoolkit/icons/<set>/.
+// -plain-preview leaves that bar off, for pictures of the sample alone;
+// nothing can be chosen while it is set.
 // Apply writes {theme, icons} to
 // $XDG_CONFIG_HOME/uitoolkit/look.json and running apps that watch
 // the file reload without a restart. Export writes
@@ -42,6 +45,7 @@ func main() {
 	shot := flag.String("screenshot", "", "write settings.png into this directory (or file) and exit")
 	stage := flag.String("stage", "", "open with this theme staged in the preview (not applied)")
 	page := flag.String("page", "", "open the page at this section: theme (default), behaviour, desktop, preview, files — the old page names themes/appearance/packs/about still resolve")
+	plain := flag.Bool("plain-preview", false, "draw the preview as the sample application alone, without the bar of live settings (for screenshots: nothing can be chosen)")
 	flag.Parse()
 
 	a := uitoolkit.New(uitoolkit.Options{
@@ -57,8 +61,10 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	if *stage != "" || *page != "" {
-		win.SetContent(settingsapp.SettingsAppOpen(a, win, *stage, *page))
+	if *stage != "" || *page != "" || *plain {
+		win.SetContent(settingsapp.SettingsAppWith(a, win, settingsapp.SettingsOptions{
+			Theme: *stage, Page: *page, PlainPreview: *plain,
+		}))
 	} else {
 		win.SetContent(settingsapp.SettingsApp(a, win))
 	}

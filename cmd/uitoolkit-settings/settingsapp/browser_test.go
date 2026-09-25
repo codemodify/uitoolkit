@@ -293,10 +293,10 @@ func TestSettingsKeyboardReachesEverything(t *testing.T) {
 			t.Errorf("Tab never reaches the %s", part)
 		}
 	}
-	// The two choosers on the preview's tool bar are stops of their own,
+	// The choosers on the preview's settings bar are stops of their own,
 	// and the bar itself is one: a tool bar that carries a control must
 	// not swallow it.
-	if set, bar := namedCombo(w.Content(), "Icons"), previewTools(t, w); set != nil {
+	if set, bar := namedCombo(w.Content(), "Icons"), previewSettings(t, w); set != nil {
 		seen := false
 		for _, c := range ring {
 			if c == widget.Component(set) {
@@ -304,10 +304,10 @@ func TestSettingsKeyboardReachesEverything(t *testing.T) {
 			}
 		}
 		if !seen {
-			t.Error("Tab never reaches the icon chooser on the preview's tool bar")
+			t.Error("Tab never reaches the icon chooser on the preview's settings bar")
 		}
 		if set.Parent() != widget.Component(bar) {
-			t.Errorf("the icon chooser is not on the tool bar but in %T", set.Parent())
+			t.Errorf("the icon chooser is not on the settings bar but in %T", set.Parent())
 		}
 	}
 	// Apply is at the foot of the window, outside the column that

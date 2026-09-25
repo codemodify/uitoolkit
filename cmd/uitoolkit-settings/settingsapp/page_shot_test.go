@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/codemodify/uitoolkit"
+	"github.com/codemodify/uitoolkit/layout"
 	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
 )
@@ -59,6 +60,36 @@ func TestSettingsPageHoldsAtEverySize(t *testing.T) {
 					t.Errorf("%s at %g×, %dx%d: the preview is %v of a %v pane",
 						pack, scale, size[0], size[1], box.Dy(), pane.Dy())
 				}
+				// And the three settings it carries are whole and on
+				// their bar at every one of these sizes. The words in
+				// front of them are not promised — the bar sheds those
+				// from the right when it runs out of room, and at the
+				// 720x520 minimum all three go — but a chooser cut off
+				// by the window frame would be a setting nobody can
+				// reach.
+				bar := previewSettings(t, w)
+				words := 0
+				for i, it := range bar.Items() {
+					if it.Label && !bar.ItemRect(i).Empty() {
+						words++
+					}
+				}
+				for _, name := range []string{"Icons", "Icon size", "Window corners"} {
+					cb := namedCombo(w.Content(), name)
+					if cb == nil {
+						t.Fatalf("%s at %g×, %dx%d: no %q chooser", pack, scale, size[0], size[1], name)
+					}
+					if cb.Bounds().Dx() < cb.Measure(layout.Unbounded()).X-0.51 {
+						t.Errorf("%s at %g×, %dx%d: the %q chooser is squeezed to %v of %v",
+							pack, scale, size[0], size[1], name, cb.Bounds().Dx(), cb.Measure(layout.Unbounded()).X)
+					}
+					if in := cb.Bounds(); in.Max.X > bar.LocalBounds().Dx()+0.51 {
+						t.Errorf("%s at %g×, %dx%d: the %q chooser ends at %v on a bar %v wide",
+							pack, scale, size[0], size[1], name, in.Max.X, bar.LocalBounds().Dx())
+					}
+				}
+				t.Logf("%s at %g×, %dx%d: bar %v wide, %d of 3 words shown",
+					pack, scale, size[0], size[1], bar.LocalBounds().Dx(), words)
 				if dir != "" {
 					name := fmt.Sprintf("settings-%s%s-%gx-%dx%d.png", page, pack, scale, size[0], size[1])
 					if err := w.WritePNG(filepath.Join(dir, name)); err != nil {

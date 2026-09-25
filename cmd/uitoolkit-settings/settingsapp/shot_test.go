@@ -14,6 +14,11 @@ import (
 // in every pack. These are those pixels in the default 1024x860 window at
 // scale 1; a layout change that moves them has to be published with the
 // new numbers (docs/settings.md, "Screenshot geometry").
+//
+// What the preview carries inside itself does not move them: the panel
+// takes whatever the two rows over and under it leave, so the settings
+// bar at the head of the window grew inside this rectangle rather than
+// pushing it down. The numbers are unchanged since that bar went in.
 const (
 	previewShotX = 317
 	previewShotY = 66
