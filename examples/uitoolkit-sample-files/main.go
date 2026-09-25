@@ -20,7 +20,7 @@ func main() {
 	// The window icon the desktop shows in its title bar, task bar and switcher.
 	a.SetIcon(icons.AppIconRGB("folder", 0xd9, 0x9a, 0x2e)...)
 	win, err := a.NewWindow(platform.WindowOptions{
-		Title: "Files", Width: 1040, Height: 680, MinWidth: 720, MinHeight: 480,
+		Title: filesapp.WindowTitle("Files"), Width: 1040, Height: 680, MinWidth: 720, MinHeight: 480,
 	})
 	if err != nil {
 		log.Fatal(err)

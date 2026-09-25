@@ -51,7 +51,7 @@ func main() {
 	// The window icon the desktop shows in its title bar, task bar and switcher.
 	a.SetIcon(icons.AppIconRGB("cards", 0xc0, 0x40, 0x7a)...)
 	win, err := a.NewWindow(platform.WindowOptions{
-		Title: "Shapes — " + *mode, Width: *size, Height: *size,
+		Title: windowTitle("Shapes — " + *mode), Width: *size, Height: *size,
 		MinWidth: 160, MinHeight: 160, Headless: headless,
 		// A shaped window draws its own silhouette, so it wants no frame
 		// from anyone: a title bar around a disc would be a rectangle
@@ -325,3 +325,10 @@ func (f *face) KeyPress(e widget.KeyEvent) bool {
 	}
 	return false
 }
+
+// windowTitle is what a window of this sample is called on the desktop:
+// the sample's own name for the window under the toolkit's prefix, so
+// that a desktop with several samples open says which toolkit they
+// belong to. Every title this sample sets goes through here, so one
+// computed while the app runs carries the prefix too.
+func windowTitle(name string) string { return "uitoolkit - " + name }

@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit"
 	"github.com/codemodify/uitoolkit/app"
 	"github.com/codemodify/uitoolkit/dock"
@@ -33,6 +34,25 @@ const LayoutName = "inspector"
 
 type prefRow struct {
 	Key, Value, Scope string
+}
+
+// WindowTitle is what a window of this sample is called on the desktop:
+// the sample's own name for the window under the toolkit's prefix, so
+// that a desktop with several samples open says which toolkit they
+// belong to. The main window and every floating panel's window go
+// through here.
+func WindowTitle(name string) string { return "uitoolkit - " + name }
+
+// floatWindowTitles is the dock's window opener with that prefix on
+// every window it opens. A panel's title is content — it says the same
+// thing docked, where there is no window — so the prefix cannot live in
+// the panel; it goes on here, at the one point where that name becomes a
+// window's title, and a panel renamed later is prefixed again by the
+// same path.
+type floatWindowTitles struct{ dock.WindowOpener }
+
+func (f floatWindowTitles) OpenFloat(title string, geom paintengine2d.Rect) (dock.FloatWindow, error) {
+	return f.WindowOpener.OpenFloat(WindowTitle(title), geom)
 }
 
 // InspectorApp is a docking preferences inspector: the table of settings
@@ -261,6 +281,7 @@ func InspectorApp(win *app.Window) widget.Component {
 	// it before any saved one is read over the top.
 	host.SetDefaultLayout()
 	app.DockHost(win, host)
+	host.SetWindowOpener(floatWindowTitles{app.DockWindows(win.App())})
 
 	// ---- the tool bar ----------------------------------------------------
 

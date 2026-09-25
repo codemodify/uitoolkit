@@ -22,7 +22,7 @@ func main() {
 	flag.Parse()
 
 	a := uitoolkit.New(uitoolkit.Options{Headless: *headless})
-	win, err := a.NewWindow(platform.WindowOptions{Title: "New account", Width: 680, Height: 460, MinWidth: 520, MinHeight: 360})
+	win, err := a.NewWindow(platform.WindowOptions{Title: windowTitle("New account"), Width: 680, Height: 460, MinWidth: 520, MinHeight: 360})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -72,3 +72,10 @@ func main() {
 		log.Fatal(err)
 	}
 }
+
+// windowTitle is what a window of this sample is called on the desktop:
+// the sample's own name for the window under the toolkit's prefix, so
+// that a desktop with several samples open says which toolkit they
+// belong to. Every title this sample sets goes through here, so one
+// computed while the app runs carries the prefix too.
+func windowTitle(name string) string { return "uitoolkit - " + name }

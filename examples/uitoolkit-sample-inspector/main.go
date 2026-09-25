@@ -20,7 +20,7 @@ func main() {
 	// The window icon the desktop shows in its title bar, task bar and switcher.
 	a.SetIcon(icons.AppIconRGB("search", 0x2a, 0x9d, 0x8f)...)
 	win, err := a.NewWindow(platform.WindowOptions{
-		Title: "Inspector", Width: 860, Height: 580, MinWidth: 560, MinHeight: 400,
+		Title: inspectorapp.WindowTitle("Inspector"), Width: 860, Height: 580, MinWidth: 560, MinHeight: 400,
 	})
 	if err != nil {
 		log.Fatal(err)

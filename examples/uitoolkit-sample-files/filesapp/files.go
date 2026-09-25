@@ -36,6 +36,16 @@ type filePlace struct {
 	Rows  []fileRow
 }
 
+// WindowTitle is what a Files window is called on the desktop: the
+// sample's own name for it under the toolkit's prefix, so that a desktop
+// with several samples open says which toolkit they belong to.
+//
+// Every title this sample sets goes through here rather than being
+// prefixed once at startup, because a Files window is renamed whenever
+// its folder changes — a prefix applied only at the window's birth would
+// be gone the first time somebody clicked a place.
+func WindowTitle(name string) string { return "uitoolkit - " + name }
+
 // FilesApp is the Files / Projects dogfood: sidebar tree, table, toolbar,
 // menus, preview TextArea (JetBrains Mono for code), tabs, dialogs, HiDPI metrics.
 // Its folders open in tabs in the window's title bar (Dolphin's folder tabs
@@ -260,7 +270,7 @@ func filesApp(win *app.Window, open []int) widget.Component {
 		sel = 0
 		refreshTable()
 		if win != nil {
-			win.SetTitle(places[i].Label + " — Files")
+			win.SetTitle(WindowTitle(places[i].Label + " — Files"))
 		}
 		syncHistory()
 	}
@@ -570,7 +580,7 @@ func filesApp(win *app.Window, open []int) widget.Component {
 			}
 		}
 		w2, err := a.NewWindow(platform.WindowOptions{
-			Title: places[p].Label + " — Files", Width: w, Height: hh,
+			Title: WindowTitle(places[p].Label + " — Files"), Width: w, Height: hh,
 			MinWidth: 720, MinHeight: 480,
 		})
 		if err != nil {
@@ -615,7 +625,7 @@ func filesApp(win *app.Window, open []int) widget.Component {
 	var rows []widget.Component
 	if win != nil {
 		win.SetTitleBar(head)
-		win.SetTitle(places[place].Label + " — Files")
+		win.SetTitle(WindowTitle(places[place].Label + " — Files"))
 	} else {
 		rows = append(rows, head)
 	}

@@ -109,7 +109,7 @@ func (p *galleryPage) host() showcase.Host {
 		Root:  func() widget.Component { return t.win.Content() },
 		NewWindow: func() error {
 			w2, err := t.a.NewWindow(platform.WindowOptions{
-				Title: "Second window", Width: 420, Height: 280,
+				Title: WindowTitle("Second window"), Width: 420, Height: 280,
 			})
 			if err != nil {
 				return err
