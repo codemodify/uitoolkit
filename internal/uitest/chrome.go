@@ -9,7 +9,9 @@ import (
 	"github.com/codemodify/uitoolkit/widgets"
 )
 
-// CheckToolBarGaps reports when adjacent labeled tools are closer than ToolItemGap.
+// CheckToolBarGaps reports when adjacent labeled tools are closer than
+// ToolItemGap — or, after a word naming the control beside it, than the
+// half gap that ties the two together ([widgets.ToolLabel]).
 func CheckToolBarGaps(t *widgets.ToolBar) error {
 	if t == nil {
 		return nil
@@ -20,9 +22,16 @@ func CheckToolBarGaps(t *widgets.ToolBar) error {
 		if a == nil || b == nil || a.Sep || b.Sep {
 			continue
 		}
-		gap := t.ItemRect(i).Min.X - t.ItemRect(i-1).Max.X
-		if gap < style.ToolItemGap-0.51 {
-			return fmt.Errorf("tools %d/%d gap %v < %v", i-1, i, gap, style.ToolItemGap)
+		ra, rb := t.ItemRect(i-1), t.ItemRect(i)
+		if ra.Empty() || rb.Empty() {
+			continue // dropped: the bar is too narrow to carry it
+		}
+		want := style.ToolItemGap
+		if a.Label {
+			want *= 0.5
+		}
+		if gap := rb.Min.X - ra.Max.X; gap < want-0.51 {
+			return fmt.Errorf("tools %d/%d gap %v < %v", i-1, i, gap, want)
 		}
 	}
 	return nil

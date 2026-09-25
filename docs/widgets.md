@@ -641,19 +641,34 @@ command — a zoom, a style, a size. A bar with free space in it takes the
 width it is offered rather than only the width of its items, so its
 right edge is the one it was given.
 
-When such a bar is narrower than its items it **drops the tools nearest
-the free space**, one at a time, rather than letting what comes after
-fall off the end: half a combo box past the edge of a window is a
-control nobody can use, while one tool button fewer is one tool button
-fewer. A dropped tool is painted nowhere, takes no clicks and is not in
-the accessibility tree. Bars with no free space in them are unchanged —
-they measure their items and a parent decides their width.
+`ToolLabel(text)` is a word on the bar that says what the control after
+it sets — the *Zoom* in front of a zoom box, `QToolBar::addWidget` with
+a `QLabel` in it. The bar draws it itself, in the face it labels tool
+buttons with, and leaves **half a gap** after it so the word pairs with
+the control it names rather than sitting midway between two. It is not a
+button: nothing hovers it, the bar's arrow keys step over it, it takes
+no clicks, and it is static text in the accessibility tree.
+
+Keep the word and the control's accessible name in agreement — the name
+should *contain* the word, never contradict it (`Size` on the bar,
+"Icon size" read out), or a screen reader and a screen say two different
+things about one control.
+
+When such a bar is narrower than its items it **drops the tools and
+words nearest the free space**, one at a time, rather than letting what
+comes after fall off the end: half a combo box past the edge of a window
+is a control nobody can use, while one tool button or one word fewer is
+one tool button or one word fewer — the control keeps its tooltip and
+its name. A dropped item is painted nowhere, takes no clicks and is not
+in the accessibility tree. Bars with no free space in them are
+unchanged — they measure their items and a parent decides their width.
 
 For a combo box on a bar, `ComboBox.MinWidth` (in 1x pixels) replaces
 the 160-pixel floor that suits a form field, and `ComboBox.Tip` is the
-hover help it needs where there is no room for a label beside it.
-Settings' preview puts its icon set and icon size choosers on the
-previewed application's tool bar this way.
+hover help it needs when the bar is too narrow to carry its word.
+Settings' preview puts its icon set, icon size and window corner
+choosers on a bar of their own this way —
+`Icons [Classic ▾] Size [24 ▾] │ Corners [Theme shape ▾]`.
 
 ## Editable combo boxes
 

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/codemodify/paintengine2d"
+	"github.com/codemodify/uitoolkit/a11y"
 	"github.com/codemodify/uitoolkit/layout"
 	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
@@ -105,5 +106,95 @@ func TestToolBarWithoutStretchKeepsItsWidth(t *testing.T) {
 	bar.SetHost(&fakeWindow{look: style.DarkLook()})
 	if got, want := bar.Measure(layout.Loose(600, 100)).X, bar.contentW(bar.barHeight()); got != want {
 		t.Errorf("a plain bar measured %v wide, want its content %v", got, want)
+	}
+}
+
+// A bar can put a word in front of a control to say what it sets — the
+// Settings preview's second bar is "Icons [ ] Size [ ] Corners [ ]" —
+// and the word is text, not a button: nothing hovers it and the bar's
+// arrow keys step over it.
+func TestToolBarLabelsTheControlBesideIt(t *testing.T) {
+	combo := NewComboBox([]string{"Classic", "Lucide"}, 0, nil)
+	combo.MinWidth = 1
+	bar := NewToolBar(
+		ToolText("One", nil),
+		ToolLabel("Icons"),
+		ToolWidget(combo),
+		ToolStretch(),
+	)
+	bar.SetHost(&fakeWindow{look: style.DarkLook()})
+	h := bar.Measure(layout.Loose(600, 100)).Y
+	bar.Arrange(paintengine2d.XYWH(0, 0, 600, h))
+	rects := bar.itemRects()
+
+	// It measures to its text, on the bar and centred in it.
+	f := style.ControlFontOf(bar.Look(), style.RoleTool)
+	if got, want := rects[1].Dx(), f.Advance("Icons"); got != want {
+		t.Errorf("the word measured %v wide, want its text %v", got, want)
+	}
+	if rects[1].Min.Y < 0 || rects[1].Max.Y > h {
+		t.Errorf("the word at %v is not inside the bar (height %v)", rects[1], h)
+	}
+	// It belongs to the control after it: the space between the two is
+	// half what the bar leaves between anything else, so the eye pairs
+	// them rather than pairing the word with the tool before it.
+	before := rects[1].Min.X - rects[0].Max.X
+	after := combo.Bounds().Min.X - rects[1].Max.X
+	if after >= before {
+		t.Errorf("the word is %v from its control and %v from the tool before it", after, before)
+	}
+	// It is not a tool: the arrow keys walk from the button to nothing
+	// else, and the pointer finds no item over the word.
+	if got := lastTool(bar.items); got != 0 {
+		t.Errorf("the last tool the bar walks is item %d, want the One button", got)
+	}
+	if got := bar.itemAt(paintengine2d.Pt(rects[1].Min.X+1, h*0.5)); got != -1 {
+		t.Errorf("the pointer found item %d over the word", got)
+	}
+	// A screen reader reads it as the static text it is, beside the
+	// control's own name.
+	var label *a11y.Node
+	for _, n := range bar.AccessibleItems() {
+		if n.Role == a11y.RoleLabel {
+			label = n
+		}
+	}
+	if label == nil || label.Name != "Icons" {
+		t.Errorf("the word is not static text in the tree: %+v", label)
+	}
+}
+
+// A bar too narrow for everything drops its words before its controls,
+// the same way it drops its tools: a combo box the user cannot reach is
+// worse than one whose name is only in its tooltip.
+func TestToolBarDropsWordsBeforeControls(t *testing.T) {
+	combo := NewComboBox([]string{"Classic"}, 0, nil)
+	combo.MinWidth = 1
+	bar := NewToolBar(
+		ToolLabel("Icons"),
+		ToolWidget(combo),
+		ToolStretch(),
+	)
+	bar.SetHost(&fakeWindow{look: style.DarkLook()})
+	h := bar.Measure(layout.Loose(600, 100)).Y
+	wide := bar.Measure(layout.Unbounded()).X
+
+	bar.Arrange(paintengine2d.XYWH(0, 0, wide, h))
+	if bar.itemRects()[0].Empty() {
+		t.Fatal("the word is gone from a bar wide enough for it")
+	}
+	bar.Arrange(paintengine2d.XYWH(0, 0, wide-20, h))
+	if !bar.itemRects()[0].Empty() {
+		t.Error("the word stayed on a bar too narrow for it")
+	}
+	if box := combo.Bounds(); box.Dx() < combo.Measure(layout.Unbounded()).X {
+		t.Errorf("the control was squeezed to %v of the %v it asked for", box.Dx(), combo.Measure(layout.Unbounded()).X)
+	}
+	// And a dropped word is out of the tree with it: a name read out with
+	// no box to point at is worse than nothing.
+	for _, n := range bar.AccessibleItems() {
+		if n.Role == a11y.RoleLabel {
+			t.Errorf("a dropped word is still in the tree: %q", n.Name)
+		}
 	}
 }
