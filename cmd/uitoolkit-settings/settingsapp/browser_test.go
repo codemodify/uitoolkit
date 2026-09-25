@@ -12,12 +12,12 @@ import (
 	"github.com/codemodify/uitoolkit/widgets"
 )
 
-// The right-hand pane of the Themes page is the preview and nothing
-// else: one application window in the staged pack, filling the pane,
-// switching when another pack is picked, and never re-theming Settings
-// itself. The whole widget gallery used to sit under it in a second
-// splitter; it is the tour's three showcase pages now, and this is what
-// says it has not crept back.
+// The right-hand pane is the preview and nothing else: one application
+// window in the staged pack, filling the pane at every size, switching
+// when another pack is picked, and never re-theming Settings itself. The
+// whole widget gallery used to sit under it in a second splitter (it is
+// the tour's three showcase pages now) and the strip of stock icons sat
+// above it for a while; this is what says neither has crept back.
 func TestSettingsPreviewIsTheWholeRightPane(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	if err := style.SaveAppearance(style.DefaultAppearance()); err != nil {
@@ -39,20 +39,35 @@ func TestSettingsPreviewIsTheWholeRightPane(t *testing.T) {
 	if a.Look().Name() == "win95" {
 		t.Fatal("the preview must not re-theme Settings itself")
 	}
-	// It is the splitter's second pane, not a slice of it.
-	split := themesSplit(t, w)
-	// One scope inside the split, so there is nothing else being previewed
-	// beside or under the preview. The page has a second one — the icon
-	// strip at its head — and that one is above the split, not in it.
-	if n := len(allScopes(split)); n != 1 {
-		t.Fatalf("the split holds %d theme scopes, want the preview alone", n)
-	}
+	// Two scopes on the whole page — the icon strip and the preview — and
+	// the strip is in the column of choices, beside the two choosers it
+	// answers. The preview's own pane holds nothing but the preview: an
+	// application window that fills it at every window size is the one
+	// promise this page makes about its right-hand side.
+	split := settingsSplit(t, w)
 	if n := len(allScopes(w.Content())); n != 2 {
-		t.Fatalf("the Themes page has %d theme scopes, want the preview and the icon strip", n)
+		t.Fatalf("the page has %d theme scopes, want the icon strip and the preview", n)
+	}
+	if n := len(allScopes(findScrollView(w.Content()))); n != 1 {
+		t.Fatalf("the column of choices holds %d theme scopes, want the icon strip", n)
+	}
+	if n := len(allScopes(preview)); n != 1 {
+		t.Fatalf("the preview holds %d theme scopes, want only itself", n)
 	}
 	pane, box := split.PaneB(), preview.LocalBounds()
-	if box.Dx() > pane.Dx() || box.Dy() < pane.Dy()-1 {
+	if box.Dx() > pane.Dx()+1 || box.Dy() < pane.Dy()-1 {
 		t.Errorf("the preview is %vx%v in a %vx%v pane", box.Dx(), box.Dy(), pane.Dx(), pane.Dy())
+	}
+	// The icon strip is in the column, under its choosers, not in here.
+	strip := findPanelTitled(w.Content(), "Preview — Classic")
+	if strip == nil {
+		t.Fatal("no icon strip in the column of choices")
+	}
+	if !nestedInScroll(strip) {
+		t.Error("the icon strip is not in the column that scrolls")
+	}
+	if widget.DeviceOrigin(strip).X >= widget.DeviceOrigin(preview).X {
+		t.Error("the icon strip is on the preview's side of the splitter")
 	}
 	// The showcase's own controls are the mark the gallery leaves.
 	if findButton(w.Content(), "Primary action") != nil {
@@ -171,9 +186,10 @@ func TestSettingsThemeSearch(t *testing.T) {
 	}
 }
 
-// Tab walks the whole of Settings: the pages, the icon choosers at the
-// head of the Themes page, the search field, the theme list, the live
-// preview beside it, and the buttons that act on it.
+// Tab walks the whole of Settings. There is one page, so one ring has to
+// hold all of it: the search field and the theme list, every chooser and
+// every switch down the column of choices, the buttons that act on a
+// pack, the live preview beside them, and Apply.
 func TestSettingsKeyboardReachesEverything(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	if err := style.SaveAppearance(style.DefaultAppearance()); err != nil {
@@ -199,13 +215,20 @@ func TestSettingsKeyboardReachesEverything(t *testing.T) {
 		t.Fatalf("the focus ring is only %d stops long", len(ring))
 	}
 	want := map[string]bool{
-		"search":    false,
-		"themes":    false,
-		"pages":     false,
-		"preview":   false,
-		"apply":     false,
-		"icon set":  false,
-		"icon size": false,
+		"search":        false,
+		"themes":        false,
+		"decade":        false,
+		"corners":       false,
+		"icon set":      false,
+		"icon size":     false,
+		"export":        false,
+		"animations":    false,
+		"follow":        false,
+		"file dialogs":  false,
+		"title bar":     false,
+		"window button": false,
+		"preview":       false,
+		"apply":         false,
 	}
 	for _, c := range ring {
 		switch v := c.(type) {
@@ -214,9 +237,7 @@ func TestSettingsKeyboardReachesEverything(t *testing.T) {
 				want["search"] = true
 			}
 		case *widgets.ListView:
-			if v.Count > 0 && v.ItemText(0) == settingsPages[0] {
-				want["pages"] = true
-			} else if v.Count > 0 && strings.Contains(v.ItemText(0), "·") {
+			if v.Count > 0 && strings.Contains(v.ItemText(0), "·") {
 				want["themes"] = true
 			}
 		case *widgets.ComboBox:
@@ -225,11 +246,30 @@ func TestSettingsKeyboardReachesEverything(t *testing.T) {
 				want["icon set"] = true
 			case "Icon size":
 				want["icon size"] = true
+			case "Corners":
+				want["corners"] = true
+			case "Decade":
+				want["decade"] = true
+			}
+		case *widgets.Switch:
+			switch v.Text {
+			case "Animations":
+				want["animations"] = true
+			case "Follow the desktop's colours":
+				want["follow"] = true
+			case "Use the desktop's file dialogs":
+				want["file dialogs"] = true
+			case "Use system title bar and borders":
+				want["title bar"] = true
+			case "Place window buttons as the theme does":
+				want["window button"] = true
 			}
 		case *widgets.Button:
 			switch v.Text {
 			case "Apply":
 				want["apply"] = true
+			case "Export current theme…":
+				want["export"] = true
 			case "Dialog…":
 				// A control of the previewed application: the preview is
 				// live, not a picture, so Tab reaches into it.
@@ -242,17 +282,10 @@ func TestSettingsKeyboardReachesEverything(t *testing.T) {
 			t.Errorf("Tab never reaches the %s", part)
 		}
 	}
-
-	// Every page is reachable and keeps a ring of its own.
-	for _, name := range settingsPages {
-		clickSettingsNav(t, w, name)
-		a.PumpOnce()
-		if len(focusRing(t, a, w)) == 0 {
-			t.Errorf("%s: nothing takes the focus", name)
-		}
-		if findApply(w.Content()) == nil {
-			t.Errorf("%s: Apply is not on the page", name)
-		}
+	// Apply is at the foot of the window, outside the column that
+	// scrolls, so it is a stop whatever the column is scrolled to.
+	if nestedInScroll(findApply(w.Content())) {
+		t.Error("Apply is inside the scrolling column")
 	}
 }
 

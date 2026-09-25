@@ -13,43 +13,55 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit"
 	"github.com/codemodify/uitoolkit/app"
+	"github.com/codemodify/uitoolkit/layout"
 	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
 	"github.com/codemodify/uitoolkit/widgets"
 )
 
-// Settings pages.
+// The sections of the page. Settings had four pages behind a sidebar —
+// Themes, Appearance, Packs, About — and they were four answers to one
+// question: what does this desktop look like. They are one page now, and
+// these are the headings down its left-hand column, in reading order:
+// which pack, where its colours come from, what shape and weight it is
+// drawn in, what the apps do besides drawing it, and where all of that is
+// kept on disk.
 const (
-	pageThemes = iota
-	pageAppearance
-	pagePacks
-	pageAbout
+	sectionTheme = iota
+	sectionDesktop
+	sectionShape
+	sectionBehaviour
+	sectionFiles
 )
 
-// The page names in the sidebar. "Packs & icons" became "Packs" when
-// choosing an icon set moved to Themes: what is left of that page is the
-// packs on disk, of both kinds — theme packs and icon sets — and what it
-// does with them is install, export and delete.
-var settingsPages = []string{"Themes", "Appearance", "Packs", "About"}
+// settingsSections names the sections in that order. -page takes these
+// names, and the names of the four pages they came from.
+var settingsSections = []string{"Theme", "Where the colours come from", "Shape and weight", "Behaviour", "Files"}
 
 // Theme browser filters: every built-in pack, one decade, or user packs.
 var themeFilters = []string{"All decades", "1980s", "1990s", "2000s", "2010s", "2020s", "My themes"}
 
 const filterUser = 6
 
-// SettingsApp is the toolkit appearance editor. The Themes page is the
-// toolkit's shop window: pick a pack and it is drawn at once in a live
-// preview — a small application window whose frame, caption and every
-// control come from that theme — while Settings itself keeps the applied
-// look (a ThemeScope around the preview). Apply — the one button, at the
-// right of the row under the pages — writes look.json and every app that
-// watches it (and Settings) switches. Closing without Apply discards the
-// staged change.
+// SettingsApp is the toolkit appearance editor, and it is one page: the
+// choices down a scrolling column on the left — the theme browser, where
+// its colours come from, the shape and weight it is drawn in, what the
+// apps do besides drawing it, and the files it all lives in — and on the
+// right, filling the rest of the window at every size, the thing those
+// choices are about: a small application window whose frame, caption and
+// every control come from the staged pack. Settings itself keeps the
+// applied look (the preview is a ThemeScope), so a pack can be judged
+// without living in it.
+//
+// Apply — the one button, at the right of the row under the page —
+// writes look.json and every app that watches it (and Settings) switches.
+// Closing without Apply discards the staged change.
 func SettingsApp(a *app.Application, win *app.Window) widget.Component {
 	saved := style.LoadAppearance().Normalize()
-	return buildSettings(a, win, saved, saved, pageThemes)
+	return buildSettings(a, win, saved, saved, sectionTheme)
 }
 
 // SettingsAppStaged is SettingsApp with a theme already staged (not
@@ -59,8 +71,8 @@ func SettingsAppStaged(a *app.Application, win *app.Window, theme string) widget
 	return SettingsAppOpen(a, win, theme, "")
 }
 
-// SettingsAppOpen is SettingsApp with a theme staged and a page open by
-// name ("themes", "appearance", "packs", "about"); either may be empty.
+// SettingsAppOpen is SettingsApp with a theme staged and the page opened
+// at a section by name; either may be empty.
 // cmd/uitoolkit-settings' -stage and -page take this path.
 func SettingsAppOpen(a *app.Application, win *app.Window, theme, page string) widget.Component {
 	saved := style.LoadAppearance().Normalize()
@@ -71,28 +83,33 @@ func SettingsAppOpen(a *app.Application, win *app.Window, theme, page string) wi
 	return buildSettings(a, win, saved, staged, SettingsPage(page))
 }
 
-// SettingsPage is the page a name opens; an unknown or empty name is the
-// theme browser.
+// SettingsPage is the section a name opens the page at; an unknown or
+// empty name is the top of it, which is the theme browser.
 //
-// The names of the pages Settings used to have keep working, because
-// -page is in scripts and in the docs of two releases. "packs & icons" is
-// the old name of Packs and still opens it. "icons" opened that page when
-// it was where an icon set was chosen; choosing one is on Themes now, so
-// that is where the name goes — a script that says -page icons wants the
-// icon settings, which is the thing that moved, not the folder of
-// installed sets that stayed behind.
+// There is one page now, so -page no longer switches anything: it says
+// which part of the page to start at, and Settings scrolls its column
+// there. The names of the four pages Settings used to have keep working,
+// because -page is in scripts, in the atlas tooling and in the docs of
+// two releases — each one resolves to the section that swallowed it.
+// "appearance" is Shape and weight, the first of the three groups that
+// page led with; "packs" (and its old name "packs & icons") is Theme,
+// because exporting a pack and deleting one are under the theme browser
+// now; "icons" is Shape and weight, where the icon set is chosen; "about"
+// is Files.
 func SettingsPage(name string) int {
 	switch strings.ToLower(strings.TrimSpace(name)) {
-	case "appearance":
-		return pageAppearance
-	case "packs", "packs & icons", "theme packs":
-		return pagePacks
-	case "about":
-		return pageAbout
-	case "themes", "icons", "icon sets":
-		return pageThemes
+	case "appearance", "shape", "shape and weight", "shape and motion", "corners", "icons", "icon sets":
+		return sectionShape
+	case "desktop", "the desktop", "colours", "colors", "where the colours come from":
+		return sectionDesktop
+	case "behaviour", "behavior", "windows", "motion":
+		return sectionBehaviour
+	case "about", "files", "paths":
+		return sectionFiles
+	case "packs", "packs & icons", "theme packs", "themes", "theme":
+		return sectionTheme
 	default:
-		return pageThemes
+		return sectionTheme
 	}
 }
 
@@ -102,16 +119,22 @@ type settingsState struct {
 	win    *app.Window
 	saved  style.Appearance
 	staged style.Appearance
-	page   int
-	filter int
+	// section is where the page opens; it is used once, on the first
+	// build, and a rebuild keeps the scroll offset instead.
+	section  int
+	revealed bool
+	filter   int
 	// query narrows the theme browser to what it names: a pack's id,
 	// name, year, family, engine or summary.
 	query string
 	// listOff keeps the theme browser's scroll position across rebuilds:
 	// picking a theme below the fold used to jump the list to the top.
 	listOff float32
-	// browserRatio is where the user left the splitter of the Themes
-	// page; it survives a rebuild.
+	// choicesOff is where the user left the column of choices; Apply
+	// rebuilds the page and must not throw them back to the top of it.
+	choicesOff float32
+	// browserRatio is where the user left the splitter between the
+	// choices and the previews; it survives a rebuild.
 	browserRatio float32
 	// browserAuto is the ratio Settings worked out for itself, to tell it
 	// apart from one the user dragged.
@@ -122,14 +145,22 @@ type settingsState struct {
 	// The live parts of the page the staged look feeds. Staging a change
 	// repaints these where they stand instead of rebuilding the page: a
 	// rebuild takes the caret out of the search field, the focus off the
-	// theme list, and the gallery back to the top.
+	// theme list, and the column back to the top.
 	rows       []themeRow
 	list       *widgets.ListView
 	bodySplit  *widgets.Splitter
+	choices    *widgets.ScrollView
+	sections   []widget.Component
 	scopes     []*widgets.ThemeScope
 	previewBox *widgets.Panel
 	applyBtn   *widgets.Button
-	// The icons head of the Themes page: the sets the chooser offers, the
+	// What Delete acts on follows the staged choice, so both buttons are
+	// always on the page and go grey when nothing of the user's own is
+	// staged: a button that came and went would move everything under it
+	// every time a pack was picked.
+	delTheme *widgets.Button
+	delIcons *widgets.Button
+	// The icons half of the look: the sets the chooser offers, the
 	// chooser itself, the size its glyphs are drawn at and the panel the
 	// strip lives in. They follow the staged appearance like the theme
 	// preview does, whatever staged it.
@@ -145,6 +176,9 @@ type settingsState struct {
 func (s *settingsState) capture() {
 	if s.list != nil {
 		s.listOff = s.list.OffsetY
+	}
+	if s.choices != nil {
+		s.choicesOff = s.choices.OffsetY
 	}
 	if s.bodySplit != nil {
 		// Only what the user dragged is kept: a ratio still ours is
@@ -162,9 +196,9 @@ func (s *settingsState) rebuild() {
 	s.win.SetContent(buildSettingsState(s))
 }
 
-func buildSettings(a *app.Application, win *app.Window, saved, staged style.Appearance, page int) widget.Component {
+func buildSettings(a *app.Application, win *app.Window, saved, staged style.Appearance, section int) widget.Component {
 	s := &settingsState{
-		a: a, win: win, saved: saved.Normalize(), staged: staged.Normalize(), page: page,
+		a: a, win: win, saved: saved.Normalize(), staged: staged.Normalize(), section: section,
 	}
 	// The preview draws the staged theme's light or dark sibling: redraw
 	// it when the desktop switches.
@@ -173,72 +207,71 @@ func buildSettings(a *app.Application, win *app.Window, saved, staged style.Appe
 			s.rebuild()
 		}
 	})
-	// The theme browser keeps its share as the window is resized, until
-	// the user drags the sash: then the split is theirs.
+	// The column of choices keeps its share as the window is resized,
+	// until the user drags the sash: then the split is theirs.
 	win.OnResize(func(int, int) { s.followWindow() })
 	return buildSettingsState(s)
 }
 
 func buildSettingsState(s *settingsState) widget.Component {
 	s.scheme = style.DesktopColorScheme()
-	if s.page < 0 || s.page >= len(settingsPages) {
-		s.page = pageThemes
+	if s.section < 0 || s.section >= len(settingsSections) {
+		s.section = sectionTheme
 	}
 	// Every live part belongs to the build that made it.
-	s.rows, s.list, s.bodySplit = nil, nil, nil
+	s.rows, s.list, s.bodySplit, s.choices, s.sections = nil, nil, nil, nil, nil
 	s.scopes, s.previewBox = nil, nil
+	s.delTheme, s.delIcons = nil, nil
 	s.iconSets, s.iconPick, s.iconSize, s.iconBox, s.iconScope = nil, nil, nil, nil, nil
 
-	var page widget.Component
-	switch s.page {
-	case pageAppearance:
-		page = widgets.NewScrollView(s.appearancePage())
-	case pagePacks:
-		page = s.packsPage()
-	case pageAbout:
-		page = widgets.NewScrollView(s.aboutPage())
-	default:
-		page = s.themesPage()
+	if s.browserRatio == 0 {
+		s.browserRatio = defaultChoicesRatio(s.win)
+		s.browserAuto = s.browserRatio
 	}
+	s.choices = widgets.NewScrollView(s.choicesColumn())
+	s.choices.SetAccessibleName("Settings")
+	s.choices.OffsetY = s.choicesOff
 
-	nav := widgets.NewListView(len(settingsPages), func(i int) string { return settingsPages[i] }, func(i int) {
-		s.page = i
-		s.rebuild()
-	})
-	nav.SetAccessibleName("Pages")
-	nav.Selected = s.page
-	nav.RowHeight = 32
-	nav.Sidebar = true
-	side := widgets.NewColumn(
-		widgets.NewTitle("Settings"),
-		widgets.NewLabel("v"+uitoolkit.Version),
-		nav,
-	).WithGap(8).WithPad(10)
-	side.AddFlex(nav, 1)
-
-	right := widgets.NewPad(10, page)
-	split := widgets.NewSplitter(widgets.SplitColumns, side, right)
-	split.Ratio = 0.18
+	s.bodySplit = widgets.NewSplitter(widgets.SplitColumns, s.openAt(), s.previewColumn())
+	s.bodySplit.Ratio = s.browserRatio
+	s.bodySplit.SetAccessibleName("Settings and preview")
 
 	s.applyBtn = widgets.NewButton("Apply", s.apply)
 	s.applyBtn.Primary = true
-	// Apply closes the row on the right, where a dialog's accept button
-	// belongs; the spacer before it is the whole of the rest of the row.
+	// Apply closes the row at the foot of the window, where a dialog's
+	// accept button belongs; the spacer before it is the whole of the
+	// rest of the row. It is outside the scrolling column on purpose:
+	// the one thing that writes anything must not be able to scroll away.
 	gap := widgets.NewSpacer()
 	actions := widgets.NewRow(gap, s.applyBtn).WithGap(12).WithPad(8)
 	actions.AddFlex(gap, 1)
 
 	s.showStaged()
 
-	root := widgets.NewColumn(split, actions)
-	root.AddFlex(split, 1)
+	body := widgets.NewPad(10, s.bodySplit)
+	root := widgets.NewColumn(body, actions)
+	root.AddFlex(body, 1)
 	return root
+}
+
+// openAt is the column of choices, wrapped — on the first build only —
+// in the thing that scrolls it to the section -page named. Where that
+// section starts is not known until the column has been measured at the
+// width it got, so it cannot be worked out here; the wrapper does it at
+// the end of the first layout and then gets out of the way.
+func (s *settingsState) openAt() widget.Component {
+	if s.revealed || s.section <= sectionTheme || s.section >= len(s.sections) {
+		s.revealed = true
+		return s.choices
+	}
+	s.revealed = true
+	return newScrollTo(s.choices, s.sections[s.section])
 }
 
 // ---- staging ------------------------------------------------------------------
 
-// stage shows next without rebuilding the page: the preview switches
-// theme where it stands, its caption follows, and Apply turns on.
+// stage shows next without rebuilding the page: the previews switch
+// theme where they stand, their captions follow, and Apply turns on.
 func (s *settingsState) stage(next style.Appearance) {
 	s.staged = next.Normalize()
 	s.showStaged()
@@ -273,7 +306,7 @@ func (s *settingsState) fail(what string, err error) {
 }
 
 // showStaged paints the staged appearance into the parts of the page that
-// follow it. Each is nil on the pages that do not show it.
+// follow it.
 func (s *settingsState) showStaged() {
 	look := s.staged.Look()
 	for _, sc := range s.scopes {
@@ -288,12 +321,45 @@ func (s *settingsState) showStaged() {
 		s.list.Selected = s.selectedRow()
 		s.list.Invalidate()
 	}
+	// Delete says what it would delete, and is only alive while that is
+	// something of the user's own.
+	if s.delTheme != nil {
+		s.delTheme.SetEnabled(indexTheme(style.ListUserThemes(), s.staged.Name) >= 0)
+	}
+	if s.delIcons != nil {
+		s.delIcons.SetEnabled(indexIcon(style.ListUserIconSets(), s.staged.Icons) >= 0)
+	}
 	if s.applyBtn != nil {
 		s.applyBtn.SetEnabled(s.staged != s.saved)
 	}
 }
 
-// ---- Themes page --------------------------------------------------------------
+// ---- the column of choices ------------------------------------------------
+
+// choicesColumn is the left-hand column: everything Settings decides,
+// under five headings, in the order a person decides them. It scrolls,
+// because five sections and a list of 129 packs do not fit in a 520-pixel
+// window and something has to give — and what must not give is the
+// previews beside it, which is why they are not in here.
+func (s *settingsState) choicesColumn() widget.Component {
+	s.sections = []widget.Component{
+		s.themeSection(),
+		s.desktopSection(),
+		s.shapeSection(),
+		s.behaviourSection(),
+		s.filesSection(),
+	}
+	col := widgets.NewColumn(
+		widgets.NewTitle("Settings"),
+		widgets.NewLabel("v"+uitoolkit.Version),
+	).WithGap(12).WithPad(4)
+	for _, sec := range s.sections {
+		col.Add(sec)
+	}
+	return col
+}
+
+// ---- Theme ------------------------------------------------------------------
 
 // themeRow is one entry of the theme browser. A pack is whatever an
 // engine — or a skin of pictures — makes of its tokens; the browser only
@@ -365,262 +431,18 @@ func (s *settingsState) selectedRow() int {
 	return -1
 }
 
-// themesPage is the shop window: the browser on the left and, on the
-// right, the staged pack drawn as a small application window — its
-// frame, caption and every control that theme's — in a splitter the user
-// can size, so the list and the preview never fight for the space.
+// themeSection is the head of the column and the first decision: a
+// search field, the decade filter, the packs that pass both, and the two
+// things that can be done to a pack of the user's own — write one out,
+// and remove one.
 //
-// The whole widget gallery used to sit under the preview. It was the
-// same widgets the tour now shows as three pages of its own, it halved
-// the preview, and what it added to a theme browser was a second answer
-// to a question the preview had already answered. The right pane is the
-// preview alone.
-func (s *settingsState) themesPage() widget.Component {
-	if s.browserRatio == 0 {
-		s.browserRatio = defaultBrowserRatio(s.win)
-		s.browserAuto = s.browserRatio
-	}
-	browser := s.themeBrowser()
-
-	s.previewBox = widgets.NewPanel("", PreviewApp(nil))
-	s.previewBox.Window = true
-	preview := s.scoped(s.previewBox)
-
-	s.bodySplit = widgets.NewSplitter(widgets.SplitColumns, browser, preview)
-	s.bodySplit.Ratio = s.browserRatio
-	s.bodySplit.SetAccessibleName("Themes and preview")
-
-	page := widgets.NewColumn(s.iconsHead(), s.bodySplit).WithGap(10)
-	page.AddFlex(s.bodySplit, 1)
-	return page
-}
-
-// iconsHead is the icons half of the look, at the head of the page and
-// built like the half under it: what to choose from on the left, in
-// Settings' own theme, and on the right, filling the rest of the width,
-// what the choice looks like, drawn in the staged one.
-//
-// Icons and themes are one question — what the toolkit looks like — asked
-// twice, which is why they are one page. The page says so by asking both
-// the same way: the chooser column here stands where the theme browser
-// stands, under a heading of its own, and the strip beside it stands
-// where the theme preview stands. Read down, it is choose-and-see, then
-// choose-and-see; it is not an icons page with a themes page under it.
-//
-// Two other places were tried. Inside the browser column, above the theme
-// list, is where the width is worst: the column is about 240 logical
-// pixels, which folds fifteen glyphs into five lines and leaves a list of
-// 129 packs the rest — the icons would have cost the page the thing it is
-// for. Beside the preview, in the right pane, keeps the width but hides
-// the icon strip behind the splitter: drag the sash left to read the
-// theme list and the icons go with it, and the chooser would have sat in
-// a pane of previews. Across the head of both columns is the only place
-// where the icon strip gets the width fifteen glyphs want and neither
-// half of the page is inside the other.
-func (s *settingsState) iconsHead() widget.Component {
-	s.iconSets = append(style.ListBuiltinIconSets(), style.ListUserIconSets()...)
-	names := make([]string, len(s.iconSets))
-	for i, set := range s.iconSets {
-		names[i] = set.Label
-	}
-	s.iconPick = widgets.NewComboBox(names, indexIcon(s.iconSets, s.staged.Icons), func(i int) {
-		if i < 0 || i >= len(s.iconSets) {
-			return
-		}
-		next := s.staged
-		next.Icons = s.iconSets[i].Name
-		s.stage(next)
-	})
-	s.iconPick.SetAccessibleName("Icons")
-
-	// The size lives beside the set because it is not a separate choice: a
-	// set's glyphs are drawn at it, some sets are made for one end of the
-	// range, and a strip that showed a fixed size would be showing
-	// something the user is not going to get. The strip is in the staged
-	// scope, so it redraws at the staged size as the size is changed.
-	s.iconSize = widgets.NewComboBox([]string{"Small", "Medium", "Large"}, iconSizeIndex(s.staged.IconSize), func(i int) {
-		next := s.staged
-		next.IconSize = iconSizes[i]
-		s.stage(next)
-	})
-	s.iconSize.SetAccessibleName("Icon size")
-
-	// "Icons" names this band as "Themes" names the column under it. The
-	// two choosers sit on the line after it and the strip spans the page
-	// under them, rather than the choosers standing in a column beside the
-	// strip: a wrap that folds has to be measured at the width it is going
-	// to be arranged at, and a flexed child of a row is measured at the
-	// row's whole width — the strip laid out beside the choosers reported
-	// one line, was given the width for two, and had its second line cut
-	// off. Full width is also the width fifteen glyphs want.
-	rule := widgets.NewSpacer()
-	chooser := widgets.NewRow(widgets.NewLabel("Icons"), s.iconPick, s.iconSize, rule).WithGap(8)
-	chooser.AddFlex(rule, 1)
-
-	// The strip is in a scope of its own — Settings' own theme carrying
-	// the staged icon set at the staged size — rather than in the staged
-	// theme like the preview under it. It is the set that is being
-	// previewed here, not the pack, and a strip drawn in the pack would
-	// change height with it: the packs put different padding round a tool
-	// button, the head would be a different height in every one of the
-	// 129, and the preview panel under it would sit somewhere different in
-	// each. The Theme Atlas crops that panel out of one screenshot per
-	// pack at one rectangle (docs/settings.md, "Screenshot geometry"), so
-	// "the same place in every pack" is a promise this page has to keep.
-	s.iconScope = widgets.NewThemeScope(s.iconLook(), s.iconStrip())
-	return widgets.NewColumn(chooser, s.iconScope).WithGap(6)
-}
-
-// iconLook is what the strip is drawn in: the theme Settings itself is
-// running, with the staged icon set at the staged size laid over it. The
-// glyphs and their size are the staged ones — that is the whole point of
-// the strip — while everything around them is the applied look, so the
-// head of the page keeps one height whatever pack is staged.
-func (s *settingsState) iconLook() style.LookAndFeel {
-	return style.WithIconSize(style.WithIcons(s.a.Look(), s.staged.Icons), s.staged.IconSize)
-}
-
-// iconStrip is the whole of what a set draws: every icon the toolkit asks
-// one for by name — the whole of [style.AllToolIcons] — in the groups
-// they belong to: the three file actions, the three clipboard ones and
-// the two histories on one bar, then find, edit, mail and download, and
-// last the four message-box faces. Those four are the ones a set gives a
-// colour of its own, so they are also the ones that say whether a set can
-// be read against a dark pack. (Question was missing from this strip for
-// as long as it had one: a test now walks AllToolIcons, so a stem added
-// to the toolkit and not to the preview fails rather than goes unseen.)
-//
-// Each group is a tool bar, and the groups are in a [widgets.Wrap]: one
-// bar of fifteen would clip its tail on a window as narrow as the 720
-// Settings opens down to, and fifteen loose tool buttons would not answer
-// the question the size chooser beside them asks. A loose tool button is
-// a control-height key, so the look's icon size is capped by its height
-// and a set at Large draws exactly as it does at Medium; a tool bar sizes
-// its buttons from the bar metrics, which are the ones the icon size
-// grows. The strip has to show the size that is staged, so the strip is
-// made of bars.
-func (s *settingsState) iconStrip() widget.Component {
-	// Three bars, not five: the file, clipboard and history icons are one
-	// bar with dividers between the groups, because every bar pays for its
-	// own ends and five of them fold onto a second line in a window where
-	// three sit on one.
-	groups := [][]style.ToolIcon{
-		{style.IconNew, style.IconOpen, style.IconSave, style.IconNone,
-			style.IconCut, style.IconCopy, style.IconPaste, style.IconNone,
-			style.IconUndo, style.IconRedo},
-		{style.IconSearch, style.IconPen, style.IconMail, style.IconDownload},
-		{style.IconInfo, style.IconWarning, style.IconError, style.IconQuestion},
-	}
-	row := widgets.NewWrap()
-	for _, group := range groups {
-		items := make([]*widgets.ToolItem, 0, len(group))
-		for _, i := range group {
-			if i == style.IconNone {
-				items = append(items, widgets.ToolDivider())
-				continue
-			}
-			// Icon only, known by the action it stands for: the strip is
-			// there to be looked at, and the name is what a screen reader
-			// and the tooltip both need.
-			it := widgets.ToolIconBtn(i, "", nil)
-			it.Tip = i.Label()
-			items = append(items, it)
-		}
-		row.Add(widgets.NewToolBar(items...))
-	}
-	s.iconBox = widgets.NewPanel(iconBoxTitle(s.staged.Icons), row)
-	s.iconBox.SetAccessibleName("Icon preview")
-	return s.iconBox
-}
-
-// iconBoxTitle names the set the strip is drawing, in the words the theme
-// preview's caption names its pack in: the page asks the same question
-// twice and captions both answers the same way.
-func iconBoxTitle(name style.IconSetName) string { return "Preview — " + iconSetLabel(name) }
-
-// showStagedIcons puts the staged appearance back into the icons head.
-// The strip follows the staged look through its scope, but the two
-// choosers and the caption are Settings' own and have to be told — and
-// they have to be told whoever staged it, not only the choosers
-// themselves. Nothing else stages an icon set today: a theme pack's
-// theme.json carries no icon preference (the field is read and ignored;
-// look.json owns icons), so picking a pack leaves the set alone and only
-// changes the surface the strip is drawn on. Deleting a user set does
-// stage one, Apply and a desktop light / dark change restage the whole
-// appearance, and a pack that took its own set would come through here
-// too.
-func (s *settingsState) showStagedIcons() {
-	if s.iconScope != nil {
-		s.iconScope.SetTheme(s.iconLook())
-	}
-	if s.iconBox != nil {
-		s.iconBox.Title = iconBoxTitle(s.staged.Icons)
-		s.iconBox.RequestLayout()
-	}
-	if s.iconPick != nil {
-		if i := indexIcon(s.iconSets, s.staged.Icons); i != s.iconPick.Selected {
-			s.iconPick.Selected = i
-			s.iconPick.Invalidate()
-		}
-	}
-	if s.iconSize != nil {
-		if i := iconSizeIndex(s.staged.IconSize); i != s.iconSize.Selected {
-			s.iconSize.Selected = i
-			s.iconSize.Invalidate()
-		}
-	}
-}
-
-// iconSizes are the sizes the chooser offers, in its order.
-var iconSizes = []style.IconSize{style.IconSizeSmall, style.IconSizeMedium, style.IconSizeLarge}
-
-func iconSizeIndex(sz style.IconSize) int {
-	for i, s := range iconSizes {
-		if s == sz {
-			return i
-		}
-	}
-	return 1 // medium, the default
-}
-
-// followWindow works the browser's share out again for the window's new
-// size, unless the user has dragged the sash since Settings last set it.
-func (s *settingsState) followWindow() {
-	if s.bodySplit == nil || s.bodySplit.Ratio != s.browserAuto {
-		return
-	}
-	s.browserAuto = defaultBrowserRatio(s.win)
-	s.bodySplit.Ratio = s.browserAuto
-	s.bodySplit.RequestLayout()
-}
-
-// defaultBrowserRatio aims the theme browser at about 240 logical pixels
-// whatever the window and the display scale are: a narrow window gives it
-// a bigger share so its rows stay readable, a wide one hands the room to
-// the preview and the gallery. Dragging the sash replaces it.
-func defaultBrowserRatio(win *app.Window) float32 {
-	const want, pad = 240, 30
-	// Window.Size is already logical pixels, which is what `want` is in.
-	lw, _ := win.Size()
-	// The page is what the navigation sidebar and its padding leave.
-	page := float32(lw)*(1-0.18) - pad
-	if page <= 0 {
-		return 0.3
-	}
-	return min(max(want/page, 0.24), 0.45)
-}
-
-// scoped draws c in the staged theme while Settings keeps the applied one.
-func (s *settingsState) scoped(c widget.Component) *widgets.ThemeScope {
-	scope := widgets.NewThemeScope(s.staged.Look(), c)
-	s.scopes = append(s.scopes, scope)
-	return scope
-}
-
-// themeBrowser is the left column: a search field, the decade filter and
-// the packs that pass both. Typing filters the list in place, so the
-// caret stays in the field.
-func (s *settingsState) themeBrowser() widget.Component {
+// Export and Delete were a page of their own (Packs) with a second copy
+// of the browser on it to say which pack they meant. The browser here is
+// the only one there is now, so they sit under it and act on what it has
+// staged: Export writes the staged look out as a pack, Delete removes the
+// staged pack when it is one of the user's. Nothing has to be selected
+// twice.
+func (s *settingsState) themeSection() widget.Component {
 	s.rows = s.themeRows()
 	s.list = widgets.NewListView(len(s.rows), func(i int) string {
 		if i < 0 || i >= len(s.rows) {
@@ -681,14 +503,468 @@ func (s *settingsState) themeBrowser() widget.Component {
 	})
 	filters.SetAccessibleName("Decade")
 
-	// The list runs to the foot of the column: the count of packs that
-	// used to close it, and the box that named the selected pack and its
-	// year, family and engine, are gone. Both said in words what the
-	// preview beside them says in the thing itself, and both took rows
-	// off a list of 129 packs to do it.
-	col := widgets.NewColumn(widgets.NewLabel("Themes"), search, filters, s.list).WithGap(6)
-	col.AddFlex(s.list, 1)
-	return col
+	// The list is held to a height rather than run to the foot of the
+	// window: it is in a column that scrolls now, and a view as tall as
+	// all 129 of its rows would have made the column ten screens long and
+	// given the list no scrollbar of its own. Nine rows is enough to
+	// browse in and leaves the four sections under it within reach.
+	return widgets.NewPanel("Theme",
+		wrapped("The pack every uitoolkit app is drawn from. Picking one stages it in the preview; nothing is written until Apply."),
+		search, filters,
+		widgets.NewHeightBox(252, s.list),
+		s.exportButton(), s.deleteThemeButton(),
+	)
+}
+
+// exportButton writes the staged look out as a theme pack of the user's
+// own. It is under the browser because the browser is what says which
+// look is staged, and because the pack it writes appears in that same
+// list a line later, as "User · <name>".
+func (s *settingsState) exportButton() widget.Component {
+	var host widget.Component
+	btn := widgets.NewButton("Export current theme…", func() {
+		promptExportName(host, func(name string) {
+			pack, err := style.ExportAppearance(strings.TrimSpace(name), s.staged)
+			if err != nil {
+				s.fail("Export failed", err)
+				return
+			}
+			next := s.staged
+			next.Name = pack.Name
+			next.Theme = pack.Palette
+			s.staged = next.Normalize()
+			s.rebuild()
+		})
+	})
+	host = btn
+	return btn
+}
+
+// deleteThemeButton removes the staged pack from disk when it is one the
+// user exported. It lives under the browser — the one place that lists
+// the user's own packs — and it is grey rather than absent while a
+// built-in pack is staged, so that picking a pack never shuffles the
+// rest of the column.
+func (s *settingsState) deleteThemeButton() widget.Component {
+	var host widget.Component
+	s.delTheme = widgets.NewButton("Delete theme…", func() {
+		name := s.staged.Name
+		if indexTheme(style.ListUserThemes(), name) < 0 {
+			return
+		}
+		widgets.Confirm(host, "Delete theme?", "Remove "+name+" from disk? This cannot be undone.", func(yes bool) {
+			if !yes {
+				return
+			}
+			if err := style.DeleteUserTheme(name); err != nil {
+				s.fail("Delete failed", err)
+				return
+			}
+			next := style.AfterUserThemeDeleted(s.staged, name)
+			if s.saved.Name == name {
+				if err := style.SaveAppearance(next); err != nil {
+					s.fail("Delete failed", err)
+					return
+				}
+				s.saved = next
+			}
+			s.a.ApplyAppearance(s.saved)
+			s.staged = next.Normalize()
+			s.rebuild()
+		})
+	})
+	host = s.delTheme
+	s.delTheme.SetEnabled(false)
+	return s.delTheme
+}
+
+// ---- Where the colours come from --------------------------------------------
+
+// desktopSection is the one setting that changes where the look comes
+// from rather than what it is: with it on, the pack Settings draws is not
+// always the pack that was chosen. It sits right under the browser for
+// that reason — it is the first footnote to the choice above it, and the
+// preview's caption is where its effect is read ("Preview — Breeze Dark"
+// under a chosen Breeze).
+func (s *settingsState) desktopSection() widget.Component {
+	// GNOME's and Plasma's light / dark setting and accent colour: the
+	// theme shows its sibling (Breeze and Breeze Dark) to match the
+	// desktop, recoloured around its accent where the engine takes one.
+	follow := widgets.NewSwitch("Follow the desktop's colours", s.staged.FollowDesktop, func(on bool) {
+		next := s.staged
+		next.FollowDesktop = on
+		s.stage(next)
+	})
+	return widgets.NewPanel(settingsSections[sectionDesktop],
+		optionSwitch(follow, "Light or dark, and the accent colour, as the desktop asks for them. The chosen pack's sibling is drawn — Breeze as Breeze Dark — and the preview's caption says so."),
+	)
+}
+
+// ---- Shape and weight -------------------------------------------------------
+
+// shapeSection is what the staged look is drawn in rather than what it
+// is: how sharp its corners are, which set its glyphs come from and how
+// big they are. Corners came off the old Appearance page and the two icon
+// choosers off the head of the old Themes page, and they belong together
+// because they are one decision with three dials — the shape and the
+// weight of everything on screen — and because all three are answered by
+// the same two previews on the right.
+func (s *settingsState) shapeSection() widget.Component {
+	cornerSel := 0
+	switch s.staged.Corners {
+	case style.CornersRound:
+		cornerSel = 1
+	case style.CornersSquare:
+		cornerSel = 2
+	}
+	corners := widgets.NewComboBox([]string{"Theme shape", "Round", "Square"}, cornerSel, func(i int) {
+		next := s.staged
+		next.Corners = []style.CornerStyle{style.CornersTheme, style.CornersRound, style.CornersSquare}[i]
+		s.stage(next)
+	})
+	corners.SetAccessibleName("Corners")
+
+	s.iconSets = append(style.ListBuiltinIconSets(), style.ListUserIconSets()...)
+	names := make([]string, len(s.iconSets))
+	for i, set := range s.iconSets {
+		names[i] = set.Label
+	}
+	s.iconPick = widgets.NewComboBox(names, indexIcon(s.iconSets, s.staged.Icons), func(i int) {
+		if i < 0 || i >= len(s.iconSets) {
+			return
+		}
+		next := s.staged
+		next.Icons = s.iconSets[i].Name
+		s.stage(next)
+	})
+	s.iconPick.SetAccessibleName("Icons")
+
+	// The size is beside the set because it is not a separate choice: a
+	// set's glyphs are drawn at it, some sets are made for one end of the
+	// range, and a strip that showed a fixed size would be showing
+	// something the user is not going to get. The strip on the right is
+	// in the staged scope, so it redraws at the staged size as the size
+	// is changed.
+	s.iconSize = widgets.NewComboBox([]string{"Small", "Medium", "Large"}, iconSizeIndex(s.staged.IconSize), func(i int) {
+		next := s.staged
+		next.IconSize = iconSizes[i]
+		s.stage(next)
+	})
+	s.iconSize.SetAccessibleName("Icon size")
+
+	// The strip of every stock icon is in this section rather than beside
+	// the theme preview, under the two choosers it answers. It was tried
+	// in the preview column, above the application window, and it read
+	// well at 1024 — but the strip keeps its own height and the preview
+	// takes what is left, so at the 720x520 Settings opens down to the
+	// fifteen glyphs folded onto four lines and left the preview a
+	// caption and a menu bar. The preview is the biggest thing on this
+	// page at every size, and the only way to promise that is to keep
+	// everything that is not the preview out of its column.
+	//
+	// It is in a scope of its own — Settings' own theme carrying the
+	// staged icon set at the staged size — rather than in the staged
+	// theme like the preview. It is the set being previewed here, not the
+	// pack; a strip drawn in the pack would be a different height in each
+	// of the 129, and it is on this side of the splitter now, so it
+	// cannot move the preview panel the Theme Atlas crops whatever it
+	// does.
+	s.iconScope = widgets.NewThemeScope(s.iconLook(), s.iconStrip())
+	return widgets.NewPanel(settingsSections[sectionShape],
+		optionRow("Corners", corners, "The pack's own shape, or rounded or square everywhere."),
+		optionRow("Icons", s.iconPick, "The set every app draws its chrome icons from."),
+		optionRow("Icon size", s.iconSize, "Small 16, Medium 24 or Large 32 pixels, before the display scale."),
+		s.iconScope,
+		s.deleteIconsButton(),
+	)
+}
+
+// deleteIconsButton removes the staged icon set from disk when it is one
+// the user copied in. The chooser above it is the only list of icon sets
+// on the page now, so this is where a set is named, and this is where
+// removing one belongs.
+func (s *settingsState) deleteIconsButton() widget.Component {
+	var host widget.Component
+	s.delIcons = widgets.NewButton("Delete icon set…", func() {
+		name := s.staged.Icons
+		if indexIcon(style.ListUserIconSets(), name) < 0 {
+			return
+		}
+		widgets.Confirm(host, "Delete icon set?", "Remove "+string(name)+" from disk? This cannot be undone.", func(yes bool) {
+			if !yes {
+				return
+			}
+			if err := style.DeleteUserIconSet(name); err != nil {
+				s.fail("Delete failed", err)
+				return
+			}
+			next := s.staged
+			if next.Icons == name {
+				next.Icons = style.IconSetClassic
+			}
+			if s.saved.Icons == name {
+				if err := style.SaveAppearance(next); err != nil {
+					s.fail("Delete failed", err)
+					return
+				}
+				s.saved = next
+			}
+			s.a.ApplyAppearance(s.saved)
+			s.staged = next.Normalize()
+			s.rebuild()
+		})
+	})
+	host = s.delIcons
+	s.delIcons.SetEnabled(false)
+	return s.delIcons
+}
+
+// ---- Behaviour ---------------------------------------------------------------
+
+// behaviourSection is everything look.json carries that is not what the
+// toolkit looks like but what it does: whether it moves, whose file
+// dialogs it opens, who draws a window's frame and where that frame's
+// buttons go. The old Appearance page had these in three groups of one
+// and two; they are one group here, because the thing they have in
+// common — none of them is the appearance of a pack — is the only thing
+// a reader needs to know to skip the lot.
+func (s *settingsState) behaviourSection() widget.Component {
+	// Hover fades, the default button's pulse, busy bars: off for users
+	// who get unwell from motion (GTK's gtk-enable-animations).
+	motion := widgets.NewSwitch("Animations", !s.staged.ReduceMotion, func(on bool) {
+		next := s.staged
+		next.ReduceMotion = !on
+		s.stage(next)
+	})
+	// The desktop's own file dialogs (the XDG portal's), as Qt and GTK
+	// apps can use, instead of the themed ones.
+	native := widgets.NewSwitch("Use the desktop's file dialogs", s.staged.NativeDialogs, func(on bool) {
+		next := s.staged
+		next.NativeDialogs = on
+		s.stage(next)
+	})
+	// Chromium's switch: windows that draw their own title bar (Mail's,
+	// with its tool bar in it) get the desktop's title bar and borders
+	// instead, and their title bar becomes the first row.
+	system := widgets.NewSwitch("Use system title bar and borders", s.staged.Decorations == style.DecorationsSystem, func(on bool) {
+		next := s.staged
+		next.Decorations = style.DecorationsAuto
+		if on {
+			next.Decorations = style.DecorationsSystem
+		}
+		s.stage(next)
+	})
+	// Where a title bar the toolkit draws puts its caption buttons: the
+	// desktop's layout, or the theme's own (the Mac's traffic lights on
+	// the left).
+	themeButtons := widgets.NewSwitch("Place window buttons as the theme does", s.staged.CaptionButtons == style.CaptionButtonsTheme, func(on bool) {
+		next := s.staged
+		next.CaptionButtons = style.CaptionButtonsDesktop
+		if on {
+			next.CaptionButtons = style.CaptionButtonsTheme
+		}
+		s.stage(next)
+	})
+
+	panel := widgets.NewPanel(settingsSections[sectionBehaviour],
+		optionSwitch(motion, "Hover fades, the default button's pulse and busy bars."),
+	)
+	if style.DesktopReducesMotion() {
+		panel.Add(wrapped("The desktop asks for reduced motion, so animations stay off."))
+	}
+	panel.Add(optionSwitch(native, "KDE's and GNOME's own Open and Save dialogs, through the XDG portal."))
+	panel.Add(optionSwitch(system, "The desktop draws the title bar and borders of every window."))
+	panel.Add(optionSwitch(themeButtons, "Close, minimise and maximise where the theme's era put them."))
+	return panel
+}
+
+// ---- Files --------------------------------------------------------------------
+
+// filesSection is the old About page: the three paths Settings reads and
+// writes. It is last because it is the only part of the page that
+// changes nothing — it says where what the rest of the page changed ends
+// up.
+func (s *settingsState) filesSection() widget.Component {
+	mono := func(name, text string) widget.Component {
+		v := widgets.NewMonoTextView(text, "")
+		// Three rows, not two: these are absolute paths in a column about
+		// 300 pixels wide, and a wrapped one is three lines more often
+		// than it is two.
+		v.MinRows = 3
+		v.Wrap = true
+		v.SetAccessibleName(name)
+		return v
+	}
+	return widgets.NewPanel(settingsSections[sectionFiles],
+		wrapped("Prefs file (theme + corners + icons + iconSize, written on Apply):"),
+		mono("Prefs file", style.AppearancePath()),
+		wrapped("User theme packs (Export writes one; edit the JSON to make your own):"),
+		mono("User theme packs", style.ThemesDir()+"/<name>/theme.json"),
+		wrapped("Icon sets (copy the repo icons/ folders here after every pull):"),
+		mono("Icon sets", style.IconsDir()+"/<set>/*.png"),
+	)
+}
+
+// ---- the previews -------------------------------------------------------------
+
+// previewColumn is the right-hand side and the whole reason the page is
+// shaped this way: the staged pack drawn as a small but entirely live
+// application, taking every pixel of its half of the window, never
+// scrolling away from the controls that change it. Nothing else is
+// allowed in here — see shapeSection for what was and what it cost.
+func (s *settingsState) previewColumn() widget.Component {
+	s.previewBox = widgets.NewPanel("", PreviewApp(nil))
+	s.previewBox.Window = true
+	return s.scoped(s.previewBox)
+}
+
+// iconLook is what the strip is drawn in: the theme Settings itself is
+// running, with the staged icon set at the staged size laid over it. The
+// glyphs and their size are the staged ones — that is the whole point of
+// the strip — while everything around them is the applied look, so the
+// section keeps one height whatever pack is staged.
+func (s *settingsState) iconLook() style.LookAndFeel {
+	return style.WithIconSize(style.WithIcons(s.a.Look(), s.staged.Icons), s.staged.IconSize)
+}
+
+// iconStrip is the whole of what a set draws: every icon the toolkit asks
+// one for by name — the whole of [style.AllToolIcons] — in the groups
+// they belong to: the three file actions, the three clipboard ones and
+// the two histories on one bar, then find, edit, mail and download, and
+// last the four message-box faces. Those four are the ones a set gives a
+// colour of its own, so they are also the ones that say whether a set can
+// be read against a dark pack. (Question was missing from this strip for
+// as long as it had one: a test now walks AllToolIcons, so a stem added
+// to the toolkit and not to the preview fails rather than goes unseen.)
+//
+// Each group is a tool bar, and the groups are in a [widgets.Wrap]: one
+// bar of fifteen would clip its tail on a window as narrow as the 720
+// Settings opens down to, and fifteen loose tool buttons would not answer
+// the question the size chooser asks. A loose tool button is a
+// control-height key, so the look's icon size is capped by its height and
+// a set at Large draws exactly as it does at Medium; a tool bar sizes its
+// buttons from the bar metrics, which are the ones the icon size grows.
+// The strip has to show the size that is staged, so the strip is made of
+// bars.
+func (s *settingsState) iconStrip() widget.Component {
+	// Five bars of at most four buttons. It was one bar of ten and two of
+	// four while the strip spanned the window — every bar pays for its
+	// own ends, so the fewer the better — but the strip lives in the
+	// column of choices now, which is about 300 logical pixels wide, and
+	// a Wrap folds whole bars: a bar wider than the column is cut off at
+	// its edge rather than folded, and the icons past the cut are simply
+	// not there. Four buttons is what fits at the largest icon size in
+	// the narrowest column, so four is the longest bar.
+	groups := [][]style.ToolIcon{
+		{style.IconNew, style.IconOpen, style.IconSave},
+		{style.IconCut, style.IconCopy, style.IconPaste},
+		{style.IconUndo, style.IconRedo},
+		{style.IconSearch, style.IconPen, style.IconMail, style.IconDownload},
+		{style.IconInfo, style.IconWarning, style.IconError, style.IconQuestion},
+	}
+	row := widgets.NewWrap()
+	for _, group := range groups {
+		items := make([]*widgets.ToolItem, 0, len(group))
+		for _, i := range group {
+			if i == style.IconNone {
+				items = append(items, widgets.ToolDivider())
+				continue
+			}
+			// Icon only, known by the action it stands for: the strip is
+			// there to be looked at, and the name is what a screen reader
+			// and the tooltip both need.
+			it := widgets.ToolIconBtn(i, "", nil)
+			it.Tip = i.Label()
+			items = append(items, it)
+		}
+		row.Add(widgets.NewToolBar(items...))
+	}
+	s.iconBox = widgets.NewPanel(iconBoxTitle(s.staged.Icons), row)
+	s.iconBox.SetAccessibleName("Icon preview")
+	return s.iconBox
+}
+
+// iconBoxTitle names the set the strip is drawing, in the words the theme
+// preview's caption names its pack in: the page asks the same question
+// twice and captions both answers the same way.
+func iconBoxTitle(name style.IconSetName) string { return "Preview — " + iconSetLabel(name) }
+
+// showStagedIcons puts the staged appearance back into the icons parts of
+// the page. The strip follows the staged look through its scope, but the
+// two choosers and the caption are Settings' own and have to be told —
+// and they have to be told whoever staged it, not only the choosers
+// themselves. Deleting a user set stages one, Apply and a desktop light /
+// dark change restage the whole appearance, and a pack that took its own
+// set would come through here too.
+func (s *settingsState) showStagedIcons() {
+	if s.iconScope != nil {
+		s.iconScope.SetTheme(s.iconLook())
+	}
+	if s.iconBox != nil {
+		s.iconBox.Title = iconBoxTitle(s.staged.Icons)
+		s.iconBox.RequestLayout()
+	}
+	if s.iconPick != nil {
+		if i := indexIcon(s.iconSets, s.staged.Icons); i != s.iconPick.Selected {
+			s.iconPick.Selected = i
+			s.iconPick.Invalidate()
+		}
+	}
+	if s.iconSize != nil {
+		if i := iconSizeIndex(s.staged.IconSize); i != s.iconSize.Selected {
+			s.iconSize.Selected = i
+			s.iconSize.Invalidate()
+		}
+	}
+}
+
+// iconSizes are the sizes the chooser offers, in its order.
+var iconSizes = []style.IconSize{style.IconSizeSmall, style.IconSizeMedium, style.IconSizeLarge}
+
+func iconSizeIndex(sz style.IconSize) int {
+	for i, s := range iconSizes {
+		if s == sz {
+			return i
+		}
+	}
+	return 1 // medium, the default
+}
+
+// followWindow works the choices column's share out again for the
+// window's new size, unless the user has dragged the sash since Settings
+// last set it.
+func (s *settingsState) followWindow() {
+	if s.bodySplit == nil || s.bodySplit.Ratio != s.browserAuto {
+		return
+	}
+	s.browserAuto = defaultChoicesRatio(s.win)
+	s.bodySplit.Ratio = s.browserAuto
+	s.bodySplit.RequestLayout()
+}
+
+// defaultChoicesRatio aims the column of choices at about 300 logical
+// pixels whatever the window and the display scale are: a narrow window
+// gives it a bigger share so its rows and its prose stay readable, a wide
+// one hands the room to the previews. It was 240 while the column was the
+// theme browser and nothing else; an option row is a label, a control and
+// a line of prose, and 240 wrapped every one of them to three lines.
+// Dragging the sash replaces it.
+func defaultChoicesRatio(win *app.Window) float32 {
+	const want, pad = 300, 30
+	// Window.Size is already logical pixels, which is what `want` is in.
+	lw, _ := win.Size()
+	page := float32(lw) - pad
+	if page <= 0 {
+		return 0.3
+	}
+	return min(max(want/page, 0.18), 0.5)
+}
+
+// scoped draws c in the staged theme while Settings keeps the applied one.
+func (s *settingsState) scoped(c widget.Component) *widgets.ThemeScope {
+	scope := widgets.NewThemeScope(s.staged.Look(), c)
+	s.scopes = append(s.scopes, scope)
+	return scope
 }
 
 // shownPack is the pack the preview actually draws: the staged one, or
@@ -837,125 +1113,14 @@ func previewTree() *widgets.TreeNode {
 	)
 }
 
-// ---- Appearance page ------------------------------------------------------
+// ---- helpers ------------------------------------------------------------------
 
-// appearancePage holds everything look.json carries besides the pack
-// itself. Each control says in a line what it does; a strip of the staged
-// theme beside them shows corners, icons and motion as they change, and
-// the Themes page shows them over the whole toolkit.
-func (s *settingsState) appearancePage() widget.Component {
-	cornerSel := 0
-	switch s.staged.Corners {
-	case style.CornersRound:
-		cornerSel = 1
-	case style.CornersSquare:
-		cornerSel = 2
-	}
-	corners := widgets.NewComboBox([]string{"Theme shape", "Round", "Square"}, cornerSel, func(i int) {
-		next := s.staged
-		next.Corners = []style.CornerStyle{style.CornersTheme, style.CornersRound, style.CornersSquare}[i]
-		s.stage(next)
-	})
-	corners.SetAccessibleName("Corners")
-
-	// Hover fades, the default button's pulse, busy bars: off for users
-	// who get unwell from motion (GTK's gtk-enable-animations).
-	motion := widgets.NewSwitch("Animations", !s.staged.ReduceMotion, func(on bool) {
-		next := s.staged
-		next.ReduceMotion = !on
-		s.stage(next)
-	})
-	// GNOME's and Plasma's light / dark setting and accent colour: the
-	// theme shows its sibling (Breeze and Breeze Dark) to match the
-	// desktop, recoloured around its accent where the engine takes one.
-	follow := widgets.NewSwitch("Follow the desktop's colours", s.staged.FollowDesktop, func(on bool) {
-		next := s.staged
-		next.FollowDesktop = on
-		s.stage(next)
-	})
-	// The desktop's own file dialogs (the XDG portal's), as Qt and GTK
-	// apps can use, instead of the themed ones.
-	native := widgets.NewSwitch("Use the desktop's file dialogs", s.staged.NativeDialogs, func(on bool) {
-		next := s.staged
-		next.NativeDialogs = on
-		s.stage(next)
-	})
-	// Chromium's switch: windows that draw their own title bar (Mail's,
-	// with its tool bar in it) get the desktop's title bar and borders
-	// instead, and their title bar becomes the first row.
-	system := widgets.NewSwitch("Use system title bar and borders", s.staged.Decorations == style.DecorationsSystem, func(on bool) {
-		next := s.staged
-		next.Decorations = style.DecorationsAuto
-		if on {
-			next.Decorations = style.DecorationsSystem
-		}
-		s.stage(next)
-	})
-	// Where a title bar the toolkit draws puts its caption buttons: the
-	// desktop's layout, or the theme's own (the Mac's traffic lights on
-	// the left).
-	themeButtons := widgets.NewSwitch("Place window buttons as the theme does", s.staged.CaptionButtons == style.CaptionButtonsTheme, func(on bool) {
-		next := s.staged
-		next.CaptionButtons = style.CaptionButtonsDesktop
-		if on {
-			next.CaptionButtons = style.CaptionButtonsTheme
-		}
-		s.stage(next)
-	})
-
-	// The icon set and the size its glyphs are drawn at used to be here,
-	// between the corners and the animations. They are on Themes now,
-	// where they are next to the strip that shows what they do and next to
-	// the theme they are being chosen for; a combo box called "Icons" with
-	// a line of prose under it never showed anybody what Phosphor's
-	// scissors look like. What is left here is the shape the packs are
-	// drawn in and whether they move — the two things that are every
-	// pack's, and neither of them a picture.
-	shape := settingsSection("Shape and motion",
-		optionRow("Corners", corners, "The pack's own shape, or rounded or square everywhere."),
-		optionSwitch(motion, "Hover fades, the default button's pulse and busy bars."),
-	)
-	if style.DesktopReducesMotion() {
-		shape.Add(wrapped("The desktop asks for reduced motion, so animations stay off."))
-	}
-	desktop := settingsSection("The desktop",
-		optionSwitch(follow, "Light or dark, and the accent colour, as the desktop asks for them."),
-		optionSwitch(native, "KDE's and GNOME's own Open and Save dialogs, through the XDG portal."),
-	)
-	// Windows: who draws the frame and where its buttons go. A window that
-	// is shaped, transparent or glass behind belongs in this section too.
-	windows := settingsSection("Windows",
-		optionSwitch(system, "The desktop draws the title bar and borders of every window."),
-		optionSwitch(themeButtons, "Close, minimise and maximise where the theme's era put them."),
-	)
-
-	options := widgets.NewColumn(shape, desktop, windows).WithGap(12)
-	// The staged theme beside the options, so corners and motion are seen
-	// changing without going back to the theme browser. It keeps to its
-	// own height at the top of the page.
-	below := widgets.NewSpacer()
-	sample := widgets.NewColumn(s.scoped(appearanceSample()), below)
-	sample.AddFlex(below, 1)
-	body := widgets.NewRow(options, sample).WithGap(16)
-	body.AddFlex(options, 1)
-	return widgets.NewColumn(
-		widgets.NewTitle("Appearance"),
-		wrapped("What every uitoolkit app does with the theme, besides the theme and its icons themselves — those are on Themes. Apply writes these to "+style.AppearancePath()+"."),
-		body,
-	).WithGap(12).WithPad(4)
-}
-
-// wrapped is a label that wraps: prose on these pages is read, and a line
-// elided at the window's edge hides the part that says where a file is.
+// wrapped is a label that wraps: prose on this page is read, and a line
+// elided at the column's edge hides the part that says where a file is.
 func wrapped(text string) *widgets.Label {
 	l := widgets.NewLabel(text)
 	l.Wrap = true
 	return l
-}
-
-// settingsSection is a titled group of option rows.
-func settingsSection(title string, rows ...widget.Component) *widgets.Panel {
-	return widgets.NewPanel(title, rows...)
 }
 
 // optionRow is a named control with the line that says what it does.
@@ -976,185 +1141,8 @@ func optionSwitch(sw *widgets.Switch, about string) widget.Component {
 	return widgets.NewColumn(sw, desc).WithGap(2)
 }
 
-// appearanceSample is a strip of the staged theme beside the options:
-// small enough to sit next to them, wide enough to show the corners
-// changing — and it keeps its tool bar, because the icons it draws are
-// the staged set at the staged size and that is worth seeing on a page
-// that no longer chooses them.
-func appearanceSample() widget.Component {
-	primary := widgets.NewButton("Default", nil)
-	primary.Primary = true
-	tools := widgets.NewToolBar(
-		widgets.ToolIconBtn(style.IconNew, "", nil),
-		widgets.ToolIconBtn(style.IconOpen, "", nil),
-		widgets.ToolIconBtn(style.IconSave, "", nil),
-		widgets.ToolDivider(),
-		widgets.ToolIconBtn(style.IconCut, "", nil),
-		widgets.ToolIconBtn(style.IconCopy, "", nil),
-	)
-	choice := widgets.NewComboBox([]string{"Combo box", "Second choice"}, 0, nil)
-	choice.SetAccessibleName("Sample choice")
-	level := widgets.NewSlider(0, 100, 40, nil)
-	level.SetAccessibleName("Sample level")
-	sample := widgets.NewPanel("Sample",
-		tools,
-		widgets.NewRow(primary, widgets.NewButton("Button", nil)).WithGap(8),
-		widgets.NewTextField("Ada Lovelace", "Name", nil),
-		choice,
-		widgets.NewCheckbox("Check box", true, nil),
-		level,
-		widgets.NewProgressBar(0.62),
-	)
-	sample.Window = true
-	return sample
-}
-
-// ---- Packs page -------------------------------------------------------------
-
-// packsPage is what is on disk: the theme packs and the icon sets, and
-// what can be done to the files — export one, delete one. Choosing a
-// theme is the theme browser's and choosing an icon set is now the head
-// of that same page, so the lists here are a shelf rather than a picker.
-// They still select, because Delete has to be told which one, and because
-// a list of what is installed that would not let you try one would be
-// being awkward on purpose.
-func (s *settingsState) packsPage() widget.Component {
-	stage := s.stage
-	fail := s.fail
-	userThemes := style.ListUserThemes()
-	userSel := indexTheme(userThemes, s.staged.Name)
-	themes := pickerSection("User", len(userThemes), func(i int) string {
-		return userThemes[i].Display()
-	}, userSel, func(i int) {
-		if i >= 0 && i < len(userThemes) {
-			next := s.staged
-			next.Name = userThemes[i].Name
-			next.Theme = userThemes[i].Palette
-			stage(next)
-		}
-	})
-	themeCol := widgets.NewColumn(widgets.NewTitle("Theme packs"),
-		wrapped("Built-in packs live in the theme browser. Export saves the staged theme's colours and metrics as a pack you can edit."),
-		themes).WithGap(8)
-	var exportHost widget.Component
-	exportBtn := widgets.NewButton("Export current theme…", func() {
-		promptExportName(exportHost, func(name string) {
-			pack, err := style.ExportAppearance(strings.TrimSpace(name), s.staged)
-			if err != nil {
-				fail("Export failed", err)
-				return
-			}
-			next := s.staged
-			next.Name = pack.Name
-			next.Theme = pack.Palette
-			s.staged = next.Normalize()
-			s.rebuild()
-		})
-	})
-	exportHost = exportBtn
-	themeCol.Add(exportBtn)
-	if userSel >= 0 {
-		var delHost widget.Component
-		del := widgets.NewButton("Delete", func() {
-			name := userThemes[userSel].Name
-			widgets.Confirm(delHost, "Delete theme?", "Remove "+name+" from disk? This cannot be undone.", func(yes bool) {
-				if !yes {
-					return
-				}
-				if err := style.DeleteUserTheme(name); err != nil {
-					fail("Delete failed", err)
-					return
-				}
-				next := style.AfterUserThemeDeleted(s.staged, name)
-				if s.saved.Name == name {
-					if err := style.SaveAppearance(next); err != nil {
-						fail("Delete failed", err)
-						return
-					}
-					s.saved = next
-				}
-				s.a.ApplyAppearance(s.saved)
-				s.staged = next.Normalize()
-				s.rebuild()
-			})
-		})
-		delHost = del
-		themeCol.Add(del)
-	}
-	themeCol.AddFlex(themes, 1)
-
-	iconBuiltin := style.ListBuiltinIconSets()
-	iconUser := style.ListUserIconSets()
-	onIcon := func(set style.IconSetInfo) {
-		next := s.staged
-		next.Icons = set.Name
-		stage(next)
-	}
-	builtinIcons := pickerSection("Built-in", len(iconBuiltin), func(i int) string {
-		return iconBuiltin[i].Label
-	}, indexIcon(iconBuiltin, s.staged.Icons), func(i int) {
-		if i >= 0 && i < len(iconBuiltin) {
-			onIcon(iconBuiltin[i])
-		}
-	})
-	userIconSel := indexIcon(iconUser, s.staged.Icons)
-	userIcons := pickerSection("User", len(iconUser), func(i int) string {
-		return iconUser[i].Label
-	}, userIconSel, func(i int) {
-		if i >= 0 && i < len(iconUser) {
-			onIcon(iconUser[i])
-		}
-	})
-	iconCol := widgets.NewColumn(widgets.NewTitle("Icon sets"),
-		wrapped("Copy a folder of PNGs into "+style.IconsDir()+" to add one. The set every app draws is chosen on Themes, beside the strip that shows it."),
-		builtinIcons, userIcons).WithGap(8)
-	iconCol.AddFlex(builtinIcons, 1)
-	if len(iconUser) > 0 {
-		iconCol.AddFlex(userIcons, 1)
-	}
-	if userIconSel >= 0 {
-		var delHost widget.Component
-		del := widgets.NewButton("Delete", func() {
-			name := iconUser[userIconSel].Name
-			widgets.Confirm(delHost, "Delete icon set?", "Remove "+string(name)+" from disk? This cannot be undone.", func(yes bool) {
-				if !yes {
-					return
-				}
-				if err := style.DeleteUserIconSet(name); err != nil {
-					fail("Delete failed", err)
-					return
-				}
-				next := s.staged
-				if next.Icons == name {
-					next.Icons = style.IconSetClassic
-				}
-				if s.saved.Icons == name {
-					if err := style.SaveAppearance(next); err != nil {
-						fail("Delete failed", err)
-						return
-					}
-					s.saved = next
-				}
-				s.a.ApplyAppearance(s.saved)
-				s.staged = next.Normalize()
-				s.rebuild()
-			})
-		})
-		delHost = del
-		iconCol.Add(del)
-	}
-	// The strip that showed what the selected set draws was here, under
-	// these lists. It is at the head of Themes now, where the set is
-	// chosen: a preview belongs beside the choice it informs, and this
-	// page is about the folders, not the glyphs.
-	body := widgets.NewRow(themeCol, iconCol).WithGap(20)
-	body.AddFlex(themeCol, 1)
-	body.AddFlex(iconCol, 1)
-	return body
-}
-
-// iconSetLabel is what the lists call a set ("Material Symbols"), or its
-// bare id if it is not listed.
+// iconSetLabel is what the chooser calls a set ("Material Symbols"), or
+// its bare id if it is not listed.
 func iconSetLabel(name style.IconSetName) string {
 	for _, set := range append(style.ListBuiltinIconSets(), style.ListUserIconSets()...) {
 		if set.Name == name {
@@ -1162,43 +1150,6 @@ func iconSetLabel(name style.IconSetName) string {
 		}
 	}
 	return string(name)
-}
-
-// ---- About page -----------------------------------------------------------------
-
-func (s *settingsState) aboutPage() widget.Component {
-	mono := func(name, text string) widget.Component {
-		v := widgets.NewMonoTextView(text, "")
-		v.MinRows = 2
-		v.Wrap = true
-		v.SetAccessibleName(name)
-		return v
-	}
-	return widgets.NewColumn(
-		widgets.NewTitle("About"),
-		wrapped("Prefs file (theme + corners + icons + iconSize, written on Apply):"),
-		mono("Prefs file", style.AppearancePath()),
-		wrapped("User theme packs (exported; edit the JSON to make your own):"),
-		mono("User theme packs", style.ThemesDir()+"/<name>/theme.json"),
-		wrapped("Icon sets (copy the repo icons/ folders here after every pull):"),
-		mono("Icon sets", style.IconsDir()+"/<set>/*.png"),
-	).WithGap(10).WithPad(4)
-}
-
-// ---- helpers ------------------------------------------------------------------
-
-func pickerSection(title string, count int, text func(int) string, selected int, on func(int)) widget.Component {
-	head := widgets.NewLabel(title)
-	if count == 0 {
-		return widgets.NewColumn(head, widgets.NewLabel("None yet")).WithGap(4)
-	}
-	list := widgets.NewListView(count, text, on)
-	list.SetAccessibleName(title)
-	list.Selected = selected
-	list.RowHeight = 28
-	col := widgets.NewColumn(head, list).WithGap(4)
-	col.AddFlex(list, 1)
-	return col
 }
 
 func indexTheme(packs []style.ThemePack, name string) int {
@@ -1217,6 +1168,51 @@ func indexIcon(sets []style.IconSetInfo, name style.IconSetName) int {
 		}
 	}
 	return -1
+}
+
+// scrollTo puts one section of a scrolling column at the top of it, once,
+// at the end of the first layout. -page names a section now that Settings
+// is one page, and where a section starts is not known until the column
+// has been measured at the width the splitter gave it — which happens
+// after the page is built, so it cannot be an offset set when the page is
+// made. This holds the scroll view, lets it lay out, then scrolls it and
+// does nothing ever after.
+type scrollTo struct {
+	widget.Base
+	view    *widgets.ScrollView
+	section widget.Component
+	done    bool
+}
+
+func newScrollTo(view *widgets.ScrollView, section widget.Component) widget.Component {
+	if view == nil || section == nil {
+		return view
+	}
+	b := &scrollTo{view: view, section: section}
+	b.Init(b)
+	b.Add(view)
+	return b
+}
+
+func (b *scrollTo) Measure(c layout.Constraints) paintengine2d.Point {
+	return b.view.Measure(c)
+}
+
+func (b *scrollTo) Arrange(r paintengine2d.Rect) {
+	b.SetBounds(r)
+	b.view.Arrange(paintengine2d.XYWH(0, 0, r.Dx(), r.Dy()))
+	if b.done || r.Empty() {
+		return
+	}
+	b.done = true
+	// The section's top in the scrolled content: every offset from it up
+	// to the view, plus the offset the view is already at (the content is
+	// arranged at -OffsetY).
+	top := b.view.OffsetY
+	for p := widget.Component(b.section); p != nil && p != widget.Component(b.view); p = p.Parent() {
+		top += p.Bounds().Min.Y
+	}
+	b.view.ScrollTo(top - 8)
 }
 
 func promptExportName(from widget.Component, on func(string)) {

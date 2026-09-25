@@ -54,9 +54,12 @@ func TestThePreviewHasTheSkinsSilhouette(t *testing.T) {
 			img := w.Capture()
 			o := widget.DeviceOrigin(preview)
 			b := preview.Bounds()
-			// What is behind the preview: the pixel just left of it.
+			// What is behind the preview: a pixel in the gap to its left.
+			// Six out, not two: the panel casts a shadow a few pixels
+			// wide, and a sample taken inside it is a shade off the
+			// background every cut pixel is compared against.
 			bg := func(y int) [4]uint8 {
-				r, g, bl, al := img.PremulAt(int(o.X)-2, y)
+				r, g, bl, al := img.PremulAt(int(o.X)-6, y)
 				return [4]uint8{r, g, bl, al}
 			}
 			for _, p := range probes {
