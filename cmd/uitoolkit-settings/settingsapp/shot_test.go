@@ -18,7 +18,7 @@ const (
 	previewShotX = 445
 	previewShotY = 10
 	previewShotW = 569
-	previewShotH = 481
+	previewShotH = 782
 )
 
 func TestSettingsPreviewPanelKeepsItsPlace(t *testing.T) {

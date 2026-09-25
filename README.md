@@ -292,13 +292,14 @@ repository.
 
 ![Inspector](docs/screenshots/inspector.png)
 
-### Settings — the theme browser, with the gallery under the preview
+### Settings — the theme browser
 
-![Settings: the theme browser, the preview and the gallery under it](docs/screenshots/settings.webp)
+![Settings: the theme browser and the live preview beside it](docs/screenshots/settings.webp)
 
-Search or filter 129 packs, and the one you pick is drawn at once in the
-preview window and in the whole widget gallery below it, in a splitter you
-can size. See **[docs/settings.md](docs/settings.md)**.
+Search or filter 129 packs, and the one you pick is drawn at once as a
+live application window beside the list — frame, caption and every
+control — in a splitter you can size. See
+**[docs/settings.md](docs/settings.md)**.
 
 ### Files — projects dogfood
 
@@ -363,7 +364,7 @@ go run ./examples/uitoolkit-sample-notes
 go run ./examples/uitoolkit-sample-inspector
 go run ./examples/uitoolkit-sample-files
 go run ./examples/uitoolkit-sample-files -headless   # writes files.png
-go run ./cmd/uitoolkit-settings                     # theme browser, preview, look.json
+go run ./cmd/uitoolkit-settings                     # theme browser, live preview, look.json
 go run ./cmd/uitoolkit-settings -stage aqua         # open with Aqua staged
 go run ./cmd/uitoolkit-settings -page appearance    # open on the options page
 go run ./cmd/uitoolkit-settings -headless           # writes settings.png
@@ -542,7 +543,7 @@ under.
 | `go run ./examples/uitoolkit-sample-notes` | [`examples/uitoolkit-sample-notes/notesapp`](examples/uitoolkit-sample-notes/notesapp) | A small real app: sortable table, textarea body, priority spinner, file stub, tooltips |
 | `go run ./examples/uitoolkit-sample-inspector` | [`examples/uitoolkit-sample-inspector/inspectorapp`](examples/uitoolkit-sample-inspector/inspectorapp) | Preferences inspector: panels that dock, float and close, a layout remembered between runs with `dock.Host.SaveLayoutFile`, table (JetBrains Mono), toolbar, message box |
 | `go run ./examples/uitoolkit-sample-files` | [`examples/uitoolkit-sample-files/filesapp`](examples/uitoolkit-sample-files/filesapp) | Files / Projects dogfood: tree, table, toolbar, menus, TextArea preview, history, drag and drop, dialogs |
-| `go run ./cmd/uitoolkit-settings` | [`cmd/uitoolkit-settings/settingsapp`](cmd/uitoolkit-settings/settingsapp) | The appearance editor: theme browser, live preview with the whole showcase under it, icons and corners, `look.json`. See [docs/settings.md](docs/settings.md) |
+| `go run ./cmd/uitoolkit-settings` | [`cmd/uitoolkit-settings/settingsapp`](cmd/uitoolkit-settings/settingsapp) | The appearance editor: theme browser, a live application window as the preview, icons and corners, `look.json`. See [docs/settings.md](docs/settings.md) |
 
 `examples/uitoolkit-sample-mdi`, `examples/uitoolkit-sample-popups`,
 `examples/uitoolkit-sample-richtext`, `examples/uitoolkit-sample-shapes`,

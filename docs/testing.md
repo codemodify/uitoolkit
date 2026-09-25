@@ -124,9 +124,10 @@ make the thing it needed public.
 Each sample's own code lives in a package beside its `main.go`
 (`examples/uitoolkit-sample-files/filesapp`, `examples/uitoolkit-sample-notes/notesapp`,
 `examples/uitoolkit-sample-inspector/inspectorapp`, `examples/uitoolkit-sample-tour/tourapp`,
-`cmd/uitoolkit-settings/settingsapp`), with the widget gallery in the top-level
-`showcase` package because Settings shows it too. That is also what lets
-the tests and `uitest-driver` drive them as libraries.
+`cmd/uitoolkit-settings/settingsapp`), with the widget showcase in the
+top-level `showcase` package because the tour spreads it over three
+pages. That is also what lets the tests and `uitest-driver` drive them as
+libraries.
 
 ## What the driver covers
 

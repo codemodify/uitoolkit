@@ -11,9 +11,9 @@ import (
 )
 
 // Every control in Settings has a name, a box and a unique ID, on every
-// page — including the Themes page, where the whole showcase sits under
-// the preview — and the tree is enough to drive the app: a screen reader
-// can see which page is selected and pick another.
+// page — including the live application inside the Themes page's preview
+// — and the tree is enough to drive the app: a screen reader can see
+// which page is selected and pick another.
 func TestSettingsIsAccessible(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	a := uitoolkit.New(uitoolkit.Options{Look: style.DarkLook(), Headless: true, Scale: 1, DisableLookWatch: true})
@@ -26,9 +26,11 @@ func TestSettingsIsAccessible(t *testing.T) {
 	s.SetContent(SettingsApp(a, s))
 	a.PumpOnce()
 	tree := a11ytest.Audit(t, "settings", s.AccessibleTree())
-	if a11ytest.Count(tree, a11y.RoleList) < 2 || a11ytest.Count(tree, a11y.RoleComboBox) == 0 || a11ytest.Count(tree, a11y.RoleSwitch) < 2 {
-		t.Errorf("settings: lists %d, combos %d, switches %d",
-			a11ytest.Count(tree, a11y.RoleList), a11ytest.Count(tree, a11y.RoleComboBox), a11ytest.Count(tree, a11y.RoleSwitch))
+	// The Themes page: the pages sidebar and the theme browser, the
+	// decade filter and the preview's own combo box.
+	if a11ytest.Count(tree, a11y.RoleList) < 2 || a11ytest.Count(tree, a11y.RoleComboBox) < 2 {
+		t.Errorf("settings: lists %d, combos %d",
+			a11ytest.Count(tree, a11y.RoleList), a11ytest.Count(tree, a11y.RoleComboBox))
 	}
 
 	// The page list is a sidebar list whose selected item is the page.
@@ -46,19 +48,39 @@ func TestSettingsIsAccessible(t *testing.T) {
 		t.Fatal("settings: the page did not change")
 	}
 
-	// Every page, including the Themes page with the preview and the
-	// whole showcase under it.
+	// Every page, the preview inside the Themes page included.
 	for _, name := range settingsPages {
 		clickSettingsNav(t, s, name)
 		a.PumpOnce()
 		a11ytest.Audit(t, "settings "+name, s.AccessibleTree())
 	}
+
+	// The options on Appearance are switches, and a screen reader has to
+	// find them as switches.
+	clickSettingsNav(t, s, "Appearance")
+	a.PumpOnce()
+	if n := a11ytest.Count(s.AccessibleTree(), a11y.RoleSwitch); n < 2 {
+		t.Errorf("settings: Appearance has %d switches", n)
+	}
+
+	// The preview is a live application, not a picture: every control on
+	// the tab it opens on is in the tree, named, with a box of its own.
 	clickSettingsNav(t, s, "Themes")
 	a.PumpOnce()
 	tree = a11ytest.Audit(t, "settings themes", s.AccessibleTree())
-	for _, r := range []a11y.Role{a11y.RoleButton, a11y.RoleCheckBox, a11y.RoleTable, a11y.RoleTree, a11y.RoleSlider} {
+	for _, r := range []a11y.Role{a11y.RoleButton, a11y.RoleCheckBox, a11y.RoleRadioButton, a11y.RoleSlider, a11y.RoleProgressBar} {
 		if a11ytest.Count(tree, r) == 0 {
-			t.Errorf("settings: the showcase under the preview has no %s", r)
+			t.Errorf("settings: the preview application has no %s", r)
+		}
+	}
+	// And the Packs page's icon strip is a tool bar of named buttons, so
+	// the preview of an icon set is not a mystery to a screen reader.
+	clickSettingsNav(t, s, "Packs & icons")
+	a.PumpOnce()
+	packsTree := a11ytest.Audit(t, "settings packs", s.AccessibleTree())
+	for _, name := range []string{"New", "Open", "Save", "Warning"} {
+		if a11ytest.Find(packsTree, a11y.RoleButton, name) == nil {
+			t.Errorf("settings: the icon preview has no %s button", name)
 		}
 	}
 }

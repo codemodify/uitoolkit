@@ -11,21 +11,21 @@ import (
 	"github.com/codemodify/uitoolkit/widgets"
 )
 
-// roomyControls is the control height past which a pack's Controls tab
-// is taller than Settings' preview at the default split: Material's,
-// shadcn's and Geist's 40- to 48-pixel touch targets. Those packs clip
-// the tab's last row in the preview; every other pack shows all of it.
-const roomyControls = 40
-
 // The preview's Controls tab shows every row — the last radio included —
-// at Settings' default size and split, in every pack with desktop-sized
-// controls, and nothing in it runs off the tab's right edge either.
+// at Settings' default size and split, in every one of the 129 packs,
+// and nothing in it runs off the tab's right edge either.
+//
+// Ten packs used to be excepted: Material's, shadcn's and Geist's 40- to
+// 48-pixel touch targets were taller than the preview got when the
+// widget gallery took the bottom of the right-hand pane. The gallery is
+// gone and the preview is the whole pane, so there is no exception left
+// to make.
 func TestSettingsPreviewShowsEveryRow(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	if err := style.SaveAppearance(style.DefaultAppearance()); err != nil {
 		t.Fatal(err)
 	}
-	checked, roomy := 0, 0
+	checked := 0
 	for _, pack := range style.ListThemes() {
 		a := uitoolkit.New(uitoolkit.Options{Look: style.LightLook(), Headless: true, Scale: 1, DisableLookWatch: true})
 		w, err := a.NewWindow(platform.WindowOptions{Title: "Settings", Width: 1024, Height: 860, Headless: true})
@@ -35,11 +35,6 @@ func TestSettingsPreviewShowsEveryRow(t *testing.T) {
 		w.SetContent(SettingsAppStaged(a, w, pack.Name))
 		a.PumpOnce()
 		scope := previewScope(t, w)
-		if scope.Theme().Metrics().ControlH >= roomyControls {
-			roomy++
-			w.Close()
-			continue
-		}
 		checked++
 		var tabs *widgets.TabView
 		widget.Walk(scope, func(c widget.Component) {
@@ -72,9 +67,9 @@ func TestSettingsPreviewShowsEveryRow(t *testing.T) {
 		}
 		w.Close()
 	}
-	t.Logf("%d packs checked, %d with roomy controls left out", checked, roomy)
-	if checked < 100 {
-		t.Errorf("only %d packs have desktop-sized controls (%d roomy)", checked, roomy)
+	t.Logf("%d packs checked", checked)
+	if checked < 120 {
+		t.Errorf("only %d packs were checked", checked)
 	}
 }
 
