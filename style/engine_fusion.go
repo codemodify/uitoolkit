@@ -1866,6 +1866,11 @@ func (e fusionEngine) DrawSplitter(l *Classic, ctx *paintengine2d.Context, b pai
 	}
 }
 
+// TooltipStyle: Fusion pads a tip by 4, as Qt does.
+func (e fusionEngine) TooltipStyle(l *Classic) TooltipStyle {
+	return l.tipStyle(l.body, l.tipPad(l.S(4)), AlignStart)
+}
+
 // DrawTooltip is the tooltip base in a 1px frame of the tooltip text
 // colour (Qt's pale yellow and black).
 func (e fusionEngine) DrawTooltip(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, text string) {
@@ -1876,11 +1881,8 @@ func (e fusionEngine) DrawTooltip(l *Classic, ctx *paintengine2d.Context, b pain
 	if b.Dx() > 2*u && b.Dy() > 2*u {
 		ctx.DrawRect(b.Inset(u*0.5), paintengine2d.StrokePaint(c.tipBorder, u))
 	}
-	pad := l.metrics.TooltipPad
-	if pad <= 0 {
-		pad = l.S(4)
-	}
-	l.drawFittedText(ctx, l.body, text, paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad*2, b.Dy()), c.tipText, AlignStart, 0)
+	pad := l.TooltipStyle().Pad
+	l.drawTipText(ctx, paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad*2, b.Dy()), text, c.tipText)
 }
 
 // ---- packs -----------------------------------------------------------------------------------------------------

@@ -1844,6 +1844,11 @@ func (nimbusEngine) DrawSplitter(l *Classic, ctx *paintengine2d.Context, b paint
 	ctx.Restore()
 }
 
+// TooltipStyle: Nimbus pads a tip by 5.
+func (nimbusEngine) TooltipStyle(l *Classic) TooltipStyle {
+	return l.tipStyle(l.body, l.tipPad(l.S(5)), AlignStart)
+}
+
 // DrawTooltip is a pale rounded box in a nimbusBorder line.
 func (nimbusEngine) DrawTooltip(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, text string) {
 	c := nbColors(l)
@@ -1852,17 +1857,11 @@ func (nimbusEngine) DrawTooltip(l *Classic, ctx *paintengine2d.Context, b painte
 	ctx.DrawRoundRect(b, r, r, paintengine2d.Fill(c.border))
 	in := b.Inset(c.u)
 	ctx.DrawRoundRect(in, max(r-c.u, 0), max(r-c.u, 0), VGradient(in, Stop(0, c.tipTop), Stop(1, c.control)))
-	pad := l.metrics.TooltipPad
-	if pad <= 0 {
-		pad = l.S(5)
-	}
-	if text == "" {
-		return
-	}
-	// The bubble is sized to the text: draw it unfitted, clipped.
+	pad := l.TooltipStyle().Pad
+	// The bubble is sized to the text: keep it inside the frame's bead.
 	ctx.Save()
 	ctx.ClipRect(b)
-	l.body.Draw(ctx, text, paintengine2d.Pt(b.Min.X+pad, b.Min.Y+(b.Dy()-l.body.Height())*0.5), c.tipText)
+	l.drawTipText(ctx, paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad*2, b.Dy()), text, c.tipText)
 	ctx.Restore()
 }
 

@@ -1672,6 +1672,11 @@ func (e openlookEngine) DrawSplitter(l *Classic, ctx *paintengine2d.Context, b p
 	e.DrawSeparator(l, ctx, b, vertical)
 }
 
+// TooltipStyle: OpenWindows pads a tip by 6.
+func (e openlookEngine) TooltipStyle(l *Classic) TooltipStyle {
+	return l.tipStyle(l.body, l.tipPad(l.S(6)), AlignStart)
+}
+
 // DrawTooltip: OPEN LOOK had no tooltips (help came with the Help key);
 // a small raised panel stands in.
 func (e openlookEngine) DrawTooltip(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, text string) {
@@ -1681,11 +1686,8 @@ func (e openlookEngine) DrawTooltip(l *Classic, ctx *paintengine2d.Context, b pa
 	var k rpInk
 	k.frame(g, 0, 0, g.w, g.h, 1)
 	k.fill(ctx, c.black)
-	pad := l.metrics.TooltipPad
-	if pad <= 0 {
-		pad = l.S(6)
-	}
-	l.drawFittedText(ctx, l.body, text, paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad*2, b.Dy()), c.text, AlignStart, 0)
+	pad := l.TooltipStyle().Pad
+	l.drawTipText(ctx, paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad*2, b.Dy()), text, c.text)
 }
 
 // DrawOverlay: OpenWindows did not dim what lay behind a notice.

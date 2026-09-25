@@ -2517,6 +2517,11 @@ func (e clearlooksEngine) DrawSplitter(l *Classic, ctx *paintengine2d.Context, b
 	ctx.DrawPath(dk, paintengine2d.Fill(c.s[4].WithAlpha(0.9)))
 }
 
+// TooltipStyle: GTK 2 pads a tip by 4.
+func (e clearlooksEngine) TooltipStyle(l *Classic) TooltipStyle {
+	return l.tipStyle(l.body, l.tipPad(l.S(4)), AlignStart)
+}
+
 // DrawTooltip is GTK 2's tooltip: the pale yellow window in a 1px black
 // border.
 func (e clearlooksEngine) DrawTooltip(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, text string) {
@@ -2525,11 +2530,8 @@ func (e clearlooksEngine) DrawTooltip(l *Classic, ctx *paintengine2d.Context, b 
 	lw := clPx(l)
 	ctx.DrawRect(b, paintengine2d.Fill(c.tip))
 	clBorder(ctx, b, lw, c.tipText)
-	pad := l.metrics.TooltipPad
-	if pad <= 0 {
-		pad = l.S(4)
-	}
-	l.drawFittedText(ctx, l.body, text, paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad*2, b.Dy()), c.tipText, AlignStart, 0)
+	pad := l.TooltipStyle().Pad
+	l.drawTipText(ctx, paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad*2, b.Dy()), text, c.tipText)
 }
 
 // ---- packs ------------------------------------------------------------------------------------

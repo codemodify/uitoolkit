@@ -160,6 +160,15 @@ type Engine interface {
 	DrawTableHeader(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, sorted, asc bool)
 	DrawTableCell(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, align Align, face *Font)
 	DrawSpinner(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, upHover, downHover, upPress, downPress bool)
+	// TooltipStyle is the face, padding and alignment this engine paints
+	// a tip's text with. The tooltip widget measures and wraps the tip
+	// with them, so the bubble it sizes and the text DrawTooltip draws
+	// agree; an engine whose tips are set in another face or padded
+	// differently says so here, and nowhere else.
+	TooltipStyle(l *Classic) TooltipStyle
+	// DrawTooltip paints the hover bubble. text is already wrapped to the
+	// bubble: it holds one newline per line break, and an engine draws it
+	// through l.drawTipText rather than as a single line.
 	DrawTooltip(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, text string)
 	DrawTextArea(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, lines []TextLine, caret, selA, selB int, blink bool, scrollX, scrollY float32, placeholder string, face *Font)
 	DrawSwitch(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, on bool, label string)

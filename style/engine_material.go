@@ -2045,6 +2045,13 @@ func (materialEngine) DrawSplitter(l *Classic, ctx *paintengine2d.Context, b pai
 	ctx.DrawRect(paintengine2d.XYWH(b.Min.X, y, b.Dx(), px), paintengine2d.Fill(col))
 }
 
+// TooltipStyle: Material sets a plain tooltip in body-small. It used to be measured in
+// body and drawn in body-small, with a fallback to body for the tips that
+// did not fit; measured in the face it is drawn in, they all fit.
+func (materialEngine) TooltipStyle(l *Classic) TooltipStyle {
+	return l.tipStyle(mdColors(l).small, l.tipPad(l.S(8)), AlignStart)
+}
+
 // DrawTooltip: Material 2's grey tooltip at 90%, Material 3's plain tooltip
 // in the inverse surface; 4dp corners.
 func (materialEngine) DrawTooltip(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, text string) {
@@ -2052,16 +2059,8 @@ func (materialEngine) DrawTooltip(l *Classic, ctx *paintengine2d.Context, b pain
 	b = mdSnap(b)
 	r := min(l.rx(4), b.Dy()*0.5)
 	ctx.DrawRoundRect(b, r, r, paintengine2d.Fill(c.tipBg))
-	pad := l.metrics.TooltipPad
-	if pad <= 0 {
-		pad = l.S(8)
-	}
-	// The small type fits when the tip was measured in the body face.
-	f := c.small
-	if f.Advance(text) > b.Dx()-pad*2 {
-		f = l.body
-	}
-	l.drawFittedText(ctx, f, text, paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad*2, b.Dy()), c.tipFg, AlignStart, 0)
+	pad := l.TooltipStyle().Pad
+	l.drawTipText(ctx, paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad*2, b.Dy()), text, c.tipFg)
 }
 
 // ---- packs ------------------------------------------------------------------------------------

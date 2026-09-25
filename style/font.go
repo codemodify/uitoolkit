@@ -2,6 +2,7 @@ package style
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/codemodify/paintengine2d"
@@ -82,6 +83,125 @@ func newShapeCache() *shapeCache {
 	return &shapeCache{m: make(map[string]shapedRun, 32)}
 }
 
+// wrapTab is what [Font.Wrap] gives a tab: four spaces. A tab stop is a
+// column, and a column is a text editor's business; a paragraph painter
+// needs the tab to take room and to be somewhere a line may break, and the
+// lines Wrap returns have to be drawable as they stand. The face's own '\t'
+// is whatever its notdef is — 8.8px and a box in Titillium Web — so leaving
+// it in the line would measure one thing and paint another.
+const wrapTab = "    "
+
+// Prefix is the longest prefix of text that fits maxW, with nothing added.
+//
+// It is [Font.Fit] without the ellipsis: Fit answers "what should I show
+// instead of this", which is the wrong question for a wrapper, a marquee or
+// a measured column, all of which need "how much of this fits". Everything
+// that wanted the second had to reimplement the rune scan Fit already does.
+//
+// The measure is the shaped layout Draw paints, pair kerning included, so
+// the prefix that comes back is the one that fits to the pixel.
+func (f *Font) Prefix(text string, maxW float32) string {
+	if f == nil || text == "" || maxW <= 0 {
+		return ""
+	}
+	if f.Advance(text) <= maxW {
+		return text
+	}
+	xs := f.shapeOf(text).xs
+	n := 0
+	for n+1 < len(xs) && xs[n+1] <= maxW {
+		n++
+	}
+	if n <= 0 {
+		return ""
+	}
+	return string([]rune(text)[:n])
+}
+
+// Wrap breaks text into lines no wider than maxW.
+//
+// It is the greedy word wrap every application that paints a paragraph was
+// writing for itself: breaks at spaces, keeps the newlines the text already
+// has (a "\r\n" counts as one), and splits a word too long for the line
+// rather than letting it run out of the box. Tabs become [wrapTab] spaces
+// first, so the lines that come back are ready to draw as they are. Empty
+// text gives no lines; an empty line between two paragraphs is kept.
+//
+// The scan costs one shaped rune per distinct rune, not one shaped prefix
+// per rune: measuring a wrap with Advance over growing prefixes is
+// quadratic and flushes the shared shape cache for any paragraph longer
+// than it. The trade is that the scan adds rune advances and so does not
+// see pair kerning ("AV", "To"), which makes a line measure a hair wider
+// than it paints — the safe direction, and the same measure the caret uses.
+func (f *Font) Wrap(text string, maxW float32) []string {
+	if f == nil || text == "" {
+		return nil
+	}
+	if maxW < 1 {
+		maxW = 1
+	}
+	text = strings.ReplaceAll(text, "\r\n", "\n")
+	text = strings.ReplaceAll(text, "\t", wrapTab)
+	adv := f.runeAdvances()
+	var out []string
+	for _, para := range strings.Split(text, "\n") {
+		out = append(out, wrapLine([]rune(para), maxW, adv)...)
+	}
+	return out
+}
+
+// wrapLine is the greedy pass over one paragraph (no newlines left in it).
+func wrapLine(runes []rune, maxW float32, adv func(rune) float32) []string {
+	if len(runes) == 0 {
+		return []string{""}
+	}
+	var out []string
+	start, brk := 0, -1 // brk is the space the line would break back to
+	var w float32
+	for i := 0; i < len(runes); i++ {
+		// The break point is the *first* space of a run, so a line that
+		// breaks after two spaces does not keep the second one hanging
+		// off its end.
+		if runes[i] == ' ' && i > start && runes[i-1] != ' ' {
+			brk = i
+		}
+		w += adv(runes[i])
+		// The first rune of a line always stays on it: a single glyph
+		// wider than the whole line would otherwise never be placed.
+		if w <= maxW || i == start {
+			continue
+		}
+		cut, next := i, i // a word longer than the line breaks mid-word
+		if brk > start {
+			cut, next = brk, brk+1
+			for next < len(runes) && runes[next] == ' ' {
+				next++
+			}
+		}
+		out = append(out, string(runes[start:cut]))
+		start, brk, w = next, -1, 0
+		i = next - 1
+	}
+	if start < len(runes) || len(out) == 0 {
+		out = append(out, string(runes[start:]))
+	}
+	return out
+}
+
+// runeAdvances is a per-call rune → advance memo over one face. Callers
+// wrap a paragraph with it and throw it away; nothing shared is touched.
+func (f *Font) runeAdvances() func(rune) float32 {
+	table := make(map[rune]float32, 64)
+	return func(r rune) float32 {
+		if w, ok := table[r]; ok {
+			return w
+		}
+		w := f.CaretX(string(r), 1)
+		table[r] = w
+		return w
+	}
+}
+
 // Fit returns text, or a prefix plus an ellipsis, that fits in maxW.
 func (f *Font) Fit(text string, maxW float32) string {
 	if f == nil || text == "" {
@@ -98,16 +218,11 @@ func (f *Font) Fit(text string, maxW float32) string {
 	if maxW <= ew {
 		return ell
 	}
-	budget := maxW - ew
-	xs := f.shapeOf(text).xs
-	n := 0
-	for n+1 < len(xs) && xs[n+1] <= budget {
-		n++
-	}
-	if n <= 0 {
+	head := f.Prefix(text, maxW-ew)
+	if head == "" {
 		return ell
 	}
-	return string([]rune(text)[:n]) + ell
+	return head + ell
 }
 
 func (f *Font) Measure(text string) paintengine2d.Point {

@@ -2145,11 +2145,8 @@ func (macosEngine) DrawTooltip(l *Classic, ctx *paintengine2d.Context, b painten
 	}
 	ctx.DrawRoundRect(b, r, r, paintengine2d.Fill(c.tip))
 	macRing(ctx, b, r, macPx(l), paintengine2d.Fill(c.tipEdge))
-	pad := l.metrics.TooltipPad
-	if pad <= 0 {
-		pad = l.S(8)
-	}
-	l.drawFittedText(ctx, l.body, text, paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad*2, b.Dy()), c.tipText, AlignStart, 0)
+	pad := l.TooltipStyle().Pad
+	l.drawTipText(ctx, paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad*2, b.Dy()), text, c.tipText)
 }
 
 // ---- packs --------------------------------------------------------------------------------------

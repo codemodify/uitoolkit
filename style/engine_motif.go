@@ -2184,6 +2184,11 @@ func (motifEngine) DrawSplitter(l *Classic, ctx *paintengine2d.Context, b painte
 	}
 }
 
+// TooltipStyle: Motif pads a tip by 6.
+func (motifEngine) TooltipStyle(l *Classic) TooltipStyle {
+	return l.tipStyle(l.body, l.tipPad(l.S(6)), AlignStart)
+}
+
 // DrawTooltip: Motif had none; CDE's help is a pale yellow box with a thin
 // black border.
 func (motifEngine) DrawTooltip(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, text string) {
@@ -2192,11 +2197,8 @@ func (motifEngine) DrawTooltip(l *Classic, ctx *paintengine2d.Context, b painten
 	u := mPx(l, 1)
 	ctx.DrawRect(r, paintengine2d.Fill(c.infoFg))
 	ctx.DrawRect(r.Inset(u), paintengine2d.Fill(c.info))
-	pad := l.metrics.TooltipPad
-	if pad <= 0 {
-		pad = l.S(6)
-	}
-	l.drawFittedText(ctx, l.body, text, paintengine2d.XYWH(r.Min.X+pad, r.Min.Y, r.Dx()-pad*2, r.Dy()), c.infoFg, AlignStart, 0)
+	pad := l.TooltipStyle().Pad
+	l.drawTipText(ctx, paintengine2d.XYWH(r.Min.X+pad, r.Min.Y, r.Dx()-pad*2, r.Dy()), text, c.infoFg)
 }
 
 // DrawFocusRing is the Motif highlight rectangle: a solid band inside b.

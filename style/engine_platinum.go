@@ -1433,6 +1433,11 @@ func (platinumEngine) DrawSplitter(l *Classic, ctx *paintengine2d.Context, b pai
 	}
 }
 
+// TooltipStyle: Platinum pads a tip by 6.
+func (platinumEngine) TooltipStyle(l *Classic) TooltipStyle {
+	return l.tipStyle(l.body, l.tipPad(l.S(6)), AlignStart)
+}
+
 // DrawTooltip is Balloon Help: a white rounded balloon with a black rim.
 func (platinumEngine) DrawTooltip(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, text string) {
 	c := platColors(l)
@@ -1443,11 +1448,8 @@ func (platinumEngine) DrawTooltip(l *Classic, ctx *paintengine2d.Context, b pain
 	}
 	ctx.DrawRoundRect(b, r, r, paintengine2d.Fill(c.black))
 	ctx.DrawRoundRect(b.Inset(u), r-u, r-u, paintengine2d.Fill(c.info))
-	pad := l.metrics.TooltipPad
-	if pad <= 0 {
-		pad = l.S(6)
-	}
-	l.drawFittedText(ctx, l.body, text, paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad*2, b.Dy()), c.infoTxt, AlignStart, 0)
+	pad := l.TooltipStyle().Pad
+	l.drawTipText(ctx, paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad*2, b.Dy()), text, c.infoTxt)
 }
 
 // DrawFocusRing is the Platinum focus frame: two pixels of the accent.

@@ -1253,13 +1253,33 @@ func handleAccel(root widget.Component, key platform.Key, mods platform.Modifier
 	return handled
 }
 
+// How much of the window a tooltip may take: all of it less the margin
+// [widget.ClampToSurface] keeps at each edge, and never less than a bubble
+// worth showing (a window this small has bigger problems than its tips).
+const (
+	tipWindowMargin = 8
+	tipLeastWidth   = 48
+	tipLeastHeight  = 24
+)
+
 func (w *Window) showTip(text string, pos paintengine2d.Point) {
 	if text == "" {
 		return
 	}
 	bubble := widgets.NewTooltipBubble(text)
 	bubble.SetHost(w)
-	sz := bubble.Measure(layout.Loose(360, 80))
+	// The window is the only hard limit on a tip. Its own look decides
+	// where it wraps (48 characters of the face the engine paints it in,
+	// [style.TooltipStyle]); the window only says how much room there is,
+	// less the margin ClampToSurface keeps at the edges, and a tip that
+	// wants more than that wraps narrower instead of losing its tail.
+	// This used to be a flat 360 by 80, which was one line and a bit: any
+	// tip longer than that was elided, whatever the window's size.
+	tip := layout.Unbounded()
+	if pw, ph := w.PixelSize(); pw > 0 && ph > 0 {
+		tip = layout.Loose(max(float32(pw)-tipWindowMargin, tipLeastWidth), max(float32(ph)-tipWindowMargin, tipLeastHeight))
+	}
+	sz := bubble.Measure(tip)
 	origin := paintengine2d.Pt(pos.X+12, pos.Y+18)
 	bubble.Arrange(paintengine2d.XYWH(origin.X, origin.Y, sz.X, sz.Y))
 	widget.ClampToSurface(w.root, bubble)

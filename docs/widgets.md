@@ -176,6 +176,90 @@ fields) use the **host** cursor theme — compositor `wp_cursor_shape_v1`
 or XCURSOR on Wayland, Xcursor / X font cursors on X11, `LoadCursorW`
 on Windows, `NSCursor` on macOS. See [platform.md](platform.md).
 
+## Tooltips
+
+A tip is attached with `widgets.NewTip(text, child)` (or a control's own
+`Tip` field, which is also its accessible description). The window shows it
+after `DefaultTooltipDelayNanos` of rest, or at once through
+`Window.RevealTooltip` — which exists so a screenshot or a test can see one.
+
+**A tip wraps.** It is a sentence about a control, not a label, and a
+sentence is wider than any window at one line. `TooltipBubble` lays the
+text out at the measure its look gives a tip and is as tall as the lines
+need:
+
+- **The measure is the font, not a pixel count**: 48 characters of the face
+  the tip's own engine paints it in (`style.TooltipStyle.MaxW`). 48 is the
+  bottom of the 45–75 character measure typography calls comfortable and the
+  top of what a hover card should be. An era face at 12px and the default at
+  16px get a line of the same *words*, and a tip at 1.75× is the same shape
+  as at 1×.
+- **The window is the only hard limit.** Where there is less room than the
+  measure wants, the tip wraps narrower rather than running out of the
+  window; `widget.ClampToSurface` keeps 4px at each edge.
+- **A tip taller than the window** keeps its first lines and loses its last,
+  rather than centring the loss over both ends.
+
+Until 0.20.0 the bubble measured `Advance(text)` as a single line, was
+constrained to 360×80 and was elided by the engine: **no tooltip could be
+more than one line**, and every long one was cut.
+
+A long tip in five eras at both scales, to look at:
+
+```bash
+UITK_SHOTS=/tmp/tips tools/testenv.sh go test ./widgets -run TestTooltipWraps
+```
+
+### What an engine sees
+
+`LookAndFeel.DrawTooltip(ctx, b, text)` still takes one string, and every
+engine still implements it. The widget does the laying out and hands the
+lines down **joined by newlines**; an engine paints them with the look's
+`drawTipText`, which stacks, aligns and elides each line on its own. An
+engine that draws the string itself would draw the newlines as one line, so
+in-tree engines do not.
+
+What an engine *does* decide is `Engine.TooltipStyle(l)` — the face, the
+padding and the alignment of a tip's text, which is what the widget measures
+with. That is the whole of the contract: a bubble measured in one face and
+painted in another is a bubble with its last word outside it. Amiga sets a
+tip in Topaz, Material in body-small, a skin centres it in its picture, and
+FlatLaf pads it by 6 whatever the pack says.
+
+## Wrapping text
+
+`style.Font` carries the two primitives every app that paints a paragraph
+was writing for itself:
+
+```go
+func (f *Font) Wrap(text string, maxW float32) []string
+func (f *Font) Prefix(text string, maxW float32) string
+```
+
+- **`Wrap`** is greedy word wrap: it breaks at spaces, keeps the newlines
+  the text already has (a `\r\n` counts as one), and splits a word too long
+  for the line rather than letting it run out of the box. Tabs become four
+  spaces first, so the lines that come back are ready to draw as they stand.
+  Empty text gives no lines; an empty line between two paragraphs is kept.
+- **`Prefix`** is the longest prefix of the text that fits, with nothing
+  added. `Fit` appends an ellipsis and so cannot answer "how much of this
+  fits", which is what a wrapper, a marquee or a measured column needs;
+  `Fit` is now written on top of `Prefix`.
+
+`Wrap` costs one shaped rune per *distinct* rune, not one shaped prefix per
+rune: measuring a wrap with `Advance` over growing prefixes is quadratic and
+flushes the shared 512-entry shape cache for any paragraph longer than it.
+The trade is that it adds rune advances and so does not see pair kerning,
+which makes a line measure a hair wider than it paints — the safe direction,
+and the same measure the caret uses.
+
+`Label` with `Wrap` set uses it. `TextArea` does not and cannot: a text
+area's lines carry the rune range of the source each came from, and the
+caret, the selection, hit-testing and `softWrapped` are all that range;
+`Wrap` answers with strings, and with tabs already expanded. `RichText`
+edits through the same machinery and has no wrapper of its own. Wrap is for
+painting a paragraph; `layoutAreaMax` is for editing one.
+
 ## Inventory notes
 
 Only constructors re-exported from `export.go` are listed. Helpers that are

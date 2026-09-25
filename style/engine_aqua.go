@@ -2059,17 +2059,19 @@ func (aquaEngine) DrawSplitter(l *Classic, ctx *paintengine2d.Context, b painten
 	aquaGelPaint(ctx, dim, dim.Dx()*0.5, u, g, false)
 }
 
+// TooltipStyle: An Aqua help tag is tight — 6 either side.
+func (aquaEngine) TooltipStyle(l *Classic) TooltipStyle {
+	return l.tipStyle(l.body, l.tipPad(l.S(6)), AlignStart)
+}
+
 // DrawTooltip is the Aqua help tag: pale yellow with a thin grey border.
 func (aquaEngine) DrawTooltip(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, text string) {
 	c := aquaColors(l)
 	u := aquaU(l)
 	ctx.DrawRect(b, paintengine2d.Fill(c.info))
 	ctx.DrawRect(b.Inset(u*0.5), paintengine2d.StrokePaint(c.infoEdge, u))
-	pad := l.metrics.TooltipPad
-	if pad <= 0 {
-		pad = l.S(6)
-	}
-	l.drawFittedText(ctx, l.body, text, paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad*2, b.Dy()), c.infoTxt, AlignStart, 0)
+	pad := l.TooltipStyle().Pad
+	l.drawTipText(ctx, paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad*2, b.Dy()), text, c.infoTxt)
 }
 
 // DrawFocusRing is the Aqua focus glow, painted just inside b.

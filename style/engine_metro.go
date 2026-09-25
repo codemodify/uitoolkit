@@ -1567,19 +1567,21 @@ func (metroEngine) DrawSplitter(l *Classic, ctx *paintengine2d.Context, b painte
 	ctx.DrawRect(b, paintengine2d.Fill(metroColors(l).face))
 }
 
+// TooltipStyle: Windows 8 pads a tip by 4.
+func (metroEngine) TooltipStyle(l *Classic) TooltipStyle {
+	return l.tipStyle(l.body, l.tipPad(l.S(4)), AlignStart)
+}
+
 // DrawTooltip is the flat tool tip: white, a grey line, grey text.
 func (metroEngine) DrawTooltip(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, text string) {
 	c := metroColors(l)
 	tb := b
 	b = winSnap(b)
 	winWell(ctx, b, winPx(l), c.tipBorder, c.tip)
-	pad := l.metrics.TooltipPad
-	if pad <= 0 {
-		pad = l.S(4)
-	}
+	pad := l.TooltipStyle().Pad
 	// The bubble is sized to the text plus the padding: let the text use
 	// the right padding rather than lose its last letters to rounding.
-	l.drawFittedText(ctx, l.body, text, paintengine2d.XYWH(tb.Min.X+pad, tb.Min.Y, tb.Dx()-pad-winPx(l), tb.Dy()), c.tipText, AlignStart, 0)
+	l.drawTipText(ctx, paintengine2d.XYWH(tb.Min.X+pad, tb.Min.Y, tb.Dx()-pad-winPx(l), tb.Dy()), text, c.tipText)
 }
 
 // DrawMessageIcon: flat discs with a white glyph and the yellow triangle.

@@ -1691,6 +1691,11 @@ func (e plastikEngine) DrawSplitter(l *Classic, ctx *paintengine2d.Context, b pa
 	plDots(ctx, b, 5, 1, 3*u, u, c.dotDk, c.dotLt)
 }
 
+// TooltipStyle: KDE 3 pads a tip by 4.
+func (e plastikEngine) TooltipStyle(l *Classic) TooltipStyle {
+	return l.tipStyle(l.body, l.tipPad(l.S(4)), AlignStart)
+}
+
 // DrawTooltip: the pale yellow tip in a one-pixel black frame.
 func (e plastikEngine) DrawTooltip(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, text string) {
 	c := plastikColors(l)

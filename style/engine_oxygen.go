@@ -2113,6 +2113,11 @@ func (e oxygenEngine) DrawSplitter(l *Classic, ctx *paintengine2d.Context, b pai
 	}
 }
 
+// TooltipStyle: Oxygen pads a tip by 6.
+func (e oxygenEngine) TooltipStyle(l *Classic) TooltipStyle {
+	return l.tipStyle(l.body, l.tipPad(l.S(6)), AlignStart)
+}
+
 // DrawTooltip is the tooltip colour's top → bottom tone gradient, rounded,
 // with a light rim.
 func (e oxygenEngine) DrawTooltip(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, text string) {
@@ -2126,11 +2131,8 @@ func (e oxygenEngine) DrawTooltip(l *Classic, ctx *paintengine2d.Context, b pain
 			Shader: paintengine2d.LinearGradient{Start: paintengine2d.Pt(0, b.Min.Y), End: paintengine2d.Pt(0, b.Max.Y), Stops: c.tipEdge},
 			Style:  paintengine2d.StyleStroke, Stroke: paintengine2d.Stroke{Width: k, MiterLimit: 4}})
 	}
-	pad := l.metrics.TooltipPad
-	if pad <= 0 {
-		pad = l.S(6)
-	}
-	l.drawFittedText(ctx, l.body, text, paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad*2, b.Dy()), c.tipText, AlignStart, 0)
+	pad := l.TooltipStyle().Pad
+	l.drawTipText(ctx, paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad*2, b.Dy()), text, c.tipText)
 }
 
 // ---- packs -----------------------------------------------------------------------------------------------------

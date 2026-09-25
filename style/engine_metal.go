@@ -2126,6 +2126,11 @@ func (metalEngine) DrawSplitter(l *Classic, ctx *paintengine2d.Context, b painte
 	c.bumps(ctx, g, tile)
 }
 
+// TooltipStyle: Metal sets a tip in its own plain body face.
+func (metalEngine) TooltipStyle(l *Classic) TooltipStyle {
+	return l.tipStyle(mtlColors(l).body, l.tipPad(l.S(4)), AlignStart)
+}
+
 // DrawTooltip is primary 3 in a primary 1 line, the text in the plain
 // system font.
 func (metalEngine) DrawTooltip(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, text string) {
@@ -2133,23 +2138,20 @@ func (metalEngine) DrawTooltip(l *Classic, ctx *paintengine2d.Context, b painten
 	b = mtlSnap(b)
 	ctx.DrawRect(b, paintengine2d.Fill(c.info))
 	c.ring(ctx, b, c.infoBorder)
-	mtlTipText(ctx, l, c.body, text, b, c.infoText)
+	mtlTipText(ctx, l, text, b, c.infoText)
 }
 
-// mtlTipText draws a tool tip's text at its padding, clipped to the bubble
-// (the bubble is sized to the text, so fitting it would only clip on a
-// rounding).
-func mtlTipText(ctx *paintengine2d.Context, l *Classic, f *Font, text string, b paintengine2d.Rect, col paintengine2d.Color) {
-	pad := l.metrics.TooltipPad
-	if pad <= 0 {
-		pad = l.S(4)
-	}
-	if text == "" || f == nil {
+// mtlTipText draws a tool tip's text at its padding, in the face
+// [metalEngine.TooltipStyle] names, clipped to the bubble (the bubble is
+// sized to that text, so fitting it would only clip on a rounding).
+func mtlTipText(ctx *paintengine2d.Context, l *Classic, text string, b paintengine2d.Rect, col paintengine2d.Color) {
+	if text == "" {
 		return
 	}
+	pad := l.TooltipStyle().Pad
 	ctx.Save()
 	ctx.ClipRect(b)
-	f.Draw(ctx, text, paintengine2d.Pt(b.Min.X+pad, b.Min.Y+(b.Dy()-f.Height())*0.5), col)
+	l.drawTipText(ctx, paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad*2, b.Dy()), text, col)
 	ctx.Restore()
 }
 

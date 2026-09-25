@@ -1032,6 +1032,14 @@ func (t *TextArea) changed() {
 // layoutAreaMax wraps text and also reports the widest line advance (used for
 // the horizontal scroll range when Wrap is off).
 //
+// It is not [style.Font.Wrap], and cannot be: a text area's lines carry the
+// rune range of the source each one came from, and the caret, the
+// selection, hit-testing and softWrapped are all that range. Wrap answers
+// with strings — and with tabs already expanded — so adopting it here would
+// mean recovering those indices from the text afterwards, which is the
+// mapping this function was rewritten to stop getting wrong. Wrap is for
+// painting a paragraph; this is for editing one.
+//
 // Line widths accumulate one rune advance at a time through a per-call table.
 // The old form measured f.Advance(runes[start:i+1]) for every rune, which
 // allocated a prefix string and shaped it — quadratic in line length, and it

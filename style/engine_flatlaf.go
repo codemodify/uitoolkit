@@ -1570,6 +1570,12 @@ func (flatlafEngine) DrawSplitter(l *Classic, ctx *paintengine2d.Context, b pain
 	ctx.DrawPath(p, paintengine2d.Fill(col))
 }
 
+// TooltipStyle: FlatLaf pads a tip by 6 whatever the pack's metric says: in Swing the
+// tooltip border belongs to the look and feel, not to the theme.
+func (flatlafEngine) TooltipStyle(l *Classic) TooltipStyle {
+	return l.tipStyle(l.body, l.S(6), AlignStart)
+}
+
 // DrawTooltip: Light's pale tip in a 1px border, Dark's charcoal one.
 func (flatlafEngine) DrawTooltip(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, text string) {
 	c := flatColors(l)
@@ -1577,7 +1583,7 @@ func (flatlafEngine) DrawTooltip(l *Classic, ctx *paintengine2d.Context, b paint
 	ctx.DrawRect(b, paintengine2d.Fill(c.tip))
 	flatRing(ctx, b, 0, flatPx(l), c.tipBorder)
 	pad := l.S(6)
-	l.drawFittedText(ctx, l.body, text, paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad*2, b.Dy()), c.tipText, AlignStart, 0)
+	l.drawTipText(ctx, paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad*2, b.Dy()), text, c.tipText)
 }
 
 // ---- packs --------------------------------------------------------------------------------------

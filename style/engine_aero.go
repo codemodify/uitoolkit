@@ -1734,6 +1734,11 @@ func (aeroEngine) DrawSplitter(l *Classic, ctx *paintengine2d.Context, b painten
 	ctx.DrawRect(b, paintengine2d.Fill(aeroColors(l).face))
 }
 
+// TooltipStyle: Windows 7 pads a tip by 4.
+func (aeroEngine) TooltipStyle(l *Classic) TooltipStyle {
+	return l.tipStyle(l.body, l.tipPad(l.S(4)), AlignStart)
+}
+
 // DrawTooltip is the Windows 7 tool tip: rounded, white fading to a pale
 // blue-grey, a grey border and grey text.
 func (aeroEngine) DrawTooltip(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, text string) {
@@ -1748,13 +1753,10 @@ func (aeroEngine) DrawTooltip(l *Classic, ctx *paintengine2d.Context, b painteng
 	ctx.DrawRoundRect(b, r, r, paintengine2d.Fill(c.tipBorder))
 	in := b.Inset(lw)
 	ctx.DrawRoundRect(in, max(r-lw, 0), max(r-lw, 0), VGradient(in, c.tip...))
-	pad := l.metrics.TooltipPad
-	if pad <= 0 {
-		pad = l.S(4)
-	}
+	pad := l.TooltipStyle().Pad
 	// The bubble is sized to the text plus the padding: let the text use
 	// the right padding rather than lose its last letters to rounding.
-	l.drawFittedText(ctx, l.body, text, paintengine2d.XYWH(tb.Min.X+pad, tb.Min.Y, tb.Dx()-pad-winPx(l), tb.Dy()), c.tipText, AlignStart, 0)
+	l.drawTipText(ctx, paintengine2d.XYWH(tb.Min.X+pad, tb.Min.Y, tb.Dx()-pad-winPx(l), tb.Dy()), text, c.tipText)
 }
 
 // DrawMessageIcon paints the Windows 7 message icons: glossy red and blue

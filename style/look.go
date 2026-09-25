@@ -1,6 +1,10 @@
 package style
 
-import "github.com/codemodify/paintengine2d"
+import (
+	"strings"
+
+	"github.com/codemodify/paintengine2d"
+)
 
 // Classic is the stock LookAndFeel (graphite chrome + blue accent).
 // Theme, corner policy, and icon set are first-class (see Appearance).
@@ -1557,12 +1561,8 @@ func (l *Classic) baseDrawTooltip(ctx *paintengine2d.Context, b paintengine2d.Re
 	r := m.RadiusSmall
 	ctx.DrawRoundRect(b, r, r, paintengine2d.Fill(p.SurfaceAlt))
 	ctx.DrawRoundRect(b.Inset(0.5), r, r, paintengine2d.StrokePaint(p.Border, m.Border))
-	pad := m.TooltipPad
-	if pad <= 0 {
-		pad = 8
-	}
-	ty := b.Min.Y + (b.Dy()-l.body.Height())*0.5
-	l.body.Draw(ctx, text, paintengine2d.Pt(b.Min.X+pad, ty), p.Text)
+	pad := l.TooltipStyle().Pad
+	l.drawTipText(ctx, paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad*2, b.Dy()), text, p.Text)
 }
 
 func (l *Classic) drawLabeled(ctx *paintengine2d.Context, f *Font, text string, underline int, b paintengine2d.Rect, col paintengine2d.Color) {
@@ -1593,16 +1593,37 @@ func (l *Classic) drawTextUnderline(ctx *paintengine2d.Context, f *Font, text st
 }
 
 func (l *Classic) drawFittedText(ctx *paintengine2d.Context, f *Font, text string, b paintengine2d.Rect, col paintengine2d.Color, align Align, pad float32) {
-	if f == nil || text == "" || b.Empty() {
+	if text == "" {
 		return
 	}
-	th := f.Height()
+	l.drawFittedLines(ctx, f, []string{text}, b, col, align, pad)
+}
+
+// drawFittedLines is drawFittedText for a block of lines (a wrapped
+// tooltip): the block is centred in b exactly as one line is, and each line
+// is aligned and elided on its own.
+func (l *Classic) drawFittedLines(ctx *paintengine2d.Context, f *Font, lines []string, b paintengine2d.Rect, col paintengine2d.Color, align Align, pad float32) {
+	if f == nil || len(lines) == 0 || b.Empty() {
+		return
+	}
+	lh := f.Height()
+	th := lh * float32(len(lines))
 	clip := b
+	y := b.Min.Y + (b.Dy()-th)*0.5
 	if th > b.Dy() {
-		// Shorter than a line: centre anyway and overflow evenly, so a
-		// tight era metric trims line gap rather than the descenders.
-		grow := (th - b.Dy()) * 0.5
-		clip = paintengine2d.Rect{Min: paintengine2d.Pt(b.Min.X, b.Min.Y-grow), Max: paintengine2d.Pt(b.Max.X, b.Max.Y+grow)}
+		if len(lines) == 1 || th-b.Dy() <= lh*0.5 {
+			// Shorter than the text by a hair — a tight era metric
+			// eating the line gap: centre anyway and overflow evenly,
+			// so it takes the gap rather than the descenders.
+			grow := (th - b.Dy()) * 0.5
+			clip = paintengine2d.Rect{Min: paintengine2d.Pt(b.Min.X, b.Min.Y-grow), Max: paintengine2d.Pt(b.Max.X, b.Max.Y+grow)}
+		} else {
+			// A block of lines the box cannot hold — a tip the window
+			// cut short: start at the top and lose the last lines,
+			// rather than centre the loss over both ends and lose the
+			// sentence's beginning with it.
+			y = b.Min.Y
+		}
 	}
 	ctx.Save()
 	ctx.ClipRect(clip)
@@ -1610,21 +1631,32 @@ func (l *Classic) drawFittedText(ctx *paintengine2d.Context, f *Font, text strin
 	if maxW < 4 {
 		maxW = 4
 	}
-	show := text
-	if f.Advance(show) > maxW {
-		show = f.Fit(show, maxW)
+	for _, text := range lines {
+		show := text
+		if f.Advance(show) > maxW {
+			show = f.Fit(show, maxW)
+		}
+		tw := f.Advance(show)
+		x := b.Min.X
+		switch align {
+		case AlignCenter:
+			x = b.Min.X + (b.Dx()-tw)*0.5
+		case AlignEnd:
+			x = b.Max.X - tw - 2
+		}
+		f.Draw(ctx, show, paintengine2d.Pt(x, y), col)
+		y += lh
 	}
-	tw := f.Advance(show)
-	x := b.Min.X
-	switch align {
-	case AlignCenter:
-		x = b.Min.X + (b.Dx()-tw)*0.5
-	case AlignEnd:
-		x = b.Max.X - tw - 2
-	}
-	y := b.Min.Y + (b.Dy()-th)*0.5
-	f.Draw(ctx, show, paintengine2d.Pt(x, y), col)
 	ctx.Restore()
+}
+
+// splitLines is the lines of text as a widget wrapped it (see
+// [Engine.DrawTooltip]); a "\r\n" counts as one break.
+func splitLines(text string) []string {
+	if !strings.Contains(text, "\n") {
+		return []string{text}
+	}
+	return strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n")
 }
 
 func (l *Classic) fontFor(col paintengine2d.Color) *Font {

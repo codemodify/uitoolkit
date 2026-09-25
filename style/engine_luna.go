@@ -2477,17 +2477,19 @@ func (lunaEngine) DrawSplitter(l *Classic, ctx *paintengine2d.Context, b painten
 	ctx.DrawRect(b, paintengine2d.Fill(lunaColors(l).face))
 }
 
+// TooltipStyle: XP pads a tip by 4.
+func (lunaEngine) TooltipStyle(l *Classic) TooltipStyle {
+	return l.tipStyle(l.body, l.tipPad(l.S(4)), AlignStart)
+}
+
 // DrawTooltip is the XP tooltip: #ffffe1 in a 1px black frame.
 func (lunaEngine) DrawTooltip(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, text string) {
 	c := lunaColors(l)
 	b = lunaSnap(b)
 	ctx.DrawRect(b, paintengine2d.Fill(c.info))
 	lunaBorder(ctx, b, lunaPx(l), c.infoBorder)
-	pad := l.metrics.TooltipPad
-	if pad <= 0 {
-		pad = l.S(4)
-	}
-	l.drawFittedText(ctx, l.body, text, paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad*2, b.Dy()), c.infoText, AlignStart, 0)
+	pad := l.TooltipStyle().Pad
+	l.drawTipText(ctx, paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad*2, b.Dy()), text, c.infoText)
 }
 
 // DrawMessageIcon paints the XP message-box icons: a red disc with a white
