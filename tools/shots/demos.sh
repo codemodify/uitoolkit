@@ -18,7 +18,7 @@ DEST=${1:-$REPO/docs/screenshots}
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 mkdir -p "$DEST" "$WORK/bin" "$WORK/cfg"
-(cd "$REPO" && go build -o "$WORK/bin/" ./examples/uitoolkit-sample-tour ./cmd/uitksettings)
+(cd "$REPO" && go build -o "$WORK/bin/" ./examples/uitoolkit-sample-tour ./cmd/uitoolkit-settings)
 headless() { env -u WAYLAND_DISPLAY -u DISPLAY XDG_CONFIG_HOME="$WORK/cfg" UITK_ANIMATIONS=0 "$@" >/dev/null; }
 webp() { # in.png out.webp
   magick "$1" -strip -define webp:lossless=true -define webp:method=6 "$2"
@@ -33,5 +33,5 @@ done
 webp "$WORK/tour-pages.png" "$DEST/tour-pages.webp"
 
 # Settings: the theme browser, the preview and the gallery, in the default look.
-headless "$WORK/bin/uitksettings" -screenshot "$WORK/settings.png"
+headless "$WORK/bin/uitoolkit-settings" -screenshot "$WORK/settings.png"
 webp "$WORK/settings.png" "$DEST/settings.webp"

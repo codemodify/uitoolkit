@@ -7,7 +7,7 @@ import (
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit"
 	"github.com/codemodify/uitoolkit/app"
-	"github.com/codemodify/uitoolkit/cmd/uitksettings/settingsapp"
+	"github.com/codemodify/uitoolkit/cmd/uitoolkit-settings/settingsapp"
 	"github.com/codemodify/uitoolkit/internal/uitest"
 	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/showcase"

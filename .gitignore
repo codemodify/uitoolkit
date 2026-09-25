@@ -7,11 +7,11 @@ dist/
 # Every sample's binary is its directory's name, so one pattern covers
 # them all — built beside their source, or at the repo root.
 examples/*/uitoolkit-sample-*
-cmd/uitksettings/uitksettings
+cmd/uitoolkit-settings/uitoolkit-settings
 # `go build ./cmd/<name>` from the repo root drops the binary here.
 /uitk-themesheet
 /uitk-skin
-/uitksettings
+/uitoolkit-settings
 /uitest-driver
 /uitoolkit-sample-*
 /settings.png

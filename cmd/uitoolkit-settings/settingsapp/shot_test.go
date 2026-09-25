@@ -9,7 +9,7 @@ import (
 	"github.com/codemodify/uitoolkit/widget"
 )
 
-// The Theme Atlas crops the preview panel out of `uitksettings -stage ID
+// The Theme Atlas crops the preview panel out of `uitoolkit-settings -stage ID
 // -screenshot` at a fixed rectangle, so it has to sit in the same place
 // in every pack. These are those pixels in the default 1024x860 window at
 // scale 1; a layout change that moves them has to be published with the
@@ -18,7 +18,7 @@ const (
 	previewShotX = 445
 	previewShotY = 10
 	previewShotW = 569
-	previewShotH = 481
+	previewShotH = 782
 )
 
 func TestSettingsPreviewPanelKeepsItsPlace(t *testing.T) {

@@ -772,6 +772,7 @@ func findSwitch(root widget.Component, text string) *widgets.Switch {
 	return sw
 }
 
+// findLabelWith reports whether any label outside the preview holds part.
 func findLabelWith(root widget.Component, part string) bool {
 	found := false
 	widget.Walk(root, func(c widget.Component) {
@@ -780,6 +781,22 @@ func findLabelWith(root widget.Component, part string) bool {
 		}
 	})
 	return found
+}
+
+// previewPanelTitle is the caption over the live preview: "Preview — " and
+// the pack it is drawing.
+func previewPanelTitle(t *testing.T, w *app.Window) string {
+	t.Helper()
+	var box *widgets.Panel
+	widget.Walk(w.Content(), func(c widget.Component) {
+		if p, ok := c.(*widgets.Panel); ok && p.Window && box == nil {
+			box = p
+		}
+	})
+	if box == nil {
+		t.Fatal("no preview panel")
+	}
+	return box.Title
 }
 
 // Following the desktop is staged like any other option: the preview
@@ -807,11 +824,15 @@ func TestSettingsFollowDesktop(t *testing.T) {
 	if got := previewAppearance(t, w).Name; got != "breeze-night" {
 		t.Fatalf("preview %s, want breeze-night", got)
 	}
-	// The browser says what the desktop's scheme does to the pack.
+	// The preview's caption names the pack it is really drawing, which is
+	// where the user sees what the desktop's scheme did to their choice.
+	// (It used to be a note in the details box under the theme list; the
+	// box has gone, and the caption is the honest place for it anyway,
+	// because it labels the very thing it is describing.)
 	clickSettingsNav(t, w, "Themes")
 	a.PumpOnce()
-	if !findLabelWith(w.Content(), "shows as Breeze Dark") {
-		t.Fatal("no note on what the desktop's scheme does")
+	if got := previewPanelTitle(t, w); got != "Preview — Breeze Dark" {
+		t.Fatalf("the preview is captioned %q", got)
 	}
 	clickSettingsNav(t, w, "Appearance")
 	a.PumpOnce()
@@ -897,4 +918,145 @@ func TestSettingsThemeCaptionButtonsSwitch(t *testing.T) {
 	if raw, _ := os.ReadFile(style.AppearancePath()); strings.Contains(string(raw), "captionButtons") {
 		t.Fatalf("the desktop's layout is left out of look.json: %s", raw)
 	}
+}
+
+// Picking an icon set shows what it draws. The strip is in a theme scope
+// of its own, so it follows the staged set without Apply, and its caption
+// names the set it is showing.
+func TestSettingsIconSetPreview(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	if err := style.SaveAppearance(style.DefaultAppearance()); err != nil {
+		t.Fatal(err)
+	}
+	installSettingsIconSet(t, dir, "lucide")
+	a, w := openSettings(t, 1024, 780)
+	clickSettingsNav(t, w, "Packs & icons")
+	a.PumpOnce()
+
+	box := findPanelTitled(w.Content(), "Preview — Classic")
+	if box == nil {
+		t.Fatal("no icon preview for the selected set")
+	}
+	// Every stock icon is in it, named by the action it stands for.
+	for _, want := range []string{"New", "Open", "Save", "Cut", "Copy", "Paste", "Undo",
+		"Redo", "Search", "Edit", "Mail", "Download", "Information", "Warning", "Error"} {
+		if findToolButton(box, want) == nil {
+			t.Errorf("the icon preview has no %s", want)
+		}
+	}
+	if style.LookAppearance(scopeAround(t, box).Theme()).Icons != style.IconSetClassic {
+		t.Fatal("the preview is not drawing the staged icon set")
+	}
+
+	// Picking another set repaints it where it stands and renames it.
+	list := findIconList(w.Content())
+	if list == nil {
+		t.Fatal("no icon set list")
+	}
+	pickListItem(t, list, "Lucide")
+	a.PumpOnce()
+	if style.LookAppearance(scopeAround(t, box).Theme()).Icons != style.IconSetLucide {
+		t.Fatal("the icon preview did not follow the staged set")
+	}
+	if box.Title != "Preview — Lucide" {
+		t.Fatalf("the icon preview is captioned %q", box.Title)
+	}
+	if style.LoadAppearance().Icons != style.IconSetClassic {
+		t.Fatal("previewing an icon set wrote look.json")
+	}
+}
+
+// The line beside Apply — "Applied — every uitoolkit app is using this
+// look" — is gone from every page; Apply being enabled says it instead.
+func TestSettingsHasNoAppliedLine(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	a, w := openSettings(t, 1024, 780)
+	for _, page := range settingsPages {
+		clickSettingsNav(t, w, page)
+		a.PumpOnce()
+		// The phrases in full: the temporary config path the About page
+		// prints carries this test's own name, so a loose match on
+		// "Applied" would find itself.
+		for _, phrase := range []string{"every uitoolkit app is using this look", "Staged, not applied"} {
+			if findLabelWith(w.Content(), phrase) {
+				t.Errorf("%s: the applied/staged line is back (%q)", page, phrase)
+			}
+		}
+	}
+}
+
+// With that line gone, a failure has to find another way to the user: a
+// failed Apply puts up an error message box rather than passing in
+// silence. (A read-only config directory is the cheapest real failure.)
+func TestSettingsApplyFailureIsSaid(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	a, w := openSettings(t, 1024, 780)
+	clickTheme(t, w, "Windows 95")
+	a.PumpOnce()
+	if err := os.Chmod(dir, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(dir, 0o700) })
+
+	clickApply(t, w)
+	a.PumpOnce()
+	over := w.Overlay()
+	if over == nil {
+		t.Fatal("a failed Apply said nothing at all")
+	}
+	if findPanelTitled(over, "Apply failed") == nil {
+		t.Error("the message box does not say what failed")
+	}
+	if !findLabelWith(over, dir) {
+		t.Error("the message box does not say why")
+	}
+	if style.LoadAppearance().Name == "win95" {
+		t.Fatal("the failed Apply was reported as having worked")
+	}
+}
+
+// findPanelTitled is the panel with exactly this caption.
+func findPanelTitled(root widget.Component, title string) *widgets.Panel {
+	var box *widgets.Panel
+	widget.Walk(root, func(c widget.Component) {
+		if p, ok := c.(*widgets.Panel); ok && p.Title == title {
+			box = p
+		}
+	})
+	return box
+}
+
+func findToolButton(root widget.Component, name string) *widgets.ToolButton {
+	var btn *widgets.ToolButton
+	widget.Walk(root, func(c widget.Component) {
+		if b, ok := c.(*widgets.ToolButton); ok && b.AccessibleName() == name {
+			btn = b
+		}
+	})
+	return btn
+}
+
+// scopeAround is the theme scope c is drawn inside.
+func scopeAround(t *testing.T, c widget.Component) *widgets.ThemeScope {
+	t.Helper()
+	for p := c.Parent(); p != nil; p = p.Parent() {
+		if sc, ok := p.(*widgets.ThemeScope); ok {
+			return sc
+		}
+	}
+	t.Fatalf("%T is in no theme scope", c)
+	return nil
+}
+
+func pickListItem(t *testing.T, list *widgets.ListView, text string) {
+	t.Helper()
+	for i := 0; i < list.Count; i++ {
+		if list.ItemText(i) == text {
+			list.OnSelect(i)
+			return
+		}
+	}
+	t.Fatalf("no list row %q", text)
 }
