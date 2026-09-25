@@ -31,10 +31,11 @@ to match; Return stages the first hit, Escape empties the field), the
 **decade filter** (*All decades*, one decade, or *My themes*), the packs
 that pass both listed by year (`1995 · Windows 95`), a count of what is
 showing, and under the list the **details** the rows have no room for:
-the pack's name, its year, family and engine, its one-line summary, and
-what following the desktop does to it. The details box keeps its height,
-so the list does not resize as you arrow down the packs; a long summary
-scrolls inside it.
+the pack's name, its year, family and engine, and what following the
+desktop does to it. (The pack's one-line summary is not shown — the
+search field still reads it.) The details box keeps its height, so the
+list does not resize as you arrow down the packs; a long note scrolls
+inside it.
 
 On the right, the staged pack drawn twice in a splitter you can size:
 
@@ -57,7 +58,7 @@ The browser is about 240 logical pixels wide whatever the window and
 display scale are, so its rows stay readable on a small window, and it
 keeps that share while the window is resized (`Window.OnResize`).
 Dragging either sash replaces the split: a dragged split stays through
-every resize after, and both survive Apply, Revert and Defaults.
+every resize after, and both survive Apply.
 
 The preview takes 62% of the right-hand splitter, enough for its Controls
 tab — four rows a side — to show every row in every pack with
@@ -87,18 +88,23 @@ sets (built-in and user, delete user sets).
 
 ### About
 
-Versions, the engine list, and the files Settings reads and writes.
+The three paths Settings reads and writes: the **prefs file**, the
+**user theme packs** folder, and the **icon sets** folder.
 
-## Staged, applied, reverted
+## Staged and applied
 
 The theme, the gallery and the preview show what is **staged**. Nothing is
 written until **Apply**, which saves `look.json` and switches Settings and
-every app that watches the file. **Revert** drops the staged change;
-**Defaults** stages what a fresh install has (it does not write either).
-The three sit pinned under the pages with the line that says which of the
-two states the screen is in — *Applied — every uitoolkit app is using this
-look* or *Staged, not applied* — and the status bar leads with
-`applied` or `unapplied`. Closing without Apply discards the staged change.
+every app that watches the file. Apply is the only button: it sits pinned
+at the **right** of the row under the pages, with the line that says which
+of the two states the screen is in — *Applied — every uitoolkit app is
+using this look* or *Staged, not applied* — at the left of the same row.
+That line is also where a failed Apply, export or delete says what went
+wrong. Closing without Apply discards the staged change.
+
+The window has no title bar row of its own and no status bar: the
+navigation sidebar, the page and that one row are all of it. (The
+preview's own status bar belongs to the previewed application and stays.)
 
 ## Screenshot geometry
 
@@ -107,14 +113,15 @@ The Theme Atlas crops the preview panel out of `uitksettings -stage ID
 default look applied, the panel is the same rectangle in every pack:
 
 ```
-x 445, y 58, 569 × 429        crop box (445, 58) – (1014, 487)
+x 445, y 10, 569 × 481        crop box (445, 10) – (1014, 491)
 ```
 
 `TestSettingsPreviewPanelKeepsItsPlace` pins those numbers; a layout
 change that moves them fails it, and the new ones belong here. (They were
 `x 504, y 175, 510 × 387` before the gallery went under the preview, and
 `569 × 381` until the preview took 62% of the split instead of 55%, so
-its Controls tab shows every row.)
+its Controls tab shows every row, and `x 445, y 58, 569 × 429` until the
+window's title bar row and status bar came off.)
 The applied look sets Settings' own metrics, so take atlas shots with a
 clean `XDG_CONFIG_HOME`.
 

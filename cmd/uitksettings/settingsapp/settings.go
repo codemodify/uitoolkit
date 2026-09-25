@@ -40,9 +40,10 @@ const filterUser = 6
 // toolkit's shop window: pick a pack and it is drawn at once in a live
 // preview window and, under it, in the whole widget gallery — every
 // control the toolkit has, in every state, in that theme — while Settings
-// itself keeps the applied look (a ThemeScope each). Apply writes
-// look.json and every app that watches it (and Settings) switches; Revert
-// drops the staged change. Closing without Apply discards it.
+// itself keeps the applied look (a ThemeScope each). Apply — the one
+// button, at the right of the row under the pages — writes look.json and
+// every app that watches it (and Settings) switches. Closing without
+// Apply discards the staged change.
 func SettingsApp(a *app.Application, win *app.Window) widget.Component {
 	saved := style.LoadAppearance().Normalize()
 	return buildSettings(a, win, saved, saved, pageThemes)
@@ -121,14 +122,10 @@ type settingsState struct {
 	previewBox *widgets.Panel
 	packTitle  *widgets.Label
 	packMeta   *widgets.Label
-	packText   *widgets.Label
 	packNote   *widgets.Label
 	galleryLbl *widgets.Label
 	applyBtn   *widgets.Button
-	revertBtn  *widgets.Button
-	defaultBtn *widgets.Button
 	hint       *widgets.Label
-	status     *widgets.StatusBar
 }
 
 // capture remembers where the user left the parts of the page they can
@@ -185,10 +182,7 @@ func buildSettingsState(s *settingsState) widget.Component {
 	// Every live part belongs to the build that made it.
 	s.rows, s.list, s.bodySplit, s.rightSplit, s.gallery = nil, nil, nil, nil, nil
 	s.scopes, s.previewBox = nil, nil
-	s.packTitle, s.packMeta, s.packText, s.packNote, s.galleryLbl = nil, nil, nil, nil, nil
-
-	s.status = widgets.NewStatusBar("", style.AppearancePath(), "v"+uitoolkit.Version)
-	chrome := widgets.NewTitleBar("Settings", "Themes from every decade for every uitoolkit app")
+	s.packTitle, s.packMeta, s.packNote, s.galleryLbl = nil, nil, nil, nil
 
 	var page widget.Component
 	switch s.page {
@@ -223,17 +217,16 @@ func buildSettingsState(s *settingsState) widget.Component {
 
 	s.applyBtn = widgets.NewButton("Apply", s.apply)
 	s.applyBtn.Primary = true
-	s.revertBtn = widgets.NewButton("Revert", s.revert)
-	s.defaultBtn = widgets.NewButton("Defaults", s.restoreDefaults)
-	// One line, elided: a hint that wrapped pushed the buttons off a
-	// small window.
+	// One line, elided: a hint that wrapped pushed the button off a
+	// small window. It leads the row and Apply closes it on the right,
+	// where a dialog's accept button belongs.
 	s.hint = widgets.NewLabel("")
-	actions := widgets.NewRow(s.applyBtn, s.revertBtn, s.defaultBtn, s.hint).WithGap(12).WithPad(8)
+	actions := widgets.NewRow(s.hint, s.applyBtn).WithGap(12).WithPad(8)
 	actions.AddFlex(s.hint, 1)
 
 	s.showStaged()
 
-	root := widgets.NewColumn(chrome, split, actions, s.status)
+	root := widgets.NewColumn(split, actions)
 	root.AddFlex(split, 1)
 	return root
 }
@@ -242,7 +235,7 @@ func buildSettingsState(s *settingsState) widget.Component {
 
 // stage shows next without rebuilding the page: the preview and the
 // gallery switch theme where they stand, the pack's details follow, and
-// the buttons, the hint and the status bar say what is staged.
+// Apply and the line beside it say what is staged.
 func (s *settingsState) stage(next style.Appearance) {
 	s.staged = next.Normalize()
 	s.showStaged()
@@ -251,7 +244,7 @@ func (s *settingsState) stage(next style.Appearance) {
 func (s *settingsState) apply() {
 	next := s.staged.Normalize()
 	if err := style.SaveAppearance(next); err != nil {
-		s.status.Set(0, err.Error())
+		s.say(err.Error())
 		return
 	}
 	s.saved = next
@@ -259,16 +252,12 @@ func (s *settingsState) apply() {
 	s.rebuild()
 }
 
-// revert and Defaults move every option at once, so the page is built
-// again: its combo boxes and switches show the values they now hold.
-func (s *settingsState) revert() {
-	s.staged = s.saved
-	s.rebuild()
-}
-
-func (s *settingsState) restoreDefaults() {
-	s.staged = style.DefaultAppearance().Normalize()
-	s.rebuild()
+// say puts a message where the state line sits, beside Apply: it is the
+// one line of prose the window has left for what went wrong.
+func (s *settingsState) say(msg string) {
+	if s.hint != nil {
+		s.hint.SetText(msg)
+	}
 }
 
 // showStaged paints the staged appearance into the parts of the page that
@@ -291,40 +280,24 @@ func (s *settingsState) showStaged() {
 	if s.packTitle != nil {
 		s.packTitle.SetText(pack.Display())
 		s.packMeta.SetText(packMetaLine(pack))
-		s.packText.SetText(pack.Summary)
 		s.packNote.SetText(note)
 	}
 	if s.list != nil {
 		s.list.Selected = s.selectedRow()
 		s.list.Invalidate()
 	}
-	unapplied := s.staged != s.saved
 	if s.applyBtn != nil {
-		s.applyBtn.SetEnabled(unapplied)
-		s.revertBtn.SetEnabled(unapplied)
-		s.defaultBtn.SetEnabled(s.staged != style.DefaultAppearance().Normalize())
+		s.applyBtn.SetEnabled(s.staged != s.saved)
 		s.hint.SetText(s.hintText())
 	}
-	s.status.Set(0, s.statusText())
 }
 
-// hintText says, beside the buttons, where the staged look has got to.
+// hintText says, beside Apply, where the staged look has got to.
 func (s *settingsState) hintText() string {
 	if s.staged == s.saved {
 		return "Applied — every uitoolkit app is using this look."
 	}
 	return "Staged, not applied — only the preview and the gallery show it."
-}
-
-// statusText leads with the state, which a narrow status bar would
-// otherwise elide away: what is on screen is never ambiguous.
-func (s *settingsState) statusText() string {
-	state := "applied"
-	if s.staged != s.saved {
-		state = "unapplied"
-	}
-	return strings.Join([]string{state, s.staged.Name, string(s.staged.Corners),
-		string(s.staged.Icons), string(s.staged.IconSize)}, " · ")
 }
 
 // ---- Themes page --------------------------------------------------------------
@@ -432,7 +405,7 @@ func (s *settingsState) themesPage() widget.Component {
 
 	// The live preview: a small application window in the staged theme —
 	// its frame, caption and every control come from that theme.
-	s.previewBox = widgets.NewPanel("", PreviewApp(func(msg string) { s.status.Set(0, msg) }))
+	s.previewBox = widgets.NewPanel("", PreviewApp(nil))
 	s.previewBox.Window = true
 	preview := s.scoped(s.previewBox)
 
@@ -576,23 +549,19 @@ func (s *settingsState) themeBrowser() widget.Component {
 
 // packDetails is what the list has no room for: the staged pack's name,
 // the year and family it comes from, the engine (or skin) that paints it,
-// its one-line summary and what following the desktop does to it. The box
-// is a fixed height so the list above it does not resize as the user
-// arrows down the packs.
+// and what following the desktop does to it. The box is a fixed height so
+// the list above it does not resize as the user arrows down the packs.
 func (s *settingsState) packDetails() widget.Component {
 	s.packTitle = widgets.NewTitle("")
 	s.packMeta = widgets.NewLabel("")
 	s.packMeta.Wrap = true
-	s.packText = widgets.NewLabel("")
-	s.packText.Wrap = true
-	s.packText.MinLines = 2
 	s.packNote = widgets.NewLabel("")
 	s.packNote.Wrap = true
 	s.packNote.MinLines = 1
-	// A summary longer than the box scrolls rather than being cut off,
-	// and on a short column the box gives the list its rows back.
-	return widgets.NewHeightBoxShare(136, 0.28, widgets.NewScrollView(
-		widgets.NewColumn(s.packTitle, s.packMeta, s.packText, s.packNote).WithGap(2)))
+	// A note longer than the box scrolls rather than being cut off, and
+	// on a short column the box gives the list its rows back.
+	return widgets.NewHeightBoxShare(96, 0.20, widgets.NewScrollView(
+		widgets.NewColumn(s.packTitle, s.packMeta, s.packNote).WithGap(2)))
 }
 
 // followNote says what following the desktop does to the staged pack, and
@@ -625,8 +594,11 @@ func (s *settingsState) followNote(pack style.ThemePack, shown *style.ThemePack)
 // theme: menu bar, tool bar, tabs with every kind of control, lists, a
 // tree, a table and a status bar. Settings shows it inside a ThemeScope.
 func PreviewApp(say func(string)) widget.Component {
+	// The preview's own status bar is where what it says goes when the
+	// caller wants it nowhere else: Settings has no status bar of its own.
+	sb := widgets.NewStatusBar("Ready", "Ln 1, Col 1", "100%")
 	if say == nil {
-		say = func(string) {}
+		say = func(msg string) { sb.Set(0, msg) }
 	}
 	menu := widgets.NewMenuBar(
 		widgets.NewMenu("&File",
@@ -731,7 +703,6 @@ func PreviewApp(say func(string)) widget.Component {
 		widgets.Tab{Title: "Text", Content: text},
 	)
 
-	sb := widgets.NewStatusBar("Ready", "Ln 1, Col 1", "100%")
 	win := widgets.NewColumn(menu, tools, tabs, sb)
 	win.AddFlex(tabs, 1)
 	return win
@@ -949,7 +920,7 @@ func appearanceSample() widget.Component {
 
 func (s *settingsState) packsPage() widget.Component {
 	stage := s.stage
-	status := s.status
+	say := s.say
 	userThemes := style.ListUserThemes()
 	userSel := indexTheme(userThemes, s.staged.Name)
 	themes := pickerSection("User", len(userThemes), func(i int) string {
@@ -970,7 +941,7 @@ func (s *settingsState) packsPage() widget.Component {
 		promptExportName(exportHost, func(name string) {
 			pack, err := style.ExportAppearance(strings.TrimSpace(name), s.staged)
 			if err != nil {
-				status.Set(0, err.Error())
+				say(err.Error())
 				return
 			}
 			next := s.staged
@@ -991,13 +962,13 @@ func (s *settingsState) packsPage() widget.Component {
 					return
 				}
 				if err := style.DeleteUserTheme(name); err != nil {
-					status.Set(0, err.Error())
+					say(err.Error())
 					return
 				}
 				next := style.AfterUserThemeDeleted(s.staged, name)
 				if s.saved.Name == name {
 					if err := style.SaveAppearance(next); err != nil {
-						status.Set(0, err.Error())
+						say(err.Error())
 						return
 					}
 					s.saved = next
@@ -1048,7 +1019,7 @@ func (s *settingsState) packsPage() widget.Component {
 					return
 				}
 				if err := style.DeleteUserIconSet(name); err != nil {
-					status.Set(0, err.Error())
+					say(err.Error())
 					return
 				}
 				next := s.staged
@@ -1057,7 +1028,7 @@ func (s *settingsState) packsPage() widget.Component {
 				}
 				if s.saved.Icons == name {
 					if err := style.SaveAppearance(next); err != nil {
-						status.Set(0, err.Error())
+						say(err.Error())
 						return
 					}
 					s.saved = next
@@ -1086,23 +1057,14 @@ func (s *settingsState) aboutPage() widget.Component {
 		v.SetAccessibleName(name)
 		return v
 	}
-	engines := strings.Join(style.EngineIDs(), ", ")
 	return widgets.NewColumn(
 		widgets.NewTitle("About"),
-		widgets.NewLabel("uitoolkit v"+uitoolkit.Version),
-		wrapped(fmt.Sprintf("%d built-in themes from %d theme engines: %s.", len(style.ListBuiltinThemes()), len(style.EngineIDs()), engines)),
-		wrapped("A theme is a pack (colours, metrics) painted by an engine (shapes): Windows 95 bevels, Aqua gel, Motif shadows…"),
 		wrapped("Prefs file (theme + corners + icons + iconSize, written on Apply):"),
 		mono("Prefs file", style.AppearancePath()),
 		wrapped("User theme packs (exported; edit the JSON to make your own):"),
 		mono("User theme packs", style.ThemesDir()+"/<name>/theme.json"),
 		wrapped("Icon sets (copy the repo icons/ folders here after every pull):"),
 		mono("Icon sets", style.IconsDir()+"/<set>/*.png"),
-		wrapped("Other apps watch look.json and switch live on Apply."),
-		widgets.NewButton("Browse themes", func() {
-			s.page = pageThemes
-			s.rebuild()
-		}),
 	).WithGap(10).WithPad(4)
 }
 

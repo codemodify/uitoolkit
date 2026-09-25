@@ -16,9 +16,9 @@ import (
 // new numbers (docs/settings.md, "Screenshot geometry").
 const (
 	previewShotX = 445
-	previewShotY = 58
+	previewShotY = 10
 	previewShotW = 569
-	previewShotH = 429
+	previewShotH = 481
 )
 
 func TestSettingsPreviewPanelKeepsItsPlace(t *testing.T) {
