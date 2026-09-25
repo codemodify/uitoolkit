@@ -102,10 +102,11 @@ Expressive. Each was researched from
 published facts: design guides, SDK documentation, and pixels measured from
 screenshots of the originals. No code or pixmaps were copied.
 
-Apps start in Metal (Ocean). Settings draws any pack twice while you
-browse — a small live application, and under it the whole widget gallery,
-every control in every state — then applies it to every app; and
-`UITK_THEME=<pack>` runs any app in any of them.
+Apps start in Metal (Ocean). Settings draws any pack you browse as a
+small live application — and one that sets what it shows: its icon set
+and icon size are chosen on its own tool bar, its corners in its own View
+menu. Apply hands the pack to every app; `UITK_THEME=<pack>` runs any app
+in any of them.
 
 ![Theme packs by year and platform](docs/screenshots/themes/timeline.png)
 
@@ -120,7 +121,9 @@ the window.
 ![Window frames from System 1 in 1984 to macOS Tahoe in 2025, each in its own era's style](docs/screenshots/themes/frames.webp)
 
 Every tile below is the same small app, the Settings window's preview,
-drawn by its pack's engine.
+drawn by its pack's engine. The two boxes at the right of its tool bar
+are that window's own settings — the icon set and the size its glyphs
+are drawn at — so they read the same in every tile.
 
 ### 1980s
 
@@ -298,7 +301,9 @@ repository.
 
 Search or filter 129 packs, and the one you pick is drawn at once as a
 live application window beside the list — frame, caption and every
-control — in a splitter you can size. See
+control — in a splitter you can size. That window is also where its icon
+set, its icon size and its corner style are chosen: the thing that shows
+a setting is the thing that sets it. See
 **[docs/settings.md](docs/settings.md)**.
 
 ### Files — projects dogfood
@@ -543,7 +548,7 @@ under.
 | `go run ./examples/uitoolkit-sample-notes` | [`examples/uitoolkit-sample-notes/notesapp`](examples/uitoolkit-sample-notes/notesapp) | A small real app: sortable table, textarea body, priority spinner, file stub, tooltips |
 | `go run ./examples/uitoolkit-sample-inspector` | [`examples/uitoolkit-sample-inspector/inspectorapp`](examples/uitoolkit-sample-inspector/inspectorapp) | Preferences inspector: panels that dock, float and close, a layout remembered between runs with `dock.Host.SaveLayoutFile`, table (JetBrains Mono), toolbar, message box |
 | `go run ./examples/uitoolkit-sample-files` | [`examples/uitoolkit-sample-files/filesapp`](examples/uitoolkit-sample-files/filesapp) | Files / Projects dogfood: tree, table, toolbar, menus, TextArea preview, history, drag and drop, dialogs |
-| `go run ./cmd/uitoolkit-settings` | [`cmd/uitoolkit-settings/settingsapp`](cmd/uitoolkit-settings/settingsapp) | The appearance editor, one page: the theme browser, the icons, the corners and the behaviour switches down a column, a live application window as the preview beside them, `look.json`. See [docs/settings.md](docs/settings.md) |
+| `go run ./cmd/uitoolkit-settings` | [`cmd/uitoolkit-settings/settingsapp`](cmd/uitoolkit-settings/settingsapp) | The appearance editor, one page: the theme browser and the behaviour switches down a column, and beside them a live application window that sets three of the things it shows — its icon set and icon size on its own tool bar, its corners in its own View menu — with `look.json` under it. See [docs/settings.md](docs/settings.md) |
 
 `examples/uitoolkit-sample-mdi`, `examples/uitoolkit-sample-popups`,
 `examples/uitoolkit-sample-richtext`, `examples/uitoolkit-sample-shapes`,
@@ -762,11 +767,30 @@ not a command — a row with children never fires its own `OnClick`, because
 a host that opens a submenu sends no click for the row it opened it from.
 See [docs/tray.md](docs/tray.md#submenus).
 
+*Settings is one page, and its preview sets what it shows.* The four
+pages behind a sidebar were four answers to one question, so they are one
+page: the theme browser and the behaviour switches down a column, the
+live application window beside them. Three of its settings are on that
+window rather than in the column — the **icon set** and the **icon size**
+are combo boxes at the right-hand end of the previewed application's own
+tool bar, which is drawn in them, and the **corner style** is in that
+window's own View ▸ Window corners — because a strip of glyphs standing
+in for a tool bar, next to a real one, was showing a copy of the answer.
+Where the colours come from stands over that window and the three config
+paths under it. `widgets.ToolWidget` and `widgets.ToolStretch` are what
+carry a control on a tool bar (Qt's `QToolBar::addWidget`, GTK's tool
+items): a bar with free space in it fills the width it is given, pins
+what follows to its right edge, and drops its own trailing tools rather
+than letting a control fall off the end.
+
 *Smaller additions from the same source.* `dock.Host.SaveLayoutFile` /
 `LoadLayoutFile` (every docking application had rebuilt the same path
 building, mkdir and error swallowing; `LoadLayoutFile` distinguishes a first
 run from a corrupt file). `widgets.HeightBox`, after two packages that cannot
 import each other grew the same private 40-line height cap.
+`ComboBox.Tip` and `ComboBox.MinWidth`, for a box on a tool bar: there it
+has no label beside it, and the 160-pixel floor that suits a form pushes
+the tools off the end of the bar.
 
 *Accessibility fixes, all real.* `Slider` and `NumberField` advertised
 increment and decrement to screen readers and implemented neither — a reader

@@ -29,14 +29,16 @@ func TestSettingsIsAccessible(t *testing.T) {
 	tree := a11ytest.Audit(t, "settings", s.AccessibleTree())
 
 	// The theme browser and the preview's own lists; the decade filter,
-	// the corners, the two icon choosers and the preview's combo box.
-	if a11ytest.Count(tree, a11y.RoleList) < 1 || a11ytest.Count(tree, a11y.RoleComboBox) < 5 {
+	// the two icon choosers on the preview's tool bar and the preview's
+	// own sample combo box.
+	if a11ytest.Count(tree, a11y.RoleList) < 1 || a11ytest.Count(tree, a11y.RoleComboBox) < 4 {
 		t.Errorf("settings: lists %d, combos %d",
 			a11ytest.Count(tree, a11y.RoleList), a11ytest.Count(tree, a11y.RoleComboBox))
 	}
 	// Every chooser Settings owns is named, so a screen reader says what
-	// is being chosen rather than reading three anonymous combo boxes.
-	for _, name := range []string{"Decade", "Corners", "Icons", "Icon size"} {
+	// is being chosen rather than reading anonymous combo boxes — and a
+	// chooser on a tool bar has nothing but its name to say it by.
+	for _, name := range []string{"Decade", "Icons", "Icon size"} {
 		if a11ytest.Find(tree, a11y.RoleComboBox, name) == nil {
 			t.Errorf("settings: no %s chooser in the tree", name)
 		}
@@ -69,14 +71,16 @@ func TestSettingsIsAccessible(t *testing.T) {
 			t.Errorf("settings: the preview application has no %s", r)
 		}
 	}
-	// The icon strip beside it is tool bars of named buttons, so the
-	// preview of an icon set is not a mystery to a screen reader.
-	// (Information, Warning, Error and Question are the strip's alone:
-	// New and Save are in the previewed application's tool bar too.)
-	for _, name := range []string{"Information", "Warning", "Error", "Question"} {
+	// The preview's tool bar is named buttons, so the set it is drawn in
+	// is not a mystery to a screen reader either, and the bar is in the
+	// tree as a tool bar with the two choosers on it.
+	for _, name := range []string{"New", "Save", "Send"} {
 		if a11ytest.Find(tree, a11y.RoleButton, name) == nil {
-			t.Errorf("settings: the icon preview has no %s button", name)
+			t.Errorf("settings: the preview's tool bar has no %s button", name)
 		}
+	}
+	if a11ytest.Count(tree, a11y.RoleToolBar) < 1 {
+		t.Error("settings: the preview's tool bar is not in the tree")
 	}
 
 	// Scrolling the column of choices does not take anything out of the
@@ -88,7 +92,12 @@ func TestSettingsIsAccessible(t *testing.T) {
 	scroll.ScrollTo(scroll.MaxOffset())
 	a.PumpOnce()
 	tree = a11ytest.Audit(t, "settings scrolled", s.AccessibleTree())
+	if a11ytest.Find(tree, a11y.RoleSwitch, "Animations") == nil {
+		t.Error("settings: scrolling the column lost the behaviour switches from the tree")
+	}
+	// The choosers are beside the column, not in it: scrolling it cannot
+	// take them anywhere.
 	if a11ytest.Find(tree, a11y.RoleComboBox, "Icons") == nil {
-		t.Error("settings: scrolling the column lost the icon chooser from the tree")
+		t.Error("settings: the icon chooser left the tree when the column scrolled")
 	}
 }

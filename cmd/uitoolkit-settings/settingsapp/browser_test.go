@@ -12,12 +12,14 @@ import (
 	"github.com/codemodify/uitoolkit/widgets"
 )
 
-// The right-hand pane is the preview and nothing else: one application
-// window in the staged pack, filling the pane at every size, switching
-// when another pack is picked, and never re-theming Settings itself. The
-// whole widget gallery used to sit under it in a second splitter (it is
-// the tour's three showcase pages now) and the strip of stock icons sat
-// above it for a while; this is what says neither has crept back.
+// The right-hand pane is the preview and the two single rows that stand
+// over and under it: where the colours come from, the application window
+// in the staged pack, and where the files are. The window is the biggest
+// thing in the pane at every size, switches when another pack is picked,
+// and never re-themes Settings itself. The whole widget gallery used to
+// sit under it in a second splitter (it is the tour's three showcase
+// pages now) and a strip of stock icons sat above it for a while; this
+// is what says neither has crept back.
 func TestSettingsPreviewIsTheWholeRightPane(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	if err := style.SaveAppearance(style.DefaultAppearance()); err != nil {
@@ -39,35 +41,47 @@ func TestSettingsPreviewIsTheWholeRightPane(t *testing.T) {
 	if a.Look().Name() == "win95" {
 		t.Fatal("the preview must not re-theme Settings itself")
 	}
-	// Two scopes on the whole page — the icon strip and the preview — and
-	// the strip is in the column of choices, beside the two choosers it
-	// answers. The preview's own pane holds nothing but the preview: an
-	// application window that fills it at every window size is the one
-	// promise this page makes about its right-hand side.
+	// One scope on the whole page: the preview. The strip of icons that
+	// had one of its own is gone — the preview's tool bar is drawn in
+	// the staged set and shows it better than a strip could.
 	split := settingsSplit(t, w)
-	if n := len(allScopes(w.Content())); n != 2 {
-		t.Fatalf("the page has %d theme scopes, want the icon strip and the preview", n)
+	if n := len(allScopes(w.Content())); n != 1 {
+		t.Fatalf("the page has %d theme scopes, want only the preview", n)
 	}
-	if n := len(allScopes(findScrollView(w.Content()))); n != 1 {
-		t.Fatalf("the column of choices holds %d theme scopes, want the icon strip", n)
+	if n := len(allScopes(findScrollView(w.Content()))); n != 0 {
+		t.Fatalf("the column of choices holds %d theme scopes, want none", n)
 	}
-	if n := len(allScopes(preview)); n != 1 {
-		t.Fatalf("the preview holds %d theme scopes, want only itself", n)
-	}
+	// The preview takes what the two rows beside it leave, and it is far
+	// the biggest thing in the pane: everything else in here is one row.
 	pane, box := split.PaneB(), preview.LocalBounds()
-	if box.Dx() > pane.Dx()+1 || box.Dy() < pane.Dy()-1 {
-		t.Errorf("the preview is %vx%v in a %vx%v pane", box.Dx(), box.Dy(), pane.Dx(), pane.Dy())
+	if box.Dx() > pane.Dx()+1 {
+		t.Errorf("the preview is %v wide in a %v pane", box.Dx(), pane.Dx())
 	}
-	// The icon strip is in the column, under its choosers, not in here.
-	strip := findPanelTitled(w.Content(), "Preview — Classic")
-	if strip == nil {
-		t.Fatal("no icon strip in the column of choices")
+	if box.Dy() < pane.Dy()*0.6 {
+		t.Errorf("the preview is %v of a %v pane", box.Dy(), pane.Dy())
 	}
-	if !nestedInScroll(strip) {
-		t.Error("the icon strip is not in the column that scrolls")
+	// Over it, the one switch that says where its colours come from;
+	// under it, the three paths. Both are Settings' own, drawn in the
+	// applied look, outside the preview's scope.
+	follow := findSwitch(w.Content(), "Follow the desktop's colours")
+	if follow == nil {
+		t.Fatal("no follow-the-desktop switch")
 	}
-	if widget.DeviceOrigin(strip).X >= widget.DeviceOrigin(preview).X {
-		t.Error("the icon strip is on the preview's side of the splitter")
+	if insidePreview(follow) {
+		t.Error("the colours switch is inside the preview's theme scope")
+	}
+	files := findPanelTitled(w.Content(), "Files")
+	if files == nil {
+		t.Fatal("no Files block")
+	}
+	if nestedInScroll(files) || nestedInScroll(follow) {
+		t.Error("the colours switch or Files is back in the column that scrolls")
+	}
+	if widget.DeviceOrigin(follow).Y >= widget.DeviceOrigin(preview).Y {
+		t.Error("the colours switch is not over the preview")
+	}
+	if widget.DeviceOrigin(files).Y <= widget.DeviceOrigin(preview).Y {
+		t.Error("the Files block is not under the preview")
 	}
 	// The showcase's own controls are the mark the gallery leaves.
 	if findButton(w.Content(), "Primary action") != nil {
@@ -218,7 +232,6 @@ func TestSettingsKeyboardReachesEverything(t *testing.T) {
 		"search":        false,
 		"themes":        false,
 		"decade":        false,
-		"corners":       false,
 		"icon set":      false,
 		"icon size":     false,
 		"export":        false,
@@ -246,8 +259,6 @@ func TestSettingsKeyboardReachesEverything(t *testing.T) {
 				want["icon set"] = true
 			case "Icon size":
 				want["icon size"] = true
-			case "Corners":
-				want["corners"] = true
 			case "Decade":
 				want["decade"] = true
 			}
@@ -280,6 +291,23 @@ func TestSettingsKeyboardReachesEverything(t *testing.T) {
 	for part, found := range want {
 		if !found {
 			t.Errorf("Tab never reaches the %s", part)
+		}
+	}
+	// The two choosers on the preview's tool bar are stops of their own,
+	// and the bar itself is one: a tool bar that carries a control must
+	// not swallow it.
+	if set, bar := namedCombo(w.Content(), "Icons"), previewTools(t, w); set != nil {
+		seen := false
+		for _, c := range ring {
+			if c == widget.Component(set) {
+				seen = true
+			}
+		}
+		if !seen {
+			t.Error("Tab never reaches the icon chooser on the preview's tool bar")
+		}
+		if set.Parent() != widget.Component(bar) {
+			t.Errorf("the icon chooser is not on the tool bar but in %T", set.Parent())
 		}
 	}
 	// Apply is at the foot of the window, outside the column that

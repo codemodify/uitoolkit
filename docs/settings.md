@@ -18,12 +18,16 @@ go run ./cmd/uitoolkit-settings -stage aqua -screenshot out/
 tools/shots/demos.sh                              # docs/screenshots/settings.webp and the other demos
 ```
 
-`-page` names a **section of the one page** and opens it scrolled there:
-`theme` (the default, the top), `desktop`, `shape`, `behaviour`, `files`.
+`-page` names a **section of the one page**: `theme` (the default, the
+top of the column), `behaviour`, `desktop`, `preview`, `files`. Two of
+the five are in the column that scrolls, and `-page` scrolls it to them;
+the other three stand beside the preview and are on screen the moment
+the window opens, so naming one of those leaves the column where it is.
 The names of the four pages Settings used to have still resolve, because
 they are in scripts, in the atlas tooling and in the docs of two
 releases: `themes` and `packs` (and `packs & icons`, `theme packs`) open
-**Theme**, `appearance` and `icons` open **Shape and weight**, `about`
+**Theme**, `appearance`, `icons` and `corners` open the **Preview**,
+which is where the shape and the icon set are chosen now, and `about`
 opens **Files**. An unknown name is the top of the page.
 
 ## The page
@@ -32,8 +36,17 @@ There is one page and no navigation. Settings used to be four pages
 behind a sidebar — Themes, Appearance, Packs, About — and they were four
 answers to one question: what does this desktop look like. The window is
 now a splitter: **the choices down a scrolling column on the left**, and
-**the preview filling the whole of the right**, with **Apply** pinned at
-the foot, outside both.
+**the preview on the right**, with **Apply** pinned at the foot, outside
+both.
+
+The page is split by what a choice is about rather than by what kind of
+choice it is. **The preview sets what it shows**: the icon set and the
+size its glyphs are drawn at are chosen on the previewed application's
+own tool bar — the bar those icons are drawn on — and the shape of its
+corners in that window's own View menu. What is left over goes in the
+column on the left (which pack, and what the apps do besides drawing it)
+or in the pane with the preview, over it and under it (where its colours
+come from, and where the files are).
 
 The column is about 300 logical pixels wide whatever the window and the
 display scale are, and it keeps that share while the window is resized
@@ -45,33 +58,89 @@ to three lines.
 
 ### The preview, on the right
 
-The whole of the pane, at every window size: a small but fully
-interactive application window (menu bar, tool bar, tabs with every
-control, tree, table, dialogs, status bar) painted entirely in the staged
-theme, frame, caption and all. Its caption names the pack it is really
-drawing, which is where you see that *Breeze* is showing as *Breeze Dark*
-because the desktop asked for dark.
+A small but fully interactive application window (menu bar, tool bar,
+tabs with every control, tree, table, dialogs, status bar) painted
+entirely in the staged theme, frame, caption and all. Its caption names
+the pack it is really drawing, which is where you see that *Breeze* is
+showing as *Breeze Dark* because the desktop asked for dark.
 
 It is a `widgets.ThemeScope`, so Settings itself keeps the applied look.
 Staging a pack switches it where it stands — the caret stays in the
 search field, the focus on the list, the column where it was scrolled.
 
-**Nothing else is allowed in this pane.** The widget gallery used to sit
-under it in a second splitter (those are the widgets the tour shows over
-its Controls, Views and Documents pages, and under the preview they
-halved it to answer a question the preview had already answered). The
-strip of stock icons sat above it for a while when the four pages were
-merged, and it read well at 1024 — but the strip keeps its own height and
-the preview takes what is left, so at the 720×520 minimum the fifteen
-glyphs folded onto four lines and left the preview a caption and a menu
-bar. The preview is the biggest thing on this page at every size, and the
-only way to promise that is to keep everything that is not the preview
-out of its column. `TestSettingsPageHoldsAtEverySize` is that promise,
-in four packs at two scales at both sizes.
+**It sets three of the things it shows.**
+
+- **The icon set** and **the size its glyphs are drawn at** are two
+  combo boxes at the **right-hand end of its tool bar**, after the free
+  space that pushes them there (`widgets.ToolStretch`,
+  `widgets.ToolWidget`). The bar between them and the tools is drawn in
+  whatever they choose, so the bar is the preview of the set: a real
+  tool bar at the real size, not a strip standing in for one. The size
+  box lists **16 / 24 / 32**, the way a word processor's size box lists
+  numbers.
+- **The corners** are in that window's own **View ▸ Window corners**:
+  *Theme shape*, *Round*, *Square*, an exclusive group with the staged
+  one ticked. A corner style is the shape of the whole window — its
+  frame, its buttons, its fields — not one bar's business, and a View
+  menu is where an application has always kept what its window looks
+  like. It also keeps the tool bar legible: a third chooser on it does
+  not fit beside the tools at the width Settings opens down to.
+
+Everything else in that window is a **sample**: *Send* sends nothing,
+the tree lists a mailbox nobody has, the check boxes tick themselves.
+What says which is which is the gap: the choosers are the only things
+past the bar's free space, where a tool bar keeps what is not a command
+(a zoom, a style, a size), and each one carries a tooltip and a screen
+reader name that says it is a real setting. The strongest signal is
+still what happens when one is used — every icon on the bar changes at
+once.
+
+**Nothing else is allowed in the preview's own box**, and only two
+single rows share its pane. The widget gallery used to sit under it in a
+second splitter (those are the widgets the tour shows over its Controls,
+Views and Documents pages, and under the preview they halved it to
+answer a question the preview had already answered). A strip of fifteen
+stock icons sat above it for a while when the four pages were merged,
+and it read well at 1024 — but the strip keeps its own height and the
+preview takes what is left, so at the 720×520 minimum the glyphs folded
+onto four lines and left the preview a caption and a menu bar. The
+preview is far the biggest thing in its pane at every size (about 78% of
+it at 1024×860 and 62% at the 720×520 minimum), and the only way to
+promise that is to keep what is not the preview down to one row each.
+`TestSettingsPageHoldsAtEverySize` is that promise, in four packs at two
+scales at both sizes.
+
+### Over and under the preview
+
+**Where the colours come from** — **Follow the desktop's colours**: its
+light or dark mode and its accent (see below). It is over the preview
+because that is where its effect is read: the caption right under it
+says *Preview — Breeze Dark* for a chosen *Breeze*. It is one switch and
+one short line; the paragraph it had in the column would have been three
+lines off the window it is a footnote to.
+
+**Files** — the three paths Settings reads and writes, one line each:
+the **prefs** file, the **themes** directory and the **icons**
+directory, written with `~` for the home directory and elided rather
+than wrapped when the pane is narrow. It is under the preview because it
+is the only part of the page that changes nothing — it says where what
+the rest of the page changed ends up — and it is three lines rather than
+the six it had (a line of prose and a three-row text box each) because
+every line here is a line off the preview. The paths are labels now, not
+text boxes: a box that can be selected from keeps three rows and grows a
+scrollbar of its own as soon as a path is longer than the pane.
+
+Last on the icons line, **Delete icon set…** — grey unless the staged
+set is one the user copied in. It lost its old neighbour when the two
+icon choosers moved to the preview's tool bar, where there is no room
+for a button and no sense in one: a bar draws a set, it does not keep
+one. The icons line of **Files** is the one place left that says where
+sets come from, and deleting one is exactly that — taking a folder out
+of that directory.
 
 ### The column of choices, on the left
 
-Five sections, in the order a person decides them.
+Two sections: the decisions the preview cannot make for itself.
 
 **Theme** — a **search field** (a pack is found by its id, name, year,
 family, engine or what its summary says — every word has to match; Return
@@ -95,45 +164,6 @@ Under the list, the two things that can be done to a pack:
   absent** while a built-in pack is staged: a button that came and went
   would move the whole column under it every time a pack was picked.
 
-**Where the colours come from** — **Follow the desktop's colours**: its
-light or dark mode and its accent (see below). It is the one setting that
-changes where the look comes from rather than what it is, so it sits
-directly under the browser, as the first footnote to the choice above it,
-and its effect is read in the preview's caption.
-
-**Shape and weight** — what the staged look is drawn in rather than what
-it is: **Corners** (Theme shape / Round / Square), the **icon set**
-(`classic`, `sharp`, and every folder installed under the icon
-directory), and the **size** its glyphs are drawn at (Small 16, Medium
-24, Large 32). One decision with three dials. The two icon choosers are
-together because they are one choice: a set's glyphs are drawn at that
-size, and some sets are made for one end of the range.
-
-Under them, the **strip**: every icon the toolkit asks a set for by name,
-the whole of `style.AllToolIcons`, in five tool bars of at most four
-buttons — the file actions, the clipboard ones, the two histories, then
-find, edit, mail and download, then the four message-box faces (info,
-warning, error, question), which are the ones a set gives a colour of its
-own and so the ones that say whether it can be read against a dark pack.
-It is captioned `Preview — <set>` the way the theme preview is captioned
-`Preview — <pack>`.
-
-The strip is tool **bars** because a loose tool button caps its icon at
-its control height, so Large would have drawn exactly like Medium; and
-the bars are short because a `Wrap` folds whole bars — a bar wider than
-the column is cut off at its edge rather than folded, and the icons past
-the cut are simply not there. Four buttons is what fits at the largest
-icon size in the narrowest column.
-
-The strip is a `ThemeScope` carrying Settings' own theme with the staged
-set and size laid over it, not the staged pack: it is the set being
-previewed here, not the pack.
-
-Last in this section, **Delete icon set…** — grey unless the staged set
-is one the user copied in. The chooser above it is the only list of icon
-sets on the page now, so this is where a set is named and this is where
-removing one belongs.
-
 **Behaviour** — everything `look.json` carries that is not what the
 toolkit looks like but what it does: **Animations** (hover fades, the
 default button's pulse, busy bars; with a note under it while the desktop
@@ -144,25 +174,32 @@ they are one group here, because the thing they have in common — none of
 them is the appearance of a pack — is the only thing a reader needs to
 know to skip the lot.
 
-**Files** — the three paths Settings reads and writes: the **prefs
-file**, the **user theme packs** folder, and the **icon sets** folder.
-Last, because it is the only part of the page that changes nothing.
-
 ### What went
 
 The **Packs** page is gone. Its two lists were a second theme browser and
 a second icon chooser; the browser and the chooser are on this page, so
 the lists were a duplicate. Its two actions were not, and both moved
 next to the thing they act on: Export and Delete theme… under the theme
-browser, Delete icon set… under the icon chooser.
+browser, Delete icon set… beside the icons directory it takes a folder
+out of.
 
 The **sidebar** is gone with the pages, and with it the `Pages` list a
 screen reader used to drive. There is nothing to drive: one Tab ring
 holds the whole application.
 
+The section called **Shape and weight** is gone too, and nothing is left
+of it in the column: corners, the icon set and the icon size are all
+answered by the preview now, and the strip of fifteen glyphs under them
+was a picture of a tool bar standing in for the real one two inches to
+its right. The **third clipboard tool** (Paste) went off the sample's
+tool bar to pay for the choosers: with it there, every one of the 129
+packs dropped *Send* off the end of the bar, and a text-and-icon tool
+button is worth more to a theme preview than a third clipboard glyph.
+`Delete icon set…` moved to the icons line of **Files**.
+
 ## Staged and applied
 
-The previews show what is **staged**. Nothing is written until **Apply**,
+The preview shows what is **staged**. Nothing is written until **Apply**,
 which saves `look.json` and switches Settings and every app that watches
 the file. Apply is the only button and the only thing in the row under
 the page: it sits pinned at the **right** of it, outside the column that
@@ -189,7 +226,7 @@ The Theme Atlas crops the preview panel out of `uitoolkit-settings -stage ID
 default look applied, the panel is the same rectangle in every pack:
 
 ```
-x 317, y 10, 697 × 790        crop box (317, 10) – (1014, 800)
+x 317, y 66, 697 × 620        crop box (317, 66) – (1014, 686)
 ```
 
 `TestSettingsPreviewPanelKeepsItsPlace` pins those numbers; a layout
@@ -199,15 +236,26 @@ change that moves them fails it, and the new ones belong here. (They were
 `x 445, y 58, 569 × 429` until the window's title bar row and status bar
 came off, `569 × 481` until the gallery came out from under the preview
 and it took the whole right-hand pane, `x 445, y 10, 569 × 782` until the
-icons took the head of the page, and `569 × 630` until the four pages
-became one.)
+icons took the head of the page, `569 × 630` until the four pages became
+one, and `x 317, y 10, 697 × 790` until the colours switch went over the
+preview and the paths under it.)
+
+**Every atlas tile now carries the two icon choosers**, because they are
+on the tool bar of the window the atlas crops. With a clean
+`XDG_CONFIG_HOME` they read *Classic* and *24* in all 129 tiles. A tile
+still reads as a small application — a style box and a size box at the
+end of a tool bar is what applications put there — but it is worth
+knowing that the furniture is the same in every tile and is not the
+theme's.
 
 The applied look sets Settings' own metrics, and the column of choices
 beside the preview is drawn in it, so take atlas shots with a clean
 `XDG_CONFIG_HOME`. That is why the test builds Settings with
 `PreferredLook`, the way the command does, rather than with a fixture
-look. Nothing above the preview shares its column any more, so the crop
-no longer moves with the icon size.
+look. The colours switch over the preview is drawn in the applied look
+too, which is what sets the crop's `y`; the icon size chosen in the
+preview does not move it, because the preview's own bar grows inside the
+crop rather than above it.
 
 ## Prefs file
 
@@ -342,7 +390,7 @@ built-in pack staged it is there but grey. If the deleted pack was
 selected, Settings falls back to the matching builtin palette (or the
 other one if that name was a shadow). If `look.json` named the deleted
 pack, it is rewritten to the fallback so the selection is not left
-dangling. **Delete icon set…** under the icon chooser is the same
+dangling. **Delete icon set…** on the icons line of **Files** is the same
 control for a **User** icon set (not premiere or drawn classic/sharp).
 
 `ListThemes` lists Built-in era packs (not shadowed) then user packs
@@ -368,16 +416,17 @@ cp -R icons/lucide icons/phosphor icons/tabler icons/heroicons icons/material-sy
 See [icons/README.md](../icons/README.md) for licenses, the full stem
 list, attribution, and the `@2x` convention.
 
-Settings offers them all in one chooser, in the order
-`ListBuiltinIconSets` then `ListUserIconSets`:
+Settings offers them all in one chooser — on the preview's tool bar — in
+the order `ListBuiltinIconSets` then `ListUserIconSets`:
 
 - **Built-in** — drawn `classic` / `sharp`, plus the five premiere
   names when those folders are present under `icons/`
 - **User** — any other `icons/<name>/` folder that contains at least
   one ToolIcon PNG
 
-The strip under the chooser draws the staged set at the staged size, in
-the full vocabulary.
+The chooser is at the right-hand end of the preview's tool bar, with the
+size box beside it, and that bar is drawn in whatever they choose: the
+preview of a set is a real tool bar full of it.
 
 When a premiere or user set is selected, a missing stem logs once and
 paints **`no-icon`** (pack file, or the embedded placeholder if the

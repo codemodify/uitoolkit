@@ -11,7 +11,8 @@ import (
 	"github.com/codemodify/uitoolkit/style"
 )
 
-// The page is one column of choices and one preview now, and whether
+// The page is one column of choices and one preview that sets what it
+// shows, and whether
 // that works is a question about pixels: the column has to stay readable
 // and the preview has to stay the biggest thing on the page at the
 // smallest window Settings opens to and at a fractional display scale.
@@ -46,12 +47,15 @@ func TestSettingsPageHoldsAtEverySize(t *testing.T) {
 				}
 				w.SetContent(SettingsAppOpen(a, w, pack, page))
 				a.PumpOnce()
-				// The preview is the whole of its side of the splitter at
-				// every one of these sizes: that is the promise the icon
-				// strip was moved out of this pane to keep.
+				// The preview is far the biggest thing on its side of the
+				// splitter at every one of these sizes: that is the
+				// promise the icon strip was moved out of this pane to
+				// keep, and the reason the two rows that share it with
+				// it — the colours switch and the three paths — are one
+				// row each.
 				split := settingsSplit(t, w)
 				box := previewScope(t, w).LocalBounds()
-				if pane := split.PaneB(); box.Dy() < pane.Dy()-1 {
+				if pane := split.PaneB(); box.Dy() < pane.Dy()*0.6 {
 					t.Errorf("%s at %g×, %dx%d: the preview is %v of a %v pane",
 						pack, scale, size[0], size[1], box.Dy(), pane.Dy())
 				}

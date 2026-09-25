@@ -39,11 +39,22 @@ func TestSettingsAppAppliesAndPersists(t *testing.T) {
 	if findMenuBarOutsidePreview(w.Content()) {
 		t.Fatal("settings must not have a menu bar (the preview app may)")
 	}
-	// One page: the corners, the icon set and the size its glyphs are
-	// drawn at are all on it, with no navigating to do first.
-	for _, opt := range []string{"Theme shape", "Round", "Square", "Small", "Medium", "Large", "Classic", "Sharp"} {
+	// One page: the icon set, the size its glyphs are drawn at and the
+	// shape of the window's corners are all on it, with no navigating to
+	// do first — the choosers on the preview's own tool bar, the shapes
+	// in the preview's own View menu.
+	for _, opt := range []string{"16", "24", "32", "Classic", "Sharp"} {
 		if findCombo(w.Content(), opt) == nil {
 			t.Fatalf("the chooser offering %q is not on the page", opt)
+		}
+	}
+	shapes := map[string]bool{"Theme shape": false, "Round": false, "Square": false}
+	for _, it := range cornerMenu(t, w) {
+		shapes[widget.PlainText(it.Text)] = true
+	}
+	for name, found := range shapes {
+		if !found {
+			t.Fatalf("the preview's window corners menu does not offer %q", name)
 		}
 	}
 	// And so is every switch the Appearance page used to hold.
@@ -88,7 +99,7 @@ func TestSettingsAppAppliesAndPersists(t *testing.T) {
 		t.Fatal("Apply should disable once saved matches staged")
 	}
 
-	pickCombo(t, w, "Round")
+	pickCorner(t, w, "Round")
 	a.PumpOnce()
 	if p := previewAppearance(t, w); p.Corners != style.CornersRound || p.Name != "dark" {
 		t.Fatalf("corners preview %+v", p)
@@ -309,7 +320,7 @@ func TestSettingsIconSizeApplyWritesLookJSON(t *testing.T) {
 		t.Fatal(err)
 	}
 	a, w := openSettings(t, 1024, 780)
-	pickCombo(t, w, "Large")
+	pickCombo(t, w, "32")
 	a.PumpOnce()
 	if p := previewAppearance(t, w); p.IconSize != style.IconSizeLarge {
 		t.Fatalf("preview size %+v", p)
@@ -401,9 +412,9 @@ func TestSettingsThemeListScrollsAllBuiltins(t *testing.T) {
 		}
 	}
 
-	// The five sections do not fit in the window, so the column of
-	// choices scrolls — and the paths the old About page held are at the
-	// foot of it, reachable by scrolling and not by navigating.
+	// The browser and the behaviour switches do not fit in the window,
+	// so the column of choices scrolls — and the switches at the foot of
+	// it are reachable by scrolling and not by navigating.
 	choices := findScrollView(w.Content())
 	if choices == nil {
 		t.Fatal("the column of choices should scroll")
@@ -414,8 +425,16 @@ func TestSettingsThemeListScrollsAllBuiltins(t *testing.T) {
 	}
 	choices.ScrollTo(choices.MaxOffset())
 	a.PumpOnce()
-	if !findLabelWith(w.Content(), "Prefs file") {
-		t.Error("the prefs path is not at the foot of the column")
+	if findSwitch(w.Content(), "Place window buttons as the theme does") == nil {
+		t.Error("the last behaviour switch is not at the foot of the column")
+	}
+	// The paths are not in this column at all: they are under the
+	// preview, where nothing scrolls and they are always on screen.
+	if !findLabelWith(w.Content(), "Prefs") {
+		t.Error("the prefs path is not on the page")
+	}
+	if files := findPanelTitled(w.Content(), "Files"); files == nil || nestedInScroll(files) {
+		t.Error("the paths are in the column that scrolls")
 	}
 	if findApply(w.Content()) == nil || nestedInScroll(findApply(w.Content())) {
 		t.Fatal("Apply must stay pinned outside the column")
@@ -575,16 +594,34 @@ func findButton(root widget.Component, text string) *widgets.Button {
 	return btn
 }
 
-// findCombo is the Settings combo (outside the preview) offering item.
+// findCombo is a Settings chooser offering item. Two of them — the icon
+// set and its size — are on the preview's tool bar now, inside the
+// preview's theme scope, so this can no longer tell Settings' own
+// choosers from the previewed application's by where they are: it tells
+// them apart by their name, which every chooser Settings owns has and
+// the sample's "Combo box" does not.
 func findCombo(root widget.Component, item string) *widgets.ComboBox {
 	var cb *widgets.ComboBox
 	widget.Walk(root, func(c widget.Component) {
-		if box, ok := c.(*widgets.ComboBox); ok && !insidePreview(c) {
-			for _, it := range box.Items {
-				if it == item {
-					cb = box
-				}
+		box, ok := c.(*widgets.ComboBox)
+		if !ok || box.AccessibleName() == "" {
+			return
+		}
+		for _, it := range box.Items {
+			if it == item {
+				cb = box
 			}
+		}
+	})
+	return cb
+}
+
+// namedCombo is the chooser a screen reader calls name.
+func namedCombo(root widget.Component, name string) *widgets.ComboBox {
+	var cb *widgets.ComboBox
+	widget.Walk(root, func(c widget.Component) {
+		if box, ok := c.(*widgets.ComboBox); ok && box.AccessibleName() == name {
+			cb = box
 		}
 	})
 	return cb
@@ -602,6 +639,62 @@ func pickCombo(t *testing.T, w *app.Window, item string) {
 			return
 		}
 	}
+}
+
+// cornerMenu is the window-shape group in the preview's View menu: the
+// corner style is the shape of the previewed window, so it is chosen in
+// that window's own menu rather than in the column of choices.
+func cornerMenu(t *testing.T, w *app.Window) []*widgets.MenuItem {
+	t.Helper()
+	var items []*widgets.MenuItem
+	widget.Walk(w.Content(), func(c widget.Component) {
+		bar, ok := c.(*widgets.MenuBar)
+		if !ok {
+			return
+		}
+		for _, m := range bar.Menus() {
+			for _, it := range m.Items {
+				if len(it.Submenu) > 0 && strings.Contains(widget.PlainText(it.Text), "corners") {
+					items = it.Submenu
+				}
+			}
+		}
+	})
+	if len(items) == 0 {
+		t.Fatal("no window corners menu in the preview")
+	}
+	return items
+}
+
+// pickCorner chooses a window shape the way the menu does.
+func pickCorner(t *testing.T, w *app.Window, text string) {
+	t.Helper()
+	for _, it := range cornerMenu(t, w) {
+		if widget.PlainText(it.Text) == text {
+			if it.OnClick == nil {
+				t.Fatalf("the %q corner style does nothing", text)
+			}
+			it.OnClick()
+			return
+		}
+	}
+	t.Fatalf("no %q in the window corners menu", text)
+}
+
+// previewTools is the previewed application's tool bar: the one with the
+// icon choosers on it.
+func previewTools(t *testing.T, w *app.Window) *widgets.ToolBar {
+	t.Helper()
+	var bar *widgets.ToolBar
+	widget.Walk(w.Content(), func(c widget.Component) {
+		if b, ok := c.(*widgets.ToolBar); ok && bar == nil {
+			bar = b
+		}
+	})
+	if bar == nil {
+		t.Fatal("the preview has no tool bar")
+	}
+	return bar
 }
 
 func listed(root widget.Component, name string) bool {
@@ -881,10 +974,11 @@ func TestSettingsThemeCaptionButtonsSwitch(t *testing.T) {
 	}
 }
 
-// Picking an icon set shows what it draws, at the head of the Themes
-// page, beside the theme it is being chosen for. The strip is in a theme
-// scope of its own, so it follows the staged set and the staged size
-// without Apply, and its caption names the set it is showing.
+// The preview's tool bar is the icon preview now: it is drawn in the
+// staged set at the staged size, and the two choosers that stage them
+// are on that same bar, at its right-hand end. A strip of fifteen loose
+// glyphs in the column of choices used to answer this question; a tool
+// bar full of icons answers it by being the thing it is showing.
 func TestSettingsIconSetPreview(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", dir)
@@ -894,103 +988,195 @@ func TestSettingsIconSetPreview(t *testing.T) {
 	installSettingsIconSet(t, dir, "lucide")
 	a, w := openSettings(t, 1024, 780)
 
-	box := findPanelTitled(w.Content(), "Preview — Classic")
-	if box == nil {
-		t.Fatal("no icon preview for the selected set on the Themes page")
+	bar := previewTools(t, w)
+	scope := previewScope(t, w)
+	if style.LookAppearance(scope.Theme()).Icons != style.IconSetClassic {
+		t.Fatal("the preview is not drawn in the staged icon set")
 	}
-	// Every stock icon is in it, named by the action it stands for.
-	shown := iconStripIcons(box)
-	for _, want := range style.AllToolIcons() {
-		if !shown[want] {
-			t.Errorf("the icon preview has no %s", want.Label())
+	// The choosers are on the bar itself, not beside it.
+	for _, name := range []string{"Icons", "Icon size"} {
+		combo := namedCombo(w.Content(), name)
+		if combo == nil {
+			t.Fatalf("no %s chooser", name)
+		}
+		if combo.Parent() != widget.Component(bar) {
+			t.Errorf("the %s chooser is not on the preview's tool bar (%T)", name, combo.Parent())
 		}
 	}
-	scope := scopeAround(t, box)
-	if style.LookAppearance(scope.Theme()).Icons != style.IconSetClassic {
-		t.Fatal("the preview is not drawing the staged icon set")
+	// And they are at its right-hand end, after the sample's own tools.
+	send := toolIndex(bar, style.IconMail)
+	icons := toolIndex(bar, style.IconNone) // the stretch: the free space
+	if send < 0 || icons < 0 || icons < send {
+		t.Errorf("the free space is item %d and Send item %d", icons, send)
+	}
+	if box := namedCombo(w.Content(), "Icons").Bounds(); box.Min.X < bar.LocalBounds().Dx()*0.5 {
+		t.Errorf("the icon chooser is at %v on a bar %v wide", box.Min.X, bar.LocalBounds().Dx())
 	}
 
-	// Picking another set repaints it where it stands and renames it.
+	// Picking another set repaints the preview where it stands.
 	pickCombo(t, w, "Lucide")
 	a.PumpOnce()
-	if style.LookAppearance(scopeAround(t, box).Theme()).Icons != style.IconSetLucide {
-		t.Fatal("the icon preview did not follow the staged set")
+	if style.LookAppearance(previewScope(t, w).Theme()).Icons != style.IconSetLucide {
+		t.Fatal("the preview did not follow the staged set")
 	}
-	if box.Title != "Preview — Lucide" {
-		t.Fatalf("the icon preview is captioned %q", box.Title)
+	if previewScope(t, w) != scope {
+		t.Fatal("staging an icon set rebuilt the page instead of repainting it")
 	}
 	if style.LoadAppearance().Icons != style.IconSetClassic {
 		t.Fatal("previewing an icon set wrote look.json")
 	}
 
 	// The size the glyphs are drawn at is staged beside the set, and the
-	// strip shows that size rather than a fixed one: the bars grow with
-	// it. (Loose tool buttons do not — their icon is capped by the
-	// control height — which is why the strip is made of bars.)
-	before := iconStripBar(t, box).Bounds().Dy()
-	pickCombo(t, w, "Large")
+	// bar shows that size rather than a fixed one: its buttons grow with
+	// it. (A loose tool button does not — its icon is capped by the
+	// control height — which is why the preview of a set is a bar.)
+	before := bar.ItemRect(0).Dy()
+	pickCombo(t, w, "32")
 	a.PumpOnce()
-	if got := style.LookAppearance(scopeAround(t, box).Theme()).IconSize; got != style.IconSizeLarge {
-		t.Fatalf("the icon preview is drawing size %v", got)
+	if got := style.LookAppearance(previewScope(t, w).Theme()).IconSize; got != style.IconSizeLarge {
+		t.Fatalf("the preview is drawing size %v", got)
 	}
-	if after := iconStripBar(t, box).Bounds().Dy(); after <= before {
-		t.Errorf("the strip did not grow with the icon size (%v then %v)", before, after)
+	if after := previewTools(t, w).ItemRect(0).Dy(); after <= before {
+		t.Errorf("the bar's buttons did not grow with the icon size (%v then %v)", before, after)
 	}
 
 	// Staging a theme leaves the icon set alone: a pack's theme.json
-	// carries no icon preference — the field is read and ignored, look.json
-	// owns icons — so picking a pack changes only the surface under the
-	// strip.
+	// carries no icon preference — the field is read and ignored,
+	// look.json owns icons — so picking a pack changes only the surface
+	// the same glyphs are drawn on.
 	clickTheme(t, w, "Windows 95")
 	a.PumpOnce()
-	if box.Title != "Preview — Lucide" {
-		t.Fatalf("staging a theme renamed the icon preview to %q", box.Title)
+	if got := namedCombo(w.Content(), "Icons"); got.Items[got.Selected] != "Lucide" {
+		t.Fatalf("staging a theme moved the icon chooser to %q", got.Items[got.Selected])
 	}
 
-	// And the icons area follows a set staged by something other than its
-	// own chooser — Apply restages the whole appearance — with the
-	// chooser showing it and the strip drawing it.
+	// And the choosers follow a set staged by something other than
+	// themselves — Apply restages the whole appearance — as the strip
+	// they replaced did.
 	clickApply(t, w)
 	a.PumpOnce()
-	if findPanelTitled(w.Content(), "Preview — Lucide") == nil {
-		t.Error("the icon strip lost the applied set across a rebuild")
-	}
-	if combo := findCombo(w.Content(), "Lucide"); combo == nil || combo.Items[combo.Selected] != "Lucide" {
+	if combo := namedCombo(w.Content(), "Icons"); combo == nil || combo.Items[combo.Selected] != "Lucide" {
 		t.Error("the icon chooser does not show the applied set")
 	}
+	if got := style.LookAppearance(previewScope(t, w).Theme()); got.Icons != style.IconSetLucide {
+		t.Errorf("the preview lost the applied set across a rebuild: %+v", got)
+	}
 }
 
-// iconStripIcons is every icon the preview strip draws.
-func iconStripIcons(box widget.Component) map[style.ToolIcon]bool {
-	out := map[style.ToolIcon]bool{}
-	widget.Walk(box, func(c widget.Component) {
-		bar, ok := c.(*widgets.ToolBar)
-		if !ok {
-			return
+// Delete icon set… is on the icons line of Files now — the one place
+// left that says where sets come from — and it still acts on the staged
+// set: grey while a built-in one is staged, live for one of the user's
+// own.
+func TestSettingsDeleteIconSetLivesWithTheIconsPath(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	if err := style.SaveAppearance(style.DefaultAppearance()); err != nil {
+		t.Fatal(err)
+	}
+	// A folder of the user's own: a premiere name (lucide) is a built-in
+	// set wherever it is installed, and Delete leaves those alone.
+	installSettingsIconSet(t, dir, "lucide")
+	mine := filepath.Join(dir, "uitoolkit", "icons", "mine")
+	if err := os.MkdirAll(mine, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	src := filepath.Join(dir, "uitoolkit", "icons", "lucide")
+	entries, err := os.ReadDir(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		b, err := os.ReadFile(filepath.Join(src, e.Name()))
+		if err != nil {
+			t.Fatal(err)
 		}
-		for _, it := range bar.Items() {
-			if it != nil && it.Icon != style.IconNone {
-				out[it.Icon] = true
+		if err := os.WriteFile(filepath.Join(mine, e.Name()), b, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	a, w := openSettings(t, 1024, 780)
+
+	del := findButton(w.Content(), "Delete icon set…")
+	if del == nil {
+		t.Fatal("no Delete icon set… button")
+	}
+	files := findPanelTitled(w.Content(), "Files")
+	if files == nil || !widget.Contains(files, del) {
+		t.Error("Delete icon set… is not on the Files block")
+	}
+	if del.Enabled() {
+		t.Error("Delete icon set… is live with a built-in set staged")
+	}
+	pickCombo(t, w, "mine")
+	a.PumpOnce()
+	if !findButton(w.Content(), "Delete icon set…").Enabled() {
+		t.Error("Delete icon set… stayed grey with a user set staged")
+	}
+	pickCombo(t, w, "Lucide")
+	a.PumpOnce()
+	if findButton(w.Content(), "Delete icon set…").Enabled() {
+		t.Error("Delete icon set… is live for a premiere set")
+	}
+}
+
+// The window shape is chosen in the preview's View menu, and what it
+// shows follows the staged appearance whoever staged it.
+func TestSettingsCornersLiveInThePreviewsMenu(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if err := style.SaveAppearance(style.DefaultAppearance()); err != nil {
+		t.Fatal(err)
+	}
+	a, w := openSettings(t, 1024, 780)
+	checked := func() string {
+		t.Helper()
+		for _, it := range cornerMenu(t, w) {
+			if it.Checked {
+				return widget.PlainText(it.Text)
 			}
 		}
-	})
-	return out
+		return ""
+	}
+	if got := checked(); got != "Theme shape" {
+		t.Fatalf("the menu opens on %q, want the pack's own shape", got)
+	}
+	pickCorner(t, w, "Square")
+	a.PumpOnce()
+	if p := previewAppearance(t, w); p.Corners != style.CornersSquare {
+		t.Fatalf("the preview is drawn with %v corners", p.Corners)
+	}
+	if style.LoadAppearance().Corners != style.CornersTheme {
+		t.Fatal("choosing a shape wrote look.json")
+	}
+	if got := checked(); got != "Square" {
+		t.Fatalf("the menu shows %q checked", got)
+	}
+	// Apply rebuilds the page: the menu of the new preview shows what
+	// was applied, not what it was built with.
+	clickApply(t, w)
+	a.PumpOnce()
+	if got := checked(); got != "Square" {
+		t.Fatalf("after Apply the menu shows %q", got)
+	}
+	if style.LoadAppearance().Corners != style.CornersSquare {
+		t.Fatalf("Apply did not write the shape: %+v", style.LoadAppearance())
+	}
 }
 
-// iconStripBar is the first of the strip's tool bars, whose height is the
-// size the staged set is being drawn at.
-func iconStripBar(t *testing.T, box widget.Component) *widgets.ToolBar {
-	t.Helper()
-	var bar *widgets.ToolBar
-	widget.Walk(box, func(c widget.Component) {
-		if b, ok := c.(*widgets.ToolBar); ok && bar == nil {
-			bar = b
+// toolIndex is the item of bar drawing icon; IconNone finds its free
+// space, the thing that pins the choosers to its right-hand end.
+func toolIndex(bar *widgets.ToolBar, icon style.ToolIcon) int {
+	for i, it := range bar.Items() {
+		if icon == style.IconNone {
+			if it.Stretch {
+				return i
+			}
+			continue
 		}
-	})
-	if bar == nil {
-		t.Fatal("the icon preview has no tool bar")
+		if it.Icon == icon {
+			return i
+		}
 	}
-	return bar
+	return -1
 }
 
 // The line beside Apply — "Applied — every uitoolkit app is using this
@@ -1050,61 +1236,29 @@ func findPanelTitled(root widget.Component, title string) *widgets.Panel {
 	return box
 }
 
-func findToolButton(root widget.Component, name string) *widgets.ToolButton {
-	var btn *widgets.ToolButton
-	widget.Walk(root, func(c widget.Component) {
-		if b, ok := c.(*widgets.ToolButton); ok && b.AccessibleName() == name {
-			btn = b
-		}
-	})
-	return btn
-}
-
-// scopeAround is the theme scope c is drawn inside.
-func scopeAround(t *testing.T, c widget.Component) *widgets.ThemeScope {
-	t.Helper()
-	for p := c.Parent(); p != nil; p = p.Parent() {
-		if sc, ok := p.(*widgets.ThemeScope); ok {
-			return sc
-		}
-	}
-	t.Fatalf("%T is in no theme scope", c)
-	return nil
-}
-
-func pickListItem(t *testing.T, list *widgets.ListView, text string) {
-	t.Helper()
-	for i := 0; i < list.Count; i++ {
-		if list.ItemText(i) == text {
-			list.OnSelect(i)
-			return
-		}
-	}
-	t.Fatalf("no list row %q", text)
-}
-
 // -page names a section of the one page now, and the names of the four
 // pages Settings used to have still resolve: they are in scripts, in the
 // atlas tooling and in the docs of two releases.
 func TestSettingsPageNamesStillResolve(t *testing.T) {
 	for name, want := range map[string]int{
-		"":                 sectionTheme,
-		"themes":           sectionTheme,
-		"packs":            sectionTheme,
-		"packs & icons":    sectionTheme,
-		"theme packs":      sectionTheme,
-		"Theme":            sectionTheme,
-		"appearance":       sectionShape,
-		"icons":            sectionShape,
-		"icon sets":        sectionShape,
-		"Shape and weight": sectionShape,
-		"about":            sectionFiles,
-		"files":            sectionFiles,
-		"behaviour":        sectionBehaviour,
-		"behavior":         sectionBehaviour,
-		"windows":          sectionBehaviour,
-		"desktop":          sectionDesktop,
-		"nonsense":         sectionTheme,
+		"":              sectionTheme,
+		"themes":        sectionTheme,
+		"packs":         sectionTheme,
+		"packs & icons": sectionTheme,
+		"theme packs":   sectionTheme,
+		"Theme":         sectionTheme,
+		"appearance":    sectionPreview,
+		"icons":         sectionPreview,
+		"icon sets":     sectionPreview,
+		"corners":       sectionPreview,
+		"Preview":       sectionPreview,
+		"about":         sectionFiles,
+		"files":         sectionFiles,
+		"behaviour":     sectionBehaviour,
+		"behavior":      sectionBehaviour,
+		"windows":       sectionBehaviour,
+		"desktop":       sectionDesktop,
+		"nonsense":      sectionTheme,
 	} {
 		if got := SettingsPage(name); got != want {
 			t.Errorf("-page %q opens section %d (%s), want %d (%s)",
@@ -1137,21 +1291,34 @@ func TestSettingsPageOpensScrolledToItsSection(t *testing.T) {
 	if got := findScrollView(top.Content()).OffsetY; got != 0 {
 		t.Errorf("with no -page the column opens at %v, want the top", got)
 	}
-	for _, page := range []string{"about", "behaviour", "appearance"} {
+	// Behaviour is the foot of the column, and the only section under
+	// the fold now: -page behaviour scrolls all the way down to it.
+	_, beh := open("behaviour")
+	sv := findScrollView(beh.Content())
+	if sv == nil {
+		t.Fatal("behaviour: no column of choices")
+	}
+	if sv.OffsetY <= 0 {
+		t.Errorf("-page behaviour left the column at the top (%v)", sv.OffsetY)
+	}
+	if sv.OffsetY < sv.MaxOffset()-1 {
+		t.Errorf("-page behaviour stopped at %v of %v", sv.OffsetY, sv.MaxOffset())
+	}
+	// The other three sections are beside the preview, not in the
+	// column: what they name is on screen the moment the window opens,
+	// so the column stays where it is and the page still holds what the
+	// name asked for.
+	for _, page := range []string{"about", "appearance", "desktop"} {
 		_, w := open(page)
-		sv := findScrollView(w.Content())
-		if sv == nil {
-			t.Fatalf("%s: no column of choices", page)
-		}
-		if sv.OffsetY <= 0 {
-			t.Errorf("-page %s left the column at the top (%v)", page, sv.OffsetY)
+		if got := findScrollView(w.Content()).OffsetY; got != 0 {
+			t.Errorf("-page %s scrolled the column to %v; its section is not in it", page, got)
 		}
 	}
-	// The old About page is the Files section, and it is the foot of the
-	// column, so -page about scrolls all the way down.
-	_, w := open("about")
-	sv := findScrollView(w.Content())
-	if sv.OffsetY < sv.MaxOffset()-1 {
-		t.Errorf("-page about stopped at %v of %v", sv.OffsetY, sv.MaxOffset())
+	_, files := open("about")
+	if !findLabelWith(files.Content(), "Prefs") {
+		t.Error("-page about does not show the paths")
+	}
+	if _, w := open("appearance"); namedCombo(w.Content(), "Icons") == nil {
+		t.Error("-page appearance does not show the icon chooser")
 	}
 }

@@ -5,14 +5,18 @@
 //	go run ./cmd/uitoolkit-settings -screenshot docs/screenshots
 //	go run ./cmd/uitoolkit-settings -page appearance -headless
 //
-// Settings is one page: the choices down a column on the left — the
-// theme browser, where the colours come from, the shape and weight the
-// packs are drawn in, what the apps do besides drawing them, and the
-// files it all lives in — and on the right, never scrolling away, the
-// two previews those choices are about: a strip of every stock icon in
-// the staged set, and a small live application window in the staged
-// pack. The icon chooser lists classic/sharp plus wide premiere PNG sets
-// copied into ~/.config/uitoolkit/icons/<set>/.
+// Settings is one page: the theme browser and the behaviour switches
+// down a column on the left, and on the right, never scrolling away, the
+// thing those choices are about — a small live application window in the
+// staged pack, with the switch that says where its colours come from
+// over it and the three config paths under it.
+//
+// The preview sets three of the things it shows: the icon set and the
+// size its glyphs are drawn at are combo boxes at the right-hand end of
+// its own tool bar (the bar they are drawn on), and its corner style is
+// in its own View ▸ Window corners. Everything else in that window is a
+// sample. The icon chooser lists classic/sharp plus wide premiere PNG
+// sets copied into ~/.config/uitoolkit/icons/<set>/.
 // Apply writes {theme, icons} to
 // $XDG_CONFIG_HOME/uitoolkit/look.json and running apps that watch
 // the file reload without a restart. Export writes
@@ -37,7 +41,7 @@ func main() {
 	headless := flag.Bool("headless", false, "paint offscreen and write settings.png")
 	shot := flag.String("screenshot", "", "write settings.png into this directory (or file) and exit")
 	stage := flag.String("stage", "", "open with this theme staged in the preview (not applied)")
-	page := flag.String("page", "", "open the page scrolled to this section: theme (default), desktop, shape, behaviour, files — the old page names themes/appearance/packs/about still resolve")
+	page := flag.String("page", "", "open the page at this section: theme (default), behaviour, desktop, preview, files — the old page names themes/appearance/packs/about still resolve")
 	flag.Parse()
 
 	a := uitoolkit.New(uitoolkit.Options{
