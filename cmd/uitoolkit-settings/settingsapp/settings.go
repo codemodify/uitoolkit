@@ -539,9 +539,9 @@ func (s *settingsState) exportButton() widget.Component {
 // a check box with a short word on it, the full name a screen reader
 // says, and the one sentence that says what turning it on does.
 //
-// The word on the box is short and the spoken name contains it — "File
-// dialogs" is read out as "Use the desktop's file dialogs" — which is
-// the rule the preview's own settings bar follows two inches below:
+// The word on the box is short and the spoken name contains it — "OS
+// borders" is read out as "OS borders: the desktop's title bar and
+// borders" — which is the rule the preview's settings bar follows below:
 // the visible word must be inside the spoken name, never beside it, or
 // the control has two names. What the eye gets from the row these five
 // stand in, the ear gets from the rest of the name.
@@ -617,8 +617,10 @@ func (s *settingsState) optionsRow() widget.Component {
 			s.stage(next)
 		})
 	// The desktop's own file dialogs (the XDG portal's), as Qt and GTK
-	// apps can use, instead of the themed ones.
-	native := s.option("System file dialogs", "System file dialogs: the desktop's own Open and Save",
+	// apps can use, instead of the themed ones. "OS", not "System",
+	// because the three of these five that hand something to the desktop
+	// should say so in the same word, and "OS colors" already did.
+	native := s.option("OS open/save dialogs", "OS open/save dialogs: the desktop's own Open and Save",
 		"KDE's and GNOME's own Open and Save dialogs, through the XDG portal, instead of the themed ones.",
 		s.staged.NativeDialogs, func(on bool) {
 			next := s.staged
@@ -628,7 +630,7 @@ func (s *settingsState) optionsRow() widget.Component {
 	// Chromium's switch: windows that draw their own title bar (Mail's,
 	// with its tool bar in it) get the desktop's title bar and borders
 	// instead, and their title bar becomes the first row.
-	system := s.option("System frames", "System frames: the desktop's title bar and borders",
+	system := s.option("OS borders", "OS borders: the desktop's title bar and borders",
 		"The desktop draws the title bar and borders of every window, instead of the toolkit.",
 		s.staged.Decorations == style.DecorationsSystem, func(on bool) {
 			next := s.staged
@@ -656,12 +658,17 @@ func (s *settingsState) optionsRow() widget.Component {
 			s.stage(next)
 		})
 
-	// The order is the order they are read, and it is also what makes
-	// them fold well: the three narrowest first, so a narrow pane gets a
-	// line of three and a line of two rather than a ragged four and one.
-	// The frame pair stay next to each other across the fold — the
-	// desktop's frame first, because the theme's button places only mean
-	// anything while the toolkit is drawing the frame itself.
+	// The order is the order they are read, and the fold follows from
+	// it: all five stand on one line in the 697-pixel row of a 1024x860
+	// window, with six pixels to spare, and the 453-pixel row of a
+	// 720x520 one takes the first three and gives the last two a second
+	// line. The frame pair stay next to each other across that fold —
+	// the desktop's frame first, because the theme's button places only
+	// mean anything while the toolkit is drawing the frame itself. ("OS
+	// open/save dialogs" is the widest of the five, wider than the
+	// "System file dialogs" it replaced; "OS borders" is enough narrower
+	// than "System frames" to pay for it, so the row came in by two
+	// pixels rather than out.)
 	row := widgets.NewWrap(motion, native, system, themeButtons, colours)
 	row.Gap = 8
 	row.SetAccessibleName(settingsSections[sectionBehaviour])

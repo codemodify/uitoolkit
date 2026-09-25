@@ -111,8 +111,8 @@ type captionClick struct {
 //
 // With the default decoration policy a window with a title bar gets the
 // toolkit's frame where the desktop can move and resize it on request
-// (Wayland, X11 stacking window managers); the user's "Use system title bar
-// and borders" preference, WindowOptions.Decorations and UITK_DECORATIONS
+// (Wayland, X11 stacking window managers); the user's "OS borders"
+// preference (Settings), WindowOptions.Decorations and UITK_DECORATIONS
 // override it.
 func (w *Window) SetTitleBar(c widget.Component) {
 	if w == nil || w.titleBar == c {

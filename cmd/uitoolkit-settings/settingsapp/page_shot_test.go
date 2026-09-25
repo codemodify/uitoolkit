@@ -99,7 +99,7 @@ func TestSettingsPageHoldsAtEverySize(t *testing.T) {
 				// is hand one of them a width its word does not fit in
 				// or push one past the pane's right edge.
 				row := optionsRow(t, w)
-				for _, word := range []string{"Animations", "System file dialogs", "System frames", "Theme buttons", "OS colors"} {
+				for _, word := range []string{"Animations", "OS open/save dialogs", "OS borders", "Theme buttons", "OS colors"} {
 					box := findOption(w.Content(), word)
 					if box == nil {
 						t.Fatalf("%s at %g×, %dx%d: no %q option", pack, scale, size[0], size[1], word)

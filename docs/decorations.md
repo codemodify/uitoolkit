@@ -505,7 +505,7 @@ kiosks). First match wins:
 3. Offscreen / headless windows: none of the toolkit's (screenshots and tests
    look the same everywhere) unless 1 or 2 asks.
 4. The user's preference, look.json `"decorations"`: `"system"` (Settings'
-   **System frames**) or `"toolkit"` (every window).
+   **OS borders**) or `"toolkit"` (every window).
 5. Auto: the toolkit's frame for a window with a title bar (`SetTitleBar`)
    where the desktop moves and resizes on request; the desktop's frame for
    every other window. So every app without a title bar looks exactly as
@@ -517,9 +517,9 @@ effect at once, without a restart. The desktop's answer is obeyed.
 
 ### The Settings switch
 
-Settings shows **System frames** — *Use system title bar and borders* to a
-screen reader, Chromium's wording and meaning — in the row of options over
-the preview, next to **System file dialogs**. On: windows
+Settings shows **OS borders** — *OS borders: the desktop's title bar and
+borders* to a screen reader, Chromium's switch by another name — in the row
+of options over the preview, next to **OS open/save dialogs**. On: windows
 that draw their own title bar get the desktop's title bar and borders instead,
 and their title bar becomes the first row. Apply writes look.json
 (`"decorations": "system"`; auto is left out) and every running app switches

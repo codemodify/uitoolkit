@@ -10,9 +10,8 @@
 // Settings is one page: the theme browser down a column on the left,
 // and on the right, never scrolling away, the thing it is browsing for —
 // a small live application window in the staged pack, with the five
-// on/off options in a row over it (Animations, File dialogs, System
-// frame, Theme buttons, Desktop colours) and the three config paths
-// under it.
+// on/off options in a row over it (Animations, OS open/save dialogs, OS
+// borders, Theme buttons, OS colors) and the three config paths under it.
 //
 // The preview sets three of the things it shows: the icon set, the size
 // its glyphs are drawn at and its corner style are combo boxes on a bar
