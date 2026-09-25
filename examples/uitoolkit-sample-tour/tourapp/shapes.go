@@ -444,7 +444,7 @@ func newTourFace(win *app.Window, page *shapesPage, card bool) *tourFace {
 	// No widget-level hit shape: the window's own input region already
 	// keeps a press in the hole out of this application, and a second
 	// silhouette here would go on refusing presses after the window was
-	// maximized and gave its hole up (examples/shapes says the same).
+	// maximized and gave its hole up (examples/uitoolkit-sample-shapes says the same).
 	return f
 }
 

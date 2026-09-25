@@ -1,4 +1,4 @@
-// Command notes is a small real desktop app built on uitoolkit.
+// Command inspector is a small preferences app built on uitoolkit.
 package main
 
 import (
@@ -7,30 +7,30 @@ import (
 	"log"
 
 	"github.com/codemodify/uitoolkit"
-	"github.com/codemodify/uitoolkit/examples/notes/notesapp"
+	"github.com/codemodify/uitoolkit/examples/uitoolkit-sample-inspector/inspectorapp"
 	"github.com/codemodify/uitoolkit/icons"
 	"github.com/codemodify/uitoolkit/platform"
 )
 
 func main() {
-	headless := flag.Bool("headless", false, "paint offscreen and write notes.png")
+	headless := flag.Bool("headless", false, "paint offscreen and write inspector.png")
 	flag.Parse()
 
 	a := uitoolkit.New(uitoolkit.Options{Headless: *headless})
 	// The window icon the desktop shows in its title bar, task bar and switcher.
-	a.SetIcon(icons.AppIconRGB("pencil", 0xc9, 0xa2, 0x27)...)
+	a.SetIcon(icons.AppIconRGB("search", 0x2a, 0x9d, 0x8f)...)
 	win, err := a.NewWindow(platform.WindowOptions{
-		Title: "Notes", Width: 860, Height: 540, MinWidth: 520, MinHeight: 360,
+		Title: "Inspector", Width: 860, Height: 580, MinWidth: 560, MinHeight: 400,
 	})
 	if err != nil {
 		log.Fatal(err)
 	}
-	win.SetContent(notesapp.NotesApp(win))
+	win.SetContent(inspectorapp.InspectorApp(win))
 	if *headless {
-		if err := win.WritePNG("notes.png"); err != nil {
+		if err := win.WritePNG("inspector.png"); err != nil {
 			log.Fatal(err)
 		}
-		fmt.Println("wrote notes.png")
+		fmt.Println("wrote inspector.png")
 		return
 	}
 	if err := a.Run(); err != nil {

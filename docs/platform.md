@@ -20,11 +20,11 @@ offscreen and X11 keep working.
 ```bash
 # Wayland (when a compositor is running)
 WAYLAND_DISPLAY=wayland-0 go run ./examples/gallery
-WAYLAND_DISPLAY=wayland-0 go run ./examples/notes
+WAYLAND_DISPLAY=wayland-0 go run ./examples/uitoolkit-sample-notes
 
 # X11
 DISPLAY=:0 UITK_BACKEND=x11 go run ./examples/gallery
-UITK_BACKEND=x11 go run ./examples/notes
+UITK_BACKEND=x11 go run ./examples/uitoolkit-sample-notes
 
 # Offscreen / CI
 go run ./examples/gallery -headless

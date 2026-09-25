@@ -1,7 +1,7 @@
 // Command richtext is a small rich-text editor: the format bar over a
 // document, opened from and saved to HTML, exported as plain text.
 //
-//	go run ./examples/richtext [file.html]
+//	go run ./examples/uitoolkit-sample-richtext [file.html]
 package main
 
 import (

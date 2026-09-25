@@ -9,7 +9,7 @@
 // and [dock.Host.LoadLayoutFile] for the remembered arrangement, and
 // [dock.Host.ResetLayout] to put everything back.
 //
-// examples/inspector opens the window and calls [InspectorApp].
+// examples/uitoolkit-sample-inspector opens the window and calls [InspectorApp].
 package inspectorapp
 
 import (

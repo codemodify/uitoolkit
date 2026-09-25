@@ -646,7 +646,7 @@ Where the desktop draws the frame, the window still says how to dress it
   `UITK_X11_SYNC=0` for the comparison.
   Put a second window behind one with a shadow to see the shadow composite
   and to check that a click in the outer margin reaches it, while one in
-  the resize band resizes. `examples/shapes -mode backdrop` is the test
+  the resize band resizes. `examples/uitoolkit-sample-shapes -mode backdrop` is the test
   card to put behind a shaped or glassy window: a patch of it seen through
   a hole says which patch it is, so moving the window shows a different one
   and a blur of it is unmistakable.

@@ -1013,8 +1013,8 @@ go run ./cmd/uitk-skingen -list
 
 # A shaped skin over a test card: the desktop beside the silhouette, and a
 # round button that takes the pointer only on its ink.
-go run ./examples/skinshape -mode backdrop &
-go run ./examples/skinshape -theme deck
+go run ./examples/uitoolkit-sample-skinshape -mode backdrop &
+go run ./examples/uitoolkit-sample-skinshape -theme deck
 
 ```
 
