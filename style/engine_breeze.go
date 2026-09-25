@@ -1630,6 +1630,11 @@ func (e breezeEngine) DrawSplitter(l *Classic, ctx *paintengine2d.Context, b pai
 	fuHLine(ctx, b.Min.X, b.Max.X, snap((b.Min.Y+b.Max.Y)*0.5)-u, u, col)
 }
 
+// TooltipStyle: Breeze pads a tip by 6.
+func (e breezeEngine) TooltipStyle(l *Classic) TooltipStyle {
+	return l.tipStyle(l.body, l.tipPad(l.S(6)), AlignStart)
+}
+
 // DrawTooltip is a rounded tool-tip-coloured frame in mix(tip, tipText,
 // 0.25).
 func (e breezeEngine) DrawTooltip(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, text string) {
@@ -1641,11 +1646,8 @@ func (e breezeEngine) DrawTooltip(l *Classic, ctx *paintengine2d.Context, b pain
 		ctx.DrawRoundRect(in, r, r, paintengine2d.Fill(c.tip))
 		ctx.DrawRoundRect(in, r, r, paintengine2d.StrokePaint(c.tipLine, u))
 	}
-	pad := l.metrics.TooltipPad
-	if pad <= 0 {
-		pad = l.S(6)
-	}
-	l.drawFittedText(ctx, l.body, text, paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad*2, b.Dy()), c.tipText, AlignStart, 0)
+	pad := l.TooltipStyle().Pad
+	l.drawTipText(ctx, paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad*2, b.Dy()), text, c.tipText)
 }
 
 // ---- packs -----------------------------------------------------------------------------------------------------

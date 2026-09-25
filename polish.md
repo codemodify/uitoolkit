@@ -306,6 +306,28 @@ are the toolkit's entries, kept where they were found.*
   mnemonic that focuses a text field types its letter there. The wizard
   moves its focus a moment later; the window could drop text while Alt is
   held.
+- ~~**No word wrap on the font, and `Font.Fit` cannot stand in for one**:
+  `Fit` appends an ellipsis, so it cannot give the longest prefix that
+  fits; there was `Advance` and nothing else, and every application that
+  painted a paragraph reimplemented greedy wrap plus a rune scan for an
+  over-long word. Reported by an application built on the toolkit; three
+  private copies lived here too (`Label.wrapText`, `TextArea.lastWrap`,
+  and the tooltip, which had none and so could never be more than one
+  line).~~ `style.Font.Wrap` and `style.Font.Prefix` are public;
+  `Fit` is written on top of `Prefix`, `Label` and the tooltip use `Wrap`,
+  and `TextArea` keeps its own because its lines carry rune ranges the
+  caret depends on. See [docs/widgets.md](docs/widgets.md#wrapping-text).
+- ~~**A tooltip could not show more than one line**: the bubble measured
+  `Advance(text)` as a single line, was constrained to 360x80 and was
+  elided by the engine, so every explanation longer than a label was cut
+  (Settings' own check boxes were the report).~~ Tips wrap at 48
+  characters of the face the engine paints them in, clamped to the window.
+- **An engine outside this repository still draws one line**: multi-line
+  tip text reaches `DrawTooltip` as one string with newlines in it, which
+  the in-tree engines paint through the look's line-block painter. An
+  engine that draws the string itself will draw the newlines as nothing.
+  The signature was kept on purpose — 32 implementations — but a
+  `DrawTooltipLines` overload would make the contract impossible to miss.
 
 ## Platform
 

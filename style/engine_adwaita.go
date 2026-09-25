@@ -1924,6 +1924,11 @@ func (e adwaitaEngine) DrawSplitter(l *Classic, ctx *paintengine2d.Context, b pa
 	e.DrawSeparator(l, ctx, b, vertical)
 }
 
+// TooltipStyle: GTK pads a tip generously — 10 either side.
+func (e adwaitaEngine) TooltipStyle(l *Classic) TooltipStyle {
+	return l.tipStyle(l.body, l.tipPad(l.S(10)), AlignStart)
+}
+
 // DrawTooltip is libadwaita's tooltip: 80% near-black in 6px corners with a
 // 10% white hairline and white text, in both styles (GTK 3: 5px corners).
 func (e adwaitaEngine) DrawTooltip(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, text string) {
@@ -1937,11 +1942,8 @@ func (e adwaitaEngine) DrawTooltip(l *Classic, ctx *paintengine2d.Context, b pai
 	}
 	ctx.DrawRoundRect(b, r, r, paintengine2d.Fill(c.tooltip))
 	adwRing(ctx, b, r, adwPx(l), c.tooltipEdge)
-	pad := l.metrics.TooltipPad
-	if pad <= 0 {
-		pad = l.S(10)
-	}
-	l.drawFittedText(ctx, l.body, text, paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad*2, b.Dy()), c.tooltipFg, AlignStart, 0)
+	pad := l.TooltipStyle().Pad
+	l.drawTipText(ctx, paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad*2, b.Dy()), text, c.tooltipFg)
 }
 
 // DrawOverlay dims the window under a dialog.

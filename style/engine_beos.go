@@ -1982,6 +1982,11 @@ func (e beosEngine) DrawSplitter(l *Classic, ctx *paintengine2d.Context, b paint
 	e.DrawSeparator(l, ctx, b, vertical)
 }
 
+// TooltipStyle: BeOS pads a tip by 6.
+func (e beosEngine) TooltipStyle(l *Classic) TooltipStyle {
+	return l.tipStyle(l.body, l.tipPad(l.S(6)), AlignStart)
+}
+
 // DrawTooltip: R5 had no tooltips; this is Haiku's later pale yellow
 // (#FFFFD8) in a one-pixel #606060 frame.
 func (e beosEngine) DrawTooltip(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, text string) {
@@ -1994,11 +1999,8 @@ func (e beosEngine) DrawTooltip(l *Classic, ctx *paintengine2d.Context, b painte
 	var k rpInk
 	k.frame(g, 0, 0, g.w, g.h, 1)
 	k.fill(ctx, c.d4)
-	pad := l.metrics.TooltipPad
-	if pad <= 0 {
-		pad = l.S(6)
-	}
-	l.drawFittedText(ctx, l.body, text, paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad*2, b.Dy()), c.text, AlignStart, 0)
+	pad := l.TooltipStyle().Pad
+	l.drawTipText(ctx, paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad*2, b.Dy()), text, c.text)
 }
 
 // DrawOverlay: BeOS did not dim the screen behind a modal window.

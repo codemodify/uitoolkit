@@ -2108,6 +2108,11 @@ func (nextEngine) DrawSplitter(l *Classic, ctx *paintengine2d.Context, b painten
 	}
 }
 
+// TooltipStyle: NeXT pads a tip by 5.
+func (nextEngine) TooltipStyle(l *Classic) TooltipStyle {
+	return l.tipStyle(l.body, l.tipPad(l.S(5)), AlignStart)
+}
+
 // DrawTooltip: a white label in a black frame.
 func (nextEngine) DrawTooltip(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, text string) {
 	c := nxColors(l)
@@ -2115,11 +2120,8 @@ func (nextEngine) DrawTooltip(l *Classic, ctx *paintengine2d.Context, b painteng
 	b = nxSnap(b)
 	nxFill(ctx, b, c.black)
 	nxFill(ctx, b.Inset(u), c.info)
-	pad := l.metrics.TooltipPad
-	if pad <= 0 {
-		pad = l.S(5)
-	}
-	l.drawFittedText(ctx, l.body, text, paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad*2, b.Dy()), c.infoTxt, AlignStart, 0)
+	pad := l.TooltipStyle().Pad
+	l.drawTipText(ctx, paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad*2, b.Dy()), text, c.infoTxt)
 }
 
 // DrawMessageIcon: NeXT alert panels showed the application's icon on its

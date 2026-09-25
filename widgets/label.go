@@ -102,35 +102,15 @@ func (l *Label) layoutLines(f *style.Font, w float32) []string {
 	if l.wrapped != nil && l.wrapKey == k {
 		return l.wrapped
 	}
-	var out []string
-	for _, para := range l.lines() {
-		out = append(out, wrapText(f, para, w)...)
+	// [style.Font.Wrap] keeps the text's own newlines, so it lays the
+	// whole label out in one pass: greedy at spaces, and a word too long
+	// for the width broken rather than left to be elided.
+	out := f.Wrap(l.Text, w)
+	if out == nil {
+		out = []string{""}
 	}
 	l.wrapKey, l.wrapped = k, out
 	return out
-}
-
-// wrapText breaks s at spaces into lines no wider than w; a word wider
-// than w keeps a line of its own (elided when painted).
-func wrapText(f *style.Font, s string, w float32) []string {
-	if f.Advance(s) <= w {
-		return []string{s}
-	}
-	words := strings.Fields(s)
-	if len(words) == 0 {
-		return []string{""}
-	}
-	var out []string
-	line := words[0]
-	for _, word := range words[1:] {
-		if cand := line + " " + word; f.Advance(cand) <= w {
-			line = cand
-			continue
-		}
-		out = append(out, line)
-		line = word
-	}
-	return append(out, line)
 }
 
 func (l *Label) Measure(c layout.Constraints) paintengine2d.Point {

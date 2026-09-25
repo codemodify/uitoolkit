@@ -1497,6 +1497,11 @@ func (e win31Engine) DrawSplitter(l *Classic, ctx *paintengine2d.Context, b pain
 	k.fill(ctx, c.frame)
 }
 
+// TooltipStyle: Windows 3.1 pads a tip by 4.
+func (e win31Engine) TooltipStyle(l *Classic) TooltipStyle {
+	return l.tipStyle(l.body, l.tipPad(l.S(4)), AlignStart)
+}
+
 // DrawTooltip: tooltips came after 3.1 (Word 6 drew its own): a pale
 // yellow box in a black line.
 func (e win31Engine) DrawTooltip(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, text string) {
@@ -1506,11 +1511,8 @@ func (e win31Engine) DrawTooltip(l *Classic, ctx *paintengine2d.Context, b paint
 	var k rpInk
 	k.frame(g, 0, 0, g.w, g.h, 1)
 	k.fill(ctx, c.frame)
-	pad := l.metrics.TooltipPad
-	if pad <= 0 {
-		pad = l.S(4)
-	}
-	l.drawFittedText(ctx, l.body, text, paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad*2, b.Dy()), c.infoText, AlignStart, 0)
+	pad := l.TooltipStyle().Pad
+	l.drawTipText(ctx, paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad*2, b.Dy()), text, c.infoText)
 }
 
 // DrawOverlay: Windows 3.1 did not dim the window behind a dialog.

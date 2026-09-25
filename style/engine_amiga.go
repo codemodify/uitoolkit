@@ -2258,6 +2258,13 @@ func (e amigaEngine) DrawSplitter(l *Classic, ctx *paintengine2d.Context, b pain
 	hi.fill(ctx, c.shine)
 }
 
+// TooltipStyle: Workbench had one face, so a tip is Topaz like every other word on the
+// screen. The bubble is measured in it too, which is what stops a long
+// one being drawn wider than it was sized.
+func (e amigaEngine) TooltipStyle(l *Classic) TooltipStyle {
+	return l.tipStyle(l.MonoFont(), l.tipPad(l.S(6)), AlignStart)
+}
+
 // DrawTooltip: the Amiga had no tooltips (3.x applications showed help in
 // the screen title bar); this is a small box in the menus' colours.
 func (e amigaEngine) DrawTooltip(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, text string) {
@@ -2267,11 +2274,12 @@ func (e amigaEngine) DrawTooltip(l *Classic, ctx *paintengine2d.Context, b paint
 	var k rpInk
 	amBox(&k, g, 0, 0, g.w, g.h, 1)
 	k.fill(ctx, c.menuLine)
-	pad := l.metrics.TooltipPad
-	if pad <= 0 {
-		pad = l.S(6)
-	}
-	amText(l, ctx, text, paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad*2, b.Dy()), b, c.barText, AlignStart)
+	pad := l.TooltipStyle().Pad
+	// Topaz, like the rest of Workbench, and clipped to the box.
+	ctx.Save()
+	ctx.ClipRect(b)
+	l.drawTipText(ctx, paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad*2, b.Dy()), text, c.barText)
+	ctx.Restore()
 }
 
 // DrawOverlay: Intuition never dimmed the screen behind a requester.

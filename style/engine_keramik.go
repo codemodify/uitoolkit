@@ -1670,6 +1670,11 @@ func (e keramikEngine) DrawSplitter(l *Classic, ctx *paintengine2d.Context, b pa
 	}
 }
 
+// TooltipStyle: KDE 3 pads a tip by 4.
+func (e keramikEngine) TooltipStyle(l *Classic) TooltipStyle {
+	return l.tipStyle(l.body, l.tipPad(l.S(4)), AlignStart)
+}
+
 // DrawTooltip: Qt 3's pale yellow tip in a one-pixel black frame.
 func (e keramikEngine) DrawTooltip(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, text string) {
 	c := keramikColors(l)
@@ -2129,11 +2134,8 @@ func kde3Tooltip(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, t
 	if b.Dx() > 2*u && b.Dy() > 2*u {
 		ctx.DrawRect(b.Inset(u), paintengine2d.Fill(fill))
 	}
-	pad := l.metrics.TooltipPad
-	if pad <= 0 {
-		pad = l.S(4)
-	}
-	l.drawFittedText(ctx, l.body, text, paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad*2, b.Dy()), fg, AlignStart, 0)
+	pad := l.TooltipStyle().Pad
+	l.drawTipText(ctx, paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad*2, b.Dy()), text, fg)
 }
 
 // kde3MenuItem paints a popup menu row as Qt 3 laid it out: an etched

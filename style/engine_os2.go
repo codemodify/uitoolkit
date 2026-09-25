@@ -1754,6 +1754,11 @@ func (e os2Engine) DrawSplitter(l *Classic, ctx *paintengine2d.Context, b painte
 	}
 }
 
+// TooltipStyle: Warp pads a tip by 6.
+func (e os2Engine) TooltipStyle(l *Classic) TooltipStyle {
+	return l.tipStyle(l.body, l.tipPad(l.S(6)), AlignStart)
+}
+
 // DrawTooltip is Warp 4's fly-over help: black text on pale yellow in a
 // one-pixel black line (the yellow is inferred).
 func (e os2Engine) DrawTooltip(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, text string) {
@@ -1766,11 +1771,8 @@ func (e os2Engine) DrawTooltip(l *Classic, ctx *paintengine2d.Context, b painten
 	var k rpInk
 	k.frame(g, 0, 0, g.w, g.h, 1)
 	k.fill(ctx, c.black)
-	pad := l.metrics.TooltipPad
-	if pad <= 0 {
-		pad = l.S(6)
-	}
-	l.drawFittedText(ctx, l.body, text, paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad*2, b.Dy()), ReadableOn(c.info, 4.5, c.black), AlignStart, 0)
+	pad := l.TooltipStyle().Pad
+	l.drawTipText(ctx, paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad*2, b.Dy()), text, ReadableOn(c.info, 4.5, c.black))
 }
 
 // DrawOverlay: Presentation Manager never dimmed what lay behind a dialog.

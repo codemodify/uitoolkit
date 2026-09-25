@@ -681,6 +681,11 @@ func (webEngine) DrawSplitter(l *Classic, ctx *paintengine2d.Context, b painteng
 	ctx.DrawRect(paintengine2d.XYWH(b.Min.X, snap((b.Min.Y+b.Max.Y-px)*0.5), b.Dx(), px), paintengine2d.Fill(col))
 }
 
+// TooltipStyle: A web tip is set in the small type the stylesheet gives it.
+func (webEngine) TooltipStyle(l *Classic) TooltipStyle {
+	return l.tipStyle(webColors(l).tipFace, l.tipPad(l.S(8)), AlignStart)
+}
+
 // DrawTooltip is a small popover (inverted where the design system inverts
 // its tips: Primer, shadcn, Geist).
 func (webEngine) DrawTooltip(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, text string) {
@@ -691,11 +696,8 @@ func (webEngine) DrawTooltip(l *Classic, ctx *paintengine2d.Context, b paintengi
 		return
 	}
 	c.box(l, ctx, b, min(c.rad(l, c.tipR), b.Dy()*0.5), c.tip, c.tipBorder)
-	pad := l.metrics.TooltipPad
-	if pad <= 0 {
-		pad = l.S(8)
-	}
-	l.drawFittedText(ctx, c.tipFace, text, paintengine2d.XYWH(tb.Min.X+pad, tb.Min.Y, tb.Dx()-pad-c.px(l), tb.Dy()), c.tipText, AlignStart, 0)
+	pad := l.TooltipStyle().Pad
+	l.drawTipText(ctx, paintengine2d.XYWH(tb.Min.X+pad, tb.Min.Y, tb.Dx()-pad-c.px(l), tb.Dy()), text, c.tipText)
 }
 
 // DrawMessageIcon: flat discs in the status colours with a white glyph.

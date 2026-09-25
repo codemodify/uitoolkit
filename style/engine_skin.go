@@ -574,6 +574,17 @@ func (skinEngine) DrawMenuFrame(l *Classic, ctx *paintengine2d.Context, b painte
 	under(l).DrawMenuFrame(l, ctx, b)
 }
 
+// TooltipStyle: a skin's tip is centred in its picture, padded by 8, and
+// falls back whole to the engine under the skin where the skin draws no
+// tooltip of its own.
+func (e skinEngine) TooltipStyle(l *Classic) TooltipStyle {
+	sk := skinFor(l)
+	if sk == nil || !sk.has("tooltip") {
+		return under(l).TooltipStyle(l)
+	}
+	return l.tipStyle(l.body, l.S(8), AlignCenter)
+}
+
 func (skinEngine) DrawTooltip(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, text string) {
 	sk := skinFor(l)
 	if sk == nil || !sk.has("tooltip") {
@@ -585,8 +596,7 @@ func (skinEngine) DrawTooltip(l *Classic, ctx *paintengine2d.Context, b painteng
 	if colorUnset(ink) {
 		ink = l.palette.Text
 	}
-	pad := l.S(8)
-	l.drawFittedText(ctx, l.body, text, b.Inset(pad), ink, AlignCenter, 0)
+	l.drawTipText(ctx, b.Inset(l.TooltipStyle().Pad), text, ink)
 }
 
 // ControlFont is the face a skin labels a role in: its text role's size and

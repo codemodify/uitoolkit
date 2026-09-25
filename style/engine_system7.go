@@ -1780,6 +1780,11 @@ func (e system7Engine) DrawSplitter(l *Classic, ctx *paintengine2d.Context, b pa
 	k.fill(ctx, c.black)
 }
 
+// TooltipStyle: A balloon is padded by 6.
+func (e system7Engine) TooltipStyle(l *Classic) TooltipStyle {
+	return l.tipStyle(l.body, l.tipPad(l.S(6)), AlignStart)
+}
+
 // DrawTooltip is Balloon Help (System 7): a white rounded balloon in a
 // one-pixel black line.
 func (e system7Engine) DrawTooltip(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, text string) {
@@ -1794,11 +1799,8 @@ func (e system7Engine) DrawTooltip(l *Classic, ctx *paintengine2d.Context, b pai
 	s.frame(&ink, g, 0, 0)
 	face.fill(ctx, c.info)
 	ink.fill(ctx, c.black)
-	pad := l.metrics.TooltipPad
-	if pad <= 0 {
-		pad = l.S(6)
-	}
-	l.drawFittedText(ctx, l.body, text, paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad*2, b.Dy()), ReadableOn(c.info, 4.5, c.text), AlignStart, 0)
+	pad := l.TooltipStyle().Pad
+	l.drawTipText(ctx, paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad*2, b.Dy()), text, ReadableOn(c.info, 4.5, c.text))
 }
 
 // DrawOverlay: the Mac never dimmed the screen behind a modal dialog.

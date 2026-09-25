@@ -1000,15 +1000,17 @@ func (win95Engine) DrawSplitter(l *Classic, ctx *paintengine2d.Context, b painte
 	ctx.DrawRect(b, paintengine2d.Fill(w95colors(l).face))
 }
 
+// TooltipStyle: Windows 95 pads a tip by 4.
+func (win95Engine) TooltipStyle(l *Classic) TooltipStyle {
+	return l.tipStyle(l.body, l.tipPad(l.S(4)), AlignStart)
+}
+
 func (win95Engine) DrawTooltip(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, text string) {
 	c := w95colors(l)
 	ctx.DrawRect(b, paintengine2d.Fill(c.info))
 	ctx.DrawRect(b.Inset(0.5), paintengine2d.StrokePaint(c.infoTxt, 1))
-	pad := l.metrics.TooltipPad
-	if pad <= 0 {
-		pad = l.S(4)
-	}
-	l.drawFittedText(ctx, l.body, text, paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad*2, b.Dy()), c.infoTxt, AlignStart, 0)
+	pad := l.TooltipStyle().Pad
+	l.drawTipText(ctx, paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad*2, b.Dy()), text, c.infoTxt)
 }
 
 // snap rounds to the pixel grid so 1px lines stay crisp.

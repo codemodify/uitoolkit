@@ -1643,13 +1643,10 @@ func (fluentEngine) DrawTooltip(l *Classic, ctx *paintengine2d.Context, b painte
 	r := l.rx(4)
 	ctx.DrawRoundRect(b, r, r, paintengine2d.Fill(c.flyout))
 	winRing(ctx, b, r, lw, paintengine2d.Fill(c.flyoutStroke))
-	pad := l.metrics.TooltipPad
-	if pad <= 0 {
-		pad = l.S(8)
-	}
+	pad := l.TooltipStyle().Pad
 	// The bubble is sized to the text plus the padding: let the text use
 	// the right padding rather than lose its last letters to rounding.
-	l.drawFittedText(ctx, l.body, text, paintengine2d.XYWH(tb.Min.X+pad, tb.Min.Y, tb.Dx()-pad-winPx(l), tb.Dy()), c.text, AlignStart, 0)
+	l.drawTipText(ctx, paintengine2d.XYWH(tb.Min.X+pad, tb.Min.Y, tb.Dx()-pad-winPx(l), tb.Dy()), text, c.text)
 }
 
 // DrawMessageIcon: InfoBar's glyphs — filled discs in the status colours

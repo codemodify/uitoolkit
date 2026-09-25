@@ -365,6 +365,9 @@ func (BaseEngine) DrawTableCell(l *Classic, ctx *paintengine2d.Context, b painte
 func (BaseEngine) DrawSpinner(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, upHover, downHover, upPress, downPress bool) {
 	l.baseDrawSpinner(ctx, b, st, upHover, downHover, upPress, downPress)
 }
+func (BaseEngine) TooltipStyle(l *Classic) TooltipStyle {
+	return l.tipStyle(l.body, l.tipPad(l.S(8)), AlignStart)
+}
 func (BaseEngine) DrawTooltip(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, text string) {
 	l.baseDrawTooltip(ctx, b, text)
 }
