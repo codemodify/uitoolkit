@@ -47,13 +47,16 @@ func TestFilesHistory(t *testing.T) {
 	// The second tab shows Projects; open the uitoolkit folder in it.
 	strip := findStrip(w.TitleBar())
 	strip.Select(1)
-	if w.Title() != "Projects — Files" {
+	// Spelled out once: what the desktop is told, prefix and all. The
+	// rest of the test goes through WindowTitle, so a retitle is checked
+	// for keeping whatever the prefix is.
+	if w.Title() != "uitoolkit - Projects — Files" {
 		t.Fatalf("title %q", w.Title())
 	}
 	table := findTable(root)
 	table.OnActivate(0)
 	a.PumpOnce()
-	if w.Title() != "uitoolkit — Files" || strip.Tab(1).Title != "uitoolkit" {
+	if w.Title() != WindowTitle("uitoolkit — Files") || strip.Tab(1).Title != "uitoolkit" {
 		t.Fatalf("after opening a folder: %q, tab %q", w.Title(), strip.Tab(1).Title)
 	}
 	key := func(k platform.Key) {
@@ -62,11 +65,11 @@ func TestFilesHistory(t *testing.T) {
 		a.PumpOnce()
 	}
 	key(platform.KeyLeft)
-	if w.Title() != "Projects — Files" {
+	if w.Title() != WindowTitle("Projects — Files") {
 		t.Fatalf("Alt+Left: %q", w.Title())
 	}
 	key(platform.KeyRight)
-	if w.Title() != "uitoolkit — Files" {
+	if w.Title() != WindowTitle("uitoolkit — Files") {
 		t.Fatalf("Alt+Right: %q", w.Title())
 	}
 	// The mouse's back button, over the listing.
@@ -74,7 +77,7 @@ func TestFilesHistory(t *testing.T) {
 	w.Inject(platform.Event{Kind: platform.EventMouseDown, Button: platform.ButtonBack, Pos: at})
 	w.Inject(platform.Event{Kind: platform.EventMouseUp, Button: platform.ButtonBack, Pos: at})
 	a.PumpOnce()
-	if w.Title() != "Projects — Files" {
+	if w.Title() != WindowTitle("Projects — Files") {
 		t.Fatalf("back button: %q", w.Title())
 	}
 	// Three fingers swiped left: forward.
@@ -82,7 +85,7 @@ func TestFilesHistory(t *testing.T) {
 	w.Inject(platform.Event{Kind: platform.EventGesture, Gesture: platform.GestureSwipe, Phase: platform.GestureUpdate, Fingers: 3, Pos: at, Scale: 1, Delta: paintengine2d.Pt(-150, 6)})
 	w.Inject(platform.Event{Kind: platform.EventGesture, Gesture: platform.GestureSwipe, Phase: platform.GestureEnd, Fingers: 3, Pos: at, Scale: 1})
 	a.PumpOnce()
-	if w.Title() != "uitoolkit — Files" {
+	if w.Title() != WindowTitle("uitoolkit — Files") {
 		t.Fatalf("swipe: %q", w.Title())
 	}
 	// The first tab has a history of its own: none.
@@ -91,7 +94,7 @@ func TestFilesHistory(t *testing.T) {
 		t.Fatal("the other tab's history leaked into this one")
 	}
 	strip.Select(1)
-	if !root.NavigateHistory(false) || w.Title() != "Projects — Files" {
+	if !root.NavigateHistory(false) || w.Title() != WindowTitle("Projects — Files") {
 		t.Fatalf("the tab lost its history: %q", w.Title())
 	}
 }

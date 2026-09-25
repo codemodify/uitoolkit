@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/app"
 	"github.com/codemodify/uitoolkit/dock"
 	"github.com/codemodify/uitoolkit/widget"
@@ -106,6 +107,11 @@ func buildDockPage(t *tourState) widget.Component {
 	// the window's close hook to shut those windows again; the tour wants
 	// its own hook back, with that one folded into it.
 	app.DockHost(t.win, p.host)
+	// A panel that floats gets a toplevel of its own, named after the
+	// panel. A panel's title is content — it says the same thing docked,
+	// where there is no window — so the prefix cannot live in it; it goes
+	// on here, at the one point where that name becomes a window's title.
+	p.host.SetWindowOpener(floatWindowTitles{app.DockWindows(t.a)})
 	t.onClose(p.host.CloseFloating)
 	t.installCloseHook()
 
@@ -352,4 +358,12 @@ func (p *dockPage) refresh() {
 			"stands now; \"Put it back\" reads the remembered one in again.", tourFactCols, "") + "\n\n"
 	}
 	p.facts.SetText(head + pretty.String())
+}
+
+// floatWindowTitles is the dock's window opener with this sample's title
+// prefix on every window it opens.
+type floatWindowTitles struct{ dock.WindowOpener }
+
+func (f floatWindowTitles) OpenFloat(title string, geom paintengine2d.Rect) (dock.FloatWindow, error) {
+	return f.WindowOpener.OpenFloat(WindowTitle(title), geom)
 }

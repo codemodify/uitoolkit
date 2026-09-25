@@ -182,7 +182,7 @@ const shotW, shotH = 1180, 820
 // the picture.
 func shootPage(a *app.Application, p int) (*paintengine2d.Image, error) {
 	win, err := a.NewWindow(platform.WindowOptions{
-		Title: "uitoolkit tour", Width: shotW, Height: shotH, Headless: true,
+		Title: tourapp.WindowTitle("Tour"), Width: shotW, Height: shotH, Headless: true,
 	})
 	if err != nil {
 		return nil, err

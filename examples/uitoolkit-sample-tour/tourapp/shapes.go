@@ -176,7 +176,7 @@ func (p *shapesPage) open() {
 	a := p.t.a
 
 	card, err := a.NewWindow(platform.WindowOptions{
-		Title: "Backdrop — the window under the hole", Width: 620, Height: 420,
+		Title: WindowTitle("Backdrop — the window under the hole"), Width: 620, Height: 420,
 		MinWidth: 240, MinHeight: 180,
 	})
 	if err != nil {
@@ -188,7 +188,7 @@ func (p *shapesPage) open() {
 	card.SetContent(p.cardFace)
 
 	shaped, err := a.NewWindow(platform.WindowOptions{
-		Title: "Shaped", Width: 340, Height: 340, MinWidth: 160, MinHeight: 160,
+		Title: WindowTitle("Shaped"), Width: 340, Height: 340, MinWidth: 160, MinHeight: 160,
 		Decorations: platform.DecorationsNone,
 	})
 	if err != nil {

@@ -59,11 +59,11 @@ func main() {
 	// The window icon the desktop shows in its title bar, task bar and switcher.
 	a.SetIcon(icons.AppIconRGB("columns", 0xc8, 0x4a, 0x3a)...)
 	opts := platform.WindowOptions{
-		Title: "Deck", Width: *width, Height: *height,
+		Title: windowTitle("Deck"), Width: *width, Height: *height,
 		MinWidth: 320, MinHeight: 200, Headless: headless,
 	}
 	if *mode == "backdrop" {
-		opts.Title = "Backdrop"
+		opts.Title = windowTitle("Backdrop")
 		opts.Width, opts.Height = 900, 620
 		opts.Decorations = platform.DecorationsNone
 	}
@@ -218,3 +218,10 @@ func (c *card) Paint(ctx *paintengine2d.Context) {
 	lk.DrawLabel(ctx, box.Inset(8), fmt.Sprintf("backdrop presses: %d", c.hits),
 		paintengine2d.RGB(1, 1, 1), style.AlignStart)
 }
+
+// windowTitle is what a window of this sample is called on the desktop:
+// the sample's own name for the window under the toolkit's prefix, so
+// that a desktop with several samples open says which toolkit they
+// belong to. Every title this sample sets goes through here, so one
+// computed while the app runs carries the prefix too.
+func windowTitle(name string) string { return "uitoolkit - " + name }

@@ -55,7 +55,7 @@ func main() {
 	// The window icon the desktop shows in its title bar, task bar and switcher.
 	a.SetIcon(icons.AppIconRGB("more", 0x5a, 0x6b, 0x7d)...)
 	win, err := a.NewWindow(platform.WindowOptions{
-		Title: "Popups", Width: 360, Height: 150, Headless: headless,
+		Title: windowTitle("Popups"), Width: 360, Height: 150, Headless: headless,
 	})
 	if err != nil {
 		log.Fatal(err)
@@ -188,3 +188,10 @@ func (p *pad) MousePress(e widget.MouseEvent) bool {
 	p.onRight(paintengine2d.Pt(o.X+e.Pos.X, o.Y+e.Pos.Y))
 	return true
 }
+
+// windowTitle is what a window of this sample is called on the desktop:
+// the sample's own name for the window under the toolkit's prefix, so
+// that a desktop with several samples open says which toolkit they
+// belong to. Every title this sample sets goes through here, so one
+// computed while the app runs carries the prefix too.
+func windowTitle(name string) string { return "uitoolkit - " + name }

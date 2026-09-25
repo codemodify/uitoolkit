@@ -57,7 +57,7 @@ func writeSheet(a *app.Application, path string, pages []int) error {
 
 	// The sheet is as big as what is on it: lay it out once to measure,
 	// then size the window to that.
-	win, err := a.NewWindow(platform.WindowOptions{Title: "tour pages", Width: 1200, Height: 800, Headless: true})
+	win, err := a.NewWindow(platform.WindowOptions{Title: tourapp.WindowTitle("Tour pages"), Width: 1200, Height: 800, Headless: true})
 	if err != nil {
 		return err
 	}

@@ -611,15 +611,28 @@ func selectQuietly(g *widgets.RadioGroup, i int) {
 	g.OnChange = fn
 }
 
+// WindowTitle is what a window of this sample is called on the desktop:
+// the sample's own name for the window under the toolkit's prefix, so
+// that a desktop with several samples open says which toolkit they
+// belong to.
+//
+// Every window the tour opens goes through here — the tour itself, the
+// window a torn-off tab lands in, the shapes page's pair, the gallery's
+// second window — rather than each one spelling the prefix out, so there
+// is one place to change and none to forget. It takes the name the
+// window would have had, so a title computed while the app runs keeps
+// the prefix instead of losing it at the first retitle.
+func WindowTitle(name string) string { return "uitoolkit - " + name }
+
 // TourWindow opens a tour window of its own holding the given pages: what
 // a tab torn out of the strip lands in, and what `-page` opens.
 func TourWindow(a *app.Application, pages ...int) (*app.Window, error) {
-	title := "uitoolkit tour"
+	title := "Tour"
 	if len(pages) == 1 && pages[0] >= 0 && pages[0] < len(tourPages) {
-		title = tourPages[pages[0]].title + " — tour"
+		title = tourPages[pages[0]].title + " — Tour"
 	}
 	win, err := a.NewWindow(platform.WindowOptions{
-		Title: title, Width: 1060, Height: 740, MinWidth: 620, MinHeight: 430,
+		Title: WindowTitle(title), Width: 1060, Height: 740, MinWidth: 620, MinHeight: 430,
 	})
 	if err != nil {
 		return nil, err

@@ -154,3 +154,30 @@ func TestInspectorSurvivesABrokenLayout(t *testing.T) {
 		panelSide(t, host, name) // fails the test when it is in no area
 	}
 }
+
+// Every window the inspector puts on the desktop carries the toolkit's
+// prefix — the main window from main.go, and a panel's window from the
+// dock's opener, whose name would otherwise be the panel's own title.
+func TestInspectorFloatsUnderTheToolkitName(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	a, w, host := buildInspector(t)
+	defer w.Close()
+	log := host.Panel("log")
+	if log == nil {
+		t.Fatal("the inspector has no log panel")
+	}
+	if !log.Float() {
+		t.Fatal("the log panel would not float")
+	}
+	a.PumpOnce()
+	var titles []string
+	for _, win := range a.Windows() {
+		if win != w {
+			titles = append(titles, win.Title())
+		}
+	}
+	if len(titles) != 1 || titles[0] != "uitoolkit - Log" {
+		t.Fatalf("the floating panel's windows are %q, want one called %q", titles, "uitoolkit - Log")
+	}
+	host.CloseFloating()
+}

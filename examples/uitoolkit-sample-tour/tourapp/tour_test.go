@@ -905,3 +905,31 @@ func countNonColor(img *paintengine2d.Image, r paintengine2d.Rect, col paintengi
 	}
 	return n
 }
+
+// Every window the tour opens is named "uitoolkit - …", so somebody with
+// several samples up can tell at a glance which toolkit they belong to.
+// A window holding one page says which page, still under the prefix.
+func TestTourWindowsAreNamedForTheToolkit(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv(style.AnimationsEnv, "0")
+	a := uitoolkit.New(uitoolkit.Options{
+		Look: style.DarkLook(), Headless: true, Scale: 1, DisableLookWatch: true,
+	})
+	all, err := TourWindow(a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer all.Close()
+	if all.Title() != "uitoolkit - Tour" {
+		t.Errorf("the whole tour is called %q", all.Title())
+	}
+	p := TourPageIndex("shapes")
+	one, err := TourWindow(a, p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer one.Close()
+	if want := "uitoolkit - " + TourPageTitle(p) + " — Tour"; one.Title() != want {
+		t.Errorf("a one-page window is called %q, want %q", one.Title(), want)
+	}
+}

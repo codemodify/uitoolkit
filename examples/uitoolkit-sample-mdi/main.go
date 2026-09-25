@@ -20,7 +20,7 @@ func main() {
 	flag.Parse()
 
 	a := uitoolkit.New(uitoolkit.Options{Headless: *headless})
-	win, err := a.NewWindow(platform.WindowOptions{Title: "Documents", Width: 960, Height: 640, MinWidth: 480, MinHeight: 320})
+	win, err := a.NewWindow(platform.WindowOptions{Title: windowTitle("Documents"), Width: 960, Height: 640, MinWidth: 480, MinHeight: 320})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -36,6 +36,10 @@ func main() {
 		ed.OnChange = func() { edited = true }
 		body := widgets.NewColumn(uitoolkit.NewRichTextBar(ed), ed).WithGap(4).WithPad(4)
 		body.AddFlex(ed, 1)
+		// The document's own caption stays as it is: an MDI window is
+		// drawn inside this one and never reaches the desktop, so
+		// "uitoolkit - " on it would only be noise repeated three times
+		// under the one title bar that does carry it.
 		w := area.AddWindow(title, body)
 		w.SetInitialFocus(ed)
 		// An edited document asks first; the answer closes it or not.
@@ -83,3 +87,10 @@ func main() {
 		log.Fatal(err)
 	}
 }
+
+// windowTitle is what a window of this sample is called on the desktop:
+// the sample's own name for the window under the toolkit's prefix, so
+// that a desktop with several samples open says which toolkit they
+// belong to. Every title this sample sets goes through here, so one
+// computed while the app runs carries the prefix too.
+func windowTitle(name string) string { return "uitoolkit - " + name }
