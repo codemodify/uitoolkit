@@ -18,12 +18,16 @@ import (
 // What the preview carries inside itself does not move them: the panel
 // takes whatever the two rows over and under it leave, so the settings
 // bar at the head of the window grew inside this rectangle rather than
-// pushing it down. The numbers are unchanged since that bar went in.
+// pushing it down. What is over and under it does move them, and the
+// row of options that replaced the single colours switch moved them up
+// and made the panel taller: the switch stood over a line of prose, the
+// five check boxes fit on one line at this size, and the 22 pixels that
+// line of prose was taking went to the preview.
 const (
 	previewShotX = 317
-	previewShotY = 66
+	previewShotY = 44
 	previewShotW = 697
-	previewShotH = 620
+	previewShotH = 647
 )
 
 func TestSettingsPreviewPanelKeepsItsPlace(t *testing.T) {

@@ -12,49 +12,54 @@ judged without launching anything.
 ```bash
 go run ./cmd/uitoolkit-settings
 go run ./cmd/uitoolkit-settings -stage win98      # open with Windows 98 staged
-go run ./cmd/uitoolkit-settings -page appearance  # open scrolled to the shape options
+go run ./cmd/uitoolkit-settings -page appearance  # name a section of the page
 go run ./cmd/uitoolkit-settings -headless         # settings.png in cwd
 go run ./cmd/uitoolkit-settings -stage aqua -screenshot out/
 tools/shots/demos.sh                              # docs/screenshots/settings.webp and the other demos
 ```
 
 `-page` names a **section of the one page**: `theme` (the default, the
-top of the column), `behaviour`, `desktop`, `preview`, `files`. Two of
-the five are in the column that scrolls, and `-page` scrolls it to them;
-the other three stand beside the preview and are on screen the moment
-the window opens, so naming one of those leaves the column where it is.
-The names of the four pages Settings used to have still resolve, because
-they are in scripts, in the atlas tooling and in the docs of two
-releases: `themes` and `packs` (and `packs & icons`, `theme packs`) open
-**Theme**, `appearance`, `icons` and `corners` open the **Preview**,
-which is where the shape and the icon set are chosen now, and `about`
-opens **Files**. An unknown name is the top of the page.
+top of the column), `behaviour`, `preview`, `files`. Only the theme
+browser is in the column that scrolls now, and it is the top of it, so
+**nothing `-page` can name is under the fold** and every name lands on
+something already on screen: the flag says which part of the page you
+came for and the page opens where it opens. (The mechanism that scrolls
+the column to a section is still there for the day something joins the
+browser in it.) The names of the four pages Settings used to have still
+resolve, because they are in scripts, in the atlas tooling and in the
+docs of two releases: `themes` and `packs` (and `packs & icons`, `theme
+packs`) open **Theme**, `appearance`, `icons` and `corners` open the
+**Preview**, which is where the shape and the icon set are chosen now,
+`about` opens **Files**, and `desktop` and `colours` open **Behaviour**,
+because following the desktop's colours is one of the five options in
+that row. An unknown name is the top of the page.
 
 ## The page
 
 There is one page and no navigation. Settings used to be four pages
 behind a sidebar — Themes, Appearance, Packs, About — and they were four
 answers to one question: what does this desktop look like. The window is
-now a splitter: **the choices down a scrolling column on the left**, and
-**the preview on the right**, with **Apply** pinned at the foot, outside
-both.
+now a splitter: **the theme browser down a scrolling column on the
+left**, and **the preview on the right**, with **Apply** pinned at the
+foot, outside both.
 
-The page is split by what a choice is about rather than by what kind of
-choice it is. **The preview sets what it shows**: the icon set, the size
-its glyphs are drawn at and the shape of its corners are three combo
-boxes on a bar of their own at the head of the previewed window, over
-the sample's menu bar, each behind the word that says what it sets.
-What is left over goes in the column on the left (which pack, and what the apps do besides drawing it)
-or in the pane with the preview, over it and under it (where its colours
-come from, and where the files are).
+The line through the page is no longer between kinds of choice but
+between the browser and the thing it is browsing for. **The preview sets
+what it shows**: the icon set, the size its glyphs are drawn at and the
+shape of its corners are three combo boxes on a bar of their own at the
+head of the previewed window, over the sample's menu bar, each behind
+the word that says what it sets. Everything else that is not the list of
+packs stands with the preview: the **five on/off options in a row over
+it**, and the three **config paths** under it.
 
 The column is about 300 logical pixels wide whatever the window and the
 display scale are, and it keeps that share while the window is resized
 (`Window.OnResize`). Dragging the sash replaces the split: a dragged
 split stays through every resize after, and survives Apply. It was 240
-while the column was the theme browser and nothing else; an option row is
-a label, a control and a line of prose, and 240 wrapped every one of them
-to three lines.
+when the column was the browser and nothing else the first time; it is
+the browser and nothing else again, and it has kept 300, because a row
+reading `1995 · Windows 95` and the paragraph over the search field are
+what set it, not the option rows that have since left.
 
 ### The preview, on the right
 
@@ -129,7 +134,8 @@ they were the room the settings bar needed: the sample's document area
 is 22 px shorter than before, not 64.)
 
 **Nothing else is allowed in the preview's own box**, and only two
-single rows share its pane. The widget gallery used to sit under it in a
+things share its pane: one folding row of options and three lines of
+paths. The widget gallery used to sit under it in a
 second splitter (those are the widgets the tour shows over its Controls,
 Views and Documents pages, and under the preview they halved it to
 answer a question the preview had already answered). A strip of fifteen
@@ -137,20 +143,65 @@ stock icons sat above it for a while when the four pages were merged,
 and it read well at 1024 — but the strip keeps its own height and the
 preview takes what is left, so at the 720×520 minimum the glyphs folded
 onto four lines and left the preview a caption and a menu bar. The
-preview is far the biggest thing in its pane at every size (about 78% of
-it at 1024×860 and 62% at the 720×520 minimum), and the only way to
-promise that is to keep what is not the preview down to one row each.
-`TestSettingsPageHoldsAtEverySize` is that promise, in four packs at two
-scales at both sizes.
+preview is far the biggest thing in its pane at every size (about **82%**
+of it at 1024×860 and **61%** at the 720×520 minimum), and the only way
+to promise that is to keep what is not the preview down to one folding
+row and three lines. `TestSettingsPageHoldsAtEverySize` is that promise,
+in four packs at two scales at both sizes.
 
 ### Over and under the preview
 
-**Where the colours come from** — **Follow the desktop's colours**: its
-light or dark mode and its accent (see below). It is over the preview
-because that is where its effect is read: the caption right under it
-says *Preview — Breeze Dark* for a chosen *Breeze*. It is one switch and
-one short line; the paragraph it had in the column would have been three
-lines off the window it is a footnote to.
+**The five options**, in one row over the preview, each a check box
+wearing a short word:
+
+```
+☑ Animations  ☐ File dialogs  ☐ System frame  ☐ Theme buttons  ☐ Desktop colours
+```
+
+| On the box | To a screen reader | What it is |
+| --- | --- | --- |
+| **Animations** | Animations | Hover fades, the default button's pulse, busy bars (GTK's `gtk-enable-animations`). While the desktop itself asks for reduced motion it says so, because the desktop's setting wins over the preference |
+| **File dialogs** | Use the desktop's file dialogs | KDE's and GNOME's own Open and Save, through the XDG portal, instead of the themed ones |
+| **System frame** | System frame: the desktop's title bar and borders | Chromium's switch. Windows that draw their own title bar (Mail's, with its tool bar in it) get the desktop's instead |
+| **Theme buttons** | Theme buttons: the caption buttons where the theme puts them | Close, minimise and maximise in the theme's era's order (the Mac's traffic lights on the left) rather than the desktop's |
+| **Desktop colours** | Desktop colours: follow the desktop's light or dark mode and its accent | The pack shows its sibling to match the desktop — a chosen *Breeze* draws as *Breeze Dark* — recoloured around the desktop's accent where the engine takes one |
+
+**Four of them spent a release in the column**, as switches with a line
+of prose each, where 300 logical pixels elided the labels themselves
+(`Use the desktop's file dia…`); the fifth, the colours one, stood here
+alone. They are one row now, over the window all five are about, and
+they are **furniture you glance at rather than documentation**: the
+sentence that was a line under each box is its tooltip and its
+accessible description instead. Over the preview, every line of prose is
+a line off the window the whole page is for.
+
+**The short word is inside the spoken name**, never beside it — the same
+rule the preview's own settings bar follows a hand's width below, where
+*Size* is read out as *Icon size*. What the eye gets from the row the box
+stands in, the ear gets from the rest of the name. `Dialogs` on its own
+would have been a riddle; `File dialogs` read as *Use the desktop's file
+dialogs* is one name for one control.
+
+**They are check boxes, not switches**, for two reasons that agree. The
+honest one: nothing on this page takes effect when it is touched — Apply
+writes `look.json` and nothing else does — and a switch is the control
+that says *this is live now*, while a check box is the control that says
+*this is what I am asking for*. The measured one: a switch's pill is 42
+logical pixels of chrome before its word, and the right-hand pane is 392
+of them at the 720×520 minimum. Five switches fold onto **three** lines
+there and leave the preview 53% of the pane; five check boxes fold onto
+**two** and leave it 61%, and onto **one** line at 1024×860, where the
+old arrangement needed two (a switch and its line of prose).
+
+**The row folds, it does not shed.** It is a `widgets.Wrap` (Qt's flow
+layout, GTK's `FlowBox`): one line while the pane is wide, two when it is
+not, and never a control cut off by the window frame the way a tool
+bar's shedding would leave one — a setting nobody can reach is worse
+than a second line. The order is what makes it fold well: the three
+narrowest first, so a narrow pane gets a line of three and a line of two
+rather than a ragged four and one, with the frame pair (*System frame*,
+*Theme buttons*) next to each other across the fold and *Desktop
+colours* last, nearest the window whose caption it changes.
 
 **Files** — the three paths Settings reads and writes, one line each:
 the **prefs** file, the **themes** directory and the **icons**
@@ -163,17 +214,19 @@ every line here is a line off the preview. The paths are labels now, not
 text boxes: a box that can be selected from keeps three rows and grows a
 scrollbar of its own as soon as a path is longer than the pane.
 
-Last on the icons line, **Delete icon set…** — grey unless the staged
-set is one the user copied in. It lost its old neighbour when the icon
-choosers moved onto the preview's settings bar, where there is no room
-for a button and no sense in one: that bar sets what the window is drawn
-in, it does not keep sets on disk. The icons line of **Files** is the one place left that says where
-sets come from, and deleting one is exactly that — taking a folder out
-of that directory.
+**Nothing on those three lines does anything.** `Delete icon set…` rode
+at the end of the icons line for a release and is gone: it was the last
+thing left of the old Packs page, it acted on a set chosen two inches
+away on the preview's own bar, and it put a button that destroys a
+directory on the one part of the page that was meant to change nothing.
+Nothing replaced it — a set is a folder, `rm -r` removes it, and
+`style.DeleteUserIconSet` is still there for an application that wants
+the operation.
 
-### The column of choices, on the left
+### The column, on the left
 
-Two sections: the decisions the preview cannot make for itself.
+One section, and the one decision on this page that is not about the
+window on the right but about which of 129 packs that window is to be.
 
 **Theme** — a **search field** (a pack is found by its id, name, year,
 family, engine or what its summary says — every word has to match; Return
@@ -197,24 +250,18 @@ Under the list, the two things that can be done to a pack:
   absent** while a built-in pack is staged: a button that came and went
   would move the whole column under it every time a pack was picked.
 
-**Behaviour** — everything `look.json` carries that is not what the
-toolkit looks like but what it does: **Animations** (hover fades, the
-default button's pulse, busy bars; with a note under it while the desktop
-asks for reduced motion), **Use the desktop's file dialogs**, **Use
-system title bar and borders**, and **Place window buttons as the theme
-does**. The old Appearance page had these in three groups of one and two;
-they are one group here, because the thing they have in common — none of
-them is the appearance of a pack — is the only thing a reader needs to
-know to skip the lot.
+That is the whole column. **Behaviour** was under it for a release —
+four switches, each with a line of prose — and is the row of five
+options over the preview now; see above.
 
 ### What went
 
 The **Packs** page is gone. Its two lists were a second theme browser and
 a second icon chooser; the browser and the chooser are on this page, so
-the lists were a duplicate. Its two actions were not, and both moved
-next to the thing they act on: Export and Delete theme… under the theme
-browser, Delete icon set… beside the icons directory it takes a folder
-out of.
+the lists were a duplicate. One of its two actions moved next to the
+thing it acts on — Export and Delete theme… are under the theme browser
+— and the other, Delete icon set…, went round the page for a release
+before going altogether.
 
 The **sidebar** is gone with the pages, and with it the `Pages` list a
 screen reader used to drive. There is nothing to drive: one Tab ring
@@ -224,7 +271,20 @@ The section called **Shape and weight** is gone too, and nothing is left
 of it in the column: corners, the icon set and the icon size are all
 answered by the preview now, and the strip of fifteen glyphs under them
 was a picture of a tool bar standing in for the real one two inches to
-its right. `Delete icon set…` moved to the icons line of **Files**.
+its right.
+
+The **Behaviour** panel is gone from the column, and with it the last
+thing in it that was not the theme browser: its four switches are four
+check boxes in the row over the preview, with the colours one, under
+short words. The column is the browser alone, which is what it was
+before the four pages became one.
+
+**`Delete icon set…` is gone**, from the column where it started and
+from the icons line of **Files** where it spent a release. It was the
+last thing left of the old Packs page. `style.DeleteUserIconSet` stays —
+it is public toolkit API and an application may want it — but Settings
+does not call it any more, and nothing on the **Files** block does
+anything at all now.
 
 The **View ▸ Window corners** submenu is gone: the corners are the third
 box on the settings bar. So is the **free-space end of the sample's tool
@@ -261,7 +321,7 @@ The Theme Atlas crops the preview panel out of `uitoolkit-settings -stage ID
 default look applied, the panel is the same rectangle in every pack:
 
 ```
-x 317, y 66, 697 × 620        crop box (317, 66) – (1014, 686)
+x 317, y 44, 697 × 647        crop box (317, 44) – (1014, 691)
 ```
 
 `TestSettingsPreviewPanelKeepsItsPlace` pins those numbers; a layout
@@ -272,14 +332,20 @@ change that moves them fails it, and the new ones belong here. (They were
 came off, `569 × 481` until the gallery came out from under the preview
 and it took the whole right-hand pane, `x 445, y 10, 569 × 782` until the
 icons took the head of the page, `569 × 630` until the four pages became
-one, and `x 317, y 10, 697 × 790` until the colours switch went over the
-preview and the paths under it.)
+one, `x 317, y 10, 697 × 790` until the colours switch went over the
+preview and the paths under it, and `x 317, y 66, 697 × 620` until the
+behaviour options joined that switch in one row.)
 
-**The settings bar did not move them.** It is inside the preview panel,
-and the panel takes whatever the two rows over and under it leave, so
-the crop is the same rectangle it was before the bar existed. It was
-re-measured when the bar went in, in the eight packs
-`TestSettingsPreviewPanelKeepsItsPlace` walks, and it had not changed.
+**What the preview carries inside itself does not move them; what stands
+over it does.** The settings bar is inside the panel, and the panel takes
+whatever is left over it and under it, so the crop did not move when that
+bar went in — it was re-measured then, in the eight packs
+`TestSettingsPreviewPanelKeepsItsPlace` walks, and had not changed. The
+row of options is *outside* the panel, and it moved the crop: the single
+colours switch stood over a line of prose and took 48 px, the five check
+boxes fit on one line at this size and take 26, and the panel grew up
+into the 22 px of difference — `y` 66 → 44, height 620 → 647, `x` and
+width unchanged.
 
 **Every atlas tile now carries the settings bar**, because it is at the
 head of the window the atlas crops. With a clean `XDG_CONFIG_HOME` it
@@ -314,8 +380,9 @@ The applied look sets Settings' own metrics, and the column of choices
 beside the preview is drawn in it, so take atlas shots with a clean
 `XDG_CONFIG_HOME`. That is why the test builds Settings with
 `PreferredLook`, the way the command does, rather than with a fixture
-look. The colours switch over the preview is drawn in the applied look
-too, which is what sets the crop's `y`; the icon size chosen in the
+look. The row of options over the preview is drawn in the applied look
+too, which is what sets the crop's `y`, and how many lines it folds onto
+at 697 px is what would move it again; the icon size chosen in the
 preview does not move it, because the preview's own bar grows inside the
 crop rather than above it.
 
@@ -350,11 +417,11 @@ animations off. `followDesktop` shows the pack's light or dark sibling to
 match the desktop. `nativeDialogs` shows the desktop's own file dialogs
 (KDE's, GNOME's, through the XDG portal) instead of the toolkit's themed
 ones. `decorations` is who draws the frame of a window with its own title
-bar: `system` the desktop (**Use system title bar and borders**),
+bar: `system` the desktop (**System frame**),
 `toolkit` uitoolkit for every window, left out for the default.
 `captionButtons` `theme` puts the caption buttons of a frame uitoolkit
 draws where the theme's era put them (the Mac's traffic lights on the
-left; **Place window buttons as the theme does**); left out, they follow
+left; **Theme buttons**); left out, they follow
 the desktop's button layout. See [decorations.md](decorations.md).
 
 ### Following the desktop's light or dark mode
@@ -452,8 +519,9 @@ built-in pack staged it is there but grey. If the deleted pack was
 selected, Settings falls back to the matching builtin palette (or the
 other one if that name was a shadow). If `look.json` named the deleted
 pack, it is rewritten to the fallback so the selection is not left
-dangling. **Delete icon set…** on the icons line of **Files** is the same
-control for a **User** icon set (not premiere or drawn classic/sharp).
+dangling. There is **no Delete for an icon set**: the button that did it
+is gone from the page (a set is a folder — `rm -r` removes it), and
+`style.DeleteUserIconSet` is the API an application would call.
 
 `ListThemes` lists Built-in era packs (not shadowed) then user packs
 (sorted by name). `LoadTheme(name)` **prefers the user pack** when both

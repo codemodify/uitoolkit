@@ -47,12 +47,11 @@ func TestSettingsAppAppliesAndPersists(t *testing.T) {
 			t.Fatalf("the chooser offering %q is not on the page", opt)
 		}
 	}
-	// And so is every switch the Appearance page used to hold.
-	for _, opt := range []string{"Animations", "Follow the desktop's colours",
-		"Use the desktop's file dialogs", "Use system title bar and borders",
-		"Place window buttons as the theme does"} {
-		if findSwitch(w.Content(), opt) == nil {
-			t.Fatalf("the %q switch is not on the page", opt)
+	// And so is every option the Appearance page used to hold, in the row
+	// over the preview, under the short word each one wears now.
+	for _, opt := range []string{"Animations", "File dialogs", "System frame", "Theme buttons", "Desktop colours"} {
+		if findOption(w.Content(), opt) == nil {
+			t.Fatalf("the %q option is not on the page", opt)
 		}
 	}
 	got := style.LookAppearance(a.Look())
@@ -402,9 +401,11 @@ func TestSettingsThemeListScrollsAllBuiltins(t *testing.T) {
 		}
 	}
 
-	// The browser and the behaviour switches do not fit in the window,
-	// so the column of choices scrolls — and the switches at the foot of
-	// it are reachable by scrolling and not by navigating.
+	// The browser alone is taller than the window, so the column of
+	// choices still scrolls — and what is at the foot of it, the two
+	// buttons that act on a pack, is reachable by scrolling and not by
+	// navigating. The four behaviour options used to be down here; they
+	// are in the row over the preview now, where nothing scrolls.
 	choices := findScrollView(w.Content())
 	if choices == nil {
 		t.Fatal("the column of choices should scroll")
@@ -415,8 +416,13 @@ func TestSettingsThemeListScrollsAllBuiltins(t *testing.T) {
 	}
 	choices.ScrollTo(choices.MaxOffset())
 	a.PumpOnce()
-	if findSwitch(w.Content(), "Place window buttons as the theme does") == nil {
-		t.Error("the last behaviour switch is not at the foot of the column")
+	if b := findButton(w.Content(), "Delete theme…"); b == nil || !nestedInScroll(b) {
+		t.Error("Delete theme… is not at the foot of the column")
+	}
+	for _, opt := range []string{"Animations", "Desktop colours"} {
+		if box := findOption(w.Content(), opt); box == nil || nestedInScroll(box) {
+			t.Errorf("the %q option is in the column that scrolls", opt)
+		}
 	}
 	// The paths are not in this column at all: they are under the
 	// preview, where nothing scrolls and they are always on screen.
@@ -845,14 +851,32 @@ func clickApply(t *testing.T, w *app.Window) {
 	apply.OnClick()
 }
 
-func findSwitch(root widget.Component, text string) *widgets.Switch {
-	var sw *widgets.Switch
+// findOption is one of the five check boxes in the row over the preview,
+// by the short word on it. Settings' own, never the sample's: the
+// previewed application has check boxes of its own on its Controls tab.
+func findOption(root widget.Component, text string) *widgets.Checkbox {
+	var box *widgets.Checkbox
 	widget.Walk(root, func(c widget.Component) {
-		if s, ok := c.(*widgets.Switch); ok && s.Text == text && !insidePreview(c) {
-			sw = s
+		if b, ok := c.(*widgets.Checkbox); ok && b.Text == text && !insidePreview(c) {
+			box = b
 		}
 	})
-	return sw
+	return box
+}
+
+// optionsRow is the row the five stand in.
+func optionsRow(t *testing.T, w *app.Window) *widgets.Wrap {
+	t.Helper()
+	var row *widgets.Wrap
+	widget.Walk(w.Content(), func(c widget.Component) {
+		if r, ok := c.(*widgets.Wrap); ok && row == nil && !insidePreview(c) {
+			row = r
+		}
+	})
+	if row == nil {
+		t.Fatal("no row of options over the preview")
+	}
+	return row
 }
 
 // findLabelWith reports whether any label outside the preview holds part.
@@ -892,13 +916,13 @@ func TestSettingsFollowDesktop(t *testing.T) {
 		t.Fatal(err)
 	}
 	a, w := openSettings(t, 1024, 780)
-	const label = "Follow the desktop's colours"
-	sw := findSwitch(w.Content(), label)
+	const label = "Desktop colours"
+	sw := findOption(w.Content(), label)
 	if sw == nil {
-		t.Fatal("no follow-the-desktop switch")
+		t.Fatal("no desktop-colours option")
 	}
-	if sw.On {
-		t.Fatal("switch on before it was chosen")
+	if sw.Checked {
+		t.Fatal("ticked before it was chosen")
 	}
 	sw.OnChange(true)
 	a.PumpOnce()
@@ -921,22 +945,23 @@ func TestSettingsFollowDesktop(t *testing.T) {
 	if c, ok := a.Look().(*style.Classic); !ok || c.Pack() != "breeze-night" {
 		t.Fatalf("applied look %v", a.Look())
 	}
-	if sw := findSwitch(w.Content(), label); sw == nil || !sw.On {
-		t.Fatal("switch should show the saved choice")
+	if sw := findOption(w.Content(), label); sw == nil || !sw.Checked {
+		t.Fatal("the option should show the saved choice")
 	}
 }
 
-// "Use system title bar and borders" writes look.json's decorations, and
-// running apps switch their windows at once.
+// "System frame" — "Use system title bar and borders" to a screen
+// reader — writes look.json's decorations, and running apps switch their
+// windows at once.
 func TestSettingsSystemTitleBarSwitch(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	a, w := openSettings(t, 1024, 780)
-	const label = "Use system title bar and borders"
-	sw := findSwitch(w.Content(), label)
+	const label = "System frame"
+	sw := findOption(w.Content(), label)
 	if sw == nil {
-		t.Fatal("no system title bar switch")
+		t.Fatal("no system-frame option")
 	}
-	if sw.On {
+	if sw.Checked {
 		t.Fatal("the toolkit's frame is the default for windows with a title bar")
 	}
 	sw.OnChange(true)
@@ -950,10 +975,10 @@ func TestSettingsSystemTitleBarSwitch(t *testing.T) {
 	if err != nil || !strings.Contains(string(raw), `"decorations": "system"`) {
 		t.Fatalf("look.json %s %v", raw, err)
 	}
-	if sw := findSwitch(w.Content(), label); sw == nil || !sw.On {
-		t.Fatal("switch should show the saved choice")
+	if sw := findOption(w.Content(), label); sw == nil || !sw.Checked {
+		t.Fatal("the option should show the saved choice")
 	}
-	findSwitch(w.Content(), label).OnChange(false)
+	findOption(w.Content(), label).OnChange(false)
 	a.PumpOnce()
 	clickApply(t, w)
 	a.PumpOnce()
@@ -962,15 +987,14 @@ func TestSettingsSystemTitleBarSwitch(t *testing.T) {
 	}
 }
 
-// "Place window buttons as the theme does" writes look.json's
-// captionButtons.
+// "Theme buttons" writes look.json's captionButtons.
 func TestSettingsThemeCaptionButtonsSwitch(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	a, w := openSettings(t, 1024, 780)
-	const label = "Place window buttons as the theme does"
-	sw := findSwitch(w.Content(), label)
-	if sw == nil || sw.On {
-		t.Fatalf("switch %v: the desktop's layout is the default", sw)
+	const label = "Theme buttons"
+	sw := findOption(w.Content(), label)
+	if sw == nil || sw.Checked {
+		t.Fatalf("option %v: the desktop's layout is the default", sw)
 	}
 	sw.OnChange(true)
 	a.PumpOnce()
@@ -983,7 +1007,7 @@ func TestSettingsThemeCaptionButtonsSwitch(t *testing.T) {
 	if err != nil || !strings.Contains(string(raw), `"captionButtons": "theme"`) {
 		t.Fatalf("look.json %s %v", raw, err)
 	}
-	findSwitch(w.Content(), label).OnChange(false)
+	findOption(w.Content(), label).OnChange(false)
 	a.PumpOnce()
 	clickApply(t, w)
 	a.PumpOnce()
@@ -1087,18 +1111,22 @@ func TestSettingsIconSetPreview(t *testing.T) {
 	}
 }
 
-// Delete icon set… is on the icons line of Files now — the one place
-// left that says where sets come from — and it still acts on the staged
-// set: grey while a built-in one is staged, live for one of the user's
-// own.
-func TestSettingsDeleteIconSetLivesWithTheIconsPath(t *testing.T) {
+// Delete icon set… is gone. It was the last thing left of the old Packs
+// page: a button that destroys a directory, riding at the end of the
+// icons path on the one part of this page that was meant to change
+// nothing, acting on a set chosen two inches away on the preview's own
+// bar. Nothing replaced it — style.DeleteUserIconSet is still there for
+// an application that wants it, and a set is still a folder anyone can
+// remove.
+func TestSettingsHasNoDeleteIconSetButton(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", dir)
 	if err := style.SaveAppearance(style.DefaultAppearance()); err != nil {
 		t.Fatal(err)
 	}
 	// A folder of the user's own: a premiere name (lucide) is a built-in
-	// set wherever it is installed, and Delete leaves those alone.
+	// set wherever it is installed, and the button was only ever live for
+	// one of these.
 	installSettingsIconSet(t, dir, "lucide")
 	mine := filepath.Join(dir, "uitoolkit", "icons", "mine")
 	if err := os.MkdirAll(mine, 0o700); err != nil {
@@ -1120,26 +1148,37 @@ func TestSettingsDeleteIconSetLivesWithTheIconsPath(t *testing.T) {
 	}
 	a, w := openSettings(t, 1024, 780)
 
-	del := findButton(w.Content(), "Delete icon set…")
-	if del == nil {
-		t.Fatal("no Delete icon set… button")
+	if del := findButton(w.Content(), "Delete icon set…"); del != nil {
+		t.Error("Delete icon set… is back on the page")
 	}
-	files := findPanelTitled(w.Content(), "Files")
-	if files == nil || !widget.Contains(files, del) {
-		t.Error("Delete icon set… is not on the Files block")
-	}
-	if del.Enabled() {
-		t.Error("Delete icon set… is live with a built-in set staged")
-	}
+	// Not hiding behind a user set being staged either: it was grey for a
+	// built-in one and live for one of the user's own, so stage theirs
+	// and look again.
 	pickCombo(t, w, "mine")
 	a.PumpOnce()
-	if !findButton(w.Content(), "Delete icon set…").Enabled() {
-		t.Error("Delete icon set… stayed grey with a user set staged")
+	if del := findButton(w.Content(), "Delete icon set…"); del != nil {
+		t.Error("Delete icon set… comes back when a user set is staged")
 	}
-	pickCombo(t, w, "Lucide")
-	a.PumpOnce()
-	if findButton(w.Content(), "Delete icon set…").Enabled() {
-		t.Error("Delete icon set… is live for a premiere set")
+	// Files is three paths and nothing that does anything: it is the one
+	// part of the page that changes nothing.
+	files := findPanelTitled(w.Content(), "Files")
+	if files == nil {
+		t.Fatal("no Files block")
+	}
+	widget.Walk(files, func(c widget.Component) {
+		if b, ok := c.(*widgets.Button); ok {
+			t.Errorf("Files carries a %q button", b.Text)
+		}
+	})
+	for _, name := range []string{"Prefs", "Themes", "Icons"} {
+		if !findLabelWith(w.Content(), name) {
+			t.Errorf("the %s path is not under the preview", name)
+		}
+	}
+	// And the set itself is still staged and still choosable: only the
+	// button went.
+	if got := previewAppearance(t, w).Icons; got != style.IconSetName("mine") {
+		t.Errorf("the user's set is staged as %q", got)
 	}
 }
 
@@ -1275,7 +1314,7 @@ func TestSettingsPageNamesStillResolve(t *testing.T) {
 		"behaviour":     sectionBehaviour,
 		"behavior":      sectionBehaviour,
 		"windows":       sectionBehaviour,
-		"desktop":       sectionDesktop,
+		"desktop":       sectionBehaviour,
 		"nonsense":      sectionTheme,
 	} {
 		if got := SettingsPage(name); got != want {
@@ -1285,10 +1324,14 @@ func TestSettingsPageNamesStillResolve(t *testing.T) {
 	}
 }
 
-// And the name is not only resolved: the column of choices opens
-// scrolled to that section, which is what -page did when it switched
-// pages.
-func TestSettingsPageOpensScrolledToItsSection(t *testing.T) {
+// And the name is not only resolved: what it names is on the page the
+// moment the window opens. Nothing scrolls to it any more, because
+// nothing is under the fold — the only section that ever was, Behaviour,
+// is the row over the preview now, and the theme browser is the top of
+// the column it left. The column still scrolls, and Settings still
+// scrolls it to a section that is in it; there is only the one, and it
+// is already at the top.
+func TestSettingsPageOpensWhereItSays(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	if err := style.SaveAppearance(style.DefaultAppearance()); err != nil {
 		t.Fatal(err)
@@ -1305,32 +1348,21 @@ func TestSettingsPageOpensScrolledToItsSection(t *testing.T) {
 		a.PumpOnce()
 		return a, w
 	}
-	_, top := open("")
-	if got := findScrollView(top.Content()).OffsetY; got != 0 {
-		t.Errorf("with no -page the column opens at %v, want the top", got)
-	}
-	// Behaviour is the foot of the column, and the only section under
-	// the fold now: -page behaviour scrolls all the way down to it.
-	_, beh := open("behaviour")
-	sv := findScrollView(beh.Content())
-	if sv == nil {
-		t.Fatal("behaviour: no column of choices")
-	}
-	if sv.OffsetY <= 0 {
-		t.Errorf("-page behaviour left the column at the top (%v)", sv.OffsetY)
-	}
-	if sv.OffsetY < sv.MaxOffset()-1 {
-		t.Errorf("-page behaviour stopped at %v of %v", sv.OffsetY, sv.MaxOffset())
-	}
-	// The other three sections are beside the preview, not in the
-	// column: what they name is on screen the moment the window opens,
-	// so the column stays where it is and the page still holds what the
-	// name asked for.
-	for _, page := range []string{"about", "appearance", "desktop"} {
+	for _, page := range []string{"", "theme", "behaviour", "desktop", "appearance", "about"} {
 		_, w := open(page)
 		if got := findScrollView(w.Content()).OffsetY; got != 0 {
-			t.Errorf("-page %s scrolled the column to %v; its section is not in it", page, got)
+			t.Errorf("-page %q opened the column at %v; nothing it can name is under the fold", page, got)
 		}
+	}
+	// Each name's section is on screen, which is the whole of what -page
+	// promises now.
+	_, beh := open("behaviour")
+	if box := findOption(beh.Content(), "Animations"); box == nil || box.LocalBounds().Empty() {
+		t.Error("-page behaviour does not show the options")
+	}
+	_, colours := open("desktop")
+	if box := findOption(colours.Content(), "Desktop colours"); box == nil || box.LocalBounds().Empty() {
+		t.Error("-page desktop does not show the colours option")
 	}
 	_, files := open("about")
 	if !findLabelWith(files.Content(), "Prefs") {
@@ -1339,6 +1371,103 @@ func TestSettingsPageOpensScrolledToItsSection(t *testing.T) {
 	if _, w := open("appearance"); namedCombo(w.Content(), "Icons") == nil {
 		t.Error("-page appearance does not show the icon chooser")
 	}
+	_, themes := open("themes")
+	if findThemeList(themes.Content()) == nil {
+		t.Error("-page themes does not show the browser")
+	}
+}
+
+// The five options stand in one row over the preview: the four the
+// Behaviour panel held in the column, plus the one that says where the
+// colours come from, which was already up here on its own.
+//
+// They are check boxes rather than switches, and they wear a short word
+// rather than the sentence each had in the column. Both are the price of
+// standing over the preview: the pane is 392 logical pixels at the
+// 720x520 minimum, a switch's pill is 42 of them before its word, and
+// every line this row takes is a line off the window the page is about.
+// The row folds — one line at the default size, two at the minimum — and
+// what it must never do is take enough of the pane for the preview to
+// stop being the biggest thing in it.
+func TestTheOptionsRowOverThePreview(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if err := style.SaveAppearance(style.DefaultAppearance()); err != nil {
+		t.Fatal(err)
+	}
+	_, w := openSettings(t, 1024, 860)
+	row := optionsRow(t, w)
+	// The words, in the order they are read. The three narrowest first is
+	// what makes a narrow pane fold to three and two instead of four and
+	// one, and the frame pair stay next to each other across the fold.
+	want := []string{"Animations", "File dialogs", "System frame", "Theme buttons", "Desktop colours"}
+	var got []string
+	widget.Walk(row, func(c widget.Component) {
+		if b, ok := c.(*widgets.Checkbox); ok {
+			got = append(got, b.Text)
+		}
+	})
+	if len(got) != len(want) {
+		t.Fatalf("the row carries %q, want %q", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("option %d is %q, want %q", i, got[i], want[i])
+		}
+	}
+	// Every word is the start of what its option is called to a screen
+	// reader, never a second name for it — the rule the preview's own
+	// settings bar follows a hand's width below.
+	names := map[string]string{
+		"Animations":      "Animations",
+		"File dialogs":    "Use the desktop's file dialogs",
+		"System frame":    "System frame: the desktop's title bar and borders",
+		"Theme buttons":   "Theme buttons: the caption buttons where the theme puts them",
+		"Desktop colours": "Desktop colours: follow the desktop's light or dark mode and its accent",
+	}
+	for word, name := range names {
+		box := findOption(w.Content(), word)
+		if box == nil {
+			t.Fatalf("no %q option on the page", word)
+		}
+		if box.AccessibleName() != name {
+			t.Errorf("%q is called %q to a screen reader, want %q", word, box.AccessibleName(), name)
+		}
+		if !strings.Contains(strings.ToLower(name), strings.ToLower(word)) {
+			t.Errorf("the box says %q and a screen reader says %q: two names for one control", word, name)
+		}
+		if box.AccessibleDescription() == "" {
+			t.Errorf("the %q option says nothing about itself: the word alone is a riddle", word)
+		}
+	}
+	// Settings' own, not the preview's, and outside the column that
+	// scrolls: they must not be able to scroll away from the window they
+	// are about.
+	if insidePreview(row) || nestedInScroll(row) {
+		t.Error("the options row is inside the preview or in the column that scrolls")
+	}
+	if widget.DeviceOrigin(row).Y >= widget.DeviceOrigin(previewScope(t, w)).Y {
+		t.Error("the options row is not over the preview")
+	}
+	// Nothing of Settings' own is a switch any more: five pills would not
+	// fit, and nothing on this page is live before Apply.
+	widget.Walk(w.Content(), func(c widget.Component) {
+		if sw, ok := c.(*widgets.Switch); ok && !insidePreview(c) {
+			t.Errorf("a %q switch is back on the page", sw.Text)
+		}
+	})
+	// One line while the pane is wide.
+	if n := rowLines(row); n != 1 {
+		t.Errorf("the five stand on %d lines in a %v pane; they fit on one", n, row.LocalBounds().Dx())
+	}
+}
+
+// rowLines is how many lines a wrapping row folded onto.
+func rowLines(row *widgets.Wrap) int {
+	tops := map[float32]bool{}
+	for _, c := range row.Children() {
+		tops[c.Bounds().Min.Y] = true
+	}
+	return len(tops)
 }
 
 // The preview carries two bars, and which is which is the whole point of

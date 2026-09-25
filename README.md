@@ -57,7 +57,7 @@ go get github.com/codemodify/paintengine2d@v0.9.0
     the theme's), in each theme's own style — Windows 95's navy caption,
     XP's blue one, Aqua's traffic lights, libadwaita's round buttons,
     SourceGit's flat cells — handing moves, resizes and the window menu to
-    the desktop; "Use system title bar and borders" gives the desktop's
+    the desktop; Settings' "System frame" gives the desktop's
     frame back. See [docs/decorations.md](docs/decorations.md).
   - Windows of any shape: a silhouette instead of a rectangle, with a hole
     through it you can see the desktop through and click through to
@@ -548,7 +548,7 @@ under.
 | `go run ./examples/uitoolkit-sample-notes` | [`examples/uitoolkit-sample-notes/notesapp`](examples/uitoolkit-sample-notes/notesapp) | A small real app: sortable table, textarea body, priority spinner, file stub, tooltips |
 | `go run ./examples/uitoolkit-sample-inspector` | [`examples/uitoolkit-sample-inspector/inspectorapp`](examples/uitoolkit-sample-inspector/inspectorapp) | Preferences inspector: panels that dock, float and close, a layout remembered between runs with `dock.Host.SaveLayoutFile`, table (JetBrains Mono), toolbar, message box |
 | `go run ./examples/uitoolkit-sample-files` | [`examples/uitoolkit-sample-files/filesapp`](examples/uitoolkit-sample-files/filesapp) | Files / Projects dogfood: tree, table, toolbar, menus, TextArea preview, history, drag and drop, dialogs |
-| `go run ./cmd/uitoolkit-settings` | [`cmd/uitoolkit-settings/settingsapp`](cmd/uitoolkit-settings/settingsapp) | The appearance editor, one page: the theme browser and the behaviour switches down a column, and beside them a live application window that sets three of the things it shows — its icon set and icon size on its own tool bar, its corners in its own View menu — with `look.json` under it. See [docs/settings.md](docs/settings.md) |
+| `go run ./cmd/uitoolkit-settings` | [`cmd/uitoolkit-settings/settingsapp`](cmd/uitoolkit-settings/settingsapp) | The appearance editor, one page: the theme browser down a column, and beside it a live application window that sets three of the things it shows — its icon set, icon size and corners on a bar of its own — with the five on/off options in a row over it and `look.json` under it. See [docs/settings.md](docs/settings.md) |
 
 `examples/uitoolkit-sample-mdi`, `examples/uitoolkit-sample-popups`,
 `examples/uitoolkit-sample-richtext`, `examples/uitoolkit-sample-shapes`,
@@ -769,19 +769,25 @@ See [docs/tray.md](docs/tray.md#submenus).
 
 *Settings is one page, and its preview sets what it shows.* The four
 pages behind a sidebar were four answers to one question, so they are one
-page: the theme browser and the behaviour switches down a column, the
-live application window beside them. Three of its settings are on that
-window rather than in the column — the **icon set**, the **icon size**
-and the **corner style** are combo boxes on a bar of their own at the
-head of it, `Icons [Classic ▾] Size [24 ▾] │ Corners [Theme shape ▾]` —
-because a strip of glyphs standing in for a tool bar, next to a real one,
-was showing a copy of the answer. The bar is **over** the sample's menu
-bar, where no application has ever put a tool bar, which is how it says
-it is Settings' and not the sample's; the two choosers spent a release
-at the free-space end of the sample's own tool bar and were read as the
+page: the theme browser down a column, the live application window
+beside it. Three of its settings are on that window rather than in the
+column — the **icon set**, the **icon size** and the **corner style**
+are combo boxes on a bar of their own at the head of it,
+`Icons [Classic ▾] Size [24 ▾] │ Corners [Theme shape ▾]` — because a
+strip of glyphs standing in for a tool bar, next to a real one, was
+showing a copy of the answer. The bar is **over** the sample's menu bar,
+where no application has ever put a tool bar, which is how it says it is
+Settings' and not the sample's; the two choosers spent a release at the
+free-space end of the sample's own tool bar and were read as the
 sample's own, and the corners spent it in the sample's View menu, where
-nobody found them. Where the colours come from stands over that window
-and the three config paths under it.
+nobody found them. Everything left over stands with that window: the
+five on/off options in one row over it —
+`☑ Animations ☐ File dialogs ☐ System frame ☐ Theme buttons ☐ Desktop colours`,
+each short word inside the full name a screen reader says — and the
+three config paths under it. They are check boxes and they fold onto a
+second line rather than shedding, because the right-hand pane is 392
+logical pixels at the smallest window Settings opens to and the preview
+has to stay the biggest thing in it.
 `widgets.ToolWidget`, `widgets.ToolLabel` and `widgets.ToolStretch` are
 what carry a control, its name and free space on a tool bar (Qt's
 `QToolBar::addWidget` with a `QLabel` in front of the box): a bar with
