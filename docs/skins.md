@@ -1006,7 +1006,7 @@ go run ./cmd/uitk-skin lint nocturne deck ~/.config/uitoolkit/skins/mine
 
 # Settings, with the skin staged in the live preview — cut to the skin's
 # silhouette, for a shaped one.
-go run ./cmd/uitksettings -stage deck -screenshot /tmp/shots
+go run ./cmd/uitoolkit-settings -stage deck -screenshot /tmp/shots
 
 # What the generator would write.
 go run ./cmd/uitk-skingen -list

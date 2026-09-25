@@ -1,9 +1,9 @@
-// Command uitksettings is the toolkit appearance editor.
+// Command uitoolkit-settings is the toolkit appearance editor.
 //
-//	go run ./cmd/uitksettings
-//	go run ./cmd/uitksettings -headless          # writes settings.png
-//	go run ./cmd/uitksettings -screenshot docs/screenshots
-//	go run ./cmd/uitksettings -page appearance -headless
+//	go run ./cmd/uitoolkit-settings
+//	go run ./cmd/uitoolkit-settings -headless          # writes settings.png
+//	go run ./cmd/uitoolkit-settings -screenshot docs/screenshots
+//	go run ./cmd/uitoolkit-settings -page appearance -headless
 //
 // The theme picker previews embedded starters and exported user packs.
 // The icon picker lists classic/sharp plus wide premiere PNG sets
@@ -22,7 +22,7 @@ import (
 	"path/filepath"
 
 	"github.com/codemodify/uitoolkit"
-	"github.com/codemodify/uitoolkit/cmd/uitksettings/settingsapp"
+	"github.com/codemodify/uitoolkit/cmd/uitoolkit-settings/settingsapp"
 	"github.com/codemodify/uitoolkit/icons"
 	"github.com/codemodify/uitoolkit/platform"
 )

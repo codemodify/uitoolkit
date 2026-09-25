@@ -9,7 +9,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/../.." && pwd)
 OUT=${ATLAS_OUT:-$HERE/out}
 mkdir -p "$OUT/bin" "$OUT/full" "$OUT/previews" "$OUT/gallery" "$OUT/cfg" "$OUT/work"
-(cd "$REPO" && go build -o "$OUT/bin/settings" ./cmd/uitksettings &&
+(cd "$REPO" && go build -o "$OUT/bin/settings" ./cmd/uitoolkit-settings &&
   go build -o "$OUT/bin/sheet" ./cmd/uitk-themesheet &&
   go build -o "$OUT/bin/shots" ./cmd/uitk-shots)
 headless() { env -u WAYLAND_DISPLAY -u DISPLAY XDG_CONFIG_HOME="$OUT/cfg" "$@"; }

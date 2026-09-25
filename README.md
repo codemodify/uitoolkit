@@ -363,10 +363,10 @@ go run ./examples/uitoolkit-sample-notes
 go run ./examples/uitoolkit-sample-inspector
 go run ./examples/uitoolkit-sample-files
 go run ./examples/uitoolkit-sample-files -headless   # writes files.png
-go run ./cmd/uitksettings           # theme browser, preview + gallery, look.json
-go run ./cmd/uitksettings -stage aqua        # open with Aqua staged
-go run ./cmd/uitksettings -page appearance   # open on the options page
-go run ./cmd/uitksettings -headless # writes settings.png
+go run ./cmd/uitoolkit-settings                     # theme browser, preview, look.json
+go run ./cmd/uitoolkit-settings -stage aqua         # open with Aqua staged
+go run ./cmd/uitoolkit-settings -page appearance    # open on the options page
+go run ./cmd/uitoolkit-settings -headless           # writes settings.png
 ```
 
 ## Testing
@@ -542,7 +542,7 @@ under.
 | `go run ./examples/uitoolkit-sample-notes` | [`examples/uitoolkit-sample-notes/notesapp`](examples/uitoolkit-sample-notes/notesapp) | A small real app: sortable table, textarea body, priority spinner, file stub, tooltips |
 | `go run ./examples/uitoolkit-sample-inspector` | [`examples/uitoolkit-sample-inspector/inspectorapp`](examples/uitoolkit-sample-inspector/inspectorapp) | Preferences inspector: panels that dock, float and close, a layout remembered between runs with `dock.Host.SaveLayoutFile`, table (JetBrains Mono), toolbar, message box |
 | `go run ./examples/uitoolkit-sample-files` | [`examples/uitoolkit-sample-files/filesapp`](examples/uitoolkit-sample-files/filesapp) | Files / Projects dogfood: tree, table, toolbar, menus, TextArea preview, history, drag and drop, dialogs |
-| `go run ./cmd/uitksettings` | [`cmd/uitksettings/settingsapp`](cmd/uitksettings/settingsapp) | The appearance editor: theme browser, live preview with the whole showcase under it, icons and corners, `look.json`. See [docs/settings.md](docs/settings.md) |
+| `go run ./cmd/uitoolkit-settings` | [`cmd/uitoolkit-settings/settingsapp`](cmd/uitoolkit-settings/settingsapp) | The appearance editor: theme browser, live preview with the whole showcase under it, icons and corners, `look.json`. See [docs/settings.md](docs/settings.md) |
 
 `examples/uitoolkit-sample-mdi`, `examples/uitoolkit-sample-popups`,
 `examples/uitoolkit-sample-richtext`, `examples/uitoolkit-sample-shapes`,
@@ -677,7 +677,7 @@ Classic (**v0.10.11**). `ToolBar.Measure` returns intrinsic width so a
 flex spacer can right-align siblings; Mail Quick Filter stays visible
 on the right (**v0.10.12**). Context menus size to the full label plus
 check column, padding, and frame so “Add sender to VIP” is not clipped
-(**v0.10.13**). Settings (`cmd/uitksettings`) is a first-class Appearance
+(**v0.10.13**). Settings (`cmd/uitoolkit-settings`) is a first-class Appearance
 editor: Dark / Light, round / square corners, Classic / Sharp icon sets,
 persisted as `$XDG_CONFIG_HOME/uitoolkit/look.json` (**v0.11.0**).
 Settings has no menu bar; radios preview locally and **Apply** writes
@@ -720,7 +720,7 @@ whole implementation of six samples while `examples/*/main.go` were 39-line
 shells in front of them — is gone. Each sample owns its code
 (`examples/uitoolkit-sample-files/filesapp`, `examples/uitoolkit-sample-notes/notesapp`,
 `examples/uitoolkit-sample-inspector/inspectorapp`, `examples/uitoolkit-sample-tour/tourapp`,
-`cmd/uitksettings/settingsapp`), so an example can be read, copied and built
+`cmd/uitoolkit-settings/settingsapp`), so an example can be read, copied and built
 by somebody learning the toolkit. `TestSamplesUseOnlyThePublicAPI` fails the
 build if anything under `examples/` or `cmd/` reaches into the toolkit's
 internal tree again: the rule had been broken twice, so it is enforced rather
@@ -1087,7 +1087,7 @@ nil (`PreferredLook`) or `WatchLook` is set, then
 `SetLook(WithAppearance(...))` so Mail, gallery, Files, Notes, and
 Inspector update live. Still paintengine2d **v0.9.0**.
 
-**0.11.0** — Toolkit Settings app (`go run ./cmd/uitksettings`). Theme,
+**0.11.0** — Toolkit Settings app (`go run ./cmd/uitoolkit-settings`). Theme,
 corner policy, and icon set are LookAndFeel settings (`Appearance`,
 `PreferredLook`, `WithTheme` / `WithCorners` / `WithIcons`) other apps
 apply via `SetLook`. Square chrome zeros `Metrics.Radius`; Sharp is a

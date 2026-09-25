@@ -83,11 +83,11 @@ Linux CGO build (Wayland/X11) — required on a real desktop, not just
 `CGO_ENABLED=0 go test`:
 
 ```bash
-CGO_ENABLED=1 go build ./cmd/uitksettings
+CGO_ENABLED=1 go build ./cmd/uitoolkit-settings
 CGO_ENABLED=1 go build ./examples/uitoolkit-sample-tour
 ```
 
-Settings (`cmd/uitksettings`) **Apply** writes theme, corners, and icons
+Settings (`cmd/uitoolkit-settings`) **Apply** writes theme, corners, and icons
 to `$XDG_CONFIG_HOME/uitoolkit/look.json`. The pickers preview only; close
 without Apply discards. **Export current theme…** writes a palette-only
 `themes/<name>/theme.json`. **Delete** (User themes only) confirms then
@@ -124,7 +124,7 @@ make the thing it needed public.
 Each sample's own code lives in a package beside its `main.go`
 (`examples/uitoolkit-sample-files/filesapp`, `examples/uitoolkit-sample-notes/notesapp`,
 `examples/uitoolkit-sample-inspector/inspectorapp`, `examples/uitoolkit-sample-tour/tourapp`,
-`cmd/uitksettings/settingsapp`), with the widget gallery in the top-level
+`cmd/uitoolkit-settings/settingsapp`), with the widget gallery in the top-level
 `showcase` package because Settings shows it too. That is also what lets
 the tests and `uitest-driver` drive them as libraries.
 
