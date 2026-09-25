@@ -700,6 +700,13 @@ func (t *ToolBar) AccessibleItems() []*a11y.Node {
 			out = append(out, item(t, i, a11y.RoleSeparator, "", r))
 			continue
 		}
+		if it.Label {
+			// A word on the bar is what a sighted reader sees beside the
+			// control; the control carries the same sense in its own
+			// accessible name, so this is static text and nothing more.
+			out = append(out, item(t, i, a11y.RoleLabel, it.Text, r))
+			continue
+		}
 		role := a11y.RoleButton
 		if it.Toggle {
 			role = a11y.RoleToggleButton

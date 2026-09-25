@@ -9,7 +9,8 @@ import (
 )
 
 // ToolItem is one thing on a ToolBar: a tool button (text, icon, or
-// both), the rule between two groups, a control of the application's own
+// both), the rule between two groups, a word that names the control
+// beside it ([ToolLabel]), a control of the application's own
 // ([ToolWidget]), or the free space that pushes what follows to the
 // right ([ToolStretch]).
 type ToolItem struct {
@@ -29,6 +30,9 @@ type ToolItem struct {
 	// Stretch is free space that eats what the bar has spare, so the
 	// items after it sit at its right-hand end. Use [ToolStretch].
 	Stretch bool
+	// Label makes Text a word on the bar rather than a button: the name
+	// of the control that follows it. Use [ToolLabel].
+	Label bool
 }
 
 // ToolText is a labeled tool button.
@@ -49,6 +53,19 @@ func ToolToggle(text string, down bool, on func()) *ToolItem {
 // ToolDivider is a vertical rule between tool groups.
 func ToolDivider() *ToolItem { return &ToolItem{Sep: true} }
 
+// ToolLabel is a word on the bar that says what the control after it
+// sets — Qt's QToolBar with a QLabel in front of a combo box, the "Zoom"
+// of every drawing program. The bar draws it in its own text, with half
+// a gap after it so it reads as belonging to the control it names and
+// not to the one before it.
+//
+// It is not a button: nothing hovers it, the bar's arrow keys step over
+// it, and it carries no command. It is also droppable — a bar too narrow
+// for everything sheds it along with its tools, because the control it
+// names keeps its tooltip and its accessible name and so is still usable
+// without the word.
+func ToolLabel(text string) *ToolItem { return &ToolItem{Text: text, Label: true} }
+
 // ToolWidget puts a control of the application's own on the bar — a
 // combo box, a search field — where Qt's QToolBar::addWidget and GTK's
 // tool items put one. It keeps its own size, is centred in the bar's
@@ -60,10 +77,10 @@ func ToolWidget(c widget.Component) *ToolItem { return &ToolItem{Widget: c} }
 // ToolStretch is the free space of a bar: everything after it is pushed
 // to the bar's right-hand end. A bar with one fills the width it is
 // given instead of only the width of its items, and when its items no
-// longer fit it drops the last of the tools before the stretch rather
-// than letting what comes after fall off the end — the controls a bar
-// carries are the application's, and losing one silently is worse than
-// showing one tool button fewer.
+// longer fit it drops the last of the tools and words before the stretch
+// rather than letting what comes after fall off the end — the controls a
+// bar carries are the application's, and losing one silently is worse
+// than showing one tool button fewer.
 func ToolStretch() *ToolItem { return &ToolItem{Stretch: true} }
 
 // ToolBar is a horizontal strip of tool buttons.
@@ -95,10 +112,10 @@ func NewToolBar(items ...*ToolItem) *ToolBar {
 }
 
 // isTool reports whether it is a tool button: the bar paints it, hovers
-// it, and its arrow keys walk it. A separator, a control and the free
-// space are none of those.
+// it, and its arrow keys walk it. A separator, a label, a control and
+// the free space are none of those.
 func (it *ToolItem) isTool() bool {
-	return it != nil && !it.Sep && !it.Stretch && it.Widget == nil
+	return it != nil && !it.Sep && !it.Stretch && !it.Label && it.Widget == nil
 }
 
 // Items returns the tool buttons.
@@ -209,6 +226,23 @@ func (t *ToolBar) itemBoxW(it *ToolItem, btn float32) float32 {
 	return w
 }
 
+// labelFont is what a [ToolLabel] is drawn in: the face the look labels
+// a tool button with, so a word on the bar and the word under an icon
+// are the same text.
+func (t *ToolBar) labelFont() *style.Font {
+	return style.ControlFontOf(t.Look(), style.RoleTool)
+}
+
+// gapAfter is the space the bar leaves after item i. It is the bar's own
+// gap everywhere but after a [ToolLabel], which keeps half of one so the
+// word sits with the control it names rather than midway between two.
+func (t *ToolBar) gapAfter(i int) float32 {
+	if i >= 0 && i < len(t.items) && t.items[i] != nil && t.items[i].Label {
+		return style.ToolItemGap * 0.5
+	}
+	return style.ToolItemGap
+}
+
 // natural is what each item asks for on a bar btn wide in its buttons:
 // a tool button's box, a separator's rule, a control's own measurement,
 // and nothing at all for the free space, which takes what is left over.
@@ -221,6 +255,9 @@ func (t *ToolBar) natural(btn float32) (w, h []float32) {
 		case it.Widget != nil:
 			sz := it.Widget.Measure(layout.Unbounded())
 			w[i], h[i] = sz.X, sz.Y
+		case it.Label:
+			f := t.labelFont()
+			w[i], h[i] = f.Advance(it.Text), f.Height()
 		case it.Sep:
 			w[i], h[i] = 8, 0
 		default:
@@ -248,7 +285,7 @@ func (t *ToolBar) contentW(h float32) float32 {
 	in := style.ToolBarInsetsOf(t.Look())
 	x := in.Left
 	for i := range t.items {
-		x += w[i] + style.ToolItemGap
+		x += w[i] + t.gapAfter(i)
 	}
 	return x + in.Right
 }
@@ -260,7 +297,7 @@ func (t *ToolBar) barHeight() float32 {
 	in := style.ToolBarInsetsOf(t.Look())
 	_, ih := t.natural(t.toolBtnW(h))
 	for i, it := range t.items {
-		if it != nil && it.Widget != nil {
+		if it != nil && (it.Widget != nil || it.Label) {
 			if want := ih[i] + in.Top + in.Bottom; want > h {
 				h = want
 			}
@@ -301,10 +338,9 @@ func (t *ToolBar) itemRects() []paintengine2d.Rect {
 		y = 2
 		btn = h - 4
 	}
-	gap := style.ToolItemGap
 	total := in.Left + in.Right
 	for i := range t.items {
-		total += w[i] + gap
+		total += w[i] + t.gapAfter(i)
 	}
 	out := make([]paintengine2d.Rect, len(t.items))
 	stretch, drop := float32(0), map[int]bool{}
@@ -312,17 +348,18 @@ func (t *ToolBar) itemRects() []paintengine2d.Rect {
 		avail := t.LocalBounds().Dx()
 		// The last item pays no gap after it: the bar's right inset is
 		// where it ends, which is what the free space measures against.
-		used := total - gap
-		// Too narrow: the tools nearest the free space give way, one at a
-		// time, so that what the free space pins to the right edge — the
-		// application's own controls — is still whole and still on the bar.
+		used := total - t.gapAfter(len(t.items)-1)
+		// Too narrow: the tools and the words nearest the free space give
+		// way, one at a time, so that what the free space pins to the
+		// right edge — the application's own controls — is still whole
+		// and still on the bar.
 		for used > avail {
 			i := t.lastBeforeStretch(drop)
 			if i < 0 {
 				break
 			}
 			drop[i] = true
-			used -= w[i] + gap
+			used -= w[i] + t.gapAfter(i)
 		}
 		if avail > used {
 			stretch = (avail - used) / float32(n)
@@ -335,7 +372,7 @@ func (t *ToolBar) itemRects() []paintengine2d.Rect {
 			out[i] = paintengine2d.Rect{}
 		case it != nil && it.Stretch:
 			out[i] = paintengine2d.XYWH(x, y, stretch, 0)
-		case it != nil && it.Widget != nil:
+		case it != nil && (it.Widget != nil || it.Label):
 			iy := (h - ih[i]) * 0.5
 			if iy < 1 {
 				iy = 1
@@ -347,13 +384,13 @@ func (t *ToolBar) itemRects() []paintengine2d.Rect {
 			out[i] = paintengine2d.XYWH(x, y, w[i], btn)
 		}
 		if it != nil && it.Stretch {
-			x += stretch + gap
+			x += stretch + t.gapAfter(i)
 			continue
 		}
 		if drop[i] {
 			continue
 		}
-		x += w[i] + gap
+		x += w[i] + t.gapAfter(i)
 	}
 	return out
 }
@@ -368,9 +405,10 @@ func (t *ToolBar) stretches() int {
 	return n
 }
 
-// lastBeforeStretch is the last tool or rule ahead of the bar's free
-// space that is still on the bar: the first thing to go when the bar is
-// narrower than its items.
+// lastBeforeStretch is the last tool, rule or word ahead of the bar's
+// free space that is still on the bar: the first thing to go when the
+// bar is narrower than its items. The bar shortens from the right, and
+// a control is never what goes.
 func (t *ToolBar) lastBeforeStretch(drop map[int]bool) int {
 	end := len(t.items)
 	for i, it := range t.items {
@@ -413,6 +451,16 @@ func (t *ToolBar) Paint(ctx *paintengine2d.Context) {
 	for i, it := range t.items {
 		if it == nil || it.Widget != nil || it.Stretch || rects[i].Empty() {
 			continue // a control paints itself; free space and a dropped tool paint nothing
+		}
+		if it.Label {
+			f := t.labelFont()
+			b := rects[i]
+			show := it.Text
+			if f.Advance(show) > b.Dx() {
+				show = f.Fit(show, b.Dx())
+			}
+			f.Draw(ctx, show, paintengine2d.Pt(b.Min.X, b.Min.Y+(b.Dy()-f.Height())*0.5), lk.Palette().Text)
+			continue
 		}
 		if it.Sep {
 			if grouped {
