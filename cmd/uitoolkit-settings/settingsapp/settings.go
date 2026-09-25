@@ -272,6 +272,23 @@ func (s *settingsState) stage(next style.Appearance) {
 	s.showStaged()
 }
 
+// apply writes the staged appearance to look.json and then wears it.
+//
+// Settings puts its own window into the look it has just applied, rather
+// than previewing something it is not: [app.Application.ApplyAppearance]
+// switches every window of this application to next, which is the same
+// call the look watcher makes in every *other* running app when it sees
+// the file change. The page is then rebuilt, because the parts of it that
+// are not a ThemeScope — the browser's rows, the options, Apply itself —
+// were built in the old look's metrics.
+//
+// There is one mechanism, not two: the command opens with
+// DisableLookWatch (see cmd/uitoolkit-settings/main.go), so the app that
+// writes look.json is the one app that does not watch it. Watching it as
+// well would mean this window took the new look twice — once here and
+// again up to 300ms later, when the poll noticed its own write — and the
+// second one would arrive after the user had already staged something
+// else and quietly restyle the page under them.
 func (s *settingsState) apply() {
 	next := s.staged.Normalize()
 	if err := style.SaveAppearance(next); err != nil {
