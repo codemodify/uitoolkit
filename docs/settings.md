@@ -167,7 +167,7 @@ wearing a short word:
 | --- | --- | --- |
 | **Animations** | Animations | Hover fades, the default button's pulse, busy bars (GTK's `gtk-enable-animations`). While the desktop itself asks for reduced motion it says so, because the desktop's setting wins over the preference |
 | **OS open/save dialogs** | OS open/save dialogs: the desktop's own Open and Save | KDE's and GNOME's own Open and Save, through the XDG portal, instead of the themed ones |
-| **OS borders** | OS borders: the desktop's title bar and borders | Chromium's switch. Windows that draw their own title bar (Mail's, with its tool bar in it) get the desktop's instead |
+| **OS borders** | OS borders: the desktop's title bar and borders | Chromium's switch. On, every window gets the desktop's title bar and borders, and one that draws its own title bar (Mail's, with its tool bar in it) keeps it as its first row; off, the toolkit draws every frame in the theme's style. The two states write look.json's `"decorations"` as `system` and `toolkit` — never `auto`, which is a third thing and is not what the box says ([decorations.md](decorations.md#the-settings-switch)) |
 | **Theme buttons** | Theme buttons: the caption buttons where the theme puts them | Close, minimise and maximise in the theme's era's order (the Mac's traffic lights on the left) rather than the desktop's |
 | **OS colors** | OS colors: follow the desktop's light or dark mode and its accent | The pack shows its sibling to match the desktop — a chosen *Breeze* draws as *Breeze Dark* — recoloured around the desktop's accent where the engine takes one |
 

@@ -647,11 +647,23 @@ func (s *settingsState) optionsRow() widget.Component {
 	// Chromium's switch: windows that draw their own title bar (Mail's,
 	// with its tool bar in it) get the desktop's title bar and borders
 	// instead, and their title bar becomes the first row.
+	//
+	// The box has two states, so it writes the two definite preferences —
+	// "system" and "toolkit" — and never "auto". Auto is a third thing:
+	// the toolkit frames a window that has a title bar of its own and
+	// leaves every other window to the desktop, which is the right
+	// default for a file nobody has edited but is not what unticking this
+	// box says. Unticked used to write auto, and a window without a title
+	// bar of its own — Settings' own, the sample's, most windows — then
+	// kept the desktop's frame: the box said the toolkit would draw the
+	// borders and nothing happened. Untouched, the staged preference
+	// stays whatever look.json holds, so applying a theme never turns
+	// client-side frames on behind the user's back.
 	system := s.option("OS borders", "OS borders: the desktop's title bar and borders",
 		"The desktop draws the title bar and borders of every window, instead of the toolkit.",
 		s.staged.Decorations == style.DecorationsSystem, func(on bool) {
 			next := s.staged
-			next.Decorations = style.DecorationsAuto
+			next.Decorations = style.DecorationsToolkit
 			if on {
 				next.Decorations = style.DecorationsSystem
 			}

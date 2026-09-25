@@ -1087,12 +1087,27 @@ func TestSettingsSystemTitleBarSwitch(t *testing.T) {
 	if sw := findOption(w.Content(), label); sw == nil || !sw.Checked {
 		t.Fatal("the option should show the saved choice")
 	}
+	// Unticking is the other half of the box's own sentence — "the
+	// toolkit draws the title bar and borders" — so it writes "toolkit",
+	// not "auto". Auto leaves every window without a title bar of its own
+	// (Settings' own window among them) with the desktop's frame, so the
+	// box used to promise the theme's borders and change nothing at all.
 	findOption(w.Content(), label).OnChange(false)
 	a.PumpOnce()
 	clickApply(t, w)
 	a.PumpOnce()
-	if got := style.LoadAppearance().Decorations; got != style.DecorationsAuto {
-		t.Fatalf("back to auto: %q", got)
+	if got := style.LoadAppearance().Decorations; got != style.DecorationsToolkit {
+		t.Fatalf("unticked writes the toolkit's frame, not %q", got)
+	}
+	if got := a.Decorations(); got != style.DecorationsToolkit {
+		t.Fatalf("the running app switched to %q", got)
+	}
+	raw, err = os.ReadFile(style.AppearancePath())
+	if err != nil || !strings.Contains(string(raw), `"decorations": "toolkit"`) {
+		t.Fatalf("look.json %s %v", raw, err)
+	}
+	if sw := findOption(w.Content(), label); sw == nil || sw.Checked {
+		t.Fatal("the option should show unticked for the toolkit's frame")
 	}
 }
 
