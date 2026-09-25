@@ -41,7 +41,7 @@ func TestSettingsAppAppliesAndPersists(t *testing.T) {
 	}
 	// One page: the icon set, the size its glyphs are drawn at and the
 	// shape of the window's corners are all on it, with no navigating to
-	// do first — three choosers on the preview's own settings bar.
+	// do first — three choosers after the options, over the preview.
 	for _, opt := range []string{"16", "24", "32", "Classic", "Sharp", "Theme shape", "Round", "Square"} {
 		if findCombo(w.Content(), opt) == nil {
 			t.Fatalf("the chooser offering %q is not on the page", opt)
@@ -49,7 +49,7 @@ func TestSettingsAppAppliesAndPersists(t *testing.T) {
 	}
 	// And so is every option the Appearance page used to hold, in the row
 	// over the preview, under the short word each one wears now.
-	for _, opt := range []string{"Animations", "OS open/save dialogs", "OS borders", "Theme buttons", "OS colors"} {
+	for _, opt := range []string{"Animations", "OS open/save dialogs", "OS borders", "OS colors"} {
 		if findOption(w.Content(), opt) == nil {
 			t.Fatalf("the %q option is not on the page", opt)
 		}
@@ -510,7 +510,7 @@ func TestSettingsThemeListScrollsAllBuiltins(t *testing.T) {
 	if !findLabelWith(w.Content(), "Prefs") {
 		t.Error("the prefs path is not on the page")
 	}
-	if files := findPanelTitled(w.Content(), "Files"); files == nil || inBrowserColumn(w.Content(), files) {
+	if files := filesBlock(t, w); inBrowserColumn(w.Content(), files) {
 		t.Error("the paths are in the browser column")
 	}
 	if findApply(w.Content()) == nil || inBrowserColumn(w.Content(), findApply(w.Content())) {
@@ -721,9 +721,9 @@ func pickCombo(t *testing.T, w *app.Window, item string) {
 	}
 }
 
-// cornerPicker is the window-shape chooser: the corner style is the
-// shape of the previewed window, so it is chosen on that window's own
-// settings bar, beside the icon set and the icon size.
+// cornerPicker is the window-shape chooser: the third of the three
+// settings that say what a pack is drawn with, beside the icon set and
+// the icon size on the page over the preview.
 func cornerPicker(t *testing.T, w *app.Window) *widgets.ComboBox {
 	t.Helper()
 	cb := namedCombo(w.Content(), "Window corners")
@@ -759,9 +759,11 @@ func cornerShown(t *testing.T, w *app.Window) string {
 	return cb.Items[cb.Selected]
 }
 
-// previewBars are the two tool bars of the previewed window, in the
-// order they stand: the live settings over the sample's own tools.
-func previewBars(t *testing.T, w *app.Window) (settings, tools *widgets.ToolBar) {
+// previewTools is the previewed application's own tool bar: New, Open,
+// Save and the rest of the sample's commands. It is the only tool bar on
+// the page — the bar of live settings that stood over the sample's menu
+// bar for a release is gone, and what was on it is on the page now.
+func previewTools(t *testing.T, w *app.Window) *widgets.ToolBar {
 	t.Helper()
 	var bars []*widgets.ToolBar
 	widget.Walk(w.Content(), func(c widget.Component) {
@@ -769,40 +771,10 @@ func previewBars(t *testing.T, w *app.Window) (settings, tools *widgets.ToolBar)
 			bars = append(bars, b)
 		}
 	})
-	switch len(bars) {
-	case 1:
-		// Only the sample's: the settings bar was left off.
-		return nil, bars[0]
-	case 2:
-		if widget.DeviceOrigin(bars[0]).Y > widget.DeviceOrigin(bars[1]).Y {
-			t.Error("the settings bar is under the sample's tool bar, not over it")
-			bars[0], bars[1] = bars[1], bars[0]
-		}
-		return bars[0], bars[1]
+	if len(bars) != 1 {
+		t.Fatalf("the page has %d tool bars, want the sample's own", len(bars))
 	}
-	t.Fatalf("the preview has %d tool bars", len(bars))
-	return nil, nil
-}
-
-// previewTools is the previewed application's own tool bar: New, Open,
-// Save and the rest of the sample's commands.
-func previewTools(t *testing.T, w *app.Window) *widgets.ToolBar {
-	t.Helper()
-	_, tools := previewBars(t, w)
-	if tools == nil {
-		t.Fatal("the preview has no tool bar")
-	}
-	return tools
-}
-
-// previewSettings is the bar of live settings over it.
-func previewSettings(t *testing.T, w *app.Window) *widgets.ToolBar {
-	t.Helper()
-	bar, _ := previewBars(t, w)
-	if bar == nil {
-		t.Fatal("the preview has no settings bar")
-	}
-	return bar
+	return bars[0]
 }
 
 func listed(root widget.Component, name string) bool {
@@ -960,7 +932,41 @@ func clickApply(t *testing.T, w *app.Window) {
 	apply.OnClick()
 }
 
-// findOption is one of the five check boxes in the row over the preview,
+// filesBlock is the three paths under the preview: the column the Prefs
+// line stands in. They were a group box with "Files" on its legend until
+// the legend and the frame were 34 pixels the preview wanted more — the
+// same call the Theme legend lost in the column on the left.
+func filesBlock(t *testing.T, w *app.Window) widget.Component {
+	t.Helper()
+	var found widget.Component
+	widget.Walk(w.Content(), func(c widget.Component) {
+		l, ok := c.(*widgets.Label)
+		if !ok || l.Text != "Prefs" || insidePreview(c) {
+			return
+		}
+		if row := l.Parent(); row != nil {
+			found = row.Parent()
+		}
+	})
+	if found == nil {
+		t.Fatal("no block of paths under the preview")
+	}
+	return found
+}
+
+// findRowLabel is the word in front of a chooser: a label of Settings'
+// own with exactly this text.
+func findRowLabel(root widget.Component, text string) *widgets.Label {
+	var lbl *widgets.Label
+	widget.Walk(root, func(c widget.Component) {
+		if l, ok := c.(*widgets.Label); ok && l.Text == text && !insidePreview(c) {
+			lbl = l
+		}
+	})
+	return lbl
+}
+
+// findOption is one of the four check boxes in the row over the preview,
 // by the short word on it. Settings' own, never the sample's: the
 // previewed application has check boxes of its own on its Controls tab.
 func findOption(root widget.Component, text string) *widgets.Checkbox {
@@ -973,7 +979,8 @@ func findOption(root widget.Component, text string) *widgets.Checkbox {
 	return box
 }
 
-// optionsRow is the row the five stand in.
+// optionsRow is the folding row the settings stand in: the four check
+// boxes and, after them, the three choosers.
 func optionsRow(t *testing.T, w *app.Window) *widgets.Wrap {
 	t.Helper()
 	var row *widgets.Wrap
@@ -1061,7 +1068,8 @@ func TestSettingsFollowDesktop(t *testing.T) {
 
 // "OS borders" — "OS borders: the desktop's title bar and borders" to a
 // screen reader — writes look.json's decorations, and running apps switch
-// their windows at once.
+// their windows at once. It writes the caption buttons with them: see
+// TestSettingsOSBordersPlacesTheCaptionButtons.
 func TestSettingsSystemTitleBarSwitch(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	a, w := openSettings(t, 1024, 780)
@@ -1111,41 +1119,102 @@ func TestSettingsSystemTitleBarSwitch(t *testing.T) {
 	}
 }
 
-// "Theme buttons" writes look.json's captionButtons.
-func TestSettingsThemeCaptionButtonsSwitch(t *testing.T) {
+// Where a title bar the toolkit draws puts its caption buttons is not a
+// box of its own any more. It was one — "Theme buttons" — and it asked a
+// question about a title bar that only exists while "OS borders" is
+// unticked: with the desktop drawing the frame there is no toolkit
+// caption to put buttons on, and with the toolkit drawing it the theme
+// is the only thing on the page with an opinion about where they go. So
+// the rule is implicit, and "OS borders" writes both halves of it.
+func TestSettingsOSBordersPlacesTheCaptionButtons(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	a, w := openSettings(t, 1024, 780)
-	const label = "Theme buttons"
-	sw := findOption(w.Content(), label)
-	if sw == nil || sw.Checked {
-		t.Fatalf("option %v: the desktop's layout is the default", sw)
+	if box := findOption(w.Content(), "Theme buttons"); box != nil {
+		t.Error("the Theme buttons box is back on the page")
 	}
-	sw.OnChange(true)
+	// Unticked: the toolkit draws the frame, so the theme places the
+	// buttons.
+	sw := findOption(w.Content(), "OS borders")
+	if sw == nil {
+		t.Fatal("no OS borders option")
+	}
+	sw.OnChange(false)
 	a.PumpOnce()
 	clickApply(t, w)
 	a.PumpOnce()
-	if got := style.LoadAppearance().CaptionButtons; got != style.CaptionButtonsTheme {
-		t.Fatalf("saved captionButtons %q", got)
+	if got := style.LoadAppearance(); got.Decorations != style.DecorationsToolkit || got.CaptionButtons != style.CaptionButtonsTheme {
+		t.Fatalf("unticked saved %q / %q", got.Decorations, got.CaptionButtons)
+	}
+	if got := a.CaptionButtons(); got != style.CaptionButtonsTheme {
+		t.Fatalf("the running app places its buttons %q", got)
 	}
 	raw, err := os.ReadFile(style.AppearancePath())
 	if err != nil || !strings.Contains(string(raw), `"captionButtons": "theme"`) {
 		t.Fatalf("look.json %s %v", raw, err)
 	}
-	findOption(w.Content(), label).OnChange(false)
+	// Ticked: the desktop draws the frame and the desktop's layout is
+	// what its buttons are in, which is the default and so is left out of
+	// the file altogether.
+	findOption(w.Content(), "OS borders").OnChange(true)
 	a.PumpOnce()
 	clickApply(t, w)
 	a.PumpOnce()
+	if got := style.LoadAppearance(); got.Decorations != style.DecorationsSystem || got.CaptionButtons != style.CaptionButtonsDesktop {
+		t.Fatalf("ticked saved %q / %q", got.Decorations, got.CaptionButtons)
+	}
 	if raw, _ := os.ReadFile(style.AppearancePath()); strings.Contains(string(raw), "captionButtons") {
 		t.Fatalf("the desktop's layout is left out of look.json: %s", raw)
 	}
 }
 
+// A look.json written before that box went keeps what it says. The
+// preference is public API — style.CaptionButtonsPref, and
+// app.Application.SetCaptionButtons for an application that wants to
+// choose — so a file that asks for the theme's layout with the desktop's
+// frame is not nonsense to be corrected on sight; it is a choice
+// Settings no longer offers to make and does not silently unmake either.
+// Touching "OS borders" is what replaces it, because that is the box the
+// rule now belongs to.
+func TestSettingsKeepsACaptionButtonsPrefItDidNotWrite(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	saved := style.DefaultAppearance()
+	saved.Decorations, saved.CaptionButtons = style.DecorationsSystem, style.CaptionButtonsTheme
+	if err := style.SaveAppearance(saved); err != nil {
+		t.Fatal(err)
+	}
+	a, w := openSettings(t, 1024, 780)
+	if box := findOption(w.Content(), "OS borders"); box == nil || !box.Checked {
+		t.Fatal("the OS borders box should open ticked for a saved system frame")
+	}
+	// Stage something else entirely and apply: the preference rides
+	// through untouched, because what Apply writes is the appearance
+	// Settings loaded with the one field a touched box changed.
+	clickTheme(t, w, "Windows 95")
+	a.PumpOnce()
+	clickApply(t, w)
+	a.PumpOnce()
+	if got := style.LoadAppearance(); got.Name != "win95" || got.CaptionButtons != style.CaptionButtonsTheme {
+		t.Fatalf("applying a pack rewrote the caption buttons: %+v", got)
+	}
+	// And the box that owns the rule now is what changes it.
+	findOption(w.Content(), "OS borders").OnChange(false)
+	a.PumpOnce()
+	clickApply(t, w)
+	a.PumpOnce()
+	if got := style.LoadAppearance(); got.CaptionButtons != style.CaptionButtonsTheme || got.Decorations != style.DecorationsToolkit {
+		t.Fatalf("after unticking: %q / %q", got.Decorations, got.CaptionButtons)
+	}
+}
+
 // The preview's tool bar is the icon preview: it is drawn in the staged
-// set at the staged size. The choosers that stage them are not on it —
-// they are on the bar of live settings above it, with the word that says
-// what each one sets. A strip of fifteen loose glyphs in the column of
-// choices used to answer this question; a tool bar full of icons answers
-// it by being the thing it is showing.
+// set at the staged size. The choosers that stage them are not on it and
+// are not in that window at all — they are on the page above it, each
+// behind the word that says what it sets. A strip of fifteen loose
+// glyphs in the column of choices used to answer this question; a tool
+// bar full of icons answers it by being the thing it is showing, and it
+// goes on answering it from outside: the whole previewed window is drawn
+// in the staged appearance through its theme scope, so the bar follows
+// the chooser whether or not the chooser stands on it.
 func TestSettingsIconSetPreview(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", dir)
@@ -1155,23 +1224,23 @@ func TestSettingsIconSetPreview(t *testing.T) {
 	installSettingsIconSet(t, dir, "lucide")
 	a, w := openSettings(t, 1024, 780)
 
-	settings, bar := previewBars(t, w)
+	bar := previewTools(t, w)
 	scope := previewScope(t, w)
 	if style.LookAppearance(scope.Theme()).Icons != style.IconSetClassic {
 		t.Fatal("the preview is not drawn in the staged icon set")
 	}
-	// All three choosers are on the settings bar, not on the sample's.
+	// All three choosers are on the page, outside the previewed window.
 	for _, name := range []string{"Icons", "Icon size", "Window corners"} {
 		combo := namedCombo(w.Content(), name)
 		if combo == nil {
 			t.Fatalf("no %s chooser", name)
 		}
-		if combo.Parent() != widget.Component(settings) {
-			t.Errorf("the %s chooser is not on the preview's settings bar (%T)", name, combo.Parent())
+		if insidePreview(combo) {
+			t.Errorf("the %s chooser is back inside the preview", name)
 		}
 	}
-	// And the sample's bar has its own commands back, Paste included:
-	// the choosers cost it that button when they rode on it.
+	// And the sample's bar has its own commands, Paste included: the
+	// choosers cost it that button when they rode on it.
 	for _, icon := range []style.ToolIcon{style.IconNew, style.IconOpen, style.IconSave,
 		style.IconCut, style.IconCopy, style.IconPaste, style.IconPen, style.IconMail} {
 		if i := toolIndex(bar, icon); i < 0 || bar.ItemRect(i).Empty() {
@@ -1283,12 +1352,9 @@ func TestSettingsHasNoDeleteIconSetButton(t *testing.T) {
 	if del := findButton(w.Content(), "Delete icon set…"); del != nil {
 		t.Error("Delete icon set… comes back when a user set is staged")
 	}
-	// Files is three paths and nothing that does anything: it is the one
-	// part of the page that changes nothing.
-	files := findPanelTitled(w.Content(), "Files")
-	if files == nil {
-		t.Fatal("no Files block")
-	}
+	// The paths are three lines and nothing that does anything: they are
+	// the one part of the page that changes nothing.
+	files := filesBlock(t, w)
 	widget.Walk(files, func(c widget.Component) {
 		if b, ok := c.(*widgets.Button); ok {
 			t.Errorf("Files carries a %q button", b.Text)
@@ -1506,18 +1572,20 @@ func TestSettingsPageOpensWhereItSays(t *testing.T) {
 	}
 }
 
-// The five options stand in one row over the preview: the four the
-// Behaviour panel held in the column, plus the one that says where the
-// colours come from, which was already up here on its own.
+// The settings stand in one folding row over the preview: the four
+// on/off options the Behaviour panel held in the column — with the one
+// that says where the colours come from, which was already up here on
+// its own — and then the three choosers that came out of the previewed
+// window.
 //
-// They are check boxes rather than switches, and they wear a short word
-// rather than the sentence each had in the column. Both are the price of
-// standing over the preview: the pane is 392 logical pixels at the
-// 720x520 minimum, a switch's pill is 42 of them before its word, and
-// every line this row takes is a line off the window the page is about.
-// The row folds — one line at the default size, two at the minimum — and
-// what it must never do is take enough of the pane for the preview to
-// stop being the biggest thing in it.
+// The options are check boxes rather than switches, and they wear a
+// short word rather than the sentence each had in the column. Both are
+// the price of standing over the preview: the pane is 453 logical pixels
+// at the 720x520 minimum, a switch's pill is 42 of them before its word,
+// and every line this row takes is a line off the window the page is
+// about. The row folds — two lines at the default size, three at the
+// minimum — and what it must never do is take enough of the pane for the
+// preview to stop being the biggest thing in it.
 func TestTheOptionsRowOverThePreview(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	if err := style.SaveAppearance(style.DefaultAppearance()); err != nil {
@@ -1525,10 +1593,8 @@ func TestTheOptionsRowOverThePreview(t *testing.T) {
 	}
 	_, w := openSettings(t, 1024, 860)
 	row := optionsRow(t, w)
-	// The words, in the order they are read. The three narrowest first is
-	// what makes a narrow pane fold to three and two instead of four and
-	// one, and the frame pair stay next to each other across the fold.
-	want := []string{"Animations", "OS open/save dialogs", "OS borders", "Theme buttons", "OS colors"}
+	// The words, in the order they are read.
+	want := []string{"Animations", "OS open/save dialogs", "OS borders", "OS colors"}
 	var got []string
 	widget.Walk(row, func(c widget.Component) {
 		if b, ok := c.(*widgets.Checkbox); ok {
@@ -1550,7 +1616,6 @@ func TestTheOptionsRowOverThePreview(t *testing.T) {
 		"Animations":           "Animations",
 		"OS open/save dialogs": "OS open/save dialogs: the desktop's own Open and Save",
 		"OS borders":           "OS borders: the desktop's title bar and borders",
-		"Theme buttons":        "Theme buttons: the caption buttons where the theme puts them",
 		"OS colors":            "OS colors: follow the desktop's light or dark mode and its accent",
 	}
 	for word, name := range names {
@@ -1584,9 +1649,56 @@ func TestTheOptionsRowOverThePreview(t *testing.T) {
 			t.Errorf("a %q switch is back on the page", sw.Text)
 		}
 	})
-	// One line while the pane is wide.
-	if n := rowLines(row); n != 1 {
-		t.Errorf("the five stand on %d lines in a %v pane; they fit on one", n, row.LocalBounds().Dx())
+	// Two lines while the pane is wide, and they are the two lines the
+	// arrangement is named for: the four options fill the first and the
+	// three choosers fall onto the second by themselves. They are one
+	// wrapping row rather than two rows of their own because two rows
+	// each fold on their own account, which is a fourth line at the
+	// 720x520 minimum and a preview that stops being what the pane is
+	// for.
+	if n := rowLines(row); n != 2 {
+		t.Errorf("the settings stand on %d lines in a %v pane; they fold onto two", n, row.LocalBounds().Dx())
+	}
+	tops := map[float32]bool{}
+	for _, word := range want {
+		tops[findOption(w.Content(), word).Bounds().Min.Y] = true
+	}
+	if len(tops) != 1 {
+		t.Errorf("the four options are on %d lines at 1024x860; they fit on one", len(tops))
+	}
+	for _, name := range []string{"Icons", "Icon size", "Window corners"} {
+		cb := namedCombo(w.Content(), name)
+		if cb == nil {
+			t.Fatalf("no %q chooser on the page", name)
+		}
+		if insidePreview(cb) {
+			t.Errorf("the %q chooser is inside the preview", name)
+		}
+		for top := range tops {
+			if widget.DeviceOrigin(cb).Y < widget.DeviceOrigin(row).Y+top+1 {
+				t.Errorf("the %q chooser shares the options' line at 1024x860", name)
+			}
+		}
+	}
+	// And every chooser has the word that says what it sets in front of
+	// it, on the same line, with the word inside the name a screen reader
+	// says.
+	for i, name := range []string{"Icons", "Icon size", "Window corners"} {
+		word := settingWords[i]
+		lbl := findRowLabel(w.Content(), word)
+		if lbl == nil {
+			t.Fatalf("the word %q is not on the page", word)
+		}
+		cb := namedCombo(w.Content(), name)
+		if widget.DeviceOrigin(lbl).X >= widget.DeviceOrigin(cb).X {
+			t.Errorf("the word %q is not in front of the %q chooser", word, name)
+		}
+		if !strings.Contains(strings.ToLower(name), strings.ToLower(word)) {
+			t.Errorf("the page says %q and a screen reader says %q: two names for one control", word, name)
+		}
+		if cb.Tip == "" {
+			t.Errorf("the %q chooser says nothing about itself", name)
+		}
 	}
 }
 
@@ -1599,23 +1711,34 @@ func rowLines(row *widgets.Wrap) int {
 	return len(tops)
 }
 
-// The preview carries two bars, and which is which is the whole point of
-// this arrangement: the live settings on top, over the menu bar, where
-// no application has ever put a tool bar, and the sample's own tools
-// under it, where a tool bar belongs. Each setting has the word that
-// says what it sets in front of it.
-func TestThePreviewsTwoBars(t *testing.T) {
+// The preview carries one bar again, and it is the sample's own. There
+// were two for a release: the sample's tools under its menu bar, where a
+// tool bar belongs, and a bar of Settings' own above the menu bar, where
+// no application has ever put one, carrying the icon set, the icon size
+// and the corner style. Those three are settings of the page, so they
+// are read where the page keeps its settings, and the window below is a
+// sample again with nothing live in its chrome.
+func TestThePreviewsOnlyBarIsTheSamples(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	if err := style.SaveAppearance(style.DefaultAppearance()); err != nil {
 		t.Fatal(err)
 	}
 	_, w := openSettings(t, 1024, 860)
-	settings, tools := previewBars(t, w)
-	if settings == nil || tools == nil {
-		t.Fatal("the preview does not carry two bars")
+	var bars []*widgets.ToolBar
+	widget.Walk(w.Content(), func(c widget.Component) {
+		if b, ok := c.(*widgets.ToolBar); ok {
+			bars = append(bars, b)
+		}
+	})
+	if len(bars) != 1 {
+		t.Fatalf("the page has %d tool bars, want the sample's own", len(bars))
 	}
-	// Over the menu bar, not merely over the tools: the menu bar is the
-	// first thing of the sample's own, and the settings stand outside it.
+	tools := bars[0]
+	if !insidePreview(tools) || tools.AccessibleName() != "Tools" {
+		t.Errorf("the one tool bar is %q, inside the preview: %v", tools.AccessibleName(), insidePreview(tools))
+	}
+	// It is under the previewed window's menu bar, which is where a tool
+	// bar belongs and where nothing of Settings' own stands over it.
 	var menu *widgets.MenuBar
 	widget.Walk(w.Content(), func(c widget.Component) {
 		if m, ok := c.(*widgets.MenuBar); ok && menu == nil {
@@ -1625,52 +1748,23 @@ func TestThePreviewsTwoBars(t *testing.T) {
 	if menu == nil {
 		t.Fatal("the preview has no menu bar")
 	}
-	if widget.DeviceOrigin(settings).Y >= widget.DeviceOrigin(menu).Y {
-		t.Error("the settings bar is not over the previewed window's menu bar")
+	if widget.DeviceOrigin(tools).Y <= widget.DeviceOrigin(menu).Y {
+		t.Error("the sample's tool bar is over its menu bar")
 	}
-	// The three choosers are on it, in the order they are read, each one
-	// behind its word.
-	var words []string
-	for _, it := range settings.Items() {
-		if it.Label {
-			words = append(words, it.Text)
+	// No chooser of Settings' own rides on it, and none is anywhere in
+	// that window. (The sample has a combo box of its own, "Choice", on
+	// its Controls tab; that one is the point of a preview.)
+	widget.Walk(previewScope(t, w), func(c widget.Component) {
+		cb, ok := c.(*widgets.ComboBox)
+		if !ok {
+			return
 		}
-	}
-	if got, want := words, PreviewSettingsWords[:]; len(got) != len(want) {
-		t.Fatalf("the bar carries the words %q, want %q", got, want)
-	} else {
-		for i := range want {
-			if got[i] != want[i] {
-				t.Errorf("word %d is %q, want %q", i, got[i], want[i])
-			}
-		}
-	}
-	// Every word is the start of what its chooser is called to a screen
-	// reader, never a second name for it: what is read out has to carry
-	// what is on the screen.
-	for i, name := range []string{"Icons", "Icon size", "Window corners"} {
-		cb := namedCombo(w.Content(), name)
-		if cb == nil {
-			t.Fatalf("no %q chooser on the page", name)
-		}
-		if cb.Parent() != widget.Component(settings) {
-			t.Errorf("the %q chooser is not on the settings bar (%T)", name, cb.Parent())
-		}
-		word := PreviewSettingsWords[i]
-		if !strings.Contains(strings.ToLower(name), strings.ToLower(word)) {
-			t.Errorf("the bar says %q and a screen reader says %q: two names for one control", word, name)
-		}
-		if cb.Tip == "" {
-			t.Errorf("the %q chooser has no tooltip, and at the narrowest window its word is dropped", name)
-		}
-	}
-	// The sample's bar is the sample's: no chooser rides on it.
-	widget.Walk(tools, func(c widget.Component) {
-		if cb, ok := c.(*widgets.ComboBox); ok {
-			t.Errorf("a %q chooser is back on the sample's own tool bar", cb.AccessibleName())
+		switch cb.AccessibleName() {
+		case "Icons", "Icon size", "Window corners", "Decade":
+			t.Errorf("the %q chooser is back inside the preview", cb.AccessibleName())
 		}
 	})
-	// And the window corners are nowhere in the sample's menus any more:
+	// And the window corners are nowhere in the sample's menus either:
 	// they were three radio items in View for a release, where the owner
 	// of this toolkit could not find them.
 	widget.Walk(w.Content(), func(c widget.Component) {
@@ -1688,14 +1782,194 @@ func TestThePreviewsTwoBars(t *testing.T) {
 	})
 }
 
-// The bar can be left off, and then the preview is the sample
-// application and nothing else: the Theme Atlas renders 129 tiles out of
-// this window, and a tile is looked at rather than used.
-func TestPlainPreviewLeavesTheSettingsBarOff(t *testing.T) {
+// The one thing in the previewed window that is not make-believe: File ▸
+// Open… and Save… open the file dialog the staged "OS open/save dialogs"
+// option asks for, so that the option can be looked at instead of read.
+//
+// What is checked here is which dialog was asked for, not which one
+// appeared: there is no XDG portal on a test's private bus, so the
+// desktop's dialog would fall back to the toolkit's and both branches
+// would end in the same window.
+func TestThePreviewOpensTheStagedFileDialog(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	if err := style.SaveAppearance(style.DefaultAppearance()); err != nil {
 		t.Fatal(err)
 	}
+	asked := []bool{}
+	var opts []widgets.FileDialogOptions
+	defer swapPreviewDialog(t, func(from widget.Component, native bool, o widgets.FileDialogOptions) {
+		asked = append(asked, native)
+		opts = append(opts, o)
+		if !insidePreview(from) {
+			t.Error("the dialog opens from outside the preview, so it will not wear the staged pack")
+		}
+	})()
+	a, w := openSettings(t, 1024, 860)
+
+	// Unticked: the toolkit's own.
+	openPreviewFile(t, w, "&Open…")
+	a.PumpOnce()
+	if len(asked) != 1 || asked[0] {
+		t.Fatalf("with the box unticked the preview asked for native=%v", asked)
+	}
+	if opts[0].Mode != widgets.FileOpen || !strings.Contains(opts[0].Title, "preview") {
+		t.Errorf("the dialog is %q, mode %v", opts[0].Title, opts[0].Mode)
+	}
+	// Ticked: the desktop's, from the staged setting and without an
+	// Apply — which is the whole point, because Apply is what would make
+	// it the applied one.
+	findOption(w.Content(), "OS open/save dialogs").OnChange(true)
+	a.PumpOnce()
+	openPreviewFile(t, w, "&Save")
+	a.PumpOnce()
+	if len(asked) != 2 || !asked[1] {
+		t.Fatalf("with the box ticked the preview asked for native=%v", asked)
+	}
+	if opts[1].Mode != widgets.FileSave {
+		t.Errorf("Save opened a dialog in mode %v", opts[1].Mode)
+	}
+	if style.LoadAppearance().NativeDialogs {
+		t.Error("previewing the dialog wrote look.json")
+	}
+	// The tool bar's Open and Save are the same command as the menu's.
+	tools := previewTools(t, w)
+	i := toolIndex(tools, style.IconOpen)
+	if i < 0 || tools.Items()[i].OnClick == nil {
+		t.Fatal("the sample's tool bar has no Open")
+	}
+	tools.Items()[i].OnClick()
+	a.PumpOnce()
+	if len(asked) != 3 {
+		t.Error("the tool bar's Open does not open the dialog its menu item does")
+	}
+}
+
+// And the staged setting wins over the applied one. style.NativeDialogs()
+// is process-wide and holds what look.json said when Settings started,
+// and widgets.ShowFileDialog ORs it — so a preview that went through the
+// front door would show the desktop's dialog for an unticked box on a
+// desktop whose dialogs are applied, which is a preview of the setting
+// the user is trying to leave.
+func TestThePreviewFileDialogIgnoresTheAppliedSetting(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	saved := style.DefaultAppearance()
+	saved.NativeDialogs = true
+	if err := style.SaveAppearance(saved); err != nil {
+		t.Fatal(err)
+	}
+	// A headless application built on an explicit look does not read
+	// look.json into the process the way the command does, so say what
+	// the command's start-up would have said: the desktop's dialogs are
+	// the applied setting.
+	style.SetNativeDialogs(true)
+	t.Cleanup(func() { style.SetNativeDialogs(false) })
+	a, w := openSettings(t, 1024, 860)
+	if !style.NativeDialogs() {
+		t.Fatal("the applied setting did not reach the process")
+	}
+	if box := findOption(w.Content(), "OS open/save dialogs"); box == nil || !box.Checked {
+		t.Fatal("the option should open ticked")
+	}
+	// Untick it and ask the preview: the toolkit's own dialog, not the
+	// portal's, and not a bare ShowFileDialog either.
+	var native []bool
+	done := swapPreviewDialog(t, func(_ widget.Component, n bool, _ widgets.FileDialogOptions) { native = append(native, n) })
+	findOption(w.Content(), "OS open/save dialogs").OnChange(false)
+	a.PumpOnce()
+	openPreviewFile(t, w, "&Open…")
+	a.PumpOnce()
+	done()
+	if len(native) != 1 || native[0] {
+		t.Fatalf("the preview asked for native=%v while the applied setting says true", native)
+	}
+
+	// The real path, with nothing swapped: a themed dialog comes up in
+	// the window even though style.NativeDialogs() is on, and it reads a
+	// directory and writes nothing.
+	openPreviewFile(t, w, "&Open…")
+	a.PumpOnce()
+	if w.Overlay() == nil {
+		t.Fatal("no dialog came up")
+	}
+	var fd *widgets.FileDialog
+	widget.Walk(w.Overlay(), func(c widget.Component) {
+		if d, ok := c.(*widgets.FileDialog); ok {
+			fd = d
+		}
+	})
+	if fd == nil {
+		// The dialog is the overlay's card rather than a child of it in
+		// some looks; the overlay being up is what matters, but a themed
+		// dialog is what has to be up.
+		if findOverlayButton(w, "Cancel") == nil {
+			t.Fatal("the overlay is not the toolkit's own file dialog")
+		}
+	}
+	if findOverlayButton(w, "Cancel") == nil {
+		t.Error("the toolkit's file dialog has no Cancel")
+	}
+}
+
+// swapPreviewDialog puts f in front of the preview's file dialog and
+// gives back what restores it.
+func swapPreviewDialog(t *testing.T, f func(widget.Component, bool, widgets.FileDialogOptions)) func() {
+	t.Helper()
+	was := showPreviewDialog
+	showPreviewDialog = f
+	restore := func() { showPreviewDialog = was }
+	t.Cleanup(restore)
+	return restore
+}
+
+// openPreviewFile picks an item of the previewed application's File menu.
+func openPreviewFile(t *testing.T, w *app.Window, item string) {
+	t.Helper()
+	var bar *widgets.MenuBar
+	widget.Walk(w.Content(), func(c widget.Component) {
+		if m, ok := c.(*widgets.MenuBar); ok && bar == nil {
+			bar = m
+		}
+	})
+	if bar == nil {
+		t.Fatal("the preview has no menu bar")
+	}
+	for _, m := range bar.Menus() {
+		for _, it := range m.Items {
+			if it.Text == item {
+				if it.OnClick == nil {
+					t.Fatalf("the preview's %q does nothing", item)
+				}
+				it.OnClick()
+				return
+			}
+		}
+	}
+	t.Fatalf("no %q in the preview's menus", item)
+}
+
+func findOverlayButton(w *app.Window, text string) *widgets.Button {
+	if w.Overlay() == nil {
+		return nil
+	}
+	var btn *widgets.Button
+	widget.Walk(w.Overlay(), func(c widget.Component) {
+		if b, ok := c.(*widgets.Button); ok && b.Text == text {
+			btn = b
+		}
+	})
+	return btn
+}
+
+// A plain preview is make-believe all through: its File menu says what
+// was asked of it and opens nothing. The Theme Atlas renders 129 tiles
+// out of this window, and a tile is looked at rather than clicked.
+func TestPlainPreviewOpensNothing(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if err := style.SaveAppearance(style.DefaultAppearance()); err != nil {
+		t.Fatal(err)
+	}
+	opened := 0
+	defer swapPreviewDialog(t, func(widget.Component, bool, widgets.FileDialogOptions) { opened++ })()
 	a := uitoolkit.New(uitoolkit.Options{Look: style.PreferredLook(), Headless: true, Scale: 1, DisableLookWatch: true})
 	w, err := a.NewWindow(platform.WindowOptions{Title: "Settings", Width: 1024, Height: 860, Headless: true})
 	if err != nil {
@@ -1705,19 +1979,24 @@ func TestPlainPreviewLeavesTheSettingsBarOff(t *testing.T) {
 	w.SetContent(SettingsAppWith(a, w, SettingsOptions{Theme: "win95", PlainPreview: true}))
 	a.PumpOnce()
 
-	settings, tools := previewBars(t, w)
-	if settings != nil {
-		t.Error("the settings bar is on a plain preview")
+	openPreviewFile(t, w, "&Open…")
+	a.PumpOnce()
+	if opened != 0 || w.Overlay() != nil {
+		t.Errorf("a plain preview opened a file dialog (%d)", opened)
 	}
-	if tools == nil {
-		t.Fatal("the plain preview lost the sample's own tool bar")
-	}
+	// It is the sample application otherwise: its own tool bar, whole.
+	tools := previewTools(t, w)
 	if i := toolIndex(tools, style.IconPaste); i < 0 {
-		t.Error("the sample's tool bar is not the sample's own")
+		t.Error("the plain preview lost the sample's own tool bar")
 	}
+	// The three choosers are on the page, not in the window, so they are
+	// there for a plain preview too — nothing the atlas crops holds them.
 	for _, name := range []string{"Icons", "Icon size", "Window corners"} {
-		if namedCombo(w.Content(), name) != nil {
-			t.Errorf("the %q chooser is on a plain preview", name)
+		cb := namedCombo(w.Content(), name)
+		if cb == nil {
+			t.Errorf("the %q chooser went with the plain preview", name)
+		} else if insidePreview(cb) {
+			t.Errorf("the %q chooser is inside the plain preview", name)
 		}
 	}
 	// The panel it draws in is the same rectangle, so the atlas crops

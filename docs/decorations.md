@@ -378,9 +378,16 @@ in-app windows, pixel by pixel, at 1 and 1.75.
 
 Glyphs, sizes and colours are the look's; the side and order of the
 buttons are the desktop's, unless the user prefers the look's own layout:
-look.json `"captionButtons": "theme"` (Settings: **Theme buttons**, in
-the row over the preview) puts the Mac's traffic lights on the left, gives GNOME's
-lone close, KDE's window menu on the left. It applies live, to every app.
+look.json `"captionButtons": "theme"` puts the Mac's traffic lights on the
+left, gives GNOME's lone close, KDE's window menu on the left. It applies
+live, to every app. Settings had a **Theme buttons** box for it and does
+not any more: the question only arises while the toolkit is drawing the
+frame, and while it is, the theme is the only thing with an opinion — so
+unticking **OS borders** writes `"captionButtons": "theme"` with
+`"decorations": "toolkit"`, and ticking it writes the desktop's layout
+back. `style.CaptionButtonsPref` and `app.Application.SetCaptionButtons`
+are unchanged: an application that wants to choose still can, and a
+`look.json` that already names a layout keeps it.
 
 `go run ./cmd/uitk-themesheet -frames -theme luna -o /tmp/f` renders a
 pack's frames sheet: windows active, in the backdrop, maximized, with the

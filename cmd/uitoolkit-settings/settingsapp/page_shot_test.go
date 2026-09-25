@@ -10,10 +10,11 @@ import (
 	"github.com/codemodify/uitoolkit/layout"
 	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
+	"github.com/codemodify/uitoolkit/widget"
 )
 
-// The page is one column of choices and one preview that sets what it
-// shows, and whether
+// The page is one column of choices, one block of settings and one
+// preview of what they make, and whether
 // that works is a question about pixels: the column has to stay readable
 // and the preview has to stay the biggest thing on the page at the
 // smallest window Settings opens to and at a fractional display scale.
@@ -52,12 +53,19 @@ func TestSettingsPageHoldsAtEverySize(t *testing.T) {
 				// The preview is far the biggest thing on its side of the
 				// splitter at every one of these sizes: that is the
 				// promise the icon strip was moved out of this pane to
-				// keep, and the reason the five options over it are one
-				// folding row of check boxes rather than a stack of
-				// switches with a line of prose each. It is 82% of the
-				// pane at 1024x860 and 61% at the 720x520 minimum, where
-				// the row folds onto two lines; five switches would have
-				// folded onto three and left it 53%.
+				// keep, and the reason the settings over it are one
+				// folding row rather than a stack of switches with a line
+				// of prose each. It is 82% of the pane at 1024x860 and
+				// 62% at the 720x520 minimum, where the row folds onto
+				// three lines.
+				//
+				// It went up, not down, when the three choosers came out
+				// of the preview and onto this page: the line they cost
+				// the pane is 30 px and the group box the three paths
+				// gave up under it was 34. Two rows of settings instead
+				// of one folding row would have cost a fourth line at the
+				// minimum and left the preview 53%, which is the whole
+				// reason they are one row.
 				split := settingsSplit(t, w)
 				pane := split.PaneB()
 				box := previewScope(t, w).LocalBounds()
@@ -65,41 +73,18 @@ func TestSettingsPageHoldsAtEverySize(t *testing.T) {
 					t.Errorf("%s at %g×, %dx%d: the preview is %v of a %v pane",
 						pack, scale, size[0], size[1], box.Dy(), pane.Dy())
 				}
-				// And the three settings it carries are whole and on
-				// their bar at every one of these sizes. The words in
-				// front of them are not promised — the bar sheds those
-				// from the right when it runs out of room, and at the
-				// 720x520 minimum all three go — but a chooser cut off
-				// by the window frame would be a setting nobody can
-				// reach.
-				bar := previewSettings(t, w)
-				words := 0
-				for i, it := range bar.Items() {
-					if it.Label && !bar.ItemRect(i).Empty() {
-						words++
-					}
-				}
-				for _, name := range []string{"Icons", "Icon size", "Window corners"} {
-					cb := namedCombo(w.Content(), name)
-					if cb == nil {
-						t.Fatalf("%s at %g×, %dx%d: no %q chooser", pack, scale, size[0], size[1], name)
-					}
-					if cb.Bounds().Dx() < cb.Measure(layout.Unbounded()).X-0.51 {
-						t.Errorf("%s at %g×, %dx%d: the %q chooser is squeezed to %v of %v",
-							pack, scale, size[0], size[1], name, cb.Bounds().Dx(), cb.Measure(layout.Unbounded()).X)
-					}
-					if in := cb.Bounds(); in.Max.X > bar.LocalBounds().Dx()+0.51 {
-						t.Errorf("%s at %g×, %dx%d: the %q chooser ends at %v on a bar %v wide",
-							pack, scale, size[0], size[1], name, in.Max.X, bar.LocalBounds().Dx())
-					}
-				}
-				// The five options over it are whole at every one of
-				// these sizes too. A check box does not elide and the
-				// row does not shed: it folds, and what it must never do
-				// is hand one of them a width its word does not fit in
-				// or push one past the pane's right edge.
+				// Everything in that block is whole at every one of these
+				// sizes. A check box does not elide and the row does not
+				// shed: it folds, and what it must never do is hand one
+				// of them a width its word does not fit in or push one
+				// past the pane's right edge. The three words in front of
+				// the choosers are promised now, which they were not on
+				// the bar inside the preview — that bar shed them from
+				// the right and at this minimum dropped all three; a
+				// wrapping row keeps what it carries and takes a line
+				// instead.
 				row := optionsRow(t, w)
-				for _, word := range []string{"Animations", "OS open/save dialogs", "OS borders", "Theme buttons", "OS colors"} {
+				for _, word := range []string{"Animations", "OS open/save dialogs", "OS borders", "OS colors"} {
 					box := findOption(w.Content(), word)
 					if box == nil {
 						t.Fatalf("%s at %g×, %dx%d: no %q option", pack, scale, size[0], size[1], word)
@@ -113,10 +98,42 @@ func TestSettingsPageHoldsAtEverySize(t *testing.T) {
 							pack, scale, size[0], size[1], word, box.Bounds().Max.X, row.LocalBounds().Dx())
 					}
 				}
+				words := 0
+				for _, word := range settingWords {
+					if findRowLabel(w.Content(), word) != nil {
+						words++
+					}
+				}
+				if words != len(settingWords) {
+					t.Errorf("%s at %g×, %dx%d: %d of the %d words in front of the choosers are on the page",
+						pack, scale, size[0], size[1], words, len(settingWords))
+				}
+				for _, name := range []string{"Icons", "Icon size", "Window corners"} {
+					cb := namedCombo(w.Content(), name)
+					if cb == nil {
+						t.Fatalf("%s at %g×, %dx%d: no %q chooser", pack, scale, size[0], size[1], name)
+					}
+					if cb.Bounds().Dx() < cb.Measure(layout.Unbounded()).X-0.51 {
+						t.Errorf("%s at %g×, %dx%d: the %q chooser is squeezed to %v of %v",
+							pack, scale, size[0], size[1], name, cb.Bounds().Dx(), cb.Measure(layout.Unbounded()).X)
+					}
+					if x := widget.DeviceOrigin(cb).X + cb.LocalBounds().Dx(); x > widget.DeviceOrigin(row).X+row.LocalBounds().Dx()+0.51 {
+						t.Errorf("%s at %g×, %dx%d: the %q chooser ends at %v in a row that ends at %v",
+							pack, scale, size[0], size[1], name, x, widget.DeviceOrigin(row).X+row.LocalBounds().Dx())
+					}
+				}
+				// The fold: two lines at 1024x860, where the four options
+				// fill the first and the three choosers fall onto the
+				// second all by themselves, and three at the 720x520
+				// minimum. Four would be a line too many — see above.
 				lines := rowLines(row)
-				if lines > 2 {
-					t.Errorf("%s at %g×, %dx%d: the five options stand on %d lines in a %v pane",
-						pack, scale, size[0], size[1], lines, row.LocalBounds().Dx())
+				want := 3
+				if size[0] > 800 {
+					want = 2
+				}
+				if lines > want {
+					t.Errorf("%s at %g×, %dx%d: the settings stand on %d lines in a %v pane, want at most %d",
+						pack, scale, size[0], size[1], lines, row.LocalBounds().Dx(), want)
 				}
 				// And the browser fills its own column, the way the
 				// preview fills the pane beside it: the list runs from
@@ -144,9 +161,9 @@ func TestSettingsPageHoldsAtEverySize(t *testing.T) {
 					t.Errorf("%s at %g×, %dx%d: the browser shows %d of %d packs",
 						pack, scale, size[0], size[1], hi-lo, list.Count)
 				}
-				t.Logf("%s at %g×, %dx%d: bar %v wide, %d of 3 words shown; options on %d line(s), preview %.0f%% of the pane; "+
+				t.Logf("%s at %g×, %dx%d: the settings are %.0f px wide on %d line(s), all %d words shown; preview %.0f%% of the pane; "+
 					"the browser shows %d of %d packs in %.0f px, %.0f%% of a %.0f px column",
-					pack, scale, size[0], size[1], bar.LocalBounds().Dx(), words, lines, 100*box.Dy()/pane.Dy(),
+					pack, scale, size[0], size[1], row.LocalBounds().Dx(), lines, words, 100*box.Dy()/pane.Dy(),
 					hi-lo, list.Count, list.LocalBounds().Dy(), 100*list.LocalBounds().Dy()/col.LocalBounds().Dy(), col.LocalBounds().Dy())
 				if dir != "" {
 					name := fmt.Sprintf("settings-%s%s-%gx-%dx%d.png", page, pack, scale, size[0], size[1])

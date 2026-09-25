@@ -16,13 +16,15 @@ import (
 // new numbers (docs/settings.md, "Screenshot geometry").
 //
 // What the preview carries inside itself does not move them: the panel
-// takes whatever the two rows over and under it leave, so the settings
-// bar at the head of the window grew inside this rectangle rather than
-// pushing it down. What is over and under it does move them, and the
-// row of options that replaced the single colours switch moved them up
-// and made the panel taller: the switch stood over a line of prose, the
-// five check boxes fit on one line at this size, and the 22 pixels that
-// line of prose was taking went to the preview.
+// takes whatever the two blocks over and under it leave, so the settings
+// bar that stood at the head of the window for a release grew inside
+// this rectangle rather than pushing it down. What is over and under it
+// does move them, and the last two changes moved them both ways at once.
+// The three choosers came off that bar and onto the page, which gave the
+// block over the panel a second line and pushed its top down 30 px
+// (y 44 → 74); the three paths under it gave up the group box they were
+// in, whose legend and frame were 34 px (101 → 67). Four of those 34 are
+// the difference: the panel is 651 tall where it was 647.
 //
 // The column on the left cannot move them either, whatever is taken out
 // of it: the splitter's ratio is worked out from the window's width and
@@ -32,9 +34,9 @@ import (
 // exactly where they were.
 const (
 	previewShotX = 317
-	previewShotY = 44
+	previewShotY = 74
 	previewShotW = 697
-	previewShotH = 647
+	previewShotH = 651
 )
 
 func TestSettingsPreviewPanelKeepsItsPlace(t *testing.T) {
