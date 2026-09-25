@@ -46,13 +46,25 @@ func TestSettingsAppAppliesAndPersists(t *testing.T) {
 			t.Fatalf("corners option %q missing", opt)
 		}
 	}
-	for _, opt := range []string{"Small", "Medium", "Large"} {
-		if findCombo(w.Content(), opt) == nil {
-			t.Fatalf("icon size option %q missing", opt)
+	// The icon settings left this page for the head of Themes, where the
+	// strip shows what they do.
+	for _, gone := range []string{"Small", "Medium", "Large", "Classic", "Sharp"} {
+		if findCombo(w.Content(), gone) != nil {
+			t.Fatalf("the icon chooser %q is still on Appearance", gone)
 		}
 	}
 	clickSettingsNav(t, w, "Themes")
 	a.PumpOnce()
+	for _, opt := range []string{"Small", "Medium", "Large"} {
+		if findCombo(w.Content(), opt) == nil {
+			t.Fatalf("icon size option %q missing from Themes", opt)
+		}
+	}
+	for _, opt := range []string{"Classic", "Sharp"} {
+		if findCombo(w.Content(), opt) == nil {
+			t.Fatalf("icon set option %q missing from Themes", opt)
+		}
+	}
 	got := style.LookAppearance(a.Look())
 	if got.Theme != style.ThemeLight || got.Corners != style.CornersSquare || got.Icons != style.IconSetSharp {
 		t.Fatalf("look %+v", got)
@@ -164,7 +176,7 @@ func TestSettingsExportThemeByName(t *testing.T) {
 		t.Fatal(err)
 	}
 	a, w := openSettings(t, 1024, 780)
-	clickSettingsNav(t, w, "Packs & icons")
+	clickSettingsNav(t, w, "Packs")
 	a.PumpOnce()
 
 	clickExportLook(t, w)
@@ -222,7 +234,7 @@ func TestSettingsDeleteUserTheme(t *testing.T) {
 		t.Fatalf("apply ocean %+v", style.LoadAppearance())
 	}
 
-	clickSettingsNav(t, w, "Packs & icons")
+	clickSettingsNav(t, w, "Packs")
 	a.PumpOnce()
 	if findButton(w.Content(), "Delete") == nil {
 		t.Fatal("Delete should appear for a selected user theme")
@@ -264,8 +276,8 @@ func TestSettingsIconSetApplyWritesLookJSON(t *testing.T) {
 	}
 	installSettingsIconSet(t, dir, "lucide")
 	a, w := openSettings(t, 1024, 780)
-	clickSettingsNav(t, w, "Appearance")
-	a.PumpOnce()
+	// Themes is the page Settings opens on and the page the icon set is
+	// chosen on: no navigation needed.
 	pickCombo(t, w, "Lucide")
 	a.PumpOnce()
 	if p := previewAppearance(t, w); p.Icons != style.IconSetLucide {
@@ -288,10 +300,10 @@ func TestSettingsIconSetApplyWritesLookJSON(t *testing.T) {
 		t.Fatalf("look.json: %s", raw)
 	}
 	// The Packs page lists icon sets too.
-	clickSettingsNav(t, w, "Packs & icons")
+	clickSettingsNav(t, w, "Packs")
 	a.PumpOnce()
 	if findIconList(w.Content()) == nil {
-		t.Fatal("missing icon set list on Packs & icons")
+		t.Fatal("missing icon set list on Packs")
 	}
 }
 
@@ -301,8 +313,6 @@ func TestSettingsIconSizeApplyWritesLookJSON(t *testing.T) {
 		t.Fatal(err)
 	}
 	a, w := openSettings(t, 1024, 780)
-	clickSettingsNav(t, w, "Appearance")
-	a.PumpOnce()
 	pickCombo(t, w, "Large")
 	a.PumpOnce()
 	if p := previewAppearance(t, w); p.IconSize != style.IconSizeLarge {
@@ -920,9 +930,10 @@ func TestSettingsThemeCaptionButtonsSwitch(t *testing.T) {
 	}
 }
 
-// Picking an icon set shows what it draws. The strip is in a theme scope
-// of its own, so it follows the staged set without Apply, and its caption
-// names the set it is showing.
+// Picking an icon set shows what it draws, at the head of the Themes
+// page, beside the theme it is being chosen for. The strip is in a theme
+// scope of its own, so it follows the staged set and the staged size
+// without Apply, and its caption names the set it is showing.
 func TestSettingsIconSetPreview(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", dir)
@@ -931,30 +942,25 @@ func TestSettingsIconSetPreview(t *testing.T) {
 	}
 	installSettingsIconSet(t, dir, "lucide")
 	a, w := openSettings(t, 1024, 780)
-	clickSettingsNav(t, w, "Packs & icons")
-	a.PumpOnce()
 
 	box := findPanelTitled(w.Content(), "Preview — Classic")
 	if box == nil {
-		t.Fatal("no icon preview for the selected set")
+		t.Fatal("no icon preview for the selected set on the Themes page")
 	}
 	// Every stock icon is in it, named by the action it stands for.
-	for _, want := range []string{"New", "Open", "Save", "Cut", "Copy", "Paste", "Undo",
-		"Redo", "Search", "Edit", "Mail", "Download", "Information", "Warning", "Error"} {
-		if findToolButton(box, want) == nil {
-			t.Errorf("the icon preview has no %s", want)
+	shown := iconStripIcons(box)
+	for _, want := range style.AllToolIcons() {
+		if !shown[want] {
+			t.Errorf("the icon preview has no %s", want.Label())
 		}
 	}
-	if style.LookAppearance(scopeAround(t, box).Theme()).Icons != style.IconSetClassic {
+	scope := scopeAround(t, box)
+	if style.LookAppearance(scope.Theme()).Icons != style.IconSetClassic {
 		t.Fatal("the preview is not drawing the staged icon set")
 	}
 
 	// Picking another set repaints it where it stands and renames it.
-	list := findIconList(w.Content())
-	if list == nil {
-		t.Fatal("no icon set list")
-	}
-	pickListItem(t, list, "Lucide")
+	pickCombo(t, w, "Lucide")
 	a.PumpOnce()
 	if style.LookAppearance(scopeAround(t, box).Theme()).Icons != style.IconSetLucide {
 		t.Fatal("the icon preview did not follow the staged set")
@@ -965,6 +971,83 @@ func TestSettingsIconSetPreview(t *testing.T) {
 	if style.LoadAppearance().Icons != style.IconSetClassic {
 		t.Fatal("previewing an icon set wrote look.json")
 	}
+
+	// The size the glyphs are drawn at is staged beside the set, and the
+	// strip shows that size rather than a fixed one: the bars grow with
+	// it. (Loose tool buttons do not — their icon is capped by the
+	// control height — which is why the strip is made of bars.)
+	before := iconStripBar(t, box).Bounds().Dy()
+	pickCombo(t, w, "Large")
+	a.PumpOnce()
+	if got := style.LookAppearance(scopeAround(t, box).Theme()).IconSize; got != style.IconSizeLarge {
+		t.Fatalf("the icon preview is drawing size %v", got)
+	}
+	if after := iconStripBar(t, box).Bounds().Dy(); after <= before {
+		t.Errorf("the strip did not grow with the icon size (%v then %v)", before, after)
+	}
+
+	// Staging a theme leaves the icon set alone: a pack's theme.json
+	// carries no icon preference — the field is read and ignored, look.json
+	// owns icons — so picking a pack changes only the surface under the
+	// strip.
+	clickTheme(t, w, "Windows 95")
+	a.PumpOnce()
+	if box.Title != "Preview — Lucide" {
+		t.Fatalf("staging a theme renamed the icon preview to %q", box.Title)
+	}
+
+	// And the icons area follows a set staged somewhere other than its own
+	// chooser: the list on Packs stages one too, and Themes has to come
+	// back with the chooser on it and the strip drawing it.
+	clickSettingsNav(t, w, "Packs")
+	a.PumpOnce()
+	list := findIconList(w.Content())
+	if list == nil {
+		t.Fatal("no icon set list on Packs")
+	}
+	pickListItem(t, list, "Sharp")
+	a.PumpOnce()
+	clickSettingsNav(t, w, "Themes")
+	a.PumpOnce()
+	if findPanelTitled(w.Content(), "Preview — Sharp") == nil {
+		t.Error("the icons head did not follow a set staged on Packs")
+	}
+	if combo := findCombo(w.Content(), "Sharp"); combo == nil || combo.Items[combo.Selected] != "Sharp" {
+		t.Error("the icon chooser does not show the staged set")
+	}
+}
+
+// iconStripIcons is every icon the preview strip draws.
+func iconStripIcons(box widget.Component) map[style.ToolIcon]bool {
+	out := map[style.ToolIcon]bool{}
+	widget.Walk(box, func(c widget.Component) {
+		bar, ok := c.(*widgets.ToolBar)
+		if !ok {
+			return
+		}
+		for _, it := range bar.Items() {
+			if it != nil && it.Icon != style.IconNone {
+				out[it.Icon] = true
+			}
+		}
+	})
+	return out
+}
+
+// iconStripBar is the first of the strip's tool bars, whose height is the
+// size the staged set is being drawn at.
+func iconStripBar(t *testing.T, box widget.Component) *widgets.ToolBar {
+	t.Helper()
+	var bar *widgets.ToolBar
+	widget.Walk(box, func(c widget.Component) {
+		if b, ok := c.(*widgets.ToolBar); ok && bar == nil {
+			bar = b
+		}
+	})
+	if bar == nil {
+		t.Fatal("the icon preview has no tool bar")
+	}
+	return bar
 }
 
 // The line beside Apply — "Applied — every uitoolkit app is using this

@@ -189,7 +189,7 @@ func runSettings(opts Options) []Result {
 // a page is built when it is first shown and the driver is looking for what
 // construction breaks.
 func walkSettingsPages(a *app.Application) error {
-	for _, page := range []string{"Themes", "Appearance", "Packs & icons", "About"} {
+	for _, page := range []string{"Themes", "Appearance", "Packs", "About"} {
 		w, err := a.NewWindow(platform.WindowOptions{
 			Title: "settings-page", Width: 1100, Height: 720, Headless: true,
 		})

@@ -28,7 +28,11 @@ const (
 	pageAbout
 )
 
-var settingsPages = []string{"Themes", "Appearance", "Packs & icons", "About"}
+// The page names in the sidebar. "Packs & icons" became "Packs" when
+// choosing an icon set moved to Themes: what is left of that page is the
+// packs on disk, of both kinds — theme packs and icon sets — and what it
+// does with them is install, export and delete.
+var settingsPages = []string{"Themes", "Appearance", "Packs", "About"}
 
 // Theme browser filters: every built-in pack, one decade, or user packs.
 var themeFilters = []string{"All decades", "1980s", "1990s", "2000s", "2010s", "2020s", "My themes"}
@@ -69,14 +73,24 @@ func SettingsAppOpen(a *app.Application, win *app.Window, theme, page string) wi
 
 // SettingsPage is the page a name opens; an unknown or empty name is the
 // theme browser.
+//
+// The names of the pages Settings used to have keep working, because
+// -page is in scripts and in the docs of two releases. "packs & icons" is
+// the old name of Packs and still opens it. "icons" opened that page when
+// it was where an icon set was chosen; choosing one is on Themes now, so
+// that is where the name goes — a script that says -page icons wants the
+// icon settings, which is the thing that moved, not the folder of
+// installed sets that stayed behind.
 func SettingsPage(name string) int {
 	switch strings.ToLower(strings.TrimSpace(name)) {
 	case "appearance":
 		return pageAppearance
-	case "packs", "packs & icons", "icons":
+	case "packs", "packs & icons", "theme packs":
 		return pagePacks
 	case "about":
 		return pageAbout
+	case "themes", "icons", "icon sets":
+		return pageThemes
 	default:
 		return pageThemes
 	}
@@ -114,8 +128,16 @@ type settingsState struct {
 	bodySplit  *widgets.Splitter
 	scopes     []*widgets.ThemeScope
 	previewBox *widgets.Panel
-	iconBox    *widgets.Panel
 	applyBtn   *widgets.Button
+	// The icons head of the Themes page: the sets the chooser offers, the
+	// chooser itself, the size its glyphs are drawn at and the panel the
+	// strip lives in. They follow the staged appearance like the theme
+	// preview does, whatever staged it.
+	iconSets  []style.IconSetInfo
+	iconPick  *widgets.ComboBox
+	iconSize  *widgets.ComboBox
+	iconBox   *widgets.Panel
+	iconScope *widgets.ThemeScope
 }
 
 // capture remembers where the user left the parts of the page they can
@@ -164,7 +186,8 @@ func buildSettingsState(s *settingsState) widget.Component {
 	}
 	// Every live part belongs to the build that made it.
 	s.rows, s.list, s.bodySplit = nil, nil, nil
-	s.scopes, s.previewBox, s.iconBox = nil, nil, nil
+	s.scopes, s.previewBox = nil, nil
+	s.iconSets, s.iconPick, s.iconSize, s.iconBox, s.iconScope = nil, nil, nil, nil, nil
 
 	var page widget.Component
 	switch s.page {
@@ -260,10 +283,7 @@ func (s *settingsState) showStaged() {
 		s.previewBox.Title = "Preview — " + s.shownPack().Display()
 		s.previewBox.RequestLayout()
 	}
-	if s.iconBox != nil {
-		s.iconBox.Title = "Preview — " + iconSetLabel(s.staged.Icons)
-		s.iconBox.RequestLayout()
-	}
+	s.showStagedIcons()
 	if s.list != nil {
 		s.list.Selected = s.selectedRow()
 		s.list.Invalidate()
@@ -369,7 +389,198 @@ func (s *settingsState) themesPage() widget.Component {
 	s.bodySplit = widgets.NewSplitter(widgets.SplitColumns, browser, preview)
 	s.bodySplit.Ratio = s.browserRatio
 	s.bodySplit.SetAccessibleName("Themes and preview")
-	return s.bodySplit
+
+	page := widgets.NewColumn(s.iconsHead(), s.bodySplit).WithGap(10)
+	page.AddFlex(s.bodySplit, 1)
+	return page
+}
+
+// iconsHead is the icons half of the look, at the head of the page and
+// built like the half under it: what to choose from on the left, in
+// Settings' own theme, and on the right, filling the rest of the width,
+// what the choice looks like, drawn in the staged one.
+//
+// Icons and themes are one question — what the toolkit looks like — asked
+// twice, which is why they are one page. The page says so by asking both
+// the same way: the chooser column here stands where the theme browser
+// stands, under a heading of its own, and the strip beside it stands
+// where the theme preview stands. Read down, it is choose-and-see, then
+// choose-and-see; it is not an icons page with a themes page under it.
+//
+// Two other places were tried. Inside the browser column, above the theme
+// list, is where the width is worst: the column is about 240 logical
+// pixels, which folds fifteen glyphs into five lines and leaves a list of
+// 129 packs the rest — the icons would have cost the page the thing it is
+// for. Beside the preview, in the right pane, keeps the width but hides
+// the icon strip behind the splitter: drag the sash left to read the
+// theme list and the icons go with it, and the chooser would have sat in
+// a pane of previews. Across the head of both columns is the only place
+// where the icon strip gets the width fifteen glyphs want and neither
+// half of the page is inside the other.
+func (s *settingsState) iconsHead() widget.Component {
+	s.iconSets = append(style.ListBuiltinIconSets(), style.ListUserIconSets()...)
+	names := make([]string, len(s.iconSets))
+	for i, set := range s.iconSets {
+		names[i] = set.Label
+	}
+	s.iconPick = widgets.NewComboBox(names, indexIcon(s.iconSets, s.staged.Icons), func(i int) {
+		if i < 0 || i >= len(s.iconSets) {
+			return
+		}
+		next := s.staged
+		next.Icons = s.iconSets[i].Name
+		s.stage(next)
+	})
+	s.iconPick.SetAccessibleName("Icons")
+
+	// The size lives beside the set because it is not a separate choice: a
+	// set's glyphs are drawn at it, some sets are made for one end of the
+	// range, and a strip that showed a fixed size would be showing
+	// something the user is not going to get. The strip is in the staged
+	// scope, so it redraws at the staged size as the size is changed.
+	s.iconSize = widgets.NewComboBox([]string{"Small", "Medium", "Large"}, iconSizeIndex(s.staged.IconSize), func(i int) {
+		next := s.staged
+		next.IconSize = iconSizes[i]
+		s.stage(next)
+	})
+	s.iconSize.SetAccessibleName("Icon size")
+
+	// "Icons" names this band as "Themes" names the column under it. The
+	// two choosers sit on the line after it and the strip spans the page
+	// under them, rather than the choosers standing in a column beside the
+	// strip: a wrap that folds has to be measured at the width it is going
+	// to be arranged at, and a flexed child of a row is measured at the
+	// row's whole width — the strip laid out beside the choosers reported
+	// one line, was given the width for two, and had its second line cut
+	// off. Full width is also the width fifteen glyphs want.
+	rule := widgets.NewSpacer()
+	chooser := widgets.NewRow(widgets.NewLabel("Icons"), s.iconPick, s.iconSize, rule).WithGap(8)
+	chooser.AddFlex(rule, 1)
+
+	// The strip is in a scope of its own — Settings' own theme carrying
+	// the staged icon set at the staged size — rather than in the staged
+	// theme like the preview under it. It is the set that is being
+	// previewed here, not the pack, and a strip drawn in the pack would
+	// change height with it: the packs put different padding round a tool
+	// button, the head would be a different height in every one of the
+	// 129, and the preview panel under it would sit somewhere different in
+	// each. The Theme Atlas crops that panel out of one screenshot per
+	// pack at one rectangle (docs/settings.md, "Screenshot geometry"), so
+	// "the same place in every pack" is a promise this page has to keep.
+	s.iconScope = widgets.NewThemeScope(s.iconLook(), s.iconStrip())
+	return widgets.NewColumn(chooser, s.iconScope).WithGap(6)
+}
+
+// iconLook is what the strip is drawn in: the theme Settings itself is
+// running, with the staged icon set at the staged size laid over it. The
+// glyphs and their size are the staged ones — that is the whole point of
+// the strip — while everything around them is the applied look, so the
+// head of the page keeps one height whatever pack is staged.
+func (s *settingsState) iconLook() style.LookAndFeel {
+	return style.WithIconSize(style.WithIcons(s.a.Look(), s.staged.Icons), s.staged.IconSize)
+}
+
+// iconStrip is the whole of what a set draws: every icon the toolkit asks
+// one for by name — the whole of [style.AllToolIcons] — in the groups
+// they belong to: the three file actions, the three clipboard ones and
+// the two histories on one bar, then find, edit, mail and download, and
+// last the four message-box faces. Those four are the ones a set gives a
+// colour of its own, so they are also the ones that say whether a set can
+// be read against a dark pack. (Question was missing from this strip for
+// as long as it had one: a test now walks AllToolIcons, so a stem added
+// to the toolkit and not to the preview fails rather than goes unseen.)
+//
+// Each group is a tool bar, and the groups are in a [widgets.Wrap]: one
+// bar of fifteen would clip its tail on a window as narrow as the 720
+// Settings opens down to, and fifteen loose tool buttons would not answer
+// the question the size chooser beside them asks. A loose tool button is
+// a control-height key, so the look's icon size is capped by its height
+// and a set at Large draws exactly as it does at Medium; a tool bar sizes
+// its buttons from the bar metrics, which are the ones the icon size
+// grows. The strip has to show the size that is staged, so the strip is
+// made of bars.
+func (s *settingsState) iconStrip() widget.Component {
+	// Three bars, not five: the file, clipboard and history icons are one
+	// bar with dividers between the groups, because every bar pays for its
+	// own ends and five of them fold onto a second line in a window where
+	// three sit on one.
+	groups := [][]style.ToolIcon{
+		{style.IconNew, style.IconOpen, style.IconSave, style.IconNone,
+			style.IconCut, style.IconCopy, style.IconPaste, style.IconNone,
+			style.IconUndo, style.IconRedo},
+		{style.IconSearch, style.IconPen, style.IconMail, style.IconDownload},
+		{style.IconInfo, style.IconWarning, style.IconError, style.IconQuestion},
+	}
+	row := widgets.NewWrap()
+	for _, group := range groups {
+		items := make([]*widgets.ToolItem, 0, len(group))
+		for _, i := range group {
+			if i == style.IconNone {
+				items = append(items, widgets.ToolDivider())
+				continue
+			}
+			// Icon only, known by the action it stands for: the strip is
+			// there to be looked at, and the name is what a screen reader
+			// and the tooltip both need.
+			it := widgets.ToolIconBtn(i, "", nil)
+			it.Tip = i.Label()
+			items = append(items, it)
+		}
+		row.Add(widgets.NewToolBar(items...))
+	}
+	s.iconBox = widgets.NewPanel(iconBoxTitle(s.staged.Icons), row)
+	s.iconBox.SetAccessibleName("Icon preview")
+	return s.iconBox
+}
+
+// iconBoxTitle names the set the strip is drawing, in the words the theme
+// preview's caption names its pack in: the page asks the same question
+// twice and captions both answers the same way.
+func iconBoxTitle(name style.IconSetName) string { return "Preview — " + iconSetLabel(name) }
+
+// showStagedIcons puts the staged appearance back into the icons head.
+// The strip follows the staged look through its scope, but the two
+// choosers and the caption are Settings' own and have to be told — and
+// they have to be told whoever staged it, not only the choosers
+// themselves. Nothing else stages an icon set today: a theme pack's
+// theme.json carries no icon preference (the field is read and ignored;
+// look.json owns icons), so picking a pack leaves the set alone and only
+// changes the surface the strip is drawn on. Deleting a user set does
+// stage one, Apply and a desktop light / dark change restage the whole
+// appearance, and a pack that took its own set would come through here
+// too.
+func (s *settingsState) showStagedIcons() {
+	if s.iconScope != nil {
+		s.iconScope.SetTheme(s.iconLook())
+	}
+	if s.iconBox != nil {
+		s.iconBox.Title = iconBoxTitle(s.staged.Icons)
+		s.iconBox.RequestLayout()
+	}
+	if s.iconPick != nil {
+		if i := indexIcon(s.iconSets, s.staged.Icons); i != s.iconPick.Selected {
+			s.iconPick.Selected = i
+			s.iconPick.Invalidate()
+		}
+	}
+	if s.iconSize != nil {
+		if i := iconSizeIndex(s.staged.IconSize); i != s.iconSize.Selected {
+			s.iconSize.Selected = i
+			s.iconSize.Invalidate()
+		}
+	}
+}
+
+// iconSizes are the sizes the chooser offers, in its order.
+var iconSizes = []style.IconSize{style.IconSizeSmall, style.IconSizeMedium, style.IconSizeLarge}
+
+func iconSizeIndex(sz style.IconSize) int {
+	for i, s := range iconSizes {
+		if s == sz {
+			return i
+		}
+	}
+	return 1 // medium, the default
 }
 
 // followWindow works the browser's share out again for the window's new
@@ -647,39 +858,6 @@ func (s *settingsState) appearancePage() widget.Component {
 	})
 	corners.SetAccessibleName("Corners")
 
-	sizeSel := 1
-	switch s.staged.IconSize {
-	case style.IconSizeSmall:
-		sizeSel = 0
-	case style.IconSizeLarge:
-		sizeSel = 2
-	}
-	sizes := widgets.NewComboBox([]string{"Small", "Medium", "Large"}, sizeSel, func(i int) {
-		next := s.staged
-		next.IconSize = []style.IconSize{style.IconSizeSmall, style.IconSizeMedium, style.IconSizeLarge}[i]
-		s.stage(next)
-	})
-	sizes.SetAccessibleName("Icon size")
-
-	sets := append(style.ListBuiltinIconSets(), style.ListUserIconSets()...)
-	names := make([]string, len(sets))
-	iconSel := 0
-	for i, set := range sets {
-		names[i] = set.Label
-		if set.Name == s.staged.Icons {
-			iconSel = i
-		}
-	}
-	icons := widgets.NewComboBox(names, iconSel, func(i int) {
-		if i < 0 || i >= len(sets) {
-			return
-		}
-		next := s.staged
-		next.Icons = sets[i].Name
-		s.stage(next)
-	})
-	icons.SetAccessibleName("Icons")
-
 	// Hover fades, the default button's pulse, busy bars: off for users
 	// who get unwell from motion (GTK's gtk-enable-animations).
 	motion := widgets.NewSwitch("Animations", !s.staged.ReduceMotion, func(on bool) {
@@ -725,10 +903,16 @@ func (s *settingsState) appearancePage() widget.Component {
 		s.stage(next)
 	})
 
-	shape := settingsSection("Shape and icons",
+	// The icon set and the size its glyphs are drawn at used to be here,
+	// between the corners and the animations. They are on Themes now,
+	// where they are next to the strip that shows what they do and next to
+	// the theme they are being chosen for; a combo box called "Icons" with
+	// a line of prose under it never showed anybody what Phosphor's
+	// scissors look like. What is left here is the shape the packs are
+	// drawn in and whether they move — the two things that are every
+	// pack's, and neither of them a picture.
+	shape := settingsSection("Shape and motion",
 		optionRow("Corners", corners, "The pack's own shape, or rounded or square everywhere."),
-		optionRow("Icon size", sizes, "How big tool bar and menu icons are drawn: 16, 24 or 32 pixels."),
-		optionRow("Icons", icons, "The chrome icon set. Copy a folder into "+style.IconsDir()+" to add one."),
 		optionSwitch(motion, "Hover fades, the default button's pulse and busy bars."),
 	)
 	if style.DesktopReducesMotion() {
@@ -746,9 +930,9 @@ func (s *settingsState) appearancePage() widget.Component {
 	)
 
 	options := widgets.NewColumn(shape, desktop, windows).WithGap(12)
-	// The staged theme beside the options, so corners, icons and their
-	// size are seen changing without going back to the theme browser. It
-	// keeps to its own height at the top of the page.
+	// The staged theme beside the options, so corners and motion are seen
+	// changing without going back to the theme browser. It keeps to its
+	// own height at the top of the page.
 	below := widgets.NewSpacer()
 	sample := widgets.NewColumn(s.scoped(appearanceSample()), below)
 	sample.AddFlex(below, 1)
@@ -756,7 +940,7 @@ func (s *settingsState) appearancePage() widget.Component {
 	body.AddFlex(options, 1)
 	return widgets.NewColumn(
 		widgets.NewTitle("Appearance"),
-		wrapped("What every uitoolkit app does with the theme. Apply writes these to "+style.AppearancePath()+"."),
+		wrapped("What every uitoolkit app does with the theme, besides the theme and its icons themselves — those are on Themes. Apply writes these to "+style.AppearancePath()+"."),
 		body,
 	).WithGap(12).WithPad(4)
 }
@@ -793,8 +977,10 @@ func optionSwitch(sw *widgets.Switch, about string) widget.Component {
 }
 
 // appearanceSample is a strip of the staged theme beside the options:
-// small enough to sit next to them, wide enough to show corners, icons
-// and the icon size changing.
+// small enough to sit next to them, wide enough to show the corners
+// changing — and it keeps its tool bar, because the icons it draws are
+// the staged set at the staged size and that is worth seeing on a page
+// that no longer chooses them.
 func appearanceSample() widget.Component {
 	primary := widgets.NewButton("Default", nil)
 	primary.Primary = true
@@ -823,8 +1009,15 @@ func appearanceSample() widget.Component {
 	return sample
 }
 
-// ---- Packs & icons page ---------------------------------------------------
+// ---- Packs page -------------------------------------------------------------
 
+// packsPage is what is on disk: the theme packs and the icon sets, and
+// what can be done to the files — export one, delete one. Choosing a
+// theme is the theme browser's and choosing an icon set is now the head
+// of that same page, so the lists here are a shelf rather than a picker.
+// They still select, because Delete has to be told which one, and because
+// a list of what is installed that would not let you try one would be
+// being awkward on purpose.
 func (s *settingsState) packsPage() widget.Component {
 	stage := s.stage
 	fail := s.fail
@@ -912,7 +1105,9 @@ func (s *settingsState) packsPage() widget.Component {
 			onIcon(iconUser[i])
 		}
 	})
-	iconCol := widgets.NewColumn(widgets.NewTitle("Icon sets"), builtinIcons, userIcons).WithGap(8)
+	iconCol := widgets.NewColumn(widgets.NewTitle("Icon sets"),
+		wrapped("Copy a folder of PNGs into "+style.IconsDir()+" to add one. The set every app draws is chosen on Themes, beside the strip that shows it."),
+		builtinIcons, userIcons).WithGap(8)
 	iconCol.AddFlex(builtinIcons, 1)
 	if len(iconUser) > 0 {
 		iconCol.AddFlex(userIcons, 1)
@@ -948,52 +1143,14 @@ func (s *settingsState) packsPage() widget.Component {
 		delHost = del
 		iconCol.Add(del)
 	}
-	// What the set picked above actually looks like. A name — "Phosphor",
-	// "Tabler" — tells nobody whether its scissors are open or shut, and a
-	// set copied into the icons directory by hand is exactly the case
-	// where seeing it drawn is the point. The strip is inside a scope, so
-	// it shows the staged set at the staged icon size while Settings
-	// itself keeps the applied one.
-	if indexIcon(iconBuiltin, s.staged.Icons) >= 0 || userIconSel >= 0 {
-		iconCol.Add(s.scoped(s.iconSample()))
-	}
+	// The strip that showed what the selected set draws was here, under
+	// these lists. It is at the head of Themes now, where the set is
+	// chosen: a preview belongs beside the choice it informs, and this
+	// page is about the folders, not the glyphs.
 	body := widgets.NewRow(themeCol, iconCol).WithGap(20)
 	body.AddFlex(themeCol, 1)
 	body.AddFlex(iconCol, 1)
 	return body
-}
-
-// iconSample is the preview under the icon lists: every icon the toolkit
-// asks a set for by name — the whole of [style.ToolIcon] — in the order
-// they group in, the three file actions, the three clipboard ones, the
-// two histories, then find, edit, mail and download, and last the three
-// message-box faces. Those three are the ones a set gives a colour of
-// its own, so they are also the ones that say whether a set can be read
-// against a dark pack.
-//
-// They are auto-raise tool buttons in a [widgets.Wrap] rather than a
-// tool bar, because a bar of fifteen clips its tail in a half-width
-// column and Settings opens as narrow as 720: the wrap folds instead.
-func (s *settingsState) iconSample() widget.Component {
-	icons := []style.ToolIcon{
-		style.IconNew, style.IconOpen, style.IconSave,
-		style.IconCut, style.IconCopy, style.IconPaste,
-		style.IconUndo, style.IconRedo,
-		style.IconSearch, style.IconPen, style.IconMail, style.IconDownload,
-		style.IconInfo, style.IconWarning, style.IconError,
-	}
-	row := widgets.NewWrap()
-	for _, i := range icons {
-		// Icon only, named by the action it stands for: the strip is
-		// there to be looked at, and the name is what a screen reader
-		// and the tooltip both need.
-		b := widgets.NewToolButton("", i, nil)
-		b.Tip = i.Label()
-		b.SetAccessibleName(i.Label())
-		row.Add(b)
-	}
-	s.iconBox = widgets.NewPanel("Preview — "+iconSetLabel(s.staged.Icons), row)
-	return s.iconBox
 }
 
 // iconSetLabel is what the lists call a set ("Material Symbols"), or its

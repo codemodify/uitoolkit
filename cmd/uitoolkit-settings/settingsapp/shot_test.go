@@ -16,9 +16,9 @@ import (
 // new numbers (docs/settings.md, "Screenshot geometry").
 const (
 	previewShotX = 445
-	previewShotY = 10
+	previewShotY = 170
 	previewShotW = 569
-	previewShotH = 782
+	previewShotH = 630
 )
 
 func TestSettingsPreviewPanelKeepsItsPlace(t *testing.T) {
@@ -27,7 +27,12 @@ func TestSettingsPreviewPanelKeepsItsPlace(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, pack := range []string{"win95", "luna", "aqua", "breeze", "adwaita", "bigsur", "tahoe", "vscode-night"} {
-		a := uitoolkit.New(uitoolkit.Options{Look: style.LightLook(), Headless: true, Scale: 1, DisableLookWatch: true})
+		// The look Settings itself runs in, the way the command starts it:
+		// the icons at the head of the Themes page are drawn in it, so
+		// where the preview panel under them begins is now Settings' own
+		// metrics' business. A fixture look here and PreferredLook in the
+		// command would pin a rectangle the atlas never renders.
+		a := uitoolkit.New(uitoolkit.Options{Look: style.PreferredLook(), Headless: true, Scale: 1, DisableLookWatch: true})
 		w, err := a.NewWindow(platform.WindowOptions{Title: "Settings", Width: 1024, Height: 860, Headless: true})
 		if err != nil {
 			t.Fatal(err)

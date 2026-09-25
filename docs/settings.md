@@ -19,10 +19,41 @@ tools/shots/demos.sh                              # docs/screenshots/settings.we
 ```
 
 `-page` takes `themes` (the default), `appearance`, `packs` or `about`.
+The old page names still resolve: `packs & icons` opens Packs, and `icons`
+opens **Themes**, which is where an icon set is chosen now.
 
 ## Pages
 
 ### Themes — browse and judge
+
+The page asks one question twice — what does this look like — so it
+answers it the same way twice: choose on the left, see the choice drawn on
+the right.
+
+At the **head of the page, the icons**: the **icon set** (`classic`,
+`sharp`, and every folder installed under the icon directory) and the
+**size** its glyphs are drawn at (Small 16, Medium 24, Large 32), and
+under them the **strip** — every icon the toolkit asks a set for by name,
+the whole of `style.AllToolIcons`, in three tool bars: the file, clipboard
+and history actions, then find, edit, mail and download, then the four
+message-box faces (info, warning, error, question), which are the ones a
+set gives a colour of its own and so the ones that say whether it can be
+read against a dark pack. The strip is captioned `Preview — <set>` the way
+the theme preview is captioned `Preview — <pack>`.
+
+The two choosers are together because they are one choice: a set's glyphs
+are drawn at that size, and the strip redraws at the staged size as it is
+changed, rather than showing a fixed one. (The strip is tool **bars** for
+that reason — a loose tool button caps its icon at its control height, so
+Large would have drawn exactly like Medium.)
+
+The strip is a `ThemeScope` carrying Settings' own theme with the staged
+set and size laid over it, not the staged pack. It is the set being
+previewed here, not the pack; and a strip drawn in the pack would be a
+different height in each of the 129, which would move the theme preview
+under it in each of them — see *Screenshot geometry*.
+
+Under that, the browser and the theme preview.
 
 The **browser** on the left: a **search field** (a pack is found by its
 id, name, year, family, engine or what its summary says — every word has
@@ -58,30 +89,34 @@ resize after, and survives Apply.
 
 ### Appearance — what every app does with the theme
 
-Everything `look.json` carries besides the pack, each with the line that
-says what it does, and a strip of the staged theme beside them so corners,
-icons and their size are seen changing:
+Everything `look.json` carries besides the pack and its icons, each with
+the line that says what it does, and a strip of the staged theme beside
+them so the corners are seen changing (it keeps its tool bar, which draws
+the staged set at the staged size):
 
-- **Shape and icons** — **Corners** (Theme shape / Round / Square),
-  **Icon size** (16 / 24 / 32), **Icons** (the chrome set), **Animations**
-  (hover fades, the default button's pulse, busy bars).
+- **Shape and motion** — **Corners** (Theme shape / Round / Square) and
+  **Animations** (hover fades, the default button's pulse, busy bars).
+  The icon set and icon size were here; they are at the head of Themes
+  now, beside the strip that shows what they do.
 - **The desktop** — **Follow the desktop's colours**, its light or dark
   mode and its accent (see below), and **Use the desktop's file dialogs**.
 - **Windows** — **Use system title bar and borders** and **Place window
   buttons as the theme does**. A window that is shaped, transparent or
   glass behind belongs in this section.
 
-### Packs & icons
+### Packs
 
-User theme packs (export the staged theme, delete user packs) on the
-left; icon sets (built-in and user, delete user sets) on the right, and
-under them a **preview** of the selected set: two tool bars holding every
-`style.ToolIcon` — new, open, save, cut, copy, paste, undo, redo, then
-search, pen, mail, download and the three message-box faces (info,
-warning, error). It is inside a `ThemeScope` like the theme preview, so
-it is the staged set at the staged icon size while Settings keeps the
-applied one, and picking another set redraws it in place. A set is known
-by what it draws, not by being called *Phosphor*.
+What is on disk, of both kinds, and what can be done to the files. User
+theme packs (export the staged theme, delete user packs) on the left;
+icon sets (built-in and user, delete user sets) on the right.
+
+The page was *Packs & icons* while it was also where an icon set was
+chosen. Choosing one is at the head of Themes now, beside the strip that
+shows it, and what is left here is the shelf: the packs installed and the
+buttons that install and remove them. The lists still select, because
+Delete has to be told which pack it is deleting, and because a list of
+what is installed that would not let you try one would be awkward on
+purpose.
 
 ### About
 
@@ -116,7 +151,7 @@ The Theme Atlas crops the preview panel out of `uitoolkit-settings -stage ID
 default look applied, the panel is the same rectangle in every pack:
 
 ```
-x 445, y 10, 569 × 782        crop box (445, 10) – (1014, 792)
+x 445, y 170, 569 × 630       crop box (445, 170) – (1014, 800)
 ```
 
 `TestSettingsPreviewPanelKeepsItsPlace` pins those numbers; a layout
@@ -124,11 +159,16 @@ change that moves them fails it, and the new ones belong here. (They were
 `x 504, y 175, 510 × 387` before the gallery went under the preview,
 `569 × 381` until the preview took 62% of the split instead of 55%,
 `x 445, y 58, 569 × 429` until the window's title bar row and status bar
-came off, and `569 × 481` until the gallery came out from under the
-preview and it took the whole right-hand pane.)
+came off, `569 × 481` until the gallery came out from under the preview
+and it took the whole right-hand pane, and `x 445, y 10, 569 × 782` until
+the icons took the head of the page.)
 
 The applied look sets Settings' own metrics, so take atlas shots with a
-clean `XDG_CONFIG_HOME`.
+clean `XDG_CONFIG_HOME` — and the icon strip above the preview is drawn
+in that same applied look at the default icon size, so the head, and with
+it the top of the crop, is now the applied look's business as well. That
+is why the test builds Settings with `PreferredLook`, the way the command
+does, rather than with a fixture look.
 
 ## Prefs file
 
@@ -231,7 +271,7 @@ apps show the default theme, Metal (Ocean) (`style.DefaultThemeName`).
 
 Settings lists them in the theme browser, a row each, by year (`1995 ·
 Windows 95`); user exports show as `User · <name>` and again under
-**User** on Packs & icons.
+**User** on Packs.
 
 ```
 $XDG_CONFIG_HOME/uitoolkit/themes/<name>/theme.json
@@ -296,8 +336,9 @@ Settings groups icon sets the same way as themes:
 - **User** — any other `icons/<name>/` folder that contains at least
   one ToolIcon PNG
 
-The Appearance live preview includes a toolbar strip of chrome plus the
-mail stems (Fetch / Write) for the selected set.
+The Appearance sample includes a tool bar of chrome icons for the staged
+set at the staged size; the strip at the head of Themes is the full
+vocabulary.
 
 When a premiere or user set is selected, a missing stem logs once and
 paints **`no-icon`** (pack file, or the embedded placeholder if the
