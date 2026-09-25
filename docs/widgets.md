@@ -750,9 +750,13 @@ unchanged — they measure their items and a parent decides their width.
 For a combo box on a bar, `ComboBox.MinWidth` (in 1x pixels) replaces
 the 160-pixel floor that suits a form field, and `ComboBox.Tip` is the
 hover help it needs when the bar is too narrow to carry its word.
-Settings' preview puts its icon set, icon size and window corner
-choosers on a bar of their own this way —
-`Icons [Classic ▾] Size [24 ▾] │ Corners [Theme shape ▾]`.
+Settings' preview carried its icon set, icon size and window corner
+choosers on a bar of its own this way for a release; they are plain
+labelled combo boxes in the row of settings over the preview now (see
+[settings.md](settings.md)), so nothing in this repository uses
+`ToolWidget` or `ToolLabel`. They stay: a control on a tool bar is what
+`QToolBar::addWidget` is for, and an application that wants one needs
+`MinWidth` and `Tip` with it.
 
 ## Editable combo boxes
 
