@@ -19,6 +19,7 @@ own Wayland socket `uitk-e2e-N`, own Xwayland (display number in `N/display`), o
     ./kwin.py N 'JS'             # run a KWin script: OUT(x) prints (window geometry / state oracle, maximize, tile)
     ./stop.sh N                  # stop app + compositor when done
     ./theme-tour.sh N [PACK...]  # gallery in every pack on the GPU + the same pack on the CPU, in pairs
+    ./frame-switch.sh N [BACKEND [PACK]]  # Settings' OS borders hands the frame over, live, both ways
 
 - `crop.py` decodes any PNG (every filter type, palette, 16-bit, Adam7), so it
   reads the toolkit's own `WritePNG` stills as well as KWin's; python3 only.

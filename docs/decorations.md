@@ -504,8 +504,9 @@ kiosks). First match wins:
 2. `WindowOptions.Decorations` when not Auto.
 3. Offscreen / headless windows: none of the toolkit's (screenshots and tests
    look the same everywhere) unless 1 or 2 asks.
-4. The user's preference, look.json `"decorations"`: `"system"` (Settings'
-   **OS borders**) or `"toolkit"` (every window).
+4. The user's preference, look.json `"decorations"`: `"system"` (the desktop
+   frames every window) or `"toolkit"` (the toolkit does). These are the two
+   states of Settings' **OS borders**, ticked and unticked.
 5. Auto: the toolkit's frame for a window with a title bar (`SetTitleBar`)
    where the desktop moves and resizes on request; the desktop's frame for
    every other window. So every app without a title bar looks exactly as
@@ -521,9 +522,20 @@ Settings shows **OS borders** — *OS borders: the desktop's title bar and
 borders* to a screen reader, Chromium's switch by another name — in the row
 of options over the preview, next to **OS open/save dialogs**. On: windows
 that draw their own title bar get the desktop's title bar and borders instead,
-and their title bar becomes the first row. Apply writes look.json
-(`"decorations": "system"`; auto is left out) and every running app switches
-live.
+and their title bar becomes the first row. Off: the toolkit draws the frame of
+every window in the theme's style, the way it already did for a window with a
+title bar. Apply writes look.json (`"decorations": "system"` or `"toolkit"`)
+and every running app switches live.
+
+The box has two states, so it writes the two definite preferences and never
+`auto`. Auto is a third thing — the toolkit's frame for a window that has a
+title bar of its own, the desktop's for every other — and it stays the
+default of a file nobody has edited, but it is not what unticking the box
+says. Unticked wrote `auto` before 0.20.0, which left every window without a
+title bar of its own (Settings' own window, the sample's, most windows) with
+the desktop's frame: the box promised the theme's borders and nothing
+happened. A preference the user never touched is still left alone, so
+applying a theme does not turn client-side frames on behind their back.
 
 ### Per platform
 
@@ -631,6 +643,16 @@ Where the desktop draws the frame, the window still says how to dress it
   ignore `zxdg_decoration_manager_v1`: GNOME's path, on KWin.
   `./kwin.py N` is the oracle for the margin: `bufferGeometry` minus
   `frameGeometry` is exactly it, and it goes when the window is maximized.
+  `./frame-switch.sh N [BACKEND [PACK]]` drives Settings' **OS borders** box
+  both ways and asks KWin who holds the frame after each Apply
+  (`clientGeometry` is inside `frameGeometry` while the desktop draws it,
+  and the same rectangle once the toolkit does). Run it on both backends and
+  with both a flat pack and one whose frame has a shadow: the Wayland half
+  is an xdg-decoration mode change on a mapped surface, the X11 half is
+  `_MOTIF_WM_HINTS` written on a mapped window, and a shadowed frame
+  re-creates the X window on a 32-bit visual on the way. KWin honours all
+  three; a compositor that only read the mode at map time would show up
+  here as a frame that does not change until the app restarts.
   Tear-off is checked there too, on both backends: a tab dragged out of
   Files becomes a second window holding that folder, one dragged onto
   another window's strip merges into it (`kwin.py` counts the windows

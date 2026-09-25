@@ -701,6 +701,56 @@ func TestDecorationsPrefSwitchesLive(t *testing.T) {
 	}
 }
 
+// A window with no title bar of its own — Settings' own window, the
+// sample's, most windows — follows the "toolkit" preference live: the
+// user unticks Settings' OS borders and the theme's frame appears without
+// a restart. Under auto such a window keeps the desktop's frame, which is
+// what made the unticked box look like it did nothing (it used to write
+// auto).
+func TestDecorationsToolkitFramesAPlainWindow(t *testing.T) {
+	t.Setenv(platform.EnvDecorations, "")
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	a := New(Options{Look: style.DarkLook(), Backend: "offscreen"})
+	a.backend = fakeBackend{}
+	a.headless = false
+	w, err := a.NewWindow(platform.WindowOptions{Width: 400, Height: 300})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.SetContent(widgets.NewLabel("x"))
+	a.PumpOnce()
+	if w.Decorations() != platform.DecorationsServer || w.Caption() != nil {
+		t.Fatalf("auto leaves a plain window to the desktop: %v caption %v", w.Decorations(), w.Caption())
+	}
+	surf := w.Surface().(*platform.Offscreen)
+	before := len(surf.FrameCalls().Requests)
+	// What Settings' Apply does with the box unticked.
+	a.ApplyAppearance(style.Appearance{Decorations: style.DecorationsToolkit})
+	a.PumpOnce()
+	if got := a.Decorations(); got != style.DecorationsToolkit {
+		t.Fatalf("preference %q", got)
+	}
+	reqs := surf.FrameCalls().Requests[before:]
+	if len(reqs) == 0 || reqs[len(reqs)-1] != platform.DecorationsClient {
+		t.Fatalf("the surface was asked for %v", reqs)
+	}
+	if w.Decorations() != platform.DecorationsClient {
+		t.Fatalf("mode in effect %v", w.Decorations())
+	}
+	if w.Caption() == nil || !w.Caption().Framed() {
+		t.Fatalf("the caption was not rebuilt for the toolkit's frame: %v", w.Caption())
+	}
+	// And back: ticking the box hands the frame to the desktop again.
+	a.ApplyAppearance(style.Appearance{Decorations: style.DecorationsSystem})
+	a.PumpOnce()
+	if w.Decorations() != platform.DecorationsServer || w.Caption() != nil {
+		t.Fatalf("OS borders: %v caption %v", w.Decorations(), w.Caption())
+	}
+	if last := surf.FrameCalls().Requests; last[len(last)-1] != platform.DecorationsServer {
+		t.Fatalf("the surface was asked for %v", last[len(last)-1])
+	}
+}
+
 func TestFrameKeyboard(t *testing.T) {
 	r := newFrameRig(t, platform.DecorationsClient)
 	field := widgets.NewTextField("", "search", nil)
