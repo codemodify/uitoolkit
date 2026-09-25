@@ -51,11 +51,20 @@ func TestSettingsIsAccessible(t *testing.T) {
 			t.Errorf("settings: the word %q is not on the preview's settings bar", word)
 		}
 	}
-	// The options are switches, and a screen reader has to find them as
-	// switches: four behaviours and the one that says where the colours
-	// come from.
-	if n := a11ytest.Count(tree, a11y.RoleSwitch); n < 5 {
-		t.Errorf("settings: the page has %d switches, want the five options", n)
+	// The five options over the preview are check boxes, and each is in
+	// the tree under the name that says in full what the short word on it
+	// means: the word is what the eye gets, the name is what the ear
+	// gets, and the one contains the other.
+	for _, name := range []string{
+		"Animations",
+		"Use the desktop's file dialogs",
+		"System frame: the desktop's title bar and borders",
+		"Theme buttons: the caption buttons where the theme puts them",
+		"Desktop colours: follow the desktop's light or dark mode and its accent",
+	} {
+		if a11ytest.Find(tree, a11y.RoleCheckBox, name) == nil {
+			t.Errorf("settings: no %q check box in the tree", name)
+		}
 	}
 	// The theme browser is a named list, and so is the search beside it.
 	if a11ytest.Find(tree, a11y.RoleList, "Themes") == nil {
@@ -66,10 +75,15 @@ func TestSettingsIsAccessible(t *testing.T) {
 	// it is grey, because a built-in pack is staged: a screen reader that
 	// could not find it at all would have no way to learn that removing a
 	// pack is something Settings does.
-	for _, name := range []string{"Export current theme…", "Delete theme…", "Delete icon set…", "Apply"} {
+	for _, name := range []string{"Export current theme…", "Delete theme…", "Apply"} {
 		if a11ytest.Find(tree, a11y.RoleButton, name) == nil {
 			t.Errorf("settings: no %s button in the tree", name)
 		}
+	}
+	// Delete icon set… is not one of them any more, and a screen reader
+	// must not be told about a button the page does not have.
+	if a11ytest.Find(tree, a11y.RoleButton, "Delete icon set…") != nil {
+		t.Error("settings: Delete icon set… is back in the tree")
 	}
 
 	// The preview is a live application, not a picture: every control on
@@ -97,7 +111,7 @@ func TestSettingsIsAccessible(t *testing.T) {
 	}
 
 	// Scrolling the column of choices does not take anything out of the
-	// tree: the sections below the fold are still there to be driven.
+	// tree: what is under the fold in it is still there to be driven.
 	scroll := findScrollView(s.Content())
 	if scroll == nil {
 		t.Fatal("settings: the column of choices does not scroll")
@@ -105,11 +119,14 @@ func TestSettingsIsAccessible(t *testing.T) {
 	scroll.ScrollTo(scroll.MaxOffset())
 	a.PumpOnce()
 	tree = a11ytest.Audit(t, "settings scrolled", s.AccessibleTree())
-	if a11ytest.Find(tree, a11y.RoleSwitch, "Animations") == nil {
-		t.Error("settings: scrolling the column lost the behaviour switches from the tree")
+	if a11ytest.Find(tree, a11y.RoleButton, "Delete theme…") == nil {
+		t.Error("settings: scrolling the column lost the foot of it from the tree")
 	}
-	// The choosers are beside the column, not in it: scrolling it cannot
-	// take them anywhere.
+	// The options and the choosers are beside the column, not in it:
+	// scrolling it cannot take them anywhere.
+	if a11ytest.Find(tree, a11y.RoleCheckBox, "Animations") == nil {
+		t.Error("settings: the options left the tree when the column scrolled")
+	}
 	if a11ytest.Find(tree, a11y.RoleComboBox, "Icons") == nil {
 		t.Error("settings: the icon chooser left the tree when the column scrolled")
 	}

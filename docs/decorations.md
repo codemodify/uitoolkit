@@ -378,8 +378,8 @@ in-app windows, pixel by pixel, at 1 and 1.75.
 
 Glyphs, sizes and colours are the look's; the side and order of the
 buttons are the desktop's, unless the user prefers the look's own layout:
-look.json `"captionButtons": "theme"` (Settings: **Place window buttons as
-the theme does**) puts the Mac's traffic lights on the left, gives GNOME's
+look.json `"captionButtons": "theme"` (Settings: **Theme buttons**, in
+the row over the preview) puts the Mac's traffic lights on the left, gives GNOME's
 lone close, KDE's window menu on the left. It applies live, to every app.
 
 `go run ./cmd/uitk-themesheet -frames -theme luna -o /tmp/f` renders a
@@ -505,7 +505,7 @@ kiosks). First match wins:
 3. Offscreen / headless windows: none of the toolkit's (screenshots and tests
    look the same everywhere) unless 1 or 2 asks.
 4. The user's preference, look.json `"decorations"`: `"system"` (Settings'
-   **Use system title bar and borders**) or `"toolkit"` (every window).
+   **System frame**) or `"toolkit"` (every window).
 5. Auto: the toolkit's frame for a window with a title bar (`SetTitleBar`)
    where the desktop moves and resizes on request; the desktop's frame for
    every other window. So every app without a title bar looks exactly as
@@ -517,8 +517,9 @@ effect at once, without a restart. The desktop's answer is obeyed.
 
 ### The Settings switch
 
-Settings → Themes shows **Use system title bar and borders** next to **Use
-the desktop's file dialogs** (Chromium's wording and meaning). On: windows
+Settings shows **System frame** — *Use system title bar and borders* to a
+screen reader, Chromium's wording and meaning — in the row of options over
+the preview, next to **File dialogs**. On: windows
 that draw their own title bar get the desktop's title bar and borders instead,
 and their title bar becomes the first row. Apply writes look.json
 (`"decorations": "system"`; auto is left out) and every running app switches

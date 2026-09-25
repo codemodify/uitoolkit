@@ -6,11 +6,12 @@
 //	go run ./cmd/uitoolkit-settings -page appearance -headless
 //	go run ./cmd/uitoolkit-settings -plain-preview -screenshot out.png
 //
-// Settings is one page: the theme browser and the behaviour switches
-// down a column on the left, and on the right, never scrolling away, the
-// thing those choices are about — a small live application window in the
-// staged pack, with the switch that says where its colours come from
-// over it and the three config paths under it.
+// Settings is one page: the theme browser down a column on the left,
+// and on the right, never scrolling away, the thing it is browsing for —
+// a small live application window in the staged pack, with the five
+// on/off options in a row over it (Animations, File dialogs, System
+// frame, Theme buttons, Desktop colours) and the three config paths
+// under it.
 //
 // The preview sets three of the things it shows: the icon set, the size
 // its glyphs are drawn at and its corner style are combo boxes on a bar
@@ -44,7 +45,7 @@ func main() {
 	headless := flag.Bool("headless", false, "paint offscreen and write settings.png")
 	shot := flag.String("screenshot", "", "write settings.png into this directory (or file) and exit")
 	stage := flag.String("stage", "", "open with this theme staged in the preview (not applied)")
-	page := flag.String("page", "", "open the page at this section: theme (default), behaviour, desktop, preview, files — the old page names themes/appearance/packs/about still resolve")
+	page := flag.String("page", "", "the section of the page to open at: theme (default), behaviour, preview, files — nothing is under the fold now, so every name is already on screen; the old page names themes/appearance/packs/about/desktop still resolve")
 	plain := flag.Bool("plain-preview", false, "draw the preview as the sample application alone, without the bar of live settings (for screenshots: nothing can be chosen)")
 	flag.Parse()
 

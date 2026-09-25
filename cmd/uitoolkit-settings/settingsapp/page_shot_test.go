@@ -24,8 +24,9 @@ import (
 //
 //	UITK_SHOTS=/tmp/shots tools/testenv.sh go test ./cmd/uitoolkit-settings/... -run PageHolds
 //
-// UITK_PAGE opens them at a section (-page's names), for the parts of
-// the column below the fold.
+// UITK_PAGE opens them at a section (-page's names); nothing is below
+// the fold any more, so it changes nothing about what is drawn, but the
+// shots are taken through the same path the flag takes.
 func TestSettingsPageHoldsAtEverySize(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	if err := style.SaveAppearance(style.DefaultAppearance()); err != nil {
@@ -51,12 +52,16 @@ func TestSettingsPageHoldsAtEverySize(t *testing.T) {
 				// The preview is far the biggest thing on its side of the
 				// splitter at every one of these sizes: that is the
 				// promise the icon strip was moved out of this pane to
-				// keep, and the reason the two rows that share it with
-				// it — the colours switch and the three paths — are one
-				// row each.
+				// keep, and the reason the five options over it are one
+				// folding row of check boxes rather than a stack of
+				// switches with a line of prose each. It is 82% of the
+				// pane at 1024x860 and 61% at the 720x520 minimum, where
+				// the row folds onto two lines; five switches would have
+				// folded onto three and left it 53%.
 				split := settingsSplit(t, w)
+				pane := split.PaneB()
 				box := previewScope(t, w).LocalBounds()
-				if pane := split.PaneB(); box.Dy() < pane.Dy()*0.6 {
+				if box.Dy() < pane.Dy()*0.6 {
 					t.Errorf("%s at %g×, %dx%d: the preview is %v of a %v pane",
 						pack, scale, size[0], size[1], box.Dy(), pane.Dy())
 				}
@@ -88,8 +93,33 @@ func TestSettingsPageHoldsAtEverySize(t *testing.T) {
 							pack, scale, size[0], size[1], name, in.Max.X, bar.LocalBounds().Dx())
 					}
 				}
-				t.Logf("%s at %g×, %dx%d: bar %v wide, %d of 3 words shown",
-					pack, scale, size[0], size[1], bar.LocalBounds().Dx(), words)
+				// The five options over it are whole at every one of
+				// these sizes too. A check box does not elide and the
+				// row does not shed: it folds, and what it must never do
+				// is hand one of them a width its word does not fit in
+				// or push one past the pane's right edge.
+				row := optionsRow(t, w)
+				for _, word := range []string{"Animations", "File dialogs", "System frame", "Theme buttons", "Desktop colours"} {
+					box := findOption(w.Content(), word)
+					if box == nil {
+						t.Fatalf("%s at %g×, %dx%d: no %q option", pack, scale, size[0], size[1], word)
+					}
+					if box.Bounds().Dx() < box.Measure(layout.Unbounded()).X-0.51 {
+						t.Errorf("%s at %g×, %dx%d: the %q option is squeezed to %v of %v",
+							pack, scale, size[0], size[1], word, box.Bounds().Dx(), box.Measure(layout.Unbounded()).X)
+					}
+					if box.Bounds().Max.X > row.LocalBounds().Dx()+0.51 {
+						t.Errorf("%s at %g×, %dx%d: the %q option ends at %v in a row %v wide",
+							pack, scale, size[0], size[1], word, box.Bounds().Max.X, row.LocalBounds().Dx())
+					}
+				}
+				lines := rowLines(row)
+				if lines > 2 {
+					t.Errorf("%s at %g×, %dx%d: the five options stand on %d lines in a %v pane",
+						pack, scale, size[0], size[1], lines, row.LocalBounds().Dx())
+				}
+				t.Logf("%s at %g×, %dx%d: bar %v wide, %d of 3 words shown; options on %d line(s), preview %.0f%% of the pane",
+					pack, scale, size[0], size[1], bar.LocalBounds().Dx(), words, lines, 100*box.Dy()/pane.Dy())
 				if dir != "" {
 					name := fmt.Sprintf("settings-%s%s-%gx-%dx%d.png", page, pack, scale, size[0], size[1])
 					if err := w.WritePNG(filepath.Join(dir, name)); err != nil {

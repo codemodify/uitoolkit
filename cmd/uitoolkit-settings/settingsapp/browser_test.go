@@ -12,14 +12,14 @@ import (
 	"github.com/codemodify/uitoolkit/widgets"
 )
 
-// The right-hand pane is the preview and the two single rows that stand
-// over and under it: where the colours come from, the application window
-// in the staged pack, and where the files are. The window is the biggest
-// thing in the pane at every size, switches when another pack is picked,
-// and never re-themes Settings itself. The whole widget gallery used to
-// sit under it in a second splitter (it is the tour's three showcase
-// pages now) and a strip of stock icons sat above it for a while; this
-// is what says neither has crept back.
+// The right-hand pane is the preview and the two things that stand over
+// and under it: the row of five options, the application window in the
+// staged pack, and where the files are. The window is the biggest thing
+// in the pane at every size, switches when another pack is picked, and
+// never re-themes Settings itself. The whole widget gallery used to sit
+// under it in a second splitter (it is the tour's three showcase pages
+// now) and a strip of stock icons sat above it for a while; this is what
+// says neither has crept back.
 func TestSettingsPreviewIsTheWholeRightPane(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	if err := style.SaveAppearance(style.DefaultAppearance()); err != nil {
@@ -60,25 +60,36 @@ func TestSettingsPreviewIsTheWholeRightPane(t *testing.T) {
 	if box.Dy() < pane.Dy()*0.6 {
 		t.Errorf("the preview is %v of a %v pane", box.Dy(), pane.Dy())
 	}
-	// Over it, the one switch that says where its colours come from;
-	// under it, the three paths. Both are Settings' own, drawn in the
-	// applied look, outside the preview's scope.
-	follow := findSwitch(w.Content(), "Follow the desktop's colours")
+	// Over it, the five options — the four the column held and the one
+	// that says where the colours come from; under it, the three paths.
+	// Both are Settings' own, drawn in the applied look, outside the
+	// preview's scope.
+	follow := findOption(w.Content(), "Desktop colours")
 	if follow == nil {
-		t.Fatal("no follow-the-desktop switch")
+		t.Fatal("no desktop-colours option")
 	}
 	if insidePreview(follow) {
-		t.Error("the colours switch is inside the preview's theme scope")
+		t.Error("the colours option is inside the preview's theme scope")
 	}
 	files := findPanelTitled(w.Content(), "Files")
 	if files == nil {
 		t.Fatal("no Files block")
 	}
 	if nestedInScroll(files) || nestedInScroll(follow) {
-		t.Error("the colours switch or Files is back in the column that scrolls")
+		t.Error("the options row or Files is back in the column that scrolls")
 	}
 	if widget.DeviceOrigin(follow).Y >= widget.DeviceOrigin(preview).Y {
-		t.Error("the colours switch is not over the preview")
+		t.Error("the options row is not over the preview")
+	}
+	// And the column beside them is the theme browser and nothing else.
+	for _, word := range []string{"Animations", "File dialogs", "System frame", "Theme buttons"} {
+		box := findOption(w.Content(), word)
+		if box == nil {
+			t.Fatalf("no %q option on the page", word)
+		}
+		if nestedInScroll(box) {
+			t.Errorf("the %q option is back in the column that scrolls", word)
+		}
 	}
 	if widget.DeviceOrigin(files).Y <= widget.DeviceOrigin(preview).Y {
 		t.Error("the Files block is not under the preview")
@@ -201,9 +212,11 @@ func TestSettingsThemeSearch(t *testing.T) {
 }
 
 // Tab walks the whole of Settings. There is one page, so one ring has to
-// hold all of it: the search field and the theme list, every chooser and
-// every switch down the column of choices, the buttons that act on a
-// pack, the live preview beside them, and Apply.
+// hold all of it: the search field and the theme list down the column,
+// the buttons that act on a pack, the five options and every chooser
+// beside them, the live preview under those, and Apply. A check box in a
+// wrapping row is a stop like any other — a row that folded its last two
+// onto a second line must not have folded them out of the ring.
 func TestSettingsKeyboardReachesEverything(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	if err := style.SaveAppearance(style.DefaultAppearance()); err != nil {
@@ -236,10 +249,10 @@ func TestSettingsKeyboardReachesEverything(t *testing.T) {
 		"icon size":     false,
 		"export":        false,
 		"animations":    false,
-		"follow":        false,
+		"colours":       false,
 		"file dialogs":  false,
-		"title bar":     false,
-		"window button": false,
+		"system frame":  false,
+		"theme buttons": false,
 		"preview":       false,
 		"apply":         false,
 	}
@@ -262,18 +275,20 @@ func TestSettingsKeyboardReachesEverything(t *testing.T) {
 			case "Decade":
 				want["decade"] = true
 			}
-		case *widgets.Switch:
+		case *widgets.Checkbox:
+			// The five over the preview; the previewed application's own
+			// check boxes are in this ring too and are not these.
 			switch v.Text {
 			case "Animations":
 				want["animations"] = true
-			case "Follow the desktop's colours":
-				want["follow"] = true
-			case "Use the desktop's file dialogs":
+			case "Desktop colours":
+				want["colours"] = true
+			case "File dialogs":
 				want["file dialogs"] = true
-			case "Use system title bar and borders":
-				want["title bar"] = true
-			case "Place window buttons as the theme does":
-				want["window button"] = true
+			case "System frame":
+				want["system frame"] = true
+			case "Theme buttons":
+				want["theme buttons"] = true
 			}
 		case *widgets.Button:
 			switch v.Text {
