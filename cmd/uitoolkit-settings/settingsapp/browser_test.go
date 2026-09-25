@@ -48,8 +48,8 @@ func TestSettingsPreviewIsTheWholeRightPane(t *testing.T) {
 	if n := len(allScopes(w.Content())); n != 1 {
 		t.Fatalf("the page has %d theme scopes, want only the preview", n)
 	}
-	if n := len(allScopes(findScrollView(w.Content()))); n != 0 {
-		t.Fatalf("the column of choices holds %d theme scopes, want none", n)
+	if n := len(allScopes(browserColumn(t, w))); n != 0 {
+		t.Fatalf("the browser column holds %d theme scopes, want none", n)
 	}
 	// The preview takes what the two rows beside it leave, and it is far
 	// the biggest thing in the pane: everything else in here is one row.
@@ -75,8 +75,8 @@ func TestSettingsPreviewIsTheWholeRightPane(t *testing.T) {
 	if files == nil {
 		t.Fatal("no Files block")
 	}
-	if nestedInScroll(files) || nestedInScroll(follow) {
-		t.Error("the options row or Files is back in the column that scrolls")
+	if inBrowserColumn(w.Content(), files) || inBrowserColumn(w.Content(), follow) {
+		t.Error("the options row or Files is back in the browser column")
 	}
 	if widget.DeviceOrigin(follow).Y >= widget.DeviceOrigin(preview).Y {
 		t.Error("the options row is not over the preview")
@@ -87,8 +87,8 @@ func TestSettingsPreviewIsTheWholeRightPane(t *testing.T) {
 		if box == nil {
 			t.Fatalf("no %q option on the page", word)
 		}
-		if nestedInScroll(box) {
-			t.Errorf("the %q option is back in the column that scrolls", word)
+		if inBrowserColumn(w.Content(), box) {
+			t.Errorf("the %q option is back in the browser column", word)
 		}
 	}
 	if widget.DeviceOrigin(files).Y <= widget.DeviceOrigin(preview).Y {
@@ -212,11 +212,14 @@ func TestSettingsThemeSearch(t *testing.T) {
 }
 
 // Tab walks the whole of Settings. There is one page, so one ring has to
-// hold all of it: the search field and the theme list down the column,
-// the buttons that act on a pack, the five options and every chooser
-// beside them, the live preview under those, and Apply. A check box in a
-// wrapping row is a stop like any other — a row that folded its last two
-// onto a second line must not have folded them out of the ring.
+// hold all of it: the search field, the decade filter and the theme list
+// down the column, the Export under them, the five options and every
+// chooser beside them, the live preview under those, and Apply. A check
+// box in a wrapping row is a stop like any other — a row that folded its
+// last two onto a second line must not have folded them out of the ring.
+//
+// The column is four stops now and Export is the last of them: Delete
+// theme… was the fifth and is gone.
 func TestSettingsKeyboardReachesEverything(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	if err := style.SaveAppearance(style.DefaultAppearance()); err != nil {
@@ -296,6 +299,8 @@ func TestSettingsKeyboardReachesEverything(t *testing.T) {
 				want["apply"] = true
 			case "Export current theme…":
 				want["export"] = true
+			case "Delete theme…":
+				t.Error("Tab stops on Delete theme…, which is off the page")
 			case "Dialog…":
 				// A control of the previewed application: the preview is
 				// live, not a picture, so Tab reaches into it.
@@ -325,10 +330,10 @@ func TestSettingsKeyboardReachesEverything(t *testing.T) {
 			t.Errorf("the icon chooser is not on the settings bar but in %T", set.Parent())
 		}
 	}
-	// Apply is at the foot of the window, outside the column that
-	// scrolls, so it is a stop whatever the column is scrolled to.
-	if nestedInScroll(findApply(w.Content())) {
-		t.Error("Apply is inside the scrolling column")
+	// Apply is at the foot of the window, outside the browser column and
+	// outside the splitter, so it is a stop at every window size.
+	if inBrowserColumn(w.Content(), findApply(w.Content())) {
+		t.Error("Apply is inside the browser column")
 	}
 }
 

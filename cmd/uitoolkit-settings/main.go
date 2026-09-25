@@ -5,6 +5,7 @@
 //	go run ./cmd/uitoolkit-settings -screenshot docs/screenshots
 //	go run ./cmd/uitoolkit-settings -page appearance -headless
 //	go run ./cmd/uitoolkit-settings -plain-preview -screenshot out.png
+//	go run ./cmd/uitoolkit-settings -version
 //
 // Settings is one page: the theme browser down a column on the left,
 // and on the right, never scrolling away, the thing it is browsing for —
@@ -21,6 +22,13 @@
 // premiere PNG sets copied into ~/.config/uitoolkit/icons/<set>/.
 // -plain-preview leaves that bar off, for pictures of the sample alone;
 // nothing can be chosen while it is set.
+// The column is four bare controls — search, decade filter, the list of
+// packs, Export — with no heading over them and no group box around
+// them: the window's title bar says which application this is, and the
+// only list on the page does not need a legend to say it lists themes.
+// -version is where the version went when that heading's version label
+// went with it; it is the only place the command states it.
+//
 // Apply writes {theme, icons} to
 // $XDG_CONFIG_HOME/uitoolkit/look.json and running apps that watch
 // the file reload without a restart. Export writes
@@ -45,9 +53,19 @@ func main() {
 	headless := flag.Bool("headless", false, "paint offscreen and write settings.png")
 	shot := flag.String("screenshot", "", "write settings.png into this directory (or file) and exit")
 	stage := flag.String("stage", "", "open with this theme staged in the preview (not applied)")
-	page := flag.String("page", "", "the section of the page to open at: theme (default), behaviour, preview, files — nothing is under the fold now, so every name is already on screen; the old page names themes/appearance/packs/about/desktop still resolve")
+	page := flag.String("page", "", "the section of the page you came for: theme (default), behaviour, preview, files — there is one page and nothing on it is under a fold, so the flag names what is already on screen and changes nothing; the old page names themes/appearance/packs/about/desktop still resolve rather than fail")
 	plain := flag.Bool("plain-preview", false, "draw the preview as the sample application alone, without the bar of live settings (for screenshots: nothing can be chosen)")
+	showVersion := flag.Bool("version", false, "print the toolkit version and exit")
 	flag.Parse()
+
+	// The version used to be a label under a "Settings" heading at the
+	// top of the column. The heading is gone — a window says what it is
+	// in its title bar — and the version came off the page with it. This
+	// is where it is now, which is where a command's version belongs.
+	if *showVersion {
+		fmt.Println("uitoolkit-settings " + uitoolkit.Version)
+		return
+	}
 
 	a := uitoolkit.New(uitoolkit.Options{
 		Headless:         *headless || *shot != "",

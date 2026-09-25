@@ -118,8 +118,36 @@ func TestSettingsPageHoldsAtEverySize(t *testing.T) {
 					t.Errorf("%s at %g×, %dx%d: the five options stand on %d lines in a %v pane",
 						pack, scale, size[0], size[1], lines, row.LocalBounds().Dx())
 				}
-				t.Logf("%s at %g×, %dx%d: bar %v wide, %d of 3 words shown; options on %d line(s), preview %.0f%% of the pane",
-					pack, scale, size[0], size[1], bar.LocalBounds().Dx(), words, lines, 100*box.Dy()/pane.Dy())
+				// And the browser fills its own column, the way the
+				// preview fills the pane beside it: the list runs from
+				// the decade filter to the Export at the foot, and how
+				// many of the 129 packs that shows is the whole of what
+				// the column is for. It was held to 252 logical pixels
+				// — nine rows at scale 1, five at 1.75 — with about 250
+				// px of nothing under the buttons.
+				col := browserColumn(t, w)
+				list := findThemeListAny(w.Content())
+				export := findButton(w.Content(), "Export current theme…")
+				if list == nil || export == nil {
+					t.Fatalf("%s at %g×, %dx%d: the column is not the browser", pack, scale, size[0], size[1])
+				}
+				if gap := export.Bounds().Min.Y - list.Bounds().Max.Y; gap > 16*scale {
+					t.Errorf("%s at %g×, %dx%d: %v px of nothing between the list and Export",
+						pack, scale, size[0], size[1], gap)
+				}
+				if tail := col.LocalBounds().Dy() - export.Bounds().Max.Y; tail > 16*scale {
+					t.Errorf("%s at %g×, %dx%d: %v px of nothing under Export",
+						pack, scale, size[0], size[1], tail)
+				}
+				lo, hi := list.VisibleRange()
+				if hi-lo < 4 {
+					t.Errorf("%s at %g×, %dx%d: the browser shows %d of %d packs",
+						pack, scale, size[0], size[1], hi-lo, list.Count)
+				}
+				t.Logf("%s at %g×, %dx%d: bar %v wide, %d of 3 words shown; options on %d line(s), preview %.0f%% of the pane; "+
+					"the browser shows %d of %d packs in %.0f px, %.0f%% of a %.0f px column",
+					pack, scale, size[0], size[1], bar.LocalBounds().Dx(), words, lines, 100*box.Dy()/pane.Dy(),
+					hi-lo, list.Count, list.LocalBounds().Dy(), 100*list.LocalBounds().Dy()/col.LocalBounds().Dy(), col.LocalBounds().Dy())
 				if dir != "" {
 					name := fmt.Sprintf("settings-%s%s-%gx-%dx%d.png", page, pack, scale, size[0], size[1])
 					if err := w.WritePNG(filepath.Join(dir, name)); err != nil {

@@ -66,24 +66,36 @@ func TestSettingsIsAccessible(t *testing.T) {
 			t.Errorf("settings: no %q check box in the tree", name)
 		}
 	}
-	// The theme browser is a named list, and so is the search beside it.
+	// The theme browser is a named list and the search field beside it is
+	// a named text field. Nothing on the screen says what the column is
+	// any more — the Theme group box and the paragraph over the search
+	// field are gone, and so is the Settings heading over both — so these
+	// two names are the whole of what a screen reader has to go on, and
+	// a11y.Check (which Audit runs) fails an unnamed list outright.
 	if a11ytest.Find(tree, a11y.RoleList, "Themes") == nil {
 		t.Error("settings: no theme browser in the tree")
 	}
+	if a11ytest.Find(tree, a11y.RoleTextField, "Search themes") == nil {
+		t.Error("settings: the search field is not named in the tree")
+	}
+	// And nothing is left claiming to name them: a group called Theme
+	// would now be a legend over the whole column.
+	if a11ytest.Find(tree, a11y.RoleGroup, "Theme") != nil {
+		t.Error("settings: the Theme group box is back in the tree")
+	}
 
-	// Export and Delete are on the page and named. Delete is there while
-	// it is grey, because a built-in pack is staged: a screen reader that
-	// could not find it at all would have no way to learn that removing a
-	// pack is something Settings does.
-	for _, name := range []string{"Export current theme…", "Delete theme…", "Apply"} {
+	// Export is on the page and named; Apply is at the foot.
+	for _, name := range []string{"Export current theme…", "Apply"} {
 		if a11ytest.Find(tree, a11y.RoleButton, name) == nil {
 			t.Errorf("settings: no %s button in the tree", name)
 		}
 	}
-	// Delete icon set… is not one of them any more, and a screen reader
-	// must not be told about a button the page does not have.
-	if a11ytest.Find(tree, a11y.RoleButton, "Delete icon set…") != nil {
-		t.Error("settings: Delete icon set… is back in the tree")
+	// Neither Delete is one of them any more, and a screen reader must
+	// not be told about a button the page does not have.
+	for _, gone := range []string{"Delete theme…", "Delete icon set…"} {
+		if a11ytest.Find(tree, a11y.RoleButton, gone) != nil {
+			t.Errorf("settings: %s is back in the tree", gone)
+		}
 	}
 
 	// The preview is a live application, not a picture: every control on
@@ -110,24 +122,31 @@ func TestSettingsIsAccessible(t *testing.T) {
 		}
 	}
 
-	// Scrolling the column of choices does not take anything out of the
-	// tree: what is under the fold in it is still there to be driven.
-	scroll := findScrollView(s.Content())
-	if scroll == nil {
-		t.Fatal("settings: the column of choices does not scroll")
+	// Nothing on this page is behind a scroll offset: the column does not
+	// scroll, so there is no foot of it to be lost from the tree, and the
+	// one thing that does scroll is the theme list, whose rows a screen
+	// reader reaches through the list itself.
+	if sv := findScrollView(s.Content()); sv != nil {
+		t.Error("settings: the page is back in a scroll view")
 	}
-	scroll.ScrollTo(scroll.MaxOffset())
+	list := findThemeListAny(s.Content())
+	if list == nil || list.MaxOffset() <= 0 {
+		t.Fatal("settings: the theme list does not scroll its 129 packs")
+	}
+	list.ScrollTo(list.MaxOffset())
 	a.PumpOnce()
-	tree = a11ytest.Audit(t, "settings scrolled", s.AccessibleTree())
-	if a11ytest.Find(tree, a11y.RoleButton, "Delete theme…") == nil {
-		t.Error("settings: scrolling the column lost the foot of it from the tree")
+	tree = a11ytest.Audit(t, "settings list scrolled", s.AccessibleTree())
+	for _, name := range []string{"Export current theme…", "Apply"} {
+		if a11ytest.Find(tree, a11y.RoleButton, name) == nil {
+			t.Errorf("settings: scrolling the list lost %s from the tree", name)
+		}
 	}
 	// The options and the choosers are beside the column, not in it:
-	// scrolling it cannot take them anywhere.
+	// scrolling the list cannot take them anywhere.
 	if a11ytest.Find(tree, a11y.RoleCheckBox, "Animations") == nil {
-		t.Error("settings: the options left the tree when the column scrolled")
+		t.Error("settings: the options left the tree when the list scrolled")
 	}
 	if a11ytest.Find(tree, a11y.RoleComboBox, "Icons") == nil {
-		t.Error("settings: the icon chooser left the tree when the column scrolled")
+		t.Error("settings: the icon chooser left the tree when the list scrolled")
 	}
 }
