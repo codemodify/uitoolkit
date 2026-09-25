@@ -107,7 +107,7 @@ DECADE_NOTE = {
     2020: "Today: libadwaita's Adwaita and GNOME 48's, Windows 11's Fluent, macOS Big Sur and Tahoe's Liquid Glass, Plasma 6's Breeze, Material 3 and Material 3 Expressive, the looks of the web and its tools — GitHub's Primer, Vercel's Geist, shadcn/ui, Linear, SourceGit, VS Code, JetBrains Islands, Catppuccin, Tokyo Night, Rosé Pine — and the toolkit's own skins.",
 }
 
-W_IMG, H_IMG = 569, 481  # the Settings preview panel (docs/settings.md, "Screenshot geometry")
+W_IMG, H_IMG = 569, 782  # the Settings preview panel (docs/settings.md, "Screenshot geometry")
 
 # One sprite sheet per decade instead of one file per preview: a page may
 # publish at most 255 files, and the previews alone are half of that.
