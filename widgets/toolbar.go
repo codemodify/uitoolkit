@@ -8,7 +8,10 @@ import (
 	"github.com/codemodify/uitoolkit/widget"
 )
 
-// ToolItem is one control on a ToolBar (text, icon, or both).
+// ToolItem is one thing on a ToolBar: a tool button (text, icon, or
+// both), the rule between two groups, a control of the application's own
+// ([ToolWidget]), or the free space that pushes what follows to the
+// right ([ToolStretch]).
 type ToolItem struct {
 	Text     string
 	Icon     style.ToolIcon
@@ -18,6 +21,14 @@ type ToolItem struct {
 	Sep      bool
 	Tip      string
 	OnClick  func()
+	// Widget is a control the bar carries instead of a tool button — a
+	// combo box, a search field, a progress bar — laid out on the bar,
+	// drawn on its background and focused in its own right. Use
+	// [ToolWidget].
+	Widget widget.Component
+	// Stretch is free space that eats what the bar has spare, so the
+	// items after it sit at its right-hand end. Use [ToolStretch].
+	Stretch bool
 }
 
 // ToolText is a labeled tool button.
@@ -37,6 +48,23 @@ func ToolToggle(text string, down bool, on func()) *ToolItem {
 
 // ToolDivider is a vertical rule between tool groups.
 func ToolDivider() *ToolItem { return &ToolItem{Sep: true} }
+
+// ToolWidget puts a control of the application's own on the bar — a
+// combo box, a search field — where Qt's QToolBar::addWidget and GTK's
+// tool items put one. It keeps its own size, is centred in the bar's
+// height, draws on the bar's background and takes the focus as any other
+// control does; the bar's own arrow keys walk its buttons and step over
+// it.
+func ToolWidget(c widget.Component) *ToolItem { return &ToolItem{Widget: c} }
+
+// ToolStretch is the free space of a bar: everything after it is pushed
+// to the bar's right-hand end. A bar with one fills the width it is
+// given instead of only the width of its items, and when its items no
+// longer fit it drops the last of the tools before the stretch rather
+// than letting what comes after fall off the end — the controls a bar
+// carries are the application's, and losing one silently is worse than
+// showing one tool button fewer.
+func ToolStretch() *ToolItem { return &ToolItem{Stretch: true} }
 
 // ToolBar is a horizontal strip of tool buttons.
 type ToolBar struct {
@@ -58,7 +86,19 @@ func NewToolBar(items ...*ToolItem) *ToolBar {
 	t := &ToolBar{items: items, hover: -1, press: -1, focus: firstTool(items)}
 	t.Init(t)
 	t.SetWantsFocus(true)
+	for _, it := range items {
+		if it != nil && it.Widget != nil {
+			t.Add(it.Widget)
+		}
+	}
 	return t
+}
+
+// isTool reports whether it is a tool button: the bar paints it, hovers
+// it, and its arrow keys walk it. A separator, a control and the free
+// space are none of those.
+func (it *ToolItem) isTool() bool {
+	return it != nil && !it.Sep && !it.Stretch && it.Widget == nil
 }
 
 // Items returns the tool buttons.
@@ -117,7 +157,7 @@ func (t *ToolBar) Hover(i int) {
 
 func firstTool(items []*ToolItem) int {
 	for i, it := range items {
-		if it != nil && !it.Sep && !it.Disabled {
+		if it.isTool() && !it.Disabled {
 			return i
 		}
 	}
@@ -169,54 +209,187 @@ func (t *ToolBar) itemBoxW(it *ToolItem, btn float32) float32 {
 	return w
 }
 
+// natural is what each item asks for on a bar btn wide in its buttons:
+// a tool button's box, a separator's rule, a control's own measurement,
+// and nothing at all for the free space, which takes what is left over.
+func (t *ToolBar) natural(btn float32) (w, h []float32) {
+	w = make([]float32, len(t.items))
+	h = make([]float32, len(t.items))
+	for i, it := range t.items {
+		switch {
+		case it == nil || it.Stretch:
+		case it.Widget != nil:
+			sz := it.Widget.Measure(layout.Unbounded())
+			w[i], h[i] = sz.X, sz.Y
+		case it.Sep:
+			w[i], h[i] = 8, 0
+		default:
+			w[i], h[i] = t.itemBoxW(it, btn), btn
+		}
+	}
+	return w, h
+}
+
+func (t *ToolBar) hasStretch() bool {
+	for _, it := range t.items {
+		if it != nil && it.Stretch {
+			return true
+		}
+	}
+	return false
+}
+
 // contentW is the intrinsic strip width (items + padding). ToolBar must
-// not expand to MaxW: a Row/Flex parent decides growth via Flex weights.
-func (t *ToolBar) contentW() float32 {
-	btn := t.toolBtnW(t.barH())
+// not expand to MaxW: a Row/Flex parent decides growth via Flex weights —
+// except that a bar with a [ToolStretch] has been told where its right
+// edge is, and takes the width it is offered.
+func (t *ToolBar) contentW(h float32) float32 {
+	w, _ := t.natural(t.toolBtnW(h))
 	in := style.ToolBarInsetsOf(t.Look())
 	x := in.Left
-	for _, it := range t.items {
-		if it == nil || it.Sep {
-			x += 8 + style.ToolItemGap
-			continue
-		}
-		x += t.itemBoxW(it, btn) + style.ToolItemGap
+	for i := range t.items {
+		x += w[i] + style.ToolItemGap
 	}
 	return x + in.Right
 }
 
-func (t *ToolBar) Measure(c layout.Constraints) paintengine2d.Point {
-	return c.Constrain(paintengine2d.Pt(t.contentW(), t.barH()))
+// barHeight is the bar's own height, or as much more as the tallest
+// control it carries needs.
+func (t *ToolBar) barHeight() float32 {
+	h := t.barH()
+	in := style.ToolBarInsetsOf(t.Look())
+	_, ih := t.natural(t.toolBtnW(h))
+	for i, it := range t.items {
+		if it != nil && it.Widget != nil {
+			if want := ih[i] + in.Top + in.Bottom; want > h {
+				h = want
+			}
+		}
+	}
+	return h
 }
 
-func (t *ToolBar) Arrange(r paintengine2d.Rect) { t.SetBounds(r) }
+func (t *ToolBar) Measure(c layout.Constraints) paintengine2d.Point {
+	h := t.barHeight()
+	w := t.contentW(h)
+	if t.hasStretch() && c.HasMaxW() {
+		w = c.MaxW
+	}
+	return c.Constrain(paintengine2d.Pt(w, h))
+}
+
+func (t *ToolBar) Arrange(r paintengine2d.Rect) {
+	t.SetBounds(r)
+	rects := t.itemRects()
+	for i, it := range t.items {
+		if it == nil || it.Widget == nil {
+			continue
+		}
+		if i < len(rects) {
+			it.Widget.Arrange(rects[i])
+		}
+	}
+}
 
 func (t *ToolBar) itemRects() []paintengine2d.Rect {
 	h := t.LocalBounds().Dy()
 	btn := t.toolBtnW(h)
-	x := style.ToolBarInsetsOf(t.Look()).Left
+	in := style.ToolBarInsetsOf(t.Look())
+	w, ih := t.natural(btn)
 	y := (h - btn) * 0.5
 	if y < 2 {
 		y = 2
 		btn = h - 4
 	}
+	gap := style.ToolItemGap
+	total := in.Left + in.Right
+	for i := range t.items {
+		total += w[i] + gap
+	}
 	out := make([]paintengine2d.Rect, len(t.items))
+	stretch, drop := float32(0), map[int]bool{}
+	if n := t.stretches(); n > 0 {
+		avail := t.LocalBounds().Dx()
+		// The last item pays no gap after it: the bar's right inset is
+		// where it ends, which is what the free space measures against.
+		used := total - gap
+		// Too narrow: the tools nearest the free space give way, one at a
+		// time, so that what the free space pins to the right edge — the
+		// application's own controls — is still whole and still on the bar.
+		for used > avail {
+			i := t.lastBeforeStretch(drop)
+			if i < 0 {
+				break
+			}
+			drop[i] = true
+			used -= w[i] + gap
+		}
+		if avail > used {
+			stretch = (avail - used) / float32(n)
+		}
+	}
+	x := in.Left
 	for i, it := range t.items {
-		if it == nil || it.Sep {
+		switch {
+		case drop[i]:
+			out[i] = paintengine2d.Rect{}
+		case it != nil && it.Stretch:
+			out[i] = paintengine2d.XYWH(x, y, stretch, 0)
+		case it != nil && it.Widget != nil:
+			iy := (h - ih[i]) * 0.5
+			if iy < 1 {
+				iy = 1
+			}
+			out[i] = paintengine2d.XYWH(x, iy, w[i], min(ih[i], h-2))
+		case it == nil || it.Sep:
 			out[i] = paintengine2d.XYWH(x, 6, 8, h-12)
-			x += 8 + style.ToolItemGap
+		default:
+			out[i] = paintengine2d.XYWH(x, y, w[i], btn)
+		}
+		if it != nil && it.Stretch {
+			x += stretch + gap
 			continue
 		}
-		w := t.itemBoxW(it, btn)
-		out[i] = paintengine2d.XYWH(x, y, w, btn)
-		x += w + style.ToolItemGap
+		if drop[i] {
+			continue
+		}
+		x += w[i] + gap
 	}
 	return out
 }
 
+func (t *ToolBar) stretches() int {
+	n := 0
+	for _, it := range t.items {
+		if it != nil && it.Stretch {
+			n++
+		}
+	}
+	return n
+}
+
+// lastBeforeStretch is the last tool or rule ahead of the bar's free
+// space that is still on the bar: the first thing to go when the bar is
+// narrower than its items.
+func (t *ToolBar) lastBeforeStretch(drop map[int]bool) int {
+	end := len(t.items)
+	for i, it := range t.items {
+		if it != nil && it.Stretch {
+			end = i
+			break
+		}
+	}
+	for i := end - 1; i >= 0; i-- {
+		if it := t.items[i]; !drop[i] && (it == nil || it.Widget == nil) {
+			return i
+		}
+	}
+	return -1
+}
+
 func (t *ToolBar) itemAt(p paintengine2d.Point) int {
 	for i, r := range t.itemRects() {
-		if r.Contains(p) {
+		if t.items[i].isTool() && !r.Empty() && r.Contains(p) {
 			return i
 		}
 	}
@@ -238,8 +411,8 @@ func (t *ToolBar) Paint(ctx *paintengine2d.Context) {
 		t.paintGroups(ctx, rects)
 	}
 	for i, it := range t.items {
-		if it == nil {
-			continue
+		if it == nil || it.Widget != nil || it.Stretch || rects[i].Empty() {
+			continue // a control paints itself; free space and a dropped tool paint nothing
 		}
 		if it.Sep {
 			if grouped {
@@ -292,7 +465,7 @@ func (t *ToolBar) paintGroups(ctx *paintengine2d.Context, rects []paintengine2d.
 		run, n = paintengine2d.Rect{}, 0
 	}
 	for i, it := range t.items {
-		if it == nil || it.Sep {
+		if !it.isTool() || rects[i].Empty() {
 			flush()
 			continue
 		}
@@ -387,7 +560,7 @@ func (t *ToolBar) KeyPress(e widget.KeyEvent) bool {
 
 func lastTool(items []*ToolItem) int {
 	for i := len(items) - 1; i >= 0; i-- {
-		if items[i] != nil && !items[i].Sep && !items[i].Disabled {
+		if items[i].isTool() && !items[i].Disabled {
 			return i
 		}
 	}
@@ -402,7 +575,7 @@ func (t *ToolBar) moveFocus(dir int) {
 	for n := 0; n < len(t.items); n++ {
 		i = (i + dir + len(t.items)) % len(t.items)
 		it := t.items[i]
-		if it != nil && !it.Sep && !it.Disabled {
+		if it.isTool() && !it.Disabled {
 			t.focus = i
 			t.Invalidate()
 			return
@@ -415,7 +588,7 @@ func (t *ToolBar) activate(i int) {
 		return
 	}
 	it := t.items[i]
-	if it == nil || it.Sep || it.Disabled {
+	if !it.isTool() || it.Disabled {
 		return
 	}
 	if it.Toggle {

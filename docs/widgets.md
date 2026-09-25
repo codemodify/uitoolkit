@@ -89,7 +89,7 @@ opens `OnContext` for the current row.
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Menu bar | `MenuBar` / `Menu` / `MenuItem` (`Icon`, `Checkable`, `RadioGroup`) | `QMenuBar` / `MenuBar` | `GtkPopoverMenuBar` | `Menu` / `NativeMenu` | `fyne.MainMenu` | `MenuStrip` | `Menu` | `NSMenu` | `commands` / `Menu` | [thumb](screenshots/compare/menubar.png) · [gallery](screenshots/gallery-menu.png) |
 | Context menu | `PopupMenu` | `QMenu` / `Menu` | `GtkPopoverMenu` | `ContextMenu` | `widget.PopUpMenu` | `ContextMenuStrip` | `ContextMenu` | `NSMenu` | `contextMenu` | [thumb](screenshots/compare/popupmenu.png) |
-| Tool bar | `ToolBar` / `ToolToggle` / `ToolButton` | `QToolBar` + checkable `QToolButton` | `GtkBox` ≈ + `GtkToggleButton` | `CommandBar` ≈ + `ToggleButton` | `widget.Toolbar` | `ToolStrip` | `ToolBar` | `NSToolbar` | `ToolbarItem` | [thumb](screenshots/compare/toolbar.png) · [gallery](screenshots/gallery-toolbar.png) |
+| Tool bar | `ToolBar` / `ToolToggle` / `ToolWidget` / `ToolButton` | `QToolBar` + checkable `QToolButton` | `GtkBox` ≈ + `GtkToggleButton` | `CommandBar` ≈ + `ToggleButton` | `widget.Toolbar` | `ToolStrip` | `ToolBar` | `NSToolbar` | `ToolbarItem` | [thumb](screenshots/compare/toolbar.png) · [gallery](screenshots/gallery-toolbar.png) |
 | Status bar | `StatusBar` | `QStatusBar` / `StatusBar` | `GtkStatusbar` ≈ | — | — | `StatusStrip` | `StatusBar` | — | — | [thumb](screenshots/compare/statusbar.png) |
 | Title bar | `TitleBar` | custom chrome ≈ | `GtkHeaderBar` ≈ | window chrome ≈ | window title ≈ | `Form.Text` ≈ | window chrome ≈ | `NSWindow` title | `navigationTitle` | [thumb](screenshots/compare/titlebar.png) |
 | Header bar (window title bar) | `HeaderBar` + `Window.SetTitleBar`, `WindowControls`, `DragArea` / `NoDrag` | custom frameless window | `GtkHeaderBar` + `gtk_window_set_titlebar`, `GtkWindowControls`, `GtkWindowHandle` | `WindowDrawnDecorations` (12) | `widget/material.Decorations` (Gio) ≈ | custom `WM_NCHITTEST` | `WindowChrome` | `NSWindow` full-size content view | `.windowStyle(.hiddenTitleBar)` ≈ | — |
@@ -624,6 +624,36 @@ Next or Finish and Escape Cancel, as a dialog's default and cancel buttons
 F, S and H press the buttons. The wizard is a dialog to assistive
 technology, saying its step ("Step 2 of 4: Your account"), the page a
 group and the steps a list. `examples/uitoolkit-sample-wizard` sets up an account.
+
+## Controls on a tool bar
+
+A `ToolBar` carries tool buttons, the rules between their groups, and —
+through `ToolWidget(c)` — controls of the application's own: a combo
+box, a search field, a progress bar, as `QToolBar::addWidget` and GTK's
+tool items do. A control keeps its own size, is centred in the bar's
+height (the bar grows for one taller than a row of tool buttons), draws
+on the bar's background and is a focus stop in its own right; the bar's
+own arrow keys walk its buttons and step over it.
+
+`ToolStretch()` is free space: everything after it sits at the bar's
+right-hand end, which is where an application keeps what is not a
+command — a zoom, a style, a size. A bar with free space in it takes the
+width it is offered rather than only the width of its items, so its
+right edge is the one it was given.
+
+When such a bar is narrower than its items it **drops the tools nearest
+the free space**, one at a time, rather than letting what comes after
+fall off the end: half a combo box past the edge of a window is a
+control nobody can use, while one tool button fewer is one tool button
+fewer. A dropped tool is painted nowhere, takes no clicks and is not in
+the accessibility tree. Bars with no free space in them are unchanged —
+they measure their items and a parent decides their width.
+
+For a combo box on a bar, `ComboBox.MinWidth` (in 1x pixels) replaces
+the 160-pixel floor that suits a form field, and `ComboBox.Tip` is the
+hover help it needs where there is no room for a label beside it.
+Settings' preview puts its icon set and icon size choosers on the
+previewed application's tool bar this way.
 
 ## Editable combo boxes
 

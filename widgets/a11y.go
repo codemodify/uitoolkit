@@ -686,12 +686,15 @@ func (t *ToolBar) AccessibleItems() []*a11y.Node {
 	rects := t.itemRects()
 	var out []*a11y.Node
 	for i, it := range t.items {
-		if it == nil {
-			continue
+		if it == nil || it.Widget != nil || it.Stretch {
+			continue // a control on the bar is an object of its own; free space is none
 		}
 		var r paintengine2d.Rect
 		if i < len(rects) {
 			r = rects[i]
+		}
+		if r.Empty() {
+			continue // dropped: the bar is too narrow to carry it
 		}
 		if it.Sep {
 			out = append(out, item(t, i, a11y.RoleSeparator, "", r))
@@ -725,7 +728,7 @@ func (t *ToolBar) AccessibleItems() []*a11y.Node {
 }
 
 func (t *ToolBar) AccessibleAction(i int, a a11y.Action) bool {
-	if a != a11y.ActionDefault || i < 0 || i >= len(t.items) || t.items[i] == nil || t.items[i].Disabled || t.items[i].Sep {
+	if a != a11y.ActionDefault || i < 0 || i >= len(t.items) || !t.items[i].isTool() || t.items[i].Disabled {
 		return false
 	}
 	t.activate(i)
