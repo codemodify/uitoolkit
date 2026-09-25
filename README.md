@@ -771,17 +771,23 @@ See [docs/tray.md](docs/tray.md#submenus).
 pages behind a sidebar were four answers to one question, so they are one
 page: the theme browser and the behaviour switches down a column, the
 live application window beside them. Three of its settings are on that
-window rather than in the column — the **icon set** and the **icon size**
-are combo boxes at the right-hand end of the previewed application's own
-tool bar, which is drawn in them, and the **corner style** is in that
-window's own View ▸ Window corners — because a strip of glyphs standing
-in for a tool bar, next to a real one, was showing a copy of the answer.
-Where the colours come from stands over that window and the three config
-paths under it. `widgets.ToolWidget` and `widgets.ToolStretch` are what
-carry a control on a tool bar (Qt's `QToolBar::addWidget`, GTK's tool
-items): a bar with free space in it fills the width it is given, pins
-what follows to its right edge, and drops its own trailing tools rather
-than letting a control fall off the end.
+window rather than in the column — the **icon set**, the **icon size**
+and the **corner style** are combo boxes on a bar of their own at the
+head of it, `Icons [Classic ▾] Size [24 ▾] │ Corners [Theme shape ▾]` —
+because a strip of glyphs standing in for a tool bar, next to a real one,
+was showing a copy of the answer. The bar is **over** the sample's menu
+bar, where no application has ever put a tool bar, which is how it says
+it is Settings' and not the sample's; the two choosers spent a release
+at the free-space end of the sample's own tool bar and were read as the
+sample's own, and the corners spent it in the sample's View menu, where
+nobody found them. Where the colours come from stands over that window
+and the three config paths under it.
+`widgets.ToolWidget`, `widgets.ToolLabel` and `widgets.ToolStretch` are
+what carry a control, its name and free space on a tool bar (Qt's
+`QToolBar::addWidget` with a `QLabel` in front of the box): a bar with
+free space in it fills the width it is given, pins what follows to its
+right edge, and drops its own trailing tools and words rather than
+letting a control fall off the end.
 
 *Smaller additions from the same source.* `dock.Host.SaveLayoutFile` /
 `LoadLayoutFile` (every docking application had rebuilt the same path

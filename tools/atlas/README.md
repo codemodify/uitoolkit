@@ -16,6 +16,11 @@ the timeline, Chromium.
   geometry `docs/settings.md` records under "Screenshot geometry". If Settings
   moves the panel, change `CROP` in `render.sh` and `W_IMG`/`H_IMG` in
   `build.py`.
+- **The settings bar** (`Icons … Size … Corners …`) is at the head of that
+  panel and so is in every tile. `-plain-preview` renders the window without
+  it, as the sample application alone; add the flag to the `settings` call in
+  `render.sh` to get tiles that way. The crop is the same either way. See
+  "Screenshot geometry" in `docs/settings.md` for the trade-off.
 - **A new lineage** (a pack's platform) needs a lane in `build.py`'s `LANES`
   or `WEB_LANES`; `build.py` names any lineage it could not place.
 - **Publishing** the page means uploading `out/index.html` with

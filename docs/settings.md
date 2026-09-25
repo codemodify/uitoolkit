@@ -40,11 +40,11 @@ now a splitter: **the choices down a scrolling column on the left**, and
 both.
 
 The page is split by what a choice is about rather than by what kind of
-choice it is. **The preview sets what it shows**: the icon set and the
-size its glyphs are drawn at are chosen on the previewed application's
-own tool bar — the bar those icons are drawn on — and the shape of its
-corners in that window's own View menu. What is left over goes in the
-column on the left (which pack, and what the apps do besides drawing it)
+choice it is. **The preview sets what it shows**: the icon set, the size
+its glyphs are drawn at and the shape of its corners are three combo
+boxes on a bar of their own at the head of the previewed window, over
+the sample's menu bar, each behind the word that says what it sets.
+What is left over goes in the column on the left (which pack, and what the apps do besides drawing it)
 or in the pane with the preview, over it and under it (where its colours
 come from, and where the files are).
 
@@ -68,32 +68,65 @@ It is a `widgets.ThemeScope`, so Settings itself keeps the applied look.
 Staging a pack switches it where it stands — the caret stays in the
 search field, the focus on the list, the column where it was scrolled.
 
-**It sets three of the things it shows.**
+**It sets three of the things it shows**, on a bar of its own —
+`Icons [Classic ▾]  Size [24 ▾] │ Corners [Theme shape ▾]`.
 
-- **The icon set** and **the size its glyphs are drawn at** are two
-  combo boxes at the **right-hand end of its tool bar**, after the free
-  space that pushes them there (`widgets.ToolStretch`,
-  `widgets.ToolWidget`). The bar between them and the tools is drawn in
-  whatever they choose, so the bar is the preview of the set: a real
-  tool bar at the real size, not a strip standing in for one. The size
-  box lists **16 / 24 / 32**, the way a word processor's size box lists
-  numbers.
-- **The corners** are in that window's own **View ▸ Window corners**:
-  *Theme shape*, *Round*, *Square*, an exclusive group with the staged
-  one ticked. A corner style is the shape of the whole window — its
-  frame, its buttons, its fields — not one bar's business, and a View
-  menu is where an application has always kept what its window looks
-  like. It also keeps the tool bar legible: a third chooser on it does
-  not fit beside the tools at the width Settings opens down to.
+- **The icon set**, **the size its glyphs are drawn at** and **the shape
+  of the window's corners**, in that order, each behind a short word
+  (`widgets.ToolLabel`, `widgets.ToolWidget`). The size box lists **16 /
+  24 / 32**, the way a word processor's size box lists numbers; the
+  corner box lists *Theme shape*, *Round*, *Square*. The sample's tool
+  bar below is drawn in whatever the first two choose, and the window's
+  own frame is cut to what the third chooses, so the window is the
+  preview of all three.
 
-Everything else in that window is a **sample**: *Send* sends nothing,
+**The bar is on top, over the menu bar**, and that is the whole of how
+it says it is not part of the sample. A tool bar belongs under the menu
+bar of the window it commands; a second strip *below* the sample's would
+read as the same application's second row of tools, which is exactly the
+mistake the last arrangement invited, when the icon choosers rode at the
+free-space end of the sample's own bar and were taken for its style and
+size boxes. Nothing in any application sits above its menu bar. What
+does is the frame around it, in the same voice as the caption over it —
+which does not name a document either but says *Preview — Windows 95*.
+The seam is clean: caption and settings bar are Settings talking, and
+everything from the menu bar down is the sample.
+
+**The words are short and never disagree with what is read out.** On
+screen: *Icons*, *Size*, *Corners*. To a screen reader: *Icons*, *Icon
+size*, *Window corners* — each one contains the word on the screen, so
+the spoken name carries the visible one and adds the context the eye
+gets from where the box stands. Every chooser also has a tooltip that
+says in full what it sets and that it is real.
+
+**When the pane is too narrow** the bar sheds its words from the right,
+one at a time, and keeps the three choosers whole (the tool bar rule at
+`widgets.ToolStretch`: a bar drops tools and words before controls). At
+1024×860 the preview pane is about 670 px and all three words show; at
+the 720×520 minimum it is about 366 px, the three boxes alone need about
+300 of it, and every word is dropped — the tooltips and the accessible
+names are what is left. A word that is not on the bar is not in the
+accessibility tree either.
+
+**Everything else in that window is a sample**: *Send* sends nothing,
 the tree lists a mailbox nobody has, the check boxes tick themselves.
-What says which is which is the gap: the choosers are the only things
-past the bar's free space, where a tool bar keeps what is not a command
-(a zoom, a style, a size), and each one carries a tooltip and a screen
-reader name that says it is a real setting. The strongest signal is
-still what happens when one is used — every icon on the bar changes at
-once.
+The corners were three radio items in the sample's **View ▸ Window
+corners** for a release — the place an application has always kept what
+its window looks like — and nobody found them there, because a preview's
+menus are the one part of it a reader takes for make-believe. A menu
+hides; a labelled bar does not.
+
+**The sample's own tool bar is the sample's again**: New, Open, Save │
+Cut, Copy, **Paste** │ Pen │ Send. Paste is back — it was the button the
+choosers cost this bar when they rode on it — and the bar ends in free
+space, so at the narrowest window it sheds *Send* rather than showing
+half a button cut off by the window frame.
+
+**The window's own furniture is flush**: menu bar, tool bar, document,
+status bar, with no air between them, the way a real window is. (There
+were eight pixels between each for a long time. No window has those, and
+they were the room the settings bar needed: the sample's document area
+is 22 px shorter than before, not 64.)
 
 **Nothing else is allowed in the preview's own box**, and only two
 single rows share its pane. The widget gallery used to sit under it in a
@@ -131,10 +164,10 @@ text boxes: a box that can be selected from keeps three rows and grows a
 scrollbar of its own as soon as a path is longer than the pane.
 
 Last on the icons line, **Delete icon set…** — grey unless the staged
-set is one the user copied in. It lost its old neighbour when the two
-icon choosers moved to the preview's tool bar, where there is no room
-for a button and no sense in one: a bar draws a set, it does not keep
-one. The icons line of **Files** is the one place left that says where
+set is one the user copied in. It lost its old neighbour when the icon
+choosers moved onto the preview's settings bar, where there is no room
+for a button and no sense in one: that bar sets what the window is drawn
+in, it does not keep sets on disk. The icons line of **Files** is the one place left that says where
 sets come from, and deleting one is exactly that — taking a folder out
 of that directory.
 
@@ -191,11 +224,13 @@ The section called **Shape and weight** is gone too, and nothing is left
 of it in the column: corners, the icon set and the icon size are all
 answered by the preview now, and the strip of fifteen glyphs under them
 was a picture of a tool bar standing in for the real one two inches to
-its right. The **third clipboard tool** (Paste) went off the sample's
-tool bar to pay for the choosers: with it there, every one of the 129
-packs dropped *Send* off the end of the bar, and a text-and-icon tool
-button is worth more to a theme preview than a third clipboard glyph.
-`Delete icon set…` moved to the icons line of **Files**.
+its right. `Delete icon set…` moved to the icons line of **Files**.
+
+The **View ▸ Window corners** submenu is gone: the corners are the third
+box on the settings bar. So is the **free-space end of the sample's tool
+bar** as a place to keep a setting — the two choosers that rode there
+are on the bar above, and *Paste*, which was taken off that bar to pay
+for them, is back.
 
 ## Staged and applied
 
@@ -240,13 +275,40 @@ icons took the head of the page, `569 × 630` until the four pages became
 one, and `x 317, y 10, 697 × 790` until the colours switch went over the
 preview and the paths under it.)
 
-**Every atlas tile now carries the two icon choosers**, because they are
-on the tool bar of the window the atlas crops. With a clean
-`XDG_CONFIG_HOME` they read *Classic* and *24* in all 129 tiles. A tile
-still reads as a small application — a style box and a size box at the
-end of a tool bar is what applications put there — but it is worth
-knowing that the furniture is the same in every tile and is not the
-theme's.
+**The settings bar did not move them.** It is inside the preview panel,
+and the panel takes whatever the two rows over and under it leave, so
+the crop is the same rectangle it was before the bar existed. It was
+re-measured when the bar went in, in the eight packs
+`TestSettingsPreviewPanelKeepsItsPlace` walks, and it had not changed.
+
+**Every atlas tile now carries the settings bar**, because it is at the
+head of the window the atlas crops. With a clean `XDG_CONFIG_HOME` it
+reads *Icons Classic*, *Size 24*, *Corners Theme shape* in all 129
+tiles. That furniture is Settings' own and is the same in every tile;
+what is the theme's is the three combo boxes it is drawn with, which is
+three more views of a control the sample shows once.
+
+**`uitoolkit-settings -plain-preview` renders the window without it**,
+as the sample application alone — no icon set, no icon size and no
+corner style can be chosen while it is set, so it is for pictures, not
+for people. The crop is the same, so a tile can be rendered either way
+by adding one flag to `CROP`'s command in `tools/atlas/render.sh`:
+
+```sh
+headless "$OUT/bin/settings" -plain-preview -stage "$id" -screenshot "$OUT/full/$id.png"
+```
+
+The atlas does **not** do this by default. The case for the bar is that
+the three boxes show the pack's combo box — closed field, arrow or
+stepper, the frame around the text — at the top of the tile where the
+eye lands, and a pack whose signature is its combo (Aqua's blue stepper,
+Win95's sunken field, Adwaita's flat pill) is better read for it. The
+case against is that a tile is a picture: the bar's whole justification
+is that a live control must be findable, which a PNG cannot honour, and
+what it costs is 64 px of the document area and a band of identical
+words in 129 tiles that the reader has to learn to skip. On top of that,
+the bar is *designed* not to read as part of an application, which is
+the one thing a tile is trying to be.
 
 The applied look sets Settings' own metrics, and the column of choices
 beside the preview is drawn in it, so take atlas shots with a clean
@@ -416,17 +478,18 @@ cp -R icons/lucide icons/phosphor icons/tabler icons/heroicons icons/material-sy
 See [icons/README.md](../icons/README.md) for licenses, the full stem
 list, attribution, and the `@2x` convention.
 
-Settings offers them all in one chooser — on the preview's tool bar — in
-the order `ListBuiltinIconSets` then `ListUserIconSets`:
+Settings offers them all in one chooser — on the preview's settings bar
+— in the order `ListBuiltinIconSets` then `ListUserIconSets`:
 
 - **Built-in** — drawn `classic` / `sharp`, plus the five premiere
   names when those folders are present under `icons/`
 - **User** — any other `icons/<name>/` folder that contains at least
   one ToolIcon PNG
 
-The chooser is at the right-hand end of the preview's tool bar, with the
-size box beside it, and that bar is drawn in whatever they choose: the
-preview of a set is a real tool bar full of it.
+The chooser is the first box on the preview's settings bar, with the
+size box beside it, and the sample's tool bar under them is drawn in
+whatever they choose: the preview of a set is a real tool bar full of
+it.
 
 When a premiere or user set is selected, a missing stem logs once and
 paints **`no-icon`** (pack file, or the embedded placeholder if the
