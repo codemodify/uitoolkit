@@ -37,32 +37,21 @@ func TestSettingsAppAppliesAndPersists(t *testing.T) {
 	}
 	a, w := openSettings(t, 1024, 780)
 	if findMenuBarOutsidePreview(w.Content()) {
-		t.Fatal("settings must not have a menu bar (the preview app and the gallery may)")
+		t.Fatal("settings must not have a menu bar (the preview app may)")
 	}
-	clickSettingsNav(t, w, "Appearance")
-	a.PumpOnce()
-	for _, opt := range []string{"Theme shape", "Round", "Square"} {
+	// One page: the corners, the icon set and the size its glyphs are
+	// drawn at are all on it, with no navigating to do first.
+	for _, opt := range []string{"Theme shape", "Round", "Square", "Small", "Medium", "Large", "Classic", "Sharp"} {
 		if findCombo(w.Content(), opt) == nil {
-			t.Fatalf("corners option %q missing", opt)
+			t.Fatalf("the chooser offering %q is not on the page", opt)
 		}
 	}
-	// The icon settings left this page for the head of Themes, where the
-	// strip shows what they do.
-	for _, gone := range []string{"Small", "Medium", "Large", "Classic", "Sharp"} {
-		if findCombo(w.Content(), gone) != nil {
-			t.Fatalf("the icon chooser %q is still on Appearance", gone)
-		}
-	}
-	clickSettingsNav(t, w, "Themes")
-	a.PumpOnce()
-	for _, opt := range []string{"Small", "Medium", "Large"} {
-		if findCombo(w.Content(), opt) == nil {
-			t.Fatalf("icon size option %q missing from Themes", opt)
-		}
-	}
-	for _, opt := range []string{"Classic", "Sharp"} {
-		if findCombo(w.Content(), opt) == nil {
-			t.Fatalf("icon set option %q missing from Themes", opt)
+	// And so is every switch the Appearance page used to hold.
+	for _, opt := range []string{"Animations", "Follow the desktop's colours",
+		"Use the desktop's file dialogs", "Use system title bar and borders",
+		"Place window buttons as the theme does"} {
+		if findSwitch(w.Content(), opt) == nil {
+			t.Fatalf("the %q switch is not on the page", opt)
 		}
 	}
 	got := style.LookAppearance(a.Look())
@@ -99,8 +88,6 @@ func TestSettingsAppAppliesAndPersists(t *testing.T) {
 		t.Fatal("Apply should disable once saved matches staged")
 	}
 
-	clickSettingsNav(t, w, "Appearance")
-	a.PumpOnce()
 	pickCombo(t, w, "Round")
 	a.PumpOnce()
 	if p := previewAppearance(t, w); p.Corners != style.CornersRound || p.Name != "dark" {
@@ -114,8 +101,6 @@ func TestSettingsAppAppliesAndPersists(t *testing.T) {
 
 	// With Revert gone, Apply is the only writer: a staged pack shows in
 	// the preview and stays out of look.json until it is applied.
-	clickSettingsNav(t, w, "Themes")
-	a.PumpOnce()
 	clickTheme(t, w, "Windows 95")
 	a.PumpOnce()
 	if p := previewAppearance(t, w); p.Name != "win95" {
@@ -176,9 +161,6 @@ func TestSettingsExportThemeByName(t *testing.T) {
 		t.Fatal(err)
 	}
 	a, w := openSettings(t, 1024, 780)
-	clickSettingsNav(t, w, "Packs")
-	a.PumpOnce()
-
 	clickExportLook(t, w)
 	a.PumpOnce()
 	if w.Overlay() == nil {
@@ -206,13 +188,13 @@ func TestSettingsExportThemeByName(t *testing.T) {
 	if !ok || pack.Source != style.ThemeSourceUser || pack.Palette != style.ThemeLight {
 		t.Fatalf("load exported %+v ok=%v", pack, ok)
 	}
-	if !listed(w.Content(), "ocean") {
-		t.Fatal("exported pack not listed on Packs")
-	}
-	clickSettingsNav(t, w, "Themes")
-	a.PumpOnce()
+	// The pack it wrote is in the browser the Export button sits under,
+	// as "User · ocean", and it is what is staged.
 	if !listed(w.Content(), "ocean") {
 		t.Fatal("exported pack not listed in the theme browser")
+	}
+	if got := previewAppearance(t, w).Name; got != "ocean" {
+		t.Fatalf("export staged %q", got)
 	}
 }
 
@@ -234,12 +216,13 @@ func TestSettingsDeleteUserTheme(t *testing.T) {
 		t.Fatalf("apply ocean %+v", style.LoadAppearance())
 	}
 
-	clickSettingsNav(t, w, "Packs")
-	a.PumpOnce()
-	if findButton(w.Content(), "Delete") == nil {
-		t.Fatal("Delete should appear for a selected user theme")
+	// Delete is under the browser that staged the pack, and it is alive
+	// because what is staged is the user's own.
+	del := findButton(w.Content(), "Delete theme…")
+	if del == nil || !del.Enabled() {
+		t.Fatalf("Delete should be live for a staged user theme: %v", del)
 	}
-	clickNamed(t, w.Content(), "Delete")
+	clickNamed(t, w.Content(), "Delete theme…")
 	a.PumpOnce()
 	if w.Overlay() == nil {
 		t.Fatal("delete should confirm")
@@ -260,8 +243,11 @@ func TestSettingsDeleteUserTheme(t *testing.T) {
 	if style.LoadAppearance() != live {
 		t.Fatalf("look.json left dangling %+v", style.LoadAppearance())
 	}
-	if findButton(w.Content(), "Delete") != nil {
-		t.Fatal("Delete should hide after falling back to a builtin")
+	// It goes grey rather than away once a built-in pack is staged: a
+	// button that came and went would move the whole column under it
+	// every time a pack was picked.
+	if del := findButton(w.Content(), "Delete theme…"); del == nil || del.Enabled() {
+		t.Fatalf("Delete should go grey after falling back to a builtin: %v", del)
 	}
 	if listed(w.Content(), "ocean") {
 		t.Fatal("deleted pack still listed")
@@ -276,8 +262,6 @@ func TestSettingsIconSetApplyWritesLookJSON(t *testing.T) {
 	}
 	installSettingsIconSet(t, dir, "lucide")
 	a, w := openSettings(t, 1024, 780)
-	// Themes is the page Settings opens on and the page the icon set is
-	// chosen on: no navigation needed.
 	pickCombo(t, w, "Lucide")
 	a.PumpOnce()
 	if p := previewAppearance(t, w); p.Icons != style.IconSetLucide {
@@ -299,11 +283,23 @@ func TestSettingsIconSetApplyWritesLookJSON(t *testing.T) {
 	if !strings.Contains(string(raw), `"icons": "lucide"`) {
 		t.Fatalf("look.json: %s", raw)
 	}
-	// The Packs page lists icon sets too.
-	clickSettingsNav(t, w, "Packs")
-	a.PumpOnce()
-	if findIconList(w.Content()) == nil {
-		t.Fatal("missing icon set list on Packs")
+	// The chooser is the only list of icon sets there is now, and it
+	// offers every one on disk: the two drawn ones and the premiere set
+	// that was copied in.
+	combo := findCombo(w.Content(), "Lucide")
+	if combo == nil {
+		t.Fatal("no icon chooser")
+	}
+	for _, want := range []string{"Classic", "Sharp", "Lucide"} {
+		found := false
+		for _, it := range combo.Items {
+			if it == want {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("the icon chooser does not offer %q (has %v)", want, combo.Items)
+		}
 	}
 }
 
@@ -405,25 +401,34 @@ func TestSettingsThemeListScrollsAllBuiltins(t *testing.T) {
 		}
 	}
 
-	clickSettingsNav(t, w, "About")
+	// The five sections do not fit in the window, so the column of
+	// choices scrolls — and the paths the old About page held are at the
+	// foot of it, reachable by scrolling and not by navigating.
+	choices := findScrollView(w.Content())
+	if choices == nil {
+		t.Fatal("the column of choices should scroll")
+	}
+	if choices.MaxOffset() <= 0 {
+		t.Fatalf("the column should overflow at 820×560, content=%v view=%v",
+			choices.ContentHeight(), choices.LocalBounds().Dy())
+	}
+	choices.ScrollTo(choices.MaxOffset())
+	a.PumpOnce()
+	if !findLabelWith(w.Content(), "Prefs file") {
+		t.Error("the prefs path is not at the foot of the column")
+	}
+	if findApply(w.Content()) == nil || nestedInScroll(findApply(w.Content())) {
+		t.Fatal("Apply must stay pinned outside the column")
+	}
+	// And it stays pinned on a window short enough that the column is
+	// almost all scrollbar.
+	w.Inject(platform.Event{Kind: platform.EventResize, Width: 720, Height: 520})
 	a.PumpOnce()
 	if findApply(w.Content()) == nil || nestedInScroll(findApply(w.Content())) {
-		t.Fatal("Apply must stay pinned on About")
+		t.Fatal("Apply must stay pinned at the minimum window size")
 	}
-	aboutScroll := findScrollView(w.Content())
-	if aboutScroll == nil {
-		t.Fatal("About should scroll")
-	}
-	// The page is three paths now, so it fits at 820×560; on a window
-	// short enough to overflow it scrolls and Apply stays pinned under it.
-	w.Inject(platform.Event{Kind: platform.EventResize, Width: 560, Height: 300})
-	a.PumpOnce()
-	aboutScroll = findScrollView(w.Content())
-	if aboutScroll == nil || aboutScroll.MaxOffset() <= 0 {
-		t.Fatalf("About should overflow at 560×300, content=%v view=%v", aboutScroll.ContentHeight(), aboutScroll.LocalBounds().Dy())
-	}
-	if findApply(w.Content()) == nil || nestedInScroll(findApply(w.Content())) {
-		t.Fatal("Apply must stay pinned on a short About")
+	if got := findScrollView(w.Content()); got == nil || got.MaxOffset() <= 0 {
+		t.Fatal("the column should still scroll at 720×520")
 	}
 }
 
@@ -628,37 +633,14 @@ func findThemeList(root widget.Component) *widgets.ListView {
 	return list
 }
 
-// findThemeListAny is the theme browser whatever its filter shows (the
-// list that is neither the nav nor an icon list).
+// findThemeListAny is the theme browser whatever its filter shows. It is
+// the only list Settings owns now that the pages sidebar and the packs
+// lists have gone; the preview's own lists are excluded as ever.
 func findThemeListAny(root widget.Component) *widgets.ListView {
 	var list *widgets.ListView
 	widget.Walk(root, func(c widget.Component) {
 		if l, ok := c.(*widgets.ListView); ok && l.ItemText != nil && !insidePreview(c) && l.Count > 0 {
-			if l.ItemText(0) == "Themes" {
-				return // the nav
-			}
 			list = l
-		}
-	})
-	return list
-}
-
-func findIconList(root widget.Component) *widgets.ListView {
-	var list *widgets.ListView
-	widget.Walk(root, func(c widget.Component) {
-		if l, ok := c.(*widgets.ListView); ok && l.ItemText != nil {
-			hasClassic, hasSharp := false, false
-			for i := 0; i < l.Count; i++ {
-				if l.ItemText(i) == "Classic" {
-					hasClassic = true
-				}
-				if l.ItemText(i) == "Sharp" {
-					hasSharp = true
-				}
-			}
-			if hasClassic && hasSharp {
-				list = l
-			}
 		}
 	})
 	return list
@@ -743,26 +725,6 @@ func findScrollView(root widget.Component) *widgets.ScrollView {
 	return sv
 }
 
-func clickSettingsNav(t *testing.T, w *app.Window, name string) {
-	t.Helper()
-	var nav *widgets.ListView
-	widget.Walk(w.Content(), func(c widget.Component) {
-		if l, ok := c.(*widgets.ListView); ok && l.ItemText != nil && l.OnSelect != nil && l.Count > 0 && l.ItemText(0) == "Themes" {
-			nav = l
-		}
-	})
-	if nav == nil {
-		t.Fatal("missing Settings nav")
-	}
-	for i := 0; i < nav.Count; i++ {
-		if nav.ItemText(i) == name {
-			nav.OnSelect(i)
-			return
-		}
-	}
-	t.Fatalf("no settings section %q", name)
-}
-
 func clickApply(t *testing.T, w *app.Window) {
 	t.Helper()
 	apply := findApply(w.Content())
@@ -819,8 +781,6 @@ func TestSettingsFollowDesktop(t *testing.T) {
 		t.Fatal(err)
 	}
 	a, w := openSettings(t, 1024, 780)
-	clickSettingsNav(t, w, "Appearance")
-	a.PumpOnce()
 	const label = "Follow the desktop's colours"
 	sw := findSwitch(w.Content(), label)
 	if sw == nil {
@@ -835,17 +795,12 @@ func TestSettingsFollowDesktop(t *testing.T) {
 		t.Fatalf("preview %s, want breeze-night", got)
 	}
 	// The preview's caption names the pack it is really drawing, which is
-	// where the user sees what the desktop's scheme did to their choice.
-	// (It used to be a note in the details box under the theme list; the
-	// box has gone, and the caption is the honest place for it anyway,
-	// because it labels the very thing it is describing.)
-	clickSettingsNav(t, w, "Themes")
-	a.PumpOnce()
+	// where the user sees what the desktop's scheme did to their choice —
+	// and the switch and the caption are now on the same page, a hand's
+	// width apart.
 	if got := previewPanelTitle(t, w); got != "Preview — Breeze Dark" {
 		t.Fatalf("the preview is captioned %q", got)
 	}
-	clickSettingsNav(t, w, "Appearance")
-	a.PumpOnce()
 	clickApply(t, w)
 	a.PumpOnce()
 	saved := style.LoadAppearance()
@@ -865,8 +820,6 @@ func TestSettingsFollowDesktop(t *testing.T) {
 func TestSettingsSystemTitleBarSwitch(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	a, w := openSettings(t, 1024, 780)
-	clickSettingsNav(t, w, "Appearance")
-	a.PumpOnce()
 	const label = "Use system title bar and borders"
 	sw := findSwitch(w.Content(), label)
 	if sw == nil {
@@ -903,8 +856,6 @@ func TestSettingsSystemTitleBarSwitch(t *testing.T) {
 func TestSettingsThemeCaptionButtonsSwitch(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	a, w := openSettings(t, 1024, 780)
-	clickSettingsNav(t, w, "Appearance")
-	a.PumpOnce()
 	const label = "Place window buttons as the theme does"
 	sw := findSwitch(w.Content(), label)
 	if sw == nil || sw.On {
@@ -996,24 +947,16 @@ func TestSettingsIconSetPreview(t *testing.T) {
 		t.Fatalf("staging a theme renamed the icon preview to %q", box.Title)
 	}
 
-	// And the icons area follows a set staged somewhere other than its own
-	// chooser: the list on Packs stages one too, and Themes has to come
-	// back with the chooser on it and the strip drawing it.
-	clickSettingsNav(t, w, "Packs")
+	// And the icons area follows a set staged by something other than its
+	// own chooser — Apply restages the whole appearance — with the
+	// chooser showing it and the strip drawing it.
+	clickApply(t, w)
 	a.PumpOnce()
-	list := findIconList(w.Content())
-	if list == nil {
-		t.Fatal("no icon set list on Packs")
+	if findPanelTitled(w.Content(), "Preview — Lucide") == nil {
+		t.Error("the icon strip lost the applied set across a rebuild")
 	}
-	pickListItem(t, list, "Sharp")
-	a.PumpOnce()
-	clickSettingsNav(t, w, "Themes")
-	a.PumpOnce()
-	if findPanelTitled(w.Content(), "Preview — Sharp") == nil {
-		t.Error("the icons head did not follow a set staged on Packs")
-	}
-	if combo := findCombo(w.Content(), "Sharp"); combo == nil || combo.Items[combo.Selected] != "Sharp" {
-		t.Error("the icon chooser does not show the staged set")
+	if combo := findCombo(w.Content(), "Lucide"); combo == nil || combo.Items[combo.Selected] != "Lucide" {
+		t.Error("the icon chooser does not show the applied set")
 	}
 }
 
@@ -1054,17 +997,13 @@ func iconStripBar(t *testing.T, box widget.Component) *widgets.ToolBar {
 // look" — is gone from every page; Apply being enabled says it instead.
 func TestSettingsHasNoAppliedLine(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	a, w := openSettings(t, 1024, 780)
-	for _, page := range settingsPages {
-		clickSettingsNav(t, w, page)
-		a.PumpOnce()
-		// The phrases in full: the temporary config path the About page
-		// prints carries this test's own name, so a loose match on
-		// "Applied" would find itself.
-		for _, phrase := range []string{"every uitoolkit app is using this look", "Staged, not applied"} {
-			if findLabelWith(w.Content(), phrase) {
-				t.Errorf("%s: the applied/staged line is back (%q)", page, phrase)
-			}
+	_, w := openSettings(t, 1024, 780)
+	// The phrases in full: the temporary config path the Files section
+	// prints carries this test's own name, so a loose match on "Applied"
+	// would find itself.
+	for _, phrase := range []string{"every uitoolkit app is using this look", "Staged, not applied"} {
+		if findLabelWith(w.Content(), phrase) {
+			t.Errorf("the applied/staged line is back (%q)", phrase)
 		}
 	}
 }
@@ -1142,4 +1081,77 @@ func pickListItem(t *testing.T, list *widgets.ListView, text string) {
 		}
 	}
 	t.Fatalf("no list row %q", text)
+}
+
+// -page names a section of the one page now, and the names of the four
+// pages Settings used to have still resolve: they are in scripts, in the
+// atlas tooling and in the docs of two releases.
+func TestSettingsPageNamesStillResolve(t *testing.T) {
+	for name, want := range map[string]int{
+		"":                 sectionTheme,
+		"themes":           sectionTheme,
+		"packs":            sectionTheme,
+		"packs & icons":    sectionTheme,
+		"theme packs":      sectionTheme,
+		"Theme":            sectionTheme,
+		"appearance":       sectionShape,
+		"icons":            sectionShape,
+		"icon sets":        sectionShape,
+		"Shape and weight": sectionShape,
+		"about":            sectionFiles,
+		"files":            sectionFiles,
+		"behaviour":        sectionBehaviour,
+		"behavior":         sectionBehaviour,
+		"windows":          sectionBehaviour,
+		"desktop":          sectionDesktop,
+		"nonsense":         sectionTheme,
+	} {
+		if got := SettingsPage(name); got != want {
+			t.Errorf("-page %q opens section %d (%s), want %d (%s)",
+				name, got, settingsSections[got], want, settingsSections[want])
+		}
+	}
+}
+
+// And the name is not only resolved: the column of choices opens
+// scrolled to that section, which is what -page did when it switched
+// pages.
+func TestSettingsPageOpensScrolledToItsSection(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if err := style.SaveAppearance(style.DefaultAppearance()); err != nil {
+		t.Fatal(err)
+	}
+	open := func(page string) (*app.Application, *app.Window) {
+		t.Helper()
+		a := uitoolkit.New(uitoolkit.Options{Look: style.PreferredLook(), Headless: true, Scale: 1, DisableLookWatch: true})
+		w, err := a.NewWindow(platform.WindowOptions{Title: "settings", Width: 1024, Height: 780, Headless: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { w.Close() })
+		w.SetContent(SettingsAppOpen(a, w, "", page))
+		a.PumpOnce()
+		return a, w
+	}
+	_, top := open("")
+	if got := findScrollView(top.Content()).OffsetY; got != 0 {
+		t.Errorf("with no -page the column opens at %v, want the top", got)
+	}
+	for _, page := range []string{"about", "behaviour", "appearance"} {
+		_, w := open(page)
+		sv := findScrollView(w.Content())
+		if sv == nil {
+			t.Fatalf("%s: no column of choices", page)
+		}
+		if sv.OffsetY <= 0 {
+			t.Errorf("-page %s left the column at the top (%v)", page, sv.OffsetY)
+		}
+	}
+	// The old About page is the Files section, and it is the foot of the
+	// column, so -page about scrolls all the way down.
+	_, w := open("about")
+	sv := findScrollView(w.Content())
+	if sv.OffsetY < sv.MaxOffset()-1 {
+		t.Errorf("-page about stopped at %v of %v", sv.OffsetY, sv.MaxOffset())
+	}
 }

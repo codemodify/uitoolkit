@@ -5,11 +5,14 @@
 //	go run ./cmd/uitoolkit-settings -screenshot docs/screenshots
 //	go run ./cmd/uitoolkit-settings -page appearance -headless
 //
-// The Themes page chooses both halves of the look: the icon set and the
-// size its glyphs are drawn at, at the head of the page with a strip of
-// every stock icon under them, and the theme pack under that with a live
-// preview beside it. The icon chooser lists classic/sharp plus wide
-// premiere PNG sets copied into ~/.config/uitoolkit/icons/<set>/.
+// Settings is one page: the choices down a column on the left — the
+// theme browser, where the colours come from, the shape and weight the
+// packs are drawn in, what the apps do besides drawing them, and the
+// files it all lives in — and on the right, never scrolling away, the
+// two previews those choices are about: a strip of every stock icon in
+// the staged set, and a small live application window in the staged
+// pack. The icon chooser lists classic/sharp plus wide premiere PNG sets
+// copied into ~/.config/uitoolkit/icons/<set>/.
 // Apply writes {theme, icons} to
 // $XDG_CONFIG_HOME/uitoolkit/look.json and running apps that watch
 // the file reload without a restart. Export writes
@@ -34,7 +37,7 @@ func main() {
 	headless := flag.Bool("headless", false, "paint offscreen and write settings.png")
 	shot := flag.String("screenshot", "", "write settings.png into this directory (or file) and exit")
 	stage := flag.String("stage", "", "open with this theme staged in the preview (not applied)")
-	page := flag.String("page", "", "open on this page: themes (default; also \"icons\"), appearance, packs, about")
+	page := flag.String("page", "", "open the page scrolled to this section: theme (default), desktop, shape, behaviour, files — the old page names themes/appearance/packs/about still resolve")
 	flag.Parse()
 
 	a := uitoolkit.New(uitoolkit.Options{

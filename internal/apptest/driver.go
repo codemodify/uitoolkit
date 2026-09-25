@@ -185,11 +185,17 @@ func runSettings(opts Options) []Result {
 	return out
 }
 
-// walkSettingsPages opens Settings once per page, in a fresh window, because
-// a page is built when it is first shown and the driver is looking for what
-// construction breaks.
+// walkSettingsPages opens Settings once per -page name, in a fresh window,
+// because the page is scrolled to that section as it is first laid out and
+// the driver is looking for what construction breaks.
 func walkSettingsPages(a *app.Application) error {
-	for _, page := range []string{"Themes", "Appearance", "Packs", "About"} {
+	// Settings is one page now and -page names a section of it. Both the
+	// section names and the names of the four pages they came from are
+	// driven, because both are what scripts pass.
+	for _, page := range []string{
+		"Theme", "Where the colours come from", "Shape and weight", "Behaviour", "Files",
+		"Themes", "Appearance", "Packs", "About",
+	} {
 		w, err := a.NewWindow(platform.WindowOptions{
 			Title: "settings-page", Width: 1100, Height: 720, Headless: true,
 		})
