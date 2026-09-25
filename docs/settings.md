@@ -160,14 +160,14 @@ in four packs at two scales at both sizes.
 wearing a short word:
 
 ```
-☑ Animations  ☐ System file dialogs  ☐ System frames  ☐ Theme buttons  ☐ OS colors
+☑ Animations  ☐ OS open/save dialogs  ☐ OS borders  ☐ Theme buttons  ☐ OS colors
 ```
 
 | On the box | To a screen reader | What it is |
 | --- | --- | --- |
 | **Animations** | Animations | Hover fades, the default button's pulse, busy bars (GTK's `gtk-enable-animations`). While the desktop itself asks for reduced motion it says so, because the desktop's setting wins over the preference |
-| **System file dialogs** | System file dialogs: the desktop's own Open and Save | KDE's and GNOME's own Open and Save, through the XDG portal, instead of the themed ones |
-| **System frames** | System frames: the desktop's title bar and borders | Chromium's switch. Windows that draw their own title bar (Mail's, with its tool bar in it) get the desktop's instead |
+| **OS open/save dialogs** | OS open/save dialogs: the desktop's own Open and Save | KDE's and GNOME's own Open and Save, through the XDG portal, instead of the themed ones |
+| **OS borders** | OS borders: the desktop's title bar and borders | Chromium's switch. Windows that draw their own title bar (Mail's, with its tool bar in it) get the desktop's instead |
 | **Theme buttons** | Theme buttons: the caption buttons where the theme puts them | Close, minimise and maximise in the theme's era's order (the Mac's traffic lights on the left) rather than the desktop's |
 | **OS colors** | OS colors: follow the desktop's light or dark mode and its accent | The pack shows its sibling to match the desktop — a chosen *Breeze* draws as *Breeze Dark* — recoloured around the desktop's accent where the engine takes one |
 
@@ -184,8 +184,15 @@ a line off the window the whole page is for.
 rule the preview's own settings bar follows a hand's width below, where
 *Size* is read out as *Icon size*. What the eye gets from the row the box
 stands in, the ear gets from the rest of the name. `Dialogs` on its own
-would have been a riddle; `File dialogs` read as *Use the desktop's file
-dialogs* is one name for one control.
+would have been a riddle; `OS open/save dialogs` read as *OS open/save
+dialogs: the desktop's own Open and Save* is one name for one control.
+
+**Three of the five say `OS`** — *OS open/save dialogs*, *OS borders*,
+*OS colors* — because those three are the ones that hand something back
+to the desktop, and a reader should not have to work out that *System
+frames* and *OS colors* were the same kind of thing. The other two,
+*Animations* and *Theme buttons*, are the toolkit's own behaviour and
+say nothing about whose.
 
 **They are check boxes, not switches**, for two reasons that agree. The
 honest one: nothing on this page takes effect when it is touched — Apply
@@ -202,11 +209,13 @@ old arrangement needed two (a switch and its line of prose).
 layout, GTK's `FlowBox`): one line while the pane is wide, two when it is
 not, and never a control cut off by the window frame the way a tool
 bar's shedding would leave one — a setting nobody can reach is worse
-than a second line. The order is what makes it fold well: the three
-narrowest first, so a narrow pane gets a line of three and a line of two
-rather than a ragged four and one, with the frame pair (*System frame*,
-*Theme buttons*) next to each other across the fold and *Desktop
-colours* last, nearest the window whose caption it changes.
+than a second line. The order is the order they are read, and the fold
+follows from it: all five fit the 697-pixel row of a 1024×860 window
+with six pixels to spare, and the 453-pixel row of a 720×520 one takes
+the first three and gives *Theme buttons* and *OS colors* a second line.
+The frame pair (*OS borders*, *Theme buttons*) stay next to each other
+across that fold, and *OS colors* is last, nearest the window whose
+caption it changes.
 
 **Files** — the three paths Settings reads and writes, one line each:
 the **prefs** file, the **themes** directory and the **icons**
@@ -498,7 +507,7 @@ animations off. `followDesktop` shows the pack's light or dark sibling to
 match the desktop. `nativeDialogs` shows the desktop's own file dialogs
 (KDE's, GNOME's, through the XDG portal) instead of the toolkit's themed
 ones. `decorations` is who draws the frame of a window with its own title
-bar: `system` the desktop (**System frames**),
+bar: `system` the desktop (**OS borders**),
 `toolkit` uitoolkit for every window, left out for the default.
 `captionButtons` `theme` puts the caption buttons of a frame uitoolkit
 draws where the theme's era put them (the Mac's traffic lights on the

@@ -647,7 +647,7 @@ func TestDecorationsPolicy(t *testing.T) {
 	surf.SetMoveResize(true)
 	a.decorPref = style.DecorationsSystem
 	if d := a.resolveDecorations(opts, true, surf); d != platform.DecorationsServer {
-		t.Errorf("Use system title bar and borders: %v", d)
+		t.Errorf("OS borders: %v", d)
 	}
 	a.decorPref = style.DecorationsToolkit
 	if d := a.resolveDecorations(opts, false, surf); d != platform.DecorationsClient {

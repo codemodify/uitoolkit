@@ -49,7 +49,7 @@ func TestSettingsAppAppliesAndPersists(t *testing.T) {
 	}
 	// And so is every option the Appearance page used to hold, in the row
 	// over the preview, under the short word each one wears now.
-	for _, opt := range []string{"Animations", "System file dialogs", "System frames", "Theme buttons", "OS colors"} {
+	for _, opt := range []string{"Animations", "OS open/save dialogs", "OS borders", "Theme buttons", "OS colors"} {
 		if findOption(w.Content(), opt) == nil {
 			t.Fatalf("the %q option is not on the page", opt)
 		}
@@ -1059,13 +1059,13 @@ func TestSettingsFollowDesktop(t *testing.T) {
 	}
 }
 
-// "System frames" — "Use system title bar and borders" to a screen
-// reader — writes look.json's decorations, and running apps switch their
-// windows at once.
+// "OS borders" — "OS borders: the desktop's title bar and borders" to a
+// screen reader — writes look.json's decorations, and running apps switch
+// their windows at once.
 func TestSettingsSystemTitleBarSwitch(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	a, w := openSettings(t, 1024, 780)
-	const label = "System frames"
+	const label = "OS borders"
 	sw := findOption(w.Content(), label)
 	if sw == nil {
 		t.Fatal("no system-frame option")
@@ -1513,7 +1513,7 @@ func TestTheOptionsRowOverThePreview(t *testing.T) {
 	// The words, in the order they are read. The three narrowest first is
 	// what makes a narrow pane fold to three and two instead of four and
 	// one, and the frame pair stay next to each other across the fold.
-	want := []string{"Animations", "System file dialogs", "System frames", "Theme buttons", "OS colors"}
+	want := []string{"Animations", "OS open/save dialogs", "OS borders", "Theme buttons", "OS colors"}
 	var got []string
 	widget.Walk(row, func(c widget.Component) {
 		if b, ok := c.(*widgets.Checkbox); ok {
@@ -1532,11 +1532,11 @@ func TestTheOptionsRowOverThePreview(t *testing.T) {
 	// reader, never a second name for it — the rule the preview's own
 	// settings bar follows a hand's width below.
 	names := map[string]string{
-		"Animations":          "Animations",
-		"System file dialogs": "System file dialogs: the desktop's own Open and Save",
-		"System frames":       "System frames: the desktop's title bar and borders",
-		"Theme buttons":       "Theme buttons: the caption buttons where the theme puts them",
-		"OS colors":           "OS colors: follow the desktop's light or dark mode and its accent",
+		"Animations":           "Animations",
+		"OS open/save dialogs": "OS open/save dialogs: the desktop's own Open and Save",
+		"OS borders":           "OS borders: the desktop's title bar and borders",
+		"Theme buttons":        "Theme buttons: the caption buttons where the theme puts them",
+		"OS colors":            "OS colors: follow the desktop's light or dark mode and its accent",
 	}
 	for word, name := range names {
 		box := findOption(w.Content(), word)

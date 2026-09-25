@@ -57,8 +57,8 @@ func TestSettingsIsAccessible(t *testing.T) {
 	// gets, and the one contains the other.
 	for _, name := range []string{
 		"Animations",
-		"System file dialogs: the desktop's own Open and Save",
-		"System frames: the desktop's title bar and borders",
+		"OS open/save dialogs: the desktop's own Open and Save",
+		"OS borders: the desktop's title bar and borders",
 		"Theme buttons: the caption buttons where the theme puts them",
 		"OS colors: follow the desktop's light or dark mode and its accent",
 	} {

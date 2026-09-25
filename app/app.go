@@ -137,9 +137,9 @@ func New(opts Options) *Application {
 	var decorPref style.DecorationsPref
 	var captionPref style.CaptionButtonsPref
 	if !opts.Headless {
-		// "Use system title bar and borders" and the caption buttons'
-		// layout are desktop-wide choices: they apply to apps with a look
-		// of their own too.
+		// "OS borders" (Settings' name for the desktop's title bar and
+		// borders) and the caption buttons' layout are desktop-wide
+		// choices: they apply to apps with a look of their own too.
 		if !preferred {
 			ap = style.LoadAppearance()
 		}

@@ -57,7 +57,7 @@ go get github.com/codemodify/paintengine2d@v0.9.0
     the theme's), in each theme's own style — Windows 95's navy caption,
     XP's blue one, Aqua's traffic lights, libadwaita's round buttons,
     SourceGit's flat cells — handing moves, resizes and the window menu to
-    the desktop; Settings' "System frames" gives the desktop's
+    the desktop; Settings' "OS borders" gives the desktop's
     frame back. See [docs/decorations.md](docs/decorations.md).
   - Windows of any shape: a silhouette instead of a rectangle, with a hole
     through it you can see the desktop through and click through to
@@ -793,7 +793,7 @@ free-space end of the sample's own tool bar and were read as the
 sample's own, and the corners spent it in the sample's View menu, where
 nobody found them. Everything left over stands with that window: the
 five on/off options in one row over it —
-`☑ Animations ☐ System file dialogs ☐ System frames ☐ Theme buttons ☐ OS colors`,
+`☑ Animations ☐ OS open/save dialogs ☐ OS borders ☐ Theme buttons ☐ OS colors`,
 each short word inside the full name a screen reader says — and the
 three config paths under it. They are check boxes and they fold onto a
 second line rather than shedding, because the right-hand pane is 392
