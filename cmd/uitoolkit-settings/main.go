@@ -41,7 +41,7 @@ func main() {
 	// The window icon the desktop shows in its title bar, task bar and switcher.
 	a.SetIcon(icons.AppIconRGB("settings", 0x60, 0x70, 0x80)...)
 	win, err := a.NewWindow(platform.WindowOptions{
-		Title: "Settings", Width: 1024, Height: 860, MinWidth: 720, MinHeight: 520,
+		Title: windowTitle("Settings"), Width: 1024, Height: 860, MinWidth: 720, MinHeight: 520,
 		Headless: *headless || *shot != "",
 	})
 	if err != nil {
@@ -70,6 +70,14 @@ func main() {
 		log.Fatal(err)
 	}
 }
+
+// windowTitle is what a window of this app is called on the desktop: its
+// own name for the window under the toolkit's prefix, so that a desktop
+// with several uitoolkit windows open says which toolkit they belong to.
+// Settings has one window and never retitles it, but the samples all
+// name their windows through a helper like this one and there is no
+// reason for the editor of the look to be the odd one out.
+func windowTitle(name string) string { return "uitoolkit - " + name }
 
 func shotPath(p string) string {
 	st, err := os.Stat(p)
