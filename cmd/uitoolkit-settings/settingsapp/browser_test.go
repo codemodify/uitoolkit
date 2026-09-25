@@ -39,12 +39,17 @@ func TestSettingsPreviewIsTheWholeRightPane(t *testing.T) {
 	if a.Look().Name() == "win95" {
 		t.Fatal("the preview must not re-theme Settings itself")
 	}
-	// One scope on the page, so there is nothing else being previewed.
-	if n := len(allScopes(w.Content())); n != 1 {
-		t.Fatalf("the Themes page has %d theme scopes, want the preview alone", n)
-	}
 	// It is the splitter's second pane, not a slice of it.
 	split := themesSplit(t, w)
+	// One scope inside the split, so there is nothing else being previewed
+	// beside or under the preview. The page has a second one — the icon
+	// strip at its head — and that one is above the split, not in it.
+	if n := len(allScopes(split)); n != 1 {
+		t.Fatalf("the split holds %d theme scopes, want the preview alone", n)
+	}
+	if n := len(allScopes(w.Content())); n != 2 {
+		t.Fatalf("the Themes page has %d theme scopes, want the preview and the icon strip", n)
+	}
 	pane, box := split.PaneB(), preview.LocalBounds()
 	if box.Dx() > pane.Dx() || box.Dy() < pane.Dy()-1 {
 		t.Errorf("the preview is %vx%v in a %vx%v pane", box.Dx(), box.Dy(), pane.Dx(), pane.Dy())
@@ -166,8 +171,9 @@ func TestSettingsThemeSearch(t *testing.T) {
 	}
 }
 
-// Tab walks the whole of Settings: the pages, the search field, the theme
-// list, the live preview beside it, and the buttons that act on it.
+// Tab walks the whole of Settings: the pages, the icon choosers at the
+// head of the Themes page, the search field, the theme list, the live
+// preview beside it, and the buttons that act on it.
 func TestSettingsKeyboardReachesEverything(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	if err := style.SaveAppearance(style.DefaultAppearance()); err != nil {
@@ -193,11 +199,13 @@ func TestSettingsKeyboardReachesEverything(t *testing.T) {
 		t.Fatalf("the focus ring is only %d stops long", len(ring))
 	}
 	want := map[string]bool{
-		"search":  false,
-		"themes":  false,
-		"pages":   false,
-		"preview": false,
-		"apply":   false,
+		"search":    false,
+		"themes":    false,
+		"pages":     false,
+		"preview":   false,
+		"apply":     false,
+		"icon set":  false,
+		"icon size": false,
 	}
 	for _, c := range ring {
 		switch v := c.(type) {
@@ -210,6 +218,13 @@ func TestSettingsKeyboardReachesEverything(t *testing.T) {
 				want["pages"] = true
 			} else if v.Count > 0 && strings.Contains(v.ItemText(0), "·") {
 				want["themes"] = true
+			}
+		case *widgets.ComboBox:
+			switch v.AccessibleName() {
+			case "Icons":
+				want["icon set"] = true
+			case "Icon size":
+				want["icon size"] = true
 			}
 		case *widgets.Button:
 			switch v.Text {

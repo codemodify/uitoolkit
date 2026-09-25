@@ -39,12 +39,12 @@ func TestSettingsIsAccessible(t *testing.T) {
 		t.Fatalf("settings: the Themes page item %+v", themes)
 	}
 	// Actions reach the widgets: pick the second page through the tree.
-	packs := a11ytest.Find(tree, a11y.RoleListItem, "Packs & icons")
+	packs := a11ytest.Find(tree, a11y.RoleListItem, "Packs")
 	if packs == nil || !s.AccessibleAction(packs.ID, a11y.ActionDefault) {
 		t.Fatal("settings: selecting a page through the tree")
 	}
 	a.PumpOnce()
-	if got := a11ytest.Find(s.AccessibleTree(), a11y.RoleListItem, "Packs & icons"); got == nil || !got.State.Has(a11y.StateSelected) {
+	if got := a11ytest.Find(s.AccessibleTree(), a11y.RoleListItem, "Packs"); got == nil || !got.State.Has(a11y.StateSelected) {
 		t.Fatal("settings: the page did not change")
 	}
 
@@ -73,14 +73,29 @@ func TestSettingsIsAccessible(t *testing.T) {
 			t.Errorf("settings: the preview application has no %s", r)
 		}
 	}
-	// And the Packs page's icon strip is a tool bar of named buttons, so
-	// the preview of an icon set is not a mystery to a screen reader.
-	clickSettingsNav(t, s, "Packs & icons")
-	a.PumpOnce()
-	packsTree := a11ytest.Audit(t, "settings packs", s.AccessibleTree())
-	for _, name := range []string{"New", "Open", "Save", "Warning"} {
-		if a11ytest.Find(packsTree, a11y.RoleButton, name) == nil {
+	// The icon strip at the head of Themes is tool bars of named buttons,
+	// so the preview of an icon set is not a mystery to a screen reader,
+	// and the two choosers beside it are combo boxes with names of their
+	// own. (Information, Warning, Error and Question are the strip's
+	// alone: New and Save are in the previewed application's tool bar
+	// too.)
+	for _, name := range []string{"Information", "Warning", "Error", "Question"} {
+		if a11ytest.Find(tree, a11y.RoleButton, name) == nil {
 			t.Errorf("settings: the icon preview has no %s button", name)
 		}
+	}
+	for _, name := range []string{"Icons", "Icon size"} {
+		if a11ytest.Find(tree, a11y.RoleComboBox, name) == nil {
+			t.Errorf("settings: the Themes page has no %s chooser", name)
+		}
+	}
+
+	// Packs is still a page a screen reader can drive: the sets on disk
+	// are there, and so is what deletes one.
+	clickSettingsNav(t, s, "Packs")
+	a.PumpOnce()
+	packsTree := a11ytest.Audit(t, "settings packs", s.AccessibleTree())
+	if a11ytest.Find(packsTree, a11y.RoleList, "Built-in") == nil {
+		t.Error("settings: Packs has no built-in icon set list")
 	}
 }
