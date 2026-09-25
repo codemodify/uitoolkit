@@ -158,8 +158,8 @@ Also merged to `dev` and pushed:
   a header bar (Files has folder tabs); `style.DecorationEngine` lets an
   engine paint its era's frame, and every other pack gets its in-app window
   caption adapted, so all 121 have one: 70 native, 31 adapted, 2 plain.
-  Settings: "Place window buttons as the theme does" (look.json
-  `captionButtons`).
+  Settings: "Theme buttons", in the row of options over the preview
+  (look.json `captionButtons`).
 - **18 more packs of today's looks** (`engine/modern`): macOS Tahoe's Liquid
   Glass, Plasma 6's Breeze, GNOME 48's Adwaita, Material 3 Expressive, VS
   Code's 2026 themes, JetBrains Islands, and the Gruvbox, Solarized and Atom
