@@ -25,12 +25,22 @@ type ComboBox struct {
 	// NoCompletion stops an editable combo box completing typed text
 	// inline from Items (QComboBox completes by default).
 	NoCompletion bool
-	open         bool
-	hovered      bool
-	fade         stateFade // hover / focus cross-fade (the look's HintHoverFadeMs)
-	field        *TextField
-	typed        string // the text as typed, without the completion
-	completing   bool
+	// Tip is the hover help, for a box whose own label does not say what
+	// it chooses — one on a tool bar, where there is no room for a label
+	// beside it.
+	Tip string
+	// MinWidth is the narrowest the box measures itself, in 1x pixels.
+	// It is 160 by default, which is a form's field: a box in a column of
+	// them should not be narrower than its neighbours whatever it lists.
+	// A box on a tool bar sets it small — there it is one item among
+	// many, and 160 pixels of empty field pushes the tools off the end.
+	MinWidth   float32
+	open       bool
+	hovered    bool
+	fade       stateFade // hover / focus cross-fade (the look's HintHoverFadeMs)
+	field      *TextField
+	typed      string // the text as typed, without the completion
+	completing bool
 }
 
 // NewComboBox builds a drop-down. selected < 0 means none.
@@ -46,6 +56,9 @@ func NewComboBox(items []string, selected int, on func(int)) *ComboBox {
 }
 
 func (c *ComboBox) RetainsPointer() bool { return true }
+
+// Tooltip is the hover help text.
+func (c *ComboBox) Tooltip() string { return c.Tip }
 
 // Text is the selected label (an editable box's typed text), or empty.
 func (c *ComboBox) Text() string {
@@ -171,7 +184,11 @@ func (c *ComboBox) Select(i int) {
 func (c *ComboBox) Measure(cons layout.Constraints) paintengine2d.Point {
 	lk := c.Look()
 	m := lk.Metrics()
-	w := style.Dip(lk, 160)
+	floor := float32(160)
+	if c.MinWidth > 0 {
+		floor = c.MinWidth
+	}
+	w := style.Dip(lk, floor)
 	f := style.ControlFontOf(lk, style.RoleCombo)
 	for _, s := range c.Items {
 		tw := f.Advance(s)
