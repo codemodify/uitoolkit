@@ -51,10 +51,15 @@ func TestSettingsChoicesFollowALiveResize(t *testing.T) {
 		if want := defaultChoicesRatio(w); !near(split.Ratio, want) {
 			t.Errorf("at %v: ratio %v, want %v", size, split.Ratio, want)
 		}
-		// About 300 logical pixels across, within the ratio's limits: an
-		// option row is a label, a control and a line of prose.
-		if got := split.PaneA().Dx(); got < 260 || got > 340 {
-			t.Errorf("at %v: the browser is %v px wide", size, got)
+		// About 300 logical pixels across, and about 240 below an 800-px
+		// window: a browser is a list and three controls, and a narrow
+		// window needs the rest for the preview and the options over it.
+		lo, hi := float32(260), float32(340)
+		if size[0] < 800 {
+			lo, hi = 200, 280
+		}
+		if got := split.PaneA().Dx(); got < lo || got > hi {
+			t.Errorf("at %v: the browser is %v px wide, want %v..%v", size, got, lo, hi)
 		}
 	}
 

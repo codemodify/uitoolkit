@@ -592,8 +592,8 @@ func (s *settingsState) optionsRow() widget.Component {
 	// pack is drawn under it, and the caption right below says
 	// "Preview — Breeze Dark" for a chosen Breeze, which is the rest of
 	// this option's explanation.
-	colours := s.option("Desktop colours",
-		"Desktop colours: follow the desktop's light or dark mode and its accent",
+	colours := s.option("OS colors",
+		"OS colors: follow the desktop's light or dark mode and its accent",
 		"Light or dark and the accent, as the desktop asks: a chosen Breeze shows as Breeze Dark.",
 		s.staged.FollowDesktop, func(on bool) {
 			next := s.staged
@@ -618,7 +618,7 @@ func (s *settingsState) optionsRow() widget.Component {
 		})
 	// The desktop's own file dialogs (the XDG portal's), as Qt and GTK
 	// apps can use, instead of the themed ones.
-	native := s.option("File dialogs", "Use the desktop's file dialogs",
+	native := s.option("System file dialogs", "System file dialogs: the desktop's own Open and Save",
 		"KDE's and GNOME's own Open and Save dialogs, through the XDG portal, instead of the themed ones.",
 		s.staged.NativeDialogs, func(on bool) {
 			next := s.staged
@@ -628,7 +628,7 @@ func (s *settingsState) optionsRow() widget.Component {
 	// Chromium's switch: windows that draw their own title bar (Mail's,
 	// with its tool bar in it) get the desktop's title bar and borders
 	// instead, and their title bar becomes the first row.
-	system := s.option("System frame", "System frame: the desktop's title bar and borders",
+	system := s.option("System frames", "System frames: the desktop's title bar and borders",
 		"The desktop draws the title bar and borders of every window, instead of the toolkit.",
 		s.staged.Decorations == style.DecorationsSystem, func(on bool) {
 			next := s.staged
@@ -936,14 +936,24 @@ func (s *settingsState) followWindow() {
 // elides the one and wraps the other.
 // Dragging the sash replaces it.
 func defaultChoicesRatio(win *app.Window) float32 {
-	const want, pad = 300, 30
+	const want, narrow, pad = 300, 800, 30
 	// Window.Size is already logical pixels, which is what `want` is in.
 	lw, _ := win.Size()
 	page := float32(lw) - pad
 	if page <= 0 {
 		return 0.3
 	}
-	return min(max(want/page, 0.18), 0.5)
+	// A browser is a list and three controls; a preview is a window with
+	// a row of settings over it. Below 800 the column asks for less, or
+	// it takes two fifths of the window to show fourteen packs while the
+	// options fold onto a third line and the preview stops being the
+	// biggest thing on the page. 240 still shows a decade filter and a
+	// readable pack name.
+	w := float32(want)
+	if lw < narrow {
+		w = 240
+	}
+	return min(max(w/page, 0.18), 0.5)
 }
 
 // scoped draws c in the staged theme while Settings keeps the applied one.

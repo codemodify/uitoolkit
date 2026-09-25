@@ -57,10 +57,10 @@ func TestSettingsIsAccessible(t *testing.T) {
 	// gets, and the one contains the other.
 	for _, name := range []string{
 		"Animations",
-		"Use the desktop's file dialogs",
-		"System frame: the desktop's title bar and borders",
+		"System file dialogs: the desktop's own Open and Save",
+		"System frames: the desktop's title bar and borders",
 		"Theme buttons: the caption buttons where the theme puts them",
-		"Desktop colours: follow the desktop's light or dark mode and its accent",
+		"OS colors: follow the desktop's light or dark mode and its accent",
 	} {
 		if a11ytest.Find(tree, a11y.RoleCheckBox, name) == nil {
 			t.Errorf("settings: no %q check box in the tree", name)
