@@ -11,7 +11,7 @@ import (
 	"github.com/codemodify/uitoolkit/widgets"
 )
 
-// Page four: who draws the frame. This is the one page whose subject is
+// Who draws the frame. This is the one page whose subject is
 // the window it is in, so every control here changes this window and the
 // page simply reports what happened — including the things the desktop
 // refused, which is most of what is interesting about window management.

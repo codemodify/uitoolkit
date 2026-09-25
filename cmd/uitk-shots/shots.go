@@ -4,6 +4,7 @@
 //
 //	go run ./cmd/uitk-shots docs/screenshots
 //	UITK_THEME=nocturne go run ./cmd/uitk-shots -theme nocturne /tmp/shots
+//	go run ./cmd/uitk-shots -gallery out.png -tab 4   # the showcase alone
 //
 // It is toolkit tooling rather than a sample: it drives the applications
 // under examples/ from the outside, exactly as their own users would, and
@@ -35,6 +36,8 @@ import (
 
 func main() {
 	theme := flag.String("theme", "", "take every showcase shot in this theme pack (default: $UITK_THEME, else each shot's own look)")
+	gallery := flag.String("gallery", "", "write the showcase alone to this PNG and exit (the Theme Atlas's picture)")
+	tab := flag.Int("tab", 0, "with -gallery, the showcase tab to open on (0 Scroll, 1 List, 2 Tree, 3 Table, 4 Form)")
 	flag.Parse()
 	dir := flag.Arg(0)
 	if dir == "" {
@@ -55,16 +58,51 @@ func main() {
 		}
 		shotLook = pack.Look()
 	}
+	if *gallery != "" {
+		if err := writeGalleryShot(*gallery, *tab); err != nil {
+			log.Fatal(err)
+		}
+		fmt.Println("wrote", *gallery)
+		return
+	}
 	if err := writeScreenshots(dir); err != nil {
 		log.Fatal(err)
 	}
 }
 
+// writeGalleryShot renders the showcase on its own into one PNG. It is
+// the Theme Atlas's picture of a pack (tools/atlas/render.sh renders 129
+// of them), which used to be taken by running the examples/gallery
+// sample headless; the sample is a page of the tour now, and a picture
+// the tooling needs is the tooling's to take. The window is the size
+// that sample opened at, so the atlas's pictures keep their geometry.
+func writeGalleryShot(path string, tab int) error {
+	opts := uitoolkit.Options{Headless: true}
+	if shotLook != nil {
+		opts.Look = shotLook
+	}
+	a := uitoolkit.New(opts)
+	w, err := a.NewWindow(platform.WindowOptions{
+		Title: "uitoolkit gallery", Width: 1000, Height: 760, Headless: true,
+	})
+	if err != nil {
+		return err
+	}
+	defer w.Close()
+	w.SetContent(buildGallery(a, w, a.Look().Name() == "light"))
+	if tab > 0 {
+		selectGalleryTab(w, tab)
+	}
+	a.PumpOnce()
+	return w.WritePNG(path)
+}
+
 // shotLook, when set by -theme, replaces the look of every gallery shot.
 var shotLook style.LookAndFeel
 
-// buildGallery is the showcase exactly as examples/gallery shows it, so
-// the pictures are of the sample and not of something assembled here.
+// buildGallery is the showcase as a window of its own: the whole of the
+// public showcase package, so the pictures are of what applications
+// embed and not of something assembled here.
 func buildGallery(a *app.Application, win *app.Window, light bool) widget.Component {
 	return showcase.App(a, win, light)
 }

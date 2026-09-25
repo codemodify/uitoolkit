@@ -42,8 +42,8 @@ On the right, the staged pack drawn twice in a splitter you can size:
   (menu bar, tool bar, tabs with every control, tree, table, dialogs,
   status bar) painted entirely in the staged theme, frame, caption and
   all;
-- the **gallery** — the `showcase` package, the same one
-  `examples/gallery` puts in a window of its own, here as one
+- the **gallery** — the `showcase` package, the same one the tour shows
+  over its Controls, Views and Documents pages, here as one
   scrolling column: tool bar, the Buttons and Fields panels, then the
   ScrollView, ListView, TreeView, TableView and Form panels, and a status
   bar. Its Window, Theme and Quit controls are disabled here: the gallery

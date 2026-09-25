@@ -12,7 +12,7 @@ import (
 	"github.com/codemodify/uitoolkit/widgets"
 )
 
-// Page two: panels around a centre. The gestures are the point — a panel
+// Panels around a centre. The gestures are the point — a panel
 // dragged by its title bar to another side, onto another panel to tab
 // with it, or clean out of the window into one of its own — so the page
 // is mostly the dock host itself, with a row of buttons that does the

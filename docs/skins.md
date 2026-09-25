@@ -999,7 +999,7 @@ go run ./cmd/uitk-themesheet -theme nocturne -scale 1.75 -o /tmp/sheets
 go run ./cmd/uitk-themesheet -frames -theme nocturne -o /tmp/sheets
 
 # A whole app.
-env -u WAYLAND_DISPLAY -u DISPLAY UITK_THEME=nocturne go run ./examples/gallery -headless
+env -u WAYLAND_DISPLAY -u DISPLAY UITK_THEME=nocturne go run ./cmd/uitk-shots -gallery /tmp/nocturne.png
 
 # What an author would want to know about one.
 go run ./cmd/uitk-skin lint nocturne deck ~/.config/uitoolkit/skins/mine

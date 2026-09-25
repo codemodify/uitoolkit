@@ -8,7 +8,7 @@
 # painted where nothing changed.
 #
 #   tools/perf/oracle.sh 31                  # every app
-#   tools/perf/oracle.sh 31 gallery notes    # just these
+#   tools/perf/oracle.sh 31 tour notes       # just these
 #
 # Animations are off (UITK_ANIMATIONS=0), so a busy bar or a caret holds
 # still between the two runs. The players animate on their own clock and

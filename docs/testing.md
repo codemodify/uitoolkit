@@ -15,7 +15,7 @@ Peers do the same thing with different names:
 
 uitoolkit’s analogue is `internal/uitest` (Measure/Arrange, inject
 Mouse/Wheel/Key, optional paint / scene record, geometry assertions)
-plus `internal/apptest` (scripted gallery + Settings).
+plus `internal/apptest` (scripted showcase + Settings).
 
 ## Mail safety — moved with the app
 
@@ -50,7 +50,7 @@ Headless widget + driver suite (no display, no CGO):
 CGO_ENABLED=0 go test ./...
 ```
 
-Full-paint benches (Settings / gallery / list) live in `internal/apptest`.
+Full-paint benches (Settings / showcase / list) live in `internal/apptest`.
 See [perf.md](perf.md) for the v0.15.0 command line and numbers.
 
 Tray tests use `UITK_TRAY=fake` or the stub (`docs/tray.md`). Do not
@@ -67,7 +67,7 @@ Scripted app driver (same checks, prints one line per step):
 ```bash
 go run ./cmd/uitest-driver
 go run ./cmd/uitest-driver -short
-go run ./cmd/uitest-driver -app=gallery
+go run ./cmd/uitest-driver -app=showcase
 go run ./cmd/uitest-driver -app=settings
 go run ./cmd/uitest-driver -compare
 ```
@@ -134,7 +134,7 @@ After each scripted step it runs `uitest.TreeInvariants` (exclusive
 splitter panes, scroll clamp, thumb-in-track, non-empty visible-row
 window when content remains, table first-row flush under the header).
 
-**Gallery** (`showcase.App`): construct, open a ComboBox and
+**Showcase** (`showcase.App`): construct, open a ComboBox and
 assert the popup clears the field and fits labels, resize, drag every
 splitter to several ratios, scroll lists/tables/trees/cards/ScrollViews
 to top / mid / end and back, select rows.
@@ -202,7 +202,7 @@ broken code:
   `TestMenuBarDropdownFitsLabelsAndShortcuts`,
   `TestMenuBarHelpNearRightEdgeFitsAboutMail`, Mail driver `context-menu`.
 - ComboBox overlap / clipped rows: `TestComboBoxPopupClearsFieldAndFitsLabels`
-  plus the gallery driver `combo-popup` step.
+  plus the showcase driver `combo-popup` step.
 - Drag and drop: the protocol in `platform/xdnd_test.go` and
   `platform/drag_test.go`, the source's state machine in
   `app/drag_test.go`, what a widget drags in `widgets/drag_test.go`.

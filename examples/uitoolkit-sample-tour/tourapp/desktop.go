@@ -12,7 +12,7 @@ import (
 	"github.com/codemodify/uitoolkit/widgets"
 )
 
-// Page seven: the four things an application asks the desktop for that
+// The four things an application asks the desktop for that
 // have nothing to do with drawing — the clipboard, an icon in the tray,
 // a notification, and a file dialog that is the desktop's rather than
 // ours. Each of them can be absent, and a toolkit that pretends

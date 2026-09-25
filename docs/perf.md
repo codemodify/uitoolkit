@@ -23,7 +23,7 @@ graph; `Surface.Present(nil)` always presents the full buffer.
 ## Headless profile (CI, `CGO_ENABLED=0`)
 
 ```bash
-CGO_ENABLED=0 go test -bench='BenchmarkSettingsFullPaint|BenchmarkGalleryFullPaint|BenchmarkListHover|BenchmarkListScroll' -benchmem ./internal/apptest
+CGO_ENABLED=0 go test -bench='BenchmarkSettingsFullPaint|BenchmarkShowcaseFullPaint|BenchmarkListHover|BenchmarkListScroll' -benchmem ./internal/apptest
 CGO_ENABLED=0 go test -bench=BenchmarkFontAdvanceCached -benchmem ./style
 CGO_ENABLED=0 go test -bench=BenchmarkLookWatchSettled -benchmem ./app
 ```
