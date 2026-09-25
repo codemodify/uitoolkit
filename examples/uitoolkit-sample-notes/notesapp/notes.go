@@ -2,7 +2,7 @@
 // an editor beside it, priorities, reordering by drag, and text dropped
 // in from another application.
 //
-// examples/notes opens the window and calls [NotesApp]; the application
+// examples/uitoolkit-sample-notes opens the window and calls [NotesApp]; the application
 // is here, built on the published API and nothing else.
 package notesapp
 

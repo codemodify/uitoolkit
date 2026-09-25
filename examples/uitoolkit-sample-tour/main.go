@@ -9,14 +9,14 @@
 // exist only while something runs — the accessibility tree, the
 // clipboard, the tray, the display's scale.
 //
-//	tour                        # every page, in one window
-//	tour -page shapes           # one page (see -page list)
-//	tour -page tabs,frames      # a window holding just those
-//	tour -theme win95           # any of the packs, skins included
-//	tour -scale 1.75            # at a fractional scale
-//	tour -shot out/             # one PNG per page, then exit
-//	tour -sheet pages.png       # every page on one contact sheet, then exit
-//	tour -headless              # paint offscreen, write tour.png, exit
+//	uitoolkit-sample-tour                        # every page, in one window
+//	uitoolkit-sample-tour -page shapes           # one page (see -page list)
+//	uitoolkit-sample-tour -page tabs,frames      # a window holding just those
+//	uitoolkit-sample-tour -theme win95           # any of the packs, skins included
+//	uitoolkit-sample-tour -scale 1.75            # at a fractional scale
+//	uitoolkit-sample-tour -shot out/             # one PNG per page, then exit
+//	uitoolkit-sample-tour -sheet pages.png       # every page on one contact sheet, then exit
+//	uitoolkit-sample-tour -headless              # paint offscreen, write tour.png, exit
 //
 // The tour's own navigation is its first page: the tabs along the top are
 // the window's caption, and one dragged out of the strip opens a second
@@ -34,7 +34,7 @@ import (
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit"
 	"github.com/codemodify/uitoolkit/app"
-	"github.com/codemodify/uitoolkit/examples/tour/tourapp"
+	"github.com/codemodify/uitoolkit/examples/uitoolkit-sample-tour/tourapp"
 	"github.com/codemodify/uitoolkit/icons"
 	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"

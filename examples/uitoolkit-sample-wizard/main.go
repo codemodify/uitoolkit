@@ -2,7 +2,7 @@
 // that must be filled in, one that checks what was typed, an optional
 // page, and one that only a choice brings in. Finish prints the result.
 //
-//	go run ./examples/wizard
+//	go run ./examples/uitoolkit-sample-wizard
 package main
 
 import (

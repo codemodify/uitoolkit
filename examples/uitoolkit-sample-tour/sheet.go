@@ -6,7 +6,7 @@ import (
 
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/app"
-	"github.com/codemodify/uitoolkit/examples/tour/tourapp"
+	"github.com/codemodify/uitoolkit/examples/uitoolkit-sample-tour/tourapp"
 	"github.com/codemodify/uitoolkit/layout"
 	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"

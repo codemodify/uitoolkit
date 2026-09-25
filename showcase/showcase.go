@@ -388,7 +388,7 @@ func buildParts(host Host) parts {
 
 	files := []string{
 		"README.md", "go.mod", "LICENSE", "widget/base.go", "style/look.go",
-		"examples/gallery/main.go", "examples/notes/main.go", "platform/x11_linux.go",
+		"examples/gallery/main.go", "examples/uitoolkit-sample-notes/main.go", "platform/x11_linux.go",
 		"app/window.go", "layout/flex.go",
 	}
 	for i := 0; i < 30; i++ {

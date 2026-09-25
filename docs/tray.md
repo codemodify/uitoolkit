@@ -339,8 +339,8 @@ Left-click is `OnClick`; balloon click is `OnNotifyClick`. HWND app windows are 
 a stub — only the tray landed.
 
 ```bat
-go build ./examples/tour
-tour.exe
+go build ./examples/uitoolkit-sample-tour
+uitoolkit-sample-tour.exe
 ```
 
 ### macOS
@@ -356,7 +356,7 @@ whole menu is inert there, children or not. macOS is a pinned platform
 and nothing was ported to it.
 
 ```bash
-CGO_ENABLED=1 go build ./examples/tour
+CGO_ENABLED=1 go build ./examples/uitoolkit-sample-tour
 ```
 
 ## History
@@ -389,10 +389,10 @@ CGO_ENABLED=0 go test ./...
 UITK_TRAY=fake go test ./platform ./app
 
 # Linux desktop: the tour's Desktop page opens a status item
-go run ./examples/tour -page desktop   # the app owns the tray (HostMenu)
+go run ./examples/uitoolkit-sample-tour -page desktop   # the app owns the tray (HostMenu)
 
-UITK_TRAY=stub go run ./examples/tour -page desktop
-UITK_TRAY=fake go run ./examples/tour -page desktop
+UITK_TRAY=stub go run ./examples/uitoolkit-sample-tour -page desktop
+UITK_TRAY=fake go run ./examples/uitoolkit-sample-tour -page desktop
 ```
 
 The application this was built for is the mail client

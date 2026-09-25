@@ -6,13 +6,13 @@ with a page for each answer, because none of them is a control you can
 put on a page of controls.
 
 ```bash
-go run ./examples/tour                  # every page, in one window
-go run ./examples/tour -page shapes     # one page (see -page list)
-go run ./examples/tour -page tabs,frames
-go run ./examples/tour -theme win95     # any of the packs, skins included
-go run ./examples/tour -scale 1.75
-go run ./examples/tour -shot out/       # one still per page (PNG)
-go run ./examples/tour -sheet pages.png # every page on one contact sheet
+go run ./examples/uitoolkit-sample-tour                  # every page, in one window
+go run ./examples/uitoolkit-sample-tour -page shapes     # one page (see -page list)
+go run ./examples/uitoolkit-sample-tour -page tabs,frames
+go run ./examples/uitoolkit-sample-tour -theme win95     # any of the packs, skins included
+go run ./examples/uitoolkit-sample-tour -scale 1.75
+go run ./examples/uitoolkit-sample-tour -shot out/       # one still per page (PNG)
+go run ./examples/uitoolkit-sample-tour -sheet pages.png # every page on one contact sheet
 tools/shots/demos.sh                    # docs/screenshots: the stills and the sheet, as WebP
 ```
 
@@ -118,8 +118,8 @@ drag-and-drop page, because then nothing rides along in-process and the
 target really does read a `text/uri-list` off the desktop.
 
 ```bash
-go run ./examples/tour -page drag &
-go run ./examples/tour -page drag        # drag a row from one to the other
+go run ./examples/uitoolkit-sample-tour -page drag &
+go run ./examples/uitoolkit-sample-tour -page drag        # drag a row from one to the other
 ```
 
 ## What it needs of the desktop, and what it does without
@@ -138,7 +138,7 @@ without one of these the page stays useful and stops claiming:
 
 ## Tested
 
-Headless, in `examples/tour/tourapp/tour_test.go`:
+Headless, in `examples/uitoolkit-sample-tour/tourapp/tour_test.go`:
 
 - every page builds, lays out and paints in **win95, system7, luna,
   bigsur, tahoe, sourcegit and the `deck` skin**, at 1× and 1.75, and is
@@ -157,7 +157,7 @@ Headless, in `examples/tour/tourapp/tour_test.go`:
 - "+"'s menu drops from the "+";
 - `-shot` is 1180 × 820 device pixels at 1× and 2065 × 1435 at 1.75, and
   `-sheet` puts the pages side by side at half size
-  (`examples/tour/main_test.go`);
+  (`examples/uitoolkit-sample-tour/main_test.go`);
 - a row dragged between the two lists lands at the caret and is moved or
   copied according to the action the target reported;
 - every silhouette the Shapes page offers rasterises to a region with the

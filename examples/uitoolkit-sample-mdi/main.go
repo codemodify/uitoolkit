@@ -2,7 +2,7 @@
 // windows inside the main window, with a Window menu that arranges and
 // lists them and asks before closing an edited one.
 //
-//	go run ./examples/mdi
+//	go run ./examples/uitoolkit-sample-mdi
 package main
 
 import (

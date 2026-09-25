@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/codemodify/uitoolkit"
-	"github.com/codemodify/uitoolkit/examples/tour/tourapp"
+	"github.com/codemodify/uitoolkit/examples/uitoolkit-sample-tour/tourapp"
 	"github.com/codemodify/uitoolkit/style"
 )
 

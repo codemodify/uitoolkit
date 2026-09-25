@@ -6,10 +6,10 @@
 # the same place every time.
 settings  cmd/uitksettings   click 614 118  435 384
 gallery   examples/gallery   click 167 76   832 448
-files     examples/files     click 153 134  650 300
-notes     examples/notes     -              370 500
-inspector examples/inspector click 960 322  600 400
-tour      examples/tour      right 290 104  400 400
-richtext  examples/richtext  click 287 176  640 500
-mdi       examples/mdi       click 187 136  540 390
-wizard    examples/wizard    -              640 450
+files     examples/uitoolkit-sample-files     click 153 134  650 300
+notes     examples/uitoolkit-sample-notes     -              370 500
+inspector examples/uitoolkit-sample-inspector click 960 322  600 400
+tour      examples/uitoolkit-sample-tour      right 290 104  400 400
+richtext  examples/uitoolkit-sample-richtext  click 287 176  640 500
+mdi       examples/uitoolkit-sample-mdi       click 187 136  540 390
+wizard    examples/uitoolkit-sample-wizard    -              640 450

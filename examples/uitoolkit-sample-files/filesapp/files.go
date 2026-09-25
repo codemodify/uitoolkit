@@ -3,7 +3,7 @@
 // between the two views, and a status bar.
 //
 // It is a package rather than a main because that is what an application
-// of any size is: examples/files is twenty lines that open a window and
+// of any size is: examples/uitoolkit-sample-files is twenty lines that open a window and
 // call [FilesApp], and everything a reader came to learn is here. Nothing
 // under it reaches into the toolkit's internals — it is written against
 // exactly the API a `go get` of uitoolkit hands anyone else.
