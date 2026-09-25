@@ -1,7 +1,8 @@
 // Package settingsapp is the toolkit's appearance editor: the theme
-// browser, the live preview of the staged pack, the icon and corner
-// options it carries on a bar of its own, the five on/off options in a
-// row over it, and the Apply that writes look.json.
+// browser, the block of settings over the preview — four on/off options
+// and the three choosers for the icon set, its size and the window's
+// corners — the live preview of the staged pack under them, and the
+// Apply that writes look.json.
 //
 // It lives beside its command rather than inside it because the
 // end-to-end driver and its own tests drive it as a library, and because
@@ -28,13 +29,12 @@ import (
 // the line through that page is no longer between kinds of choice but
 // between the browser and the thing it is browsing for: the list of 129
 // packs is the column on the left, and everything else stands with the
-// preview on the right — the five options in a row over it, the icons
-// and the corners on its own bar, and where it all lives on disk under
-// it.
+// preview on the right — the settings in a folding block over it, and
+// where it all lives on disk under it.
 const (
 	sectionTheme     = iota // the column on the left, and the whole of it
-	sectionBehaviour        // the row of options over the preview
-	sectionPreview          // the preview itself: its icons and its corners
+	sectionBehaviour        // the four on/off options, first in the block over the preview
+	sectionPreview          // the three choosers after them: the icons and the corners
 	sectionFiles            // the right-hand pane, under the preview
 )
 
@@ -87,14 +87,16 @@ type SettingsOptions struct {
 	// every name resolves to something already on screen. See
 	// [SettingsPage] for why it is still taken.
 	Theme, Page string
-	// PlainPreview leaves the bar of live settings off the preview, so
-	// that the window in the right-hand pane is the sample application
-	// and nothing else: no icon set, no icon size and no corner style
-	// can be chosen while it is set.
+	// PlainPreview makes the previewed window make-believe all through:
+	// its File menu's Open… and Save… say their name on the sample's
+	// status bar instead of opening a real file dialog.
 	//
 	// It is for pictures, not for people — the Theme Atlas renders 129
-	// tiles out of this preview, and a tile is read as a picture of a
-	// pack rather than used as a control panel. Settings itself never
+	// tiles out of this preview, and a tile is looked at rather than
+	// clicked. It used to take the bar of live settings off the head of
+	// the window as well; that bar is gone, and the icon set, the icon
+	// size and the corner style are chosen on the page beside the
+	// preview, outside anything the atlas crops. Settings itself never
 	// sets it; cmd/uitoolkit-settings' -plain-preview does.
 	PlainPreview bool
 }
@@ -121,8 +123,9 @@ func SettingsAppWith(a *app.Application, win *app.Window, opt SettingsOptions) w
 // Settings used to have keep working, because -page is in scripts, in
 // the atlas tooling and in the docs of two releases — each one resolves
 // to the section that swallowed it. "appearance", "corners" and "icons"
-// are the Preview, which is where the shape and the icon set are chosen
-// now; "packs" (and its old name "packs & icons") is Theme, because
+// are the Preview: the three choosers that say what the previewed window
+// is drawn with, which stand with the options over it; "packs" (and its
+// old name "packs & icons") is Theme, because
 // exporting a pack and deleting one are under the theme browser;
 // "about" is Files; "desktop" and "colours" are Behaviour, because
 // following the desktop's colours is one of the five options in that
@@ -175,19 +178,19 @@ type settingsState struct {
 	scopes     []*widgets.ThemeScope
 	previewBox *widgets.Panel
 	applyBtn   *widgets.Button
-	// The controls the preview carries instead of showing: the sets the
+	// The three settings that are not an on and an off: the sets the
 	// chooser offers, the chooser itself, the size its glyphs are drawn
-	// at and the shape of the window's corners. All three stand on a bar
-	// of Settings' own at the head of the previewed window, each behind
-	// the word that says what it sets. They follow the staged appearance
-	// whatever staged it — a pack picked in the browser, -stage, Apply —
-	// and not only their own clicks.
+	// at and the shape of the window's corners. They stand on the page
+	// after the four options, each behind the word that says what it
+	// sets. They follow the staged appearance whatever staged it — a
+	// pack picked in the browser, -stage, Apply — and not only their own
+	// clicks.
 	iconSets []style.IconSetInfo
 	iconPick *widgets.ComboBox
 	iconSize *widgets.ComboBox
 	corners  *widgets.ComboBox
-	// plain drops that bar: the preview is then the sample application
-	// and nothing else. See [SettingsOptions].
+	// plain makes the previewed window make-believe all through. See
+	// [SettingsOptions].
 	plain bool
 }
 
@@ -550,18 +553,18 @@ func (s *settingsState) exportButton() widget.Component {
 	return btn
 }
 
-// ---- the options, over the preview --------------------------------------------
+// ---- the settings, over the preview --------------------------------------------
 
-// option is one of the five on/off settings in the row over the preview:
-// a check box with a short word on it, the full name a screen reader
-// says, and the one sentence that says what turning it on does.
+// option is one of the four on/off settings that lead the block over the
+// preview: a check box with a short word on it, the full name a screen
+// reader says, and the one sentence that says what turning it on does.
 //
 // The word on the box is short and the spoken name contains it — "OS
 // borders" is read out as "OS borders: the desktop's title bar and
-// borders" — which is the rule the preview's settings bar follows below:
+// borders" — which is the rule the three choosers after them follow too:
 // the visible word must be inside the spoken name, never beside it, or
-// the control has two names. What the eye gets from the row these five
-// stand in, the ear gets from the rest of the name.
+// the control has two names. What the eye gets from the row these stand
+// in, the ear gets from the rest of the name.
 //
 // The sentence is the tooltip and the accessible description, not a line
 // under the box. It was a line under the box while these were in the
@@ -575,38 +578,58 @@ func (s *settingsState) option(word, name, about string, on bool, set func(bool)
 	return widgets.NewTip(about, box)
 }
 
-// optionsRow is the five things look.json carries that are neither a
-// pack nor the shape and the icons the preview sets for itself: where
-// the colours come from, and the four that are not what the toolkit
-// looks like but what it does — whether it moves, whose file dialogs it
-// opens, who draws a window's frame, and where that frame's buttons go.
+// optionsRow is everything look.json carries that is not a pack: the four
+// things that are not what the toolkit looks like but what it does —
+// whether it moves, whose file dialogs it opens, who draws a window's
+// frame, and where the colours come from — and then the three choosers
+// that say what a pack is drawn with: the icon set, the size its glyphs
+// are drawn at, and the shape of a window's corners.
 //
-// They are one row over the preview rather than a panel in the column
-// beside it. Four of them spent a release in that column, where 300
-// logical pixels elided every one of them ("Use the desktop's file
-// dia…") and each carried a line of prose under it, and the fifth stood
-// here alone. A row of five words over a window is furniture you glance
-// at; a stack of five sentences is documentation, and documentation
-// about five booleans is not worth a third of the column it was costing.
+// It is one block over the preview rather than a panel in the column
+// beside it. Four of the options spent a release in that column, where
+// 300 logical pixels elided every one of them ("Use the desktop's file
+// dia…") and each carried a line of prose under it. A row of short words
+// over a window is furniture you glance at; a stack of sentences is
+// documentation, and documentation about four booleans is not worth a
+// third of the column it was costing.
 //
-// They are check boxes, not switches, for two reasons that agree. The
-// honest one is that nothing on this page takes effect when it is
+// The options are check boxes, not switches, for two reasons that agree.
+// The honest one is that nothing on this page takes effect when it is
 // touched — Apply writes look.json and nothing else does — and a switch
 // is the control that says "this is live now", while a check box is the
 // control that says "this is what I am asking for". The measured one is
 // that a switch's pill is 42 logical pixels of chrome before its word,
-// and five of those in the 392-pixel pane of a 720x520 window fold onto
-// three lines and take a fifth of the preview's height with them; five
-// check boxes fold onto two, and onto one at 1024. The preview is what
-// this pane is for.
+// and four of those in the 453-pixel row of a 720x520 window take a
+// third of the pane the preview is the point of.
 //
-// [widgets.Wrap] is what folds them: one line while the pane is wide,
-// two when it is not, and never a control cut off by the window frame
-// the way a tool bar's shedding would leave one.
+// # One block, not two rows
+//
+// The three choosers came out of the previewed window, where they stood
+// on a bar of Settings' own over the sample's menu bar — "the preview
+// configures itself". They are settings of the page like the four before
+// them, so they are read where the page keeps its settings, and the
+// window below is a sample again with nothing live in its chrome.
+//
+// They are in the *same* [widgets.Wrap] as the options rather than a
+// second row under it, and that is a measurement, not a preference. The
+// pane is 453 logical pixels at the 720x520 minimum and the settings
+// come to about 990 of them: a row that folds packs them into three
+// lines there, and two rows that each fold on their own take four —
+// which is 78 pixels off a preview that had 273, and the preview stops
+// being what the pane is for. One row that folds also *reads* as two
+// rows wherever there is room for it to: at 1024x860 the four options
+// fill the first line and the three choosers fall onto the second, which
+// is the arrangement, arrived at by folding rather than by decree.
+//
+// What the fold must never do is break a chooser from the word in front
+// of it, or the icon set from the size its glyphs are drawn at. So the
+// choosers go in as two children, not six: the pair that says what is
+// drawn, and the one that says what shape the window is — the two groups
+// the divider on the old bar stood between.
 func (s *settingsState) optionsRow() widget.Component {
-	// Where the colours come from is last, which puts it nearest the
-	// window it changes: it is the one of the five that decides which
-	// pack is drawn under it, and the caption right below says
+	// Where the colours come from is last of the four, which puts it
+	// nearest the window it changes: it is the one that decides which
+	// pack is drawn under it, and the caption below says
 	// "Preview — Breeze Dark" for a chosen Breeze, which is the rest of
 	// this option's explanation.
 	colours := s.option("OS colors",
@@ -635,10 +658,15 @@ func (s *settingsState) optionsRow() widget.Component {
 		})
 	// The desktop's own file dialogs (the XDG portal's), as Qt and GTK
 	// apps can use, instead of the themed ones. "OS", not "System",
-	// because the three of these five that hand something to the desktop
+	// because the three of these that hand something to the desktop
 	// should say so in the same word, and "OS colors" already did.
+	//
+	// The preview is where this one can be looked at rather than read:
+	// the sample's File ▸ Open… and Save… open the dialog this box is
+	// asking for, the desktop's or the toolkit's, and open nothing else.
+	// See [PreviewOptions].
 	native := s.option("OS open/save dialogs", "OS open/save dialogs: the desktop's own Open and Save",
-		"KDE's and GNOME's own Open and Save dialogs, through the XDG portal, instead of the themed ones.",
+		"KDE's and GNOME's own Open and Save dialogs, through the XDG portal, instead of the themed ones. The preview's File menu opens the one this asks for.",
 		s.staged.NativeDialogs, func(on bool) {
 			next := s.staged
 			next.NativeDialogs = on
@@ -659,76 +687,74 @@ func (s *settingsState) optionsRow() widget.Component {
 	// borders and nothing happened. Untouched, the staged preference
 	// stays whatever look.json holds, so applying a theme never turns
 	// client-side frames on behind the user's back.
+	//
+	// It carries the caption buttons with it, and that is the whole of
+	// what is left of a fifth box called "Theme buttons". Where the
+	// buttons of a title bar go was a question about a title bar that
+	// only exists while this box is unticked: with the desktop drawing
+	// the frame there is no toolkit caption to put buttons on, and with
+	// the toolkit drawing it the theme is the only thing on this page
+	// with an opinion about where they go — the Mac's traffic lights on
+	// the left, GNOME's lone close, KDE's window menu. So the rule is
+	// implicit: the toolkit draws the frame, the theme places the
+	// buttons. style.CaptionButtonsPref and app.Application.SetCaptionButtons
+	// stay, because an application may still want to choose; Settings is
+	// what stopped asking. A look.json that already says
+	// "captionButtons" keeps saying it — the staged appearance is
+	// whatever was loaded until a box is touched, and this is the box
+	// that touches it.
 	system := s.option("OS borders", "OS borders: the desktop's title bar and borders",
-		"The desktop draws the title bar and borders of every window, instead of the toolkit.",
+		"The desktop draws the title bar and borders of every window, instead of the toolkit. Unticked, the toolkit draws them and the theme places the caption buttons.",
 		s.staged.Decorations == style.DecorationsSystem, func(on bool) {
 			next := s.staged
-			next.Decorations = style.DecorationsToolkit
+			next.Decorations, next.CaptionButtons = style.DecorationsToolkit, style.CaptionButtonsTheme
 			if on {
-				next.Decorations = style.DecorationsSystem
-			}
-			s.stage(next)
-		})
-	// Where a title bar the toolkit draws puts its caption buttons: the
-	// desktop's layout, or the theme's own (the Mac's traffic lights on
-	// the left). This is the one of the five that is not really an on and
-	// an off but a choice between two layouts, and the only one whose
-	// short word had to be found rather than cut out of the long one:
-	// "Place window buttons as the theme does" shortens to nothing that
-	// is inside it and still says which of the two it means.
-	themeButtons := s.option("Theme buttons", "Theme buttons: the caption buttons where the theme puts them",
-		"Close, minimise and maximise where the theme's era put them, instead of in the desktop's order.",
-		s.staged.CaptionButtons == style.CaptionButtonsTheme, func(on bool) {
-			next := s.staged
-			next.CaptionButtons = style.CaptionButtonsDesktop
-			if on {
-				next.CaptionButtons = style.CaptionButtonsTheme
+				next.Decorations, next.CaptionButtons = style.DecorationsSystem, style.CaptionButtonsDesktop
 			}
 			s.stage(next)
 		})
 
+	glyphs, shape := s.choosers()
 	// The order is the order they are read, and the fold follows from
-	// it: all five stand on one line in the 697-pixel row of a 1024x860
-	// window, with six pixels to spare, and the 453-pixel row of a
-	// 720x520 one takes the first three and gives the last two a second
-	// line. The frame pair stay next to each other across that fold —
-	// the desktop's frame first, because the theme's button places only
-	// mean anything while the toolkit is drawing the frame itself. ("OS
-	// open/save dialogs" is the widest of the five, wider than the
-	// "System file dialogs" it replaced; "OS borders" is enough narrower
-	// than "System frames" to pay for it, so the row came in by two
-	// pixels rather than out.)
-	row := widgets.NewWrap(motion, native, system, themeButtons, colours)
+	// it: the four options fill the 697-pixel row of a 1024x860 window
+	// and the two chooser groups fall onto a second line; the 453-pixel
+	// row of a 720x520 one takes the first three options, then the
+	// fourth with the icons beside it, then the corners.
+	row := widgets.NewWrap(motion, native, system, colours, glyphs, shape)
 	row.Gap = 8
+	// Closer between the lines than along them: a block that folds has
+	// to read as one block and not as rows of unrelated furniture.
+	row.LineGap = 4
+	// Named for the options that lead it; the three choosers after them
+	// carry their own names, each with the word in front of it in the
+	// tree as the static text it is.
 	row.SetAccessibleName(settingsSections[sectionBehaviour])
 	return row
 }
 
-// ---- what the preview sets ----------------------------------------------------
+// ---- what the packs are drawn with ---------------------------------------------
 
-// previewControls are the settings the previewed window carries on a bar
-// of its own instead of showing what someone else chose: the icon set,
-// the size its glyphs are drawn at, and the shape of its corners.
+// choosers are the three settings that are not an on and an off: the
+// icon set, the size its glyphs are drawn at, and the shape of the
+// window's corners. Each stands behind the word that says what it sets.
+//
+// They come back as two children of the wrapping row, not six, because a
+// child of that row is what never folds down the middle of itself: the
+// set and the size are one question about what is drawn, the shape of
+// the window is another, and the pair must not be split by a line break
+// any more than a word may be split from its box. It is the same seam
+// the divider marked when these three rode on a bar inside the preview.
 //
 // They were a section called Shape and weight in the column on the left,
 // with a strip of fifteen glyphs under them to show what a set draws.
 // The strip was a picture of a tool bar; the preview has a real one,
 // drawn in the staged set at the staged size, so the strip had nothing
-// left to say and went. Corners came too, because a corner style is the
-// shape of a window and the window is here.
-//
-// All three are combo boxes on one bar now, each behind the word that
-// says what it sets. The set and the size spent a release at the far end
-// of the sample's own tool bar, where they were mistaken for the
-// sample's own style and size boxes, and corners spent it in the
-// sample's View menu, where the owner of this toolkit could not find
-// them at all. A menu hides; a labelled bar does not.
-func (s *settingsState) previewControls() PreviewControls {
-	if s.plain {
-		// Pictures only: the window in the pane is the sample and
-		// nothing else. See [SettingsOptions].
-		return PreviewControls{}
-	}
+// left to say and went. It has not come back: the preview's tool bar is
+// still drawn in whatever the chooser says — the whole previewed window
+// is, through its theme scope — so what shows a set is still a bar full
+// of that set's icons, and it is a bar of the size the size chooser
+// says, which a strip of loose glyphs never was.
+func (s *settingsState) choosers() (glyphs, shape widget.Component) {
 	s.iconSets = append(style.ListBuiltinIconSets(), style.ListUserIconSets()...)
 	names := make([]string, len(s.iconSets))
 	for i, set := range s.iconSets {
@@ -742,23 +768,24 @@ func (s *settingsState) previewControls() PreviewControls {
 		next.Icons = s.iconSets[i].Name
 		s.stage(next)
 	})
-	// A tool bar item, not a form field: it fits its longest set name and
-	// no more, so that all three choosers and their words stay on a bar
-	// as narrow as the 720-pixel window gives it.
+	// It fits its longest set name and no more: three choosers and their
+	// words share a line with four check boxes, and a combo box that
+	// measured itself at the stock 160 would fold the block a line
+	// further at every window size.
 	s.iconPick.MinWidth = 1
-	// The word on the bar is "Icons"; what a screen reader says is the
+	// The word on the page is "Icons"; what a screen reader says is the
 	// same word, because a name that disagreed with the one on the
 	// screen would be two names for one control.
 	s.iconPick.SetAccessibleName("Icons")
-	s.iconPick.Tip = "Icon set — a real setting. This window's tools are drawn in it; the rest of it is a sample."
+	s.iconPick.Tip = "Icon set — a real setting. The preview's tools are drawn in it; the rest of that window is a sample."
 	s.iconPick.SetAccessibleDescription(s.iconPick.Tip)
 
 	// The size is beside the set because it is not a separate choice: a
 	// set's glyphs are drawn at it, some sets are made for one end of the
-	// range, and a bar that showed a fixed size would be showing
+	// range, and a page that showed a fixed size would be showing
 	// something the user is not going to get. It lists the pixel sizes
-	// rather than Small / Medium / Large because it is a size box on a
-	// tool bar, where every application has written the number since the
+	// rather than Small / Medium / Large because it is a size box beside
+	// a set, where every application has written the number since the
 	// first word processor.
 	s.iconSize = widgets.NewComboBox(iconSizeNames(), iconSizeIndex(s.staged.IconSize), func(i int) {
 		next := s.staged
@@ -766,8 +793,8 @@ func (s *settingsState) previewControls() PreviewControls {
 		s.stage(next)
 	})
 	s.iconSize.MinWidth = 1
-	// "Size" on the bar, "Icon size" to a screen reader: the bar's word
-	// is short because the chooser it names is the second half of a
+	// "Size" on the page, "Icon size" to a screen reader: the visible
+	// word is short because the chooser it names is the second half of a
 	// pair, and the spoken name carries the half the eye gets from where
 	// the box stands. The one contains the other, which is the rule —
 	// the visible word must be in the spoken name, never beside it.
@@ -779,8 +806,7 @@ func (s *settingsState) previewControls() PreviewControls {
 	// preview's View ▸ Window corners, which is where an application has
 	// always kept what its window looks like — and which nobody opened,
 	// because a preview's menus are the one part of it a reader takes for
-	// make-believe. It is the third box on the bar now, and it is a
-	// setting of the same kind as the other two: one word, one chooser.
+	// make-believe.
 	s.corners = widgets.NewComboBox(cornerNames(), cornerIndex(s.staged.Corners), func(i int) {
 		if i < 0 || i >= len(cornerStyles) {
 			return
@@ -791,11 +817,31 @@ func (s *settingsState) previewControls() PreviewControls {
 	})
 	s.corners.MinWidth = 1
 	s.corners.SetAccessibleName("Window corners")
-	s.corners.Tip = "Window corners — a real setting: the pack's own shape, round, or square. This window is drawn with it."
+	s.corners.Tip = "Window corners — a real setting: the pack's own shape, round, or square. The previewed window is drawn with it."
 	s.corners.SetAccessibleDescription(s.corners.Tip)
 
-	return PreviewControls{Icons: s.iconPick, IconSize: s.iconSize, Corners: s.corners}
+	// A word sits close to the box it names and further from the one
+	// before it — six pixels one side, fourteen the other — so that the
+	// three read as three settings rather than six controls. The gap
+	// between the two groups is the row's own eight plus six carried on
+	// the first group's right edge, which makes it the same fourteen; on
+	// the group's right rather than the second group's left, because a
+	// line the corners start is a line that must start at the margin.
+	pair := func(word string, box *widgets.ComboBox) widget.Component {
+		return widgets.NewRow(widgets.NewLabel(word), box).WithGap(6).WithAlign(layout.AlignCenter)
+	}
+	glyphs = widgets.NewRow(pair(settingWords[0], s.iconPick), pair(settingWords[1], s.iconSize)).
+		WithGap(14).WithAlign(layout.AlignCenter).WithPadding(0, 0, 6, 0)
+	shape = pair(settingWords[2], s.corners)
+	return glyphs, shape
 }
+
+// settingWords are the words in front of the three choosers, in their
+// order. They are short because they share a line with four check boxes
+// in a pane as narrow as 453 logical pixels, and each one is the
+// beginning of what its chooser is called to a screen reader ("Icons",
+// "Icon size", "Window corners") rather than another name for it.
+var settingWords = [3]string{"Icons", "Size", "Corners"}
 
 // ---- Files --------------------------------------------------------------------
 
@@ -808,13 +854,23 @@ func (s *settingsState) previewControls() PreviewControls {
 // height, and a path in a pane 700 pixels wide needs one row and says
 // what it is by its own name.
 //
+// Three lines and no box. It was a group box with "Files" on its legend,
+// and the legend and the frame cost 43 of the 101 pixels the block took
+// — 43 pixels off the window the page is about, to put a word over three
+// lines each of which is a name and a path and so says what it is by
+// being one. It is the same call the Theme legend lost in the column on
+// the left: a group box's legend names a group, and three paths under a
+// preview are not a group anyone has to be told about. The pixels went
+// to the preview, which is what paid for the choosers that came out of
+// it.
+//
 // A name and the path, three times over, and nothing else: Delete icon
 // set… rode at the end of the icons line for a release and is gone. It
 // was the last thing left of the old Packs page, it acted on a set
-// chosen two inches away on the preview's own bar, and it put a button
-// that destroys a directory on the one part of the page that was meant
-// to change nothing. style.DeleteUserIconSet is still there for an
-// application that wants it.
+// chosen two inches away, and it put a button that destroys a directory
+// on the one part of the page that was meant to change nothing.
+// style.DeleteUserIconSet is still there for an application that wants
+// it.
 func (s *settingsState) filesSection() widget.Component {
 	line := func(name, path string) widget.Component {
 		// A label, not a text box: a box that can be selected from keeps
@@ -829,15 +885,14 @@ func (s *settingsState) filesSection() widget.Component {
 		row.AddFlex(v, 1)
 		return row
 	}
-	panel := widgets.NewPanel(settingsSections[sectionFiles],
+	// Three lines of one thing each: two pixels between them, because the
+	// eight a column puts between its children are for paragraphs, not
+	// for a table.
+	return widgets.NewColumn(
 		line("Prefs", style.AppearancePath()),
 		line("Themes", style.ThemesDir()+"/<name>/theme.json"),
 		line("Icons", style.IconsDir()+"/<set>/*.png"),
-	)
-	// Three lines of one thing each: the 8 pixels a panel puts between
-	// its children are for paragraphs, not for a table.
-	panel.Content().WithGap(2)
-	return panel
+	).WithGap(2)
 }
 
 // shortPath is a path with the user's home written as ~, the way a shell
@@ -856,25 +911,21 @@ func shortPath(p string) string {
 
 // previewColumn is the right-hand side and the whole reason the page is
 // shaped this way: the staged pack drawn as a small but entirely live
-// application — and one that carries, on a labelled bar over its menu
-// bar, the three settings it is itself the answer to: the icon set, the
-// icon size and the shape of its corners.
+// application, frame and caption and every control.
 //
-// Three things are in this pane, in the order they are read: the five
-// options, over the window, because the first of them decides which pack
-// the window below it draws and the other four decide what the apps
-// drawn in it will do; the window; and where the files are, under it,
-// because that is where what the window shows ends up. The options are
-// one row that folds to two in a narrow pane and the paths are three
-// lines, and neither scrolls: the window takes every pixel the two of
-// them leave, at every window size, which is the promise this page has
-// always made about its right-hand side. Nothing else is allowed in
-// here — the strip of fifteen glyphs was tried above the window and
-// folded onto four lines at the 720x520 minimum, leaving the preview a
-// caption and a menu bar.
+// Three things are in this pane, in the order they are read: the block
+// of settings, over the window, because they are what it is drawing;
+// the window; and where the files are, under it, because that is where
+// what the window shows ends up. The settings are one row that folds and
+// the paths are three lines, and neither scrolls: the window takes every
+// pixel the two of them leave, at every window size, which is the
+// promise this page has always made about its right-hand side. Nothing
+// else is allowed in here — the strip of fifteen glyphs was tried above
+// the window and folded onto four lines at the 720x520 minimum, leaving
+// the preview a caption and a menu bar.
 func (s *settingsState) previewColumn() widget.Component {
 	options := s.optionsRow()
-	s.previewBox = widgets.NewPanel("", PreviewAppWith(nil, s.previewControls()))
+	s.previewBox = widgets.NewPanel("", PreviewAppWith(nil, s.previewOptions()))
 	s.previewBox.Window = true
 	preview := s.scoped(s.previewBox)
 	col := widgets.NewColumn(options, preview, s.filesSection()).WithGap(8)
@@ -882,12 +933,25 @@ func (s *settingsState) previewColumn() widget.Component {
 	return col
 }
 
-// showStagedControls puts the staged appearance back into the controls
-// the preview carries. The bars and the window follow the staged look
-// through the preview's scope, but what the three choosers show is
-// Settings' own and has to be told — and told whoever staged it, not
-// only the controls themselves. Picking a pack in the browser, -stage,
-// Apply and a desktop light / dark change all come through here.
+// previewOptions is what Settings lends the sample: which file dialog its
+// File menu should open, read from the *staged* setting every time the
+// menu is used rather than captured when the page was built, so that
+// ticking the box and going straight to File ▸ Open… shows what was
+// ticked. A plain preview lends it nothing and is make-believe all
+// through.
+func (s *settingsState) previewOptions() PreviewOptions {
+	if s.plain {
+		return PreviewOptions{}
+	}
+	return PreviewOptions{NativeDialogs: func() bool { return s.staged.NativeDialogs }}
+}
+
+// showStagedControls puts the staged appearance back into the three
+// choosers. The previewed window follows the staged look through its
+// scope, but what a chooser shows is Settings' own and has to be told —
+// and told whoever staged it, not only the chooser itself. Picking a
+// pack in the browser, -stage, Apply and a desktop light / dark change
+// all come through here.
 func (s *settingsState) showStagedControls() {
 	if s.corners != nil {
 		if i := cornerIndex(s.staged.Corners); i != s.corners.Selected {
@@ -1016,71 +1080,54 @@ func (s *settingsState) shownPack() style.ThemePack {
 	return pack
 }
 
-// PreviewControls are the parts of the preview that are not a sample.
-// Everything else in the previewed application is make-believe — Send
-// sends nothing, the tree lists a mailbox nobody has — but these are the
-// real settings of the desktop, and the window they stand in is drawn
-// with them. Left empty, the preview is the sample it has always been.
-//
-// They go on a bar of their own at the head of the window, above the
-// sample's menu bar, each behind a short word ([PreviewSettingsWords]).
-type PreviewControls struct {
-	// Icons chooses the icon set the window's tools are drawn in,
-	// IconSize the pixel size of their glyphs, and Corners the shape of
-	// the window itself. Any may be nil; all three nil is no bar.
-	Icons, IconSize, Corners widget.Component
+// PreviewOptions is what the application showing the preview lends it.
+// Everything in the previewed window is make-believe — Send sends
+// nothing, the tree lists a mailbox nobody has, the check boxes tick
+// themselves — with one exception, and this is how the exception is
+// handed in. Left empty, the preview is the sample it has always been.
+type PreviewOptions struct {
+	// NativeDialogs, when it is not nil, makes the sample's File ▸ Open…
+	// and Save… (and the Open and Save on its tool bar) open a real file
+	// dialog, and says which one: the desktop's own, through the XDG
+	// portal, when it returns true, and the toolkit's themed one when it
+	// returns false. That is the "OS open/save dialogs" option made
+	// visible — the one of Settings' options whose effect is a window
+	// nobody can picture from four words — and it is a preview in the
+	// strict sense: the dialog reads a directory and nothing else, and
+	// the path it comes back with is said on the sample's status bar and
+	// dropped.
+	//
+	// It is a function, not a bool, because the answer has to be the
+	// *staged* setting at the moment the menu is used. Settings has not
+	// applied anything yet, so the process-wide style.NativeDialogs()
+	// still holds what look.json said when it started; a preview that
+	// asked that would be previewing the applied setting, which is the
+	// one thing it must not do.
+	NativeDialogs func() bool
 }
 
-// PreviewSettingsWords are the words on that bar, in its order: the
-// label in front of each chooser. They are short because the bar is as
-// narrow as the preview pane of a 720-pixel window, and each one is the
-// beginning of what its chooser is called to a screen reader ("Icons",
-// "Icon size", "Window corners") rather than another name for it.
-var PreviewSettingsWords = [3]string{"Icons", "Size", "Corners"}
-
-// settingsBar is that bar: the live settings, over the sample's own menu
-// bar and tool bar.
+// showPreviewDialog opens the file dialog native asks for.
 //
-// Over, not under. The sample's tool bar belongs where a tool bar
-// belongs, under the menu bar of the window it commands, and a second
-// strip below it would read as the same application's second row of
-// tools — which is exactly the mistake the last arrangement invited,
-// when the two choosers rode at the end of the sample's own bar and were
-// taken for its style and size boxes. Nothing in any application sits
-// above its menu bar, so a strip that does is not the application's; it
-// is the frame around it, in the same voice as the caption over it,
-// which does not say a document's name either but "Preview — Windows
-// 95". The seam is clean: caption and settings bar are Settings talking,
-// and everything from the menu bar down is the sample.
-//
-// Each chooser carries a word. The bar sheds them from the right as it
-// narrows and keeps the choosers whole, so at the smallest window the
-// three boxes stand on their own with their tooltips — see the tool bar
-// rule in [widgets.ToolStretch].
-func settingsBar(ctl PreviewControls) *widgets.ToolBar {
-	boxes := [3]widget.Component{ctl.Icons, ctl.IconSize, ctl.Corners}
-	var items []*widgets.ToolItem
-	for i, box := range boxes {
-		if box == nil {
-			continue
-		}
-		if i == 2 && len(items) > 0 {
-			// The set and the size are one question about what is drawn;
-			// the shape of the window is another.
-			items = append(items, widgets.ToolDivider())
-		}
-		items = append(items, widgets.ToolLabel(PreviewSettingsWords[i]), widgets.ToolWidget(box))
+// It is a variable so that a test can see which dialog was asked for. It
+// cannot see it any other way: there is no portal on a test's private
+// bus, so the desktop's dialog would silently fall back to the toolkit's
+// and both branches would end in the same window.
+var showPreviewDialog = func(from widget.Component, native bool, opts widgets.FileDialogOptions) {
+	if native {
+		// ShowFileDialog asks the portal and falls back to the toolkit's
+		// own dialog when the desktop has none, which is exactly what
+		// the setting promises.
+		opts.Native = true
+		widgets.ShowFileDialog(from, opts)
+		return
 	}
-	if len(items) == 0 {
-		return nil
-	}
-	// The free space is what makes the bar fill the window's width and
-	// what lets it shed a word when it cannot: a bar without one is only
-	// as wide as its items and drops nothing.
-	items = append(items, widgets.ToolStretch())
-	bar := widgets.NewToolBar(items...)
-	bar.SetAccessibleName("Appearance")
-	return bar
+	// The staged setting says the themed dialog — and ShowFileDialog
+	// would hand this one to the portal all the same, because it ORs
+	// style.NativeDialogs(), which is process-wide and still says what
+	// was applied. Untick the box on a desktop whose dialogs are applied
+	// and the preview would go on opening KDE's. Building the dialog is
+	// the published way to say "this one, whatever the process thinks".
+	widgets.NewFileDialog(opts).Show(from)
 }
 
 // PreviewApp is a small, fully interactive application used to preview a
@@ -1088,27 +1135,62 @@ func settingsBar(ctl PreviewControls) *widgets.ToolBar {
 // tree, a table and a status bar. Nothing in it does anything outside
 // itself. Settings shows it inside a ThemeScope.
 func PreviewApp(say func(string)) widget.Component {
-	return PreviewAppWith(say, PreviewControls{})
+	return PreviewAppWith(say, PreviewOptions{})
 }
 
-// PreviewAppWith is [PreviewApp] carrying controls of the application
-// that shows it: settings the previewed window is itself the answer to.
-// Settings passes the icon set, the icon size and the corner style, and
-// they stand on a bar of their own over the sample's menu bar, so that
-// the tools a set is chosen on are drawn in it and the window whose
-// corners are chosen is the window they round.
-func PreviewAppWith(say func(string), ctl PreviewControls) widget.Component {
+// PreviewAppWith is [PreviewApp] with the one thing in it the showing
+// application lends it: the file dialog its File menu opens. See
+// [PreviewOptions].
+func PreviewAppWith(say func(string), opt PreviewOptions) widget.Component {
 	// The preview's own status bar is where what it says goes when the
 	// caller wants it nowhere else: Settings has no status bar of its own.
 	sb := widgets.NewStatusBar("Ready", "Ln 1, Col 1", "100%")
 	if say == nil {
 		say = func(msg string) { sb.Set(0, msg) }
 	}
+	// File ▸ Open… and Save… are the one thing in this window that is not
+	// make-believe: they open the file dialog the staged "OS open/save
+	// dialogs" setting asks for, so that the option can be looked at
+	// instead of read. host is the window they open over — it is inside
+	// the preview's theme scope, so the toolkit's own dialog comes up in
+	// the pack being staged, which is the other half of what there is to
+	// see. Nothing is read and nothing is written: the path that comes
+	// back is said on the status bar and dropped.
+	var host widget.Component
+	files := func(mode widgets.FileDialogMode) {
+		what := "Open"
+		if mode == widgets.FileSave {
+			what = "Save"
+		}
+		if opt.NativeDialogs == nil || host == nil {
+			// A plain preview, or [PreviewApp]: the sample says what was
+			// asked of it, the way Send and About do.
+			say(what)
+			return
+		}
+		start, err := os.UserHomeDir()
+		if err != nil || start == "" {
+			start = "."
+		}
+		showPreviewDialog(host, opt.NativeDialogs(), widgets.FileDialogOptions{
+			// The title says so in both dialogs, the desktop's included:
+			// a file chooser that has opened over an editor of themes is
+			// the one place a person would reasonably expect a file to be
+			// opened.
+			Title: what + " — preview only",
+			Path:  start,
+			Mode:  mode,
+			OnPick: func(p string) {
+				say(what + " " + shortPath(p) + " — a preview: nothing was read or written")
+			},
+			OnCancel: func() { say(what + " cancelled") },
+		})
+	}
 	menu := widgets.NewMenuBar(
 		widgets.NewMenu("&File",
 			widgets.ItemIconAccel(style.IconNew, "&New", "Ctrl+N", func() { say("New") }),
-			widgets.ItemIconAccel(style.IconOpen, "&Open…", "Ctrl+O", func() { say("Open") }),
-			widgets.ItemIconAccel(style.IconSave, "&Save", "Ctrl+S", func() { say("Save") }),
+			widgets.ItemIconAccel(style.IconOpen, "&Open…", "Ctrl+O", func() { files(widgets.FileOpen) }),
+			widgets.ItemIconAccel(style.IconSave, "&Save", "Ctrl+S", func() { files(widgets.FileSave) }),
 			widgets.Sep(),
 			widgets.Item("E&xit", func() { say("Exit") }),
 		),
@@ -1126,15 +1208,19 @@ func PreviewAppWith(say func(string), ctl PreviewControls) widget.Component {
 	bold := widgets.ToolIconBtn(style.IconPen, "", nil)
 	bold.Toggle, bold.Down = true, true
 	// The sample's own bar, and nothing but: eight commands in three
-	// groups, the way a text editor's is. Paste is back beside Cut and
-	// Copy — it was the button the choosers cost this bar when they rode
-	// at the end of it, and a clipboard group of two was a group with a
-	// hole in it. The bar is drawn in the staged set at the staged size,
-	// which is what makes it the preview of them.
+	// groups, the way a text editor's is. It is the bar it was before the
+	// choosers rode at the end of it and cost it Paste, and nothing has
+	// been added to fill the room they left — a tool bar is not a shelf,
+	// and eight commands in three groups is what this sample does. The
+	// bar is drawn in the staged set at the staged size, which is what
+	// makes it the preview of both.
+	//
+	// Open and Save are the menu's Open and Save: a tool button and the
+	// item it doubles are one command, so they open the same dialog.
 	tools := widgets.NewToolBar(
 		widgets.ToolIconBtn(style.IconNew, "", func() { say("New") }),
-		widgets.ToolIconBtn(style.IconOpen, "", func() { say("Open") }),
-		widgets.ToolIconBtn(style.IconSave, "", func() { say("Save") }),
+		widgets.ToolIconBtn(style.IconOpen, "", func() { files(widgets.FileOpen) }),
+		widgets.ToolIconBtn(style.IconSave, "", func() { files(widgets.FileSave) }),
 		widgets.ToolDivider(),
 		widgets.ToolIconBtn(style.IconCut, "", nil),
 		widgets.ToolIconBtn(style.IconCopy, "", nil),
@@ -1222,19 +1308,14 @@ func PreviewAppWith(say func(string), ctl PreviewControls) widget.Component {
 	// The sample's own furniture is flush, the way a window's is: a menu
 	// bar, the tool bar under it, the document, the status bar at the
 	// foot, with no air between them. (There were eight pixels between
-	// each for a long time. No window has those, and they were the room
-	// the settings bar needed.)
+	// each for a long time. No window has those.)
 	sample := widgets.NewColumn(menu, tools, tabs, sb).WithGap(0)
 	sample.AddFlex(tabs, 1)
-	bar := settingsBar(ctl)
-	if bar == nil {
-		return sample
-	}
-	// And that gap is what the settings bar stands in: it is not part of
-	// the window under it, so it does not touch it.
-	win := widgets.NewColumn(bar, sample)
-	win.AddFlex(sample, 1)
-	return win
+	// The window a dialog opens over, now that there is a window: the
+	// column is inside the preview's theme scope, so the dialog wears the
+	// staged pack.
+	host = sample
+	return sample
 }
 
 func previewTree() *widgets.TreeNode {

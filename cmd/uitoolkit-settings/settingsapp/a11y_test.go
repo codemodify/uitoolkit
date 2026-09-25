@@ -29,8 +29,8 @@ func TestSettingsIsAccessible(t *testing.T) {
 	tree := a11ytest.Audit(t, "settings", s.AccessibleTree())
 
 	// The theme browser and the preview's own lists; the decade filter,
-	// the three choosers on the preview's settings bar and the preview's
-	// own sample combo box.
+	// the three choosers over the preview and the preview's own sample
+	// combo box.
 	if a11ytest.Count(tree, a11y.RoleList) < 1 || a11ytest.Count(tree, a11y.RoleComboBox) < 5 {
 		t.Errorf("settings: lists %d, combos %d",
 			a11ytest.Count(tree, a11y.RoleList), a11ytest.Count(tree, a11y.RoleComboBox))
@@ -45,13 +45,16 @@ func TestSettingsIsAccessible(t *testing.T) {
 	}
 	// The words in front of them are in the tree as the static text they
 	// are, and each is the beginning of the name of the chooser it
-	// stands for: a screen reader reads out what the screen says.
-	for _, word := range PreviewSettingsWords {
+	// stands for: a screen reader reads out what the screen says. They
+	// are promised now, which they were not while these three rode on a
+	// tool bar inside the preview: a bar sheds its words when it runs out
+	// of room, and at the 720x520 minimum it shed all three.
+	for _, word := range settingWords {
 		if a11ytest.Find(tree, a11y.RoleLabel, word) == nil {
-			t.Errorf("settings: the word %q is not on the preview's settings bar", word)
+			t.Errorf("settings: the word %q is not on the page", word)
 		}
 	}
-	// The five options over the preview are check boxes, and each is in
+	// The four options over the preview are check boxes, and each is in
 	// the tree under the name that says in full what the short word on it
 	// means: the word is what the eye gets, the name is what the ear
 	// gets, and the one contains the other.
@@ -59,12 +62,16 @@ func TestSettingsIsAccessible(t *testing.T) {
 		"Animations",
 		"OS open/save dialogs: the desktop's own Open and Save",
 		"OS borders: the desktop's title bar and borders",
-		"Theme buttons: the caption buttons where the theme puts them",
 		"OS colors: follow the desktop's light or dark mode and its accent",
 	} {
 		if a11ytest.Find(tree, a11y.RoleCheckBox, name) == nil {
 			t.Errorf("settings: no %q check box in the tree", name)
 		}
+	}
+	// And the fifth is gone with its box: where the caption buttons go
+	// follows "OS borders" now.
+	if a11ytest.Find(tree, a11y.RoleCheckBox, "Theme buttons: the caption buttons where the theme puts them") != nil {
+		t.Error("settings: the Theme buttons check box is back in the tree")
 	}
 	// The theme browser is a named list and the search field beside it is
 	// a named text field. Nothing on the screen says what the column is
@@ -106,20 +113,23 @@ func TestSettingsIsAccessible(t *testing.T) {
 		}
 	}
 	// The preview's tool bar is named buttons, so the set it is drawn in
-	// is not a mystery to a screen reader either, and both bars are in
-	// the tree: the sample's tools and the settings over them.
+	// is not a mystery to a screen reader either.
 	for _, name := range []string{"New", "Save", "Paste", "Send"} {
 		if a11ytest.Find(tree, a11y.RoleButton, name) == nil {
 			t.Errorf("settings: the preview's tool bar has no %s button", name)
 		}
 	}
-	if a11ytest.Count(tree, a11y.RoleToolBar) < 2 {
-		t.Error("settings: the preview's two bars are not both in the tree")
+	// And it is the only bar in the tree: the Appearance bar that stood
+	// over the sample's menu bar for a release is gone, and the three
+	// choosers that were on it are on the page.
+	if n := a11ytest.Count(tree, a11y.RoleToolBar); n != 1 {
+		t.Errorf("settings: %d tool bars in the tree, want the sample's own", n)
 	}
-	for _, name := range []string{"Tools", "Appearance"} {
-		if a11ytest.Find(tree, a11y.RoleToolBar, name) == nil {
-			t.Errorf("settings: no %s bar in the tree", name)
-		}
+	if a11ytest.Find(tree, a11y.RoleToolBar, "Tools") == nil {
+		t.Error("settings: no Tools bar in the tree")
+	}
+	if a11ytest.Find(tree, a11y.RoleToolBar, "Appearance") != nil {
+		t.Error("settings: the Appearance bar is back inside the preview")
 	}
 
 	// Nothing on this page is behind a scroll offset: the column does not

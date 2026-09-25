@@ -71,18 +71,15 @@ func TestSettingsPreviewIsTheWholeRightPane(t *testing.T) {
 	if insidePreview(follow) {
 		t.Error("the colours option is inside the preview's theme scope")
 	}
-	files := findPanelTitled(w.Content(), "Files")
-	if files == nil {
-		t.Fatal("no Files block")
-	}
+	files := filesBlock(t, w)
 	if inBrowserColumn(w.Content(), files) || inBrowserColumn(w.Content(), follow) {
-		t.Error("the options row or Files is back in the browser column")
+		t.Error("the options row or the paths are back in the browser column")
 	}
 	if widget.DeviceOrigin(follow).Y >= widget.DeviceOrigin(preview).Y {
 		t.Error("the options row is not over the preview")
 	}
 	// And the column beside them is the theme browser and nothing else.
-	for _, word := range []string{"Animations", "OS open/save dialogs", "OS borders", "Theme buttons"} {
+	for _, word := range []string{"Animations", "OS open/save dialogs", "OS borders", "OS colors"} {
 		box := findOption(w.Content(), word)
 		if box == nil {
 			t.Fatalf("no %q option on the page", word)
@@ -213,10 +210,11 @@ func TestSettingsThemeSearch(t *testing.T) {
 
 // Tab walks the whole of Settings. There is one page, so one ring has to
 // hold all of it: the search field, the decade filter and the theme list
-// down the column, the Export under them, the five options and every
-// chooser beside them, the live preview under those, and Apply. A check
-// box in a wrapping row is a stop like any other — a row that folded its
-// last two onto a second line must not have folded them out of the ring.
+// down the column, the Export under them, the four options and the three
+// choosers beside them, the live preview under those, and Apply. A
+// control in a wrapping row is a stop like any other — a row that folded
+// its last children onto another line must not have folded them out of
+// the ring.
 //
 // The column is four stops now and Export is the last of them: Delete
 // theme… was the fifth and is gone.
@@ -245,19 +243,19 @@ func TestSettingsKeyboardReachesEverything(t *testing.T) {
 		t.Fatalf("the focus ring is only %d stops long", len(ring))
 	}
 	want := map[string]bool{
-		"search":        false,
-		"themes":        false,
-		"decade":        false,
-		"icon set":      false,
-		"icon size":     false,
-		"export":        false,
-		"animations":    false,
-		"colours":       false,
-		"file dialogs":  false,
-		"system frame":  false,
-		"theme buttons": false,
-		"preview":       false,
-		"apply":         false,
+		"search":       false,
+		"themes":       false,
+		"decade":       false,
+		"icon set":     false,
+		"icon size":    false,
+		"corners":      false,
+		"export":       false,
+		"animations":   false,
+		"colours":      false,
+		"file dialogs": false,
+		"system frame": false,
+		"preview":      false,
+		"apply":        false,
 	}
 	for _, c := range ring {
 		switch v := c.(type) {
@@ -277,6 +275,8 @@ func TestSettingsKeyboardReachesEverything(t *testing.T) {
 				want["icon size"] = true
 			case "Decade":
 				want["decade"] = true
+			case "Window corners":
+				want["corners"] = true
 			}
 		case *widgets.Checkbox:
 			// The five over the preview; the previewed application's own
@@ -290,8 +290,6 @@ func TestSettingsKeyboardReachesEverything(t *testing.T) {
 				want["file dialogs"] = true
 			case "OS borders":
 				want["system frame"] = true
-			case "Theme buttons":
-				want["theme buttons"] = true
 			}
 		case *widgets.Button:
 			switch v.Text {
@@ -313,21 +311,25 @@ func TestSettingsKeyboardReachesEverything(t *testing.T) {
 			t.Errorf("Tab never reaches the %s", part)
 		}
 	}
-	// The choosers on the preview's settings bar are stops of their own,
-	// and the bar itself is one: a tool bar that carries a control must
-	// not swallow it.
-	if set, bar := namedCombo(w.Content(), "Icons"), previewSettings(t, w); set != nil {
+	// The three choosers are stops of Settings' own, outside the preview
+	// and outside the column: a chooser that only the mouse can reach is
+	// a setting half the users of this page cannot change.
+	for _, name := range []string{"Icons", "Icon size", "Window corners"} {
+		cb := namedCombo(w.Content(), name)
+		if cb == nil {
+			t.Fatalf("no %q chooser on the page", name)
+		}
 		seen := false
 		for _, c := range ring {
-			if c == widget.Component(set) {
+			if c == widget.Component(cb) {
 				seen = true
 			}
 		}
 		if !seen {
-			t.Error("Tab never reaches the icon chooser on the preview's settings bar")
+			t.Errorf("Tab never reaches the %q chooser", name)
 		}
-		if set.Parent() != widget.Component(bar) {
-			t.Errorf("the icon chooser is not on the settings bar but in %T", set.Parent())
+		if insidePreview(cb) || inBrowserColumn(w.Content(), cb) {
+			t.Errorf("the %q chooser is inside the preview or in the browser column", name)
 		}
 	}
 	// Apply is at the foot of the window, outside the browser column and

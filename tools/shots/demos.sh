@@ -1,7 +1,7 @@
 #!/bin/bash
 # demos.sh [DIR] — the README's pictures of the demos, rendered headless
 # with the apps' own -shot flags: every page of the tour (a still each and
-# one contact sheet) and Settings with the gallery under its preview. DIR
+# one contact sheet) and Settings, one page, in the default look. DIR
 # defaults to docs/screenshots.
 #
 # The player stills (minim.webp, marquee.webp, lantern.webp) used to be made
@@ -32,6 +32,7 @@ for f in "$WORK"/tour/tour-*.png; do
 done
 webp "$WORK/tour-pages.png" "$DEST/tour-pages.webp"
 
-# Settings: the theme browser, the preview and the gallery, in the default look.
+# Settings: the theme browser, the row of settings and the preview, in the
+# default look.
 headless "$WORK/bin/uitoolkit-settings" -screenshot "$WORK/settings.png"
 webp "$WORK/settings.png" "$DEST/settings.webp"

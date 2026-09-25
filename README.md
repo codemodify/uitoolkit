@@ -297,16 +297,17 @@ repository.
 
 ### Settings — the theme browser
 
-![Settings: the theme browser, the row of options and the live preview beside them](docs/screenshots/settings.webp)
+![Settings: the theme browser, the row of settings and the live preview beside them](docs/screenshots/settings.webp)
 
 Search or filter 129 packs, and the one you pick is drawn at once as a
 live application window beside the list — frame, caption and every
-control — in a splitter you can size. That window is also where its icon
-set, its icon size and its corner style are chosen: the thing that shows
-a setting is the thing that sets it. The column beside it is four bare
-controls — search, decade filter, the list, Export — with no heading over
-them and no group box around them, and the list runs to the foot of the
-window. See **[docs/settings.md](docs/settings.md)**.
+control — in a splitter you can size. Over that window, in one row that
+folds, is everything you can change: four check boxes and then the icon
+set, the icon size and the corner style the window is drawn with. The
+column beside it is four bare controls — search, decade filter, the list,
+Export — with no heading over them and no group box around them, and the
+list runs to the foot of the window. See
+**[docs/settings.md](docs/settings.md)**.
 
 ### Files — projects dogfood
 
@@ -551,7 +552,7 @@ under.
 | `go run ./examples/uitoolkit-sample-notes` | [`examples/uitoolkit-sample-notes/notesapp`](examples/uitoolkit-sample-notes/notesapp) | A small real app: sortable table, textarea body, priority spinner, file stub, tooltips |
 | `go run ./examples/uitoolkit-sample-inspector` | [`examples/uitoolkit-sample-inspector/inspectorapp`](examples/uitoolkit-sample-inspector/inspectorapp) | Preferences inspector: panels that dock, float and close, a layout remembered between runs with `dock.Host.SaveLayoutFile`, table (JetBrains Mono), toolbar, message box |
 | `go run ./examples/uitoolkit-sample-files` | [`examples/uitoolkit-sample-files/filesapp`](examples/uitoolkit-sample-files/filesapp) | Files / Projects dogfood: tree, table, toolbar, menus, TextArea preview, history, drag and drop, dialogs |
-| `go run ./cmd/uitoolkit-settings` | [`cmd/uitoolkit-settings/settingsapp`](cmd/uitoolkit-settings/settingsapp) | The appearance editor, one page: the theme browser down a column, and beside it a live application window that sets three of the things it shows — its icon set, icon size and corners on a bar of its own — with the five on/off options in a row over it and `look.json` under it. See [docs/settings.md](docs/settings.md) |
+| `go run ./cmd/uitoolkit-settings` | [`cmd/uitoolkit-settings/settingsapp`](cmd/uitoolkit-settings/settingsapp) | The appearance editor, one page: the theme browser down a column, and beside it a live application window with one folding row of settings over it — four on/off options and the icon set, icon size and corners the window is drawn with — and `look.json` under it. See [docs/settings.md](docs/settings.md) |
 
 `examples/uitoolkit-sample-mdi`, `examples/uitoolkit-sample-popups`,
 `examples/uitoolkit-sample-richtext`, `examples/uitoolkit-sample-shapes`,
@@ -770,10 +771,10 @@ not a command — a row with children never fires its own `OnClick`, because
 a host that opens a submenu sends no click for the row it opened it from.
 See [docs/tray.md](docs/tray.md#submenus).
 
-*Settings is one page, and its preview sets what it shows.* The four
-pages behind a sidebar were four answers to one question, so they are one
-page: the theme browser down a column, the live application window
-beside it. The column is the browser and **nothing else**: a search
+*Settings is one page: the browser, the settings and what they make.* The
+four pages behind a sidebar were four answers to one question, so they
+are one page: the theme browser down a column, the live application
+window beside it. The column is the browser and **nothing else**: a search
 field, the decade filter, the list of packs running to the foot of the
 window, and **Export current theme…** — no group box around them, no
 heading over them, no version label, and **no Delete theme…** (a pack is
@@ -781,30 +782,31 @@ a folder; `style.DeleteUserTheme` is still the API, Settings just does
 not offer the button). Nothing on the page scrolls but the list itself,
 inside itself; `-page` still takes every name it ever took and now names
 what is already on screen. `uitoolkit-settings -version` is where the
-version went. Three of its settings are on that window rather than in the
-column — the **icon set**, the **icon size** and the **corner style**
-are combo boxes on a bar of their own at the head of it,
-`Icons [Classic ▾] Size [24 ▾] │ Corners [Theme shape ▾]` — because a
-strip of glyphs standing in for a tool bar, next to a real one, was
-showing a copy of the answer. The bar is **over** the sample's menu bar,
-where no application has ever put a tool bar, which is how it says it is
-Settings' and not the sample's; the two choosers spent a release at the
-free-space end of the sample's own tool bar and were read as the
-sample's own, and the corners spent it in the sample's View menu, where
-nobody found them. Everything left over stands with that window: the
-five on/off options in one row over it —
-`☑ Animations ☐ OS open/save dialogs ☐ OS borders ☐ Theme buttons ☐ OS colors`,
-each short word inside the full name a screen reader says — and the
-three config paths under it. They are check boxes and they fold onto a
-second line rather than shedding, because the right-hand pane is 392
-logical pixels at the smallest window Settings opens to and the preview
-has to stay the biggest thing in it.
-`widgets.ToolWidget`, `widgets.ToolLabel` and `widgets.ToolStretch` are
-what carry a control, its name and free space on a tool bar (Qt's
-`QToolBar::addWidget` with a `QLabel` in front of the box): a bar with
-free space in it fills the width it is given, pins what follows to its
-right edge, and drops its own trailing tools and words rather than
-letting a control fall off the end.
+version went. Everything that is not the browser stands with that window:
+one folding row of settings over it and the three config paths under it.
+The row is four check boxes —
+`☑ Animations ☐ OS open/save dialogs ☐ OS borders ☐ OS colors`, each
+short word inside the full name a screen reader says — and then the three
+choosers that say what a pack is drawn with,
+`Icons [Classic ▾] Size [24 ▾] Corners [Theme shape ▾]`. It folds onto
+**two lines at 1024×860**, the options on the first and the choosers on
+the second, and **three at the 720×520 minimum**; it is one wrapping row
+rather than two fixed ones because two rows fold on their own account and
+cost a fourth line at that minimum, which is a preview that has stopped
+being the biggest thing in its pane. The choosers spent a release on a
+bar inside the previewed window — "the preview configures itself" — and
+they are settings of the page, so they are read where the page keeps its
+settings; the window below is a mock application again, with nothing live
+in its chrome. Where the **caption buttons** of a frame the toolkit draws
+go is no longer a box either: unticking *OS borders* puts them where the
+theme says, because while the toolkit is drawing the frame the theme is
+the only thing with an opinion (`style.CaptionButtonsPref` and
+`Application.SetCaptionButtons` are unchanged for an application that
+wants to choose). The one live thing left in the preview is its **File
+menu**: *Open…* and *Save…* open the dialog *OS open/save dialogs* is
+asking for — the desktop's through the XDG portal, or the toolkit's own
+in the pack being staged — and open nothing, so the option can be looked
+at rather than read.
 
 *Smaller additions from the same source.* `dock.Host.SaveLayoutFile` /
 `LoadLayoutFile` (every docking application had rebuilt the same path

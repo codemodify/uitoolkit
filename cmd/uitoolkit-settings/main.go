@@ -9,18 +9,27 @@
 //
 // Settings is one page: the theme browser down a column on the left,
 // and on the right, never scrolling away, the thing it is browsing for —
-// a small live application window in the staged pack, with the five
-// on/off options in a row over it (Animations, OS open/save dialogs, OS
-// borders, Theme buttons, OS colors) and the three config paths under it.
+// a small live application window in the staged pack, with the settings
+// in a folding row over it and the three config paths under it.
 //
-// The preview sets three of the things it shows: the icon set, the size
-// its glyphs are drawn at and its corner style are combo boxes on a bar
-// of their own over the sample's menu bar, each behind the word that
-// says what it sets — Icons, Size, Corners. Everything else in that
-// window is a sample. The icon chooser lists classic/sharp plus wide
-// premiere PNG sets copied into ~/.config/uitoolkit/icons/<set>/.
-// -plain-preview leaves that bar off, for pictures of the sample alone;
-// nothing can be chosen while it is set.
+// That row is four check boxes — Animations, OS open/save dialogs, OS
+// borders, OS colors — and then the three choosers that say what a pack
+// is drawn with: Icons, Size, Corners. It folds onto two lines at the
+// default window size, the options on the first and the choosers on the
+// second, and onto three at the 720x520 minimum. The icon chooser lists
+// classic/sharp plus wide premiere PNG sets copied into
+// ~/.config/uitoolkit/icons/<set>/.
+//
+// Where the caption buttons of a frame the toolkit draws go is not a box
+// of its own: unticking OS borders puts them where the theme says, which
+// is the only opinion there is once the toolkit is drawing the frame.
+//
+// The window in the pane is a sample, with one exception: its File menu's
+// Open… and Save… open the file dialog OS open/save dialogs is asking
+// for — the desktop's or the toolkit's — so the option can be looked at
+// instead of read. They open nothing: a chosen path is said on the
+// sample's status bar and dropped. -plain-preview takes even that away,
+// for pictures.
 // The column is four bare controls — search, decade filter, the list of
 // packs, Export — with no heading over them and no group box around
 // them: the window's title bar says which application this is, and the
@@ -53,7 +62,7 @@ func main() {
 	shot := flag.String("screenshot", "", "write settings.png into this directory (or file) and exit")
 	stage := flag.String("stage", "", "open with this theme staged in the preview (not applied)")
 	page := flag.String("page", "", "the section of the page you came for: theme (default), behaviour, preview, files — there is one page and nothing on it is under a fold, so the flag names what is already on screen and changes nothing; the old page names themes/appearance/packs/about/desktop still resolve rather than fail")
-	plain := flag.Bool("plain-preview", false, "draw the preview as the sample application alone, without the bar of live settings (for screenshots: nothing can be chosen)")
+	plain := flag.Bool("plain-preview", false, "make the previewed window make-believe all through: its File menu opens no dialog (for screenshots)")
 	showVersion := flag.Bool("version", false, "print the toolkit version and exit")
 	flag.Parse()
 
