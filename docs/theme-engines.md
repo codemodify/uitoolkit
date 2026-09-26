@@ -19,6 +19,7 @@ Engines so far, each a good model for its family:
 | `luna` | Windows XP Luna, Royale | gradients, memoised colours, rebar grips |
 | `aqua`, `platinum` | Mac OS X, Mac OS 8 | gel materials, textures, Mac rules (inactive grey, hollow selections) |
 | `motif` | Motif, CDE, IRIX, HP VUE | colour derivation, shadow thickness per pack |
+| `kde1`, `kde2` | KDE 1, KDE 2 | the thin engine (`kde1` embeds `win95` and replaces only the window) beside the whole one (`kde2` draws HighColor from its own parts) |
 | `next` | NeXTSTEP, OPENSTEP, Window Maker | textures as pack data, dithers |
 | `fusion`, `oxygen`, `breeze` | Qt Fusion, KDE 4, Plasma | modern flat and glow looks, tone models |
 | `web` | SourceGit, Primer, shadcn/ui, Geist, Linear, the editor palettes | a parametric engine: one idiom, every difference a param (see [The web engine](#the-web-engine)) |

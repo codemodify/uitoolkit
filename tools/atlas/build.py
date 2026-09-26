@@ -101,8 +101,8 @@ for p in packs:
 
 DECADE_NOTE = {
     1980: "The first desktops: the Mac's System 1, Workbench 1.3, OPEN LOOK, and NeXT's greys with black key-window titles.",
-    1990: "Bevels everywhere: Windows 3.1 and 95, System 7 and Platinum, OS/2 Warp, BeOS, Motif and CDE on Unix, Window Maker, and Swing's Metal.",
-    2000: "Gloss and gel: Aqua, Luna and Aero, brushed metal, Java's Ocean and Nimbus, and the Linux desktop grows up with Bluecurve, Keramik, Plastik, Clearlooks and Human.",
+    1990: "Bevels everywhere: Windows 3.1 and 95, System 7 and Platinum, OS/2 Warp, BeOS, Motif and CDE on Unix, Window Maker, Swing's Metal, and the first K Desktop Environment.",
+    2000: "Gloss and gel: Aqua, Luna and Aero, brushed metal, Java's Ocean and Nimbus, and the Linux desktop grows up with KDE 2's HighColor, Bluecurve, Keramik, Plastik, Clearlooks and Human.",
     2010: "Flat and modern: Metro and Windows 10, Fusion, Breeze, Adwaita, OS X Yosemite, Material and FlatLaf, while the editor palettes arrive: Solarized, Gruvbox, Dracula, Atom's One and Nord.",
     2020: "Today: libadwaita's Adwaita and GNOME 48's, Windows 11's Fluent, macOS Big Sur and Tahoe's Liquid Glass, Plasma 6's Breeze, Material 3 and Material 3 Expressive, the looks of the web and its tools — GitHub's Primer, Vercel's Geist, shadcn/ui, Linear, SourceGit, VS Code, JetBrains Islands, Catppuccin, Tokyo Night, Rosé Pine — and the toolkit's own skins.",
 }

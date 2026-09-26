@@ -39,9 +39,9 @@ go get github.com/codemodify/paintengine2d@v0.9.0
 
 ## Highlights
 
-- **Themes that change shapes, not just colours.** 29 engines (like Qt's
-  QStyle) draw 121 packs spanning four decades: System 1 to macOS Tahoe's
-  Liquid Glass, Windows 3.1 to 11, Motif, CDE, NeXT, Amiga, BeOS, OS/2, KDE 3
+- **Themes that change shapes, not just colours.** 31 engines (like Qt's
+  QStyle) draw 123 packs spanning four decades: System 1 to macOS Tahoe's
+  Liquid Glass, Windows 3.1 to 11, Motif, CDE, NeXT, Amiga, BeOS, OS/2, KDE 1
   to Plasma 6, GNOME 2 to GNOME 48, Material 2, 3 and 3 Expressive, Swing's
   Metal and Nimbus, FlatLaf, and today's VS Code, JetBrains Islands,
   SourceGit, Primer, shadcn/ui, Geist and Linear with the Catppuccin, Nord,
@@ -94,7 +94,7 @@ go get github.com/codemodify/paintengine2d@v0.9.0
 ## Themes
 
 A theme is an **engine**, Go code that decides the shapes (like Qt's
-QStyle), plus a **pack** of colours, metrics and fonts. 29 engines draw 121
+QStyle), plus a **pack** of colours, metrics and fonts. 31 engines draw 123
 packs, from the 1984 Finder to VS Code's 2026 themes. An engine can hand a
 later era of its platform to code of its own, so macOS draws Big Sur and
 Tahoe, Breeze Plasma 5 and 6, Adwaita GNOME 42 and 48, Material 3 and 3
@@ -299,7 +299,7 @@ repository.
 
 ![Settings: the theme browser, the row of settings and the live preview beside them](docs/screenshots/settings.webp)
 
-Search or filter 129 packs, and the one you pick is drawn at once as a
+Search or filter 131 packs, and the one you pick is drawn at once as a
 live application window beside the list — frame, caption and every
 control — in a splitter you can size. Over that window, in one row that
 folds, is everything you can change: four check boxes and then the icon

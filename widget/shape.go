@@ -9,7 +9,7 @@ import (
 // A component's own silhouette.
 //
 // Every component takes input across its whole box, and always has: that is
-// the default, it is what all 121 packs and every widget in the toolkit
+// the default, it is what all 123 packs and every widget in the toolkit
 // rely on, and nothing here changes it. A component that wants otherwise
 // says so with [Base.SetHitShape], and then a press outside its silhouette
 // goes to whatever is behind it in the tree, exactly as a press outside a

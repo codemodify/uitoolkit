@@ -180,7 +180,7 @@ type ControlShapeEngine interface {
 }
 
 // ControlShapeOf is lk's silhouette for the face of role in box b, or nil
-// for the whole box — the default, and the answer for all 121 packs.
+// for the whole box — the default, and the answer for all 123 packs.
 func ControlShapeOf(lk LookAndFeel, b paintengine2d.Rect, role Role) *Silhouette {
 	if lk == nil || b.Empty() {
 		return nil

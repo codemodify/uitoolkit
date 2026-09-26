@@ -8,7 +8,7 @@ named sub-rects of them, and a table saying which sub-rect paints which part
 of which control.
 
 A skin is a pack of the `skin` engine. It lists in Settings beside the other
-121, it is selected by the same `look.json` preference, `UITK_THEME=nocturne`
+123, it is selected by the same `look.json` preference, `UITK_THEME=nocturne`
 runs any app in one, and editing it applies live. There is no skin mode and
 no second picker.
 
@@ -1039,7 +1039,7 @@ say it.
 - **HiDPI.** Layout and text are exact at every scale because they are not
   pictures. The art chooses upward, or declares itself pixelated and stays
   crisp at whole multiples.
-- **The other 121 packs.** Every addition is optional and nothing about the
+- **The other 123 packs.** Every addition is optional and nothing about the
   existing engines changed. Remove the skin, pick Breeze or Luna or System 7,
   and the app still works.
 

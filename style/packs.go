@@ -17,6 +17,8 @@ const (
 	EraFluent    = "Fluent"
 	EraMaterial  = "Material"
 	EraFlatLaf   = "FlatLaf"
+	EraKDE1      = "KDE 1"
+	EraKDE2      = "KDE 2"
 )
 
 var (

@@ -143,7 +143,7 @@ go run ./examples/uitoolkit-sample-tour -page controls   # the same tour, on its
 go run ./examples/uitoolkit-sample-notes
 go run ./examples/uitoolkit-sample-files
 go run ./examples/uitoolkit-sample-skinshape    # a shaped window over a test card
-go run ./cmd/uitoolkit-settings  # theme browser: 129 packs and a live preview
+go run ./cmd/uitoolkit-settings  # theme browser: 131 packs and a live preview
 go run ./cmd/uitest-driver     # scripted UI drive, no display needed
 go run ./cmd/uitk-shots DIR    # the pictures in the README and these docs
 ```

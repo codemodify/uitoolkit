@@ -39,7 +39,7 @@ import (
 )
 
 func main() {
-	theme := flag.String("theme", "deck", "the pack to run in (a skin, or any of the 121)")
+	theme := flag.String("theme", "deck", "the pack to run in (a skin, or any of the 123)")
 	mode := flag.String("mode", "window", "window | backdrop")
 	width := flag.Int("width", 560, "window width in logical pixels")
 	height := flag.Int("height", 340, "window height in logical pixels")
