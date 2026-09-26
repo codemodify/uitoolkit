@@ -147,7 +147,7 @@ func TestSettingsPageHoldsAtEverySize(t *testing.T) {
 				// And the browser fills its own column, the way the
 				// preview fills the pane beside it: the list runs from
 				// the decade filter to the Export at the foot, and how
-				// many of the 129 packs that shows is the whole of what
+				// many of the 131 packs that shows is the whole of what
 				// the column is for. It was held to 252 logical pixels
 				// — nine rows at scale 1, five at 1.75 — with about 250
 				// px of nothing under the buttons.

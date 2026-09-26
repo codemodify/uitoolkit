@@ -150,7 +150,7 @@ func TestSettingsStagingKeepsThePage(t *testing.T) {
 
 	// Apply does build the page again — every option has to show what it
 	// now holds — and the list comes back down among the packs, on the
-	// one that was staged, rather than at the top of 129 rows.
+	// one that was staged, rather than at the top of 131 rows.
 	clickApply(t, w)
 	a.PumpOnce()
 	got := findThemeList(w.Content())

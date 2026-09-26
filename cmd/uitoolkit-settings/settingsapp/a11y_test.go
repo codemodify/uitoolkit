@@ -141,7 +141,7 @@ func TestSettingsIsAccessible(t *testing.T) {
 	}
 	list := findThemeListAny(s.Content())
 	if list == nil || list.MaxOffset() <= 0 {
-		t.Fatal("settings: the theme list does not scroll its 129 packs")
+		t.Fatal("settings: the theme list does not scroll its 131 packs")
 	}
 	list.ScrollTo(list.MaxOffset())
 	a.PumpOnce()
