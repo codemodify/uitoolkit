@@ -12,7 +12,7 @@ import (
 )
 
 // The preview's Controls tab shows every row — the last radio included —
-// at Settings' default size and split, in every one of the 129 packs,
+// at Settings' default size and split, in every one of the 131 packs,
 // and nothing in it runs off the tab's right edge either.
 //
 // Ten packs used to be excepted: Material's, shadcn's and Geist's 40- to

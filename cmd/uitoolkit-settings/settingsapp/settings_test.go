@@ -329,7 +329,7 @@ func TestTheColumnIsBareControls(t *testing.T) {
 		}
 		// The whole of it scrolls inside the list, not under it.
 		if list.MaxOffset() <= 0 {
-			t.Errorf("at %v: the list of 129 packs does not overflow", size)
+			t.Errorf("at %v: the list of 131 packs does not overflow", size)
 		}
 		if sv := findScrollView(w.Content()); sv != nil {
 			t.Errorf("at %v: the column is back in a scroll view", size)

@@ -27,7 +27,7 @@ import (
 // Themes, Appearance, Packs, About — and they were four answers to one
 // question: what does this desktop look like. They are one page now, and
 // the line through that page is no longer between kinds of choice but
-// between the browser and the thing it is browsing for: the list of 129
+// between the browser and the thing it is browsing for: the list of 131
 // packs is the column on the left, and everything else stands with the
 // preview on the right — the settings in a folding block over it, and
 // where it all lives on disk under it.
@@ -91,7 +91,7 @@ type SettingsOptions struct {
 	// its File menu's Open… and Save… say their name on the sample's
 	// status bar instead of opening a real file dialog.
 	//
-	// It is for pictures, not for people — the Theme Atlas renders 129
+	// It is for pictures, not for people — the Theme Atlas renders 131
 	// tiles out of this preview, and a tile is looked at rather than
 	// clicked. It used to take the bar of live settings off the head of
 	// the window as well; that bar is gone, and the icon set, the icon
@@ -505,11 +505,11 @@ func (s *settingsState) choicesColumn() widget.Component {
 
 	// The list runs to the foot of the column: it takes every pixel the
 	// search field, the filter and Export leave, at every window size,
-	// and scrolls its 129 rows inside that on a scrollbar of its own.
+	// and scrolls its 131 rows inside that on a scrollbar of its own.
 	//
 	// It was held to 252 pixels inside a column that scrolled, which was
 	// the only way to have both a list with a scrollbar and a column
-	// with one — a view as tall as all 129 of its rows would have made
+	// with one — a view as tall as all 131 of its rows would have made
 	// the column ten screens long. That column had nothing else in it
 	// but the browser, so what the arrangement really bought was two
 	// scrollbars an inch apart and 250 pixels of nothing below the
