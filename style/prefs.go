@@ -38,6 +38,10 @@ type appearanceFileJSON struct {
 	Decorations string `json:"decorations,omitempty"`
 	// CaptionButtons: "desktop" (omitted) or "theme".
 	CaptionButtons string `json:"captionButtons,omitempty"`
+	// Renderer: "auto" (omitted), "gpu" or "cpu" — which paint device a
+	// new window's surface binds. UITK_PAINT overrides it and is never
+	// written back here; see [RendererPref].
+	Renderer string `json:"renderer,omitempty"`
 }
 
 // ConfigDir is $XDG_CONFIG_HOME/uitoolkit (or ~/.config/uitoolkit).
@@ -121,6 +125,7 @@ func resolveAppearance(raw appearanceFileJSON) Appearance {
 	a.NativeDialogs = raw.NativeDialogs
 	a.Decorations = ParseDecorationsPref(raw.Decorations)
 	a.CaptionButtons = ParseCaptionButtonsPref(raw.CaptionButtons)
+	a.Renderer = ParseRendererPref(raw.Renderer)
 	return a.Normalize()
 }
 
@@ -157,6 +162,12 @@ func LoadAppearance() Appearance {
 const ThemeEnv = "UITK_THEME"
 
 // SaveAppearance writes look.json with theme, corners, icons, and iconSize (mode 0600).
+//
+// The renderer goes in as "renderer" and auto is left out, the way auto
+// decorations and the desktop's caption buttons are. UITK_PAINT is never
+// written here: it overrides the file in the process that has it set,
+// and a Settings started under it must not bake it into everyone's
+// preferences.
 func SaveAppearance(a Appearance) error {
 	a = a.Normalize()
 	return writeJSONFile(AppearancePath(), appearanceFileJSON{
@@ -171,6 +182,7 @@ func SaveAppearance(a Appearance) error {
 		NativeDialogs:  a.NativeDialogs,
 		Decorations:    decorationsJSON(a.Decorations),
 		CaptionButtons: string(ParseCaptionButtonsPref(string(a.CaptionButtons))),
+		Renderer:       string(ParseRendererPref(string(a.Renderer))),
 	})
 }
 

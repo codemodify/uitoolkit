@@ -184,6 +184,24 @@ opaque UI cannot present as a fully transparent ARGB surface.
 bound, otherwise a CPU device wrapping `Surface.Buffer`. Offscreen and
 `CGO_ENABLED=0` stay on the CPU path.
 
+**The same three values are a saved preference as well** (0.20.0):
+`look.json` `"renderer"`, which Settings' **Paint** chooser writes and
+`app.New` pushes into `platform.SetPaintPref` before the first window.
+`platform.PaintPref` is what a surface asks, and it answers
+`UITK_PAINT` first and the saved preference second — the variable wins
+wherever it is set, and the file is never rewritten to match it.
+
+The preference is read **when a surface binds its device**, not once at
+start-up, so applying one reaches the windows opened afterwards and
+leaves the ones already mapped alone: an EGL context cannot be swapped
+under a mapped window without re-creating it, and the shm and EGL present
+paths are not interchangeable mid-life. `platform.SurfaceBackend(s)`
+reports what a surface is *really* painting through, which is the honest
+answer where `auto` or `gpu` met an EGL that would not start;
+`app.Window.PaintBackend` and `app.Application.PaintBackend` are the same
+question one level up. See
+[settings.md](settings.md#the-renderer).
+
 A transparent Wayland window is a present-path bug, not an idle-loop
 bug. If a window is fully transparent, set `UITK_PAINT=cpu` and/or
 `UITK_WAYLAND_PRESENT=shm` (opaque `XRGB8888`). GPU window configs still

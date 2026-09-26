@@ -1,14 +1,15 @@
 #!/bin/bash
-# frame-switch.sh N [BACKEND [PACK]] — Settings' "OS borders" box hands the
-# frame between the desktop and the theme while the window is up, which is
-# the one thing headless tests cannot see: a window with no frame has no
-# frame to look at.
+# frame-switch.sh N [BACKEND [PACK]] — Settings' "OS window borders" box
+# hands the frame between the desktop and the theme while the window is up,
+# which is the one thing headless tests cannot see: a window with no frame
+# has no frame to look at.
 #
 #   ./start.sh 7 2100 1620 && ./frame-switch.sh 7            # wayland, luna
 #   ./frame-switch.sh 7 x11 win95                            # the X11 path
 #
 # It runs Settings in instance N with PACK staged and the desktop's frame,
-# unticks OS borders, presses Apply, and asks KWin whether the frame went.
+# unticks OS window borders, presses Apply, and asks KWin whether the frame
+# went.
 # KWin's own answer is the oracle: while the desktop draws the frame the
 # client sits inside it (clientGeometry is smaller than frameGeometry, by
 # the title bar); once the toolkit draws it the two are the same rectangle.
@@ -29,10 +30,19 @@ mkdir -p "$OUT" "$BIN" "$D/cfg/uitoolkit"
 (cd "$ROOT" && CGO_ENABLED=1 go build -o "$BIN/settings" ./cmd/uitoolkit-settings) || exit 1
 
 # Where the box and the button sit inside the window, in logical pixels from
-# the client's top left. They differ by the toolkit caption's height: under
-# the desktop's frame the client starts at the options row, under the
-# toolkit's it starts at the caption above it.
-BOX_X=624; APPLY_X=980
+# the client's top left, in the default 1024x860 window at scale 1. They
+# differ by the toolkit caption's height: under the desktop's frame the
+# client starts at the options row, under the toolkit's it starts at the
+# caption above it.
+#
+# BOX_X is the middle of the "OS window borders" check box, which is the
+# fourth and last of the options on the first line of the folding row. It
+# moves whenever that row changes: the box was renamed and the row reordered
+# for the renderer chooser, and 624 — where it was — now lands on "OS
+# open/save dialogs". Re-measure it rather than guess; the numbers come out
+# of widget.DeviceOrigin on the box in a 1024x860 headless Settings, which is
+# what cmd/uitoolkit-settings/settingsapp/shot_test.go does for the preview.
+BOX_X=835; APPLY_X=980
 SERVER_BOX_Y=21; SERVER_APPLY_Y=841
 CLIENT_BOX_Y=47; CLIENT_APPLY_Y=834
 
@@ -55,7 +65,7 @@ EOF
   UITK_BACKEND="$BACKEND" RUN_WAIT=5 "$RIG/run.sh" "$N" "$BIN/settings" >/dev/null || exit 1
 }
 
-toggle() { # click the OS borders box and Apply, with the offsets of mode $1
+toggle() { # click the OS window borders box and Apply, with the offsets of mode $1
   read -r fx fy fw fh cx cy cw ch <<<"$(geom)"
   local by=$SERVER_BOX_Y ay=$SERVER_APPLY_Y
   [ "$1" = client ] && { by=$CLIENT_BOX_Y; ay=$CLIENT_APPLY_Y; }

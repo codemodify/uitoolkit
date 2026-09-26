@@ -194,6 +194,33 @@ three fooled this pass before the script took care of them:
    app to go when it finds its pid file, which would otherwise be counted as
    start-up. `measure.sh` removes the file itself.
 
+### CPU or GPU is now a preference, not only a variable
+
+`UITK_PAINT=cpu|gpu|auto` picks the paint device and always has; from
+0.20.0 the same three are saved in `look.json` as `"renderer"` and chosen
+in Settings' **Paint** box, with the variable still winning wherever it
+is set. Nothing about the two paths changed — the numbers above stand —
+but two things are worth knowing when measuring:
+
+- **A run is one device.** `platform.PaintPref` is read when a surface
+  binds its device, so a preference applied while an app runs reaches the
+  windows it opens afterwards, not the ones already up. Measure a
+  renderer by starting the app under it (the variable is the quickest
+  way), not by switching it in Settings mid-run.
+- **Ask, do not assume.** `auto` and `gpu` both fall back to the CPU when
+  EGL will not start, and a table that recorded the preference instead of
+  the device would be quietly wrong. `app.Application.PaintBackend()`
+  (and `platform.SurfaceBackend`) reports what a window really presents
+  through; `UITK_PERF_LOG` already carries the window's GPU texture
+  bytes, which is zero on the CPU path.
+
+`UITK_PAINT_MSAA=0` is unchanged and stays an environment variable: it is
+a knob on the GPU path alone, it is invisible on a machine that came up
+on the CPU, and it costs four times the pixels on llvmpipe — which is
+exactly when you want it, and exactly not a thing to put on a settings
+row that is already at its fold
+([settings.md](settings.md#uitk_paint_msaa-is-not-on-this-page)).
+
 `UITK_PERF_LOG=<file>` (`app/perflog.go`) is what the script reads: a line
 per painted frame with the time it took and the window's GPU texture bytes,
 a line per idle trim, and, on `SIGUSR1`, a heap profile and every

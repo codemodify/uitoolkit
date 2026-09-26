@@ -62,6 +62,7 @@ func TestSettingsPreviewIsTheWholeRightPane(t *testing.T) {
 	}
 	// Over it, the five options — the four the column held and the one
 	// that says where the colours come from; under it, the three paths.
+	// (And the four choosers, which came out of the preview.)
 	// Both are Settings' own, drawn in the applied look, outside the
 	// preview's scope.
 	follow := findOption(w.Content(), "OS colors")
@@ -79,7 +80,7 @@ func TestSettingsPreviewIsTheWholeRightPane(t *testing.T) {
 		t.Error("the options row is not over the preview")
 	}
 	// And the column beside them is the theme browser and nothing else.
-	for _, word := range []string{"Animations", "OS open/save dialogs", "OS borders", "OS colors"} {
+	for _, word := range []string{"Animations", "OS colors", "OS open/save dialogs", "OS window borders"} {
 		box := findOption(w.Content(), word)
 		if box == nil {
 			t.Fatalf("no %q option on the page", word)
@@ -249,6 +250,7 @@ func TestSettingsKeyboardReachesEverything(t *testing.T) {
 		"icon set":     false,
 		"icon size":    false,
 		"corners":      false,
+		"renderer":     false,
 		"export":       false,
 		"animations":   false,
 		"colours":      false,
@@ -277,6 +279,8 @@ func TestSettingsKeyboardReachesEverything(t *testing.T) {
 				want["decade"] = true
 			case "Window corners":
 				want["corners"] = true
+			case "Paint renderer":
+				want["renderer"] = true
 			}
 		case *widgets.Checkbox:
 			// The five over the preview; the previewed application's own
@@ -288,7 +292,7 @@ func TestSettingsKeyboardReachesEverything(t *testing.T) {
 				want["colours"] = true
 			case "OS open/save dialogs":
 				want["file dialogs"] = true
-			case "OS borders":
+			case "OS window borders":
 				want["system frame"] = true
 			}
 		case *widgets.Button:
@@ -311,10 +315,10 @@ func TestSettingsKeyboardReachesEverything(t *testing.T) {
 			t.Errorf("Tab never reaches the %s", part)
 		}
 	}
-	// The three choosers are stops of Settings' own, outside the preview
+	// The four choosers are stops of Settings' own, outside the preview
 	// and outside the column: a chooser that only the mouse can reach is
 	// a setting half the users of this page cannot change.
-	for _, name := range []string{"Icons", "Icon size", "Window corners"} {
+	for _, name := range []string{"Window corners", "Icons", "Icon size", "Paint renderer"} {
 		cb := namedCombo(w.Content(), name)
 		if cb == nil {
 			t.Fatalf("no %q chooser on the page", name)

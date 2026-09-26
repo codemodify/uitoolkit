@@ -647,7 +647,7 @@ func TestDecorationsPolicy(t *testing.T) {
 	surf.SetMoveResize(true)
 	a.decorPref = style.DecorationsSystem
 	if d := a.resolveDecorations(opts, true, surf); d != platform.DecorationsServer {
-		t.Errorf("OS borders: %v", d)
+		t.Errorf("OS window borders: %v", d)
 	}
 	a.decorPref = style.DecorationsToolkit
 	if d := a.resolveDecorations(opts, false, surf); d != platform.DecorationsClient {
@@ -703,7 +703,7 @@ func TestDecorationsPrefSwitchesLive(t *testing.T) {
 
 // A window with no title bar of its own — Settings' own window, the
 // sample's, most windows — follows the "toolkit" preference live: the
-// user unticks Settings' OS borders and the theme's frame appears without
+// user unticks Settings' OS window borders and the theme's frame appears without
 // a restart. Under auto such a window keeps the desktop's frame, which is
 // what made the unticked box look like it did nothing (it used to write
 // auto).
@@ -744,7 +744,7 @@ func TestDecorationsToolkitFramesAPlainWindow(t *testing.T) {
 	a.ApplyAppearance(style.Appearance{Decorations: style.DecorationsSystem})
 	a.PumpOnce()
 	if w.Decorations() != platform.DecorationsServer || w.Caption() != nil {
-		t.Fatalf("OS borders: %v caption %v", w.Decorations(), w.Caption())
+		t.Fatalf("OS window borders: %v caption %v", w.Decorations(), w.Caption())
 	}
 	if last := surf.FrameCalls().Requests; last[len(last)-1] != platform.DecorationsServer {
 		t.Fatalf("the surface was asked for %v", last[len(last)-1])

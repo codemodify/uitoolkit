@@ -3,6 +3,7 @@ package platform
 import (
 	"os"
 	"strings"
+	"sync/atomic"
 
 	"github.com/codemodify/paintengine2d"
 )
@@ -10,10 +11,62 @@ import (
 // EnvPaint is UITK_PAINT — the paintengine2d cpu|gpu|auto selector.
 const EnvPaint = paintengine2d.EnvPaint
 
-// PaintPref returns the normalized UITK_PAINT choice (cpu, gpu, or auto).
-// An unset or empty value is auto: try GPU, fall back to CPU.
+// savedPaintPref is the preference an application applied from its
+// preferences file (look.json "renderer"), normalized, or "" for none.
+// UITK_PAINT wins over it; see [PaintPref].
+var savedPaintPref atomic.Value // string
+
+// SetPaintPref remembers the cpu|gpu|auto preference the application read
+// out of its preferences file. An empty value (or "auto") forgets it.
+//
+// It changes nothing that is already on screen: a surface binds its paint
+// device when it is created, so this decides what the *next* window gets.
+// app.New pushes look.json's choice into it and
+// app.Application.ApplyAppearance replaces it; an application that wants
+// to choose for itself calls app.Application.SetRenderer after New,
+// which goes through here.
+func SetPaintPref(pref string) {
+	savedPaintPref.Store(normalPaintPref(pref))
+}
+
+// PaintPrefEnv is the UITK_PAINT value when the environment sets one:
+// the normalized choice and whether it was there at all. It is the one
+// thing that beats [SetPaintPref], the way UITK_THEME beats the saved
+// theme, so a chooser in a settings page can say that the environment is
+// in charge here.
+func PaintPrefEnv() (string, bool) {
+	s := strings.TrimSpace(os.Getenv(EnvPaint))
+	if s == "" {
+		return "", false
+	}
+	return paintengine2d.ParsePaintPref(s), true
+}
+
+// PaintPref returns the normalized paint choice (cpu, gpu, or auto):
+// UITK_PAINT when it is set, otherwise whatever [SetPaintPref] was last
+// given, otherwise auto — try GPU, fall back to CPU.
+//
+// It is read when a surface binds its device, not once at start-up, so a
+// preference applied while an application runs reaches the windows it
+// opens afterwards and leaves the ones already open alone.
 func PaintPref() string {
-	return paintengine2d.EnvPaintPref()
+	if pref, ok := PaintPrefEnv(); ok {
+		return pref
+	}
+	if saved, _ := savedPaintPref.Load().(string); saved != "" {
+		return saved
+	}
+	return paintengine2d.PaintAuto
+}
+
+// normalPaintPref is ParsePaintPref with an empty value left empty:
+// paintengine2d reads anything it does not know as cpu, and "nobody has
+// said" is not "somebody said CPU".
+func normalPaintPref(pref string) string {
+	if strings.TrimSpace(pref) == "" {
+		return ""
+	}
+	return paintengine2d.ParsePaintPref(pref)
 }
 
 // WantGPU reports whether the toolkit should try an EGL/GLES paint device.
@@ -85,6 +138,17 @@ func (c *softDevice) of(img *paintengine2d.Image) *paintengine2d.CPUDevice {
 func SurfaceUsesGPU(s Surface) bool {
 	g, ok := s.(gpuSurface)
 	return ok && g.UsesGPU()
+}
+
+// SurfaceBackend is what s is really painting through — "gpu" or "cpu" —
+// which is not the same question as [PaintPref]. A preference of gpu or
+// auto whose EGL never started is a window on the CPU, and the honest
+// answer to "what am I getting" is this one.
+func SurfaceBackend(s Surface) string {
+	if SurfaceUsesGPU(s) {
+		return paintengine2d.PaintGPU
+	}
+	return paintengine2d.PaintCPU
 }
 
 // SurfaceDevice is the live paint [paintengine2d.Device] for s.

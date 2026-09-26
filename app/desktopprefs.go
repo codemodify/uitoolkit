@@ -127,6 +127,13 @@ func (a *Application) DesktopColorScheme() style.ColorScheme {
 // ApplyAppearance switches every window to ap (theme, corners, icons,
 // motion, and following the desktop's light / dark preference) without
 // saving it; SaveAppearance persists it for every app.
+//
+// Every part of ap but one reaches the windows already open. The
+// renderer cannot: a surface binds its paint device when it is created,
+// and an EGL context cannot be swapped under a mapped window without
+// re-creating it. [Application.SetRenderer] therefore decides what the
+// *next* window gets, and a page that offers the choice has to say so —
+// see cmd/uitoolkit-settings/settingsapp.
 func (a *Application) ApplyAppearance(ap style.Appearance) {
 	if a == nil {
 		return
@@ -138,6 +145,7 @@ func (a *Application) ApplyAppearance(ap style.Appearance) {
 	// whatever the preference says (resolveDecorations).
 	a.setDecorationsPref(ap.Decorations)
 	a.SetCaptionButtons(ap.CaptionButtons)
+	a.SetRenderer(ap.Renderer)
 	a.following = ap.FollowDesktop
 	if a.look == nil {
 		a.SetLook(ap.Look())
@@ -167,6 +175,7 @@ func (a *Application) Appearance() style.Appearance {
 	ap := style.LookAppearance(a.look)
 	ap.Decorations = a.decorPref
 	ap.CaptionButtons = a.captionPref
+	ap.Renderer = a.renderPref
 	ap.ReduceMotion = style.ReduceMotion()
 	ap.NativeDialogs = style.NativeDialogs()
 	ap.FollowDesktop = a.following

@@ -383,7 +383,7 @@ left, gives GNOME's lone close, KDE's window menu on the left. It applies
 live, to every app. Settings had a **Theme buttons** box for it and does
 not any more: the question only arises while the toolkit is drawing the
 frame, and while it is, the theme is the only thing with an opinion — so
-unticking **OS borders** writes `"captionButtons": "theme"` with
+unticking **OS window borders** writes `"captionButtons": "theme"` with
 `"decorations": "toolkit"`, and ticking it writes the desktop's layout
 back. `style.CaptionButtonsPref` and `app.Application.SetCaptionButtons`
 are unchanged: an application that wants to choose still can, and a
@@ -513,7 +513,7 @@ kiosks). First match wins:
    look the same everywhere) unless 1 or 2 asks.
 4. The user's preference, look.json `"decorations"`: `"system"` (the desktop
    frames every window) or `"toolkit"` (the toolkit does). These are the two
-   states of Settings' **OS borders**, ticked and unticked.
+   states of Settings' **OS window borders**, ticked and unticked.
 5. Auto: the toolkit's frame for a window with a title bar (`SetTitleBar`)
    where the desktop moves and resizes on request; the desktop's frame for
    every other window. So every app without a title bar looks exactly as
@@ -525,9 +525,10 @@ effect at once, without a restart. The desktop's answer is obeyed.
 
 ### The Settings switch
 
-Settings shows **OS borders** — *OS borders: the desktop's title bar and
-borders* to a screen reader, Chromium's switch by another name — in the row
-of options over the preview, next to **OS open/save dialogs**. On: windows
+Settings shows **OS window borders** — *OS window borders: the desktop's
+title bar and borders* to a screen reader, Chromium's switch by another
+name — last in the row of options over the preview, after **OS open/save
+dialogs**. On: windows
 that draw their own title bar get the desktop's title bar and borders instead,
 and their title bar becomes the first row. Off: the toolkit draws the frame of
 every window in the theme's style, the way it already did for a window with a
@@ -650,7 +651,7 @@ Where the desktop draws the frame, the window still says how to dress it
   ignore `zxdg_decoration_manager_v1`: GNOME's path, on KWin.
   `./kwin.py N` is the oracle for the margin: `bufferGeometry` minus
   `frameGeometry` is exactly it, and it goes when the window is maximized.
-  `./frame-switch.sh N [BACKEND [PACK]]` drives Settings' **OS borders** box
+  `./frame-switch.sh N [BACKEND [PACK]]` drives Settings' **OS window borders** box
   both ways and asks KWin who holds the frame after each Apply
   (`clientGeometry` is inside `frameGeometry` while the desktop draws it,
   and the same rectangle once the toolkit does). Run it on both backends and

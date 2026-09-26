@@ -29,16 +29,16 @@ func TestSettingsIsAccessible(t *testing.T) {
 	tree := a11ytest.Audit(t, "settings", s.AccessibleTree())
 
 	// The theme browser and the preview's own lists; the decade filter,
-	// the three choosers over the preview and the preview's own sample
+	// the four choosers over the preview and the preview's own sample
 	// combo box.
-	if a11ytest.Count(tree, a11y.RoleList) < 1 || a11ytest.Count(tree, a11y.RoleComboBox) < 5 {
+	if a11ytest.Count(tree, a11y.RoleList) < 1 || a11ytest.Count(tree, a11y.RoleComboBox) < 6 {
 		t.Errorf("settings: lists %d, combos %d",
 			a11ytest.Count(tree, a11y.RoleList), a11ytest.Count(tree, a11y.RoleComboBox))
 	}
 	// Every chooser Settings owns is named, so a screen reader says what
 	// is being chosen rather than reading anonymous combo boxes — and a
 	// chooser on a tool bar has nothing but its name to say it by.
-	for _, name := range []string{"Decade", "Icons", "Icon size", "Window corners"} {
+	for _, name := range []string{"Decade", "Window corners", "Icons", "Icon size", "Paint renderer"} {
 		if a11ytest.Find(tree, a11y.RoleComboBox, name) == nil {
 			t.Errorf("settings: no %s chooser in the tree", name)
 		}
@@ -61,7 +61,7 @@ func TestSettingsIsAccessible(t *testing.T) {
 	for _, name := range []string{
 		"Animations",
 		"OS open/save dialogs: the desktop's own Open and Save",
-		"OS borders: the desktop's title bar and borders",
+		"OS window borders: the desktop's title bar and borders",
 		"OS colors: follow the desktop's light or dark mode and its accent",
 	} {
 		if a11ytest.Find(tree, a11y.RoleCheckBox, name) == nil {
@@ -69,7 +69,7 @@ func TestSettingsIsAccessible(t *testing.T) {
 		}
 	}
 	// And the fifth is gone with its box: where the caption buttons go
-	// follows "OS borders" now.
+	// follows "OS window borders" now.
 	if a11ytest.Find(tree, a11y.RoleCheckBox, "Theme buttons: the caption buttons where the theme puts them") != nil {
 		t.Error("settings: the Theme buttons check box is back in the tree")
 	}

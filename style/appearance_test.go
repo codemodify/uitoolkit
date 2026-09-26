@@ -347,3 +347,71 @@ func TestCaptionButtonsPrefRoundTrip(t *testing.T) {
 		t.Fatalf("loaded %q", got)
 	}
 }
+
+// The renderer is in look.json — the one preferences file — beside the
+// other two that say who does the work rather than what it looks like,
+// and auto is left out of the file the way auto decorations are.
+//
+// It is the only preference in there that UITK_PAINT can override, and
+// the override lives in platform, not here: LoadAppearance reports what
+// the file says, so a Settings started under UITK_PAINT=cpu shows and
+// saves the user's own choice instead of baking the variable into
+// everybody's preferences. (UITK_THEME, which is older, does replace
+// what LoadAppearance returns.)
+func TestRendererPrefRoundTrip(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv(ThemeEnv, "")
+	t.Setenv("UITK_PAINT", "cpu")
+	for in, want := range map[string]RendererPref{
+		"gpu": RendererGPU, "GPU": RendererGPU, "egl": RendererGPU, "gles": RendererGPU,
+		"cpu": RendererCPU, "software": RendererCPU, "raster": RendererCPU,
+		"auto": RendererAuto, "": RendererAuto, "bogus": RendererAuto, "  gpu  ": RendererGPU,
+	} {
+		if got := ParseRendererPref(in); got != want {
+			t.Errorf("ParseRendererPref(%q) = %q want %q", in, got, want)
+		}
+	}
+	for p, want := range map[RendererPref]string{
+		RendererAuto: "Auto", RendererGPU: "GPU", RendererCPU: "CPU", "bogus": "Auto",
+	} {
+		if got := p.Label(); got != want {
+			t.Errorf("%q.Label() = %q want %q", p, got, want)
+		}
+	}
+	ap := DefaultAppearance()
+	if ap.Renderer != RendererAuto {
+		t.Fatalf("default %q", ap.Renderer)
+	}
+	ap.Renderer = RendererGPU
+	if err := SaveAppearance(ap); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(AppearancePath())
+	if err != nil || !strings.Contains(string(raw), `"renderer": "gpu"`) {
+		t.Fatalf("look.json %s %v", raw, err)
+	}
+	// UITK_PAINT=cpu is set for this whole test and changes nothing
+	// here: the file is the user's choice, the variable is this
+	// process's.
+	if got := LoadAppearance(); got.Renderer != RendererGPU {
+		t.Fatalf("loaded %q with UITK_PAINT=cpu set", got.Renderer)
+	}
+	ap.Renderer = RendererAuto
+	if err := SaveAppearance(ap); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ = os.ReadFile(AppearancePath())
+	if strings.Contains(string(raw), "renderer") {
+		t.Fatalf("auto is left out of look.json: %s", raw)
+	}
+	// And a file that asks for something unknown is auto, not a crash
+	// and not CPU: paintengine2d's own parser reads an unknown word as
+	// cpu, which is the wrong default for a preferences file somebody
+	// hand-edited.
+	if err := os.WriteFile(AppearancePath(), []byte(`{"theme":"light","renderer":"vulkan"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := LoadAppearance().Renderer; got != RendererAuto {
+		t.Fatalf("an unknown renderer reads as %q, want auto", got)
+	}
+}
