@@ -16,12 +16,12 @@ import (
 
 // A skin is a theme made of pictures.
 //
-// The 29 engines in this package are code: win95's bevel is four colours and
+// The 31 engines in this package are code: win95's bevel is four colours and
 // a rule, system7's is 1-bit pixel art drawn by hand. A skin is the other
 // answer to the same question — the one WinAmp, VLC's skins2 and Windows
 // Media Player gave: named sub-rects of a bitmap bound to the parts of a
 // control. It is loaded as a pack of the "skin" engine (engine_skin.go), so
-// it lists, applies and reloads exactly as the other 121 packs do.
+// it lists, applies and reloads exactly as the other 123 packs do.
 //
 // Three rules separate this format from the ones it takes its ideas from:
 //

@@ -162,7 +162,7 @@ rectangles filled nonzero so two that overlap are one outline.
   pointer, unhovers, and hovers again.
 
 Bounding box and plain rectangle stay the default. A look that implements
-neither hook is what it always was, which is all 121 engine packs; the cost
+neither hook is what it always was, which is all 123 engine packs; the cost
 to a component that names no face is two nil checks and a type assertion
 that fails.
 
@@ -369,7 +369,7 @@ fallback rather than a broken window.
 ## For widgets
 
 A component takes input across its whole box, and always has. That is the
-default, every widget in the toolkit and all 121 packs rely on it, and
+default, every widget in the toolkit and all 123 packs rely on it, and
 nothing about it has changed — a component that never asks pays two nil
 checks and a failed type assertion in `HitTest`.
 
