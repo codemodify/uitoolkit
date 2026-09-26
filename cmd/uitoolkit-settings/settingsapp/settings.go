@@ -1,8 +1,8 @@
 // Package settingsapp is the toolkit's appearance editor: the theme
 // browser, the block of settings over the preview — four on/off options
-// and the three choosers for the icon set, its size and the window's
-// corners — the live preview of the staged pack under them, and the
-// Apply that writes look.json.
+// and the four choosers for the icon set, its size, the window's corners
+// and the device that paints them — the live preview of the staged pack
+// under them, and the Apply that writes look.json.
 //
 // It lives beside its command rather than inside it because the
 // end-to-end driver and its own tests drive it as a library, and because
@@ -34,7 +34,7 @@ import (
 const (
 	sectionTheme     = iota // the column on the left, and the whole of it
 	sectionBehaviour        // the four on/off options, first in the block over the preview
-	sectionPreview          // the three choosers after them: the icons and the corners
+	sectionPreview          // the four choosers after them: the icons, the corners and the renderer
 	sectionFiles            // the right-hand pane, under the preview
 )
 
@@ -123,8 +123,8 @@ func SettingsAppWith(a *app.Application, win *app.Window, opt SettingsOptions) w
 // Settings used to have keep working, because -page is in scripts, in
 // the atlas tooling and in the docs of two releases — each one resolves
 // to the section that swallowed it. "appearance", "corners" and "icons"
-// are the Preview: the three choosers that say what the previewed window
-// is drawn with, which stand with the options over it; "packs" (and its
+// are the Preview: the choosers that say what the previewed window is
+// drawn with and what draws it, which stand with the options over it; "packs" (and its
 // old name "packs & icons") is Theme, because
 // exporting a pack and deleting one are under the theme browser;
 // "about" is Files; "desktop" and "colours" are Behaviour, because
@@ -189,6 +189,11 @@ type settingsState struct {
 	iconPick *widgets.ComboBox
 	iconSize *widgets.ComboBox
 	corners  *widgets.ComboBox
+	// render is the fourth chooser, and the odd one out: it says which
+	// device paints, not what is painted, and what it asks for reaches
+	// the windows opened after Apply rather than the ones already up.
+	// See [settingsState.renderer].
+	render *widgets.ComboBox
 	// plain makes the previewed window make-believe all through. See
 	// [SettingsOptions].
 	plain bool
@@ -238,7 +243,7 @@ func buildSettingsState(s *settingsState) widget.Component {
 	// Every live part belongs to the build that made it.
 	s.rows, s.list, s.bodySplit = nil, nil, nil
 	s.scopes, s.previewBox = nil, nil
-	s.iconSets, s.iconPick, s.iconSize, s.corners = nil, nil, nil, nil
+	s.iconSets, s.iconPick, s.iconSize, s.corners, s.render = nil, nil, nil, nil, nil
 
 	if s.browserRatio == 0 {
 		s.browserRatio = defaultChoicesRatio(s.win)
@@ -434,9 +439,9 @@ func (s *settingsState) selectedRow() int {
 // `uitoolkit-settings -version` prints.
 //
 // Everything else that was ever in here has gone to the pane on the
-// right: the four on/off options and the three choosers for the shape
-// and the icons in one folding row over the preview, and the three paths
-// under it.
+// right: the four on/off options and the four choosers for the shape,
+// the icons and the renderer in one folding row over the preview, and
+// the three paths under it.
 func (s *settingsState) choicesColumn() widget.Component {
 	s.rows = s.themeRows()
 	s.list = widgets.NewListView(len(s.rows), func(i int) string {
@@ -560,8 +565,8 @@ func (s *settingsState) exportButton() widget.Component {
 // reader says, and the one sentence that says what turning it on does.
 //
 // The word on the box is short and the spoken name contains it — "OS
-// borders" is read out as "OS borders: the desktop's title bar and
-// borders" — which is the rule the three choosers after them follow too:
+// window borders" is read out as "OS window borders: the desktop's title
+// bar and borders" — which is the rule the choosers after them follow too:
 // the visible word must be inside the spoken name, never beside it, or
 // the control has two names. What the eye gets from the row these stand
 // in, the ear gets from the rest of the name.
@@ -581,9 +586,9 @@ func (s *settingsState) option(word, name, about string, on bool, set func(bool)
 // optionsRow is everything look.json carries that is not a pack: the four
 // things that are not what the toolkit looks like but what it does —
 // whether it moves, whose file dialogs it opens, who draws a window's
-// frame, and where the colours come from — and then the three choosers
-// that say what a pack is drawn with: the icon set, the size its glyphs
-// are drawn at, and the shape of a window's corners.
+// frame, and where the colours come from — and then the four choosers:
+// the shape of a window's corners, the icon set, the size its glyphs are
+// drawn at, and the device that paints the lot.
 //
 // It is one block over the preview rather than a panel in the column
 // beside it. Four of the options spent a release in that column, where
@@ -604,11 +609,12 @@ func (s *settingsState) option(word, name, about string, on bool, set func(bool)
 //
 // # One block, not two rows
 //
-// The three choosers came out of the previewed window, where they stood
-// on a bar of Settings' own over the sample's menu bar — "the preview
-// configures itself". They are settings of the page like the four before
-// them, so they are read where the page keeps its settings, and the
-// window below is a sample again with nothing live in its chrome.
+// Three of the four choosers came out of the previewed window, where
+// they stood on a bar of Settings' own over the sample's menu bar — "the
+// preview configures itself". They are settings of the page like the
+// four before them, so they are read where the page keeps its settings,
+// and the window below is a sample again with nothing live in its
+// chrome. The fourth, the renderer, was never anywhere but UITK_PAINT.
 //
 // They are in the *same* [widgets.Wrap] as the options rather than a
 // second row under it, and that is a measurement, not a preference. The
@@ -618,7 +624,7 @@ func (s *settingsState) option(word, name, about string, on bool, set func(bool)
 // which is 78 pixels off a preview that had 273, and the preview stops
 // being what the pane is for. One row that folds also *reads* as two
 // rows wherever there is room for it to: at 1024x860 the four options
-// fill the first line and the three choosers fall onto the second, which
+// fill the first line and the four choosers fall onto the second, which
 // is the arrangement, arrived at by folding rather than by decree.
 //
 // What the fold must never do is break a chooser from the word in front
@@ -703,7 +709,7 @@ func (s *settingsState) optionsRow() widget.Component {
 	// "captionButtons" keeps saying it — the staged appearance is
 	// whatever was loaded until a box is touched, and this is the box
 	// that touches it.
-	system := s.option("OS borders", "OS borders: the desktop's title bar and borders",
+	system := s.option("OS window borders", "OS window borders: the desktop's title bar and borders",
 		"The desktop draws the title bar and borders of every window, instead of the toolkit. Unticked, the toolkit draws them and the theme places the caption buttons.",
 		s.staged.Decorations == style.DecorationsSystem, func(on bool) {
 			next := s.staged
@@ -714,18 +720,32 @@ func (s *settingsState) optionsRow() widget.Component {
 			s.stage(next)
 		})
 
-	glyphs, shape := s.choosers()
-	// The order is the order they are read, and the fold follows from
-	// it: the four options fill the 697-pixel row of a 1024x860 window
-	// and the two chooser groups fall onto a second line; the 453-pixel
-	// row of a 720x520 one takes the first three options, then the
-	// fourth with the icons beside it, then the corners.
-	row := widgets.NewWrap(motion, native, system, colours, glyphs, shape)
+	shape, glyphs, paint := s.choosers()
+	// The order is the order they are read: what the toolkit does on its
+	// own account first, then the three that hand a piece of the window
+	// to the desktop, in the order of how much they hand over — its
+	// colours, then the dialogs it opens, then the frame around it —
+	// and then what a pack is drawn with and what draws it.
+	//
+	// The fold follows from that order, and the order was settled by the
+	// fold as much as by the reading. "OS borders" became "OS window
+	// borders" and a fourth chooser joined the end: 63 px on one box and
+	// 136 more at the end of the row. With the colours still last of the
+	// four and the corners still last of the choosers, the 453-pixel row
+	// of a 720x520 window folded onto four lines — and a fourth line is
+	// 30 px off a preview that has 281, which takes it under the 60% of
+	// its pane this page promises. Three narrow options lead now, so
+	// that row's first line holds three of the four; the borders box
+	// goes down onto the second with the corners, and the icon set, its
+	// size and the renderer take the third. At 1024x860 the four options
+	// still fill the first line and the three chooser groups fall onto
+	// the second by themselves.
+	row := widgets.NewWrap(motion, colours, native, system, shape, glyphs, paint)
 	row.Gap = 8
 	// Closer between the lines than along them: a block that folds has
 	// to read as one block and not as rows of unrelated furniture.
 	row.LineGap = 4
-	// Named for the options that lead it; the three choosers after them
+	// Named for the options that lead it; the four choosers after them
 	// carry their own names, each with the word in front of it in the
 	// tree as the static text it is.
 	row.SetAccessibleName(settingsSections[sectionBehaviour])
@@ -734,16 +754,18 @@ func (s *settingsState) optionsRow() widget.Component {
 
 // ---- what the packs are drawn with ---------------------------------------------
 
-// choosers are the three settings that are not an on and an off: the
-// icon set, the size its glyphs are drawn at, and the shape of the
-// window's corners. Each stands behind the word that says what it sets.
+// choosers are the four settings that are not an on and an off: the icon
+// set, the size its glyphs are drawn at, the shape of the window's
+// corners, and which device paints them. Each stands behind the word
+// that says what it sets.
 //
-// They come back as two children of the wrapping row, not six, because a
-// child of that row is what never folds down the middle of itself: the
-// set and the size are one question about what is drawn, the shape of
-// the window is another, and the pair must not be split by a line break
-// any more than a word may be split from its box. It is the same seam
-// the divider marked when these three rode on a bar inside the preview.
+// They come back as three children of the wrapping row, not eight,
+// because a child of that row is what never folds down the middle of
+// itself: the set and the size are one question about what is drawn,
+// the shape of the window is another, the renderer a third, and a pair
+// must not be split by a line break any more than a word may be split
+// from its box. It is the same seam the divider marked when the first
+// three rode on a bar inside the preview.
 //
 // They were a section called Shape and weight in the column on the left,
 // with a strip of fifteen glyphs under them to show what a set draws.
@@ -754,7 +776,7 @@ func (s *settingsState) optionsRow() widget.Component {
 // is, through its theme scope — so what shows a set is still a bar full
 // of that set's icons, and it is a bar of the size the size chooser
 // says, which a strip of loose glyphs never was.
-func (s *settingsState) choosers() (glyphs, shape widget.Component) {
+func (s *settingsState) choosers() (shape, glyphs, paint widget.Component) {
 	s.iconSets = append(style.ListBuiltinIconSets(), style.ListUserIconSets()...)
 	names := make([]string, len(s.iconSets))
 	for i, set := range s.iconSets {
@@ -768,7 +790,7 @@ func (s *settingsState) choosers() (glyphs, shape widget.Component) {
 		next.Icons = s.iconSets[i].Name
 		s.stage(next)
 	})
-	// It fits its longest set name and no more: three choosers and their
+	// It fits its longest set name and no more: four choosers and their
 	// words share a line with four check boxes, and a combo box that
 	// measured itself at the stock 160 would fold the block a line
 	// further at every window size.
@@ -822,26 +844,140 @@ func (s *settingsState) choosers() (glyphs, shape widget.Component) {
 
 	// A word sits close to the box it names and further from the one
 	// before it — six pixels one side, fourteen the other — so that the
-	// three read as three settings rather than six controls. The gap
-	// between the two groups is the row's own eight plus six carried on
-	// the first group's right edge, which makes it the same fourteen; on
-	// the group's right rather than the second group's left, because a
-	// line the corners start is a line that must start at the margin.
-	pair := func(word string, box *widgets.ComboBox) widget.Component {
+	// four read as four settings rather than eight controls. The gap
+	// between one group and the next is the row's own eight plus six
+	// carried on the left-hand group's right edge, which makes it the
+	// same fourteen; on the group's right rather than the next group's
+	// left, because a line a group starts is a line that must start at
+	// the margin.
+	pair := func(word string, box *widgets.ComboBox) *widgets.FlexBox {
 		return widgets.NewRow(widgets.NewLabel(word), box).WithGap(6).WithAlign(layout.AlignCenter)
 	}
-	glyphs = widgets.NewRow(pair(settingWords[0], s.iconPick), pair(settingWords[1], s.iconSize)).
+	shape = pair(settingWords[0], s.corners).WithPadding(0, 0, 6, 0)
+	glyphs = widgets.NewRow(pair(settingWords[1], s.iconPick), pair(settingWords[2], s.iconSize)).
 		WithGap(14).WithAlign(layout.AlignCenter).WithPadding(0, 0, 6, 0)
-	shape = pair(settingWords[2], s.corners)
-	return glyphs, shape
+	paint = pair(settingWords[3], s.renderer())
+	return shape, glyphs, paint
 }
 
-// settingWords are the words in front of the three choosers, in their
-// order. They are short because they share a line with four check boxes
-// in a pane as narrow as 453 logical pixels, and each one is the
-// beginning of what its chooser is called to a screen reader ("Icons",
-// "Icon size", "Window corners") rather than another name for it.
-var settingWords = [3]string{"Icons", "Size", "Corners"}
+// settingWords are the words in front of the four choosers, in the order
+// they stand on the page. They are short because they share a folding
+// row with four check boxes in a pane as narrow as 453 logical pixels,
+// and each one is the beginning of what its chooser is called to a
+// screen reader ("Window corners", "Icons", "Icon size", "Paint
+// renderer") rather than another name for it.
+//
+// Corners leads them, where it used to come last of three. The reading
+// is outside in — the shape of the window, then what is drawn inside
+// it, then what draws the lot — and, as with the four options before
+// them, the fold is what settled it: the borders box and the corners
+// share the second line of a 453-pixel row, and the icon set, its size
+// and the renderer the third. With the corners last, as they were, the
+// icons had a line to themselves and the row took four.
+var settingWords = [4]string{"Corners", "Icons", "Size", "Paint"}
+
+// rendererPrefs are the devices the paint chooser offers, in its order:
+// let the toolkit decide, then the two definite answers.
+var rendererPrefs = []style.RendererPref{style.RendererAuto, style.RendererGPU, style.RendererCPU}
+
+// renderer is the chooser for the device that paints — the EGL/GLES one
+// or the CPU rasterizer — and it is the odd one out on this row twice
+// over.
+//
+// It is not appearance. Everything else here changes what a window looks
+// like; this changes what draws it, and on a working GPU the two paths
+// are meant to be the same picture. It is on this row because it is a
+// setting of the toolkit the user owns, this is where the toolkit's
+// settings are read, and the alternative was a second preferences page
+// for one enum.
+//
+// And it is the one setting on the page that a window already open
+// cannot take. Every other Apply reaches the windows that exist:
+// [app.Application.ApplyAppearance] re-looks them where they stand. A
+// surface binds its paint device when it is created — wl_egl_window and
+// eglSwapBuffers for the GPU, wl_shm or XPutImage for the CPU — and
+// swapping that under a mapped window means tearing an EGL context down
+// and building another, with a frame of nothing in between. So this
+// chooser is honest about its reach instead: what it says, and what it
+// is read out as, is that the windows opened after Apply get it and the
+// ones already up keep what they started with. A chooser that quietly
+// did nothing until the next start is the shape of bug that cost this
+// page two releases.
+//
+// It also says what is actually being painted with, which a preference
+// on its own never does. "Auto" is a question, not an answer: a machine
+// whose EGL will not initialise runs the whole toolkit on the CPU and
+// the page would otherwise show a cheerful "Auto" over it. So the tip
+// and the accessible description name the device this very window is
+// presenting through ([app.Window.PaintBackend]), and say so when
+// UITK_PAINT is what decided it.
+func (s *settingsState) renderer() *widgets.ComboBox {
+	names := make([]string, len(rendererPrefs))
+	for i, p := range rendererPrefs {
+		names[i] = p.Label()
+	}
+	// Auto's item was "Auto (CPU)" for an afternoon — the resolved device
+	// on the face of the control, where nobody has to hover for it. It
+	// does not fit: the suffix is 49 px, the combo measures itself on its
+	// longest item, and the third line of the 453-pixel row at the
+	// 720x520 minimum has 42 px spare. It folded onto a fourth line and
+	// took the preview under 60% of its pane. So what is really painting
+	// is in the tip and in the accessible description, which are the same
+	// sentence and say it in full — see [settingsState.rendererTip].
+	s.render = widgets.NewComboBox(names, rendererIndex(s.staged.Renderer), func(i int) {
+		if i < 0 || i >= len(rendererPrefs) {
+			return
+		}
+		next := s.staged
+		next.Renderer = rendererPrefs[i]
+		s.stage(next)
+	})
+	s.render.MinWidth = 1
+	// "Paint" on the page, "Paint renderer" to a screen reader: the
+	// visible word is inside the spoken name, as everywhere else on this
+	// row. "Paint" rather than "Renderer" because it is the word the
+	// environment variable and the docs have always used (UITK_PAINT),
+	// and because five characters is what the row has room for.
+	s.render.SetAccessibleName("Paint renderer")
+	s.render.Tip = s.rendererTip()
+	s.render.SetAccessibleDescription(s.render.Tip)
+	return s.render
+}
+
+// rendererTip is what the paint chooser says about itself: what the
+// choice means, what is really painting this window, what decided that,
+// and how far an Apply reaches. It is rebuilt whenever the staged choice
+// changes, because all four answers can move.
+func (s *settingsState) rendererTip() string {
+	var b strings.Builder
+	b.WriteString("Paint renderer — a real setting: Auto takes the GPU (EGL/GLES) where it starts and the CPU rasterizer where it does not. ")
+	// The window this page is drawn in, not the preference and not the
+	// application's best window: the sentence says "this window", so it
+	// has to ask this window's surface.
+	got := "the CPU"
+	if s.win.PaintBackend() == style.RendererGPU {
+		got = "the GPU"
+	}
+	b.WriteString("This window is painting on " + got + ".")
+	if env, ok := app.RendererOverride(); ok {
+		b.WriteString(" " + app.RendererEnv + "=" + strings.ToLower(env.Label()) +
+			" is set here and overrides the saved choice in this process; Apply still writes it for everything else.")
+	}
+	// The one thing on this page that Apply cannot give a window that is
+	// already up. Said on the control rather than in a footnote: this is
+	// where a person is when they need it.
+	b.WriteString(" Apply writes it, and the windows opened after that are drawn with it — the ones already open, this one included, keep the device they were created with.")
+	return b.String()
+}
+
+func rendererIndex(p style.RendererPref) int {
+	for i, want := range rendererPrefs {
+		if want == style.ParseRendererPref(string(p)) {
+			return i
+		}
+	}
+	return 0 // auto, the default
+}
 
 // ---- Files --------------------------------------------------------------------
 
@@ -969,6 +1105,19 @@ func (s *settingsState) showStagedControls() {
 		if i := iconSizeIndex(s.staged.IconSize); i != s.iconSize.Selected {
 			s.iconSize.Selected = i
 			s.iconSize.Invalidate()
+		}
+	}
+	if s.render != nil {
+		if i := rendererIndex(s.staged.Renderer); i != s.render.Selected {
+			s.render.Selected = i
+			s.render.Invalidate()
+		}
+		// What the chooser says about itself moves with the choice: what
+		// Auto resolves to on this machine is one sentence, what a
+		// definite GPU or CPU asks for is another.
+		if tip := s.rendererTip(); tip != s.render.Tip {
+			s.render.Tip = tip
+			s.render.SetAccessibleDescription(tip)
 		}
 	}
 }

@@ -12,16 +12,19 @@
 // a small live application window in the staged pack, with the settings
 // in a folding row over it and the three config paths under it.
 //
-// That row is four check boxes — Animations, OS open/save dialogs, OS
-// borders, OS colors — and then the three choosers that say what a pack
-// is drawn with: Icons, Size, Corners. It folds onto two lines at the
-// default window size, the options on the first and the choosers on the
-// second, and onto three at the 720x520 minimum. The icon chooser lists
+// That row is four check boxes — Animations, OS colors, OS open/save
+// dialogs, OS window borders — and then the four choosers that say what
+// a pack is drawn with and what draws it: Corners, Icons, Size, Paint.
+// It folds onto two lines at the default window size, the options on the
+// first and the choosers on the second, and onto three at the 720x520
+// minimum. Paint is the renderer (look.json "renderer", UITK_PAINT's
+// three values) and is the one setting here that a window already open
+// cannot take; the chooser says so. The icon chooser lists
 // classic/sharp plus wide premiere PNG sets copied into
 // ~/.config/uitoolkit/icons/<set>/.
 //
 // Where the caption buttons of a frame the toolkit draws go is not a box
-// of its own: unticking OS borders puts them where the theme says, which
+// of its own: unticking OS window borders puts them where the theme says, which
 // is the only opinion there is once the toolkit is drawing the frame.
 //
 // The window in the pane is a sample, with one exception: its File menu's

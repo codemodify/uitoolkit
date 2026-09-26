@@ -20,11 +20,20 @@ import (
 // bar that stood at the head of the window for a release grew inside
 // this rectangle rather than pushing it down. What is over and under it
 // does move them, and the last two changes moved them both ways at once.
-// The three choosers came off that bar and onto the page, which gave the
+// Three choosers came off that bar and onto the page, which gave the
 // block over the panel a second line and pushed its top down 30 px
 // (y 44 → 74); the three paths under it gave up the group box they were
 // in, whose legend and frame were 34 px (101 → 67). Four of those 34 are
 // the difference: the panel is 651 tall where it was 647.
+//
+// Renaming "OS borders" to "OS window borders" and adding a fourth
+// chooser did not move them either, which is not obvious: between them
+// they put 199 px more into that folding row. The row's order changed
+// with them (settings.go, optionsRow), so it still folds onto two lines
+// at this size and still stands 56 px tall. These numbers were
+// re-measured in the eight packs below, and rendered through
+// tools/atlas/render.sh's own crop in three of them, rather than
+// assumed.
 //
 // The column on the left cannot move them either, whatever is taken out
 // of it: the splitter's ratio is worked out from the window's width and

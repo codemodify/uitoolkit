@@ -59,7 +59,7 @@ func TestSettingsPageHoldsAtEverySize(t *testing.T) {
 				// 62% at the 720x520 minimum, where the row folds onto
 				// three lines.
 				//
-				// It went up, not down, when the three choosers came out
+				// It went up, not down, when three choosers came out
 				// of the preview and onto this page: the line they cost
 				// the pane is 30 px and the group box the three paths
 				// gave up under it was 34. Two rows of settings instead
@@ -84,7 +84,7 @@ func TestSettingsPageHoldsAtEverySize(t *testing.T) {
 				// wrapping row keeps what it carries and takes a line
 				// instead.
 				row := optionsRow(t, w)
-				for _, word := range []string{"Animations", "OS open/save dialogs", "OS borders", "OS colors"} {
+				for _, word := range []string{"Animations", "OS colors", "OS open/save dialogs", "OS window borders"} {
 					box := findOption(w.Content(), word)
 					if box == nil {
 						t.Fatalf("%s at %g×, %dx%d: no %q option", pack, scale, size[0], size[1], word)
@@ -108,7 +108,7 @@ func TestSettingsPageHoldsAtEverySize(t *testing.T) {
 					t.Errorf("%s at %g×, %dx%d: %d of the %d words in front of the choosers are on the page",
 						pack, scale, size[0], size[1], words, len(settingWords))
 				}
-				for _, name := range []string{"Icons", "Icon size", "Window corners"} {
+				for _, name := range []string{"Window corners", "Icons", "Icon size", "Paint renderer"} {
 					cb := namedCombo(w.Content(), name)
 					if cb == nil {
 						t.Fatalf("%s at %g×, %dx%d: no %q chooser", pack, scale, size[0], size[1], name)
@@ -123,9 +123,18 @@ func TestSettingsPageHoldsAtEverySize(t *testing.T) {
 					}
 				}
 				// The fold: two lines at 1024x860, where the four options
-				// fill the first and the three choosers fall onto the
+				// fill the first and the four choosers fall onto the
 				// second all by themselves, and three at the 720x520
 				// minimum. Four would be a line too many — see above.
+				//
+				// It survived "OS borders" growing into "OS window
+				// borders" (63 px) and a fourth chooser (136 px with its
+				// word and the gap before it) because the order of the
+				// row changed with them: the three narrow options lead,
+				// so the widest folds down beside the corners instead of
+				// leaving the icons a line of their own. Left as it was,
+				// the minimum took four lines and the preview 55% of its
+				// pane.
 				lines := rowLines(row)
 				want := 3
 				if size[0] > 800 {

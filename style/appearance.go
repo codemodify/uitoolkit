@@ -83,6 +83,12 @@ type Appearance struct {
 	// default) or CaptionButtonsTheme (the look's own: the Mac's traffic
 	// lights on the left, GNOME's lone close, KDE's window menu).
 	CaptionButtons CaptionButtonsPref
+	// Renderer is the paint device a window's surface binds when it is
+	// created: RendererAuto (the GPU where EGL starts, else the CPU),
+	// RendererGPU or RendererCPU. UITK_PAINT overrides it wherever it is
+	// set — the file is never rewritten to match — and a window already
+	// open keeps the device it was created with. See [RendererPref].
+	Renderer RendererPref
 }
 
 // CaptionButtonsPref is the look.json "captionButtons" preference.
@@ -126,6 +132,58 @@ func ParseDecorationsPref(s string) DecorationsPref {
 		return DecorationsToolkit
 	}
 	return DecorationsAuto
+}
+
+// RendererPref is the look.json "renderer" preference: which paint
+// device the toolkit binds to a window's surface when it is created.
+//
+// It is not what the toolkit looks like, and it is in this file anyway,
+// beside "decorations" and "nativeDialogs" — the two other preferences
+// that say *who does the work* rather than what the result looks like
+// (the desktop's frame or the toolkit's, the desktop's file dialogs or
+// the toolkit's). look.json is the toolkit's one preferences file: one
+// atomic write from Settings, one read at start-up in every app, one
+// watcher. A file of its own would have been a second of each for a
+// single enum. See docs/settings.md, "Where the renderer preference
+// lives".
+type RendererPref string
+
+const (
+	// RendererAuto takes an EGL/GLES device when it initialises and the
+	// CPU rasterizer when it does not. It is the default (the zero
+	// value; written "auto" or left out of look.json).
+	RendererAuto RendererPref = ""
+	// RendererGPU asks for the EGL/GLES device. A window whose EGL
+	// cannot start still opens, on the CPU: a preference is not a
+	// promise the driver has to keep.
+	RendererGPU RendererPref = "gpu"
+	// RendererCPU is the portable scanline rasterizer, presented through
+	// wl_shm or XPutImage.
+	RendererCPU RendererPref = "cpu"
+)
+
+// ParseRendererPref accepts auto / gpu / cpu and the words the same three
+// go by elsewhere (egl, gles; software, raster); anything else is auto.
+func ParseRendererPref(s string) RendererPref {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "gpu", "egl", "gles":
+		return RendererGPU
+	case "cpu", "software", "raster":
+		return RendererCPU
+	}
+	return RendererAuto
+}
+
+// Label is the word the renderer chooser shows for p.
+func (p RendererPref) Label() string {
+	switch ParseRendererPref(string(p)) {
+	case RendererGPU:
+		return "GPU"
+	case RendererCPU:
+		return "CPU"
+	default:
+		return "Auto"
+	}
 }
 
 // DefaultAppearance is the default theme ([DefaultThemeName], a light
@@ -225,6 +283,7 @@ func (a Appearance) Normalize() Appearance {
 	a.IconSize = ParseIconSize(string(a.IconSize))
 	a.Decorations = ParseDecorationsPref(string(a.Decorations))
 	a.CaptionButtons = ParseCaptionButtonsPref(string(a.CaptionButtons))
+	a.Renderer = ParseRendererPref(string(a.Renderer))
 	if strings.TrimSpace(a.Name) == "" {
 		a.Name = StarterName(a.Theme)
 	}

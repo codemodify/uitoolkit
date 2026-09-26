@@ -96,6 +96,11 @@ type Application struct {
 	// captionPref is where toolkit frames put their caption buttons: the
 	// desktop's layout or the look's own (look.json "captionButtons").
 	captionPref style.CaptionButtonsPref
+	// renderPref is the paint device new windows ask for (look.json
+	// "renderer"). It is the application's copy of what was pushed into
+	// platform.SetPaintPref, so Appearance can report it; UITK_PAINT
+	// overrides it there and this field never sees the override.
+	renderPref style.RendererPref
 	// palettes are the colour-scheme files written for the desktop's
 	// frame, by look, and paletteWarned is set once writing one failed
 	// (dress.go); icon is every window's icon (SetIcon).
@@ -137,14 +142,23 @@ func New(opts Options) *Application {
 	var decorPref style.DecorationsPref
 	var captionPref style.CaptionButtonsPref
 	if !opts.Headless {
-		// "OS borders" (Settings' name for the desktop's title bar and
-		// borders) and the caption buttons' layout are desktop-wide
-		// choices: they apply to apps with a look of their own too.
+		// "OS window borders" (Settings' name for the desktop's title bar
+		// and borders), where the caption buttons go and which paint
+		// device a window binds are desktop-wide choices: they apply to
+		// apps with a look of their own too.
 		if !preferred {
 			ap = style.LoadAppearance()
 		}
 		decorPref, captionPref = ap.Decorations, ap.CaptionButtons
 	}
+	// A surface binds its paint device when it is created, so the
+	// preference has to be in place before the first NewWindow. An
+	// offscreen surface paints into a pixmap whatever it says; the
+	// preference is remembered there too, so Appearance reports what was
+	// applied rather than a default, and so that a headless test can see
+	// that UITK_PAINT still wins over it.
+	renderPref := ap.Renderer
+	platform.SetPaintPref(string(renderPref))
 	var backend platform.Backend
 	if opts.Backend != "" {
 		backend = platform.Select(opts.Backend, opts.Headless)
@@ -171,6 +185,7 @@ func New(opts Options) *Application {
 		watchLook:   watch,
 		decorPref:   decorPref,
 		captionPref: captionPref,
+		renderPref:  renderPref,
 	}
 	// Ask the desktop for its preferences before the look is built: a
 	// theme that follows its light / dark mode starts in the right one.

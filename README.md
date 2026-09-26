@@ -57,7 +57,7 @@ go get github.com/codemodify/paintengine2d@v0.9.0
     the theme's), in each theme's own style — Windows 95's navy caption,
     XP's blue one, Aqua's traffic lights, libadwaita's round buttons,
     SourceGit's flat cells — handing moves, resizes and the window menu to
-    the desktop; Settings' "OS borders" gives the desktop's
+    the desktop; Settings' "OS window borders" gives the desktop's
     frame back. See [docs/decorations.md](docs/decorations.md).
   - Windows of any shape: a silhouette instead of a rectangle, with a hole
     through it you can see the desktop through and click through to
@@ -365,7 +365,7 @@ go run ./examples/uitoolkit-sample-tour -page controls  # every widget, one page
 UITK_BACKEND=x11 go run ./examples/uitoolkit-sample-tour
 UITK_BACKEND=wayland go run ./examples/uitoolkit-sample-tour
 UITK_PAINT=auto go run ./examples/uitoolkit-sample-tour   # default: GPU if EGL works
-UITK_PAINT=cpu go run ./examples/uitoolkit-sample-tour    # v0.4.1 CPU present
+UITK_PAINT=cpu go run ./examples/uitoolkit-sample-tour    # v0.4.1 CPU present (beats look.json "renderer")
 UITK_SCENE=off go run ./examples/uitoolkit-sample-tour    # v0.5 immediate paint (no scene graph)
 go run ./cmd/uitk-shots -gallery gallery.png  # the showcase alone, offscreen
 go run ./examples/uitoolkit-sample-notes
@@ -400,6 +400,12 @@ XRGB8888** on Wayland (`UITK_WAYLAND_PRESENT=auto|shm`).
 `UITK_WAYLAND_PRESENT=dmabuf` opts into linux-dmabuf on the CPU path.
 `UITK_PAINT=cpu` forces the CPU painter. If a Wayland window is fully
 transparent, set `UITK_PAINT=cpu` and/or `UITK_WAYLAND_PRESENT=shm`.
+The same three values are a **saved preference** as well — `look.json`
+`"renderer"`, written by Settings' **Paint** chooser — and `UITK_PAINT`
+beats the file wherever it is set. A surface binds its device when it is
+created, so a change reaches the windows opened after it and not the ones
+already up; `Application.PaintBackend` says which of the two a window is
+really presenting through.
 `Application.Run` waits on the display fd (not a 16 ms ticker) and skips
 `Present` when damage is empty. Default `UITK_SCENE` records a retained
 graph (`Recorder` / `DrawScene`); `UITK_SCENE=off` is the immediate path.
@@ -785,28 +791,39 @@ what is already on screen. `uitoolkit-settings -version` is where the
 version went. Everything that is not the browser stands with that window:
 one folding row of settings over it and the three config paths under it.
 The row is four check boxes —
-`☑ Animations ☐ OS open/save dialogs ☐ OS borders ☐ OS colors`, each
-short word inside the full name a screen reader says — and then the three
-choosers that say what a pack is drawn with,
-`Icons [Classic ▾] Size [24 ▾] Corners [Theme shape ▾]`. It folds onto
-**two lines at 1024×860**, the options on the first and the choosers on
-the second, and **three at the 720×520 minimum**; it is one wrapping row
-rather than two fixed ones because two rows fold on their own account and
-cost a fourth line at that minimum, which is a preview that has stopped
-being the biggest thing in its pane. The choosers spent a release on a
-bar inside the previewed window — "the preview configures itself" — and
-they are settings of the page, so they are read where the page keeps its
-settings; the window below is a mock application again, with nothing live
-in its chrome. Where the **caption buttons** of a frame the toolkit draws
-go is no longer a box either: unticking *OS borders* puts them where the
-theme says, because while the toolkit is drawing the frame the theme is
-the only thing with an opinion (`style.CaptionButtonsPref` and
+`☑ Animations ☐ OS colors ☐ OS open/save dialogs ☐ OS window borders`,
+each short word inside the full name a screen reader says — and the four
+choosers that say what a pack is drawn with and what draws it,
+`Corners [Theme shape ▾] Icons [Classic ▾] Size [24 ▾] Paint [Auto ▾]`. It
+folds onto **two lines at 1024×860**, the options on the first and the
+choosers on the second, and **three at the 720×520 minimum**; it is one
+wrapping row rather than two fixed ones because two rows fold on their own
+account and cost a fourth line at that minimum, which is a preview that has
+stopped being the biggest thing in its pane. The order of the row is the
+order it is read *and* what makes it fold that way: the three narrow
+options lead, so the widest can share the second line with the corners.
+Three of the choosers spent a release on a bar inside the previewed
+window — "the preview configures itself" — and they are settings of the
+page, so they are read where the page keeps its settings; the window
+below is a mock application again, with nothing live in its chrome. Where
+the **caption buttons** of a frame the toolkit draws go is no longer a
+box either: unticking *OS window borders* puts them where the theme says,
+because while the toolkit draws the frame the theme is the only thing
+with an opinion (`style.CaptionButtonsPref` and
 `Application.SetCaptionButtons` are unchanged for an application that
 wants to choose). The one live thing left in the preview is its **File
 menu**: *Open…* and *Save…* open the dialog *OS open/save dialogs* is
 asking for — the desktop's through the XDG portal, or the toolkit's own
 in the pack being staged — and open nothing, so the option can be looked
-at rather than read.
+at rather than read. **Paint** is the fourth chooser and the newest
+setting on the page: *Auto*, *GPU* or *CPU*, written to `look.json` as
+`"renderer"`, which is `UITK_PAINT` made choosable without a terminal
+(and `UITK_PAINT` still beats the file wherever it is set). It is the one
+setting here a window already open cannot take — a surface binds its
+paint device when it is created — so the chooser says so, and says which
+device *this* window is really presenting through, because "Auto" on a
+machine whose EGL never started is not an answer. See
+[docs/settings.md](docs/settings.md#the-renderer).
 
 *Smaller additions from the same source.* `dock.Host.SaveLayoutFile` /
 `LoadLayoutFile` (every docking application had rebuilt the same path

@@ -30,7 +30,7 @@ const EnvDecorationPalette = "UITK_DECORATION_PALETTE"
 // palette on the wire only when it changed.
 //
 // The scheme goes to the desktop even while the toolkit draws the frame,
-// so a live switch to the desktop's frame (Settings' "OS borders") comes up
+// so a live switch to the desktop's frame (Settings' "OS window borders") comes up
 // in the right colours at once.
 func (w *Window) syncDecorationPalette() {
 	if w == nil || w.surf == nil || w.opts.Popup || os.Getenv(EnvDecorationPalette) == "0" {

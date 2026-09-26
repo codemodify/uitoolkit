@@ -159,7 +159,7 @@ Also merged to `dev` and pushed:
   engine paint its era's frame, and every other pack gets its in-app window
   caption adapted, so all 121 have one: 70 native, 31 adapted, 2 plain.
   Settings writes look.json's `captionButtons` with the frame it goes
-  with: unticking "OS borders" hands the layout to the theme.
+  with: unticking "OS window borders" hands the layout to the theme.
 - **18 more packs of today's looks** (`engine/modern`): macOS Tahoe's Liquid
   Glass, Plasma 6's Breeze, GNOME 48's Adwaita, Material 3 Expressive, VS
   Code's 2026 themes, JetBrains Islands, and the Gruvbox, Solarized and Atom

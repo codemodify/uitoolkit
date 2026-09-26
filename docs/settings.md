@@ -33,8 +33,8 @@ error. The names of the four pages Settings used to have still
 resolve, because they are in scripts, in the atlas tooling and in the
 docs of two releases: `themes` and `packs` (and `packs & icons`, `theme
 packs`) open **Theme**, `appearance`, `icons` and `corners` open the
-**Preview** — the three choosers that say what the previewed window is
-drawn with, which stand with the options over it —
+**Preview** — the choosers that say what the previewed window is
+drawn with, and what draws it, which stand with the options over it —
 `about` opens **Files**, and `desktop` and `colours` open **Behaviour**,
 because following the desktop's colours is one of the four options in
 that row. An unknown name is the top of the page.
@@ -52,9 +52,9 @@ list of packs, inside itself.
 The line through the page is no longer between kinds of choice but
 between the browser and the thing it is browsing for. Everything that is
 not the list of packs stands with the preview: **one folding row of
-settings over it** — four check boxes and then the three choosers for the
-icon set, its size and the window's corners — and the three **config
-paths** under it.
+settings over it** — four check boxes and then the four choosers for the
+window's corners, the icon set, its size and the renderer — and the
+three **config paths** under it.
 
 The column is about 300 logical pixels wide whatever the window and the
 display scale are, and it keeps that share while the window is resized
@@ -161,12 +161,12 @@ paths gave up under the preview was 34. They were 82% and 61% before.
 ### Over and under the preview
 
 **The settings**, in one row over the preview that folds: four check
-boxes, each wearing a short word, and then the three choosers that say
-what a pack is drawn with.
+boxes, each wearing a short word, then the three choosers that say what
+a pack is drawn with, and a fourth that says what draws it.
 
 ```
-☑ Animations  ☐ OS open/save dialogs  ☐ OS borders  ☐ OS colors
-Icons [Classic ▾]  Size [24 ▾]  Corners [Theme shape ▾]
+☑ Animations  ☐ OS colors  ☐ OS open/save dialogs  ☐ OS window borders
+Corners [Theme shape ▾]  Icons [Classic ▾]  Size [24 ▾]  Paint [Auto ▾]
 ```
 
 That is what it looks like at 1024×860 — and it is **one wrapping row**,
@@ -176,33 +176,49 @@ for itself. Why it is one row is under *The fold*, below.
 | On the box | To a screen reader | What it is |
 | --- | --- | --- |
 | **Animations** | Animations | Hover fades, the default button's pulse, busy bars (GTK's `gtk-enable-animations`). While the desktop itself asks for reduced motion it says so, because the desktop's setting wins over the preference |
-| **OS open/save dialogs** | OS open/save dialogs: the desktop's own Open and Save | KDE's and GNOME's own Open and Save, through the XDG portal, instead of the themed ones |
-| **OS borders** | OS borders: the desktop's title bar and borders | Chromium's switch. On, every window gets the desktop's title bar and borders, and one that draws its own title bar (Mail's, with its tool bar in it) keeps it as its first row; off, the toolkit draws every frame in the theme's style **and the theme places the caption buttons**. The two states write look.json's `"decorations"` as `system` and `toolkit` — never `auto`, which is a third thing and is not what the box says ([decorations.md](decorations.md#the-settings-switch)) — and `"captionButtons"` as `theme` and the desktop's default with them |
 | **OS colors** | OS colors: follow the desktop's light or dark mode and its accent | The pack shows its sibling to match the desktop — a chosen *Breeze* draws as *Breeze Dark* — recoloured around the desktop's accent where the engine takes one |
+| **OS open/save dialogs** | OS open/save dialogs: the desktop's own Open and Save | KDE's and GNOME's own Open and Save, through the XDG portal, instead of the themed ones |
+| **OS window borders** | OS window borders: the desktop's title bar and borders | Chromium's switch. On, every window gets the desktop's title bar and borders, and one that draws its own title bar (Mail's, with its tool bar in it) keeps it as its first row; off, the toolkit draws every frame in the theme's style **and the theme places the caption buttons**. The two states write look.json's `"decorations"` as `system` and `toolkit` — never `auto`, which is a third thing and is not what the box says ([decorations.md](decorations.md#the-settings-switch)) — and `"captionButtons"` as `theme` and the desktop's default with them |
 
-And the three choosers after them:
+**The order changed with the rename.** *OS borders* became *OS window
+borders* — seven characters, 63 px — and a fourth chooser joined the end
+of the row, and with the old order the 453-pixel row of a 720×520 window
+folded onto **four** lines, which takes the preview under the 60% of its
+pane this page promises. The reading is now: what the toolkit does on its
+own account, then the three that hand a piece of the window to the
+desktop, in the order of how much they hand over — its colours, then the
+dialogs it opens, then the frame around it. *OS colors* loses its old
+place next to the caption it changes and keeps its old job; the three
+narrow options lead, which is what folds the row back onto three lines.
+
+And the four choosers after them:
 
 | On the page | To a screen reader | What it is |
 | --- | --- | --- |
+| **Corners** | Window corners | *Theme shape* (the pack's own), *Round* or *Square*, and the previewed window's frame is cut to it |
 | **Icons** | Icons | The icon set the chrome is drawn in: `classic` / `sharp` and any premiere or user set installed under `~/.config/uitoolkit/icons/` |
 | **Size** | Icon size | The pixel size its glyphs are drawn at — **16 / 24 / 32**, the way a word processor's size box lists numbers, because a set's glyphs are drawn at it and a page that showed a fixed size would be showing something the user is not going to get |
-| **Corners** | Window corners | *Theme shape* (the pack's own), *Round* or *Square*, and the previewed window's frame is cut to it |
+| **Paint** | Paint renderer | *Auto*, *GPU* or *CPU* — which device paints. See [The renderer](#the-renderer), below: it is the one setting here that the windows already open cannot take |
+
+*Corners* leads them where it used to come last of three: the reading is
+outside in — the shape of the window, then what is drawn inside it, then
+what draws the lot — and, as with the options, the fold settled it.
 
 **Where the caption buttons go is not a box any more.** It was one,
 *Theme buttons*, and it asked a question about a title bar that only
-exists while *OS borders* is unticked: with the desktop drawing the frame
+exists while *OS window borders* is unticked: with the desktop drawing the frame
 there is no toolkit caption to put buttons on, and with the toolkit
 drawing it the theme is the only thing on this page with an opinion about
 where they go — the Mac's traffic lights on the left, GNOME's lone close,
 KDE's window menu. So the rule is implicit: **the toolkit draws the
-frame, the theme places the buttons**, and *OS borders* writes both
+frame, the theme places the buttons**, and *OS window borders* writes both
 halves of it. `style.CaptionButtonsPref` and
 `app.Application.SetCaptionButtons` are unchanged — they are public API
 and an application may still want to choose; Settings is what stopped
 asking — and a `look.json` that already says `"captionButtons"` keeps
 saying it until that box is touched.
 
-**The three choosers came out of the previewed window.** They spent a
+**Three of the four choosers came out of the previewed window.** They spent a
 release on a bar of Settings' own over the sample's menu bar, where
 "what shows a setting is what sets it"; before that the set and the size
 were at the free-space end of the sample's own tool bar, where they were
@@ -225,14 +241,14 @@ accessible description instead. Over the preview, every line of prose is
 a line off the window the whole page is for.
 
 **The short word is inside the spoken name**, never beside it — the same
-rule the three choosers follow at the other end of the row, where *Size*
+rule the four choosers follow at the other end of the row, where *Size*
 is read out as *Icon size*. What the eye gets from the row the box
 stands in, the ear gets from the rest of the name. `Dialogs` on its own
 would have been a riddle; `OS open/save dialogs` read as *OS open/save
 dialogs: the desktop's own Open and Save* is one name for one control.
 
-**Three of the four say `OS`** — *OS open/save dialogs*, *OS borders*,
-*OS colors* — because those three are the ones that hand something back
+**Three of the four say `OS`** — *OS colors*, *OS open/save dialogs*,
+*OS window borders* — because those three are the ones that hand something back
 to the desktop, and a reader should not have to work out that *System
 frames* and *OS colors* were the same kind of thing. The fourth,
 *Animations*, is the toolkit's own behaviour and says nothing about
@@ -252,7 +268,7 @@ right-hand pane is 453 of them at the 720×520 minimum.
 layout, GTK's `FlowBox`): it takes another line rather than cut a control
 off at the window frame the way a tool bar's shedding would — a setting
 nobody can reach is worse than another line. The words in front of the
-three choosers are promised for the same reason, where on the bar inside
+four choosers are promised for the same reason, where on the bar inside
 the preview they were not: that bar shed them from the right as it
 narrowed, and at the 720×520 minimum it shed all three, leaving the
 tooltips and the accessible names.
@@ -262,10 +278,17 @@ of a 720×520 one, at scale 1 and 1.75 alike:
 
 | | 1024×860 | 720×520 |
 | --- | --- | --- |
-| the four options | 543 px — one line | 543 px — two: the first three, then *OS colors* |
-| the three choosers | 497 px — the second line, to themselves | the icons and the size beside *OS colors*, the corners on a third |
+| the four options | 606 px — one line | two lines: the three narrow ones (422 px), then *OS window borders* |
+| the four choosers | 639 px — the second line, to themselves | the corners beside *OS window borders* (404 px), then the icons, the size and the paint (411 px) |
 | **the row** | **2 lines**, 56 px | **3 lines**, 86 px |
 | the preview | **82%** of the pane | **62%** |
+
+Those are the same two numbers for the preview as before *OS borders*
+grew seven characters and the renderer chooser arrived: the row carries
+199 px more and folds the same, because the order absorbed them. The
+`x 317, y 74, 697 × 651` crop the Theme Atlas takes is unmoved for the
+same reason, and was re-measured in the eight packs
+`TestSettingsPreviewPanelKeepsItsPlace` walks to say so.
 
 **One wrapping row, not two fixed ones**, and that is a measurement
 rather than a preference. Two rows each fold on their own account: the
@@ -273,24 +296,131 @@ options take two lines at 453 px and the choosers take two more, which is
 **four** lines where one wrapping row takes three — 78 px off a preview
 that has 281, and it stops being what the pane is for. A row that folds
 is also what *gives* the two-row reading wherever there is room for it:
-at 1024×860 the four options fill the first line and the three choosers
+at 1024×860 the four options fill the first line and the four choosers
 fall onto the second by themselves, which is the arrangement, arrived at
 by folding rather than by decree.
 
 **What the fold must never break** is a chooser from the word in front of
-it, or the icon set from the size its glyphs are drawn at. So the three
-choosers go into the row as **two** children, not six: the pair that says
-what is drawn, and the one that says what shape the window is — the two
-groups the divider on the old bar stood between. Inside a group the
-spacing does the rest: six pixels between a word and its box, fourteen
-between one pair and the next, and fourteen between the groups.
+it, or the icon set from the size its glyphs are drawn at. So the four
+choosers go into the row as **three** children, not eight: the one that
+says what shape the window is, the pair that says what is drawn in it,
+and the one that says what draws it. Inside a group the spacing does the
+rest: six pixels between a word and its box, fourteen between one pair
+and the next, and fourteen between the groups.
 
-The order is the order they are read. The options come first because
-three of them are about the desktop and the fourth about motion, and none
-of them changes what the window below is *drawn* with; *OS colors* is
-last of the four, nearest the window whose caption it changes, because it
-is the one that decides which pack is drawn under it (a chosen *Breeze*
-shows as *Breeze Dark*).
+**The order is the order they are read, and it was settled by the fold.**
+The options come first because three of them are about the desktop and
+the fourth about motion, and none of them changes what the window below
+is *drawn* with. Within them, *OS window borders* is last because it is
+the widest, and a row whose first line is its three narrow boxes folds
+onto three lines where the old order folded onto four; *OS colors*, which
+used to sit last for being nearest the caption it changes, moved up to
+second, where it reads as the first and lightest of the three hand-overs
+to the desktop. Among the choosers the corners lead for the same two
+reasons at once: the reading is outside in, and the corners are what the
+borders box can share a line with at 453 px.
+
+#### The renderer
+
+**Paint** is the fourth chooser and the odd one on the page twice over.
+It is not appearance — on a working GPU the two paths are meant to be the
+same picture — and it is the one setting here that **a window already
+open cannot take**.
+
+| | |
+| --- | --- |
+| On the page | **Paint** |
+| To a screen reader | *Paint renderer* |
+| Offers | **Auto** (the default), **GPU**, **CPU** |
+| Writes | `look.json` `"renderer"`, `gpu` / `cpu`; auto is left out |
+| Overridden by | `UITK_PAINT=cpu\|gpu\|auto`, always, and the file is never rewritten to match |
+| Reaches | the windows opened **after** Apply |
+
+**Auto** takes an EGL/GLES device where it initialises and the CPU
+rasterizer where it does not; **GPU** asks for EGL and still opens on the
+CPU if the driver will not give it (a preference is not a promise the
+driver has to keep); **CPU** is the portable scanline rasterizer,
+presented through `wl_shm` or `XPutImage`. That is the same three
+`UITK_PAINT` has always meant — see [platform.md](platform.md) — with the
+difference that it is now a choice a person can make without a terminal.
+
+**What it does to a running application.** A surface binds its paint
+device when it is *created*: `wl_egl_window` + `eglSwapBuffers` on one
+path, a shared-memory pixmap on the other. Swapping that under a mapped
+window means tearing an EGL context down and building another, with a
+frame of nothing in between, and on Wayland it changes the present path
+as well. So Apply pushes the preference into `platform.SetPaintPref`,
+every window opened afterwards — in this application and, through the
+look watcher, in every other running one — binds its device by it, and
+the windows already up keep what they started with. Settings' own window
+included: applying *GPU* does not move Settings onto the GPU.
+
+**And the chooser says so**, in its tooltip and in the same words as its
+accessible description, because the alternative is exactly the bug this
+page has been paying for — a control that looks live and quietly does
+nothing until the next start. It says three things a preference on its
+own never says:
+
+1. **what is actually painting.** *Auto* is a question, not an answer: a
+   machine whose EGL will not start runs the whole toolkit on the CPU,
+   and a page that showed a cheerful *Auto* over it would be lying by
+   omission. The sentence names the device this very window is presenting
+   through — `app.Application.PaintBackend()`, which asks the surface
+   (`platform.SurfaceBackend`) rather than the preference.
+2. **how far Apply reaches** — the windows opened after it, not this one.
+3. **when `UITK_PAINT` is what decided it.** Started under the variable,
+   the page says so by name and value, goes on showing the *saved*
+   choice, and goes on writing it: the file is the desktop's preference
+   and the variable is this one run's.
+
+**It is not on the face of the control, and that is a compromise.**
+*Auto* read `Auto (CPU)` for an afternoon, which is the version nobody
+has to hover for. It does not fit: a combo box measures itself on its
+longest item, the suffix is 49 px, and the third line of the 453-pixel
+row at the 720×520 minimum has 42 px spare — the row folded onto a fourth
+line and took the preview under 60% of its pane. Shaving the group gaps
+got it to within a pixel and no further. So the answer is in the tip and
+the accessible description, in the same sentence, and the next person to
+widen that pane by 10 px should put it back.
+
+##### Where the renderer preference lives
+
+In `look.json`, as `"renderer"`, beside `"decorations"` and
+`"nativeDialogs"`.
+
+The objection is fair — `style.LoadAppearance` reads that file and the
+file is about appearance. But those two neighbours are not about
+appearance either: they say **who does the work**, the desktop's frame or
+the toolkit's, the desktop's file dialogs or the toolkit's. The renderer
+is the third of exactly that kind, one level further down. And `look.json`
+is the toolkit's *one* preferences file: one atomic write from Apply, one
+read at start-up in every application, one watcher, one path on the
+*Files* lines below the preview. A file of its own would have been a
+second of each, and a second thing that can disagree, for a single enum.
+
+`UITK_PAINT` overriding it is handled one level lower than `UITK_THEME`
+is, and deliberately. `UITK_THEME` replaces what `LoadAppearance` returns,
+so a Settings started under it shows the variable's theme and can save it
+into everybody's file. The renderer override lives in `platform.PaintPref`
+instead: `LoadAppearance` reports what the file says, the variable decides
+what a surface binds, and a Settings started under `UITK_PAINT=cpu`
+therefore shows, stages and saves the user's own choice while painting on
+the CPU — and says both.
+
+##### `UITK_PAINT_MSAA` is not on this page
+
+Multisampling is on by default on the GPU path and
+`UITK_PAINT_MSAA=0` turns it off; it is worth real money on a software GL
+stack, where four samples cost four times the pixels
+([running.md](running.md), [perf.md](perf.md)). It stays an environment
+variable, for three reasons. It is a knob on one of the two renderers, so
+it is meaningless in two of the three states this chooser has and on
+every machine that came up on the CPU. Its effect is edge quality at the
+scale of a pixel, which is the one thing the preview beneath cannot show.
+And the row is at its fold: a fifth control is the fourth line the whole
+arrangement exists to avoid. If it ever earns a control it belongs under
+the renderer and only while the GPU is in use, which is a disclosure this
+row has no room for.
 
 **The three paths** Settings reads and writes, one line each: the
 **prefs** file, the **themes** directory and the **icons** directory,
@@ -428,13 +558,13 @@ words. The column is the browser alone, which is what it was before the
 four pages became one.
 
 The **Theme buttons** check box is gone, and nothing replaced it: where
-the caption buttons of a frame the toolkit draws go follows *OS borders*
+the caption buttons of a frame the toolkit draws go follows *OS window borders*
 now. See the options table above. `style.CaptionButtonsPref` and
 `app.Application.SetCaptionButtons` stay.
 
 The **settings bar inside the preview** is gone — the strip over the
 sample's menu bar that carried `Icons`, `Size` and `Corners` for a
-release. The three choosers are on the page, after the options, and the
+release. The choosers are on the page, after the options, and the
 previewed window is a mock application again. What the bar was built out
 of stays as public API: `widgets.ToolWidget`, `widgets.ToolLabel` and
 `ComboBox.MinWidth` have no caller in this repository any more (the
@@ -534,12 +664,20 @@ over and under it does.** The settings bar was inside the panel, and the
 panel takes whatever is left over it and under it, so the crop did not
 move when that bar went in — it was re-measured then, in the eight packs
 `TestSettingsPreviewPanelKeepsItsPlace` walks, and had not changed. The
-last change moved it both ways at once. The three choosers came off that
-bar and onto the page, which gave the row over the panel a second line
-and pushed the top down 30 px (`y` 44 → 74); the three paths under it
-gave up their group box, which was 34 px of legend and frame. Four of
-those 34 are the difference: the panel is 651 tall where it was 647, and
-`x` and the width are unchanged.
+last change to move it moved it both ways at once. Three choosers came
+off that bar and onto the page, which gave the row over the panel a
+second line and pushed the top down 30 px (`y` 44 → 74); the three paths
+under it gave up their group box, which was 34 px of legend and frame.
+Four of those 34 are the difference: the panel is 651 tall where it was
+647, and `x` and the width are unchanged.
+
+**Renaming *OS borders* and adding the renderer chooser did not move
+them.** Between them they put 199 px more into the folding row, and the
+row folds onto the same two lines at 1024×860 because its order changed
+with them (see *The fold*): the same 56 px over the panel, the same
+`697x651+317+74`. It was re-measured in the eight packs
+`TestSettingsPreviewPanelKeepsItsPlace` walks, and rendered through
+`tools/atlas/render.sh`'s own crop in three of them, rather than assumed.
 
 **No atlas tile carries a bar of Settings' own any more.** Every tile
 did, for a release, because that bar was at the head of the window the
@@ -602,13 +740,13 @@ animations off. `followDesktop` shows the pack's light or dark sibling to
 match the desktop. `nativeDialogs` shows the desktop's own file dialogs
 (KDE's, GNOME's, through the XDG portal) instead of the toolkit's themed
 ones. `decorations` is who draws the frame of a window with its own title
-bar: `system` the desktop (**OS borders**),
+bar: `system` the desktop (**OS window borders**),
 `toolkit` uitoolkit for every window, left out for the default.
 `captionButtons` `theme` puts the caption buttons of a frame uitoolkit
 draws where the theme's era put them (the Mac's traffic lights on the
 left); left out, they follow the desktop's button layout. Settings writes
 it with `decorations`, because the question only arises while the toolkit
-is drawing the frame: unticking **OS borders** writes both `toolkit` and
+is drawing the frame: unticking **OS window borders** writes both `toolkit` and
 `theme`, ticking it writes `system` and leaves `captionButtons` out. It
 is read on load whatever wrote it, so a file that names a layout Settings
 would not now offer keeps it until that box is touched, and

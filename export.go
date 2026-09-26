@@ -59,6 +59,7 @@ type (
 	CornerStyle       = style.CornerStyle
 	IconSetName       = style.IconSetName
 	IconSize          = style.IconSize
+	RendererPref      = style.RendererPref
 	ThemePack         = style.ThemePack
 	ThemeSource       = style.ThemeSource
 	ThemeTokens       = style.ThemeTokens
@@ -100,6 +101,9 @@ const (
 	IconSetTabler          = style.IconSetTabler
 	IconSetHeroicons       = style.IconSetHeroicons
 	IconSetMaterialSymbols = style.IconSetMaterialSymbols
+	RendererAuto           = style.RendererAuto
+	RendererGPU            = style.RendererGPU
+	RendererCPU            = style.RendererCPU
 	IconSizeSmall          = style.IconSizeSmall
 	IconSizeMedium         = style.IconSizeMedium
 	IconSizeLarge          = style.IconSizeLarge
@@ -204,6 +208,12 @@ func NewWizard(title string, pages ...*widgets.WizardPage) *widgets.Wizard {
 
 // LoadPicture decodes a PNG, JPEG or GIF into a Picture.
 func LoadPicture(r io.Reader) (*widgets.Picture, error) { return widgets.LoadPicture(r) }
+
+// RendererEnv is UITK_PAINT, which overrides the saved renderer wherever
+// it is set; RendererOverride is its value when it is.
+const RendererEnv = app.RendererEnv
+
+func RendererOverride() (style.RendererPref, bool) { return app.RendererOverride() }
 
 func StatusItemAvailable() bool { return platform.StatusItemAvailable() }
 func StatusMenuFromItems(items []*widgets.MenuItem) []platform.StatusMenuItem {

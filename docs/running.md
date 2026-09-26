@@ -155,7 +155,16 @@ Escape hatches added in the review pass:
 
 - `UITK_PAINT_FULLFRAME=1` — restore the old full-frame repaint, bypassing partial
   redraw. Run the tour's Controls page both ways to feel the difference.
-- `UITK_PAINT_MSAA=0` — turn off the engine's multisample target.
+- `UITK_PAINT_MSAA=0` — turn off the engine's multisample target. It is on
+  by default where the driver supports it, and four samples cost four
+  times the pixels on a software GL stack (llvmpipe). It stays an
+  environment variable on purpose: it is a knob on one of the two
+  renderers, it does nothing on a machine that came up on the CPU, and
+  its effect is edge quality at the scale of a pixel — see
+  [settings.md](settings.md#uitk_paint_msaa-is-not-on-this-page).
+- `UITK_PAINT=cpu|gpu|auto` — which device paints. It is a saved
+  preference too now (`look.json` `"renderer"`, Settings' **Paint**
+  chooser); the variable wins wherever it is set.
 
 ---
 
