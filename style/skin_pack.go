@@ -17,7 +17,7 @@ import (
 // That is the decision this file implements, and it is what makes the
 // feature safe. A skin is not a mode an app opts into and not a second
 // picker: it is a ThemePack with `"engine": "skin"`, listed in Settings
-// beside the other 121, selected by the same look.json preference, applied
+// beside the other 123, selected by the same look.json preference, applied
 // live by the same watcher, and reachable with UITK_THEME=<id> like any
 // other. So a skinned app is a themed app underneath, always, and dropping
 // the skin at run time leaves a working app.

@@ -71,7 +71,7 @@ func main() {
 }
 
 // writeGalleryShot renders the showcase on its own into one PNG. It is
-// the Theme Atlas's picture of a pack (tools/atlas/render.sh renders 129
+// the Theme Atlas's picture of a pack (tools/atlas/render.sh renders 131
 // of them), which used to be taken by running the examples/gallery
 // sample headless; the sample is a page of the tour now, and a picture
 // the tooling needs is the tooling's to take. The window is the size

@@ -356,6 +356,8 @@ are its reach past the window at 1x, top / right / bottom / left:
 | `os2` | stacked: Warp 4's sizing border, the mini icon, the sunken #2B00AA title well and the Close, Hide and Maximize glyphs | square | none |
 | `win31` | stacked: the sizing frame, the navy caption with its centred bold title, the control-menu box and the arrow buttons (both arrows while maximized) | square | none |
 | `openlook` | stacked: olwm's black outline with the L-shaped resize corners, the header recessed while focused, the abbreviated menu button — the only control OPEN LOOK put on a frame | square | none |
+| `kde1` | stacked: kwm's raised grey border with the title strip sunk into it, blending navy into black, the glyphs outside it on the bare grey | square | none |
+| `kde2` | stacked: KWin 2's grab bar over the flat blue title bar woven with its stipple, the menu button on the bar's colour and the rest grey | square | none |
 | `keramik` | stacked: the rounded gel slab, the title riding in its bubble, round gel buttons | 7 px top | none |
 | `plastik` | stacked: the four-pixel border read from the outside in, the lit title bar, square buttons | 3 px top | none |
 | `oxygen` | stacked: the window's own gradient running on through the caption, the embossed centred title, round slabs, the float frame's rim | 5 px top | 7/17/27/17 |

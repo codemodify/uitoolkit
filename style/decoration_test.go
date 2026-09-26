@@ -223,6 +223,8 @@ func TestDecorationCornersAndShadowsPerEra(t *testing.T) {
 		"system1": {}, "system7": {}, "platinum": {}, "platinum-lime": {},
 		"amiga13": {}, "amiga31": {}, "beos": {}, "os2warp": {},
 		"win31": {}, "win-hotdog": {}, "openlook": {},
+		// KDE 1 and KDE 2 ran on plain X: nothing shaped, nothing composited.
+		"kde1": {}, "kde2": {},
 		"next": {}, "openstep": {}, "wmaker-default": {},
 		"metal-steel": {}, "metal-ocean": {},
 		// Bluecurve is square everywhere, by Red Hat's design.
