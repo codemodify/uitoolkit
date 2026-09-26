@@ -175,7 +175,7 @@ func buildShadowPatch(lk style.LookAndFeel, st style.DecorationState, m platform
 // The look's own numbers decide what the blur looks like: the margin it
 // asked for is the reach, the difference between the top and bottom margins
 // is how far its shadow falls, and its colour comes from its own rectangular
-// shadow, probed once. A shaped window in any of the 121 packs therefore
+// shadow, probed once. A shaped window in any of the 123 packs therefore
 // casts the shadow of that pack rather than a generic one.
 
 // shapeShadow is a shaped window's cached shadow image.

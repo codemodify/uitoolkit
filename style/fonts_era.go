@@ -53,6 +53,10 @@ var eraEngineFonts = map[string]FontPrefs{
 	"next": {UI: helvetica, Mono: courier},
 	// Motif, HP VUE, CDE and IRIX read in X11's Helvetica.
 	"motif": {UI: helvetica, Mono: courier},
+	// KDE 1 and KDE 2 read in X11's Helvetica too: Qt 1 and Qt 2 asked
+	// for "helvetica" and KDE's own default general font was Helvetica 12.
+	"kde1": {UI: helvetica, Mono: courier},
+	"kde2": {UI: helvetica, Mono: courier},
 	// Windows 95 and 98: MS Sans Serif 8pt.
 	"win95": {UI: msSans, Mono: courierNw},
 	// Mac OS 8 and 9: Charcoal (Chicago before it).

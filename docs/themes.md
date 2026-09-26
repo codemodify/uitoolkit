@@ -13,7 +13,7 @@ icon size stay independent `look.json` prefs.
 
 ## Built-in packs
 
-121 packs from 29 engines, by the year their original shipped. Each one was
+123 packs from 31 engines, by the year their original shipped. Each one was
 researched from published facts (design guides, SDK documentation, pixels
 measured from screenshots of the originals); no code or pixmaps were copied.
 Apps start in `metal-ocean` (`style.DefaultThemeName`) until the user picks
@@ -52,9 +52,11 @@ one; `UITK_THEME=<id>` runs any app in any pack.
 | `wmaker-openstep` | Window Maker OpenStep | 1997 | Window Maker | `next` | Window Maker's OpenStep theme: midnight-blue diagonal titles over light grey menus. |
 | `beos` | BeOS | 1998 | Be | `beos` | BeOS R5: the yellow window tab, soft grey bevels on #D8D8D8 and blue keyboard-focus underlines. |
 | `metal-steel` | Metal (Steel) | 1998 | Java | `metal` | Swing's Java look and feel: grey-blue flush 3D borders, bumps, bold labels. |
+| `kde1` | KDE 1 | 1998 | KDE | `kde1` | KDE 1 on Qt 1: Windows 95 shapes in Helvetica, and kwm's title strip sunk into the frame, fading from navy to black. |
 | `wmaker-night` | Window Maker Night Sky | 1998 | Window Maker | `next` | Window Maker's Night Sky: black-to-teal title gradients, dark menus lit in warm cream. |
 | `win98` | Windows 98 | 1998 | Windows | `win95` | Windows 95 with gradient captions and flat hot-tracked menus. |
 | `wmaker-steelbluesilk` | Window Maker SteelBlueSilk | 1999 | Window Maker | `next` | Window Maker's SteelBlueSilk: multi-stop steel-blue silk titles, dark silk menus, violet dock tiles. |
+| `kde2` | KDE 2 | 2000 | KDE | `kde2` | KDE 2's HighColor: slabs with their corners cut and a white-lit top, flat-topped arrows, three-button scroll bars and a woven blue title bar. |
 | `win2000` | Windows 2000 | 2000 | Windows | `win95` | Warm grey #d4d0c8, blue gradient captions. |
 | `aqua` | Aqua | 2001 | Mac OS | `aqua` | Mac OS X 10.0–10.4: blue gel pills, pinstripes, traffic lights. |
 | `aqua-graphite` | Aqua Graphite | 2001 | Mac OS | `aqua` | The Graphite appearance: the same gel in blue-grey. |

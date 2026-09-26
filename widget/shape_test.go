@@ -9,7 +9,7 @@ import (
 )
 
 // A component's own silhouette, and the promise that not asking for one
-// changes nothing: every widget in the toolkit and all 121 packs rely on a
+// changes nothing: every widget in the toolkit and all 123 packs rely on a
 // press anywhere in a component's box being that component's.
 
 // shapedBox is the smallest component that can carry a silhouette.

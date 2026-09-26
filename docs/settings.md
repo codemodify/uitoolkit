@@ -478,10 +478,10 @@ the operation.
   a line later.
 
 **The list runs to the foot of the column.** It takes every pixel the
-three controls around it leave, at every window size, and scrolls its 129
+three controls around it leave, at every window size, and scrolls its 131
 rows inside itself. It was held to 252 logical pixels — nine rows — inside
 a column that scrolled, which was the only way to have both a list with a
-scrollbar and a column with one; a view as tall as all 129 rows would
+scrollbar and a column with one; a view as tall as all 131 rows would
 have made the column ten screens long. What that really bought was **two
 scrollbars an inch apart and about 250 pixels of nothing under the
 buttons**. It shows **25–27 packs at 1024×860** and **14–15 at the
@@ -579,7 +579,7 @@ application may want it — but Settings does not call it any more, and
 nothing on the **Files** block does anything at all now.
 
 **`Delete theme…` is gone**, the same call one release later. It stood
-under the browser, grey for all 129 built-in packs and live for the
+under the browser, grey for all 131 built-in packs and live for the
 handful the user had exported, and what it did was destroy a directory
 after a Yes/No. A pack is a folder; `rm -r ~/.config/uitoolkit/themes/<name>`
 removes it. `style.DeleteUserTheme` and `style.AfterUserThemeDeleted`
@@ -682,7 +682,7 @@ with them (see *The fold*): the same 56 px over the panel, the same
 **No atlas tile carries a bar of Settings' own any more.** Every tile
 did, for a release, because that bar was at the head of the window the
 atlas crops, and it read *Icons Classic*, *Size 24*, *Corners Theme
-shape* in all 129 of them — a band of identical words the reader had to
+shape* in all 131 of them — a band of identical words the reader had to
 learn to skip, and 64 px of the document area, on a strip whose whole
 justification was that a live control must be findable, which a PNG
 cannot honour. A tile is now the sample application and nothing else,

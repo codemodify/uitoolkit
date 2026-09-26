@@ -681,7 +681,7 @@ func TestAnAppsOwnShapeWinsOverItsLooks(t *testing.T) {
 	}
 }
 
-// And the promise the other 121 packs rely on: a framed window in a look
+// And the promise the other 123 packs rely on: a framed window in a look
 // that declares nothing states no shape at all, and takes the path it took
 // before any of this existed.
 func TestAFramedWindowInAPlainLookStatesNoShape(t *testing.T) {
