@@ -1615,8 +1615,10 @@ func TestTheOptionsRowOverThePreview(t *testing.T) {
 	}
 	_, w := openSettings(t, 1024, 860)
 	row := optionsRow(t, w)
-	// The words, in the order they are read.
-	want := []string{"Animations", "OS colors", "OS dialogs", "OS borders"}
+	// The words, in the order they are read: the two that say what the
+	// toolkit does on its own account, then the three that hand a piece
+	// of the window to the desktop.
+	want := []string{"Animations", "Combo wheel", "OS colors", "OS dialogs", "OS borders"}
 	var got []string
 	widget.Walk(row, func(c widget.Component) {
 		if b, ok := c.(*widgets.Checkbox); ok {
@@ -1635,10 +1637,11 @@ func TestTheOptionsRowOverThePreview(t *testing.T) {
 	// reader, never a second name for it — the rule the preview's own
 	// settings bar follows a hand's width below.
 	names := map[string]string{
-		"Animations": "Animations",
-		"OS dialogs": "OS dialogs: the desktop's own Open and Save dialogs",
-		"OS borders": "OS borders: the desktop's title bar and borders",
-		"OS colors":  "OS colors: follow the desktop's light or dark mode and its accent",
+		"Animations":  "Animations",
+		"Combo wheel": "Combo wheel: the mouse wheel over a closed combo box steps its choice",
+		"OS dialogs":  "OS dialogs: the desktop's own Open and Save dialogs",
+		"OS borders":  "OS borders: the desktop's title bar and borders",
+		"OS colors":   "OS colors: follow the desktop's light or dark mode and its accent",
 	}
 	for word, name := range names {
 		box := findOption(w.Content(), word)
@@ -1665,26 +1668,28 @@ func TestTheOptionsRowOverThePreview(t *testing.T) {
 		t.Error("the options row is not over the preview")
 	}
 	// Nothing of Settings' own is a switch any more: five pills would not
-	// fit, and nothing on this page is live before Apply.
+	// fit, and nothing on this page is live before Apply. (Six, now.)
 	widget.Walk(w.Content(), func(c widget.Component) {
 		if sw, ok := c.(*widgets.Switch); ok && !insidePreview(c) {
 			t.Errorf("a %q switch is back on the page", sw.Text)
 		}
 	})
-	// Two lines while the pane is wide, and the block under it two more:
-	// the four options and the renderer stand on this block's one line,
-	// and the corners, the two typefaces, the icon set and its size in
-	// the block below. They are two blocks rather than one row of nine
-	// controls because nine groups in the pane of the smallest window
-	// fold whatever order they stand in, and lines of undifferentiated
-	// furniture over a window are not a block anyone reads.
+	// One line while the pane is wide, and the block under it two more.
+	// The seam between the two blocks is now the plainest one there is:
+	// every setting that is an on and an off is up here, every setting
+	// that is a list to pick from is down there. The renderer used to
+	// be the exception — a chooser standing with the boxes, because the
+	// fold had room for it and the block below did not — and a fifth
+	// box took that room back. Both blocks fold onto exactly the lines
+	// they folded onto before, which is why the preview panel below
+	// them did not move (see shot_test.go).
 	if n := rowLines(row); n != 1 {
-		t.Errorf("the options stand on %d lines in a %v pane; they fit one at 1024x860", n, row.LocalBounds().Dx())
+		t.Errorf("the five options stand on %d lines in a %v pane; they fit one at 1024x860", n, row.LocalBounds().Dx())
 	}
 	drawn := drawnWithRow(t, w)
 	// Five groups, two of them a font family wide: the corners and the
-	// typefaces take the first line, the icon set and its size the
-	// second.
+	// typefaces take the first line, the icon set, its size and the
+	// renderer the second.
 	if n := rowLines(drawn); n != 2 {
 		t.Errorf("what the toolkit is drawn with stands on %d lines in a %v pane; it folds onto two", n, drawn.LocalBounds().Dx())
 	}
@@ -1699,8 +1704,10 @@ func TestTheOptionsRowOverThePreview(t *testing.T) {
 		tops[findOption(w.Content(), word).Bounds().Min.Y] = true
 	}
 	if len(tops) != 1 {
-		t.Errorf("the four options are on %d lines at 1024x860; they fit on one", len(tops))
+		t.Errorf("the five options are on %d lines at 1024x860; they fit on one", len(tops))
 	}
+	// And every chooser is below them, the renderer included: there is
+	// no exception to the seam any more.
 	for _, name := range settingChooserNames {
 		cb := namedCombo(w.Content(), name)
 		if cb == nil {
@@ -1708,9 +1715,6 @@ func TestTheOptionsRowOverThePreview(t *testing.T) {
 		}
 		if insidePreview(cb) {
 			t.Errorf("the %q chooser is inside the preview", name)
-		}
-		if name == settingChooserNames[5] {
-			continue // the renderer stands with the options, by design
 		}
 		for top := range tops {
 			if widget.DeviceOrigin(cb).Y < widget.DeviceOrigin(row).Y+top+1 {

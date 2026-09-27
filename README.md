@@ -52,6 +52,10 @@ go get github.com/codemodify/paintengine2d@v0.9.0
     portal).
   - Honours its reduced-motion setting.
   - Uses the desktop's own file dialogs on request.
+  - Will step a closed combo box on the mouse wheel if asked to — off by
+    default, and it hands the notch back at the ends of the list so the
+    page behind it goes on scrolling
+    ([docs/settings.md](docs/settings.md#combo-wheel)).
   - Draws its own title bar where an app puts one in (browser-style tabs or
     a tool bar in the caption, caption buttons in the desktop's layout or
     the theme's), in each theme's own style — Windows 95's navy caption,
@@ -301,12 +305,14 @@ repository.
 
 Search or filter 131 packs, and the one you pick is drawn at once as a
 live application window beside the list — frame, caption and every
-control — in a splitter you can size. Over that window, in one row that
-folds, is everything you can change: four check boxes and then the icon
-set, the icon size and the corner style the window is drawn with. The
-column beside it is four bare controls — search, decade filter, the list,
-Export — with no heading over them and no group box around them, and the
-list runs to the foot of the window. See
+control — in a splitter you can size. Over that window, in two blocks
+that fold, is everything you can change: every setting that is an on and
+an off in the first (five check boxes), every setting that is a list to
+pick from in the second (the corners, the two typefaces, the icon set,
+its size and the renderer). The column beside it is four bare controls —
+search, decade filter, the list, Export — with no heading over them and
+no group box around them, and the list runs to the foot of the window.
+**About** and **Apply** close the page at the foot. See
 **[docs/settings.md](docs/settings.md)**.
 
 ### Files — projects dogfood

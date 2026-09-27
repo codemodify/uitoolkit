@@ -45,18 +45,26 @@ There is one page and no navigation. Settings used to be four pages
 behind a sidebar — Themes, Appearance, Packs, About — and they were four
 answers to one question: what does this desktop look like. The window is
 now a splitter: **the theme browser down a column on the left**, and
-**the preview on the right**, with **Apply** pinned at the foot, outside
-both. Neither side scrolls; the only thing on the page that does is the
-list of packs, inside itself.
+**the preview on the right**, with **About** and **Apply** pinned at the
+foot, outside both. Neither side scrolls; the only thing on the page
+that does is the list of packs, inside itself.
+
+About is where the fourth of those four pages went: what uitoolkit is,
+the version, the licence, the repository, and — because this is the
+toolkit's own showcase — how many packs and engines this copy carries
+and what this very window is painting through. It is a dialog and not a
+page, because nobody wants to *be* in About; they want to look something
+up and leave. It stands in front of Apply: the one button that writes
+anything is the last one in the row and the last one a Tab reaches.
 
 The line through the page is no longer between kinds of choice but
 between the browser and the thing it is browsing for. Everything that is
 not the list of packs stands with the preview: **two folding blocks of
-settings over it** — the four check boxes and the window's corners in
-the first, and what the toolkit is *drawn with* in the second (the
-interface typeface, the monospaced one, the icon set, the size its
-glyphs are drawn at and the renderer) — and **where it all lives on
-disk**, in one line under it.
+settings over it** — every setting that is an on and an off in the
+first, and every setting that is a list to pick from in the second (the
+window's corners, the interface typeface, the monospaced one, the icon
+set, the size its glyphs are drawn at and the renderer) — and **where it
+all lives on disk**, in one line under it.
 
 The column is about 300 logical pixels wide whatever the window and the
 display scale are, and it keeps that share while the window is resized
@@ -163,42 +171,42 @@ paths gave up under the preview was 34. They were 82% and 61% before.
 ### Over and under the preview
 
 **The settings**, in two blocks over the preview that each fold on their
-own: the four check boxes and the window's corners, then everything the
-sentence *what the toolkit draws with* covers.
+own: the five check boxes, then everything the sentence *what the
+toolkit draws with* covers.
 
 ```
-☑ Animations  ☐ OS colors  ☐ OS dialogs  ☐ OS borders
-Corners [Theme shape ▾]
+☑ Animations  ☐ Combo wheel  ☐ OS colors  ☐ OS dialogs  ☐ OS borders
 
-Text [Theme font ▾]  Code [Theme font ▾]  Icons [Classic ▾]  Size [24 ▾]
-Renderer [Auto ▾]
+Corners [Theme shape ▾]  Text [Theme font ▾]  Code [Theme font ▾]
+Icons [Classic ▾]  Size [24 ▾]  Renderer [Auto ▾]
 ```
 
 That is what it looks like at 1024×860. It was **one** folding row of
 eight controls for a release, and it was full; the two typeface choosers
-are what split it. Why the seam falls where it does is under *The fold*,
-below.
+are what split it. **The seam is now the plainest one there is**: an on
+and an off above, a list to pick from below. It was not always — the
+renderer spent a release up with the boxes, because the first line had
+room for it and the block below did not — and a fifth box took that room
+back. The rule is better for having no exception in it, and it cost the
+page nothing: see *The fold*, below.
 
 | On the box | To a screen reader | What it is |
 | --- | --- | --- |
 | **Animations** | Animations | Hover fades, the default button's pulse, busy bars (GTK's `gtk-enable-animations`). While the desktop itself asks for reduced motion it says so, because the desktop's setting wins over the preference |
+| **Combo wheel** | Combo wheel: the mouse wheel over a closed combo box steps its choice | **Off by default.** A wheel notch over a *closed* drop-down moves it to the next or previous item, as Qt's combo boxes do and as GTK's did until GTK 4 took it out. See [Combo wheel](#combo-wheel), below, for what it does not do |
 | **OS colors** | OS colors: follow the desktop's light or dark mode and its accent | The pack shows its sibling to match the desktop — a chosen *Breeze* draws as *Breeze Dark* — recoloured around the desktop's accent where the engine takes one |
 | **OS dialogs** | OS dialogs: the desktop's own Open and Save dialogs | KDE's and GNOME's own Open and Save, through the XDG portal, instead of the themed ones |
 | **OS borders** | OS borders: the desktop's title bar and borders | Chromium's switch. On, every window gets the desktop's title bar and borders, and one that draws its own title bar (Mail's, with its tool bar in it) keeps it as its first row; off, the toolkit draws every frame in the theme's style **and the theme places the caption buttons**. The two states write look.json's `"decorations"` as `system` and `toolkit` — never `auto`, which is a third thing and is not what the box says ([decorations.md](decorations.md#the-settings-switch)) — and `"captionButtons"` as `theme` and the desktop's default with them |
 
-**The order changed with the rename.** *OS borders* became *OS window
-borders* — seven characters, 63 px — and a fourth chooser joined the end
-of the row, and with the old order the 453-pixel row of a 720×520 window
-folded onto **four** lines, which takes the preview under the 60% of its
-pane this page promises. The reading is now: what the toolkit does on its
-own account, then the three that hand a piece of the window to the
-desktop, in the order of how much they hand over — its colours, then the
-dialogs it opens, then the frame around it. *OS colors* loses its old
-place next to the caption it changes and keeps its old job; the three
-narrow options lead, which is what folds the row back onto three lines.
+**The order is the reading.** The two that say what the toolkit does on
+its own account come first — whether it moves, and what the wheel over a
+drop-down does — and then the three that hand a piece of the window to
+the desktop, in the order of how much they hand over: its colours, then
+the dialogs it opens, then the frame around it. *OS colors* gave up its
+old place next to the caption it changes to take that slot, and kept its
+old job.
 
-And the six choosers — the corners at the end of the first block, the
-other five in the second:
+And the six choosers, all of them in the second block now:
 
 | On the page | To a screen reader | What it is |
 | --- | --- | --- |
@@ -209,11 +217,53 @@ other five in the second:
 | **Size** | Icon size | The pixel size its glyphs are drawn at — **16 / 24 / 32**, the way a word processor's size box lists numbers, because a set's glyphs are drawn at it and a page that showed a fixed size would be showing something the user is not going to get |
 | **Renderer** | Renderer | *Auto*, *GPU* or *CPU* — which device paints. See [The renderer](#the-renderer), below: it is the one setting here that the windows already open cannot take |
 
-*Corners* stays with the options rather than leading the block under
-them, and the fold settled that: the four boxes fill 396 px of a
-453-pixel line and the corners take the second on their own, so the
-chooser is free where it stands and would cost the block below a line of
-its own.
+*Corners* leads the block under the options rather than closing the one
+above, and that is the seam doing its job rather than the fold: it is a
+list to pick from, so it is where the lists are. The fold agrees — five
+boxes fill 595 px of a 697-pixel line and have nothing to spare.
+
+#### Combo wheel
+
+**This one is contentious, and the default is the answer to why.** GTK
+removed the behaviour in GTK 4 for a reason worth repeating: the pointer
+that is over a combo box is nearly always on its way *past* it, and a
+control that changes its value while being scrolled past changes it
+where nobody is looking. So it is **off** unless the user asks, and what
+turning it on buys is deliberately narrow. A notch steps a *closed*
+box's selection, and nothing else does:
+
+- **A box that cannot step further in that direction passes the notch
+  on.** This is the rule that keeps the option honest. A combo box at
+  its first or last item does not swallow the wheel, so a form inside a
+  `ScrollView` goes on scrolling when the pointer crosses a drop-down
+  that has nowhere left to go — the contract the whole scrolling family
+  keeps ([widgets.md](widgets.md#what-handled-means)). It is *not*
+  `NumberField`'s, which consumes at its limits; a spinner can afford
+  to, because it steps only while focused and a passing pointer never
+  reaches it.
+- **A touchpad is not a wheel.** A precise two-finger scroll has no
+  detents and one flick would run through thirty items, so precise
+  scrolling scrolls the page and never steps.
+- **An editable combo box never steps.** Its text is something the user
+  typed, not a choice they are one step away from, and a wheel that
+  replaced it would be deleting work.
+- **An open list is untouched.** The popup under the pointer is a list
+  and scrolls like one, whatever this setting says. That was never the
+  contentious part.
+
+There is **no focus gate**, and that is deliberate. `NumberField`'s
+wheel is gated on focus because nobody asked for it; this one is off
+until somebody does, and gating it on focus as well would leave the
+preference with nothing to turn on — a combo box takes focus by being
+clicked, and clicking it opens the list.
+
+The preference is process-wide (`style.ComboWheel`, `look.json`
+`comboWheel`), so one box in Settings reaches every application, exactly
+as *Animations* and *OS dialogs* do. A single control may overrule it
+either way with `widgets.ComboBox.WheelSelect` — `WheelSelectOff` for a
+long form that is scrolled past far more often than it is answered,
+`WheelSelectOn` for a combo box that *is* the control of its page. The
+zero value follows the user.
 
 #### Two typefaces, not one
 
@@ -322,29 +372,39 @@ preview they were not: that bar shed them from the right as it narrowed,
 and at the 720×520 minimum it shed all three, leaving the tooltips and
 the accessible names.
 
-Measured in the 697-pixel pane of a 1024×860 window and the 453-pixel
-pane of a 720×520 one, at scale 1 and 1.75 alike:
+Measured in the 697-pixel pane of a 1024×860 window and the 477-pixel
+pane of a 720×580 one, at scale 1 and 1.75 alike:
 
-| | 1024×860 | 720×520 |
+| | 1024×860 | 720×580 |
 | --- | --- | --- |
-| the four options and the corners | two lines: the boxes (564 px), then *Corners* | two lines: the three narrow boxes (396 px), then *OS borders* beside *Corners* |
-| what it is drawn with | two lines: the typefaces, the icons and the size, then *Renderer* | two lines: the two typefaces, then the icons, the size and the renderer |
-| **both blocks** | **2 + 2 lines** | **2 + 2 lines** |
-| the preview | **80%** of the pane | **65%** |
+| the five options | **one** line (595 px of 697) | two lines: four boxes (475 px), then *OS borders* |
+| what it is drawn with | two lines: *Corners Text Code* (551 px), then *Icons Size Renderer* | three lines |
+| **both blocks** | **1 + 2 lines** | **2 + 3 lines** |
+| the preview | **84%** of the pane (86% at 1.75×) | **63%** (67% at 1.75×) |
 
-The preview went **up** at the minimum, from 62% to 65%, while two
-controls were added to the page — because a block that folds onto two
-lines at both sizes costs the narrow window less than the single row
-did, which folded onto three there, and because the three path lines
-under the preview became one.
+Those percentages are logged by `TestSettingsPageHoldsAtEverySize`,
+which fails below 60% at either size.
 
-**Two blocks, not one row of ten controls**, and that is a measurement
-as much as a reading. Ten groups come to about 1 470 px and will not
-fold onto fewer than **four** lines in a 453-pixel pane whatever order
-they stand in, and four lines of undifferentiated furniture over a
-window is not a block anyone reads — it is a hedge. Split at the seam
-the fold used to find by accident, each half folds onto two lines at
-both sizes, and the halves are the two questions the page is actually
+**A fifth check box cost neither block a line**, and that is why the
+Theme Atlas crop did not move. The box measures 129 px and the first
+line had 94 px of slack, so something had to leave it; what left was the
+renderer, which went back down to the choosers where it was first
+described. The second block had 393 px spare on its own second line and
+the renderer measures 158, so it fitted without folding anything — and
+the same thing happens on the third line at the 720×580 minimum. Both
+blocks fold onto exactly the lines they folded onto before.
+
+Shortening the label would not have worked, and it is worth saying why:
+even a zero-width box would have left the line 8 px short of the gap it
+needs, because the four old boxes and the renderer already came to 624
+of 697.
+
+**Two blocks, not one row of eleven controls**, and that is a
+measurement as much as a reading. Eleven groups come to about 1 600 px
+and will not fold onto fewer than **four** lines in a 477-pixel pane
+whatever order they stand in, and four lines of undifferentiated
+furniture over a window is not a block anyone reads — it is a hedge.
+Split at the seam, the halves are the two questions the page is actually
 asking: *what does the toolkit do*, and *what does it draw with*.
 
 **What the fold must never break** is a chooser from the word in front of
@@ -363,22 +423,20 @@ crops this page at fixed pixels; a page whose geometry moved with the
 fonts installed could not be cropped at all. The face elides what does
 not fit and the drop-down shows the name in full.
 
-**The order is the order they are read, and it was settled by the fold.**
-The options come first because three of them are about the desktop and
-the fourth about motion, and none of them changes what the window below
-is *drawn* with. Within them, *OS borders* is last because it is
-the widest, and a block whose first line is its three narrow boxes folds
-onto two lines where the old order folded onto three; *OS colors*, which
-used to sit last for being nearest the caption it changes, moved up to
-second, where it reads as the first and lightest of the three hand-overs
-to the desktop. *Corners* closes that block because the borders box is
-what it can share a line with at 453 px. The second block reads inside
-out from the type: the two typefaces, then the icons and their size,
-then the device that paints the lot.
+**The order is the order they are read.** The options come first
+because three of them are about the desktop and two about what the
+toolkit does on its own account, and none of them changes what the
+window below is *drawn* with. Within them, *OS borders* is last because
+it is the widest, so the box that falls onto a second line at the
+minimum is the one that can have a line to itself; *OS colors*, which
+used to sit last for being nearest the caption it changes, reads as the
+first and lightest of the three hand-overs to the desktop. The second
+block reads outward from the window: its shape, then the type, then the
+icons and their size, then the device that paints the lot.
 
 #### The renderer
 
-**Renderer** is the fourth chooser and the odd one on the page twice over.
+**Renderer** is the last chooser and the odd one on the page twice over.
 It is not appearance — on a working GPU the two paths are meant to be the
 same picture — and it is the one setting here that **a window already
 open cannot take**.
@@ -513,7 +571,7 @@ the operation.
 **Four bare controls**, in this order, and nothing around them:
 
 ```
-[ Search themes            ]
+[ Search themes          × ]
 [ All decades            ▾ ]
  1995 · Windows 95
  1995 · Windows 95 Dark
@@ -523,7 +581,15 @@ the operation.
 
 - a **search field** — a pack is found by its id, name, year, family,
   engine or what its summary says; every word has to match, Return stages
-  the first hit, Escape empties the field;
+  the first hit, Escape empties the field. It is **the one field in
+  Settings with a clear button**, and the reason is that it is the only
+  one whose value hides the page: what is typed here puts 130 of the 131
+  packs out of sight, so getting them back is something the user wants
+  often, in one gesture, without reading what is in the box first. The
+  export-name prompt's field is the counter-example — it is answered
+  once and the dialog closes — and so is the previewed sample's, which
+  is a picture of a field rather than one anybody fills in. See
+  [widgets.md](widgets.md#the-clear-button);
 - the **decade filter** — *All decades*, one decade, or *My themes*;
 - the **list of packs** that pass both, by year (`1995 · Windows 95`),
   user exports as `User · <name>`;
@@ -602,10 +668,10 @@ screen reader used to drive. There is nothing to drive: one Tab ring
 holds the whole application.
 
 The section called **Shape and weight** is gone too, and nothing is left
-of it in the column: corners are a chooser in the first block over the
-preview and the icon set and its size are in the second, and the strip of
-fifteen glyphs under them was a picture of a tool bar standing in for the
-real one two inches to its right.
+of it in the column: the corners, the icon set and its size are all
+choosers in the second block over the preview, and the strip of fifteen
+glyphs under them was a picture of a tool bar standing in for the real
+one two inches to its right.
 
 **The three lines of paths under the preview are one line.** They were
 six — a line of prose and a three-row text box each — then three, a name
@@ -619,9 +685,18 @@ under the 60% of its pane this page promises.
 
 The **Behaviour** panel is gone from the column, and with it the last
 thing in it that was not the theme browser: its four switches are check
-boxes in the first block over the preview, with the colours one, under
-short words. The column is the browser alone, which is what it was before the
-four pages became one.
+boxes in the first block over the preview, with the colours one and the
+combo wheel, under short words. The column is the browser alone, which
+is what it was before the four pages became one.
+
+The **About** page is gone and has **not** come back as a page. It is
+the button in front of Apply, and what it opens is a dialog — see
+*The page*, above. Nothing it says is on the page itself:
+`TestAboutIsADialogAndNotAPage` fails if the version, the licence or a
+link to the repository turns up outside it, because each of them would
+be a line off the window the page is about, and a fourth line in the
+**Files** block would move the Theme Atlas crop for a fact about the
+build.
 
 The **Theme buttons** check box is gone, and nothing replaced it: where
 the caption buttons of a frame the toolkit draws go follows *OS borders*
@@ -672,10 +747,15 @@ a shelf.
 
 The preview shows what is **staged**. Nothing is written until **Apply**,
 which saves `look.json` and switches Settings and every app that watches
-the file. Apply is the only button and the only thing in the row under
-the page: it sits pinned at the **right** of it, outside the splitter
-and outside the column, so the one thing that writes anything is on
-screen at every window size. The line that used to
+the file. Apply and **About** are the whole of the row under the page:
+they sit pinned at the **right** of it, outside the splitter and outside
+the column, so the one thing that writes anything is on screen at every
+window size. Apply is last, in the row and in the Tab ring, which is
+where every desktop puts the button that commits; About is in front of
+it and is the one button on the page that changes nothing. The two come
+to 150 logical pixels of a 704-pixel row at the 720×580 minimum, so
+neither folds nor elides at any size Settings opens to. The line that
+used to
 lead that row — *Applied — every uitoolkit app is using this look*, or
 *Staged, not applied* — is gone; Apply being enabled or greyed says the
 same thing in the place you are already looking. Closing without Apply
@@ -757,6 +837,17 @@ walks, and rendered through `tools/atlas/render.sh`'s own crop, rather
 than assumed. `CROP` in `tools/atlas/render.sh` and `W_IMG, H_IMG` in
 `tools/atlas/build.py` carry the same numbers and moved with them.
 
+**A fifth check box did not move them, and the renderer going back down
+is why.** *Combo wheel* measures 129 px and the first line had 94 px of
+slack, so the block would have taken a second line and the crop would
+have gone back to `697x633+317+138`. Instead the renderer left that line
+for the block below, where there were 393 px spare — and both blocks
+fold onto exactly the lines they folded onto before. Re-measured in the
+same eight packs: `697x663+317+108`, unchanged. **About** at the foot is
+outside the crop and cannot move it either; it shares a row with Apply
+that was already there, and the row's height is set by the taller of the
+two buttons, which are the same height.
+
 **No atlas tile carries a bar of Settings' own any more.** Every tile
 did, for a release, because that bar was at the head of the window the
 atlas crops, and it read *Icons Classic*, *Size 24*, *Corners Theme
@@ -808,6 +899,7 @@ $XDG_CONFIG_HOME/uitoolkit/look.json
   "reduceMotion": false,
   "followDesktop": true,
   "nativeDialogs": false,
+  "comboWheel": false,
   "decorations": "system",
   "captionButtons": "theme"
 }
@@ -829,7 +921,9 @@ aliases `16` / `24` / `32` are accepted on load. `reduceMotion` turns
 animations off. `followDesktop` shows the pack's light or dark sibling to
 match the desktop. `nativeDialogs` shows the desktop's own file dialogs
 (KDE's, GNOME's, through the XDG portal) instead of the toolkit's themed
-ones. `decorations` is who draws the frame of a window with its own title
+ones. `comboWheel` lets the mouse wheel over a *closed* combo box step
+its selection; it is off by default and left out of the file when it is
+(see [Combo wheel](#combo-wheel)). `decorations` is who draws the frame of a window with its own title
 bar: `system` the desktop (**OS borders**),
 `toolkit` uitoolkit for every window, left out for the default.
 `captionButtons` `theme` puts the caption buttons of a frame uitoolkit
@@ -1152,6 +1246,9 @@ corners, the icon set, and icon size on top.
 | `Application.WatchingLook`, `Application.ReloadPreferredLook` | `app` |
 | `Application.ApplyAppearance`, `Application.Appearance`, `Application.Decorations`, `Application.OnLookChange`, `Application.DesktopColorScheme`, `ColorSchemeEnv` | `app` |
 | `ColorScheme`, `SchemeVariant`, `Appearance.Effective`, `SetDesktopColorScheme`, `DesktopReducesMotion` | `style` / `uitoolkit` |
+| `ComboWheel`, `SetComboWheel`, `Appearance.ComboWheel` | `style` |
+| `ComboBox.WheelSelect`, `WheelSelectPref` / `On` / `Off` | `widgets` / `uitoolkit` |
+| `TextField.Clearable` | `widgets` / `uitoolkit` |
 | `AccentEngine`, `SetDesktopAccent`, `DesktopAccent`, `TakesAccent`, `CloneTokenMaps` | `style` |
 | `DesktopPrefs`, `ReadDesktopPrefs`, `WatchDesktopPrefs` (the portal) | `platform` |
 | `DrawToolIcon`, `DrawFileToolIcon` | `style` |

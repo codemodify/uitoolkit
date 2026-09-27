@@ -60,6 +60,7 @@ func TestSettingsIsAccessible(t *testing.T) {
 	// gets, and the one contains the other.
 	for _, name := range []string{
 		"Animations",
+		"Combo wheel: the mouse wheel over a closed combo box steps its choice",
 		"OS dialogs: the desktop's own Open and Save dialogs",
 		"OS borders: the desktop's title bar and borders",
 		"OS colors: follow the desktop's light or dark mode and its accent",
@@ -91,10 +92,20 @@ func TestSettingsIsAccessible(t *testing.T) {
 		t.Error("settings: the Theme group box is back in the tree")
 	}
 
-	// Export is on the page and named; Apply is at the foot.
-	for _, name := range []string{"Export current theme…", "Apply"} {
+	// Export is on the page and named; About and Apply are at the foot,
+	// in that order. About's spoken name carries the word on it, the
+	// way the check boxes' do.
+	for _, name := range []string{"Export current theme…", "About uitoolkit", "Apply"} {
 		if a11ytest.Find(tree, a11y.RoleButton, name) == nil {
 			t.Errorf("settings: no %s button in the tree", name)
+		}
+	}
+	// The theme search field carries a clear button, and it is in the
+	// tree as a named button under the field rather than as an anonymous
+	// cross a screen reader would read as part of the text.
+	if a11ytest.Find(tree, a11y.RoleTextField, "Search themes") != nil {
+		if a11ytest.Find(tree, a11y.RoleButton, "Clear Search themes") != nil {
+			t.Error("settings: the empty search field offers a Clear button with nothing to clear")
 		}
 	}
 	// Neither Delete is one of them any more, and a screen reader must

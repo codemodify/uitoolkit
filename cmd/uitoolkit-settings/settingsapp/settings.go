@@ -1,10 +1,10 @@
 // Package settingsapp is the toolkit's appearance editor: the theme
-// browser, two blocks of settings over the preview — the four on/off
-// options and the window's corners, then what the toolkit is drawn with
-// (the interface typeface, the monospaced one, the icon set, the size
-// its glyphs are drawn at and the device that paints them) — the live
-// preview of the staged pack under them, and the Apply that writes
-// look.json.
+// browser, two blocks of settings over the preview — every setting that
+// is an on and an off, then every setting that is a list to pick from
+// (the window's corners, the interface typeface, the monospaced one,
+// the icon set, the size its glyphs are drawn at and the device that
+// paints them) — the live preview of the staged pack under them, and
+// the About and Apply at the foot.
 //
 // It lives beside its command rather than inside it because the
 // end-to-end driver and its own tests drive it as a library, and because
@@ -35,8 +35,8 @@ import (
 // and where it all lives on disk, in one line under it.
 const (
 	sectionTheme     = iota // the column on the left, and the whole of it
-	sectionBehaviour        // the four on/off options, first in the block over the preview
-	sectionPreview          // the block under them: the typefaces, the icons and the renderer
+	sectionBehaviour        // the five on/off options, first in the block over the preview
+	sectionPreview          // the block under them: the corners, the typefaces, the icons and the renderer
 	sectionFiles            // the right-hand pane, under the preview
 )
 
@@ -130,7 +130,7 @@ func SettingsAppWith(a *app.Application, win *app.Window, opt SettingsOptions) w
 // old name "packs & icons") is Theme, because
 // exporting a pack and deleting one are under the theme browser;
 // "about" is Files; "desktop" and "colours" are Behaviour, because
-// following the desktop's colours is one of the four options that lead
+// following the desktop's colours is one of the five options that lead
 // that row.
 func SettingsPage(name string) int {
 	switch strings.ToLower(strings.TrimSpace(name)) {
@@ -183,7 +183,7 @@ type settingsState struct {
 	// The three settings that are not an on and an off: the sets the
 	// chooser offers, the chooser itself, the size its glyphs are drawn
 	// at and the shape of the window's corners. They stand on the page
-	// after the four options, each behind the word that says what it
+	// after the five options, each behind the word that says what it
 	// sets. They follow the staged appearance whatever staged it — a
 	// pack picked in the browser, -stage, Apply — and not only their own
 	// clicks.
@@ -207,7 +207,7 @@ type settingsState struct {
 	// family installed on the machine. The empty string at the head is
 	// "the pack's own", which is not a family.
 	families []string
-	// render is the fourth chooser, and the odd one out: it says which
+	// render is the last chooser, and the odd one out: it says which
 	// device paints, not what is painted, and what it asks for reaches
 	// the windows opened after Apply rather than the ones already up.
 	// See [settingsState.renderer].
@@ -278,8 +278,15 @@ func buildSettingsState(s *settingsState) widget.Component {
 	// accept button belongs; the spacer before it is the whole of the
 	// rest of the row. It is outside the scrolling column on purpose:
 	// the one thing that writes anything must not be able to scroll away.
+	//
+	// About stands immediately in front of it, on the same side. The
+	// two together are 150 logical pixels of a 704-pixel row at the
+	// 720x580 minimum, so the spacer still has five sixths of the row
+	// and nothing here folds or elides at any size Settings opens to.
+	// See [settingsState.aboutButton] for why About is a button here
+	// rather than the page it used to be.
 	gap := widgets.NewSpacer()
-	actions := widgets.NewRow(gap, s.applyBtn).WithGap(12).WithPad(8)
+	actions := widgets.NewRow(gap, s.aboutButton(), s.applyBtn).WithGap(12).WithPad(8)
 	actions.AddFlex(gap, 1)
 
 	s.showStaged()
@@ -458,8 +465,9 @@ func (s *settingsState) selectedRow() int {
 // `uitoolkit-settings -version` prints.
 //
 // Everything else that was ever in here has gone to the pane on the
-// right: the four on/off options and the four choosers for the shape,
-// the icons and the renderer in one folding row over the preview, and
+// right: the five on/off options and the six choosers for the shape,
+// the typefaces, the icons and the renderer in two folding blocks over
+// the preview, and
 // the three paths under it.
 func (s *settingsState) choicesColumn() widget.Component {
 	s.rows = s.themeRows()
@@ -502,6 +510,16 @@ func (s *settingsState) choicesColumn() widget.Component {
 		refilter()
 	})
 	search.SetAccessibleName("Search themes")
+	// The one field in Settings that obviously wants a clear button, and
+	// the reason is that it is the only one whose value is a filter
+	// rather than a value: what is typed here hides 130 of the 131
+	// packs, so getting all of them back is a thing the user wants to
+	// do often, in one gesture, without reading what is in the box
+	// first. The export-name prompt's field is the counter-example a
+	// hand's width down this file — it is answered once and the dialog
+	// closes — and so is the previewed sample's, which is a picture of
+	// a field rather than one anybody fills in.
+	search.Clearable = true
 	// Return stages the first pack the search found; Escape empties the
 	// field, which is the whole list again.
 	search.OnSubmit = func(string) {
@@ -579,7 +597,7 @@ func (s *settingsState) exportButton() widget.Component {
 
 // ---- the settings, over the preview --------------------------------------------
 
-// option is one of the four on/off settings that lead the block over the
+// option is one of the five on/off settings that lead the block over the
 // preview: a check box with a short word on it, the full name a screen
 // reader says, and the one sentence that says what turning it on does.
 //
@@ -602,12 +620,19 @@ func (s *settingsState) option(word, name, about string, on bool, set func(bool)
 	return widgets.NewTip(about, box)
 }
 
-// optionsRow is everything look.json carries that is not a pack: the four
-// things that are not what the toolkit looks like but what it does —
-// whether it moves, whose file dialogs it opens, who draws a window's
-// frame, and where the colours come from — and then the four choosers:
-// the shape of a window's corners, the icon set, the size its glyphs are
+// optionsRow is everything look.json carries that is not a pack: the
+// five things that are not what the toolkit looks like but what it does
+// — whether it moves, what the wheel over a drop-down does, whose file
+// dialogs it opens, who draws a window's frame, and where the colours
+// come from — and then the six choosers: the shape of a window's
+// corners, the two typefaces, the icon set, the size its glyphs are
 // drawn at, and the device that paints the lot.
+//
+// The seam between the two blocks is now the plainest one there is:
+// every setting that is an on and an off is in the first, every setting
+// that is a list to pick from is in the second. It was not always —
+// the renderer spent a release up with the boxes because the fold had
+// room for it — and the rule is better for having no exception in it.
 //
 // It is one block over the preview rather than a panel in the column
 // beside it. Four of the options spent a release in that column, where
@@ -623,17 +648,17 @@ func (s *settingsState) option(word, name, about string, on bool, set func(bool)
 // is the control that says "this is live now", while a check box is the
 // control that says "this is what I am asking for". The measured one is
 // that a switch's pill is 42 logical pixels of chrome before its word,
-// and four of those in the 453-pixel row of a 720x520 window take a
-// third of the pane the preview is the point of.
+// and five of those in the 453-pixel row of a 720x520 window take the
+// whole of the pane the preview is the point of.
 //
 // # One block, not two rows
 //
-// Three of the four choosers came out of the previewed window, where
+// Three of the six choosers came out of the previewed window, where
 // they stood on a bar of Settings' own over the sample's menu bar — "the
 // preview configures itself". They are settings of the page like the
-// four before them, so they are read where the page keeps its settings,
+// five before them, so they are read where the page keeps its settings,
 // and the window below is a sample again with nothing live in its
-// chrome. The fourth, the renderer, was never anywhere but UITK_PAINT.
+// chrome. The renderer was never anywhere but UITK_PAINT.
 //
 // They are in the *same* [widgets.Wrap] as the options rather than a
 // second row under it, and that is a measurement, not a preference. The
@@ -642,9 +667,10 @@ func (s *settingsState) option(word, name, about string, on bool, set func(bool)
 // lines there, and two rows that each fold on their own take four —
 // which is 78 pixels off a preview that had 273, and the preview stops
 // being what the pane is for. One row that folds also *reads* as two
-// rows wherever there is room for it to: at 1024x860 the four options
-// fill the first line and the four choosers fall onto the second, which
-// is the arrangement, arrived at by folding rather than by decree.
+// rows wherever there is room for it to: at 1024x860 the five options
+// fill the first line and the six choosers fall onto the two below,
+// which is the arrangement, arrived at by folding rather than by
+// decree.
 //
 // What the fold must never do is break a chooser from the word in front
 // of it, or the icon set from the size its glyphs are drawn at. So the
@@ -652,7 +678,7 @@ func (s *settingsState) option(word, name, about string, on bool, set func(bool)
 // drawn, and the one that says what shape the window is — the two groups
 // the divider on the old bar stood between.
 func (s *settingsState) optionsRow() widget.Component {
-	// Where the colours come from is last of the four, which puts it
+	// Where the colours come from is third of the five, which puts it
 	// nearest the window it changes: it is the one that decides which
 	// pack is drawn under it, and the caption below says
 	// "Preview — Breeze Dark" for a chosen Breeze, which is the rest of
@@ -739,12 +765,56 @@ func (s *settingsState) optionsRow() widget.Component {
 			s.stage(next)
 		})
 
+	// The mouse wheel over a closed combo box. It stands second, beside
+	// Animations, because those two are the pair that say what the
+	// toolkit does on its own account before the three that hand a
+	// piece of the window to the desktop — and because both of them are
+	// about how a control behaves under a pointer rather than about
+	// what it looks like.
+	//
+	// "Combo wheel" and not "Combobox scroll": the word on a box in
+	// this row is what the eye gets and the name is what the ear gets,
+	// and the eye needs the shorter of the two. The full name says what
+	// it does to a screen reader, and the sentence under it says the
+	// part that matters — that the page keeps scrolling.
+	wheel := s.option("Combo wheel",
+		"Combo wheel: the mouse wheel over a closed combo box steps its choice",
+		"Off by default. On, a wheel notch over a closed drop-down moves it to the next or previous item, as Qt's combo boxes do. "+
+			"A box that has nowhere left to go passes the notch on, so a list behind it still scrolls.",
+		s.staged.ComboWheel, func(on bool) {
+			next := s.staged
+			next.ComboWheel = on
+			s.stage(next)
+		})
+
 	shape, glyphs, paint := s.choosers()
+	// The renderer comes back down here, where the choosers are, and
+	// where it was first described: "the icon set, the size its glyphs
+	// are drawn at, the shape of the window's corners, and which device
+	// paints them". It spent a release up in the options row for one
+	// reason, which was the fold — four boxes and one chooser fit the
+	// first line of a 697-pixel pane and saved the block below a line —
+	// and a fifth box has taken that room. There is no point spending
+	// prose on the exception now that the fold has withdrawn it: the
+	// rule it leaves behind is the plainer one anyway. The first block
+	// is every setting that is an on and an off, the second is every
+	// setting that is a list to pick from, and nothing has to be
+	// remembered about where the sixth one went.
+	//
+	// It costs nothing to put it here. The five groups fold 166 + 180 +
+	// 189 onto the first line of this block and leave the icon set and
+	// its size 393 pixels of the second, which is more than twice the
+	// 158 the renderer measures; at the 720x580 minimum the same thing
+	// happens on the third line. So both blocks fold exactly as they
+	// did — and the preview panel, which is whatever they leave, does
+	// not move a pixel. That is the whole reason to prefer this to
+	// letting the options take a second line.
 	s.drawnWith = widgets.NewWrap(
 		shape,
 		pair(settingWords[1], s.fontUI).WithPadding(0, 0, 6, 0),
 		pair(settingWords[2], s.fontMono).WithPadding(0, 0, 6, 0),
-		glyphs)
+		glyphs,
+		paint)
 	s.drawnWith.Gap = 8
 	s.drawnWith.LineGap = 4
 	// Named for what it is, not for the -page word that reaches it: a
@@ -760,11 +830,11 @@ func (s *settingsState) optionsRow() widget.Component {
 	//
 	// The fold follows from that order, and the order was settled by the
 	// fold as much as by the reading. Three narrow options lead, so the
-	// first line of a 453-pixel row holds three of the four and the
-	// borders box goes down onto the second with the corners chooser; at
-	// 1024x860 the four options fill the first line and the corners fall
-	// onto the second alone.
-	row := widgets.NewWrap(motion, colours, native, system, paint)
+	// first line of a 453-pixel row holds four of the five and the
+	// borders box goes down onto the second alone; at 1024x860 all five
+	// fill the first line and the choosers have the block below to
+	// themselves.
+	row := widgets.NewWrap(motion, wheel, colours, native, system)
 	row.Gap = 8
 	// Closer between the lines than along them: a block that folds has
 	// to read as one block and not as rows of unrelated furniture.
@@ -778,7 +848,7 @@ func (s *settingsState) optionsRow() widget.Component {
 
 // ---- what the packs are drawn with ---------------------------------------------
 
-// choosers are the four settings that are not an on and an off: the icon
+// choosers are the six settings that are not an on and an off: the icon
 // set, the size its glyphs are drawn at, the shape of the window's
 // corners, and which device paints them. Each stands behind the word
 // that says what it sets.
@@ -831,7 +901,7 @@ func (s *settingsState) choosers() (shape, glyphs, paint widget.Component) {
 		s.stage(next)
 	})
 	// It fits its longest set name and no more: the choosers and their
-	// words share a folding block with four check boxes, and a combo box
+	// words share a folding block with five check boxes, and a combo box
 	// that measured itself at the stock 160 would fold it a line further
 	// at every window size. The ceiling is the other half of the same
 	// rule and it is new: the list is no longer seven names this
@@ -1075,14 +1145,14 @@ func familyIndex(families []string, chosen string) int {
 // settingWords are the words in front of the six choosers, in the order
 // they stand on the page: the corners at the end of the options over the
 // preview, and then the five of the block under them. They are short
-// because they share two folding blocks with four check boxes in a pane
+// because they share two folding blocks with five check boxes in a pane
 // as narrow as 453 logical pixels, and each one is the beginning of what
 // its chooser is called to a screen reader ("Window corners", "Text
 // font", "Code font", "Icons", "Icon size", "Paint renderer") rather
 // than another name for it.
 //
 // Corners leads them and stays with the options, which is where the fold
-// wants it: the four boxes fill 396 of a 453-pixel line and the corners
+// wants it: the five boxes fill 475 of a 453-pixel line and the corners
 // take the second on their own, so the chooser is free there and would
 // cost the block under it a line of its own.
 var settingWords = [6]string{"Corners", "Text", "Code", "Icons", "Size", "Renderer"}
@@ -1100,12 +1170,11 @@ var settingChooserNames = [6]string{"Window corners", "Text font", "Code font", 
 var rendererPrefs = []style.RendererPref{style.RendererAuto, style.RendererGPU, style.RendererCPU}
 
 // renderer is the chooser for the device that paints — the EGL/GLES one
-// or the CPU rasterizer — and it is the odd one out on this row twice
-// over.
+// or the CPU rasterizer — and it is the odd one out in this block.
 //
 // It is not appearance. Everything else here changes what a window looks
 // like; this changes what draws it, and on a working GPU the two paths
-// are meant to be the same picture. It is on this row because it is a
+// are meant to be the same picture. It is on this page because it is a
 // setting of the toolkit the user owns, this is where the toolkit's
 // settings are read, and the alternative was a second preferences page
 // for one enum.
