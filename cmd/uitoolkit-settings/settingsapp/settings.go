@@ -750,6 +750,10 @@ func (s *settingsState) optionsRow() widget.Component {
 		paint, glyphs, shape)
 	s.drawnWith.Gap = 8
 	s.drawnWith.LineGap = 4
+	// The renderer and the corners end their lines against the right
+	// edge: neither is a font or an icon, and the gap in front of them
+	// says so without a rule or a legend.
+	s.drawnWith.TrailRight = true
 	// Named for what it is, not for the -page word that reaches it: a
 	// screen reader reads this block after the options and has to be
 	// told what changed, and "Preview" is the window under it.

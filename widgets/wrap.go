@@ -17,6 +17,15 @@ type Wrap struct {
 	widget.Base
 	Gap     float32 // between items on a line, 1x (0 = 8)
 	LineGap float32 // between lines, 1x (0 = Gap)
+	// TrailRight pushes the last item of every line to the right edge of
+	// the box, where the line has room and more than one item on it. A
+	// line of one is left where it is: pushing the only thing on a line
+	// to the far side reads as a different block, not as an aligned one.
+	//
+	// It is for a row whose last item is of a different kind from the
+	// rest — Settings' renderer among its typefaces — and it keeps the
+	// folding, which pinning the item to a fixed column would not.
+	TrailRight bool
 }
 
 // NewWrap flows children into lines.
@@ -73,7 +82,38 @@ func (w *Wrap) flow(maxW float32) ([]paintengine2d.Rect, paintengine2d.Point) {
 		started = true
 	}
 	// Centre each item in its line's height.
+	if w.TrailRight && maxW > 0 {
+		w.trailRight(rects, maxW)
+	}
 	return w.centreLines(rects), paintengine2d.Pt(width, y+lineH)
+}
+
+// trailRight slides the last item of each line out to the right edge.
+// The slack is whatever the line did not use; a line of one item keeps
+// it, and the item never moves left, so a line that is already full is
+// untouched.
+func (w *Wrap) trailRight(rects []paintengine2d.Rect, maxW float32) {
+	kids := w.Children()
+	last, count := -1, 0
+	flush := func() {
+		if last >= 0 && count > 1 {
+			if slack := maxW - rects[last].Max.X; slack > 0 {
+				rects[last] = rects[last].Translate(paintengine2d.Pt(slack, 0))
+			}
+		}
+		last, count = -1, 0
+	}
+	var line float32 = -1
+	for i, c := range kids {
+		if !c.Visible() {
+			continue
+		}
+		if last >= 0 && rects[i].Min.Y != line {
+			flush()
+		}
+		line, last, count = rects[i].Min.Y, i, count+1
+	}
+	flush()
 }
 
 // centreLines centres every item vertically within its line.

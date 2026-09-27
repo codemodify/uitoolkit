@@ -124,7 +124,7 @@ names) is in [compare.md](compare.md).
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Column / row | `Column` / `Row` (`FlexBox`) | `QVBoxLayout` / `Row`+`Column` | `GtkBox` | `StackPanel` | `container.VBox` / `HBox` | `FlowLayoutPanel` ≈ | `StackPanel` | `NSStackView` | `VStack` / `HStack` | [thumb](screenshots/compare/layout.png) |
 | Stack | `Stack` | `QStackedWidget` / `StackLayout` | `GtkStack` | `Panel` (z) ≈ | `container.Stack` | z-order ≈ | `Grid` / `Canvas` ≈ | layers ≈ | `ZStack` | [thumb](screenshots/compare/layout.png) |
-| Wrap | `Wrap` (items flow into lines; height follows width) | flow layout (example) / `Flow` | `GtkFlowBox` | `WrapPanel` | `container.NewGridWrap` ≈ | `FlowLayoutPanel` | `WrapPanel` | `NSCollectionView` flow ≈ | `LazyVGrid` ≈ | — |
+| Wrap | `Wrap` (items flow into lines; height follows width; `TrailRight` ends each line against the right edge) | flow layout (example) / `Flow` | `GtkFlowBox` | `WrapPanel` | `container.NewGridWrap` ≈ | `FlowLayoutPanel` | `WrapPanel` | `NSCollectionView` flow ≈ | `LazyVGrid` ≈ | — |
 | Pad | `Pad` | layout margins | margins | `Padding` / `Decorator` | `container.Padded` | `Padding` | `Padding` | constraints ≈ | `padding` | — |
 | Height box | `HeightBox` (holds a child to a height in 1x pixels; `Share` caps it at a fraction of the room offered) | `setFixedHeight` / `Layout.preferredHeight` | `gtk_widget_set_size_request` | `Height` / `MaxHeight` | `container.NewGridWrap` size ≈ | `Height` | `Height` / `MaxHeight` | height constraint | `.frame(height:)` | — |
 | Grid | `Grid` (auto / px / flex tracks, spans) | `QGridLayout` / `GridLayout` | `GtkGrid` | `Grid` | `container.NewGridWithColumns` ≈ | `TableLayoutPanel` | `Grid` | `NSGridView` | `Grid` | — |
