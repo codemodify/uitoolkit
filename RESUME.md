@@ -1,6 +1,81 @@
-# Resume here — uitoolkit, as of 2026-09-23
+# Resume here — uitoolkit, as of 2026-09-27
 
 ## Now
+
+### The platform boundary, 2026-09-27
+
+Before a second platform is written, the boundary it will be held to had to
+be worth holding to — **a second implementation freezes it**. So `platform`
+was audited interface by interface against what Win32 and AppKit would
+actually do, and the first slice reshaped. Merged as
+`design/platform-boundary`.
+
+**What it found.** Of the 27 optional `Surface` capabilities found by type
+assertion, **20 were implemented by all three backends** — the assertion
+answered "yes" every time and carried no information. Six of the rest
+carried their own `…Supported()` predicate *inside*, so the caller had to
+ask twice. And on failure almost everything degraded **silently**:
+`SetFullscreen`, `SetMaximized`, `SetCursor`, `MoveSurface`, `Lower` and
+more were `if ok { do }` with no else and no return value. That is the bug
+class this repo has shipped more than once — a caption button that does
+nothing.
+
+**What replaced it** (`platform/windowframe.go`): nine interfaces —
+`FrameSurface`, `Lowerer`, `AxisMaximizer`, `AboveSurface`, `ShadeSurface`,
+`GlassSurface`, `DesktopSurface`, `DecorationPaletteSurface`, `IconSurface`
+— became **one `WindowFrame` every backend implements whole**, plus a
+`FrameCaps` bitmask of 14 bits read afresh, never cached. `FrameOf(surface)`
+is **never nil**. Every request returns `bool`: whether it was *made*, never
+whether it *succeeded* — the desktop still answers with `EventWindowState`.
+`platform`'s interface count went 33 → 25; `WMCaps` and its `CapKnown`
+tri-state are gone.
+
+The honesty mechanism now has three layers, and the split is the point:
+
+- **compile time** — the method must exist, so a Win32 backend that forgets
+  keep-above fails to build;
+- **run time, per window** — `Caps()`, because a WM can be replaced under a
+  running window and KWin drops blur when effects go off;
+- **per request** — the `bool`.
+
+`Window.CanShade()` stays, and is now documented as the place the two meet:
+**`FrameCaps` says what the window system will do; the layer above ANDs in
+its own policy; neither answers for the other.** `CanKeepAbove()` was purely
+a platform fact and became one bit.
+
+**What it proved.** The capability bits do real work in both directions:
+`FrameKeepAbove`, `FrameLower` and `FrameMaximizeAxis` are X11-and-not-Wayland,
+while on Win32/AppKit all three come back and `FrameIcon`/`FramePalette`/
+`FrameMenu` go away — the asymmetry reverses and the boundary does not care.
+Making the fakes declare their capabilities (no more "zero means everything")
+broke five tests, each a place where a control appeared because nobody had
+said it could not. The tour sample lost its `CapKnown` branch and now prints
+`caps.String()`. And `GOOS=windows` and `GOOS=darwin` **build again** —
+`app/perflog.go` named `syscall.SIGUSR1`, and `app.A11yEnv`, public API, sat
+behind `//go:build linux`.
+
+**Known and deliberate:** `FrameHost.Minimize`/`ToggleMaximize` stay void
+while every `WindowFrame` request answers, because a caption never asks one
+it has not already drawn and an MDI child always can.
+
+### What the audit says to do next, in order
+
+| what | cost | risk | why |
+| --- | --- | --- | --- |
+| `Backend.Caps()` | ~2 h | low | kills the last four `Name() == "wayland"` / `"offscreen"` string branches (`platform/placement.go:93`, `app/frame.go:159`, `app/desktopprefs.go:62`, `app/atspi_linux.go:80`) |
+| `WindowGeometry` (SizingSurface, HostWindow, HostMover, HostPositioner, ScreenPlacer) | ~1 d | low | mechanical; `ScreenPlacementAvailable`'s backend-name test dies with it |
+| `EventScale` + a main-OS-thread contract | ~½ d | low | **blocks macOS**: `NSWindowDidChangeBackingProperties` fires with *no resize*, so a window dragged Retina → non-Retina would never re-scale. Today `syncScale()` is only reached from `EventResize` |
+| `Frame` shadow/opaque ownership | ~1 d | medium | **do it before a Windows backend, not after** — DWM and AppKit draw the shadow themselves, and the contract cannot say "reserve nothing" |
+| move ~42 X11/Wayland/freedesktop names out of the exported API | ~1 d | low, noisy | `XDND*`, `INCR*`, `IsKDE`, `DialSessionBus`… into `platform/internal/…` |
+| `Presentation` (popups, cursor, IME) | ~2 d | medium | `SolvePopup` is already the portable answer for 3 of 4 backends; `PopupAdjust` must stop being `xdg_positioner.constraint_adjustment`'s ABI |
+| `Transfer` (drag, drop, clipboard) | ~3 d **+ a spike first** | **high** | `DoDragDrop` is a *blocking* modal loop, and `IDropTarget::DragOver` / `draggingUpdated:` answer **synchronously** where our contract is async. Do not reshape this from reasoning |
+| IME for TSF / `NSTextInputClient` | ~1 w | high | both want to *read the document*; two methods cannot express it. Belongs with the pinned IME/RTL item |
+
+Other leaks named and not yet fixed: `SetPalette(path)` takes a path to a
+**KDE `.colors` file** (Windows 11 wants three `COLORREF`s); `Frame.Opaque`
+is a region where macOS has a bool; `ClipboardPrimaryGet()` is X11/Wayland
+only with no capability query and no `ok`.
+
 
 **Two applications left this repository on 2026-09-23**, on the author's
 instruction, and both now build against uitoolkit's *published* module — no
