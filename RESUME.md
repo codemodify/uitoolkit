@@ -58,6 +58,56 @@ behind `//go:build linux`.
 while every `WindowFrame` request answers, because a caption never asks one
 it has not already drawn and an MDI child always can.
 
+### The five slices after it, 2026-09-27
+
+Same branch of work, `feat/platform-boundary-2`. `platform` is down to
+**21 interfaces from 33**, and **198 exported names from 228**.
+
+| slice | what |
+| --- | --- |
+| `Backend.Caps()` | the four `Name() == "offscreen"` / `!= "wayland"` branches are gone. Two bits: `BackendDesktop` ("is anybody there" — a window manager, preferences that are somebody's, assistive technology that might be listening) and `BackendScreenPlace`. The old tests named the backends that *could not*, so a new backend was assumed able before its code existed |
+| `EventScale` | `syncScale` was reached only from `EventResize`. **macOS fires `NSWindowDidChangeBackingProperties` with no resize at all**, so a window dragged Retina → plain would never re-theme. Proved by breaking the handler: the test fails with "the window is still drawing at scale 2" |
+| main-thread contract | "one goroutine" → "the main OS thread, locked", with `runtime.LockOSThread` in an `app` init. AppKit needs the process's *first* thread; Win32 needs the HWND's thread to be an OLE STA |
+| shadow + resize-band ownership | `FrameSystemShadow`, `FrameSystemResizeBand`. DWM and AppKit draw the shadow **outside** the window; the old `Frame.Margin` could not say so, so a Windows backend would have painted a second shadow inside the system's **because the contract told it to** |
+| `WindowGeometry` | `HostWindow`, `HostMover`, `HostPositioner`, `ScreenPlacer`, `SizingSurface` → one seam + `GeometryCaps` |
+| exported-API cleanup | 30 X11/Wayland/freedesktop names unexported, the compiler proving each unused outside the package first |
+
+Two things turned up that were not in the audit:
+
+**`Caps()` does not survive a second seam.** Go allows a type one method
+of a name and `wlSurface` implements both seams, so `WindowFrame.Caps()`
+and `WindowGeometry.Caps()` collide outright. They are `FrameCaps()` and
+`GeometryCaps()` now — each seam names its accessor after itself, which
+`Transfer` and `Presentation` will need too.
+
+**The offscreen backend was kinder than a real desktop.**
+`SimulateKeepAbove`, `SimulateGlass` and `SimulateDecorationPalette`
+changed a capability and announced nothing; only `SimulateCapabilities`
+queued `EventCapabilities`. The tests passed because the caption reads
+caps live, but it meant a capability vanishing under a running window
+reached nothing — the exact bug class this boundary exists to kill,
+sitting inside the harness meant to catch it. They all announce now.
+
+### A correction to the audit: the palette is not an hour
+
+The audit said `SetPalette(path string)` should become three colours,
+"an hour". That is too glib, and the reason is worth writing down.
+
+KWin does not take three colours. `_KDE_NET_WM_COLOR_SCHEME` names a
+**whole colour scheme** — seven sets of ten roles — which
+`style.KDEColorScheme` derives from the look, and the app writes to a
+cache file and hands over as a path. Windows 11 takes exactly three
+`COLORREF`s (`DWMWA_CAPTION_COLOR`, `TEXT_COLOR`, `BORDER_COLOR`);
+macOS takes nothing at all.
+
+So the choice is a real one, not a rename: pass the frame's few colours
+and accept that KWin's decoration loses whatever it draws from the
+richer sets, or keep a per-platform artifact in the contract. `platform`
+already imports `style`, so the layering does not decide it either.
+**Leave it until there is a Windows backend to measure the loss
+against** — the same reason drag and drop is not being reshaped on
+paper.
+
 ### What the audit says to do next, in order
 
 | what | cost | risk | why |
