@@ -137,6 +137,7 @@ func (c *ComboBox) SetEditable(on bool) {
 			c.OnSubmit(s)
 		}
 	}
+	f.SetEnabled(c.Enabled())
 	c.field = f
 	c.typed = f.Text
 	c.Add(f)
@@ -169,6 +170,20 @@ func (c *ComboBox) indexOf(s string) int {
 
 // edited follows the field: the matching choice, and inline completion
 // when the text grew at its end.
+// SetEnabled disables the editable field with the combo.
+//
+// The field is a child, but focus enumeration and key dispatch do not
+// consult an ancestor's enabled state, so a disabled editable combo left
+// a perfectly focusable, perfectly editable text field behind: clicking
+// it and typing changed the value of a control the application had
+// turned off.
+func (c *ComboBox) SetEnabled(v bool) {
+	c.Base.SetEnabled(v)
+	if c.field != nil {
+		c.field.SetEnabled(v)
+	}
+}
+
 func (c *ComboBox) edited(s string) {
 	if c.completing {
 		return

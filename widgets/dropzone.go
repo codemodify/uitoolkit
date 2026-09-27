@@ -114,9 +114,13 @@ func (t *TextField) Drop(e widget.DropEvent) bool {
 	t.selfDrop = e.Source == widget.Component(t)
 	t.caret = t.indexAt(e.Pos.X)
 	t.selA, t.selB = t.caret, t.caret
-	t.replaceSel(strings.Join(strings.Fields(strings.ReplaceAll(e.Text, "\n", " ")), " "))
+	// The insertion's answer is the drop's answer. An Accept validator
+	// can refuse the text, and returning true anyway tells the source
+	// the target took data it never received — which, for a drag
+	// negotiated as Move, licenses the source to delete the original.
+	ok := t.replaceSel(strings.Join(strings.Fields(strings.ReplaceAll(e.Text, "\n", " ")), " "))
 	t.RequestFocus()
-	return true
+	return ok
 }
 
 func (t *TextArea) DropTypes() []string { return []string{"text/plain"} }
@@ -131,7 +135,7 @@ func (t *TextArea) Drop(e widget.DropEvent) bool {
 	t.selfDrop = e.Source == widget.Component(t)
 	t.caret = t.indexAt(e.Pos.X, e.Pos.Y)
 	t.selA, t.selB = t.caret, t.caret
-	t.replaceSel(e.Text)
+	ok := t.replaceSel(e.Text)
 	t.RequestFocus()
-	return true
+	return ok
 }
