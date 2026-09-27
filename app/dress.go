@@ -36,8 +36,8 @@ func (w *Window) syncDecorationPalette() {
 	if w == nil || w.surf == nil || w.opts.Popup || os.Getenv(EnvDecorationPalette) == "0" {
 		return
 	}
-	ps, ok := w.surf.(platform.DecorationPaletteSurface)
-	if !ok || !ps.DecorationPaletteSupported() {
+	fs := platform.FrameOf(w.surf)
+	if !fs.Caps().Has(platform.FramePalette) {
 		return
 	}
 	path, err := w.app.decorationPaletteFile(w.look)
@@ -48,7 +48,7 @@ func (w *Window) syncDecorationPalette() {
 		}
 		return
 	}
-	ps.SetDecorationPalette(path)
+	fs.SetPalette(path)
 }
 
 // decorationPaletteFile is the KDE colour scheme of lk, written once under
@@ -166,5 +166,5 @@ func (w *Window) applyIcon() {
 	if icon == nil && !w.iconSent {
 		return
 	}
-	w.iconSent = platform.SurfaceSetIcon(w.surf, icon) && icon != nil
+	w.iconSent = platform.FrameOf(w.surf).SetIcon(icon) && icon != nil
 }

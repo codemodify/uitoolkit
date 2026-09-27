@@ -6,38 +6,11 @@ import (
 
 // This file holds what a window tells the desktop about how to dress it
 // when the desktop draws the frame, or lists the window: the colour scheme
-// KWin paints its own title bar in, and the window's icon. Like frame.go it
-// has no cgo and no build tag, so the encodings are tested headless; the
-// backends put them on the wire (wayland_dress_linux.go, x11_dress_linux.go).
-
-// DecorationPaletteSurface is an optional Surface capability: the desktop's
-// own frame takes a colour scheme per window, so a window under the
-// desktop's title bar can have it in its own colours. KWin is the desktop
-// that offers it — org_kde_kwin_server_decoration_palette on Wayland,
-// _KDE_NET_WM_COLOR_SCHEME on X11 — and it names a KDE colour-scheme file
-// (style.KDEColorScheme writes one from a look).
-type DecorationPaletteSurface interface {
-	// DecorationPaletteSupported reports whether the desktop takes a
-	// palette: KWin's global is advertised (Wayland), KWin is the window
-	// manager (X11).
-	DecorationPaletteSupported() bool
-	// SetDecorationPalette names the colour-scheme file, an absolute path,
-	// the desktop's frame paints the window with; "" goes back to the
-	// desktop's own colours. It is sent only when it changes, and never
-	// where the desktop does not take one.
-	SetDecorationPalette(path string)
-}
-
-// SurfaceSetDecorationPalette names s's frame palette where s's desktop
-// takes one, and reports whether it does.
-func SurfaceSetDecorationPalette(s Surface, path string) bool {
-	p, ok := s.(DecorationPaletteSurface)
-	if !ok || !p.DecorationPaletteSupported() {
-		return false
-	}
-	p.SetDecorationPalette(path)
-	return true
-}
+// KWin paints its own title bar in, and the window's icon. Both are
+// [WindowFrame] requests (SetPalette, SetIcon) gated by FramePalette and
+// FrameIcon; this file is only the *encoding*, which has no cgo and no
+// build tag so it is tested headless. The backends put it on the wire
+// (wayland_dress_linux.go, x11_dress_linux.go).
 
 // palettePlan is what a surface puts on the wire to take a palette: create
 // the per-surface palette object (once), then set_palette.
@@ -58,29 +31,6 @@ func planPalette(global, have bool, sent, want string) palettePlan {
 		return palettePlan{}
 	}
 	return palettePlan{create: !have, set: true}
-}
-
-// IconSurface is an optional Surface capability: the window's own icon,
-// which the desktop shows in its title bar, its task switcher and its task
-// bar — xdg-toplevel-icon-v1 on Wayland, _NET_WM_ICON on X11. Without it a
-// desktop falls back on the application's desktop entry, which a program
-// run from its build tree has none of.
-type IconSurface interface {
-	// SetIcon gives the window its icon as square images at the sizes the
-	// app has; the desktop picks the size it shows. None goes back to the
-	// desktop's default icon.
-	SetIcon(images []*paintengine2d.Image)
-}
-
-// SurfaceSetIcon gives s its icon where it can take one, and reports
-// whether it could.
-func SurfaceSetIcon(s Surface, images []*paintengine2d.Image) bool {
-	is, ok := s.(IconSurface)
-	if !ok {
-		return false
-	}
-	is.SetIcon(images)
-	return true
 }
 
 // iconImages is images as a window icon holds them: square and non-empty,

@@ -56,9 +56,10 @@ type FrameHost interface {
 	// WindowState is what the desktop says about the window (maximized
 	// shows the restore glyph).
 	WindowState() platform.WindowState
-	// FrameCaps is what the desktop can do for the window: caption buttons
-	// for the rest are hidden.
-	FrameCaps() platform.WMCaps
+	// FrameCaps is what the window system will do for the window's frame
+	// now: caption buttons for anything it will not do are hidden, rather
+	// than drawn and dead.
+	FrameCaps() platform.FrameCaps
 	// Active reports whether the window paints as active.
 	Active() bool
 	Minimize()
@@ -71,20 +72,21 @@ type FrameHost interface {
 	ShowWindowMenu(p paintengine2d.Point)
 }
 
-// FrameAbove is what a FrameHost implements where its window can be kept
-// above the others: the caption's keep-above button
-// ([platform.CaptionKeepAbove]) is its user. app.Window implements it.
+// FrameAbove is what a FrameHost implements to carry the keep-above
+// *state*: whether the desktop is holding the window above the others, and
+// the toggle. app.Window implements it.
 //
-// A host that does not implement it, or whose CanKeepAbove is false, gets
-// no such button: the desktop cannot do it (no Wayland compositor can —
-// see [platform.AboveSurface]), and a caption button that cannot work is
-// not drawn, exactly as minimize is not where the desktop cannot minimize.
+// Whether the desktop *can* is not here — it is
+// [platform.FrameKeepAbove] in FrameCaps, like every other thing the
+// window system may or may not do, so the caption asks one question in one
+// place. No Wayland compositor can (there is no keep-above request a
+// client may make on its own surface); X11 window managers that list
+// _NET_WM_STATE_ABOVE in _NET_SUPPORTED can. A caption button that cannot
+// work is not drawn, exactly as minimize is not where the desktop cannot
+// minimize.
 type FrameAbove interface {
-	// CanKeepAbove reports whether the desktop can keep the window above
-	// the others.
-	CanKeepAbove() bool
-	// KeepAbove is whether it is doing so — the desktop's answer, which is
-	// what the button paints.
+	// KeepAbove is whether the desktop is keeping the window above the
+	// others — its answer, which is what the button paints.
 	KeepAbove() bool
 	// ToggleKeepAbove turns it on or off.
 	ToggleKeepAbove() bool

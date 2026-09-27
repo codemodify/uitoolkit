@@ -17,27 +17,6 @@ type IMESurface interface {
 	SetIMEEnabled(on bool)
 }
 
-// DesktopSurface is optional chrome control (EWMH / xdg-shell).
-type DesktopSurface interface {
-	SetFullscreen(on bool)
-	SetMaximized(on bool)
-}
-
-// SetFullscreen asks the window manager / compositor when the surface
-// implements DesktopSurface.
-func SetFullscreen(s Surface, on bool) {
-	if d, ok := s.(DesktopSurface); ok {
-		d.SetFullscreen(on)
-	}
-}
-
-// SetMaximized asks the window manager / compositor when supported.
-func SetMaximized(s Surface, on bool) {
-	if d, ok := s.(DesktopSurface); ok {
-		d.SetMaximized(on)
-	}
-}
-
 // ApplyPreeditDraw applies an XIM-style incremental preedit update.
 // chgFirst/chgLen are rune indices into old; insert replaces that span.
 func ApplyPreeditDraw(old string, chgFirst, chgLen int, insert string) string {

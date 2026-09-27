@@ -15,7 +15,7 @@ import (
 type frameHost struct {
 	host
 	state  platform.WindowState
-	caps   platform.WMCaps
+	caps   platform.FrameCaps
 	active bool
 	calls  []string
 	menuAt paintengine2d.Point
@@ -26,20 +26,29 @@ type frameHost struct {
 
 func (h *frameHost) Title() string                     { return "Window" }
 func (h *frameHost) WindowState() platform.WindowState { return h.state }
-func (h *frameHost) FrameCaps() platform.WMCaps        { return h.caps }
-func (h *frameHost) Active() bool                      { return h.active }
-func (h *frameHost) Minimize()                         { h.calls = append(h.calls, "minimize") }
-func (h *frameHost) ToggleMaximize()                   { h.calls = append(h.calls, "maximize") }
-func (h *frameHost) RequestClose()                     { h.calls = append(h.calls, "close") }
+
+// FrameCaps folds canAbove in: keep-above is one capability among the
+// rest now, not an interface of its own that may or may not be there.
+func (h *frameHost) FrameCaps() platform.FrameCaps {
+	c := h.caps
+	if h.canAbove {
+		c |= platform.FrameKeepAbove
+	}
+	return c
+}
+
+func (h *frameHost) Active() bool    { return h.active }
+func (h *frameHost) Minimize()       { h.calls = append(h.calls, "minimize") }
+func (h *frameHost) ToggleMaximize() { h.calls = append(h.calls, "maximize") }
+func (h *frameHost) RequestClose()   { h.calls = append(h.calls, "close") }
 func (h *frameHost) ShowWindowMenu(p paintengine2d.Point) {
 	h.calls = append(h.calls, "menu")
 	h.menuAt = p
 }
 
-// The host can also keep its window above the others (widget.FrameAbove),
-// which is what the caption's keep-above button drives.
-func (h *frameHost) CanKeepAbove() bool { return h.canAbove }
-func (h *frameHost) KeepAbove() bool    { return h.above }
+// The host also carries the keep-above state (widget.FrameAbove); whether
+// the desktop *can* is platform.FrameKeepAbove in FrameCaps.
+func (h *frameHost) KeepAbove() bool { return h.above }
 func (h *frameHost) ToggleKeepAbove() bool {
 	if !h.canAbove {
 		return false
@@ -49,8 +58,15 @@ func (h *frameHost) ToggleKeepAbove() bool {
 	return true
 }
 
+// newFrameHost is an ordinary desktop: it grants the four per-window
+// states. Under the old WMCaps a zero value meant "nobody has said, so
+// everything is allowed"; FrameCaps has no such tri-state, so a fake says
+// what it grants like a real backend does.
 func newFrameHost() *frameHost {
-	return &frameHost{active: true}
+	return &frameHost{
+		active: true,
+		caps:   platform.FrameMenu | platform.FrameMinimize | platform.FrameMaximize | platform.FrameFullscreen,
+	}
 }
 
 func arrange(c widget.Component, w, h float32) {
@@ -188,11 +204,14 @@ func TestWindowControls(t *testing.T) {
 		t.Fatalf("right click %v at %v", host.calls, host.menuAt)
 	}
 	// Buttons for what the desktop cannot do are hidden.
-	host.caps = platform.CapKnown | platform.CapWindowMenu
+	host.caps = platform.FrameMenu
 	if got := c.Shown(); len(got) != 1 || got[0] != platform.CaptionClose {
 		t.Fatalf("without minimize and maximize %v", got)
 	}
-	host.caps = 0
+	// Back to an ordinary desktop. Under WMCaps this line was `= 0`,
+	// which meant "nobody has said, so everything is allowed"; with
+	// FrameCaps zero means zero, and a test says what it grants.
+	host.caps = newFrameHost().caps
 	// Names for assistive technology; maximized means Restore.
 	names := func() []string {
 		var out []string

@@ -96,9 +96,10 @@ func TestWaylandDesktopChrome(t *testing.T) {
 	}
 	defer s.Close()
 	_ = s.Present(nil)
-	SetFullscreen(s, true)
-	SetMaximized(s, true)
-	SetFullscreen(s, false)
+	f := FrameOf(s)
+	f.SetFullscreen(true)
+	f.SetMaximized(true)
+	f.SetFullscreen(false)
 	if ime, ok := s.(IMESurface); ok {
 		ime.SetIMECursor(8, 12, 2, 16)
 	}

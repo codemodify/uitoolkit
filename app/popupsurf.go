@@ -387,7 +387,7 @@ func (w *Window) popMargin(lk style.LookAndFeel, kind style.PopupKind) platform.
 // popGlass reports whether a popup in lk is real glass here: the look's
 // materials are translucent and the desktop blurs behind a surface.
 func (w *Window) popGlass(lk style.LookAndFeel) bool {
-	return !w.state.Solid && style.WantsGlass(lk) && platform.SurfaceBlurBehind(w.surf)
+	return !w.state.Solid && style.WantsGlass(lk) && platform.FrameCapsOf(w.surf).Has(platform.FrameBlurBehind)
 }
 
 // popFrame is what the window system is told about a popup's surface: the

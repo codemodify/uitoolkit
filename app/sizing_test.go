@@ -71,7 +71,7 @@ func TestFixedWindowHasNoResizeBand(t *testing.T) {
 		t.Errorf("limits %+v, want 275x116 on both ends", l)
 	}
 	// Maximizing is a resize: the action and its caption button both go.
-	if w.FrameCaps().Can(platform.CapMaximize) {
+	if w.FrameCaps().Has(platform.FrameMaximize) {
 		t.Error("a fixed window offers maximize")
 	}
 	w.ToggleMaximize()
@@ -120,7 +120,7 @@ func TestSetResizableUnpinsTheWindow(t *testing.T) {
 	if got, _ := w.NonClientHit(paintengine2d.Pt(win.Max.X+1, win.Max.Y+1)); got != RegionResize {
 		t.Errorf("no resize band after SetResizable(true): %v", got)
 	}
-	if !w.FrameCaps().Can(platform.CapMaximize) {
+	if !w.FrameCaps().Has(platform.FrameMaximize) {
 		t.Error("maximize still refused after SetResizable(true)")
 	}
 }

@@ -116,7 +116,7 @@ type Window struct {
 	// window's silhouette) and shadow the cached nine-patch that margin is
 	// painted from.
 	decor    platform.Decorations
-	caps     platform.WMCaps
+	caps     platform.FrameCaps
 	geom     frameGeom
 	sysFrame platform.Frame
 	shadow   frameShadow
@@ -188,10 +188,8 @@ func newWindow(a *Application, surf platform.Surface, opts platform.WindowOption
 	w.look = a.scaledLook(w.scale)
 	w.dirty.Pad = 1
 	w.opts = opts
-	w.decor = platform.SurfaceDecorations(surf)
-	if f, ok := surf.(platform.FrameSurface); ok {
-		w.caps = f.Capabilities()
-	}
+	f := platform.FrameOf(surf)
+	w.decor, w.caps = f.Decorations(), f.Caps()
 	w.rebuildCaption()
 	w.applyIcon()
 	return w
@@ -330,11 +328,23 @@ func (w *Window) SetTitle(s string) {
 	}
 }
 
-// SetFullscreen asks the native backend (EWMH / xdg-shell) when available.
-func (w *Window) SetFullscreen(on bool) { platform.SetFullscreen(w.surf, on) }
+// SetFullscreen puts the window full screen, or takes it back. It reports
+// whether there was anything to ask — false where the desktop will not do
+// it for this window ([platform.FrameFullscreen]), which it used to do
+// silently.
+//
+// The answer arrives as an ordinary window-state change, so
+// [Window.WindowState] follows what the desktop did rather than what was
+// asked.
+func (w *Window) SetFullscreen(on bool) bool {
+	return platform.FrameOf(w.surf).SetFullscreen(on)
+}
 
-// SetMaximized asks the native backend when available.
-func (w *Window) SetMaximized(on bool) { platform.SetMaximized(w.surf, on) }
+// SetMaximized maximizes the window both ways, or restores it. It reports
+// whether there was anything to ask (see [Window.SetFullscreen]).
+func (w *Window) SetMaximized(on bool) bool {
+	return platform.FrameOf(w.surf).SetMaximized(on)
+}
 
 // WindowState is what the desktop last said about the window: maximized,
 // full screen, tiled edges, activated, suspended.
@@ -351,9 +361,7 @@ func (w *Window) Minimize() {
 	if w == nil || w.Closed() {
 		return
 	}
-	if f, ok := w.surf.(platform.FrameSurface); ok {
-		f.Minimize()
-	}
+	platform.FrameOf(w.surf).Minimize()
 }
 
 // ToggleMaximize maximizes the window, or restores a maximized one. A
@@ -392,11 +400,10 @@ func (w *Window) SetResizable(on bool) bool {
 	if !platform.SetSurfaceSizing(w.surf, sz) {
 		return false
 	}
-	// The resize band and the maximize button both go with it.
+	// The resize band and the maximize button both go with it: a fixed
+	// window may not be maximized, resized from an edge or rolled up.
 	w.band = nil
-	if f, ok := w.surf.(platform.FrameSurface); ok {
-		w.caps = f.Capabilities()
-	}
+	w.caps = platform.FrameCapsOf(w.surf)
 	w.rebuildCaption()
 	return true
 }

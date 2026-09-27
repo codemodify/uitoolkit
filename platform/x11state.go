@@ -55,21 +55,28 @@ const (
 	netActionFullscreen
 )
 
-// netAllowedCaps decodes _NET_WM_ALLOWED_ACTIONS; windowMenu is whether the
-// window manager lists _GTK_SHOW_WINDOW_MENU in _NET_SUPPORTED.
-func netAllowedCaps(bits uint32, windowMenu bool) WMCaps {
-	c := CapKnown
+// netAllowedCaps decodes _NET_WM_ALLOWED_ACTIONS into the four
+// capabilities a desktop grants per window; windowMenu is whether the
+// window manager lists _GTK_SHOW_WINDOW_MENU in _NET_SUPPORTED. What the
+// *backend* can do regardless is added by x11Surface.Caps.
+func netAllowedCaps(bits uint32, windowMenu bool) FrameCaps {
+	var c FrameCaps
 	if bits&netActionMinimize != 0 {
-		c |= CapMinimize
+		c |= FrameMinimize
 	}
 	if bits&netActionMaximizeHorz != 0 && bits&netActionMaximizeVert != 0 {
-		c |= CapMaximize
+		c |= FrameMaximize
+	}
+	if bits&netActionMaximizeHorz != 0 || bits&netActionMaximizeVert != 0 {
+		// _NET_WM_STATE_MAXIMIZED_VERT / _HORZ are separate states, so a
+		// window manager that allows either allows maximizing one way.
+		c |= FrameMaximizeAxis
 	}
 	if bits&netActionFullscreen != 0 {
-		c |= CapFullscreen
+		c |= FrameFullscreen
 	}
 	if windowMenu {
-		c |= CapWindowMenu
+		c |= FrameMenu
 	}
 	return c
 }

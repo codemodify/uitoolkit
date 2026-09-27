@@ -344,13 +344,13 @@ func inOrder(log []string, want ...string) bool {
 func TestWaylandDecorationPaletteOnTheWire(t *testing.T) {
 	f := startWlFake(t, "org_kde_kwin_server_decoration_palette_manager:1")
 	s := fakeSurface(t)
-	if !s.DecorationPaletteSupported() {
+	if !s.paletteSupported() {
 		t.Fatal("the palette manager was advertised but not bound")
 	}
-	s.SetDecorationPalette("/cache/uitk-a.colors")
-	s.SetDecorationPalette("/cache/uitk-a.colors")
-	s.SetDecorationPalette("/cache/uitk-b.colors")
-	s.SetDecorationPalette("")
+	s.SetPalette("/cache/uitk-a.colors")
+	s.SetPalette("/cache/uitk-a.colors")
+	s.SetPalette("/cache/uitk-b.colors")
+	s.SetPalette("")
 	s.conn.roundtrip()
 	log := f.requests()
 	if !inOrder(log,
@@ -377,10 +377,10 @@ func TestWaylandDecorationPaletteOnTheWire(t *testing.T) {
 func TestWaylandDecorationPaletteNeedsKWin(t *testing.T) {
 	f := startWlFake(t)
 	s := fakeSurface(t)
-	if s.DecorationPaletteSupported() {
+	if s.paletteSupported() {
 		t.Fatal("a palette is supported with no palette manager")
 	}
-	s.SetDecorationPalette("/cache/uitk-a.colors")
+	s.SetPalette("/cache/uitk-a.colors")
 	s.conn.roundtrip()
 	for _, l := range f.requests() {
 		if strings.Contains(l, "palette") {

@@ -4,8 +4,6 @@ import (
 	"math"
 	"os"
 	"strings"
-
-	"github.com/codemodify/paintengine2d"
 )
 
 // This file holds the window-frame vocabulary shared by every backend: who
@@ -254,26 +252,6 @@ func OpaqueRects(win FrameRect, radius [4]float32, scale float32) []FrameRect {
 	return out
 }
 
-// SurfaceFrame is the frame s was last told about (the zero frame when it
-// cannot hold one).
-func SurfaceFrame(s Surface) Frame {
-	if f, ok := s.(FrameSurface); ok {
-		return f.Frame()
-	}
-	return Frame{}
-}
-
-// SetSurfaceFrame tells s about the frame the toolkit draws, where it can
-// take one. It reports whether the surface took it.
-func SetSurfaceFrame(s Surface, f Frame) bool {
-	fs, ok := s.(FrameSurface)
-	if !ok {
-		return false
-	}
-	fs.SetFrame(f)
-	return true
-}
-
 // Edges is a set of window edges. A resize edge is one side or a corner
 // (two adjacent sides).
 type Edges uint8
@@ -454,108 +432,20 @@ func xdgStateFromMask(mask uint32) WindowState {
 	return st
 }
 
-// WMCaps is what the desktop can do for a window: xdg_toplevel's
-// wm_capabilities, X11's _NET_WM_ALLOWED_ACTIONS and _NET_SUPPORTED.
-type WMCaps uint8
-
-const (
-	// CapWindowMenu: the desktop shows its window menu on request.
-	CapWindowMenu WMCaps = 1 << iota
-	CapMaximize
-	CapFullscreen
-	CapMinimize
-	// CapKnown is set once the desktop has said; until then every action
-	// counts as available.
-	CapKnown WMCaps = 1 << 7
-)
-
-// Can reports whether the desktop does x for the window (always true while
-// it has not said).
-func (c WMCaps) Can(x WMCaps) bool {
-	return c&CapKnown == 0 || c&x == x
-}
-
-// xdgCapsFromMask decodes xdg_toplevel.wm_capabilities: bit n is set when
-// the array held capability value n (window_menu 1, maximize 2,
-// fullscreen 3, minimize 4).
-func xdgCapsFromMask(mask uint32) WMCaps {
-	c := CapKnown
-	for v, cap := range map[uint]WMCaps{1: CapWindowMenu, 2: CapMaximize, 3: CapFullscreen, 4: CapMinimize} {
+// xdgFrameCapsFromMask decodes xdg_toplevel.wm_capabilities: bit n is set
+// when the array held capability value n (window_menu 1, maximize 2,
+// fullscreen 3, minimize 4). What is not in the array the compositor will
+// not do for this window, so nothing else is assumed here — the backend
+// decides what to answer *before* the compositor has said at all (see
+// frameDesktopCaps).
+func xdgFrameCapsFromMask(mask uint32) FrameCaps {
+	var c FrameCaps
+	for v, cap := range map[uint]FrameCaps{1: FrameMenu, 2: FrameMaximize, 3: FrameFullscreen, 4: FrameMinimize} {
 		if mask&(1<<v) != 0 {
 			c |= cap
 		}
 	}
 	return c
-}
-
-// FrameSurface is an optional Surface capability for windows whose frame the
-// toolkit draws: the negotiated decoration mode, the window's state, what the
-// desktop can do, and the requests that hand a gesture back to the desktop.
-// Moving, resizing, snapping and the window menu stay the desktop's: the
-// toolkit asks, from the user's button press, and the desktop does it.
-//
-// Wayland and X11 top-level surfaces implement it; Offscreen records the
-// calls for tests.
-type FrameSurface interface {
-	// Decorations is the mode in effect after negotiation: the compositor
-	// may answer another mode than the one asked for (KWin draws no frame
-	// at all for full-screen windows, GNOME draws none ever).
-	Decorations() Decorations
-	// RequestDecorations asks for mode d (Auto counts as Server). The
-	// answer arrives as EventDecorations when it differs from the current
-	// mode.
-	RequestDecorations(d Decorations)
-	// WindowState is the window's current state (EventWindowState reports
-	// every change).
-	WindowState() WindowState
-	// Capabilities is what the desktop can do for the window
-	// (EventCapabilities reports changes).
-	Capabilities() WMCaps
-	// StartSystemMove hands the button press being handled to the desktop
-	// for an interactive move (Qt's startSystemMove). It must be called
-	// while the button is still down; false means nothing started. The
-	// pointer then belongs to the desktop until the gesture ends: the
-	// release never reaches the window.
-	StartSystemMove() bool
-	// StartSystemResize is StartSystemMove for a resize from edges.
-	StartSystemResize(edges Edges) bool
-	// ShowWindowMenu asks the desktop for its window menu at p (surface
-	// device pixels); false means it cannot, and the toolkit shows its own.
-	ShowWindowMenu(p paintengine2d.Point) bool
-	// SetFrame tells the window system about the frame the toolkit draws
-	// (see [Frame]): the invisible margin, the resize band inside it, the
-	// corner radii and whether the buffer needs alpha. The surface grows
-	// by the margin at once — Size() is the buffer, the visible window is
-	// Size() less the margin — and the window system is told with the next
-	// Present, in the same commit as the buffer.
-	SetFrame(f Frame)
-	// Frame is the frame last set.
-	Frame() Frame
-	// Minimize iconifies the window (keeping it: unlike Hide, the taskbar
-	// or the overview brings it back).
-	Minimize()
-	// SuitsClientFrame reports whether a toolkit-drawn frame works well
-	// here: the desktop moves and resizes windows on request and is not a
-	// tiling manager. The Auto policy picks the client frame only then.
-	SuitsClientFrame() bool
-}
-
-// SurfaceWindowState is s's window state (the zero state when s cannot say).
-func SurfaceWindowState(s Surface) WindowState {
-	if f, ok := s.(FrameSurface); ok {
-		return f.WindowState()
-	}
-	return WindowState{}
-}
-
-// SurfaceDecorations is the decoration mode in effect for s: the negotiated
-// one, or Server for a surface that cannot negotiate (someone else's frame,
-// or none).
-func SurfaceDecorations(s Surface) Decorations {
-	if f, ok := s.(FrameSurface); ok {
-		return f.Decorations()
-	}
-	return DecorationsServer
 }
 
 // effectiveDecorations is what a backend reports after a negotiation:
@@ -581,97 +471,6 @@ func requestedDecorations(d Decorations) Decorations {
 	return d
 }
 
-// Lowerer is an optional Surface capability: put the window below the
-// others (X11; Wayland has no such request).
-type Lowerer interface {
-	Lower()
-}
-
-// AxisMaximizer is an optional Surface capability: maximize or restore one
-// way only (X11's _NET_WM_STATE_MAXIMIZED_VERT / _HORZ; xdg-shell cannot).
-type AxisMaximizer interface {
-	ToggleMaximizeAxis(vertical bool)
-}
-
-// AboveSurface is an optional Surface capability: keep the window above the
-// others, the state a "stay on top" caption button toggles
-// ([CaptionKeepAbove]).
-//
-// Only X11 implements it, through _NET_WM_STATE_ABOVE, and only where the
-// window manager lists that atom in _NET_SUPPORTED. **Wayland has no
-// keep-above in xdg-shell or in any protocol a client may use on its own
-// surface**: KDE's org_kde_plasma_window_management does carry the state,
-// but it is a window-manager protocol with no wl_surface request at all —
-// a client binds it to enumerate *every* window on the desktop and would
-// have to guess which one is its own from the pid and the title. A UI
-// toolkit must not take that capability for every application that links
-// it, so the Wayland backend does not implement this and the caption
-// button says so rather than going quiet.
-//
-// The window's actual state comes back as [WindowState.KeepAbove]: the
-// desktop has the last word, as it does for maximize.
-type AboveSurface interface {
-	// KeepAboveSupported reports whether the desktop can keep the window
-	// above the others. It is asked afresh rather than cached: a window
-	// manager can be replaced while the window is up.
-	KeepAboveSupported() bool
-	// SetKeepAbove asks for the state; the answer arrives as
-	// EventWindowState.
-	SetKeepAbove(on bool)
-}
-
-// SurfaceKeepAboveSupported reports whether s's desktop can keep the window
-// above the others (false for a surface that cannot say).
-func SurfaceKeepAboveSupported(s Surface) bool {
-	a, ok := s.(AboveSurface)
-	return ok && a.KeepAboveSupported()
-}
-
-// SetKeepAbove asks s's desktop to keep the window above the others, or to
-// stop. It reports whether there was anything to ask.
-func SetKeepAbove(s Surface, on bool) bool {
-	a, ok := s.(AboveSurface)
-	if !ok || !a.KeepAboveSupported() {
-		return false
-	}
-	a.SetKeepAbove(on)
-	return true
-}
-
-// ShadeSurface is an optional Surface capability: hold the window at one
-// height while it is rolled up to its title bar, whatever minimum height it
-// otherwise states.
-//
-// Rolling up is the client's own doing — it resizes itself to its caption
-// and back — but the window system has to be told, for two reasons. A
-// window manager clamps a client's resize to its WM_NORMAL_HINTS (KWin
-// does), so a window with a minimum height would spring straight back
-// open; and a rolled-up window cannot be resized vertically, which is what
-// pinning its height to one value says.
-//
-// All three backends implement it. It is not shading in the window
-// manager's sense: X11's _NET_WM_STATE_SHADED and KWin's own shade are the
-// *desktop's* title bar rolling up, which is no use to a window whose
-// title bar the toolkit draws — an undecorated window is not shadeable at
-// all. Under the desktop's frame the wheel over the title bar never
-// reaches the client and shading stays entirely the desktop's business.
-type ShadeSurface interface {
-	// SetShadedHeight pins the window's height to h logical pixels; 0
-	// releases the pin and restores the window's own limits.
-	SetShadedHeight(h int)
-}
-
-// SetShadedHeight pins s's height while it is rolled up (0 unpins), and
-// reports whether the backend could.
-func SetShadedHeight(s Surface, h int) bool {
-	sh, ok := s.(ShadeSurface)
-	if !ok {
-		return false
-	}
-	sh.SetShadedHeight(h)
-	return true
-}
-
 // shadePin applies a rolled-up window's height pin to its stated limits: a
 // shaded window is exactly that tall and not resizable vertically. h of 0
 // leaves the limits alone.
@@ -680,27 +479,4 @@ func shadePin(l SizeLimits, h int) SizeLimits {
 		l.MinHeight, l.MaxHeight = h, h
 	}
 	return l
-}
-
-// GlassSurface is an optional Surface capability: the desktop can blur what
-// lies *behind* the window, so a translucent window becomes real glass over
-// the desktop rather than over its own pixels. Wayland asks
-// ext_background_effect_v1, X11 sets _KDE_NET_WM_BLUR_BEHIND_REGION; the
-// region itself is [Frame.Blur].
-//
-// The answer changes while the window is up — KWin drops the capability
-// when desktop effects are switched off — so it is asked afresh rather than
-// cached, and a look that asks for glass must still paint something that
-// stands on its own without it.
-type GlassSurface interface {
-	// BlurBehindSupported reports whether the desktop blurs behind a
-	// window now.
-	BlurBehindSupported() bool
-}
-
-// SurfaceBlurBehind reports whether s's desktop can blur what is behind the
-// window (false for a surface that cannot say).
-func SurfaceBlurBehind(s Surface) bool {
-	g, ok := s.(GlassSurface)
-	return ok && g.BlurBehindSupported()
 }

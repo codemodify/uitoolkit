@@ -454,7 +454,7 @@ func TestCaptionButtons(t *testing.T) {
 		t.Fatal("restore")
 	}
 	// The desktop cannot minimize: no minimize button.
-	r.o.SimulateCapabilities(platform.CapMaximize | platform.CapWindowMenu)
+	r.o.SimulateCapabilities(platform.FrameMaximize | platform.FrameMenu)
 	r.a.PumpOnce()
 	if got := right.Shown(); len(got) != 2 || got[0] != platform.CaptionMaximize {
 		t.Fatalf("without minimize %v", got)

@@ -136,8 +136,22 @@ func (w *Window) Caption() *widgets.HeaderBar { return w.caption }
 // draws the frame, Server when the desktop does, None for no frame.
 func (w *Window) Decorations() platform.Decorations { return w.decor }
 
-// FrameCaps is what the desktop can do for the window (widget.FrameHost).
-func (w *Window) FrameCaps() platform.WMCaps { return w.caps }
+// FrameCaps is what the window system will do for the window's frame now
+// (widget.FrameHost): it drives which caption buttons are drawn at all.
+//
+// It asks the backend rather than answering from w.caps, which is only the
+// last value seen — the one changes are noticed against. Several of these
+// change under a running window with no event to announce it: a window
+// manager is replaced and keep-above appears, KWin's desktop effects go off
+// and blur disappears. A capability read once at creation would leave a
+// caption button that no longer works, which is the failure this whole
+// boundary is shaped to prevent.
+func (w *Window) FrameCaps() platform.FrameCaps {
+	if w == nil {
+		return 0
+	}
+	return platform.FrameCapsOf(w.surf)
+}
 
 // offscreen reports whether the application paints without a display
 // (tests, screenshots): no frame is chosen for it unless asked explicitly.
@@ -170,10 +184,8 @@ func (a *Application) resolveDecorations(opts platform.WindowOptions, titleBar b
 	case style.DecorationsToolkit:
 		return platform.DecorationsClient
 	}
-	if titleBar {
-		if f, ok := surf.(platform.FrameSurface); ok && f.SuitsClientFrame() {
-			return platform.DecorationsClient
-		}
+	if titleBar && platform.FrameCapsOf(surf).Has(platform.FrameClientFrame) {
+		return platform.DecorationsClient
 	}
 	return platform.DecorationsServer
 }
@@ -212,13 +224,9 @@ func (w *Window) ownsCaption() bool { return w.titleBar != nil || w.onCaptionDra
 // rebuilds the caption for the mode in effect.
 func (w *Window) syncDecorations() {
 	want := w.app.resolveDecorations(w.opts, w.ownsCaption(), w.surf)
-	if f, ok := w.surf.(platform.FrameSurface); ok {
-		f.RequestDecorations(want)
-		w.decor = f.Decorations()
-		w.caps = f.Capabilities()
-	} else {
-		w.decor = platform.DecorationsServer
-	}
+	f := platform.FrameOf(w.surf)
+	f.RequestDecorations(want)
+	w.decor, w.caps = f.Decorations(), f.Caps()
 	w.rebuildCaption()
 }
 
@@ -350,8 +358,9 @@ func (w *Window) decorationsChanged(d platform.Decorations) {
 	w.rebuildCaption()
 }
 
-// capsChanged adopts what the desktop can do now (caption buttons follow).
-func (w *Window) capsChanged(c platform.WMCaps) {
+// capsChanged adopts what the window system will do now (caption buttons
+// follow).
+func (w *Window) capsChanged(c platform.FrameCaps) {
 	if c == w.caps {
 		return
 	}
@@ -459,15 +468,14 @@ func (w *Window) applyFrame() {
 	// drops it when desktop effects go off), and every look reads it
 	// through style.GlassBehind, so it is refreshed here — once a layout,
 	// beside everything else the window system has to say.
-	if _, ok := w.surf.(platform.GlassSurface); ok {
-		style.SetGlassAvailable(platform.SurfaceBlurBehind(w.surf))
-	}
+	fs := platform.FrameOf(w.surf)
+	style.SetGlassAvailable(fs.Caps().Has(platform.FrameBlurBehind))
 	f := w.wantFrame()
 	if f.Same(w.sysFrame) {
 		return
 	}
 	w.sysFrame = f
-	platform.SetSurfaceFrame(w.surf, f)
+	fs.SetFrame(f)
 	w.shadow.drop()
 }
 
@@ -859,8 +867,7 @@ func (w *Window) frameMouseUp() bool {
 // Qt's startSystemMove); false when the desktop cannot. The window lets go of
 // the pointer: the release goes to the desktop.
 func (w *Window) StartMove() bool {
-	f, ok := w.surf.(platform.FrameSurface)
-	if !ok || !f.StartSystemMove() {
+	if !platform.FrameOf(w.surf).StartMove() {
 		return false
 	}
 	w.releasePointer()
@@ -869,8 +876,7 @@ func (w *Window) StartMove() bool {
 
 // StartResize is StartMove for an interactive resize from edges.
 func (w *Window) StartResize(edges platform.Edges) bool {
-	f, ok := w.surf.(platform.FrameSurface)
-	if !ok || !f.StartSystemResize(edges) {
+	if !platform.FrameOf(w.surf).StartResize(edges) {
 		return false
 	}
 	w.releasePointer()
@@ -899,7 +905,7 @@ func (w *Window) ShowWindowMenu(p paintengine2d.Point) {
 	if w == nil || w.Closed() {
 		return
 	}
-	if f, ok := w.surf.(platform.FrameSurface); ok && f.ShowWindowMenu(p) {
+	if platform.FrameOf(w.surf).ShowMenu(p) {
 		w.releasePointer()
 		return
 	}
@@ -915,15 +921,15 @@ func (w *Window) showToolkitWindowMenu(p paintengine2d.Point) *widgets.PopupMenu
 	if anchor == nil {
 		return nil
 	}
-	caps := w.caps
+	caps := w.FrameCaps()
 	var items []*widgets.MenuItem
 	switch {
 	case w.state.Maximized:
 		items = append(items, widgets.Item("&Restore", w.ToggleMaximize))
-	case caps.Can(platform.CapMaximize):
+	case caps.Has(platform.FrameMaximize):
 		items = append(items, widgets.Item("Ma&ximize", w.ToggleMaximize))
 	}
-	if caps.Can(platform.CapMinimize) {
+	if caps.Has(platform.FrameMinimize) {
 		items = append(items, widgets.Item("Mi&nimize", w.Minimize))
 	}
 	if w.shaded {
@@ -947,8 +953,7 @@ func (w *Window) runTitleAction(a platform.TitleAction, p paintengine2d.Point) {
 	case platform.TitleToggleMaximize:
 		w.ToggleMaximize()
 	case platform.TitleToggleMaximizeVertically, platform.TitleToggleMaximizeHorizontally:
-		if m, ok := w.surf.(platform.AxisMaximizer); ok {
-			m.ToggleMaximizeAxis(a == platform.TitleToggleMaximizeVertically)
+		if platform.FrameOf(w.surf).MaximizeAxis(a == platform.TitleToggleMaximizeVertically) {
 			return
 		}
 		// xdg-shell maximizes both ways or not at all.
@@ -956,9 +961,7 @@ func (w *Window) runTitleAction(a platform.TitleAction, p paintengine2d.Point) {
 	case platform.TitleMinimize:
 		w.Minimize()
 	case platform.TitleLower:
-		if l, ok := w.surf.(platform.Lowerer); ok {
-			l.Lower()
-		}
+		platform.FrameOf(w.surf).Lower()
 	case platform.TitleToggleShade:
 		w.ToggleShade()
 	case platform.TitleToggleKeepAbove:

@@ -74,11 +74,19 @@ func (c *WindowControls) frameAbove() widget.FrameAbove {
 	return a
 }
 
-// canKeepAbove reports whether the desktop can keep the window above the
-// others; a keep-above button is not drawn where it cannot.
+// canKeepAbove reports whether the window can be kept above the others: a
+// desktop that will do it ([platform.FrameKeepAbove]) and a host that
+// carries the state. A keep-above button is not drawn otherwise.
 func (c *WindowControls) canKeepAbove() bool {
-	a := c.frameAbove()
-	return a != nil && a.CanKeepAbove()
+	return c.caps().Has(platform.FrameKeepAbove) && c.frameAbove() != nil
+}
+
+// caps is what the window system will do for the window's frame now.
+func (c *WindowControls) caps() platform.FrameCaps {
+	if h := c.frameHost(); h != nil {
+		return h.FrameCaps()
+	}
+	return 0
 }
 
 // keptAbove reports whether the window is being kept above the others: the
@@ -97,19 +105,16 @@ func (c *WindowControls) frameHost() widget.FrameHost {
 
 // Shown are the buttons painted: those the desktop can do.
 func (c *WindowControls) Shown() []platform.CaptionButton {
-	caps := platform.WMCaps(0)
-	if h := c.frameHost(); h != nil {
-		caps = h.FrameCaps()
-	}
+	caps := c.caps()
 	out := make([]platform.CaptionButton, 0, len(c.buttons))
 	for _, b := range c.buttons {
 		switch b {
 		case platform.CaptionMinimize:
-			if !caps.Can(platform.CapMinimize) {
+			if !caps.Has(platform.FrameMinimize) {
 				continue
 			}
 		case platform.CaptionMaximize:
-			if !caps.Can(platform.CapMaximize) {
+			if !caps.Has(platform.FrameMaximize) {
 				continue
 			}
 		case platform.CaptionKeepAbove:
