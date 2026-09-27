@@ -185,7 +185,7 @@ bound, otherwise a CPU device wrapping `Surface.Buffer`. Offscreen and
 `CGO_ENABLED=0` stay on the CPU path.
 
 **The same three values are a saved preference as well** (0.20.0):
-`look.json` `"renderer"`, which Settings' **Paint** chooser writes and
+`look.json` `"renderer"`, which Settings' **Renderer** chooser writes and
 `app.New` pushes into `platform.SetPaintPref` before the first window.
 `platform.PaintPref` is what a surface asks, and it answers
 `UITK_PAINT` first and the saved preference second — the variable wins

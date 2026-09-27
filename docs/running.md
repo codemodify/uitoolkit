@@ -163,7 +163,7 @@ Escape hatches added in the review pass:
   its effect is edge quality at the scale of a pixel — see
   [settings.md](settings.md#uitk_paint_msaa-is-not-on-this-page).
 - `UITK_PAINT=cpu|gpu|auto` — which device paints. It is a saved
-  preference too now (`look.json` `"renderer"`, Settings' **Paint**
+  preference too now (`look.json` `"renderer"`, Settings' **Renderer**
   chooser); the variable wins wherever it is set.
 
 ---

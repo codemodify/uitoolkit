@@ -401,7 +401,7 @@ XRGB8888** on Wayland (`UITK_WAYLAND_PRESENT=auto|shm`).
 `UITK_PAINT=cpu` forces the CPU painter. If a Wayland window is fully
 transparent, set `UITK_PAINT=cpu` and/or `UITK_WAYLAND_PRESENT=shm`.
 The same three values are a **saved preference** as well — `look.json`
-`"renderer"`, written by Settings' **Paint** chooser — and `UITK_PAINT`
+`"renderer"`, written by Settings' **Renderer** chooser — and `UITK_PAINT`
 beats the file wherever it is set. A surface binds its device when it is
 created, so a change reaches the windows opened after it and not the ones
 already up; `Application.PaintBackend` says which of the two a window is
@@ -815,7 +815,7 @@ wants to choose). The one live thing left in the preview is its **File
 menu**: *Open…* and *Save…* open the dialog *OS open/save dialogs* is
 asking for — the desktop's through the XDG portal, or the toolkit's own
 in the pack being staged — and open nothing, so the option can be looked
-at rather than read. **Paint** is the fourth chooser and the newest
+at rather than read. **Renderer** is the fourth chooser and the newest
 setting on the page: *Auto*, *GPU* or *CPU*, written to `look.json` as
 `"renderer"`, which is `UITK_PAINT` made choosable without a terminal
 (and `UITK_PAINT` still beats the file wherever it is set). It is the one

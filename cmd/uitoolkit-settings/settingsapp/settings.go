@@ -874,7 +874,7 @@ func (s *settingsState) choosers() (shape, glyphs, paint widget.Component) {
 // share the second line of a 453-pixel row, and the icon set, its size
 // and the renderer the third. With the corners last, as they were, the
 // icons had a line to themselves and the row took four.
-var settingWords = [4]string{"Corners", "Icons", "Size", "Paint"}
+var settingWords = [4]string{"Corners", "Icons", "Size", "Renderer"}
 
 // rendererPrefs are the devices the paint chooser offers, in its order:
 // let the toolkit decide, then the two definite answers.
@@ -933,12 +933,10 @@ func (s *settingsState) renderer() *widgets.ComboBox {
 		s.stage(next)
 	})
 	s.render.MinWidth = 1
-	// "Paint" on the page, "Paint renderer" to a screen reader: the
-	// visible word is inside the spoken name, as everywhere else on this
-	// row. "Paint" rather than "Renderer" because it is the word the
-	// environment variable and the docs have always used (UITK_PAINT),
-	// and because five characters is what the row has room for.
-	s.render.SetAccessibleName("Paint renderer")
+	// "Renderer" on the page and at the head of the spoken name, as
+	// everywhere else on this row. It is the widest of the four labels,
+	// which is why the row's order puts it where it can share a line.
+	s.render.SetAccessibleName("Renderer: the CPU rasterizer or the GPU")
 	s.render.Tip = s.rendererTip()
 	s.render.SetAccessibleDescription(s.render.Tip)
 	return s.render
@@ -950,7 +948,7 @@ func (s *settingsState) renderer() *widgets.ComboBox {
 // changes, because all four answers can move.
 func (s *settingsState) rendererTip() string {
 	var b strings.Builder
-	b.WriteString("Paint renderer — a real setting: Auto takes the GPU (EGL/GLES) where it starts and the CPU rasterizer where it does not. ")
+	b.WriteString("Renderer — a real setting: Auto takes the GPU (EGL/GLES) where it starts and the CPU rasterizer where it does not. ")
 	// The window this page is drawn in, not the preference and not the
 	// application's best window: the sentence says "this window", so it
 	// has to ask this window's surface.
@@ -1139,10 +1137,9 @@ func iconSizeNames() []string {
 // the pack's own, then round, then square.
 var cornerStyles = []style.CornerStyle{style.CornersTheme, style.CornersRound, style.CornersSquare}
 
-// cornerNames are what that chooser lists. "Theme shape" is the pack's
-// own corners, whatever they are — the words the View menu used, kept
-// because they are the ones the docs and two releases of screenshots
-// say.
+// cornerNames are what that chooser lists. "Theme" is the pack's own
+// corners, whatever they are — the words the View menu used, kept because
+// they are the ones the docs and two releases of screenshots say.
 func cornerNames() []string { return []string{"Theme shape", "Round", "Square"} }
 
 func cornerIndex(c style.CornerStyle) int {

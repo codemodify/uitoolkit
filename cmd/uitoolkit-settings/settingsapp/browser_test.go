@@ -279,7 +279,7 @@ func TestSettingsKeyboardReachesEverything(t *testing.T) {
 				want["decade"] = true
 			case "Window corners":
 				want["corners"] = true
-			case "Paint renderer":
+			case "Renderer: the CPU rasterizer or the GPU":
 				want["renderer"] = true
 			}
 		case *widgets.Checkbox:
@@ -318,7 +318,7 @@ func TestSettingsKeyboardReachesEverything(t *testing.T) {
 	// The four choosers are stops of Settings' own, outside the preview
 	// and outside the column: a chooser that only the mouse can reach is
 	// a setting half the users of this page cannot change.
-	for _, name := range []string{"Window corners", "Icons", "Icon size", "Paint renderer"} {
+	for _, name := range []string{"Window corners", "Icons", "Icon size", "Renderer: the CPU rasterizer or the GPU"} {
 		cb := namedCombo(w.Content(), name)
 		if cb == nil {
 			t.Fatalf("no %q chooser on the page", name)

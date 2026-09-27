@@ -166,7 +166,7 @@ a pack is drawn with, and a fourth that says what draws it.
 
 ```
 ☑ Animations  ☐ OS colors  ☐ OS open/save dialogs  ☐ OS window borders
-Corners [Theme shape ▾]  Icons [Classic ▾]  Size [24 ▾]  Paint [Auto ▾]
+Corners [Theme shape ▾]  Icons [Classic ▾]  Size [24 ▾]  Renderer [Auto ▾]
 ```
 
 That is what it looks like at 1024×860 — and it is **one wrapping row**,
@@ -198,7 +198,7 @@ And the four choosers after them:
 | **Corners** | Window corners | *Theme shape* (the pack's own), *Round* or *Square*, and the previewed window's frame is cut to it |
 | **Icons** | Icons | The icon set the chrome is drawn in: `classic` / `sharp` and any premiere or user set installed under `~/.config/uitoolkit/icons/` |
 | **Size** | Icon size | The pixel size its glyphs are drawn at — **16 / 24 / 32**, the way a word processor's size box lists numbers, because a set's glyphs are drawn at it and a page that showed a fixed size would be showing something the user is not going to get |
-| **Paint** | Paint renderer | *Auto*, *GPU* or *CPU* — which device paints. See [The renderer](#the-renderer), below: it is the one setting here that the windows already open cannot take |
+| **Renderer** | Renderer | *Auto*, *GPU* or *CPU* — which device paints. See [The renderer](#the-renderer), below: it is the one setting here that the windows already open cannot take |
 
 *Corners* leads them where it used to come last of three: the reading is
 outside in — the shape of the window, then what is drawn inside it, then
@@ -322,15 +322,15 @@ borders box can share a line with at 453 px.
 
 #### The renderer
 
-**Paint** is the fourth chooser and the odd one on the page twice over.
+**Renderer** is the fourth chooser and the odd one on the page twice over.
 It is not appearance — on a working GPU the two paths are meant to be the
 same picture — and it is the one setting here that **a window already
 open cannot take**.
 
 | | |
 | --- | --- |
-| On the page | **Paint** |
-| To a screen reader | *Paint renderer* |
+| On the page | **Renderer** |
+| To a screen reader | *Renderer: the CPU rasterizer or the GPU* |
 | Offers | **Auto** (the default), **GPU**, **CPU** |
 | Writes | `look.json` `"renderer"`, `gpu` / `cpu`; auto is left out |
 | Overridden by | `UITK_PAINT=cpu\|gpu\|auto`, always, and the file is never rewritten to match |

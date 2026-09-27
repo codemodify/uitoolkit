@@ -13,7 +13,7 @@ import (
 // pickRenderer chooses an item of the paint chooser by the word on it.
 func pickRenderer(t *testing.T, w *app.Window, item string) {
 	t.Helper()
-	cb := namedCombo(w.Content(), "Paint renderer")
+	cb := namedCombo(w.Content(), "Renderer: the CPU rasterizer or the GPU")
 	if cb == nil {
 		t.Fatal("no paint chooser on the page")
 	}
@@ -41,7 +41,7 @@ func TestSettingsRendererChooserWritesLookJSON(t *testing.T) {
 	}
 	a, w := openSettings(t, 1024, 860)
 
-	cb := namedCombo(w.Content(), "Paint renderer")
+	cb := namedCombo(w.Content(), "Renderer: the CPU rasterizer or the GPU")
 	if cb == nil {
 		t.Fatal("no paint chooser on the page")
 	}
@@ -55,11 +55,11 @@ func TestSettingsRendererChooserWritesLookJSON(t *testing.T) {
 	}
 	// The word in front of it is on the page and is inside the name a
 	// screen reader says, as everywhere else on this row.
-	if findRowLabel(w.Content(), "Paint") == nil {
-		t.Error("the word Paint is not in front of the chooser")
+	if findRowLabel(w.Content(), "Renderer") == nil {
+		t.Error("the word Renderer is not in front of the chooser")
 	}
-	if !strings.Contains(strings.ToLower(cb.AccessibleName()), "paint") {
-		t.Errorf("the page says %q and a screen reader says %q", "Paint", cb.AccessibleName())
+	if !strings.Contains(strings.ToLower(cb.AccessibleName()), "renderer") {
+		t.Errorf("the page says %q and a screen reader says %q", "Renderer", cb.AccessibleName())
 	}
 
 	// Staging writes nothing, as with every other setting here.
@@ -91,7 +91,7 @@ func TestSettingsRendererChooserWritesLookJSON(t *testing.T) {
 	if got := platform.PaintPref(); got != "cpu" {
 		t.Fatalf("new surfaces would bind %q", got)
 	}
-	if cb := namedCombo(w.Content(), "Paint renderer"); cb == nil || cb.Selected != 2 {
+	if cb := namedCombo(w.Content(), "Renderer: the CPU rasterizer or the GPU"); cb == nil || cb.Selected != 2 {
 		t.Fatal("the chooser should show the saved choice after Apply")
 	}
 
@@ -121,7 +121,7 @@ func TestSettingsRendererSaysHowFarItReaches(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, w := openSettings(t, 1024, 860)
-	cb := namedCombo(w.Content(), "Paint renderer")
+	cb := namedCombo(w.Content(), "Renderer: the CPU rasterizer or the GPU")
 	if cb == nil {
 		t.Fatal("no paint chooser on the page")
 	}
@@ -162,7 +162,7 @@ func TestSettingsRendererSaysWhenUITKPaintOverrides(t *testing.T) {
 	}
 	a, w := openSettings(t, 1024, 860)
 
-	cb := namedCombo(w.Content(), "Paint renderer")
+	cb := namedCombo(w.Content(), "Renderer: the CPU rasterizer or the GPU")
 	if cb == nil {
 		t.Fatal("no paint chooser on the page")
 	}

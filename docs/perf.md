@@ -198,7 +198,7 @@ three fooled this pass before the script took care of them:
 
 `UITK_PAINT=cpu|gpu|auto` picks the paint device and always has; from
 0.20.0 the same three are saved in `look.json` as `"renderer"` and chosen
-in Settings' **Paint** box, with the variable still winning wherever it
+in Settings' **Renderer** box, with the variable still winning wherever it
 is set. Nothing about the two paths changed — the numbers above stand —
 but two things are worth knowing when measuring:
 

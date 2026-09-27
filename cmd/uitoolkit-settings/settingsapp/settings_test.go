@@ -1667,7 +1667,7 @@ func TestTheOptionsRowOverThePreview(t *testing.T) {
 	if len(tops) != 1 {
 		t.Errorf("the four options are on %d lines at 1024x860; they fit on one", len(tops))
 	}
-	for _, name := range []string{"Window corners", "Icons", "Icon size", "Paint renderer"} {
+	for _, name := range []string{"Window corners", "Icons", "Icon size", "Renderer: the CPU rasterizer or the GPU"} {
 		cb := namedCombo(w.Content(), name)
 		if cb == nil {
 			t.Fatalf("no %q chooser on the page", name)
@@ -1684,7 +1684,7 @@ func TestTheOptionsRowOverThePreview(t *testing.T) {
 	// And every chooser has the word that says what it sets in front of
 	// it, on the same line, with the word inside the name a screen reader
 	// says.
-	for i, name := range []string{"Window corners", "Icons", "Icon size", "Paint renderer"} {
+	for i, name := range []string{"Window corners", "Icons", "Icon size", "Renderer: the CPU rasterizer or the GPU"} {
 		word := settingWords[i]
 		lbl := findRowLabel(w.Content(), word)
 		if lbl == nil {

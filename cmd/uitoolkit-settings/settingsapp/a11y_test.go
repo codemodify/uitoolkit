@@ -38,7 +38,7 @@ func TestSettingsIsAccessible(t *testing.T) {
 	// Every chooser Settings owns is named, so a screen reader says what
 	// is being chosen rather than reading anonymous combo boxes — and a
 	// chooser on a tool bar has nothing but its name to say it by.
-	for _, name := range []string{"Decade", "Window corners", "Icons", "Icon size", "Paint renderer"} {
+	for _, name := range []string{"Decade", "Window corners", "Icons", "Icon size", "Renderer: the CPU rasterizer or the GPU"} {
 		if a11ytest.Find(tree, a11y.RoleComboBox, name) == nil {
 			t.Errorf("settings: no %s chooser in the tree", name)
 		}

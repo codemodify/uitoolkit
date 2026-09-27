@@ -108,7 +108,7 @@ func TestSettingsPageHoldsAtEverySize(t *testing.T) {
 					t.Errorf("%s at %g×, %dx%d: %d of the %d words in front of the choosers are on the page",
 						pack, scale, size[0], size[1], words, len(settingWords))
 				}
-				for _, name := range []string{"Window corners", "Icons", "Icon size", "Paint renderer"} {
+				for _, name := range []string{"Window corners", "Icons", "Icon size", "Renderer: the CPU rasterizer or the GPU"} {
 					cb := namedCombo(w.Content(), name)
 					if cb == nil {
 						t.Fatalf("%s at %g×, %dx%d: no %q chooser", pack, scale, size[0], size[1], name)
