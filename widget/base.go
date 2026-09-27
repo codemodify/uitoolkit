@@ -29,7 +29,18 @@ type Base struct {
 	keyNav           bool
 	focusVisibleOnly bool
 	look             style.LookAndFeel
-	host             Host
+	// theme is this component's own level of the theme cascade, and nil
+	// for every component that was never given one, which is almost all
+	// of them: a [style.ThemeOverride] is six strings, and inline it
+	// would make every widget in every window carry ninety-six bytes for
+	// something hardly any of them use (the same reason acc and anchor
+	// below are pointers). lookMemo and lookGen are the look this
+	// component last resolved to and the generation that answer was good
+	// for. See widget/theme.go.
+	theme    *style.ThemeOverride
+	lookMemo style.LookAndFeel
+	lookGen  uint64
+	host     Host
 	// acc holds an accessible name and description, when set (most
 	// components take theirs from their text).
 	acc *accLabel
@@ -111,12 +122,33 @@ func (b *Base) SetEnabled(v bool) {
 	b.Invalidate()
 }
 
+// SetLook puts an exact look on this component and its subtree, past the
+// cascade: whatever the window or a scope above says, this subtree draws
+// in l. It is the low-level form — it takes a look already built at a
+// display scale, and nothing rescales it afterwards — and it is what
+// widgets.ThemeScope and an inherited popup are built on.
+//
+// An application that wants a pane in another pack wants
+// [Base.SetTheme], which states a level of the cascade instead and
+// inherits the window's scale, density and everything it does not name.
 func (b *Base) SetLook(l style.LookAndFeel) {
-	b.look = l
+	if b.look != l {
+		b.look = l
+		// Only when it moved: a popup handed the same look it already
+		// had — a combo box reopened in the same pane — must not throw
+		// every memo in the process away.
+		LooksChanged()
+	}
 	b.Invalidate()
 }
 
 func (b *Base) SetHost(h Host) {
+	if b.host != h {
+		// A different window is a different look at the root of the
+		// cascade (a tab torn into a window of its own, a popup mounted
+		// on a layer).
+		LooksChanged()
+	}
 	b.host = h
 	for _, ch := range b.children {
 		ch.SetHost(h)
@@ -126,22 +158,6 @@ func (b *Base) SetHost(h Host) {
 func (b *Base) SetPreferred(w, h float32) { b.pref = paintengine2d.Pt(w, h) }
 
 func (b *Base) Preferred() paintengine2d.Point { return b.pref }
-
-// resolveLook is the widget's own look, else the nearest ancestor's, else
-// the window's. Parents come before the host so a subtree can run in its
-// own theme (a Settings preview, a themed dialog) — see widgets.ThemeScope.
-func (b *Base) resolveLook() style.LookAndFeel {
-	if b.look != nil {
-		return b.look
-	}
-	if b.parent != nil {
-		return b.parent.Look()
-	}
-	if b.host != nil {
-		return b.host.Look()
-	}
-	return style.DarkLook()
-}
 
 func (b *Base) Add(child Component) {
 	if child == nil {
@@ -153,6 +169,9 @@ func (b *Base) Add(child Component) {
 	b.children = append(b.children, child)
 	child.setParent(b.me())
 	child.SetHost(b.host)
+	// The subtree hangs somewhere else now, so the levels above it are
+	// different ones.
+	LooksChanged()
 	b.Invalidate()
 }
 
@@ -168,6 +187,7 @@ func (b *Base) Remove(child Component) {
 	}
 	b.children = out
 	child.setParent(nil)
+	LooksChanged()
 	b.Invalidate()
 }
 
@@ -176,6 +196,7 @@ func (b *Base) ClearChildren() {
 		ch.setParent(nil)
 	}
 	b.children = nil
+	LooksChanged()
 	b.Invalidate()
 }
 

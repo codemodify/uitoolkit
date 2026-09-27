@@ -208,6 +208,10 @@ func (w *Window) applyLook(base style.LookAndFeel) {
 	} else {
 		w.look = lookAtScale(base, w.scale)
 	}
+	// Every component under this window resolves through w.look, and a
+	// themed subtree through a look derived from it, so all of them have
+	// to work their look out again.
+	widget.LooksChanged()
 	if w.caption != nil {
 		// The frame is the new look's (and, with the theme's button
 		// layout, so are the caption buttons' places).
@@ -232,6 +236,7 @@ func (w *Window) syncScale() bool {
 	}
 	w.scale = next
 	w.look = w.app.scaledLook(next)
+	widget.LooksChanged()
 	w.laid = false
 	w.dropScene()
 	w.fullInvalidate()
@@ -1281,6 +1286,16 @@ func (w *Window) showTip(text string, pos paintengine2d.Point) {
 	}
 	bubble := widgets.NewTooltipBubble(text)
 	bubble.SetHost(w)
+	// A tip belongs to the widget it came from, so it is in that
+	// widget's theme: hovering a button inside a Metal-themed pane shows
+	// a Metal tip, not the window's. The look is already at the window's
+	// display scale — the cascade derives from the window's look — so it
+	// is handed over whole (widget.SetLook), not as another level.
+	if w.tipHover != nil {
+		if lk := w.tipHover.Look(); lk != nil && lk != w.look {
+			bubble.SetLook(lk)
+		}
+	}
 	// The window is the only hard limit on a tip. Its own look decides
 	// where it wraps (48 characters of the face the engine paints it in,
 	// [style.TooltipStyle]); the window only says how much room there is,

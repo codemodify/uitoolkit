@@ -39,6 +39,8 @@ func ShowTooltip(from, bubble Component) bool {
 		return false
 	}
 	bubble.SetHost(h)
+	// A tip is in the theme of the widget it came from.
+	inheritLook(from, bubble, h)
 	th.SetTooltip(bubble)
 	return true
 }

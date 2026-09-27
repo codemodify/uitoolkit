@@ -62,6 +62,7 @@ you are looking at, and why.
 | **Frames** | The desktop's frame against the toolkit's own, caption buttons in the desktop's order or the theme's, and what a maximized, tiled or full-screen window gives up. |
 | **Shapes** | A window with a hole in it over a test card, and both windows' press counters side by side: the presses aimed at the hole are counted by the card and not by the ring. Glass where the compositor offers any. |
 | **Skins** | Every pack the toolkit has, previewed in a `ThemeScope` and applied to the running application without rebuilding the widget tree — including a skin that gives the window its outline. |
+| **Cascade** | Three packs in one window: the window's, a pane's, and a pane inside that pane's, each inheriting what it does not state. The corner policy reaches all three through packs that never mention it, the display scale is the display's at every level, and a menu opened from the inner pane comes up in the inner pane's pack although it is a surface of its own. `widget.SetTheme`, `style.ThemeOverride`. |
 | **Desktop** | The clipboard both ways, a StatusNotifierItem in the tray with a real dbusmenu, a notification, and the desktop's portal file dialog beside the toolkit's — each reported present or absent before it is offered. |
 | **Access** | The window's own accessibility tree as a tree view, `a11y.Check`'s verdict on it, the tab order with each control's role, reduced motion, and the same controls drawn at 1 … 2×. |
 

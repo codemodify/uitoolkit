@@ -91,3 +91,34 @@ func BenchmarkListScroll(b *testing.B) {
 		a.PumpOnce()
 	}
 }
+
+// BenchmarkShowcaseThemedPaint is BenchmarkShowcaseFullPaint with half
+// the window running in another pack: what the theme cascade costs in a
+// real window, against the same window without one.
+func BenchmarkShowcaseThemedPaint(b *testing.B) {
+	a, w := benchWindow(b, 1100, 720, func(a *app.Application, win *app.Window) widget.Component {
+		root := showcase.App(a, win, false)
+		var scoped widget.Component
+		widget.Walk(root, func(c widget.Component) {
+			if _, ok := c.(*widgets.TabView); ok && scoped == nil {
+				scoped = c
+			}
+		})
+		if scoped == nil {
+			scoped = root
+		}
+		widget.SetTheme(scoped, style.ThemeOverride{Pack: "win95"})
+		return root
+	})
+	b.ReportAllocs()
+	b.ResetTimer()
+	reused := 0
+	for i := 0; i < b.N; i++ {
+		w.Invalidate(nil, paintengine2d.Rect{})
+		a.PumpOnce()
+		if sc := w.Scene(); sc != nil {
+			reused += sc.Reused
+		}
+	}
+	b.ReportMetric(float64(reused)/float64(b.N), "reused/op")
+}

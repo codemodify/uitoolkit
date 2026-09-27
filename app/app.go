@@ -9,6 +9,7 @@ import (
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
+	"github.com/codemodify/uitoolkit/widget"
 )
 
 // Options configure an Application.
@@ -30,6 +31,22 @@ type Options struct {
 	// DisableLookWatch skips the default watcher (Look == nil). Settings
 	// uses this so picker changes preview locally until Apply writes.
 	DisableLookWatch bool
+	// Theme is the application's own level of the theme cascade: the
+	// parts of the appearance this application states for itself
+	// whatever the desktop saved. The rest still come from look.json,
+	// and still follow it — an app pinned to Luna keeps the user's icon
+	// set, their corner policy, their typefaces and their frame, and
+	// picks up a change to any of them without a restart.
+	//
+	//	uitoolkit.New(uitoolkit.Options{Theme: style.ThemeOverride{Pack: "luna"}})
+	//
+	// This is the middle level of the cascade; a subtree states the next
+	// one with [widget.SetTheme]. For an application that must not
+	// follow the desktop at all — a kiosk, a test — pass Look and
+	// DisableLookWatch instead, which pins the whole look and stops the
+	// watcher. Theme and Look together mean "this look, with these parts
+	// written over it".
+	Theme style.ThemeOverride
 }
 
 // Application owns the run loop and open windows.
@@ -77,6 +94,16 @@ type Application struct {
 	// desktopStop ends the watch on the desktop's appearance preferences;
 	// schemeForced is set when ColorSchemeEnv stands in for the desktop;
 	// following is set while the look follows its light / dark preference.
+	// appTheme is the application's own level of the theme cascade
+	// (Options.Theme): it is written over every appearance that reaches
+	// the app from look.json, so an app pinned to a pack keeps it across
+	// a Settings → Apply.
+	appTheme style.ThemeOverride
+	// deskAp is the last appearance that reached the app from outside its
+	// own level — look.json, the desktop's preferences, a Settings
+	// Apply. appTheme is written over it, and it is what is left when
+	// appTheme is cleared.
+	deskAp       style.Appearance
 	desktopStop  func()
 	schemeForced bool
 	accentForced bool
@@ -191,9 +218,31 @@ func New(opts Options) *Application {
 	// Ask the desktop for its preferences before the look is built: a
 	// theme that follows its light / dark mode starts in the right one.
 	a.watchDesktop()()
+	a.appTheme = opts.Theme
 	if preferred {
+		// The desktop's, which is what a cleared Application.SetTheme
+		// goes back to and what every later look.json change replaces.
+		a.deskAp = ap.Normalize()
 		a.following = ap.FollowDesktop
 		opts.Look = ap.Look()
+	} else {
+		a.deskAp = style.LookAppearance(opts.Look)
+	}
+	if !opts.Theme.Empty() {
+		// The application's own level of the cascade, written over
+		// whatever it would otherwise have started in. A look given
+		// explicitly is derived from rather than rebuilt, so it keeps
+		// the density and scale it came with.
+		if preferred {
+			merged := opts.Theme.On(a.deskAp)
+			a.following = merged.FollowDesktop
+			opts.Look = merged.Look()
+		} else {
+			opts.Look = style.Themed(opts.Look, opts.Theme)
+			if opts.Theme.Pack != "" {
+				a.following = false
+			}
+		}
 	}
 	a.base = lookAtScale(opts.Look, 1)
 	a.look = lookAtScale(a.base, opts.Scale)
@@ -229,12 +278,37 @@ func (a *Application) SetLook(l style.LookAndFeel) {
 	a.owesTrim()
 	a.base = lookAtScale(l, 1)
 	a.look = a.scaledLook(a.scale)
+	widget.LooksChanged()
 	for _, w := range a.Windows() {
 		w.applyLook(a.base)
 	}
 	for _, fn := range append([]*func(){}, a.lookHooks...) {
 		(*fn)()
 	}
+}
+
+// Theme is the application's own level of the theme cascade.
+func (a *Application) Theme() style.ThemeOverride {
+	if a == nil {
+		return style.ThemeOverride{}
+	}
+	return a.appTheme
+}
+
+// SetTheme replaces the application's own level of the cascade and
+// applies it at once: every window, and every subtree that does not
+// state a pack of its own, is in it on the next frame. The zero
+// [style.ThemeOverride] gives the application back to look.json.
+//
+// What t leaves empty keeps coming from the desktop, now and at every
+// later change of look.json — the standing override outlives a reload,
+// which is the whole point of it.
+func (a *Application) SetTheme(t style.ThemeOverride) {
+	if a == nil {
+		return
+	}
+	a.appTheme = t
+	a.ApplyAppearance(a.deskAp)
 }
 
 // OnLookChange runs fn on the UI goroutine after every change of the app's

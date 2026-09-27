@@ -206,6 +206,160 @@ track / thumb / arrow wells, ComboBox field + dropdown, CheckBox /
 Radio, TextField / NumberField / TextArea focus, Splitter grip, ToolBar
 strip.
 
+## The cascade
+
+A desktop saves one appearance in `look.json`. An application may want
+another. A pane inside that application may want a third — a designer's
+canvas that has to show the pack it is editing, a tab of legacy forms
+that should stay in Win95, a preview. CSS answers this with a cascade —
+the nearest rule wins, and what it does not mention is inherited — and so
+does uitoolkit.
+
+The levels, weakest first:
+
+| Level | Set by | Reaches |
+| --- | --- | --- |
+| the desktop | `~/.config/uitoolkit/look.json`, written by Settings | every app that does not say otherwise |
+| the application | `uitoolkit.Options.Theme`, `Application.SetTheme` | every window of that app |
+| a subtree | `widget.SetTheme(c, …)` on any component | that component and everything under it |
+| …nested | the same call, again, further in | the nearest one wins for its own subtree |
+| an exact look | `Base.SetLook`, `widgets.ThemeScope` | past the cascade entirely |
+
+One level is a **`style.ThemeOverride`**: the parts an application or a
+pane states for itself. Every field is empty for "inherit", so the zero
+value states nothing.
+
+```go
+type ThemeOverride struct {
+    Pack             string       // "luna", "metal-ocean", "win95"
+    Corners          CornerStyle  // "theme" (the pack's own), "round", "square"
+    Icons            IconSetName
+    IconSize         IconSize
+    FontUI, FontMono string       // a family, or "theme" for the pack's era face
+}
+```
+
+### Per application
+
+```go
+a := uitoolkit.New(uitoolkit.Options{
+    Theme: style.ThemeOverride{Pack: "luna"},
+})
+```
+
+This app is in Luna whatever `look.json` says — and everything it did
+*not* state still comes from `look.json` and still follows it: the
+user's icon set, their corner policy, their typefaces, who draws the
+frame, reduced motion. A Settings → Apply reaches the app for all of
+those and leaves the pack alone. `Application.SetTheme` changes the
+level at runtime; the zero value gives the application back to the
+desktop.
+
+For an application that must not follow the desktop **at all** — a kiosk,
+a test, a screenshot pass — the answer is the older pair, and it is still
+the right one:
+
+```go
+a := uitoolkit.New(uitoolkit.Options{Look: pack.Look(), DisableLookWatch: true})
+```
+
+`Look` pins the whole look and `DisableLookWatch` stops the watcher.
+`Theme` on top of an explicit `Look` means "this look, with these parts
+written over it".
+
+### Per control, per subtree
+
+Any component. No wrapper, no rebuild:
+
+```go
+widget.SetTheme(tabs.Page(), style.ThemeOverride{Pack: "metal-ocean"})
+panel.SetTheme(style.ThemeOverride{Pack: "win95"})
+button.SetTheme(style.ThemeOverride{Corners: style.CornersSquare})
+```
+
+`SetTheme` is a method on `widget.Base`, so every widget has it;
+`widget.SetTheme(c, …)` is the same thing for a `Component` held behind
+the interface (and for `widgets.ThemeScope`, whose own `SetTheme` takes a
+whole look). `widget.ThemeOf(c)` reads the level back — the level `c`
+*states*, not the one it resolves to, which is `c.Look()`.
+
+### What cascades, and what does not
+
+CSS cascades every property on its own because every property is
+independent. Here they are not. A pack is a bevel language, a palette,
+metrics, an engine and an era's typography that were drawn to go
+together; half of Metal over half of Luna is not a theme, it is a bug.
+So **the pack cascades whole**, and beside it the four preferences the
+toolkit already treats as independent of the pack — because Settings
+already lets a user set them *across* packs:
+
+| Cascades | Why |
+| --- | --- |
+| the pack | the thing this is for |
+| corners | already a pack-independent preference (`ApplyCorners` is a metrics transform) |
+| icon set, icon size | same; a pack does not own the chrome icons |
+| the two typefaces | same; a pinned family already beats the pack's era |
+
+And what does not:
+
+- **The display scale.** It belongs to the monitor, not to an
+  application and not to a pane. There is no field for it in a
+  `ThemeOverride` and no path to one: a level derives its look from the
+  look above it, which already carries the window's scale and density,
+  so a scope *cannot* change them. A pane at 2× is at 2×.
+- **Reduced motion, the desktop's file dialogs, the combo wheel.**
+  Process-wide behaviour, not appearance. A pane that made animations
+  come back for itself would be a bug in an accessibility preference.
+- **Who draws the window frame, where its caption buttons go, which
+  device paints the surface.** These belong to the *window* and to the
+  compositor, which need exactly one answer per window.
+- **Following the desktop's light / dark preference.** Naming a pack
+  turns it off for that level: an app that asks for `luna` asked for
+  Luna, not for whichever of Luna and Royale Noir matches the session.
+
+### Popups, menus and the window frame
+
+A menu, a combo box's list and a tooltip are **not in the window's
+widget tree** — on Wayland each is an `xdg_popup` on a surface of its
+own, placed by the compositor — so nothing can reach them by walking up
+from the widget that opened them. They are handed the opener's look
+instead, before they are measured (`widget.PreparePopup`), because packs
+differ in their metrics and a list measured in one pack and painted in
+another is the wrong size. A menu opened from a Metal-themed tab is
+Metal, and so is every submenu that cascades out of it.
+
+**A window's frame is the window's look, always.** A themed subtree
+never changes it: the desktop's title bar takes its colours from one
+palette, a toolkit-drawn frame paints one caption, and a compositor gets
+one silhouette. An in-window panel that *stands in* for a window —
+`widgets.Panel` with `Window = true` — is a widget, so its caption and
+its frame do follow the cascade. That is the line: a real window is the
+compositor's, a panel that looks like one is yours.
+
+### What it costs
+
+`Look()` is called several times per widget per layout and per paint, so
+resolution does not walk the tree. Each component remembers the look it
+resolved to, and every memo is thrown away at once by bumping a single
+process-wide counter whenever anything that could change an answer
+changes — a window's look, a component's theme, a reparent. Resolving is
+then a nil check, a load and a compare:
+
+| | before | after |
+| --- | --- | --- |
+| `Look()` at depth 64 | 250 ns, walking 64 frames | **2.5 ns**, 0 allocs |
+| the same, through 8 nested scopes | 16.8 µs, 56 allocs | **3 ns**, 0 allocs |
+
+The derived looks themselves are memoized on (the look above, the
+level), so a subtree resolves to the *same look pointer* every time and
+everything keyed on a look — an engine's derived paint data, a popup's
+shadow patch, a shaped window's silhouette — is shared rather than
+rebuilt per widget. A level that states what the look above already says
+resolves to that same look and builds nothing at all.
+
+See `examples/uitoolkit-sample-tour`, the **Cascade** page: one window
+with three packs in it.
+
 ## API
 
 ```go
@@ -213,4 +367,12 @@ pack, _ := uitoolkit.LoadTheme("luna")
 look := pack.Look()
 tok := style.LookTokens(look)
 _ = tok.Bevel
+
+// One level of the cascade, on any component.
+widget.SetTheme(pane, style.ThemeOverride{Pack: "metal-ocean"})
+widget.ThemeOf(pane)          // the level it states
+pane.Look()                   // the look it resolves to
+
+// The same, for an application.
+uitoolkit.New(uitoolkit.Options{Theme: style.ThemeOverride{Pack: "luna"}})
 ```

@@ -446,7 +446,8 @@ func (a Appearance) Look() *Classic {
 	tok := tokensForAppearance(a)
 	m := packMetrics(DensityDefault, tok, a.Corners, a.IconSize)
 	return newClassic(string(tok.Family), tok.Palette, m, a.Corners, a.Icons, a.IconSize, tok).
-		setPack(a.Name).setDensity(DensityDefault).setScale(1)
+		setPack(a.Name).setDensity(DensityDefault).setScale(1).
+		setAppearanceBits(a.FontUI, a.FontMono, a.FollowDesktop)
 }
 
 func tokensForAppearance(a Appearance) ThemeTokens {
@@ -480,18 +481,26 @@ func PreferredLook() LookAndFeel {
 	return LoadAppearance().Look()
 }
 
-// LookAppearance reads pack name / palette / corners / icons / size from a
-// live look — what a look carries, and only that. The preferences that
-// belong to an application rather than to a look (who draws the frame,
-// where the caption buttons go, reduced motion, the desktop's file dialogs,
-// following the desktop's light / dark mode) come back at their defaults,
-// and so do the two typefaces: a look carries the family it *resolved*
-// to, not whether that family was the user's instruction or the pack's
-// era, and guessing which would put a pinned typeface into an appearance
-// nobody pinned one in. [Application.Appearance] is the whole of it and
-// is what an app that switches packs should start from.
-// app.Application.Appearance is the whole of it, and what an app that
-// switches packs should start from.
+// LookAppearance is the appearance a look was built from, as far as the
+// look itself can say: the pack, the palette, the corners, the icons and
+// their size, the two typefaces the user pinned (empty where the pack's
+// own era was used) and whether it follows the desktop's light / dark
+// mode and accent.
+//
+// The last three cannot be read out of a finished look — it carries the
+// family it *resolved* to, not whether that family was an instruction —
+// so a look built through [Appearance.Look] or [WithAppearance] carries
+// them explicitly and every derivation passes them on. A look built by
+// hand ([NewClassic]) never pinned anything and answers empty, which is
+// the truth about it. This is what makes a derived look
+// ([Themed], the theme cascade) keep a pinned typeface instead of
+// silently falling back to the pack's era.
+//
+// The preferences that belong to an application rather than to a look —
+// who draws the frame, where the caption buttons go, reduced motion, the
+// desktop's file dialogs — still come back at their defaults, because a
+// look has nothing to do with them. app.Application.Appearance is the
+// whole of it, and what an app that switches packs should start from.
 func LookAppearance(l LookAndFeel) Appearance {
 	a := DefaultAppearance()
 	if l == nil {
@@ -503,6 +512,8 @@ func LookAppearance(l LookAndFeel) Appearance {
 		a.Icons = c.Icons()
 		a.IconSize = c.IconSize()
 		a.Name = c.Pack()
+		a.FontUI, a.FontMono = c.userUI, c.userMono
+		a.FollowDesktop = c.follow
 		return a.Normalize()
 	}
 	a.FontUI, a.FontMono = "", ""
@@ -539,7 +550,7 @@ func WithTheme(look LookAndFeel, theme ThemeName) LookAndFeel {
 	}
 	m := lookMetrics(c.Density(), c.Scale(), tok, c.Corners(), c.IconSize())
 	return newClassic(string(theme), tok.Palette, m, c.Corners(), c.Icons(), c.IconSize(), tok).
-		setPack(StarterName(theme)).setDensity(c.Density()).setScale(c.Scale())
+		setPack(StarterName(theme)).setDensity(c.Density()).setScale(c.Scale()).carry(c)
 }
 
 // WithCorners rebuilds a Classic look with a new radius policy.
@@ -552,7 +563,7 @@ func WithCorners(look LookAndFeel, corners CornerStyle) LookAndFeel {
 	tok := c.Tokens()
 	m := lookMetrics(c.Density(), c.Scale(), tok, corners, c.IconSize())
 	return newClassic(c.Name(), c.Palette(), m, corners, c.Icons(), c.IconSize(), tok).
-		setPack(c.Pack()).setDensity(c.Density()).setScale(c.Scale())
+		setPack(c.Pack()).setDensity(c.Density()).setScale(c.Scale()).carry(c)
 }
 
 // WithIcons rebuilds a Classic look with a new ToolIcon set (file or
@@ -564,7 +575,7 @@ func WithIcons(look LookAndFeel, icons IconSetName) LookAndFeel {
 	}
 	icons = ParseIconSet(string(icons))
 	return newClassic(c.Name(), c.Palette(), c.Metrics(), c.Corners(), icons, c.IconSize(), c.Tokens()).
-		setPack(c.Pack()).setDensity(c.Density()).setScale(c.Scale())
+		setPack(c.Pack()).setDensity(c.Density()).setScale(c.Scale()).carry(c)
 }
 
 // WithIconSize rebuilds a Classic look with a new ToolIcon draw size.
@@ -576,7 +587,7 @@ func WithIconSize(look LookAndFeel, sz IconSize) LookAndFeel {
 	sz = ParseIconSize(string(sz))
 	m := lookMetrics(c.Density(), c.Scale(), c.Tokens(), c.Corners(), sz)
 	return newClassic(c.Name(), c.Palette(), m, c.Corners(), c.Icons(), sz, c.Tokens()).
-		setPack(c.Pack()).setDensity(c.Density()).setScale(c.Scale())
+		setPack(c.Pack()).setDensity(c.Density()).setScale(c.Scale()).carry(c)
 }
 
 // WithAppearance applies the appearance prefs to an existing Classic look,
@@ -602,7 +613,8 @@ func WithAppearance(look LookAndFeel, a Appearance) LookAndFeel {
 	}
 	m := lookMetrics(c.Density(), c.Scale(), tok, a.Corners, a.IconSize)
 	return newClassic(string(tok.Family), tok.Palette, m, a.Corners, a.Icons, a.IconSize, tok).
-		setPack(pack).setDensity(c.Density()).setScale(c.Scale())
+		setPack(pack).setDensity(c.Density()).setScale(c.Scale()).
+		setAppearanceBits(a.FontUI, a.FontMono, a.FollowDesktop)
 }
 
 func classicOf(look LookAndFeel) (*Classic, bool) {
