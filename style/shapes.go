@@ -176,15 +176,41 @@ func DottedRect(ctx *paintengine2d.Context, b paintengine2d.Rect, col paintengin
 	}
 	x0, y0 := float32(math.Floor(float64(b.Min.X))), float32(math.Floor(float64(b.Min.Y)))
 	x1, y1 := float32(math.Floor(float64(b.Max.X)))-1, float32(math.Floor(float64(b.Max.Y)))-1
+	// One path an edge rather than one draw op a dot, as Pinstripes fills
+	// all its stripes at once: a ring round a list row was 282 ops, and
+	// every engine's focus ring ends here. The dots are disjoint
+	// one-pixel boxes on integer coordinates, so a fill covers exactly
+	// the same pixels.
+	//
+	// Four paths, not one. A single path round the ring has the whole
+	// box as its bounds, and the scanline rasterizer then walks every row
+	// of it to paint two dots; an edge's path is one pixel thick, so the
+	// immediate CPU device rasterizes the ring's 568 pixels instead of
+	// its 6240.
 	fill := paintengine2d.Fill(col)
+	edge := paintengine2d.NewPath()
+	drawEdge := func() {
+		if !edge.Empty() {
+			ctx.DrawPath(edge, fill)
+		}
+		edge.Reset()
+	}
 	for x := x0; x <= x1; x += 2 {
-		ctx.DrawRect(paintengine2d.XYWH(x, y0, 1, 1), fill)
-		ctx.DrawRect(paintengine2d.XYWH(x, y1, 1, 1), fill)
+		edge.AddRect(paintengine2d.XYWH(x, y0, 1, 1))
 	}
+	drawEdge()
+	for x := x0; x <= x1; x += 2 {
+		edge.AddRect(paintengine2d.XYWH(x, y1, 1, 1))
+	}
+	drawEdge()
 	for y := y0 + 2; y < y1; y += 2 {
-		ctx.DrawRect(paintengine2d.XYWH(x0, y, 1, 1), fill)
-		ctx.DrawRect(paintengine2d.XYWH(x1, y, 1, 1), fill)
+		edge.AddRect(paintengine2d.XYWH(x0, y, 1, 1))
 	}
+	drawEdge()
+	for y := y0 + 2; y < y1; y += 2 {
+		edge.AddRect(paintengine2d.XYWH(x1, y, 1, 1))
+	}
+	drawEdge()
 }
 
 // Bumps paints the Java Metal "bumps" texture: a lattice of light dots with
@@ -199,16 +225,27 @@ func Bumps(ctx *paintengine2d.Context, b paintengine2d.Rect, light, dark painten
 	ctx.Save()
 	ctx.ClipRect(b)
 	lf, df := paintengine2d.Fill(light), paintengine2d.Fill(dark)
+	// A row of dots at a time, light then dark, rather than two draw ops
+	// per dot: over a 320x200 panel at the default spacing that is 200
+	// ops instead of 16 000. Batching a whole panel would be fewer still,
+	// but at spacing 2 a row's dark dots land on the next row's light
+	// ones, and the painter's order across rows is what decides those
+	// pixels — so the batch stops at the row.
+	lp, dp := paintengine2d.NewPath(), paintengine2d.NewPath()
 	row := 0
 	for y := b.Min.Y; y < b.Max.Y; y += spacing / 2 {
 		off := float32(0)
 		if row%2 == 1 {
 			off = spacing / 2
 		}
+		lp.Reset()
+		dp.Reset()
 		for x := b.Min.X + off; x < b.Max.X; x += spacing {
-			ctx.DrawRect(paintengine2d.XYWH(x, y, 1, 1), lf)
-			ctx.DrawRect(paintengine2d.XYWH(x+1, y+1, 1, 1), df)
+			lp.AddRect(paintengine2d.XYWH(x, y, 1, 1))
+			dp.AddRect(paintengine2d.XYWH(x+1, y+1, 1, 1))
 		}
+		ctx.DrawPath(lp, lf)
+		ctx.DrawPath(dp, df)
 		row++
 	}
 	ctx.Restore()
