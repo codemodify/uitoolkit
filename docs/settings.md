@@ -91,7 +91,7 @@ themselves.
 **With one exception, and it is the point of an exception.** The sample's
 **File ▸ Open…** and **Save…** — and the *Open* and *Save* on its tool
 bar, which are the same commands — open a real file dialog: the
-desktop's own, through the XDG portal, when **OS open/save dialogs** is
+desktop's own, through the XDG portal, when **OS dialogs** is
 ticked, and the toolkit's themed one when it is not. That option is the
 one of the four whose effect is a whole window, and four words cannot
 show a window. It is a preview in the strict sense: the dialog lists a
@@ -167,7 +167,7 @@ own: the four check boxes and the window's corners, then everything the
 sentence *what the toolkit draws with* covers.
 
 ```
-☑ Animations  ☐ OS colors  ☐ OS open/save dialogs  ☐ OS window borders
+☑ Animations  ☐ OS colors  ☐ OS dialogs  ☐ OS borders
 Corners [Theme shape ▾]
 
 Text [Theme font ▾]  Code [Theme font ▾]  Icons [Classic ▾]  Size [24 ▾]
@@ -183,8 +183,8 @@ below.
 | --- | --- | --- |
 | **Animations** | Animations | Hover fades, the default button's pulse, busy bars (GTK's `gtk-enable-animations`). While the desktop itself asks for reduced motion it says so, because the desktop's setting wins over the preference |
 | **OS colors** | OS colors: follow the desktop's light or dark mode and its accent | The pack shows its sibling to match the desktop — a chosen *Breeze* draws as *Breeze Dark* — recoloured around the desktop's accent where the engine takes one |
-| **OS open/save dialogs** | OS open/save dialogs: the desktop's own Open and Save | KDE's and GNOME's own Open and Save, through the XDG portal, instead of the themed ones |
-| **OS window borders** | OS window borders: the desktop's title bar and borders | Chromium's switch. On, every window gets the desktop's title bar and borders, and one that draws its own title bar (Mail's, with its tool bar in it) keeps it as its first row; off, the toolkit draws every frame in the theme's style **and the theme places the caption buttons**. The two states write look.json's `"decorations"` as `system` and `toolkit` — never `auto`, which is a third thing and is not what the box says ([decorations.md](decorations.md#the-settings-switch)) — and `"captionButtons"` as `theme` and the desktop's default with them |
+| **OS dialogs** | OS dialogs: the desktop's own Open and Save dialogs | KDE's and GNOME's own Open and Save, through the XDG portal, instead of the themed ones |
+| **OS borders** | OS borders: the desktop's title bar and borders | Chromium's switch. On, every window gets the desktop's title bar and borders, and one that draws its own title bar (Mail's, with its tool bar in it) keeps it as its first row; off, the toolkit draws every frame in the theme's style **and the theme places the caption buttons**. The two states write look.json's `"decorations"` as `system` and `toolkit` — never `auto`, which is a third thing and is not what the box says ([decorations.md](decorations.md#the-settings-switch)) — and `"captionButtons"` as `theme` and the desktop's default with them |
 
 **The order changed with the rename.** *OS borders* became *OS window
 borders* — seven characters, 63 px — and a fourth chooser joined the end
@@ -255,12 +255,12 @@ puts that role back on the pack's era without the file being touched.
 
 **Where the caption buttons go is not a box any more.** It was one,
 *Theme buttons*, and it asked a question about a title bar that only
-exists while *OS window borders* is unticked: with the desktop drawing the frame
+exists while *OS borders* is unticked: with the desktop drawing the frame
 there is no toolkit caption to put buttons on, and with the toolkit
 drawing it the theme is the only thing on this page with an opinion about
 where they go — the Mac's traffic lights on the left, GNOME's lone close,
 KDE's window menu. So the rule is implicit: **the toolkit draws the
-frame, the theme places the buttons**, and *OS window borders* writes both
+frame, the theme places the buttons**, and *OS borders* writes both
 halves of it. `style.CaptionButtonsPref` and
 `app.Application.SetCaptionButtons` are unchanged — they are public API
 and an application may still want to choose; Settings is what stopped
@@ -293,11 +293,11 @@ a line off the window the whole page is for.
 rule the four choosers follow at the other end of the row, where *Size*
 is read out as *Icon size*. What the eye gets from the row the box
 stands in, the ear gets from the rest of the name. `Dialogs` on its own
-would have been a riddle; `OS open/save dialogs` read as *OS open/save
-dialogs: the desktop's own Open and Save* is one name for one control.
+would have been a riddle; `OS dialogs` read as *OS dialogs: the
+desktop's own Open and Save dialogs* is one name for one control.
 
-**Three of the four say `OS`** — *OS colors*, *OS open/save dialogs*,
-*OS window borders* — because those three are the ones that hand something back
+**Three of the four say `OS`** — *OS colors*, *OS dialogs*,
+*OS borders* — because those three are the ones that hand something back
 to the desktop, and a reader should not have to work out that *System
 frames* and *OS colors* were the same kind of thing. The fourth,
 *Animations*, is the toolkit's own behaviour and says nothing about
@@ -327,7 +327,7 @@ pane of a 720×520 one, at scale 1 and 1.75 alike:
 
 | | 1024×860 | 720×520 |
 | --- | --- | --- |
-| the four options and the corners | two lines: the boxes (564 px), then *Corners* | two lines: the three narrow boxes (396 px), then *OS window borders* beside *Corners* |
+| the four options and the corners | two lines: the boxes (564 px), then *Corners* | two lines: the three narrow boxes (396 px), then *OS borders* beside *Corners* |
 | what it is drawn with | two lines: the typefaces, the icons and the size, then *Renderer* | two lines: the two typefaces, then the icons, the size and the renderer |
 | **both blocks** | **2 + 2 lines** | **2 + 2 lines** |
 | the preview | **80%** of the pane | **65%** |
@@ -366,7 +366,7 @@ not fit and the drop-down shows the name in full.
 **The order is the order they are read, and it was settled by the fold.**
 The options come first because three of them are about the desktop and
 the fourth about motion, and none of them changes what the window below
-is *drawn* with. Within them, *OS window borders* is last because it is
+is *drawn* with. Within them, *OS borders* is last because it is
 the widest, and a block whose first line is its three narrow boxes folds
 onto two lines where the old order folded onto three; *OS colors*, which
 used to sit last for being nearest the caption it changes, moved up to
@@ -624,7 +624,7 @@ short words. The column is the browser alone, which is what it was before the
 four pages became one.
 
 The **Theme buttons** check box is gone, and nothing replaced it: where
-the caption buttons of a frame the toolkit draws go follows *OS window borders*
+the caption buttons of a frame the toolkit draws go follows *OS borders*
 now. See the options table above. `style.CaptionButtonsPref` and
 `app.Application.SetCaptionButtons` stay.
 
@@ -698,7 +698,7 @@ The Theme Atlas crops the preview panel out of `uitoolkit-settings -stage ID
 default look applied, the panel is the same rectangle in every pack:
 
 ```
-x 317, y 138, 697 × 633       crop box (317, 138) – (1014, 771)
+x 317, y 108, 697 × 663       crop box (317, 108) – (1014, 771)
 ```
 
 `TestSettingsPreviewPanelKeepsItsPlace` pins those numbers; a layout
@@ -745,12 +745,13 @@ row folded onto the same two lines at 1024×860 because its order changed
 with them (see *The fold*): the same 56 px over the panel, the same
 `697x651+317+74`.
 
-**The two typeface choosers did, and by 64 px.** Ten groups will not
-fold onto two lines in this pane, so the settings are two blocks now, and
-the second is 64 px of its own: `y` 74 → 138. Under the panel the three
-path lines became one, which gave 18 px back, so the panel is **633**
-tall where it was 651 — 46 px went into the settings and 18 came back out
-of the paths, and `x` and the width are unchanged. The numbers were
+**Reordering the settings gave 30 px back.** The renderer moved up to
+stand with the four options, which fit one line at this width, and the
+corners came down to lead the typefaces, the icon set and its size, which
+fit another: two lines where the two blocks took three. So `y` 138 → 108
+and the panel is **663** tall where it was 633, with `x` and the width
+unchanged. (Before that the two typeface choosers had cost 64 px and the
+three path lines becoming one had given 18 back.) The numbers were
 re-measured in the eight packs `TestSettingsPreviewPanelKeepsItsPlace`
 walks, and rendered through `tools/atlas/render.sh`'s own crop, rather
 than assumed. `CROP` in `tools/atlas/render.sh` and `W_IMG, H_IMG` in
@@ -829,13 +830,13 @@ animations off. `followDesktop` shows the pack's light or dark sibling to
 match the desktop. `nativeDialogs` shows the desktop's own file dialogs
 (KDE's, GNOME's, through the XDG portal) instead of the toolkit's themed
 ones. `decorations` is who draws the frame of a window with its own title
-bar: `system` the desktop (**OS window borders**),
+bar: `system` the desktop (**OS borders**),
 `toolkit` uitoolkit for every window, left out for the default.
 `captionButtons` `theme` puts the caption buttons of a frame uitoolkit
 draws where the theme's era put them (the Mac's traffic lights on the
 left); left out, they follow the desktop's button layout. Settings writes
 it with `decorations`, because the question only arises while the toolkit
-is drawing the frame: unticking **OS window borders** writes both `toolkit` and
+is drawing the frame: unticking **OS borders** writes both `toolkit` and
 `theme`, ticking it writes `system` and leaves `captionButtons` out. It
 is read on load whatever wrote it, so a file that names a layout Settings
 would not now offer keeps it until that box is touched, and

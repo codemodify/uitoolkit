@@ -57,7 +57,7 @@ go get github.com/codemodify/paintengine2d@v0.9.0
     the theme's), in each theme's own style — Windows 95's navy caption,
     XP's blue one, Aqua's traffic lights, libadwaita's round buttons,
     SourceGit's flat cells — handing moves, resizes and the window menu to
-    the desktop; Settings' "OS window borders" gives the desktop's
+    the desktop; Settings' "OS borders" gives the desktop's
     frame back. See [docs/decorations.md](docs/decorations.md).
   - Windows of any shape: a silhouette instead of a rectangle, with a hole
     through it you can see the desktop through and click through to
@@ -804,7 +804,7 @@ what is already on screen. `uitoolkit-settings -version` is where the
 version went. Everything that is not the browser stands with that window:
 one folding row of settings over it and the three config paths under it.
 The row is four check boxes —
-`☑ Animations ☐ OS colors ☐ OS open/save dialogs ☐ OS window borders`,
+`☑ Animations ☐ OS colors ☐ OS dialogs ☐ OS borders`,
 each short word inside the full name a screen reader says — and the four
 choosers that say what a pack is drawn with and what draws it,
 `Corners [Theme shape ▾] Icons [Classic ▾] Size [24 ▾] Paint [Auto ▾]`. It
@@ -820,12 +820,12 @@ window — "the preview configures itself" — and they are settings of the
 page, so they are read where the page keeps its settings; the window
 below is a mock application again, with nothing live in its chrome. Where
 the **caption buttons** of a frame the toolkit draws go is no longer a
-box either: unticking *OS window borders* puts them where the theme says,
+box either: unticking *OS borders* puts them where the theme says,
 because while the toolkit draws the frame the theme is the only thing
 with an opinion (`style.CaptionButtonsPref` and
 `Application.SetCaptionButtons` are unchanged for an application that
 wants to choose). The one live thing left in the preview is its **File
-menu**: *Open…* and *Save…* open the dialog *OS open/save dialogs* is
+menu**: *Open…* and *Save…* open the dialog *OS dialogs* is
 asking for — the desktop's through the XDG portal, or the toolkit's own
 in the pack being staged — and open nothing, so the option can be looked
 at rather than read. **Renderer** is the fourth chooser and the newest

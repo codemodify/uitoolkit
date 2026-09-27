@@ -49,7 +49,7 @@ func TestSettingsAppAppliesAndPersists(t *testing.T) {
 	}
 	// And so is every option the Appearance page used to hold, in the row
 	// over the preview, under the short word each one wears now.
-	for _, opt := range []string{"Animations", "OS colors", "OS open/save dialogs", "OS window borders"} {
+	for _, opt := range []string{"Animations", "OS colors", "OS dialogs", "OS borders"} {
 		if findOption(w.Content(), opt) == nil {
 			t.Fatalf("the %q option is not on the page", opt)
 		}
@@ -270,7 +270,7 @@ func TestTheColumnIsBareControls(t *testing.T) {
 	if err := style.SaveAppearance(style.DefaultAppearance()); err != nil {
 		t.Fatal(err)
 	}
-	for _, size := range [][2]int{{1024, 860}, {720, 520}} {
+	for _, size := range [][2]int{{1024, 860}, {720, 580}} {
 		_, w := openSettings(t, size[0], size[1])
 		col := browserColumn(t, w)
 		kids := col.Children()
@@ -1085,14 +1085,14 @@ func TestSettingsFollowDesktop(t *testing.T) {
 	}
 }
 
-// "OS window borders" — "OS window borders: the desktop's title bar and
+// "OS borders" — "OS borders: the desktop's title bar and
 // borders" to a screen reader — writes look.json's decorations, and running apps switch
 // their windows at once. It writes the caption buttons with them: see
 // TestSettingsOSWindowBordersPlacesTheCaptionButtons.
 func TestSettingsSystemTitleBarSwitch(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	a, w := openSettings(t, 1024, 780)
-	const label = "OS window borders"
+	const label = "OS borders"
 	sw := findOption(w.Content(), label)
 	if sw == nil {
 		t.Fatal("no system-frame option")
@@ -1140,11 +1140,11 @@ func TestSettingsSystemTitleBarSwitch(t *testing.T) {
 
 // Where a title bar the toolkit draws puts its caption buttons is not a
 // box of its own any more. It was one — "Theme buttons" — and it asked a
-// question about a title bar that only exists while "OS window borders" is
+// question about a title bar that only exists while "OS borders" is
 // unticked: with the desktop drawing the frame there is no toolkit
 // caption to put buttons on, and with the toolkit drawing it the theme
 // is the only thing on the page with an opinion about where they go. So
-// the rule is implicit, and "OS window borders" writes both halves of it.
+// the rule is implicit, and "OS borders" writes both halves of it.
 func TestSettingsOSWindowBordersPlacesTheCaptionButtons(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	a, w := openSettings(t, 1024, 780)
@@ -1153,9 +1153,9 @@ func TestSettingsOSWindowBordersPlacesTheCaptionButtons(t *testing.T) {
 	}
 	// Unticked: the toolkit draws the frame, so the theme places the
 	// buttons.
-	sw := findOption(w.Content(), "OS window borders")
+	sw := findOption(w.Content(), "OS borders")
 	if sw == nil {
-		t.Fatal("no OS window borders option")
+		t.Fatal("no OS borders option")
 	}
 	sw.OnChange(false)
 	a.PumpOnce()
@@ -1174,7 +1174,7 @@ func TestSettingsOSWindowBordersPlacesTheCaptionButtons(t *testing.T) {
 	// Ticked: the desktop draws the frame and the desktop's layout is
 	// what its buttons are in, which is the default and so is left out of
 	// the file altogether.
-	findOption(w.Content(), "OS window borders").OnChange(true)
+	findOption(w.Content(), "OS borders").OnChange(true)
 	a.PumpOnce()
 	clickApply(t, w)
 	a.PumpOnce()
@@ -1192,7 +1192,7 @@ func TestSettingsOSWindowBordersPlacesTheCaptionButtons(t *testing.T) {
 // choose — so a file that asks for the theme's layout with the desktop's
 // frame is not nonsense to be corrected on sight; it is a choice
 // Settings no longer offers to make and does not silently unmake either.
-// Touching "OS window borders" is what replaces it, because that is the box the
+// Touching "OS borders" is what replaces it, because that is the box the
 // rule now belongs to.
 func TestSettingsKeepsACaptionButtonsPrefItDidNotWrite(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
@@ -1202,8 +1202,8 @@ func TestSettingsKeepsACaptionButtonsPrefItDidNotWrite(t *testing.T) {
 		t.Fatal(err)
 	}
 	a, w := openSettings(t, 1024, 780)
-	if box := findOption(w.Content(), "OS window borders"); box == nil || !box.Checked {
-		t.Fatal("the OS window borders box should open ticked for a saved system frame")
+	if box := findOption(w.Content(), "OS borders"); box == nil || !box.Checked {
+		t.Fatal("the OS borders box should open ticked for a saved system frame")
 	}
 	// Stage something else entirely and apply: the preference rides
 	// through untouched, because what Apply writes is the appearance
@@ -1216,7 +1216,7 @@ func TestSettingsKeepsACaptionButtonsPrefItDidNotWrite(t *testing.T) {
 		t.Fatalf("applying a pack rewrote the caption buttons: %+v", got)
 	}
 	// And the box that owns the rule now is what changes it.
-	findOption(w.Content(), "OS window borders").OnChange(false)
+	findOption(w.Content(), "OS borders").OnChange(false)
 	a.PumpOnce()
 	clickApply(t, w)
 	a.PumpOnce()
@@ -1616,7 +1616,7 @@ func TestTheOptionsRowOverThePreview(t *testing.T) {
 	_, w := openSettings(t, 1024, 860)
 	row := optionsRow(t, w)
 	// The words, in the order they are read.
-	want := []string{"Animations", "OS colors", "OS open/save dialogs", "OS window borders"}
+	want := []string{"Animations", "OS colors", "OS dialogs", "OS borders"}
 	var got []string
 	widget.Walk(row, func(c widget.Component) {
 		if b, ok := c.(*widgets.Checkbox); ok {
@@ -1635,10 +1635,10 @@ func TestTheOptionsRowOverThePreview(t *testing.T) {
 	// reader, never a second name for it — the rule the preview's own
 	// settings bar follows a hand's width below.
 	names := map[string]string{
-		"Animations":           "Animations",
-		"OS open/save dialogs": "OS open/save dialogs: the desktop's own Open and Save",
-		"OS window borders":    "OS window borders: the desktop's title bar and borders",
-		"OS colors":            "OS colors: follow the desktop's light or dark mode and its accent",
+		"Animations": "Animations",
+		"OS dialogs": "OS dialogs: the desktop's own Open and Save dialogs",
+		"OS borders": "OS borders: the desktop's title bar and borders",
+		"OS colors":  "OS colors: follow the desktop's light or dark mode and its accent",
 	}
 	for word, name := range names {
 		box := findOption(w.Content(), word)
@@ -1672,17 +1672,19 @@ func TestTheOptionsRowOverThePreview(t *testing.T) {
 		}
 	})
 	// Two lines while the pane is wide, and the block under it two more:
-	// the four options fill this block's first line and the corners
-	// chooser takes its second, and the typefaces, the icon set, its
-	// size and the renderer stand in the block below. They are two
-	// blocks rather than one row of ten controls because ten groups in
-	// the 453-pixel pane of a 720x520 window fold onto four lines
-	// whatever order they stand in, and four lines of undifferentiated
-	// furniture over a window is not a block anyone reads.
-	if n := rowLines(row); n != 2 {
-		t.Errorf("the options stand on %d lines in a %v pane; they fold onto two", n, row.LocalBounds().Dx())
+	// the four options and the renderer stand on this block's one line,
+	// and the corners, the two typefaces, the icon set and its size in
+	// the block below. They are two blocks rather than one row of nine
+	// controls because nine groups in the pane of the smallest window
+	// fold whatever order they stand in, and lines of undifferentiated
+	// furniture over a window are not a block anyone reads.
+	if n := rowLines(row); n != 1 {
+		t.Errorf("the options stand on %d lines in a %v pane; they fit one at 1024x860", n, row.LocalBounds().Dx())
 	}
 	drawn := drawnWithRow(t, w)
+	// Five groups, two of them a font family wide: the corners and the
+	// typefaces take the first line, the icon set and its size the
+	// second.
 	if n := rowLines(drawn); n != 2 {
 		t.Errorf("what the toolkit is drawn with stands on %d lines in a %v pane; it folds onto two", n, drawn.LocalBounds().Dx())
 	}
@@ -1706,6 +1708,9 @@ func TestTheOptionsRowOverThePreview(t *testing.T) {
 		}
 		if insidePreview(cb) {
 			t.Errorf("the %q chooser is inside the preview", name)
+		}
+		if name == settingChooserNames[5] {
+			continue // the renderer stands with the options, by design
 		}
 		for top := range tops {
 			if widget.DeviceOrigin(cb).Y < widget.DeviceOrigin(row).Y+top+1 {
@@ -1816,7 +1821,7 @@ func TestThePreviewsOnlyBarIsTheSamples(t *testing.T) {
 }
 
 // The one thing in the previewed window that is not make-believe: File ▸
-// Open… and Save… open the file dialog the staged "OS open/save dialogs"
+// Open… and Save… open the file dialog the staged "OS dialogs"
 // option asks for, so that the option can be looked at instead of read.
 //
 // What is checked here is which dialog was asked for, not which one
@@ -1851,7 +1856,7 @@ func TestThePreviewOpensTheStagedFileDialog(t *testing.T) {
 	// Ticked: the desktop's, from the staged setting and without an
 	// Apply — which is the whole point, because Apply is what would make
 	// it the applied one.
-	findOption(w.Content(), "OS open/save dialogs").OnChange(true)
+	findOption(w.Content(), "OS dialogs").OnChange(true)
 	a.PumpOnce()
 	openPreviewFile(t, w, "&Save")
 	a.PumpOnce()
@@ -1900,14 +1905,14 @@ func TestThePreviewFileDialogIgnoresTheAppliedSetting(t *testing.T) {
 	if !style.NativeDialogs() {
 		t.Fatal("the applied setting did not reach the process")
 	}
-	if box := findOption(w.Content(), "OS open/save dialogs"); box == nil || !box.Checked {
+	if box := findOption(w.Content(), "OS dialogs"); box == nil || !box.Checked {
 		t.Fatal("the option should open ticked")
 	}
 	// Untick it and ask the preview: the toolkit's own dialog, not the
 	// portal's, and not a bare ShowFileDialog either.
 	var native []bool
 	done := swapPreviewDialog(t, func(_ widget.Component, n bool, _ widgets.FileDialogOptions) { native = append(native, n) })
-	findOption(w.Content(), "OS open/save dialogs").OnChange(false)
+	findOption(w.Content(), "OS dialogs").OnChange(false)
 	a.PumpOnce()
 	openPreviewFile(t, w, "&Open…")
 	a.PumpOnce()

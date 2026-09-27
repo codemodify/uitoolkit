@@ -1,5 +1,5 @@
 #!/bin/bash
-# frame-switch.sh N [BACKEND [PACK]] — Settings' "OS window borders" box
+# frame-switch.sh N [BACKEND [PACK]] — Settings' "OS borders" box
 # hands the frame between the desktop and the theme while the window is up,
 # which is the one thing headless tests cannot see: a window with no frame
 # has no frame to look at.
@@ -8,7 +8,7 @@
 #   ./frame-switch.sh 7 x11 win95                            # the X11 path
 #
 # It runs Settings in instance N with PACK staged and the desktop's frame,
-# unticks OS window borders, presses Apply, and asks KWin whether the frame
+# unticks OS borders, presses Apply, and asks KWin whether the frame
 # went.
 # KWin's own answer is the oracle: while the desktop draws the frame the
 # client sits inside it (clientGeometry is smaller than frameGeometry, by
@@ -35,7 +35,7 @@ mkdir -p "$OUT" "$BIN" "$D/cfg/uitoolkit"
 # client starts at the options row, under the toolkit's it starts at the
 # caption above it.
 #
-# BOX_X is the middle of the "OS window borders" check box, which is the
+# BOX_X is the middle of the "OS borders" check box, which is the
 # fourth and last of the options on the first line of the folding row. It
 # moves whenever that row changes: the box was renamed and the row reordered
 # for the renderer chooser, and 624 — where it was — now lands on "OS
@@ -65,7 +65,7 @@ EOF
   UITK_BACKEND="$BACKEND" RUN_WAIT=5 "$RIG/run.sh" "$N" "$BIN/settings" >/dev/null || exit 1
 }
 
-toggle() { # click the OS window borders box and Apply, with the offsets of mode $1
+toggle() { # click the OS borders box and Apply, with the offsets of mode $1
   read -r fx fy fw fh cx cy cw ch <<<"$(geom)"
   local by=$SERVER_BOX_Y ay=$SERVER_APPLY_Y
   [ "$1" = client ] && { by=$CLIENT_BOX_Y; ay=$CLIENT_APPLY_Y; }

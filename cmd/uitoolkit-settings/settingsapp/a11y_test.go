@@ -60,8 +60,8 @@ func TestSettingsIsAccessible(t *testing.T) {
 	// gets, and the one contains the other.
 	for _, name := range []string{
 		"Animations",
-		"OS open/save dialogs: the desktop's own Open and Save",
-		"OS window borders: the desktop's title bar and borders",
+		"OS dialogs: the desktop's own Open and Save dialogs",
+		"OS borders: the desktop's title bar and borders",
 		"OS colors: follow the desktop's light or dark mode and its accent",
 	} {
 		if a11ytest.Find(tree, a11y.RoleCheckBox, name) == nil {
@@ -69,7 +69,7 @@ func TestSettingsIsAccessible(t *testing.T) {
 		}
 	}
 	// And the fifth is gone with its box: where the caption buttons go
-	// follows "OS window borders" now.
+	// follows "OS borders" now.
 	if a11ytest.Find(tree, a11y.RoleCheckBox, "Theme buttons: the caption buttons where the theme puts them") != nil {
 		t.Error("settings: the Theme buttons check box is back in the tree")
 	}

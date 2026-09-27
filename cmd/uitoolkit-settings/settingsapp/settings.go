@@ -584,7 +584,7 @@ func (s *settingsState) exportButton() widget.Component {
 // reader says, and the one sentence that says what turning it on does.
 //
 // The word on the box is short and the spoken name contains it — "OS
-// window borders" is read out as "OS window borders: the desktop's title
+// borders" is read out as "OS borders: the desktop's title
 // bar and borders" — which is the rule the choosers after them follow too:
 // the visible word must be inside the spoken name, never beside it, or
 // the control has two names. What the eye gets from the row these stand
@@ -690,7 +690,7 @@ func (s *settingsState) optionsRow() widget.Component {
 	// the sample's File ▸ Open… and Save… open the dialog this box is
 	// asking for, the desktop's or the toolkit's, and open nothing else.
 	// See [PreviewOptions].
-	native := s.option("OS open/save dialogs", "OS open/save dialogs: the desktop's own Open and Save",
+	native := s.option("OS dialogs", "OS dialogs: the desktop's own Open and Save dialogs",
 		"KDE's and GNOME's own Open and Save dialogs, through the XDG portal, instead of the themed ones. The preview's File menu opens the one this asks for.",
 		s.staged.NativeDialogs, func(on bool) {
 			next := s.staged
@@ -728,7 +728,7 @@ func (s *settingsState) optionsRow() widget.Component {
 	// "captionButtons" keeps saying it — the staged appearance is
 	// whatever was loaded until a box is touched, and this is the box
 	// that touches it.
-	system := s.option("OS window borders", "OS window borders: the desktop's title bar and borders",
+	system := s.option("OS borders", "OS borders: the desktop's title bar and borders",
 		"The desktop draws the title bar and borders of every window, instead of the toolkit. Unticked, the toolkit draws them and the theme places the caption buttons.",
 		s.staged.Decorations == style.DecorationsSystem, func(on bool) {
 			next := s.staged
@@ -741,9 +741,10 @@ func (s *settingsState) optionsRow() widget.Component {
 
 	shape, glyphs, paint := s.choosers()
 	s.drawnWith = widgets.NewWrap(
+		shape,
 		pair(settingWords[1], s.fontUI).WithPadding(0, 0, 6, 0),
 		pair(settingWords[2], s.fontMono).WithPadding(0, 0, 6, 0),
-		glyphs, paint)
+		glyphs)
 	s.drawnWith.Gap = 8
 	s.drawnWith.LineGap = 4
 	// Named for what it is, not for the -page word that reaches it: a
@@ -763,7 +764,7 @@ func (s *settingsState) optionsRow() widget.Component {
 	// borders box goes down onto the second with the corners chooser; at
 	// 1024x860 the four options fill the first line and the corners fall
 	// onto the second alone.
-	row := widgets.NewWrap(motion, colours, native, system, shape)
+	row := widgets.NewWrap(motion, colours, native, system, paint)
 	row.Gap = 8
 	// Closer between the lines than along them: a block that folds has
 	// to read as one block and not as rows of unrelated furniture.
@@ -1499,7 +1500,7 @@ type PreviewOptions struct {
 	// and Save… (and the Open and Save on its tool bar) open a real file
 	// dialog, and says which one: the desktop's own, through the XDG
 	// portal, when it returns true, and the toolkit's themed one when it
-	// returns false. That is the "OS open/save dialogs" option made
+	// returns false. That is the "OS dialogs" option made
 	// visible — the one of Settings' options whose effect is a window
 	// nobody can picture from four words — and it is a preview in the
 	// strict sense: the dialog reads a directory and nothing else, and
@@ -1558,8 +1559,7 @@ func PreviewAppWith(say func(string), opt PreviewOptions) widget.Component {
 		say = func(msg string) { sb.Set(0, msg) }
 	}
 	// File ▸ Open… and Save… are the one thing in this window that is not
-	// make-believe: they open the file dialog the staged "OS open/save
-	// dialogs" setting asks for, so that the option can be looked at
+	// make-believe: they open the file dialog the staged "OS dialogs" setting asks for, so that the option can be looked at
 	// instead of read. host is the window they open over — it is inside
 	// the preview's theme scope, so the toolkit's own dialog comes up in
 	// the pack being staged, which is the other half of what there is to

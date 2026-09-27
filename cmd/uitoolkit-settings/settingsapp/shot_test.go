@@ -25,7 +25,7 @@ import (
 // block over the panel a second line and pushed its top down 30 px
 // (y 44 → 74); the three paths under it gave up the group box they were
 // in, whose legend and frame were 34 px (101 → 67), so the panel grew
-// from 647 to 651. Renaming "OS borders" to "OS window borders" and
+// from 647 to 651. Renaming "OS borders" to "OS borders" and
 // adding a fourth chooser moved nothing, although between them they put
 // 199 px more into that folding row: the row's order changed with them
 // and it still folded onto two lines.
@@ -53,9 +53,9 @@ import (
 // exactly where they were.
 const (
 	previewShotX = 317
-	previewShotY = 138
+	previewShotY = 108
 	previewShotW = 697
-	previewShotH = 633
+	previewShotH = 663
 )
 
 func TestSettingsPreviewPanelKeepsItsPlace(t *testing.T) {

@@ -12,9 +12,9 @@
 // a small live application window in the staged pack, with the settings
 // in a folding row over it and the three config paths under it.
 //
-// That row is four check boxes — Animations, OS colors, OS open/save
-// dialogs, OS window borders — and then the four choosers that say what
-// a pack is drawn with and what draws it: Corners, Icons, Size, Paint.
+// That row is four check boxes and the renderer — Animations, OS colors,
+// OS dialogs, OS borders, Renderer — over a second line that says what a
+// pack is drawn with: Corners, Text, Code, Icons, Size.
 // It folds onto two lines at the default window size, the options on the
 // first and the choosers on the second, and onto three at the 720x520
 // minimum. Paint is the renderer (look.json "renderer", UITK_PAINT's
@@ -24,11 +24,11 @@
 // ~/.config/uitoolkit/icons/<set>/.
 //
 // Where the caption buttons of a frame the toolkit draws go is not a box
-// of its own: unticking OS window borders puts them where the theme says, which
+// of its own: unticking OS borders puts them where the theme says, which
 // is the only opinion there is once the toolkit is drawing the frame.
 //
 // The window in the pane is a sample, with one exception: its File menu's
-// Open… and Save… open the file dialog OS open/save dialogs is asking
+// Open… and Save… open the file dialog OS dialogs is asking
 // for — the desktop's or the toolkit's — so the option can be looked at
 // instead of read. They open nothing: a chosen path is said on the
 // sample's status bar and dropped. -plain-preview takes even that away,
@@ -85,7 +85,7 @@ func main() {
 	// The window icon the desktop shows in its title bar, task bar and switcher.
 	a.SetIcon(icons.AppIconRGB("settings", 0x60, 0x70, 0x80)...)
 	win, err := a.NewWindow(platform.WindowOptions{
-		Title: windowTitle("Settings"), Width: 1024, Height: 860, MinWidth: 720, MinHeight: 520,
+		Title: windowTitle("Settings"), Width: 1024, Height: 860, MinWidth: 720, MinHeight: 580,
 		Headless: *headless || *shot != "",
 	})
 	if err != nil {

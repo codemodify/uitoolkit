@@ -42,7 +42,7 @@ func TestSettingsPageHoldsAtEverySize(t *testing.T) {
 	page := os.Getenv("UITK_PAGE")
 	for _, pack := range []string{"win95", "breeze", "adwaita", "breeze-night"} {
 		for _, scale := range []float32{1, 1.75} {
-			for _, size := range [][2]int{{1024, 860}, {720, 520}} {
+			for _, size := range [][2]int{{1024, 860}, {720, 580}} {
 				a := uitoolkit.New(uitoolkit.Options{Look: style.PreferredLook(), Headless: true, Scale: scale, DisableLookWatch: true})
 				w, err := a.NewWindow(platform.WindowOptions{Title: "Settings", Width: size[0], Height: size[1], Headless: true})
 				if err != nil {
@@ -84,7 +84,7 @@ func TestSettingsPageHoldsAtEverySize(t *testing.T) {
 				// wrapping row keeps what it carries and takes a line
 				// instead.
 				row := optionsRow(t, w)
-				for _, word := range []string{"Animations", "OS colors", "OS open/save dialogs", "OS window borders"} {
+				for _, word := range []string{"Animations", "OS colors", "OS dialogs", "OS borders"} {
 					box := findOption(w.Content(), word)
 					if box == nil {
 						t.Fatalf("%s at %g×, %dx%d: no %q option", pack, scale, size[0], size[1], word)

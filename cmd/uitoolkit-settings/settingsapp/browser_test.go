@@ -80,7 +80,7 @@ func TestSettingsPreviewIsTheWholeRightPane(t *testing.T) {
 		t.Error("the options row is not over the preview")
 	}
 	// And the column beside them is the theme browser and nothing else.
-	for _, word := range []string{"Animations", "OS colors", "OS open/save dialogs", "OS window borders"} {
+	for _, word := range []string{"Animations", "OS colors", "OS dialogs", "OS borders"} {
 		box := findOption(w.Content(), word)
 		if box == nil {
 			t.Fatalf("no %q option on the page", word)
@@ -290,9 +290,9 @@ func TestSettingsKeyboardReachesEverything(t *testing.T) {
 				want["animations"] = true
 			case "OS colors":
 				want["colours"] = true
-			case "OS open/save dialogs":
+			case "OS dialogs":
 				want["file dialogs"] = true
-			case "OS window borders":
+			case "OS borders":
 				want["system frame"] = true
 			}
 		case *widgets.Button:
