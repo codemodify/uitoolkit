@@ -79,6 +79,7 @@ func (s *Stack) Select(i int) {
 	s.Invalidate()
 	if h := hostOf(s); h != nil {
 		h.relayout()
+		h.layoutChanged() // the current tab is saved with the layout
 	}
 }
 

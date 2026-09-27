@@ -104,6 +104,37 @@ func (w *winStatusItem) start() error {
 	return <-w.ready
 }
 
+// One window class for every tray item, registered once, with a
+// procedure that finds the item by its window handle.
+//
+// Each item used to register the class itself, with a procedure closing
+// over that item. RegisterClassExW refuses a name it already has, and
+// the error was dropped — so every window after the first ran the
+// *first* item's procedure. Clicking the second tray icon invoked the
+// first one's callbacks, and an item created after the first was closed
+// invoked a procedure belonging to an item that no longer existed.
+var (
+	winStatusClass     sync.Once
+	winStatusClassName *uint16
+	winStatusMu        sync.Mutex
+	winStatusByHWND    = map[uintptr]*winStatusItem{}
+)
+
+// winStatusProc is the shared procedure: it dispatches to whichever item
+// owns hwnd, and defers to Windows for a handle it does not know — which
+// includes the messages that arrive while CreateWindowExW is still
+// running, before the handle can be registered.
+func winStatusProc(hwnd, msg, wparam, lparam uintptr) uintptr {
+	winStatusMu.Lock()
+	w := winStatusByHWND[hwnd]
+	winStatusMu.Unlock()
+	if w == nil {
+		r, _, _ := procDefWindow.Call(hwnd, msg, wparam, lparam)
+		return r
+	}
+	return w.wndProc(hwnd, msg, wparam, lparam)
+}
+
 func (w *winStatusItem) create() error {
 	class, _ := syscall.UTF16PtrFromString("uitoolkit.StatusItem")
 	var wc struct {
@@ -121,9 +152,13 @@ func (w *winStatusItem) create() error {
 		IconSm     uintptr
 	}
 	wc.Size = uint32(unsafe.Sizeof(wc))
-	wc.WndProc = syscall.NewCallback(w.wndProc)
+	wc.WndProc = syscall.NewCallback(winStatusProc)
 	wc.ClassName = class
-	procRegister.Call(uintptr(unsafe.Pointer(&wc)))
+	winStatusClass.Do(func() {
+		winStatusClassName = class
+		procRegister.Call(uintptr(unsafe.Pointer(&wc)))
+	})
+	class = winStatusClassName
 	title, _ := syscall.UTF16PtrFromString(w.title)
 	hwnd, _, err := procCreateWindow.Call(0, uintptr(unsafe.Pointer(class)), uintptr(unsafe.Pointer(title)),
 		0, 0, 0, 0, 0, hwndMessage, 0, 0, 0)
@@ -133,6 +168,9 @@ func (w *winStatusItem) create() error {
 		}
 		return fmt.Errorf("status: CreateWindowExW failed")
 	}
+	winStatusMu.Lock()
+	winStatusByHWND[hwnd] = w
+	winStatusMu.Unlock()
 	w.mu.Lock()
 	w.hwnd = hwnd
 	w.mu.Unlock()
@@ -146,6 +184,9 @@ func (w *winStatusItem) create() error {
 	utf16Copy(w.nid.Tip[:], w.tooltip)
 	r, _, callErr := procNotifyIcon.Call(nimAdd, uintptr(unsafe.Pointer(&w.nid)))
 	if r == 0 {
+		winStatusMu.Lock()
+		delete(winStatusByHWND, hwnd)
+		winStatusMu.Unlock()
 		procDestroyWin.Call(hwnd)
 		w.mu.Lock()
 		w.hwnd = 0
@@ -221,6 +262,9 @@ func (w *winStatusItem) wndProc(hwnd, msg, wparam, lparam uintptr) uintptr {
 		return 0
 	}
 	if msg == wmQuitPump {
+		winStatusMu.Lock()
+		delete(winStatusByHWND, hwnd)
+		winStatusMu.Unlock()
 		procDestroyWin.Call(hwnd)
 		procPostQuit.Call(0)
 		return 0

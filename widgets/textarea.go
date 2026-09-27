@@ -984,9 +984,13 @@ func (t *TextArea) readOnlyKey(e widget.KeyEvent) bool {
 	return false
 }
 
-func (t *TextArea) replaceSel(s string) {
+// replaceSel puts s in place of the selection and reports whether it
+// did. An Accept validator can refuse, and a caller that has told a drag
+// source the drop succeeded needs to know the difference: the source
+// removes its original on the strength of that answer.
+func (t *TextArea) replaceSel(s string) bool {
 	if !t.editable() {
-		return
+		return false
 	}
 	a, b := t.selA, t.selB
 	if a == b {
@@ -996,10 +1000,10 @@ func (t *TextArea) replaceSel(s string) {
 		a, b = b, a
 	}
 	if a == b && s == "" {
-		return
+		return false
 	}
 	if t.Accept != nil && !t.Accept(t.previewReplace(s)) {
-		return
+		return false
 	}
 	runes := []rune(t.Text)
 	if a < 0 {
@@ -1014,6 +1018,7 @@ func (t *TextArea) replaceSel(s string) {
 	t.havePref = false
 	t.caretUp = false
 	t.changed()
+	return true
 }
 
 // changed is every edit the user makes; the app's go through SetText.

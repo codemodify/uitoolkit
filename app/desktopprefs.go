@@ -188,6 +188,13 @@ func (a *Application) Appearance() style.Appearance {
 	ap.Renderer = a.renderPref
 	ap.ReduceMotion = style.ReduceMotion()
 	ap.NativeDialogs = style.NativeDialogs()
+	// The look does not carry this one, so it has to be read from the
+	// live preference like the two above. Leaving it out made the
+	// appearance lie about it: a caller doing the ordinary
+	// read-modify-apply — a.ApplyAppearance(a.Appearance()), which the
+	// tour does — turned the user's combo-wheel choice off on the way
+	// past.
+	ap.ComboWheel = style.ComboWheel()
 	ap.FollowDesktop = a.following
 	return ap.Normalize()
 }

@@ -191,3 +191,38 @@ func TestWaylandGPUTargetNotShownBeforeItIsPainted(t *testing.T) {
 		t.Fatal("a target reallocated after the paint must not be shown")
 	}
 }
+
+// Resize speaks logical pixels at every scale. It used to guess: a
+// request whose numbers matched the current *buffer* was read as device
+// pixels echoed back and answered by keeping the size it already had. At
+// 2x that made a 100x80 surface ignore Resize(200, 160) — a legitimate
+// request to become 200x160 logical — and no caller could phrase it in a
+// way the guess did not eat.
+func TestWaylandResizeIsLogicalAtEveryScale(t *testing.T) {
+	f := startWlFake(t)
+	_ = f
+	s := fakeSurface(t)
+	if err := s.Resize(100, 80); err != nil {
+		t.Fatal(err)
+	}
+	// A 2x surface: 100x80 logical is a 200x160 buffer.
+	s.frac = 2
+	if err := s.Resize(100, 80); err != nil {
+		t.Fatal(err)
+	}
+	if bw, bh := s.bufferWH(); bw != 200 || bh != 160 {
+		t.Fatalf("at 2x a 100x80 window has a %dx%d buffer, want 200x160", bw, bh)
+	}
+
+	// Now ask for 200x160 *logical*, which happens to equal the buffer.
+	if err := s.Resize(200, 160); err != nil {
+		t.Fatal(err)
+	}
+	if s.logicalW != 200 || s.logicalH != 160 {
+		t.Fatalf("Resize(200,160) left the window %dx%d logical; it is a size, not an echo",
+			s.logicalW, s.logicalH)
+	}
+	if bw, bh := s.bufferWH(); bw != 400 || bh != 320 {
+		t.Fatalf("the buffer is %dx%d, want 400x320", bw, bh)
+	}
+}

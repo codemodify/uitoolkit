@@ -508,6 +508,15 @@ func (d *Doc) replace(at, n int, nb []*Block) {
 func (d *Doc) edit(kind editKind, at, n int, nb []*Block, after Selection, r rune) {
 	before := d.sel
 	old := append([]*Block(nil), d.blocks[at:at+n]...)
+	// A document is never empty: replace puts an empty paragraph back
+	// when the last block goes. That has to happen *here*, before the
+	// step is recorded and the watchers are told, or the two disagree
+	// with the document — the step said it had put zero blocks back,
+	// so undoing "remove everything" inserted the originals in front of
+	// a paragraph nothing knew about and left a trailing blank line.
+	if len(nb) == 0 && at == 0 && n == len(d.blocks) {
+		nb = []*Block{NewBlock(Paragraph, 0)}
+	}
 	d.replace(at, n, nb)
 	d.sel = Selection{d.clamp(after.Anchor), d.clamp(after.Caret)}
 	d.redo = nil
@@ -539,6 +548,15 @@ func (d *Doc) edit(kind editKind, at, n int, nb []*Block, after Selection, r run
 
 // Transact runs fn and makes every edit it makes one undo step.
 func (d *Doc) Transact(fn func()) {
+	// Seal whatever came before, so the transaction's first edit cannot
+	// join it. Without this, typing "a" and then transacting "b" and
+	// "c" merged all three into the older step: there was no new entry
+	// to seal, and one undo removed the "a" the user had typed before
+	// the transaction began.
+	if k := len(d.undo); k > 0 {
+		d.undo[k-1].sealed = true
+	}
+	d.typing = nil
 	n := len(d.undo)
 	before := d.sel
 	d.inTx++

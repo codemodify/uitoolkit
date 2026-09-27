@@ -326,9 +326,11 @@ func (h *Host) adopt(p *Panel) {
 			return
 		}
 	}
-	if p.features == 0 {
-		p.features = DefaultFeatures
-	}
+	// No defaults here. NewPanel already gives a panel DefaultFeatures,
+	// so a zero mask at this point is not "uninitialised" — it is a
+	// caller who said SetFeatures(0) and meant it. Filling it in made a
+	// deliberately locked panel closable, movable, floatable and
+	// collapsible the moment it was docked.
 	p.owner = h
 	h.panels = append(h.panels, p)
 }

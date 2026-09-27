@@ -258,6 +258,14 @@ func (sk *Skin) variant(sp *SkinSprite, target float32) *skinVariant {
 	}
 	key := skinVariantKey{sprite: sp, scale: assetScale}
 
+	// Ask for the sheet first, even though the cut below may not need
+	// it. sheetImage owns the TTL and the stat, and it is what throws
+	// away the cuts taken from a sheet whose pixels changed — so
+	// returning a cached cut before calling it meant a re-saved PNG
+	// never reached the screen, however long a skin author waited. The
+	// lock is not held here: sheetImage takes it itself.
+	sk.sheetImage(file)
+
 	skinCache.mu.Lock()
 	skinCache.syncGen()
 	if v, ok := skinCache.cuts[key]; ok {

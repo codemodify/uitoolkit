@@ -435,11 +435,26 @@ func (t *RichText) pruneCache() {
 	}
 }
 
+// afterDocChange repaints and re-lays the view after its document
+// changed under it.
+//
+// A Document can be edited directly — doc.InsertText and the rest — and
+// the API says those edits show in the views attached to it. This
+// watcher kept the height and layout arrays in step but invalidated
+// nothing, so the change sat in the document until some unrelated event
+// happened to repaint: one document with two editors showed the edit in
+// whichever one the user next touched.
+func (t *RichText) afterDocChange() {
+	t.RequestLayout()
+	t.Invalidate()
+}
+
 // blocksChanged follows an edit: removed blocks at at became added new
 // ones, whose heights are estimated until they are laid out.
 func (t *RichText) blocksChanged(at, removed, added int) {
 	if len(t.heights) != t.doc.Len()-added+removed {
 		t.heights = nil // the next sync rebuilds them all
+		t.afterDocChange()
 		return
 	}
 	nh := make([]float32, added)
@@ -449,6 +464,7 @@ func (t *RichText) blocksChanged(at, removed, added int) {
 	tail := append([]float32(nil), t.heights[at+removed:]...)
 	t.heights = append(append(t.heights[:at], nh...), tail...)
 	t.topsOK = min(t.topsOK, at)
+	t.afterDocChange()
 }
 
 // top is block i's top in the document (i == Len is the document's end).

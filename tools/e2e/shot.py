@@ -22,11 +22,19 @@ def reader():
             if not b:
                 break
             chunks.append(b)
-t = threading.Thread(target=reader)
+# The reader is a daemon and the writer is closed in a finally: if
+# CaptureWorkspace raises, the writer would otherwise stay open, the
+# reader would never reach EOF, and Python would wait on a non-daemon
+# thread for ever — the traceback prints and the script hangs anyway.
+t = threading.Thread(target=reader, daemon=True)
 t.start()
-res = iface.CaptureWorkspace({"include-cursor": dbus.Boolean(False), "native-resolution": dbus.Boolean(True)}, dbus.types.UnixFd(w))
-os.close(w)
-t.join()
+try:
+    res = iface.CaptureWorkspace({"include-cursor": dbus.Boolean(False), "native-resolution": dbus.Boolean(True)}, dbus.types.UnixFd(w))
+finally:
+    os.close(w)
+t.join(timeout=30)
+if t.is_alive():
+    sys.exit("shot.py: the compositor never closed the pipe")
 data = b"".join(chunks)
 W, H, stride, fmt = int(res["width"]), int(res["height"]), int(res["stride"]), int(res["format"])
 # QImage::Format_ARGB32 (5), ARGB32_Premultiplied (6), RGB32 (4): little-endian BGRA bytes.

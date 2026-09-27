@@ -239,8 +239,12 @@ func (h *Host) ApplyLayout(l Layout) error {
 		placed[p.Name()] = true
 	}
 	if l.Weights != nil {
-		h.root.weights = l.Weights.Rows[:]
-		h.middle.weights = l.Weights.Cols[:]
+		// Copied, not aliased. ResetLayout applies the stored default
+		// Layout, so assigning its arrays straight to the live splits
+		// made every later sash drag rewrite the defaults themselves —
+		// after one drag, "reset" restored the dragged proportions.
+		h.root.weights = append([]float32(nil), l.Weights.Rows[:]...)
+		h.middle.weights = append([]float32(nil), l.Weights.Cols[:]...)
 	}
 	// Flags, then the floating windows, which need the panels to be in
 	// the tree first so floating can take them out of it again.

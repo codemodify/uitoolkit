@@ -781,7 +781,11 @@ func (t *TextField) previewReplace(s string) string {
 	return string(runes[:a]) + s + string(runes[b:])
 }
 
-func (t *TextField) replaceSel(s string) {
+// replaceSel puts s in place of the selection and reports whether it
+// did. An Accept validator can refuse, and a caller that has told a drag
+// source the drop succeeded needs to know the difference: the source
+// removes its original on the strength of that answer.
+func (t *TextField) replaceSel(s string) bool {
 	a, b := t.selA, t.selB
 	if a == b {
 		a, b = t.caret, t.caret
@@ -790,10 +794,10 @@ func (t *TextField) replaceSel(s string) {
 		a, b = b, a
 	}
 	if a == b && s == "" {
-		return
+		return false
 	}
 	if t.Accept != nil && !t.Accept(t.previewReplace(s)) {
-		return
+		return false
 	}
 	runes := []rune(t.Text)
 	if a < 0 {
@@ -806,6 +810,7 @@ func (t *TextField) replaceSel(s string) {
 	t.caret = a + runeCount(s)
 	t.selA, t.selB = t.caret, t.caret
 	t.changed()
+	return true
 }
 
 // changed is every edit the user makes — typing, backspace, a paste, a cut,

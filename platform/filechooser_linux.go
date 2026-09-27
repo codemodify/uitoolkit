@@ -64,10 +64,22 @@ func openFileChooser(conn *dbus.Conn, dest string, opts FileChooserOptions, done
 	// so a quick answer is not missed.
 	sender := strings.ReplaceAll(strings.TrimPrefix(conn.Names()[0], ":"), ".", "_")
 	reqPath := dbus.ObjectPath("/org/freedesktop/portal/desktop/request/" + sender + "/" + token)
+	// Subscribed by interface and member rather than by that exact path.
+	//
+	// The path is only a *prediction*: the portal is entitled to answer
+	// on a Request object of its own choosing, and the handler below has
+	// always known that. The match did not — it named the predicted path
+	// — so a portal that chose another one emitted its Response into a
+	// subscription nobody held, and the caller waited for ever.
+	//
+	// Matching before the call and filtering after it also closes the
+	// race the prediction was there to avoid: a Response emitted while
+	// the method call is still in flight is already subscribed, whatever
+	// path it arrives on.
 	match := []dbus.MatchOption{
 		dbus.WithMatchInterface(portalRequest),
 		dbus.WithMatchMember("Response"),
-		dbus.WithMatchObjectPath(reqPath),
+		dbus.WithMatchSender(dest),
 	}
 	if conn.AddMatchSignal(match...) != nil {
 		return false

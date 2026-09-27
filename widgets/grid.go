@@ -56,7 +56,16 @@ type Grid struct {
 	widget.Base
 	Cols, Rows     []Track
 	ColGap, RowGap float32
-	cells          []*GridCell // parallel to Children()
+	// cells is keyed by the component, not by its position among the
+	// children. It used to be a slice parallel to Children(), which the
+	// inherited Remove and ClearChildren know nothing about: removing
+	// the first child left every later child wearing its neighbour's
+	// cell, so a grid silently rearranged itself. Reparenting had the
+	// same effect.
+	cells map[widget.Component]*GridCell
+	// order keeps the placement order, so dims and visible walk the
+	// cells in the order they were placed rather than in map order.
+	order []widget.Component
 }
 
 // NewGrid is an empty grid with 8px gaps.
@@ -81,25 +90,24 @@ func (g *Grid) PlaceSpan(c widget.Component, row, col, rowSpan, colSpan int) *Gr
 	}
 	cell := &GridCell{Row: row, Col: col, RowSpan: rowSpan, ColSpan: colSpan, HAlign: layout.AlignStretch, VAlign: layout.AlignCenter}
 	g.Base.Add(c)
-	g.cells = append(g.cells, cell)
+	if g.cells == nil {
+		g.cells = map[widget.Component]*GridCell{}
+	}
+	if _, seen := g.cells[c]; !seen {
+		g.order = append(g.order, c)
+	}
+	g.cells[c] = cell
 	g.RequestLayout()
 	return cell
 }
 
 // CellOf is c's cell, or nil when c is not in the grid.
-func (g *Grid) CellOf(c widget.Component) *GridCell {
-	for i, ch := range g.Children() {
-		if ch == c && i < len(g.cells) {
-			return g.cells[i]
-		}
-	}
-	return nil
-}
+func (g *Grid) CellOf(c widget.Component) *GridCell { return g.cells[c] }
 
 // dims is the number of rows and columns in use.
 func (g *Grid) dims() (rows, cols int) {
 	rows, cols = len(g.Rows), len(g.Cols)
-	for _, c := range g.cells {
+	for _, c := range g.placed() {
 		if n := c.Row + c.RowSpan; n > rows {
 			rows = n
 		}
@@ -119,12 +127,32 @@ func trackAt(ts []Track, i int) Track {
 
 // visible pairs each shown child with its cell.
 func (g *Grid) visible(fn func(c widget.Component, cell *GridCell)) {
-	for i, ch := range g.Children() {
-		if i >= len(g.cells) || !ch.Visible() {
+	for _, ch := range g.Children() {
+		cell := g.cells[ch]
+		if cell == nil || !ch.Visible() {
 			continue
 		}
-		fn(ch, g.cells[i])
+		fn(ch, cell)
 	}
+}
+
+// placed is every cell still holding a child of this grid, in placement
+// order. A child taken out by Remove or ClearChildren drops out here
+// rather than leaving its cell behind to enlarge the grid.
+func (g *Grid) placed() []*GridCell {
+	out := make([]*GridCell, 0, len(g.order))
+	live := map[widget.Component]bool{}
+	for _, ch := range g.Children() {
+		live[ch] = true
+	}
+	for _, c := range g.order {
+		if live[c] {
+			if cell := g.cells[c]; cell != nil {
+				out = append(out, cell)
+			}
+		}
+	}
+	return out
 }
 
 // solve sizes the tracks of one axis. content[i] is the natural length of
@@ -181,36 +209,71 @@ func solve(ts []Track, n int, content []float32, spans [][3]float32, gap, avail 
 	}
 	// Flexible tracks share what the others leave, by weight, but never
 	// below their content.
-	used := gap * float32(max(n-1, 0))
-	var weight float32
-	for i := 0; i < n; i++ {
-		t := trackAt(ts, i)
-		if t.Mode == TrackFlex {
-			w := t.Size
-			if w <= 0 {
-				w = 1
-			}
-			weight += w
-			continue
-		}
-		used += out[i]
-	}
-	if weight == 0 {
-		return out
-	}
-	left := avail - used
-	for i := 0; i < n; i++ {
-		t := trackAt(ts, i)
-		if t.Mode != TrackFlex {
-			continue
-		}
-		w := t.Size
+	//
+	// "Never below their content" is why this iterates. Taking
+	// max(content, share) for each track independently lets a track that
+	// needs more than its share keep its content *while the others still
+	// take a share computed as though it had not* — so the row adds up
+	// to more than there is. Two equal Flex columns with natural widths
+	// 90 and 10 in 100 pixels came out 90 and 50, and the second child
+	// ended 40 pixels past the right edge.
+	//
+	// Instead: a track whose content exceeds its share is frozen at its
+	// content and its width comes out of the pot, then the rest share
+	// what is left. Freezing one can push another over its new share, so
+	// it repeats until nothing else freezes.
+	weightOf := func(i int) float32 {
+		w := trackAt(ts, i).Size
 		if w <= 0 {
 			w = 1
 		}
-		if share := left * w / weight; share > out[i] {
-			out[i] = share
+		return w
+	}
+	fixed := gap * float32(max(n-1, 0))
+	var flex []int
+	for i := 0; i < n; i++ {
+		if trackAt(ts, i).Mode == TrackFlex {
+			flex = append(flex, i)
+			continue
 		}
+		fixed += out[i]
+	}
+	if len(flex) == 0 {
+		return out
+	}
+	for {
+		var weight, left float32
+		left = avail - fixed
+		for _, i := range flex {
+			weight += weightOf(i)
+		}
+		if weight <= 0 {
+			break
+		}
+		froze := false
+		for k := 0; k < len(flex); k++ {
+			i := flex[k]
+			if share := left * weightOf(i) / weight; out[i] > share {
+				// It needs more than its share: give it its content and
+				// take that out of what the others divide.
+				fixed += out[i]
+				flex = append(flex[:k], flex[k+1:]...)
+				k--
+				froze = true
+			}
+		}
+		if froze {
+			continue
+		}
+		left = avail - fixed
+		weight = 0
+		for _, i := range flex {
+			weight += weightOf(i)
+		}
+		for _, i := range flex {
+			out[i] = left * weightOf(i) / weight
+		}
+		break
 	}
 	return out
 }

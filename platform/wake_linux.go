@@ -46,12 +46,36 @@ func (w *fdWaker) FD() int {
 	return w.fd
 }
 
+// Signal makes the next Wait return at once. It never blocks.
+//
+// It writes the raw descriptor rather than calling os.File.Write. The
+// pipe is O_NONBLOCK, but its write end is registered with the Go
+// runtime poller, and os.File.Write on a registered descriptor does not
+// answer EAGAIN — it parks the goroutine until the pipe drains. Nothing
+// guarantees a drain: WakeSurface signals this pipe for every post while
+// the X11 and offscreen waits never read it, so a run of posts fills the
+// buffer and the *next* Signal blocks before it can wake the surface.
+// Posting from the UI thread then deadlocks the loop against itself.
+//
+// A full pipe already means what the byte would mean, so EAGAIN is the
+// answer rather than a problem: a wake is pending and unread, and one
+// more byte would say nothing new. That is what makes a wake pipe
+// coalescing, and it holds only if the write refuses to wait.
 func (w *fdWaker) Signal() {
 	if w == nil || w.w == nil {
 		return
 	}
-	var b [1]byte
-	_, _ = w.w.Write(b[:])
+	rc, err := w.w.SyscallConn()
+	if err != nil {
+		return
+	}
+	_ = rc.Write(func(fd uintptr) bool {
+		var b [1]byte
+		_, _ = syscall.Write(int(fd), b[:])
+		// Always done. Returning false asks the poller to wait for the
+		// pipe to become writable, which is the block this avoids.
+		return true
+	})
 }
 
 // Drain empties the pipe. It reads the descriptor directly until it

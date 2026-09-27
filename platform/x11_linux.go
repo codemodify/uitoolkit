@@ -1164,8 +1164,12 @@ type x11Surface struct {
 	mapped bool
 	// shaped: a bounding shape is set, so dropping the shape has to give
 	// the pixels back rather than leave the last silhouette behind.
-	shaped     bool
-	closed     bool
+	shaped bool
+	closed bool
+	// torn says this surface's teardown has already run, so Close
+	// releases the shared connection exactly once however many times it
+	// is called.
+	torn       bool
 	shm        bool
 	shmInfo    unsafe.Pointer
 	imeSpotX   int
@@ -2066,9 +2070,18 @@ func (s *x11Surface) translate(xe *C.XEvent) []Event {
 }
 
 func (s *x11Surface) Close() error {
-	if s.closed && (s.conn == nil || s.conn.dpy == nil) {
+	// Torn down once, whatever else is true.
+	//
+	// The guard used to be "closed *and* the display is gone", which is
+	// not the same thing. With two windows open, closing one twice found
+	// the display still alive — the other window holds it — went through
+	// the whole teardown again and dropped the connection's reference a
+	// second time. The refcount hit zero, XCloseDisplay ran, and the
+	// surviving window lost its server.
+	if s == nil || s.torn {
 		return nil
 	}
+	s.torn = true
 	// Popups go before the window they hang from, a popup's grab with it.
 	x11Mu.Lock()
 	s.closePopupsLocked()

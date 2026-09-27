@@ -2158,6 +2158,17 @@ func (w *Window) Close() {
 	if w.app != nil && w.app.statusMenu == w {
 		w.app.statusMenu = nil
 	}
+	// A drag this window started dies with it. The backend's completion
+	// event is delivered to the source window, and this one is about to
+	// leave the application's list and stop being pumped — so without
+	// this the run would never finish: app.drag stayed set, every later
+	// StartDrag was refused, and the payload and its Done callback were
+	// held for the life of the process. finish is idempotent, so a
+	// tear-off that already completed (and closed its source as part of
+	// merging) is unaffected.
+	if w.app != nil && w.app.drag != nil && w.app.drag.win == w {
+		w.app.drag.finish(platform.DragNone)
+	}
 	// Popups go before the window they hang from.
 	w.closePops(0)
 	w.closeTipPop()
