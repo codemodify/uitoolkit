@@ -21,8 +21,19 @@ func (f *wlFake) configureToplevel(s *wlSurface, w, h int, serial uint32) {
 	}
 	f.emit(top[0], 0, uint32(w), uint32(h), uint32(0))
 	f.emit(xdg[0], 0, serial)
-	s.conn.roundtrip()
-	_ = s.Poll()
+	// Dispatch until the ack is on the wire rather than assuming one
+	// pass carries it: the fake writes its events from a goroutine of
+	// its own, so on a loaded machine the first roundtrip can return
+	// before both are readable. Bounded, so a real failure to ack still
+	// fails the test that called this rather than hanging it.
+	want := fmt.Sprintf("ack_configure %d", serial)
+	for i := 0; i < 50; i++ {
+		s.conn.roundtrip()
+		_ = s.Poll()
+		if inOrder(f.requests(), want) {
+			return
+		}
+	}
 }
 
 // lastBuffer is the geometry of the last wl_shm buffer the client made.
