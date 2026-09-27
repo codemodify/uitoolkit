@@ -103,10 +103,10 @@ published facts: design guides, SDK documentation, and pixels measured from
 screenshots of the originals. No code or pixmaps were copied.
 
 Apps start in Metal (Ocean). Settings draws any pack you browse as a
-small live application — and one that sets what it shows: its icon set
-and icon size are chosen on its own tool bar, its corners in its own View
-menu. Apply hands the pack to every app; `UITK_THEME=<pack>` runs any app
-in any of them.
+small live application, with what it is drawn with — the two typefaces,
+the icon set, the size its glyphs are drawn at, the window's corners —
+chosen on the page beside it. Apply hands the pack to every app;
+`UITK_THEME=<pack>` runs any app in any of them.
 
 ![Theme packs by year and platform](docs/screenshots/themes/timeline.png)
 
@@ -121,9 +121,9 @@ the window.
 ![Window frames from System 1 in 1984 to macOS Tahoe in 2025, each in its own era's style](docs/screenshots/themes/frames.webp)
 
 Every tile below is the same small app, the Settings window's preview,
-drawn by its pack's engine. The two boxes at the right of its tool bar
-are that window's own settings — the icon set and the size its glyphs
-are drawn at — so they read the same in every tile.
+drawn by its pack's engine. Nothing in a tile is a setting of Settings'
+own: the typefaces, the icon set and its size are chosen on the page
+outside what the atlas crops.
 
 ### 1980s
 
@@ -330,8 +330,18 @@ tree/table/list rows, the tray and much of the menu work below.
 
 ![Font roles](docs/screenshots/fonts.png)
 
-LookAndFeel locks **UI → Titillium Web** and **Mono → JetBrains Mono**
-(OFL, embedded). mononoki is not the default mono face.
+Two roles: **UI** and **Mono**. The bundled **Titillium Web** and
+**JetBrains Mono** (OFL, embedded) are what a look falls back to; each
+pack names its era's typefaces first and reads in the first one
+installed (`style.FontPrefs`, resolved through fontconfig's `fc-list` —
+never `fc-match`, which substitutes rather than failing and would tell
+every pack its face was present).
+
+**Settings has a chooser for each role**, and a family chosen there goes
+in front of the pack's list, so it wins wherever it is installed and the
+era is still underneath it where it is not. It persists in `look.json`
+as `fontUI` / `fontMono`, and `UITK_FONT` / `UITK_FONT_MONO` override it
+for one process. See [docs/settings.md](docs/settings.md#two-typefaces-not-one).
 
 Name-by-name map vs Qt / GTK / Avalonia / Fyne / WinForms / WPF / Apple:
 [Widget comparison](#widget-comparison) · [docs/widgets.md](docs/widgets.md).
@@ -471,8 +481,11 @@ widgets    Button, Label, TextField, TextArea     ScrollView, ListView, TableVie
            MessageBox, FileDialog stub, Tooltip   TitleBar, context menus
            CardList
 style      LookAndFeel + Palette + Metrics        Color themes + corners +
+                                                  typefaces (fontconfig) +
                                                   PNG icon sets
                                                   (~/.config/uitoolkit/icons/)
+                                                  + freedesktop icon themes
+                                                  (/usr/share/icons/…)
 ```
 
 Swap the skin with `Application.SetLook(uitoolkit.LightLook())` or
@@ -558,7 +571,7 @@ under.
 | `go run ./examples/uitoolkit-sample-notes` | [`examples/uitoolkit-sample-notes/notesapp`](examples/uitoolkit-sample-notes/notesapp) | A small real app: sortable table, textarea body, priority spinner, file stub, tooltips |
 | `go run ./examples/uitoolkit-sample-inspector` | [`examples/uitoolkit-sample-inspector/inspectorapp`](examples/uitoolkit-sample-inspector/inspectorapp) | Preferences inspector: panels that dock, float and close, a layout remembered between runs with `dock.Host.SaveLayoutFile`, table (JetBrains Mono), toolbar, message box |
 | `go run ./examples/uitoolkit-sample-files` | [`examples/uitoolkit-sample-files/filesapp`](examples/uitoolkit-sample-files/filesapp) | Files / Projects dogfood: tree, table, toolbar, menus, TextArea preview, history, drag and drop, dialogs |
-| `go run ./cmd/uitoolkit-settings` | [`cmd/uitoolkit-settings/settingsapp`](cmd/uitoolkit-settings/settingsapp) | The appearance editor, one page: the theme browser down a column, and beside it a live application window with one folding row of settings over it — four on/off options and the icon set, icon size and corners the window is drawn with — and `look.json` under it. See [docs/settings.md](docs/settings.md) |
+| `go run ./cmd/uitoolkit-settings` | [`cmd/uitoolkit-settings/settingsapp`](cmd/uitoolkit-settings/settingsapp) | The appearance editor, one page: the theme browser down a column, and beside it a live application window with two folding blocks of settings over it — four on/off options and the window's corners, then what it is drawn with (the interface typeface, the monospaced one, the icon set, its size and the renderer) — and `look.json` under it. See [docs/settings.md](docs/settings.md) |
 
 `examples/uitoolkit-sample-mdi`, `examples/uitoolkit-sample-popups`,
 `examples/uitoolkit-sample-richtext`, `examples/uitoolkit-sample-shapes`,

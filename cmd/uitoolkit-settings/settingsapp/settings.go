@@ -1,8 +1,10 @@
 // Package settingsapp is the toolkit's appearance editor: the theme
-// browser, the block of settings over the preview — four on/off options
-// and the four choosers for the icon set, its size, the window's corners
-// and the device that paints them — the live preview of the staged pack
-// under them, and the Apply that writes look.json.
+// browser, two blocks of settings over the preview — the four on/off
+// options and the window's corners, then what the toolkit is drawn with
+// (the interface typeface, the monospaced one, the icon set, the size
+// its glyphs are drawn at and the device that paints them) — the live
+// preview of the staged pack under them, and the Apply that writes
+// look.json.
 //
 // It lives beside its command rather than inside it because the
 // end-to-end driver and its own tests drive it as a library, and because
@@ -29,12 +31,12 @@ import (
 // the line through that page is no longer between kinds of choice but
 // between the browser and the thing it is browsing for: the list of 131
 // packs is the column on the left, and everything else stands with the
-// preview on the right — the settings in a folding block over it, and
-// where it all lives on disk under it.
+// preview on the right — the settings in two folding blocks over it,
+// and where it all lives on disk, in one line under it.
 const (
 	sectionTheme     = iota // the column on the left, and the whole of it
 	sectionBehaviour        // the four on/off options, first in the block over the preview
-	sectionPreview          // the four choosers after them: the icons, the corners and the renderer
+	sectionPreview          // the block under them: the typefaces, the icons and the renderer
 	sectionFiles            // the right-hand pane, under the preview
 )
 
@@ -189,6 +191,22 @@ type settingsState struct {
 	iconPick *widgets.ComboBox
 	iconSize *widgets.ComboBox
 	corners  *widgets.ComboBox
+	// The two typefaces. There are two choosers because the toolkit has
+	// two font roles and a pack names a face for each: one list that set
+	// both would have to pretend that picking JetBrains Mono means
+	// "monospaced everywhere" or "monospaced nowhere", and neither is
+	// true. Both are handed the same list of families.
+	fontUI   *widgets.ComboBox
+	fontMono *widgets.ComboBox
+	// drawnWith is the second of the two folding blocks over the
+	// preview: the typefaces, the icon set and its size, and the device
+	// that paints them. It is built by optionsRow, which builds both.
+	drawnWith *widgets.Wrap
+	// families is that list, in the order both choosers show it: the
+	// pack's own typefaces, then the two the toolkit carries, then every
+	// family installed on the machine. The empty string at the head is
+	// "the pack's own", which is not a family.
+	families []string
 	// render is the fourth chooser, and the odd one out: it says which
 	// device paints, not what is painted, and what it asks for reaches
 	// the windows opened after Apply rather than the ones already up.
@@ -244,6 +262,7 @@ func buildSettingsState(s *settingsState) widget.Component {
 	s.rows, s.list, s.bodySplit = nil, nil, nil
 	s.scopes, s.previewBox = nil, nil
 	s.iconSets, s.iconPick, s.iconSize, s.corners, s.render = nil, nil, nil, nil, nil
+	s.fontUI, s.fontMono, s.families, s.drawnWith = nil, nil, nil, nil
 
 	if s.browserRatio == 0 {
 		s.browserRatio = defaultChoicesRatio(s.win)
@@ -721,33 +740,37 @@ func (s *settingsState) optionsRow() widget.Component {
 		})
 
 	shape, glyphs, paint := s.choosers()
+	s.drawnWith = widgets.NewWrap(
+		pair(settingWords[1], s.fontUI).WithPadding(0, 0, 6, 0),
+		pair(settingWords[2], s.fontMono).WithPadding(0, 0, 6, 0),
+		glyphs, paint)
+	s.drawnWith.Gap = 8
+	s.drawnWith.LineGap = 4
+	// Named for what it is, not for the -page word that reaches it: a
+	// screen reader reads this block after the options and has to be
+	// told what changed, and "Preview" is the window under it.
+	s.drawnWith.SetAccessibleName("Drawn with")
+
 	// The order is the order they are read: what the toolkit does on its
 	// own account first, then the three that hand a piece of the window
 	// to the desktop, in the order of how much they hand over — its
 	// colours, then the dialogs it opens, then the frame around it —
-	// and then what a pack is drawn with and what draws it.
+	// and then the shape of the window itself.
 	//
 	// The fold follows from that order, and the order was settled by the
-	// fold as much as by the reading. "OS borders" became "OS window
-	// borders" and a fourth chooser joined the end: 63 px on one box and
-	// 136 more at the end of the row. With the colours still last of the
-	// four and the corners still last of the choosers, the 453-pixel row
-	// of a 720x520 window folded onto four lines — and a fourth line is
-	// 30 px off a preview that has 281, which takes it under the 60% of
-	// its pane this page promises. Three narrow options lead now, so
-	// that row's first line holds three of the four; the borders box
-	// goes down onto the second with the corners, and the icon set, its
-	// size and the renderer take the third. At 1024x860 the four options
-	// still fill the first line and the three chooser groups fall onto
-	// the second by themselves.
-	row := widgets.NewWrap(motion, colours, native, system, shape, glyphs, paint)
+	// fold as much as by the reading. Three narrow options lead, so the
+	// first line of a 453-pixel row holds three of the four and the
+	// borders box goes down onto the second with the corners chooser; at
+	// 1024x860 the four options fill the first line and the corners fall
+	// onto the second alone.
+	row := widgets.NewWrap(motion, colours, native, system, shape)
 	row.Gap = 8
 	// Closer between the lines than along them: a block that folds has
 	// to read as one block and not as rows of unrelated furniture.
 	row.LineGap = 4
-	// Named for the options that lead it; the four choosers after them
-	// carry their own names, each with the word in front of it in the
-	// tree as the static text it is.
+	// Named for the options that lead it; the choosers carry their own
+	// names, each with the word in front of it in the tree as the static
+	// text it is.
 	row.SetAccessibleName(settingsSections[sectionBehaviour])
 	return row
 }
@@ -777,7 +800,23 @@ func (s *settingsState) optionsRow() widget.Component {
 // of that set's icons, and it is a bar of the size the size chooser
 // says, which a strip of loose glyphs never was.
 func (s *settingsState) choosers() (shape, glyphs, paint widget.Component) {
+	// The icon sets, in three groups and in this order: the two the
+	// toolkit draws and the PNG families it ships, then the user's own
+	// folders under ~/.config/uitoolkit/icons, then every freedesktop
+	// icon theme installed on the machine — Adwaita, Breeze, Breeze
+	// Dark, Oxygen, the Yarus — read out of /usr/share/icons and
+	// ~/.local/share/icons where the distribution put them.
+	//
+	// The order is the grouping: a combo box has no headings, and
+	// "what this toolkit brought, then what you added, then what the
+	// desktop already had" is a list anyone can read down. What is *not*
+	// in it is a theme this toolkit cannot draw — a cursor folder, a set
+	// of formats it cannot decode — because an item that paints nothing
+	// is worse than an absence. The absences are named in the tip
+	// instead, with the reason, so "where is my icon theme" has an
+	// answer on the control rather than in a bug report.
 	s.iconSets = append(style.ListBuiltinIconSets(), style.ListUserIconSets()...)
+	s.iconSets = append(s.iconSets, style.ListSystemIconThemes()...)
 	names := make([]string, len(s.iconSets))
 	for i, set := range s.iconSets {
 		names[i] = set.Label
@@ -790,16 +829,20 @@ func (s *settingsState) choosers() (shape, glyphs, paint widget.Component) {
 		next.Icons = s.iconSets[i].Name
 		s.stage(next)
 	})
-	// It fits its longest set name and no more: four choosers and their
-	// words share a line with four check boxes, and a combo box that
-	// measured itself at the stock 160 would fold the block a line
-	// further at every window size.
-	s.iconPick.MinWidth = 1
+	// It fits its longest set name and no more: the choosers and their
+	// words share a folding block with four check boxes, and a combo box
+	// that measured itself at the stock 160 would fold it a line further
+	// at every window size. The ceiling is the other half of the same
+	// rule and it is new: the list is no longer seven names this
+	// toolkit chose but everything the desktop has installed, and
+	// "Yaru-prussiangreen-dark" is not a width anyone signed up for.
+	s.iconPick.MinWidth = iconPickWidth
+	s.iconPick.MaxWidth = iconPickWidth
 	// The word on the page is "Icons"; what a screen reader says is the
 	// same word, because a name that disagreed with the one on the
 	// screen would be two names for one control.
-	s.iconPick.SetAccessibleName("Icons")
-	s.iconPick.Tip = "Icon set — a real setting. The preview's tools are drawn in it; the rest of that window is a sample."
+	s.iconPick.SetAccessibleName(settingChooserNames[3])
+	s.iconPick.Tip = s.iconTip()
 	s.iconPick.SetAccessibleDescription(s.iconPick.Tip)
 
 	// The size is beside the set because it is not a separate choice: a
@@ -820,7 +863,7 @@ func (s *settingsState) choosers() (shape, glyphs, paint widget.Component) {
 	// pair, and the spoken name carries the half the eye gets from where
 	// the box stands. The one contains the other, which is the rule —
 	// the visible word must be in the spoken name, never beside it.
-	s.iconSize.SetAccessibleName("Icon size")
+	s.iconSize.SetAccessibleName(settingChooserNames[4])
 	s.iconSize.Tip = "Icon size — a real setting: 16, 24 or 32 pixels, before the display scale."
 	s.iconSize.SetAccessibleDescription(s.iconSize.Tip)
 
@@ -838,43 +881,218 @@ func (s *settingsState) choosers() (shape, glyphs, paint widget.Component) {
 		s.stage(next)
 	})
 	s.corners.MinWidth = 1
-	s.corners.SetAccessibleName("Window corners")
+	s.corners.SetAccessibleName(settingChooserNames[0])
 	s.corners.Tip = "Window corners — a real setting: the pack's own shape, round, or square. The previewed window is drawn with it."
 	s.corners.SetAccessibleDescription(s.corners.Tip)
 
+	s.fonts()
+
 	// A word sits close to the box it names and further from the one
 	// before it — six pixels one side, fourteen the other — so that the
-	// four read as four settings rather than eight controls. The gap
-	// between one group and the next is the row's own eight plus six
+	// groups read as settings rather than as a queue of controls. The
+	// gap between one group and the next is the row's own eight plus six
 	// carried on the left-hand group's right edge, which makes it the
 	// same fourteen; on the group's right rather than the next group's
 	// left, because a line a group starts is a line that must start at
 	// the margin.
-	pair := func(word string, box *widgets.ComboBox) *widgets.FlexBox {
-		return widgets.NewRow(widgets.NewLabel(word), box).WithGap(6).WithAlign(layout.AlignCenter)
-	}
-	shape = pair(settingWords[0], s.corners).WithPadding(0, 0, 6, 0)
-	glyphs = widgets.NewRow(pair(settingWords[1], s.iconPick), pair(settingWords[2], s.iconSize)).
+	shape = pair(settingWords[0], s.corners)
+	glyphs = widgets.NewRow(pair(settingWords[3], s.iconPick), pair(settingWords[4], s.iconSize)).
 		WithGap(14).WithAlign(layout.AlignCenter).WithPadding(0, 0, 6, 0)
-	paint = pair(settingWords[3], s.renderer())
+	paint = pair(settingWords[5], s.renderer())
 	return shape, glyphs, paint
 }
 
-// settingWords are the words in front of the four choosers, in the order
-// they stand on the page. They are short because they share a folding
-// row with four check boxes in a pane as narrow as 453 logical pixels,
-// and each one is the beginning of what its chooser is called to a
-// screen reader ("Window corners", "Icons", "Icon size", "Paint
-// renderer") rather than another name for it.
+// pair is a chooser behind the word that says what it sets.
+func pair(word string, box *widgets.ComboBox) *widgets.FlexBox {
+	return widgets.NewRow(widgets.NewLabel(word), box).WithGap(6).WithAlign(layout.AlignCenter)
+}
+
+// iconPickWidth and fontPickWidth are what those three choosers measure,
+// exactly: both their floor and their ceiling, in 1x pixels.
 //
-// Corners leads them, where it used to come last of three. The reading
-// is outside in — the shape of the window, then what is drawn inside
-// it, then what draws the lot — and, as with the four options before
-// them, the fold is what settled it: the borders box and the corners
-// share the second line of a 453-pixel row, and the icon set, its size
-// and the renderer the third. With the corners last, as they were, the
-// icons had a line to themselves and the row took four.
-var settingWords = [4]string{"Corners", "Icons", "Size", "Paint"}
+// They are pinned, where the other three choosers measure themselves on
+// their longest item, because their items are not a list this page
+// chose. They are what the machine has installed — six hundred font
+// families on the box this was written on, twenty-six icon themes — and
+// a control whose width is a fact about somebody's font directory is a
+// control that folds this block differently on two machines. The Theme
+// Atlas crops this page at fixed pixels (shot_test.go); a page whose
+// geometry moved with the fonts installed could not be cropped at all.
+//
+// 136 fits "Titillium Web", "Liberation Sans", "Material Symbols" and
+// "Breeze Dark" whole, and elides the tail of the longer names, which
+// the drop-down then shows in full.
+const (
+	iconPickWidth = 136
+	fontPickWidth = 152
+)
+
+// fonts builds the two typeface choosers.
+//
+// # Why two
+//
+// Because the toolkit has two font roles and every pack names a face for
+// each of them: an interface face and a monospaced one (style.FontPrefs,
+// "ui" and "mono"). One chooser over one list could only set one of them
+// and leave the other to the pack, or set both to the same family — and
+// a page that quietly did either while calling itself "Font" would be
+// lying about half of what it changed. Two choosers say what they set,
+// and a person who wants the interface in one family and code in another
+// — which is what almost everyone wants — can have it.
+//
+// # One list, in the owner's order
+//
+// Both are handed the same list and it leads with what the toolkit
+// carries: Titillium Web, then JetBrains Mono, then the families
+// fontconfig reports installed, sorted. Neither list is filtered by
+// role. A monospaced family is a perfectly good interface font — the
+// Amiga pack's whole look is one — and fontconfig's own spacing flag is
+// not accurate enough to hide six hundred families behind.
+//
+// In front of the two bundled faces stands one item that is not a font
+// at all: "Theme font", the default and the way back. It is what every
+// look.json written before this field says, and what it means is that
+// this role is the pack's business — Aqua reads in Lucida Grande, Luna
+// in Tahoma, Win95 in MS Sans Serif, each falling through its own list
+// of look-alikes to whatever this machine actually has.
+//
+// # Who wins
+//
+// The user. A pack's typefaces are a list of wishes an era had and the
+// toolkit grants the first one it can; a name chosen here goes in front
+// of that list, so it wins wherever it is installed and the era is still
+// underneath it where it is not (style.withUserFonts). That is the same
+// bargain the corner chooser strikes with a pack's own shape, and the
+// tip says so in as many words, because "which of these two wins" is
+// the one thing a person cannot see by looking at the control.
+func (s *settingsState) fonts() {
+	s.families = append([]string{""}, style.ListFontFamilies()...)
+	names := make([]string, len(s.families))
+	names[0] = themeFontItem
+	copy(names[1:], s.families[1:])
+
+	build := func(chosen string, set func(style.Appearance, string) style.Appearance) *widgets.ComboBox {
+		cb := widgets.NewComboBox(names, familyIndex(s.families, chosen), func(i int) {
+			if i < 0 || i >= len(s.families) {
+				return
+			}
+			s.stage(set(s.staged, s.families[i]))
+		})
+		cb.MinWidth = fontPickWidth
+		cb.MaxWidth = fontPickWidth
+		return cb
+	}
+	s.fontUI = build(s.staged.FontUI, func(a style.Appearance, fam string) style.Appearance {
+		a.FontUI = fam
+		return a
+	})
+	// "Text" on the page, "Text font" to a screen reader: the visible
+	// word is inside the spoken name, as everywhere else on this block.
+	s.fontUI.SetAccessibleName(settingChooserNames[1])
+	s.fontMono = build(s.staged.FontMono, func(a style.Appearance, fam string) style.Appearance {
+		a.FontMono = fam
+		return a
+	})
+	s.fontMono.SetAccessibleName(settingChooserNames[2])
+	s.showFontTips()
+}
+
+// themeFontItem is the first item of both font choosers: not a family,
+// but the absence of a choice — the pack's own typeface for that role.
+const themeFontItem = "Theme font"
+
+// showFontTips writes what the two choosers say about themselves. They
+// are rebuilt whenever the staged appearance moves, because both
+// sentences name the family that is actually being drawn with, and that
+// changes when the pack changes as well as when the chooser does.
+func (s *settingsState) showFontTips() {
+	look := s.staged.Look()
+	tip := func(cb *widgets.ComboBox, role, chosen, drawn string) {
+		if cb == nil {
+			return
+		}
+		t := role + " — a real setting. The list leads with the two typefaces uitoolkit carries; " +
+			"the rest are the families installed on this machine."
+		if chosen == "" {
+			t += " " + themeFontItem + " is the pack's own: " + s.shownPack().Display() + " is reading in " + drawn + "."
+		} else {
+			t += " A family chosen here beats the pack's — " + s.shownPack().Display() +
+				" asks for its era's typeface and this window is reading in " + drawn + "."
+			t += " " + themeFontItem + " gives the pack its era back."
+		}
+		cb.Tip = t
+		cb.SetAccessibleDescription(t)
+	}
+	tip(s.fontUI, "Text font", s.staged.FontUI, look.UIFamily())
+	tip(s.fontMono, "Code font", s.staged.FontMono, look.MonoFamily())
+}
+
+// iconTip is what the icon chooser says about itself: what it sets, where
+// the sets past the toolkit's own come from, and — the part no chooser
+// can show — which installed themes were found and left out, and why.
+func (s *settingsState) iconTip() string {
+	var b strings.Builder
+	b.WriteString("Icon set — a real setting. The preview's tools are drawn in it; the rest of that window is a sample. ")
+	b.WriteString("The toolkit's own sets come first, then your folders under ")
+	b.WriteString(shortPath(style.IconsDir()))
+	b.WriteString(", then the icon themes this desktop has installed.")
+	bad := style.UnavailableSystemIconThemes()
+	if len(bad) == 0 {
+		return b.String()
+	}
+	b.WriteString(" Not listed: ")
+	for i, p := range bad {
+		if i == 3 {
+			b.WriteString(fmt.Sprintf(" and %d more", len(bad)-3))
+			break
+		}
+		if i > 0 {
+			b.WriteString("; ")
+		}
+		b.WriteString(p.Name + " — " + p.Reason)
+	}
+	b.WriteString(".")
+	return b.String()
+}
+
+// familyIndex is where chosen stands in the chooser's list ("" is the
+// first item, the pack's own; a family that is no longer installed is
+// the first item too, which is what is actually being drawn).
+func familyIndex(families []string, chosen string) int {
+	chosen = style.NormalizeFontChoice(chosen)
+	if chosen == "" {
+		return 0
+	}
+	for i, f := range families {
+		if strings.EqualFold(f, chosen) {
+			return i
+		}
+	}
+	return 0
+}
+
+// settingWords are the words in front of the six choosers, in the order
+// they stand on the page: the corners at the end of the options over the
+// preview, and then the five of the block under them. They are short
+// because they share two folding blocks with four check boxes in a pane
+// as narrow as 453 logical pixels, and each one is the beginning of what
+// its chooser is called to a screen reader ("Window corners", "Text
+// font", "Code font", "Icons", "Icon size", "Paint renderer") rather
+// than another name for it.
+//
+// Corners leads them and stays with the options, which is where the fold
+// wants it: the four boxes fill 396 of a 453-pixel line and the corners
+// take the second on their own, so the chooser is free there and would
+// cost the block under it a line of its own.
+var settingWords = [6]string{"Corners", "Text", "Code", "Icons", "Size", "Paint"}
+
+// settingChooserNames are what a screen reader calls the same six, in
+// the same order. The visible word is inside the spoken name, never
+// beside it: "Size" is the second half of "Icon size", "Text" the first
+// half of "Text font". They are one array rather than six string
+// literals because the rule only holds if the two lists are read
+// together, and a test reads them together.
+var settingChooserNames = [6]string{"Window corners", "Text font", "Code font", "Icons", "Icon size", "Paint renderer"}
 
 // rendererPrefs are the devices the paint chooser offers, in its order:
 // let the toolkit decide, then the two definite answers.
@@ -938,7 +1156,7 @@ func (s *settingsState) renderer() *widgets.ComboBox {
 	// row. "Paint" rather than "Renderer" because it is the word the
 	// environment variable and the docs have always used (UITK_PAINT),
 	// and because five characters is what the row has room for.
-	s.render.SetAccessibleName("Paint renderer")
+	s.render.SetAccessibleName(settingChooserNames[5])
 	s.render.Tip = s.rendererTip()
 	s.render.SetAccessibleDescription(s.render.Tip)
 	return s.render
@@ -984,13 +1202,14 @@ func rendererIndex(p style.RendererPref) int {
 // filesSection is the old About page: the three paths Settings reads and
 // writes. It is under the preview because it is the only part of the
 // page that changes nothing — it says where what the rest of the page
-// changed ends up — and it is three lines rather than the six it was
-// because it is under the preview: a line of prose and a three-row text
-// box for each path cost the window they sit beneath a third of its
-// height, and a path in a pane 700 pixels wide needs one row and says
-// what it is by its own name.
+// changed ends up — and that is also why it has been the page's bank
+// every time something had to be paid for. It was six lines: a line of
+// prose and a three-row text box for each path. It was three, one path
+// each. It is one, and the two lines that bought are what put the two
+// typeface choosers on the page without taking the preview under the
+// 60% of its pane this page promises.
 //
-// Three lines and no box. It was a group box with "Files" on its legend,
+// One line and no box. It was a group box with "Files" on its legend,
 // and the legend and the frame cost 43 of the 101 pixels the block took
 // — 43 pixels off the window the page is about, to put a word over three
 // lines each of which is a name and a path and so says what it is by
@@ -1008,27 +1227,28 @@ func rendererIndex(p style.RendererPref) int {
 // style.DeleteUserIconSet is still there for an application that wants
 // it.
 func (s *settingsState) filesSection() widget.Component {
-	line := func(name, path string) widget.Component {
-		// A label, not a text box: a box that can be selected from keeps
-		// three rows and grows a scrollbar of its own the moment the path
-		// is longer than the pane, and there are three of them under a
-		// window that wants every pixel. A label gives the pane back and
-		// elides what will not fit.
-		v := widgets.NewLabel(shortPath(path))
-		v.Mono = true
-		v.SetAccessibleName(name + ": " + path)
-		row := widgets.NewRow(widgets.NewLabel(name), v).WithGap(10).WithAlign(layout.AlignCenter)
-		row.AddFlex(v, 1)
-		return row
-	}
-	// Three lines of one thing each: two pixels between them, because the
-	// eight a column puts between its children are for paragraphs, not
-	// for a table.
-	return widgets.NewColumn(
-		line("Prefs", style.AppearancePath()),
-		line("Themes", style.ThemesDir()+"/<name>/theme.json"),
-		line("Icons", style.IconsDir()+"/<set>/*.png"),
-	).WithGap(2)
+	// One line, and it is a directory and three names rather than three
+	// paths, because the three paths share a directory and repeating it
+	// three times is 60 characters of ~/.config/uitoolkit saying nothing
+	// twice. The full paths are still exact, in the accessible name and
+	// in the hover text, where a path that is going to be typed or
+	// copied is read one at a time anyway.
+	dir := shortPath(style.ConfigDir())
+	full := strings.Join([]string{
+		"Prefs: " + style.AppearancePath(),
+		"Themes: " + style.ThemesDir() + "/<name>/theme.json",
+		"Icons: " + style.IconsDir() + "/<set>/*.png",
+	}, "; ")
+	// A label, not a text box: a box that can be selected from keeps
+	// three rows and grows a scrollbar of its own the moment the path is
+	// longer than the pane, under a window that wants every pixel. A
+	// label gives the pane back and elides what will not fit.
+	v := widgets.NewLabel(dir + "/ — look.json, themes/<name>/theme.json, icons/<set>/*.png")
+	v.Mono = true
+	v.SetAccessibleName(full)
+	row := widgets.NewRow(widgets.NewLabel("Files"), v).WithGap(10).WithAlign(layout.AlignCenter)
+	row.AddFlex(v, 1)
+	return widgets.NewTip(full, row)
 }
 
 // shortPath is a path with the user's home written as ~, the way a shell
@@ -1049,22 +1269,45 @@ func shortPath(p string) string {
 // shaped this way: the staged pack drawn as a small but entirely live
 // application, frame and caption and every control.
 //
-// Three things are in this pane, in the order they are read: the block
-// of settings, over the window, because they are what it is drawing;
-// the window; and where the files are, under it, because that is where
-// what the window shows ends up. The settings are one row that folds and
-// the paths are three lines, and neither scrolls: the window takes every
-// pixel the two of them leave, at every window size, which is the
-// promise this page has always made about its right-hand side. Nothing
-// else is allowed in here — the strip of fifteen glyphs was tried above
-// the window and folded onto four lines at the 720x520 minimum, leaving
-// the preview a caption and a menu bar.
+// Four things are in this pane, in the order they are read: what the
+// window *is* and what the desktop does for it; what it is drawn with;
+// the window; and where all of it lives on disk. The first two are
+// folding blocks, the last is one line, and none of the three scrolls:
+// the window takes every pixel they leave, at every window size, which
+// is the promise this page has always made about its right-hand side.
+//
+// # Why two blocks and not one row
+//
+// It was one row of eight controls and it was full. Two typefaces had to
+// join it — the interface face and the monospaced one, which is two
+// choosers and not one, because a pack names a face for each role — and
+// nine groups in a 453-pixel pane fold onto four lines whatever order
+// they stand in. Four lines of undifferentiated furniture over a window
+// is not a block anyone reads; it is a hedge.
+//
+// So the seam that the fold used to find by accident is drawn on
+// purpose. Over the window: the four things the toolkit does rather than
+// looks like, and the shape of the window itself. Under them: the two
+// typefaces, the icon set, the size its glyphs are drawn at, and the
+// device that paints the lot — everything the sentence "what the toolkit
+// draws with" covers, in one block that folds on its own. Each holds two
+// lines at the 720x520 minimum and two at 1024x860, where the row it
+// replaced held three and two.
+//
+// The pixels for the ninth and tenth control came from under the
+// preview, and they came from the same argument that has paid for
+// everything else on this side: the three file paths are the one block
+// on the page that changes nothing, they were six lines once and three
+// after that, and they are one line now (see [settingsState.filesSection]).
+// Nothing else is allowed in this pane — the strip of fifteen glyphs was
+// tried above the window and folded onto four lines at the minimum,
+// leaving the preview a caption and a menu bar.
 func (s *settingsState) previewColumn() widget.Component {
 	options := s.optionsRow()
 	s.previewBox = widgets.NewPanel("", PreviewAppWith(nil, s.previewOptions()))
 	s.previewBox.Window = true
 	preview := s.scoped(s.previewBox)
-	col := widgets.NewColumn(options, preview, s.filesSection()).WithGap(8)
+	col := widgets.NewColumn(options, s.drawnWith, preview, s.filesSection()).WithGap(8)
 	col.AddFlex(preview, 1)
 	return col
 }
@@ -1107,6 +1350,23 @@ func (s *settingsState) showStagedControls() {
 			s.iconSize.Invalidate()
 		}
 	}
+	for _, f := range []struct {
+		box    *widgets.ComboBox
+		chosen string
+	}{{s.fontUI, s.staged.FontUI}, {s.fontMono, s.staged.FontMono}} {
+		if f.box == nil {
+			continue
+		}
+		if i := familyIndex(s.families, f.chosen); i != f.box.Selected {
+			f.box.Selected = i
+			f.box.Invalidate()
+		}
+	}
+	// Both tips name the family actually being drawn with, which moves
+	// when the pack moves and not only when the chooser does: staging
+	// Aqua with no font chosen has to stop saying Noto Sans and start
+	// saying whatever Aqua's list of Lucidas came down to here.
+	s.showFontTips()
 	if s.render != nil {
 		if i := rendererIndex(s.staged.Renderer); i != s.render.Selected {
 			s.render.Selected = i

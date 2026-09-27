@@ -34,7 +34,17 @@ type ComboBox struct {
 	// them should not be narrower than its neighbours whatever it lists.
 	// A box on a tool bar sets it small — there it is one item among
 	// many, and 160 pixels of empty field pushes the tools off the end.
-	MinWidth   float32
+	MinWidth float32
+	// MaxWidth is the widest the box measures itself, in 1x pixels, or 0
+	// for no limit (the default). A box whose items are a list of
+	// somebody else's names — the six hundred font families fontconfig
+	// reports, a desktop's forty icon themes — cannot measure itself on
+	// its longest item, because its longest item is not a decision
+	// anyone made: it is whatever font is installed with the longest
+	// name. The face elides what does not fit (the look's DrawComboBox
+	// fits the text to the field) and the list itself is unaffected, so
+	// what a limit costs is the tail of one name on the closed control.
+	MaxWidth   float32
 	open       bool
 	hovered    bool
 	fade       stateFade // hover / focus cross-fade (the look's HintHoverFadeMs)
@@ -208,6 +218,11 @@ func (c *ComboBox) Measure(cons layout.Constraints) paintengine2d.Point {
 		tw += style.Dip(lk, 44)
 		if tw > w {
 			w = tw
+		}
+	}
+	if c.MaxWidth > 0 {
+		if cap := style.Dip(lk, c.MaxWidth); w > cap {
+			w = cap
 		}
 	}
 	return cons.Constrain(paintengine2d.Pt(w, style.ComboHeight(m)))

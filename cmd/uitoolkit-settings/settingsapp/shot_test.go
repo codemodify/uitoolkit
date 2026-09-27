@@ -16,24 +16,34 @@ import (
 // new numbers (docs/settings.md, "Screenshot geometry").
 //
 // What the preview carries inside itself does not move them: the panel
-// takes whatever the two blocks over and under it leave, so the settings
-// bar that stood at the head of the window for a release grew inside
-// this rectangle rather than pushing it down. What is over and under it
-// does move them, and the last two changes moved them both ways at once.
+// takes whatever the blocks over and under it leave, so the settings bar
+// that stood at the head of the window for a release grew inside this
+// rectangle rather than pushing it down. What is over and under it does
+// move them, and the last three changes moved them all three ways.
+//
 // Three choosers came off that bar and onto the page, which gave the
 // block over the panel a second line and pushed its top down 30 px
 // (y 44 → 74); the three paths under it gave up the group box they were
-// in, whose legend and frame were 34 px (101 → 67). Four of those 34 are
-// the difference: the panel is 651 tall where it was 647.
+// in, whose legend and frame were 34 px (101 → 67), so the panel grew
+// from 647 to 651. Renaming "OS borders" to "OS window borders" and
+// adding a fourth chooser moved nothing, although between them they put
+// 199 px more into that folding row: the row's order changed with them
+// and it still folded onto two lines.
 //
-// Renaming "OS borders" to "OS window borders" and adding a fourth
-// chooser did not move them either, which is not obvious: between them
-// they put 199 px more into that folding row. The row's order changed
-// with them (settings.go, optionsRow), so it still folds onto two lines
-// at this size and still stands 56 px tall. These numbers were
-// re-measured in the eight packs below, and rendered through
-// tools/atlas/render.sh's own crop in three of them, rather than
-// assumed.
+// The two typeface choosers are what moved it this time, and they moved
+// it a long way down. Ten groups will not fold onto two lines in this
+// pane, so the settings are two blocks now — what the toolkit does, then
+// what it is drawn with — and the second block is 64 px of its own
+// (y 74 → 138). Under the panel the three path lines became one, which
+// gave 18 px back, so the panel is 633 tall where it was 651: 46 px went
+// into the settings and 18 came back out of the paths. The preview is
+// still far the biggest thing in its pane — 80% of it at this size and
+// 65% at the 720x520 minimum, where it was 82% and 62% — because a
+// block that folds onto two lines at both sizes costs the minimum less
+// than a row that folded onto three.
+//
+// These numbers were re-measured in the eight packs below, and rendered
+// through tools/atlas/render.sh's own crop, rather than assumed.
 //
 // The column on the left cannot move them either, whatever is taken out
 // of it: the splitter's ratio is worked out from the window's width and
@@ -43,9 +53,9 @@ import (
 // exactly where they were.
 const (
 	previewShotX = 317
-	previewShotY = 74
+	previewShotY = 138
 	previewShotW = 697
-	previewShotH = 651
+	previewShotH = 633
 )
 
 func TestSettingsPreviewPanelKeepsItsPlace(t *testing.T) {
