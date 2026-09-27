@@ -7,7 +7,6 @@ import (
 	"runtime"
 	"runtime/pprof"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/codemodify/uitoolkit/platform"
@@ -71,13 +70,18 @@ func perfMark(what string) {
 	perf.mu.Unlock()
 }
 
-// perfDumps writes a heap profile and the goroutines on every SIGUSR1,
-// and five seconds of CPU profile on every SIGUSR2.
+// perfDumps writes a heap profile and the goroutines on every heap-dump
+// signal, and five seconds of CPU profile on every cpu-dump signal (see
+// perfDumpSignals; a platform with no such signals takes no dumps).
 func perfDumps(path string) {
+	heapSig, cpuSig := perfDumpSignals()
+	if heapSig == nil && cpuSig == nil {
+		return
+	}
 	ch := make(chan os.Signal, 1)
-	signal.Notify(ch, syscall.SIGUSR1, syscall.SIGUSR2)
+	signal.Notify(ch, heapSig, cpuSig)
 	for n := 1; ; n++ {
-		if <-ch == syscall.SIGUSR2 {
+		if <-ch == cpuSig {
 			if f, err := os.Create(fmt.Sprintf("%s.cpu.%d.pb.gz", path, n)); err == nil {
 				if pprof.StartCPUProfile(f) == nil {
 					time.Sleep(5 * time.Second)

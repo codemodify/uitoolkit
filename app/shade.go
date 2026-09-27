@@ -23,20 +23,21 @@ import (
 // is why CanShade is false there rather than the toolkit fighting for it.
 //
 // **Keeping a window above the others is the desktop's doing, and only X11
-// can.** See [platform.AboveSurface]: X11 has _NET_WM_STATE_ABOVE, and
-// Wayland has no keep-above a client may ask for on its own surface. The
-// caption button follows [Window.CanKeepAbove] and says so rather than
-// going quiet.
+// can.** X11 has _NET_WM_STATE_ABOVE; Wayland has no keep-above a client
+// may ask for on its own surface, so the Wayland backend leaves
+// [platform.FrameKeepAbove] out of its [platform.FrameCaps] rather than
+// pretending. The caption button follows [Window.CanKeepAbove] and says so
+// rather than going quiet.
 
 // CanKeepAbove reports whether the desktop can keep the window above the
 // others. X11 window managers that list _NET_WM_STATE_ABOVE in
 // _NET_SUPPORTED can; Wayland compositors cannot, whatever desktop they
-// are (see [platform.AboveSurface]).
+// are (no [platform.FrameKeepAbove] in their [platform.FrameCaps]).
 func (w *Window) CanKeepAbove() bool {
 	if w == nil || w.Closed() {
 		return false
 	}
-	return platform.SurfaceKeepAboveSupported(w.surf)
+	return platform.FrameCapsOf(w.surf).Has(platform.FrameKeepAbove)
 }
 
 // KeepAbove reports whether the desktop is keeping the window above the
@@ -57,7 +58,7 @@ func (w *Window) SetKeepAbove(on bool) bool {
 	if w == nil || w.Closed() {
 		return false
 	}
-	return platform.SetKeepAbove(w.surf, on)
+	return platform.FrameOf(w.surf).SetKeepAbove(on)
 }
 
 // ToggleKeepAbove turns keep-above on or off (the caption button, the
@@ -70,12 +71,16 @@ func (w *Window) ToggleKeepAbove() bool {
 }
 
 // CanShade reports whether the window can be rolled up to its title bar
-// now. It needs a title bar of the toolkit's to roll up to, a backend that
-// can pin the window's height while it is rolled up
-// ([platform.ShadeSurface]), and a window whose height is the toolkit's to
-// change: a maximized, tiled or full-screen window's size belongs to the
-// desktop, and a window pinned to one size (platform.SizingFixed) has said
-// its height is not to be touched.
+// now. It is the toolkit's own composite, not one capability: the window
+// system must be able to pin the height while the window is rolled up
+// ([platform.FrameShade] — which already excludes a window pinned to one
+// size), and on top of that the *toolkit* needs a title bar of its own to
+// roll up to and a window whose height is its to change — a maximized,
+// tiled or full-screen window's size belongs to the desktop.
+//
+// That split is the pattern: [platform.FrameCaps] says what the window
+// system will do, and the layer above ands in what it will do. Neither can
+// answer for the other.
 func (w *Window) CanShade() bool {
 	if w == nil || w.Closed() || w.caption == nil || !w.framed() {
 		return false
@@ -87,8 +92,7 @@ func (w *Window) CanShade() bool {
 	if (w.state.Tiled|w.state.Constrained)&(platform.EdgeTop|platform.EdgeBottom) != 0 {
 		return false
 	}
-	_, ok := w.surf.(platform.ShadeSurface)
-	return ok
+	return platform.FrameCapsOf(w.surf).Has(platform.FrameShade)
 }
 
 // Shaded reports whether the window is rolled up to its title bar.
@@ -133,7 +137,7 @@ func (w *Window) SetShaded(on bool) bool {
 	w.shaded, w.shadeRestore = true, lh
 	// Pin the height first: a window manager clamps a resize to the
 	// window's stated minimum, so unpinned the roll-up would spring open.
-	platform.SetShadedHeight(w.surf, h)
+	platform.FrameOf(w.surf).SetShadedHeight(h)
 	w.SetSize(lw, h)
 	w.shadeChanged()
 	return true
@@ -150,7 +154,7 @@ func (w *Window) unshade() {
 	w.shaded, w.shadeRestore = false, 0
 	// Unpin before resizing, or the pin clamps the window back to its
 	// rolled-up height.
-	platform.SetShadedHeight(w.surf, 0)
+	platform.FrameOf(w.surf).SetShadedHeight(0)
 	if h > 0 {
 		lw, _ := w.Size()
 		w.SetSize(lw, h)

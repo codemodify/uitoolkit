@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/codemodify/paintengine2d"
-	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
 	"github.com/codemodify/uitoolkit/widgets"
@@ -181,13 +180,10 @@ func (p *framesPage) refresh() {
 	w, h := t.win.Size()
 	sw, sh := t.win.SurfaceSize()
 
-	known := "the desktop has not said yet (everything counts as allowed)"
-	if caps&platform.CapKnown != 0 {
-		known = "maximize " + yesNo(caps.Can(platform.CapMaximize)) +
-			" · minimize " + yesNo(caps.Can(platform.CapMinimize)) +
-			" · full screen " + yesNo(caps.Can(platform.CapFullscreen)) +
-			" · window menu " + yesNo(caps.Can(platform.CapWindowMenu))
-	}
+	// What the window system will do for this window, in one line. There
+	// is no "it has not said yet" any more: the backend resolves that
+	// before the answer leaves it, so the app reads one set of facts.
+	known := caps.String()
 	p.facts.SetText(tourFacts(
 		[2]string{"backend", t.a.BackendName()},
 		[2]string{"asked for", decorPrefName(t.a.Decorations())},

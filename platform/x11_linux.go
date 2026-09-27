@@ -1177,7 +1177,8 @@ type x11Surface struct {
 	// events for managers without _NET_WM_STATE_FOCUSED. wantDeco is the
 	// requested decoration mode (_MOTIF_WM_HINTS).
 	state    WindowState
-	caps     WMCaps
+	caps     FrameCaps
+	capsSet  bool // the window manager has set _NET_WM_ALLOWED_ACTIONS
 	focused  bool
 	wantDeco Decorations
 	// motifSet: _MOTIF_WM_HINTS has been written on the window, so the
@@ -2831,9 +2832,11 @@ func (s *x11Surface) Visible() bool {
 	return s.mapped
 }
 
-func (s *x11Surface) SetFullscreen(on bool) {
-	if s.conn == nil || s.conn.dpy == nil || s.win == 0 {
-		return
+// SetFullscreen puts the window full screen, or takes it back
+// (WindowFrame, _NET_WM_STATE_FULLSCREEN).
+func (s *x11Surface) SetFullscreen(on bool) bool {
+	if s.conn == nil || s.conn.dpy == nil || s.win == 0 || !s.Caps().Has(FrameFullscreen) {
+		return false
 	}
 	action := C.long(0)
 	if on {
@@ -2842,11 +2845,14 @@ func (s *x11Surface) SetFullscreen(on bool) {
 	x11Mu.Lock()
 	C.ui_ewmh_state(s.conn.dpy, s.win, action, s.conn.atomFullscr, 0)
 	x11Mu.Unlock()
+	return true
 }
 
-func (s *x11Surface) SetMaximized(on bool) {
-	if s.conn == nil || s.conn.dpy == nil || s.win == 0 {
-		return
+// SetMaximized maximizes the window both ways, or restores it
+// (WindowFrame, _NET_WM_STATE_MAXIMIZED_VERT and _HORZ together).
+func (s *x11Surface) SetMaximized(on bool) bool {
+	if s.conn == nil || s.conn.dpy == nil || s.win == 0 || !s.Caps().Has(FrameMaximize) {
+		return false
 	}
 	action := C.long(0)
 	if on {
@@ -2855,6 +2861,7 @@ func (s *x11Surface) SetMaximized(on bool) {
 	x11Mu.Lock()
 	C.ui_ewmh_state(s.conn.dpy, s.win, action, s.conn.atomMaxVert, s.conn.atomMaxHorz)
 	x11Mu.Unlock()
+	return true
 }
 
 func (s *x11Surface) SetIMEEnabled(on bool) {
@@ -2898,7 +2905,7 @@ func x11PortalParent(win uint64) string {
 	return fmt.Sprintf("x11:%x", win)
 }
 
-// ---- client-side frame support (FrameSurface) ----------------------------
+// ---- client-side frame support (WindowFrame) ----------------------------
 
 // x11ButtonBit is a core pointer button's bit in x11Surface.buttons (wheel
 // "buttons" 4-7 are not held buttons).
@@ -3062,15 +3069,15 @@ func (s *x11Surface) readCapsLocked() []Event {
 		}
 	}
 	caps := netAllowedCaps(bits, c.supportsLocked(c.atomShowMenu))
-	if caps == s.caps {
+	if s.capsSet && caps == s.caps {
 		return nil
 	}
-	s.caps = caps
-	return []Event{{Kind: EventCapabilities, Caps: caps}}
+	s.caps, s.capsSet = caps, true
+	return []Event{{Kind: EventCapabilities, Caps: s.capsLocked()}}
 }
 
 // Decorations is the requested mode: an X11 window manager does not answer
-// (FrameSurface).
+// (WindowFrame).
 func (s *x11Surface) Decorations() Decorations {
 	if s.popup {
 		return DecorationsNone
@@ -3079,7 +3086,7 @@ func (s *x11Surface) Decorations() Decorations {
 }
 
 // RequestDecorations sets or removes _MOTIF_WM_HINTS; the window manager
-// adds or drops its frame (FrameSurface).
+// adds or drops its frame (WindowFrame).
 func (s *x11Surface) RequestDecorations(d Decorations) {
 	if s == nil || s.popup || s.closed {
 		return
@@ -3099,13 +3106,64 @@ func (s *x11Surface) RequestDecorations(d Decorations) {
 	}
 }
 
-// WindowState is the window manager's _NET_WM_STATE, decoded (FrameSurface).
+// WindowState is the window manager's _NET_WM_STATE, decoded (WindowFrame).
 func (s *x11Surface) WindowState() WindowState { return s.state }
 
-// Capabilities are the window's _NET_WM_ALLOWED_ACTIONS (FrameSurface).
+// Capabilities are the window's _NET_WM_ALLOWED_ACTIONS (WindowFrame).
 // Capabilities is what _NET_WM_ALLOWED_ACTIONS says, less what a fixed
-// window cannot have (FrameSurface).
-func (s *x11Surface) Capabilities() WMCaps { return dropResizeCaps(s.caps, s.sizing) }
+// window cannot have (WindowFrame).
+// Caps is what the window manager will do for this window now
+// (WindowFrame). X11 can do everything in the vocabulary — that is the
+// asymmetry the boundary exists to hold: keep-above, per-axis maximize and
+// lower are X11's and not Wayland's — but each one still depends on *this*
+// window manager, read from _NET_SUPPORTED every time rather than cached,
+// because a window manager can be replaced under a running window.
+func (s *x11Surface) Caps() FrameCaps {
+	if s == nil || s.closed || s.popup {
+		return 0
+	}
+	x11Mu.Lock()
+	defer x11Mu.Unlock()
+	return s.capsLocked()
+}
+
+// capsLocked is Caps with x11Mu already held.
+func (s *x11Surface) capsLocked() FrameCaps {
+	c := s.conn
+	if c == nil || c.dpy == nil || s.win == 0 {
+		return 0
+	}
+	// What the window manager grants this window. Until it has set
+	// _NET_WM_ALLOWED_ACTIONS — many managers never do — assume all four.
+	caps := frameDesktopCaps
+	if s.capsSet {
+		caps = s.caps
+	}
+	// An interactive move or resize, and a toolkit-drawn frame, need
+	// _NET_WM_MOVERESIZE and a manager that is not tiling.
+	if c.supportsLocked(c.atomMoveRes) {
+		caps |= FrameMove | FrameResize
+		if !tilingWM(c.wmName) {
+			caps |= FrameClientFrame
+		}
+	}
+	// XIconifyWindow, XLowerWindow and WM_NORMAL_HINTS are core X11: no
+	// window manager has to advertise them.
+	caps |= FrameLower | FrameShade
+	if c.supportsLocked(c.atomAbove) {
+		caps |= FrameKeepAbove
+	}
+	// Blur wants a compositing manager; KWin alone reads the colour
+	// scheme, and _NET_WM_ICON is core.
+	if c.composited && c.atomBlur != 0 {
+		caps |= FrameBlurBehind
+	}
+	if c.kwinLocked() {
+		caps |= FramePalette
+	}
+	caps |= FrameIcon
+	return dropResizeCaps(caps, s.sizing)
+}
 
 // Sizing is the window's resize policy (SizingSurface).
 func (s *x11Surface) Sizing() Sizing { return s.sizing }
@@ -3184,17 +3242,6 @@ func (s *x11Surface) placeLocked(x, y int) {
 	s.applySizeHintsLocked()
 }
 
-// SuitsClientFrame: the window manager moves and resizes on request
-// (_NET_WM_MOVERESIZE) and is not a tiling manager.
-func (s *x11Surface) SuitsClientFrame() bool {
-	if s == nil || s.conn == nil {
-		return false
-	}
-	x11Mu.Lock()
-	defer x11Mu.Unlock()
-	return s.conn.supportsLocked(s.conn.atomMoveRes) && !tilingWM(s.conn.wmName)
-}
-
 // moveResizeLocked sends _NET_WM_MOVERESIZE for the held press.
 func (s *x11Surface) moveResize(dir uint32) bool {
 	c := s.conn
@@ -3215,14 +3262,14 @@ func (s *x11Surface) moveResize(dir uint32) bool {
 	return true
 }
 
-// StartSystemMove hands the held press to the window manager for an
+// StartMove hands the held press to the window manager for an
 // interactive move (_NET_WM_MOVERESIZE, MOVE), from where it was pressed.
-func (s *x11Surface) StartSystemMove() bool { return s.moveResize(netMoveResizeMove) }
+func (s *x11Surface) StartMove() bool { return s.moveResize(netMoveResizeMove) }
 
-// StartSystemResize hands the held press to the window manager for an
+// StartResize hands the held press to the window manager for an
 // interactive resize from edges.
-func (s *x11Surface) StartSystemResize(edges Edges) bool {
-	if s.sizing == SizingFixed {
+func (s *x11Surface) StartResize(edges Edges) bool {
+	if !s.Caps().Has(FrameResize) {
 		return false
 	}
 	dir, ok := netMoveResizeDirection(edges)
@@ -3232,9 +3279,9 @@ func (s *x11Surface) StartSystemResize(edges Edges) bool {
 	return s.moveResize(dir)
 }
 
-// ShowWindowMenu asks the window manager for its window menu at p (window
+// ShowMenu asks the window manager for its window menu at p (window
 // device pixels) with _GTK_SHOW_WINDOW_MENU, where it is supported.
-func (s *x11Surface) ShowWindowMenu(p paintengine2d.Point) bool {
+func (s *x11Surface) ShowMenu(p paintengine2d.Point) bool {
 	c := s.conn
 	if c == nil || c.dpy == nil || s.win == 0 {
 		return false
@@ -3256,7 +3303,7 @@ func (s *x11Surface) ShowWindowMenu(p paintengine2d.Point) bool {
 	return true
 }
 
-// SetFrame takes the frame the toolkit draws (FrameSurface): the X window
+// SetFrame takes the frame the toolkit draws (WindowFrame): the X window
 // grows by the margin, _GTK_FRAME_EXTENTS tells the window manager how much
 // of it is shadow (KWin and Mutter honour it when snapping, tiling and
 // maximizing), an input shape keeps presses in the margin out of the
@@ -3296,7 +3343,7 @@ func (s *x11Surface) SetFrame(f Frame) {
 	}
 }
 
-// Frame is the frame last set (FrameSurface).
+// Frame is the frame last set (WindowFrame).
 func (s *x11Surface) Frame() Frame {
 	if s == nil {
 		return Frame{}
@@ -3555,14 +3602,6 @@ func (s *x11Surface) applyBlurLocked() {
 	C.ui_change_prop32(c.dpy, s.win, c.atomBlur, C.XA_CARDINAL, &rects[0], C.int(len(rects)))
 }
 
-// BlurBehindSupported reports whether the desktop blurs behind a window: on
-// X11 that is a compositing manager being there at all (KWin reads the
-// property; a plain X screen has no one to do it). The toolkit already
-// watches the compositing manager come and go (phase 3) (GlassSurface).
-func (s *x11Surface) BlurBehindSupported() bool {
-	return s != nil && s.conn != nil && s.conn.composited && s.conn.atomBlur != 0
-}
-
 // x11FlatRects is rects as the flat x, y, w, h list the C helpers take.
 func x11FlatRects(rects []FrameRect) []C.int {
 	out := make([]C.int, 0, len(rects)*4)
@@ -3595,31 +3634,33 @@ func (s *x11Surface) opaqueRects() []C.ulong {
 }
 
 // Minimize iconifies the window (XIconifyWindow).
-func (s *x11Surface) Minimize() {
-	if s.conn == nil || s.conn.dpy == nil || s.win == 0 {
-		return
+func (s *x11Surface) Minimize() bool {
+	if s.conn == nil || s.conn.dpy == nil || s.win == 0 || !s.Caps().Has(FrameMinimize) {
+		return false
 	}
 	x11Mu.Lock()
 	C.ui_iconify(s.conn.dpy, s.win)
 	x11Mu.Unlock()
+	return true
 }
 
-// Lower puts the window below the others (a title-bar action that only X11
-// offers).
-func (s *x11Surface) Lower() {
-	if s.conn == nil || s.conn.dpy == nil || s.win == 0 {
-		return
+// Lower puts the window below the others (XLowerWindow — a title-bar
+// action that only X11 offers).
+func (s *x11Surface) Lower() bool {
+	if s.conn == nil || s.conn.dpy == nil || s.win == 0 || !s.Caps().Has(FrameLower) {
+		return false
 	}
 	x11Mu.Lock()
 	C.ui_lower(s.conn.dpy, s.win)
 	x11Mu.Unlock()
+	return true
 }
 
-// ToggleMaximizeAxis maximizes (or restores) one way only: KWin's "Maximize
+// MaximizeAxis maximizes (or restores) one way only: KWin's "Maximize
 // (vertical only)" title-bar action, which only X11 can express.
-func (s *x11Surface) ToggleMaximizeAxis(vertical bool) {
-	if s.conn == nil || s.conn.dpy == nil || s.win == 0 {
-		return
+func (s *x11Surface) MaximizeAxis(vertical bool) bool {
+	if s.conn == nil || s.conn.dpy == nil || s.win == 0 || !s.Caps().Has(FrameMaximizeAxis) {
+		return false
 	}
 	atom := s.conn.atomMaxHorz
 	if vertical {
@@ -3628,29 +3669,17 @@ func (s *x11Surface) ToggleMaximizeAxis(vertical bool) {
 	x11Mu.Lock()
 	C.ui_ewmh_state(s.conn.dpy, s.win, 2, atom, 0) // _NET_WM_STATE_TOGGLE
 	x11Mu.Unlock()
-}
-
-// KeepAboveSupported reports whether the window manager does
-// _NET_WM_STATE_ABOVE (AboveSurface). It is read from _NET_SUPPORTED every
-// time rather than cached: the window manager can be replaced under a
-// running window, and a caption button that says it can must be right.
-func (s *x11Surface) KeepAboveSupported() bool {
-	if s == nil || s.conn == nil || s.conn.dpy == nil || s.win == 0 || s.popup {
-		return false
-	}
-	x11Mu.Lock()
-	defer x11Mu.Unlock()
-	return s.conn.supportsLocked(s.conn.atomAbove)
+	return true
 }
 
 // SetKeepAbove asks the window manager to keep the window above the others,
-// or to stop (AboveSurface). The answer comes back as a PropertyNotify on
-// _NET_WM_STATE and reaches the application as EventWindowState: a manager
-// that refuses simply never sets the state, and the caption button follows
-// the property rather than the request.
-func (s *x11Surface) SetKeepAbove(on bool) {
-	if s == nil || s.conn == nil || s.conn.dpy == nil || s.win == 0 {
-		return
+// or to stop (WindowFrame, _NET_WM_STATE_ABOVE). The answer comes back as a
+// PropertyNotify on _NET_WM_STATE and reaches the application as
+// EventWindowState: a manager that refuses simply never sets the state, and
+// the caption button follows the property rather than the request.
+func (s *x11Surface) SetKeepAbove(on bool) bool {
+	if s == nil || s.conn == nil || s.conn.dpy == nil || s.win == 0 || !s.Caps().Has(FrameKeepAbove) {
+		return false
 	}
 	action := C.long(0) // _NET_WM_STATE_REMOVE
 	if on {
@@ -3659,22 +3688,26 @@ func (s *x11Surface) SetKeepAbove(on bool) {
 	x11Mu.Lock()
 	C.ui_ewmh_state(s.conn.dpy, s.win, action, s.conn.atomAbove, 0)
 	x11Mu.Unlock()
+	return true
 }
 
 // SetShadedHeight pins the window to h logical pixels tall while it is
-// rolled up, 0 to let it grow again (ShadeSurface). Without the pin KWin
+// rolled up, 0 to let it grow again (FrameShade). Without the pin KWin
 // clamps the roll-up straight back to WM_NORMAL_HINTS' minimum height —
 // every non-popup X11 window states one — and the window would spring open
 // again the moment it was told to close.
-func (s *x11Surface) SetShadedHeight(h int) {
+func (s *x11Surface) SetShadedHeight(h int) bool {
 	if s == nil || s.closed {
-		return
+		return false
 	}
-	if h < 0 {
-		h = 0
+	h = max(h, 0)
+	// Unpinning always works: a window must never be left rolled up
+	// because the capability went away under it.
+	if h > 0 && !s.Caps().Has(FrameShade) {
+		return false
 	}
 	if h == s.shadeH {
-		return
+		return true
 	}
 	s.shadeH = h
 	if h > 0 {
@@ -3683,13 +3716,8 @@ func (s *x11Surface) SetShadedHeight(h int) {
 	x11Mu.Lock()
 	s.applySizeHintsLocked()
 	x11Mu.Unlock()
+	return true
 }
 
-// x11Surface is a full FrameSurface (compile-time check).
-var _ FrameSurface = (*x11Surface)(nil)
-
-// x11Surface keeps windows above the others and rolls them up.
-var (
-	_ AboveSurface = (*x11Surface)(nil)
-	_ ShadeSurface = (*x11Surface)(nil)
-)
+// x11Surface is a full WindowFrame (compile-time check).
+var _ WindowFrame = (*x11Surface)(nil)

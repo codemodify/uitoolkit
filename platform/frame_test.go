@@ -152,22 +152,30 @@ func TestXdgStateFromMask(t *testing.T) {
 	}
 }
 
-func TestWMCaps(t *testing.T) {
-	var unknown WMCaps
-	if !unknown.Can(CapMinimize) || !unknown.Can(CapWindowMenu) {
-		t.Error("an unknown desktop is assumed to do everything")
+func TestFrameCaps(t *testing.T) {
+	c := xdgFrameCapsFromMask(1<<1 | 1<<2)
+	if !c.Has(FrameMenu|FrameMaximize) || c.Has(FrameMinimize) || c.Has(FrameFullscreen) {
+		t.Errorf("menu+maximize %v", c)
 	}
-	c := xdgCapsFromMask(1<<1 | 1<<2)
-	if !c.Can(CapWindowMenu) || !c.Can(CapMaximize) || c.Can(CapMinimize) || c.Can(CapFullscreen) {
-		t.Errorf("menu+maximize %08b", c)
+	// An empty array means "none". "Nobody has said yet" is not a value
+	// the boundary carries any more: the backend resolves it (see
+	// frameDesktopCaps), so a reader never has to hold a tri-state.
+	if c := xdgFrameCapsFromMask(0); c != 0 {
+		t.Errorf("empty caps %v", c)
 	}
-	// An empty array means "none", not "unknown".
-	if c := xdgCapsFromMask(0); c.Can(CapMinimize) || c&CapKnown == 0 {
-		t.Errorf("empty caps %08b", c)
+	all := xdgFrameCapsFromMask(1<<1 | 1<<2 | 1<<3 | 1<<4)
+	if all != frameDesktopCaps {
+		t.Errorf("all %v, want %v", all, frameDesktopCaps)
 	}
-	all := xdgCapsFromMask(1<<1 | 1<<2 | 1<<3 | 1<<4)
-	if !all.Can(CapWindowMenu | CapMaximize | CapFullscreen | CapMinimize) {
-		t.Errorf("all %08b", all)
+	if got := (FrameMove | FrameKeepAbove).String(); got != "move keep-above" {
+		t.Errorf("String %q", got)
+	}
+	if FrameCaps(0).String() != "none" {
+		t.Error("no capability at all")
+	}
+	// Has asks for every bit, not any.
+	if (FrameMove).Has(FrameMove | FrameResize) {
+		t.Error("Has is all of them")
 	}
 }
 
@@ -194,11 +202,14 @@ func TestNetWMState(t *testing.T) {
 
 func TestNetAllowedCaps(t *testing.T) {
 	c := netAllowedCaps(netActionMinimize|netActionMaximizeHorz|netActionMaximizeVert, true)
-	if !c.Can(CapMinimize) || !c.Can(CapMaximize) || !c.Can(CapWindowMenu) || c.Can(CapFullscreen) {
-		t.Errorf("caps %08b", c)
+	if !c.Has(FrameMinimize|FrameMaximize|FrameMenu|FrameMaximizeAxis) || c.Has(FrameFullscreen) {
+		t.Errorf("caps %v", c)
 	}
-	if c := netAllowedCaps(netActionMaximizeVert, false); c.Can(CapMaximize) || c.Can(CapWindowMenu) {
-		t.Errorf("one-way maximize is not maximize %08b", c)
+	// One way only is not maximize, but it is maximize-on-one-axis, which
+	// X11 has and xdg-shell does not.
+	c = netAllowedCaps(netActionMaximizeVert, false)
+	if c.Has(FrameMaximize) || c.Has(FrameMenu) || !c.Has(FrameMaximizeAxis) {
+		t.Errorf("one-way maximize is not maximize %v", c)
 	}
 }
 
@@ -266,9 +277,9 @@ func TestResizeCursorsOnEveryBackend(t *testing.T) {
 	}
 }
 
-func TestOffscreenFrameSurface(t *testing.T) {
+func TestOffscreenWindowFrame(t *testing.T) {
 	o := NewOffscreen(WindowOptions{Width: 100, Height: 80})
-	var fs FrameSurface = o
+	fs := FrameOf(o)
 	if fs.Decorations() != DecorationsServer {
 		t.Fatalf("default %v", fs.Decorations())
 	}
@@ -280,14 +291,15 @@ func TestOffscreenFrameSurface(t *testing.T) {
 	if len(evs) != 1 || evs[0].Kind != EventDecorations || evs[0].Decor != DecorationsClient {
 		t.Fatalf("decoration event %+v", evs)
 	}
-	if !fs.StartSystemMove() || !fs.StartSystemResize(EdgeBottom|EdgeRight) || fs.StartSystemResize(EdgeTop|EdgeBottom) {
+	if !fs.StartMove() || !fs.StartResize(EdgeBottom|EdgeRight) || fs.StartResize(EdgeTop|EdgeBottom) {
 		t.Fatal("move / resize")
 	}
-	if !fs.ShowWindowMenu(paintengine2d.Pt(3, 4)) {
+	if !fs.ShowMenu(paintengine2d.Pt(3, 4)) {
 		t.Fatal("menu")
 	}
-	fs.Minimize()
-	SetMaximized(o, true)
+	if !fs.Minimize() || !fs.SetMaximized(true) {
+		t.Fatal("minimize / maximize")
+	}
 	calls := o.FrameCalls()
 	if calls.Moves != 1 || len(calls.Resizes) != 1 || calls.Resizes[0] != EdgeBottom|EdgeRight ||
 		len(calls.Menus) != 1 || calls.Minimizes != 1 || len(calls.Maximizes) != 1 {
@@ -301,17 +313,140 @@ func TestOffscreenFrameSurface(t *testing.T) {
 		t.Fatalf("state event %+v", evs)
 	}
 	o.SetWindowMenu(false)
-	if fs.ShowWindowMenu(paintengine2d.Pt(0, 0)) {
+	if fs.ShowMenu(paintengine2d.Pt(0, 0)) {
 		t.Fatal("no window menu")
 	}
-	o.SimulateCapabilities(CapMaximize)
-	if fs.Capabilities().Can(CapMinimize) || !fs.Capabilities().Can(CapMaximize) {
-		t.Fatalf("caps %08b", fs.Capabilities())
+	if fs.Caps().Has(FrameMenu) {
+		t.Fatal("a desktop with no window menu says so")
+	}
+	o.SimulateCapabilities(FrameMaximize)
+	if fs.Caps().Has(FrameMinimize) || !fs.Caps().Has(FrameMaximize) {
+		t.Fatalf("caps %v", fs.Caps())
+	}
+	// A request the desktop will not grant is refused, not silently
+	// dropped: that is the whole point of the capability being data.
+	if fs.Minimize() {
+		t.Fatal("minimize was granted by a desktop that cannot")
 	}
 	if pop := NewOffscreen(WindowOptions{Popup: true}); pop.Decorations() != DecorationsNone {
 		t.Fatal("a popup has no frame")
 	}
-	if SurfaceDecorations(NewOffscreen(WindowOptions{Decorations: DecorationsClient})) != DecorationsClient {
+	if FrameOf(NewOffscreen(WindowOptions{Decorations: DecorationsClient})).Decorations() != DecorationsClient {
 		t.Fatal("the option asks at creation")
+	}
+}
+
+// A surface with no frame seam answers for everything rather than being
+// absent: FrameOf never returns nil, so a caller has one thing to ask.
+func TestFrameOfSurfaceWithoutAFrame(t *testing.T) {
+	f := FrameOf(nil)
+	if f == nil {
+		t.Fatal("FrameOf is never nil")
+	}
+	if f.Caps() != 0 || f.Decorations() != DecorationsServer || f.WindowState() != (WindowState{}) {
+		t.Errorf("caps %v deco %v state %+v", f.Caps(), f.Decorations(), f.WindowState())
+	}
+	if f.StartMove() || f.StartResize(EdgeTop) || f.ShowMenu(paintengine2d.Pt(0, 0)) ||
+		f.Minimize() || f.SetMaximized(true) || f.MaximizeAxis(true) || f.SetFullscreen(true) ||
+		f.SetKeepAbove(true) || f.Lower() || f.SetShadedHeight(10) ||
+		f.SetPalette("/x.colors") || f.SetIcon(nil) {
+		t.Error("a surface with no frame granted something")
+	}
+	f.SetFrame(Frame{Alpha: true})
+	if !f.Frame().Zero() {
+		t.Error("nothing was kept")
+	}
+	f.RequestDecorations(DecorationsClient)
+	if f.Decorations() != DecorationsServer {
+		t.Error("nothing was negotiated")
+	}
+}
+
+// Every request the frame seam offers is gated by the capability that
+// names it, both ways: with the capability the request is made, without it
+// the request is refused rather than quietly dropped.
+//
+// This is the property the whole shape exists for. Under the old nine
+// interfaces a caller that forgot a type assertion, or forgot the
+// *Supported() predicate inside the interface it had just found, got
+// silence — a caption button that did nothing, which is a bug this repo
+// has shipped more than once. There is nowhere to forget now: the
+// capability is data on one object, and the request answers for itself.
+func TestFrameCapsGateEveryRequest(t *testing.T) {
+	// off switches the capability off on a fresh offscreen window, on
+	// switches it on; do makes the request. A nil off means the offscreen
+	// desktop can always do it and only a fixed window cannot.
+	cases := []struct {
+		name string
+		cap  FrameCaps
+		off  func(*Offscreen)
+		on   func(*Offscreen)
+		do   func(WindowFrame) bool
+	}{
+		{"move", FrameMove,
+			func(o *Offscreen) { o.SetMoveResize(false) }, nil,
+			func(f WindowFrame) bool { return f.StartMove() }},
+		{"resize", FrameResize,
+			func(o *Offscreen) { o.SetMoveResize(false) }, nil,
+			func(f WindowFrame) bool { return f.StartResize(EdgeBottom | EdgeRight) }},
+		{"menu", FrameMenu,
+			func(o *Offscreen) { o.SetWindowMenu(false) }, nil,
+			func(f WindowFrame) bool { return f.ShowMenu(paintengine2d.Pt(1, 2)) }},
+		{"minimize", FrameMinimize,
+			func(o *Offscreen) { o.SimulateCapabilities(0) }, nil,
+			func(f WindowFrame) bool { return f.Minimize() }},
+		{"maximize", FrameMaximize,
+			func(o *Offscreen) { o.SimulateCapabilities(0) }, nil,
+			func(f WindowFrame) bool { return f.SetMaximized(true) }},
+		{"fullscreen", FrameFullscreen,
+			func(o *Offscreen) { o.SimulateCapabilities(0) }, nil,
+			func(f WindowFrame) bool { return f.SetFullscreen(true) }},
+		{"maximize-axis", FrameMaximizeAxis,
+			func(o *Offscreen) { o.SetSizing(SizingFixed) }, nil,
+			func(f WindowFrame) bool { return f.MaximizeAxis(true) }},
+		{"shade", FrameShade,
+			func(o *Offscreen) { o.SetSizing(SizingFixed) }, nil,
+			func(f WindowFrame) bool { return f.SetShadedHeight(30) }},
+		{"keep-above", FrameKeepAbove,
+			nil, func(o *Offscreen) { o.SimulateKeepAbove(true) },
+			func(f WindowFrame) bool { return f.SetKeepAbove(true) }},
+		{"palette", FramePalette,
+			nil, func(o *Offscreen) { o.SimulateDecorationPalette(true) },
+			func(f WindowFrame) bool { return f.SetPalette("/cache/a.colors") }},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			// Without the capability: not in Caps, and refused.
+			o := NewOffscreen(WindowOptions{Width: 200, Height: 140})
+			if c.off != nil {
+				c.off(o)
+			}
+			if f := FrameOf(o); f.Caps().Has(c.cap) {
+				t.Fatalf("%v is still in %v", c.cap, f.Caps())
+			} else if c.do(f) {
+				t.Fatalf("%v was granted by a desktop that says it cannot", c.cap)
+			}
+			// With it: in Caps, and granted.
+			o = NewOffscreen(WindowOptions{Width: 200, Height: 140})
+			if c.on != nil {
+				c.on(o)
+			}
+			if f := FrameOf(o); !f.Caps().Has(c.cap) {
+				t.Fatalf("%v missing from %v", c.cap, f.Caps())
+			} else if !c.do(f) {
+				t.Fatalf("%v was refused by a desktop that says it can", c.cap)
+			}
+		})
+	}
+}
+
+// Unpinning a rolled-up window always works, even where the pin itself
+// cannot be taken. A window must never be stuck rolled up because the
+// capability went away under it (app.Window.unshadeIfStuck relies on this).
+func TestShadeUnpinAlwaysWorks(t *testing.T) {
+	o := NewOffscreen(WindowOptions{Width: 200, Height: 140})
+	o.SetSizing(SizingFixed)
+	if !FrameOf(o).SetShadedHeight(0) {
+		t.Fatal("unpinning was refused")
 	}
 }

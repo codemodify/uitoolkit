@@ -118,42 +118,54 @@ func (c *wlConn) destroyDressLocked() {
 	c.iconMan = nil
 }
 
-// DecorationPaletteSupported reports whether KWin advertised its palette
-// manager (DecorationPaletteSurface).
-func (s *wlSurface) DecorationPaletteSupported() bool {
+// paletteSupported reports whether KWin advertised its palette manager
+// (FramePalette). Only KWin offers org_kde_kwin_server_decoration_palette;
+// on any other compositor a window under the desktop's frame cannot be in
+// its own colours, and the look has to stand without it.
+func (s *wlSurface) paletteSupported() bool {
 	return s != nil && !s.popup && s.conn != nil && s.conn.paletteMan != nil
 }
 
-// SetDecorationPalette names the colour scheme KWin paints the window's
-// frame with (DecorationPaletteSurface). The palette belongs to the
-// wl_surface, so it outlives a hidden window's role.
-func (s *wlSurface) SetDecorationPalette(path string) {
+// iconSupported reports whether the compositor serves xdg-toplevel-icon-v1
+// (FrameIcon).
+func (s *wlSurface) iconSupported() bool {
+	return s != nil && !s.popup && s.conn != nil && s.conn.iconMan != nil
+}
+
+// SetPalette names the colour scheme KWin paints the window's frame with
+// (WindowFrame). The palette belongs to the wl_surface, so it outlives a
+// hidden window's role.
+func (s *wlSurface) SetPalette(path string) bool {
 	if s == nil || s.closed || s.surf == nil || s.popup || s.conn == nil {
-		return
+		return false
 	}
-	plan := planPalette(s.conn.paletteMan != nil, s.dress.palette != nil, s.dress.paletteSent, path)
+	if !s.paletteSupported() {
+		return false
+	}
+	plan := planPalette(true, s.dress.palette != nil, s.dress.paletteSent, path)
 	if plan.create {
 		s.dress.palette = C.ui_wl_palette_create(s.conn.paletteMan, s.surf)
 		if s.dress.palette == nil {
-			return
+			return false
 		}
 	}
 	if !plan.set {
-		return
+		return true
 	}
 	cp := C.CString(path)
 	C.ui_wl_palette_set(s.dress.palette, cp)
 	C.free(unsafe.Pointer(cp))
 	s.dress.paletteSent = path
 	C.ui_wl_flush_dress(s.conn.dpy)
+	return true
 }
 
-// SetIcon gives the toplevel its icon (IconSurface). The icon is sent now
+// SetIcon gives the toplevel its icon (WindowFrame). The icon is sent now
 // if the window has a role and again whenever it gets a new one (Show
 // after Hide).
-func (s *wlSurface) SetIcon(images []*paintengine2d.Image) {
-	if s == nil || s.closed || s.popup {
-		return
+func (s *wlSurface) SetIcon(images []*paintengine2d.Image) bool {
+	if s == nil || s.closed || s.popup || !s.iconSupported() {
+		return false
 	}
 	s.dress.icon = iconImages(images)
 	s.applyIconLocked()
@@ -164,6 +176,7 @@ func (s *wlSurface) SetIcon(images []*paintengine2d.Image) {
 		}
 		C.ui_wl_flush_dress(s.conn.dpy)
 	}
+	return true
 }
 
 // applyIconLocked puts the icon on the toplevel: a new icon object with a
@@ -221,7 +234,6 @@ func (s *wlSurface) closeDress() {
 	s.dress.iconObj, s.dress.iconBufs = nil, nil
 }
 
-var (
-	_ DecorationPaletteSurface = (*wlSurface)(nil)
-	_ IconSurface              = (*wlSurface)(nil)
-)
+// The palette and the icon are part of the one frame seam
+// ([WindowFrame]); the compile-time check lives beside the rest of it in
+// wayland_linux.go.

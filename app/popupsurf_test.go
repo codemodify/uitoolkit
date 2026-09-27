@@ -552,7 +552,7 @@ func TestAeroGlassFrameKeepsContentOpaque(t *testing.T) {
 	w.SetContent(widgets.NewLabel("content"))
 	a.PumpOnce()
 	img := w.Capture()
-	if f := platform.SurfaceFrame(w.Surface()); f.Blur == nil {
+	if f := platform.FrameOf(w.Surface()).Frame(); f.Blur == nil {
 		t.Fatal("no blur asked for")
 	}
 	cb := w.geom.content.Translate(paintengine2d.Pt(-w.windowBox().Min.X, -w.windowBox().Min.Y))

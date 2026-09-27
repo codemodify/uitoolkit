@@ -66,15 +66,18 @@ func limitsFor(sizing Sizing, opts WindowOptions, w, h int) SizeLimits {
 	}
 }
 
-// dropResizeCaps takes the actions a fixed window does not have out of what
-// the desktop said it can do. Maximizing is a resize, so a window that may
-// not be resized may not be maximized either — and a caption button that
-// cannot work should not be drawn (widgets.WindowControls.Shown).
-func dropResizeCaps(c WMCaps, sizing Sizing) WMCaps {
+// dropResizeCaps takes out what a fixed window cannot have. Maximizing is
+// a resize, and so is an interactive resize from an edge and rolling the
+// window up to its title bar — a window pinned to one size has said its
+// height is not to be touched. A caption button that cannot work should
+// not be drawn (widgets.WindowControls.Shown), which is only possible
+// because the policy is folded in here rather than left for each caller to
+// remember.
+func dropResizeCaps(c FrameCaps, sizing Sizing) FrameCaps {
 	if sizing != SizingFixed {
 		return c
 	}
-	return (c | CapKnown) &^ CapMaximize
+	return c &^ (FrameMaximize | FrameMaximizeAxis | FrameResize | FrameShade)
 }
 
 // SizingSurface is an optional Surface capability: the window's resize

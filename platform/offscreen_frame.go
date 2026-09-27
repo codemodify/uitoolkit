@@ -14,6 +14,9 @@ type FrameCalls struct {
 	Maximizes  []bool
 	Fullscreen []bool
 	Lowers     int
+	// AxisMaximizes are the one-axis maximize requests, in order (true:
+	// vertically).
+	AxisMaximizes []bool
 	// Aboves are the keep-above requests, in order, and ShadeHeights the
 	// heights a rolled-up window was pinned to (0 unpins).
 	Aboves       []bool
@@ -30,14 +33,15 @@ type FrameCalls struct {
 	Icons    [][]int
 }
 
-// offscreenFrame is Offscreen's FrameSurface state: a desktop that grants
+// offscreenFrame is Offscreen's WindowFrame state: a desktop that grants
 // whatever it is asked (a client frame included) and whose window menu can be
 // switched off to exercise the toolkit's fallback.
 type offscreenFrame struct {
 	deco         Decorations
 	decoSet      bool // always set by NewOffscreen; a zero Offscreen reports Server
 	state        WindowState
-	caps         WMCaps
+	caps         FrameCaps
+	capsSet      bool // the simulated desktop has said (SimulateCapabilities)
 	calls        FrameCalls
 	noWindowMenu bool
 	noMoveResize bool
@@ -70,7 +74,7 @@ type offscreenFrame struct {
 }
 
 // Decorations is the requested mode; an offscreen window has no desktop
-// frame, so Server (and Auto) is reported as asked (FrameSurface).
+// frame, so Server (and Auto) is reported as asked (WindowFrame).
 func (o *Offscreen) Decorations() Decorations {
 	if !o.frame.decoSet {
 		return DecorationsServer
@@ -78,7 +82,7 @@ func (o *Offscreen) Decorations() Decorations {
 	return o.frame.deco
 }
 
-// RequestDecorations records d and grants it (FrameSurface).
+// RequestDecorations records d and grants it (WindowFrame).
 func (o *Offscreen) RequestDecorations(d Decorations) {
 	d = requestedDecorations(d)
 	o.frame.calls.Requests = append(o.frame.calls.Requests, d)
@@ -89,12 +93,53 @@ func (o *Offscreen) RequestDecorations(d Decorations) {
 	o.queue = append(o.queue, Event{Kind: EventDecorations, Decor: d})
 }
 
-// WindowState is the simulated state (FrameSurface).
+// WindowState is the simulated state (WindowFrame).
 func (o *Offscreen) WindowState() WindowState { return o.frame.state }
 
-// Capabilities are the simulated desktop's (FrameSurface). A fixed window
-// cannot be maximized, whatever the desktop can do.
-func (o *Offscreen) Capabilities() WMCaps { return dropResizeCaps(o.frame.caps, o.sizing) }
+// Caps is what the simulated desktop will do for the window
+// (WindowFrame). The offscreen backend is the third implementation of this
+// boundary and the one every headless test runs against, so it answers the
+// whole of it and answers honestly: everything a test has switched on, and
+// nothing it has not.
+//
+// The switches are the point. A real desktop's capabilities change under a
+// running window — a compositor withholds minimize, a window manager is
+// replaced, KWin drops blur when effects go off — and the only way to test
+// that the layer above degrades instead of drawing a dead control is to be
+// able to take a capability away. SimulateCapabilities, SimulateKeepAbove,
+// SimulateGlass, SimulateDecorationPalette, SetWindowMenu and SetMoveResize
+// each take one away.
+func (o *Offscreen) Caps() FrameCaps {
+	if o == nil {
+		return 0
+	}
+	// What the simulated desktop grants. Until a test has said, all four,
+	// which is what a real backend assumes before its desktop has spoken.
+	c := frameDesktopCaps
+	if o.frame.capsSet {
+		c = o.frame.caps
+	}
+	if o.frame.noWindowMenu {
+		c &^= FrameMenu
+	}
+	if !o.frame.noMoveResize {
+		c |= FrameMove | FrameResize | FrameClientFrame
+	}
+	// The simulated desktop always stacks, rolls up and dresses windows:
+	// it is a desktop with no protocol to be short of, so a test that
+	// wants the *absence* of one asks for it.
+	c |= FrameLower | FrameMaximizeAxis | FrameShade | FrameIcon
+	if o.frame.above {
+		c |= FrameKeepAbove
+	}
+	if o.frame.glass {
+		c |= FrameBlurBehind
+	}
+	if o.frame.palette {
+		c |= FramePalette
+	}
+	return dropResizeCaps(c, o.sizing)
+}
 
 // Sizing is the window's resize policy (SizingSurface).
 func (o *Offscreen) Sizing() Sizing { return o.sizing }
@@ -112,32 +157,29 @@ func (o *Offscreen) SetSizing(s Sizing) {
 // height pin of a rolled-up window included.
 func (o *Offscreen) SizeLimits() SizeLimits { return shadePin(o.limits, o.frame.shadeH) }
 
-// SuitsClientFrame is true: the simulated desktop moves and resizes.
-func (o *Offscreen) SuitsClientFrame() bool { return !o.frame.noMoveResize }
-
-// StartSystemMove records a move (FrameSurface).
-func (o *Offscreen) StartSystemMove() bool {
-	if o.frame.noMoveResize {
+// StartMove records a move (WindowFrame).
+func (o *Offscreen) StartMove() bool {
+	if !o.Caps().Has(FrameMove) {
 		return false
 	}
 	o.frame.calls.Moves++
 	return true
 }
 
-// StartSystemResize records a resize from edges (FrameSurface). A fixed
-// window refuses one, as a desktop does.
-func (o *Offscreen) StartSystemResize(edges Edges) bool {
-	if o.frame.noMoveResize || !edges.Valid() || o.sizing == SizingFixed {
+// StartResize records a resize from edges (WindowFrame). A fixed window
+// refuses one, as a desktop does.
+func (o *Offscreen) StartResize(edges Edges) bool {
+	if !o.Caps().Has(FrameResize) || !edges.Valid() {
 		return false
 	}
 	o.frame.calls.Resizes = append(o.frame.calls.Resizes, edges)
 	return true
 }
 
-// ShowWindowMenu records the request; false when the simulated desktop has
-// no window menu (SetWindowMenu).
-func (o *Offscreen) ShowWindowMenu(p paintengine2d.Point) bool {
-	if o.frame.noWindowMenu || !o.frame.caps.Can(CapWindowMenu) {
+// ShowMenu records the request; false when the simulated desktop has no
+// window menu (SetWindowMenu).
+func (o *Offscreen) ShowMenu(p paintengine2d.Point) bool {
+	if !o.Caps().Has(FrameMenu) {
 		return false
 	}
 	o.frame.calls.Menus = append(o.frame.calls.Menus, p)
@@ -146,7 +188,7 @@ func (o *Offscreen) ShowWindowMenu(p paintengine2d.Point) bool {
 
 // SetFrame takes the frame the toolkit draws: the pixmap grows by its
 // margin at once, so the window can paint the shadow it just asked for
-// (FrameSurface).
+// (WindowFrame).
 func (o *Offscreen) SetFrame(f Frame) {
 	if o == nil || f.Same(o.frame.frame) {
 		return
@@ -156,7 +198,7 @@ func (o *Offscreen) SetFrame(f Frame) {
 	o.resizeSurface()
 }
 
-// Frame is the frame last set (FrameSurface).
+// Frame is the frame last set (WindowFrame).
 func (o *Offscreen) Frame() Frame {
 	if o == nil {
 		return Frame{}
@@ -182,41 +224,72 @@ func (o *Offscreen) resizeSurface() {
 	o.img = paintengine2d.NewImage(max(w, 1), max(h, 1))
 }
 
-// Minimize records the request (FrameSurface).
-func (o *Offscreen) Minimize() { o.frame.calls.Minimizes++ }
+// Minimize records the request (WindowFrame).
+func (o *Offscreen) Minimize() bool {
+	if !o.Caps().Has(FrameMinimize) {
+		return false
+	}
+	o.frame.calls.Minimizes++
+	return true
+}
 
-// Lower records the request (Lowerer).
-func (o *Offscreen) Lower() { o.frame.calls.Lowers++ }
+// Lower records the request (WindowFrame).
+func (o *Offscreen) Lower() bool {
+	if !o.Caps().Has(FrameLower) {
+		return false
+	}
+	o.frame.calls.Lowers++
+	return true
+}
 
 // SetMaximized records the request and, like a compositor, answers with
-// the new state (DesktopSurface).
-func (o *Offscreen) SetMaximized(on bool) {
+// the new state (WindowFrame).
+func (o *Offscreen) SetMaximized(on bool) bool {
+	if !o.Caps().Has(FrameMaximize) {
+		return false
+	}
 	o.frame.calls.Maximizes = append(o.frame.calls.Maximizes, on)
 	st := o.frame.state
 	st.Maximized = on
 	o.SimulateWindowState(st)
+	return true
+}
+
+// MaximizeAxis maximizes or restores one way only (WindowFrame). The
+// simulated desktop answers with the state, as it does for SetMaximized:
+// a window maximized both ways is Maximized, one way is not.
+func (o *Offscreen) MaximizeAxis(vertical bool) bool {
+	if !o.Caps().Has(FrameMaximizeAxis) {
+		return false
+	}
+	o.frame.calls.AxisMaximizes = append(o.frame.calls.AxisMaximizes, vertical)
+	return true
 }
 
 // SetFullscreen records the request and answers with the new state
-// (DesktopSurface).
-func (o *Offscreen) SetFullscreen(on bool) {
+// (WindowFrame).
+func (o *Offscreen) SetFullscreen(on bool) bool {
+	if !o.Caps().Has(FrameFullscreen) {
+		return false
+	}
 	o.frame.calls.Fullscreen = append(o.frame.calls.Fullscreen, on)
 	st := o.frame.state
 	st.Fullscreen = on
 	o.SimulateWindowState(st)
+	return true
 }
 
-// KeepAboveSupported is whether the simulated desktop can keep a window
-// above the others (AboveSurface; SimulateKeepAbove switches it).
-func (o *Offscreen) KeepAboveSupported() bool { return o != nil && o.frame.above }
-
 // SetKeepAbove records the request and, like a window manager that grants
-// it, answers with the new state (AboveSurface).
-func (o *Offscreen) SetKeepAbove(on bool) {
+// it, answers with the new state (WindowFrame).
+func (o *Offscreen) SetKeepAbove(on bool) bool {
+	if !o.Caps().Has(FrameKeepAbove) {
+		return false
+	}
 	o.frame.calls.Aboves = append(o.frame.calls.Aboves, on)
 	st := o.frame.state
 	st.KeepAbove = on
 	o.SimulateWindowState(st)
+	return true
 }
 
 // SimulateKeepAbove switches whether the simulated desktop can keep a
@@ -229,24 +302,25 @@ func (o *Offscreen) SimulateKeepAbove(can bool) {
 }
 
 // SetShadedHeight records the height a rolled-up window is pinned to and
-// states it as a limit, exactly as the real backends do (ShadeSurface).
-func (o *Offscreen) SetShadedHeight(h int) {
-	if o == nil || h < 0 {
-		h = max(h, 0)
+// states it as a limit, exactly as the real backends do (FrameShade).
+func (o *Offscreen) SetShadedHeight(h int) bool {
+	if o == nil {
+		return false
 	}
-	if o == nil || h == o.frame.shadeH {
-		return
+	h = max(h, 0)
+	// Unpinning always works: a window must never be left rolled up
+	// because the capability went away under it.
+	if h > 0 && !o.Caps().Has(FrameShade) {
+		return false
+	}
+	if h == o.frame.shadeH {
+		return true
 	}
 	o.frame.shadeH = h
 	o.frame.calls.ShadeHeights = append(o.frame.calls.ShadeHeights, h)
 	o.limits = limitsFor(o.sizing, o.opts, o.frame.geomLW, o.frame.geomLH)
+	return true
 }
-
-// SizeLimits already folds the pin in; see SetShadedHeight.
-var (
-	_ AboveSurface = (*Offscreen)(nil)
-	_ ShadeSurface = (*Offscreen)(nil)
-)
 
 // FrameCalls returns what the app asked the simulated desktop to do.
 func (o *Offscreen) FrameCalls() FrameCalls { return o.frame.calls }
@@ -261,15 +335,18 @@ func (o *Offscreen) SimulateWindowState(st WindowState) {
 	o.queue = append(o.queue, Event{Kind: EventWindowState, State: st})
 }
 
-// SimulateCapabilities sets what the simulated desktop can do and queues
-// EventCapabilities (tests).
-func (o *Offscreen) SimulateCapabilities(c WMCaps) {
-	c |= CapKnown
-	if c == o.frame.caps {
+// SimulateCapabilities sets which of the four per-window capabilities the
+// simulated desktop grants — the window menu, minimize, maximize, full
+// screen — and queues EventCapabilities (tests). Anything else in c is
+// ignored: the rest of [FrameCaps] is what the *backend* can do, and the
+// offscreen backend's own switches say that.
+func (o *Offscreen) SimulateCapabilities(c FrameCaps) {
+	c &= frameDesktopCaps
+	if o.frame.capsSet && c == o.frame.caps {
 		return
 	}
-	o.frame.caps = c
-	o.queue = append(o.queue, Event{Kind: EventCapabilities, Caps: c})
+	o.frame.caps, o.frame.capsSet = c, true
+	o.queue = append(o.queue, Event{Kind: EventCapabilities, Caps: o.Caps()})
 }
 
 // SimulateDecorations answers with mode d as a compositor may on its own
@@ -291,13 +368,9 @@ func (o *Offscreen) SimulateCompositing(on bool) {
 	o.SimulateWindowState(st)
 }
 
-// BlurBehindSupported is whether the simulated desktop blurs behind a
-// window (GlassSurface; SimulateGlass switches it).
-func (o *Offscreen) BlurBehindSupported() bool { return o != nil && o.frame.glass }
-
 // SimulateGlass switches the simulated desktop's blur-behind on or off, so
 // a test can run both the real-glass path and the painted fallback
-// (GlassSurface). It takes effect for the next frame the window asks for.
+// (FrameBlurBehind). It takes effect for the next frame the window asks for.
 func (o *Offscreen) SimulateGlass(on bool) {
 	if o != nil {
 		o.frame.glass = on
@@ -312,11 +385,12 @@ func (o *Offscreen) SetWindowMenu(on bool) { o.frame.noWindowMenu = !on }
 // resize on or off.
 func (o *Offscreen) SetMoveResize(on bool) { o.frame.noMoveResize = !on }
 
-// Offscreen is a full FrameSurface: a compile-time check, so a capability
-// the backends grow does not silently stop being one here. It answers for
-// glass too, so the whole shaped-and-glassy path is testable headless.
-var _ FrameSurface = (*Offscreen)(nil)
-var _ GlassSurface = (*Offscreen)(nil)
+// Offscreen is a full WindowFrame: a compile-time check, and the reason
+// the check is worth anything. The frame seam is one interface a backend
+// implements whole, so a capability the boundary grows cannot quietly stop
+// being implemented here — the headless tests would stop compiling rather
+// than stop covering it.
+var _ WindowFrame = (*Offscreen)(nil)
 
 // ---- the simulated input method ------------------------------------------
 
@@ -355,28 +429,31 @@ var _ IMESurface = (*Offscreen)(nil)
 // scheme for its frame, as KWin does, or stop taking one.
 func (o *Offscreen) SimulateDecorationPalette(on bool) { o.frame.palette = on }
 
-// DecorationPaletteSupported reports whether the simulated desktop takes a
-// frame palette (DecorationPaletteSurface).
-func (o *Offscreen) DecorationPaletteSupported() bool { return o.frame.palette }
-
-// SetDecorationPalette records the palette when it changes
-// (DecorationPaletteSurface).
-func (o *Offscreen) SetDecorationPalette(path string) {
-	if !o.frame.palette || path == o.frame.paletteSet {
-		return
+// SetPalette records the colour scheme when it changes (WindowFrame).
+func (o *Offscreen) SetPalette(path string) bool {
+	if !o.Caps().Has(FramePalette) {
+		return false
+	}
+	if path == o.frame.paletteSet {
+		return true
 	}
 	o.frame.paletteSet = path
 	o.frame.calls.Palettes = append(o.frame.calls.Palettes, path)
+	return true
 }
 
 // DecorationPalette is the palette the simulated desktop was last given.
 func (o *Offscreen) DecorationPalette() string { return o.frame.paletteSet }
 
-// SetIcon records the icon's sizes (IconSurface).
-func (o *Offscreen) SetIcon(images []*paintengine2d.Image) {
+// SetIcon records the icon's sizes (WindowFrame).
+func (o *Offscreen) SetIcon(images []*paintengine2d.Image) bool {
+	if !o.Caps().Has(FrameIcon) {
+		return false
+	}
 	var sizes []int
 	for _, im := range iconImages(images) {
 		sizes = append(sizes, im.Width)
 	}
 	o.frame.calls.Icons = append(o.frame.calls.Icons, sizes)
+	return true
 }

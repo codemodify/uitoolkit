@@ -33,7 +33,7 @@ const (
 	// CaptionKeepAbove toggles "keep this window above the others" (KWin's
 	// "F" button, Motif's and OS/2's "stay on top"). It is a toggle, not a
 	// command: it paints pressed while it is on. Only a desktop that can
-	// do it gets one — see [AboveSurface].
+	// do it gets one — see [FrameKeepAbove].
 	CaptionKeepAbove
 )
 
@@ -186,10 +186,10 @@ const (
 	TitleClose
 	// TitleToggleShade rolls the window up to its title bar, or a rolled-up
 	// one back down (Window.ToggleShade). Only a frame the toolkit draws
-	// can: see [ShadeSurface].
+	// can, and only where the desktop pins the height: see [FrameShade].
 	TitleToggleShade
 	// TitleToggleKeepAbove toggles "keep above the others" (see
-	// [AboveSurface]); where the desktop cannot, it does nothing.
+	// [FrameKeepAbove]); where the desktop cannot, it does nothing.
 	TitleToggleKeepAbove
 )
 

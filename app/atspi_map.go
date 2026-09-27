@@ -5,6 +5,17 @@ import "github.com/codemodify/uitoolkit/a11y"
 // AT-SPI2's numbering of roles and states (AtspiRole, AtspiStateType in
 // the published D-Bus interface), for the Linux adapter.
 
+// A11yEnv controls the accessibility bridge: "1" turns it on whatever the
+// desktop says (tests, a screen reader started by hand), "0" keeps it off.
+// Otherwise it follows the desktop — on Linux org.a11y.Status, as Qt does:
+// off until assistive technology is running, so apps pay nothing without
+// it.
+//
+// It lives here rather than beside the Linux adapter because it is public
+// API: a program that sets it (tools/a11y/demo) must compile on every
+// platform, including the ones whose bridge is not written yet.
+const A11yEnv = "UITK_A11Y"
+
 // AT-SPI roles used here.
 const (
 	atspiRoleAlert          = 2

@@ -295,26 +295,26 @@ func TestNetWMStateAbove(t *testing.T) {
 // and answers the request with the state, as a window manager does.
 func TestOffscreenKeepAbove(t *testing.T) {
 	o := NewOffscreen(WindowOptions{Width: 300, Height: 200})
-	if SurfaceKeepAboveSupported(o) {
+	if FrameCapsOf(o).Has(FrameKeepAbove) {
 		t.Error("an offscreen window has no desktop to be stacked in")
 	}
-	if SetKeepAbove(o, true) {
+	if FrameOf(o).SetKeepAbove(true) {
 		t.Error("asked a desktop that cannot")
 	}
 	o.SimulateKeepAbove(true)
-	if !SetKeepAbove(o, true) || !o.WindowState().KeepAbove {
+	if !FrameOf(o).SetKeepAbove(true) || !o.WindowState().KeepAbove {
 		t.Fatalf("keep above %+v", o.WindowState())
 	}
 	if calls := o.FrameCalls().Aboves; len(calls) != 1 || !calls[0] {
 		t.Errorf("requests %v", calls)
 	}
-	if !SetShadedHeight(o, 30) {
+	if !FrameOf(o).SetShadedHeight(30) {
 		t.Fatal("no shade pin")
 	}
 	if l := o.SizeLimits(); l.MinHeight != 30 || l.MaxHeight != 30 {
 		t.Errorf("pinned limits %+v", l)
 	}
-	SetShadedHeight(o, 0)
+	FrameOf(o).SetShadedHeight(0)
 	if l := o.SizeLimits(); l.MinHeight == 30 && l.MaxHeight == 30 {
 		t.Errorf("the pin outlived the roll-up: %+v", l)
 	}

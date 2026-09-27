@@ -1497,10 +1497,11 @@ type wlSurface struct {
 	// pend* hold what an xdg_toplevel event announced until the
 	// xdg_surface.configure that makes it current.
 	state        WindowState
-	caps         WMCaps
+	caps         FrameCaps
+	capsSet      bool // the compositor has sent wm_capabilities
 	pendState    WindowState
 	pendStateSet bool
-	pendCaps     WMCaps
+	pendCaps     FrameCaps
 	pendCapsSet  bool
 	pendDeco     Decorations
 	pendDecoSet  bool
@@ -1826,27 +1827,52 @@ func (s *wlSurface) toDevice(x, y float32) (float32, float32) {
 	return x * sc, y * sc
 }
 
-func (s *wlSurface) SetFullscreen(on bool) {
-	if s.top == nil {
-		return
+// SetFullscreen puts the toplevel full screen, or takes it back
+// (WindowFrame). The compositor answers with the state.
+func (s *wlSurface) SetFullscreen(on bool) bool {
+	if s.top == nil || !s.Caps().Has(FrameFullscreen) {
+		return false
 	}
 	if on {
 		C.ui_wl_set_full(s.top)
 	} else {
 		C.ui_wl_unset_full(s.top)
 	}
+	return true
 }
 
-func (s *wlSurface) SetMaximized(on bool) {
-	if s.top == nil {
-		return
+// SetMaximized maximizes the toplevel both ways, or restores it
+// (WindowFrame). The compositor answers with the state.
+func (s *wlSurface) SetMaximized(on bool) bool {
+	if s.top == nil || !s.Caps().Has(FrameMaximize) {
+		return false
 	}
 	if on {
 		C.ui_wl_set_max(s.top)
 	} else {
 		C.ui_wl_unset_max(s.top)
 	}
+	return true
 }
+
+// MaximizeAxis: xdg-shell maximizes both ways or not at all — there is no
+// per-axis request, and FrameMaximizeAxis is never in Caps (WindowFrame).
+func (s *wlSurface) MaximizeAxis(bool) bool { return false }
+
+// Lower: xdg-shell has no request to put a window below the others, and
+// FrameLower is never in Caps (WindowFrame).
+func (s *wlSurface) Lower() bool { return false }
+
+// SetKeepAbove: **no Wayland protocol a client may use on its own surface
+// keeps a window above the others.** KDE's org_kde_plasma_window_management
+// carries the state, but it is a window-manager protocol with no wl_surface
+// request at all — a client binds it to enumerate *every* window on the
+// desktop and would have to guess which one is its own from the pid and the
+// title. A UI toolkit must not take that capability for every application
+// that links it, so this answers false and FrameKeepAbove is never in Caps:
+// the caption button then says the desktop cannot, rather than going quiet
+// (WindowFrame).
+func (s *wlSurface) SetKeepAbove(bool) bool { return false }
 
 func (s *wlSurface) Raise() {
 	s.hidden = false
@@ -3217,9 +3243,9 @@ func uitkWlXdgConfigure(sid C.uintptr_t, surf *C.struct_xdg_surface, serial C.ui
 func (s *wlSurface) applyPendingConfigure() {
 	if s.pendCapsSet {
 		s.pendCapsSet = false
-		if s.pendCaps != s.caps {
-			s.caps = s.pendCaps
-			s.push(Event{Kind: EventCapabilities, Caps: s.caps})
+		if !s.capsSet || s.pendCaps != s.caps {
+			s.caps, s.capsSet = s.pendCaps, true
+			s.push(Event{Kind: EventCapabilities, Caps: s.Caps()})
 		}
 	}
 	if s.pendStateSet {
@@ -3265,7 +3291,7 @@ func uitkWlTopBounds(sid C.uintptr_t, w, h C.int32_t) {
 //export uitkWlTopCaps
 func uitkWlTopCaps(sid C.uintptr_t, mask C.uint32_t) {
 	if s := wlSurfBy(sid); s != nil {
-		s.pendCaps = xdgCapsFromMask(uint32(mask))
+		s.pendCaps = xdgFrameCapsFromMask(uint32(mask))
 		s.pendCapsSet = true
 	}
 }
@@ -4439,7 +4465,7 @@ func (s *wlSurface) FinishDrop(ok bool) {
 	}
 }
 
-// ---- client-side frame support (FrameSurface) ----------------------------
+// ---- client-side frame support (WindowFrame) ----------------------------
 
 // effectiveDeco is the decoration mode in effect: a popup has none; with a
 // decoration object the compositor's answer rules (the requested mode until
@@ -4495,10 +4521,10 @@ func (s *wlSurface) applyDeco() {
 	}
 }
 
-// Decorations is the negotiated decoration mode (FrameSurface).
+// Decorations is the negotiated decoration mode (WindowFrame).
 func (s *wlSurface) Decorations() Decorations { return s.decoMode }
 
-// RequestDecorations asks the compositor for mode d (FrameSurface). Before
+// RequestDecorations asks the compositor for mode d (WindowFrame). Before
 // the window is first shown the answer is awaited, so the first frame is
 // already drawn in the mode the window will have.
 func (s *wlSurface) RequestDecorations(d Decorations) {
@@ -4529,13 +4555,45 @@ func (s *wlSurface) RequestDecorations(d Decorations) {
 	s.applyDeco()
 }
 
-// WindowState is the toplevel's current state (FrameSurface).
+// WindowState is the toplevel's current state (WindowFrame).
 func (s *wlSurface) WindowState() WindowState { return s.state }
 
-// Capabilities are the compositor's wm_capabilities (FrameSurface).
-// Capabilities is what xdg_toplevel.wm_capabilities said, less what a fixed
-// window cannot have (FrameSurface).
-func (s *wlSurface) Capabilities() WMCaps { return dropResizeCaps(s.caps, s.sizing) }
+// Caps is what the compositor will do for this toplevel now (WindowFrame).
+//
+// Three of Wayland's absences are stated here rather than by a method that
+// is not there: there is no keep-above a client may ask for on its own
+// surface, no per-axis maximize in xdg-shell, and no way to lower a window.
+// They are the *protocol's* absences, not an unwritten backend — a Win32 or
+// AppKit backend has all three — and stating them as data is what lets the
+// layer above hide a caption button on Wayland and show it on X11 without
+// knowing either protocol exists.
+func (s *wlSurface) Caps() FrameCaps {
+	if s == nil || s.closed || s.popup {
+		return 0
+	}
+	// What the compositor grants this window. Until it has sent
+	// wm_capabilities — which it need never do — assume all four.
+	c := frameDesktopCaps
+	if s.capsSet {
+		c = s.caps
+	}
+	// xdg-shell always moves, resizes and (since the client does it
+	// itself) rolls windows up; xdg_toplevel.move and .resize are core.
+	c |= FrameMove | FrameResize | FrameShade
+	// A compositor moves and resizes on request and is never a tiling
+	// manager in the X11 sense, so a toolkit-drawn frame always suits.
+	c |= FrameClientFrame
+	if s.blurBehind() {
+		c |= FrameBlurBehind
+	}
+	if s.paletteSupported() {
+		c |= FramePalette
+	}
+	if s.iconSupported() {
+		c |= FrameIcon
+	}
+	return dropResizeCaps(c, s.sizing)
+}
 
 // Sizing is the window's resize policy (SizingSurface).
 func (s *wlSurface) Sizing() Sizing { return s.sizing }
@@ -4580,7 +4638,7 @@ func (s *wlSurface) applyLimitsLocked() {
 }
 
 // SetShadedHeight pins the toplevel to h logical pixels tall while it is
-// rolled up to its title bar, 0 to let it grow again (ShadeSurface). A
+// rolled up to its title bar, 0 to let it grow again (FrameShade). A
 // resizable toplevel states a minimum of 200 by 120 whether or not the
 // application asked for one, so without the pin the compositor would be
 // told the window may never be as short as its own title bar.
@@ -4588,30 +4646,27 @@ func (s *wlSurface) applyLimitsLocked() {
 // There is no shade in xdg-shell: the compositor sees an ordinary resize,
 // and nothing comes back saying the window is rolled up. The toolkit owns
 // that fact (app.Window.Shaded).
-func (s *wlSurface) SetShadedHeight(h int) {
+func (s *wlSurface) SetShadedHeight(h int) bool {
 	if s == nil {
-		return
+		return false
 	}
-	if h < 0 {
-		h = 0
+	h = max(h, 0)
+	// Unpinning always works: a window must never be left rolled up
+	// because the capability went away under it.
+	if h > 0 && !s.Caps().Has(FrameShade) {
+		return false
 	}
 	if h == s.shadeH {
-		return
+		return true
 	}
 	s.shadeH = h
 	s.syncLimits()
+	return true
 }
-
-// The Wayland backend rolls windows up, but cannot keep one above the
-// others: see [AboveSurface] for why it does not pretend to.
-var _ ShadeSurface = (*wlSurface)(nil)
 
 // ConfigureBounds is the compositor's recommended largest window size
 // (xdg_toplevel.configure_bounds, logical px); zero when it has not said.
 func (s *wlSurface) ConfigureBounds() (w, h int) { return s.boundsW, s.boundsH }
-
-// SuitsClientFrame is always true: xdg-shell moves and resizes on request.
-func (s *wlSurface) SuitsClientFrame() bool { return true }
 
 // heldPress reports whether a pointer button pressed over this surface is
 // still down, which xdg_toplevel.move and resize need.
@@ -4621,9 +4676,9 @@ func (s *wlSurface) heldPress() bool {
 		c.ptrSurf == s.id && c.buttons != 0 && c.pressSerial != 0
 }
 
-// StartSystemMove hands the held button press to the compositor for an
+// StartMove hands the held button press to the compositor for an
 // interactive move (xdg_toplevel.move).
-func (s *wlSurface) StartSystemMove() bool {
+func (s *wlSurface) StartMove() bool {
 	if !s.heldPress() {
 		return false
 	}
@@ -4635,10 +4690,10 @@ func (s *wlSurface) StartSystemMove() bool {
 	return true
 }
 
-// StartSystemResize hands the held button press to the compositor for an
+// StartResize hands the held button press to the compositor for an
 // interactive resize from edges (xdg_toplevel.resize).
-func (s *wlSurface) StartSystemResize(edges Edges) bool {
-	if s.sizing == SizingFixed {
+func (s *wlSurface) StartResize(edges Edges) bool {
+	if !s.Caps().Has(FrameResize) {
 		return false
 	}
 	e := xdgResizeEdge(edges)
@@ -4652,12 +4707,12 @@ func (s *wlSurface) StartSystemResize(edges Edges) bool {
 	return true
 }
 
-// ShowWindowMenu asks the compositor for its window menu at p, in surface
+// ShowMenu asks the compositor for its window menu at p, in surface
 // device pixels (xdg_toplevel.show_window_menu takes surface-local logical
 // coordinates).
-func (s *wlSurface) ShowWindowMenu(p paintengine2d.Point) bool {
+func (s *wlSurface) ShowMenu(p paintengine2d.Point) bool {
 	c := s.conn
-	if s.top == nil || c == nil || c.seat == nil || c.dpy == nil || !s.caps.Can(CapWindowMenu) {
+	if s.top == nil || c == nil || c.seat == nil || c.dpy == nil || !s.Caps().Has(FrameMenu) {
 		return false
 	}
 	sc := s.deviceScale()
@@ -4670,7 +4725,7 @@ func (s *wlSurface) ShowWindowMenu(p paintengine2d.Point) bool {
 	return true
 }
 
-// SetFrame takes the frame the toolkit draws (FrameSurface). The surface
+// SetFrame takes the frame the toolkit draws (WindowFrame). The surface
 // grows by the margin at once — the app lays this frame out at the new size
 // — and the window system hears about it with the next buffer commit, so
 // the geometry, the regions and the pixels it describes are one atomic
@@ -4700,7 +4755,7 @@ func (s *wlSurface) SetFrame(f Frame) {
 	}
 }
 
-// Frame is the frame last set (FrameSurface).
+// Frame is the frame last set (WindowFrame).
 func (s *wlSurface) Frame() Frame {
 	if s == nil {
 		return Frame{}
@@ -4815,10 +4870,11 @@ func (s *wlSurface) applyBlurLocked() {
 	}
 }
 
-// BlurBehindSupported reports whether the compositor blurs behind a window
-// now: it serves ext_background_effect_v1 and says blur is among the
-// effects it can do (GlassSurface).
-func (s *wlSurface) BlurBehindSupported() bool {
+// blurBehind reports whether the compositor blurs behind a window now: it
+// serves ext_background_effect_v1 and says blur is among the effects it
+// can do. It is read afresh for every Caps: KWin drops the capability when
+// desktop effects are switched off.
+func (s *wlSurface) blurBehind() bool {
 	return s != nil && s.conn != nil && s.conn.bgMan != nil &&
 		s.conn.bgCaps&C.EXT_BACKGROUND_EFFECT_MANAGER_V1_CAPABILITY_BLUR != 0
 }
@@ -4856,13 +4912,14 @@ func (s *wlSurface) inputLogical() FrameInsets {
 
 // Minimize iconifies the window (xdg_toplevel.set_minimized), keeping its
 // role: the taskbar brings it back. Hide, by contrast, drops the role.
-func (s *wlSurface) Minimize() {
-	if s.top == nil || s.conn == nil || s.conn.dpy == nil || !s.caps.Can(CapMinimize) {
-		return
+func (s *wlSurface) Minimize() bool {
+	if s.top == nil || s.conn == nil || s.conn.dpy == nil || !s.Caps().Has(FrameMinimize) {
+		return false
 	}
 	C.ui_wl_set_minimized(s.top)
 	C.ui_wl_flush(s.conn.dpy)
+	return true
 }
 
-// wlSurface is a full FrameSurface (compile-time check).
-var _ FrameSurface = (*wlSurface)(nil)
+// wlSurface is a full WindowFrame (compile-time check).
+var _ WindowFrame = (*wlSurface)(nil)

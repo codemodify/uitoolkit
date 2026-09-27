@@ -20,12 +20,6 @@ import (
 	"github.com/codemodify/uitoolkit/widget"
 )
 
-// A11yEnv controls the AT-SPI2 bridge: "1" turns it on whatever the
-// desktop says (tests, a screen reader started by hand), "0" keeps it off.
-// Otherwise it follows org.a11y.Status, as Qt does: off until assistive
-// technology is running, so apps pay nothing without it.
-const A11yEnv = "UITK_A11Y"
-
 const (
 	atspiRootPath   = dbus.ObjectPath("/org/a11y/atspi/accessible/root")
 	atspiPathPrefix = "/org/a11y/atspi/accessible/"

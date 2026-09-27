@@ -59,29 +59,25 @@ func (c *x11Conn) kwinLocked() bool {
 	return strings.EqualFold(c.wmName, "KWin")
 }
 
-// DecorationPaletteSupported reports whether the window manager is KWin
-// (DecorationPaletteSurface).
-func (s *x11Surface) DecorationPaletteSupported() bool {
-	if s == nil || s.popup || s.conn == nil || s.conn.dpy == nil {
+// SetPalette sets _KDE_NET_WM_COLOR_SCHEME, the colour-scheme file KWin
+// paints the window's frame with; "" removes it (WindowFrame). Only KWin
+// reads it, which is what FramePalette reports.
+func (s *x11Surface) SetPalette(path string) bool {
+	if s == nil || s.closed || s.popup || s.win == 0 || s.conn == nil {
 		return false
 	}
-	x11Mu.Lock()
-	defer x11Mu.Unlock()
-	return s.conn.kwinLocked()
-}
-
-// SetDecorationPalette sets _KDE_NET_WM_COLOR_SCHEME, the colour-scheme file
-// KWin paints the window's frame with; "" removes it
-// (DecorationPaletteSurface).
-func (s *x11Surface) SetDecorationPalette(path string) {
-	if s == nil || s.closed || s.popup || s.win == 0 || s.conn == nil || path == s.dress.palette {
-		return
+	if !s.Caps().Has(FramePalette) {
+		return false
+	}
+	if path == s.dress.palette {
+		return true
 	}
 	s.dress.palette = path
 	x11Mu.Lock()
 	s.applyPaletteLocked()
 	C.ui_x_flush_dress(s.conn.dpy)
 	x11Mu.Unlock()
+	return true
 }
 
 func (s *x11Surface) applyPaletteLocked() {
@@ -96,16 +92,17 @@ func (s *x11Surface) applyPaletteLocked() {
 	C.free(unsafe.Pointer(cp))
 }
 
-// SetIcon sets _NET_WM_ICON (IconSurface); no images removes it.
-func (s *x11Surface) SetIcon(images []*paintengine2d.Image) {
+// SetIcon sets _NET_WM_ICON (WindowFrame); no images removes it.
+func (s *x11Surface) SetIcon(images []*paintengine2d.Image) bool {
 	if s == nil || s.closed || s.popup || s.win == 0 || s.conn == nil {
-		return
+		return false
 	}
 	s.dress.icon = netWMIcon(images)
 	x11Mu.Lock()
 	s.applyIconLocked()
 	C.ui_x_flush_dress(s.conn.dpy)
 	x11Mu.Unlock()
+	return true
 }
 
 func (s *x11Surface) applyIconLocked() {
@@ -129,7 +126,6 @@ func (s *x11Surface) reapplyDressLocked() {
 	}
 }
 
-var (
-	_ DecorationPaletteSurface = (*x11Surface)(nil)
-	_ IconSurface              = (*x11Surface)(nil)
-)
+// The palette and the icon are part of the one frame seam
+// ([WindowFrame]); the compile-time check lives beside the rest of it in
+// x11_linux.go.

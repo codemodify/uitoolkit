@@ -144,7 +144,7 @@ func (w *Window) Glass() bool { return w != nil && w.glass }
 // It changes while the window is up — KWin drops it when desktop effects
 // are switched off — so a look asks afresh rather than once.
 func (w *Window) GlassAvailable() bool {
-	return w != nil && platform.SurfaceBlurBehind(w.surf)
+	return w != nil && platform.FrameCapsOf(w.surf).Has(platform.FrameBlurBehind)
 }
 
 // shapeChanged re-lays the window out: the silhouette is part of the frame
@@ -347,7 +347,7 @@ func (w *Window) wantsGlass() bool {
 	if !w.glass && !style.GlassBehind(w.look) {
 		return false
 	}
-	return platform.SurfaceBlurBehind(w.surf)
+	return platform.FrameCapsOf(w.surf).Has(platform.FrameBlurBehind)
 }
 
 // ---- painting -------------------------------------------------------------

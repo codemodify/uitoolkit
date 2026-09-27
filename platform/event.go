@@ -256,11 +256,11 @@ type Event struct {
 	// continuous source; otherwise it counts wheel notches.
 	ScrollPrecise bool
 	// State is the window's new state (EventWindowState), Decor the new
-	// decoration mode (EventDecorations), Caps the desktop's new
-	// capabilities for the window (EventCapabilities).
+	// decoration mode (EventDecorations), Caps what the window system will
+	// now do for the window's frame (EventCapabilities).
 	State WindowState
 	Decor Decorations
-	Caps  WMCaps
+	Caps  FrameCaps
 	// Gesture and Phase say which touchpad gesture an EventGesture is
 	// and where in it; Fingers is how many fingers make it. Delta is how
 	// far the fingers (a pinch: the point between them) moved since the
