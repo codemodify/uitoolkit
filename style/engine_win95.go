@@ -1,3 +1,5 @@
+//go:build theme_engine_all || theme_engine_win95 || theme_engine_kde1
+
 package style
 
 import "github.com/codemodify/paintengine2d"
@@ -1011,14 +1013,6 @@ func (win95Engine) DrawTooltip(l *Classic, ctx *paintengine2d.Context, b painten
 	ctx.DrawRect(b.Inset(0.5), paintengine2d.StrokePaint(c.infoTxt, 1))
 	pad := l.TooltipStyle().Pad
 	l.drawTipText(ctx, paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad*2, b.Dy()), text, c.infoTxt)
-}
-
-// snap rounds to the pixel grid so 1px lines stay crisp.
-func snap(v float32) float32 {
-	if v < 0 {
-		return float32(int(v - 0.5))
-	}
-	return float32(int(v + 0.5))
 }
 
 // ---- packs --------------------------------------------------------------------

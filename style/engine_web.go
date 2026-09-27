@@ -1,3 +1,5 @@
+//go:build theme_engine_all || theme_engine_web
+
 package style
 
 import "github.com/codemodify/paintengine2d"
@@ -138,20 +140,6 @@ func (webEngine) DefaultMetrics() ChromeMetrics {
 		ToolBarH: 40, StatusBarH: 28, SpinnerW: 22, SwitchW: 36, SwitchH: 20,
 	}
 }
-
-// Focus styles.
-const (
-	webFocusOutside = 0
-	webFocusInside  = 1
-	webFocusDotted  = 2
-)
-
-// Tab styles.
-const (
-	webTabUnderline = 0
-	webTabSegmented = 1
-	webTabBrowser   = 2
-)
 
 // Row kinds: plain lists and trees, sidebars, tables.
 const (
@@ -453,18 +441,11 @@ func webBuild(l *Classic) *webSet {
 // ---- helpers ------------------------------------------------------------------------------------
 
 // webA is c with its alpha multiplied by a.
-func webA(c paintengine2d.Color, a float32) paintengine2d.Color { return c.WithAlpha(c.A * a) }
 
 // flat is col flattened over the window colour.
 func (c *webSet) flat(col paintengine2d.Color) paintengine2d.Color { return webOver(c.window, col) }
 
 // webOver is col flattened over the opaque base.
-func webOver(base, col paintengine2d.Color) paintengine2d.Color {
-	if col.A >= 1 {
-		return col
-	}
-	return Mix(base, col, col.A)
-}
 
 // rad is a corner radius at display scale, 0 when the Corners pref squares
 // the look.
@@ -531,17 +512,6 @@ func (c *webSet) box(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rec
 }
 
 // band fills the ring between the round rects outer (radius ro) and inner.
-func webBand(ctx *paintengine2d.Context, outer paintengine2d.Rect, ro float32, inner paintengine2d.Rect, ri float32, col paintengine2d.Color) {
-	if outer.Empty() || col.A <= 0 {
-		return
-	}
-	p := paintengine2d.NewPath()
-	p.AddRoundRect(outer, min(ro, outer.Dx()*0.5, outer.Dy()*0.5), min(ro, outer.Dx()*0.5, outer.Dy()*0.5))
-	if !inner.Empty() {
-		p.AddRoundRect(inner, min(ri, inner.Dx()*0.5, inner.Dy()*0.5), min(ri, inner.Dx()*0.5, inner.Dy()*0.5))
-	}
-	ctx.DrawPath(p, paintengine2d.Paint{Color: col, Style: paintengine2d.StyleFill, FillRule: paintengine2d.FillEvenOdd})
-}
 
 // webDots is Avalonia's focus adorner: a dotted rectangle along the edge of
 // b, dots of one line every three (the 1,2 dash), all in one path.

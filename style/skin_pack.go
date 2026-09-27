@@ -396,6 +396,13 @@ func (sk *Skin) basePack() (ThemePack, bool) {
 	// The toolkit's default, read straight from the built-in packs rather
 	// than through LoadTheme: a user skin installed under that name would
 	// otherwise send the search round again.
+	//
+	// It asks for the constant rather than [DefaultTheme] for the same
+	// reason. DefaultTheme resolves through LoadTheme, and this runs
+	// while the pack index is being built, so going that way is a cycle.
+	// If the default engine is not in this build, a skin simply has no
+	// base pack and falls back to the base engine, which is the intended
+	// degradation.
 	return builtinEraPack(DefaultThemeName)
 }
 

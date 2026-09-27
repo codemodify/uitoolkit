@@ -1,8 +1,9 @@
+//go:build theme_engine_all || theme_engine_material || theme_engine_material_expressive
+
 package style
 
 import (
 	"math"
-	"strings"
 
 	"github.com/codemodify/paintengine2d"
 )
@@ -104,36 +105,24 @@ func (materialEngine) DefaultMetrics() ChromeMetrics {
 
 // mdSet is a look's resolved Material colours (built once per look). Both
 // generations are described with Material 3's role names.
-type mdSet struct {
-	m3, dark bool
 
-	primary, onPrimary, primaryC, onPrimaryC         paintengine2d.Color
-	secondary, onSecondary, secondaryC, onSecondaryC paintengine2d.Color
-	errorC, onError                                  paintengine2d.Color
-	bg, surface, onSurface, onSurfaceVar             paintengine2d.Color
-	surfaceVar, outline, outlineVar                  paintengine2d.Color
-	invSurface, invOnSurface                         paintengine2d.Color
+// Opaque text at the three emphases, over the surface.
 
-	// Opaque text at the three emphases, over the surface.
-	text, text2, textDis paintengine2d.Color
-	// Lines: dividers and the resting outline of fields.
-	divider, fieldLine paintengine2d.Color
-	// Surfaces at elevation: menus, dialogs, cards, bars.
-	menu, dialog, card, bar paintengine2d.Color
-	tipBg, tipFg            paintengine2d.Color
-	// Selection controls: the "on" colour, its mark, the "off" outline.
-	ctlOn, ctlMark, ctlOff paintengine2d.Color
-	// Row selection fill and its text.
-	rowSel, rowSelText paintengine2d.Color
-	// Material 2's activated drawer item and its label.
-	navSel, navSelText paintengine2d.Color
-	// Slider / progress inactive track; the M2 switch thumb when off.
-	trackOff, thumbOff paintengine2d.Color
-	// State layer opacities.
-	aHover, aFocus, aPress float32
-	// Faces: the floated label and the button label.
-	small, label *Font
-}
+// Lines: dividers and the resting outline of fields.
+
+// Surfaces at elevation: menus, dialogs, cards, bars.
+
+// Selection controls: the "on" colour, its mark, the "off" outline.
+
+// Row selection fill and its text.
+
+// Material 2's activated drawer item and its label.
+
+// Slider / progress inactive track; the M2 switch thumb when off.
+
+// State layer opacities.
+
+// Faces: the floated label and the button label.
 
 type mdKey struct{}
 
@@ -149,7 +138,6 @@ func mdGen(l *Classic) int {
 }
 
 // mdOver is c at opacity a over base, flattened.
-func mdOver(base, c paintengine2d.Color, a float32) paintengine2d.Color { return Mix(base, c, a) }
 
 func mdBuild(l *Classic) *mdSet {
 	dark := Luma(l.palette.Background) < 0.5
@@ -272,74 +260,18 @@ func mdBuild3(l *Classic, c *mdSet) {
 
 // layer is the state-layer opacity of st: the strongest of hover, focus
 // and press (Material's layers do not stack).
-func (c *mdSet) layer(st ControlState) float32 {
-	if st.Disabled() {
-		return 0
-	}
-	var a float32
-	if st.Hovered() {
-		a = c.aHover
-	}
-	if st.Focused() {
-		a = max(a, c.aFocus)
-	}
-	if st.Pressed() {
-		a = max(a, c.aPress)
-	}
-	return a
-}
 
 // ---- helpers ----------------------------------------------------------------------------------
 
 // mdPx is one device pixel: 1 at 1x, 2 at 2x.
-func mdPx(l *Classic) float32 {
-	v := float32(math.Round(float64(l.S(1))))
-	if v < 1 {
-		v = 1
-	}
-	return v
-}
 
 // mdSnap puts b on whole pixels; edges round half down so the rect never
 // covers a pixel whose centre lies outside b.
-func mdSnap(b paintengine2d.Rect) paintengine2d.Rect {
-	f := func(v float32) float32 { return float32(math.Ceil(float64(v) - 0.5 - 1e-3)) }
-	x0, y0, x1, y1 := f(b.Min.X), f(b.Min.Y), f(b.Max.X), f(b.Max.Y)
-	if x1 < x0 {
-		x1 = x0
-	}
-	if y1 < y0 {
-		y1 = y0
-	}
-	return paintengine2d.Rect{Min: paintengine2d.Pt(x0, y0), Max: paintengine2d.Pt(x1, y1)}
-}
 
 // mdRing fills the lw-wide band just inside the round rect b (one
 // even-odd path).
-func mdRing(ctx *paintengine2d.Context, b paintengine2d.Rect, r, lw float32, col paintengine2d.Color) {
-	if b.Empty() || col.A <= 0 {
-		return
-	}
-	r = min(r, min(b.Dx(), b.Dy())*0.5)
-	if b.Dx() <= 2*lw || b.Dy() <= 2*lw {
-		ctx.DrawRoundRect(b, r, r, paintengine2d.Fill(col))
-		return
-	}
-	p := paintengine2d.NewPath()
-	p.AddRoundRect(b, r, r)
-	ri := max(r-lw, 0)
-	p.AddRoundRect(b.Inset(lw), ri, ri)
-	ctx.DrawPath(p, paintengine2d.Paint{Color: col, Style: paintengine2d.StyleFill, FillRule: paintengine2d.FillEvenOdd})
-}
 
 // mdFill fills a round rect (radius clamped to the shape).
-func mdFill(ctx *paintengine2d.Context, b paintengine2d.Rect, r float32, col paintengine2d.Color) {
-	if b.Empty() || col.A <= 0 {
-		return
-	}
-	r = min(r, min(b.Dx(), b.Dy())*0.5)
-	ctx.DrawRoundRect(b, r, r, paintengine2d.Fill(col))
-}
 
 // mdCentered is a w×h rect centred in b, on whole pixels.
 func mdCentered(b paintengine2d.Rect, w, h float32) paintengine2d.Rect {
@@ -348,96 +280,21 @@ func mdCentered(b paintengine2d.Rect, w, h float32) paintengine2d.Rect {
 
 // face is the visible body of a push button inside its rect: Material 2
 // keeps room around it for the elevation shadow.
-func (c *mdSet) face(l *Classic, b paintengine2d.Rect) paintengine2d.Rect {
-	b = mdSnap(b)
-	if c.m3 {
-		return mdSnap(paintengine2d.Rect{
-			Min: paintengine2d.Pt(b.Min.X+l.S(1), b.Min.Y+l.S(1)),
-			Max: paintengine2d.Pt(b.Max.X-l.S(1), b.Max.Y-l.S(2)),
-		})
-	}
-	return mdSnap(paintengine2d.Rect{
-		Min: paintengine2d.Pt(b.Min.X+l.S(2), b.Min.Y+l.S(1)),
-		Max: paintengine2d.Pt(b.Max.X-l.S(2), b.Max.Y-l.S(3)),
-	})
-}
 
 // radius is the corner of a control face: 4dp in Material 2, fully round
 // in Material 3.
-func (c *mdSet) radius(l *Classic, f paintengine2d.Rect) float32 {
-	if l.square() {
-		return 0
-	}
-	if c.m3 {
-		return min(f.Dx(), f.Dy()) * 0.5
-	}
-	return l.S(4)
-}
 
 // mdLevel is the shadow of a Material elevation, as layers of offset,
 // blur and spread (dp at 1x): Material 2's umbra, penumbra and ambient
 // light (dp 1, 2, 4, 8, 24), Material 3's key and ambient light (levels 1
 // to 3).
-func mdLevel(m3 bool, e float32) [3]mdShadow {
-	if m3 {
-		switch {
-		case e >= 6:
-			return [3]mdShadow{{0.3, 1, 3, 0}, {0.15, 4, 8, 3}}
-		case e >= 3:
-			return [3]mdShadow{{0.3, 1, 2, 0}, {0.15, 2, 6, 2}}
-		case e > 0:
-			return [3]mdShadow{{0.3, 1, 2, 0}, {0.15, 1, 3, 1}}
-		}
-		return [3]mdShadow{}
-	}
-	switch {
-	case e >= 24:
-		return [3]mdShadow{{0.2, 11, 15, -7}, {0.14, 24, 38, 3}, {0.12, 9, 46, 8}}
-	case e >= 8:
-		return [3]mdShadow{{0.2, 5, 5, -3}, {0.14, 8, 10, 1}, {0.12, 3, 14, 2}}
-	case e >= 4:
-		return [3]mdShadow{{0.2, 2, 4, -1}, {0.14, 4, 5, 0}, {0.12, 1, 10, 0}}
-	case e >= 2:
-		return [3]mdShadow{{0.2, 3, 1, -2}, {0.14, 2, 2, 0}, {0.12, 1, 5, 0}}
-	case e > 0:
-		return [3]mdShadow{{0.2, 2, 1, -1}, {0.14, 1, 1, 0}, {0.12, 1, 3, 0}}
-	}
-	return [3]mdShadow{}
-}
 
 // elevate paints the shadow of face (corner r) at elevation e (dp, or an
 // M3 level's dp), clipped to clip — the control's own rect, which keeps
 // room under the face for it.
-func (c *mdSet) elevate(l *Classic, ctx *paintengine2d.Context, face, clip paintengine2d.Rect, r, e float32) {
-	if e <= 0 || face.Empty() {
-		return
-	}
-	k := float32(1)
-	if c.dark {
-		k = 1.8
-	}
-	ctx.Save()
-	ctx.ClipRect(clip)
-	for _, s := range mdLevel(c.m3, e) {
-		if s.a > 0 {
-			DropShadow(ctx, face, r, paintengine2d.RGBA(0, 0, 0, min(s.a*k, 0.6)), 0, l.S(s.dy), l.S(s.blur), l.S(s.spread))
-		}
-	}
-	ctx.Restore()
-}
 
 // labelText is a button or tab label: Material 2 sets it in capitals when
 // the capitals fit the room (the widget measured the label as written).
-func (c *mdSet) labelText(f *Font, s string, room float32) string {
-	if c.m3 || s == "" {
-		return s
-	}
-	up := strings.ToUpper(s)
-	if f.Advance(up) <= room {
-		return up
-	}
-	return s
-}
 
 // mdTick strokes the check mark into g.
 func mdTick(ctx *paintengine2d.Context, g paintengine2d.Rect, col paintengine2d.Color, w float32) {
@@ -492,134 +349,20 @@ func mdTriangle(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, di
 // ---- parts ------------------------------------------------------------------------------------
 
 // button paints a push button face and returns its label colour.
-func (c *mdSet) button(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState) paintengine2d.Color {
-	f := c.face(l, b)
-	if f.Dx() < 4 || f.Dy() < 4 {
-		return c.text
-	}
-	r := c.radius(l, f)
-	lw := mdPx(l)
-	a := c.layer(st)
-	dis := st.Disabled()
-	plain := int(l.P("plain", 0))
-	switch {
-	case st.Primary() || (!c.m3 && plain == 2):
-		// Contained (M2) / filled (M3).
-		fill, fg := c.primary, c.onPrimary
-		if !st.Primary() {
-			fill, fg = c.surface, c.primary
-		}
-		if dis {
-			ctx.DrawRoundRect(f, r, r, paintengine2d.Fill(c.onSurface.WithAlpha(0.12)))
-			return c.textDis
-		}
-		e := float32(2)
-		if c.m3 {
-			e = 0
-		}
-		switch {
-		case st.Pressed():
-			e = 8
-			if c.m3 {
-				e = 0
-			}
-		case st.Hovered():
-			e = 4
-			if c.m3 {
-				e = 1
-			}
-		}
-		c.elevate(l, ctx, f, b, r, e)
-		ctx.DrawRoundRect(f, r, r, paintengine2d.Fill(fill))
-		if a > 0 {
-			// Content on the primary colour takes a doubled layer (M2).
-			k := float32(1)
-			if !c.m3 && st.Primary() {
-				k = 2
-			}
-			ctx.DrawRoundRect(f, r, r, paintengine2d.Fill(fg.WithAlpha(min(a*k, 0.32))))
-		}
-		return fg
-	case c.m3 && (plain == 2 || (st.Toggle() && st.Checked())):
-		// Filled tonal.
-		if dis {
-			ctx.DrawRoundRect(f, r, r, paintengine2d.Fill(c.onSurface.WithAlpha(0.12)))
-			return c.textDis
-		}
-		if st.Hovered() && !st.Pressed() {
-			c.elevate(l, ctx, f, b, r, 1)
-		}
-		ctx.DrawRoundRect(f, r, r, paintengine2d.Fill(c.secondaryC))
-		if a > 0 {
-			ctx.DrawRoundRect(f, r, r, paintengine2d.Fill(c.onSecondaryC.WithAlpha(a)))
-		}
-		return c.onSecondaryC
-	case c.m3 || plain == 1:
-		// Outlined.
-		edge := c.outline
-		if !c.m3 {
-			edge = c.divider
-		}
-		fg := c.primary
-		if dis {
-			edge, fg = c.onSurface.WithAlpha(0.12), c.textDis
-		} else if st.Toggle() && st.Checked() {
-			ctx.DrawRoundRect(f, r, r, paintengine2d.Fill(c.primary.WithAlpha(0.12)))
-		}
-		if a > 0 {
-			ctx.DrawRoundRect(f, r, r, paintengine2d.Fill(c.primary.WithAlpha(a)))
-		}
-		if st.Focused() && !dis && c.m3 {
-			edge = c.primary
-		}
-		mdRing(ctx, f, r, lw, edge)
-		return fg
-	default:
-		// Text button (M2): the label alone, the layer under the pointer.
-		if dis {
-			return c.textDis
-		}
-		if st.Toggle() && st.Checked() {
-			ctx.DrawRoundRect(f, r, r, paintengine2d.Fill(c.primary.WithAlpha(0.12)))
-		}
-		if a > 0 {
-			ctx.DrawRoundRect(f, r, r, paintengine2d.Fill(c.primary.WithAlpha(a)))
-		}
-		return c.primary
-	}
-}
+
+// Contained (M2) / filled (M3).
+
+// Content on the primary colour takes a doubled layer (M2).
+
+// Filled tonal.
+
+// Outlined.
+
+// Text button (M2): the label alone, the layer under the pointer.
 
 // field paints the outlined text field box over box and returns it.
-func (c *mdSet) field(l *Classic, ctx *paintengine2d.Context, box paintengine2d.Rect, st ControlState, notch0, notch1 float32) {
-	if box.Dx() < 4 || box.Dy() < 4 {
-		return
-	}
-	lw := mdPx(l)
-	r := min(l.rx(4), box.Dy()*0.5)
-	edge := c.fieldLine
-	w := lw
-	switch {
-	case st.Disabled():
-		edge = c.onSurface.WithAlpha(0.12)
-	case st.Focused() || st.Pressed():
-		edge, w = c.primary, 2*lw
-	case st.Hovered():
-		edge = c.text
-	}
-	ctx.DrawRoundRect(box, r, r, paintengine2d.Fill(c.surface))
-	if notch1 > notch0 {
-		// The floated label sits in a gap of the top edge.
-		ctx.Save()
-		p := paintengine2d.NewPath()
-		p.AddRect(box)
-		p.AddRect(paintengine2d.Rect{Min: paintengine2d.Pt(notch0, box.Min.Y), Max: paintengine2d.Pt(notch1, box.Min.Y+w+lw)})
-		ctx.ClipPathRule(p, paintengine2d.FillEvenOdd)
-		mdRing(ctx, box, r, w, edge)
-		ctx.Restore()
-		return
-	}
-	mdRing(ctx, box, r, w, edge)
-}
+
+// The floated label sits in a gap of the top edge.
 
 func (e materialEngine) Face(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, role Role, st ControlState) paintengine2d.Color {
 	c := mdColors(l)
@@ -668,64 +411,11 @@ func (e materialEngine) Face(l *Classic, ctx *paintengine2d.Context, b paintengi
 }
 
 // tool paints an icon / tool button face and returns its glyph colour.
-func (c *mdSet) tool(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState) paintengine2d.Color {
-	b = mdSnap(b)
-	if b.Dx() < 4 || b.Dy() < 4 {
-		return c.text2
-	}
-	r := l.rx(4)
-	if c.m3 {
-		r = min(b.Dx(), b.Dy()) * 0.5
-	}
-	fg := c.text2
-	switch {
-	case st.Disabled():
-		return c.textDis
-	case st.Checked() && c.m3:
-		ctx.DrawRoundRect(b, r, r, paintengine2d.Fill(c.secondaryC))
-		fg = c.onSecondaryC
-	case st.Checked():
-		ctx.DrawRoundRect(b, r, r, paintengine2d.Fill(c.primary.WithAlpha(0.12)))
-		fg = c.primary
-	}
-	if a := c.layer(st); a > 0 {
-		ctx.DrawRoundRect(b, r, r, paintengine2d.Fill(c.onSurface.WithAlpha(a)))
-	}
-	return fg
-}
 
 // row paints an item row (list, tree, table cell with span) and returns its
 // text colour. rad > 0 rounds it (Material 3 pills).
-func (c *mdSet) row(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, rad float32) paintengine2d.Color {
-	fg := c.text
-	if st.Disabled() {
-		fg = c.textDis
-	}
-	if st.Checked() {
-		fill := c.rowSel
-		if st.Backdrop() {
-			// An inactive window keeps a neutral selection.
-			fill = mdOver(c.surface, c.onSurface, 0.08)
-			mdFill(ctx, b, rad, fill)
-			return fg
-		}
-		mdFill(ctx, b, rad, fill)
-		if !st.Disabled() {
-			fg = c.rowSelText
-		}
-	}
-	a := float32(0)
-	if st.Hovered() && !st.Disabled() {
-		a = c.aHover
-	}
-	if st.Pressed() && !st.Disabled() {
-		a = c.aPress
-	}
-	if a > 0 {
-		mdFill(ctx, b, rad, c.onSurface.WithAlpha(a))
-	}
-	return fg
-}
+
+// An inactive window keeps a neutral selection.
 
 func (e materialEngine) CheckIndicator(l *Classic, ctx *paintengine2d.Context, box paintengine2d.Rect, st ControlState, checked bool) {
 	c := mdColors(l)
@@ -887,12 +577,6 @@ func (e materialEngine) DrawScrollBar(l *Classic, ctx *paintengine2d.Context, tr
 
 // cardR is the corner of cards, views and group boxes: 4dp in Material 2,
 // 12dp (medium) in Material 3.
-func (c *mdSet) cardR(l *Classic) float32 {
-	if c.m3 {
-		return l.rx(12)
-	}
-	return l.rx(4)
-}
 
 // GroupBoxInsets: a titled card; the title sits inside it.
 func (materialEngine) GroupBoxInsets(l *Classic, hasTitle bool) Insets {
@@ -923,21 +607,6 @@ func (materialEngine) DrawGroupBox(l *Classic, ctx *paintengine2d.Context, b pai
 
 // cardBox paints a card inside b: elevated (a 1dp shadow inside b) or
 // outlined.
-func (c *mdSet) cardBox(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, raised bool) {
-	b = mdSnap(b)
-	if b.Dx() < 6 || b.Dy() < 6 {
-		return
-	}
-	r := c.cardR(l)
-	if raised {
-		f := mdSnap(paintengine2d.Rect{Min: paintengine2d.Pt(b.Min.X+l.S(1), b.Min.Y+l.S(1)), Max: paintengine2d.Pt(b.Max.X-l.S(1), b.Max.Y-l.S(2))})
-		c.elevate(l, ctx, f, b, r, 1)
-		ctx.DrawRoundRect(f, r, r, paintengine2d.Fill(c.card))
-		return
-	}
-	ctx.DrawRoundRect(b, r, r, paintengine2d.Fill(c.surface))
-	mdRing(ctx, b, r, mdPx(l), c.divider)
-}
 
 // mdCaptionH is a dialog's title band.
 func mdCaptionH(l *Classic) float32 {
@@ -1040,7 +709,6 @@ func (materialEngine) DrawPopupShadow(l *Classic, ctx *paintengine2d.Context, b 
 
 // mdShadow is one layer of an elevation shadow: opacity, offset, blur and
 // spread (dp at 1x).
-type mdShadow struct{ a, dy, blur, spread float32 }
 
 // mdPopupShadows are the layers of a floating layer's shadow: menus at 8dp
 // (Material 2) or level 2 (Material 3), dialogs at 24dp or level 3.
@@ -1127,34 +795,12 @@ func (e materialEngine) ViewBackground(l *Classic, st ControlState) paintengine2
 // surface at elevation level 1 (tinted by the primary at 5%), the colour
 // the 2023 role took over (#F7F2FA for the baseline seed), a step off the
 // surface in both schemes. Material 2's standard drawer is the surface.
-func (c *mdSet) drawer() paintengine2d.Color {
-	if c.m3 {
-		return c.card
-	}
-	return c.surface
-}
 
 // drawerItem is a navigation drawer item's box inside its row and the box's
 // corner. Material 3's active indicator is a full-height pill (corner full:
 // 28dp on the 56dp item) inset 12dp from the drawer's sides (336dp in a
 // 360dp drawer); Material 2's item a 4dp-rounded box inset 8dp from the
 // sides and 4dp from the top and bottom (40dp in its 48dp slot).
-func (c *mdSet) drawerItem(l *Classic, b paintengine2d.Rect) (paintengine2d.Rect, float32) {
-	b = mdSnap(b)
-	h, v := snap(l.S(12)), float32(0)
-	if !c.m3 {
-		h = snap(l.S(8))
-		v = snap(min(l.S(4), max((b.Dy()-l.S(24))*0.5, 0)))
-	}
-	if b.Dx() <= 4*h || b.Dy() <= 2*v+4 {
-		return b, 0
-	}
-	box := paintengine2d.Rect{Min: paintengine2d.Pt(b.Min.X+h, b.Min.Y+v), Max: paintengine2d.Pt(b.Max.X-h, b.Max.Y-v)}
-	if c.m3 {
-		return box, min(l.rx(28), box.Dy()*0.5)
-	}
-	return box, min(l.rx(4), box.Dy()*0.5)
-}
 
 // drawerRow paints a navigation drawer item and returns its box and label
 // colour. Material 3: the active item is the secondary-container pill with
@@ -1166,47 +812,6 @@ func (c *mdSet) drawerItem(l *Classic, b paintengine2d.Rect) (paintengine2d.Rect
 // pressed) with its label the primary at 87%; other items take the
 // on-surface overlay. An inactive window keeps a neutral selection, as the
 // engine's lists do.
-func (c *mdSet) drawerRow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState) (paintengine2d.Rect, paintengine2d.Color) {
-	box, r := c.drawerItem(l, b)
-	pane := c.drawer()
-	dis := st.Disabled()
-	fg := c.text
-	if c.m3 && !st.Hovered() && !st.Focused() && !st.Pressed() {
-		fg = c.onSurfaceVar
-	}
-	if dis {
-		fg = c.textDis
-	}
-	a := c.layer(st)
-	if st.Checked() {
-		if st.Backdrop() || dis {
-			mdFill(ctx, box, r, mdOver(pane, c.onSurface, 0.08))
-			return box, fg
-		}
-		if c.m3 {
-			mdFill(ctx, box, r, c.secondaryC)
-			if a > 0 {
-				mdFill(ctx, box, r, c.onSecondaryC.WithAlpha(a))
-			}
-			return box, c.onSecondaryC
-		}
-		if a <= 0 {
-			mdFill(ctx, box, r, c.navSel)
-			return box, c.navSelText
-		}
-		sel := mdOver(pane, c.primary, 0.12+a)
-		mdFill(ctx, box, r, sel)
-		return box, ReadableOn(sel, 4.5, c.navSelText, c.primary, c.text)
-	}
-	if a > 0 {
-		layer := c.onSurface
-		if c.m3 && st.Pressed() {
-			layer = c.onSecondaryC
-		}
-		mdFill(ctx, box, r, layer.WithAlpha(a))
-	}
-	return box, fg
-}
 
 // StyleHint: Material's state changes fade (about 150ms); dialogs put the
 // confirming action last; tabs start at the left.
@@ -1278,21 +883,6 @@ func mdToggleLayout(l *Classic, b paintengine2d.Rect, side float32) (slot, lb pa
 }
 
 // halo is the round state layer around a selection control.
-func (c *mdSet) halo(ctx *paintengine2d.Context, slot, clip paintengine2d.Rect, st ControlState, on bool) {
-	a := c.layer(st)
-	if a <= 0 || slot.Empty() {
-		return
-	}
-	col := c.onSurface
-	if on {
-		col = c.ctlOn
-	}
-	ctx.Save()
-	ctx.ClipRect(clip)
-	ctr := paintengine2d.Pt((slot.Min.X+slot.Max.X)*0.5, (slot.Min.Y+slot.Max.Y)*0.5)
-	ctx.DrawCircle(ctr, min(slot.Dx(), slot.Dy())*0.5, paintengine2d.Fill(col.WithAlpha(a)))
-	ctx.Restore()
-}
 
 func (e materialEngine) DrawCheckbox(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, checked bool, label string) {
 	c := mdColors(l)
@@ -1312,17 +902,6 @@ func (e materialEngine) DrawRadio(l *Classic, ctx *paintengine2d.Context, b pain
 	c.halo(ctx, slot, b, st, selected)
 	e.RadioIndicator(l, ctx, slot, st, selected)
 	c.toggleLabel(l, ctx, lb, st, label)
-}
-
-func (c *mdSet) toggleLabel(l *Classic, ctx *paintengine2d.Context, lb paintengine2d.Rect, st ControlState, label string) {
-	if label == "" || lb.Dx() <= 0 {
-		return
-	}
-	fg := c.text
-	if st.Disabled() {
-		fg = c.textDis
-	}
-	l.drawFittedText(ctx, l.body, label, lb, fg, AlignStart, 0)
 }
 
 func (e materialEngine) DrawSwitch(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, on bool, label string) {
@@ -1503,17 +1082,6 @@ func (e materialEngine) DrawProgressBar(l *Classic, ctx *paintengine2d.Context, 
 
 // fieldBox is the outlined box inside a field rect: it drops by half the
 // floated label's height when the field has a label to float.
-func (c *mdSet) fieldBox(l *Classic, b paintengine2d.Rect, labelled bool) paintengine2d.Rect {
-	b = mdSnap(b)
-	if !labelled {
-		return b
-	}
-	top := snap(c.small.Height() * 0.5)
-	if b.Dy()-top < c.small.Height()*1.6 {
-		return b
-	}
-	return paintengine2d.Rect{Min: paintengine2d.Pt(b.Min.X, b.Min.Y+top), Max: b.Max}
-}
 
 func (e materialEngine) DrawTextField(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, text, placeholder string, caret, selA, selB int, blink bool, scrollX float32, face *Font) {
 	c := mdColors(l)
@@ -1797,29 +1365,11 @@ func mdGutter(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, ch M
 }
 
 // mdRowPill is a Material 3 row's pill inside its row rect.
-func mdRowPill(l *Classic, b paintengine2d.Rect) paintengine2d.Rect {
-	in := snap(l.S(4))
-	return mdSnap(paintengine2d.XYWH(b.Min.X+in, b.Min.Y+snap(l.S(2)), b.Dx()-2*in, b.Dy()-2*snap(l.S(2))))
-}
 
 // rowBox is where a row's selection paints and its corner.
-func (c *mdSet) rowBox(l *Classic, b paintengine2d.Rect) (paintengine2d.Rect, float32) {
-	b = mdSnap(b)
-	if !c.m3 {
-		return b, 0
-	}
-	p := mdRowPill(l, b)
-	return p, p.Dy() * 0.5
-}
 
 // drawerPad is where a drawer item's label starts inside its box: 16dp into
 // Material 3's indicator, past Material 2's 8dp padding.
-func (c *mdSet) drawerPad(l *Classic) float32 {
-	if c.m3 {
-		return l.S(16)
-	}
-	return l.S(8)
-}
 
 func (e materialEngine) DrawListRow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string) {
 	c := mdColors(l)

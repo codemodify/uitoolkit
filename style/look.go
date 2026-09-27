@@ -219,7 +219,7 @@ func (l *Classic) Appearance() Appearance { return LookAppearance(l) }
 // to the embedded starter matching the palette.
 func (l *Classic) Pack() string {
 	if l == nil {
-		return DefaultThemeName
+		return DefaultTheme()
 	}
 	if l.pack != "" {
 		return l.pack

@@ -256,14 +256,18 @@ func TestLoadAppearanceMissingIsDefault(t *testing.T) {
 // the pack's own family.
 func TestDefaultThemeIsABuiltinPack(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	p, ok := LoadTheme(DefaultThemeName)
+	// DefaultTheme, not DefaultThemeName: the constant is the preferred
+	// default, and a build that picked its own engines may not carry it
+	// (docs/engines.md). What the toolkit actually shows must always
+	// resolve.
+	p, ok := LoadTheme(DefaultTheme())
 	if !ok || p.Source != ThemeSourceBuiltin {
-		t.Fatalf("default theme %q is not built in", DefaultThemeName)
+		t.Fatalf("default theme %q is not built in", DefaultTheme())
 	}
 	if a := DefaultAppearance(); a.Theme != p.Palette {
 		t.Fatalf("default appearance family %s, the pack's %s", a.Theme, p.Palette)
 	}
-	if got := PreferredLook().(*Classic).Pack(); got != DefaultThemeName {
+	if got := PreferredLook().(*Classic).Pack(); got != DefaultTheme() {
 		t.Fatalf("with no look.json the look is %q", got)
 	}
 }

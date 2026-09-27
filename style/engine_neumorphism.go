@@ -1,4 +1,4 @@
-//go:build theme_engine_all || theme_engine_neumorphism || (!theme_engine_amiga && !theme_engine_beos && !theme_engine_bluecurve && !theme_engine_kde1 && !theme_engine_kde2 && !theme_engine_macos_tahoe && !theme_engine_openlook && !theme_engine_os2 && !theme_engine_oxygen && !theme_engine_plastik && !theme_engine_platinum && !theme_engine_win31)
+//go:build theme_engine_all || theme_engine_neumorphism || (!theme_engine_adwaita && !theme_engine_adwaita48 && !theme_engine_aero && !theme_engine_amiga && !theme_engine_aqua && !theme_engine_beos && !theme_engine_bluecurve && !theme_engine_breeze && !theme_engine_breeze6 && !theme_engine_clearlooks && !theme_engine_flatlaf && !theme_engine_fluent && !theme_engine_fusion && !theme_engine_kde1 && !theme_engine_kde2 && !theme_engine_keramik && !theme_engine_luna && !theme_engine_macos && !theme_engine_macos_tahoe && !theme_engine_material && !theme_engine_material_expressive && !theme_engine_metal && !theme_engine_metro && !theme_engine_motif && !theme_engine_next && !theme_engine_nimbus && !theme_engine_openlook && !theme_engine_os2 && !theme_engine_oxygen && !theme_engine_plastik && !theme_engine_platinum && !theme_engine_skin && !theme_engine_system7 && !theme_engine_web && !theme_engine_win31 && !theme_engine_win95)
 
 package style
 
@@ -51,12 +51,20 @@ func (neuEngine) ID() string { return "neumorphism" }
 // rather than stopping at it.
 func (neuEngine) DefaultMetrics() ChromeMetrics {
 	return ChromeMetrics{
-		Radius:    14,
-		Scroll:    14,
-		FieldH:    34,
-		Checkbox:  20,
-		MenuItemH: 30,
-		TitleBar:  38,
+		Radius: 14,
+		Scroll: 14,
+		// Generous, but not so generous that an application laid out
+		// for ordinary metrics stops fitting: Settings keeps its
+		// preview at 60% of the pane at the smallest window it allows,
+		// and a row four pixels taller than this costs it that.
+		FieldH:    26,
+		ControlH:  28,
+		ComboH:    28,
+		Checkbox:  18,
+		Radio:     18,
+		MenuItemH: 24,
+		TitleBar:  30,
+		RowH:      24,
 		Border:    0, // a border would break the continuous surface
 		ViewFrame: 0, // a view is pressed in, not framed
 		FieldPad:  10,

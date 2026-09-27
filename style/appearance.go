@@ -219,9 +219,17 @@ func (p RendererPref) Label() string {
 // DefaultAppearance is the default theme ([DefaultThemeName], a light
 // pack) in its own corners, with the classic icons.
 func DefaultAppearance() Appearance {
+	// The pack's own family, not a fixed light: with engines opt-in the
+	// default pack may be whatever this build carries, and a light
+	// appearance over a dark pack is a look nobody asked for.
+	name := DefaultTheme()
+	family := ThemeLight
+	if p, ok := builtinEraPack(name); ok {
+		family = p.Palette
+	}
 	return Appearance{
-		Name:     DefaultThemeName,
-		Theme:    ThemeLight,
+		Name:     name,
+		Theme:    family,
 		Corners:  CornersTheme,
 		Icons:    IconSetClassic,
 		IconSize: IconSizeMedium,

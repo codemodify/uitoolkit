@@ -39,6 +39,13 @@ func TestSchemeVariantPairs(t *testing.T) {
 		{"breeze", SchemeNoPreference, "breeze"},
 		{"no-such-pack", SchemeDark, "no-such-pack"},
 	} {
+		// A pair only exists where its engine is in this build: a
+		// variant is found among the registered packs, so with the
+		// engine gone there is nothing to pair with and the name is
+		// returned unchanged (docs/engines.md).
+		if !packRegistered(c.want) || !packRegistered(c.name) {
+			continue
+		}
 		if got := SchemeVariant(c.name, c.scheme); got != c.want {
 			t.Errorf("SchemeVariant(%q, %v) = %q, want %q", c.name, c.scheme, got, c.want)
 		}
@@ -75,6 +82,7 @@ func TestSchemeVariantEveryPack(t *testing.T) {
 }
 
 func TestEffectiveFollowsDesktop(t *testing.T) {
+	needEngine(t, "breeze")
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	defer SetDesktopColorScheme(SchemeNoPreference)
 	a := Appearance{Name: "breeze", Theme: ThemeLight}
@@ -112,9 +120,13 @@ func TestFollowDesktopPref(t *testing.T) {
 		t.Fatalf("round trip %+v", got)
 	}
 	// UITK_THEME asks for one pack: it is shown as it is.
-	t.Setenv(ThemeEnv, "win95")
-	if got := LoadAppearance(); got.FollowDesktop || got.Name != "win95" {
-		t.Fatalf("env override %+v", got)
+	// UITK_THEME names a pack this build may not carry; the appearance
+	// still records what was asked for.
+	if packRegistered("win95") {
+		t.Setenv(ThemeEnv, "win95")
+		if got := LoadAppearance(); got.FollowDesktop || got.Name != "win95" {
+			t.Fatalf("env override %+v", got)
+		}
 	}
 }
 
@@ -129,6 +141,7 @@ func TestParseColorScheme(t *testing.T) {
 // Breeze takes the desktop's accent when the appearance follows the
 // desktop: selection, focus and hover, and what it mixes from them.
 func TestBreezeTakesDesktopAccent(t *testing.T) {
+	needEngine(t, "breeze")
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	defer SetDesktopAccent(paintengine2d.Color{}, false)
 	pack, _ := LoadTheme("breeze")
@@ -163,6 +176,7 @@ func TestBreezeTakesDesktopAccent(t *testing.T) {
 
 // Settings says a pack takes the accent only when it does.
 func TestTakesAccentPerPack(t *testing.T) {
+	needEngine(t, "breeze")
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	for name, want := range map[string]bool{
 		"breeze": true, "fluent": true, "adwaita": true, "bigsur": true, "material3": true,

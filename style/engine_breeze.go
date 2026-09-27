@@ -1,3 +1,5 @@
+//go:build theme_engine_all || theme_engine_breeze || theme_engine_breeze6
+
 package style
 
 import "github.com/codemodify/paintengine2d"
@@ -84,230 +86,38 @@ func (breezeEngine) StyleHint(l *Classic, h StyleHint) int {
 
 // ---- resolved colours ------------------------------------------------------------------
 
-type breeze struct {
-	win, text, base, viewText, btn, btnText, hl, hlText paintengine2d.Color
-	tip, tipText, focus, hover, negative, dis           paintengine2d.Color
-	header, headerText, title, titleText                paintengine2d.Color
-	titleOff, titleTextOff                              paintengine2d.Color
+// frameR is the frame radius for a 1px pen: 2.5 (3px frames), 4.5 on
+// Plasma 6 (5px).
 
-	outline, btnOutline, frameBg, sep, focusOutline paintengine2d.Color
-	arrow, arrowText, arrowBtn, shadow              paintengine2d.Color
+// (Not l.fieldText(): Memo is not re-entrant.)
 
-	btnDown, btnChecked, btnDef, btnDefLine, btnDis paintengine2d.Color
-	flatDown, flatChecked                           paintengine2d.Color
+// Disabled text: faded most of the way into a slightly darkened
+// window colour.
 
-	chkLine, chkOn, chkOnDown, chkDown paintengine2d.Color
+// Outlines, frames and marks.
 
-	groove, grooveFill, hlGrooveFill, sliderLine   paintengine2d.Color
-	progFill, busyAlt                              paintengine2d.Color
-	sbHandle, sbHandleIdle, sbGroove, sbGrooveFill paintengine2d.Color
-
-	tabOff, tabHover, menuHot, tipLine, branch   paintengine2d.Color
-	hlOff, hlOffText, hlDis                      paintengine2d.Color
-	headerHot, headerDown, headerLine, headerSep paintengine2d.Color
-	disField, disBtn                             paintengine2d.Color
-
-	// frameR is the frame radius for a 1px pen: 2.5 (3px frames), 4.5 on
-	// Plasma 6 (5px).
-	frameR float32
-}
-
-type breezeKey struct{}
-
-func breezeColors(l *Classic) *breeze {
-	return l.Memo(breezeKey{}, func() any { return breezeBuild(l) }).(*breeze)
-}
-
-func breezeBuild(l *Classic) *breeze {
-	p := l.palette
-	c := &breeze{
-		win:  p.Background,
-		text: p.Text,
-		base: p.Field,
-		hl:   p.Selection,
-	}
-	if c.hl.A < 0.9 {
-		c.hl = p.Accent
-	}
-	// (Not l.fieldText(): Memo is not re-entrant.)
-	c.viewText = l.X("viewText", ReadableOn(c.base, 4.5, c.text))
-	c.btn = l.X("button", p.SurfaceAlt)
-	c.btnText = l.X("buttonText", c.text)
-	c.hlText = p.TextOnAccent
-	c.tip = l.X("tip", c.btn)
-	c.tipText = l.X("tipText", c.btnText)
-	c.focus = l.X("focus", c.hl)
-	c.hover = l.X("hover", c.focus)
-	c.negative = l.X("negative", p.Danger)
-	// Disabled text: faded most of the way into a slightly darkened
-	// window colour.
-	c.dis = l.X("disabledText", Mix(c.text, Shade(c.win, -0.04), 0.62))
-	c.header = l.X("header", c.win)
-	c.headerText = l.X("headerText", c.text)
-	c.title = l.X("titleBar", c.header)
-	c.titleText = l.X("titleText", c.headerText)
-	c.titleOff = l.X("titleBarOff", c.win)
-	c.titleTextOff = l.X("titleTextOff", p.TextMuted)
-
-	// Outlines, frames and marks.
-	c.outline = Mix(c.win, c.text, 0.25)
-	c.btnOutline = Mix(c.btn, c.btnText, 0.3)
-	c.frameBg = Mix(c.win, c.base, 0.3)
-	c.sep = c.outline
-	c.focusOutline = Mix(c.focus, c.text, 0.15)
-	c.arrow = Mix(c.text, c.win, 0.15)
-	c.arrowText = Mix(c.viewText, c.base, 0.15)
-	c.arrowBtn = Mix(c.btnText, c.btn, 0.15)
-	c.shadow = paintengine2d.RGBA(0, 0, 0, 0.125)
-
-	c.btnDown = Mix(c.btn, c.hl, 0.333)
-	c.btnChecked = Mix(c.btn, c.btnText, 0.125)
-	c.btnDef = Mix(c.btn, c.hl, 0.2)
-	c.btnDefLine = Mix(c.hl, Mix(c.btn, c.btnText, 0.333), 0.5)
-	c.btnDis = Shade(c.btn, -0.04)
-	c.flatDown = c.hl.WithAlpha(0.33)
-	c.flatChecked = c.btnText.WithAlpha(0.125)
-
-	c.chkLine = c.viewText.WithAlpha(0.33)
-	c.chkOn = c.hl.WithAlpha(0.33)
-	c.chkOnDown = darkerPct(Mix(c.base, c.hl, 0.33), 110)
-	c.chkDown = darkerPct(c.base, 110)
-
-	c.groove = c.text.WithAlpha(0.2)
-	c.grooveFill = c.text.WithAlpha(0.1)
-	c.hlGrooveFill = c.hl.WithAlpha(0.5)
-	c.sliderLine = Mix(c.win, c.text, 0.4)
-	// Progress: the highlight at half strength over the window.
-	c.progFill = Mix(c.win, c.hl, 0.5)
-	c.busyAlt = Mix(c.hl, c.win, 0.7)
-	c.sbHandle = c.text.WithAlpha(0.5)
-	c.sbHandleIdle = c.text.WithAlpha(0.35)
-	c.sbGroove = c.text.WithAlpha(0.2)
-	c.sbGrooveFill = c.text.WithAlpha(0.1)
-
-	c.tabOff = darkerPct(c.win, 120)
-	c.tabHover = Mix(c.win, c.hover, 0.2)
-	c.menuHot = c.focus.WithAlpha(0.3)
-	c.tipLine = Mix(c.tip, c.tipText, 0.25)
-	c.branch = Mix(c.base, c.viewText, 0.25)
-	c.headerHot = Mix(c.btn, c.hover, 0.2)
-	c.headerDown = Mix(c.btn, c.focus, 0.2)
-	c.headerLine = c.text.WithAlpha(0.1)
-	c.headerSep = c.text.WithAlpha(0.2)
-	c.disField = Shade(c.base, -0.04)
-	c.hlOff = l.X("selectionInactive", Mix(c.hl, c.base, 0.5))
-	c.hlOffText = ReadableOn(c.hlOff, 4.5, c.hlText, c.viewText)
-	c.hlDis = Mix(c.hl, c.win, 0.5)
-	c.frameR = 2.5
-	if l.P("plasma", 5) >= 6 {
-		breeze6Mixes(c)
-	}
-	return c
-}
+// Progress: the highlight at half strength over the window.
 
 // ---- painting helpers ------------------------------------------------------------------
 
 // brU is one design pixel at the look's scale (never under a device pixel).
-func brU(l *Classic) float32 {
-	u := snap(l.S(1))
-	if u < 1 {
-		u = 1
-	}
-	return u
-}
 
 // brR is the frame radius (3px, Plasma 6's 5px) for a 1px pen stroked half
 // a pixel in.
-func brR(l *Classic) float32 { return l.rx(breezeColors(l).frameR) }
 
 // frame is Breeze's frame: a 1px margin, then the outline (stroked half a
 // pixel in) around the fill.
-func (c *breeze) frame(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, fill, line paintengine2d.Color) {
-	u := brU(l)
-	f := b.Inset(u)
-	if f.Dx() < 2*u || f.Dy() < 2*u {
-		return
-	}
-	r := brR(l)
-	in := f.Inset(u * 0.5)
-	if fill.A > 0 {
-		ctx.DrawRoundRect(in, r, r, paintengine2d.Fill(fill))
-	}
-	if line.A > 0 {
-		ctx.DrawRoundRect(in, r, r, paintengine2d.StrokePaint(line, u))
-	}
-}
 
 // button is a raised push button: the button colour in its outline over a
 // one-pixel drop shadow; hover / focus / press draw the outline in the
 // highlight.
-func (c *breeze) button(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, def bool) {
-	u := brU(l)
-	sb := b.Inset(u) // the button, a pixel in for its shadow
-	if sb.Dx() < 3*u || sb.Dy() < 3*u {
-		return
-	}
-	r := brR(l)
-	enabled := !st.Disabled()
-	down := enabled && st.Pressed()
-	checked := st.Toggle() && st.Checked()
-	bg, pen := c.btn, c.btnOutline
-	switch {
-	case down:
-		bg = c.btnDown
-	case checked:
-		bg = c.btnChecked
-	case def && enabled:
-		bg, pen = c.btnDef, c.btnDefLine
-	case !enabled:
-		bg = c.btnDis
-	}
-	if enabled && (st.Hovered() || st.Focused() || down) {
-		pen = c.hl
-	}
-	if enabled && !down && !checked {
-		// The shadow: the outline ring half a pixel lower.
-		ctx.DrawRoundRect(paintengine2d.XYWH(sb.Min.X+u*0.5, sb.Min.Y+u, sb.Dx()-u, sb.Dy()-u*0.5), r, r, paintengine2d.StrokePaint(c.shadow, u))
-	}
-	in := sb.Inset(u * 0.5)
-	ctx.DrawRoundRect(in, r, r, paintengine2d.Fill(bg))
-	ctx.DrawRoundRect(in, r, r, paintengine2d.StrokePaint(pen, u))
-}
+
+// the button, a pixel in for its shadow
+
+// The shadow: the outline ring half a pixel lower.
 
 // flat is a flat (tool) button: nothing at rest, the highlight outline
 // when hot or focused, a highlight wash when held.
-func (c *breeze) flat(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState) bool {
-	u := brU(l)
-	sb := b.Inset(u)
-	if sb.Dx() < 3*u || sb.Dy() < 3*u {
-		return false
-	}
-	enabled := !st.Disabled()
-	down := enabled && st.Pressed()
-	checked := st.Toggle() && st.Checked()
-	var bg, pen paintengine2d.Color
-	switch {
-	case down:
-		bg = c.flatDown
-	case checked:
-		bg, pen = c.flatChecked, c.btnOutline
-	}
-	if enabled && (st.Hovered() || st.Focused() || down) {
-		pen = c.hl
-	}
-	if bg.A == 0 && pen.A == 0 {
-		return false
-	}
-	r := brR(l)
-	in := sb.Inset(u * 0.5)
-	if bg.A > 0 {
-		ctx.DrawRoundRect(in, r, r, paintengine2d.Fill(bg))
-	}
-	if pen.A > 0 {
-		ctx.DrawRoundRect(in, r, r, paintengine2d.StrokePaint(pen, u))
-	}
-	return true
-}
 
 // brArrow strokes Breeze's 1px chevron centred in b: 9px across and 4px
 // deep in a 10px box (measured from Breeze screenshots), its arms on pixel
@@ -348,22 +158,6 @@ func brArrow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, dir D
 
 // focusLine is Breeze's label focus: a 1px focus-coloured underline two
 // pixels below the text.
-func (c *breeze) focusLine(l *Classic, ctx *paintengine2d.Context, f *Font, label string, lb, clip paintengine2d.Rect, align Align) {
-	u := brU(l)
-	tw := f.Advance(label)
-	if tw > lb.Dx() {
-		tw = lb.Dx()
-	}
-	x := lb.Min.X
-	if align == AlignCenter {
-		x = lb.Min.X + (lb.Dx()-tw)*0.5
-	}
-	y := snap(lb.Min.Y + (lb.Dy()+f.Height())*0.5 + l.S(1))
-	if y+u > clip.Max.Y {
-		y = clip.Max.Y - u
-	}
-	ctx.DrawRect(paintengine2d.XYWH(x, y, tw, u), paintengine2d.Fill(c.focus))
-}
 
 // ---- parts ---------------------------------------------------------------------------------
 
@@ -626,72 +420,10 @@ func (breezeEngine) ScrollBarStyle(l *Classic) ScrollBarStyle {
 }
 
 // sbTrack is the scroll bar groove: an 8px rounded groove in text at 20%.
-func (c *breeze) sbTrack(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, vertical bool) {
-	u := brU(l)
-	w := l.S(8)
-	var g paintengine2d.Rect
-	if vertical {
-		if w > b.Dx() {
-			w = b.Dx()
-		}
-		g = paintengine2d.XYWH(snap(b.Min.X+(b.Dx()-w)*0.5), b.Min.Y, snap(w), b.Dy())
-	} else {
-		if w > b.Dy() {
-			w = b.Dy()
-		}
-		g = paintengine2d.XYWH(b.Min.X, snap(b.Min.Y+(b.Dy()-w)*0.5), b.Dx(), snap(w))
-	}
-	if g.Dx() < 2*u || g.Dy() < 2*u {
-		return
-	}
-	r := g.Dx() * 0.5
-	if g.Dy() < g.Dx() {
-		r = g.Dy() * 0.5
-	}
-	in := g.Inset(u * 0.5)
-	ctx.DrawRoundRect(in, r, r, paintengine2d.Fill(c.sbGrooveFill))
-	ctx.DrawRoundRect(in, r, r, paintengine2d.StrokePaint(c.sbGroove, u))
-}
 
 // handle is the scroll bar handle: a rounded bar outlined in its colour
 // and filled with the colour at 50% over the window; thin at rest, 8px when
 // the bar is hovered, the hover colour when the handle itself is hot.
-func (c *breeze) handle(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, vertical, hot, wide, down bool) {
-	u := brU(l)
-	w := l.S(6)
-	if wide {
-		w = l.S(8)
-	}
-	var h paintengine2d.Rect
-	if vertical {
-		if w > b.Dx() {
-			w = b.Dx()
-		}
-		h = paintengine2d.XYWH(snap(b.Min.X+(b.Dx()-w)*0.5), b.Min.Y, snap(w), b.Dy())
-	} else {
-		if w > b.Dy() {
-			w = b.Dy()
-		}
-		h = paintengine2d.XYWH(b.Min.X, snap(b.Min.Y+(b.Dy()-w)*0.5), b.Dx(), snap(w))
-	}
-	if h.Dx() < 2*u || h.Dy() < 2*u {
-		return
-	}
-	col := c.sbHandleIdle
-	switch {
-	case down || hot:
-		col = c.hover
-	case wide:
-		col = c.sbHandle
-	}
-	r := h.Dx() * 0.5
-	if h.Dy() < h.Dx() {
-		r = h.Dy() * 0.5
-	}
-	in := h.Inset(u * 0.5)
-	ctx.DrawRoundRect(in, r, r, paintengine2d.Fill(Mix(c.win, col, col.A*0.5)))
-	ctx.DrawRoundRect(in, r, r, paintengine2d.StrokePaint(col, u))
-}
 
 func (e breezeEngine) DrawScrollBarParts(l *Classic, ctx *paintengine2d.Context, p ScrollParts, vertical bool, st ScrollState) {
 	c := breezeColors(l)
@@ -984,35 +716,6 @@ func (e breezeEngine) DrawSwitch(l *Classic, ctx *paintengine2d.Context, b paint
 // sliderHandle is the slider handle: a circle one pixel inside hb in the
 // button colour, outlined (highlight when hot or focused) over an
 // ellipse shadow unless held.
-func (c *breeze) sliderHandle(l *Classic, ctx *paintengine2d.Context, hb paintengine2d.Rect, st ControlState) {
-	u := brU(l)
-	side := hb.Dx()
-	if hb.Dy() < side {
-		side = hb.Dy()
-	}
-	r := side*0.5 - u
-	if r < 2*u {
-		return
-	}
-	ctr := hb.Center()
-	enabled := !st.Disabled()
-	if enabled && !st.Pressed() {
-		ctx.DrawCircle(paintengine2d.Pt(ctr.X+u*0.35, ctr.Y+u*0.35), r, paintengine2d.StrokePaint(c.shadow, u))
-	}
-	line := c.sliderLine
-	switch {
-	case !enabled:
-		line = Mix(c.win, c.text, 0.25)
-	case st.Focused() || st.Hovered() || st.Pressed():
-		line = c.hl
-	}
-	fill := c.btn
-	if !enabled {
-		fill = c.btnDis
-	}
-	ctx.DrawCircle(ctr, r-u*0.5, paintengine2d.Fill(fill))
-	ctx.DrawCircle(ctr, r-u*0.5, paintengine2d.StrokePaint(line, u))
-}
 
 // brGroove is the slider / progress groove: a 6px rounded groove outlined
 // in its colour, filled with it at half strength.
@@ -1373,30 +1076,6 @@ func (e breezeEngine) DrawMenuItem(l *Classic, ctx *paintengine2d.Context, b pai
 // at 20% for hover. KDE keeps a selection when only the view loses focus;
 // an inactive window (Backdrop) shows the scheme's inactive selection
 // colour.
-func (c *breeze) row(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState) paintengine2d.Color {
-	bg, fg := c.hl, c.hlText
-	switch {
-	case st.Disabled():
-		bg, fg = c.hlDis, c.hlText
-	case st.Backdrop():
-		bg, fg = c.hlOff, c.hlOffText
-	}
-	hot := st.Hovered() && !st.Disabled()
-	switch {
-	case st.Checked() && hot:
-		ctx.DrawRect(b, paintengine2d.Fill(lighterPct(bg, 110)))
-		return fg
-	case st.Checked():
-		ctx.DrawRect(b, paintengine2d.Fill(bg))
-		return fg
-	case hot:
-		ctx.DrawRect(b, paintengine2d.Fill(c.hl.WithAlpha(0.2)))
-	}
-	if st.Disabled() {
-		return c.dis
-	}
-	return c.viewText
-}
 
 func (e breezeEngine) DrawListRow(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string) {
 	c := breezeColors(l)

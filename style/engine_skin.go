@@ -37,7 +37,6 @@ type skinEngine struct{ BaseEngine }
 // skinEngineID is the engine registry id and the value of a skin pack's
 // "engine" token. It is deliberately neutral: this is the toolkit's skin
 // format, not an imitation of any one player's.
-const skinEngineID = "skin"
 
 func init() { RegisterEngine(skinEngine{}) }
 
@@ -96,57 +95,16 @@ func underFor(l *Classic, parts ...string) Engine {
 // ---- resolving art --------------------------------------------------------
 
 // skinRolePart maps an engine Role onto the part name a skin binds it with.
-var skinRolePart = map[Role]string{
-	RoleButton:   "button",
-	RoleTool:     "tool",
-	RoleField:    "field",
-	RoleCheck:    "check",
-	RoleRow:      "row",
-	RoleTab:      "tab",
-	RoleThumb:    "thumb",
-	RoleTrack:    "track",
-	RoleMenu:     "menu",
-	RoleCombo:    "combo",
-	RoleSplitter: "splitter",
-	RoleBar:      "bar",
-	RolePanel:    "panel",
-}
 
 // skinStateName is the state a control is in, as the manifest names it.
 //
 // The order is the order a person would read the control: disabled first
 // because it outranks everything, then the on/off axis, then the pointer,
 // then focus, then the default button, then a backdrop window.
-func skinStateName(st ControlState) string {
-	switch {
-	case st.Disabled():
-		return "disabled"
-	case st.Checked() && st.Pressed():
-		return "checkedPressed"
-	case st.Checked() && st.Hovered():
-		return "checkedHover"
-	case st.Checked():
-		return "checked"
-	// The default button keeps its own face under the pointer. Its art is
-	// the accent, and swapping it for the ordinary hover face would make
-	// the one button the dialog is steering you to look like the others.
-	case st.Primary() && st.Pressed():
-		return "defaultPressed"
-	case st.Primary() && st.Hovered():
-		return "defaultHover"
-	case st.Primary():
-		return "default"
-	case st.Pressed():
-		return "pressed"
-	case st.Hovered():
-		return "hover"
-	case st.Focused():
-		return "focus"
-	case st.Inactive() || st.Backdrop():
-		return "inactive"
-	}
-	return "normal"
-}
+
+// The default button keeps its own face under the pointer. Its art is
+// the accent, and swapping it for the ordinary hover face would make
+// the one button the dialog is steering you to look like the others.
 
 // art is the sprite for a state, walking skinStateFallback until something
 // is bound. Nil means the part has nothing to say and the base engine paints.

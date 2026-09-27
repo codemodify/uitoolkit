@@ -1,3 +1,5 @@
+//go:build theme_engine_all || theme_engine_web
+
 package style
 
 import "github.com/codemodify/paintengine2d"
@@ -26,12 +28,6 @@ import "github.com/codemodify/paintengine2d"
 //     sliders: 0);
 //   - "openRing" [0] 1: an open combo keeps the focus ring, as Swing rings
 //     whatever holds focus (Islands).
-
-// The editors' tab styles.
-const (
-	webTabEditor = 3
-	webTabPill   = 4
-)
 
 // webIDESet is a look's editor additions, built once per look.
 type webIDESet struct {

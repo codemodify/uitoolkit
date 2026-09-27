@@ -1,3 +1,5 @@
+//go:build theme_engine_all || theme_engine_fluent
+
 package style
 
 import (
@@ -1088,26 +1090,8 @@ func (fluentEngine) DrawTabBar(l *Classic, ctx *paintengine2d.Context, b painten
 // fluentTabPath is the selected tab's outline: 8px top corners and
 // concave bottom corners (ear e) that meet the strip's bottom line. closed
 // also runs along the bottom, for filling.
-func fluentTabPath(b paintengine2d.Rect, top, r, e float32, closed bool) *paintengine2d.Path {
-	const k = 0.5522847
-	x0, x1 := b.Min.X+e, b.Max.X-e
-	y1 := b.Max.Y
-	r = min(r, (x1-x0)*0.5, (y1-top)*0.5)
-	p := paintengine2d.NewPath()
-	p.MoveTo(b.Min.X, y1)
-	// Concave ear up to the tab side.
-	p.CubicTo(b.Min.X+e*k, y1, x0, y1-e+e*k, x0, y1-e)
-	p.LineTo(x0, top+r)
-	p.CubicTo(x0, top+r-r*k, x0+r-r*k, top, x0+r, top)
-	p.LineTo(x1-r, top)
-	p.CubicTo(x1-r+r*k, top, x1, top+r-r*k, x1, top+r)
-	p.LineTo(x1, y1-e)
-	p.CubicTo(x1, y1-e+e*k, b.Max.X-e*k, y1, b.Max.X, y1)
-	if closed {
-		p.Close()
-	}
-	return p
-}
+
+// Concave ear up to the tab side.
 
 // DrawTab is a TabView item: the selected tab is the page colour with 8px
 // top corners, a hairline and ears curving into the page; the others are

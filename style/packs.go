@@ -47,6 +47,22 @@ var legacyEraMeta = map[string]struct {
 	"flatlaf": {2019, "Java"}, "flatlaf-night": {2019, "Java"},
 }
 
+// legacyEraEngine names the engine that supersedes each legacy era pack.
+// The pack is only offered when that engine is in the build; see
+// eraPackIndex for why. A name missing from here is a pack the base
+// engine paints correctly on its own.
+var legacyEraEngine = map[string]string{
+	"motif": "motif", "cde": "motif", "cde-crimson": "motif",
+	"next": "next", "next-night": "next",
+	"luna": "luna", "luna-night": "luna",
+	"aqua": "aqua", "aqua-night": "aqua",
+	"fusion": "fusion", "fusion-night": "fusion",
+	"breeze": "breeze", "breeze-night": "breeze",
+	"fluent": "fluent", "fluent-night": "fluent",
+	"material": "material", "material-night": "material",
+	"flatlaf": "flatlaf", "flatlaf-night": "flatlaf",
+}
+
 // eraPackIndex merges the legacy era packs with packs registered by the
 // engines (a registered pack replaces a legacy one of the same name) and
 // orders them oldest → newest. It rebuilds whenever RegisterPack ran.
@@ -77,6 +93,20 @@ func eraPackIndex() map[string]ThemePack {
 		by[p.Name] = p
 	}
 	for _, p := range allEraPacks() {
+		// A legacy era pack is the rough version of a look that an
+		// engine paints properly, and RegisterPack replaces it when
+		// that engine is built. Without the engine it would be painted
+		// by the base engine instead, which gets it visibly wrong —
+		// aqua drew its caption buttons outside their boxes, next and
+		// fusion reported corners and a layout they do not have. So a
+		// legacy pack is offered only when its engine is there, and a
+		// build that left the engine out simply does not have that
+		// theme. See docs/engines.md.
+		if e := legacyEraEngine[p.Name]; e != "" {
+			if _, ok := EngineByID(e); !ok {
+				continue
+			}
+		}
 		if meta, ok := legacyEraMeta[p.Name]; ok {
 			if p.Year == 0 {
 				p.Year = meta.year

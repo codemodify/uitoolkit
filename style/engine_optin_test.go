@@ -88,7 +88,16 @@ func needEngine(t *testing.T, id string) {
 // table of packs use it to skip the rows whose engine was left out, so
 // the same table serves every configuration instead of one table per
 // build.
-func packBuilt(name string) bool {
-	_, ok := LoadTheme(name)
-	return ok
+func packBuilt(name string) bool { return packRegistered(name) }
+
+// packRegistered reports whether name is a pack this build registered,
+// by that exact name. It is stricter than LoadTheme, which follows
+// aliases and so can answer yes by resolving to a different pack.
+func packRegistered(name string) bool {
+	for _, n := range AllBuiltinThemeNames() {
+		if n == name {
+			return true
+		}
+	}
+	return false
 }

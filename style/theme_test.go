@@ -135,6 +135,9 @@ func TestLoadAppearanceReadsTriad(t *testing.T) {
 // other saved prefs still apply; without a file it still works.
 func TestLoadAppearanceThemeEnvOverride(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if !packRegistered("win95") {
+		t.Skip("the win95 engine is not in this build")
+	}
 	t.Setenv(ThemeEnv, "win95")
 	if got := LoadAppearance(); got.Name != "win95" {
 		t.Fatalf("no file: theme %q, want win95", got.Name)

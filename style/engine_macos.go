@@ -1,3 +1,5 @@
+//go:build theme_engine_all || theme_engine_macos || theme_engine_macos_tahoe
+
 package style
 
 import (

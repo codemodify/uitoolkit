@@ -1,7 +1,7 @@
 # Theme engines are opt-in
 
-131 theme packs are drawn by 34 engines, and an application that wants
-three of them should not carry all thirty-four. Engines are chosen at
+131 theme packs are drawn by 36 engines, and an application that wants
+three of them should not carry all thirty-six. Engines are chosen at
 **build time**, with build tags.
 
 ```sh
@@ -11,34 +11,31 @@ go build -tags "theme_engine_oxygen,theme_engine_beos" ./...
 go build -tags theme_engine_all ./...       # every engine there is
 ```
 
-Three rules, and they compose:
+Four rules, and they compose:
 
 1. **Name an engine and you get that engine.** `theme_engine_<id>`, as
    many as you like.
 2. **Name none and you get the default**, `neumorphism` — so a build
    always has a working look and a theme list that is not empty.
-3. **Name one and the default steps aside.** It is there to be a
-   sensible answer when nothing was asked for, not to be carried by
-   everyone. `theme_engine_neumorphism` keeps it alongside the others.
-4. `theme_engine_all` is every engine, for a build that wants the lot.
+3. **Name one and the default steps aside.** It is there to be a sensible
+   answer when nothing was asked for, not to be carried by everyone.
+   `theme_engine_neumorphism` keeps it alongside the others.
+4. `theme_engine_all` is every engine.
 
 Measured on `cmd/uitoolkit-settings`, stripped (`-ldflags "-s -w"`):
 
 | build | engines | size |
 | --- | --- | --- |
-| default | 23 | **18.78 MB** |
-| `theme_engine_oxygen` | 23 | 18.95 MB |
-| `theme_engine_all` | 34 | 21.13 MB |
+| default | 1 | **12.71 MB** |
+| `theme_engine_oxygen` | 1 | 12.88 MB |
+| three engines | 3 | 13.29 MB |
+| `theme_engine_all` | 36 | 21.15 MB |
 
-**23, not 1** — the default build still carries the 22 engines that are
-not separable yet, for the reasons under *What is not separable yet*. The
-scheme is right; the number will come down as those are untangled. The
-floor, measured by making every engine unreachable and letting the linker
-drop it, is 12.5 MB.
+**8.4 MB**, 40% of the binary, for an application that wants one look.
 
 ## How the tags are written
 
-Every pickable engine carries:
+Every engine carries:
 
 ```go
 //go:build theme_engine_all || theme_engine_oxygen
@@ -48,24 +45,66 @@ and the default engine carries the negation of all of them:
 
 ```go
 //go:build theme_engine_all || theme_engine_neumorphism ||
-//         (!theme_engine_amiga && !theme_engine_beos && ... )
+//         (!theme_engine_adwaita && !theme_engine_aero && ... )
 ```
 
 which is what makes rule 3 work: naming any engine makes one of those
-terms false, and the default drops out on its own. The list is mechanical
-and grows as engines become separable.
+terms false and the default drops out on its own.
+
+An engine built *on* another brings it along, because that is what it
+means to be built on it: `theme_engine_bluecurve` also builds Clearlooks,
+`theme_engine_kde1` also builds Windows 95 (KDE 1's widgets are Qt 1's,
+which are Windows 95's), `theme_engine_breeze6` brings Breeze,
+`theme_engine_adwaita48` brings Adwaita, `theme_engine_macos_tahoe`
+brings macOS, `theme_engine_material_expressive` brings Material.
 
 Build tags cannot contain hyphens — `//go:build theme-engine-oxygen` is a
 syntax error, `parsing //go:build line: invalid syntax at -` — so the
 names use underscores throughout.
 
-## The default engine
+## The kits: what belongs to no engine
 
-`neumorphism` is the default because a toolkit that builds with no flags
-has to look like *something*, and a single modern, self-contained look
-serves that better than an arbitrary pick from the historical ones. It is
-therefore always-built-capable: it embeds [BaseEngine] rather than another
-era engine, so it can never drag a tagged engine in behind it.
+Engines could not be separated at first, and the reason was always the
+same: a helper written inside whichever engine happened to need it first,
+which every later engine then called. `snap`, a function that rounds to
+the pixel grid, lived in `engine_win95.go` and had **1001 call sites
+across 36 engines and the core**. While it lived there, no build could
+leave Windows 95 out.
+
+So there are kit files, with no build tag, on one rule: **anything more
+than one engine needs belongs to all of them.**
+
+| file | what |
+| --- | --- |
+| `enginekit.go` | `snap`, and the odds and ends |
+| `enginekit_win.go` | the Windows chrome: bevels, glyphs, wells, dotted grips |
+| `enginekit_color.go` | OKLab/OKLCh, the accent shifts, percentage lighten and darken |
+| `enginekit_pixel.go` | the raster port System 7, the Amiga and BeOS draw through |
+| `enginekit_kde3.go` | the KDE 3 vocabulary Keramik, Plastik and KDE 2 share |
+| `enginekit_web.go` | the parts the web-derived design systems have in common |
+| `enginekit_draw.go` | small drawing helpers |
+
+Finding them is not a reading exercise. Static analysis said 382
+declarations were shared and every engine's dependency closure was 36 of
+42 — both badly wrong, inflated by method names and local variables that
+happen to be called `ok`, `set`, `line`, `rect`. **The compiler is the
+only reliable instrument**: tag an engine, build, and read what it says is
+missing. `tools/engines-build.sh` does that for every engine, and is how
+a new entanglement gets caught.
+
+## Testing a toolkit whose parts are optional
+
+`tools/test.sh ./...` runs the suite with `theme_engine_all`, and that is
+the suite that covers what this repository ships. A plain
+`go test ./...` tests the *default product build* — one engine — where a
+test written about what Aqua paints has nothing to assert; dozens of
+tests are like that, and they skip.
+
+The narrowed builds are covered on purpose rather than by accident:
+
+- `tools/testenv.sh go test ./style/` — the default, one engine;
+- the same with `-tags theme_engine_oxygen` — somebody else's pick;
+- `tools/engines-build.sh` — every engine, built on its own.
 
 ## What an engine leaving takes with it
 

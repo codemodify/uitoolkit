@@ -160,6 +160,7 @@ func TestInstalledHelveticaDraws(t *testing.T) {
 	if os.Getenv(SystemFontsEnv) == "0" || !FontInstalled("Nimbus Sans") && !FontInstalled("Helvetica") {
 		t.Skip("no Helvetica or Nimbus Sans installed")
 	}
+	needEngine(t, "next")
 	lk := mustLook(t, "next")
 	if lk.UIFamily() == FamilyUI {
 		t.Fatalf("NeXT should read in an installed Helvetica, got the bundled face")
@@ -175,6 +176,9 @@ func TestInstalledHelveticaDraws(t *testing.T) {
 func TestSelectionTextPinnedByPack(t *testing.T) {
 	white := Hex("#ffffff")
 	for _, pack := range []string{"aero", "win8", "win10"} {
+		if _, ok := LoadTheme(pack); !ok {
+			continue // that engine is not in this build
+		}
 		lk := mustLook(t, pack)
 		if got := lk.selectedText(lk.palette.Selection); got != white {
 			t.Errorf("%s: selected text %s, want white", pack, colorHexPadded(got))

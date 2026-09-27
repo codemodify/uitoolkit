@@ -45,15 +45,9 @@ const skinHitCacheMax = 256
 
 // skinHitKey identifies one derived mask: the sprite, the box it was fitted
 // to, where in that box it was drawn, and the display scale that fitted it.
-type skinHitKey struct {
-	sprite *SkinSprite
-	w, h   int
-	at     paintengine2d.Rect
-	scale  float32
-	// panel is whether the sprite is painted as a panel's piece
-	// (panelDraw) rather than as a control's face.
-	panel bool
-}
+
+// panel is whether the sprite is painted as a panel's piece
+// (panelDraw) rather than as a control's face.
 
 // ControlShape is the silhouette of the face this skin paints for role in
 // box b, or nil for the whole box — which is the answer for a part the skin

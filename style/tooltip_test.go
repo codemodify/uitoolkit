@@ -12,8 +12,10 @@ import (
 // TooltipStyle came back empty would measure its bubble at nothing and show
 // an empty box.
 func TestEveryPackLaysATipOut(t *testing.T) {
+	// However many engines this build carries, every pack it does have
+	// must lay a tooltip out (docs/engines.md).
 	packs := append(ListBuiltinThemes(), ListSkins()...)
-	if len(packs) < 100 {
+	if len(packs) < 2 {
 		t.Fatalf("only %d packs — the registry did not load", len(packs))
 	}
 	for _, p := range packs {
@@ -89,6 +91,7 @@ func TestTooltipFacesThatAreNotTheBodyFace(t *testing.T) {
 	// Material sets a plain tooltip in body-small, four points under the
 	// body face. It used to be measured in body and drawn in small, with a
 	// fallback to body for whatever did not fit.
+	needEngine(t, "material")
 	md := look("material")
 	if f := TooltipStyleOf(md).Face; f.Size >= md.Font().Size {
 		t.Errorf("material: tip face %v, body %v — body-small is smaller", f.Size, md.Font().Size)

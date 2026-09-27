@@ -1,3 +1,5 @@
+//go:build theme_engine_all || theme_engine_luna
+
 package style
 
 import (
@@ -8,23 +10,6 @@ import (
 )
 
 var lunaPackNames = []string{"luna", "luna-olive", "luna-silver", "luna-royale", "luna-night"}
-
-func lunaLook(t *testing.T, name string, scale float32) *Classic {
-	t.Helper()
-	p, ok := LoadTheme(name)
-	if !ok {
-		t.Fatalf("pack %q not found", name)
-	}
-	var lk LookAndFeel = p.Look()
-	if scale != 1 {
-		lk = WithScale(lk, scale)
-	}
-	c, ok := lk.(*Classic)
-	if !ok {
-		t.Fatalf("%s: look is %T", name, lk)
-	}
-	return c
-}
 
 func TestLunaPacksRegisteredInYearOrder(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
@@ -108,13 +93,6 @@ func TestLunaSchemeTables(t *testing.T) {
 	if miss := lunaKeyMiss.Load() - before; miss != 0 {
 		t.Fatalf("engine asked for %d keys missing from lunaBlue", miss)
 	}
-}
-
-var lunaStates = []ControlState{
-	StateNone, StateHovered, StatePressed | StateHovered, StateFocused, StateDisabled,
-	StateChecked, StatePrimary, StatePrimary | StateFocused, StateToggle,
-	StateToggle | StateChecked, StateToggle | StateChecked | StateHovered,
-	StateDisabled | StateChecked, StateFocused | StateHovered,
 }
 
 // lunaCalls paints every control of the look into r, in state st.
@@ -376,21 +354,6 @@ func TestLunaPaintsInsideRect(t *testing.T) {
 }
 
 // lunaOutside counts non-transparent pixels outside r.
-func lunaOutside(img *paintengine2d.Image, r paintengine2d.Rect) int {
-	n := 0
-	for y := 0; y < img.Height; y++ {
-		for x := 0; x < img.Width; x++ {
-			px, py := float32(x)+0.5, float32(y)+0.5
-			if px >= r.Min.X && px < r.Max.X && py >= r.Min.Y && py < r.Max.Y {
-				continue
-			}
-			if _, _, _, a := img.PremulAt(x, y); a != 0 {
-				n++
-			}
-		}
-	}
-	return n
-}
 
 // Labels read on every fill the engine paints them on.
 func TestLunaLabelsReadable(t *testing.T) {

@@ -1,8 +1,8 @@
+//go:build theme_engine_all || theme_engine_fusion
+
 package style
 
 import (
-	"math"
-
 	"github.com/codemodify/paintengine2d"
 )
 
@@ -86,67 +86,15 @@ func (fusionEngine) StyleHint(l *Classic, h StyleHint) int {
 // Breeze and Oxygen use these too.
 
 // hsvOf splits c into hue (degrees), saturation and value (0..1).
-func hsvOf(c paintengine2d.Color) (h, s, v float32) {
-	r, g, b := clamp1(c.R), clamp1(c.G), clamp1(c.B)
-	hi := max(r, g, b)
-	lo := min(r, g, b)
-	v = hi
-	span := hi - lo
-	if hi <= 0 || span <= 0 {
-		return 0, 0, v
-	}
-	s = span / hi
-	var sector float32
-	switch hi {
-	case r:
-		sector = (g - b) / span
-	case g:
-		sector = 2 + (b-r)/span
-	default:
-		sector = 4 + (r-g)/span
-	}
-	h = sector * 60
-	if h < 0 {
-		h += 360
-	}
-	return h, s, v
-}
 
 // hsvColor builds a colour from hue (degrees), saturation, value and alpha.
-func hsvColor(h, s, v, a float32) paintengine2d.Color {
-	if s <= 0 {
-		return paintengine2d.RGBA(v, v, v, a)
-	}
-	// Each channel is v less a share of the chroma that depends on how far
-	// the hue is from the channel's own primary.
-	chroma := v * s
-	ch := func(n float32) float32 {
-		k := float32(math.Mod(float64(n+h/60), 6))
-		d := min(k, 4-k, 1)
-		if d < 0 {
-			d = 0
-		}
-		return v - chroma*d
-	}
-	return paintengine2d.RGBA(ch(5), ch(3), ch(1), a)
-}
+
+// Each channel is v less a share of the chroma that depends on how far
+// the hue is from the channel's own primary.
 
 // lighterPct returns c with f% of its HSV value (f > 100 lightens).
-func lighterPct(c paintengine2d.Color, f float32) paintengine2d.Color {
-	h, s, v := hsvOf(c)
-	v *= f / 100
-	if over := v - 1; over > 0 {
-		s = max(0, s-over)
-		v = 1
-	}
-	return hsvColor(h, s, v, c.A)
-}
 
 // darkerPct returns c with its HSV value divided by f/100.
-func darkerPct(c paintengine2d.Color, f float32) paintengine2d.Color {
-	h, s, v := hsvOf(c)
-	return hsvColor(h, s, v*100/f, c.A)
-}
 
 // mixPct is pct% of a and the rest of b, keeping a's alpha.
 func mixPct(a, b paintengine2d.Color, pct float32) paintengine2d.Color {
@@ -179,9 +127,6 @@ func withLightness(c paintengine2d.Color, l float32) paintengine2d.Color {
 
 // grayLevel is Qt's documented qGray weighting, (11r + 16g + 5b) / 32, on
 // 0..255.
-func grayLevel(c paintengine2d.Color) float32 {
-	return (clamp1(c.R)*11 + clamp1(c.G)*16 + clamp1(c.B)*5) / 32 * 255
-}
 
 // ---- resolved colours ------------------------------------------------------------------
 
@@ -415,23 +360,8 @@ func fuStroke(ctx *paintengine2d.Context, b paintengine2d.Rect, r, u float32, co
 }
 
 // fuLine fills a horizontal or vertical 1u line.
-func fuHLine(ctx *paintengine2d.Context, x0, x1, y, u float32, col paintengine2d.Color) {
-	if x1 > x0 {
-		ctx.DrawRect(paintengine2d.XYWH(x0, y, x1-x0, u), paintengine2d.Fill(col))
-	}
-}
-
-func fuVLine(ctx *paintengine2d.Context, x, y0, y1, u float32, col paintengine2d.Color) {
-	if y1 > y0 {
-		ctx.DrawRect(paintengine2d.XYWH(x, y0, u, y1-y0), paintengine2d.Fill(col))
-	}
-}
 
 // fuSnap rounds a rect to the pixel grid.
-func fuSnap(b paintengine2d.Rect) paintengine2d.Rect {
-	x0, y0 := snap(b.Min.X), snap(b.Min.Y)
-	return paintengine2d.XYWH(x0, y0, snap(b.Max.X)-x0, snap(b.Max.Y)-y0)
-}
 
 // button paints a push button face into b: the 2px-rounded gradient in its
 // outline with the inner contrast line.
@@ -635,26 +565,6 @@ func (fusionEngine) CheckIndicator(l *Classic, ctx *paintengine2d.Context, box p
 // end pushed out by half the pen along its arm so the ends read square.
 // (The ends are extended by hand: square caps on an open polyline leave a
 // stray band across the mark in paintengine2d's stroker.)
-func strokeTick(ctx *paintengine2d.Context, a, v, b paintengine2d.Point, w float32, col paintengine2d.Color, join paintengine2d.Join) {
-	if col.A <= 0 || w <= 0 {
-		return
-	}
-	out := func(e paintengine2d.Point) paintengine2d.Point {
-		dx, dy := e.X-v.X, e.Y-v.Y
-		n := float32(math.Hypot(float64(dx), float64(dy)))
-		if n <= 0 {
-			return e
-		}
-		return paintengine2d.Pt(e.X+dx/n*w*0.5, e.Y+dy/n*w*0.5)
-	}
-	a, b = out(a), out(b)
-	p := paintengine2d.NewPath()
-	p.MoveTo(a.X, a.Y)
-	p.LineTo(v.X, v.Y)
-	p.LineTo(b.X, b.Y)
-	ctx.DrawPath(p, paintengine2d.Paint{Color: col, Style: paintengine2d.StyleStroke,
-		Stroke: paintengine2d.Stroke{Width: w, Cap: paintengine2d.CapButt, Join: join, MiterLimit: 4}})
-}
 
 // RadioIndicator is a base circle in the window darker 150%, a
 // translucent text-coloured dot when selected.

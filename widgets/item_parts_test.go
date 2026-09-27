@@ -159,7 +159,7 @@ func TestTripleArrowScrollBar(t *testing.T) {
 func TestFixedScrollThumb(t *testing.T) {
 	pack, ok := style.LoadTheme("system7")
 	if !ok {
-		t.Fatal("no system7 pack")
+		t.Skipf("the %q pack is not in this build", "system7")
 	}
 	lk := pack.Look()
 	view := paintengine2d.XYWH(0, 0, 200, 300)

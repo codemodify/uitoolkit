@@ -1,3 +1,5 @@
+//go:build theme_engine_all || theme_engine_material_expressive
+
 package style
 
 import (
@@ -79,24 +81,6 @@ func (material3xEngine) DefaultMetrics() ChromeMetrics {
 // surface-container, dialogs surface-container-high), 10% focus and pressed
 // layers and Expressive's secondary-container inactive track. A pack pins
 // any role by name.
-func md3xRoles(l *Classic, c *mdSet) {
-	n := mdCorePalette(l.X("seed", Hex("#6750a4"))).neutral
-	tone := func(k string, light, dark float64) paintengine2d.Color {
-		if c.dark {
-			return l.X(k, n.tone(dark))
-		}
-		return l.X(k, n.tone(light))
-	}
-	c.surface = tone("surface", 98, 6)
-	c.bg = tone("background", 98, 6)
-	c.card = tone("surfaceContainerLow", 96, 10)
-	c.menu = tone("surfaceContainer", 94, 12)
-	c.bar = c.menu
-	c.dialog = tone("surfaceContainerHigh", 92, 17)
-	c.textDis = mdOver(c.surface, c.onSurface, 0.38)
-	c.aFocus, c.aPress = 0.10, 0.10
-	c.trackOff = c.secondaryC
-}
 
 // md3xSet is the roles only the Expressive era paints with.
 type md3xSet struct {

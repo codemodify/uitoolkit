@@ -1,3 +1,5 @@
+//go:build theme_engine_all || theme_engine_next
+
 package style
 
 import (
@@ -110,15 +112,6 @@ func TestNextWindowMakerTexturesAreTheThemeFiles(t *testing.T) {
 	}
 }
 
-func mustLook(t *testing.T, name string) *Classic {
-	t.Helper()
-	p, ok := LoadTheme(name)
-	if !ok {
-		t.Fatalf("missing %s", name)
-	}
-	return p.Look()
-}
-
 func TestNextStyleHintsAndScrollers(t *testing.T) {
 	lk := mustLook(t, "next")
 	if LookHint(lk, HintDialogPrimaryFirst) != 0 || LookHint(lk, HintTabsCentered) != 0 {
@@ -181,18 +174,6 @@ func TestNextCloseButtonAgreesWithPaint(t *testing.T) {
 			}
 		}
 	}
-}
-
-func nxNear(img *paintengine2d.Image, x, y int, want paintengine2d.Color) bool {
-	r, g, b, _ := img.PremulAt(x, y)
-	wr, wg, wb, _ := want.Premul8()
-	d := func(a, b uint8) int {
-		if a > b {
-			return int(a - b)
-		}
-		return int(b - a)
-	}
-	return d(r, wr) < 40 && d(g, wg) < 40 && d(b, wb) < 40
 }
 
 // The trough stipple is a one-pixel checkerboard of the trough colour over

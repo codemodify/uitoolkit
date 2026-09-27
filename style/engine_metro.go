@@ -1,3 +1,5 @@
+//go:build theme_engine_all || theme_engine_metro
+
 package style
 
 import (
@@ -1755,58 +1757,8 @@ func metroPacks() []ThemePack {
 
 // winChevron strokes a thin chevron (Segoe MDL2's) centred in b: 8 units
 // across and 4 deep, one line thick.
-func winChevron(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, dir Direction, col paintengine2d.Color) {
-	if b.Empty() || col.A <= 0 {
-		return
-	}
-	u := min(l.S(1), min(b.Dx(), b.Dy())/10)
-	lw := max(winPx(l)*0.9, u)
-	cx, cy := snap((b.Min.X+b.Max.X)*0.5), snap((b.Min.Y+b.Max.Y)*0.5)
-	a, d := 4*u, 2*u
-	p := paintengine2d.NewPath()
-	switch dir {
-	case DirUp:
-		p.MoveTo(cx-a, cy+d)
-		p.LineTo(cx, cy-d)
-		p.LineTo(cx+a, cy+d)
-	case DirDown:
-		p.MoveTo(cx-a, cy-d)
-		p.LineTo(cx, cy+d)
-		p.LineTo(cx+a, cy-d)
-	case DirLeft:
-		p.MoveTo(cx+d, cy-a)
-		p.LineTo(cx-d, cy)
-		p.LineTo(cx+d, cy+a)
-	default:
-		p.MoveTo(cx-d, cy-a)
-		p.LineTo(cx+d, cy)
-		p.LineTo(cx-d, cy+a)
-	}
-	ctx.DrawPath(p, paintengine2d.Paint{Color: col, Style: paintengine2d.StyleStroke,
-		Stroke: paintengine2d.Stroke{Width: lw, Cap: paintengine2d.CapRound, Join: paintengine2d.JoinRound, MiterLimit: 4}})
-}
 
 // winFlatDisc paints a flat message-box disc with a glyph.
-func winFlatDisc(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, fill paintengine2d.Color, glyph string, gc paintengine2d.Color) {
-	s := min(b.Dx(), b.Dy())
-	if s < 4 {
-		return
-	}
-	cx, cy := (b.Min.X+b.Max.X)*0.5, (b.Min.Y+b.Max.Y)*0.5
-	r := s * 0.46
-	ctx.DrawCircle(paintengine2d.Pt(cx, cy), r, paintengine2d.Fill(fill))
-	if glyph == "×" {
-		k := r * 0.36
-		winCross(ctx, paintengine2d.XYWH(cx-k, cy-k, 2*k, 2*k), gc, r*0.16)
-		return
-	}
-	f := l.bold
-	if f == nil {
-		f = l.body
-	}
-	w := f.Advance(glyph)
-	f.Draw(ctx, glyph, paintengine2d.Pt(cx-w*0.5, cy-f.Height()*0.5), gc)
-}
 
 // winFlatTriangle paints a flat warning triangle with a "!".
 func winFlatTriangle(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, fill, gc paintengine2d.Color) {

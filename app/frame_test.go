@@ -851,7 +851,7 @@ func TestStackedFrame(t *testing.T) {
 	t.Setenv(platform.EnvDecorations, "")
 	pack, ok := style.LoadTheme("win95")
 	if !ok {
-		t.Fatal("no win95 pack")
+		t.Skipf("the %q pack is not in this build", "win95")
 	}
 	a := New(Options{Look: pack.Look(), Headless: true})
 	a.SetTitleBarPrefs(platform.DefaultTitleBarPrefs(""))
@@ -1027,7 +1027,7 @@ func TestThemeCaptionButtons(t *testing.T) {
 	r := newFrameRig(t, platform.DecorationsClient)
 	mac, ok := style.LoadTheme("bigsur")
 	if !ok {
-		t.Fatal("no bigsur pack")
+		t.Skipf("the %q pack is not in this build", "bigsur")
 	}
 	r.a.SetLook(mac.Look())
 	r.a.SetCaptionButtons(style.CaptionButtonsTheme)

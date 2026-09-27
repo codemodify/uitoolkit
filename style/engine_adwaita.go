@@ -1,3 +1,5 @@
+//go:build theme_engine_all || theme_engine_adwaita || theme_engine_adwaita48
+
 package style
 
 import (
@@ -263,12 +265,6 @@ func adwSnap(b paintengine2d.Rect) paintengine2d.Rect {
 }
 
 // adwPill is the radius that rounds b into a stadium (0 for square looks).
-func adwPill(l *Classic, b paintengine2d.Rect) float32 {
-	if l.square() {
-		return 0
-	}
-	return max(min(b.Dx(), b.Dy())*0.5, 0)
-}
 
 // adwR is design radius r (1x px, GNOME 42–47's) for a shape of size b in
 // the look's GNOME (adwEraR), never more than half its short side.
@@ -277,13 +273,6 @@ func adwR(l *Classic, r float32, b paintengine2d.Rect) float32 {
 }
 
 // adwRing strokes a w-wide ring just inside b, following radius r.
-func adwRing(ctx *paintengine2d.Context, b paintengine2d.Rect, r, w float32, col paintengine2d.Color) {
-	if b.Dx() < 2*w || b.Dy() < 2*w || col.A <= 0 {
-		return
-	}
-	ri := max(r-w*0.5, 0)
-	ctx.DrawRoundRect(b.Inset(w*0.5), ri, ri, paintengine2d.StrokePaint(col, w))
-}
 
 // adwFrame fills b with edge and its lw-inset with fill, both rounded r.
 func adwFrame(ctx *paintengine2d.Context, b paintengine2d.Rect, r, lw float32, edge, fill paintengine2d.Color) {
@@ -298,9 +287,6 @@ func adwFrame(ctx *paintengine2d.Context, b paintengine2d.Rect, r, lw float32, e
 }
 
 // adwCentered is a w×h rect centred in b.
-func adwCentered(b paintengine2d.Rect, w, h float32) paintengine2d.Rect {
-	return paintengine2d.XYWH(b.Min.X+(b.Dx()-w)*0.5, b.Min.Y+(b.Dy()-h)*0.5, w, h)
-}
 
 // adwStroke is a round-capped stroke for symbolic glyphs.
 func adwStroke(col paintengine2d.Color, w float32) paintengine2d.Paint {

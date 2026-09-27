@@ -1,3 +1,5 @@
+//go:build theme_engine_all || theme_engine_luna
+
 package style
 
 import "github.com/codemodify/paintengine2d"
