@@ -60,7 +60,51 @@ var (
 	procSetDIBitsToDev = gdi32.NewProc("SetDIBitsToDevice")
 
 	procGetModuleHandle = kernel32.NewProc("GetModuleHandleW")
+
+	// Declaring DPI awareness, newest API first. Each is a different
+	// Windows generation's answer and they are not interchangeable:
+	// only the per-monitor-v2 context re-scales a window when it is
+	// dragged to another monitor.
+	procSetDpiCtx       = user32.NewProc("SetProcessDpiAwarenessContext")                    // 1703+
+	procSetDpiAwareness = syscall.NewLazyDLL("shcore.dll").NewProc("SetProcessDpiAwareness") // 8.1+
+	procSetDPIAware     = user32.NewProc("SetProcessDPIAware")                               // Vista+
 )
+
+// dpiPerMonitorV2 is DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, which
+// is the handle value -4 rather than an enum.
+const dpiPerMonitorV2 = ^uintptr(3)
+
+var win32DPIOnce sync.Once
+
+// win32DeclareDPIAware tells Windows this process handles scaling
+// itself, once, before any window exists.
+//
+// Without it Windows treats the process as 96-DPI whatever the monitor
+// says: GetDpiForWindow answers 96, every window is rendered at 1x and
+// then **bitmap-scaled** by the desktop, and the result on a 150% or
+// 200% display is a blurred window that reports the wrong size. A
+// toolkit that draws its own pixels has to opt out of that, and it can
+// only be done before the first window is created — which is why this
+// is a Once here rather than a manifest: a manifest would work too, but
+// it would have to be carried by every application built with the
+// toolkit, and forgetting it would look like a toolkit bug.
+func win32DeclareDPIAware() {
+	win32DPIOnce.Do(func() {
+		if r, _, _ := procSetDpiCtx.Call(dpiPerMonitorV2); r != 0 {
+			return
+		}
+		// 8.1: PROCESS_PER_MONITOR_DPI_AWARE = 2. A window still gets
+		// per-monitor DPI, but Windows does not re-scale it on a
+		// monitor change — WM_DPICHANGED arrives and the app acts.
+		if r, _, _ := procSetDpiAwareness.Call(2); r == 0 {
+			return
+		}
+		// Vista: system-wide awareness. One scale for the session,
+		// which is wrong on a mixed-DPI desktop but sharp on a uniform
+		// one, and much better than being scaled by the compositor.
+		procSetDPIAware.Call()
+	})
+}
 
 const (
 	wsOverlappedWindow = 0x00CF0000
@@ -285,6 +329,8 @@ func (s *winSurface) push(ev Event) {
 // ---- the surface ---------------------------------------------------------
 
 func newWinSurface(opts WindowOptions) (Surface, error) {
+	// Before any window exists: after the first one it is too late.
+	win32DeclareDPIAware()
 	class, err := win32RegisterClass()
 	if err != nil {
 		return nil, err
