@@ -234,6 +234,25 @@ request `EGL_ALPHA_SIZE` 0.
   **`wl_egl_window` + `eglSwapBuffers`** (paintengine2d `GPUDevice`).
   Resize calls `wl_egl_window_resize` and `GPUDevice.Resize`. A failed
   swap drops GPU for that surface and falls back to shm.
+- **A paint target is never shown before it has been painted.** Both
+  paths reallocate on a resize or a scale change, and a present can be
+  the one that notices: a configure dispatched inside `Poll` changes the
+  size before the application has answered the resize event, so the
+  deferred-damage flush that follows finds a buffer of the wrong size and
+  resizes it itself. The pixmap the CPU path then holds is empty, and the
+  GPU path's new colour texture (`glTexImage2D` with no pixels) holds
+  whatever that video memory held before — an older, differently strided
+  image, which presents as the dense vertical columns of a stride
+  mismatch. Neither is committed: the present keeps its damage and
+  returns, the queued `EventResize` drives a full repaint, and the
+  compositor goes on showing the last good buffer until it lands. The CPU
+  path checks the pixmap (`imgPainted`); the GPU path has no pixels to
+  look at, so `wlSurface.gpuUnpainted` records it — armed by every
+  `GPUDevice.Resize` and by a fresh device, cleared only by a present the
+  application made after painting (a `flushOnly` flush of deferred damage
+  drew nothing and cannot clear it). `tools/e2e/resize-tear.sh` is the
+  guard: it drags a window's edge on a real compositor and scores the
+  frames.
 - CPU present (no EGL, or `UITK_PAINT=cpu`) defaults to **`wl_shm`
   `XRGB8888`** (opaque). `UITK_WAYLAND_PRESENT=auto` and `shm` are the
   same path. **Do not use ARGB8888 for opaque UI**: paintengine2d

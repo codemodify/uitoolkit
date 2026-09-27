@@ -131,6 +131,9 @@ func (a *wlArgs) u() uint32 {
 	return v
 }
 
+// i reads a signed argument (wl_surface.damage and friends).
+func (a *wlArgs) i() int32 { return int32(a.u()) }
+
 func (a *wlArgs) s() string {
 	n := int(a.u())
 	if n == 0 || len(a.b) < n {
@@ -195,6 +198,7 @@ func (f *wlFake) request(obj uint32, op uint16, body []byte) {
 	case iface == "xdg_wm_base" && op == 2:
 		id, surf := a.u(), a.u()
 		f.objs[id] = "xdg_surface"
+		f.ids["xdg_surface"] = append(f.ids["xdg_surface"], id)
 		if f.top == 0 {
 			f.top = surf
 		}
@@ -215,7 +219,21 @@ func (f *wlFake) request(obj uint32, op uint16, body []byte) {
 	case iface == "zxdg_exported_v2" && op == 0:
 		f.logf("exported.destroy")
 	case iface == "xdg_surface" && op == 1:
-		f.objs[a.u()] = "xdg_toplevel"
+		id := a.u()
+		f.objs[id] = "xdg_toplevel"
+		f.ids["xdg_toplevel"] = append(f.ids["xdg_toplevel"], id)
+	case iface == "xdg_surface" && op == 4: // ack_configure(serial)
+		f.logf("ack_configure %d", a.u())
+	case iface == "wl_surface" && op == 1: // attach(buffer, x, y)
+		f.logf("attach %d", a.u())
+	case iface == "wl_surface" && op == 2: // damage(x, y, w, h)
+		f.logf("damage %d %d %d %d", a.i(), a.i(), a.i(), a.i())
+	case iface == "wl_surface" && op == 6:
+		f.logf("commit")
+	case iface == "wl_surface" && op == 8: // set_buffer_scale(scale)
+		f.logf("set_buffer_scale %d", a.i())
+	case iface == "wl_surface" && op == 9: // damage_buffer(x, y, w, h)
+		f.logf("damage_buffer %d %d %d %d", a.i(), a.i(), a.i(), a.i())
 	case iface == "wl_shm" && op == 0: // create_pool(id, fd, size)
 		id, size := a.u(), a.u()
 		if len(f.fds) > 0 {
