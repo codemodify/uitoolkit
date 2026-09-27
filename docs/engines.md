@@ -1,6 +1,6 @@
 # Theme engines are opt-in
 
-131 theme packs are drawn by 36 engines, and an application that wants
+131 theme packs are drawn by 35 engines, and an application that wants
 three of them should not carry all thirty-six. Engines are chosen at
 **build time**, with build tags.
 
@@ -15,11 +15,12 @@ Four rules, and they compose:
 
 1. **Name an engine and you get that engine.** `theme_engine_<id>`, as
    many as you like.
-2. **Name none and you get the default**, `neumorphism` — so a build
-   always has a working look and a theme list that is not empty.
+2. **Name none and you get the default**, `plastik` — KDE 3's default
+   style — so a build always has a working look and a theme list that is
+   not empty.
 3. **Name one and the default steps aside.** It is there to be a sensible
    answer when nothing was asked for, not to be carried by everyone.
-   `theme_engine_neumorphism` keeps it alongside the others.
+   `theme_engine_plastik` keeps it alongside the others.
 4. `theme_engine_all` is every engine.
 
 Measured on `cmd/uitoolkit-settings`, stripped (`-ldflags "-s -w"`):
@@ -29,7 +30,7 @@ Measured on `cmd/uitoolkit-settings`, stripped (`-ldflags "-s -w"`):
 | default | 1 | **12.71 MB** |
 | `theme_engine_oxygen` | 1 | 12.88 MB |
 | three engines | 3 | 13.29 MB |
-| `theme_engine_all` | 36 | 21.15 MB |
+| `theme_engine_all` | 35 | 21.15 MB |
 
 **8.4 MB**, 40% of the binary, for an application that wants one look.
 
@@ -44,7 +45,7 @@ Every engine carries:
 and the default engine carries the negation of all of them:
 
 ```go
-//go:build theme_engine_all || theme_engine_neumorphism ||
+//go:build theme_engine_all || theme_engine_plastik ||
 //         (!theme_engine_adwaita && !theme_engine_aero && ... )
 ```
 
@@ -68,7 +69,7 @@ Engines could not be separated at first, and the reason was always the
 same: a helper written inside whichever engine happened to need it first,
 which every later engine then called. `snap`, a function that rounds to
 the pixel grid, lived in `engine_win95.go` and had **1001 call sites
-across 36 engines and the core**. While it lived there, no build could
+across 35 engines and the core**. While it lived there, no build could
 leave Windows 95 out.
 
 So there are kit files, with no build tag, on one rule: **anything more

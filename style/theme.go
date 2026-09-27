@@ -20,15 +20,15 @@ import (
 var starterFS embed.FS
 
 // DefaultThemeName is the look apps show until the user picks one, and
-// what an unusable look.json theme falls back to: Neumorphism, the
-// toolkit's default engine. The embedded "dark" and "light" packs stay
+// what an unusable look.json theme falls back to: Plastik, KDE 3's
+// default style, which is the toolkit's default engine. The embedded "dark" and "light" packs stay
 // the palette starters (see [StarterName]).
 //
 // It is the *preferred* default rather than a guaranteed one. Engines are
 // chosen at build time (docs/engines.md), and a build that names its own
 // engines does not carry this one — so read the default through
 // [DefaultTheme], which falls back to a pack the build actually has.
-const DefaultThemeName = "neumorphism"
+const DefaultThemeName = "plastik"
 
 // DefaultTheme is the name of the look to show until the user picks one:
 // [DefaultThemeName] where this build has it, and otherwise the first
