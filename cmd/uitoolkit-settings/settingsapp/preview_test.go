@@ -67,9 +67,15 @@ func TestSettingsPreviewShowsEveryRow(t *testing.T) {
 		}
 		w.Close()
 	}
+	// Every pack in this build, whichever engines it has: the count is
+	// the registry's, not a number written down when all of them
+	// happened to be built (docs/engines.md).
 	t.Logf("%d packs checked", checked)
-	if checked < 120 {
-		t.Errorf("only %d packs were checked", checked)
+	if want := len(style.ListThemes()); checked < want {
+		t.Errorf("%d of %d packs were checked", checked, want)
+	}
+	if checked < 20 {
+		t.Errorf("only %d packs at all — the registry looks empty", checked)
 	}
 }
 

@@ -89,6 +89,7 @@ func within(a, b, tol float32) bool { return float32(math.Abs(float64(a-b))) <= 
 // and 17 before the zoom box — so the tab a window wears is exactly as wide
 // as the in-app window's, and its title sits in the same place on it.
 func TestBeOSTabKeepsR5Gaps(t *testing.T) {
+	needPack(t, "beos")
 	for _, sc := range []float32{1, 1.75} {
 		t.Run(fmt.Sprint(sc), func(t *testing.T) {
 			const title = "Tracker"
@@ -136,6 +137,7 @@ func TestBeOSTabKeepsR5Gaps(t *testing.T) {
 // Platinum: the title is centred on the whole bar, as Mac OS 8 centred it,
 // not in the room between the close box and the collapse and zoom boxes.
 func TestPlatinumTitleCentresOnTheBar(t *testing.T) {
+	needPack(t, "platinum")
 	for _, sc := range []float32{1, 1.75} {
 		t.Run(fmt.Sprint(sc), func(t *testing.T) {
 			const title = "Untitled"
@@ -218,5 +220,15 @@ func TestWindowMakerMiddleSectionHighlight(t *testing.T) {
 				t.Errorf("no highlight down the seam: %d beside %d", lum(img, seam, y), lum(img, seam+3, y))
 			}
 		})
+	}
+}
+
+// needPack skips the test when pack is not in this build. A test named
+// after one engine is asking for that engine, and an application (or this
+// repo's own default build) may have left it out — see docs/engines.md.
+func needPack(t *testing.T, name string) {
+	t.Helper()
+	if _, ok := style.LoadTheme(name); !ok {
+		t.Skipf("the %q pack is not in this build (theme_engine_%s)", name, name)
 	}
 }

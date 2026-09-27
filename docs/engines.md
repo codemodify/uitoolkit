@@ -1,51 +1,71 @@
 # Theme engines are opt-in
 
-131 theme packs are drawn by 33 engines, and an application that wants
-three of them should not carry all thirty-three. Engines are selected at
+131 theme packs are drawn by 34 engines, and an application that wants
+three of them should not carry all thirty-four. Engines are chosen at
 **build time**, with build tags.
 
 ```sh
-go build ./...                                    # every engine (the default)
-go build -tags theme_engines_pick ./...           # only the always-built ones
-go build -tags "theme_engines_pick,\
-                theme_engine_beos,theme_engine_platinum" ./...
+go build ./...                              # the default engine alone
+go build -tags theme_engine_oxygen ./...    # Oxygen instead of it
+go build -tags "theme_engine_oxygen,theme_engine_beos" ./...
+go build -tags theme_engine_all ./...       # every engine there is
 ```
+
+Three rules, and they compose:
+
+1. **Name an engine and you get that engine.** `theme_engine_<id>`, as
+   many as you like.
+2. **Name none and you get the default**, `neumorphism` — so a build
+   always has a working look and a theme list that is not empty.
+3. **Name one and the default steps aside.** It is there to be a
+   sensible answer when nothing was asked for, not to be carried by
+   everyone. `theme_engine_neumorphism` keeps it alongside the others.
+4. `theme_engine_all` is every engine, for a build that wants the lot.
 
 Measured on `cmd/uitoolkit-settings`, stripped (`-ldflags "-s -w"`):
 
-| build | size |
-| --- | --- |
-| default, all engines | 21.06 MB |
-| `theme_engines_pick` | **18.71 MB** |
-| `theme_engines_pick` + beos + platinum | 19.15 MB |
+| build | engines | size |
+| --- | --- | --- |
+| default | 23 | **18.78 MB** |
+| `theme_engine_oxygen` | 23 | 18.95 MB |
+| `theme_engine_all` | 34 | 21.13 MB |
 
-The ceiling, measured by making every engine unreachable and letting the
-linker drop it, is **12.5 MB** — so the 13 engines that are separable
-today are worth 2.35 MB of an available 8.6 MB. The rest is blocked by
-what is described under *What is not separable yet*.
+**23, not 1** — the default build still carries the 22 engines that are
+not separable yet, for the reasons under *What is not separable yet*. The
+scheme is right; the number will come down as those are untangled. The
+floor, measured by making every engine unreachable and letting the linker
+drop it, is 12.5 MB.
 
-## Why the default is everything
+## How the tags are written
 
-An opt-in scheme whose default is *nothing* fails the wrong way. uitoolkit
-is a library: the application author runs the build, so nothing here can
-make them pass a flag. Forget it under a nothing-by-default scheme and you
-get a toolkit with no themes, at run time, with no compile error to say
-so — the same silent failure the platform boundary spent a release
-removing.
-
-So every engine file carries:
+Every pickable engine carries:
 
 ```go
-//go:build !theme_engines_pick || theme_engine_beos
+//go:build theme_engine_all || theme_engine_oxygen
 ```
 
-Read it as: build this engine unless the application is picking its own,
-and build it anyway if it picked this one. A forgotten flag gives you
-**more** than you wanted, never less.
+and the default engine carries the negation of all of them:
 
-Build tags cannot contain hyphens — `//go:build theme-engine-beos` is a
+```go
+//go:build theme_engine_all || theme_engine_neumorphism ||
+//         (!theme_engine_amiga && !theme_engine_beos && ... )
+```
+
+which is what makes rule 3 work: naming any engine makes one of those
+terms false, and the default drops out on its own. The list is mechanical
+and grows as engines become separable.
+
+Build tags cannot contain hyphens — `//go:build theme-engine-oxygen` is a
 syntax error, `parsing //go:build line: invalid syntax at -` — so the
 names use underscores throughout.
+
+## The default engine
+
+`neumorphism` is the default because a toolkit that builds with no flags
+has to look like *something*, and a single modern, self-contained look
+serves that better than an arbitrary pick from the historical ones. It is
+therefore always-built-capable: it embeds [BaseEngine] rather than another
+era engine, so it can never drag a tagged engine in behind it.
 
 ## What an engine leaving takes with it
 

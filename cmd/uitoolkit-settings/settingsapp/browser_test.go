@@ -199,7 +199,12 @@ func TestSettingsThemeSearch(t *testing.T) {
 	if list.Count != all {
 		t.Fatalf("emptying the search left %d of %d rows", list.Count, all)
 	}
-	// Return stages the first pack the search found.
+	// Return stages the first pack the search found. Hot Dog Stand
+	// belongs to the win31 engine, which a build may have left out
+	// (docs/engines.md).
+	if _, ok := style.LoadTheme("win-hotdog"); !ok {
+		t.Skip("the win31 engine is not in this build")
+	}
 	search.SetText("hot dog")
 	a.PumpOnce()
 	search.OnSubmit(search.Text)

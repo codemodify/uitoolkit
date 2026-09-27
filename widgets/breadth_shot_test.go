@@ -25,7 +25,9 @@ func shotWindow(t *testing.T, pack string, scale float32, w, h int, build func()
 	if p, ok := style.LoadTheme(pack); ok {
 		look = p.Look()
 	} else if pack != "" {
-		t.Fatalf("unknown pack %q", pack)
+		// A shot named after one engine has nothing to show when that
+		// engine is not in this build (docs/engines.md).
+		t.Skipf("the %q pack is not in this build", pack)
 	}
 	a := uitoolkit.New(uitoolkit.Options{Look: look, Headless: true, Scale: scale, DisableLookWatch: true})
 	win, err := a.NewWindow(platform.WindowOptions{Title: "shot", Width: w, Height: h, Headless: true})
