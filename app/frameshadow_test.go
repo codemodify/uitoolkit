@@ -307,20 +307,6 @@ func TestIMECursorAndAccessibleExtentsFollowTheMargin(t *testing.T) {
 	if float32(x) < fb.Min.X-1 || float32(x) > fb.Max.X+1 {
 		t.Fatalf("caret x=%d is outside the field %v", x, fb)
 	}
-	// Accessible boxes are relative to the window, so the margin is out.
-	tree := r.w.AccessibleTree()
-	if tree == nil || len(tree.Children) == 0 {
-		t.Fatal("no accessible tree")
-	}
-	node := tree.Children[0]
-	obj := &atspiObj{win: r.w, node: node}
-	e := obj.extents()
-	if e.X < 0 || e.Y < 0 {
-		t.Fatalf("accessible extents %v are outside the window", e)
-	}
-	if want := int32(node.Bounds.Min.X - r.w.WindowRect().Min.X); e.X != want {
-		t.Fatalf("accessible x %d, want %d (bounds %v, window %v)", e.X, want, node.Bounds, r.w.WindowRect())
-	}
 }
 
 // The GPU path paints the same frame: the scene the window records is

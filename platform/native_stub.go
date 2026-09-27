@@ -1,4 +1,4 @@
-//go:build !linux || !cgo
+//go:build (!linux || !cgo) && !windows
 
 package platform
 
@@ -6,4 +6,5 @@ package platform
 // headless / offscreen. nativeDetectScale is 0 so DetectScale uses env or 1.
 func x11Available() Backend      { return nil }
 func waylandBackend() Backend    { return nil }
+func win32Available() Backend    { return nil }
 func nativeDetectScale() float32 { return 0 }

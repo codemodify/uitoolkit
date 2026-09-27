@@ -45,6 +45,11 @@ func Select(name string, headless bool) Backend {
 			return b
 		}
 		return autoBackend()
+	case "win32", "windows":
+		if b := win32Available(); b != nil {
+			return b
+		}
+		return OffscreenBackend{}
 	case "", "auto":
 		return autoBackend()
 	}
@@ -52,6 +57,12 @@ func Select(name string, headless bool) Backend {
 }
 
 func autoBackend() Backend {
+	// Windows first, and without asking the environment: there is no
+	// DISPLAY to look for, and a Windows process that can make a window
+	// always can.
+	if b := win32Available(); b != nil {
+		return b
+	}
 	if os.Getenv("WAYLAND_DISPLAY") != "" {
 		if b := waylandBackend(); b != nil {
 			return b
