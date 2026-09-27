@@ -53,10 +53,25 @@ var skinRegistry = struct {
 }
 
 func init() {
-	for _, sk := range loadBuiltinSkins() {
+	// Two passes, and the order matters for start-up. Pack resolves the
+	// skin against its base pack, which builds the era-pack index — every
+	// registered pack, each one Resolved — and RegisterPack invalidates
+	// that index. Registering inside the same loop therefore rebuilt the
+	// whole index once per skin: eight builds of 129 packs before main,
+	// 5.0 MB of the 12.0 MB the package allocated at init. Resolving all
+	// eight first and registering them afterwards builds it once.
+	//
+	// A skin may not stand on another skin (see basePack), so no skin
+	// needs an earlier one to be registered for its own Pack to resolve.
+	skins := loadBuiltinSkins()
+	packs := make([]ThemePack, len(skins))
+	for i, sk := range skins {
+		packs[i] = sk.Pack()
+	}
+	for i, sk := range skins {
 		skinRegistry.builtin[sk.Name] = sk
 		skinRegistry.order = append(skinRegistry.order, sk.Name)
-		RegisterPack(sk.Pack())
+		RegisterPack(packs[i])
 	}
 }
 
