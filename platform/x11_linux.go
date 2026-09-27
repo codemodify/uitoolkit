@@ -3692,7 +3692,7 @@ func (s *x11Surface) SetKeepAbove(on bool) bool {
 }
 
 // SetShadedHeight pins the window to h logical pixels tall while it is
-// rolled up, 0 to let it grow again (ShadeSurface). Without the pin KWin
+// rolled up, 0 to let it grow again (FrameShade). Without the pin KWin
 // clamps the roll-up straight back to WM_NORMAL_HINTS' minimum height —
 // every non-popup X11 window states one — and the window would spring open
 // again the moment it was told to close.

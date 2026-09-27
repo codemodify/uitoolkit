@@ -8,8 +8,9 @@ import (
 
 // This file holds the window-frame vocabulary shared by every backend: who
 // draws a window's frame (Decorations), what the desktop says about the
-// window (WindowState, WMCaps) and the FrameSurface capability a toolkit-drawn
-// frame needs (hand a move, a resize or the window menu to the desktop). It
+// window (WindowState) and what a frame the toolkit draws hands back to
+// the desktop — a move, a resize, the window menu. [WindowFrame] is the
+// seam those travel through; this is the vocabulary they are said in. It
 // has no cgo and no build tag, so the decoders below are tested headless.
 
 // Decorations says who draws a top-level window's frame: its title bar,
@@ -402,7 +403,7 @@ type WindowState struct {
 	// (_NET_WM_STATE_ABOVE). It is the desktop's answer, not the
 	// application's request — a window manager that refused says so by
 	// never setting it. Wayland's core protocol has no such state and
-	// never sets it; see [AboveSurface].
+	// never sets it; see [FrameKeepAbove].
 	KeepAbove bool
 }
 

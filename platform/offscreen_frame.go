@@ -302,7 +302,7 @@ func (o *Offscreen) SimulateKeepAbove(can bool) {
 }
 
 // SetShadedHeight records the height a rolled-up window is pinned to and
-// states it as a limit, exactly as the real backends do (ShadeSurface).
+// states it as a limit, exactly as the real backends do (FrameShade).
 func (o *Offscreen) SetShadedHeight(h int) bool {
 	if o == nil {
 		return false
@@ -370,7 +370,7 @@ func (o *Offscreen) SimulateCompositing(on bool) {
 
 // SimulateGlass switches the simulated desktop's blur-behind on or off, so
 // a test can run both the real-glass path and the painted fallback
-// (GlassSurface). It takes effect for the next frame the window asks for.
+// (FrameBlurBehind). It takes effect for the next frame the window asks for.
 func (o *Offscreen) SimulateGlass(on bool) {
 	if o != nil {
 		o.frame.glass = on

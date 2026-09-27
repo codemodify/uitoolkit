@@ -32,7 +32,7 @@ import (
 // CanKeepAbove reports whether the desktop can keep the window above the
 // others. X11 window managers that list _NET_WM_STATE_ABOVE in
 // _NET_SUPPORTED can; Wayland compositors cannot, whatever desktop they
-// are (see [platform.AboveSurface]).
+// are (no [platform.FrameKeepAbove] in their [platform.FrameCaps]).
 func (w *Window) CanKeepAbove() bool {
 	if w == nil || w.Closed() {
 		return false

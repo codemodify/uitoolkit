@@ -594,13 +594,18 @@ sees an ordinary resize. There is no shade request in xdg-shell, and X11's
 `_NET_WM_STATE_SHADED` is the *window manager's* title bar rolling up —
 no use to a window that asked for no decorations, which is not shadeable at
 all. So both backends take the same path, and the backend's only part is
-`platform.ShadeSurface`: while the window is rolled up its height is pinned
+`WindowFrame.SetShadedHeight` (`platform.FrameShade`): while the window is
+rolled up its height is pinned
 (`WM_NORMAL_HINTS`, `xdg_toplevel.set_min_size`/`set_max_size`), because
 both backends state a minimum height for every resizable window and a
 window manager clamps a resize to it — unpinned, the window would spring
 straight back open.
 
-`CanShade` is false where the height is not the toolkit's to change: under
+`CanShade` ANDs that capability with what the toolkit itself will do — it
+is the one place the two meet. `FrameCaps` says what the *window system*
+will do; the layer above adds its own policy; neither answers for the
+other. So `CanShade` is false where the height is not the toolkit's to
+change: under
 the desktop's frame ("OS window borders" — there the wheel over the title
 bar never reaches the client at all, and KWin's own `CommandTitlebarWheel`
 governs it), and while the window is maximized, tiled, full screen or
@@ -616,7 +621,8 @@ that key explicitly gets what they set, `Nothing` included.
 **Keeping the window above the others** is the desktop's doing, and only
 X11 can: `_NET_WM_STATE_ABOVE`, where the window manager lists it in
 `_NET_SUPPORTED`. `Window.SetKeepAbove`, `ToggleKeepAbove`, `KeepAbove`,
-`CanKeepAbove`, and `platform.AboveSurface` underneath; the state comes
+`CanKeepAbove`, and `platform.FrameKeepAbove` in the window's `FrameCaps`
+underneath; the state comes
 back as an ordinary window-state change, so what is shown is what the
 window manager did, not what was asked.
 

@@ -304,7 +304,7 @@ func (w *Window) buttonLayout(hb *widgets.HeaderBar) platform.ButtonLayout {
 //
 // It only happens where the desktop can actually keep a window above the
 // others, so nobody trades a working button for a dead one: on Wayland,
-// where no compositor can (see [platform.AboveSurface]), the window-menu
+// where no compositor can (no [platform.FrameKeepAbove]), the window-menu
 // button stays exactly as it was. A layout that already asks for
 // keep-above — KWin's "F" in ButtonsOnLeft, a look's own layout — is left
 // alone.

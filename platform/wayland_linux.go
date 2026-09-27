@@ -4638,7 +4638,7 @@ func (s *wlSurface) applyLimitsLocked() {
 }
 
 // SetShadedHeight pins the toplevel to h logical pixels tall while it is
-// rolled up to its title bar, 0 to let it grow again (ShadeSurface). A
+// rolled up to its title bar, 0 to let it grow again (FrameShade). A
 // resizable toplevel states a minimum of 200 by 120 whether or not the
 // application asked for one, so without the pin the compositor would be
 // told the window may never be as short as its own title bar.

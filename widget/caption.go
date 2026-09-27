@@ -62,6 +62,11 @@ type FrameHost interface {
 	FrameCaps() platform.FrameCaps
 	// Active reports whether the window paints as active.
 	Active() bool
+	// Minimize and ToggleMaximize are commands, not questions: unlike the
+	// requests on [platform.WindowFrame] they answer nothing, because a
+	// caption never asks one it has not already drawn — FrameCaps decided
+	// that, and an MDI child window (widgets.mdi) always can. What the
+	// desktop did comes back through WindowState.
 	Minimize()
 	ToggleMaximize()
 	// RequestClose asks the window to close, as the desktop's own close

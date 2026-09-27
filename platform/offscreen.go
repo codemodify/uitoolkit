@@ -29,7 +29,7 @@ type Offscreen struct {
 	drop      map[string][]byte
 	dropTaken *bool
 	dragOut   offscreenDrag
-	// frame is the simulated desktop behind FrameSurface (offscreen_frame.go).
+	// frame is the simulated desktop behind WindowFrame (offscreen_frame.go).
 	frame offscreenFrame
 	// opts are the options the window was made with, sizing its resize
 	// policy and limits what the simulated desktop was told about how

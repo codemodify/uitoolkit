@@ -460,23 +460,68 @@ dbusmenu and skipped `ContextMenu`.
 
 Who draws a window's frame — the desktop or uitoolkit — and how an app puts
 its own title bar in it (`Window.SetTitleBar`, `widgets.HeaderBar`) is in
-[decorations.md](decorations.md). The platform side is the optional
-`FrameSurface` capability (negotiated `Decorations`, `WindowState`,
-`Capabilities`, `StartSystemMove`, `StartSystemResize`, `ShowWindowMenu`,
-`Minimize`, `SuitsClientFrame`, `SetFrame`), implemented by the Wayland and
-X11 top-level surfaces and by `Offscreen`, which records the calls for
-tests.
+[decorations.md](decorations.md). The platform side is `WindowFrame`
+(`platform/windowframe.go`): one seam **every backend implements whole**,
+carrying the decoration negotiation (`Decorations`, `RequestDecorations`,
+`WindowState`, `SetFrame`), the gestures handed back to the desktop
+(`StartMove`, `StartResize`, `ShowMenu`) and every state request
+(`Minimize`, `SetMaximized`, `MaximizeAxis`, `SetFullscreen`,
+`SetKeepAbove`, `Lower`, `SetShadedHeight`, `SetPalette`, `SetIcon`).
+The Wayland and X11 top-level surfaces implement it, and so does
+`Offscreen`, which records the calls for tests.
 
-### The window's dress
+Reach it with `platform.FrameOf(surface)`, which is **never nil**: a
+surface with no frame of its own — a popup, a layer surface — answers with
+one whose `Caps()` is zero and whose every request returns false.
 
-Two more optional capabilities say how the desktop should dress a window
-it lists or frames (`platform/windowdress.go`), and `Offscreen` records
-both (`FrameCalls.Palettes`, `.Icons`; `SimulateDecorationPalette`):
+### What the window system will actually do
+
+`FrameCaps` is a bitmask read afresh from `WindowFrame.Caps()` — never
+cached — saying what the window system will do **for this window now**. It
+folds two things a caller never had reason to tell apart: what the backend
+has code for (xdg-shell has no keep-above; Wayland has no lower) and what
+the desktop grants this window at this moment
+(`xdg_toplevel.wm_capabilities`, `_NET_WM_ALLOWED_ACTIONS`, a fixed window
+that may not be maximized).
 
 | | Wayland | X11 |
 | --- | --- | --- |
-| Frame palette (`DecorationPaletteSurface`) | `org_kde_kwin_server_decoration_palette_manager.create` on the `wl_surface` the first time there is a palette, then `set_palette(path)` once per change; `set_palette("")` gives KWin's own colours back, `release` goes with the surface. Only where KWin advertises the manager | `_KDE_NET_WM_COLOR_SCHEME` (STRING, the path) while the window manager is KWin; removed for none |
-| Icon (`IconSurface`) | `xdg-toplevel-icon-v1`: one `wl_shm` pool, an ARGB8888 (premultiplied, stride 4 × side) buffer per square size, `create_icon`, `add_buffer(buffer, 1)` for each, `set_icon(toplevel, icon)`; a new icon replaces it and the old icon is destroyed before its buffers. Re-sent on every new role (Show after Hide). KWin asks for 96 px (`icon_size`) | `_NET_WM_ICON`: width, height and straight (not premultiplied) ARGB CARDINALs per size, smallest first |
+| `FrameMove`, `FrameResize`, `FrameMenu` | `xdg_toplevel.move` / `.resize` / `.show_window_menu` | `_NET_WM_MOVERESIZE` |
+| `FrameMinimize`, `FrameMaximize`, `FrameFullscreen` | granted unless `wm_capabilities` withholds them | `_NET_WM_ALLOWED_ACTIONS` |
+| `FrameMaximizeAxis` | — | `_NET_WM_STATE_MAXIMIZED_VERT` / `_HORZ` |
+| `FrameLower` | — | `XLowerWindow` |
+| `FrameKeepAbove` | — | `_NET_WM_STATE_ABOVE` in `_NET_SUPPORTED` |
+| `FrameShade` | `set_min_size`/`set_max_size` | `WM_NORMAL_HINTS` |
+| `FrameBlurBehind` | `ext_background_effect_v1` | `_KDE_NET_WM_BLUR_BEHIND_REGION` |
+| `FramePalette`, `FrameIcon` | see the table below | see the table below |
+| `FrameClientFrame` | not a tiling compositor | the WM moves and resizes on request |
+
+A backend that cannot do something **leaves the bit out and its method
+returns false** — it does not omit the method. That is what makes this a
+boundary a second platform can be held to: a Win32 backend that forgets
+keep-above fails to compile, and one that cannot do a thing says so where
+the caption button can read it. Every request reports whether it was
+*made*, never whether it *succeeded*: the desktop has the last word and
+answers with an `EventWindowState`.
+
+Until a desktop has said, a backend assumes the four it grants per window
+(menu, minimize, maximize, fullscreen): a Wayland compositor need never
+send `wm_capabilities` and an X11 window manager need never set
+`_NET_WM_ALLOWED_ACTIONS`, so a caption button that waited for permission
+would never appear. That assumption lives **inside the backend**, which
+knows whether its desktop has spoken.
+
+### The window's dress
+
+Two more parts of the same seam say how the desktop should dress a window
+it lists or frames, gated by `FramePalette` and `FrameIcon`, and
+`Offscreen` records both (`FrameCalls.Palettes`, `.Icons`;
+`SimulateDecorationPalette`):
+
+| | Wayland | X11 |
+| --- | --- | --- |
+| Frame palette (`SetPalette`, `FramePalette`) | `org_kde_kwin_server_decoration_palette_manager.create` on the `wl_surface` the first time there is a palette, then `set_palette(path)` once per change; `set_palette("")` gives KWin's own colours back, `release` goes with the surface. Only where KWin advertises the manager | `_KDE_NET_WM_COLOR_SCHEME` (STRING, the path) while the window manager is KWin; removed for none |
+| Icon (`SetIcon`, `FrameIcon`) | `xdg-toplevel-icon-v1`: one `wl_shm` pool, an ARGB8888 (premultiplied, stride 4 × side) buffer per square size, `create_icon`, `add_buffer(buffer, 1)` for each, `set_icon(toplevel, icon)`; a new icon replaces it and the old icon is destroyed before its buffers. Re-sent on every new role (Show after Hide). KWin asks for 96 px (`icon_size`) | `_NET_WM_ICON`: width, height and straight (not premultiplied) ARGB CARDINALs per size, smallest first |
 
 Both are put back on an X window made afresh on another visual.
 `platform/wlfake_linux_test.go` is a compositor on a socket pair
