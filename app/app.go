@@ -134,6 +134,7 @@ func New(opts Options) *Application {
 		ap = style.LoadAppearance()
 		style.SetReduceMotion(ap.ReduceMotion)
 		style.SetNativeDialogs(ap.NativeDialogs)
+		style.SetComboWheel(ap.ComboWheel)
 		watch = true
 	}
 	if opts.DisableLookWatch {

@@ -33,6 +33,7 @@ type (
 	MessageButtons    = widgets.MessageButtons
 	MessageResult     = widgets.MessageResult
 	MessageBoxOptions = widgets.MessageBoxOptions
+	WheelSelect       = widgets.WheelSelect
 	ButtonRole        = widgets.ButtonRole
 	TableColumn       = widgets.TableColumn
 	FileInfo          = widgets.FileInfo
@@ -583,6 +584,13 @@ const (
 
 	FileOpen = widgets.FileOpen
 	FileSave = widgets.FileSave
+
+	// Whether a wheel notch over a closed combo box steps its
+	// selection: the user's preference (style.ComboWheel, Settings'
+	// "Combo wheel"), or this one box's own answer to it.
+	WheelSelectPref = widgets.WheelSelectPref
+	WheelSelectOn   = widgets.WheelSelectOn
+	WheelSelectOff  = widgets.WheelSelectOff
 )
 
 // Layout constants.

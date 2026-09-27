@@ -140,6 +140,7 @@ func (a *Application) ApplyAppearance(ap style.Appearance) {
 	}
 	style.SetReduceMotion(ap.ReduceMotion)
 	style.SetNativeDialogs(ap.NativeDialogs)
+	style.SetComboWheel(ap.ComboWheel)
 	// Kept offscreen too, so what Appearance reports is what was applied;
 	// the frame policy gives an offscreen window no frame of the toolkit's
 	// whatever the preference says (resolveDecorations).

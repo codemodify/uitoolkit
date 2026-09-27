@@ -34,6 +34,10 @@ type appearanceFileJSON struct {
 	FollowDesktop bool `json:"followDesktop,omitempty"`
 	// NativeDialogs uses the desktop's own file dialogs.
 	NativeDialogs bool `json:"nativeDialogs,omitempty"`
+	// ComboWheel lets the wheel over a closed combo box step its
+	// selection. Left out unless it is on, like every other preference
+	// here whose default is off.
+	ComboWheel bool `json:"comboWheel,omitempty"`
 	// Decorations: "auto" (omitted), "system" or "toolkit".
 	Decorations string `json:"decorations,omitempty"`
 	// CaptionButtons: "desktop" (omitted) or "theme".
@@ -135,6 +139,7 @@ func resolveAppearance(raw appearanceFileJSON) Appearance {
 	a.ReduceMotion = raw.ReduceMotion
 	a.FollowDesktop = raw.FollowDesktop
 	a.NativeDialogs = raw.NativeDialogs
+	a.ComboWheel = raw.ComboWheel
 	a.Decorations = ParseDecorationsPref(raw.Decorations)
 	a.CaptionButtons = ParseCaptionButtonsPref(raw.CaptionButtons)
 	a.Renderer = ParseRendererPref(raw.Renderer)
@@ -209,6 +214,7 @@ func SaveAppearance(a Appearance) error {
 		ReduceMotion:   a.ReduceMotion,
 		FollowDesktop:  a.FollowDesktop,
 		NativeDialogs:  a.NativeDialogs,
+		ComboWheel:     a.ComboWheel,
 		Decorations:    decorationsJSON(a.Decorations),
 		CaptionButtons: string(ParseCaptionButtonsPref(string(a.CaptionButtons))),
 		Renderer:       string(ParseRendererPref(string(a.Renderer))),

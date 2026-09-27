@@ -1,6 +1,7 @@
 package widgets
 
 import (
+	"math"
 	"strings"
 
 	"github.com/codemodify/paintengine2d"
@@ -30,7 +31,36 @@ type TextField struct {
 	Password    bool // paint bullets; Text stays the real value
 	// Frameless paints the text alone: the field sits inside a frame its
 	// parent drew (a spin box's field shares its frame with the buttons).
-	Frameless  bool
+	Frameless bool
+	// Clearable puts a small cross at the field's trailing end while
+	// there is something to clear, and clicking it empties the field.
+	//
+	// It is opt-in, and that is the whole of the decision. A field that
+	// grew one on its own would grow one everywhere: in a password box,
+	// where a stray click throws away a typed secret with no undo; in a
+	// form that already has a Reset, where it is a second, narrower
+	// answer to a question the form has answered; in the one-character
+	// boxes of a date or a licence key, where there is no room for it
+	// and no work in clearing one character. None of those is a thing
+	// the widget can see, and all of them are things the page knows. It
+	// is not a look's decision either: whether a field can be emptied in
+	// one click is a fact about what the field is for, and it must not
+	// appear and disappear as the user changes theme.
+	//
+	// Four things turn it off whatever this says, because in each of
+	// them showing it would be a bug rather than a preference:
+	// [TextField.Password] (a bullet field must never offer to throw the
+	// secret away), [TextField.Frameless] (the frame is the parent's and
+	// so is that corner — a spin box's arrows are already there), a
+	// disabled field, and a field too narrow to hold the cross and still
+	// show text.
+	Clearable bool
+	// clearHot and clearDown are the pointer's state over that cross. It
+	// is a button inside another control, so it keeps a button's
+	// contract: it acts on the release, and only if the release lands
+	// where the press did.
+	clearHot   bool
+	clearDown  bool
 	caret      int
 	selA, selB int
 	blinkOn    bool
@@ -127,6 +157,152 @@ func (t *TextField) Measure(c layout.Constraints) paintengine2d.Point {
 
 func (t *TextField) Arrange(r paintengine2d.Rect) { t.SetBounds(r) }
 
+// ---- the clear button ---------------------------------------------------------
+//
+// The cross is drawn by the widget, not by an engine, and it is the one
+// piece of chrome in this file that no look is asked about.
+//
+// A DrawFieldClear on the engine interface would be thirty-odd
+// implementations of a sixteen-pixel × — thirty-odd chances for a pack
+// to draw it a pixel out, thirty-odd golden files to keep — and there
+// is nothing for those implementations to be faithful to. Win95 has no
+// clear button. Motif has none, NeXT has none, Platinum has none: the
+// affordance was invented for Mac OS X's search field and the web's
+// input[type=search], long after most of these eras ended, so an engine
+// asked to draw one in its era's manner has no era to draw from. What a
+// look does own here it already gives: the field's own frame around it,
+// [style.Palette].Text and TextMuted for the strokes, and the look's
+// scale for their weight.
+//
+// So this uses [style.DrawCaptionGlyph] with [style.CaptionClose] — the
+// same painter, the same rounding to whole device pixels, that draws
+// the × on a browser tab's close button ([BrowserTabs]) and on a window
+// caption. One cross, drawn one way, crisp at 1x and at 1.75x.
+//
+// A typed [style.ToolIcon] was the other candidate and is the wrong
+// shape for this. The premiere PNG sets do ship close and x stems, but
+// no ToolIcon reaches them, and adding one means a constant, a label,
+// an entry in the freedesktop name table, artwork in five sets at two
+// densities and both drawn-vector fallbacks — because three tests walk
+// AllToolIcons and demand ink from every set for every icon. That is
+// the price of an icon an application asks for by name. This is not
+// one: it is a part of a control, like a combo's arrow, and parts of
+// controls are drawn, not fetched.
+
+// clearShows reports whether the cross is on screen: the field asked
+// for one, there is something to clear, and clearing it is a thing this
+// field may do at all. See [TextField.Clearable] for the four refusals.
+func (t *TextField) clearShows() bool {
+	if !t.Clearable || t.Password || t.Frameless || !t.Enabled() || t.Text == "" {
+		return false
+	}
+	b := t.LocalBounds()
+	// Room for the cross and for text beside it. A field narrow enough
+	// that the cross would be most of it keeps its whole width: one
+	// character is quicker to erase than to aim at.
+	return b.Dx() >= style.Dip(t.Look(), 72) && t.clearSide() >= style.Dip(t.Look(), 10)
+}
+
+// clearSide is the side of the square the cross is drawn in.
+func (t *TextField) clearSide() float32 {
+	return min(style.Dip(t.Look(), 16), t.LocalBounds().Dy()-style.Dip(t.Look(), 6))
+}
+
+// clearRect is that square, in local coordinates: against the trailing
+// end of the field, inside the frame, vertically centred and snapped to
+// whole pixels so the two strokes land on the same grid at every scale.
+func (t *TextField) clearRect() paintengine2d.Rect {
+	b, side := t.LocalBounds(), t.clearSide()
+	x := b.Max.X - t.fieldPad()*0.5 - side
+	y := b.Min.Y + float32(math.Round(float64(b.Dy()-side)*0.5))
+	return paintengine2d.XYWH(float32(math.Round(float64(x))), y, side, side)
+}
+
+// clearRoom is how much of the text box the cross takes, which is what
+// keeps the promise that it never sits on the text or on the caret at
+// the end of it. Nothing else in this file knows the cross is there:
+// the text is measured, scrolled and truncated against the box less
+// this, so every engine — the ones that route their text through
+// baseDrawTextField and the eight that lay it out themselves — ends up
+// drawing a string that stops before the cross begins.
+func (t *TextField) clearRoom() float32 {
+	if !t.clearShows() {
+		return 0
+	}
+	room := t.LocalBounds().Max.X - t.fieldPad() - (t.clearRect().Min.X - style.Dip(t.Look(), 3))
+	return max(room, 0)
+}
+
+// clearName is what a screen reader calls the cross. It is the field's
+// own name with the verb in front of it, the way a browser tab's close
+// button is "Close <title>": "Clear" alone, on a page with four fields,
+// names four different buttons the same.
+func (t *TextField) clearName() string {
+	for _, s := range []string{t.AccessibleName(), t.Placeholder} {
+		if s = strings.TrimSpace(s); s != "" {
+			return "Clear " + s
+		}
+	}
+	return "Clear"
+}
+
+// clearNow empties the field as the user's own edit, so OnInput fires
+// beside OnChange (widgets/oninput.go) — a click on this cross is the
+// user typing nothing, not the application assigning a value.
+//
+// It does not touch the focus. A field that had the caret keeps it, at
+// the start of the now-empty text; a field that did not is not given it,
+// because what was clicked is a button and clicking a button does not
+// put a caret anywhere. That is also why the press is answered here
+// rather than falling through to MousePress's caret placement.
+func (t *TextField) clearNow() {
+	if t.Text == "" {
+		return
+	}
+	t.IMEReset()
+	t.user.did(func() { t.SetText("") })
+	t.caret, t.selA, t.selB, t.scrollX = 0, 0, 0, 0
+	t.Invalidate()
+}
+
+// paintClear strokes the cross: muted while it is only there, the
+// field's own text colour under the pointer, so it reads as reachable
+// without a face of its own — a field is already a sunken well or a
+// gel capsule, and a second raised box inside it is one box too many.
+func (t *TextField) paintClear(ctx *paintengine2d.Context) {
+	lk := t.Look()
+	col := lk.Palette().TextMuted
+	if t.clearHot || t.clearDown {
+		col = lk.Palette().Text
+	}
+	box := t.clearRect()
+	if t.clearDown {
+		box = box.Inset(style.Dip(lk, 1))
+	}
+	style.DrawCaptionGlyph(ctx, box, style.CaptionClose, false,
+		col, style.Dip(lk, 8), max(style.Dip(lk, 1.25), 1))
+}
+
+// fitClear cuts s where the cross begins. The engines draw the string
+// they are handed, each clipping it to a text box of its own making, so
+// the only way to keep every one of them off the cross is to hand them
+// a string that does not reach it.
+func (t *TextField) fitClear(s string, room float32) string {
+	if room <= 0 || s == "" {
+		return s
+	}
+	f := t.font()
+	if f.Advance(s)-t.scrollX <= room {
+		return s
+	}
+	n := runeCount(s)
+	i := min(max(f.IndexAt(s, room+t.scrollX), 0), n)
+	for i > 0 && f.CaretX(s, i)-t.scrollX > room {
+		i--
+	}
+	return string([]rune(s)[:i])
+}
+
 func (t *TextField) fieldPad() float32 {
 	p := t.Look().Metrics().FieldPad
 	if p <= 0 {
@@ -153,9 +329,20 @@ func (t *TextField) Paint(ctx *paintengine2d.Context) {
 	if t.Frameless {
 		st |= style.StateFrameless
 	}
+	// The cross takes its room out of the string, not out of the rect:
+	// the field's frame is still drawn at its full width, so a look's
+	// well, bevel or capsule is the shape it always was. See clearRoom.
+	if room := t.clearRoom(); room > 0 {
+		text = t.fitClear(text, t.LocalBounds().Dx()-t.fieldPad()*2-room)
+		n := runeCount(text)
+		caret, selA, selB = min(caret, n), min(selA, n), min(selB, n)
+	}
 	t.Look().DrawTextField(ctx, t.LocalBounds(), st, text, t.Placeholder, caret, selA, selB, t.blink(), t.scrollX, t.font())
 	if t.preedit != "" {
 		drawPreeditBar(ctx, t.Look(), t.LocalBounds(), t.fieldPad(), text, selA, selB, t.scrollX, false, t.font())
+	}
+	if t.clearShows() {
+		t.paintClear(ctx)
 	}
 }
 
@@ -277,6 +464,14 @@ func (t *TextField) FocusLost() {
 	}
 }
 
+func (t *TextField) MouseExit() {
+	if t.clearHot {
+		t.clearHot = false
+		t.Invalidate()
+	}
+	t.Base.MouseExit()
+}
+
 func (t *TextField) indexAt(x float32) int {
 	f := t.font()
 	return f.IndexAt(t.displayText(), x-t.fieldPad()+t.scrollX)
@@ -285,7 +480,9 @@ func (t *TextField) indexAt(x float32) int {
 func (t *TextField) ensureCaretVisible() {
 	f := t.font()
 	pad := t.fieldPad()
-	inner := t.LocalBounds().Dx() - pad*2
+	// Less the cross's room, so the caret at the end of a long string
+	// stops in front of it rather than under it.
+	inner := t.LocalBounds().Dx() - pad*2 - t.clearRoom()
 	if inner <= 0 {
 		return
 	}
@@ -316,6 +513,15 @@ func (t *TextField) MousePress(e widget.MouseEvent) bool {
 	if !t.Enabled() {
 		return false
 	}
+	// The cross is answered before anything else in this method,
+	// because everything else in this method belongs to the text: the
+	// focus, the caret, the selection and the primary-selection paste.
+	// A press on a button must move none of them.
+	if e.Button == platform.ButtonLeft && t.clearShows() && t.clearRect().Contains(e.Pos) {
+		t.clearDown, t.clearHot = true, true
+		t.Invalidate()
+		return true
+	}
 	t.RequestFocus()
 	if e.Button == platform.ButtonMiddle {
 		t.caret = t.indexAt(e.Pos.X)
@@ -344,6 +550,15 @@ func (t *TextField) MousePress(e widget.MouseEvent) bool {
 }
 
 func (t *TextField) MouseMove(e widget.MouseEvent) bool {
+	if hot := t.clearShows() && t.clearRect().Contains(e.Pos); hot != t.clearHot {
+		t.clearHot = hot
+		t.Invalidate()
+	}
+	if t.clearDown {
+		// Held on the cross: the pointer may wander off it and back, and
+		// it must not be extending a selection while it does.
+		return true
+	}
 	if t.dragSel {
 		// Waiting to see whether this press becomes a drag of the
 		// selection; it must not extend it in the meantime.
@@ -359,7 +574,18 @@ func (t *TextField) MouseMove(e widget.MouseEvent) bool {
 	return true
 }
 
-func (t *TextField) MouseRelease(widget.MouseEvent) bool {
+func (t *TextField) MouseRelease(e widget.MouseEvent) bool {
+	if t.clearDown {
+		// A button's contract: it acts on the release, and only where
+		// the press landed, so a press that turned out to be a mistake
+		// can be taken back by letting go somewhere else.
+		t.clearDown = false
+		if t.clearShows() && t.clearRect().Contains(e.Pos) {
+			t.clearNow()
+		}
+		t.Invalidate()
+		return true
+	}
 	if t.dragSel {
 		// The press inside the selection never became a drag: it was a
 		// click, and a click puts the caret where it landed.
@@ -393,6 +619,15 @@ func (t *TextField) KeyPress(e widget.KeyEvent) bool {
 	}
 	switch e.Key {
 	case platform.KeyEscape:
+		// The keyboard's way to the cross, and the convention of every
+		// field that has one (NSSearchField, GtkSearchEntry, a
+		// QLineEdit with a clear button): the first Escape empties the
+		// field, and only once it is empty does Escape mean what the
+		// page says it means — leave, close, cancel.
+		if t.clearShows() {
+			t.clearNow()
+			return true
+		}
 		if t.OnEscape != nil {
 			t.OnEscape()
 			return true

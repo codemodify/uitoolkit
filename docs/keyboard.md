@@ -70,6 +70,11 @@ written over `TextInput`, and a text field must not be written over
 | IME | Preedit is underlined in the field; commit inserts the phrase. Esc cancels composition. On Wayland, Latin keys still emit `EventText` when text-input-v3 is idle (no preedit). |
 | Password | Same keys; the field paints bullets. `NewPasswordField` / `TextField.Password`. |
 | Return | `OnSubmit` |
+| Escape | Clears a `Clearable` field that has something in it, then `OnEscape` once it is empty (the `NSSearchField` / `GtkSearchEntry` convention). A field that is not `Clearable` goes straight to `OnEscape`. |
+
+A `Clearable` field's cross is **not** a tab stop: a screen reader
+reaches it as a named button under the field and Escape is the
+keyboard's way to it. See [widgets.md](widgets.md#the-clear-button).
 
 ## TextArea
 
@@ -171,6 +176,8 @@ The widget reports `OnSort`; the app reorders `CellText`.
 | Return / Space | Activate |
 | Esc | Close the open menu / combo (also handled globally) |
 | Letter | Mnemonic or first-letter match inside a popup |
+| Wheel (open combo, menu) | Scroll the popup, and let it bubble at the ends |
+| Wheel (closed combo) | Step the selection — **only** with Settings' *Combo wheel* on, or `ComboBox.WheelSelect`. Off by default; a box at its first or last item passes the notch to whatever is scrolling behind it, and a touchpad's precise scroll never steps. See [widgets.md](widgets.md#the-wheel-over-a-closed-combo-box) |
 
 ## Links
 
