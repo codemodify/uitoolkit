@@ -29,7 +29,29 @@ const (
 	// CaptionMenu opens the window menu (Windows' control-menu box, Motif's
 	// window menu button, KDE's "M").
 	CaptionMenu
+	// 5 is platform.CaptionSpacer, a gap rather than a button: a caption
+	// never asks a look to paint one, but the values have to keep lining
+	// up, so the name is skipped rather than the number.
+	_
+	// CaptionKeepAbove keeps the window above the others (KWin's "F",
+	// Motif's and OS/2's "stay on top"). It is a toggle: while it is on it
+	// is drawn as a button held down (StateChecked, and StateToggle to say
+	// it is one) with its glyph in the alternate form — see [CaptionAlt].
+	CaptionKeepAbove
 )
+
+// CaptionAlt reports whether caption button k is showing its other face:
+// a maximize button on a maximized window (which restores), a keep-above
+// button that is on. It is the flag [DrawCaptionGlyph] takes.
+func CaptionAlt(k CaptionButton, cs ControlState, st DecorationState) bool {
+	switch k {
+	case CaptionMaximize:
+		return st.Maximized
+	case CaptionKeepAbove:
+		return cs.Checked()
+	}
+	return false
+}
 
 // Edges is a set of window edges. The values match platform.Edges'.
 type Edges uint8
@@ -516,9 +538,13 @@ func NativeDecoration(lk LookAndFeel) bool {
 
 // DrawCaptionGlyph draws a caption-button glyph of side s centred in b: an ✕
 // (close), a bar (minimize), a square (maximize), two overlapping squares
-// (restore, while maximized) or a small window (the window menu), in lines
-// lw wide on whole device pixels, so it stays crisp at any scale.
-func DrawCaptionGlyph(ctx *paintengine2d.Context, b paintengine2d.Rect, k CaptionButton, maximized bool, col paintengine2d.Color, s, lw float32) {
+// (restore, while maximized), a small window (the window menu) or a window
+// held up under a ceiling (keep above), in lines lw wide on whole device
+// pixels, so it stays crisp at any scale.
+//
+// alt is the button's other face: a maximize button restores, a keep-above
+// button is on. [CaptionAlt] reads it off the button's states.
+func DrawCaptionGlyph(ctx *paintengine2d.Context, b paintengine2d.Rect, k CaptionButton, alt bool, col paintengine2d.Color, s, lw float32) {
 	if ctx == nil || b.Empty() || col.A <= 0 {
 		return
 	}
@@ -529,14 +555,15 @@ func DrawCaptionGlyph(ctx *paintengine2d.Context, b paintengine2d.Rect, k Captio
 	y0 := round(b.Min.Y + (b.Dy()-s)*0.5)
 	g := paintengine2d.XYWH(x0, y0, s, s)
 	fill := paintengine2d.Fill(col)
-	frame := func(q paintengine2d.Rect) {
+	frameT := func(q paintengine2d.Rect, t float32) {
 		p := paintengine2d.NewPath()
-		p.AddRect(paintengine2d.XYWH(q.Min.X, q.Min.Y, q.Dx(), lw))
-		p.AddRect(paintengine2d.XYWH(q.Min.X, q.Max.Y-lw, q.Dx(), lw))
-		p.AddRect(paintengine2d.XYWH(q.Min.X, q.Min.Y+lw, lw, q.Dy()-2*lw))
-		p.AddRect(paintengine2d.XYWH(q.Max.X-lw, q.Min.Y+lw, lw, q.Dy()-2*lw))
+		p.AddRect(paintengine2d.XYWH(q.Min.X, q.Min.Y, q.Dx(), t))
+		p.AddRect(paintengine2d.XYWH(q.Min.X, q.Max.Y-t, q.Dx(), t))
+		p.AddRect(paintengine2d.XYWH(q.Min.X, q.Min.Y+t, t, q.Dy()-2*t))
+		p.AddRect(paintengine2d.XYWH(q.Max.X-t, q.Min.Y+t, t, q.Dy()-2*t))
 		ctx.DrawPath(p, fill)
 	}
+	frame := func(q paintengine2d.Rect) { frameT(q, lw) }
 	switch k {
 	case CaptionClose:
 		p := paintengine2d.NewPath()
@@ -547,8 +574,31 @@ func DrawCaptionGlyph(ctx *paintengine2d.Context, b paintengine2d.Rect, k Captio
 		ctx.DrawPath(p, paintengine2d.StrokePaint(col, lw*1.15))
 	case CaptionMinimize:
 		ctx.DrawRect(paintengine2d.XYWH(g.Min.X, round(g.Min.Y+s*0.5), s, lw), fill)
+	case CaptionKeepAbove:
+		// "Stay on top": a ceiling across the top with the window held up
+		// against it — hollow while it is off, solid while it is on. The
+		// same two shapes read in a 1998 frame and in a 2026 one, and
+		// being nothing but axis-aligned rectangles they stay hard-edged
+		// at every scale, as the rest of these do.
+		// The ceiling is kept to a fifth of the glyph however heavy the
+		// look's own line is: a look that strokes at 1.5 dip would
+		// otherwise eat the window below it and leave two bars.
+		c := min(lw, max(round(s*0.2), 1))
+		ctx.DrawRect(paintengine2d.XYWH(g.Min.X, g.Min.Y, s, c), fill)
+		body := paintengine2d.XYWH(g.Min.X, round(g.Min.Y+2*c), s, s-2*c)
+		// The hollow body's line is thinned again where even that is too
+		// heavy to leave a hole: on and off must never come out the same
+		// picture, which is the whole point of a toggle.
+		t := min(c, max(round((body.Dy()-1)*0.5), 1))
+		switch {
+		case body.Dy() <= 0:
+		case alt || body.Dy() < 3:
+			ctx.DrawRect(body, fill)
+		default:
+			frameT(body, t)
+		}
 	case CaptionMaximize:
-		if !maximized {
+		if !alt {
 			frame(g)
 			return
 		}
@@ -651,7 +701,7 @@ func drawPlainCaptionButton(lk LookAndFeel, ctx *paintengine2d.Context, b painte
 	if !st.Active && !hot {
 		fg = fg.WithAlpha(fg.A * 0.55)
 	}
-	DrawCaptionGlyph(ctx, b, k, st.Maximized, fg, Dip(lk, 10), Dip(lk, 1))
+	DrawCaptionGlyph(ctx, b, k, CaptionAlt(k, cs, st), fg, Dip(lk, 10), Dip(lk, 1))
 }
 
 // drawFrameBorder fills the band of widths in just inside w.
@@ -833,7 +883,7 @@ func (a frameAdapter) DrawCaptionButton(l *Classic, ctx *paintengine2d.Context, 
 	}
 	fg := e.Face(l, ctx, b, RoleButton, fs)
 	side := min(b.Dx(), b.Dy())
-	DrawCaptionGlyph(ctx, b, k, st.Maximized, fg, side*0.45, max(l.S(1), side/16))
+	DrawCaptionGlyph(ctx, b, k, CaptionAlt(k, cs, st), fg, side*0.45, max(l.S(1), side/16))
 }
 
 // ---- shared painters --------------------------------------------------------
@@ -874,7 +924,7 @@ func (f flatCaption) draw(ctx *paintengine2d.Context, b paintengine2d.Rect, k Ca
 	case CaptionClose:
 		s = f.cls
 	}
-	DrawCaptionGlyph(ctx, b, k, st.Maximized, fg, s, f.lw)
+	DrawCaptionGlyph(ctx, b, k, CaptionAlt(k, cs, st), fg, s, f.lw)
 }
 
 // captionTitle draws a window title in b: f in col, aligned (centred on b,

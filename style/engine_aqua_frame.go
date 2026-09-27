@@ -104,7 +104,10 @@ func (aquaEngine) DrawCaptionButton(l *Classic, ctx *paintengine2d.Context, b pa
 		i = 1
 	case CaptionMaximize:
 		i = 2
-	case CaptionMenu:
+	case CaptionMenu, CaptionKeepAbove:
+		// Neither is one of the three lights: they take the grey one, and
+		// keep the glyph on at rest, since a toggle has to show which way
+		// it is without being pointed at.
 		i = -1
 	}
 	g := &c.lightOff
@@ -129,6 +132,8 @@ func (aquaEngine) DrawCaptionButton(l *Classic, ctx *paintengine2d.Context, b pa
 		DrawCross(ctx, s, fg, lw)
 	case CaptionMinimize:
 		ctx.DrawRect(paintengine2d.XYWH(s.Min.X, snap((s.Min.Y+s.Max.Y-lw)*0.5), s.Dx(), max(snap(lw), 1)), paintengine2d.Fill(fg))
+	case CaptionKeepAbove:
+		DrawCaptionGlyph(ctx, s, k, CaptionAlt(k, cs, st), fg, s.Dx(), lw)
 	default:
 		// Zoom's plus (and the window menu's).
 		t := max(snap(lw), 1)

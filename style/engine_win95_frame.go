@@ -99,12 +99,12 @@ func (win95Engine) DrawCaptionButton(l *Classic, ctx *paintengine2d.Context, b p
 	if cs.Pressed() {
 		g = g.Translate(paintengine2d.Pt(1, 1))
 	}
-	w95Glyph(ctx, g, k, st.Maximized, c.text)
+	w95Glyph(ctx, g, k, CaptionAlt(k, cs, st), c.text)
 }
 
 // w95Glyph draws a caption glyph in the proportions of the era's 16×14
 // buttons, scaled to b and kept on whole pixels.
-func w95Glyph(ctx *paintengine2d.Context, b paintengine2d.Rect, k CaptionButton, maximized bool, col paintengine2d.Color) {
+func w95Glyph(ctx *paintengine2d.Context, b paintengine2d.Rect, k CaptionButton, alt bool, col paintengine2d.Color) {
 	u := max(b.Dy()/14, 1)
 	px := func(v float32) float32 { return snap(v * u) }
 	t := max(px(2), 2) // the thick strokes
@@ -125,7 +125,7 @@ func w95Glyph(ctx *paintengine2d.Context, b paintengine2d.Rect, k CaptionButton,
 	case CaptionMinimize:
 		ctx.DrawRect(paintengine2d.XYWH(x0+px(4), y0+px(9), px(6), t), fill)
 	case CaptionMaximize:
-		if !maximized {
+		if !alt {
 			box(x0+px(3), y0+px(2), px(9), px(9))
 			return
 		}
@@ -145,5 +145,14 @@ func w95Glyph(ctx *paintengine2d.Context, b paintengine2d.Rect, k CaptionButton,
 	case CaptionMenu:
 		// The control-menu box: a window with a thick title bar.
 		box(x0+px(4), y0+px(3), px(8), px(7))
+	case CaptionKeepAbove:
+		// The ceiling, and the window held up under it.
+		ctx.DrawRect(paintengine2d.XYWH(x0+px(3), y0+px(2), px(10), lw), fill)
+		body := paintengine2d.XYWH(x0+px(3), y0+px(4), px(10), px(8))
+		if alt {
+			ctx.DrawRect(body, fill)
+			return
+		}
+		box(body.Min.X, body.Min.Y, body.Dx(), body.Dy())
 	}
 }

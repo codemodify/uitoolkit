@@ -1418,6 +1418,9 @@ type wlSurface struct {
 	sizeOpts WindowOptions
 	sizing   Sizing
 	limits   SizeLimits
+	// shadeH is the height (logical px) the toplevel is pinned to while
+	// the window is rolled up to its title bar, 0 when it is not.
+	shadeH int
 	// img is the CPU pixmap, nil while the GPU paints the window (a
 	// device-size pixmap beside the GPU surface would only hold memory:
 	// 12.5 MB for a 1280×800 window at 1.75x). bufW × bufH is the buffer's
@@ -4571,10 +4574,37 @@ func (s *wlSurface) applyLimitsLocked() {
 	if s == nil || s.top == nil {
 		return
 	}
-	l := s.limits
+	l := shadePin(s.limits, s.shadeH)
 	C.ui_wl_set_min(s.top, C.int(max(l.MinWidth, 0)), C.int(max(l.MinHeight, 0)))
 	C.ui_wl_set_max_size(s.top, C.int(max(l.MaxWidth, 0)), C.int(max(l.MaxHeight, 0)))
 }
+
+// SetShadedHeight pins the toplevel to h logical pixels tall while it is
+// rolled up to its title bar, 0 to let it grow again (ShadeSurface). A
+// resizable toplevel states a minimum of 200 by 120 whether or not the
+// application asked for one, so without the pin the compositor would be
+// told the window may never be as short as its own title bar.
+//
+// There is no shade in xdg-shell: the compositor sees an ordinary resize,
+// and nothing comes back saying the window is rolled up. The toolkit owns
+// that fact (app.Window.Shaded).
+func (s *wlSurface) SetShadedHeight(h int) {
+	if s == nil {
+		return
+	}
+	if h < 0 {
+		h = 0
+	}
+	if h == s.shadeH {
+		return
+	}
+	s.shadeH = h
+	s.syncLimits()
+}
+
+// The Wayland backend rolls windows up, but cannot keep one above the
+// others: see [AboveSurface] for why it does not pretend to.
+var _ ShadeSurface = (*wlSurface)(nil)
 
 // ConfigureBounds is the compositor's recommended largest window size
 // (xdg_toplevel.configure_bounds, logical px); zero when it has not said.

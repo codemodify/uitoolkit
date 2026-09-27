@@ -79,7 +79,7 @@ func kw1Title(l *Classic, ctx *paintengine2d.Context, in paintengine2d.Rect, tit
 
 // kw1Glyph paints one caption glyph on the bare frame: flat at rest, on a
 // raised bevel under the pointer and a pushed one while held.
-func kw1Glyph(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, k CaptionButton, maximized, hot, pressed bool) {
+func kw1Glyph(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, k CaptionButton, alt, hot, pressed bool) {
 	c := w95colors(l)
 	r := paintengine2d.XYWH(snap(b.Min.X), snap(b.Min.Y), snap(b.Dx()), snap(b.Dy()))
 	if hot || pressed {
@@ -104,7 +104,7 @@ func kw1Glyph(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, k Ca
 	case CaptionClose:
 		DrawCross(ctx, g.Inset(g.Dx()*0.28), c.text, lw)
 	default:
-		DrawCaptionGlyph(ctx, g, k, maximized, c.text, g.Dx()*0.44, lw)
+		DrawCaptionGlyph(ctx, g, k, alt, c.text, g.Dx()*0.44, lw)
 	}
 }
 
@@ -152,7 +152,7 @@ func (kde1Engine) DrawCaptionTitle(l *Classic, ctx *paintengine2d.Context, b pai
 }
 
 func (kde1Engine) DrawCaptionButton(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, k CaptionButton, cs ControlState, st DecorationState) {
-	kw1Glyph(l, ctx, b, k, st.Maximized, cs.Hovered() && !cs.Pressed(), cs.Pressed())
+	kw1Glyph(l, ctx, b, k, CaptionAlt(k, cs, st), cs.Hovered() && !cs.Pressed(), cs.Pressed())
 }
 
 // ---- the in-app window ------------------------------------------------------------------

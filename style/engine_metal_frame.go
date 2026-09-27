@@ -131,5 +131,5 @@ func (metalEngine) DrawCaptionButton(l *Classic, ctx *paintengine2d.Context, b p
 		DrawCross(ctx, g.Inset(snap(b.Dx()*0.28)), c.black, 2*u)
 		return
 	}
-	DrawCaptionGlyph(ctx, g, k, st.Maximized, c.black, snap(g.Dx()*0.45), max(u, 1))
+	DrawCaptionGlyph(ctx, g, k, CaptionAlt(k, cs, st), c.black, snap(g.Dx()*0.45), max(u, 1))
 }

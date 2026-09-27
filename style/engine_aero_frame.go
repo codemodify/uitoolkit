@@ -196,8 +196,8 @@ func (aeroEngine) DrawCaptionButton(l *Classic, ctx *paintengine2d.Context, b pa
 	if edge.A > 0 {
 		// A dark rim round the white glyph, as Windows 7 drew them.
 		for _, d := range []paintengine2d.Point{{X: -lw}, {X: lw}, {Y: -lw}, {Y: lw}} {
-			DrawCaptionGlyph(ctx, b.Translate(d), k, st.Maximized, edge, side, w)
+			DrawCaptionGlyph(ctx, b.Translate(d), k, CaptionAlt(k, cs, st), edge, side, w)
 		}
 	}
-	DrawCaptionGlyph(ctx, b, k, st.Maximized, fg, side, w)
+	DrawCaptionGlyph(ctx, b, k, CaptionAlt(k, cs, st), fg, side, w)
 }

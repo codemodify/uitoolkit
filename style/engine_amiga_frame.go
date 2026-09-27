@@ -185,6 +185,11 @@ func (e amigaEngine) DrawCaptionButton(l *Classic, ctx *paintengine2d.Context, b
 		amG.zoomInk.emit(&lo, g, 5, oy)
 		amG.zoomFill.emit(&blue, g, 5, oy)
 		amG.zoomMid.emit(&hi, g, 5, oy)
+	case CaptionKeepAbove:
+		// Intuition had no keep-above gadget: the plain ceiling-and-window
+		// glyph on the gadget's own bevel.
+		n := min(min(g.w-4, g.h-2), 9)
+		lo.aboveGlyph(g, (g.w-n)/2, (g.h-n)/2, n, CaptionAlt(k, cs, st))
 	default:
 		// The depth gadget stands in for minimize (its own job was to send
 		// the window behind) and for the window menu.
@@ -226,6 +231,9 @@ func (e amigaEngine) frame13Gadget(l *Classic, ctx *paintengine2d.Context, g rpG
 			amG.close13Box.emit(&blue, box, ox, oy)
 			amG.close13Dot.emit(&dark, box, ox, oy)
 		}
+	case CaptionKeepAbove:
+		n := min(min(box.w-2, bar/amRow-1), 9)
+		dark.aboveGlyph(box, (box.w-n)/2, oy, n, CaptionAlt(k, cs, st))
 	case CaptionMaximize:
 		// The front depth gadget: 1.3's "bring this window to the front".
 		ox := (box.w - 20) / 2

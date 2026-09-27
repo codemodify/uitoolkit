@@ -112,7 +112,7 @@ func (macosEngine) DrawCaptionButton(l *Classic, ctx *paintengine2d.Context, b p
 		i = 2
 	}
 	fill, rim := c.lightOff, c.lightOffEdge
-	if k != CaptionMenu && (st.Active || cs.Hovered()) {
+	if k != CaptionMenu && k != CaptionKeepAbove && (st.Active || cs.Hovered()) {
 		fill, rim = c.lights[i], c.lightEdges[i]
 	}
 	if cs.Pressed() {
@@ -122,7 +122,9 @@ func (macosEngine) DrawCaptionButton(l *Classic, ctx *paintengine2d.Context, b p
 	rad := min(b.Dx(), b.Dy()) * 0.5
 	ctx.DrawCircle(ctr, rad, paintengine2d.Fill(rim))
 	ctx.DrawCircle(ctr, rad-px*0.75, paintengine2d.Fill(fill))
-	if !cs.Hovered() && !cs.Pressed() {
+	// A toggle shows which way it is at rest; the commands wait to be
+	// pointed at, as Mac OS X's lights always have.
+	if !cs.Hovered() && !cs.Pressed() && k != CaptionKeepAbove {
 		return
 	}
 	glyph := Mix(rim, paintengine2d.RGB(0, 0, 0), 0.55)
@@ -136,6 +138,8 @@ func (macosEngine) DrawCaptionButton(l *Classic, ctx *paintengine2d.Context, b p
 		DrawCross(ctx, s, glyph, lw)
 	case CaptionMinimize:
 		ctx.DrawRect(paintengine2d.XYWH(s.Min.X, snap((s.Min.Y+s.Max.Y-lw)*0.5), s.Dx(), max(snap(lw), 1)), paintengine2d.Fill(glyph))
+	case CaptionKeepAbove:
+		DrawCaptionGlyph(ctx, s, k, CaptionAlt(k, cs, st), glyph, s.Dx(), lw)
 	default:
 		t := max(snap(lw), 1)
 		ctx.DrawRect(paintengine2d.XYWH(s.Min.X, snap((s.Min.Y+s.Max.Y-t)*0.5), s.Dx(), t), paintengine2d.Fill(glyph))

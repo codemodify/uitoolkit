@@ -19,6 +19,9 @@ type frameHost struct {
 	active bool
 	calls  []string
 	menuAt paintengine2d.Point
+	// canAbove: the desktop can keep the window above the others; above:
+	// it is doing so.
+	canAbove, above bool
 }
 
 func (h *frameHost) Title() string                     { return "Window" }
@@ -31,6 +34,19 @@ func (h *frameHost) RequestClose()                     { h.calls = append(h.call
 func (h *frameHost) ShowWindowMenu(p paintengine2d.Point) {
 	h.calls = append(h.calls, "menu")
 	h.menuAt = p
+}
+
+// The host can also keep its window above the others (widget.FrameAbove),
+// which is what the caption's keep-above button drives.
+func (h *frameHost) CanKeepAbove() bool { return h.canAbove }
+func (h *frameHost) KeepAbove() bool    { return h.above }
+func (h *frameHost) ToggleKeepAbove() bool {
+	if !h.canAbove {
+		return false
+	}
+	h.above = !h.above
+	h.calls = append(h.calls, "above")
+	return true
 }
 
 func newFrameHost() *frameHost {
@@ -380,5 +396,54 @@ func TestHeaderBarCentredTitle(t *testing.T) {
 		if mid := (r.Min.X + r.Max.X) * 0.5; w == 800 && (mid < w/2-1 || mid > w/2+1) {
 			t.Fatalf("title %v off the window's centre %v", r, w/2)
 		}
+	}
+}
+
+// The keep-above button paints in both states, paints differently in each,
+// is named for what pressing it will do, and is only there at all where the
+// desktop can keep a window above the others.
+func TestKeepAboveCaptionButton(t *testing.T) {
+	host := newFrameHost()
+	c := NewWindowControls(platform.CaptionKeepAbove, platform.CaptionClose)
+	c.SetHost(host)
+	if got := c.Shown(); len(got) != 1 || got[0] != platform.CaptionClose {
+		t.Fatalf("a desktop that cannot keep a window above still got the button: %v", got)
+	}
+	host.canAbove = true
+	if got := c.Shown(); len(got) != 2 || got[0] != platform.CaptionKeepAbove {
+		t.Fatalf("shown %v", got)
+	}
+	sz := c.Measure(layout.Unbounded())
+	arrange(c, sz.X, 32)
+	shoot := func() *paintengine2d.Image {
+		img := paintengine2d.NewImage(int(sz.X), 32)
+		ctx := paintengine2d.NewContext(img)
+		ctx.Clear(paintengine2d.RGB(0, 0, 0))
+		c.Paint(ctx)
+		return img
+	}
+	box := c.ButtonRect(platform.CaptionKeepAbove)
+	if box.Empty() {
+		t.Fatal("no box for the keep-above button")
+	}
+	offImg := crop(shoot(), box)
+	host.above = true
+	onImg := crop(shoot(), box)
+	if offImg == onImg {
+		t.Error("keep-above looks the same on as off")
+	}
+	// Pressing it toggles, and the name says what the next press will do.
+	host.above = false
+	if n := c.buttonName(platform.CaptionKeepAbove); n != "Keep Above Others" {
+		t.Errorf("name off %q", n)
+	}
+	host.above = true
+	if n := c.buttonName(platform.CaptionKeepAbove); n != "Stop Keeping Above Others" {
+		t.Errorf("name on %q", n)
+	}
+	host.above = false
+	c.activate(0)
+	if !host.above || len(host.calls) != 1 || host.calls[0] != "above" {
+		t.Errorf("activate: above %v calls %v", host.above, host.calls)
 	}
 }

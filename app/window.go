@@ -84,6 +84,12 @@ type Window struct {
 	// on its Activated — not keyboard focus — drives the active look.
 	state      platform.WindowState
 	stateKnown bool
+	// shaded: the window is rolled up to its title bar (shade.go), and
+	// shadeRestore the logical height to give it back. The desktop is
+	// never told — a rolled-up window is only a short one to it — so the
+	// toolkit keeps both.
+	shaded       bool
+	shadeRestore int
 
 	// opts are the options the window was made with (the decoration policy
 	// runs again whenever its inputs change).
@@ -399,6 +405,11 @@ func (w *Window) windowStateChanged(st platform.WindowState) {
 		// Back from another window: the desktop's title-bar settings may
 		// have changed there.
 		w.app.refreshTitleBarPrefs()
+	}
+	w.unshadeIfStuck()
+	if was.KeepAbove != st.KeepAbove && w.caption != nil {
+		// The keep-above button paints pressed while it is on.
+		w.caption.Invalidate()
 	}
 	switch {
 	case was.Fullscreen != st.Fullscreen:
@@ -982,7 +993,9 @@ func (w *Window) dispatch(ev platform.Event) {
 	case platform.EventMouseMove:
 		w.mouseMove(ev)
 	case platform.EventScroll:
-		w.bubbleWheel(ev)
+		if !w.captionWheel(ev) {
+			w.bubbleWheel(ev)
+		}
 	case platform.EventPointerLeave:
 		w.pointerLeft()
 	case platform.EventDragMotion:

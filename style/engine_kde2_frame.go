@@ -88,7 +88,7 @@ func kw2Bar(l *Classic, ctx *paintengine2d.Context, bar paintengine2d.Rect, acti
 
 // kw2Button is a caption button: a square bevel over the given face with
 // a black glyph, sinking when held.
-func kw2Button(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, k CaptionButton, maximized, hot, pressed bool, face paintengine2d.Color) {
+func kw2Button(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, k CaptionButton, alt, hot, pressed bool, face paintengine2d.Color) {
 	c := kde2Colors(l)
 	u := kde3U(l)
 	r := kde3Snap(b)
@@ -119,7 +119,7 @@ func kw2Button(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, k C
 		DrawCross(ctx, g.Inset(g.Dx()*0.3), glyph, lw)
 		return
 	}
-	DrawCaptionGlyph(ctx, g, k, maximized, glyph, g.Dx()*0.42, lw)
+	DrawCaptionGlyph(ctx, g, k, alt, glyph, g.Dx()*0.42, lw)
 }
 
 // ---- the desktop's frame ----------------------------------------------------------------
@@ -211,7 +211,7 @@ func (kde2Engine) DrawCaptionButton(l *Classic, ctx *paintengine2d.Context, b pa
 			face = c.capOff
 		}
 	}
-	kw2Button(l, ctx, b, k, st.Maximized, cs.Hovered() && !cs.Pressed(), cs.Pressed(), face)
+	kw2Button(l, ctx, b, k, CaptionAlt(k, cs, st), cs.Hovered() && !cs.Pressed(), cs.Pressed(), face)
 }
 
 // ---- the in-app window ------------------------------------------------------------------

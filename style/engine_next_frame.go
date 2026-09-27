@@ -143,7 +143,7 @@ func (e nextEngine) DrawCaptionButton(l *Classic, ctx *paintengine2d.Context, b 
 	if cs.Pressed() {
 		g = g.Translate(paintengine2d.Pt(u, u))
 	}
-	nxFrameGlyph(ctx, g, k, st.Maximized, u, c.cross*u, ink)
+	nxFrameGlyph(ctx, g, k, CaptionAlt(k, cs, st), u, c.cross*u, ink)
 }
 
 // wmFrameButton is a Window Maker title tile: the bar's texture (already
@@ -173,7 +173,7 @@ func (e nextEngine) wmFrameButton(l *Classic, ctx *paintengine2d.Context, b pain
 	if cs.Pressed() {
 		g = g.Translate(paintengine2d.Pt(u, u))
 	}
-	nxFrameGlyph(ctx, g, k, st.Maximized, u, 1.6*u, glyph)
+	nxFrameGlyph(ctx, g, k, CaptionAlt(k, cs, st), u, 1.6*u, glyph)
 }
 
 // nxFrameGlyph draws a caption glyph in g: the era's own miniaturize window
@@ -181,14 +181,29 @@ func (e nextEngine) wmFrameButton(l *Classic, ctx *paintengine2d.Context, b pain
 // — a desktop's layout asks for them — plainly in the same flat ink: zoom an
 // outlined square (two of them while maximized), the window menu a stack of
 // three bars.
-func nxFrameGlyph(ctx *paintengine2d.Context, g paintengine2d.Rect, k CaptionButton, maximized bool, u, cw float32, col paintengine2d.Color) {
+func nxFrameGlyph(ctx *paintengine2d.Context, g paintengine2d.Rect, k CaptionButton, alt bool, u, cw float32, col paintengine2d.Color) {
 	switch k {
 	case CaptionClose:
 		nxCross(ctx, g.Inset(cw*0.35), col, cw)
 	case CaptionMinimize:
 		nxMini(ctx, g.Inset(u*0.5), u, col)
 	case CaptionMaximize:
-		nxZoom(ctx, g, u, col, maximized)
+		nxZoom(ctx, g, u, col, alt)
+	case CaptionKeepAbove:
+		b := nxSnap(g)
+		if b.Dy() < 4*u {
+			return
+		}
+		nxFill(ctx, paintengine2d.XYWH(b.Min.X, b.Min.Y, b.Dx(), u), col)
+		body := paintengine2d.XYWH(b.Min.X, snap(b.Min.Y+2*u), b.Dx(), snap(b.Dy()-2*u))
+		if alt {
+			nxFill(ctx, body, col)
+			return
+		}
+		nxFill(ctx, paintengine2d.XYWH(body.Min.X, body.Min.Y, body.Dx(), u), col)
+		nxFill(ctx, paintengine2d.XYWH(body.Min.X, body.Max.Y-u, body.Dx(), u), col)
+		nxFill(ctx, paintengine2d.XYWH(body.Min.X, body.Min.Y, u, body.Dy()), col)
+		nxFill(ctx, paintengine2d.XYWH(body.Max.X-u, body.Min.Y, u, body.Dy()), col)
 	case CaptionMenu:
 		b := nxSnap(g)
 		if b.Dy() < 5*u {

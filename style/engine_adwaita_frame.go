@@ -133,6 +133,6 @@ func (adwaitaEngine) DrawCaptionButton(l *Classic, ctx *paintengine2d.Context, b
 		p.LineTo(g.Min.X, g.Max.Y)
 		ctx.DrawPath(p, adwStroke(fg, 2*u))
 	default:
-		DrawCaptionGlyph(ctx, b, k, st.Maximized, fg, snap(10*u), lw)
+		DrawCaptionGlyph(ctx, b, k, CaptionAlt(k, cs, st), fg, snap(10*u), lw)
 	}
 }

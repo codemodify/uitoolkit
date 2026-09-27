@@ -126,8 +126,9 @@ func TestDecorationPaintsInsideItsBoxes(t *testing.T) {
 				}
 				// Each button on a small canvas of its own, 8px round it.
 				bb := paintengine2d.XYWH(8, 8, s.Button.X, bh)
-				for _, k := range []CaptionButton{CaptionClose, CaptionMinimize, CaptionMaximize, CaptionMenu} {
-					for _, cs := range []ControlState{StateNone, StateHovered, StateHovered | StatePressed} {
+				for _, k := range []CaptionButton{CaptionClose, CaptionMinimize, CaptionMaximize, CaptionMenu, CaptionKeepAbove} {
+					for _, cs := range []ControlState{StateNone, StateHovered, StateHovered | StatePressed,
+						StateToggle | StateChecked | StatePressed} {
 						img = paintengine2d.NewImage(int(bb.Max.X)+8, int(bb.Max.Y)+8)
 						DrawCaptionButtonOf(lk, paintengine2d.NewContext(img), bb, k, cs, st)
 						if x, y, bad := paintedOutside(img, bb, 1); bad {
@@ -285,7 +286,7 @@ func TestDecorationPlainFrame(t *testing.T) {
 
 // Glyphs sit on whole pixels and inside their box at any scale.
 func TestCaptionGlyphsAreCrisp(t *testing.T) {
-	for _, k := range []CaptionButton{CaptionMinimize, CaptionMaximize, CaptionMenu} {
+	for _, k := range []CaptionButton{CaptionMinimize, CaptionMaximize, CaptionMenu, CaptionKeepAbove} {
 		for _, maxed := range []bool{false, true} {
 			for _, s := range []float32{10, 12.5, 17.5, 20} {
 				img := paintengine2d.NewImage(40, 40)
@@ -300,4 +301,61 @@ func TestCaptionGlyphsAreCrisp(t *testing.T) {
 			}
 		}
 	}
+}
+
+// Every era draws the keep-above button, and draws it differently when it is
+// on: the toggle has to read as a toggle in a 1998 frame and in a 2026 one,
+// and "on" must never be a button that merely looks like the off one.
+func TestKeepAboveButtonReadsAsAToggle(t *testing.T) {
+	const off = StateToggle
+	const on = StateToggle | StateChecked | StatePressed
+	for _, p := range ListBuiltinThemes() {
+		for _, scale := range []float32{1, 2} {
+			lk := p.Look().setScale(scale)
+			st := DecorationState{Active: true}
+			s := DecorationOf(lk, st)
+			bh := s.Button.Y
+			if bh <= 0 {
+				bh = float32(math.Ceil(float64(s.Caption))) - s.ButtonPad.Top
+			}
+			bb := paintengine2d.XYWH(4, 4, s.Button.X, bh)
+			shoot := func(cs ControlState) *paintengine2d.Image {
+				img := paintengine2d.NewImage(int(bb.Max.X)+4, int(bb.Max.Y)+4)
+				DrawCaptionButtonOf(lk, paintengine2d.NewContext(img), bb, CaptionKeepAbove, cs, st)
+				return img
+			}
+			a, b := shoot(off), shoot(on)
+			if ink := inked(a, bb); ink < 6 {
+				t.Errorf("%s @%vx: the keep-above button paints %d pixels", p.Name, scale, ink)
+			}
+			if sameInk(a, b, bb) {
+				t.Errorf("%s @%vx: keep-above looks the same on as off", p.Name, scale)
+			}
+		}
+	}
+}
+
+// inked counts the pixels of img inside r that were painted at all.
+func inked(img *paintengine2d.Image, r paintengine2d.Rect) int {
+	n := 0
+	for y := int(r.Min.Y); y < int(r.Max.Y) && y < img.Height; y++ {
+		for x := int(r.Min.X); x < int(r.Max.X) && x < img.Width; x++ {
+			if _, _, _, a := img.At(x, y).RGBA(); a != 0 {
+				n++
+			}
+		}
+	}
+	return n
+}
+
+// sameInk reports whether the two images are identical inside r.
+func sameInk(a, b *paintengine2d.Image, r paintengine2d.Rect) bool {
+	for y := int(r.Min.Y); y < int(r.Max.Y) && y < a.Height; y++ {
+		for x := int(r.Min.X); x < int(r.Max.X) && x < a.Width; x++ {
+			if a.At(x, y) != b.At(x, y) {
+				return false
+			}
+		}
+	}
+	return true
 }

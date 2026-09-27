@@ -150,5 +150,5 @@ func (fusionEngine) DrawCaptionButton(l *Classic, ctx *paintengine2d.Context, b 
 		DrawCross(ctx, b.Inset(b.Dx()*0.3), glyph, l.S(1.5))
 		return
 	}
-	DrawCaptionGlyph(ctx, b, k, st.Maximized, glyph, snap(b.Dx()*0.4), max(u, 1))
+	DrawCaptionGlyph(ctx, b, k, CaptionAlt(k, cs, st), glyph, snap(b.Dx()*0.4), max(u, 1))
 }

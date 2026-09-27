@@ -67,7 +67,7 @@ func (materialEngine) DrawCaptionButton(l *Classic, ctx *paintengine2d.Context, 
 		ctx.DrawCircle(b.Center(), min(b.Dx(), b.Dy())*0.5, paintengine2d.Fill(c.onSurface.WithAlpha(a)))
 	}
 	s := snap(min(b.Dx(), b.Dy()) * 20 / 32 * 0.6)
-	DrawCaptionGlyph(ctx, b, k, st.Maximized, fg, s, max(snap(l.S(1.5)), 1))
+	DrawCaptionGlyph(ctx, b, k, CaptionAlt(k, cs, st), fg, s, max(snap(l.S(1.5)), 1))
 }
 
 // materialWindowShadow is Material's elevation under a window: the key and

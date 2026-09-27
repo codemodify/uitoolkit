@@ -262,6 +262,9 @@ func (w *Window) rebuildCaption() {
 		}
 		w.capPress, w.capClick = captionGesture{}, captionClick{}
 	}
+	// A window rolled up to a title bar it no longer has could not be
+	// rolled back down: give it its height back first.
+	w.unshadeIfStuck()
 	// The desktop's frame, wherever it takes a palette, is in the look's
 	// colours.
 	w.syncDecorationPalette()
@@ -283,7 +286,34 @@ func (w *Window) buttonLayout(hb *widgets.HeaderBar) platform.ButtonLayout {
 	if w.app.captionPref == style.CaptionButtonsTheme && spec.Layout != "" {
 		l = platform.ParseButtonLayout(spec.Layout)
 	}
-	return buttonsToSide(l, spec.ButtonSide)
+	return buttonsToSide(w.keepAboveInMenuSlot(l), spec.ButtonSide)
+}
+
+// keepAboveInMenuSlot puts the keep-above button where the window-menu
+// button would go. The window menu itself is not lost with it: it is still
+// a right click on the caption or on any caption button, and it is still
+// the desktop's right-click title-bar action.
+//
+// It only happens where the desktop can actually keep a window above the
+// others, so nobody trades a working button for a dead one: on Wayland,
+// where no compositor can (see [platform.AboveSurface]), the window-menu
+// button stays exactly as it was. A layout that already asks for
+// keep-above — KWin's "F" in ButtonsOnLeft, a look's own layout — is left
+// alone.
+func (w *Window) keepAboveInMenuSlot(l platform.ButtonLayout) platform.ButtonLayout {
+	if !w.CanKeepAbove() || !l.Has(platform.CaptionMenu) || l.Has(platform.CaptionKeepAbove) {
+		return l
+	}
+	swap := func(bs []platform.CaptionButton) []platform.CaptionButton {
+		out := append([]platform.CaptionButton(nil), bs...)
+		for i, b := range out {
+			if b == platform.CaptionMenu {
+				out[i] = platform.CaptionKeepAbove
+			}
+		}
+		return out
+	}
+	return platform.ButtonLayout{Left: swap(l.Left), Right: swap(l.Right)}
 }
 
 // buttonsToSide moves every button of l to one side, keeping which buttons
@@ -662,6 +692,10 @@ func (w *Window) resizeEdgesAt(p paintengine2d.Point) platform.Edges {
 	}
 	// A tiled edge touches a screen edge or a neighbour: it does not resize.
 	e &^= st.Tiled | st.Constrained
+	if w.shaded {
+		// A window rolled up to its title bar is pinned to that height.
+		e &^= platform.EdgeTop | platform.EdgeBottom
+	}
 	if !e.Valid() {
 		return 0
 	}
@@ -892,6 +926,14 @@ func (w *Window) showToolkitWindowMenu(p paintengine2d.Point) *widgets.PopupMenu
 	if caps.Can(platform.CapMinimize) {
 		items = append(items, widgets.Item("Mi&nimize", w.Minimize))
 	}
+	if w.shaded {
+		items = append(items, widgets.Item("Un&shade", func() { w.SetShaded(false) }))
+	} else if w.CanShade() {
+		items = append(items, widgets.Item("&Shade", func() { w.SetShaded(true) }))
+	}
+	if w.CanKeepAbove() {
+		items = append(items, widgets.CheckItem("Keep &Above Others", w.KeepAbove(), func() { w.ToggleKeepAbove() }))
+	}
 	if len(items) > 0 {
 		items = append(items, widgets.Sep())
 	}
@@ -917,6 +959,10 @@ func (w *Window) runTitleAction(a platform.TitleAction, p paintengine2d.Point) {
 		if l, ok := w.surf.(platform.Lowerer); ok {
 			l.Lower()
 		}
+	case platform.TitleToggleShade:
+		w.ToggleShade()
+	case platform.TitleToggleKeepAbove:
+		w.ToggleKeepAbove()
 	case platform.TitleMenu:
 		w.ShowWindowMenu(p)
 	case platform.TitleClose:

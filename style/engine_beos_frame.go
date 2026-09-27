@@ -189,6 +189,8 @@ func (beosEngine) DrawCaptionButton(l *Classic, ctx *paintengine2d.Context, b pa
 	case CaptionMenu:
 		k2.frame(g, 4, 4, 6, 6, 1)
 		k2.cells(g, 4, 4, 6, 2)
+	case CaptionKeepAbove:
+		k2.aboveGlyph(g, 4, 3, 6, CaptionAlt(k, cs, st))
 	}
 	k2.fill(ctx, ink)
 }

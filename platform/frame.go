@@ -420,6 +420,12 @@ type WindowState struct {
 	// no shadow, no rounded corners, nothing translucent, since alpha is
 	// simply ignored there. Wayland always composites.
 	Solid bool
+	// KeepAbove: the desktop keeps the window above the others
+	// (_NET_WM_STATE_ABOVE). It is the desktop's answer, not the
+	// application's request — a window manager that refused says so by
+	// never setting it. Wayland's core protocol has no such state and
+	// never sets it; see [AboveSurface].
+	KeepAbove bool
 }
 
 // xdgStateFromMask decodes the backend's xdg_toplevel.configure state set:
@@ -585,6 +591,95 @@ type Lowerer interface {
 // way only (X11's _NET_WM_STATE_MAXIMIZED_VERT / _HORZ; xdg-shell cannot).
 type AxisMaximizer interface {
 	ToggleMaximizeAxis(vertical bool)
+}
+
+// AboveSurface is an optional Surface capability: keep the window above the
+// others, the state a "stay on top" caption button toggles
+// ([CaptionKeepAbove]).
+//
+// Only X11 implements it, through _NET_WM_STATE_ABOVE, and only where the
+// window manager lists that atom in _NET_SUPPORTED. **Wayland has no
+// keep-above in xdg-shell or in any protocol a client may use on its own
+// surface**: KDE's org_kde_plasma_window_management does carry the state,
+// but it is a window-manager protocol with no wl_surface request at all —
+// a client binds it to enumerate *every* window on the desktop and would
+// have to guess which one is its own from the pid and the title. A UI
+// toolkit must not take that capability for every application that links
+// it, so the Wayland backend does not implement this and the caption
+// button says so rather than going quiet.
+//
+// The window's actual state comes back as [WindowState.KeepAbove]: the
+// desktop has the last word, as it does for maximize.
+type AboveSurface interface {
+	// KeepAboveSupported reports whether the desktop can keep the window
+	// above the others. It is asked afresh rather than cached: a window
+	// manager can be replaced while the window is up.
+	KeepAboveSupported() bool
+	// SetKeepAbove asks for the state; the answer arrives as
+	// EventWindowState.
+	SetKeepAbove(on bool)
+}
+
+// SurfaceKeepAboveSupported reports whether s's desktop can keep the window
+// above the others (false for a surface that cannot say).
+func SurfaceKeepAboveSupported(s Surface) bool {
+	a, ok := s.(AboveSurface)
+	return ok && a.KeepAboveSupported()
+}
+
+// SetKeepAbove asks s's desktop to keep the window above the others, or to
+// stop. It reports whether there was anything to ask.
+func SetKeepAbove(s Surface, on bool) bool {
+	a, ok := s.(AboveSurface)
+	if !ok || !a.KeepAboveSupported() {
+		return false
+	}
+	a.SetKeepAbove(on)
+	return true
+}
+
+// ShadeSurface is an optional Surface capability: hold the window at one
+// height while it is rolled up to its title bar, whatever minimum height it
+// otherwise states.
+//
+// Rolling up is the client's own doing — it resizes itself to its caption
+// and back — but the window system has to be told, for two reasons. A
+// window manager clamps a client's resize to its WM_NORMAL_HINTS (KWin
+// does), so a window with a minimum height would spring straight back
+// open; and a rolled-up window cannot be resized vertically, which is what
+// pinning its height to one value says.
+//
+// All three backends implement it. It is not shading in the window
+// manager's sense: X11's _NET_WM_STATE_SHADED and KWin's own shade are the
+// *desktop's* title bar rolling up, which is no use to a window whose
+// title bar the toolkit draws — an undecorated window is not shadeable at
+// all. Under the desktop's frame the wheel over the title bar never
+// reaches the client and shading stays entirely the desktop's business.
+type ShadeSurface interface {
+	// SetShadedHeight pins the window's height to h logical pixels; 0
+	// releases the pin and restores the window's own limits.
+	SetShadedHeight(h int)
+}
+
+// SetShadedHeight pins s's height while it is rolled up (0 unpins), and
+// reports whether the backend could.
+func SetShadedHeight(s Surface, h int) bool {
+	sh, ok := s.(ShadeSurface)
+	if !ok {
+		return false
+	}
+	sh.SetShadedHeight(h)
+	return true
+}
+
+// shadePin applies a rolled-up window's height pin to its stated limits: a
+// shaded window is exactly that tall and not resizable vertically. h of 0
+// leaves the limits alone.
+func shadePin(l SizeLimits, h int) SizeLimits {
+	if h > 0 {
+		l.MinHeight, l.MaxHeight = h, h
+	}
+	return l
 }
 
 // GlassSurface is an optional Surface capability: the desktop can blur what

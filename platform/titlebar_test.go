@@ -57,8 +57,13 @@ func TestKDEButtonLayout(t *testing.T) {
 		t.Errorf("close on the left %v", l)
 	}
 	l = KDEButtonLayout("XI_A", "NFBLHS")
-	if !sameButtons(l.Left, []CaptionButton{CaptionClose, CaptionMinimize, CaptionSpacer, CaptionMaximize}) || len(l.Right) != 0 {
-		t.Errorf("spacer and dropped buttons %v", l)
+	if !sameButtons(l.Left, []CaptionButton{CaptionClose, CaptionMinimize, CaptionSpacer, CaptionMaximize}) ||
+		!sameButtons(l.Right, []CaptionButton{CaptionKeepAbove}) {
+		t.Errorf("spacer, keep above and dropped buttons %v", l)
+	}
+	// F is keep above; N, B, L, H and S still have no toolkit equivalent.
+	if l := KDEButtonLayout("", "NBLHS"); len(l.Left) != 0 || len(l.Right) != 0 {
+		t.Errorf("buttons with no equivalent %v", l)
 	}
 }
 
@@ -66,7 +71,7 @@ func TestTitleActions(t *testing.T) {
 	for in, want := range map[string]TitleAction{
 		"toggle-maximize": TitleToggleMaximize, "toggle-maximize-vertically": TitleToggleMaximizeVertically,
 		"toggle-maximize-horizontally": TitleToggleMaximizeHorizontally, "minimize": TitleMinimize,
-		"lower": TitleLower, "menu": TitleMenu, "none": TitleNone, "toggle-shade": TitleNone, "'menu'": TitleMenu,
+		"lower": TitleLower, "menu": TitleMenu, "none": TitleNone, "toggle-shade": TitleToggleShade, "'menu'": TitleMenu,
 	} {
 		if got, ok := ParseTitleAction(in); !ok || got != want {
 			t.Errorf("ParseTitleAction(%q) = %v,%v want %v", in, got, ok, want)
@@ -78,7 +83,8 @@ func TestTitleActions(t *testing.T) {
 	for in, want := range map[string]TitleAction{
 		"Maximize": TitleToggleMaximize, "Maximize (vertical only)": TitleToggleMaximizeVertically,
 		"Maximize (horizontal only)": TitleToggleMaximizeHorizontally, "Minimize": TitleMinimize,
-		"Lower": TitleLower, "Close": TitleClose, "Nothing": TitleNone, "Shade": TitleNone,
+		"Lower": TitleLower, "Close": TitleClose, "Nothing": TitleNone, "Shade": TitleToggleShade,
+		"Keep above": TitleToggleKeepAbove, "Keep below": TitleNone,
 	} {
 		if got, ok := kdeDoubleClickAction(in); !ok || got != want {
 			t.Errorf("kdeDoubleClickAction(%q) = %v,%v want %v", in, got, ok, want)
@@ -213,5 +219,103 @@ func TestTitleBarConfigFiles(t *testing.T) {
 		if !strings.Contains(joined, want) {
 			t.Errorf("missing %s in %v", want, files)
 		}
+	}
+}
+
+// The wheel over the title bar: KWin's Shade/Unshade is the one command the
+// toolkit has, the rest read as none, and an unset key leaves the toolkit's
+// own default (roll the window up) standing.
+func TestTitlebarWheel(t *testing.T) {
+	for in, want := range map[string]TitleWheel{
+		"Shade/Unshade": TitleWheelShade, "Nothing": TitleWheelNone,
+		"Raise/Lower": TitleWheelNone, "Maximize/Restore": TitleWheelNone,
+		"Above/Below": TitleWheelNone, "Change Opacity": TitleWheelNone,
+	} {
+		if got, ok := kdeTitlebarWheel(in); !ok || got != want {
+			t.Errorf("kdeTitlebarWheel(%q) = %v,%v want %v", in, got, ok, want)
+		}
+	}
+	if _, ok := kdeTitlebarWheel("Spin"); ok {
+		t.Error("unknown wheel command parsed")
+	}
+	if p := DefaultTitleBarPrefs("KDE"); p.Wheel != TitleWheelShade {
+		t.Errorf("default wheel %v: a toolkit title bar rolls the window up", p.Wheel)
+	}
+}
+
+// The keep-above button's name round-trips through the layout syntax.
+func TestKeepAboveButtonName(t *testing.T) {
+	if s := CaptionKeepAbove.String(); s != "keep-above" {
+		t.Errorf("name %q", s)
+	}
+	l := ParseButtonLayout("keep-above:close")
+	if !sameButtons(l.Left, []CaptionButton{CaptionKeepAbove}) || !sameButtons(l.Right, []CaptionButton{CaptionClose}) {
+		t.Errorf("parsed %v", l)
+	}
+	if l.String() != "keep-above:close" {
+		t.Errorf("round trip %q", l.String())
+	}
+	// The style package converts the values numerically, so they must line
+	// up across the two packages' constants.
+	if CaptionKeepAbove != 6 || CaptionSpacer != 5 {
+		t.Errorf("caption button values moved: spacer %d, keep above %d (style.CaptionButton mirrors them)", CaptionSpacer, CaptionKeepAbove)
+	}
+}
+
+// A rolled-up window is pinned to one height and cannot be resized
+// vertically; unpinning gives its own limits back.
+func TestShadePin(t *testing.T) {
+	l := SizeLimits{MinWidth: 200, MinHeight: 120, MaxWidth: 900}
+	if got := shadePin(l, 0); got != l {
+		t.Errorf("unpinned %+v", got)
+	}
+	got := shadePin(l, 28)
+	if got.MinHeight != 28 || got.MaxHeight != 28 {
+		t.Errorf("pinned height %+v", got)
+	}
+	if got.MinWidth != 200 || got.MaxWidth != 900 {
+		t.Errorf("the pin took the width with it: %+v", got)
+	}
+}
+
+// _NET_WM_STATE_ABOVE is the keep-above state; Wayland never reports one.
+func TestNetWMStateAbove(t *testing.T) {
+	if st := netWMState(netStateAbove, true, false); !st.KeepAbove {
+		t.Error("_NET_WM_STATE_ABOVE not decoded")
+	}
+	if st := netWMState(netStateMaxVert|netStateMaxHorz, true, false); st.KeepAbove {
+		t.Error("keep above set without the atom")
+	}
+	if st := xdgStateFromMask(1 << 4); st.KeepAbove {
+		t.Error("xdg-shell has no keep-above state to report")
+	}
+}
+
+// The offscreen desktop keeps a window above only when a test says it can,
+// and answers the request with the state, as a window manager does.
+func TestOffscreenKeepAbove(t *testing.T) {
+	o := NewOffscreen(WindowOptions{Width: 300, Height: 200})
+	if SurfaceKeepAboveSupported(o) {
+		t.Error("an offscreen window has no desktop to be stacked in")
+	}
+	if SetKeepAbove(o, true) {
+		t.Error("asked a desktop that cannot")
+	}
+	o.SimulateKeepAbove(true)
+	if !SetKeepAbove(o, true) || !o.WindowState().KeepAbove {
+		t.Fatalf("keep above %+v", o.WindowState())
+	}
+	if calls := o.FrameCalls().Aboves; len(calls) != 1 || !calls[0] {
+		t.Errorf("requests %v", calls)
+	}
+	if !SetShadedHeight(o, 30) {
+		t.Fatal("no shade pin")
+	}
+	if l := o.SizeLimits(); l.MinHeight != 30 || l.MaxHeight != 30 {
+		t.Errorf("pinned limits %+v", l)
+	}
+	SetShadedHeight(o, 0)
+	if l := o.SizeLimits(); l.MinHeight == 30 && l.MaxHeight == 30 {
+		t.Errorf("the pin outlived the roll-up: %+v", l)
 	}
 }

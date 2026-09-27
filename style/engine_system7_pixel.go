@@ -205,6 +205,26 @@ func rpEdge(hi, lo *rpInk, g rpGrid, cx, cy, cw, ch, n int) {
 
 // rpDotted appends the classic dotted focus rectangle just inside the
 // cw × ch cells at (cx, cy): every other cell along each side.
+// aboveGlyph emits the keep-above glyph n cells across with its top-left at
+// cx, cy of g: a ceiling rule with the window held up under it, hollow while
+// keep-above is off and solid while it is on. It is the 1-bit twin of
+// DrawCaptionGlyph's, so the pixel-grid eras read the same as the rest.
+func (k *rpInk) aboveGlyph(g rpGrid, cx, cy, n int, on bool) {
+	if n < 4 {
+		return
+	}
+	k.cells(g, cx, cy, n, 1)
+	switch {
+	case on:
+		k.cells(g, cx, cy+2, n, n-2)
+	case n < 6:
+		// Too few cells to hollow out and still read as a box.
+		k.cells(g, cx, cy+2, n, n-2)
+	default:
+		k.frame(g, cx, cy+2, n, n-2, 1)
+	}
+}
+
 func (k *rpInk) dotted(g rpGrid, cx, cy, cw, ch int) {
 	if cw < 3 || ch < 3 {
 		return

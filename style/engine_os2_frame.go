@@ -109,6 +109,11 @@ func (os2Engine) DrawCaptionButton(l *Classic, ctx *paintengine2d.Context, b pai
 		o2maxGlyph(&white, &dark, g)
 	case CaptionMenu:
 		o2frameMenuGlyph(&white, &dark, &black, &strip, g)
+	case CaptionKeepAbove:
+		// OS/2 had no such button; its ink is the frame's dark, so the
+		// glyph sits on the button the way "hide" and "maximize" do.
+		n := min(o2glyph-2, 11)
+		dark.aboveGlyph(g, (o2glyph-n)/2, (o2glyph-n)/2, n, CaptionAlt(k, cs, st))
 	}
 	strip.fill(ctx, c.title)
 	white.fill(ctx, c.hi)

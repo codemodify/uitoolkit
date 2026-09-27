@@ -159,6 +159,6 @@ func (e oxygenEngine) DrawCaptionButton(l *Classic, ctx *paintengine2d.Context, 
 		DrawCross(ctx, g, glyph, 1.6*u)
 		return
 	}
-	DrawCaptionGlyph(ctx, b.Translate(paintengine2d.Pt(0, u)), k, st.Maximized, c.winLight, b.Dx()*0.34, max(l.S(1.4), 1))
-	DrawCaptionGlyph(ctx, b, k, st.Maximized, glyph, b.Dx()*0.34, max(l.S(1.4), 1))
+	DrawCaptionGlyph(ctx, b.Translate(paintengine2d.Pt(0, u)), k, CaptionAlt(k, cs, st), c.winLight, b.Dx()*0.34, max(l.S(1.4), 1))
+	DrawCaptionGlyph(ctx, b, k, CaptionAlt(k, cs, st), glyph, b.Dx()*0.34, max(l.S(1.4), 1))
 }

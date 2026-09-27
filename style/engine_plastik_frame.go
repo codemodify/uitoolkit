@@ -127,5 +127,5 @@ func (plastikEngine) DrawCaptionButton(l *Classic, ctx *paintengine2d.Context, b
 		DrawCross(ctx, b.Inset(b.Dx()*0.3), glyph, max(l.S(2), u))
 		return
 	}
-	DrawCaptionGlyph(ctx, b, k, st.Maximized, glyph, b.Dx()*0.42, max(l.S(1.5), u))
+	DrawCaptionGlyph(ctx, b, k, CaptionAlt(k, cs, st), glyph, b.Dx()*0.42, max(l.S(1.5), u))
 }

@@ -30,6 +30,11 @@ const (
 	CaptionMenu
 	// CaptionSpacer is a gap between buttons.
 	CaptionSpacer
+	// CaptionKeepAbove toggles "keep this window above the others" (KWin's
+	// "F" button, Motif's and OS/2's "stay on top"). It is a toggle, not a
+	// command: it paints pressed while it is on. Only a desktop that can
+	// do it gets one — see [AboveSurface].
+	CaptionKeepAbove
 )
 
 func (b CaptionButton) String() string {
@@ -44,6 +49,8 @@ func (b CaptionButton) String() string {
 		return "icon"
 	case CaptionSpacer:
 		return "spacer"
+	case CaptionKeepAbove:
+		return "keep-above"
 	}
 	return ""
 }
@@ -117,14 +124,16 @@ func captionButtonNamed(name string) CaptionButton {
 		return CaptionMenu
 	case "spacer":
 		return CaptionSpacer
+	case "keep-above", "above":
+		return CaptionKeepAbove
 	}
 	return CaptionNone
 }
 
 // KDEButtonLayout reads KWin's ButtonsOnLeft / ButtonsOnRight letters
 // ([org.kde.kdecoration2] in kwinrc): M window menu, I minimize, A
-// maximize, X close, _ a spacer. KWin's other buttons (N application
-// menu, S on all desktops, H help, F keep above, B keep below, L shade, E
+// maximize, X close, F keep above, _ a spacer. KWin's other buttons (N
+// application menu, S on all desktops, H help, B keep below, L shade, E
 // exclude from capture) have no toolkit equivalent and are skipped.
 func KDEButtonLayout(left, right string) ButtonLayout {
 	seen := map[CaptionButton]bool{}
@@ -141,6 +150,8 @@ func KDEButtonLayout(left, right string) ButtonLayout {
 				b = CaptionMaximize
 			case 'X':
 				b = CaptionClose
+			case 'F':
+				b = CaptionKeepAbove
 			case '_':
 				b = CaptionSpacer
 			default:
@@ -173,6 +184,13 @@ const (
 	// TitleMenu shows the window menu.
 	TitleMenu
 	TitleClose
+	// TitleToggleShade rolls the window up to its title bar, or a rolled-up
+	// one back down (Window.ToggleShade). Only a frame the toolkit draws
+	// can: see [ShadeSurface].
+	TitleToggleShade
+	// TitleToggleKeepAbove toggles "keep above the others" (see
+	// [AboveSurface]); where the desktop cannot, it does nothing.
+	TitleToggleKeepAbove
 )
 
 func (a TitleAction) String() string {
@@ -191,13 +209,16 @@ func (a TitleAction) String() string {
 		return "menu"
 	case TitleClose:
 		return "close"
+	case TitleToggleShade:
+		return "toggle-shade"
+	case TitleToggleKeepAbove:
+		return "toggle-keep-above"
 	}
 	return "none"
 }
 
 // ParseTitleAction reads GNOME's action-*-titlebar and GTK's
-// gtk-titlebar-*-click values. toggle-shade has no toolkit equivalent and
-// reads as none; ok is false for an unknown value.
+// gtk-titlebar-*-click values; ok is false for an unknown value.
 func ParseTitleAction(s string) (TitleAction, bool) {
 	switch strings.ToLower(strings.Trim(strings.TrimSpace(s), `"'`)) {
 	case "toggle-maximize":
@@ -212,7 +233,9 @@ func ParseTitleAction(s string) (TitleAction, bool) {
 		return TitleLower, true
 	case "menu":
 		return TitleMenu, true
-	case "none", "toggle-shade":
+	case "toggle-shade":
+		return TitleToggleShade, true
+	case "none":
 		return TitleNone, true
 	}
 	return TitleNone, false
@@ -233,7 +256,11 @@ func kdeDoubleClickAction(s string) (TitleAction, bool) {
 		return TitleLower, true
 	case "Close":
 		return TitleClose, true
-	case "Nothing", "Shade", "OnAllDesktops", "Keep above", "Keep below":
+	case "Shade":
+		return TitleToggleShade, true
+	case "Keep above":
+		return TitleToggleKeepAbove, true
+	case "Nothing", "OnAllDesktops", "Keep below":
 		return TitleNone, true
 	}
 	return TitleNone, false
@@ -254,10 +281,47 @@ func kdeMouseAction(s string) (TitleAction, bool) {
 		return TitleClose, true
 	case "Maximize":
 		return TitleToggleMaximize, true
-	case "Nothing", "Raise", "Activate and raise", "Activate", "Activate and lower", "Shade", "Move", "Resize":
+	case "Shade":
+		return TitleToggleShade, true
+	case "Nothing", "Raise", "Activate and raise", "Activate", "Activate and lower", "Move", "Resize":
 		return TitleNone, true
 	}
 	return TitleNone, false
+}
+
+// TitleWheel is what turning the mouse wheel over the title bar does.
+type TitleWheel uint8
+
+const (
+	// TitleWheelNone: the wheel over the title bar does nothing, and the
+	// title bar's own contents get it.
+	TitleWheelNone TitleWheel = iota
+	// TitleWheelShade rolls the window up to its title bar (wheel up) and
+	// back down (wheel down): KWin's "Shade/Unshade".
+	TitleWheelShade
+)
+
+func (w TitleWheel) String() string {
+	if w == TitleWheelShade {
+		return "shade"
+	}
+	return "none"
+}
+
+// kdeTitlebarWheel reads KWin's [MouseBindings] CommandTitlebarWheel.
+// KWin's other wheel commands (Raise/Lower, Maximize/Restore, Above/Below,
+// Previous/Next Desktop, Change Opacity) have no toolkit equivalent and
+// read as none, so the wheel falls through to the title bar's contents
+// rather than doing the wrong thing; ok is false for an unknown value.
+func kdeTitlebarWheel(s string) (TitleWheel, bool) {
+	switch strings.TrimSpace(s) {
+	case "Shade/Unshade":
+		return TitleWheelShade, true
+	case "Nothing", "Raise/Lower", "Maximize/Restore", "Above/Below",
+		"Previous/Next Desktop", "Change Opacity":
+		return TitleWheelNone, true
+	}
+	return TitleWheelNone, false
 }
 
 // TitleBarPrefs are the desktop's title-bar conventions.
@@ -271,6 +335,13 @@ type TitleBarPrefs struct {
 	// before a press becomes a drag.
 	DoubleClickTime time.Duration
 	DragThreshold   float32
+	// Wheel is what the wheel over the title bar does. Unlike the rest of
+	// these, its default is not the desktop's: KWin's own
+	// CommandTitlebarWheel defaults to Nothing, but a title bar the
+	// toolkit draws rolls the window up, which is what this toolkit's
+	// windows are asked to do. A user who has set CommandTitlebarWheel
+	// explicitly gets what they set, including Nothing.
+	Wheel TitleWheel
 	// Source says where the layout came from ("kwinrc", "portal", "gtk",
 	// "default"), for diagnostics.
 	Source string
@@ -304,6 +375,7 @@ func DefaultTitleBarPrefs(desktop string) TitleBarPrefs {
 		RightClick:      TitleMenu,
 		DoubleClickTime: 400 * time.Millisecond,
 		DragThreshold:   8,
+		Wheel:           TitleWheelShade,
 		Source:          "default",
 	}
 	switch {
@@ -383,6 +455,9 @@ func titleBarPrefsFrom(desktop string, dirs []string, portal DesktopPrefs) Title
 		}
 		if a, ok := kdeMouseAction(kwin["MouseBindings"]["CommandActiveTitlebar3"]); ok {
 			p.RightClick = a
+		}
+		if a, ok := kdeTitlebarWheel(kwin["MouseBindings"]["CommandTitlebarWheel"]); ok {
+			p.Wheel = a
 		}
 		if ms, err := strconv.Atoi(globals["KDE"]["DoubleClickInterval"]); err == nil && ms > 0 {
 			p.DoubleClickTime = time.Duration(ms) * time.Millisecond
