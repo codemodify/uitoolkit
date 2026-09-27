@@ -170,6 +170,33 @@ func (t *TextField) Describe(n *a11y.Node) {
 	n.Caret, n.SelStart, n.SelEnd = t.caret, min(t.selA, t.selB), max(t.selA, t.selB)
 }
 
+// AccessibleItems puts a clearable field's cross in the tree as the
+// button it is, under the field, the way a browser tab's close button
+// hangs under its tab. It is not a tab stop — a field with one would
+// cost every keyboard user an extra Tab on every form to reach a thing
+// the keyboard can already do — and it does not need to be one: it is
+// reached as an item, it is named ("Clear Search themes", never a bare
+// "Clear"), it answers ActionDefault, and Escape in the field does the
+// same thing from the keyboard.
+func (t *TextField) AccessibleItems() []*a11y.Node {
+	if !t.clearShows() {
+		return nil
+	}
+	n := item(t, 0, a11y.RoleButton, t.clearName(), t.clearRect())
+	n.Actions = n.Actions.With(a11y.ActionDefault)
+	return []*a11y.Node{n}
+}
+
+// AccessibleAction clears the field for a screen reader that presses
+// that button.
+func (t *TextField) AccessibleAction(i int, a a11y.Action) bool {
+	if i != 0 || a != a11y.ActionDefault || !t.clearShows() {
+		return false
+	}
+	t.clearNow()
+	return true
+}
+
 func (t *TextArea) Describe(n *a11y.Node) {
 	n.Role = a11y.RoleTextArea
 	n.State |= a11y.StateMultiLine

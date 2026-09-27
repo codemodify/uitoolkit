@@ -10,6 +10,31 @@ import (
 	"github.com/codemodify/uitoolkit/widget"
 )
 
+// WheelSelect is whether a wheel notch over a *closed* combo box steps
+// its selection, for one box. The preference the user set in Settings
+// is the answer for a box that has no opinion, and a box has no opinion
+// unless it says so — [WheelSelectPref] is the zero value.
+//
+// A box overrides it when the page around it knows something the
+// preference cannot: a combo in a long form that is scrolled past far
+// more often than it is answered turns it off whatever the preference
+// says, and a combo that *is* the control of its page — a zoom level, a
+// page number, a channel — can turn it on for everybody, because there
+// the wheel is what the user came for.
+type WheelSelect int
+
+const (
+	// WheelSelectPref follows [style.ComboWheel], the user's preference.
+	// It is the zero value and it is what a box should be unless there
+	// is a reason.
+	WheelSelectPref WheelSelect = iota
+	// WheelSelectOn steps on the wheel whatever the preference says.
+	WheelSelectOn
+	// WheelSelectOff never steps on the wheel, so the notch goes to
+	// whatever is scrolling behind the box.
+	WheelSelectOff
+)
+
 // ComboBox is a closed field that drops a list of choices. SetEditable
 // lets the user type a value of their own.
 type ComboBox struct {
@@ -44,13 +69,18 @@ type ComboBox struct {
 	// name. The face elides what does not fit (the look's DrawComboBox
 	// fits the text to the field) and the list itself is unaffected, so
 	// what a limit costs is the tail of one name on the closed control.
-	MaxWidth   float32
-	open       bool
-	hovered    bool
-	fade       stateFade // hover / focus cross-fade (the look's HintHoverFadeMs)
-	field      *TextField
-	typed      string // the text as typed, without the completion
-	completing bool
+	MaxWidth float32
+	// WheelSelect is this box's answer to "does the wheel over me,
+	// closed, step my selection". The zero value follows the user's
+	// preference, which is what almost every box should do; a form that
+	// knows better overrides it either way. See [WheelSelect].
+	WheelSelect WheelSelect
+	open        bool
+	hovered     bool
+	fade        stateFade // hover / focus cross-fade (the look's HintHoverFadeMs)
+	field       *TextField
+	typed       string // the text as typed, without the completion
+	completing  bool
 }
 
 // NewComboBox builds a drop-down. selected < 0 means none.
@@ -274,6 +304,71 @@ func (c *ComboBox) MousePress(e widget.MouseEvent) bool {
 	} else {
 		c.Open()
 	}
+	return true
+}
+
+// wheelSteps reports whether a notch over this box should move its
+// selection: the box's own answer, or the user's preference when it has
+// none.
+func (c *ComboBox) wheelSteps() bool {
+	switch c.WheelSelect {
+	case WheelSelectOn:
+		return true
+	case WheelSelectOff:
+		return false
+	}
+	return style.ComboWheel()
+}
+
+// MouseWheel steps a closed box's selection, and it is the one input
+// this widget refuses to do unless it has been asked for: it is off
+// until [style.ComboWheel] or [ComboBox.WheelSelect] says otherwise.
+// GTK took this behaviour out in GTK 4 for a good reason — the pointer
+// that is over a combo box is nearly always on its way past it, and a
+// control that changes its value while being scrolled past changes it
+// where nobody is looking.
+//
+// So the wheel is refused in four cases besides the preference being
+// off, and each of them is somebody scrolling rather than choosing:
+//
+//   - The list is open. The popup under the pointer is a list and
+//     scrolls like one ([PopupMenu.MouseWheel]); the face of an open box
+//     is not a second control.
+//   - The notch is precise — a touchpad's two-finger scroll, which has
+//     no detents, would fly through thirty items on one flick. A wheel
+//     clicks once per item; a touchpad is a page being scrolled.
+//   - The box is editable. Its text is something the user typed, not a
+//     choice they can be a step away from, and a wheel that replaced it
+//     would be deleting work.
+//   - There is no next item in that direction. This is the rule that
+//     keeps the option honest: a box at its first or last item does not
+//     swallow the notch, so a combo near the top of a [ScrollView] does
+//     not pin the page the moment the pointer crosses it. It is the
+//     contract the whole scrolling family keeps (see
+//     [ScrollView.MouseWheel]) rather than [NumberField]'s, which
+//     consumes at its limits — a spinner can afford to, because it
+//     steps only while focused and a passing pointer never reaches it.
+//
+// Unlike [NumberField] there is no focus gate, and that is deliberate:
+// the spinner's gate exists because nobody asked for its wheel, while
+// this one is off until somebody does. Gating it on focus as well would
+// leave the preference with nothing to turn on — a combo box takes
+// focus by being clicked, and clicking it opens the list.
+func (c *ComboBox) MouseWheel(e widget.MouseEvent) bool {
+	if !c.Enabled() || c.open || e.Precise || e.Scroll.Y == 0 {
+		return false
+	}
+	if c.field != nil || !c.wheelSteps() {
+		return false
+	}
+	next := c.Selected - 1
+	if e.Scroll.Y > 0 {
+		next = c.Selected + 1
+	}
+	if next < 0 || next >= len(c.Items) {
+		return false
+	}
+	c.Select(next)
 	return true
 }
 

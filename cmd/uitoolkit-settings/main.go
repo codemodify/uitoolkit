@@ -12,16 +12,17 @@
 // a small live application window in the staged pack, with the settings
 // in a folding row over it and the three config paths under it.
 //
-// That row is four check boxes — OS colors, OS dialogs, OS borders,
-// Animations — over a second block that says what a pack is drawn with:
-// Text, Code, Renderer, Icons, Size, Corners.
-// It folds onto two lines at the default window size, the options on the
-// first and the choosers on the second, and onto three at the 720x520
-// minimum. Paint is the renderer (look.json "renderer", UITK_PAINT's
-// three values) and is the one setting here that a window already open
-// cannot take; the chooser says so. The icon chooser lists
-// classic/sharp plus wide premiere PNG sets copied into
-// ~/.config/uitoolkit/icons/<set>/.
+// That row is five check boxes — OS colors, OS dialogs, OS borders,
+// Animations, Combo wheel — over a block that says what a pack is drawn
+// with: Text, Code, Renderer, Icons, Size, Corners. Every setting that
+// is an on and an off is in the first, every setting that is a list to
+// pick from is in the second, and there is no exception to that.
+// Renderer is the paint device (look.json "renderer", UITK_PAINT's three
+// values) and is the one setting here that a window already open cannot
+// take; the chooser says so. Combo wheel is off by default and is the
+// one setting here that changes what an input device does rather than
+// what a window looks like. The icon chooser lists classic/sharp plus
+// wide premiere PNG sets copied into ~/.config/uitoolkit/icons/<set>/.
 //
 // Where the caption buttons of a frame the toolkit draws go is not a box
 // of its own: unticking OS borders puts them where the theme says, which
@@ -38,7 +39,14 @@
 // them: the window's title bar says which application this is, and the
 // only list on the page does not need a legend to say it lists themes.
 // -version is where the version went when that heading's version label
-// went with it; it is the only place the command states it.
+// went with it; About, the button in front of Apply, is the other place
+// it is stated, together with the licence, the repository, how many
+// packs and engines this copy carries and what this window is painting
+// through.
+//
+// The search field over the theme list carries a clear button — the one
+// field in Settings that does, because it is the only one whose value
+// hides most of the page. Escape clears it too.
 //
 // Apply writes {theme, icons} to
 // $XDG_CONFIG_HOME/uitoolkit/look.json and running apps that watch
@@ -85,7 +93,7 @@ func main() {
 	// The window icon the desktop shows in its title bar, task bar and switcher.
 	a.SetIcon(icons.AppIconRGB("settings", 0x60, 0x70, 0x80)...)
 	win, err := a.NewWindow(platform.WindowOptions{
-		Title: windowTitle("Settings"), Width: 1024, Height: 860, MinWidth: 720, MinHeight: 520,
+		Title: windowTitle("Settings"), Width: 1024, Height: 860, MinWidth: 720, MinHeight: 580,
 		Headless: *headless || *shot != "",
 	})
 	if err != nil {

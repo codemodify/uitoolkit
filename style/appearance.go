@@ -97,6 +97,11 @@ type Appearance struct {
 	// NativeDialogs shows the desktop's own file dialogs (the XDG portal's)
 	// instead of the toolkit's themed ones.
 	NativeDialogs bool
+	// ComboWheel lets the mouse wheel over a closed combo box step its
+	// selection (see [ComboWheel]). It is off by default, and it is the
+	// one preference in this struct that changes what an input device
+	// does rather than what a window looks like.
+	ComboWheel bool
 	// Decorations is who draws the frame of a window: DecorationsAuto (the
 	// toolkit for windows with their own title bar), DecorationsSystem (the
 	// desktop's title bar and borders wherever it has them — Settings' "Use

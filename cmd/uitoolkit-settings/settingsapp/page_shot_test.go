@@ -42,7 +42,7 @@ func TestSettingsPageHoldsAtEverySize(t *testing.T) {
 	page := os.Getenv("UITK_PAGE")
 	for _, pack := range []string{"win95", "breeze", "adwaita", "breeze-night"} {
 		for _, scale := range []float32{1, 1.75} {
-			for _, size := range [][2]int{{1024, 860}, {720, 520}} {
+			for _, size := range [][2]int{{1024, 860}, {720, 580}} {
 				a := uitoolkit.New(uitoolkit.Options{Look: style.PreferredLook(), Headless: true, Scale: scale, DisableLookWatch: true})
 				w, err := a.NewWindow(platform.WindowOptions{Title: "Settings", Width: size[0], Height: size[1], Headless: true})
 				if err != nil {
@@ -84,7 +84,7 @@ func TestSettingsPageHoldsAtEverySize(t *testing.T) {
 				// wrapping row keeps what it carries and takes a line
 				// instead.
 				row := optionsRow(t, w)
-				for _, word := range []string{"Animations", "OS colors", "OS dialogs", "OS borders"} {
+				for _, word := range []string{"Animations", "Combo wheel", "OS colors", "OS dialogs", "OS borders"} {
 					box := findOption(w.Content(), word)
 					if box == nil {
 						t.Fatalf("%s at %g×, %dx%d: no %q option", pack, scale, size[0], size[1], word)
@@ -135,10 +135,15 @@ func TestSettingsPageHoldsAtEverySize(t *testing.T) {
 				// leaving the icons a line of their own. Left as it was,
 				// the minimum took four lines and the preview 55% of its
 				// pane.
+				// One line at 1024x860 and two at the minimum. A fifth
+				// box did not cost either of them a line: the renderer
+				// went back down to the block of choosers to pay for it
+				// (see settings.go), which is also why the crop in
+				// shot_test.go did not move.
 				lines := rowLines(row)
-				want := 3
+				want := 2
 				if size[0] > 800 {
-					want = 2
+					want = 1
 				}
 				if lines > want {
 					t.Errorf("%s at %g×, %dx%d: the settings stand on %d lines in a %v pane, want at most %d",

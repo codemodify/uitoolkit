@@ -272,7 +272,7 @@ Aliases:
 - `NewSpinner` → `*NumberField`
 - `NewBusyBar` → `*ProgressBar` with `Indeterminate`
 - `NewMonoTextField` / `NewMonoTextArea` → same types, mono font role
-- `NewPasswordField` → `*TextField` with `Password` (bullets)
+- `NewPasswordField` → `*TextField` with `Password` (bullets; never clearable)
 
 Regenerate thumbs and gallery frames:
 
@@ -757,6 +757,115 @@ labelled combo boxes in the row of settings over the preview now (see
 `ToolWidget` or `ToolLabel`. They stay: a control on a tool bar is what
 `QToolBar::addWidget` is for, and an application that wants one needs
 `MinWidth` and `Tip` with it.
+
+## The clear button
+
+`TextField.Clearable` puts a small cross at the field's trailing end
+while there is something to clear, and clicking it empties the field.
+
+**It is opt-in, and that is the whole of the decision.** A field that
+grew one on its own would grow one everywhere: in a password box, where
+a stray click throws away a typed secret with no undo; in a form that
+already has a *Reset*, where it is a second and narrower answer to a
+question the form has answered; in the one-character boxes of a date or
+a licence key, where there is no room for it and no work in clearing one
+character. None of those is a thing the widget can see and all of them
+are things the page knows. It is not a *look's* decision either —
+whether a field can be emptied in one click is a fact about what the
+field is for, and it must not appear and disappear as the user changes
+theme.
+
+Four things turn it off whatever the field says, because in each of them
+showing it would be a bug rather than a preference: `Password` (a bullet
+field must never offer to throw the secret away), `Frameless` (the frame
+is the parent's and so is that corner — a spin box's arrows are already
+there), a disabled field, and a field too narrow to hold the cross and
+still show text.
+
+**It is keyboard-reachable and named.** `Escape` clears a clearable,
+non-empty field, and only once the field is empty does `Escape` mean
+what the page says it means — the convention of `NSSearchField`,
+`GtkSearchEntry` and a `QLineEdit` with a clear button. A screen reader
+gets it as a named button *under* the field (`AccessibleItems`,
+`ActionDefault`), the way a browser tab's close button hangs under its
+tab: `Clear Search themes`, never a bare `Clear`, because "Clear" on a
+page with four fields names four different buttons the same. It is
+deliberately **not a tab stop** — a field with one would cost every
+keyboard user an extra Tab on every form to reach something the keyboard
+can already do.
+
+**It does not take the caret.** The press is answered before the code
+that focuses the field and places the caret, so a field that had the
+caret keeps it and a field that did not is not given it: what was
+clicked is a button, and clicking a button puts a caret nowhere. It acts
+on the release, and only where the press landed. Clearing counts as the
+user's own edit, so `OnInput` fires beside `OnChange`.
+
+**It never sits on the text or on the caret at the end of it.** The
+engines draw the string they are handed, each clipping it to a text box
+of its own making, so the widget hands them a string that does not reach
+the cross and measures the caret against the narrowed box. Nothing in
+any engine had to learn the cross was there.
+
+**The widget draws it, not the engine.** `DrawFieldClear` on the engine
+interface would be thirty-odd implementations of a sixteen-pixel ×, with
+nothing for them to be faithful to: Win95 has no clear button, nor does
+Motif, NeXT or Platinum — the affordance was invented for Mac OS X's
+search field and `input[type=search]`, long after most of these eras
+ended. What a look owns here it already gives: the field's frame around
+it, `Palette().Text` / `TextMuted` for the strokes, and the look's scale
+for their weight. So it uses `style.DrawCaptionGlyph` with
+`style.CaptionClose` — the same painter, rounded to whole device pixels,
+that strokes the × on a browser tab's close button and on a window
+caption. A typed `style.ToolIcon` was the other candidate and is the
+wrong shape: the premiere PNG sets ship `close` and `x` stems, but
+reaching one from typed code means a constant, a label, a freedesktop
+name, artwork in five sets at two densities and both drawn-vector
+fallbacks, because three tests walk `AllToolIcons` and demand ink from
+every set for every icon. That is the price of an icon an application
+asks for by name; this is a part of a control, like a combo's arrow, and
+parts of controls are drawn rather than fetched.
+
+Settings' theme search field is the one field in this repository that
+sets it ([settings.md](settings.md#the-column-on-the-left)).
+
+## The wheel over a closed combo box
+
+`ComboBox` steps its selection on a wheel notch **only when it has been
+asked to**. The preference is process-wide — `style.ComboWheel`, written
+by Settings' *Combo wheel* box into `look.json` — and it is **off** by
+default, which is the considered answer rather than a timid one: GTK
+removed the behaviour in GTK 4 because the pointer over a combo box is
+nearly always on its way past it, and a control that changes its value
+while being scrolled past changes it where nobody is looking.
+
+`ComboBox.WheelSelect` overrules the preference for one box:
+`WheelSelectOff` for a long form scrolled past far more often than it is
+answered, `WheelSelectOn` for a combo box that *is* the control of its
+page (a zoom level, a page number). `WheelSelectPref` is the zero value
+and follows the user.
+
+Even switched on it is narrow, and the first of these is what keeps the
+option honest:
+
+- **A box that cannot step further passes the notch on.** At its first
+  or last item it returns `false`, so the `ScrollView` behind it
+  scrolls — the contract the whole scrolling family keeps (*What
+  "handled" means*, above). `NumberField` consumes at its limits
+  instead; it can afford to, because it steps only while focused and a
+  passing pointer never reaches it.
+- **A precise (touchpad) scroll never steps.** It has no detents, and
+  one two-finger flick would run through thirty items.
+- **An editable combo box never steps**: its text is something the user
+  typed, not a choice they are one step away from.
+- **An open list is untouched.** The popup scrolls like the list it is,
+  whatever the preference says, and that was never the contentious part.
+
+There is deliberately **no focus gate**. `NumberField`'s wheel is gated
+on focus because nobody asked for it; this one is off until somebody
+does, and a combo box takes focus by being clicked — which opens the
+list — so a focus gate would leave the preference with nothing to turn
+on.
 
 ## Editable combo boxes
 
