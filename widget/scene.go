@@ -122,6 +122,16 @@ func (c *SceneCache) dirtyID(id uint64) bool {
 	return c != nil && c.dirty != nil && c.dirty[id]
 }
 
+// takeDirty reports whether id is dirty and clears the flag, so the
+// caller acts on it exactly once.
+func (c *SceneCache) takeDirty(id uint64) bool {
+	if c == nil || c.dirty == nil || !c.dirty[id] {
+		return false
+	}
+	delete(c.dirty, id)
+	return true
+}
+
 func (c *SceneCache) get(id uint64) *cachedGroup {
 	if c == nil || c.layers == nil {
 		return nil
@@ -172,10 +182,26 @@ func (c *SceneCache) markLive(n Component) {
 }
 
 func subtreeDirty(c Component, cache *SceneCache) bool {
-	if c == nil || cache == nil || !c.Visible() {
+	if c == nil || cache == nil {
+		return false
+	}
+	if !c.Visible() {
 		// An invisible subtree contributes nothing to the recording, so
 		// its stale dirty flags must not force ancestors to re-record.
-		return false
+		//
+		// The one frame that must: the frame it *becomes* invisible.
+		// The ancestor's cached group still holds the pixels it drew
+		// last time, and SetVisible only invalidates the child — it does
+		// not request layout — so this flag is the only signal that the
+		// group is stale. Hiding a button left it on screen until
+		// something else happened to reset the cache.
+		//
+		// The flag is taken rather than read, so it forces exactly one
+		// re-record. EndFrame clears flags for cached groups that went
+		// untouched, but a hidden leaf may never have had a group of its
+		// own, and its flag would otherwise make every later frame
+		// re-record an ancestor that has not changed since.
+		return cache.takeDirty(c.ID())
 	}
 	if cache.dirtyID(c.ID()) {
 		return true
