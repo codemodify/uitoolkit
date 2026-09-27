@@ -729,7 +729,7 @@ func parseSkin(name string, raw []byte, fsys fs.FS) (*Skin, error) {
 		Lineage: strings.TrimSpace(doc.Lineage),
 		Summary: strings.TrimSpace(doc.Summary),
 		Base:    strings.ToLower(strings.TrimSpace(doc.Base)),
-		Family:  ParseTheme(doc.Family),
+		Family:  parseSkinFamily(doc.Family),
 		Design:  SkinDesign{Scale: 1},
 		Sheets:  map[string]*SkinSheet{},
 		Sprites: map[string]*SkinSprite{},
@@ -960,61 +960,100 @@ func (sk *Skin) parseSprite(key string, raw []byte, name string) (*SkinSprite, e
 	return sp, nil
 }
 
+// loadParts reads every part in two passes, because a strip *generates*
+// sprite names ("button.normal") into sk.Sprites that another part may
+// refer to by name. Parsing each part completely in turn meant the
+// reference resolved or failed according to Go's map order: the same
+// manifest loaded a thousand times failed 135 of them with
+// `no sprite "button.normal"`, depending on whether the part that
+// defines the strip happened to be read before the part that names it.
+//
+// First every strip, so all generated sprites exist; then every part's
+// state, text and padding, which may name any of them. The names are
+// sorted so that a manifest with a real error names the same part every
+// run.
+// parseSkinFamily reads a skin's declared family, and leaves it **unset**
+// when the manifest omits one.
+//
+// ParseTheme cannot be used directly here: its default branch answers
+// dark, so an omitted family came back as a declared dark. That is a
+// different statement, and it silently beat the inheritance in
+// skin_pack.go, which gives a skin its base pack's family when it
+// declares none — a skin over a light base was handed light colours and
+// dark metadata.
+func parseSkinFamily(s string) ThemeName {
+	if strings.TrimSpace(s) == "" {
+		return ""
+	}
+	return ParseTheme(s)
+}
+
 func (sk *Skin) loadParts(m map[string]json.RawMessage) error {
-	for name, raw := range m {
+	names := make([]string, 0, len(m))
+	for name := range m {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	docs := make(map[string]*skinPartJSON, len(names))
+	for _, name := range names {
 		key := joinKey("parts", name)
 		if _, ok := skinPartNames[name]; !ok {
 			return skinErr(key, "%q is not a part of this toolkit (see SkinPartNames; new controls come from the toolkit, not the skin)", name)
 		}
-		p, err := sk.parsePart(key, raw, name)
-		if err != nil {
+		var doc skinPartJSON
+		if err := decodeSkinJSON(key, m[name], &doc); err != nil {
 			return err
 		}
-		sk.Parts[name] = p
+		p := &SkinPart{Name: name, States: map[string]*SkinSprite{}}
+		if doc.Strip != nil {
+			if err := sk.expandStrip(joinKey(key, "strip"), doc.Strip, p); err != nil {
+				return err
+			}
+		}
+		docs[name], sk.Parts[name] = &doc, p
+	}
+	for _, name := range names {
+		if err := sk.finishPart(joinKey("parts", name), docs[name], sk.Parts[name]); err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
-func (sk *Skin) parsePart(key string, raw []byte, name string) (*SkinPart, error) {
-	var doc skinPartJSON
-	if err := decodeSkinJSON(key, raw, &doc); err != nil {
-		return nil, err
-	}
-	p := &SkinPart{Name: name, States: map[string]*SkinSprite{}}
-
-	if doc.Strip != nil {
-		if err := sk.expandStrip(joinKey(key, "strip"), doc.Strip, p); err != nil {
-			return nil, err
-		}
-	}
+// finishPart resolves what may name a sprite another part generated:
+// the states, the text role and the padding. Every strip has already
+// been expanded by the time it runs (see loadParts).
+func (sk *Skin) finishPart(key string, doc *skinPartJSON, p *SkinPart) error {
+	name := p.Name
 	for state, raw := range doc.States {
 		sk2 := joinKey(joinKey(key, "states"), state)
 		if !skinStateSet[state] {
-			return nil, skinErr(sk2, "%q is not a control state (one of %s)", state, strings.Join(skinStateNames, ", "))
+			return skinErr(sk2, "%q is not a control state (one of %s)", state, strings.Join(skinStateNames, ", "))
 		}
 		sp, err := sk.spriteRef(sk2, raw, name+"."+state)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		p.States[state] = sp
 	}
 	if len(p.States) > 0 && p.States["normal"] == nil {
-		return nil, skinErr(joinKey(key, "states"), `needs "normal": every other state falls back to it`)
+		return skinErr(joinKey(key, "states"), `needs "normal": every other state falls back to it`)
 	}
 
 	if len(doc.Text) > 0 {
 		t, err := sk.textRef(joinKey(key, "text"), doc.Text, name)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		p.Text = t
 	}
 	pad, err := insets4(joinKey(key, "pad"), doc.Pad, "pad")
 	if err != nil {
-		return nil, err
+		return err
 	}
 	p.Pad = pad
-	return p, nil
+	return nil
 }
 
 // expandStrip lays a run of equal cells across (or down) a sheet, one per
@@ -1209,8 +1248,20 @@ func (sk *Skin) parseWindow(key string, raw json.RawMessage, base *SkinWindow) (
 		if !skinFrameParts[name] {
 			return nil, skinErr(pk, "a window variant rebinds only the frame's parts (caption, caption.button, caption.title, window); %q is not one", name)
 		}
-		p, err := sk.parsePart(pk, raw, name)
-		if err != nil {
+		// A window variant's parts are read whole: they rebind the
+		// frame and nothing else refers to what they generate, so the
+		// two-pass rule loadParts needs does not apply here.
+		var doc skinPartJSON
+		if err := decodeSkinJSON(pk, raw, &doc); err != nil {
+			return nil, err
+		}
+		p := &SkinPart{Name: name, States: map[string]*SkinSprite{}}
+		if doc.Strip != nil {
+			if err := sk.expandStrip(joinKey(pk, "strip"), doc.Strip, p); err != nil {
+				return nil, err
+			}
+		}
+		if err := sk.finishPart(pk, &doc, p); err != nil {
 			return nil, err
 		}
 		if w.Parts == nil {

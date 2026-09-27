@@ -85,8 +85,34 @@ func writeJSONFile(path string, v any) error {
 		return err
 	}
 	b = append(b, '\n')
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o600); err != nil {
+	// A temporary file of this writer's own, in the destination's
+	// directory so the rename stays on one filesystem and is therefore
+	// atomic.
+	//
+	// It used to be a fixed "<path>.tmp" shared by every writer, which
+	// defeats the point of writing to a temporary file at all: two saves
+	// truncate the same inode and interleave their bytes, one renames
+	// the other's half-written file into place, and a failed save
+	// removes a file its neighbour is about to publish. Two Settings
+	// windows, or one application saving from two goroutines, could
+	// leave invalid JSON where the preferences belong.
+	f, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".*.tmp")
+	if err != nil {
+		return err
+	}
+	tmp := f.Name()
+	if _, err := f.Write(b); err != nil {
+		f.Close()
+		_ = os.Remove(tmp)
+		return err
+	}
+	if err := f.Chmod(0o600); err != nil {
+		f.Close()
+		_ = os.Remove(tmp)
+		return err
+	}
+	if err := f.Close(); err != nil {
+		_ = os.Remove(tmp)
 		return err
 	}
 	if err := os.Rename(tmp, path); err != nil {
