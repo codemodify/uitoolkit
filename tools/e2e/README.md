@@ -20,10 +20,20 @@ own Wayland socket `uitk-e2e-N`, own Xwayland (display number in `N/display`), o
     ./stop.sh N                  # stop app + compositor when done
     ./theme-tour.sh N [PACK...]  # gallery in every pack on the GPU + the same pack on the CPU, in pairs
     ./frame-switch.sh N [BACKEND [PACK]]  # Settings' OS borders hands the frame over, live, both ways
+    ./shade-above.sh N [BACKEND [PACK]]   # the wheel rolls the window up; keep-above holds it in front
     ./resize-tear.sh N BIN [PASSES]  # drag an edge and score every frame for a torn window
 
 - `crop.py` decodes any PNG (every filter type, palette, 16-bit, Adam7), so it
   reads the toolkit's own `WritePNG` stills as well as KWin's; python3 only.
+- `shade-above.sh` drives `rigapp` (`tools/e2e/rigapp`, a window with the
+  toolkit's own frame and nothing else) for the two title-bar behaviours that
+  only a real compositor shows: the wheel over the caption rolling the window
+  up to its title bar, and the keep-above caption button. KWin is the oracle
+  for both — the window's geometry and the size hints it read for the
+  roll-up, the stacking order for keep-above. Keep-above is X11-only (no
+  Wayland compositor offers one a client may ask for on its own surface), so
+  the Wayland run checks that the toolkit says so instead of showing a button
+  that does nothing.
 - `resize-tear.sh` is the regression guard for a window shown from a paint
   target a resize reallocated and nothing painted into: it drags the right
   edge in and out, shoots through each drag, and scores the frames with

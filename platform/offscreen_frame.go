@@ -14,6 +14,10 @@ type FrameCalls struct {
 	Maximizes  []bool
 	Fullscreen []bool
 	Lowers     int
+	// Aboves are the keep-above requests, in order, and ShadeHeights the
+	// heights a rolled-up window was pinned to (0 unpins).
+	Aboves       []bool
+	ShadeHeights []int
 	// Requests are the decoration modes asked for, in order, and Frames
 	// the frames (margin, resize band, corners, alpha) handed over.
 	Requests []Decorations
@@ -40,6 +44,13 @@ type offscreenFrame struct {
 	// glass is whether the simulated desktop blurs behind a window
 	// (SimulateGlass); off by default, as a plain compositor is.
 	glass bool
+	// above is whether the simulated desktop can keep a window above the
+	// others (SimulateKeepAbove). It is off by default — an offscreen
+	// window has no desktop to be stacked in, which is also the Wayland
+	// answer — so a test that wants the caption button asks for it.
+	above bool
+	// shadeH is the height a rolled-up window is pinned to (0: not).
+	shadeH int
 	// palette is whether the simulated desktop takes a frame palette
 	// (SimulateDecorationPalette), and paletteSet the one it was given.
 	palette    bool
@@ -97,8 +108,9 @@ func (o *Offscreen) SetSizing(s Sizing) {
 	o.limits = limitsFor(s, o.opts, o.frame.geomLW, o.frame.geomLH)
 }
 
-// SizeLimits is what the simulated desktop was told (SizingSurface).
-func (o *Offscreen) SizeLimits() SizeLimits { return o.limits }
+// SizeLimits is what the simulated desktop was told (SizingSurface), the
+// height pin of a rolled-up window included.
+func (o *Offscreen) SizeLimits() SizeLimits { return shadePin(o.limits, o.frame.shadeH) }
 
 // SuitsClientFrame is true: the simulated desktop moves and resizes.
 func (o *Offscreen) SuitsClientFrame() bool { return !o.frame.noMoveResize }
@@ -193,6 +205,48 @@ func (o *Offscreen) SetFullscreen(on bool) {
 	st.Fullscreen = on
 	o.SimulateWindowState(st)
 }
+
+// KeepAboveSupported is whether the simulated desktop can keep a window
+// above the others (AboveSurface; SimulateKeepAbove switches it).
+func (o *Offscreen) KeepAboveSupported() bool { return o != nil && o.frame.above }
+
+// SetKeepAbove records the request and, like a window manager that grants
+// it, answers with the new state (AboveSurface).
+func (o *Offscreen) SetKeepAbove(on bool) {
+	o.frame.calls.Aboves = append(o.frame.calls.Aboves, on)
+	st := o.frame.state
+	st.KeepAbove = on
+	o.SimulateWindowState(st)
+}
+
+// SimulateKeepAbove switches whether the simulated desktop can keep a
+// window above the others, so a test can run both the X11 path and the
+// Wayland one, where the caption button has to say it cannot (tests).
+func (o *Offscreen) SimulateKeepAbove(can bool) {
+	if o != nil {
+		o.frame.above = can
+	}
+}
+
+// SetShadedHeight records the height a rolled-up window is pinned to and
+// states it as a limit, exactly as the real backends do (ShadeSurface).
+func (o *Offscreen) SetShadedHeight(h int) {
+	if o == nil || h < 0 {
+		h = max(h, 0)
+	}
+	if o == nil || h == o.frame.shadeH {
+		return
+	}
+	o.frame.shadeH = h
+	o.frame.calls.ShadeHeights = append(o.frame.calls.ShadeHeights, h)
+	o.limits = limitsFor(o.sizing, o.opts, o.frame.geomLW, o.frame.geomLH)
+}
+
+// SizeLimits already folds the pin in; see SetShadedHeight.
+var (
+	_ AboveSurface = (*Offscreen)(nil)
+	_ ShadeSurface = (*Offscreen)(nil)
+)
 
 // FrameCalls returns what the app asked the simulated desktop to do.
 func (o *Offscreen) FrameCalls() FrameCalls { return o.frame.calls }

@@ -101,7 +101,7 @@ func (metroEngine) DrawCaptionButton(l *Classic, ctx *paintengine2d.Context, b p
 			fill, glyph = c.closeHot, c.closeGlyphHot
 		}
 		ctx.DrawRect(b, paintengine2d.Fill(fill))
-		DrawCaptionGlyph(ctx, b, k, st.Maximized, glyph, g, w)
+		DrawCaptionGlyph(ctx, b, k, CaptionAlt(k, cs, st), glyph, g, w)
 		return
 	}
 	switch {
@@ -114,7 +114,7 @@ func (metroEngine) DrawCaptionButton(l *Classic, ctx *paintengine2d.Context, b p
 	if !st.Active {
 		col = fgOff
 	}
-	DrawCaptionGlyph(ctx, b, k, st.Maximized, col, g, w)
+	DrawCaptionGlyph(ctx, b, k, CaptionAlt(k, cs, st), col, g, w)
 }
 
 // metroWindowShadow is the tight shadow a Windows 10 window casts (Windows

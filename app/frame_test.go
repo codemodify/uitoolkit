@@ -407,7 +407,8 @@ func TestCaptionRightClickWindowMenu(t *testing.T) {
 	for _, it := range pop.Items {
 		names = append(names, it.Text)
 	}
-	if len(names) != 4 || names[0] != "Ma&ximize" || names[1] != "Mi&nimize" || names[3] != "&Close" {
+	if len(names) != 5 || names[0] != "Ma&ximize" || names[1] != "Mi&nimize" ||
+		names[2] != "&Shade" || names[4] != "&Close" {
 		t.Fatalf("menu %q", names)
 	}
 	if len(r.o.FrameCalls().Maximizes) != 0 {

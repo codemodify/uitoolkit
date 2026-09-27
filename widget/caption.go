@@ -71,6 +71,25 @@ type FrameHost interface {
 	ShowWindowMenu(p paintengine2d.Point)
 }
 
+// FrameAbove is what a FrameHost implements where its window can be kept
+// above the others: the caption's keep-above button
+// ([platform.CaptionKeepAbove]) is its user. app.Window implements it.
+//
+// A host that does not implement it, or whose CanKeepAbove is false, gets
+// no such button: the desktop cannot do it (no Wayland compositor can —
+// see [platform.AboveSurface]), and a caption button that cannot work is
+// not drawn, exactly as minimize is not where the desktop cannot minimize.
+type FrameAbove interface {
+	// CanKeepAbove reports whether the desktop can keep the window above
+	// the others.
+	CanKeepAbove() bool
+	// KeepAbove is whether it is doing so — the desktop's answer, which is
+	// what the button paints.
+	KeepAbove() bool
+	// ToggleKeepAbove turns it on or off.
+	ToggleKeepAbove() bool
+}
+
 // FrameRequests is what a FrameHost implements to ask its look for a frame
 // of its own: the role the app gave the window, which a look that dresses
 // windows differently chooses a frame by, and a caption height the app

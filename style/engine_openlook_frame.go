@@ -165,6 +165,8 @@ func (openlookEngine) DrawCaptionButton(l *Classic, ctx *paintengine2d.Context, 
 		if st.Maximized && n > 4 {
 			ink.frame(g, x0+2, y0+2, n-4, n-4, 1)
 		}
+	case CaptionKeepAbove:
+		ink.aboveGlyph(g, x0, y0, n, CaptionAlt(k, cs, st))
 	case CaptionClose:
 		m := rpNewMask(bw, bh)
 		m.line(x0, y0, x0+n-1, y0+n-1)

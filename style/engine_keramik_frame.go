@@ -153,5 +153,5 @@ func (keramikEngine) DrawCaptionButton(l *Classic, ctx *paintengine2d.Context, b
 	if cs.Pressed() {
 		g = g.Translate(paintengine2d.Pt(u, u))
 	}
-	DrawCaptionGlyph(ctx, g, k, st.Maximized, c.btnGlyph, in.Dx()*0.46, max(l.S(1.8), u))
+	DrawCaptionGlyph(ctx, g, k, CaptionAlt(k, cs, st), c.btnGlyph, in.Dx()*0.46, max(l.S(1.8), u))
 }

@@ -65,6 +65,29 @@ func (c *WindowControls) Buttons() []platform.CaptionButton { return c.buttons }
 // FocusOnClick is false: caption buttons never take the keyboard focus.
 func (c *WindowControls) FocusOnClick() bool { return false }
 
+// frameAbove is the host where its window can be kept above the others.
+func (c *WindowControls) frameAbove() widget.FrameAbove {
+	a, ok := c.Host().(widget.FrameAbove)
+	if !ok {
+		return nil
+	}
+	return a
+}
+
+// canKeepAbove reports whether the desktop can keep the window above the
+// others; a keep-above button is not drawn where it cannot.
+func (c *WindowControls) canKeepAbove() bool {
+	a := c.frameAbove()
+	return a != nil && a.CanKeepAbove()
+}
+
+// keptAbove reports whether the window is being kept above the others: the
+// button paints as a toggle that is on.
+func (c *WindowControls) keptAbove() bool {
+	a := c.frameAbove()
+	return a != nil && a.KeepAbove()
+}
+
 func (c *WindowControls) frameHost() widget.FrameHost {
 	if h, ok := c.Host().(widget.FrameHost); ok {
 		return h
@@ -87,6 +110,10 @@ func (c *WindowControls) Shown() []platform.CaptionButton {
 			}
 		case platform.CaptionMaximize:
 			if !caps.Can(platform.CapMaximize) {
+				continue
+			}
+		case platform.CaptionKeepAbove:
+			if !c.canKeepAbove() {
 				continue
 			}
 		case platform.CaptionNone:
@@ -299,6 +326,11 @@ func (c *WindowControls) buttonName(b platform.CaptionButton) string {
 		return "Maximize"
 	case platform.CaptionMenu:
 		return "Window Menu"
+	case platform.CaptionKeepAbove:
+		if c.keptAbove() {
+			return "Stop Keeping Above Others"
+		}
+		return "Keep Above Others"
 	}
 	return ""
 }
@@ -318,6 +350,17 @@ func (c *WindowControls) Paint(ctx *paintengine2d.Context) {
 		}
 		if i == c.press {
 			cs |= style.StatePressed | style.StateHovered
+		}
+		if b == platform.CaptionKeepAbove {
+			// A toggle, not a command. While it is on it is a button held
+			// down — which is how a set toggle has looked in every era
+			// from Motif to Breeze, and how KWin draws its own keep-above
+			// button — so every engine shows the state through the pressed
+			// art it already has, and the glyph fills in as well.
+			cs |= style.StateToggle
+			if c.keptAbove() {
+				cs |= style.StateChecked | style.StatePressed
+			}
 		}
 		style.DrawCaptionButtonOf(lk, ctx, r, style.CaptionButton(b), cs, ds)
 	}
@@ -391,6 +434,12 @@ func (c *WindowControls) activate(i int) bool {
 		h.Minimize()
 	case platform.CaptionMaximize:
 		h.ToggleMaximize()
+	case platform.CaptionKeepAbove:
+		a := c.frameAbove()
+		if a == nil {
+			return false
+		}
+		a.ToggleKeepAbove()
 	case platform.CaptionMenu:
 		r := c.rects()[i]
 		h.ShowWindowMenu(widget.DeviceOrigin(c).Add(paintengine2d.Pt(r.Min.X, r.Max.Y)))
@@ -414,6 +463,14 @@ func (c *WindowControls) AccessibleItems() []*a11y.Node {
 		}
 		n := item(c, i, a11y.RoleButton, c.buttonName(b), rects[i])
 		n.Actions = n.Actions.With(a11y.ActionDefault)
+		if b == platform.CaptionKeepAbove {
+			// A screen reader is told it is a toggle and which way it is.
+			n.Role = a11y.RoleToggleButton
+			n.State |= a11y.StateCheckable
+			if c.keptAbove() {
+				n.State |= a11y.StateChecked | a11y.StatePressed
+			}
+		}
 		out = append(out, n)
 	}
 	return out

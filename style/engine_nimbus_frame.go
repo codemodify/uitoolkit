@@ -123,5 +123,5 @@ func (nimbusEngine) DrawCaptionButton(l *Classic, ctx *paintengine2d.Context, b 
 		DrawCross(ctx, gb.Inset(snap(gb.Dx()*0.3)), glyph, 1.8*u)
 		return
 	}
-	DrawCaptionGlyph(ctx, gb, k, st.Maximized, glyph, snap(gb.Dx()*0.4), max(u, 1))
+	DrawCaptionGlyph(ctx, gb, k, CaptionAlt(k, cs, st), glyph, snap(gb.Dx()*0.4), max(u, 1))
 }

@@ -109,12 +109,27 @@ func (motifEngine) DrawCaptionButton(l *Classic, ctx *paintengine2d.Context, b p
 	} else {
 		mShadow(ctx, p, s.ts, s.bs, ib, false)
 	}
-	glyph := func(w, h float32) {
+	at := func(w, h, dy float32, sunken bool) {
 		w, h = snap(w), snap(h)
-		gr := paintengine2d.XYWH(snap(p.Min.X+(p.Dx()-w)*0.5), snap(p.Min.Y+(p.Dy()-h)*0.5), w, h)
-		mShadow(ctx, gr, s.ts, s.bs, ib, false)
+		gr := paintengine2d.XYWH(snap(p.Min.X+(p.Dx()-w)*0.5), snap(p.Min.Y+(p.Dy()-h)*0.5+dy), w, h)
+		top, bot := s.ts, s.bs
+		if sunken {
+			top, bot = s.bs, s.ts
+		}
+		mShadow(ctx, gr, top, bot, ib, false)
 	}
+	glyph := func(w, h float32) { at(w, h, 0, false) }
 	switch k {
+	case CaptionKeepAbove:
+		// The shelf, and the window sitting up against it — bevelled
+		// boxes, which is Motif's whole glyph vocabulary. A toggle that is
+		// set is a box cut *into* the face rather than standing out of it,
+		// as every Motif toggle was, so the window under the shelf turns
+		// over while keep-above is on.
+		side := maxf(T*0.34, 5*ib)
+		rail := maxf(T*0.12, 2*ib)
+		at(T*0.52, rail, -(side+rail)*0.5, false)
+		at(side, side, (rail+ib)*0.5, CaptionAlt(k, cs, st))
 	case CaptionMenu:
 		glyph(T*0.5, maxf(T*0.2, 3*ib))
 	case CaptionMinimize:

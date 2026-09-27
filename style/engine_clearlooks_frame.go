@@ -143,5 +143,5 @@ func (clearlooksEngine) DrawCaptionButton(l *Classic, ctx *paintengine2d.Context
 			Stroke: paintengine2d.Stroke{Width: 2 * lw, Cap: paintengine2d.CapSquare, Join: paintengine2d.JoinMiter, MiterLimit: 4}})
 		return
 	}
-	DrawCaptionGlyph(ctx, b, k, st.Maximized, glyph, snap(b.Dx()*0.42), max(lw, 1))
+	DrawCaptionGlyph(ctx, b, k, CaptionAlt(k, cs, st), glyph, snap(b.Dx()*0.42), max(lw, 1))
 }

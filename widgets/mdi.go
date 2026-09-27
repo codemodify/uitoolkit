@@ -1227,6 +1227,11 @@ func (w *MDIWindow) buttons() (left, right []platform.CaptionButton) {
 				if w.Features&MDIMaximizable == 0 {
 					continue
 				}
+			case platform.CaptionKeepAbove:
+				// A child window is stacked inside its area, not on the
+				// desktop: there is nothing for it to be kept above, so
+				// the button is not drawn rather than drawn dead.
+				continue
 			case platform.CaptionNone:
 				continue
 			}

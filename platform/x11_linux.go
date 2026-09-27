@@ -286,7 +286,10 @@ static void ui_map(Display* d, Window w) {
 // A window manager reads PMinSize == PMaxSize as "not resizable" — it drops
 // the resize edges, greys maximize out and clamps a drag — which is how a
 // fixed-size window is stated on X11.
-static void ui_resize_hints(Display* d, Window w, int minw, int minh, int maxw, int maxh, int placed, int x, int y) {
+// force writes the hints even when there is nothing to state, which is how
+// a window that was rolled up gets its limits back: leaving the property
+// alone would keep the one-height pin the roll-up put there.
+static void ui_resize_hints(Display* d, Window w, int minw, int minh, int maxw, int maxh, int placed, int x, int y, int force) {
 	XSizeHints hints;
 	memset(&hints, 0, sizeof(hints));
 	if (placed) {
@@ -310,7 +313,7 @@ static void ui_resize_hints(Display* d, Window w, int minw, int minh, int maxw, 
 		hints.max_width = maxw > 0 ? maxw : 1 << 20;
 		hints.max_height = maxh > 0 ? maxh : 1 << 20;
 	}
-	if (!hints.flags) return;
+	if (!hints.flags && !force) return;
 	XSetWMNormalHints(d, w, &hints);
 }
 
@@ -1057,6 +1060,7 @@ type x11Conn struct {
 	atomFullscr   C.Atom
 	atomHidden    C.Atom
 	atomFocused   C.Atom
+	atomAbove     C.Atom
 	atomAllowed   C.Atom
 	atomActMin    C.Atom
 	atomActMaxH   C.Atom
@@ -1199,6 +1203,12 @@ type x11Surface struct {
 	opts   WindowOptions
 	sizing Sizing
 	limits SizeLimits
+	// shadeH is the height (logical px) the window is pinned to while it
+	// is rolled up to its title bar, 0 when it is not; shadePinned stays
+	// set once it has been, so unpinning writes WM_NORMAL_HINTS again
+	// instead of leaving the pin standing (see ui_resize_hints).
+	shadeH      int
+	shadePinned bool
 	// placed says the client chose where the X window goes — a position
 	// in its WindowOptions, a Move or a drag carrying it before it was
 	// mapped — and placeX, placeY where, in root device pixels: what
@@ -1288,6 +1298,7 @@ func x11OpenLocked() (*x11Conn, error) {
 	c.atomFullscr = internAtom(d, "_NET_WM_STATE_FULLSCREEN")
 	c.atomHidden = internAtom(d, "_NET_WM_STATE_HIDDEN")
 	c.atomFocused = internAtom(d, "_NET_WM_STATE_FOCUSED")
+	c.atomAbove = internAtom(d, "_NET_WM_STATE_ABOVE")
 	c.atomAllowed = internAtom(d, "_NET_WM_ALLOWED_ACTIONS")
 	c.atomActMin = internAtom(d, "_NET_WM_ACTION_MINIMIZE")
 	c.atomActMaxH = internAtom(d, "_NET_WM_ACTION_MAXIMIZE_HORZ")
@@ -3014,6 +3025,8 @@ func (s *x11Surface) readStateLocked() []Event {
 			bits |= netStateHidden
 		case c.atomFocused:
 			bits |= netStateFocused
+		case c.atomAbove:
+			bits |= netStateAbove
 		}
 	}
 	st := netWMState(bits, c.supportsLocked(c.atomFocused), s.focused)
@@ -3136,7 +3149,7 @@ func (s *x11Surface) applySizeHintsLocked() {
 	if c == nil || c.dpy == nil || s.win == 0 {
 		return
 	}
-	l := s.limits
+	l := shadePin(s.limits, s.shadeH)
 	m := s.frame.Margin
 	sc := c.displayScale()
 	grow := func(v, margin int) C.int {
@@ -3149,10 +3162,14 @@ func (s *x11Surface) applySizeHintsLocked() {
 	if s.placed {
 		placed = 1
 	}
+	force := C.int(0)
+	if s.shadePinned {
+		force = 1
+	}
 	C.ui_resize_hints(c.dpy, s.win,
 		grow(l.MinWidth, m.Width()), grow(l.MinHeight, m.Height()),
 		grow(l.MaxWidth, m.Width()), grow(l.MaxHeight, m.Height()),
-		placed, C.int(s.placeX), C.int(s.placeY))
+		placed, C.int(s.placeX), C.int(s.placeY), force)
 }
 
 // placeLocked records that the client put the (unmapped) X window at x, y
@@ -3613,5 +3630,66 @@ func (s *x11Surface) ToggleMaximizeAxis(vertical bool) {
 	x11Mu.Unlock()
 }
 
+// KeepAboveSupported reports whether the window manager does
+// _NET_WM_STATE_ABOVE (AboveSurface). It is read from _NET_SUPPORTED every
+// time rather than cached: the window manager can be replaced under a
+// running window, and a caption button that says it can must be right.
+func (s *x11Surface) KeepAboveSupported() bool {
+	if s == nil || s.conn == nil || s.conn.dpy == nil || s.win == 0 || s.popup {
+		return false
+	}
+	x11Mu.Lock()
+	defer x11Mu.Unlock()
+	return s.conn.supportsLocked(s.conn.atomAbove)
+}
+
+// SetKeepAbove asks the window manager to keep the window above the others,
+// or to stop (AboveSurface). The answer comes back as a PropertyNotify on
+// _NET_WM_STATE and reaches the application as EventWindowState: a manager
+// that refuses simply never sets the state, and the caption button follows
+// the property rather than the request.
+func (s *x11Surface) SetKeepAbove(on bool) {
+	if s == nil || s.conn == nil || s.conn.dpy == nil || s.win == 0 {
+		return
+	}
+	action := C.long(0) // _NET_WM_STATE_REMOVE
+	if on {
+		action = 1 // _NET_WM_STATE_ADD
+	}
+	x11Mu.Lock()
+	C.ui_ewmh_state(s.conn.dpy, s.win, action, s.conn.atomAbove, 0)
+	x11Mu.Unlock()
+}
+
+// SetShadedHeight pins the window to h logical pixels tall while it is
+// rolled up, 0 to let it grow again (ShadeSurface). Without the pin KWin
+// clamps the roll-up straight back to WM_NORMAL_HINTS' minimum height —
+// every non-popup X11 window states one — and the window would spring open
+// again the moment it was told to close.
+func (s *x11Surface) SetShadedHeight(h int) {
+	if s == nil || s.closed {
+		return
+	}
+	if h < 0 {
+		h = 0
+	}
+	if h == s.shadeH {
+		return
+	}
+	s.shadeH = h
+	if h > 0 {
+		s.shadePinned = true
+	}
+	x11Mu.Lock()
+	s.applySizeHintsLocked()
+	x11Mu.Unlock()
+}
+
 // x11Surface is a full FrameSurface (compile-time check).
 var _ FrameSurface = (*x11Surface)(nil)
+
+// x11Surface keeps windows above the others and rolls them up.
+var (
+	_ AboveSurface = (*x11Surface)(nil)
+	_ ShadeSurface = (*x11Surface)(nil)
+)

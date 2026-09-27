@@ -306,7 +306,7 @@ func (skinEngine) DrawCaptionButton(l *Classic, ctx *paintengine2d.Context, b pa
 			}
 		}
 		side := min(b.Dx(), b.Dy())
-		DrawCaptionGlyph(ctx, b, k, st.Maximized, col, side*0.42, max(1, l.S(1)))
+		DrawCaptionGlyph(ctx, b, k, CaptionAlt(k, cs, st), col, side*0.42, max(1, l.S(1)))
 		return
 	}
 	skinUnderFrame(l).DrawCaptionButton(l, ctx, b, k, cs, st)

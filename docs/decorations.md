@@ -566,7 +566,7 @@ backdrop look; a suspended window stops blinking its caret.
 
 | Desktop | Button layout | Click actions | Double-click time, drag threshold |
 | --- | --- | --- | --- |
-| KDE Plasma | kwinrc `[org.kde.kdecoration2]` `ButtonsOnLeft` / `ButtonsOnRight` (M window menu, I minimize, A maximize, X close, `_` spacer; KWin's other buttons are skipped). Defaults `MSE` / `HIAX`: the window menu on the left, minimize, maximize, close on the right | kwinrc `[Windows] TitlebarDoubleClickCommand`, `[MouseBindings] CommandActiveTitlebar2/3` | kdeglobals `[KDE] DoubleClickInterval`, `StartDragDist` |
+| KDE Plasma | kwinrc `[org.kde.kdecoration2]` `ButtonsOnLeft` / `ButtonsOnRight` (M window menu, I minimize, A maximize, X close, F keep above, `_` spacer; KWin's other buttons are skipped). Defaults `MSE` / `HIAX`: the window menu on the left, minimize, maximize, close on the right | kwinrc `[Windows] TitlebarDoubleClickCommand`, `[MouseBindings] CommandActiveTitlebar2/3`, `CommandTitlebarWheel` | kdeglobals `[KDE] DoubleClickInterval`, `StartDragDist` |
 | GNOME and others with a GTK / GNOME portal backend | `org.gnome.desktop.wm.preferences` `button-layout` through the settings portal (GNOME's default `appmenu:close`: close only) | `action-double-click-titlebar`, `-middle-`, `-right-` | `org.gnome.desktop.peripherals.mouse` `double-click`, `drag-threshold` |
 | elsewhere | GTK's `settings.ini` `gtk-decoration-layout` (GTK 4, then 3) | `gtk-titlebar-*-click` | `gtk-double-click-time`, `gtk-dnd-drag-threshold` |
 | defaults | trailing minimize, maximize, close | double: toggle maximize; middle: none; right: menu | 400 ms, 8 px |
@@ -576,7 +576,71 @@ directly (cascading over `XDG_CONFIG_DIRS`), and re-read when a window becomes
 active after a config file changed; the portal's keys arrive live. Actions
 xdg-shell cannot express fall back: "maximize vertically / horizontally only"
 toggle-maximizes on Wayland (X11 does it one way), "lower" works on X11 only,
-"shade" and "on all desktops" do nothing.
+"on all desktops" does nothing, and "keep above" works on X11 only (see
+below). "Shade" rolls the window up (below) wherever the toolkit draws the
+frame, on both backends.
+
+### Rolling the window up, and keeping it above
+
+Two things a title bar the toolkit draws does beyond moving the window.
+
+**Rolling up (shade)** collapses the window to its title bar and back.
+`Window.SetShaded`, `ToggleShade`, `Shaded`, `CanShade`; the wheel over
+caption space does it (up rolls up, down rolls down), as does the desktop's
+`toggle-shade` title-bar action and a Shade item in the toolkit's window
+menu. It is the toolkit's own doing: the window resizes itself to its
+caption and remembers the height to come back to, so the desktop only ever
+sees an ordinary resize. There is no shade request in xdg-shell, and X11's
+`_NET_WM_STATE_SHADED` is the *window manager's* title bar rolling up —
+no use to a window that asked for no decorations, which is not shadeable at
+all. So both backends take the same path, and the backend's only part is
+`platform.ShadeSurface`: while the window is rolled up its height is pinned
+(`WM_NORMAL_HINTS`, `xdg_toplevel.set_min_size`/`set_max_size`), because
+both backends state a minimum height for every resizable window and a
+window manager clamps a resize to it — unpinned, the window would spring
+straight back open.
+
+`CanShade` is false where the height is not the toolkit's to change: under
+the desktop's frame ("OS window borders" — there the wheel over the title
+bar never reaches the client at all, and KWin's own `CommandTitlebarWheel`
+governs it), and while the window is maximized, tiled, full screen or
+pinned to one size. A window that becomes any of those while rolled up is
+rolled back down first: it must never be left rolled up with no title bar
+to roll it back down with.
+
+Unlike the rest of the conventions above, the wheel's default is not the
+desktop's. KWin's own `CommandTitlebarWheel` defaults to `Nothing`; a title
+bar the toolkit draws rolls the window up instead, and a user who has set
+that key explicitly gets what they set, `Nothing` included.
+
+**Keeping the window above the others** is the desktop's doing, and only
+X11 can: `_NET_WM_STATE_ABOVE`, where the window manager lists it in
+`_NET_SUPPORTED`. `Window.SetKeepAbove`, `ToggleKeepAbove`, `KeepAbove`,
+`CanKeepAbove`, and `platform.AboveSurface` underneath; the state comes
+back as an ordinary window-state change, so what is shown is what the
+window manager did, not what was asked.
+
+**Wayland cannot**, on any compositor. xdg-shell has no such request, and
+nothing a client may use on its own surface does. KDE's
+`org_kde_plasma_window_management` does carry a `keep_above` state, but it
+is a window-manager protocol with no `wl_surface` request at all: a client
+binds it to enumerate *every* window on the desktop and would have to guess
+which one is its own from the pid and the title. A UI toolkit must not take
+that capability for every application that links it, so the Wayland backend
+does not implement it, and nothing pretends otherwise.
+
+The caption button (`platform.CaptionKeepAbove`, KWin's `F`) stands where
+the window-menu button would — but only where the desktop can actually do
+it, so nobody trades a working button for a dead one. On Wayland the
+window-menu button stays exactly as it was. The window menu is not lost
+either way: it is still a right click on the caption or on any caption
+button, and still the desktop's right-click title-bar action.
+
+The button is a toggle, not a command: while it is on it is drawn as a
+button held down (`style.StateChecked | StatePressed`, and `StateToggle` to
+say it is one) with its glyph filled in, which is how a set toggle has
+looked in every era the toolkit paints. Assistive technology is told it is
+a toggle button, checkable, and checked while it is on.
 
 ## Dressing the desktop's frame
 

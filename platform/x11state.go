@@ -15,6 +15,7 @@ const (
 	netStateFullscreen
 	netStateHidden
 	netStateFocused
+	netStateAbove
 )
 
 // netWMState decodes a window's _NET_WM_STATE. EWMH has no tiled states;
@@ -26,6 +27,7 @@ func netWMState(bits uint32, focusKnown, focused bool) WindowState {
 	st := WindowState{
 		Fullscreen: bits&netStateFullscreen != 0,
 		Minimized:  bits&netStateHidden != 0,
+		KeepAbove:  bits&netStateAbove != 0,
 	}
 	vert, horz := bits&netStateMaxVert != 0, bits&netStateMaxHorz != 0
 	switch {

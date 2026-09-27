@@ -143,6 +143,9 @@ func (e win31Engine) DrawCaptionButton(l *Classic, ctx *paintengine2d.Context, b
 	case k == CaptionMaximize:
 		t := w31tri(7, DirUp)
 		t.emit(&glyph, box, (box.w-t.w)/2, (box.h-t.h)/2)
+	case k == CaptionKeepAbove:
+		n := min(min(box.w, box.h)-4, 9)
+		glyph.aboveGlyph(box, (box.w-n)/2, (box.h-n)/2, n, CaptionAlt(k, cs, st))
 	default:
 		// Close, which 3.1 had no button for: a 1-bit cross.
 		n := min(box.w, box.h) - 6

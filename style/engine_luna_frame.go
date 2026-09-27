@@ -126,7 +126,7 @@ func (lunaEngine) DrawCaptionButton(l *Classic, ctx *paintengine2d.Context, b pa
 		ctx.Restore()
 	}
 	fg := ReadableOn(shade(0.2+lift), 3, white, black)
-	lunaGlyph(ctx, b, k, st.Maximized, fg, lw)
+	lunaGlyph(ctx, b, k, CaptionAlt(k, cs, st), fg, lw)
 }
 
 // lunaStopAt is the colour of gradient stops at offset t.
@@ -149,7 +149,7 @@ func lunaStopAt(stops []paintengine2d.GradientStop, t float32) paintengine2d.Col
 // lunaGlyph draws XP's caption glyphs, 21px buttons' proportions scaled to
 // b: a thick bar low at the left (minimize), a square with a heavy top
 // (maximize), two overlapping ones (restore), a window (the window menu).
-func lunaGlyph(ctx *paintengine2d.Context, b paintengine2d.Rect, k CaptionButton, maximized bool, col paintengine2d.Color, lw float32) {
+func lunaGlyph(ctx *paintengine2d.Context, b paintengine2d.Rect, k CaptionButton, alt bool, col paintengine2d.Color, lw float32) {
 	u := b.Dx() / 21
 	px := func(v float32) float32 { return snap(v * u) }
 	t := max(px(3), 2*lw)
@@ -168,7 +168,7 @@ func lunaGlyph(ctx *paintengine2d.Context, b paintengine2d.Rect, k CaptionButton
 	case CaptionMinimize:
 		ctx.DrawRect(paintengine2d.XYWH(x0+px(5), y0+px(13), px(7), t), fill)
 	case CaptionMaximize:
-		if !maximized {
+		if !alt {
 			box(x0+px(5), y0+px(5), px(11), px(11))
 			return
 		}
@@ -180,6 +180,14 @@ func lunaGlyph(ctx *paintengine2d.Context, b paintengine2d.Rect, k CaptionButton
 		box(x0+px(4), y0+px(8), px(9), px(9))
 	case CaptionMenu:
 		box(x0+px(5), y0+px(6), px(11), px(9))
+	case CaptionKeepAbove:
+		ctx.DrawRect(paintengine2d.XYWH(x0+px(5), y0+px(4), px(11), thin), fill)
+		body := paintengine2d.XYWH(x0+px(5), y0+px(8), px(11), px(9))
+		if alt {
+			ctx.DrawRect(body, fill)
+			return
+		}
+		box(body.Min.X, body.Min.Y, body.Dx(), body.Dy())
 	case CaptionClose:
 		lunaCross(ctx, b.Inset(snap(b.Dx()*0.27)), col, max(b.Dx()*0.13, lw*1.5))
 	}

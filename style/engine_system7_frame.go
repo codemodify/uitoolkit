@@ -174,7 +174,7 @@ func (system7Engine) DrawCaptionButton(l *Classic, ctx *paintengine2d.Context, b
 	} else if pressed {
 		ink = &lav // the white burst on the inverted box
 	}
-	s7FrameGlyph(ink, box, k, n, st, pressed)
+	s7FrameGlyph(ink, box, k, n, st, pressed, CaptionAlt(k, cs, st))
 	navy.fill(ctx, c.navy)
 	if c.grey {
 		lav.fill(ctx, c.lav)
@@ -187,7 +187,7 @@ func (system7Engine) DrawCaptionButton(l *Classic, ctx *paintengine2d.Context, b
 // s7FrameGlyph inks the box's glyph: the zoom box's small square, the burst
 // of a pressed close box, and for the buttons the Mac had no box for, a bar
 // (minimize) and a small window (the window menu).
-func s7FrameGlyph(ink *rpInk, box rpGrid, k CaptionButton, n int, st DecorationState, pressed bool) {
+func s7FrameGlyph(ink *rpInk, box rpGrid, k CaptionButton, n int, st DecorationState, pressed, above bool) {
 	switch k {
 	case CaptionClose:
 		if !pressed {
@@ -213,5 +213,7 @@ func s7FrameGlyph(ink *rpInk, box rpGrid, k CaptionButton, n int, st DecorationS
 	case CaptionMenu:
 		ink.frame(box, 2, 2, n-4, n-4, 1)
 		ink.cells(box, 2, 2, n-4, 2)
+	case CaptionKeepAbove:
+		ink.aboveGlyph(box, 2, 2, n-4, above)
 	}
 }
