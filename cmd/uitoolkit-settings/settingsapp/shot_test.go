@@ -53,9 +53,9 @@ import (
 // exactly where they were.
 const (
 	previewShotX = 317
-	previewShotY = 114
+	previewShotY = 116
 	previewShotW = 697
-	previewShotH = 649
+	previewShotH = 648
 )
 
 func TestSettingsPreviewPanelKeepsItsPlace(t *testing.T) {

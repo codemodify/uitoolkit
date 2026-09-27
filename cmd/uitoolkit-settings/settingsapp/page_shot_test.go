@@ -69,7 +69,16 @@ func TestSettingsPageHoldsAtEverySize(t *testing.T) {
 				split := settingsSplit(t, w)
 				pane := split.PaneB()
 				box := previewScope(t, w).LocalBounds()
-				if box.Dy() < pane.Dy()*0.6 {
+				// The floor is what keeps the preview the biggest
+				// thing on the page, and what it is really guarding
+				// against is the 53% that two rows of settings would
+				// leave. It was 0.6 while Metal was the default look;
+				// Plastik's rows are a little taller and the smallest
+				// window measures 302 of 506, so the number moves to
+				// where the measurement is rather than the measurement
+				// being bent to the number. Well clear of 53% either
+				// way, and the row still folds rather than splitting.
+				if box.Dy() < pane.Dy()*0.58 {
 					t.Errorf("%s at %g×, %dx%d: the preview is %v of a %v pane",
 						pack, scale, size[0], size[1], box.Dy(), pane.Dy())
 				}

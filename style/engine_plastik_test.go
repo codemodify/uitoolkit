@@ -1,4 +1,4 @@
-//go:build theme_engine_all || theme_engine_plastik
+//go:build theme_engine_all || theme_engine_plastik || (!theme_engine_adwaita && !theme_engine_adwaita48 && !theme_engine_aero && !theme_engine_amiga && !theme_engine_aqua && !theme_engine_beos && !theme_engine_bluecurve && !theme_engine_breeze && !theme_engine_breeze6 && !theme_engine_clearlooks && !theme_engine_flatlaf && !theme_engine_fluent && !theme_engine_fusion && !theme_engine_kde1 && !theme_engine_kde2 && !theme_engine_keramik && !theme_engine_luna && !theme_engine_macos && !theme_engine_macos_tahoe && !theme_engine_material && !theme_engine_material_expressive && !theme_engine_metal && !theme_engine_metro && !theme_engine_motif && !theme_engine_next && !theme_engine_nimbus && !theme_engine_openlook && !theme_engine_os2 && !theme_engine_oxygen && !theme_engine_platinum && !theme_engine_skin && !theme_engine_system7 && !theme_engine_web && !theme_engine_win31 && !theme_engine_win95)
 
 package style
 
@@ -17,10 +17,19 @@ func TestPlastikPacksRegisteredInYearOrder(t *testing.T) {
 	pos := kdePositions()
 	// Keramik (2002), Plastik (2004), Plastique (2006), Oxygen (2008),
 	// Fusion (2012).
+	// Plastik is the default engine, so it is in every build while the
+	// rest of KDE's line is not (docs/engines.md): the order is checked
+	// among the packs this build actually has.
 	order := []string{"keramik", "plastik", "plastique", "oxygen", "fusion"}
-	for i := 1; i < len(order); i++ {
-		if pos[order[i-1]] > pos[order[i]] {
-			t.Fatalf("%s sorts after %s: %v", order[i-1], order[i], pos)
+	var have []string
+	for _, n := range order {
+		if _, ok := pos[n]; ok {
+			have = append(have, n)
+		}
+	}
+	for i := 1; i < len(have); i++ {
+		if pos[have[i-1]] > pos[have[i]] {
+			t.Fatalf("%s sorts after %s: %v", have[i-1], have[i], pos)
 		}
 	}
 }
@@ -167,6 +176,7 @@ func TestPlastikInputFocusHighlight(t *testing.T) {
 // KDE 3 kept a list's selection when it lost focus and when its window
 // went inactive.
 func TestKDE3KeepsSelectionUnfocused(t *testing.T) {
+	needEngine(t, "keramik")
 	for _, n := range []string{"keramik", "plastik", "plastique"} {
 		lk := mustLook(t, n)
 		fill := func(st ControlState) paintengine2d.Color {
@@ -208,6 +218,7 @@ func TestPlastikPaintsEveryControlInsideItsRect(t *testing.T) {
 // KDE 3 labelled tool buttons in its tool bar font, a point smaller than
 // the general font; Qt 4's Plastique used the application font.
 func TestKDE3ToolBarFont(t *testing.T) {
+	needEngine(t, "keramik")
 	for _, c := range []struct {
 		name    string
 		smaller bool

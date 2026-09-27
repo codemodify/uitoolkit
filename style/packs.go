@@ -19,7 +19,6 @@ const (
 	EraFlatLaf   = "FlatLaf"
 	EraKDE1      = "KDE 1"
 	EraKDE2      = "KDE 2"
-	EraNeumorph  = "Neumorphism"
 )
 
 var (
