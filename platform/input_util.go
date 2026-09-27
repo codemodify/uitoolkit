@@ -5,7 +5,7 @@ import (
 	"unicode/utf8"
 )
 
-// KeyFromKeysymFallback maps a keysym to a toolkit [Key], falling back to
+// keyFromKeysymFallback maps a keysym to a toolkit [Key], falling back to
 // the layout-independent keysym when the active layout has no mapping.
 //
 // sym is the keysym the active group/level produced; base is the same
@@ -14,14 +14,14 @@ import (
 // Cyrillic_es / Greek_psi, which no toolkit Key covers — shortcuts and
 // accelerators would silently die. Qt, GTK, and Chromium all resolve
 // shortcuts against the layout-independent symbol for exactly this reason.
-func KeyFromKeysymFallback(sym, base uint64) Key {
-	if k := KeyFromKeysym(sym); k != KeyUnknown {
+func keyFromKeysymFallback(sym, base uint64) Key {
+	if k := keyFromKeysym(sym); k != KeyUnknown {
 		return k
 	}
 	if base == 0 || base == sym {
 		return KeyUnknown
 	}
-	return KeyFromKeysym(base)
+	return keyFromKeysym(base)
 }
 
 // latin1ToUTF8 re-encodes ISO-8859-1 bytes as UTF-8.

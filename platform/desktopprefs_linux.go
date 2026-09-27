@@ -46,9 +46,9 @@ func sessionBusAddress() string {
 	return ""
 }
 
-// DialSessionBus connects to the session bus without starting one (see
+// dialSessionBus connects to the session bus without starting one (see
 // sessionBusAddress); the caller closes the connection.
-func DialSessionBus() (*dbus.Conn, error) { return connectSessionBus() }
+func dialSessionBus() (*dbus.Conn, error) { return connectSessionBus() }
 
 var sharedBus struct {
 	once sync.Once

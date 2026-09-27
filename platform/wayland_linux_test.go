@@ -26,7 +26,7 @@ func TestWaylandSurfacePresent(t *testing.T) {
 	if os.Getenv("WAYLAND_DISPLAY") == "" || !waylandProbe() {
 		t.Skip("no Wayland compositor")
 	}
-	b := WaylandBackend{}
+	b := wlBackend{}
 	s, err := b.NewSurface(WindowOptions{Title: "uitoolkit-wl-test", Width: 160, Height: 100})
 	if err != nil {
 		t.Fatal(err)
@@ -65,7 +65,7 @@ func TestWaylandClipboardRoundtrip(t *testing.T) {
 	if os.Getenv("WAYLAND_DISPLAY") == "" || !waylandProbe() {
 		t.Skip("no Wayland compositor")
 	}
-	b := WaylandBackend{}
+	b := wlBackend{}
 	s, err := b.NewSurface(WindowOptions{Title: "clip", Width: 120, Height: 80})
 	if err != nil {
 		t.Fatal(err)
@@ -89,7 +89,7 @@ func TestWaylandDesktopChrome(t *testing.T) {
 	if os.Getenv("WAYLAND_DISPLAY") == "" || !waylandProbe() {
 		t.Skip("no Wayland compositor")
 	}
-	b := WaylandBackend{}
+	b := wlBackend{}
 	s, err := b.NewSurface(WindowOptions{Title: "chrome", Width: 140, Height: 90})
 	if err != nil {
 		t.Fatal(err)
@@ -116,7 +116,7 @@ func TestWaylandAutoPresentIsSHM(t *testing.T) {
 	}
 	t.Setenv(EnvPaint, paintengine2d.PaintCPU)
 	t.Setenv(EnvWaylandPresent, WaylandPresentAuto)
-	b := WaylandBackend{}
+	b := wlBackend{}
 	s, err := b.NewSurface(WindowOptions{Title: "uitoolkit-wl-auto", Width: 120, Height: 80})
 	if err != nil {
 		t.Fatal(err)
@@ -141,7 +141,7 @@ func TestWaylandPresentOpaqueColor(t *testing.T) {
 	}
 	t.Setenv(EnvPaint, paintengine2d.PaintCPU)
 	t.Setenv(EnvWaylandPresent, WaylandPresentSHM)
-	b := WaylandBackend{}
+	b := wlBackend{}
 	s, err := b.NewSurface(WindowOptions{Title: "uitoolkit-wl-opaque", Width: 64, Height: 48})
 	if err != nil {
 		t.Fatal(err)
@@ -210,7 +210,7 @@ func TestWaylandPresentSHMOverride(t *testing.T) {
 	if waylandLive() {
 		t.Log("existing Wayland connection; present path may already be chosen")
 	}
-	b := WaylandBackend{}
+	b := wlBackend{}
 	s, err := b.NewSurface(WindowOptions{Title: "uitoolkit-wl-shm", Width: 120, Height: 80})
 	if err != nil {
 		t.Fatal(err)
@@ -237,7 +237,7 @@ func TestWaylandDmabufPathOrSkip(t *testing.T) {
 	t.Logf("dmabuf allocator: %s", dmabufAllocatorName())
 	t.Setenv(EnvPaint, paintengine2d.PaintCPU)
 	t.Setenv(EnvWaylandPresent, WaylandPresentDmabuf)
-	b := WaylandBackend{}
+	b := wlBackend{}
 	s, err := b.NewSurface(WindowOptions{Title: "uitoolkit-wl-dmabuf", Width: 140, Height: 90})
 	if err != nil {
 		t.Fatal(err)
@@ -276,7 +276,7 @@ func TestWaylandEGLOrCPUFallback(t *testing.T) {
 		t.Skip("no Wayland compositor")
 	}
 	t.Setenv(EnvPaint, paintengine2d.PaintAuto)
-	b := WaylandBackend{}
+	b := wlBackend{}
 	s, err := b.NewSurface(WindowOptions{Title: "uitoolkit-wl-egl", Width: 140, Height: 90})
 	if err != nil {
 		t.Fatal(err)

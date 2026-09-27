@@ -486,7 +486,10 @@ func TestCaptionCloseHonoursCloseHides(t *testing.T) {
 func TestDesktopButtonLayout(t *testing.T) {
 	r := newFrameRig(t, platform.DecorationsClient)
 	p := platform.DefaultTitleBarPrefs("")
-	p.Layout = platform.KDEButtonLayout("X", "IA")
+	// KWin's ButtonsOnLeft="X" ButtonsOnRight="IA", said portably: the
+	// KDE config reader is the toolkit's own business and no longer
+	// exported from a cross-platform package.
+	p.Layout = platform.ParseButtonLayout("close:minimize,maximize")
 	r.a.SetTitleBarPrefs(p)
 	r.a.PumpOnce()
 	left, right := r.hb.Controls()

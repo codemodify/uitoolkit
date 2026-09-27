@@ -485,24 +485,24 @@ type xdndAtoms struct {
 	a [xdndAtomCount]C.Atom
 	// dropProp is where a converted XdndSelection lands on our window.
 	dropProp C.Atom
-	actions  XDNDActions
+	actions  xdndActions
 	ready    bool
 }
 
-func (x *xdndAtoms) at(i XDNDAtom) C.Atom { return x.a[i] }
+func (x *xdndAtoms) at(i xdndAtom) C.Atom { return x.a[i] }
 
 // internXdndLocked interns every XDND atom once per connection.
 func (c *x11Conn) internXdndLocked() {
 	if c.xdnd.ready || c.dpy == nil {
 		return
 	}
-	for i, name := range XDNDAtomNames {
+	for i, name := range xdndAtomNames {
 		cs := C.CString(name)
 		c.xdnd.a[i] = C.XInternAtom(c.dpy, cs, C.False)
 		C.free(unsafe.Pointer(cs))
 	}
 	c.xdnd.dropProp = internAtom(c.dpy, "UITK_XDND_DROP")
-	c.xdnd.actions = XDNDActions{
+	c.xdnd.actions = xdndActions{
 		Copy:    uint32(c.xdnd.at(XAActionCopy)),
 		Move:    uint32(c.xdnd.at(XAActionMove)),
 		Link:    uint32(c.xdnd.at(XAActionLink)),
@@ -595,7 +595,7 @@ func (c *x11Conn) handleXdndMessage(xe *C.XEvent) bool {
 	}
 	c.internXdndLocked()
 	typ := C.ui_x_cm_type(xe)
-	var m XDNDMessage
+	var m xdndMessage
 	for i := 0; i < 5; i++ {
 		m[i] = uint32(C.ui_x_cm_data(xe, C.int(i)))
 	}
@@ -618,14 +618,14 @@ func (c *x11Conn) handleXdndMessage(xe *C.XEvent) bool {
 	return true
 }
 
-func (c *x11Conn) xdndEnter(win C.Window, m XDNDMessage) {
+func (c *x11Conn) xdndEnter(win C.Window, m xdndMessage) {
 	s := c.surfaces[win]
 	if s == nil {
 		return
 	}
 	c.xdndEnd(false)
 	source, version, more, types := DecodeXdndEnter(m)
-	v, ok := XDNDNegotiateVersion(XDNDVersion, version)
+	v, ok := xdndNegotiateVersion(XDNDVersion, version)
 	if !ok {
 		return
 	}
@@ -658,7 +658,7 @@ func (c *x11Conn) xdndEnter(win C.Window, m XDNDMessage) {
 	}
 }
 
-func (c *x11Conn) xdndPosition(win C.Window, m XDNDMessage) {
+func (c *x11Conn) xdndPosition(win C.Window, m xdndMessage) {
 	if !c.drop.active || c.drop.win != win {
 		return
 	}
@@ -707,7 +707,7 @@ func (c *x11Conn) xdndPosition(win C.Window, m XDNDMessage) {
 	})
 }
 
-func (c *x11Conn) xdndLeave(m XDNDMessage) {
+func (c *x11Conn) xdndLeave(m xdndMessage) {
 	if !c.drop.active || C.Window(DecodeXdndLeave(m)) != c.drop.source {
 		return
 	}
@@ -717,7 +717,7 @@ func (c *x11Conn) xdndLeave(m XDNDMessage) {
 	c.xdndEnd(false)
 }
 
-func (c *x11Conn) xdndDrop(m XDNDMessage) {
+func (c *x11Conn) xdndDrop(m xdndMessage) {
 	if !c.drop.active {
 		return
 	}
@@ -753,14 +753,14 @@ func (c *x11Conn) sendXdndStatus() {
 	// An empty rectangle asks the source to keep sending positions: our
 	// targets are widgets, far smaller than the window, so the answer
 	// changes as the pointer moves inside it.
-	m := EncodeXdndStatus(uint32(c.drop.win), accept, XDNDRect{},
+	m := EncodeXdndStatus(uint32(c.drop.win), accept, xdndRect{},
 		c.xdnd.actions.Atom(c.drop.action))
 	c.sendXdnd(c.drop.source, c.drop.source, XAStatus, m)
 }
 
 // sendXdnd sends one message: dest is the window it goes to, win the one
 // it names.
-func (c *x11Conn) sendXdnd(dest, win C.Window, which XDNDAtom, m XDNDMessage) {
+func (c *x11Conn) sendXdnd(dest, win C.Window, which xdndAtom, m xdndMessage) {
 	if c.dpy == nil || dest == 0 {
 		return
 	}
@@ -944,7 +944,7 @@ type x11Drag struct {
 	win C.Window
 	// target is the window under the pointer now, its proxy and the
 	// version we speak to it.
-	target XDNDTarget
+	target xdndTarget
 	// accepted and action are its last XdndStatus.
 	accepted bool
 	action   DragAction
@@ -1210,7 +1210,7 @@ func (c *x11Conn) dragMotionTo(rx, ry int, mods uint) {
 		return (c.drag.icon.win != 0 && C.Window(w) == c.drag.icon.win) ||
 			(c.drag.attach != nil && C.Window(w) == c.drag.attach.win)
 	}
-	found := XDNDFindTarget(tree, uint32(C.ui_x_root(c.dpy)), rx, ry, skip)
+	found := xdndFindTarget(tree, uint32(C.ui_x_root(c.dpy)), rx, ry, skip)
 	if found.Window != c.drag.target.Window {
 		xdndTrace("target at %d,%d: window=%#x proxy=%#x version=%d",
 			rx, ry, found.Window, found.Proxy, found.Version)
@@ -1246,13 +1246,13 @@ func (c *x11Conn) dragLeaveTarget() {
 	}
 	c.sendXdnd(C.Window(c.drag.target.Send()), C.Window(c.drag.target.Window), XALeave,
 		EncodeXdndLeave(uint32(c.drag.win)))
-	c.drag.target = XDNDTarget{}
+	c.drag.target = xdndTarget{}
 	c.drag.accepted, c.drag.action = false, DragNone
 }
 
 // dragStatus is a target's answer: whether it takes a drop where the
 // pointer is and what it would do, which the cursor then shows.
-func (c *x11Conn) dragStatus(m XDNDMessage) {
+func (c *x11Conn) dragStatus(m xdndMessage) {
 	if !c.drag.active {
 		return
 	}
@@ -1308,7 +1308,7 @@ func (c *x11Conn) dragRelease_ungrab() {
 }
 
 // dragFinished is the target saying it is done with the data.
-func (c *x11Conn) dragFinished(m XDNDMessage) {
+func (c *x11Conn) dragFinished(m xdndMessage) {
 	if !c.drag.active || !c.drag.dropped {
 		return
 	}
@@ -1429,7 +1429,7 @@ func (c *x11Conn) dragSelRequest(xe *C.XEvent) bool {
 		C.ui_x_sel_notify(c.dpy, xe, 0)
 		return true
 	}
-	thr := INCRThreshold(c.maxReq)
+	thr := incrThreshold(c.maxReq)
 	if len(data) > thr {
 		// Too big for one property: the ICCCM incremental protocol
 		// sends it a piece at a time as the requestor consumes them.
@@ -1439,7 +1439,7 @@ func (c *x11Conn) dragSelRequest(xe *C.XEvent) bool {
 		C.ui_x_sel_notify(c.dpy, xe, prop)
 		c.incrSends = append(c.incrSends, incrSendState{
 			requestor: req, prop: prop, typ: target,
-			data: data, chunk: INCRChunkSize(thr),
+			data: data, chunk: incrChunkSize(thr),
 		})
 		c.keep = true
 		return true
@@ -1568,7 +1568,7 @@ func (c *x11Conn) dragFreeIcon() {
 
 // ---- the window tree, for the search -------------------------------------------
 
-// x11Tree is [XDNDTree] over a live X connection.
+// x11Tree is [xdndTree] over a live X connection.
 type x11Tree struct{ c *x11Conn }
 
 func (t x11Tree) Children(win uint32) []uint32 {

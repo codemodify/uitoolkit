@@ -26,12 +26,12 @@ func TestParseWaylandPresent(t *testing.T) {
 
 func TestWaylandPresentPrefEnv(t *testing.T) {
 	t.Setenv(EnvWaylandPresent, "shm")
-	if WaylandPresentPref() != WaylandPresentSHM {
-		t.Fatal(WaylandPresentPref())
+	if waylandPresentPref() != WaylandPresentSHM {
+		t.Fatal(waylandPresentPref())
 	}
 	t.Setenv(EnvWaylandPresent, "")
-	if WaylandPresentPref() != WaylandPresentAuto {
-		t.Fatal(WaylandPresentPref())
+	if waylandPresentPref() != WaylandPresentAuto {
+		t.Fatal(waylandPresentPref())
 	}
 }
 

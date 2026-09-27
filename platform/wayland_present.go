@@ -39,8 +39,8 @@ type dmaFmtMod struct {
 	modifier uint64
 }
 
-// WaylandPresentPref returns the UITK_WAYLAND_PRESENT choice (auto/shm/dmabuf).
-func WaylandPresentPref() string {
+// waylandPresentPref returns the UITK_WAYLAND_PRESENT choice (auto/shm/dmabuf).
+func waylandPresentPref() string {
 	return parseWaylandPresent(os.Getenv(EnvWaylandPresent))
 }
 
@@ -79,7 +79,7 @@ func dmabufFormatOpaque(fmt uint32) bool {
 // (v0.4.1): default/auto dmabuf presented a fully transparent window on
 // real compositors while UITK_WAYLAND_PRESENT=shm painted correctly.
 func waylandWantDmabuf() bool {
-	return WaylandPresentPref() == WaylandPresentDmabuf
+	return waylandPresentPref() == WaylandPresentDmabuf
 }
 
 func pickDmabufFormat(pairs []dmaFmtMod) (format uint32, modifier uint64, ok bool) {

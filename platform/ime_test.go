@@ -74,7 +74,7 @@ func TestShouldEmitXKBText(t *testing.T) {
 
 func TestPairXKBAndIMECommit(t *testing.T) {
 	// Latin compositor: xkb utf8 first, then IME commit of the same rune.
-	emit, lastX, lastI := PairXKBText("a", "")
+	emit, lastX, lastI := pairXKBText("a", "")
 	if emit != "a" || lastX != "a" || lastI != "" {
 		t.Fatalf("xkb first %#v %#v %#v", emit, lastX, lastI)
 	}
@@ -88,23 +88,23 @@ func TestPairXKBAndIMECommit(t *testing.T) {
 	if emit != "a" || lastX != "" || lastI != "a" {
 		t.Fatalf("IME first %#v %#v %#v", emit, lastX, lastI)
 	}
-	emit, lastX, lastI = PairXKBText("a", lastI)
+	emit, lastX, lastI = pairXKBText("a", lastI)
 	if emit != "" || lastX != "" || lastI != "" {
 		t.Fatalf("dedupe xkb %#v %#v %#v", emit, lastX, lastI)
 	}
 
 	// Repeated same letter: second key must still insert.
-	emit, lastX, lastI = PairXKBText("a", "")
+	emit, lastX, lastI = pairXKBText("a", "")
 	if emit != "a" {
 		t.Fatal("first a")
 	}
-	emit, lastX, lastI = PairXKBText("a", lastI)
+	emit, lastX, lastI = pairXKBText("a", lastI)
 	if emit != "a" || lastX != "a" {
 		t.Fatalf("second a must not be eaten by previous xkb pair %#v %#v", emit, lastX)
 	}
 
 	// CJK commit after xkb Latin must still land (preedit path skips xkb).
-	emit, lastX, lastI = PairXKBText("a", "")
+	emit, lastX, lastI = pairXKBText("a", "")
 	emit, lastX, lastI = PairIMECommit("あ", lastX)
 	if emit != "あ" || lastI != "あ" {
 		t.Fatalf("distinct IME commit %#v %#v", emit, lastI)

@@ -1066,22 +1066,22 @@ import (
 	"github.com/codemodify/paintengine2d"
 )
 
-// WaylandBackend presents through paintengine2d. When UITK_PAINT=auto|gpu
+// wlBackend presents through paintengine2d. When UITK_PAINT=auto|gpu
 // and EGL init works, each window is a wl_egl_window + eglSwapBuffers.
 // Otherwise it keeps the v0.4.1 opaque wl_shm XRGB8888 path. linux-dmabuf
 // is opt-in (UITK_WAYLAND_PRESENT=dmabuf) on the CPU present path.
-type WaylandBackend struct{}
+type wlBackend struct{}
 
-func (WaylandBackend) Name() string { return "wayland" }
+func (wlBackend) Name() string { return "wayland" }
 
 // Caps: a real desktop, and absolute placement only where the compositor
 // offers zwlr_layer_shell_v1 — a plain xdg_toplevel has no position at
 // all. KDE, sway, Hyprland and wayfire offer it; GNOME/Mutter has
 // declined it. Asked afresh because it is the compositor's answer, not
 // the backend's.
-func (WaylandBackend) Caps() BackendCaps {
+func (wlBackend) Caps() BackendCaps {
 	c := BackendDesktop
-	if LayerSurfacesAvailable() {
+	if layerSurfacesAvailable() {
 		c |= BackendScreenPlace
 	}
 	return c
@@ -1094,7 +1094,7 @@ func waylandProbe() bool {
 	return C.ui_wl_probe() != 0
 }
 
-func (WaylandBackend) NewSurface(opts WindowOptions) (Surface, error) {
+func (wlBackend) NewSurface(opts WindowOptions) (Surface, error) {
 	if opts.Headless {
 		return NewOffscreen(opts), nil
 	}
@@ -1902,7 +1902,7 @@ func (s *wlSurface) GeometryCaps() GeometryCaps {
 		return 0
 	}
 	c := GeometryVisibility | GeometrySizeLimits
-	if s.wantsLayer() && LayerSurfacesAvailable() {
+	if s.wantsLayer() && layerSurfacesAvailable() {
 		c |= GeometryScreenPlace
 	}
 	return c
@@ -3151,7 +3151,7 @@ func uitkWlRegistryGlobal(id C.uintptr_t, reg *C.struct_wl_registry, name C.uint
 		c.primMan = (*C.struct_zwp_primary_selection_device_manager_v1)(C.ui_wl_bind(reg, name, C.ui_wl_prim_man_iface(), 1))
 		c.bindSeatExtras()
 	case "zxdg_decoration_manager_v1":
-		if os.Getenv(EnvXdgDecoration) == "0" {
+		if os.Getenv(envXdgDecoration) == "0" {
 			// Testing: behave as on GNOME, which has no server-side
 			// decorations (KWin then treats every window as drawing its
 			// own frame).
@@ -3654,7 +3654,7 @@ func uitkWlKey(id C.uintptr_t, key, state, serial C.uint32_t) {
 // under a Cyrillic / Greek / Hebrew layout.
 func (c *wlConn) mapKey(key C.uint32_t, sym uint64) Key {
 	base := uint64(C.ui_xkb_base_sym(c.xkbMap, key))
-	return KeyFromKeysymFallback(sym, base)
+	return keyFromKeysymFallback(sym, base)
 }
 
 // pushXKBText emits EventText from xkb/compose unless IME preedit owns the key.
@@ -3692,7 +3692,7 @@ func (c *wlConn) pushXKBText(s *wlSurface, key C.uint32_t, ks uint64) {
 	if len(raw) == 0 {
 		return
 	}
-	emit, lastX, lastI := PairXKBText(string(raw), c.lastIMEText)
+	emit, lastX, lastI := pairXKBText(string(raw), c.lastIMEText)
 	c.lastXkbText, c.lastIMEText = lastX, lastI
 	if emit == "" {
 		return

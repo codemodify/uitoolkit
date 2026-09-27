@@ -67,7 +67,7 @@ func TestXdndPositionNegativeRootCoordinates(t *testing.T) {
 }
 
 func TestXdndStatusRoundTrip(t *testing.T) {
-	r := XDNDRect{X: 10, Y: 20, W: 300, H: 40}
+	r := xdndRect{X: 10, Y: 20, W: 300, H: 40}
 	m := EncodeXdndStatus(0xbeef, true, r, 55)
 	target, accept, wantPos, gotR, action := DecodeXdndStatus(m)
 	if target != 0xbeef || !accept || gotR != r || action != 55 {
@@ -81,7 +81,7 @@ func TestXdndStatusRoundTrip(t *testing.T) {
 // A refused drop must name no action: a source that saw one would show
 // the user a drop cursor for a drop that will not happen.
 func TestXdndStatusRefusedCarriesNoAction(t *testing.T) {
-	m := EncodeXdndStatus(1, false, XDNDRect{}, 55)
+	m := EncodeXdndStatus(1, false, xdndRect{}, 55)
 	if m[4] != 0 {
 		t.Fatalf("refused status must send action None, got %d", m[4])
 	}
@@ -95,7 +95,7 @@ func TestXdndStatusRefusedCarriesNoAction(t *testing.T) {
 }
 
 func TestXdndStatusWantPositionBit(t *testing.T) {
-	m := EncodeXdndStatus(1, true, XDNDRect{}, 5)
+	m := EncodeXdndStatus(1, true, xdndRect{}, 5)
 	m[1] |= 2
 	_, accept, wantPos, _, _ := DecodeXdndStatus(m)
 	if !accept || !wantPos {
@@ -126,7 +126,7 @@ func TestXdndFinishedRoundTrip(t *testing.T) {
 // Before version 5 XdndFinished had no "accepted" bit. The spec tells the
 // source to proceed as if it were set, whatever the bit actually holds.
 func TestXdndFinishedBeforeVersion5CountsAsTaken(t *testing.T) {
-	var m XDNDMessage
+	var m xdndMessage
 	m[0] = 8
 	m[2] = 44
 	_, accepted, action := DecodeXdndFinished(m, 4)
@@ -147,7 +147,7 @@ func TestXdndNegotiateVersion(t *testing.T) {
 		{2, 0, false}, // below the spec's floor
 		{0, 0, false}, // no XdndAware at all
 	} {
-		got, ok := XDNDNegotiateVersion(XDNDVersion, tc.theirs)
+		got, ok := xdndNegotiateVersion(XDNDVersion, tc.theirs)
 		if got != tc.want || ok != tc.ok {
 			t.Fatalf("theirs %d: got %d %v want %d %v", tc.theirs, got, ok, tc.want, tc.ok)
 		}
@@ -155,7 +155,7 @@ func TestXdndNegotiateVersion(t *testing.T) {
 }
 
 func TestXDNDActionsMapping(t *testing.T) {
-	tab := XDNDActions{Copy: 10, Move: 11, Link: 12, Ask: 13, Private: 14}
+	tab := xdndActions{Copy: 10, Move: 11, Link: 12, Ask: 13, Private: 14}
 	for _, tc := range []struct {
 		atom uint32
 		want DragAction
@@ -186,7 +186,7 @@ func TestXDNDActionsMapping(t *testing.T) {
 }
 
 func TestXDNDActionsList(t *testing.T) {
-	tab := XDNDActions{Copy: 10, Move: 11, Link: 12}
+	tab := xdndActions{Copy: 10, Move: 11, Link: 12}
 	got := tab.List(DragCopy|DragMove|DragLink, DragMove)
 	want := []uint32{11, 10, 12} // preferred first, then copy, move, link
 	if !reflect.DeepEqual(got, want) {
@@ -240,7 +240,7 @@ func newFrameTree() fakeTree {
 
 func TestXDNDFindTargetDescendsThroughTheFrame(t *testing.T) {
 	tree := newFrameTree()
-	got := XDNDFindTarget(tree, 1, 100, 200, nil)
+	got := xdndFindTarget(tree, 1, 100, 200, nil)
 	if got.Window != 11 {
 		t.Fatalf("got window %d want the client 11", got.Window)
 	}
@@ -253,7 +253,7 @@ func TestXDNDFindTargetTakesTheTopmostWindow(t *testing.T) {
 	tree := newFrameTree()
 	// (250,150) is inside both frames; window 20 is later in the child
 	// list, so it is on top.
-	got := XDNDFindTarget(tree, 1, 250, 150, nil)
+	got := xdndFindTarget(tree, 1, 250, 150, nil)
 	if got.Window != 21 {
 		t.Fatalf("got window %d want the topmost client 21", got.Window)
 	}
@@ -266,10 +266,10 @@ func TestXDNDFindTargetSkipsTheDragIcon(t *testing.T) {
 	tree.kids[1] = append(tree.kids[1], 99)
 	tree.geom[99] = [4]int{0, 0, 2000, 2000}
 	tree.aware[99] = 5
-	if got := XDNDFindTarget(tree, 1, 100, 200, nil); got.Window != 99 {
+	if got := xdndFindTarget(tree, 1, 100, 200, nil); got.Window != 99 {
 		t.Fatalf("without the skip the icon is the target: got %d", got.Window)
 	}
-	got := XDNDFindTarget(tree, 1, 100, 200, func(w uint32) bool { return w == 99 })
+	got := xdndFindTarget(tree, 1, 100, 200, func(w uint32) bool { return w == 99 })
 	if got.Window != 11 {
 		t.Fatalf("with the skip: got %d want 11", got.Window)
 	}
@@ -278,19 +278,19 @@ func TestXDNDFindTargetSkipsTheDragIcon(t *testing.T) {
 func TestXDNDFindTargetIgnoresUnmappedWindows(t *testing.T) {
 	tree := newFrameTree()
 	tree.unmap = map[uint32]bool{20: true}
-	if got := XDNDFindTarget(tree, 1, 250, 150, nil); got.Window != 11 {
+	if got := xdndFindTarget(tree, 1, 250, 150, nil); got.Window != 11 {
 		t.Fatalf("got %d want 11 (the mapped window under it)", got.Window)
 	}
 }
 
 func TestXDNDFindTargetNothingThere(t *testing.T) {
 	tree := newFrameTree()
-	if got := XDNDFindTarget(tree, 1, 5000, 5000, nil); got.Valid() {
+	if got := xdndFindTarget(tree, 1, 5000, 5000, nil); got.Valid() {
 		t.Fatalf("got a target off every window: %+v", got)
 	}
 	// A window that takes no drops is not a target either.
 	tree.aware = nil
-	if got := XDNDFindTarget(tree, 1, 100, 200, nil); got.Valid() {
+	if got := xdndFindTarget(tree, 1, 100, 200, nil); got.Valid() {
 		t.Fatalf("got a target with no XdndAware: %+v", got)
 	}
 }
@@ -298,7 +298,7 @@ func TestXDNDFindTargetNothingThere(t *testing.T) {
 func TestXDNDFindTargetTooOldIsNoTarget(t *testing.T) {
 	tree := newFrameTree()
 	tree.aware[11] = 2 // below the spec's floor of 3
-	if got := XDNDFindTarget(tree, 1, 100, 200, nil); got.Valid() {
+	if got := xdndFindTarget(tree, 1, 100, 200, nil); got.Valid() {
 		t.Fatalf("version 2 is not XDND: got %+v", got)
 	}
 }
@@ -306,7 +306,7 @@ func TestXDNDFindTargetTooOldIsNoTarget(t *testing.T) {
 func TestXDNDFindTargetSpeaksTheOlderVersion(t *testing.T) {
 	tree := newFrameTree()
 	tree.aware[11] = 3
-	got := XDNDFindTarget(tree, 1, 100, 200, nil)
+	got := xdndFindTarget(tree, 1, 100, 200, nil)
 	if got.Window != 11 || got.Version != 3 {
 		t.Fatalf("got window %d version %d want 11 at 3", got.Window, got.Version)
 	}
@@ -316,7 +316,7 @@ func TestXDNDFindTargetFollowsTheProxy(t *testing.T) {
 	tree := newFrameTree()
 	tree.proxies = map[uint32]uint32{11: 77, 77: 77} // the proxy names itself
 	tree.aware[77] = 5
-	got := XDNDFindTarget(tree, 1, 100, 200, nil)
+	got := xdndFindTarget(tree, 1, 100, 200, nil)
 	if got.Window != 11 {
 		t.Fatalf("the messages must still name the window under the pointer: got %d", got.Window)
 	}
@@ -331,7 +331,7 @@ func TestXDNDFindTargetIgnoresAStaleProxy(t *testing.T) {
 	tree := newFrameTree()
 	tree.proxies = map[uint32]uint32{11: 77}
 	tree.aware[77] = 5
-	got := XDNDFindTarget(tree, 1, 100, 200, nil)
+	got := xdndFindTarget(tree, 1, 100, 200, nil)
 	if got.Window != 11 || got.Proxy != 0 || got.Send() != 11 {
 		t.Fatalf("got %+v want the window itself", got)
 	}
@@ -344,7 +344,7 @@ func TestXDNDFindTargetSurvivesALoop(t *testing.T) {
 		kids: map[uint32][]uint32{1: {2}, 2: {2}},
 		geom: map[uint32][4]int{2: {0, 0, 100, 100}},
 	}
-	if got := XDNDFindTarget(tree, 1, 10, 10, nil); got.Valid() {
+	if got := xdndFindTarget(tree, 1, 10, 10, nil); got.Valid() {
 		t.Fatalf("got %+v", got)
 	}
 }
@@ -352,10 +352,10 @@ func TestXDNDFindTargetSurvivesALoop(t *testing.T) {
 // The names and the indexes are two halves of one table: a name added to
 // one without the other would intern the wrong atom for every message.
 func TestXDNDAtomNamesMatchTheIndex(t *testing.T) {
-	if len(XDNDAtomNames) != xdndAtomCount {
-		t.Fatalf("%d names for %d atoms", len(XDNDAtomNames), xdndAtomCount)
+	if len(xdndAtomNames) != xdndAtomCount {
+		t.Fatalf("%d names for %d atoms", len(xdndAtomNames), xdndAtomCount)
 	}
-	for i, want := range map[XDNDAtom]string{
+	for i, want := range map[xdndAtom]string{
 		XAAware: "XdndAware", XASelection: "XdndSelection", XAEnter: "XdndEnter",
 		XAPosition: "XdndPosition", XAStatus: "XdndStatus", XALeave: "XdndLeave",
 		XADrop: "XdndDrop", XAFinished: "XdndFinished", XATypeList: "XdndTypeList",
@@ -364,7 +364,7 @@ func TestXDNDAtomNamesMatchTheIndex(t *testing.T) {
 		XAActionPrivate: "XdndActionPrivate", XAActionList: "XdndActionList",
 		XAProxy: "XdndProxy",
 	} {
-		if got := XDNDAtomNames[i]; got != want {
+		if got := xdndAtomNames[i]; got != want {
 			t.Fatalf("atom %d is %q, want %q", int(i), got, want)
 		}
 	}

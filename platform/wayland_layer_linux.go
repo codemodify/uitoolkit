@@ -125,15 +125,15 @@ import (
 // out of it, the decision to use a layer surface at all — lives in
 // wlstate.go and placement.go and is.
 
-// EnvLayerShell turns the layer-shell path off: UITK_LAYER_SHELL=0 makes
+// envLayerShell turns the layer-shell path off: UITK_LAYER_SHELL=0 makes
 // the toolkit behave as if the compositor had no zwlr_layer_shell_v1, so
 // the GNOME road can be walked on a KDE machine.
-const EnvLayerShell = "UITK_LAYER_SHELL"
+const envLayerShell = "UITK_LAYER_SHELL"
 
 // layerShellWanted reports whether UITK_LAYER_SHELL leaves the protocol in
 // play.
 func layerShellWanted() bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvLayerShell))) {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(envLayerShell))) {
 	case "0", "off", "false", "no":
 		return false
 	}
@@ -174,7 +174,7 @@ func (c *wlConn) destroyLayerShellLocked() {
 	c.layerVer = 0
 }
 
-// LayerSurfacesAvailable reports whether the compositor offers
+// layerSurfacesAvailable reports whether the compositor offers
 // zwlr_layer_shell_v1, which is whether this process can put a window at
 // an absolute point of the screen (see [ScreenPlacementAvailable], which
 // is what callers normally want).
@@ -182,7 +182,7 @@ func (c *wlConn) destroyLayerShellLocked() {
 // It answers from the live connection where there is one. With none it
 // opens one to ask and drops it again, which is a round trip to the
 // compositor; call it once and remember the answer.
-func LayerSurfacesAvailable() bool {
+func layerSurfacesAvailable() bool {
 	if !layerShellWanted() {
 		return false
 	}
@@ -201,10 +201,10 @@ func LayerSurfacesAvailable() bool {
 	return ok
 }
 
-// LayerShellVersion is the version of zwlr_layer_shell_v1 bound, or 0
+// layerShellVersion is the version of zwlr_layer_shell_v1 bound, or 0
 // where there is none. Version 4 is where keyboard interactivity became
 // on-demand rather than all-or-nothing.
-func LayerShellVersion() int {
+func layerShellVersion() int {
 	wlMu.Lock()
 	c := wlc
 	wlMu.Unlock()

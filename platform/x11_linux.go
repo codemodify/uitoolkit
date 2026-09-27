@@ -940,20 +940,20 @@ import (
 	"github.com/codemodify/paintengine2d"
 )
 
-// X11Backend presents through paintengine2d. UITK_PAINT=auto|gpu binds
+// x11Backend presents through paintengine2d. UITK_PAINT=auto|gpu binds
 // GPUDevice to the X window (eglSwapBuffers) when EGL works; otherwise
 // present is dirty-rect XPutImage / MIT-SHM.
-type X11Backend struct{}
+type x11Backend struct{}
 
-func (X11Backend) Name() string { return "x11" }
+func (x11Backend) Name() string { return "x11" }
 
 // Caps: a real desktop, and X11 places windows where they ask
 // (XMoveWindow, _NET_MOVERESIZE_WINDOW) — a window manager may argue
 // about it, but there is a position to ask for, which is what Wayland
 // lacks.
-func (X11Backend) Caps() BackendCaps { return BackendDesktop | BackendScreenPlace }
+func (x11Backend) Caps() BackendCaps { return BackendDesktop | BackendScreenPlace }
 
-func (X11Backend) NewSurface(opts WindowOptions) (Surface, error) {
+func (x11Backend) NewSurface(opts WindowOptions) (Surface, error) {
 	if opts.Headless {
 		return NewOffscreen(opts), nil
 	}
@@ -1265,9 +1265,9 @@ func x11InitOnce() {
 // cannot flood a terminal.
 var x11Errors atomic.Int64
 
-// X11Errors is the number of X protocol errors seen since start (tests
+// x11ErrorCount is the number of X protocol errors seen since start (tests
 // and diagnostics).
-func X11Errors() int { return int(x11Errors.Load()) }
+func x11ErrorCount() int { return int(x11Errors.Load()) }
 
 //export uitkXError
 func uitkXError(code, request, minor C.int) {
@@ -2013,7 +2013,7 @@ func (s *x11Surface) translate(xe *C.XEvent) []Event {
 		base := uint64(C.ui_base_sym(s.conn.dpy, xe))
 		ev := Event{
 			Kind: kind,
-			Key:  KeyFromKeysymFallback(uint64(ks), base),
+			Key:  keyFromKeysymFallback(uint64(ks), base),
 			Mods: xmods(uint(C.ui_key_state(xe))),
 		}
 		out := []Event{ev}
@@ -2307,8 +2307,8 @@ func xkey(ks C.KeySym) Key {
 	return KeyUnknown
 }
 
-// MapXKeySym is exported for X11-tagged tests.
-func MapXKeySym(ks uint64) Key { return xkey(C.KeySym(ks)) }
+// mapXKeySym is exported for X11-tagged tests.
+func mapXKeySym(ks uint64) Key { return xkey(C.KeySym(ks)) }
 
 type incrRecvState struct {
 	active bool
@@ -2369,7 +2369,7 @@ func (c *x11Conn) handleSelReq(xe *C.XEvent) {
 			replyType = c.atomUTF8
 		}
 		raw := []byte(data)
-		thr := INCRThreshold(c.maxReq)
+		thr := incrThreshold(c.maxReq)
 		if len(raw) > thr {
 			C.ui_select_prop(c.dpy, req)
 			sz := []C.ulong{C.ulong(len(raw))}
@@ -2380,7 +2380,7 @@ func (c *x11Conn) handleSelReq(xe *C.XEvent) {
 				prop:      prop,
 				typ:       replyType,
 				data:      raw,
-				chunk:     INCRChunkSize(thr),
+				chunk:     incrChunkSize(thr),
 			})
 			c.keep = true
 			return
@@ -2679,7 +2679,7 @@ func x11ClipGet(primary bool) (string, bool) {
 		sel = c.atomPrimary
 	}
 	timeout := 250 * time.Millisecond
-	if INCRThreshold(c.maxReq) < 1024 {
+	if incrThreshold(c.maxReq) < 1024 {
 		timeout = 2 * time.Second
 	}
 	return c.readSelection(sel, timeout)

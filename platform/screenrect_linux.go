@@ -14,9 +14,9 @@ package platform
 // between its own two halves.
 func screenRectAt(x, y int) (FrameRect, bool) {
 	switch Default(false).(type) {
-	case WaylandBackend:
+	case wlBackend:
 		return wlScreenRectAt(x, y)
-	case X11Backend:
+	case x11Backend:
 		return x11ScreenRectAt(x, y)
 	}
 	return FrameRect{}, false

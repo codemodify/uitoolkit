@@ -59,7 +59,7 @@ func TestX11CarriedWindowFollowsTheDrag(t *testing.T) {
 	if os.Getenv("DISPLAY") == "" {
 		t.Skip("no DISPLAY")
 	}
-	b := X11Backend{}
+	b := x11Backend{}
 	src, err := b.NewSurface(WindowOptions{Title: "source", Width: 300, Height: 200, X: 60, Y: 60, Scale: 1})
 	if err != nil {
 		t.Fatal(err)
