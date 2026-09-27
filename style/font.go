@@ -329,6 +329,22 @@ func (f *Font) shapeOf(text string) shapedRun {
 	if f == nil || text == "" {
 		return shapedRun{}
 	}
+	// The warm path, before anything walks the string. ensure asks the
+	// published sheet whether it holds every rune of text, which is a map
+	// lookup a rune even when the run was shaped a thousand frames ago —
+	// and Advance is what the whole layout pass is made of. A run cached
+	// against the sheet that is still published needs none of it: cells
+	// are only ever added, so every glyph that run names is still there.
+	if f.shaped != nil {
+		if cur := f.GlyphAtlas(); cur != nil {
+			f.shaped.mu.Lock()
+			hit, ok := f.shaped.m[text]
+			f.shaped.mu.Unlock()
+			if ok && hit.run.Atlas == cur {
+				return hit
+			}
+		}
+	}
 	atlas := f.ensure(text)
 	if atlas == nil {
 		return shapedRun{}
