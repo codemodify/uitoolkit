@@ -947,6 +947,12 @@ type X11Backend struct{}
 
 func (X11Backend) Name() string { return "x11" }
 
+// Caps: a real desktop, and X11 places windows where they ask
+// (XMoveWindow, _NET_MOVERESIZE_WINDOW) — a window manager may argue
+// about it, but there is a position to ask for, which is what Wayland
+// lacks.
+func (X11Backend) Caps() BackendCaps { return BackendDesktop | BackendScreenPlace }
+
 func (X11Backend) NewSurface(opts WindowOptions) (Surface, error) {
 	if opts.Headless {
 		return NewOffscreen(opts), nil

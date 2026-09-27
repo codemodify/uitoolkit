@@ -622,10 +622,16 @@ func TestFrameDefaultCaptionAndModeChanges(t *testing.T) {
 }
 
 // fakeBackend stands for a real display backend (the policy only asks
-// offscreen windows for no frame).
+// windows with no desktop behind them for no frame). It has to say so
+// now: the policy asks for [platform.BackendDesktop] rather than testing
+// the name for "offscreen", so a fake that wants to be a desktop
+// declares it instead of getting it by not being called something.
 type fakeBackend struct{}
 
 func (fakeBackend) Name() string { return "fake" }
+func (fakeBackend) Caps() platform.BackendCaps {
+	return platform.BackendDesktop | platform.BackendScreenPlace
+}
 func (fakeBackend) NewSurface(o platform.WindowOptions) (platform.Surface, error) {
 	return platform.NewOffscreen(o), nil
 }

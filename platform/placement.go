@@ -86,12 +86,15 @@ func SimulateScreenPlacement(want bool) func() {
 // Wayland answers yes only where the compositor offers
 // zwlr_layer_shell_v1 (KDE, sway, Hyprland, wayfire do; GNOME/Mutter has
 // declined it), because a plain xdg_toplevel has no position at all.
+//
+// It asks the backend rather than testing its name. The old test was
+// `Name() != "wayland"`, which answered yes for every backend that was
+// not the one known to have trouble — so a new backend was assumed able
+// before anyone had written the code, and the one place that knew the
+// truth was the last to be asked.
 func ScreenPlacementAvailable() bool {
 	if simScreenPlace != nil {
 		return *simScreenPlace
 	}
-	if Default(false).Name() != "wayland" {
-		return true
-	}
-	return LayerSurfacesAvailable()
+	return BackendCapsOf(Default(false)).Has(BackendScreenPlace)
 }

@@ -155,8 +155,13 @@ func (w *Window) FrameCaps() platform.FrameCaps {
 
 // offscreen reports whether the application paints without a display
 // (tests, screenshots): no frame is chosen for it unless asked explicitly.
+//
+// It asks the backend whether there is a desktop behind it
+// ([platform.BackendDesktop]) rather than testing its name, so a backend
+// nobody has heard of here answers for itself.
 func (a *Application) offscreen() bool {
-	return a == nil || a.headless || a.backend == nil || a.backend.Name() == "offscreen"
+	return a == nil || a.headless ||
+		!platform.BackendCapsOf(a.backend).Has(platform.BackendDesktop)
 }
 
 // resolveDecorations is the decoration policy, first match wins:

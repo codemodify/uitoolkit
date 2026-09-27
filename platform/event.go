@@ -373,6 +373,14 @@ type Surface interface {
 // Backend opens surfaces. Linux ships X11 (CGO) plus a always-on offscreen
 // backend for tests, screenshots, and headless CI.
 type Backend interface {
+	// Name says which backend this is: "wayland", "x11", "offscreen".
+	// It is for diagnostics and for what a page prints — nothing
+	// branches on it, because a name is not a capability (see
+	// [BackendCaps]).
 	Name() string
+	// Caps is what this backend will do, asked afresh: one of them
+	// depends on the compositor and can change under a running
+	// application.
+	Caps() BackendCaps
 	NewSurface(opts WindowOptions) (Surface, error)
 }

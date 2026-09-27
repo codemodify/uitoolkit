@@ -255,6 +255,14 @@ type OffscreenBackend struct{}
 
 func (OffscreenBackend) Name() string { return "offscreen" }
 
+// Caps: the offscreen backend places windows wherever they ask, because
+// it is pretending and nothing contradicts it. There is no desktop behind
+// it — no window manager, no preferences that are anybody's, no
+// assistive technology listening — so [BackendDesktop] is off, and that
+// single bit is what the three old `Name() == "offscreen"` tests were
+// really asking.
+func (OffscreenBackend) Caps() BackendCaps { return BackendScreenPlace }
+
 func (OffscreenBackend) NewSurface(opts WindowOptions) (Surface, error) {
 	return NewOffscreen(opts), nil
 }

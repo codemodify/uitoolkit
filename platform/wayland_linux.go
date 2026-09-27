@@ -1074,6 +1074,19 @@ type WaylandBackend struct{}
 
 func (WaylandBackend) Name() string { return "wayland" }
 
+// Caps: a real desktop, and absolute placement only where the compositor
+// offers zwlr_layer_shell_v1 — a plain xdg_toplevel has no position at
+// all. KDE, sway, Hyprland and wayfire offer it; GNOME/Mutter has
+// declined it. Asked afresh because it is the compositor's answer, not
+// the backend's.
+func (WaylandBackend) Caps() BackendCaps {
+	c := BackendDesktop
+	if LayerSurfacesAvailable() {
+		c |= BackendScreenPlace
+	}
+	return c
+}
+
 func waylandProbe() bool {
 	if os.Getenv("WAYLAND_DISPLAY") == "" && os.Getenv("XDG_RUNTIME_DIR") == "" {
 		return false
