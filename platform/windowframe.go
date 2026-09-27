@@ -159,8 +159,11 @@ const frameDesktopCaps = FrameMenu | FrameMinimize | FrameMaximize | FrameFullsc
 // never setting the state, which is why [WindowState] and not the last
 // request is what the caption paints.
 type WindowFrame interface {
-	// Caps is what the window system will do for this window now.
-	Caps() FrameCaps
+	// FrameCaps is what the window system will do for this window
+	// now. It is named for its seam rather than being a bare Caps()
+	// because one surface implements several seams and each has
+	// capabilities of its own — see [WindowGeometry.GeometryCaps].
+	FrameCaps() FrameCaps
 
 	// Decorations is the mode in effect after negotiation: the desktop may
 	// answer another mode than the one asked for (KWin draws no frame at
@@ -250,13 +253,13 @@ func FrameOf(s Surface) WindowFrame {
 
 // FrameCapsOf is what the window system will do for s's frame now (nothing,
 // for a surface with no frame seam).
-func FrameCapsOf(s Surface) FrameCaps { return FrameOf(s).Caps() }
+func FrameCapsOf(s Surface) FrameCaps { return FrameOf(s).FrameCaps() }
 
 // noFrame is the frame seam of a surface that has none: it can do nothing
 // and says so.
 type noFrame struct{}
 
-func (noFrame) Caps() FrameCaps                     { return 0 }
+func (noFrame) FrameCaps() FrameCaps                { return 0 }
 func (noFrame) Decorations() Decorations            { return DecorationsServer }
 func (noFrame) RequestDecorations(Decorations)      {}
 func (noFrame) WindowState() WindowState            { return WindowState{} }

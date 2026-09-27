@@ -231,7 +231,7 @@ func (w *Window) syncDecorations() {
 	want := w.app.resolveDecorations(w.opts, w.ownsCaption(), w.surf)
 	f := platform.FrameOf(w.surf)
 	f.RequestDecorations(want)
-	w.decor, w.caps = f.Decorations(), f.Caps()
+	w.decor, w.caps = f.Decorations(), f.FrameCaps()
 	w.rebuildCaption()
 }
 
@@ -486,7 +486,7 @@ func (w *Window) applyFrame() {
 	// through style.GlassBehind, so it is refreshed here — once a layout,
 	// beside everything else the window system has to say.
 	fs := platform.FrameOf(w.surf)
-	style.SetGlassAvailable(fs.Caps().Has(platform.FrameBlurBehind))
+	style.SetGlassAvailable(fs.FrameCaps().Has(platform.FrameBlurBehind))
 	f := w.wantFrame()
 	if f.Same(w.sysFrame) {
 		return

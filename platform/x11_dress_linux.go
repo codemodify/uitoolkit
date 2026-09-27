@@ -66,7 +66,7 @@ func (s *x11Surface) SetPalette(path string) bool {
 	if s == nil || s.closed || s.popup || s.win == 0 || s.conn == nil {
 		return false
 	}
-	if !s.Caps().Has(FramePalette) {
+	if !s.FrameCaps().Has(FramePalette) {
 		return false
 	}
 	if path == s.dress.palette {

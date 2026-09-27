@@ -80,41 +80,17 @@ func dropResizeCaps(c FrameCaps, sizing Sizing) FrameCaps {
 	return c &^ (FrameMaximize | FrameMaximizeAxis | FrameResize | FrameShade)
 }
 
-// SizingSurface is an optional Surface capability: the window's resize
-// policy and the limits the window system has been told about. All three
-// Linux backends implement it.
-type SizingSurface interface {
-	// Sizing is the policy in effect.
-	Sizing() Sizing
-	// SetSizing changes it and re-states the limits to the window system.
-	SetSizing(s Sizing)
-	// SizeLimits is what the window system was last told.
-	SizeLimits() SizeLimits
-}
+// The resize policy and the limits the window system has been told about
+// are part of [WindowGeometry] — how big a window may be is the same
+// question as where it is, asked about its other two numbers. These are
+// the free functions over it.
 
 // SurfaceSizing is s's resize policy (resizable when s cannot say).
-func SurfaceSizing(s Surface) Sizing {
-	if v, ok := s.(SizingSurface); ok {
-		return v.Sizing()
-	}
-	return SizingResizable
-}
+func SurfaceSizing(s Surface) Sizing { return GeometryOf(s).Sizing() }
 
 // SetSurfaceSizing changes s's resize policy. It reports whether s could.
-func SetSurfaceSizing(s Surface, sz Sizing) bool {
-	v, ok := s.(SizingSurface)
-	if !ok {
-		return false
-	}
-	v.SetSizing(sz)
-	return true
-}
+func SetSurfaceSizing(s Surface, sz Sizing) bool { return GeometryOf(s).SetSizing(sz) }
 
 // SurfaceSizeLimits is what s told the window system (zero when it cannot
 // say).
-func SurfaceSizeLimits(s Surface) SizeLimits {
-	if v, ok := s.(SizingSurface); ok {
-		return v.SizeLimits()
-	}
-	return SizeLimits{}
-}
+func SurfaceSizeLimits(s Surface) SizeLimits { return GeometryOf(s).SizeLimits() }

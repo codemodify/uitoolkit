@@ -274,7 +274,7 @@ func (s *wlSurface) destroyLayerLocked() {
 }
 
 // PlaceAtScreen puts the window at x, y in logical pixels of the desktop
-// ([ScreenPlacer]). It works only for a window opened with Place:
+// ([WindowGeometry.PlaceAtScreen]). It works only for a window opened with Place:
 // PlaceAtScreen on a compositor with zwlr_layer_shell_v1; every other
 // Wayland window answers false, because a toplevel has no position.
 //

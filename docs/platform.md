@@ -593,6 +593,49 @@ send `wm_capabilities` and an X11 window manager need never set
 would never appear. That assumption lives **inside the backend**, which
 knows whether its desktop has spoken.
 
+## Where the window is
+
+`WindowGeometry` (`platform/windowgeometry.go`) is a window's place on the
+desktop: where it is, how big it may be, and whether it is on screen.
+`GeometryOf(surface)` is **never nil**, and `GeometryCaps` says which of it
+the window system will do.
+
+It replaced five interfaces — `HostWindow`, `HostMover`, `HostPositioner`,
+`ScreenPlacer`, `SizingSurface` — which between them were the clearest case
+of silent failure in the package:
+
+```go
+func RaiseSurface(s Surface)          { if h, ok := s.(HostWindow); ok { … } }
+func HideSurface(s Surface)           { if h, ok := s.(HostWindow); ok { … } }
+func MoveSurface(s Surface, x, y int) { if m, ok := s.(HostMover); ok { … } }
+```
+
+No return value and no else: a window that could not be moved was not
+moved, and nothing anywhere found out. Every request answers now.
+
+| | Wayland | X11 |
+| --- | --- | --- |
+| `GeometryMove` | **no** — an `xdg_toplevel` has no position and a client cannot ask to be moved | `XMoveWindow` |
+| `GeometryPosition` | **no** — a client is never told where its windows are | the last `ConfigureNotify` |
+| `GeometryScreenPlace` | `zwlr_layer_shell_v1` only | same as move |
+| `GeometryVisibility` | drop and remap the `xdg_toplevel` role (there is no `unset_minimized`) | map / unmap + `_NET_ACTIVE_WINDOW` |
+| `GeometrySizeLimits` | `xdg_toplevel.set_min_size` / `set_max_size` | `WM_NORMAL_HINTS` |
+
+Wayland's two absences are the protocol rather than an omission, and they
+are why the seam carries capabilities at all. A Win32 or AppKit backend
+gets both for free — `SetWindowPos` / `GetWindowRect`, `setFrameOrigin:` /
+`frame` — and simply sets the bits; it never learns that xdg-shell exists.
+Anything needing two windows' positions, such as carrying a torn-off
+window under the pointer, goes through `xdg-toplevel-drag-v1` instead.
+
+`PlaceAtScreen` stays a separate request from `Move` because on Wayland
+they have different answers: a layer surface can be placed while a toplevel
+cannot be moved. Everywhere else the backend implements one as the other.
+
+Each seam names its capability accessor after itself — `FrameCaps()`,
+`GeometryCaps()` — rather than a bare `Caps()`, because one surface
+implements several seams and Go allows a type only one method of a name.
+
 ### The window's dress
 
 Two more parts of the same seam say how the desktop should dress a window

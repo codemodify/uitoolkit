@@ -24,6 +24,11 @@ type Offscreen struct {
 	// They are the desktop's device pixels, as an X11 root window's are;
 	// Move and Position speak logical ones and convert at the scale.
 	posX, posY int
+	// noGeom are the geometry capabilities this simulated desktop has
+	// had taken away (SimulateGeometry), so a test can reach the Wayland
+	// case — a window that cannot be moved and is never told where it is
+	// — without a compositor.
+	noGeom GeometryCaps
 	// drop is a simulated drop's data by type (SimulateDrop); dragOut is
 	// a drag started *from* this surface (offscreen_drag.go).
 	drop      map[string][]byte
@@ -33,7 +38,7 @@ type Offscreen struct {
 	frame offscreenFrame
 	// opts are the options the window was made with, sizing its resize
 	// policy and limits what the simulated desktop was told about how
-	// large the window may be (platform.SizingSurface).
+	// large the window may be (platform.WindowGeometry).
 	opts   WindowOptions
 	sizing Sizing
 	limits SizeLimits
@@ -161,21 +166,70 @@ func (o *Offscreen) Present(dirty []paintengine2d.Rect) error {
 	return nil
 }
 
-func (o *Offscreen) Raise() { o.hidden = false }
-func (o *Offscreen) Show()  { o.hidden = false }
-func (o *Offscreen) Hide()  { o.hidden = true }
-
-// Move implements [HostMover]: the offscreen desktop puts the window
-// where it is asked, as an X11 one does. x, y are logical pixels.
-func (o *Offscreen) Move(x, y int) {
-	o.posX, o.posY = DevicePosition(x, o.Scale()), DevicePosition(y, o.Scale())
+// GeometryCaps: the simulated desktop does all of it. It has no protocol
+// to be short of — a test that wants an absence asks for it with
+// SimulateGeometry.
+func (o *Offscreen) GeometryCaps() GeometryCaps {
+	if o == nil {
+		return 0
+	}
+	c := GeometryMove | GeometryPosition | GeometryScreenPlace |
+		GeometryVisibility | GeometrySizeLimits
+	return c &^ o.noGeom
 }
 
-// Position implements [HostPositioner]: where the window is on the
-// offscreen desktop. It is always known — this desktop has no compositor
-// keeping it a secret.
+// SimulateGeometry takes capabilities away from the simulated desktop, so
+// a test can see what the layer above does without them — the Wayland
+// case (no move, no position) without a compositor.
+func (o *Offscreen) SimulateGeometry(without GeometryCaps) {
+	if o != nil {
+		o.noGeom = without
+	}
+}
+
+func (o *Offscreen) Raise() bool { return o.show() }
+func (o *Offscreen) Show() bool  { return o.show() }
+
+func (o *Offscreen) show() bool {
+	if o == nil || !o.GeometryCaps().Has(GeometryVisibility) {
+		return false
+	}
+	o.hidden = false
+	return true
+}
+
+func (o *Offscreen) Hide() bool {
+	if o == nil || !o.GeometryCaps().Has(GeometryVisibility) {
+		return false
+	}
+	o.hidden = true
+	return true
+}
+
+// Move: the offscreen desktop puts the window where it is asked, as an
+// X11 one does. x, y are logical pixels (WindowGeometry).
+func (o *Offscreen) Move(x, y int) bool {
+	if o == nil || !o.GeometryCaps().Has(GeometryMove) {
+		return false
+	}
+	o.posX, o.posY = DevicePosition(x, o.Scale()), DevicePosition(y, o.Scale())
+	return true
+}
+
+// PlaceAtScreen is Move here: a simulated desktop has no layer shell to
+// need (WindowGeometry).
+func (o *Offscreen) PlaceAtScreen(x, y int) bool {
+	if o == nil || !o.GeometryCaps().Has(GeometryScreenPlace) {
+		return false
+	}
+	return o.Move(x, y)
+}
+
+// Position is where the window is on the offscreen desktop. It is always
+// known — this desktop has no compositor keeping it a secret
+// (WindowGeometry).
 func (o *Offscreen) Position() (int, int, bool) {
-	if o == nil || o.closed {
+	if o == nil || o.closed || !o.GeometryCaps().Has(GeometryPosition) {
 		return 0, 0, false
 	}
 	return LogicalPosition(o.posX, o.Scale()), LogicalPosition(o.posY, o.Scale()), true

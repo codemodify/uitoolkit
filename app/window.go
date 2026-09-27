@@ -189,7 +189,7 @@ func newWindow(a *Application, surf platform.Surface, opts platform.WindowOption
 	w.dirty.Pad = 1
 	w.opts = opts
 	f := platform.FrameOf(surf)
-	w.decor, w.caps = f.Decorations(), f.Caps()
+	w.decor, w.caps = f.Decorations(), f.FrameCaps()
 	w.rebuildCaption()
 	w.applyIcon()
 	return w

@@ -2,7 +2,7 @@ package platform
 
 // ScreenRectAt is the rectangle of the screen that holds the desktop
 // point x, y, in logical pixels of the desktop — the unit
-// [WindowOptions].X, Y and [ScreenPlacer.PlaceAtScreen] speak. It is what
+// [WindowOptions].X, Y and [WindowGeometry.PlaceAtScreen] speak. It is what
 // a window placed at an absolute point is constrained to
 // ([SolveScreenMenu]).
 //
