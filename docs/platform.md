@@ -368,6 +368,51 @@ metrics and buffer scale agree. List/table/tree rows and fixed column
 widths are design pixels that grow with the look. EGL, dmabuf, and shm
 share that scale; CPU present still uses damage / attach / commit.
 
+### When the scale changes
+
+`EventScale` says the display scale this window is drawn at has changed:
+it moved to a monitor with another scale, or the scale of the monitor it
+is on changed under it. It carries no size — the window is the same number
+of logical pixels across, and only the buffer behind it is different — so
+the application reads the new scale from `Surface.Scale()` and rebuilds the
+look.
+
+It exists because **a scale change is not always a resize**, and until it
+did, `syncScale` was reached only from `EventResize`. That was survivable
+on Linux and would not have been anywhere else:
+
+| | does a scale change come with a resize? |
+| --- | --- |
+| Wayland | usually — `wp_fractional_scale_v1.preferred_scale` normally arrives with a configure, but not necessarily, and the one time it arrives alone the window was left drawing the old scale |
+| Windows | yes — `WM_DPICHANGED` hands you a rect to honour and a `WM_SIZE` follows |
+| macOS | **no** — `NSWindowDidChangeBackingProperties` fires with the window the same size in *points*, so a window dragged from a Retina display to a plain one would never be told |
+
+The event is safe to send when nothing changed; the application compares
+against the scale it is drawing at and ignores a repeat. The **X11 backend
+does not send it**, and that is not an omission: X11's scale here is the
+display's, read from `Xft.dpi` at connect, and one logical screen has one
+of them — a window moved to another monitor does not change scale because
+X11 does not think it has. Watching XSETTINGS for `Xft/DPI` changing under
+a running session would make it send one; nothing has needed that yet.
+
+### Which thread
+
+Every `Surface` method, and the package-level clipboard and cursor
+helpers, must be called from **the main OS thread** — the one that runs the
+event loop — with `runtime.LockOSThread` held. The `app` package does that
+in an `init`, which locks the goroutine running package initialisation and
+so pins `main.main` to the main thread for the life of the program.
+
+"One goroutine" was the old rule and is not enough, because Go may move a
+goroutine to another OS thread at any function call. Xlib and libwayland
+want serialised access rather than one particular thread, so Linux got
+away with it. **AppKit** requires `NSApplication` and every `NSWindow` to
+be touched from the process's *first* thread — not a consistent thread,
+that one. **Win32** delivers messages to the thread that created the
+`HWND`, and OLE drag-and-drop needs that thread to be a single-threaded
+apartment. Doing it now costs Linux nothing and means the rule is in force
+before a backend depends on it.
+
 ### Which pixels a number is in
 
 **Window geometry — size and position — is logical pixels. Everything
@@ -495,6 +540,8 @@ that may not be maximized).
 | `FrameBlurBehind` | `ext_background_effect_v1` | `_KDE_NET_WM_BLUR_BEHIND_REGION` |
 | `FramePalette`, `FrameIcon` | see the table below | see the table below |
 | `FrameClientFrame` | not a tiling compositor | the WM moves and resizes on request |
+| `FrameSystemShadow` | — (the client reserves a margin and paints its own) | — (same) |
+| `FrameSystemResizeBand` | — (the client's `Frame.Input` band) | — (same) |
 
 A backend that cannot do something **leaves the bit out and its method
 returns false** — it does not omit the method. That is what makes this a
@@ -503,6 +550,41 @@ keep-above fails to compile, and one that cannot do a thing says so where
 the caption button can read it. Every request reports whether it was
 *made*, never whether it *succeeded*: the desktop has the last word and
 answers with an `EventWindowState`.
+
+### Who draws the shadow, who runs the resize
+
+Two of those bits are off on both Linux backends and will be on elsewhere,
+which is the point of them.
+
+On Wayland and X11 the **client** owns its drop shadow: the window grows
+by an invisible `Frame.Margin`, paints a shadow into it, and tells the
+compositor which part is really the window
+(`xdg_surface.set_window_geometry`, `_GTK_FRAME_EXTENTS`) so snapping and
+tiling ignore the rest. Windows (DWM) and macOS (AppKit) draw the shadow
+**themselves, outside the window**. A toolkit that reserved a margin there
+would give every window two shadows — its own inside, the system's outside
+— and line up with nothing else on the desktop.
+
+`FrameSystemShadow` says the window system owns it. A window whose desktop
+sets it reserves no margin and paints none; because `geom.shadow` is
+`!margin.Zero()`, the margin going to zero turns the painting off with it.
+Rounded corners are *not* affected — those are the window's own silhouette.
+
+`FrameSystemResizeBand` says the window system runs resizing from the
+window's edges. macOS sets both: a resizable `NSWindow` already has resize
+borders AppKit manages, and **there is no public API to begin a resize from
+an edge**, so `StartResize` answers false there and a band of the toolkit's
+would be unnecessary and unreachable. Windows sets only the shadow bit — a
+window that owns its non-client area (`WM_NCCALCSIZE`) answers
+`WM_NCHITTEST` for its own edges, which is the band the toolkit already
+draws.
+
+Both were settled before either backend exists, deliberately. The old
+`Frame` struct had no way to express "the platform owns this, reserve
+nothing", so a Windows backend would have emulated a Wayland shadow it did
+not need — not through oversight, but **because the boundary instructed it
+to**. `Offscreen.SimulateSystemShadow` and `SimulateSystemResizeBand`
+switch each on so the degrade path is tested rather than assumed.
 
 Until a desktop has said, a backend assumes the four it grants per window
 (menu, minimize, maximize, fullscreen): a Wayland compositor need never

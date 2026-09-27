@@ -436,6 +436,15 @@ func (w *Window) wantDecorFrame() platform.Frame {
 	// DecorationOf has already dropped the shadow and the corners where
 	// the window is maximized, tiled or uncomposited.
 	band, _ := w.resizeBand()
+	caps := w.FrameCaps()
+	if caps.Has(platform.FrameSystemShadow) {
+		// The window system draws the shadow itself, around the window
+		// (Windows' DWM, macOS's AppKit). Reserving a margin here would
+		// give the window two: ours inside it and the system's outside.
+		// The margin going to zero also turns off painting one, because
+		// geom.shadow is !margin.Zero().
+		spec.Shadow = style.Insets{}
+	}
 	sc := max(w.scale, 1)
 	edge := func(reach float32) int {
 		if reach <= 0 {
@@ -450,9 +459,12 @@ func (w *Window) wantDecorFrame() platform.Frame {
 		Bottom: edge(spec.Shadow.Bottom),
 		Left:   edge(spec.Shadow.Left),
 	}
-	if !w.Resizable() {
+	if !w.Resizable() || caps.Has(platform.FrameSystemResizeBand) {
 		// Nothing to reach into the margin for: a fixed window's input
-		// region is the window, and the shadow around it clicks through.
+		// region is the window, and the shadow around it clicks through
+		// — and where the window system runs edge resizing itself
+		// (AppKit's resizable NSWindow), a band of ours would be both
+		// unnecessary and unreachable.
 		band = 0
 	}
 	f.Input = platform.FrameInsets{

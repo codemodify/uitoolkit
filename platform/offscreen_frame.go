@@ -59,6 +59,13 @@ type offscreenFrame struct {
 	// (SimulateDecorationPalette), and paletteSet the one it was given.
 	palette    bool
 	paletteSet string
+	// sysShadow / sysBand are whether the simulated desktop draws the
+	// window's drop shadow itself and runs edge resizing itself
+	// (SimulateSystemShadow, SimulateSystemResizeBand). Both off by
+	// default: the simulated desktop is a Linux one, where the client
+	// owns both. Windows sets the first, macOS sets both.
+	sysShadow bool
+	sysBand   bool
 	// frame is the client frame's margin and regions; geomW / geomH the
 	// visible window's size in device pixels, which the pixmap grows past
 	// by the margin, exactly as a compositor's surface does, and geomLW /
@@ -138,7 +145,37 @@ func (o *Offscreen) Caps() FrameCaps {
 	if o.frame.palette {
 		c |= FramePalette
 	}
+	if o.frame.sysShadow {
+		c |= FrameSystemShadow
+	}
+	if o.frame.sysBand {
+		c |= FrameSystemResizeBand
+	}
 	return dropResizeCaps(c, o.sizing)
+}
+
+// SimulateSystemShadow makes the simulated desktop draw the window's drop
+// shadow itself, the way Windows' DWM and macOS's AppKit do
+// ([FrameSystemShadow]). A frame the toolkit draws must then reserve no
+// margin for one and paint none. Off by default: the simulated desktop is
+// a Linux one, where the client owns its shadow.
+func (o *Offscreen) SimulateSystemShadow(on bool) {
+	if o == nil || o.frame.sysShadow == on {
+		return
+	}
+	o.frame.sysShadow = on
+	o.announceCaps()
+}
+
+// SimulateSystemResizeBand makes the simulated desktop run edge resizing
+// itself ([FrameSystemResizeBand]), the way a resizable NSWindow does, so
+// the toolkit reserves no input band. Off by default.
+func (o *Offscreen) SimulateSystemResizeBand(on bool) {
+	if o == nil || o.frame.sysBand == on {
+		return
+	}
+	o.frame.sysBand = on
+	o.announceCaps()
 }
 
 // Sizing is the window's resize policy (SizingSurface).
@@ -296,9 +333,24 @@ func (o *Offscreen) SetKeepAbove(on bool) bool {
 // window above the others, so a test can run both the X11 path and the
 // Wayland one, where the caption button has to say it cannot (tests).
 func (o *Offscreen) SimulateKeepAbove(can bool) {
-	if o != nil {
-		o.frame.above = can
+	if o == nil || o.frame.above == can {
+		return
 	}
+	o.frame.above = can
+	o.announceCaps()
+}
+
+// announceCaps queues EventCapabilities with what the simulated desktop
+// will do now.
+//
+// Every capability here can change under a running window — that is the
+// whole reason Caps is asked afresh rather than cached — and a change
+// nobody is told about is a caption button that stays drawn after it has
+// stopped working, or stays hidden after it has started. The real
+// backends send this event; the simulated desktop has to send it too, or
+// the tests are kinder than the world.
+func (o *Offscreen) announceCaps() {
+	o.queue = append(o.queue, Event{Kind: EventCapabilities, Caps: o.Caps()})
 }
 
 // SetShadedHeight records the height a rolled-up window is pinned to and
@@ -372,9 +424,11 @@ func (o *Offscreen) SimulateCompositing(on bool) {
 // a test can run both the real-glass path and the painted fallback
 // (FrameBlurBehind). It takes effect for the next frame the window asks for.
 func (o *Offscreen) SimulateGlass(on bool) {
-	if o != nil {
-		o.frame.glass = on
+	if o == nil || o.frame.glass == on {
+		return
 	}
+	o.frame.glass = on
+	o.announceCaps()
 }
 
 // SetWindowMenu switches the simulated desktop's window menu on or off
@@ -427,7 +481,13 @@ var _ IMESurface = (*Offscreen)(nil)
 
 // SimulateDecorationPalette makes the simulated desktop take a colour
 // scheme for its frame, as KWin does, or stop taking one.
-func (o *Offscreen) SimulateDecorationPalette(on bool) { o.frame.palette = on }
+func (o *Offscreen) SimulateDecorationPalette(on bool) {
+	if o == nil || o.frame.palette == on {
+		return
+	}
+	o.frame.palette = on
+	o.announceCaps()
+}
 
 // SetPalette records the colour scheme when it changes (WindowFrame).
 func (o *Offscreen) SetPalette(path string) bool {

@@ -86,6 +86,42 @@ const (
 	// desktop moves and resizes windows on request and is not a tiling
 	// manager. The Auto decoration policy picks a client frame only then.
 	FrameClientFrame
+	// FrameSystemShadow: **the window system draws the window's drop
+	// shadow itself**, outside the window, and a frame the toolkit draws
+	// must reserve no margin for one and paint none.
+	//
+	// This is the ordinary case on two of the four platforms and the
+	// odd one on the other two. Wayland and X11 make the client do it:
+	// the window grows by an invisible band, paints a shadow into it,
+	// and tells the compositor which part is really the window
+	// (xdg_surface.set_window_geometry, _GTK_FRAME_EXTENTS). Windows
+	// (DWM) and macOS (AppKit) draw it for you, around the window, in
+	// the compositor — so a toolkit that reserved a margin there would
+	// get **two** shadows, its own inside the window and the system's
+	// around it, and a window that does not line up with any other on
+	// the desktop.
+	//
+	// It is a capability and not a constant because the contract had no
+	// way to say it at all: Frame.Margin assumed the client owned the
+	// shadow, so a Win32 backend would have been forced to emulate a
+	// Wayland shadow it did not need — not by oversight, but because
+	// the boundary told it to. That is the failure this bit exists to
+	// prevent, and it had to exist before the backend, not after.
+	FrameSystemShadow
+	// FrameSystemResizeBand: **the window system handles resizing from
+	// the window's edges itself**, so the toolkit must reserve no input
+	// band for it.
+	//
+	// It goes with FrameSystemShadow but is not the same thing. macOS
+	// sets both: a resizable NSWindow already has invisible resize
+	// borders AppKit manages, and there is no public API to begin a
+	// resize from an edge at all — so [WindowFrame.StartResize] there
+	// answers false, and a toolkit band would be both unnecessary and
+	// unimplementable. Windows sets only the shadow bit: a window that
+	// owns its non-client area (WM_NCCALCSIZE) answers WM_NCHITTEST for
+	// its own edges, which is exactly the band the toolkit already
+	// draws.
+	FrameSystemResizeBand
 )
 
 // Has reports whether every capability in x is present.
@@ -243,7 +279,7 @@ func (noFrame) SetIcon([]*paintengine2d.Image) bool { return false }
 var frameCapNames = []string{
 	"move", "resize", "menu", "minimize", "maximize", "fullscreen",
 	"maximize-axis", "lower", "keep-above", "shade", "blur-behind",
-	"palette", "icon", "client-frame",
+	"palette", "icon", "client-frame", "system-shadow", "system-resize-band",
 }
 
 // String lists the capabilities present, in bit order, space separated
