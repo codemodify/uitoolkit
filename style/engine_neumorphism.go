@@ -2,7 +2,11 @@
 
 package style
 
-import "github.com/codemodify/paintengine2d"
+import (
+	"math"
+
+	"github.com/codemodify/paintengine2d"
+)
 
 // neuEngine paints Neumorphism, or "soft UI": the look that came out of a
 // 2019 Dribbble post by Alexander Plyuto and spread through design work
@@ -99,13 +103,37 @@ func neuColors(l *Classic) neuSet {
 	}
 }
 
+// neuRings is how many rounded rects a shadow is built from, and the
+// alpha each one carries.
+//
+// The count follows the shadow's size *in device pixels*, not a constant:
+// five rings over a 5px fall reads as a smooth gradient, and the same
+// five over a 20px fall at 4x reads as five visible bands. Anyone on a
+// HiDPI display would see the stair-stepping, and this is the default
+// theme, so it is the first thing they would see.
+//
+// The alpha is then solved so the accumulated darkness stays the same
+// however many rings there are: n rings of alpha a over one another come
+// out at 1-(1-a)^n, so a = 1-(1-total)^(1/n).
+func neuRings(reach float32, total float64) (int, float32) {
+	n := int(reach)
+	if n < 5 {
+		n = 5
+	}
+	if n > 24 {
+		n = 24
+	}
+	return n, float32(1 - math.Pow(1-total, 1/float64(n)))
+}
+
 // neuReach is how far the shadows need outside the face, so the face can
 // be inset by it and the whole control still paint inside the rect it was
 // given.
 func neuReach(l *Classic) float32 { return l.S(neuDepth) + l.S(neuSpread)*0.5 }
 
-// softOut paints b as the surface pushed out of the page: the dark shadow
-// down and right, the light one up and left, then the face over both.
+// softOut paints b as the surface pushed out of the page: the dark
+// shadow down and right, the light one up and left, then the face over
+// both.
 //
 // **The shadows are drawn inside b, not around it.** A control is given a
 // rect and everything it draws belongs in that rect — the same rule the
@@ -115,34 +143,58 @@ func neuReach(l *Classic) float32 { return l.S(neuDepth) + l.S(neuSpread)*0.5 }
 // means a soft control can be laid out beside anything else without
 // bleeding over it.
 //
-// Each shadow is a few translucent rounded rects stepping outwards rather
-// than a real blur — at this radius the difference is invisible and the
-// cost is a handful of fills instead of a convolution.
+// Each shadow is several rounded rects at **one offset and growing
+// sizes**, not one shape slid outwards. That distinction is the whole
+// difference between a shadow and a mistake: translating a fixed shape
+// accumulates into a hard-edged copy of the button sitting behind it,
+// which is what this first did, and it looked like three overlapping
+// pills. Growing the shape instead means each ring reaches a little
+// further than the last, so coverage falls off over the spread and the
+// edge is soft.
 func (g neuSet) softOut(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, r float32) {
 	face, fr, reach := neuFace(l, b, r)
 	if face.Dx() <= 0 || face.Dy() <= 0 {
 		return
 	}
-	// Constant alpha per ring, offsets spanning the whole reach and
-	// drawn outermost first. The falloff then comes from *coverage*
-	// rather than from the alpha: near the face every ring overlaps, at
-	// the edge of the reach only the outermost does. Weighting the
-	// alpha instead makes the outer rings invisible and the shadow
-	// never leaves the face.
-	const steps, ringA = 5, 0.17
+	// The spread may never exceed the drop. A ring is the face moved by
+	// drop and grown by up to spread, so with spread > drop its far
+	// corner reaches back *past* the face on the opposite side — the
+	// dark shadow shows above and left of a button whose light is
+	// supposed to be there, as a small dark tick. Their sum is the
+	// reach, so drop takes the larger share.
+	drop, spread := reach*0.6, reach*0.4
+	steps, ringA := neuRings(reach, 0.60)
 	for i := steps; i >= 1; i-- {
-		off := reach * float32(i) / float32(steps)
-		ctx.DrawPath(RoundRectPath(face.Translate(paintengine2d.Pt(off, off)), fr, fr, fr, fr),
-			paintengine2d.Fill(withA(g.shade, ringA)))
-		ctx.DrawPath(RoundRectPath(face.Translate(paintengine2d.Pt(-off, -off)), fr, fr, fr, fr),
-			paintengine2d.Fill(withA(g.light, ringA)))
+		grow := spread * float32(i) / float32(steps)
+		// The radius has to be clamped to half the ring, not just
+		// grown with it: a short control's face is only a few pixels
+		// tall, fr is already half of that, and fr+grow then asks for
+		// a corner larger than the shape it is rounding. The path that
+		// comes back is malformed, and it shows as a dark hook at the
+		// top left of every small button.
+		rr := func(x paintengine2d.Rect) float32 {
+			return min(fr+grow, min(x.Dx(), x.Dy())/2)
+		}
+		dark := face.Translate(paintengine2d.Pt(drop, drop)).Inset(-grow)
+		if d := rr(dark); dark.Dx() > 0 && dark.Dy() > 0 {
+			ctx.DrawPath(RoundRectPath(dark, d, d, d, d), paintengine2d.Fill(withA(g.shade, ringA)))
+		}
+		lite := face.Translate(paintengine2d.Pt(-drop, -drop)).Inset(-grow)
+		if d := rr(lite); lite.Dx() > 0 && lite.Dy() > 0 {
+			ctx.DrawPath(RoundRectPath(lite, d, d, d, d), paintengine2d.Fill(withA(g.light, ringA)))
+		}
 	}
 	ctx.DrawPath(RoundRectPath(face, fr, fr, fr, fr), paintengine2d.Fill(g.surface))
 }
 
 // softIn is the same surface pressed into the page: the shadows swap
-// sides and move inside the shape, so the control reads as a well. It is
-// clipped to the face, so it is inside b for the same reason.
+// sides and fall inside the shape, so the control reads as a well.
+//
+// Inside, the falloff comes from the stroke's *width* rather than from
+// growing the shape: a band hugging the face's edge, widest for the
+// faintest ring, so the accumulation is densest against the edge and
+// fades towards the middle. It is clipped to the face, so it stays
+// inside b for the same reason the outside shadows do.
 func (g neuSet) softIn(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, r float32) {
 	face, fr, reach := neuFace(l, b, r)
 	if face.Dx() <= 0 || face.Dy() <= 0 {
@@ -151,17 +203,20 @@ func (g neuSet) softIn(l *Classic, ctx *paintengine2d.Context, b paintengine2d.R
 	ctx.DrawPath(RoundRectPath(face, fr, fr, fr, fr), paintengine2d.Fill(g.surface))
 	ctx.Save()
 	ctx.ClipPath(RoundRectPath(face, fr, fr, fr, fr))
-	const steps, ringA = 5, 0.19
-	w := max(l.S(2), 1)
+	drop := reach * 0.5
+	steps, ringA := neuRings(reach, 0.62)
 	for i := steps; i >= 1; i-- {
-		off := reach * float32(i) / float32(steps)
-		a := float32(ringA)
+		w := max(reach*float32(i)/float32(steps), 1)
 		in := face.Inset(w * 0.5)
-		ctx.DrawRoundRect(in.Translate(paintengine2d.Pt(off, off)), fr, fr,
-			paintengine2d.Paint{Color: withA(g.shade, a), Style: paintengine2d.StyleStroke,
+		if in.Dx() <= 0 || in.Dy() <= 0 {
+			continue
+		}
+		rr := min(max(fr-w*0.5, 0), min(in.Dx(), in.Dy())/2)
+		ctx.DrawRoundRect(in.Translate(paintengine2d.Pt(drop, drop)), rr, rr,
+			paintengine2d.Paint{Color: withA(g.shade, ringA), Style: paintengine2d.StyleStroke,
 				Stroke: paintengine2d.Stroke{Width: w, Join: paintengine2d.JoinRound, MiterLimit: 4}})
-		ctx.DrawRoundRect(in.Translate(paintengine2d.Pt(-off, -off)), fr, fr,
-			paintengine2d.Paint{Color: withA(g.light, a), Style: paintengine2d.StyleStroke,
+		ctx.DrawRoundRect(in.Translate(paintengine2d.Pt(-drop, -drop)), rr, rr,
+			paintengine2d.Paint{Color: withA(g.light, ringA), Style: paintengine2d.StyleStroke,
 				Stroke: paintengine2d.Stroke{Width: w, Join: paintengine2d.JoinRound, MiterLimit: 4}})
 	}
 	ctx.Restore()
@@ -339,7 +394,7 @@ func (e neuEngine) DrawPopupShadow(l *Classic, ctx *paintengine2d.Context, b pai
 	// reach goes on spread and 30% on the fall, so the lowest edge of
 	// the widest ring lands exactly on the reach and not past it.
 	reach := l.S(neuDepth * 3)
-	const steps, ringA = 6, 0.09
+	steps, ringA := neuRings(reach, 0.42)
 	for i := steps; i >= 1; i-- {
 		t := float32(i) / float32(steps)
 		grow := reach * t * 0.7

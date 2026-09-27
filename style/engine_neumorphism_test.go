@@ -64,9 +64,11 @@ func TestNeumorphismPressedIsTheRaisedOneInverted(t *testing.T) {
 	}
 	const m = 5 // the margin the face is inset by at 1x
 
-	// Raised: the margin outside the face.
-	rTL := corner(raised, 0, 0, m, m)
-	rBR := corner(raised, w-m, h-m, w, h)
+	// Raised: a box straddling the face's corner, since the shadow is
+	// thrown clear of the edge and falls off across the margin rather
+	// than hugging the very outside of it.
+	rTL := corner(raised, 0, 0, 2*m, 2*m)
+	rBR := corner(raised, w-2*m, h-2*m, w, h)
 	if rTL <= rBR {
 		t.Errorf("raised: the margin is %.4f at the top left and %.4f at the bottom right; the light comes from the top left", rTL, rBR)
 	}
