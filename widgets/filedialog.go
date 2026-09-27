@@ -270,13 +270,24 @@ func (fd *FileDialog) finish(ok bool) {
 	}
 }
 
+// chosen is the path the dialog would return: **what the path field
+// says**, then the selected row, then the directory.
+//
+// The field comes first because it is the only one of the three the user
+// can disagree with. Selecting a row writes that row's full path into
+// the field (see onSelect), so for a plain selection the two agree and
+// the order does not matter. It matters when they differ, and they
+// differ exactly when the user typed: select old.txt in a Save dialog,
+// type new.txt over it, press Save. Reading the row there returns
+// old.txt — the file the user was careful *not* to name — and the caller
+// overwrites it.
 func (fd *FileDialog) chosen() string {
+	if fd.path != nil && fd.path.Text != "" {
+		return fd.path.Text
+	}
 	if fd.table != nil && fd.table.Selected >= 0 && fd.table.Selected < len(fd.entries) {
 		e := fd.entries[fd.table.Selected]
 		return filepath.Join(fd.dir, e.Name)
-	}
-	if fd.path != nil && fd.path.Text != "" {
-		return fd.path.Text
 	}
 	return fd.dir
 }

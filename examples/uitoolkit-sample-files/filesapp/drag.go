@@ -146,7 +146,17 @@ func filesDropInto(places []filePlace, dst int, e widget.DropEvent) bool {
 	p, ok := e.Payload.(filesPayload)
 	if !ok {
 		// From another application: the files are named by path, and the
-		// demo lists them in the folder without copying anything.
+		// sample lists them in the folder without copying anything.
+		//
+		// Which is exactly why it must refuse a Move. Returning true
+		// tells the source the target took the data, and a source that
+		// negotiated Move deletes its original on the strength of it —
+		// so acknowledging one here would destroy the user's files to
+		// produce a row in a demo. The sample has no filesystem
+		// transfer behind it, so Copy is the only honest answer.
+		if e.Action == platform.DragMove {
+			return false
+		}
 		return filesDropPaths(places, dst, e.Paths)
 	}
 	if p.From == dst {

@@ -4479,25 +4479,19 @@ func wlReadFD(c *wlConn, request func(fd int)) (string, bool) {
 	C.ui_wl_flush(c.dpy)
 	C.ui_wl_roundtrip(c.dpy)
 	C.ui_wl_set_nonblock(fds[0])
-	var out []byte
-	var buf [4096]byte
-	deadline := time.Now().Add(wlClipboardTimeout)
-	for {
-		remain := time.Until(deadline)
-		if remain <= 0 {
-			break
-		}
-		n := int(C.ui_wl_read_deadline(fds[0], (*C.char)(unsafe.Pointer(&buf[0])), 4096,
-			C.int(remain/time.Millisecond)+1))
-		if n <= 0 {
-			break
-		}
-		out = append(out, buf[:n]...)
-		if len(out) > 64<<20 {
-			break
-		}
-	}
+	out, how := wlReadLoop(func(buf []byte, ms int) int {
+		return int(C.ui_wl_read_deadline(fds[0], (*C.char)(unsafe.Pointer(&buf[0])),
+			C.size_t(len(buf)), C.int(ms)))
+	}, time.Now().Add(wlClipboardTimeout))
 	C.ui_wl_close_fd(fds[0])
+	// Only EOF means the payload is whole. A timeout, a read error or
+	// the size cap leave a prefix, and this used to hand that back as a
+	// success: a truncated paste, or — for a drag negotiated as Move —
+	// an acknowledgement of data the application never received, after
+	// which the source may delete the original.
+	if !how.ok() {
+		return string(out), false
+	}
 	return string(out), true
 }
 
