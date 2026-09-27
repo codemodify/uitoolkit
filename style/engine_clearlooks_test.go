@@ -124,7 +124,7 @@ func TestClearlooksPaintsEveryControlInsideItsRect(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	for _, n := range clPackNames {
 		for _, scale := range []float32{1, 2} {
-			aquaExercise(t, fmt.Sprintf("%s@%gx", n, scale), clLook(t, n, scale))
+			exerciseEngine(t, fmt.Sprintf("%s@%gx", n, scale), clLook(t, n, scale))
 		}
 	}
 }
@@ -219,6 +219,9 @@ func clRaster(lk *Classic, draw func(ctx *paintengine2d.Context, b paintengine2d
 func TestClearlooksSelectionKeptUntilBackdrop(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	for _, n := range append([]string{"bluecurve"}, clPackNames...) {
+		if !packBuilt(n) {
+			continue
+		}
 		lk := clLook(t, n, 1)
 		row := func(st ControlState) []byte {
 			return clRaster(lk, func(ctx *paintengine2d.Context, b paintengine2d.Rect) { lk.DrawListRow(ctx, b, st, "Row") }).Pix

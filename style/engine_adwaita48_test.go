@@ -55,7 +55,7 @@ func TestAdwaita48PaintsEveryControlInsideItsRect(t *testing.T) {
 	for _, n := range adw48PackNames {
 		for _, scale := range []float32{1, 1.75, 2} {
 			lk := clLook(t, n, scale)
-			aquaExercise(t, fmt.Sprintf("%s@%gx", n, scale), lk)
+			exerciseEngine(t, fmt.Sprintf("%s@%gx", n, scale), lk)
 			kdeExtras(t, fmt.Sprintf("%s@%gx", n, scale), lk)
 		}
 	}

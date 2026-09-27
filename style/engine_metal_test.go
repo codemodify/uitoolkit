@@ -81,7 +81,7 @@ func TestMetalPaintsEveryControlInsideItsRect(t *testing.T) {
 		p, _ := LoadTheme(n)
 		for _, scale := range []float32{1, 2} {
 			lk := WithScale(p.Look(), scale).(*Classic)
-			aquaExercise(t, fmt.Sprintf("%s@%gx", n, scale), lk)
+			exerciseEngine(t, fmt.Sprintf("%s@%gx", n, scale), lk)
 			mtlRowsInside(t, fmt.Sprintf("%s@%gx", n, scale), lk)
 		}
 	}
@@ -113,33 +113,6 @@ func TestMetalPaintsEveryControl(t *testing.T) {
 			if ctx.SaveCount() != 0 {
 				t.Fatalf("%s@%gx left %d saved states", n, sc, ctx.SaveCount())
 			}
-		}
-	}
-}
-
-// mtlRowsInside paints the item rows in their view states (current,
-// unfocused view, odd row, tree chains, table cell spans) and checks they
-// stay in their rect.
-func mtlRowsInside(t *testing.T, name string, lk *Classic) {
-	t.Helper()
-	sc := lk.Scale()
-	states := []ControlState{
-		StateFocused, StateChecked | StateFocused, StateChecked | StateInactive, StateChecked | StateBackdrop,
-		StateAlternate, StateAlternate | StateChecked, StateExpanderHot | StateHovered,
-		TreeChain(0b101) | StateFocused, TreeChain(0) | StateChecked,
-		StateFirst | StateChecked, StateLast | StateChecked, StateChecked,
-	}
-	for _, st := range states {
-		img := paintengine2d.NewImage(int(260*sc), int(60*sc))
-		ctx := paintengine2d.NewContext(img)
-		r := paintengine2d.XYWH(20*sc, 20*sc, 200*sc, 24*sc)
-		lk.DrawListRow(ctx, r, st, "List row")
-		lk.DrawTreeRow(ctx, r, st, st.Checked(), !st.Checked(), 2, "Tree row", false)
-		lk.DrawTableCell(ctx, r, st, "Cell", AlignCenter, nil)
-		lk.DrawItemFocus(ctx, r, st)
-		lk.DrawViewFrame(ctx, r, st)
-		if x, y, ok := aquaOutside(img, r); ok {
-			t.Errorf("%s: row state %#x painted outside at (%d,%d)", name, uint32(st), x, y)
 		}
 	}
 }

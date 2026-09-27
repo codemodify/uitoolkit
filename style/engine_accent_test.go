@@ -1,3 +1,5 @@
+//go:build !theme_engines_pick
+
 package style
 
 import (
@@ -42,25 +44,6 @@ var accCases = []accCase{
 // green 4 (pale and mid-tone), GNOME 47's purple.
 var accSamples = []string{"#e95420", "#f6d32d", "#26a269", "#9141ac"}
 
-// accLook is the pack's look as an app that follows the desktop builds it
-// while the desktop's accent is accent.
-func accLook(t *testing.T, pack string, accent paintengine2d.Color, scale float32) *Classic {
-	t.Helper()
-	p, ok := LoadTheme(pack)
-	if !ok {
-		t.Fatalf("pack %q not registered", pack)
-	}
-	SetDesktopAccent(accent, true)
-	defer SetDesktopAccent(paintengine2d.Color{}, false)
-	a := p.Appearance()
-	a.FollowDesktop = true
-	var lk LookAndFeel = a.Look()
-	if scale != 1 {
-		lk = WithScale(lk, scale)
-	}
-	return lk.(*Classic)
-}
-
 // accPlain is the pack's own look.
 func accPlain(t *testing.T, pack string, scale float32) *Classic {
 	t.Helper()
@@ -73,15 +56,6 @@ func accPlain(t *testing.T, pack string, scale float32) *Classic {
 		lk = WithScale(lk, scale)
 	}
 	return lk.(*Classic)
-}
-
-// accHex prints a colour for failure messages.
-func accHex(c paintengine2d.Color) string {
-	q := func(v float32) int { return int(math.Round(float64(clamp1(v)) * 255)) }
-	if c.A < 1 {
-		return fmt.Sprintf("#%02x%02x%02x%02x", q(c.R), q(c.G), q(c.B), q(c.A))
-	}
-	return fmt.Sprintf("#%02x%02x%02x", q(c.R), q(c.G), q(c.B))
 }
 
 // accHue is c's Oklch hue and chroma.
@@ -556,7 +530,7 @@ func TestAccentTextStaysReadable(t *testing.T) {
 }
 
 // Every control of every accented look still paints inside its rect
-// (aquaExercise, the KDE extras and the accent cells), with a dark and a
+// (exerciseEngine, the KDE extras and the accent cells), with a dark and a
 // pale accent at 1× and the pale one at 2×: the accent moves colours, never
 // geometry.
 func TestAccentLooksPaintInsideTheirRects(t *testing.T) {
@@ -574,16 +548,16 @@ func TestAccentLooksPaintInsideTheirRects(t *testing.T) {
 				lk := accLook(t, c.pack, Hex(s), sc)
 				name := fmt.Sprintf("%s+%s@%gx", c.pack, s, sc)
 				// Fluent's floating bar sits a pixel in from the view's
-				// edge, so it does not fit aquaExercise's bar-wide views
+				// edge, so it does not fit exerciseEngine's bar-wide views
 				// (its own check, winPaintsInsideRect, gives it a wider
 				// one, as accCells does).
 				if lk.Engine().ID() != "fluent" {
-					aquaExercise(t, name, lk)
+					exerciseEngine(t, name, lk)
 				}
 				kdeExtras(t, name, lk)
 				for _, cell := range accCells() {
 					img, b := accPaint(lk, cell)
-					if x, y, out := aquaOutside(img, b); out {
+					if x, y, out := outsideRect(img, b); out {
 						t.Errorf("%s: %s painted outside its rect at (%d,%d)", name, cell.name, x, y)
 					}
 				}

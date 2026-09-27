@@ -1,3 +1,5 @@
+//go:build !theme_engines_pick || theme_engine_bluecurve
+
 package style
 
 import (
@@ -48,7 +50,7 @@ func TestBluecurvePaintsEveryControlInsideItsRect(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	for _, scale := range []float32{1, 2} {
 		lk := clLook(t, "bluecurve", scale)
-		aquaExercise(t, "bluecurve", lk)
+		exerciseEngine(t, "bluecurve", lk)
 		img := paintengine2d.NewImage(64, 64)
 		ctx := paintengine2d.NewContext(img)
 		for _, r := range []paintengine2d.Rect{{}, paintengine2d.XYWH(0, 0, 1, 1), paintengine2d.XYWH(0, 0, 5, 40), paintengine2d.XYWH(0, 0, 40, 5)} {

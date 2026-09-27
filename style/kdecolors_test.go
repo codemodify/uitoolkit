@@ -71,6 +71,9 @@ func rgbOf(t *testing.T, where, v string) [3]int {
 func TestKDEColorSchemeFormat(t *testing.T) {
 	for _, pack := range []string{"luna", "aqua", "tahoe", "win95", "beos", "aero"} {
 		t.Run(pack, func(t *testing.T) {
+			if !packBuilt(pack) {
+				t.Skipf("the %q pack is not in this build", pack)
+			}
 			lk := retroLook(t, pack, 1)
 			g := parseKDEScheme(t, KDEColorScheme(lk, "uitoolkit "+pack))
 			if gen := g["General"]; gen["ColorScheme"] != "uitoolkit "+pack || gen["Name"] == "" {
@@ -119,6 +122,9 @@ func TestKDEColorSchemeTitleBarIsTheLooksCaption(t *testing.T) {
 		"win95": {blue: true, whiteTitle: true},
 	} {
 		t.Run(pack, func(t *testing.T) {
+			if !packBuilt(pack) {
+				t.Skipf("the %q pack is not in this build", pack)
+			}
 			lk := retroLook(t, pack, 1)
 			g := parseKDEScheme(t, KDEColorScheme(lk, pack))
 			bar := rgbOf(t, "header", g["Colors:Header"]["BackgroundNormal"])

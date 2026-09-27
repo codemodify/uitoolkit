@@ -112,7 +112,7 @@ func TestWebPaintsInsideRect(t *testing.T) {
 	for _, n := range names {
 		for _, sc := range []float32{1, 2} {
 			lk := winLook(t, n, sc)
-			aquaExercise(t, n, lk)
+			exerciseEngine(t, n, lk)
 			kdeExtras(t, n, lk)
 		}
 	}

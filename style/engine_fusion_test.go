@@ -78,7 +78,7 @@ func TestFusionPaintsEveryControlInsideItsRect(t *testing.T) {
 		p, _ := LoadTheme(n)
 		for _, scale := range []float32{1, 2} {
 			lk := WithScale(p.Look(), scale).(*Classic)
-			aquaExercise(t, fmt.Sprintf("%s@%gx", n, scale), lk)
+			exerciseEngine(t, fmt.Sprintf("%s@%gx", n, scale), lk)
 			kdeExtras(t, fmt.Sprintf("%s@%gx", n, scale), lk)
 		}
 	}
@@ -172,7 +172,7 @@ func kdeDiffers(a, b *paintengine2d.Image, x, y int) bool {
 	return d(r0, r1) || d(g0, g1) || d(b0, b1) || d(a0, a1)
 }
 
-// kdeExtras paints what aquaExercise does not reach — the current item's
+// kdeExtras paints what exerciseEngine does not reach — the current item's
 // focus mark, item views' frames, rows in every item state, the tab pane
 // and the window background — and fails when one panics, leaves saved
 // states or paints outside its rect.
@@ -225,7 +225,7 @@ func kdeExtras(t *testing.T, name string, lk *Classic) {
 		if ctx.SaveCount() != 0 {
 			t.Fatalf("%s: %s left %d saved states", name, c.n, ctx.SaveCount())
 		}
-		if x, y, ok := aquaOutside(img, b); ok {
+		if x, y, ok := outsideRect(img, b); ok {
 			t.Errorf("%s: %s painted outside its rect at (%d,%d) of %v", name, c.n, x, y, b)
 		}
 	}

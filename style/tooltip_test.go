@@ -94,6 +94,7 @@ func TestTooltipFacesThatAreNotTheBodyFace(t *testing.T) {
 		t.Errorf("material: tip face %v, body %v — body-small is smaller", f.Size, md.Font().Size)
 	}
 	// Workbench had one face, and a tip is in it like everything else.
+	needEngine(t, "amiga")
 	am := look("amiga31")
 	if f := TooltipStyleOf(am).Face; f != am.MonoFont() {
 		t.Error("amiga: a tip is Topaz, the look's mono face")

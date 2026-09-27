@@ -92,7 +92,7 @@ func TestBreeze6PaintsEveryControlInsideItsRect(t *testing.T) {
 	for _, n := range breeze6PackNames {
 		for _, scale := range []float32{1, 1.75, 2} {
 			lk := WithScale(mustLook(t, n), scale).(*Classic)
-			aquaExercise(t, fmt.Sprintf("%s@%gx", n, scale), lk)
+			exerciseEngine(t, fmt.Sprintf("%s@%gx", n, scale), lk)
 			kdeExtras(t, fmt.Sprintf("%s@%gx", n, scale), lk)
 		}
 	}

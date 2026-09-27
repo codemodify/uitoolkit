@@ -123,7 +123,7 @@ func TestFlatLafPaintsInsideRect(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	for _, n := range flatlafPackNames {
 		for _, sc := range []float32{1, 2} {
-			aquaExercise(t, fmt.Sprintf("%s@%gx", n, sc), flatLook(t, n, sc))
+			exerciseEngine(t, fmt.Sprintf("%s@%gx", n, sc), flatLook(t, n, sc))
 		}
 	}
 }

@@ -80,7 +80,7 @@ func TestMaterial3xPaintsEveryControlInsideItsRect(t *testing.T) {
 	for _, n := range md3xPackNames {
 		for _, sc := range []float32{1, 1.75, 2} {
 			lk := materialLook(t, n, sc)
-			aquaExercise(t, fmt.Sprintf("%s@%gx", n, sc), lk)
+			exerciseEngine(t, fmt.Sprintf("%s@%gx", n, sc), lk)
 			kdeExtras(t, fmt.Sprintf("%s@%gx", n, sc), lk)
 		}
 	}

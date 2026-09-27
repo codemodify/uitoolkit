@@ -103,6 +103,7 @@ func TestChosenFontBeatsThePack(t *testing.T) {
 		"Liberation Mono\t80\t0\t0\t/f/LiberationMono-Regular.ttf",
 	)
 	// aqua asks for Lucida Grande and comes down to Noto Sans here.
+	needEngine(t, "aqua")
 	base := Appearance{Name: "aqua"}.Normalize()
 	look := base.Look()
 	if look.UIFamily() != "Noto Sans" {

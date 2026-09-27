@@ -1,3 +1,5 @@
+//go:build !theme_engines_pick || theme_engine_amiga
+
 package style
 
 import (
@@ -140,7 +142,7 @@ func TestAmigaSurvivesTinyRects(t *testing.T) {
 							if ctx.SaveCount() != 0 {
 								t.Fatalf("%s@%gx %s %vx%v: %d saved states left", n, scale, c.name, w, h, ctx.SaveCount())
 							}
-							if x, y, ok := aquaOutside(img, b); ok {
+							if x, y, ok := outsideRect(img, b); ok {
 								t.Fatalf("%s@%gx %s %vx%v state %#x: painted outside at (%d,%d)", n, scale, c.name, w, h, uint32(st), x, y)
 							}
 						}
