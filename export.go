@@ -62,6 +62,7 @@ type (
 	IconSize          = style.IconSize
 	RendererPref      = style.RendererPref
 	ThemePack         = style.ThemePack
+	ThemeOverride     = style.ThemeOverride
 	ThemeSource       = style.ThemeSource
 	ThemeTokens       = style.ThemeTokens
 	BevelStyle        = style.BevelStyle
@@ -306,6 +307,23 @@ func SplitLookThemeName(name string) (string, style.CornerStyle, bool) {
 }
 func LookAppearance(look style.LookAndFeel) style.Appearance {
 	return style.LookAppearance(look)
+}
+
+// SetTheme gives a component and everything under it their own level of
+// the theme cascade: the pack, corners, icons and typefaces t names,
+// and the window's for everything it leaves empty. See docs/themes.md.
+//
+//	uitoolkit.SetTheme(tabs.Page(), uitoolkit.ThemeOverride{Pack: "metal-ocean"})
+func SetTheme(c widget.Component, t style.ThemeOverride) { widget.SetTheme(c, t) }
+
+// ThemeOf is the level c states for itself (the zero value: none).
+func ThemeOf(c widget.Component) style.ThemeOverride { return widget.ThemeOf(c) }
+
+// Themed is look with t written over it, keeping look's display scale
+// and density. Components resolve this for themselves; it is here for
+// code that holds a look rather than a component.
+func Themed(look style.LookAndFeel, t style.ThemeOverride) style.LookAndFeel {
+	return style.Themed(look, t)
 }
 func LookTokens(look style.LookAndFeel) style.ThemeTokens {
 	return style.LookTokens(look)

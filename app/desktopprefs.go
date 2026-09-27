@@ -147,6 +147,13 @@ func (a *Application) ApplyAppearance(ap style.Appearance) {
 	a.setDecorationsPref(ap.Decorations)
 	a.SetCaptionButtons(ap.CaptionButtons)
 	a.SetRenderer(ap.Renderer)
+	// What reached the app from outside is what a cleared
+	// Application.SetTheme goes back to; the application's own level of
+	// the theme cascade is then written over it, so an app pinned to a
+	// pack keeps that pack across a Settings → Apply while everything it
+	// did not pin follows the file.
+	a.deskAp = ap.Normalize()
+	ap = a.appTheme.On(ap)
 	a.following = ap.FollowDesktop
 	if a.look == nil {
 		a.SetLook(ap.Look())

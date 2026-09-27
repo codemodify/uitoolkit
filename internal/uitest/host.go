@@ -104,7 +104,7 @@ func (h *Host) Look() style.LookAndFeel {
 }
 func (h *Host) RequestLayout() { h.layoutN++ }
 
-func (h *Host) SetLook(l style.LookAndFeel) { h.look = l }
+func (h *Host) SetLook(l style.LookAndFeel) { h.look = l; widget.LooksChanged() }
 func (h *Host) SetScale(s float32)          { h.scale = s }
 
 func (h *Host) SetCursor(c platform.Cursor) { h.cursor = c }

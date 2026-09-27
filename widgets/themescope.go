@@ -7,11 +7,24 @@ import (
 	"github.com/codemodify/uitoolkit/widget"
 )
 
-// ThemeScope runs its child subtree in its own look while the rest of the
-// window keeps the window's: a live theme preview in Settings, a themed
-// pane in a designer. The look is given at 1x; the scope applies the
-// window's display scale itself. Popups opened from inside (combo lists,
-// context menus) inherit the scope's look.
+// ThemeScope runs its child subtree in one exact look while the rest of
+// the window keeps the window's, and paints that look's window
+// background behind it: a live theme preview in Settings, a themed pane
+// in a designer. The look is given at 1x; the scope applies the window's
+// display scale itself. Popups opened from inside (combo lists, context
+// menus) inherit the scope's look.
+//
+// It is the *low-level* end of the theme cascade, for the case where a
+// caller has a whole [style.LookAndFeel] in hand and wants exactly that
+// one — Settings has staged an appearance and must show it faithfully.
+// An application that wants a pane in another pack does not need a
+// wrapper at all: [widget.SetTheme] gives any component its own level of
+// the cascade, inheriting the display scale, the density and everything
+// it does not name. See docs/themes.md, "The cascade".
+//
+// This type's own SetTheme takes a look rather than a
+// [style.ThemeOverride] and so shadows [widget.Base.SetTheme]; to give a
+// scope a cascade level as well, call widget.SetTheme(scope, …).
 type ThemeScope struct {
 	widget.Base
 	child  widget.Component
@@ -49,6 +62,8 @@ func (s *ThemeScope) Child() widget.Component { return s.child }
 func (s *ThemeScope) SetTheme(look style.LookAndFeel) {
 	s.base = look
 	s.scaled = nil
+	// The subtree's memoized looks all came from this one.
+	widget.LooksChanged()
 	s.RequestLayout()
 	s.Invalidate()
 }

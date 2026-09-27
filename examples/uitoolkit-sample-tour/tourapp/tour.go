@@ -54,6 +54,7 @@ const (
 	pageFrames
 	pageShapes
 	pageSkins
+	pageCascade
 	pageDesktop
 	pageAccess
 )
@@ -82,6 +83,7 @@ var tourPages = []tourPage{
 	pageFrames:   {name: "Frames"},
 	pageShapes:   {name: "Shapes"},
 	pageSkins:    {name: "Skins"},
+	pageCascade:  {name: "Cascade"},
 	pageDesktop:  {name: "Desktop"},
 	pageAccess:   {name: "Access"},
 }

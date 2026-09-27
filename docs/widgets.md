@@ -657,6 +657,22 @@ plain raised card. `Window` wins over `Raised` when both are set.
 its smallest size in 1x design pixels — `Arrange` scales them by the look
 before comparing them with the measured size, which is in device pixels.
 
+A panel — like every other component — can run in a pack of its own:
+
+```go
+pane.SetTheme(style.ThemeOverride{Pack: "metal-ocean"})
+```
+
+Everything under it draws in that pack and the rest of the window is
+untouched; what the level does not state (the corners, the icons, the
+typefaces) is still inherited, and the display scale is not a level's to
+state at all. A `Window` panel's caption and frame follow the cascade,
+because it is a widget; the *real* window's frame around it does not,
+because the compositor needs one answer per window. A menu or a combo
+box's list opened from inside the pane comes up in the pane's pack even
+though it is a surface of its own. See
+[themes.md](themes.md#the-cascade).
+
 ## Windows inside a window
 
 `widgets.NewMDIArea()` holds windows inside a window, as Qt's `QMdiArea`

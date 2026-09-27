@@ -112,6 +112,32 @@ the icon set, the size its glyphs are drawn at, the window's corners —
 chosen on the page beside it. Apply hands the pack to every app;
 `UITK_THEME=<pack>` runs any app in any of them.
 
+### A theme per app, per pane, per control
+
+A pack is not all-or-nothing. Themes **cascade**, the way CSS does: the
+desktop's saved appearance, then the application's own, then any
+subtree's, then a single control's, with the nearest one winning and each
+level inheriting whatever it does not state (**v0.20.0**).
+
+```go
+// This app is in Luna whatever look.json says — and still follows the
+// file for the icons, the corners and the typefaces it did not name.
+a := uitoolkit.New(uitoolkit.Options{Theme: style.ThemeOverride{Pack: "luna"}})
+
+// One tab's content in Metal, the rest of the window unchanged.
+widget.SetTheme(tabs.Page(), style.ThemeOverride{Pack: "metal-ocean"})
+```
+
+The display scale is never a level's to change — it is the monitor's, and
+a pane derives its look from the one above it, which already carries it.
+A menu or a combo box's list opened from a themed pane comes up in that
+pane's pack although it is a surface of its own. A window's frame stays
+the window's, because the compositor needs one answer. Resolution is
+memoized per component, so a subtree nested eight scopes deep answers
+`Look()` in about 3 ns with no allocation. See
+[docs/themes.md](docs/themes.md#the-cascade) and the tour's **Cascade**
+page.
+
 ![Theme packs by year and platform](docs/screenshots/themes/timeline.png)
 
 *Each dot is a pack, placed by the year its original shipped and the
@@ -201,7 +227,8 @@ repositories of their own, painted through paintengine2d with Titillium Web
 
 The tabs are the window's own title bar, and pull out into windows of their
 own; a page each for docking, drag and drop, frames, shaped windows, skins,
-the desktop and accessibility, each with what the toolkit reports. See
+the theme cascade, the desktop and accessibility, each with what the
+toolkit reports. See
 **[docs/tour.md](docs/tour.md)**.
 
 ![The tour's Tabs page: the strip is the window's caption](docs/screenshots/tour-tabs.webp)

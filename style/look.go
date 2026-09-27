@@ -30,12 +30,24 @@ type Classic struct {
 	// era's when installed, else the bundled faces.
 	uiFamily   string
 	monoFamily string
-	body       *Font
-	title      *Font
-	bold       *Font
-	muted      *Font
-	onAcc      *Font
-	mono       *Font
+	// userUI / userMono are the typefaces the *user* named
+	// ([Appearance.FontUI]), empty for "whatever the pack asks for", and
+	// follow whether the pack was built to follow the desktop's light /
+	// dark preference and accent. None of the three can be read back out
+	// of a finished look — a look carries the family it resolved to, not
+	// whether that family was an instruction — so they are carried here,
+	// and [LookAppearance] gives them back. Without them a look derived
+	// from this one ([Themed], the theme cascade) would silently drop a
+	// pinned typeface and the desktop's accent.
+	userUI   string
+	userMono string
+	follow   bool
+	body     *Font
+	title    *Font
+	bold     *Font
+	muted    *Font
+	onAcc    *Font
+	mono     *Font
 }
 
 // NewClassic builds fonts for p. Name is "dark" or "light" typically.
@@ -192,7 +204,7 @@ func WithScale(look LookAndFeel, scale float32) LookAndFeel {
 		return look
 	}
 	return newClassic(c.Name(), c.Palette(), ScaleMetrics(c.Metrics(), scale), c.Corners(), c.Icons(), c.IconSize(), c.Tokens()).
-		setPack(c.Pack()).setDensity(c.Density()).setScale(c.Scale() * scale)
+		setPack(c.Pack()).setDensity(c.Density()).setScale(c.Scale() * scale).carry(c)
 }
 
 func (l *Classic) Name() string           { return l.name }
@@ -223,6 +235,27 @@ func (l *Classic) setPack(name string) *Classic {
 		l.pack = name
 	}
 	return l
+}
+
+// setAppearanceBits carries the parts of the [Appearance] a finished look
+// cannot be read back for: the typefaces the user pinned and whether the
+// pack follows the desktop. Every derivation (WithScale, WithCorners, …)
+// passes them on, so a look keeps them however far it is from the
+// Appearance it was built from.
+func (l *Classic) setAppearanceBits(ui, mono string, follow bool) *Classic {
+	if l == nil {
+		return l
+	}
+	l.userUI, l.userMono, l.follow = ui, mono, follow
+	return l
+}
+
+// carry copies src's pinned typefaces and desktop-following onto l.
+func (l *Classic) carry(src *Classic) *Classic {
+	if l == nil || src == nil {
+		return l
+	}
+	return l.setAppearanceBits(src.userUI, src.userMono, src.follow)
 }
 
 func (l *Classic) Font() *Font      { return l.body }

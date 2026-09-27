@@ -67,9 +67,22 @@ func ShowPopup(from Component, popup Component) bool {
 	return true
 }
 
-// inheritLook gives a popup or overlay the look of the widget that opened
-// it when that differs from the window's (a combo inside a themed preview
-// opens a list in the preview's theme, not the window's).
+// inheritLook gives a popup, a submenu, an overlay or a tooltip the look
+// of the widget that opened it, whenever that is not the window's: a
+// combo box inside a Metal-themed pane opens a Metal list, and the menu
+// and every submenu that cascade out of a Metal-themed tab are Metal
+// too.
+//
+// A popup is a root — it hangs from no parent, and on Wayland and X11 it
+// is a surface of its own — so the cascade cannot reach it by walking
+// up. This is where it is carried across instead, and it is carried as
+// an exact look rather than as a level of the cascade, because the
+// opener's look is already at the window's display scale and re-deriving
+// it would be one rebuild for nothing.
+//
+// The look is set (or cleared) on every open, never only when there is
+// one to impose: a popup reused by its widget — a combo box keeps its
+// list — must not keep the theme of a scope it has since left.
 func inheritLook(from, layer Component, h Host) {
 	fl, ok := from.(interface{ Look() style.LookAndFeel })
 	if !ok {
@@ -79,9 +92,13 @@ func inheritLook(from, layer Component, h Host) {
 	if !ok {
 		return
 	}
-	if lk := fl.Look(); lk != nil && lk != h.Look() {
-		sl.SetLook(lk)
+	lk := fl.Look()
+	if lk == nil || (h != nil && lk == h.Look()) {
+		// Nothing of its own: the popup resolves the window's look the
+		// ordinary way, and a look left over from a previous open goes.
+		lk = nil
 	}
+	sl.SetLook(lk)
 }
 
 // DismissPopup closes the window popup layer, if any.
@@ -218,14 +235,24 @@ func PopupAnchorOf(popup Component) (PopupAnchor, bool) {
 	return PopupAnchor{}, false
 }
 
-// PreparePopup attaches from's host (look, scale, popup layer) before Measure.
+// PreparePopup attaches from's host and from's look to popup before it is
+// measured.
+//
+// The look has to be on before Measure and not only before paint: packs
+// differ in their metrics, and a list measured in the window's look and
+// then painted in a scope's would be the wrong size. Every Place*
+// function starts here, so a submenu — which is opened by its parent
+// menu rather than through [ShowPopup] — inherits the cascade too.
 func PreparePopup(from, popup Component) {
 	if from == nil || popup == nil {
 		return
 	}
-	if h := from.Host(); h != nil {
-		popup.SetHost(h)
+	h := from.Host()
+	if h == nil {
+		return
 	}
+	popup.SetHost(h)
+	inheritLook(from, popup, h)
 }
 
 func popupSurface(c Component) (SurfaceSizer, bool) {
