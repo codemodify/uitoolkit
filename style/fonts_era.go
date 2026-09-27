@@ -193,6 +193,33 @@ func withEraFonts(tok ThemeTokens, pack string) ThemeTokens {
 	return tok
 }
 
+// withUserFonts puts the user's chosen typefaces in front of the pack's
+// own, for the roles they name. It is the last word on what a look reads
+// in, and it is deliberately a *prepend* rather than a replacement:
+//
+//	Aqua's UI list  : Lucida Grande, Lucida Sans Unicode, Lucida Sans, DejaVu Sans, Noto Sans
+//	the user says   : Cantarell
+//	what is resolved: Cantarell, Lucida Grande, …, Noto Sans
+//
+// so the user's family wins wherever it is installed, and where it is not
+// — a look.json copied to another machine, a font removed since — the
+// pack's era is still underneath rather than a hole. [ResolveFont] walks
+// that list and the bundled faces catch whatever falls through it, which
+// is how a pack could never need a font to be present and still cannot.
+//
+// An empty name changes nothing for that role, which is what the
+// chooser's first item ("Theme font") sets and what every look.json
+// written before this field says.
+func withUserFonts(tok ThemeTokens, ui, mono string) ThemeTokens {
+	if ui = NormalizeFontChoice(ui); ui != "" {
+		tok.Fonts.UI = append([]string{ui}, tok.Fonts.UI...)
+	}
+	if mono = NormalizeFontChoice(mono); mono != "" {
+		tok.Fonts.Mono = append([]string{mono}, tok.Fonts.Mono...)
+	}
+	return tok
+}
+
 // lookFamilies resolves tok's typefaces to installed or bundled families.
 func lookFamilies(tok ThemeTokens) (ui, mono string) {
 	if ui = ResolveFont(tok.Fonts.UI); ui == "" {

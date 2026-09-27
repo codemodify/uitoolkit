@@ -21,9 +21,14 @@ const (
 	CornersSquare CornerStyle = "square"
 )
 
-// IconSetName selects chrome ToolIcons. classic / sharp are drawn in
-// process. Any other sanitized name is a file set under
-// ~/.config/uitoolkit/icons/<name>/ (lucide, phosphor, tabler, …).
+// IconSetName selects chrome ToolIcons, and it now names one of three
+// kinds of thing:
+//
+//   - classic / sharp, drawn in process;
+//   - a sanitized name, which is a folder of PNGs under
+//     ~/.config/uitoolkit/icons/<name>/ (lucide, phosphor, tabler, …);
+//   - "desktop:<Theme>", an installed freedesktop icon theme read from
+//     /usr/share/icons or ~/.local/share/icons (see [SystemIconPrefix]).
 type IconSetName string
 
 const (
@@ -63,6 +68,26 @@ type Appearance struct {
 	Corners  CornerStyle
 	Icons    IconSetName
 	IconSize IconSize
+	// FontUI and FontMono are the typefaces the user chose for the two
+	// font roles — the interface face and the monospaced one — or ""
+	// for "whatever the pack asks for", which is the default.
+	//
+	// A choice here beats the pack. A pack's [FontPrefs] is a list of
+	// wishes an era had, most wanted first, and the toolkit walks it
+	// until it finds something installed; a name in this field is not a
+	// wish, it is an instruction, so it goes in front of that list. Aqua
+	// asks for Lucida Grande and this field says Cantarell: the window
+	// reads in Cantarell. It is the same rule [CornerStyle] already
+	// follows — the pack's own shape until the user says round or square
+	// — and the way back is the same too: clear the field (the
+	// chooser's "Theme font") and the pack has its era again.
+	//
+	// The pack's list is still the fallback, not a casualty: a family
+	// that is not installed — a look.json carried to another machine,
+	// a font uninstalled since — falls through to the era's own names
+	// and then to the bundled faces, so a window is never left without
+	// a typeface. See [withUserFonts].
+	FontUI, FontMono string
 	// ReduceMotion turns animations off (see [Animations]).
 	ReduceMotion bool
 	// FollowDesktop shows the pack's light or dark sibling to match the
@@ -198,6 +223,35 @@ func DefaultAppearance() Appearance {
 	}
 }
 
+// FontEnv and MonoFontEnv override the saved typefaces for one process,
+// the way [ThemeEnv] overrides the saved pack: UITK_FONT="Liberation
+// Sans" ./app. The word "theme" (and the empty string) means "the pack's
+// own", so a session can be run at a pack's era typography without
+// editing look.json.
+//
+// Like UITK_THEME and unlike UITK_PAINT, an override read here is the
+// loaded preference: it is not written back on its own, but a Settings
+// started under it stages it and an Apply saves it. UITK_PAINT is the
+// exception because it says which *device* paints rather than what is
+// painted, and baking a debugging flag into everyone's preferences is a
+// different kind of mistake from baking a typeface into them.
+const (
+	FontEnv     = "UITK_FONT"
+	MonoFontEnv = "UITK_FONT_MONO"
+)
+
+// NormalizeFontChoice is a chosen family in the form the rest of the
+// toolkit stores it: trimmed, with the words that mean "no choice"
+// ("theme", "default", "pack") resolved to the empty string.
+func NormalizeFontChoice(s string) string {
+	s = strings.TrimSpace(s)
+	switch strings.ToLower(s) {
+	case "", "theme", "default", "pack", "theme font":
+		return ""
+	}
+	return s
+}
+
 // ParseTheme accepts dark / light (empty → dark).
 func ParseTheme(s string) ThemeName {
 	switch s {
@@ -221,10 +275,21 @@ func ParseCorners(s string) CornerStyle {
 }
 
 // ParseIconSet accepts classic / sharp / lucide / phosphor / tabler /
-// heroicons / material-symbols or any sanitized file-set directory
-// name (empty → classic).
+// heroicons / material-symbols, any sanitized file-set directory name,
+// or "desktop:<Theme>" for an installed freedesktop icon theme
+// (empty → classic).
 func ParseIconSet(s string) IconSetName {
 	s = strings.TrimSpace(s)
+	if strings.HasPrefix(s, SystemIconPrefix) {
+		// A theme directory keeps its own spelling — Breeze_Light and
+		// Papirus-Dark are the names on the disk — so it is checked
+		// rather than sanitized. One that could escape the icon
+		// directories is not a theme and reads as classic.
+		if name := IconSetName(SystemIconPrefix + strings.TrimSpace(strings.TrimPrefix(s, SystemIconPrefix))); IsSystemIconSet(name) {
+			return name
+		}
+		return IconSetClassic
+	}
 	switch s {
 	case "sharp", "Sharp", "geometric":
 		return IconSetSharp
@@ -278,6 +343,8 @@ func IconSizePixels(sz IconSize) float32 {
 // icon size do not change the theme name.
 func (a Appearance) Normalize() Appearance {
 	a.Theme = ParseTheme(string(a.Theme))
+	a.FontUI = NormalizeFontChoice(a.FontUI)
+	a.FontMono = NormalizeFontChoice(a.FontMono)
 	a.Corners = ParseCorners(string(a.Corners))
 	a.Icons = ParseIconSet(string(a.Icons))
 	a.IconSize = ParseIconSize(string(a.IconSize))
@@ -388,12 +455,12 @@ func tokensForAppearance(a Appearance) ThemeTokens {
 		if a.FollowDesktop {
 			tok = withDesktopAccent(tok)
 		}
-		return withEraFonts(tok, pack.Name)
+		return withUserFonts(withEraFonts(tok, pack.Name), a.FontUI, a.FontMono)
 	}
 	if pack, ok := LoadTheme(StarterName(a.Theme)); ok {
-		return pack.Tokens.Resolve()
+		return withUserFonts(pack.Tokens.Resolve(), a.FontUI, a.FontMono)
 	}
-	return ThemeTokens{Family: a.Theme, Palette: paletteForFamily(a.Theme)}.Resolve()
+	return withUserFonts(ThemeTokens{Family: a.Theme, Palette: paletteForFamily(a.Theme)}.Resolve(), a.FontUI, a.FontMono)
 }
 
 func paletteForFamily(t ThemeName) Palette {
@@ -412,7 +479,12 @@ func PreferredLook() LookAndFeel {
 // live look — what a look carries, and only that. The preferences that
 // belong to an application rather than to a look (who draws the frame,
 // where the caption buttons go, reduced motion, the desktop's file dialogs,
-// following the desktop's light / dark mode) come back at their defaults:
+// following the desktop's light / dark mode) come back at their defaults,
+// and so do the two typefaces: a look carries the family it *resolved*
+// to, not whether that family was the user's instruction or the pack's
+// era, and guessing which would put a pinned typeface into an appearance
+// nobody pinned one in. [Application.Appearance] is the whole of it and
+// is what an app that switches packs should start from.
 // app.Application.Appearance is the whole of it, and what an app that
 // switches packs should start from.
 func LookAppearance(l LookAndFeel) Appearance {
@@ -428,6 +500,7 @@ func LookAppearance(l LookAndFeel) Appearance {
 		a.Name = c.Pack()
 		return a.Normalize()
 	}
+	a.FontUI, a.FontMono = "", ""
 	a.Theme = ParseTheme(l.Name())
 	m := l.Metrics()
 	if m.Radius <= 0 && m.RadiusSmall <= 0 {
