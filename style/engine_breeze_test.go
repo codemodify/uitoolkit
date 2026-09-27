@@ -1,3 +1,5 @@
+//go:build theme_engine_all || theme_engine_breeze || theme_engine_breeze6
+
 package style
 
 import (

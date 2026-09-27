@@ -1,3 +1,5 @@
+//go:build theme_engine_all || theme_engine_system7
+
 package style
 
 import "github.com/codemodify/paintengine2d"

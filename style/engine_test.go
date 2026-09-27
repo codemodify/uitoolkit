@@ -10,7 +10,7 @@ import (
 func TestScrollGeometryHorizontalArrowOverride(t *testing.T) {
 	p, ok := LoadTheme("next")
 	if !ok {
-		t.Fatal("next pack missing")
+		t.Skipf("the %q pack is not in this build", "next")
 	}
 	lk := p.Look()
 	view := paintengine2d.XYWH(0, 0, 300, 200)
@@ -56,6 +56,11 @@ func TestDarkAliasesNameTheirOwnPacks(t *testing.T) {
 	for alias, want := range map[string]string{"adwaita-dark": "adwaita-night", "breeze-dark": "breeze-night", "fusion-dark": "fusion-night"} {
 		if got := aliasThemeName(alias); got != want {
 			t.Fatalf("alias %s -> %s, want %s", alias, got, want)
+		}
+		// The alias always resolves; whether it finds a pack depends
+		// on the engine being in this build.
+		if _, ok := LoadTheme(want); !ok {
+			continue
 		}
 		if _, ok := LoadTheme(alias); !ok {
 			t.Fatalf("LoadTheme(%s) found nothing", alias)

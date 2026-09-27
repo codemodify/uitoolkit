@@ -1,4 +1,4 @@
-//go:build !theme_engines_pick || theme_engine_oxygen
+//go:build theme_engine_all || theme_engine_oxygen
 
 package style
 

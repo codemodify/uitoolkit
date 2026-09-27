@@ -1,3 +1,5 @@
+//go:build theme_engine_all || theme_engine_adwaita48
+
 package style
 
 import "github.com/codemodify/paintengine2d"
@@ -37,23 +39,9 @@ func (adwaitaEngine) EngineFor(t ThemeTokens) Engine {
 // adwEraR is GNOME 42–47's design radius r as the look's GNOME draws it:
 // GNOME 48 rounded the 6px controls, rows and menus to 9px and the 12px
 // popovers, dialogs and windows to 15px.
-func adwEraR(l *Classic, r float32) float32 {
-	if l != nil && l.P("era", 0) >= 48 {
-		switch r {
-		case 6:
-			return 9
-		case 12:
-			return 15
-		}
-	}
-	return r
-}
 
 // adwCardR is the 12px corner of cards, boxed lists and frames, which GNOME
 // 48 kept, for a shape of size b.
-func adwCardR(l *Classic, b paintengine2d.Rect) float32 {
-	return min(l.rx(12), adwPill(l, b))
-}
 
 // adw48Shadows are libadwaita 1.10's box-shadows as DropShadow layers (a CSS
 // blur radius fades over twice its length): popovers a 1px ring of black at

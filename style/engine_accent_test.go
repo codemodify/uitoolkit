@@ -1,4 +1,4 @@
-//go:build !theme_engines_pick
+//go:build theme_engine_all || theme_engine_macos_tahoe
 
 package style
 

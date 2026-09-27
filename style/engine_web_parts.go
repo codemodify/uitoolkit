@@ -1,3 +1,5 @@
+//go:build theme_engine_all || theme_engine_web
+
 package style
 
 import (
@@ -456,7 +458,6 @@ func (e webEngine) DrawScrollBar(l *Classic, ctx *paintengine2d.Context, track, 
 // ---- frames -------------------------------------------------------------------------------------
 
 // webHeadH is the band a group's heading takes above its card.
-func webHeadH(l *Classic) float32 { return snap(l.BoldFont().Height() + l.S(8)) }
 
 // GroupBoxInsets: a titled group is a heading above a card (an island with
 // its heading inside where the look has them).

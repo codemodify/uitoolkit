@@ -1,4 +1,4 @@
-//go:build !theme_engines_pick || theme_engine_bluecurve
+//go:build theme_engine_all || theme_engine_bluecurve
 
 package style
 
@@ -12,7 +12,7 @@ func TestBluecurvePackRegistered(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	p, ok := LoadTheme("bluecurve")
 	if !ok {
-		t.Fatal("bluecurve not registered")
+		t.Skipf("the %q pack is not in this build", "bluecurve")
 	}
 	if p.Tokens.Engine != "bluecurve" || p.Label != "Bluecurve" || p.Lineage != "Red Hat" || p.Year != 2002 || p.Summary == "" {
 		t.Fatalf("bluecurve: engine %q label %q lineage %q year %d", p.Tokens.Engine, p.Label, p.Lineage, p.Year)

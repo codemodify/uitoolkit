@@ -1,3 +1,5 @@
+//go:build theme_engine_all || theme_engine_system7
+
 package style
 
 import (
@@ -43,14 +45,6 @@ func retroCheckPacks(t *testing.T, engine string, packs []retroPack) {
 }
 
 // retroLook is pack name at a display scale.
-func retroLook(t *testing.T, name string, scale float32) *Classic {
-	t.Helper()
-	p, ok := LoadTheme(name)
-	if !ok {
-		t.Fatalf("missing %s", name)
-	}
-	return WithScale(p.Look(), scale).(*Classic)
-}
 
 // retroNear reports whether pixel (x, y) is within 40 of want per channel.
 func retroNear(img *paintengine2d.Image, x, y int, want paintengine2d.Color) bool {

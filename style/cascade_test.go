@@ -54,11 +54,13 @@ func TestThemeOverrideOnAppearance(t *testing.T) {
 }
 
 func TestThemedKeepsScaleAndDensity(t *testing.T) {
+	needEngine(t, "luna")
 	pack, ok := LoadTheme("luna")
 	if !ok {
-		t.Fatal("luna")
+		t.Skipf("the %q pack is not in this build", "luna")
 	}
 	base := WithDensity(WithScale(pack.Look(), 2), DensityCompact).(*Classic)
+	needEngine(t, "aqua")
 	got, ok := Themed(base, ThemeOverride{Pack: "aqua"}).(*Classic)
 	if !ok {
 		t.Fatalf("%T", got)

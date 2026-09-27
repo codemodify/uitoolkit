@@ -1,3 +1,5 @@
+//go:build theme_engine_all || theme_engine_adwaita48
+
 package style
 
 import (

@@ -30,7 +30,10 @@ func tourWindow(t *testing.T, pack string, scale float32, page int) (*app.Applic
 	if p, ok := style.LoadTheme(pack); ok {
 		look = p.Look()
 	} else if pack != "" {
-		t.Fatalf("unknown pack %q", pack)
+		// The tour is a sample: it shows the engines this build has,
+		// and a test named after one that was left out has nothing to
+		// look at (docs/engines.md).
+		t.Skipf("the %q pack is not in this build", pack)
 	}
 	a := uitoolkit.New(uitoolkit.Options{
 		Look: look, Headless: true, Scale: scale, DisableLookWatch: true,

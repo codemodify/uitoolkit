@@ -1,3 +1,5 @@
+//go:build theme_engine_all || theme_engine_breeze6
+
 package style
 
 import "github.com/codemodify/paintengine2d"
@@ -63,133 +65,33 @@ func (breeze6Engine) DefaultMetrics() ChromeMetrics {
 // frame contrast for every outline, the highlight at 0.3 for pressed
 // buttons and checked boxes (over the button colour), at 0.7 for slider and
 // progress values.
-func breeze6Mixes(c *breeze) {
-	const contrast = 0.2
-	c.frameR = 4.5
-	c.outline = Mix(c.win, c.text, contrast)
-	c.sep = c.outline
-	c.btnOutline = Mix(c.btn, c.btnText, contrast)
-	c.btnDown = Mix(c.btn, c.hl, 0.3)
-	c.btnDef = Mix(c.btn, c.hl, 0.2)
-	c.btnDefLine = Mix(c.hl, c.btnOutline, 0.5)
-	c.chkLine = c.outline
-	c.chkOn = Mix(c.btn, c.hl, 0.3)
-	c.chkOnDown = darkerPct(c.chkOn, 110)
-	c.chkDown = darkerPct(c.btn, 110)
-	c.hlGrooveFill = Mix(c.win, c.hl, 0.7)
-	c.progFill = Mix(c.win, c.hl, 0.7)
-}
 
 // ---- shapes -------------------------------------------------------------------------------------
 
 // breeze6Margin is the room buttons, fields and combos keep round their face
 // for the focus band: 2px.
-func breeze6Margin(l *Classic) float32 { return 2 * brU(l) }
 
 // b6R is the 5px corner of Plasma 6's rows, tabs and window frames.
-func b6R(l *Classic) float32 { return l.rx(5) }
 
 // band paints Plasma 6's keyboard focus: a 2px band of the highlight at 0.3
 // hugging the outside of face (the frame's 5px corner inside, 7px outside).
-func (c *breeze) band(l *Classic, ctx *paintengine2d.Context, face paintengine2d.Rect) {
-	w := breeze6Margin(l)
-	r := float32(0)
-	if !l.square() {
-		r = brR(l) + brU(l)*0.5
-	}
-	webBand(ctx, face.Inset(-w), r+w, face, r, c.hl.WithAlpha(0.3))
-}
 
 // button6 is a Plasma 6 push button inside b: 2px in (the focus band's
 // room), the button colour in its outline over a one-pixel shadow; hover and
 // focus turn the outline to the highlight, a press fills it with the
 // highlight at 0.3, the default button with a fifth; keyboard focus adds the
 // band.
-func (c *breeze) button6(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, def bool) {
-	u := brU(l)
-	sb := b.Inset(breeze6Margin(l))
-	room := true
-	if sb.Dx() < 3*u || sb.Dy() < 3*u {
-		sb, room = b.Inset(u), false
-		if sb.Dx() < 3*u || sb.Dy() < 3*u {
-			return
-		}
-	}
-	r := brR(l)
-	enabled := !st.Disabled()
-	down := enabled && st.Pressed()
-	checked := st.Toggle() && st.Checked()
-	bg, pen := c.btn, c.btnOutline
-	switch {
-	case down:
-		bg = c.btnDown
-	case checked:
-		bg = c.btnChecked
-	case def && enabled:
-		bg, pen = c.btnDef, c.btnDefLine
-	case !enabled:
-		bg = c.btnDis
-	}
-	if enabled && (st.Hovered() || st.Focused() || down) {
-		pen = c.hl
-	}
-	if enabled && !down && !checked {
-		// The shadow: the outline ring half a pixel lower.
-		ctx.DrawRoundRect(paintengine2d.XYWH(sb.Min.X+u*0.5, sb.Min.Y+u, sb.Dx()-u, sb.Dy()-u*0.5), r, r, paintengine2d.StrokePaint(c.shadow, u))
-	}
-	in := sb.Inset(u * 0.5)
-	ctx.DrawRoundRect(in, r, r, paintengine2d.Fill(bg))
-	ctx.DrawRoundRect(in, r, r, paintengine2d.StrokePaint(pen, u))
-	if enabled && st.Focused() && room {
-		c.band(l, ctx, sb)
-	}
-}
+
+// The shadow: the outline ring half a pixel lower.
 
 // field6 is a Plasma 6 text field inside b: the view colour in the frame
 // outline 2px in; the hover colour's outline under the pointer, the focus
 // colour's and the band while focused.
-func (c *breeze) field6(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState) {
-	u := brU(l)
-	fill, line := c.base, c.outline
-	switch {
-	case st.Disabled():
-		fill = c.disField
-	case st.Focused():
-		line = c.focus
-	case st.Hovered():
-		line = c.hover
-	}
-	f := b.Inset(u) // frame insets a pixel more for its outline
-	if f.Dx() < 6*u || f.Dy() < 6*u {
-		c.frame(l, ctx, b, fill, line)
-		return
-	}
-	c.frame(l, ctx, f, fill, line)
-	if st.Focused() && !st.Disabled() {
-		c.band(l, ctx, b.Inset(breeze6Margin(l)))
-	}
-}
+
+// frame insets a pixel more for its outline
 
 // breeze6Box fills box rounded (tl, tr, br, bl) and rings it with a u-wide
 // outline just inside its edge.
-func breeze6Box(ctx *paintengine2d.Context, box paintengine2d.Rect, rad [4]float32, u float32, fill, line paintengine2d.Color) {
-	if box.Dx() < 2*u || box.Dy() < 2*u {
-		return
-	}
-	lim := min(box.Dx(), box.Dy()) * 0.5
-	for i := range rad {
-		rad[i] = min(rad[i], lim)
-	}
-	if fill.A > 0 {
-		ctx.DrawPath(RoundRectPath(box, rad[0], rad[1], rad[2], rad[3]), paintengine2d.Fill(fill))
-	}
-	if line.A > 0 {
-		p := paintengine2d.NewPath()
-		winAddRoundRect(p, box, rad[0], rad[1], rad[2], rad[3])
-		winAddRoundRect(p, box.Inset(u), max(rad[0]-u, 0), max(rad[1]-u, 0), max(rad[2]-u, 0), max(rad[3]-u, 0))
-		ctx.DrawPath(p, paintengine2d.Paint{Color: line, Style: paintengine2d.StyleFill, FillRule: paintengine2d.FillEvenOdd})
-	}
-}
 
 // rowBox6 is where a Plasma 6 row's highlight paints inside the row b: 2px
 // in from the sides, 1px from the top and bottom (the item margins).
@@ -207,32 +109,6 @@ func rowBox6(l *Classic, b paintengine2d.Rect) paintengine2d.Rect {
 // the text (the scheme's inactive selection in an inactive window), lighter
 // under the pointer; the highlight at 0.3 in a half-strength outline under
 // the pointer. KDE keeps a selection when only the view loses focus.
-func (c *breeze) row6(l *Classic, ctx *paintengine2d.Context, box paintengine2d.Rect, st ControlState) paintengine2d.Color {
-	u := brU(l)
-	r := b6R(l)
-	rad := [4]float32{r, r, r, r}
-	hot := st.Hovered() && !st.Disabled()
-	switch {
-	case st.Checked():
-		fill, fg := c.hl, c.hlText
-		switch {
-		case st.Disabled():
-			fill = c.hlDis
-		case st.Backdrop():
-			fill, fg = c.hlOff, c.hlOffText
-		case hot:
-			fill = lighterPct(c.hl, 110)
-		}
-		breeze6Box(ctx, box, rad, u, fill, Mix(fill, c.viewText, 0.15))
-		return fg
-	case hot:
-		breeze6Box(ctx, box, rad, u, c.hl.WithAlpha(0.3), c.hl.WithAlpha(0.5))
-	}
-	if st.Disabled() {
-		return c.dis
-	}
-	return c.viewText
-}
 
 // ---- parts --------------------------------------------------------------------------------------
 

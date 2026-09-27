@@ -777,7 +777,7 @@ The Theme Atlas crops the preview panel out of `uitoolkit-settings -stage ID
 default look applied, the panel is the same rectangle in every pack:
 
 ```
-x 317, y 108, 697 × 663       crop box (317, 108) – (1014, 771)
+x 317, y 114, 697 × 649       crop box (317, 114) – (1014, 763)
 ```
 
 `TestSettingsPreviewPanelKeepsItsPlace` pins those numbers; a layout
@@ -822,7 +822,9 @@ Four of those 34 are the difference: the panel is 651 tall where it was
 them.** Between them they put 199 px more into the folding row, and the
 row folded onto the same two lines at 1024×860 because its order changed
 with them (see *The fold*): the same 56 px over the panel, the same
-`697x651+317+74`.
+`697x651+317+74`, and `697x663+317+108` until the default look became
+Neumorphism, whose taller controls pushed the row of settings down and
+shortened the preview under it: `697x649+317+114`.
 
 **Reordering the settings gave 30 px back.** The renderer moved up to
 stand with the four options, which fit one line at this width, and the

@@ -1,3 +1,5 @@
+//go:build theme_engine_all || theme_engine_flatlaf
+
 package style
 
 import (
@@ -257,17 +259,6 @@ func flatPx(l *Classic) float32 {
 
 // flatSnap puts b on whole pixels; edges round half down, so the rect never
 // covers a pixel whose centre lies outside b.
-func flatSnap(b paintengine2d.Rect) paintengine2d.Rect {
-	f := func(v float32) float32 { return float32(math.Ceil(float64(v) - 0.5 - 1e-3)) }
-	x0, y0, x1, y1 := f(b.Min.X), f(b.Min.Y), f(b.Max.X), f(b.Max.Y)
-	if x1 < x0 {
-		x1 = x0
-	}
-	if y1 < y0 {
-		y1 = y0
-	}
-	return paintengine2d.Rect{Min: paintengine2d.Pt(x0, y0), Max: paintengine2d.Pt(x1, y1)}
-}
 
 // flatRing fills the lw-wide band just inside the round rect b.
 func flatRing(ctx *paintengine2d.Context, b paintengine2d.Rect, r, lw float32, col paintengine2d.Color) {
@@ -287,9 +278,6 @@ func flatRing(ctx *paintengine2d.Context, b paintengine2d.Rect, r, lw float32, c
 }
 
 // flatCentered is a w×h rect centred in b, on whole pixels.
-func flatCentered(b paintengine2d.Rect, w, h float32) paintengine2d.Rect {
-	return flatSnap(paintengine2d.XYWH((b.Min.X+b.Max.X-w)*0.5, (b.Min.Y+b.Max.Y-h)*0.5, w, h))
-}
 
 // face is a bordered component's visible body inside its rect: Darcula
 // keeps a transparent margin for its outer focus ring.
@@ -1635,67 +1623,7 @@ func flatChrome(tok *ThemeTokens, h func(string) paintengine2d.Color) {
 // operations in HSL (hue in degrees, saturation and lightness in percent),
 // each rounding its result to 8-bit channels as java.awt.Color does.
 
-func flat8(v float64) float32 { return float32(math.Floor(math.Min(1, math.Max(0, v))*255+0.5)) / 255 }
-
-func flatHSL(c paintengine2d.Color) (h, s, l float64) {
-	r, g, b := float64(c.R), float64(c.G), float64(c.B)
-	mx, mn := math.Max(r, math.Max(g, b)), math.Min(r, math.Min(g, b))
-	l = (mx + mn) / 2
-	if mx == mn {
-		return 0, 0, l * 100
-	}
-	d := mx - mn
-	if l > 0.5 {
-		s = d / (2 - mx - mn)
-	} else {
-		s = d / (mx + mn)
-	}
-	switch mx {
-	case r:
-		h = (g - b) / d
-		if g < b {
-			h += 6
-		}
-	case g:
-		h = (b-r)/d + 2
-	default:
-		h = (r-g)/d + 4
-	}
-	return h * 60, s * 100, l * 100
-}
-
-func flatFromHSL(h, s, l float64, a float32) paintengine2d.Color {
-	h = math.Mod(math.Mod(h, 360)+360, 360) / 360
-	s, l = math.Min(100, math.Max(0, s))/100, math.Min(100, math.Max(0, l))/100
-	if s == 0 {
-		v := flat8(l)
-		return paintengine2d.RGBA(v, v, v, a)
-	}
-	q := l + s - l*s
-	if l < 0.5 {
-		q = l * (1 + s)
-	}
-	p := 2*l - q
-	ch := func(t float64) float32 {
-		t = math.Mod(t+1, 1)
-		switch {
-		case t < 1.0/6:
-			return flat8(p + (q-p)*6*t)
-		case t < 0.5:
-			return flat8(q)
-		case t < 2.0/3:
-			return flat8(p + (q-p)*(2.0/3-t)*6)
-		}
-		return flat8(p)
-	}
-	return paintengine2d.RGBA(ch(h+1.0/3), ch(h), ch(h-1.0/3), a)
-}
-
 // flatLighten is lighten(c, pct) (darken with a negative pct).
-func flatLighten(c paintengine2d.Color, pct float64) paintengine2d.Color {
-	h, s, l := flatHSL(c)
-	return flatFromHSL(h, s, l+pct, c.A)
-}
 
 func flatSaturate(c paintengine2d.Color, pct float64) paintengine2d.Color {
 	h, s, l := flatHSL(c)

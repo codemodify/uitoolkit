@@ -1,3 +1,5 @@
+//go:build theme_engine_all || theme_engine_system7
+
 package style
 
 import "github.com/codemodify/paintengine2d"
@@ -167,24 +169,6 @@ func (c *s7) greyOut(l *Classic, ctx *paintengine2d.Context, r paintengine2d.Rec
 }
 
 // rpTextBox is the box drawFittedText (pad 0) puts text in inside b.
-func rpTextBox(f *Font, text string, b paintengine2d.Rect, align Align) paintengine2d.Rect {
-	if f == nil || text == "" {
-		return paintengine2d.Rect{}
-	}
-	tw := f.Advance(text)
-	if tw > b.Dx() {
-		tw = b.Dx()
-	}
-	th := f.Height()
-	x := b.Min.X
-	switch align {
-	case AlignCenter:
-		x = b.Min.X + (b.Dx()-tw)*0.5
-	case AlignEnd:
-		x = b.Max.X - tw - 2
-	}
-	return paintengine2d.XYWH(x, b.Min.Y+(b.Dy()-th)*0.5, tw, th)
-}
 
 // s7radius is the corner of a button body h cells tall: a quarter of its
 // height (five on the Mac's 20-pixel buttons, which cut 3, 1, 1, 0).
@@ -243,38 +227,11 @@ func s7arrowMask(w int, filled bool) rpMask {
 
 // s7tri is a filled triangle of base w cells pointing dir: rows of w, w-2
 // … 1 cells (the pop-up menu's 11 × 6 triangle, hierarchical marks).
-func s7tri(w int, dir Direction) rpMask {
-	if w%2 == 0 {
-		w--
-	}
-	if w < 3 {
-		w = 3
-	}
-	h := (w + 1) / 2
-	m := rpNewMask(w, h)
-	for i := 0; i < h; i++ {
-		m.span(i, w-i, i)
-	}
-	switch dir { // drawn pointing down
-	case DirUp:
-		return m.turn(DirDown)
-	case DirLeft, DirRight:
-		return m.turn(DirDown).turn(dir)
-	}
-	return m
-}
+
+// drawn pointing down
 
 // s7check is the menu check mark in an n-cell box: a short stroke down to
 // the right and a long one up to the top right, two cells thick.
-func s7check(n int) rpMask {
-	m := rpNewMask(n, n)
-	bx, by := n*3/10, n*8/10
-	m.line(1, by-bx+1, bx, by)
-	m.line(2, by-bx+1, bx+1, by)
-	m.line(bx, by, n-2, 1)
-	m.line(bx+1, by, n-1, 1)
-	return m
-}
 
 // ---- parts --------------------------------------------------------------------
 
@@ -556,27 +513,6 @@ func (system7Engine) ScrollBarStyle(l *Classic) ScrollBarStyle {
 // The Mac's scroll box, Windows 3.1's thumb and OPEN LOOK's elevator never
 // changed size; the thumb the toolkit hit-tests is the proportional one,
 // which always contains the box.
-func rpBoxAt(track, thumb paintengine2d.Rect, vertical bool, g rpGrid, n, overlap int) (int, bool) {
-	if thumb.Empty() {
-		return 0, false
-	}
-	var t0, tl, th0, thl, o float32
-	if vertical {
-		t0, tl, th0, thl, o = track.Min.Y, track.Dy(), thumb.Min.Y, thumb.Dy(), g.y
-	} else {
-		t0, tl, th0, thl, o = track.Min.X, track.Dx(), thumb.Min.X, thumb.Dx(), g.x
-	}
-	f := float32(0)
-	if free := tl - thl; free > 0.5 {
-		f = clamp1((th0 - t0) / free)
-	}
-	a := int((t0-o)/g.u+0.5) - overlap
-	span := int(tl/g.u+0.5) + 2*overlap - n
-	if span < 0 {
-		return 0, false
-	}
-	return a + int(f*float32(span)+0.5), true
-}
 
 func (e system7Engine) DrawScrollBarParts(l *Classic, ctx *paintengine2d.Context, p ScrollParts, vertical bool, st ScrollState) {
 	c := s7colors(l)

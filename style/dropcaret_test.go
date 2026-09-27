@@ -53,6 +53,7 @@ func TestDropCaretLookIsAsked(t *testing.T) {
 // The caret is a whole number of device pixels thick, centred on the gap
 // and snapped to the pixel grid, at every scale a display can have.
 func TestDropCaretRectSnapsToWholePixels(t *testing.T) {
+	needEngine(t, "breeze")
 	for _, scale := range []float32{1, 1.25, 1.5, 1.75, 2} {
 		lk := themePack(t, "breeze").Look().setScale(scale)
 		w := DropCaretThickness(lk)

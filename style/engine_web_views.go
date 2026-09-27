@@ -1,3 +1,5 @@
+//go:build theme_engine_all || theme_engine_web
+
 package style
 
 import (
@@ -727,8 +729,6 @@ func (webEngine) DrawMessageIcon(l *Classic, ctx *paintengine2d.Context, b paint
 // SystemAccentColorLight1 and Dark1, which SourceGit's accent buttons use
 // under the pointer and pressed): the accent's HSL lightness moved up 39 and
 // down 28.5 of 255.
-func webLight1(c paintengine2d.Color) paintengine2d.Color { return flatLighten(c, 39.0/255*100) }
-func webDark1(c paintengine2d.Color) paintengine2d.Color  { return flatLighten(c, -28.5/255*100) }
 
 // webSameRGB reports two colours with the same channels (any alpha).
 func webSameRGB(a, b paintengine2d.Color) bool {
@@ -771,10 +771,3 @@ func (webEngine) Accented(tok ThemeTokens, accent paintengine2d.Color) ThemeToke
 }
 
 // webChrome sets the chrome states the base painters read from the palette.
-func webChrome(tok *ThemeTokens) {
-	p := tok.Palette
-	tok.Hot = ChromeState{Fill: p.MenuHover, Border: p.MenuHoverBorder}
-	tok.Pressed = ChromeState{Fill: Mix(p.MenuHover, p.Text, 0.06), Border: p.Accent}
-	tok.Selected = ChromeState{Fill: webOver(p.Field, p.Selection), Border: p.Accent}
-	tok.Focus = ChromeState{Fill: p.Field, Border: p.Focus}
-}

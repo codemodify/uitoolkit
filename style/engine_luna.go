@@ -1,7 +1,8 @@
+//go:build theme_engine_all || theme_engine_luna
+
 package style
 
 import (
-	"math"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -1507,25 +1508,6 @@ var (
 
 // lunaCross fills the caption × (CloseGlyph.bmp): two bars w thick from
 // corner to corner of b, as quads so the ends stay flat and whole.
-func lunaCross(ctx *paintengine2d.Context, b paintengine2d.Rect, col paintengine2d.Color, w float32) {
-	if b.Empty() || w <= 0 {
-		return
-	}
-	fill := paintengine2d.Fill(col)
-	for _, d := range [2][4]float32{{b.Min.X, b.Min.Y, b.Max.X, b.Max.Y}, {b.Max.X, b.Min.Y, b.Min.X, b.Max.Y}} {
-		x0, y0, x1, y1 := d[0], d[1], d[2], d[3]
-		dx, dy := x1-x0, y1-y0
-		n := float32(math.Sqrt(float64(dx*dx + dy*dy)))
-		nx, ny := -dy/n*w*0.5, dx/n*w*0.5
-		p := paintengine2d.NewPath()
-		p.MoveTo(x0+nx, y0+ny)
-		p.LineTo(x1+nx, y1+ny)
-		p.LineTo(x1-nx, y1-ny)
-		p.LineTo(x0-nx, y0-ny)
-		p.Close()
-		ctx.DrawPath(p, fill)
-	}
-}
 
 // ---- controls ---------------------------------------------------------------------
 

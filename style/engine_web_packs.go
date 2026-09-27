@@ -1,3 +1,5 @@
+//go:build theme_engine_all || theme_engine_web
+
 package style
 
 import (
@@ -12,22 +14,8 @@ import (
 
 // webSpec is one web pack: its identity, colours (the engine's keys), params
 // and metrics in the pack's own pixels.
-type webSpec struct {
-	name, label, era, lineage, summary string
-	year                               int
-	dark                               bool
-	c                                  map[string]string
-	p                                  map[string]float32
-	m                                  ChromeMetrics
-}
 
 // webWith is base with over's entries on top.
-func webWith[V any](base, over map[string]V) map[string]V {
-	out := make(map[string]V, len(base)+len(over))
-	maps.Copy(out, base)
-	maps.Copy(out, over)
-	return out
-}
 
 // webHex formats a derived colour for a pack table.
 func webHex(c paintengine2d.Color) string { return colorHexPadded(c) }

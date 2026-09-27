@@ -20,10 +20,37 @@ import (
 var starterFS embed.FS
 
 // DefaultThemeName is the look apps show until the user picks one, and
-// what an unusable look.json theme falls back to: Swing's Metal in its
-// Ocean theme, Java's default since 2004. The embedded "dark" and "light"
-// packs stay the palette starters (see [StarterName]).
-const DefaultThemeName = "metal-ocean"
+// what an unusable look.json theme falls back to: Neumorphism, the
+// toolkit's default engine. The embedded "dark" and "light" packs stay
+// the palette starters (see [StarterName]).
+//
+// It is the *preferred* default rather than a guaranteed one. Engines are
+// chosen at build time (docs/engines.md), and a build that names its own
+// engines does not carry this one — so read the default through
+// [DefaultTheme], which falls back to a pack the build actually has.
+const DefaultThemeName = "neumorphism"
+
+// DefaultTheme is the name of the look to show until the user picks one:
+// [DefaultThemeName] where this build has it, and otherwise the first
+// pack the built engines registered. It is never a name that does not
+// resolve, which a constant on its own cannot promise once engines are
+// opt-in.
+// It reads the registry directly rather than through [LoadTheme]:
+// LoadTheme falls back to the default for a name it cannot use, so going
+// that way is a cycle, and one that only appears once the default engine
+// is absent.
+func DefaultTheme() string {
+	names := builtinEraOrder()
+	for _, n := range names {
+		if n == DefaultThemeName {
+			return DefaultThemeName
+		}
+	}
+	if len(names) > 0 {
+		return names[0]
+	}
+	return DefaultThemeName
+}
 
 // ThemeSource says whether a pack is compiled in or loaded from disk.
 type ThemeSource string
@@ -103,7 +130,7 @@ func StarterName(theme ThemeName) string {
 func SplitLookThemeName(name string) (pack string, corners CornerStyle, hasCorners bool) {
 	name = strings.ToLower(strings.TrimSpace(name))
 	if name == "" {
-		return DefaultThemeName, CornersRound, false
+		return DefaultTheme(), CornersRound, false
 	}
 	parts := strings.Split(name, "-")
 	if len(parts) >= 1 && (parts[0] == "dark" || parts[0] == "light") {
@@ -123,7 +150,7 @@ func SplitLookThemeName(name string) (pack string, corners CornerStyle, hasCorne
 func CanonicalStarterName(name string) string {
 	pack, _, _ := SplitLookThemeName(name)
 	if pack == "" {
-		return DefaultThemeName
+		return DefaultTheme()
 	}
 	return pack
 }
@@ -414,6 +441,17 @@ func loadEmbedded() map[string]ThemePack {
 			pack, err := parseThemeFile(name, b, ThemeSourceBuiltin)
 			if err != nil {
 				return nil
+			}
+			// A data theme names its engine by string, and an
+			// engine is only in the build if it was asked for
+			// (docs/engines.md). Offering a theme whose engine is
+			// missing means offering one the base engine will
+			// paint wrong, so it is left out rather than shown
+			// broken.
+			if e := pack.Tokens.Engine; e != "" {
+				if _, ok := EngineByID(e); !ok {
+					return nil
+				}
 			}
 			if _, exists := embeddedPack[name]; !exists {
 				embeddedPack[name] = pack

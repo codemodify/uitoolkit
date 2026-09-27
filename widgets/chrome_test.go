@@ -489,7 +489,7 @@ func TestTabBarSelectedTabPaintsLastWithOutset(t *testing.T) {
 	bar.Selected = 1
 	p, ok := style.LoadTheme("win95")
 	if !ok {
-		t.Fatal("win95 pack missing")
+		t.Skipf("the %q pack is not in this build", "win95")
 	}
 	lk := p.Look()
 	rec := &tabStateLook{LookAndFeel: lk}

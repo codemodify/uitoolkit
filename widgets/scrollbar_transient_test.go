@@ -61,7 +61,7 @@ var _ widget.Timers = (*timerHost)(nil)
 func TestTransientScrollBarComesAndGoes(t *testing.T) {
 	pack, ok := style.LoadTheme("adwaita")
 	if !ok {
-		t.Fatal("no adwaita pack")
+		t.Skipf("the %q pack is not in this build", "adwaita")
 	}
 	h := &timerHost{look: pack.Look(), now: time.Unix(1000, 0)}
 	defer func(old func() time.Time) { scrollNow = old }(scrollNow)

@@ -1,3 +1,5 @@
+//go:build theme_engine_all || theme_engine_clearlooks || theme_engine_bluecurve
+
 package style
 
 import "github.com/codemodify/paintengine2d"

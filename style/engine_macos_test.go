@@ -1,3 +1,5 @@
+//go:build theme_engine_all || theme_engine_macos || theme_engine_macos_tahoe
+
 package style
 
 import (
@@ -7,21 +9,6 @@ import (
 
 	"github.com/codemodify/paintengine2d"
 )
-
-var macosPackNames = []string{"yosemite", "bigsur", "bigsur-night"}
-
-func macLook(t *testing.T, name string, scale float32) *Classic {
-	t.Helper()
-	p, ok := LoadTheme(name)
-	if !ok {
-		t.Fatalf("pack %q not found", name)
-	}
-	var lk LookAndFeel = p.Look()
-	if scale != 1 {
-		lk = WithScale(lk, scale)
-	}
-	return lk.(*Classic)
-}
 
 func TestMacOSPacksRegisteredInYearOrder(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())

@@ -1,3 +1,5 @@
+//go:build theme_engine_all
+
 package style
 
 import (
