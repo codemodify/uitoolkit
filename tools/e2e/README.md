@@ -20,9 +20,21 @@ own Wayland socket `uitk-e2e-N`, own Xwayland (display number in `N/display`), o
     ./stop.sh N                  # stop app + compositor when done
     ./theme-tour.sh N [PACK...]  # gallery in every pack on the GPU + the same pack on the CPU, in pairs
     ./frame-switch.sh N [BACKEND [PACK]]  # Settings' OS borders hands the frame over, live, both ways
+    ./resize-tear.sh N BIN [PASSES]  # drag an edge and score every frame for a torn window
 
 - `crop.py` decodes any PNG (every filter type, palette, 16-bit, Adam7), so it
   reads the toolkit's own `WritePNG` stills as well as KWin's; python3 only.
+- `resize-tear.sh` is the regression guard for a window shown from a paint
+  target a resize reallocated and nothing painted into: it drags the right
+  edge in and out, shoots through each drag, and scores the frames with
+  `tear.py` (recycled video memory is a lattice of dashes, zeroed pages are
+  black where the UI is light), exiting non-zero if any frame is torn. It
+  needs a real compositor and a real EGL device, so it cannot be a `go test`.
+  Run it on the GPU (`UITK_PAINT=gpu`), on the CPU, and on X11
+  (`UITK_BACKEND=x11`); a fractional scale on the output makes the
+  compositor send a configure for nearly every step of the drag, which is
+  the worst case:
+  `WAYLAND_DISPLAY=uitk-e2e-N DBUS_SESSION_BUS_ADDRESS=$(cat N/bus.addr) kscreen-doctor output.Virtual-0.scale.1.75`
 - The first window is placed at the same spot every time if it is the only window.
 - The injector releases every key it holds when it exits: to screenshot with a
   key held (Alt for mnemonic underlines), run `./in.sh N key+ 56 sleep 2500 key- 56 &`

@@ -1467,6 +1467,15 @@ type wlSurface struct {
 	// flash, so Present skips it and lets the resize event drive a
 	// repaint first.
 	blank bool
+	// gpuUnpainted is the same rule for the GPU target, which needs one
+	// of its own because there are no pixels to look at. A resized
+	// GPUDevice allocates a new colour texture with no contents
+	// (glTexImage2D, nil pixels), so until the application has painted a
+	// frame into it the target holds whatever that video memory held
+	// before — an older, differently strided image, which presents as
+	// the dense vertical dashes of a stride mismatch. Present refuses to
+	// swap while this is set.
+	gpuUnpainted bool
 	// mapped is true once a buffer has been committed against the
 	// current xdg role. Hide/Show must clear it (and detach) or
 	// re-creating the role is a protocol error.
@@ -2199,10 +2208,27 @@ func (s *wlSurface) setBuffer(bw, bh int) {
 		s.img = nil
 		s.resizeGPU(bw, bh)
 		if s.gpu != nil {
+			s.noteGPUTargetAllocated()
 			return
 		}
 	}
 	s.img = paintengine2d.NewImage(bw, bh)
+}
+
+// noteGPUTargetAllocated arms the rule below: the device just made a new
+// colour texture, and nothing has been drawn at that size yet.
+func (s *wlSurface) noteGPUTargetAllocated() { s.gpuUnpainted = true }
+
+// notePainted records what a present carries. A present the application
+// made after painting (flushOnly false) leaves a frame in the target as it
+// stands; a flushOnly present drew nothing, so it cannot make a
+// reallocated target showable. The caller runs this before the resize
+// check, so a reallocation in the same present arms the flag again: that
+// paint went into the target the resize replaced.
+func (s *wlSurface) notePainted(flushOnly bool) {
+	if !flushOnly {
+		s.gpuUnpainted = false
+	}
 }
 
 // marginLogical is the frame's margin in logical pixels — what the
@@ -2309,6 +2335,7 @@ func (s *wlSurface) present(dirty []paintengine2d.Rect, flushOnly bool) error {
 	if !s.configured {
 		return nil
 	}
+	s.notePainted(flushOnly)
 	if s.wantW > 0 {
 		s.logicalW = s.wantW
 	}
@@ -2331,12 +2358,23 @@ func (s *wlSurface) present(dirty []paintengine2d.Rect, flushOnly bool) error {
 	if s.blank {
 		// One frame only: the resize event queued above makes the app
 		// repaint, and committing the empty pixmap in the meantime
-		// flashes black over the window. The GPU path draws into its
-		// own surface, so it is not affected.
+		// flashes black over the window.
 		s.blank = false
 		if s.gpu == nil && !s.imgPainted() {
 			return nil
 		}
+	}
+	if s.gpu != nil && s.gpuUnpainted {
+		// The GPU target was reallocated since the last frame was
+		// painted — by the resize above, or by one the application has
+		// not answered yet. Swapping it now hands the compositor a
+		// texture full of recycled video memory, which is the garbage a
+		// dragged window dissolves into. Keep the damage and let the
+		// resize event drive the repaint: until it lands the compositor
+		// goes on showing the last good buffer, which is a window one
+		// step behind the pointer rather than a broken one.
+		s.deferDamage(nil)
+		return nil
 	}
 	surfW, surfH := s.surfaceLogical()
 	if s.frac > 1 && s.viewport != nil {

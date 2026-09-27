@@ -67,6 +67,9 @@ func (s *wlSurface) tryBindGPU() {
 	s.eglWin = unsafe.Pointer(win)
 	s.gpu = dev
 	s.gpuAlpha = s.frame.Alpha
+	// A device's first colour target is as undefined as a resized one:
+	// nothing may be swapped out of it before a frame is painted in.
+	s.gpuUnpainted = true
 	// The buffer is this size now: a configure that arrived since the
 	// surface was made (configure_bounds, a compositor's size) changed it,
 	// and a present that thought otherwise never resized the EGL window.
@@ -103,6 +106,7 @@ func (s *wlSurface) closeGPU() {
 	if s == nil {
 		return
 	}
+	s.gpuUnpainted = false
 	if s.gpu != nil {
 		_ = s.gpu.Close()
 		s.gpu = nil
