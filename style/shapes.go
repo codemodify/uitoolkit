@@ -2,9 +2,25 @@ package style
 
 import (
 	"math"
+	"sync"
 
 	"github.com/codemodify/paintengine2d"
 )
+
+// shapePaths recycles the paths these helpers gather rects into. A path
+// keeps its capacity across paints, so a focus ring or a panel of bumps
+// is rebuilt every frame without allocating. Nothing keeps the path: a
+// recorder snapshots it and a device consumes it during the draw call,
+// which is what the KDE 3 and pixel engines rely on for their own pools.
+var shapePaths = sync.Pool{New: func() any { return paintengine2d.NewPath() }}
+
+func borrowPath() *paintengine2d.Path {
+	p := shapePaths.Get().(*paintengine2d.Path)
+	p.Reset()
+	return p
+}
+
+func returnPath(p *paintengine2d.Path) { shapePaths.Put(p) }
 
 // Shape helpers shared by the theme engines. They are deliberately small
 // and literal — each one is a drawing idiom that several eras used — so an
@@ -188,7 +204,8 @@ func DottedRect(ctx *paintengine2d.Context, b paintengine2d.Rect, col paintengin
 	// immediate CPU device rasterizes the ring's 568 pixels instead of
 	// its 6240.
 	fill := paintengine2d.Fill(col)
-	edge := paintengine2d.NewPath()
+	edge := borrowPath()
+	defer returnPath(edge)
 	drawEdge := func() {
 		if !edge.Empty() {
 			ctx.DrawPath(edge, fill)
@@ -231,7 +248,9 @@ func Bumps(ctx *paintengine2d.Context, b paintengine2d.Rect, light, dark painten
 	// but at spacing 2 a row's dark dots land on the next row's light
 	// ones, and the painter's order across rows is what decides those
 	// pixels — so the batch stops at the row.
-	lp, dp := paintengine2d.NewPath(), paintengine2d.NewPath()
+	lp, dp := borrowPath(), borrowPath()
+	defer returnPath(lp)
+	defer returnPath(dp)
 	row := 0
 	for y := b.Min.Y; y < b.Max.Y; y += spacing / 2 {
 		off := float32(0)
@@ -265,7 +284,8 @@ func Pinstripes(ctx *paintengine2d.Context, b paintengine2d.Rect, col paintengin
 	}
 	// One path of every stripe, filled once: a window of pinstripes is a
 	// single draw op instead of hundreds.
-	path := paintengine2d.NewPath()
+	path := borrowPath()
+	defer returnPath(path)
 	for y := b.Min.Y; y < b.Max.Y; y += period {
 		h := thickness
 		if y+h > b.Max.Y {
