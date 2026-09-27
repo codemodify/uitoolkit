@@ -114,6 +114,13 @@ func (o *Offscreen) SimulateScale(s float32) {
 	o.frame.geomW = DevicePixels(o.frame.geomLW, s)
 	o.frame.geomH = DevicePixels(o.frame.geomLH, s)
 	o.resizeSurface()
+	// And say so. The buffer behind the window just changed size while
+	// the window did not, so no EventResize goes with this — which is
+	// exactly the macOS case (NSWindowDidChangeBackingProperties fires
+	// with the window the same size in points) and exactly the case an
+	// application used to miss, because syncScale was only ever reached
+	// from a resize.
+	o.queue = append(o.queue, Event{Kind: EventScale})
 }
 
 // Resize sizes the *window*, in logical pixels — the pixmap is that times

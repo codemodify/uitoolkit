@@ -914,13 +914,21 @@ func (w *Window) dispatch(ev platform.Event) {
 		w.Close()
 	case platform.EventResize:
 		_ = w.surf.Resize(ev.Width, ev.Height)
-		// A resize is also how a move between monitors reaches us, so
-		// re-read the surface display scale here.
+		// A resize is usually also how a move between monitors reaches
+		// us, so re-read the display scale here too. It is not the only
+		// way — see EventScale, which is the way that does not depend on
+		// the window happening to change size.
 		if !w.syncScale() {
 			w.laid = false
 			w.dropScene()
 			w.fullInvalidate()
 		}
+	case platform.EventScale:
+		// The display scale changed with no resize behind it. Until
+		// this event existed, syncScale was reached only from
+		// EventResize, so a window that changed scale without changing
+		// size went on drawing a look built for the old one.
+		w.syncScale()
 	case platform.EventExpose:
 		w.dirty.Add(paintengine2d.XYWH(ev.Pos.X, ev.Pos.Y, float32(ev.Width), float32(ev.Height)))
 	case platform.EventWindowState:

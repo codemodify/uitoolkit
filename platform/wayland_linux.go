@@ -3922,9 +3922,17 @@ func uitkWlFracScale(sid C.uintptr_t, scale120 C.uint32_t) {
 	if s == nil || scale120 == 0 {
 		return
 	}
+	was := s.frac
 	s.frac = float32(scale120) / 120
 	if s.frac < 1 {
 		s.frac = 1
+	}
+	// Say so. A preferred_scale usually arrives with a configure, and
+	// the resize that follows used to be the only way the application
+	// found out — which meant the one time it arrives alone, the window
+	// went on drawing a look built for the old scale.
+	if s.frac != was {
+		s.push(Event{Kind: EventScale})
 	}
 }
 
