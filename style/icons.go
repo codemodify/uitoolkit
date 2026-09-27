@@ -42,6 +42,19 @@ func DrawToolIcon(ctx *paintengine2d.Context, b paintengine2d.Rect, icon ToolIco
 		return
 	}
 	set = ParseIconSet(string(set))
+	if IsSystemIconSet(set) {
+		// An installed theme, drawn from the desktop's own files. It
+		// falls through to the drawn set rather than to the no-icon
+		// placeholder: a theme is somebody else's vocabulary, and an
+		// action it has never heard of is a gap the toolkit can fill
+		// itself, where a *toolkit* set missing one of its own stems is
+		// a set that was installed wrong and should say so.
+		if DrawSystemToolIcon(ctx, b, icon, col, set) {
+			return
+		}
+		drawScaledIcon(ctx, b, func(ctx *paintengine2d.Context, db paintengine2d.Rect) { drawClassicIcon(ctx, db, icon, col) })
+		return
+	}
 	if IsFileIconSet(set) {
 		if DrawFileToolIcon(ctx, b, icon, col, set) {
 			return

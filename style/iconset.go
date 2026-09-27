@@ -84,9 +84,15 @@ func SanitizeIconSetName(s string) (string, error) {
 }
 
 // IsFileIconSet reports whether name is loaded from icons/<name>/*.png
-// (not the drawn classic/sharp fallbacks).
+// (not the drawn classic/sharp fallbacks, and not an installed
+// freedesktop theme, which is read from the desktop's own directories —
+// see [IsSystemIconSet]).
 func IsFileIconSet(name IconSetName) bool {
-	switch ParseIconSet(string(name)) {
+	set := ParseIconSet(string(name))
+	if IsSystemIconSet(set) {
+		return false
+	}
+	switch set {
 	case IconSetClassic, IconSetSharp:
 		return false
 	default:
@@ -224,14 +230,19 @@ func DeleteUserIconSet(name IconSetName) error {
 }
 
 // ListIconSets returns Built-in (drawn classic/sharp, then premiere
-// names when present) followed by User folders, sorted. A directory
-// counts if it contains at least one ToolIcon PNG (24 or @2x).
+// names when present), then User folders, then the installed
+// freedesktop icon themes, each group sorted. A directory counts if it
+// contains at least one ToolIcon PNG (24 or @2x); a desktop theme counts
+// if this toolkit can open the files it answers with (see
+// [ListSystemIconThemes]).
 func ListIconSets() []IconSetInfo {
 	builtins := ListBuiltinIconSets()
 	users := ListUserIconSets()
-	out := make([]IconSetInfo, 0, len(builtins)+len(users))
+	system := ListSystemIconThemes()
+	out := make([]IconSetInfo, 0, len(builtins)+len(users)+len(system))
 	out = append(out, builtins...)
 	out = append(out, users...)
+	out = append(out, system...)
 	return out
 }
 
