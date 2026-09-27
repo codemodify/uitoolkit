@@ -25,7 +25,7 @@ headless "$OUT/bin/sheet" -list > "$OUT/packs.tsv"
 # left is outside the crop and cannot move it: the splitter's ratio comes from
 # the window's width, not from what the column holds. Add -plain-preview to the
 # settings call below for tiles whose File menu opens nothing.
-CROP=697x651+317+74
+CROP=697x633+317+138
 fail=0
 while IFS=$'\t' read -r id _; do
   if headless "$OUT/bin/settings" -stage "$id" -screenshot "$OUT/full/$id.png" >/dev/null 2>&1; then

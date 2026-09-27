@@ -109,6 +109,12 @@ func TestRepoIconSetsShipMailAliases(t *testing.T) {
 
 func TestListIconSetsListsInstalled(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	// The toolkit's own sets and the user's, and not the forty icon
+	// themes the machine this runs on happens to have installed: what
+	// ListIconSets puts *after* those two groups is
+	// ListSystemIconThemes' business and is tested against a theme of
+	// this test's own making (icontheme_test.go).
+	t.Setenv(IconThemeDirsEnv, "none")
 	resetIconCache()
 	listed := ListIconSets()
 	if len(listed) != 2 || listed[0].Name != IconSetClassic || listed[1].Name != IconSetSharp {

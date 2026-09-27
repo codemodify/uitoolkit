@@ -15,6 +15,17 @@ The old hand-drawn `filled` / `outline` / `duotone` SVG folders are
 **gone**. Use these packs. Glyphs are official upstream SVGs rendered by
 `icons/render.sh` — not hand-drawn.
 
+**Nothing here has to be installed at all.** Settings also lists the
+**freedesktop icon themes the machine already has** — Breeze, Adwaita,
+Oxygen, Papirus, whatever is under `/usr/share/icons` and
+`~/.local/share/icons` — read where the distribution put them, copied
+nowhere and vendored nowhere. A theme selected that way is written to
+`look.json` as `desktop:<Theme>`. See
+[docs/settings.md](../docs/settings.md#desktop-icon-themes) for how far
+that goes: PNG and a narrow monochrome slice of SVG, and a theme whose
+files this toolkit cannot read is listed as unavailable with the reason
+rather than shown as a set of blanks.
+
 ## Install (manual)
 
 After clone or pull, copy again. New stems (and refreshed PNGs) only

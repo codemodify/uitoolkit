@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -16,6 +17,18 @@ import (
 // open look-alikes; the first one installed wins, and the bundled Titillium
 // Web and JetBrains Mono stay the last resort, so no pack needs a font to be
 // present. Fonts are found through fontconfig, indexed once per process.
+//
+// Through fc-list, and never through fc-match: that is the whole of why a
+// pack that asks for a face nobody has falls through to the next name on
+// its list instead of drawing in something else entirely. fc-match is a
+// matcher — it is *required* to answer, and on a machine with the usual
+// Arch fontconfig it answers "Noto Sans" for every family on earth,
+// including families that are not installed and including the bundled
+// Titillium Web. A toolkit that asked it "have you got Lucida Sans?" would
+// be told yes, 131 times over, and every era would quietly read in one
+// face. fc-list enumerates instead: it says what is actually on the disk,
+// keyed by the family the file itself declares, and [ResolveFont] compares
+// the names. See TestLookupNeverAsksFontconfigToMatch.
 
 // SystemFontsEnv set to "0" turns installed-font lookup off (reproducible
 // screenshots, CI): every look then reads in the bundled faces.
@@ -32,6 +45,14 @@ type sysFace struct {
 var sysIndex struct {
 	once  sync.Once
 	faces map[string][]sysFace // lower-case family → upright faces
+	// names are the families a chooser lists: the name each file
+	// declares first, in its own spelling, sorted and deduplicated. The
+	// rest of a font's comma-separated names are aliases of the same
+	// file — the weight-suffixed spellings fontconfig invents ("Noto
+	// Sans Bengali UI Thin") and localized names — and they stay
+	// resolvable without standing in a list of 600 as if they were
+	// typefaces of their own.
+	names []string
 }
 
 // fcList lists the installed fonts through fontconfig. Tests replace it.
@@ -50,19 +71,30 @@ func PrefetchSystemFonts() { go systemFaces() }
 
 func systemFaces() map[string][]sysFace {
 	sysIndex.once.Do(func() {
-		sysIndex.faces = map[string][]sysFace{}
+		sysIndex.faces, sysIndex.names = map[string][]sysFace{}, nil
 		if os.Getenv(SystemFontsEnv) == "0" {
 			return
 		}
 		if out, err := fcList(); err == nil {
-			parseFCList(out, sysIndex.faces)
+			sysIndex.names = parseFCList(out, sysIndex.faces)
 		}
 	})
 	return sysIndex.faces
 }
 
-// parseFCList reads fc-list lines "family[,alias…]\tweight\tslant\tindex\tfile".
-func parseFCList(out []byte, into map[string][]sysFace) {
+// systemFamilies is the sorted list of installed families a chooser
+// offers (the index is built if it has not been).
+func systemFamilies() []string {
+	systemFaces()
+	return sysIndex.names
+}
+
+// parseFCList reads fc-list lines "family[,alias…]\tweight\tslant\tindex\tfile"
+// into the lookup index, and returns the primary family names — the first
+// name on each line, which is the one the file declares — sorted and
+// deduplicated.
+func parseFCList(out []byte, into map[string][]sysFace) []string {
+	primary := map[string]string{}
 	sc := bufio.NewScanner(bytes.NewReader(out))
 	sc.Buffer(make([]byte, 64*1024), 1<<20)
 	for sc.Scan() {
@@ -87,12 +119,32 @@ func parseFCList(out []byte, into map[string][]sysFace) {
 		}
 		idx, _ := strconv.Atoi(f[3])
 		face := sysFace{file: file, index: idx & 0xffff, weight: w, named: idx>>16 != 0}
-		for _, fam := range strings.Split(f[0], ",") {
-			if fam = strings.ToLower(strings.TrimSpace(fam)); fam != "" {
-				into[fam] = append(into[fam], face)
+		for i, fam := range strings.Split(f[0], ",") {
+			fam = strings.TrimSpace(fam)
+			key := strings.ToLower(fam)
+			if key == "" {
+				continue
+			}
+			into[key] = append(into[key], face)
+			if i == 0 {
+				if _, seen := primary[key]; !seen {
+					primary[key] = fam
+				}
 			}
 		}
 	}
+	names := make([]string, 0, len(primary))
+	for _, fam := range primary {
+		names = append(names, fam)
+	}
+	sort.Slice(names, func(i, j int) bool {
+		a, b := strings.ToLower(names[i]), strings.ToLower(names[j])
+		if a != b {
+			return a < b
+		}
+		return names[i] < names[j]
+	})
+	return names
 }
 
 // fontconfig weights.
@@ -233,4 +285,44 @@ func systemOTFace(family string, w Weight) *otFace {
 	f.embolden = synth
 	systemOTFaces.m[key] = f
 	return f
+}
+
+// ---- what a font chooser offers -------------------------------------------
+
+// BundledFamilies are the two typefaces the toolkit carries in its own
+// binary, in the order a chooser lists them: the UI face first, the
+// monospaced one second. They are the only two families that are on every
+// machine, and they are what every pack falls back to, so they lead the
+// list rather than standing among the installed families under T and J.
+func BundledFamilies() []string { return []string{FamilyUI, FamilyMono} }
+
+// ListFontFamilies is what a font chooser offers: the two bundled
+// families, then every upright family fontconfig reports installed,
+// sorted, without repeating the bundled two.
+//
+// Both choosers are handed the same list. The toolkit has two font roles
+// and a pack names a typeface for each, so there are two choosers — one
+// list cannot set both roles honestly — but neither list is filtered to
+// "sans" or "mono", because fontconfig's spacing field is not reliable
+// enough to hide a family behind it and because a person who wants
+// JetBrains Mono for the interface, or Titillium Web in a code view, is
+// not making a mistake the toolkit should correct.
+//
+// With UITK_SYSTEM_FONTS=0 it is the bundled two and nothing else, which
+// is what makes a screenshot of the chooser reproducible.
+func ListFontFamilies() []string {
+	bundled := BundledFamilies()
+	skip := map[string]bool{}
+	for _, f := range bundled {
+		skip[strings.ToLower(f)] = true
+	}
+	installed := systemFamilies()
+	out := make([]string, 0, len(bundled)+len(installed))
+	out = append(out, bundled...)
+	for _, fam := range installed {
+		if !skip[strings.ToLower(fam)] {
+			out = append(out, fam)
+		}
+	}
+	return out
 }

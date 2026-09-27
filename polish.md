@@ -48,6 +48,36 @@ Struck through once fixed; newest findings at the end of their section.
   errors; `uitk-skin lint` would be a ~40-line `main`.~~ `uitk-skin lint`,
   with `style.LintSkin`'s warnings: fallback states, unbound sprites, art too
   small for 2×.
+- **The page's fold is measured in the default typefaces only.** The two
+  typeface choosers can put a wide family into the look Settings itself is
+  drawn in, and the blocks over the preview then fold differently —
+  JetBrains Mono for the interface takes the second block onto three lines
+  at 1024×860. Nothing breaks and nothing is unreachable (a block folds, it
+  never sheds), but the 60%-of-its-pane promise is only *tested* in the
+  packs' own faces. `TestSettingsPageHoldsAtEverySize` should walk a wide
+  family and a narrow one as well as four packs and two scales.
+- **The font choosers are a 600-item drop-down.** Right for a list nobody
+  can predict, wrong for finding "Noto Sans Mono" in it: there is no type-to-
+  filter and no grouping, and the closed box elides a family whose name is
+  longer than "Liberation Sans". `ComboBox.SetEditable` already completes
+  inline from `Items` and is the half-step; a real font chooser sorts sans
+  from mono and shows a specimen line.
+- **A themed icon a set has never heard of falls back to the drawn glyph**,
+  so a desktop theme that is missing one of the sixteen actions shows a
+  `classic` scribble among its own. It is the honest fallback and it is
+  visibly not the theme's; a set-wide "this theme covers 14 of 16" in the
+  chooser's tip would be better than finding out one tool bar at a time.
+- **The freedesktop SVG subset stops at monochrome-ish flat art.** `<use>`,
+  gradients, clip paths and masks are refused rather than approximated
+  (style/svgicon.go), which is right, but it means a theme built on symbol
+  reuse lists as unavailable even though a fuller rasterizer would open it.
+  Breeze, Papirus and Adwaita's symbolic set are all covered; the next one
+  that is not will want `<use>` and a `<defs>` symbol table first.
+- **Breeze and Breeze Dark render identically here**, because both are
+  monochrome and the toolkit tints them with the look's foreground. That is
+  what the desktops do and it is the right answer — but two entries in the
+  chooser that produce the same picture is a list nobody can use. Sibling
+  themes whose only difference is the ink could be collapsed to one.
 
 ## Window frames and shapes
 

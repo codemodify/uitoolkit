@@ -42,7 +42,7 @@ func TestSettingsAppAppliesAndPersists(t *testing.T) {
 	// One page: the icon set, the size its glyphs are drawn at and the
 	// shape of the window's corners are all on it, with no navigating to
 	// do first — four choosers after the options, over the preview.
-	for _, opt := range []string{"16", "24", "32", "Classic", "Sharp", "Theme shape", "Round", "Square"} {
+	for _, opt := range []string{"16", "24", "32", "Classic", "Sharp", "Theme", "Round", "Square"} {
 		if findCombo(w.Content(), opt) == nil {
 			t.Fatalf("the chooser offering %q is not on the page", opt)
 		}
@@ -507,7 +507,7 @@ func TestSettingsThemeListScrollsAllBuiltins(t *testing.T) {
 	}
 	// The paths are not in this column at all: they are under the
 	// preview, where nothing scrolls and they are always on screen.
-	if !findLabelWith(w.Content(), "Prefs") {
+	if !findLabelWith(w.Content(), "look.json") {
 		t.Error("the prefs path is not on the page")
 	}
 	if files := filesBlock(t, w); inBrowserColumn(w.Content(), files) {
@@ -932,24 +932,24 @@ func clickApply(t *testing.T, w *app.Window) {
 	apply.OnClick()
 }
 
-// filesBlock is the three paths under the preview: the column the Prefs
-// line stands in. They were a group box with "Files" on its legend until
+// filesBlock is the line of paths under the preview: the row the word
+// "Files" stands in. It was a group box with "Files" on its legend until
 // the legend and the frame were 34 pixels the preview wanted more — the
-// same call the Theme legend lost in the column on the left.
+// same call the Theme legend lost in the column on the left — then three
+// lines of a name and a path each, and it is one line now, which is what
+// paid for the two typeface choosers.
 func filesBlock(t *testing.T, w *app.Window) widget.Component {
 	t.Helper()
 	var found widget.Component
 	widget.Walk(w.Content(), func(c widget.Component) {
 		l, ok := c.(*widgets.Label)
-		if !ok || l.Text != "Prefs" || insidePreview(c) {
+		if !ok || l.Text != "Files" || insidePreview(c) {
 			return
 		}
-		if row := l.Parent(); row != nil {
-			found = row.Parent()
-		}
+		found = l.Parent()
 	})
 	if found == nil {
-		t.Fatal("no block of paths under the preview")
+		t.Fatal("no line of paths under the preview")
 	}
 	return found
 }
@@ -979,20 +979,39 @@ func findOption(root widget.Component, text string) *widgets.Checkbox {
 	return box
 }
 
-// optionsRow is the folding row the settings stand in: the four check
-// boxes and, after them, the four choosers.
+// optionsRow is the first of the two folding blocks over the preview:
+// the four check boxes and the corner chooser after them.
 func optionsRow(t *testing.T, w *app.Window) *widgets.Wrap {
 	t.Helper()
-	var row *widgets.Wrap
-	widget.Walk(w.Content(), func(c widget.Component) {
-		if r, ok := c.(*widgets.Wrap); ok && row == nil && !insidePreview(c) {
-			row = r
-		}
-	})
-	if row == nil {
+	rows := settingBlocks(w)
+	if len(rows) == 0 {
 		t.Fatal("no row of options over the preview")
 	}
-	return row
+	return rows[0]
+}
+
+// drawnWithRow is the second block: the two typefaces, the icon set and
+// its size, and the device that paints them.
+func drawnWithRow(t *testing.T, w *app.Window) *widgets.Wrap {
+	t.Helper()
+	rows := settingBlocks(w)
+	if len(rows) < 2 {
+		t.Fatal("no block of what the toolkit is drawn with")
+	}
+	return rows[1]
+}
+
+// settingBlocks is both folding blocks, in the order they stand on the
+// page. Settings' own: the previewed sample has no wrapping row of its
+// own, and would not count if it had.
+func settingBlocks(w *app.Window) []*widgets.Wrap {
+	var rows []*widgets.Wrap
+	widget.Walk(w.Content(), func(c widget.Component) {
+		if r, ok := c.(*widgets.Wrap); ok && !insidePreview(c) {
+			rows = append(rows, r)
+		}
+	})
+	return rows
 }
 
 // findLabelWith reports whether any label outside the preview holds part.
@@ -1352,7 +1371,7 @@ func TestSettingsHasNoDeleteIconSetButton(t *testing.T) {
 	if del := findButton(w.Content(), "Delete icon set…"); del != nil {
 		t.Error("Delete icon set… comes back when a user set is staged")
 	}
-	// The paths are three lines and nothing that does anything: they are
+	// The paths are one line and nothing that does anything: they are
 	// the one part of the page that changes nothing.
 	files := filesBlock(t, w)
 	widget.Walk(files, func(c widget.Component) {
@@ -1360,7 +1379,7 @@ func TestSettingsHasNoDeleteIconSetButton(t *testing.T) {
 			t.Errorf("Files carries a %q button", b.Text)
 		}
 	})
-	for _, name := range []string{"Prefs", "Themes", "Icons"} {
+	for _, name := range []string{"look.json", "theme.json", "*.png"} {
 		if !findLabelWith(w.Content(), name) {
 			t.Errorf("the %s path is not under the preview", name)
 		}
@@ -1383,7 +1402,7 @@ func TestSettingsCornersAreAChooserOnThePreviewsBar(t *testing.T) {
 	}
 	a, w := openSettings(t, 1024, 780)
 	checked := func() string { return cornerShown(t, w) }
-	if got := checked(); got != "Theme shape" {
+	if got := checked(); got != "Theme" {
 		t.Fatalf("the chooser opens on %q, want the pack's own shape", got)
 	}
 	pickCorner(t, w, "Square")
@@ -1560,7 +1579,7 @@ func TestSettingsPageOpensWhereItSays(t *testing.T) {
 		t.Error("-page desktop does not show the colours option")
 	}
 	_, files := open("about")
-	if !findLabelWith(files.Content(), "Prefs") {
+	if !findLabelWith(files.Content(), "look.json") {
 		t.Error("-page about does not show the paths")
 	}
 	if _, w := open("appearance"); namedCombo(w.Content(), "Icons") == nil {
@@ -1572,21 +1591,23 @@ func TestSettingsPageOpensWhereItSays(t *testing.T) {
 	}
 }
 
-// The settings stand in one folding row over the preview: the four
+// The settings stand in two folding blocks over the preview. The first
+// is what the toolkit does rather than what it looks like: the four
 // on/off options the Behaviour panel held in the column — with the one
 // that says where the colours come from, which was already up here on
-// its own — and then the four choosers, three that came out of the
-// previewed window and the renderer, which was never anywhere but
-// UITK_PAINT.
+// its own — and the shape of the window's corners. The second is what
+// it is drawn with: the two typefaces, the icon set that came out of the
+// previewed window, the size its glyphs are drawn at, and the renderer,
+// which was never anywhere but UITK_PAINT.
 //
 // The options are check boxes rather than switches, and they wear a
 // short word rather than the sentence each had in the column. Both are
 // the price of standing over the preview: the pane is 453 logical pixels
 // at the 720x520 minimum, a switch's pill is 42 of them before its word,
-// and every line this row takes is a line off the window the page is
-// about. The row folds — two lines at the default size, three at the
-// minimum — and what it must never do is take enough of the pane for the
-// preview to stop being the biggest thing in it.
+// and every line these blocks take is a line off the window the page is
+// about. Both fold — two lines each at the default size and at the
+// minimum — and what they must never do is take enough of the pane for
+// the preview to stop being the biggest thing in it.
 func TestTheOptionsRowOverThePreview(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	if err := style.SaveAppearance(style.DefaultAppearance()); err != nil {
@@ -1650,15 +1671,26 @@ func TestTheOptionsRowOverThePreview(t *testing.T) {
 			t.Errorf("a %q switch is back on the page", sw.Text)
 		}
 	})
-	// Two lines while the pane is wide, and they are the two lines the
-	// arrangement is named for: the four options fill the first and the
-	// four choosers fall onto the second by themselves. They are one
-	// wrapping row rather than two rows of their own because two rows
-	// each fold on their own account, which is a fourth line at the
-	// 720x520 minimum and a preview that stops being what the pane is
-	// for.
+	// Two lines while the pane is wide, and the block under it two more:
+	// the four options fill this block's first line and the corners
+	// chooser takes its second, and the typefaces, the icon set, its
+	// size and the renderer stand in the block below. They are two
+	// blocks rather than one row of ten controls because ten groups in
+	// the 453-pixel pane of a 720x520 window fold onto four lines
+	// whatever order they stand in, and four lines of undifferentiated
+	// furniture over a window is not a block anyone reads.
 	if n := rowLines(row); n != 2 {
-		t.Errorf("the settings stand on %d lines in a %v pane; they fold onto two", n, row.LocalBounds().Dx())
+		t.Errorf("the options stand on %d lines in a %v pane; they fold onto two", n, row.LocalBounds().Dx())
+	}
+	drawn := drawnWithRow(t, w)
+	if n := rowLines(drawn); n != 2 {
+		t.Errorf("what the toolkit is drawn with stands on %d lines in a %v pane; it folds onto two", n, drawn.LocalBounds().Dx())
+	}
+	if widget.DeviceOrigin(drawn).Y <= widget.DeviceOrigin(row).Y {
+		t.Error("the block of what the toolkit is drawn with is not under the options")
+	}
+	if widget.DeviceOrigin(drawn).Y >= widget.DeviceOrigin(previewScope(t, w)).Y {
+		t.Error("the block of what the toolkit is drawn with is not over the preview")
 	}
 	tops := map[float32]bool{}
 	for _, word := range want {
@@ -1667,7 +1699,7 @@ func TestTheOptionsRowOverThePreview(t *testing.T) {
 	if len(tops) != 1 {
 		t.Errorf("the four options are on %d lines at 1024x860; they fit on one", len(tops))
 	}
-	for _, name := range []string{"Window corners", "Icons", "Icon size", "Renderer: the CPU rasterizer or the GPU"} {
+	for _, name := range settingChooserNames {
 		cb := namedCombo(w.Content(), name)
 		if cb == nil {
 			t.Fatalf("no %q chooser on the page", name)
@@ -1684,7 +1716,7 @@ func TestTheOptionsRowOverThePreview(t *testing.T) {
 	// And every chooser has the word that says what it sets in front of
 	// it, on the same line, with the word inside the name a screen reader
 	// says.
-	for i, name := range []string{"Window corners", "Icons", "Icon size", "Renderer: the CPU rasterizer or the GPU"} {
+	for i, name := range settingChooserNames {
 		word := settingWords[i]
 		lbl := findRowLabel(w.Content(), word)
 		if lbl == nil {

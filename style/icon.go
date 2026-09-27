@@ -190,14 +190,55 @@ func toolIconFileCandidates(icon ToolIcon, destW float32) []string {
 
 const noIconStem = "no-icon"
 
+// toolIconThemeNames maps each chrome action onto the names an installed
+// freedesktop icon theme keeps it under, best first.
+//
+// They are the Icon Naming Specification's names and not this toolkit's
+// own: a theme has "document-save", not "save", and asking it for "save"
+// is asking for a file that no theme on earth ships. That is what this
+// table is for, and it is why an installed theme can be an icon set at
+// all (see icontheme.go) — and why the tray, which has always claimed to
+// send a themed name, was in fact sending "new", "open" and "cut" to a
+// status-notifier host that could not resolve one of them.
+//
+// A second and third name where the sets disagree: KDE's "edit-find" is
+// GNOME's "system-search", Breeze's "document-edit" is Adwaita's
+// "text-editor", and the download arrow is "browser-download" in one set
+// and "go-down" in the plainest of the old ones.
+var toolIconThemeNames = map[ToolIcon][]string{
+	IconNew:      {"document-new"},
+	IconOpen:     {"document-open", "folder-open"},
+	IconSave:     {"document-save", "media-floppy"},
+	IconCut:      {"edit-cut"},
+	IconCopy:     {"edit-copy"},
+	IconPaste:    {"edit-paste"},
+	IconUndo:     {"edit-undo"},
+	IconRedo:     {"edit-redo"},
+	IconSearch:   {"edit-find", "system-search", "search"},
+	IconInfo:     {"dialog-information", "gtk-dialog-info"},
+	IconWarning:  {"dialog-warning", "gtk-dialog-warning"},
+	IconError:    {"dialog-error", "gtk-dialog-error"},
+	IconQuestion: {"dialog-question", "help-contents", "gtk-dialog-question"},
+	IconMail:     {"mail-unread", "mail-message", "internet-mail"},
+	IconDownload: {"browser-download", "document-save", "go-down"},
+	IconPen:      {"document-edit", "gtk-edit", "text-editor", "accessories-text-editor"},
+}
+
+// ToolIconThemeNames are the freedesktop names an installed icon theme
+// is asked for, best first. It is what the system icon sets look an
+// action up by; [ToolIconThemeName] is the first of them.
+func ToolIconThemeNames(icon ToolIcon) []string {
+	if names, ok := toolIconThemeNames[icon]; ok {
+		return names
+	}
+	return nil
+}
+
 // ToolIconThemeName is a freedesktop icon-theme name for tray / SNI
 // (IconName). File sets still use ToolIconName ("mail.png").
 func ToolIconThemeName(icon ToolIcon) string {
-	if icon == IconMail {
-		return "mail-unread"
-	}
-	if name := ToolIconName(icon); name != "" {
-		return name
+	if names := ToolIconThemeNames(icon); len(names) > 0 {
+		return names[0]
 	}
 	return "application-default-icon"
 }

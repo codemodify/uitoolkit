@@ -42,6 +42,16 @@ type appearanceFileJSON struct {
 	// new window's surface binds. UITK_PAINT overrides it and is never
 	// written back here; see [RendererPref].
 	Renderer string `json:"renderer,omitempty"`
+	// FontUI and FontMono are the family names the user chose for the
+	// two font roles, left out when the pack's own typefaces are wanted
+	// (the default). They are stored as the family reads — "Liberation
+	// Sans", not a slug — because that is what fontconfig is asked for
+	// and what another application reading this file has to ask for
+	// too. A family that is not installed on the machine that reads the
+	// file is not an error: the pack's era fonts are still underneath
+	// it. See [Appearance] and [withUserFonts].
+	FontUI   string `json:"fontUI,omitempty"`
+	FontMono string `json:"fontMono,omitempty"`
 }
 
 // ConfigDir is $XDG_CONFIG_HOME/uitoolkit (or ~/.config/uitoolkit).
@@ -120,6 +130,8 @@ func resolveAppearance(raw appearanceFileJSON) Appearance {
 	if strings.TrimSpace(raw.IconSize) != "" {
 		a.IconSize = ParseIconSize(raw.IconSize)
 	}
+	a.FontUI = NormalizeFontChoice(raw.FontUI)
+	a.FontMono = NormalizeFontChoice(raw.FontMono)
 	a.ReduceMotion = raw.ReduceMotion
 	a.FollowDesktop = raw.FollowDesktop
 	a.NativeDialogs = raw.NativeDialogs
@@ -144,6 +156,20 @@ func LoadAppearance() Appearance {
 		ok = true
 	} else {
 		raw = appearanceFileJSON{}
+	}
+	// UITK_FONT / UITK_FONT_MONO override the saved typefaces for this
+	// process alone, the way UITK_THEME overrides the pack. Setting one
+	// to "theme" puts that role back on the pack's era fonts without the
+	// file being touched, which is how a session is run at a pack's own
+	// typography for a screenshot.
+	for _, env := range []struct {
+		name string
+		into *string
+	}{{FontEnv, &raw.FontUI}, {MonoFontEnv, &raw.FontMono}} {
+		if v, set := os.LookupEnv(env.name); set {
+			*env.into = v
+			ok = true
+		}
 	}
 	if env := strings.TrimSpace(os.Getenv(ThemeEnv)); env != "" {
 		// The pack asked for is the pack shown: no swapping it for its
@@ -176,6 +202,9 @@ func SaveAppearance(a Appearance) error {
 		Corners:  string(a.Corners),
 		Icons:    string(a.Icons),
 		IconSize: string(a.IconSize),
+
+		FontUI:   a.FontUI,
+		FontMono: a.FontMono,
 
 		ReduceMotion:   a.ReduceMotion,
 		FollowDesktop:  a.FollowDesktop,

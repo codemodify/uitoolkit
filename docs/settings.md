@@ -51,10 +51,12 @@ list of packs, inside itself.
 
 The line through the page is no longer between kinds of choice but
 between the browser and the thing it is browsing for. Everything that is
-not the list of packs stands with the preview: **one folding row of
-settings over it** — four check boxes and then the four choosers for the
-window's corners, the icon set, its size and the renderer — and the
-three **config paths** under it.
+not the list of packs stands with the preview: **two folding blocks of
+settings over it** — the four check boxes and the window's corners in
+the first, and what the toolkit is *drawn with* in the second (the
+interface typeface, the monospaced one, the icon set, the size its
+glyphs are drawn at and the renderer) — and **where it all lives on
+disk**, in one line under it.
 
 The column is about 300 logical pixels wide whatever the window and the
 display scale are, and it keeps that share while the window is resized
@@ -137,8 +139,8 @@ to.
 status bar, with no air between them, the way a real window is. (There
 were eight pixels between each for a long time. No window has those.)
 
-**Nothing else is allowed in the preview's own box**, and only two
-things share its pane: one folding row of settings and three lines of
+**Nothing else is allowed in the preview's own box**, and only three
+things share its pane: two folding blocks of settings and one line of
 paths. The widget gallery used to sit under it in a
 second splitter (those are the widgets the tour shows over its Controls,
 Views and Documents pages, and under the preview they halved it to
@@ -160,18 +162,22 @@ paths gave up under the preview was 34. They were 82% and 61% before.
 
 ### Over and under the preview
 
-**The settings**, in one row over the preview that folds: four check
-boxes, each wearing a short word, then the three choosers that say what
-a pack is drawn with, and a fourth that says what draws it.
+**The settings**, in two blocks over the preview that each fold on their
+own: the four check boxes and the window's corners, then everything the
+sentence *what the toolkit draws with* covers.
 
 ```
 ☑ Animations  ☐ OS colors  ☐ OS open/save dialogs  ☐ OS window borders
-Corners [Theme shape ▾]  Icons [Classic ▾]  Size [24 ▾]  Renderer [Auto ▾]
+Corners [Theme shape ▾]
+
+Text [Theme font ▾]  Code [Theme font ▾]  Icons [Classic ▾]  Size [24 ▾]
+Renderer [Auto ▾]
 ```
 
-That is what it looks like at 1024×860 — and it is **one wrapping row**,
-not two rows; the second line is the fold finding the same arrangement
-for itself. Why it is one row is under *The fold*, below.
+That is what it looks like at 1024×860. It was **one** folding row of
+eight controls for a release, and it was full; the two typeface choosers
+are what split it. Why the seam falls where it does is under *The fold*,
+below.
 
 | On the box | To a screen reader | What it is |
 | --- | --- | --- |
@@ -191,18 +197,61 @@ dialogs it opens, then the frame around it. *OS colors* loses its old
 place next to the caption it changes and keeps its old job; the three
 narrow options lead, which is what folds the row back onto three lines.
 
-And the four choosers after them:
+And the six choosers — the corners at the end of the first block, the
+other five in the second:
 
 | On the page | To a screen reader | What it is |
 | --- | --- | --- |
 | **Corners** | Window corners | *Theme shape* (the pack's own), *Round* or *Square*, and the previewed window's frame is cut to it |
-| **Icons** | Icons | The icon set the chrome is drawn in: `classic` / `sharp` and any premiere or user set installed under `~/.config/uitoolkit/icons/` |
+| **Text** | Text font | The typeface everything that is not code is read in. *Theme font* (the default) is the pack's own; then **Titillium Web** and **JetBrains Mono**, the two the toolkit carries; then every family fontconfig reports installed |
+| **Code** | Code font | The same list, for the monospaced role: code views, log panes, the paths under the preview |
+| **Icons** | Icons | The icon set the chrome is drawn in: `classic` / `sharp`, any premiere or user set under `~/.config/uitoolkit/icons/`, and then **the freedesktop icon themes this desktop has installed** — Breeze, Adwaita, Oxygen, Papirus, whatever is under `/usr/share/icons` and `~/.local/share/icons` ([Desktop icon themes](#desktop-icon-themes)) |
 | **Size** | Icon size | The pixel size its glyphs are drawn at — **16 / 24 / 32**, the way a word processor's size box lists numbers, because a set's glyphs are drawn at it and a page that showed a fixed size would be showing something the user is not going to get |
 | **Renderer** | Renderer | *Auto*, *GPU* or *CPU* — which device paints. See [The renderer](#the-renderer), below: it is the one setting here that the windows already open cannot take |
 
-*Corners* leads them where it used to come last of three: the reading is
-outside in — the shape of the window, then what is drawn inside it, then
-what draws the lot — and, as with the options, the fold settled it.
+*Corners* stays with the options rather than leading the block under
+them, and the fold settled that: the four boxes fill 396 px of a
+453-pixel line and the corners take the second on their own, so the
+chooser is free where it stands and would cost the block below a line of
+its own.
+
+#### Two typefaces, not one
+
+**The toolkit has two font roles** and every pack names a face for each
+of them (`style.FontPrefs`, `"ui"` and `"mono"`). One chooser over one
+list could set one role and leave the other to the pack, or set both to
+the same family, and a page that did either under the word *Font* would
+be lying about half of what it changed. So there are two, and a person
+who wants the interface in one family and code in another — which is
+what almost everyone wants — can have it.
+
+**Both are handed the same list**, and neither is filtered by role. A
+monospaced family is a perfectly good interface font (the Amiga pack's
+whole look is one), and fontconfig's spacing flag is not accurate enough
+to hide six hundred families behind.
+
+**The user wins.** A pack's typefaces are a list of wishes an era had and
+the toolkit grants the first one it can find; a family chosen here goes
+in **front** of that list:
+
+```
+Aqua's UI list  : Lucida Grande, Lucida Sans Unicode, Lucida Sans, DejaVu Sans, Noto Sans
+you chose       : Cantarell
+what is read in : Cantarell, then Aqua's list if Cantarell is not installed
+```
+
+so the choice wins wherever it is installed, and where it is not — a
+`look.json` carried to another machine, a font removed since — the era is
+still underneath it rather than a hole. It is the same bargain the corner
+chooser strikes with a pack's own shape, and the way back is the same:
+*Theme font*, the first item, gives the pack its era again. Both tooltips
+say it in as many words and name the family the window is **actually**
+reading in, because which of the two won is the one thing a person
+cannot see by looking at the control.
+
+`UITK_FONT` and `UITK_FONT_MONO` override the saved typefaces for one
+process the way `UITK_THEME` overrides the saved pack; `UITK_FONT=theme`
+puts that role back on the pack's era without the file being touched.
 
 **Where the caption buttons go is not a box any more.** It was one,
 *Theme buttons*, and it asked a question about a title bar that only
@@ -264,61 +313,68 @@ right-hand pane is 453 of them at the 720×520 minimum.
 
 #### The fold
 
-**The row folds, it does not shed.** It is a `widgets.Wrap` (Qt's flow
+**A block folds, it does not shed.** Each is a `widgets.Wrap` (Qt's flow
 layout, GTK's `FlowBox`): it takes another line rather than cut a control
 off at the window frame the way a tool bar's shedding would — a setting
 nobody can reach is worse than another line. The words in front of the
-four choosers are promised for the same reason, where on the bar inside
-the preview they were not: that bar shed them from the right as it
-narrowed, and at the 720×520 minimum it shed all three, leaving the
-tooltips and the accessible names.
+choosers are promised for the same reason, where on the bar inside the
+preview they were not: that bar shed them from the right as it narrowed,
+and at the 720×520 minimum it shed all three, leaving the tooltips and
+the accessible names.
 
-Measured in the 697-pixel row of a 1024×860 window and the 453-pixel row
-of a 720×520 one, at scale 1 and 1.75 alike:
+Measured in the 697-pixel pane of a 1024×860 window and the 453-pixel
+pane of a 720×520 one, at scale 1 and 1.75 alike:
 
 | | 1024×860 | 720×520 |
 | --- | --- | --- |
-| the four options | 606 px — one line | two lines: the three narrow ones (422 px), then *OS window borders* |
-| the four choosers | 639 px — the second line, to themselves | the corners beside *OS window borders* (404 px), then the icons, the size and the paint (411 px) |
-| **the row** | **2 lines**, 56 px | **3 lines**, 86 px |
-| the preview | **82%** of the pane | **62%** |
+| the four options and the corners | two lines: the boxes (564 px), then *Corners* | two lines: the three narrow boxes (396 px), then *OS window borders* beside *Corners* |
+| what it is drawn with | two lines: the typefaces, the icons and the size, then *Renderer* | two lines: the two typefaces, then the icons, the size and the renderer |
+| **both blocks** | **2 + 2 lines** | **2 + 2 lines** |
+| the preview | **80%** of the pane | **65%** |
 
-Those are the same two numbers for the preview as before *OS borders*
-grew seven characters and the renderer chooser arrived: the row carries
-199 px more and folds the same, because the order absorbed them. The
-`x 317, y 74, 697 × 651` crop the Theme Atlas takes is unmoved for the
-same reason, and was re-measured in the eight packs
-`TestSettingsPreviewPanelKeepsItsPlace` walks to say so.
+The preview went **up** at the minimum, from 62% to 65%, while two
+controls were added to the page — because a block that folds onto two
+lines at both sizes costs the narrow window less than the single row
+did, which folded onto three there, and because the three path lines
+under the preview became one.
 
-**One wrapping row, not two fixed ones**, and that is a measurement
-rather than a preference. Two rows each fold on their own account: the
-options take two lines at 453 px and the choosers take two more, which is
-**four** lines where one wrapping row takes three — 78 px off a preview
-that has 281, and it stops being what the pane is for. A row that folds
-is also what *gives* the two-row reading wherever there is room for it:
-at 1024×860 the four options fill the first line and the four choosers
-fall onto the second by themselves, which is the arrangement, arrived at
-by folding rather than by decree.
+**Two blocks, not one row of ten controls**, and that is a measurement
+as much as a reading. Ten groups come to about 1 470 px and will not
+fold onto fewer than **four** lines in a 453-pixel pane whatever order
+they stand in, and four lines of undifferentiated furniture over a
+window is not a block anyone reads — it is a hedge. Split at the seam
+the fold used to find by accident, each half folds onto two lines at
+both sizes, and the halves are the two questions the page is actually
+asking: *what does the toolkit do*, and *what does it draw with*.
 
 **What the fold must never break** is a chooser from the word in front of
-it, or the icon set from the size its glyphs are drawn at. So the four
-choosers go into the row as **three** children, not eight: the one that
-says what shape the window is, the pair that says what is drawn in it,
-and the one that says what draws it. Inside a group the spacing does the
-rest: six pixels between a word and its box, fourteen between one pair
-and the next, and fourteen between the groups.
+it, or the icon set from the size its glyphs are drawn at. So the icon
+set and its size go into the second block as **one** child. Inside a
+group the spacing does the rest: six pixels between a word and its box,
+fourteen between one pair and the next, and fourteen between the groups.
+
+**The typeface and icon choosers measure a fixed 152 and 136 px**, floor
+and ceiling both, where the other four measure themselves on their
+longest item. Their items are not a list this page chose — they are the
+six hundred font families and twenty-six icon themes the machine happens
+to have — and a control whose width is a fact about somebody's font
+directory folds this block differently on two machines. The Theme Atlas
+crops this page at fixed pixels; a page whose geometry moved with the
+fonts installed could not be cropped at all. The face elides what does
+not fit and the drop-down shows the name in full.
 
 **The order is the order they are read, and it was settled by the fold.**
 The options come first because three of them are about the desktop and
 the fourth about motion, and none of them changes what the window below
 is *drawn* with. Within them, *OS window borders* is last because it is
-the widest, and a row whose first line is its three narrow boxes folds
-onto three lines where the old order folded onto four; *OS colors*, which
+the widest, and a block whose first line is its three narrow boxes folds
+onto two lines where the old order folded onto three; *OS colors*, which
 used to sit last for being nearest the caption it changes, moved up to
 second, where it reads as the first and lightest of the three hand-overs
-to the desktop. Among the choosers the corners lead for the same two
-reasons at once: the reading is outside in, and the corners are what the
-borders box can share a line with at 453 px.
+to the desktop. *Corners* closes that block because the borders box is
+what it can share a line with at 453 px. The second block reads inside
+out from the type: the two typefaces, then the icons and their size,
+then the device that paints the lot.
 
 #### The renderer
 
@@ -546,15 +602,25 @@ screen reader used to drive. There is nothing to drive: one Tab ring
 holds the whole application.
 
 The section called **Shape and weight** is gone too, and nothing is left
-of it in the column: corners, the icon set and the icon size are three
-choosers in the row over the preview, and the strip of fifteen glyphs
-under them was a picture of a tool bar standing in for the real one two
-inches to its right.
+of it in the column: corners are a chooser in the first block over the
+preview and the icon set and its size are in the second, and the strip of
+fifteen glyphs under them was a picture of a tool bar standing in for the
+real one two inches to its right.
+
+**The three lines of paths under the preview are one line.** They were
+six — a line of prose and a three-row text box each — then three, a name
+and a path each, and they are now the directory and the three names that
+live in it, with the exact paths in the accessible name and the hover
+text. The block under the preview is the one part of the page that
+changes nothing, which is why it has been the page's bank every time
+something had to be paid for; the two lines it gave up this time are
+what put the typeface choosers on the page without taking the preview
+under the 60% of its pane this page promises.
 
 The **Behaviour** panel is gone from the column, and with it the last
 thing in it that was not the theme browser: its four switches are check
-boxes in the row over the preview, with the colours one, under short
-words. The column is the browser alone, which is what it was before the
+boxes in the first block over the preview, with the colours one, under
+short words. The column is the browser alone, which is what it was before the
 four pages became one.
 
 The **Theme buttons** check box is gone, and nothing replaced it: where
@@ -595,8 +661,8 @@ The **Theme group box** is gone, with the paragraph under its legend,
 and so are the **Settings heading** and the **version label** at the top
 of the column. See *The column, on the left*.
 
-The **View ▸ Window corners** submenu is gone: the corners are the third
-chooser in the row over the preview. So is the **free-space end of the
+The **View ▸ Window corners** submenu is gone: the corners are a chooser
+in the block of options over the preview. So is the **free-space end of the
 sample's tool bar** as a place to keep a setting — and *Paste*, which was
 taken off that bar to pay for the two choosers that rode there, is back.
 Nothing was put on that bar to fill the room they left: a tool bar is not
@@ -632,7 +698,7 @@ The Theme Atlas crops the preview panel out of `uitoolkit-settings -stage ID
 default look applied, the panel is the same rectangle in every pack:
 
 ```
-x 317, y 74, 697 × 651        crop box (317, 74) – (1014, 725)
+x 317, y 138, 697 × 633       crop box (317, 138) – (1014, 771)
 ```
 
 `TestSettingsPreviewPanelKeepsItsPlace` pins those numbers; a layout
@@ -647,8 +713,10 @@ one, `x 317, y 10, 697 × 790` until the colours switch went over the
 preview and the paths under it, `x 317, y 66, 697 × 620` until the
 behaviour options joined that switch in one row, and `x 317, y 44,
 697 × 647` until the icon and corner choosers came out of the preview and
-the group box came off the paths. Nothing that has happened to the column
-on the left has moved them.)
+the group box came off the paths, and `x 317, y 74, 697 × 651` until the
+two typeface choosers split the settings into two blocks and the three
+path lines became one. Nothing that has happened to the column on the
+left has moved them.)
 
 **Changes to the column on the left do not move them.** The splitter's
 ratio is worked out from the *window's* width, not from what the column
@@ -673,11 +741,20 @@ Four of those 34 are the difference: the panel is 651 tall where it was
 
 **Renaming *OS borders* and adding the renderer chooser did not move
 them.** Between them they put 199 px more into the folding row, and the
-row folds onto the same two lines at 1024×860 because its order changed
+row folded onto the same two lines at 1024×860 because its order changed
 with them (see *The fold*): the same 56 px over the panel, the same
-`697x651+317+74`. It was re-measured in the eight packs
-`TestSettingsPreviewPanelKeepsItsPlace` walks, and rendered through
-`tools/atlas/render.sh`'s own crop in three of them, rather than assumed.
+`697x651+317+74`.
+
+**The two typeface choosers did, and by 64 px.** Ten groups will not
+fold onto two lines in this pane, so the settings are two blocks now, and
+the second is 64 px of its own: `y` 74 → 138. Under the panel the three
+path lines became one, which gave 18 px back, so the panel is **633**
+tall where it was 651 — 46 px went into the settings and 18 came back out
+of the paths, and `x` and the width are unchanged. The numbers were
+re-measured in the eight packs `TestSettingsPreviewPanelKeepsItsPlace`
+walks, and rendered through `tools/atlas/render.sh`'s own crop, rather
+than assumed. `CROP` in `tools/atlas/render.sh` and `W_IMG, H_IMG` in
+`tools/atlas/build.py` carry the same numbers and moved with them.
 
 **No atlas tile carries a bar of Settings' own any more.** Every tile
 did, for a release, because that bar was at the head of the window the
@@ -703,11 +780,13 @@ The applied look sets Settings' own metrics, and the column of choices
 beside the preview is drawn in it, so take atlas shots with a clean
 `XDG_CONFIG_HOME`. That is why the test builds Settings with
 `PreferredLook`, the way the command does, rather than with a fixture
-look. The row of settings over the preview is drawn in the applied look
-too, which is what sets the crop's `y`, and how many lines it folds onto
-at 697 px is what would move it again; the icon size chosen in that row
-does not move it, because what grows with it is the previewed window's
-own tool bar, inside the crop.
+look. The two blocks of settings over the preview are drawn in the
+applied look too, which is what sets the crop's `y`, and how many lines
+they fold onto at 697 px is what would move it again — which is why the
+typeface and icon choosers measure a fixed width rather than one that
+follows what the machine has installed. The icon size chosen in that
+block does not move it, because what grows with it is the previewed
+window's own tool bar, inside the crop.
 
 ## Prefs file
 
@@ -721,8 +800,10 @@ $XDG_CONFIG_HOME/uitoolkit/look.json
   "version": 2,
   "theme": "breeze",
   "corners": "theme",
-  "icons": "lucide",
+  "icons": "desktop:breeze-dark",
   "iconSize": "medium",
+  "fontUI": "Liberation Sans",
+  "fontMono": "Liberation Mono",
   "reduceMotion": false,
   "followDesktop": true,
   "nativeDialogs": false,
@@ -730,6 +811,14 @@ $XDG_CONFIG_HOME/uitoolkit/look.json
   "captionButtons": "theme"
 }
 ```
+
+`fontUI` and `fontMono` are family names as the family reads — that is
+what fontconfig is asked for, and what another application reading this
+file has to ask for too. Both are left out when the pack's own typefaces
+are wanted, which is the default; a family that is not installed on the
+machine that reads the file is not an error, because the pack's era
+fonts are still underneath it. `icons` takes a `desktop:<Theme>` id for
+an installed freedesktop icon theme; see below.
 
 `theme` is the theme pack. `corners` is `theme` (the pack's own shape,
 the default), `round` or `square`. `icons` is the chrome set (`classic`,
@@ -874,17 +963,22 @@ cp -R icons/lucide icons/phosphor icons/tabler icons/heroicons icons/material-sy
 See [icons/README.md](../icons/README.md) for licenses, the full stem
 list, attribution, and the `@2x` convention.
 
-Settings offers them all in one chooser — in the row of settings over the
-preview — in the order `ListBuiltinIconSets` then `ListUserIconSets`:
+Settings offers them all in one chooser — in the block of what the
+toolkit is drawn with, over the preview — in the order
+`ListBuiltinIconSets`, `ListUserIconSets`, `ListSystemIconThemes`:
 
 - **Built-in** — drawn `classic` / `sharp`, plus the five premiere
   names when those folders are present under `icons/`
 - **User** — any other `icons/<name>/` folder that contains at least
   one ToolIcon PNG
+- **Desktop** — the freedesktop icon themes installed on the machine
+  ([below](#desktop-icon-themes))
 
-The chooser is the first of the three that follow the options, with the
-size box beside it, and the previewed window's tool bar is drawn in
-whatever they choose: the preview of a set is a real tool bar full of it.
+A combo box has no headings, so the order *is* the grouping: what this
+toolkit brought, then what you added, then what the desktop already had.
+The size box is beside the chooser, and the previewed window's tool bar
+is drawn in whatever they choose: the preview of a set is a real tool bar
+full of it.
 
 When a premiere or user set is selected, a missing stem logs once and
 paints **`no-icon`** (pack file, or the embedded placeholder if the
@@ -897,6 +991,67 @@ The v0.12.0 `filled` / `outline` / `duotone` SVG folders are removed.
 `ListIconSets` / `IconsDir` / `WithIcons` are the API. Changing icons
 and Apply reloads other apps the same way as a theme change.
 
+## Desktop icon themes
+
+The chooser also lists **the freedesktop icon themes the machine already
+has** — the ones Plasma and GNOME are drawing from, read where the
+distribution put them and copied nowhere:
+
+```
+$XDG_DATA_HOME/icons   (or ~/.local/share/icons)
+~/.icons
+$XDG_DATA_DIRS/icons   (default /usr/local/share/icons, /usr/share/icons)
+```
+
+A theme is selected as `desktop:<Theme>` — `desktop:breeze-dark`,
+`desktop:Papirus-Dark` — keeping the directory's own spelling, which is
+the name the directory has on disk and the name `Inherits=` lines use.
+The colon is what makes the two namespaces impossible to confuse:
+`SanitizeIconSetName` rejects it, so no folder under `icons/` can ever
+produce an id that begins that way.
+
+**The lookup is the freedesktop one.** `index.theme` gives `Directories`
+and each directory's `Size` / `Scale` / `Type` / `MinSize` / `MaxSize` /
+`Threshold`; a wanted size is matched exactly first and then by nearest;
+`Inherits=` is walked breadth first and **hicolor** is tried last whether
+a theme names it or not. The toolkit's actions are asked for under their
+**freedesktop** names — `document-save`, `edit-copy`, `dialog-warning` —
+with a second and third name where the sets disagree (`edit-find` /
+`system-search`, `document-edit` / `text-editor`). An action a theme has
+never heard of falls back to the drawn `classic` glyph, not to the
+`no-icon` placeholder: a theme is somebody else's vocabulary, and a gap
+in it is not a broken installation.
+
+**Colour.** A themed icon is drawn in the pixels its author drew, except
+when the file is monochrome — one colour and an alpha channel, which is
+what every symbolic set and the whole of Breeze is — and then it is
+tinted with the look's foreground, exactly as the toolkit's own PNG sets
+are. It is what the desktops do, and it is the only rule under which
+Oxygen's full-colour floppy disk and Breeze's one-colour outline are
+both right.
+
+**PNG and a narrow slice of SVG.** Breeze and Papirus ship no PNG at
+all, so a loader that could not open SVG would, on a KDE machine, list
+every theme except the one the desktop is wearing. What a themed icon
+*is* — a `viewBox` and a handful of filled outlines — is rasterized:
+`<path>`, `<rect>`, `<circle>`, `<ellipse>`, `<polygon>`, `<polyline>`,
+`<line>`, inside `<g>`, with `transform`, `fill`, `fill-rule`, `stroke`
+and `opacity`. **Anything past that is refused, not approximated** —
+`<use>`, gradients, clip paths, masks, filters, patterns, embedded
+images, text — because a half-drawn icon is worse than a set that says
+it is unavailable.
+
+**What cannot be drawn is not offered, and is named.** A theme is probed
+before it is listed; one that answers with files this toolkit cannot
+read, or has none of the toolkit's actions at all, is left out of the
+chooser and listed in the chooser's tooltip **with the reason**, so
+*where is my icon theme* has an answer on the control rather than in a
+bug report. `ListSystemIconThemes` and `UnavailableSystemIconThemes` are
+the two halves of that, and `UITK_ICON_THEME_DIRS` replaces the search
+path (or, set to `none`, switches installed themes off entirely, which
+is what makes a screenshot of this page the same picture on two
+machines).
+
 ## Live reload in other apps
 
 Source of truth is `look.json`. After Apply, every `Application` that
@@ -907,7 +1062,8 @@ and, on change, reloads prefs and calls
 app.SetLook(style.WithAppearance(app.Look(), style.LoadAppearance()))
 ```
 
-so theme, corners, icons, and icon size update without a restart. Display
+so theme, corners, icons, icon size and the two typefaces update without
+a restart. Display
 scale and density on the current look are kept. A desktop that turns light
 or dark reloads the same way while the appearance follows it, and
 `Application.OnLookChange` callbacks run after every change (Settings
