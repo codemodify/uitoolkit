@@ -43,7 +43,9 @@ func TestMotifPacksRegisteredInYearOrder(t *testing.T) {
 	// NeXT (1989) < Motif, HP VUE (1990) < CDE (1993) < Windows 95 (1995)
 	// < Platinum (1997).
 	for _, o := range [][2]string{{"next", "motif"}, {"motif", "cde"}, {"hp-vue", "cde-alpine"}, {"cde", "win95"}, {"irix", "win95"}, {"cde-desert", "platinum"}} {
-		if pos[o[0]] > pos[o[1]] {
+		a, aok := pos[o[0]]
+		b, bok := pos[o[1]]
+		if aok && bok && a > b {
 			t.Fatalf("%s sorts after %s: %v", o[0], o[1], pos)
 		}
 	}
@@ -334,7 +336,7 @@ func TestMotifPaintsEveryControlInsideItsRect(t *testing.T) {
 		for _, scale := range scales {
 			lk := WithScale(p.Look(), scale).(*Classic)
 			name := fmt.Sprintf("%s@%gx", n, scale)
-			aquaExercise(t, name, lk)
+			exerciseEngine(t, name, lk)
 			// The page under a tab bar and the window background too.
 			for _, f := range []func(*paintengine2d.Context, paintengine2d.Rect){
 				func(ctx *paintengine2d.Context, b paintengine2d.Rect) { lk.DrawTabPane(ctx, b) },
@@ -344,7 +346,7 @@ func TestMotifPaintsEveryControlInsideItsRect(t *testing.T) {
 				img := paintengine2d.NewImage(int(200*scale+2*m), int(90*scale+2*m))
 				b := paintengine2d.XYWH(m, m, 200*scale, 90*scale)
 				f(paintengine2d.NewContext(img), b)
-				if x, y, ok := aquaOutside(img, b); ok {
+				if x, y, ok := outsideRect(img, b); ok {
 					t.Errorf("%s: pane painted outside its rect at (%d,%d)", name, x, y)
 				}
 			}

@@ -157,7 +157,7 @@ func TestBreezeTakesDesktopAccent(t *testing.T) {
 		t.Fatal("Accented wrote into the registered pack")
 	}
 	// Every control still paints inside its bounds with the accent.
-	aquaExercise(t, "breeze+accent", l)
+	exerciseEngine(t, "breeze+accent", l)
 	kdeExtras(t, "breeze+accent", l)
 }
 

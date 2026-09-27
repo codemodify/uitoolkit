@@ -58,7 +58,7 @@ func TestAdwaitaPaintsEveryControlInsideItsRect(t *testing.T) {
 	for _, n := range adwPackNames {
 		for _, scale := range []float32{1, 2} {
 			lk := clLook(t, n, scale)
-			aquaExercise(t, fmt.Sprintf("%s@%gx", n, scale), lk)
+			exerciseEngine(t, fmt.Sprintf("%s@%gx", n, scale), lk)
 			img := paintengine2d.NewImage(64, 64)
 			ctx := paintengine2d.NewContext(img)
 			for _, r := range []paintengine2d.Rect{{}, paintengine2d.XYWH(0, 0, 1, 1), paintengine2d.XYWH(2, 2, 3, 3),

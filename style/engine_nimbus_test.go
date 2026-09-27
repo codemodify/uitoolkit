@@ -53,7 +53,7 @@ func TestNimbusPaintsEveryControlInsideItsRect(t *testing.T) {
 	p, _ := LoadTheme("nimbus")
 	for _, scale := range []float32{1, 2} {
 		lk := WithScale(p.Look(), scale).(*Classic)
-		aquaExercise(t, fmt.Sprintf("nimbus@%gx", scale), lk)
+		exerciseEngine(t, fmt.Sprintf("nimbus@%gx", scale), lk)
 		mtlRowsInside(t, fmt.Sprintf("nimbus@%gx", scale), lk)
 	}
 }

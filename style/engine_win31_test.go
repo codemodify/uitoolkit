@@ -1,3 +1,5 @@
+//go:build !theme_engines_pick || theme_engine_win31
+
 package style
 
 import (

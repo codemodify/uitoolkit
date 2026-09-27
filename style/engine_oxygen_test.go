@@ -1,3 +1,5 @@
+//go:build !theme_engines_pick || theme_engine_oxygen
+
 package style
 
 import (
@@ -103,15 +105,7 @@ func TestOxygenPaintsEveryControlInsideItsRect(t *testing.T) {
 	p, _ := LoadTheme("oxygen")
 	for _, scale := range []float32{1, 2} {
 		lk := WithScale(p.Look(), scale).(*Classic)
-		aquaExercise(t, fmt.Sprintf("oxygen@%gx", scale), lk)
+		exerciseEngine(t, fmt.Sprintf("oxygen@%gx", scale), lk)
 		kdeExtras(t, fmt.Sprintf("oxygen@%gx", scale), lk)
 	}
-}
-
-// kdeClose reports whether a and b are within tol (0–255) per channel.
-func kdeClose(a, b paintengine2d.Color, tol int) bool {
-	ar, ag, ab, _ := a.Premul8()
-	br, bg, bb, _ := b.Premul8()
-	d := func(p, q uint8) bool { return int(p)-int(q) <= tol && int(q)-int(p) <= tol }
-	return d(ar, br) && d(ag, bg) && d(ab, bb)
 }

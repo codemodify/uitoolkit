@@ -1,3 +1,5 @@
+//go:build !theme_engines_pick || theme_engine_kde1
+
 package style
 
 import "github.com/codemodify/paintengine2d"

@@ -164,6 +164,9 @@ func TestEveryEnginePaintsItsOwnFrame(t *testing.T) {
 // leaves the frame square and states no layout of its own.
 func TestDecorationAdapterUsesTheInAppFrame(t *testing.T) {
 	for _, name := range []string{"win31", "os2warp", "next", "keramik", "oxygen"} {
+		if !packBuilt(name) {
+			continue
+		}
 		p := themePack(t, name)
 		lk := p.Look()
 		in := lk.eng().WindowFrameInsets(lk)
@@ -239,6 +242,9 @@ func TestDecorationCornersAndShadowsPerEra(t *testing.T) {
 		"nimbus": {rounded: true, shadow: true},
 	}
 	for name, want := range eras {
+		if !packBuilt(name) {
+			continue
+		}
 		s := DecorationOf(themePack(t, name).Look(), DecorationState{Active: true})
 		rounded := s.Radius[0] > 0 && s.Radius[1] > 0
 		if rounded != want.rounded || s.Radius[2] != 0 || s.Radius[3] != 0 {
@@ -265,6 +271,9 @@ func TestDecorationThemeLayouts(t *testing.T) {
 		"nimbus": ":minimize,maximize,close", "fusion": ":minimize,maximize,close",
 	}
 	for name, layout := range want {
+		if !packBuilt(name) {
+			continue
+		}
 		if got := DecorationOf(themePack(t, name).Look(), DecorationState{Active: true}).Layout; got != layout {
 			t.Errorf("%s: layout %q, wanted %q", name, got, layout)
 		}

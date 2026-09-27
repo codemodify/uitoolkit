@@ -108,6 +108,13 @@ func TestLooksReadInTheirErasTypeface(t *testing.T) {
 		"dark":    FamilyUI, // the toolkit's own look keeps the bundled face
 	}
 	for pack, want := range cases {
+		// Each case is really about an engine's era typeface, so a
+		// configuration built without that engine has nothing to
+		// assert: the name still resolves, to the legacy era pack the
+		// engine would have overridden.
+		if _, ok := EngineByID(pack); !ok {
+			continue
+		}
 		lk := mustLook(t, pack)
 		if got := lk.UIFamily(); got != want {
 			t.Errorf("%s reads in %q, want %q", pack, got, want)

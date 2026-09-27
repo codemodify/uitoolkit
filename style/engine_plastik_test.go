@@ -1,3 +1,5 @@
+//go:build !theme_engines_pick || theme_engine_plastik
+
 package style
 
 import (
@@ -197,7 +199,7 @@ func TestPlastikPaintsEveryControlInsideItsRect(t *testing.T) {
 		p, _ := LoadTheme(n)
 		for _, scale := range []float32{1, 2} {
 			lk := WithScale(p.Look(), scale).(*Classic)
-			aquaExercise(t, fmt.Sprintf("%s@%gx", n, scale), lk)
+			exerciseEngine(t, fmt.Sprintf("%s@%gx", n, scale), lk)
 			kdeExtras(t, fmt.Sprintf("%s@%gx", n, scale), lk)
 		}
 	}

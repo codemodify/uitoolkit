@@ -58,6 +58,65 @@ behind `//go:build linux`.
 while every `WindowFrame` request answers, because a caption never asks one
 it has not already drawn and an MDI child always can.
 
+### Theme engines are opt-in, 2026-09-27
+
+`docs/engines.md`. Engines are selected with build tags, and **the default
+is everything**:
+
+```sh
+go build ./...                                     # all engines, unchanged
+go build -tags theme_engines_pick ./...            # only the always-built
+go build -tags "theme_engines_pick,theme_engine_beos" ./...
+```
+
+Each engine file carries `//go:build !theme_engines_pick ||
+theme_engine_<name>`. A forgotten flag therefore gives **more** than
+asked for, never less — which matters because uitoolkit is a library and
+the *application* runs the build, so nothing here can make anyone pass a
+flag. An opt-in scheme defaulting to nothing would hand a consumer a
+themeless toolkit at run time with no compile error, which is the silent
+failure the platform boundary just spent a release removing.
+
+Measured on `cmd/uitoolkit-settings`, stripped:
+
+| build | size |
+| --- | --- |
+| default | 21.06 MB |
+| `theme_engines_pick` | **18.71 MB** |
+| the ceiling, every engine unreachable | 12.5 MB |
+
+So the 13 separable engines are worth 2.35 MB of an available 8.6 MB.
+
+**Two facts established by measurement rather than reading.** Build tags
+cannot contain hyphens (`theme-engine-x` is a syntax error), so the names
+use underscores. And moving engines to subpackages — the `image/png`
+blank-import pattern, which is what I first recommended — produces **206
+undefined identifiers**: 184 needing a `style.` prefix across 80 files
+and **22 unexported helpers that would become permanent public API**
+(`clamp01`, `edge`, `hexColor`, `nearColor`…). Tags cost none of that.
+The idiomatic answer was the wrong one here.
+
+### What blocks the other 6 MB
+
+| engine | why it must be always-built |
+| --- | --- |
+| `metal` | registers `metal-ocean`, which is `DefaultThemeName` |
+| `aqua`, `motif` | core's untagged `style/packs.go` carries a **legacy era pack** of the same name that the engine overrides when present. Without the engine the name still resolves, to the legacy pack painted by the base engine, and `TestDecorationPaintsInsideItsBoxes` catches aqua painting **outside its box**. The legacy pack must move behind the engine's tag |
+
+And 29 groups are entangled with each other: `win95` is reached into by 38
+others *and* by core (`snap`, `w95`), `aero` by 10 plus core (`winSnap`),
+`material_tone` by 13, `web` by 9. Helpers live in whichever engine file
+first needed them. Extracting those into untagged files is the bulk of the
+remaining 6 MB, and the same rule applies to the tests — a helper more
+than one engine's tests need belongs to all of them
+(`style/enginetest_shared_test.go`), and a test walking a table of packs
+skips rows whose engine is absent (`packBuilt`, `needEngine`).
+
+**A warning for that work:** group engine files by reading them, not by
+their names. I mis-grouped `engine_web_controls.go` as an engine of its
+own when it belongs to `web`, and it broke the web tests until I caught
+it.
+
 ### The five slices after it, 2026-09-27
 
 Same branch of work, `feat/platform-boundary-2`. `platform` is down to

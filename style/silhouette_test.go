@@ -175,7 +175,7 @@ func TestASilhouetteIsDroppedWhereTheFrameIs(t *testing.T) {
 	for _, name := range []string{"beos", "deck"} {
 		p, ok := LoadTheme(name)
 		if !ok {
-			t.Fatalf("no pack %q", name)
+			continue // that engine is not in this build
 		}
 		for _, c := range cases {
 			f := probeFrame(600, 400, 240, 40)
@@ -185,6 +185,9 @@ func TestASilhouetteIsDroppedWhereTheFrameIs(t *testing.T) {
 		}
 	}
 	// The fitted caption follows the same rule, for the look that asks.
+	if !packBuilt("beos") {
+		return
+	}
 	lk := themePack(t, "beos").Look()
 	for _, c := range cases {
 		if got := DecorationOf(lk, c.st).CaptionFits; got != c.want {
@@ -278,6 +281,7 @@ func TestASilhouetteUnionsItsRectangles(t *testing.T) {
 // take clicks on. The test finds the painted tab's right edge by looking for
 // the yellow, and asks the silhouette about the pixels either side of it.
 func TestTheBeOSSilhouetteIsItsPaintedTab(t *testing.T) {
+	needEngine(t, "beos")
 	for _, scale := range []float32{1, 1.75} {
 		lk := retroLook(t, "beos", scale)
 		st := DecorationState{Active: true}

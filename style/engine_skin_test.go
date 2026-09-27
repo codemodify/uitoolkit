@@ -56,7 +56,7 @@ func TestSkinPaintsEveryControlInsideItsRect(t *testing.T) {
 		for _, scale := range []float32{1, 1.75, 2} {
 			lk := WithScale(p.Look(), scale).(*Classic)
 			name := fmt.Sprintf("%s@%gx", n, scale)
-			aquaExercise(t, name, lk)
+			exerciseEngine(t, name, lk)
 			kdeExtras(t, name, lk)
 		}
 	}

@@ -58,11 +58,11 @@ func retroNear(img *paintengine2d.Image, x, y int, want paintengine2d.Color) boo
 }
 
 // retroExercise paints every control of every pack at 1x and 2x and fails
-// on paint outside the rects (aquaExercise's contract).
+// on paint outside the rects (exerciseEngine's contract).
 func retroExercise(t *testing.T, names ...string) {
 	for _, n := range names {
 		for _, scale := range []float32{1, 2} {
-			aquaExercise(t, fmt.Sprintf("%s@%gx", n, scale), retroLook(t, n, scale))
+			exerciseEngine(t, fmt.Sprintf("%s@%gx", n, scale), retroLook(t, n, scale))
 		}
 	}
 }

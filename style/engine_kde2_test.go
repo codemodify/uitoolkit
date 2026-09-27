@@ -1,3 +1,5 @@
+//go:build !theme_engines_pick || theme_engine_kde2
+
 package style
 
 import (
@@ -216,7 +218,7 @@ func TestKDE2PaintsEveryControlInsideItsRect(t *testing.T) {
 	p, _ := LoadTheme("kde2")
 	for _, scale := range []float32{1, 2} {
 		lk := WithScale(p.Look(), scale).(*Classic)
-		aquaExercise(t, fmt.Sprintf("kde2@%gx", scale), lk)
+		exerciseEngine(t, fmt.Sprintf("kde2@%gx", scale), lk)
 		kdeExtras(t, fmt.Sprintf("kde2@%gx", scale), lk)
 	}
 }

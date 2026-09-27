@@ -125,7 +125,7 @@ func TestMacOSPaintsInsideRect(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	for _, n := range macosPackNames {
 		for _, sc := range []float32{1, 2} {
-			aquaExercise(t, fmt.Sprintf("%s@%gx", n, sc), macLook(t, n, sc))
+			exerciseEngine(t, fmt.Sprintf("%s@%gx", n, sc), macLook(t, n, sc))
 		}
 	}
 }

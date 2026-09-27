@@ -1,3 +1,5 @@
+//go:build !theme_engines_pick || theme_engine_macos_tahoe
+
 package style
 
 import (
@@ -82,7 +84,7 @@ func TestTahoePaintsEveryControlInsideItsRect(t *testing.T) {
 	for _, n := range tahoePackNames {
 		for _, sc := range []float32{1, 1.75, 2} {
 			lk := macLook(t, n, sc)
-			aquaExercise(t, fmt.Sprintf("%s@%gx", n, sc), lk)
+			exerciseEngine(t, fmt.Sprintf("%s@%gx", n, sc), lk)
 			kdeExtras(t, fmt.Sprintf("%s@%gx", n, sc), lk)
 			for _, st := range []ControlState{StateNone, StateSidebar, StateSidebar | StateBackdrop, StateFocused} {
 				img := paintengine2d.NewImage(int(260*sc), int(180*sc))

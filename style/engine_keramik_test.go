@@ -12,8 +12,8 @@ func TestKeramikPackRegisteredInYearOrder(t *testing.T) {
 	pos := kdePositions()
 	// Keramik (2002) comes before KDE's later looks: Plastik (2004) and
 	// Oxygen (2008).
-	if !(pos["keramik"] < pos["oxygen"]) {
-		t.Fatalf("Keramik (2002) sorts after Oxygen (2008): %v %v", pos["keramik"], pos["oxygen"])
+	if o, ok := pos["oxygen"]; ok && pos["keramik"] > o {
+		t.Fatalf("Keramik (2002) sorts after Oxygen (2008): %v %v", pos["keramik"], o)
 	}
 	if p, ok := pos["plastik"]; ok && pos["keramik"] > p {
 		t.Fatalf("Keramik (2002) sorts after Plastik (2004): %v %v", pos["keramik"], p)
@@ -124,7 +124,7 @@ func TestKeramikPaintsEveryControlInsideItsRect(t *testing.T) {
 	p, _ := LoadTheme("keramik")
 	for _, scale := range []float32{1, 2} {
 		lk := WithScale(p.Look(), scale).(*Classic)
-		aquaExercise(t, fmt.Sprintf("keramik@%gx", scale), lk)
+		exerciseEngine(t, fmt.Sprintf("keramik@%gx", scale), lk)
 		kdeExtras(t, fmt.Sprintf("keramik@%gx", scale), lk)
 	}
 }
