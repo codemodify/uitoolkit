@@ -421,6 +421,22 @@ are the toolkit's entries, kept where they were found.*
   in the eraser go unwritten whatever the filter, texture format or texel
   choice; per-sample shading hides most but not all. The wipe stays;
   paintengine2d keeps an opt-in probe (`PE_PROBE_MSAA_DESTOUT=1`).
+- **Text is one draw op a glyph.** `Context.DrawGlyphs` issues a `Blit`
+  per glyph, and `DrawScene` batches consecutive opaque rect fills on the
+  GPU but not blits — so 770 of Settings' 1029 recorded ops, and 1440 of
+  the showcase's 1622, are one-glyph GPU draw calls covering 11% and 24%
+  of their windows' pixels. A batched glyph-run op in the `Device`
+  interface is the biggest structural saving left on the GPU path
+  (`docs/perf.md`, the 0.20.0 review).
+- **`pixelDisjointRects` is quadratic over rects that share a row.** The
+  CPU device's analytic multi-rect fast path proves the boxes disjoint by
+  sorting them on their top edge and stopping at the first that begins
+  below the current one — which never happens in a run of rects that all
+  sit on one scanline, so 130 dots of a dotted line cost 8450 overlap
+  tests and the fill is 3.3× slower than the same dots drawn one at a
+  time. A secondary sort on X, with an X-based break, would make it
+  linear. It is why `style.DottedRect` fills the four edges of a focus
+  ring separately instead of the ring at once.
 
 ## Tooling
 

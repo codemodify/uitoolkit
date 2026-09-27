@@ -2,9 +2,25 @@ package style
 
 import (
 	"math"
+	"sync"
 
 	"github.com/codemodify/paintengine2d"
 )
+
+// shapePaths recycles the paths these helpers gather rects into. A path
+// keeps its capacity across paints, so a focus ring or a panel of bumps
+// is rebuilt every frame without allocating. Nothing keeps the path: a
+// recorder snapshots it and a device consumes it during the draw call,
+// which is what the KDE 3 and pixel engines rely on for their own pools.
+var shapePaths = sync.Pool{New: func() any { return paintengine2d.NewPath() }}
+
+func borrowPath() *paintengine2d.Path {
+	p := shapePaths.Get().(*paintengine2d.Path)
+	p.Reset()
+	return p
+}
+
+func returnPath(p *paintengine2d.Path) { shapePaths.Put(p) }
 
 // Shape helpers shared by the theme engines. They are deliberately small
 // and literal — each one is a drawing idiom that several eras used — so an
@@ -176,15 +192,42 @@ func DottedRect(ctx *paintengine2d.Context, b paintengine2d.Rect, col paintengin
 	}
 	x0, y0 := float32(math.Floor(float64(b.Min.X))), float32(math.Floor(float64(b.Min.Y)))
 	x1, y1 := float32(math.Floor(float64(b.Max.X)))-1, float32(math.Floor(float64(b.Max.Y)))-1
+	// One path an edge rather than one draw op a dot, as Pinstripes fills
+	// all its stripes at once: a ring round a list row was 282 ops, and
+	// every engine's focus ring ends here. The dots are disjoint
+	// one-pixel boxes on integer coordinates, so a fill covers exactly
+	// the same pixels.
+	//
+	// Four paths, not one. A single path round the ring has the whole
+	// box as its bounds, and the scanline rasterizer then walks every row
+	// of it to paint two dots; an edge's path is one pixel thick, so the
+	// immediate CPU device rasterizes the ring's 568 pixels instead of
+	// its 6240.
 	fill := paintengine2d.Fill(col)
+	edge := borrowPath()
+	defer returnPath(edge)
+	drawEdge := func() {
+		if !edge.Empty() {
+			ctx.DrawPath(edge, fill)
+		}
+		edge.Reset()
+	}
 	for x := x0; x <= x1; x += 2 {
-		ctx.DrawRect(paintengine2d.XYWH(x, y0, 1, 1), fill)
-		ctx.DrawRect(paintengine2d.XYWH(x, y1, 1, 1), fill)
+		edge.AddRect(paintengine2d.XYWH(x, y0, 1, 1))
 	}
+	drawEdge()
+	for x := x0; x <= x1; x += 2 {
+		edge.AddRect(paintengine2d.XYWH(x, y1, 1, 1))
+	}
+	drawEdge()
 	for y := y0 + 2; y < y1; y += 2 {
-		ctx.DrawRect(paintengine2d.XYWH(x0, y, 1, 1), fill)
-		ctx.DrawRect(paintengine2d.XYWH(x1, y, 1, 1), fill)
+		edge.AddRect(paintengine2d.XYWH(x0, y, 1, 1))
 	}
+	drawEdge()
+	for y := y0 + 2; y < y1; y += 2 {
+		edge.AddRect(paintengine2d.XYWH(x1, y, 1, 1))
+	}
+	drawEdge()
 }
 
 // Bumps paints the Java Metal "bumps" texture: a lattice of light dots with
@@ -199,16 +242,29 @@ func Bumps(ctx *paintengine2d.Context, b paintengine2d.Rect, light, dark painten
 	ctx.Save()
 	ctx.ClipRect(b)
 	lf, df := paintengine2d.Fill(light), paintengine2d.Fill(dark)
+	// A row of dots at a time, light then dark, rather than two draw ops
+	// per dot: over a 320x200 panel at the default spacing that is 200
+	// ops instead of 16 000. Batching a whole panel would be fewer still,
+	// but at spacing 2 a row's dark dots land on the next row's light
+	// ones, and the painter's order across rows is what decides those
+	// pixels — so the batch stops at the row.
+	lp, dp := borrowPath(), borrowPath()
+	defer returnPath(lp)
+	defer returnPath(dp)
 	row := 0
 	for y := b.Min.Y; y < b.Max.Y; y += spacing / 2 {
 		off := float32(0)
 		if row%2 == 1 {
 			off = spacing / 2
 		}
+		lp.Reset()
+		dp.Reset()
 		for x := b.Min.X + off; x < b.Max.X; x += spacing {
-			ctx.DrawRect(paintengine2d.XYWH(x, y, 1, 1), lf)
-			ctx.DrawRect(paintengine2d.XYWH(x+1, y+1, 1, 1), df)
+			lp.AddRect(paintengine2d.XYWH(x, y, 1, 1))
+			dp.AddRect(paintengine2d.XYWH(x+1, y+1, 1, 1))
 		}
+		ctx.DrawPath(lp, lf)
+		ctx.DrawPath(dp, df)
 		row++
 	}
 	ctx.Restore()
@@ -228,7 +284,8 @@ func Pinstripes(ctx *paintengine2d.Context, b paintengine2d.Rect, col paintengin
 	}
 	// One path of every stripe, filled once: a window of pinstripes is a
 	// single draw op instead of hundreds.
-	path := paintengine2d.NewPath()
+	path := borrowPath()
+	defer returnPath(path)
 	for y := b.Min.Y; y < b.Max.Y; y += period {
 		h := thickness
 		if y+h > b.Max.Y {
