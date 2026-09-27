@@ -167,11 +167,9 @@ own: the four check boxes and the window's corners, then everything the
 sentence *what the toolkit draws with* covers.
 
 ```
-☑ Animations  ☐ OS colors  ☐ OS dialogs  ☐ OS borders
-Corners [Theme shape ▾]
-
-Text [Theme font ▾]  Code [Theme font ▾]  Icons [Classic ▾]  Size [24 ▾]
-Renderer [Auto ▾]
+☐ OS colors  ☐ OS dialogs  ☐ OS borders  ☑ Animations
+Text [Theme font ▾]  Code [Theme font ▾]  Renderer [Auto ▾]
+Icons [Classic ▾]  Size [24 ▾]  Corners [Theme ▾]
 ```
 
 That is what it looks like at 1024×860. It was **one** folding row of

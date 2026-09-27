@@ -740,11 +740,14 @@ func (s *settingsState) optionsRow() widget.Component {
 		})
 
 	shape, glyphs, paint := s.choosers()
+	// The two typefaces, then what rasterizes them, then the icons and
+	// their size, then the shape of the window itself: the text first
+	// because it is what a person reads, the corners last because they
+	// are the one thing here the preview shows without being told.
 	s.drawnWith = widgets.NewWrap(
-		shape,
 		pair(settingWords[1], s.fontUI).WithPadding(0, 0, 6, 0),
 		pair(settingWords[2], s.fontMono).WithPadding(0, 0, 6, 0),
-		glyphs)
+		paint, glyphs, shape)
 	s.drawnWith.Gap = 8
 	s.drawnWith.LineGap = 4
 	// Named for what it is, not for the -page word that reaches it: a
@@ -764,7 +767,7 @@ func (s *settingsState) optionsRow() widget.Component {
 	// borders box goes down onto the second with the corners chooser; at
 	// 1024x860 the four options fill the first line and the corners fall
 	// onto the second alone.
-	row := widgets.NewWrap(motion, colours, native, system, paint)
+	row := widgets.NewWrap(colours, native, system, motion)
 	row.Gap = 8
 	// Closer between the lines than along them: a block that folds has
 	// to read as one block and not as rows of unrelated furniture.

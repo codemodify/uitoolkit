@@ -12,9 +12,9 @@
 // a small live application window in the staged pack, with the settings
 // in a folding row over it and the three config paths under it.
 //
-// That row is four check boxes and the renderer — Animations, OS colors,
-// OS dialogs, OS borders, Renderer — over a second line that says what a
-// pack is drawn with: Corners, Text, Code, Icons, Size.
+// That row is four check boxes — OS colors, OS dialogs, OS borders,
+// Animations — over a second block that says what a pack is drawn with:
+// Text, Code, Renderer, Icons, Size, Corners.
 // It folds onto two lines at the default window size, the options on the
 // first and the choosers on the second, and onto three at the 720x520
 // minimum. Paint is the renderer (look.json "renderer", UITK_PAINT's
@@ -85,7 +85,7 @@ func main() {
 	// The window icon the desktop shows in its title bar, task bar and switcher.
 	a.SetIcon(icons.AppIconRGB("settings", 0x60, 0x70, 0x80)...)
 	win, err := a.NewWindow(platform.WindowOptions{
-		Title: windowTitle("Settings"), Width: 1024, Height: 860, MinWidth: 720, MinHeight: 580,
+		Title: windowTitle("Settings"), Width: 1024, Height: 860, MinWidth: 720, MinHeight: 520,
 		Headless: *headless || *shot != "",
 	})
 	if err != nil {

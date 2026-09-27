@@ -270,7 +270,7 @@ func TestTheColumnIsBareControls(t *testing.T) {
 	if err := style.SaveAppearance(style.DefaultAppearance()); err != nil {
 		t.Fatal(err)
 	}
-	for _, size := range [][2]int{{1024, 860}, {720, 580}} {
+	for _, size := range [][2]int{{1024, 860}, {720, 520}} {
 		_, w := openSettings(t, size[0], size[1])
 		col := browserColumn(t, w)
 		kids := col.Children()
@@ -1615,8 +1615,10 @@ func TestTheOptionsRowOverThePreview(t *testing.T) {
 	}
 	_, w := openSettings(t, 1024, 860)
 	row := optionsRow(t, w)
-	// The words, in the order they are read.
-	want := []string{"Animations", "OS colors", "OS dialogs", "OS borders"}
+	// The words, in the order they are read: the three that hand a piece
+	// of the window to the desktop, in the order of how much they hand
+	// over, and then the one that is the toolkit's own.
+	want := []string{"OS colors", "OS dialogs", "OS borders", "Animations"}
 	var got []string
 	widget.Walk(row, func(c widget.Component) {
 		if b, ok := c.(*widgets.Checkbox); ok {
