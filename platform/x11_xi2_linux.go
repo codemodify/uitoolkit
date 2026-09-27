@@ -257,9 +257,9 @@ import (
 	"github.com/codemodify/paintengine2d"
 )
 
-// EnvX11XI2 set to 0 leaves XInput 2 alone: core events only, wheel
+// envX11XI2 set to 0 leaves XInput 2 alone: core events only, wheel
 // notches, no smooth scrolling and no gestures — the path X11 took before.
-const EnvX11XI2 = "UITK_X11_XI2"
+const envX11XI2 = "UITK_X11_XI2"
 
 // x11XI2 is what a connection does with XInput 2: smooth scrolling from
 // 2.1 (x11scroll.go), touchpad gestures from 2.4.
@@ -330,7 +330,7 @@ func (c *x11Conn) valuesXI2Locked(id int) {
 // takes the devices' scroll valuators.
 func (c *x11Conn) initXI2Locked() {
 	c.xi.minor = -1
-	if os.Getenv(EnvX11XI2) == "0" {
+	if os.Getenv(envX11XI2) == "0" {
 		return
 	}
 	var opcode C.int

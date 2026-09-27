@@ -12,25 +12,25 @@ func TestKeyFromKeysymFallbackNonLatinLayout(t *testing.T) {
 		latinC     = 'c'
 		latinV     = 'v'
 	)
-	if got := KeyFromKeysymFallback(cyrillicEs, latinC); got != KeyC {
+	if got := keyFromKeysymFallback(cyrillicEs, latinC); got != KeyC {
 		t.Fatalf("Cyrillic_es with base 'c' = %v, want KeyC", got)
 	}
-	if got := KeyFromKeysymFallback(greekPsi, latinV); got != KeyV {
+	if got := keyFromKeysymFallback(greekPsi, latinV); got != KeyV {
 		t.Fatalf("Greek_psi with base 'v' = %v, want KeyV", got)
 	}
 	// A layout that does map the symbol must win over the base symbol.
-	if got := KeyFromKeysymFallback('a', 'q'); got != KeyA {
+	if got := keyFromKeysymFallback('a', 'q'); got != KeyA {
 		t.Fatalf("'a' with base 'q' = %v, want KeyA (layout symbol wins)", got)
 	}
 	// Nothing to fall back to.
-	if got := KeyFromKeysymFallback(cyrillicEs, 0); got != KeyUnknown {
+	if got := keyFromKeysymFallback(cyrillicEs, 0); got != KeyUnknown {
 		t.Fatalf("no base symbol = %v, want KeyUnknown", got)
 	}
-	if got := KeyFromKeysymFallback(cyrillicEs, cyrillicEs); got != KeyUnknown {
+	if got := keyFromKeysymFallback(cyrillicEs, cyrillicEs); got != KeyUnknown {
 		t.Fatalf("base == sym = %v, want KeyUnknown", got)
 	}
 	// Named keys are layout-independent already.
-	if got := KeyFromKeysymFallback(0xff1b, 0); got != KeyEscape {
+	if got := keyFromKeysymFallback(0xff1b, 0); got != KeyEscape {
 		t.Fatalf("Escape = %v", got)
 	}
 }

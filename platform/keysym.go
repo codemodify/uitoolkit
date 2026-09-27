@@ -1,7 +1,7 @@
 package platform
 
-// KeyFromKeysym maps an X11 / xkbcommon keysym to a toolkit Key.
-func KeyFromKeysym(ks uint64) Key {
+// keyFromKeysym maps an X11 / xkbcommon keysym to a toolkit Key.
+func keyFromKeysym(ks uint64) Key {
 	switch ks {
 	case 0xff1b:
 		return KeyEscape

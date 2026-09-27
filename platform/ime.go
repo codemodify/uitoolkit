@@ -120,9 +120,9 @@ func ShouldEmitXKBText(pressed, ctrl, imeComposing bool) bool {
 	return pressed && !ctrl && !imeComposing
 }
 
-// PairXKBText records xkb UTF-8 and drops it when IME already committed the
+// pairXKBText records xkb UTF-8 and drops it when IME already committed the
 // same string for this key (IME-then-key order).
-func PairXKBText(utf8, lastIME string) (emit, lastXKB, lastIMEOut string) {
+func pairXKBText(utf8, lastIME string) (emit, lastXKB, lastIMEOut string) {
 	if utf8 == "" {
 		return "", "", lastIME
 	}

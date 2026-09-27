@@ -1066,13 +1066,26 @@ import (
 	"github.com/codemodify/paintengine2d"
 )
 
-// WaylandBackend presents through paintengine2d. When UITK_PAINT=auto|gpu
+// wlBackend presents through paintengine2d. When UITK_PAINT=auto|gpu
 // and EGL init works, each window is a wl_egl_window + eglSwapBuffers.
 // Otherwise it keeps the v0.4.1 opaque wl_shm XRGB8888 path. linux-dmabuf
 // is opt-in (UITK_WAYLAND_PRESENT=dmabuf) on the CPU present path.
-type WaylandBackend struct{}
+type wlBackend struct{}
 
-func (WaylandBackend) Name() string { return "wayland" }
+func (wlBackend) Name() string { return "wayland" }
+
+// Caps: a real desktop, and absolute placement only where the compositor
+// offers zwlr_layer_shell_v1 — a plain xdg_toplevel has no position at
+// all. KDE, sway, Hyprland and wayfire offer it; GNOME/Mutter has
+// declined it. Asked afresh because it is the compositor's answer, not
+// the backend's.
+func (wlBackend) Caps() BackendCaps {
+	c := BackendDesktop
+	if layerSurfacesAvailable() {
+		c |= BackendScreenPlace
+	}
+	return c
+}
 
 func waylandProbe() bool {
 	if os.Getenv("WAYLAND_DISPLAY") == "" && os.Getenv("XDG_RUNTIME_DIR") == "" {
@@ -1081,7 +1094,7 @@ func waylandProbe() bool {
 	return C.ui_wl_probe() != 0
 }
 
-func (WaylandBackend) NewSurface(opts WindowOptions) (Surface, error) {
+func (wlBackend) NewSurface(opts WindowOptions) (Surface, error) {
 	if opts.Headless {
 		return NewOffscreen(opts), nil
 	}
@@ -1414,7 +1427,7 @@ type wlSurface struct {
 	appID string
 	// sizeOpts are the options the window's limits are computed from (its
 	// minimum already defaulted), sizing its resize policy and limits what
-	// xdg_toplevel was last told (platform.SizingSurface).
+	// xdg_toplevel was last told (platform.WindowGeometry).
 	sizeOpts WindowOptions
 	sizing   Sizing
 	limits   SizeLimits
@@ -1830,7 +1843,7 @@ func (s *wlSurface) toDevice(x, y float32) (float32, float32) {
 // SetFullscreen puts the toplevel full screen, or takes it back
 // (WindowFrame). The compositor answers with the state.
 func (s *wlSurface) SetFullscreen(on bool) bool {
-	if s.top == nil || !s.Caps().Has(FrameFullscreen) {
+	if s.top == nil || !s.FrameCaps().Has(FrameFullscreen) {
 		return false
 	}
 	if on {
@@ -1844,7 +1857,7 @@ func (s *wlSurface) SetFullscreen(on bool) bool {
 // SetMaximized maximizes the toplevel both ways, or restores it
 // (WindowFrame). The compositor answers with the state.
 func (s *wlSurface) SetMaximized(on bool) bool {
-	if s.top == nil || !s.Caps().Has(FrameMaximize) {
+	if s.top == nil || !s.FrameCaps().Has(FrameMaximize) {
 		return false
 	}
 	if on {
@@ -1874,7 +1887,39 @@ func (s *wlSurface) Lower() bool { return false }
 // (WindowFrame).
 func (s *wlSurface) SetKeepAbove(bool) bool { return false }
 
-func (s *wlSurface) Raise() {
+// GeometryCaps: Wayland has no window position at all. An xdg_toplevel
+// is never told where it is and cannot ask to be moved — that is the
+// protocol, not an omission — so GeometryMove and GeometryPosition are
+// simply absent. Absolute placement needs zwlr_layer_shell_v1, which KDE,
+// sway, Hyprland and wayfire offer and GNOME/Mutter has declined, so
+// GeometryScreenPlace is the compositor's answer and is asked afresh.
+//
+// A Win32 or AppKit backend gets move and position for free (SetWindowPos,
+// setFrameOrigin:) and simply sets the bits. It never learns that
+// xdg-shell exists.
+func (s *wlSurface) GeometryCaps() GeometryCaps {
+	if s == nil || s.closed {
+		return 0
+	}
+	c := GeometryVisibility | GeometrySizeLimits
+	if s.wantsLayer() && layerSurfacesAvailable() {
+		c |= GeometryScreenPlace
+	}
+	return c
+}
+
+// Move: an xdg_toplevel has no position, so there is nothing to ask
+// (no [GeometryMove]). See GeometryCaps.
+func (s *wlSurface) Move(int, int) bool { return false }
+
+// Position: a Wayland client is never told where its windows are
+// (no [GeometryPosition]). See GeometryCaps.
+func (s *wlSurface) Position() (int, int, bool) { return 0, 0, false }
+
+func (s *wlSurface) Raise() bool {
+	if s == nil || s.closed {
+		return false
+	}
 	s.hidden = false
 	if s.wantsLayer() {
 		if s.layer.obj == nil || s.layer.gone {
@@ -1884,7 +1929,7 @@ func (s *wlSurface) Raise() {
 		if s.conn != nil && s.conn.dpy != nil {
 			C.ui_wl_flush(s.conn.dpy)
 		}
-		return
+		return true
 	}
 	if s.xdg == nil || s.top == nil {
 		// xdg_toplevel has no unset_minimized. Destroying the role and
@@ -1895,11 +1940,15 @@ func (s *wlSurface) Raise() {
 	if s.conn != nil && s.conn.dpy != nil {
 		C.ui_wl_flush(s.conn.dpy)
 	}
+	return true
 }
 
-func (s *wlSurface) Show() { s.Raise() }
+func (s *wlSurface) Show() bool { return s.Raise() }
 
-func (s *wlSurface) Hide() {
+func (s *wlSurface) Hide() bool {
+	if s == nil || s.closed {
+		return false
+	}
 	s.hidden = true
 	// Minimize first (taskbar / overview), then drop the xdg role so
 	// Show can remap. set_minimized alone cannot be undone.
@@ -1910,6 +1959,7 @@ func (s *wlSurface) Hide() {
 	if s.conn != nil && s.conn.dpy != nil {
 		C.ui_wl_flush(s.conn.dpy)
 	}
+	return true
 }
 
 func (s *wlSurface) bindToplevelLocked() {
@@ -3101,7 +3151,7 @@ func uitkWlRegistryGlobal(id C.uintptr_t, reg *C.struct_wl_registry, name C.uint
 		c.primMan = (*C.struct_zwp_primary_selection_device_manager_v1)(C.ui_wl_bind(reg, name, C.ui_wl_prim_man_iface(), 1))
 		c.bindSeatExtras()
 	case "zxdg_decoration_manager_v1":
-		if os.Getenv(EnvXdgDecoration) == "0" {
+		if os.Getenv(envXdgDecoration) == "0" {
 			// Testing: behave as on GNOME, which has no server-side
 			// decorations (KWin then treats every window as drawing its
 			// own frame).
@@ -3245,7 +3295,7 @@ func (s *wlSurface) applyPendingConfigure() {
 		s.pendCapsSet = false
 		if !s.capsSet || s.pendCaps != s.caps {
 			s.caps, s.capsSet = s.pendCaps, true
-			s.push(Event{Kind: EventCapabilities, Caps: s.Caps()})
+			s.push(Event{Kind: EventCapabilities, Caps: s.FrameCaps()})
 		}
 	}
 	if s.pendStateSet {
@@ -3604,7 +3654,7 @@ func uitkWlKey(id C.uintptr_t, key, state, serial C.uint32_t) {
 // under a Cyrillic / Greek / Hebrew layout.
 func (c *wlConn) mapKey(key C.uint32_t, sym uint64) Key {
 	base := uint64(C.ui_xkb_base_sym(c.xkbMap, key))
-	return KeyFromKeysymFallback(sym, base)
+	return keyFromKeysymFallback(sym, base)
 }
 
 // pushXKBText emits EventText from xkb/compose unless IME preedit owns the key.
@@ -3642,7 +3692,7 @@ func (c *wlConn) pushXKBText(s *wlSurface, key C.uint32_t, ks uint64) {
 	if len(raw) == 0 {
 		return
 	}
-	emit, lastX, lastI := PairXKBText(string(raw), c.lastIMEText)
+	emit, lastX, lastI := pairXKBText(string(raw), c.lastIMEText)
 	c.lastXkbText, c.lastIMEText = lastX, lastI
 	if emit == "" {
 		return
@@ -3909,9 +3959,17 @@ func uitkWlFracScale(sid C.uintptr_t, scale120 C.uint32_t) {
 	if s == nil || scale120 == 0 {
 		return
 	}
+	was := s.frac
 	s.frac = float32(scale120) / 120
 	if s.frac < 1 {
 		s.frac = 1
+	}
+	// Say so. A preferred_scale usually arrives with a configure, and
+	// the resize that follows used to be the only way the application
+	// found out — which meant the one time it arrives alone, the window
+	// went on drawing a look built for the old scale.
+	if s.frac != was {
+		s.push(Event{Kind: EventScale})
 	}
 }
 
@@ -4567,7 +4625,7 @@ func (s *wlSurface) WindowState() WindowState { return s.state }
 // AppKit backend has all three — and stating them as data is what lets the
 // layer above hide a caption button on Wayland and show it on X11 without
 // knowing either protocol exists.
-func (s *wlSurface) Caps() FrameCaps {
+func (s *wlSurface) FrameCaps() FrameCaps {
 	if s == nil || s.closed || s.popup {
 		return 0
 	}
@@ -4595,20 +4653,24 @@ func (s *wlSurface) Caps() FrameCaps {
 	return dropResizeCaps(c, s.sizing)
 }
 
-// Sizing is the window's resize policy (SizingSurface).
+// Sizing is the window's resize policy (WindowGeometry).
 func (s *wlSurface) Sizing() Sizing { return s.sizing }
 
 // SetSizing changes the policy and re-states the toplevel's limits
-// (SizingSurface).
-func (s *wlSurface) SetSizing(sz Sizing) {
-	if s == nil || s.sizing == sz {
-		return
+// (WindowGeometry).
+func (s *wlSurface) SetSizing(sz Sizing) bool {
+	if s == nil {
+		return false
+	}
+	if s.sizing == sz {
+		return true
 	}
 	s.sizing = sz
 	s.syncLimits()
+	return true
 }
 
-// SizeLimits is what xdg_toplevel was last told (SizingSurface).
+// SizeLimits is what xdg_toplevel was last told (WindowGeometry).
 func (s *wlSurface) SizeLimits() SizeLimits { return s.limits }
 
 // syncLimits recomputes the window's limits for its size and states them.
@@ -4653,7 +4715,7 @@ func (s *wlSurface) SetShadedHeight(h int) bool {
 	h = max(h, 0)
 	// Unpinning always works: a window must never be left rolled up
 	// because the capability went away under it.
-	if h > 0 && !s.Caps().Has(FrameShade) {
+	if h > 0 && !s.FrameCaps().Has(FrameShade) {
 		return false
 	}
 	if h == s.shadeH {
@@ -4693,7 +4755,7 @@ func (s *wlSurface) StartMove() bool {
 // StartResize hands the held button press to the compositor for an
 // interactive resize from edges (xdg_toplevel.resize).
 func (s *wlSurface) StartResize(edges Edges) bool {
-	if !s.Caps().Has(FrameResize) {
+	if !s.FrameCaps().Has(FrameResize) {
 		return false
 	}
 	e := xdgResizeEdge(edges)
@@ -4712,7 +4774,7 @@ func (s *wlSurface) StartResize(edges Edges) bool {
 // coordinates).
 func (s *wlSurface) ShowMenu(p paintengine2d.Point) bool {
 	c := s.conn
-	if s.top == nil || c == nil || c.seat == nil || c.dpy == nil || !s.Caps().Has(FrameMenu) {
+	if s.top == nil || c == nil || c.seat == nil || c.dpy == nil || !s.FrameCaps().Has(FrameMenu) {
 		return false
 	}
 	sc := s.deviceScale()
@@ -4913,7 +4975,7 @@ func (s *wlSurface) inputLogical() FrameInsets {
 // Minimize iconifies the window (xdg_toplevel.set_minimized), keeping its
 // role: the taskbar brings it back. Hide, by contrast, drops the role.
 func (s *wlSurface) Minimize() bool {
-	if s.top == nil || s.conn == nil || s.conn.dpy == nil || !s.Caps().Has(FrameMinimize) {
+	if s.top == nil || s.conn == nil || s.conn.dpy == nil || !s.FrameCaps().Has(FrameMinimize) {
 		return false
 	}
 	C.ui_wl_set_minimized(s.top)
@@ -4923,3 +4985,4 @@ func (s *wlSurface) Minimize() bool {
 
 // wlSurface is a full WindowFrame (compile-time check).
 var _ WindowFrame = (*wlSurface)(nil)
+var _ WindowGeometry = (*wlSurface)(nil)

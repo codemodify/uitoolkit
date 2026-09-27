@@ -213,6 +213,33 @@ const (
 	// pointer at Pos. See [GestureKind] and [GesturePhase] for the
 	// contract; Fingers, Delta, Scale and Rotation carry the gesture.
 	EventGesture
+	// EventScale: the display scale this window is drawn at changed —
+	// it was moved to a monitor with another scale, or the scale of the
+	// monitor it is on was changed under it. Read the new one from
+	// [Surface.Scale]; the event carries no size, because the window's
+	// size in logical pixels has not changed and its buffer is the
+	// backend's to resize.
+	//
+	// It exists because **a scale change is not always a resize**. It
+	// usually is on Wayland (a fractional-scale change arrives with a
+	// configure) and on Windows (WM_DPICHANGED hands you a rect to
+	// honour, and a WM_SIZE follows). On macOS it is not:
+	// NSWindowDidChangeBackingProperties fires with the window the same
+	// size in points, so a window dragged from a Retina display to a
+	// plain one would never be told — it would go on drawing a look
+	// built for the wrong scale until something else resized it. Any
+	// backend that can notice must send this, resize or no resize.
+	//
+	// It is safe to send when nothing changed: the application compares
+	// against the scale it is drawing at and ignores a repeat.
+	//
+	// The X11 backend does not send it, and that is not an omission:
+	// X11's scale here is the display's, read from Xft.dpi at connect,
+	// and one logical screen has one of them — a window moved to
+	// another monitor does not change scale because X11 does not think
+	// it has. Watching XSETTINGS for Xft/DPI changing under a running
+	// session would make it send one; nothing has needed that yet.
+	EventScale
 )
 
 // DropReceiver is implemented by surfaces that take drops from other
@@ -334,9 +361,23 @@ type WindowOptions struct {
 // NewPaintContext (GPUDevice when EGL is bound, else Buffer) and calls Present.
 //
 // Threading: every Surface method, and the package-level clipboard and
-// cursor helpers, must be called from the one goroutine that runs the
-// event loop. The backends talk to Xlib / libwayland connections that are
-// not goroutine-safe in the way this package uses them.
+// cursor helpers, must be called from **the main OS thread**, the one
+// that runs the event loop, with [runtime.LockOSThread] held — which the
+// app package does on the application's behalf.
+//
+// One goroutine is not enough, and the difference is not pedantic. Go may
+// move a goroutine between OS threads at any function call, and:
+//
+//   - Xlib and libwayland connections are not goroutine-safe in the way
+//     this package uses them, which is what "one goroutine" was for;
+//   - AppKit requires that NSApplication and every NSWindow be touched
+//     from the process's *first* thread, and nothing else will do;
+//   - Win32 delivers messages to the thread that created the HWND, and
+//     OLE drag-and-drop needs that thread to be an STA.
+//
+// Two of those three are platforms this package does not have yet, which
+// is why the weaker rule held so far. It will not survive the first one
+// of them, so it is written down now, while there is nothing to break.
 //
 // Close semantics: [EventClose] is a *request* from the window manager or
 // compositor (WM_DELETE_WINDOW, xdg_toplevel.close). The application may
@@ -373,6 +414,14 @@ type Surface interface {
 // Backend opens surfaces. Linux ships X11 (CGO) plus a always-on offscreen
 // backend for tests, screenshots, and headless CI.
 type Backend interface {
+	// Name says which backend this is: "wayland", "x11", "offscreen".
+	// It is for diagnostics and for what a page prints — nothing
+	// branches on it, because a name is not a capability (see
+	// [BackendCaps]).
 	Name() string
+	// Caps is what this backend will do, asked afresh: one of them
+	// depends on the compositor and can change under a running
+	// application.
+	Caps() BackendCaps
 	NewSurface(opts WindowOptions) (Surface, error)
 }

@@ -15,10 +15,10 @@ import "time"
 // ahead of the client. The pure state below is x11_sync_linux.go's, kept
 // free of cgo so it is tested headless.
 
-// EnvX11Sync set to 0 makes the X11 backend leave _NET_WM_SYNC_REQUEST out:
+// envX11Sync set to 0 makes the X11 backend leave _NET_WM_SYNC_REQUEST out:
 // a window the manager resizes as fast as it likes, which is how the
 // difference is measured.
-const EnvX11Sync = "UITK_X11_SYNC"
+const envX11Sync = "UITK_X11_SYNC"
 
 // syncOverdue is how long a request may wait for the frame that answers it
 // before it is answered anyway: an app that does not repaint on a resize (or

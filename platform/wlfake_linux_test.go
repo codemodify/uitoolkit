@@ -316,7 +316,7 @@ func fakeSurface(t *testing.T) *wlSurface {
 	if busy {
 		t.Skip("a Wayland connection is already open in this process")
 	}
-	s, err := WaylandBackend{}.NewSurface(WindowOptions{Title: "fake", Width: 200, Height: 100})
+	s, err := wlBackend{}.NewSurface(WindowOptions{Title: "fake", Width: 200, Height: 100})
 	if err != nil {
 		t.Fatal(err)
 	}

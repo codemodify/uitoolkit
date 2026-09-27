@@ -37,7 +37,7 @@ func (w *Window) syncDecorationPalette() {
 		return
 	}
 	fs := platform.FrameOf(w.surf)
-	if !fs.Caps().Has(platform.FramePalette) {
+	if !fs.FrameCaps().Has(platform.FramePalette) {
 		return
 	}
 	path, err := w.app.decorationPaletteFile(w.look)

@@ -77,7 +77,10 @@ type atspiBridge struct {
 // the bridge on when it runs (see A11yEnv).
 func (a *Application) startA11y() {
 	env := strings.TrimSpace(os.Getenv(A11yEnv))
-	offscreen := a.headless || a.backend == nil || a.backend.Name() == "offscreen"
+	// No desktop behind the backend means no assistive technology can be
+	// watching, so the bridge stays off unless A11yEnv asks for it.
+	offscreen := a.headless ||
+		!platform.BackendCapsOf(a.backend).Has(platform.BackendDesktop)
 	if env == "0" || (offscreen && env != "1") {
 		return
 	}

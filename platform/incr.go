@@ -12,10 +12,10 @@ const (
 	minINCRThreshold     = 64
 )
 
-// INCRThreshold is the X11 selection size that switches to the ICCCM
+// incrThreshold is the X11 selection size that switches to the ICCCM
 // incremental (INCR) protocol. UITK_X11_INCR_THRESHOLD overrides this
 // (bytes). maxRequestBytes is XMaxRequestSize*4 when known.
-func INCRThreshold(maxRequestBytes int) int {
+func incrThreshold(maxRequestBytes int) int {
 	if s := strings.TrimSpace(os.Getenv("UITK_X11_INCR_THRESHOLD")); s != "" {
 		n, err := strconv.Atoi(s)
 		if err == nil && n >= minINCRThreshold {
@@ -31,8 +31,8 @@ func INCRThreshold(maxRequestBytes int) int {
 	return defaultINCRThreshold
 }
 
-// INCRChunkSize is one incremental property payload.
-func INCRChunkSize(threshold int) int {
+// incrChunkSize is one incremental property payload.
+func incrChunkSize(threshold int) int {
 	if threshold < 256 {
 		return 256
 	}
@@ -42,10 +42,10 @@ func INCRChunkSize(threshold int) int {
 	return threshold
 }
 
-// INCRChunks splits data into INCR property-sized pieces. The last
+// incrChunks splits data into INCR property-sized pieces. The last
 // chunk may be empty (ICCCM end-of-transfer is an empty property, which
 // the caller sends after the last non-empty chunk).
-func INCRChunks(data []byte, chunk int) [][]byte {
+func incrChunks(data []byte, chunk int) [][]byte {
 	if chunk < 1 {
 		chunk = defaultINCRChunk
 	}

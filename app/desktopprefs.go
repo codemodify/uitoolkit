@@ -59,7 +59,9 @@ func (a *Application) watchDesktop() (wait func()) {
 		style.SetDesktopAccent(c, ok)
 		a.accentForced = true
 	}
-	if a.headless || a.backend == nil || a.backend.Name() == "offscreen" {
+	// Desktop preferences are a desktop's to have: with none behind the
+	// backend there is nobody whose preferences these would be.
+	if a.headless || !platform.BackendCapsOf(a.backend).Has(platform.BackendDesktop) {
 		return func() {}
 	}
 	type first struct {

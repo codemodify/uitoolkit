@@ -130,12 +130,12 @@ func captionButtonNamed(name string) CaptionButton {
 	return CaptionNone
 }
 
-// KDEButtonLayout reads KWin's ButtonsOnLeft / ButtonsOnRight letters
+// kdeButtonLayout reads KWin's ButtonsOnLeft / ButtonsOnRight letters
 // ([org.kde.kdecoration2] in kwinrc): M window menu, I minimize, A
 // maximize, X close, F keep above, _ a spacer. KWin's other buttons (N
 // application menu, S on all desktops, H help, B keep below, L shade, E
 // exclude from capture) have no toolkit equivalent and are skipped.
-func KDEButtonLayout(left, right string) ButtonLayout {
+func kdeButtonLayout(left, right string) ButtonLayout {
 	seen := map[CaptionButton]bool{}
 	side := func(letters string) []CaptionButton {
 		var out []CaptionButton
@@ -347,11 +347,11 @@ type TitleBarPrefs struct {
 	Source string
 }
 
-// IsKDE reports whether desktop (XDG_CURRENT_DESKTOP) is KDE Plasma.
-func IsKDE(desktop string) bool { return desktopHas(desktop, "kde") }
+// isKDE reports whether desktop (XDG_CURRENT_DESKTOP) is KDE Plasma.
+func isKDE(desktop string) bool { return desktopHas(desktop, "kde") }
 
-// IsGNOME reports whether desktop (XDG_CURRENT_DESKTOP) is GNOME.
-func IsGNOME(desktop string) bool { return desktopHas(desktop, "gnome") }
+// isGNOME reports whether desktop (XDG_CURRENT_DESKTOP) is GNOME.
+func isGNOME(desktop string) bool { return desktopHas(desktop, "gnome") }
 
 func desktopHas(desktop, name string) bool {
 	for _, d := range strings.Split(desktop, ":") {
@@ -379,10 +379,10 @@ func DefaultTitleBarPrefs(desktop string) TitleBarPrefs {
 		Source:          "default",
 	}
 	switch {
-	case IsKDE(desktop):
-		p.Layout = KDEButtonLayout("MSE", "HIAX")
+	case isKDE(desktop):
+		p.Layout = kdeButtonLayout("MSE", "HIAX")
 		p.DragThreshold = 10 // Qt's and KDE's StartDragDist
-	case IsGNOME(desktop):
+	case isGNOME(desktop):
 		p.Layout = ParseButtonLayout("appmenu:close")
 	}
 	return p
@@ -431,7 +431,7 @@ func configDirs() []string {
 // first) and the portal's GNOME keys.
 func titleBarPrefsFrom(desktop string, dirs []string, portal DesktopPrefs) TitleBarPrefs {
 	p := DefaultTitleBarPrefs(desktop)
-	if IsKDE(desktop) {
+	if isKDE(desktop) {
 		kwin := readKConfig(dirs, "kwinrc")
 		globals := readKConfig(dirs, "kdeglobals")
 		deco := kwin["org.kde.kdecoration2"]
@@ -444,7 +444,7 @@ func titleBarPrefsFrom(desktop string, dirs []string, portal DesktopPrefs) Title
 			if !okR {
 				right = "HIAX"
 			}
-			p.Layout = KDEButtonLayout(left, right)
+			p.Layout = kdeButtonLayout(left, right)
 			p.Source = "kwinrc"
 		}
 		if a, ok := kdeDoubleClickAction(kwin["Windows"]["TitlebarDoubleClickCommand"]); ok {

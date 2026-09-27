@@ -316,12 +316,12 @@ func TestOffscreenWindowFrame(t *testing.T) {
 	if fs.ShowMenu(paintengine2d.Pt(0, 0)) {
 		t.Fatal("no window menu")
 	}
-	if fs.Caps().Has(FrameMenu) {
+	if fs.FrameCaps().Has(FrameMenu) {
 		t.Fatal("a desktop with no window menu says so")
 	}
 	o.SimulateCapabilities(FrameMaximize)
-	if fs.Caps().Has(FrameMinimize) || !fs.Caps().Has(FrameMaximize) {
-		t.Fatalf("caps %v", fs.Caps())
+	if fs.FrameCaps().Has(FrameMinimize) || !fs.FrameCaps().Has(FrameMaximize) {
+		t.Fatalf("caps %v", fs.FrameCaps())
 	}
 	// A request the desktop will not grant is refused, not silently
 	// dropped: that is the whole point of the capability being data.
@@ -343,8 +343,8 @@ func TestFrameOfSurfaceWithoutAFrame(t *testing.T) {
 	if f == nil {
 		t.Fatal("FrameOf is never nil")
 	}
-	if f.Caps() != 0 || f.Decorations() != DecorationsServer || f.WindowState() != (WindowState{}) {
-		t.Errorf("caps %v deco %v state %+v", f.Caps(), f.Decorations(), f.WindowState())
+	if f.FrameCaps() != 0 || f.Decorations() != DecorationsServer || f.WindowState() != (WindowState{}) {
+		t.Errorf("caps %v deco %v state %+v", f.FrameCaps(), f.Decorations(), f.WindowState())
 	}
 	if f.StartMove() || f.StartResize(EdgeTop) || f.ShowMenu(paintengine2d.Pt(0, 0)) ||
 		f.Minimize() || f.SetMaximized(true) || f.MaximizeAxis(true) || f.SetFullscreen(true) ||
@@ -421,8 +421,8 @@ func TestFrameCapsGateEveryRequest(t *testing.T) {
 			if c.off != nil {
 				c.off(o)
 			}
-			if f := FrameOf(o); f.Caps().Has(c.cap) {
-				t.Fatalf("%v is still in %v", c.cap, f.Caps())
+			if f := FrameOf(o); f.FrameCaps().Has(c.cap) {
+				t.Fatalf("%v is still in %v", c.cap, f.FrameCaps())
 			} else if c.do(f) {
 				t.Fatalf("%v was granted by a desktop that says it cannot", c.cap)
 			}
@@ -431,8 +431,8 @@ func TestFrameCapsGateEveryRequest(t *testing.T) {
 			if c.on != nil {
 				c.on(o)
 			}
-			if f := FrameOf(o); !f.Caps().Has(c.cap) {
-				t.Fatalf("%v missing from %v", c.cap, f.Caps())
+			if f := FrameOf(o); !f.FrameCaps().Has(c.cap) {
+				t.Fatalf("%v missing from %v", c.cap, f.FrameCaps())
 			} else if !c.do(f) {
 				t.Fatalf("%v was refused by a desktop that says it can", c.cap)
 			}

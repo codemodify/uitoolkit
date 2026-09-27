@@ -7,7 +7,7 @@ import (
 
 func TestINCRChunksRoundtrip(t *testing.T) {
 	data := bytes.Repeat([]byte("xyz"), 100)
-	parts := INCRChunks(data, 64)
+	parts := incrChunks(data, 64)
 	if len(parts) < 2 {
 		t.Fatalf("parts %d", len(parts))
 	}
@@ -27,17 +27,17 @@ func TestINCRChunksRoundtrip(t *testing.T) {
 
 func TestINCRThresholdEnv(t *testing.T) {
 	t.Setenv("UITK_X11_INCR_THRESHOLD", "128")
-	if INCRThreshold(1<<20) != 128 {
-		t.Fatalf("env %d", INCRThreshold(1<<20))
+	if incrThreshold(1<<20) != 128 {
+		t.Fatalf("env %d", incrThreshold(1<<20))
 	}
 	t.Setenv("UITK_X11_INCR_THRESHOLD", "")
-	if INCRThreshold(1<<20) != defaultINCRThreshold {
-		t.Fatalf("default %d", INCRThreshold(1<<20))
+	if incrThreshold(1<<20) != defaultINCRThreshold {
+		t.Fatalf("default %d", incrThreshold(1<<20))
 	}
 }
 
 func TestINCREmpty(t *testing.T) {
-	parts := INCRChunks(nil, 64)
+	parts := incrChunks(nil, 64)
 	if len(parts) != 1 || parts[0] != nil {
 		t.Fatalf("%v", parts)
 	}
@@ -50,12 +50,12 @@ func TestINCREmpty(t *testing.T) {
 func TestINCRThresholdRespectsMaxRequest(t *testing.T) {
 	// A server with a small max request size must lower the threshold so
 	// a reply cannot exceed one request.
-	if got := INCRThreshold(16384); got != 4096 {
-		t.Fatalf("INCRThreshold(16384) = %d, want 4096", got)
+	if got := incrThreshold(16384); got != 4096 {
+		t.Fatalf("incrThreshold(16384) = %d, want 4096", got)
 	}
 	// A large max request keeps the default.
-	if got := INCRThreshold(1 << 20); got != defaultINCRThreshold {
-		t.Fatalf("INCRThreshold(1MiB) = %d, want %d", got, defaultINCRThreshold)
+	if got := incrThreshold(1 << 20); got != defaultINCRThreshold {
+		t.Fatalf("incrThreshold(1MiB) = %d, want %d", got, defaultINCRThreshold)
 	}
 }
 

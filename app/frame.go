@@ -155,8 +155,13 @@ func (w *Window) FrameCaps() platform.FrameCaps {
 
 // offscreen reports whether the application paints without a display
 // (tests, screenshots): no frame is chosen for it unless asked explicitly.
+//
+// It asks the backend whether there is a desktop behind it
+// ([platform.BackendDesktop]) rather than testing its name, so a backend
+// nobody has heard of here answers for itself.
 func (a *Application) offscreen() bool {
-	return a == nil || a.headless || a.backend == nil || a.backend.Name() == "offscreen"
+	return a == nil || a.headless ||
+		!platform.BackendCapsOf(a.backend).Has(platform.BackendDesktop)
 }
 
 // resolveDecorations is the decoration policy, first match wins:
@@ -226,7 +231,7 @@ func (w *Window) syncDecorations() {
 	want := w.app.resolveDecorations(w.opts, w.ownsCaption(), w.surf)
 	f := platform.FrameOf(w.surf)
 	f.RequestDecorations(want)
-	w.decor, w.caps = f.Decorations(), f.Caps()
+	w.decor, w.caps = f.Decorations(), f.FrameCaps()
 	w.rebuildCaption()
 }
 
@@ -431,6 +436,15 @@ func (w *Window) wantDecorFrame() platform.Frame {
 	// DecorationOf has already dropped the shadow and the corners where
 	// the window is maximized, tiled or uncomposited.
 	band, _ := w.resizeBand()
+	caps := w.FrameCaps()
+	if caps.Has(platform.FrameSystemShadow) {
+		// The window system draws the shadow itself, around the window
+		// (Windows' DWM, macOS's AppKit). Reserving a margin here would
+		// give the window two: ours inside it and the system's outside.
+		// The margin going to zero also turns off painting one, because
+		// geom.shadow is !margin.Zero().
+		spec.Shadow = style.Insets{}
+	}
 	sc := max(w.scale, 1)
 	edge := func(reach float32) int {
 		if reach <= 0 {
@@ -445,9 +459,12 @@ func (w *Window) wantDecorFrame() platform.Frame {
 		Bottom: edge(spec.Shadow.Bottom),
 		Left:   edge(spec.Shadow.Left),
 	}
-	if !w.Resizable() {
+	if !w.Resizable() || caps.Has(platform.FrameSystemResizeBand) {
 		// Nothing to reach into the margin for: a fixed window's input
-		// region is the window, and the shadow around it clicks through.
+		// region is the window, and the shadow around it clicks through
+		// — and where the window system runs edge resizing itself
+		// (AppKit's resizable NSWindow), a band of ours would be both
+		// unnecessary and unreachable.
 		band = 0
 	}
 	f.Input = platform.FrameInsets{
@@ -469,7 +486,7 @@ func (w *Window) applyFrame() {
 	// through style.GlassBehind, so it is refreshed here — once a layout,
 	// beside everything else the window system has to say.
 	fs := platform.FrameOf(w.surf)
-	style.SetGlassAvailable(fs.Caps().Has(platform.FrameBlurBehind))
+	style.SetGlassAvailable(fs.FrameCaps().Has(platform.FrameBlurBehind))
 	f := w.wantFrame()
 	if f.Same(w.sysFrame) {
 		return

@@ -47,22 +47,22 @@ func sameButtons(a, b []CaptionButton) bool {
 
 func TestKDEButtonLayout(t *testing.T) {
 	// KWin's defaults: MSE on the left, HIAX on the right.
-	l := KDEButtonLayout("MSE", "HIAX")
+	l := kdeButtonLayout("MSE", "HIAX")
 	if !sameButtons(l.Left, []CaptionButton{CaptionMenu}) ||
 		!sameButtons(l.Right, []CaptionButton{CaptionMinimize, CaptionMaximize, CaptionClose}) {
 		t.Errorf("defaults %v", l)
 	}
-	l = KDEButtonLayout("X", "IA")
+	l = kdeButtonLayout("X", "IA")
 	if !sameButtons(l.Left, []CaptionButton{CaptionClose}) || !sameButtons(l.Right, []CaptionButton{CaptionMinimize, CaptionMaximize}) {
 		t.Errorf("close on the left %v", l)
 	}
-	l = KDEButtonLayout("XI_A", "NFBLHS")
+	l = kdeButtonLayout("XI_A", "NFBLHS")
 	if !sameButtons(l.Left, []CaptionButton{CaptionClose, CaptionMinimize, CaptionSpacer, CaptionMaximize}) ||
 		!sameButtons(l.Right, []CaptionButton{CaptionKeepAbove}) {
 		t.Errorf("spacer, keep above and dropped buttons %v", l)
 	}
 	// F is keep above; N, B, L, H and S still have no toolkit equivalent.
-	if l := KDEButtonLayout("", "NBLHS"); len(l.Left) != 0 || len(l.Right) != 0 {
+	if l := kdeButtonLayout("", "NBLHS"); len(l.Left) != 0 || len(l.Right) != 0 {
 		t.Errorf("buttons with no equivalent %v", l)
 	}
 }

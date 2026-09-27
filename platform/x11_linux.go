@@ -940,14 +940,20 @@ import (
 	"github.com/codemodify/paintengine2d"
 )
 
-// X11Backend presents through paintengine2d. UITK_PAINT=auto|gpu binds
+// x11Backend presents through paintengine2d. UITK_PAINT=auto|gpu binds
 // GPUDevice to the X window (eglSwapBuffers) when EGL works; otherwise
 // present is dirty-rect XPutImage / MIT-SHM.
-type X11Backend struct{}
+type x11Backend struct{}
 
-func (X11Backend) Name() string { return "x11" }
+func (x11Backend) Name() string { return "x11" }
 
-func (X11Backend) NewSurface(opts WindowOptions) (Surface, error) {
+// Caps: a real desktop, and X11 places windows where they ask
+// (XMoveWindow, _NET_MOVERESIZE_WINDOW) — a window manager may argue
+// about it, but there is a position to ask for, which is what Wayland
+// lacks.
+func (x11Backend) Caps() BackendCaps { return BackendDesktop | BackendScreenPlace }
+
+func (x11Backend) NewSurface(opts WindowOptions) (Surface, error) {
 	if opts.Headless {
 		return NewOffscreen(opts), nil
 	}
@@ -1200,7 +1206,7 @@ type x11Surface struct {
 	// opts are what the window was made with, so it can be re-created on
 	// another visual when the frame starts or stops needing alpha; sizing
 	// is its resize policy and limits what WM_NORMAL_HINTS last said
-	// (platform.SizingSurface).
+	// (platform.WindowGeometry).
 	opts   WindowOptions
 	sizing Sizing
 	limits SizeLimits
@@ -1259,9 +1265,9 @@ func x11InitOnce() {
 // cannot flood a terminal.
 var x11Errors atomic.Int64
 
-// X11Errors is the number of X protocol errors seen since start (tests
+// x11ErrorCount is the number of X protocol errors seen since start (tests
 // and diagnostics).
-func X11Errors() int { return int(x11Errors.Load()) }
+func x11ErrorCount() int { return int(x11Errors.Load()) }
 
 //export uitkXError
 func uitkXError(code, request, minor C.int) {
@@ -1921,7 +1927,7 @@ func (s *x11Surface) translate(xe *C.XEvent) []Event {
 		return []Event{{Kind: EventExpose, Pos: r.Min, Width: int(r.Dx()), Height: int(r.Dy())}}
 	case C.ConfigureNotify:
 		// Where the window manager put the window, for whoever asks
-		// ([HostPositioner]): a drag that carries a window needs it, and
+		// ([WindowGeometry.Position]): a drag that carries a window needs it, and
 		// a saved layout keeps a floating panel's place with it.
 		s.posX, s.posY = int(C.ui_cfg_x(xe)), int(C.ui_cfg_y(xe))
 		s.posRoot, s.posKnown = C.ui_cfg_synthetic(xe) != 0, true
@@ -2007,7 +2013,7 @@ func (s *x11Surface) translate(xe *C.XEvent) []Event {
 		base := uint64(C.ui_base_sym(s.conn.dpy, xe))
 		ev := Event{
 			Kind: kind,
-			Key:  KeyFromKeysymFallback(uint64(ks), base),
+			Key:  keyFromKeysymFallback(uint64(ks), base),
 			Mods: xmods(uint(C.ui_key_state(xe))),
 		}
 		out := []Event{ev}
@@ -2301,8 +2307,8 @@ func xkey(ks C.KeySym) Key {
 	return KeyUnknown
 }
 
-// MapXKeySym is exported for X11-tagged tests.
-func MapXKeySym(ks uint64) Key { return xkey(C.KeySym(ks)) }
+// mapXKeySym is exported for X11-tagged tests.
+func mapXKeySym(ks uint64) Key { return xkey(C.KeySym(ks)) }
 
 type incrRecvState struct {
 	active bool
@@ -2363,7 +2369,7 @@ func (c *x11Conn) handleSelReq(xe *C.XEvent) {
 			replyType = c.atomUTF8
 		}
 		raw := []byte(data)
-		thr := INCRThreshold(c.maxReq)
+		thr := incrThreshold(c.maxReq)
 		if len(raw) > thr {
 			C.ui_select_prop(c.dpy, req)
 			sz := []C.ulong{C.ulong(len(raw))}
@@ -2374,7 +2380,7 @@ func (c *x11Conn) handleSelReq(xe *C.XEvent) {
 				prop:      prop,
 				typ:       replyType,
 				data:      raw,
-				chunk:     INCRChunkSize(thr),
+				chunk:     incrChunkSize(thr),
 			})
 			c.keep = true
 			return
@@ -2673,7 +2679,7 @@ func x11ClipGet(primary bool) (string, bool) {
 		sel = c.atomPrimary
 	}
 	timeout := 250 * time.Millisecond
-	if INCRThreshold(c.maxReq) < 1024 {
+	if incrThreshold(c.maxReq) < 1024 {
 		timeout = 2 * time.Second
 	}
 	return c.readSelection(sel, timeout)
@@ -2718,9 +2724,20 @@ func (s *x11Surface) SetCursor(cur Cursor) {
 	x11Mu.Unlock()
 }
 
-func (s *x11Surface) Raise() {
+// GeometryCaps: X11 does all of it. A window manager may argue about
+// where a window goes, but there is a position to ask for and one to be
+// told, which is what Wayland lacks.
+func (s *x11Surface) GeometryCaps() GeometryCaps {
+	if s == nil || s.closed {
+		return 0
+	}
+	return GeometryMove | GeometryPosition | GeometryScreenPlace |
+		GeometryVisibility | GeometrySizeLimits
+}
+
+func (s *x11Surface) Raise() bool {
 	if s.conn == nil || s.conn.dpy == nil || s.win == 0 {
-		return
+		return false
 	}
 	x11Mu.Lock()
 	C.ui_raise(s.conn.dpy, s.win)
@@ -2730,11 +2747,12 @@ func (s *x11Surface) Raise() {
 	s.mapped = true
 	s.hidden = false
 	x11Mu.Unlock()
+	return true
 }
 
-func (s *x11Surface) Move(x, y int) {
+func (s *x11Surface) Move(x, y int) bool {
 	if s == nil || s.conn == nil || s.conn.dpy == nil || s.win == 0 {
-		return
+		return false
 	}
 	x11Mu.Lock()
 	// The caller places the window the user sees, in logical pixels; the
@@ -2748,9 +2766,14 @@ func (s *x11Surface) Move(x, y int) {
 	}
 	C.ui_move(s.conn.dpy, s.win, C.int(dx), C.int(dy))
 	x11Mu.Unlock()
+	return true
 }
 
-// Position implements [HostPositioner]: where the window manager has put
+// PlaceAtScreen is Move on X11: a window has a position and the client
+// may ask for it, so there is no layer shell to need (WindowGeometry).
+func (s *x11Surface) PlaceAtScreen(x, y int) bool { return s.Move(x, y) }
+
+// Position is where the window manager has put
 // the window, in logical pixels, counting from the window the user sees
 // rather than from the margin around it. It is the last ConfigureNotify's
 // answer, translated to the root here when the manager's configure was
@@ -2812,17 +2835,18 @@ func (s *x11Surface) WakeAt() time.Time {
 	return time.Now().Add(x11DragPoll)
 }
 
-func (s *x11Surface) Show() { s.Raise() }
+func (s *x11Surface) Show() bool { return s.Raise() }
 
-func (s *x11Surface) Hide() {
+func (s *x11Surface) Hide() bool {
 	if s.conn == nil || s.conn.dpy == nil || s.win == 0 {
-		return
+		return false
 	}
 	x11Mu.Lock()
 	C.ui_unmap(s.conn.dpy, s.win)
 	s.mapped = false
 	s.hidden = true
 	x11Mu.Unlock()
+	return true
 }
 
 func (s *x11Surface) Visible() bool {
@@ -2835,7 +2859,7 @@ func (s *x11Surface) Visible() bool {
 // SetFullscreen puts the window full screen, or takes it back
 // (WindowFrame, _NET_WM_STATE_FULLSCREEN).
 func (s *x11Surface) SetFullscreen(on bool) bool {
-	if s.conn == nil || s.conn.dpy == nil || s.win == 0 || !s.Caps().Has(FrameFullscreen) {
+	if s.conn == nil || s.conn.dpy == nil || s.win == 0 || !s.FrameCaps().Has(FrameFullscreen) {
 		return false
 	}
 	action := C.long(0)
@@ -2851,7 +2875,7 @@ func (s *x11Surface) SetFullscreen(on bool) bool {
 // SetMaximized maximizes the window both ways, or restores it
 // (WindowFrame, _NET_WM_STATE_MAXIMIZED_VERT and _HORZ together).
 func (s *x11Surface) SetMaximized(on bool) bool {
-	if s.conn == nil || s.conn.dpy == nil || s.win == 0 || !s.Caps().Has(FrameMaximize) {
+	if s.conn == nil || s.conn.dpy == nil || s.win == 0 || !s.FrameCaps().Has(FrameMaximize) {
 		return false
 	}
 	action := C.long(0)
@@ -3118,7 +3142,7 @@ func (s *x11Surface) WindowState() WindowState { return s.state }
 // lower are X11's and not Wayland's — but each one still depends on *this*
 // window manager, read from _NET_SUPPORTED every time rather than cached,
 // because a window manager can be replaced under a running window.
-func (s *x11Surface) Caps() FrameCaps {
+func (s *x11Surface) FrameCaps() FrameCaps {
 	if s == nil || s.closed || s.popup {
 		return 0
 	}
@@ -3165,21 +3189,25 @@ func (s *x11Surface) capsLocked() FrameCaps {
 	return dropResizeCaps(caps, s.sizing)
 }
 
-// Sizing is the window's resize policy (SizingSurface).
+// Sizing is the window's resize policy (WindowGeometry).
 func (s *x11Surface) Sizing() Sizing { return s.sizing }
 
 // SetSizing changes the policy and re-states WM_NORMAL_HINTS
-// (SizingSurface).
-func (s *x11Surface) SetSizing(sz Sizing) {
-	if s == nil || s.sizing == sz {
-		return
+// (WindowGeometry).
+func (s *x11Surface) SetSizing(sz Sizing) bool {
+	if s == nil {
+		return false
+	}
+	if s.sizing == sz {
+		return true
 	}
 	s.sizing = sz
 	s.syncLimits()
+	return true
 }
 
 // SizeLimits is what WM_NORMAL_HINTS last said about the visible window
-// (SizingSurface).
+// (WindowGeometry).
 func (s *x11Surface) SizeLimits() SizeLimits { return s.limits }
 
 // syncLimits recomputes the window's limits for its size and hands them to
@@ -3269,7 +3297,7 @@ func (s *x11Surface) StartMove() bool { return s.moveResize(netMoveResizeMove) }
 // StartResize hands the held press to the window manager for an
 // interactive resize from edges.
 func (s *x11Surface) StartResize(edges Edges) bool {
-	if !s.Caps().Has(FrameResize) {
+	if !s.FrameCaps().Has(FrameResize) {
 		return false
 	}
 	dir, ok := netMoveResizeDirection(edges)
@@ -3635,7 +3663,7 @@ func (s *x11Surface) opaqueRects() []C.ulong {
 
 // Minimize iconifies the window (XIconifyWindow).
 func (s *x11Surface) Minimize() bool {
-	if s.conn == nil || s.conn.dpy == nil || s.win == 0 || !s.Caps().Has(FrameMinimize) {
+	if s.conn == nil || s.conn.dpy == nil || s.win == 0 || !s.FrameCaps().Has(FrameMinimize) {
 		return false
 	}
 	x11Mu.Lock()
@@ -3647,7 +3675,7 @@ func (s *x11Surface) Minimize() bool {
 // Lower puts the window below the others (XLowerWindow — a title-bar
 // action that only X11 offers).
 func (s *x11Surface) Lower() bool {
-	if s.conn == nil || s.conn.dpy == nil || s.win == 0 || !s.Caps().Has(FrameLower) {
+	if s.conn == nil || s.conn.dpy == nil || s.win == 0 || !s.FrameCaps().Has(FrameLower) {
 		return false
 	}
 	x11Mu.Lock()
@@ -3659,7 +3687,7 @@ func (s *x11Surface) Lower() bool {
 // MaximizeAxis maximizes (or restores) one way only: KWin's "Maximize
 // (vertical only)" title-bar action, which only X11 can express.
 func (s *x11Surface) MaximizeAxis(vertical bool) bool {
-	if s.conn == nil || s.conn.dpy == nil || s.win == 0 || !s.Caps().Has(FrameMaximizeAxis) {
+	if s.conn == nil || s.conn.dpy == nil || s.win == 0 || !s.FrameCaps().Has(FrameMaximizeAxis) {
 		return false
 	}
 	atom := s.conn.atomMaxHorz
@@ -3678,7 +3706,7 @@ func (s *x11Surface) MaximizeAxis(vertical bool) bool {
 // EventWindowState: a manager that refuses simply never sets the state, and
 // the caption button follows the property rather than the request.
 func (s *x11Surface) SetKeepAbove(on bool) bool {
-	if s == nil || s.conn == nil || s.conn.dpy == nil || s.win == 0 || !s.Caps().Has(FrameKeepAbove) {
+	if s == nil || s.conn == nil || s.conn.dpy == nil || s.win == 0 || !s.FrameCaps().Has(FrameKeepAbove) {
 		return false
 	}
 	action := C.long(0) // _NET_WM_STATE_REMOVE
@@ -3703,7 +3731,7 @@ func (s *x11Surface) SetShadedHeight(h int) bool {
 	h = max(h, 0)
 	// Unpinning always works: a window must never be left rolled up
 	// because the capability went away under it.
-	if h > 0 && !s.Caps().Has(FrameShade) {
+	if h > 0 && !s.FrameCaps().Has(FrameShade) {
 		return false
 	}
 	if h == s.shadeH {
@@ -3721,3 +3749,4 @@ func (s *x11Surface) SetShadedHeight(h int) bool {
 
 // x11Surface is a full WindowFrame (compile-time check).
 var _ WindowFrame = (*x11Surface)(nil)
+var _ WindowGeometry = (*x11Surface)(nil)

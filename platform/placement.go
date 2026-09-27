@@ -35,33 +35,16 @@ const (
 	PlaceAtScreen
 )
 
-// ScreenPlacer is an optional Surface capability: put the window at an
-// absolute point of the screen and report whether it went there. It is
-// distinct from [HostMover] on purpose — a Wayland surface can answer this
-// one (a layer surface can move; a toplevel cannot), while [HostMover]
-// keeps meaning "this backend places windows at all", which Wayland does
-// not.
-type ScreenPlacer interface {
-	// PlaceAtScreen moves the window to x, y in logical pixels of the
-	// desktop. false means the window did not move.
-	PlaceAtScreen(x, y int) bool
-}
-
 // PlaceSurfaceAtScreen puts s at x, y in logical pixels of the desktop and
-// reports whether it went there: through [ScreenPlacer] where the surface
-// has an opinion, else through [HostMover], else not at all.
+// reports whether it went there ([WindowGeometry.PlaceAtScreen]).
+//
+// It is a separate request from [WindowGeometry.Move] on purpose, and
+// Wayland is why: a layer surface can be placed while a toplevel cannot
+// be moved at all, so [GeometryScreenPlace] and [GeometryMove] are
+// different answers there. Everywhere else they are the same answer and
+// the backend implements one in terms of the other.
 func PlaceSurfaceAtScreen(s Surface, x, y int) bool {
-	if s == nil {
-		return false
-	}
-	if p, ok := s.(ScreenPlacer); ok {
-		return p.PlaceAtScreen(x, y)
-	}
-	if m, ok := s.(HostMover); ok {
-		m.Move(x, y)
-		return true
-	}
-	return false
+	return GeometryOf(s).PlaceAtScreen(x, y)
 }
 
 // simScreenPlace overrides [ScreenPlacementAvailable] for tests; nil means
@@ -86,12 +69,15 @@ func SimulateScreenPlacement(want bool) func() {
 // Wayland answers yes only where the compositor offers
 // zwlr_layer_shell_v1 (KDE, sway, Hyprland, wayfire do; GNOME/Mutter has
 // declined it), because a plain xdg_toplevel has no position at all.
+//
+// It asks the backend rather than testing its name. The old test was
+// `Name() != "wayland"`, which answered yes for every backend that was
+// not the one known to have trouble — so a new backend was assumed able
+// before anyone had written the code, and the one place that knew the
+// truth was the last to be asked.
 func ScreenPlacementAvailable() bool {
 	if simScreenPlace != nil {
 		return *simScreenPlace
 	}
-	if Default(false).Name() != "wayland" {
-		return true
-	}
-	return LayerSurfacesAvailable()
+	return BackendCapsOf(Default(false)).Has(BackendScreenPlace)
 }

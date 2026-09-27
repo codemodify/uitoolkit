@@ -59,6 +59,13 @@ type offscreenFrame struct {
 	// (SimulateDecorationPalette), and paletteSet the one it was given.
 	palette    bool
 	paletteSet string
+	// sysShadow / sysBand are whether the simulated desktop draws the
+	// window's drop shadow itself and runs edge resizing itself
+	// (SimulateSystemShadow, SimulateSystemResizeBand). Both off by
+	// default: the simulated desktop is a Linux one, where the client
+	// owns both. Windows sets the first, macOS sets both.
+	sysShadow bool
+	sysBand   bool
 	// frame is the client frame's margin and regions; geomW / geomH the
 	// visible window's size in device pixels, which the pixmap grows past
 	// by the margin, exactly as a compositor's surface does, and geomLW /
@@ -109,7 +116,7 @@ func (o *Offscreen) WindowState() WindowState { return o.frame.state }
 // able to take a capability away. SimulateCapabilities, SimulateKeepAbove,
 // SimulateGlass, SimulateDecorationPalette, SetWindowMenu and SetMoveResize
 // each take one away.
-func (o *Offscreen) Caps() FrameCaps {
+func (o *Offscreen) FrameCaps() FrameCaps {
 	if o == nil {
 		return 0
 	}
@@ -138,28 +145,65 @@ func (o *Offscreen) Caps() FrameCaps {
 	if o.frame.palette {
 		c |= FramePalette
 	}
+	if o.frame.sysShadow {
+		c |= FrameSystemShadow
+	}
+	if o.frame.sysBand {
+		c |= FrameSystemResizeBand
+	}
 	return dropResizeCaps(c, o.sizing)
 }
 
-// Sizing is the window's resize policy (SizingSurface).
+// SimulateSystemShadow makes the simulated desktop draw the window's drop
+// shadow itself, the way Windows' DWM and macOS's AppKit do
+// ([FrameSystemShadow]). A frame the toolkit draws must then reserve no
+// margin for one and paint none. Off by default: the simulated desktop is
+// a Linux one, where the client owns its shadow.
+func (o *Offscreen) SimulateSystemShadow(on bool) {
+	if o == nil || o.frame.sysShadow == on {
+		return
+	}
+	o.frame.sysShadow = on
+	o.announceCaps()
+}
+
+// SimulateSystemResizeBand makes the simulated desktop run edge resizing
+// itself ([FrameSystemResizeBand]), the way a resizable NSWindow does, so
+// the toolkit reserves no input band. Off by default.
+func (o *Offscreen) SimulateSystemResizeBand(on bool) {
+	if o == nil || o.frame.sysBand == on {
+		return
+	}
+	o.frame.sysBand = on
+	o.announceCaps()
+}
+
+// Sizing is the window's resize policy (WindowGeometry).
 func (o *Offscreen) Sizing() Sizing { return o.sizing }
 
-// SetSizing changes the policy and re-states the limits (SizingSurface).
-func (o *Offscreen) SetSizing(s Sizing) {
-	if o == nil || o.sizing == s {
-		return
+// SetSizing changes the policy and re-states the limits (WindowGeometry).
+func (o *Offscreen) SetSizing(s Sizing) bool {
+	if o == nil || !o.GeometryCaps().Has(GeometrySizeLimits) {
+		return false
+	}
+	if o.sizing == s {
+		return true
 	}
 	o.sizing = s
 	o.limits = limitsFor(s, o.opts, o.frame.geomLW, o.frame.geomLH)
+	// A fixed window loses maximize, edge-resize and roll-up
+	// (dropResizeCaps), so what the caption may draw changed.
+	o.announceCaps()
+	return true
 }
 
-// SizeLimits is what the simulated desktop was told (SizingSurface), the
+// SizeLimits is what the simulated desktop was told (WindowGeometry), the
 // height pin of a rolled-up window included.
 func (o *Offscreen) SizeLimits() SizeLimits { return shadePin(o.limits, o.frame.shadeH) }
 
 // StartMove records a move (WindowFrame).
 func (o *Offscreen) StartMove() bool {
-	if !o.Caps().Has(FrameMove) {
+	if !o.FrameCaps().Has(FrameMove) {
 		return false
 	}
 	o.frame.calls.Moves++
@@ -169,7 +213,7 @@ func (o *Offscreen) StartMove() bool {
 // StartResize records a resize from edges (WindowFrame). A fixed window
 // refuses one, as a desktop does.
 func (o *Offscreen) StartResize(edges Edges) bool {
-	if !o.Caps().Has(FrameResize) || !edges.Valid() {
+	if !o.FrameCaps().Has(FrameResize) || !edges.Valid() {
 		return false
 	}
 	o.frame.calls.Resizes = append(o.frame.calls.Resizes, edges)
@@ -179,7 +223,7 @@ func (o *Offscreen) StartResize(edges Edges) bool {
 // ShowMenu records the request; false when the simulated desktop has no
 // window menu (SetWindowMenu).
 func (o *Offscreen) ShowMenu(p paintengine2d.Point) bool {
-	if !o.Caps().Has(FrameMenu) {
+	if !o.FrameCaps().Has(FrameMenu) {
 		return false
 	}
 	o.frame.calls.Menus = append(o.frame.calls.Menus, p)
@@ -226,7 +270,7 @@ func (o *Offscreen) resizeSurface() {
 
 // Minimize records the request (WindowFrame).
 func (o *Offscreen) Minimize() bool {
-	if !o.Caps().Has(FrameMinimize) {
+	if !o.FrameCaps().Has(FrameMinimize) {
 		return false
 	}
 	o.frame.calls.Minimizes++
@@ -235,7 +279,7 @@ func (o *Offscreen) Minimize() bool {
 
 // Lower records the request (WindowFrame).
 func (o *Offscreen) Lower() bool {
-	if !o.Caps().Has(FrameLower) {
+	if !o.FrameCaps().Has(FrameLower) {
 		return false
 	}
 	o.frame.calls.Lowers++
@@ -245,7 +289,7 @@ func (o *Offscreen) Lower() bool {
 // SetMaximized records the request and, like a compositor, answers with
 // the new state (WindowFrame).
 func (o *Offscreen) SetMaximized(on bool) bool {
-	if !o.Caps().Has(FrameMaximize) {
+	if !o.FrameCaps().Has(FrameMaximize) {
 		return false
 	}
 	o.frame.calls.Maximizes = append(o.frame.calls.Maximizes, on)
@@ -259,7 +303,7 @@ func (o *Offscreen) SetMaximized(on bool) bool {
 // simulated desktop answers with the state, as it does for SetMaximized:
 // a window maximized both ways is Maximized, one way is not.
 func (o *Offscreen) MaximizeAxis(vertical bool) bool {
-	if !o.Caps().Has(FrameMaximizeAxis) {
+	if !o.FrameCaps().Has(FrameMaximizeAxis) {
 		return false
 	}
 	o.frame.calls.AxisMaximizes = append(o.frame.calls.AxisMaximizes, vertical)
@@ -269,7 +313,7 @@ func (o *Offscreen) MaximizeAxis(vertical bool) bool {
 // SetFullscreen records the request and answers with the new state
 // (WindowFrame).
 func (o *Offscreen) SetFullscreen(on bool) bool {
-	if !o.Caps().Has(FrameFullscreen) {
+	if !o.FrameCaps().Has(FrameFullscreen) {
 		return false
 	}
 	o.frame.calls.Fullscreen = append(o.frame.calls.Fullscreen, on)
@@ -282,7 +326,7 @@ func (o *Offscreen) SetFullscreen(on bool) bool {
 // SetKeepAbove records the request and, like a window manager that grants
 // it, answers with the new state (WindowFrame).
 func (o *Offscreen) SetKeepAbove(on bool) bool {
-	if !o.Caps().Has(FrameKeepAbove) {
+	if !o.FrameCaps().Has(FrameKeepAbove) {
 		return false
 	}
 	o.frame.calls.Aboves = append(o.frame.calls.Aboves, on)
@@ -296,9 +340,24 @@ func (o *Offscreen) SetKeepAbove(on bool) bool {
 // window above the others, so a test can run both the X11 path and the
 // Wayland one, where the caption button has to say it cannot (tests).
 func (o *Offscreen) SimulateKeepAbove(can bool) {
-	if o != nil {
-		o.frame.above = can
+	if o == nil || o.frame.above == can {
+		return
 	}
+	o.frame.above = can
+	o.announceCaps()
+}
+
+// announceCaps queues EventCapabilities with what the simulated desktop
+// will do now.
+//
+// Every capability here can change under a running window — that is the
+// whole reason Caps is asked afresh rather than cached — and a change
+// nobody is told about is a caption button that stays drawn after it has
+// stopped working, or stays hidden after it has started. The real
+// backends send this event; the simulated desktop has to send it too, or
+// the tests are kinder than the world.
+func (o *Offscreen) announceCaps() {
+	o.queue = append(o.queue, Event{Kind: EventCapabilities, Caps: o.FrameCaps()})
 }
 
 // SetShadedHeight records the height a rolled-up window is pinned to and
@@ -310,7 +369,7 @@ func (o *Offscreen) SetShadedHeight(h int) bool {
 	h = max(h, 0)
 	// Unpinning always works: a window must never be left rolled up
 	// because the capability went away under it.
-	if h > 0 && !o.Caps().Has(FrameShade) {
+	if h > 0 && !o.FrameCaps().Has(FrameShade) {
 		return false
 	}
 	if h == o.frame.shadeH {
@@ -346,7 +405,7 @@ func (o *Offscreen) SimulateCapabilities(c FrameCaps) {
 		return
 	}
 	o.frame.caps, o.frame.capsSet = c, true
-	o.queue = append(o.queue, Event{Kind: EventCapabilities, Caps: o.Caps()})
+	o.queue = append(o.queue, Event{Kind: EventCapabilities, Caps: o.FrameCaps()})
 }
 
 // SimulateDecorations answers with mode d as a compositor may on its own
@@ -372,9 +431,11 @@ func (o *Offscreen) SimulateCompositing(on bool) {
 // a test can run both the real-glass path and the painted fallback
 // (FrameBlurBehind). It takes effect for the next frame the window asks for.
 func (o *Offscreen) SimulateGlass(on bool) {
-	if o != nil {
-		o.frame.glass = on
+	if o == nil || o.frame.glass == on {
+		return
 	}
+	o.frame.glass = on
+	o.announceCaps()
 }
 
 // SetWindowMenu switches the simulated desktop's window menu on or off
@@ -427,11 +488,17 @@ var _ IMESurface = (*Offscreen)(nil)
 
 // SimulateDecorationPalette makes the simulated desktop take a colour
 // scheme for its frame, as KWin does, or stop taking one.
-func (o *Offscreen) SimulateDecorationPalette(on bool) { o.frame.palette = on }
+func (o *Offscreen) SimulateDecorationPalette(on bool) {
+	if o == nil || o.frame.palette == on {
+		return
+	}
+	o.frame.palette = on
+	o.announceCaps()
+}
 
 // SetPalette records the colour scheme when it changes (WindowFrame).
 func (o *Offscreen) SetPalette(path string) bool {
-	if !o.Caps().Has(FramePalette) {
+	if !o.FrameCaps().Has(FramePalette) {
 		return false
 	}
 	if path == o.frame.paletteSet {
@@ -447,7 +514,7 @@ func (o *Offscreen) DecorationPalette() string { return o.frame.paletteSet }
 
 // SetIcon records the icon's sizes (WindowFrame).
 func (o *Offscreen) SetIcon(images []*paintengine2d.Image) bool {
-	if !o.Caps().Has(FrameIcon) {
+	if !o.FrameCaps().Has(FrameIcon) {
 		return false
 	}
 	var sizes []int

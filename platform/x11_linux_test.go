@@ -12,13 +12,13 @@ import (
 )
 
 func TestMapXKeySym(t *testing.T) {
-	if MapXKeySym(0xff1b) != KeyEscape {
+	if mapXKeySym(0xff1b) != KeyEscape {
 		t.Fatal("Escape")
 	}
-	if MapXKeySym(0x0061) != KeyA || MapXKeySym(0x0041) != KeyA {
+	if mapXKeySym(0x0061) != KeyA || mapXKeySym(0x0041) != KeyA {
 		t.Fatal("A")
 	}
-	if MapXKeySym(0xff0d) != KeyReturn {
+	if mapXKeySym(0xff0d) != KeyReturn {
 		t.Fatal("Return")
 	}
 }
@@ -27,7 +27,7 @@ func TestX11SurfacePresentAndClose(t *testing.T) {
 	if os.Getenv("DISPLAY") == "" {
 		t.Skip("no DISPLAY")
 	}
-	b := X11Backend{}
+	b := x11Backend{}
 	s, err := b.NewSurface(WindowOptions{Title: "uitoolkit-test", Width: 160, Height: 100})
 	if err != nil {
 		t.Fatal(err)
@@ -64,7 +64,7 @@ func TestX11MultiWindowClose(t *testing.T) {
 	if os.Getenv("DISPLAY") == "" {
 		t.Skip("no DISPLAY")
 	}
-	b := X11Backend{}
+	b := x11Backend{}
 	a, err := b.NewSurface(WindowOptions{Title: "a", Width: 120, Height: 80})
 	if err != nil {
 		t.Fatal(err)
@@ -132,7 +132,7 @@ func TestX11EWMHAndIMECursor(t *testing.T) {
 	if os.Getenv("DISPLAY") == "" {
 		t.Skip("no DISPLAY")
 	}
-	b := X11Backend{}
+	b := x11Backend{}
 	s, err := b.NewSurface(WindowOptions{Title: "ewmh", Width: 180, Height: 100})
 	if err != nil {
 		t.Fatal(err)
@@ -156,7 +156,7 @@ func TestX11EGLOrCPUFallback(t *testing.T) {
 		t.Skip("no DISPLAY")
 	}
 	t.Setenv(EnvPaint, paintengine2d.PaintAuto)
-	b := X11Backend{}
+	b := x11Backend{}
 	s, err := b.NewSurface(WindowOptions{Title: "uitoolkit-x11-egl", Width: 160, Height: 100})
 	if err != nil {
 		t.Fatal(err)
@@ -181,7 +181,7 @@ func TestX11IMEEventsOnFocusOut(t *testing.T) {
 	if os.Getenv("DISPLAY") == "" {
 		t.Skip("no DISPLAY")
 	}
-	b := X11Backend{}
+	b := x11Backend{}
 	s, err := b.NewSurface(WindowOptions{Title: "ime", Width: 160, Height: 90})
 	if err != nil {
 		t.Fatal(err)
@@ -236,7 +236,7 @@ func TestX11PlacedWindowMapsWhereItWasPut(t *testing.T) {
 	if os.Getenv("DISPLAY") == "" {
 		t.Skip("no DISPLAY")
 	}
-	b := X11Backend{}
+	b := x11Backend{}
 	for _, tc := range []struct {
 		name  string
 		opts  WindowOptions

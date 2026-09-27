@@ -64,7 +64,7 @@ type x11Sync struct {
 func (c *x11Conn) syncReadyLocked() bool {
 	if c.syncState == 0 {
 		c.syncState = -1
-		if os.Getenv(EnvX11Sync) != "0" && C.ui_sync_init(c.dpy) != 0 {
+		if os.Getenv(envX11Sync) != "0" && C.ui_sync_init(c.dpy) != 0 {
 			c.syncState = 1
 			c.atomProtocols = internAtom(c.dpy, "WM_PROTOCOLS")
 			c.atomDelete = internAtom(c.dpy, "WM_DELETE_WINDOW")

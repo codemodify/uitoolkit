@@ -50,8 +50,8 @@ func parseScale(s string) float32 {
 // device pixels at 1, 481 by 203 at 1.75 — so an application states its
 // design once and the same numbers give the same window on every backend.
 //
-// So is where a window is: [WindowOptions]'s X and Y, [HostMover] and
-// [HostPositioner] place and report a window in logical pixels of the
+// So is where a window is: [WindowOptions]'s X and Y, [WindowGeometry]'s Move and
+// Position place and report a window in logical pixels of the
 // desktop, the same unit as its size, so an app that puts one window
 // against another's edge adds numbers of one kind (Qt's QWindow::position
 // does the same).

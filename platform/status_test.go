@@ -84,7 +84,7 @@ func TestStatusItemStubOption(t *testing.T) {
 	}
 }
 
-func TestOffscreenHostWindow(t *testing.T) {
+func TestOffscreenVisibility(t *testing.T) {
 	o := NewOffscreen(WindowOptions{Width: 80, Height: 40})
 	if !o.Visible() {
 		t.Fatal("mapped by default")
