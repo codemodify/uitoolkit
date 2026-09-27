@@ -1446,22 +1446,31 @@ type wlSurface struct {
 	logicalW   int
 	logicalH   int
 	bufScale   int
-	frac       float32
-	opaqueW    int
-	opaqueH    int
-	scaleSet   int
-	configured bool
-	closed     bool
-	hidden     bool
-	queue      []Event
-	viewport   *C.struct_wp_viewport
-	fracObj    *C.struct_wp_fractional_scale_v1
-	deco       *C.struct_zxdg_toplevel_decoration_v1
-	surfSync   unsafe.Pointer // *zwp_linux_surface_synchronization_v1
-	timeline   unsafe.Pointer // *ui_drm_timeline
-	gpu        *paintengine2d.GPUDevice
-	eglWin     unsafe.Pointer // *wl_egl_window
-	popup      bool
+	// bufScaleKnown says bufScale came from the outputs this surface has
+	// actually entered, rather than from the connection's global scale
+	// at creation. Without the distinction a resolved 1 is
+	// indistinguishable from "nobody has said", and the fallback below
+	// would override it.
+	bufScaleKnown bool
+	// viewportSet says a wp_viewport destination is in force, so it can
+	// be unset again when the surface stops needing one.
+	viewportSet bool
+	frac        float32
+	opaqueW     int
+	opaqueH     int
+	scaleSet    int
+	configured  bool
+	closed      bool
+	hidden      bool
+	queue       []Event
+	viewport    *C.struct_wp_viewport
+	fracObj     *C.struct_wp_fractional_scale_v1
+	deco        *C.struct_zxdg_toplevel_decoration_v1
+	surfSync    unsafe.Pointer // *zwp_linux_surface_synchronization_v1
+	timeline    unsafe.Pointer // *ui_drm_timeline
+	gpu         *paintengine2d.GPUDevice
+	eglWin      unsafe.Pointer // *wl_egl_window
+	popup       bool
 	// outs is the set of wl_output registry names this surface overlaps
 	// (wl_surface.enter / leave).
 	outs *outputSet
@@ -1822,10 +1831,26 @@ func (s *wlSurface) Buffer() *paintengine2d.Image {
 func (s *wlSurface) Closed() bool   { return s.closed }
 func (s *wlSurface) Scale() float32 { return s.deviceScale() }
 
+// deviceScale is what this surface paints at.
+//
+// Every test here is "did anyone say", not "did anyone say something
+// greater than one". Reading 1 as silence is what made an explicit
+// preference unreachable: a compositor answering wp_fractional_scale
+// with exactly 1 on a desktop whose global scale is 2 got 2, and so did
+// a surface that had entered a 1x monitor.
 func (s *wlSurface) deviceScale() float32 {
-	if s.frac > 1 {
+	if s.frac > 0 { // the fractional-scale protocol, 1 included
 		return s.frac
 	}
+	if s.bufScaleKnown { // resolved from the outputs entered, 1 included
+		if s.bufScale > 0 {
+			return float32(s.bufScale)
+		}
+		return 1
+	}
+	// Nothing has been resolved for this surface yet, so fall back to
+	// what the connection knows: better than painting at 1 on a 2x
+	// desktop for the frames before the first wl_surface.enter.
 	if s.bufScale > 1 {
 		return float32(s.bufScale)
 	}
@@ -2255,13 +2280,14 @@ func (s *wlSurface) Resize(w, h int) error {
 	if h < 1 {
 		h = 1
 	}
-	w, h = fitLogicalSize(w, h, s.logicalW, s.logicalH, s.deviceScale())
-	if s.bufW == w && s.bufH == h {
-		// Caller passed current buffer pixels; keep logical, just sync.
-		if bw, bh := s.bufferWH(); bw == w && bh == h {
-			return nil
-		}
-	}
+	// Resize takes logical pixels, full stop. It used to guess: a
+	// request whose numbers matched the current *buffer* was read as
+	// device pixels echoed back, and answered by keeping the size it
+	// already had. At 2x that makes a 100x80 surface ignore
+	// Resize(200, 160) — a legitimate request to become 200x160 — and
+	// there is no way for a caller to phrase it that the guess does not
+	// eat. Anything holding device pixels converts them before calling
+	// (LogicalPixels).
 	s.logicalW, s.logicalH = w, h
 	s.wantW, s.wantH = w, h
 	if s.sizing == SizingFixed {
@@ -2462,10 +2488,26 @@ func (s *wlSurface) present(dirty []paintengine2d.Rect, flushOnly bool) error {
 			s.scaleSet = 1
 		}
 		C.ui_wl_viewport_dest(s.viewport, C.int(surfW), C.int(surfH))
-	} else if sc := int(s.deviceScale() + 0.1); sc > 1 {
+		s.viewportSet = true
+	} else if sc := int(s.deviceScale() + 0.1); sc >= 1 {
+		// Every resolved scale, **including 1**. This used to run only
+		// above 1, so a surface going from 2x back to 1x never sent
+		// set_buffer_scale 1: the compositor went on dividing by two
+		// while the client attached half-size buffers, which is a
+		// window drawn at a quarter of its area — and a buffer whose
+		// dimensions are not a multiple of the stale scale is a
+		// protocol error besides.
 		if s.scaleSet != sc {
 			C.ui_wl_set_buf_scale(s.surf, C.int32_t(sc))
 			s.scaleSet = sc
+		}
+		// Leaving the fractional path: the viewport still carries the
+		// destination set for it, which would go on resizing this
+		// surface after the scale that needed it is gone. -1, -1 is how
+		// wp_viewport says "no destination".
+		if s.viewportSet && s.viewport != nil {
+			C.ui_wl_viewport_dest(s.viewport, -1, -1)
+			s.viewportSet = false
 		}
 	}
 	s.applyFrameLocked(surfW, surfH)
@@ -3950,7 +3992,7 @@ func (s *wlSurface) applyOutputScale() {
 	if sc < 1 {
 		sc = 1
 	}
-	s.bufScale = sc
+	s.bufScale, s.bufScaleKnown = sc, true
 }
 
 //export uitkWlFracScale

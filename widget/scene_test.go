@@ -51,8 +51,8 @@ func samePixels(t *testing.T, a, b *paintengine2d.Image) bool {
 // A cached group must not be replayed at the position it was recorded at
 // once the widget has moved.
 func TestReuseFollowsMove(t *testing.T) {
-	root := newPainted(paintengine2d.RGB(10, 10, 10))
-	child := newPainted(paintengine2d.RGB(200, 60, 60))
+	root := newPainted(paintengine2d.RGB(0.05, 0.05, 0.05))
+	child := newPainted(paintengine2d.RGB(0.80, 0.25, 0.25))
 	root.Add(child)
 	root.Arrange(paintengine2d.XYWH(0, 0, 100, 100))
 	child.Arrange(paintengine2d.XYWH(0, 0, 20, 20))
@@ -73,9 +73,9 @@ func TestReuseFollowsMove(t *testing.T) {
 
 // A group whose clip did not move with it cannot be reused by translation.
 func TestReuseRejectedWhenClipStaysPut(t *testing.T) {
-	root := newPainted(paintengine2d.RGB(10, 10, 10))
-	clipper := newPainted(paintengine2d.RGB(20, 20, 20))
-	child := newPainted(paintengine2d.RGB(200, 60, 60))
+	root := newPainted(paintengine2d.RGB(0.05, 0.05, 0.05))
+	clipper := newPainted(paintengine2d.RGB(0.20, 0.20, 0.20))
+	child := newPainted(paintengine2d.RGB(0.80, 0.25, 0.25))
 	root.Add(clipper)
 	clipper.Add(child)
 	root.Arrange(paintengine2d.XYWH(0, 0, 100, 100))
@@ -98,7 +98,7 @@ func TestReuseRejectedWhenClipStaysPut(t *testing.T) {
 
 // Groups for widgets that were not visited must not linger.
 func TestEndFrameDropsUnvisited(t *testing.T) {
-	root := newPainted(paintengine2d.RGB(10, 10, 10))
+	root := newPainted(paintengine2d.RGB(0.05, 0.05, 0.05))
 	a := newPainted(paintengine2d.RGB(1, 2, 3))
 	b := newPainted(paintengine2d.RGB(4, 5, 6))
 	root.Add(a)
@@ -122,7 +122,7 @@ func TestEndFrameDropsUnvisited(t *testing.T) {
 // A hidden child's stale dirty flag must not make its parent re-record on
 // every frame forever.
 func TestInvisibleChildIsNotDirty(t *testing.T) {
-	root := newPainted(paintengine2d.RGB(10, 10, 10))
+	root := newPainted(paintengine2d.RGB(0.05, 0.05, 0.05))
 	child := newPainted(paintengine2d.RGB(1, 2, 3))
 	root.Add(child)
 	root.Arrange(paintengine2d.XYWH(0, 0, 100, 100))
