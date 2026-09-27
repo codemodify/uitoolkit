@@ -16,7 +16,11 @@ RIG="$(cd "$(dirname "$0")" && pwd)"; N="${1:?instance}"; shift
 ROOT="$(cd "$RIG/../.." && pwd)"; D="$RIG/$N"; OUT="$D/tour"; BIN="$D/bin"
 [ -f "$D/bus.addr" ] || { echo "instance $N is not running: ./start.sh $N"; exit 1; }
 mkdir -p "$OUT" "$BIN"
-(cd "$ROOT" && go build -o "$BIN/tour" ./examples/uitoolkit-sample-tour && go build -o "$BIN/sheet" ./cmd/uitk-themesheet) || exit 1
+# -tags theme_engine_all: engines are opt-in (docs/engines.md), so
+# without it the tour and the pack list both hold the default engine
+# alone and "every pack" means twelve of them.
+(cd "$ROOT" && go build -tags theme_engine_all -o "$BIN/tour" ./examples/uitoolkit-sample-tour &&
+  go build -tags theme_engine_all -o "$BIN/sheet" ./cmd/uitk-themesheet) || exit 1
 if [ $# -gt 0 ]; then
   PACKS=("$@")
 else

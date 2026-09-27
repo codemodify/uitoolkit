@@ -184,6 +184,11 @@ func (p *Panel) setClosed(v bool) {
 	}
 	if h := p.DockHost(); h != nil {
 		h.relayout()
+		// Closing or reopening a panel is part of the arrangement, so
+		// it is worth saving. relayout only re-measures; without this
+		// an application using OnLayoutChanged to persist its layout
+		// (the Inspector sample does) never hears about a closed panel.
+		h.layoutChanged()
 	}
 	if p.OnShown != nil {
 		p.OnShown(!v)
@@ -205,6 +210,7 @@ func (p *Panel) SetCollapsed(v bool) {
 	}
 	if h := p.DockHost(); h != nil {
 		h.relayout()
+		h.layoutChanged() // collapsed state is saved with the layout
 	}
 }
 

@@ -9,9 +9,15 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/../.." && pwd)
 OUT=${ATLAS_OUT:-$HERE/out}
 mkdir -p "$OUT/bin" "$OUT/full" "$OUT/previews" "$OUT/gallery" "$OUT/cfg" "$OUT/work"
-(cd "$REPO" && go build -o "$OUT/bin/settings" ./cmd/uitoolkit-settings &&
-  go build -o "$OUT/bin/sheet" ./cmd/uitk-themesheet &&
-  go build -o "$OUT/bin/shots" ./cmd/uitk-shots)
+# -tags theme_engine_all, because theme engines are opt-in (docs/engines.md)
+# and this atlas is meant to hold every pack. Without it these three
+# binaries carry the default engine alone and the "full" atlas quietly
+# renders 12 packs out of 131 — a complete-looking artifact that is
+# missing nine tenths of its subject.
+TAGS=theme_engine_all
+(cd "$REPO" && go build -tags "$TAGS" -o "$OUT/bin/settings" ./cmd/uitoolkit-settings &&
+  go build -tags "$TAGS" -o "$OUT/bin/sheet" ./cmd/uitk-themesheet &&
+  go build -tags "$TAGS" -o "$OUT/bin/shots" ./cmd/uitk-shots)
 headless() { env -u WAYLAND_DISPLAY -u DISPLAY XDG_CONFIG_HOME="$OUT/cfg" "$@"; }
 headless "$OUT/bin/sheet" -list > "$OUT/packs.tsv"
 
