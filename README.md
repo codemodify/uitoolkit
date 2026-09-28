@@ -51,7 +51,7 @@ hyphens, so the names use underscores. See
 | Windowing | Linux X11 + Wayland (`wl_egl_window` / eglSwapBuffers, else `wl_shm` / `XPutImage`); offscreen always. Pointers are host cursors (`wp_cursor_shape_v1` / XCURSOR / Xfont / `LoadCursorW` / `NSCursor`) |
 | Tray | `StatusItem` — Linux SNI + dbusmenu (submenus included) + fdo notifications; Win32 notify area; macOS `NSStatusItem` (CGO) |
 | CGO | optional — tests and screenshots are `CGO_ENABLED=0` |
-| Ports | Linux is the shipping platform. **Windows has a real backend** — window, input, clipboard, drag and drop, per-monitor DPI — cross-compiled from Linux with `CGO_ENABLED=0` and tested on Windows 10 and 11 ([docs/windows.md](docs/windows.md)). `GOOS=darwin` builds, with no backend behind it yet |
+| Ports | Linux is the shipping platform. **Windows has a real backend** — window, input, clipboard, drag and drop, per-monitor DPI — cross-compiled from Linux with `CGO_ENABLED=0` and tested on Windows 10 and 11 ([docs/windows.md](docs/windows.md)). **macOS has an AppKit backend** — window, present, input, frame and geometry, cgo — with the whole suite green on macOS 15 ([docs/macos.md](docs/macos.md)); no IME, clipboard or drag and drop there yet |
 | License | [The Free License](LICENSE) |
 
 ## Highlights
@@ -519,7 +519,8 @@ platform   window + event pump + present          Linux X11 (EGL or XPutImage,
            (thin OS glue)                         CLIPBOARD+PRIMARY, XIM) and
                                                   Wayland (wl_egl_window or
                                                   wl_shm, xdg-shell, seat);
-                                                  Win / macOS stubs
+                                                  Win32 (pure syscall, DIB)
+                                                  and AppKit (cgo, CALayer)
 app        Application run loop, windows,         DPI/scale, backend select,
                                                   input routing
            capture / WritePNG

@@ -44,6 +44,39 @@ a tray, notification or portal test would reach the desktop it runs on.
 tools/testenv.sh go test -p 2 ./...
 ```
 
+**Or run `tools/test.sh`**, which is that plus `-tags theme_engine_all`,
+so every theme engine the toolkit ships is compiled in and tested — a
+bare `go test ./...` tests the *default product build*, one engine, and
+a test written about what Aqua paints has nothing to assert when Aqua
+was not built.
+
+```bash
+tools/test.sh ./...
+tools/test.sh -run TestFoo ./style/
+```
+
+It also pins `UITK_SYSTEM_FONTS=0`. A look reads in the era's typeface
+when the machine has it, so what a look *measures* — where a panel
+ends, how a sentence wraps — depends on what is installed, and a test
+that asserts a pixel would pass here and fail on a machine with a
+different font set. Three did: on macOS, which has no fontconfig at
+all, and they would have in any clean container too. Pinning the
+bundled faces makes those numbers a property of the toolkit rather than
+of the developer. Set `UITK_SYSTEM_FONTS=1` to run against this
+machine's fonts.
+
+**The other two platforms** are tested on real ones, from here:
+
+```bash
+UITK_WIN_VM_MON=/path/to/monitor.sock tools/test-windows.sh   # docs/windows.md
+UITK_MAC_HOST=user@the-mac            tools/test-darwin.sh ./...  # docs/macos.md
+```
+
+The Windows tests cross-compile with `CGO_ENABLED=0` and are handed to
+a VM over QEMU's user networking; the macOS ones cannot cross-compile
+at all, because AppKit is cgo, so the tree is mirrored to a Mac with
+rsync and built there. Both bring their output back.
+
 Headless widget + driver suite (no display, no CGO):
 
 ```bash
