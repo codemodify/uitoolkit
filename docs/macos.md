@@ -180,6 +180,26 @@ Two details were not guesses:
   115 ms. On Linux it is 30 ms, and unused, since `fc-list` answers
   first.
 
+### One thing it turned up, still open
+
+Running the suite with `UITK_SYSTEM_FONTS=1` on a Mac is a
+configuration that had never existed, and it fails one test:
+`TestPlatinumTitleCentresOnTheBar`, which compares the title the
+desktop's frame draws against the same title drawn by an in-app frame.
+
+With the bundled face the two agree exactly, at every title length.
+With Geneva — which is the right font for Platinum, and which is the
+point — they agree for a long title and differ for short ones: for
+"Untitled" the frame's ink is 42 px wide against the in-app frame's
+62, and for "Ab" the frame has no ink at all in the rows the test
+samples. Geneva's metrics also make the caption band 27 px tall where
+the bundled face makes it 31.
+
+So it is a real difference between the two frames and not a flaky
+measurement, but it is in Platinum's caption, not in this backend, and
+it needs its own look. The suite's default is `UITK_SYSTEM_FONTS=0`,
+so it is not failing anywhere today.
+
 Checked against fontconfig on a Linux machine with 596 family keys
 installed, the scan finds 590 of them. The six it does not are the
 weight-suffixed spellings fontconfig invents for a variable font's

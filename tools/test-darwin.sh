@@ -64,7 +64,13 @@ rsync -az --delete --exclude '.git' --exclude 'tools/atlas/out' --exclude '*.tes
 args=""
 for a in "$@"; do args+=" $(printf %q "$a")"; done
 
+# Resolved here and sent as a literal. Written as ${VAR:-0} inside the
+# remote command it would be expanded by the *remote* shell, where the
+# variable was never set — so it read 0 however it was set here, and
+# "run the suite against this machine's fonts" quietly did not.
+fonts=${UITK_SYSTEM_FONTS:-0}
+
 echo "== building and running them there =="
 exec "${SSH[@]}" "$HOST" \
-  "export PATH=$GOROOT/bin:\$PATH CGO_ENABLED=1 UITK_SYSTEM_FONTS=\${UITK_SYSTEM_FONTS:-0}; \
+  "export PATH=$GOROOT/bin:\$PATH CGO_ENABLED=1 UITK_SYSTEM_FONTS=$fonts; \
    cd $DIR && go test -tags theme_engine_all$args"
