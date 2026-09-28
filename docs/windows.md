@@ -68,8 +68,10 @@ reshaped seam was for.
 | --- | --- |
 | `SetPalette` | Takes a path to a KDE colour-scheme file. Windows 11 wants three `COLORREF`s through `DwmSetWindowAttribute`. The signature is an open question, so this answers **false** rather than pretending |
 | `MaximizeAxis` | Windows has no per-axis maximize at all. Correctly **false** |
-| `SetShadedHeight` | Built. `WM_GETMINMAXINFO` pins the height of a rolled-up window, which is the half a drag needs — `SetWindowPos` was never clamped, so rolling up worked without it |
-| The suggested DPI rectangle | `WM_DPICHANGED` carries a rectangle Windows would like the window moved to. Reading it means turning an `LPARAM` back into a pointer, which `go vet` will not have; the window is re-sized from its logical size and the new scale instead, which lands in the same place for an ordinary drag between two monitors |
+| Clipboard | **Not built, and the biggest gap here.** `clipboard_linux.go` is `//go:build linux && cgo`; every other platform gets `clipboard_stub.go`, which answers nothing and discards writes, so copy and paste do nothing in a Windows build. Wants `OpenClipboard`/`GetClipboardData`/`SetClipboardData` with `CF_UNICODETEXT` — most of which the drag source already does |
+| The pointer's shape | Not wired. `platform/cursor_windows.go` has `winCursorHost` and says to wire a surface's `SetCursor` to it; nothing does, so `winSurface` is not a `CursorSurface` and the pointer never becomes an I-beam or a resize arrow |
+| IME | No `WM_IME_*` at all, so composition — every CJK input method, and dead keys through an IME — does not reach the toolkit's `EventIMEPreedit`/`EventIMECommit` |
+| The suggested DPI rectangle | `WM_DPICHANGED` carries a rectangle Windows would like the window moved to, and it is now readable: `lparamAs` reinterprets the LPARAM's address rather than its value, which `go vet` accepts. The note that said otherwise was wrong |
 
 ## Why the pixels go up through a DIB section
 
