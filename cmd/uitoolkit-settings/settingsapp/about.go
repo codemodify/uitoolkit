@@ -96,10 +96,16 @@ func (s *settingsState) showAbout() {
 	close := widgets.NewButton("Close", func() { widget.DismissOverlay(overlay) })
 	close.Primary = true
 
+	// Every platform the toolkit has a backend for is named, and that
+	// is deliberate rather than tidy. This sentence said "X11 and
+	// Wayland" for a while after the Win32 and AppKit backends landed,
+	// so on a Mac the dialog contradicted its own next paragraph —
+	// which names the backend the window is actually on.
+	// TestAboutDialogSaysWhatItIsAbout holds it to all four or none.
 	what := widgets.NewLabel(
 		"A desktop toolkit written in Go and nothing else. Every pixel in this window is drawn by paintengine2d — " +
-			"there is no Qt, no GTK, no Skia and no browser underneath it — and the windows themselves come from X11 and " +
-			"Wayland directly.")
+			"there is no Qt, no GTK, no Skia and no browser underneath it — and the windows themselves come straight " +
+			"from the platform: X11 and Wayland on Linux, Win32 on Windows, AppKit on macOS.")
 	what.Wrap = true
 
 	facts := widgets.NewLabel(s.aboutFacts())

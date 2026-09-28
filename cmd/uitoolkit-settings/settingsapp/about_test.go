@@ -85,6 +85,24 @@ func TestAboutDialogSaysWhatItIsAbout(t *testing.T) {
 	if packs < 100 || engines < 20 {
 		t.Errorf("the counts look wrong: %d packs, %d engines", packs, engines)
 	}
+	// The sentence about where windows come from names every platform
+	// the toolkit has a backend for, or none of them. It named X11 and
+	// Wayland alone for a while after Win32 and AppKit landed, so on a
+	// Mac this dialog contradicted the paragraph under it — which
+	// names the backend the window is really on. A prose list of
+	// platforms goes stale the moment a port lands, and nothing but
+	// this notices.
+	var named, missing []string
+	for _, n := range []string{"X11", "Wayland", "Win32", "AppKit"} {
+		if strings.Contains(said, n) {
+			named = append(named, n)
+		} else {
+			missing = append(missing, n)
+		}
+	}
+	if len(named) > 0 && len(missing) > 0 {
+		t.Errorf("About names %v but not %v:\n%s", named, missing, said)
+	}
 	// The window this dialog is in is on the CPU here, and the sentence
 	// says so rather than reciting the preference.
 	if w.PaintBackend() == style.RendererCPU && !strings.Contains(said, "CPU") {

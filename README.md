@@ -56,7 +56,7 @@ hyphens, so the names use underscores. See
 
 ## Highlights
 
-- **Themes that change shapes, not just colours.** 36 engines (like Qt's
+- **Themes that change shapes, not just colours.** 33 engines (like Qt's
   QStyle) draw 131 packs spanning four decades: System 1 to macOS Tahoe's
   Liquid Glass, Windows 3.1 to 11, Motif, CDE, NeXT, Amiga, BeOS, OS/2, KDE 1
   to Plasma 6, GNOME 2 to GNOME 48, Material 2, 3 and 3 Expressive, Swing's
