@@ -85,7 +85,7 @@ func TestAboutAndClearButtonHold(t *testing.T) {
 				}
 
 				// And the card over the same window.
-				about := findButton(w.Content(), "About")
+				about := findAboutButton(w.Content())
 				if about == nil {
 					t.Fatalf("%s: no About button", where)
 				}

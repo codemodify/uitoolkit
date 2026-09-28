@@ -746,14 +746,28 @@ a shelf.
 
 The preview shows what is **staged**. Nothing is written until **Apply**,
 which saves `look.json` and switches Settings and every app that watches
-the file. Apply and **About** are the whole of the row under the page:
-they sit pinned at the **right** of it, outside the splitter and outside
-the column, so the one thing that writes anything is on screen at every
+the file. Apply and **About** close the row under the page: they sit
+pinned at the **right** of it, outside the splitter and outside the
+column, so the one thing that writes anything is on screen at every
 window size. Apply is last, in the row and in the Tab ring, which is
 where every desktop puts the button that commits; About is in front of
-it and is the one button on the page that changes nothing. The two come
-to 150 logical pixels of a 704-pixel row at the 720×580 minimum, so
-neither folds nor elides at any size Settings opens to. The line that
+it and is the one button on the page that changes nothing.
+
+About carries the **information mark and no word** ([style.IconInfo], so
+it comes from whichever icon set the look is wearing). It is read about
+once a year, and a word for it was taking room from a row that now also
+holds the file paths. It is drawn with a button's `Content` rather than
+as a [widgets.ToolButton] — a tool button is flat and this one stands
+next to Apply, which is not — and its accessible name is what a screen
+reader says, there being no text to read. `findAboutButton` in the tests
+finds it the same way, which is the honest test of that name.
+
+**The file paths open the row**, left-aligned on the same baseline as
+the two buttons. They were under the preview, and they are the one block
+on the page that changes nothing: a line saying where what you changed
+ends up does not belong in the pane showing you what you changed. They
+take the row's flex, so the buttons keep their measured width at every
+size and the line elides into whatever is left. The line that
 used to
 lead that row — *Applied — every uitoolkit app is using this look*, or
 *Staged, not applied* — is gone; Apply being enabled or greyed says the
@@ -777,7 +791,7 @@ The Theme Atlas crops the preview panel out of `uitoolkit-settings -stage ID
 default look applied, the panel is the same rectangle in every pack:
 
 ```
-x 317, y 116, 697 × 648       crop box (317, 116) – (1014, 764)
+x 317, y 116, 697 × 680       crop box (317, 116) – (1014, 796)
 ```
 
 `TestSettingsPreviewPanelKeepsItsPlace` pins those numbers; a layout
@@ -792,10 +806,16 @@ one, `x 317, y 10, 697 × 790` until the colours switch went over the
 preview and the paths under it, `x 317, y 66, 697 × 620` until the
 behaviour options joined that switch in one row, and `x 317, y 44,
 697 × 647` until the icon and corner choosers came out of the preview and
-the group box came off the paths, and `x 317, y 74, 697 × 651` until the
+the group box came off the paths, `x 317, y 74, 697 × 651` until the
 two typeface choosers split the settings into two blocks and the three
-path lines became one. Nothing that has happened to the column on the
-left has moved them.)
+path lines became one, `697 × 648` until the suite pinned the bundled
+faces — that one was never a layout change at all, it was this file
+recording what the developer's installed fonts happened to measure, and
+`697 × 645` is what the toolkit's own faces give — and `697 × 645` until
+the paths came off this pane altogether and onto the row at the foot of
+the window, beside About and Apply, which gave the preview back the
+35 px they took. Nothing that has happened to the column on the left has
+moved them.)
 
 **Changes to the column on the left do not move them.** The splitter's
 ratio is worked out from the *window's* width, not from what the column

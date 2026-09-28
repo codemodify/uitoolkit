@@ -664,6 +664,20 @@ func findApply(root widget.Component) *widgets.Button {
 	return findButton(root, "Apply")
 }
 
+// findAboutButton is findButton for the one button in Settings with no
+// text: About carries the information mark alone, so its accessible
+// name is the only thing that identifies it — to a test and to a screen
+// reader both, which is the point.
+func findAboutButton(root widget.Component) *widgets.Button {
+	var btn *widgets.Button
+	widget.Walk(root, func(c widget.Component) {
+		if b, ok := c.(*widgets.Button); ok && b.AccessibleName() == "About uitoolkit" && !insidePreview(c) {
+			btn = b
+		}
+	})
+	return btn
+}
+
 func findButton(root widget.Component, text string) *widgets.Button {
 	var btn *widgets.Button
 	widget.Walk(root, func(c widget.Component) {

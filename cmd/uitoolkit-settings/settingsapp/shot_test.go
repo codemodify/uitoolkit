@@ -45,6 +45,11 @@ import (
 // These numbers were re-measured in the eight packs below, and rendered
 // through tools/atlas/render.sh's own crop, rather than assumed.
 //
+// The paths moved off this pane and onto the row at the foot of the
+// window beside About and Apply, which gave the preview the 35 px they
+// took: 645 became 680. That is the whole of what this block has ever
+// recorded — where the pane's height went, and to what.
+//
 // They are measured in the *bundled* faces, which is why tools/test.sh and
 // render.sh both pin UITK_SYSTEM_FONTS=0. A look reads in the era's
 // typeface when the machine has it, and the panel then ends somewhere
@@ -63,7 +68,7 @@ const (
 	previewShotX = 317
 	previewShotY = 116
 	previewShotW = 697
-	previewShotH = 645
+	previewShotH = 680
 )
 
 func TestSettingsPreviewPanelKeepsItsPlace(t *testing.T) {

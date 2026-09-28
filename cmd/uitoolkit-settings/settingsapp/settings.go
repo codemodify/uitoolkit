@@ -279,15 +279,26 @@ func buildSettingsState(s *settingsState) widget.Component {
 	// rest of the row. It is outside the scrolling column on purpose:
 	// the one thing that writes anything must not be able to scroll away.
 	//
-	// About stands immediately in front of it, on the same side. The
-	// two together are 150 logical pixels of a 704-pixel row at the
-	// 720x580 minimum, so the spacer still has five sixths of the row
-	// and nothing here folds or elides at any size Settings opens to.
-	// See [settingsState.aboutButton] for why About is a button here
-	// rather than the page it used to be.
-	gap := widgets.NewSpacer()
-	actions := widgets.NewRow(gap, s.aboutButton(), s.applyBtn).WithGap(12).WithPad(8)
-	actions.AddFlex(gap, 1)
+	// About stands immediately in front of it, on the same side, as the
+	// information mark alone — see [settingsState.aboutButton] for why
+	// it is a button here rather than the page it used to be, and why
+	// it lost its word.
+	//
+	// The file paths open the row. They were under the preview, which
+	// is the pane the whole page is about, and they are the one block
+	// on it that changes nothing: a line that says where what you
+	// changed ends up does not belong in the space showing you what you
+	// changed. Here they are on the same baseline as the two buttons,
+	// left where a line of prose starts, and they cost the preview
+	// nothing at all.
+	//
+	// The paths take the flex rather than a spacer, so the buttons keep
+	// their measured width at every size and the line elides into
+	// whatever is left — which is what it was already built to do
+	// ([settingsState.filesSection]).
+	files := s.filesSection()
+	actions := widgets.NewRow(files, s.aboutButton(), s.applyBtn).WithGap(12).WithPad(8)
+	actions.AddFlex(files, 1)
 
 	s.showStaged()
 
@@ -1368,7 +1379,7 @@ func (s *settingsState) previewColumn() widget.Component {
 	s.previewBox = widgets.NewPanel("", PreviewAppWith(nil, s.previewOptions()))
 	s.previewBox.Window = true
 	preview := s.scoped(s.previewBox)
-	col := widgets.NewColumn(options, s.drawnWith, preview, s.filesSection()).WithGap(8)
+	col := widgets.NewColumn(options, s.drawnWith, preview).WithGap(8)
 	col.AddFlex(preview, 1)
 	return col
 }

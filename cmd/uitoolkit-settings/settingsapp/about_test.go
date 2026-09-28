@@ -35,7 +35,7 @@ func overlayText(w *app.Window) string {
 
 func openAbout(t *testing.T, a *app.Application, w *app.Window) {
 	t.Helper()
-	about := findButton(w.Content(), "About")
+	about := findAboutButton(w.Content())
 	if about == nil || about.OnClick == nil {
 		t.Fatal("no About button at the foot of the window")
 	}
@@ -167,7 +167,7 @@ func TestAboutStandsInFrontOfApply(t *testing.T) {
 		t.Fatal(err)
 	}
 	a, w := openSettings(t, 720, 580)
-	about, apply := findButton(w.Content(), "About"), findApply(w.Content())
+	about, apply := findAboutButton(w.Content()), findApply(w.Content())
 	if about == nil || apply == nil {
 		t.Fatal("the foot row is not About and Apply")
 	}
@@ -194,7 +194,7 @@ func TestAboutStandsInFrontOfApply(t *testing.T) {
 	}
 	clickTheme(t, w, "Windows 95")
 	a.PumpOnce()
-	about, apply = findButton(w.Content(), "About"), findApply(w.Content())
+	about, apply = findAboutButton(w.Content()), findApply(w.Content())
 	ring := widget.Focusables(w.Content())
 	ai, pi := -1, -1
 	for i, c := range ring {

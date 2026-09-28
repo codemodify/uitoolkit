@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit"
 	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
@@ -38,11 +39,41 @@ const LicenseName = "The Free License"
 // the click that was meant for it. About is also the one button here
 // that changes nothing at all, so it is the furthest from the one that
 // changes everything.
+// It carries the information mark and no word. About is the one button
+// in this row nobody is looking for — it is read about once a year —
+// and a word for it takes room from a row that also has to hold the
+// file paths now. The mark is the one every desktop uses for exactly
+// this, and it is [style.IconInfo], so it comes from whichever icon set
+// the look is wearing rather than being drawn here.
+//
+// Content rather than a [widgets.ToolButton]: a tool button is flat,
+// and this one stands next to Apply, which is not. Content puts the
+// app's own mark on the look's ordinary button face and leaves the
+// face, its states and its cross-fade to the engine.
+//
+// The accessible name is doing real work now. A button with no text has
+// nothing for a screen reader to say, so the name is the only thing
+// standing between this and an unlabelled control; the test holds it.
 func (s *settingsState) aboutButton() *widgets.Button {
-	b := widgets.NewButton("About", func() { s.showAbout() })
+	b := widgets.NewButton("", func() { s.showAbout() })
 	b.Tip = "What uitoolkit is, which version this is, and what this window is running on."
 	b.SetAccessibleName("About uitoolkit")
 	b.SetAccessibleDescription(b.Tip)
+	b.Content = func(ctx *paintengine2d.Context, r paintengine2d.Rect, st style.ControlState) {
+		col, set := paintengine2d.RGB(0, 0, 0), style.IconSetName("")
+		if c, ok := b.Look().(*style.Classic); ok {
+			col, set = c.Palette().Text, c.Icons()
+			if st.Disabled() {
+				col = c.Palette().TextMuted
+			}
+		}
+		// Square and centred, at the height a caption glyph takes: the
+		// button is as wide as an empty one measures, so the mark sets
+		// its own size rather than filling whatever room is left.
+		d := min(r.Dx(), r.Dy()) * 0.62
+		c := r.Center()
+		style.DrawToolIcon(ctx, paintengine2d.XYWH(c.X-d/2, c.Y-d/2, d, d), style.IconInfo, col, set)
+	}
 	return b
 }
 
