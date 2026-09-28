@@ -67,10 +67,8 @@ reshaped seam was for.
 | | |
 | --- | --- |
 | `SetPalette` | Takes a path to a KDE colour-scheme file. Windows 11 wants three `COLORREF`s through `DwmSetWindowAttribute`. The signature is an open question, so this answers **false** rather than pretending |
-| `SetIcon` | `WM_SETICON` with `ICON_SMALL`/`ICON_BIG`. Not built |
 | `MaximizeAxis` | Windows has no per-axis maximize at all. Correctly **false** |
 | `SetShadedHeight` | Built. `WM_GETMINMAXINFO` pins the height of a rolled-up window, which is the half a drag needs — `SetWindowPos` was never clamped, so rolling up worked without it |
-| `SetFullscreen` | Records the state but does not yet save the placement, drop the style and cover the monitor |
 | Drag and drop | Not started, **on purpose**. `DoDragDrop` is a *blocking* modal call and `IDropTarget::DragOver` answers *synchronously*, where the toolkit's contract is asynchronous. That is a run-loop mismatch, not a vocabulary one, and it should be built against the real API and allowed to dictate the seam rather than designed on paper |
 | The suggested DPI rectangle | `WM_DPICHANGED` carries a rectangle Windows would like the window moved to. Reading it means turning an `LPARAM` back into a pointer, which `go vet` will not have; the window is re-sized from its logical size and the new scale instead, which lands in the same place for an ordinary drag between two monitors |
 

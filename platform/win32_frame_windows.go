@@ -20,6 +20,12 @@ import (
 var (
 	procSetWindowPlacement = user32.NewProc("SetWindowPlacement")
 	procGetWindowPlacement = user32.NewProc("GetWindowPlacement")
+	procMonitorFromWindow  = user32.NewProc("MonitorFromWindow")
+	procCreateIconIndirect = user32.NewProc("CreateIconIndirect")
+	procDestroyIcon        = user32.NewProc("DestroyIcon")
+	procGetSystemMetrics   = user32.NewProc("GetSystemMetrics")
+	procCreateBitmap       = gdi32.NewProc("CreateBitmap")
+	procGetMonitorInfo     = user32.NewProc("GetMonitorInfoW")
 	procGetSystemMenu      = user32.NewProc("GetSystemMenu")
 	procTrackPopupMenu     = user32.NewProc("TrackPopupMenu")
 	procClientToScreen     = user32.NewProc("ClientToScreen")
@@ -32,21 +38,27 @@ var (
 )
 
 const (
-	swMinimize   = 6
-	swRestore    = 9
-	swMaximize   = 3
-	swHide       = 0
-	wmSysCommand = 0x0112
-	scMove       = 0xF010
-	scSize       = 0xF000
-	hwndTopmost  = ^uintptr(0) // (HWND)-1
-	hwndNoTopmst = ^uintptr(1) // (HWND)-2
-	hwndBottom   = 1
-	swpNoMove    = 0x0002
-	swpNoSize    = 0x0001
-	swpNoActive  = 0x0010
-	swpNoZOrder  = 0x0004
-	swpFrameChgd = 0x0020
+	swMinimize     = 6
+	swRestore      = 9
+	swMaximize     = 3
+	swHide         = 0
+	wmSysCommand   = 0x0112
+	scMove         = 0xF010
+	scSize         = 0xF000
+	hwndTopmost    = ^uintptr(0) // (HWND)-1
+	hwndNoTopmst   = ^uintptr(1) // (HWND)-2
+	hwndBottom     = 1
+	swpNoMove      = 0x0002
+	swpNoSize      = 0x0001
+	swpNoActive    = 0x0010
+	swpNoZOrder    = 0x0004
+	swpFrameChgd   = 0x0020
+	monitorNearest = 0x0002
+	wmSetIcon      = 0x0080
+	iconSmall      = 0
+	iconBig        = 1
+	smCXIcon       = 11
+	smCXSmIcon     = 49
 )
 
 // ---- WindowFrame ---------------------------------------------------------
@@ -224,9 +236,54 @@ func (s *winSurface) MaximizeAxis(bool) bool { return false }
 // SetFullscreen: Windows has no full-screen *state*. The window's
 // placement is saved, the frame style dropped, and the window put over
 // the monitor — which is what every application that does this does.
+// SetFullscreen covers the monitor the window is on, or gives back the
+// place it had.
+//
+// Windows has no fullscreen state of its own — no _NET_WM_STATE_FULLSCREEN,
+// nothing to ask for — so this is the three steps an application does for
+// itself: remember the placement, take the frame off the style, and set
+// the window to the monitor's whole rectangle. Coming back is the same in
+// reverse, and the placement is what makes a window that was maximized
+// before going fullscreen maximized again after.
+//
+// The monitor is the one the window is *on*, not the primary: dragging a
+// window to the second screen and pressing fullscreen should fill that
+// screen. MONITOR_DEFAULTTONEAREST, so a window somehow off every screen
+// still gets an answer.
 func (s *winSurface) SetFullscreen(on bool) bool {
 	if s == nil || s.hwnd == 0 || !s.FrameCaps().Has(FrameFullscreen) {
 		return false
+	}
+	if on == s.state.Fullscreen {
+		return true
+	}
+	if on {
+		s.prePlacement = winPlacement{Length: uint32(unsafe.Sizeof(winPlacement{}))}
+		if r, _, _ := procGetWindowPlacement.Call(s.hwnd, uintptr(unsafe.Pointer(&s.prePlacement))); r == 0 {
+			return false
+		}
+		s.preStyle, _, _ = procGetWindowLongW.Call(s.hwnd, gwlStyle)
+		mi := winMonitorInfo{Size: uint32(unsafe.Sizeof(winMonitorInfo{}))}
+		mon, _, _ := procMonitorFromWindow.Call(s.hwnd, monitorNearest)
+		if mon == 0 {
+			return false
+		}
+		if r, _, _ := procGetMonitorInfo.Call(mon, uintptr(unsafe.Pointer(&mi))); r == 0 {
+			return false
+		}
+		// WS_OVERLAPPEDWINDOW off: no caption, no sizing border, and
+		// nothing of the frame left to overlap the screen it is covering.
+		procSetWindowLong.Call(s.hwnd, gwlStyle, s.preStyle&^wsOverlappedWindow)
+		procSetWindowPos.Call(s.hwnd, 0,
+			uintptr(mi.Monitor.Left), uintptr(mi.Monitor.Top),
+			uintptr(mi.Monitor.Right-mi.Monitor.Left),
+			uintptr(mi.Monitor.Bottom-mi.Monitor.Top),
+			swpNoZOrder|swpNoActive|swpFrameChgd)
+	} else {
+		procSetWindowLong.Call(s.hwnd, gwlStyle, s.preStyle)
+		procSetWindowPlacement.Call(s.hwnd, uintptr(unsafe.Pointer(&s.prePlacement)))
+		procSetWindowPos.Call(s.hwnd, 0, 0, 0, 0, 0,
+			swpNoMove|swpNoSize|swpNoZOrder|swpNoActive|swpFrameChgd)
 	}
 	s.state.Fullscreen = on
 	s.push(Event{Kind: EventWindowState, State: s.state})
@@ -280,8 +337,144 @@ func (s *winSurface) SetShadedHeight(h int) bool {
 // RESUME.md, and until it is settled this says no rather than pretending.
 func (s *winSurface) SetPalette(string) bool { return false }
 
-// SetIcon: WM_SETICON, ICON_SMALL and ICON_BIG. Not built yet.
-func (s *winSurface) SetIcon([]*paintengine2d.Image) bool { return false }
+// SetIcon gives the window its icon, for the title bar, the task bar and
+// Alt+Tab.
+//
+// Windows asks for two sizes and uses them in different places — the
+// small one in the caption and the task bar, the big one in Alt+Tab and
+// the task manager — so the nearest image at or above each is chosen
+// rather than one being stretched for both. SM_CXSMICON and SM_CXICON
+// ask what those sizes are *for this window's DPI*, not for 96.
+//
+// The old icons are destroyed after the new ones are in place, never
+// before: WM_SETICON answers with the handle it is replacing and that
+// handle is still on screen until it does.
+func (s *winSurface) SetIcon(imgs []*paintengine2d.Image) bool {
+	if s == nil || s.hwnd == 0 || s.closed || !s.FrameCaps().Has(FrameIcon) {
+		return false
+	}
+	if len(imgs) == 0 {
+		s.setOneIcon(iconSmall, 0)
+		s.setOneIcon(iconBig, 0)
+		return true
+	}
+	sc := s.deviceScale()
+	want := func(metric uintptr, fallback int) int {
+		n, _, _ := procGetSystemMetrics.Call(metric)
+		if n == 0 {
+			return DevicePixels(fallback, sc)
+		}
+		return int(n)
+	}
+	ok := false
+	for _, c := range []struct {
+		which uintptr
+		side  int
+	}{
+		{iconSmall, want(smCXSmIcon, 16)},
+		{iconBig, want(smCXIcon, 32)},
+	} {
+		h := winIconFrom(pickIcon(imgs, c.side))
+		if h == 0 {
+			continue
+		}
+		s.setOneIcon(c.which, h)
+		ok = true
+	}
+	return ok
+}
+
+// setOneIcon installs one of the window's two icons and destroys the one
+// it replaced.
+func (s *winSurface) setOneIcon(which, icon uintptr) {
+	old, _, _ := procSendMessage.Call(s.hwnd, wmSetIcon, which, icon)
+	if old != 0 && old != icon {
+		procDestroyIcon.Call(old)
+	}
+}
+
+// pickIcon is the image to use at side pixels: the smallest that is at
+// least that big, or the biggest there is when none of them reach it.
+// Scaling down a larger icon beats scaling up a smaller one.
+func pickIcon(imgs []*paintengine2d.Image, side int) *paintengine2d.Image {
+	var best *paintengine2d.Image
+	for _, im := range imgs {
+		if im == nil || im.Width <= 0 || im.Height <= 0 {
+			continue
+		}
+		switch {
+		case best == nil:
+			best = im
+		case best.Width < side:
+			if im.Width > best.Width {
+				best = im
+			}
+		case im.Width >= side && im.Width < best.Width:
+			best = im
+		}
+	}
+	return best
+}
+
+// winIconFrom turns one image into an HICON, or 0.
+//
+// The colour bitmap is a top-down 32-bit DIB section, which is the one
+// shape that carries an alpha channel: an icon built the old way, from a
+// colour bitmap and a 1-bit mask, has hard edges. The mask is supplied
+// all the same because ICONINFO requires one, and it is all zeroes —
+// "every pixel opaque" — so the alpha is what decides.
+//
+// Windows wants the pixels premultiplied, which is how paintengine2d
+// already keeps them, so this is the same BGRA swizzle Present does.
+func winIconFrom(im *paintengine2d.Image) uintptr {
+	if im == nil || im.Width <= 0 || im.Height <= 0 {
+		return 0
+	}
+	w, h := im.Width, im.Height
+	var bi winBitmapInfoHeader
+	bi.Size = uint32(unsafe.Sizeof(bi))
+	bi.Width, bi.Height = int32(w), int32(-h)
+	bi.Planes, bi.BitCount = 1, 32
+	bi.Compression = biRGB
+
+	var bits *byte
+	colour, _, _ := procCreateDIBSect.Call(0, uintptr(unsafe.Pointer(&bi)),
+		dibRGBColors, uintptr(unsafe.Pointer(&bits)), 0, 0)
+	if colour == 0 || bits == nil {
+		return 0
+	}
+	dst := unsafe.Slice(bits, w*h*4)
+	stride := im.Stride
+	if stride == 0 {
+		stride = w * 4
+	}
+	for y := 0; y < h; y++ {
+		si, di := y*stride, y*w*4
+		for x := 0; x < w; x++ {
+			dst[di+0] = im.Pix[si+2]
+			dst[di+1] = im.Pix[si+1]
+			dst[di+2] = im.Pix[si+0]
+			dst[di+3] = im.Pix[si+3]
+			si, di = si+4, di+4
+		}
+	}
+	// A 1-bit mask of zeroes: ICONINFO will not take nil for it.
+	mask, _, _ := procCreateBitmap.Call(uintptr(w), uintptr(h), 1, 1, 0)
+	if mask == 0 {
+		procDeleteObject.Call(colour)
+		return 0
+	}
+	info := struct {
+		Icon         int32
+		HotX, HotY   uint32
+		Mask, Colour uintptr
+	}{Icon: 1, Mask: mask, Colour: colour}
+	icon, _, _ := procCreateIconIndirect.Call(uintptr(unsafe.Pointer(&info)))
+	// CreateIconIndirect copies both bitmaps; they are ours to free.
+	procDeleteObject.Call(colour)
+	procDeleteObject.Call(mask)
+	return icon
+}
 
 // ---- WindowGeometry ------------------------------------------------------
 
@@ -373,3 +566,20 @@ var (
 	_ WindowFrame    = (*winSurface)(nil)
 	_ WindowGeometry = (*winSurface)(nil)
 )
+
+// winPlacement is WINDOWPLACEMENT and winMonitorInfo is MONITORINFO:
+// where a window was before it went fullscreen, and how big the screen
+// it is going to cover is.
+type winPlacement struct {
+	Length, Flags  uint32
+	ShowCmd        uint32
+	MinPosition    winPoint
+	MaxPosition    winPoint
+	NormalPosition winRect
+}
+
+type winMonitorInfo struct {
+	Size          uint32
+	Monitor, Work winRect
+	Flags         uint32
+}

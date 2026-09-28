@@ -382,3 +382,102 @@ func TestTheWindowIsSizedForItsDisplaysDPI(t *testing.T) {
 	}
 	t.Logf("display is %d DPI, scale %v, client %dx%d", dpi, s.Scale(), c.Right-c.Left, c.Bottom-c.Top)
 }
+
+// Fullscreen is three steps an application does for itself on Windows —
+// remember the placement, take the frame off the style, cover the
+// monitor — because Windows has no fullscreen state to ask for. It used
+// to record the state and do none of them.
+func TestFullscreenCoversTheMonitorAndComesBack(t *testing.T) {
+	s := testSurface(t, 500, 380)
+	f := FrameOf(s)
+	before, _ := rects(t, s)
+	style := winStyleOf(s)
+
+	if !f.SetFullscreen(true) {
+		t.Fatal("SetFullscreen(true) refused")
+	}
+	const wsCaption, wsThickFrame = 0x00C00000, 0x00040000
+	if winStyleOf(s)&(wsCaption|wsThickFrame) != 0 {
+		t.Errorf("fullscreen style %#x still has a caption or a sizing border", winStyleOf(s))
+	}
+	full, _ := rects(t, s)
+	if full.Right-full.Left <= before.Right-before.Left ||
+		full.Bottom-full.Top <= before.Bottom-before.Top {
+		t.Errorf("fullscreen client %dx%d is no bigger than the %dx%d it was",
+			full.Right-full.Left, full.Bottom-full.Top,
+			before.Right-before.Left, before.Bottom-before.Top)
+	}
+	if !f.WindowState().Fullscreen {
+		t.Error("the window does not say it is fullscreen")
+	}
+
+	if !f.SetFullscreen(false) {
+		t.Fatal("SetFullscreen(false) refused")
+	}
+	if got := winStyleOf(s); got != style {
+		t.Errorf("style came back as %#x, was %#x", got, style)
+	}
+	if back, _ := rects(t, s); back != before {
+		t.Errorf("client came back %v, was %v", back, before)
+	}
+	if f.WindowState().Fullscreen {
+		t.Error("the window still says it is fullscreen")
+	}
+}
+
+// SetIcon answered false and did nothing. A window's icon is what the
+// caption, the task bar and Alt+Tab show.
+func TestSetIconGivesTheWindowAnIcon(t *testing.T) {
+	s := testSurface(t, 300, 220)
+	f := FrameOf(s)
+	if !f.FrameCaps().Has(FrameIcon) {
+		t.Skip("this window says it cannot carry an icon")
+	}
+	paint := func(side int, c paintengine2d.Color) *paintengine2d.Image {
+		im := paintengine2d.NewImage(side, side)
+		ctx := paintengine2d.NewContext(im)
+		ctx.DrawRect(paintengine2d.XYWH(0, 0, float32(side), float32(side)), paintengine2d.Fill(c))
+		return im
+	}
+	icons := []*paintengine2d.Image{
+		paint(16, paintengine2d.RGB(0.9, 0.2, 0.2)),
+		paint(32, paintengine2d.RGB(0.2, 0.7, 0.3)),
+		paint(48, paintengine2d.RGB(0.2, 0.3, 0.9)),
+	}
+	if !f.SetIcon(icons) {
+		t.Fatal("SetIcon refused")
+	}
+	// WM_GETICON (0x007F): ask the window back for what it now has.
+	for _, c := range []struct {
+		which uintptr
+		name  string
+	}{{iconSmall, "small"}, {iconBig, "big"}} {
+		got, _, _ := procSendMessage.Call(s.hwnd, 0x007F, c.which, 0)
+		if got == 0 {
+			t.Errorf("the window has no %s icon after SetIcon", c.name)
+		}
+	}
+	// And an empty list takes them away again.
+	if !f.SetIcon(nil) {
+		t.Fatal("SetIcon(nil) refused")
+	}
+	if got, _, _ := procSendMessage.Call(s.hwnd, 0x007F, iconSmall, 0); got != 0 {
+		t.Errorf("the small icon survived SetIcon(nil): %#x", got)
+	}
+}
+
+// pickIcon chooses per size rather than stretching one for both.
+func TestPickIconTakesTheNearestAtOrAbove(t *testing.T) {
+	im := func(side int) *paintengine2d.Image { return paintengine2d.NewImage(side, side) }
+	set := []*paintengine2d.Image{im(16), im(32), im(64)}
+	for _, c := range []struct{ want, side int }{
+		{16, 16}, {32, 17}, {32, 32}, {64, 33}, {64, 64}, {64, 256},
+	} {
+		if got := pickIcon(set, c.side); got == nil || got.Width != c.want {
+			t.Errorf("for %d pixels picked %v, want the %d", c.side, got, c.want)
+		}
+	}
+	if pickIcon(nil, 16) != nil {
+		t.Error("an empty set should pick nothing")
+	}
+}

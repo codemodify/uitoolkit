@@ -57,6 +57,7 @@ var (
 	procAdjustWindow   = user32.NewProc("AdjustWindowRectEx")
 	procSetWindowPos   = user32.NewProc("SetWindowPos")
 	procSetWindowLong  = user32.NewProc("SetWindowLongPtrW")
+	procGetWindowLongW = user32.NewProc("GetWindowLongPtrW")
 	procScreenToClient = user32.NewProc("ScreenToClient")
 
 	procCreateDIBSect  = gdi32.NewProc("CreateDIBSection")
@@ -202,6 +203,10 @@ type winSurface struct {
 	hiSurrogate uint16
 	// shadedH is the height a rolled-up window is held at, or 0.
 	shadedH int
+	// prePlacement and preStyle are where the window was, and what it
+	// looked like, before it went fullscreen.
+	prePlacement winPlacement
+	preStyle     uintptr
 
 	sizing  Sizing
 	limits  SizeLimits
