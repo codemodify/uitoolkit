@@ -218,6 +218,15 @@ func ModifierDragAction(mods Modifiers, allows, fallback DragAction) DragAction 
 	if want != DragNone && allows.Has(want) {
 		return want
 	}
+	// No modifier, and the source would rather the user were asked.
+	// DragAsk is not in dragActionOrder — it is a question and not an
+	// action — so One() cannot find it and it has to be looked for here.
+	// A modifier still settles the question, which is why this comes
+	// after the check above: holding Shift over a drag that would
+	// otherwise ask moves it, and no menu appears.
+	if fallback.Asks() && allows.Asks() {
+		return DragAsk
+	}
 	if one := fallback.One(); one != DragNone && allows.Has(one) {
 		return one
 	}

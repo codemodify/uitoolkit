@@ -420,3 +420,31 @@ func TestMergeDragOfferKeepsTheRequestedAction(t *testing.T) {
 		}
 	}
 }
+
+// A source that wants the user asked has to be able to say so. DragAsk
+// is not in dragActionOrder — it is a question, not an action — so
+// One() cannot find it, and without a case of its own Atom answered 0:
+// XdndPosition then carried no action and the target refused the drag.
+func TestXdndAtomCarriesTheAskAction(t *testing.T) {
+	tab := xdndActions{Copy: 10, Move: 11, Link: 12, Ask: 13}
+	if got := tab.Atom(DragAsk); got != 13 {
+		t.Errorf("Atom(DragAsk) = %d, want the ask atom 13", got)
+	}
+	// A set that also names a real action sends that action: one atom
+	// goes in a position message, and a concrete answer beats a question.
+	if got := tab.Atom(DragAsk | DragMove); got != 11 {
+		t.Errorf("Atom(ask|move) = %d, want move", got)
+	}
+	// A display that never interned the atom cannot send it.
+	none := xdndActions{Copy: 10, Move: 11, Link: 12}
+	if got := none.Atom(DragAsk); got != 0 {
+		t.Errorf("with no ask atom interned, Atom(DragAsk) = %d, want 0", got)
+	}
+	// And it is still not one of the *offered* actions: XdndActionList is
+	// what the user would be choosing between.
+	for _, a := range tab.List(DragCopy|DragMove|DragAsk, DragAsk) {
+		if a == 13 {
+			t.Error("XdndActionList names the ask atom; it lists what may be chosen, not the asking")
+		}
+	}
+}

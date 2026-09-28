@@ -677,11 +677,18 @@ and macOS adapters.
    scripts that need it (Arabic joining, Indic), plus right-to-left
    layout mirroring. Text is kerned but not shaped. A pure-Go HarfBuzz port
    (go-text/typesetting, BSD) could do the shaping.
-2. **Drag and drop, what is left:** both halves work on both backends —
-   XDND 5 on X11, `wl_data_device` / `wl_data_source` on Wayland, with a
-   drag icon, action negotiation and in-process payloads. Still missing:
-   a drop indicator between rows for reordering a list, and XDND's "ask"
-   action (the Copy / Move / Link menu a file manager shows on a drop).
+2. **Drag and drop: done.** Both halves on both Linux backends — XDND 5
+   on X11, `wl_data_device` / `wl_data_source` on Wayland — and on
+   Windows through OLE. The two things listed here as missing were not,
+   or are no longer: the drop indicator between rows is
+   `widgets/dropcaret.go`, which splits every row into three bands and is
+   used by the list, the table, the tree, the rich text and the tear-off;
+   and XDND's ask works now in both directions. The target side always
+   did — an ask arrives, `app/dropask.go` puts the Copy / Move / Link
+   menu under the pointer — but a *source* here could not request it,
+   because DragAsk is a question rather than an action and so neither
+   `One()` nor `xdndActions.Atom` could find it. A drag that asked sent
+   no action at all and was refused.
 3. **Other platforms:** Windows and macOS backends, with UI Automation and
    NSAccessibility adapters for the accessibility tree that now exists.
 4. **Portals:** a parent window for native dialogs on Wayland

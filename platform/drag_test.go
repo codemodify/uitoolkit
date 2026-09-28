@@ -137,3 +137,29 @@ func TestSurfacePosition(t *testing.T) {
 // noPosition is a Surface without the position capability, which is what
 // a Wayland toplevel is.
 type noPosition struct{ Surface }
+
+// A source whose preferred action is "ask" gets to ask, and a modifier
+// still settles it — that is the whole of the rule dropask.go describes.
+func TestModifierDragActionCanAsk(t *testing.T) {
+	const allows = DragCopy | DragMove | DragLink | DragAsk
+	if got := ModifierDragAction(0, allows, DragAsk); got != DragAsk {
+		t.Errorf("with no modifier and a source that asks, got %v, want ask", got)
+	}
+	for _, c := range []struct {
+		mods Modifiers
+		want DragAction
+	}{
+		{ModShift, DragMove},
+		{ModCtrl, DragCopy},
+		{ModCtrl | ModShift, DragLink},
+	} {
+		if got := ModifierDragAction(c.mods, allows, DragAsk); got != c.want {
+			t.Errorf("mods %v over a drag that would ask: got %v, want %v", c.mods, got, c.want)
+		}
+	}
+	// A source that asks where the target will not: fall back to an
+	// action rather than asking into the void.
+	if got := ModifierDragAction(0, DragCopy|DragMove, DragAsk); got != DragCopy {
+		t.Errorf("asking where ask is not allowed gave %v, want copy", got)
+	}
+}

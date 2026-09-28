@@ -259,6 +259,14 @@ func (t xdndActions) Action(atom uint32) DragAction {
 // Atom is the atom for one action. DragNone (and a set with no action in
 // it) is None, which is what a refused drop must send.
 func (t xdndActions) Atom(a DragAction) uint32 {
+	// A pure ask first: One() walks the actions and DragAsk is not one
+	// of them, so without this a source that wants the user asked sends
+	// no action at all and the target refuses the drag. A set that also
+	// names a real action is that action — XdndPosition carries one
+	// atom, and a concrete answer beats a question.
+	if t.Ask != 0 && a.Asks() && a.Actions() == DragNone {
+		return t.Ask
+	}
 	switch a.One() {
 	case DragCopy:
 		return t.Copy
