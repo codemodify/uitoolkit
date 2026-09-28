@@ -10,7 +10,7 @@ tries `GPUDevice` and falls back to the CPU pixmap.
 | **Wayland** | Linux + CGO + `WAYLAND_DISPLAY` | **`wl_egl_window` + `eglSwapBuffers`** when `UITK_PAINT=auto\|gpu` and EGL works; else v0.4.1 **`wl_shm` XRGB8888** (opaque). **linux-dmabuf** only if `UITK_WAYLAND_PRESENT=dmabuf` on the CPU path | `wl_data_device` + primary when the compositor offers it (drag and drop rides the same device) | `wl_output` scale, `wp_fractional_scale_v1` + viewporter, env | `zwp_text_input_v3` preedit / commit | host cursors: `wp_cursor_shape_v1` when advertised, else `wl_cursor_theme` (`XCURSOR_THEME` / `XCURSOR_SIZE`) + `wl_pointer_set_cursor` (enter serial); re-applied on pointer enter |
 | **X11** | Linux + CGO + `DISPLAY` | **EGL window + `eglSwapBuffers`** when EGL works; else dirty-rect `XPutImage` / MIT-SHM | CLIPBOARD + PRIMARY, ICCCM **INCR**; drag and drop is **XDND 5** | Xft.dpi, RandR mm, screen mm, env | XIM preedit callbacks + compose / dead keys | host cursors: `XcursorLibraryLoadCursor` theme names, else `XCreateFontCursor` + `XDefineCursor` |
 | **Win32** | Windows; pure `syscall`, no cgo ([windows.md](windows.md)) | `CreateDIBSection` + `BitBlt` from a memory DC | `CF_UNICODETEXT`; drag and drop is OLE (`IDropTarget` / `IDropSource`) | per-monitor v2, `WM_DPICHANGED` | — (`WM_IME_*` not wired) | host cursors: `LoadCursorW` + `SetCursor`, re-applied from `WM_SETCURSOR` |
-| **AppKit** | macOS + CGO ([macos.md](macos.md)) | a `CGImage` assigned to `contentView.layer.contents` — premultiplied RGBA both sides, so no swizzle | `NSPasteboard` general, string; no PRIMARY. Drag and drop not wired | `backingScaleFactor`, `windowDidChangeBackingProperties` | — (`NSTextInputClient` not wired) | host cursors: `NSCursor`, re-applied from `-[NSView cursorUpdate:]`; no public diagonal resize shape |
+| **AppKit** | macOS + CGO ([macos.md](macos.md)) | a `CGImage` assigned to `contentView.layer.contents` — premultiplied RGBA both sides, so no swizzle | `NSPasteboard` general, string; no PRIMARY. Drag and drop is `NSDraggingSource` / `NSDraggingDestination`, types as MIME | `backingScaleFactor`, `windowDidChangeBackingProperties` | — (`NSTextInputClient` not wired) | host cursors: `NSCursor`, re-applied from `-[NSView cursorUpdate:]`; no public diagonal resize shape |
 | tray on both | **tray** is `Shell_NotifyIcon` / `NSStatusItem`, and landed before the windows did | — | — | — | — | host cursors listed for the tray's own use: `LoadCursorW`; AppKit `NSCursor` |
 
 Auto-select: Wayland if `WAYLAND_DISPLAY` is set **and** a compositor
@@ -1083,8 +1083,8 @@ makes the file dialog a real window that imports the handle (see
 - The extended `_NET_WM_SYNC_REQUEST` (a second counter and
   `_NET_WM_FRAME_DRAWN` / `_NET_WM_FRAME_TIMINGS`): the basic handshake is
   in place
-- macOS IME (`NSTextInputClient`) and drag and drop
-  (`NSDraggingSource` / `NSDraggingDestination`). The AppKit **window**,
-  its input, both seams, the clipboard and the pointer shapes are in —
-  see [macos.md](macos.md); those two are what is left of that port
-- Windows IME (`WM_IME_*`)
+- IME on **Windows** (`WM_IME_*`) and **macOS** (`NSTextInputClient`) —
+  the last gap either port has; everything else the Linux backends do,
+  both of them now do. See [windows.md](windows.md) and
+  [macos.md](macos.md)
+

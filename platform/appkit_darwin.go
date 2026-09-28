@@ -93,6 +93,16 @@ type akSurface struct {
 	pop  *akPopup
 	kids []*akSurface
 
+	// Drag and drop (appkit_dnd_darwin.go): what the drag over this
+	// window offers, what was copied out of the pasteboard at the drop,
+	// what the toolkit last agreed to, and whether a drag started here
+	// is running.
+	dragMimes  []string
+	dropData   map[string][]byte
+	dragAccept bool
+	dragAction DragAction
+	dragging   bool
+
 	opts WindowOptions
 }
 
@@ -135,6 +145,10 @@ func newAkSurface(opts WindowOptions) (Surface, error) {
 	s.sizing = opts.Sizing
 	s.limits = limitsFor(s.sizing, opts, w, h)
 	s.applyLimits()
+	// Every window takes drops: the toolkit decides what to do with one
+	// by answering AcceptDrag, and a window that had not registered
+	// would never be asked.
+	C.uitk_ak_register_drops(s.win)
 	if !opts.Headless {
 		C.uitk_ak_window_show(s.win)
 	}
@@ -345,6 +359,10 @@ func uitkAkInput(sid C.uintptr_t, kind C.int, x, y, dx, dy C.double,
 	case C.UITK_AK_KEY_UP:
 		s.mods = m
 		s.push(Event{Kind: EventKeyUp, Key: akKey(rune(key)), Mods: m})
+	case C.UITK_AK_DRAG_MOTION, C.UITK_AK_DRAG_LEAVE, C.UITK_AK_DROP, C.UITK_AK_DRAG_END:
+		// button carries what the source allows and key what it prefers
+		// — or, at the end, the action that was performed.
+		s.akDragEvent(kind, at, DragAction(button), DragAction(key))
 	}
 }
 

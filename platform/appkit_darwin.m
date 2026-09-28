@@ -116,12 +116,19 @@ static int actionsFromOps(NSDragOperation op) {
 // numbers darwinCursorKind produces.
 extern NSCursor *uitk_nscursor_for(int kind);
 
-@interface UitkView : NSView
+@interface UitkView : NSView <NSDraggingSource>
 @property(assign) uintptr_t sid;
 @property(assign) int cursorKind;
 // strong, not assign: ARC would release the tracking area the moment it
 // was stored and the view would be left pointing at freed memory.
 @property(strong) NSTrackingArea *tracking;
+// The drag now over this view, what the toolkit last said it would do
+// with it, and the drag this view started. currentDrag is weak: the
+// dragging info belongs to AppKit and is gone when the drag ends.
+@property(weak) id<NSDraggingInfo> currentDrag;
+@property(assign) int dropAnswer;
+@property(assign) int dragActions;
+@property(assign) BOOL dragging;
 @end
 
 @implementation UitkView
@@ -879,7 +886,7 @@ void uitk_ak_set_drop_answer(void *w, int action) {
 
 // mimesOf is the pasteboard's types as the MIME names the toolkit
 // speaks, NUL-separated and NUL-terminated.
-static char *mimesOf(NSPasteboard *pb) {
+static char *mimesOf(NSPasteboard *pb, int *n) {
 	NSMutableArray<NSString *> *out = [NSMutableArray array];
 	if ([pb canReadObjectForClasses:@[[NSURL class]] options:@{NSPasteboardURLReadingFileURLsOnlyKey: @YES}]) {
 		[out addObject:@"text/uri-list"];
@@ -901,18 +908,19 @@ static char *mimesOf(NSPasteboard *pb) {
 		const char *u = [m UTF8String];
 		[buf appendBytes:u length:strlen(u) + 1];
 	}
-	char z = 0;
-	[buf appendBytes:&z length:1];
+	if (n) *n = (int)buf.length;
+	if (buf.length == 0) return NULL;
 	char *res = (char *)malloc(buf.length);
 	memcpy(res, buf.bytes, buf.length);
 	return res;
 }
 
-char *uitk_ak_drop_types(void *w) {
+char *uitk_ak_drop_types(void *w, int *n) {
+	if (n) *n = 0;
 	@autoreleasepool {
 		UitkView *v = uitkView(w);
 		if (!v || !v.currentDrag) return NULL;
-		return mimesOf([v.currentDrag draggingPasteboard]);
+		return mimesOf([v.currentDrag draggingPasteboard], n);
 	}
 }
 

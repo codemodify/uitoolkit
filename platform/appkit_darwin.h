@@ -157,9 +157,11 @@ void uitk_ak_work_area(void *win, int *x, int *y, int *w, int *h);
 void uitk_ak_register_drops(void *win);
 
 // uitk_ak_drop_types is the MIME types the drag now over the window
-// offers, NUL-separated and NUL-terminated; the caller frees it. NULL
-// when no drag is in hand.
-char *uitk_ak_drop_types(void *win);
+// offers, NUL-separated; the caller frees it. n is set to the total
+// length, so the Go side can take the whole block in one piece and
+// split it in Go, where the splitting can be tested. NULL when no drag
+// is in hand.
+char *uitk_ak_drop_types(void *win, int *n);
 
 // uitk_ak_drop_data is one type's bytes from the drag now over the
 // window; the caller frees it. n is set to the length, 0 for nothing.

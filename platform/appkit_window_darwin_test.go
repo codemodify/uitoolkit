@@ -803,3 +803,108 @@ func TestAppKitPopupReposition(t *testing.T) {
 // onMainClose closes a surface on the main thread, for a deferred
 // teardown inside an onMain block.
 func onMainClose(s *akSurface) { s.Close() }
+
+// Every window takes drops, and it says what it would do with one.
+func TestAppKitIsADropTarget(t *testing.T) {
+	onMain(func() {
+		s := akTestWindow(t, 320, 200)
+		pump(s, 200*time.Millisecond)
+		var _ DropNegotiator = s
+		var _ DropReceiver = s
+		var _ DragSurface = s
+		// Refusing and accepting both reach AppKit without panicking,
+		// and the surface remembers which it said.
+		s.AcceptDrag("", DragCopy, DragNone)
+		if s.dragAccept {
+			t.Error("an empty mime was taken as an acceptance")
+		}
+		s.AcceptDrag("text/plain", DragCopy|DragMove, DragCopy)
+		if !s.dragAccept || s.dragAction != DragCopy {
+			t.Errorf("after accepting: accept=%v action=%v", s.dragAccept, s.dragAction)
+		}
+		s.FinishDrop(true)
+		if s.dropData != nil || s.dragMimes != nil {
+			t.Error("FinishDrop left the drop's payload behind")
+		}
+	})
+}
+
+// A drag needs a press to start from, so one asked for out of the blue
+// is refused rather than half-started. This is the same rule
+// StartMove keeps, and the same reason.
+func TestAppKitDragNeedsAPress(t *testing.T) {
+	onMain(func() {
+		s := akTestWindow(t, 320, 200)
+		pump(s, 200*time.Millisecond)
+		got := s.StartDrag(DragPayload{
+			Types: []string{"text/plain"},
+			Data:  func(string) ([]byte, bool) { return []byte("hello"), true },
+		})
+		if got {
+			t.Error("a drag started with no press being handled")
+		}
+		if s.Dragging() {
+			t.Error("and it says a drag is running")
+		}
+	})
+}
+
+// A payload with nothing in it is refused: an empty drag would leave
+// the pointer carrying a pasteboard item no target can read.
+func TestAppKitDragRefusesAnEmptyPayload(t *testing.T) {
+	onMain(func() {
+		s := akTestWindow(t, 320, 200)
+		pump(s, 200*time.Millisecond)
+		for _, c := range []struct {
+			name string
+			p    DragPayload
+		}{
+			{"no types", DragPayload{}},
+			{"no reader", DragPayload{Types: []string{"text/plain"}}},
+			{"the reader refuses", DragPayload{
+				Types: []string{"text/plain"},
+				Data:  func(string) ([]byte, bool) { return nil, false },
+			}},
+			{"the reader is empty", DragPayload{
+				Types: []string{"text/plain"},
+				Data:  func(string) ([]byte, bool) { return []byte{}, true },
+			}},
+		} {
+			if s.StartDrag(c.p) {
+				t.Errorf("%s: a drag started anyway", c.name)
+			}
+		}
+	})
+}
+
+// The MIME list comes off the pasteboard NUL-separated and is split in
+// Go. It is worth its own test because nothing else notices if it
+// drops the last entry — and it can have one only because the split is
+// on this side of the boundary.
+func TestAkParseMimeList(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		in   string
+		want []string
+	}{
+		{"the usual three", "text/uri-list\x00text/plain;charset=utf-8\x00text/plain\x00",
+			[]string{"text/uri-list", "text/plain;charset=utf-8", "text/plain"}},
+		{"one", "text/plain\x00", []string{"text/plain"}},
+		{"nothing", "", nil},
+		{"only a terminator", "\x00", nil},
+		{"a doubled separator leaves no empty entry", "a/b\x00\x00c/d\x00",
+			[]string{"a/b", "c/d"}},
+		{"no trailing NUL is still a list", "a/b\x00c/d", []string{"a/b", "c/d"}},
+	} {
+		got := parseMimeList([]byte(c.in))
+		if len(got) != len(c.want) {
+			t.Errorf("%s: read %q, want %q", c.name, got, c.want)
+			continue
+		}
+		for i := range c.want {
+			if got[i] != c.want[i] {
+				t.Errorf("%s: entry %d is %q, want %q", c.name, i, got[i], c.want[i])
+			}
+		}
+	}
+}

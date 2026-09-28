@@ -116,8 +116,6 @@ tile.
 - **IME.** `NSTextInputClient` is not implemented, so there is no
   preedit and CJK input does not work. This is the same gap Windows
   has (`WM_IME_*`), and the largest one on either platform.
-- **Drag and drop.** `NSDraggingSource` and `NSDraggingDestination` are
-  not wired up.
 
 ## ⌘S and Ctrl+S are the same shortcut
 
@@ -257,6 +255,36 @@ same function deciding.
 Child windows carry the rest: a panel added with `addChildWindow:`
 follows its window across a move, a space and full screen, and goes
 away with it. Submenus close with their menu, deepest first.
+
+## Drag and drop
+
+Both halves. A window is a drop target from the moment it opens — the
+toolkit decides what to do with a drag by answering `AcceptDrag`, and a
+window that had not registered would never be asked — and `StartDrag`
+begins a session from the press being handled, the same rule
+`StartMove` keeps and for the same reason.
+
+Types cross as MIME strings. The two macOS has names of its own for,
+text and file URLs, are mapped; everything else goes on the pasteboard
+**under the MIME string itself**, which `NSPasteboard` allows. So a
+toolkit-specific type travels between two uitoolkit windows with
+nothing registered anywhere, while text and files still arrive from
+Finder and from every other application.
+
+One thing differs from the other two backends and it decides the shape
+of the code: **a dragging pasteboard is only readable while
+`-performDragOperation:` is on the stack.** XDND and `wl_data_offer`
+both let a target read afterwards, so the toolkit's flow is
+drop → `ReceiveDrop` → `FinishDrop`; AppKit's pasteboard is gone by
+then. Every offered type is therefore copied out inside the callback
+and `ReceiveDrop` is served from that copy. A backend that assumed it
+could read later would read an empty pasteboard exactly when somebody
+dropped something big enough to be worth dropping.
+
+`CancelDrag` does nothing and says so: `NSDraggingSession` runs its own
+loop and there is no way to call one off. Escape during a drag cancels
+it, but that is AppKit's doing rather than the toolkit's — the same
+kind of honest refusal `StartResize` makes.
 
 ## The clipboard and the pointer
 
