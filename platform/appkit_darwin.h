@@ -70,6 +70,9 @@ int uitk_ak_miniaturized(void *win);
 int uitk_ak_fullscreen(void *win);
 void uitk_ak_set_fullscreen(void *win, int on);
 void uitk_ak_set_level(void *win, int above);
+// uitk_ak_above is whether the window is at a level above the ordinary
+// ones — the state a keep-above caption button draws itself from.
+int uitk_ak_above(void *win);
 int uitk_ak_active(void *win);
 // uitk_ak_set_decorations: 0 the desktop's frame, 1 none at all. A
 // borderless window is also told to stop drawing its own shadow and

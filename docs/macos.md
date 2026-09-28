@@ -206,6 +206,27 @@ weight-suffixed spellings fontconfig invents for a variable font's
 named instances — "Noto Sans Syriac Thin" — which `sfnt` cannot draw
 anyway, and which the existing lookup already skips.
 
+## A capability is not done until the state says so
+
+`SetKeepAbove` worked from the first day: the window really did float,
+and `uitk-smoke -exercise` reported `SetKeepAbove yes`. It was still
+broken, and a user found it in a minute.
+
+`WindowState` never carried `KeepAbove`. The toolkit's toggle is
+`SetKeepAbove(!WindowState().KeepAbove)` and a caption's pin draws
+itself from the same field, so with the state stuck at false **every
+press meant "on"**: the pin never changed, and a window once pinned
+could not be released. Windows had always set it in its own
+`SetKeepAbove`; AppKit had not, and nothing compared the two.
+
+The state is read back from the window's level now rather than
+remembered from the last request, and `SetKeepAbove` pushes an
+`EventWindowState` — AppKit has no notification for a level change to
+hang it on. Three tests cover it: that the state reports it, that the
+change is announced, and that a toggle goes both ways. The last one is
+the user's actual gesture, and it is the one a test asserting only
+"`SetKeepAbove` returned true" will never catch.
+
 ## The clipboard and the pointer
 
 `NSPasteboard` is the easiest clipboard of the three. X11 has to own a

@@ -478,6 +478,13 @@ void uitk_ak_set_level(void *w, int above) {
 	}
 }
 
+int uitk_ak_above(void *w) {
+	if (!w) return 0;
+	@autoreleasepool {
+		return ((__bridge NSWindow *)w).level > NSNormalWindowLevel ? 1 : 0;
+	}
+}
+
 int uitk_ak_active(void *w) {
 	if (!w) return 0;
 	@autoreleasepool { return ((__bridge NSWindow *)w).isKeyWindow ? 1 : 0; }

@@ -83,6 +83,13 @@ func (s *akSurface) WindowState() WindowState {
 		Activated:  C.uitk_ak_active(s.win) != 0,
 		Minimized:  C.uitk_ak_miniaturized(s.win) != 0,
 		Suspended:  C.uitk_ak_miniaturized(s.win) != 0,
+		// Read back from the window rather than remembered from the
+		// last request: this is the state a caption's pin draws itself
+		// from, and [Window.ToggleKeepAbove] is SetKeepAbove(!this).
+		// Leaving it out does not merely fail to light the button up —
+		// it makes every press mean "on", so the window can be pinned
+		// and never released.
+		KeepAbove: C.uitk_ak_above(s.win) != 0,
 	}
 }
 
@@ -162,6 +169,10 @@ func (s *akSurface) SetKeepAbove(on bool) bool {
 		return false
 	}
 	C.uitk_ak_set_level(s.win, cbool(on))
+	// The desktop is never asked again, so the toolkit is told here.
+	// Windows does the same in its own SetKeepAbove; AppKit has no
+	// notification for a level change to hang it on.
+	s.push(Event{Kind: EventWindowState, State: s.WindowState()})
 	return true
 }
 

@@ -531,3 +531,75 @@ func TestAppKitCursorShapesAreDistinct(t *testing.T) {
 		t.Error("a north resize and a row resize are the same up-down pointer")
 	}
 }
+
+// Keep-above is reported back in the window's state, not only applied.
+//
+// This is the test that was missing. SetKeepAbove worked — the window
+// really did float — but WindowState never carried KeepAbove, and the
+// toolkit's toggle is SetKeepAbove(!WindowState().KeepAbove). With the
+// state stuck at false every press meant "on": the caption's pin never
+// lit up, and a window once pinned could not be released. A test that
+// only asserted SetKeepAbove returns true passed throughout.
+func TestAppKitKeepAboveIsReportedInTheState(t *testing.T) {
+	onMain(func() {
+		s := akTestWindow(t, 320, 200)
+		pump(s, 200*time.Millisecond)
+		if s.WindowState().KeepAbove {
+			t.Fatal("a new window is already kept above")
+		}
+		if !s.SetKeepAbove(true) {
+			t.Fatal("SetKeepAbove refused")
+		}
+		pump(s, 200*time.Millisecond)
+		if !s.WindowState().KeepAbove {
+			t.Error("after SetKeepAbove(true) the state still says no: " +
+				"the caption cannot draw the pin, and the toggle can never turn it off")
+		}
+		if !s.SetKeepAbove(false) {
+			t.Fatal("SetKeepAbove(false) refused")
+		}
+		pump(s, 200*time.Millisecond)
+		if s.WindowState().KeepAbove {
+			t.Error("after SetKeepAbove(false) the window is still kept above")
+		}
+	})
+}
+
+// And the change is announced, so a caption drawn from the state
+// repaints without anything having to poll it.
+func TestAppKitKeepAboveAnnouncesTheChange(t *testing.T) {
+	onMain(func() {
+		s := akTestWindow(t, 320, 200)
+		pump(s, 200*time.Millisecond)
+		s.SetKeepAbove(true)
+		var said bool
+		for _, e := range pump(s, 300*time.Millisecond) {
+			if e.Kind == EventWindowState && e.State.KeepAbove {
+				said = true
+			}
+		}
+		if !said {
+			t.Error("no EventWindowState carrying KeepAbove after it was turned on")
+		}
+	})
+}
+
+// The toggle a caption button actually performs, end to end: press,
+// press again, and the window is back where it started.
+func TestAppKitKeepAboveTogglesBothWays(t *testing.T) {
+	onMain(func() {
+		s := akTestWindow(t, 320, 200)
+		pump(s, 200*time.Millisecond)
+		toggle := func() { s.SetKeepAbove(!s.WindowState().KeepAbove) }
+		toggle()
+		pump(s, 200*time.Millisecond)
+		if !s.WindowState().KeepAbove {
+			t.Fatal("the first press did not pin the window")
+		}
+		toggle()
+		pump(s, 200*time.Millisecond)
+		if s.WindowState().KeepAbove {
+			t.Fatal("the second press did not release it — this is the bug a user hits")
+		}
+	})
+}
