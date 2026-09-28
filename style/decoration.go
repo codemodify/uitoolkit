@@ -930,41 +930,56 @@ func captionTitle(l *Classic, ctx *paintengine2d.Context, f *Font, b paintengine
 	l.drawFittedText(ctx, f, title, paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad, b.Dy()), col, AlignStart, 0)
 }
 
-// drawCaptionPin draws the keep-above pin inside g: a head across the
-// top and a needle down from it.
+// drawCaptionPin draws the keep-above pin inside g: the artwork of
+// [captionPinLoose] and [captionPinDriven], scaled to the glyph.
 //
-// Two parts, and no angle. A caption button is eight to eighteen device
-// pixels across, and a pushpin drawn properly — head, barrel, plate,
-// needle, lying over at 45° — has more parts than that many pixels can
-// hold: it came out an unreadable smudge at every size that matters.
-// What survives at ten pixels is one bold shape and one thin one.
+// Lying over while the window is not kept above, driven upright while it
+// is — the same pin, turned, which is the only difference between the
+// two and the one every pin toggle uses.
 //
-// On and off are the head filled against the head hollow, which is how
-// the rest of these glyphs say the same thing, rather than the pin
-// turning: a turn needs the detail that does not fit.
+// This glyph is the one exception to the whole-pixel rule the others
+// keep: it has diagonals, so its edges are antialiased, and
+// TestCaptionGlyphsAreCrisp leaves it out for that reason. Four attempts
+// at a hard-edged pin all read as a smudge at the eight to eighteen
+// pixels a caption button gets; the artwork does not.
 func drawCaptionPin(ctx *paintengine2d.Context, g paintengine2d.Rect, s, lw float32, pinned bool, fill paintengine2d.Paint) {
-	round := func(v float32) float32 { return float32(math.Round(float64(v))) }
-	n := max(round(s), 5)
-	headH := max(round(n*0.45), 3)
-	needleW := max(round(n*0.22), 1)
-	x := round(g.Min.X + (n-needleW)*0.5)
-
-	head := paintengine2d.XYWH(g.Min.X, g.Min.Y, n, headH)
-	p := paintengine2d.NewPath()
-	if pinned || headH < 3 {
-		p.AddRect(head)
-	} else {
-		// Hollow, with a wall of exactly one pixel however big the pin
-		// is. A wall that scales with the glyph closes the hole up at
-		// the sizes that have the fewest pixels to spare — and some
-		// packs leave the glyph only seven of them — so the two states
-		// come out the same picture just where they can least afford to.
-		t := float32(1)
-		p.AddRect(paintengine2d.XYWH(head.Min.X, head.Min.Y, head.Dx(), t))
-		p.AddRect(paintengine2d.XYWH(head.Min.X, head.Max.Y-t, head.Dx(), t))
-		p.AddRect(paintengine2d.XYWH(head.Min.X, head.Min.Y+t, t, head.Dy()-2*t))
-		p.AddRect(paintengine2d.XYWH(head.Max.X-t, head.Min.Y+t, t, head.Dy()-2*t))
+	rings := captionPinLoose
+	if pinned {
+		rings = captionPinDriven
 	}
-	p.AddRect(paintengine2d.XYWH(x, g.Min.Y+headH, needleW, n-headH))
+	p := paintengine2d.NewPath()
+	for _, r := range rings {
+		for i := 0; i+1 < len(r); i += 2 {
+			x, y := g.Min.X+r[i]*s, g.Min.Y+r[i+1]*s
+			if i == 0 {
+				p.MoveTo(x, y)
+			} else {
+				p.LineTo(x, y)
+			}
+		}
+		p.Close()
+	}
 	ctx.DrawPath(p, fill)
+}
+
+// captionPinCovers reports whether the pin's artwork covers the point
+// (u, v) of the unit square. It is how the packs that paint on a cell
+// grid ask for the same shape: one sample per cell, rather than a path
+// they have no way to fill.
+func captionPinCovers(rings [][]float32, u, v float32) bool {
+	for _, r := range rings {
+		in := false
+		n := len(r) / 2
+		for i, j := 0, n-1; i < n; j, i = i, i+1 {
+			xi, yi := r[2*i], r[2*i+1]
+			xj, yj := r[2*j], r[2*j+1]
+			if (yi > v) != (yj > v) && u < (xj-xi)*(v-yi)/(yj-yi)+xi {
+				in = !in
+			}
+		}
+		if in {
+			return true
+		}
+	}
+	return false
 }

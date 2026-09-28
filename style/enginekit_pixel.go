@@ -636,25 +636,23 @@ func (k *rpInk) aboveGlyph(g rpGrid, cx, cy, n int, on bool) {
 	if n < 4 {
 		return
 	}
-	// The same plain pin the vector glyph draws ([DrawCaptionGlyph]): a
-	// head across the top and a needle down from it, filled while the
-	// window is kept above and hollow while it is not. One symbol for
-	// keep-above across the whole toolkit, and two parts, which is all a
-	// glyph this size can hold.
-	headH := (n*9 + 10) / 20 // about nine twentieths, rounded
-	if headH < 3 {
-		headH = 3
+	// The same pin the vector glyph draws, sampled onto this pack's cell
+	// grid: one test per cell against the artwork's outline, at the
+	// cell's middle. A pack that paints in cells cannot fill a path, and
+	// the point of the artwork is that every pack shows one pin.
+	rings := captionPinLoose
+	if on {
+		rings = captionPinDriven
 	}
-	needleW := (n*22 + 50) / 100
-	if needleW < 1 {
-		needleW = 1
+	for y := 0; y < n; y++ {
+		for x := 0; x < n; x++ {
+			u := (float32(x) + 0.5) / float32(n)
+			v := (float32(y) + 0.5) / float32(n)
+			if captionPinCovers(rings, u, v) {
+				k.cells(g, cx+x, cy+y, 1, 1)
+			}
+		}
 	}
-	if on || headH < 3 {
-		k.cells(g, cx, cy, n, headH)
-	} else {
-		k.frame(g, cx, cy, n, headH, 1)
-	}
-	k.cells(g, cx+(n-needleW)/2, cy+headH, needleW, n-headH)
 }
 
 func (k *rpInk) dotted(g rpGrid, cx, cy, cw, ch int) {
