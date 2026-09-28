@@ -26,7 +26,18 @@ import (
 func main() {
 	hold := flag.Duration("hold", 5*time.Second, "how long to keep the window up")
 	quiet := flag.Bool("quiet", false, "do not open a window")
+	watchdog := flag.Duration("watchdog", 0, "panic after this long, to dump the stacks of a window that will not open")
 	flag.Parse()
+
+	if *watchdog > 0 {
+		// Run this with GOTRACEBACK=all: a Win32 window can wedge inside
+		// a synchronous message, and the stack of the thread that is
+		// stuck is the only thing that says where.
+		go func() {
+			time.Sleep(*watchdog)
+			panic("uitk-winsmoke: watchdog expired")
+		}()
+	}
 
 	b := platform.Default(false)
 	fmt.Printf("backend      %s\n", b.Name())
@@ -50,6 +61,9 @@ func main() {
 
 	w, h := surf.Size()
 	fmt.Printf("window       %dx%d device pixels at scale %g\n", w, h, surf.Scale())
+	if img := surf.Buffer(); img != nil {
+		fmt.Printf("buffer       %dx%d, stride %d, %d bytes\n", img.Width, img.Height, img.Stride, len(img.Pix))
+	}
 	fmt.Printf("frame caps   %s\n", platform.FrameOf(surf).FrameCaps())
 	fmt.Printf("geometry     %s\n", platform.GeometryOf(surf).GeometryCaps())
 	if x, y, ok := platform.GeometryOf(surf).Position(); ok {
@@ -73,7 +87,9 @@ func main() {
 		ctx.DrawRect(paintengine2d.XYWH(w/2, 0, w/2, h/2), paintengine2d.Fill(paintengine2d.RGB(0.15, 0.7, 0.2)))
 		ctx.DrawRect(paintengine2d.XYWH(0, h/2, w/2, h/2), paintengine2d.Fill(paintengine2d.RGB(0.15, 0.3, 0.9)))
 		ctx.DrawRect(paintengine2d.XYWH(w/2, h/2, w/2, h/2), paintengine2d.Fill(paintengine2d.RGB(0.95, 0.95, 0.95)))
-		_ = surf.Present(nil)
+		if err := surf.Present(nil); err != nil {
+			fmt.Println("present      FAILED:", err)
+		}
 	}
 	paint()
 	fmt.Println("painted      top-left RED, top-right GREEN, bottom-left BLUE, bottom-right WHITE")

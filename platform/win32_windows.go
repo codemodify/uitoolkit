@@ -57,7 +57,12 @@ var (
 	procAdjustWindow   = user32.NewProc("AdjustWindowRectEx")
 	procSetWindowPos   = user32.NewProc("SetWindowPos")
 
-	procSetDIBitsToDev = gdi32.NewProc("SetDIBitsToDevice")
+	procCreateDIBSect  = gdi32.NewProc("CreateDIBSection")
+	procCreateCompatDC = gdi32.NewProc("CreateCompatibleDC")
+	procSelectObject   = gdi32.NewProc("SelectObject")
+	procBitBlt         = gdi32.NewProc("BitBlt")
+	procDeleteObject   = gdi32.NewProc("DeleteObject")
+	procDeleteDC       = gdi32.NewProc("DeleteDC")
 
 	procGetModuleHandle = kernel32.NewProc("GetModuleHandleW")
 
@@ -134,6 +139,7 @@ const (
 
 	biRGB          = 0
 	dibRGBColors   = 0
+	srcCopy        = 0x00CC0020
 	qsAllInput     = 0x04FF
 	mwmoInputAvail = 0x0004
 )
@@ -171,6 +177,7 @@ type winSurface struct {
 
 	img                *paintengine2d.Image
 	bgra               []byte // the same pixels in the order a DIB wants them
+	dib                winDIB // the GDI memory bgra points into
 	bufW, bufH         int
 	logicalW, logicalH int
 	scale              float32
@@ -403,8 +410,85 @@ func (s *winSurface) resizeBuffer(w, h int) {
 		return
 	}
 	s.img = paintengine2d.NewImage(w, h)
-	s.bgra = make([]byte, w*h*4)
+	s.newDIB(w, h)
 	s.bufW, s.bufH = w, h
+}
+
+// winDIB is the buffer's GDI side: a top-down 32-bit DIB section selected
+// into a memory DC, which is what Present blits from.
+type winDIB struct {
+	hbm  uintptr // the section
+	mdc  uintptr // the memory DC it is selected into
+	prev uintptr // whatever the DC held before
+	bits *byte   // the pixels — GDI's memory, not Go's
+}
+
+// newDIB replaces the surface's DIB section with one w by h.
+//
+// The pixels have to be GDI's own, not a Go slice. SetDIBitsToDevice and
+// StretchDIBits read past the end of the bits they are handed; a Go
+// allocation that ends where Go's committed heap ends has nothing mapped
+// after it, the read faults inside GDI, and the call answers 0 scan lines
+// with GetLastError still reporting success — a window that never shows a
+// pixel and never says why. Measured on Windows 10 19045: the same call
+// refused the exact-sized Go buffer, took the same buffer with a page of
+// slack after it, and took one scan line of the refused buffer. A DIB
+// section has no such edge, and BitBlt out of a memory DC is the faster
+// path anyway: GDI parses the header once here rather than once a frame.
+func (s *winSurface) newDIB(w, h int) {
+	s.freeDIB()
+	var bi winBitmapInfoHeader
+	bi.Size = uint32(unsafe.Sizeof(bi))
+	bi.Width, bi.Height = int32(w), int32(-h) // negative: top-down, the order Pix is in
+	bi.Planes, bi.BitCount = 1, 32
+	bi.Compression = biRGB
+
+	// GDI writes the address of the pixels here. Declaring it *byte
+	// rather than uintptr means the slice below needs no uintptr-to-
+	// unsafe.Pointer conversion, which is the one thing `go vet` will
+	// not have; the collector ignores a pointer outside its own heap.
+	var bits *byte
+	hbm, _, _ := procCreateDIBSect.Call(0, uintptr(unsafe.Pointer(&bi)),
+		dibRGBColors, uintptr(unsafe.Pointer(&bits)), 0, 0)
+	if hbm == 0 || bits == nil {
+		// Present reports this; a surface with no pixels is still a
+		// surface, and the caller may only want its geometry.
+		s.bgra = nil
+		return
+	}
+	mdc, _, _ := procCreateCompatDC.Call(0)
+	if mdc == 0 {
+		procDeleteObject.Call(hbm)
+		s.bgra = nil
+		return
+	}
+	prev, _, _ := procSelectObject.Call(mdc, hbm)
+	s.dib = winDIB{hbm: hbm, mdc: mdc, prev: prev, bits: bits}
+	s.bgra = unsafe.Slice(bits, w*h*4)
+}
+
+// freeDIB gives the section and its DC back. GDI objects are not garbage
+// collected: a window resized for a while leaks one of each per size.
+func (s *winSurface) freeDIB() {
+	if s.dib.mdc != 0 {
+		procSelectObject.Call(s.dib.mdc, s.dib.prev)
+		procDeleteDC.Call(s.dib.mdc)
+	}
+	if s.dib.hbm != 0 {
+		procDeleteObject.Call(s.dib.hbm)
+	}
+	s.dib = winDIB{}
+	s.bgra = nil
+}
+
+// winBitmapInfoHeader is BITMAPINFOHEADER: 40 bytes, four-byte aligned.
+type winBitmapInfoHeader struct {
+	Size                   uint32
+	Width, Height          int32
+	Planes, BitCount       uint16
+	Compression, SizeImage uint32
+	XPelsPerMeter, YPels   int32
+	ClrUsed, ClrImportant  uint32
 }
 
 func (s *winSurface) Title() string { return s.title }
@@ -452,13 +536,17 @@ func (s *winSurface) Resize(w, h int) error {
 
 // Present puts the buffer on screen.
 //
-// The pixels are swizzled into a scratch buffer first: paintengine2d
-// keeps premultiplied RGBA and a 32-bit BI_RGB DIB is BGRX, so red and
-// blue trade places. Only the damaged rows are converted — a full-window
-// swizzle on every frame would cost more than the drawing usually does.
+// The pixels are swizzled into the DIB section first: paintengine2d keeps
+// premultiplied RGBA and a 32-bit BI_RGB DIB is BGRX, so red and blue
+// trade places. Only the damaged rows are converted, and only the damaged
+// rectangles are blitted — a full-window present on every frame would cost
+// more than the drawing usually does.
 func (s *winSurface) Present(dirty []paintengine2d.Rect) error {
 	if s.hwnd == 0 || s.closed || s.img == nil {
 		return nil
+	}
+	if s.dib.mdc == 0 || s.bgra == nil {
+		return fmt.Errorf("win32: the window has no DIB section to present")
 	}
 	s.swizzle(dirty)
 	dc, _, _ := procGetDC.Call(s.hwnd)
@@ -467,25 +555,27 @@ func (s *winSurface) Present(dirty []paintengine2d.Rect) error {
 	}
 	defer procReleaseDC.Call(s.hwnd, dc)
 
-	var bi struct {
-		Size                   uint32
-		Width, Height          int32
-		Planes, BitCount       uint16
-		Compression, SizeImage uint32
-		XPelsPerMeter, YPels   int32
-		ClrUsed, ClrImportant  uint32
+	blit := func(x, y, w, h int) error {
+		if w <= 0 || h <= 0 {
+			return nil
+		}
+		ok, _, err := procBitBlt.Call(dc, uintptr(x), uintptr(y), uintptr(w), uintptr(h),
+			s.dib.mdc, uintptr(x), uintptr(y), srcCopy)
+		if ok == 0 {
+			return fmt.Errorf("win32: BitBlt %dx%d at %d,%d: %w", w, h, x, y, err)
+		}
+		return nil
 	}
-	bi.Size = uint32(unsafe.Sizeof(bi))
-	bi.Width = int32(s.bufW)
-	bi.Height = int32(-s.bufH) // negative: top-down, the order Pix is in
-	bi.Planes, bi.BitCount = 1, 32
-	bi.Compression = biRGB
-
-	procSetDIBitsToDev.Call(dc,
-		0, 0, uintptr(s.bufW), uintptr(s.bufH),
-		0, 0, 0, uintptr(s.bufH),
-		uintptr(unsafe.Pointer(&s.bgra[0])),
-		uintptr(unsafe.Pointer(&bi)), dibRGBColors)
+	if len(dirty) == 0 {
+		return blit(0, 0, s.bufW, s.bufH)
+	}
+	for _, r := range dirty {
+		x0, y0 := clampInt(int(r.Min.X), 0, s.bufW), clampInt(int(r.Min.Y), 0, s.bufH)
+		x1, y1 := clampInt(int(r.Max.X+0.999), 0, s.bufW), clampInt(int(r.Max.Y+0.999), 0, s.bufH)
+		if err := blit(x0, y0, x1-x0, y1-y0); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -587,6 +677,7 @@ func (s *winSurface) Close() error {
 		procDestroyWindow.Call(s.hwnd)
 		s.hwnd = 0
 	}
+	s.freeDIB()
 	return nil
 }
 
