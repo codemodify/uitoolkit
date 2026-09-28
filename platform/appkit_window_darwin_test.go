@@ -603,3 +603,203 @@ func TestAppKitKeepAboveTogglesBothWays(t *testing.T) {
 		}
 	})
 }
+
+// akPopupFrom opens a popup under the window, anchored at a box in it.
+func akPopupFrom(t *testing.T, s *akSurface, w, h int, anchor FrameRect) *akSurface {
+	t.Helper()
+	p, err := s.OpenPopup(PopupOptions{
+		Parent: s, Role: PopupRoleMenu,
+		Placement: PopupPlacement{
+			Anchor: anchor, AnchorEdge: EdgeBottom | EdgeLeft, Gravity: EdgeBottom | EdgeRight,
+			W: w, H: h, Adjust: AdjustFlipY | AdjustSlideX | AdjustSlideY,
+		},
+	})
+	if err != nil {
+		t.Fatalf("OpenPopup: %v", err)
+	}
+	return p.(*akSurface)
+}
+
+// A popup is a window of its own, with its own buffer, and the toolkit
+// is told where it went.
+//
+// Without this the app draws a popup inside its window, which works
+// until the popup is taller than the room under it — a combo box near
+// the foot of a window — and then it is clipped or moved somewhere it
+// does not belong. That was macOS and Windows both.
+func TestAppKitOpensRealPopups(t *testing.T) {
+	onMain(func() {
+		s := akTestWindow(t, 400, 300)
+		pump(s, 200*time.Millisecond)
+		if !s.PopupsSupported() {
+			t.Fatal("AppKit says it cannot open popups")
+		}
+		p := akPopupFrom(t, s, 160, 120, FrameRect{X: 20, Y: 40, W: 80, H: 20})
+		defer onMainClose(p)
+		pump(s, 200*time.Millisecond)
+
+		if got := p.Root(); got != Surface(s) {
+			t.Errorf("the popup's root is %p, want the window %p", got, s)
+		}
+		placed := p.Placed()
+		if placed.W != 160 || placed.H != 120 {
+			t.Errorf("placed %+v, want 160x120", placed)
+		}
+		// Anchored at the bottom-left of a box at 20,40 20 tall, with
+		// gravity down and right: the popup starts there.
+		if placed.X != 20 || placed.Y != 60 {
+			t.Errorf("placed at %d,%d, want 20,60 — under the anchor", placed.X, placed.Y)
+		}
+		// Its own buffer, at the window's scale, sized to the answer.
+		if w, h := p.Size(); w != DevicePixels(160, s.Scale()) || h != DevicePixels(120, s.Scale()) {
+			t.Errorf("the popup's buffer is %dx%d at scale %g", w, h, s.Scale())
+		}
+		if p.Buffer() == nil {
+			t.Error("the popup has no buffer to paint")
+		}
+		if p.Buffer() == s.Buffer() {
+			t.Error("the popup shares the window's buffer")
+		}
+		// Origin is where its pixels land in the root's, and the popup
+		// has no margin of its own on macOS: AppKit draws the shadow.
+		o := p.Origin()
+		if o.X != 20*s.Scale() || o.Y != 60*s.Scale() {
+			t.Errorf("origin %v, want %v,%v", o, 20*s.Scale(), 60*s.Scale())
+		}
+	})
+}
+
+// The popup is placed against the screen's work area, not blindly at
+// the anchor: one that would hang off the bottom flips above it.
+//
+// This is [SolvePopup], the same function the X11 backend and the
+// headless tests use — macOS has no xdg_positioner, so the answer is
+// computed here and is the same answer everywhere.
+func TestAppKitPopupIsPlacedInTheWorkArea(t *testing.T) {
+	onMain(func() {
+		s := akTestWindow(t, 400, 300)
+		pump(s, 200*time.Millisecond)
+		area, ok := s.PopupWorkArea()
+		if !ok {
+			t.Fatal("macOS knows where its windows are and this one did not")
+		}
+		if area.W < 200 || area.H < 200 {
+			t.Fatalf("the work area is %+v, which is not a screen", area)
+		}
+		// The window's own box is inside it: the area is relative to the
+		// window, so a window on screen has a negative-ish origin and
+		// room past its own height.
+		if area.Y > 0 {
+			t.Errorf("the work area starts below the window's top: %+v", area)
+		}
+
+		// A popup taller than the room under an anchor near the foot of
+		// the work area has to go above it instead.
+		anchorY := area.Y + area.H - 40
+		p := akPopupFrom(t, s, 120, 300, FrameRect{X: 10, Y: anchorY, W: 60, H: 20})
+		defer onMainClose(p)
+		placed := p.Placed()
+		if placed.Y+placed.H > area.Y+area.H {
+			t.Errorf("the popup runs off the bottom: placed %+v, area %+v", placed, area)
+		}
+	})
+}
+
+// A popup's pointer is the window's: every press on it arrives on the
+// root, moved by the popup's origin, because as far as the application
+// is concerned the menu is part of the window.
+func TestAppKitPopupInputGoesToTheRoot(t *testing.T) {
+	onMain(func() {
+		s := akTestWindow(t, 400, 300)
+		pump(s, 200*time.Millisecond)
+		p := akPopupFrom(t, s, 160, 120, FrameRect{X: 20, Y: 40, W: 80, H: 20})
+		defer onMainClose(p)
+		pump(s, 300*time.Millisecond)
+
+		// 10 points in from the popup's top-left, posted in AppKit's
+		// coordinates on the popup's own window.
+		akPostMouse(p, EventMouseDown, 10, float64(120-10), 1, 0)
+		evs := pump(s, 500*time.Millisecond)
+
+		var down *Event
+		for i := range evs {
+			if evs[i].Kind == EventMouseDown {
+				down = &evs[i]
+			}
+		}
+		if down == nil {
+			t.Fatalf("a press on the popup never reached the window; saw %s", kindsOf(evs))
+		}
+		// The popup's buffer point 10,10 device-scaled, plus its origin.
+		o := p.Origin()
+		wantX, wantY := o.X+10*s.Scale(), o.Y+10*s.Scale()
+		if dx, dy := down.Pos.X-wantX, down.Pos.Y-wantY; dx < -2 || dx > 2 || dy < -2 || dy > 2 {
+			t.Errorf("the press arrived at %v, want %v,%v (the popup's origin plus 10,10)",
+				down.Pos, wantX, wantY)
+		}
+		// And the popup's own queue does not also carry it: an event
+		// delivered twice is a menu item chosen twice.
+		for _, e := range p.Poll() {
+			if e.Kind == EventMouseDown {
+				t.Error("the press is on the popup's queue as well as the root's")
+			}
+		}
+	})
+}
+
+// Closing the window takes its popups with it, and a submenu goes with
+// its menu: a child window that outlives its parent is one nobody can
+// reach and nothing can close.
+func TestAppKitPopupsCloseWithTheirParent(t *testing.T) {
+	onMain(func() {
+		s := akTestWindow(t, 400, 300)
+		pump(s, 200*time.Millisecond)
+		menu := akPopupFrom(t, s, 160, 120, FrameRect{X: 20, Y: 40, W: 80, H: 20})
+		sub := akPopupFrom(t, menu, 100, 80, FrameRect{X: 10, Y: 10, W: 40, H: 16})
+		pump(s, 200*time.Millisecond)
+		if len(s.kids) != 1 || len(menu.kids) != 1 {
+			t.Fatalf("the popup chain is %d and %d deep", len(s.kids), len(menu.kids))
+		}
+		menu.Close()
+		pump(s, 200*time.Millisecond)
+		if !sub.Closed() {
+			t.Error("closing a menu left its submenu open")
+		}
+		if len(s.kids) != 0 {
+			t.Errorf("the window still lists %d popups", len(s.kids))
+		}
+	})
+}
+
+// Reposition moves an open popup — a combo list that grew, a menu whose
+// anchor moved — rather than the app having to close and reopen it.
+func TestAppKitPopupReposition(t *testing.T) {
+	onMain(func() {
+		s := akTestWindow(t, 400, 300)
+		pump(s, 200*time.Millisecond)
+		p := akPopupFrom(t, s, 160, 120, FrameRect{X: 20, Y: 40, W: 80, H: 20})
+		defer onMainClose(p)
+		pump(s, 200*time.Millisecond)
+		before := p.Placed()
+
+		if !p.Reposition(PopupPlacement{
+			Anchor:     FrameRect{X: 100, Y: 40, W: 80, H: 20},
+			AnchorEdge: EdgeBottom | EdgeLeft, Gravity: EdgeBottom | EdgeRight,
+			W: 160, H: 120, Adjust: AdjustFlipY | AdjustSlideX,
+		}) {
+			t.Fatal("Reposition refused")
+		}
+		pump(s, 200*time.Millisecond)
+		after := p.Placed()
+		if after.X == before.X {
+			t.Errorf("the popup did not move: %+v then %+v", before, after)
+		}
+		if after.X != 100 {
+			t.Errorf("repositioned to %+v, want x 100", after)
+		}
+	})
+}
+
+// onMainClose closes a surface on the main thread, for a deferred
+// teardown inside an onMain block.
+func onMainClose(s *akSurface) { s.Close() }

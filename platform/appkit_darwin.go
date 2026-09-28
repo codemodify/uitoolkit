@@ -87,6 +87,12 @@ type akSurface struct {
 	// cursor is the shape this window asked for (cursor_darwin.go).
 	cursor Cursor
 
+	// pop is set on a popup and says what it hangs from; kids are the
+	// popups open from this surface, innermost last
+	// (appkit_popup_darwin.go).
+	pop  *akPopup
+	kids []*akSurface
+
 	opts WindowOptions
 }
 
@@ -144,7 +150,21 @@ func (s *akSurface) resizeBuffer(w, h int) {
 	s.bufW, s.bufH = w, h
 }
 
+// push queues an event for this surface — or, when the surface is a
+// popup and the event is input, for the popup's root window with every
+// position moved by the popup's origin.
+//
+// That is the contract ([PopupSurface]): a popup is placed by the
+// window system and paints its own buffer, but as far as the
+// application is concerned its pointer and its keys are the window's.
+// Everything else — the popup's own resize, its close — stays on the
+// popup, because it is the backend's business and would read as the
+// root window's if it were passed on.
 func (s *akSurface) push(ev Event) {
+	if s.pop != nil && s.pop.root != nil && s.pop.root != s && popupInput(ev.Kind) {
+		s.pop.root.push(popupEvent(ev, s.Origin()))
+		return
+	}
 	s.mu.Lock()
 	s.queue = append(s.queue, ev)
 	s.mu.Unlock()
@@ -215,10 +235,16 @@ func (s *akSurface) Close() error {
 		return nil
 	}
 	s.torn = true
+	// Popups first, and deepest first: a submenu belongs to its menu,
+	// and a child window outliving its parent is a window nobody can
+	// reach.
+	s.closeKids()
 	s.mu.Lock()
 	s.closed = true
 	s.mu.Unlock()
-	if s.win != nil {
+	if s.pop != nil {
+		s.closePopup()
+	} else if s.win != nil {
 		C.uitk_ak_window_close(s.win)
 		s.win = nil
 	}

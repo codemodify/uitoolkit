@@ -646,3 +646,101 @@ void uitk_ak_set_cursor(void *w, int kind) {
 		}
 	}
 }
+
+// --- popups ----------------------------------------------------------
+
+void *uitk_ak_popup_new(uintptr_t sid, void *parentWin, int x, int y, int w, int h, int tooltip) {
+	@autoreleasepool {
+		NSWindow *parent = (__bridge NSWindow *)parentWin;
+		NSRect content = NSMakeRect(0, 0, w > 0 ? w : 1, h > 0 ? h : 1);
+		// A panel, and non-activating: clicking a menu must not take key
+		// away from the window the menu belongs to. NSWindow has no such
+		// style bit; NSPanel does.
+		NSPanel *p = [[NSPanel alloc] initWithContentRect:content
+		                                        styleMask:NSWindowStyleMaskBorderless | NSWindowStyleMaskNonactivatingPanel
+		                                          backing:NSBackingStoreBuffered
+		                                            defer:NO];
+		if (!p) return NULL;
+		p.releasedWhenClosed = NO;
+		p.opaque = NO;
+		p.backgroundColor = [NSColor clearColor];
+		// macOS draws a menu's shadow itself (FrameSystemShadow), and a
+		// tooltip's too; the toolkit reserves no margin for one.
+		p.hasShadow = YES;
+		p.level = tooltip ? NSStatusWindowLevel : NSPopUpMenuWindowLevel;
+		// It rides with its window across spaces and full screen, and
+		// never gets a window-cycling entry of its own.
+		p.collectionBehavior = NSWindowCollectionBehaviorTransient |
+		                       NSWindowCollectionBehaviorIgnoresCycle |
+		                       NSWindowCollectionBehaviorFullScreenAuxiliary;
+		p.hidesOnDeactivate = YES;
+
+		UitkView *view = [[UitkView alloc] initWithFrame:content];
+		view.sid = sid;
+		view.wantsLayer = YES;
+		view.layer.contentsGravity = kCAGravityTopLeft;
+		view.layer.magnificationFilter = kCAFilterNearest;
+		p.contentView = view;
+		p.acceptsMouseMovedEvents = YES;
+
+		[p setFrameTopLeftPoint:NSMakePoint(x, flipY(y))];
+		// A child window follows its parent when the parent moves and
+		// goes away with it, which is what a menu should do.
+		if (parent) [parent addChildWindow:p ordered:NSWindowAbove];
+		[p orderFront:nil];
+		return (void *)CFBridgingRetain(p);
+	}
+}
+
+void uitk_ak_popup_move(void *w, int x, int y, int width, int height) {
+	if (!w) return;
+	@autoreleasepool {
+		NSWindow *p = (__bridge NSWindow *)w;
+		[p setContentSize:NSMakeSize(width > 0 ? width : 1, height > 0 ? height : 1)];
+		[p setFrameTopLeftPoint:NSMakePoint(x, flipY(y))];
+	}
+}
+
+void uitk_ak_popup_close(void *parentWin, void *w) {
+	if (!w) return;
+	@autoreleasepool {
+		NSWindow *p = (__bridge NSWindow *)w;
+		NSWindow *parent = parentWin ? (__bridge NSWindow *)parentWin : nil;
+		if (parent) [parent removeChildWindow:p];
+		[p orderOut:nil];
+		[p close];
+		CFBridgingRelease(w);
+	}
+}
+
+void uitk_ak_content_origin(void *w, int *x, int *y) {
+	if (x) *x = 0;
+	if (y) *y = 0;
+	if (!w) return;
+	@autoreleasepool {
+		NSWindow *win = (__bridge NSWindow *)w;
+		NSRect c = [win contentRectForFrameRect:win.frame];
+		if (x) *x = (int)lround(c.origin.x);
+		if (y) *y = (int)lround(flipY(NSMaxY(c)));
+	}
+}
+
+void uitk_ak_work_area(void *w, int *x, int *y, int *width, int *height) {
+	if (x) *x = 0;
+	if (y) *y = 0;
+	if (width) *width = 0;
+	if (height) *height = 0;
+	@autoreleasepool {
+		NSScreen *sc = nil;
+		if (w) sc = ((__bridge NSWindow *)w).screen;
+		if (!sc) sc = [NSScreen mainScreen];
+		if (!sc) return;
+		// visibleFrame, not frame: the menu bar and the Dock are not
+		// somewhere a menu may open.
+		NSRect v = sc.visibleFrame;
+		if (x) *x = (int)lround(v.origin.x);
+		if (y) *y = (int)lround(flipY(NSMaxY(v)));
+		if (width) *width = (int)lround(v.size.width);
+		if (height) *height = (int)lround(v.size.height);
+	}
+}

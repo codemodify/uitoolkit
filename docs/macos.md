@@ -227,6 +227,37 @@ change is announced, and that a toggle goes both ways. The last one is
 the user's actual gesture, and it is the one a test asserting only
 "`SetKeepAbove` returned true" will never catch.
 
+## Popups are windows
+
+A menu, a combo list and a tooltip are surfaces of their own here, not
+rectangles painted inside the window. Without that a popup taller than
+the room under it — a combo box near the foot of a window — is clipped
+or moved somewhere it does not belong, and that was macOS and Windows
+both.
+
+A popup is a borderless, **non-activating** `NSPanel` parented to the
+window it hangs from. Non-activating is the part that matters: a menu
+must not take key away from the window under it, and it does not need
+to, because the toolkit's contract is that a popup hands every input
+event to its root. The keyboard reaching the root window directly is
+the intended destination rather than a gap; what the panel's own view
+sees is the pointer, and that is translated by `Origin` and pushed onto
+the root's queue.
+
+**The placement is the toolkit's.** Wayland hands the whole problem to
+the compositor through `xdg_positioner`; macOS has nothing like it, so
+this takes the X11 backend's path and calls `SolvePopup`, which flips,
+slides and shrinks against the screen's work area. `PopupWorkArea` is
+`NSScreen.visibleFrame` — the screen less the menu bar and the Dock —
+and macOS can answer it where Wayland cannot, which is why the
+capability is optional at all. The useful consequence is that a popup
+lands in the same place here as under a headless run, because it is the
+same function deciding.
+
+Child windows carry the rest: a panel added with `addChildWindow:`
+follows its window across a move, a space and full screen, and goes
+away with it. Submenus close with their menu, deepest first.
+
 ## The clipboard and the pointer
 
 `NSPasteboard` is the easiest clipboard of the three. X11 has to own a

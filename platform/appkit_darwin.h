@@ -103,6 +103,34 @@ double uitk_ak_backing_scale(void *win);
 // uitk_ak_content_size is the content area in *device* pixels.
 void uitk_ak_content_size(void *win, int *w, int *h);
 
+// --- popups ----------------------------------------------------------
+//
+// A popup is a borderless, non-activating panel parented to the window
+// it hangs from. Non-activating matters: a menu must not take key away
+// from the window under it, and it does not need to — the toolkit's
+// contract is that a popup hands every input event to its root, so the
+// keyboard going straight there is the answer rather than a problem.
+//
+// Placement is the toolkit's, not AppKit's. macOS has no positioner
+// like xdg_positioner, so SolvePopup does the flipping and sliding (the
+// X11 backend's path too) and this is told where to put the window.
+//
+// x and y are the toolkit's screen coordinates: points, y down from the
+// top-left of the main screen.
+void *uitk_ak_popup_new(uintptr_t sid, void *parent, int x, int y, int w, int h, int tooltip);
+void uitk_ak_popup_move(void *win, int x, int y, int w, int h);
+void uitk_ak_popup_close(void *parent, void *win);
+
+// uitk_ak_content_origin is where the window's *content* area begins, in
+// the toolkit's screen coordinates — the origin a popup's placement is
+// relative to.
+void uitk_ak_content_origin(void *win, int *x, int *y);
+
+// uitk_ak_work_area is the usable area of the screen the window is on,
+// in the toolkit's screen coordinates: the screen less the menu bar and
+// the Dock, which is where a popup may go.
+void uitk_ak_work_area(void *win, int *x, int *y, int *w, int *h);
+
 // --- verification ---------------------------------------------------
 //
 // uitk_ak_readback renders the window's own layer tree into out, which
