@@ -636,69 +636,25 @@ func (k *rpInk) aboveGlyph(g rpGrid, cx, cy, n int, on bool) {
 	if n < 4 {
 		return
 	}
-	// The same pushpin the vector glyph draws ([DrawCaptionGlyph]), in
-	// cells: driven straight in while the window is kept above, lying
-	// over at 45° while it is not. One symbol across the whole toolkit,
-	// so "keep above" does not mean a pin in one pack and a ceiling with
-	// a window under it in the next.
-	//
-	// Top to bottom along the pin: the handle, the barrel, the plate the
-	// thumb pushes on, then the needle.
-	at := func(f float32, least int) int {
-		v := int(float32(n)*f + 0.5)
-		if v < least {
-			return least
-		}
-		return v
+	// The same plain pin the vector glyph draws ([DrawCaptionGlyph]): a
+	// head across the top and a needle down from it, filled while the
+	// window is kept above and hollow while it is not. One symbol for
+	// keep-above across the whole toolkit, and two parts, which is all a
+	// glyph this size can hold.
+	headH := (n*9 + 10) / 20 // about nine twentieths, rounded
+	if headH < 3 {
+		headH = 3
 	}
-	width := func(i int) int { // i counts from the point
-		t := float32(i) / float32(n-1)
-		switch {
-		case t < 0.36:
-			return 1 // the needle
-		case t < 0.55:
-			return at(0.62, 3) // the plate
-		case t < 0.80:
-			return at(0.38, 2) // the barrel
-		case t <= 0.95:
-			return at(0.25, 1) // the handle
-		}
-		return 0
+	needleW := (n*22 + 50) / 100
+	if needleW < 1 {
+		needleW = 1
 	}
-	if on {
-		mid := n / 2
-		for i := 0; i < n; i++ {
-			w := width(i)
-			if w > 0 {
-				k.cells(g, cx+mid-w/2, cy+n-1-i, w, 1)
-			}
-		}
-		return
+	if on || headH < 3 {
+		k.cells(g, cx, cy, n, headH)
+	} else {
+		k.frame(g, cx, cy, n, headH, 1)
 	}
-	// Lying over: a column of cells per step, which is what fills a 45°
-	// band solidly — single cells laid along the other diagonal
-	// interleave between one step and the next and come out chequered.
-	for i := 0; i < n; i++ {
-		w := width(i)
-		if w <= 0 {
-			continue
-		}
-		tall := int(float32(w)*1.414 + 0.5)
-		if tall < 1 {
-			tall = 1
-		}
-		y := n - 1 - i - tall/2
-		lo, hi := y, y+tall
-		if lo < 0 {
-			lo = 0
-		}
-		if hi > n {
-			hi = n
-		}
-		if hi > lo {
-			k.cells(g, cx+i, cy+lo, 1, hi-lo)
-		}
-	}
+	k.cells(g, cx+(n-needleW)/2, cy+headH, needleW, n-headH)
 }
 
 func (k *rpInk) dotted(g rpGrid, cx, cy, cw, ch int) {

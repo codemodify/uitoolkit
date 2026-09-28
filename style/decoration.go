@@ -930,87 +930,41 @@ func captionTitle(l *Classic, ctx *paintengine2d.Context, f *Font, b paintengine
 	l.drawFittedText(ctx, f, title, paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad, b.Dy()), col, AlignStart, 0)
 }
 
-// drawCaptionPin draws the keep-above pushpin inside g.
+// drawCaptionPin draws the keep-above pin inside g: a head across the
+// top and a needle down from it.
 //
-// One pin, two orientations. Along its axis it is a needle, then the
-// plate it is pushed in by, then the barrel, then the handle — the
-// silhouette every pushpin icon has. Pinned, that axis runs straight
-// down and the pin is seen driven in; loose, it lies over at 45° the way
-// a pin does when it is holding nothing.
+// Two parts, and no angle. A caption button is eight to eighteen device
+// pixels across, and a pushpin drawn properly — head, barrel, plate,
+// needle, lying over at 45° — has more parts than that many pixels can
+// hold: it came out an unreadable smudge at every size that matters.
+// What survives at ten pixels is one bold shape and one thin one.
 //
-// Both are built from the same profile, so the two states read as one
-// pin turning rather than as two different pins, and both are whole
-// pixels: every caption glyph here is fully opaque or fully clear at any
-// scale, which TestCaptionGlyphsAreCrisp holds them to, and a drawn
-// diagonal anti-aliases. Stepping it is what an icon drawn for small
-// sizes does anyway, which is the size a caption button gets.
+// On and off are the head filled against the head hollow, which is how
+// the rest of these glyphs say the same thing, rather than the pin
+// turning: a turn needs the detail that does not fit.
 func drawCaptionPin(ctx *paintengine2d.Context, g paintengine2d.Rect, s, lw float32, pinned bool, fill paintengine2d.Paint) {
-	n := int(max(float32(math.Round(float64(s))), 5))
-	// w is how wide the pin is across, at step i along its axis counting
-	// from the point.
-	w := func(i int) int {
-		t := float32(i) / float32(n-1)
-		at := func(f float32, least int) int {
-			return max(int(math.Round(float64(float32(n)*f))), least)
-		}
-		switch {
-		case t < 0.36: // the needle, and its point
-			if t < 0.12 {
-				return 1
-			}
-			return at(0.07, 1)
-		case t < 0.55: // the plate the thumb pushes on
-			return at(0.42, 3)
-		case t < 0.78: // the barrel
-			return at(0.26, 2)
-		case t < 0.83 && n >= 11: // a gap, where there is room to see one
-			return 0
-		case t <= 0.94: // the handle
-			return at(0.18, 1)
-		default:
-			// Nothing at the very end. A 45° band is centred on its axis,
-			// and the axis reaches the corner: anything still wide there
-			// hangs out of the glyph and gets cut off square, which is
-			// what a chopped-looking handle was.
-			return 0
-		}
-	}
+	round := func(v float32) float32 { return float32(math.Round(float64(v))) }
+	n := max(round(s), 5)
+	headH := max(round(n*0.45), 3)
+	needleW := max(round(n*0.22), 1)
+	x := round(g.Min.X + (n-needleW)*0.5)
 
+	head := paintengine2d.XYWH(g.Min.X, g.Min.Y, n, headH)
 	p := paintengine2d.NewPath()
-	px := func(x, y int) {
-		p.AddRect(paintengine2d.XYWH(g.Min.X+float32(x), g.Min.Y+float32(y), 1, 1))
+	if pinned || headH < 3 {
+		p.AddRect(head)
+	} else {
+		// Hollow, with a wall of exactly one pixel however big the pin
+		// is. A wall that scales with the glyph closes the hole up at
+		// the sizes that have the fewest pixels to spare — and some
+		// packs leave the glyph only seven of them — so the two states
+		// come out the same picture just where they can least afford to.
+		t := float32(1)
+		p.AddRect(paintengine2d.XYWH(head.Min.X, head.Min.Y, head.Dx(), t))
+		p.AddRect(paintengine2d.XYWH(head.Min.X, head.Max.Y-t, head.Dx(), t))
+		p.AddRect(paintengine2d.XYWH(head.Min.X, head.Min.Y+t, t, head.Dy()-2*t))
+		p.AddRect(paintengine2d.XYWH(head.Max.X-t, head.Min.Y+t, t, head.Dy()-2*t))
 	}
-	mid := n / 2
-	for i := 0; i < n; i++ {
-		k := w(i)
-		if k <= 0 {
-			continue
-		}
-		if pinned {
-			// Straight down: the point at the bottom, the handle on top.
-			x := mid - k/2
-			for j := 0; j < k; j++ {
-				px(x+j, n-1-i)
-			}
-			continue
-		}
-		// Over at 45°: the point at the bottom left, the handle top
-		// right. A column per step, not a run of single pixels along the
-		// other diagonal — those interleave between one step and the next
-		// and come out a checkerboard instead of a band. A column of
-		// √2·k covers k across a 45° band, which is what makes the loose
-		// pin weigh the same as the upright one.
-		tall := max(int(math.Round(float64(float32(k)*1.414))), 1)
-		x, y := i, n-1-i
-		lo, hi := y-tall/2, y-tall/2+tall
-		// The band is centred on the axis, and near the corners part of
-		// it would fall outside the glyph; it is cut there rather than
-		// the whole pin being shrunk away from the corners, which is what
-		// makes a diagonal pin look like a vertical smudge.
-		lo, hi = max(lo, 0), min(hi, n)
-		if hi > lo {
-			p.AddRect(paintengine2d.XYWH(g.Min.X+float32(x), g.Min.Y+float32(lo), 1, float32(hi-lo)))
-		}
-	}
+	p.AddRect(paintengine2d.XYWH(x, g.Min.Y+headH, needleW, n-headH))
 	ctx.DrawPath(p, fill)
 }
