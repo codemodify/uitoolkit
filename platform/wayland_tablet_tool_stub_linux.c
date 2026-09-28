@@ -1,3 +1,5 @@
+//go:build linux && cgo
+
 /* Satisfies cursor-shape-v1's get_tablet_tool_v2 type slot.
  * uitoolkit does not bind tablet-v2; the symbol is required to link. */
 

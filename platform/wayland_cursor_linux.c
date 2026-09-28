@@ -1,3 +1,5 @@
+//go:build linux && cgo
+
 #include "wayland_cursor.h"
 
 #include <stdlib.h>

@@ -1,3 +1,5 @@
+//go:build linux && cgo
+
 #include "kde_palette.h"
 
 #include <stddef.h>
