@@ -59,14 +59,14 @@ func TestWinCharKeepsTextAndDropsControlCodes(t *testing.T) {
 		{'a', 'a', true},
 		{' ', ' ', true},
 		{'~', '~', true},
-		{0x00E9, 'é', true},   // é, straight from a layout
-		{0x20AC, '€', true},   // AltGr on many layouts
-		{0x1B, 0, false},      // Escape
-		{0x0D, 0, false},      // Return
-		{0x09, 0, false},      // Tab
-		{0x08, 0, false},      // Backspace
-		{0x13, 0, false},      // Ctrl+S
-		{0x7F, 0, false},      // Delete
+		{0x00E9, 'é', true}, // é, straight from a layout
+		{0x20AC, '€', true}, // AltGr on many layouts
+		{0x1B, 0, false},    // Escape
+		{0x0D, 0, false},    // Return
+		{0x09, 0, false},    // Tab
+		{0x08, 0, false},    // Backspace
+		{0x13, 0, false},    // Ctrl+S
+		{0x7F, 0, false},    // Delete
 	} {
 		got, ok := s.winChar(c.in)
 		if ok != c.ok || (ok && got != c.want) {

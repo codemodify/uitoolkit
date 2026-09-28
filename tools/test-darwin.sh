@@ -58,7 +58,13 @@ rsync -az --delete --exclude '.git' --exclude 'tools/atlas/out' --exclude '*.tes
 # keep tests off the desktop's Wayland, X11 and D-Bus session, and macOS
 # has none of the three: there is nothing here for a test to reach into by
 # accident, and the AppKit tests want a window server on purpose.
+# The arguments go through a second shell on the far side, so each one is
+# quoted for it: without this a -run 'A|B' arrives as a pipeline and the
+# Mac tries to run a command called TestB.
+args=""
+for a in "$@"; do args+=" $(printf %q "$a")"; done
+
 echo "== building and running them there =="
 exec "${SSH[@]}" "$HOST" \
   "export PATH=$GOROOT/bin:\$PATH CGO_ENABLED=1 UITK_SYSTEM_FONTS=\${UITK_SYSTEM_FONTS:-0}; \
-   cd $DIR && go test -tags theme_engine_all $*"
+   cd $DIR && go test -tags theme_engine_all$args"

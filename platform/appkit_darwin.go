@@ -37,7 +37,7 @@ var (
 	akMu sync.Mutex
 	// akBySID maps a surface id back to its surface: the delegate is
 	// handed an integer, because handing C a Go pointer is not allowed.
-	akBySID = map[uintptr]*akSurface{}
+	akBySID  = map[uintptr]*akSurface{}
 	akNextID uintptr
 )
 
@@ -69,6 +69,21 @@ type akSurface struct {
 
 	closed bool
 	torn   bool
+
+	// The frame and geometry seams' state (appkit_frame_darwin.go,
+	// appkit_geometry_darwin.go).
+	decor  Decorations
+	frame  Frame
+	sizing Sizing
+	limits SizeLimits
+
+	// mods is the modifier set the last event carried, kept so that
+	// flagsChanged — which says what is held now, not what changed —
+	// can be turned into the key going down or coming up.
+	mods Modifiers
+	// pointerIn tracks whether the pointer is over the content area, so
+	// a leave is reported once and not on every move outside it.
+	pointerIn bool
 
 	opts WindowOptions
 }
@@ -102,6 +117,16 @@ func newAkSurface(opts WindowOptions) (Surface, error) {
 		s.scale = 1
 	}
 	s.resizeBuffer(DevicePixels(w, s.scale), DevicePixels(h, s.scale))
+	s.decor = opts.Decorations
+	if s.decor == DecorationsAuto {
+		s.decor = DecorationsServer
+	}
+	if s.decor != DecorationsServer {
+		C.uitk_ak_set_decorations(s.win, 1)
+	}
+	s.sizing = opts.Sizing
+	s.limits = limitsFor(s.sizing, opts, w, h)
+	s.applyLimits()
 	if !opts.Headless {
 		C.uitk_ak_window_show(s.win)
 	}
@@ -239,7 +264,86 @@ func uitkAkEvent(sid C.uintptr_t, kind C.int, a, b C.double) {
 		s.push(Event{Kind: EventFocusIn})
 	case C.UITK_AK_FOCUS_OUT:
 		s.push(Event{Kind: EventFocusOut})
+	case C.UITK_AK_STATE:
+		s.push(Event{Kind: EventWindowState, State: s.WindowState()})
 	}
+}
+
+//export uitkAkInput
+func uitkAkInput(sid C.uintptr_t, kind C.int, x, y, dx, dy C.double,
+	button, key C.int, mods C.uint64_t, text *C.char, flags C.int) {
+	s := akSurfaceOf(sid)
+	if s == nil {
+		return
+	}
+	m := akMods(uint64(mods))
+	at := paintengine2d.Pt(float32(x), float32(y))
+	switch kind {
+	case C.UITK_AK_MOUSE_DOWN:
+		s.pointerIn = true
+		s.push(Event{Kind: EventMouseDown, Pos: at, Button: MouseButton(button), Mods: m})
+	case C.UITK_AK_MOUSE_UP:
+		s.push(Event{Kind: EventMouseUp, Pos: at, Button: MouseButton(button), Mods: m})
+	case C.UITK_AK_MOUSE_MOVE:
+		s.pointerIn = true
+		s.push(Event{Kind: EventMouseMove, Pos: at, Mods: m})
+	case C.UITK_AK_POINTER_LEAVE:
+		if s.pointerIn {
+			s.pointerIn = false
+			s.push(Event{Kind: EventPointerLeave, Pos: at, Mods: m})
+		}
+	case C.UITK_AK_SCROLL:
+		s.push(Event{
+			Kind: EventScroll, Pos: at, Mods: m,
+			Scroll:        paintengine2d.Pt(float32(dx), float32(dy)),
+			ScrollPrecise: flags != 0,
+		})
+	case C.UITK_AK_KEY_DOWN:
+		if flags != 0 {
+			// A modifier changed. AppKit says which are held now, so the
+			// one that moved is whichever bit differs, and which way it
+			// moved is whether the new set has it.
+			s.pushModifierChange(m)
+			return
+		}
+		s.mods = m
+		s.push(Event{Kind: EventKeyDown, Key: akKey(rune(key)), Mods: m})
+		// Repeats insert text but do not re-fire the key: button 1 is
+		// isARepeat, and a shortcut that fired again while a key was
+		// held would be wrong. Only the text is wanted.
+		if t := akText(C.GoString(text), uint64(mods)); t != "" {
+			s.push(Event{Kind: EventText, Text: t, Rune: firstRune(t), Mods: m})
+		}
+	case C.UITK_AK_KEY_UP:
+		s.mods = m
+		s.push(Event{Kind: EventKeyUp, Key: akKey(rune(key)), Mods: m})
+	}
+}
+
+// pushModifierChange turns AppKit's "these are held now" into the key
+// events the toolkit expects. Only Alt has a [Key] of its own — a
+// window underlines its mnemonics while it is held — so the others
+// change s.mods and say nothing.
+func (s *akSurface) pushModifierChange(now Modifiers) {
+	was := s.mods
+	s.mods = now
+	if (was^now)&ModAlt == 0 {
+		return
+	}
+	k := EventKeyUp
+	if now&ModAlt != 0 {
+		k = EventKeyDown
+	}
+	s.push(Event{Kind: k, Key: KeyAlt, Mods: now})
+}
+
+// firstRune is the first rune of t, for the Rune field an EventText
+// carries beside its Text.
+func firstRune(t string) rune {
+	for _, r := range t {
+		return r
+	}
+	return 0
 }
 
 var _ Surface = (*akSurface)(nil)

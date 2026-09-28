@@ -17,6 +17,9 @@
 //	uitk-smoke -quiet          capabilities only, no window
 //	uitk-smoke -watchdog 15s   panic after this long, to dump the stacks
 //	                           of a window that will not open
+//	uitk-smoke -exercise       ask the frame and geometry seams to do
+//	                           every thing they claim they can, and
+//	                           report what actually happened
 package main
 
 import (
@@ -33,6 +36,7 @@ func main() {
 	hold := flag.Duration("hold", 5*time.Second, "how long to keep the window up")
 	quiet := flag.Bool("quiet", false, "do not open a window")
 	watchdog := flag.Duration("watchdog", 0, "panic after this long, to dump the stacks of a window that will not open")
+	exercise := flag.Bool("exercise", false, "call every capability the frame and geometry seams claim")
 	flag.Parse()
 
 	if *watchdog > 0 {
@@ -76,6 +80,10 @@ func main() {
 		fmt.Printf("position     %d,%d\n", x, y)
 	} else {
 		fmt.Println("position     unknown")
+	}
+
+	if *exercise {
+		exerciseSeams(surf)
 	}
 
 	paint := func() {
@@ -123,4 +131,77 @@ func main() {
 		fmt.Printf("  %-3d %v\n", n, k)
 	}
 	fmt.Println("done")
+}
+
+// exerciseSeams calls every frame and geometry capability the surface
+// claims, and reports what came back.
+//
+// The point is the gap between the claim and the fact. A backend says
+// it can minimize a window; this asks it to, and asks again what state
+// the window is in. A capability that answers true and changes nothing
+// is the failure worth catching, and it is invisible from the caps
+// word alone.
+func exerciseSeams(surf platform.Surface) {
+	fr, geo := platform.FrameOf(surf), platform.GeometryOf(surf)
+	step := func(name string, ok bool, note string) {
+		mark := "no"
+		if ok {
+			mark = "yes"
+		}
+		fmt.Printf("  %-16s %-4s %s\n", name, mark, note)
+	}
+	pump := func() {
+		for range 20 {
+			surf.Poll()
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+
+	fmt.Println("exercise     geometry")
+	if x, y, ok := geo.Position(); ok {
+		moved := geo.Move(x+40, y+30)
+		pump()
+		nx, ny, _ := geo.Position()
+		step("Move", moved, fmt.Sprintf("%d,%d -> %d,%d (asked %d,%d)", x, y, nx, ny, x+40, y+30))
+		geo.Move(x, y)
+		pump()
+	}
+	step("Raise", geo.Raise(), "")
+	step("Visible", geo.Visible(), "")
+	before := geo.SizeLimits()
+	step("SetSizing fixed", geo.SetSizing(platform.SizingFixed),
+		fmt.Sprintf("limits %+v -> %+v", before, geo.SizeLimits()))
+	step("caps when fixed", true, fr.FrameCaps().String())
+	geo.SetSizing(platform.SizingResizable)
+
+	fmt.Println("exercise     frame")
+	st := func() string { return fmt.Sprintf("%+v", fr.WindowState()) }
+	fmt.Printf("  %-16s      %s\n", "state", st())
+	step("SetMaximized", fr.SetMaximized(true), "")
+	pump()
+	fmt.Printf("  %-16s      %s\n", "state", st())
+	fr.SetMaximized(false)
+	pump()
+	step("SetKeepAbove", fr.SetKeepAbove(true), "")
+	fr.SetKeepAbove(false)
+	step("Lower", fr.Lower(), "")
+	geo.Raise()
+	// The ones expected to refuse, so a backend that starts claiming
+	// them has to say so here too.
+	step("StartResize", fr.StartResize(platform.EdgeBottom|platform.EdgeRight), "refused on macOS: no API")
+	step("ShowMenu", fr.ShowMenu(paintengine2d.Pt(10, 10)), "refused on macOS: no window menu")
+	step("SetShadedHeight", fr.SetShadedHeight(30), "refused on macOS: no window shade")
+	step("SetPalette", fr.SetPalette("/tmp/x.colors"), "refused on macOS: KDE colour schemes")
+	step("MaximizeAxis", fr.MaximizeAxis(true), "refused on macOS: zoom is both ways")
+	icon := paintengine2d.NewImage(64, 64)
+	c := paintengine2d.NewContext(icon)
+	c.DrawRect(paintengine2d.XYWH(0, 0, 64, 64), paintengine2d.Fill(paintengine2d.RGB(0.2, 0.5, 0.9)))
+	step("SetIcon", fr.SetIcon([]*paintengine2d.Image{icon}), "the Dock tile on macOS")
+	step("RequestDecorations", true, "client, then back")
+	fr.RequestDecorations(platform.DecorationsClient)
+	pump()
+	fmt.Printf("  %-16s      %s\n", "decorations", fr.Decorations())
+	fr.RequestDecorations(platform.DecorationsServer)
+	pump()
+	fmt.Printf("  %-16s      %s\n", "decorations", fr.Decorations())
 }
