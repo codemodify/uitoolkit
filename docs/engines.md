@@ -1,8 +1,14 @@
 # Theme engines are opt-in
 
-131 theme packs are drawn by 35 engines, and an application that wants
-three of them should not carry all thirty-three. Engines are chosen at
+131 theme packs are drawn by 33 engines, and an application that wants
+three of them should not carry all of them. Engines are chosen at
 **build time**, with build tags.
+
+(33 is what `style.EngineIDs()` returns and what the About box in
+Settings prints. There are **34 tags**, because two engines are era
+variants another engine hands off to — `breeze6` for a pack whose
+`plasma` parameter is 6 or more, `adwaita48` likewise — and each can be
+left out on its own without losing the engine it belongs to.)
 
 ```sh
 go build ./...                              # the default engine alone

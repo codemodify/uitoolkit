@@ -518,6 +518,27 @@ And two applications that grew up here and moved out:
 [comms-mail](https://github.com/codemodify/comms-mail) and
 [media-player-music](https://github.com/codemodify/media-player-music).
 
+## Documentation
+
+| | |
+| --- | --- |
+| [toolkits.md](docs/toolkits.md) | **next to Qt, GTK, Avalonia, Fyne, WinForms, Win32, GPUI and AppKit** — what it does differently, what it does not do, and when to choose something else |
+| [tour.md](docs/tour.md) | the sample that shows what the toolkit is, page by page |
+| [running.md](docs/running.md) | every screenshot in these docs, how each was made, and how to regenerate them |
+| [widgets.md](docs/widgets.md) | every widget, mapped by name to the nearest control in other toolkits |
+| [compare.md](docs/compare.md) | the behaviour map: how chrome is expected to act, and which test fails when it stops |
+| [themes.md](docs/themes.md) · [theme-engines.md](docs/theme-engines.md) · [engines.md](docs/engines.md) | the 131 packs, how an engine draws an era, and why engines are opt-in at build time |
+| [skins.md](docs/skins.md) · [shapes.md](docs/shapes.md) | art-driven looks, and windows that are not rectangles |
+| [platform.md](docs/platform.md) | the backend seam: what each window system does and what it refuses |
+| [windows.md](docs/windows.md) · [macos.md](docs/macos.md) | the two newer ports — what each does differently, and what it cost to find out |
+| [decorations.md](docs/decorations.md) | who draws the title bar, and what happens when the desktop will not |
+| [keyboard.md](docs/keyboard.md) · [accessibility.md](docs/accessibility.md) | focus, shortcuts, and the accessibility model |
+| [settings.md](docs/settings.md) | the theme browser, and the geometry its screenshots are pinned to |
+| [tray.md](docs/tray.md) | the status item on all three platforms |
+| [testing.md](docs/testing.md) | how to run the suite here, on a Windows VM and on a Mac |
+| [perf.md](docs/perf.md) | what was measured, when, and on what |
+| [players.md](docs/players.md) · [mail.md](docs/mail.md) | the two applications that grew up here and moved out |
+
 ## Quickstart
 
 ```bash
