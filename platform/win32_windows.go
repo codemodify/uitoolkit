@@ -124,6 +124,7 @@ const (
 	pmRemove     = 0x0001
 	cwUseDefault = ^uintptr(0x7FFFFFFF) // 0x80000000 as a signed int
 
+	wmGetMinMax   = 0x0024
 	wmNcCalcSize  = 0x0083
 	wmDestroy     = 0x0002
 	wmSize        = 0x0005
@@ -270,6 +271,13 @@ func win32Proc(hwnd, msg, wparam, lparam uintptr) uintptr {
 		s.closed = true
 		s.mu.Unlock()
 		return 0
+	case wmGetMinMax:
+		// DefWindowProc first, because it fills in the sensible defaults
+		// — the largest the window may be is the monitor's work area —
+		// and only then are they tightened to what this window states.
+		r, _, _ := procDefWindowProc.Call(hwnd, msg, wparam, lparam)
+		s.applyMinMax(lparamAs[winMinMaxInfo](lparam))
+		return r
 	case wmNcCalcSize:
 		// wParam TRUE means "here is the proposed client rectangle".
 		// Answering 0 without touching it keeps the client area equal to
@@ -806,4 +814,83 @@ func (s *winSurface) Closed() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.closed
+}
+
+// winPoint is POINT, and winMinMaxInfo is MINMAXINFO: what Windows asks
+// a window for when a resize is about to start.
+type winPoint struct{ X, Y int32 }
+
+type winMinMaxInfo struct {
+	Reserved     winPoint
+	MaxSize      winPoint
+	MaxPosition  winPoint
+	MinTrackSize winPoint
+	MaxTrackSize winPoint
+}
+
+// lparamAs reads a message's LPARAM as the pointer it is.
+//
+// Several messages pass a structure by address in LPARAM — MINMAXINFO
+// for WM_GETMINMAXINFO, RECT for WM_SIZING — and a window procedure's
+// signature hands those bits over as a uintptr because that is what the
+// signature says, not because they are a number.
+//
+// Written as a reinterpretation of lparam's own *address* rather than as
+// unsafe.Pointer(lparam). The second is what `go vet`'s unsafeptr check
+// refuses, and it is right to refuse it: an arbitrary integer turned into
+// a pointer is a pointer the collector cannot see, and if it named Go
+// memory that memory could move or be freed underneath it. Nothing here
+// is Go's. The structure belongs to Windows, lives on the thread's stack
+// for exactly the length of the message, and is neither stored nor
+// reachable from Go afterwards — so there is nothing for the collector to
+// know about, and the check has nothing to protect.
+func lparamAs[T any](lparam uintptr) *T {
+	return *(**T)(unsafe.Pointer(&lparam))
+}
+
+// applyMinMax tells Windows how small and how large the user may drag
+// this window.
+//
+// This is the only way a window says so: SizeLimits and the
+// GeometrySizeLimits capability were both answered while nothing was ever
+// said to Windows, so a window could be dragged to any size whatever it
+// stated. The limits are the client area in logical pixels and Windows
+// wants the whole window in device pixels, so each one goes through
+// AdjustWindowRectEx with the style the frame is currently measured by.
+//
+// A rolled-up window is held at its shaded height here too, and that is
+// the half of shading Windows has to be told about: SetWindowPos is not
+// clamped by the minimum tracking size, which is why rolling up works
+// without this, but a drag is a resize the *user* makes and is.
+func (s *winSurface) applyMinMax(mmi *winMinMaxInfo) {
+	if s == nil || mmi == nil || s.closed {
+		return
+	}
+	sc := s.deviceScale()
+	outer := func(w, h int) (int32, int32) {
+		r := winRect{0, 0, int32(DevicePixels(max(w, 1), sc)), int32(DevicePixels(max(h, 1), sc))}
+		procAdjustWindow.Call(uintptr(unsafe.Pointer(&r)), s.winAdjust(), 0, 0)
+		return r.Right - r.Left, r.Bottom - r.Top
+	}
+	lim := s.limits
+	if lim.MinWidth > 0 {
+		w, _ := outer(lim.MinWidth, 1)
+		mmi.MinTrackSize.X = w
+	}
+	if lim.MinHeight > 0 {
+		_, h := outer(1, lim.MinHeight)
+		mmi.MinTrackSize.Y = h
+	}
+	if lim.MaxWidth > 0 {
+		w, _ := outer(lim.MaxWidth, 1)
+		mmi.MaxTrackSize.X = w
+	}
+	if lim.MaxHeight > 0 {
+		_, h := outer(1, lim.MaxHeight)
+		mmi.MaxTrackSize.Y = h
+	}
+	if s.shadedH > 0 {
+		_, h := outer(1, s.shadedH)
+		mmi.MinTrackSize.Y, mmi.MaxTrackSize.Y = h, h
+	}
 }

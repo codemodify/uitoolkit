@@ -17,6 +17,19 @@ import (
 
 var procGetWindowLongT = user32.NewProc("GetWindowLongPtrW")
 
+func testSurfaceWith(t *testing.T, opts WindowOptions) *winSurface {
+	t.Helper()
+	runtime.LockOSThread()
+	t.Cleanup(runtime.UnlockOSThread)
+	s, err := newWinSurface(opts)
+	if err != nil {
+		t.Skipf("no window could be made (no interactive desktop?): %v", err)
+	}
+	ws := s.(*winSurface)
+	t.Cleanup(func() { ws.Close() })
+	return ws
+}
+
 func testSurface(t *testing.T, w, h int) *winSurface {
 	t.Helper()
 	// The same rule the backend is built on, which a test has to keep for
@@ -232,5 +245,101 @@ func TestAWindowRollsUpToItsTitleBar(t *testing.T) {
 	c, _ := rects(t, s)
 	if h := c.Bottom - c.Top; h != 24 {
 		t.Errorf("rolled up to %d pixels, asked for 24: the resize was clamped, so a shaded window springs open", h)
+	}
+}
+
+// askMinMax is what Windows would be told if a resize started now.
+func askMinMax(s *winSurface) winMinMaxInfo {
+	var mmi winMinMaxInfo
+	procSendMessage.Call(s.hwnd, wmGetMinMax, 0, uintptr(unsafe.Pointer(&mmi)))
+	runtime.KeepAlive(&mmi)
+	return mmi
+}
+
+// The bug this is about: SizeLimits answered and GeometrySizeLimits was
+// advertised, while nothing was ever said to Windows — WM_GETMINMAXINFO
+// went unhandled — so a window could be dragged to any size whatever it
+// stated. A capability that lies.
+func TestSizeLimitsAreToldToWindows(t *testing.T) {
+	s := testSurfaceWith(t, WindowOptions{
+		Title: "uitoolkit limits", Width: 400, Height: 300,
+		MinWidth: 220, MinHeight: 160, MaxWidth: 900, MaxHeight: 700,
+	})
+	if !GeometryOf(s).GeometryCaps().Has(GeometrySizeLimits) {
+		t.Fatal("GeometrySizeLimits is not advertised")
+	}
+	sc := s.deviceScale()
+	mmi := askMinMax(s)
+	// The window is at least as big as its client minimum: the frame is
+	// added on top, so greater is right and smaller is the bug.
+	if got, want := mmi.MinTrackSize.X, int32(DevicePixels(220, sc)); got < want {
+		t.Errorf("minimum width %d, want at least the %d the window states", got, want)
+	}
+	if got, want := mmi.MinTrackSize.Y, int32(DevicePixels(160, sc)); got < want {
+		t.Errorf("minimum height %d, want at least %d", got, want)
+	}
+	if got, want := mmi.MaxTrackSize.X, int32(DevicePixels(900, sc)); got < want {
+		t.Errorf("maximum width %d, want at least %d", got, want)
+	}
+	if mmi.MinTrackSize.X >= mmi.MaxTrackSize.X || mmi.MinTrackSize.Y >= mmi.MaxTrackSize.Y {
+		t.Errorf("a resizable window given min %v and max %v cannot be resized at all",
+			mmi.MinTrackSize, mmi.MaxTrackSize)
+	}
+}
+
+// A fixed window is one Windows must not let the user resize: its
+// minimum and its maximum are the same, which is also how a desktop
+// knows to drop the resize edges.
+func TestAFixedWindowCannotBeDragged(t *testing.T) {
+	s := testSurface(t, 360, 240)
+	if !GeometryOf(s).SetSizing(SizingFixed) {
+		t.Fatal("SetSizing(SizingFixed) refused")
+	}
+	mmi := askMinMax(s)
+	if mmi.MinTrackSize != mmi.MaxTrackSize {
+		t.Errorf("fixed window may still be dragged: min %v, max %v", mmi.MinTrackSize, mmi.MaxTrackSize)
+	}
+}
+
+// The other half of shading. Rolling up works without telling Windows
+// anything, because SetWindowPos is not clamped by the minimum tracking
+// size — but a drag is a resize the user makes and is, so without this a
+// rolled-up window can simply be dragged open again.
+//
+// The window is given real limits first: with none, Windows is told
+// nothing either way and the two tracking sizes are both zero, which
+// would make "pinned" and "not pinned" indistinguishable and the test
+// worthless. It said so for a while.
+func TestARolledUpWindowStaysRolledUp(t *testing.T) {
+	s := testSurfaceWith(t, WindowOptions{
+		Title: "uitoolkit shade", Width: 400, Height: 300,
+		MinWidth: 200, MinHeight: 150, MaxWidth: 900, MaxHeight: 700,
+	})
+	f := FrameOf(s)
+	base := askMinMax(s)
+	if base.MinTrackSize.Y >= base.MaxTrackSize.Y {
+		t.Fatalf("unshaded, the window should have room to resize: %+v", base)
+	}
+
+	if !f.SetShadedHeight(26) {
+		t.Fatal("SetShadedHeight refused")
+	}
+	sh := askMinMax(s)
+	if sh.MinTrackSize.Y != sh.MaxTrackSize.Y {
+		t.Errorf("rolled up, the window can still be dragged to another height: min %d, max %d",
+			sh.MinTrackSize.Y, sh.MaxTrackSize.Y)
+	}
+	if sh.MaxTrackSize.Y >= base.MaxTrackSize.Y {
+		t.Errorf("rolled up, the height was pinned at %d, no shorter than the %d it could already be",
+			sh.MaxTrackSize.Y, base.MaxTrackSize.Y)
+	}
+	// Only the height: a rolled-up window is still as wide as it was.
+	if sh.MinTrackSize.X != base.MinTrackSize.X || sh.MaxTrackSize.X != base.MaxTrackSize.X {
+		t.Errorf("shading changed the width limits: %v then %v", base.MinTrackSize, sh.MinTrackSize)
+	}
+
+	f.SetShadedHeight(0)
+	if back := askMinMax(s); back != base {
+		t.Errorf("unshaded, the limits did not come back: %+v, want %+v", back, base)
 	}
 }
