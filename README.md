@@ -23,7 +23,7 @@ _ = app.Run()
 ```
 
 ```bash
-go get github.com/codemodify/uitoolkit@v0.20.0
+go get github.com/codemodify/uitoolkit@v0.21.0
 go get github.com/codemodify/paintengine2d@v0.11.0
 ```
 
@@ -905,6 +905,86 @@ are independent look.json fields again; compound pack names migrate
 (**v0.12.2**).
 
 ## Version
+
+**0.21.0** — **Three platforms, at parity.** Windows and macOS now implement
+every seam the Linux backends do, and the compiler keeps it that way.
+
+*The AppKit backend.* macOS has a real window: `NSWindow`, a present that
+assigns a `CGImage` to the layer's contents — paintengine2d keeps
+premultiplied RGBA and `CGBitmapContext` takes it, so unlike the Windows DIB
+there is no swizzle — input, both window seams, the clipboard, pointer
+shapes, popups, drag and drop and IME. The whole suite runs there
+(`tools/test-darwin.sh`) and passes. macOS gives a test no ordinary way to
+*see* a window — reading the screen back wants a permission an ssh session
+does not have, and `screencapture` does not fail without it, it returns a
+clean desktop with every window silently missing — so the tests render the
+window's own layer back and assert its pixels. That caught an upside-down
+window on the first run: a layer-backed `NSView` that answers YES to
+`isFlipped` draws its contents image inverted, and the contents image is the
+whole window.
+
+*Popups are windows, on both new platforms.* A menu, a combo list and a
+tooltip were rectangles painted inside the window — which works until one is
+taller than the room under it. They are `NSPanel`s and `WS_POPUP` windows
+now, non-activating on both, placed by `SolvePopup` against the screen's work
+area: the same function X11 and the headless tests use, so a popup lands in
+the same place everywhere.
+
+*Input methods.* `NSTextInputClient` on macOS and `WM_IME_*` through imm32 on
+Windows, so CJK composition works on all three. On macOS this meant taking
+the text out of `keyDown:` — with an input method active `[event characters]`
+is the *raw keystrokes*, so a user typing にほん would have had "nihon"
+inserted as they went.
+
+*⌘S is Ctrl+S.* A menu writes one shortcut and it fires on the modifier the
+platform uses. The backend still reports what the keyboard did — Command is
+`ModSuper` there, and a backend handing the toolkit a `ModCtrl` nobody
+pressed would make `Mods` lie to everything that reads it — so
+`Window.dispatch` translates once, on the way to the widgets. Fifty places in
+`widgets` ask `e.Mods.Ctrl()` and all fifty are right on a Mac without being
+touched.
+
+*Installed fonts without fontconfig.* A look reads in its era's typeface, and
+the lookup asked `fc-list`, which is Linux's. So on Windows and macOS every
+pack fell back to the bundled face — 131 packs across four decades, all drawn
+in one font. `style/sysfont_scan.go` walks the platform's font directories
+and reads each file's own `name` and `OS/2` tables instead: pure Go, no
+CoreText, no DirectWrite. On a Mac it finds 341 families, and Aqua, Platinum
+and NeXT draw in Lucida Grande, Geneva and Helvetica.
+
+*The suite runs on Windows.* `tools/test-windows.sh` ran `./platform/` and
+nothing else; it runs all 25 packages now. It found five failures the first
+time — four tests written in Unix terms, and one real: publishing
+`look.json` renames a temporary file over the target, and on Windows a rename
+over a file another process has open fails. Every application *watches* that
+file, so a save raced every other running app by design, and what a user saw
+was Apply reporting it could not write the preferences.
+
+*The compiler is the feature matrix.* `platform/seams_linux.go`,
+`seams_windows.go` and `seams_darwin.go` assert every seam on every backend.
+Several of these are found by type assertion, so a method whose signature
+drifted would not have failed the build — the capability would have switched
+itself off silently.
+
+*Fixed, and each found by somebody using it.* A macOS window could be pinned
+above the others and never released: `SetKeepAbove` worked, but `WindowState`
+never carried `KeepAbove`, and the toolkit's toggle is
+`SetKeepAbove(!WindowState().KeepAbove)` — so every press meant "on".
+Platinum laid its window title out twice, and only the path a real window
+takes clipped it to the room the caption boxes leave; with the bundled face
+the title fits and the two agreed, with Geneva they did not.
+
+*Settings.* About is the information mark rather than a word, and the file
+paths moved off the preview pane onto the row at the foot of the window,
+which gave the preview back 35 px.
+
+*The documentation says what it does not do.* [docs/toolkits.md](docs/toolkits.md)
+puts this next to Qt, GTK, Avalonia, Fyne, WinForms, Win32, GPUI and AppKit,
+and names the toolkit to choose instead when the answer is not this one. The
+README carries the gaps beside the features: **no complex text** (no `GSUB`,
+no bidi — Arabic, Hebrew, Devanagari and Thai render wrongly), accessibility
+bridged on Linux only, GPU on Linux only, no printing, and arm64 that
+compiles on every target and has run on none.
 
 **0.20.0** — **The first release meant to be depended on from outside this
 repository.** Everything below follows from one rule the author set on

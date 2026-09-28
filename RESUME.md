@@ -1,6 +1,32 @@
-# Resume here — uitoolkit, as of 2026-09-27
+# Resume here — uitoolkit, as of 2026-09-28
 
 ## Now
+
+### Released 0.21.0 — three platforms at parity, 2026-09-28
+
+Windows and macOS implement **every seam the Linux backends do**, and
+`platform/seams_linux.go`, `seams_windows.go` and `seams_darwin.go` assert
+it so the compiler keeps it true. What landed today: the AppKit backend
+finished (popups, drag and drop, IME, clipboard, cursors, frame and
+geometry), popups and IME on Win32, installed fonts found without
+fontconfig on both, ⌘ as the shortcut modifier, and `tools/test-windows.sh`
+widened from `./platform/` to all 25 packages — which immediately found a
+real bug, a preferences save that failed on Windows whenever another
+uitoolkit app was reading `look.json`.
+
+Verified on Linux, macOS 15 (with bundled faces and with real ones) and
+both Windows VMs. **Tagged v0.21.0.**
+
+**What is left before 1.0**, in order:
+
+1. **Complex text.** No `GSUB`, no bidi — Arabic, Hebrew, Devanagari and
+   Thai render as isolated glyphs in logical order. This is the one that
+   decides whether 1.0 means anything.
+2. **Accessibility off Linux.** The `a11y` model is complete and AT-SPI2
+   is wired; UI Automation and NSAccessibility are not.
+3. **arm64.** Every target compiles, none has run — there is no ARM
+   machine on the LAN, and Apple Silicon is most Macs.
+4. **Printing**, and a GPU path off Linux.
 
 ### The platform boundary, 2026-09-27
 
@@ -212,7 +238,7 @@ Everything is merged to `dev` and pushed, across five repositories:
 
 | repository | `dev` | what it is |
 | --- | --- | --- |
-| [uitoolkit](https://github.com/codemodify/uitoolkit) | `7c527e0` | the toolkit, version 0.20.0, untagged |
+| [uitoolkit](https://github.com/codemodify/uitoolkit) | see `git log` | the toolkit, tagged **v0.21.0** |
 | [paintengine2d](https://github.com/codemodify/paintengine2d) | `6206e36` | the engine, tagged **v0.11.0** |
 | [comms-mail](https://github.com/codemodify/comms-mail) | `fde66c3` | mail: daemon, GUI, demo launcher |
 | [media-player-music](https://github.com/codemodify/media-player-music) | `ca6f7ee` | one player, three faces |
@@ -224,13 +250,18 @@ that folder was a second worktree of uitoolkit and no longer exists, so a path
 naming it further down this file is history rather than a place. Every feature
 branch is merged into `dev` and pushed.
 
-**The goal since 2026-09-21 is a solid release for Linux, and as of
-2026-09-23 the toolkit is ready to be tagged.** paintengine2d is tagged
+**That goal — a solid Linux release — was met with v0.20.0, and v0.21.0
+took the same standard to Windows and macOS.** The history below is kept
+as written on the day.
+
+**The goal since 2026-09-21 was a solid release for Linux, and as of
+2026-09-23 the toolkit was ready to be tagged.** paintengine2d is tagged
 v0.11.0 and the `replace` directive is gone, so uitoolkit resolves the engine
 from the proxy like any other dependency. The 0.20.0 release notes are
 written (README, Version). Three applications build against the published
 module with no `replace` and no internal imports, which is the completeness
-test. **Tagging itself is the author's to do and has not been done.**
+test. **Tagging itself is the author's to do**, and v0.20.0 and v0.21.0
+have both since been tagged at their request.
 
 One thing to say out loud when it is: anyone on **v0.19.1** is broken if they
 use the `a11y` package, because that tag predates it — `go mod tidy` resolving
