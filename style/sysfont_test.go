@@ -10,14 +10,22 @@ import (
 // fakeFonts swaps the fontconfig index for lines of fc-list output.
 func fakeFonts(t *testing.T, lines ...string) {
 	t.Helper()
+	// The suite runs with UITK_SYSTEM_FONTS=0 so that what a look measures
+	// is the same on every machine (tools/test.sh). These tests are about
+	// the lookup itself, so they turn it back on — over lines of their
+	// own, which is still no machine's font set.
+	// The switch goes off, because the suite pins it on: these lines are
+	// the machine as far as the lookup is concerned. A test about the
+	// switch itself sets it back *after* calling this.
+	t.Setenv(SystemFontsEnv, "")
 	old := fcList
 	fcList = func() ([]byte, error) { return []byte(strings.Join(lines, "\n") + "\n"), nil }
 	sysIndex.once = sync.Once{}
-	sysIndex.faces = nil
+	sysIndex.faces, sysIndex.names = nil, nil
 	t.Cleanup(func() {
 		fcList = old
 		sysIndex.once = sync.Once{}
-		sysIndex.faces = nil
+		sysIndex.faces, sysIndex.names = nil, nil
 	})
 }
 
@@ -84,8 +92,8 @@ func TestFCListIndex(t *testing.T) {
 
 // UITK_SYSTEM_FONTS=0 keeps every look on the bundled faces.
 func TestSystemFontsOff(t *testing.T) {
-	t.Setenv(SystemFontsEnv, "0")
 	fakeFonts(t, "Tahoma\t80\t0\t0\t/f/tahoma.ttf")
+	t.Setenv(SystemFontsEnv, "0") // after fakeFonts: it is what is under test
 	if FontInstalled("Tahoma") {
 		t.Fatal("installed fonts should be off")
 	}

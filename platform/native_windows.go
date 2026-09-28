@@ -16,3 +16,5 @@ func win32Available() Backend { return Win32Backend{} }
 // detect. A window answers with its own, and EventScale says when it
 // changes — which on a multi-monitor desktop it does.
 func nativeDetectScale() float32 { return 0 }
+
+func appkitAvailable() Backend { return nil }

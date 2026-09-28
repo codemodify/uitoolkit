@@ -11,6 +11,7 @@ cmd/uitoolkit-settings/uitoolkit-settings
 # `go build ./cmd/<name>` from the repo root drops the binary here.
 /uitk-themesheet
 /uitk-skin
+/uitk-smoke
 /uitoolkit-settings
 /uitest-driver
 /uitoolkit-sample-*

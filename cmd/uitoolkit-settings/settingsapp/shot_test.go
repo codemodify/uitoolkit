@@ -45,6 +45,14 @@ import (
 // These numbers were re-measured in the eight packs below, and rendered
 // through tools/atlas/render.sh's own crop, rather than assumed.
 //
+// They are measured in the *bundled* faces, which is why tools/test.sh and
+// render.sh both pin UITK_SYSTEM_FONTS=0. A look reads in the era's
+// typeface when the machine has it, and the panel then ends somewhere
+// else: 648 here, 645 without, and the 3 px was this file passing on the
+// machine it was written on and failing on macOS, which has no fontconfig
+// at all. The bundled faces are on every machine, so the height below is
+// the toolkit's and not the developer's.
+//
 // The column on the left cannot move them either, whatever is taken out
 // of it: the splitter's ratio is worked out from the window's width and
 // the column has no minimum that could push the sash. Stripping it to
@@ -55,7 +63,7 @@ const (
 	previewShotX = 317
 	previewShotY = 116
 	previewShotW = 697
-	previewShotH = 648
+	previewShotH = 645
 )
 
 func TestSettingsPreviewPanelKeepsItsPlace(t *testing.T) {

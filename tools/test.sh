@@ -23,6 +23,15 @@
 #
 # so that "a build with only these engines works" is a claim with a test
 # behind it, rather than one nobody checks.
+#
+# Why UITK_SYSTEM_FONTS=0: a look reads in the era's typeface when the
+# machine has it (style/sysfont.go), so what a look *measures* — where a
+# panel ends, how a sentence wraps — depends on what is installed. Tests
+# that assert a pixel then pass here and fail on a machine with a
+# different font set: on macOS, which has no fontconfig at all, and in any
+# clean container. Pinning the bundled faces makes those numbers a
+# property of the toolkit. Set it to 1 to run against this machine's fonts.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+export UITK_SYSTEM_FONTS=${UITK_SYSTEM_FONTS:-0}
 exec tools/testenv.sh go test -tags theme_engine_all "$@"

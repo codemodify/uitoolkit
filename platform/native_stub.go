@@ -1,4 +1,4 @@
-//go:build (!linux || !cgo) && !windows
+//go:build (!linux || !cgo) && !windows && (!darwin || !cgo)
 
 package platform
 
@@ -7,4 +7,5 @@ package platform
 func x11Available() Backend      { return nil }
 func waylandBackend() Backend    { return nil }
 func win32Available() Backend    { return nil }
+func appkitAvailable() Backend   { return nil }
 func nativeDetectScale() float32 { return 0 }

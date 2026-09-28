@@ -18,7 +18,13 @@ TAGS=theme_engine_all
 (cd "$REPO" && go build -tags "$TAGS" -o "$OUT/bin/settings" ./cmd/uitoolkit-settings &&
   go build -tags "$TAGS" -o "$OUT/bin/sheet" ./cmd/uitk-themesheet &&
   go build -tags "$TAGS" -o "$OUT/bin/shots" ./cmd/uitk-shots)
-headless() { env -u WAYLAND_DISPLAY -u DISPLAY XDG_CONFIG_HOME="$OUT/cfg" "$@"; }
+# UITK_SYSTEM_FONTS=0 for the same reason tools/test.sh sets it: a look
+# reads in an installed typeface when it finds one, so an atlas rendered
+# on a machine with Tahoma is not the atlas rendered on one without, and
+# the crop below is measured in whichever it was. The bundled faces are on
+# every machine, so this atlas is the same everywhere — and the crop is a
+# constant the test suite can check (previewShot* in shot_test.go).
+headless() { env -u WAYLAND_DISPLAY -u DISPLAY UITK_SYSTEM_FONTS=0 XDG_CONFIG_HOME="$OUT/cfg" "$@"; }
 headless "$OUT/bin/sheet" -list > "$OUT/packs.tsv"
 
 # Where the preview panel sits in a 1024x860 Settings window at scale 1, with
@@ -31,7 +37,7 @@ headless "$OUT/bin/sheet" -list > "$OUT/packs.tsv"
 # left is outside the crop and cannot move it: the splitter's ratio comes from
 # the window's width, not from what the column holds. Add -plain-preview to the
 # settings call below for tiles whose File menu opens nothing.
-CROP=697x648+317+116
+CROP=697x645+317+116
 fail=0
 while IFS=$'\t' read -r id _; do
   if headless "$OUT/bin/settings" -stage "$id" -screenshot "$OUT/full/$id.png" >/dev/null 2>&1; then
@@ -40,7 +46,7 @@ while IFS=$'\t' read -r id _; do
     echo "preview failed: $id"; fail=1
   fi
   if (cd "$OUT/work" && UITK_THEME="$id" timeout 60 env -u WAYLAND_DISPLAY -u DISPLAY \
-      XDG_CONFIG_HOME="$OUT/cfg" "$OUT/bin/shots" -gallery "$OUT/gallery/$id.png" -tab 4 >/dev/null 2>&1); then
+      UITK_SYSTEM_FONTS=0 XDG_CONFIG_HOME="$OUT/cfg" "$OUT/bin/shots" -gallery "$OUT/gallery/$id.png" -tab 4 >/dev/null 2>&1); then
     :
   else
     echo "gallery failed: $id"; fail=1

@@ -108,8 +108,14 @@ func TestTooltipWrapsToASmallWindow(t *testing.T) {
 	if b.Max.X > float32(pw) || b.Min.X < 0 {
 		t.Fatalf("bubble %v is outside the %d px window", b, pw)
 	}
-	if len(bubble.Lines()) < 4 {
-		t.Fatalf("a 260px window should take more than %d lines: %q", len(bubble.Lines()), bubble.Lines())
+	// Against the same tip in a room it fits, not against a line count:
+	// how many lines a sentence takes is the typeface's business, and
+	// pinning a number here is how this test came to depend on the
+	// machine having fonts installed.
+	_, _, roomy := hoverTip(t, "adwaita", 1, 900, 400, longTip)
+	if len(bubble.Lines()) <= len(roomy.Lines()) {
+		t.Fatalf("a 260px window took %d lines, a 900px one %d: %q",
+			len(bubble.Lines()), len(roomy.Lines()), bubble.Lines())
 	}
 	if b.Max.Y > float32(ph) {
 		t.Fatalf("bubble %v is below the %d px window", b, ph)

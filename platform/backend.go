@@ -50,6 +50,11 @@ func Select(name string, headless bool) Backend {
 			return b
 		}
 		return OffscreenBackend{}
+	case "appkit", "cocoa", "macos", "darwin":
+		if b := appkitAvailable(); b != nil {
+			return b
+		}
+		return OffscreenBackend{}
 	case "", "auto":
 		return autoBackend()
 	}
@@ -57,10 +62,13 @@ func Select(name string, headless bool) Backend {
 }
 
 func autoBackend() Backend {
-	// Windows first, and without asking the environment: there is no
-	// DISPLAY to look for, and a Windows process that can make a window
-	// always can.
+	// Windows and macOS first, and without asking the environment:
+	// there is no DISPLAY to look for on either, and a process that can
+	// make a window there always can.
 	if b := win32Available(); b != nil {
+		return b
+	}
+	if b := appkitAvailable(); b != nil {
 		return b
 	}
 	if os.Getenv("WAYLAND_DISPLAY") != "" {

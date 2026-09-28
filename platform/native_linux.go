@@ -20,3 +20,5 @@ func waylandBackend() Backend {
 
 // win32Available is nil on Linux: Win32 is a Windows backend.
 func win32Available() Backend { return nil }
+
+func appkitAvailable() Backend { return nil }

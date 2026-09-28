@@ -87,8 +87,8 @@ func TestListFontFamilies(t *testing.T) {
 }
 
 func TestSystemFontsOffLeavesTheBundledTwo(t *testing.T) {
-	t.Setenv(SystemFontsEnv, "0")
 	fakeFonts(t, "Noto Sans\t80\t0\t0\t/f/NotoSans-Regular.ttf")
+	t.Setenv(SystemFontsEnv, "0") // after fakeFonts: it is what is under test
 	if got := ListFontFamilies(); len(got) != 2 || got[0] != FamilyUI || got[1] != FamilyMono {
 		t.Errorf("%s=0 lists %v", SystemFontsEnv, got)
 	}
