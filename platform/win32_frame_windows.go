@@ -45,6 +45,8 @@ const (
 	swpNoMove    = 0x0002
 	swpNoSize    = 0x0001
 	swpNoActive  = 0x0010
+	swpNoZOrder  = 0x0004
+	swpFrameChgd = 0x0020
 )
 
 // ---- WindowFrame ---------------------------------------------------------
@@ -79,6 +81,13 @@ func (s *winSurface) Decorations() Decorations {
 
 // RequestDecorations answers at once: Win32 has no negotiation, so the
 // mode asked for is the mode in force.
+//
+// Recording the mode is not enough, which is what this used to do. A
+// window keeps whatever Windows was told to draw at CreateWindowExW
+// until its style is changed, so the toolkit would start drawing its own
+// title bar while the desktop's stayed above it — two title bars, and an
+// "OS borders" switch that did nothing to the borders. The style has to
+// change, and Windows has to be told the frame changed.
 func (s *winSurface) RequestDecorations(d Decorations) {
 	if d == DecorationsAuto {
 		d = DecorationsServer
@@ -87,7 +96,31 @@ func (s *winSurface) RequestDecorations(d Decorations) {
 		return
 	}
 	s.deco = d
+	s.applyDecorations()
 	s.push(Event{Kind: EventDecorations, Decor: d})
+}
+
+// applyDecorations makes the window's frame match s.deco, keeping the
+// client area the size it already was.
+//
+// SWP_FRAMECHANGED is the whole mechanism: it is what makes Windows send
+// WM_NCCALCSIZE again, and WM_NCCALCSIZE is where this backend says
+// whether the caption and borders take any room. Without it the caption
+// stays on screen until something else happens to force a frame change.
+//
+// The non-client area changes size with the answer, and SetWindowPos
+// takes the *outer* rectangle, so the size is recomputed through
+// AdjustWindowRectEx with the new measuring style — otherwise the
+// drawable area jumps by the height of a title bar.
+func (s *winSurface) applyDecorations() {
+	if s.hwnd == 0 || s.closed {
+		return
+	}
+	r := winRect{0, 0, int32(s.bufW), int32(s.bufH)}
+	procAdjustWindow.Call(uintptr(unsafe.Pointer(&r)), s.winAdjust(), 0, 0)
+	procSetWindowPos.Call(s.hwnd, 0, 0, 0,
+		uintptr(r.Right-r.Left), uintptr(r.Bottom-r.Top),
+		swpNoMove|swpNoZOrder|swpNoActive|swpFrameChgd)
 }
 
 func (s *winSurface) WindowState() WindowState { return s.state }

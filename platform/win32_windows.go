@@ -56,6 +56,7 @@ var (
 	procMsgWaitForObjs = user32.NewProc("MsgWaitForMultipleObjectsEx")
 	procAdjustWindow   = user32.NewProc("AdjustWindowRectEx")
 	procSetWindowPos   = user32.NewProc("SetWindowPos")
+	procSetWindowLong  = user32.NewProc("SetWindowLongPtrW")
 
 	procCreateDIBSect  = gdi32.NewProc("CreateDIBSection")
 	procCreateCompatDC = gdi32.NewProc("CreateCompatibleDC")
@@ -113,10 +114,16 @@ func win32DeclareDPIAware() {
 
 const (
 	wsOverlappedWindow = 0x00CF0000
-	swShow             = 5
-	pmRemove           = 0x0001
-	cwUseDefault       = ^uintptr(0x7FFFFFFF) // 0x80000000 as a signed int
+	// wsPopup adds no frame, so AdjustWindowRectEx with it leaves a
+	// rectangle alone. That is what a client-decorated window wants: its
+	// client area is the whole window (see wmNcCalcSize).
+	wsPopup      = 0x80000000
+	gwlStyle     = ^uintptr(15) // GWL_STYLE, -16
+	swShow       = 5
+	pmRemove     = 0x0001
+	cwUseDefault = ^uintptr(0x7FFFFFFF) // 0x80000000 as a signed int
 
+	wmNcCalcSize  = 0x0083
 	wmDestroy     = 0x0002
 	wmSize        = 0x0005
 	wmClose       = 0x0010
@@ -253,6 +260,14 @@ func win32Proc(hwnd, msg, wparam, lparam uintptr) uintptr {
 		s.closed = true
 		s.mu.Unlock()
 		return 0
+	case wmNcCalcSize:
+		// wParam TRUE means "here is the proposed client rectangle".
+		// Answering 0 without touching it keeps the client area equal to
+		// the whole window: no caption, no borders, and the style bits
+		// still say WS_OVERLAPPEDWINDOW so DWM keeps the shadow.
+		if wparam != 0 && s.deco == DecorationsClient {
+			return 0
+		}
 	case wmEraseBkgnd:
 		return 1 // the toolkit paints every pixel; erasing first flickers
 	case wmPaint:
@@ -282,7 +297,7 @@ func win32Proc(hwnd, msg, wparam, lparam uintptr) uintptr {
 		s.mu.Unlock()
 		if sc > 0 && lw > 0 && lh > 0 {
 			r := winRect{0, 0, int32(DevicePixels(lw, sc)), int32(DevicePixels(lh, sc))}
-			procAdjustWindow.Call(uintptr(unsafe.Pointer(&r)), wsOverlappedWindow, 0, 0)
+			procAdjustWindow.Call(uintptr(unsafe.Pointer(&r)), s.winAdjust(), 0, 0)
 			procSetWindowPos.Call(hwnd, 0, 0, 0,
 				uintptr(r.Right-r.Left), uintptr(r.Bottom-r.Top),
 				swpNoMove|0x0004|0x0010) // NOMOVE|NOZORDER|NOACTIVATE
@@ -356,7 +371,7 @@ func newWinSurface(opts WindowOptions) (Surface, error) {
 	// The size asked for is the *client* area, so the frame has to be
 	// added on top of it: CreateWindowExW takes the outer rectangle.
 	r := winRect{0, 0, int32(w), int32(h)}
-	procAdjustWindow.Call(uintptr(unsafe.Pointer(&r)), wsOverlappedWindow, 0, 0)
+	procAdjustWindow.Call(uintptr(unsafe.Pointer(&r)), winAdjustStyle(opts.Decorations), 0, 0)
 	inst, _, _ := procGetModuleHandle.Call(0)
 	hwnd, _, callErr := procCreateWindowEx.Call(0,
 		uintptr(unsafe.Pointer(class)), uintptr(unsafe.Pointer(title)),
@@ -375,6 +390,15 @@ func newWinSurface(opts WindowOptions) (Surface, error) {
 	s.scale = s.readDPI()
 	s.resizeBuffer(DevicePixels(w, s.scale), DevicePixels(h, s.scale))
 	s.limits = limitsFor(s.sizing, opts, w, h)
+	// A window born with the toolkit's frame needs the frame recalculated
+	// once here. CreateWindowExW sends its WM_NCCALCSIZE before the
+	// window is in win32ByHWND, so the procedure answered for a surface
+	// it could not find yet and Windows laid out an ordinary caption; and
+	// RequestDecorations will not do it later, because the mode it would
+	// be asked for is the mode this window already has.
+	if s.deco == DecorationsClient {
+		s.applyDecorations()
+	}
 	if !opts.Headless {
 		procShowWindow.Call(hwnd, swShow)
 		s.visible = true
@@ -491,6 +515,38 @@ type winBitmapInfoHeader struct {
 	ClrUsed, ClrImportant  uint32
 }
 
+// winAdjustStyle is the style to measure this window's frame with.
+//
+// The window keeps WS_OVERLAPPEDWINDOW whoever draws its frame — that is
+// what DWM hangs the drop shadow, the snap animation and Windows 11's
+// rounded corners on. What changes instead is WM_NCCALCSIZE, which gives
+// the client area the whole window.
+//
+// Both halves of that are measured, against the bare wallpaper with
+// nothing else on screen. A WS_POPUP window — the obvious way to drop a
+// title bar — had no shadow at all: every pixel outside it was
+// byte-identical to the desktop behind, and DwmExtendFrameIntoClientArea
+// did not bring one back. Keeping the style and answering WM_NCCALCSIZE
+// leaves the shadow intact, falling off 23, 20, 19, 16, 13, 9, 7, 5, 3,
+// 1, 0 over the eleven pixels outside the window.
+//
+// It matters because [FrameSystemShadow] tells the toolkit to reserve no
+// margin and paint no shadow of its own, so a window that lost DWM's has
+// neither — and it cannot paint its own either: a Win32 window has no
+// per-pixel alpha, so the margin would be an opaque box, not a shadow.
+//
+// So the frame is real to Windows and zero-sized to us, and the rectangle
+// arithmetic has to measure with a style that adds nothing.
+func winAdjustStyle(d Decorations) uintptr {
+	if d == DecorationsClient {
+		return wsPopup
+	}
+	return wsOverlappedWindow
+}
+
+// winAdjust is the measuring style for this window now.
+func (s *winSurface) winAdjust() uintptr { return winAdjustStyle(s.deco) }
+
 func (s *winSurface) Title() string { return s.title }
 
 func (s *winSurface) SetTitle(t string) {
@@ -527,7 +583,7 @@ func (s *winSurface) Resize(w, h int) error {
 	s.resizeBuffer(DevicePixels(w, sc), DevicePixels(h, sc))
 
 	r := winRect{0, 0, int32(DevicePixels(w, sc)), int32(DevicePixels(h, sc))}
-	procAdjustWindow.Call(uintptr(unsafe.Pointer(&r)), wsOverlappedWindow, 0, 0)
+	procAdjustWindow.Call(uintptr(unsafe.Pointer(&r)), s.winAdjust(), 0, 0)
 	// SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE: only the size changes.
 	procSetWindowPos.Call(s.hwnd, 0, 0, 0,
 		uintptr(r.Right-r.Left), uintptr(r.Bottom-r.Top), 0x0002|0x0004|0x0010)
