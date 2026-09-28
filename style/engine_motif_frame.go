@@ -123,15 +123,12 @@ func (motifEngine) DrawCaptionButton(l *Classic, ctx *paintengine2d.Context, b p
 	glyph := func(w, h float32) { at(w, h, 0, false) }
 	switch k {
 	case CaptionKeepAbove:
-		// The shelf, and the window sitting up against it — bevelled
-		// boxes, which is Motif's whole glyph vocabulary. A toggle that is
-		// set is a box cut *into* the face rather than standing out of it,
-		// as every Motif toggle was, so the window under the shelf turns
-		// over while keep-above is on.
-		side := maxf(T*0.34, 5*ib)
-		rail := maxf(T*0.12, 2*ib)
-		at(T*0.52, rail, -(side+rail)*0.5, false)
-		at(side, side, (rail+ib)*0.5, CaptionAlt(k, cs, st))
+		// The toolkit's pin. Motif drew every glyph as a bevelled box and
+		// this one no longer is, which is a real loss of that vocabulary
+		// — but a keep-above button is a toolkit invention in the first
+		// place (Motif had no such thing), and one symbol for it
+		// everywhere is worth more than a bevel on an invented button.
+		DrawCaptionGlyph(ctx, p, k, CaptionAlt(k, cs, st), s.fg, snap(T*0.55), ib)
 	case CaptionMenu:
 		glyph(T*0.5, maxf(T*0.2, 3*ib))
 	case CaptionMinimize:

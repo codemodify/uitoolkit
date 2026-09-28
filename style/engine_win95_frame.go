@@ -148,13 +148,7 @@ func w95Glyph(ctx *paintengine2d.Context, b paintengine2d.Rect, k CaptionButton,
 		// The control-menu box: a window with a thick title bar.
 		box(x0+px(4), y0+px(3), px(8), px(7))
 	case CaptionKeepAbove:
-		// The ceiling, and the window held up under it.
-		ctx.DrawRect(paintengine2d.XYWH(x0+px(3), y0+px(2), px(10), lw), fill)
-		body := paintengine2d.XYWH(x0+px(3), y0+px(4), px(10), px(8))
-		if alt {
-			ctx.DrawRect(body, fill)
-			return
-		}
-		box(body.Min.X, body.Min.Y, body.Dx(), body.Dy())
+		// The toolkit's pin, in this pack's ink.
+		DrawCaptionGlyph(ctx, b, k, alt, col, px(11), lw)
 	}
 }

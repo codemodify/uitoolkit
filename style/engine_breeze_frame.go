@@ -128,16 +128,11 @@ func (breezeEngine) DrawCaptionButton(l *Classic, ctx *paintengine2d.Context, b 
 		p.MoveTo(g.Min.X+k18*0.5, g.Min.Y+2.5*k18)
 		p.LineTo(g.Max.X-k18*0.5, g.Min.Y+2.5*k18)
 	case CaptionKeepAbove:
-		// The ceiling, and the window held up under it: outlined while it
-		// is off, filled in while it is on.
-		p.MoveTo(g.Min.X, g.Min.Y+k18*0.5)
-		p.LineTo(g.Max.X, g.Min.Y+k18*0.5)
-		body := paintengine2d.XYWH(g.Min.X+k18*0.5, g.Min.Y+3*k18, g.Dx()-k18, g.Dy()-3.5*k18)
-		if CaptionAlt(k, cs, st) {
-			ctx.DrawRect(body, paintengine2d.Fill(glyph))
-		} else {
-			p.AddRect(body)
-		}
+		// The toolkit's pin, in Breeze's ink. Drawn and returned here
+		// rather than added to the path below: the pin is filled, and
+		// everything else in this glyph set is stroked.
+		DrawCaptionGlyph(ctx, g, k, CaptionAlt(k, cs, st), glyph, g.Dx(), k18)
+		return
 	}
 	ctx.DrawPath(p, stroke)
 }

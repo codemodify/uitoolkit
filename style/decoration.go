@@ -575,28 +575,18 @@ func DrawCaptionGlyph(ctx *paintengine2d.Context, b paintengine2d.Rect, k Captio
 	case CaptionMinimize:
 		ctx.DrawRect(paintengine2d.XYWH(g.Min.X, round(g.Min.Y+s*0.5), s, lw), fill)
 	case CaptionKeepAbove:
-		// "Stay on top": a ceiling across the top with the window held up
-		// against it — hollow while it is off, solid while it is on. The
-		// same two shapes read in a 1998 frame and in a 2026 one, and
-		// being nothing but axis-aligned rectangles they stay hard-edged
-		// at every scale, as the rest of these do.
-		// The ceiling is kept to a fifth of the glyph however heavy the
-		// look's own line is: a look that strokes at 1.5 dip would
-		// otherwise eat the window below it and leave two bars.
-		c := min(lw, max(round(s*0.2), 1))
-		ctx.DrawRect(paintengine2d.XYWH(g.Min.X, g.Min.Y, s, c), fill)
-		body := paintengine2d.XYWH(g.Min.X, round(g.Min.Y+2*c), s, s-2*c)
-		// The hollow body's line is thinned again where even that is too
-		// heavy to leave a hole: on and off must never come out the same
-		// picture, which is the whole point of a toggle.
-		t := min(c, max(round((body.Dy()-1)*0.5), 1))
-		switch {
-		case body.Dy() <= 0:
-		case alt || body.Dy() < 3:
-			ctx.DrawRect(body, fill)
-		default:
-			frameT(body, t)
-		}
+		// A pushpin, the way KDE 1's title bar drew it (and OpenLook and
+		// CDE before it): pushed in while the window is kept above,
+		// pulled out and lying on its side while it is not. It says
+		// "pinned" without a word, which the ceiling-and-window shape it
+		// replaced never quite did.
+		//
+		// Upright against lying, rather than a tilt: a tilted pin is a
+		// diagonal, and a diagonal is mush at the eight or ten pixels a
+		// caption button actually gets. Both of these are axis-aligned
+		// rectangles on whole device pixels, so the pin stays
+		// hard-edged at every scale, as the rest of these glyphs do.
+		drawCaptionPin(ctx, g, s, lw, alt, fill)
 	case CaptionMaximize:
 		if !alt {
 			frame(g)
@@ -938,4 +928,79 @@ func captionTitle(l *Classic, ctx *paintengine2d.Context, f *Font, b paintengine
 		return
 	}
 	l.drawFittedText(ctx, f, title, paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad, b.Dy()), col, AlignStart, 0)
+}
+
+// drawCaptionPin draws the keep-above pin inside g: the artwork of
+// [captionPinLoose] and [captionPinDriven], on the pixel grid.
+//
+// Lying over while the window is not kept above, driven upright while it
+// is — one shape at two angles, which is what every pin toggle does.
+//
+// It is filled a scan line at a time rather than as a path, and that is
+// the whole point: a filled path would antialias its diagonals, and
+// every caption glyph here is whole opaque or whole clear pixels at any
+// scale (TestCaptionGlyphsAreCrisp). Each ring is convex, so a scan line
+// crosses it exactly twice and the row between those two crossings is one
+// rectangle — which also makes this cheaper than sampling the outline per
+// pixel would be.
+//
+// A row the pin only grazes still gets a pixel. Rounding a span to
+// nothing is how a needle disappears at the sizes where it is already
+// hardest to see.
+func drawCaptionPin(ctx *paintengine2d.Context, g paintengine2d.Rect, s, lw float32, pinned bool, fill paintengine2d.Paint) {
+	rings := captionPinLoose
+	if pinned {
+		rings = captionPinDriven
+	}
+	n := int(max(float32(math.Round(float64(s))), 3))
+	p := paintengine2d.NewPath()
+	for _, r := range rings {
+		for y := 0; y < n; y++ {
+			lo, hi, ok := captionPinSpan(r, (float32(y)+0.5)/float32(n))
+			if !ok {
+				continue
+			}
+			x0 := int(math.Round(float64(lo * float32(n))))
+			x1 := int(math.Round(float64(hi * float32(n))))
+			if x1 <= x0 {
+				x1 = x0 + 1
+			}
+			x0, x1 = pinClamp(x0, 0, n), pinClamp(x1, 0, n)
+			if x1 > x0 {
+				p.AddRect(paintengine2d.XYWH(g.Min.X+float32(x0), g.Min.Y+float32(y), float32(x1-x0), 1))
+			}
+		}
+	}
+	ctx.DrawPath(p, fill)
+}
+
+// captionPinSpan is where the horizontal line at v crosses ring r, which
+// is convex: the two crossings, or ok false where it misses.
+func captionPinSpan(r []float32, v float32) (lo, hi float32, ok bool) {
+	n := len(r) / 2
+	for i, j := 0, n-1; i < n; j, i = i, i+1 {
+		xi, yi := r[2*i], r[2*i+1]
+		xj, yj := r[2*j], r[2*j+1]
+		if (yi > v) == (yj > v) {
+			continue
+		}
+		x := (xj-xi)*(v-yi)/(yj-yi) + xi
+		if !ok {
+			lo, hi, ok = x, x, true
+			continue
+		}
+		lo, hi = min(lo, x), max(hi, x)
+	}
+	return lo, hi, ok
+}
+
+// pinClamp holds v inside [lo, hi].
+func pinClamp(v, lo, hi int) int {
+	if v < lo {
+		return lo
+	}
+	if v > hi {
+		return hi
+	}
+	return v
 }

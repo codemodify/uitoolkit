@@ -56,18 +56,75 @@ var (
 	procMsgWaitForObjs = user32.NewProc("MsgWaitForMultipleObjectsEx")
 	procAdjustWindow   = user32.NewProc("AdjustWindowRectEx")
 	procSetWindowPos   = user32.NewProc("SetWindowPos")
+	procSetWindowLong  = user32.NewProc("SetWindowLongPtrW")
+	procScreenToClient = user32.NewProc("ScreenToClient")
 
-	procSetDIBitsToDev = gdi32.NewProc("SetDIBitsToDevice")
+	procCreateDIBSect  = gdi32.NewProc("CreateDIBSection")
+	procCreateCompatDC = gdi32.NewProc("CreateCompatibleDC")
+	procSelectObject   = gdi32.NewProc("SelectObject")
+	procBitBlt         = gdi32.NewProc("BitBlt")
+	procDeleteObject   = gdi32.NewProc("DeleteObject")
+	procDeleteDC       = gdi32.NewProc("DeleteDC")
 
 	procGetModuleHandle = kernel32.NewProc("GetModuleHandleW")
+
+	// Declaring DPI awareness, newest API first. Each is a different
+	// Windows generation's answer and they are not interchangeable:
+	// only the per-monitor-v2 context re-scales a window when it is
+	// dragged to another monitor.
+	procSetDpiCtx       = user32.NewProc("SetProcessDpiAwarenessContext")                    // 1703+
+	procSetDpiAwareness = syscall.NewLazyDLL("shcore.dll").NewProc("SetProcessDpiAwareness") // 8.1+
+	procSetDPIAware     = user32.NewProc("SetProcessDPIAware")                               // Vista+
 )
+
+// dpiPerMonitorV2 is DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, which
+// is the handle value -4 rather than an enum.
+const dpiPerMonitorV2 = ^uintptr(3)
+
+var win32DPIOnce sync.Once
+
+// win32DeclareDPIAware tells Windows this process handles scaling
+// itself, once, before any window exists.
+//
+// Without it Windows treats the process as 96-DPI whatever the monitor
+// says: GetDpiForWindow answers 96, every window is rendered at 1x and
+// then **bitmap-scaled** by the desktop, and the result on a 150% or
+// 200% display is a blurred window that reports the wrong size. A
+// toolkit that draws its own pixels has to opt out of that, and it can
+// only be done before the first window is created — which is why this
+// is a Once here rather than a manifest: a manifest would work too, but
+// it would have to be carried by every application built with the
+// toolkit, and forgetting it would look like a toolkit bug.
+func win32DeclareDPIAware() {
+	win32DPIOnce.Do(func() {
+		if r, _, _ := procSetDpiCtx.Call(dpiPerMonitorV2); r != 0 {
+			return
+		}
+		// 8.1: PROCESS_PER_MONITOR_DPI_AWARE = 2. A window still gets
+		// per-monitor DPI, but Windows does not re-scale it on a
+		// monitor change — WM_DPICHANGED arrives and the app acts.
+		if r, _, _ := procSetDpiAwareness.Call(2); r == 0 {
+			return
+		}
+		// Vista: system-wide awareness. One scale for the session,
+		// which is wrong on a mixed-DPI desktop but sharp on a uniform
+		// one, and much better than being scaled by the compositor.
+		procSetDPIAware.Call()
+	})
+}
 
 const (
 	wsOverlappedWindow = 0x00CF0000
-	swShow             = 5
-	pmRemove           = 0x0001
-	cwUseDefault       = ^uintptr(0x7FFFFFFF) // 0x80000000 as a signed int
+	// wsPopup adds no frame, so AdjustWindowRectEx with it leaves a
+	// rectangle alone. That is what a client-decorated window wants: its
+	// client area is the whole window (see wmNcCalcSize).
+	wsPopup      = 0x80000000
+	gwlStyle     = ^uintptr(15) // GWL_STYLE, -16
+	swShow       = 5
+	pmRemove     = 0x0001
+	cwUseDefault = ^uintptr(0x7FFFFFFF) // 0x80000000 as a signed int
 
+	wmNcCalcSize  = 0x0083
 	wmDestroy     = 0x0002
 	wmSize        = 0x0005
 	wmClose       = 0x0010
@@ -82,14 +139,19 @@ const (
 	wmMButtonDown = 0x0207
 	wmMButtonUp   = 0x0208
 	wmMouseWheel  = 0x020A
+	wmMouseHWheel = 0x020E
+	wmActivate    = 0x0006
 	wmKeyDown     = 0x0100
 	wmKeyUp       = 0x0101
 	wmChar        = 0x0102
+	wmSysKeyDown  = 0x0104
+	wmSysKeyUp    = 0x0105
 	wmSetFocus    = 0x0007
 	wmKillFocus   = 0x0008
 
 	biRGB          = 0
 	dibRGBColors   = 0
+	srcCopy        = 0x00CC0020
 	qsAllInput     = 0x04FF
 	mwmoInputAvail = 0x0004
 )
@@ -127,12 +189,18 @@ type winSurface struct {
 
 	img                *paintengine2d.Image
 	bgra               []byte // the same pixels in the order a DIB wants them
+	dib                winDIB // the GDI memory bgra points into
 	bufW, bufH         int
 	logicalW, logicalH int
 	scale              float32
 
 	closed bool
 	torn   bool
+
+	// hiSurrogate is a WM_CHAR high surrogate waiting for its pair.
+	hiSurrogate uint16
+	// shadedH is the height a rolled-up window is held at, or 0.
+	shadedH int
 
 	sizing  Sizing
 	limits  SizeLimits
@@ -202,6 +270,14 @@ func win32Proc(hwnd, msg, wparam, lparam uintptr) uintptr {
 		s.closed = true
 		s.mu.Unlock()
 		return 0
+	case wmNcCalcSize:
+		// wParam TRUE means "here is the proposed client rectangle".
+		// Answering 0 without touching it keeps the client area equal to
+		// the whole window: no caption, no borders, and the style bits
+		// still say WS_OVERLAPPEDWINDOW so DWM keeps the shadow.
+		if wparam != 0 && s.deco == DecorationsClient {
+			return 0
+		}
 	case wmEraseBkgnd:
 		return 1 // the toolkit paints every pixel; erasing first flickers
 	case wmPaint:
@@ -231,7 +307,7 @@ func win32Proc(hwnd, msg, wparam, lparam uintptr) uintptr {
 		s.mu.Unlock()
 		if sc > 0 && lw > 0 && lh > 0 {
 			r := winRect{0, 0, int32(DevicePixels(lw, sc)), int32(DevicePixels(lh, sc))}
-			procAdjustWindow.Call(uintptr(unsafe.Pointer(&r)), wsOverlappedWindow, 0, 0)
+			procAdjustWindow.Call(uintptr(unsafe.Pointer(&r)), s.winAdjust(), 0, 0)
 			procSetWindowPos.Call(hwnd, 0, 0, 0,
 				uintptr(r.Right-r.Left), uintptr(r.Bottom-r.Top),
 				swpNoMove|0x0004|0x0010) // NOMOVE|NOZORDER|NOACTIVATE
@@ -243,6 +319,52 @@ func win32Proc(hwnd, msg, wparam, lparam uintptr) uintptr {
 		return 0
 	case wmKillFocus:
 		s.push(Event{Kind: EventFocusOut})
+		return 0
+	case wmActivate:
+		// The frame is painted active or backdrop from this, and nothing
+		// else said it. Left unhandled, Activated stayed false for the
+		// window's whole life, so the first EventWindowState anything
+		// pushed — SetKeepAbove's, say — told the application its window
+		// had just gone inactive and the title bar lost its colour.
+		// WA_INACTIVE is 0; WA_ACTIVE and WA_CLICKACTIVE are not.
+		s.state.Activated = uint32(wparam)&0xFFFF != 0
+		s.push(Event{Kind: EventWindowState, State: s.state})
+		// and on to DefWindowProc, which has its own work to do here.
+	case wmMouseWheel, wmMouseHWheel:
+		// The wheel messages carry *screen* coordinates, alone among the
+		// mouse messages, so they need converting before they mean the
+		// same thing as a button's.
+		delta := float32(int16(uint32(wparam)>>16)) / 120
+		ev := Event{Kind: EventScroll, Pos: s.screenPoint(lparam), Mods: winMods()}
+		if msg == wmMouseWheel {
+			// Away from the user is up, and up is negative: the sign the
+			// X11 backend gives button 4, so a scroll means one thing
+			// above the boundary.
+			ev.Scroll = paintengine2d.Pt(0, -delta)
+		} else {
+			ev.Scroll = paintengine2d.Pt(delta, 0)
+		}
+		s.push(ev)
+		return 0
+	case wmKeyDown, wmSysKeyDown:
+		s.push(Event{Kind: EventKeyDown, Key: winKey(wparam), Mods: winMods()})
+		if msg == wmSysKeyDown {
+			// Alt combinations are the system's before they are ours:
+			// falling through to DefWindowProc is what keeps Alt+F4
+			// closing the window and Alt+Space opening its menu.
+			break
+		}
+		return 0
+	case wmKeyUp, wmSysKeyUp:
+		s.push(Event{Kind: EventKeyUp, Key: winKey(wparam), Mods: winMods()})
+		if msg == wmSysKeyUp {
+			break
+		}
+		return 0
+	case wmChar:
+		if r, ok := s.winChar(wparam); ok {
+			s.push(Event{Kind: EventText, Rune: r, Mods: winMods()})
+		}
 		return 0
 	case wmMouseMove:
 		s.push(Event{Kind: EventMouseMove, Pos: lparamPoint(lparam)})
@@ -259,6 +381,15 @@ func win32Proc(hwnd, msg, wparam, lparam uintptr) uintptr {
 }
 
 type winRect struct{ Left, Top, Right, Bottom int32 }
+
+// screenPoint turns an LPARAM holding a screen position into a point in
+// the window's client area, which is what every other pointer event
+// carries.
+func (s *winSurface) screenPoint(lparam uintptr) paintengine2d.Point {
+	pt := struct{ X, Y int32 }{int32(int16(lparam & 0xFFFF)), int32(int16((lparam >> 16) & 0xFFFF))}
+	procScreenToClient.Call(s.hwnd, uintptr(unsafe.Pointer(&pt)))
+	return paintengine2d.Pt(float32(pt.X), float32(pt.Y))
+}
 
 func lparamPoint(lparam uintptr) paintengine2d.Point {
 	x := int16(lparam & 0xFFFF)
@@ -285,6 +416,8 @@ func (s *winSurface) push(ev Event) {
 // ---- the surface ---------------------------------------------------------
 
 func newWinSurface(opts WindowOptions) (Surface, error) {
+	// Before any window exists: after the first one it is too late.
+	win32DeclareDPIAware()
 	class, err := win32RegisterClass()
 	if err != nil {
 		return nil, err
@@ -303,7 +436,7 @@ func newWinSurface(opts WindowOptions) (Surface, error) {
 	// The size asked for is the *client* area, so the frame has to be
 	// added on top of it: CreateWindowExW takes the outer rectangle.
 	r := winRect{0, 0, int32(w), int32(h)}
-	procAdjustWindow.Call(uintptr(unsafe.Pointer(&r)), wsOverlappedWindow, 0, 0)
+	procAdjustWindow.Call(uintptr(unsafe.Pointer(&r)), winAdjustStyle(opts.Decorations), 0, 0)
 	inst, _, _ := procGetModuleHandle.Call(0)
 	hwnd, _, callErr := procCreateWindowEx.Call(0,
 		uintptr(unsafe.Pointer(class)), uintptr(unsafe.Pointer(title)),
@@ -322,6 +455,15 @@ func newWinSurface(opts WindowOptions) (Surface, error) {
 	s.scale = s.readDPI()
 	s.resizeBuffer(DevicePixels(w, s.scale), DevicePixels(h, s.scale))
 	s.limits = limitsFor(s.sizing, opts, w, h)
+	// A window born with the toolkit's frame needs the frame recalculated
+	// once here. CreateWindowExW sends its WM_NCCALCSIZE before the
+	// window is in win32ByHWND, so the procedure answered for a surface
+	// it could not find yet and Windows laid out an ordinary caption; and
+	// RequestDecorations will not do it later, because the mode it would
+	// be asked for is the mode this window already has.
+	if s.deco == DecorationsClient {
+		s.applyDecorations()
+	}
 	if !opts.Headless {
 		procShowWindow.Call(hwnd, swShow)
 		s.visible = true
@@ -357,9 +499,118 @@ func (s *winSurface) resizeBuffer(w, h int) {
 		return
 	}
 	s.img = paintengine2d.NewImage(w, h)
-	s.bgra = make([]byte, w*h*4)
+	s.newDIB(w, h)
 	s.bufW, s.bufH = w, h
 }
+
+// winDIB is the buffer's GDI side: a top-down 32-bit DIB section selected
+// into a memory DC, which is what Present blits from.
+type winDIB struct {
+	hbm  uintptr // the section
+	mdc  uintptr // the memory DC it is selected into
+	prev uintptr // whatever the DC held before
+	bits *byte   // the pixels — GDI's memory, not Go's
+}
+
+// newDIB replaces the surface's DIB section with one w by h.
+//
+// The pixels have to be GDI's own, not a Go slice. SetDIBitsToDevice and
+// StretchDIBits read past the end of the bits they are handed; a Go
+// allocation that ends where Go's committed heap ends has nothing mapped
+// after it, the read faults inside GDI, and the call answers 0 scan lines
+// with GetLastError still reporting success — a window that never shows a
+// pixel and never says why. Measured on Windows 10 19045: the same call
+// refused the exact-sized Go buffer, took the same buffer with a page of
+// slack after it, and took one scan line of the refused buffer. A DIB
+// section has no such edge, and BitBlt out of a memory DC is the faster
+// path anyway: GDI parses the header once here rather than once a frame.
+func (s *winSurface) newDIB(w, h int) {
+	s.freeDIB()
+	var bi winBitmapInfoHeader
+	bi.Size = uint32(unsafe.Sizeof(bi))
+	bi.Width, bi.Height = int32(w), int32(-h) // negative: top-down, the order Pix is in
+	bi.Planes, bi.BitCount = 1, 32
+	bi.Compression = biRGB
+
+	// GDI writes the address of the pixels here. Declaring it *byte
+	// rather than uintptr means the slice below needs no uintptr-to-
+	// unsafe.Pointer conversion, which is the one thing `go vet` will
+	// not have; the collector ignores a pointer outside its own heap.
+	var bits *byte
+	hbm, _, _ := procCreateDIBSect.Call(0, uintptr(unsafe.Pointer(&bi)),
+		dibRGBColors, uintptr(unsafe.Pointer(&bits)), 0, 0)
+	if hbm == 0 || bits == nil {
+		// Present reports this; a surface with no pixels is still a
+		// surface, and the caller may only want its geometry.
+		s.bgra = nil
+		return
+	}
+	mdc, _, _ := procCreateCompatDC.Call(0)
+	if mdc == 0 {
+		procDeleteObject.Call(hbm)
+		s.bgra = nil
+		return
+	}
+	prev, _, _ := procSelectObject.Call(mdc, hbm)
+	s.dib = winDIB{hbm: hbm, mdc: mdc, prev: prev, bits: bits}
+	s.bgra = unsafe.Slice(bits, w*h*4)
+}
+
+// freeDIB gives the section and its DC back. GDI objects are not garbage
+// collected: a window resized for a while leaks one of each per size.
+func (s *winSurface) freeDIB() {
+	if s.dib.mdc != 0 {
+		procSelectObject.Call(s.dib.mdc, s.dib.prev)
+		procDeleteDC.Call(s.dib.mdc)
+	}
+	if s.dib.hbm != 0 {
+		procDeleteObject.Call(s.dib.hbm)
+	}
+	s.dib = winDIB{}
+	s.bgra = nil
+}
+
+// winBitmapInfoHeader is BITMAPINFOHEADER: 40 bytes, four-byte aligned.
+type winBitmapInfoHeader struct {
+	Size                   uint32
+	Width, Height          int32
+	Planes, BitCount       uint16
+	Compression, SizeImage uint32
+	XPelsPerMeter, YPels   int32
+	ClrUsed, ClrImportant  uint32
+}
+
+// winAdjustStyle is the style to measure this window's frame with.
+//
+// The window keeps WS_OVERLAPPEDWINDOW whoever draws its frame — that is
+// what DWM hangs the drop shadow, the snap animation and Windows 11's
+// rounded corners on. What changes instead is WM_NCCALCSIZE, which gives
+// the client area the whole window.
+//
+// Both halves of that are measured, against the bare wallpaper with
+// nothing else on screen. A WS_POPUP window — the obvious way to drop a
+// title bar — had no shadow at all: every pixel outside it was
+// byte-identical to the desktop behind, and DwmExtendFrameIntoClientArea
+// did not bring one back. Keeping the style and answering WM_NCCALCSIZE
+// leaves the shadow intact, falling off 23, 20, 19, 16, 13, 9, 7, 5, 3,
+// 1, 0 over the eleven pixels outside the window.
+//
+// It matters because [FrameSystemShadow] tells the toolkit to reserve no
+// margin and paint no shadow of its own, so a window that lost DWM's has
+// neither — and it cannot paint its own either: a Win32 window has no
+// per-pixel alpha, so the margin would be an opaque box, not a shadow.
+//
+// So the frame is real to Windows and zero-sized to us, and the rectangle
+// arithmetic has to measure with a style that adds nothing.
+func winAdjustStyle(d Decorations) uintptr {
+	if d == DecorationsClient {
+		return wsPopup
+	}
+	return wsOverlappedWindow
+}
+
+// winAdjust is the measuring style for this window now.
+func (s *winSurface) winAdjust() uintptr { return winAdjustStyle(s.deco) }
 
 func (s *winSurface) Title() string { return s.title }
 
@@ -397,7 +648,7 @@ func (s *winSurface) Resize(w, h int) error {
 	s.resizeBuffer(DevicePixels(w, sc), DevicePixels(h, sc))
 
 	r := winRect{0, 0, int32(DevicePixels(w, sc)), int32(DevicePixels(h, sc))}
-	procAdjustWindow.Call(uintptr(unsafe.Pointer(&r)), wsOverlappedWindow, 0, 0)
+	procAdjustWindow.Call(uintptr(unsafe.Pointer(&r)), s.winAdjust(), 0, 0)
 	// SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE: only the size changes.
 	procSetWindowPos.Call(s.hwnd, 0, 0, 0,
 		uintptr(r.Right-r.Left), uintptr(r.Bottom-r.Top), 0x0002|0x0004|0x0010)
@@ -406,13 +657,17 @@ func (s *winSurface) Resize(w, h int) error {
 
 // Present puts the buffer on screen.
 //
-// The pixels are swizzled into a scratch buffer first: paintengine2d
-// keeps premultiplied RGBA and a 32-bit BI_RGB DIB is BGRX, so red and
-// blue trade places. Only the damaged rows are converted — a full-window
-// swizzle on every frame would cost more than the drawing usually does.
+// The pixels are swizzled into the DIB section first: paintengine2d keeps
+// premultiplied RGBA and a 32-bit BI_RGB DIB is BGRX, so red and blue
+// trade places. Only the damaged rows are converted, and only the damaged
+// rectangles are blitted — a full-window present on every frame would cost
+// more than the drawing usually does.
 func (s *winSurface) Present(dirty []paintengine2d.Rect) error {
 	if s.hwnd == 0 || s.closed || s.img == nil {
 		return nil
+	}
+	if s.dib.mdc == 0 || s.bgra == nil {
+		return fmt.Errorf("win32: the window has no DIB section to present")
 	}
 	s.swizzle(dirty)
 	dc, _, _ := procGetDC.Call(s.hwnd)
@@ -421,25 +676,27 @@ func (s *winSurface) Present(dirty []paintengine2d.Rect) error {
 	}
 	defer procReleaseDC.Call(s.hwnd, dc)
 
-	var bi struct {
-		Size                   uint32
-		Width, Height          int32
-		Planes, BitCount       uint16
-		Compression, SizeImage uint32
-		XPelsPerMeter, YPels   int32
-		ClrUsed, ClrImportant  uint32
+	blit := func(x, y, w, h int) error {
+		if w <= 0 || h <= 0 {
+			return nil
+		}
+		ok, _, err := procBitBlt.Call(dc, uintptr(x), uintptr(y), uintptr(w), uintptr(h),
+			s.dib.mdc, uintptr(x), uintptr(y), srcCopy)
+		if ok == 0 {
+			return fmt.Errorf("win32: BitBlt %dx%d at %d,%d: %w", w, h, x, y, err)
+		}
+		return nil
 	}
-	bi.Size = uint32(unsafe.Sizeof(bi))
-	bi.Width = int32(s.bufW)
-	bi.Height = int32(-s.bufH) // negative: top-down, the order Pix is in
-	bi.Planes, bi.BitCount = 1, 32
-	bi.Compression = biRGB
-
-	procSetDIBitsToDev.Call(dc,
-		0, 0, uintptr(s.bufW), uintptr(s.bufH),
-		0, 0, 0, uintptr(s.bufH),
-		uintptr(unsafe.Pointer(&s.bgra[0])),
-		uintptr(unsafe.Pointer(&bi)), dibRGBColors)
+	if len(dirty) == 0 {
+		return blit(0, 0, s.bufW, s.bufH)
+	}
+	for _, r := range dirty {
+		x0, y0 := clampInt(int(r.Min.X), 0, s.bufW), clampInt(int(r.Min.Y), 0, s.bufH)
+		x1, y1 := clampInt(int(r.Max.X+0.999), 0, s.bufW), clampInt(int(r.Max.Y+0.999), 0, s.bufH)
+		if err := blit(x0, y0, x1-x0, y1-y0); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -541,6 +798,7 @@ func (s *winSurface) Close() error {
 		procDestroyWindow.Call(s.hwnd)
 		s.hwnd = 0
 	}
+	s.freeDIB()
 	return nil
 }
 
