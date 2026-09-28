@@ -37,6 +37,14 @@ if [ -z "$MON" ]; then
   exit 2
 fi
 
+# Every argument is quoted for cmd, which reads | & < > ^ in an
+# unquoted word as its own syntax: a -test.run 'A|B' became a pipe into
+# a command called B, and the guest sat there for ever while this waited
+# 600 seconds for a result that was never coming. Single-name runs
+# worked, which is what made it look like the window tests hanging.
+args=""
+for a in "$@"; do args+=" \"$a\""; done
+
 work=$(mktemp -d)
 trap 'rm -rf "$work"; kill %1 2>/dev/null || true' EXIT
 
@@ -60,13 +68,31 @@ python3 "$work/serve.py" "$PORT" &
 sleep 1
 
 # The guest side, as one file, so only one short line has to be typed at it.
+# The old binary is deleted before the new one is fetched, and its
+# absence afterwards is reported rather than ignored. Without that a
+# curl that cannot reach the host leaves the *previous* run's
+# platform.test.exe in place, the guest runs that, and a stale binary
+# POSTs back a confident PASS — which happened, and cost a session's
+# worth of trust in these results. A test harness that cannot fetch
+# what it is testing has to say so.
 {
   echo '@echo off'
   echo "set SRC=http://10.0.2.2:$PORT"
   echo 'set D=%TEMP%\uitkwin'
   echo 'if not exist "%D%" mkdir "%D%"'
+  echo 'del /q "%D%\platform.test.exe" 2>nul'
   echo 'curl -s -o "%D%\platform.test.exe" %SRC%/platform.test.exe'
-  echo "\"%D%\\platform.test.exe\" -test.v $* > \"%D%\\out.txt\" 2>&1"
+  echo 'if not exist "%D%\platform.test.exe" ('
+  echo '  echo FETCH-FAILED: the guest could not download the test binary from %SRC% > "%D%\out.txt"'
+  echo '  echo EXIT=1 >> "%D%\out.txt"'
+  echo '  curl -s --data-binary @"%D%\out.txt" %SRC%/result.txt'
+  echo '  exit /b 1'
+  echo ')'
+  # The size of what was actually fetched, first line of the report.
+  # A binary that is not the one just built is the failure this whole
+  # block exists to make visible, and its size says so at a glance.
+  echo 'for %%F in ("%D%\platform.test.exe") do echo FETCHED %%~zF bytes > "%D%\out.txt"'
+  echo "\"%D%\\platform.test.exe\" -test.v $args >> \"%D%\\out.txt\" 2>&1"
   echo 'echo EXIT=%ERRORLEVEL% >> "%D%\out.txt"'
   echo 'curl -s --data-binary @"%D%\out.txt" %SRC%/result.txt'
 } | sed 's/$/\r/' > "$work/run.cmd"

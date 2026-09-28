@@ -31,6 +31,14 @@ enum {
 	UITK_AK_KEY_DOWN = 5,
 	UITK_AK_KEY_UP = 6,
 	UITK_AK_POINTER_LEAVE = 7,
+	// Drag and drop. x and y are the pointer in the window's content
+	// area, device pixels y down; `button` carries the toolkit's drag
+	// actions the source allows and `key` the one it prefers, or for
+	// UITK_AK_DRAG_END the one that was performed.
+	UITK_AK_DRAG_MOTION = 8,
+	UITK_AK_DRAG_LEAVE = 9,
+	UITK_AK_DROP = 10,
+	UITK_AK_DRAG_END = 11,
 };
 
 // uitk_ak_init brings NSApplication up. Safe to call more than once, and
@@ -130,6 +138,49 @@ void uitk_ak_content_origin(void *win, int *x, int *y);
 // in the toolkit's screen coordinates: the screen less the menu bar and
 // the Dock, which is where a popup may go.
 void uitk_ak_work_area(void *win, int *x, int *y, int *w, int *h);
+
+// --- drag and drop ---------------------------------------------------
+//
+// Types cross this boundary as MIME strings, which is the toolkit's
+// vocabulary, and the Objective-C side maps the two macOS knows —
+// text and file URLs — onto their pasteboard types. Anything else is
+// put on the pasteboard under the MIME string itself: NSPasteboard
+// takes an arbitrary type identifier, so a toolkit-specific type
+// travels between two uitoolkit windows without a registry.
+//
+// Drag actions are the toolkit's bitset (DragCopy 1, DragMove 2,
+// DragLink 4), not NSDragOperation, for the same reason the event
+// kinds are not platform.EventKind: the boundary is a bad place to
+// depend on the value of a constant from either side.
+
+// uitk_ak_register_drops makes the window a drop target.
+void uitk_ak_register_drops(void *win);
+
+// uitk_ak_drop_types is the MIME types the drag now over the window
+// offers, NUL-separated and NUL-terminated; the caller frees it. NULL
+// when no drag is in hand.
+char *uitk_ak_drop_types(void *win);
+
+// uitk_ak_drop_data is one type's bytes from the drag now over the
+// window; the caller frees it. n is set to the length, 0 for nothing.
+void *uitk_ak_drop_data(void *win, const char *mime, int *n);
+
+// uitk_ak_set_drop_answer records what the target would do with the
+// drag, which -draggingUpdated: answers with.
+void uitk_ak_set_drop_answer(void *win, int action);
+
+// A drag's payload is built up and then started. uitk_ak_drag_new
+// makes one, _add puts a type on it, _start begins the session from
+// the press being handled and _free releases an unstarted one.
+void *uitk_ak_drag_new(void);
+void uitk_ak_drag_add(void *item, const char *mime, const void *bytes, int n);
+int uitk_ak_drag_start(void *win, void *item, const unsigned char *icon, int iw, int ih,
+                       double hotX, double hotY, int actions);
+void uitk_ak_drag_free(void *item);
+
+// uitk_ak_dragging reports whether a drag started from this window is
+// still running.
+int uitk_ak_dragging(void *win);
 
 // --- verification ---------------------------------------------------
 //

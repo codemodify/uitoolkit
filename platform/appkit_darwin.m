@@ -74,6 +74,35 @@ static double flipY(double y) {
 - (void)windowDidEndLiveResize:(NSNotification *)n   { uitkAkEvent(self.sid, UITK_AK_STATE, 0, 0); }
 @end
 
+// pbType is the pasteboard type a MIME string travels as. The two
+// macOS has names of its own for get them; everything else goes on the
+// pasteboard under the MIME string itself, which NSPasteboard allows
+// and which lets a toolkit-specific type cross between two uitoolkit
+// windows without anyone registering anything.
+static NSString *pbType(NSString *mime) {
+	if ([mime hasPrefix:@"text/plain"]) return NSPasteboardTypeString;
+	if ([mime isEqualToString:@"text/uri-list"]) return NSPasteboardTypeFileURL;
+	return mime;
+}
+
+// The toolkit's DragAction bitset (copy 1, move 2, link 4) and
+// NSDragOperation, which agree on nothing.
+static NSDragOperation opsFromActions(int a) {
+	NSDragOperation op = NSDragOperationNone;
+	if (a & 1) op |= NSDragOperationCopy;
+	if (a & 2) op |= NSDragOperationMove;
+	if (a & 4) op |= NSDragOperationLink;
+	return op;
+}
+
+static int actionsFromOps(NSDragOperation op) {
+	int a = 0;
+	if (op & NSDragOperationCopy) a |= 1;
+	if (op & NSDragOperationMove) a |= 2;
+	if (op & NSDragOperationLink) a |= 4;
+	return a;
+}
+
 // UitkView is the window's content. It exists for input: a window
 // delegate is told about the window, never about a key or a press, and
 // those arrive at the view that is under the pointer or holds the
@@ -165,6 +194,60 @@ extern NSCursor *uitk_nscursor_for(int kind);
 	[uitk_nscursor_for(self.cursorKind) set];
 }
 
+// --- drop target ---
+//
+// Every one of these reports to Go and answers from what the toolkit
+// last said; none of them decides anything itself. The application is
+// asked through EventDragMotion and replies with AcceptDrag, which
+// lands in dropAnswer, which is what -draggingUpdated: returns.
+
+- (NSPoint)dragPoint:(id<NSDraggingInfo>)info {
+	NSPoint p = [self convertPoint:[info draggingLocation] fromView:nil];
+	double s = self.window ? self.window.backingScaleFactor : 1;
+	return NSMakePoint(p.x * s, (self.bounds.size.height - p.y) * s);
+}
+
+- (void)reportDrag:(int)kind info:(id<NSDraggingInfo>)info {
+	NSPoint p = [self dragPoint:info];
+	int allowed = actionsFromOps([info draggingSourceOperationMask]);
+	uitkAkInput(self.sid, kind, p.x, p.y, 0, 0, allowed, allowed, 0, NULL, 0);
+}
+
+- (NSDragOperation)draggingEntered:(id<NSDraggingInfo>)info {
+	self.currentDrag = info;
+	self.dropAnswer = 0;
+	[self reportDrag:UITK_AK_DRAG_MOTION info:info];
+	return opsFromActions(self.dropAnswer);
+}
+
+- (NSDragOperation)draggingUpdated:(id<NSDraggingInfo>)info {
+	self.currentDrag = info;
+	[self reportDrag:UITK_AK_DRAG_MOTION info:info];
+	return opsFromActions(self.dropAnswer);
+}
+
+- (void)draggingExited:(id<NSDraggingInfo>)info {
+	self.currentDrag = nil;
+	self.dropAnswer = 0;
+	uitkAkInput(self.sid, UITK_AK_DRAG_LEAVE, 0, 0, 0, 0, 0, 0, 0, NULL, 0);
+}
+
+- (BOOL)prepareForDragOperation:(id<NSDraggingInfo>)info {
+	self.currentDrag = info;
+	return self.dropAnswer != 0;
+}
+
+- (BOOL)performDragOperation:(id<NSDraggingInfo>)info {
+	self.currentDrag = info;
+	[self reportDrag:UITK_AK_DROP info:info];
+	// The pasteboard belongs to the drag and the drag is over once this
+	// returns, so the Go side reads what it wants inside this call —
+	// uitk_ak_drop_data answers from self.currentDrag, which is still
+	// set. The toolkit's ReceiveDrop is served from a copy it took here.
+	self.currentDrag = nil;
+	return YES;
+}
+
 - (void)mouseExited:(NSEvent *)e {
 	NSPoint p = [self where:e];
 	uitkAkInput(self.sid, UITK_AK_POINTER_LEAVE, p.x, p.y, 0, 0, 0, 0,
@@ -208,6 +291,24 @@ static int bareKey(NSEvent *e) {
 - (void)keyUp:(NSEvent *)e {
 	uitkAkInput(self.sid, UITK_AK_KEY_UP, 0, 0, 0, 0, 0, bareKey(e),
 	            (uint64_t)e.modifierFlags, NULL, 0);
+}
+
+// --- drag source ---
+
+- (NSDragOperation)draggingSession:(NSDraggingSession *)session
+    sourceOperationMaskForDraggingContext:(NSDraggingContext)context {
+	return opsFromActions(self.dragActions);
+}
+
+- (void)draggingSession:(NSDraggingSession *)session
+           endedAtPoint:(NSPoint)p
+              operation:(NSDragOperation)op {
+	self.dragging = NO;
+	// The action that was performed, and whether anything took it: a
+	// drag let go over nothing ends with NSDragOperationNone, which the
+	// toolkit reads as a drop that happened and nobody wanted.
+	uitkAkInput(self.sid, UITK_AK_DRAG_END, p.x, p.y, 0, 0,
+	            actionsFromOps(op), actionsFromOps(op), 0, NULL, 1);
 }
 
 // A modifier has no keyDown: of its own. The toolkit needs Alt, because
@@ -742,5 +843,188 @@ void uitk_ak_work_area(void *w, int *x, int *y, int *width, int *height) {
 		if (y) *y = (int)lround(flipY(NSMaxY(v)));
 		if (width) *width = (int)lround(v.size.width);
 		if (height) *height = (int)lround(v.size.height);
+	}
+}
+
+// --- drag and drop ---------------------------------------------------
+
+// uitkView is the window's content view as a UitkView, or nil.
+static UitkView *uitkView(void *w) {
+	if (!w) return nil;
+	NSView *v = ((__bridge NSWindow *)w).contentView;
+	return [v isKindOfClass:[UitkView class]] ? (UitkView *)v : nil;
+}
+
+void uitk_ak_register_drops(void *w) {
+	@autoreleasepool {
+		UitkView *v = uitkView(w);
+		if (!v) return;
+		// Text and file URLs by their own names, and NSPasteboardTypeURL
+		// so a link dragged out of a browser arrives too. Anything else
+		// a uitoolkit window offers travels under its MIME string, and
+		// registering for a type nobody sends costs nothing.
+		[v registerForDraggedTypes:@[
+			NSPasteboardTypeString, NSPasteboardTypeFileURL, NSPasteboardTypeURL,
+			@"text/plain", @"text/plain;charset=utf-8", @"text/uri-list", @"text/html",
+		]];
+	}
+}
+
+void uitk_ak_set_drop_answer(void *w, int action) {
+	@autoreleasepool {
+		UitkView *v = uitkView(w);
+		if (v) v.dropAnswer = action;
+	}
+}
+
+// mimesOf is the pasteboard's types as the MIME names the toolkit
+// speaks, NUL-separated and NUL-terminated.
+static char *mimesOf(NSPasteboard *pb) {
+	NSMutableArray<NSString *> *out = [NSMutableArray array];
+	if ([pb canReadObjectForClasses:@[[NSURL class]] options:@{NSPasteboardURLReadingFileURLsOnlyKey: @YES}]) {
+		[out addObject:@"text/uri-list"];
+	}
+	if ([pb canReadObjectForClasses:@[[NSString class]] options:@{}]) {
+		[out addObject:@"text/plain;charset=utf-8"];
+		[out addObject:@"text/plain"];
+	}
+	for (NSPasteboardType t in pb.types) {
+		// A type that is already a MIME string is one of ours and goes
+		// through untranslated; the rest are Apple's and are covered
+		// above or are of no use to the toolkit.
+		if ([t containsString:@"/"] && ![t hasPrefix:@"public."] && ![out containsObject:t]) {
+			[out addObject:t];
+		}
+	}
+	NSMutableData *buf = [NSMutableData data];
+	for (NSString *m in out) {
+		const char *u = [m UTF8String];
+		[buf appendBytes:u length:strlen(u) + 1];
+	}
+	char z = 0;
+	[buf appendBytes:&z length:1];
+	char *res = (char *)malloc(buf.length);
+	memcpy(res, buf.bytes, buf.length);
+	return res;
+}
+
+char *uitk_ak_drop_types(void *w) {
+	@autoreleasepool {
+		UitkView *v = uitkView(w);
+		if (!v || !v.currentDrag) return NULL;
+		return mimesOf([v.currentDrag draggingPasteboard]);
+	}
+}
+
+void *uitk_ak_drop_data(void *w, const char *mime, int *n) {
+	if (n) *n = 0;
+	@autoreleasepool {
+		UitkView *v = uitkView(w);
+		if (!v || !v.currentDrag || !mime) return NULL;
+		NSPasteboard *pb = [v.currentDrag draggingPasteboard];
+		NSString *m = [NSString stringWithUTF8String:mime];
+		NSData *data = nil;
+		if ([m isEqualToString:@"text/uri-list"]) {
+			// The toolkit's uri-list is what every other backend hands
+			// it: one URI per line, CRLF, which is what RFC 2483 says.
+			NSArray *urls = [pb readObjectsForClasses:@[[NSURL class]]
+			                                  options:@{NSPasteboardURLReadingFileURLsOnlyKey: @YES}];
+			NSMutableString *s = [NSMutableString string];
+			for (NSURL *u in urls) [s appendFormat:@"%@\r\n", u.absoluteString];
+			data = [s dataUsingEncoding:NSUTF8StringEncoding];
+		} else if ([m hasPrefix:@"text/plain"]) {
+			NSString *s = [pb stringForType:NSPasteboardTypeString];
+			data = [s dataUsingEncoding:NSUTF8StringEncoding];
+		} else {
+			data = [pb dataForType:m];
+		}
+		if (!data || data.length == 0) return NULL;
+		void *res = malloc(data.length);
+		memcpy(res, data.bytes, data.length);
+		if (n) *n = (int)data.length;
+		return res;
+	}
+}
+
+void *uitk_ak_drag_new(void) {
+	@autoreleasepool { return (void *)CFBridgingRetain([[NSPasteboardItem alloc] init]); }
+}
+
+void uitk_ak_drag_add(void *item, const char *mime, const void *bytes, int n) {
+	if (!item || !mime || !bytes || n <= 0) return;
+	@autoreleasepool {
+		NSPasteboardItem *it = (__bridge NSPasteboardItem *)item;
+		NSString *m = [NSString stringWithUTF8String:mime];
+		NSData *d = [NSData dataWithBytes:bytes length:(NSUInteger)n];
+		// Under the type macOS knows it by *and* under the MIME name, so
+		// the same item satisfies a Finder drop and a uitoolkit one.
+		[it setData:d forType:pbType(m)];
+		if (![pbType(m) isEqualToString:m]) [it setData:d forType:m];
+	}
+}
+
+void uitk_ak_drag_free(void *item) {
+	if (item) CFBridgingRelease(item);
+}
+
+int uitk_ak_drag_start(void *w, void *item, const unsigned char *icon, int iw, int ih,
+                       double hotX, double hotY, int actions) {
+	@autoreleasepool {
+		UitkView *v = uitkView(w);
+		if (!v || !item) return 0;
+		// A drag has to come from a press, the way an interactive move
+		// does: beginDraggingSession tracks the button that is down.
+		NSEvent *e = [NSApp currentEvent];
+		if (!e) return 0;
+		switch (e.type) {
+		case NSEventTypeLeftMouseDown:
+		case NSEventTypeLeftMouseDragged:
+		case NSEventTypeRightMouseDown:
+		case NSEventTypeRightMouseDragged:
+		case NSEventTypeOtherMouseDown:
+		case NSEventTypeOtherMouseDragged:
+			break;
+		default:
+			return 0;
+		}
+		NSPasteboardItem *it = (__bridge NSPasteboardItem *)item;
+		NSDraggingItem *di = [[NSDraggingItem alloc] initWithPasteboardWriter:it];
+
+		double s = v.window ? v.window.backingScaleFactor : 1;
+		NSPoint at = [v convertPoint:e.locationInWindow fromView:nil];
+		NSImage *img = nil;
+		NSRect frame = NSMakeRect(at.x - 8, at.y - 8, 16, 16);
+		if (icon && iw > 0 && ih > 0) {
+			CGColorSpaceRef cs = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+			CGContextRef ctx = CGBitmapContextCreate((void *)icon, iw, ih, 8, (size_t)iw * 4, cs,
+			                                         kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big);
+			CGColorSpaceRelease(cs);
+			if (ctx) {
+				CGImageRef cg = CGBitmapContextCreateImage(ctx);
+				CGContextRelease(ctx);
+				if (cg) {
+					// The picture is in device pixels and the frame is in
+					// points, so it is divided by the scale: an icon drawn
+					// for a Retina display is the same size on screen as
+					// one drawn for a plain one, and sharper.
+					double pw = iw / s, ph = ih / s;
+					img = [[NSImage alloc] initWithCGImage:cg size:NSMakeSize(pw, ph)];
+					CGImageRelease(cg);
+					frame = NSMakeRect(at.x - hotX / s, at.y - (ph - hotY / s), pw, ph);
+				}
+			}
+		}
+		[di setDraggingFrame:frame contents:img];
+		v.dragActions = actions;
+		v.dragging = YES;
+		[v beginDraggingSessionWithItems:@[di] event:e source:v];
+		return 1;
+	}
+}
+
+int uitk_ak_dragging(void *w) {
+	@autoreleasepool {
+		UitkView *v = uitkView(w);
+		return v && v.dragging ? 1 : 0;
 	}
 }
