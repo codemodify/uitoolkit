@@ -4,6 +4,7 @@ package platform
 
 import (
 	"runtime"
+	"syscall"
 	"testing"
 	"unsafe"
 
@@ -16,6 +17,19 @@ import (
 // compiled there. See docs/windows.md.
 
 var procGetWindowLongT = user32.NewProc("GetWindowLongPtrW")
+
+func testSurfaceWith(t *testing.T, opts WindowOptions) *winSurface {
+	t.Helper()
+	runtime.LockOSThread()
+	t.Cleanup(runtime.UnlockOSThread)
+	s, err := newWinSurface(opts)
+	if err != nil {
+		t.Skipf("no window could be made (no interactive desktop?): %v", err)
+	}
+	ws := s.(*winSurface)
+	t.Cleanup(func() { ws.Close() })
+	return ws
+}
 
 func testSurface(t *testing.T, w, h int) *winSurface {
 	t.Helper()
@@ -230,7 +244,464 @@ func TestAWindowRollsUpToItsTitleBar(t *testing.T) {
 	}
 	s.Poll()
 	c, _ := rects(t, s)
-	if h := c.Bottom - c.Top; h != 24 {
-		t.Errorf("rolled up to %d pixels, asked for 24: the resize was clamped, so a shaded window springs open", h)
+	// Resize speaks logical pixels and the client rectangle is device
+	// pixels, which are not the same thing anywhere but a 96-DPI display.
+	if h, want := int(c.Bottom-c.Top), DevicePixels(24, s.Scale()); h != want {
+		t.Errorf("rolled up to %d device pixels at scale %v, asked for 24 logical (%d): the resize was clamped, so a shaded window springs open",
+			h, s.Scale(), want)
+	}
+}
+
+// askMinMax is what Windows would be told if a resize started now.
+func askMinMax(s *winSurface) winMinMaxInfo {
+	var mmi winMinMaxInfo
+	procSendMessage.Call(s.hwnd, wmGetMinMax, 0, uintptr(unsafe.Pointer(&mmi)))
+	runtime.KeepAlive(&mmi)
+	return mmi
+}
+
+// The bug this is about: SizeLimits answered and GeometrySizeLimits was
+// advertised, while nothing was ever said to Windows — WM_GETMINMAXINFO
+// went unhandled — so a window could be dragged to any size whatever it
+// stated. A capability that lies.
+func TestSizeLimitsAreToldToWindows(t *testing.T) {
+	s := testSurfaceWith(t, WindowOptions{
+		Title: "uitoolkit limits", Width: 400, Height: 300,
+		MinWidth: 220, MinHeight: 160, MaxWidth: 900, MaxHeight: 700,
+	})
+	if !GeometryOf(s).GeometryCaps().Has(GeometrySizeLimits) {
+		t.Fatal("GeometrySizeLimits is not advertised")
+	}
+	sc := s.deviceScale()
+	mmi := askMinMax(s)
+	// The window is at least as big as its client minimum: the frame is
+	// added on top, so greater is right and smaller is the bug.
+	if got, want := mmi.MinTrackSize.X, int32(DevicePixels(220, sc)); got < want {
+		t.Errorf("minimum width %d, want at least the %d the window states", got, want)
+	}
+	if got, want := mmi.MinTrackSize.Y, int32(DevicePixels(160, sc)); got < want {
+		t.Errorf("minimum height %d, want at least %d", got, want)
+	}
+	if got, want := mmi.MaxTrackSize.X, int32(DevicePixels(900, sc)); got < want {
+		t.Errorf("maximum width %d, want at least %d", got, want)
+	}
+	if mmi.MinTrackSize.X >= mmi.MaxTrackSize.X || mmi.MinTrackSize.Y >= mmi.MaxTrackSize.Y {
+		t.Errorf("a resizable window given min %v and max %v cannot be resized at all",
+			mmi.MinTrackSize, mmi.MaxTrackSize)
+	}
+}
+
+// A fixed window is one Windows must not let the user resize: its
+// minimum and its maximum are the same, which is also how a desktop
+// knows to drop the resize edges.
+func TestAFixedWindowCannotBeDragged(t *testing.T) {
+	s := testSurface(t, 360, 240)
+	if !GeometryOf(s).SetSizing(SizingFixed) {
+		t.Fatal("SetSizing(SizingFixed) refused")
+	}
+	mmi := askMinMax(s)
+	if mmi.MinTrackSize != mmi.MaxTrackSize {
+		t.Errorf("fixed window may still be dragged: min %v, max %v", mmi.MinTrackSize, mmi.MaxTrackSize)
+	}
+}
+
+// The other half of shading. Rolling up works without telling Windows
+// anything, because SetWindowPos is not clamped by the minimum tracking
+// size — but a drag is a resize the user makes and is, so without this a
+// rolled-up window can simply be dragged open again.
+//
+// The window is given real limits first: with none, Windows is told
+// nothing either way and the two tracking sizes are both zero, which
+// would make "pinned" and "not pinned" indistinguishable and the test
+// worthless. It said so for a while.
+func TestARolledUpWindowStaysRolledUp(t *testing.T) {
+	s := testSurfaceWith(t, WindowOptions{
+		Title: "uitoolkit shade", Width: 400, Height: 300,
+		MinWidth: 200, MinHeight: 150, MaxWidth: 900, MaxHeight: 700,
+	})
+	f := FrameOf(s)
+	base := askMinMax(s)
+	if base.MinTrackSize.Y >= base.MaxTrackSize.Y {
+		t.Fatalf("unshaded, the window should have room to resize: %+v", base)
+	}
+
+	if !f.SetShadedHeight(26) {
+		t.Fatal("SetShadedHeight refused")
+	}
+	sh := askMinMax(s)
+	if sh.MinTrackSize.Y != sh.MaxTrackSize.Y {
+		t.Errorf("rolled up, the window can still be dragged to another height: min %d, max %d",
+			sh.MinTrackSize.Y, sh.MaxTrackSize.Y)
+	}
+	if sh.MaxTrackSize.Y >= base.MaxTrackSize.Y {
+		t.Errorf("rolled up, the height was pinned at %d, no shorter than the %d it could already be",
+			sh.MaxTrackSize.Y, base.MaxTrackSize.Y)
+	}
+	// Only the height: a rolled-up window is still as wide as it was.
+	if sh.MinTrackSize.X != base.MinTrackSize.X || sh.MaxTrackSize.X != base.MaxTrackSize.X {
+		t.Errorf("shading changed the width limits: %v then %v", base.MinTrackSize, sh.MinTrackSize)
+	}
+
+	f.SetShadedHeight(0)
+	if back := askMinMax(s); back != base {
+		t.Errorf("unshaded, the limits did not come back: %+v, want %+v", back, base)
+	}
+}
+
+var procGetDpiForWindowT = user32.NewProc("GetDpiForWindow")
+
+// The window's scale, and the size that follows from it. This passes
+// trivially on a 96-DPI display and is the only thing that catches a
+// backend that never declared itself DPI-aware: Windows then answers 96
+// however the display is set, bitmap-scales the window, and every
+// assertion here still holds at the wrong size — so run it on a guest
+// set to something other than 100% (docs/windows.md).
+func TestTheWindowIsSizedForItsDisplaysDPI(t *testing.T) {
+	s := testSurface(t, 400, 300)
+	dpi, _, _ := procGetDpiForWindowT.Call(s.hwnd)
+	if dpi < 48 {
+		t.Skipf("GetDpiForWindow answered %d: too old a Windows to ask", dpi)
+	}
+	want := float32(dpi) / 96
+	if got := s.Scale(); got != want {
+		t.Errorf("Scale() = %v, want %v for %d DPI", got, want, dpi)
+	}
+	// The client area is the logical size times the scale, in device
+	// pixels — not the logical size in device pixels, which is what a
+	// window that is not DPI-aware gets and then has stretched for it.
+	c, _ := rects(t, s)
+	if got, want := int(c.Right-c.Left), DevicePixels(400, s.Scale()); got != want {
+		t.Errorf("client is %d device pixels wide at scale %v, want %d", got, s.Scale(), want)
+	}
+	if got, want := int(c.Bottom-c.Top), DevicePixels(300, s.Scale()); got != want {
+		t.Errorf("client is %d device pixels tall at scale %v, want %d", got, s.Scale(), want)
+	}
+	// And the buffer is that size, or the toolkit paints at the wrong one.
+	if bw, bh := s.Size(); bw != DevicePixels(400, s.Scale()) || bh != DevicePixels(300, s.Scale()) {
+		t.Errorf("buffer is %dx%d, want %dx%d", bw, bh,
+			DevicePixels(400, s.Scale()), DevicePixels(300, s.Scale()))
+	}
+	t.Logf("display is %d DPI, scale %v, client %dx%d", dpi, s.Scale(), c.Right-c.Left, c.Bottom-c.Top)
+}
+
+// Fullscreen is three steps an application does for itself on Windows —
+// remember the placement, take the frame off the style, cover the
+// monitor — because Windows has no fullscreen state to ask for. It used
+// to record the state and do none of them.
+func TestFullscreenCoversTheMonitorAndComesBack(t *testing.T) {
+	s := testSurface(t, 500, 380)
+	f := FrameOf(s)
+	before, _ := rects(t, s)
+	style := winStyleOf(s)
+
+	if !f.SetFullscreen(true) {
+		t.Fatal("SetFullscreen(true) refused")
+	}
+	const wsCaption, wsThickFrame = 0x00C00000, 0x00040000
+	if winStyleOf(s)&(wsCaption|wsThickFrame) != 0 {
+		t.Errorf("fullscreen style %#x still has a caption or a sizing border", winStyleOf(s))
+	}
+	full, _ := rects(t, s)
+	if full.Right-full.Left <= before.Right-before.Left ||
+		full.Bottom-full.Top <= before.Bottom-before.Top {
+		t.Errorf("fullscreen client %dx%d is no bigger than the %dx%d it was",
+			full.Right-full.Left, full.Bottom-full.Top,
+			before.Right-before.Left, before.Bottom-before.Top)
+	}
+	if !f.WindowState().Fullscreen {
+		t.Error("the window does not say it is fullscreen")
+	}
+
+	if !f.SetFullscreen(false) {
+		t.Fatal("SetFullscreen(false) refused")
+	}
+	if got := winStyleOf(s); got != style {
+		t.Errorf("style came back as %#x, was %#x", got, style)
+	}
+	if back, _ := rects(t, s); back != before {
+		t.Errorf("client came back %v, was %v", back, before)
+	}
+	if f.WindowState().Fullscreen {
+		t.Error("the window still says it is fullscreen")
+	}
+}
+
+// SetIcon answered false and did nothing. A window's icon is what the
+// caption, the task bar and Alt+Tab show.
+func TestSetIconGivesTheWindowAnIcon(t *testing.T) {
+	s := testSurface(t, 300, 220)
+	f := FrameOf(s)
+	if !f.FrameCaps().Has(FrameIcon) {
+		t.Skip("this window says it cannot carry an icon")
+	}
+	paint := func(side int, c paintengine2d.Color) *paintengine2d.Image {
+		im := paintengine2d.NewImage(side, side)
+		ctx := paintengine2d.NewContext(im)
+		ctx.DrawRect(paintengine2d.XYWH(0, 0, float32(side), float32(side)), paintengine2d.Fill(c))
+		return im
+	}
+	icons := []*paintengine2d.Image{
+		paint(16, paintengine2d.RGB(0.9, 0.2, 0.2)),
+		paint(32, paintengine2d.RGB(0.2, 0.7, 0.3)),
+		paint(48, paintengine2d.RGB(0.2, 0.3, 0.9)),
+	}
+	if !f.SetIcon(icons) {
+		t.Fatal("SetIcon refused")
+	}
+	// WM_GETICON (0x007F): ask the window back for what it now has.
+	for _, c := range []struct {
+		which uintptr
+		name  string
+	}{{iconSmall, "small"}, {iconBig, "big"}} {
+		got, _, _ := procSendMessage.Call(s.hwnd, 0x007F, c.which, 0)
+		if got == 0 {
+			t.Errorf("the window has no %s icon after SetIcon", c.name)
+		}
+	}
+	// And an empty list takes them away again.
+	if !f.SetIcon(nil) {
+		t.Fatal("SetIcon(nil) refused")
+	}
+	if got, _, _ := procSendMessage.Call(s.hwnd, 0x007F, iconSmall, 0); got != 0 {
+		t.Errorf("the small icon survived SetIcon(nil): %#x", got)
+	}
+}
+
+// pickIcon chooses per size rather than stretching one for both.
+func TestPickIconTakesTheNearestAtOrAbove(t *testing.T) {
+	im := func(side int) *paintengine2d.Image { return paintengine2d.NewImage(side, side) }
+	set := []*paintengine2d.Image{im(16), im(32), im(64)}
+	for _, c := range []struct{ want, side int }{
+		{16, 16}, {32, 17}, {32, 32}, {64, 33}, {64, 64}, {64, 256},
+	} {
+		if got := pickIcon(set, c.side); got == nil || got.Width != c.want {
+			t.Errorf("for %d pixels picked %v, want the %d", c.side, got, c.want)
+		}
+	}
+	if pickIcon(nil, 16) != nil {
+		t.Error("an empty set should pick nothing")
+	}
+}
+
+// Drag and drop, the receiving half. The COM object, its vtable and the
+// events it queues are exercised here; the IDataObject is not, because
+// only a real drag from another application has one — what is tested is
+// everything this backend is responsible for between Windows calling and
+// the toolkit hearing about it.
+func TestADropTargetIsRegisteredAndSpeaksToTheQueue(t *testing.T) {
+	s := testSurface(t, 400, 300)
+	if s.dropTarget == nil {
+		t.Fatal("RegisterDragDrop did not take: the window accepts no drops")
+	}
+	this := uintptr(unsafe.Pointer(s.dropTarget))
+	s.Poll()
+
+	kinds := func() []EventKind {
+		var out []EventKind
+		for _, ev := range s.Poll() {
+			switch ev.Kind {
+			case EventDragMotion, EventDragLeave, EventDrop:
+				out = append(out, ev.Kind)
+			}
+		}
+		return out
+	}
+	var effect uint32
+	call := func(slot uintptr, args ...uintptr) {
+		vt := s.dropTarget.vtbl
+		fn := [...]uintptr{vt.QueryInterface, vt.AddRef, vt.Release,
+			vt.DragEnter, vt.DragOver, vt.DragLeave, vt.Drop}[slot]
+		syscall.SyscallN(fn, append([]uintptr{this}, args...)...)
+	}
+
+	// The window has agreed to take a copy.
+	s.AcceptDrag("text/uri-list", DragCopy|DragMove, DragCopy)
+	call(3, 0, 0, 0, 0, uintptr(unsafe.Pointer(&effect))) // DragEnter
+	if effect != dropEffectCopy {
+		t.Errorf("DragEnter answered effect %d, want copy (%d)", effect, dropEffectCopy)
+	}
+	if got := kinds(); len(got) != 1 || got[0] != EventDragMotion {
+		t.Errorf("DragEnter queued %v, want one EventDragMotion", got)
+	}
+
+	// Having refused, the next answer is "no drop".
+	s.AcceptDrag("", 0, DragNone)
+	call(4, 0, 0, 0, uintptr(unsafe.Pointer(&effect))) // DragOver
+	if effect != dropEffectNone {
+		t.Errorf("after refusing, DragOver answered %d, want none", effect)
+	}
+
+	call(5)                                               // DragLeave
+	call(6, 0, 0, 0, 0, uintptr(unsafe.Pointer(&effect))) // Drop
+	if got := kinds(); len(got) != 3 ||
+		got[0] != EventDragMotion || got[1] != EventDragLeave || got[2] != EventDrop {
+		t.Errorf("queued %v, want motion, leave, drop", got)
+	}
+}
+
+// A drop is handed over as a uri-list, the way every other backend hands
+// files over, so nothing above the boundary learns what a path looks like
+// on Windows.
+func TestWindowsPathsBecomeFileURIs(t *testing.T) {
+	for _, c := range []struct{ in, want string }{
+		{`C:\Users\ic\a.txt`, "file:///C:/Users/ic/a.txt"},
+		{`C:\a b\c.txt`, "file:///C:/a%20b/c.txt"},
+		{`D:\π\x.md`, "file:///D:/%CF%80/x.md"},
+		{`C:\a#b\c&d.txt`, "file:///C:/a%23b/c%26d.txt"},
+	} {
+		if got := winFileURI(c.in); got != c.want {
+			t.Errorf("winFileURI(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+// Windows leaves the modifier convention to the target.
+func TestDragActionsFollowTheModifiers(t *testing.T) {
+	const ctrl, shift = 0x0008, 0x0004
+	for _, c := range []struct {
+		keys uintptr
+		want DragAction
+	}{
+		{0, DragCopy | DragMove | DragLink},
+		{ctrl, DragCopy},
+		{shift, DragMove},
+		{ctrl | shift, DragLink},
+	} {
+		if got := winDragActions(c.keys); got != c.want {
+			t.Errorf("keys %#x gave %v, want %v", c.keys, got, c.want)
+		}
+	}
+	for _, c := range []struct {
+		ok   bool
+		a    DragAction
+		want uint32
+	}{
+		{false, DragCopy, dropEffectNone},
+		{true, DragCopy, dropEffectCopy},
+		{true, DragMove, dropEffectMove},
+		{true, DragLink, dropEffectLink},
+	} {
+		if got := winEffectOf(c.ok, c.a); got != c.want {
+			t.Errorf("winEffectOf(%v, %v) = %d, want %d", c.ok, c.a, got, c.want)
+		}
+	}
+}
+
+// The source half. DoDragDrop itself cannot be driven from a test — it
+// blocks on a real gesture — but everything Explorer will call on the way
+// can be, and that is where the work is: the IDataObject's vtable, the
+// formats it offers, and the HGLOBALs it hands over.
+func TestADragSourceOffersWhatItCarries(t *testing.T) {
+	s := testSurface(t, 300, 200)
+	files := "file:///C:/a%20b/c.txt\r\nfile:///D:/x.md\r\n"
+	if !s.StartDrag(DragPayload{
+		Types: []string{"text/uri-list", "text/plain;charset=utf-8"},
+		Data: func(mime string) ([]byte, bool) {
+			switch mime {
+			case "text/uri-list":
+				return []byte(files), true
+			case "text/plain;charset=utf-8":
+				return []byte("hello"), true
+			}
+			return nil, false
+		},
+		Actions: DragCopy | DragMove,
+	}) {
+		t.Fatal("StartDrag refused")
+	}
+	d := s.pendingDrag
+	if d == nil {
+		t.Fatal("no drag is pending")
+	}
+	t.Cleanup(func() { s.pendingDrag = nil })
+
+	// Register it the way runPendingDrag would, then call it as a COM
+	// client does.
+	this := uintptr(unsafe.Pointer(&d.data))
+	winSrcMu.Lock()
+	winSrcBy[this] = d
+	winSrcMu.Unlock()
+	t.Cleanup(func() {
+		winSrcMu.Lock()
+		delete(winSrcBy, this)
+		winSrcMu.Unlock()
+	})
+
+	ask := func(cf uint16, tymed uint32) (winStgMedium, uintptr) {
+		f := winFormatEtc{Format: cf, Aspect: dvAspectContent, Index: -1, Tymed: tymed}
+		var m winStgMedium
+		r, _, _ := syscall.SyscallN(d.data.vtbl.GetData, this,
+			uintptr(unsafe.Pointer(&f)), uintptr(unsafe.Pointer(&m)))
+		return m, r
+	}
+	// QueryGetData says yes to what it carries and no to the rest.
+	q := func(cf uint16) uintptr {
+		f := winFormatEtc{Format: cf, Aspect: dvAspectContent, Index: -1, Tymed: tymedHGlobal}
+		r, _, _ := syscall.SyscallN(d.data.vtbl.QueryGetData, this, uintptr(unsafe.Pointer(&f)))
+		return r
+	}
+	if q(cfHDrop) != sOK || q(cfUnicodeText) != sOK {
+		t.Error("the drag does not offer the formats it was given")
+	}
+	if q(0xC0FE) == sOK {
+		t.Error("the drag claims a format it was never given")
+	}
+	// A medium it cannot provide is refused rather than faked.
+	if _, r := ask(cfHDrop, 0); r != dvENoTymed {
+		t.Errorf("GetData with no usable medium answered %#x, want DV_E_TYMED", r)
+	}
+	// Text comes back as UTF-16, NUL-terminated.
+	m, r := ask(cfUnicodeText, tymedHGlobal)
+	if r != sOK || m.Handle == 0 {
+		t.Fatalf("GetData(CF_UNICODETEXT) answered %#x", r)
+	}
+	if got := string(winTextFromGlobal(m.Handle)); got != "hello" {
+		t.Errorf("the text came back %q, want %q", got, "hello")
+	}
+	procGlobalFree.Call(m.Handle)
+
+	// And the files as a CF_HDROP, which is what Explorer reads.
+	m, r = ask(cfHDrop, tymedHGlobal)
+	if r != sOK || m.Handle == 0 {
+		t.Fatalf("GetData(CF_HDROP) answered %#x", r)
+	}
+	if got := string(winFilesFromHDrop(m.Handle)); got != files {
+		t.Errorf("the files came back %q, want %q", got, files)
+	}
+	procGlobalFree.Call(m.Handle)
+}
+
+// A uri-list and a Windows path list are the same thing said two ways,
+// and the round trip has to survive spaces and non-ASCII.
+func TestFileURIsRoundTripToWindowsPaths(t *testing.T) {
+	for _, p := range []string{
+		`C:\Users\ic\a.txt`, `C:\a b\c.txt`, `D:\π\x.md`, `C:\a#b\c&d.txt`,
+	} {
+		uri := winFileURI(p)
+		back, ok := winPathFromURI(uri)
+		if !ok || back != p {
+			t.Errorf("%q -> %q -> %q (ok %v)", p, uri, back, ok)
+		}
+	}
+	if _, ok := winPathFromURI("http://example.com/x"); ok {
+		t.Error("a non-file URI should not become a path")
+	}
+}
+
+// What the drag allows, and what came back, in Windows' vocabulary.
+func TestDragEffectsMapBothWays(t *testing.T) {
+	if got := winEffectsOf(DragCopy | DragMove); got != dropEffectCopy|dropEffectMove {
+		t.Errorf("allowed copy|move became %d", got)
+	}
+	for _, c := range []struct {
+		e    uint32
+		want DragAction
+	}{
+		{dropEffectNone, DragNone}, {dropEffectCopy, DragCopy},
+		{dropEffectMove, DragMove}, {dropEffectLink, DragLink},
+	} {
+		if got := winActionOf(c.e); got != c.want {
+			t.Errorf("effect %d became %v, want %v", c.e, got, c.want)
+		}
 	}
 }

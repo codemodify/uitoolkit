@@ -67,11 +67,8 @@ reshaped seam was for.
 | | |
 | --- | --- |
 | `SetPalette` | Takes a path to a KDE colour-scheme file. Windows 11 wants three `COLORREF`s through `DwmSetWindowAttribute`. The signature is an open question, so this answers **false** rather than pretending |
-| `SetIcon` | `WM_SETICON` with `ICON_SMALL`/`ICON_BIG`. Not built |
 | `MaximizeAxis` | Windows has no per-axis maximize at all. Correctly **false** |
-| Size limits | **A capability that lies, and the first thing to fix.** `GeometrySizeLimits` is advertised and `SizeLimits()` answers, but nothing is ever said to Windows: `WM_GETMINMAXINFO` is not handled, so a window can be dragged to any size whatever it states. The same message is the missing half of `SetShadedHeight` — rolling a window up works, because `SetWindowPos` is not clamped, but nothing stops the user dragging a rolled-up window open again. Reading `MINMAXINFO` means turning an `LPARAM` back into a pointer, which `go vet` will not have, so it needs a way through that keeps the Windows build vet-clean |
-| `SetFullscreen` | Records the state but does not yet save the placement, drop the style and cover the monitor |
-| Drag and drop | Not started, **on purpose**. `DoDragDrop` is a *blocking* modal call and `IDropTarget::DragOver` answers *synchronously*, where the toolkit's contract is asynchronous. That is a run-loop mismatch, not a vocabulary one, and it should be built against the real API and allowed to dictate the seam rather than designed on paper |
+| `SetShadedHeight` | Built. `WM_GETMINMAXINFO` pins the height of a rolled-up window, which is the half a drag needs — `SetWindowPos` was never clamped, so rolling up worked without it |
 | The suggested DPI rectangle | `WM_DPICHANGED` carries a rectangle Windows would like the window moved to. Reading it means turning an `LPARAM` back into a pointer, which `go vet` will not have; the window is re-sized from its logical size and the new scale instead, which lands in the same place for an ordinary drag between two monitors |
 
 ## Why the pixels go up through a DIB section
@@ -108,6 +105,40 @@ happened to be a committed page after the buffer. A DIB section has no
 such edge — the memory is GDI's, sized by GDI — and blitting from a
 memory DC is the faster path anyway, since the header is parsed once at
 creation instead of once a frame.
+
+## Drag and drop, and the one thing it costs
+
+Both halves are built, on OLE, in Go without cgo: a vtable of
+`syscall.NewCallback` entries and objects whose first word points at it.
+
+**Taking a drop** is `RegisterDragDrop` and an `IDropTarget`. The
+mismatch it was deferred for is real and is bridged rather than solved:
+`IDropTarget::DragOver` must answer *now* with the effect the window
+would have, and the toolkit answers *later*, because `EventDragMotion`
+goes on the queue and the application replies with `AcceptDrag` when it
+gets to it. Making the synchronous question wait would mean running the
+toolkit's loop inside a COM call. So the answer given is the last one the
+application settled on, and the motion is queued for the next turn: a
+drag that has just arrived is offered whatever that window last agreed to
+take and is corrected a frame later.
+
+**Starting a drag** is `DoDragDrop`, and **it blocks** — a modal loop of
+its own until the user drops or gives up. `StartDrag` therefore records
+the payload and answers at once; `Poll` runs the drag on the next turn,
+so the blocking happens inside the toolkit's loop where blocking is
+already expected, rather than half way down an event handler.
+
+What that costs, plainly: **for the length of the drag the source window
+does not repaint.** Windows pumps messages during its modal loop, so the
+window procedure runs and everything it queues is waiting afterwards, but
+nothing drains that queue until the drag ends. An application that paints
+from `WM_PAINT` does not have this problem and one that paints from its
+own loop does. The alternative is re-entering the toolkit from inside
+`IDropSource::GiveFeedback`, which Windows calls throughout — the
+re-entrancy the window procedure exists to avoid.
+
+Files cross as a `text/uri-list` and text as UTF-8, both ways, so nothing
+above the boundary learns what a path looks like on Windows.
 
 ## Building an app for Windows
 
