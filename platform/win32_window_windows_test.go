@@ -243,8 +243,11 @@ func TestAWindowRollsUpToItsTitleBar(t *testing.T) {
 	}
 	s.Poll()
 	c, _ := rects(t, s)
-	if h := c.Bottom - c.Top; h != 24 {
-		t.Errorf("rolled up to %d pixels, asked for 24: the resize was clamped, so a shaded window springs open", h)
+	// Resize speaks logical pixels and the client rectangle is device
+	// pixels, which are not the same thing anywhere but a 96-DPI display.
+	if h, want := int(c.Bottom-c.Top), DevicePixels(24, s.Scale()); h != want {
+		t.Errorf("rolled up to %d device pixels at scale %v, asked for 24 logical (%d): the resize was clamped, so a shaded window springs open",
+			h, s.Scale(), want)
 	}
 }
 
@@ -342,4 +345,40 @@ func TestARolledUpWindowStaysRolledUp(t *testing.T) {
 	if back := askMinMax(s); back != base {
 		t.Errorf("unshaded, the limits did not come back: %+v, want %+v", back, base)
 	}
+}
+
+var procGetDpiForWindowT = user32.NewProc("GetDpiForWindow")
+
+// The window's scale, and the size that follows from it. This passes
+// trivially on a 96-DPI display and is the only thing that catches a
+// backend that never declared itself DPI-aware: Windows then answers 96
+// however the display is set, bitmap-scales the window, and every
+// assertion here still holds at the wrong size — so run it on a guest
+// set to something other than 100% (docs/windows.md).
+func TestTheWindowIsSizedForItsDisplaysDPI(t *testing.T) {
+	s := testSurface(t, 400, 300)
+	dpi, _, _ := procGetDpiForWindowT.Call(s.hwnd)
+	if dpi < 48 {
+		t.Skipf("GetDpiForWindow answered %d: too old a Windows to ask", dpi)
+	}
+	want := float32(dpi) / 96
+	if got := s.Scale(); got != want {
+		t.Errorf("Scale() = %v, want %v for %d DPI", got, want, dpi)
+	}
+	// The client area is the logical size times the scale, in device
+	// pixels — not the logical size in device pixels, which is what a
+	// window that is not DPI-aware gets and then has stretched for it.
+	c, _ := rects(t, s)
+	if got, want := int(c.Right-c.Left), DevicePixels(400, s.Scale()); got != want {
+		t.Errorf("client is %d device pixels wide at scale %v, want %d", got, s.Scale(), want)
+	}
+	if got, want := int(c.Bottom-c.Top), DevicePixels(300, s.Scale()); got != want {
+		t.Errorf("client is %d device pixels tall at scale %v, want %d", got, s.Scale(), want)
+	}
+	// And the buffer is that size, or the toolkit paints at the wrong one.
+	if bw, bh := s.Size(); bw != DevicePixels(400, s.Scale()) || bh != DevicePixels(300, s.Scale()) {
+		t.Errorf("buffer is %dx%d, want %dx%d", bw, bh,
+			DevicePixels(400, s.Scale()), DevicePixels(300, s.Scale()))
+	}
+	t.Logf("display is %d DPI, scale %v, client %dx%d", dpi, s.Scale(), c.Right-c.Left, c.Bottom-c.Top)
 }

@@ -460,8 +460,20 @@ func newWinSurface(opts WindowOptions) (Surface, error) {
 	win32ByHWND[hwnd] = s
 	win32Mu.Unlock()
 
+	// The scale cannot be known until the window exists — GetDpiForWindow
+	// wants an HWND — so the window above was made at the logical size
+	// and is corrected here. Left out, a window asked for 400x300 was
+	// 400x300 *device* pixels on a 150% display while its buffer was
+	// 600x450: the toolkit painted at one size into a window of another.
 	s.scale = s.readDPI()
 	s.resizeBuffer(DevicePixels(w, s.scale), DevicePixels(h, s.scale))
+	if s.scale != 1 {
+		r := winRect{0, 0, int32(s.bufW), int32(s.bufH)}
+		procAdjustWindow.Call(uintptr(unsafe.Pointer(&r)), winAdjustStyle(opts.Decorations), 0, 0)
+		procSetWindowPos.Call(hwnd, 0, 0, 0,
+			uintptr(r.Right-r.Left), uintptr(r.Bottom-r.Top),
+			swpNoMove|swpNoZOrder|swpNoActive)
+	}
 	s.limits = limitsFor(s.sizing, opts, w, h)
 	// A window born with the toolkit's frame needs the frame recalculated
 	// once here. CreateWindowExW sends its WM_NCCALCSIZE before the
