@@ -83,8 +83,13 @@ static double flipY(double y) {
 // to a queue — the same rule the rest of this file keeps. In
 // particular it does not draw: the layer's contents is the frame (see
 // the note at the top), so there is no drawRect: here at all.
+// Defined in cursor_darwin.go's preamble: the NSCursor for one of the
+// numbers darwinCursorKind produces.
+extern NSCursor *uitk_nscursor_for(int kind);
+
 @interface UitkView : NSView
 @property(assign) uintptr_t sid;
+@property(assign) int cursorKind;
 // strong, not assign: ARC would release the tracking area the moment it
 // was stored and the view would be left pointing at freed memory.
 @property(strong) NSTrackingArea *tracking;
@@ -112,8 +117,8 @@ static double flipY(double y) {
 	[super updateTrackingAreas];
 	if (self.tracking) [self removeTrackingArea:self.tracking];
 	NSTrackingAreaOptions opts = NSTrackingMouseEnteredAndExited |
-	                             NSTrackingMouseMoved | NSTrackingActiveInKeyWindow |
-	                             NSTrackingInVisibleRect;
+	                             NSTrackingMouseMoved | NSTrackingCursorUpdate |
+	                             NSTrackingActiveInKeyWindow | NSTrackingInVisibleRect;
 	self.tracking = [[NSTrackingArea alloc] initWithRect:self.bounds
 	                                            options:opts owner:self userInfo:nil];
 	[self addTrackingArea:self.tracking];
@@ -152,6 +157,13 @@ static double flipY(double y) {
 - (void)rightMouseDragged:(NSEvent *)e { [self send:UITK_AK_MOUSE_MOVE event:e button:0]; }
 - (void)otherMouseDragged:(NSEvent *)e { [self send:UITK_AK_MOUSE_MOVE event:e button:0]; }
 - (void)mouseEntered:(NSEvent *)e      { [self send:UITK_AK_MOUSE_MOVE event:e button:0]; }
+
+// AppKit asks every time the pointer moves over the view, and the
+// default answer would put the arrow back. Answering here is the half
+// that makes a shape stick; see -[akSurface SetCursor].
+- (void)cursorUpdate:(NSEvent *)e {
+	[uitk_nscursor_for(self.cursorKind) set];
+}
 
 - (void)mouseExited:(NSEvent *)e {
 	NSPoint p = [self where:e];
@@ -615,5 +627,15 @@ void uitk_ak_post_mouse(void *w, int kind, double x, double y,
 		                              clickCount:1
 		                                pressure:1.0];
 		if (e) [NSApp postEvent:e atStart:NO];
+	}
+}
+
+void uitk_ak_set_cursor(void *w, int kind) {
+	if (!w) return;
+	@autoreleasepool {
+		NSWindow *win = (__bridge NSWindow *)w;
+		if ([win.contentView isKindOfClass:[UitkView class]]) {
+			((UitkView *)win.contentView).cursorKind = kind;
+		}
 	}
 }

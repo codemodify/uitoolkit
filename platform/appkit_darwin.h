@@ -82,6 +82,11 @@ int uitk_ak_start_move(void *win);
 // premultiplied RGBA pixels: macOS has no per-window icon.
 void uitk_ak_set_app_icon(const unsigned char *pix, int w, int h);
 
+// uitk_ak_set_cursor remembers the pointer shape the content area
+// should have, so -[UitkView cursorUpdate:] can put it back every time
+// AppKit asks. kind is what darwinCursorKind returns (cursor.go).
+void uitk_ak_set_cursor(void *win, int kind);
+
 // uitk_ak_present puts w by h premultiplied RGBA pixels on the window.
 void uitk_ak_present(void *win, const unsigned char *pix, int w, int h);
 

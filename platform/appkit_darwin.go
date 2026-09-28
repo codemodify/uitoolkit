@@ -84,6 +84,8 @@ type akSurface struct {
 	// pointerIn tracks whether the pointer is over the content area, so
 	// a leave is reported once and not on every move outside it.
 	pointerIn bool
+	// cursor is the shape this window asked for (cursor_darwin.go).
+	cursor Cursor
 
 	opts WindowOptions
 }

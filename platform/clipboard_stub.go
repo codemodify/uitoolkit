@@ -1,4 +1,4 @@
-//go:build (!linux && !windows) || (!cgo && !windows)
+//go:build (!linux && !windows && !darwin) || (!cgo && !windows)
 
 package platform
 

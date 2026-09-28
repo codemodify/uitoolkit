@@ -255,18 +255,61 @@ func win32CursorID(c Cursor) uintptr {
 	}
 }
 
-// darwinCursorKind picks an NSCursor: AppKit has left/right and up/down
-// resize cursors but no public diagonal ones, so corners keep the arrow.
+// The NSCursor a shape maps to, as a number the Objective-C side
+// switches on (cursor_darwin.go). The first four keep the values they
+// had when this was only used by the tray.
+//
+// AppKit publishes no diagonal resize cursor before macOS 15, which
+// added +[NSCursor frameResizeCursorFromPosition:inDirection:]. The
+// four corners are named here anyway and the C side falls back to the
+// arrow on an older system, rather than this file having to know what
+// macOS version it is running on.
+const (
+	akCursorArrow = iota
+	akCursorResizeWE
+	akCursorResizeNS
+	akCursorIBeam
+	akCursorOpenHand
+	akCursorClosedHand
+	akCursorPointingHand
+	akCursorDragCopy
+	akCursorDragLink
+	akCursorNoDrop
+	akCursorResizeNWSE
+	akCursorResizeNESW
+)
+
+// darwinCursorKind picks an NSCursor.
 func darwinCursorKind(c Cursor) int {
 	switch c {
 	case CursorColResize, CursorResizeE, CursorResizeW:
-		return 1
+		return akCursorResizeWE
 	case CursorRowResize, CursorResizeN, CursorResizeS:
-		return 2
+		return akCursorResizeNS
 	case CursorText:
-		return 3
+		return akCursorIBeam
+	case CursorResizeNW, CursorResizeSE:
+		return akCursorResizeNWSE
+	case CursorResizeNE, CursorResizeSW:
+		return akCursorResizeNESW
+	case CursorGrab:
+		return akCursorOpenHand
+	// The Mac has no four-way move pointer. Dragging something around is
+	// the closed hand here, which is what Finder and Preview both use
+	// and what Win32 spells IDC_SIZEALL.
+	case CursorGrabbing, CursorMove:
+		return akCursorClosedHand
+	case CursorDragCopy:
+		return akCursorDragCopy
+	case CursorDragLink:
+		return akCursorDragLink
+	case CursorNoDrop:
+		return akCursorNoDrop
+	// CursorDragMove keeps the arrow: a plain move is what macOS shows
+	// nothing special for, and the badge-less arrow is the shape that
+	// says "this will move".
 	default:
-		return 0
+		return akCursorArrow
 	}
 }
 

@@ -460,3 +460,74 @@ func kindsOf(evs []Event) string {
 	}
 	return out
 }
+
+// The pasteboard round-trips, and a read finds what another process
+// would have put there.
+//
+// This one writes to the *real* pasteboard of the machine it runs on,
+// which is a side effect a test should own up to: the Mac these run on
+// is a build machine, and what was on its clipboard is gone. There is
+// no per-process pasteboard to use instead — NSPasteboard general is
+// the system's one — and a test against a named pasteboard of our own
+// would not be testing the code that ships.
+func TestAppKitClipboardRoundTrips(t *testing.T) {
+	const want = "uitoolkit pasteboard ✓ 日本語"
+	ClipboardSet(want)
+	got, ok := clipboardNativeGet()
+	if !ok {
+		t.Fatal("the pasteboard holds no string after one was set")
+	}
+	if got != want {
+		t.Errorf("the pasteboard holds %q, want %q", got, want)
+	}
+	if got := ClipboardGet(); got != want {
+		t.Errorf("ClipboardGet is %q, want %q", got, want)
+	}
+	// No PRIMARY here, so it answers from the same place rather than
+	// from a second selection that does not exist.
+	if got := ClipboardPrimaryGet(); got != want {
+		t.Errorf("ClipboardPrimaryGet is %q, want %q", got, want)
+	}
+}
+
+// Setting the cursor is remembered and answered, and does not need the
+// pointer to be over the window for the shape to be recorded.
+func TestAppKitCursorIsRemembered(t *testing.T) {
+	onMain(func() {
+		s := akTestWindow(t, 320, 200)
+		if got := s.Cursor(); got != CursorDefault {
+			t.Errorf("a new window starts with cursor %v, want the default", got)
+		}
+		s.SetCursor(CursorText)
+		if got := s.Cursor(); got != CursorText {
+			t.Errorf("after asking for a text cursor: %v", got)
+		}
+		s.SetCursor(CursorGrabbing)
+		if got := s.Cursor(); got != CursorGrabbing {
+			t.Errorf("after asking for a grabbing cursor: %v", got)
+		}
+	})
+}
+
+// Every shape the toolkit names maps to an NSCursor, and the ones that
+// should differ do. A mapping that quietly sent everything to the
+// arrow would pass a "does SetCursor work" test and be useless.
+func TestAppKitCursorShapesAreDistinct(t *testing.T) {
+	distinct := map[int][]Cursor{}
+	for _, c := range []Cursor{
+		CursorDefault, CursorColResize, CursorRowResize, CursorText,
+		CursorGrab, CursorGrabbing, CursorDragCopy, CursorDragLink, CursorNoDrop,
+	} {
+		k := darwinCursorKind(c)
+		distinct[k] = append(distinct[k], c)
+	}
+	if len(distinct) != 9 {
+		t.Errorf("nine shapes that should differ map to %d NSCursors: %v", len(distinct), distinct)
+	}
+	if darwinCursorKind(CursorResizeE) != darwinCursorKind(CursorColResize) {
+		t.Error("an east resize and a column resize are the same left-right pointer")
+	}
+	if darwinCursorKind(CursorResizeN) != darwinCursorKind(CursorRowResize) {
+		t.Error("a north resize and a row resize are the same up-down pointer")
+	}
+}

@@ -93,6 +93,16 @@ window where it is asked and tells you where it ended up.
 | `FramePalette` / `SetPalette` | The file it names is a KDE colour scheme. AppKit's frame takes its colours from the system appearance. |
 | `FrameBlurBehind` | `NSVisualEffectView` is a *view*, not a window property, and the frame seam has no way to put one behind a buffer the toolkit paints. |
 
+The **diagonal resize pointers** bend the same way. AppKit publishes no
+corner-resize cursor: the one the window frame draws is private, and the
+public `+[NSCursor frameResizeCursorFromPosition:inDirection:]` is too
+new to rely on — it is missing from command line tools that are
+otherwise current, so calling it would make the toolkit fail to build on
+up-to-date Macs. The arrow stands in, and it costs little: macOS resizes
+windows from its own band, so a diagonal is only ever asked for by
+something the toolkit draws inside its own window, and a splitter is
+horizontal or vertical.
+
 `SetIcon` is the one that bends rather than refuses. macOS has no
 per-window icon — a title bar shows one only for a document, and that
 one is the document's file — so it sets the **application's** icon, the
@@ -106,9 +116,8 @@ tile.
 - **IME.** `NSTextInputClient` is not implemented, so there is no
   preedit and CJK input does not work. This is the same gap Windows
   has (`WM_IME_*`), and the largest one on either platform.
-- **The clipboard and drag and drop.** `NSPasteboard` and
-  `NSDraggingSource` / `NSDraggingDestination` are not wired up.
-- **The pointer shape.** `NSCursor` is not wired to `CursorSurface`.
+- **Drag and drop.** `NSDraggingSource` and `NSDraggingDestination` are
+  not wired up.
 - **Font enumeration.** There is no fontconfig on macOS, so
   `style/sysfont.go` finds nothing and every pack falls back to the
   bundled Titillium Web and JetBrains Mono. CoreText would enumerate
@@ -120,6 +129,23 @@ tile.
   not fire on Cmd+S. Mapping Command to `ModCtrl` in the backend would
   make `Mods` lie to everything that reads it; the translation belongs
   above `platform`, and is not written yet.
+
+## The clipboard and the pointer
+
+`NSPasteboard` is the easiest clipboard of the three. X11 has to own a
+selection and keep answering requests for it after the window is gone;
+Wayland has to hold a `wl_data_device`; NSPasteboard is a *server* the
+system runs, so setting a string hands it over and there is nothing to
+serve afterwards — no background drainer, and no paste that can hang
+waiting for another application. There is no PRIMARY selection, exactly
+as on Windows, so `ClipboardPrimaryGet` answers from the same place
+rather than pretending to a second one.
+
+The pointer is `NSCursor`, and like `WM_SETCURSOR` on Windows it takes
+two halves: setting the shape now, for a widget the pointer has just
+crossed into, and answering `-[NSView cursorUpdate:]` every time AppKit
+asks afterwards. A backend that does only the first gets the
+arrow-over-text flicker.
 
 ## Testing it
 
