@@ -930,63 +930,88 @@ func captionTitle(l *Classic, ctx *paintengine2d.Context, f *Font, b paintengine
 	l.drawFittedText(ctx, f, title, paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad, b.Dy()), col, AlignStart, 0)
 }
 
-// drawCaptionPin draws the keep-above pushpin inside g: head, shaft and
-// point, upright when the window is pinned and lying on its side, head to
-// the left, when it is not.
+// drawCaptionPin draws the keep-above pushpin inside g.
 //
-// The two are one shape with its axes swapped, which is why it is written
-// once: a pin that changed its proportions as it turned would read as two
-// different pins rather than as one pin in two states.
+// The shape is the one every desktop's "pin" icon is: a round head, a
+// collar, and a needle running out of it at an angle — the pin lying
+// loose. Pinned, the same pin is driven straight in, so it stands
+// upright and shows its head face-on.
+//
+// The diagonal is a stair of whole pixels, not a sloped edge. Every
+// caption glyph here is whole opaque or whole clear pixels at any scale,
+// which TestCaptionGlyphsAreCrisp holds them to; a drawn diagonal
+// anti-aliases and fails it. Stepping it is also what a pin looks like
+// in an icon set drawn for small sizes, which is the size this gets.
 func drawCaptionPin(ctx *paintengine2d.Context, g paintengine2d.Rect, s, lw float32, pinned bool, fill paintengine2d.Paint) {
 	round := func(v float32) float32 { return float32(math.Round(float64(v))) }
-	// A thumbtack's silhouette is three widths, not two: a broad flat cap,
-	// a shorter neck under it, then the needle. Drawn as cap and needle
-	// alone it comes out a nail.
-	head := max(round(s*0.24), lw) // how deep the cap is
-	wide := max(round(s*0.70), 3)  // how wide the cap is across
-	neck := max(round(s*0.16), 1)  // how deep the neck is
-	neckW := max(round(s*0.38), 2) // and how wide
-	shaft := max(round(s*0.16), 1) // the needle's thickness
-	if shaft > neckW {
-		shaft = neckW
+	px := func(x, y, w, h float32) paintengine2d.Rect {
+		return paintengine2d.XYWH(g.Min.X+x, g.Min.Y+y, w, h)
 	}
-	if neckW > wide {
-		neckW = wide
-	}
-	tip := max(round(s*0.24), 1) // how long the point is
-	for head+neck+tip >= s {     // at the smallest sizes, give up the neck
-		if neck > 0 {
-			neck = 0
-			continue
-		}
-		head, tip = max(round(s*0.25), 1), max(round(s*0.25), 1)
-		break
-	}
-	mid := round(s * 0.5)
-
-	// Laid out along one axis and centred across the other, then handed to
-	// the path in whichever order this orientation wants.
-	at := func(along, across, dAlong, dAcross float32) paintengine2d.Rect {
-		if pinned {
-			return paintengine2d.XYWH(g.Min.X+across, g.Min.Y+along, dAcross, dAlong)
-		}
-		return paintengine2d.XYWH(g.Min.X+along, g.Min.Y+across, dAlong, dAcross)
-	}
-
 	p := paintengine2d.NewPath()
-	p.AddRect(at(0, round(mid-wide*0.5), head, wide)) // the cap
-	if neck > 0 {
-		p.AddRect(at(head, round(mid-neckW*0.5), neck, neckW)) // the neck
+
+	if pinned {
+		// Driven in: head across the top, collar under it, needle down
+		// the middle to a point. All square, all crisp.
+		head := max(round(s*0.26), lw)
+		wide := max(round(s*0.66), 3)
+		neck := max(round(s*0.14), 1)
+		neckW := max(round(s*0.40), 2)
+		shaft := max(round(s*0.18), 1)
+		tip := max(round(s*0.24), 1)
+		mid := round(s * 0.5)
+		if head+neck+tip >= s {
+			head, neck, tip = max(round(s*0.3), 1), 0, max(round(s*0.25), 1)
+		}
+		p.AddRect(px(round(mid-wide*0.5), 0, wide, head))
+		if neck > 0 {
+			p.AddRect(px(round(mid-neckW*0.5), head, neckW, neck))
+		}
+		p.AddRect(px(round(mid-shaft*0.5), head+neck, shaft, s-head-neck-tip))
+		for i := float32(0); i < tip; i++ {
+			w := max(round(shaft*(1-(i+1)/tip)), 1)
+			p.AddRect(px(round(mid-w*0.5), s-tip+i, w, 1))
+		}
+		ctx.DrawPath(p, fill)
+		return
 	}
-	p.AddRect(at(head+neck, round(mid-shaft*0.5), s-head-neck-tip, shaft)) // the needle
-	// The point, as a stair rather than a triangle. A diagonal edge is
-	// the one thing these glyphs may not have: every caption glyph is
-	// whole opaque or whole clear pixels at every scale, which
-	// TestCaptionGlyphsAreCrisp holds them to, and a sloped point
-	// anti-aliases. One device pixel per step, narrowing to one.
-	for i := float32(0); i < tip; i++ {
-		w := max(round(shaft*(1-(i+1)/tip)), 1)
-		p.AddRect(at(s-tip+i, round(mid-w*0.5), 1, w))
+
+	// Loose: the head up and to the right, the needle running down to the
+	// left, the way a pin lies when it is not holding anything.
+	head := max(round(s*0.42), 3) // the head's span, across the diagonal
+	shaft := max(round(s*0.20), 1)
+	// The head: a stepped disc, widest through its middle, so it reads
+	// round at the sizes that have the pixels for it and as a square blob
+	// at the ones that do not.
+	hx, hy := round(s-head), float32(0)
+	rows := head
+	for i := float32(0); i < rows; i++ {
+		inset := float32(0)
+		if rows >= 5 {
+			// Clip one pixel off each corner, two off the very corners of
+			// a large head: enough to round it without a sloped edge.
+			switch {
+			case i == 0 || i == rows-1:
+				inset = round(rows * 0.28)
+			case i == 1 || i == rows-2:
+				inset = round(rows * 0.12)
+			}
+		}
+		w := rows - 2*inset
+		if w < 1 {
+			w = 1
+		}
+		p.AddRect(px(hx+inset, hy+i, w, 1))
+	}
+	// The needle: one step down and one step left per row, from under the
+	// head to the point, thinning to a single pixel at the end.
+	x, y := round(hx+head*0.5-shaft*0.5), hy+head
+	steps := min(round(x), round(s-y))
+	for i := float32(0); i < steps; i++ {
+		w := shaft
+		if left := steps - i; left <= shaft {
+			w = max(left, 1) // the point
+		}
+		p.AddRect(px(x-i-w+shaft, y+i, w, 1))
 	}
 	ctx.DrawPath(p, fill)
 }
