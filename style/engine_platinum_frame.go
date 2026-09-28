@@ -176,12 +176,7 @@ func (platinumEngine) DrawCaptionButton(l *Classic, ctx *paintengine2d.Context, 
 		ctx.DrawRect(in.Inset(u*0.5), paintengine2d.StrokePaint(ink, u))
 		ctx.DrawRect(paintengine2d.XYWH(in.Min.X, in.Min.Y, in.Dx(), 2*u), paintengine2d.Fill(ink))
 	case CaptionKeepAbove:
-		ctx.DrawRect(paintengine2d.XYWH(in.Min.X, in.Min.Y, in.Dx(), u), paintengine2d.Fill(ink))
-		body := paintengine2d.XYWH(in.Min.X, snap(in.Min.Y+2*u), in.Dx(), snap(in.Dy()-2*u))
-		if CaptionAlt(k, cs, st) {
-			ctx.DrawRect(body, paintengine2d.Fill(ink))
-			return
-		}
-		ctx.DrawRect(body.Inset(u*0.5), paintengine2d.StrokePaint(ink, u))
+		// The toolkit's pin, in this pack's ink.
+		DrawCaptionGlyph(ctx, in, k, CaptionAlt(k, cs, st), ink, in.Dx(), u)
 	}
 }

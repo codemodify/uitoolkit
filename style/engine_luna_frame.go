@@ -183,13 +183,10 @@ func lunaGlyph(ctx *paintengine2d.Context, b paintengine2d.Rect, k CaptionButton
 	case CaptionMenu:
 		box(x0+px(5), y0+px(6), px(11), px(9))
 	case CaptionKeepAbove:
-		ctx.DrawRect(paintengine2d.XYWH(x0+px(5), y0+px(4), px(11), thin), fill)
-		body := paintengine2d.XYWH(x0+px(5), y0+px(8), px(11), px(9))
-		if alt {
-			ctx.DrawRect(body, fill)
-			return
-		}
-		box(body.Min.X, body.Min.Y, body.Dx(), body.Dy())
+		// The toolkit's pin, in Luna's ink: one symbol for keep-above
+		// across every pack, rather than a pin here and a ceiling with a
+		// window under it there.
+		DrawCaptionGlyph(ctx, b, k, alt, col, snap(b.Dx()*0.62), max(thin, 1))
 	case CaptionClose:
 		lunaCross(ctx, b.Inset(snap(b.Dx()*0.27)), col, max(b.Dx()*0.13, lw*1.5))
 	}

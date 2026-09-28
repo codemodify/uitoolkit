@@ -932,86 +932,85 @@ func captionTitle(l *Classic, ctx *paintengine2d.Context, f *Font, b paintengine
 
 // drawCaptionPin draws the keep-above pushpin inside g.
 //
-// The shape is the one every desktop's "pin" icon is: a round head, a
-// collar, and a needle running out of it at an angle — the pin lying
-// loose. Pinned, the same pin is driven straight in, so it stands
-// upright and shows its head face-on.
+// One pin, two orientations. Along its axis it is a needle, then the
+// plate it is pushed in by, then the barrel, then the handle — the
+// silhouette every pushpin icon has. Pinned, that axis runs straight
+// down and the pin is seen driven in; loose, it lies over at 45° the way
+// a pin does when it is holding nothing.
 //
-// The diagonal is a stair of whole pixels, not a sloped edge. Every
-// caption glyph here is whole opaque or whole clear pixels at any scale,
-// which TestCaptionGlyphsAreCrisp holds them to; a drawn diagonal
-// anti-aliases and fails it. Stepping it is also what a pin looks like
-// in an icon set drawn for small sizes, which is the size this gets.
+// Both are built from the same profile, so the two states read as one
+// pin turning rather than as two different pins, and both are whole
+// pixels: every caption glyph here is fully opaque or fully clear at any
+// scale, which TestCaptionGlyphsAreCrisp holds them to, and a drawn
+// diagonal anti-aliases. Stepping it is what an icon drawn for small
+// sizes does anyway, which is the size a caption button gets.
 func drawCaptionPin(ctx *paintengine2d.Context, g paintengine2d.Rect, s, lw float32, pinned bool, fill paintengine2d.Paint) {
-	round := func(v float32) float32 { return float32(math.Round(float64(v))) }
-	px := func(x, y, w, h float32) paintengine2d.Rect {
-		return paintengine2d.XYWH(g.Min.X+x, g.Min.Y+y, w, h)
-	}
-	p := paintengine2d.NewPath()
-
-	if pinned {
-		// Driven in: head across the top, collar under it, needle down
-		// the middle to a point. All square, all crisp.
-		head := max(round(s*0.26), lw)
-		wide := max(round(s*0.66), 3)
-		neck := max(round(s*0.14), 1)
-		neckW := max(round(s*0.40), 2)
-		shaft := max(round(s*0.18), 1)
-		tip := max(round(s*0.24), 1)
-		mid := round(s * 0.5)
-		if head+neck+tip >= s {
-			head, neck, tip = max(round(s*0.3), 1), 0, max(round(s*0.25), 1)
+	n := int(max(float32(math.Round(float64(s))), 5))
+	// w is how wide the pin is across, at step i along its axis counting
+	// from the point.
+	w := func(i int) int {
+		t := float32(i) / float32(n-1)
+		at := func(f float32, least int) int {
+			return max(int(math.Round(float64(float32(n)*f))), least)
 		}
-		p.AddRect(px(round(mid-wide*0.5), 0, wide, head))
-		if neck > 0 {
-			p.AddRect(px(round(mid-neckW*0.5), head, neckW, neck))
-		}
-		p.AddRect(px(round(mid-shaft*0.5), head+neck, shaft, s-head-neck-tip))
-		for i := float32(0); i < tip; i++ {
-			w := max(round(shaft*(1-(i+1)/tip)), 1)
-			p.AddRect(px(round(mid-w*0.5), s-tip+i, w, 1))
-		}
-		ctx.DrawPath(p, fill)
-		return
-	}
-
-	// Loose: the head up and to the right, the needle running down to the
-	// left, the way a pin lies when it is not holding anything.
-	head := max(round(s*0.42), 3) // the head's span, across the diagonal
-	shaft := max(round(s*0.20), 1)
-	// The head: a stepped disc, widest through its middle, so it reads
-	// round at the sizes that have the pixels for it and as a square blob
-	// at the ones that do not.
-	hx, hy := round(s-head), float32(0)
-	rows := head
-	for i := float32(0); i < rows; i++ {
-		inset := float32(0)
-		if rows >= 5 {
-			// Clip one pixel off each corner, two off the very corners of
-			// a large head: enough to round it without a sloped edge.
-			switch {
-			case i == 0 || i == rows-1:
-				inset = round(rows * 0.28)
-			case i == 1 || i == rows-2:
-				inset = round(rows * 0.12)
+		switch {
+		case t < 0.36: // the needle, and its point
+			if t < 0.12 {
+				return 1
 			}
+			return at(0.07, 1)
+		case t < 0.55: // the plate the thumb pushes on
+			return at(0.42, 3)
+		case t < 0.78: // the barrel
+			return at(0.26, 2)
+		case t < 0.83 && n >= 11: // a gap, where there is room to see one
+			return 0
+		case t <= 0.94: // the handle
+			return at(0.18, 1)
+		default:
+			// Nothing at the very end. A 45° band is centred on its axis,
+			// and the axis reaches the corner: anything still wide there
+			// hangs out of the glyph and gets cut off square, which is
+			// what a chopped-looking handle was.
+			return 0
 		}
-		w := rows - 2*inset
-		if w < 1 {
-			w = 1
-		}
-		p.AddRect(px(hx+inset, hy+i, w, 1))
 	}
-	// The needle: one step down and one step left per row, from under the
-	// head to the point, thinning to a single pixel at the end.
-	x, y := round(hx+head*0.5-shaft*0.5), hy+head
-	steps := min(round(x), round(s-y))
-	for i := float32(0); i < steps; i++ {
-		w := shaft
-		if left := steps - i; left <= shaft {
-			w = max(left, 1) // the point
+
+	p := paintengine2d.NewPath()
+	px := func(x, y int) {
+		p.AddRect(paintengine2d.XYWH(g.Min.X+float32(x), g.Min.Y+float32(y), 1, 1))
+	}
+	mid := n / 2
+	for i := 0; i < n; i++ {
+		k := w(i)
+		if k <= 0 {
+			continue
 		}
-		p.AddRect(px(x-i-w+shaft, y+i, w, 1))
+		if pinned {
+			// Straight down: the point at the bottom, the handle on top.
+			x := mid - k/2
+			for j := 0; j < k; j++ {
+				px(x+j, n-1-i)
+			}
+			continue
+		}
+		// Over at 45°: the point at the bottom left, the handle top
+		// right. A column per step, not a run of single pixels along the
+		// other diagonal — those interleave between one step and the next
+		// and come out a checkerboard instead of a band. A column of
+		// √2·k covers k across a 45° band, which is what makes the loose
+		// pin weigh the same as the upright one.
+		tall := max(int(math.Round(float64(float32(k)*1.414))), 1)
+		x, y := i, n-1-i
+		lo, hi := y-tall/2, y-tall/2+tall
+		// The band is centred on the axis, and near the corners part of
+		// it would fall outside the glyph; it is cut there rather than
+		// the whole pin being shrunk away from the corners, which is what
+		// makes a diagonal pin look like a vertical smudge.
+		lo, hi = max(lo, 0), min(hi, n)
+		if hi > lo {
+			p.AddRect(paintengine2d.XYWH(g.Min.X+float32(x), g.Min.Y+float32(lo), 1, float32(hi-lo)))
+		}
 	}
 	ctx.DrawPath(p, fill)
 }

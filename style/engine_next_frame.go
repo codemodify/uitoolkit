@@ -192,20 +192,12 @@ func nxFrameGlyph(ctx *paintengine2d.Context, g paintengine2d.Rect, k CaptionBut
 	case CaptionMaximize:
 		nxZoom(ctx, g, u, col, alt)
 	case CaptionKeepAbove:
+		// The toolkit's pin, in this pack's ink.
 		b := nxSnap(g)
 		if b.Dy() < 4*u {
 			return
 		}
-		nxFill(ctx, paintengine2d.XYWH(b.Min.X, b.Min.Y, b.Dx(), u), col)
-		body := paintengine2d.XYWH(b.Min.X, snap(b.Min.Y+2*u), b.Dx(), snap(b.Dy()-2*u))
-		if alt {
-			nxFill(ctx, body, col)
-			return
-		}
-		nxFill(ctx, paintengine2d.XYWH(body.Min.X, body.Min.Y, body.Dx(), u), col)
-		nxFill(ctx, paintengine2d.XYWH(body.Min.X, body.Max.Y-u, body.Dx(), u), col)
-		nxFill(ctx, paintengine2d.XYWH(body.Min.X, body.Min.Y, u, body.Dy()), col)
-		nxFill(ctx, paintengine2d.XYWH(body.Max.X-u, body.Min.Y, u, body.Dy()), col)
+		DrawCaptionGlyph(ctx, b, k, alt, col, b.Dx(), u)
 	case CaptionMenu:
 		b := nxSnap(g)
 		if b.Dy() < 5*u {
