@@ -633,23 +633,31 @@ func (k *rpInk) frame(g rpGrid, cx, cy, cw, ch, t int) {
 // keep-above is off and solid while it is on. It is the 1-bit twin of
 // DrawCaptionGlyph's, so the pixel-grid eras read the same as the rest.
 func (k *rpInk) aboveGlyph(g rpGrid, cx, cy, n int, on bool) {
-	if n < 4 {
+	if n < 3 {
 		return
 	}
-	// The same pin the vector glyph draws, sampled onto this pack's cell
-	// grid: one test per cell against the artwork's outline, at the
-	// cell's middle. A pack that paints in cells cannot fill a path, and
-	// the point of the artwork is that every pack shows one pin.
+	// The same pin, on this pack's cell grid: one run of cells per row,
+	// from the same scan-line crossings drawCaptionPin uses, so a pack
+	// that paints in cells and a pack that paints in pixels show the one
+	// shape.
 	rings := captionPinLoose
 	if on {
 		rings = captionPinDriven
 	}
-	for y := 0; y < n; y++ {
-		for x := 0; x < n; x++ {
-			u := (float32(x) + 0.5) / float32(n)
-			v := (float32(y) + 0.5) / float32(n)
-			if captionPinCovers(rings, u, v) {
-				k.cells(g, cx+x, cy+y, 1, 1)
+	for _, r := range rings {
+		for y := 0; y < n; y++ {
+			lo, hi, ok := captionPinSpan(r, (float32(y)+0.5)/float32(n))
+			if !ok {
+				continue
+			}
+			x0 := int(math.Round(float64(lo * float32(n))))
+			x1 := int(math.Round(float64(hi * float32(n))))
+			if x1 <= x0 {
+				x1 = x0 + 1
+			}
+			x0, x1 = pinClamp(x0, 0, n), pinClamp(x1, 0, n)
+			if x1 > x0 {
+				k.cells(g, cx+x0, cy+y, x1-x0, 1)
 			}
 		}
 	}

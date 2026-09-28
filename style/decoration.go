@@ -931,55 +931,76 @@ func captionTitle(l *Classic, ctx *paintengine2d.Context, f *Font, b paintengine
 }
 
 // drawCaptionPin draws the keep-above pin inside g: the artwork of
-// [captionPinLoose] and [captionPinDriven], scaled to the glyph.
+// [captionPinLoose] and [captionPinDriven], on the pixel grid.
 //
 // Lying over while the window is not kept above, driven upright while it
-// is — the same pin, turned, which is the only difference between the
-// two and the one every pin toggle uses.
+// is — one shape at two angles, which is what every pin toggle does.
 //
-// This glyph is the one exception to the whole-pixel rule the others
-// keep: it has diagonals, so its edges are antialiased, and
-// TestCaptionGlyphsAreCrisp leaves it out for that reason. Four attempts
-// at a hard-edged pin all read as a smudge at the eight to eighteen
-// pixels a caption button gets; the artwork does not.
+// It is filled a scan line at a time rather than as a path, and that is
+// the whole point: a filled path would antialias its diagonals, and
+// every caption glyph here is whole opaque or whole clear pixels at any
+// scale (TestCaptionGlyphsAreCrisp). Each ring is convex, so a scan line
+// crosses it exactly twice and the row between those two crossings is one
+// rectangle — which also makes this cheaper than sampling the outline per
+// pixel would be.
+//
+// A row the pin only grazes still gets a pixel. Rounding a span to
+// nothing is how a needle disappears at the sizes where it is already
+// hardest to see.
 func drawCaptionPin(ctx *paintengine2d.Context, g paintengine2d.Rect, s, lw float32, pinned bool, fill paintengine2d.Paint) {
 	rings := captionPinLoose
 	if pinned {
 		rings = captionPinDriven
 	}
+	n := int(max(float32(math.Round(float64(s))), 3))
 	p := paintengine2d.NewPath()
 	for _, r := range rings {
-		for i := 0; i+1 < len(r); i += 2 {
-			x, y := g.Min.X+r[i]*s, g.Min.Y+r[i+1]*s
-			if i == 0 {
-				p.MoveTo(x, y)
-			} else {
-				p.LineTo(x, y)
+		for y := 0; y < n; y++ {
+			lo, hi, ok := captionPinSpan(r, (float32(y)+0.5)/float32(n))
+			if !ok {
+				continue
+			}
+			x0 := int(math.Round(float64(lo * float32(n))))
+			x1 := int(math.Round(float64(hi * float32(n))))
+			if x1 <= x0 {
+				x1 = x0 + 1
+			}
+			x0, x1 = pinClamp(x0, 0, n), pinClamp(x1, 0, n)
+			if x1 > x0 {
+				p.AddRect(paintengine2d.XYWH(g.Min.X+float32(x0), g.Min.Y+float32(y), float32(x1-x0), 1))
 			}
 		}
-		p.Close()
 	}
 	ctx.DrawPath(p, fill)
 }
 
-// captionPinCovers reports whether the pin's artwork covers the point
-// (u, v) of the unit square. It is how the packs that paint on a cell
-// grid ask for the same shape: one sample per cell, rather than a path
-// they have no way to fill.
-func captionPinCovers(rings [][]float32, u, v float32) bool {
-	for _, r := range rings {
-		in := false
-		n := len(r) / 2
-		for i, j := 0, n-1; i < n; j, i = i, i+1 {
-			xi, yi := r[2*i], r[2*i+1]
-			xj, yj := r[2*j], r[2*j+1]
-			if (yi > v) != (yj > v) && u < (xj-xi)*(v-yi)/(yj-yi)+xi {
-				in = !in
-			}
+// captionPinSpan is where the horizontal line at v crosses ring r, which
+// is convex: the two crossings, or ok false where it misses.
+func captionPinSpan(r []float32, v float32) (lo, hi float32, ok bool) {
+	n := len(r) / 2
+	for i, j := 0, n-1; i < n; j, i = i, i+1 {
+		xi, yi := r[2*i], r[2*i+1]
+		xj, yj := r[2*j], r[2*j+1]
+		if (yi > v) == (yj > v) {
+			continue
 		}
-		if in {
-			return true
+		x := (xj-xi)*(v-yi)/(yj-yi) + xi
+		if !ok {
+			lo, hi, ok = x, x, true
+			continue
 		}
+		lo, hi = min(lo, x), max(hi, x)
 	}
-	return false
+	return lo, hi, ok
+}
+
+// pinClamp holds v inside [lo, hi].
+func pinClamp(v, lo, hi int) int {
+	if v < lo {
+		return lo
+	}
+	if v > hi {
+		return hi
+	}
+	return v
 }

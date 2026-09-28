@@ -295,13 +295,7 @@ func TestDecorationPlainFrame(t *testing.T) {
 
 // Glyphs sit on whole pixels and inside their box at any scale.
 func TestCaptionGlyphsAreCrisp(t *testing.T) {
-	// CaptionKeepAbove is deliberately absent: it is a pushpin traced from
-	// artwork (captionpin.go), it has diagonals, and its edges are
-	// therefore antialiased. Four hand-drawn hard-edged pins were tried
-	// first and every one of them read as a smudge at the size a caption
-	// button actually is, so the artwork won and this rule gave way for
-	// it alone.
-	for _, k := range []CaptionButton{CaptionMinimize, CaptionMaximize, CaptionMenu} {
+	for _, k := range []CaptionButton{CaptionMinimize, CaptionMaximize, CaptionMenu, CaptionKeepAbove} {
 		for _, maxed := range []bool{false, true} {
 			for _, s := range []float32{10, 12.5, 17.5, 20} {
 				img := paintengine2d.NewImage(40, 40)
