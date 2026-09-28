@@ -691,8 +691,14 @@ and macOS adapters.
    no action at all and was refused.
 3. **Other platforms:** Windows and macOS backends, with UI Automation and
    NSAccessibility adapters for the accessibility tree that now exists.
-4. **Portals:** a parent window for native dialogs on Wayland
-   (xdg-foreign), OpenURI, notifications through the portal.
+4. **Portals: done.** All three things listed here as wanted are built.
+   FileChooser, OpenURI, Notification and Settings all speak to
+   `org.freedesktop.portal.*`, and the parent window on Wayland is
+   `platform/wayland_foreign_linux.go`: the toplevel is exported through
+   `zxdg_exporter_v2` the first time it is asked for, the compositor's
+   handle becomes `wayland:<handle>`, and the export is revoked when the
+   window loses its role. Without it a portal dialog opens unparented —
+   not modal, and possibly behind the window that asked for it.
 5. **Widgets:**
    - a rich-text editor;
    - an MDI area;
