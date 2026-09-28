@@ -575,28 +575,18 @@ func DrawCaptionGlyph(ctx *paintengine2d.Context, b paintengine2d.Rect, k Captio
 	case CaptionMinimize:
 		ctx.DrawRect(paintengine2d.XYWH(g.Min.X, round(g.Min.Y+s*0.5), s, lw), fill)
 	case CaptionKeepAbove:
-		// "Stay on top": a ceiling across the top with the window held up
-		// against it — hollow while it is off, solid while it is on. The
-		// same two shapes read in a 1998 frame and in a 2026 one, and
-		// being nothing but axis-aligned rectangles they stay hard-edged
-		// at every scale, as the rest of these do.
-		// The ceiling is kept to a fifth of the glyph however heavy the
-		// look's own line is: a look that strokes at 1.5 dip would
-		// otherwise eat the window below it and leave two bars.
-		c := min(lw, max(round(s*0.2), 1))
-		ctx.DrawRect(paintengine2d.XYWH(g.Min.X, g.Min.Y, s, c), fill)
-		body := paintengine2d.XYWH(g.Min.X, round(g.Min.Y+2*c), s, s-2*c)
-		// The hollow body's line is thinned again where even that is too
-		// heavy to leave a hole: on and off must never come out the same
-		// picture, which is the whole point of a toggle.
-		t := min(c, max(round((body.Dy()-1)*0.5), 1))
-		switch {
-		case body.Dy() <= 0:
-		case alt || body.Dy() < 3:
-			ctx.DrawRect(body, fill)
-		default:
-			frameT(body, t)
-		}
+		// A pushpin, the way KDE 1's title bar drew it (and OpenLook and
+		// CDE before it): pushed in while the window is kept above,
+		// pulled out and lying on its side while it is not. It says
+		// "pinned" without a word, which the ceiling-and-window shape it
+		// replaced never quite did.
+		//
+		// Upright against lying, rather than a tilt: a tilted pin is a
+		// diagonal, and a diagonal is mush at the eight or ten pixels a
+		// caption button actually gets. Both of these are axis-aligned
+		// rectangles on whole device pixels, so the pin stays
+		// hard-edged at every scale, as the rest of these glyphs do.
+		drawCaptionPin(ctx, g, s, lw, alt, fill)
 	case CaptionMaximize:
 		if !alt {
 			frame(g)
@@ -938,4 +928,65 @@ func captionTitle(l *Classic, ctx *paintengine2d.Context, f *Font, b paintengine
 		return
 	}
 	l.drawFittedText(ctx, f, title, paintengine2d.XYWH(b.Min.X+pad, b.Min.Y, b.Dx()-pad, b.Dy()), col, AlignStart, 0)
+}
+
+// drawCaptionPin draws the keep-above pushpin inside g: head, shaft and
+// point, upright when the window is pinned and lying on its side, head to
+// the left, when it is not.
+//
+// The two are one shape with its axes swapped, which is why it is written
+// once: a pin that changed its proportions as it turned would read as two
+// different pins rather than as one pin in two states.
+func drawCaptionPin(ctx *paintengine2d.Context, g paintengine2d.Rect, s, lw float32, pinned bool, fill paintengine2d.Paint) {
+	round := func(v float32) float32 { return float32(math.Round(float64(v))) }
+	// A thumbtack's silhouette is three widths, not two: a broad flat cap,
+	// a shorter neck under it, then the needle. Drawn as cap and needle
+	// alone it comes out a nail.
+	head := max(round(s*0.24), lw) // how deep the cap is
+	wide := max(round(s*0.70), 3)  // how wide the cap is across
+	neck := max(round(s*0.16), 1)  // how deep the neck is
+	neckW := max(round(s*0.38), 2) // and how wide
+	shaft := max(round(s*0.16), 1) // the needle's thickness
+	if shaft > neckW {
+		shaft = neckW
+	}
+	if neckW > wide {
+		neckW = wide
+	}
+	tip := max(round(s*0.24), 1) // how long the point is
+	for head+neck+tip >= s {     // at the smallest sizes, give up the neck
+		if neck > 0 {
+			neck = 0
+			continue
+		}
+		head, tip = max(round(s*0.25), 1), max(round(s*0.25), 1)
+		break
+	}
+	mid := round(s * 0.5)
+
+	// Laid out along one axis and centred across the other, then handed to
+	// the path in whichever order this orientation wants.
+	at := func(along, across, dAlong, dAcross float32) paintengine2d.Rect {
+		if pinned {
+			return paintengine2d.XYWH(g.Min.X+across, g.Min.Y+along, dAcross, dAlong)
+		}
+		return paintengine2d.XYWH(g.Min.X+along, g.Min.Y+across, dAlong, dAcross)
+	}
+
+	p := paintengine2d.NewPath()
+	p.AddRect(at(0, round(mid-wide*0.5), head, wide)) // the cap
+	if neck > 0 {
+		p.AddRect(at(head, round(mid-neckW*0.5), neck, neckW)) // the neck
+	}
+	p.AddRect(at(head+neck, round(mid-shaft*0.5), s-head-neck-tip, shaft)) // the needle
+	// The point, as a stair rather than a triangle. A diagonal edge is
+	// the one thing these glyphs may not have: every caption glyph is
+	// whole opaque or whole clear pixels at every scale, which
+	// TestCaptionGlyphsAreCrisp holds them to, and a sloped point
+	// anti-aliases. One device pixel per step, narrowing to one.
+	for i := float32(0); i < tip; i++ {
+		w := max(round(shaft*(1-(i+1)/tip)), 1)
+		p.AddRect(at(s-tip+i, round(mid-w*0.5), 1, w))
+	}
+	ctx.DrawPath(p, fill)
 }
