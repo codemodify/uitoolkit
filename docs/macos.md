@@ -1,9 +1,12 @@
 # The macOS backend
 
-Linux is the shipping platform; Windows is the second; this is the
-third and it is the newest. What follows is what exists, what does not,
-and how to run it — the gaps are listed because a port that hides them
-is worse than one that has them.
+Linux is where this toolkit is most complete — it is the only platform
+with a GPU path and a working accessibility bridge — and this is the
+newest of the three backends, but not a partial one: it implements
+every seam the Linux backends do, and `platform/seams_darwin.go` makes
+the compiler keep that true. What follows is what exists, what does
+not, and how to run it; the gaps are listed because a port that hides
+them is worse than one that has them.
 
 ## What it is
 

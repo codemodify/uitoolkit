@@ -1,12 +1,18 @@
 # uitoolkit, running
 
-Every frame on this page was rendered by this repo at **v0.20.0** painting through
+Every frame on this page was rendered by this repo painting through
 **paintengine2d v0.11.0**, on the offscreen backend — no X11, no Wayland, no compositor
 involved. Regenerate the stills at any time with:
 
 ```sh
-go run ./cmd/uitk-shots docs/screenshots
+UITK_SYSTEM_FONTS=0 go run ./cmd/uitk-shots docs/screenshots
 ```
+
+`UITK_SYSTEM_FONTS=0` is what makes them reproducible. A look reads in
+its era's typeface when the machine has one, so without it these images
+are a picture of the fonts on whoever's computer rendered them last —
+and the same setting is what `tools/test.sh` pins, so the screenshots
+and the tests measure the same text. It takes about a second.
 
 The animation was captured by injecting one event at a time into a headless window and
 grabbing a frame after each (`app.Window.Inject` + `Capture`); see

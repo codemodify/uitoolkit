@@ -1,10 +1,12 @@
 # uitoolkit
 
 **Pure-Go desktop UI toolkit.** Retained widget tree, layout, themes, and
-X11 and Wayland window backends. Every pixel is painted with
+**four window backends** — Wayland and X11 on Linux, Win32 on Windows,
+AppKit on macOS. Every pixel is painted with
 [`github.com/codemodify/paintengine2d`](https://github.com/codemodify/paintengine2d)
-(v0.9.0+). Each theme reads in its era's typeface when it is installed
-(Tahoma for XP, Segoe UI for Windows 10, Cantarell for GNOME…); the bundled
+(v0.11.0). Each theme reads in its era's typeface when it is installed
+(Tahoma for XP, Segoe UI for Windows 10, Cantarell for GNOME, Geneva for
+Platinum…) — found without fontconfig on Windows and macOS too; the bundled
 **Titillium Web** and **JetBrains Mono** (OFL, embedded) stand in otherwise.
 Outlines are rasterized through paintengine2d into a white atlas and tinted
 with `Paint.Color`. There is no second rasterizer, no Skia, no Gio renderer,
@@ -28,7 +30,7 @@ go get github.com/codemodify/paintengine2d@v0.11.0
 **Theme engines are opt-in, and it is the thing to know first.** A plain
 `go build` gives your application **one** theme — Plastik, the default —
 because an application that wants three looks should not carry
-thirty-six. Name the ones you ship, or take the lot:
+thirty-three. Name the ones you ship, or take the lot:
 
 ```bash
 go build ./...                                    # the default engine alone
@@ -37,8 +39,8 @@ go build -tags "theme_engine_breeze,theme_engine_win95" ./...
 go build -tags theme_engine_all ./...             # every engine there is
 ```
 
-It is worth 8 MB: **12.96 MB** for a single-engine build against **21.07
-MB** for all of them, stripped. Naming any engine makes the default step
+It is worth 8 MB: **12.98 MB** for a single-engine `uitoolkit-settings`
+against **21.09 MB** for all of them, stripped. Naming any engine makes the default step
 aside; `theme_engine_all` is the escape hatch. Build tags cannot contain
 hyphens, so the names use underscores. See
 **[docs/engines.md](docs/engines.md)**.
@@ -46,9 +48,10 @@ hyphens, so the names use underscores. See
 | | |
 | --- | --- |
 | Language | Go 1.22+ |
+| Compared with | Qt, GTK, Avalonia, Fyne, WinForms, Win32, GPUI, AppKit — **[docs/toolkits.md](docs/toolkits.md)** |
 | Paint | paintengine2d **v0.11.0** (`Scene` / `Recorder` / GPU rect batches; flatten cache) |
 | Fonts | Titillium Web (UI) + JetBrains Mono (code), OpenType → atlas |
-| Windowing | Linux X11 + Wayland (`wl_egl_window` / eglSwapBuffers, else `wl_shm` / `XPutImage`); offscreen always. Pointers are host cursors (`wp_cursor_shape_v1` / XCURSOR / Xfont / `LoadCursorW` / `NSCursor`) |
+| Windowing | **Wayland** and **X11** on Linux (`wl_egl_window` / eglSwapBuffers, else `wl_shm` / `XPutImage`), **Win32** on Windows (`CreateDIBSection` + `BitBlt`), **AppKit** on macOS (`CGImage` → `CALayer`); offscreen always. Pointers are host cursors (`wp_cursor_shape_v1` / XCURSOR / Xfont / `LoadCursorW` / `NSCursor`) |
 | Tray | `StatusItem` — Linux SNI + dbusmenu (submenus included) + fdo notifications; Win32 notify area; macOS `NSStatusItem` (CGO) |
 | CGO | optional — tests and screenshots are `CGO_ENABLED=0` |
 | Ports | Linux is the shipping platform. **Windows has a real backend** — window, input, clipboard, drag and drop, per-monitor DPI — cross-compiled from Linux with `CGO_ENABLED=0` and tested on Windows 10 and 11 ([docs/windows.md](docs/windows.md)). **macOS has an AppKit backend** — cgo — with the whole suite green on macOS 15 ([docs/macos.md](docs/macos.md)). Both now implement **every seam the Linux backends do**: window, input, frame and geometry, clipboard, pointer shapes, popups on surfaces of their own, drag and drop, and IME. The compiler keeps that true (`seams_*.go`), and installed fonts are found without fontconfig, so a pack draws in its era's typeface everywhere |
@@ -233,6 +236,19 @@ these were (draw the cells in Go; both scales and the manifest come out of
 it) and can start as a fork of one of ours rather than as a blank PNG.
 See [docs/skins.md](docs/skins.md).
 
+## The same page on three platforms
+
+One sample — the tour's **Controls** page, the whole widget set — running
+on each backend, each wearing a different pack. Nothing about the
+application changes between them; the pack does.
+
+| | |
+| --- | --- |
+| ![The tour on Linux in Breeze](docs/screenshots/platforms/linux-breeze.png) | ![The tour on Windows 10 in Metal](docs/screenshots/platforms/windows10-metal.png) |
+| **Linux** — Breeze, rendered offscreen, which is why there is no window frame: there is no window. Every screenshot in this repository is made this way, which is what makes them reproducible. | **Windows 10** — Metal (Steel), a real window on a real desktop, captured from the VM the tests run in. The frame is the toolkit's, drawn by the pack. |
+| ![The tour on macOS in Plastik](docs/screenshots/platforms/macos-plastik.png) | |
+| **macOS 15** — Plastik, a real window at a backing scale of 2. The title bar is the toolkit's, not AppKit's: the pack draws it, and macOS draws the shadow around it. | |
+
 ## Screenshots
 
 Real frames from the tour, Settings, the gallery, Notes, Inspector and
@@ -410,6 +426,96 @@ The application shots come from the applications: `comms-mail-demo
 -screenshot docs/screenshots` in
 [comms-mail](https://github.com/codemodify/comms-mail), and the player's own
 `-shot` in
+[media-player-music](https://github.com/codemodify/media-player-music).
+
+## What it does, and what it does not
+
+The gaps are here rather than at the bottom, because you cannot plan
+around a list of strengths. [docs/toolkits.md](docs/toolkits.md) puts
+all of this next to Qt, GTK, Avalonia, Fyne, WinForms, Win32, GPUI and
+AppKit.
+
+**It does:**
+
+- Four real window backends — Wayland, X11, Win32, AppKit — each
+  implementing the **same seams**: window and buffer, input, window
+  frame and geometry, popups on surfaces of their own, the clipboard,
+  drag and drop, pointer shapes and IME. `platform/seams_*.go` asserts
+  that, so the compiler keeps the list true.
+- **33 theme engines** driving **131 packs**, from System 1 to macOS
+  Tahoe, that change a widget's *shapes* and not only its colours.
+- A retained widget tree with layout, focus and keyboard navigation, a
+  full widget set (lists, trees, tables, rich text, MDI, wizards,
+  docking, accordions), dialogs, menus, tool bars and a status bar.
+- Window frames the toolkit draws itself when the desktop has none, with
+  shadows, rounded corners and arbitrary silhouettes
+  ([docs/shapes.md](docs/shapes.md)).
+- A system tray item with a real menu on all three platforms, and XDG
+  portals on Linux for file dialogs.
+- Installed fonts found **without fontconfig**, so a pack draws in its
+  era's typeface on Windows and macOS too.
+- An accessibility model every stock widget fills in, and screenshots
+  and tests that render offscreen, deterministically, with no display.
+
+**It does not:**
+
+| Gap | What that means |
+| --- | --- |
+| **Complex text** | No `GSUB`, no bidi. Latin, Cyrillic, Greek and CJK are right; **Arabic, Hebrew, Devanagari and Thai are not** — they draw as isolated glyphs in logical order. |
+| **Accessibility off Linux** | The `a11y` model is complete and AT-SPI2 is wired, but UI Automation (Windows) and NSAccessibility (macOS) are not. A screen reader there sees nothing. |
+| **GPU off Linux** | EGL/GLES on Wayland and X11; Windows and macOS rasterise on the CPU. Fast enough for desktop UI ([docs/perf.md](docs/perf.md)), not for heavy continuous animation. |
+| **Printing** | There is none. |
+| **Mobile and web** | Not a goal. |
+| **arm64 in anger** | Every arm64 target compiles; none has been run. |
+
+## Building
+
+One binary, no native dependencies to install, nothing to find at run
+time.
+
+```bash
+# Linux — needs cgo for the X11 and Wayland backends
+CGO_ENABLED=1 go build -tags theme_engine_all ./examples/uitoolkit-sample-tour
+
+# Windows — pure syscall, so it cross-compiles from anywhere
+GOOS=windows GOARCH=amd64 CGO_ENABLED=0   go build -tags theme_engine_all -o tour.exe ./examples/uitoolkit-sample-tour
+
+# macOS — AppKit is Objective-C, so this has to be built on a Mac
+CGO_ENABLED=1 go build -tags theme_engine_all ./examples/uitoolkit-sample-tour
+```
+
+A Windows GUI build wants `-ldflags -H=windowsgui`, or the console
+window steals the focus. macOS needs no bundle to run, but an `.app` is
+what gives it a Dock icon and a name in the menu bar.
+
+Headless — no display, no cgo, useful in CI and for rendering
+documentation:
+
+```bash
+CGO_ENABLED=0 go build ./...
+```
+
+## The samples
+
+Ten of them, each a real application on the published API — no
+`internal/` imports, no reusable widgets hiding in `package main`, which
+is checked by a test.
+
+| Sample | What it shows |
+| --- | --- |
+| [`uitoolkit-sample-tour`](examples/uitoolkit-sample-tour) | a page per capability — Controls, Views, Documents, Tabs, Docking, Drag and drop, Frames, Shapes, Skins, Cascade, Desktop, Access. **Start here**, or open one with `-page shapes`. |
+| [`uitoolkit-sample-files`](examples/uitoolkit-sample-files) | a project browser: tree, table, splitters, a real file dialog |
+| [`uitoolkit-sample-notes`](examples/uitoolkit-sample-notes) | a small notes app — the smallest complete thing here |
+| [`uitoolkit-sample-inspector`](examples/uitoolkit-sample-inspector) | a preferences window: forms, groups, validation |
+| [`uitoolkit-sample-richtext`](examples/uitoolkit-sample-richtext) | the rich-text editor: bold, links, lists, drag and drop |
+| [`uitoolkit-sample-mdi`](examples/uitoolkit-sample-mdi) | child windows inside a window, the way an era did it |
+| [`uitoolkit-sample-wizard`](examples/uitoolkit-sample-wizard) | a multi-step dialog |
+| [`uitoolkit-sample-shapes`](examples/uitoolkit-sample-shapes) | a round window with a hole you can click through |
+| [`uitoolkit-sample-skinshape`](examples/uitoolkit-sample-skinshape) | a skinned, shaped window from a sheet of art |
+| [`uitoolkit-sample-popups`](examples/uitoolkit-sample-popups) | popups on surfaces of their own, and the fallback when there are none |
+
+And two applications that grew up here and moved out:
+[comms-mail](https://github.com/codemodify/comms-mail) and
 [media-player-music](https://github.com/codemodify/media-player-music).
 
 ## Quickstart

@@ -1,9 +1,12 @@
 # The Windows backend
 
-Linux is the shipping platform; this is the second one, and it is new.
-What follows is what exists, what does not, and how to run it — the
-gaps are listed because a port that hides them is worse than one that
-has them.
+Linux is where this toolkit is most complete — it is the only platform
+with a GPU path and a working accessibility bridge — but the Win32
+backend is no longer a partial one: it implements every seam the Linux
+backends do, and `platform/seams_windows.go` makes the compiler keep
+that true. What follows is what exists, what does not, and how to run
+it; the gaps are listed because a port that hides them is worse than
+one that has them.
 
 ## What it is
 

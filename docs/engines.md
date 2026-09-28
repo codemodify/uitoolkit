@@ -1,7 +1,7 @@
 # Theme engines are opt-in
 
 131 theme packs are drawn by 35 engines, and an application that wants
-three of them should not carry all thirty-six. Engines are chosen at
+three of them should not carry all thirty-three. Engines are chosen at
 **build time**, with build tags.
 
 ```sh
