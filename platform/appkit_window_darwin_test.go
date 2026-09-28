@@ -908,3 +908,126 @@ func TestAkParseMimeList(t *testing.T) {
 		}
 	}
 }
+
+// An input method composes into the window: marked text arrives as a
+// preedit, the chosen text as a commit, and abandoning it as a cancel.
+//
+// Before the view was an NSTextInputClient this could not work at all.
+// keyDown: read [event characters] and pushed it as EventText, which is
+// right for plain typing and wrong for composition, because with a
+// Japanese or Pinyin method active those characters are the raw
+// keystrokes — a user typing にほん would have had "nihon" inserted as
+// they went.
+func TestAppKitIMEComposes(t *testing.T) {
+	onMain(func() {
+		s := akTestWindow(t, 320, 200)
+		pump(s, 200*time.Millisecond)
+		s.SetIMEEnabled(true)
+		s.SetIMECursor(40, 60, 2, 18)
+
+		akIMEMark(s, "にほん", 3)
+		akIMEInsert(s, "日本")
+		evs := pump(s, 300*time.Millisecond)
+
+		var pre, commit *Event
+		for i := range evs {
+			switch evs[i].Kind {
+			case EventIMEPreedit:
+				pre = &evs[i]
+			case EventIMECommit:
+				commit = &evs[i]
+			case EventText:
+				t.Errorf("a composition produced EventText %q; a commit is not ordinary typing", evs[i].Text)
+			}
+		}
+		if pre == nil {
+			t.Fatalf("no preedit; saw %s", kindsOf(evs))
+		}
+		if pre.Text != "にほん" {
+			t.Errorf("the preedit is %q, want にほん", pre.Text)
+		}
+		// The caret is a byte offset into the UTF-8, not a UTF-16 one:
+		// three characters of three bytes each.
+		if pre.IMECaret != 9 {
+			t.Errorf("the caret is at %d, want 9 — the byte offset, not the UTF-16 one", pre.IMECaret)
+		}
+		if commit == nil {
+			t.Fatalf("no commit; saw %s", kindsOf(evs))
+		}
+		if commit.Text != "日本" {
+			t.Errorf("the commit is %q, want 日本", commit.Text)
+		}
+	})
+}
+
+// Text inserted with nothing being composed is ordinary typing and
+// arrives as EventText, not as a commit. The two go to different places
+// in the toolkit, so the backend has to tell them apart.
+func TestAppKitIMEPlainTextIsNotACommit(t *testing.T) {
+	onMain(func() {
+		s := akTestWindow(t, 320, 200)
+		pump(s, 200*time.Millisecond)
+		akIMEInsert(s, "x")
+		evs := pump(s, 300*time.Millisecond)
+		var text, commit bool
+		for _, e := range evs {
+			switch e.Kind {
+			case EventText:
+				text = true
+				if e.Text != "x" {
+					t.Errorf("the text is %q, want x", e.Text)
+				}
+			case EventIMECommit:
+				commit = true
+			}
+		}
+		if !text {
+			t.Errorf("typing with no composition produced no EventText; saw %s", kindsOf(evs))
+		}
+		if commit {
+			t.Error("and it produced a commit, which belongs to a composition")
+		}
+	})
+}
+
+// Abandoning a composition cancels it, so the widget drops the preedit
+// instead of leaving it on screen for ever.
+func TestAppKitIMECancels(t *testing.T) {
+	onMain(func() {
+		s := akTestWindow(t, 320, 200)
+		pump(s, 200*time.Millisecond)
+		akIMEMark(s, "にほ", 2)
+		akIMEUnmark(s)
+		var cancelled bool
+		for _, e := range pump(s, 300*time.Millisecond) {
+			if e.Kind == EventIMECancel {
+				cancelled = true
+			}
+		}
+		if !cancelled {
+			t.Error("unmarking the text did not cancel the composition")
+		}
+	})
+}
+
+// Turning the input method off discards what was half-composed: a
+// preedit abandoned in one field must not reappear in the next.
+func TestAppKitIMEOffDiscardsTheComposition(t *testing.T) {
+	onMain(func() {
+		s := akTestWindow(t, 320, 200)
+		pump(s, 200*time.Millisecond)
+		s.SetIMEEnabled(true)
+		akIMEMark(s, "にほ", 2)
+		pump(s, 200*time.Millisecond)
+		s.SetIMEEnabled(false)
+		var cancelled bool
+		for _, e := range pump(s, 300*time.Millisecond) {
+			if e.Kind == EventIMECancel {
+				cancelled = true
+			}
+		}
+		if !cancelled {
+			t.Error("turning the input method off left the composition standing")
+		}
+	})
+}

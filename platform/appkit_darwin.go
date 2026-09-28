@@ -341,6 +341,18 @@ func uitkAkInput(sid C.uintptr_t, kind C.int, x, y, dx, dy C.double,
 			ScrollPrecise: flags != 0,
 		})
 	case C.UITK_AK_KEY_DOWN:
+		if flags == 2 {
+			// Text from -insertText: with nothing being composed:
+			// ordinary typing, after the layout, the Shift and any dead
+			// key have had their say. The filter is the same one every
+			// backend uses — a printable rune is >= 32 and not 127 —
+			// because -interpretKeyEvents: also turns Return and Escape
+			// into text nobody should insert.
+			if t := akText(C.GoString(text), uint64(mods)); t != "" {
+				s.push(Event{Kind: EventText, Text: t, Rune: firstRune(t), Mods: m})
+			}
+			return
+		}
 		if flags != 0 {
 			// A modifier changed. AppKit says which are held now, so the
 			// one that moved is whichever bit differs, and which way it
@@ -350,15 +362,21 @@ func uitkAkInput(sid C.uintptr_t, kind C.int, x, y, dx, dy C.double,
 		}
 		s.mods = m
 		s.push(Event{Kind: EventKeyDown, Key: akKey(rune(key)), Mods: m})
-		// Repeats insert text but do not re-fire the key: button 1 is
-		// isARepeat, and a shortcut that fired again while a key was
-		// held would be wrong. Only the text is wanted.
-		if t := akText(C.GoString(text), uint64(mods)); t != "" {
-			s.push(Event{Kind: EventText, Text: t, Rune: firstRune(t), Mods: m})
-		}
+		// The text no longer rides with the key: it comes back from
+		// -insertText: through the input context, which is what lets an
+		// input method compose (appkit_ime_darwin.go).
 	case C.UITK_AK_KEY_UP:
 		s.mods = m
 		s.push(Event{Kind: EventKeyUp, Key: akKey(rune(key)), Mods: m})
+	case C.UITK_AK_IME_PREEDIT:
+		s.push(Event{
+			Kind: EventIMEPreedit, Text: C.GoString(text),
+			IMECaret: int(key), IMEDelBefore: int(button),
+		})
+	case C.UITK_AK_IME_COMMIT:
+		s.push(Event{Kind: EventIMECommit, Text: C.GoString(text)})
+	case C.UITK_AK_IME_CANCEL:
+		s.push(Event{Kind: EventIMECancel})
 	case C.UITK_AK_DRAG_MOTION, C.UITK_AK_DRAG_LEAVE, C.UITK_AK_DROP, C.UITK_AK_DRAG_END:
 		// button carries what the source allows and key what it prefers
 		// — or, at the end, the action that was performed.

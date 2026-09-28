@@ -83,6 +83,24 @@ func akPostMouse(s *akSurface, kind EventKind, x, y float64, button MouseButton,
 		C.int(button), C.uint64_t(akFlags(mods)))
 }
 
+// akIMEMark, akIMEInsert and akIMEUnmark drive the view's
+// NSTextInputClient the way an input method would. A real one cannot
+// be scripted from a test, and this is the path it takes.
+func akIMEMark(s *akSurface, text string, caretUTF16 int) {
+	akIME(s, 1, text, caretUTF16)
+}
+func akIMEInsert(s *akSurface, text string) { akIME(s, 2, text, 0) }
+func akIMEUnmark(s *akSurface)              { akIME(s, 3, "", 0) }
+
+func akIME(s *akSurface, what int, text string, caret int) {
+	if s == nil || s.win == nil {
+		return
+	}
+	c := C.CString(text)
+	defer C.free(unsafe.Pointer(c))
+	C.uitk_ak_ime_simulate(s.win, C.int(what), c, C.int(caret))
+}
+
 // akContentSize is what AppKit says the content area is, in device
 // pixels — the number the buffer is supposed to match.
 func akContentSize(s *akSurface) (int, int) {

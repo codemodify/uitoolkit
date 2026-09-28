@@ -116,7 +116,7 @@ static int actionsFromOps(NSDragOperation op) {
 // numbers darwinCursorKind produces.
 extern NSCursor *uitk_nscursor_for(int kind);
 
-@interface UitkView : NSView <NSDraggingSource>
+@interface UitkView : NSView <NSDraggingSource, NSTextInputClient>
 @property(assign) uintptr_t sid;
 @property(assign) int cursorKind;
 // strong, not assign: ARC would release the tracking area the moment it
@@ -129,6 +129,12 @@ extern NSCursor *uitk_nscursor_for(int kind);
 @property(assign) int dropAnswer;
 @property(assign) int dragActions;
 @property(assign) BOOL dragging;
+// The text being composed, and where the caret is so the candidate
+// window can be put beside it.
+@property(strong) NSString *marked;
+@property(assign) NSRange markedSel;
+@property(assign) NSRect imeCaret;
+@property(assign) BOOL imeOn;
 @end
 
 @implementation UitkView
@@ -286,19 +292,99 @@ static int bareKey(NSEvent *e) {
 }
 
 - (void)keyDown:(NSEvent *)e {
-	// charactersIgnoringModifiers is the key, characters is the text;
-	// the Go side decides what each one means (appkit_keys_darwin.go).
-	// ARC keeps the string alive for the duration of the call, which is
-	// all the Go side needs: it copies before returning.
+	// The key first, always: a shortcut, an arrow or Escape is about
+	// the key and must arrive whatever the input method does with the
+	// event afterwards.
 	uitkAkInput(self.sid, UITK_AK_KEY_DOWN, 0, 0, 0, 0, e.isARepeat ? 1 : 0,
-	            bareKey(e), (uint64_t)e.modifierFlags,
-	            [[e characters] UTF8String], 0);
+	            bareKey(e), (uint64_t)e.modifierFlags, NULL, 0);
+	// Then the text, through the input context rather than off the
+	// event. That is what makes an input method work at all: with a
+	// Japanese or Pinyin method active, -interpretKeyEvents: calls
+	// -setMarkedText: while the user composes and -insertText: when
+	// they choose, and taking [e characters] instead would insert the
+	// raw Latin keystrokes as the user typed them.
+	//
+	// It is also why the dead keys work: é on a US-International
+	// layout is two events and one insertText:.
+	[self interpretKeyEvents:@[e]];
 }
 
 - (void)keyUp:(NSEvent *)e {
 	uitkAkInput(self.sid, UITK_AK_KEY_UP, 0, 0, 0, 0, 0, bareKey(e),
 	            (uint64_t)e.modifierFlags, NULL, 0);
 }
+
+// --- input method ---
+//
+// Nothing here decides anything either: each callback reports and the
+// toolkit does the editing, which is the same rule the rest of this
+// file keeps. The toolkit is the one that knows where the caret is and
+// what is selected, so the ranges below are answered from what it last
+// said rather than from a document this view does not have.
+
+- (BOOL)hasMarkedText { return self.marked.length > 0; }
+- (NSRange)markedRange {
+	return self.marked.length ? NSMakeRange(0, self.marked.length) : NSMakeRange(NSNotFound, 0);
+}
+- (NSRange)selectedRange { return self.markedSel; }
+- (NSArray<NSAttributedStringKey> *)validAttributesForMarkedText { return @[]; }
+- (NSAttributedString *)attributedSubstringForProposedRange:(NSRange)r actualRange:(NSRangePointer)a {
+	return nil;
+}
+- (NSUInteger)characterIndexForPoint:(NSPoint)p { return NSNotFound; }
+
+// utf8Caret is a UTF-16 offset into s as a byte offset into its UTF-8,
+// because that is the unit EventIMEPreedit's caret is in and the two
+// part company on the first character outside the basic plane.
+static int utf8Caret(NSString *s, NSUInteger utf16Off) {
+	if (!s || utf16Off == 0 || utf16Off > s.length) return 0;
+	NSString *head = [s substringToIndex:utf16Off];
+	return (int)[head lengthOfBytesUsingEncoding:NSUTF8StringEncoding];
+}
+
+- (void)setMarkedText:(id)string selectedRange:(NSRange)sel replacementRange:(NSRange)repl {
+	NSString *t = [string isKindOfClass:[NSAttributedString class]] ? [string string] : string;
+	self.marked = t.length ? [t copy] : nil;
+	self.markedSel = sel;
+	uitkAkInput(self.sid, UITK_AK_IME_PREEDIT, 0, 0, 0, 0,
+	            repl.location == NSNotFound ? 0 : (int)repl.length,
+	            utf8Caret(t, sel.location), 0,
+	            t.length ? [t UTF8String] : "", 0);
+}
+
+- (void)unmarkText {
+	if (!self.marked) return;
+	self.marked = nil;
+	self.markedSel = NSMakeRange(0, 0);
+	uitkAkInput(self.sid, UITK_AK_IME_CANCEL, 0, 0, 0, 0, 0, 0, 0, NULL, 0);
+}
+
+- (void)insertText:(id)string replacementRange:(NSRange)repl {
+	NSString *t = [string isKindOfClass:[NSAttributedString class]] ? [string string] : string;
+	if (t.length == 0) { [self unmarkText]; return; }
+	BOOL wasComposing = self.marked.length > 0;
+	self.marked = nil;
+	self.markedSel = NSMakeRange(0, 0);
+	// A commit while composing is the input method's answer and goes to
+	// the IME seam; text typed with no composition is ordinary typing
+	// and goes to the text one. The toolkit tells them apart, so this
+	// has to as well.
+	uitkAkInput(self.sid, wasComposing ? UITK_AK_IME_COMMIT : UITK_AK_KEY_DOWN,
+	            0, 0, 0, 0, 0, 0, 0, [t UTF8String], wasComposing ? 0 : 2);
+}
+
+// The candidate window goes beside the caret, in screen coordinates.
+- (NSRect)firstRectForCharacterRange:(NSRange)r actualRange:(NSRangePointer)a {
+	NSRect in = self.imeCaret;
+	if (NSIsEmptyRect(in)) in = NSMakeRect(0, 0, 1, 16);
+	NSRect w = [self convertRect:in toView:nil];
+	return [self.window convertRectToScreen:w];
+}
+
+// interpretKeyEvents turns an arrow into moveLeft: and Return into
+// insertNewline:. The toolkit has already had those as EventKeyDown,
+// so they are swallowed here rather than becoming text.
+- (void)doCommandBySelector:(SEL)sel {}
 
 // --- drag source ---
 
@@ -1034,5 +1120,48 @@ int uitk_ak_dragging(void *w) {
 	@autoreleasepool {
 		UitkView *v = uitkView(w);
 		return v && v.dragging ? 1 : 0;
+	}
+}
+
+void uitk_ak_set_ime_enabled(void *w, int on) {
+	@autoreleasepool {
+		UitkView *v = uitkView(w);
+		if (!v) return;
+		v.imeOn = on ? YES : NO;
+		if (on) [[v inputContext] activate];
+		else {
+			// Anything half-composed is abandoned with it, or the next
+			// field inherits the last one's preedit.
+			[[v inputContext] discardMarkedText];
+			[[v inputContext] deactivate];
+			[v unmarkText];
+		}
+	}
+}
+
+void uitk_ak_set_ime_cursor(void *w, int x, int y, int cw, int ch) {
+	@autoreleasepool {
+		UitkView *v = uitkView(w);
+		if (!v) return;
+		double s = v.window ? v.window.backingScaleFactor : 1;
+		// Device pixels, y down, to the view's points, y up.
+		double px = x / s, ph = ch / s;
+		double py = v.bounds.size.height - (y / s) - ph;
+		v.imeCaret = NSMakeRect(px, py, cw / s, ph);
+		[[v inputContext] invalidateCharacterCoordinates];
+	}
+}
+
+void uitk_ak_ime_simulate(void *w, int what, const char *text, int caret) {
+	@autoreleasepool {
+		UitkView *v = uitkView(w);
+		if (!v) return;
+		NSString *t = text ? [NSString stringWithUTF8String:text] : @"";
+		switch (what) {
+		case 1: [v setMarkedText:t selectedRange:NSMakeRange((NSUInteger)caret, 0)
+		           replacementRange:NSMakeRange(NSNotFound, 0)]; break;
+		case 2: [v insertText:t replacementRange:NSMakeRange(NSNotFound, 0)]; break;
+		case 3: [v unmarkText]; break;
+		}
 	}
 }

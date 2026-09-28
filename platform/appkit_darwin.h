@@ -39,6 +39,12 @@ enum {
 	UITK_AK_DRAG_LEAVE = 9,
 	UITK_AK_DROP = 10,
 	UITK_AK_DRAG_END = 11,
+	// Input methods. The text rides in `text`; for a preedit `key` is
+	// the caret as a byte offset into it, and `button` the length in
+	// bytes of the text replaced before the caret.
+	UITK_AK_IME_PREEDIT = 12,
+	UITK_AK_IME_COMMIT = 13,
+	UITK_AK_IME_CANCEL = 14,
 };
 
 // uitk_ak_init brings NSApplication up. Safe to call more than once, and
@@ -184,6 +190,18 @@ void uitk_ak_drag_free(void *item);
 // still running.
 int uitk_ak_dragging(void *win);
 
+// --- input methods ---------------------------------------------------
+//
+// uitk_ak_set_ime_enabled activates or deactivates the view's input
+// context, which is as near as macOS comes to the enable/disable
+// zwp_text_input_v3 has: there is no per-window switch, only which
+// responder the input context is serving.
+void uitk_ak_set_ime_enabled(void *win, int on);
+
+// uitk_ak_set_ime_cursor says where the text caret is, in device pixels
+// of the content area — where the candidate window goes.
+void uitk_ak_set_ime_cursor(void *win, int x, int y, int w, int h);
+
 // --- verification ---------------------------------------------------
 //
 // uitk_ak_readback renders the window's own layer tree into out, which
@@ -202,6 +220,12 @@ int uitk_ak_dragging(void *win);
 // actually get wrong: that the buffer reached the layer, with its
 // channels in the right order and its geometry the right way up.
 int uitk_ak_readback(void *win, unsigned char *out, int w, int h);
+
+// uitk_ak_ime_simulate drives the view's NSTextInputClient directly:
+// 1 marks text with a caret at a UTF-16 offset, 2 inserts it, 3
+// unmarks. A real input method cannot be scripted, and this is the
+// path it would take.
+void uitk_ak_ime_simulate(void *win, int what, const char *text, int caret);
 
 // uitk_ak_post_key and uitk_ak_post_mouse put a synthetic event in the
 // application's own queue, for a test that needs to know input arrives.

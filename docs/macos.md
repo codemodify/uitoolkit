@@ -113,9 +113,6 @@ tile.
 
 ### Still to do
 
-- **IME.** `NSTextInputClient` is not implemented, so there is no
-  preedit and CJK input does not work. This is the same gap Windows
-  has (`WM_IME_*`), and the largest one on either platform.
 
 ## ⌘S and Ctrl+S are the same shortcut
 
@@ -255,6 +252,40 @@ same function deciding.
 Child windows carry the rest: a panel added with `addChildWindow:`
 follows its window across a move, a space and full screen, and goes
 away with it. Submenus close with their menu, deepest first.
+
+## Input methods
+
+The view is an `NSTextInputClient`, so a Japanese, Pinyin or Hangul
+method composes into the window the way it does into any Mac
+application, and a dead key on a US-International layout produces the
+character it is for.
+
+What changed to make it possible is where the text comes from.
+`keyDown:` used to read `[event characters]` and push it as `EventText`
+— right for plain typing and wrong for everything else, because with an
+input method active those characters are the **raw keystrokes**: a user
+typing にほん would have had "nihon" inserted as they went. Now
+`keyDown:` sends the key and hands the event to `-interpretKeyEvents:`,
+and the text comes back from `-insertText:` or `-setMarkedText:`. The
+key is still sent first and unconditionally, because a shortcut, an
+arrow or Escape is about the key whatever the method then does.
+
+Two things the tests pin, because neither is obvious:
+
+- A commit while composing is the method's answer and goes to the IME
+  seam; text typed with nothing marked is ordinary typing and goes to
+  the text one. The toolkit sends them to different places, so the
+  backend has to tell them apart.
+- The preedit caret is a **byte offset into the UTF-8**, and
+  `-setMarkedText:` gives a UTF-16 one. They part company on exactly
+  the characters an input method exists for.
+
+`SetIMEEnabled(false)` discards anything half-composed, or a preedit
+abandoned in one field reappears in the next.
+
+A real input method cannot be scripted from a test, so
+`uitk_ak_ime_simulate` drives the same `NSTextInputClient` calls it
+would.
 
 ## Drag and drop
 

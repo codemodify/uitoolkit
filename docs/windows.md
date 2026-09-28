@@ -67,7 +67,32 @@ reshaped seam was for.
 | | |
 | --- | --- |
 | `MaximizeAxis` | Windows has no per-axis maximize at all. Correctly **false** |
-| IME | No `WM_IME_*` at all, so composition — every CJK input method, and dead keys through an IME — does not reach the toolkit's `EventIMEPreedit`/`EventIMECommit` |
+| *(nothing)* | Every seam the Linux backends implement, this one now implements too — `seams_windows.go` asserts it and the compiler keeps it true |
+
+**Two things used to be on this list and are not any more.**
+
+**Popups.** A menu, a combo list and a tooltip were rectangles painted
+inside the window, clipped as soon as one was taller than the room
+under it. They are `WS_POPUP` windows now, `WS_EX_NOACTIVATE` and
+owned by the window they hang from, with a class of their own for
+`CS_DROPSHADOW` — that is what gives a Windows menu its shadow, and a
+top-level must not have it or it gets DWM's as well. Placement is
+`SolvePopup` against the monitor's work area, the same function X11 and
+the headless tests use.
+
+**IME.** `WM_IME_STARTCOMPOSITION`, `WM_IME_COMPOSITION` and
+`WM_IME_ENDCOMPOSITION` now reach `EventIMEPreedit` / `EventIMECommit`
+/ `EventIMECancel`, with the composition string read out of the input
+context with `ImmGetCompositionStringW`. Two details decided the code:
+`WM_IME_SETCONTEXT` clears `ISC_SHOWUICOMPOSITIONWINDOW`, or Windows
+draws the preedit in a box of its own and the same text is on screen
+twice; and the caret from `GCS_CURSORPOS` counts UTF-16 units where
+`Event.IMECaret` is a byte offset, which part company on exactly the
+characters an input method is for. The candidate list is left to
+Windows — it is the method's window, every application gets the same
+one — and what the toolkit owes it is the caret, through
+`ImmSetCandidateWindow` with `CFS_EXCLUDE` so a list near the foot of
+the screen opens above the caret instead of over it.
 
 **Installed fonts used to be on this list and are not any more.**
 `style/sysfont.go` finds faces through `fc-list`, and Windows has no

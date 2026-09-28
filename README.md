@@ -51,7 +51,7 @@ hyphens, so the names use underscores. See
 | Windowing | Linux X11 + Wayland (`wl_egl_window` / eglSwapBuffers, else `wl_shm` / `XPutImage`); offscreen always. Pointers are host cursors (`wp_cursor_shape_v1` / XCURSOR / Xfont / `LoadCursorW` / `NSCursor`) |
 | Tray | `StatusItem` — Linux SNI + dbusmenu (submenus included) + fdo notifications; Win32 notify area; macOS `NSStatusItem` (CGO) |
 | CGO | optional — tests and screenshots are `CGO_ENABLED=0` |
-| Ports | Linux is the shipping platform. **Windows has a real backend** — window, input, clipboard, drag and drop, per-monitor DPI — cross-compiled from Linux with `CGO_ENABLED=0` and tested on Windows 10 and 11 ([docs/windows.md](docs/windows.md)). **macOS has an AppKit backend** — window, present, input, frame and geometry, clipboard, pointer shapes, cgo — with the whole suite green on macOS 15 ([docs/macos.md](docs/macos.md)); no IME or drag and drop there yet. Installed fonts are found without fontconfig on both, so a pack draws in its era's typeface everywhere |
+| Ports | Linux is the shipping platform. **Windows has a real backend** — window, input, clipboard, drag and drop, per-monitor DPI — cross-compiled from Linux with `CGO_ENABLED=0` and tested on Windows 10 and 11 ([docs/windows.md](docs/windows.md)). **macOS has an AppKit backend** — cgo — with the whole suite green on macOS 15 ([docs/macos.md](docs/macos.md)). Both now implement **every seam the Linux backends do**: window, input, frame and geometry, clipboard, pointer shapes, popups on surfaces of their own, drag and drop, and IME. The compiler keeps that true (`seams_*.go`), and installed fonts are found without fontconfig, so a pack draws in its era's typeface everywhere |
 | License | [The Free License](LICENSE) |
 
 ## Highlights

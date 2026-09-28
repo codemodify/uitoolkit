@@ -247,6 +247,13 @@ type winSurface struct {
 	// (win32_popup_windows.go).
 	pop  *winPopup
 	kids []*winSurface
+
+	// The input method (win32_ime_windows.go): whether it is on for
+	// this window, the context set aside while it is off, and whether
+	// something is being composed now.
+	imeOn     bool
+	imeCtx    uintptr
+	composing bool
 }
 
 func win32RegisterClass() (*uint16, error) {
@@ -425,6 +432,30 @@ func win32Proc(hwnd, msg, wparam, lparam uintptr) uintptr {
 		s.push(Event{Kind: EventKeyUp, Key: winKey(wparam), Mods: winMods()})
 		if msg == wmSysKeyUp {
 			break
+		}
+		return 0
+	case wmImeSetContext:
+		// Windows would draw the preedit itself, in a box of its own
+		// near the caret, and then the same text would be on screen
+		// twice — once in the toolkit's text field and once in the
+		// IME's. Clearing the bit before the default handler sees it is
+		// how an application says it draws its own.
+		r, _, _ := procDefWindowProc.Call(hwnd, msg, wparam, lparam&^iscShowUIComposition)
+		return r
+	case wmImeStartComposition:
+		s.composing = true
+		// Answering 0 rather than calling on: the default handler is
+		// what opens the composition window this backend has just said
+		// it does not want.
+		return 0
+	case wmImeComposition:
+		if s.wmImeComposition(lparam) {
+			return 0
+		}
+	case wmImeEndComposition:
+		if s.composing {
+			s.composing = false
+			s.push(Event{Kind: EventIMECancel})
 		}
 		return 0
 	case wmChar:

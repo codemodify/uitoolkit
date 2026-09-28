@@ -199,3 +199,50 @@ func TestWinPopupReposition(t *testing.T) {
 		t.Errorf("repositioned to %+v, want x 100", after)
 	}
 }
+
+// The caret in a preedit is a byte offset into the UTF-8, and Windows
+// counts UTF-16 units. The two part company on the first character
+// outside the basic plane — which for an input method is not a corner
+// case, because that is where the rarer CJK characters live.
+func TestWinIMECaretIsAByteOffset(t *testing.T) {
+	for _, c := range []struct {
+		name  string
+		text  string
+		units int
+		want  int
+	}{
+		{"nothing", "", 0, 0},
+		{"the start", "にほん", 0, 0},
+		{"one BMP character is three bytes", "にほん", 1, 3},
+		{"two", "にほん", 2, 6},
+		{"the end", "にほん", 3, 9},
+		{"past the end is the end", "にほん", 99, 9},
+		{"ASCII is one for one", "abc", 2, 2},
+		// U+20BB7, a surrogate pair: two UTF-16 units, four UTF-8 bytes.
+		{"before a pair", "a\U00020BB7b", 1, 1},
+		{"a caret inside a pair belongs before it", "a\U00020BB7b", 2, 1},
+		{"after a pair", "a\U00020BB7b", 3, 5},
+		{"negative is the start", "にほん", -1, 0},
+	} {
+		if got := utf16ByteOffset(c.text, c.units); got != c.want {
+			t.Errorf("%s: offset %d of %q is %d, want %d", c.name, c.units, c.text, got, c.want)
+		}
+	}
+}
+
+// The window carries the IME seam, and turning it on and off is safe
+// whatever state it is in.
+func TestWinIsAnIMESurface(t *testing.T) {
+	s := testSurface(t, 320, 200)
+	var _ IMESurface = s
+	s.SetIMEEnabled(true)
+	s.SetIMECursor(40, 60, 2, 18)
+	s.SetIMEEnabled(false)
+	// Off twice, and on again: the context is set aside rather than
+	// destroyed, so this has to be idempotent.
+	s.SetIMEEnabled(false)
+	s.SetIMEEnabled(true)
+	if !s.imeOn {
+		t.Error("the input method did not come back on")
+	}
+}
