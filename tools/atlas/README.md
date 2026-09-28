@@ -25,3 +25,17 @@ the timeline, Chromium.
   or `WEB_LANES`; `build.py` names any lineage it could not place.
 - **Publishing** the page means uploading `out/index.html` with
   `out/previews/` and `out/gallery/` beside it.
+
+## frames.sh
+
+`tools/atlas/frames.sh` rebuilds the README's window-frame sheet
+(`docs/screenshots/themes/frames.webp`): one active frame per era,
+System 1 to macOS Tahoe, cropped out of each pack's `-frames` sheet and
+montaged four to a row.
+
+It exists because that image did not have a script. It was made by hand
+once, and when frame drawing changed — the Platinum title, the fonts
+the suite pins — the list of packs in it had to be reconstructed from
+the picture before it could be rebuilt. A screenshot in the
+documentation that no script can regenerate is one that will be wrong
+and stay wrong.
