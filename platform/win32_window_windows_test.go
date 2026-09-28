@@ -586,3 +586,122 @@ func TestDragActionsFollowTheModifiers(t *testing.T) {
 		}
 	}
 }
+
+// The source half. DoDragDrop itself cannot be driven from a test — it
+// blocks on a real gesture — but everything Explorer will call on the way
+// can be, and that is where the work is: the IDataObject's vtable, the
+// formats it offers, and the HGLOBALs it hands over.
+func TestADragSourceOffersWhatItCarries(t *testing.T) {
+	s := testSurface(t, 300, 200)
+	files := "file:///C:/a%20b/c.txt\r\nfile:///D:/x.md\r\n"
+	if !s.StartDrag(DragPayload{
+		Types: []string{"text/uri-list", "text/plain;charset=utf-8"},
+		Data: func(mime string) ([]byte, bool) {
+			switch mime {
+			case "text/uri-list":
+				return []byte(files), true
+			case "text/plain;charset=utf-8":
+				return []byte("hello"), true
+			}
+			return nil, false
+		},
+		Actions: DragCopy | DragMove,
+	}) {
+		t.Fatal("StartDrag refused")
+	}
+	d := s.pendingDrag
+	if d == nil {
+		t.Fatal("no drag is pending")
+	}
+	t.Cleanup(func() { s.pendingDrag = nil })
+
+	// Register it the way runPendingDrag would, then call it as a COM
+	// client does.
+	this := uintptr(unsafe.Pointer(&d.data))
+	winSrcMu.Lock()
+	winSrcBy[this] = d
+	winSrcMu.Unlock()
+	t.Cleanup(func() {
+		winSrcMu.Lock()
+		delete(winSrcBy, this)
+		winSrcMu.Unlock()
+	})
+
+	ask := func(cf uint16, tymed uint32) (winStgMedium, uintptr) {
+		f := winFormatEtc{Format: cf, Aspect: dvAspectContent, Index: -1, Tymed: tymed}
+		var m winStgMedium
+		r, _, _ := syscall.SyscallN(d.data.vtbl.GetData, this,
+			uintptr(unsafe.Pointer(&f)), uintptr(unsafe.Pointer(&m)))
+		return m, r
+	}
+	// QueryGetData says yes to what it carries and no to the rest.
+	q := func(cf uint16) uintptr {
+		f := winFormatEtc{Format: cf, Aspect: dvAspectContent, Index: -1, Tymed: tymedHGlobal}
+		r, _, _ := syscall.SyscallN(d.data.vtbl.QueryGetData, this, uintptr(unsafe.Pointer(&f)))
+		return r
+	}
+	if q(cfHDrop) != sOK || q(cfUnicodeText) != sOK {
+		t.Error("the drag does not offer the formats it was given")
+	}
+	if q(0xC0FE) == sOK {
+		t.Error("the drag claims a format it was never given")
+	}
+	// A medium it cannot provide is refused rather than faked.
+	if _, r := ask(cfHDrop, 0); r != dvENoTymed {
+		t.Errorf("GetData with no usable medium answered %#x, want DV_E_TYMED", r)
+	}
+	// Text comes back as UTF-16, NUL-terminated.
+	m, r := ask(cfUnicodeText, tymedHGlobal)
+	if r != sOK || m.Handle == 0 {
+		t.Fatalf("GetData(CF_UNICODETEXT) answered %#x", r)
+	}
+	if got := string(winTextFromGlobal(m.Handle)); got != "hello" {
+		t.Errorf("the text came back %q, want %q", got, "hello")
+	}
+	procGlobalFree.Call(m.Handle)
+
+	// And the files as a CF_HDROP, which is what Explorer reads.
+	m, r = ask(cfHDrop, tymedHGlobal)
+	if r != sOK || m.Handle == 0 {
+		t.Fatalf("GetData(CF_HDROP) answered %#x", r)
+	}
+	if got := string(winFilesFromHDrop(m.Handle)); got != files {
+		t.Errorf("the files came back %q, want %q", got, files)
+	}
+	procGlobalFree.Call(m.Handle)
+}
+
+// A uri-list and a Windows path list are the same thing said two ways,
+// and the round trip has to survive spaces and non-ASCII.
+func TestFileURIsRoundTripToWindowsPaths(t *testing.T) {
+	for _, p := range []string{
+		`C:\Users\ic\a.txt`, `C:\a b\c.txt`, `D:\π\x.md`, `C:\a#b\c&d.txt`,
+	} {
+		uri := winFileURI(p)
+		back, ok := winPathFromURI(uri)
+		if !ok || back != p {
+			t.Errorf("%q -> %q -> %q (ok %v)", p, uri, back, ok)
+		}
+	}
+	if _, ok := winPathFromURI("http://example.com/x"); ok {
+		t.Error("a non-file URI should not become a path")
+	}
+}
+
+// What the drag allows, and what came back, in Windows' vocabulary.
+func TestDragEffectsMapBothWays(t *testing.T) {
+	if got := winEffectsOf(DragCopy | DragMove); got != dropEffectCopy|dropEffectMove {
+		t.Errorf("allowed copy|move became %d", got)
+	}
+	for _, c := range []struct {
+		e    uint32
+		want DragAction
+	}{
+		{dropEffectNone, DragNone}, {dropEffectCopy, DragCopy},
+		{dropEffectMove, DragMove}, {dropEffectLink, DragLink},
+	} {
+		if got := winActionOf(c.e); got != c.want {
+			t.Errorf("effect %d became %v, want %v", c.e, got, c.want)
+		}
+	}
+}

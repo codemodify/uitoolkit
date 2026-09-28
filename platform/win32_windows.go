@@ -217,6 +217,10 @@ type winSurface struct {
 	dragAccept  bool
 	dragAction  DragAction
 	dragPayload map[string][]byte
+	// pendingDrag is a drag StartDrag agreed to and Poll has yet to run;
+	// drag is the one running now.
+	pendingDrag *winDragSource
+	drag        *winDragSource
 
 	sizing  Sizing
 	limits  SizeLimits
@@ -783,6 +787,10 @@ func clampInt(v, lo, hi int) int {
 // Poll drains what the window procedure queued, after pumping whatever
 // Windows has for this thread.
 func (s *winSurface) Poll() []Event {
+	// A drag the application asked for runs here, before the queue is
+	// drained: DoDragDrop blocks for the whole gesture, and this is the
+	// place in the loop where blocking is already expected.
+	s.runPendingDrag()
 	s.pump()
 	s.mu.Lock()
 	ev := s.queue
