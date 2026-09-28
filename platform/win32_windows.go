@@ -208,6 +208,16 @@ type winSurface struct {
 	prePlacement winPlacement
 	preStyle     uintptr
 
+	// The drag currently over this window: what it offers, the
+	// IDataObject while one is in hand, what the application last agreed
+	// to do with it, and what a drop actually carried.
+	dropTarget  *winDropTarget
+	dragMimes   []string
+	dragData    uintptr
+	dragAccept  bool
+	dragAction  DragAction
+	dragPayload map[string][]byte
+
 	sizing  Sizing
 	limits  SizeLimits
 	opts    WindowOptions
@@ -493,6 +503,7 @@ func newWinSurface(opts WindowOptions) (Surface, error) {
 		procShowWindow.Call(hwnd, swShow)
 		s.visible = true
 	}
+	s.registerDrop()
 	return s, nil
 }
 
@@ -817,6 +828,8 @@ func (s *winSurface) Close() error {
 	s.closed = true
 	s.mu.Unlock()
 	if s.hwnd != 0 {
+		// Before the window goes: RevokeDragDrop needs it.
+		s.revokeDrop()
 		win32Mu.Lock()
 		delete(win32ByHWND, s.hwnd)
 		win32Mu.Unlock()

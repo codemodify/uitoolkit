@@ -4,6 +4,7 @@ package platform
 
 import (
 	"runtime"
+	"syscall"
 	"testing"
 	"unsafe"
 
@@ -479,5 +480,109 @@ func TestPickIconTakesTheNearestAtOrAbove(t *testing.T) {
 	}
 	if pickIcon(nil, 16) != nil {
 		t.Error("an empty set should pick nothing")
+	}
+}
+
+// Drag and drop, the receiving half. The COM object, its vtable and the
+// events it queues are exercised here; the IDataObject is not, because
+// only a real drag from another application has one — what is tested is
+// everything this backend is responsible for between Windows calling and
+// the toolkit hearing about it.
+func TestADropTargetIsRegisteredAndSpeaksToTheQueue(t *testing.T) {
+	s := testSurface(t, 400, 300)
+	if s.dropTarget == nil {
+		t.Fatal("RegisterDragDrop did not take: the window accepts no drops")
+	}
+	this := uintptr(unsafe.Pointer(s.dropTarget))
+	s.Poll()
+
+	kinds := func() []EventKind {
+		var out []EventKind
+		for _, ev := range s.Poll() {
+			switch ev.Kind {
+			case EventDragMotion, EventDragLeave, EventDrop:
+				out = append(out, ev.Kind)
+			}
+		}
+		return out
+	}
+	var effect uint32
+	call := func(slot uintptr, args ...uintptr) {
+		vt := s.dropTarget.vtbl
+		fn := [...]uintptr{vt.QueryInterface, vt.AddRef, vt.Release,
+			vt.DragEnter, vt.DragOver, vt.DragLeave, vt.Drop}[slot]
+		syscall.SyscallN(fn, append([]uintptr{this}, args...)...)
+	}
+
+	// The window has agreed to take a copy.
+	s.AcceptDrag("text/uri-list", DragCopy|DragMove, DragCopy)
+	call(3, 0, 0, 0, 0, uintptr(unsafe.Pointer(&effect))) // DragEnter
+	if effect != dropEffectCopy {
+		t.Errorf("DragEnter answered effect %d, want copy (%d)", effect, dropEffectCopy)
+	}
+	if got := kinds(); len(got) != 1 || got[0] != EventDragMotion {
+		t.Errorf("DragEnter queued %v, want one EventDragMotion", got)
+	}
+
+	// Having refused, the next answer is "no drop".
+	s.AcceptDrag("", 0, DragNone)
+	call(4, 0, 0, 0, uintptr(unsafe.Pointer(&effect))) // DragOver
+	if effect != dropEffectNone {
+		t.Errorf("after refusing, DragOver answered %d, want none", effect)
+	}
+
+	call(5)                                               // DragLeave
+	call(6, 0, 0, 0, 0, uintptr(unsafe.Pointer(&effect))) // Drop
+	if got := kinds(); len(got) != 3 ||
+		got[0] != EventDragMotion || got[1] != EventDragLeave || got[2] != EventDrop {
+		t.Errorf("queued %v, want motion, leave, drop", got)
+	}
+}
+
+// A drop is handed over as a uri-list, the way every other backend hands
+// files over, so nothing above the boundary learns what a path looks like
+// on Windows.
+func TestWindowsPathsBecomeFileURIs(t *testing.T) {
+	for _, c := range []struct{ in, want string }{
+		{`C:\Users\ic\a.txt`, "file:///C:/Users/ic/a.txt"},
+		{`C:\a b\c.txt`, "file:///C:/a%20b/c.txt"},
+		{`D:\π\x.md`, "file:///D:/%CF%80/x.md"},
+		{`C:\a#b\c&d.txt`, "file:///C:/a%23b/c%26d.txt"},
+	} {
+		if got := winFileURI(c.in); got != c.want {
+			t.Errorf("winFileURI(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+// Windows leaves the modifier convention to the target.
+func TestDragActionsFollowTheModifiers(t *testing.T) {
+	const ctrl, shift = 0x0008, 0x0004
+	for _, c := range []struct {
+		keys uintptr
+		want DragAction
+	}{
+		{0, DragCopy | DragMove | DragLink},
+		{ctrl, DragCopy},
+		{shift, DragMove},
+		{ctrl | shift, DragLink},
+	} {
+		if got := winDragActions(c.keys); got != c.want {
+			t.Errorf("keys %#x gave %v, want %v", c.keys, got, c.want)
+		}
+	}
+	for _, c := range []struct {
+		ok   bool
+		a    DragAction
+		want uint32
+	}{
+		{false, DragCopy, dropEffectNone},
+		{true, DragCopy, dropEffectCopy},
+		{true, DragMove, dropEffectMove},
+		{true, DragLink, dropEffectLink},
+	} {
+		if got := winEffectOf(c.ok, c.a); got != c.want {
+			t.Errorf("winEffectOf(%v, %v) = %d, want %d", c.ok, c.a, got, c.want)
+		}
 	}
 }
