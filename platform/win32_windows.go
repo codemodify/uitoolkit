@@ -141,6 +141,8 @@ const (
 	wmKeyDown     = 0x0100
 	wmKeyUp       = 0x0101
 	wmChar        = 0x0102
+	wmSysKeyDown  = 0x0104
+	wmSysKeyUp    = 0x0105
 	wmSetFocus    = 0x0007
 	wmKillFocus   = 0x0008
 
@@ -191,6 +193,9 @@ type winSurface struct {
 
 	closed bool
 	torn   bool
+
+	// hiSurrogate is a WM_CHAR high surrogate waiting for its pair.
+	hiSurrogate uint16
 
 	sizing  Sizing
 	limits  SizeLimits
@@ -309,6 +314,26 @@ func win32Proc(hwnd, msg, wparam, lparam uintptr) uintptr {
 		return 0
 	case wmKillFocus:
 		s.push(Event{Kind: EventFocusOut})
+		return 0
+	case wmKeyDown, wmSysKeyDown:
+		s.push(Event{Kind: EventKeyDown, Key: winKey(wparam), Mods: winMods()})
+		if msg == wmSysKeyDown {
+			// Alt combinations are the system's before they are ours:
+			// falling through to DefWindowProc is what keeps Alt+F4
+			// closing the window and Alt+Space opening its menu.
+			break
+		}
+		return 0
+	case wmKeyUp, wmSysKeyUp:
+		s.push(Event{Kind: EventKeyUp, Key: winKey(wparam), Mods: winMods()})
+		if msg == wmSysKeyUp {
+			break
+		}
+		return 0
+	case wmChar:
+		if r, ok := s.winChar(wparam); ok {
+			s.push(Event{Kind: EventText, Rune: r, Mods: winMods()})
+		}
 		return 0
 	case wmMouseMove:
 		s.push(Event{Kind: EventMouseMove, Pos: lparamPoint(lparam)})

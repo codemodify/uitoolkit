@@ -71,7 +71,6 @@ reshaped seam was for.
 | `MaximizeAxis` | Windows has no per-axis maximize at all. Correctly **false** |
 | `SetShadedHeight` | Wants `WM_GETMINMAXINFO`, the analogue of `WM_NORMAL_HINTS`. Unpinning works; pinning does not |
 | `SetFullscreen` | Records the state but does not yet save the placement, drop the style and cover the monitor |
-| Keyboard | `WM_KEYDOWN`/`WM_CHAR` are not translated yet: the window takes mouse input only |
 | Drag and drop | Not started, **on purpose**. `DoDragDrop` is a *blocking* modal call and `IDropTarget::DragOver` answers *synchronously*, where the toolkit's contract is asynchronous. That is a run-loop mismatch, not a vocabulary one, and it should be built against the real API and allowed to dictate the seam rather than designed on paper |
 | The suggested DPI rectangle | `WM_DPICHANGED` carries a rectangle Windows would like the window moved to. Reading it means turning an `LPARAM` back into a pointer, which `go vet` will not have; the window is re-sized from its logical size and the new scale instead, which lands in the same place for an ordinary drag between two monitors |
 
@@ -110,6 +109,21 @@ such edge — the memory is GDI's, sized by GDI — and blitting from a
 memory DC is the faster path anyway, since the header is parsed once at
 creation instead of once a frame.
 
+## Building an app for Windows
+
+Pass `-ldflags "-H windowsgui"`. Go links a Windows binary for the
+console subsystem by default, so without it every uitoolkit app opens a
+console window beside its own — and that console takes the keyboard
+focus, which makes the app look as though it ignores typing:
+
+```sh
+GOOS=windows GOARCH=amd64 go build -tags theme_engine_all \
+    -ldflags "-H windowsgui" -o settings.exe ./cmd/uitoolkit-settings
+```
+
+`cmd/uitk-winsmoke` is the exception and wants the console: it reports
+what it saw as text.
+
 ## Running it
 
 `cmd/uitk-winsmoke` exists because *"a window appeared"* is not evidence.
@@ -146,6 +160,18 @@ the slirp gateway at `10.0.2.2`:
 | --- | --- |
 | Windows 10 22H2, 19045.6466 | five runs in five complete; the four quadrants land in the right corners in the right colours |
 | Windows 11 24H2, 26100.9168 | five runs in five complete; same |
+
+Keyboard, on Windows 11 24H2: Tab moves the focus ring between controls,
+and typing `keram` into Settings' theme filter narrows 131 packs to
+`2002 · Keramik`. So `WM_KEYDOWN` reaches the toolkit as a key and
+`WM_CHAR` reaches a text field as text.
+
+One trap worth writing down for anyone testing this way: Microsoft
+Defender quarantines freshly built, unsigned Go console binaries copied
+into a guest. The file vanishes, or survives and will not start —
+"The system cannot execute the specified program" — which looks exactly
+like a broken build. A GUI-subsystem binary of the same code was left
+alone.
 
 The quadrants come back byte-identical to what the same drawing calls
 produce on Linux — `217,38,38`, `38,179,51`, `38,77,230`, `242,242,242` —
