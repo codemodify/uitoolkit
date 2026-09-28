@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -208,6 +209,14 @@ func TestParseINI(t *testing.T) {
 }
 
 func TestTitleBarConfigFiles(t *testing.T) {
+	// The files are KDE's and GTK's, found the XDG way, so the paths this
+	// asserts are a Linux desktop's — on Windows filepath.Join answers
+	// with backslashes and the test is about nothing. It is skipped rather
+	// than given a build tag because the rest of this file is portable and
+	// worth running wherever the tests run (tools/test-windows.sh).
+	if runtime.GOOS != "linux" {
+		t.Skip("KDE and GTK configuration paths are a Linux desktop's")
+	}
 	t.Setenv("XDG_CONFIG_HOME", "/cfg")
 	t.Setenv("XDG_CONFIG_DIRS", "/etc/a:/etc/b")
 	files := TitleBarConfigFiles()

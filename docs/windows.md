@@ -150,6 +150,45 @@ sounds: the first version threw the result of the blit away, which is
 precisely why a window that never showed a pixel looked exactly like one
 that worked.
 
+## Testing it
+
+Two scripts, because the two halves cost very different amounts:
+
+```sh
+tools/build-windows.sh                     # seconds, needs no Windows
+UITK_WIN_VM_MON=/path/to/monitor.sock \
+  tools/test-windows.sh                    # runs the tests on real Windows
+```
+
+**`tools/build-windows.sh`** cross-compiles and vets the whole tree for
+`GOOS=windows`, and compiles the Windows *test* binaries too so they
+cannot rot. It catches nothing that a type checker cannot see — which is
+the point of saying so.
+
+**`tools/test-windows.sh`** is the one that matters. It cross-compiles
+`platform`'s tests, hands the binary to a Windows VM over QEMU's user
+network (the guest reaches this host at `10.0.2.2`; nothing is exposed
+outside loopback), runs them there, and brings the output back. The guest
+needs two things set up once: an interactive logged-in desktop, because
+the tests make real windows and a window needs a session to appear in;
+and Microsoft Defender told to leave the directory alone, because it
+quarantines freshly built unsigned Go binaries.
+
+### Why this exists at all
+
+Every file behind `//go:build windows` is invisible to `tools/test.sh`:
+Go does not compile it on Linux, so the suite cannot fail on it. At the
+point the backend first ran, `platform/` held **seven Windows source
+files and no Windows test files**, and nothing in `tools/` built for
+`GOOS=windows` at all. Three bugs went out through that gap, and all
+three were the same shape — *a Win32 call whose result nobody read*:
+
+| | what the test asserts now |
+| --- | --- |
+| `ShowWindow` blocked for ever without the main thread pinned (four runs in five) | windows open five times over without the test timing out |
+| `SetDIBitsToDevice` answered "0 scan lines set" every frame and the window stayed white | `Present` returns an error, and the swizzled bytes are BGRX |
+| `RequestDecorations` recorded the mode and did nothing to the window | the client rectangle equals the window rectangle, and `WS_CAPTION` survives |
+
 ## What has actually been run
 
 Under QEMU, cross-compiled from Linux, driven through the QEMU monitor
