@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 const appearanceFile = "look.json"
@@ -70,6 +71,28 @@ func ConfigDir() string {
 	return filepath.Join(os.TempDir(), "uitoolkit")
 }
 
+// CacheDir is $XDG_CACHE_HOME/uitoolkit (or the platform's own cache
+// directory) — where the toolkit writes things it can regenerate, such
+// as the colour-scheme files a desktop's own window frame reads.
+//
+// XDG_CACHE_HOME first on **every** platform, for the same reason
+// [ConfigDir] reads XDG_CONFIG_HOME on every platform: the two have to
+// follow one rule or a test that redirects one finds the other pointing
+// at the real home directory. That is not hypothetical — this was
+// os.UserCacheDir, which ignores XDG_CACHE_HOME on Windows and macOS,
+// and a test that moved the cache aside on Linux quietly wrote into the
+// developer's own %LocalAppData% on Windows and found somebody else's
+// files there.
+func CacheDir() string {
+	if dir := os.Getenv("XDG_CACHE_HOME"); dir != "" {
+		return filepath.Join(dir, "uitoolkit")
+	}
+	if base, err := os.UserCacheDir(); err == nil && base != "" {
+		return filepath.Join(base, "uitoolkit")
+	}
+	return filepath.Join(os.TempDir(), "uitoolkit")
+}
+
 // AppearancePath is $XDG_CONFIG_HOME/uitoolkit/look.json
 // (or ~/.config/uitoolkit/look.json).
 func AppearancePath() string {
@@ -115,11 +138,43 @@ func writeJSONFile(path string, v any) error {
 		_ = os.Remove(tmp)
 		return err
 	}
-	if err := os.Rename(tmp, path); err != nil {
+	if err := replaceFile(tmp, path); err != nil {
 		_ = os.Remove(tmp)
 		return err
 	}
 	return nil
+}
+
+// replaceFile renames tmp over path, retrying briefly.
+//
+// The retry is Windows'. There, a rename over a file another process
+// has open fails — Go opens files for reading without FILE_SHARE_DELETE
+// — so publishing look.json fails exactly when another uitoolkit
+// application happens to be reading it. That is not a rare race: every
+// application *watches* that file (app/lookwatch.go), so a save races
+// every other running app by design, and the failure mode is Apply
+// reporting that it could not write the preferences.
+//
+// It is not only readers: two writers renaming over the same path at
+// once collide there too, and a save is not the only thing saving —
+// Settings can be open twice. So the wait backs off rather than
+// spinning, out to about a quarter of a second in total, which is far
+// longer than either holds the file and still imperceptible for
+// something a user does by pressing Apply.
+//
+// On Unix the first attempt always succeeds and none of this runs.
+func replaceFile(tmp, path string) error {
+	var err error
+	for i := 0; i < 60; i++ {
+		if err = os.Rename(tmp, path); err == nil {
+			return nil
+		}
+		// 1ms for the first few, growing to 16: quick enough that an
+		// uncontended retry is over at once, patient enough that a
+		// hundred writers all get through.
+		time.Sleep(time.Duration(1+i/4) * time.Millisecond)
+	}
+	return err
 }
 
 func resolveAppearance(raw appearanceFileJSON) Appearance {

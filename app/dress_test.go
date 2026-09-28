@@ -13,22 +13,19 @@ import (
 )
 
 // dressRig is an offscreen window in pack whose simulated desktop takes a
-// frame palette when palette is set, with the user's cache directory in a
-// temporary one. It returns that directory as [os.UserCacheDir] resolves
-// it, which is not the same thing on every platform: XDG_CACHE_HOME is
-// Linux's, and macOS ignores it for $HOME/Library/Caches. So both are
-// moved, and the answer is read back rather than assumed — asserting the
-// XDG path directly is how this test came to fail on macOS while testing
-// nothing that was actually broken.
+// frame palette when palette is set, with the toolkit's cache directory
+// in a temporary one.
+//
+// One environment variable does it on all three platforms, because
+// [style.CacheDir] reads XDG_CACHE_HOME everywhere — which it does
+// precisely so this works. It used to be os.UserCacheDir, and then this
+// rig had to move HOME as well for macOS and still found the real
+// %LocalAppData% on Windows, where it read somebody else's files and
+// failed.
 func dressRig(t *testing.T, pack string, palette bool) (*Application, *Window, *platform.Offscreen, string) {
 	t.Helper()
-	home := t.TempDir()
-	t.Setenv("XDG_CACHE_HOME", home)
-	t.Setenv("HOME", home)
-	cache, err := os.UserCacheDir()
-	if err != nil {
-		t.Fatal(err)
-	}
+	cache := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", cache)
 	t.Setenv(EnvDecorationPalette, "")
 	p, ok := style.LoadTheme(pack)
 	if !ok {

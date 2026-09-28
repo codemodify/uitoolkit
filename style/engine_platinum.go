@@ -755,24 +755,14 @@ func (e platinumEngine) DrawWindowFrame(l *Classic, ctx *paintengine2d.Context, 
 		ctx.DrawRect(paintengine2d.XYWH(content.Min.X, content.Min.Y, u, content.Dy()), paintengine2d.Fill(c.hi))
 	}
 	f := l.BoldFont()
-	tw := float32(0)
-	if title != "" {
-		tw = f.Advance(title)
-	}
 	left, right := bar.Min.X+u*2, bar.Max.X-u*2
 	gap := l.S(8)
-	var tx float32
-	place := func() {
-		// Centred over the whole bar, kept clear of the boxes.
-		tx = bar.Min.X + (bar.Dx()-tw)*0.5
-		if tx < left+gap {
-			tx = left + gap
-		}
-		if tx+tw > right-gap {
-			tx = right - gap - tw
-		}
-	}
-	place()
+	// Centred over the whole bar, kept clear of the boxes, and clipped
+	// to the room between them — platTitleSpan, which the window's own
+	// caption uses too, so the frame a dialog draws for itself and the
+	// frame a window wears lay the title out identically.
+	tx, tw := platTitleSpan(l, bar, left, right, f, title)
+	place := func() { tx, tw = platTitleSpan(l, bar, left, right, f, title) }
 	if st.Active {
 		if st.CanClose {
 			cb := e.WindowCloseRect(l, b)
@@ -806,10 +796,12 @@ func (e platinumEngine) DrawWindowFrame(l *Classic, ctx *paintengine2d.Context, 
 	if !st.Active {
 		col = c.dim
 	}
-	if tx < left {
-		tx = left
+	if tw <= 0 {
+		return
 	}
-	l.drawFittedText(ctx, f, title, paintengine2d.XYWH(tx, bar.Min.Y, right-tx, bar.Dy()), col, AlignStart, 0)
+	// tw, not right-tx: the box is the room the title was clipped to,
+	// which is what the window's own caption draws into.
+	l.drawFittedText(ctx, f, title, paintengine2d.XYWH(tx, bar.Min.Y, tw, bar.Dy()), col, AlignStart, 0)
 }
 
 // ---- controls ---------------------------------------------------------------

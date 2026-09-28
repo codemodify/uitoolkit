@@ -150,17 +150,51 @@ func TestPlatinumTitleCentresOnTheBar(t *testing.T) {
 			lead, trail := hb.Controls()
 			// Clear of the boxes' black outlines, whichever frame drew them.
 			x0, x1 := widget.DeviceBounds(lead).Max.X+lk.(*style.Classic).S(8), widget.DeviceBounds(trail).Min.X-lk.(*style.Classic).S(8)
-			// The title's middle rows: clear of the black line under the bar,
-			// which the in-app bar puts elsewhere at a fractional scale.
-			cy, ht := band.Min.Y+(band.Dy()-3*style.Dip(lk, 1))*0.5, lk.(*style.Classic).S(3)
-			y0, y1 := int(cy-ht), int(cy+ht)
+			// The title's own rows, measured from the *font* rather than
+			// from a fixed slice of the bar. A fixed slice is what this
+			// was, and it only worked while the bar was the height the
+			// bundled face makes it: Geneva — which is the right font
+			// for Platinum and the whole point of reading one in — is
+			// wide and short, so the same six rows caught the top of
+			// the word and not its end, and a correctly centred title
+			// measured as an off-centre one.
+			//
+			// Kept clear of the black lines along the bar's own edges,
+			// which run its full width and would swamp any span.
+			cy := band.Min.Y + (band.Dy()-3*style.Dip(lk, 1))*0.5
+			ht := lk.(*style.Classic).BoldFont().Height() * 0.35
+			y0 := max(int(cy-ht), int(band.Min.Y)+3)
+			y1 := min(int(cy+ht), int(band.Max.Y)-4)
 			ff, fl := inkSpan(img, int(x0), int(x1), y0, y1, 40)
 			if ff < 0 {
 				t.Fatal("no title ink")
 			}
 			mid := (float32(ff) + float32(fl+1)) * 0.5
-			if !within(mid, (wr.Min.X+wr.Max.X)*0.5, 2*lk.(*style.Classic).S(1)) {
-				t.Errorf("title's centre %v, the window's %v", mid, (wr.Min.X+wr.Max.X)*0.5)
+			winMid := (wr.Min.X + wr.Max.X) * 0.5
+			// Against the window's middle, within a few pixels: what is
+			// measured here is the title's *ink*, and ink is not the
+			// advance box — the first glyph's left bearing and the
+			// last one's right are not equal, so a perfectly centred
+			// string measures a pixel or two off centre, by however
+			// much the face's bearings differ. Geneva's differ by more
+			// than the bundled face's.
+			//
+			// The tolerance still tests what the name says. The room
+			// between the boxes is centred elsewhere — its middle is
+			// where the title would sit if it were centred in the room
+			// rather than on the bar — and that is much further away
+			// than this, which the check below makes explicit.
+			if !within(mid, winMid, lk.(*style.Classic).S(5)) {
+				t.Errorf("title's centre %v, the window's %v", mid, winMid)
+			}
+			// And the thing the centring is *not*: the middle of the
+			// free space between the close box and the zoom and
+			// collapse boxes. Mac OS 8 centred on the window, and a
+			// title centred in the room instead would land here.
+			roomMid := (widget.DeviceBounds(lead).Max.X + widget.DeviceBounds(trail).Min.X) * 0.5
+			if absf(mid-roomMid) <= absf(mid-winMid) && absf(roomMid-winMid) > lk.(*style.Classic).S(2) {
+				t.Errorf("title's centre %v is nearer the free room's %v than the window's %v: "+
+					"it is centred between the boxes, not on the bar", mid, roomMid, winMid)
 			}
 			ref := inAppFrame(t, lk, int(wr.Dx()), int(wr.Dy()), title)
 			oy := int(wr.Min.Y)
@@ -231,4 +265,12 @@ func needPack(t *testing.T, name string) {
 	if _, ok := style.LoadTheme(name); !ok {
 		t.Skipf("the %q pack is not in this build (theme_engine_%s)", name, name)
 	}
+}
+
+// absf is |x|, for comparing how far two measurements are from a third.
+func absf(x float32) float32 {
+	if x < 0 {
+		return -x
+	}
+	return x
 }

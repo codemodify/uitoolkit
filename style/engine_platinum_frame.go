@@ -90,6 +90,30 @@ func (e platinumEngine) DrawCaptionTitle(l *Classic, ctx *paintengine2d.Context,
 	e.DrawCaptionTitleSpan(l, ctx, b, b, title, st)
 }
 
+// platTitleSpan is where the title goes in a bar whose boxes leave the
+// room between left and right: centred on the whole bar, as Mac OS 8
+// centred it, then slid back inside that room, and clipped to it when
+// the title is wider than the room itself.
+//
+// It is one function because it was two. DrawWindowFrame — the in-app
+// frame, the one a dialog draws for itself — had its own copy that did
+// everything but the clipping: it centred and slid, and then drew the
+// title at its full width into whatever was left to the right. With the
+// bundled face the title fits between the boxes and the two agreed; with
+// an era font wide enough to overrun them they did not, and the window
+// a user sees and the window a test compares it against were laid out
+// differently. Everything below the title's own box — how tall the bar
+// is, where the ridges run — is still each caller's own.
+func platTitleSpan(l *Classic, bar paintengine2d.Rect, left, right float32, f *Font, title string) (tx, tw float32) {
+	if title == "" {
+		return snap(bar.Min.X + bar.Dx()*0.5), 0
+	}
+	gap := l.S(8)
+	tw = min(f.Advance(title), max(right-left-2*gap, 0))
+	tx = snap(bar.Min.X + (bar.Dx()-tw)*0.5)
+	return max(min(tx, right-gap-tw), left+gap), tw
+}
+
 // DrawCaptionTitleSpan is the bold title centred on the whole bar — Mac OS
 // 8 centred it on the window, not in the room its boxes left — kept 8
 // pixels clear of the ridges, which run out from it to 4 pixels short of
@@ -112,12 +136,7 @@ func (platinumEngine) DrawCaptionTitleSpan(l *Classic, ctx *paintengine2d.Contex
 	}
 	f := l.BoldFont()
 	gap := l.S(8)
-	tw := float32(0)
-	if title != "" {
-		tw = min(f.Advance(title), max(right-left-2*gap, 0))
-	}
-	tx := snap(bb.Min.X + (bb.Dx()-tw)*0.5)
-	tx = max(min(tx, right-gap-tw), left+gap)
+	tx, tw := platTitleSpan(l, bb, left, right, f, title)
 	if st.Active {
 		// Ridges only on the active window, as on the Mac.
 		cy := bb.Min.Y + bb.Dy()*0.5

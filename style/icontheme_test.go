@@ -3,6 +3,7 @@ package style
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -158,6 +159,10 @@ func TestSystemIconThemesListWhatCanBeDrawn(t *testing.T) {
 // The toolkit's actions are looked up under the freedesktop names, not
 // under its own: a theme has "document-save", never "save".
 func TestSystemIconThemeResolvesFreedesktopNames(t *testing.T) {
+	// As above: an installed freedesktop icon theme, found the XDG way.
+	if runtime.GOOS != "linux" {
+		t.Skip("freedesktop icon themes are a Linux desktop's")
+	}
 	root := fixtureThemes(t)
 	set := SystemIconSetName("pngtheme")
 	if !SystemIconThemeHas(set, IconSave) {
@@ -322,6 +327,15 @@ func TestSystemIconSetSurvivesLookJSON(t *testing.T) {
 // it can switch installed themes off entirely — which is what keeps a
 // screenshot of this page the same picture on two machines.
 func TestIconThemeSearchPath(t *testing.T) {
+	// The XDG icon theme specification is a Linux desktop's, and so are
+	// the paths this asserts: elsewhere filepath.Join answers with
+	// backslashes and filepath.SplitList splits XDG_DATA_DIRS on the
+	// wrong character, so the test is about nothing. Skipped rather
+	// than given a build tag because the rest of this file is portable
+	// and worth running wherever the tests run (tools/test-windows.sh).
+	if runtime.GOOS != "linux" {
+		t.Skip("the XDG icon theme search path is a Linux desktop's")
+	}
 	t.Setenv("XDG_DATA_HOME", "/xdg/data")
 	t.Setenv("XDG_DATA_DIRS", "/a:/b")
 	os.Unsetenv(IconThemeDirsEnv)

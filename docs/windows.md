@@ -69,6 +69,21 @@ reshaped seam was for.
 | `MaximizeAxis` | Windows has no per-axis maximize at all. Correctly **false** |
 | *(nothing)* | Every seam the Linux backends implement, this one now implements too — `seams_windows.go` asserts it and the compiler keeps it true |
 
+**Saving preferences retries its rename**, and that is Windows-specific
+and was a real bug. `style.writeJSONFile` writes a temporary file and
+renames it over the target, which is atomic on Unix. On Windows a
+rename over a file another process has open fails — Go opens files for
+reading without `FILE_SHARE_DELETE` — so publishing `look.json` failed
+exactly when another uitoolkit application happened to be reading it.
+That is not a rare race: every application *watches* that file, so a
+save races every other running app by design, and what a user saw was
+Apply reporting that it could not write the preferences. It retries for
+a few milliseconds now, which is longer than a reader holds the file and
+costs nothing on Unix, where the first attempt always succeeds.
+
+It was found by widening `tools/test-windows.sh` to the whole suite —
+`TestConcurrentSavesNeverPublishHalfAFile` had never run on Windows.
+
 **Two things used to be on this list and are not any more.**
 
 **Popups.** A menu, a combo list and a tooltip were rectangles painted

@@ -72,10 +72,33 @@ UITK_WIN_VM_MON=/path/to/monitor.sock tools/test-windows.sh   # docs/windows.md
 UITK_MAC_HOST=user@the-mac            tools/test-darwin.sh ./...  # docs/macos.md
 ```
 
-The Windows tests cross-compile with `CGO_ENABLED=0` and are handed to
-a VM over QEMU's user networking; the macOS ones cannot cross-compile
-at all, because AppKit is cgo, so the tree is mirrored to a Mac with
-rsync and built there. Both bring their output back.
+Both run the **whole suite**, not just `./platform/`. The Windows one
+used to run that single package, and the asymmetry cost real bugs: the
+widget, style and app suites had never executed on Windows, so a layout
+that depended on the developer's installed fonts, or a path assumption,
+surfaced on macOS first and only because macOS ran everything. Widening
+it turned up five failures the same afternoon — four tests written in
+Unix terms, and one real one (see below).
+
+The Windows tests cross-compile with `CGO_ENABLED=0` and are handed to a
+VM over QEMU's user networking; `go test -c` builds one package at a
+time, so a full run is two dozen binaries, fetched and deleted one at a
+time so the guest never holds more than one. The source tree goes over
+once as well, because some tests read files next to themselves
+(`internal/uitest` opens `testdata/`, `skingen` reads `../style/skins`)
+and each binary is run from its own package's directory, as `go test`
+would. `UITK_WIN_PKGS=./platform/` narrows it.
+
+The macOS ones cannot cross-compile at all, because AppKit is cgo, so
+the tree is mirrored to a Mac with rsync and built there. Both bring
+their output back.
+
+**A test that only makes sense on one platform skips on the others,
+with a reason** — the XDG icon theme search path, KDE and GTK
+configuration files, Unix permission bits, making a directory
+unwritable with `chmod`. A build tag would take the whole file out;
+these files are mostly portable and worth running everywhere, so the
+skip is per test and says what it is about.
 
 Headless widget + driver suite (no display, no CGO):
 

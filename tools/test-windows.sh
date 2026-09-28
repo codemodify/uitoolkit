@@ -1,7 +1,9 @@
 #!/bin/bash
-# test-windows.sh — run the Windows tests on real Windows, from here.
+# test-windows.sh — run the test suite on real Windows, from here.
 #
-#   tools/test-windows.sh [go test args...]
+#   tools/test-windows.sh                             every package
+#   tools/test-windows.sh -test.run TestFoo           that test, everywhere
+#   UITK_WIN_PKGS=./platform/ tools/test-windows.sh   one package
 #
 # The Windows backend cannot be tested on this machine: tools/test.sh
 # never compiles it, and a cross-compiled test binary cannot run. So the
@@ -9,13 +11,31 @@
 # output brought back — the same shape as any other test run, just with a
 # hypervisor in the middle.
 #
+# **It runs the whole suite**, not only ./platform/. Running that one
+# package is what it did, and the asymmetry cost real bugs: the widget,
+# style and app suites had never executed on Windows at all, so a layout
+# that depended on the developer's installed fonts, or a path assumption,
+# surfaced on macOS first and only because macOS ran everything.
+#
+# That costs more than one binary. `go test -c` compiles one package at a
+# time, so a full run is two dozen binaries of about 18 MB each. They are
+# fetched and deleted one at a time rather than shipped together: the
+# guest never holds more than one, and the run starts producing output
+# immediately instead of after a 450 MB download.
+#
+# The source tree goes over too, once, because some tests read files next
+# to themselves — internal/uitest opens testdata/chrome-strip-*.png and
+# skingen reads ../style/skins. `go test` runs each package in its own
+# directory, so each binary is run from its package's directory in the
+# unpacked tree.
+#
 # How the two halves talk: QEMU's user networking maps the host's loopback
 # to 10.0.2.2 in the guest, so a server bound to 127.0.0.1 here is
 # reachable there and nothing is exposed on the network. The guest fetches
-# the test binary over it and POSTs the output back. There is deliberately
-# no SSH and no share: both wanted a working guest before they could help,
-# and this needs nothing installed in the guest but curl, which Windows 10
-# and 11 both ship.
+# over it and POSTs the output back. There is deliberately no SSH and no
+# share: both wanted a working guest before they could help, and this
+# needs nothing in the guest but curl and tar, which Windows 10 and 11
+# both ship.
 #
 # What the guest needs, once:
 #   * an interactive logged-in desktop — the tests make real windows, and
@@ -27,29 +47,55 @@
 #
 # UITK_WIN_VM_MON  the QEMU monitor socket of the guest to drive
 # UITK_WIN_VM_PORT the port this serves on (default 8099)
+# UITK_WIN_PKGS    the packages to test (default ./...)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 MON=${UITK_WIN_VM_MON:-}
 PORT=${UITK_WIN_VM_PORT:-8099}
+PKGS=${UITK_WIN_PKGS:-./...}
 if [ -z "$MON" ]; then
   echo "set UITK_WIN_VM_MON to the QEMU monitor socket of a logged-in Windows guest" >&2
   exit 2
 fi
 
-# Every argument is quoted for cmd, which reads | & < > ^ in an
-# unquoted word as its own syntax: a -test.run 'A|B' became a pipe into
-# a command called B, and the guest sat there for ever while this waited
-# 600 seconds for a result that was never coming. Single-name runs
-# worked, which is what made it look like the window tests hanging.
+# Every argument is quoted for cmd, which reads | & < > ^ in an unquoted
+# word as its own syntax: a -test.run 'A|B' became a pipe into a command
+# called B, and the guest sat there for ever while this waited out its
+# timeout. Single-name runs worked, which is exactly what made it look
+# like the window tests hanging.
 args=""
 for a in "$@"; do args+=" \"$a\""; done
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"; kill %1 2>/dev/null || true' EXIT
+mkdir -p "$work/bin"
 
 echo "== cross-compiling the Windows tests =="
-GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go test -c -o "$work/platform.test.exe" ./platform/
+# One binary per package that has any, named after its import path with
+# the slashes flattened, and pkgs.txt says which directory each has to run
+# in.
+: > "$work/pkgs.txt"
+n=0
+while read -r p; do
+  [ -z "$p" ] && continue
+  rel=${p#github.com/codemodify/uitoolkit}
+  rel=${rel#/}
+  [ -z "$rel" ] && rel="."
+  name=$(printf '%s' "$rel" | tr '/' '_')
+  GOOS=windows GOARCH=amd64 CGO_ENABLED=0 \
+    go test -c -tags theme_engine_all -o "$work/bin/$name.test.exe" "$p"
+  # Backslashes: the guest will cd to it.
+  printf '%s %s\n' "$name" "$(printf '%s' "$rel" | tr '/' '\\')" >> "$work/pkgs.txt"
+  n=$((n + 1))
+done < <(GOOS=windows go list -f '{{if or .TestGoFiles .XTestGoFiles}}{{.ImportPath}}{{end}}' \
+  -tags theme_engine_all $PKGS)
+echo "   $n packages"
+
+echo "== packing the source tree =="
+# For the tests that read files next to themselves. tools/atlas/out is
+# generated screenshots and is the only large thing excluded for size.
+tar czf "$work/src.tgz" --exclude=.git --exclude=tools/atlas/out --exclude='*.test.exe' .
 
 cat > "$work/serve.py" <<'PY'
 import http.server, os, sys
@@ -67,33 +113,45 @@ PY
 python3 "$work/serve.py" "$PORT" &
 sleep 1
 
-# The guest side, as one file, so only one short line has to be typed at it.
-# The old binary is deleted before the new one is fetched, and its
-# absence afterwards is reported rather than ignored. Without that a
-# curl that cannot reach the host leaves the *previous* run's
-# platform.test.exe in place, the guest runs that, and a stale binary
-# POSTs back a confident PASS — which happened, and cost a session's
-# worth of trust in these results. A test harness that cannot fetch
-# what it is testing has to say so.
+# The guest side, as one file, so only one short line has to be typed at
+# it. Nothing in here is typed, so it may hold characters the sendkey map
+# below has no key for.
 {
   echo '@echo off'
   echo "set SRC=http://10.0.2.2:$PORT"
   echo 'set D=%TEMP%\uitkwin'
-  echo 'if not exist "%D%" mkdir "%D%"'
-  echo 'del /q "%D%\platform.test.exe" 2>nul'
-  echo 'curl -s -o "%D%\platform.test.exe" %SRC%/platform.test.exe'
-  echo 'if not exist "%D%\platform.test.exe" ('
-  echo '  echo FETCH-FAILED: the guest could not download the test binary from %SRC% > "%D%\out.txt"'
-  echo '  echo EXIT=1 >> "%D%\out.txt"'
+  echo 'if exist "%D%" rd /s /q "%D%"'
+  echo 'mkdir "%D%"'
+  echo 'mkdir "%D%\src"'
+  echo 'echo uitoolkit on Windows > "%D%\out.txt"'
+  echo 'curl -s -o "%D%\src.tgz" %SRC%/src.tgz'
+  echo 'if not exist "%D%\src.tgz" ('
+  echo '  echo ===FAIL no source tree from %SRC% >> "%D%\out.txt"'
+  echo '  echo ===DONE >> "%D%\out.txt"'
   echo '  curl -s --data-binary @"%D%\out.txt" %SRC%/result.txt'
   echo '  exit /b 1'
   echo ')'
-  # The size of what was actually fetched, first line of the report.
-  # A binary that is not the one just built is the failure this whole
-  # block exists to make visible, and its size says so at a glance.
-  echo 'for %%F in ("%D%\platform.test.exe") do echo FETCHED %%~zF bytes > "%D%\out.txt"'
-  echo "\"%D%\\platform.test.exe\" -test.v $args >> \"%D%\\out.txt\" 2>&1"
-  echo 'echo EXIT=%ERRORLEVEL% >> "%D%\out.txt"'
+  echo 'tar -xzf "%D%\src.tgz" -C "%D%\src"'
+  echo 'curl -s -o "%D%\pkgs.txt" %SRC%/pkgs.txt'
+  # One package at a time: fetched, run in its own directory, deleted.
+  # A binary that will not download is reported rather than skipped — a
+  # failed curl used to leave the previous one in place, and the guest
+  # ran that and POSTed back a confident PASS from a stale binary.
+  echo 'for /f "usebackq tokens=1,2" %%A in ("%D%\pkgs.txt") do ('
+  echo '  del /q "%D%\t.exe" 2>nul'
+  echo '  curl -s -o "%D%\t.exe" %SRC%/bin/%%A.test.exe'
+  echo '  echo ===PKG %%A >> "%D%\out.txt"'
+  echo '  if not exist "%D%\t.exe" ('
+  echo '    echo ===FAIL %%A FETCH-FAILED >> "%D%\out.txt"'
+  echo '  ) else ('
+  echo '    pushd "%D%\src\%%B"'
+  echo "    \"%D%\\t.exe\" -test.v$args >> \"%D%\\out.txt\" 2>&1"
+  echo '    if errorlevel 1 echo ===FAIL %%A >> "%D%\out.txt"'
+  echo '    popd'
+  echo '  )'
+  echo ')'
+  echo 'del /q "%D%\t.exe" 2>nul'
+  echo 'echo ===DONE >> "%D%\out.txt"'
   echo 'curl -s --data-binary @"%D%\out.txt" %SRC%/result.txt'
 } | sed 's/$/\r/' > "$work/run.cmd"
 
@@ -126,7 +184,10 @@ s.close()
 PY
 
 echo "== waiting for the result =="
-for _ in $(seq 1 120); do
+# Longer than it was, because a full suite is two dozen binaries to fetch
+# and run rather than one. The guest writes ===DONE last, so a result
+# that arrives without it is a run that died partway and says so.
+for _ in $(seq 1 360); do
   [ -s "$work/result.txt" ] && break
   sleep 5
 done
@@ -135,4 +196,15 @@ if [ ! -s "$work/result.txt" ]; then
   exit 1
 fi
 tr -d '\r' < "$work/result.txt"
-grep -q '^EXIT=0' "$work/result.txt" || exit 1
+
+if ! grep -q '^===DONE' "$work/result.txt"; then
+  echo >&2
+  echo "the run did not finish: no ===DONE marker" >&2
+  exit 1
+fi
+if grep -q '^===FAIL' "$work/result.txt"; then
+  echo >&2
+  echo "failed packages:" >&2
+  tr -d '\r' < "$work/result.txt" | grep '^===FAIL' | sed 's/^===FAIL /  /' >&2
+  exit 1
+fi

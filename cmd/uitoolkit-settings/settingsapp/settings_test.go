@@ -3,6 +3,7 @@ package settingsapp
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -1478,6 +1479,15 @@ func TestSettingsHasNoAppliedLine(t *testing.T) {
 // failed Apply puts up an error message box rather than passing in
 // silence. (A read-only config directory is the cheapest real failure.)
 func TestSettingsApplyFailureIsSaid(t *testing.T) {
+	// The failure is made by taking write permission off the directory,
+	// and that is a Unix thing to do: on Windows os.Chmod moves the
+	// read-only *attribute* of a file and does not stop anything being
+	// created in a directory, so Apply succeeds and the test is about
+	// nothing. What it covers — that a failed Apply says so rather than
+	// looking like a success — is worth keeping where it can be shown.
+	if runtime.GOOS == "windows" {
+		t.Skip("a directory cannot be made unwritable with os.Chmod on Windows")
+	}
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", dir)
 	a, w := openSettings(t, 1024, 780)

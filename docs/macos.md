@@ -175,25 +175,26 @@ Two details were not guesses:
   115 ms. On Linux it is 30 ms, and unused, since `fc-list` answers
   first.
 
-### One thing it turned up, still open
+### What it turned up, since fixed
 
-Running the suite with `UITK_SYSTEM_FONTS=1` on a Mac is a
-configuration that had never existed, and it fails one test:
-`TestPlatinumTitleCentresOnTheBar`, which compares the title the
-desktop's frame draws against the same title drawn by an in-app frame.
+Running the suite with `UITK_SYSTEM_FONTS=1` on a Mac was a
+configuration that had never existed, and it failed
+`TestPlatinumTitleCentresOnTheBar` — two bugs at once, neither in this
+backend.
 
-With the bundled face the two agree exactly, at every title length.
-With Geneva — which is the right font for Platinum, and which is the
-point — they agree for a long title and differ for short ones: for
-"Untitled" the frame's ink is 42 px wide against the in-app frame's
-62, and for "Ab" the frame has no ink at all in the rows the test
-samples. Geneva's metrics also make the caption band 27 px tall where
-the bundled face makes it 31.
+Platinum laid its title out **twice**. `DrawCaptionTitleSpan`, which a
+window's caption calls, clipped the title to the room the boxes leave;
+`DrawWindowFrame`, which a dialog draws for itself, had its own copy
+that centred and slid but never clipped. With the bundled face the
+title fits between the boxes and the two agreed; with Geneva — the
+right font for Platinum, and the point of reading one in — they did
+not. They share one function now.
 
-So it is a real difference between the two frames and not a flaky
-measurement, but it is in Platinum's caption, not in this backend, and
-it needs its own look. The suite's default is `UITK_SYSTEM_FONTS=0`,
-so it is not failing anywhere today.
+And the test measured the title's ink in six fixed rows of the bar,
+which only worked while the bar was the height the bundled face makes
+it. Geneva is wide and short, so those rows caught the top of the word
+and not its end, and a correctly centred title measured as an
+off-centre one. The rows come from the font now.
 
 Checked against fontconfig on a Linux machine with 596 family keys
 installed, the scan finds 590 of them. The six it does not are the

@@ -80,11 +80,7 @@ func (a *Application) decorationPaletteFile(lk style.LookAndFeel) (string, error
 	data := style.KDEColorScheme(lk, name)
 	h := fnv.New64a()
 	h.Write(data)
-	base, err := os.UserCacheDir()
-	if err != nil {
-		return "", err
-	}
-	dir := filepath.Join(base, "uitoolkit", "colors")
+	dir := filepath.Join(style.CacheDir(), "colors")
 	path := filepath.Join(dir, fmt.Sprintf("uitk-%016x.colors", h.Sum64()))
 	if _, err := os.Stat(path); err != nil {
 		if err := os.MkdirAll(dir, 0o755); err != nil {

@@ -3,6 +3,7 @@ package style
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -236,7 +237,11 @@ func TestAppearancePrefsRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if st.Mode().Perm() != 0o600 {
+	// Preferences are the user's own and nobody else's business. Only
+	// where that means anything: Windows has no Unix permission bits
+	// and reports 0666 for every file it can write, so asserting them
+	// there tests the operating system rather than the toolkit.
+	if runtime.GOOS != "windows" && st.Mode().Perm() != 0o600 {
 		t.Fatalf("mode %o", st.Mode().Perm())
 	}
 	look := PreferredLook().(*Classic)
