@@ -790,7 +790,7 @@ func TestFrameKeyboard(t *testing.T) {
 	}
 	// Keys from the title bar reach the content root's shortcuts.
 	r.w.RequestFocus(field)
-	r.w.dispatch(platform.Event{Kind: platform.EventKeyDown, Key: platform.KeyU, Mods: platform.ModCtrl})
+	r.w.dispatch(platform.Event{Kind: platform.EventKeyDown, Key: platform.KeyU, Mods: platform.PrimaryModifier()})
 	if got != 1 {
 		t.Fatalf("shortcut from the title bar: %d", got)
 	}
@@ -999,7 +999,7 @@ func TestBrowserTabsInTheTitleBar(t *testing.T) {
 	}
 	// Ctrl+Tab goes to the app (which switches tabs), plain Tab moves focus.
 	r.w.RequestFocus(r.body)
-	r.w.dispatch(platform.Event{Kind: platform.EventKeyDown, Key: platform.KeyTab, Mods: platform.ModCtrl})
+	r.w.dispatch(platform.Event{Kind: platform.EventKeyDown, Key: platform.KeyTab, Mods: platform.PrimaryModifier()})
 	if switched != 1 || tabs.Selected() != 0 || r.w.Focus() != widget.Component(r.body) {
 		t.Fatalf("Ctrl+Tab: switched %d selected %d focus %T", switched, tabs.Selected(), r.w.Focus())
 	}

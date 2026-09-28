@@ -894,6 +894,12 @@ func (w *Window) armStatusMenuIfDue() {
 
 func (w *Window) dispatch(ev platform.Event) {
 	w.app.stirred()
+	// The one place the shortcut modifier is translated. The backend
+	// reports what the keyboard did — Command is ModSuper on a Mac —
+	// and everything above here reads Mods as what a shortcut is
+	// written with, so ⌘S fires a table that says Ctrl+S. Everywhere
+	// but macOS this is the identity; see [platform.AccelMods].
+	ev.Mods = platform.AccelMods(ev.Mods)
 	switch ev.Kind {
 	case platform.EventClose:
 		if w.statusMenu {

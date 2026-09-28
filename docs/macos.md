@@ -124,11 +124,30 @@ tile.
   the installed families; until it does, a Mac draws the era's
   typefaces in the toolkit's own face. This is why `tools/test.sh`
   pins `UITK_SYSTEM_FONTS=0` — see below.
-- **The shortcut modifier.** Command reports as `ModSuper` and Control
-  as `ModCtrl`, faithfully, so a shortcut table written as Ctrl+S does
-  not fire on Cmd+S. Mapping Command to `ModCtrl` in the backend would
-  make `Mods` lie to everything that reads it; the translation belongs
-  above `platform`, and is not written yet.
+
+## ⌘S and Ctrl+S are the same shortcut
+
+A menu writes "Ctrl+S" on Linux and Windows and "⌘S" on a Mac, and it
+is one shortcut. The toolkit writes it once — `ParseAccel` has always
+read `Cmd` and `⌘` as `ModCtrl` — and the other half is turning what a
+key press actually carried into what a table means.
+
+The backend does **not** do it. Command is reported as `ModSuper` and
+Control as `ModCtrl`, faithfully, because that is what the keyboard did
+and `Event.Mods` is what the keyboard did; a backend handing the
+toolkit a `ModCtrl` nobody pressed would make every other reader of
+`Mods` wrong.
+
+Instead `Window.dispatch` calls `platform.AccelMods` once, on the way
+from the platform to the widgets. On macOS the two modifiers **swap**
+rather than Command merely becoming Control, so they stay distinct: ⌘A
+is Select All, and a Mac's Control+A is the emacs-ism for the start of
+the line, which should not fire it. Everywhere else it is the identity.
+
+Doing it at that one point is what makes it small. Fifty places in
+`widgets` ask `e.Mods.Ctrl()` — a text field copying, a list
+extending a selection — and all fifty are right on a Mac without being
+touched.
 
 ## The clipboard and the pointer
 

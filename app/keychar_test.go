@@ -63,11 +63,17 @@ func TestKeyEventCarriesTheCharacter(t *testing.T) {
 
 	// The character is the key's, with no modifier folded in: Ctrl+S and
 	// Shift+S are both 's', and the modifier is where a table looks for it.
+	//
+	// "Where a table looks" is the point, and it is why this compares
+	// against platform.AccelMods rather than against what was pressed:
+	// dispatch translates the shortcut modifier once, so on a Mac a
+	// pressed Command arrives as the ModCtrl a table is written with.
 	for _, m := range []platform.Modifiers{platform.ModCtrl, platform.ModShift, platform.ModCtrl | platform.ModShift} {
 		box.seen = nil
 		w.dispatch(platform.Event{Kind: platform.EventKeyDown, Key: platform.KeyS, Mods: m})
-		if got := box.seen[0]; got.Rune != 's' || got.Mods != m {
-			t.Errorf("with mods %v: %+v, want rune 's' and the mods kept", m, got)
+		want := platform.AccelMods(m)
+		if got := box.seen[0]; got.Rune != 's' || got.Mods != want {
+			t.Errorf("with mods %v: %+v, want rune 's' and mods %v", m, got, want)
 		}
 	}
 

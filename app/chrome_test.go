@@ -499,13 +499,16 @@ func TestMenuAcceleratorsDispatch(t *testing.T) {
 		w.dispatch(platform.Event{Kind: platform.EventKeyDown, Key: k, Mods: m})
 		a.PumpOnce()
 	}
-	key(platform.KeyN, platform.ModCtrl)
+	// PrimaryModifier, not ModCtrl: these presses mean "the shortcut
+	// modifier", which is Command on a Mac, and dispatch translates the
+	// physical one (platform.AccelMods).
+	key(platform.KeyN, platform.PrimaryModifier())
 	key(platform.KeyF1, 0)
 	if fired["new"] != 1 || fired["help"] != 1 {
 		t.Fatalf("accelerators with no focus: %v", fired)
 	}
 	field.RequestFocus()
-	key(platform.KeyN, platform.ModCtrl)
+	key(platform.KeyN, platform.PrimaryModifier())
 	if fired["new"] != 2 {
 		t.Fatalf("Ctrl+N with a field focused: %v", fired)
 	}

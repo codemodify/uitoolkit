@@ -121,7 +121,7 @@ func TestWindowOpenFocusSkipsChrome(t *testing.T) {
 	if w.Focus() != nil {
 		t.Errorf("a window of nothing but chrome opened focused on %v", w.Focus())
 	}
-	w.dispatch(platform.Event{Kind: platform.EventKeyDown, Key: platform.KeyN, Mods: platform.ModCtrl})
+	w.dispatch(platform.Event{Kind: platform.EventKeyDown, Key: platform.KeyN, Mods: platform.PrimaryModifier()})
 	if ran != 1 {
 		t.Errorf("the accelerator ran %d times with no focus", ran)
 	}
