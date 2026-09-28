@@ -21,26 +21,43 @@ _ = app.Run()
 ```
 
 ```bash
-go get github.com/codemodify/uitoolkit@dev
-go get github.com/codemodify/paintengine2d@v0.9.0
-# if v0.9.0 is not on GitHub yet (local engine checkout):
-# go mod edit -replace=github.com/codemodify/paintengine2d=/path/to/paintengine2d
+go get github.com/codemodify/uitoolkit@v0.20.0
+go get github.com/codemodify/paintengine2d@v0.11.0
 ```
+
+**Theme engines are opt-in, and it is the thing to know first.** A plain
+`go build` gives your application **one** theme — Plastik, the default —
+because an application that wants three looks should not carry
+thirty-six. Name the ones you ship, or take the lot:
+
+```bash
+go build ./...                                    # the default engine alone
+go build -tags theme_engine_breeze ./...          # Breeze instead of it
+go build -tags "theme_engine_breeze,theme_engine_win95" ./...
+go build -tags theme_engine_all ./...             # every engine there is
+```
+
+It is worth 8 MB: **12.96 MB** for a single-engine build against **21.07
+MB** for all of them, stripped. Naming any engine makes the default step
+aside; `theme_engine_all` is the escape hatch. Build tags cannot contain
+hyphens, so the names use underscores. See
+**[docs/engines.md](docs/engines.md)**.
 
 | | |
 | --- | --- |
 | Language | Go 1.22+ |
-| Paint | paintengine2d **v0.9.0** (`Scene` / `Recorder` / GPU rect batches; flatten cache) |
+| Paint | paintengine2d **v0.11.0** (`Scene` / `Recorder` / GPU rect batches; flatten cache) |
 | Fonts | Titillium Web (UI) + JetBrains Mono (code), OpenType → atlas |
 | Windowing | Linux X11 + Wayland (`wl_egl_window` / eglSwapBuffers, else `wl_shm` / `XPutImage`); offscreen always. Pointers are host cursors (`wp_cursor_shape_v1` / XCURSOR / Xfont / `LoadCursorW` / `NSCursor`) |
 | Tray | `StatusItem` — Linux SNI + dbusmenu (submenus included) + fdo notifications; Win32 notify area; macOS `NSStatusItem` (CGO) |
 | CGO | optional — tests and screenshots are `CGO_ENABLED=0` |
+| Ports | Linux is the shipping platform. **Windows has a real backend** — window, input, clipboard, drag and drop, per-monitor DPI — cross-compiled from Linux with `CGO_ENABLED=0` and tested on Windows 10 and 11 ([docs/windows.md](docs/windows.md)). `GOOS=darwin` builds, with no backend behind it yet |
 | License | [The Free License](LICENSE) |
 
 ## Highlights
 
-- **Themes that change shapes, not just colours.** 31 engines (like Qt's
-  QStyle) draw 123 packs spanning four decades: System 1 to macOS Tahoe's
+- **Themes that change shapes, not just colours.** 36 engines (like Qt's
+  QStyle) draw 131 packs spanning four decades: System 1 to macOS Tahoe's
   Liquid Glass, Windows 3.1 to 11, Motif, CDE, NeXT, Amiga, BeOS, OS/2, KDE 1
   to Plasma 6, GNOME 2 to GNOME 48, Material 2, 3 and 3 Expressive, Swing's
   Metal and Nimbus, FlatLaf, and today's VS Code, JetBrains Islands,
@@ -428,7 +445,9 @@ See **[docs/testing.md](docs/testing.md)** for how to run the suite and
 what the app driver covers.
 
 ```bash
-CGO_ENABLED=0 go test ./...
+tools/test.sh ./...                  # the suite: every engine compiled in
+tools/engines-build.sh               # every engine still builds on its own
+tools/build-windows.sh               # the Windows cross-compile and its vet
 go run ./cmd/uitest-driver           # showcase + Settings
 CGO_ENABLED=1 go build ./examples/uitoolkit-sample-tour   # Linux CGO / Wayland
 ```
