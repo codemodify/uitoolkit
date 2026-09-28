@@ -3,6 +3,7 @@
 package platform
 
 import (
+	"runtime"
 	"testing"
 	"unsafe"
 
@@ -18,6 +19,16 @@ var procGetWindowLongT = user32.NewProc("GetWindowLongPtrW")
 
 func testSurface(t *testing.T, w, h int) *winSurface {
 	t.Helper()
+	// The same rule the backend is built on, which a test has to keep for
+	// itself: Win32 delivers a window's messages to the thread that
+	// created it, so that thread must stay put. platform's init locks the
+	// *main* goroutine, and `go test` runs every test on a goroutine of
+	// its own — so without this the test goroutine wanders off the thread
+	// that made the window and ShowWindow blocks for ever, which is
+	// precisely the bug below. Observed: this test hung on its own
+	// second run.
+	runtime.LockOSThread()
+	t.Cleanup(runtime.UnlockOSThread)
 	s, err := newWinSurface(WindowOptions{Title: "uitoolkit test", Width: w, Height: h})
 	if err != nil {
 		t.Skipf("no window could be made (no interactive desktop?): %v", err)
@@ -129,5 +140,97 @@ func TestWindowsOpenRepeatedlyWithoutWedging(t *testing.T) {
 			t.Fatalf("window %d has no position, which on Windows is a bug", i)
 		}
 		s.Close()
+	}
+}
+
+// Nothing but WM_ACTIVATE says whether the frame is painted active or
+// backdrop. Left unhandled, Activated stayed false for the window's whole
+// life, so the first EventWindowState anything pushed — SetKeepAbove's —
+// told the application the window had just gone inactive, and pressing
+// "keep above" made the title bar lose its colour.
+func TestActivationIsReportedSoTheTitleBarKeepsItsColour(t *testing.T) {
+	s := testSurface(t, 300, 200)
+	last := func() (WindowState, bool) {
+		var st WindowState
+		var got bool
+		for _, ev := range s.Poll() {
+			if ev.Kind == EventWindowState {
+				st, got = ev.State, true
+			}
+		}
+		return st, got
+	}
+	s.Poll() // drain whatever opening the window produced
+
+	const waActive, waInactive = 1, 0
+	procSendMessage.Call(s.hwnd, wmActivate, waActive, 0)
+	if st, ok := last(); !ok || !st.Activated {
+		t.Fatalf("after WA_ACTIVE: state %+v, reported %v; want Activated", st, ok)
+	}
+	procSendMessage.Call(s.hwnd, wmActivate, waInactive, 0)
+	if st, ok := last(); !ok || st.Activated {
+		t.Fatalf("after WA_INACTIVE: state %+v, reported %v; want not Activated", st, ok)
+	}
+
+	// And the state a frame call reports carries it too, which is the path
+	// that actually went wrong: SetKeepAbove pushes s.state.
+	procSendMessage.Call(s.hwnd, wmActivate, waActive, 0)
+	s.Poll()
+	FrameOf(s).SetKeepAbove(true)
+	if st, ok := last(); !ok || !st.Activated {
+		t.Errorf("keep-above reported %+v: it must not say the window went inactive", st)
+	}
+	FrameOf(s).SetKeepAbove(false)
+}
+
+// The wheel messages were declared and never handled, so nothing scrolled
+// anywhere on Windows — over a list, a text area or the title bar alike.
+func TestTheWheelArrivesAsAScroll(t *testing.T) {
+	s := testSurface(t, 300, 200)
+	s.Poll()
+	scroll := func(msg, delta uintptr) paintengine2d.Point {
+		procSendMessage.Call(s.hwnd, msg, delta<<16, 0)
+		for _, ev := range s.Poll() {
+			if ev.Kind == EventScroll {
+				return ev.Scroll
+			}
+		}
+		t.Fatalf("message %#x with delta %d produced no EventScroll", msg, int16(delta))
+		return paintengine2d.Point{}
+	}
+	const up, down = 120, 0x10000 - 120 // WHEEL_DELTA, and -WHEEL_DELTA as a word
+	// Away from the user is up, and up is negative — the sign X11 gives
+	// button 4, so a scroll means one thing above the boundary.
+	if got := scroll(wmMouseWheel, up); got.Y != -1 || got.X != 0 {
+		t.Errorf("a notch away from the user gave %v, want (0,-1)", got)
+	}
+	if got := scroll(wmMouseWheel, down); got.Y != 1 || got.X != 0 {
+		t.Errorf("a notch towards the user gave %v, want (0,1)", got)
+	}
+	if got := scroll(wmMouseHWheel, up); got.X != 1 || got.Y != 0 {
+		t.Errorf("a notch of the horizontal wheel gave %v, want (1,0)", got)
+	}
+}
+
+// Rolling a window up to its title bar. The claim FrameShade makes here is
+// that a programmatic resize is not clamped by the minimum tracking size a
+// window states — that governs a resize the user drags — so the roll-up
+// holds instead of springing back open.
+func TestAWindowRollsUpToItsTitleBar(t *testing.T) {
+	s := testSurface(t, 400, 300)
+	f := FrameOf(s)
+	if !f.FrameCaps().Has(FrameShade) {
+		t.Fatal("FrameShade is not advertised, so Window.CanShade refuses and nothing can roll up")
+	}
+	if !f.SetShadedHeight(24) {
+		t.Fatal("SetShadedHeight refused")
+	}
+	if err := s.Resize(400, 24); err != nil {
+		t.Fatalf("Resize: %v", err)
+	}
+	s.Poll()
+	c, _ := rects(t, s)
+	if h := c.Bottom - c.Top; h != 24 {
+		t.Errorf("rolled up to %d pixels, asked for 24: the resize was clamped, so a shaded window springs open", h)
 	}
 }

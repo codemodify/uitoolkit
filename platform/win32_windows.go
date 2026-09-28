@@ -57,6 +57,7 @@ var (
 	procAdjustWindow   = user32.NewProc("AdjustWindowRectEx")
 	procSetWindowPos   = user32.NewProc("SetWindowPos")
 	procSetWindowLong  = user32.NewProc("SetWindowLongPtrW")
+	procScreenToClient = user32.NewProc("ScreenToClient")
 
 	procCreateDIBSect  = gdi32.NewProc("CreateDIBSection")
 	procCreateCompatDC = gdi32.NewProc("CreateCompatibleDC")
@@ -138,6 +139,8 @@ const (
 	wmMButtonDown = 0x0207
 	wmMButtonUp   = 0x0208
 	wmMouseWheel  = 0x020A
+	wmMouseHWheel = 0x020E
+	wmActivate    = 0x0006
 	wmKeyDown     = 0x0100
 	wmKeyUp       = 0x0101
 	wmChar        = 0x0102
@@ -196,6 +199,8 @@ type winSurface struct {
 
 	// hiSurrogate is a WM_CHAR high surrogate waiting for its pair.
 	hiSurrogate uint16
+	// shadedH is the height a rolled-up window is held at, or 0.
+	shadedH int
 
 	sizing  Sizing
 	limits  SizeLimits
@@ -315,6 +320,32 @@ func win32Proc(hwnd, msg, wparam, lparam uintptr) uintptr {
 	case wmKillFocus:
 		s.push(Event{Kind: EventFocusOut})
 		return 0
+	case wmActivate:
+		// The frame is painted active or backdrop from this, and nothing
+		// else said it. Left unhandled, Activated stayed false for the
+		// window's whole life, so the first EventWindowState anything
+		// pushed — SetKeepAbove's, say — told the application its window
+		// had just gone inactive and the title bar lost its colour.
+		// WA_INACTIVE is 0; WA_ACTIVE and WA_CLICKACTIVE are not.
+		s.state.Activated = uint32(wparam)&0xFFFF != 0
+		s.push(Event{Kind: EventWindowState, State: s.state})
+		// and on to DefWindowProc, which has its own work to do here.
+	case wmMouseWheel, wmMouseHWheel:
+		// The wheel messages carry *screen* coordinates, alone among the
+		// mouse messages, so they need converting before they mean the
+		// same thing as a button's.
+		delta := float32(int16(uint32(wparam)>>16)) / 120
+		ev := Event{Kind: EventScroll, Pos: s.screenPoint(lparam), Mods: winMods()}
+		if msg == wmMouseWheel {
+			// Away from the user is up, and up is negative: the sign the
+			// X11 backend gives button 4, so a scroll means one thing
+			// above the boundary.
+			ev.Scroll = paintengine2d.Pt(0, -delta)
+		} else {
+			ev.Scroll = paintengine2d.Pt(delta, 0)
+		}
+		s.push(ev)
+		return 0
 	case wmKeyDown, wmSysKeyDown:
 		s.push(Event{Kind: EventKeyDown, Key: winKey(wparam), Mods: winMods()})
 		if msg == wmSysKeyDown {
@@ -350,6 +381,15 @@ func win32Proc(hwnd, msg, wparam, lparam uintptr) uintptr {
 }
 
 type winRect struct{ Left, Top, Right, Bottom int32 }
+
+// screenPoint turns an LPARAM holding a screen position into a point in
+// the window's client area, which is what every other pointer event
+// carries.
+func (s *winSurface) screenPoint(lparam uintptr) paintengine2d.Point {
+	pt := struct{ X, Y int32 }{int32(int16(lparam & 0xFFFF)), int32(int16((lparam >> 16) & 0xFFFF))}
+	procScreenToClient.Call(s.hwnd, uintptr(unsafe.Pointer(&pt)))
+	return paintengine2d.Pt(float32(pt.X), float32(pt.Y))
+}
 
 func lparamPoint(lparam uintptr) paintengine2d.Point {
 	x := int16(lparam & 0xFFFF)

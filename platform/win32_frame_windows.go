@@ -64,6 +64,12 @@ func (s *winSurface) FrameCaps() FrameCaps {
 	c := FrameMove | FrameResize | FrameMenu |
 		FrameMinimize | FrameMaximize | FrameFullscreen |
 		FrameKeepAbove | FrameLower | FrameIcon | FrameClientFrame |
+		// FrameShade: a window can be rolled up to its title bar here.
+		// SetWindowPos is not clamped by the minimum tracking size a
+		// window states — that governs a resize the user drags, not one
+		// the program asks for — so the roll-up holds instead of
+		// springing back open.
+		FrameShade |
 		// DWM draws the window's drop shadow itself, outside the
 		// window, so a frame the toolkit draws must reserve no margin
 		// for one. This is the bit the Frame contract grew before
@@ -254,7 +260,19 @@ func (s *winSurface) Lower() bool {
 // SetShadedHeight pins the height while the window is rolled up, through
 // WM_GETMINMAXINFO — the exact analogue of WM_NORMAL_HINTS. Not wired to
 // the message yet, so the capability says so.
-func (s *winSurface) SetShadedHeight(h int) bool { return h == 0 }
+// SetShadedHeight records the height a rolled-up window is held at.
+//
+// Nothing has to be said to Windows for the roll-up itself: the height
+// this backend is about to be asked for goes through SetWindowPos, which
+// the minimum tracking size does not clamp. The height is kept so that
+// WM_GETMINMAXINFO could hold a *dragged* resize to it as well, which is
+// the half that is not built — see docs/windows.md, and note that
+// reading MINMAXINFO means turning an LPARAM back into a pointer, which
+// is the one thing `go vet` will not have.
+func (s *winSurface) SetShadedHeight(h int) bool {
+	s.shadedH = max(h, 0)
+	return true
+}
 
 // SetPalette takes a path to a KDE colour-scheme file, which means
 // nothing here: Windows 11 takes three COLORREFs through
