@@ -69,6 +69,16 @@ reshaped seam was for.
 | `MaximizeAxis` | Windows has no per-axis maximize at all. Correctly **false** |
 | IME | No `WM_IME_*` at all, so composition — every CJK input method, and dead keys through an IME — does not reach the toolkit's `EventIMEPreedit`/`EventIMECommit` |
 
+**Installed fonts used to be on this list and are not any more.**
+`style/sysfont.go` finds faces through `fc-list`, and Windows has no
+fontconfig, so every pack fell back to the bundled Titillium Web — a
+Luna that could not draw in Tahoma. `style/sysfont_scan.go` walks
+`%WINDIR%\Fonts` and the per-user font directory and reads each file's
+own `name` and `OS/2` tables instead. It is pure Go, so it costs the
+`CGO_ENABLED=0` build nothing, and it needed no DirectWrite and no
+registry. It was written for macOS, which has the same gap; see
+[macos.md](macos.md) for what it does and what it was checked against.
+
 ## Why the pixels go up through a DIB section
 
 `Present` does not hand GDI a pointer to Go memory. It keeps a

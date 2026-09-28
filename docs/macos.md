@@ -118,12 +118,6 @@ tile.
   has (`WM_IME_*`), and the largest one on either platform.
 - **Drag and drop.** `NSDraggingSource` and `NSDraggingDestination` are
   not wired up.
-- **Font enumeration.** There is no fontconfig on macOS, so
-  `style/sysfont.go` finds nothing and every pack falls back to the
-  bundled Titillium Web and JetBrains Mono. CoreText would enumerate
-  the installed families; until it does, a Mac draws the era's
-  typefaces in the toolkit's own face. This is why `tools/test.sh`
-  pins `UITK_SYSTEM_FONTS=0` — see below.
 
 ## ⌘S and Ctrl+S are the same shortcut
 
@@ -148,6 +142,49 @@ Doing it at that one point is what makes it small. Fifty places in
 `widgets` ask `e.Mods.Ctrl()` — a text field copying, a list
 extending a selection — and all fifty are right on a Mac without being
 touched.
+
+## Finding the fonts without fontconfig
+
+`style/sysfont.go` asks `fc-list`, and macOS has no fontconfig at all.
+So the index came back empty, every pack fell through to the bundled
+Titillium Web, and a toolkit that ships 131 packs across four decades
+drew all of them in one face.
+
+The fallback in `style/sysfont_scan.go` walks the directories macOS
+keeps its fonts in and reads each file's own `name` and `OS/2` tables,
+which is what `fc-list` does underneath. It is pure Go, it has no
+build tag, and it fixes **Windows at the same time** — Windows has no
+fontconfig either, and needed no DirectWrite or registry reading for
+this.
+
+`/System/Library/Fonts/Supplemental` is in the list and matters: that
+is where Helvetica, Times, Courier, Monaco and Geneva live, which is
+to say every face the older packs ask for by name. On this Mac the
+scan finds **341 families**, and Helvetica, Helvetica Neue, Lucida
+Grande, Geneva, Monaco, Menlo, Courier, Times New Roman, Tahoma,
+Verdana, Arial and Georgia all resolve — so Aqua, Platinum and NeXT
+draw in their own typefaces here rather than in the toolkit's.
+
+Two details were not guesses:
+
+- **Weight comes from `OS/2`, not from the name**, because a subfamily
+  string is localized and a French system says "Gras". But the
+  `fsSelection` BOLD *bit* beats `usWeightClass`, because they
+  disagree: the toolkit's own JetBrains Mono Bold declares
+  `usWeightClass` 558 — it was cut from a variable font and the axis
+  value came with it — and reading the number alone files the bold
+  face under medium.
+- **It runs on every core.** One thread took 803 ms on this Mac, which
+  is long enough for the first window to want a font before the index
+  has one; the files are independent, so a worker per core takes
+  115 ms. On Linux it is 30 ms, and unused, since `fc-list` answers
+  first.
+
+Checked against fontconfig on a Linux machine with 596 family keys
+installed, the scan finds 590 of them. The six it does not are the
+weight-suffixed spellings fontconfig invents for a variable font's
+named instances — "Noto Sans Syriac Thin" — which `sfnt` cannot draw
+anyway, and which the existing lookup already skips.
 
 ## The clipboard and the pointer
 

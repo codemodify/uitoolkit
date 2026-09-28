@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -16,7 +15,14 @@ import (
 // (XP's Tahoma, Vista's Segoe UI, GNOME's Cantarell, NeXT's Helvetica), then
 // open look-alikes; the first one installed wins, and the bundled Titillium
 // Web and JetBrains Mono stay the last resort, so no pack needs a font to be
-// present. Fonts are found through fontconfig, indexed once per process.
+// present. Fonts are indexed once per process.
+//
+// Through fontconfig where there is one, because it is the machine's own
+// answer: it knows the configured directories, the user's additions and the
+// aliases. macOS has no fontconfig and Windows has none either, and there
+// the directories are walked and each file read instead — see
+// sysfont_scan.go, which is what made an era's typeface appear on those two
+// platforms at all.
 //
 // Through fc-list, and never through fc-match: that is the whole of why a
 // pack that asks for a face nobody has falls through to the next name on
@@ -75,9 +81,16 @@ func systemFaces() map[string][]sysFace {
 		if os.Getenv(SystemFontsEnv) == "0" {
 			return
 		}
-		if out, err := fcList(); err == nil {
+		if out, err := fcList(); err == nil && len(out) > 0 {
 			sysIndex.names = parseFCList(out, sysIndex.faces)
+			return
 		}
+		// No fontconfig, or it answered nothing: macOS has none at all
+		// and Windows has none either, and without this every pack on
+		// both falls through to the bundled faces. Walking the font
+		// directories and reading each file is what fc-list does
+		// underneath (sysfont_scan.go).
+		sysIndex.names = scanFamilies(systemFontDirs(), sysIndex.faces)
 	})
 	return sysIndex.faces
 }
@@ -89,12 +102,52 @@ func systemFamilies() []string {
 	return sysIndex.names
 }
 
+// faceRecord is one upright face, as either source found it: fc-list
+// (parseFCList) or a walk of the font directories (sysfont_scan.go).
+// Both produce these and indexFaceRecords does the rest, so the two
+// paths cannot drift in how a family is keyed or listed.
+type faceRecord struct {
+	// names are the family's spellings, the one to list first. fc-list
+	// gives a comma-separated set; a file gives its typographic family
+	// and its family, which differ for a face like "Helvetica Neue
+	// Bold" that names itself a family of its own.
+	names  []string
+	weight int  // fontconfig's scale: 80 regular, 200 bold
+	index  int  // face within a collection file
+	named  bool // a variable font's named instance
+	file   string
+}
+
+// indexFaceRecords files records under every spelling of their family
+// and returns the primary names a chooser lists, sorted and
+// deduplicated.
+func indexFaceRecords(records []faceRecord, into map[string][]sysFace) []string {
+	primary := map[string]string{}
+	for _, r := range records {
+		face := sysFace{file: r.file, index: r.index, weight: r.weight, named: r.named}
+		for i, fam := range r.names {
+			fam = strings.TrimSpace(fam)
+			key := strings.ToLower(fam)
+			if key == "" {
+				continue
+			}
+			into[key] = append(into[key], face)
+			if i == 0 {
+				if _, seen := primary[key]; !seen {
+					primary[key] = fam
+				}
+			}
+		}
+	}
+	return sortedFamilies(primary)
+}
+
 // parseFCList reads fc-list lines "family[,alias…]\tweight\tslant\tindex\tfile"
 // into the lookup index, and returns the primary family names — the first
 // name on each line, which is the one the file declares — sorted and
 // deduplicated.
 func parseFCList(out []byte, into map[string][]sysFace) []string {
-	primary := map[string]string{}
+	var records []faceRecord
 	sc := bufio.NewScanner(bytes.NewReader(out))
 	sc.Buffer(make([]byte, 64*1024), 1<<20)
 	for sc.Scan() {
@@ -118,33 +171,15 @@ func parseFCList(out []byte, into map[string][]sysFace) []string {
 			continue
 		}
 		idx, _ := strconv.Atoi(f[3])
-		face := sysFace{file: file, index: idx & 0xffff, weight: w, named: idx>>16 != 0}
-		for i, fam := range strings.Split(f[0], ",") {
-			fam = strings.TrimSpace(fam)
-			key := strings.ToLower(fam)
-			if key == "" {
-				continue
-			}
-			into[key] = append(into[key], face)
-			if i == 0 {
-				if _, seen := primary[key]; !seen {
-					primary[key] = fam
-				}
-			}
-		}
+		records = append(records, faceRecord{
+			names:  strings.Split(f[0], ","),
+			weight: w,
+			index:  idx & 0xffff,
+			named:  idx>>16 != 0,
+			file:   file,
+		})
 	}
-	names := make([]string, 0, len(primary))
-	for _, fam := range primary {
-		names = append(names, fam)
-	}
-	sort.Slice(names, func(i, j int) bool {
-		a, b := strings.ToLower(names[i]), strings.ToLower(names[j])
-		if a != b {
-			return a < b
-		}
-		return names[i] < names[j]
-	})
-	return names
+	return indexFaceRecords(records, into)
 }
 
 // fontconfig weights.
