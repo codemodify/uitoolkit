@@ -3,6 +3,7 @@
 package platform
 
 import (
+	"os"
 	"runtime"
 	"syscall"
 	"testing"
@@ -702,6 +703,102 @@ func TestDragEffectsMapBothWays(t *testing.T) {
 	} {
 		if got := winActionOf(c.e); got != c.want {
 			t.Errorf("effect %d became %v, want %v", c.e, got, c.want)
+		}
+	}
+}
+
+// Copy and paste did nothing in a Windows build: clipboard_linux.go is
+// behind linux && cgo and everything else fell to a stub that answered
+// nothing and threw writes away.
+func TestTheClipboardCarriesText(t *testing.T) {
+	runtime.LockOSThread()
+	t.Cleanup(runtime.UnlockOSThread)
+	before := ClipboardGet()
+	t.Cleanup(func() { ClipboardSet(before) })
+
+	for _, want := range []string{
+		"hello", "", "two\nlines", "πλάτος — em dash and Greek", "a\tb",
+	} {
+		ClipboardSet(want)
+		if got := ClipboardGet(); got != want {
+			t.Errorf("set %q, read back %q", want, got)
+		}
+		// Windows has no PRIMARY selection, so it answers from the same
+		// place rather than inventing a second one.
+		if got := ClipboardPrimaryGet(); got != want {
+			t.Errorf("primary read back %q, want %q", got, want)
+		}
+	}
+}
+
+// The pointer's shape. SetCursor alone is not enough — Windows asks the
+// window again with WM_SETCURSOR on every move inside it, and the
+// default answer puts the class cursor back.
+func TestTheWindowAnswersForItsPointer(t *testing.T) {
+	s := testSurface(t, 300, 220)
+	if _, ok := Surface(s).(CursorSurface); !ok {
+		t.Fatal("the surface is not a CursorSurface, so nothing can change the pointer")
+	}
+	SetCursor(s, CursorText)
+	if got := s.Cursor(); got != CursorText {
+		t.Errorf("the window remembers cursor %v, want the text one", got)
+	}
+	// Over the client area the window answers and says so; over the
+	// frame it must not, or the resize arrows never appear.
+	const htClient, htLeft = 1, 10
+	if r, _, _ := procSendMessage.Call(s.hwnd, wmSetCursor, s.hwnd, htClient); r != 1 {
+		t.Errorf("WM_SETCURSOR over the client area answered %d, want 1 (handled)", r)
+	}
+	if r, _, _ := procSendMessage.Call(s.hwnd, wmSetCursor, s.hwnd, htLeft); r == 1 {
+		t.Error("the window answered WM_SETCURSOR over its frame; Windows' own resize arrows are lost")
+	}
+}
+
+// SetPalette was answering false on the grounds that its signature — a
+// path to a KDE colour-scheme file — meant nothing on Windows. The file
+// is the source of the colours, not a KDE-only mechanism.
+func TestSetPalettePaintsTheCaption(t *testing.T) {
+	s := testSurface(t, 300, 220)
+	f := FrameOf(s)
+	if !f.FrameCaps().Has(FramePalette) {
+		t.Skip("this Windows does not take a caption colour (before 11 22000)")
+	}
+	dir := t.TempDir()
+	path := dir + `\scheme.colors`
+	if err := os.WriteFile(path, []byte(
+		"[WM]\nactiveBackground=61,174,233\nactiveForeground=255,255,255\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if !f.SetPalette(path) {
+		t.Error("SetPalette refused a scheme with an [WM] group")
+	}
+	if !f.SetPalette("") {
+		t.Error("SetPalette(\"\") refused to give the colours back")
+	}
+	if f.SetPalette(dir + `\nothing-here.colors`) {
+		t.Error("SetPalette accepted a file that does not exist")
+	}
+}
+
+// COLORREF is 0x00BBGGRR — the bytes the other way round from every
+// other colour on this platform, and the easiest thing here to get wrong.
+func TestKDEColoursBecomeCOLORREFs(t *testing.T) {
+	for _, c := range []struct {
+		in   string
+		want uint32
+		ok   bool
+	}{
+		{"61,174,233", 0x00E9AE3D, true},
+		{"255,255,255", 0x00FFFFFF, true},
+		{"0,0,0", 0, true},
+		{" 1 , 2 , 3 ", 0x00030201, true},
+		{"1,2", 0, false},
+		{"1,2,300", 0, false},
+		{"r,g,b", 0, false},
+	} {
+		got, ok := winColorRef(c.in)
+		if ok != c.ok || (ok && got != c.want) {
+			t.Errorf("winColorRef(%q) = %#08x, %v; want %#08x, %v", c.in, got, ok, c.want, c.ok)
 		}
 	}
 }

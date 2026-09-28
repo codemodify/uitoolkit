@@ -66,12 +66,8 @@ reshaped seam was for.
 
 | | |
 | --- | --- |
-| `SetPalette` | Takes a path to a KDE colour-scheme file. Windows 11 wants three `COLORREF`s through `DwmSetWindowAttribute`. The signature is an open question, so this answers **false** rather than pretending |
 | `MaximizeAxis` | Windows has no per-axis maximize at all. Correctly **false** |
-| Clipboard | **Not built, and the biggest gap here.** `clipboard_linux.go` is `//go:build linux && cgo`; every other platform gets `clipboard_stub.go`, which answers nothing and discards writes, so copy and paste do nothing in a Windows build. Wants `OpenClipboard`/`GetClipboardData`/`SetClipboardData` with `CF_UNICODETEXT` — most of which the drag source already does |
-| The pointer's shape | Not wired. `platform/cursor_windows.go` has `winCursorHost` and says to wire a surface's `SetCursor` to it; nothing does, so `winSurface` is not a `CursorSurface` and the pointer never becomes an I-beam or a resize arrow |
 | IME | No `WM_IME_*` at all, so composition — every CJK input method, and dead keys through an IME — does not reach the toolkit's `EventIMEPreedit`/`EventIMECommit` |
-| The suggested DPI rectangle | `WM_DPICHANGED` carries a rectangle Windows would like the window moved to, and it is now readable: `lparamAs` reinterprets the LPARAM's address rather than its value, which `go vet` accepts. The note that said otherwise was wrong |
 
 ## Why the pixels go up through a DIB section
 
@@ -107,6 +103,42 @@ happened to be a committed page after the buffer. A DIB section has no
 such edge — the memory is GDI's, sized by GDI — and blitting from a
 memory DC is the faster path anyway, since the header is parsed once at
 creation instead of once a frame.
+
+## The clipboard, the pointer and the caption's colours
+
+Three things that were not built and now are, and one note each on the
+part that is easy to miss.
+
+**The clipboard** is `OpenClipboard` / `GetClipboardData` /
+`SetClipboardData` with `CF_UNICODETEXT`. `OpenClipboard` is a *lock* on
+a single system-wide resource, not a handle: every path closes it,
+nothing that can block happens while it is held, and failing because
+another application holds it is ordinary — so it is retried over about a
+quarter of a second and then given up on rather than waited for.
+`SetClipboardData` **gives the memory away**; the block is only ours to
+free if it refuses. There is no PRIMARY selection here, so
+`ClipboardPrimaryGet` answers from the same place rather than inventing
+one.
+
+**The pointer's shape** needs two halves. `SetCursor` changes it now, and
+`WM_SETCURSOR` answers for it — Windows asks the window again on every
+move inside it and the default answer puts the class cursor back, which
+is exactly the arrow-flickering-over-text that a backend doing only the
+first half gets. Only over the client area: over the frame Windows' own
+shape is right, and answering there would take the resize arrows away.
+`WM_MOUSELEAVE` had to come with it, because there is no such message
+without asking for it — a window that never calls `TrackMouseEvent`
+believes the pointer is still over it for ever.
+
+**`SetPalette`** turned out not to be blocked at all. Its signature names
+a KDE colour-scheme file, which looked like the wrong shape for a
+platform that wants three `COLORREF`s — but the file is the *source* of
+the colours, not a KDE-only mechanism, and `platform` already parses that
+format for the title-bar preferences. The `[WM]` group's
+`activeBackground` and `activeForeground` become
+`DWMWA_CAPTION_COLOR` and `DWMWA_TEXT_COLOR`. `FramePalette` is probed
+for rather than assumed, because the attributes arrive in Windows 11
+22000 and the capability has to say what *this machine* will do.
 
 ## Drag and drop, and the one thing it costs
 

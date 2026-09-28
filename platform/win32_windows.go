@@ -59,6 +59,7 @@ var (
 	procSetWindowLong  = user32.NewProc("SetWindowLongPtrW")
 	procGetWindowLongW = user32.NewProc("GetWindowLongPtrW")
 	procScreenToClient = user32.NewProc("ScreenToClient")
+	procTrackMouse     = user32.NewProc("TrackMouseEvent")
 
 	procCreateDIBSect  = gdi32.NewProc("CreateDIBSection")
 	procCreateCompatDC = gdi32.NewProc("CreateCompatibleDC")
@@ -143,6 +144,8 @@ const (
 	wmMouseWheel  = 0x020A
 	wmMouseHWheel = 0x020E
 	wmActivate    = 0x0006
+	wmSetCursor   = 0x0020
+	wmMouseLeave  = 0x02A3
 	wmKeyDown     = 0x0100
 	wmKeyUp       = 0x0101
 	wmChar        = 0x0102
@@ -201,6 +204,15 @@ type winSurface struct {
 
 	// hiSurrogate is a WM_CHAR high surrogate waiting for its pair.
 	hiSurrogate uint16
+	// cursor is the shape this window asked for, and pointerIn says the
+	// pointer is over its client area — WM_SETCURSOR is answered from
+	// both.
+	cursor    Cursor
+	pointerIn bool
+	// paletteProbed/paletteOK: whether DWM here takes a caption colour,
+	// asked once.
+	paletteProbed bool
+	paletteOK     bool
 	// shadedH is the height a rolled-up window is held at, or 0.
 	shadedH int
 	// prePlacement and preStyle are where the window was, and what it
@@ -320,24 +332,41 @@ func win32Proc(hwnd, msg, wparam, lparam uintptr) uintptr {
 		}
 		return 0
 	case wmDpiChanged:
-		// The new DPI is the low word of wParam. Windows also passes a
-		// suggested rectangle in lParam, and this deliberately does not
-		// read it: turning an LPARAM back into a pointer is the one
-		// thing `go vet` will not have, and keeping the Windows build
-		// vet-clean is worth more than the suggestion. The window is
-		// re-sized from the logical size it already has and the scale
-		// that just changed, which lands in the same place for the
-		// ordinary case of a drag between two monitors.
+		// The new DPI is the low word of wParam, and lParam points at
+		// the rectangle Windows would like the window moved to.
+		//
+		// That rectangle is worth taking. It is not only a size: when a
+		// window is dragged between two monitors of different scales,
+		// it says *where* on the new monitor the window should land so
+		// that it stays under the pointer and inside the screen.
+		// Re-sizing from the logical size alone gets the size right and
+		// the position wrong, and the window walks across the screen a
+		// little on every crossing.
+		//
+		// Reading it was refused here before, on the grounds that
+		// turning an LPARAM back into a pointer is what `go vet` will
+		// not have. That was true of unsafe.Pointer(lparam) and is not
+		// true of lparamAs, which reinterprets the LPARAM's own address:
+		// nothing of Windows' is Go's memory, and vet is satisfied.
 		s.mu.Lock()
 		s.scale = float32(uint32(wparam)&0xFFFF) / 96
 		lw, lh, sc := s.logicalW, s.logicalH, s.scale
 		s.mu.Unlock()
-		if sc > 0 && lw > 0 && lh > 0 {
+		if want := lparamAs[winRect](lparam); want != nil &&
+			want.Right > want.Left && want.Bottom > want.Top {
+			procSetWindowPos.Call(hwnd, 0,
+				uintptr(want.Left), uintptr(want.Top),
+				uintptr(want.Right-want.Left), uintptr(want.Bottom-want.Top),
+				swpNoZOrder|swpNoActive)
+		} else if sc > 0 && lw > 0 && lh > 0 {
+			// No suggestion: keep the logical size and take the new
+			// scale, which is the right size in the wrong place, and
+			// better than neither.
 			r := winRect{0, 0, int32(DevicePixels(lw, sc)), int32(DevicePixels(lh, sc))}
 			procAdjustWindow.Call(uintptr(unsafe.Pointer(&r)), s.winAdjust(), 0, 0)
 			procSetWindowPos.Call(hwnd, 0, 0, 0,
 				uintptr(r.Right-r.Left), uintptr(r.Bottom-r.Top),
-				swpNoMove|0x0004|0x0010) // NOMOVE|NOZORDER|NOACTIVATE
+				swpNoMove|swpNoZOrder|swpNoActive)
 		}
 		s.push(Event{Kind: EventScale})
 		return 0
@@ -373,6 +402,10 @@ func win32Proc(hwnd, msg, wparam, lparam uintptr) uintptr {
 		}
 		s.push(ev)
 		return 0
+	case wmMouseLeave:
+		s.pointerIn = false
+		s.push(Event{Kind: EventPointerLeave})
+		return 0
 	case wmKeyDown, wmSysKeyDown:
 		s.push(Event{Kind: EventKeyDown, Key: winKey(wparam), Mods: winMods()})
 		if msg == wmSysKeyDown {
@@ -393,7 +426,20 @@ func win32Proc(hwnd, msg, wparam, lparam uintptr) uintptr {
 			s.push(Event{Kind: EventText, Rune: r, Mods: winMods()})
 		}
 		return 0
+	case wmSetCursor:
+		// The low word of lParam is the hit-test. Only the client area
+		// is ours; over the frame Windows' own shape is the right one,
+		// and answering for it would take the resize arrows away.
+		const htClient = 1
+		if uint32(lparam)&0xFFFF == htClient {
+			applySystemCursor(s.cursor)
+			return 1 // handled: do not load the class cursor over it
+		}
 	case wmMouseMove:
+		if !s.pointerIn {
+			s.pointerIn = true
+			s.trackLeave()
+		}
 		s.push(Event{Kind: EventMouseMove, Pos: lparamPoint(lparam)})
 		return 0
 	case wmLButtonDown, wmRButtonDown, wmMButtonDown:
@@ -931,4 +977,28 @@ func (s *winSurface) applyMinMax(mmi *winMinMaxInfo) {
 		_, h := outer(1, s.shadedH)
 		mmi.MinTrackSize.Y, mmi.MaxTrackSize.Y = h, h
 	}
+}
+
+// trackLeave asks Windows for one WM_MOUSELEAVE when the pointer next
+// goes out of this window.
+//
+// There is no such message without asking: Windows sends WM_MOUSEMOVE
+// while the pointer is inside and simply stops, so a window that never
+// calls this believes the pointer is still over it for ever — the hover
+// that never clears, and the tooltip that never goes away. The request
+// is spent when it fires, which is why it is made again on the next move
+// in.
+func (s *winSurface) trackLeave() {
+	if s.hwnd == 0 {
+		return
+	}
+	const leave = 0x00000002 // TME_LEAVE
+	e := struct {
+		Size, Flags uint32
+		Track       uintptr
+		Hover       uint32
+		_           uint32
+	}{Flags: leave, Track: s.hwnd}
+	e.Size = uint32(unsafe.Sizeof(e))
+	procTrackMouse.Call(uintptr(unsafe.Pointer(&e)))
 }

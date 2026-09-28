@@ -87,6 +87,12 @@ func (s *winSurface) FrameCaps() FrameCaps {
 		// for one. This is the bit the Frame contract grew before
 		// there was a backend to need it.
 		FrameSystemShadow
+	if s.winCaptionColorsWork() {
+		// Only where DWM takes the attribute: Windows 11 22000 and
+		// later. The bit says what this machine will do, not what the
+		// code knows how to ask for.
+		c |= FramePalette
+	}
 	return dropResizeCaps(c, s.sizing)
 }
 
@@ -330,12 +336,6 @@ func (s *winSurface) SetShadedHeight(h int) bool {
 	s.shadedH = max(h, 0)
 	return true
 }
-
-// SetPalette takes a path to a KDE colour-scheme file, which means
-// nothing here: Windows 11 takes three COLORREFs through
-// DwmSetWindowAttribute. The signature is the open question recorded in
-// RESUME.md, and until it is settled this says no rather than pretending.
-func (s *winSurface) SetPalette(string) bool { return false }
 
 // SetIcon gives the window its icon, for the title bar, the task bar and
 // Alt+Tab.
