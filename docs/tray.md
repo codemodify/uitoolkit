@@ -181,7 +181,7 @@ written for this toolkit:
 | Waybar tray module | Same |
 | ToolkitMenu (any Linux desktop) | Toolkit `PopupMenu` cascade, hover or Right to open |
 | Windows | Toolkit `PopupMenu` cascade — there is no dbusmenu and no `HMENU` |
-| macOS | The menu is not bridged to `NSMenu` at all yet, with or without children |
+| macOS | A real `NSMenu`, built and attached to the `NSStatusItem`; AppKit draws the cascade |
 
 What this repository verifies is the layout a host receives (ids,
 `children-display`, `recursionDepth`, `Event` routing) over a private
@@ -350,10 +350,33 @@ and `NSUserNotification` toasts. The OS owns the menu-bar click;
 toolkit `PopupMenu` is not used. Without CGO the item is a stub. AppKit
 windows are still a stub.
 
-`SetMenu` on macOS stores the rows and hands **none** of them to AppKit
-— there is no `NSMenu` bridge yet, so this is not new with submenus: the
-whole menu is inert there, children or not. macOS is a pinned platform
-and nothing was ported to it.
+`SetMenu` builds a real `NSMenu` and hands it to the status item, which
+draws it on any click — there is no protocol to export and no host to
+negotiate with, unlike the Linux dbusmenu. It used to store the rows and
+hand none of them to AppKit, so the macOS tray was an icon that did
+nothing.
+
+Two things about how it is built are worth knowing, because the first
+attempt got both wrong:
+
+- **The whole menu goes over in one hop to the main thread.** AppKit is
+  main-thread only, so every call is trampolined onto the main queue —
+  and a `dispatch_sync` to the main queue from a goroutine waits for a
+  queue nobody is draining whenever `NSApp`'s run loop has not started,
+  which is every test and every moment of start-up. Building a menu row
+  by row meant one such wait per row. The rows are flattened into a
+  pre-order array (each row says how many children follow it) and one
+  async block builds the lot; C owns the array and frees it, because the
+  block outlives the Go call.
+- **Click ids are never reused.** Each clickable row carries its id in
+  the `NSMenuItem` tag, and one shared target turns the action into a
+  call back into Go. A menu replaced while the old one is open must not
+  fire the *new* menu's handler for the row under the pointer, so the
+  counter only goes up and the old generation's handlers are dropped
+  when its menu is.
+
+A row with a submenu is a parent and not a command, as on every other
+backend ([StatusMenuItem.Submenu]), so it gets no id.
 
 ```bash
 CGO_ENABLED=1 go build ./examples/uitoolkit-sample-tour
