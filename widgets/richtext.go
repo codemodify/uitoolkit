@@ -745,8 +745,31 @@ func (t *RichText) paintLine(ctx *paintengine2d.Context, ln *rtLine, x0, ly floa
 				if px := f.img.Pixels; px != nil && px.Width > 0 && px.Height > 0 {
 					ctx.DrawImageRectPaint(px, paintengine2d.XYWH(0, 0, float32(px.Width), float32(px.Height)), dst, paintengine2d.Paint{})
 				} else {
-					// A picture not loaded: its box, as a browser shows it.
+					// A picture not loaded: its box, as a browser shows
+					// it — and the alt text inside, which is the whole
+					// reason the attribute exists. An image-heavy mail
+					// with its pictures unresolved was a wall of empty
+					// rectangles before this; the alt was parsed and
+					// stored all along (richtext.Image.Alt) and simply
+					// never drawn.
 					ctx.DrawRect(dst.Inset(0.5), paintengine2d.StrokePaint(text.WithAlpha(0.4), 1))
+					pad := t.dip(2)
+					if alt := strings.TrimSpace(f.img.Alt); alt != "" && dst.Dx() > t.dip(12) {
+						af := t.Look().MutedFont()
+						ctx.Save()
+						ctx.ClipRect(dst.Inset(pad))
+						// Centred in the box and fitted to it, so a long
+						// alt does not run out of a small placeholder.
+						room := dst.Dx() - pad*2
+						shown := alt
+						if af.Advance(shown) > room {
+							shown = af.Fit(shown, room)
+						}
+						af.Draw(ctx, shown, paintengine2d.Pt(
+							dst.Min.X+(dst.Dx()-af.Advance(shown))*0.5,
+							dst.Min.Y+(dst.Dy()-af.Height())*0.5), text.WithAlpha(0.75))
+						ctx.Restore()
+					}
 				}
 				continue
 			}

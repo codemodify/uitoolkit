@@ -75,11 +75,20 @@ screenshot tests in this repository possible at all.
 
 **Complex text.** This is the big one. The text stack shapes runs
 rune-by-rune with pair kerning from `GPOS`; there is no `GSUB`, no
-bidi, no Arabic joining and no Indic reordering. Latin, Cyrillic, Greek
-and CJK are fine. **Arabic, Hebrew, Devanagari and Thai are not** — they
-render as isolated glyphs in logical order, which is to say wrongly. Qt
-has HarfBuzz, GTK has Pango, and if you need those scripts you need one
-of them.
+bidi, no Arabic joining and no Indic reordering. **Arabic, Hebrew,
+Devanagari and Thai** render as isolated glyphs in logical order, which
+is to say wrongly. Qt has HarfBuzz, GTK has Pango, and if you need
+those scripts you need one of them.
+
+**And the bundled face is Latin only.** Titillium Web, which every pack
+falls back to, has 456 glyphs: no Greek, no Cyrillic, no CJK, and none
+of the arrows, check marks or box drawing a user interface reaches for
+— measured, not assumed. Those render only when a pack resolves an
+*installed* face that carries them, which it often does on a desktop
+and never does under `UITK_SYSTEM_FONTS=0`. There is no font fallback:
+a rune the face lacks draws as a box. Symbols are meant to come from
+the icon set rather than from a font, which is a defensible line for
+✓ and →, and not one for Greek or Cyrillic text.
 
 **Accessibility beyond Linux.** The model in package `a11y` is complete
 and every stock widget describes itself, but the platform bridge is

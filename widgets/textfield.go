@@ -107,10 +107,13 @@ func (t *TextField) SetText(s string) {
 		return
 	}
 	t.Text = s
-	n := runeCount(s)
-	if t.caret > n {
-		t.caret = n
-	}
+	// The caret goes to the end, which is where every toolkit puts it
+	// after a programmatic set — Qt, GTK and every browser — and where
+	// a caller who has just replaced the whole text means it to be.
+	// It used only to be clamped *down*, so setting the text of a field
+	// whose caret was at 0 left it in front of what had just been put
+	// there, and the next keystroke typed behind it.
+	t.caret = runeCount(s)
 	t.selA, t.selB = t.caret, t.caret
 	t.ensureCaretVisible()
 	t.Invalidate()
