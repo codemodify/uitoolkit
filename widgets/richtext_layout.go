@@ -159,6 +159,11 @@ func (t *RichText) spacing(b *richtext.Block) (before, after float32) {
 	case richtext.Rule:
 		return t.dip(6), t.dip(6)
 	case richtext.TableRow:
+		// Nothing between the rows of one table — they are one grid —
+		// and a paragraph's space after the last one, so the block that
+		// follows a table does not start right under its bottom rule.
+		// The caller adds the space after; only the last row of a run
+		// asks for it (see hasRowAfter).
 		return 0, 0
 	}
 	return 0, t.dip(6)
@@ -197,34 +202,19 @@ type rtSeg struct {
 	imgW, imgH float32
 }
 
-// layoutBlock lays b out at width.
-func (t *RichText) layoutBlock(b *richtext.Block, width float32) *rtLayout {
-	lay := &rtLayout{width: width, sig: t.sig()}
-	lay.base = t.face(richtext.Style{}, b.Kind, b.Level)
-	switch {
-	case b.Kind.IsList():
-		lay.indent = t.listIndent() * float32(min(max(b.Level, 0), richtext.MaxLevel)+1)
-	case b.Kind == richtext.Quote:
-		lay.indent = t.quoteIndent() * float32(min(max(b.Level, 0), richtext.MaxLevel)+1)
-	}
-	if b.Kind == richtext.Rule {
-		// A rule has no text and no lines: one empty line of the rule's
-		// own height, so every reader of a layout — the caret, hit
-		// testing, the scroll extent — has something to work with.
-		before, after := t.spacing(b)
-		lay.before = before
-		h := t.ruleHeight()
-		lay.lines = []rtLine{{y: before, h: h, base: h, ascent: h}}
-		lay.h = before + h + after
-		return lay
-	}
-	if b.Kind == richtext.TableRow {
-		return t.layoutTableRow(b, width, lay)
-	}
-	avail := max(width-lay.indent, t.dip(24))
+// segmentsOf turns spans into the words and images a line breaker
+// places, with each one carrying the face its span asks for. It is
+// shared by a paragraph and a table cell, which is what keeps a cell's
+// bold, its code and its links — a cell used to be drawn as its plain
+// text in one face, so a newsletter's table of links lost its links.
+//
+// at is the rune offset the first span starts at in the block, so a
+// cell's fragments point into the row's flattened text and the caret
+// goes on counting in one thing.
+func (t *RichText) segmentsOf(spans []richtext.Span, kind richtext.Kind, level, at int, avail float32) []rtSeg {
 	var segs []rtSeg
-	pos := 0
-	for si, s := range b.Spans {
+	pos := at
+	for si, s := range spans {
 		n := utf8.RuneCountInString(s.Text)
 		if s.Image != nil {
 			w, h := t.imageBox(s.Image, avail)
@@ -232,7 +222,7 @@ func (t *RichText) layoutBlock(b *richtext.Block, width float32) *rtLayout {
 			pos++
 			continue
 		}
-		f := t.face(s.Style, b.Kind, b.Level)
+		f := t.face(s.Style, kind, level)
 		rs := []rune(s.Text)
 		for i := 0; i < len(rs); {
 			j := i
@@ -250,8 +240,18 @@ func (t *RichText) layoutBlock(b *richtext.Block, width float32) *rtLayout {
 		}
 		pos += n
 	}
+	return segs
+}
+
+// breakSegments places segments into lines no wider than avail, breaking
+// a word longer than the line between its characters. end is the offset
+// the last line runs to.
+func breakSegments(segs []rtSeg, avail float32, end int) []rtLine {
 	var lines []rtLine
 	cur := rtLine{}
+	if len(segs) > 0 {
+		cur.start = segs[0].start
+	}
 	var x float32
 	add := func(sg rtSeg) {
 		if n := len(cur.frags); n > 0 && sg.img == nil && cur.frags[n-1].img == nil &&
@@ -296,8 +296,39 @@ func (t *RichText) layoutBlock(b *richtext.Block, width float32) *rtLayout {
 		}
 		add(sg)
 	}
-	cur.end = b.Len()
+
+	cur.end = end
 	lines = append(lines, cur)
+	return lines
+}
+
+// layoutBlock lays b out at width.
+func (t *RichText) layoutBlock(b *richtext.Block, width float32) *rtLayout {
+	lay := &rtLayout{width: width, sig: t.sig()}
+	lay.base = t.face(richtext.Style{}, b.Kind, b.Level)
+	switch {
+	case b.Kind.IsList():
+		lay.indent = t.listIndent() * float32(min(max(b.Level, 0), richtext.MaxLevel)+1)
+	case b.Kind == richtext.Quote:
+		lay.indent = t.quoteIndent() * float32(min(max(b.Level, 0), richtext.MaxLevel)+1)
+	}
+	if b.Kind == richtext.Rule {
+		// A rule has no text and no lines: one empty line of the rule's
+		// own height, so every reader of a layout — the caret, hit
+		// testing, the scroll extent — has something to work with.
+		before, after := t.spacing(b)
+		lay.before = before
+		h := t.ruleHeight()
+		lay.lines = []rtLine{{y: before, h: h, base: h, ascent: h}}
+		lay.h = before + h + after
+		return lay
+	}
+	if b.Kind == richtext.TableRow {
+		return t.layoutTableRow(b, width, lay)
+	}
+	avail := max(width-lay.indent, t.dip(24))
+	segs := t.segmentsOf(b.Spans, b.Kind, b.Level, 0, avail)
+	lines := breakSegments(segs, avail, b.Len())
 
 	lineGap := t.dip(2)
 	before, after := t.spacing(b)

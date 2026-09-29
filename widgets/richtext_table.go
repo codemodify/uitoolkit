@@ -5,7 +5,6 @@ import (
 
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/richtext"
-	"github.com/codemodify/uitoolkit/style"
 )
 
 // Laying a table row out.
@@ -23,10 +22,18 @@ import (
 // for a paragraph — the row's flattened text (cells joined by tabs) is
 // what they count in.
 //
-// What this does not do: wrap a cell over several lines, span columns, or
-// nest a table in a cell. A cell whose text is wider than its column is
-// elided. Mail tables are small and wide-ish; a cell that needs a
-// paragraph of its own is a document this widget is not for.
+// A cell is laid out the way a paragraph is — its own spans, its own
+// faces, wrapped to its column — so bold, code and links survive in a
+// <td>. It used to be drawn as its plain text in one face fitted to one
+// line, which lost a newsletter's table of links and cut a long cell
+// rather than folding it.
+//
+// The row is as tall as its tallest cell, and every cell's k-th line
+// shares the row's k-th line, so the caret, the selection and the
+// painter go on working on lines and fragments exactly as they do for a
+// paragraph.
+//
+// What this still does not do: span columns, or nest a table in a cell.
 
 // tableCols is the width of each column of a run, and the widths the
 // cells were measured at.
@@ -41,31 +48,30 @@ func (t *RichText) layoutTableRow(b *richtext.Block, width float32, lay *rtLayou
 	run := t.runFor(b)
 	cols := t.columnsFor(run, width)
 	pad := t.cellPad()
-	face := lay.base
+	kind := richtext.TableRow
 	if b.Header() {
-		face = t.boldFace(lay.base)
+		// A header cell's spans are drawn bold on top of whatever they
+		// already ask for, which is what a <th> means.
+		kind = richtext.Heading
 	}
 
-	var frags []rtFrag
-	var x float32
-	// Offsets into the row's flattened text, so a caret in a cell is a
-	// caret in the block: cells are joined by one tab each.
+	// Each cell laid out on its own, at its column's width.
+	type cell struct {
+		lines []rtLine
+		x     float32
+	}
+	cells := make([]cell, len(cols))
 	pos := 0
+	var x float32
 	for j := range cols {
-		text := ""
+		var spans []richtext.Span
 		if j < len(b.Cells) {
-			text = drawText(b.CellText(j))
+			spans = b.Cells[j]
 		}
-		room := max(cols[j]-pad*2, 0)
-		shown := text
-		if face.Advance(shown) > room {
-			shown = face.Fit(shown, room)
-		}
-		n := len([]rune(text))
-		frags = append(frags, rtFrag{
-			start: pos, end: pos + n, text: shown, font: face,
-			x: x + pad, w: max(cols[j]-pad, 0),
-		})
+		room := max(cols[j]-pad*2, t.dip(8))
+		n := cellRunes(spans)
+		segs := t.segmentsOf(spans, kind, b.Level, pos, room)
+		cells[j] = cell{lines: breakSegments(segs, room, pos+n), x: x + pad}
 		pos += n + 1 // the tab that follows this cell
 		x += cols[j]
 	}
@@ -74,17 +80,91 @@ func (t *RichText) layoutTableRow(b *richtext.Block, width float32, lay *rtLayou
 		pos--
 	}
 
-	h := face.Height() + t.dip(6)
+	rows := 0
+	for _, c := range cells {
+		rows = max(rows, len(c.lines))
+	}
+	if rows == 0 {
+		rows = 1
+	}
+
 	before, after := t.spacing(b)
+	// A paragraph's space after the last row of a table, and nothing
+	// between the rows of one — they are one grid. Without it the block
+	// that follows a table started right under its bottom rule, so a
+	// quote's accent rule butted straight onto it.
+	if !t.rowFollows(b) {
+		after = t.dip(6)
+	}
 	lay.before = before
-	lay.lines = []rtLine{{
-		start: 0, end: b.Len(), y: before, h: h,
-		base: face.Ascent + t.dip(3), x: 0, w: x,
-		frags: frags, ascent: face.Ascent, descent: fontDescent(face),
-	}}
-	lay.h = before + h + after
+	lineGap := t.dip(2)
+	base := t.face(richtext.Style{}, richtext.TableRow, 0)
+
+	lines := make([]rtLine, rows)
+	y := before
+	for i := 0; i < rows; i++ {
+		ln := &lines[i]
+		asc, desc := base.Ascent, fontDescent(base)
+		for _, c := range cells {
+			if i >= len(c.lines) {
+				continue
+			}
+			src := c.lines[i]
+			var fx float32
+			for _, f := range src.frags {
+				f.x = c.x + fx
+				if f.img != nil {
+					f.w = f.imgW
+					asc = max(asc, f.imgH)
+				} else {
+					f.w = f.font.Advance(f.text)
+					asc = max(asc, f.font.Ascent)
+					desc = max(desc, fontDescent(f.font))
+				}
+				fx += f.w
+				ln.frags = append(ln.frags, f)
+			}
+		}
+		ln.ascent, ln.descent = asc, desc
+		ln.base = float32(math.Round(float64(lineGap*0.5 + asc)))
+		ln.h = float32(math.Ceil(float64(asc + desc + lineGap)))
+		ln.x, ln.w = 0, x
+		ln.y = y
+		y += ln.h
+	}
+	// The row is one block to everything that counts in offsets: the
+	// first line starts at 0 and the last ends at the row's length, so a
+	// caret dragged down a column still walks the flattened text.
+	lines[0].start = 0
+	for i := 0; i < rows-1; i++ {
+		lines[i].soft = true
+		lines[i].end = lines[i+1].start
+	}
+	lines[rows-1].end = b.Len()
+
+	// Cell padding at the top, so text does not sit on the rule above it.
+	pv := t.dip(3)
+	for i := range lines {
+		lines[i].y += pv
+	}
+	lay.lines = lines
+	lay.h = before + (y - before) + pv*2 + after
 	lay.cols = cols
 	return lay
+}
+
+// cellRunes is how many runes a cell's spans hold, which is what the
+// row's flattened text counts it as.
+func cellRunes(spans []richtext.Span) int {
+	n := 0
+	for _, s := range spans {
+		if s.Image != nil {
+			n++
+			continue
+		}
+		n += len([]rune(s.Text))
+	}
+	return n
 }
 
 // runFor is the run of table rows b belongs to.
@@ -132,17 +212,26 @@ func (t *RichText) measureColumns(run []*richtext.Block, width float32) []float3
 		return nil
 	}
 	pad := t.cellPad()
-	base := t.face(richtext.Style{}, richtext.TableRow, 0)
-	bold := t.boldFace(base)
 	want := make([]float32, n)
 	for _, b := range run {
-		f := base
+		kind := richtext.TableRow
 		if b.Header() {
-			f = bold
+			kind = richtext.Heading
 		}
 		for j := 0; j < n && j < len(b.Cells); j++ {
-			w := f.Advance(drawText(b.CellText(j))) + pad*2
-			if w > want[j] {
+			// Measured span by span in the face each one asks for, so a
+			// bold cell is not measured in the regular face and then
+			// drawn wider than the column it was given.
+			var w float32
+			for _, sp := range b.Cells[j] {
+				if sp.Image != nil {
+					iw, _ := t.imageBox(sp.Image, math.MaxFloat32)
+					w += iw
+					continue
+				}
+				w += t.face(sp.Style, kind, b.Level).Advance(drawText(sp.Text))
+			}
+			if w += pad * 2; w > want[j] {
 				want[j] = w
 			}
 		}
@@ -171,14 +260,6 @@ func (t *RichText) measureColumns(run []*richtext.Block, width float32) []float3
 		want[j] = float32(math.Round(float64(want[j] - (want[j]-floor)*k)))
 	}
 	return want
-}
-
-// boldFace is f at bold weight, for a header row.
-func (t *RichText) boldFace(f *style.Font) *style.Font {
-	if f == nil {
-		return nil
-	}
-	return style.BakeFamily(f.Family, style.WeightBold, f.Size, f.Color)
 }
 
 // paintBlockChrome draws what a block is made of besides its text: the
@@ -248,4 +329,16 @@ func (t *RichText) paintBlockChrome(ctx *paintengine2d.Context, b *richtext.Bloc
 func (t *RichText) hasRowAfter(i int) bool {
 	bs := t.doc.Blocks()
 	return i+1 < len(bs) && bs[i+1].Kind == richtext.TableRow
+}
+
+// rowFollows reports whether another row of the same table comes after
+// b, which is how the last row of a run knows to leave space after it.
+func (t *RichText) rowFollows(b *richtext.Block) bool {
+	bs := t.doc.Blocks()
+	for i, x := range bs {
+		if x == b {
+			return i+1 < len(bs) && bs[i+1].Kind == richtext.TableRow
+		}
+	}
+	return false
 }
