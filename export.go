@@ -38,6 +38,8 @@ type (
 	ButtonRole        = widgets.ButtonRole
 	TableColumn       = widgets.TableColumn
 	FileInfo          = widgets.FileInfo
+	Token             = widgets.Token
+	TokenField        = widgets.TokenField
 	FileDialogMode    = widgets.FileDialogMode
 	FileDialogOptions = widgets.FileDialogOptions
 	Density           = style.Density
@@ -509,6 +511,10 @@ func Warn(from widget.Component, title, message string, on func()) *widgets.Mess
 func Prompt(from widget.Component, title, label, initial string, on func(string, bool)) *widgets.MessageBox {
 	return widgets.Prompt(from, title, label, initial, on)
 }
+func NewTokenField(placeholder string, on func([]string)) *widgets.TokenField {
+	return widgets.NewTokenField(placeholder, on)
+}
+func NewToken(text string) *widgets.Token { return widgets.NewToken(text) }
 func NewTableView(cols []widgets.TableColumn, rows int, cell func(row, col int) string, on func(int)) *widgets.TableView {
 	return widgets.NewTableView(cols, rows, cell, on)
 }

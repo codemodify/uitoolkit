@@ -655,8 +655,13 @@ func (t *TextField) KeyPress(e widget.KeyEvent) bool {
 			t.caret--
 			t.selA, t.selB = t.caret, t.caret
 			t.changed()
+			return true
 		}
-		return true
+		// Nothing to delete: the key bubbles, for the same reason Return
+		// does below. A chip field's Backspace on an empty editor takes
+		// back the last recipient, and a field that swallowed the key
+		// with no visible effect would be the only thing stopping it.
+		return false
 	case platform.KeyDelete:
 		if t.hasSel() {
 			t.replaceSel("")

@@ -176,6 +176,20 @@ func (t *TableView) contentH() float32 { return float32(t.RowCount) * t.rowH() }
 // frame is the look's view frame around the table (zero on flat looks).
 func (t *TableView) frame() style.Insets { return viewFrame(t.Look(), t.Frameless) }
 
+// RowHeightPx is one body row's height as this look and density draw it.
+func (t *TableView) RowHeightPx() float32 { return t.rowH() }
+
+// HeightForRows is the height this table needs to show its header and
+// exactly n body rows — the same number [ListView.HeightForRows] gives,
+// with the header added, and with none of Measure's four-row floor.
+func (t *TableView) HeightForRows(n int) float32 {
+	if n < 0 {
+		n = 0
+	}
+	in := t.frame()
+	return t.headerH() + float32(n)*t.rowH() + in.Top + in.Bottom
+}
+
 // inner is the viewport in view space (inside the frame): header + body.
 func (t *TableView) inner() paintengine2d.Rect { return viewInner(t.LocalBounds(), t.frame()) }
 

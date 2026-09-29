@@ -17,6 +17,104 @@ type TabBar struct {
 	hover    int
 	press    int
 	fades    []stateFade // one per tab: hover cross-fades
+	// enabled and shown are the per-tab flags, by index, grown only when
+	// something turns one off — a bar nobody has called SetTabEnabled or
+	// SetTabVisible on carries neither slice and behaves as it always did.
+	// Both read as true past their end, so growing Titles adds tabs that
+	// are on.
+	enabled []bool
+	shown   []bool
+}
+
+// TabEnabled reports whether tab i can be selected. Tabs are enabled.
+func (t *TabBar) TabEnabled(i int) bool {
+	return i >= 0 && i < len(t.Titles) && (i >= len(t.enabled) || t.enabled[i])
+}
+
+// TabVisible reports whether tab i is in the strip. Tabs are visible.
+func (t *TabBar) TabVisible(i int) bool {
+	return i >= 0 && i < len(t.Titles) && (i >= len(t.shown) || t.shown[i])
+}
+
+// SetTabEnabled greys a tab out. It stays in the strip — the page exists
+// and is not available, which is different from not being there — and it
+// cannot be clicked, arrowed onto or scrolled onto.
+func (t *TabBar) SetTabEnabled(i int, v bool) { t.setFlag(&t.enabled, i, v) }
+
+// SetTabVisible takes a tab out of the strip altogether, for a page that
+// does not apply at all: a mail with no HTML part has no HTML tab, and a
+// disabled one would only invite a click that can never work.
+func (t *TabBar) SetTabVisible(i int, v bool) { t.setFlag(&t.shown, i, v) }
+
+func (t *TabBar) setFlag(slot *[]bool, i int, v bool) {
+	if i < 0 || i >= len(t.Titles) {
+		return
+	}
+	for len(*slot) < len(t.Titles) {
+		*slot = append(*slot, true)
+	}
+	if (*slot)[i] == v {
+		return
+	}
+	(*slot)[i] = v
+	// The selected tab may have just become one that cannot be selected.
+	if !t.selectable(t.Selected) {
+		if n := t.nearest(t.Selected, 0); n >= 0 {
+			t.Selected = n
+			if t.OnSelect != nil {
+				t.OnSelect(n)
+			}
+		}
+	}
+	t.Invalidate()
+	t.RequestLayout()
+}
+
+// selectable is "in range, shown and enabled".
+func (t *TabBar) selectable(i int) bool { return t.TabVisible(i) && t.TabEnabled(i) }
+
+// nearest is the tab Select(i) lands on. With dir 0 it looks forward from
+// i and then backward, which makes Select(0) mean "the first tab there
+// actually is" and Select(len-1) the last. With dir -1 or +1 it looks
+// only that way, which is what an arrow key means: Left at the leftmost
+// selectable tab must stay, not wrap round to the right.
+func (t *TabBar) nearest(i, dir int) int {
+	n := len(t.Titles)
+	if n == 0 {
+		return -1
+	}
+	if i < 0 {
+		i = 0
+	}
+	if i >= n {
+		i = n - 1
+	}
+	if dir == 0 {
+		for j := i; j < n; j++ {
+			if t.selectable(j) {
+				return j
+			}
+		}
+		for j := i - 1; j >= 0; j-- {
+			if t.selectable(j) {
+				return j
+			}
+		}
+		return -1
+	}
+	for j := i; j >= 0 && j < n; j += dir {
+		if t.selectable(j) {
+			return j
+		}
+	}
+	return -1
+}
+
+// step moves one selectable tab along (an arrow key, a wheel notch).
+func (t *TabBar) step(dir int) {
+	if i := t.nearest(t.Selected+dir, dir); i >= 0 {
+		t.Select(i)
+	}
 }
 
 // NewTabBar constructs a tab strip.
@@ -59,14 +157,25 @@ func (t *TabBar) tabRects() []paintengine2d.Rect {
 	// Neighbours overlap by the look's tab overlap, so two tabs share one
 	// border line (each tab still paints only inside its own rect).
 	ov := style.TabOverlapOf(lk)
-	ws := make([]float32, n)
+	// Hidden tabs take no width and get an empty rect, which is what
+	// every reader below treats as "not there".
+	vis := make([]int, 0, n)
+	for i := range t.Titles {
+		if t.TabVisible(i) {
+			vis = append(vis, i)
+		}
+	}
+	if len(vis) == 0 {
+		return make([]paintengine2d.Rect, n)
+	}
+	ws := make([]float32, len(vis))
 	minW := style.Dip(lk, 56)
 	var total float32
-	for i, title := range t.Titles {
-		ws[i] = max(f.Advance(title)+style.Dip(lk, 28), minW)
-		total += ws[i]
+	for k, i := range vis {
+		ws[k] = max(f.Advance(t.Titles[i])+style.Dip(lk, 28), minW)
+		total += ws[k]
 	}
-	total -= ov * float32(n-1)
+	total -= ov * float32(len(vis)-1)
 	// Too many for the strip: tabs give up width above a narrower floor
 	// (their labels elide), then the strip slides to keep the selected tab
 	// in view (Qt's QTabBar, GTK's notebook).
@@ -85,28 +194,32 @@ func (t *TabBar) tabRects() []paintengine2d.Rect {
 		}
 	}
 	out := make([]paintengine2d.Rect, n)
-	for i, w := range ws {
-		out[i] = paintengine2d.XYWH(x, 0, w, h)
+	for k, w := range ws {
+		out[vis[k]] = paintengine2d.XYWH(x, 0, w, h)
 		x += w
-		if i < n-1 {
+		if k < len(vis)-1 {
 			x -= ov
 		}
 	}
-	if end := x + margin; end > t.LocalBounds().Dx() && t.Selected >= 0 && t.Selected < n {
+	if end := x + margin; end > t.LocalBounds().Dx() && t.Selected >= 0 && t.Selected < n && out[t.Selected].Dx() > 0 {
 		sel := out[t.Selected]
 		shift := float32(0)
 		if over := sel.Max.X + margin - t.LocalBounds().Dx(); over > 0 {
 			shift = -over
 		}
 		for i := range out {
-			out[i] = out[i].Translate(paintengine2d.Pt(shift, 0))
+			if out[i].Dx() > 0 {
+				out[i] = out[i].Translate(paintengine2d.Pt(shift, 0))
+			}
 		}
 	}
 	// Some looks centre the strip over its page (Aqua's segmented tabs).
 	if style.LookHint(lk, style.HintTabsCentered) == 1 {
 		if shift := (t.LocalBounds().Dx() - (x + style.Dip(lk, 4))) * 0.5; shift > 0 {
 			for i := range out {
-				out[i] = out[i].Translate(paintengine2d.Pt(shift, 0))
+				if out[i].Dx() > 0 {
+					out[i] = out[i].Translate(paintengine2d.Pt(shift, 0))
+				}
 			}
 		}
 	}
@@ -118,7 +231,7 @@ func (t *TabBar) indexAt(x float32) int {
 	// border.
 	rects := t.tabRects()
 	for i := len(rects) - 1; i >= 0; i-- {
-		if r := rects[i]; x >= r.Min.X && x < r.Max.X {
+		if r := rects[i]; r.Dx() > 0 && x >= r.Min.X && x < r.Max.X {
 			return i
 		}
 	}
@@ -143,10 +256,17 @@ func (t *TabBar) Paint(ctx *paintengine2d.Context) {
 		if i != t.Selected {
 			st &^= style.StateFocused
 		}
-		if i == 0 {
+		if !t.TabEnabled(i) {
+			st |= style.StateDisabled
+			st &^= style.StateHovered | style.StatePressed
+		}
+		// First and last are about the strip as it is drawn, so a hidden
+		// tab does not leave its neighbour looking like the middle of a
+		// row that starts with it.
+		if i == t.firstShown() {
 			st |= style.StateFirst
 		}
-		if i == len(t.Titles)-1 {
+		if i == t.lastShown() {
 			st |= style.StateLast
 		}
 		return st
@@ -155,7 +275,7 @@ func (t *TabBar) Paint(ctx *paintengine2d.Context) {
 		t.fades = make([]stateFade, len(t.Titles))
 	}
 	for i, title := range t.Titles {
-		if i != t.Selected {
+		if i != t.Selected && rects[i].Dx() > 0 {
 			r := rects[i]
 			t.fades[i].paint(t, ctx, r, state(i), func(ctx *paintengine2d.Context, st style.ControlState) {
 				lk.DrawTab(ctx, r, st, title, false)
@@ -164,12 +284,30 @@ func (t *TabBar) Paint(ctx *paintengine2d.Context) {
 	}
 	// The selected tab paints last, grown by the look's outset, so it can
 	// overlap its neighbours (Win95, XP, Platinum and Motif tabs do).
-	if i := t.Selected; i >= 0 && i < len(t.Titles) {
+	if i := t.Selected; i >= 0 && i < len(t.Titles) && rects[i].Dx() > 0 {
 		r := rects[i]
 		out := style.TabOutsetOf(lk)
 		r = paintengine2d.XYWH(r.Min.X-out.Left, r.Min.Y-out.Top, r.Dx()+out.Left+out.Right, r.Dy()+out.Top+out.Bottom).Intersect(b)
 		lk.DrawTab(ctx, r, state(i), t.Titles[i], true)
 	}
+}
+
+func (t *TabBar) firstShown() int {
+	for i := range t.Titles {
+		if t.TabVisible(i) {
+			return i
+		}
+	}
+	return -1
+}
+
+func (t *TabBar) lastShown() int {
+	for i := len(t.Titles) - 1; i >= 0; i-- {
+		if t.TabVisible(i) {
+			return i
+		}
+	}
+	return -1
 }
 
 func (t *TabBar) invalidateTab(i int) {
@@ -182,6 +320,11 @@ func (t *TabBar) invalidateTab(i int) {
 
 func (t *TabBar) MouseMove(e widget.MouseEvent) bool {
 	i := t.indexAt(e.Pos.X)
+	if !t.TabEnabled(i) {
+		// A disabled tab does not light up. Highlighting one is a promise
+		// the click will not keep.
+		i = -1
+	}
 	if i != t.hover {
 		old := t.hover
 		t.hover = i
@@ -203,7 +346,10 @@ func (t *TabBar) MousePress(e widget.MouseEvent) bool {
 	}
 	t.MarkPointerFocus()
 	t.RequestFocus()
-	t.press = t.indexAt(e.Pos.X)
+	t.press = -1
+	if i := t.indexAt(e.Pos.X); t.selectable(i) {
+		t.press = i
+	}
 	t.Invalidate()
 	return true
 }
@@ -224,11 +370,11 @@ func (t *TabBar) MouseWheel(e widget.MouseEvent) bool {
 		return false
 	}
 	if e.Scroll.Y > 0 {
-		t.Select(t.Selected + 1)
+		t.step(1)
 		return true
 	}
 	if e.Scroll.Y < 0 {
-		t.Select(t.Selected - 1)
+		t.step(-1)
 		return true
 	}
 	return false
@@ -241,10 +387,10 @@ func (t *TabBar) KeyPress(e widget.KeyEvent) bool {
 	t.MarkKeyboardFocus()
 	switch e.Key {
 	case platform.KeyLeft:
-		t.Select(t.Selected - 1)
+		t.step(-1)
 		return true
 	case platform.KeyRight:
-		t.Select(t.Selected + 1)
+		t.step(1)
 		return true
 	case platform.KeyHome:
 		t.Select(0)
@@ -256,17 +402,14 @@ func (t *TabBar) KeyPress(e widget.KeyEvent) bool {
 	return false
 }
 
-// Select changes the current tab.
+// Select changes the current tab. A disabled or hidden tab cannot be
+// selected: the nearest one that can be takes it — searched forward from
+// i and then backward — so Select(0) means "the first tab there is".
 func (t *TabBar) Select(i int) {
 	if !t.Enabled() {
 		return
 	}
-	if i < 0 {
-		i = 0
-	}
-	if i >= len(t.Titles) {
-		i = len(t.Titles) - 1
-	}
+	i = t.nearest(i, 0)
 	if i < 0 || i == t.Selected {
 		return
 	}
@@ -334,6 +477,13 @@ func (p *TabPage) Paint(ctx *paintengine2d.Context) {
 type Tab struct {
 	Title   string
 	Content widget.Component
+	// Disabled greys the tab: the page exists and is not available now.
+	Disabled bool
+	// Hidden takes it out of the strip: the page does not apply at all —
+	// no HTML part, so no HTML tab. A hidden tab is not a disabled one,
+	// and showing a disabled tab for a page that will never exist only
+	// invites a click that can never work.
+	Hidden bool
 }
 
 // TabView composes a TabBar and swapped TabPage content.
@@ -359,11 +509,60 @@ func NewTabView(tabs ...Tab) *TabView {
 	for i, tab := range tabs {
 		if tab.Content != nil {
 			tv.page.Add(tab.Content)
-			tab.Content.SetVisible(i == 0)
+			tab.Content.SetVisible(false)
+		}
+		if tab.Disabled {
+			tv.bar.SetTabEnabled(i, false)
+		}
+		if tab.Hidden {
+			tv.bar.SetTabVisible(i, false)
+		}
+	}
+	// The first tab that can be selected, which is the first one unless
+	// the caller hid or disabled it.
+	tv.selected = tv.bar.nearest(0, 0)
+	if tv.selected >= 0 {
+		tv.bar.Selected = tv.selected
+		if c := tabs[tv.selected].Content; c != nil {
+			c.SetVisible(true)
 		}
 	}
 	tv.bar.OnSelect = func(i int) { tv.Select(i) }
 	return tv
+}
+
+// SetTabEnabled greys tab i out. A disabled tab cannot be selected, and
+// selecting away from it happens here rather than being the caller's job.
+func (t *TabView) SetTabEnabled(i int, v bool) { t.setTabFlag(i, v, false) }
+
+// SetTabVisible takes tab i out of the strip, or puts it back.
+func (t *TabView) SetTabVisible(i int, v bool) { t.setTabFlag(i, v, true) }
+
+// TabEnabled reports whether tab i can be selected.
+func (t *TabView) TabEnabled(i int) bool { return t.bar.TabEnabled(i) }
+
+// TabVisible reports whether tab i is in the strip.
+func (t *TabView) TabVisible(i int) bool { return t.bar.TabVisible(i) }
+
+func (t *TabView) setTabFlag(i int, v, visibility bool) {
+	if i < 0 || i >= len(t.tabs) {
+		return
+	}
+	was := t.bar.Selected
+	if visibility {
+		t.tabs[i].Hidden = !v
+		t.bar.SetTabVisible(i, v)
+	} else {
+		t.tabs[i].Disabled = !v
+		t.bar.SetTabEnabled(i, v)
+	}
+	// The bar moves its own selection off a tab that can no longer hold
+	// it; the pages have to follow. Its OnSelect is this view's Select,
+	// so the common case is already done — this covers the one where the
+	// bar changed Selected without firing (it fires only on a real move).
+	if t.bar.Selected != was || t.selected != t.bar.Selected {
+		t.Select(t.bar.Selected)
+	}
 }
 
 // Bar is the tab strip.
@@ -375,8 +574,10 @@ func (t *TabView) Page() *TabPage { return t.page }
 // Selected is the current tab index.
 func (t *TabView) Selected() int { return t.selected }
 
-// Select shows tab i.
+// Select shows tab i, or the nearest tab that is neither disabled nor
+// hidden ([TabBar.Select]).
 func (t *TabView) Select(i int) {
+	i = t.bar.nearest(i, 0)
 	if i < 0 || i >= len(t.tabs) {
 		return
 	}

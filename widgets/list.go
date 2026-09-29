@@ -218,6 +218,30 @@ func (l *ListView) rowH() float32 {
 
 func (l *ListView) contentH() float32 { return float32(l.Count) * l.rowH() }
 
+// RowHeightPx is one row's height as this look and density draw it —
+// [ListView.RowHeight] when it is set, otherwise the look's own.
+func (l *ListView) RowHeightPx() float32 { return l.rowH() }
+
+// HeightForRows is the height this list needs to show exactly n rows:
+// n row heights plus the look's view frame, at the look's scale.
+//
+// It is the number a popover, a completion drop-down or an inline list
+// wants, because those are sized by how many rows they should show
+// rather than by the space around them, and getting it out of Measure
+// meant laying the list out first and then asking it a question it was
+// not being asked to answer.
+//
+// n is not clamped to Count. A drop-down that is always five rows tall
+// is still five rows tall when two of them are filled, and a list that
+// quietly shrank would move the window under the pointer.
+func (l *ListView) HeightForRows(n int) float32 {
+	if n < 0 {
+		n = 0
+	}
+	in := l.frame()
+	return float32(n)*l.rowH() + in.Top + in.Bottom
+}
+
 // frame is the look's view frame around the list (zero on flat looks, and
 // zero for a placed list, whose art has the well printed in it).
 func (l *ListView) frame() style.Insets {

@@ -43,6 +43,7 @@ stub; there is no native AppKit/SwiftUI control host.
 | Slider | `Slider` | `QSlider` / `Slider` | `GtkScale` | `Slider` | `widget.Slider` | `TrackBar` | `Slider` | `NSSlider` | `Slider` | [thumb](screenshots/compare/slider.png) |
 | Text field | `TextField` / `MonoTextField` / `PasswordField` | `QLineEdit` / `TextField` | `GtkEntry` | `TextBox` | `widget.Entry` | `TextBox` | `PasswordBox` / `TextBox` | `NSSecureTextField` / `NSTextField` | `SecureField` / `TextField` | [thumb](screenshots/compare/textfield.png) |
 | Text area | `TextArea` / `MonoTextArea` | `QTextEdit` / `TextArea` | `GtkTextView` | `TextBox` (AcceptsReturn) | `widget.Entry` (MultiLine) | `TextBox` (Multiline) | `TextBox` | `NSTextView` | `TextEditor` | [thumb](screenshots/compare/textarea.png) · [gallery](screenshots/gallery-textarea.png) |
+| Chip / token field | `TokenField` / `Token` | — (`QLineEdit` + hand-built) | — (`GtkEntry` + hand-built) | — | — | — | — | `NSTokenField` | — | — |
 | Rich text | `RichText` + `RichTextBar` (`richtext.Doc`, HTML in and out) | `QTextEdit` / `TextArea` (`textFormat: RichText`) | `GtkTextView` + `GtkTextBuffer` tags | — (`TextBox` ≈) | `widget.RichText` (read-only) ≈ | `RichTextBox` | `RichTextBox` | `NSTextView` (rich) | `TextEditor` (`AttributedString`) ≈ | [sheet](screenshots/breadth/richtext-1x.webp) |
 | Number / spinner | `NumberField` / `Spinner` | `QSpinBox` / `SpinBox` | `GtkSpinButton` | `NumericUpDown` | — (`Entry` ≈) | `NumericUpDown` | — (toolkit ≈) | `NSStepper` + field | `Stepper` | [thumb](screenshots/compare/numberfield.png) |
 | Combo box | `ComboBox` | `QComboBox` / `ComboBox` | `GtkDropDown` | `ComboBox` | `widget.Select` | `ComboBox` | `ComboBox` | `NSComboBox` / `NSPopUpButton` | `Picker` | [thumb](screenshots/compare/combobox.png) · [gallery](screenshots/gallery-combo.png) |
@@ -53,11 +54,11 @@ stub; there is no native AppKit/SwiftUI control host.
 
 | Widget | uitoolkit | Qt (Widgets / Quick) | GTK 4 | Avalonia | Fyne | WinForms | WPF | AppKit | SwiftUI | Screenshot |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| List | `ListView` | `QListView` / `ListView` | `GtkListView` | `ListBox` | `widget.List` | `ListBox` | `ListBox` | `NSTableView` | `List` | [thumb](screenshots/compare/listview.png) |
+| List | `ListView` (`HeightForRows`) | `QListView` / `ListView` | `GtkListView` | `ListBox` | `widget.List` | `ListBox` | `ListBox` | `NSTableView` | `List` | [thumb](screenshots/compare/listview.png) |
 | Card list | `CardList` | `QListView` (delegate) ≈ | `GtkListBox` ≈ | `ItemsControl` ≈ | `widget.List` ≈ | — | `ItemsControl` ≈ | `NSCollectionView` ≈ | `List` ≈ | [thumb](screenshots/compare/cardlist.png) · [mail](screenshots/mail-cards.png) |
-| Table | `TableView` (sticky header, column-resize) | `QTableView` / `TableView` | `GtkColumnView` | `DataGrid` | `widget.Table` | `DataGridView` | `DataGrid` | `NSTableView` | `Table` | [thumb](screenshots/compare/tableview.png) · [gallery](screenshots/gallery-table.png) |
+| Table | `TableView` (sticky header, column-resize, `HeightForRows`) | `QTableView` / `TableView` | `GtkColumnView` | `DataGrid` | `widget.Table` | `DataGridView` | `DataGrid` | `NSTableView` | `Table` | [thumb](screenshots/compare/tableview.png) · [gallery](screenshots/gallery-table.png) |
 | Tree | `TreeView` | `QTreeView` / `TreeView` | `GtkListView` (tree) / `GtkTreeView` | `TreeView` | `widget.Tree` | `TreeView` | `TreeView` | `NSOutlineView` | `OutlineGroup` / `List` | [thumb](screenshots/compare/treeview.png) · [gallery](screenshots/gallery-tree.png) |
-| Tabs | `TabView` / `TabBar` / `TabPage` | `QTabWidget` / `TabBar` | `GtkNotebook` | `TabControl` | `container.AppTabs` | `TabControl` | `TabControl` | `NSTabView` | `TabView` | [thumb](screenshots/compare/tabview.png) |
+| Tabs | `TabView` / `TabBar` / `TabPage` (per-tab disable and hide) | `QTabWidget` / `TabBar` | `GtkNotebook` | `TabControl` | `container.AppTabs` | `TabControl` | `TabControl` | `NSTabView` | `TabView` | [thumb](screenshots/compare/tabview.png) |
 | Document tabs (browser style, title bar) | `BrowserTabs` | `QTabBar` (documentMode, tabsClosable, movable) ≈ | `AdwTabBar` | `TabView` (Fluent) ≈ | — | — | — | `NSWindow` tab bar ≈ | `TabView` ≈ | — |
 
 `CardList` is a first-class virtualized multi-line row (the mail client's

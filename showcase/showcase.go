@@ -217,6 +217,12 @@ func Build(host Host) Parts {
 
 	name := widgets.NewTextField("Ada Lovelace", "Display name", nil)
 	name.SetAccessibleName("Display name")
+	recipients := widgets.NewTokenField("Recipients", func(v []string) {
+		status.Set(0, fmt.Sprintf("Recipients  %d", len(v)))
+	})
+	recipients.Unique = true
+	recipients.SetTokens([]string{"ada@example.com", "grace@example.com"})
+	recipients.SetAccessibleName("Recipients")
 	columns := widgets.NewNumberField(1, 12, 3, 1, func(v float64) {
 		status.Set(0, fmt.Sprintf("Columns  %d", int(v)))
 	})
@@ -367,6 +373,8 @@ func Build(host Host) Parts {
 	fields := widgets.NewPanel("Fields",
 		widgets.NewLabel("Name"),
 		name,
+		widgets.NewLabel("Recipients (type, comma, backspace)"),
+		recipients,
 		widgets.NewLabel("Columns"),
 		columns,
 		widgets.NewLabel("Paint engine"),

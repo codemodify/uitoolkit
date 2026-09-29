@@ -937,3 +937,40 @@ func (t *TextArea) AccessibleSetText(s string) bool {
 	t.user.did(func() { t.SetText(s) })
 	return true
 }
+
+// Describe: a chip is an item of the field's list, named by its value.
+func (t *Token) Describe(n *a11y.Node) {
+	n.Role = a11y.RoleListItem
+	nameOr(n, t.Text)
+}
+
+// AccessibleItems puts the chip's cross in the tree as the button it is,
+// under the chip — the same shape as a clearable field's cross, and for
+// the same reason: it is reached as an item, it is named ("Remove
+// ada@example.com", never a bare "Remove"), and it answers
+// ActionDefault, so it costs no keyboard user an extra Tab.
+func (t *Token) AccessibleItems() []*a11y.Node {
+	if !t.Removable || t.OnRemove == nil {
+		return nil
+	}
+	n := item(t, 0, a11y.RoleButton, "Remove "+t.Text, t.crossRect())
+	n.Actions = n.Actions.With(a11y.ActionDefault)
+	return []*a11y.Node{n}
+}
+
+func (t *Token) AccessibleAction(i int, a a11y.Action) bool {
+	if i != 0 || a != a11y.ActionDefault || !t.Enabled() || !t.Removable || t.OnRemove == nil {
+		return false
+	}
+	t.OnRemove()
+	return true
+}
+
+// Describe: the chip field is the list its chips are items of, named by
+// its label or, failing that, its placeholder — the same rule the text
+// field follows.
+func (t *TokenField) Describe(n *a11y.Node) {
+	n.Role = a11y.RoleList
+	nameOr(n, t.Placeholder)
+	n.Value = strings.Join(t.Tokens(), ", ")
+}
