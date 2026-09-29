@@ -106,6 +106,35 @@ Headless widget + driver suite (no display, no CGO):
 CGO_ENABLED=0 go test ./...
 ```
 
+### Driving a headless window from an application's own tests
+
+`Headless: true` makes a window that renders to a buffer and takes
+events; `Window.Inject` is what the backend would have sent and
+`Application.PumpOnce` runs a frame. Those two have always been enough,
+and on top of them are the four everybody writes anyway:
+
+```go
+a := uitoolkit.New(uitoolkit.Options{Headless: true})
+w, _ := a.NewWindow(platform.WindowOptions{Width: 400, Height: 200, Headless: true})
+w.SetContent(form)
+a.PumpOnce()
+
+w.FocusOn(field)                 // the Tab a test would have to count
+w.Type("correct horse")          // one text event per rune
+w.Press(platform.KeyA, platform.ModCtrl)
+w.ClickComponent(okButton)       // through the window's hit testing
+```
+
+Each runs a frame before it returns, so the effect has happened by the
+time the call does. `Type` is a keyboard, not `SetText`: the widget's own
+input handling runs, so `OnInput` fires, an `Accept` rejects what it
+would reject, and a `SecretField`'s buffer takes the path a real key
+takes. `ClickComponent` goes to the middle of the widget's arranged box
+through the window's hit testing, so a widget under a popup is not
+clicked and a disabled one hears the press and does nothing; it answers
+false for a widget that was never laid out rather than clicking the
+corner of the window. `Window.WritePNG` is the frame.
+
 Full-paint benches (Settings / showcase / list) live in `internal/apptest`.
 See [perf.md](perf.md) for the v0.15.0 command line and numbers.
 
