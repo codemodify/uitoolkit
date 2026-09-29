@@ -37,11 +37,18 @@ type Window struct {
 	dirty      paintengine2d.Damage
 	full       bool
 	focus      widget.Component
-	hover      widget.Component
-	capture    widget.Component
-	closed     atomic.Bool
-	blink      bool
-	laid       bool
+	// The lock keys as of the last event that carried modifiers, and
+	// whether any event has carried them yet (app/lockkeys.go).
+	lockCaps, lockNum, lockKnown bool
+	onLockKeys                   func(caps, num bool)
+	// wantFit is WindowOptions.FitContent, waiting for the first layout
+	// with content in it (app/fitcontent.go).
+	wantFit bool
+	hover   widget.Component
+	capture widget.Component
+	closed  atomic.Bool
+	blink   bool
+	laid    bool
 	// initialFocus is the component the window focuses when it first
 	// opens (SetInitialFocus), and openFocused that it has had its one
 	// chance to (focusOnOpen).
@@ -188,6 +195,7 @@ func newWindow(a *Application, surf platform.Surface, opts platform.WindowOption
 	w.look = a.scaledLook(w.scale)
 	w.dirty.Pad = 1
 	w.opts = opts
+	w.wantFit = opts.FitContent
 	f := platform.FrameOf(surf)
 	w.decor, w.caps = f.Decorations(), f.FrameCaps()
 	w.rebuildCaption()
@@ -900,6 +908,16 @@ func (w *Window) dispatch(ev platform.Event) {
 	// written with, so ⌘S fires a table that says Ctrl+S. Everywhere
 	// but macOS this is the identity; see [platform.AccelMods].
 	ev.Mods = platform.AccelMods(ev.Mods)
+	// Every event that carries modifiers carries the lock keys with
+	// them, so the state stays current without anything being polled —
+	// and a change is noticed even when the key reaches no widget, which
+	// is the case that matters, because pressing Caps Lock is not a key
+	// any field wants (app/lockkeys.go).
+	switch ev.Kind {
+	case platform.EventKeyDown, platform.EventKeyUp, platform.EventFocusIn,
+		platform.EventMouseDown, platform.EventMouseUp, platform.EventMouseMove:
+		w.noteLockKeys(ev.Mods)
+	}
 	switch ev.Kind {
 	case platform.EventClose:
 		if w.statusMenu {
@@ -1622,6 +1640,9 @@ func (w *Window) layout() {
 	w.dropDeadRefs()
 	w.focusOnOpen()
 	w.laid = true
+	// Last, so the measure it makes is of a tree that has been laid out
+	// at this window's scale and through this window's frame.
+	w.fitOnFirstLayout()
 }
 
 // focusOnOpen gives the keyboard somewhere to go the first time the window

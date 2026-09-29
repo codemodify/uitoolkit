@@ -93,11 +93,40 @@ const (
 	ModCtrl
 	ModAlt
 	ModSuper
+	// ModCapsLock and ModNumLock are the *lock* keys, which are latched
+	// state rather than a key being held. They are on every key event
+	// while the lock is on.
+	//
+	// Caps Lock is here because a passphrase field cannot tell the user
+	// why the right passphrase was refused without it, and the only
+	// other way to know would be to look at the case of what was typed
+	// — which means reading the secret to do it.
+	//
+	// They are deliberately **not** part of a shortcut's modifiers: a
+	// Ctrl+S is a Ctrl+S with Caps Lock on, and an accelerator table
+	// that compared the whole set would stop matching. Everything that
+	// dispatches shortcuts masks them out; [Modifiers.Chord] is that
+	// mask.
+	ModCapsLock
+	ModNumLock
 )
 
 func (m Modifiers) Shift() bool { return m&ModShift != 0 }
 func (m Modifiers) Ctrl() bool  { return m&ModCtrl != 0 }
 func (m Modifiers) Alt() bool   { return m&ModAlt != 0 }
+
+// CapsLock and NumLock report the lock keys' state at this event.
+func (m Modifiers) CapsLock() bool { return m&ModCapsLock != 0 }
+func (m Modifiers) NumLock() bool  { return m&ModNumLock != 0 }
+
+// Chord is m without the lock keys: what a shortcut is compared by.
+//
+// Ctrl+S is Ctrl+S whether or not Caps Lock is on, so every comparison
+// of a key event against an accelerator goes through this. Comparing the
+// raw set would have made every shortcut in the application stop working
+// the moment a user pressed Caps Lock, which is the kind of bug that
+// gets reported as "the menus broke".
+func (m Modifiers) Chord() Modifiers { return m &^ (ModCapsLock | ModNumLock) }
 
 // LetterKey maps a/A..z/Z to KeyA..KeyZ.
 func LetterKey(r rune) Key {
@@ -371,6 +400,16 @@ type WindowOptions struct {
 	// It is the same request as [WindowFrame.SetKeepAbove] and has the
 	// same answer — no Wayland compositor allows it.
 	KeepAbove bool
+	// FitContent makes the window as tall as its content the first time
+	// it is laid out, keeping Width. A dialog whose height depends on
+	// its text — a description of one line or of five — does not know
+	// its height when WindowOptions is written, and measuring the
+	// content by hand first means guessing at two things the window
+	// knows and the caller does not: the display scale this window will
+	// open at, and the height of a caption the toolkit may draw.
+	//
+	// [app.Window.FitToContent] is the same thing afterwards.
+	FitContent bool
 	// Popup requests a short-lived menu surface: no taskbar, no
 	// decorations when the backend can, positioned at X,Y on X11.
 	Popup bool

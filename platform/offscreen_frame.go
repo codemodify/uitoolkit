@@ -82,10 +82,13 @@ type offscreenFrame struct {
 	noCapture   bool
 	// role, centered and activated are the window-role requests, for the
 	// same reason.
-	role      WindowRole
-	centered  bool
-	wantAbove bool
-	activated int
+	// capsLock and numLock are the simulated lock keys (SetLockKeys);
+	// caps, a hand's width up, is the frame capability set.
+	capsLock, numLock bool
+	role              WindowRole
+	centered          bool
+	wantAbove         bool
+	activated         int
 	// input method (surface device pixels), imeOn whether it is enabled.
 	imeRect [4]int
 	imeOn   bool
@@ -619,3 +622,21 @@ var (
 	_ CenterSurface   = (*Offscreen)(nil)
 	_ ActivateSurface = (*Offscreen)(nil)
 )
+
+// SetLockKeys simulates the keyboard's lock state, so a test can open a
+// window with Caps Lock already on ([LockKeysSurface]).
+func (o *Offscreen) SetLockKeys(caps, num bool) {
+	if o != nil {
+		o.frame.capsLock, o.frame.numLock = caps, num
+	}
+}
+
+// LockKeys is what SetLockKeys was told ([LockKeysSurface]).
+func (o *Offscreen) LockKeys() (caps, num bool) {
+	if o == nil {
+		return false, false
+	}
+	return o.frame.capsLock, o.frame.numLock
+}
+
+var _ LockKeysSurface = (*Offscreen)(nil)

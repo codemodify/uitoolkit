@@ -44,4 +44,7 @@ var (
 	_ RoleSurface        = (*x11Surface)(nil)
 	_ ActivateSurface    = (*x11Surface)(nil)
 	_ CenterSurface      = (*x11Surface)(nil)
+	// X11 can be asked for the lock keys at any moment; Wayland learns
+	// them from the compositor and has nothing to query.
+	_ LockKeysSurface = (*x11Surface)(nil)
 )

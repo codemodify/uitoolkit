@@ -58,10 +58,17 @@ const (
 // NSEventModifierFlags (NSEvent.h). Listed rather than imported for the
 // same reason as the key codes.
 const (
-	akModShift   = 1 << 17
-	akModControl = 1 << 18
-	akModOption  = 1 << 19
-	akModCommand = 1 << 20
+	// NSEventModifierFlagCapsLock and NumericPad. Caps Lock is a latch
+	// and reports while it is on; NumericPad is set while a key from the
+	// numeric keypad is involved, which is the nearest thing macOS has
+	// to a Num Lock state — the Mac has had no Num Lock key since the
+	// Extended Keyboard.
+	akModCapsLock = 1 << 16
+	akModShift    = 1 << 17
+	akModControl  = 1 << 18
+	akModOption   = 1 << 19
+	akModCommand  = 1 << 20
+	akModNumLock  = 1 << 21
 )
 
 // akKey maps a code point from charactersIgnoringModifiers to the
@@ -144,6 +151,12 @@ func akMods(flags uint64) Modifiers {
 	}
 	if flags&akModCommand != 0 {
 		m |= ModSuper
+	}
+	if flags&akModCapsLock != 0 {
+		m |= ModCapsLock
+	}
+	if flags&akModNumLock != 0 {
+		m |= ModNumLock
 	}
 	return m
 }

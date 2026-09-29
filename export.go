@@ -646,6 +646,9 @@ const (
 	ResultYes    = widgets.ResultYes
 	ResultNo     = widgets.ResultNo
 
+	ModCapsLock = platform.ModCapsLock
+	ModNumLock  = platform.ModNumLock
+
 	RoleNormal = platform.RoleNormal
 	RoleDialog = platform.RoleDialog
 

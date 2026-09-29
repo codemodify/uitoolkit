@@ -56,3 +56,15 @@ func SecureInputAvailable() bool { return secureInputAvailable() }
 // CaptureExclusionAvailable reports whether this build can keep a window
 // out of screenshots ([CaptureExcludeSurface]).
 func CaptureExclusionAvailable() bool { return captureExclusionAvailable() }
+
+// LockKeysSurface is a backend that can be asked for the lock keys'
+// state without waiting for an event.
+//
+// It is what lets a prompt warn about Caps Lock *before* the first
+// keystroke. X11 and Windows can both answer at any moment; Wayland
+// cannot — a client learns the modifiers from the compositor and has
+// nothing to query — and macOS answers from the current event, which is
+// close enough that the window's own tracking covers it.
+type LockKeysSurface interface {
+	LockKeys() (caps, num bool)
+}

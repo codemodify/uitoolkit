@@ -21,6 +21,8 @@ const (
 	vkBack     = 0x08
 	vkTab      = 0x09
 	vkReturn   = 0x0D
+	vkCapital  = 0x14 // Caps Lock
+	vkNumLock  = 0x90
 	vkShift    = 0x10
 	vkControl  = 0x11
 	vkMenu     = 0x12 // Alt
@@ -120,6 +122,20 @@ func winMods() Modifiers {
 	}
 	if down(vkLWin) || down(vkRWin) {
 		m |= ModSuper
+	}
+	// The lock keys are the *low* bit of GetKeyState — the toggle —
+	// rather than the high bit that says a key is held down. Reading the
+	// high bit would report Caps Lock only while the key itself was
+	// under a finger, which is the opposite of what a lock is.
+	toggled := func(vk uintptr) bool {
+		r, _, _ := procGetKeyState.Call(vk)
+		return r&1 != 0
+	}
+	if toggled(vkCapital) {
+		m |= ModCapsLock
+	}
+	if toggled(vkNumLock) {
+		m |= ModNumLock
 	}
 	return m
 }

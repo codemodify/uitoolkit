@@ -3905,6 +3905,17 @@ func wlMods(c *wlConn) Modifiers {
 	if C.ui_xkb_mod(c.xkbState, logo) != 0 {
 		m |= ModSuper
 	}
+	// The lock keys, which xkb reports as latched rather than held.
+	caps := C.CString("Lock")
+	num := C.CString("Mod2")
+	defer C.free(unsafe.Pointer(caps))
+	defer C.free(unsafe.Pointer(num))
+	if C.ui_xkb_mod(c.xkbState, caps) != 0 {
+		m |= ModCapsLock
+	}
+	if C.ui_xkb_mod(c.xkbState, num) != 0 {
+		m |= ModNumLock
+	}
 	return m
 }
 

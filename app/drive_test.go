@@ -36,7 +36,9 @@ func TestDriveAHeadlessWindow(t *testing.T) {
 		t.Fatalf("typed %q", field.Text)
 	}
 	// Modifiers combine, and the field's own handling runs.
-	w.Press(platform.KeyA, platform.ModCtrl)
+	// PrimaryModifier, not ModCtrl: the shortcut modifier is Command on
+	// a Mac, and a test that named Ctrl tested nothing there.
+	w.Press(platform.KeyA, platform.PrimaryModifier())
 	if a, b := field.Selection(); a != 0 || b != len("correct horse") {
 		t.Fatalf("Ctrl+A selected %d..%d", a, b)
 	}

@@ -750,6 +750,51 @@ is not already in front — the rule that stops a background window
 stealing the keyboard mid-sentence — and flashes the taskbar entry or
 marks the window urgent instead.
 
+## The lock keys
+
+`Modifiers` carries `ModCapsLock` and `ModNumLock` on every event that
+carries modifiers, and `Window.LockKeys()` and `Window.OnLockKeys` are
+the state and its changes.
+
+A passphrase prompt needs them and almost nothing else does: a right
+passphrase refused is nearly always Caps Lock, and a field that holds a
+secret cannot work that out for itself — the only other way to know is
+to look at the case of what was typed, which means reading the secret to
+do it.
+
+| | the state on an event | the state before the first key |
+| --- | --- | --- |
+| X11 | `LockMask` and `Mod2` in the core state | `XkbGetIndicatorState` |
+| Wayland | xkb's `Lock` and `Mod2`, latched | from the compositor's first modifiers event |
+| Win32 | the **low** bit of `GetKeyState` — the toggle, not the held bit | the same, at any moment |
+| AppKit | `NSEventModifierFlagCapsLock` / `NumericPad` | from the first event |
+
+They are deliberately **not** part of a shortcut. Ctrl+S is Ctrl+S with
+Caps Lock on, and an accelerator table that compared the whole modifier
+set would stop matching the moment a user pressed it — the kind of bug
+that gets reported as "the menus broke". `Modifiers.Chord()` is the mask
+that drops them, and the menu bar already compared only the four real
+modifiers.
+
+`OnLockKeys` fires on a change and only on a change, and it fires even
+when the key reaches no widget — pressing Caps Lock is not a key any
+field wants, and it is exactly the key a prompt has to hear.
+
+## Sizing a window to its content
+
+`WindowOptions.FitContent` makes a window as tall as what is in it the
+first time it is laid out, keeping `Width`; `Window.FitToContent()` is
+the same afterwards.
+
+A dialog whose height depends on its text does not know its height when
+`WindowOptions` is written. Measuring the content by hand first means
+guessing at two things the window knows and the caller does not: the
+display scale this window will open at, which is not the application's
+on a multi-monitor desktop, and the height of a caption the toolkit may
+draw. Both are known inside `layout()`, which is where this measures —
+and it lays out again immediately, so the very first frame the window
+paints is the right one rather than a flash of the old size.
+
 ## Holding the keyboard, and staying out of screenshots
 
 `Window.SetSecureInput` and `Window.SetExcludeFromCapture` are what a

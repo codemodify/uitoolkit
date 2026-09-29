@@ -2229,8 +2229,10 @@ func xmods(state uint) Modifiers {
 	var m Modifiers
 	const (
 		shift = 1 << 0
+		lock  = 1 << 1 // LockMask: Caps Lock, latched
 		ctrl  = 1 << 2
 		mod1  = 1 << 3
+		mod2  = 1 << 4 // Num Lock, by the convention every desktop follows
 		mod4  = 1 << 6
 	)
 	if state&shift != 0 {
@@ -2244,6 +2246,12 @@ func xmods(state uint) Modifiers {
 	}
 	if state&mod4 != 0 {
 		m |= ModSuper
+	}
+	if state&lock != 0 {
+		m |= ModCapsLock
+	}
+	if state&mod2 != 0 {
+		m |= ModNumLock
 	}
 	return m
 }
