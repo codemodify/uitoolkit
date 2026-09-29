@@ -104,10 +104,34 @@ a new entanglement gets caught.
 `tools/test.sh ./...` runs the suite with `theme_engine_all`, and that is
 the suite that covers what this repository ships. A plain
 `go test ./...` tests the *default product build* — one engine — where a
-test written about what Aqua paints has nothing to assert; dozens of
-tests are like that, and they skip.
+test written about what Aqua paints has nothing to assert.
 
-The narrowed builds are covered on purpose rather than by accident:
+**A test like that is meant to skip, and only `style`'s do.** The
+helpers are `needEngine` and `packBuilt` in
+`style/engine_optin_test.go`: a test that walks a table of packs drops
+the rows whose engine is not in this build, and one that is about a
+single engine skips outright. `style` uses them throughout and passes on
+its own.
+
+The other packages do not have them, and **64 tests fail in a plain
+`go test ./...`** because of it — 24 in `widgets`, 21 in
+`cmd/uitoolkit-settings`, 18 in `app`, one in the tour. Every one is the
+same thing in a different disguise: a pack named that a default build
+does not carry (`unknown pack "luna"`), a look set and the fallback got
+back, an assertion about what Windows 95 in particular paints, a view
+that needs a long list to overflow, or a count of the registry. None of
+them is a defect in the toolkit; all of them are tests written in the
+all-engine build's terms.
+
+It is worth knowing what that costs, because it is not nothing: **the
+configuration a plain `go build` produces is the one with no trustworthy
+test signal.** A regression there lands in an already-red run and nobody
+sees it. Until the helpers reach those four packages, a change that
+could plausibly affect the one-engine build has to be checked by
+comparing the failure list before and after rather than by reading a
+green result.
+
+The narrowed builds that *are* covered on purpose:
 
 - `tools/testenv.sh go test ./style/` — the default, one engine;
 - the same with `-tags theme_engine_oxygen` — somebody else's pick;
