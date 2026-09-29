@@ -30,7 +30,7 @@ inbox           inbox
 send            paper-airplane
 reply           arrow-uturn-left
 reply-all       share
-forward         forward
+forward         arrow-turn-up-right
 attach          paper-clip
 download        arrow-down-tray
 upload          arrow-up-tray
@@ -80,3 +80,4 @@ cards           squares-2x2
 sun             sun
 moon            moon
 no-icon         placeholder (missing stem)
+print           printer

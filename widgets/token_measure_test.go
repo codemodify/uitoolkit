@@ -5,6 +5,7 @@ import (
 
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/layout"
+	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
 )
 
@@ -80,5 +81,45 @@ func TestTokenRadiusFollowsTheLook(t *testing.T) {
 					tc.radius, h, got, tc.want)
 			}
 		})
+	}
+}
+
+// A dialog's buttons can carry a mark — KDE puts icons on OK, Cancel,
+// Apply and Save. Only ToolButton and MenuItem could before, so an
+// action row had to be made of ToolButtons to get icons at all.
+func TestButtonIconReservesItsRoom(t *testing.T) {
+	loose := layout.Constraints{MaxW: -1, MaxH: -1}
+	plain := NewButton("Save", nil)
+	withIcon := NewButton("Save", nil)
+	withIcon.Icon = style.IconSave
+
+	a, b := plain.Measure(loose), withIcon.Measure(loose)
+	if b.X <= a.X {
+		t.Errorf("a button with an icon measured %v, the same one without measured %v", b.X, a.X)
+	}
+	if b.Y != a.Y {
+		t.Errorf("the icon changed the height: %v vs %v", b.Y, a.Y)
+	}
+
+	withIcon.Arrange(paintengine2d.XYWH(0, 0, b.X, b.Y))
+	ib := withIcon.iconRect(withIcon.Look(), withIcon.LocalBounds())
+	if ib.Empty() {
+		t.Fatal("no room for the icon in the button it measured for")
+	}
+	if ib.Min.X < 0 || ib.Max.X > b.X || ib.Min.Y < 0 || ib.Max.Y > b.Y {
+		t.Errorf("the icon at %v is outside the button %v", ib, withIcon.LocalBounds())
+	}
+	// The strip is reserved at each end, so the engine's centred label
+	// still clears it.
+	if ib.Max.X > b.X*0.5 {
+		t.Errorf("the icon at %v reaches past the middle of a %v-wide button", ib, b.X)
+	}
+}
+
+// No icon, no room taken.
+func TestButtonWithoutAnIconIsUnchanged(t *testing.T) {
+	b := NewButton("Save", nil)
+	if !b.iconRect(b.Look(), paintengine2d.XYWH(0, 0, 100, 30)).Empty() {
+		t.Error("a button with no icon reserved a box for one")
 	}
 }

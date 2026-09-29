@@ -43,6 +43,33 @@ const (
 	IconForward
 	IconCheck
 	IconMute
+	// The actions a mail client's menus and toolbars are made of. Every
+	// one of these was already a PNG in all five shipped sets with no id
+	// to name it by, so an application could see the art and not reach
+	// it; IconPrint is the one that had to be drawn, since no set carried
+	// a printer.
+	IconTrash
+	IconArchive
+	IconJunk
+	IconTag
+	IconFolder
+	IconReplyAll
+	IconSettings
+	IconExternalLink
+	IconEye
+	IconUser
+	IconBell
+	IconSend
+	IconClose
+	IconQuit
+	IconPrint
+	// A filled star and a dot: the two marks a list uses to say "this one
+	// is flagged" and "this one is unread". They are pure geometry with
+	// no house style to match, so the toolkit draws them itself in every
+	// set — a filled star is a filled star in all five packs, and none of
+	// them ships one.
+	IconStarFilled
+	IconDot
 )
 
 var toolIconLabels = [...]string{
@@ -53,7 +80,13 @@ var toolIconLabels = [...]string{
 	IconDownload: "Download", IconPen: "Edit",
 	IconAttach: "Attachment", IconStar: "Star", IconFlag: "Flag",
 	IconReply: "Reply", IconForward: "Forward", IconCheck: "Done",
-	IconMute: "Muted",
+	IconMute:  "Muted",
+	IconTrash: "Delete", IconArchive: "Archive", IconJunk: "Junk",
+	IconTag: "Tag", IconFolder: "Folder", IconReplyAll: "Reply All",
+	IconSettings: "Settings", IconExternalLink: "Open in browser",
+	IconEye: "Show", IconUser: "Contact", IconBell: "Notify",
+	IconSend: "Send", IconClose: "Close", IconQuit: "Quit",
+	IconPrint: "Print", IconStarFilled: "Starred", IconDot: "Unread",
 }
 
 // Label is the action the icon stands for, in words ("Save"): what
@@ -93,6 +126,23 @@ var toolIconFiles = []struct {
 	{IconForward, "forward"},
 	{IconCheck, "check"},
 	{IconMute, "bell-off"},
+	{IconTrash, "trash"},
+	{IconArchive, "archive"},
+	{IconJunk, "junk"},
+	{IconTag, "tag"},
+	{IconFolder, "folder"},
+	{IconReplyAll, "reply-all"},
+	{IconSettings, "settings"},
+	{IconExternalLink, "external-link"},
+	{IconEye, "eye"},
+	{IconUser, "user"},
+	{IconBell, "bell"},
+	{IconSend, "send"},
+	{IconClose, "close"},
+	{IconQuit, "quit"},
+	{IconPrint, "print"},
+	{IconStarFilled, "star-filled"},
+	{IconDot, "dot"},
 }
 
 // shippedIconStems is the wide PNG vocabulary rendered by icons/render.sh
@@ -111,7 +161,7 @@ var shippedIconStems = []string{
 	"info", "warning", "error", "question", "help",
 	"home", "calendar", "clock", "link", "external-link",
 	"list", "layout", "columns", "rows", "table", "cards",
-	"sun", "moon",
+	"sun", "moon", "print",
 	"no-icon",
 }
 
@@ -182,7 +232,7 @@ func toolIconAliases(icon ToolIcon) []string {
 }
 
 func toolIconStems(icon ToolIcon) []string {
-	name := ToolIconName(icon)
+	name := StemOf(icon)
 	stems := make([]string, 0, 4)
 	if name != "" {
 		stems = append(stems, name)
@@ -256,6 +306,24 @@ var toolIconThemeNames = map[ToolIcon][]string{
 	IconForward:  {"mail-forward", "mail-forwarded"},
 	IconCheck:    {"object-select", "emblem-ok", "gtk-apply"},
 	IconMute:     {"audio-volume-muted", "notification-disabled"},
+
+	IconTrash:        {"user-trash", "edit-delete", "delete"},
+	IconArchive:      {"mail-archive", "package-x-generic", "archive-insert"},
+	IconJunk:         {"mail-mark-junk", "dialog-error", "action-unavailable"},
+	IconTag:          {"tag", "bookmark-new", "stock_bookmark"},
+	IconFolder:       {"folder", "inode-directory"},
+	IconReplyAll:     {"mail-reply-all", "mail-replied-all"},
+	IconSettings:     {"preferences-system", "configure", "gtk-preferences"},
+	IconExternalLink: {"link", "emblem-symbolic-link", "web-browser"},
+	IconEye:          {"view-visible", "image-x-generic", "view-preview"},
+	IconUser:         {"avatar-default", "user-identity", "stock_person"},
+	IconBell:         {"preferences-desktop-notification", "notification-active"},
+	IconSend:         {"mail-send", "document-send", "go-next"},
+	IconClose:        {"window-close", "dialog-close", "gtk-close"},
+	IconQuit:         {"application-exit", "system-log-out", "gtk-quit"},
+	IconPrint:        {"document-print", "printer", "gtk-print"},
+	IconStarFilled:   {"starred", "rating", "bookmark-new"},
+	IconDot:          {"media-record", "dialog-information"},
 }
 
 // ToolIconThemeNames are the freedesktop names an installed icon theme
@@ -285,4 +353,53 @@ func ToolIconByName(name string) (ToolIcon, bool) {
 		}
 	}
 	return IconNone, false
+}
+
+// IconByStem is the icon for any stem the shipped sets carry, whether or
+// not it has a typed id of its own.
+//
+// The typed ids are the actions the toolkit itself draws — the ones a
+// drawn icon set has a vector for, so they work in every set including
+// the two that are drawn rather than loaded. The shipped PNG vocabulary
+// is wider than that ([ShippedIconStems]), and it was unreachable: an
+// application could see "calendar", "clock", "users" and "sync" sitting
+// in all five premiere packs with no way to name one.
+//
+// A stem with a typed id gives that id, so it behaves identically in
+// every set. A stem without one gives an icon that resolves from a file
+// set and falls back to the missing-icon mark in a drawn set — which is
+// the honest answer, since the toolkit has no vector for it. ok is false
+// for a stem nothing ships, so a caller can fall back rather than draw a
+// placeholder.
+func IconByStem(stem string) (ToolIcon, bool) {
+	if stem == "" {
+		return IconNone, false
+	}
+	if icon, ok := ToolIconByName(stem); ok {
+		return icon, true
+	}
+	for i, s := range shippedIconStems {
+		if s == stem {
+			return stemIconBase + ToolIcon(i), true
+		}
+	}
+	return IconNone, false
+}
+
+// stemIconBase is where the stem-only icons start, above every typed id.
+// They are ToolIcon values so they travel through the same painting and
+// caching as the rest; nothing switches on them, because the drawn sets
+// have no vector for them and the file sets go by name.
+const stemIconBase ToolIcon = 1 << 12
+
+// StemOf is the file stem an icon resolves to, including the stem-only
+// ones from [IconByStem]. It is "" for IconNone.
+func StemOf(icon ToolIcon) string {
+	if icon >= stemIconBase {
+		if i := int(icon - stemIconBase); i >= 0 && i < len(shippedIconStems) {
+			return shippedIconStems[i]
+		}
+		return ""
+	}
+	return ToolIconName(icon)
 }

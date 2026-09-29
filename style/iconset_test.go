@@ -11,10 +11,25 @@ import (
 
 var shippedIconSets = []string{"lucide", "phosphor", "tabler", "heroicons", "material-symbols"}
 
+// drawnOnlyIcon reports the icons the toolkit draws itself in every set
+// rather than loading from one.
+//
+// A filled star and a dot are pure geometry with no house style to
+// match, and none of the five outline packs ships either — shipping a
+// rendered one per pack would be five copies of the same circle. They
+// are drawn in DrawToolIcon before the set is consulted, so they work
+// everywhere; nothing else is allowed to take this route.
+func drawnOnlyIcon(icon ToolIcon) bool {
+	return icon == IconStarFilled || icon == IconDot
+}
+
 func TestRepoIconSetsCoverAllToolIcons(t *testing.T) {
 	root := filepath.Join("..", "icons")
 	for _, set := range shippedIconSets {
 		for _, icon := range AllToolIcons() {
+			if drawnOnlyIcon(icon) {
+				continue
+			}
 			lo := filepath.Join(root, set, ToolIconFileName(icon))
 			hi := filepath.Join(root, set, ToolIconHiDPIFileName(icon))
 			checkPNG(t, lo, 24)
@@ -250,6 +265,12 @@ func TestFileIconSetDoesNotUseClassicWhenPresent(t *testing.T) {
 	resetIconCache()
 	installRepoIconSet(t, "lucide")
 	for _, icon := range AllToolIcons() {
+		if drawnOnlyIcon(icon) {
+			// These two are drawn by the toolkit in every set on
+			// purpose, so matching the classic drawing is the whole
+			// point rather than a failure to load a file.
+			continue
+		}
 		classic := rasterIcon(IconSetClassic, icon)
 		file := rasterIcon(IconSetLucide, icon)
 		if inkCount(file) < 8 {

@@ -80,3 +80,4 @@ cards           layout-grid
 sun             sun
 moon            moon
 no-icon         placeholder (missing stem)
+print           printer

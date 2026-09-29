@@ -52,6 +52,23 @@ type Button struct {
 	Text    string
 	Primary bool
 	Tip     string
+	// Icon is a stock mark drawn at the leading edge, before the text: a
+	// Save button's disc, a Delete button's bin. It is an icon rather
+	// than a character because the interface face has no such glyph and
+	// typing one is a box on most machines (docs/contracts.md).
+	//
+	// The engine centres a button's label in the whole button, and the
+	// engine is what draws it, so the icon does not push the text along:
+	// the button reserves a strip for the icon at each end instead, which
+	// keeps the label centred between them and leaves every era's own
+	// label treatment — its emboss, its shadow, its disabled colour —
+	// exactly as it was. The cost is a button one icon wider than a
+	// leading-icon button strictly needs.
+	//
+	// For an icon-only button, reach for [ToolIconBtn]; an icon with no
+	// text here would be a button with a centred empty label and a mark
+	// off to one side.
+	Icon    style.ToolIcon
 	OnClick func()
 	// Painter and Shaper are the skin's way in: the art, and where the
 	// art really is. The focus ring is drawn over a painted button either
@@ -120,7 +137,26 @@ func (b *Button) Measure(c layout.Constraints) paintengine2d.Point {
 	m := lk.Metrics()
 	w := style.ControlFontOf(lk, style.RoleButton).Advance(b.Text) + m.Pad*2 + style.Dip(lk, 16)
 	h := m.ControlH
+	if b.Icon != style.IconNone {
+		// A strip at each end: the label stays centred between them, so
+		// the engine goes on drawing it exactly where it always did.
+		_, side, gap := style.ToolButtonChromeFor(lk, h)
+		w += (side + gap) * 2
+	}
 	return c.Constrain(paintengine2d.Pt(w, h))
+}
+
+// iconRect is where the leading mark goes: the reserved strip at the
+// button's leading edge, vertically centred.
+func (b *Button) iconRect(lk style.LookAndFeel, r paintengine2d.Rect) paintengine2d.Rect {
+	if b.Icon == style.IconNone || r.Empty() {
+		return paintengine2d.Rect{}
+	}
+	pad, side, _ := style.ToolButtonChromeFor(lk, r.Dy())
+	if side > r.Dx() {
+		return paintengine2d.Rect{}
+	}
+	return paintengine2d.XYWH(r.Min.X+pad, r.Min.Y+(r.Dy()-side)*0.5, side, side)
 }
 
 func (b *Button) Arrange(r paintengine2d.Rect) { b.SetBounds(r) }
@@ -146,6 +182,15 @@ func (b *Button) Paint(ctx *paintengine2d.Context) {
 // of it: a cross-fade draws the pair and the mark travels with its face.
 func (b *Button) face(ctx *paintengine2d.Context, lk style.LookAndFeel, r paintengine2d.Rect, st style.ControlState) {
 	lk.DrawButton(ctx, r, st, b.Text)
+	if ib := b.iconRect(lk, r); !ib.Empty() {
+		// After the face, so it sits on it, and in the label's own colour
+		// so it goes grey with the text on a disabled button.
+		col := lk.Palette().Text
+		if st.Disabled() {
+			col = lk.Palette().TextMuted
+		}
+		style.DrawToolIcon(ctx, ib, b.Icon, col, style.IconSetOf(lk))
+	}
 	if b.Content != nil {
 		b.Content(ctx, r, st)
 	}

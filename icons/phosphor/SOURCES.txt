@@ -80,3 +80,4 @@ cards           squares-four
 sun             sun
 moon            moon
 no-icon         placeholder (missing stem)
+print           printer

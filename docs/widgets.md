@@ -272,7 +272,7 @@ else.
 | a mark anywhere else you are painting | `style.DrawToolIcon(ctx, box, icon, colour, style.IconSetOf(look))` |
 | a picture in a document | `richtext` and its `<img>`, not a glyph |
 
-There are **23 typed ids** (`style.AllToolIcons`), each of which resolves
+There are **40 typed ids** (`style.AllToolIcons`), each of which resolves
 four ways, best first: the user's file icon set, an installed freedesktop
 theme by name (`style.ToolIconThemeNames`), one of the five packs shipped
 in `icons/`, and the toolkit's own drawn Classic or Sharp set. That is
@@ -283,13 +283,28 @@ answers exists on every machine.
 new      open     save     cut      copy     paste    undo     redo
 search   info     warning  error    question mail     download pen
 attach   star     flag     reply    forward  check    bell-off
+trash    archive  junk     tag      folder   reply-all settings
+external-link     eye      user     bell     send     close    quit
+print    star-filled       dot
 ```
 
-The shipped packs carry a **wider vocabulary than the typed ids** — 79
-stems (`style.ShippedIconStems`), including `trash`, `archive`, `send`,
-`sync`, `lock`, `eye`, `folder`, the four chevrons and the four arrows.
-Reach one by name with `style.ToolIconByName`. A typed id is added when a
-widget needs a *typed* one; a stem needs nothing.
+`star-filled` and `dot` are the two the toolkit draws itself in every
+set, file sets included: none of the five packs ships either, and a
+filled star has no house style to match. Everything else resolves the
+four ways above.
+
+The shipped packs carry a **wider vocabulary than the typed ids** — 80
+stems (`style.ShippedIconStems`), including `sync`, `lock`, `inbox`,
+`compose`, `users`, `calendar`, `clock`, the four chevrons and the four
+arrows.
+
+Reach any of them with **`style.IconByStem`**, which gives the typed id
+where there is one and a stem-only icon where there is not. The
+difference matters in one place: a typed id has a vector in the drawn
+sets, so it works in every set on every machine, while a stem-only icon
+resolves from a file set and draws the missing-icon mark in a drawn one.
+Since every shipped pack uses the drawn Classic set unless the user picks
+otherwise, prefer a typed id where one fits.
 
 ### The four runes that do work
 

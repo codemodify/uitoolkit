@@ -76,6 +76,7 @@ columns
 rows
 table
 cards
+print
 sun
 moon
 no-icon

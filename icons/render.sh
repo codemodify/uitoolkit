@@ -127,7 +127,7 @@ inbox	inbox	tray	inbox	inbox	inbox
 send	send	paper-plane-tilt	send	paper-airplane	send
 reply	reply	arrow-u-up-left	arrow-back	arrow-uturn-left	reply
 reply-all	reply-all	arrow-bend-double-up-left	arrow-back-up-double	share	reply_all
-forward	forward	arrow-bend-up-right	mail-forward	forward	forward
+forward	forward	arrow-bend-up-right	mail-forward	arrow-turn-up-right	forward
 attach	paperclip	paperclip	paperclip	paper-clip	attach_file
 download	download	download-simple	download	arrow-down-tray	download
 upload	upload	upload-simple	upload	arrow-up-tray	upload
@@ -174,6 +174,7 @@ columns	columns-2	columns	layout-columns	view-columns	view_column
 rows	rows-2	rows	layout-rows	bars-3	table_rows
 table	table	table	table	table-cells	table_chart
 cards	layout-grid	squares-four	layout-grid	squares-2x2	grid_view
+print	printer	printer	printer	printer	print
 sun	sun	sun	sun	sun	light_mode
 moon	moon	moon	moon	moon	dark_mode
 MAP

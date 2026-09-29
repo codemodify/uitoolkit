@@ -46,6 +46,15 @@ func DrawToolIcon(ctx *paintengine2d.Context, b paintengine2d.Rect, icon ToolIco
 		return
 	}
 	set = ParseIconSet(string(set))
+	if icon == IconStarFilled || icon == IconDot {
+		// Pure geometry with no house style to match, and no set ships
+		// either of them: a filled star is a filled star. Drawing them
+		// here rather than per set is what makes them work everywhere
+		// instead of falling back to the missing-icon mark in the four
+		// sets that have no such file.
+		drawScaledIcon(ctx, b, func(ctx *paintengine2d.Context, db paintengine2d.Rect) { drawClassicIcon(ctx, db, icon, col) })
+		return
+	}
 	if IsSystemIconSet(set) {
 		// An installed theme, drawn from the desktop's own files. It
 		// falls through to the drawn set rather than to the no-icon
@@ -230,15 +239,20 @@ func drawClassicIcon(ctx *paintengine2d.Context, b paintengine2d.Rect, icon Tool
 		tray.LineTo(b.Max.X-2.2, b.Max.Y-6.2)
 		ctx.DrawPath(tray, stroke)
 	case IconAttach:
-		// A paperclip: a rounded hairpin, open at the bottom left, the
-		// way every set has drawn one since Outlook.
+		// A paperclip is one stroke: down the outer right, a wide U at
+		// the bottom, up the outer left, a tighter hook over the top,
+		// and back down the inside, stopping short.
+		//
+		// Drawn wide with tight bends it read as a rounded box at the
+		// 20px a message list actually uses, so it is narrow, the bottom
+		// U is open, and the inner stroke ends well clear of it.
 		clip := paintengine2d.NewPath()
-		clip.MoveTo(b.Min.X+5.4, b.Max.Y-6.2)
-		clip.LineTo(b.Min.X+5.4, b.Min.Y+5.0)
-		clip.QuadTo(cx, b.Min.Y+1.4, b.Max.X-5.4, b.Min.Y+5.0)
-		clip.LineTo(b.Max.X-5.4, b.Max.Y-5.4)
-		clip.QuadTo(cx, b.Max.Y-1.4, b.Min.X+7.6, b.Max.Y-5.4)
-		clip.LineTo(b.Min.X+7.6, b.Min.Y+5.6)
+		clip.MoveTo(cx+3.4, b.Min.Y+7.5)
+		clip.LineTo(cx+3.4, b.Min.Y+16.0)
+		clip.QuadTo(cx, b.Min.Y+21.2, cx-3.4, b.Min.Y+16.0)
+		clip.LineTo(cx-3.4, b.Min.Y+6.4)
+		clip.QuadTo(cx-1.0, b.Min.Y+2.0, cx+1.1, b.Min.Y+6.4)
+		clip.LineTo(cx+1.1, b.Min.Y+15.2)
 		ctx.DrawPath(clip, stroke)
 	case IconStar:
 		ctx.DrawPath(starPath(cx, cy, w*0.44, w*0.18), stroke)
@@ -290,7 +304,202 @@ func drawClassicIcon(ctx *paintengine2d.Context, b paintengine2d.Rect, icon Tool
 		tip.LineTo(b.Min.X+5.4, b.Max.Y-1.6)
 		tip.Close()
 		ctx.DrawPath(tip, fill)
+	case IconTrash:
+		// A bin: lid, handle, body, two ribs.
+		ctx.DrawPath(lineP(b.Min.X+2.6, b.Min.Y+5.6, b.Max.X-2.6, b.Min.Y+5.6), stroke)
+		ctx.DrawPath(lineP(cx-2.4, b.Min.Y+3.4, cx+2.4, b.Min.Y+3.4), stroke)
+		body := paintengine2d.NewPath()
+		body.MoveTo(b.Min.X+4.4, b.Min.Y+5.6)
+		body.LineTo(b.Min.X+5.4, b.Max.Y-2.4)
+		body.LineTo(b.Max.X-5.4, b.Max.Y-2.4)
+		body.LineTo(b.Max.X-4.4, b.Min.Y+5.6)
+		ctx.DrawPath(body, stroke)
+		ctx.DrawPath(lineP(cx-1.8, b.Min.Y+8.2, cx-1.5, b.Max.Y-4.6), stroke)
+		ctx.DrawPath(lineP(cx+1.8, b.Min.Y+8.2, cx+1.5, b.Max.Y-4.6), stroke)
+	case IconArchive:
+		// A box with a lid and a slot: the archive of every mail client.
+		ctx.DrawRect(paintengine2d.XYWH(b.Min.X+2.4, b.Min.Y+3.2, w-4.8, 3.4),
+			paintengine2d.StrokePaint(col, 1.5))
+		box := paintengine2d.NewPath()
+		box.MoveTo(b.Min.X+3.8, b.Min.Y+6.6)
+		box.LineTo(b.Min.X+3.8, b.Max.Y-2.6)
+		box.LineTo(b.Max.X-3.8, b.Max.Y-2.6)
+		box.LineTo(b.Max.X-3.8, b.Min.Y+6.6)
+		ctx.DrawPath(box, stroke)
+		ctx.DrawPath(lineP(cx-2.2, b.Min.Y+9.4, cx+2.2, b.Min.Y+9.4), stroke)
+	case IconJunk:
+		// A circle with a bar through it: "no", which is what junk means
+		// as an action.
+		ctx.DrawCircle(paintengine2d.Pt(cx, cy), w*0.36, paintengine2d.StrokePaint(col, 1.6))
+		d := w * 0.36 * 0.72
+		ctx.DrawPath(lineP(cx-d, cy-d, cx+d, cy+d), stroke)
+	case IconTag:
+		// A label with its eyelet.
+		tag := paintengine2d.NewPath()
+		tag.MoveTo(cx+w*0.30, b.Min.Y+2.6)
+		tag.LineTo(b.Min.X+2.6, b.Min.Y+2.6)
+		tag.LineTo(b.Min.X+2.6, cy+h*0.06)
+		tag.LineTo(cx+w*0.10, b.Max.Y-2.6)
+		tag.LineTo(b.Max.X-2.6, cy-h*0.06)
+		tag.Close()
+		ctx.DrawPath(tag, stroke)
+		ctx.DrawCircle(paintengine2d.Pt(b.Min.X+5.8, b.Min.Y+5.8), 1.5, paintengine2d.StrokePaint(col, 1.4))
+	case IconFolder:
+		fol := paintengine2d.NewPath()
+		fol.MoveTo(b.Min.X+2.4, b.Max.Y-3.0)
+		fol.LineTo(b.Min.X+2.4, b.Min.Y+4.6)
+		fol.LineTo(b.Min.X+2.4+w*0.30, b.Min.Y+4.6)
+		fol.LineTo(b.Min.X+2.4+w*0.30+2.0, b.Min.Y+6.8)
+		fol.LineTo(b.Max.X-2.4, b.Min.Y+6.8)
+		fol.LineTo(b.Max.X-2.4, b.Max.Y-3.0)
+		fol.Close()
+		ctx.DrawPath(fol, stroke)
+	case IconReplyAll:
+		// Two arrows into one line: reply, with a second head behind it.
+		for _, dx := range []float32{0, 3.4} {
+			head := paintengine2d.NewPath()
+			head.MoveTo(b.Min.X+5.0+dx, cy-3.2)
+			head.LineTo(b.Min.X+1.8+dx, cy)
+			head.LineTo(b.Min.X+5.0+dx, cy+3.2)
+			ctx.DrawPath(head, stroke)
+		}
+		tail := paintengine2d.NewPath()
+		tail.MoveTo(b.Min.X+5.2, cy)
+		tail.LineTo(b.Max.X-6.0, cy)
+		tail.QuadTo(b.Max.X-2.4, cy, b.Max.X-2.4, cy+4.4)
+		ctx.DrawPath(tail, stroke)
+	case IconSettings:
+		// A cog: a toothed outline around a hub. Thin rays out of a ring
+		// read as a sun, so the teeth have width and are part of one
+		// closed path — which is what makes the silhouette a gear.
+		inner, outer := w*0.30, w*0.44
+		const teeth = 8
+		gear := paintengine2d.NewPath()
+		for i := 0; i < teeth*2; i++ {
+			a0 := float64(i)*math.Pi/teeth - math.Pi/(teeth*2)
+			a1 := float64(i+1)*math.Pi/teeth - math.Pi/(teeth*2)
+			r := inner
+			if i%2 == 0 {
+				r = outer
+			}
+			x0, y0 := cx+float32(math.Cos(a0))*r, cy+float32(math.Sin(a0))*r
+			x1, y1 := cx+float32(math.Cos(a1))*r, cy+float32(math.Sin(a1))*r
+			if i == 0 {
+				gear.MoveTo(x0, y0)
+			} else {
+				gear.LineTo(x0, y0)
+			}
+			gear.LineTo(x1, y1)
+		}
+		gear.Close()
+		ctx.DrawPath(gear, paintengine2d.StrokePaint(col, 1.4))
+		ctx.DrawCircle(paintengine2d.Pt(cx, cy), w*0.14, paintengine2d.StrokePaint(col, 1.4))
+	case IconExternalLink:
+		// A box with a corner missing and an arrow leaving it.
+		out := paintengine2d.NewPath()
+		out.MoveTo(cx+0.6, b.Min.Y+3.0)
+		out.LineTo(b.Min.X+3.0, b.Min.Y+3.0)
+		out.LineTo(b.Min.X+3.0, b.Max.Y-3.0)
+		out.LineTo(b.Max.X-3.0, b.Max.Y-3.0)
+		out.LineTo(b.Max.X-3.0, cy-0.6)
+		ctx.DrawPath(out, stroke)
+		arr := paintengine2d.NewPath()
+		arr.MoveTo(cx-0.4, cy+0.4)
+		arr.LineTo(b.Max.X-2.6, b.Min.Y+2.6)
+		arr.MoveTo(cx+2.8, b.Min.Y+2.6)
+		arr.LineTo(b.Max.X-2.6, b.Min.Y+2.6)
+		arr.LineTo(b.Max.X-2.6, b.Min.Y+6.8)
+		ctx.DrawPath(arr, stroke)
+	case IconEye:
+		eye := paintengine2d.NewPath()
+		eye.MoveTo(b.Min.X+2.0, cy)
+		eye.QuadTo(cx, cy-h*0.30, b.Max.X-2.0, cy)
+		eye.QuadTo(cx, cy+h*0.30, b.Min.X+2.0, cy)
+		ctx.DrawPath(eye, stroke)
+		ctx.DrawCircle(paintengine2d.Pt(cx, cy), w*0.13, paintengine2d.StrokePaint(col, 1.5))
+	case IconUser:
+		ctx.DrawCircle(paintengine2d.Pt(cx, b.Min.Y+h*0.34), w*0.17, paintengine2d.StrokePaint(col, 1.6))
+		sh := paintengine2d.NewPath()
+		sh.MoveTo(b.Min.X+4.4, b.Max.Y-2.6)
+		sh.QuadTo(cx, b.Max.Y-8.4, b.Max.X-4.4, b.Max.Y-2.6)
+		ctx.DrawPath(sh, stroke)
+	case IconBell:
+		// The dome sits high and narrow and the skirt flares wide at the
+		// bottom: a dome of even width reads as a lampshade.
+		bell := paintengine2d.NewPath()
+		bell.MoveTo(b.Min.X+3.0, b.Max.Y-6.0)
+		bell.QuadTo(b.Min.X+5.6, b.Max.Y-7.4, b.Min.X+5.6, cy-1.6)
+		bell.QuadTo(b.Min.X+5.6, b.Min.Y+3.0, cx, b.Min.Y+3.0)
+		bell.QuadTo(b.Max.X-5.6, b.Min.Y+3.0, b.Max.X-5.6, cy-1.6)
+		bell.QuadTo(b.Max.X-5.6, b.Max.Y-7.4, b.Max.X-3.0, b.Max.Y-6.0)
+		bell.Close()
+		ctx.DrawPath(bell, stroke)
+		// The clapper, and the little stud on top.
+		clap := paintengine2d.NewPath()
+		clap.MoveTo(cx-1.8, b.Max.Y-5.2)
+		clap.QuadTo(cx, b.Max.Y-2.4, cx+1.8, b.Max.Y-5.2)
+		ctx.DrawPath(clap, stroke)
+		ctx.DrawPath(lineP(cx, b.Min.Y+1.6, cx, b.Min.Y+3.0), stroke)
+	case IconSend:
+		// A paper plane.
+		plane := paintengine2d.NewPath()
+		plane.MoveTo(b.Max.X-2.2, b.Min.Y+2.2)
+		plane.LineTo(b.Min.X+2.2, cy+0.6)
+		plane.LineTo(cx-0.4, cy+1.6)
+		plane.LineTo(b.Max.X-4.6, b.Max.Y-2.2)
+		plane.Close()
+		ctx.DrawPath(plane, stroke)
+		ctx.DrawPath(lineP(b.Max.X-2.2, b.Min.Y+2.2, cx-0.4, cy+1.6), stroke)
+	case IconClose:
+		d := w * 0.26
+		ctx.DrawPath(lineP(cx-d, cy-d, cx+d, cy+d), stroke)
+		ctx.DrawPath(lineP(cx+d, cy-d, cx-d, cy+d), stroke)
+	case IconQuit:
+		// A door with an arrow leaving it.
+		door := paintengine2d.NewPath()
+		door.MoveTo(cx-0.6, b.Min.Y+2.6)
+		door.LineTo(b.Min.X+2.8, b.Min.Y+2.6)
+		door.LineTo(b.Min.X+2.8, b.Max.Y-2.6)
+		door.LineTo(cx-0.6, b.Max.Y-2.6)
+		ctx.DrawPath(door, stroke)
+		arr := paintengine2d.NewPath()
+		arr.MoveTo(cx-1.0, cy)
+		arr.LineTo(b.Max.X-2.8, cy)
+		arr.MoveTo(b.Max.X-6.0, cy-3.2)
+		arr.LineTo(b.Max.X-2.8, cy)
+		arr.LineTo(b.Max.X-6.0, cy+3.2)
+		ctx.DrawPath(arr, stroke)
+	case IconStarFilled:
+		ctx.DrawPath(starPath(cx, cy, w*0.44, w*0.18), fill)
+	case IconDot:
+		ctx.DrawCircle(paintengine2d.Pt(cx, cy), w*0.22, fill)
+	case IconPrint:
+		// A printer: the sheet going in, the body, the sheet coming out.
+		ctx.DrawRect(paintengine2d.XYWH(b.Min.X+5.4, b.Min.Y+2.2, w-10.8, 3.6),
+			paintengine2d.StrokePaint(col, 1.5))
+		ctx.DrawRoundRect(paintengine2d.XYWH(b.Min.X+2.4, b.Min.Y+5.8, w-4.8, h*0.30), 1.5, 1.5,
+			paintengine2d.StrokePaint(col, 1.5))
+		ctx.DrawRect(paintengine2d.XYWH(b.Min.X+5.4, b.Max.Y-6.6, w-10.8, 4.4),
+			paintengine2d.StrokePaint(col, 1.5))
+	default:
+		// A stem-only icon ([IconByStem]) in a drawn set: the toolkit has
+		// no vector for it, and drawing nothing would leave a button with
+		// an invisible mark on it. The missing-icon square says so.
+		drawNoIconMark(ctx, b, col)
 	}
+}
+
+// drawNoIconMark is the placeholder a drawn set uses for an icon it has
+// no vector for: a dashed square with a cross in it, which is the same
+// mark the file sets ship as no-icon.png.
+func drawNoIconMark(ctx *paintengine2d.Context, b paintengine2d.Rect, col paintengine2d.Color) {
+	stroke := iconStroke(col, 1.5, paintengine2d.CapRound, paintengine2d.JoinRound)
+	r := b.Inset(2.5)
+	ctx.DrawRoundRect(r, 2, 2, paintengine2d.StrokePaint(col.WithAlpha(col.A*0.7), 1.4))
+	d := r.Dx() * 0.26
+	cx, cy := (r.Min.X+r.Max.X)*0.5, (r.Min.Y+r.Max.Y)*0.5
+	ctx.DrawPath(lineP(cx-d, cy-d, cx+d, cy+d), stroke)
+	ctx.DrawPath(lineP(cx+d, cy-d, cx-d, cy+d), stroke)
 }
 
 func drawSharpIcon(ctx *paintengine2d.Context, b paintengine2d.Rect, icon ToolIcon, col paintengine2d.Color) {
@@ -457,6 +666,11 @@ func drawSharpIcon(ctx *paintengine2d.Context, b paintengine2d.Rect, icon ToolIc
 		body.Close()
 		ctx.DrawPath(body, stroke)
 		ctx.DrawRect(paintengine2d.XYWH(b.Min.X+1.4, b.Max.Y-3.2, 4.2, 1.6), fill)
+	default:
+		// A shape this set has no drawing of its own for. The classic
+		// vector is a better answer than an empty box, and better than a
+		// placeholder: it is the same action, drawn in the other hand.
+		drawClassicIcon(ctx, b, icon, col)
 	}
 }
 
@@ -518,4 +732,12 @@ func IconSetOf(look LookAndFeel) IconSetName {
 		return c.Icons()
 	}
 	return IconSetClassic
+}
+
+// lineP is a two-point path, which most of the drawn icons are made of.
+func lineP(x0, y0, x1, y1 float32) *paintengine2d.Path {
+	p := paintengine2d.NewPath()
+	p.MoveTo(x0, y0)
+	p.LineTo(x1, y1)
+	return p
 }
