@@ -43,6 +43,7 @@ stub; there is no native AppKit/SwiftUI control host.
 | Slider | `Slider` | `QSlider` / `Slider` | `GtkScale` | `Slider` | `widget.Slider` | `TrackBar` | `Slider` | `NSSlider` | `Slider` | [thumb](screenshots/compare/slider.png) |
 | Text field | `TextField` / `MonoTextField` / `PasswordField` | `QLineEdit` / `TextField` | `GtkEntry` | `TextBox` | `widget.Entry` | `TextBox` | `PasswordBox` / `TextBox` | `NSSecureTextField` / `NSTextField` | `SecureField` / `TextField` | [thumb](screenshots/compare/textfield.png) |
 | Text area | `TextArea` / `MonoTextArea` | `QTextEdit` / `TextArea` | `GtkTextView` | `TextBox` (AcceptsReturn) | `widget.Entry` (MultiLine) | `TextBox` (Multiline) | `TextBox` | `NSTextView` | `TextEditor` | [thumb](screenshots/compare/textarea.png) · [gallery](screenshots/gallery-textarea.png) |
+| Passphrase field | `SecretField` (`[]byte`, never a string) | `QLineEdit` (`Password`) ≈ | `GtkPasswordEntry` ≈ | `TextBox` (`PasswordChar`) ≈ | `widget.NewPasswordEntry` ≈ | `TextBox` (`UseSystemPasswordChar`) ≈ | `PasswordBox` ≈ | `NSSecureTextField` ≈ | `SecureField` ≈ | — |
 | Chip / token field | `TokenField` / `Token` | — (`QLineEdit` + hand-built) | — (`GtkEntry` + hand-built) | — | — | — | — | `NSTokenField` | — | — |
 | Rich text | `RichText` + `RichTextBar` (`richtext.Doc`, HTML in and out) | `QTextEdit` / `TextArea` (`textFormat: RichText`) | `GtkTextView` + `GtkTextBuffer` tags | — (`TextBox` ≈) | `widget.RichText` (read-only) ≈ | `RichTextBox` | `RichTextBox` | `NSTextView` (rich) | `TextEditor` (`AttributedString`) ≈ | [sheet](screenshots/breadth/richtext-1x.webp) |
 | Number / spinner | `NumberField` / `Spinner` | `QSpinBox` / `SpinBox` | `GtkSpinButton` | `NumericUpDown` | — (`Entry` ≈) | `NumericUpDown` | — (toolkit ≈) | `NSStepper` + field | `Stepper` | [thumb](screenshots/compare/numberfield.png) |
@@ -273,6 +274,44 @@ caret, the selection, hit-testing and `softWrapped` are all that range;
 `Wrap` answers with strings, and with tabs already expanded. `RichText`
 edits through the same machinery and has no wrapper of its own. Wrap is for
 painting a paragraph; `layoutAreaMax` is for editing one.
+
+### A passphrase is not a string
+
+`SecretField` is a widget of its own, not a mode of `TextField`, and the
+reason is that a Go string cannot be wiped: every copy lives until the
+collector reaches it and then lingers in freed memory. `TextField` with
+`Password` set paints bullets and nothing more — the value is the
+exported string `Text`, rebuilt on every keystroke, and Ctrl+C, Ctrl+X
+and a drag of the selection all carry the plaintext out.
+
+So the contents live in a `[]byte` edited in place, the array is zeroed
+when it is outgrown and when a delete shortens it, and nothing in the
+widget turns it into a string — a test reads the source to keep it that
+way. Copy, cut, drag-out, the X11 PRIMARY selection and middle-click
+paste are refused; typing, Backspace, Delete, Ctrl+V, select-all and the
+caret keys work. `Bytes()` hands out a copy for the caller to wipe
+(`WipeBytes`), and `Len()` is a rune count with no content, for a
+strength meter.
+
+Painting hidden goes through the engine's own field painter with a
+string of bullets, so every era is exactly as right as it is for a
+password field. Painting **revealed** cannot: `Font.Draw` keeps its
+shaped run in a cache keyed by the string, which would hold the
+passphrase for the life of the face. Revealed text is drawn through
+`Font.DrawBytes`, `AdvanceBytes`, `CaretXBytes` and `IndexAtBytes` —
+the byte path, which caches nothing and allocates no string. It sees no
+pair kerning, because kerning is a property of a shaped run and there is
+no run; revealed text is set a hair wider than the same string in a
+label, which is the price of not remembering it.
+
+The input method is off while a secret widget has the focus
+(`widget.SecretTarget`), and that now covers `TextField` with `Password`
+too. An input method is another process that sees every keystroke and
+learns from it, so masking the preedit was never enough. X11's
+`SetIMEEnabled` used to be a no-op on the reasoning that XIM follows the
+window's focus; it now unsets the input-context focus and resets it,
+dropping whatever was half-composed rather than committing it into the
+field that has just been focused.
 
 ### A wrapping label in a row: the second measure pass
 

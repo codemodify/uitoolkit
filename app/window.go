@@ -747,7 +747,7 @@ func (w *Window) syncIMECursor() {
 	if !ok {
 		return
 	}
-	if t, ok := w.focus.(widget.IMETarget); ok {
+	if t, ok := w.focus.(widget.IMETarget); ok && !widget.IsSecretTarget(w.focus) {
 		s.SetIMEEnabled(true)
 		r := t.IMECaretRect()
 		o := widget.DeviceOrigin(w.focus)

@@ -1169,9 +1169,13 @@ type x11Surface struct {
 	// torn says this surface's teardown has already run, so Close
 	// releases the shared connection exactly once however many times it
 	// is called.
-	torn       bool
-	shm        bool
-	shmInfo    unsafe.Pointer
+	torn    bool
+	shm     bool
+	shmInfo unsafe.Pointer
+	// imeOff is set while the focused widget is a secret one: the zero
+	// value is an ordinary window, with the input context focused as it
+	// always was.
+	imeOff     bool
 	imeSpotX   int
 	imeSpotY   int
 	preeditBuf string
@@ -2032,7 +2036,12 @@ func (s *x11Surface) translate(xe *C.XEvent) []Event {
 			// lost (the grab's start is ignored below).
 			return nil
 		}
-		C.ui_set_ic_focus(s.ic)
+		// Not while a secret field has the focus: the window coming back
+		// must not hand the input method the keys the application has
+		// asked it to be kept out of.
+		if !s.imeOff {
+			C.ui_set_ic_focus(s.ic)
+		}
 		return append([]Event{{Kind: EventFocusIn}}, s.focusChangedLocked(true)...)
 	case C.FocusOut:
 		if C.ui_focus_mode(xe) == C.NotifyGrab {
@@ -2901,9 +2910,34 @@ func (s *x11Surface) SetMaximized(on bool) bool {
 	return true
 }
 
+// SetIMEEnabled turns the XIM input context on or off for this window
+// ([IMESurface]).
+//
+// It used to be a no-op, on the reasoning that the context is created
+// with the window and XIM follows the window's focus. That is true and
+// it is not enough: a passphrase field needs the method to stop being
+// given the keys at all, not merely to stop drawing over them, because
+// an input method is another process that learns from what it sees.
+//
+// Off is XUnsetICFocus plus a reset, and the reset's leftover is
+// **dropped** rather than committed: a half-composed word belongs to the
+// field it was started in, and delivering it to the one that has just
+// taken the focus would put it somewhere it was never typed.
 func (s *x11Surface) SetIMEEnabled(on bool) {
-	// XIC is created with the window; focus is enough for XIM.
-	_ = on
+	if s == nil || s.ic == nil || s.imeOff == !on {
+		return
+	}
+	s.imeOff = !on
+	x11Mu.Lock()
+	defer x11Mu.Unlock()
+	if on {
+		C.ui_set_ic_focus(s.ic)
+		return
+	}
+	C.ui_unset_ic_focus(s.ic)
+	if leftover := C.ui_reset_ic(s.ic); leftover != nil {
+		C.ui_xfree(unsafe.Pointer(leftover))
+	}
 }
 
 func (s *x11Surface) SetIMECursor(x, y, w, h int) {

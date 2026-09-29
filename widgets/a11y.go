@@ -974,3 +974,23 @@ func (t *TokenField) Describe(n *a11y.Node) {
 	nameOr(n, t.Placeholder)
 	n.Value = strings.Join(t.Tokens(), ", ")
 }
+
+// Describe: a secret field is a password field with no value. What it
+// reports is the role, that it is editable, and how many characters are
+// in it — a screen reader says "password, 12 bullets", which is what it
+// says for every other password field, and nothing about what they are.
+func (f *SecretField) Describe(n *a11y.Node) {
+	n.Role = a11y.RolePasswordField
+	n.State |= a11y.StateEditable
+	nameOr(n, f.Placeholder)
+	n.Value = f.mask()
+	// Offsets in the mask, not in the buffer: the caret a screen reader
+	// is told about is the one the user can see.
+	a, b := f.Selection()
+	n.Caret, n.SelStart, n.SelEnd = f.maskOffset(f.Caret()), f.maskOffset(a), f.maskOffset(b)
+}
+
+// AccessibleSetText is refused. AT-SPI's EditableText would put a Go
+// string into the buffer and hand this widget the one thing it exists to
+// avoid; a screen reader types into it like anyone else.
+func (f *SecretField) AccessibleSetText(string) bool { return false }

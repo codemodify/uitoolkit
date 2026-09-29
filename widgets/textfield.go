@@ -392,6 +392,12 @@ func (t *TextField) visual() (text string, caret, selA, selB int) {
 	return platform.ComposeVisual(base, t.caret, pre, t.preeditCaret)
 }
 
+// IsSecret makes a password field a [widget.SecretTarget]: the window
+// turns the input method off while it has the focus. Masking the preedit
+// was never enough — the method is another process, and it sees and
+// remembers what it was given whether or not this window drew it.
+func (t *TextField) IsSecret() bool { return t.Password }
+
 func (t *TextField) IMEPreedit(s string, caret int) {
 	if !t.Enabled() {
 		return
