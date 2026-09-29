@@ -7,7 +7,7 @@ about the problem it solved.
 
 ---
 
-## 0.23.0
+## 0.22.2
 
 Twenty-five items from the same two applications — a mail client and a
 password vault — and this time nearly half of them were the toolkit's own

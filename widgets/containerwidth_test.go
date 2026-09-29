@@ -20,7 +20,7 @@ func wrappingChild() *Label {
 // leaves the child's last lines — and whatever is under them — outside
 // the box, where clicks on them miss.
 //
-// Two of these were doing it before 0.23: Overlay measured its card at
+// Two of these were doing it before 0.22.2: Overlay measured its card at
 // 0.8 of itself and arranged it at anything up to 0.92, and Grid
 // measured its rows at the columns' natural widths while Arrange shared
 // the whole width out. This is the sweep that says the rest do not.
