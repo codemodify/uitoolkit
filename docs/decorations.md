@@ -649,6 +649,49 @@ them). `zwlr_layer_shell_v1` is a different surface role, with no title
 bar, no task-switcher entry and no user move: right for a tray menu
 ([platform.md](platform.md#popups)), wrong for a window.
 
+There is one route, and the toolkit deliberately does not take it.
+KWin's scripting interface is on the session bus (`org.kde.KWin`,
+`/Scripting`), and a dozen lines of JavaScript loaded through it will set
+`keepAbove` on a window matched by pid. It works — it was tried on
+Settings before this paragraph was written.
+
+**It is write-only, and that is what rules it out.** Nothing carries the
+state back. `xdg_toplevel.configure` announces maximized, fullscreen,
+resizing, activated and tiled, and no "above";
+`org_kde_plasma_window_management` carries it and is not advertised to
+ordinary clients. Tested both ways round: set from the button, KWin's own
+menu can turn it off and the application never learns; set from KWin's
+menu, the application never learns that either.
+
+That breaks the promise the rest of this section makes. `KeepAbove` is
+*the desktop's answer, not the last request* — on X11, Win32 and macOS
+literally so, because the state comes back as a window-state change.
+Through scripting it could only ever mean "what we last asked for",
+which is a different thing wearing the same name, and the caption button
+would be a toggle that silently disagrees with the desktop. A dead button
+is worse than none; a lying one is worse than a dead one.
+
+So it stays out of the toolkit — along with the rest of what shipping it
+would mean: KDE only, a JavaScript payload injected into the window
+manager by every application that links this, and an API that moved
+between Plasma 5 (`workspace.clientList`) and 6 (`workspace.windowList`).
+
+An **application** that is deliberately KDE-targeted may reasonably make
+that trade for itself, and owns the consequence:
+
+```go
+js := fmt.Sprintf(`
+const list = (typeof workspace.windowList === 'function')
+  ? workspace.windowList() : workspace.clientList();
+for (const w of list) { if (w.pid === %d) { w.keepAbove = %t; } }
+`, os.Getpid(), on)
+os.WriteFile(path, []byte(js), 0o600)
+obj := conn.Object("org.kde.KWin", "/Scripting")
+obj.Call("org.kde.kwin.Scripting.loadScript", 0, path, name)
+obj.Call("org.kde.kwin.Scripting.start", 0)
+obj.Call("org.kde.kwin.Scripting.unloadScript", 0, name)
+```
+
 The caption button (`platform.CaptionKeepAbove`, KWin's `F`) stands where
 the window-menu button would — but only where the desktop can actually do
 it, so nobody trades a working button for a dead one. On Wayland the

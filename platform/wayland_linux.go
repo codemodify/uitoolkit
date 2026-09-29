@@ -1984,6 +1984,18 @@ func (s *wlSurface) Lower() bool { return false }
 // move, which is right for a tray menu (see PlaceAtScreen) and wrong for
 // a window.
 //
+// KWin's scripting interface (org.kde.KWin /Scripting) will do it — a
+// script loaded over D-Bus can set keepAbove on a window matched by pid,
+// and it was tried before this comment was written. It is **write-only**:
+// no configure state carries "above", plasma-window-management is not
+// advertised to ordinary clients, and so the application cannot learn
+// that the user turned it off again from KWin's own menu. Tested both
+// ways round, and neither direction reaches the client. KeepAbove is
+// documented as the desktop's answer rather than the last request, so a
+// toggle that can only ever mean the second would be a button that lies
+// — see docs/decorations.md, which carries the recipe for an
+// application that wants to make that trade for itself.
+//
 // So this answers false, FrameKeepAbove is never in Caps, and the caption
 // button is **left out** rather than drawn dead: a button that cannot
 // work is worse than none, and the window menu drops "Keep Above Others"
