@@ -14,6 +14,11 @@ import (
 // typed. Return always does, whatever this says.
 const DefaultTokenSeparators = ",;"
 
+// defaultTokenFieldWidth is the 1x design width a chip field asks for
+// when it is measured without one — a text field's width, since that is
+// what it stands in for.
+const defaultTokenFieldWidth = 320
+
 // Token is one chip in a [TokenField]: a label and, unless Removable is
 // off, a cross that takes it out.
 //
@@ -207,6 +212,11 @@ type TokenField struct {
 	Unique bool
 	// Removable is the default for the chips this field makes.
 	Removable bool
+	// PreferredWidth is the 1x design width the field asks for when it is
+	// measured without one, in place of [defaultTokenFieldWidth]. The
+	// field wraps, so this is where it folds rather than a width it is
+	// held to: given a width, it uses that one.
+	PreferredWidth float32
 	// Color tints every chip. Per-chip colours are set on the [Token].
 	Color paintengine2d.Color
 	// OnChange fires whenever the set of tokens changes, from typing, a
@@ -332,7 +342,7 @@ func (f *TokenField) splitInput(s string) {
 	defer func() { f.splitting = false }()
 
 	seps := f.seps()
-	if !strings.ContainsAny(s, seps) {
+	if nextSep(s, 0, seps) < 0 {
 		// Nothing but space in the editor is the space after the last
 		// separator, not the start of the next value: "ada@x, grace@x"
 		// must not leave " grace@x" being typed. A token cannot begin
@@ -344,17 +354,70 @@ func (f *TokenField) splitInput(s string) {
 	}
 	i := 0
 	for i < len(s) {
-		j := strings.IndexAny(s[i:], seps)
+		j := nextSep(s, i, seps)
 		if j < 0 {
 			break
 		}
-		if part := strings.TrimSpace(s[i : i+j]); part != "" && !f.add(part) {
-			f.editor.SetText(strings.TrimLeft(s[i:i+j]+s[i+j+1:], " \t"))
+		if part := strings.TrimSpace(s[i:j]); part != "" && !f.add(part) {
+			f.editor.SetText(strings.TrimLeft(s[i:j]+s[j+1:], " \t"))
 			return
 		}
-		i += j + 1
+		i = j + 1
 	}
 	f.editor.SetText(strings.TrimLeft(s[i:], " \t"))
+}
+
+// nextSep is the index of the next separator in s at or after from, or
+// -1, skipping any that falls inside a quoted string.
+//
+// A comma inside quotes is part of the value, not the end of it, which
+// is the one piece of syntax every address list shares: `"Lovelace, Ada"
+// <ada@x>, grace@x` is two recipients, and splitting on every comma made
+// it three, two of them nonsense. RFC 5322 spells this a display-name
+// quoted-string with backslash escapes, and the same rule reads a CSV
+// field or any other quoted list, so the field does not need to know it
+// is holding addresses.
+//
+// An unclosed quote is not an error here. The user is still typing, and
+// a field that stopped accepting separators the moment a quote was
+// opened would be a field that stopped working after a stray keystroke —
+// so an opening quote with no partner leaves the rest of the text
+// splitting normally.
+func nextSep(s string, from int, seps string) int {
+	quoted, closes := false, -1
+	for i := from; i < len(s); i++ {
+		switch c := s[i]; {
+		case c == '\\' && quoted:
+			i++ // the next byte is escaped, whatever it is
+		case c == '"':
+			if quoted {
+				quoted = false
+				continue
+			}
+			// Only a quote that is closed hides what is between them.
+			if closes = closingQuote(s, i); closes < 0 {
+				continue
+			}
+			quoted = true
+		case !quoted && strings.IndexByte(seps, c) >= 0:
+			return i
+		}
+	}
+	return -1
+}
+
+// closingQuote is the index of the quote that closes the one at i, or -1
+// if it is never closed.
+func closingQuote(s string, i int) int {
+	for j := i + 1; j < len(s); j++ {
+		switch s[j] {
+		case '\\':
+			j++
+		case '"':
+			return j
+		}
+	}
+	return -1
 }
 
 func (f *TokenField) add(v string) bool {
@@ -483,10 +546,43 @@ func (f *TokenField) flow(maxW float32) (chips []paintengine2d.Rect, editor pain
 	return chips, editor, paintengine2d.Pt(width+in.Right, y+lineH+in.Bottom)
 }
 
+// naturalWidth is the width the field asks for when none is offered.
+//
+// A chip field wraps, so the width it would take with every chip on one
+// line is not a width it *wants* — it is only the width at which it
+// would not have to fold. Reporting that made a Form size its field
+// column from it (a Grid measures its columns unbounded) and a Flex
+// track never goes below its content, so three addresses pushed a Write
+// window's form past the window's edge and the whole form was clipped.
+//
+// So it asks for a text field's width and wraps inside it, which is what
+// a recipient row does in every mail client: the useful answer from a
+// widget that can fold is its height at the width it is given, and this
+// is the width at which that answer is computed when nobody has said.
+// PreferredWidth overrides it; a chip is never split, so the widest chip
+// is the floor.
+func (f *TokenField) naturalWidth() float32 {
+	lk := f.Look()
+	w := style.Dip(lk, defaultTokenFieldWidth)
+	if f.PreferredWidth > 0 {
+		w = style.Dip(lk, f.PreferredWidth)
+	}
+	loose := layout.Constraints{MaxW: -1, MaxH: -1}
+	in := f.pad()
+	for _, t := range f.tokens {
+		if sz := t.Measure(loose); sz.X+in.Left+in.Right > w {
+			w = sz.X + in.Left + in.Right
+		}
+	}
+	return w
+}
+
 func (f *TokenField) Measure(c layout.Constraints) paintengine2d.Point {
 	maxW := float32(-1)
 	if c.HasMaxW() {
 		maxW = c.MaxW
+	} else {
+		maxW = f.naturalWidth()
 	}
 	_, _, size := f.flow(maxW)
 	if c.HasMaxW() {

@@ -176,6 +176,40 @@ func NotifyFocusMoved(now Component, roots ...Component) {
 	}
 }
 
+// LockKeysWatcher is implemented by components that show the state of
+// Caps Lock or Num Lock: a passphrase field's "Caps Lock is on" mark,
+// most of all.
+//
+// A right passphrase refused is nearly always Caps Lock, and a field
+// holding a secret cannot work that out for itself — the only other way
+// is to read the secret. The window's own OnLockKeys is one callback, so
+// a widget that wanted the state had to take the window's callback and
+// hand it back, and two widgets in one window could not both follow it.
+// This is the same shape as [FocusWatcher]: every component under the
+// window's roots that implements it hears every change.
+type LockKeysWatcher interface {
+	// LockKeysChanged is called when Caps Lock or Num Lock changes,
+	// whether or not the key reached a widget — pressing Caps Lock is not
+	// a key any field wants, and it is exactly the key a prompt has to
+	// hear.
+	LockKeysChanged(caps, num bool)
+}
+
+// NotifyLockKeys tells every LockKeysWatcher under roots about the lock
+// state. The host calls it on each change.
+func NotifyLockKeys(caps, num bool, roots ...Component) {
+	for _, r := range roots {
+		if r == nil {
+			continue
+		}
+		Walk(r, func(n Component) {
+			if w, ok := n.(LockKeysWatcher); ok {
+				w.LockKeysChanged(caps, num)
+			}
+		})
+	}
+}
+
 // Revealer is implemented by scrolling containers that can bring a
 // descendant into view (widgets.ScrollView).
 type Revealer interface {

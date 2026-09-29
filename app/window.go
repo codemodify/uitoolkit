@@ -740,12 +740,20 @@ func (w *Window) RequestFocus(c widget.Component) {
 	// Containers that paint by where the focus is rather than by holding
 	// it — a dock panel's title bar — hear about every move. The caption
 	// is a concrete type, so it only joins the roots when there is one.
+	widget.NotifyFocusMoved(c, w.notifyRoots()...)
+	w.syncIMECursor()
+}
+
+// notifyRoots are the trees a window-wide notification walks: the
+// content, the overlay, an open popup, and the caption where the toolkit
+// draws one. The caption is a concrete type, so it only joins when there
+// is one.
+func (w *Window) notifyRoots() []widget.Component {
 	roots := []widget.Component{w.root, w.overlay, w.popup}
 	if w.caption != nil {
 		roots = append(roots, w.caption)
 	}
-	widget.NotifyFocusMoved(c, roots...)
-	w.syncIMECursor()
+	return roots
 }
 
 func (w *Window) resetIME() {

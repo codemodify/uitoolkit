@@ -75,6 +75,12 @@ func (w *Window) ClickComponent(c widget.Component) bool {
 	if w == nil || w.Closed() || c == nil {
 		return false
 	}
+	// Scroll to it first, as a person does: a click is aimed at something
+	// the user can see. A button below a ScrollView's fold is at
+	// coordinates outside the view, so clicking where its box says it is
+	// pressed whatever happens to be there — or nothing — and the test
+	// read as a button that did not work.
+	w.reveal(c)
 	b := c.Bounds()
 	if b.Empty() {
 		return false
@@ -82,6 +88,17 @@ func (w *Window) ClickComponent(c widget.Component) bool {
 	o := widget.DeviceOrigin(c)
 	at := paintengine2d.Pt(o.X+b.Dx()/2, o.Y+b.Dy()/2)
 	return w.ClickAt(at)
+}
+
+// reveal scrolls every enclosing ScrollView so c is in view, and lays the
+// window out again so the bounds read afterwards are the ones it now has.
+func (w *Window) reveal(c widget.Component) {
+	if c == nil {
+		return
+	}
+	widget.RevealFocus(c)
+	w.laid = false
+	w.pumpOnce()
 }
 
 // ClickAt presses and releases the left button at a point in the
@@ -105,6 +122,7 @@ func (w *Window) FocusOn(c widget.Component) {
 		return
 	}
 	w.RequestFocus(c)
+	w.reveal(c)
 	w.pumpOnce()
 }
 

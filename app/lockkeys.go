@@ -1,6 +1,9 @@
 package app
 
-import "github.com/codemodify/uitoolkit/platform"
+import (
+	"github.com/codemodify/uitoolkit/platform"
+	"github.com/codemodify/uitoolkit/widget"
+)
 
 // The lock keys, which a passphrase prompt needs and nothing else does.
 //
@@ -37,6 +40,11 @@ func (w *Window) LockKeys() (caps, num bool) {
 // field wants, and it is exactly the key a prompt has to hear.
 //
 // It fires on a real change only, not on every keystroke.
+//
+// It is one callback a window, and a second replaces the first. A widget
+// that wants the state should implement [widget.LockKeysWatcher]
+// instead, which every component in the window gets; this is for the
+// window's own code.
 func (w *Window) OnLockKeys(fn func(caps, num bool)) {
 	if w == nil {
 		return
@@ -56,8 +64,14 @@ func (w *Window) noteLockKeys(mods platform.Modifiers) {
 	w.lockCaps, w.lockNum, w.lockKnown = caps, num, true
 	// The first event is not a change — it is the state becoming known,
 	// and a prompt that asked at start-up has it already.
-	if first || w.onLockKeys == nil {
+	if first {
 		return
 	}
-	w.onLockKeys(caps, num)
+	// Every watcher in the window, then the window's own callback. A
+	// widget that shows the state is one of many and cannot own the
+	// single callback, which is why both exist.
+	widget.NotifyLockKeys(caps, num, w.notifyRoots()...)
+	if w.onLockKeys != nil {
+		w.onLockKeys(caps, num)
+	}
 }

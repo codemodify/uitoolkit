@@ -11,19 +11,22 @@ import (
 
 // scaleHost gives a component a look at a chosen display scale.
 type scaleHost struct {
-	look style.LookAndFeel
+	look  style.LookAndFeel
+	focus widget.Component
 }
 
 func (h *scaleHost) Invalidate(widget.Component, paintengine2d.Rect) {}
-func (h *scaleHost) RequestFocus(widget.Component)                   {}
-func (h *scaleHost) Focus() widget.Component                         { return nil }
+func (h *scaleHost) RequestFocus(c widget.Component)                 { h.focus = c }
+func (h *scaleHost) Focus() widget.Component                         { return h.focus }
 func (h *scaleHost) Scale() float32                                  { return style.LookScale(h.look) }
 func (h *scaleHost) RequestLayout()                                  {}
 func (h *scaleHost) Look() style.LookAndFeel                         { return h.look }
 
-func atScale(t *testing.T, c widget.Component, scale float32) {
+func atScale(t *testing.T, c widget.Component, scale float32) *scaleHost {
 	t.Helper()
-	c.SetHost(&scaleHost{look: style.WithScale(style.DarkLook(), scale)})
+	h := &scaleHost{look: style.WithScale(style.DarkLook(), scale)}
+	c.SetHost(h)
+	return h
 }
 
 // 0.22.0 made FlexBox's gap and Grid's row and column gaps 1x design

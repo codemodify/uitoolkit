@@ -53,6 +53,18 @@ type SecretField struct {
 	// Mono paints in the monospaced face, which is what a generated
 	// passphrase wants.
 	Mono bool
+	// CapsHint draws a warning mark in the field while it has the focus
+	// and Caps Lock is on, as macOS's secure text field does. It is on by
+	// default: a right passphrase refused is nearly always Caps Lock, the
+	// field cannot work that out for itself without reading the secret,
+	// and every application with a passphrase field was writing the same
+	// warning line for itself.
+	//
+	// The state reaches the field through [widget.LockKeysWatcher], so it
+	// needs no application code at all — but a window that never
+	// dispatches events (a pixel test) has nothing to learn it from, and
+	// the mark stays off.
+	CapsHint bool
 	// OnChange fires when the contents change. It is handed the field
 	// rather than the value: a callback taking a string would be the
 	// leak this widget exists to close.
@@ -66,11 +78,12 @@ type SecretField struct {
 	scrollX    float32
 	blinkOn    bool
 	dragging   bool
+	capsOn     bool
 }
 
 // NewSecretField builds an empty passphrase field.
 func NewSecretField(placeholder string) *SecretField {
-	f := &SecretField{Placeholder: placeholder, blinkOn: true}
+	f := &SecretField{Placeholder: placeholder, blinkOn: true, CapsHint: true}
 	f.Init(f)
 	f.SetWantsFocus(true)
 	return f
@@ -305,6 +318,7 @@ func (f *SecretField) Paint(ctx *paintengine2d.Context) {
 		lk.DrawTextField(ctx, b, st, f.mask(), f.Placeholder,
 			f.maskOffset(f.caret), f.maskOffset(a), f.maskOffset(e),
 			f.blink(), f.scrollX, f.font())
+		f.paintCapsHint(ctx)
 		return
 	}
 	// Revealed. The frame is still the engine's, drawn with no text in
@@ -314,7 +328,59 @@ func (f *SecretField) Paint(ctx *paintengine2d.Context) {
 	// face's shape cache for as long as the face lives.
 	lk.DrawTextField(ctx, b, st, "", "", -1, 0, 0, false, 0, f.font())
 	f.paintRevealed(ctx)
+	f.paintCapsHint(ctx)
 }
+
+// capsShown reports whether the Caps Lock mark belongs on the field now.
+func (f *SecretField) capsShown() bool {
+	return f.CapsHint && f.capsOn && f.Focused()
+}
+
+// capsRect is the mark's box, at the field's trailing end.
+func (f *SecretField) capsRect() paintengine2d.Rect {
+	if !f.capsShown() {
+		return paintengine2d.Rect{}
+	}
+	b := f.LocalBounds()
+	side := min(f.font().Height(), b.Dy()-style.Dip(f.Look(), 4))
+	if side <= 0 {
+		return paintengine2d.Rect{}
+	}
+	pad := f.fieldPad()
+	return paintengine2d.XYWH(b.Max.X-pad-side, b.Min.Y+(b.Dy()-side)*0.5, side, side)
+}
+
+// paintCapsHint draws the warning mark. It is an icon, not a character:
+// the interface face has no ⇪ and typing one would be a box on most
+// machines (docs/contracts.md). The colour is the palette's warning as
+// *ink* rather than as declared, because this is a mark read against the
+// field's own background with nothing behind it to carry the contrast.
+func (f *SecretField) paintCapsHint(ctx *paintengine2d.Context) {
+	r := f.capsRect()
+	if r.Empty() {
+		return
+	}
+	lk := f.Look()
+	style.DrawToolIcon(ctx, r, style.IconWarning, lk.Palette().WarningInk(), style.IconSetOf(lk))
+}
+
+// LockKeysChanged implements [widget.LockKeysWatcher]: the window hands
+// every component the lock state, so a field shows the mark without the
+// application wiring anything up, and two fields in one window both
+// follow it.
+func (f *SecretField) LockKeysChanged(caps, _ bool) {
+	if f.capsOn == caps {
+		return
+	}
+	f.capsOn = caps
+	if f.CapsHint {
+		f.Invalidate()
+	}
+}
+
+// CapsLockOn reports what the field last heard, for an application that
+// wants to say it in its own words as well.
+func (f *SecretField) CapsLockOn() bool { return f.capsOn }
 
 func (f *SecretField) paintRevealed(ctx *paintengine2d.Context) {
 	lk := f.Look()

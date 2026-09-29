@@ -116,3 +116,99 @@ func TestAcceleratorFiresWithCapsLockOn(t *testing.T) {
 		t.Fatalf("the accelerator fired %d times with Caps Lock on", fired)
 	}
 }
+
+// lockWatcher counts what it is told, as a widget showing the state
+// would.
+type lockWatcher struct {
+	widgets.Label
+	caps, num bool
+	n         int
+}
+
+func newLockWatcher() *lockWatcher {
+	w := &lockWatcher{}
+	w.Init(w)
+	return w
+}
+
+func (w *lockWatcher) LockKeysChanged(caps, num bool) {
+	w.caps, w.num, w.n = caps, num, w.n+1
+}
+
+// OnLockKeys is one callback a window, so a widget that wanted the state
+// had to take it and hand it back — and two widgets in one window could
+// not both follow it. Every component under the window's roots hears it
+// now, the same way FocusWatcher works.
+func TestEveryWatcherInTheWindowHearsTheLockKeys(t *testing.T) {
+	a := New(Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{Width: 300, Height: 200, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	one, two := newLockWatcher(), newLockWatcher()
+	w.SetContent(widgets.NewColumn(one, widgets.NewColumn(two)))
+	a.PumpOnce()
+
+	// The window's own callback still works alongside them.
+	own := 0
+	w.OnLockKeys(func(bool, bool) { own++ })
+
+	key := func(mods platform.Modifiers) {
+		w.dispatch(platform.Event{Kind: platform.EventKeyDown, Key: platform.KeyA, Mods: mods})
+		a.PumpOnce()
+	}
+	key(0) // the state becoming known, not a change
+	if one.n != 0 || two.n != 0 {
+		t.Fatalf("the first event told the watchers: %d %d", one.n, two.n)
+	}
+
+	key(platform.ModCapsLock)
+	if one.n != 1 || !one.caps {
+		t.Errorf("first watcher: %d calls, caps %v", one.n, one.caps)
+	}
+	if two.n != 1 || !two.caps {
+		t.Errorf("second watcher (nested): %d calls, caps %v", two.n, two.caps)
+	}
+	if own != 1 {
+		t.Errorf("the window's own callback fired %d times, want 1", own)
+	}
+
+	key(0)
+	if one.caps || two.caps {
+		t.Error("a watcher kept caps on after it went off")
+	}
+	if one.n != 2 || two.n != 2 {
+		t.Errorf("calls %d %d, want 2 each", one.n, two.n)
+	}
+}
+
+// And the passphrase field shows its own mark with no application code
+// at all, which is the point of the interface.
+func TestSecretFieldShowsCapsLockWithNoApplicationCode(t *testing.T) {
+	a := New(Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{Width: 300, Height: 120, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := widgets.NewSecretField("Passphrase")
+	w.SetContent(f)
+	w.RequestFocus(f)
+	a.PumpOnce()
+
+	key := func(mods platform.Modifiers) {
+		w.dispatch(platform.Event{Kind: platform.EventKeyDown, Key: platform.KeyA, Mods: mods})
+		a.PumpOnce()
+	}
+	key(0)
+	if f.CapsLockOn() {
+		t.Fatal("Caps Lock is on before anything said so")
+	}
+	key(platform.ModCapsLock)
+	if !f.CapsLockOn() {
+		t.Error("the field did not hear that Caps Lock came on")
+	}
+	key(0)
+	if f.CapsLockOn() {
+		t.Error("the field did not hear that Caps Lock went off")
+	}
+}
