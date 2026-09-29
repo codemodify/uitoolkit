@@ -461,8 +461,8 @@ AppKit.
 
 | Gap | What that means |
 | --- | --- |
-| **Complex text** | No `GSUB`, no bidi: **Arabic, Hebrew, Devanagari and Thai** draw as isolated glyphs in logical order. Latin is right. |
-| **Script coverage of the bundled face** | The bundled Titillium Web is **Latin only** — no Greek, no Cyrillic, no CJK, and none of the arrows or check marks a UI reaches for. Those render only when a pack resolves an *installed* face that has them, so under `UITK_SYSTEM_FONTS=0` (containers, CI, these screenshots) they are tofu boxes. **A mark is an icon, not a character** — see [Icons, and when not to use text](docs/widgets.md#icons-and-when-not-to-use-text), which says what to use instead and why an icon is safe where a glyph is not. |
+| **Complex text, and no RTL** | No `GSUB`, no bidi, and **no mirrored interface**: Arabic, Hebrew, Devanagari and Thai are wrong, and nothing flips for a right-to-left locale. Latin is right, and kerned. [The text contract](docs/contracts.md) says exactly what is and is not supported. |
+| **Script coverage of the bundled face** | The bundled Titillium Web is **Latin only** — no Greek, no Cyrillic, no CJK, and none of the arrows or check marks a UI reaches for. Those render only when a pack resolves an *installed* face that has them, so under `UITK_SYSTEM_FONTS=0` (containers, CI, these screenshots) they are tofu boxes. **A mark is an icon, not a character**, and a word is not a picture — [the text contract](docs/contracts.md) has both rules and what to use instead. |
 | **Accessibility off Linux** | The `a11y` model is complete and AT-SPI2 is wired, but UI Automation (Windows) and NSAccessibility (macOS) are not. A screen reader there sees nothing. |
 | **GPU off Linux** | EGL/GLES on Wayland and X11; Windows and macOS rasterise on the CPU. Fast enough for desktop UI ([docs/perf.md](docs/perf.md)), not for heavy continuous animation. |
 | **Printing** | There is none. |
@@ -526,6 +526,7 @@ And two applications that grew up here and moved out:
 | [toolkits.md](docs/toolkits.md) | **next to Qt, GTK, Avalonia, Fyne, WinForms, Win32, GPUI and AppKit** — what it does differently, what it does not do, and when to choose something else |
 | [tour.md](docs/tour.md) | the sample that shows what the toolkit is, page by page |
 | [running.md](docs/running.md) | every screenshot in these docs, how each was made, and how to regenerate them |
+| [contracts.md](docs/contracts.md) | **the text contract**: a mark is an icon and a word is not a picture; no shaping, no bidi, no right-to-left interface, no font fallback — and what you *can* rely on |
 | [widgets.md](docs/widgets.md) | every widget, mapped by name to the nearest control in other toolkits |
 | [compare.md](docs/compare.md) | the behaviour map: how chrome is expected to act, and which test fails when it stops |
 | [themes.md](docs/themes.md) · [theme-engines.md](docs/theme-engines.md) · [engines.md](docs/engines.md) | the 132 packs, how an engine draws an era, and why engines are opt-in at build time |

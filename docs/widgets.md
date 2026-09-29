@@ -243,7 +243,9 @@ FlatLaf pads it by 6 whatever the pack says.
 
 ## Icons, and when not to use text
 
-**A mark is an icon. Text is for words.**
+**A mark is an icon. Text is for words.** Both halves of that, and
+everything the text stack does not do, are in
+[the text contract](contracts.md); this section is the widget side of it.
 
 That line decides more than it looks like it does, because the toolkit
 draws its own text and the face it bundles is Latin only. Titillium Web

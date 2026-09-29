@@ -662,6 +662,34 @@ func BakeFamily(family string, weight Weight, size float32, col paintengine2d.Co
 }
 
 func bakeOutline(family string, weight Weight, size float32) (*Font, error) {
+	f, err := bakeFace(family, weight, size)
+	if err == nil {
+		return f, nil
+	}
+	// An installed face that cannot draw the interface is not one the
+	// interface can be drawn in, and the answer is the same as for a
+	// family that is not installed at all: the bundled face stands in.
+	//
+	// The face this catches is a script-only one — Noto Sans Arabic,
+	// Noto Sans CJK, Noto Color Emoji — which has no Latin 'A' and so
+	// cannot draw a menu, a button or its own name. Thirty of them are
+	// in the chooser's list on an ordinary desktop, the choice is saved
+	// in look.json, and this used to *panic*: picking one made every
+	// uitoolkit application on the machine crash on start, and keep
+	// crashing, because the setting outlived the process.
+	//
+	// It is not the toolkit's place to hide those families from the
+	// chooser — a face is a face, and the list is deliberately
+	// unfiltered (ListFontFamilies) — but it is very much its place not
+	// to die of one.
+	if family == "" || bundledFamily(family) == FamilyUI || bundledFamily(family) == FamilyMono {
+		return nil, err
+	}
+	return bakeFace("", weight, size)
+}
+
+// bakeFace bakes exactly the family asked for, with no fallback.
+func bakeFace(family string, weight Weight, size float32) (*Font, error) {
 	face, err := faceFor(family, weight)
 	if err != nil {
 		return nil, err
@@ -675,7 +703,7 @@ func bakeOutline(family string, weight Weight, size float32) (*Font, error) {
 	}
 	cell, ok := atlas.Cell(paintengine2d.GlyphID('A'))
 	if !ok || cell.Src.Empty() || (ot.hasNotdef && cell.Src == ot.notdef.Src) {
-		return nil, fmt.Errorf("style: %s did not rasterize A", family)
+		return nil, fmt.Errorf("style: %s cannot draw Latin", family)
 	}
 	return &Font{
 		Size:    size,

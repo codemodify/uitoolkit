@@ -73,12 +73,16 @@ screenshot tests in this repository possible at all.
 
 ## What they do that it does not
 
-**Complex text.** This is the big one. The text stack shapes runs
-rune-by-rune with pair kerning from `GPOS`; there is no `GSUB`, no
-bidi, no Arabic joining and no Indic reordering. **Arabic, Hebrew,
-Devanagari and Thai** render as isolated glyphs in logical order, which
-is to say wrongly. Qt has HarfBuzz, GTK has Pango, and if you need
-those scripts you need one of them.
+**Complex text, and no right-to-left interface.** This is the big one.
+The text stack shapes runs rune-by-rune with pair kerning from `GPOS`;
+there is no `GSUB`, no bidi, no Arabic joining and no Indic reordering.
+**Arabic, Hebrew, Devanagari and Thai** render as isolated glyphs in
+logical order where the face has them at all, which is to say wrongly.
+Nor does the *interface* mirror for a right-to-left locale: nothing
+reads a locale's direction and there is no API to ask. Qt has HarfBuzz,
+GTK has Pango, and both mirror; if you need any of that you need one of
+them. [contracts.md](contracts.md) is the whole of what is and is not
+supported, for someone who has already chosen this one.
 
 **And the bundled face is Latin only.** Titillium Web, which every pack
 falls back to, has 456 glyphs: no Greek, no Cyrillic, no CJK, and none
