@@ -165,7 +165,11 @@ func (g *Grid) placed() []*GridCell {
 // single-span children in track i; spans are (first, count, need) of the
 // children covering several tracks. avail < 0 means "no size to fill":
 // flexible tracks then take their content.
-func solve(ts []Track, n int, content []float32, spans [][3]float32, gap, avail float32) []float32 {
+// solve sizes n tracks. content is each track's natural size — what its
+// children want when nothing constrains them — and minc is the least
+// each can be squeezed to; pass nil for minc where shrinking is not on
+// offer, and every track is then treated as unshrinkable.
+func solve(ts []Track, n int, content, minc []float32, spans [][3]float32, gap, avail float32) []float32 {
 	out := make([]float32, n)
 	for i := 0; i < n; i++ {
 		t := trackAt(ts, i)
@@ -259,10 +263,28 @@ func solve(ts []Track, n int, content []float32, spans [][3]float32, gap, avail 
 		froze := false
 		for k := 0; k < len(flex); k++ {
 			i := flex[k]
-			if share := left * weightOf(i) / weight; out[i] > share {
-				// It needs more than its share: give it its content and
-				// take that out of what the others divide.
-				fixed += out[i]
+			share := left * weightOf(i) / weight
+			// The floor is what this track can actually be squeezed to,
+			// not what it would like.
+			//
+			// Freezing at the natural width is right for a child that
+			// cannot shrink — a button is as wide as its label — and
+			// wrong for one that can. A wrapping label measured with
+			// nothing to constrain it reports the width of its whole text
+			// on one line: 1453 pixels for a sentence. Treating that as a
+			// floor gave its column 1453 of the 400 there were, so the
+			// form ran off its own right edge and the height came back as
+			// the single line nobody would ever see. Its real floor is
+			// its longest word.
+			floor := out[i]
+			if minc != nil && minc[i] > 0 && minc[i] < floor {
+				floor = minc[i]
+			}
+			if floor > share {
+				// Even squeezed it needs more than its share: give it
+				// that, and take it out of what the others divide.
+				out[i] = floor
+				fixed += floor
 				flex = append(flex[:k], flex[k+1:]...)
 				k--
 				froze = true
@@ -288,18 +310,74 @@ func solve(ts []Track, n int, content []float32, spans [][3]float32, gap, avail 
 func (g *Grid) columns(avail float32) []float32 {
 	_, nc := g.dims()
 	content := make([]float32, nc)
+	var minc []float32
+	if avail >= 0 {
+		// The least each column can be squeezed to, which only matters
+		// when there is a width to fit into. It costs one more measure
+		// per cell, so it is not taken for a natural-size pass.
+		minc = make([]float32, nc)
+	}
 	var spans [][3]float32
 	g.visible(func(c widget.Component, cell *GridCell) {
-		w := ceilPx(c.Measure(layout.Unbounded()).X)
+		natural := c.Measure(layout.Unbounded())
+		w := ceilPx(natural.X)
 		if cell.ColSpan == 1 {
 			if cell.Col < nc && w > content[cell.Col] {
 				content[cell.Col] = w
+			}
+			// Only a flexible track can be squeezed, so only those pay
+			// for the extra measure.
+			if minc != nil && cell.Col < nc && trackAt(g.Cols, cell.Col).Mode == TrackFlex {
+				if m := minWidthOf(c, natural); m > minc[cell.Col] {
+					minc[cell.Col] = m
+				}
 			}
 			return
 		}
 		spans = append(spans, [3]float32{float32(cell.Col), float32(cell.ColSpan), w})
 	})
-	return solve(g.Cols, nc, content, spans, g.colGap(), avail)
+	return solve(g.Cols, nc, content, minc, spans, g.colGap(), avail)
+}
+
+// minWidthOf is how narrow a column may be squeezed for this child, or 0
+// for a child that cannot be squeezed at all.
+//
+// Whether a child folds is told by its *height*, not its width. Asking
+// it to fit in a narrow box cannot answer it on its own, because a child
+// that cannot fold is clipped to the constraint just the same as one
+// that can, and both come back narrow — so a button asked to fit in a
+// pixel says 65 and is then squeezed to 65, which is not a button any
+// more. A child that folds gets taller when it is narrowed; one that
+// cannot keeps its height.
+//
+// The probe is a quarter of the child's natural width, with a small
+// floor, which makes the answer an approximation of the true min-content
+// width — a wrapping label's longest word — and deliberately so: the
+// exact value needs a search, and squeezing a label to its longest word
+// is not a layout anyone wants anyway. What matters is telling "this can
+// give way" from "this cannot", and a quarter is far enough in to settle
+// it. One pixel is not: a label with no room for a single rune stops
+// wrapping and reports one line, which reads as a child that does not
+// fold at all.
+func minWidthOf(c widget.Component, natural paintengine2d.Point) float32 {
+	if natural.X <= 0 {
+		return 0
+	}
+	probe := natural.X * 0.25
+	if probe < 24 {
+		probe = 24
+	}
+	if probe >= natural.X {
+		return 0
+	}
+	got := c.Measure(layout.Constraints{MaxW: probe, MaxH: -1})
+	if got.Y <= natural.Y {
+		return 0
+	}
+	if w := ceilPx(min(got.X, probe)); w >= 1 {
+		return w
+	}
+	return 1
 }
 
 // spanLen is the length of count tracks from first, gaps included.
@@ -330,7 +408,9 @@ func (g *Grid) rows(cols []float32, avail float32) []float32 {
 		}
 		spans = append(spans, [3]float32{float32(cell.Row), float32(cell.RowSpan), h})
 	})
-	return solve(g.Rows, nr, content, spans, g.rowGap(), avail)
+	// No minimum for rows: height-for-width is the direction that
+	// matters, and nothing here folds sideways to get shorter.
+	return solve(g.Rows, nr, content, nil, spans, g.rowGap(), avail)
 }
 
 func sum(v []float32, gap float32) float32 {
@@ -347,9 +427,25 @@ func sum(v []float32, gap float32) float32 {
 func (g *Grid) Measure(c layout.Constraints) paintengine2d.Point {
 	cols := g.columns(-1)
 	w := sum(cols, g.colGap())
-	if c.HasMaxW() && w > c.MaxW {
+	if c.HasMaxW() {
+		if w > c.MaxW {
+			w = c.MaxW
+		}
+		// Row heights are measured at the widths Arrange will hand out,
+		// not at the columns' natural ones.
+		//
+		// Arrange always calls columns(r.Dx()), which shares the whole
+		// width out; Measure only did that when the natural widths did
+		// not fit, so a grid with room to spare measured its rows narrow
+		// and laid them out wide. A child whose height depends on its
+		// width — a wrapping label, a chip field — was therefore measured
+		// tall and arranged short, and the form kept the difference as
+		// blank space under it.
+		//
+		// The reported width stays the natural one where it fits, so a
+		// grid is not greedy in a row that would otherwise leave it
+		// alone.
 		cols = g.columns(c.MaxW)
-		w = c.MaxW
 	}
 	h := sum(g.rows(cols, -1), g.rowGap())
 	return c.Constrain(paintengine2d.Pt(w, h))

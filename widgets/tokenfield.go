@@ -1,6 +1,7 @@
 package widgets
 
 import (
+	"math"
 	"strings"
 
 	"github.com/codemodify/paintengine2d"
@@ -507,6 +508,16 @@ func (f *TokenField) pad() style.Insets {
 // — or a line of its own when what is left of that one is too narrow to
 // type in. Rects are in the field's local space.
 func (f *TokenField) flow(maxW float32) (chips []paintengine2d.Rect, editor paintengine2d.Rect, size paintengine2d.Point) {
+	// Flow at a whole-pixel width, because that is what Arrange will
+	// have: SetBounds snaps a component's bounds to the pixel grid, so a
+	// measure taken at 300.4 and a layout done at 300 disagree — one
+	// fits a child on the line that the other folds, and the difference
+	// shows as a line's height of empty space under the last row, or a
+	// row running past the edge. Rounding both to the same grid makes
+	// the two passes answer the same question.
+	if maxW > 0 {
+		maxW = float32(math.Round(float64(maxW)))
+	}
 	lk := f.Look()
 	in := f.pad()
 	gap := style.Dip(lk, 4)

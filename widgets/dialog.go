@@ -84,14 +84,29 @@ func (o *Overlay) Arrange(r paintengine2d.Rect) {
 	if f := style.Dip(lk, 140); minH < f {
 		minH = f
 	}
+	// The width is settled first, because the height depends on it.
 	if cs.X < minW {
 		cs.X = minW
 	}
-	if cs.Y < minH {
-		cs.Y = minH
-	}
 	if cs.X > r.Dx()*0.92 {
 		cs.X = r.Dx() * 0.92
+	}
+	// Height for the width the card is actually getting — Qt's
+	// heightForWidth, one level up.
+	//
+	// The card was measured at 0.8 of the overlay and is arranged at
+	// anything from the 280-pixel floor to 0.92 of it, so the two widths
+	// routinely differ, and a card narrowed by that cap wraps into more
+	// lines than were measured. Its last lines and its buttons were then
+	// drawn outside it, where clicks on them missed — a confirmation with
+	// a long program path in its text did exactly this. Asking again is
+	// the only answer: no measurement made before the width is known can
+	// be right about the height.
+	if again := o.Card.Measure(layout.Constraints{MaxW: cs.X, MaxH: -1}); again.Y > cs.Y {
+		cs.Y = again.Y
+	}
+	if cs.Y < minH {
+		cs.Y = minH
 	}
 	if cs.Y > r.Dy()*0.88 {
 		cs.Y = r.Dy() * 0.88

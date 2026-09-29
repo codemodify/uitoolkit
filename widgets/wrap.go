@@ -56,6 +56,16 @@ func (w *Wrap) gaps() (gap, line float32) {
 // flow places the visible children in lines no wider than maxW (< 0: one
 // line) and reports each child's rect and the extent they cover.
 func (w *Wrap) flow(maxW float32) ([]paintengine2d.Rect, paintengine2d.Point) {
+	// Flow at a whole-pixel width, because that is what Arrange will
+	// have: SetBounds snaps a component's bounds to the pixel grid, so a
+	// measure taken at 300.4 and a layout done at 300 disagree — one
+	// fits a child on the line that the other folds, and the difference
+	// shows as a line's height of empty space under the last row, or a
+	// row running past the edge. Rounding both to the same grid makes
+	// the two passes answer the same question.
+	if maxW > 0 {
+		maxW = float32(math.Round(float64(maxW)))
+	}
 	gap, lineGap := w.gaps()
 	kids := w.Children()
 	rects := make([]paintengine2d.Rect, len(kids))
