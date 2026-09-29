@@ -13,8 +13,21 @@ import (
 // each line is aligned and, when too long, elided on its own.
 type Label struct {
 	widget.Base
-	Text  string
+	Text string
+	// Color overrides everything: a literal colour, in device terms,
+	// which does not follow the look. Prefer Tone.
 	Color paintengine2d.Color
+	// Tone is what the text *means* — a warning, an error, a success —
+	// resolved against the look's palette at paint time, so it follows a
+	// theme change and stays readable on whatever ground the pack uses.
+	//
+	// It is the answer to a colour that is right in one theme and
+	// invisible in another: the palette's status colours are era-faithful
+	// and most of them do not reach 4.5:1 as text, so a label takes the
+	// ink form of them ([style.Palette.Ink]) rather than the declared
+	// one. An application that set Color from the palette itself got the
+	// unreadable version, and had to re-set it on every look change.
+	Tone  LabelTone
 	Align style.Align
 	Title bool
 	Mono  bool
@@ -135,7 +148,7 @@ func (l *Label) Paint(ctx *paintengine2d.Context) {
 	f := l.font()
 	col := l.Color
 	if col == (paintengine2d.Color{}) {
-		col = lk.Palette().Text
+		col = l.Tone.colorIn(lk)
 	}
 	b := l.LocalBounds()
 	lines := l.layoutLines(f, b.Dx()-2)
@@ -171,4 +184,41 @@ func (l *Label) Paint(ctx *paintengine2d.Context) {
 func near(a, b paintengine2d.Color) bool {
 	dr, dg, db := a.R-b.R, a.G-b.G, a.B-b.B
 	return dr*dr+dg*dg+db*db < 0.002
+}
+
+// LabelTone is what a label's text means, which decides its colour.
+type LabelTone uint8
+
+const (
+	// ToneNormal is ordinary text in the palette's text colour.
+	ToneNormal LabelTone = iota
+	// ToneMuted is secondary text — a hint, a caption, a unit.
+	ToneMuted
+	// ToneDanger, ToneWarning and ToneSuccess are the three status
+	// meanings, in the readable ink form of the palette's status colours
+	// rather than the declared ones, which are chosen for fills and are
+	// mostly too faint to read as text.
+	ToneDanger
+	ToneWarning
+	ToneSuccess
+	// ToneAccent is the palette's accent, lifted to be readable.
+	ToneAccent
+)
+
+func (t LabelTone) colorIn(lk style.LookAndFeel) paintengine2d.Color {
+	p := lk.Palette()
+	switch t {
+	case ToneMuted:
+		return p.TextMuted
+	case ToneDanger:
+		return p.DangerInk()
+	case ToneWarning:
+		return p.WarningInk()
+	case ToneSuccess:
+		return p.SuccessInk()
+	case ToneAccent:
+		return p.Ink(p.Accent)
+	default:
+		return p.Text
+	}
 }

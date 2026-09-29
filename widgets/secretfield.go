@@ -89,6 +89,18 @@ func NewSecretField(placeholder string) *SecretField {
 	return f
 }
 
+// IsSecret implements [widget.SecretTarget]: always, whatever mode the
+// field is in. Revealing the value is the user asking to read their own
+// passphrase; it is not permission to send it through an input method,
+// which is another process that sees every keystroke and learns from it.
+//
+// Not being a [widget.IMETarget] already kept the input method away from
+// this widget. Declaring it as well is what lets anything that asks the
+// question — a window deciding whether to turn secure input on, a
+// backend deciding what to tell the compositor — get a straight answer
+// rather than inferring one from an absence.
+func (f *SecretField) IsSecret() bool { return true }
+
 // Bytes is a copy of the contents. The caller owns it and should wipe it
 // ([SecretField.WipeBytes] is the same loop) when it is done.
 func (f *SecretField) Bytes() []byte {
@@ -272,11 +284,15 @@ func (f *SecretField) fieldPad() float32 {
 // a string made of nothing but bullets, so it can go anywhere a string
 // goes — the engine's own field painter, the accessibility tree — while
 // the contents cannot.
-func (f *SecretField) mask() string {
-	if n := f.Len(); n > 0 {
-		return strings.Repeat("•", n)
+func (f *SecretField) mask() string { return bullets(f.Len()) }
+
+// bullets is n masking characters. It is one place so the field and the
+// area cannot drift to different marks.
+func bullets(n int) string {
+	if n <= 0 {
+		return ""
 	}
-	return ""
+	return strings.Repeat("•", n)
 }
 
 // maskOffset maps a byte offset in the buffer to a rune index in the

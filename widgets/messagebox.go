@@ -89,18 +89,39 @@ type MessageBoxInput struct {
 	// and makes Return do nothing — a "name this folder" dialog must not
 	// be able to return an empty name.
 	Required bool
+	// Validate vets the value when the accepting button is pressed.
+	// Returning an error keeps the dialog up and shows the error under
+	// the field, with what the user typed still there.
+	//
+	// Without it a prompt could only dismiss and report, so a value the
+	// caller had to refuse — "a folder with that name already exists" —
+	// meant a second dialog complaining, then the prompt opened again
+	// with the text put back. The refusal belongs where the value was
+	// typed.
+	//
+	// It runs on the UI goroutine, so it is for a check the caller can
+	// make at once. A check that is a round trip to a server should
+	// accept the dialog, do the work, and open a fresh prompt on failure
+	// — or keep the dialog and call [MessageBox.SetInputError] when the
+	// answer comes back.
+	Validate func(string) error
+	// AcceptLabel names the accepting button ("Rename", "Create") in
+	// place of the stock OK or Yes. Every desktop's guidelines say a
+	// button names its action.
+	AcceptLabel string
 }
 
 // MessageBox is the card inside a modal Overlay.
 type MessageBox struct {
 	widget.Base
-	opts    MessageBoxOptions
-	result  MessageResult
-	done    bool
-	overlay *Overlay
-	field   *TextField
-	primary *Button
-	text    string
+	opts     MessageBoxOptions
+	result   MessageResult
+	done     bool
+	overlay  *Overlay
+	field    *TextField
+	errLabel *Label
+	primary  *Button
+	text     string
 }
 
 // NewMessageBox builds an overlay + card. Call Show on a host, or use ShowMessageBox.
@@ -129,6 +150,14 @@ func NewMessageBox(opts MessageBoxOptions) *MessageBox {
 		// to it, which is what every rename dialog does.
 		mb.field.SelectAll()
 		body.Add(mb.field)
+		// The refusal goes under the field, where the value was typed.
+		// It is hidden until there is one, so it takes no room in a
+		// dialog that never refuses anything.
+		mb.errLabel = NewLabel("")
+		mb.errLabel.Wrap = true
+		mb.errLabel.Tone = ToneDanger
+		mb.errLabel.SetVisible(false)
+		body.Add(mb.errLabel)
 	}
 
 	head := NewRow(icon, body).WithGap(12).WithAlign(layout.AlignStart)
@@ -158,7 +187,7 @@ func NewMessageBox(opts MessageBoxOptions) *MessageBox {
 		mb.overlay.InitialFocus = mb.field
 		mb.field.OnSubmit = func(string) {
 			if mb.acceptable() {
-				mb.finish(mb.acceptResult())
+				mb.accept(mb.acceptResult())
 			}
 		}
 		if mb.primary != nil {
@@ -181,7 +210,10 @@ func NewMessageBox(opts MessageBoxOptions) *MessageBox {
 
 func (mb *MessageBox) actionButtons() []widget.Component {
 	add := func(label string, primary bool, res MessageResult) *Button {
-		b := NewButton(label, func() { mb.finish(res) })
+		if primary && mb.opts.Input != nil && mb.opts.Input.AcceptLabel != "" {
+			label = mb.opts.Input.AcceptLabel
+		}
+		b := NewButton(label, func() { mb.accept(res) })
 		b.Primary = primary
 		if primary {
 			mb.primary = b
@@ -231,6 +263,49 @@ func (mb *MessageBox) acceptable() bool {
 		return true
 	}
 	return strings.TrimSpace(mb.field.Text) != ""
+}
+
+// accept runs the caller's check before dismissing, where there is one
+// and the result is the accepting one. A refused value keeps the dialog
+// up with the reason under the field.
+func (mb *MessageBox) accept(res MessageResult) {
+	if mb.field == nil || mb.opts.Input == nil || mb.opts.Input.Validate == nil ||
+		res != mb.acceptResult() {
+		mb.finish(res)
+		return
+	}
+	if err := mb.opts.Input.Validate(mb.field.Text); err != nil {
+		mb.SetInputError(err.Error())
+		return
+	}
+	mb.finish(res)
+}
+
+// SetInputError shows a message under the input field and keeps the
+// dialog up, or clears it when msg is empty. It is what
+// [MessageBoxInput.Validate] uses, and what a caller whose check is a
+// round trip calls when the answer arrives.
+func (mb *MessageBox) SetInputError(msg string) {
+	if mb == nil || mb.errLabel == nil {
+		return
+	}
+	mb.errLabel.Text = msg
+	mb.errLabel.SetVisible(msg != "")
+	if mb.field != nil {
+		mb.field.RequestFocus()
+	}
+	if mb.overlay != nil {
+		mb.overlay.RequestLayout()
+		mb.overlay.Invalidate()
+	}
+}
+
+// InputError is the message currently shown under the field.
+func (mb *MessageBox) InputError() string {
+	if mb == nil || mb.errLabel == nil {
+		return ""
+	}
+	return mb.errLabel.Text
 }
 
 func (mb *MessageBox) finish(res MessageResult) {
@@ -312,10 +387,17 @@ func Confirm(from widget.Component, title, message string, on func(bool)) *Messa
 // It is the "name this" dialog: a new folder, a rename, a saved search.
 // Anything more than one field is a form, and a form is a window.
 func Prompt(from widget.Component, title, label, initial string, on func(string, bool)) *MessageBox {
+	return PromptFor(from, title, label, MessageBoxInput{Text: initial}, on)
+}
+
+// PromptFor is [Prompt] with the field configured: a named accept button
+// ("Rename", "Create"), a required value, a password field, or a
+// Validate that refuses one without closing the dialog.
+func PromptFor(from widget.Component, title, label string, in MessageBoxInput, on func(string, bool)) *MessageBox {
 	var mb *MessageBox
 	mb = NewMessageBox(MessageBoxOptions{
 		Title: title, Message: label, Kind: MessageQuestion, Buttons: ButtonsOKCancel,
-		Input: &MessageBoxInput{Text: initial},
+		Input: &in,
 		OnResult: func(r MessageResult) {
 			if on != nil {
 				on(mb.Text(), r == ResultOK)

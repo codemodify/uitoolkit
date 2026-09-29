@@ -130,12 +130,38 @@ func ShowOverlay(from Component, overlay Component) bool {
 	}
 	overlay.SetHost(h)
 	inheritLook(from, overlay, h)
-	oh.SetOverlay(overlay)
+	// A host that stacks puts this one on top of whatever is already
+	// there; one that does not replaces it, as it always did. A
+	// confirmation raised from inside a dialog used to close that dialog
+	// and run its OnClose — which for a dialog that wipes its secret
+	// fields on close wiped them.
+	if st, ok := h.(OverlayStackHost); ok {
+		st.PushOverlay(overlay)
+	} else {
+		oh.SetOverlay(overlay)
+	}
 	notifyPresented(from, overlay)
 	return true
 }
 
-// DismissOverlay closes the window overlay layer, if any.
+// OverlayStackHost is a host whose overlays stack: a dialog raised from
+// inside another comes back to it. A host without it has one overlay,
+// and showing a second replaces the first.
+type OverlayStackHost interface {
+	PushOverlay(Component)
+	PopOverlay(Component) bool
+	Overlay() Component
+	// Overlays is the stack, oldest first.
+	Overlays() []Component
+}
+
+// DismissOverlay closes the overlay from is in — the top one where they
+// stack — and leaves whatever was under it up.
+//
+// An overlay that is no longer on the stack closes nothing. That case is
+// reached on the way out of a dismissal: an overlay's OnClose commonly
+// calls back into the code that closes it, and popping "the top" there
+// would take the dialog *underneath* down with it.
 func DismissOverlay(from Component) {
 	if from == nil {
 		return
@@ -144,9 +170,29 @@ func DismissOverlay(from Component) {
 	if h == nil {
 		return
 	}
+	if st, ok := h.(OverlayStackHost); ok {
+		root := overlayRootOf(from)
+		for _, o := range st.Overlays() {
+			if o == from || o == root {
+				st.PopOverlay(o)
+				return
+			}
+		}
+		return
+	}
 	if oh, ok := h.(OverlayHost); ok {
 		oh.SetOverlay(nil)
 	}
+}
+
+// overlayRootOf is the top of from's own tree, which is the overlay it
+// sits in when it sits in one.
+func overlayRootOf(from Component) Component {
+	root := from
+	for n := from; n != nil; n = n.Parent() {
+		root = n
+	}
+	return root
 }
 
 // Retains reports whether c or an ancestor wants the dismiss-click delivered.

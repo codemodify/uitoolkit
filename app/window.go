@@ -31,12 +31,18 @@ type Window struct {
 	surf       platform.Surface
 	root       widget.Component
 	overlay    widget.Component
-	popup      widget.Component
-	tooltip    widget.Component
-	look       style.LookAndFeel
-	dirty      paintengine2d.Damage
-	full       bool
-	focus      widget.Component
+	// overlays is the dialog stack, oldest first; overlay is always its
+	// top, or nil. A window had one overlay, so a confirmation raised
+	// from inside a dialog replaced that dialog and ran its OnClose —
+	// which for a dialog that wipes its secret fields on close wiped them
+	// (app/window.go, PushOverlay).
+	overlays []widget.Component
+	popup    widget.Component
+	tooltip  widget.Component
+	look     style.LookAndFeel
+	dirty    paintengine2d.Damage
+	full     bool
+	focus    widget.Component
 	// The lock keys as of the last event that carried modifiers, and
 	// whether any event has carried them yet (app/lockkeys.go).
 	lockCaps, lockNum, lockKnown bool
@@ -504,17 +510,33 @@ func (w *Window) setActive(active bool) {
 	w.fullInvalidate()
 }
 
+// SetOverlay replaces the whole overlay stack with c, dismissing every
+// overlay that was up. Passing nil closes them all.
+//
+// [Window.PushOverlay] is what a dialog raised from inside another one
+// wants; this is the "there is one dialog" call, and it is what Escape
+// and a click on the dimmer still do to the top one.
 func (w *Window) SetOverlay(c widget.Component) {
-	if w.overlay == c {
+	if len(w.overlays) == 1 && w.overlays[0] == c {
 		return
 	}
-	old := w.overlay
-	w.overlay = c
+	if c == nil && len(w.overlays) == 0 {
+		return
+	}
+	old := w.overlays
+	w.overlays = nil
 	if c != nil {
+		w.overlays = []widget.Component{c}
 		c.SetHost(w)
 	}
-	if old != nil {
-		if d, ok := old.(widget.Dismisser); ok {
+	w.overlay = c
+	// Newest first: an overlay restores focus to its anchor, and the
+	// anchor of the one below is where the focus should end up.
+	for i := len(old) - 1; i >= 0; i-- {
+		if old[i] == c {
+			continue
+		}
+		if d, ok := old[i].(widget.Dismisser); ok {
 			d.Dismissed()
 		}
 	}
@@ -525,7 +547,71 @@ func (w *Window) SetOverlay(c widget.Component) {
 	w.fullInvalidate()
 }
 
+// PushOverlay puts c on top of whatever dialog is already up, without
+// dismissing it: a confirmation raised from inside a dialog comes back
+// to that dialog, with its fields as they were.
+//
+// Only the top one takes the keyboard and the pointer; the ones under it
+// are still painted, because a dialog that vanished while a confirmation
+// asked about it would be asking about nothing the user can see.
+func (w *Window) PushOverlay(c widget.Component) {
+	if w == nil || c == nil {
+		return
+	}
+	for _, o := range w.overlays {
+		if o == c {
+			return
+		}
+	}
+	w.overlays = append(w.overlays, c)
+	w.overlay = c
+	c.SetHost(w)
+	w.laid = false
+	w.fullInvalidate()
+}
+
+// PopOverlay takes c off the stack and dismisses it, leaving whatever
+// was under it up and focused. c is usually the top; popping one from
+// the middle is allowed, and dismisses only that one.
+//
+// It reports whether c was on the stack.
+func (w *Window) PopOverlay(c widget.Component) bool {
+	if w == nil || c == nil {
+		return false
+	}
+	at := -1
+	for i, o := range w.overlays {
+		if o == c {
+			at = i
+			break
+		}
+	}
+	if at < 0 {
+		return false
+	}
+	w.overlays = append(w.overlays[:at], w.overlays[at+1:]...)
+	w.overlay = nil
+	if n := len(w.overlays); n > 0 {
+		w.overlay = w.overlays[n-1]
+	}
+	if d, ok := c.(widget.Dismisser); ok {
+		d.Dismissed()
+	}
+	w.dropDeadRefs()
+	w.laid = false
+	w.fullInvalidate()
+	return true
+}
+
+// Overlay is the dialog on top, or nil.
 func (w *Window) Overlay() widget.Component { return w.overlay }
+
+// Overlays is the whole stack, oldest first.
+func (w *Window) Overlays() []widget.Component {
+	out := make([]widget.Component, len(w.overlays))
+	copy(out, w.overlays)
+	return out
+}
 
 func (w *Window) SetPopup(c widget.Component) {
 	old := w.popup
@@ -749,7 +835,8 @@ func (w *Window) RequestFocus(c widget.Component) {
 // draws one. The caption is a concrete type, so it only joins when there
 // is one.
 func (w *Window) notifyRoots() []widget.Component {
-	roots := []widget.Component{w.root, w.overlay, w.popup}
+	roots := []widget.Component{w.root, w.popup}
+	roots = append(roots, w.overlays...)
 	if w.caption != nil {
 		roots = append(roots, w.caption)
 	}
@@ -1251,7 +1338,7 @@ func (w *Window) dismissEscape() bool {
 		return true
 	}
 	if w.overlay != nil {
-		w.SetOverlay(nil)
+		w.PopOverlay(w.overlay)
 		return true
 	}
 	return false
@@ -1640,8 +1727,10 @@ func (w *Window) layout() {
 		if g.framed {
 			ob = g.content
 		}
-		_ = w.overlay.Measure(layout.Tight(ob.Dx(), ob.Dy()))
-		w.overlay.Arrange(ob)
+		for _, o := range w.overlays {
+			_ = o.Measure(layout.Tight(ob.Dx(), ob.Dy()))
+			o.Arrange(ob)
+		}
 	}
 	if w.statusMenu && w.popup != nil {
 		w.popup.Arrange(box)
@@ -1852,8 +1941,8 @@ func (w *Window) paintLayers(ctx *paintengine2d.Context, dirty *paintengine2d.Da
 	if w.root != nil {
 		widget.PaintTree(w.root, ctx, dirty)
 	}
-	if w.overlay != nil {
-		widget.PaintTree(w.overlay, ctx, dirty)
+	for _, o := range w.overlays {
+		widget.PaintTree(o, ctx, dirty)
 	}
 	if w.popup != nil && !w.onPopSurface(w.popup) {
 		widget.WalkCascade(w.popup, func(c widget.Component) {
