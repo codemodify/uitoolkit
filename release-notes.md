@@ -48,7 +48,12 @@ Four changes alter behaviour rather than adding to it.
   settles its card's width before asking for its height. Both measured at
   one width and laid out at another, which left a form taller than what
   it drew and a dialog's buttons outside the dialog, where clicks on them
-  missed.
+  missed. Every other container is swept by a test.
+
+  The same rule applies to an application and cannot be enforced from
+  inside the toolkit: a column measured at 600 and handed a 300-wide box
+  of the height that measurement asked for still puts its last child
+  outside the box. A container cannot grow a box it was given.
 - **`Wrap` and `TokenField` flow at whole pixels**, because that is what
   `Arrange` has. A measure at 300.4 and a layout at 300 disagreed about
   which child fits on the line, and it showed as a line's height of empty
