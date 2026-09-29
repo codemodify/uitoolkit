@@ -274,6 +274,25 @@ caret, the selection, hit-testing and `softWrapped` are all that range;
 edits through the same machinery and has no wrapper of its own. Wrap is for
 painting a paragraph; `layoutAreaMax` is for editing one.
 
+### A wrapping label in a row: the second measure pass
+
+A flex child is measured before the row knows how wide it will be. A
+wrapping label therefore reports the one line its whole text fits on, is
+arranged narrower, wraps to three, and draws them centred in a one-line
+box with the first and last cut off.
+
+`layout.Flex` asks again. Once the main axis is distributed, every child
+whose width the distribution changed is measured a second time at that
+width, and the row takes the taller answer — Qt's `heightForWidth`,
+GTK's height-for-width, WPF's second measure pass. The pass only ever
+**grows** a child: there is no bug in a box that is too big for its
+contents, and shrinking would move the geometry of every row in the
+toolkit for nothing. It is horizontal only, because width-for-height is
+the same idea with the axes swapped and nothing here needs it.
+
+It costs one extra `Measure` per flex child of a row, and nothing at all
+for a row with no flex children.
+
 ## Inventory notes
 
 Only constructors re-exported from `export.go` are listed. Helpers that are
