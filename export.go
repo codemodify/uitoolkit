@@ -615,6 +615,13 @@ const (
 	IconSearch   = style.IconSearch
 	IconInfo     = style.IconInfo
 	IconWarning  = style.IconWarning
+	IconAttach   = style.IconAttach
+	IconStar     = style.IconStar
+	IconFlag     = style.IconFlag
+	IconReply    = style.IconReply
+	IconForward  = style.IconForward
+	IconCheck    = style.IconCheck
+	IconMute     = style.IconMute
 	IconError    = style.IconError
 	IconQuestion = style.IconQuestion
 	IconMail     = style.IconMail

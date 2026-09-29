@@ -30,6 +30,19 @@ const (
 	IconMail
 	IconDownload
 	IconPen
+	// The marks a list view puts beside a row, added when a mail client
+	// needed them and found that a cell could only hold characters: a
+	// paperclip, a star, a flag, reply and forward, a check and a muted
+	// bell. Every one of them resolves to a PNG the five shipped icon
+	// sets already carry ([ShippedIconStems]), so they are icons in the
+	// full sense rather than drawn-only stand-ins.
+	IconAttach
+	IconStar
+	IconFlag
+	IconReply
+	IconForward
+	IconCheck
+	IconMute
 )
 
 var toolIconLabels = [...]string{
@@ -38,6 +51,9 @@ var toolIconLabels = [...]string{
 	IconSearch: "Search", IconInfo: "Information", IconWarning: "Warning",
 	IconError: "Error", IconQuestion: "Question", IconMail: "Mail",
 	IconDownload: "Download", IconPen: "Edit",
+	IconAttach: "Attachment", IconStar: "Star", IconFlag: "Flag",
+	IconReply: "Reply", IconForward: "Forward", IconCheck: "Done",
+	IconMute: "Muted",
 }
 
 // Label is the action the icon stands for, in words ("Save"): what
@@ -70,6 +86,13 @@ var toolIconFiles = []struct {
 	{IconMail, "mail"},
 	{IconDownload, "download"},
 	{IconPen, "pen"},
+	{IconAttach, "attach"},
+	{IconStar, "star"},
+	{IconFlag, "flag"},
+	{IconReply, "reply"},
+	{IconForward, "forward"},
+	{IconCheck, "check"},
+	{IconMute, "bell-off"},
 }
 
 // shippedIconStems is the wide PNG vocabulary rendered by icons/render.sh
@@ -149,6 +172,10 @@ func toolIconAliases(icon ToolIcon) []string {
 		return []string{"fetch"}
 	case IconPen:
 		return []string{"pencil", "compose"}
+	case IconAttach:
+		return []string{"paperclip"}
+	case IconMute:
+		return []string{"bell"}
 	default:
 		return nil
 	}
@@ -222,6 +249,13 @@ var toolIconThemeNames = map[ToolIcon][]string{
 	IconMail:     {"mail-unread", "mail-message", "internet-mail"},
 	IconDownload: {"browser-download", "document-save", "go-down"},
 	IconPen:      {"document-edit", "gtk-edit", "text-editor", "accessories-text-editor"},
+	IconAttach:   {"mail-attachment", "stock_attach"},
+	IconStar:     {"starred", "rating", "bookmark-new"},
+	IconFlag:     {"flag", "mail-mark-important", "emblem-important"},
+	IconReply:    {"mail-reply-sender", "mail-replied"},
+	IconForward:  {"mail-forward", "mail-forwarded"},
+	IconCheck:    {"object-select", "emblem-ok", "gtk-apply"},
+	IconMute:     {"audio-volume-muted", "notification-disabled"},
 }
 
 // ToolIconThemeNames are the freedesktop names an installed icon theme

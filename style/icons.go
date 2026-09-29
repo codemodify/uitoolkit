@@ -1,6 +1,10 @@
 package style
 
-import "github.com/codemodify/paintengine2d"
+import (
+	"math"
+
+	"github.com/codemodify/paintengine2d"
+)
 
 // DrawToolIcon paints a stock ToolIcon in the chosen glyph set.
 // File sets (lucide / phosphor / tabler / heroicons / material-symbols /
@@ -225,6 +229,53 @@ func drawClassicIcon(ctx *paintengine2d.Context, b paintengine2d.Rect, icon Tool
 		tray.LineTo(b.Max.X-2.2, b.Max.Y-2.2)
 		tray.LineTo(b.Max.X-2.2, b.Max.Y-6.2)
 		ctx.DrawPath(tray, stroke)
+	case IconAttach:
+		// A paperclip: a rounded hairpin, open at the bottom left, the
+		// way every set has drawn one since Outlook.
+		clip := paintengine2d.NewPath()
+		clip.MoveTo(b.Min.X+5.4, b.Max.Y-6.2)
+		clip.LineTo(b.Min.X+5.4, b.Min.Y+5.0)
+		clip.QuadTo(cx, b.Min.Y+1.4, b.Max.X-5.4, b.Min.Y+5.0)
+		clip.LineTo(b.Max.X-5.4, b.Max.Y-5.4)
+		clip.QuadTo(cx, b.Max.Y-1.4, b.Min.X+7.6, b.Max.Y-5.4)
+		clip.LineTo(b.Min.X+7.6, b.Min.Y+5.6)
+		ctx.DrawPath(clip, stroke)
+	case IconStar:
+		ctx.DrawPath(starPath(cx, cy, w*0.44, w*0.18), stroke)
+	case IconFlag:
+		pole := paintengine2d.NewPath()
+		pole.MoveTo(b.Min.X+4.2, b.Min.Y+2.2)
+		pole.LineTo(b.Min.X+4.2, b.Max.Y-2.2)
+		ctx.DrawPath(pole, stroke)
+		cloth := paintengine2d.NewPath()
+		cloth.MoveTo(b.Min.X+4.2, b.Min.Y+2.8)
+		cloth.LineTo(b.Max.X-2.6, b.Min.Y+5.4)
+		cloth.LineTo(b.Min.X+4.2, b.Min.Y+8.0)
+		cloth.Close()
+		ctx.DrawPath(cloth, stroke)
+	case IconReply:
+		ctx.DrawPath(replyPath(b, cx, cy, w, h, false), stroke)
+	case IconForward:
+		ctx.DrawPath(replyPath(b, cx, cy, w, h, true), stroke)
+	case IconCheck:
+		tick := paintengine2d.NewPath()
+		tick.MoveTo(b.Min.X+2.8, cy+0.4)
+		tick.LineTo(cx-1.4, b.Max.Y-3.4)
+		tick.LineTo(b.Max.X-2.6, b.Min.Y+3.4)
+		ctx.DrawPath(tick, stroke)
+	case IconMute:
+		bell := paintengine2d.NewPath()
+		bell.MoveTo(b.Min.X+4.4, b.Max.Y-7.0)
+		bell.LineTo(b.Min.X+4.4, cy-1.0)
+		bell.QuadTo(cx, b.Min.Y+1.8, b.Max.X-4.4, cy-1.0)
+		bell.LineTo(b.Max.X-4.4, b.Max.Y-7.0)
+		bell.Close()
+		ctx.DrawPath(bell, stroke)
+		ctx.DrawRect(paintengine2d.XYWH(b.Min.X+3.2, b.Max.Y-7.0, w-6.4, 1.4), fill)
+		slash := paintengine2d.NewPath()
+		slash.MoveTo(b.Min.X+2.4, b.Min.Y+2.4)
+		slash.LineTo(b.Max.X-2.4, b.Max.Y-2.4)
+		ctx.DrawPath(slash, stroke)
 	case IconPen:
 		nib := paintengine2d.NewPath()
 		nib.MoveTo(b.Min.X+3.2, b.Max.Y-3.4)
@@ -364,6 +415,39 @@ func drawSharpIcon(ctx *paintengine2d.Context, b paintengine2d.Rect, icon ToolIc
 		ctx.DrawRect(paintengine2d.XYWH(b.Min.X+2, b.Max.Y-5.4, w-4, 1.5), fill)
 		ctx.DrawRect(paintengine2d.XYWH(b.Min.X+2, b.Max.Y-5.4, 1.5, 3.8), fill)
 		ctx.DrawRect(paintengine2d.XYWH(b.Max.X-3.5, b.Max.Y-5.4, 1.5, 3.8), fill)
+	case IconAttach:
+		ctx.DrawRect(paintengine2d.XYWH(b.Min.X+5.0, b.Min.Y+3.0, 1.6, h*0.56), fill)
+		ctx.DrawRect(paintengine2d.XYWH(b.Max.X-6.6, b.Min.Y+3.0, 1.6, h*0.40), fill)
+		ctx.DrawRect(paintengine2d.XYWH(b.Min.X+5.0, b.Min.Y+3.0, w-11.6, 1.6), fill)
+		ctx.DrawRect(paintengine2d.XYWH(b.Min.X+5.0, b.Max.Y-5.4, w-11.6, 1.6), fill)
+	case IconStar:
+		ctx.DrawPath(starPath(cx, cy, w*0.44, w*0.18), fill)
+	case IconFlag:
+		ctx.DrawRect(paintengine2d.XYWH(b.Min.X+3.6, b.Min.Y+2.2, 1.6, h-4.4), fill)
+		cloth := paintengine2d.NewPath()
+		cloth.MoveTo(b.Min.X+5.2, b.Min.Y+2.6)
+		cloth.LineTo(b.Max.X-2.4, b.Min.Y+2.6)
+		cloth.LineTo(b.Max.X-2.4, b.Min.Y+8.2)
+		cloth.LineTo(b.Min.X+5.2, b.Min.Y+8.2)
+		cloth.Close()
+		ctx.DrawPath(cloth, fill)
+	case IconReply:
+		ctx.DrawPath(replyPath(b, cx, cy, w, h, false), stroke)
+	case IconForward:
+		ctx.DrawPath(replyPath(b, cx, cy, w, h, true), stroke)
+	case IconCheck:
+		tick := paintengine2d.NewPath()
+		tick.MoveTo(b.Min.X+2.6, cy)
+		tick.LineTo(cx-1.6, b.Max.Y-3.6)
+		tick.LineTo(b.Max.X-2.4, b.Min.Y+3.2)
+		ctx.DrawPath(tick, iconStroke(col, 2.2, paintengine2d.CapButt, paintengine2d.JoinMiter))
+	case IconMute:
+		ctx.DrawRect(paintengine2d.XYWH(b.Min.X+4.4, cy-3.4, w-8.8, h*0.34), fill)
+		ctx.DrawRect(paintengine2d.XYWH(b.Min.X+3.2, b.Max.Y-7.2, w-6.4, 1.6), fill)
+		slash := paintengine2d.NewPath()
+		slash.MoveTo(b.Min.X+2.2, b.Min.Y+2.2)
+		slash.LineTo(b.Max.X-2.2, b.Max.Y-2.2)
+		ctx.DrawPath(slash, iconStroke(col, 2.0, paintengine2d.CapButt, paintengine2d.JoinMiter))
 	case IconPen:
 		body := paintengine2d.NewPath()
 		body.MoveTo(b.Min.X+3.4, b.Max.Y-3.2)
@@ -374,4 +458,64 @@ func drawSharpIcon(ctx *paintengine2d.Context, b paintengine2d.Rect, icon ToolIc
 		ctx.DrawPath(body, stroke)
 		ctx.DrawRect(paintengine2d.XYWH(b.Min.X+1.4, b.Max.Y-3.2, 4.2, 1.6), fill)
 	}
+}
+
+// starPath is a five-pointed star, outer radius r and inner radius ri,
+// point up. Both stock sets draw the same shape and differ only in
+// whether it is stroked or filled, because a star is a star: the sets
+// disagree about bevels and corners, not about this.
+func starPath(cx, cy, r, ri float32) *paintengine2d.Path {
+	p := paintengine2d.NewPath()
+	// Ten vertices, alternating outer and inner, starting at the top.
+	const turn = 3.14159265 / 5
+	for i := 0; i < 10; i++ {
+		rad := r
+		if i%2 == 1 {
+			rad = ri
+		}
+		a := float64(float32(i)*turn) - 3.14159265/2
+		x := cx + rad*float32(math.Cos(a))
+		y := cy + rad*float32(math.Sin(a))
+		if i == 0 {
+			p.MoveTo(x, y)
+		} else {
+			p.LineTo(x, y)
+		}
+	}
+	p.Close()
+	return p
+}
+
+// replyPath is the curved arrow both reply and forward are drawn from:
+// an arrowhead at one end and a line that turns down into the message it
+// points back at. forward is the same shape the other way round, which
+// is what every icon set does and why they are one function.
+func replyPath(b paintengine2d.Rect, cx, cy, w, h float32, forward bool) *paintengine2d.Path {
+	p := paintengine2d.NewPath()
+	tipX, backX := b.Min.X+2.4, b.Max.X-3.2
+	headX := b.Min.X + 7.0
+	if forward {
+		tipX, backX = b.Max.X-2.4, b.Min.X+3.2
+		headX = b.Max.X - 7.0
+	}
+	y := b.Min.Y + h*0.34
+	p.MoveTo(headX, y-3.6)
+	p.LineTo(tipX, y)
+	p.LineTo(headX, y+3.6)
+	p.MoveTo(tipX, y)
+	p.LineTo(backX-(backX-tipX)*0.25, y)
+	p.LineTo(backX, y+h*0.22)
+	p.LineTo(backX, b.Max.Y-2.6)
+	return p
+}
+
+// IconSetOf is the icon set a look draws with, for a widget that paints
+// an icon itself rather than through the look. A look that is not this
+// package's own answers with the classic drawn set, which every build
+// has.
+func IconSetOf(look LookAndFeel) IconSetName {
+	if c, ok := look.(*Classic); ok {
+		return c.Icons()
+	}
+	return IconSetClassic
 }

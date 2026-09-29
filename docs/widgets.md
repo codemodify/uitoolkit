@@ -57,7 +57,7 @@ stub; there is no native AppKit/SwiftUI control host.
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | List | `ListView` (`HeightForRows`) | `QListView` / `ListView` | `GtkListView` | `ListBox` | `widget.List` | `ListBox` | `ListBox` | `NSTableView` | `List` | [thumb](screenshots/compare/listview.png) |
 | Card list | `CardList` | `QListView` (delegate) ≈ | `GtkListBox` ≈ | `ItemsControl` ≈ | `widget.List` ≈ | — | `ItemsControl` ≈ | `NSCollectionView` ≈ | `List` ≈ | [thumb](screenshots/compare/cardlist.png) · [mail](screenshots/mail-cards.png) |
-| Table | `TableView` (sticky header, column-resize, `HeightForRows`) | `QTableView` / `TableView` | `GtkColumnView` | `DataGrid` | `widget.Table` | `DataGridView` | `DataGrid` | `NSTableView` | `Table` | [thumb](screenshots/compare/tableview.png) · [gallery](screenshots/gallery-table.png) |
+| Table | `TableView` (sticky header, column-resize, `HeightForRows`, cell and header icons) | `QTableView` / `TableView` | `GtkColumnView` | `DataGrid` | `widget.Table` | `DataGridView` | `DataGrid` | `NSTableView` | `Table` | [thumb](screenshots/compare/tableview.png) · [gallery](screenshots/gallery-table.png) |
 | Tree | `TreeView` | `QTreeView` / `TreeView` | `GtkListView` (tree) / `GtkTreeView` | `TreeView` | `widget.Tree` | `TreeView` | `TreeView` | `NSOutlineView` | `OutlineGroup` / `List` | [thumb](screenshots/compare/treeview.png) · [gallery](screenshots/gallery-tree.png) |
 | Tabs | `TabView` / `TabBar` / `TabPage` (per-tab disable and hide) | `QTabWidget` / `TabBar` | `GtkNotebook` | `TabControl` | `container.AppTabs` | `TabControl` | `TabControl` | `NSTabView` | `TabView` | [thumb](screenshots/compare/tabview.png) |
 | Document tabs (browser style, title bar) | `BrowserTabs` | `QTabBar` (documentMode, tabsClosable, movable) ≈ | `AdwTabBar` | `TabView` (Fluent) ≈ | — | — | — | `NSWindow` tab bar ≈ | `TabView` ≈ | — |
@@ -274,6 +274,38 @@ caret, the selection, hit-testing and `softWrapped` are all that range;
 `Wrap` answers with strings, and with tabs already expanded. `RichText`
 edits through the same machinery and has no wrapper of its own. Wrap is for
 painting a paragraph; `layoutAreaMax` is for editing one.
+
+### Marks in a list: icons, not characters
+
+A message list's marks — a paperclip for an attachment, a star, a flag, a
+muted bell, replied and forwarded — used to have to be *characters*,
+because `TableView` cells and column titles were strings and `TreeNode`
+had a label, a bold flag and a colour swatch. That meant they came out of
+the font, and the bundled face has four of them ([toolkits.md](toolkits.md)) and
+tofu for the rest.
+
+They are icons now. `TableColumn.Icon` marks a column's header,
+`TableView.CellIcon(row, col) (ToolIcon, Color)` marks a cell, and
+`TreeNode.Icon` with `IconTint` marks a node. Seven stock ids were added
+for them — `IconAttach`, `IconStar`, `IconFlag`, `IconReply`,
+`IconForward`, `IconCheck`, `IconMute` — and every one resolves to a PNG
+the five shipped icon sets already carry, so they are icons in the full
+sense rather than drawn-only stand-ins, and the classic and sharp sets
+draw them too.
+
+Three things about the shape of it:
+
+- **A cell with no icon paints exactly what it painted before.** The mark
+  path is taken only for a cell that asks for one, so no existing pixel
+  moves and `CellIcon` costs nothing when it is nil.
+- **A zero colour is the row's own text colour**, which follows selection
+  and hover like the rest of the row. A colour of the caller's own is how
+  a flag is red and a star is amber. What "starred" looks like is the
+  application's business; the toolkit draws the icon it is handed.
+- **A cell with an icon and no text centres the mark**, because a
+  one-glyph column is a column of marks and a mark against the left edge
+  of it reads as an accident. With text, the icon leads and the text
+  follows.
 
 ### A passphrase is not a string
 

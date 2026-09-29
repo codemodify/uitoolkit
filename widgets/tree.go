@@ -17,6 +17,16 @@ type TreeNode struct {
 	Expanded bool
 	Bold     bool
 	Color    paintengine2d.Color // optional tag swatch
+	// Icon is a mark at the trailing end of the row, beside the swatch:
+	// the pin on a folder with an active filter, the bell on a muted
+	// one. IconTint colours it; a zero colour is the row's own text
+	// colour, which follows selection and hover.
+	//
+	// It is at the trailing end rather than before the label because the
+	// leading end belongs to the disclosure triangle and the indent, and
+	// a mark there would move with the depth.
+	Icon     style.ToolIcon
+	IconTint paintengine2d.Color
 	Data     any
 }
 
@@ -330,6 +340,7 @@ func (t *TreeView) Paint(ctx *paintengine2d.Context) {
 				row := paintengine2d.XYWH(0, 0, rw, rh)
 				lk.DrawTreeRow(ctx, row, t.rowState(n), n.Expanded, n.Leaf(), rows[i].depth, n.Label, n.Bold)
 				paintTreeSwatch(ctx, row, n.Color)
+				paintTreeIcon(ctx, lk, row, t.rowState(n), n)
 			},
 		)
 	} else {
@@ -341,6 +352,7 @@ func (t *TreeView) Paint(ctx *paintengine2d.Context) {
 			n := rows[i].node
 			lk.DrawTreeRow(ctx, row, t.rowState(n), n.Expanded, n.Leaf(), rows[i].depth, n.Label, n.Bold)
 			paintTreeSwatch(ctx, row, n.Color)
+			paintTreeIcon(ctx, lk, row, t.rowState(n), n)
 		}
 		ctx.Restore()
 	}
@@ -389,7 +401,8 @@ func (t *TreeView) rowSig(row treeRow) uint64 {
 		extra ^= bits32(c.R)*31 ^ bits32(c.G)*131 ^ bits32(c.B)*313 ^ bits32(c.A)*1013
 	}
 	st := uint64(t.rowState(n))
-	return visualSig(n == t.Selected, n == t.hover, extra^st<<32^st>>32, n.Label)
+	return visualSig(n == t.Selected, n == t.hover,
+		extra^st<<32^st>>32^uint64(n.Icon)<<48, n.Label)
 }
 
 // rowState is n's item state for the look, with its branch-line chain.
@@ -422,6 +435,41 @@ func paintTreeSwatch(ctx *paintengine2d.Context, row paintengine2d.Rect, col pai
 	cx := row.Max.X - 12
 	cy := (row.Min.Y + row.Max.Y) * 0.5
 	ctx.DrawCircle(paintengine2d.Pt(cx, cy), side*0.5, paintengine2d.Fill(col))
+}
+
+// paintTreeIcon puts the node's mark at the trailing end of the row,
+// inside the swatch where there is one — the swatch is the node's colour
+// and the icon is what it is doing, and a folder can have both.
+func paintTreeIcon(ctx *paintengine2d.Context, lk style.LookAndFeel, row paintengine2d.Rect, st style.ControlState, n *TreeNode) {
+	if n == nil || n.Icon == style.IconNone {
+		return
+	}
+	sz := row.Dy() - style.Dip(lk, 6)
+	if maxSz := style.Dip(lk, 18); sz > maxSz {
+		sz = maxSz
+	}
+	if sz < style.Dip(lk, 9) {
+		return
+	}
+	x := row.Max.X - style.Dip(lk, 8) - sz
+	if n.Color != (paintengine2d.Color{}) {
+		// Left of the swatch, which owns the trailing corner.
+		x -= style.Dip(lk, 14)
+	}
+	if x < row.Min.X {
+		return
+	}
+	col := n.IconTint
+	if col == (paintengine2d.Color{}) {
+		col = lk.Palette().Text
+		if st.Checked() {
+			if on := lk.Palette().TextOnAccent; on != (paintengine2d.Color{}) {
+				col = on
+			}
+		}
+	}
+	y := row.Min.Y + (row.Dy()-sz)*0.5
+	style.DrawToolIcon(ctx, paintengine2d.XYWH(x, y, sz, sz), n.Icon, col, style.IconSetOf(lk))
 }
 
 func (t *TreeView) rowAt(y float32) int {

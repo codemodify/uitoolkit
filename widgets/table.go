@@ -20,19 +20,40 @@ type TableColumn struct {
 	MinWidth float32
 	Sortable bool
 	Align    style.Align
+	// Icon is drawn at the head of the column, before Title, or instead
+	// of it where Title is empty — which is what a narrow column of
+	// marks wants: a paperclip over the attachment column says what it
+	// is in the width the column has.
+	Icon style.ToolIcon
 }
 
 // TableView is a virtualized row/column grid with optional sort headers.
 type TableView struct {
 	widget.Base
-	Columns    []TableColumn
-	RowCount   int
-	RowHeight  float32
-	Selected   int
-	SortCol    int
-	SortAsc    bool
-	CellText   func(row, col int) string
-	CellBold   func(row, col int) bool
+	Columns   []TableColumn
+	RowCount  int
+	RowHeight float32
+	Selected  int
+	SortCol   int
+	SortAsc   bool
+	CellText  func(row, col int) string
+	CellBold  func(row, col int) bool
+	// CellIcon is the mark in a cell: a paperclip on a row with an
+	// attachment, a star, a muted bell. It is asked for every painted
+	// cell, so it must be cheap; [style.IconNone] means no mark, which
+	// is the answer for nearly every cell and costs nothing.
+	//
+	// The colour tints it. A zero colour is the text colour the row
+	// would use, which follows selection and hover like any other text;
+	// a colour of the caller's own is how a flag is red and a star is
+	// amber. The state a mark carries is the application's business —
+	// the toolkit has no opinion about what "starred" looks like beyond
+	// drawing the icon it is handed.
+	//
+	// A cell with an icon and text puts the icon first and the text
+	// after it. A cell with an icon and no text is a mark on its own,
+	// centred in the column, which is what a one-glyph column is for.
+	CellIcon   func(row, col int) (style.ToolIcon, paintengine2d.Color)
 	OnSelect   func(row int)
 	OnActivate func(row int) // Return / Space / double click; falls back to OnSelect
 	OnSort     func(col int, asc bool)
@@ -514,7 +535,16 @@ func (t *TableView) paintHeader(ctx *paintengine2d.Context, lk style.LookAndFeel
 		if i == t.pressCol {
 			st |= style.StatePressed
 		}
-		lk.DrawTableHeader(ctx, hb, st, col.Title, t.SortCol == i, t.SortAsc)
+		if col.Icon == style.IconNone {
+			lk.DrawTableHeader(ctx, hb, st, col.Title, t.SortCol == i, t.SortAsc)
+		} else {
+			// The engine paints the header and its sort arrow with no
+			// title in it; the icon and the title go on top, so a look
+			// keeps its own chrome and the column keeps its mark.
+			lk.DrawTableHeader(ctx, hb, st, "", t.SortCol == i, t.SortAsc)
+			t.paintCellMark(ctx, lk, hb, col.Icon, paintengine2d.Color{},
+				col.Title, lk.Font(), lk.Palette().Text, col.Align)
+		}
 		x += w
 	}
 }
@@ -543,7 +573,15 @@ func (t *TableView) paintRow(ctx *paintengine2d.Context, lk style.LookAndFeel, w
 		if col == len(t.Columns)-1 {
 			cst |= style.StateLast
 		}
-		lk.DrawTableCell(ctx, cell, cst, label, t.Columns[col].Align, face)
+		icon, tint := style.IconNone, paintengine2d.Color{}
+		if t.CellIcon != nil {
+			icon, tint = t.CellIcon(row, col)
+		}
+		if icon == style.IconNone {
+			lk.DrawTableCell(ctx, cell, cst, label, t.Columns[col].Align, face)
+		} else {
+			t.paintIconCell(ctx, lk, cell, cst, label, icon, tint, face, t.Columns[col].Align)
+		}
 		cx += w
 	}
 	if st.Focused() {
@@ -1062,4 +1100,75 @@ func (t *TableView) ensureVisible(i int) {
 		t.OffsetY = bot - view
 	}
 	t.clamp()
+}
+
+// iconCellSize is how big a mark in a cell or a header is: the row's
+// height less the padding either side, capped so a tall row does not get
+// a poster. It is the same rule a tool button follows.
+func (t *TableView) iconCellSize(box paintengine2d.Rect) float32 {
+	sz := box.Dy() - style.Dip(t.Look(), 6)
+	if max := style.Dip(t.Look(), 20); sz > max {
+		sz = max
+	}
+	if min := style.Dip(t.Look(), 10); sz < min {
+		sz = min
+	}
+	return sz
+}
+
+// paintIconCell draws the cell's own chrome through the engine — with no
+// text in it, so the look's selection, grid and alternation are still
+// the look's — and then the mark and the label on top.
+func (t *TableView) paintIconCell(ctx *paintengine2d.Context, lk style.LookAndFeel,
+	cell paintengine2d.Rect, st style.ControlState, label string,
+	icon style.ToolIcon, tint paintengine2d.Color, face *style.Font, align style.Align) {
+	lk.DrawTableCell(ctx, cell, st, "", align, face)
+	// The colour the row's text is in, so an unteinted mark follows the
+	// selection the way the rest of the row does.
+	fg := lk.Palette().Text
+	if st.Checked() {
+		if on := lk.Palette().TextOnAccent; on != (paintengine2d.Color{}) {
+			fg = on
+		}
+	}
+	if st.Disabled() {
+		fg = lk.Palette().TextMuted
+	}
+	t.paintCellMark(ctx, lk, cell, icon, tint, label, face, fg, align)
+}
+
+// paintCellMark puts the icon at the leading end and the label after it,
+// or the icon alone in the middle when there is no label — a column of
+// one glyph is a column of marks, and a mark hugging the left edge of it
+// reads as an accident.
+func (t *TableView) paintCellMark(ctx *paintengine2d.Context, lk style.LookAndFeel,
+	box paintengine2d.Rect, icon style.ToolIcon, tint paintengine2d.Color,
+	label string, face *style.Font, fg paintengine2d.Color, align style.Align) {
+	sz := t.iconCellSize(box)
+	pad := style.Dip(lk, 4)
+	col := tint
+	if col == (paintengine2d.Color{}) {
+		col = fg
+	}
+	y := box.Min.Y + (box.Dy()-sz)*0.5
+	if label == "" {
+		x := box.Min.X + (box.Dx()-sz)*0.5
+		style.DrawToolIcon(ctx, paintengine2d.XYWH(x, y, sz, sz), icon, col, style.IconSetOf(lk))
+		return
+	}
+	x := box.Min.X + pad
+	style.DrawToolIcon(ctx, paintengine2d.XYWH(x, y, sz, sz), icon, col, style.IconSetOf(lk))
+	textX := x + sz + pad
+	room := box.Max.X - pad - textX
+	if room <= 0 || face == nil {
+		return
+	}
+	shown := label
+	if face.Advance(shown) > room {
+		shown = face.Fit(shown, room)
+	}
+	if align == style.AlignEnd {
+		textX = box.Max.X - pad - face.Advance(shown)
+	}
+	face.Draw(ctx, shown, paintengine2d.Pt(textX, box.Min.Y+(box.Dy()-face.Height())*0.5), col)
 }
