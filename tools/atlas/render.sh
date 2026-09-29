@@ -12,7 +12,7 @@ mkdir -p "$OUT/bin" "$OUT/full" "$OUT/previews" "$OUT/gallery" "$OUT/cfg" "$OUT/
 # -tags theme_engine_all, because theme engines are opt-in (docs/engines.md)
 # and this atlas is meant to hold every pack. Without it these three
 # binaries carry the default engine alone and the "full" atlas quietly
-# renders 12 packs out of 131 — a complete-looking artifact that is
+# renders 12 packs out of 132 — a complete-looking artifact that is
 # missing nine tenths of its subject.
 TAGS=theme_engine_all
 (cd "$REPO" && go build -tags "$TAGS" -o "$OUT/bin/settings" ./cmd/uitoolkit-settings &&

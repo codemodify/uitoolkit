@@ -106,6 +106,25 @@ Headless widget + driver suite (no display, no CGO):
 CGO_ENABLED=0 go test ./...
 ```
 
+### The screenshots in the documentation are scripted
+
+Every picture under `docs/screenshots` is rebuilt by a command, and that
+is a rule rather than a convenience: a screenshot no script can rebuild
+is one that will be wrong and stay wrong, because by the time the thing
+it shows has changed nobody can reconstruct how it was taken.
+
+```bash
+tools/atlas/render.sh          # every pack, twice: the preview and the gallery
+python3 tools/atlas/build.py   # the Theme Atlas page the timeline is cut from
+tools/atlas/sheets.sh          # the contact sheet per decade, and the timeline
+tools/atlas/frames.sh          # one window frame per era
+tools/atlas/breadth.sh         # rich text, MDI and the wizard in nine looks
+go run -tags theme_engine_all ./cmd/uitk-shots docs/screenshots
+```
+
+The last one writes the gallery and the per-widget comparison thumbnails.
+All of them are headless; nothing opens on the desktop.
+
 ### Driving a headless window from an application's own tests
 
 `Headless: true` makes a window that renders to a buffer and takes
