@@ -1786,6 +1786,11 @@ func (l *Classic) DrawPanel(ctx *paintengine2d.Context, b paintengine2d.Rect, ra
 
 func (l *Classic) DrawButton(ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string) {
 	l.eng().DrawButton(l, ctx, b, st, label)
+	// A pack whose engine ignores Primary gets a ring, so that every
+	// pack says which button Enter presses. A pack that paints its own
+	// default face is left alone — the measurement is what decides, not
+	// a list (style/primaryface.go).
+	DrawDefaultMark(l, ctx, b, st)
 }
 
 func (l *Classic) DrawLabel(ctx *paintengine2d.Context, b paintengine2d.Rect, text string, col paintengine2d.Color, align Align) {

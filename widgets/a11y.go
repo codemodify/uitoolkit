@@ -994,3 +994,12 @@ func (f *SecretField) Describe(n *a11y.Node) {
 // string into the buffer and hand this widget the one thing it exists to
 // avoid; a screen reader types into it like anyone else.
 func (f *SecretField) AccessibleSetText(string) bool { return false }
+
+// Describe: a secret label reports how many characters it is showing and
+// not which. A screen reader saying a password aloud is the thing this
+// widget exists to prevent, revealed or not — what is on screen is the
+// user's own choice to make in a room they can see.
+func (l *SecretLabel) Describe(n *a11y.Node) {
+	n.Role = a11y.RoleLabel
+	n.Value = l.mask()
+}

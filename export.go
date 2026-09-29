@@ -42,6 +42,7 @@ type (
 	Token             = widgets.Token
 	TokenField        = widgets.TokenField
 	SecretField       = widgets.SecretField
+	SecretLabel       = widgets.SecretLabel
 	FileDialogMode    = widgets.FileDialogMode
 	FileDialogOptions = widgets.FileDialogOptions
 	Density           = style.Density
@@ -519,6 +520,9 @@ func NewTokenField(placeholder string, on func([]string)) *widgets.TokenField {
 func NewToken(text string) *widgets.Token { return widgets.NewToken(text) }
 func NewSecretField(placeholder string) *widgets.SecretField {
 	return widgets.NewSecretField(placeholder)
+}
+func NewSecretLabel(value func() []byte) *widgets.SecretLabel {
+	return widgets.NewSecretLabel(value)
 }
 
 // WipeBytes zeroes b: the toolkit's own wipe, for the copy a

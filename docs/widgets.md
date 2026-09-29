@@ -43,7 +43,7 @@ stub; there is no native AppKit/SwiftUI control host.
 | Slider | `Slider` | `QSlider` / `Slider` | `GtkScale` | `Slider` | `widget.Slider` | `TrackBar` | `Slider` | `NSSlider` | `Slider` | [thumb](screenshots/compare/slider.png) |
 | Text field | `TextField` / `MonoTextField` / `PasswordField` | `QLineEdit` / `TextField` | `GtkEntry` | `TextBox` | `widget.Entry` | `TextBox` | `PasswordBox` / `TextBox` | `NSSecureTextField` / `NSTextField` | `SecureField` / `TextField` | [thumb](screenshots/compare/textfield.png) |
 | Text area | `TextArea` / `MonoTextArea` | `QTextEdit` / `TextArea` | `GtkTextView` | `TextBox` (AcceptsReturn) | `widget.Entry` (MultiLine) | `TextBox` (Multiline) | `TextBox` | `NSTextView` | `TextEditor` | [thumb](screenshots/compare/textarea.png) · [gallery](screenshots/gallery-textarea.png) |
-| Passphrase field | `SecretField` (`[]byte`, never a string) | `QLineEdit` (`Password`) ≈ | `GtkPasswordEntry` ≈ | `TextBox` (`PasswordChar`) ≈ | `widget.NewPasswordEntry` ≈ | `TextBox` (`UseSystemPasswordChar`) ≈ | `PasswordBox` ≈ | `NSSecureTextField` ≈ | `SecureField` ≈ | — |
+| Passphrase field | `SecretField` / `SecretLabel` (`[]byte`, never a string) | `QLineEdit` (`Password`) ≈ | `GtkPasswordEntry` ≈ | `TextBox` (`PasswordChar`) ≈ | `widget.NewPasswordEntry` ≈ | `TextBox` (`UseSystemPasswordChar`) ≈ | `PasswordBox` ≈ | `NSSecureTextField` ≈ | `SecureField` ≈ | — |
 | Chip / token field | `TokenField` / `Token` | — (`QLineEdit` + hand-built) | — (`GtkEntry` + hand-built) | — | — | — | — | `NSTokenField` | — | — |
 | Rich text | `RichText` + `RichTextBar` (`richtext.Doc`, HTML in and out) | `QTextEdit` / `TextArea` (`textFormat: RichText`) | `GtkTextView` + `GtkTextBuffer` tags | — (`TextBox` ≈) | `widget.RichText` (read-only) ≈ | `RichTextBox` | `RichTextBox` | `NSTextView` (rich) | `TextEditor` (`AttributedString`) ≈ | [sheet](screenshots/breadth/richtext-1x.webp) |
 | Number / spinner | `NumberField` / `Spinner` | `QSpinBox` / `SpinBox` | `GtkSpinButton` | `NumericUpDown` | — (`Entry` ≈) | `NumericUpDown` | — (toolkit ≈) | `NSStepper` + field | `Stepper` | [thumb](screenshots/compare/numberfield.png) |
@@ -335,6 +335,13 @@ the byte path, which caches nothing and allocates no string. It sees no
 pair kerning, because kerning is a property of a shaped run and there is
 no run; revealed text is set a hair wider than the same string in a
 label, which is the price of not remembering it.
+
+`SecretLabel` is the read-only half — the item view's "show password"
+and a TOTP code. Its value comes from a function rather than a field, so
+a locked vault answers nothing and the label empties itself on the next
+frame; `Hide()` zeroes what it last drew from. It is measured for what it
+is *showing*, and for the wider of the bullets and the text, so pressing
+"show" does not move the row under the reader's hand.
 
 The input method is off while a secret widget has the focus
 (`widget.SecretTarget`), and that now covers `TextField` with `Password`

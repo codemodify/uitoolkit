@@ -143,15 +143,30 @@ func (f *Font) Wrap(text string, maxW float32) []string {
 	text = strings.ReplaceAll(text, "\r\n", "\n")
 	text = strings.ReplaceAll(text, "\t", wrapTab)
 	adv := f.runeAdvances()
+	exact := func(runes []rune) float32 { return f.Advance(string(runes)) }
 	var out []string
 	for _, para := range strings.Split(text, "\n") {
-		out = append(out, wrapLine([]rune(para), maxW, adv)...)
+		out = append(out, wrapLine([]rune(para), maxW, adv, exact)...)
 	}
 	return out
 }
 
 // wrapLine is the greedy pass over one paragraph (no newlines left in it).
-func wrapLine(runes []rune, maxW float32, adv func(rune) float32) []string {
+//
+// It adds rune advances, which is cheap and *over*-counts: a sum of
+// advances does not see the pair kerning the text is painted with, so it
+// says a line is wider than it will be. That is the safe direction for
+// deciding a line is full, and the wrong one for deciding it is too
+// full — a label measured at exactly its own [Font.Advance] width wrapped
+// anyway, and every wrapping label in a form was therefore a line taller
+// than the line it drew.
+//
+// So the cheap sum decides when to *ask*, and exact decides whether to
+// break. When the exact measure says the line still fits, the running
+// sum is resynced to it: the kerning slack has to accumulate again
+// before the next question, which keeps the exact measures to a handful
+// per line rather than one per rune.
+func wrapLine(runes []rune, maxW float32, adv func(rune) float32, exact func([]rune) float32) []string {
 	if len(runes) == 0 {
 		return []string{""}
 	}
@@ -170,6 +185,12 @@ func wrapLine(runes []rune, maxW float32, adv func(rune) float32) []string {
 		// wider than the whole line would otherwise never be placed.
 		if w <= maxW || i == start {
 			continue
+		}
+		if exact != nil {
+			if ex := exact(runes[start : i+1]); ex <= maxW {
+				w = ex
+				continue
+			}
 		}
 		cut, next := i, i // a word longer than the line breaks mid-word
 		if brk > start {
