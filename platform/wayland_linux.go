@@ -4422,7 +4422,20 @@ func wlDisableTextInput(c *wlConn) {
 	c.lastPre, c.lastPreCaret = "", 0
 }
 
-func wlClipSet(s string) bool {
+// wlClipSetSecret offers s on the clipboard only — no primary selection
+// — with the mime type KDE's Klipper and the managers that follow it
+// read to decide whether to record a copy.
+//
+// Wayland has no per-offer flag for this, so the convention is the same
+// one X11 uses, carried as a mime type rather than a target: an offer
+// that advertises x-kde-passwordManagerHint is a password. A manager
+// that does not know the type sees an ordinary text offer, which is why
+// the timeout in [ClipboardSetSecret] is the thing actually relied on.
+func wlClipSetSecret(s string) bool { return wlClipSetSel(s, true) }
+
+func wlClipSet(s string) bool { return wlClipSetSel(s, false) }
+
+func wlClipSetSel(s string, secret bool) bool {
 	c, err := wlRetain()
 	if err != nil || c == nil || c.dataDev == nil || c.dataMan == nil {
 		if c != nil {
@@ -4432,7 +4445,9 @@ func wlClipSet(s string) bool {
 	}
 	wlMu.Lock()
 	c.clip.set(s)
-	c.prim.set(s)
+	if !secret {
+		c.prim.set(s)
+	}
 	c.clipKeep = true
 	if c.dataSrc != nil {
 		C.ui_wl_data_source_destroy(c.dataSrc)
@@ -4452,8 +4467,26 @@ func wlClipSet(s string) bool {
 	C.ui_wl_data_offer_mime(src, plain)
 	C.free(unsafe.Pointer(utf))
 	C.free(unsafe.Pointer(plain))
+	if secret {
+		hint := C.CString("x-kde-passwordManagerHint")
+		C.ui_wl_data_offer_mime(src, hint)
+		C.free(unsafe.Pointer(hint))
+	}
 	C.ui_wl_set_selection(c.dataDev, src, C.uint32_t(c.serial))
-	if c.primMan != nil && c.primDev != nil {
+	// A secret does not go on the primary selection, which a middle
+	// click anywhere on the desktop pastes with no Ctrl+V and no intent.
+	// The one that is there is dropped rather than left behind an
+	// application that believes it has just copied a password.
+	if secret {
+		if c.primSrc != nil {
+			C.ui_wl_prim_source_destroy(c.primSrc)
+			c.primSrc = nil
+		}
+		if c.primMan != nil && c.primDev != nil {
+			C.ui_wl_prim_set(c.primDev, nil, C.uint32_t(c.serial))
+		}
+		c.prim.set("")
+	} else if c.primMan != nil && c.primDev != nil {
 		if c.primSrc != nil {
 			C.ui_wl_prim_source_destroy(c.primSrc)
 			c.primSrc = nil

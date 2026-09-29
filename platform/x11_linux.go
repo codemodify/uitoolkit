@@ -1058,6 +1058,10 @@ type x11Conn struct {
 	atomText      C.Atom
 	atomINCR      C.Atom
 	atomTimestamp C.Atom
+	// atomPwHint is x-kde-passwordManagerHint, the target Klipper and the
+	// clipboard managers that follow it read to decide whether to record
+	// a selection. It is served only while the selection is a secret.
+	atomPwHint    C.Atom
 	atomProp      C.Atom
 	atomString    C.Atom
 	atomNetState  C.Atom
@@ -1105,8 +1109,12 @@ type x11Conn struct {
 	atomSyncCounter C.Atom
 
 	clipText string
-	ownClip  bool
-	ownPrim  bool
+	// clipSecret is set while what we own is a passphrase: PRIMARY is
+	// not taken, the password-manager hint is offered, and the bytes are
+	// wiped when the selection is dropped.
+	clipSecret bool
+	ownClip    bool
+	ownPrim    bool
 	// ownTime is the timestamp ownership was taken with; the ICCCM
 	// TIMESTAMP target must return exactly that value.
 	ownTime C.Time
@@ -1305,6 +1313,7 @@ func x11OpenLocked() (*x11Conn, error) {
 	c.atomText = internAtom(d, "TEXT")
 	c.atomINCR = internAtom(d, "INCR")
 	c.atomTimestamp = internAtom(d, "TIMESTAMP")
+	c.atomPwHint = internAtom(d, "x-kde-passwordManagerHint")
 	c.atomProp = internAtom(d, "UITK_CLIP")
 	c.atomString = C.XA_STRING
 	c.atomNetState = internAtom(d, "_NET_WM_STATE")
@@ -2377,7 +2386,20 @@ func (c *x11Conn) handleSelReq(xe *C.XEvent) {
 			C.ulong(c.atomTargets), C.ulong(c.atomTimestamp),
 			C.ulong(c.atomUTF8), C.ulong(c.atomString), C.ulong(c.atomText),
 		}
+		if c.clipSecret && c.atomPwHint != 0 {
+			atoms = append(atoms, C.ulong(c.atomPwHint))
+		}
 		C.ui_change_prop32(c.dpy, req, prop, C.XA_ATOM, &atoms[0], C.int(len(atoms)))
+		C.ui_send_sel_notify(c.dpy, xe, prop)
+	case c.atomPwHint:
+		// "secret" is the value Klipper looks for; anything else, or the
+		// target missing, means an ordinary selection.
+		if !c.clipSecret || c.atomPwHint == 0 {
+			C.ui_send_sel_notify(c.dpy, xe, 0)
+			return
+		}
+		hint := []byte("secret")
+		C.ui_change_prop8(c.dpy, req, prop, c.atomUTF8, (*C.char)(unsafe.Pointer(&hint[0])), C.int(len(hint)))
 		C.ui_send_sel_notify(c.dpy, xe, prop)
 	case c.atomTimestamp:
 		ts := []C.ulong{C.ulong(c.ownTime)}
@@ -2431,7 +2453,7 @@ func (c *x11Conn) handleSelClear(xe *C.XEvent) {
 	}
 	if !c.ownClip && !c.ownPrim && len(c.incrSends) == 0 {
 		c.keep = false
-		c.clipText = ""
+		c.wipeClipLocked()
 	}
 }
 
@@ -2532,22 +2554,70 @@ func (c *x11Conn) handleProperty(xe *C.XEvent) {
 	}
 }
 
-func (c *x11Conn) setClipboard(s string) {
+func (c *x11Conn) setClipboard(s string) { c.setClipboardSel(s, false) }
+
+// setClipboardSel owns CLIPBOARD, and PRIMARY too unless this is a
+// secret. A passphrase must not go on PRIMARY: that selection is pasted
+// by a middle click anywhere on the desktop, with no Ctrl+V and no
+// intent, and there is no gesture in X11 that undoes it.
+func (c *x11Conn) setClipboardSel(s string, secret bool) {
 	x11Mu.Lock()
 	defer x11Mu.Unlock()
 	if c.dpy == nil || c.helper == 0 {
 		return
 	}
+	c.wipeClipLocked()
 	c.clipText = s
+	c.clipSecret = secret
 	t := c.selectionTimeLocked()
 	c.ownTime = t
 	C.ui_set_owner(c.dpy, c.helper, c.atomClipboard, t)
-	C.ui_set_owner(c.dpy, c.helper, c.atomPrimary, t)
 	c.ownClip = C.ui_owner(c.dpy, c.atomClipboard) == c.helper
-	c.ownPrim = C.ui_owner(c.dpy, c.atomPrimary) == c.helper
+	if secret {
+		// Give PRIMARY up rather than leave the last non-secret value
+		// there: an owner that keeps serving an old selection while the
+		// application believes it copied a password is worse than none.
+		if c.ownPrim {
+			C.ui_set_owner(c.dpy, 0, c.atomPrimary, t)
+			c.ownPrim = false
+		}
+	} else {
+		C.ui_set_owner(c.dpy, c.helper, c.atomPrimary, t)
+		c.ownPrim = C.ui_owner(c.dpy, c.atomPrimary) == c.helper
+	}
 	c.keep = c.ownClip || c.ownPrim
 	C.ui_flush(c.dpy)
 	c.startSelectionServiceLocked()
+}
+
+// clearClipboard drops both selections and wipes what was being served.
+func (c *x11Conn) clearClipboard() {
+	x11Mu.Lock()
+	defer x11Mu.Unlock()
+	if c.dpy == nil || c.helper == 0 {
+		return
+	}
+	t := c.selectionTimeLocked()
+	if c.ownClip {
+		C.ui_set_owner(c.dpy, 0, c.atomClipboard, t)
+		c.ownClip = false
+	}
+	if c.ownPrim {
+		C.ui_set_owner(c.dpy, 0, c.atomPrimary, t)
+		c.ownPrim = false
+	}
+	c.wipeClipLocked()
+	c.keep = false
+	C.ui_flush(c.dpy)
+}
+
+// wipeClipLocked drops the served value. A string cannot be zeroed, so
+// what this can do is let go of it at once rather than when the next
+// copy happens to replace it — and say so, which is why the X11 note in
+// [ClipboardSetSecret]'s documentation exists.
+func (c *x11Conn) wipeClipLocked() {
+	c.clipText = ""
+	c.clipSecret = false
 }
 
 // selectionTimeLocked returns a real server timestamp for selection

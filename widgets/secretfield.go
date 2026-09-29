@@ -520,16 +520,19 @@ func (f *SecretField) moveTo(i int, extend bool) {
 	f.Invalidate()
 }
 
-// paste takes the clipboard in as bytes. The string the platform hands
-// back is the session's, not this field's — the toolkit did not make it
-// and cannot wipe it — so what this can promise is that no *further*
-// copy is kept: the bytes go into the buffer and the rest is dropped.
+// paste takes the clipboard in as bytes ([platform.ClipboardGetSecret]).
+// Where the clipboard holds the toolkit's own secret, nothing is turned
+// into a string at any point; where it holds somebody else's, the
+// platform hands the toolkit a string, because that is what the
+// clipboard API of every one of them returns. That string is the
+// session's, not this field's, and what this can promise is that no
+// further copy is kept.
 func (f *SecretField) paste() {
-	s := platform.ClipboardGet()
-	if s == "" {
+	b := platform.ClipboardGetSecret()
+	if len(b) == 0 {
 		return
 	}
-	b := []byte(s)
+	defer WipeBytes(b)
 	// A pasted passphrase is one line. Anything past a newline is the
 	// next field's or the next line's, and silently taking it would make
 	// a wrong passphrase that looks right.
@@ -538,7 +541,6 @@ func (f *SecretField) paste() {
 	}
 	a, e := f.selRange()
 	f.replace(a, e, b)
-	WipeBytes(b)
 }
 
 func indexNewline(b []byte) int {

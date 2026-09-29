@@ -640,6 +640,12 @@ func (a *Application) Run() error {
 		}
 		a.waitDisplay(timeout)
 	}
+	// A secret copied to the clipboard does not outlive the application
+	// that copied it. Its own timer would usually have fired first, and
+	// this is the case where it has not: the user copied a password and
+	// quit within the timeout, and the desktop would otherwise go on
+	// holding it with nobody left to take it back.
+	platform.ClipboardClearSecret()
 	if a.onQuit != nil {
 		a.onQuit()
 	}

@@ -523,6 +523,22 @@ func NewSecretField(placeholder string) *widgets.SecretField {
 // WipeBytes zeroes b: the toolkit's own wipe, for the copy a
 // [widgets.SecretField] hands out.
 func WipeBytes(b []byte) { widgets.WipeBytes(b) }
+
+// ClipboardSetSecret copies data to the clipboard as a secret: CLIPBOARD
+// only, hinted so clipboard managers do not record it, cleared after
+// clearAfter (and on quit). It takes ownership of data
+// ([platform.ClipboardSetSecret]).
+func ClipboardSetSecret(data []byte, clearAfter time.Duration) *platform.SecretClip {
+	return platform.ClipboardSetSecret(data, clearAfter)
+}
+
+// ClipboardClear empties the clipboard and wipes any secret the toolkit
+// was holding — what an application calls when it locks.
+func ClipboardClear() { platform.ClipboardClear() }
+
+// ClipboardGetSecret reads the clipboard as bytes, for pasting into a
+// field that must not make a string of it. The caller wipes the result.
+func ClipboardGetSecret() []byte { return platform.ClipboardGetSecret() }
 func NewTableView(cols []widgets.TableColumn, rows int, cell func(row, col int) string, on func(int)) *widgets.TableView {
 	return widgets.NewTableView(cols, rows, cell, on)
 }
