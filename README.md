@@ -462,7 +462,7 @@ AppKit.
 | Gap | What that means |
 | --- | --- |
 | **Complex text** | No `GSUB`, no bidi: **Arabic, Hebrew, Devanagari and Thai** draw as isolated glyphs in logical order. Latin is right. |
-| **Script coverage of the bundled face** | The bundled Titillium Web is **Latin only** — no Greek, no Cyrillic, no CJK, and none of the arrows or check marks a UI reaches for. Those render only when a pack resolves an *installed* face that has them, so under `UITK_SYSTEM_FONTS=0` (containers, CI, these screenshots) they are tofu boxes. Symbols are meant to be drawn as [icons](docs/themes.md) rather than typed as glyphs. |
+| **Script coverage of the bundled face** | The bundled Titillium Web is **Latin only** — no Greek, no Cyrillic, no CJK, and none of the arrows or check marks a UI reaches for. Those render only when a pack resolves an *installed* face that has them, so under `UITK_SYSTEM_FONTS=0` (containers, CI, these screenshots) they are tofu boxes. **A mark is an icon, not a character** — see [Icons, and when not to use text](docs/widgets.md#icons-and-when-not-to-use-text), which says what to use instead and why an icon is safe where a glyph is not. |
 | **Accessibility off Linux** | The `a11y` model is complete and AT-SPI2 is wired, but UI Automation (Windows) and NSAccessibility (macOS) are not. A screen reader there sees nothing. |
 | **GPU off Linux** | EGL/GLES on Wayland and X11; Windows and macOS rasterise on the CPU. Fast enough for desktop UI ([docs/perf.md](docs/perf.md)), not for heavy continuous animation. |
 | **Printing** | There is none. |

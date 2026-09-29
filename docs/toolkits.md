@@ -86,9 +86,13 @@ of the arrows, check marks or box drawing a user interface reaches for
 — measured, not assumed. Those render only when a pack resolves an
 *installed* face that carries them, which it often does on a desktop
 and never does under `UITK_SYSTEM_FONTS=0`. There is no font fallback:
-a rune the face lacks draws as a box. Symbols are meant to come from
-the icon set rather than from a font, which is a defensible line for
-✓ and →, and not one for Greek or Cyrillic text.
+a rune the face lacks draws as a box.
+
+Marks come from the icon set rather than from a font, and the toolkit
+carries the icons for it — see [Icons, and when not to use text](widgets.md#icons-and-when-not-to-use-text).
+That is a defensible line for ✓ and →, and **not** one for Greek or
+Cyrillic text: an icon cannot stand in for a script. Those render only
+where a pack resolves an installed face that has them.
 
 **Accessibility beyond Linux.** The model in package `a11y` is complete
 and every stock widget describes itself, but the platform bridge is

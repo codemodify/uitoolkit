@@ -241,6 +241,73 @@ painted in another is a bubble with its last word outside it. Amiga sets a
 tip in Topaz, Material in body-small, a skin centres it in its picture, and
 FlatLaf pads it by 6 whatever the pack says.
 
+## Icons, and when not to use text
+
+**A mark is an icon. Text is for words.**
+
+That line decides more than it looks like it does, because the toolkit
+draws its own text and the face it bundles is Latin only. Titillium Web
+has 456 glyphs: no Greek, no Cyrillic, no CJK, and **none of the arrows,
+check marks, box drawing or dingbats a user interface reaches for** —
+measured, not assumed. There is no font fallback: a rune the face lacks
+draws as a box.
+
+So a `✓` typed into a label is a box on any machine whose installed
+fonts do not rescue it, and it is a box on *every* machine under
+`UITK_SYSTEM_FONTS=0` — which is what containers, CI and every
+screenshot in this repository run under. An application that types its
+marks has a UI that looks right for its author and wrong for everybody
+else.
+
+### What to do instead
+
+| you want | use |
+| --- | --- |
+| a mark on a button or a tool bar | `Button.Icon`, `ToolItem.Icon` |
+| a mark in a menu row | `MenuItem.Icon` |
+| a mark in a table cell or its column header | `TableView.CellIcon`, `TableColumn.Icon` |
+| a mark on a tree node | `TreeNode.Icon`, with `IconTint` |
+| a mark anywhere else you are painting | `style.DrawToolIcon(ctx, box, icon, colour, style.IconSetOf(look))` |
+| a picture in a document | `richtext` and its `<img>`, not a glyph |
+
+There are **23 typed ids** (`style.AllToolIcons`), each of which resolves
+four ways, best first: the user's file icon set, an installed freedesktop
+theme by name (`style.ToolIconThemeNames`), one of the five packs shipped
+in `icons/`, and the toolkit's own drawn Classic or Sharp set. That is
+why an icon is safe where a glyph is not — every one of those four
+answers exists on every machine.
+
+```
+new      open     save     cut      copy     paste    undo     redo
+search   info     warning  error    question mail     download pen
+attach   star     flag     reply    forward  check    bell-off
+```
+
+The shipped packs carry a **wider vocabulary than the typed ids** — 79
+stems (`style.ShippedIconStems`), including `trash`, `archive`, `send`,
+`sync`, `lock`, `eye`, `folder`, the four chevrons and the four arrows.
+Reach one by name with `style.ToolIconByName`. A typed id is added when a
+widget needs a *typed* one; a stem needs nothing.
+
+### The four runes that do work
+
+`★ 📎 ● 🔇` are drawn from vector paths when the face lacks them
+(`style/symbols.go`), so those four are safe as characters. They are
+there because they predate the icons, and they are **not a pattern to
+follow**: nothing else is rescued, and adding a fifth would be four
+hand-made shapes drifting from the icon set that has the real ones.
+Prefer `IconStar`, `IconAttach` and `IconMute`.
+
+### What this is not a line about
+
+The rule is about **marks**. It is not an answer for Greek, Cyrillic,
+CJK or any other script: those are text, an icon cannot stand in for
+them, and the bundled face cannot draw them. What happens there is that
+a pack resolves an installed face that can — which a desktop usually
+has and a container never does. See
+[toolkits.md](toolkits.md#what-they-do-that-it-does-not) for the whole
+of that gap, including the shaping the text stack does not do.
+
 ## Wrapping text
 
 `style.Font` carries the two primitives every app that paints a paragraph
@@ -332,8 +399,7 @@ A message list's marks — a paperclip for an attachment, a star, a flag, a
 muted bell, replied and forwarded — used to have to be *characters*,
 because `TableView` cells and column titles were strings and `TreeNode`
 had a label, a bold flag and a colour swatch. That meant they came out of
-the font, and the bundled face has four of them ([toolkits.md](toolkits.md)) and
-tofu for the rest.
+the font, against [the rule that says they should not](#icons-and-when-not-to-use-text).
 
 They are icons now. `TableColumn.Icon` marks a column's header,
 `TableView.CellIcon(row, col) (ToolIcon, Color)` marks a cell, and
