@@ -254,20 +254,6 @@ func LoadAppearance() Appearance {
 	} else {
 		raw = appearanceFileJSON{}
 	}
-	// UITK_FONT / UITK_FONT_MONO override the saved typefaces for this
-	// process alone, the way UITK_THEME overrides the pack. Setting one
-	// to "theme" puts that role back on the pack's era fonts without the
-	// file being touched, which is how a session is run at a pack's own
-	// typography for a screenshot.
-	for _, env := range []struct {
-		name string
-		into *string
-	}{{FontEnv, &raw.FontUI}, {MonoFontEnv, &raw.FontMono}} {
-		if v, set := os.LookupEnv(env.name); set {
-			*env.into = v
-			ok = true
-		}
-	}
 	if env := strings.TrimSpace(os.Getenv(ThemeEnv)); env != "" {
 		// The pack asked for is the pack shown: no swapping it for its
 		// light or dark sibling.
@@ -275,10 +261,32 @@ func LoadAppearance() Appearance {
 		raw.FollowDesktop = false
 		ok = true
 	}
-	if !ok {
-		return DefaultAppearance()
+	a := DefaultAppearance()
+	if ok {
+		a = resolveAppearance(raw)
 	}
-	return resolveAppearance(raw)
+	// UITK_FONT / UITK_FONT_MONO override the saved typefaces for this
+	// process alone, the way UITK_THEME overrides the pack. Setting one
+	// to "theme" puts that role back on the pack's era fonts without the
+	// file being touched, which is how a session is run at a pack's own
+	// typography for a screenshot.
+	//
+	// They are applied to the appearance rather than to the file read
+	// into it, because a typeface says nothing about the rest of it.
+	// Folding them into the raw file made a machine with no look.json
+	// resolve an empty file instead of the defaults, and an empty file
+	// says FollowDesktop is off — so `UITK_FONT=theme ./app` stopped the
+	// program following the desktop's dark mode, which is a setting it
+	// was not asked about.
+	for _, env := range []struct {
+		name string
+		into *string
+	}{{FontEnv, &a.FontUI}, {MonoFontEnv, &a.FontMono}} {
+		if v, set := os.LookupEnv(env.name); set {
+			*env.into = NormalizeFontChoice(v)
+		}
+	}
+	return a
 }
 
 // ThemeEnv names the environment variable that overrides the saved theme.

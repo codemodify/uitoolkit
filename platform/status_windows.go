@@ -342,6 +342,14 @@ func (w *winStatusItem) Alive() bool {
 	return !w.closed && w.hwnd != 0
 }
 
+// Shown follows Alive. Windows has a notification area in every session
+// and Shell_NotifyIcon has no way to ask whether the icon is in the
+// overflow flyout rather than on the taskbar — and that distinction is
+// not the one this answers: the icon is reachable either way.
+func (w *winStatusItem) Shown() bool { return w.Alive() }
+
+func (w *winStatusItem) SetOnShownChange(func(bool)) {}
+
 func (w *winStatusItem) modify(flags uint32) error {
 	w.nid.Flags = nifMessage | nifIcon | nifTip | flags
 	procNotifyIcon.Call(nimModify, uintptr(unsafe.Pointer(&w.nid)))

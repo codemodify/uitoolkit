@@ -347,6 +347,12 @@ func (d *darwinStatusItem) Alive() bool {
 	return !d.closed && d.item != nil
 }
 
+// Shown follows Alive. An NSStatusItem that was created is in the menu
+// bar; macOS has no session without one.
+func (d *darwinStatusItem) Shown() bool { return d.Alive() }
+
+func (d *darwinStatusItem) SetOnShownChange(func(bool)) {}
+
 // flattenTrayMenu turns the rows into the pre-order array the C side
 // builds from, and registers a click handler for each row that has one.
 //

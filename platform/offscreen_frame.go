@@ -87,6 +87,7 @@ type offscreenFrame struct {
 	capsLock, numLock bool
 	role              WindowRole
 	centered          bool
+	centerings        int
 	wantAbove         bool
 	activated         int
 	// input method (surface device pixels), imeOn whether it is enabled.
@@ -585,6 +586,7 @@ func (o *Offscreen) Center() bool {
 		return false
 	}
 	o.frame.centered = true
+	o.frame.centerings++
 	return true
 }
 
@@ -605,6 +607,17 @@ func (o *Offscreen) WindowRole() WindowRole {
 }
 
 func (o *Offscreen) Centered() bool { return o != nil && o.frame.centered }
+
+// Centerings is how many times the window was put in the middle. A fit
+// that changes the size has to centre again — a resize keeps the
+// top-left corner, so a dialog centred at the size it was made with is
+// off-centre at the size it is fitted to.
+func (o *Offscreen) Centerings() int {
+	if o == nil {
+		return 0
+	}
+	return o.frame.centerings
+}
 
 // KeepAboveRequested is what WindowOptions asked for, which is not the
 // same fact as WindowState().KeepAbove — that is what the desktop did.

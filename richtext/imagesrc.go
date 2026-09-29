@@ -67,6 +67,13 @@ func ClassifyImageSrc(src string) ImageKind {
 	if s == "" {
 		return ImageUnknown
 	}
+	// A protocol-relative URL — //host/pixel.gif — has no scheme, and
+	// reading it as a relative path is the dangerous way to be wrong: it
+	// is a fetch over the network, and a tracking pixel written this way
+	// would be loaded by a client that had been told it was local.
+	if strings.HasPrefix(s, "//") {
+		return ImageRemote
+	}
 	scheme, rest, ok := strings.Cut(s, ":")
 	if !ok || !isURLScheme(scheme) {
 		// No scheme at all: a relative path beside the document.

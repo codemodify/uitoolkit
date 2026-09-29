@@ -44,6 +44,9 @@ type Window struct {
 	// wantFit is WindowOptions.FitContent, waiting for the first layout
 	// with content in it (app/fitcontent.go).
 	wantFit bool
+	// centred says the toolkit put this window in the middle, so a fit
+	// that changes its size can put it back there (app/fitcontent.go).
+	centred bool
 	hover   widget.Component
 	capture widget.Component
 	closed  atomic.Bool
@@ -196,6 +199,7 @@ func newWindow(a *Application, surf platform.Surface, opts platform.WindowOption
 	w.dirty.Pad = 1
 	w.opts = opts
 	w.wantFit = opts.FitContent
+	w.centred = opts.Center
 	f := platform.FrameOf(surf)
 	w.decor, w.caps = f.Decorations(), f.FrameCaps()
 	w.rebuildCaption()

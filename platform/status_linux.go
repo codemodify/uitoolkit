@@ -46,6 +46,11 @@ type linuxStatusItem struct {
 	closed   bool
 	notifyID uint32
 	noteFn   map[uint32]func()
+	// hostSeen is the watcher's IsStatusNotifierHostRegistered as of the
+	// last time it was read or signalled, and hostKnown whether it has
+	// ever been read. Unknown answers true: see StatusItem.Shown.
+	hostSeen, hostKnown bool
+	onShown             func(bool)
 }
 
 func newNativeStatusItem(opts StatusItemOptions) (item StatusItem, err error) {
@@ -217,6 +222,16 @@ func (s *linuxStatusItem) listenBus() {
 		dbus.WithMatchMember("NameOwnerChanged"),
 		dbus.WithMatchArg(0, sniWatcher),
 	)
+	// A tray host coming or going while the program runs: an
+	// AppIndicator extension switched on, a panel restarted. An
+	// application that hid its window behind the icon has to hear about
+	// the second one.
+	for _, m := range []string{"StatusNotifierHostRegistered", "StatusNotifierHostUnregistered"} {
+		_ = s.conn.AddMatchSignal(
+			dbus.WithMatchInterface(sniWatcher),
+			dbus.WithMatchMember(m),
+		)
+	}
 	ch := make(chan *dbus.Signal, 16)
 	s.conn.Signal(ch)
 	go func() {
@@ -249,6 +264,15 @@ func (s *linuxStatusItem) listenBus() {
 				dispatch := s.opts.Dispatch
 				s.mu.Unlock()
 				invokeStatus(dispatch, fn)
+			case sniWatcher + ".StatusNotifierHostRegistered":
+				s.setHostRegistered(true)
+			case sniWatcher + ".StatusNotifierHostUnregistered":
+				// The signal says a host went away, not that none is
+				// left, so the property is the answer rather than false.
+				s.mu.Lock()
+				s.hostKnown = false
+				s.mu.Unlock()
+				s.readHostRegistered()
 			case "org.freedesktop.DBus.NameOwnerChanged":
 				if len(sig.Body) < 3 {
 					continue
@@ -267,6 +291,11 @@ func (s *linuxStatusItem) onWatcherOwnerChanged(name, newOwner string) {
 	}
 	trayDebug("StatusNotifierWatcher owner %s; re-register", newOwner)
 	s.registerSNI()
+	// A new watcher is a new answer: the old one's hosts went with it.
+	s.mu.Lock()
+	s.hostKnown = false
+	s.mu.Unlock()
+	s.readHostRegistered()
 }
 
 type sniPixmap struct {
@@ -429,6 +458,78 @@ func (s *linuxStatusItem) Alive() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return !s.closed && s.conn != nil
+}
+
+func (s *linuxStatusItem) Shown() bool {
+	s.mu.Lock()
+	closed, conn, known, seen := s.closed, s.conn, s.hostKnown, s.hostSeen
+	s.mu.Unlock()
+	if closed || conn == nil {
+		return false
+	}
+	if !s.sni {
+		// The notification-only path puts nothing in a tray, so there is
+		// no icon to be shown or hidden. Saying true would tell an
+		// application it may hide its window behind an icon that does not
+		// exist.
+		return false
+	}
+	if known {
+		return seen
+	}
+	return s.readHostRegistered()
+}
+
+func (s *linuxStatusItem) SetOnShownChange(fn func(bool)) {
+	s.mu.Lock()
+	s.onShown = fn
+	s.mu.Unlock()
+}
+
+// readHostRegistered asks the watcher whether any host is displaying
+// items, and remembers the answer for the signals to update.
+//
+// A watcher that is not there, or that does not answer, is read as a
+// desktop that shows the item: the property is how a tray says it is
+// absent, and a bus error is not that statement. Guessing "hidden" from
+// a failed call would make an application refuse to close to a tray that
+// works.
+func (s *linuxStatusItem) readHostRegistered() bool {
+	defer func() { recover() }()
+	s.mu.Lock()
+	conn := s.conn
+	s.mu.Unlock()
+	if conn == nil {
+		return true
+	}
+	obj := conn.Object(sniWatcher, sniWatcherPath)
+	v, err := obj.GetProperty(sniWatcher + ".IsStatusNotifierHostRegistered")
+	if err != nil {
+		return true
+	}
+	b, ok := v.Value().(bool)
+	if !ok {
+		return true
+	}
+	s.setHostRegistered(b)
+	return b
+}
+
+// setHostRegistered records the watcher's answer and reports a change to
+// the application, once per change rather than once per signal.
+func (s *linuxStatusItem) setHostRegistered(v bool) {
+	s.mu.Lock()
+	if s.hostKnown && s.hostSeen == v {
+		s.mu.Unlock()
+		return
+	}
+	s.hostKnown, s.hostSeen = true, v
+	fn, dispatch := s.onShown, s.opts.Dispatch
+	s.mu.Unlock()
+	if fn == nil {
+		return
+	}
+	invokeStatus(dispatch, func() { fn(v) })
 }
 
 // Activate implements StatusNotifierItem.Activate (primary click).

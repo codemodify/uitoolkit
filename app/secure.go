@@ -124,5 +124,11 @@ func (w *Window) Center() bool {
 	if !ok {
 		return false
 	}
-	return s.Center()
+	if !s.Center() {
+		return false
+	}
+	// Remembered so a later fit can put the window back in the middle
+	// rather than growing it off-centre from its top-left corner.
+	w.centred = true
+	return true
 }

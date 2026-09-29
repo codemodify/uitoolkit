@@ -34,6 +34,7 @@ type SecretClip struct {
 	data    []byte
 	timer   *time.Timer
 	cleared bool
+	onClear func()
 }
 
 var (
@@ -118,8 +119,8 @@ func (c *SecretClip) Clear() {
 // clipboard.
 func (c *SecretClip) forget() {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	if c.cleared {
+		c.mu.Unlock()
 		return
 	}
 	c.cleared = true
@@ -131,6 +132,48 @@ func (c *SecretClip) forget() {
 		c.data[i] = 0
 	}
 	c.data = nil
+	fn := c.onClear
+	c.onClear = nil
+	c.mu.Unlock()
+	// Outside the lock: the callback is the application's, it runs on
+	// whatever goroutine cleared the copy — the timer's, most often — and
+	// holding the clip's lock across it would let it deadlock by asking
+	// this copy anything about itself.
+	if fn != nil {
+		fn()
+	}
+}
+
+// OnCleared installs a callback for the moment this copy goes: the
+// timeout expiring, another copy replacing it, or the program quitting.
+//
+// It is what a "copied — clears in 45s" indicator is built from. Without
+// it an application has to poll [SecretClip.Cleared] to find out, and a
+// poll is both a timer of its own and a window in which the interface
+// says the passphrase is still on the clipboard when it is not.
+//
+// The callback runs at most once and on the goroutine that cleared the
+// copy, which is usually not the UI one — hand it to the application's
+// dispatcher rather than touching widgets in it. Installing it on a copy
+// that has already been cleared calls it straight away, so a caller
+// cannot lose the event to a timeout that beat it.
+func (c *SecretClip) OnCleared(fn func()) {
+	if c == nil {
+		if fn != nil {
+			fn()
+		}
+		return
+	}
+	c.mu.Lock()
+	if c.cleared {
+		c.mu.Unlock()
+		if fn != nil {
+			fn()
+		}
+		return
+	}
+	c.onClear = fn
+	c.mu.Unlock()
 }
 
 // Cleared reports whether this copy is gone.

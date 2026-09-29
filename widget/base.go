@@ -182,25 +182,47 @@ func (b *Base) Remove(child Component) {
 	if child == nil {
 		return
 	}
+	found := false
 	out := b.children[:0]
 	for _, ch := range b.children {
-		if ch != child {
-			out = append(out, ch)
+		if ch == child {
+			found = true
+			continue
 		}
+		out = append(out, ch)
 	}
 	b.children = out
-	child.setParent(nil)
+	if !found {
+		return
+	}
+	detach(child)
 	LooksChanged()
 	b.Invalidate()
 }
 
 func (b *Base) ClearChildren() {
 	for _, ch := range b.children {
-		ch.setParent(nil)
+		detach(ch)
 	}
 	b.children = nil
 	LooksChanged()
 	b.Invalidate()
+}
+
+// detach takes a subtree off the tree: no parent, and no host.
+//
+// The host matters as much as the parent. Add hands the host down the
+// subtree, so a component that has ever been added holds a pointer to
+// the window it was added to — and clearing only the parent left that
+// pointer live after the component was taken off. A panel swapped out of
+// a view went on resolving its look through a window it was no longer
+// in, went on being reachable from it, and kept it alive; a component
+// put back under a different window carried the old one until something
+// happened to call SetHost again. Add sets the host immediately after
+// re-parenting, so a move from one parent to another is unaffected.
+func detach(child Component) {
+	child.setParent(nil)
+	child.SetHost(nil)
 }
 
 func (b *Base) Measure(c layout.Constraints) paintengine2d.Point {

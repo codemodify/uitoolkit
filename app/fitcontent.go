@@ -42,8 +42,31 @@ func (w *Window) FitToContent() bool {
 		return false
 	}
 	w.SetSize(lw, h)
+	w.recenterIfCentred()
 	w.laid = false
 	return true
+}
+
+// recenterIfCentred puts the window back in the middle after its size
+// has changed, if the middle is where it was put.
+//
+// A resize keeps the top-left corner, so a dialog that was centred at
+// the size it was made with is off-centre at the size it is fitted to —
+// by half the difference, which for a dialog that grows from a guessed
+// height to a measured one is most of the change. Centring and fitting
+// are the two halves of the same request ("a dialog, in front, the right
+// size"), and a caller has no way to sequence them itself: the fit is
+// what changes the size, and it happens inside the toolkit.
+//
+// A window the user has since moved is not re-centred, because the
+// desktop owns its position once the user has expressed one — but the
+// toolkit cannot see a move on every backend, so this is best-effort and
+// only ever runs on a window the toolkit centred itself.
+func (w *Window) recenterIfCentred() {
+	if w == nil || !w.centred {
+		return
+	}
+	w.Center()
 }
 
 // contentFit is the logical width and height a window fitted to its
@@ -94,6 +117,7 @@ func (w *Window) fitOnFirstLayout() {
 		return
 	}
 	w.SetSize(lw, lh)
+	w.recenterIfCentred()
 	// The window just changed size under a layout that has finished, so
 	// the tree is arranged for the box it used to have. Lay it out again
 	// here rather than waiting for the backend's resize event, so the

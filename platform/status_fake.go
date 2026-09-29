@@ -13,6 +13,8 @@ type FakeStatusItem struct {
 	Notes   []Notification
 	Clicks  int
 	closed  bool
+	hidden  bool
+	onShown func(bool)
 }
 
 func newFakeStatusItem(opts StatusItemOptions) *FakeStatusItem {
@@ -73,6 +75,36 @@ func (f *FakeStatusItem) Alive() bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return !f.closed
+}
+
+func (f *FakeStatusItem) Shown() bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return !f.closed && !f.hidden
+}
+
+func (f *FakeStatusItem) SetOnShownChange(fn func(bool)) {
+	f.mu.Lock()
+	f.onShown = fn
+	f.mu.Unlock()
+}
+
+// SetShown is the test's tray host arriving or going away: a desktop
+// that shows status items, or a GNOME with no extension. A fake item
+// shows its icon until a test says otherwise, so a test written before
+// Shown existed sees what it always saw.
+func (f *FakeStatusItem) SetShown(v bool) {
+	f.mu.Lock()
+	if f.closed || f.hidden == !v {
+		f.mu.Unlock()
+		return
+	}
+	f.hidden = !v
+	fn := f.onShown
+	f.mu.Unlock()
+	if fn != nil {
+		fn(v)
+	}
 }
 
 // Icon / Tooltip / Title / Menu are test snapshots.

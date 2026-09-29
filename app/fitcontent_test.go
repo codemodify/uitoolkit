@@ -121,3 +121,71 @@ func TestFitToContentWithoutContent(t *testing.T) {
 		t.Fatal("a closed window fitted")
 	}
 }
+
+// A resize keeps the top-left corner, so a dialog centred at the size it
+// was made with is off-centre at the size it is fitted to — by half the
+// difference, which for a dialog that grows from a guessed height to a
+// measured one is most of the change. Centring and fitting are the two
+// halves of one request, and the caller cannot sequence them itself:
+// the fit is what changes the size, and it happens inside the toolkit.
+func TestFitContentRecentresACentredDialog(t *testing.T) {
+	a := New(Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{
+		Width: 320, Height: 600, Headless: true, FitContent: true,
+		Center: true, Sizing: platform.SizingFixed,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	o, ok := w.surf.(*platform.Offscreen)
+	if !ok {
+		t.Fatalf("surface %T", w.surf)
+	}
+	if o.Centerings() != 1 {
+		t.Fatalf("centred %d times at creation, want 1", o.Centerings())
+	}
+	w.SetContent(tallBy(3))
+	a.PumpOnce()
+	if _, h := w.Size(); h == 600 {
+		t.Fatal("the window was never fitted, so this proves nothing")
+	}
+	if o.Centerings() != 2 {
+		t.Errorf("centred %d times, want a second after the fit", o.Centerings())
+	}
+}
+
+// FitToContent called by hand does the same, on a window the toolkit
+// centred.
+func TestFitToContentRecentres(t *testing.T) {
+	a := New(Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{Width: 320, Height: 600, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	o := w.surf.(*platform.Offscreen)
+	w.SetContent(tallBy(2))
+	a.PumpOnce()
+
+	// Not centred: nothing to put back.
+	if !w.FitToContent() {
+		t.Fatal("FitToContent refused")
+	}
+	a.PumpOnce()
+	if o.Centerings() != 0 {
+		t.Errorf("a window nobody centred was centred %d times", o.Centerings())
+	}
+
+	// Centred: the fit puts it back.
+	if !w.Center() {
+		t.Fatal("Center refused")
+	}
+	w.SetContent(tallBy(9))
+	a.PumpOnce()
+	if !w.FitToContent() {
+		t.Fatal("FitToContent refused the taller content")
+	}
+	a.PumpOnce()
+	if o.Centerings() != 2 {
+		t.Errorf("centred %d times, want the explicit one and the fit's", o.Centerings())
+	}
+}

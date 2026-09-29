@@ -16,3 +16,5 @@ func (s *stubStatusItem) Notify(Notification) error      { return nil }
 func (s *stubStatusItem) Close() error                   { return nil }
 func (s *stubStatusItem) Backend() string                { return "stub" }
 func (s *stubStatusItem) Alive() bool                    { return false }
+func (s *stubStatusItem) Shown() bool                    { return false }
+func (s *stubStatusItem) SetOnShownChange(func(bool))    {}

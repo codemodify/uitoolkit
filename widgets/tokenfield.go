@@ -61,7 +61,14 @@ func (t *Token) Measure(c layout.Constraints) paintengine2d.Point {
 	if min := style.Dip(lk, 20); h < min {
 		h = min
 	}
-	return c.Constrain(paintengine2d.Pt(t.pad()*2+f.Advance(t.Text)+t.crossW(), h))
+	// Whole pixels, rounded up. A component's bounds are snapped to the
+	// pixel grid by SetBounds, so a chip that asks for a fractional width
+	// can be handed back up to a pixel less than it asked for — and Paint
+	// answers a box a hair too small by eliding the text. Asking for the
+	// pixel above means the box is never narrower than the label needs,
+	// and a chip stops cutting its own text short.
+	w := t.pad()*2 + f.Advance(t.Text) + t.crossW()
+	return c.Constrain(paintengine2d.Pt(ceilPx(w), h))
 }
 
 func (t *Token) Arrange(r paintengine2d.Rect) { t.SetBounds(r) }

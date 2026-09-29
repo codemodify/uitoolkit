@@ -84,6 +84,36 @@ func (f *SecretField) Bytes() []byte {
 	return out
 }
 
+// SetBytes puts b in the field, taking it over: the caller must not use
+// or wipe b afterwards, and the field wipes it with the rest of its
+// buffer.
+//
+// It is the way a generated passphrase gets into the field. Without it
+// the only route in was TextInput rune by rune, or SetText on a field
+// that does not have one, and a caller that built the value itself had
+// to keep a string or a copy alive to feed it — which is the thing this
+// widget exists to avoid. Taking ownership rather than copying is the
+// point: a copy would leave the caller holding the original, and two
+// buffers to wipe instead of one.
+//
+// The buffer it replaces is wiped first, so what was in the field does
+// not survive in freed memory.
+func (f *SecretField) SetBytes(b []byte) {
+	if len(b) > 0 && len(f.buf) > 0 && &b[0] == &f.buf[0] {
+		// Handed its own buffer back: wiping it would be wiping the
+		// value being set.
+		f.caret = len(f.buf)
+		f.selA, f.selB, f.scrollX = f.caret, f.caret, 0
+		f.changed()
+		return
+	}
+	WipeBytes(f.buf)
+	f.buf = b
+	f.caret = len(f.buf)
+	f.selA, f.selB, f.scrollX = f.caret, f.caret, 0
+	f.changed()
+}
+
 // Len is how many runes are in the field, and nothing about them. It is
 // what a strength meter and an "at least 12 characters" rule read.
 func (f *SecretField) Len() int { return utf8.RuneCount(f.buf) }

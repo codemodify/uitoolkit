@@ -34,6 +34,30 @@ type StatusItem interface {
 	Backend() string
 	// Alive reports a live host (icon and/or notification daemon). Stubs are not.
 	Alive() bool
+	// Shown reports whether anything on this desktop actually displays
+	// the item, which is a narrower question than Alive and the one an
+	// application has to ask before it hides its window in the tray.
+	//
+	// Alive says there is somewhere to send the item. Shown says someone
+	// is showing it. The two differ on exactly the desktop where getting
+	// it wrong costs the user their window: a GNOME session has a session
+	// bus and no tray at all unless an AppIndicator extension is
+	// installed, so an application that closed to the tray there would
+	// put its window somewhere with no way back.
+	//
+	// Linux reads the StatusNotifierWatcher's
+	// IsStatusNotifierHostRegistered and follows its host signals;
+	// Windows and macOS have an area that is always there, so it follows
+	// Alive. A backend that cannot tell answers true rather than false —
+	// refusing to run on a desktop that would have worked is the worse
+	// failure of the two.
+	Shown() bool
+	// SetOnShownChange installs a callback for a tray host arriving or
+	// going away while the program runs — an extension switched on, a
+	// panel restarted — so a window hidden to a tray that has gone can be
+	// put back. It runs on the options' Dispatch, like every other status
+	// callback, replaces any previous one, and nil removes it.
+	SetOnShownChange(func(shown bool))
 }
 
 // StatusIcon is a tray pictogram. First non-empty field wins: Image, Path,
