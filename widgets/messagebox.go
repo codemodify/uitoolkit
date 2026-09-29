@@ -1,6 +1,8 @@
 package widgets
 
 import (
+	"strings"
+
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/layout"
 	"github.com/codemodify/uitoolkit/style"
@@ -66,11 +68,27 @@ func (k MessageKind) Title() string {
 
 // MessageBoxOptions configures ShowMessageBox / NewMessageBox.
 type MessageBoxOptions struct {
-	Title    string
-	Message  string
-	Kind     MessageKind
-	Buttons  MessageButtons
+	Title   string
+	Message string
+	Kind    MessageKind
+	Buttons MessageButtons
+	// Input, when set, puts a single-line field under the message and
+	// makes this a prompt: the field takes the focus instead of the
+	// default button, Return accepts, and [MessageBox.Text] reads the
+	// value back. [Prompt] is the short way to one.
+	Input    *MessageBoxInput
 	OnResult func(MessageResult)
+}
+
+// MessageBoxInput is the field [MessageBoxOptions.Input] adds.
+type MessageBoxInput struct {
+	Text        string // the value the field starts with, selected
+	Placeholder string
+	Password    bool
+	// Required greys the accepting button out while the field is empty,
+	// and makes Return do nothing — a "name this folder" dialog must not
+	// be able to return an empty name.
+	Required bool
 }
 
 // MessageBox is the card inside a modal Overlay.
@@ -80,6 +98,9 @@ type MessageBox struct {
 	result  MessageResult
 	done    bool
 	overlay *Overlay
+	field   *TextField
+	primary *Button
+	text    string
 }
 
 // NewMessageBox builds an overlay + card. Call Show on a host, or use ShowMessageBox.
@@ -94,6 +115,21 @@ func NewMessageBox(opts MessageBoxOptions) *MessageBox {
 	icon.Init(icon)
 
 	body := NewColumn(NewLabel(opts.Message)).WithGap(8)
+	if in := opts.Input; in != nil {
+		mb.text = in.Text
+		mb.field = NewTextField(in.Text, in.Placeholder, func(s string) {
+			mb.text = s
+			if mb.primary != nil && in.Required {
+				mb.primary.SetEnabled(mb.acceptable())
+			}
+		})
+		mb.field.Password = in.Password
+		// The initial value is a suggestion — a folder's current name, a
+		// default file name — and typing replaces it rather than appending
+		// to it, which is what every rename dialog does.
+		mb.field.SelectAll()
+		body.Add(mb.field)
+	}
 
 	head := NewRow(icon, body).WithGap(12).WithAlign(layout.AlignStart)
 	head.AddFlex(body, 1)
@@ -114,6 +150,21 @@ func NewMessageBox(opts MessageBoxOptions) *MessageBox {
 	// No Yes"); Windows / KDE read the same row backwards ("Yes No Cancel").
 	primary := actions[len(actions)-1]
 	mb.overlay.InitialFocus = primary
+	if mb.field != nil {
+		// A prompt is there to be typed in: the field takes the focus,
+		// and Return is what the default button would have been. Escape
+		// is left alone — the field lets it bubble to the overlay, which
+		// is the cancel the rest of this dialog already has.
+		mb.overlay.InitialFocus = mb.field
+		mb.field.OnSubmit = func(string) {
+			if mb.acceptable() {
+				mb.finish(mb.acceptResult())
+			}
+		}
+		if mb.primary != nil {
+			mb.primary.SetEnabled(mb.acceptable())
+		}
+	}
 	mb.overlay.OnPresented = func() {
 		if style.LookHint(mb.overlay.Look(), style.HintDialogPrimaryFirst) == 0 {
 			return
@@ -132,6 +183,9 @@ func (mb *MessageBox) actionButtons() []widget.Component {
 	add := func(label string, primary bool, res MessageResult) *Button {
 		b := NewButton(label, func() { mb.finish(res) })
 		b.Primary = primary
+		if primary {
+			mb.primary = b
+		}
 		return b
 	}
 	switch mb.opts.Buttons {
@@ -161,12 +215,33 @@ func (mb *MessageBox) cancelResult() MessageResult {
 	}
 }
 
+// acceptResult is what the default button of this button set returns.
+func (mb *MessageBox) acceptResult() MessageResult {
+	switch mb.opts.Buttons {
+	case ButtonsYesNo, ButtonsYesNoCancel:
+		return ResultYes
+	default:
+		return ResultOK
+	}
+}
+
+// acceptable is false only for a Required field left empty.
+func (mb *MessageBox) acceptable() bool {
+	if mb.field == nil || mb.opts.Input == nil || !mb.opts.Input.Required {
+		return true
+	}
+	return strings.TrimSpace(mb.field.Text) != ""
+}
+
 func (mb *MessageBox) finish(res MessageResult) {
 	if mb.done {
 		return
 	}
 	mb.done = true
 	mb.result = res
+	if mb.field != nil {
+		mb.text = mb.field.Text
+	}
 	if mb.overlay != nil {
 		widget.DismissOverlay(mb.overlay)
 	}
@@ -180,6 +255,14 @@ func (mb *MessageBox) Overlay() *Overlay { return mb.overlay }
 
 // Result is the last button, or ResultNone.
 func (mb *MessageBox) Result() MessageResult { return mb.result }
+
+// Text is what [MessageBoxOptions.Input]'s field holds. It is the empty
+// string for a message box without one.
+func (mb *MessageBox) Text() string { return mb.text }
+
+// Field is the input field, or nil. It is here so a caller can reach the
+// things a field has and a dialog cannot guess — Accept, Clearable, Mono.
+func (mb *MessageBox) Field() *TextField { return mb.field }
 
 // Show mounts the modal on the window that hosts from.
 func (mb *MessageBox) Show(from widget.Component) bool {
@@ -220,6 +303,27 @@ func Confirm(from widget.Component, title, message string, on func(bool)) *Messa
 			}
 		},
 	})
+}
+
+// Prompt asks for one line of text. on is called with the field's value
+// and true for OK, and with it and false for Cancel or Escape — the same
+// shape as [Confirm], with the answer beside the yes or no.
+//
+// It is the "name this" dialog: a new folder, a rename, a saved search.
+// Anything more than one field is a form, and a form is a window.
+func Prompt(from widget.Component, title, label, initial string, on func(string, bool)) *MessageBox {
+	var mb *MessageBox
+	mb = NewMessageBox(MessageBoxOptions{
+		Title: title, Message: label, Kind: MessageQuestion, Buttons: ButtonsOKCancel,
+		Input: &MessageBoxInput{Text: initial},
+		OnResult: func(r MessageResult) {
+			if on != nil {
+				on(mb.Text(), r == ResultOK)
+			}
+		},
+	})
+	mb.Show(from)
+	return mb
 }
 
 // Warn is a warning OK dialog.

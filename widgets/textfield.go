@@ -151,6 +151,15 @@ func (t *TextField) Caret() int { return t.caret }
 // Selection returns the unordered selection anchors.
 func (t *TextField) Selection() (a, b int) { return t.selA, t.selB }
 
+// SelectAll selects the whole value and puts the caret at its end, which
+// is what Ctrl+A does and what a dialog does to an initial value it
+// expects to be replaced rather than edited.
+func (t *TextField) SelectAll() {
+	t.selA, t.selB = 0, runeCount(t.Text)
+	t.caret = t.selB
+	t.Invalidate()
+}
+
 func (t *TextField) SetCaretBlink(on bool) { t.blinkOn = on }
 
 func (t *TextField) Measure(c layout.Constraints) paintengine2d.Point {
@@ -697,9 +706,7 @@ func (t *TextField) KeyPress(e widget.KeyEvent) bool {
 		return true
 	case platform.KeyA:
 		if e.Mods.Ctrl() {
-			t.selA, t.selB = 0, runeCount(t.Text)
-			t.caret = t.selB
-			t.Invalidate()
+			t.SelectAll()
 			return true
 		}
 	case platform.KeyC:

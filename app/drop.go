@@ -9,12 +9,42 @@ import (
 // dropTarget is the component under pos that takes one of the offered
 // types: the one hit, or its nearest ancestor that does.
 func (w *Window) dropTarget(pos paintengine2d.Point, offered []string) (widget.DropTarget, widget.Component) {
+	// Files first, wherever they are wanted.
+	//
+	// A file manager offers "text/uri-list" **and** "text/plain" on the
+	// same drag — the paths as text, so something that only takes text
+	// still gets something useful. Taking the innermost widget that
+	// accepts anything at all therefore gave every file drop to a text
+	// widget: dropping files on the message body of a Write window
+	// typed their paths into it instead of attaching them, which is
+	// where people drop them.
+	//
+	// So a drag carrying files looks for something that wants *files*
+	// before it settles for something that wants text. Only one pass is
+	// spent on it, and only when files are on offer.
+	if dropHasFiles(offered) {
+		for c := w.hitContent(pos); c != nil; c = c.Parent() {
+			if t, ok := c.(widget.DropTarget); ok && c.Enabled() && dropHasFiles(t.DropTypes()) {
+				return t, c
+			}
+		}
+	}
 	for c := w.hitContent(pos); c != nil; c = c.Parent() {
 		if t, ok := c.(widget.DropTarget); ok && c.Enabled() && widget.PickDropMime(t.DropTypes(), offered) != "" {
 			return t, c
 		}
 	}
 	return nil, nil
+}
+
+// dropHasFiles reports whether a list of mime types carries files.
+func dropHasFiles(mimes []string) bool {
+	for _, m := range mimes {
+		if m == "text/uri-list" {
+			return true
+		}
+	}
+	return false
 }
 
 // dragMotion follows a drag over the window, telling the target under it
