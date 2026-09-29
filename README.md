@@ -23,7 +23,7 @@ _ = app.Run()
 ```
 
 ```bash
-go get github.com/codemodify/uitoolkit@v0.21.0
+go get github.com/codemodify/uitoolkit@v0.22.0
 go get github.com/codemodify/paintengine2d@v0.11.0
 ```
 
@@ -909,6 +909,52 @@ are independent look.json fields again; compound pack names migrate
 (**v0.12.2**).
 
 ## Version
+
+Every release's notes are in [release-notes.md](release-notes.md); the
+last two are summarised here.
+
+**0.22.0** — **What two applications could not do.** Everything in this
+release came from a mail client and a password vault writing down what
+they had worked around and why, and the two lists are now down to one
+open item between them.
+
+*Secrets are not strings.* A Go string cannot be wiped: every copy lives
+until the collector reaches it and then lingers in freed memory.
+`SecretField` and `SecretLabel` keep their contents in a `[]byte` edited
+in place, zero the array when it is outgrown or shortened, and refuse
+copy, cut, drag-out, the X11 PRIMARY selection and middle-click paste —
+a test reads the source to keep any `string(` conversion out. Around them:
+`ClipboardSetSecret` (CLIPBOARD only, hinted so clipboard managers do not
+record it, cleared on a timeout and on quit), `Window.SetSecureInput` and
+`SetExcludeFromCapture`, the input method turned off while a secret field
+has the focus, and `ModCapsLock`, because a right passphrase refused is
+nearly always Caps Lock and a field that holds a secret cannot work that
+out without reading it.
+
+*Dialogs are windows the desktop knows about.* `WindowOptions` gained
+`Role`, `Center` and `FitContent`, applied before the window is shown, so
+a prompt opens in front, focused, centred and as tall as its text —
+measured at the window's own scale and through its own frame, which is
+what an application measuring by hand could not have at the same time.
+
+*Widgets.* `Prompt`, `TokenField` (removable chips), `FileOpenFolder`,
+per-tab disable and hide, `HeightForRows`, `ScrollView.ShrinkToContent`,
+a non-capturing popup for type-ahead, and icons in table cells, column
+headers and tree nodes — a message list's marks used to have to be
+characters, which meant they came out of the font.
+
+*Rich text* reads `<table>`, `<blockquote>` and `<hr>` as tables, quotes
+and rules rather than as their text, and `ResolveImageKind` tells an
+application whether an image is an inline part or a remote fetch.
+
+*Fixed.* Text measured at its own width wrapped anyway, because
+`Font.Wrap` counted without kerning — so every wrapping label in a form
+was a line too tall. A wrapping label that flexes in a row was clipped,
+for want of a height-for-width pass. A theme this build cannot paint
+turned the window dark, because the palette family was guessed from the
+pack's *name*. Gaps and padding were device pixels, so a dialog's margins
+halved on a HiDPI display. A program with no `look.json` opened white on
+a dark desktop. macOS had a tray icon that did nothing when clicked.
 
 **0.21.0** — **Three platforms, at parity.** Windows and macOS now implement
 every seam the Linux backends do, and the compiler keeps it that way.
