@@ -22,6 +22,9 @@ var (
 	_ DropNegotiator = (*wlSurface)(nil)
 	_ DropReceiver   = (*wlSurface)(nil)
 	_ IMESurface     = (*wlSurface)(nil)
+	// Wayland inhibits the compositor's shortcuts; it cannot keep a
+	// window out of a capture, and does not claim to.
+	_ SecureInputSurface = (*wlSurface)(nil)
 
 	_ WindowFrame    = (*x11Surface)(nil)
 	_ WindowGeometry = (*x11Surface)(nil)
@@ -31,4 +34,7 @@ var (
 	_ DropNegotiator = (*x11Surface)(nil)
 	_ DropReceiver   = (*x11Surface)(nil)
 	_ IMESurface     = (*x11Surface)(nil)
+	// X11 grabs the keyboard; the root window is readable by any
+	// client, so there is no capture exclusion to implement.
+	_ SecureInputSurface = (*x11Surface)(nil)
 )

@@ -1183,13 +1183,18 @@ type x11Surface struct {
 	// imeOff is set while the focused widget is a secret one: the zero
 	// value is an ordinary window, with the input context focused as it
 	// always was.
-	imeOff     bool
-	imeSpotX   int
-	imeSpotY   int
-	preeditBuf string
-	ximCbs     unsafe.Pointer
-	gpu        *paintengine2d.GPUDevice
-	popup      bool
+	imeOff bool
+	// secureWanted is the application's SetSecureInput request, and
+	// secureHeld whether the keyboard grab is actually in hand — the two
+	// differ while the window is not focused.
+	secureWanted bool
+	secureHeld   bool
+	imeSpotX     int
+	imeSpotY     int
+	preeditBuf   string
+	ximCbs       unsafe.Pointer
+	gpu          *paintengine2d.GPUDevice
+	popup        bool
 	// hidden is set by Hide: presenting must not map the window again
 	// (close-to-tray hid it, and the next repaint showed it).
 	hidden bool
@@ -2051,6 +2056,7 @@ func (s *x11Surface) translate(xe *C.XEvent) []Event {
 		if !s.imeOff {
 			C.ui_set_ic_focus(s.ic)
 		}
+		defer s.secureFocusChangedLocked(true)
 		return append([]Event{{Kind: EventFocusIn}}, s.focusChangedLocked(true)...)
 	case C.FocusOut:
 		if C.ui_focus_mode(xe) == C.NotifyGrab {
@@ -2059,6 +2065,7 @@ func (s *x11Surface) translate(xe *C.XEvent) []Event {
 			return nil
 		}
 		C.ui_unset_ic_focus(s.ic)
+		defer s.secureFocusChangedLocked(false)
 		out := append([]Event{{Kind: EventFocusOut}, {Kind: EventIMECancel}}, s.popupsLostLocked()...)
 		if leftover := C.ui_reset_ic(s.ic); leftover != nil {
 			txt := C.GoString(leftover)

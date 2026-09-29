@@ -59,6 +59,10 @@ type akSurface struct {
 
 	title string
 
+	// secureOn is this window's half of the process-wide secure input
+	// count, so closing it can give back exactly what it took.
+	secureOn bool
+
 	mu    sync.Mutex
 	queue []Event
 
@@ -249,6 +253,13 @@ func (s *akSurface) Close() error {
 		return nil
 	}
 	s.torn = true
+	// Give back whatever this window took of the process-wide secure
+	// input count. An unbalanced enable would leave the desktop in
+	// secure input until the process exits, and no other application
+	// could undo it.
+	if s.secureOn {
+		s.SetSecureInput(false)
+	}
 	// Popups first, and deepest first: a submenu belongs to its menu,
 	// and a child window outliving its parent is a window nobody can
 	// reach.

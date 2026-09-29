@@ -15,4 +15,7 @@ var (
 	_ DropNegotiator = (*akSurface)(nil)
 	_ DropReceiver   = (*akSurface)(nil)
 	_ IMESurface     = (*akSurface)(nil)
+	// macOS has both, and is the only one that does.
+	_ SecureInputSurface    = (*akSurface)(nil)
+	_ CaptureExcludeSurface = (*akSurface)(nil)
 )

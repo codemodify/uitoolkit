@@ -75,6 +75,11 @@ type offscreenFrame struct {
 	geomW, geomH   int
 	geomLW, geomLH int
 	// imeRect is the caret rectangle the app last gave the simulated
+	// secureInput and noCapture are the last SetSecureInput and
+	// SetExcludeFromCapture requests, so a test can assert a prompt
+	// asked for them.
+	secureInput bool
+	noCapture   bool
 	// input method (surface device pixels), imeOn whether it is enabled.
 	imeRect [4]int
 	imeOn   bool
@@ -523,4 +528,33 @@ func (o *Offscreen) SetIcon(images []*paintengine2d.Image) bool {
 	}
 	o.frame.calls.Icons = append(o.frame.calls.Icons, sizes)
 	return true
+}
+
+// SetSecureInput records the request ([SecureInputSurface]). Offscreen
+// has no keyboard to take, so it answers yes and remembers, which is
+// what a test asserting that a prompt asked for it needs.
+func (o *Offscreen) SetSecureInput(on bool) bool {
+	if o == nil {
+		return false
+	}
+	o.frame.secureInput = on
+	return true
+}
+
+// SetExcludeFromCapture records the request ([CaptureExcludeSurface]).
+func (o *Offscreen) SetExcludeFromCapture(on bool) bool {
+	if o == nil {
+		return false
+	}
+	o.frame.noCapture = on
+	return true
+}
+
+// SecureInput and ExcludeFromCapture are what the app last asked for.
+func (o *Offscreen) SecureInput() bool {
+	return o != nil && o.frame.secureInput
+}
+
+func (o *Offscreen) ExcludeFromCapture() bool {
+	return o != nil && o.frame.noCapture
 }

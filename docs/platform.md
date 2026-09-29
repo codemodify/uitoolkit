@@ -323,7 +323,8 @@ wayland-scanner private-code \
 # linux-dmabuf-unstable-v1, linux-explicit-synchronization-unstable-v1,
 # linux-drm-syncobj-v1, xdg-activation-v1, cursor-shape-v1,
 # xdg-toplevel-icon-v1 (staging), pointer-gestures-unstable-v1,
-# xdg-foreign-unstable-v2, xdg-output-unstable-v1
+# xdg-foreign-unstable-v2, xdg-output-unstable-v1,
+# keyboard-shortcuts-inhibit-unstable-v1, xdg-dialog-v1 (staging)
 ```
 
 `zwlr_layer_shell_v1` is not in wayland-protocols — it is wlroots'

@@ -29,6 +29,7 @@ package platform
 #include "cursor-shape-v1-client-protocol.h"
 #include "xdg-toplevel-drag-v1-client-protocol.h"
 #include "ext-background-effect-v1-client-protocol.h"
+#include "keyboard-shortcuts-inhibit-unstable-v1-client-protocol.h"
 #include "wayland_dmabuf.h"
 #include "wayland_sync.h"
 #include "wayland_cursor.h"
@@ -659,6 +660,25 @@ static void ui_xkb_compose_reset(struct xkb_compose_state *s) { if (s) xkb_compo
 static const struct wl_interface *ui_wl_data_man_iface(void) { return &wl_data_device_manager_interface; }
 static const struct wl_interface *ui_wl_output_iface(void) { return &wl_output_interface; }
 static const struct wl_interface *ui_wl_ti_man_iface(void) { return &zwp_text_input_manager_v3_interface; }
+
+static const struct wl_interface *ui_wl_ksi_man_iface(void) {
+	return &zwp_keyboard_shortcuts_inhibit_manager_v1_interface;
+}
+
+static struct zwp_keyboard_shortcuts_inhibitor_v1 *ui_wl_inhibit_shortcuts(
+		struct zwp_keyboard_shortcuts_inhibit_manager_v1 *m,
+		struct wl_surface *surf, struct wl_seat *seat) {
+	if (!m || !surf || !seat) return NULL;
+	return zwp_keyboard_shortcuts_inhibit_manager_v1_inhibit_shortcuts(m, surf, seat);
+}
+
+static void ui_wl_inhibitor_destroy(struct zwp_keyboard_shortcuts_inhibitor_v1 *i) {
+	if (i) zwp_keyboard_shortcuts_inhibitor_v1_destroy(i);
+}
+
+static void ui_wl_ksi_man_destroy(struct zwp_keyboard_shortcuts_inhibit_manager_v1 *m) {
+	if (m) zwp_keyboard_shortcuts_inhibit_manager_v1_destroy(m);
+}
 static const struct wl_interface *ui_wl_prim_man_iface(void) { return &zwp_primary_selection_device_manager_v1_interface; }
 static const struct wl_interface *ui_wl_deco_man_iface(void) { return &zxdg_decoration_manager_v1_interface; }
 static const struct wl_interface *ui_wl_top_drag_man_iface(void) { return &xdg_toplevel_drag_manager_v1_interface; }
@@ -1298,13 +1318,17 @@ type wlConn struct {
 	pendPrim     *C.struct_zwp_primary_selection_offer_v1
 	pendPrimMime string
 
-	textMan    *C.struct_zwp_text_input_manager_v3
-	textIn     *C.struct_zwp_text_input_v3
-	textActive bool
-	tiWanted   bool // app focused an IMETarget; enable only then
-	tiSurf     int
-	imePre     string
-	imeCommit  string
+	textMan *C.struct_zwp_text_input_manager_v3
+	// shortcutMan is zwp_keyboard_shortcuts_inhibit_manager_v1, where the
+	// compositor offers it: what a passphrase prompt asks for so the
+	// compositor stops eating keys as its own shortcuts.
+	shortcutMan *C.struct_zwp_keyboard_shortcuts_inhibit_manager_v1
+	textIn      *C.struct_zwp_text_input_v3
+	textActive  bool
+	tiWanted    bool // app focused an IMETarget; enable only then
+	tiSurf      int
+	imePre      string
+	imeCommit   string
 	// lastPre / lastPreCaret are the preedit last handed to the app, and
 	// tiRect the cursor rectangle last committed to the compositor. Every
 	// text_input commit makes the compositor answer with done; re-sending
@@ -1417,14 +1441,17 @@ type wlSlot struct {
 const maxSlotStale = 32
 
 type wlSurface struct {
-	soft  softDevice // software devices of the buffers (no GPU)
-	id    int
-	conn  *wlConn
-	surf  *C.struct_wl_surface
-	xdg   *C.struct_xdg_surface
-	top   *C.struct_xdg_toplevel
-	title string
-	appID string
+	// inhibitor is the keyboard-shortcuts inhibitor while this surface
+	// has asked for secure input (SetSecureInput).
+	inhibitor *C.struct_zwp_keyboard_shortcuts_inhibitor_v1
+	soft      softDevice // software devices of the buffers (no GPU)
+	id        int
+	conn      *wlConn
+	surf      *C.struct_wl_surface
+	xdg       *C.struct_xdg_surface
+	top       *C.struct_xdg_toplevel
+	title     string
+	appID     string
 	// sizeOpts are the options the window's limits are computed from (its
 	// minimum already defaulted), sizing its resize policy and limits what
 	// xdg_toplevel was last told (platform.WindowGeometry).
@@ -1771,6 +1798,10 @@ func (c *wlConn) closeLocked() {
 	}
 	c.outputs = map[uintptr]uint32{}
 	c.outs = newOutputSet()
+	if c.shortcutMan != nil {
+		C.ui_wl_ksi_man_destroy(c.shortcutMan)
+		c.shortcutMan = nil
+	}
 	if c.seat != nil {
 		C.ui_wl_seat_destroy(c.seat)
 		c.seat = nil
@@ -3186,6 +3217,9 @@ func uitkWlRegistryGlobal(id C.uintptr_t, reg *C.struct_wl_registry, name C.uint
 			// or after it; whichever came second asks for the pair.
 			c.requestXdgOutput(uint32(name), out)
 		}
+	case "zwp_keyboard_shortcuts_inhibit_manager_v1":
+		c.shortcutMan = (*C.struct_zwp_keyboard_shortcuts_inhibit_manager_v1)(
+			C.ui_wl_bind(reg, name, C.ui_wl_ksi_man_iface(), 1))
 	case "zwp_text_input_manager_v3":
 		c.textMan = (*C.struct_zwp_text_input_manager_v3)(C.ui_wl_bind(reg, name, C.ui_wl_ti_man_iface(), 1))
 		c.bindSeatExtras()
