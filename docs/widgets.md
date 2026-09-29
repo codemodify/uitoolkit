@@ -140,7 +140,7 @@ names) is in [compare.md](compare.md).
 | Spacer | `Spacer` | `QSpacerItem` / `Item` | `GtkBox` expand | — | `layout.Spacer` | — | — | — | `Spacer` | [thumb](screenshots/compare/layout.png) |
 | Separator | `Separator` / `VSeparator` | `QFrame` / `ToolSeparator` | `GtkSeparator` | `Separator` | `widget.Separator` | `ToolStripSeparator` | `Separator` | `NSBox` (separator) | `Divider` | [thumb](screenshots/compare/layout.png) |
 | Panel | `Panel` | `QGroupBox` / `GroupBox` | `GtkFrame` | `HeaderedContentControl` ≈ | `widget.Card` ≈ | `GroupBox` | `GroupBox` | `NSBox` | `GroupBox` | [thumb](screenshots/compare/panel.png) |
-| Scroll | `ScrollView` | `QScrollArea` / `ScrollView` | `GtkScrolledWindow` | `ScrollViewer` | `container.Scroll` | `AutoScroll` | `ScrollViewer` | `NSScrollView` | `ScrollView` | [thumb](screenshots/compare/scrollview.png) · [gallery](screenshots/gallery-scroll.png) |
+| Scroll | `ScrollView` (`ShrinkToContent`, `MaxHeight`) | `QScrollArea` / `ScrollView` | `GtkScrolledWindow` | `ScrollViewer` | `container.Scroll` | `AutoScroll` | `ScrollViewer` | `NSScrollView` | `ScrollView` | [thumb](screenshots/compare/scrollview.png) · [gallery](screenshots/gallery-scroll.png) |
 | Splitter | `Splitter` | `QSplitter` / `SplitView` | `GtkPaned` | `GridSplitter` | `container.Split` | `SplitContainer` | `GridSplitter` | `NSSplitView` | `HSplitView` / `VSplitView` | [thumb](screenshots/compare/splitter.png) |
 | Dockable panels | `dock.Host` + `dock.Panel` (four areas, tabs, float, saved layout) | `QMainWindow::addDockWidget` + `QDockWidget` | — (`GtkPaned` / `AdwToolbarView` ≈) | `Dock.Avalonia` (third party) ≈ | — | `DockPanel` (docking only, no float / tab) ≈ | `DockPanel` ≈ | — | — | — |
 | Windows that snap together | `rack.Desk` + `rack.Rack` (separate toplevels that snap flush and travel as one; X11 only) | — | — | — | — | — | — | — | — | [players](players.md) |
@@ -175,6 +175,15 @@ slides against the screen; one placed by hand says so with
 `widget.SetPopupAnchor`. A popup component with a hit shape
 (`SetHitShapeFunc`) is cut to it — surface, shadow and input region
 ([shapes.md](shapes.md#popups)).
+
+A popup owns the keyboard while it is up, which is what a menu wants and
+what a **completion list** does not: there the user is still typing into
+the field underneath. `widget.SetPopupKeysPass` makes one non-capturing —
+it is still offered every key first, so it takes Up, Down, Return and
+Escape by handling them, and every letter, Backspace and caret key
+reaches the field. It does not take the focus either, so the field keeps
+its caret; the application opens, updates and dismisses the popup as the
+text changes.
 
 Pointer shapes (`TableView` column dividers, `Splitter` sash, text
 fields) use the **host** cursor theme — compositor `wp_cursor_shape_v1`

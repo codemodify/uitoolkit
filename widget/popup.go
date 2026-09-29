@@ -235,6 +235,46 @@ func PopupAnchorOf(popup Component) (PopupAnchor, bool) {
 	return PopupAnchor{}, false
 }
 
+type keyPasser interface{ keysPassSlot() *bool }
+
+func (b *Base) keysPassSlot() *bool { return &b.keysPass }
+
+// SetPopupKeysPass makes a popup **non-capturing**: a key it does not
+// take reaches the widget that has the focus, which is normally the one
+// the popup hangs from.
+//
+// A popup owns the keyboard by default, and that is right for a menu: a
+// menu is where the keyboard is while it is open, and a key leaking past
+// it to the page behind would act on something the user cannot see.
+//
+// It is wrong for the other kind of popup — a completion list, a
+// type-ahead drop-down, a search-suggest panel — where the user is still
+// typing into the field underneath. There the popup wants the keys that
+// are about the list (Up, Down, Return, Escape, which it takes by
+// returning true from KeyPress) and nothing else; every letter, every
+// Backspace and every caret key belongs to the field. Without this the
+// only way to build one was to lay the list out inline and reflow the
+// form around it.
+//
+// The popup is still offered every key first, so it decides what is
+// about the list. It does not take the focus either, so the field keeps
+// its caret: it is the app that opens and updates the popup as the text
+// changes, and dismisses it when there is nothing to suggest.
+func SetPopupKeysPass(popup Component, v bool) {
+	if s, ok := popup.(keyPasser); ok {
+		*s.keysPassSlot() = v
+	}
+}
+
+// PopupKeysPass reports whether popup lets the keys it did not take
+// through to the focused widget ([SetPopupKeysPass]).
+func PopupKeysPass(popup Component) bool {
+	if s, ok := popup.(keyPasser); ok {
+		return *s.keysPassSlot()
+	}
+	return false
+}
+
 // PreparePopup attaches from's host and from's look to popup before it is
 // measured.
 //

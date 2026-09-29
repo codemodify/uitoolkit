@@ -1081,7 +1081,12 @@ func (w *Window) dispatch(ev platform.Event) {
 			// would deliver the same key to it a second time (focus is
 			// normally the popup itself) and then leak it to the content
 			// behind the menu.
-			if w.popup != nil {
+			//
+			// Unless it said otherwise: a non-capturing popup — a
+			// completion list over a field the user is still typing in —
+			// takes the keys that are about the list and lets the rest
+			// reach the field ([widget.SetPopupKeysPass]).
+			if w.popup != nil && !widget.PopupKeysPass(w.popup) {
 				return
 			}
 		}

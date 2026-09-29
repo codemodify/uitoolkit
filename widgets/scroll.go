@@ -11,7 +11,29 @@ import (
 // ScrollView clips a larger child and paints a vertical scrollbar.
 type ScrollView struct {
 	widget.Base
-	OffsetY      float32
+	OffsetY float32
+	// ShrinkToContent measures to what is inside instead of taking all
+	// the height it is offered.
+	//
+	// A scroll view's whole job is normally to fill a space and scroll
+	// what does not fit, so that is the default. It is the wrong answer
+	// for a panel that should be as tall as its contents *up to* a limit
+	// — a message header that grows with an invitation or a list of
+	// attachments and must not push the body out — which otherwise has
+	// to be wrapped in a box that measures the child again and reads
+	// [ScrollView.ContentHeight] back.
+	//
+	// With [ScrollView.MaxHeight] it is "as tall as what is in it, up to
+	// N, and scrolling past that".
+	ShrinkToContent bool
+	// MaxHeight caps the height this view asks for, in 1x design pixels
+	// (0: no cap). It applies whether or not ShrinkToContent is set: on
+	// its own it means "no taller than N however much room there is".
+	MaxHeight float32
+	// MinHeight floors it, in 1x design pixels (0: none). It is for a
+	// ShrinkToContent view that must not collapse to nothing when it is
+	// empty.
+	MinHeight    float32
 	child        widget.Component
 	content      paintengine2d.Point
 	bar          scrollDrag
@@ -69,8 +91,23 @@ func (s *ScrollView) Measure(c layout.Constraints) paintengine2d.Point {
 		}
 		s.content = s.child.Measure(layout.Constraints{MaxW: cw, MaxH: -1})
 	}
-	w, h := s.content.X+g, style.Dip(s.Look(), 160)
-	if c.HasMaxH() {
+	lk := s.Look()
+	w, h := s.content.X+g, style.Dip(lk, 160)
+	switch {
+	case s.ShrinkToContent:
+		h = s.content.Y
+	case c.HasMaxH():
+		h = c.MaxH
+	}
+	if s.MinHeight > 0 {
+		h = max(h, style.Dip(lk, s.MinHeight))
+	}
+	if s.MaxHeight > 0 {
+		h = min(h, style.Dip(lk, s.MaxHeight))
+	}
+	// The cap is this view's, not a licence to overflow the box it was
+	// given: a parent that offered less still wins.
+	if c.HasMaxH() && h > c.MaxH {
 		h = c.MaxH
 	}
 	if c.HasMaxW() {

@@ -64,6 +64,9 @@ type Base struct {
 	// anchor is what the component hangs from when it is a popup: set by
 	// the Place* functions (widget/popup.go), nil for everything else.
 	anchor *PopupAnchor
+	// keysPass makes a popup non-capturing: keys it does not take reach
+	// the widget it hangs from (widget.SetPopupKeysPass).
+	keysPass bool
 }
 
 type accLabel struct{ name, desc string }
