@@ -244,7 +244,37 @@ func (s *Stack) Arrange(r paintengine2d.Rect) {
 // Pad insets a single child.
 type Pad struct {
 	widget.Base
+	// L, T, R and B are 1x design lengths, scaled by the look like every
+	// other length in the toolkit ([style.Dip]). Set RawSpacing to be
+	// given them in device pixels instead.
 	L, T, R, B float32
+	// RawSpacing takes the four insets as device pixels: the caller has
+	// already scaled them, or is placing something against a fixed pixel
+	// grid. It is the opt-out rather than the default, for the same
+	// reason as [FlexBox.RawSpacing] — a margin that does not follow the
+	// display is a bug far more often than it is a choice.
+	//
+	// They used to be device pixels always, which is what made a dialog
+	// built with NewPad(20) sit in a 20-pixel margin beside text that had
+	// doubled. 0.22.0 scaled FlexBox's gap and padding and left these
+	// alone, so a form at 2x had scaled gaps between unscaled pads —
+	// worse than either answer on its own.
+	RawSpacing bool
+}
+
+// insets are the four lengths in device pixels.
+//
+// At scale 1 this is the identity, which is why none of the toolkit's
+// pinned geometry moved: what changes is only what a 2x window does.
+func (p *Pad) insets() (l, t, r, b float32) {
+	if p.RawSpacing {
+		return p.L, p.T, p.R, p.B
+	}
+	k := style.LookScale(p.Look())
+	if k == 1 {
+		return p.L, p.T, p.R, p.B
+	}
+	return p.L * k, p.T * k, p.R * k, p.B * k
 }
 
 func NewPad(v float32, child widget.Component) *Pad {
@@ -257,18 +287,20 @@ func NewPad(v float32, child widget.Component) *Pad {
 }
 
 func (p *Pad) Measure(c layout.Constraints) paintengine2d.Point {
-	inner := c.Inset(p.L+p.R, p.T+p.B)
+	l, t, r, b := p.insets()
+	inner := c.Inset(l+r, t+b)
 	var sz paintengine2d.Point
 	if len(p.Children()) > 0 {
 		sz = p.Children()[0].Measure(inner)
 	}
-	return c.Constrain(paintengine2d.Pt(sz.X+p.L+p.R, sz.Y+p.T+p.B))
+	return c.Constrain(paintengine2d.Pt(sz.X+l+r, sz.Y+t+b))
 }
 
-func (p *Pad) Arrange(r paintengine2d.Rect) {
-	p.SetBounds(r)
+func (p *Pad) Arrange(rect paintengine2d.Rect) {
+	p.SetBounds(rect)
 	if len(p.Children()) == 0 {
 		return
 	}
-	p.Children()[0].Arrange(paintengine2d.XYWH(p.L, p.T, r.Dx()-p.L-p.R, r.Dy()-p.T-p.B))
+	l, t, r, b := p.insets()
+	p.Children()[0].Arrange(paintengine2d.XYWH(l, t, rect.Dx()-l-r, rect.Dy()-t-b))
 }

@@ -354,8 +354,12 @@ func (s *sheet) bars(x, y float32) {
 	s.caption(x, y+144, "overlay dimmer")
 	s.lk.DrawButton(s.ctx, s.r(x, y+162, 120, 30), stN, "Behind")
 	s.lk.DrawOverlay(s.ctx, s.r(x, y+160, 180, 40))
-	s.lk.DrawLabel(s.ctx, s.r(x+200, y+162, 180, 30), "Label (accent)", s.p.Accent, style.AlignStart)
-	s.lk.DrawLabel(s.ctx, s.r(x+380, y+162, 180, 30), "Label (danger)", s.p.Danger, style.AlignStart)
+	// Ink, not the declared colour: a word drawn on the window background
+	// has nothing behind it to carry the contrast, and most packs' status
+	// colours do not reach 4.5:1 there. The declared colour is still the
+	// right one for a fill.
+	s.lk.DrawLabel(s.ctx, s.r(x+200, y+162, 180, 30), "Label (accent)", s.p.Ink(s.p.Accent), style.AlignStart)
+	s.lk.DrawLabel(s.ctx, s.r(x+380, y+162, 180, 30), "Label (danger)", s.p.DangerInk(), style.AlignStart)
 }
 
 func (s *sheet) frames(x, y float32) {

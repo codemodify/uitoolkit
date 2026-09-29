@@ -53,3 +53,32 @@ func TestTokenLabelFitsItsOwnBox(t *testing.T) {
 	}
 	_ = widget.Component(NewToken("x"))
 }
+
+// A chip is the look's shape, not always a capsule. Zero is a radius —
+// and the commonest one, since 41 of the packs draw square corners — so
+// testing for one above zero read every square pack as having no opinion
+// and gave it the rounded shape it never drew.
+func TestTokenRadiusFollowsTheLook(t *testing.T) {
+	tok := NewToken("ada@example.com")
+	loose := layout.Constraints{MaxW: -1, MaxH: -1}
+	sz := tok.Measure(loose)
+	tok.Arrange(paintengine2d.XYWH(0, 0, sz.X, sz.Y))
+	h := tok.LocalBounds().Dy()
+
+	for _, tc := range []struct {
+		name   string
+		radius float32
+		want   float32
+	}{
+		{"square", 0, 0},
+		{"slight", 3, 3},
+		{"round", 1e6, h * 0.5}, // never more than a capsule
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tokenRadius(h, tc.radius); got != tc.want {
+				t.Errorf("radius %v of a %v-tall chip = %v, want %v",
+					tc.radius, h, got, tc.want)
+			}
+		})
+	}
+}

@@ -83,6 +83,22 @@ func (t *Token) crossRect() paintengine2d.Rect {
 	return paintengine2d.XYWH(b.Max.X-w-style.Dip(t.Look(), 2), b.Min.Y, w, b.Dy())
 }
 
+// tokenRadius is a chip's corner radius: a capsule, unless the look's
+// own corner radius is smaller, so a square-cornered era gets square
+// chips rather than a shape it never drew.
+//
+// Zero is a radius, and the commonest one here — 41 of the packs draw
+// square corners. Testing for a radius above zero read every one of them
+// as "no opinion" and gave them the capsule, which is the exact shape
+// the test was written to keep out of them.
+func tokenRadius(height, lookRadius float32) float32 {
+	rad := height * 0.5
+	if lookRadius >= 0 && lookRadius < rad {
+		return lookRadius
+	}
+	return rad
+}
+
 func (t *Token) Paint(ctx *paintengine2d.Context) {
 	lk := t.Look()
 	p := lk.Palette()
@@ -91,13 +107,7 @@ func (t *Token) Paint(ctx *paintengine2d.Context) {
 	if col == (paintengine2d.Color{}) {
 		col = p.Accent
 	}
-	// A capsule, not a rounded rectangle: the radius is half the height
-	// until the look's corner radius is smaller, so a square-cornered era
-	// gets square chips rather than a shape it never drew.
-	rad := b.Dy() * 0.5
-	if m := lk.Metrics().Radius; m > 0 && m < rad {
-		rad = m
-	}
+	rad := tokenRadius(b.Dy(), lk.Metrics().Radius)
 	alpha := float32(0.18)
 	if t.hover {
 		alpha = 0.26

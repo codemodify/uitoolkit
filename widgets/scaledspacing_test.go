@@ -6,93 +6,116 @@ import (
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/layout"
 	"github.com/codemodify/uitoolkit/style"
+	"github.com/codemodify/uitoolkit/widget"
 )
 
-// lookAt is the default look at a display scale.
-func lookAt(scale float32) style.LookAndFeel {
-	return style.WithScale(style.DarkLook(), scale)
+// scaleHost gives a component a look at a chosen display scale.
+type scaleHost struct {
+	look style.LookAndFeel
 }
 
-// A column made WithPad(20) has 20 pixels of padding at 1x and 40 at 2x.
-//
-// They used to be device pixels, so a dialog's margins halved on a HiDPI
-// display beside text and controls that had doubled, and every
-// application that cared had to write style.Dip around its own numbers.
-func TestFlexSpacingFollowsTheScale(t *testing.T) {
-	build := func(scale float32) *FlexBox {
-		col := NewColumn(newSized(40, 20), newSized(40, 20)).WithGap(10).WithPad(20)
-		col.SetLook(lookAt(scale))
-		col.SetHost(&host{})
-		return col
-	}
-	one := build(1).Measure(layout.Constraints{MaxW: -1, MaxH: -1})
-	two := build(2).Measure(layout.Constraints{MaxW: -1, MaxH: -1})
-	// The children do not scale here (they are fixed test widgets), so
-	// the whole difference is the padding and the gap: 2*20 + 10 more.
-	if want := one.Y + 20*2 + 10; two.Y != want {
-		t.Fatalf("at 2x the column is %v tall, want %v (1x was %v)", two.Y, want, one.Y)
-	}
+func (h *scaleHost) Invalidate(widget.Component, paintengine2d.Rect) {}
+func (h *scaleHost) RequestFocus(widget.Component)                   {}
+func (h *scaleHost) Focus() widget.Component                         { return nil }
+func (h *scaleHost) Scale() float32                                  { return style.LookScale(h.look) }
+func (h *scaleHost) RequestLayout()                                  {}
+func (h *scaleHost) Look() style.LookAndFeel                         { return h.look }
 
-	// And the children land inside the scaled padding.
-	col := build(2)
-	col.Arrange(paintengine2d.XYWH(0, 0, 200, two.Y))
-	first := col.Children()[0]
-	if got := first.Bounds().Min.Y; got != 40 {
-		t.Fatalf("the first child starts at %v, want 40 (20 design pixels at 2x)", got)
-	}
+func atScale(t *testing.T, c widget.Component, scale float32) {
+	t.Helper()
+	c.SetHost(&scaleHost{look: style.WithScale(style.DarkLook(), scale)})
 }
 
-// RawSpacing is the way back for a caller that means device pixels.
-func TestRawSpacingOptsOut(t *testing.T) {
-	col := NewColumn(newSized(40, 20), newSized(40, 20)).WithGap(10).WithPad(20)
-	col.RawSpacing = true
-	col.SetLook(lookAt(2))
-	col.SetHost(&host{})
-	col.Arrange(paintengine2d.XYWH(0, 0, 200, 200))
-	if got := col.Children()[0].Bounds().Min.Y; got != 20 {
-		t.Fatalf("RawSpacing put the first child at %v, want 20", got)
+// 0.22.0 made FlexBox's gap and Grid's row and column gaps 1x design
+// lengths and left Pad, Spacer and ProgressBar in device pixels — so a
+// form at 2x had scaled gaps between unscaled pads, which is worse than
+// either answer on its own.
+func TestPadFollowsTheDisplayScale(t *testing.T) {
+	loose := layout.Constraints{MaxW: -1, MaxH: -1}
+	measure := func(scale float32, raw bool) paintengine2d.Point {
+		p := NewPad(10, NewSpacerSize(0, 0))
+		p.RawSpacing = raw
+		atScale(t, p, scale)
+		return p.Measure(loose)
 	}
-}
 
-// The same for a grid, and so for a form.
-func TestGridSpacingFollowsTheScale(t *testing.T) {
-	build := func(scale float32) *Grid {
-		g := NewGrid()
-		g.ColGap, g.RowGap = 10, 6
-		g.Place(newSized(40, 20), 0, 0)
-		g.Place(newSized(40, 20), 0, 1)
-		g.Place(newSized(40, 20), 1, 0)
-		g.SetLook(lookAt(scale))
-		g.SetHost(&host{})
-		return g
+	one := measure(1, false)
+	two := measure(2, false)
+	if two.X != one.X*2 || two.Y != one.Y*2 {
+		t.Errorf("a 10-pixel pad measured %v at 1x and %v at 2x, want twice", one, two)
 	}
-	one := build(1).Measure(layout.Constraints{MaxW: -1, MaxH: -1})
-	two := build(2).Measure(layout.Constraints{MaxW: -1, MaxH: -1})
-	if want := one.X + 10; two.X != want {
-		t.Fatalf("at 2x the grid is %v wide, want %v (1x was %v)", two.X, want, one.X)
+	// RawSpacing is the way back.
+	if got := measure(2, true); got != one {
+		t.Errorf("RawSpacing at 2x measured %v, want the 1x %v", got, one)
 	}
-	if want := one.Y + 6; two.Y != want {
-		t.Fatalf("at 2x the grid is %v tall, want %v (1x was %v)", two.Y, want, one.Y)
-	}
-	g := build(2)
-	g.RawSpacing = true
-	if got := g.Measure(layout.Constraints{MaxW: -1, MaxH: -1}); got.X != one.X {
-		t.Fatalf("RawSpacing grid is %v wide, want the 1x %v", got.X, one.X)
+	// At scale 1 nothing moved, which is why no pinned geometry changed.
+	if got := measure(1, true); got != one {
+		t.Errorf("RawSpacing at 1x measured %v, want %v", got, one)
 	}
 }
 
-// Nothing moves at 1x, which is why the toolkit's pinned geometry is
-// untouched: the scale is the identity there.
-func TestSpacingIsUnchangedAtOneToOne(t *testing.T) {
-	raw := NewColumn(newSized(40, 20), newSized(40, 20)).WithGap(10).WithPad(20)
+// The child sits inside the scaled insets, not the raw ones.
+func TestPadArrangesInsideTheScaledInsets(t *testing.T) {
+	child := NewSpacerSize(0, 0)
+	p := NewPad(10, child)
+	p.RawSpacing = true // so the child's own size is not scaled too
+	atScale(t, p, 2)
+	p.Arrange(paintengine2d.XYWH(0, 0, 200, 100))
+	if got := child.Bounds().Min; got.X != 10 || got.Y != 10 {
+		t.Errorf("RawSpacing child at %v, want (10,10)", got)
+	}
+
+	p2 := NewPad(10, NewSpacerSize(0, 0))
+	atScale(t, p2, 2)
+	p2.Arrange(paintengine2d.XYWH(0, 0, 200, 100))
+	if got := p2.Children()[0].Bounds().Min; got.X != 20 || got.Y != 20 {
+		t.Errorf("scaled child at %v, want (20,20)", got)
+	}
+}
+
+// A fixed gap between two groups is a design length as well.
+func TestSpacerFollowsTheDisplayScale(t *testing.T) {
+	loose := layout.Constraints{MaxW: -1, MaxH: -1}
+	s1 := NewSpacerSize(24, 8)
+	atScale(t, s1, 1)
+	s2 := NewSpacerSize(24, 8)
+	atScale(t, s2, 2)
+
+	a, b := s1.Measure(loose), s2.Measure(loose)
+	if b.X != a.X*2 || b.Y != a.Y*2 {
+		t.Errorf("a 24x8 spacer measured %v at 1x and %v at 2x", a, b)
+	}
+
+	raw := NewSpacerSize(24, 8)
 	raw.RawSpacing = true
-	raw.SetLook(lookAt(1))
-	raw.SetHost(&host{})
-	scaled := NewColumn(newSized(40, 20), newSized(40, 20)).WithGap(10).WithPad(20)
-	scaled.SetLook(lookAt(1))
-	scaled.SetHost(&host{})
-	c := layout.Constraints{MaxW: -1, MaxH: -1}
-	if raw.Measure(c) != scaled.Measure(c) {
-		t.Fatalf("at 1x scaled %v differs from raw %v", scaled.Measure(c), raw.Measure(c))
+	atScale(t, raw, 2)
+	if got := raw.Measure(loose); got != a {
+		t.Errorf("RawSpacing at 2x measured %v, want the 1x %v", got, a)
+	}
+}
+
+// A spacer with no preferred size is a grower, and still is.
+func TestZeroSpacerIsStillAGrower(t *testing.T) {
+	s := NewSpacer()
+	atScale(t, s, 2)
+	got := s.Measure(layout.Constraints{MinW: 5, MinH: 7, MaxW: -1, MaxH: -1})
+	if got.X != 5 || got.Y != 7 {
+		t.Errorf("an unsized spacer measured %v, want its minimum (5,7)", got)
+	}
+}
+
+// A progress bar's natural length was 160 device pixels, so it was half
+// as long as everything beside it on a 2x display.
+func TestProgressBarLengthFollowsTheDisplayScale(t *testing.T) {
+	loose := layout.Constraints{MaxW: -1, MaxH: -1}
+	p1, p2 := &ProgressBar{}, &ProgressBar{}
+	p1.Init(p1)
+	p2.Init(p2)
+	atScale(t, p1, 1)
+	atScale(t, p2, 2)
+
+	a, b := p1.Measure(loose), p2.Measure(loose)
+	if b.X != a.X*2 {
+		t.Errorf("a bar measured %v wide at 1x and %v at 2x, want twice", a.X, b.X)
 	}
 }

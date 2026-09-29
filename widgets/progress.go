@@ -104,7 +104,10 @@ func (p *ProgressBar) Measure(c layout.Constraints) paintengine2d.Point {
 	if p.ShowText && !p.Indeterminate && !p.textInside() {
 		h = max(h, p.Look().Font().Height())
 	}
-	w := float32(160) + p.textW()
+	// A 1x design length, like every other length in the toolkit. It was
+	// 160 device pixels, so a bar was half as long as everything beside
+	// it on a 2x display.
+	w := style.Dip(p.Look(), 160) + p.textW()
 	if c.HasMaxW() && c.MaxW < w {
 		w = c.MaxW
 	}

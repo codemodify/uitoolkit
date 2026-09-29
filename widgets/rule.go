@@ -3,6 +3,7 @@ package widgets
 import (
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/layout"
+	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
 )
 
@@ -43,6 +44,10 @@ func (s *Separator) Paint(ctx *paintengine2d.Context) {
 // Spacer is an empty box. Use FlexBox.AddFlex(NewSpacer(), 1) to soak leftover space.
 type Spacer struct {
 	widget.Base
+	// RawSpacing takes [NewSpacerSize]'s width and height as device
+	// pixels rather than 1x design lengths. It is the opt-out rather than
+	// the default, for the same reason as [FlexBox.RawSpacing].
+	RawSpacing bool
 }
 
 // NewSpacer is a zero-preferred gap (grows only when flexed or given a min).
@@ -63,6 +68,15 @@ func (s *Spacer) Measure(c layout.Constraints) paintengine2d.Point {
 	pref := s.Preferred()
 	if pref.X == 0 && pref.Y == 0 {
 		return c.Constrain(paintengine2d.Pt(c.MinW, c.MinH))
+	}
+	// A fixed gap is a 1x design length, like every other length in the
+	// toolkit: a 24-pixel space between two groups was 24 pixels on a 2x
+	// display too, so it read as half a gap beside controls that had
+	// doubled.
+	if !s.RawSpacing {
+		if k := style.LookScale(s.Look()); k != 1 {
+			pref = paintengine2d.Pt(pref.X*k, pref.Y*k)
+		}
 	}
 	return c.Constrain(pref)
 }
