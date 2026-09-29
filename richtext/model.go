@@ -92,6 +92,25 @@ const (
 	// outermost.
 	Bullet
 	Numbered
+	// Quote is a blockquote: indented, with a rule down its side. Level
+	// is the nesting, 0 the outermost, so a quote inside a quote — which
+	// is what a mail thread is made of — is two levels rather than two
+	// paragraphs.
+	Quote
+	// Rule is a horizontal rule: a block with no text at all, which is
+	// why every reader of Spans has to cope with an empty one.
+	Rule
+	// TableRow is one row of a table. Its text is in Cells rather than
+	// in Spans, and Level is 1 for a header row and 0 for a body one.
+	//
+	// A table is a run of consecutive TableRow blocks, and that is the
+	// whole of the structure: there is no table object, no column
+	// spanning and no nesting. It is enough to show the tables that
+	// arrive in mail and in Markdown as tables rather than as their
+	// aligned text, and it keeps a document a list of blocks — which is
+	// what makes the caret, the selection and every offset in this
+	// package work.
+	TableRow
 )
 
 // MaxLevel is the deepest list nesting.
@@ -99,6 +118,13 @@ const MaxLevel = 8
 
 // IsList reports whether k is a list item.
 func (k Kind) IsList() bool { return k == Bullet || k == Numbered }
+
+// IsQuote reports whether k is quoted text.
+func (k Kind) IsQuote() bool { return k == Quote }
+
+// HasText reports whether k is a block whose Spans hold its text. A Rule
+// has none, and a TableRow keeps its text in Cells.
+func (k Kind) HasText() bool { return k != Rule && k != TableRow }
 
 // Align is a block's horizontal alignment.
 type Align uint8
@@ -119,6 +145,12 @@ type Block struct {
 	Level int
 	Align Align
 	Spans []Span
+	// Cells are a [TableRow]'s cells, left to right; nil for every other
+	// kind. Spans is the row's text flattened — one cell after another,
+	// separated by a tab — so that the caret, the selection, Len, find
+	// and every other offset in this package go on working without
+	// knowing what a table is. Cells is what the *layout* reads.
+	Cells [][]Span
 	n     int // runes, counted once
 }
 

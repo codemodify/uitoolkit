@@ -275,6 +275,35 @@ caret, the selection, hit-testing and `softWrapped` are all that range;
 edits through the same machinery and has no wrapper of its own. Wrap is for
 painting a paragraph; `layoutAreaMax` is for editing one.
 
+### Quotes, rules and tables in rich text
+
+`richtext` read `<table>` for the characters inside it and nothing else,
+`<blockquote>` as plain paragraphs, and dropped `<hr>`. A table in a mail
+came out as its aligned text in the monospace face, and a quoted reply
+was indistinguishable from the reply to it.
+
+Three block kinds now: `Quote` (indented, one accent rule per level of
+nesting, so a thread's depth is read at a glance), `Rule`, and
+`TableRow`.
+
+A table is **a run of consecutive `TableRow` blocks** and nothing else —
+no table object, no column spanning, no nesting. That is enough for the
+tables that arrive in mail and in Markdown, and it keeps a document a
+flat list of blocks, which is what makes the caret, the selection and
+every offset in the package work without any of them knowing what a
+table is. A row's text lives twice: in `Cells`, which the layout reads,
+and flattened into `Spans` with a tab between cells, which everything
+else reads. `NewTableRow` and the parser keep them in step; `SyncCells`
+is how a caller that edits `Cells` puts `Spans` back.
+
+Column widths belong to the run rather than to a row, so they are
+measured once for the run and cached: every row reads the same answer, or
+the columns would not line up. A table wider than the pane is squeezed in
+proportion above a floor, and a cell too narrow for its text is elided —
+a column nobody can see is worse than one that is cut short. A cell is
+one line; a cell that needs a paragraph is a document this widget is not
+for.
+
 ### Spacing is a design length, not a pixel count
 
 `FlexBox`'s `Gap` and padding and `Grid`'s (and so `Form`'s) `ColGap` and

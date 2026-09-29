@@ -23,9 +23,12 @@ import (
 // the rest of the web. What is read:
 //
 //   - blocks: <p>, <div>, <h1>–<h6>, <ul> and <ol> with <li> (nested lists
-//     nest), <blockquote> and <pre> (as paragraphs; <pre> keeps its lines
-//     and sets them in the monospace face), <br> (ends the block and starts
-//     another of the same kind), and the text-align of a block's style;
+//     nest), <blockquote> (a [Quote] at its nesting, so a mail thread's
+//     depth survives), <pre> (as paragraphs, keeping its lines and setting
+//     them in the monospace face), <hr> (a [Rule]), <table> with <tr>,
+//     <th> and <td> (a run of [TableRow] blocks), <br> (ends the block and
+//     starts another of the same kind), and the text-align of a block's
+//     style;
 //   - character styles: <b>/<strong>, <i>/<em>, <u>/<ins>, <s>/<strike>/
 //     <del>, <code>/<tt>/<kbd>/<samp>, <mark> (a yellow highlight), <a
 //     href>, <font color size>, and a style attribute on any element with
@@ -54,7 +57,7 @@ func ParseHTML(s string) (*Doc, error) {
 // SetHTML replaces the document with the subset of HTML read from s and
 // forgets the history, as loading a file does.
 func (d *Doc) SetHTML(s string) error {
-	p := htmlParser{resolve: d.ResolveImage}
+	p := htmlParser{resolve: d.ImageResolver()}
 	blocks := p.parse(s)
 	d.Reset(blocks)
 	return nil
@@ -225,6 +228,15 @@ type htmlParser struct {
 	styles []styleFrame
 	lists  []Kind
 	pre    int
+	// quotes counts open <blockquote>s, which is a quote's nesting.
+	quotes int
+	// row is the table row being filled and cell its current cell; both
+	// nil outside a <tr>. A table is a run of TableRow blocks, so there
+	// is nothing to keep for the table itself.
+	row *Block
+	// cellOpen: a <td> or <th> is being filled. Without it the </tr>
+	// that follows a </td> would close a second, empty cell.
+	cellOpen bool
 	// head counts open <head>s, whose content is skipped.
 	head int
 	// kind and align are what the next block becomes.
@@ -243,7 +255,8 @@ type styleFrame struct {
 var blockTags = map[string]bool{
 	"p": true, "div": true, "h1": true, "h2": true, "h3": true, "h4": true, "h5": true, "h6": true,
 	"li": true, "blockquote": true, "pre": true, "ul": true, "ol": true, "body": true, "html": true,
-	"table": true, "tr": true, "section": true, "article": true, "header": true, "footer": true,
+	"table": true, "tr": true, "td": true, "th": true,
+	"tbody": true, "thead": true, "tfoot": true, "section": true, "article": true, "header": true, "footer": true,
 }
 
 func (p *htmlParser) style() Style {
@@ -396,12 +409,41 @@ func (p *htmlParser) start(t htmlToken) {
 		case "pre":
 			p.pre++
 			p.kind, p.level = Paragraph, 0
-		case "body", "html", "table", "tr", "section", "article", "header", "footer":
+		case "blockquote":
+			// A quote inside a quote is a level, which is what a mail
+			// thread is made of.
+			p.quotes++
+			p.kind, p.level = Quote, min(p.quotes-1, MaxLevel)
+			return
+		case "tr":
+			p.endRow()
+			p.row = &Block{Kind: TableRow}
+			return
+		case "td", "th":
+			if p.row == nil {
+				// A cell outside a row: start one, rather than losing
+				// the text. Malformed tables are the common kind.
+				p.row = &Block{Kind: TableRow}
+			}
+			if t.name == "th" {
+				p.row.Level = 1
+			}
+			p.endCell()
+			p.cellOpen = true
+			p.kind, p.level = TableRow, 0
+			return
+		case "body", "html", "table", "tbody", "thead", "tfoot", "section", "article", "header", "footer":
 			return
 		default:
 			if len(p.lists) > 0 {
 				// A paragraph inside a list item is the item's text.
 				return
+			}
+			if p.quotes > 0 {
+				// A paragraph inside a blockquote is quoted, at the
+				// quote's nesting — which is what a mail thread is.
+				p.kind, p.level = Quote, min(p.quotes-1, MaxLevel)
+				break
 			}
 			p.kind, p.level = Paragraph, 0
 		}
@@ -428,7 +470,11 @@ func (p *htmlParser) start(t htmlToken) {
 	case "img":
 		p.image(t)
 		return
-	case "hr", "meta", "link", "input", "col", "wbr", "source":
+	case "hr":
+		p.flush(false)
+		p.blocks = append(p.blocks, NewRule())
+		return
+	case "meta", "link", "input", "col", "wbr", "source":
 		return
 	}
 	if !t.self {
@@ -503,7 +549,30 @@ func (p *htmlParser) end(name string) {
 	case "pre":
 		p.flush(false)
 		p.pre = max(p.pre-1, 0)
-	case "p", "div", "blockquote":
+	case "blockquote":
+		if len(p.lists) > 0 {
+			return
+		}
+		p.flush(false)
+		p.quotes = max(p.quotes-1, 0)
+		if p.quotes > 0 {
+			p.kind, p.level = Quote, min(p.quotes-1, MaxLevel)
+			p.align = AlignLeft
+			return
+		}
+	case "td", "th":
+		p.endCell()
+		return
+	case "tr":
+		p.endRow()
+		return
+	case "table", "tbody", "thead", "tfoot":
+		// A cell or a row left open by malformed markup still becomes
+		// one: losing the text would be worse than an odd shape.
+		p.endCell()
+		p.endRow()
+		return
+	case "p", "div":
 		if len(p.lists) > 0 {
 			return
 		}
@@ -512,9 +581,49 @@ func (p *htmlParser) end(name string) {
 		p.flush(false)
 	}
 	if len(p.lists) == 0 {
-		p.kind, p.level = Paragraph, 0
+		if p.quotes > 0 {
+			p.kind, p.level = Quote, min(p.quotes-1, MaxLevel)
+		} else {
+			p.kind, p.level = Paragraph, 0
+		}
 	}
 	p.align = AlignLeft
+}
+
+// endCell closes the cell being filled, and endRow the row: a row
+// becomes a TableRow block with its cells and their flattened text.
+func (p *htmlParser) endCell() {
+	if p.row == nil || !p.cellOpen {
+		return
+	}
+	p.cellOpen = false
+	// Whatever text has accumulated belongs to this cell rather than to
+	// a block of its own.
+	cell := append([]Span(nil), p.spans...)
+	if n := len(cell); n > 0 && cell[n-1].Image == nil && p.pre == 0 {
+		cell[n-1].Text = strings.TrimRight(cell[n-1].Text, " ")
+	}
+	p.row.Cells = append(p.row.Cells, normalize(cell))
+	p.spans, p.cur, p.open, p.space = nil, nil, false, false
+}
+
+func (p *htmlParser) endRow() {
+	if p.row == nil {
+		return
+	}
+	p.endCell()
+	row := p.row
+	p.row = nil
+	if len(row.Cells) == 0 {
+		return
+	}
+	row.SyncCells()
+	p.blocks = append(p.blocks, row)
+	if p.quotes > 0 {
+		p.kind, p.level = Quote, min(p.quotes-1, MaxLevel)
+	} else {
+		p.kind, p.level = Paragraph, 0
+	}
 }
 
 func (p *htmlParser) image(t htmlToken) {
@@ -530,7 +639,11 @@ func (p *htmlParser) image(t htmlToken) {
 		im.H = cssLength(v, 0)
 	}
 	im.Pixels = DecodeDataURI(src)
-	if im.Pixels == nil && p.resolve != nil && src != "" {
+	// A data: URI carries its own bytes, so the resolver is not asked
+	// for one even when they do not decode: there is nothing to fetch,
+	// and an application that classifies what it is handed
+	// ([ClassifyImageSrc]) would have to recognise and ignore it.
+	if im.Pixels == nil && p.resolve != nil && src != "" && ClassifyImageSrc(src) != ImageData {
 		im.Pixels = p.resolve(src)
 	}
 	p.space = false
@@ -772,7 +885,69 @@ func (d *Doc) HTML() string {
 			}
 		}
 	}
+	// Open tables and quotes, closed when the run of blocks that needs
+	// them ends. A table is a run of TableRow blocks and a quote a run
+	// of Quote blocks at a level, so both are bracketed here rather than
+	// carried in the model.
+	inTable := false
+	quotes := 0
+	closeTable := func() {
+		if inTable {
+			b.WriteString("</table>\n")
+			inTable = false
+		}
+	}
+	closeQuotes := func(to int) {
+		for quotes > to {
+			b.WriteString("</blockquote>\n")
+			quotes--
+		}
+	}
+	defer func() { closeTable(); closeQuotes(0) }()
+
 	for _, bl := range d.blocks {
+		if bl.Kind != TableRow {
+			closeTable()
+		}
+		if bl.Kind != Quote {
+			closeQuotes(0)
+		}
+		switch bl.Kind {
+		case Rule:
+			closeTo(0)
+			b.WriteString("<hr>\n")
+			continue
+		case TableRow:
+			closeTo(0)
+			if !inTable {
+				b.WriteString("<table>\n")
+				inTable = true
+			}
+			cellTag := "td"
+			if bl.Header() {
+				cellTag = "th"
+			}
+			b.WriteString("<tr>")
+			for _, cell := range bl.Cells {
+				b.WriteString("<" + cellTag + ">")
+				writeSpans(&b, cell)
+				b.WriteString("</" + cellTag + ">")
+			}
+			b.WriteString("</tr>\n")
+			continue
+		case Quote:
+			closeTo(0)
+			want := min(max(bl.Level, 0), MaxLevel) + 1
+			closeQuotes(want)
+			for quotes < want {
+				b.WriteString("<blockquote>\n")
+				quotes++
+			}
+			b.WriteString("<p" + alignAttr(bl.Align) + ">")
+			writeSpans(&b, bl.Spans)
+			b.WriteString("</p>\n")
+			continue
+		}
 		if !bl.Kind.IsList() {
 			closeTo(0)
 			tag := "p"
@@ -784,6 +959,8 @@ func (d *Doc) HTML() string {
 			b.WriteString("</" + tag + ">\n")
 			continue
 		}
+		closeTable()
+		closeQuotes(0)
 		depth := min(max(bl.Level, 0), MaxLevel) + 1
 		if len(stack) > depth {
 			closeTo(depth)
@@ -819,6 +996,8 @@ func (d *Doc) HTML() string {
 		liOpen = true
 	}
 	closeTo(0)
+	closeTable()
+	closeQuotes(0)
 	return b.String()
 }
 

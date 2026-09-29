@@ -75,13 +75,23 @@ func TestAkModsAreFaithful(t *testing.T) {
 		{"command and shift", akModCommand | akModShift, ModSuper | ModShift},
 		{"all four", akModShift | akModControl | akModOption | akModCommand,
 			ModShift | ModCtrl | ModAlt | ModSuper},
-		// Caps Lock, function, numeric pad and the rest are flags too,
-		// and none of them is a modifier the toolkit knows.
-		{"caps lock alone", 1 << 16, 0},
+		// Caps Lock is a modifier the toolkit knows, because a
+		// passphrase prompt has to be able to say it is on. It is a
+		// *lock* rather than a chord key: Chord() drops it, so a
+		// shortcut still matches with Caps Lock down.
+		{"caps lock alone", akModCapsLock, ModCapsLock},
+		{"command with caps lock", akModCommand | akModCapsLock, ModSuper | ModCapsLock},
+		// Function and the rest are flags too, and none of those is a
+		// modifier the toolkit knows.
+		{"function alone", 1 << 23, 0},
 	} {
 		if got := akMods(c.flags); got != c.want {
 			t.Errorf("%s: mods %v, want %v", c.name, got, c.want)
 		}
+	}
+	// And a chord is the chord whatever the locks are doing.
+	if got := akMods(akModCommand | akModCapsLock).Chord(); got != ModSuper {
+		t.Errorf("Chord() with caps lock = %v, want just Super", got)
 	}
 }
 

@@ -54,6 +54,9 @@ type rtLayout struct {
 	before float32
 	indent float32
 	base   *style.Font
+	// cols is a table row's column widths, shared by every row of its
+	// run (widgets/richtext_table.go); nil for every other block.
+	cols []float32
 }
 
 // rtSig is what a layout depends on besides the block and the width: the
@@ -129,6 +132,18 @@ func (t *RichText) face(st richtext.Style, k richtext.Kind, level int) *style.Fo
 // listIndent is how far each list level indents.
 func (t *RichText) listIndent() float32 { return float32(math.Round(float64(t.dip(24)))) }
 
+// quoteIndent is how far a quote's text sits from the rule down its
+// side, per level of nesting.
+func (t *RichText) quoteIndent() float32 { return float32(math.Round(float64(t.dip(16)))) }
+
+// quoteRuleWidth is the rule beside a quote, and ruleHeight the room a
+// horizontal rule takes.
+func (t *RichText) quoteRuleWidth() float32 { return max(t.dip(2), 1) }
+func (t *RichText) ruleHeight() float32     { return max(t.dip(1), 1) }
+
+// cellPad is the room inside a table cell, left and right.
+func (t *RichText) cellPad() float32 { return float32(math.Round(float64(t.dip(6)))) }
+
 // spacing is the room before and after a block of kind k.
 func (t *RichText) spacing(b *richtext.Block) (before, after float32) {
 	switch b.Kind {
@@ -136,6 +151,15 @@ func (t *RichText) spacing(b *richtext.Block) (before, after float32) {
 		return t.dip(8), t.dip(4)
 	case richtext.Bullet, richtext.Numbered:
 		return 0, t.dip(2)
+	case richtext.Quote:
+		// Tight between the lines of one quote, so a quoted paragraph
+		// reads as a block rather than as separate paragraphs behind a
+		// rule.
+		return 0, t.dip(3)
+	case richtext.Rule:
+		return t.dip(6), t.dip(6)
+	case richtext.TableRow:
+		return 0, 0
 	}
 	return 0, t.dip(6)
 }
@@ -177,8 +201,25 @@ type rtSeg struct {
 func (t *RichText) layoutBlock(b *richtext.Block, width float32) *rtLayout {
 	lay := &rtLayout{width: width, sig: t.sig()}
 	lay.base = t.face(richtext.Style{}, b.Kind, b.Level)
-	if b.Kind.IsList() {
+	switch {
+	case b.Kind.IsList():
 		lay.indent = t.listIndent() * float32(min(max(b.Level, 0), richtext.MaxLevel)+1)
+	case b.Kind == richtext.Quote:
+		lay.indent = t.quoteIndent() * float32(min(max(b.Level, 0), richtext.MaxLevel)+1)
+	}
+	if b.Kind == richtext.Rule {
+		// A rule has no text and no lines: one empty line of the rule's
+		// own height, so every reader of a layout — the caret, hit
+		// testing, the scroll extent — has something to work with.
+		before, after := t.spacing(b)
+		lay.before = before
+		h := t.ruleHeight()
+		lay.lines = []rtLine{{y: before, h: h, base: h, ascent: h}}
+		lay.h = before + h + after
+		return lay
+	}
+	if b.Kind == richtext.TableRow {
+		return t.layoutTableRow(b, width, lay)
 	}
 	avail := max(width-lay.indent, t.dip(24))
 	var segs []rtSeg
@@ -349,6 +390,7 @@ func (t *RichText) syncGeometry() {
 	resized := sig == t.laidSig
 	t.laidSig, t.laidW = sig, w
 	clear(t.cache)
+	clear(t.tcols)
 	t.avgW = 0
 	if !resized {
 		t.faces = nil

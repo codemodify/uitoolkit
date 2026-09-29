@@ -76,10 +76,24 @@ type Doc struct {
 	// ResolveImage turns an image's Src that is not a data: URI into
 	// pixels when HTML is loaded (SetHTML); nil leaves such images as
 	// placeholders that still save their Src.
+	//
+	// It is not told what kind of source it is being handed, which a
+	// mail client has to know: an inline part costs nothing to show and
+	// a remote one tells the sender the message was opened, at the
+	// address and moment it was opened. Set [Doc.ResolveImageKind]
+	// instead, which is asked first and is given the answer.
 	ResolveImage func(src string) *paintengine2d.Image
-	rev          uint64
-	watchers     []watcher
-	nextWatch    int
+	// ResolveImageKind is [Doc.ResolveImage] with the source classified.
+	// When it is set it is what gets asked, and ResolveImage is not: a
+	// caller that wants the plain form sets the plain field.
+	//
+	// Returning nil leaves a placeholder that still carries the Src and
+	// the alt text, so a "load remote images" control can come back to
+	// it later ([Doc.UnresolvedImages]) without reloading the document.
+	ResolveImageKind func(src string, kind ImageKind) *paintengine2d.Image
+	rev              uint64
+	watchers         []watcher
+	nextWatch        int
 	// starts[i] is block i's first character as a document offset (each
 	// block ends in one newline); valid below startsOK.
 	starts   []int

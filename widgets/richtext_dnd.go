@@ -101,7 +101,7 @@ func (t *RichText) Drop(e widget.DropEvent) bool {
 	if frag == nil {
 		switch {
 		case e.Mime == "text/html" && len(e.Data) > 0:
-			frag = richtext.FragmentHTML(decodeHTMLDrop(e.Data), t.doc.ResolveImage)
+			frag = richtext.FragmentHTML(decodeHTMLDrop(e.Data), t.doc.ImageResolver())
 		case e.Text != "":
 			frag = richtext.NewPlain(e.Text)
 		default:

@@ -58,6 +58,12 @@ type RichText struct {
 	// ResolveImage turns an image's Src into pixels when HTML is loaded
 	// (the document's own data: URIs need nothing).
 	ResolveImage func(src string) *paintengine2d.Image
+	// ResolveImageKind is ResolveImage told what kind of source it is
+	// being handed — inline, remote, local — which is what a mail client
+	// needs to show an attached picture and refuse a tracking pixel. It
+	// is asked in preference to ResolveImage where both are set; see
+	// [richtext.Doc.ResolveImageKind].
+	ResolveImageKind func(src string, kind richtext.ImageKind) *paintengine2d.Image
 
 	doc       *richtext.Doc
 	stopWatch func()
@@ -65,6 +71,7 @@ type RichText struct {
 
 	// layout (richtext_layout.go)
 	cache    map[*richtext.Block]*rtLayout
+	tcols    map[*richtext.Block]*tableCols
 	faces    map[rtFaceKey]*style.Font
 	heights  []float32
 	tops     []float32
@@ -135,9 +142,13 @@ func (t *RichText) SetDocument(d *richtext.Doc) {
 	if d.ResolveImage == nil && t.ResolveImage != nil {
 		d.ResolveImage = t.ResolveImage
 	}
+	if d.ResolveImageKind == nil && t.ResolveImageKind != nil {
+		d.ResolveImageKind = t.ResolveImageKind
+	}
 	t.stopWatch = d.Watch(t.blocksChanged)
 	t.heights, t.tops, t.topsOK = nil, nil, 0
 	clear(t.cache)
+	clear(t.tcols)
 	t.scrollY = 0
 	t.havePref, t.caretUp = false, false
 	t.lastRev, t.lastSel = d.Rev(), d.Selection()
@@ -150,6 +161,9 @@ func (t *RichText) SetDocument(d *richtext.Doc) {
 func (t *RichText) SetHTML(html string) {
 	if t.ResolveImage != nil {
 		t.doc.ResolveImage = t.ResolveImage
+	}
+	if t.ResolveImageKind != nil {
+		t.doc.ResolveImageKind = t.ResolveImageKind
 	}
 	_ = t.doc.SetHTML(html)
 	t.scrollY = 0
@@ -637,6 +651,10 @@ func (t *RichText) Paint(ctx *paintengine2d.Context) {
 		if blk.Kind.IsList() {
 			t.paintMarker(ctx, blk, lay, nums, i, in.Min.X, oy, text)
 		}
+		// The chrome the new block kinds are: a rule down a quote's
+		// side, the line an <hr> is, and a table's rules. Under the
+		// text, so a selection's highlight still covers it.
+		t.paintBlockChrome(ctx, blk, lay, i, in, oy, text)
 		for li := range lay.lines {
 			ln := &lay.lines[li]
 			ly := oy + ln.y
