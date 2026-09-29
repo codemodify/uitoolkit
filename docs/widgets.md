@@ -553,7 +553,15 @@ rather than at the columns' natural ones, and `Overlay` settles its
 card's width before asking for its height. Both were measuring at one
 width and laying out at another, which is the same bug in two places:
 what a widget that folds reports is only true of the width it was asked
-about.
+about. `TestContainersSizeChildrenAtTheWidthTheyGive` sweeps the rest.
+
+The rule that follows applies to an application too, and the toolkit
+cannot enforce it: **measure a container at the width you are going to
+give it**. A column measured at 600 and then handed a 300-wide box of
+the height that measurement asked for will put its last child outside
+that box, and nothing inside the column can fix it — it cannot grow a
+box it was handed. Measure again at the final width, or give it the
+width you measured at.
 
 ## Inventory notes
 
