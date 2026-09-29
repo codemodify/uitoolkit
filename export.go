@@ -33,6 +33,7 @@ type (
 	MessageButtons    = widgets.MessageButtons
 	MessageResult     = widgets.MessageResult
 	MessageBoxOptions = widgets.MessageBoxOptions
+	MessageBoxInput   = widgets.MessageBoxInput
 	WheelSelect       = widgets.WheelSelect
 	ButtonRole        = widgets.ButtonRole
 	TableColumn       = widgets.TableColumn
@@ -505,6 +506,9 @@ func Confirm(from widget.Component, title, message string, on func(bool)) *widge
 func Warn(from widget.Component, title, message string, on func()) *widgets.MessageBox {
 	return widgets.Warn(from, title, message, on)
 }
+func Prompt(from widget.Component, title, label, initial string, on func(string, bool)) *widgets.MessageBox {
+	return widgets.Prompt(from, title, label, initial, on)
+}
 func NewTableView(cols []widgets.TableColumn, rows int, cell func(row, col int) string, on func(int)) *widgets.TableView {
 	return widgets.NewTableView(cols, rows, cell, on)
 }
@@ -600,8 +604,9 @@ const (
 	ResultYes    = widgets.ResultYes
 	ResultNo     = widgets.ResultNo
 
-	FileOpen = widgets.FileOpen
-	FileSave = widgets.FileSave
+	FileOpen       = widgets.FileOpen
+	FileSave       = widgets.FileSave
+	FileOpenFolder = widgets.FileOpenFolder
 
 	// Whether a wheel notch over a closed combo box steps its
 	// selection: the user's preference (style.ComboWheel, Settings'

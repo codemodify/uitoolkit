@@ -717,11 +717,13 @@ Apple columns are names only (AppKit/SwiftUI backends are still stubs).
 | Panel | `Panel` | `QGroupBox` / `GroupBox` | `GtkFrame` | headered ≈ | `widget.Card` ≈ | `GroupBox` | `GroupBox` | `NSBox` | `GroupBox` | <img src="docs/screenshots/compare/panel.png" width="160" alt="Panel"> |
 | Accordion | `Accordion` / `Expander` | `QToolBox` ≈ | `GtkExpander` | `Expander` | `widget.Accordion` | — | `Expander` | disclosure ≈ | `DisclosureGroup` | <img src="docs/screenshots/compare/accordion.png" width="160" alt="Accordion"> |
 | Message box | `MessageBox` | `QMessageBox` / `MessageDialog` | `GtkAlertDialog` | dialog ≈ | `dialog.NewInformation` | `MessageBox` | `MessageBox` | `NSAlert` | `alert` | <img src="docs/screenshots/compare/messagebox.png" width="160" alt="MessageBox"> |
-| File picker | `FileDialog` (stub) | `QFileDialog` / `FileDialog` | `GtkFileDialog` | `OpenFileDialog` | `dialog.NewFileOpen` | `OpenFileDialog` | `OpenFileDialog` | `NSOpenPanel` | `fileImporter` | <img src="docs/screenshots/compare/filedialog.png" width="160" alt="FileDialog"> |
+| File picker | `FileDialog` (stub; open, save, folder) | `QFileDialog` / `FileDialog` | `GtkFileDialog` | `OpenFileDialog` | `dialog.NewFileOpen` | `OpenFileDialog` | `OpenFileDialog` | `NSOpenPanel` | `fileImporter` | <img src="docs/screenshots/compare/filedialog.png" width="160" alt="FileDialog"> |
 | Tooltip | `Tip` | `QToolTip` / `ToolTip` | tooltip | `ToolTip` | tooltip | `ToolTip` | `ToolTip` | tooltip | `.help()` | <img src="docs/screenshots/compare/tooltip.png" width="160" alt="Tooltip"> |
 | Flex / rules | `Column` `Row` `Separator` `Spacer` | box layout / `QFrame` | `GtkBox` / `GtkSeparator` | `StackPanel` / `Separator` | `VBox` / `Separator` | layout panels | `StackPanel` / `Separator` | `NSStackView` | `VStack` / `Divider` / `Spacer` | <img src="docs/screenshots/compare/layout.png" width="160" alt="Layout"> |
 
-`FileDialog` is an in-process stub (list + path), not a native portal.
+`FileDialog` is an in-process stub (list + path), not a native portal — set
+`Native` for the desktop's own. `MessageBox` covers `Info` / `Confirm` /
+`Warn` and, with an input field, `Prompt`.
 `CardList` is the mail-client-style virtualized multi-line row, not a generic card
 container. Layout extras (`Stack`, `Pad`, `Overlay`) are in
 [docs/widgets.md](docs/widgets.md).

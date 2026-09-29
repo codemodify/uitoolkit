@@ -26,13 +26,29 @@ type FileDialogMode int
 const (
 	FileOpen FileDialogMode = iota
 	FileSave
+	// FileOpenFolder picks a directory. The listing shows folders only,
+	// activating one enters it, and the button returns the one that is
+	// selected — or, with nothing selected, the folder being shown, which
+	// is what every folder chooser does.
+	FileOpenFolder
 )
+
+// picksFolder reports whether this mode returns a directory.
+func (m FileDialogMode) picksFolder() bool { return m == FileOpenFolder }
 
 // FileDialogOptions configures ShowFileDialog. Entries and OnNavigate feed
 // the toolkit's own dialog.
 type FileDialogOptions struct {
-	Title      string
-	Path       string
+	Title string
+	// Path is the folder to open in. For [FileSave] it may be a whole
+	// file path instead, in which case its directory is listed and its
+	// base name is suggested — see Name.
+	Path string
+	// Name is the file name a [FileSave] dialog starts with ("Invoice.eml").
+	// Path stays the folder. Without it, a Path that names a file rather
+	// than a directory is split into the two, so a caller that has only
+	// one string to give still gets a listing rather than an empty one.
+	Name       string
 	Filter     string // glob patterns, separated by spaces or ';' ("*.txt *.md")
 	Mode       FileDialogMode
 	Entries    []FileInfo
@@ -67,20 +83,28 @@ type FileDialog struct {
 // NewFileDialog builds the overlay + card. Call Show, or use ShowFileDialog.
 func NewFileDialog(opts FileDialogOptions) *FileDialog {
 	if opts.Title == "" {
-		if opts.Mode == FileSave {
+		switch opts.Mode {
+		case FileSave:
 			opts.Title = "Save file"
-		} else {
+		case FileOpenFolder:
+			opts.Title = "Choose folder"
+		default:
 			opts.Title = "Open file"
 		}
 	}
 	if opts.Path == "" {
 		opts.Path = "."
 	}
+	opts.Path, opts.Name = splitSavePath(opts)
 	fd := &FileDialog{opts: opts}
 	fd.Init(fd)
 
 	fd.dir = opts.Path
-	fd.path = NewTextField(opts.Path, "Path", nil)
+	start := opts.Path
+	if opts.Name != "" {
+		start = filepath.Join(opts.Path, opts.Name)
+	}
+	fd.path = NewTextField(start, "Path", nil)
 	fd.path.OnSubmit = func(s string) { fd.setPath(s) }
 
 	fd.table = NewTableView([]TableColumn{
@@ -97,8 +121,11 @@ func NewFileDialog(opts FileDialogOptions) *FileDialog {
 	fd.hint = NewLabel("")
 
 	openLbl := "Open"
-	if opts.Mode == FileSave {
+	switch opts.Mode {
+	case FileSave:
 		openLbl = "Save"
+	case FileOpenFolder:
+		openLbl = "Choose"
 	}
 	open := NewButton(openLbl, func() { fd.finish(true) })
 	open.Primary = true
@@ -128,6 +155,11 @@ func NewFileDialog(opts FileDialogOptions) *FileDialog {
 func (fd *FileDialog) hintText() string {
 	if fd.err != "" {
 		return fd.err
+	}
+	if fd.opts.Mode.picksFolder() {
+		// Not the glob: a folder chooser ignores it, and printing it
+		// would claim a filter that is not being applied.
+		return "Folders only"
 	}
 	if fd.opts.Filter != "" {
 		return "Filter  " + fd.opts.Filter
@@ -211,20 +243,69 @@ func (fd *FileDialog) reload(p string) {
 // the error so the dialog can show it — it must never fall back to a
 // fabricated listing, which produced paths for files that do not exist.
 func (fd *FileDialog) list(p string) ([]FileInfo, error) {
+	keep := func(ents []FileInfo) []FileInfo {
+		if fd.opts.Mode.picksFolder() {
+			return foldersOnly(ents)
+		}
+		return filterEntries(ents, fd.opts.Filter)
+	}
 	if fd.opts.OnNavigate != nil {
 		if ents := fd.opts.OnNavigate(p); ents != nil {
-			return filterEntries(ents, fd.opts.Filter), nil
+			return keep(ents), nil
 		}
 	}
 	ents, err := ReadDirEntries(p)
 	if err == nil {
-		return filterEntries(ents, fd.opts.Filter), nil
+		return keep(ents), nil
 	}
 	if len(fd.opts.Entries) > 0 {
 		// Explicit caller-supplied listing (the documented stub seam).
-		return filterEntries(append([]FileInfo(nil), fd.opts.Entries...), fd.opts.Filter), nil
+		return keep(append([]FileInfo(nil), fd.opts.Entries...)), nil
 	}
 	return nil, err
+}
+
+// foldersOnly is the filter a folder chooser uses instead of the glob:
+// a file is not an answer to "which folder", and showing files that
+// cannot be picked is how a chooser gets accused of ignoring clicks.
+func foldersOnly(ents []FileInfo) []FileInfo {
+	out := make([]FileInfo, 0, len(ents))
+	for _, e := range ents {
+		if e.Dir {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// splitSavePath turns a Path that names a file into a folder and a
+// suggested name, for the callers that have one string to give.
+//
+// It is deliberately timid: only for Save, only when no Name was passed,
+// and only when the filesystem agrees — the parent lists and the path
+// itself does not. A stubbed dialog (Entries, OnNavigate) and a path
+// that is simply wrong are both left exactly as they were, because
+// guessing there would move a listing the caller chose.
+func splitSavePath(opts FileDialogOptions) (dir, name string) {
+	dir, name = opts.Path, opts.Name
+	if opts.Mode != FileSave || name != "" || opts.Path == "" {
+		return
+	}
+	if opts.Entries != nil || opts.OnNavigate != nil {
+		return
+	}
+	if st, err := os.Stat(opts.Path); err == nil && st.IsDir() {
+		return
+	}
+	parent := filepath.Dir(opts.Path)
+	base := filepath.Base(opts.Path)
+	if parent == opts.Path || base == "." || base == string(filepath.Separator) {
+		return
+	}
+	if st, err := os.Stat(parent); err != nil || !st.IsDir() {
+		return
+	}
+	return parent, base
 }
 
 func (fd *FileDialog) sortEntries(col int, asc bool) {
@@ -330,7 +411,11 @@ func showNativeFileDialog(from widget.Component, opts FileDialogOptions) bool {
 	if !ok || timers == nil {
 		return false
 	}
-	co := platform.FileChooserOptions{Title: opts.Title, Save: opts.Mode == FileSave}
+	co := platform.FileChooserOptions{
+		Title:     opts.Title,
+		Save:      opts.Mode == FileSave,
+		Directory: opts.Mode.picksFolder(),
+	}
 	if p, ok := from.Host().(interface{ PortalParent() string }); ok {
 		// The dialog opens as the window's child (modal to it).
 		co.ParentWindow = p.PortalParent()
@@ -340,6 +425,14 @@ func showNativeFileDialog(from widget.Component, opts FileDialogOptions) bool {
 			co.Folder, _ = filepath.Abs(opts.Path)
 		} else if abs, err := filepath.Abs(opts.Path); err == nil {
 			co.Folder, co.Name = filepath.Dir(abs), filepath.Base(abs)
+		}
+	}
+	// An explicit Name wins the split above: the caller said which part
+	// of Path is the folder by not putting the name in it.
+	if opts.Name != "" {
+		co.Name = opts.Name
+		if st, err := os.Stat(opts.Path); err == nil && st.IsDir() {
+			co.Folder, _ = filepath.Abs(opts.Path)
 		}
 	}
 	if pats := strings.FieldsFunc(opts.Filter, func(r rune) bool { return r == ' ' || r == ';' || r == ',' }); len(pats) > 0 {

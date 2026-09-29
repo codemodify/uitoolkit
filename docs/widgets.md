@@ -153,12 +153,16 @@ names) is in [compare.md](compare.md).
 | Widget | uitoolkit | Qt (Widgets / Quick) | GTK 4 | Avalonia | Fyne | WinForms | WPF | AppKit | SwiftUI | Screenshot |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Message box | `MessageBox` (`Info` / `Confirm` / `Warn`) | `QMessageBox` / `MessageDialog` | `GtkAlertDialog` | dialog `Window` ≈ | `dialog.NewInformation` | `MessageBox` | `MessageBox` | `NSAlert` | `alert` / `confirmationDialog` | [thumb](screenshots/compare/messagebox.png) · [gallery](screenshots/gallery-message.png) |
-| File picker | `FileDialog` (**stub**) | `QFileDialog` / `FileDialog` | `GtkFileDialog` | `OpenFileDialog` | `dialog.NewFileOpen` | `OpenFileDialog` | `OpenFileDialog` | `NSOpenPanel` | `fileImporter` | [thumb](screenshots/compare/filedialog.png) · [gallery](screenshots/gallery-file.png) |
+| File picker | `FileDialog` (**stub**; open, save, folder) | `QFileDialog` / `FileDialog` | `GtkFileDialog` | `OpenFileDialog` | `dialog.NewFileOpen` | `OpenFileDialog` | `OpenFileDialog` | `NSOpenPanel` | `fileImporter` | [thumb](screenshots/compare/filedialog.png) · [gallery](screenshots/gallery-file.png) |
+| Text prompt | `Prompt` (`MessageBoxOptions.Input`) | `QInputDialog::getText` | entry in a `GtkDialog` ≈ | — | `dialog.NewEntry` | `InputBox` (VB) | — | `NSAlert` + accessory ≈ | `TextField` in an `alert` | — |
 | Wizard | `Wizard` / `WizardPage` (validation, optional and skipped pages, steps) | `QWizard` / `QWizardPage` | `GtkAssistant` (deprecated in 4.10) | — | — | — | — (`NavigationWindow` ≈) | `NSPageController` ≈ | — | [sheet](screenshots/breadth/wizard-1x.webp) |
 | Tooltip | `Tip` / `TipWrap` | `QToolTip` / `ToolTip` | widget tooltip | `ToolTip` | widget `ToolTip` | `ToolTip` | `ToolTip` | tooltip | `.help()` | [thumb](screenshots/compare/tooltip.png) · [gallery](screenshots/gallery-tooltip.png) |
 
 `FileDialog` is an in-process modal list + path field, not a native portal /
-COM picker.
+COM picker. Its modes are `FileOpen`, `FileSave` and `FileOpenFolder` (a
+folders-only listing); `Name` is the file name a Save dialog suggests, and
+`Native` hands the whole thing to the desktop's own dialog through the XDG
+portal, which has `directory` and `current_name` for those two.
 
 Menus, combo lists, context menus and tooltips open as **surfaces of their
 own** (an `xdg_popup`, an X11 override-redirect window) and may run past
