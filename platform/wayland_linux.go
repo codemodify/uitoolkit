@@ -1962,14 +1962,34 @@ func (s *wlSurface) MaximizeAxis(bool) bool { return false }
 func (s *wlSurface) Lower() bool { return false }
 
 // SetKeepAbove: **no Wayland protocol a client may use on its own surface
-// keeps a window above the others.** KDE's org_kde_plasma_window_management
-// carries the state, but it is a window-manager protocol with no wl_surface
+// keeps a window above the others.**
+//
+// This is not the capability missing from the desktop. KDE and GNOME both
+// keep windows above, and a user reaches it by right-clicking the title
+// bar or through Alt+F3 — which is the whole point of the asymmetry. The
+// compositor *is* the window manager: it owns the stack, it drew that
+// menu, and raising a window it already manages is bookkeeping it does to
+// itself. No protocol is involved, and nothing is sent to the client.
+// What Wayland withholds is the *client-initiated* path: an application
+// may not put itself in front of everything else, which is a decision
+// about who the desktop belongs to rather than an omission.
+//
+// KDE's org_kde_plasma_window_management carries the state, and it is not
+// the way in either. It is a window-manager protocol with no wl_surface
 // request at all — a client binds it to enumerate *every* window on the
-// desktop and would have to guess which one is its own from the pid and the
-// title. A UI toolkit must not take that capability for every application
-// that links it, so this answers false and FrameKeepAbove is never in Caps:
-// the caption button then says the desktop cannot, rather than going quiet
-// (WindowFrame).
+// desktop and would have to guess which one is its own from the pid and
+// the title — and KWin does not advertise it to ordinary clients in the
+// first place. zwlr_layer_shell_v1 is not it either: a layer surface is a
+// different role, with no title bar, no task-switcher entry and no user
+// move, which is right for a tray menu (see PlaceAtScreen) and wrong for
+// a window.
+//
+// So this answers false, FrameKeepAbove is never in Caps, and the caption
+// button is **left out** rather than drawn dead: a button that cannot
+// work is worse than none, and the window menu drops "Keep Above Others"
+// by the same gate (app.Window.CanKeepAbove). The user's route is the
+// compositor's own menu, which loses nothing, because a client could not
+// have offered anything the compositor does not already do better.
 func (s *wlSurface) SetKeepAbove(bool) bool { return false }
 
 // GeometryCaps: Wayland has no window position at all. An xdg_toplevel

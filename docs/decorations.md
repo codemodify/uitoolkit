@@ -618,29 +618,44 @@ desktop's. KWin's own `CommandTitlebarWheel` defaults to `Nothing`; a title
 bar the toolkit draws rolls the window up instead, and a user who has set
 that key explicitly gets what they set, `Nothing` included.
 
-**Keeping the window above the others** is the desktop's doing, and only
-X11 can: `_NET_WM_STATE_ABOVE`, where the window manager lists it in
-`_NET_SUPPORTED`. `Window.SetKeepAbove`, `ToggleKeepAbove`, `KeepAbove`,
-`CanKeepAbove`, and `platform.FrameKeepAbove` in the window's `FrameCaps`
-underneath; the state comes
-back as an ordinary window-state change, so what is shown is what the
-window manager did, not what was asked.
+**Keeping the window above the others** is the desktop's doing.
+`Window.SetKeepAbove`, `ToggleKeepAbove`, `KeepAbove` and `CanKeepAbove`,
+with `platform.FrameKeepAbove` in the window's `FrameCaps` underneath;
+the state comes back as an ordinary window-state change, so what is shown
+is what the desktop did, not what was asked. X11 does it with
+`_NET_WM_STATE_ABOVE` where the window manager lists it in
+`_NET_SUPPORTED`, Win32 with `HWND_TOPMOST`, macOS with the window level.
 
-**Wayland cannot**, on any compositor. xdg-shell has no such request, and
-nothing a client may use on its own surface does. KDE's
-`org_kde_plasma_window_management` does carry a `keep_above` state, but it
-is a window-manager protocol with no `wl_surface` request at all: a client
-binds it to enumerate *every* window on the desktop and would have to guess
-which one is its own from the pid and the title. A UI toolkit must not take
-that capability for every application that links it, so the Wayland backend
-does not implement it, and nothing pretends otherwise.
+**A Wayland client cannot ask** — and that is a narrower statement than
+it first reads, so it is worth being exact about, because the desktop
+plainly *can*. Right-click a title bar on KDE or GNOME and "Keep Above
+Others" is there, and it works.
+
+The difference is who is asking. The compositor **is** the window
+manager: it owns the stack, it drew that menu, and raising a window it
+already manages is bookkeeping it does to itself — no protocol is
+involved and nothing is sent to the client. What Wayland withholds is the
+*client-initiated* path: an application may not put itself in front of
+everything else. That is a decision about who the desktop belongs to
+rather than a gap someone forgot to fill.
+
+Nor is there a side door. xdg-shell has no such request. KDE's
+`org_kde_plasma_window_management` carries a `keep_above` state but has no
+`wl_surface` request at all — a client binds it to enumerate *every*
+window on the desktop and would have to guess which one is its own from
+the pid and the title — and KWin does not advertise it to ordinary
+clients anyway (66 globals on a Plasma 6 session, and that is not among
+them). `zwlr_layer_shell_v1` is a different surface role, with no title
+bar, no task-switcher entry and no user move: right for a tray menu
+([platform.md](platform.md#popups)), wrong for a window.
 
 The caption button (`platform.CaptionKeepAbove`, KWin's `F`) stands where
 the window-menu button would — but only where the desktop can actually do
 it, so nobody trades a working button for a dead one. On Wayland the
-window-menu button stays exactly as it was. The window menu is not lost
-either way: it is still a right click on the caption or on any caption
-button, and still the desktop's right-click title-bar action.
+button is **left out** rather than drawn dead, the window-menu button
+stays exactly as it was, and the window menu drops "Keep Above Others" by
+the same gate. Nothing is lost by that: the user's route is the
+compositor's own menu, which a client could not have bettered.
 
 The button is a toggle, not a command: while it is on it is drawn as a
 button held down (`style.StateChecked | StatePressed`, and `StateToggle` to

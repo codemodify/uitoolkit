@@ -730,7 +730,7 @@ is shown jumps:
 | --- | --- | --- | --- | --- |
 | `Role: RoleDialog` | `_NET_WM_WINDOW_TYPE_DIALOG` | `xdg_dialog_v1` where offered | no minimize or maximize, `WS_EX_DLGMODALFRAME`, off the taskbar | floating level, no minimize button |
 | `Center` | `_NET_WORKAREA` of the monitor it is on | **ignored** — a client cannot place a toplevel | `MonitorFromWindow` work area | `-[NSWindow center]` |
-| `KeepAbove` | `_NET_WM_STATE_ABOVE` before the map | no — no compositor allows it | `HWND_TOPMOST` | window level |
+| `KeepAbove` | `_NET_WM_STATE_ABOVE` before the map | no — no *client* may ask; the compositor's own menu still can | `HWND_TOPMOST` | window level |
 | `Window.Activate()` | `_NET_ACTIVE_WINDOW` | `xdg_activation_v1`, using `$XDG_ACTIVATION_TOKEN` when the launcher passed one | `SetForegroundWindow` | `activateIgnoringOtherApps:` + `makeKeyAndOrderFront:` |
 
 Wayland ignoring `Center` is not a gap: a client may not place a
