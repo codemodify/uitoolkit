@@ -23,7 +23,7 @@ _ = app.Run()
 ```
 
 ```bash
-go get github.com/codemodify/uitoolkit@v0.22.0
+go get github.com/codemodify/uitoolkit@v0.22.1
 go get github.com/codemodify/paintengine2d@v0.11.0
 ```
 
@@ -913,6 +913,16 @@ are independent look.json fields again; compound pack names migrate
 
 Every release's notes are in [release-notes.md](release-notes.md); the
 last two are summarised here.
+
+**0.22.1** — **The text contract**, in one page:
+[docs/contracts.md](docs/contracts.md). A mark is an icon and a word is
+not a picture; no shaping, no bidi, **no right-to-left interface**, no
+font fallback; and the two bundled faces stated exactly, because they
+differ and the difference is a trap. Fixed with it: a font that cannot
+draw Latin made `BakeFamily` panic, and thirty such families are in the
+chooser on an ordinary desktop — picking one crashed every uitoolkit
+application on the machine at start, and kept crashing, because the
+choice is saved in `look.json`.
 
 **0.22.0** — **What two applications could not do.** Everything in this
 release came from a mail client and a password vault writing down what

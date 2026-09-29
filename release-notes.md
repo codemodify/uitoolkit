@@ -7,6 +7,60 @@ about the problem it solved.
 
 ---
 
+## 0.22.1
+
+The contracts 0.22.0 should have carried, and a crash found while
+writing them down.
+
+### The text contract
+
+[docs/contracts.md](docs/contracts.md) is new: one page for what the
+toolkit promises about text and what it does not. The rules existed —
+scattered across a widgets subsection, a comparison page's gap list and
+a README table row — and one of them was not written down anywhere.
+
+Two rules, stated as rules:
+
+- **A mark is an icon, not a character.** `✓ ✗ →` typed into a label are
+  boxes on any machine whose selected face lacks them, and on every
+  machine under `UITK_SYSTEM_FONTS=0`.
+- **Text is text, not an icon.** The converse, and the one nothing draws
+  a box to warn you about: an icon-only control needs
+  `SetAccessibleName`, because a glyph cannot be read aloud, translated
+  or searched; and prose must not be rendered as a picture to dodge the
+  script limits, because it cannot be selected, copied, found or scaled.
+
+What is not supported, in one place: **no `GSUB`** (no Arabic joining,
+no Indic reordering, no ligatures of any kind), **no bidi** (right-to-
+left text comes out reversed), **no right-to-left interface** — nothing
+reads a locale's direction, nothing mirrors, and there is no API to ask
+— and **no font fallback**, which is the one that surprises people:
+installed fonts decide which single face is *selected*, not which glyph
+answers for a rune.
+
+The two bundled faces are now stated exactly, because they differ and
+the difference is a trap. Titillium Web has Latin and nothing else;
+JetBrains Mono carries `✓ ✗ → ← └`, Greek and Cyrillic. Both are pinned
+by a test, so the table cannot drift from the fonts — and the page says
+plainly not to set `Mono` on a label to win a glyph, which is rule 2
+broken from the other side.
+
+### Fixed
+
+- **A font that cannot draw Latin no longer kills the process.**
+  `BakeFamily` panicked on a script-only face — Noto Sans Arabic, Noto
+  Color Emoji and about thirty others the font chooser offers on an
+  ordinary desktop. The choice is saved in `look.json`, so picking one
+  crashed every uitoolkit application on the machine at start, and kept
+  crashing until the file was edited by hand. It falls back to the
+  bundled face now, which is what an uninstalled family has always done;
+  the two cases had no business differing. A test walks every installed
+  family and asserts each gives back a face that can draw the interface
+  — 265 on the machine this was written on, of which 30 used to be
+  fatal.
+
+---
+
 ## 0.22.0
 
 Everything in this release came from two applications built on the
