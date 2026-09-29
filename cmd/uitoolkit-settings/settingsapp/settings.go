@@ -565,7 +565,21 @@ func (s *settingsState) choicesColumn() widget.Component {
 	// overflow: three controls of fixed height and a list that takes
 	// what is left, which is the same promise the preview makes on the
 	// other side of the sash.
-	col := widgets.NewColumn(search, filters, s.list, s.exportButton()).WithGap(8).WithPad(4)
+	children := []widget.Component{search, filters}
+	// The saved theme is a pack this build cannot paint, so no row in
+	// the list is the one that is on and the preview shows a look the
+	// user did not choose. That is the one state this column has to
+	// explain itself in — "the theme is wrong" is what it looks like
+	// otherwise — and it explains itself only then: three controls of
+	// fixed height and a list that takes what is left is the column's
+	// shape in every other case.
+	if note := style.MissingThemeNote(s.staged.Name); note != "" {
+		missing := widgets.NewLabel(note)
+		missing.Wrap = true
+		children = append(children, missing)
+	}
+	children = append(children, s.list, s.exportButton())
+	col := widgets.NewColumn(children...).WithGap(8).WithPad(4)
 	col.AddFlex(s.list, 1)
 	// The window opens on the list, not on the search field above it.
 	// A window with no initial focus of its own starts on the first

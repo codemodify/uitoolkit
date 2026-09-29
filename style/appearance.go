@@ -62,6 +62,13 @@ const (
 // Appearance is the resolved toolkit skin. Name is the color theme
 // (look.json "theme": dark, light, or a user export). Corners, icons,
 // and icon size are independent prefs in the same file.
+//
+// Name may be a pack this build cannot load, because theme engines are
+// opt-in ([docs/engines.md]) and a look.json is shared with every other
+// uitoolkit application on the machine. The name is kept so the
+// preference survives a build that leaves the engine out;
+// [Appearance.Missing] reports it, and the look is the build's default
+// one.
 type Appearance struct {
 	Name     string // pack id: "dark", "light", or a user export
 	Theme    ThemeName
@@ -375,6 +382,27 @@ func (a Appearance) String() string {
 	return a.Name
 }
 
+// Missing reports that [Appearance.Name] names a pack this build cannot
+// load, so the window wears the build's default look instead of the one
+// the preference asks for.
+//
+// The usual cause is that theme engines are chosen at build time and
+// this build left that one out: a look.json is shared with every other
+// uitoolkit application on the machine, so a pack somebody else's build
+// paints is a name this one has never heard of. The other cause is a
+// name that was always wrong, and the two cannot be told apart from the
+// name alone — what is missing is the engine's `init`, and an engine
+// that is not compiled in leaves nothing behind to be asked about. See
+// [EngineIDs] for what this build does have.
+//
+// It is answered rather than stored, so it cannot go stale: an
+// application that sets Name and asks again gets the truth about the new
+// name. [MissingThemeNote] is the line to log.
+func (a Appearance) Missing() bool {
+	name := strings.TrimSpace(a.Name)
+	return name != "" && !ThemeAvailable(name)
+}
+
 // WithPalette switches to the embedded dark / light starter and keeps
 // corners and icons (Mail View → Dark / Light).
 func (a Appearance) WithPalette(theme ThemeName) Appearance {
@@ -470,6 +498,18 @@ func tokensForAppearance(a Appearance) ThemeTokens {
 			tok = withDesktopAccent(tok)
 		}
 		return withUserFonts(withEraFonts(tok, pack.Name), a.FontUI, a.FontMono)
+	}
+	// The pack is not in this build ([Appearance.Missing]). Show the one
+	// this build would have shown if look.json had said nothing, not the
+	// bare light or dark starter: a build whose default is Plastik
+	// should look like Plastik when somebody else's theme name reaches
+	// it, and the starter is a palette with no era at all.
+	//
+	// Only where the families agree, which after resolveAppearance they
+	// do — it no longer guesses one from the name. An application that
+	// set Theme itself means it, and gets that family's starter.
+	if def, ok := LoadTheme(DefaultTheme()); ok && def.Palette == a.Theme {
+		return withUserFonts(withEraFonts(def.Tokens.Resolve(), def.Name), a.FontUI, a.FontMono)
 	}
 	if pack, ok := LoadTheme(StarterName(a.Theme)); ok {
 		return withUserFonts(pack.Tokens.Resolve(), a.FontUI, a.FontMono)

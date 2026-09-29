@@ -661,6 +661,32 @@ func LoadTheme(name string) (ThemePack, bool) {
 	return ThemePack{}, false
 }
 
+// ThemeAvailable reports whether a pack of this name can be loaded in
+// this build: a user pack on disk, an installed skin, or a built-in one
+// whose engine was compiled in. It is what [LoadTheme] answers, without
+// the pack.
+func ThemeAvailable(name string) bool {
+	_, ok := LoadTheme(name)
+	return ok
+}
+
+// MissingThemeNote is one line an application can log or show when the
+// saved theme is not in this build — the case [Appearance.Missing]
+// reports. It names the pack that was asked for and the one being shown,
+// because "the theme is wrong" is what a user sees otherwise, and says
+// where the answer is.
+//
+// It returns "" for a pack that is there, so it can be logged
+// unconditionally.
+func MissingThemeNote(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" || ThemeAvailable(name) {
+		return ""
+	}
+	return "theme " + name + " is not in this build (theme engines are " +
+		"opt-in at build time: see docs/engines.md); showing " + DefaultTheme()
+}
+
 // ExportTheme writes the current look's palette as themes/<name>/theme.json.
 // Corners and icons stay look.json prefs; they are not stored in the pack.
 func ExportTheme(name string, look LookAndFeel) (ThemePack, error) {

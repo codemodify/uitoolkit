@@ -190,11 +190,22 @@ func resolveAppearance(raw appearanceFileJSON) Appearance {
 		a.Name = StarterName(ThemeLight)
 		a.Theme = ThemeLight
 	} else if clean, err := SanitizeThemeName(packName); err == nil && clean != "" && clean != "dark" {
-		// A pack that is not installed (yet) keeps its name so the pref
-		// survives, but only in canonical form: look.json is shared with
-		// other apps and the name ends up in file paths.
+		// A pack this build cannot load keeps its name so the pref
+		// survives — look.json is shared with other applications, and a
+		// build without the engine must not throw the user's theme away
+		// — but only in canonical form, because the name ends up in
+		// file paths.
+		//
+		// Its family is **not** guessed from the name. That is what this
+		// used to do, with ParseTheme, which answers the two words
+		// "light" and "dark" and reads everything else as dark: every
+		// pack a build was missing therefore came up dark and painted
+		// the dark palette, so a light pack like metal-steel showed as
+		// dark with nothing anywhere to say why. Theme stays the default
+		// appearance's — the look this build would have shown if the
+		// file had said nothing — and [Appearance.Missing] is how an
+		// application finds out and says so.
 		a.Name = clean
-		a.Theme = ParseTheme(clean)
 	}
 	if strings.TrimSpace(raw.Corners) != "" {
 		a.Corners = ParseCorners(raw.Corners)

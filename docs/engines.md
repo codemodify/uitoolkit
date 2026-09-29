@@ -125,17 +125,54 @@ naming an engine this build does not have must not be fatal — and
 `engineFor` falls back to the base engine. `TestUnbuiltEngineFallsBackToBase`
 pins it.
 
+### A pack this build does not have
+
+`look.json` is shared with every other uitoolkit application on the
+machine, so a name from somebody else's build — with other engines in it
+— reaches this one routinely. Three things happen, and the third is the
+one that matters:
+
+1. **The name survives.** `Appearance.Name` keeps it, canonicalised, and
+   `SaveAppearance` writes it back, so the user's theme returns the
+   moment a build carries its engine. Throwing it away would be a
+   preference silently lost.
+2. **`Appearance.Missing()` says so**, and `style.MissingThemeNote(name)`
+   is the line to log or show: it names the pack asked for and the one
+   being shown. Both are answered rather than stored, so they cannot go
+   stale.
+3. **The look is this build's default pack**, not dark. The family used
+   to be run through `ParseTheme`, which answers the two words "light"
+   and "dark" and reads everything else as dark — so *every* pack a
+   build was missing came up dark, and a light pack like `metal-steel`
+   showed as black with nothing anywhere to say why. It is now
+   `DefaultTheme()`: the look this build would have shown if the file
+   had said nothing.
+
+Why the family cannot simply be looked up: a pack's family lives in the
+record its engine's `init` registers, and an engine that is not compiled
+in leaves nothing behind to be asked. What is missing is the `init`
+itself. A **user** pack (`themes/<name>/theme.json`) is never missing —
+it carries its own palette and needs nobody's `init`.
+
 ## What is not separable yet
 
-Three engines have to be always-built, and the reasons are worth knowing
-because they are the work remaining:
+**No engine has to be always-built any more.** This page used to list
+three — `metal`, for registering the default theme, and `aqua` and
+`motif`, for the legacy era packs of the same name in core — and both
+reasons are gone:
 
-| engine | why |
-| --- | --- |
-| `metal` | it registers `metal-ocean`, which is `style.DefaultThemeName`. The default theme cannot be optional |
-| `aqua`, `motif` | `style/packs.go` — core, untagged — carries a **legacy era pack** of the same name, which an engine overrides when present ([style.RegisterPack]). Drop the engine and the name still resolves, to the legacy pack painted by the base engine, and `TestDecorationPaintsInsideItsBoxes` catches it painting outside its box. The legacy pack has to move behind the same tag as the engine that supersedes it |
+- `style.DefaultTheme()` answers `DefaultThemeName` where the build has
+  it and otherwise the first pack the built engines registered, so the
+  default is never a name that is not there. `go build -tags
+  theme_engine_oxygen` carries `[base oxygen skin]` and nothing else.
+- `eraPackIndex` offers a legacy era pack only when its engine is built
+  (`style/packs.go`), so dropping `aqua` drops the name rather than
+  leaving it to be painted wrong by the base engine.
 
-A further 29 engine groups are entangled with each other: `win95` alone is
+What remains is entanglement between engines, which costs size rather
+than correctness.
+
+29 engine groups reach into each other: `win95` alone is
 reached into by 38 others (and by core, for `snap` and `w95`), `aero` by
 10 (and core, for `winSnap`), `material_tone` by 13, `web` by 9. Helpers
 live in whichever engine file first needed them, so one cannot leave
