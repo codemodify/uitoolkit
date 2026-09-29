@@ -12,8 +12,8 @@ import (
 // fc-match is a *matcher*: it is required to answer, and on a machine
 // with the usual fontconfig it answers "Noto Sans" for every family
 // asked for, installed or not — including the bundled Titillium Web. A
-// lookup built on it would tell every one of the 131 packs that its
-// era's typeface was present, and all 131 would read in one face while
+// lookup built on it would tell every one of the 132 packs that its
+// era's typeface was present, and all 132 would read in one face while
 // believing they had found Lucida, Tahoma and Chicago.
 //
 // The lookup is built on fc-list instead: it enumerates what is on the

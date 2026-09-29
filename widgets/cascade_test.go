@@ -391,7 +391,7 @@ func TestCascadeIsInvisibleToInputAndAccess(t *testing.T) {
 	}
 }
 
-// Every pack has to survive being a scope: the toolkit ships 131 of
+// Every pack has to survive being a scope: the toolkit ships 132 of
 // them, and a cascade that works in three is not a cascade.
 func TestCascadeHoldsInEveryPack(t *testing.T) {
 	inner := NewButton("Inner", nil)
