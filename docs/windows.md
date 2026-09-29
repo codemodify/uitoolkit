@@ -319,7 +319,7 @@ the slirp gateway at `10.0.2.2`:
 | Windows 11 24H2, 26100.9168 | five runs in five complete; same |
 
 Keyboard, on Windows 11 24H2: Tab moves the focus ring between controls,
-and typing `keram` into Settings' theme filter narrows 131 packs to
+and typing `keram` into Settings' theme filter narrows 132 packs to
 `2002 · Keramik`. So `WM_KEYDOWN` reaches the toolkit as a key and
 `WM_CHAR` reaches a text field as text.
 

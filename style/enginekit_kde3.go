@@ -508,10 +508,19 @@ func kde3Pack(name, label string, year int, lineage, era, summary, engine string
 		"caption": Hex(s.caption), "caption2": Hex(s.captionBlend), "captionText": Hex(s.captionText),
 		"captionOff": Hex(s.captionOff), "captionOff2": Hex(s.captionOffBlend), "captionOffText": Hex(s.captionOffText),
 	}
+	// The family follows the scheme's own window colour rather than
+	// being assumed. Every KDE 3 pack was light until Plastik gained a
+	// dark sibling, and a pack whose family says light while its window
+	// is near-black is one that SchemeVariant will never pair and that
+	// every "is this dark" test will get wrong.
+	family := ThemeLight
+	if RelLuminance(pal.Background) < 0.35 {
+		family = ThemeDark
+	}
 	tok := ThemeTokens{
 		Engine:  engine,
 		Bevel:   bevel,
-		Family:  ThemeLight,
+		Family:  family,
 		Palette: pal,
 		Era:     era,
 		Extra:   extra,

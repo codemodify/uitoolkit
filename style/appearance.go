@@ -240,6 +240,17 @@ func DefaultAppearance() Appearance {
 		Corners:  CornersTheme,
 		Icons:    IconSetClassic,
 		IconSize: IconSizeMedium,
+		// A fresh appearance follows the desktop, because a program
+		// nobody has configured should look like it belongs to the
+		// desktop it opened on. Without this, a first run on a dark
+		// desktop was a white window — and for a passphrase prompt that
+		// flares up at the moment it matters, that is the worst time for
+		// it.
+		//
+		// It is only the *default*. A look.json is a choice, and
+		// resolveAppearance takes followDesktop from the file, so a user
+		// who turned it off keeps it off.
+		FollowDesktop: true,
 	}
 }
 

@@ -69,6 +69,7 @@ one; `UITK_THEME=<id>` runs any app in any pack.
 | `brushed-metal` | Brushed Metal | 2003 | Mac OS | `aqua` | Panther's textured windows: brushed aluminium and darker gels. |
 | `metal-ocean` | Metal (Ocean) | 2004 | Java | `metal` | Java 5's Metal theme: soft blue gradients on buttons, scroll bars and sliders. |
 | `plastik` | Plastik | 2004 | KDE | `plastik` | KDE 3.5's default: flat gradient surfaces in a soft contour, the blue mouse-over highlight, dotted grips and striped progress. |
+| `plastik-night` | Plastik Night | 2004 | KDE | `plastik` | Plastik after dark: the same contours, grips and striped progress over KDE 3's dark scheme. It exists because Plastik is the default pack, and without a dark sibling a program nobody has configured opens white on a dark desktop. |
 | `luna-royale` | Royale | 2004 | Windows | `luna` | Media Center's glossy Energy Blue captions, steel buttons and Office XP menus. |
 | `clearlooks` | Clearlooks | 2005 | GNOME | `clearlooks` | GNOME 2.12's default: rounded gradient buttons, the striped candy progress bar, blue tab stripes. |
 | `luna-night` | Royale Noir | 2005 | Windows | `luna` | Royale's black glossy variant, as a dark scheme with Office XP-style menus. |

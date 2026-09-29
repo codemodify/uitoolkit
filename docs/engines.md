@@ -1,6 +1,6 @@
 # Theme engines are opt-in
 
-131 theme packs are drawn by 33 engines, and an application that wants
+132 theme packs are drawn by 33 engines, and an application that wants
 three of them should not carry all of them. Engines are chosen at
 **build time**, with build tags.
 

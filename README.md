@@ -60,7 +60,7 @@ hyphens, so the names use underscores. See
 ## Highlights
 
 - **Themes that change shapes, not just colours.** 33 engines (like Qt's
-  QStyle) draw 131 packs spanning four decades: System 1 to macOS Tahoe's
+  QStyle) draw 132 packs spanning four decades: System 1 to macOS Tahoe's
   Liquid Glass, Windows 3.1 to 11, Motif, CDE, NeXT, Amiga, BeOS, OS/2, KDE 1
   to Plasma 6, GNOME 2 to GNOME 48, Material 2, 3 and 3 Expressive, Swing's
   Metal and Nimbus, FlatLaf, and today's VS Code, JetBrains Islands,
@@ -363,7 +363,7 @@ repository.
 
 ![Settings: the theme browser, the row of settings and the live preview beside them](docs/screenshots/settings.webp)
 
-Search or filter 131 packs, and the one you pick is drawn at once as a
+Search or filter 132 packs, and the one you pick is drawn at once as a
 live application window beside the list — frame, caption and every
 control — in a splitter you can size. Over that window, in two blocks
 that fold, is everything you can change: every setting that is an on and
@@ -442,7 +442,7 @@ AppKit.
   frame and geometry, popups on surfaces of their own, the clipboard,
   drag and drop, pointer shapes and IME. `platform/seams_*.go` asserts
   that, so the compiler keeps the list true.
-- **33 theme engines** driving **131 packs**, from System 1 to macOS
+- **33 theme engines** driving **132 packs**, from System 1 to macOS
   Tahoe, that change a widget's *shapes* and not only its colours.
 - A retained widget tree with layout, focus and keyboard navigation, a
   full widget set (lists, trees, tables, rich text, MDI, wizards,
@@ -528,7 +528,7 @@ And two applications that grew up here and moved out:
 | [running.md](docs/running.md) | every screenshot in these docs, how each was made, and how to regenerate them |
 | [widgets.md](docs/widgets.md) | every widget, mapped by name to the nearest control in other toolkits |
 | [compare.md](docs/compare.md) | the behaviour map: how chrome is expected to act, and which test fails when it stops |
-| [themes.md](docs/themes.md) · [theme-engines.md](docs/theme-engines.md) · [engines.md](docs/engines.md) | the 131 packs, how an engine draws an era, and why engines are opt-in at build time |
+| [themes.md](docs/themes.md) · [theme-engines.md](docs/theme-engines.md) · [engines.md](docs/engines.md) | the 132 packs, how an engine draws an era, and why engines are opt-in at build time |
 | [skins.md](docs/skins.md) · [shapes.md](docs/shapes.md) | art-driven looks, and windows that are not rectangles |
 | [platform.md](docs/platform.md) | the backend seam: what each window system does and what it refuses |
 | [windows.md](docs/windows.md) · [macos.md](docs/macos.md) | the two newer ports — what each does differently, and what it cost to find out |
@@ -950,7 +950,7 @@ touched.
 
 *Installed fonts without fontconfig.* A look reads in its era's typeface, and
 the lookup asked `fc-list`, which is Linux's. So on Windows and macOS every
-pack fell back to the bundled face — 131 packs across four decades, all drawn
+pack fell back to the bundled face — 132 packs across four decades, all drawn
 in one font. `style/sysfont_scan.go` walks the platform's font directories
 and reads each file's own `name` and `OS/2` tables instead: pure Go, no
 CoreText, no DirectWrite. On a Mac it finds 341 families, and Aqua, Platinum

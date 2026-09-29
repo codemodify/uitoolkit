@@ -1726,7 +1726,31 @@ func plastikPacks() []ThemePack {
 	qt4.alternate = "#e8e8e8"
 	qt4.caption, qt4.captionBlend = "#678db2", "#678db2"
 	qt4.captionOff, qt4.captionOffBlend, qt4.captionOffText = "#c7c7c7", "#c7c7c7", "#000000"
+	// Plastik's own scheme after dark. KDE 3.5 shipped dark colour
+	// schemes for its default style (Obsidian Coast among them), so a
+	// dark Plastik is a thing that existed rather than an invention;
+	// what it is *for* here is that Plastik is the toolkit's default
+	// pack, and without a dark sibling a program nobody has configured
+	// opens white on a dark desktop.
+	//
+	// The window and button greys are inverted around KDE 3's own
+	// contrast, the base goes to near-black, and the steel-blue
+	// selection and title bar are kept — they read on both.
+	night := kde3Scheme{
+		background: "#2b2b2e", foreground: "#e6e6e8",
+		button: "#3a3c42", buttonText: "#e6e6e8",
+		selection: "#678db2", selectionText: "#ffffff",
+		base: "#1e1f22", text: "#e6e6e8",
+		alternate: "#25262a", link: "#8ab4f8",
+		caption: "#418edc", captionBlend: "#33587f", captionText: "#ffffff",
+		captionOff: "#3a3c42", captionOffBlend: "#3a3c42", captionOffText: "#9a9aa0",
+	}
 	return []ThemePack{
+		kde3Pack("plastik-night", "Plastik Night", 2004, "KDE", "Plastik",
+			"Plastik after dark: the same contours and grips over KDE 3's dark scheme, which is what the default pack wears on a dark desktop.",
+			"plastik", BevelClassic3D, night, map[string]float32{
+				"shadow": 0, "stripes": 1, "branchLines": 1, "tabBar": 1,
+			}),
 		kde3Pack("plastik", "Plastik", 2004, "KDE", "Plastik",
 			"KDE 3.5's default: flat gradient surfaces in a soft contour, the blue mouse-over highlight, dotted grips and striped progress.",
 			"plastik", BevelClassic3D, kde35, map[string]float32{

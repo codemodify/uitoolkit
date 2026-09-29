@@ -145,7 +145,7 @@ touched.
 
 `style/sysfont.go` asks `fc-list`, and macOS has no fontconfig at all.
 So the index came back empty, every pack fell through to the bundled
-Titillium Web, and a toolkit that ships 131 packs across four decades
+Titillium Web, and a toolkit that ships 132 packs across four decades
 drew all of them in one face.
 
 The fallback in `style/sysfont_scan.go` walks the directories macOS

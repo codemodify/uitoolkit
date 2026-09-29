@@ -217,8 +217,14 @@ func TestLoadAppearanceBareDarkIsTheDarkStarter(t *testing.T) {
 	if err := os.WriteFile(path, []byte(`{"theme":"dark"}`+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if want := DefaultAppearance().WithPalette(ThemeDark); LoadAppearance() != want {
-		t.Fatalf("%+v, want %+v", LoadAppearance(), want)
+	// FollowDesktop off, because the file is a choice: a fresh
+	// appearance follows the desktop, and a saved one says for itself
+	// whether it does (resolveAppearance reads followDesktop from the
+	// file, and this one does not set it).
+	want := DefaultAppearance().WithPalette(ThemeDark)
+	want.FollowDesktop = false
+	if got := LoadAppearance(); got != want {
+		t.Fatalf("%+v, want %+v", got, want)
 	}
 }
 
