@@ -7,6 +7,192 @@ about the problem it solved.
 
 ---
 
+## 0.23.0
+
+Twenty-five items from the same two applications — a mail client and a
+password vault — and this time nearly half of them were the toolkit's own
+breakage: a fix to something 0.22.x shipped, or a hole left in it. One of
+the twenty-five turned out not to be a gap at all.
+
+### If you are upgrading
+
+Four changes alter behaviour rather than adding to it.
+
+- **`Pad`, `Spacer` and `ProgressBar` lengths follow the display scale.**
+  0.22.0 made `FlexBox`'s gap and padding and `Grid`'s row and column
+  gaps 1x design lengths and left these three in device pixels, so a form
+  at 2x had scaled gaps between unscaled pads and a progress bar half as
+  long as everything beside it. **If your application multiplied them by
+  the scale itself, stop.** `RawSpacing` on `Pad` and `Spacer` is the way
+  back, as it already was on `FlexBox` and `Grid`. At scale 1 nothing
+  moved.
+- **A flexible grid column may now be narrower than its content.** A
+  wrapping label in a `Form` gets the width the form has and folds,
+  instead of taking the width of its whole text on one line and running
+  off the edge. Nothing that cannot fold is squeezed.
+- **Overlays stack.** `ShowOverlay` pushes and `DismissOverlay` pops, so
+  a dialog shown from inside another no longer closes it. If you relied
+  on the second dialog replacing the first, call `Window.SetOverlay`,
+  which still means "there is one dialog".
+- **A square-cornered pack draws square chips.** 41 of the 135 packs were
+  getting a capsule because a corner radius of zero read as "no opinion".
+
+### Layout
+
+- **A column that can wrap is allowed to.** A flexible track was frozen
+  at its children's unbounded width when there was not room for it: right
+  for a button, wrong for a label. Which one a child is cannot be told by
+  width — narrowed, both come back narrow — so it is told by height: what
+  folds gets taller, what cannot keeps its height.
+- **`Grid` measures its rows at the widths it will use**, and `Overlay`
+  settles its card's width before asking for its height. Both measured at
+  one width and laid out at another, which left a form taller than what
+  it drew and a dialog's buttons outside the dialog, where clicks on them
+  missed.
+- **`Wrap` and `TokenField` flow at whole pixels**, because that is what
+  `Arrange` has. A measure at 300.4 and a layout at 300 disagreed about
+  which child fits on the line, and it showed as a line's height of empty
+  space under the last row.
+
+### Icons
+
+- **Seventeen more**, and a way to name the rest. Fifteen typed ids for
+  actions the five packs already shipped with no id to reach them by —
+  trash, archive, junk, tag, folder, reply-all, settings, external-link,
+  eye, user, bell, send, close, quit — plus print, which no pack carried
+  and is now rendered from the same pinned upstreams as the rest.
+  `IconByStem` reaches the whole shipped vocabulary; `IconStarFilled` and
+  `IconDot` are drawn by the toolkit in every set, because neither is
+  shipped by an outline pack and a filled star has no house style to
+  match.
+- **No icon draws nothing.** The drawn sets had no default arm at all, so
+  anything they had no vector for simply did not appear — a button with
+  an invisible mark on it. This mattered more than it looked: every
+  shipped pack uses the drawn Classic set unless the user picks
+  otherwise.
+- **`Button.Icon`.** Only `ToolButton` and `MenuItem` had one, so a
+  dialog's buttons could not carry a mark. The engine centres and draws
+  the label, so the button reserves a strip at each end rather than
+  pushing the text along, and every era's label treatment survives
+  untouched.
+- **Art**: heroicons' forward was the media fast-forward; the drawn
+  paperclip read as a rounded box at the size a message list uses; the
+  new cog read as a sun and the new bell as a lampshade.
+
+### Colour
+
+- **`Palette.Ink`, `DangerInk`, `WarningInk`, `SuccessInk` and
+  `ReadableInk`.** The declared status colours are era-faithful on
+  purpose — Clearlooks really did use `#c4a000` — and most of their uses
+  are fills, where the chrome around them carries the contrast. Text is
+  the other case, and 225 of the 405 status pairs across the shipped
+  packs did not reach 4.5:1, the worst near 1.6:1. Both are kept now: the
+  palette holds what the pack declared, and `Ink` is the same colour
+  moved along its own lightness until it reads, hue intact. All 405 pairs
+  pass as ink; the 180 that already read are returned untouched.
+- **`Label.Tone`** says what a label's text *means* — danger, warning,
+  success, muted, accent — and takes the ink form at paint time, so it
+  follows a theme change. An application that set `Color` from the
+  palette got the unreadable version and had to set it again on every
+  look change.
+
+### Secrets
+
+- **`SecretArea`**, for a PEM block or an OpenSSH private key:
+  `SecretField` over several lines, and the same widget rather than a
+  second one, so the buffer, the wipes and the refusals are not written
+  twice. A pasted key keeps its lines and CRLF is normalised in place.
+- **`SecretField.SetBytes`** takes a generated passphrase over rather
+  than copying it, and wipes what it replaces.
+- **`SecretClip.OnCleared`**, for the "copied — clears in 45s"
+  indicator. The alternative was polling `Cleared`, which is a timer of
+  its own and a window in which the interface is wrong.
+- **Caps Lock in the field itself.** `widget.LockKeysWatcher` gives every
+  widget in the window the lock state, where `Window.OnLockKeys` was one
+  callback that a widget had to take and hand back. A focused
+  `SecretField` draws the mark with no application code.
+- **`SecretField` declares itself a `widget.SecretTarget`.** Not being an
+  `IMETarget` already kept the input method away; declaring it lets
+  anything that asks get a straight answer rather than inferring one.
+
+### Dialogs and windows
+
+- **Overlays stack**, so a confirmation raised from inside a dialog comes
+  back to that dialog with its fields as they were — and a dialog that
+  wipes its secret fields on close no longer wipes them because something
+  else opened.
+- **`MessageBoxInput.Validate` and `AcceptLabel`.** A prompt can refuse a
+  value without closing, showing why under the field with what was typed
+  still there; and the accepting button can name its action, which is
+  what every desktop's guidelines say. `SetInputError` is the same for a
+  check that is a round trip; `PromptFor` is the short way to both.
+- **A fitted dialog is centred for the height it ends up at.** A resize
+  keeps the top-left corner, and the caller cannot sequence the two
+  itself because the fit is what changes the size.
+- **`StatusItem.Shown` and `SetOnShownChange`.** `Alive` says there is
+  somewhere to send the item; `Shown` says someone is showing it. They
+  differ on exactly the desktop where getting it wrong costs the user
+  their window: a GNOME with no AppIndicator extension has a session bus
+  and no tray.
+
+### Rich text
+
+- **A table cell keeps its bold, its code and its links, and wraps.** A
+  cell was drawn as its plain text in one face fitted to one line, so a
+  newsletter's table of links lost its links. Cells are laid out the way
+  paragraphs are now, through the same two halves of the code, because a
+  second text layout is how a widget ends up with two sets of rules.
+- **The block after a table gets its space.** Rows of one table stay
+  tight — they are one grid — but a quote's rule used to butt straight
+  onto the bottom row.
+- **A protocol-relative image src is remote.** `//host/pixel.gif` has no
+  scheme and was read as a file beside the document, so a mail client
+  told an image was local fetched a tracking pixel without asking.
+
+### Fixed
+
+- **A chip no longer cuts its own text short.** `Token.Measure` asked for
+  a fractional width and `SetBounds` rounds each edge on its own, so the
+  box could come back a pixel under and `Paint` elided the label it had
+  just measured for.
+- **A quoted comma does not split a token.** `"Lovelace, Ada" <ada@x>`
+  was two recipients, both nonsense. An unclosed quote is not an error:
+  the user is still typing.
+- **A chip field measured without a width asks for a field's width**, not
+  for every chip on one line. That measurement was what pushed a Write
+  window's form past the window's edge.
+- **`UITK_FONT` no longer stops a program following the desktop's dark
+  mode.** The override was folded into the file read from disk, so a
+  machine with no `look.json` resolved an empty file instead of the
+  defaults — and an empty file says `FollowDesktop` is off.
+- **A widget taken out of the tree lets go of its window.** `Add` hands
+  the host down a subtree and `Remove` cleared only the parent, so
+  anything holding a removed component kept the window reachable.
+- **`ClickComponent` and `FocusOn` scroll to the target first**, as a
+  person does. A button below a `ScrollView`'s fold was clicked where its
+  box said it was, which is outside the view.
+
+### Not done
+
+**Font fallback for message content** was asked for again and is still
+declined. One face draws everything; a rune it lacks is a box. A product
+that must show other people's arbitrary scripts needs a toolkit with a
+shaping engine, which [contracts.md](contracts.md) says plainly and at
+length.
+
+**`widgets.Wrap` was reported missing and is not.** It has laid controls
+out in a row that folds since before 0.22, and is documented. That one
+was a discoverability failure rather than a gap, and the report has been
+withdrawn.
+
+### Verified
+
+The suite with every engine and with one; Windows and Darwin
+cross-compiled. The 64 failures in a one-engine build are unchanged and
+all of the same kind — a test naming a pack that build does not have.
+
+---
+
 ## 0.22.1
 
 The contracts 0.22.0 should have carried, and a crash found while

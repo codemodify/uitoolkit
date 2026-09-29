@@ -43,7 +43,7 @@ stub; there is no native AppKit/SwiftUI control host.
 | Slider | `Slider` | `QSlider` / `Slider` | `GtkScale` | `Slider` | `widget.Slider` | `TrackBar` | `Slider` | `NSSlider` | `Slider` | [thumb](screenshots/compare/slider.png) |
 | Text field | `TextField` / `MonoTextField` / `PasswordField` | `QLineEdit` / `TextField` | `GtkEntry` | `TextBox` | `widget.Entry` | `TextBox` | `PasswordBox` / `TextBox` | `NSSecureTextField` / `NSTextField` | `SecureField` / `TextField` | [thumb](screenshots/compare/textfield.png) |
 | Text area | `TextArea` / `MonoTextArea` | `QTextEdit` / `TextArea` | `GtkTextView` | `TextBox` (AcceptsReturn) | `widget.Entry` (MultiLine) | `TextBox` (Multiline) | `TextBox` | `NSTextView` | `TextEditor` | [thumb](screenshots/compare/textarea.png) · [gallery](screenshots/gallery-textarea.png) |
-| Passphrase field | `SecretField` / `SecretLabel` (`[]byte`, never a string) | `QLineEdit` (`Password`) ≈ | `GtkPasswordEntry` ≈ | `TextBox` (`PasswordChar`) ≈ | `widget.NewPasswordEntry` ≈ | `TextBox` (`UseSystemPasswordChar`) ≈ | `PasswordBox` ≈ | `NSSecureTextField` ≈ | `SecureField` ≈ | — |
+| Passphrase field | `SecretField` / `SecretArea` / `SecretLabel` (`[]byte`, never a string) | `QLineEdit` (`Password`) ≈ | `GtkPasswordEntry` ≈ | `TextBox` (`PasswordChar`) ≈ | `widget.NewPasswordEntry` ≈ | `TextBox` (`UseSystemPasswordChar`) ≈ | `PasswordBox` ≈ | `NSSecureTextField` ≈ | `SecureField` ≈ | — |
 | Chip / token field | `TokenField` / `Token` | — (`QLineEdit` + hand-built) | — (`GtkEntry` + hand-built) | — | — | — | — | `NSTokenField` | — | — |
 | Rich text | `RichText` + `RichTextBar` (`richtext.Doc`, HTML in and out) | `QTextEdit` / `TextArea` (`textFormat: RichText`) | `GtkTextView` + `GtkTextBuffer` tags | — (`TextBox` ≈) | `widget.RichText` (read-only) ≈ | `RichTextBox` | `RichTextBox` | `NSTextView` (rich) | `TextEditor` (`AttributedString`) ≈ | [sheet](screenshots/breadth/richtext-1x.webp) |
 | Number / spinner | `NumberField` / `Spinner` | `QSpinBox` / `SpinBox` | `GtkSpinButton` | `NumericUpDown` | — (`Entry` ≈) | `NumericUpDown` | — (toolkit ≈) | `NSStepper` + field | `Stepper` | [thumb](screenshots/compare/numberfield.png) |
@@ -470,12 +470,36 @@ pair kerning, because kerning is a property of a shaped run and there is
 no run; revealed text is set a hair wider than the same string in a
 label, which is the price of not remembering it.
 
+`SecretArea` is the same widget over several lines, for a PEM block or
+an OpenSSH private key. It is the same widget and not a second one on
+purpose: the buffer, the wipes, the refusals and the test that reads the
+source all belong to the embedded `SecretField` and are not written
+twice, because a second implementation of secret handling is the last
+thing this should have. What it adds is newlines kept rather than
+dropped, a caret that moves by line and keeps the x it was aiming for,
+and one masked line per line of text. Return inserts a line and
+Ctrl+Return submits. A pasted key keeps its lines — taking only the
+first would make a value that looks right and is not — and CRLF is
+normalised in place, so no second array ever holds it. It wraps nothing:
+a long line scrolls sideways, which keeps a key's header, body and
+footer the shape the reader recognises.
+
 `SecretLabel` is the read-only half — the item view's "show password"
 and a TOTP code. Its value comes from a function rather than a field, so
 a locked vault answers nothing and the label empties itself on the next
 frame; `Hide()` zeroes what it last drew from. It is measured for what it
 is *showing*, and for the wider of the bullets and the text, so pressing
 "show" does not move the row under the reader's hand.
+
+Caps Lock is shown by the field itself. A right passphrase refused is
+nearly always Caps Lock, and a field holding a secret cannot work that
+out for itself — the only other way is to read the secret. The state
+reaches every widget in the window through `widget.LockKeysWatcher`, the
+same shape as `FocusWatcher`, so a field draws the mark with no
+application code and two fields in one window both follow it.
+`Window.OnLockKeys` is still there for the window's own code, and is
+still one callback. The mark is an icon, not a character
+([contracts.md](contracts.md)), drawn in the palette's warning as *ink*.
 
 The input method is off while a secret widget has the focus
 (`widget.SecretTarget`), and that now covers `TextField` with `Password`
@@ -504,6 +528,32 @@ the same idea with the axes swapped and nothing here needs it.
 
 It costs one extra `Measure` per flex child of a row, and nothing at all
 for a row with no flex children.
+
+### A column that can wrap is allowed to
+
+The same question in a grid has a different answer, and getting it wrong
+was worse. A flexible track was frozen at its children's *unbounded*
+width whenever there was not room for it — right for a child that cannot
+shrink, since a button is as wide as its label, and wrong for one that
+can. A wrapping label measured with nothing to constrain it reports the
+width of its whole text on one line: 1453 pixels for a sentence. Its
+column took all 1453 of the 400 there were, so a form ran off its own
+right edge and its height came back as the single line nobody would see.
+
+Which of the two a child is cannot be told by width. Narrowed, a child
+that cannot fold is clipped to the constraint exactly as one that can,
+and both come back narrow. The **height** tells them apart: what folds
+gets taller, what cannot keeps its height. A quarter of the natural width
+is the probe, not one pixel — a label with no room for a single rune
+stops wrapping and reports one line, which reads as a child that does not
+fold at all.
+
+`Grid` then measures its rows at the widths `Arrange` will hand out
+rather than at the columns' natural ones, and `Overlay` settles its
+card's width before asking for its height. Both were measuring at one
+width and laying out at another, which is the same bug in two places:
+what a widget that folds reports is only true of the width it was asked
+about.
 
 ## Inventory notes
 
