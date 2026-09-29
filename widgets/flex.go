@@ -3,14 +3,24 @@ package widgets
 import (
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/layout"
+	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
 )
 
 // FlexBox is a row or column of children with optional grow weights.
 type FlexBox struct {
 	widget.Base
-	Spec  layout.Flex
-	items []layout.Item
+	// Spec's Gap and padding are 1x design lengths, scaled by the look
+	// like every other length in the toolkit ([style.Dip]). Set
+	// RawSpacing to be given them in device pixels instead.
+	Spec layout.Flex
+	// RawSpacing takes Spec's Gap and padding as device pixels: the
+	// caller has already scaled them, or is placing something against a
+	// fixed pixel grid. It is the opt-out rather than the default,
+	// because a layout that does not follow the display is a bug far
+	// more often than it is a choice.
+	RawSpacing bool
+	items      []layout.Item
 }
 
 // NewColumn stacks children top-to-bottom.
@@ -97,13 +107,40 @@ func (f *FlexBox) AddFlex(child widget.Component, weight float32) {
 	f.items = append(f.items, layout.Item{Node: wrap(child), Flex: weight})
 }
 
+// scaled is Spec with its gap and padding taken as **1x design
+// lengths** and multiplied by the look's scale.
+//
+// They used to be device pixels, so a dialog laid out with WithPad(20)
+// had 20 pixels of margin on a 1x display and 20 on a 2x one — half the
+// margin, beside text and controls that had doubled. Every application
+// that cared had to write style.Dip around its own numbers, and the ones
+// that did not looked cramped on HiDPI.
+//
+// At scale 1 this is the identity, which is why nothing in the toolkit's
+// own pinned geometry moved: what changes is only what a 2x window does.
+// [FlexBox.RawSpacing] is the way back for a caller that means device
+// pixels.
+func (f *FlexBox) scaled() layout.Flex {
+	sp := f.Spec
+	if f.RawSpacing {
+		return sp
+	}
+	k := style.LookScale(f.Look())
+	if k == 1 {
+		return sp
+	}
+	sp.Gap *= k
+	sp.PadL, sp.PadT, sp.PadR, sp.PadB = sp.PadL*k, sp.PadT*k, sp.PadR*k, sp.PadB*k
+	return sp
+}
+
 func (f *FlexBox) Measure(c layout.Constraints) paintengine2d.Point {
-	return f.Spec.Measure(c, f.visibleItems(false))
+	return f.scaled().Measure(c, f.visibleItems(false))
 }
 
 func (f *FlexBox) Arrange(r paintengine2d.Rect) {
 	f.SetBounds(r)
-	f.Spec.Arrange(r, f.visibleItems(true))
+	f.scaled().Arrange(r, f.visibleItems(true))
 }
 
 func (f *FlexBox) visibleItems(collapseHidden bool) []layout.Item {

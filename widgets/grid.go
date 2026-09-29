@@ -54,8 +54,14 @@ type GridCell struct {
 // the leftover space (Cols, Rows; missing tracks fit their content).
 type Grid struct {
 	widget.Base
-	Cols, Rows     []Track
+	Cols, Rows []Track
+	// ColGap and RowGap are 1x design lengths, scaled by the look like
+	// every other length in the toolkit ([style.Dip]); RawSpacing takes
+	// them as device pixels instead. A form whose gaps did not follow
+	// the display was half as airy on a 2x screen as on a 1x one, beside
+	// text and controls that had doubled.
 	ColGap, RowGap float32
+	RawSpacing     bool
 	// cells is keyed by the component, not by its position among the
 	// children. It used to be a slice parallel to Children(), which the
 	// inherited Remove and ClearChildren know nothing about: removing
@@ -293,7 +299,7 @@ func (g *Grid) columns(avail float32) []float32 {
 		}
 		spans = append(spans, [3]float32{float32(cell.Col), float32(cell.ColSpan), w})
 	})
-	return solve(g.Cols, nc, content, spans, g.ColGap, avail)
+	return solve(g.Cols, nc, content, spans, g.colGap(), avail)
 }
 
 // spanLen is the length of count tracks from first, gaps included.
@@ -314,7 +320,7 @@ func (g *Grid) rows(cols []float32, avail float32) []float32 {
 	content := make([]float32, nr)
 	var spans [][3]float32
 	g.visible(func(c widget.Component, cell *GridCell) {
-		cw := spanLen(cols, cell.Col, cell.ColSpan, g.ColGap)
+		cw := spanLen(cols, cell.Col, cell.ColSpan, g.colGap())
 		h := ceilPx(c.Measure(layout.Constraints{MaxW: cw, MaxH: -1}).Y)
 		if cell.RowSpan == 1 {
 			if cell.Row < nr && h > content[cell.Row] {
@@ -324,7 +330,7 @@ func (g *Grid) rows(cols []float32, avail float32) []float32 {
 		}
 		spans = append(spans, [3]float32{float32(cell.Row), float32(cell.RowSpan), h})
 	})
-	return solve(g.Rows, nr, content, spans, g.RowGap, avail)
+	return solve(g.Rows, nr, content, spans, g.rowGap(), avail)
 }
 
 func sum(v []float32, gap float32) float32 {
@@ -340,12 +346,12 @@ func sum(v []float32, gap float32) float32 {
 
 func (g *Grid) Measure(c layout.Constraints) paintengine2d.Point {
 	cols := g.columns(-1)
-	w := sum(cols, g.ColGap)
+	w := sum(cols, g.colGap())
 	if c.HasMaxW() && w > c.MaxW {
 		cols = g.columns(c.MaxW)
 		w = c.MaxW
 	}
-	h := sum(g.rows(cols, -1), g.RowGap)
+	h := sum(g.rows(cols, -1), g.rowGap())
 	return c.Constrain(paintengine2d.Pt(w, h))
 }
 
@@ -355,18 +361,18 @@ func (g *Grid) Arrange(r paintengine2d.Rect) {
 	rows := g.rows(cols, r.Dy())
 	xs := make([]float32, len(cols)+1)
 	for i, w := range cols {
-		xs[i+1] = xs[i] + w + g.ColGap
+		xs[i+1] = xs[i] + w + g.colGap()
 	}
 	ys := make([]float32, len(rows)+1)
 	for i, h := range rows {
-		ys[i+1] = ys[i] + h + g.RowGap
+		ys[i+1] = ys[i] + h + g.rowGap()
 	}
 	g.visible(func(c widget.Component, cell *GridCell) {
 		if cell.Col >= len(cols) || cell.Row >= len(rows) {
 			return
 		}
 		box := paintengine2d.XYWH(xs[cell.Col], ys[cell.Row],
-			spanLen(cols, cell.Col, cell.ColSpan, g.ColGap), spanLen(rows, cell.Row, cell.RowSpan, g.RowGap))
+			spanLen(cols, cell.Col, cell.ColSpan, g.colGap()), spanLen(rows, cell.Row, cell.RowSpan, g.rowGap()))
 		c.Arrange(alignIn(c, box, cell.HAlign, cell.VAlign))
 	})
 }
@@ -455,3 +461,15 @@ func (f *Form) Arrange(r paintengine2d.Rect) {
 // ceilPx rounds a measured length up to whole pixels, so a child sized to
 // its content keeps that width after layout rounding.
 func ceilPx(v float32) float32 { return float32(math.Ceil(float64(v) - 1e-3)) }
+
+// colGap and rowGap are the gaps at the look's scale, or as given when
+// RawSpacing says the caller has already scaled them.
+func (g *Grid) colGap() float32 { return g.gapOf(g.ColGap) }
+func (g *Grid) rowGap() float32 { return g.gapOf(g.RowGap) }
+
+func (g *Grid) gapOf(v float32) float32 {
+	if g.RawSpacing {
+		return v
+	}
+	return style.Dip(g.Look(), v)
+}

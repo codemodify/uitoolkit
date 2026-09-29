@@ -7,9 +7,14 @@ import (
 
 // Locked hashes for the chrome strip. Recomputed when UITK_UPDATE_GOLDEN=1
 // prints the new values — do not silently accept a dirty-rect glyph change.
+// The 1x hash has not moved since it was pinned. The 2x one changed
+// when FlexBox and Grid started taking their gaps and padding as 1x
+// design lengths and scaling them with the look: at 2x the spacing
+// doubled, which is the point, and at 1x the scale is the identity and
+// the strip is byte-for-byte what it was.
 var chromeStripHash = map[float32]uint64{
 	1: 0x2080c72771f4446c,
-	2: 0x38a65979f0e0ca7,
+	2: 0x66d4b400097f7c17,
 }
 
 func TestChromeStripGolden(t *testing.T) {

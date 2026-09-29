@@ -23,9 +23,11 @@ const sheetCols = 2
 // toolkit, so its captions are the pack's type and colours like the pages.
 func writeSheet(a *app.Application, path string, pages []int) error {
 	pages = shotPages(pages)
-	// Gaps and margins are device pixels to a layout: scale them with the
-	// pages so the sheet is one design at every scale.
-	dip := max(a.Scale(), 1)
+	// Gaps and margins are 1x design lengths: the toolkit scales them
+	// with the look, so the sheet is one design at every scale and this
+	// does not multiply them itself. It used to, back when a layout took
+	// them as device pixels, and doing both would make the gaps at 1.75x
+	// three times what they should be.
 	var cells []widget.Component
 	for _, p := range pages {
 		img, err := shootPage(a, p)
@@ -34,10 +36,10 @@ func writeSheet(a *app.Application, path string, pages []int) error {
 		}
 		name := widgets.NewTitle(tourapp.TourPageNames()[p])
 		title := widgets.NewLabel(tourapp.TourPageTitle(p))
-		head := widgets.NewRow(name, title).WithGap(10 * dip).WithAlign(layout.AlignCenter)
-		cells = append(cells, widgets.NewColumn(head, newThumb(halve(img))).WithGap(6*dip))
+		head := widgets.NewRow(name, title).WithGap(10).WithAlign(layout.AlignCenter)
+		cells = append(cells, widgets.NewColumn(head, newThumb(halve(img))).WithGap(6))
 	}
-	gap := 18 * dip
+	gap := float32(18)
 	grid := widgets.NewGrid()
 	grid.ColGap, grid.RowGap = gap, gap
 	for i, c := range cells {

@@ -275,6 +275,28 @@ caret, the selection, hit-testing and `softWrapped` are all that range;
 edits through the same machinery and has no wrapper of its own. Wrap is for
 painting a paragraph; `layoutAreaMax` is for editing one.
 
+### Spacing is a design length, not a pixel count
+
+`FlexBox`'s `Gap` and padding and `Grid`'s (and so `Form`'s) `ColGap` and
+`RowGap` are **1x design lengths**, scaled by the look like every other
+length in the toolkit. They were device pixels, so a dialog laid out with
+`WithPad(20)` had twenty pixels of margin on a 1x display and twenty on a
+2x one — half the margin, beside text and controls that had doubled.
+Every application that cared wrote `style.Dip` around its own numbers,
+and the ones that did not looked cramped on HiDPI.
+
+`RawSpacing` on either is the way back for a caller that means device
+pixels, and it is the opt-out rather than the default because a layout
+that does not follow the display is a bug far more often than it is a
+choice.
+
+At scale 1 the conversion is the identity, so none of the toolkit's
+pinned geometry moved and the 1x golden strip is byte-for-byte what it
+was; the 2x one changed, which is the fix. The one place that had
+written the workaround — the tour's contact sheet — stopped multiplying
+by the scale itself, because doing both made its gaps three times what
+they should be at 1.75x.
+
 ### Marks in a list: icons, not characters
 
 A message list's marks — a paperclip for an attachment, a star, a flag, a
