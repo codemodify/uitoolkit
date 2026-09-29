@@ -153,6 +153,18 @@ func newAkSurface(opts WindowOptions) (Surface, error) {
 	// by answering AcceptDrag, and a window that had not registered
 	// would never be asked.
 	C.uitk_ak_register_drops(s.win)
+	// Before the window is shown: a dialog that appears with a minimize
+	// button and loses it a frame later is a flicker the user sees, and
+	// -center on a window already on screen is a jump.
+	if opts.Role != RoleNormal {
+		s.SetWindowRole(opts.Role)
+	}
+	if opts.Center {
+		s.Center()
+	}
+	if opts.KeepAbove {
+		FrameOf(s).SetKeepAbove(true)
+	}
 	if !opts.Headless {
 		C.uitk_ak_window_show(s.win)
 	}

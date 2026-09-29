@@ -719,6 +719,59 @@ wayland-scanner private-code \
 linux-dmabuf stays on the opaque `XRGB` formats; a frame that needs alpha
 presents through `wl_shm` instead (the dmabuf path is opt-in and CPU-only).
 
+## Dialog windows
+
+`WindowOptions` carries three things a prompt opens with, and each is
+applied **before the window is shown**, because a dialog raised a frame
+after it is mapped can be covered in that frame and one centred after it
+is shown jumps:
+
+| | X11 | Wayland | Win32 | AppKit |
+| --- | --- | --- | --- | --- |
+| `Role: RoleDialog` | `_NET_WM_WINDOW_TYPE_DIALOG` | `xdg_dialog_v1` where offered | no minimize or maximize, `WS_EX_DLGMODALFRAME`, off the taskbar | floating level, no minimize button |
+| `Center` | `_NET_WORKAREA` of the monitor it is on | **ignored** — a client cannot place a toplevel | `MonitorFromWindow` work area | `-[NSWindow center]` |
+| `KeepAbove` | `_NET_WM_STATE_ABOVE` before the map | no — no compositor allows it | `HWND_TOPMOST` | window level |
+| `Window.Activate()` | `_NET_ACTIVE_WINDOW` | `xdg_activation_v1`, using `$XDG_ACTIVATION_TOKEN` when the launcher passed one | `SetForegroundWindow` | `activateIgnoringOtherApps:` + `makeKeyAndOrderFront:` |
+
+Wayland ignoring `Center` is not a gap: a client may not place a
+toplevel, and a compositor told the window is a dialog centres it on its
+parent itself — which is the whole reason `RoleDialog` carries weight
+there. `platform.CenterAvailable` is not a function for the same reason
+`Window.Center` reports what happened: ask the window.
+
+The `xdg_dialog_v1` object is deliberately **not** made modal. Modality
+is the application's business, the toolkit draws its own modal overlays,
+and a compositor-enforced modal that outlived a crashed dialog would
+lock the parent with nothing left to unlock it.
+
+`Window.Activate` reports whether the desktop was *asked*, not whether it
+agreed. Every modern desktop refuses focus to a window whose application
+is not already in front — the rule that stops a background window
+stealing the keyboard mid-sentence — and flashes the taskbar entry or
+marks the window urgent instead.
+
+## Holding the keyboard, and staying out of screenshots
+
+`Window.SetSecureInput` and `Window.SetExcludeFromCapture` are what a
+passphrase prompt asks for. Both report what happened, and both have an
+`Available` in `platform` so an application can decide whether to make
+the promise at all.
+
+| | secure input | out of captures |
+| --- | --- | --- |
+| X11 | `XGrabKeyboard`, retried for 250 ms, dropped and retaken with the focus | no — any client can read the root window |
+| Wayland | `zwp_keyboard_shortcuts_inhibit_manager_v1` | no — screencast is the portal's business |
+| Win32 | no — nothing an ordinary application may use | `SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)` |
+| AppKit | `EnableSecureEventInput`, reference counted | `NSWindow.sharingType = .none` |
+
+They are not the same promise. macOS takes the keyboard from every other
+process, including the ones with accessibility permission. X11 stops the
+server *delivering* keys to other clients, which a client that has
+already opened the input device is unaffected by. Wayland's inhibitor is
+not about secrecy at all — a client cannot see another client's keys
+there to begin with — it stops the compositor eating keys as its own
+shortcuts, which is the only thing there is to ask for.
+
 ## Popups
 
 Menus, submenus, combo lists, context menus, the drop-action menu and

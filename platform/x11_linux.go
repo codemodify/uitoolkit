@@ -1036,7 +1036,20 @@ func (x11Backend) NewSurface(opts WindowOptions) (Surface, error) {
 	s.setXdndAwareLocked()
 	s.selectXI2Locked()
 	s.setupSyncLocked()
+	// Both before the map, because a window manager reads them when it
+	// takes the window over: a type set afterwards may not move a window
+	// it has already placed, and an above state set afterwards costs a
+	// frame in which the window can be covered.
+	if !opts.Popup {
+		s.setWindowRoleLocked(opts.Role)
+		if opts.KeepAbove {
+			s.setInitialAboveLocked()
+		}
+	}
 	x11Mu.Unlock()
+	if opts.Center && !opts.Popup {
+		s.Center()
+	}
 	s.tryBindGPU()
 	return s, nil
 }
@@ -1061,26 +1074,31 @@ type x11Conn struct {
 	// atomPwHint is x-kde-passwordManagerHint, the target Klipper and the
 	// clipboard managers that follow it read to decide whether to record
 	// a selection. It is served only while the selection is a secret.
-	atomPwHint    C.Atom
-	atomProp      C.Atom
-	atomString    C.Atom
-	atomNetState  C.Atom
-	atomMaxVert   C.Atom
-	atomMaxHorz   C.Atom
-	atomFullscr   C.Atom
-	atomHidden    C.Atom
-	atomFocused   C.Atom
-	atomAbove     C.Atom
-	atomAllowed   C.Atom
-	atomActMin    C.Atom
-	atomActMaxH   C.Atom
-	atomActMaxV   C.Atom
-	atomActFull   C.Atom
-	atomSupported C.Atom
-	atomMoveRes   C.Atom
-	atomMoveWin   C.Atom
-	atomShowMenu  C.Atom
-	atomMotif     C.Atom
+	atomPwHint   C.Atom
+	atomProp     C.Atom
+	atomString   C.Atom
+	atomNetState C.Atom
+	atomMaxVert  C.Atom
+	atomMaxHorz  C.Atom
+	atomFullscr  C.Atom
+	atomHidden   C.Atom
+	atomFocused  C.Atom
+	atomAbove    C.Atom
+	// The window-type atoms: what kind of window this is, which is how a
+	// window manager knows to centre a dialog rather than cascade it.
+	atomWinType       C.Atom
+	atomWinTypeNormal C.Atom
+	atomWinTypeDialog C.Atom
+	atomAllowed       C.Atom
+	atomActMin        C.Atom
+	atomActMaxH       C.Atom
+	atomActMaxV       C.Atom
+	atomActFull       C.Atom
+	atomSupported     C.Atom
+	atomMoveRes       C.Atom
+	atomMoveWin       C.Atom
+	atomShowMenu      C.Atom
+	atomMotif         C.Atom
 	// supported is the window manager's _NET_SUPPORTED, read once (nil
 	// until then); wmName is its _NET_WM_NAME.
 	supported map[C.Atom]bool
@@ -1189,12 +1207,14 @@ type x11Surface struct {
 	// differ while the window is not focused.
 	secureWanted bool
 	secureHeld   bool
-	imeSpotX     int
-	imeSpotY     int
-	preeditBuf   string
-	ximCbs       unsafe.Pointer
-	gpu          *paintengine2d.GPUDevice
-	popup        bool
+	// role is what the window manager has been told this window is.
+	role       WindowRole
+	imeSpotX   int
+	imeSpotY   int
+	preeditBuf string
+	ximCbs     unsafe.Pointer
+	gpu        *paintengine2d.GPUDevice
+	popup      bool
 	// hidden is set by Hide: presenting must not map the window again
 	// (close-to-tray hid it, and the next repaint showed it).
 	hidden bool
@@ -1328,6 +1348,9 @@ func x11OpenLocked() (*x11Conn, error) {
 	c.atomHidden = internAtom(d, "_NET_WM_STATE_HIDDEN")
 	c.atomFocused = internAtom(d, "_NET_WM_STATE_FOCUSED")
 	c.atomAbove = internAtom(d, "_NET_WM_STATE_ABOVE")
+	c.atomWinType = internAtom(d, "_NET_WM_WINDOW_TYPE")
+	c.atomWinTypeNormal = internAtom(d, "_NET_WM_WINDOW_TYPE_NORMAL")
+	c.atomWinTypeDialog = internAtom(d, "_NET_WM_WINDOW_TYPE_DIALOG")
 	c.atomAllowed = internAtom(d, "_NET_WM_ALLOWED_ACTIONS")
 	c.atomActMin = internAtom(d, "_NET_WM_ACTION_MINIMIZE")
 	c.atomActMaxH = internAtom(d, "_NET_WM_ACTION_MAXIMIZE_HORZ")

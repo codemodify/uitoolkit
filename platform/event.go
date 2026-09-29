@@ -348,6 +348,29 @@ type WindowOptions struct {
 	// xdg_toplevel, which is the only Wayland role a client can place.
 	// Ask [ScreenPlacementAvailable] before relying on it.
 	Place Placement
+	// Role is what kind of window this is, for the desktop: ordinary (the
+	// zero value) or a dialog. See [WindowRole]; it can be changed
+	// afterwards through [RoleSurface].
+	Role WindowRole
+	// Center opens the window in the middle of the monitor it lands on,
+	// rather than wherever the desktop would have cascaded it. It is for
+	// a prompt: a passphrase dialog that opens in a corner is one the
+	// user has to look for.
+	//
+	// Wayland ignores it, and correctly: a client cannot place a
+	// toplevel, and a compositor told the window is a dialog
+	// ([RoleDialog]) centres it itself. Ask [CenterAvailable] to know
+	// which you have.
+	Center bool
+	// KeepAbove asks for the window to open above the others, rather
+	// than being raised afterwards. The difference matters for a prompt:
+	// a window that is raised a frame after it is mapped can be covered
+	// in that frame, and on X11 it can be covered by the thing that
+	// launched it.
+	//
+	// It is the same request as [WindowFrame.SetKeepAbove] and has the
+	// same answer — no Wayland compositor allows it.
+	KeepAbove bool
 	// Popup requests a short-lived menu surface: no taskbar, no
 	// decorations when the backend can, positioned at X,Y on X11.
 	Popup bool

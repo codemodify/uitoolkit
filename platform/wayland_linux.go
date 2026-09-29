@@ -30,6 +30,7 @@ package platform
 #include "xdg-toplevel-drag-v1-client-protocol.h"
 #include "ext-background-effect-v1-client-protocol.h"
 #include "keyboard-shortcuts-inhibit-unstable-v1-client-protocol.h"
+#include "xdg-dialog-v1-client-protocol.h"
 #include "wayland_dmabuf.h"
 #include "wayland_sync.h"
 #include "wayland_cursor.h"
@@ -661,6 +662,16 @@ static const struct wl_interface *ui_wl_data_man_iface(void) { return &wl_data_d
 static const struct wl_interface *ui_wl_output_iface(void) { return &wl_output_interface; }
 static const struct wl_interface *ui_wl_ti_man_iface(void) { return &zwp_text_input_manager_v3_interface; }
 
+static const struct wl_interface *ui_wl_dlg_man_iface(void) { return &xdg_wm_dialog_v1_interface; }
+
+static struct xdg_dialog_v1 *ui_wl_get_dialog(struct xdg_wm_dialog_v1 *m, struct xdg_toplevel *t) {
+	if (!m || !t) return NULL;
+	return xdg_wm_dialog_v1_get_xdg_dialog(m, t);
+}
+
+static void ui_wl_dialog_destroy(struct xdg_dialog_v1 *d) { if (d) xdg_dialog_v1_destroy(d); }
+static void ui_wl_dlg_man_destroy(struct xdg_wm_dialog_v1 *m) { if (m) xdg_wm_dialog_v1_destroy(m); }
+
 static const struct wl_interface *ui_wl_ksi_man_iface(void) {
 	return &zwp_keyboard_shortcuts_inhibit_manager_v1_interface;
 }
@@ -1211,6 +1222,13 @@ func (wlBackend) NewSurface(opts WindowOptions) (Surface, error) {
 	// leaves the compositor waiting and the window fully transparent.
 	C.ui_wl_commit(s.surf)
 	wlMu.Unlock()
+	// After the toplevel exists and before the first roundtrip, so the
+	// compositor knows what kind of window it is placing when it places
+	// it. Center is not asked for: a client cannot place a toplevel, and
+	// a compositor told this is a dialog centres it itself.
+	if opts.Role != RoleNormal && !opts.Popup {
+		s.SetWindowRole(opts.Role)
+	}
 	C.ui_wl_roundtrip(c.dpy)
 	if !s.configured {
 		C.ui_wl_roundtrip(c.dpy)
@@ -1323,12 +1341,16 @@ type wlConn struct {
 	// compositor offers it: what a passphrase prompt asks for so the
 	// compositor stops eating keys as its own shortcuts.
 	shortcutMan *C.struct_zwp_keyboard_shortcuts_inhibit_manager_v1
-	textIn      *C.struct_zwp_text_input_v3
-	textActive  bool
-	tiWanted    bool // app focused an IMETarget; enable only then
-	tiSurf      int
-	imePre      string
-	imeCommit   string
+	// dialogMan is xdg_wm_dialog_v1 where the compositor offers it: how
+	// a toplevel is told it is a dialog, which is what makes the
+	// compositor centre it on its parent rather than tile or cascade it.
+	dialogMan  *C.struct_xdg_wm_dialog_v1
+	textIn     *C.struct_zwp_text_input_v3
+	textActive bool
+	tiWanted   bool // app focused an IMETarget; enable only then
+	tiSurf     int
+	imePre     string
+	imeCommit  string
 	// lastPre / lastPreCaret are the preedit last handed to the app, and
 	// tiRect the cursor rectangle last committed to the compositor. Every
 	// text_input commit makes the compositor answer with done; re-sending
@@ -1444,14 +1466,17 @@ type wlSurface struct {
 	// inhibitor is the keyboard-shortcuts inhibitor while this surface
 	// has asked for secure input (SetSecureInput).
 	inhibitor *C.struct_zwp_keyboard_shortcuts_inhibitor_v1
-	soft      softDevice // software devices of the buffers (no GPU)
-	id        int
-	conn      *wlConn
-	surf      *C.struct_wl_surface
-	xdg       *C.struct_xdg_surface
-	top       *C.struct_xdg_toplevel
-	title     string
-	appID     string
+	// dialog is the xdg_dialog_v1 while this toplevel is a dialog.
+	dialog *C.struct_xdg_dialog_v1
+	role   WindowRole
+	soft   softDevice // software devices of the buffers (no GPU)
+	id     int
+	conn   *wlConn
+	surf   *C.struct_wl_surface
+	xdg    *C.struct_xdg_surface
+	top    *C.struct_xdg_toplevel
+	title  string
+	appID  string
 	// sizeOpts are the options the window's limits are computed from (its
 	// minimum already defaulted), sizing its resize policy and limits what
 	// xdg_toplevel was last told (platform.WindowGeometry).
@@ -1798,6 +1823,10 @@ func (c *wlConn) closeLocked() {
 	}
 	c.outputs = map[uintptr]uint32{}
 	c.outs = newOutputSet()
+	if c.dialogMan != nil {
+		C.ui_wl_dlg_man_destroy(c.dialogMan)
+		c.dialogMan = nil
+	}
 	if c.shortcutMan != nil {
 		C.ui_wl_ksi_man_destroy(c.shortcutMan)
 		c.shortcutMan = nil
@@ -2127,6 +2156,20 @@ func (s *wlSurface) unmapToplevelLocked() {
 
 func (s *wlSurface) requestActivate() {
 	if s == nil || s.conn == nil || s.conn.activation == nil || s.surf == nil {
+		return
+	}
+	// A token the launcher passed in the environment is the strongest
+	// claim there is: it says the user asked for this window, from the
+	// application that started it, and a compositor that would refuse a
+	// self-made token honours it. XDG_ACTIVATION_TOKEN is spent once —
+	// it is unset after use, as the spec says, so a later activation
+	// makes its own.
+	if tok := os.Getenv("XDG_ACTIVATION_TOKEN"); tok != "" {
+		os.Unsetenv("XDG_ACTIVATION_TOKEN")
+		ct := C.CString(tok)
+		C.ui_wl_act_activate(s.conn.activation, ct, s.surf)
+		C.free(unsafe.Pointer(ct))
+		C.ui_wl_flush(s.conn.dpy)
 		return
 	}
 	tok := C.ui_wl_act_token(s.conn.activation)
@@ -3217,6 +3260,8 @@ func uitkWlRegistryGlobal(id C.uintptr_t, reg *C.struct_wl_registry, name C.uint
 			// or after it; whichever came second asks for the pair.
 			c.requestXdgOutput(uint32(name), out)
 		}
+	case "xdg_wm_dialog_v1":
+		c.dialogMan = (*C.struct_xdg_wm_dialog_v1)(C.ui_wl_bind(reg, name, C.ui_wl_dlg_man_iface(), 1))
 	case "zwp_keyboard_shortcuts_inhibit_manager_v1":
 		c.shortcutMan = (*C.struct_zwp_keyboard_shortcuts_inhibit_manager_v1)(
 			C.ui_wl_bind(reg, name, C.ui_wl_ksi_man_iface(), 1))

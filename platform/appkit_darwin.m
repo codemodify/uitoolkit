@@ -1165,3 +1165,52 @@ void uitk_ak_ime_simulate(void *w, int what, const char *text, int caret) {
 		}
 	}
 }
+
+// uitk_ak_set_role restyles a window as a dialog, or back.
+//
+// Not an NSPanel: the window is made before the role is known, and
+// rebuilding it as a panel would mean rebuilding its view, its layer and
+// its delegate with it. What a panel gives a dialog is the floating
+// level and the absence of a minimize button, and both are properties of
+// an NSWindow — so this sets those, and the window behaves as a panel
+// without being one.
+//
+// NSFloatingWindowLevel keeps it above the application's ordinary
+// windows without putting it above every other application's, which is
+// what a prompt wants and what NSStatusWindowLevel would get wrong.
+void uitk_ak_set_role(void *w, int dialog) {
+	@autoreleasepool {
+		NSWindow *win = (__bridge NSWindow *)w;
+		if (!win) return;
+		if (dialog) {
+			win.styleMask &= ~NSWindowStyleMaskMiniaturizable;
+			win.level = NSFloatingWindowLevel;
+			win.collectionBehavior |= NSWindowCollectionBehaviorMoveToActiveSpace;
+		} else {
+			win.styleMask |= NSWindowStyleMaskMiniaturizable;
+			win.level = NSNormalWindowLevel;
+		}
+	}
+}
+
+void uitk_ak_center(void *w) {
+	@autoreleasepool {
+		NSWindow *win = (__bridge NSWindow *)w;
+		if (win) [win center];
+	}
+}
+
+// uitk_ak_activate brings the window to the front and gives it the
+// keyboard. activateIgnoringOtherApps: as well, because a process that
+// is not frontmost gets its window ordered in behind everything else
+// otherwise — which is exactly the case a prompt opened from a terminal
+// is in.
+int uitk_ak_activate(void *w) {
+	@autoreleasepool {
+		NSWindow *win = (__bridge NSWindow *)w;
+		if (!win) return 0;
+		[NSApp activateIgnoringOtherApps:YES];
+		[win makeKeyAndOrderFront:nil];
+		return 1;
+	}
+}

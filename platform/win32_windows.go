@@ -600,6 +600,18 @@ func newWinSurface(opts WindowOptions) (Surface, error) {
 	if s.deco == DecorationsClient {
 		s.applyDecorations()
 	}
+	// The role restyles the window, so it happens before it is shown:
+	// a dialog that appears with a minimize box and loses it a frame
+	// later is a flicker the user sees.
+	if opts.Role != RoleNormal {
+		s.SetWindowRole(opts.Role)
+	}
+	if opts.Center {
+		s.Center()
+	}
+	if opts.KeepAbove {
+		s.SetKeepAbove(true)
+	}
 	if !opts.Headless {
 		procShowWindow.Call(hwnd, swShow)
 		s.visible = true

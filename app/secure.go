@@ -65,3 +65,64 @@ func (w *Window) SetExcludeFromCapture(on bool) bool {
 	}
 	return s.SetExcludeFromCapture(on)
 }
+
+// Activate brings the window to the front and gives it the keyboard.
+//
+// It is what a prompt does when it opens, and what an application does
+// when a second copy of it is started and hands the request to the one
+// already running. [Window.Raise] is the same thing on X11 and Wayland,
+// named for the X11 request; this one is named for what the caller
+// wants, and on Windows the two are genuinely different — raising is
+// z-order and activating is focus.
+//
+// It reports whether the desktop was asked, not whether it agreed. Every
+// modern desktop refuses focus to a window whose application is not
+// already in front, which is the rule that stops a background window
+// stealing the keyboard mid-sentence; what happens instead is the
+// taskbar entry flashes, or the compositor marks the window urgent.
+func (w *Window) Activate() bool {
+	if w == nil || w.Closed() {
+		return false
+	}
+	if a, ok := w.surf.(platform.ActivateSurface); ok {
+		return a.Activate()
+	}
+	platform.RaiseSurface(w.surf)
+	return true
+}
+
+// SetWindowRole tells the desktop what kind of window this is —
+// ordinary, or a dialog ([platform.WindowRole]).
+//
+// [platform.WindowOptions.Role] is the better place to say it, because a
+// window manager reads the type when it takes the window over: a role
+// set afterwards may not move a window it has already placed. This is
+// for a window that becomes a dialog later.
+func (w *Window) SetWindowRole(r platform.WindowRole) bool {
+	if w == nil || w.Closed() {
+		return false
+	}
+	s, ok := w.surf.(platform.RoleSurface)
+	if !ok {
+		return false
+	}
+	return s.SetWindowRole(r)
+}
+
+// Center puts the window in the middle of the work area of the monitor
+// it is on, and reports whether it could.
+//
+// Wayland cannot and answers false: a client may not place a toplevel
+// there. A window opened with [platform.WindowRole] RoleDialog is
+// centred by the compositor instead, which is the Wayland way of asking
+// for the same thing.
+func (w *Window) Center() bool {
+	if w == nil || w.Closed() {
+		return false
+	}
+	s, ok := w.surf.(platform.CenterSurface)
+	if !ok {
+		return false
+	}
+	return s.Center()
+}

@@ -87,6 +87,18 @@ func NewOffscreen(opts WindowOptions) *Offscreen {
 	if opts.Popup {
 		o.frame.deco = DecorationsNone
 	}
+	// The dialog options, recorded as a real backend applies them.
+	o.frame.role = opts.Role
+	o.frame.centered = opts.Center
+	// The request is recorded whether or not the simulated desktop
+	// grants it, because those are two different facts: KeepAbove is
+	// what was asked for, and WindowState().KeepAbove is what the
+	// desktop did — and the simulated desktop grants it only when a test
+	// has said it stacks windows (SimulateCapabilities).
+	o.frame.wantAbove = opts.KeepAbove
+	if opts.KeepAbove {
+		o.SetKeepAbove(true)
+	}
 	return o
 }
 

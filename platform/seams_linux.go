@@ -25,6 +25,10 @@ var (
 	// Wayland inhibits the compositor's shortcuts; it cannot keep a
 	// window out of a capture, and does not claim to.
 	_ SecureInputSurface = (*wlSurface)(nil)
+	_ RoleSurface        = (*wlSurface)(nil)
+	_ ActivateSurface    = (*wlSurface)(nil)
+	// No CenterSurface: a client cannot place a toplevel, and a
+	// compositor told the window is a dialog centres it itself.
 
 	_ WindowFrame    = (*x11Surface)(nil)
 	_ WindowGeometry = (*x11Surface)(nil)
@@ -37,4 +41,7 @@ var (
 	// X11 grabs the keyboard; the root window is readable by any
 	// client, so there is no capture exclusion to implement.
 	_ SecureInputSurface = (*x11Surface)(nil)
+	_ RoleSurface        = (*x11Surface)(nil)
+	_ ActivateSurface    = (*x11Surface)(nil)
+	_ CenterSurface      = (*x11Surface)(nil)
 )

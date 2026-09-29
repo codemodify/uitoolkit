@@ -80,6 +80,12 @@ type offscreenFrame struct {
 	// asked for them.
 	secureInput bool
 	noCapture   bool
+	// role, centered and activated are the window-role requests, for the
+	// same reason.
+	role      WindowRole
+	centered  bool
+	wantAbove bool
+	activated int
 	// input method (surface device pixels), imeOn whether it is enabled.
 	imeRect [4]int
 	imeOn   bool
@@ -558,3 +564,58 @@ func (o *Offscreen) SecureInput() bool {
 func (o *Offscreen) ExcludeFromCapture() bool {
 	return o != nil && o.frame.noCapture
 }
+
+// SetWindowRole records the request ([RoleSurface]).
+func (o *Offscreen) SetWindowRole(r WindowRole) bool {
+	if o == nil {
+		return false
+	}
+	o.frame.role = r
+	return true
+}
+
+// Center and Activate record the request: offscreen has no desktop to be
+// centred on and no focus to take, and a test asserting that a prompt
+// asked for either is what these are for.
+func (o *Offscreen) Center() bool {
+	if o == nil {
+		return false
+	}
+	o.frame.centered = true
+	return true
+}
+
+func (o *Offscreen) Activate() bool {
+	if o == nil {
+		return false
+	}
+	o.frame.activated++
+	return true
+}
+
+// WindowRole, Centered and Activations are what the app asked for.
+func (o *Offscreen) WindowRole() WindowRole {
+	if o == nil {
+		return RoleNormal
+	}
+	return o.frame.role
+}
+
+func (o *Offscreen) Centered() bool { return o != nil && o.frame.centered }
+
+// KeepAboveRequested is what WindowOptions asked for, which is not the
+// same fact as WindowState().KeepAbove — that is what the desktop did.
+func (o *Offscreen) KeepAboveRequested() bool { return o != nil && o.frame.wantAbove }
+
+func (o *Offscreen) Activations() int {
+	if o == nil {
+		return 0
+	}
+	return o.frame.activated
+}
+
+var (
+	_ RoleSurface     = (*Offscreen)(nil)
+	_ CenterSurface   = (*Offscreen)(nil)
+	_ ActivateSurface = (*Offscreen)(nil)
+)

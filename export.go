@@ -21,6 +21,7 @@ type (
 	Options           = app.Options
 	Window            = app.Window
 	WindowOptions     = platform.WindowOptions
+	WindowRole        = platform.WindowRole
 	LookAndFeel       = style.LookAndFeel
 	Palette           = style.Palette
 	Component         = widget.Component
@@ -633,6 +634,9 @@ const (
 	ResultCancel = widgets.ResultCancel
 	ResultYes    = widgets.ResultYes
 	ResultNo     = widgets.ResultNo
+
+	RoleNormal = platform.RoleNormal
+	RoleDialog = platform.RoleDialog
 
 	FileOpen       = widgets.FileOpen
 	FileSave       = widgets.FileSave

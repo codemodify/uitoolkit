@@ -39,5 +39,6 @@ func (s *winSurface) SetExcludeFromCapture(on bool) bool {
 // Windows has no SecureInputSurface: there is no counterpart to macOS's
 // EnableSecureEventInput that an ordinary application may use, and the
 // low-level hook API that would be needed to take the keyboard is the
-// thing a key logger uses rather than the thing that stops one.
-var _ CaptureExcludeSurface = (*winSurface)(nil)
+// thing a key logger uses rather than the thing that stops one. The
+// CaptureExcludeSurface assertion is in win32_dialog_windows.go with the
+// rest of this backend's optional seams.

@@ -18,4 +18,7 @@ var (
 	// macOS has both, and is the only one that does.
 	_ SecureInputSurface    = (*akSurface)(nil)
 	_ CaptureExcludeSurface = (*akSurface)(nil)
+	_ RoleSurface           = (*akSurface)(nil)
+	_ ActivateSurface       = (*akSurface)(nil)
+	_ CenterSurface         = (*akSurface)(nil)
 )
