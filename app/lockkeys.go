@@ -62,16 +62,19 @@ func (w *Window) noteLockKeys(mods platform.Modifiers) {
 	}
 	first := !w.lockKnown
 	w.lockCaps, w.lockNum, w.lockKnown = caps, num, true
-	// The first event is not a change — it is the state becoming known,
-	// and a prompt that asked at start-up has it already.
-	if first {
-		return
-	}
 	// Every watcher in the window, then the window's own callback. A
 	// widget that shows the state is one of many and cannot own the
 	// single callback, which is why both exist.
+	//
+	// Watchers hear the first event too, because for them it is not "the
+	// state became known" but "here is the state" — a field drawing a
+	// Caps Lock mark has nothing until it is told, and a window that has
+	// been open with the lock on since before it was shown has no change
+	// to report. OnLockKeys keeps its documented meaning and fires on a
+	// change only: it is the window's own callback, and a program that
+	// wanted the state at start-up asked for it.
 	widget.NotifyLockKeys(caps, num, w.notifyRoots()...)
-	if w.onLockKeys != nil {
+	if !first && w.onLockKeys != nil {
 		w.onLockKeys(caps, num)
 	}
 }

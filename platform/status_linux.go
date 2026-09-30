@@ -279,6 +279,11 @@ func (s *linuxStatusItem) listenBus() {
 				}
 				name, _ := sig.Body[0].(string)
 				newOwner, _ := sig.Body[2].(string)
+				if name == sniWatcher && newOwner == "" {
+					// The watcher itself went: no watcher, no tray.
+					s.setHostRegistered(false)
+					continue
+				}
 				s.onWatcherOwnerChanged(name, newOwner)
 			}
 		}
@@ -489,10 +494,16 @@ func (s *linuxStatusItem) SetOnShownChange(fn func(bool)) {
 // readHostRegistered asks the watcher whether any host is displaying
 // items, and remembers the answer for the signals to update.
 //
-// A watcher that is not there, or that does not answer, is read as a
-// desktop that shows the item: the property is how a tray says it is
-// absent, and a bus error is not that statement. Guessing "hidden" from
-// a failed call would make an application refuse to close to a tray that
+// Two different failures, and they used to be treated alike. **No
+// watcher on the bus at all** is a statement: nothing is registering
+// status items, so nothing can be showing one — and that is exactly what
+// a GNOME without an AppIndicator extension looks like, which is the
+// case this whole question exists for. NameHasOwner answers it without
+// guessing.
+//
+// A watcher that *is* there and will not answer is not a statement, and
+// is still read as a desktop that shows the item: guessing "hidden" from
+// a bus error would make an application refuse to close to a tray that
 // works.
 func (s *linuxStatusItem) readHostRegistered() bool {
 	defer func() { recover() }()
@@ -501,6 +512,10 @@ func (s *linuxStatusItem) readHostRegistered() bool {
 	s.mu.Unlock()
 	if conn == nil {
 		return true
+	}
+	if owned, known := watcherOnBus(conn); known && !owned {
+		s.setHostRegistered(false)
+		return false
 	}
 	obj := conn.Object(sniWatcher, sniWatcherPath)
 	v, err := obj.GetProperty(sniWatcher + ".IsStatusNotifierHostRegistered")
@@ -513,6 +528,18 @@ func (s *linuxStatusItem) readHostRegistered() bool {
 	}
 	s.setHostRegistered(b)
 	return b
+}
+
+// watcherOnBus reports whether org.kde.StatusNotifierWatcher has an
+// owner, and whether the bus could say.
+func watcherOnBus(conn *dbus.Conn) (owned, known bool) {
+	defer func() { recover() }()
+	var has bool
+	err := conn.BusObject().Call("org.freedesktop.DBus.NameHasOwner", 0, sniWatcher).Store(&has)
+	if err != nil {
+		return false, false
+	}
+	return has, true
 }
 
 // setHostRegistered records the watcher's answer and reports a change to

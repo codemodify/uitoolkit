@@ -157,16 +157,23 @@ func TestEveryWatcherInTheWindowHearsTheLockKeys(t *testing.T) {
 		w.dispatch(platform.Event{Kind: platform.EventKeyDown, Key: platform.KeyA, Mods: mods})
 		a.PumpOnce()
 	}
-	key(0) // the state becoming known, not a change
-	if one.n != 0 || two.n != 0 {
-		t.Fatalf("the first event told the watchers: %d %d", one.n, two.n)
+	// Watchers hear the first event: for them it is not "the state
+	// became known" but "here is the state", and a field drawing a Caps
+	// Lock mark has nothing until it is told. The window's own callback
+	// keeps its documented meaning and fires on a change only.
+	key(0)
+	if one.n != 1 || two.n != 1 {
+		t.Fatalf("the first event did not reach the watchers: %d %d", one.n, two.n)
+	}
+	if own != 0 {
+		t.Fatalf("OnLockKeys fired on the first event: %d", own)
 	}
 
 	key(platform.ModCapsLock)
-	if one.n != 1 || !one.caps {
+	if one.n != 2 || !one.caps {
 		t.Errorf("first watcher: %d calls, caps %v", one.n, one.caps)
 	}
-	if two.n != 1 || !two.caps {
+	if two.n != 2 || !two.caps {
 		t.Errorf("second watcher (nested): %d calls, caps %v", two.n, two.caps)
 	}
 	if own != 1 {
@@ -177,8 +184,8 @@ func TestEveryWatcherInTheWindowHearsTheLockKeys(t *testing.T) {
 	if one.caps || two.caps {
 		t.Error("a watcher kept caps on after it went off")
 	}
-	if one.n != 2 || two.n != 2 {
-		t.Errorf("calls %d %d, want 2 each", one.n, two.n)
+	if one.n != 3 || two.n != 3 {
+		t.Errorf("calls %d %d, want 3 each", one.n, two.n)
 	}
 }
 
@@ -210,5 +217,31 @@ func TestSecretFieldShowsCapsLockWithNoApplicationCode(t *testing.T) {
 	key(0)
 	if f.CapsLockOn() {
 		t.Error("the field did not hear that Caps Lock went off")
+	}
+}
+
+// A window that has been open with Caps Lock on since before a dialog
+// was shown has no *change* to report, so a field that learns only of
+// changes drew no mark on the passphrase that was about to be refused —
+// which is the one that matters. It asks when it takes the focus.
+func TestSecretFieldKnowsTheLockItOpensWith(t *testing.T) {
+	a := New(Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{Width: 300, Height: 120, Headless: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The lock was already on before anything was shown: one event, and
+	// then nothing changes.
+	w.dispatch(platform.Event{Kind: platform.EventKeyDown, Key: platform.KeyA, Mods: platform.ModCapsLock})
+	a.PumpOnce()
+
+	f := widgets.NewSecretField("Passphrase")
+	w.SetContent(f)
+	a.PumpOnce()
+	w.RequestFocus(f)
+	a.PumpOnce()
+
+	if !f.CapsLockOn() {
+		t.Error("a field focused in a window whose Caps Lock is already on does not know it")
 	}
 }

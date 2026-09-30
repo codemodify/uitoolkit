@@ -113,7 +113,10 @@ func TestSecretLabelCopiesTheValue(t *testing.T) {
 	}
 }
 
-// A screen reader gets the length and not the value, revealed or not.
+// A screen reader gets neither the value nor its length, revealed or
+// not. Reporting the bullets told it the length as surely as showing
+// them tells the screen — and a length read aloud in an open-plan office
+// is the least worth leaking of all.
 func TestSecretLabelAccessibility(t *testing.T) {
 	l := testSecretLabel(t, func() []byte { return []byte("hunter2") })
 	l.Len()
@@ -122,11 +125,77 @@ func TestSecretLabelAccessibility(t *testing.T) {
 		var n a11y.Node
 		l.Describe(&n)
 		if strings.Contains(n.Value, "hunter") {
-			t.Fatalf("reveal=%v: the node says %q", reveal, n.Value)
+			t.Errorf("reveal=%v: the node says %q", reveal, n.Value)
 		}
-		if n.Value != strings.Repeat("•", 7) {
-			t.Fatalf("reveal=%v: value %q", reveal, n.Value)
+		if strings.Contains(n.Value, "•") {
+			t.Errorf("reveal=%v: the node says %q, which counts out the length", reveal, n.Value)
 		}
+		if n.Value == "" {
+			t.Errorf("reveal=%v: the node says nothing at all", reveal)
+		}
+	}
+
+	// A secret of a different length reads the same.
+	short := testSecretLabel(t, func() []byte { return []byte("a") })
+	short.Len()
+	var a, b a11y.Node
+	short.Describe(&a)
+	l.Reveal = false
+	l.Describe(&b)
+	if a.Value != b.Value {
+		t.Errorf("a one-character secret reads %q and a seven-character one %q", a.Value, b.Value)
+	}
+}
+
+// A fixed mask says only that there is something there: neither the
+// screen nor the box gives the length away.
+func TestSecretLabelFixedMask(t *testing.T) {
+	l := testSecretLabel(t, func() []byte { return []byte("a-very-long-passphrase-indeed") })
+	l.MaskLen = 8
+	l.Len()
+
+	if got := l.mask(); got != strings.Repeat("•", 8) {
+		t.Errorf("mask %q, want eight bullets", got)
+	}
+	// And measured for the mask alone, not the wider of the two.
+	hidden := l.Measure(layout.Constraints{MaxW: -1, MaxH: -1})
+	l.Reveal = true
+	shown := l.Measure(layout.Constraints{MaxW: -1, MaxH: -1})
+	if hidden.X >= shown.X {
+		t.Errorf("hidden it measures %v and revealed %v — the box gives the length away",
+			hidden.X, shown.X)
+	}
+
+	// An empty value is still empty, not eight bullets of nothing.
+	e := testSecretLabel(t, func() []byte { return nil })
+	e.MaskLen = 8
+	e.Len()
+	if got := e.mask(); got != "" {
+		t.Errorf("an empty secret masks as %q", got)
+	}
+}
+
+// A key is several lines, and a one-line label cannot show one.
+func TestSecretLabelLines(t *testing.T) {
+	const key = "-----BEGIN-----\nbody\n-----END-----"
+	l := testSecretLabel(t, func() []byte { return []byte(key) })
+	l.Lines = true
+	l.Reveal = true
+	l.Len()
+
+	if got := len(l.valueLines()); got != 3 {
+		t.Errorf("%d lines, want 3", got)
+	}
+	one := testSecretLabel(t, func() []byte { return []byte(key) })
+	one.Reveal = true
+	one.Len()
+	tall := l.Measure(layout.Constraints{MaxW: -1, MaxH: -1})
+	flat := one.Measure(layout.Constraints{MaxW: -1, MaxH: -1})
+	if tall.Y <= flat.Y {
+		t.Errorf("three lines measure %v tall and one line %v", tall.Y, flat.Y)
+	}
+	if tall.X >= flat.X {
+		t.Errorf("split into lines it should be narrower: %v vs %v", tall.X, flat.X)
 	}
 }
 

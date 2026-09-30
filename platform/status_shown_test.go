@@ -48,3 +48,29 @@ func TestStubStatusItemShowsNothing(t *testing.T) {
 	}
 	it.SetOnShownChange(func(bool) { t.Error("a stub called back") })
 }
+
+// No watcher on the bus is not a bus error — it is a statement that
+// nothing is registering status items, so nothing can be showing one.
+// That is exactly what a GNOME without an AppIndicator extension looks
+// like, which is the case Shown exists for; reading it as "shown"
+// defeated the whole question.
+//
+// A watcher that is there and will not answer is still read as shown:
+// refusing to close to a tray that works is the worse failure.
+func TestLinuxTrayNotShownWithNoWatcher(t *testing.T) {
+	it, err := NewStatusItem(StatusItemOptions{ID: "uitoolkit-test", Title: "test"})
+	if err != nil {
+		t.Skip(err)
+	}
+	defer it.Close()
+	if it.Backend() != "sni" {
+		t.Skipf("no SNI backend here (%s)", it.Backend())
+	}
+	// The test bus has no org.kde.StatusNotifierWatcher on it.
+	if it.Shown() {
+		t.Error("Shown is true on a bus with no watcher — nothing is displaying the item")
+	}
+	if !it.Alive() {
+		t.Error("Alive should still be true: there is a bus to send to")
+	}
+}

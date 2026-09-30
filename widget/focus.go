@@ -195,6 +195,35 @@ type LockKeysWatcher interface {
 	LockKeysChanged(caps, num bool)
 }
 
+// LockKeysHost is a host that knows the state of the lock keys, which a
+// window does — from the last event that carried modifiers, or from the
+// backend before any has ([app.Window.LockKeys]).
+type LockKeysHost interface {
+	LockKeys() (caps, num bool)
+}
+
+// LockKeysOf asks c's host for the lock keys.
+//
+// A widget that shows the state needs this as well as
+// [LockKeysWatcher]: the watcher tells it about changes, and a window
+// that has been sitting open with Caps Lock on since before it was shown
+// has no change to report. A field asks when it takes the focus, so the
+// mark is right on the passphrase that is about to be refused rather
+// than on the second one.
+func LockKeysOf(c Component) (caps, num bool) {
+	if c == nil {
+		return false, false
+	}
+	h := c.Host()
+	if h == nil && c.Parent() != nil {
+		h = c.Parent().Host()
+	}
+	if lk, ok := h.(LockKeysHost); ok {
+		return lk.LockKeys()
+	}
+	return false, false
+}
+
 // NotifyLockKeys tells every LockKeysWatcher under roots about the lock
 // state. The host calls it on each change.
 func NotifyLockKeys(caps, num bool, roots ...Component) {

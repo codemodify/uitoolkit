@@ -995,11 +995,23 @@ func (f *SecretField) Describe(n *a11y.Node) {
 // avoid; a screen reader types into it like anyone else.
 func (f *SecretField) AccessibleSetText(string) bool { return false }
 
-// Describe: a secret label reports how many characters it is showing and
-// not which. A screen reader saying a password aloud is the thing this
-// widget exists to prevent, revealed or not — what is on screen is the
-// user's own choice to make in a room they can see.
+// Describe: a secret label reports that there is a secret here and
+// nothing else — not the characters, and not how many.
+//
+// A screen reader saying a password aloud is the thing this widget
+// exists to prevent, revealed or not: what is on screen is the user's
+// own choice to make in a room they can see, and what is read aloud is
+// not. Reporting the bullets told it the length as surely as showing
+// them tells the screen, and a length read aloud in an open-plan office
+// is the least worth leaking of all.
 func (l *SecretLabel) Describe(n *a11y.Node) {
 	n.Role = a11y.RoleLabel
-	n.Value = l.mask()
+	switch {
+	case len(l.buf) == 0:
+		n.Value = "empty"
+	case l.Reveal:
+		n.Value = "revealed secret"
+	default:
+		n.Value = "concealed"
+	}
 }

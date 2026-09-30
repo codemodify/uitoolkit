@@ -41,6 +41,24 @@ type SecretLabel struct {
 	Align style.Align
 	// Color overrides the text colour.
 	Color paintengine2d.Color
+	// MaskLen is how many bullets stand for the value while it is
+	// hidden, whatever its real length. Zero means one per rune.
+	//
+	// One per rune tells anyone looking at the screen how long the
+	// secret is, and the label is measured for the wider of the bullets
+	// and the text, so the box says it too. For a password that is a
+	// meaningful part of it. Set a fixed count — eight is the usual
+	// choice — and the screen says only that there is something there.
+	//
+	// A fixed mask is measured for itself alone, so revealing a longer
+	// value makes the label grow. That is the trade: a box that does not
+	// move, or a box that does not leak.
+	MaskLen int
+	// Lines splits the value at newlines and draws one line each, for a
+	// PEM block or an OpenSSH private key. Off by default: a password
+	// and a TOTP code are one line, and a label that grew a second one
+	// would move the row under the reader's hand.
+	Lines bool
 
 	buf []byte
 }
@@ -100,24 +118,68 @@ func (l *SecretLabel) font() *style.Font {
 // mask is one bullet per rune — a string of nothing but bullets, so it
 // can be measured and drawn like any other text while the value cannot.
 func (l *SecretLabel) mask() string {
+	if l.MaskLen > 0 {
+		if len(l.buf) == 0 {
+			return ""
+		}
+		return strings.Repeat("•", l.MaskLen)
+	}
 	if n := utf8.RuneCount(l.buf); n > 0 {
 		return strings.Repeat("•", n)
 	}
 	return ""
 }
 
+// lines are the value's lines, or the whole of it as one.
+func (l *SecretLabel) valueLines() [][]byte {
+	if !l.Lines {
+		return [][]byte{l.buf}
+	}
+	var out [][]byte
+	start := 0
+	for i := 0; i <= len(l.buf); i++ {
+		if i == len(l.buf) || l.buf[i] == '\n' {
+			line := l.buf[start:i]
+			// A trailing carriage return is not part of the line.
+			if n := len(line); n > 0 && line[n-1] == '\r' {
+				line = line[:n-1]
+			}
+			out = append(out, line)
+			start = i + 1
+		}
+	}
+	return out
+}
+
 func (l *SecretLabel) Measure(c layout.Constraints) paintengine2d.Point {
 	l.refresh()
 	f := l.font()
-	w := f.AdvanceBytes(l.buf)
-	if !l.Reveal {
-		// Bullets are not the same width as the text they stand for, so
-		// the label is measured for what it is *showing*. A box that
-		// changed size when the user pressed "show" would move the row
-		// under their hand, so it is the wider of the two.
-		w = max(w, f.Advance(l.mask()))
+	lines := l.valueLines()
+	var w float32
+	for _, ln := range lines {
+		w = max(w, f.AdvanceBytes(ln))
 	}
-	return c.Constrain(paintengine2d.Pt(w+2, f.Height()+2))
+	if !l.Reveal {
+		if l.MaskLen > 0 {
+			// A fixed mask is measured for itself alone. Taking the
+			// wider of the two would put the value's own width on the
+			// screen, which is the length this exists to hide.
+			w = f.Advance(l.mask())
+		} else {
+			// Bullets are not the same width as the text they stand
+			// for, so the label is measured for what it is *showing*. A
+			// box that changed size when the user pressed "show" would
+			// move the row under their hand, so it is the wider of the
+			// two.
+			w = max(w, f.Advance(l.mask()))
+		}
+	}
+	h := f.Height()*float32(len(lines)) + 2
+	if !l.Reveal && l.MaskLen > 0 {
+		// Hidden, a fixed mask is one line however many the value has.
+		h = f.Height() + 2
+	}
+	return c.Constrain(paintengine2d.Pt(w+2, h))
 }
 
 func (l *SecretLabel) Arrange(r paintengine2d.Rect) { l.SetBounds(r) }
@@ -133,9 +195,9 @@ func (l *SecretLabel) Paint(ctx *paintengine2d.Context) {
 	if !l.Enabled() {
 		col = l.Look().Palette().TextMuted
 	}
-	y := b.Min.Y + (b.Dy()-f.Height())*0.5
 	if !l.Reveal {
 		m := l.mask()
+		y := b.Min.Y + (b.Dy()-f.Height())*0.5
 		f.Draw(ctx, m, paintengine2d.Pt(l.textX(b, f.Advance(m)), y), col)
 		return
 	}
@@ -145,7 +207,12 @@ func (l *SecretLabel) Paint(ctx *paintengine2d.Context) {
 	// long as the face lives.
 	ctx.Save()
 	ctx.ClipRect(b)
-	f.DrawBytes(ctx, l.buf, paintengine2d.Pt(l.textX(b, f.AdvanceBytes(l.buf)), y), col)
+	lines := l.valueLines()
+	y := b.Min.Y + (b.Dy()-f.Height()*float32(len(lines)))*0.5
+	for _, ln := range lines {
+		f.DrawBytes(ctx, ln, paintengine2d.Pt(l.textX(b, f.AdvanceBytes(ln)), y), col)
+		y += f.Height()
+	}
 	ctx.Restore()
 }
 

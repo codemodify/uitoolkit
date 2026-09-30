@@ -398,6 +398,19 @@ func (f *SecretField) paintCapsHint(ctx *paintengine2d.Context) {
 	style.DrawToolIcon(ctx, r, style.IconWarning, lk.Palette().WarningInk(), style.IconSetOf(lk))
 }
 
+// FocusGained asks the window for the lock keys.
+//
+// The watcher tells a field about *changes*, and a window that has been
+// open with Caps Lock on since before the dialog was shown has no change
+// to report — so without this the mark appeared on the second passphrase
+// rather than the first, which is the one that gets refused.
+func (f *SecretField) FocusGained() {
+	if caps, _ := widget.LockKeysOf(f); caps != f.capsOn {
+		f.capsOn = caps
+	}
+	f.Base.FocusGained()
+}
+
 // LockKeysChanged implements [widget.LockKeysWatcher]: the window hands
 // every component the lock state, so a field shows the mark without the
 // application wiring anything up, and two fields in one window both

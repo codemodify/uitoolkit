@@ -1,11 +1,3 @@
-# Release notes
-
-What changed in each release, and why. The reasons are here because a
-list of names is not much use six months later: what a reader usually
-wants to know is whether a change affects them, and that is a question
-about the problem it solved.
-
----
 
 ## 0.22.4
 
