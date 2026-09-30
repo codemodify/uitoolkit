@@ -52,6 +52,32 @@ only way to do it, and it is why the previous advice for an asynchronous
 check did not actually work. `MessageBox.Checking` reports whether a
 check is out.
 
+### Horizontal scrolling
+
+`ScrollView.Horizontal` and `TableView.Horizontal`, both off by default.
+
+A scroll view scrolled up and down only, so a child with no narrower form
+was clipped at the edge with the rest unreachable — and a table with more
+columns than fit squeezed them to their floors and clipped what was left,
+so the last columns could not be reached at all. Every file manager and
+mail client on every desktop scrolls sideways there.
+
+Off by default is deliberate. A scroll view's usual job is to give its
+child the width it has and let it fold, and **a form should not scroll
+sideways** — it should drop its labels above its fields or fold with
+`Wrap`. Turning this on says "this content genuinely cannot be
+narrower": the child is then measured at its natural width rather than
+the view's.
+
+Both give a bar, the wheel (Shift for a wheel with only one axis) and the
+arrow keys. A `ScrollView` that scrolls sideways stops imposing its
+child's width on anything above it, so its `MinWidth` drops to nothing.
+
+Widgets that own their own text already scrolled sideways and are
+unchanged: `TextArea` with wrap off has a real bar, and `TextField`,
+`SecretField` and `SecretArea` slide their contents under the caret. This
+was only ever missing from containers.
+
 ### `widget.MinWidthOf` — where the floor is
 
 A layout that runs out of room stops at a floor rather than squeezing
@@ -73,8 +99,8 @@ narrower. Anything else is worked out from the **height**: what folds
 gets taller when it is narrowed, what cannot keeps its height. Width
 cannot answer it, because a button asked to fit in a pixel says 65.
 
-There is still no window minimum-size API to hand the answer to, and no
-horizontal scrolling; both are open.
+There is still no window minimum-size API to hand the answer to; that one
+is open.
 
 ### A lever for a form in a narrow pane
 
@@ -84,8 +110,7 @@ column gives it what it asks for even where there is less, and the
 columns after it go off the edge — deliberately, since the alternative is
 a button squeezed to nothing. Lowering what the field asks for is the
 lever for a form that has to fit a narrow pane;
-[docs/recipes.md](docs/recipes.md) has the rest of the answer, including
-that there is still **no minimum-size API and no horizontal scrolling**.
+[docs/recipes.md](docs/recipes.md) has the rest of the answer.
 
 ### docs/recipes.md
 

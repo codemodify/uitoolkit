@@ -171,9 +171,7 @@ floors together are wider than the pane, the row runs over. That is
 deliberate — the alternative is a button squeezed to nothing — and Qt and
 GTK behave the same way.
 
-There is **no minimum-size API and no horizontal scrolling**, so the
-toolkit will not stop you reaching that point or let you scroll out of
-it. What you can do:
+What you can do:
 
 - **Lower what the fixed children ask for.** `SecretField.PreferredWidth`,
   `SecretArea.PreferredWidth` and `TokenField.PreferredWidth` are that
@@ -199,6 +197,42 @@ layout that believed it would draw the button with its label hanging out
 of both ends. `MinWidthOf` asks containers, which know, and works the
 rest out from the **height**: what folds gets taller when narrowed, what
 cannot keeps its height.
+
+## Content that is genuinely wider than its pane
+
+**Obvious:** a `ScrollView`, which is what scrolls things.
+
+**It scrolls up and down only**, unless you say otherwise. A child wider
+than the view is clipped at the edge and the rest is unreachable.
+
+That is the default on purpose: a scroll view's usual job is to give its
+child the width it has and let it fold. **A form should not scroll
+sideways** — drop its labels above its fields, or fold it with `Wrap`.
+Reading anything laid out in columns by sliding it back and forth is a
+poor interface, and reaching for it is usually a sign the layout is
+wrong.
+
+For content that truly has no narrower form — a table with more columns
+than fit, a diagram, an image at its own size:
+
+```go
+sv := widgets.NewScrollView(content)
+sv.Horizontal = true      // and the child keeps its natural width
+```
+
+```go
+tv.Horizontal = true      // a TableView scrolls its own columns
+```
+
+Both give you a bar, the wheel (with Shift for a one-axis wheel), and
+the arrow keys. A `ScrollView` that scrolls sideways also stops imposing
+its child's width on whatever is above it — `MinWidthOf` drops to
+nothing, because it no longer needs the room.
+
+Note that widgets owning their own text already scroll sideways
+themselves: `TextArea` with wrap off has a real bar, and `TextField`,
+`SecretField` and `SecretArea` slide their contents under the caret. This
+is only about *containers*.
 
 ## A status colour as text
 

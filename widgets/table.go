@@ -30,6 +30,18 @@ type TableColumn struct {
 // TableView is a virtualized row/column grid with optional sort headers.
 type TableView struct {
 	widget.Base
+	// Horizontal lets the table scroll sideways when its columns are
+	// wider than the pane, instead of squeezing them to their floors and
+	// clipping what is left over.
+	//
+	// It is off by default: a table that fits should share out the width
+	// it has, which is what most do. Turn it on for a table with more
+	// columns than a narrow pane can hold — the case where the last
+	// columns are otherwise simply unreachable.
+	Horizontal bool
+	// OffsetX is the horizontal scroll position, used only when
+	// Horizontal is set.
+	OffsetX   float32
 	Columns   []TableColumn
 	RowCount  int
 	RowHeight float32
@@ -98,6 +110,8 @@ type TableView struct {
 	resizeX   float32
 	resizeW   float32
 	vbar      scrollDrag
+	hbar      scrollDrag
+	draggingH bool
 	rows      rowSceneCache
 	lastRow   int
 	lastAt    time.Time
@@ -238,8 +252,76 @@ func (t *TableView) vaxis() scrollAxis {
 }
 
 // rowsW is the row width: the view minus the gutter a visible bar takes.
+// rowsW is the width the rows are laid out across: the viewport, or the
+// columns' own total where the table scrolls sideways and they are wider.
 func (t *TableView) rowsW() float32 {
+	view := t.viewW()
+	if !t.Horizontal {
+		return view
+	}
+	if w := t.naturalW(); w > view {
+		return w
+	}
+	return view
+}
+
+// viewW is the box the rows are seen through.
+func (t *TableView) viewW() float32 {
 	return t.inner().Dx() - scrollGutter(t.Look(), t.MaxOffset() > 0)
+}
+
+// naturalW is what the columns want, which is what a sideways-scrolling
+// table is as wide as.
+func (t *TableView) naturalW() float32 {
+	lk := t.Look()
+	var w float32
+	for _, c := range t.Columns {
+		switch {
+		case c.Width > 0:
+			w += style.Dip(lk, c.Width)
+		case c.MinWidth > 0:
+			w += style.Dip(lk, c.MinWidth)
+		default:
+			w += style.Dip(lk, 80)
+		}
+	}
+	return w
+}
+
+// MaxOffsetX is the largest legal OffsetX.
+func (t *TableView) MaxOffsetX() float32 {
+	if !t.Horizontal {
+		return 0
+	}
+	return layout.MaxScroll(t.rowsW(), t.viewW())
+}
+
+// ScrollToX sets OffsetX, clamped.
+func (t *TableView) ScrollToX(x float32) {
+	if !t.Horizontal {
+		return
+	}
+	t.OffsetX = layout.ClampScroll(x, t.rowsW(), t.viewW())
+	t.Invalidate()
+}
+
+// ScrollByX adds dx to the horizontal offset.
+func (t *TableView) ScrollByX(dx float32) { t.ScrollToX(t.OffsetX + dx) }
+
+func (t *TableView) hparts() style.ScrollParts {
+	if !t.Horizontal || t.MaxOffsetX() <= 0 {
+		return style.ScrollParts{}
+	}
+	return style.ScrollGeometry(t.Look(), t.inner(), false, t.rowsW(), t.viewW(), t.OffsetX, true)
+}
+
+func (t *TableView) haxis() scrollAxis {
+	return scrollAxis{
+		parts: t.hparts,
+		get:   func() (float32, float32) { return t.OffsetX, t.MaxOffsetX() },
+		set:   t.ScrollToX,
+		steps: func() (float32, float32) { return t.rowH(), max(t.viewW()*0.9, 24) },
+	}
 }
 
 func (t *TableView) scrollTrack() (track, thumb paintengine2d.Rect) {
@@ -443,6 +525,7 @@ func shrinkBy(out, min []float32, deficit float32, flex []bool, force bool) {
 }
 
 func (t *TableView) colAt(x float32) int {
+	x += t.OffsetX
 	acc := float32(0)
 	for i, w := range t.colWidths() {
 		if x >= acc && x < acc+w {
@@ -456,6 +539,7 @@ func (t *TableView) colAt(x float32) int {
 const colResizeHit = 5
 
 func (t *TableView) colEdgeAt(x float32) int {
+	x += t.OffsetX
 	acc := float32(0)
 	for i, w := range t.colWidths() {
 		acc += w
@@ -625,7 +709,7 @@ func (t *TableView) Paint(ctx *paintengine2d.Context) {
 	body := paintengine2d.XYWH(0, hh, b.Dx(), b.Dy()-hh)
 	rh := t.rowH()
 	lo, hi := t.visibleRange()
-	if rec, ok := ctx.Device().(*paintengine2d.Recorder); ok {
+	if rec, ok := ctx.Device().(*paintengine2d.Recorder); ok && t.OffsetX == 0 {
 		// The body viewport goes on the band group, so the sticky header
 		// keeps its own clip and the rows slide under it.
 		o := rowOrigin(ctx)
@@ -660,6 +744,9 @@ func (t *TableView) Paint(ctx *paintengine2d.Context) {
 	} else {
 		ctx.Save()
 		ctx.ClipRect(body)
+		if t.OffsetX != 0 {
+			ctx.Translate(-t.OffsetX, 0)
+		}
 		for row := lo; row < hi; row++ {
 			y := hh + float32(row)*rh - t.OffsetY
 			t.paintRow(ctx, lk, widths, row, y, rh)
@@ -679,8 +766,19 @@ func (t *TableView) Paint(ctx *paintengine2d.Context) {
 		paintDropCaret(ctx, lk, t.dropAt, t.RowCount, 0, rw, hh, rh, t.OffsetY, body)
 	}
 	// Sticky header after the body so a leaked row cannot cover the labels.
-	t.paintHeader(ctx, lk, widths, hh)
+	if t.OffsetX != 0 {
+		ctx.Save()
+		ctx.ClipRect(paintengine2d.XYWH(0, 0, b.Dx(), hh))
+		ctx.Translate(-t.OffsetX, 0)
+		t.paintHeader(ctx, lk, widths, hh)
+		ctx.Restore()
+	} else {
+		t.paintHeader(ctx, lk, widths, hh)
+	}
 	t.vbar.paint(t, ctx, lk, t.vparts(), true, t.OffsetY)
+	if t.Horizontal {
+		t.hbar.paint(t, ctx, lk, t.hparts(), false, t.OffsetX)
+	}
 	// The current row carries the focus mark; a focused table without one
 	// rings itself.
 	if t.Focused() && (t.Selected < 0 || t.Selected >= t.RowCount) {
@@ -739,6 +837,14 @@ func (t *TableView) MouseMove(e widget.MouseEvent) bool {
 		t.applyCursor(e.Pos)
 		return true
 	}
+	if t.draggingH {
+		if handled, dirty := t.hbar.move(t, p, t.haxis()); handled || dirty {
+			if dirty {
+				t.Invalidate()
+			}
+			return handled
+		}
+	}
 	if handled, dirty := t.vbar.move(t, p, t.vaxis()); handled || dirty {
 		if dirty {
 			t.Invalidate()
@@ -796,6 +902,12 @@ func (t *TableView) MousePress(e widget.MouseEvent) bool {
 	t.RequestFocus()
 	p := toView(e.Pos, t.frame())
 	if t.vbar.press(t, p, t.vaxis()) {
+		t.draggingH = false
+		t.Invalidate()
+		return true
+	}
+	if t.Horizontal && t.hbar.press(t, p, t.haxis()) {
+		t.draggingH = true
 		t.Invalidate()
 		return true
 	}
@@ -864,6 +976,13 @@ func (t *TableView) MouseRelease(e widget.MouseEvent) bool {
 		t.applyCursor(e.Pos)
 		t.Invalidate()
 		return true
+	}
+	if t.draggingH {
+		t.draggingH = false
+		if t.hbar.release() {
+			t.Invalidate()
+			return true
+		}
 	}
 	if t.vbar.release() {
 		t.Invalidate()
@@ -965,13 +1084,21 @@ func (t *TableView) sortBy(col int) {
 // already-at-the-edge view must let the wheel bubble to an outer scroll pane
 // instead of swallowing it.
 func (t *TableView) MouseWheel(e widget.MouseEvent) bool {
-	if t.MaxOffset() <= 0 {
-		return false
+	dy, dx := e.Scroll.Y, e.Scroll.X
+	// Shift turns a vertical wheel sideways, as every desktop does and
+	// as a wheel with only one axis has to rely on.
+	if t.Horizontal && dx == 0 && e.Mods.Shift() {
+		dx, dy = dy, 0
 	}
-	before := t.OffsetY
-	t.OffsetY += wheelDelta(e.Scroll.Y, t.rowH(), e.Precise)
-	t.clamp()
-	if t.OffsetY == before {
+	beforeY, beforeX := t.OffsetY, t.OffsetX
+	if dy != 0 && t.MaxOffset() > 0 {
+		t.OffsetY += wheelDelta(dy, t.rowH(), e.Precise)
+		t.clamp()
+	}
+	if dx != 0 && t.Horizontal && t.MaxOffsetX() > 0 {
+		t.ScrollByX(wheelDelta(dx, t.rowH(), e.Precise))
+	}
+	if t.OffsetY == beforeY && t.OffsetX == beforeX {
 		return false
 	}
 	t.Invalidate()

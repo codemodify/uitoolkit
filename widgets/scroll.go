@@ -12,6 +12,21 @@ import (
 type ScrollView struct {
 	widget.Base
 	OffsetY float32
+	// OffsetX is the horizontal scroll position, used only when
+	// [ScrollView.Horizontal] is set.
+	OffsetX float32
+	// Horizontal lets the view scroll sideways as well as up and down,
+	// for content that has no narrower form: a table with more columns
+	// than fit, a wide diagram, an image at its own size.
+	//
+	// It is off by default, and deliberately. A scroll view's usual job
+	// is to give its child the width it has and let it fold — a form
+	// that does not fit should drop its labels above its fields or fold
+	// with [Wrap], not be scrolled sideways, which is a poor way to read
+	// anything laid out in columns. Turning this on means "this content
+	// genuinely cannot be narrower", and the child is then measured at
+	// its natural width rather than the view's.
+	Horizontal bool
 	// ShrinkToContent measures to what is inside instead of taking all
 	// the height it is offered.
 	//
@@ -38,6 +53,8 @@ type ScrollView struct {
 	content      paintengine2d.Point
 	bar          scrollDrag
 	sceneOff     float32
+	sceneOffX    float32
+	draggingH    bool
 	contentDirty bool
 }
 
@@ -83,6 +100,11 @@ func (s *ScrollView) ScrollBy(dy float32) { s.ScrollTo(s.OffsetY + dy) }
 // down, so it makes nothing narrower: its minimum is its child's, plus
 // the gutter its bar takes.
 func (s *ScrollView) MinWidth() float32 {
+	if s.Horizontal {
+		// It scrolls sideways, so its child's width is not a floor on
+		// anything: the view can be as narrow as it likes.
+		return s.gutter()
+	}
 	w := widget.MinWidthOf(s.child)
 	if w <= 0 {
 		return 0
@@ -99,6 +121,11 @@ func (s *ScrollView) Measure(c layout.Constraints) paintengine2d.Point {
 			if cw < 0 {
 				cw = 0
 			}
+		}
+		if s.Horizontal {
+			// The child keeps whatever width it wants; the view scrolls
+			// to the rest of it.
+			cw = -1
 		}
 		s.content = s.child.Measure(layout.Constraints{MaxW: cw, MaxH: -1})
 	}
@@ -136,12 +163,22 @@ func (s *ScrollView) Arrange(r paintengine2d.Rect) {
 	if cw < 0 {
 		cw = 0
 	}
-	s.content = s.child.Measure(layout.Constraints{MinW: cw, MaxW: cw, MaxH: -1})
-	if s.content.Y < r.Dy() {
-		s.content.Y = r.Dy()
+	if s.Horizontal {
+		// Measured at its own width, then laid out at least as wide as
+		// the view so a child narrower than the pane still fills it.
+		s.content = s.child.Measure(layout.Unbounded())
+		if s.content.X < cw {
+			s.content.X = cw
+		}
+	} else {
+		s.content = s.child.Measure(layout.Constraints{MinW: cw, MaxW: cw, MaxH: -1})
+		s.content.X = cw
+	}
+	if s.content.Y < r.Dy()-s.hGutter() {
+		s.content.Y = r.Dy() - s.hGutter()
 	}
 	s.clamp()
-	s.child.Arrange(paintengine2d.XYWH(0, -s.OffsetY, cw, s.content.Y))
+	s.child.Arrange(paintengine2d.XYWH(-s.OffsetX, -s.OffsetY, s.content.X, s.content.Y))
 }
 
 // gutter is the width the child gives up to the scrollbar (always
@@ -171,11 +208,73 @@ func (s *ScrollView) Reveal(c widget.Component) {
 }
 
 func (s *ScrollView) maxOff() float32 {
-	return layout.MaxScroll(s.content.Y, s.LocalBounds().Dy())
+	return layout.MaxScroll(s.content.Y, s.viewH())
 }
 
 func (s *ScrollView) clamp() {
-	s.OffsetY = layout.ClampScroll(s.OffsetY, s.content.Y, s.LocalBounds().Dy())
+	s.OffsetY = layout.ClampScroll(s.OffsetY, s.content.Y, s.viewH())
+	if s.Horizontal {
+		s.OffsetX = layout.ClampScroll(s.OffsetX, s.content.X, s.viewW())
+	} else {
+		s.OffsetX = 0
+	}
+}
+
+// hGutter is the height given up to the horizontal bar, zero when the
+// view does not scroll sideways.
+func (s *ScrollView) hGutter() float32 {
+	if !s.Horizontal {
+		return 0
+	}
+	return style.ScrollGutter(s.Look())
+}
+
+// viewW and viewH are the box the content is seen through, with the
+// bars' gutters taken off.
+func (s *ScrollView) viewW() float32 { return max(s.LocalBounds().Dx()-s.gutter(), 0) }
+func (s *ScrollView) viewH() float32 { return max(s.LocalBounds().Dy()-s.hGutter(), 0) }
+
+// MaxOffsetX is the largest legal OffsetX.
+func (s *ScrollView) MaxOffsetX() float32 {
+	if !s.Horizontal {
+		return 0
+	}
+	return layout.MaxScroll(s.content.X, s.viewW())
+}
+
+// ScrollToX sets OffsetX (clamped) and relayouts the child.
+func (s *ScrollView) ScrollToX(x float32) {
+	if !s.Horizontal {
+		return
+	}
+	s.OffsetX = x
+	s.clamp()
+	if !s.Bounds().Empty() {
+		s.Arrange(s.Bounds())
+	}
+	s.Invalidate()
+}
+
+// ScrollByX adds dx pixels to the horizontal offset.
+func (s *ScrollView) ScrollByX(dx float32) { s.ScrollToX(s.OffsetX + dx) }
+
+// ContentWidth is the arranged child width used for clamp and thumb.
+func (s *ScrollView) ContentWidth() float32 { return s.content.X }
+
+func (s *ScrollView) hparts() style.ScrollParts {
+	if !s.Horizontal {
+		return style.ScrollParts{}
+	}
+	return style.ScrollGeometry(s.Look(), s.LocalBounds(), false, s.content.X, s.viewW(), s.OffsetX, true)
+}
+
+func (s *ScrollView) haxis() scrollAxis {
+	return scrollAxis{
+		parts: s.hparts,
+		get:   func() (float32, float32) { return s.OffsetX, s.MaxOffsetX() },
+		set:   s.ScrollToX,
+		steps: func() (float32, float32) { return s.lineStep(), max(s.viewW()*0.9, 24) },
+	}
 }
 
 func (s *ScrollView) lineStep() float32 {
@@ -187,7 +286,7 @@ func (s *ScrollView) lineStep() float32 {
 }
 
 func (s *ScrollView) pageStep() float32 {
-	h := s.LocalBounds().Dy() * 0.9
+	h := s.viewH() * 0.9
 	if h < 24 {
 		h = 24
 	}
@@ -195,7 +294,7 @@ func (s *ScrollView) pageStep() float32 {
 }
 
 func (s *ScrollView) vparts() style.ScrollParts {
-	return vScrollParts(s.Look(), s.LocalBounds(), s.content.Y, s.OffsetY)
+	return style.ScrollGeometry(s.Look(), s.LocalBounds(), true, s.content.Y, s.viewH(), s.OffsetY, s.Horizontal)
 }
 
 func (s *ScrollView) vaxis() scrollAxis {
@@ -225,13 +324,13 @@ func (s *ScrollView) RetainScene() (paintengine2d.Matrix, bool) {
 	if s.contentDirty || s.child == nil {
 		return paintengine2d.Identity(), false
 	}
-	return paintengine2d.Translation(0, s.sceneOff-s.OffsetY), true
+	return paintengine2d.Translation(s.sceneOffX-s.OffsetX, s.sceneOff-s.OffsetY), true
 }
 
 func (s *ScrollView) MarkSceneChildDirty() { s.contentDirty = true }
 
 func (s *ScrollView) NoteSceneRecorded() {
-	s.sceneOff = s.OffsetY
+	s.sceneOff, s.sceneOffX = s.OffsetY, s.OffsetX
 	s.contentDirty = false
 }
 
@@ -248,6 +347,9 @@ func (s *ScrollView) Paint(ctx *paintengine2d.Context) {
 		ctx.Restore()
 	}
 	s.bar.paint(s, ctx, lk, s.vparts(), true, s.OffsetY)
+	if s.Horizontal {
+		s.bar.paint(s, ctx, lk, s.hparts(), false, s.OffsetX)
+	}
 	if s.State().Focused() {
 		lk.DrawFocusRing(ctx, b)
 	}
@@ -258,6 +360,9 @@ func (s *ScrollView) HitTest(local paintengine2d.Point) widget.Component {
 		return nil
 	}
 	if sp := s.vparts(); !sp.Thumb.Empty() && sp.Bar.Contains(local) {
+		return s
+	}
+	if sp := s.hparts(); !sp.Thumb.Empty() && sp.Bar.Contains(local) {
 		return s
 	}
 	if s.child != nil {
@@ -274,23 +379,38 @@ func (s *ScrollView) HitTest(local paintengine2d.Point) widget.Component {
 // already-at-the-edge view must let the wheel bubble to an outer scroll pane
 // instead of swallowing it.
 func (s *ScrollView) MouseWheel(e widget.MouseEvent) bool {
-	dy := e.Scroll.Y
-	if dy == 0 && e.Scroll.X == 0 {
+	dy, dx := e.Scroll.Y, e.Scroll.X
+	if dy == 0 && dx == 0 {
 		return false
 	}
-	if s.maxOff() <= 0 {
-		return false
+	// Shift turns a vertical wheel sideways, which is what every desktop
+	// does and what a wheel with only one axis has to rely on.
+	if s.Horizontal && dx == 0 && e.Mods.Shift() {
+		dx, dy = dy, 0
 	}
-	before := s.OffsetY
-	s.ScrollBy(wheelDelta(dy, s.lineStep(), e.Precise))
-	return s.OffsetY != before
+	beforeY, beforeX := s.OffsetY, s.OffsetX
+	if dy != 0 && s.maxOff() > 0 {
+		s.ScrollBy(wheelDelta(dy, s.lineStep(), e.Precise))
+	}
+	if dx != 0 && s.Horizontal && s.MaxOffsetX() > 0 {
+		s.ScrollByX(wheelDelta(dx, s.lineStep(), e.Precise))
+	}
+	return s.OffsetY != beforeY || s.OffsetX != beforeX
 }
 
 func (s *ScrollView) MousePress(e widget.MouseEvent) bool {
 	if !s.Enabled() {
 		return false
 	}
+	if s.Horizontal && s.bar.press(s, e.Pos, s.haxis()) {
+		s.draggingH = true
+		s.MarkPointerFocus()
+		s.RequestFocus()
+		s.Invalidate()
+		return true
+	}
 	if s.bar.press(s, e.Pos, s.vaxis()) {
+		s.draggingH = false
 		s.MarkPointerFocus()
 		s.RequestFocus()
 		s.Invalidate()
@@ -300,7 +420,14 @@ func (s *ScrollView) MousePress(e widget.MouseEvent) bool {
 }
 
 func (s *ScrollView) MouseMove(e widget.MouseEvent) bool {
-	handled, dirty := s.bar.move(s, e.Pos, s.vaxis())
+	// Whichever bar the press landed on: one drag at a time, and it
+	// must keep following the bar it started on even when the pointer
+	// wanders over the other.
+	ax := s.vaxis()
+	if s.draggingH {
+		ax = s.haxis()
+	}
+	handled, dirty := s.bar.move(s, e.Pos, ax)
 	if dirty {
 		s.Invalidate()
 	}
@@ -308,6 +435,7 @@ func (s *ScrollView) MouseMove(e widget.MouseEvent) bool {
 }
 
 func (s *ScrollView) MouseRelease(widget.MouseEvent) bool {
+	s.draggingH = false
 	if !s.bar.release() {
 		return false
 	}
@@ -343,6 +471,18 @@ func (s *ScrollView) KeyPress(e widget.KeyEvent) bool {
 		return true
 	case platform.KeyEnd:
 		s.ScrollTo(s.maxOff())
+		return true
+	case platform.KeyLeft:
+		if !s.Horizontal {
+			return false
+		}
+		s.ScrollByX(-s.lineStep())
+		return true
+	case platform.KeyRight:
+		if !s.Horizontal {
+			return false
+		}
+		s.ScrollByX(s.lineStep())
 		return true
 	}
 	return false
