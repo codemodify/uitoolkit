@@ -53,6 +53,16 @@ type SecretField struct {
 	// Mono paints in the monospaced face, which is what a generated
 	// passphrase wants.
 	Mono bool
+	// PreferredWidth is the 1x design width the field asks for, in place
+	// of [defaultSecretFieldWidth].
+	//
+	// A field cannot fold, so a layout gives it what it asks for even
+	// where there is less — a flexible grid column never squeezes a
+	// child that has no narrower form, and the columns after it go off
+	// the edge. Lower this where a form has to fit a pane narrower than
+	// the default: it is the lever for that, and docs/recipes.md has the
+	// rest of the answer.
+	PreferredWidth float32
 	// CapsHint draws a warning mark in the field while it has the focus
 	// and Caps Lock is on, as macOS's secure text field does. It is on by
 	// default: a right passphrase refused is nearly always Caps Lock, the
@@ -80,6 +90,10 @@ type SecretField struct {
 	dragging   bool
 	capsOn     bool
 }
+
+// defaultSecretFieldWidth is the 1x design width a passphrase field asks
+// for when [SecretField.PreferredWidth] is unset.
+const defaultSecretFieldWidth = 180
 
 // NewSecretField builds an empty passphrase field.
 func NewSecretField(placeholder string) *SecretField {
@@ -303,7 +317,11 @@ func (f *SecretField) maskOffset(i int) int {
 
 func (f *SecretField) Measure(c layout.Constraints) paintengine2d.Point {
 	h := style.FieldHeight(f.Look().Metrics())
-	return c.Constrain(paintengine2d.Pt(style.Dip(f.Look(), 180), h))
+	w := float32(defaultSecretFieldWidth)
+	if f.PreferredWidth > 0 {
+		w = f.PreferredWidth
+	}
+	return c.Constrain(paintengine2d.Pt(style.Dip(f.Look(), w), h))
 }
 
 func (f *SecretField) Arrange(r paintengine2d.Rect) { f.SetBounds(r) }

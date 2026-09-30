@@ -117,6 +117,9 @@ func (a *SecretArea) Measure(c layout.Constraints) paintengine2d.Point {
 	// the columns after it went off the edge. A text area takes the
 	// width it is given; so does this.
 	w := style.Dip(lk, defaultSecretAreaWidth)
+	if a.PreferredWidth > 0 {
+		w = style.Dip(lk, a.PreferredWidth)
+	}
 	if c.HasMaxW() {
 		w = c.MaxW
 	}

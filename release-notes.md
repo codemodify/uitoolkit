@@ -52,6 +52,17 @@ only way to do it, and it is why the previous advice for an asynchronous
 check did not actually work. `MessageBox.Checking` reports whether a
 check is out.
 
+### A lever for a form in a narrow pane
+
+`SecretField.PreferredWidth` and `SecretArea.PreferredWidth`, matching
+`TokenField.PreferredWidth`. A field cannot fold, so a flexible grid
+column gives it what it asks for even where there is less, and the
+columns after it go off the edge — deliberately, since the alternative is
+a button squeezed to nothing. Lowering what the field asks for is the
+lever for a form that has to fit a narrow pane;
+[docs/recipes.md](docs/recipes.md) has the rest of the answer, including
+that there is still **no minimum-size API and no horizontal scrolling**.
+
 ### docs/recipes.md
 
 A page for the situations where the obvious way is wrong, written for

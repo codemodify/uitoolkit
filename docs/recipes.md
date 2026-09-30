@@ -158,6 +158,35 @@ handed.
 
 ---
 
+## A form that has to fit a narrow pane
+
+**Obvious:** make the window smaller and expect the layout to cope.
+
+**It will stop at a floor, and then run over the edge.** A flexible grid
+column shares out the width it is given, but it never squeezes a child
+below what that child can actually be: a label folds, so its column can
+shrink to its longest word; a text field, a button and a check box have
+no narrower form, so their columns stop at what they ask for. When the
+floors together are wider than the pane, the row runs over. That is
+deliberate — the alternative is a button squeezed to nothing — and Qt and
+GTK behave the same way.
+
+There is **no minimum-size API and no horizontal scrolling**, so the
+toolkit will not stop you reaching that point or let you scroll out of
+it. What you can do:
+
+- **Lower what the fixed children ask for.** `SecretField.PreferredWidth`,
+  `SecretArea.PreferredWidth` and `TokenField.PreferredWidth` are that
+  lever. A field that asks for 120 instead of 180 buys 60 px.
+- **Fold the row** with `NewWrap`, so the button drops under the field
+  instead of off the edge.
+- **Use fewer columns.** A label above its field rather than beside it
+  halves the floor.
+- **Find the floor and design above it.** Lay the form out at decreasing
+  widths in a test and assert nothing leaves the box — a minimum-size
+  test is the only thing that catches this before a user does, and it
+  catches it again when somebody adds an icon to a button.
+
 ## A status colour as text
 
 **Obvious:** draw the word in `Palette().Danger`.
