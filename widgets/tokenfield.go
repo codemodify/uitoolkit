@@ -379,43 +379,45 @@ func (f *TokenField) splitInput(s string) {
 // field or any other quoted list, so the field does not need to know it
 // is holding addresses.
 //
-// An unclosed quote is not an error here. The user is still typing, and
-// a field that stopped accepting separators the moment a quote was
-// opened would be a field that stopped working after a stray keystroke —
-// so an opening quote with no partner leaves the rest of the text
-// splitting normally.
+// An unclosed quote holds the split until it is closed. While someone
+// *types* `"Doe, Jane" <jane@x>`, the quote is still open at the moment
+// the comma is typed — so reading an unclosed quote as no quote split
+// there, refused `"Doe`, and swallowed the comma: the chip came out
+// `"Doe Jane" <jane@x>`. The typing case is the common one, and it is
+// the one that was wrong.
+//
+// A stray quote therefore holds splitting until it is closed or deleted.
+// That is visible in the editor — the text simply stays there — and it
+// is the lesser of the two: a value that will not commit is a value the
+// user can see and fix, where a value silently cut in half is not.
+//
+// Comments and angle brackets nest the same way, because an address list
+// puts commas inside both: `(Smith, J)` and `<a@x, b@y>`.
 func nextSep(s string, from int, seps string) int {
-	quoted, closes := false, -1
+	quoted := false
+	paren, angle := 0, 0
 	for i := from; i < len(s); i++ {
 		switch c := s[i]; {
 		case c == '\\' && quoted:
 			i++ // the next byte is escaped, whatever it is
 		case c == '"':
-			if quoted {
-				quoted = false
-				continue
+			quoted = !quoted
+		case quoted:
+			// Inside a quoted string nothing else is punctuation.
+		case c == '(':
+			paren++
+		case c == ')':
+			if paren > 0 {
+				paren--
 			}
-			// Only a quote that is closed hides what is between them.
-			if closes = closingQuote(s, i); closes < 0 {
-				continue
+		case c == '<':
+			angle++
+		case c == '>':
+			if angle > 0 {
+				angle--
 			}
-			quoted = true
-		case !quoted && strings.IndexByte(seps, c) >= 0:
+		case paren == 0 && angle == 0 && strings.IndexByte(seps, c) >= 0:
 			return i
-		}
-	}
-	return -1
-}
-
-// closingQuote is the index of the quote that closes the one at i, or -1
-// if it is never closed.
-func closingQuote(s string, i int) int {
-	for j := i + 1; j < len(s); j++ {
-		switch s[j] {
-		case '\\':
-			j++
-		case '"':
-			return j
 		}
 	}
 	return -1

@@ -42,6 +42,11 @@ type SecretArea struct {
 	goalLive bool
 }
 
+// defaultSecretAreaWidth is the 1x design width a secret area asks for
+// when it is measured without one. It is narrow on purpose — a caller
+// that wants a key's full line gives it a width.
+const defaultSecretAreaWidth = 180
+
 // DefaultSecretAreaRows is how tall a secret area is when Rows is unset:
 // enough for a PEM block's beginning, some body and its end to be on
 // screen together.
@@ -106,7 +111,16 @@ func (a *SecretArea) Measure(c layout.Constraints) paintengine2d.Point {
 	lk := a.Look()
 	pad := a.fieldPad()
 	h := a.lineHeight()*float32(a.rows()) + pad*2
-	return c.Constrain(paintengine2d.Pt(style.Dip(lk, 280), h))
+	// The width offered, where there is one. Asking for 280 whatever it
+	// was given made a grid's flexible column hand it 280 where there
+	// was less — and since it cannot fold, nothing squeezed it back, so
+	// the columns after it went off the edge. A text area takes the
+	// width it is given; so does this.
+	w := style.Dip(lk, defaultSecretAreaWidth)
+	if c.HasMaxW() {
+		w = c.MaxW
+	}
+	return c.Constrain(paintengine2d.Pt(w, h))
 }
 
 func (a *SecretArea) Arrange(r paintengine2d.Rect) { a.SetBounds(r) }

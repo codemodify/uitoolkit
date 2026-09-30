@@ -135,3 +135,54 @@ func TestSetOverlayReplacesTheWholeStack(t *testing.T) {
 		t.Errorf("%d of 3 dialogs were told they closed", closed)
 	}
 }
+
+// Before overlays stacked, DismissOverlay(from) closed the window's
+// overlay whatever from was — a program passed its content's root to
+// take down whatever was on screen as it quit. Popping only the overlay
+// from is in silently broke that: a program quitting with a recovery key
+// up stopped wiping it, and a cancelled file chooser stayed up.
+func TestDismissFromOutsideEveryOverlayClosesTheTop(t *testing.T) {
+	a, w := stackWindow(t)
+	closed := 0
+	mb := widgets.NewMessageBox(widgets.MessageBoxOptions{
+		Title: "Recovery key", Message: "write this down",
+		Buttons:  widgets.ButtonsOK,
+		OnResult: func(widgets.MessageResult) { closed++ },
+	})
+	mb.Show(w.Content())
+	a.PumpOnce()
+	if w.Overlay() == nil {
+		t.Fatal("the dialog did not show")
+	}
+
+	// From the window's content, which is in no overlay at all.
+	widget.DismissOverlay(w.Content())
+	a.PumpOnce()
+	if closed != 1 {
+		t.Errorf("the dialog reported closing %d times", closed)
+	}
+	if w.Overlay() != nil || len(w.Overlays()) != 0 {
+		t.Error("the dialog is still up")
+	}
+}
+
+// And it takes the top one only, leaving what is under it.
+func TestDismissFromOutsideTakesOnlyTheTop(t *testing.T) {
+	a, w := stackWindow(t)
+	first := widgets.NewMessageBox(widgets.MessageBoxOptions{
+		Title: "One", Message: "one", Buttons: widgets.ButtonsOK,
+	})
+	first.Show(w.Content())
+	a.PumpOnce()
+	second := widgets.NewMessageBox(widgets.MessageBoxOptions{
+		Title: "Two", Message: "two", Buttons: widgets.ButtonsOK,
+	})
+	second.Show(first.Overlay())
+	a.PumpOnce()
+
+	widget.DismissOverlay(w.Content())
+	a.PumpOnce()
+	if got := len(w.Overlays()); got != 1 {
+		t.Errorf("%d overlays left, want 1", got)
+	}
+}

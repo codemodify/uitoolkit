@@ -126,7 +126,7 @@ mail-open	mail-open	envelope-open	mail-opened	envelope-open	drafts
 inbox	inbox	tray	inbox	inbox	inbox
 send	send	paper-plane-tilt	send	paper-airplane	send
 reply	reply	arrow-u-up-left	arrow-back	arrow-uturn-left	reply
-reply-all	reply-all	arrow-bend-double-up-left	arrow-back-up-double	share	reply_all
+reply-all	reply-all	arrow-bend-double-up-left	arrow-back-up-double	arrow-turn-up-left	reply_all
 forward	forward	arrow-bend-up-right	mail-forward	arrow-turn-up-right	forward
 attach	paperclip	paperclip	paperclip	paper-clip	attach_file
 download	download	download-simple	download	arrow-down-tray	download

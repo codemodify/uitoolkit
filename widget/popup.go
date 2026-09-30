@@ -155,13 +155,15 @@ type OverlayStackHost interface {
 	Overlays() []Component
 }
 
-// DismissOverlay closes the overlay from is in — the top one where they
-// stack — and leaves whatever was under it up.
+// DismissOverlay closes the overlay from is in and leaves whatever was
+// under it up. Called from outside every overlay — a window's content
+// taking down whatever is on screen — it closes the top one, which is
+// what it did before overlays stacked.
 //
-// An overlay that is no longer on the stack closes nothing. That case is
-// reached on the way out of a dismissal: an overlay's OnClose commonly
-// calls back into the code that closes it, and popping "the top" there
-// would take the dialog *underneath* down with it.
+// The one case that closes nothing is an overlay that *was* on the stack
+// and is no longer, which is reached on the way out of every dismissal:
+// an overlay's OnClose commonly calls back into the code that closes it,
+// and popping "the top" there would take the dialog underneath down too.
 func DismissOverlay(from Component) {
 	if from == nil {
 		return
@@ -176,6 +178,25 @@ func DismissOverlay(from Component) {
 			if o == from || o == root {
 				st.PopOverlay(o)
 				return
+			}
+		}
+		// from is not in any overlay on the stack, which is two cases
+		// that must not be treated alike.
+		//
+		// A component in the window's own content asking to take down
+		// whatever is up is what this call meant before overlays
+		// stacked, and closing nothing silently broke it: a program
+		// quitting with a recovery key on screen stopped wiping it, and
+		// a cancelled file chooser stayed up. That one closes the top.
+		//
+		// An overlay that *was* on the stack and is no longer closes
+		// nothing. That case is reached on the way out of every
+		// dismissal — an overlay's OnClose calls back into the code that
+		// closes it — and popping the top there would take the dialog
+		// underneath down as well.
+		if inHostTree(from, st) {
+			if top := st.Overlay(); top != nil {
+				st.PopOverlay(top)
 			}
 		}
 		return
@@ -193,6 +214,35 @@ func overlayRootOf(from Component) Component {
 		root = n
 	}
 	return root
+}
+
+// ContentRootHost is a host that can say which of its trees are its own
+// content rather than an overlay.
+type ContentRootHost interface {
+	// ContentRoots are the host's non-overlay trees: its content, and
+	// the caption where the toolkit draws one.
+	ContentRoots() []Component
+}
+
+// inHostTree reports whether c hangs under one of the host's own trees
+// rather than under an overlay. It is how "close whatever is up" is told
+// from "close the overlay I am in, which has already gone".
+//
+// A host that cannot say answers no, which keeps the safe behaviour: a
+// dismissal that has already happened does not take a second dialog with
+// it.
+func inHostTree(c Component, st OverlayStackHost) bool {
+	cr, ok := st.(ContentRootHost)
+	if !ok {
+		return false
+	}
+	root := overlayRootOf(c)
+	for _, r := range cr.ContentRoots() {
+		if r != nil && r == root {
+			return true
+		}
+	}
+	return false
 }
 
 // Retains reports whether c or an ancestor wants the dismiss-click delivered.

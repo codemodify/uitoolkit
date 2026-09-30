@@ -834,6 +834,18 @@ func (w *Window) RequestFocus(c widget.Component) {
 // content, the overlay, an open popup, and the caption where the toolkit
 // draws one. The caption is a concrete type, so it only joins when there
 // is one.
+// ContentRoots implements [widget.ContentRootHost]: the window's own
+// trees, which are everything except the overlay stack. A component
+// under one of these asking to dismiss an overlay means "take down
+// whatever is up", where one under an overlay means its own.
+func (w *Window) ContentRoots() []widget.Component {
+	roots := []widget.Component{w.root}
+	if w.caption != nil {
+		roots = append(roots, w.caption)
+	}
+	return roots
+}
+
 func (w *Window) notifyRoots() []widget.Component {
 	roots := []widget.Component{w.root, w.popup}
 	roots = append(roots, w.overlays...)

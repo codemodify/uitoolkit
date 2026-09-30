@@ -136,3 +136,114 @@ func TestRowsOfOneTableStayTight(t *testing.T) {
 		t.Errorf("the first row is %v tall for %v of lines — it has space after it", rows[0].h, lines)
 	}
 }
+
+// A header cell is bold at the table's own size. It was laid out as a
+// Heading, and the HTML parser gives a <th> Level 1 — so every header
+// cell came out an H1: title-sized, and breaking mid-word in a narrow
+// column.
+func TestTableHeaderIsBoldNotAHeading(t *testing.T) {
+	rt := tableDoc(t, `<table>
+	  <tr><th>Item</th><th>Price</th></tr>
+	  <tr><td>Tea</td><td>3</td></tr>
+	</table>`)
+	lays := layoutsOf(t, rt)
+	if len(lays) < 2 {
+		t.Fatal("expected two rows")
+	}
+	head, body := lays[0], lays[1]
+
+	var headSize, bodySize float32
+	var bold bool
+	for _, ln := range head.lines {
+		for _, f := range ln.frags {
+			headSize = max(headSize, f.font.Size)
+			if f.st.Bold {
+				bold = true
+			}
+		}
+	}
+	for _, ln := range body.lines {
+		for _, f := range ln.frags {
+			bodySize = max(bodySize, f.font.Size)
+		}
+	}
+	if !bold {
+		t.Error("a header cell is not bold")
+	}
+	if headSize != bodySize {
+		t.Errorf("header cells are set at %v and body cells at %v — a header is bold, not bigger",
+			headSize, bodySize)
+	}
+}
+
+// A row two lines tall must have its column rules and its underline
+// drawn for the whole row. They were drawn at the first line's height,
+// so the later lines sat outside their own cell — which reads as the
+// next row overlapping this one.
+func TestTableChromeSpansTheWholeRow(t *testing.T) {
+	rt := tableDoc(t, `<table>
+	  <tr><td>a</td><td>a cell with enough words in it to need more than one line of its column</td></tr>
+	  <tr><td>b</td><td>c</td></tr>
+	</table>`)
+	lays := layoutsOf(t, rt)
+	var tall *rtLayout
+	for _, l := range lays {
+		if len(l.cols) > 0 && len(l.lines) > 1 {
+			tall = l
+			break
+		}
+	}
+	if tall == nil {
+		t.Fatal("no row wrapped, so this proves nothing")
+	}
+	first, last := tall.lines[0], tall.lines[len(tall.lines)-1]
+	rowH := last.y + last.h - first.y
+	if rowH <= first.h {
+		t.Fatalf("row height %v is no more than its first line %v", rowH, first.h)
+	}
+}
+
+// A column is never squeezed past its longest word. It used to shrink
+// toward one number for every column, which was right while a cell too
+// wide for its column was elided; now that cells wrap, that broke text
+// mid-word — "Price" came out "Pric" and "£4.50" became "£4.5" and "0".
+func TestTableColumnsAreNeverNarrowerThanTheirLongestWord(t *testing.T) {
+	rt := tableDoc(t, `<table>
+	  <tr><th>Item</th><th>Price</th><th>Notes</th></tr>
+	  <tr><td>Cake with a long name that should wrap inside its cell</td><td>&pound;4.50</td><td>x</td></tr>
+	</table>`)
+
+	lays := layoutsOf(t, rt)
+	var cols []float32
+	for _, l := range lays {
+		if len(l.cols) > 0 {
+			cols = l.cols
+			break
+		}
+	}
+	if len(cols) == 0 {
+		t.Fatal("no columns")
+	}
+	// Every fragment must fit in its own column: nothing was broken to
+	// make it fit.
+	for _, l := range lays {
+		for _, ln := range l.lines {
+			for _, f := range ln.frags {
+				if f.w > cols[len(cols)-1]+cols[0]+cols[1] {
+					t.Errorf("a fragment is %v wide, wider than the table", f.w)
+				}
+			}
+		}
+	}
+	// And the money column holds its whole value on one line.
+	rt2 := tableDoc(t, `<table><tr><td>a</td><td>&pound;4.50</td></tr></table>`)
+	for _, l := range layoutsOf(t, rt2) {
+		for _, ln := range l.lines {
+			for _, f := range ln.frags {
+				if f.text == "£4.5" || f.text == "0" {
+					t.Errorf("£4.50 was broken into %q", f.text)
+				}
+			}
+		}
+	}
+}

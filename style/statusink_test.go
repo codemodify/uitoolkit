@@ -108,17 +108,112 @@ func TestInkKeepsAlpha(t *testing.T) {
 	}
 }
 
-// A mid-grey background leaves nowhere for a colour to go. An unreadable
-// coloured word is worse than a readable plain one, so it falls back
-// rather than returning something that still cannot be read.
+// A mid-grey background is the hard case. What matters is that the
+// result can be read — the first candidate that clears the bar wins,
+// because keeping the colour is the point and a colour at 4.5:1 is not
+// improved by being blacker.
+//
+// Only where no lightness on the hue reaches the bar at all does it fall
+// back to black or white: an unreadable coloured word is worse than a
+// readable plain one.
 func TestInkOnAHopelessBackground(t *testing.T) {
 	bg := paintengine2d.RGB(0.45, 0.45, 0.45)
 	got := ReadableInk(Hex("#c4a000"), bg)
-	best := ContrastRatio(paintengine2d.RGB(0, 0, 0), bg)
-	if w := ContrastRatio(paintengine2d.RGB(1, 1, 1), bg); w > best {
-		best = w
+	if r := ContrastRatio(got, bg); r < MinInkContrast {
+		// It could not reach the bar, so it must have taken the better
+		// of black and white.
+		best, which := ContrastRatio(paintengine2d.RGB(0, 0, 0), bg), "black"
+		if w := ContrastRatio(paintengine2d.RGB(1, 1, 1), bg); w > best {
+			best, which = w, "white"
+		}
+		if r < best-0.01 {
+			t.Errorf("ink is %.2f:1 and did not fall back to %s at %.2f:1", r, which, best)
+		}
+		return
 	}
-	if r := ContrastRatio(got, bg); r < best-0.01 {
-		t.Errorf("ink is %.2f:1 where black or white would be %.2f:1", r, best)
+	// It cleared the bar, so it must still be the colour it started as.
+	if _, s, _ := flatHSL(got); s < 20 {
+		t.Errorf("ink %v cleared the bar but lost its colour", got)
+	}
+}
+
+// The ink must keep the pack's colour, not merely reach the contrast
+// ratio. This is the test the first version of this file needed and did
+// not have: the walk passed lightness as a fraction where flatFromHSL
+// takes percent, so every candidate sat within one percent of black. On
+// a light background the first already cleared 4.5:1 and the ink came
+// out all but black; on a dark one none did, and the fallback made it
+// white. Every pack's danger, warning and success ink was black or
+// white — and the contrast test passed, because black on light and white
+// on dark both read perfectly well.
+//
+// So contrast is not the property. Keeping the colour is, and that is
+// what this asserts: a saturated status colour stays saturated.
+func TestStatusInkKeepsThePacksColour(t *testing.T) {
+	packs := ListThemes()
+	if len(packs) == 0 {
+		t.Skip("no packs in this build")
+	}
+	greyed := 0
+	for _, p := range packs {
+		lk := Appearance{Name: p.Name, Theme: p.Palette}.Look()
+		pal := lk.Palette()
+		for _, tc := range []struct {
+			role string
+			want paintengine2d.Color
+			ink  paintengine2d.Color
+		}{
+			{"danger", pal.Danger, pal.DangerInk()},
+			{"success", pal.Success, pal.SuccessInk()},
+			{"warning", pal.Warning, pal.WarningInk()},
+		} {
+			_, ws, _ := flatHSL(tc.want)
+			_, is, _ := flatHSL(tc.ink)
+			if ws < 20 {
+				continue // the pack chose a grey; keeping it grey is right
+			}
+			// A colour that had some in it must not come back grey.
+			if is < ws*0.5 {
+				greyed++
+				t.Errorf("%s %s: %v (s=%.0f%%) came back as %v (s=%.0f%%) — the colour was lost",
+					p.Name, tc.role, tc.want, ws, tc.ink, is)
+			}
+		}
+	}
+	if greyed > 0 {
+		t.Logf("%d of %d status colours lost their hue", greyed, len(packs)*3)
+	}
+}
+
+// And the two ends: nothing comes back pure black or pure white where
+// the pack asked for a colour and one was available.
+func TestStatusInkIsNotBlackOrWhite(t *testing.T) {
+	packs := ListThemes()
+	if len(packs) == 0 {
+		t.Skip("no packs in this build")
+	}
+	black := paintengine2d.RGB(0, 0, 0)
+	white := paintengine2d.RGB(1, 1, 1)
+	for _, p := range packs {
+		lk := Appearance{Name: p.Name, Theme: p.Palette}.Look()
+		pal := lk.Palette()
+		for _, tc := range []struct {
+			role string
+			want paintengine2d.Color
+			ink  paintengine2d.Color
+		}{
+			{"danger", pal.Danger, pal.DangerInk()},
+			{"success", pal.Success, pal.SuccessInk()},
+			{"warning", pal.Warning, pal.WarningInk()},
+		} {
+			if _, s, _ := flatHSL(tc.want); s < 20 {
+				continue
+			}
+			for _, plain := range []paintengine2d.Color{black, white} {
+				if tc.ink.R == plain.R && tc.ink.G == plain.G && tc.ink.B == plain.B {
+					t.Errorf("%s %s: %v came back as %v", p.Name, tc.role, tc.want, tc.ink)
+				}
+			}
+		}
 	}
 }

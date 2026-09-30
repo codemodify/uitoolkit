@@ -2,6 +2,7 @@ package widgets
 
 import (
 	"math"
+	"strings"
 
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/richtext"
@@ -48,12 +49,11 @@ func (t *RichText) layoutTableRow(b *richtext.Block, width float32, lay *rtLayou
 	run := t.runFor(b)
 	cols := t.columnsFor(run, width)
 	pad := t.cellPad()
+	// A header cell is bold at the table's own size. It is *not* laid
+	// out as a Heading: the HTML parser gives a <th> Level 1, so asking
+	// for the heading face made every header cell an H1 — title-sized,
+	// and wrapping mid-word in a narrow column. Bold is what <th> means.
 	kind := richtext.TableRow
-	if b.Header() {
-		// A header cell's spans are drawn bold on top of whatever they
-		// already ask for, which is what a <th> means.
-		kind = richtext.Heading
-	}
 
 	// Each cell laid out on its own, at its column's width.
 	type cell struct {
@@ -67,6 +67,9 @@ func (t *RichText) layoutTableRow(b *richtext.Block, width float32, lay *rtLayou
 		var spans []richtext.Span
 		if j < len(b.Cells) {
 			spans = b.Cells[j]
+			if b.Header() {
+				spans = boldSpans(spans)
+			}
 		}
 		room := max(cols[j]-pad*2, t.dip(8))
 		n := cellRunes(spans)
@@ -214,52 +217,107 @@ func (t *RichText) measureColumns(run []*richtext.Block, width float32) []float3
 	pad := t.cellPad()
 	want := make([]float32, n)
 	for _, b := range run {
-		kind := richtext.TableRow
-		if b.Header() {
-			kind = richtext.Heading
-		}
 		for j := 0; j < n && j < len(b.Cells); j++ {
 			// Measured span by span in the face each one asks for, so a
 			// bold cell is not measured in the regular face and then
 			// drawn wider than the column it was given.
 			var w float32
-			for _, sp := range b.Cells[j] {
+			cells := b.Cells[j]
+			if b.Header() {
+				cells = boldSpans(cells)
+			}
+			for _, sp := range cells {
 				if sp.Image != nil {
 					iw, _ := t.imageBox(sp.Image, math.MaxFloat32)
 					w += iw
 					continue
 				}
-				w += t.face(sp.Style, kind, b.Level).Advance(drawText(sp.Text))
+				w += t.face(sp.Style, richtext.TableRow, 0).Advance(drawText(sp.Text))
 			}
 			if w += pad * 2; w > want[j] {
 				want[j] = w
 			}
 		}
 	}
-	floor := t.dip(28)
+	// Each column's own floor: the widest word in it, which is the
+	// narrowest it can be without breaking text mid-word.
+	//
+	// It used to be one number for every column — 28 pixels — which was
+	// right while a cell too wide for its column was elided. Now that
+	// cells wrap, a column squeezed past its longest word makes the
+	// wrapper break inside words: "Price" came out "Pric", "£4.50" broke
+	// into "£4.5" and "0", and the rows grew a line each to hold the
+	// pieces.
+	floors := t.columnFloors(run, n, pad)
 	var total float32
 	for j := range want {
-		want[j] = max(want[j], floor)
+		want[j] = max(want[j], floors[j])
 		total += want[j]
 	}
 	if total <= width || total <= 0 {
 		return want
 	}
 	// Too wide: take the excess out of the columns in proportion to what
-	// each has above the floor, so a column that is already at the floor
-	// gives up nothing.
+	// each has above its floor, so a column already at its floor gives up
+	// nothing.
 	var spare float32
-	for _, w := range want {
-		spare += w - floor
+	for j, w := range want {
+		spare += w - floors[j]
 	}
 	if spare <= 0 {
+		// Every column is at its floor and they still do not fit. The
+		// table is wider than the pane; shrinking further would only
+		// break words, so the widest column gives up the rest and elides
+		// as it used to.
 		return want
 	}
 	k := min((total-width)/spare, 1)
 	for j := range want {
-		want[j] = float32(math.Round(float64(want[j] - (want[j]-floor)*k)))
+		// Never rounded below the floor. Rounding a column to 51 where
+		// its longest word needs 51.3 is the chip bug again: the width
+		// is a hair under what was measured for, and the wrapper breaks
+		// the word rather than admitting it does not fit.
+		want[j] = max(ceilPx(want[j]-(want[j]-floors[j])*k), floors[j])
 	}
 	return want
+}
+
+// columnFloors is the narrowest each column can be without breaking a
+// word: the widest single word in any of its cells, plus the padding.
+func (t *RichText) columnFloors(run []*richtext.Block, n int, pad float32) []float32 {
+	floors := make([]float32, n)
+	hard := t.dip(28)
+	for _, b := range run {
+		for j := 0; j < n && j < len(b.Cells); j++ {
+			cells := b.Cells[j]
+			if b.Header() {
+				cells = boldSpans(cells)
+			}
+			for _, sp := range cells {
+				if sp.Image != nil {
+					// An image cannot be broken at all.
+					iw, _ := t.imageBox(sp.Image, math.MaxFloat32)
+					if w := iw + pad*2; w > floors[j] {
+						floors[j] = w
+					}
+					continue
+				}
+				f := t.face(sp.Style, richtext.TableRow, 0)
+				for _, word := range strings.Fields(drawText(sp.Text)) {
+					if w := f.Advance(word) + pad*2; w > floors[j] {
+						floors[j] = w
+					}
+				}
+			}
+		}
+	}
+	for j := range floors {
+		if floors[j] < hard {
+			floors[j] = hard
+		}
+		floors[j] = ceilPx(floors[j])
+	}
+	return floors
 }
 
 // paintBlockChrome draws what a block is made of besides its text: the
@@ -297,8 +355,15 @@ func (t *RichText) paintBlockChrome(ctx *paintengine2d.Context, b *richtext.Bloc
 		ctx.DrawRect(paintengine2d.XYWH(in.Min.X, oy+ln.y, t.laidW, t.ruleHeight()),
 			paintengine2d.Fill(rule))
 	case richtext.TableRow:
-		ln := lay.lines[0]
-		y, h := oy+ln.y, ln.h
+		// The whole row, not its first line. A cell that wraps makes a
+		// row several lines tall, and drawing the column rules and the
+		// rule under the row at the first line's height left the later
+		// lines outside their own cell — which reads as the next row
+		// overlapping this one.
+		first := lay.lines[0]
+		last := lay.lines[len(lay.lines)-1]
+		y := oy + first.y
+		h := last.y + last.h - first.y
 		hair := max(t.dip(1), 1)
 		// A line between the columns, and one under the row. The run's
 		// last row gets no line under it — the table ends there, and a
@@ -341,4 +406,16 @@ func (t *RichText) rowFollows(b *richtext.Block) bool {
 		}
 	}
 	return false
+}
+
+// boldSpans is spans with bold set on every one, for a header cell. It
+// copies rather than editing, because the spans belong to the document
+// and a layout must not change what it is laying out.
+func boldSpans(spans []richtext.Span) []richtext.Span {
+	out := make([]richtext.Span, len(spans))
+	copy(out, spans)
+	for i := range out {
+		out[i].Style.Bold = true
+	}
+	return out
 }

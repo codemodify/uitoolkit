@@ -29,7 +29,7 @@ mail-open       envelope-open
 inbox           inbox
 send            paper-airplane
 reply           arrow-uturn-left
-reply-all       share
+reply-all       arrow-turn-up-left
 forward         arrow-turn-up-right
 attach          paper-clip
 download        arrow-down-tray

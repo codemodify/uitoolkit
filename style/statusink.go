@@ -78,11 +78,17 @@ func ReadableInk(want, bg paintengine2d.Color) paintengine2d.Color {
 	// background is monotonic in lightness on each side of it, but the
 	// first lightness that clears the bar is the one that keeps most of
 	// the colour, and that is what stepping finds.
+	// Lightness in percent, which is what flatHSL gives and flatFromHSL
+	// takes. Walking it from 0 to 1 instead put every candidate within
+	// one percent of black: on a light background the first already
+	// cleared the bar, so the ink came out all but black, and on a dark
+	// one none did and the fallback made it white. Every promise this
+	// file makes about keeping the pack's own colour was void.
 	const steps = 64
 	for i := 1; i <= steps; i++ {
-		l := float64(i) / steps
+		l := 100 * float64(i) / steps
 		if dark {
-			l = 1 - l
+			l = 100 - l
 		}
 		cand := flatFromHSL(h, s, l, want.A)
 		r := ContrastRatio(cand, bg)
