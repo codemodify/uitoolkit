@@ -36,6 +36,8 @@ stub; there is no native AppKit/SwiftUI control host.
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Label | `Label` / `Title` | `QLabel` / `Text` | `GtkLabel` | `TextBlock` | `widget.Label` | `Label` | `TextBlock` | `NSTextField` | `Text` | [thumb](screenshots/compare/label.png) |
 | Button | `Button` | `QPushButton` / `Button` | `GtkButton` | `Button` | `widget.Button` | `Button` | `Button` | `NSButton` | `Button` | [thumb](screenshots/compare/button.png) |
+| Icon button | `IconButton` (push face, mark alone) | `QToolButton` (`autoRaise: false`) | `GtkButton` + icon child | `Button` + `PathIcon` | `widget.NewButtonWithIcon` | `Button` (`Image`) | `Button` + `Path` | `NSButton` (image only) | `Button(action:)` + `Image` | — |
+| Menu button | `MenuButton` | `QToolButton` (`setMenu`) | `GtkMenuButton` | `DropDownButton` | — | `ToolStripDropDownButton` | `Menu` (`MenuItem`) | `NSPopUpButton` ≈ | `Menu` | — |
 | Tool button | `ToolButton` | `QToolButton` | `GtkButton` (flat) | `Button` (flat) ≈ | `widget.Button` ≈ | `ToolStripButton` | `Button` (`ToolBar`) | `NSButton` (recessed) | `Button` (`.borderless`) | [thumb](screenshots/compare/toolbar.png) |
 | Checkbox | `Checkbox` | `QCheckBox` / `CheckBox` | `GtkCheckButton` | `CheckBox` | `widget.Check` | `CheckBox` | `CheckBox` | `NSButton` (checkbox) | `Toggle` ≈ | [thumb](screenshots/compare/checkbox.png) |
 | Switch | `Switch` | `Switch` (Quick); Widgets ≈ `QCheckBox` | `GtkSwitch` | `ToggleSwitch` | `widget.Check` ≈ | — (`CheckBox` ≈) | `ToggleButton` ≈ | `NSSwitch` | `Toggle` | [thumb](screenshots/compare/switch.png) |
@@ -489,7 +491,13 @@ a long line scrolls sideways, which keeps a key's header, body and
 footer the shape the reader recognises.
 
 `SecretLabel` is the read-only half — the item view's "show password"
-and a TOTP code. Its value comes from a function rather than a field, so
+and a TOTP code. `MaskLen` is a fixed number of bullets whatever the
+value's length, measured for itself alone: one bullet per rune tells
+anyone looking how long the secret is, and the box says it too. Its
+accessibility node reads "concealed" and nothing else, because reporting
+the bullets told a screen reader the length as surely — and a length read
+aloud is the least worth leaking of all. `Lines` splits at newlines, so a
+PEM block or an OpenSSH key can be shown. Its value comes from a function rather than a field, so
 a locked vault answers nothing and the label empties itself on the next
 frame; `Hide()` zeroes what it last drew from. It is measured for what it
 is *showing*, and for the wider of the bullets and the text, so pressing
@@ -513,6 +521,71 @@ learns from it, so masking the preedit was never enough. X11's
 window's focus; it now unsets the input-context focus and resets it,
 dropping whatever was half-composed rather than committing it into the
 field that has just been focused.
+
+### Three shapes of button with a mark on it
+
+The face is the choice, not the size, and the toolkit had two of the
+three until an application tried to build a header out of them.
+
+| | face | when |
+| --- | --- | --- |
+| `Button` + `Icon` | push button, label centred | a button with a **name**: OK, Save, Rename |
+| `IconButton` | push button, mark centred, square | a button that is **only** a mark and must look like a button |
+| `MenuButton` | push button, mark centred, square | a button that **drops a menu** |
+| `ToolIconBtn` in a `ToolBar` | tool face — flat until hovered | a mark on a **tool bar** |
+| `ToolButton` | tool face, tight | a mark beside a name, outside a dialog |
+
+`ToolIconBtn` is a *tool item*: in most eras it has no frame until the
+pointer is over it, which is right on a tool bar and wrong anywhere
+somebody is meant to see that the thing is a button. That is why
+`IconButton` exists; if the answer to "why doesn't that look like a
+button?" is "because it isn't one", this is the one you wanted.
+
+A latched button — a search that is on, a filter applied — sets `Checked`
+and `Toggle`. **53 of the 135 packs draw a checked button exactly as an
+ordinary one**, so on those it is drawn pressed instead, which is how
+Windows 3.1, Motif, CDE and OPEN LOOK drew a toggle anyway. Measured, not
+listed (`style.CheckedFaceOf`), so a caller never has to know which pack
+it is on.
+
+`MenuButton` is not a `Button` whose `OnClick` calls `ShowContextMenu`.
+It opens on press so a drag runs into the menu, stays down while open,
+closes on a second press — and **owns its items' accelerators**. An
+application menu moved from a `MenuBar` to a plain button silently loses
+its shortcuts, and the first anyone knows is that Ctrl+Q has stopped
+quitting.
+
+### Chrome that lines up with a pane
+
+The caption is laid out **before** the content, so anything that measures
+a divider and then tells the chrome about it is permanently one frame
+behind — on a drag, a frame the user watches.
+
+`Splitter.OnRatioChanged` fires on the **drag** instead, and
+`HeaderBar.StartWidth` takes a plain number, so the next layout has it in
+time. Neither widget learns about the other, and a footer or a status bar
+can read the same value.
+
+A `Splitter` also takes its panes' own minimums now (`widget.MinWidthOf`,
+as Qt's `QSplitter` does), so a sidebar cannot be dragged until its
+buttons run off the edge; `MinA` / `MinB` override that and
+`AllowCollapse` lets a pane close entirely.
+
+### Buttons of your own in the title bar
+
+`Window.SetCaptionButtonVisible` turns one of the window's own buttons
+off for that window — a tool window with no maximize. It cannot *add* one
+the desktop cannot do: the look and the compositor decide what is
+possible, and this picks from that.
+
+`Window.SetCaptionActions` puts the application's buttons up there, each
+choosing its side with `Lead`. They are drawn on the era's **tool** face
+rather than its window-control face, and that is a measured constraint
+rather than a preference: a look draws a window control's shape and glyph
+as one piece keyed on which control it is, and **67 of the packs draw a
+glyph of their own for any value they do not recognise** — so there is no
+"shape only" to borrow. The tool face is the era's own button for a mark,
+and every pack has one.
 
 ### A wrapping label in a row: the second measure pass
 

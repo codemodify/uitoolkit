@@ -1,3 +1,134 @@
+# Release notes
+
+What changed in each release, and why. The reasons are here because a
+list of names is not much use six months later: what a reader usually
+wants to know is whether a change affects them, and that is a question
+about the problem it solved.
+
+---
+
+## 0.22.5
+
+The two applications kept going. secretvault's three remaining items were
+all real and all the toolkit's; comms-mail made its header into real
+buttons with icons and found five more.
+
+### Three that were still open, and all three were
+
+- **A Caps Lock hint that missed Caps Lock.** A field learned only of
+  *changes*, and a window open with the lock on since before the dialog
+  was shown has no change to report — so the mark appeared on the second
+  passphrase, never the first, which is the one that gets refused. That
+  is the entire case the feature exists for. Watchers hear the first
+  event now, and a `SecretField` asks its window when it takes the focus.
+  `Window.OnLockKeys` keeps its documented change-only meaning.
+- **A tray that said it was shown when there was no tray.** `Shown` read
+  any property error as "displayed", which was documented as deliberate:
+  a bus error is not a statement. But no watcher *on the bus* is a
+  statement — nothing is registering status items, so nothing can be
+  showing one — and a GNOME without an AppIndicator extension is exactly
+  that, which is the case the whole question exists for. A watcher that
+  is there and will not answer is still read as shown.
+- **A secret label that gave away the length**, on the screen and to a
+  screen reader. `SecretLabel.MaskLen` is a fixed number of bullets
+  measured for itself alone, its accessibility node says "concealed" and
+  nothing else, and `Lines` splits at newlines so a PEM block can be
+  shown at all.
+
+### Three shapes of button with a mark on it
+
+The toolkit had two of the three, and [docs/recipes.md](docs/recipes.md)
+confidently named the wrong one.
+
+- **`IconButton`** — the look's push-button face with the mark centred,
+  square, named for the tooltip and the screen reader in one go.
+  `ToolIconBtn`, which the recipe recommended, is a *tool item*: flat
+  with no frame until hovered in most eras, so it does not read as a
+  button. That was my advice and it did not do what the entry claimed.
+- **`MenuButton`** — opens on press so a drag runs into the menu, stays
+  down while open, closes on a second press, and **owns its items'
+  accelerators**. An application menu moved from a `MenuBar` to a plain
+  button silently loses its shortcuts; the first anyone knows is that
+  Ctrl+Q stopped quitting. The matcher is shared with `MenuBar` now
+  rather than written twice, which is how the two came to differ.
+- **A latched push button** — `Button.Checked` and `Toggle`. Measured
+  rather than assumed, as the default button was in 0.22.0: 53 of the 135
+  packs draw a checked button exactly as an ordinary one, so on those it
+  is drawn pressed instead — which is how Windows 3.1, Motif, CDE and
+  OPEN LOOK drew a toggle anyway.
+
+**`IconMore` and `IconMenu`**, with vectors in the drawn sets and `menu`
+rendered into all five packs. Both were stem-only, which is the hazard
+`IconByStem` documents — no vector in a drawn set, and every pack uses a
+drawn set unless the user picks otherwise — left standing on the two
+commonest button marks there are.
+
+### Chrome that lines up with a pane
+
+The caption is laid out **before** the content, so anything that measures
+a divider and then tells the chrome is permanently one frame behind — on
+a drag, a frame the user watches. The request was a header bar bound to a
+pane's width; binding is the wrong shape, because it moves the
+measurement and not the ordering.
+
+`Splitter.OnRatioChanged` fires on the **drag** and `HeaderBar.StartWidth`
+takes a plain number, so the next layout has it in time. Nothing is tied
+to anything: a footer, a status bar or a second tool bar reads the same
+value, and neither widget knows the other exists. `Splitter.SetRatio`
+reports too, so restoring a saved layout is not a silent change.
+
+A `Splitter` takes its panes' own minimums as well, now that
+`widget.MinWidthOf` can be asked — a sidebar cannot be dragged until its
+buttons run off the edge. `MinA` / `MinB` override it, and
+`AllowCollapse` lets a pane close (and really close: the old 8 % floor on
+`Ratio` applied even to a pane meant to collapse).
+
+### Buttons of your own in the title bar
+
+- **`Window.SetCaptionButtonVisible`** turns one of the window's own
+  buttons off for that window. It cannot *add* one the desktop cannot do:
+  the look and the compositor decide what is possible, and this picks
+  from that.
+- **`Window.SetCaptionActions`** puts the application's buttons up there,
+  as many as it likes, each choosing its side.
+
+They are drawn on the era's **tool** face rather than its window-control
+face, and that is a measured constraint rather than a preference. A look
+draws a window control's shape and its glyph as one piece, keyed on which
+control it is, so a close button's shape cannot be borrowed for a
+different mark: 67 of the packs draw a glyph of their own for any value
+they do not recognise. The tool face is the era's own button for a mark,
+it is separable, and every pack has one.
+
+### Fixed
+
+- **A plain label held layouts open.** `MinWidthOf` (0.22.4) read a
+  one-line label as a thing that cannot shrink, because it is no taller
+  when narrowed — but a single-line label *clips*, and a layout was
+  keeping a whole sentence's width for something happy to be cut short.
+  `Label` answers for itself now; a wrapping one still reports its
+  longest word.
+
+### Still open
+
+**`Button.Icon` is about 64 px wider than a leading-icon button needs**
+(comms-mail #29), and that is inherent to the engine drawing the label:
+every era centres and decorates it its own way, so the widget reserves a
+strip at each end rather than taking the drawing over. `IconButton` is
+the answer where a row is tight; a real leading-icon layout would need
+either an opt-in that draws the label itself or a change to all 34
+engines.
+
+**A sidebar running beside the title bar** (#37) is not here. What landed
+is what removes the frame of lag from an application doing it by hand.
+The full feature needs client-side decorations by definition, and the
+pattern nearly everything actually uses — a full-width title bar with the
+sidebar starting under it — needs none of it.
+
+**Font fallback for message content** stays declined; see
+[contracts.md](docs/contracts.md).
+
+---
 
 ## 0.22.4
 
