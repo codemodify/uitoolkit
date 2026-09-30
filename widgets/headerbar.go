@@ -45,10 +45,41 @@ type HeaderBar struct {
 	// ShowTitle paints the window's title in the free space when the header
 	// bar has no centre (a stacked frame's strip always shows it).
 	ShowTitle bool
+	// StartWidth reserves this much room, in device pixels, at the start
+	// of the bar before its own items — so the bar's content can begin
+	// where something below it does.
+	//
+	// It is a plain number rather than a binding to a component on
+	// purpose. The caption is laid out *before* the content, so anything
+	// that measured a divider and then told the header about it would
+	// always be one frame behind, which on a drag is a frame the user
+	// sees. [Splitter.OnRatioChanged] fires on the drag instead, the
+	// application sets this, and the next layout has it in time.
+	//
+	// It is the toolkit's answer to a sidebar the window's chrome lines
+	// up with, and it ties nothing to anything: a footer, a second tool
+	// bar or a status bar can use the same number.
+	StartWidth float32
 	// OnContextMenu, when set, runs for a right-click on the header bar's
 	// caption space (at, window device pixels) instead of the window menu,
 	// and reports whether it showed a menu (Chromium's tab-strip menu).
 	OnContextMenu func(at paintengine2d.Point) bool
+}
+
+// LeadControls and TrailControls are the window's buttons at each end of
+// the caption, for a test or an application that needs to look.
+func (h *HeaderBar) LeadControls() *WindowControls  { return h.lead }
+func (h *HeaderBar) TrailControls() *WindowControls { return h.trail }
+
+// SetCaptionActions gives each side the application's own caption
+// buttons, which sit beside the window's own controls.
+func (h *HeaderBar) SetCaptionActions(lead, trail []CaptionAction) {
+	if h.lead != nil {
+		h.lead.SetActions(lead)
+	}
+	if h.trail != nil {
+		h.trail.SetActions(trail)
+	}
 }
 
 // NewHeaderBar builds a header bar: start items on the left, center in the
@@ -280,6 +311,13 @@ func (h *HeaderBar) Arrange(r paintengine2d.Rect) {
 		// A stacked frame's caption holding only the title: no row.
 	default:
 		lw, rw := h.controlsW()
+		// StartWidth pushes the bar's own items along so they begin
+		// where something below does — but never over the window
+		// controls, which own the start of the caption where the era
+		// puts them there.
+		if h.StartWidth > lw {
+			lw = h.StartWidth
+		}
 		rowBox = paintengine2d.XYWH(lw, 0, max(0, w-lw-rw), ht)
 	}
 	h.row.Arrange(rowBox)

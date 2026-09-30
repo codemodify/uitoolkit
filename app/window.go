@@ -53,11 +53,15 @@ type Window struct {
 	// centred says the toolkit put this window in the middle, so a fit
 	// that changes its size can put it back there (app/fitcontent.go).
 	centred bool
-	hover   widget.Component
-	capture widget.Component
-	closed  atomic.Bool
-	blink   bool
-	laid    bool
+	// hiddenCaption and captionActions are this window's own say over
+	// its caption buttons (app/frame.go).
+	hiddenCaption  map[platform.CaptionButton]bool
+	captionActions []widgets.CaptionAction
+	hover          widget.Component
+	capture        widget.Component
+	closed         atomic.Bool
+	blink          bool
+	laid           bool
 	// initialFocus is the component the window focuses when it first
 	// opens (SetInitialFocus), and openFocused that it has had its one
 	// chance to (focusOnOpen).

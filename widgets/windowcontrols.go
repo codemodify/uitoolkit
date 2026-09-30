@@ -24,8 +24,44 @@ import (
 //
 // A window that draws its own frame puts them into its title bar
 // (Window.SetTitleBar and HeaderBar); apps rarely make them directly.
+// CaptionAction is a button of the application's own in the window's
+// caption, beside the window controls: a browser's profile or extensions
+// button, an editor's layout switches, anything a title bar carries that
+// is not close, minimize or maximize.
+//
+// It is drawn on the era's **tool** face rather than its window-control
+// face, and that is not a shortcut. A look draws its window controls as
+// one piece — the shape and the glyph together, keyed on which control
+// it is — so there is no way to borrow a close button's shape and put a
+// different mark in it: 67 of the packs draw a glyph of their own for
+// any value they do not recognise. The tool face is the era's own button
+// for a mark, it is separable, and every pack has one.
+type CaptionAction struct {
+	// Icon is the mark. An icon alone cannot be read aloud, so Name is
+	// not optional in practice.
+	Icon style.ToolIcon
+	// Name is what it does, in words: the tooltip and the accessible
+	// name.
+	Name string
+	// Lead puts it at the caption's start rather than beside the
+	// close button.
+	Lead bool
+	// Checked draws it held down, for a button that toggles something.
+	Checked bool
+	// OnClick runs when it is pressed. A menu is opened from here.
+	OnClick func()
+}
+
+// captionActionBase is where an action's pseudo-button value starts, above
+// every real [platform.CaptionButton]. The controls carry actions in the
+// same list as the buttons so that placement, hit testing, hovering and
+// the accessibility tree all work on one thing rather than two.
+const captionActionBase platform.CaptionButton = 128
+
 type WindowControls struct {
 	widget.Base
+	// actions are the application's own buttons on this side.
+	actions []CaptionAction
 	buttons []platform.CaptionButton
 	hover   int
 	press   int
@@ -96,6 +132,19 @@ func (c *WindowControls) keptAbove() bool {
 	return a != nil && a.KeepAbove()
 }
 
+// hiddenByWindow reports whether the window has turned this button off.
+//
+// A look and a desktop decide which buttons *can* be there; this is the
+// window saying which of them it wants — a tool window with no maximize,
+// a dialog with only a close. It is a per-window override and nothing
+// else: it cannot add a button the desktop cannot do.
+func (c *WindowControls) hiddenByWindow(b platform.CaptionButton) bool {
+	h, ok := c.Host().(interface {
+		CaptionButtonHidden(platform.CaptionButton) bool
+	})
+	return ok && h.CaptionButtonHidden(b)
+}
+
 func (c *WindowControls) frameHost() widget.FrameHost {
 	if h, ok := c.Host().(widget.FrameHost); ok {
 		return h
@@ -103,7 +152,28 @@ func (c *WindowControls) frameHost() widget.FrameHost {
 	return nil
 }
 
-// Shown are the buttons painted: those the desktop can do.
+// SetActions replaces the application's own caption buttons on this side.
+func (c *WindowControls) SetActions(a []CaptionAction) {
+	c.actions = append(c.actions[:0], a...)
+	c.Invalidate()
+}
+
+// Actions are the application's own caption buttons on this side.
+func (c *WindowControls) Actions() []CaptionAction { return c.actions }
+
+// actionAt is the action a pseudo-button value names, or nil.
+func (c *WindowControls) actionAt(b platform.CaptionButton) *CaptionAction {
+	if b < captionActionBase {
+		return nil
+	}
+	if i := int(b - captionActionBase); i >= 0 && i < len(c.actions) {
+		return &c.actions[i]
+	}
+	return nil
+}
+
+// Shown are the buttons painted: those the desktop can do, those the
+// window has not hidden, and the application's own.
 func (c *WindowControls) Shown() []platform.CaptionButton {
 	caps := c.caps()
 	out := make([]platform.CaptionButton, 0, len(c.buttons))
@@ -124,7 +194,21 @@ func (c *WindowControls) Shown() []platform.CaptionButton {
 		case platform.CaptionNone:
 			continue
 		}
+		if c.hiddenByWindow(b) {
+			continue
+		}
 		out = append(out, b)
+	}
+	// The application's own buttons, beside the window's: at the start
+	// of a lead group and the end of a trailing one, so they sit next to
+	// the edge's controls rather than between them and the corner.
+	for i := range c.actions {
+		v := captionActionBase + platform.CaptionButton(i)
+		if c.lead {
+			out = append(out, v)
+		} else {
+			out = append([]platform.CaptionButton{v}, out...)
+		}
 	}
 	// A spacer at either end of a side is no gap between buttons.
 	for len(out) > 0 && out[0] == platform.CaptionSpacer {
@@ -367,8 +451,35 @@ func (c *WindowControls) Paint(ctx *paintengine2d.Context) {
 				cs |= style.StateChecked | style.StatePressed
 			}
 		}
+		if a := c.actionAt(b); a != nil {
+			c.paintAction(ctx, lk, r, *a, cs)
+			continue
+		}
 		style.DrawCaptionButtonOf(lk, ctx, r, style.CaptionButton(b), cs, ds)
 	}
+}
+
+// paintAction draws one of the application's own caption buttons: the
+// era's tool face, and the app's mark on it.
+func (c *WindowControls) paintAction(ctx *paintengine2d.Context, lk style.LookAndFeel,
+	r paintengine2d.Rect, a CaptionAction, cs style.ControlState) {
+	if a.Checked {
+		cs |= style.StateChecked | style.StateToggle
+	}
+	lk.DrawToolButton(ctx, r, cs, "", style.IconNone)
+	if a.Icon == style.IconNone {
+		return
+	}
+	// The tool face's own ink, since the tool face is what is under it.
+	col := lk.Palette().Text
+	if cs.Disabled() {
+		col = lk.Palette().TextMuted
+	}
+	side := min(r.Dx(), r.Dy()) * 0.55
+	box := paintengine2d.XYWH(
+		r.Min.X+(r.Dx()-side)*0.5,
+		r.Min.Y+(r.Dy()-side)*0.5, side, side)
+	style.DrawToolIcon(ctx, box, a.Icon, col, style.IconSetOf(lk))
 }
 
 func (c *WindowControls) invalidateButton(i int) {
@@ -426,11 +537,21 @@ func (c *WindowControls) MouseRelease(e widget.MouseEvent) bool {
 }
 
 // activate runs shown button i.
+// ActivateForTest presses the i-th shown button, for a test driving the
+// caption without a pointer.
+func (c *WindowControls) ActivateForTest(i int) bool { return c.activate(i) }
+
 func (c *WindowControls) activate(i int) bool {
 	shown := c.Shown()
 	h := c.frameHost()
 	if i < 0 || i >= len(shown) || h == nil {
 		return false
+	}
+	if a := c.actionAt(shown[i]); a != nil {
+		if a.OnClick != nil {
+			a.OnClick()
+		}
+		return true
 	}
 	switch shown[i] {
 	case platform.CaptionClose:

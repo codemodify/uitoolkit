@@ -262,6 +262,61 @@ themselves: `TextArea` with wrap off has a real bar, and `TextField`,
 `SecretField` and `SecretArea` slide their contents under the caret. This
 is only about *containers*.
 
+## Chrome that lines up with a pane
+
+**Obvious:** measure the splitter after a layout and tell the header bar.
+
+**That is always a frame late.** The caption is laid out *before* the
+content, so a divider position discovered during content layout reaches
+the chrome one frame after it changed — and on a drag that is a frame the
+user watches.
+
+**Instead**, let the drag tell you, and give the bar a number:
+
+```go
+split.OnRatioChanged = func(paneA, ratio float32) { head.StartWidth = paneA }
+head.StartWidth = /* whatever it starts at */
+```
+
+`OnRatioChanged` fires on the **drag**, not the layout, so the next pass
+already has the number. Nothing is bound to anything: a footer, a second
+tool bar or a status bar can read the same value, and neither widget
+learns about the other.
+
+A sidebar with a header of its own does not need any of this — put a
+`HeaderBar` at the top of the pane. This is only for lining the *window's*
+chrome up with a pane below it.
+
+Note that a full-height sidebar running beside the title bar needs
+client-side decorations: under a desktop-drawn frame the title bar is not
+the toolkit's to lay out. The usual pattern — and what Safari, Chrome, VS
+Code and every web dashboard do — is a full-width title bar with the
+sidebar starting underneath it, which needs none of that.
+
+## Buttons in the title bar
+
+`Window.SetCaptionButtonVisible` turns one of the window's own buttons
+off for this window — a tool window with no maximize, a dialog with only
+a close. It cannot add one the desktop cannot do: the look and the
+compositor decide what is possible, and this picks from that.
+
+`Window.SetCaptionActions` puts the application's own buttons up there,
+each saying which side it belongs on:
+
+```go
+w.SetCaptionActions(
+    widgets.CaptionAction{Icon: style.IconUser, Name: "Profile", OnClick: showProfile},
+    widgets.CaptionAction{Icon: style.IconMore, Name: "More", Lead: true, OnClick: showMenu},
+)
+```
+
+They are drawn on the era's **tool** face, not its window-control face.
+A look draws a window control's shape and its glyph as one piece, keyed
+on which control it is, so there is no way to borrow a close button's
+shape and put a different mark in it — 67 of the packs draw a glyph of
+their own for anything they do not recognise. The tool face is the era's
+own button for a mark, and every pack has one.
+
 ## A status colour as text
 
 **Obvious:** draw the word in `Palette().Danger`.

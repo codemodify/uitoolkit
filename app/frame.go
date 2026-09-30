@@ -124,6 +124,79 @@ func (w *Window) SetTitleBar(c widget.Component) {
 	w.dropDeadRefs()
 }
 
+// SetCaptionButtonVisible turns one of the window's caption buttons on
+// or off for this window alone.
+//
+// A look and the desktop decide which buttons *can* be there — a
+// compositor that cannot minimize gets no minimize button whatever
+// anyone asks. This is the window saying which of the possible ones it
+// wants: a tool window with no maximize, a dialog with only a close. It
+// cannot add one the desktop cannot do.
+//
+// Passing [platform.CaptionMenu], [platform.CaptionMinimize],
+// [platform.CaptionMaximize], [platform.CaptionClose] or
+// [platform.CaptionKeepAbove]; anything else is ignored.
+func (w *Window) SetCaptionButtonVisible(b platform.CaptionButton, on bool) {
+	if w == nil {
+		return
+	}
+	if w.hiddenCaption == nil {
+		w.hiddenCaption = map[platform.CaptionButton]bool{}
+	}
+	if on {
+		delete(w.hiddenCaption, b)
+	} else {
+		w.hiddenCaption[b] = true
+	}
+	w.laid = false
+	w.fullInvalidate()
+}
+
+// CaptionButtonHidden reports whether this window has turned b off. The
+// caption's controls ask it.
+func (w *Window) CaptionButtonHidden(b platform.CaptionButton) bool {
+	return w != nil && w.hiddenCaption[b]
+}
+
+// SetCaptionActions puts the application's own buttons in the caption,
+// beside the window's controls — a profile button, an extensions button,
+// a layout switch. Each says which side it belongs on.
+//
+// They are drawn on the era's tool face rather than its window-control
+// face: a look draws a window control's shape and glyph as one piece, so
+// there is no way to borrow a close button's shape for a different mark.
+// The tool face is the era's own button for a mark, and every pack has
+// one.
+func (w *Window) SetCaptionActions(actions ...widgets.CaptionAction) {
+	if w == nil {
+		return
+	}
+	w.captionActions = append(w.captionActions[:0], actions...)
+	w.applyCaptionActions()
+	w.laid = false
+	w.fullInvalidate()
+}
+
+// CaptionActions are the application's own caption buttons.
+func (w *Window) CaptionActions() []widgets.CaptionAction { return w.captionActions }
+
+// applyCaptionActions hands each side its own, which is what the
+// controls draw and hit-test.
+func (w *Window) applyCaptionActions() {
+	if w.caption == nil {
+		return
+	}
+	var lead, trail []widgets.CaptionAction
+	for _, a := range w.captionActions {
+		if a.Lead {
+			lead = append(lead, a)
+		} else {
+			trail = append(trail, a)
+		}
+	}
+	w.caption.SetCaptionActions(lead, trail)
+}
+
 // TitleBar is the component given to SetTitleBar (nil for none).
 func (w *Window) TitleBar() widget.Component { return w.titleBar }
 
@@ -275,6 +348,10 @@ func (w *Window) rebuildCaption() {
 		}
 		w.capPress, w.capClick = captionGesture{}, captionClick{}
 	}
+	// A caption rebuilt — a different look, a title bar set or taken
+	// away — has none of the application's own buttons until it is told
+	// again.
+	w.applyCaptionActions()
 	// A window rolled up to a title bar it no longer has could not be
 	// rolled back down: give it its height back first.
 	w.unshadeIfStuck()

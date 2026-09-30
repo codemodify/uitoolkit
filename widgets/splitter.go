@@ -53,8 +53,18 @@ type Splitter struct {
 	// AllowCollapse lets a pane be dragged to nothing, as a collapsible
 	// sidebar is. Without it a drag stops at the minimum.
 	AllowCollapse bool
-	drag          bool
-	hovered       bool
+	// OnRatioChanged is called while the divider is dragged, with the
+	// first pane's width in device pixels and the new ratio.
+	//
+	// It fires on the **drag**, not on the layout, and that is the whole
+	// point: anything that has to line up with the divider — a header
+	// bar's start section, a footer, a second tool bar — needs the
+	// number *before* the next layout begins. A watcher that measured
+	// the pane after a layout would always be a frame behind, and on a
+	// drag that is a frame the user can see.
+	OnRatioChanged func(paneA, ratio float32)
+	drag           bool
+	hovered        bool
 }
 
 // sideBySide is what the look's painters and the hit tests want: whether the
@@ -356,6 +366,7 @@ func (s *Splitter) MouseMove(e widget.MouseEvent) bool {
 	}
 	s.clampRatio()
 	s.Arrange(s.Bounds())
+	s.notifyRatio()
 	s.RequestLayout()
 	s.applyCursor(e.Pos)
 	s.Invalidate()
@@ -367,4 +378,27 @@ func (s *Splitter) MouseRelease(e widget.MouseEvent) bool {
 	s.applyCursor(e.Pos)
 	s.Invalidate()
 	return true
+}
+
+// notifyRatio tells a watcher where the divider is now, with the pane's
+// width already resolved — so a caller does not have to work the ratio
+// back into pixels itself, and gets the same number the pane actually
+// got after the minimums were applied.
+func (s *Splitter) notifyRatio() {
+	if s.OnRatioChanged == nil {
+		return
+	}
+	s.OnRatioChanged(s.PaneA().Dx(), s.Ratio)
+}
+
+// SetRatio moves the divider and reports it, as a drag does. It is how
+// an application restores a saved layout without the watcher missing it.
+func (s *Splitter) SetRatio(r float32) {
+	s.Ratio = r
+	s.clampRatio()
+	if !s.Bounds().Empty() {
+		s.Arrange(s.Bounds())
+	}
+	s.notifyRatio()
+	s.Invalidate()
 }
