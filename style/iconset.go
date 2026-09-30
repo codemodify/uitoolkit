@@ -51,25 +51,33 @@ func IsPremiereIconSet(name IconSetName) bool {
 	}
 }
 
-// IconsDir is $XDG_CONFIG_HOME/uitoolkit/icons
-// (or ~/.config/uitoolkit/icons).
-func IconsDir() string {
+// UserIconsDir is the **person's** icon directory —
+// $XDG_CONFIG_HOME/uitoolkit/icons, or ~/.config/uitoolkit/icons.
+//
+// It is this toolkit's ~/.icons: somewhere they install a set once, for
+// every uitoolkit program on the machine. Settings writes here when the
+// person asks it to, and nothing else should.
+//
+// **An application shipping art of its own does not copy it here.** Two
+// that do overwrite each other, last one wins, and neither can tell.
+// Keep it wherever you like and call [AddSearchPath].
+func UserIconsDir() string {
 	return filepath.Join(ConfigDir(), "icons")
 }
 
-// IconSetDir is icons/<name>/ in the user's own config directory. When a
+// UserIconSetDir is icons/<name>/ in the user's own config directory. When a
 // folder with a different spelling (case, spaces) canonicalizes to name,
 // that folder is returned.
 //
 // It is where Settings installs and removes a set. To *read* one, use
 // [IconSetDirs], which includes the directories applications have
 // registered with [AddSearchPath].
-func IconSetDir(name IconSetName) string {
+func UserIconSetDir(name IconSetName) string {
 	set := string(ParseIconSet(string(name)))
 	if dir, ok := iconDirIndex()[set]; ok {
-		return filepath.Join(IconsDir(), dir)
+		return filepath.Join(UserIconsDir(), dir)
 	}
-	return filepath.Join(IconsDir(), set)
+	return filepath.Join(UserIconsDir(), set)
 }
 
 // IconSetDirs are every directory that may hold the set, the user's
@@ -87,7 +95,7 @@ func IconSetDirs(name IconSetName) []string {
 	for i, d := range dirs {
 		if i == 0 {
 			// The user's, where a differently-spelled folder resolves.
-			out = append(out, IconSetDir(name))
+			out = append(out, UserIconSetDir(name))
 			continue
 		}
 		out = append(out, filepath.Join(d, set))
@@ -264,7 +272,7 @@ func DeleteUserIconSet(name IconSetName) error {
 	if !ok {
 		return fmt.Errorf("not a user icon set: %s", clean)
 	}
-	return os.RemoveAll(filepath.Join(IconsDir(), dirName))
+	return os.RemoveAll(filepath.Join(UserIconsDir(), dirName))
 }
 
 // ListIconSets returns Built-in (drawn classic/sharp, then premiere

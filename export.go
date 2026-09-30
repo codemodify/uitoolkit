@@ -252,8 +252,8 @@ func SaveAppearance(a style.Appearance) error {
 }
 func AppearancePath() string { return style.AppearancePath() }
 func ConfigDir() string      { return style.ConfigDir() }
-func ThemesDir() string      { return style.ThemesDir() }
-func IconsDir() string       { return style.IconsDir() }
+func UserThemesDir() string  { return style.UserThemesDir() }
+func UserIconsDir() string   { return style.UserIconsDir() }
 func ListIconSets() []style.IconSetInfo {
 	return style.ListIconSets()
 }

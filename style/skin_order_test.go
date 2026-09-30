@@ -20,7 +20,7 @@ import (
 // time, and the answer has to be "it loaded".
 func TestSkinStripReferencesDoNotDependOnMapOrder(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	dir := filepath.Join(SkinsDir(), "striporder")
+	dir := filepath.Join(UserSkinsDir(), "striporder")
 	if err := os.MkdirAll(filepath.Join(dir, "art"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +72,7 @@ func TestSkinWithNoFamilyInheritsItsBase(t *testing.T) {
 	if _, ok := LoadTheme("light"); !ok {
 		t.Skip("no light pack in this build")
 	}
-	dir := filepath.Join(SkinsDir(), "nofamily")
+	dir := filepath.Join(UserSkinsDir(), "nofamily")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}

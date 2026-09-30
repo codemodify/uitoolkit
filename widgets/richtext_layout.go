@@ -488,7 +488,14 @@ func (t *RichText) setHeight(i int, h float32) {
 	top := t.top(i)
 	old := t.heights[i]
 	t.heights[i] = h
-	t.topsOK = min(t.topsOK, i+1)
+	// tops[k+1] = tops[k] + heights[k], so changing heights[i]
+	// invalidates tops[i+1] onward and the last still-good entry is
+	// tops[i]. Keeping tops[i+1] — one too many — placed the block
+	// *directly after* this one at the offset the old height gave: a
+	// table row that turned out two lines tall after being estimated at
+	// one had the next row drawn over its second line, with no rule
+	// between them. The splice above has always used the right form.
+	t.topsOK = min(t.topsOK, i)
 	if top+old <= t.scrollY && !t.pinTop {
 		t.scrollY += h - old
 	}

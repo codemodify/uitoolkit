@@ -1122,7 +1122,7 @@ func (s *settingsState) iconTip() string {
 	var b strings.Builder
 	b.WriteString("Icon set — a real setting. The preview's tools are drawn in it; the rest of that window is a sample. ")
 	b.WriteString("The toolkit's own sets come first, then your folders under ")
-	b.WriteString(shortPath(style.IconsDir()))
+	b.WriteString(shortPath(style.UserIconsDir()))
 	b.WriteString(", then the icon themes this desktop has installed.")
 	bad := style.UnavailableSystemIconThemes()
 	if len(bad) == 0 {
@@ -1322,8 +1322,8 @@ func (s *settingsState) filesSection() widget.Component {
 	dir := shortPath(style.ConfigDir())
 	full := strings.Join([]string{
 		"Prefs: " + style.AppearancePath(),
-		"Themes: " + style.ThemesDir() + "/<name>/theme.json",
-		"Icons: " + style.IconsDir() + "/<set>/*.png",
+		"Themes: " + style.UserThemesDir() + "/<name>/theme.json",
+		"Icons: " + style.UserIconsDir() + "/<set>/*.png",
 	}, "; ")
 	// A label, not a text box: a box that can be selected from keeps
 	// three rows and grows a scrollbar of its own the moment the path is

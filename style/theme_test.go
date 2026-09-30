@@ -30,8 +30,8 @@ func TestEmbeddedStartersArePalettes(t *testing.T) {
 			t.Fatalf("look %s %+v", name, LookAppearance(look))
 		}
 	}
-	if _, err := os.Stat(ThemesDir()); !os.IsNotExist(err) {
-		t.Fatalf("listing builtins must not write %s", ThemesDir())
+	if _, err := os.Stat(UserThemesDir()); !os.IsNotExist(err) {
+		t.Fatalf("listing builtins must not write %s", UserThemesDir())
 	}
 }
 

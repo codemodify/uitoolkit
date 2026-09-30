@@ -21,7 +21,7 @@ import (
 func slotSkinLook(t *testing.T) style.LookAndFeel {
 	t.Helper()
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	dir := filepath.Join(style.SkinsDir(), "slotprobe")
+	dir := filepath.Join(style.UserSkinsDir(), "slotprobe")
 	if err := os.MkdirAll(filepath.Join(dir, "art"), 0o755); err != nil {
 		t.Fatal(err)
 	}

@@ -108,15 +108,18 @@ var (
 	embeddedPack map[string]ThemePack
 )
 
-// ThemesDir is $XDG_CONFIG_HOME/uitoolkit/themes
-// (or ~/.config/uitoolkit/themes).
-func ThemesDir() string {
+// UserThemesDir is the **person's** theme directory —
+// $XDG_CONFIG_HOME/uitoolkit/themes, or ~/.config/uitoolkit/themes.
+//
+// Settings writes here when they ask it to; an application ships a theme
+// of its own by calling [AddSearchPath], never by copying into this one.
+func UserThemesDir() string {
 	return filepath.Join(ConfigDir(), "themes")
 }
 
 // ThemeFile is themes/<name>/theme.json.
 func ThemeFile(name string) string {
-	return filepath.Join(ThemesDir(), name, "theme.json")
+	return filepath.Join(UserThemesDir(), name, "theme.json")
 }
 
 // StarterName is the embedded pack id for a palette (dark or light).
@@ -513,7 +516,7 @@ func userThemeDirs() map[string]string {
 // own themes directory rather than an application's. Settings may only
 // delete one of those: an application's folder is not its to remove.
 func userThemeIsTheUsers(dir string) bool {
-	rel, err := filepath.Rel(ThemesDir(), dir)
+	rel, err := filepath.Rel(UserThemesDir(), dir)
 	return err == nil && !strings.HasPrefix(rel, "..") && rel != "."
 }
 

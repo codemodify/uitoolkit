@@ -38,7 +38,7 @@ func checkerSkin(t *testing.T) LookAndFeel {
 		}
 		return buf.Bytes()
 	}
-	dir := filepath.Join(SkinsDir(), "checker")
+	dir := filepath.Join(UserSkinsDir(), "checker")
 	if err := os.MkdirAll(filepath.Join(dir, "art"), 0o755); err != nil {
 		t.Fatal(err)
 	}

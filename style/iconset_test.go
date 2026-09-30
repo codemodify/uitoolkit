@@ -150,7 +150,7 @@ func TestListIconSetsListsInstalled(t *testing.T) {
 		t.Fatalf("split builtin=%d user=%d", len(ListBuiltinIconSets()), len(ListUserIconSets()))
 	}
 
-	dst := filepath.Join(IconsDir(), "my-set")
+	dst := filepath.Join(UserIconsDir(), "my-set")
 	if err := os.MkdirAll(dst, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -206,8 +206,8 @@ func TestFileIconLoadTintFallback(t *testing.T) {
 	classic := rasterIcon(IconSetClassic, IconCut)
 	installed := rasterIcon(IconSetLucide, IconCut)
 	placeholder := rasterNamedStem(IconSetLucide, "no-icon")
-	_ = os.Remove(filepath.Join(IconSetDir(IconSetLucide), "cut.png"))
-	_ = os.Remove(filepath.Join(IconSetDir(IconSetLucide), "cut@2x.png"))
+	_ = os.Remove(filepath.Join(UserIconSetDir(IconSetLucide), "cut.png"))
+	_ = os.Remove(filepath.Join(UserIconSetDir(IconSetLucide), "cut@2x.png"))
 	resetIconCache()
 	fallback := rasterIcon(IconSetLucide, IconCut)
 	if inkCount(fallback) < 8 {
@@ -238,12 +238,12 @@ func TestMissingStemUsesNoIconNotClassicPen(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	resetIconCache()
 	installRepoIconSet(t, "lucide")
-	_ = os.Remove(filepath.Join(IconSetDir(IconSetLucide), "pen.png"))
-	_ = os.Remove(filepath.Join(IconSetDir(IconSetLucide), "pen@2x.png"))
-	_ = os.Remove(filepath.Join(IconSetDir(IconSetLucide), "pencil.png"))
-	_ = os.Remove(filepath.Join(IconSetDir(IconSetLucide), "pencil@2x.png"))
-	_ = os.Remove(filepath.Join(IconSetDir(IconSetLucide), "compose.png"))
-	_ = os.Remove(filepath.Join(IconSetDir(IconSetLucide), "compose@2x.png"))
+	_ = os.Remove(filepath.Join(UserIconSetDir(IconSetLucide), "pen.png"))
+	_ = os.Remove(filepath.Join(UserIconSetDir(IconSetLucide), "pen@2x.png"))
+	_ = os.Remove(filepath.Join(UserIconSetDir(IconSetLucide), "pencil.png"))
+	_ = os.Remove(filepath.Join(UserIconSetDir(IconSetLucide), "pencil@2x.png"))
+	_ = os.Remove(filepath.Join(UserIconSetDir(IconSetLucide), "compose.png"))
+	_ = os.Remove(filepath.Join(UserIconSetDir(IconSetLucide), "compose@2x.png"))
 	resetIconCache()
 	got := rasterIcon(IconSetLucide, IconPen)
 	classicPen := rasterIcon(IconSetClassic, IconPen)
@@ -285,7 +285,7 @@ func TestFileIconSetDoesNotUseClassicWhenPresent(t *testing.T) {
 func TestFileIconPicksHiDPI(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	resetIconCache()
-	dst := filepath.Join(IconSetDir(IconSetLucide))
+	dst := filepath.Join(UserIconSetDir(IconSetLucide))
 	if err := os.MkdirAll(dst, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -392,7 +392,7 @@ func TestParseIconSetFileNames(t *testing.T) {
 func installRepoIconSet(t *testing.T, name string) {
 	t.Helper()
 	src := filepath.Join("..", "icons", name)
-	dst := filepath.Join(IconsDir(), name)
+	dst := filepath.Join(UserIconsDir(), name)
 	if err := os.MkdirAll(dst, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -420,7 +420,7 @@ func rasterNamedStem(set IconSetName, stem string) *paintengine2d.Image {
 	var loaded *paintengine2d.Image
 	ok := false
 	for _, name := range stemFileCandidates(stem, 28) {
-		if loaded, ok = loadPNGIcon(filepath.Join(IconSetDir(set), name)); ok {
+		if loaded, ok = loadPNGIcon(filepath.Join(UserIconSetDir(set), name)); ok {
 			break
 		}
 	}

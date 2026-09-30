@@ -311,7 +311,7 @@ func TestUserThemeDirCanonicalization(t *testing.T) {
 	if got.Name != "mytheme" {
 		t.Fatalf("round trip lost the pack: %q", got.Name)
 	}
-	if ThemeSourceFile("MyTheme") != filepath.Join(ThemesDir(), "MyTheme", "theme.json") {
+	if ThemeSourceFile("MyTheme") != filepath.Join(UserThemesDir(), "MyTheme", "theme.json") {
 		t.Fatalf("ThemeSourceFile %q", ThemeSourceFile("MyTheme"))
 	}
 	if ThemeSourceFile("dark") != "" {
@@ -479,8 +479,8 @@ func TestIconSetDirCanonicalization(t *testing.T) {
 	}
 	writeMaskPNG(t, filepath.Join(dir, "open.png"), 24)
 	resetIconCache()
-	if got := IconSetDir("my-icons"); got != dir {
-		t.Fatalf("IconSetDir %q want %q", got, dir)
+	if got := UserIconSetDir("my-icons"); got != dir {
+		t.Fatalf("UserIconSetDir %q want %q", got, dir)
 	}
 	if !fileIconSetInstalled("my-icons") {
 		t.Fatal("set listed from that folder must count as installed")
@@ -495,7 +495,7 @@ func TestIconSetDirCanonicalization(t *testing.T) {
 	if !found {
 		t.Fatalf("not listed: %+v", sets)
 	}
-	if _, ok := loadPNGIcon(filepath.Join(IconSetDir("my-icons"), "open.png")); !ok {
+	if _, ok := loadPNGIcon(filepath.Join(UserIconSetDir("my-icons"), "open.png")); !ok {
 		t.Fatal("the PNG in the folder must load")
 	}
 }

@@ -734,7 +734,7 @@ func TestSkinAlwaysDrawsAFocusRing(t *testing.T) {
 // manifest's path.
 func installSkin(t *testing.T, name, doc string) string {
 	t.Helper()
-	dir := filepath.Join(SkinsDir(), name)
+	dir := filepath.Join(UserSkinsDir(), name)
 	if err := os.MkdirAll(filepath.Join(dir, "art"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -840,7 +840,7 @@ func TestUserSkinReloadsWhenEdited(t *testing.T) {
 // skin format of the era turned out to be.
 func TestSkinLoadsFromAnArchive(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	if err := os.MkdirAll(SkinsDir(), 0o755); err != nil {
+	if err := os.MkdirAll(UserSkinsDir(), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	for _, nested := range []bool{false, true} {
@@ -866,7 +866,7 @@ func TestSkinLoadsFromAnArchive(t *testing.T) {
 		if err := zw.Close(); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(filepath.Join(SkinsDir(), name+SkinArchiveExt), buf.Bytes(), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(UserSkinsDir(), name+SkinArchiveExt), buf.Bytes(), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}

@@ -402,7 +402,7 @@ const shapeSkinDoc = `{
 // user installed.
 func installShapeSkin(t *testing.T, name, doc string, scale float32) *Classic {
 	t.Helper()
-	dir := filepath.Join(SkinsDir(), name)
+	dir := filepath.Join(UserSkinsDir(), name)
 	if err := os.MkdirAll(filepath.Join(dir, "art"), 0o755); err != nil {
 		t.Fatal(err)
 	}

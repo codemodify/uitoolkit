@@ -10,9 +10,30 @@ about the problem it solved.
 ## 0.22.4
 
 An application can ship its own icons, themes and skins without writing
-into a directory that is not its own.
+into a directory that is not its own — and a table row no longer has the
+next row drawn over it.
 
-### `style.AddSearchPath`
+### A block after one whose height changed was placed six pixels high
+
+Block tops are a prefix sum: `tops[k+1] = tops[k] + heights[k]`. So
+changing `heights[i]` invalidates `tops[i+1]` onward, and the last entry
+still good is `tops[i]`. `setHeight` kept `tops[i+1]` — one too many — so
+the block *directly after* one whose height changed was placed at the
+offset the old height gave.
+
+A block's height is estimated before it is laid out and corrected when it
+is, so this fired whenever an estimate was wrong: a table row that turned
+out two lines tall after being estimated at one had the next row drawn
+over its second line, with no rule between them. It looked width-
+dependent because at a width where nothing wrapped no estimate was wrong,
+and a resize cleared it because that recomputes every top from zero —
+which is why nothing an application could call fixed it. The splice path
+beside it has always used the right form.
+
+This was reported against 0.22.3 as a table bug and is not one: it moves
+every kind of block whose height is not what it was guessed to be.
+
+### Whose directory is whose
 
 `~/.config/uitoolkit/{icons,themes,skins}` belongs to the **person using
 the machine** — it is this toolkit's `~/.icons` and `~/.themes`, where
@@ -46,10 +67,17 @@ a program can rely on art it ships. Settings will not delete a theme that
 came from an application: it is not Settings' to remove.
 
 `SearchPaths`, `IconSearchDirs`, `ThemeSearchDirs`, `SkinSearchDirs` and
-`IconSetDirs` report what is being looked at. `IconSetDir` still names the
-user's own folder, because that is where Settings installs and removes.
+`IconSetDirs` report what is being looked at.
 
-Nothing changes for a program that registers nothing.
+**Renamed, so the owner is in the name.** `IconsDir`, `ThemesDir`,
+`SkinsDir`, `IconSetDir` and `SkinDir` are now `UserIconsDir`,
+`UserThemesDir`, `UserSkinsDir`, `UserIconSetDir` and `UserSkinDir`.
+They still mean the same directory — the person's — and are still where
+Settings installs and removes. The old names read like "the place icons
+go", which is exactly the misreading that had applications copying into
+them; the new ones cannot. This breaks the old spelling on purpose.
+
+Nothing else changes for a program that registers nothing.
 
 ---
 

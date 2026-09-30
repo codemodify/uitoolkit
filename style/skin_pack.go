@@ -28,15 +28,18 @@ import (
 //go:embed skins/*/skin.json skins/*/art/*.png
 var builtinSkinFS embed.FS
 
-// SkinsDir is $XDG_CONFIG_HOME/uitoolkit/skins (or ~/.config/uitoolkit/skins),
+// UserSkinsDir is $XDG_CONFIG_HOME/uitoolkit/skins (or ~/.config/uitoolkit/skins),
 // beside the user's themes and icon sets.
-func SkinsDir() string { return filepath.Join(ConfigDir(), "skins") }
+// UserSkinsDir is the **person's** skin directory. An application ships
+// a skin of its own by calling [AddSearchPath], never by copying into
+// this one.
+func UserSkinsDir() string { return filepath.Join(ConfigDir(), "skins") }
 
-// SkinDir is skins/<name>/.
-func SkinDir(name string) string { return filepath.Join(SkinsDir(), name) }
+// UserSkinDir is skins/<name>/.
+func UserSkinDir(name string) string { return filepath.Join(UserSkinsDir(), name) }
 
 // skinRegistry holds the skins this process can paint: the ones embedded in
-// the binary, and the ones under SkinsDir. User skins are re-scanned on the
+// the binary, and the ones under UserSkinsDir. User skins are re-scanned on the
 // asset TTL so installing or editing one applies without a restart.
 var skinRegistry = struct {
 	mu      sync.RWMutex
@@ -119,7 +122,7 @@ func invalidateSkinPacks() {
 	skinRegistry.mu.Unlock()
 }
 
-// userSkins is every loadable skin under SkinsDir, keyed by its canonical
+// userSkins is every loadable skin under UserSkinsDir, keyed by its canonical
 // id. The scan is cached on the asset TTL, on the icon cache's generation
 // and on the directory itself, so a frame that paints a skinned control
 // costs no syscalls and an installed skin still shows up about a second
@@ -148,7 +151,7 @@ func userSkins() map[string]*Skin {
 	return m
 }
 
-// scanUserSkins reads SkinsDir. A folder holding a skin.json is a skin; so
+// scanUserSkins reads UserSkinsDir. A folder holding a skin.json is a skin; so
 // is a .uskin archive, which is what a skin shared as one file is. A skin
 // that does not load is skipped, not fatal: one stranger's broken zip must
 // not take the theme browser down with it.
@@ -221,7 +224,7 @@ func loadSkinPath(path, name string, archive bool) (*Skin, error) {
 	return sk, nil
 }
 
-// LoadSkin reads the named skin: a user skin under SkinsDir first, then one
+// LoadSkin reads the named skin: a user skin under UserSkinsDir first, then one
 // embedded in the binary — the same precedence LoadTheme gives user packs
 // over builtins, so a user can shadow a shipped skin with their own.
 func LoadSkin(name string) (*Skin, bool) {
@@ -269,7 +272,7 @@ func ListSkins() []ThemePack {
 	return out
 }
 
-// ListUserSkins is the skins installed under SkinsDir, sorted by id.
+// ListUserSkins is the skins installed under UserSkinsDir, sorted by id.
 func ListUserSkins() []ThemePack {
 	var out []ThemePack
 	for _, sk := range sortedUserSkins() {

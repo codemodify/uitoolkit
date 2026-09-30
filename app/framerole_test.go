@@ -39,7 +39,7 @@ func skinRig(t *testing.T, name, doc string, scale float32) *shapeRig {
 	t.Helper()
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv(platform.EnvDecorations, "")
-	dir := filepath.Join(style.SkinsDir(), name)
+	dir := filepath.Join(style.UserSkinsDir(), name)
 	if err := os.MkdirAll(filepath.Join(dir, "art"), 0o755); err != nil {
 		t.Fatal(err)
 	}
