@@ -113,3 +113,60 @@ func TestWindowCaptionActions(t *testing.T) {
 		t.Errorf("callbacks ran profile=%d extensions=%d", profile, extensions)
 	}
 }
+
+// The window-menu button hides like any other. It is the one an era puts
+// on the *other* side — Windows' control-menu box, Motif's window menu,
+// KDE's "M" — so a window that hides it is hiding something from the
+// lead group rather than the trailing one.
+func TestWindowHidesTheWindowMenuButton(t *testing.T) {
+	a := New(Options{Look: style.DarkLook(), Headless: true})
+	w, err := a.NewWindow(platform.WindowOptions{
+		Width: 480, Height: 300, Headless: true,
+		Decorations: platform.DecorationsClient,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.SetContent(widgets.NewLabel("content"))
+	a.PumpOnce()
+	if w.Caption() == nil {
+		t.Skip("no toolkit-drawn caption here")
+	}
+	// Put one there whatever this era would have chosen, so the test is
+	// about hiding rather than about which pack is in the build.
+	c := w.Caption()
+	if lead := c.LeadControls(); lead != nil {
+		lead.SetButtons([]platform.CaptionButton{platform.CaptionMenu})
+	}
+	a.PumpOnce()
+	if !shownIn(w)[platform.CaptionMenu] {
+		t.Skip("this configuration draws no window-menu button")
+	}
+
+	w.SetCaptionButtonVisible(platform.CaptionMenu, false)
+	a.PumpOnce()
+	if shownIn(w)[platform.CaptionMenu] {
+		t.Error("the window-menu button is still there")
+	}
+	w.SetCaptionButtonVisible(platform.CaptionMenu, true)
+	a.PumpOnce()
+	if !shownIn(w)[platform.CaptionMenu] {
+		t.Error("it did not come back")
+	}
+}
+
+// Every one of them can go, which is what an application drawing its own
+// chrome edge to edge wants.
+func TestWindowHidesEveryCaptionButton(t *testing.T) {
+	a, w := captionWindow(t)
+	for _, b := range []platform.CaptionButton{
+		platform.CaptionMenu, platform.CaptionMinimize,
+		platform.CaptionMaximize, platform.CaptionClose, platform.CaptionKeepAbove,
+	} {
+		w.SetCaptionButtonVisible(b, false)
+	}
+	a.PumpOnce()
+	if got := len(shownIn(w)); got != 0 {
+		t.Errorf("%d buttons left after hiding them all", got)
+	}
+}

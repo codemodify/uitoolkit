@@ -266,3 +266,116 @@ func NewBrowser(w *app.Window) widget.Component {
 	row.AddFlex(split, 1)
 	return row
 }
+
+// NewMail is the third title-bar shape, and the one a mail client has:
+// a pane toggle, a few named actions, a search field taking the rest of
+// the width, a menu, and the window's controls. Thunderbird's.
+//
+// Its named actions are the interesting part. They are icon *then*
+// label, tight, and flat until the pointer is over them — which is
+// exactly what ToolButton is, and exactly what Button.Icon is not: a
+// push button's label is centred by the engine, so an icon has to
+// reserve a strip at each end and three of them in a title bar would
+// cost nearly two hundred pixels of width for nothing.
+func NewMail(w *app.Window) widget.Component {
+	toggle := widgets.NewIconButton(style.IconColumns, "Toggle Folder Pane", nil)
+
+	actions := widgets.NewRow(
+		widgets.NewToolButton("Get Messages", style.IconDownload, nil),
+		widgets.NewToolButton("Write", style.IconPen, nil),
+		widgets.NewToolButton("Delete", style.IconTrash, nil),
+	).WithGap(4)
+
+	search := widgets.NewTextField("", "Search…   Ctrl+K", nil)
+
+	head := widgets.NewHeaderBar(
+		[]widget.Component{toggle, actions},
+		search,
+		[]widget.Component{
+			widgets.NewMenuButton(style.IconMenu, "Application Menu",
+				&widgets.MenuItem{Text: "New Message", Shortcut: "Ctrl+N"},
+				&widgets.MenuItem{Text: "Address Book"},
+				&widgets.MenuItem{Separator: true},
+				&widgets.MenuItem{Text: "Settings"},
+				&widgets.MenuItem{Text: "Quit", Shortcut: "Ctrl+Q", OnClick: func() { w.Close() }}),
+		})
+	head.ShowTitle = false
+	w.SetTitleBar(head)
+	w.SetBorderless(true)
+
+	// The folder tree.
+	tree := widgets.NewTreeView()
+	for _, acct := range []string{"j9@nchip.com", "john@nchip.com", "ping@sccllc.com"} {
+		node := &widgets.TreeNode{Label: acct, Icon: style.IconMail, Expanded: true}
+		for _, f := range []struct {
+			name  string
+			icon  style.ToolIcon
+			count string
+		}{
+			{"Inbox", style.IconMail, "47"},
+			{"Drafts", style.IconPen, ""},
+			{"Sent", style.IconSend, ""},
+			{"Archives", style.IconArchive, ""},
+			{"Spam", style.IconJunk, ""},
+			{"Trash", style.IconTrash, ""},
+		} {
+			node.Children = append(node.Children, &widgets.TreeNode{Label: f.name, Icon: f.icon})
+		}
+		tree.Roots = append(tree.Roots, node)
+	}
+
+	// The message list over the reading pane.
+	subjects := []string{
+		"Give 10% off a Pixel phone, get $50 back.",
+		"You have $25 in Uber Cash waiting",
+		"Final Hours: Go Truly Wireless",
+		"Unlock savings with GoDaddy Payments.",
+		"Your Screen, Finally Moves With You",
+	}
+	from := []string{"Google Pixel", "Uber", "First Backer", "GoDaddy", "First Backer"}
+	list := widgets.NewTableView(
+		[]widgets.TableColumn{
+			{Title: "Subject", Width: 260, MinWidth: 120},
+			{Title: "Correspondents", Width: 200, MinWidth: 110},
+			{Title: "Date", Width: 70, MinWidth: 50},
+		},
+		len(subjects),
+		func(r, c int) string {
+			switch c {
+			case 0:
+				return subjects[r]
+			case 1:
+				return from[r]
+			}
+			return "2:08 PM"
+		}, nil)
+	// More columns than a narrow pane can hold: scroll to them.
+	list.Horizontal = true
+
+	reading := widgets.NewColumn(
+		widgets.NewRow(
+			widgets.NewToolButton("Reply", style.IconReply, nil),
+			widgets.NewToolButton("Reply All", style.IconReplyAll, nil),
+			widgets.NewToolButton("Forward", style.IconForward, nil),
+			widgets.NewToolButton("Archive", style.IconArchive, nil),
+			widgets.NewToolButton("Spam", style.IconJunk, nil),
+			widgets.NewToolButton("Delete", style.IconTrash, nil),
+		).WithGap(4).WithPad(6),
+		widgets.NewLabel("They save on a new phone, you get Google Store credit."),
+	).WithGap(4)
+
+	right := widgets.NewSplitter(widgets.SplitRows, list, reading)
+	right.Ratio = 0.45
+
+	split := widgets.NewSplitter(widgets.SplitColumns, widgets.NewScrollView(tree), right)
+	split.Ratio = 0.24
+
+	status := widgets.NewRow(
+		widgets.NewIconButton(style.IconArrowRight, "Activity", nil),
+		widgets.NewLabel("Connected"),
+	).WithGap(6).WithPad(4)
+
+	col := widgets.NewColumn(split, status).WithGap(0)
+	col.AddFlex(split, 1)
+	return col
+}

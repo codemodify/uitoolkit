@@ -18,6 +18,8 @@ import (
 func main() {
 	headless := flag.Bool("headless", false, "paint offscreen and write shell.png")
 	browser := flag.Bool("browser", false, "the browser shape: controls, then back/forward, then a wide field")
+	mail := flag.Bool("mail", false, "the mail client shape: a pane toggle, named actions, a search field")
+	bare := flag.Bool("bare", false, "hide every window control, including the window-menu button")
 	out := flag.String("out", "shell.png", "where -headless writes")
 	flag.Parse()
 
@@ -29,10 +31,25 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	if *browser {
+	switch {
+	case *browser:
 		win.SetContent(shellapp.NewBrowser(win))
-	} else {
+	case *mail:
+		win.SetContent(shellapp.NewMail(win))
+	default:
 		win.SetContent(shellapp.New(win))
+	}
+	if *bare {
+		// An application that closes and resizes from its own chrome can
+		// take the window's buttons away entirely — the window-menu
+		// button with them.
+		for _, b := range []platform.CaptionButton{
+			platform.CaptionMenu, platform.CaptionMinimize,
+			platform.CaptionMaximize, platform.CaptionClose,
+			platform.CaptionKeepAbove,
+		} {
+			win.SetCaptionButtonVisible(b, false)
+		}
 	}
 	if *headless {
 		if err := win.WritePNG(*out); err != nil {
