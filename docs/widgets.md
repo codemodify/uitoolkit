@@ -263,6 +263,10 @@ else.
 
 ### What to do instead
 
+> Doing it the right way for a situation that is not obvious —
+> a mark on a button, shipping your own icons, a passphrase, a check that
+> has to ask a server — is [recipes.md](recipes.md).
+
 | you want | use |
 | --- | --- |
 | a mark on a button or a tool bar | `Button.Icon`, `ToolItem.Icon` |

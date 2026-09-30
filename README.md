@@ -528,6 +528,7 @@ And two applications that grew up here and moved out:
 | [running.md](docs/running.md) | every screenshot in these docs, how each was made, and how to regenerate them |
 | [contracts.md](docs/contracts.md) | **the text contract**: a mark is an icon and a word is not a picture; no shaping, no bidi, no right-to-left interface, no font fallback — and what you *can* rely on |
 | [widgets.md](docs/widgets.md) | every widget, mapped by name to the nearest control in other toolkits |
+| [recipes.md](docs/recipes.md) | **doing it right**: the situations where the obvious way is wrong — a mark on a button, shipping your own icons, a passphrase, sizing something that wraps, a check that has to ask a server |
 | [compare.md](docs/compare.md) | the behaviour map: how chrome is expected to act, and which test fails when it stops |
 | [themes.md](docs/themes.md) · [theme-engines.md](docs/theme-engines.md) · [engines.md](docs/engines.md) | the 132 packs, how an engine draws an era, and why engines are opt-in at build time |
 | [skins.md](docs/skins.md) · [shapes.md](docs/shapes.md) | art-driven looks, and windows that are not rectangles |

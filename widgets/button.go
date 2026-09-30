@@ -65,6 +65,12 @@ type Button struct {
 	// exactly as it was. The cost is a button one icon wider than a
 	// leading-icon button strictly needs.
 	//
+	// **A button with an icon is about 64 px wider at 1x than the same
+	// button without**, and that will break a row that only just
+	// fitted. Where a row is tight, use [ToolIconBtn] for an icon-only
+	// button, [NewToolButton] for a tight icon-and-label one, or let the
+	// row fold with [NewWrap]. docs/recipes.md has the table.
+	//
 	// For an icon-only button, reach for [ToolIconBtn]; an icon with no
 	// text here would be a button with a centred empty label and a mark
 	// off to one side.

@@ -100,11 +100,28 @@ type MessageBoxInput struct {
 	// typed.
 	//
 	// It runs on the UI goroutine, so it is for a check the caller can
-	// make at once. A check that is a round trip to a server should
-	// accept the dialog, do the work, and open a fresh prompt on failure
-	// — or keep the dialog and call [MessageBox.SetInputError] when the
-	// answer comes back.
+	// make at once: empty, malformed, already in a list the caller
+	// holds. A check that has to ask something else — a server, a
+	// daemon, a file system — is [MessageBoxInput.ValidateAsync].
 	Validate func(string) error
+	// ValidateAsync vets the value when the check cannot answer at once:
+	// the mail server that has to be asked whether a folder name is
+	// taken, the vault daemon that has to be asked whether a key
+	// unlocks.
+	//
+	// The dialog stays up with the accepting button busy, and ignores
+	// further presses, until done is called. done(nil) closes the dialog
+	// with its accepting result, so OnResult runs exactly as it would
+	// have; done(err) puts the reason under the field, re-enables the
+	// button, and leaves what the user typed where it is.
+	//
+	// It is called on the UI goroutine and done may be called from any
+	// goroutine — hand it to the application's dispatcher if the answer
+	// arrives on another. done is safe to call more than once; the
+	// second call does nothing.
+	//
+	// Set this or [MessageBoxInput.Validate], not both; Validate wins.
+	ValidateAsync func(value string, done func(error))
 	// AcceptLabel names the accepting button ("Rename", "Create") in
 	// place of the stock OK or Yes. Every desktop's guidelines say a
 	// button names its action.
@@ -120,6 +137,7 @@ type MessageBox struct {
 	overlay  *Overlay
 	field    *TextField
 	errLabel *Label
+	checking bool
 	primary  *Button
 	text     string
 }
@@ -141,7 +159,7 @@ func NewMessageBox(opts MessageBoxOptions) *MessageBox {
 		mb.field = NewTextField(in.Text, in.Placeholder, func(s string) {
 			mb.text = s
 			if mb.primary != nil && in.Required {
-				mb.primary.SetEnabled(mb.acceptable())
+				mb.primary.SetEnabled(!mb.checking && mb.acceptable())
 			}
 		})
 		mb.field.Password = in.Password
@@ -269,15 +287,84 @@ func (mb *MessageBox) acceptable() bool {
 // and the result is the accepting one. A refused value keeps the dialog
 // up with the reason under the field.
 func (mb *MessageBox) accept(res MessageResult) {
-	if mb.field == nil || mb.opts.Input == nil || mb.opts.Input.Validate == nil ||
-		res != mb.acceptResult() {
+	in := mb.opts.Input
+	if mb.field == nil || in == nil || res != mb.acceptResult() {
 		mb.finish(res)
 		return
 	}
-	if err := mb.opts.Input.Validate(mb.field.Text); err != nil {
-		mb.SetInputError(err.Error())
+	if mb.checking {
+		// A check is already on its way. A second press must not start
+		// another, and must not close the dialog under the first.
 		return
 	}
+	if in.Validate != nil {
+		if err := in.Validate(mb.field.Text); err != nil {
+			mb.SetInputError(err.Error())
+			return
+		}
+		mb.finish(res)
+		return
+	}
+	if in.ValidateAsync == nil {
+		mb.finish(res)
+		return
+	}
+	mb.setChecking(true)
+	answered := false
+	in.ValidateAsync(mb.field.Text, func(err error) {
+		// Once. A callback invoked twice must not close a dialog the
+		// user has since reopened, or report a result twice.
+		if answered {
+			return
+		}
+		answered = true
+		mb.setChecking(false)
+		if err != nil {
+			mb.SetInputError(err.Error())
+			return
+		}
+		mb.finish(res)
+	})
+}
+
+// setChecking puts the dialog in and out of its waiting state: the
+// accepting button greys and stops responding while an asynchronous
+// check is out, so the user can see that something is happening and a
+// second press cannot start a second check.
+func (mb *MessageBox) setChecking(v bool) {
+	if mb == nil || mb.checking == v {
+		return
+	}
+	mb.checking = v
+	if mb.primary != nil {
+		mb.primary.SetEnabled(!v && mb.acceptable())
+	}
+	if v {
+		mb.SetInputError("")
+	}
+	if mb.overlay != nil {
+		mb.overlay.Invalidate()
+	}
+}
+
+// Checking reports whether an asynchronous check is out.
+func (mb *MessageBox) Checking() bool { return mb != nil && mb.checking }
+
+// Close finishes the dialog with res, exactly as pressing the matching
+// button would: it dismisses, records the result and runs OnResult.
+//
+// It is how a dialog is closed by something other than the user — an
+// answer that arrived, a vault that locked, a window shutting down.
+// Dismissing the overlay directly takes the dialog off the screen
+// without any of that, so OnResult never runs and the caller waiting on
+// it waits forever.
+//
+// Closing a dialog that has already closed does nothing.
+func (mb *MessageBox) Close(res MessageResult) {
+	if mb == nil {
+		return
+	}
+	mb.checking = false
 	mb.finish(res)
 }
 

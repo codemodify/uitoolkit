@@ -33,6 +33,39 @@ beside it has always used the right form.
 This was reported against 0.22.3 as a table bug and is not one: it moves
 every kind of block whose height is not what it was guessed to be.
 
+### An asynchronous check in a prompt
+
+`MessageBoxInput.ValidateAsync` is for a check that cannot answer at once
+— the mail server that has to be asked whether a folder name is taken.
+The dialog stays up with the accepting button busy, ignoring further
+presses, until `done` is called: `done(nil)` closes it with its accepting
+result so `OnResult` runs, and `done(err)` puts the reason under the
+field and re-enables the button with what the user typed still there.
+
+`Validate` stays as it was, for a check the caller can make at once.
+
+`MessageBox.Close(result)` finishes a dialog from outside a button — an
+answer that arrived, a vault that locked. Dismissing the overlay by hand
+takes the dialog off the screen without recording a result or running
+`OnResult`, so whatever was waiting on it waited forever; that was the
+only way to do it, and it is why the previous advice for an asynchronous
+check did not actually work. `MessageBox.Checking` reports whether a
+check is out.
+
+### docs/recipes.md
+
+A page for the situations where the obvious way is wrong, written for
+someone who has not used this toolkit before: a mark on a button and what
+`Button.Icon` costs, a row that must fold, shipping your own icons
+without writing into the user's directory, a passphrase, sizing something
+that wraps, a status colour as text, a check that has to ask a server,
+closing a dialog from your own code, dialogs raised from inside dialogs,
+and window-wide state like Caps Lock.
+
+Each entry says what the obvious route is, why it does not work, and what
+does. Every one of them is there because somebody building a real program
+took the obvious route first.
+
 ### Whose directory is whose
 
 `~/.config/uitoolkit/{icons,themes,skins}` belongs to the **person using
