@@ -483,6 +483,55 @@ func drawClassicIcon(ctx *paintengine2d.Context, b paintengine2d.Rect, icon Tool
 		for _, dy := range []float32{-h * 0.18, 0, h * 0.18} {
 			ctx.DrawRect(paintengine2d.XYWH(cx-bw*0.5, cy+dy-bh*0.5, bw, bh), fill)
 		}
+	case IconLayout, IconColumns, IconRows, IconTable, IconCards:
+		// A frame with the divisions each one names, drawn from one
+		// outline so the family reads as a family.
+		out := b.Inset(3)
+		lw := max(h*0.055, 1.3)
+		ctx.DrawRoundRect(out, 2, 2, paintengine2d.StrokePaint(col, lw))
+		vx := out.Min.X + out.Dx()*0.38
+		hy := out.Min.Y + out.Dy()*0.38
+		switch icon {
+		case IconColumns:
+			ctx.DrawRect(paintengine2d.XYWH(vx, out.Min.Y, lw, out.Dy()), fill)
+		case IconRows:
+			ctx.DrawRect(paintengine2d.XYWH(out.Min.X, hy, out.Dx(), lw), fill)
+		case IconLayout:
+			// A side bar and a panel under the rest.
+			ctx.DrawRect(paintengine2d.XYWH(vx, out.Min.Y, lw, out.Dy()), fill)
+			ctx.DrawRect(paintengine2d.XYWH(vx, out.Max.Y-out.Dy()*0.32, out.Max.X-vx, lw), fill)
+		case IconTable:
+			ctx.DrawRect(paintengine2d.XYWH(out.Min.X, hy, out.Dx(), lw), fill)
+			for _, f := range []float32{0.36, 0.68} {
+				x := out.Min.X + out.Dx()*f
+				ctx.DrawRect(paintengine2d.XYWH(x, out.Min.Y, lw, out.Dy()), fill)
+			}
+		case IconCards:
+			ctx.DrawRect(paintengine2d.XYWH(out.Min.X+out.Dx()*0.5-lw*0.5, out.Min.Y, lw, out.Dy()), fill)
+			ctx.DrawRect(paintengine2d.XYWH(out.Min.X, out.Min.Y+out.Dy()*0.5-lw*0.5, out.Dx(), lw), fill)
+		}
+	case IconArrowLeft, IconArrowRight, IconArrowUp, IconArrowDown:
+		// A shaft and a head, in the direction asked for.
+		var dx, dy float32
+		switch icon {
+		case IconArrowLeft:
+			dx = -1
+		case IconArrowRight:
+			dx = 1
+		case IconArrowUp:
+			dy = -1
+		default:
+			dy = 1
+		}
+		r := w * 0.30
+		tipX, tipY := cx+dx*r, cy+dy*r
+		ctx.DrawPath(lineP(cx-dx*r, cy-dy*r, tipX, tipY), stroke)
+		head := paintengine2d.NewPath()
+		// The two barbs are the shaft turned a quarter each way.
+		head.MoveTo(tipX-dx*r*0.55-dy*r*0.55, tipY-dy*r*0.55+dx*r*0.55)
+		head.LineTo(tipX, tipY)
+		head.LineTo(tipX-dx*r*0.55+dy*r*0.55, tipY-dy*r*0.55-dx*r*0.55)
+		ctx.DrawPath(head, stroke)
 	case IconStarFilled:
 		ctx.DrawPath(starPath(cx, cy, w*0.44, w*0.18), fill)
 	case IconDot:

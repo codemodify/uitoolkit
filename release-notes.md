@@ -222,8 +222,9 @@ narrower. Anything else is worked out from the **height**: what folds
 gets taller when it is narrowed, what cannot keeps its height. Width
 cannot answer it, because a button asked to fit in a pixel says 65.
 
-There is still no window minimum-size API to hand the answer to; that one
-is open.
+Hand the answer to `WindowOptions.MinWidth` / `MinHeight`, which the
+window system is told about on every backend — so a window cannot be
+dragged below what its own content needs.
 
 ### A lever for a form in a narrow pane
 

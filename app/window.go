@@ -55,6 +55,7 @@ type Window struct {
 	centred bool
 	// hiddenCaption and captionActions are this window's own say over
 	// its caption buttons (app/frame.go).
+	noBorder       bool
 	hiddenCaption  map[platform.CaptionButton]bool
 	captionActions []widgets.CaptionAction
 	hover          widget.Component

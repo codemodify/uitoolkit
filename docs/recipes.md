@@ -208,9 +208,11 @@ What you can do:
   — so a sidebar cannot be dragged until its buttons run off the edge.
   `MinA` / `MinB` override that, and `AllowCollapse` lets a pane close
   entirely.
-- **Ask where the floor is.** `widget.MinWidthOf(content)` is the width
-  below which something starts leaving the box. Size the window from it
-  rather than from a guess, and assert it in a test — that is what
+- **Ask where the floor is, and tell the window.**
+  `widget.MinWidthOf(content)` is the width below which something starts
+  leaving the box; `WindowOptions.MinWidth` is where that answer goes, and
+  every backend passes it to the window system. A window then cannot be
+  dragged below what it holds. Assert it in a test too — that is what
   catches a button growing an icon before a user does.
 
 ```go

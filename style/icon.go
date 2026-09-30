@@ -77,6 +77,22 @@ const (
 	// picks otherwise) they came out as the missing-icon mark.
 	IconMore
 	IconMenu
+	// The layout family, which an application shell's "toggle the panel /
+	// the sidebar / the second editor" buttons are made of. They shipped
+	// as stems with no typed id, so in a drawn set — which every pack
+	// uses unless the user picks otherwise — they were the missing-icon
+	// mark.
+	IconLayout
+	IconColumns
+	IconRows
+	IconTable
+	IconCards
+	// The four arrows. Back and forward are the chrome of a browser, a
+	// wizard and a file manager alike, and they were stem-only too.
+	IconArrowLeft
+	IconArrowRight
+	IconArrowUp
+	IconArrowDown
 )
 
 var toolIconLabels = [...]string{
@@ -95,6 +111,10 @@ var toolIconLabels = [...]string{
 	IconSend: "Send", IconClose: "Close", IconQuit: "Quit",
 	IconPrint: "Print", IconStarFilled: "Starred", IconDot: "Unread",
 	IconMore: "More", IconMenu: "Menu",
+	IconLayout: "Layout", IconColumns: "Columns", IconRows: "Rows",
+	IconTable: "Table", IconCards: "Cards",
+	IconArrowLeft: "Back", IconArrowRight: "Forward",
+	IconArrowUp: "Up", IconArrowDown: "Down",
 }
 
 // Label is the action the icon stands for, in words ("Save"): what
@@ -153,6 +173,15 @@ var toolIconFiles = []struct {
 	{IconDot, "dot"},
 	{IconMore, "more"},
 	{IconMenu, "menu"},
+	{IconLayout, "layout"},
+	{IconColumns, "columns"},
+	{IconRows, "rows"},
+	{IconTable, "table"},
+	{IconCards, "cards"},
+	{IconArrowLeft, "arrow-left"},
+	{IconArrowRight, "arrow-right"},
+	{IconArrowUp, "arrow-up"},
+	{IconArrowDown, "arrow-down"},
 }
 
 // shippedIconStems is the wide PNG vocabulary rendered by icons/render.sh
@@ -336,6 +365,15 @@ var toolIconThemeNames = map[ToolIcon][]string{
 	IconDot:          {"media-record", "dialog-information"},
 	IconMore:         {"view-more-symbolic", "overflow-menu", "go-down"},
 	IconMenu:         {"open-menu", "application-menu", "format-justify-fill"},
+	IconLayout:       {"view-dual", "view-grid", "preferences-desktop"},
+	IconColumns:      {"view-split-left-right", "view-column", "view-dual"},
+	IconRows:         {"view-split-top-bottom", "view-list", "view-continuous"},
+	IconTable:        {"view-grid", "x-office-spreadsheet", "table"},
+	IconCards:        {"view-grid", "view-paged", "view-list-icons"},
+	IconArrowLeft:    {"go-previous", "back", "draw-arrow-back"},
+	IconArrowRight:   {"go-next", "forward", "draw-arrow-forward"},
+	IconArrowUp:      {"go-up", "up"},
+	IconArrowDown:    {"go-down", "down"},
 }
 
 // ToolIconThemeNames are the freedesktop names an installed icon theme

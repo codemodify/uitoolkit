@@ -124,6 +124,32 @@ func (w *Window) SetTitleBar(c widget.Component) {
 	w.dropDeadRefs()
 }
 
+// SetBorderless drops the look's border from the window's sides and
+// bottom, leaving the caption and the content to fill it edge to edge.
+//
+// It is for an application that draws its own chrome to the window's
+// edges — a rail down one side, a status bar along the bottom — where an
+// era's bevel or hairline around the outside would read as a frame
+// inside a frame. VS Code, Chrome and Slack all look like this.
+//
+// The window is still resizable: the resize band is measured from the
+// window's edge and does not depend on there being a visible border to
+// grab. What goes is the paint, not the behaviour.
+//
+// It does nothing under a desktop-drawn frame, where the border is not
+// the toolkit's to remove.
+func (w *Window) SetBorderless(v bool) {
+	if w == nil || w.noBorder == v {
+		return
+	}
+	w.noBorder = v
+	w.laid = false
+	w.fullInvalidate()
+}
+
+// Borderless reports whether the look's border has been dropped.
+func (w *Window) Borderless() bool { return w != nil && w.noBorder }
+
 // SetCaptionButtonVisible turns one of the window's caption buttons on
 // or off for this window alone.
 //
@@ -461,7 +487,7 @@ func (w *Window) frameSpec() style.DecorationSpec {
 // frameBorder is the look's border around a framed window, whole device
 // pixels (none when maximized).
 func (w *Window) frameBorder() style.Insets {
-	if w.caption == nil || w.state.Maximized {
+	if w.caption == nil || w.state.Maximized || w.noBorder {
 		return style.Insets{}
 	}
 	b := w.frameSpec().Border

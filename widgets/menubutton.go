@@ -2,6 +2,7 @@ package widgets
 
 import (
 	"github.com/codemodify/paintengine2d"
+	"github.com/codemodify/uitoolkit/layout"
 	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
@@ -49,9 +50,35 @@ func NewMenuButton(icon style.ToolIcon, name string, items ...*MenuItem) *MenuBu
 	b.SetWantsFocus(true)
 	b.SetFocusVisibleOnly(true)
 	b.SetAccessibleName(name)
-	b.Content = b.paintIcon
+	if icon != style.IconNone {
+		b.Content = b.paintIcon
+	}
 	b.Toggle = true
 	return b
+}
+
+// NewTextMenuButton is a menu button that shows a word rather than a
+// mark — the File, Edit and View of a menu bar rendered as buttons,
+// which is what an application that draws its own title bar has instead
+// of a [MenuBar].
+func NewTextMenuButton(text string, items ...*MenuItem) *MenuButton {
+	b := NewMenuButton(style.IconNone, text, items...)
+	b.Text = text
+	b.Tip = ""
+	return b
+}
+
+// Measure is a square while the button is a mark alone, and a button's
+// own width once it has a name.
+//
+// It embeds [IconButton], which is square by definition — but a menu
+// button is as often "File" as it is a hamburger, and a named one
+// squeezed into a square shows "F…".
+func (b *MenuButton) Measure(c layout.Constraints) paintengine2d.Point {
+	if b.Text == "" {
+		return b.IconButton.Measure(c)
+	}
+	return b.Button.Measure(c)
 }
 
 // items are the rows this opening should show.

@@ -141,3 +141,26 @@ func TestMenuButtonBuildsItsItems(t *testing.T) {
 		t.Error("Build was never asked")
 	}
 }
+
+// A menu button is as often "File" as it is a hamburger. It embeds
+// IconButton, which is square by definition, so a named one came out
+// squeezed into a square showing "F…".
+func TestNamedMenuButtonIsNotSquashed(t *testing.T) {
+	mark := NewMenuButton(style.IconMenu, "Menu", &MenuItem{Text: "Quit"})
+	named := NewTextMenuButton("Selection", &MenuItem{Text: "Select All"})
+	atScale(t, mark, 1)
+	atScale(t, named, 1)
+
+	loose := layout.Constraints{MaxW: -1, MaxH: -1}
+	m := mark.Measure(loose)
+	if m.X != m.Y {
+		t.Errorf("a mark-only menu button measured %v, want a square", m)
+	}
+	n := named.Measure(loose)
+	if n.X <= n.Y {
+		t.Errorf("a named menu button measured %v — it has no room for its word", n)
+	}
+	if n.X <= m.X {
+		t.Errorf("%q measured %v, no wider than a bare mark at %v", named.Text, n.X, m.X)
+	}
+}
