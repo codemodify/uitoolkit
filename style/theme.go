@@ -477,26 +477,44 @@ func starterOrder() []string {
 // canonical id too. Only sanitized names are accepted, which is also what
 // keeps "../../etc" out of [ThemeFile] — and os.ReadDir does not follow
 // symlinks, so a symlinked folder is not a directory entry here.
+// userThemeDirs maps each theme's canonical name onto the full path of
+// the folder holding it.
+//
+// It is a full path rather than a folder name because a theme can come
+// from more than one place: the user's own themes/ first, then each
+// directory an application registered with [AddSearchPath]. An
+// application ships a theme by pointing at its own folder, never by
+// writing into the user's.
 func userThemeDirs() map[string]string {
 	out := map[string]string{}
-	entries, err := os.ReadDir(ThemesDir())
-	if err != nil {
-		return out
-	}
-	for _, e := range entries {
-		if !e.IsDir() {
-			continue
-		}
-		name, err := SanitizeThemeName(e.Name())
+	for _, root := range ThemeSearchDirs() {
+		entries, err := os.ReadDir(root)
 		if err != nil {
 			continue
 		}
-		if _, dup := out[name]; dup {
-			continue // first (sorted) entry wins, deterministically
+		for _, e := range entries {
+			if !e.IsDir() {
+				continue
+			}
+			name, err := SanitizeThemeName(e.Name())
+			if err != nil {
+				continue
+			}
+			if _, dup := out[name]; dup {
+				continue // first wins: the user's own, then each app's
+			}
+			out[name] = filepath.Join(root, e.Name())
 		}
-		out[name] = e.Name()
 	}
 	return out
+}
+
+// userThemeIsTheUsers reports whether name resolves inside the user's
+// own themes directory rather than an application's. Settings may only
+// delete one of those: an application's folder is not its to remove.
+func userThemeIsTheUsers(dir string) bool {
+	rel, err := filepath.Rel(ThemesDir(), dir)
+	return err == nil && !strings.HasPrefix(rel, "..") && rel != "."
 }
 
 // ThemeSourceFile is the theme.json backing a user pack, or "" when name is
@@ -513,7 +531,7 @@ func ThemeSourceFile(name string) string {
 		// skin.json applies live through exactly this machinery.
 		return SkinSourceFile(clean)
 	}
-	return filepath.Join(ThemesDir(), dir, "theme.json")
+	return filepath.Join(dir, "theme.json")
 }
 
 func readUserTheme(name string) (ThemePack, bool) {
@@ -525,7 +543,7 @@ func readUserTheme(name string) (ThemePack, bool) {
 	if !ok {
 		return ThemePack{}, false
 	}
-	b, err := os.ReadFile(filepath.Join(ThemesDir(), dir, "theme.json"))
+	b, err := os.ReadFile(filepath.Join(dir, "theme.json"))
 	if err != nil {
 		return ThemePack{}, false
 	}
@@ -745,7 +763,12 @@ func DeleteUserTheme(name string) error {
 	if !ok {
 		return fmt.Errorf("not a user theme: %s", clean)
 	}
-	return os.RemoveAll(filepath.Join(ThemesDir(), dir))
+	if !userThemeIsTheUsers(dir) {
+		// It came from a directory an application registered. Deleting
+		// it would be this program reaching into another's files.
+		return fmt.Errorf("theme %s belongs to an application, not to you", clean)
+	}
+	return os.RemoveAll(dir)
 }
 
 // AfterUserThemeDeleted rewrites a if it named the deleted pack.

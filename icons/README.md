@@ -26,7 +26,43 @@ that goes: PNG and a narrow monochrome slice of SVG, and a theme whose
 files this toolkit cannot read is listed as unavailable with the reason
 rather than shown as a set of blanks.
 
-## Install (manual)
+## Whose directory is whose
+
+`~/.config/uitoolkit/{icons,themes,skins}` belongs to the **person using
+the machine**. It is this toolkit's `~/.icons` and `~/.themes`: somewhere
+they drop a set they like, once, and every uitoolkit program picks it up.
+
+**An application must not write there.** Two that do overwrite each
+other — last one wins, and neither can tell. A program built against a
+newer toolkit installs stems that an older program's copy then removes,
+and the older program's icons start coming back as the missing-icon
+placeholder with nothing anywhere to say why.
+
+An application that ships art of its own keeps it wherever it likes —
+beside the binary, in its own config directory, embedded and unpacked to
+a temporary directory — and says so at start-up:
+
+```go
+style.AddSearchPath("/opt/comms-mail/share")   // …/share/icons/<set>/*.png
+```
+
+A registered directory has the same shape as the user's (`icons/`,
+`themes/`, `skins/`; any of the three may be missing) and is private to
+that process.
+
+**The user's copy comes first, file by file.** Where they have installed
+a set, their version of a given icon wins; where they have nothing — a
+stem their copy predates, or a set they never installed — the
+application's answers. So a person keeps control of how their desktop
+looks, and a program can still rely on art it ships. Settings will not
+delete a theme that came from an application: it is not Settings' to
+remove.
+
+## Install (manual, and for the user)
+
+This section is for someone choosing a set for their own machine. It is
+not what an application does.
+
 
 After clone or pull, copy again. New stems (and refreshed PNGs) only
 appear in Settings once the folders under `~/.config/uitoolkit/icons/`

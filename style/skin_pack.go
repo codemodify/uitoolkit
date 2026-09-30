@@ -126,7 +126,7 @@ func invalidateSkinPacks() {
 // later — while an app (or a test) that moves XDG_CONFIG_HOME sees the new
 // directory at once rather than the old one's skins for a second.
 func userSkins() map[string]*Skin {
-	gen, dir := IconGeneration(), SkinsDir()
+	gen, dir := IconGeneration(), strings.Join(SkinSearchDirs(), string(os.PathListSeparator))
 	skinRegistry.mu.RLock()
 	fresh := skinRegistry.user != nil && skinRegistry.userGen == gen &&
 		skinRegistry.userDir == dir && time.Since(skinRegistry.userAt) < skinAssetTTL
@@ -154,33 +154,38 @@ func userSkins() map[string]*Skin {
 // not take the theme browser down with it.
 func scanUserSkins() map[string]*Skin {
 	out := map[string]*Skin{}
-	entries, err := os.ReadDir(SkinsDir())
-	if err != nil {
-		return out
-	}
-	for _, e := range entries {
-		raw := e.Name()
-		id := raw
-		archive := false
-		if !e.IsDir() {
-			if !strings.EqualFold(filepath.Ext(raw), SkinArchiveExt) {
+	// The user's skins/ first, then each directory an application
+	// registered with [AddSearchPath]. A skin that is part of a
+	// program's identity ships with the program; it does not go in a
+	// folder the person maintains for themselves.
+	for _, root := range SkinSearchDirs() {
+		entries, err := os.ReadDir(root)
+		if err != nil {
+			continue
+		}
+		for _, e := range entries {
+			raw := e.Name()
+			id := raw
+			archive := false
+			if !e.IsDir() {
+				if !strings.EqualFold(filepath.Ext(raw), SkinArchiveExt) {
+					continue
+				}
+				id, archive = strings.TrimSuffix(raw, filepath.Ext(raw)), true
+			}
+			clean, err := SanitizeThemeName(id)
+			if err != nil {
 				continue
 			}
-			id, archive = strings.TrimSuffix(raw, filepath.Ext(raw)), true
+			if _, dup := out[clean]; dup {
+				continue // first wins: the user's own, then each app's
+			}
+			sk, err := loadSkinPath(filepath.Join(root, raw), clean, archive)
+			if err != nil {
+				continue
+			}
+			out[clean] = sk
 		}
-		clean, err := SanitizeThemeName(id)
-		if err != nil {
-			continue
-		}
-		if _, dup := out[clean]; dup {
-			continue // first (sorted) entry wins, deterministically
-		}
-		path := filepath.Join(SkinsDir(), raw)
-		sk, err := loadSkinPath(path, clean, archive)
-		if err != nil {
-			continue
-		}
-		out[clean] = sk
 	}
 	return out
 }

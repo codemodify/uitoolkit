@@ -7,6 +7,52 @@ about the problem it solved.
 
 ---
 
+## 0.22.4
+
+An application can ship its own icons, themes and skins without writing
+into a directory that is not its own.
+
+### `style.AddSearchPath`
+
+`~/.config/uitoolkit/{icons,themes,skins}` belongs to the **person using
+the machine** — it is this toolkit's `~/.icons` and `~/.themes`, where
+they install a set once and every uitoolkit program picks it up. That
+part was right.
+
+What was missing was the other half. An application that wanted art of
+its own had no way to offer it, so the only route was to copy into the
+user's directory — and two applications doing that overwrite each other.
+Last one wins, and neither can tell: a program built against a newer
+toolkit installs stems an older program's copy then removes, and the
+older program's icons start coming back as the missing-icon placeholder
+with nothing anywhere to say why. It also meant the icons added in
+0.22.2, and the reply-all fixed in 0.22.3, reached nobody who had not run
+a copy command by hand.
+
+So an application keeps its art wherever it likes and registers it:
+
+```go
+style.AddSearchPath("/opt/comms-mail/share")   // …/share/icons/<set>/*.png
+```
+
+A registered directory has the same shape as the user's (`icons/`,
+`themes/`, `skins/`; any may be missing) and is private to that process.
+
+**The user's copy comes first, file by file.** Where they have installed
+a set, their version of a given icon wins; where they have nothing — a
+stem their copy predates, or a set they never installed — the
+application's answers. A person keeps control of how their desktop looks;
+a program can rely on art it ships. Settings will not delete a theme that
+came from an application: it is not Settings' to remove.
+
+`SearchPaths`, `IconSearchDirs`, `ThemeSearchDirs`, `SkinSearchDirs` and
+`IconSetDirs` report what is being looked at. `IconSetDir` still names the
+user's own folder, because that is where Settings installs and removes.
+
+Nothing changes for a program that registers nothing.
+
+---
+
 ## 0.22.3
 
 What 0.22.2 got wrong. Both applications upgraded, checked the closed

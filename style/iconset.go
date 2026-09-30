@@ -57,14 +57,42 @@ func IconsDir() string {
 	return filepath.Join(ConfigDir(), "icons")
 }
 
-// IconSetDir is icons/<name>/. When a folder with a different spelling
-// (case, spaces) canonicalizes to name, that folder is returned.
+// IconSetDir is icons/<name>/ in the user's own config directory. When a
+// folder with a different spelling (case, spaces) canonicalizes to name,
+// that folder is returned.
+//
+// It is where Settings installs and removes a set. To *read* one, use
+// [IconSetDirs], which includes the directories applications have
+// registered with [AddSearchPath].
 func IconSetDir(name IconSetName) string {
 	set := string(ParseIconSet(string(name)))
 	if dir, ok := iconDirIndex()[set]; ok {
 		return filepath.Join(IconsDir(), dir)
 	}
 	return filepath.Join(IconsDir(), set)
+}
+
+// IconSetDirs are every directory that may hold the set, the user's
+// first: theirs, then each path an application registered with
+// [AddSearchPath].
+//
+// A stem is looked for in each in turn, so the user's copy of an icon
+// wins where they have it and the application's answers where they do
+// not — which is what lets a program rely on art it ships without
+// writing into a directory that is not its own.
+func IconSetDirs(name IconSetName) []string {
+	set := string(ParseIconSet(string(name)))
+	dirs := IconSearchDirs()
+	out := make([]string, 0, len(dirs))
+	for i, d := range dirs {
+		if i == 0 {
+			// The user's, where a differently-spelled folder resolves.
+			out = append(out, IconSetDir(name))
+			continue
+		}
+		out = append(out, filepath.Join(d, set))
+	}
+	return out
 }
 
 // SanitizeIconSetName lowercases and accepts [a-z][a-z0-9_-]{0,63}.
@@ -114,7 +142,12 @@ func fileIconSetInstalled(set IconSetName) bool {
 	if !IsFileIconSet(set) {
 		return false
 	}
-	return iconSetHasGlyphs(IconSetDir(set))
+	for _, dir := range IconSetDirs(set) {
+		if iconSetHasGlyphs(dir) {
+			return true
+		}
+	}
+	return false
 }
 
 func iconSetDisplay(name string) string {
@@ -140,28 +173,33 @@ func iconSetDisplay(name string) string {
 // embedded placeholder for every stem.
 func scanIconDirs() map[string]string {
 	out := map[string]string{}
-	entries, err := os.ReadDir(IconsDir())
-	if err != nil {
-		return out
-	}
-	for _, e := range entries {
-		if !e.IsDir() {
-			continue
-		}
-		name, err := SanitizeIconSetName(e.Name())
+	// Every icons/ directory, the user's first, so a set an application
+	// ships is listed and selectable without being copied into a folder
+	// that belongs to the person using the machine.
+	for _, root := range IconSearchDirs() {
+		entries, err := os.ReadDir(root)
 		if err != nil {
 			continue
 		}
-		if name == string(IconSetClassic) || name == string(IconSetSharp) {
-			continue
+		for _, e := range entries {
+			if !e.IsDir() {
+				continue
+			}
+			name, err := SanitizeIconSetName(e.Name())
+			if err != nil {
+				continue
+			}
+			if name == string(IconSetClassic) || name == string(IconSetSharp) {
+				continue
+			}
+			if !iconSetHasGlyphs(filepath.Join(root, e.Name())) {
+				continue
+			}
+			if _, dup := out[name]; dup {
+				continue // first wins: the user's own, then each app's
+			}
+			out[name] = e.Name()
 		}
-		if !iconSetHasGlyphs(filepath.Join(IconsDir(), e.Name())) {
-			continue
-		}
-		if _, dup := out[name]; dup {
-			continue // first (sorted) entry wins, deterministically
-		}
-		out[name] = e.Name()
 	}
 	return out
 }
@@ -333,8 +371,10 @@ func iconDirIndex() map[string]string {
 	iconsCache.mu.Unlock()
 
 	var mod int64
-	if st, err := os.Stat(IconsDir()); err == nil {
-		mod = st.ModTime().UnixNano()
+	for _, root := range IconSearchDirs() {
+		if st, err := os.Stat(root); err == nil {
+			mod ^= st.ModTime().UnixNano()
+		}
 	}
 	iconsCache.mu.Lock()
 	if iconsCache.dirs != nil && iconsCache.dirsGen == gen && iconsCache.dirsMod == mod {
@@ -362,22 +402,24 @@ func iconDirIndex() map[string]string {
 // inside the folders (path resolution only).
 func scanIconDirNames() map[string]string {
 	out := map[string]string{}
-	entries, err := os.ReadDir(IconsDir())
-	if err != nil {
-		return out
-	}
-	for _, e := range entries {
-		if !e.IsDir() {
-			continue
-		}
-		name, err := SanitizeIconSetName(e.Name())
+	for _, root := range IconSearchDirs() {
+		entries, err := os.ReadDir(root)
 		if err != nil {
 			continue
 		}
-		if _, dup := out[name]; dup {
-			continue // first (sorted) entry wins, deterministically
+		for _, e := range entries {
+			if !e.IsDir() {
+				continue
+			}
+			name, err := SanitizeIconSetName(e.Name())
+			if err != nil {
+				continue
+			}
+			if _, dup := out[name]; dup {
+				continue // first wins: the user's own, then each app's
+			}
+			out[name] = e.Name()
 		}
-		out[name] = e.Name()
 	}
 	return out
 }
@@ -386,16 +428,25 @@ func loadFileIcon(set IconSetName, icon ToolIcon, destW float32) (*paintengine2d
 	if !IsFileIconSet(set) {
 		return nil, false
 	}
-	dir := IconSetDir(set)
+	dirs := IconSetDirs(set)
+	// The stem, in each directory in turn: the user's copy first, then
+	// whatever an application registered. A person's own set therefore
+	// wins where it has the icon, and a stem their copy predates is
+	// answered by the application that needs it rather than coming back
+	// as the placeholder.
 	for _, name := range toolIconFileCandidates(icon, destW) {
-		if img, ok := loadPNGIcon(filepath.Join(dir, name)); ok {
-			return img, true
+		for _, dir := range dirs {
+			if img, ok := loadPNGIcon(filepath.Join(dir, name)); ok {
+				return img, true
+			}
 		}
 	}
 	for _, name := range stemFileCandidates(noIconStem, destW) {
-		if img, ok := loadPNGIcon(filepath.Join(dir, name)); ok {
-			logMissingStemOnce(set, icon, noIconStem)
-			return img, true
+		for _, dir := range dirs {
+			if img, ok := loadPNGIcon(filepath.Join(dir, name)); ok {
+				logMissingStemOnce(set, icon, noIconStem)
+				return img, true
+			}
 		}
 	}
 	if img, ok := loadEmbeddedNoIcon(destW); ok {
