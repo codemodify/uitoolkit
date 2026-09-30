@@ -113,6 +113,7 @@ preferences	sliders-horizontal	sliders	adjustments-horizontal	adjustments-horizo
 quit	log-out	sign-out	logout	arrow-right-on-rectangle	logout
 close	x	x	x	x-mark	close
 more	ellipsis	dots-three	dots	ellipsis-horizontal	more_horiz
+menu	menu	list	menu-2	bars-3	menu
 chevron-up	chevron-up	caret-up	chevron-up	chevron-up	keyboard_arrow_up
 chevron-down	chevron-down	caret-down	chevron-down	chevron-down	keyboard_arrow_down
 chevron-left	chevron-left	caret-left	chevron-left	chevron-left	chevron_left

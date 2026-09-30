@@ -52,6 +52,13 @@ type Button struct {
 	Text    string
 	Primary bool
 	Tip     string
+	// Checked draws the button in its on state and says so in the
+	// accessibility tree; Toggle makes it a toggle for a screen reader
+	// rather than a button that happens to look pressed. They are what
+	// a latched push button is — a search that is on, a filter that is
+	// applied — and are the same pair [ToolButton] has.
+	Checked bool
+	Toggle  bool
 	// Icon is a stock mark drawn at the leading edge, before the text: a
 	// Save button's disc, a Delete button's bin. It is an icon rather
 	// than a character because the interface face has no such glyph and
@@ -127,7 +134,17 @@ func (b *Button) PaintState() style.ControlState {
 	if b.Primary {
 		st |= style.StatePrimary
 	}
-	return st
+	if b.Checked {
+		st |= style.StateChecked
+	}
+	if b.Toggle {
+		st |= style.StateToggle
+	}
+	// A latched button has to look latched. 53 of the 135 packs draw a
+	// checked button exactly as an ordinary one, so on those it is drawn
+	// pressed instead — which is how Windows 3.1, Motif, CDE and OPEN
+	// LOOK drew a toggle, and a state every engine paints.
+	return style.LatchedState(b.Look(), st)
 }
 
 func NewButton(text string, onClick func()) *Button {

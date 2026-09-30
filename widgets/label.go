@@ -143,6 +143,27 @@ func (l *Label) Measure(c layout.Constraints) paintengine2d.Point {
 
 func (l *Label) Arrange(r paintengine2d.Rect) { l.SetBounds(r) }
 
+// MinWidth implements [widget.MinWidther].
+//
+// A label that wraps has a real floor: its longest word, below which a
+// word would have to be broken. A label that does *not* wrap has almost
+// none — it is a single line that clips, and giving it less than it
+// would like costs the end of the text and nothing else. That is the
+// difference the height-based probe cannot see: a one-line label is not
+// taller when it is narrowed, so the probe reads it as a thing that
+// cannot shrink, and a layout would then keep a whole sentence's width
+// for something perfectly happy to be cut short.
+//
+// So a wrapping label is probed, and a plain one asks for a few pixels:
+// enough that it is never squeezed out of existence, far too little to
+// hold a layout open.
+func (l *Label) MinWidth() float32 {
+	if !l.Wrap {
+		return style.Dip(l.Look(), 16)
+	}
+	return widget.MinWidthByProbe(l, l.Measure(layout.Unbounded()))
+}
+
 func (l *Label) Paint(ctx *paintengine2d.Context) {
 	lk := l.Look()
 	f := l.font()

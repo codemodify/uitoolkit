@@ -22,13 +22,35 @@ is the whole rule.
 
 **Instead**, pick by what the control is:
 
-| the control is | use | width |
+| the control is | use | face |
 | --- | --- | --- |
-| a button with a name — OK, Save, Rename | `NewButton` + `Button.Icon` | wide (see below) |
-| a button that is *only* a mark | `ToolIconBtn(icon, "", on)` | the mark |
-| a row of marks — a tool bar | `NewToolBar(items...)` | the marks |
-| a mark beside a name, outside a dialog | `NewToolButton(text, icon, on)` | tight |
+| a button with a name — OK, Save, Rename | `NewButton` + `Button.Icon` | push button, wide (see below) |
+| a button that is **only** a mark, and must look like a button | `NewIconButton(icon, name, on)` | push button, square |
+| a button that drops a menu | `NewMenuButton(icon, name, items...)` | push button, square |
+| a mark on a **tool bar** | `ToolIconBtn(icon, "", on)` in `NewToolBar` | tool face — flat until hovered |
+| a mark beside a name, outside a dialog | `NewToolButton(text, icon, on)` | tool face, tight |
 | a mark in a menu row, a cell, a tree node | `MenuItem.Icon`, `TableView.CellIcon`, `TreeNode.Icon` | — |
+
+**The face is the choice, not the size.** `ToolIconBtn` is a *tool* item:
+in most eras it is flat with no frame until the pointer is over it, which
+is right on a tool bar and wrong anywhere somebody is meant to see that
+the thing is a button. If the answer to "why doesn't that look like a
+button?" is "because it isn't one", you wanted `NewIconButton`.
+
+A latched button — a search that is on, a filter applied — sets
+`Checked` (and `Toggle`, so a screen reader calls it a toggle). 53 of the
+135 packs draw a checked button exactly as an ordinary one, so on those
+it is drawn pressed instead, which is how Windows 3.1, Motif, CDE and
+OPEN LOOK drew a toggle anyway. You do not have to know which pack you
+are on.
+
+**A button that opens a menu is `NewMenuButton`, not a `Button` whose
+`OnClick` calls `ShowContextMenu`.** The difference is not cosmetic: the
+menu opens on press so a drag can run into it, the button stays down
+while it is open, pressing again closes it — and its items' **shortcuts
+work**. An application menu moved from a `MenuBar` to a plain button
+silently loses them, and the first anyone knows is that Ctrl+Q has
+stopped quitting.
 
 ### What `Button.Icon` costs, and why
 
@@ -48,8 +70,9 @@ cost of not touching the engine.
 **So**: use `Button.Icon` for dialog buttons and anywhere with room.
 Where a row is tight, do one of these instead —
 
-- `ToolIconBtn(style.IconTrash, "", onDelete)` — an icon-only button,
-  with `SetAccessibleName("Delete")` so it can still be read aloud;
+- `NewIconButton(style.IconTrash, "Delete", onDelete)` — the same push
+  button face with the mark alone, square, and named for the screen
+  reader and the tooltip in one go;
 - `NewToolButton("Delete", style.IconTrash, onDelete)` — a tool-faced
   button, which lays icon and label out itself and is tight;
 - keep `Button.Icon` and let the row fold: `NewWrap(buttons...)`.
@@ -180,6 +203,11 @@ What you can do:
   instead of off the edge.
 - **Use fewer columns.** A label above its field rather than beside it
   halves the floor.
+- **Let a splitter take its panes' minimums.** `Splitter` divides by
+  `Ratio`, but it will not put a pane below what that pane says it needs
+  — so a sidebar cannot be dragged until its buttons run off the edge.
+  `MinA` / `MinB` override that, and `AllowCollapse` lets a pane close
+  entirely.
 - **Ask where the floor is.** `widget.MinWidthOf(content)` is the width
   below which something starts leaving the box. Size the window from it
   rather than from a guess, and assert it in a test — that is what

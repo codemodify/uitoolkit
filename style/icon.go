@@ -70,6 +70,13 @@ const (
 	// them ships one.
 	IconStarFilled
 	IconDot
+	// The two marks a button that opens a menu wears. Every desktop
+	// draws an overflow as ⋯ and an application menu as a hamburger, and
+	// both shipped only as stems — so IconByStem gave them back with no
+	// vector, and in a drawn set (which every pack uses unless the user
+	// picks otherwise) they came out as the missing-icon mark.
+	IconMore
+	IconMenu
 )
 
 var toolIconLabels = [...]string{
@@ -87,6 +94,7 @@ var toolIconLabels = [...]string{
 	IconEye: "Show", IconUser: "Contact", IconBell: "Notify",
 	IconSend: "Send", IconClose: "Close", IconQuit: "Quit",
 	IconPrint: "Print", IconStarFilled: "Starred", IconDot: "Unread",
+	IconMore: "More", IconMenu: "Menu",
 }
 
 // Label is the action the icon stands for, in words ("Save"): what
@@ -143,6 +151,8 @@ var toolIconFiles = []struct {
 	{IconPrint, "print"},
 	{IconStarFilled, "star-filled"},
 	{IconDot, "dot"},
+	{IconMore, "more"},
+	{IconMenu, "menu"},
 }
 
 // shippedIconStems is the wide PNG vocabulary rendered by icons/render.sh
@@ -161,7 +171,7 @@ var shippedIconStems = []string{
 	"info", "warning", "error", "question", "help",
 	"home", "calendar", "clock", "link", "external-link",
 	"list", "layout", "columns", "rows", "table", "cards",
-	"sun", "moon", "print",
+	"sun", "moon", "print", "menu",
 	"no-icon",
 }
 
@@ -324,6 +334,8 @@ var toolIconThemeNames = map[ToolIcon][]string{
 	IconPrint:        {"document-print", "printer", "gtk-print"},
 	IconStarFilled:   {"starred", "rating", "bookmark-new"},
 	IconDot:          {"media-record", "dialog-information"},
+	IconMore:         {"view-more-symbolic", "overflow-menu", "go-down"},
+	IconMenu:         {"open-menu", "application-menu", "format-justify-fill"},
 }
 
 // ToolIconThemeNames are the freedesktop names an installed icon theme

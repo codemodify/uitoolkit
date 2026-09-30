@@ -5,6 +5,7 @@ import (
 
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/layout"
+	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
 )
 
@@ -127,5 +128,70 @@ func TestMinWidthIncludesPadding(t *testing.T) {
 
 	if got, want := widget.MinWidthOf(p), widget.MinWidthOf(bare)+40; got != want {
 		t.Errorf("a padded button's minimum is %v, want %v", got, want)
+	}
+}
+
+// A splitter divided by ratio alone let a pane be dragged — or opened —
+// narrower than the things inside it, and they ran off the edge. It
+// takes the panes' own minimums now, as Qt's QSplitter does.
+func TestSplitterKeepsAPaneWideEnoughForWhatItHolds(t *testing.T) {
+	side := NewRow(
+		NewIconButton(style.IconDownload, "Fetch", nil),
+		NewIconButton(style.IconPen, "Write", nil),
+		NewIconButton(style.IconSearch, "Search", nil),
+	).WithGap(6)
+	body := NewLabel("the pages")
+	sp := NewSplitter(SplitColumns, side, body)
+	sp.Ratio = 0.02 // far below what the buttons need
+	atScale(t, sp, 1)
+	sp.Measure(layout.Tight(800, 300))
+	sp.Arrange(paintengine2d.XYWH(0, 0, 800, 300))
+
+	need := widget.MinWidthOf(side)
+	if got := sp.PaneA().Dx(); got < need-1 {
+		t.Errorf("the pane is %v wide for content needing %v", got, need)
+	}
+	// And the buttons are inside it.
+	for _, c := range side.Children() {
+		if b := c.Bounds(); b.Max.X > sp.PaneA().Dx()+1 {
+			t.Errorf("a button reaches %v, past the pane's %v", b.Max.X, sp.PaneA().Dx())
+		}
+	}
+}
+
+// AllowCollapse is how a pane that is meant to close gets to close.
+func TestSplitterCollapseIsOptIn(t *testing.T) {
+	side := NewRow(NewIconButton(style.IconDownload, "Fetch", nil))
+	sp := NewSplitter(SplitColumns, side, NewLabel("body"))
+	sp.Ratio = 0.02
+	sp.AllowCollapse = true
+	atScale(t, sp, 1)
+	sp.Measure(layout.Tight(800, 300))
+	sp.Arrange(paintengine2d.XYWH(0, 0, 800, 300))
+
+	if got := sp.PaneA().Dx(); got > 40 {
+		t.Errorf("with AllowCollapse the pane kept %v", got)
+	}
+}
+
+// A one-line label clips rather than refusing, so it must not hold a
+// layout open at its whole width. The height-based probe cannot see
+// that — a label that does not wrap is no taller when it is narrowed —
+// which is why Label answers for itself.
+func TestPlainLabelDoesNotHoldALayoutOpen(t *testing.T) {
+	plain := NewLabel("a fairly long label that has no wrap set on it at all")
+	atScale(t, plain, 1)
+	wrapped := NewLabel("a fairly long label that has no wrap set on it at all")
+	wrapped.Wrap = true
+	atScale(t, wrapped, 1)
+
+	natural := plain.Measure(layout.Unbounded()).X
+	if got := widget.MinWidthOf(plain); got > natural*0.25 {
+		t.Errorf("a plain label asks for %v of its %v — it clips, it does not refuse", got, natural)
+	}
+	// A wrapping one has a real floor: its longest word.
+	w := widget.MinWidthOf(wrapped)
+	if w <= 0 || w >= natural {
+		t.Errorf("a wrapping label's minimum is %v, want its longest word (under %v)", w, natural)
 	}
 }

@@ -427,46 +427,60 @@ func (m *MenuBar) HandleAccelerator(key platform.Key, mods platform.Modifiers) b
 	if !m.Enabled() || !m.Visible() {
 		return false
 	}
-	const mask = platform.ModCtrl | platform.ModShift | platform.ModAlt | platform.ModSuper
-	var hit func(items []*MenuItem) bool
-	hit = func(items []*MenuItem) bool {
-		for _, it := range items {
-			if it == nil || it.Separator || it.Disabled {
-				continue
-			}
-			if it.HasSubmenu() {
-				if hit(it.Submenu) {
-					return true
-				}
-				continue
-			}
-			k, want, ok := ParseAccel(it.Shortcut)
-			if !ok || k != key || mods&mask != want {
-				continue
-			}
+	for _, menu := range m.menus {
+		if menu == nil {
+			continue
+		}
+		if runMenuAccelerator(menu.Items, key, mods) {
 			if m.open >= 0 {
 				m.Close()
 			}
-			if it.RadioGroup != "" {
-				for _, o := range items {
-					if o != nil && o.RadioGroup == it.RadioGroup {
-						o.Checked = o == it
-					}
-				}
-			} else if it.Checkable {
-				it.Checked = !it.Checked
-			}
-			if it.OnClick != nil {
-				it.OnClick()
-			}
 			return true
 		}
-		return false
 	}
-	for _, menu := range m.menus {
-		if menu != nil && hit(menu.Items) {
-			return true
+	return false
+}
+
+// runMenuAccelerator runs the first item under items whose shortcut
+// matches, including in submenus, and reports whether one did.
+//
+// It is shared by [MenuBar] and [MenuButton] rather than written twice:
+// a shortcut that works in a menu bar and not in a menu button — which
+// is what happened when an application menu moved from one to the other
+// and Ctrl+Q stopped quitting — is the kind of difference two copies
+// grow.
+//
+// Checking and radio state are applied before the click, because a
+// handler commonly reads the item it was called for.
+func runMenuAccelerator(items []*MenuItem, key platform.Key, mods platform.Modifiers) bool {
+	const mask = platform.ModCtrl | platform.ModShift | platform.ModAlt | platform.ModSuper
+	for _, it := range items {
+		if it == nil || it.Separator || it.Disabled {
+			continue
 		}
+		if it.HasSubmenu() {
+			if runMenuAccelerator(it.Submenu, key, mods) {
+				return true
+			}
+			continue
+		}
+		k, want, ok := ParseAccel(it.Shortcut)
+		if !ok || k != key || mods&mask != want {
+			continue
+		}
+		if it.RadioGroup != "" {
+			for _, o := range items {
+				if o != nil && o.RadioGroup == it.RadioGroup {
+					o.Checked = o == it
+				}
+			}
+		} else if it.Checkable {
+			it.Checked = !it.Checked
+		}
+		if it.OnClick != nil {
+			it.OnClick()
+		}
+		return true
 	}
 	return false
 }

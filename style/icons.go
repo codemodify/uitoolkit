@@ -469,6 +469,20 @@ func drawClassicIcon(ctx *paintengine2d.Context, b paintengine2d.Rect, icon Tool
 		arr.LineTo(b.Max.X-2.8, cy)
 		arr.LineTo(b.Max.X-6.0, cy+3.2)
 		ctx.DrawPath(arr, stroke)
+	case IconMore:
+		// Three dots in a row, which is what every desktop draws an
+		// overflow as.
+		r := w * 0.065
+		for _, dx := range []float32{-w * 0.22, 0, w * 0.22} {
+			ctx.DrawCircle(paintengine2d.Pt(cx+dx, cy), r, fill)
+		}
+	case IconMenu:
+		// A hamburger: three full-width bars.
+		bw := w * 0.58
+		bh := max(h*0.055, 1.4)
+		for _, dy := range []float32{-h * 0.18, 0, h * 0.18} {
+			ctx.DrawRect(paintengine2d.XYWH(cx-bw*0.5, cy+dy-bh*0.5, bw, bh), fill)
+		}
 	case IconStarFilled:
 		ctx.DrawPath(starPath(cx, cy, w*0.44, w*0.18), fill)
 	case IconDot:

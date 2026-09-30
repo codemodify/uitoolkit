@@ -276,7 +276,7 @@ else.
 | a mark anywhere else you are painting | `style.DrawToolIcon(ctx, box, icon, colour, style.IconSetOf(look))` |
 | a picture in a document | `richtext` and its `<img>`, not a glyph |
 
-There are **40 typed ids** (`style.AllToolIcons`), each of which resolves
+There are **42 typed ids** (`style.AllToolIcons`), each of which resolves
 four ways, best first: the user's file icon set, an installed freedesktop
 theme by name (`style.ToolIconThemeNames`), one of the five packs shipped
 in `icons/`, and the toolkit's own drawn Classic or Sharp set. That is
@@ -289,7 +289,7 @@ search   info     warning  error    question mail     download pen
 attach   star     flag     reply    forward  check    bell-off
 trash    archive  junk     tag      folder   reply-all settings
 external-link     eye      user     bell     send     close    quit
-print    star-filled       dot
+print    star-filled       dot      more     menu
 ```
 
 `star-filled` and `dot` are the two the toolkit draws itself in every

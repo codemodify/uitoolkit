@@ -15,6 +15,7 @@ preferences
 quit
 close
 more
+menu
 chevron-up
 chevron-down
 chevron-left
