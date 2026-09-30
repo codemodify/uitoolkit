@@ -182,10 +182,23 @@ it. What you can do:
   instead of off the edge.
 - **Use fewer columns.** A label above its field rather than beside it
   halves the floor.
-- **Find the floor and design above it.** Lay the form out at decreasing
-  widths in a test and assert nothing leaves the box — a minimum-size
-  test is the only thing that catches this before a user does, and it
-  catches it again when somebody adds an icon to a button.
+- **Ask where the floor is.** `widget.MinWidthOf(content)` is the width
+  below which something starts leaving the box. Size the window from it
+  rather than from a guess, and assert it in a test — that is what
+  catches a button growing an icon before a user does.
+
+```go
+min := widget.MinWidthOf(form)          // the floor, in device pixels
+sz := form.Measure(layout.Constraints{MaxW: max(paneW, min), MaxH: -1})
+```
+
+Do **not** try to find it by measuring at a small width. A container
+asked to fit in one pixel reports the one pixel it was constrained to,
+and a button does the same — measuring a button at 1 px says 65, and a
+layout that believed it would draw the button with its label hanging out
+of both ends. `MinWidthOf` asks containers, which know, and works the
+rest out from the **height**: what folds gets taller when narrowed, what
+cannot keeps its height.
 
 ## A status colour as text
 

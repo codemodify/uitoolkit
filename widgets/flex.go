@@ -23,6 +23,18 @@ type FlexBox struct {
 	items      []layout.Item
 }
 
+// MinWidth implements [widget.MinWidther]: a row is as narrow as its
+// children's minimums laid side by side, and a column as narrow as its
+// widest child's minimum.
+func (f *FlexBox) MinWidth() float32 {
+	sp := f.scaled()
+	pad := sp.PadL + sp.PadR
+	if f.Spec.Axis == layout.AxisHorizontal {
+		return widget.SumMinWidths(f.Children(), sp.Gap) + pad
+	}
+	return widget.MinWidthOfChildren(f.Children()) + pad
+}
+
 // NewColumn stacks children top-to-bottom.
 func NewColumn(children ...widget.Component) *FlexBox {
 	f := newFlex(layout.AxisVertical)
@@ -284,6 +296,13 @@ func NewPad(v float32, child widget.Component) *Pad {
 		p.Add(child)
 	}
 	return p
+}
+
+// MinWidth implements [widget.MinWidther]: what is inside, plus the
+// insets, which do not shrink.
+func (p *Pad) MinWidth() float32 {
+	l, _, r, _ := p.insets()
+	return widget.MinWidthOfChildren(p.Children()) + l + r
 }
 
 func (p *Pad) Measure(c layout.Constraints) paintengine2d.Point {

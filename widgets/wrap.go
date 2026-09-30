@@ -142,6 +142,12 @@ func (w *Wrap) centreLines(rects []paintengine2d.Rect) []paintengine2d.Rect {
 	return rects
 }
 
+// MinWidth implements [widget.MinWidther]: a wrap folds, so it is only
+// ever as wide as the widest thing it has to fit on a line.
+func (w *Wrap) MinWidth() float32 {
+	return widget.MinWidthOfChildren(w.Children())
+}
+
 func (w *Wrap) Measure(c layout.Constraints) paintengine2d.Point {
 	maxW := float32(-1)
 	if c.HasMaxW() {

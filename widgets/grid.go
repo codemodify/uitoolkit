@@ -380,6 +380,44 @@ func minWidthOf(c widget.Component, natural paintengine2d.Point) float32 {
 	return 1
 }
 
+// MinWidth implements [widget.MinWidther]: the sum of the columns'
+// floors, which is the width below which this grid's children start
+// leaving its box.
+//
+// A grid cannot answer this by measuring itself — asked to fit in one
+// pixel it reports the one pixel it was constrained to — so it is
+// computed from the same floors the column solver uses.
+func (g *Grid) MinWidth() float32 {
+	_, nc := g.dims()
+	if nc == 0 {
+		return 0
+	}
+	floors := make([]float32, nc)
+	g.visible(func(c widget.Component, cell *GridCell) {
+		if cell.Col >= nc || cell.ColSpan != 1 {
+			return
+		}
+		natural := c.Measure(layout.Unbounded())
+		m := ceilPx(natural.X)
+		if trackAt(g.Cols, cell.Col).Mode == TrackFlex {
+			if got := minWidthOf(c, natural); got > 0 {
+				m = got
+			}
+		}
+		if m > floors[cell.Col] {
+			floors[cell.Col] = m
+		}
+	})
+	var w float32
+	for _, f := range floors {
+		w += f
+	}
+	if nc > 1 {
+		w += g.colGap() * float32(nc-1)
+	}
+	return w
+}
+
 // spanLen is the length of count tracks from first, gaps included.
 func spanLen(sizes []float32, first, count int, gap float32) float32 {
 	var l float32

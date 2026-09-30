@@ -79,6 +79,17 @@ func (s *ScrollView) ScrollTo(y float32) {
 // ScrollBy adds dy pixels to the offset.
 func (s *ScrollView) ScrollBy(dy float32) { s.ScrollTo(s.OffsetY + dy) }
 
+// MinWidth implements [widget.MinWidther]. A scroll view scrolls up and
+// down, so it makes nothing narrower: its minimum is its child's, plus
+// the gutter its bar takes.
+func (s *ScrollView) MinWidth() float32 {
+	w := widget.MinWidthOf(s.child)
+	if w <= 0 {
+		return 0
+	}
+	return w + s.Look().Metrics().Scroll
+}
+
 func (s *ScrollView) Measure(c layout.Constraints) paintengine2d.Point {
 	g := s.gutter()
 	if s.child != nil {

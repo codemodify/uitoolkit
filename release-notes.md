@@ -52,6 +52,30 @@ only way to do it, and it is why the previous advice for an asynchronous
 check did not actually work. `MessageBox.Checking` reports whether a
 check is out.
 
+### `widget.MinWidthOf` — where the floor is
+
+A layout that runs out of room stops at a floor rather than squeezing
+children to nothing, and then runs over the edge. That is right, and Qt
+and GTK do the same — but a program had no way to find out *where* the
+floor was, so the only way to meet it was to hit it.
+
+`widget.MinWidthOf(c)` is the width below which something starts leaving
+the box. Size a window from it instead of from a guess, and assert it in
+a test — which is what catches a button growing an icon before a user
+does.
+
+Containers answer it themselves (`widget.MinWidther`), because they have
+to: a container asked to fit in one pixel reports the one pixel it was
+constrained to. `Grid` sums its column floors, a row sums its children, a
+column and a `Wrap` take their widest, `Pad` adds its insets, and a
+`ScrollView` adds its bar — it scrolls up and down, so it makes nothing
+narrower. Anything else is worked out from the **height**: what folds
+gets taller when it is narrowed, what cannot keeps its height. Width
+cannot answer it, because a button asked to fit in a pixel says 65.
+
+There is still no window minimum-size API to hand the answer to, and no
+horizontal scrolling; both are open.
+
 ### A lever for a form in a narrow pane
 
 `SecretField.PreferredWidth` and `SecretArea.PreferredWidth`, matching
