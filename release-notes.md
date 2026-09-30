@@ -7,6 +7,112 @@ about the problem it solved.
 
 ---
 
+## 0.22.3
+
+What 0.22.2 got wrong. Both applications upgraded, checked the closed
+items, and found ten things — nine of them the toolkit's own, and one of
+them a feature that had never worked at all.
+
+### The status inks were black and white
+
+`ReadableInk` walked lightness from 0 to 1 where `flatFromHSL` takes
+percent, so every candidate sat within one percent of black. On a light
+background the first already cleared 4.5:1, and the ink came out all but
+black; on a dark one none did, and the fallback made it white.
+`plastik-night`'s danger, warning and success were all `#ffffff`, and
+`plastik`'s warning ink was `#050300`. Every promise
+[docs/widgets.md](docs/widgets.md) makes about keeping the pack's own
+colour was void.
+
+`#c08000` is `#8f6000` now on a light ground and `#c78500` on a dark one;
+`plastik-night`'s danger is `#ff5858`.
+
+**Both tests passed**, which is the part worth writing down. One checked
+the contrast ratio — and black on a light background reads perfectly
+well. The other checked hue — which survives at one percent lightness.
+Neither checked the property the feature exists for. Two new ones do: a
+saturated status colour comes back saturated, and nothing comes back pure
+black or white where the pack asked for a colour.
+
+### Rich-text tables
+
+Laying cells out as paragraphs in 0.22.2 brought three problems, all of
+them visible in an ordinary Markdown table.
+
+- **A header cell was an H1.** `layoutTableRow` asked for the heading
+  face with the block's level, and the HTML parser gives a `<th>` level
+  1 — so header cells were title-sized and broke mid-word in a narrow
+  column. A header is bold at the table's own size.
+- **A wrapped row's chrome stopped after its first line.** The column
+  rules and the rule under a row were drawn at the first line's height,
+  so a row whose cell wrapped had its later lines outside its own cell.
+  That reads as the next row overlapping this one, which is how it was
+  reported.
+- **Columns were squeezed past their longest word.** Shrinking every
+  column toward one number was right while a cell too wide for its
+  column was elided; now that cells wrap it broke words instead —
+  "Price" came out "Pric", "£4.50" became "£4.5" and "0", and the rows
+  grew a line each to hold the pieces. Each column has its own floor
+  now, and is never *rounded* below it either, which is the chip bug of
+  0.22.2 over again.
+
+### Fixed
+
+- **An unclosed quote holds the token split.** Reading it as no quote was
+  wrong for the case that matters: while someone *types* `"Doe, Jane"
+  <jane@x>`, the quote is open at the moment the comma is typed — so the
+  comma split there, `"Doe` was refused, and the chip came out with the
+  name's comma missing. A stray quote now holds splitting until it is
+  closed or deleted, which the user can see in the editor. Comments and
+  angle brackets nest too, since an address list puts commas inside both.
+- **`DismissOverlay` from outside every overlay closes the top one
+  again**, as it did before overlays stacked. Popping only the overlay
+  the caller sits in silently broke every caller that was not inside a
+  dialog: a program quitting with a recovery key on screen stopped
+  wiping it, and a cancelled file chooser stayed up. An overlay that
+  *was* on the stack and is no longer still closes nothing — that is the
+  case reached on the way out of every dismissal, and popping the top
+  there would take the dialog underneath down as well. The two are told
+  apart by `widget.ContentRootHost`.
+- **`SecretArea` takes the width it is offered.** Asking for 280
+  whatever it was given made a grid's flexible column hand it 280 where
+  there was less, and since it cannot fold, nothing squeezed it back and
+  the columns after it went off the edge.
+- **`uitoolkit.Version` said 0.22.1 through the whole 0.22.2 release**,
+  so every application that shows the toolkit's version showed the wrong
+  one. A test now compares it with the newest heading in this file.
+- **heroicons' `reply-all` was the share mark** — three linked dots, a
+  different action entirely. heroicons has no reply-all and
+  `icons/render.sh` takes official upstream names only, so it is
+  `arrow-turn-up-left`: a reply arrow, and distinct from `reply`'s own
+  `arrow-uturn-left`.
+
+### Still open
+
+Three items from the same round are not in this release, because each is
+a design change rather than a fix:
+
+- **`Button.Icon` costs about 64 px a button.** Reserving a strip at both
+  ends keeps every engine's label treatment untouched, which was the
+  point, but rows that fitted narrow windows stopped fitting. A leading
+  icon needs either `DrawButton` taking the label's box — a change to all
+  33 engines — or an opt-in.
+- **The premiere icon packs are not embedded.** They are read from
+  `~/.config/uitoolkit/icons/`, refreshed by hand, so on a machine that
+  has not copied them the icons added in 0.22.2 draw as the no-icon
+  placeholder and heroicons' forward is still the fast-forward 0.22.2
+  says was fixed. Embedding them, with the installed copy as an
+  override, is the fix.
+- **`MessageBoxInput.Validate` is synchronous.** A check that is a server
+  round trip has no way to say "keep the dialog up" but to return an
+  empty error, and no way to close the box with its result.
+  `ValidateAsync` with a busy accept button is what it wants.
+
+And font fallback for message content stays declined; see
+[contracts.md](contracts.md).
+
+---
+
 ## 0.22.2
 
 Twenty-five items from the same two applications — a mail client and a
