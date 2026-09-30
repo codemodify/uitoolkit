@@ -93,6 +93,14 @@ const (
 	IconArrowRight
 	IconArrowUp
 	IconArrowDown
+	// A tray, which is what an inbox is drawn as everywhere.
+	IconInbox
+	// A plus and a cross, which every tab strip and every list with an
+	// "add" needs.
+	IconPlus
+	IconClose2
+	// A padlock, for a secure address and a locked vault.
+	IconLock
 )
 
 var toolIconLabels = [...]string{
@@ -115,6 +123,7 @@ var toolIconLabels = [...]string{
 	IconTable: "Table", IconCards: "Cards",
 	IconArrowLeft: "Back", IconArrowRight: "Forward",
 	IconArrowUp: "Up", IconArrowDown: "Down",
+	IconInbox: "Inbox", IconPlus: "Add", IconClose2: "Close", IconLock: "Secure",
 }
 
 // Label is the action the icon stands for, in words ("Save"): what
@@ -182,6 +191,10 @@ var toolIconFiles = []struct {
 	{IconArrowRight, "arrow-right"},
 	{IconArrowUp, "arrow-up"},
 	{IconArrowDown, "arrow-down"},
+	{IconInbox, "inbox"},
+	{IconPlus, "plus"},
+	{IconClose2, "x"},
+	{IconLock, "lock"},
 }
 
 // shippedIconStems is the wide PNG vocabulary rendered by icons/render.sh
@@ -374,6 +387,10 @@ var toolIconThemeNames = map[ToolIcon][]string{
 	IconArrowRight:   {"go-next", "forward", "draw-arrow-forward"},
 	IconArrowUp:      {"go-up", "up"},
 	IconArrowDown:    {"go-down", "down"},
+	IconInbox:        {"mail-inbox", "mail-folder-inbox", "inbox"},
+	IconPlus:         {"list-add", "add"},
+	IconClose2:       {"window-close", "edit-delete", "list-remove"},
+	IconLock:         {"channel-secure", "security-high", "lock"},
 }
 
 // ToolIconThemeNames are the freedesktop names an installed icon theme

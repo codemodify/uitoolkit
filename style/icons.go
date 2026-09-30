@@ -532,6 +532,40 @@ func drawClassicIcon(ctx *paintengine2d.Context, b paintengine2d.Rect, icon Tool
 		head.LineTo(tipX, tipY)
 		head.LineTo(tipX-dx*r*0.55+dy*r*0.55, tipY-dy*r*0.55-dx*r*0.55)
 		ctx.DrawPath(head, stroke)
+	case IconInbox:
+		// A tray: the box, and the lip mail drops behind.
+		tray := paintengine2d.NewPath()
+		tray.MoveTo(b.Min.X+2.6, cy-h*0.22)
+		tray.LineTo(b.Min.X+2.6, b.Max.Y-3.0)
+		tray.LineTo(b.Max.X-2.6, b.Max.Y-3.0)
+		tray.LineTo(b.Max.X-2.6, cy-h*0.22)
+		ctx.DrawPath(tray, stroke)
+		lip := paintengine2d.NewPath()
+		lip.MoveTo(b.Min.X+2.6, cy-h*0.22)
+		lip.LineTo(b.Min.X+w*0.32, cy-h*0.22)
+		lip.LineTo(b.Min.X+w*0.38, cy+h*0.04)
+		lip.LineTo(b.Max.X-w*0.38, cy+h*0.04)
+		lip.LineTo(b.Max.X-w*0.32, cy-h*0.22)
+		lip.LineTo(b.Max.X-2.6, cy-h*0.22)
+		ctx.DrawPath(lip, stroke)
+		ctx.DrawPath(lineP(cx, b.Min.Y+2.6, cx, cy-h*0.30), stroke)
+	case IconPlus:
+		d := w * 0.26
+		ctx.DrawPath(lineP(cx-d, cy, cx+d, cy), stroke)
+		ctx.DrawPath(lineP(cx, cy-d, cx, cy+d), stroke)
+	case IconClose2:
+		d := w * 0.24
+		ctx.DrawPath(lineP(cx-d, cy-d, cx+d, cy+d), stroke)
+		ctx.DrawPath(lineP(cx+d, cy-d, cx-d, cy+d), stroke)
+	case IconLock:
+		body := paintengine2d.XYWH(cx-w*0.24, cy-h*0.04, w*0.48, h*0.32)
+		ctx.DrawRoundRect(body, 2, 2, paintengine2d.StrokePaint(col, 1.5))
+		sh := paintengine2d.NewPath()
+		sh.MoveTo(cx-w*0.14, cy-h*0.04)
+		sh.LineTo(cx-w*0.14, cy-h*0.18)
+		sh.QuadTo(cx, cy-h*0.36, cx+w*0.14, cy-h*0.18)
+		sh.LineTo(cx+w*0.14, cy-h*0.04)
+		ctx.DrawPath(sh, stroke)
 	case IconStarFilled:
 		ctx.DrawPath(starPath(cx, cy, w*0.44, w*0.18), fill)
 	case IconDot:
