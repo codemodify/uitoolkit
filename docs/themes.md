@@ -1,5 +1,12 @@
 # Theme packs
 
+A pack is the first of the
+[three ways to build with this toolkit](building.md#which-kind-of-application-are-you-building):
+the application places controls and the look draws them and arranges its
+own chrome around them. An application may instead state part of its chrome
+([recipes.md](recipes.md#an-application-whose-chrome-is-its-own--a-browser-an-editor)),
+or be [skinned](skins.md) outright.
+
 > Shapes per theme come from **theme engines** — see
 > [theme-engines.md](theme-engines.md) for the architecture, the rules and
 > how to write one. A pack whose shapes are *pictures* rather than code is a

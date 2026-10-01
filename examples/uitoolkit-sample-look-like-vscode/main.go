@@ -7,8 +7,8 @@
 // a HeaderBar, a Row, a Column and a Splitter; what makes it look like
 // an editor is how they are filled.
 //
-//	go run ./examples/uitoolkit-sample-look-like-vscode
-//	go run ./examples/uitoolkit-sample-look-like-vscode -headless
+//	go run -tags theme_engine_web ./examples/uitoolkit-sample-look-like-vscode
+//	go run -tags theme_engine_web ./examples/uitoolkit-sample-look-like-vscode -headless
 package main
 
 import (
@@ -45,13 +45,30 @@ type editor struct {
 	buttons []*widgets.IconButton
 }
 
+// themePack is the look this sample wears. Theme engines are chosen at
+// build time (docs/engines.md), so a plain build has only the default
+// one and the look falls back to the default — which the toolkit
+// says at start-up, and app.Application.Diagnostics collects for a test.
+const themePack = "vscode-night"
+
 func main() {
 	headless := flag.Bool("headless", false, "paint offscreen and write vscode.png")
 	flag.Parse()
 
-	a := uitoolkit.New(uitoolkit.Options{Headless: *headless})
+	// The shape is only half of looking like vscode; the other half is the
+	// paint. The sample states the pack it wants and nothing else, so a
+	// user's icon set, corner policy and typefaces still come from their
+	// own settings — VS Code's own dark pack.
+	a := uitoolkit.New(uitoolkit.Options{
+		Headless: *headless,
+		// Without this the id would be the binary's name, and a sample
+		// built as "vscode" would claim the real vscode's identity on the
+		// desktop — its task-bar slot, its icon, its window rules.
+		AppID: "uitoolkit-sample-look-like-vscode",
+		Theme: uitoolkit.ThemeOverride{Pack: themePack},
+	})
 	win, err := a.NewWindow(platform.WindowOptions{
-		Title: "main.go — uitoolkit", Width: 1100, Height: 700,
+		Title: "uitoolkit-sample-look-like-vscode", Width: 1100, Height: 700,
 		MinWidth: 640, MinHeight: 420, Decorations: platform.DecorationsClient,
 	})
 	if err != nil {
@@ -59,7 +76,10 @@ func main() {
 	}
 
 	e := &editor{}
+	// VS Code's menu, title and its own buttons share one row that is the
+	// window's caption, under every theme it ships.
 	win.SetTitleBar(e.titleBar(win))
+	win.SetCaptionStyle(uitoolkit.CaptionMerged)
 	// The application draws to the window's edges, so an era's bevel
 	// round the outside would read as a frame inside a frame.
 	win.SetBorderless(true)
@@ -193,7 +213,7 @@ func statusBar() widget.Component {
 	left := widgets.NewRow(
 		widgets.NewIconButton(style.IconExternalLink, "Open a Remote Window", nil),
 		widgets.NewLabel("dev*"),
-		widgets.NewIconButton(style.IconRedo, "Synchronize Changes", nil),
+		widgets.NewIconButton(style.IconSync, "Synchronize Changes", nil),
 		widgets.NewLabel("0 errors, 0 warnings"),
 	).WithGap(8)
 	right := widgets.NewRow(

@@ -6,8 +6,8 @@
 // one that leans hardest on the splitter: three dividers, each with a
 // pane that must not be squeezed past what it holds.
 //
-//	go run ./examples/uitoolkit-sample-look-like-sourcegit
-//	go run ./examples/uitoolkit-sample-look-like-sourcegit -headless
+//	go run -tags theme_engine_web ./examples/uitoolkit-sample-look-like-sourcegit
+//	go run -tags theme_engine_web ./examples/uitoolkit-sample-look-like-sourcegit -headless
 package main
 
 import (
@@ -34,19 +34,39 @@ var history = []commit{
 	{"│ ", "fix: the block after one whose height changed", "codemodify", "09:11", "3a0e482"},
 }
 
+// themePack is the look this sample wears. Theme engines are chosen at
+// build time (docs/engines.md), so a plain build has only the default
+// one and the look falls back to the default — which the toolkit
+// says at start-up, and app.Application.Diagnostics collects for a test.
+const themePack = "sourcegit"
+
 func main() {
 	headless := flag.Bool("headless", false, "paint offscreen and write sourcegit.png")
 	flag.Parse()
 
-	a := uitoolkit.New(uitoolkit.Options{Headless: *headless})
+	// The shape is only half of looking like sourcegit; the other half is the
+	// paint. The sample states the pack it wants and nothing else, so a
+	// user's icon set, corner policy and typefaces still come from their
+	// own settings — the pack drawn after SourceGit.
+	a := uitoolkit.New(uitoolkit.Options{
+		Headless: *headless,
+		// Without this the id would be the binary's name, and a sample
+		// built as "sourcegit" would claim the real sourcegit's identity on the
+		// desktop — its task-bar slot, its icon, its window rules.
+		AppID: "uitoolkit-sample-look-like-sourcegit",
+		Theme: uitoolkit.ThemeOverride{Pack: themePack},
+	})
 	win, err := a.NewWindow(platform.WindowOptions{
-		Title: "uitoolkit — dev", Width: 1240, Height: 760,
+		Title: "uitoolkit-sample-look-like-sourcegit", Width: 1240, Height: 760,
 		MinWidth: 760, MinHeight: 480, Decorations: platform.DecorationsClient,
 	})
 	if err != nil {
 		log.Fatal(err)
 	}
+	// SourceGit's repository tabs are its title bar, the way Chromium's
+	// are, so the window says so rather than letting the era decide.
 	win.SetTitleBar(titleBar(win))
+	win.SetCaptionStyle(uitoolkit.CaptionMerged)
 	win.SetBorderless(true)
 	win.SetContent(body())
 
@@ -196,7 +216,11 @@ func statusBar() widget.Component {
 	row := widgets.NewRow(
 		widgets.NewIconButton(style.IconExternalLink, "Branch", nil),
 		widgets.NewLabel("dev"),
-		widgets.NewLabel("↑2 ↓0"),
+		// Ahead/behind as icons, not arrow runes: the bundled faces
+		// carry no arrows, so "↑2 ↓0" draws two tofu boxes. docs/icons.md
+		// is the rule — a mark is an icon, never a character.
+		widgets.NewIconLabel(style.IconArrowUp, "2"),
+		widgets.NewIconLabel(style.IconArrowDown, "0"),
 		gap,
 		widgets.NewLabel("7 commits"),
 	).WithGap(8).WithPad(4)

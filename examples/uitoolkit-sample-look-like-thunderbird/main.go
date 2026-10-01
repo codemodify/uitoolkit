@@ -10,8 +10,8 @@
 // width for nothing. Knowing which of the shapes a control is *is* the
 // job (docs/widgets.md, "Three shapes of button with a mark on it").
 //
-//	go run ./examples/uitoolkit-sample-look-like-thunderbird
-//	go run ./examples/uitoolkit-sample-look-like-thunderbird -headless
+//	go run -tags theme_engine_adwaita ./examples/uitoolkit-sample-look-like-thunderbird
+//	go run -tags theme_engine_adwaita ./examples/uitoolkit-sample-look-like-thunderbird -headless
 package main
 
 import (
@@ -39,13 +39,30 @@ var inbox = []message{
 	{"Educational: Assemble A Smartphone Yourself", "Kickstarter <contact@backthebest.com>", "9/29"},
 }
 
+// themePack is the look this sample wears. Theme engines are chosen at
+// build time (docs/engines.md), so a plain build has only the default
+// one and the look falls back to the default — which the toolkit
+// says at start-up, and app.Application.Diagnostics collects for a test.
+const themePack = "adwaita"
+
 func main() {
 	headless := flag.Bool("headless", false, "paint offscreen and write thunderbird.png")
 	flag.Parse()
 
-	a := uitoolkit.New(uitoolkit.Options{Headless: *headless})
+	// The shape is only half of looking like thunderbird; the other half is the
+	// paint. The sample states the pack it wants and nothing else, so a
+	// user's icon set, corner policy and typefaces still come from their
+	// own settings — GNOME's flat chrome, which is what Thunderbird wears on this desktop.
+	a := uitoolkit.New(uitoolkit.Options{
+		Headless: *headless,
+		// Without this the id would be the binary's name, and a sample
+		// built as "thunderbird" would claim the real thunderbird's identity on the
+		// desktop — its task-bar slot, its icon, its window rules.
+		AppID: "uitoolkit-sample-look-like-thunderbird",
+		Theme: uitoolkit.ThemeOverride{Pack: themePack},
+	})
 	win, err := a.NewWindow(platform.WindowOptions{
-		Title: "Inbox — uitoolkit Mail", Width: 1180, Height: 720,
+		Title: "uitoolkit-sample-look-like-thunderbird", Width: 1180, Height: 720,
 		MinWidth: 700, MinHeight: 460, Decorations: platform.DecorationsClient,
 	})
 	if err != nil {

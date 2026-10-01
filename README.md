@@ -27,6 +27,24 @@ go get github.com/codemodify/uitoolkit@v0.22.1
 go get github.com/codemodify/paintengine2d@v0.11.0
 ```
 
+**Start here: [docs/building.md](docs/building.md)** — the path through the
+toolkit in the order you meet it, naming at each step the one call you need
+and the thing that can quietly decide otherwise. The other pages are
+reference and are linked from it; none of them is a starting point.
+
+It opens with the question to answer first, because there are **three ways
+to build with this toolkit and two of them are opt-in**:
+
+| | the window's chrome | the controls in it | you write |
+| --- | --- | --- | --- |
+| **Themed** | the look's | the look's | nothing — the default |
+| **[Your own chrome](docs/recipes.md#an-application-whose-chrome-is-its-own--a-browser-an-editor)** | yours: its shape and a surface or two | the look's | a call per piece |
+| **[Skinned](docs/skins.md)** | the art's | the art's, hit areas and all | a skin file, no Go |
+
+A themed application writes none of the custom-chrome calls and looks like
+the desktop it runs on, under all 132 packs. That is the default in the
+strongest sense, and a test holds it.
+
 **Theme engines are opt-in, and it is the thing to know first.** A plain
 `go build` gives your application **one** theme — Plastik, the default —
 because an application that wants three looks should not carry

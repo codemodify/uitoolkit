@@ -7,6 +7,12 @@ Windows Media Player gave. It is a theme made of pictures: sprite sheets,
 named sub-rects of them, and a table saying which sub-rect paints which part
 of which control.
 
+A skin is the third of the
+[three ways to build with this toolkit](building.md#which-kind-of-application-are-you-building):
+a themed application places controls and the look draws everything, an
+application may state part of its own chrome, and a skin is art and hit
+areas in a file.
+
 A skin is a pack of the `skin` engine. It lists in Settings beside the other
 123, it is selected by the same `look.json` preference, `UITK_THEME=nocturne`
 runs any app in one, and editing it applies live. There is no skin mode and

@@ -275,15 +275,18 @@ else.
 | a mark in a menu row | `MenuItem.Icon` |
 | a mark in a table cell or its column header | `TableView.CellIcon`, `TableColumn.Icon` |
 | a mark on a tree node | `TreeNode.Icon`, with `IconTint` |
+| a mark beside plain text, that nothing clicks | `Label.Icon`, or `NewIconLabel(icon, text)` |
 | a mark anywhere else you are painting | `style.DrawToolIcon(ctx, box, icon, colour, style.IconSetOf(look))` |
 | a picture in a document | `richtext` and its `<img>`, not a glyph |
 
-There are **55 typed ids** (`style.AllToolIcons`), each of which resolves
+There are **56 typed ids** (`style.AllToolIcons`), each of which resolves
 four ways, best first: the user's file icon set, an installed freedesktop
 theme by name (`style.ToolIconThemeNames`), one of the five packs shipped
 in `icons/`, and the toolkit's own drawn Classic or Sharp set. That is
 why an icon is safe where a glyph is not — every one of those four
-answers exists on every machine.
+answers exists on every machine, and the last one always does
+(`style.Drawable`), so a typed id never comes back as a blank even when
+the person's copied icon set predates it.
 
 ```
 new      open     save     cut      copy     paste    undo     redo
@@ -294,8 +297,17 @@ external-link     eye      user     bell     send     close    quit
 print    star-filled       dot      more     menu
 layout   columns  rows     table    cards
 arrow-left        arrow-right       arrow-up arrow-down
-inbox    plus     x        lock
+inbox    plus     x        lock     sync
 ```
+
+`Label.Icon` is the row to reach for when the mark is not on a control.
+A status bar's ahead-and-behind counts, a lock beside a path, a severity
+in front of a line: these were the cases where the rule was hardest to
+keep, because until the field existed the only widget that could draw a
+mark was a button, and a button in a status bar is a lie about what is
+clickable. The mark takes the label's own colour and is sized from its
+font, so it matches small print rather than towering over it, and a
+label with an icon and no text is just the mark.
 
 `star-filled` and `dot` are the two the toolkit draws itself in every
 set, file sets included: none of the five packs ships either, and a

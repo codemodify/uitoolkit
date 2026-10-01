@@ -7,6 +7,320 @@ about the problem it solved.
 
 ---
 
+## Unreleased
+
+Five samples that are meant to look like applications people use, and
+what building them found. Nothing here is new API except one field.
+
+### A label was drawn in a font nobody had measured
+
+A Thunderbird-shaped tool bar read **"Get Message", "Reply Al",
+"Forwarc", "Delet"**. The labels were not too long for the bar — each
+button was given exactly the width it had asked for.
+
+`ToolButton.Measure` reserves `style.ControlFontOf(look, RoleTool)`.
+The engine then draws the label in whatever face it likes and clips to
+the button's box. Adwaita draws libadwaita's semibold and **declared no
+control font at all**, so it was measured in the body face and drawn a
+weight heavier — about a character's worth, silently cut off the end.
+
+Two fixes, both at the seam rather than at the call site:
+
+- `adwaitaEngine.ControlFont` now names the face it actually draws
+  buttons, tool buttons and tabs in.
+- A skin asked its *base pack* for the face and then painted the label
+  through the *stock* chrome — `under` where the drawing uses `underFor`.
+  Two different engines, one measuring for the other. Lantern, Marquee
+  and Nocturne are partial skins whose base is not in the default build,
+  and their tool labels were clipped in exactly that build and no other.
+
+The regression test is not a table of which engine is bold. It renders:
+a tool button is drawn twice at one width, once with the label and once
+without, and the difference between the two images is the label's own
+ink. Do that at the measured width and again with room to spare, and
+compare how wide that ink is. A label that fits draws the same glyphs
+either way; one that is clipped or elided does not. Every pack in the
+build is checked, in both build configurations.
+
+### `Label.Icon`
+
+The toolkit's first rule is that a mark is an icon and never a character,
+because the bundled faces have no arrows, no check and no chevron — a
+status bar that writes `↑2 ↓0` draws two boxes. But until now the only
+widget that could put a mark on screen was a **button**, so obeying the
+rule in a status bar meant either a button that does nothing or a rune
+that draws a box. The SourceGit sample hit it immediately and drew two
+boxes.
+
+`Label.Icon` (and `NewIconLabel(icon, text)`) is a mark before the text,
+in the text's own colour and sized from its font, so it matches small
+print instead of towering over it. A label with an icon and no text is
+just the mark.
+
+### Three ways to build, and two of them are opt-in
+
+Written down at the top of [building.md](docs/building.md), because it is
+the first question and it was nowhere: a **themed** application places
+controls and the look draws and arranges everything around them; an
+application that **states part of its own chrome** keeps the look's
+controls but owns its title bar's shape and two or three surfaces; a
+**skin** is art and hit areas in a file. They are not a ladder and nobody
+graduates between them.
+
+The second and third are opted into a call at a time, and that is now a
+test rather than an intention: a window built with no extra line reports
+the look's caption style, keeps the look's border, has no title bar of its
+own, and its surfaces match the pack's exactly — and an icon button is not
+flat, a tool item does not grow, a label carries no mark, a field is not
+frameless. Defaults of this kind erode one convenience at a time, so the
+promise is held somewhere that fails.
+
+### The pieces a browser-shaped application needs, as toolkit pieces
+
+The look-like-chromium sample was built beside a real Chromium and
+measured against it until the two matched. Nothing it needed stayed in the
+sample: every piece is API, and the shape is now five ordinary calls that
+any application can make ([recipes.md](docs/recipes.md)).
+
+- **`widgets.FieldBox`** — one text-field well with controls inside it: a
+  browser's address bar with its site-information mark and its bookmark
+  star, a search box with a magnifier. `TextField.Clearable` does the
+  trailing end only, and does it by taking the room out of the *string*,
+  which cannot work at the leading end — where the text begins belongs to
+  the engine, and twenty-five of them draw a field. So the box draws the
+  well and the field inside it is frameless, and the well takes the focus
+  ring from the field: one control to look at, not three.
+- **`ToolItem.Grow` / `ToolGrow`** — the other half of `Stretch`. Both
+  take a bar's spare width; `Stretch` leaves it blank and `Grow` hands it
+  to a control. A widget marked `Stretch` was treated as a gap and never
+  laid out, so the sample's omnibox was an invisible 950-pixel hole in its
+  own tool bar.
+- **`IconButton.Flat`** — the same control on the tool face: no frame
+  until the pointer is over it, which is how a browser draws its lock, its
+  star and its three-dot menu. The toolkit had the flat face and the
+  framed one and no way to ask the second for the first, so a sample
+  copying that chrome put framed buttons inside its own address bar.
+  `MenuButton` inherits it.
+- **`CenterButtons` now means what it says.** It fired only when the band
+  was taller than the look's caption, leaving the other half of the same
+  question unanswered: a button *shorter* than its band hung from the top
+  with the slack beneath it however much the pack wanted it centred. Every
+  pack that wanted centring had worked it out by hand into
+  `ButtonPad.Top`; a pack that set the flag alone got nothing. A test now
+  holds every pack that claims centring to it.
+- **The web look's caption buttons and browser tabs.** It was the one
+  modern pack still using the Windows idiom — a wide full-height rectangle
+  — among adwaita, breeze, material and macOS, which all use a square
+  button centred with a gap. Its browser tab's feet and corner radius were
+  flat pixel counts, so on a short caption the whole flare compressed into
+  the last pixel or two and the tab read as a rectangle with the corners
+  knocked off; both are proportions of the tab now.
+
+The root package re-exports all of it, along with `ToolStretch`,
+`ToolLabel`, `ToolWidget`, `NewIconButton`, `NewMenuButton` and
+`NewIconLabel`, which were reachable only by importing `widgets` directly.
+
+### An application can paint its own chrome
+
+The look-like-chromium sample had the right layout and still did not look
+like Chromium, and measuring the two side by side said why in one line:
+real Chromium's chrome is a tinted strip over a paler tool bar — `#D2E2FC`
+over `#ECF2FA` — and ours was one unbroken field of white. Chromium's
+whole tab metaphor rests on that contrast: the selected tab is a channel
+cut through the tinted strip, continuous with the tool bar below it.
+
+Two things were missing, and only one of them was a gap.
+
+**The sample never painted a tool bar.** Its navigation row was a plain
+`Row` on the window's background, so there was no tool bar surface for the
+selected tab to merge into — and the engine had been filling that tab with
+the tool bar's colour all along, correctly, into nothing. A `ToolBar` with
+`ToolWidget` for the address field is the whole fix, and the tab meets it.
+
+**An application could not tint its chrome.** `Options.Chrome` and
+`style.WithChrome` state the window's surfaces by name — "titleBar",
+"toolBar", "sidebar" — which is exactly how a pack states them in
+`theme.json`, so every engine already reads them through `Classic.X`. The
+sample now matches a real Chromium's tab strip exactly and its tool bar
+within four parts in 255.
+
+A tint carries no ink: an engine draws the text on these surfaces in the
+palette's colours, and there is no "title bar text" to go with "titleBar".
+So a tinted surface must stay inside the contrast its palette was built
+for — which is why the Firefox sample pales the `#6094CF` it measured off
+a real one rather than using it directly, and why the doc says so.
+
+### Two programs built with this toolkit are two programs
+
+Both Linux backends hardcoded the application's identity to the string
+"uitoolkit" — Wayland in `xdg_toplevel.set_app_id`, X11 in `WM_CLASS`.
+That is what a desktop files windows under, so it decides which task-bar
+button they share, which icon they wear, which `.desktop` file they match
+and which window rules apply. The desktop did exactly as it was told: a
+mail client and a password vault, two unrelated programs, shared one
+task-bar entry and one icon, and nothing either could do would separate
+them. Five samples on one desktop appeared as one program.
+
+The default is now the executable's own name, which is distinct without
+anyone asking, and `Options.AppID` states it explicitly — which an
+application shipping a `.desktop` file must do, since matching that file
+is the only way the desktop can give it its icon.
+
+Not a seam the other backends owe anything: Windows and macOS identify a
+program by its executable already, so there was never a bug there to fix.
+A Linux-shaped problem with a Linux-shaped answer.
+
+One trap the samples found: the default being the binary's name means a
+sample built as `chromium` would claim the *real* Chromium's identity —
+its task-bar slot, its icon, its window rules. Each sample now states its
+own, which is also the demonstration of why the field exists.
+
+### One path through the documentation, and a test that it is true
+
+Twenty-four reference pages and eleven thousand lines of them, and no
+order to read them in: the toolkit's problem was never a shortage of
+documentation. [docs/building.md](docs/building.md) is the spine — an
+application from `New` to its first test, in the order you meet it, where
+each step names the one call you need **and the layer that can quietly
+decide otherwise**, now that each of those layers says so out loud. The
+README points at it and the reference pages hang off it.
+
+And the pages are now checked against the toolkit. `contracts.md` once
+listed the places an application may put a mark — and a status bar was
+not among them and could not be, because no widget could draw one unless
+you clicked it. The rule the page stated was unkeepable and the page said
+nothing, because nothing compared the two. Every `package.Symbol` written
+in a documentation page now has to resolve, or the suite fails.
+
+Two things it found immediately: a metric written as `style.ComboH` that
+is really a field of `ChromeMetrics`, and — the interesting one — that
+the comparison tables name *fyne's* `widget` and `layout` packages, which
+are spelled exactly like this repository's. There is no telling them
+apart, so those two are not checked inside a table and are everywhere
+else. One page deliberately names a function in order to say it does not
+exist; that is in a short written-down allowlist with its reason, not
+filtered away by a pattern.
+
+### The toolkit says when it did not do what it was told
+
+Everything else in this release was found the same way: something was
+stated clearly, a layer that had never been mentioned overruled it, and
+nothing anywhere said so. A sample asked for a browser's shape in four
+correct calls and got a caption row above its tabs. A pinned theme pack
+whose engine was not in the build fell back to the default look in
+silence. A tool button measured one font and was drawn in another.
+
+These are not bugs in those layers — a Windows 95 pack *should* put a
+tool bar under its title strip, and engines *should* be chosen at build
+time. The bug was that being overruled was indistinguishable from being
+wrong.
+
+`diag` is a new leaf package, and `Application.Diagnostics()` returns what
+it collected. Every finding has three parts and the third is the point:
+what was asked, what happened instead, and **the call or build flag that
+gets what was asked**.
+
+	uitk theme: asked theme pack "adwaita", got the default look; no engine
+	  in this build draws that pack — build with the engine that draws it;
+	  docs/engines.md lists the tags
+
+They are logged as they happen, for a developer, and collected, for a
+test — which is the half that stops an application drifting back into the
+confusion unnoticed. The caption note waits for the first layout on
+purpose, so an application that settles its shape on the next line is
+never told it was overruled.
+
+Wired so far: a pinned pack this build cannot draw, a title bar an era put
+in a second row, a frame the compositor refused, a theme metric clamped,
+an icon set that is behind or absent, a tray menu the host would not let
+the toolkit draw. Debug tracing is deliberately *not* in it — that is a
+different thing. [docs/diagnostics.md](docs/diagnostics.md) has the rest,
+including how to add one.
+
+`style.ThemePackAvailable` is the question an application actually wants
+to ask before pinning a pack, and is new with this.
+
+### An application can say its title bar *is* the caption
+
+The look-like-chromium sample asked for everything correctly — client
+decorations, the tab strip as the title bar, no title text, no border —
+and still came out with a caption row above its tabs. The toolkit was
+doing what it was told: `DecorationSpec.Stacked` says a classic frame
+keeps the era's own title strip and puts the application's bar in the row
+*under* it, which is right for Windows 95's tool bars and wrong for a
+browser. Nothing could say otherwise, so under a classic pack a browser
+sample could never look like a browser.
+
+`Window.SetCaptionStyle` is the application's say over the era:
+
+```go
+win.SetTitleBar(tabStrip())
+win.SetCaptionStyle(style.CaptionMerged)
+```
+
+`CaptionFollowsLook` stays the default and stays right for an application
+that wants to belong to the desktop it runs on. `CaptionMerged` is for one
+that is a shape instead — Chromium's tabs are its title bar on every
+desktop it has ever run on, and so are VS Code's menu row and SourceGit's
+repository tabs. `CaptionStacked` asks for the classic strip under every
+pack. The four samples whose namesakes merge now state it, and they look
+like themselves under the era packs as well as the modern ones.
+
+### A copied icon set that is one id behind is behind, not broken
+
+Two samples drew a blank where their menu button should be. The set was
+not installed wrong: `icons/README.md` says an application must never
+write into `~/.config/uitoolkit/icons`, because two that do overwrite
+each other silently. The consequence had not been followed through — a
+copy is therefore made **once**, so the day the toolkit gains a typed id
+every installed copy of every set is one stem short of it, for everybody.
+This release alone added about thirty ids.
+
+`loadFileIcon` treated that as an install to complain about and drew the
+missing-icon mark, while holding a perfectly good vector for the id. Now
+the two cases are told apart by `style.Drawable`: a **typed** id the set
+lacks is drawn by the toolkit, with one line naming the stem and where a
+fresh copy is; a **stem-only** icon, which nothing anywhere can draw,
+still gets the mark, because there the box is the only honest answer.
+
+It is the mirror of the same seam in the other direction — a stem-only
+icon showing the missing-icon mark in a *drawn* set — and both are now
+pinned by tests.
+
+### The samples wear their namesake's pack, not just its shape
+
+Getting the shape right only got half the way there: a browser laid out
+correctly but painted in a classic pack's bevels still does not look like
+a browser. Each sample now states the pack it wants and nothing else, so
+the reader's icon set, corners and typefaces still come from their own
+settings:
+
+	uitoolkit.New(uitoolkit.Options{Theme: uitoolkit.ThemeOverride{Pack: "adwaita"}})
+
+VS Code and SourceGit take the packs drawn after them (`vscode-night`,
+`sourcegit`, both `webEngine`); the three that wear the desktop's own
+chrome take `adwaita`. Theme engines are chosen at build time, so each
+sample's run line now carries the tag its pack needs and each says so at
+startup if it was built without it, rather than falling back silently to
+the default look and appearing to be broken.
+
+### The five samples say which sample they are
+
+Each window's title is now its sample name, so five of them on one desktop
+can be told apart in the task bar. They draw their own captions, so the
+realistic title text is still there in the bar itself.
+
+### The choices column in Settings was 198 pixels wide
+
+`defaultChoicesRatio` works a *share* out from the window size, guessing
+what the page spends on chrome before the panes ever see it. The guess
+was 30 pixels and the truth is about 90, so at 760 the column asked for
+216 and was given 198 — narrow enough to elide a pack's own name. A share
+cannot express a floor, so the column now states one (`Splitter.MinA`)
+and the ratio only decides how much more than the floor it gets.
+
+---
+
 ## 0.22.5
 
 The two applications kept going. secretvault's three remaining items were

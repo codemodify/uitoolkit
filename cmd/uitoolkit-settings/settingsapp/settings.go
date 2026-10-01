@@ -270,6 +270,13 @@ func buildSettingsState(s *settingsState) widget.Component {
 	}
 	s.bodySplit = widgets.NewSplitter(widgets.SplitColumns, s.choicesColumn(), s.previewColumn())
 	s.bodySplit.Ratio = s.browserRatio
+	// A share is not a width: defaultChoicesRatio works one out from the
+	// *window*, guessing what the page spends on chrome before the panes
+	// see it, and the guess is low — at 760 the column asked for 216 and
+	// was given 198, narrow enough to elide a pack's own name. The floor
+	// is the honest half of the pair, so the column states it and the
+	// ratio only decides how much more than the floor it gets.
+	s.bodySplit.MinA = choicesFloor
 	s.bodySplit.SetAccessibleName("Settings and preview")
 
 	s.applyBtn = widgets.NewButton("Apply", s.apply)
@@ -1531,6 +1538,11 @@ func (s *settingsState) followWindow() {
 // "1995  ·  Windows 95" and the word on the Export button, and 240
 // elides the one and wraps the other.
 // Dragging the sash replaces it.
+// choicesFloor is the least the column may be: a decade filter, a pack
+// name and the word on the Export button. Below it the row reading
+// "1995  ·  Windows 95" elides and the button wraps.
+const choicesFloor = 216
+
 func defaultChoicesRatio(win *app.Window) float32 {
 	const want, narrow, pad = 300, 800, 30
 	// Window.Size is already logical pixels, which is what `want` is in.
@@ -1547,7 +1559,7 @@ func defaultChoicesRatio(win *app.Window) float32 {
 	// readable pack name.
 	w := float32(want)
 	if lw < narrow {
-		w = 216
+		w = choicesFloor
 	}
 	return min(max(w/page, 0.18), 0.5)
 }

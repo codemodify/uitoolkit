@@ -65,7 +65,7 @@ hashes button + checkbox + menu row paint so dirty-rect hacks fail CI.
 | Focus ring | `Palette.Focus` stroke | GTK focus ring / Avalonia focus adorner |
 | Inactive selection | `Selection` @ 0.14 | Qt inactive highlight |
 | Menu hot-track | `MenuHover` + `MenuHoverBorder` + `MenuGutter` | Office XP / Win32 menu highlight |
-| `style.ComboH` / `FieldHeight` | 30 (compact 26 / relaxed 36) | Qt toolbar-height combo / spin |
+| `style.ChromeMetrics.ComboH` / `FieldHeight` | 30 (compact 26 / relaxed 36) | Qt toolbar-height combo / spin |
 | `style.Metrics.ProgressH` | look metric | Qt / GTK progress thickness |
 | Column resize hit | 5 device px | Qt `QHeaderView` handle |
 

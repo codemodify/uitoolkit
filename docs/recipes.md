@@ -319,6 +319,92 @@ shape and put a different mark in it — 67 of the packs draw a glyph of
 their own for anything they do not recognise. The tool face is the era's
 own button for a mark, and every pack has one.
 
+## An application whose chrome is its own — a browser, an editor
+
+This is the second of the three ways to build with this toolkit, and it is
+opted into a call at a time: a themed application that writes none of this
+keeps the look's own chrome, and a skin answers the question a third way
+([building.md](building.md#which-kind-of-application-are-you-building)).
+
+The shape a browser or a code editor wears is not a special case the
+toolkit knows about. It is five ordinary pieces, and every one of them is
+a thing any application can ask for. `examples/uitoolkit-sample-look-like-chromium`
+is the whole of it in one file.
+
+**1. Your title bar *is* the caption.** A classic look would put its own
+title strip above yours; say that your bar is the caption and it will not,
+under any pack:
+
+```go
+win.SetTitleBar(tabStrip())           // a HeaderBar holding BrowserTabs
+win.SetCaptionStyle(style.CaptionMerged)
+win.SetBorderless(true)               // your chrome runs to the window's edge
+```
+
+**2. Paint your own chrome.** A browser tints its tab strip and its tool
+bar; it does not wear the pack's neutral grey. State the two surfaces by
+name — the same names a pack's `theme.json` uses, so the engine was
+already reading them:
+
+```go
+uitoolkit.New(uitoolkit.Options{
+    Chrome: map[string]paintengine2d.Color{
+        "titleBar": accent,
+        "toolBar":  style.Mix(accent, paintengine2d.RGB(1, 1, 1), 0.55),
+    },
+})
+```
+
+A tint carries no ink, so keep a tinted surface inside the contrast its
+palette was built for.
+
+**3. The row under the tabs is a `ToolBar`, not a `Row`.** This is the one
+that is easy to get wrong and hard to see: a look paints its tool bar as
+its own surface, and the engine fills the *selected tab* with that same
+colour so the two meet and read as one. On a plain `Row` there is no tool
+bar surface, the tab has nothing to merge into, and the window reads as
+a page with tabs floating above it.
+
+**4. One control takes the spare width.** `ToolStretch` is blank space;
+`ToolGrow` is the control that grows:
+
+```go
+widgets.NewToolBar(
+    widgets.ToolIconBtn(style.IconArrowLeft, "", onBack),
+    widgets.ToolIconBtn(style.IconArrowRight, "", onForward),
+    widgets.ToolIconBtn(style.IconSync, "", onReload),
+    widgets.ToolGrow(omnibox),
+    widgets.ToolIconBtn(style.IconArchive, "", onExtensions),
+    widgets.ToolWidget(menu),
+)
+```
+
+**5. Marks inside the address bar, and marks with no frame.** A browser's
+site-information lock and its bookmark star are *inside* the field, not
+beside it, and none of its marks has a frame until you point at it:
+
+```go
+addr := widgets.NewTextField(url, "Search or enter address", nil)
+lock := widgets.NewIconButton(style.IconLock, "View site information", onInfo)
+star := widgets.NewIconButton(style.IconStar, "Bookmark this tab", onStar)
+lock.Flat, star.Flat = true, true     // no frame until pointed at
+omnibox := widgets.NewFieldBox(
+    []widget.Component{lock}, addr, []widget.Component{star})
+```
+
+`FieldBox` draws the well once, around everything, and takes the focus
+ring from the field inside it — one control to look at, not three.
+`IconButton.Flat` is the same control as an ordinary one, with the tool
+face instead of the button face; `MenuButton` inherits it, which is what
+a three-dot menu wants.
+
+**What the pack still decides.** The tab's shape, the caption buttons'
+size and side, the radius: those are the look's, and they differ by era on
+purpose. `style.ThemePackAvailable` tells you whether the pack you pinned
+is even in your build ([engines.md](engines.md)), and anything the toolkit
+does other than what you asked is on the log and in
+`Application.Diagnostics()` ([diagnostics.md](diagnostics.md)).
+
 ## A status colour as text
 
 **Obvious:** draw the word in `Palette().Danger`.

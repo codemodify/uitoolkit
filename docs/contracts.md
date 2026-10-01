@@ -30,9 +30,16 @@ it lacks draws as a box — on any machine, and on *every* machine under
 in this repository run under. An application that types its marks has a
 UI that looks right for its author and wrong for everybody else.
 
-Use `Button.Icon`, `ToolItem.Icon`, `MenuItem.Icon`,
+Use `Button.Icon`, `ToolItem.Icon`, `MenuItem.Icon`, `Label.Icon`,
 `TableView.CellIcon`, `TableColumn.Icon`, `TreeNode.Icon`, or
-`style.DrawToolIcon` where you are painting yourself. The full list of
+`style.DrawToolIcon` where you are painting yourself.
+
+`Label.Icon` (`NewIconLabel`) is the one for a mark that nothing clicks —
+a status bar's ahead and behind counts, a caption's lock, a severity
+beside a line of text. Before it existed the only widget that could put a
+mark on screen was a button, so obeying this rule in a status bar meant
+either a button that does nothing or a rune that draws a box. A label
+with an icon and no text is just the mark. The full list of
 ids, the wider stem vocabulary and the four runes that *are* safe are in
 [Icons, and when not to use text](widgets.md#icons-and-when-not-to-use-text).
 
