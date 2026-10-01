@@ -27,7 +27,18 @@ type Label struct {
 	// ink form of them ([style.Palette.Ink]) rather than the declared
 	// one. An application that set Color from the palette itself got the
 	// unreadable version, and had to re-set it on every look change.
-	Tone  LabelTone
+	Tone LabelTone
+	// Icon is a mark drawn before the text, in the text's own colour and
+	// scaled to its height.
+	//
+	// The toolkit's rule is that a mark is an icon and never a character
+	// (docs/icons.md), because the bundled faces carry no arrows, no
+	// check and no chevron — a "↑2" written as text draws a tofu box.
+	// Until this field existed the only way to obey that rule was to
+	// wrap the mark in a button, which is wrong for a status bar or a
+	// caption, where nothing is clickable. A label with an icon and no
+	// text is just the mark.
+	Icon  style.ToolIcon
 	Align style.Align
 	Title bool
 	Mono  bool
@@ -138,10 +149,29 @@ func (l *Label) Measure(c layout.Constraints) paintengine2d.Point {
 		w = max(w, f.Advance(line))
 	}
 	n := max(len(lines), l.MinLines)
+	if l.Icon != style.IconNone {
+		w += l.iconSide(f) + l.iconGap(f)
+	}
 	return c.Constrain(paintengine2d.Pt(w+2, f.Height()*float32(n)+2))
 }
 
+// NewIconLabel is a label that leads with a mark — a status bar's ahead
+// and behind counts, a caption's lock, a row's severity.
+func NewIconLabel(icon style.ToolIcon, text string) *Label {
+	l := NewLabel(text)
+	l.Icon = icon
+	return l
+}
+
 func (l *Label) Arrange(r paintengine2d.Rect) { l.SetBounds(r) }
+
+// iconSide and iconGap size the mark from the text it sits beside, not
+// from the look's control metrics: a label is whatever height its font
+// is, and an icon measured against a toolbar button would tower over a
+// status line's small print.
+func (l *Label) iconSide(f *style.Font) float32 { return float32(int(f.Height()*0.85 + 0.5)) }
+
+func (l *Label) iconGap(f *style.Font) float32 { return float32(int(f.Height()*0.3 + 0.5)) }
 
 // MinWidth implements [widget.MinWidther].
 //
@@ -172,6 +202,15 @@ func (l *Label) Paint(ctx *paintengine2d.Context) {
 		col = l.Tone.colorIn(lk)
 	}
 	b := l.LocalBounds()
+	if l.Icon != style.IconNone {
+		side, gap := l.iconSide(f), l.iconGap(f)
+		// Centred on the first line, so a wrapping label's mark sits
+		// beside the text it introduces rather than beside the middle
+		// of the paragraph.
+		top := b.Min.Y + (min(f.Height(), b.Dy())-side)*0.5
+		style.DrawToolIcon(ctx, paintengine2d.XYWH(b.Min.X, top, side, side), l.Icon, col, style.IconSetOf(lk))
+		b.Min.X += side + gap
+	}
 	lines := l.layoutLines(f, b.Dx()-2)
 	th := f.Height()
 	y := b.Min.Y + (b.Dy()-th*float32(len(lines)))*0.5

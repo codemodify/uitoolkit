@@ -101,6 +101,9 @@ const (
 	IconClose2
 	// A padlock, for a secure address and a locked vault.
 	IconLock
+	// A circular arrow. Reload is not redo: a browser's reload button is
+	// a ring, and IconRedo is the right-angled arrow that undoes an undo.
+	IconSync
 )
 
 var toolIconLabels = [...]string{
@@ -124,6 +127,7 @@ var toolIconLabels = [...]string{
 	IconArrowLeft: "Back", IconArrowRight: "Forward",
 	IconArrowUp: "Up", IconArrowDown: "Down",
 	IconInbox: "Inbox", IconPlus: "Add", IconClose2: "Close", IconLock: "Secure",
+	IconSync: "Reload",
 }
 
 // Label is the action the icon stands for, in words ("Save"): what
@@ -195,6 +199,7 @@ var toolIconFiles = []struct {
 	{IconPlus, "plus"},
 	{IconClose2, "x"},
 	{IconLock, "lock"},
+	{IconSync, "sync"},
 }
 
 // shippedIconStems is the wide PNG vocabulary rendered by icons/render.sh
@@ -391,6 +396,7 @@ var toolIconThemeNames = map[ToolIcon][]string{
 	IconPlus:         {"list-add", "add"},
 	IconClose2:       {"window-close", "edit-delete", "list-remove"},
 	IconLock:         {"channel-secure", "security-high", "lock"},
+	IconSync:         {"view-refresh", "reload", "system-software-update"},
 }
 
 // ToolIconThemeNames are the freedesktop names an installed icon theme
@@ -458,6 +464,18 @@ func IconByStem(stem string) (ToolIcon, bool) {
 // caching as the rest; nothing switches on them, because the drawn sets
 // have no vector for them and the file sets go by name.
 const stemIconBase ToolIcon = 1 << 12
+
+// Drawable reports whether the toolkit can draw this icon itself, which
+// is true of every typed id and of no stem-only one.
+//
+// It is the difference between the two ways a file set can fail to have
+// an icon. A set that is missing a *typed* stem is a set that has fallen
+// behind — the toolkit gained an id after the person copied the set into
+// their directory, which happens to everybody every time an id is added
+// — and the toolkit has its own vector to draw meanwhile. A set missing
+// a *stem-only* icon has nothing behind it anywhere, and the
+// missing-icon mark is the only honest answer.
+func Drawable(icon ToolIcon) bool { return icon != IconNone && icon < stemIconBase }
 
 // StemOf is the file stem an icon resolves to, including the stem-only
 // ones from [IconByStem]. It is "" for IconNone.

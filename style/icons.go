@@ -72,9 +72,18 @@ func DrawToolIcon(ctx *paintengine2d.Context, b paintengine2d.Rect, icon ToolIco
 		if DrawFileToolIcon(ctx, b, icon, col, set) {
 			return
 		}
-		if drawEmbeddedNoIcon(ctx, b, col) {
+		// The set has no file for this one. Where the toolkit can draw
+		// the mark itself it does — a set that predates an id is behind,
+		// not broken, and a person who copied their icons last month
+		// should not get a box because the toolkit gained an id since.
+		// A stem-only icon, which nothing anywhere can draw, and a set
+		// that was never installed, which the person needs to be told
+		// about, both fall to the missing-icon mark (see loadFileIcon).
+		if Drawable(icon) && fileIconSetInstalled(set) {
+			drawScaledIcon(ctx, b, func(ctx *paintengine2d.Context, db paintengine2d.Rect) { drawClassicIcon(ctx, db, icon, col) })
 			return
 		}
+		drawEmbeddedNoIcon(ctx, b, col)
 		return
 	}
 	switch set {
@@ -566,6 +575,22 @@ func drawClassicIcon(ctx *paintengine2d.Context, b paintengine2d.Rect, icon Tool
 		sh.QuadTo(cx, cy-h*0.36, cx+w*0.14, cy-h*0.18)
 		sh.LineTo(cx+w*0.14, cy-h*0.04)
 		ctx.DrawPath(sh, stroke)
+	case IconSync:
+		// A ring open at the top with an arrowhead on one end: reload,
+		// which is not redo.
+		r := w * 0.30
+		arc := paintengine2d.NewPath()
+		arc.MoveTo(cx+r*0.30, cy-r)
+		arc.QuadTo(cx-r*1.35, cy-r*1.05, cx-r, cy)
+		arc.QuadTo(cx-r*0.9, cy+r*1.35, cx, cy+r)
+		arc.QuadTo(cx+r*1.35, cy+r*0.9, cx+r, cy-r*0.10)
+		ctx.DrawPath(arc, stroke)
+		head := paintengine2d.NewPath()
+		head.MoveTo(cx+r*0.30, cy-r*1.55)
+		head.LineTo(cx+r*0.95, cy-r*0.92)
+		head.LineTo(cx+r*0.05, cy-r*0.55)
+		head.Close()
+		ctx.DrawPath(head, fill)
 	case IconStarFilled:
 		ctx.DrawPath(starPath(cx, cy, w*0.44, w*0.18), fill)
 	case IconDot:

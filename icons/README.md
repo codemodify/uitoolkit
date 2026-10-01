@@ -38,6 +38,15 @@ newer toolkit installs stems that an older program's copy then removes,
 and the older program's icons start coming back as the missing-icon
 placeholder with nothing anywhere to say why.
 
+The consequence of that rule is that a copy is made **once** and then
+falls behind on its own: the day the toolkit gains a typed id, every
+installed copy of every set is one stem short of it, for everybody. So a
+set missing a *typed* stem is not treated as broken — the toolkit draws
+its own vector for that id and logs one line naming the stem and where a
+fresh copy is. Only a **stem-only** icon, which no vector exists for,
+falls to the missing-icon mark. Refreshing a set is still just copying
+the folder over; nothing breaks while you have not.
+
 An application that ships art of its own keeps it wherever it likes —
 beside the binary, in its own config directory, embedded and unpacked to
 a temporary directory — and says so at start-up:

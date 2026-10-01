@@ -201,8 +201,11 @@ func TestFileIconLoadTintFallback(t *testing.T) {
 		t.Fatal("search should tint blue")
 	}
 
-	// Missing glyph in an installed premiere set uses no-icon, never
-	// the drawn classic scribble.
+	// A typed stem missing from a set that *is* installed: the toolkit
+	// draws its own mark. The set has fallen behind — a person copies a
+	// set once, so every id the toolkit gains leaves every copy short of
+	// it — and a mark that says "cut" serves them better than a box that
+	// says nothing. logStaleSetOnce names the stem in the log.
 	classic := rasterIcon(IconSetClassic, IconCut)
 	installed := rasterIcon(IconSetLucide, IconCut)
 	placeholder := rasterNamedStem(IconSetLucide, "no-icon")
@@ -211,13 +214,13 @@ func TestFileIconLoadTintFallback(t *testing.T) {
 	resetIconCache()
 	fallback := rasterIcon(IconSetLucide, IconCut)
 	if inkCount(fallback) < 8 {
-		t.Fatal("missing stem should paint no-icon")
+		t.Fatal("a stale stem painted nothing at all")
 	}
-	if maskDiff(classic, fallback) < 8 {
-		t.Fatalf("missing file must not use classic (diff=%d)", maskDiff(classic, fallback))
+	if maskDiff(classic, fallback) > 4 {
+		t.Fatalf("a stale stem should be the toolkit's own mark (diff=%d)", maskDiff(classic, fallback))
 	}
-	if maskDiff(placeholder, fallback) > 4 {
-		t.Fatalf("missing stem should match no-icon (diff=%d)", maskDiff(placeholder, fallback))
+	if maskDiff(placeholder, fallback) < 8 {
+		t.Fatal("a stale stem fell to the missing-icon mark")
 	}
 	if maskDiff(classic, installed) < 8 {
 		t.Fatal("installed lucide cut should differ from classic before delete")
@@ -234,29 +237,49 @@ func TestFileIconLoadTintFallback(t *testing.T) {
 	}
 }
 
-func TestMissingStemUsesNoIconNotClassicPen(t *testing.T) {
+// A stale stem draws *that* id's mark, not some neighbouring one. The
+// value of falling through to the drawn set is that the button still says
+// what it does; a fallback that painted the wrong action would be worse
+// than the box it replaced.
+func TestStaleStemDrawsItsOwnMarkNotANeighbour(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	resetIconCache()
 	installRepoIconSet(t, "lucide")
-	_ = os.Remove(filepath.Join(UserIconSetDir(IconSetLucide), "pen.png"))
-	_ = os.Remove(filepath.Join(UserIconSetDir(IconSetLucide), "pen@2x.png"))
-	_ = os.Remove(filepath.Join(UserIconSetDir(IconSetLucide), "pencil.png"))
-	_ = os.Remove(filepath.Join(UserIconSetDir(IconSetLucide), "pencil@2x.png"))
-	_ = os.Remove(filepath.Join(UserIconSetDir(IconSetLucide), "compose.png"))
-	_ = os.Remove(filepath.Join(UserIconSetDir(IconSetLucide), "compose@2x.png"))
+	for _, stem := range []string{"pen", "pencil", "compose"} {
+		_ = os.Remove(filepath.Join(UserIconSetDir(IconSetLucide), stem+".png"))
+		_ = os.Remove(filepath.Join(UserIconSetDir(IconSetLucide), stem+"@2x.png"))
+	}
 	resetIconCache()
 	got := rasterIcon(IconSetLucide, IconPen)
 	classicPen := rasterIcon(IconSetClassic, IconPen)
 	classicNew := rasterIcon(IconSetClassic, IconNew)
 	placeholder := rasterNamedStem(IconSetLucide, "no-icon")
-	if maskDiff(got, classicPen) < 8 {
-		t.Fatal("missing pen must not paint classic pen")
+	if maskDiff(got, classicPen) > 4 {
+		t.Fatalf("a stale pen should be the drawn pen (diff=%d)", maskDiff(got, classicPen))
 	}
 	if maskDiff(got, classicNew) < 8 {
-		t.Fatal("missing pen must not paint classic new")
+		t.Fatal("a stale pen painted the drawn *new* mark — the wrong action")
 	}
-	if maskDiff(got, placeholder) > 4 {
-		t.Fatalf("missing pen should be no-icon (diff=%d)", maskDiff(got, placeholder))
+	if maskDiff(got, placeholder) < 8 {
+		t.Fatal("a stale pen fell to the missing-icon mark")
+	}
+}
+
+// A set nobody installed is a different failure from one that is behind:
+// the person picked it in Settings and it never arrived. Drawing every
+// icon would make that look like it worked, so the mark stays the answer.
+func TestASetThatWasNeverInstalledStillShowsTheMark(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	resetIconCache()
+	installRepoIconSet(t, "lucide")
+	placeholder := rasterNamedStem(IconSetLucide, "no-icon")
+	resetIconCache()
+	unknown := rasterIcon(IconSetName("not-installed"), IconSearch)
+	if maskDiff(rasterIcon(IconSetClassic, IconSearch), unknown) < 8 {
+		t.Fatal("a set that is not installed painted the drawn mark, hiding that it is missing")
+	}
+	if maskDiff(placeholder, unknown) > 8 {
+		t.Fatalf("a set that is not installed should paint no-icon (diff=%d)", maskDiff(placeholder, unknown))
 	}
 }
 

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	_ "embed"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -13,6 +12,7 @@ import (
 	"time"
 
 	"github.com/codemodify/paintengine2d"
+	"github.com/codemodify/uitoolkit/diag"
 )
 
 //go:embed no-icon.png
@@ -449,6 +449,22 @@ func loadFileIcon(set IconSetName, icon ToolIcon, destW float32) (*paintengine2d
 			}
 		}
 	}
+	// A set missing a *typed* stem has fallen behind rather than been
+	// installed wrong, and the difference matters because falling behind
+	// is not an edge case: the person's copy is made once (icons/README
+	// forbids an application to write into their directory), so the day
+	// the toolkit gains an id, every copy of every set is one stem short
+	// of it, for everybody. The mark exists — it is drawn — so the
+	// caller draws it and this says the set is behind, once.
+	//
+	// Only for a set that is *there*. A set nobody installed is a
+	// different failure — the person picked it in Settings and it never
+	// arrived — and drawing every icon would make that look like it
+	// worked, so the mark stays the answer there.
+	if Drawable(icon) && fileIconSetInstalled(set) {
+		logStaleSetOnce(set, icon)
+		return nil, false
+	}
 	for _, name := range stemFileCandidates(noIconStem, destW) {
 		for _, dir := range dirs {
 			if img, ok := loadPNGIcon(filepath.Join(dir, name)); ok {
@@ -493,6 +509,30 @@ var missingStemLog = struct {
 	seen map[string]bool
 }{seen: map[string]bool{}}
 
+// logStaleSetOnce says a file set predates one of the toolkit's own ids,
+// once per set and stem. It names the stem and where a fresh copy is, so
+// the line is something the reader can act on rather than a complaint.
+func logStaleSetOnce(set IconSetName, icon ToolIcon) {
+	want := StemOf(icon)
+	if want == "" {
+		return
+	}
+	key := "stale:" + string(set) + ":" + want
+	missingStemLog.mu.Lock()
+	defer missingStemLog.mu.Unlock()
+	if missingStemLog.seen[key] {
+		return
+	}
+	missingStemLog.seen[key] = true
+	diag.Report(diag.Finding{
+		Level: diag.Note,
+		Area:  "icons",
+		Asked: fmt.Sprintf("%s.png from the %q set", want, set),
+		Got:   "the toolkit's own drawn mark; the copy in your icons directory predates that id",
+		Fix:   fmt.Sprintf("copy icons/%s/ over ~/.config/uitoolkit/icons/%s/ for the set's own artwork", set, set),
+	})
+}
+
 func logMissingStemOnce(set IconSetName, icon ToolIcon, used string) {
 	want := ToolIconName(icon)
 	if want == "" {
@@ -505,7 +545,13 @@ func logMissingStemOnce(set IconSetName, icon ToolIcon, used string) {
 		return
 	}
 	missingStemLog.seen[key] = true
-	log.Printf("uitk icons: %s missing %s.png, using %s", set, want, used)
+	diag.Report(diag.Finding{
+		Level: diag.Warn,
+		Area:  "icons",
+		Asked: fmt.Sprintf("%s.png from the %q set", want, set),
+		Got:   fmt.Sprintf("the %s mark; nothing can draw this one, so there is no fallback", used),
+		Fix:   fmt.Sprintf("add %s.png to the %s set, or use a typed id (style.AllToolIcons) which the toolkit can always draw", want, set),
+	})
 }
 
 // loadPNGIcon decodes path into a white mask, caching hits and misses. A
@@ -583,9 +629,13 @@ func toWhiteMask(src *paintengine2d.Image) *paintengine2d.Image {
 }
 
 // DrawFileToolIcon paints a tinted PNG from the named file set.
-// Lookup is exact stem, then documented aliases, then no-icon (pack
-// file or the embedded placeholder). It never paints a drawn classic
-// scribble. False only if even the embedded placeholder cannot decode.
+// Lookup is exact stem, then documented aliases. It never paints a drawn
+// vector itself; it reports false and leaves that to the caller.
+//
+// False means either that the set has fallen behind one of the toolkit's
+// own ids — [Drawable] is true and the caller should draw the vector,
+// which [DrawToolIcon] does — or, for a stem-only icon, that even the
+// embedded placeholder could not decode.
 func DrawFileToolIcon(ctx *paintengine2d.Context, b paintengine2d.Rect, icon ToolIcon, col paintengine2d.Color, set IconSetName) bool {
 	img, ok := loadFileIcon(set, icon, b.Dx())
 	if !ok {

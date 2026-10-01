@@ -123,3 +123,31 @@ func TestButtonWithoutAnIconIsUnchanged(t *testing.T) {
 		t.Error("a button with no icon reserved a box for one")
 	}
 }
+
+// A tool button's painter gives its label exactly the width the measure
+// reserved and clips to the box, so a fractional measure snapped down by
+// SetBounds loses the last character's edge: "Get Messages" drawn as
+// "Get Message". The chip's bug in another widget.
+func TestToolButtonLabelFitsItsOwnBox(t *testing.T) {
+	loose := layout.Constraints{MaxW: -1, MaxH: -1}
+	for _, x := range []float32{0, 0.2, 0.4, 0.5, 0.6, 0.8} {
+		for _, text := range []string{"Get Messages", "Reply All", "Forward", "Delete", "Write"} {
+			b := NewToolButton(text, style.IconDownload, nil)
+			atScale(t, b, 1)
+			sz := b.Measure(loose)
+			if sz.X != float32(int(sz.X)) {
+				t.Errorf("%q measured %v — not a whole pixel", text, sz.X)
+			}
+			b.Arrange(paintengine2d.XYWH(x, 0, sz.X, sz.Y))
+
+			lk := b.Look()
+			box := b.LocalBounds()
+			pad, side, gap := style.ToolButtonChromeFor(lk, box.Dy())
+			room := box.Dx() - pad*2 - side - gap
+			if adv := lk.Font().Advance(text); adv > room {
+				t.Errorf("x=%v %q: label needs %.1f, box leaves %.1f — it would be clipped",
+					x, text, adv, room)
+			}
+		}
+	}
+}
