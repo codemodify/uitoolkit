@@ -40,6 +40,15 @@ type IconButton struct {
 	// Pad is the space around the icon inside the button, as a 1x design
 	// length. Zero takes the look's own.
 	Pad float32
+	// Flat draws the mark on the *tool* face instead of the button one:
+	// no frame until the pointer is over it, the way a browser's
+	// site-information lock, its bookmark star and its three-dot menu
+	// are drawn, and every mark that sits inside another control.
+	//
+	// It is the same control either way — same action, same name, same
+	// keyboard — and only the face differs. A button somebody is meant
+	// to *see* is a button keeps the default.
+	Flat bool
 }
 
 // NewIconButton builds a push button showing icon alone, named by name.
@@ -53,6 +62,19 @@ func NewIconButton(icon style.ToolIcon, name string, on func()) *IconButton {
 	b.SetAccessibleName(name)
 	b.Content = b.paintIcon
 	return b
+}
+
+// Paint draws the look's button face with the mark on it, or the tool
+// face when Flat is set.
+func (b *IconButton) Paint(ctx *paintengine2d.Context) {
+	if !b.Flat {
+		b.Button.Paint(ctx)
+		return
+	}
+	lk, r := b.Look(), b.LocalBounds()
+	st := b.PaintState() | style.StateAutoRaise
+	lk.DrawToolButton(ctx, r, st, "", style.IconNone)
+	b.paintIcon(ctx, r, st)
 }
 
 // SetAction changes the tooltip and the accessible name together, so

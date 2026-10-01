@@ -30,6 +30,15 @@ type ToolItem struct {
 	// Stretch is free space that eats what the bar has spare, so the
 	// items after it sit at its right-hand end. Use [ToolStretch].
 	Stretch bool
+	// Grow gives this item's widget the bar's spare width instead of
+	// leaving it as blank space — a browser's address bar, a file
+	// manager's search box, the one control on a bar that should be as
+	// wide as the bar allows. Use [ToolGrow].
+	//
+	// It is the other half of Stretch: both take the spare width, and
+	// where Stretch leaves it empty Grow hands it to a control. A bar
+	// with several shares it between them.
+	Grow bool
 	// Label makes Text a word on the bar rather than a button: the name
 	// of the control that follows it. Use [ToolLabel].
 	Label bool
@@ -82,6 +91,10 @@ func ToolWidget(c widget.Component) *ToolItem { return &ToolItem{Widget: c} }
 // bar carries are the application's, and losing one silently is worse
 // than showing one tool button fewer.
 func ToolStretch() *ToolItem { return &ToolItem{Stretch: true} }
+
+// ToolGrow is a widget on the bar that takes the bar's spare width: the
+// address bar of a browser, the search box of a file manager.
+func ToolGrow(c widget.Component) *ToolItem { return &ToolItem{Widget: c, Grow: true} }
 
 // ToolBar is a horizontal strip of tool buttons.
 type ToolBar struct {
@@ -377,7 +390,11 @@ func (t *ToolBar) itemRects() []paintengine2d.Rect {
 			if iy < 1 {
 				iy = 1
 			}
-			out[i] = paintengine2d.XYWH(x, iy, w[i], min(ih[i], h-2))
+			iw := w[i]
+			if it.Grow {
+				iw += stretch
+			}
+			out[i] = paintengine2d.XYWH(x, iy, iw, min(ih[i], h-2))
 		case it == nil || it.Sep:
 			out[i] = paintengine2d.XYWH(x, 6, 8, h-12)
 		default:
@@ -391,6 +408,9 @@ func (t *ToolBar) itemRects() []paintengine2d.Rect {
 			continue
 		}
 		x += w[i] + t.gapAfter(i)
+		if it != nil && it.Grow {
+			x += stretch
+		}
 	}
 	return out
 }
@@ -398,7 +418,7 @@ func (t *ToolBar) itemRects() []paintengine2d.Rect {
 func (t *ToolBar) stretches() int {
 	n := 0
 	for _, it := range t.items {
-		if it != nil && it.Stretch {
+		if it != nil && (it.Stretch || it.Grow) {
 			n++
 		}
 	}

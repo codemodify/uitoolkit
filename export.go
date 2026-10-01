@@ -6,6 +6,7 @@ import (
 
 	"github.com/codemodify/paintengine2d"
 	"github.com/codemodify/uitoolkit/app"
+	"github.com/codemodify/uitoolkit/diag"
 	"github.com/codemodify/uitoolkit/dock"
 	"github.com/codemodify/uitoolkit/layout"
 	"github.com/codemodify/uitoolkit/platform"
@@ -43,6 +44,9 @@ type (
 	TokenField        = widgets.TokenField
 	SecretField       = widgets.SecretField
 	SecretLabel       = widgets.SecretLabel
+	IconButton        = widgets.IconButton
+	MenuButton        = widgets.MenuButton
+	FieldBox          = widgets.FieldBox
 	FileDialogMode    = widgets.FileDialogMode
 	FileDialogOptions = widgets.FileDialogOptions
 	Density           = style.Density
@@ -64,6 +68,9 @@ type (
 	ColorScheme       = style.ColorScheme
 	ThemeName         = style.ThemeName
 	CornerStyle       = style.CornerStyle
+	Finding           = diag.Finding
+	DiagLevel         = diag.Level
+	CaptionStyle      = style.CaptionStyle
 	IconSetName       = style.IconSetName
 	IconSize          = style.IconSize
 	RendererPref      = style.RendererPref
@@ -98,6 +105,9 @@ const (
 	CursorColResize        = platform.CursorColResize
 	CursorRowResize        = platform.CursorRowResize
 	CursorText             = platform.CursorText
+	CaptionFollowsLook     = style.CaptionFollowsLook
+	CaptionMerged          = style.CaptionMerged
+	CaptionStacked         = style.CaptionStacked
 	ThemeDark              = style.ThemeDark
 	ThemeLight             = style.ThemeLight
 	CornersRound           = style.CornersRound
@@ -246,6 +256,20 @@ func LightLook() *style.Classic { return style.LightLook() }
 func PreferredLook() style.LookAndFeel {
 	return style.PreferredLook()
 }
+
+// Diagnostics is everything the toolkit could not do the way it was
+// asked, oldest first. See [app.Application.Diagnostics].
+func Diagnostics() []diag.Finding { return diag.Findings() }
+
+// SetDiagnosticLogging turns the one-line log off, without losing the
+// findings themselves — for a program that shows them its own way.
+func SetDiagnosticLogging(on bool) { diag.SetLogging(on) }
+
+// WithChrome tints a look's window surfaces by name — see [style.WithChrome].
+func WithChrome(lk style.LookAndFeel, tint map[string]paintengine2d.Color) style.LookAndFeel {
+	return style.WithChrome(lk, tint)
+}
+
 func LoadAppearance() style.Appearance { return style.LoadAppearance() }
 func SaveAppearance(a style.Appearance) error {
 	return style.SaveAppearance(a)
@@ -482,6 +506,44 @@ func ToolToggle(text string, down bool, on func()) *widgets.ToolItem {
 	return widgets.ToolToggle(text, down, on)
 }
 func ToolDivider() *widgets.ToolItem { return widgets.ToolDivider() }
+
+// ToolStretch is blank space on a bar that eats what it has spare, so the
+// items after it sit at its right-hand end.
+func ToolStretch() *widgets.ToolItem { return widgets.ToolStretch() }
+
+// ToolLabel is a word on a bar: the name of the control after it.
+func ToolLabel(text string) *widgets.ToolItem { return widgets.ToolLabel(text) }
+
+// ToolWidget puts a control of your own on a bar.
+func ToolWidget(c widget.Component) *widgets.ToolItem { return widgets.ToolWidget(c) }
+
+// ToolGrow puts a control on a bar and gives it the bar's spare width —
+// a browser's address bar, a file manager's search box.
+func ToolGrow(c widget.Component) *widgets.ToolItem { return widgets.ToolGrow(c) }
+
+// NewIconButton is a push button whose content is a mark. Set Flat for a
+// mark with no frame until the pointer is over it.
+func NewIconButton(icon style.ToolIcon, action string, on func()) *widgets.IconButton {
+	return widgets.NewIconButton(icon, action, on)
+}
+
+// NewMenuButton is a button that drops a menu when pressed.
+func NewMenuButton(icon style.ToolIcon, action string, items ...*widgets.MenuItem) *widgets.MenuButton {
+	return widgets.NewMenuButton(icon, action, items...)
+}
+
+// NewIconLabel is a label that leads with a mark, for a mark nothing
+// clicks — a status bar's counts, a caption's lock.
+func NewIconLabel(icon style.ToolIcon, text string) *widgets.Label {
+	return widgets.NewIconLabel(icon, text)
+}
+
+// NewFieldBox is one text-field well with controls inside it: a browser's
+// address bar with its site-information mark and its bookmark star, a
+// search box with a magnifier.
+func NewFieldBox(lead []widget.Component, field widget.Component, trail []widget.Component) *widgets.FieldBox {
+	return widgets.NewFieldBox(lead, field, trail)
+}
 func NewComboBox(items []string, selected int, on func(int)) *widgets.ComboBox {
 	return widgets.NewComboBox(items, selected, on)
 }
