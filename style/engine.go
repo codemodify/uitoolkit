@@ -939,7 +939,7 @@ func DrawSliderTicksOf(lk LookAndFeel, ctx *paintengine2d.Context, b paintengine
 // of another style.
 type BrowserTabEngine interface {
 	BrowserTabOutset(l *Classic) Insets
-	DrawBrowserTab(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, selected bool)
+	DrawBrowserTab(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, selected bool, shape TabShape)
 }
 
 // BrowserTabOutsetOf is how far any look's selected browser tab reaches past
@@ -956,13 +956,13 @@ func BrowserTabOutsetOf(lk LookAndFeel) Insets {
 
 // DrawBrowserTabOf paints a browser-style tab in any look: the engine's own,
 // else the look's ordinary tab.
-func DrawBrowserTabOf(lk LookAndFeel, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, selected bool) {
+func DrawBrowserTabOf(lk LookAndFeel, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, selected bool, shape TabShape) {
 	if lk == nil || ctx == nil {
 		return
 	}
 	if c, ok := lk.(*Classic); ok && c != nil {
 		if e, ok := c.eng().(BrowserTabEngine); ok {
-			e.DrawBrowserTab(c, ctx, b, st, label, selected)
+			e.DrawBrowserTab(c, ctx, b, st, label, selected, shape)
 			return
 		}
 	}

@@ -39,7 +39,7 @@ func (e webEngine) DrawTab(l *Classic, ctx *paintengine2d.Context, b paintengine
 	c := webColors(l)
 	switch c.tabStyle {
 	case webTabBrowser:
-		e.DrawBrowserTab(l, ctx, b, st, label, selected)
+		e.DrawBrowserTab(l, ctx, b, st, label, selected, TabsMerged)
 	case webTabSegmented:
 		c.segmentTab(l, ctx, winSnap(b), st, label, selected)
 	case webTabEditor:
@@ -153,6 +153,50 @@ func (c *webSet) segmentTab(l *Classic, ctx *paintengine2d.Context, b paintengin
 	}
 }
 
+// drawFloatingTab is Firefox's tab: a rounded card standing clear of the
+// row below it, not a shape that runs into it.
+//
+// The selected one is filled and the others are bare until the pointer is
+// over them, which is the whole of the idiom — there are no feet, no
+// separators between tabs and no outset, because nothing here reaches
+// past its slot.
+func (e webEngine) drawFloatingTab(l *Classic, ctx *paintengine2d.Context, c *webSet, b paintengine2d.Rect, st ControlState, label string, selected bool, px float32) {
+	r := min(c.rad(l, 8), b.Dx()*0.5, b.Dy()*0.5)
+	fg := webA(c.titleBarText, 0.75)
+	switch {
+	case selected:
+		// The card is the tool bar's colour, as Firefox's is, so the
+		// selected tab and the row below read as the same material even
+		// though they do not touch.
+		ctx.DrawRoundRect(b, r, r, paintengine2d.Fill(c.toolBar))
+		// And a hairline round it, because a merged tab is told from its
+		// strip by the shape it cuts and a floating one has only its
+		// colour — on a pack whose title bar and tool bar are the same
+		// colour, which is most of them until an application tints one,
+		// an unoutlined card is invisible.
+		ctx.DrawRoundRect(b.Inset(px*0.5), r, r, paintengine2d.Paint{
+			Color: c.border0, Style: paintengine2d.StyleStroke,
+			Stroke: paintengine2d.Stroke{Width: px, Join: paintengine2d.JoinRound, MiterLimit: 4},
+		})
+		fg = c.toolBarText
+	case st.Disabled():
+		fg = webA(c.titleBarText, 0.4)
+	case st.Hovered() || st.Pressed():
+		// A wash of the card's colour, not the card: the tab is not
+		// selected and must not look it.
+		ctx.DrawRoundRect(b, r, r, paintengine2d.Fill(webA(c.toolBar, 0.25)))
+		fg = c.titleBarText
+	}
+	l.drawFittedText(ctx, c.smallFace, label, b, fg, AlignCenter, l.S(12))
+	if st.Focused() && !st.Disabled() {
+		fb := b.Inset(snap(l.S(2)))
+		if fb.Dx() > 8*px && fb.Dy() > 8*px {
+			_, w := c.ring(l)
+			winRing(ctx, fb, max(r-l.S(2), 0), w, paintengine2d.Fill(webA(c.focus, c.focusA)))
+		}
+	}
+}
+
 // BrowserTabOutset: the selected tab's concave feet reach this far past
 // its slot on each side.
 //
@@ -173,25 +217,34 @@ func (webEngine) BrowserTabOutset(l *Classic) Insets {
 // feet that run into the tool bar below it; the others bare, divided by thin
 // separators that stop beside the selected tab; labels a size smaller, at
 // half strength, brighter under the pointer, full on the selected tab.
-func (e webEngine) DrawBrowserTab(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, selected bool) {
+func (e webEngine) DrawBrowserTab(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, selected bool, shape TabShape) {
 	c := webColors(l)
 	b = winSnap(b)
 	px := c.px(l)
 	if b.Dx() < 8*px || b.Dy() < 8*px {
 		return
 	}
+	if shape == TabsFloating {
+		e.drawFloatingTab(l, ctx, c, b, st, label, selected, px)
+		return
+	}
 	ear := float32(0)
 	if selected {
 		ear = min(e.BrowserTabOutset(l).Left, b.Dx()*0.2)
 	}
-	top := b.Min.Y + max(snap(b.Dy()-l.S(30)), 0)
+	// The tab fills the box it is given. That box is the strip's slot for
+	// this tab, so its height is BrowserTabs' to decide and not the
+	// engine's to second-guess: the old `b.Dy() - 30` was a no-op while
+	// every slot was 30 tall and became 48 pixels of dead band the moment
+	// an application asked for a taller strip.
+	top := b.Min.Y
 	body := paintengine2d.XYWH(b.Min.X+ear, top, b.Dx()-2*ear, b.Max.Y-top)
-	// A browser tab's top corners are round in proportion to the tab, not
-	// to the pack's general radius: Chromium's are about a third of the
-	// tab's height, and 5px on a 36px strip reads as a rectangle with the
-	// corners knocked off. The pack still decides whether there is any
-	// rounding at all — a square look gets none, because c.rad says so.
-	r := min(c.rad(l, 12), body.Dx()*0.5, body.Dy()*0.5)
+	// A browser tab's top corners are the pack's to state, because the
+	// applications differ more than their other radii do: Chromium's tabs
+	// are round and SourceGit's are nearly square, and both are drawn by
+	// this engine. The default is Chrome's, which is what a pack that
+	// says nothing about browser tabs most likely wants.
+	r := min(c.rad(l, l.P("browserTabRadius", 12)), body.Dx()*0.5, body.Dy()*0.5)
 	// The ink each tab stands on: the others are on the strip, the
 	// selected one is on the tool bar's colour, because that is what it
 	// is filled with. On an untinted pack both are the palette's text and

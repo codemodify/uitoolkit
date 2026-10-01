@@ -147,7 +147,10 @@ func sourcegitSpec(dark bool) webSpec {
 		// 5; square text boxes; 4px tool tips, list frames and sidebar
 		// rows; 3px menu rows; the 8px content card and Linux window.
 		"radius": 3, "fieldRadius": 0, "comboRadius": 3, "overlayRadius": 5, "tipRadius": 4,
-		"cardRadius": 8, "viewRadius": 4, "windowRadius": 8, "checkRadius": 2,
+		// Its repository tabs are nearly square — a 6px arc on a 49px tab,
+		// measured off the application — where a browser's are round.
+		"browserTabRadius": 4,
+		"cardRadius":       8, "viewRadius": 4, "windowRadius": 8, "checkRadius": 2,
 		"rowRadius": 3, "menuRowRadius": 3, "sideRadius": 4, "menuInset": 8,
 		"pressScale": 0.98, "disabledAlpha": 0.6,
 		// The dotted focus adorner; accent borders under the pointer; check

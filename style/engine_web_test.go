@@ -128,7 +128,7 @@ func TestWebPaintsInsideRect(t *testing.T) {
 				ctx := paintengine2d.NewContext(img)
 				lk.DrawTabBar(ctx, r)
 				lk.DrawTab(ctx, r, st, "sourcegit", st.Checked())
-				DrawBrowserTabOf(lk, ctx, r, st, "tab", !st.Checked())
+				DrawBrowserTabOf(lk, ctx, r, st, "tab", !st.Checked(), TabsMerged)
 				if k := winOutside(img, r); k > 0 {
 					t.Errorf("%s %gx browser tab %#x: %d pixels outside", n, sc, uint32(st), k)
 				}

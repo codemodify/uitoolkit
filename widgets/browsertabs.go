@@ -15,6 +15,10 @@ import (
 // BrowserTab is one document tab of a BrowserTabs strip.
 type BrowserTab struct {
 	Title string
+	// Icon is a mark at the tab's leading end, before the title: a
+	// browser's favicon, a repository's icon, the kind of document the
+	// tab holds. IconNone leaves the title where it was.
+	Icon style.ToolIcon
 	// Tip is the tab's tool tip; empty: the title, when it does not fit.
 	Tip string
 	// NoClose hides the tab's close button (a window's last tab it keeps).
@@ -43,6 +47,10 @@ type BrowserTab struct {
 // selected one, Home and End the first and the last; Shortcut gives an app
 // the browser shortcuts (Ctrl+Tab, Ctrl+W, Ctrl+T …) in one call.
 type BrowserTabs struct {
+	// Shape is how the tabs meet the strip: Chrome's merged tab, which
+	// runs into the row below, or Firefox's floating card, which stands
+	// clear of it. [style.TabsMerged] is the default.
+	Shape style.TabShape
 	widget.Base
 	tabs []BrowserTab
 	sel  int
@@ -366,7 +374,28 @@ func (t *BrowserTabs) geom() stripGeom {
 	b := t.LocalBounds()
 	var g stripGeom
 	g.tabH = min(t.tabHeight(), b.Dy())
+	if t.onCaption() {
+		// The strip *is* the title bar here, so its height is the one the
+		// application asked for and the tabs are what it asked for it
+		// with. A fixed tab height pinned to the bottom left a tall strip
+		// as a band of empty colour with small tabs along its lower edge.
+		// The gap above is the browser's: a few pixels, never a sixth of
+		// the strip.
+		gap := min(t.dip(5), b.Dy()*0.16)
+		g.tabH = max(g.tabH, b.Dy()-gap)
+	}
 	top := b.Dy() - g.tabH
+	if t.Shape == style.TabsFloating {
+		// A floating tab stands clear of the row below as well as the one
+		// above: the margin is on every side, which is what makes the
+		// strip read as a tray with cards in it rather than a surface the
+		// tabs are cut out of.
+		m := min(t.dip(4), b.Dy()*0.12)
+		if g.tabH > 2*m {
+			g.tabH -= m
+		}
+		top = max(b.Dy()-g.tabH-m, 0)
+	}
 	out := style.BrowserTabOutsetOf(lk)
 	pad := max(float32(math.Ceil(float64(out.Left))), t.dip(2))
 	maxW := t.dip(200)
@@ -596,10 +625,45 @@ func (t *BrowserTabs) tabState(i int) style.ControlState {
 // labelBox is where tab i's label goes in its slot s: the slot, less the
 // close button's room at its right end when the tab has one.
 func (t *BrowserTabs) labelBox(i int, s paintengine2d.Rect, g stripGeom) paintengine2d.Rect {
-	if !t.closable(i, g) {
-		return s
+	lb := s
+	if t.closable(i, g) {
+		lb.Max.X = t.closeRect(s).Min.X - t.dip(2)
 	}
-	return paintengine2d.Rect{Min: s.Min, Max: paintengine2d.Pt(t.closeRect(s).Min.X-t.dip(2), s.Max.Y)}
+	if r := t.iconRect(i, s); !r.Empty() {
+		lb.Min.X = r.Max.X + t.dip(4)
+	}
+	return lb
+}
+
+// iconRect is tab i's mark, square and centred down the tab, against its
+// leading end. Empty where the tab has no mark or the tab is too narrow
+// to give one room and still show a word.
+func (t *BrowserTabs) iconRect(i int, s paintengine2d.Rect) paintengine2d.Rect {
+	if i < 0 || i >= len(t.tabs) || t.tabs[i].Icon == style.IconNone {
+		return paintengine2d.Rect{}
+	}
+	side := min(t.dip(16), s.Dy()-t.dip(8))
+	if side < t.dip(8) || s.Dx() < side+t.dip(28) {
+		return paintengine2d.Rect{}
+	}
+	x := s.Min.X + t.dip(8)
+	y := s.Min.Y + float32(math.Round(float64(s.Dy()-side)*0.5))
+	return paintengine2d.XYWH(x, y, side, side)
+}
+
+// paintIcon draws tab i's mark, in the ink the look gives that tab's
+// label so a selected tab's mark is as emphatic as its word.
+func (t *BrowserTabs) paintIcon(ctx *paintengine2d.Context, i int, s paintengine2d.Rect, sel bool) {
+	r := t.iconRect(i, s)
+	if r.Empty() {
+		return
+	}
+	lk := t.Look()
+	col := lk.Palette().Text
+	if !sel {
+		col = lk.Palette().TextMuted
+	}
+	style.DrawToolIcon(ctx, r, t.tabs[i].Icon, col, style.IconSetOf(lk))
 }
 
 // label is tab i's title as it fits its label box lb, and whether it was
@@ -637,22 +701,26 @@ func (t *BrowserTabs) Paint(ctx *paintengine2d.Context) {
 		lb := t.labelBox(i, s, g)
 		text, _ := t.label(i, lb)
 		if lb == s {
-			style.DrawBrowserTabOf(lk, ctx, r, st, text, sel)
+			style.DrawBrowserTabOf(lk, ctx, r, st, text, sel, t.Shape)
 		} else {
 			// The look centres a tab's label on the tab; to centre it on
 			// the room left of the close button, the tab is painted bare,
 			// then again moved left by half the button's room, clipped to
 			// that room: inside it the face is the same, and the label
 			// lands where it belongs.
-			style.DrawBrowserTabOf(lk, ctx, r, st, "", sel)
+			style.DrawBrowserTabOf(lk, ctx, r, st, "", sel, t.Shape)
 			if text != "" {
-				shift := (s.Max.X - lb.Max.X) * 0.5
+				// Centre the word in the room left over, whichever end
+				// took it: a close button on the right, a mark on the
+				// left, or both.
+				shift := ((s.Max.X - lb.Max.X) - (lb.Min.X - s.Min.X)) * 0.5
 				ctx.Save()
 				ctx.ClipRect(paintengine2d.Rect{Min: paintengine2d.Pt(lb.Min.X+t.dip(2), s.Min.Y), Max: lb.Max})
-				style.DrawBrowserTabOf(lk, ctx, s.Translate(paintengine2d.Pt(-shift, 0)), st, text, sel)
+				style.DrawBrowserTabOf(lk, ctx, s.Translate(paintengine2d.Pt(-shift, 0)), st, text, sel, t.Shape)
 				ctx.Restore()
 			}
 		}
+		t.paintIcon(ctx, i, s, sel)
 		if t.hasClose(i, g) {
 			t.paintClose(ctx, i, t.closeRect(s), sel)
 		}
