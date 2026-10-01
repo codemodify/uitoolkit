@@ -7,10 +7,78 @@ about the problem it solved.
 
 ---
 
-## Unreleased
+## 0.23.0
 
 Five samples that are meant to look like applications people use, and
-what building them found. Nothing here is new API except one field.
+what building them found — which turned out to be most of this release.
+
+Each sample was put beside the real application and compared pixel by
+pixel: Chromium, Firefox, SourceGit, Thunderbird, VS Code. Every
+difference that was not the sample's own arrangement was a gap in the
+toolkit, and each one is API here rather than code in an example. The
+pattern repeated often enough to be worth stating: when an application
+cannot say what it means, it paints around the toolkit instead, and the
+paint is always slightly wrong.
+
+New in this release, with the rest of the detail below: `style.TabShape`
+and `BrowserTab.Icon`; `IconButton.Flat` and `.Badge`, with
+`NewFlatIconButton` and `NewFlatMenuButton`; `widgets.FieldBox` and
+`ToolItem.Grow`; `Options.Chrome` and `style.WithChrome`;
+`Window.SetCaptionStyle`; `Options.AppID`; `Label.Icon`; the `diag`
+package and `Application.Diagnostics`; and `style.ThemePackAvailable`.
+
+### The tabs a browser draws, and the marks on them
+
+The two browsers people copy chose different tab shapes and the toolkit
+drew only one of them. Chrome's is merged — filled with the tool bar's
+colour, concave feet running into the row below, so tab and tool bar read
+as one surface. Firefox's, since Proton, is a floating card standing clear
+of that row. `style.TabShape` has both; `TabsMerged` stays the default.
+
+Writing its test found what the sample could not show: on a pack whose
+title bar and tool bar are the same colour — most of them, until an
+application tints one — a floating card is *invisible*, because unlike a
+merged tab it has no shape to tell it from the strip. It carries a
+hairline now.
+
+`BrowserTab` had `Title`, `Tip`, `NoClose` and `Data` and no way to show a
+mark, so a git client's repository tabs had bare words and the browsers
+had no favicons. `BrowserTab.Icon` sits at the leading end and the label
+centres in what is left. Tabs also fill the strip they are given rather
+than a fixed height pinned to its bottom, and the corner radius is the
+pack's to state: Chromium's tabs are round and SourceGit's nearly square,
+both drawn by the same engine, so a constant could not serve both.
+
+### A window that asked for no border gets none
+
+`SetBorderless` zeroed the *content* insets and the frame went on painting
+a border underneath. You saw it wherever nothing opaque covered it — the
+tab strip, the page — and not where the tool bar did, which read as the
+tool bar overstepping the window. Nothing was overstepping; the border
+should not have been there.
+
+The decision now lives in the one helper every engine calls rather than at
+each of its nineteen call sites, and the compiler made each site pass the
+state in. A test holds every pack to it — and writing it was worth more
+than the fix, going from seventeen packs failing to none through
+distinctions rather than workarounds: a skin's frame is its art; Motif and
+Win31 draw sculpted bevels, not a border on a frame; the Amiga and BeOS
+paint a structural frame they never declared, which is two names written
+down with the reason rather than a rule that would swallow the next one.
+
+### A mark that is a button only when you point at it
+
+`IconButton.Flat` and `.Badge`, `NewFlatIconButton`, `NewFlatMenuButton`.
+Both were helpers the samples had written out by hand — one of them
+verbatim in two of them — which is how a framework gap announces itself. A
+browser's lock and star, an editor's menu bar and activity rail, a mail
+client's bell: all want the tool face, and the toolkit had the flat face
+and the framed one and no way to ask the second for the first.
+
+That turned up a bug the moment a *named* menu used it: `IconButton` is a
+mark alone, but `MenuButton` embeds it, and File and Edit are the same
+control with a word instead. The flat path drew an empty label, so an
+editor's menu bar came out as four blank hit areas.
 
 ### A label was drawn in a font nobody had measured
 
