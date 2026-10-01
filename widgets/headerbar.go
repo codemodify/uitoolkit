@@ -34,6 +34,9 @@ type HeaderBar struct {
 	lead   *WindowControls
 	trail  *WindowControls
 	framed bool
+	// capStyle is the application's say over the look's era: whether its
+	// own bar is the caption or sits under the look's strip.
+	capStyle style.CaptionStyle
 	// custom: the app gave the header bar items of its own.
 	custom bool
 	// strip is a stacked frame's caption strip height in the last layout
@@ -156,9 +159,33 @@ func (h *HeaderBar) spec() style.DecorationSpec {
 	return style.DecorationOf(h.Look(), h.DecorationState())
 }
 
+// SetCaptionStyle gives the application the last word over the look's era
+// about whether this bar is the caption or sits under the look's strip.
+// The default, [style.CaptionFollowsLook], lets the pack decide.
+//
+// [app.Window.SetCaptionStyle] is how a window sets it; this is the same
+// switch on the bar itself, for a header bar used somewhere else.
+func (h *HeaderBar) SetCaptionStyle(s style.CaptionStyle) {
+	if h == nil || h.capStyle == s {
+		return
+	}
+	h.capStyle = s
+	h.RequestLayout()
+	h.Invalidate()
+}
+
+// CaptionStyle is the application's say over the look's era.
+func (h *HeaderBar) CaptionStyle() style.CaptionStyle { return h.capStyle }
+
 // Stacked reports whether the header bar lays a stacked frame's caption
-// strip above its row (see style.DecorationSpec.Stacked).
-func (h *HeaderBar) Stacked() bool { return h.framed && h.spec().Stacked }
+// strip above its row (see style.DecorationSpec.Stacked), after the
+// application's [HeaderBar.SetCaptionStyle] has had its say.
+func (h *HeaderBar) Stacked() bool { return h.stackedIn(h.spec()) }
+
+// stackedIn is Stacked against a spec already in hand.
+func (h *HeaderBar) stackedIn(s style.DecorationSpec) bool {
+	return h.framed && h.capStyle.StackedOver(s.Stacked)
+}
 
 // inMergedCaption reports whether c is in the caption of a merged frame the
 // toolkit draws: the look's caption band is its background, so bars there
@@ -235,7 +262,7 @@ func (h *HeaderBar) CaptionFitWidth() float32 {
 func (h *HeaderBar) minCaption(s style.DecorationSpec) float32 {
 	lk := h.Look()
 	m := max(s.Caption, h.lead.MinHeight(), h.trail.MinHeight())
-	if !s.Stacked && h.DecorationState().Caption <= 0 {
+	if !h.stackedIn(s) && h.DecorationState().Caption <= 0 {
 		// A merged caption holds the app's row, so it is never shorter
 		// than a row — unless the app asked for a band of its own height,
 		// which it means.
@@ -249,7 +276,7 @@ func (h *HeaderBar) minCaption(s style.DecorationSpec) float32 {
 
 func (h *HeaderBar) Measure(c layout.Constraints) paintengine2d.Point {
 	s := h.spec()
-	if h.framed && s.Stacked {
+	if h.stackedIn(s) {
 		strip := h.minCaption(s)
 		sz := paintengine2d.Pt(0, strip)
 		if h.custom {
@@ -280,7 +307,7 @@ func (h *HeaderBar) Arrange(r paintengine2d.Rect) {
 	s := h.spec()
 	band := ht
 	h.strip, h.stripW = 0, w
-	if h.framed && s.Stacked {
+	if h.stackedIn(s) {
 		h.strip = min(h.minCaption(s), ht)
 		band = h.strip
 		if s.CaptionFits {

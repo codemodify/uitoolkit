@@ -316,9 +316,33 @@ func (c *WindowControls) rects() []paintengine2d.Rect {
 	s := c.spec()
 	shown := c.Shown()
 	h := c.LocalBounds().Dy()
+	// Where the row of buttons sits in the band it was given.
+	//
+	// CenterButtons used to fire only when the band was *taller* than the
+	// look's caption, which left the other half of the same question
+	// unanswered: a button shorter than the band hung from the top with
+	// the slack beneath it, however much the pack wanted it centred. Every
+	// pack that wanted centring therefore worked it out by hand into
+	// ButtonPad.Top — adwaita, breeze, material and macOS all state
+	// (caption - side) / 2 — and a pack that set the flag alone got
+	// nothing. The web look stated neither and came out top-aligned by
+	// accident, which is what a browser sample's caption buttons sitting
+	// high in their band turned out to be.
+	//
+	// So a stated button height is centred in the band, which gives the
+	// packs that compute the pad exactly what they compute and the ones
+	// that only set the flag what they asked for. A button of no stated
+	// height is the caption's full height, less the pad, and has nothing
+	// to centre.
 	top := s.ButtonPad.Top
-	if s.CenterButtons && h > s.Caption {
-		top += float32(math.Round(float64(h-s.Caption) * 0.5))
+	if s.CenterButtons {
+		if bh := max(s.Button.Y, s.CloseButton.Y); bh > 0 {
+			if h > bh {
+				top = float32(math.Round(float64(h-bh) * 0.5))
+			}
+		} else if h > s.Caption {
+			top += float32(math.Round(float64(h-s.Caption) * 0.5))
+		}
 	}
 	out := make([]paintengine2d.Rect, len(shown))
 	x := float32(0)

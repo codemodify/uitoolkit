@@ -76,6 +76,31 @@ under their title bars. Either way the header bar's free space moves the
 window, and in a merged caption a menu bar, tool bar or tab strip paints no
 bar of its own: the caption band is their background.
 
+### When the application, not the era, decides
+
+Some applications are a *shape* rather than a citizen of an era. Chromium's
+tabs are its title bar on every desktop it has ever run on, and so are VS
+Code's menu row and SourceGit's repository tabs; none of them grows a
+second title bar because the system theme is an old one.
+
+`Window.SetCaptionStyle` is that application saying so:
+
+```go
+win.SetTitleBar(tabStrip())
+win.SetCaptionStyle(style.CaptionMerged)
+```
+
+- `style.CaptionFollowsLook` — the default, and what an application that
+  wants to belong to the desktop it is running on should keep.
+- `style.CaptionMerged` — the application's title bar is the caption under
+  every pack, buttons at its sides.
+- `style.CaptionStacked` — the era's own strip above the application's bar
+  under every pack, asked for on purpose.
+
+It only decides how the bar meets the frame. Whether the toolkit draws that
+frame at all is `WindowOptions.Decorations` and the user's preference, and
+under a desktop-drawn frame there is nothing here to merge with.
+
 ### What moves the window
 
 Title-bar space is caption where every component from the one under the

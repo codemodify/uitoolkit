@@ -21,14 +21,25 @@ func (webEngine) Decoration(l *Classic, st DecorationState) DecorationSpec {
 	if st.Maximized {
 		capH = snap(l.S(30))
 	}
+	side := snap(l.S(24))
 	r := c.rad(l, 8)
 	s := DecorationSpec{
 		Border:  Insets{Top: px, Right: px, Bottom: px, Left: px},
 		Caption: capH,
-		Button:  paintengine2d.Pt(snap(l.S(48)), snap(l.S(30))),
-		Layout:  ":minimize,maximize,close",
-		Radius:  [4]float32{r, r, r, r},
-		Shadow:  ShadowLayersReach(webWindowShadow(l, DecorationState{Active: true})),
+		// A square button centred in the band with a gap beside it, as
+		// every other modern look here does (adwaita, breeze, material,
+		// macOS) and as a browser on a Linux desktop wears. The box was
+		// 48 wide and 30 tall in a 38 band — the Windows idiom, a wide
+		// full-height rectangle — so the hover highlight hung from the
+		// top with slack under it and sat too far from its neighbour.
+		// Neither half of that reads right beside a real browser.
+		Button:        paintengine2d.Pt(side, side),
+		ButtonGap:     snap(l.S(6)),
+		ButtonPad:     Insets{Right: snap(l.S(8))},
+		CenterButtons: true,
+		Layout:        ":minimize,maximize,close",
+		Radius:        [4]float32{r, r, r, r},
+		Shadow:        ShadowLayersReach(webWindowShadow(l, DecorationState{Active: true})),
 	}
 	return s
 }
@@ -50,9 +61,11 @@ func (webEngine) DrawDecoration(l *Classic, ctx *paintengine2d.Context, f Decora
 
 func (webEngine) DrawCaptionTitle(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, title string, st DecorationState) {
 	c := webColors(l)
-	col := c.text
+	// On the title bar's own colour, which an application may have
+	// tinted: the ink follows the surface it is written on.
+	col := c.titleBarText
 	if !st.Active {
-		col = c.text2
+		col = webA(c.titleBarText, 0.6)
 	}
 	captionTitle(l, ctx, c.bold, b, title, col, true, l.S(16))
 }

@@ -55,7 +55,13 @@ type Window struct {
 	centred bool
 	// hiddenCaption and captionActions are this window's own say over
 	// its caption buttons (app/frame.go).
-	noBorder       bool
+	noBorder bool
+	// capStyle is the window's say over the look's era about whether its
+	// own title bar is the caption (style.CaptionMerged) or sits under
+	// the look's strip. See Window.SetCaptionStyle.
+	capStyle style.CaptionStyle
+	// capReported: the caption-shape note is said once per window.
+	capReported    bool
 	hiddenCaption  map[platform.CaptionButton]bool
 	captionActions []widgets.CaptionAction
 	hover          widget.Component
@@ -1761,6 +1767,10 @@ func (w *Window) layout() {
 	// Last, so the measure it makes is of a tree that has been laid out
 	// at this window's scale and through this window's frame.
 	w.fitOnFirstLayout()
+	// And now, not while the caption was being built: an application
+	// configures a window over several calls, and a note about a shape it
+	// settles one line later would be a false alarm.
+	w.reportCaptionShape()
 }
 
 // focusOnOpen gives the keyboard somewhere to go the first time the window

@@ -168,17 +168,21 @@ type webSet struct {
 	popup, popupBorder, windowBorder, field, fieldDis                           paintengine2d.Color
 	border0, border1, border2                                                   paintengine2d.Color
 	text, text2, textDis, onAccent, link, headerText                            paintengine2d.Color
-	accent, accentHover, accentPress, focus, fieldFocus, fieldRing              paintengine2d.Color
-	btn, btnHover, btnPress, btnBorder, btnText                                 paintengine2d.Color
-	primary, primaryHover, primaryPress, primaryBorder, onPrimary               paintengine2d.Color
-	wash, sel, menuHover, menuText, rowBar                                      paintengine2d.Color
-	tip, tipText, tipBorder                                                     paintengine2d.Color
-	checkOff, checkOn, checkMark, checkBorder                                   paintengine2d.Color
-	switchOff, switchOffBorder, switchOn, knobOff, knobOn, knobBorder           paintengine2d.Color
-	track, trackFill, thumbFill, thumbBorder, progress, progressTrack           paintengine2d.Color
-	scrollThumb, scrollThumbHot, scrollTrack                                    paintengine2d.Color
-	tabLine, tabText, tabText2, segTrack, segOn, segOnText                      paintengine2d.Color
-	captionHover, close, onClose, danger, success, warning                      paintengine2d.Color
+	// titleBarText and toolBarText are the ink on those two surfaces.
+	// They matter when an application tints its own chrome: the surface
+	// moves and the text has to move with it.
+	titleBarText, toolBarText                                         paintengine2d.Color
+	accent, accentHover, accentPress, focus, fieldFocus, fieldRing    paintengine2d.Color
+	btn, btnHover, btnPress, btnBorder, btnText                       paintengine2d.Color
+	primary, primaryHover, primaryPress, primaryBorder, onPrimary     paintengine2d.Color
+	wash, sel, menuHover, menuText, rowBar                            paintengine2d.Color
+	tip, tipText, tipBorder                                           paintengine2d.Color
+	checkOff, checkOn, checkMark, checkBorder                         paintengine2d.Color
+	switchOff, switchOffBorder, switchOn, knobOff, knobOn, knobBorder paintengine2d.Color
+	track, trackFill, thumbFill, thumbBorder, progress, progressTrack paintengine2d.Color
+	scrollThumb, scrollThumbHot, scrollTrack                          paintengine2d.Color
+	tabLine, tabText, tabText2, segTrack, segOn, segOnText            paintengine2d.Color
+	captionHover, close, onClose, danger, success, warning            paintengine2d.Color
 
 	radius, fieldR, comboR, overlayR, tipR, cardR, viewR, windowR float32
 	checkR, menuRowR, switchR, menuInset                          float32
@@ -232,6 +236,16 @@ func webBuild(l *Classic) *webSet {
 	c.subPanel = x("subPanel", c.window)
 	c.sidebar = x("sidebar", c.window)
 	c.card = x("card", c.window)
+	// A tinted surface carries its own ink. An application that paints
+	// its chrome states a colour, not a colour *scheme* — there is no
+	// "title bar text" for it to think about — so a strip tinted dark
+	// enough to need light text would otherwise keep the palette's dark
+	// one and the labels on it would disappear. ReadableInk walks the
+	// palette's text away from the surface until it reads, which for an
+	// untinted pack is the palette's text unchanged: every existing look
+	// is unaffected, and a tint is safe without anyone saying so.
+	c.titleBarText = x("titleBarText", ReadableInk(c.text, c.titleBar))
+	c.toolBarText = x("toolBarText", ReadableInk(c.text, c.toolBar))
 	c.popup = x("popup", pal.SurfaceAlt)
 	c.dialog = x("dialog", c.popup)
 	c.header = x("header", c.field)

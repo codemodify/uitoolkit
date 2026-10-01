@@ -1,11 +1,14 @@
 package app
 
 import (
+	"fmt"
+
 	"math"
 	"os"
 	"time"
 
 	"github.com/codemodify/paintengine2d"
+	"github.com/codemodify/uitoolkit/diag"
 	"github.com/codemodify/uitoolkit/layout"
 	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
@@ -149,6 +152,53 @@ func (w *Window) SetBorderless(v bool) {
 
 // Borderless reports whether the look's border has been dropped.
 func (w *Window) Borderless() bool { return w != nil && w.noBorder }
+
+// SetCaptionStyle says whether this window's own title bar *is* the
+// caption or sits in a row under the look's title strip, overriding what
+// the pack's era would have decided.
+//
+// The default, [style.CaptionFollowsLook], is right for an application
+// that wants to belong to the desktop it is running on: under Windows 95
+// it gets the 95 title strip with its bar underneath, under a GTK header
+// bar its bar is the caption.
+//
+// [style.CaptionMerged] is for an application that is a *shape* rather
+// than a citizen of an era. Chromium's tabs are its title bar on every
+// desktop it has ever run on, and so are VS Code's menu row and
+// SourceGit's repository tabs; none of them grows a second title bar
+// because the system theme is an old one. Such an application says so
+// once and gets one row under every pack:
+//
+//	win.SetTitleBar(tabStrip())
+//	win.SetCaptionStyle(style.CaptionMerged)
+//
+// [style.CaptionStacked] is the other way round, for a window that wants
+// the classic strip whatever the look does.
+//
+// It needs a caption the toolkit draws: under the desktop's own frame
+// there is nothing here to merge with, and the setting waits, without
+// effect, until the window has one.
+func (w *Window) SetCaptionStyle(s style.CaptionStyle) {
+	if w == nil || w.capStyle == s {
+		return
+	}
+	w.capStyle = s
+	if w.caption != nil {
+		w.caption.SetCaptionStyle(s)
+	}
+	w.lookShapeCur = nil
+	w.laid = false
+	w.dropScene()
+	w.fullInvalidate()
+}
+
+// CaptionStyle is the window's say over the look's era about its caption.
+func (w *Window) CaptionStyle() style.CaptionStyle {
+	if w == nil {
+		return style.CaptionFollowsLook
+	}
+	return w.capStyle
+}
 
 // SetCaptionButtonVisible turns one of the window's caption buttons on
 // or off for this window alone.
@@ -331,6 +381,19 @@ func (w *Window) syncDecorations() {
 	f := platform.FrameOf(w.surf)
 	f.RequestDecorations(want)
 	w.decor, w.caps = f.Decorations(), f.FrameCaps()
+	// A frame the desktop would not give. An application that draws its
+	// own title bar and is handed a server frame gets *two* title bars,
+	// or its own drawn where nothing can move the window, and the reason
+	// is on the other side of the protocol where it cannot look.
+	if want != w.decor {
+		diag.Report(diag.Finding{
+			Level: diag.Warn,
+			Area:  "decorations",
+			Asked: fmt.Sprintf("%v decorations", want),
+			Got:   fmt.Sprintf("%v; the desktop would not give the other", w.decor),
+			Fix:   "the compositor decides this one — UITK_DECORATIONS overrides it for a test, and platform.FrameCapsOf says what this desktop can do",
+		})
+	}
 	w.rebuildCaption()
 }
 
@@ -365,6 +428,9 @@ func (w *Window) rebuildCaption() {
 	if hb != nil {
 		hb.SetHost(w)
 		hb.SetWindowControls(w.buttonLayout(hb), framed)
+		// A caption just built knows nothing of the window's say over
+		// the era until it is told.
+		hb.SetCaptionStyle(w.capStyle)
 	}
 	if hb != w.caption {
 		old := w.caption
@@ -390,6 +456,44 @@ func (w *Window) rebuildCaption() {
 	w.laid = false
 	w.dropScene()
 	w.fullInvalidate()
+}
+
+// reportCaptionShape says when an application's own title bar went into a
+// row *under* the look's title strip instead of being the caption.
+//
+// This is the era being honoured, not a failure — under Windows 95 a tool
+// bar belongs beneath the title bar — so it is a note. It exists because
+// it is the single most expensive surprise the toolkit has: an
+// application sets a title bar, asks for a client frame, hides the title
+// and drops the border, and still gets a caption row above its tabs, with
+// nothing anywhere to say which layer decided that or how to change it.
+func (w *Window) reportCaptionShape() {
+	if w.capReported || w.titleBar == nil || w.capStyle != style.CaptionFollowsLook {
+		return
+	}
+	if w.caption == nil || !w.caption.Stacked() {
+		return
+	}
+	w.capReported = true
+	// The pack that is *drawing*, which is not always the one that was
+	// asked for: Classic.Pack records the name the cascade was given
+	// whether or not this build has an engine for it, so naming that one
+	// would send the reader to look at a pack that is not even here.
+	pack := ""
+	if c, ok := w.look.(*style.Classic); ok {
+		if p := c.Pack(); style.ThemePackAvailable(p) {
+			pack = p
+		} else {
+			pack = c.Name() + " (the default look; " + p + " is not in this build)"
+		}
+	}
+	diag.Report(diag.Finding{
+		Level: diag.Note,
+		Area:  "caption",
+		Asked: "a title bar of the application's own (SetTitleBar)",
+		Got:   fmt.Sprintf("it in a row under the look's title strip; %s draws a stacked frame", pack),
+		Fix:   "win.SetCaptionStyle(style.CaptionMerged) makes your bar the caption under every pack, the way Chromium and VS Code do",
+	})
 }
 
 // buttonLayout is where hb's caption buttons go: the desktop's layout, or

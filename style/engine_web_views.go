@@ -153,10 +153,18 @@ func (c *webSet) segmentTab(l *Classic, ctx *paintengine2d.Context, b paintengin
 	}
 }
 
-// BrowserTabOutset: the selected tab's concave feet, as wide as its top
-// corners are round (5px), reach past its slot.
+// BrowserTabOutset: the selected tab's concave feet reach this far past
+// its slot on each side.
+//
+// A quarter of the tab's own height, not a flat 5px. The foot's curve
+// runs from the tab's side down to its outermost point over the *same*
+// distance it travels sideways, so a small outset squeezes the whole
+// flare into the last pixel or two of the band and the tab reads as a
+// plain rounded rectangle — which is what a browser sample drawn beside a
+// real Chromium showed. Chrome's feet are about a quarter of the tab's
+// height, and at that size they read as feet at every caption size.
 func (webEngine) BrowserTabOutset(l *Classic) Insets {
-	e := snap(l.S(5))
+	e := snap(max(l.S(30)*0.25, l.S(5)))
 	return Insets{Left: e, Right: e}
 }
 
@@ -178,8 +186,17 @@ func (e webEngine) DrawBrowserTab(l *Classic, ctx *paintengine2d.Context, b pain
 	}
 	top := b.Min.Y + max(snap(b.Dy()-l.S(30)), 0)
 	body := paintengine2d.XYWH(b.Min.X+ear, top, b.Dx()-2*ear, b.Max.Y-top)
-	r := min(c.rad(l, 5), body.Dx()*0.5, body.Dy()*0.5)
-	fg := webA(c.text, 0.5)
+	// A browser tab's top corners are round in proportion to the tab, not
+	// to the pack's general radius: Chromium's are about a third of the
+	// tab's height, and 5px on a 36px strip reads as a rectangle with the
+	// corners knocked off. The pack still decides whether there is any
+	// rounding at all — a square look gets none, because c.rad says so.
+	r := min(c.rad(l, 12), body.Dx()*0.5, body.Dy()*0.5)
+	// The ink each tab stands on: the others are on the strip, the
+	// selected one is on the tool bar's colour, because that is what it
+	// is filled with. On an untinted pack both are the palette's text and
+	// nothing changes; on a tinted one each follows its own surface.
+	fg := webA(c.titleBarText, 0.5)
 	switch {
 	case selected:
 		if ear > 0 {
@@ -192,12 +209,12 @@ func (e webEngine) DrawBrowserTab(l *Classic, ctx *paintengine2d.Context, b pain
 		ctx.DrawPath(fluentTabPath(b, top, r, ear, true), paintengine2d.Fill(c.toolBar))
 		ctx.DrawPath(fluentTabPath(b.Inset(px*0.5), top+px*0.5, r, ear, false), paintengine2d.Paint{Color: c.border0, Style: paintengine2d.StyleStroke,
 			Stroke: paintengine2d.Stroke{Width: px, Cap: paintengine2d.CapButt, Join: paintengine2d.JoinRound, MiterLimit: 4}})
-		fg = c.text
+		fg = c.toolBarText
 	case st.Disabled():
-		fg = webA(c.text, 0.3)
+		fg = webA(c.titleBarText, 0.3)
 	default:
 		if st.Hovered() || st.Pressed() {
-			fg = webA(c.text, 0.85)
+			fg = webA(c.titleBarText, 0.85)
 		}
 		if !st.Last() {
 			h := min(snap(l.S(18)), body.Dy()-4*px)

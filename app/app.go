@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/codemodify/paintengine2d"
+	"github.com/codemodify/uitoolkit/diag"
 	"github.com/codemodify/uitoolkit/platform"
 	"github.com/codemodify/uitoolkit/style"
 	"github.com/codemodify/uitoolkit/widget"
@@ -47,7 +48,54 @@ type Options struct {
 	// watcher. Theme and Look together mean "this look, with these parts
 	// written over it".
 	Theme style.ThemeOverride
+	// AppID is the identity a Linux desktop files this application's
+	// windows under: `xdg_toplevel.set_app_id` on Wayland, `WM_CLASS` on
+	// X11. A desktop uses it for everything that treats windows as
+	// belonging to one program — which task-bar button they share, which
+	// icon they wear, which `.desktop` file they match, which window
+	// rules apply.
+	//
+	// The default is the executable's own name, which separates two
+	// programs built with this toolkit from each other. Set it when the
+	// application ships a `.desktop` file, to the name of that file
+	// without its suffix: that is the only way a desktop can tie the
+	// window and the file together, and it is what gives the application
+	// its icon in the task bar.
+	//
+	//	uitoolkit.New(uitoolkit.Options{AppID: "com.example.Notes"})
+	//
+	// Windows and macOS need nothing here: they identify a program by its
+	// executable already, and the field is ignored there.
+	AppID string
+	// Chrome tints the window's own surfaces by name — "titleBar",
+	// "toolBar", "sidebar" — exactly as a pack states them, and is how an
+	// application themes its own chrome the way every browser and editor
+	// does. See [style.WithChrome] for the names and what reads them.
+	//
+	// It survives a theme change: the tint is the application's, so it is
+	// re-applied over whatever pack the person switches to.
+	Chrome map[string]paintengine2d.Color
 }
+
+// Diagnostics is everything the toolkit could not do the way this
+// application asked for it, oldest first.
+//
+// Each finding names what was asked, what happened instead, and the call
+// or build flag that gets what was asked ([diag.Finding]). Printing it at
+// start-up turns a wrong pixel into a line a developer can act on:
+//
+//	for _, f := range a.Diagnostics() {
+//	    log.Print(f)
+//	}
+//
+// It is more useful still in a test, where an application can require
+// that the toolkit is doing what it was told and cannot drift back into
+// the confusion unnoticed.
+//
+// The findings are process-wide rather than per-application, because the
+// layers that report them — the look, the icon directory, the theme
+// parser — are process-wide themselves.
+func (a *Application) Diagnostics() []diag.Finding { return diag.Findings() }
 
 // Application owns the run loop and open windows.
 type Application struct {
@@ -99,6 +147,8 @@ type Application struct {
 	// the app from look.json, so an app pinned to a pack keeps it across
 	// a Settings → Apply.
 	appTheme style.ThemeOverride
+	// chrome is Options.Chrome, re-applied over every look the app adopts.
+	chrome map[string]paintengine2d.Color
 	// deskAp is the last appearance that reached the app from outside its
 	// own level — look.json, the desktop's preferences, a Settings
 	// Apply. appTheme is written over it, and it is what is left when
@@ -219,6 +269,12 @@ func New(opts Options) *Application {
 	// theme that follows its light / dark mode starts in the right one.
 	a.watchDesktop()()
 	a.appTheme = opts.Theme
+	a.chrome = opts.Chrome
+	// Before any window is made: a desktop reads the id when a window is
+	// mapped and does not re-read it.
+	if opts.AppID != "" {
+		platform.SetAppID(opts.AppID)
+	}
 	if preferred {
 		// The desktop's, which is what a cleared Application.SetTheme
 		// goes back to and what every later look.json change replaces.
@@ -244,7 +300,26 @@ func New(opts Options) *Application {
 			}
 		}
 	}
-	a.base = lookAtScale(opts.Look, 1)
+	// A pack an application pinned that this binary cannot draw is the
+	// quietest way to be wrong: theme engines are chosen at build time
+	// (docs/engines.md), so the pack simply is not there, the look falls
+	// back to the default one, and the application comes up in a skin
+	// nobody chose with nothing said. Say it.
+	if want := opts.Theme.Pack; want != "" {
+		// Not Classic.Pack: the cascade records the name it was given
+		// whether or not anything can draw it, so asking the look would
+		// only ever confirm what we just set.
+		if !style.ThemePackAvailable(want) {
+			diag.Report(diag.Finding{
+				Level: diag.Warn,
+				Area:  "theme",
+				Asked: fmt.Sprintf("theme pack %q", want),
+				Got:   "the default look; no engine in this build draws that pack",
+				Fix:   "build with the engine that draws it — docs/engines.md lists the tags, style.EngineIDs() the ids, and -tags theme_engine_all has every one",
+			})
+		}
+	}
+	a.base = style.WithChrome(lookAtScale(opts.Look, 1), a.chrome)
 	a.look = lookAtScale(a.base, opts.Scale)
 	if watch {
 		a.lookWatch = newLookFileStamp()
@@ -276,7 +351,10 @@ func (a *Application) SetLook(l style.LookAndFeel) {
 		return
 	}
 	a.owesTrim()
-	a.base = lookAtScale(l, 1)
+	// The tint is the application's own, so a look arriving from anywhere
+	// — a Settings → Apply, the look.json watcher, a test — gets it again
+	// rather than losing the application's chrome to the new pack.
+	a.base = style.WithChrome(lookAtScale(l, 1), a.chrome)
 	a.look = a.scaledLook(a.scale)
 	widget.LooksChanged()
 	for _, w := range a.Windows() {

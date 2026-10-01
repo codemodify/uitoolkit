@@ -93,6 +93,48 @@ type DecorationState struct {
 	Caption float32
 }
 
+// CaptionStyle is how an application's own title bar meets the look's
+// frame, where the application has an opinion about it.
+//
+// The look's era answers this by default, and for most applications that
+// is right: under Windows 95 a window has a title strip and the app's bar
+// sits under it, under a GTK header bar the app's bar *is* the caption.
+// But some applications are a shape rather than a citizen of an era —
+// Chromium's tabs are its title bar on every desktop it runs on, and so
+// are VS Code's menu and SourceGit's repository tabs. Given a stacked
+// look those applications do not want a strip above their bar; they want
+// to *be* the strip, and before this they had no way to say so.
+//
+// It says nothing about whether the toolkit or the desktop draws the
+// frame ([platform.Decorations]), and it cannot conjure a caption where
+// the desktop draws its own.
+type CaptionStyle uint8
+
+const (
+	// CaptionFollowsLook lets the pack's era decide, which is the default
+	// and what an ordinary application wants.
+	CaptionFollowsLook CaptionStyle = iota
+	// CaptionMerged makes the application's title bar the caption itself,
+	// with the window buttons at its sides, under every look.
+	CaptionMerged
+	// CaptionStacked keeps the look's own title strip above the
+	// application's bar under every look — the era's classic frame, asked
+	// for on purpose.
+	CaptionStacked
+)
+
+// StackedOver is whether the frame is stacked once c has had its say
+// over what the look's [DecorationSpec.Stacked] asked for.
+func (c CaptionStyle) StackedOver(spec bool) bool {
+	switch c {
+	case CaptionMerged:
+		return false
+	case CaptionStacked:
+		return true
+	}
+	return spec
+}
+
 // DecorationSpec is a look's window frame in one state, in device pixels.
 type DecorationSpec struct {
 	// Border is the visible frame around the window (zero when maximized).
