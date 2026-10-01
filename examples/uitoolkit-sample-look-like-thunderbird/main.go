@@ -29,14 +29,18 @@ import (
 
 type message struct{ subject, from, date string }
 
+// Invented senders at example.com and example.org, which exist for this
+// (RFC 2606) and can belong to nobody. A sample ships in screenshots, so
+// a real address in it is somebody's inbox and a real brand in it is a
+// claim the sample has no business making.
 var inbox = []message{
-	{"Give 10% off a Pixel phone, get $50 back.", "Google Pixel <noreply@google.com>", "2:08 PM"},
-	{"You have $25 in Uber Cash waiting in your account", "Uber <uber@uber.com>", "1:52 PM"},
-	{"Final Hours: Go Truly Wireless", "First Backer <news@first-backer.com>", "1:20 PM"},
-	{"Endless \"DADA\" Infinite Slider", "Kickstarter <contact@backthebest.com>", "1:04 PM"},
-	{"Unlock savings with GoDaddy Payments.", "GoDaddy <donotreply@godaddy.com>", "12:41 PM"},
-	{"Your Screen, Finally Moves With You", "First Backer <news@first-backer.com>", "9/29"},
-	{"Educational: Assemble A Smartphone Yourself", "Kickstarter <contact@backthebest.com>", "9/29"},
+	{"Your order has shipped", "Parcel Desk <noreply@example.com>", "2:08 PM"},
+	{"£25 of ride credit is waiting", "City Rides <receipts@example.com>", "1:52 PM"},
+	{"Final hours: go truly wireless", "First Backer <news@example.org>", "1:20 PM"},
+	{"Endless \"DADA\" infinite slider", "Back The Best <contact@example.org>", "1:04 PM"},
+	{"Your domain renews next month", "Domain Desk <billing@example.com>", "12:41 PM"},
+	{"Your screen, finally moves with you", "First Backer <news@example.org>", "9/29"},
+	{"Educational: assemble a smartphone yourself", "Back The Best <contact@example.org>", "9/29"},
 }
 
 // themePack is the look this sample wears. Theme engines are chosen at
@@ -84,12 +88,16 @@ func main() {
 // titleBar: a pane toggle, the three actions, a search field taking the
 // free width, and the application menu.
 func titleBar(win *app.Window) *widgets.HeaderBar {
+	// Flat marks, not framed buttons. A push button's face beside a row of
+	// tool buttons reads as a control stuck half pressed — the tool
+	// buttons have no frame until the pointer is over them and this one
+	// had one always. WithPadding keeps it off the window's edge.
 	actions := widgets.NewRow(
-		widgets.NewIconButton(style.IconColumns, "Toggle Folder Pane", nil),
+		widgets.NewFlatIconButton(style.IconColumns, "Toggle Folder Pane", nil),
 		widgets.NewToolButton("Get Messages", style.IconDownload, nil),
 		widgets.NewToolButton("Write", style.IconPen, nil),
 		widgets.NewToolButton("Delete", style.IconTrash, nil),
-	).WithGap(4)
+	).WithGap(4).WithPadding(6, 0, 0, 0)
 
 	search := widgets.NewTextField("", "Search…   Ctrl+K", nil)
 
@@ -97,7 +105,7 @@ func titleBar(win *app.Window) *widgets.HeaderBar {
 		[]widget.Component{actions},
 		search,
 		[]widget.Component{
-			widgets.NewMenuButton(style.IconMenu, "Application Menu",
+			widgets.NewFlatMenuButton(style.IconMenu, "Application Menu",
 				&widgets.MenuItem{Text: "New Message", Shortcut: "Ctrl+N"},
 				&widgets.MenuItem{Text: "Address Book"},
 				&widgets.MenuItem{Separator: true},
@@ -125,7 +133,7 @@ func body() widget.Component {
 // folders is the account tree down the left.
 func folders() widget.Component {
 	t := widgets.NewTreeView()
-	for _, account := range []string{"j9@nchip.com", "john@nchip.com", "ping@sccllc.com"} {
+	for _, account := range []string{"ada@example.com", "work@example.com", "lists@example.org"} {
 		node := &widgets.TreeNode{Label: account, Icon: style.IconMail, Expanded: true}
 		for _, f := range []struct {
 			name string
@@ -189,13 +197,14 @@ func readingPane() widget.Component {
 	).WithGap(4).WithPad(6)
 
 	head := widgets.NewForm()
-	head.AddRow("From", widgets.NewLabel("Google Pixel <googlepixel-noreply@google.com>"))
+	head.AddRow("From", widgets.NewLabel("Parcel Desk <noreply@example.com>"))
 	head.AddRow("To", widgets.NewLabel("you@example.com"))
-	head.AddRow("Subject", widgets.NewLabel("Give 10% off a Pixel phone, get $50 back."))
+	head.AddRow("Subject", widgets.NewLabel("Your order has shipped"))
 
 	body := widgets.NewLabel(
-		"They save on a new phone, you get Google Store credit. " +
-			"Send your exclusive code to a friend and you get $50 in Google Store credit.")
+		"Your parcel left the depot this morning and should reach you " +
+			"tomorrow. Track it from the link in your account, or reply to " +
+			"this message and we will look it up for you.")
 	body.Wrap = true
 
 	col := widgets.NewColumn(actions, widgets.NewPad(8, head), widgets.NewPad(8, body)).WithGap(4)
@@ -204,11 +213,13 @@ func readingPane() widget.Component {
 
 func statusBar() widget.Component {
 	gap := widgets.NewSpacer()
+	// Flat here too: a status bar's marks are not buttons you are meant to
+	// see, and a framed one at each end reads as pressed.
 	row := widgets.NewRow(
-		widgets.NewIconButton(style.IconArrowRight, "Activity Manager", nil),
+		widgets.NewFlatIconButton(style.IconArrowRight, "Activity Manager", nil),
 		widgets.NewLabel("Connected"),
 		gap,
-		widgets.NewIconButton(style.IconBell, "Notifications", nil),
+		widgets.NewFlatIconButton(style.IconBell, "Notifications", nil),
 	).WithGap(6).WithPad(4)
 	row.AddFlex(gap, 1)
 	return row

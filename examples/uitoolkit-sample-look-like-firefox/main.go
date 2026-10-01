@@ -87,11 +87,6 @@ func main() {
 	// so the strip states it rather than inheriting a classic look's
 	// separate caption row.
 	win.SetTitleBar(tabStrip(win))
-	// Firefox's tab strip is taller than the look's caption: 78px against
-	// a real one. A design length again, so 99 draws 78. The look still
-	// decides everything *in* the strip; this is only how much room the
-	// application's own bar is given.
-	win.SetCaptionHeight(99)
 	win.SetCaptionStyle(uitoolkit.CaptionMerged)
 	win.SetBorderless(true)
 	doc := page()
@@ -116,14 +111,27 @@ func tabStrip(win *app.Window) *widgets.HeaderBar {
 		"Release notes",
 		"docs/widgets.md",
 	)
+	// Firefox's tabs are floating cards, not Chrome's merged shape: they
+	// stand clear of the tool bar instead of running into it. Stating it
+	// is the difference between looking like Firefox and looking like
+	// Chrome wearing Firefox's colours.
+	tabs.Shape = style.TabsFloating
 	tabs.OnNew = func() { tabs.AddTab(widgets.BrowserTab{Title: "New Tab"}) }
 	tabs.OnClose = func(i int) { tabs.RemoveTab(i) }
 
+	// Nothing before the first tab: Firefox's strip starts with the tabs
+	// themselves. The list-all-tabs chevron at the far end is flat, like
+	// every mark on a browser's chrome.
 	head := widgets.NewHeaderBar(
-		[]widget.Component{widgets.NewIconButton(style.IconColumns, "Sidebars", nil)},
+		nil,
 		tabs,
-		[]widget.Component{widgets.NewIconButton(style.IconArrowDown, "List all tabs", nil)})
+		[]widget.Component{widgets.NewFlatIconButton(style.IconArrowDown, "List all tabs", nil)})
 	head.ShowTitle = false
+	// Firefox's first tab does not start at the window's edge — there is
+	// about fifty pixels of strip before it, where its sidebar button
+	// sits. The space is part of the shape whether or not the button is
+	// there, so the strip reserves it.
+	head.StartWidth = 51
 	return head
 }
 
@@ -136,16 +144,10 @@ func navigationBar(win *app.Window) widget.Component {
 	// from the field, so the bar reads as one control.
 	address := widgets.NewTextField("https://github.com/codemodify/uitoolkit", "Search or enter address", nil)
 	omnibox := widgets.NewFieldBox(
-		[]widget.Component{flat(widgets.NewIconButton(style.IconLock, "Site information", nil))},
+		[]widget.Component{widgets.NewFlatIconButton(style.IconLock, "Site information", nil)},
 		address,
-		[]widget.Component{flat(widgets.NewIconButton(style.IconStar, "Bookmark this page", nil))},
+		[]widget.Component{widgets.NewFlatIconButton(style.IconStar, "Bookmark this page", nil)},
 	)
-	// Firefox's address capsule is taller than a form's field: measured
-	// against a real one it stands 56px in a 70px bar, where the look's
-	// own field height leaves it about half that. Both this and the
-	// caption height below are 1x *design* lengths, which the look scales
-	// by its own density — 74 here draws 56.
-	omnibox.MinHeight = 74
 
 	// A ToolBar, not a Row on the window's background: a look paints its
 	// tool bar as its own surface, and the engine fills the *selected tab*
@@ -159,7 +161,7 @@ func navigationBar(win *app.Window) widget.Component {
 		widgets.ToolGrow(omnibox),
 		widgets.ToolIconBtn(style.IconArchive, "", nil),
 		widgets.ToolIconBtn(style.IconUser, "", nil),
-		widgets.ToolWidget(flatMenu(widgets.NewMenuButton(style.IconMenu, "Open application menu",
+		widgets.ToolWidget(widgets.NewFlatMenuButton(style.IconMenu, "Open application menu",
 			&widgets.MenuItem{Text: "New Tab", Shortcut: "Ctrl+T"},
 			&widgets.MenuItem{Text: "New Window", Shortcut: "Ctrl+N"},
 			&widgets.MenuItem{Separator: true},
@@ -167,21 +169,9 @@ func navigationBar(win *app.Window) widget.Component {
 			&widgets.MenuItem{Text: "History"},
 			&widgets.MenuItem{Separator: true},
 			&widgets.MenuItem{Text: "Settings"},
-			&widgets.MenuItem{Text: "Quit", Shortcut: "Ctrl+Q", OnClick: win.Close}))),
+			&widgets.MenuItem{Text: "Quit", Shortcut: "Ctrl+Q", OnClick: win.Close})),
 	)
 	return bar
-}
-
-// flat and flatMenu draw a mark with no frame until the pointer is over
-// it, which is how a browser draws every mark on its chrome.
-func flat(b *widgets.IconButton) *widgets.IconButton {
-	b.Flat = true
-	return b
-}
-
-func flatMenu(b *widgets.MenuButton) *widgets.MenuButton {
-	b.Flat = true
-	return b
 }
 
 // page stands in for the rendered document.

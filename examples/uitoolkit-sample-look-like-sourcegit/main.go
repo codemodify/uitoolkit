@@ -25,13 +25,13 @@ import (
 type commit struct{ graph, subject, author, when, hash string }
 
 var history = []commit{
-	{"│", "release: 0.22.5", "codemodify", "14:02", "d317b7b"},
-	{"├─", "feat: chrome that lines up with a pane", "codemodify", "13:41", "26e71e5"},
-	{"│ ", "feat: the button that is a mark", "codemodify", "12:55", "5431914"},
-	{"├─", "fix: the three secretvault said were open", "codemodify", "11:30", "649af18"},
-	{"│ ", "release: 0.22.4", "codemodify", "10:18", "7ea6f81"},
-	{"├─", "feat: widget.MinWidthOf", "codemodify", "09:52", "5c346a0"},
-	{"│ ", "fix: the block after one whose height changed", "codemodify", "09:11", "3a0e482"},
+	{"│", "release: 0.22.5", "A. Developer", "14:02", "d317b7b"},
+	{"├─", "feat: chrome that lines up with a pane", "A. Developer", "13:41", "26e71e5"},
+	{"│ ", "feat: the button that is a mark", "A. Developer", "12:55", "5431914"},
+	{"├─", "fix: the three secretvault said were open", "A. Developer", "11:30", "649af18"},
+	{"│ ", "release: 0.22.4", "A. Developer", "10:18", "7ea6f81"},
+	{"├─", "feat: widget.MinWidthOf", "A. Developer", "09:52", "5c346a0"},
+	{"│ ", "fix: the block after one whose height changed", "A. Developer", "09:11", "3a0e482"},
 }
 
 // themePack is the look this sample wears. Theme engines are chosen at
@@ -82,13 +82,29 @@ func main() {
 // titleBar: the open repositories as tabs, with the actions a git client
 // keeps to hand at the end.
 func titleBar(win *app.Window) *widgets.HeaderBar {
-	repos := widgets.NewBrowserTabs("uitoolkit", "comms-mail", "secretvault")
-	repos.OnNew = func() { repos.AddTab(widgets.BrowserTab{Title: "Open…"}) }
+	// A repository tab carries its mark, as SourceGit's do — and so does
+	// a browser tab, which is where a favicon goes.
+	repos := widgets.NewBrowserTabs()
+	for _, r := range []struct {
+		name string
+		icon style.ToolIcon
+	}{
+		{"uitoolkit", style.IconFolder},
+		{"comms-mail", style.IconMail},
+		{"secretvault", style.IconLock},
+	} {
+		repos.AddTab(widgets.BrowserTab{Title: r.name, Icon: r.icon})
+	}
+	repos.Select(0)
+	repos.OnNew = func() { repos.AddTab(widgets.BrowserTab{Title: "Open…", Icon: style.IconPlus}) }
 	repos.OnClose = func(i int) { repos.RemoveTab(i) }
 
 	head := widgets.NewHeaderBar(
+		// Three marks before the tabs, flat, as the real one has.
 		[]widget.Component{
-			widgets.NewIconButton(style.IconExternalLink, "Repositories", nil),
+			widgets.NewFlatIconButton(style.IconFolder, "Open repository", nil),
+			widgets.NewFlatIconButton(style.IconPlus, "Clone repository", nil),
+			widgets.NewFlatIconButton(style.IconSettings, "Preferences", nil),
 		},
 		repos,
 		[]widget.Component{
@@ -177,7 +193,7 @@ func historyTable() *widgets.TableView {
 func detail() widget.Component {
 	head := widgets.NewForm()
 	head.AddRow("Commit", mono("d317b7b0d314f3125288005080a7668b56fe13bf"))
-	head.AddRow("Author", widgets.NewLabel("codemodify <codemodify@linux.com>"))
+	head.AddRow("Author", widgets.NewLabel("A. Developer <dev@example.com>"))
 	head.AddRow("Date", widgets.NewLabel("Tue 30 Sep 2026 14:02:11"))
 
 	files := widgets.NewTableView(
@@ -211,19 +227,10 @@ func mono(s string) *widgets.Label {
 	return l
 }
 
+// statusBar is the thin strip along the bottom. SourceGit's carries
+// nothing — measured against a real one, the band below the commit detail
+// holds no text, no marks and no buttons — so this is a divider and the
+// room the window leaves under its content, not a row of invented status.
 func statusBar() widget.Component {
-	gap := widgets.NewSpacer()
-	row := widgets.NewRow(
-		widgets.NewIconButton(style.IconExternalLink, "Branch", nil),
-		widgets.NewLabel("dev"),
-		// Ahead/behind as icons, not arrow runes: the bundled faces
-		// carry no arrows, so "↑2 ↓0" draws two tofu boxes. docs/icons.md
-		// is the rule — a mark is an icon, never a character.
-		widgets.NewIconLabel(style.IconArrowUp, "2"),
-		widgets.NewIconLabel(style.IconArrowDown, "0"),
-		gap,
-		widgets.NewLabel("7 commits"),
-	).WithGap(8).WithPad(4)
-	row.AddFlex(gap, 1)
-	return row
+	return widgets.NewRow().WithPad(2)
 }

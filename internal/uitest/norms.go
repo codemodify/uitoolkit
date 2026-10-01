@@ -530,7 +530,7 @@ func checkButtonClip() error {
 }
 
 func checkComboPopup() error {
-	cb := widgets.NewComboBox([]string{"QQ <j9@nchip.com>", "Work <you@example.com>"}, 0, nil)
+	cb := widgets.NewComboBox([]string{"Home <ada@example.com>", "Work <you@example.com>"}, 0, nil)
 	root := widgets.NewPad(16, cb)
 	s := Mount(root, paintengine2d.XYWH(0, 0, 480, 280))
 	cb.Open()

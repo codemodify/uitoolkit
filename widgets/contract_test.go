@@ -608,7 +608,7 @@ func TestMenuBarHelpNearRightEdgeFitsAboutMail(t *testing.T) {
 
 func TestComboBoxPopupClearsFieldAndFitsLabels(t *testing.T) {
 	cb := widgets.NewComboBox([]string{
-		"QQ <j9@nchip.com>",
+		"Home <ada@example.com>",
 		"Work <you@example.com>",
 		"+plus checked-looking label",
 	}, 0, nil)

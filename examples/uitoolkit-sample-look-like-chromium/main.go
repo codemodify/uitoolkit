@@ -117,9 +117,9 @@ func toolbar(win *app.Window) widget.Component {
 	// ends, which is what a FieldBox is for.
 	address := widgets.NewTextField("github.com/codemodify/uitoolkit", "Search Google or type a URL", nil)
 	omnibox := widgets.NewFieldBox(
-		[]widget.Component{flat(widgets.NewIconButton(style.IconLock, "View site information", nil))},
+		[]widget.Component{widgets.NewFlatIconButton(style.IconLock, "View site information", nil)},
 		address,
-		[]widget.Component{flat(widgets.NewIconButton(style.IconStar, "Bookmark this tab", nil))},
+		[]widget.Component{widgets.NewFlatIconButton(style.IconStar, "Bookmark this tab", nil)},
 	)
 
 	bar := widgets.NewToolBar(
@@ -129,7 +129,7 @@ func toolbar(win *app.Window) widget.Component {
 		widgets.ToolGrow(omnibox),
 		widgets.ToolIconBtn(style.IconArchive, "", nil),
 		widgets.ToolIconBtn(style.IconUser, "", nil),
-		widgets.ToolWidget(flatMenu(widgets.NewMenuButton(style.IconMore, "Customize and control",
+		widgets.ToolWidget(widgets.NewFlatMenuButton(style.IconMore, "Customize and control",
 			&widgets.MenuItem{Text: "New tab", Shortcut: "Ctrl+T"},
 			&widgets.MenuItem{Text: "New window", Shortcut: "Ctrl+N"},
 			&widgets.MenuItem{Separator: true},
@@ -138,22 +138,9 @@ func toolbar(win *app.Window) widget.Component {
 			&widgets.MenuItem{Text: "Bookmarks"},
 			&widgets.MenuItem{Separator: true},
 			&widgets.MenuItem{Text: "Settings"},
-			&widgets.MenuItem{Text: "Exit", Shortcut: "Ctrl+Q", OnClick: win.Close}))),
+			&widgets.MenuItem{Text: "Exit", Shortcut: "Ctrl+Q", OnClick: win.Close})),
 	)
 	return bar
-}
-
-// flat and flatMenu draw a mark with no frame until the pointer is over
-// it. Chromium's lock, star and three-dot menu are all drawn that way —
-// a framed button inside the omnibox reads as a control in a control.
-func flat(b *widgets.IconButton) *widgets.IconButton {
-	b.Flat = true
-	return b
-}
-
-func flatMenu(b *widgets.MenuButton) *widgets.MenuButton {
-	b.Flat = true
-	return b
 }
 
 func page() widget.Component {
