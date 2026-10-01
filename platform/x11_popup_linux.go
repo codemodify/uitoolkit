@@ -15,7 +15,7 @@ package platform
 // to; typed as a menu or a tooltip for a compositor's effects; and, on a
 // 32-bit visual, fully transparent until the first frame is put.
 static Window ui_pop_create(Display* d, Window parent, int x, int y, int w, int h,
-		Visual* vis, Colormap cmap, int depth, int tooltip) {
+		Visual* vis, Colormap cmap, int depth, int tooltip, const char* cls_name, const char* cls_class) {
 	int s = DefaultScreen(d);
 	XSetWindowAttributes swa;
 	memset(&swa, 0, sizeof(swa));
@@ -34,8 +34,8 @@ static Window ui_pop_create(Display* d, Window parent, int x, int y, int w, int 
 	XChangeProperty(d, win, wtype, XA_ATOM, 32, PropModeReplace, (unsigned char*)&kind, 1);
 	XSetTransientForHint(d, win, parent);
 	XClassHint ch;
-	ch.res_name = "uitoolkit";
-	ch.res_class = "Uitoolkit";
+	ch.res_name = (char*)cls_name;
+	ch.res_class = (char*)cls_class;
 	XSetClassHint(d, win, &ch);
 	return win;
 }
@@ -300,8 +300,10 @@ func (s *x11Surface) OpenPopup(opts PopupOptions) (PopupSurface, error) {
 	if opts.Role == PopupRoleTooltip {
 		tooltip = 1
 	}
+	cname, cclass := cAppClass()
+	defer freeAppClass(cname, cclass)
 	p.win = C.ui_pop_create(c.dpy, root.win, C.int(rx+int(o.X)), C.int(ry+int(o.Y)), C.int(w), C.int(h),
-		vis, cmap, depth, tooltip)
+		vis, cmap, depth, tooltip, cname, cclass)
 	if p.win == 0 {
 		x11Mu.Unlock()
 		c.release()

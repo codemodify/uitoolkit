@@ -1159,7 +1159,7 @@ func (wlBackend) NewSurface(opts WindowOptions) (Surface, error) {
 	s := &wlSurface{
 		conn:     c,
 		title:    title,
-		appID:    "uitoolkit",
+		appID:    AppID(),
 		sizeOpts: fitOpts,
 		sizing:   opts.Sizing,
 		logicalW: w,
@@ -2105,7 +2105,7 @@ func (s *wlSurface) bindToplevelLocked() {
 		C.free(unsafe.Pointer(ct))
 		appID := s.appID
 		if appID == "" {
-			appID = "uitoolkit"
+			appID = AppID()
 		}
 		app := C.CString(appID)
 		C.ui_wl_set_app_id(s.top, app)
@@ -2211,7 +2211,7 @@ func (s *wlSurface) requestActivate() {
 	C.ui_wl_act_token_listen(tok, C.uintptr_t(s.id))
 	appID := s.appID
 	if appID == "" {
-		appID = "uitoolkit"
+		appID = AppID()
 	}
 	app := C.CString(appID)
 	C.ui_wl_act_token_app(tok, app)

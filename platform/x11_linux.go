@@ -198,7 +198,7 @@ static void ui_shape_none(Display* d, Window w, int kind) {
 	XShapeCombineMask(d, w, (kind == 1) ? ShapeBounding : ShapeInput, 0, 0, None, ShapeSet);
 }
 
-static Window ui_create_visual(Display* d, int x, int y, int w, int h, const char* title, int popup, Visual* vis, Colormap cmap, int depth) {
+static Window ui_create_visual(Display* d, int x, int y, int w, int h, const char* title, int popup, Visual* vis, Colormap cmap, int depth, const char* cls_name, const char* cls_class) {
 	int s = DefaultScreen(d);
 	XSetWindowAttributes swa;
 	memset(&swa, 0, sizeof(swa));
@@ -227,8 +227,8 @@ static Window ui_create_visual(Display* d, int x, int y, int w, int h, const cha
 	Atom proto = XInternAtom(d, "WM_DELETE_WINDOW", False);
 	XSetWMProtocols(d, win, &proto, 1);
 	XClassHint ch;
-	ch.res_name = "uitoolkit";
-	ch.res_class = "Uitoolkit";
+	ch.res_name = (char*)cls_name;
+	ch.res_class = (char*)cls_class;
 	XSetClassHint(d, win, &ch);
 	XSizeHints hints;
 	memset(&hints, 0, sizeof(hints));
@@ -256,8 +256,8 @@ static Window ui_create_visual(Display* d, int x, int y, int w, int h, const cha
 	return win;
 }
 
-static Window ui_create(Display* d, int x, int y, int w, int h, const char* title, int popup) {
-	return ui_create_visual(d, x, y, w, h, title, popup, NULL, 0, 0);
+static Window ui_create(Display* d, int x, int y, int w, int h, const char* title, int popup, const char* cls_name, const char* cls_class) {
+	return ui_create_visual(d, x, y, w, h, title, popup, NULL, 0, 0, cls_name, cls_class);
 }
 
 static void ui_move(Display* d, Window w, int x, int y) {
@@ -930,6 +930,7 @@ import "C"
 
 import (
 	"fmt"
+	"github.com/codemodify/uitoolkit/diag"
 	"log"
 	"os"
 	"sync"
@@ -991,7 +992,9 @@ func (x11Backend) NewSurface(opts WindowOptions) (Surface, error) {
 	if opts.Popup {
 		popup = 1
 	}
-	win := C.ui_create(c.dpy, C.int(x), C.int(y), C.int(w), C.int(h), ctitle, C.int(popup))
+	cname, cclass := cAppClass()
+	defer freeAppClass(cname, cclass)
+	win := C.ui_create(c.dpy, C.int(x), C.int(y), C.int(w), C.int(h), ctitle, C.int(popup), cname, cclass)
 	gc := C.ui_gc(c.dpy, win)
 	ic, cbs := x11CreateIC(c.im, win)
 	s := &x11Surface{
@@ -1696,8 +1699,13 @@ func x11SupportedBPP(bpp int) bool { return bpp == 32 || bpp == 16 }
 
 func x11WarnVisual(bpp int) {
 	if x11VisualWarned.CompareAndSwap(false, true) {
-		log.Printf("uitk x11: unsupported visual (%d bits per pixel); "+
-			"window will not present -- use a 32- or 16-bpp visual, or UITK_BACKEND=offscreen", bpp)
+		diag.Report(diag.Finding{
+			Level: diag.Warn,
+			Area:  "x11",
+			Asked: "a window on this display",
+			Got:   fmt.Sprintf("nothing presented; the visual is %d bits per pixel and the toolkit draws into 32 or 16", bpp),
+			Fix:   "run on a 32- or 16-bpp visual, or set UITK_BACKEND=offscreen",
+		})
 	}
 }
 
@@ -3639,7 +3647,9 @@ func (s *x11Surface) recreateOnVisual(argb bool) {
 	}
 	ctitle := C.CString(s.title)
 	popup := C.int(0)
-	s.win = C.ui_create_visual(c.dpy, C.int(x), C.int(y), C.int(w), C.int(h), ctitle, popup, vis, cmap, depth)
+	cname, cclass := cAppClass()
+	defer freeAppClass(cname, cclass)
+	s.win = C.ui_create_visual(c.dpy, C.int(x), C.int(y), C.int(w), C.int(h), ctitle, popup, vis, cmap, depth, cname, cclass)
 	C.free(unsafe.Pointer(ctitle))
 	s.vis, s.cmap, s.visDepth = vis, cmap, int(depth)
 	if vis != nil {
