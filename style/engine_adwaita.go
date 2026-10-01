@@ -1088,6 +1088,18 @@ func (adwaitaEngine) StyleHint(l *Classic, h StyleHint) int {
 // ---- controls ------------------------------------------------------------------------------
 
 // adwButtonFont is the label face: libadwaita buttons are bold.
+// ControlFont declares the face this look labels a control with, so a
+// widget measuring a label reserves the width the engine will actually
+// draw — libadwaita's buttons are semibold, and a tool button measured
+// in the body face came out a character short of its own name.
+func (e adwaitaEngine) ControlFont(l *Classic, role Role) *Font {
+	switch role {
+	case RoleButton, RoleTool, RoleTab:
+		return adwButtonFont(l, adwColors(l))
+	}
+	return l.body
+}
+
 func adwButtonFont(l *Classic, c *adwSet) *Font {
 	if c.gtk3 {
 		return l.body

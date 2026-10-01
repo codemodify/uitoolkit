@@ -417,6 +417,13 @@ func (b *ToolButton) Measure(c layout.Constraints) paintengine2d.Point {
 	if b.Text == "" && b.Icon == style.IconNone && w < h {
 		w = h
 	}
+	// Whole pixels, rounded up. The painter gives the label exactly what
+	// this reserved for it and clips to the button's box, so a width
+	// measured as 160.3 and snapped to 160 by SetBounds loses the last
+	// character's edge — "Get Messages" drawn as "Get Message". It is
+	// the chip's bug in another widget: a fractional measure meeting a
+	// whole-pixel box.
+	w = ceilPx(w)
 	return c.Constrain(paintengine2d.Pt(w, h))
 }
 

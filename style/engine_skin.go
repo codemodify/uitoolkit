@@ -582,6 +582,17 @@ func (skinEngine) ControlFont(l *Classic, role Role) *Font {
 			}
 		}
 	}
+	// A skin that states no text role for this part gets whatever engine
+	// will actually *paint* the part, which is underFor and not under:
+	// a skin that owns the art paints its label through the stock chrome
+	// (see underFor), so asking its base pack for the face names one
+	// engine's font for another engine's drawing. Lantern, Marquee and
+	// Nocturne are partial skins over a base that is not in the default
+	// build; their labels were measured in the fallback pack's small
+	// tool face and drawn in the stock one, and came out clipped.
+	if name, ok := skinRolePart[role]; ok {
+		return underFor(l, name).ControlFont(l, role)
+	}
 	return under(l).ControlFont(l, role)
 }
 
