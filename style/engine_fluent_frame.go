@@ -55,7 +55,7 @@ func (fluentEngine) DrawDecoration(l *Classic, ctx *paintengine2d.Context, f Dec
 	if !st.Maximized {
 		lw := winPx(l)
 		// The window stroke is translucent: flatten it over the Mica.
-		drawFrameBorder(ctx, f.Window, Insets{Top: lw, Right: lw, Bottom: lw, Left: lw}, Mix(c.bg, c.windowStroke.WithAlpha(1), c.windowStroke.A))
+		drawFrameBorder(ctx, f.Window, Insets{Top: lw, Right: lw, Bottom: lw, Left: lw}, Mix(c.bg, c.windowStroke.WithAlpha(1), c.windowStroke.A), st)
 	}
 }
 

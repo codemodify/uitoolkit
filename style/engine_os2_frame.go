@@ -42,7 +42,7 @@ func (os2Engine) DrawDecoration(l *Classic, ctx *paintengine2d.Context, f Decora
 	c := o2colors(l)
 	u := rpU(l)
 	border := Insets{Top: o2above * u, Right: o2border * u, Bottom: o2border * u, Left: o2border * u}
-	if st.Maximized {
+	if st.Maximized || st.NoBorder {
 		border = Insets{}
 	}
 	for _, part := range FrameParts(f, border) {

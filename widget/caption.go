@@ -104,4 +104,7 @@ type FrameAbove interface {
 type FrameRequests interface {
 	FrameRole() string
 	CaptionHeight() float32
+	// Borderless reports that the window's chrome runs to its edges, so
+	// the frame draws no line down the sides or along the bottom.
+	Borderless() bool
 }

@@ -29,7 +29,7 @@ func (flatlafEngine) DrawDecoration(l *Classic, ctx *paintengine2d.Context, f De
 	ctx.DrawRect(flatSnap(f.Caption), paintengine2d.Fill(c.bg))
 	if !st.Maximized {
 		px := flatPx(l)
-		drawFrameBorder(ctx, f.Window, Insets{Top: px, Right: px, Bottom: px, Left: px}, c.border)
+		drawFrameBorder(ctx, f.Window, Insets{Top: px, Right: px, Bottom: px, Left: px}, c.border, st)
 	}
 }
 

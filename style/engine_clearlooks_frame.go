@@ -66,7 +66,7 @@ func (clearlooksEngine) DrawDecoration(l *Classic, ctx *paintengine2d.Context, f
 		return
 	}
 	border := clFrameBorder(l)
-	if st.Maximized {
+	if st.Maximized || st.NoBorder {
 		border = Insets{}
 	}
 	base := c.caption

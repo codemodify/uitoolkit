@@ -73,7 +73,7 @@ func (system7Engine) DrawDecoration(l *Classic, ctx *paintengine2d.Context, f De
 	u := rpU(l)
 	bh := s7barH(l)
 	border := Insets{Top: u, Right: u, Bottom: u, Left: u}
-	if st.Maximized {
+	if st.Maximized || st.NoBorder {
 		border = Insets{}
 	}
 	face, stripe := s7FrameBar(c, st)
@@ -108,7 +108,7 @@ func (system7Engine) DrawDecoration(l *Classic, ctx *paintengine2d.Context, f De
 	// The black line under the bar, and the window's own frame line.
 	frame.cells(g, 0, bar.h, g.w, 1)
 	if !st.Maximized {
-		drawFrameBorder(ctx, f.Window, border, line)
+		drawFrameBorder(ctx, f.Window, border, line, st)
 	}
 	lavDk.fill(ctx, c.lavDk)
 	lav.fill(ctx, c.lav)

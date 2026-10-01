@@ -54,16 +54,16 @@ func (metroEngine) DrawDecoration(l *Classic, ctx *paintengine2d.Context, f Deco
 	}
 	w := f.Window
 	if c.win10 {
-		drawFrameBorder(ctx, w, Insets{Top: lw, Right: lw, Bottom: lw, Left: lw}, border)
+		drawFrameBorder(ctx, w, Insets{Top: lw, Right: lw, Bottom: lw, Left: lw}, border, st)
 		return
 	}
 	// Windows 8: the coloured frame round the client, in a line of its
 	// border colour outside and in.
 	fw := metroFrameW(l)
-	drawFrameBorder(ctx, w, Insets{Top: f.Caption.Max.Y - w.Min.Y, Right: fw, Bottom: fw, Left: fw}, frame)
-	drawFrameBorder(ctx, w, Insets{Top: lw, Right: lw, Bottom: lw, Left: lw}, border)
+	drawFrameBorder(ctx, w, Insets{Top: f.Caption.Max.Y - w.Min.Y, Right: fw, Bottom: fw, Left: fw}, frame, st)
+	drawFrameBorder(ctx, w, Insets{Top: lw, Right: lw, Bottom: lw, Left: lw}, border, st)
 	client := paintengine2d.Rect{Min: paintengine2d.Pt(w.Min.X+fw, f.Caption.Max.Y), Max: paintengine2d.Pt(w.Max.X-fw, w.Max.Y-fw)}
-	drawFrameBorder(ctx, client.Inset(-lw), Insets{Top: lw, Right: lw, Bottom: lw, Left: lw}, border)
+	drawFrameBorder(ctx, client.Inset(-lw), Insets{Top: lw, Right: lw, Bottom: lw, Left: lw}, border, st)
 }
 
 func (metroEngine) DrawCaptionTitle(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, title string, st DecorationState) {

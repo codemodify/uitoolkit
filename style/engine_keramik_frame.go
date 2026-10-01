@@ -66,7 +66,7 @@ func (keramikEngine) DrawDecoration(l *Classic, ctx *paintengine2d.Context, f De
 	c := keramikColors(l)
 	u := kde3U(l)
 	border := kmFrameBorder(l)
-	if st.Maximized {
+	if st.Maximized || st.NoBorder {
 		border = Insets{}
 	}
 	b := kde3Snap(f.Window)

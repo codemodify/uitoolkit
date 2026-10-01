@@ -48,14 +48,33 @@ func (webEngine) DrawDecoration(l *Classic, ctx *paintengine2d.Context, f Decora
 	c := webColors(l)
 	px := c.px(l)
 	cb := winSnap(f.Caption)
-	ctx.DrawRect(cb, paintengine2d.Fill(c.titleBar))
+	// The caption dims in the backdrop, as every desktop's does. It
+	// matters for a *tinted* one above all: an application that paints
+	// its title bar the desktop's accent and leaves it at full strength
+	// when the window loses the focus is the one window on screen still
+	// claiming to be active.
+	band := c.titleBar
+	if !st.Active {
+		band = Mix(c.titleBar, c.window, 0.55)
+	}
+	ctx.DrawRect(cb, paintengine2d.Fill(band))
 	ctx.DrawRect(paintengine2d.XYWH(cb.Min.X, cb.Max.Y-px, cb.Dx(), px), paintengine2d.Fill(c.border0))
 	if !st.Maximized {
 		border := c.windowBorder
-		if !st.Active {
-			border = Mix(c.windowBorder, c.titleBar, 0.35)
+		// A tint carries its border as well as its ink. The pack's window
+		// border is chosen against the pack's own chrome, so on a caption
+		// an application has tinted it can end up *lighter* than the
+		// thing it outlines — a pale stripe along the top of a blue
+		// title bar, which is what it looked like. Where the caption has
+		// been moved away from the window colour, the border is a
+		// darkening of the caption instead.
+		if c.titleBar != c.window {
+			border = Mix(band, c.text, 0.28)
 		}
-		drawFrameBorder(ctx, f.Window, Insets{Top: px, Right: px, Bottom: px, Left: px}, border)
+		if !st.Active {
+			border = Mix(border, band, 0.35)
+		}
+		drawFrameBorder(ctx, f.Window, Insets{Top: px, Right: px, Bottom: px, Left: px}, border, st)
 	}
 }
 

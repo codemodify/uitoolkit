@@ -81,7 +81,7 @@ func (aquaEngine) DrawDecoration(l *Classic, ctx *paintengine2d.Context, f Decor
 		ctx.DrawRect(paintengine2d.XYWH(bar.Min.X, bar.Max.Y-u, bar.Dx(), u), paintengine2d.Fill(c.titleEdge))
 	}
 	if !st.Maximized {
-		drawFrameBorder(ctx, f.Window, Insets{Top: u, Right: u, Bottom: u, Left: u}, Mix(c.titleEdge, c.win, 0.2))
+		drawFrameBorder(ctx, f.Window, Insets{Top: u, Right: u, Bottom: u, Left: u}, Mix(c.titleEdge, c.win, 0.2), st)
 	}
 }
 

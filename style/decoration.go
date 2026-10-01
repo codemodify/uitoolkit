@@ -81,6 +81,14 @@ type DecorationState struct {
 	// Custom: the app's own title bar (tabs, a tool bar) fills the caption,
 	// not just the window title.
 	Custom bool
+	// NoBorder: the application asked for its chrome to run to the
+	// window's edges ([app.Window.SetBorderless]), so a frame draws its
+	// caption and its shadow but no line down the sides or along the
+	// bottom. A browser is the case: Firefox and Chromium have no side
+	// border at all, and one drawn anyway is a line the application's own
+	// tool bar then paints over, which reads as chrome overstepping the
+	// window rather than as a border.
+	NoBorder bool
 	// Role is what the app calls this window (Window.SetFrameRole): its
 	// equaliser, its playlist. A look that dresses windows differently — a
 	// skin's window variants — chooses the frame by it; every other look
@@ -694,7 +702,7 @@ func (d plainDecoration) DrawDecoration(_ *Classic, ctx *paintengine2d.Context, 
 		ctx.DrawRect(paintengine2d.XYWH(f.Caption.Min.X, f.Caption.Max.Y-1, f.Caption.Dx(), 1), paintengine2d.Fill(pal.Divider))
 	}
 	if !st.Maximized {
-		drawFrameBorder(ctx, f.Window, Insets{Top: 1, Right: 1, Bottom: 1, Left: 1}, pal.Border)
+		drawFrameBorder(ctx, f.Window, Insets{Top: 1, Right: 1, Bottom: 1, Left: 1}, pal.Border, st)
 	}
 }
 
@@ -737,8 +745,15 @@ func drawPlainCaptionButton(lk LookAndFeel, ctx *paintengine2d.Context, b painte
 }
 
 // drawFrameBorder fills the band of widths in just inside w.
-func drawFrameBorder(ctx *paintengine2d.Context, w paintengine2d.Rect, in Insets, col paintengine2d.Color) {
-	if w.Empty() || col.A <= 0 {
+// drawFrameBorder draws a frame's border ring, or nothing where the
+// application asked for its chrome to run to the window's edges.
+//
+// The check lives here rather than at each of the nineteen call sites
+// because that is the only way it stays true: an engine added next year
+// gets it by calling the helper every other engine calls, and one that
+// forgets is one the compiler has already made pass the state in.
+func drawFrameBorder(ctx *paintengine2d.Context, w paintengine2d.Rect, in Insets, col paintengine2d.Color, st DecorationState) {
+	if w.Empty() || col.A <= 0 || st.NoBorder {
 		return
 	}
 	p := paintengine2d.NewPath()

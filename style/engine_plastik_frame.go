@@ -52,7 +52,7 @@ func (plastikEngine) DrawDecoration(l *Classic, ctx *paintengine2d.Context, f De
 	c := plastikColors(l)
 	u := kde3U(l)
 	border := plFrameBorder(l)
-	if st.Maximized {
+	if st.Maximized || st.NoBorder {
 		border = Insets{}
 	}
 	b := kde3Snap(f.Window)

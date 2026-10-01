@@ -48,7 +48,7 @@ func (metalEngine) DrawDecoration(l *Classic, ctx *paintengine2d.Context, f Deco
 	u := c.u
 	b := mtlSnap(f.Window)
 	border := mtlFrameBorder(l)
-	if st.Maximized {
+	if st.Maximized || st.NoBorder {
 		border = Insets{}
 	}
 	frame, groove, grooveHi, bar := c.frameOn, c.grooveOn, c.grooveOnHi, c.titleOn

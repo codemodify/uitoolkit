@@ -60,7 +60,7 @@ func (breezeEngine) DrawDecoration(l *Classic, ctx *paintengine2d.Context, f Dec
 	}
 	ctx.DrawRect(fuSnap(f.Caption), paintengine2d.Fill(bar))
 	if !st.Maximized {
-		drawFrameBorder(ctx, f.Window, Insets{Top: u, Right: u, Bottom: u, Left: u}, Mix(bar, c.text, 0.35).WithAlpha(1))
+		drawFrameBorder(ctx, f.Window, Insets{Top: u, Right: u, Bottom: u, Left: u}, Mix(bar, c.text, 0.35).WithAlpha(1), st)
 	}
 }
 

@@ -63,7 +63,7 @@ func (platinumEngine) DrawDecoration(l *Classic, ctx *paintengine2d.Context, f D
 	c := platColors(l)
 	u := platFrameU(l)
 	border := platFrameBorder(l)
-	if st.Maximized {
+	if st.Maximized || st.NoBorder {
 		border = Insets{}
 	}
 	for _, part := range FrameParts(f, border) {

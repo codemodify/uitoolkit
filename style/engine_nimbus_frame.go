@@ -53,7 +53,7 @@ func (nimbusEngine) DrawDecoration(l *Classic, ctx *paintengine2d.Context, f Dec
 		return
 	}
 	border := Insets{Right: fw, Bottom: fw, Left: fw}
-	if st.Maximized {
+	if st.Maximized || st.NoBorder {
 		border = Insets{}
 	}
 	r := nbRadius(b, l.rx(6))

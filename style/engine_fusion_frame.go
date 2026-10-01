@@ -71,7 +71,7 @@ func (fusionEngine) DrawDecoration(l *Classic, ctx *paintengine2d.Context, f Dec
 		return
 	}
 	border := fuFrameBorder(l)
-	if st.Maximized {
+	if st.Maximized || st.NoBorder {
 		border = Insets{}
 	}
 	bar := paintengine2d.XYWH(b.Min.X, b.Min.Y, b.Dx(), fuSnap(f.Caption).Max.Y-b.Min.Y)

@@ -159,7 +159,7 @@ func (skinEngine) DrawDecoration(l *Classic, ctx *paintengine2d.Context, f Decor
 		if !spec.Border.Zero() || spec.Split || spec.CaptionGap > 0 {
 			if !sk.drawPart(l, ctx, f.Window, sk.framePart("window", st.Role), cs) {
 				col := l.palette.Border
-				drawFrameBorder(ctx, f.Window, spec.Border, col)
+				drawFrameBorder(ctx, f.Window, spec.Border, col, st)
 			}
 		}
 	}

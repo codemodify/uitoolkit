@@ -81,7 +81,7 @@ func (adwaitaEngine) DrawDecoration(l *Classic, ctx *paintengine2d.Context, f De
 	if c.dark {
 		edge = adwOver(c.win, paintengine2d.RGBA(1, 1, 1, 0.1))
 	}
-	drawFrameBorder(ctx, f.Window, Insets{Top: lw, Right: lw, Bottom: lw, Left: lw}, edge)
+	drawFrameBorder(ctx, f.Window, Insets{Top: lw, Right: lw, Bottom: lw, Left: lw}, edge, st)
 }
 
 func (adwaitaEngine) DrawCaptionTitle(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, title string, st DecorationState) {

@@ -131,15 +131,15 @@ func (aeroEngine) DrawDecoration(l *Classic, ctx *paintengine2d.Context, f Decor
 	if st.Maximized {
 		return
 	}
-	drawFrameBorder(ctx, w, Insets{Top: lw, Right: lw, Bottom: lw, Left: lw}, c.frameEdge)
-	drawFrameBorder(ctx, w.Inset(lw), Insets{Top: lw, Right: lw, Bottom: lw, Left: lw}, paintengine2d.RGBA(1, 1, 1, 0.35))
+	drawFrameBorder(ctx, w, Insets{Top: lw, Right: lw, Bottom: lw, Left: lw}, c.frameEdge, st)
+	drawFrameBorder(ctx, w.Inset(lw), Insets{Top: lw, Right: lw, Bottom: lw, Left: lw}, paintengine2d.RGBA(1, 1, 1, 0.35), st)
 	// The line round the client area, just outside it: the caption's bottom
 	// row and the borders' inner edges.
 	client := paintengine2d.Rect{Min: paintengine2d.Pt(w.Min.X+border.Left, f.Caption.Max.Y), Max: paintengine2d.Pt(w.Max.X-border.Right, w.Max.Y-border.Bottom)}
 	if !f.Bar.Empty() {
 		client.Min.Y = f.Bar.Max.Y
 	}
-	drawFrameBorder(ctx, client.Inset(-lw), Insets{Top: lw, Right: lw, Bottom: lw, Left: lw}, c.clientEdge)
+	drawFrameBorder(ctx, client.Inset(-lw), Insets{Top: lw, Right: lw, Bottom: lw, Left: lw}, c.clientEdge, st)
 }
 
 func (aeroEngine) DrawCaptionTitle(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, title string, st DecorationState) {

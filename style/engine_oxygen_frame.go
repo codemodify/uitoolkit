@@ -83,7 +83,7 @@ func (e oxygenEngine) DrawDecoration(l *Classic, ctx *paintengine2d.Context, f D
 		r = 0
 	}
 	border := oxFrameBorder(l)
-	if st.Maximized {
+	if st.Maximized || st.NoBorder {
 		border = Insets{}
 	}
 	for _, part := range FrameParts(f, border) {

@@ -38,7 +38,7 @@ func (materialEngine) DrawDecoration(l *Classic, ctx *paintengine2d.Context, f D
 	ctx.DrawRect(mdSnap(f.Caption), paintengine2d.Fill(bar))
 	if !st.Maximized {
 		px := mdPx(l)
-		drawFrameBorder(ctx, f.Window, Insets{Top: px, Right: px, Bottom: px, Left: px}, c.divider)
+		drawFrameBorder(ctx, f.Window, Insets{Top: px, Right: px, Bottom: px, Left: px}, c.divider, st)
 	}
 }
 

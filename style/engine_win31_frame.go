@@ -49,7 +49,7 @@ func (win31Engine) DrawDecoration(l *Classic, ctx *paintengine2d.Context, f Deco
 	c := w31colors(l)
 	u := rpU(l)
 	border := w31FrameBorder(l)
-	if st.Maximized {
+	if st.Maximized || st.NoBorder {
 		border = Insets{}
 	}
 	bar := c.caption

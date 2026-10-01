@@ -59,7 +59,7 @@ func (openlookEngine) DrawDecoration(l *Classic, ctx *paintengine2d.Context, f D
 	u := rpU(l)
 	hh := olHeaderH(l)
 	border := Insets{Top: olFrame * u, Right: olFrame * u, Bottom: olFrame * u, Left: olFrame * u}
-	if st.Maximized {
+	if st.Maximized || st.NoBorder {
 		border = Insets{}
 	}
 	for _, part := range FrameParts(f, border) {

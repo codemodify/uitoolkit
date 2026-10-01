@@ -86,7 +86,7 @@ func (macosEngine) DrawDecoration(l *Classic, ctx *paintengine2d.Context, f Deco
 		ctx.DrawRect(paintengine2d.XYWH(bar.Min.X, bar.Max.Y-px, bar.Dx(), px), paintengine2d.Fill(c.titleOffEdge))
 	}
 	if !st.Maximized {
-		drawFrameBorder(ctx, f.Window, Insets{Top: px, Right: px, Bottom: px, Left: px}, c.winEdge)
+		drawFrameBorder(ctx, f.Window, Insets{Top: px, Right: px, Bottom: px, Left: px}, c.winEdge, st)
 	}
 }
 

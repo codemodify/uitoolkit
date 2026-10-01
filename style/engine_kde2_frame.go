@@ -150,7 +150,7 @@ func (kde2Engine) DrawDecoration(l *Classic, ctx *paintengine2d.Context, f Decor
 	c := kde2Colors(l)
 	u := kde3U(l)
 	border := Insets{Top: kw2Grab(l), Right: kw2Border(l), Bottom: kw2Foot(l), Left: kw2Border(l)}
-	if st.Maximized {
+	if st.Maximized || st.NoBorder {
 		border = Insets{}
 	}
 	b := kde3Snap(f.Window)

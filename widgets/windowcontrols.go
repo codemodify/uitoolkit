@@ -244,6 +244,7 @@ func frameState(h widget.FrameHost, custom bool) style.DecorationState {
 		if r, ok := h.(widget.FrameRequests); ok {
 			st.Role = r.FrameRole()
 			st.Caption = r.CaptionHeight()
+			st.NoBorder = r.Borderless()
 		}
 	}
 	return st
