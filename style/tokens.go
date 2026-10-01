@@ -1,12 +1,13 @@
 package style
 
 import (
-	"log"
+	"fmt"
 	"math"
 	"strconv"
 	"strings"
 
 	"github.com/codemodify/paintengine2d"
+	"github.com/codemodify/uitoolkit/diag"
 )
 
 // BevelStyle is the control-chrome language a theme pack paints with.
@@ -619,6 +620,20 @@ const (
 	maxFontSize    = 48
 )
 
+// reportMetric says a theme file asked for a value the toolkit would not
+// take. A theme is data, often somebody else's, so this is never an error
+// — but silently using a different number than the file states is how a
+// pack comes out looking wrong with nothing to read.
+func reportMetric(name, asked, got, fix string) {
+	diag.Report(diag.Finding{
+		Level: diag.Warn,
+		Area:  "theme",
+		Asked: name + " = " + asked,
+		Got:   got,
+		Fix:   fix,
+	})
+}
+
 // clampMetric keeps v inside [min, max]. Zero stays zero (unset); negative
 // and non-finite values fall back to unset. Every change is logged once at
 // the point a theme is parsed or resolved.
@@ -627,19 +642,19 @@ func clampMetric(name string, v, min, max float32) float32 {
 		return 0
 	}
 	if math.IsNaN(float64(v)) || math.IsInf(float64(v), 0) {
-		log.Printf("uitk theme: %s is not a finite number, ignoring", name)
+		reportMetric(name, fmt.Sprint(v), "ignored: it is not a finite number", fmt.Sprintf("give %s a number between %v and %v", name, min, max))
 		return 0
 	}
 	if v < 0 {
-		log.Printf("uitk theme: %s %v is negative, ignoring", name, v)
+		reportMetric(name, fmt.Sprint(v), "ignored: it is negative", fmt.Sprintf("give %s a number between %v and %v", name, min, max))
 		return 0
 	}
 	if v < min {
-		log.Printf("uitk theme: %s %v below %v, clamped", name, v, min)
+		reportMetric(name, fmt.Sprint(v), fmt.Sprintf("clamped up to %v", min), fmt.Sprintf("%s is bounded to [%v, %v]", name, min, max))
 		return min
 	}
 	if v > max {
-		log.Printf("uitk theme: %s %v above %v, clamped", name, v, max)
+		reportMetric(name, fmt.Sprint(v), fmt.Sprintf("clamped down to %v", max), fmt.Sprintf("%s is bounded to [%v, %v]", name, min, max))
 		return max
 	}
 	return v
@@ -657,11 +672,11 @@ func clampChromeMetrics(cm ChromeMetrics) ChromeMetrics {
 	cm.ComboH = clampMetric("metrics.comboH", cm.ComboH, minControlSide, maxControlSide)
 	cm.FontSize = clampMetric("metrics.fontSize", cm.FontSize, minFontSize, maxFontSize)
 	if cm.Elevation < 0 {
-		log.Printf("uitk theme: metrics.elevation %d is negative, ignoring", cm.Elevation)
+		reportMetric("metrics.elevation", fmt.Sprint(cm.Elevation), "ignored: it is negative", fmt.Sprintf("metrics.elevation is bounded to [0, %d]", maxElevation))
 		cm.Elevation = 0
 	}
 	if cm.Elevation > maxElevation {
-		log.Printf("uitk theme: metrics.elevation %d above %d, clamped", cm.Elevation, maxElevation)
+		reportMetric("metrics.elevation", fmt.Sprint(cm.Elevation), fmt.Sprintf("clamped down to %d", maxElevation), fmt.Sprintf("metrics.elevation is bounded to [0, %d]", maxElevation))
 		cm.Elevation = maxElevation
 	}
 	var j chromeMetricsJSON

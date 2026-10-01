@@ -633,6 +633,26 @@ func ListBuiltinThemes() []ThemePack {
 }
 
 // ListThemes returns embedded starters (not shadowed) then user packs.
+// ThemePackAvailable reports whether this binary can draw the named pack.
+//
+// Theme engines are chosen at build time (docs/engines.md), so a pack's
+// name resolving is not the same as its art existing: an application that
+// pins a pack whose engine was left out gets the default look instead,
+// and [Classic.Pack] still reports the name that was asked for, because
+// that is what the cascade was told. This is the question an application
+// actually wants answered before it pins one.
+func ThemePackAvailable(name string) bool {
+	if name == "" {
+		return false
+	}
+	for _, p := range ListThemes() {
+		if p.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
 func ListThemes() []ThemePack {
 	builtins := ListBuiltinThemes()
 	users := ListUserThemes()

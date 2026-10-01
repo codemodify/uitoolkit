@@ -1,6 +1,7 @@
 package app
 
 import (
+	"github.com/codemodify/uitoolkit/diag"
 	"log"
 	"os"
 	"strings"
@@ -72,7 +73,13 @@ func demoteStatusMenuChrome(opts *platform.StatusItemOptions) platform.StatusMen
 		// this changes what its menu looks like.
 		opts.MenuChrome = chrome
 		trayChromeFallbackOnce.Do(func() {
-			log.Printf("uitk tray: ToolkitMenu asked for, HostMenu used: %s", why)
+			diag.Report(diag.Finding{
+				Level: diag.Warn,
+				Area:  "tray",
+				Asked: "a tray menu in the toolkit's own chrome (ToolkitMenu)",
+				Got:   "the host's menu; " + why,
+				Fix:   "nothing in the application changes this — the status-item host decides. StatusItemOptions.MenuChrome reports what was used.",
+			})
 		})
 	}
 	return chrome
