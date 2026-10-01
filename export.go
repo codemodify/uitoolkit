@@ -527,6 +527,16 @@ func NewIconButton(icon style.ToolIcon, action string, on func()) *widgets.IconB
 	return widgets.NewIconButton(icon, action, on)
 }
 
+// NewFlatIconButton is a mark with no frame until the pointer is over it.
+func NewFlatIconButton(icon style.ToolIcon, action string, on func()) *widgets.IconButton {
+	return widgets.NewFlatIconButton(icon, action, on)
+}
+
+// NewFlatMenuButton drops a menu, with no frame until pointed at.
+func NewFlatMenuButton(icon style.ToolIcon, action string, items ...*widgets.MenuItem) *widgets.MenuButton {
+	return widgets.NewFlatMenuButton(icon, action, items...)
+}
+
 // NewMenuButton is a button that drops a menu when pressed.
 func NewMenuButton(icon style.ToolIcon, action string, items ...*widgets.MenuItem) *widgets.MenuButton {
 	return widgets.NewMenuButton(icon, action, items...)

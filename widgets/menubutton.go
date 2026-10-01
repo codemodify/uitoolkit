@@ -57,6 +57,14 @@ func NewMenuButton(icon style.ToolIcon, name string, items ...*MenuItem) *MenuBu
 	return b
 }
 
+// NewFlatMenuButton drops its menu with no frame until the pointer is
+// over it, which is how a browser's three-dot or hamburger menu is drawn.
+func NewFlatMenuButton(icon style.ToolIcon, name string, items ...*MenuItem) *MenuButton {
+	b := NewMenuButton(icon, name, items...)
+	b.Flat = true
+	return b
+}
+
 // NewTextMenuButton is a menu button that shows a word rather than a
 // mark — the File, Edit and View of a menu bar rendered as buttons,
 // which is what an application that draws its own title bar has instead

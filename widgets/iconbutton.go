@@ -40,6 +40,14 @@ type IconButton struct {
 	// Pad is the space around the icon inside the button, as a 1x design
 	// length. Zero takes the look's own.
 	Pad float32
+	// Badge is a count worn at the mark's trailing-bottom corner, in the
+	// look's accent: an editor's rail showing how many files changed, a
+	// mail button's unread, a notification count. Empty draws none.
+	//
+	// A number on a mark is one of those things every application paints
+	// itself until the toolkit offers it, and then every one of them
+	// paints it slightly differently.
+	Badge string
 	// Flat draws the mark on the *tool* face instead of the button one:
 	// no frame until the pointer is over it, the way a browser's
 	// site-information lock, its bookmark star and its three-dot menu
@@ -73,8 +81,23 @@ func (b *IconButton) Paint(ctx *paintengine2d.Context) {
 	}
 	lk, r := b.Look(), b.LocalBounds()
 	st := b.PaintState() | style.StateAutoRaise
-	lk.DrawToolButton(ctx, r, st, "", style.IconNone)
+	// The label goes to the engine, not dropped. An IconButton is a mark
+	// alone, but MenuButton embeds it and a *named* menu — "File",
+	// "Edit" — is the same control with a word instead, which is what a
+	// code editor's menu bar is made of. Drawing the flat face with an
+	// empty label lost the word entirely.
+	lk.DrawToolButton(ctx, r, st, b.Text, style.IconNone)
 	b.paintIcon(ctx, r, st)
+}
+
+// NewFlatIconButton is a mark with no frame until the pointer is over it:
+// a browser's site-information lock, its bookmark star, the marks inside
+// another control. Same control as [NewIconButton] — same action, same
+// name, same keyboard — on the tool face instead of the button one.
+func NewFlatIconButton(icon style.ToolIcon, action string, on func()) *IconButton {
+	b := NewIconButton(icon, action, on)
+	b.Flat = true
+	return b
 }
 
 // SetAction changes the tooltip and the accessible name together, so
@@ -121,4 +144,31 @@ func (b *IconButton) paintIcon(ctx *paintengine2d.Context, r paintengine2d.Rect,
 		}
 	}
 	style.DrawToolIcon(ctx, box, b.Icon, col, style.IconSetOf(lk))
+	b.paintBadge(ctx, r)
+}
+
+// paintBadge draws the count, a pill against the button's trailing-bottom
+// corner. It is drawn after the mark and may overlap it, which is what a
+// badge is: the count matters more than the corner of the glyph it hides.
+func (b *IconButton) paintBadge(ctx *paintengine2d.Context, r paintengine2d.Rect) {
+	if b.Badge == "" || r.Empty() {
+		return
+	}
+	lk := b.Look()
+	f := lk.MutedFont()
+	if f == nil {
+		return
+	}
+	w := f.Advance(b.Badge) + style.Dip(lk, 6)
+	h := f.Height()
+	if w > r.Dx() || h > r.Dy() {
+		return
+	}
+	box := paintengine2d.XYWH(r.Max.X-w-1, r.Max.Y-h-1, w, h)
+	ctx.DrawRoundRect(box, h*0.5, h*0.5, paintengine2d.Fill(lk.Palette().Accent))
+	ink := lk.Palette().TextOnAccent
+	if ink == (paintengine2d.Color{}) {
+		ink = lk.Palette().Background
+	}
+	f.Draw(ctx, b.Badge, paintengine2d.Pt(box.Min.X+style.Dip(lk, 3), box.Min.Y), ink)
 }
