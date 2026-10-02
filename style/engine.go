@@ -954,6 +954,66 @@ func BrowserTabOutsetOf(lk LookAndFeel) Insets {
 	return TabOutsetOf(lk)
 }
 
+// TabContentInsetEngine is an optional engine hook: the room a tab's own
+// contents — a mark at its leading end, a close button at its trailing one —
+// must keep from the ends of its box, because the tab's outline is not a
+// rectangle there.
+//
+// A slanted tab (NeXT's, and so Window Maker's) is a trapezoid: narrower
+// along its top edge than along its foot. A mark placed hard against the
+// box's leading edge is then drawn over the slope, half of it outside the
+// tab's ink and standing on the strip behind. The engine that draws the
+// slope is the only thing that knows how wide it is, so it says.
+//
+// Zero for a tab that is a rectangle, which is most of them.
+type TabContentInsetEngine interface {
+	TabContentInset(l *Classic, b paintengine2d.Rect) float32
+}
+
+// TabContentInsetOf is the room a tab's mark and close button keep from the
+// ends of its box in any look, at display scale.
+func TabContentInsetOf(lk LookAndFeel, b paintengine2d.Rect) float32 {
+	if c, ok := lk.(*Classic); ok && c != nil {
+		if e, ok := c.eng().(TabContentInsetEngine); ok {
+			return max(e.TabContentInset(c, b), 0)
+		}
+	}
+	return 0
+}
+
+// TabLabelInkEngine is an optional engine hook: the colour this look sets a
+// tab's word in.
+//
+// A strip normally lets the engine draw the label with the tab, centred on
+// it. Where a mark or a close button has taken room at one end the label is
+// no longer centred on the tab, so the strip places it itself — and then it
+// needs the ink the engine would have used, because looks do not agree: most
+// set every tab's label in the ordinary text colour and let the face carry
+// the selection, Material tints the selected one, and the plain look mutes
+// the ones behind.
+type TabLabelInkEngine interface {
+	TabLabelInk(l *Classic, st ControlState, selected bool) paintengine2d.Color
+}
+
+// TabLabelInkOf is the colour a tab's word takes in any look. The default is
+// the ordinary text colour for every tab, which is what the era engines do:
+// they let the face carry the selection and leave the words alike. It cannot
+// be defaulted on [BaseEngine] instead, because every engine embeds that one
+// and would inherit whatever it said.
+func TabLabelInkOf(lk LookAndFeel, st ControlState, selected bool) paintengine2d.Color {
+	c, ok := lk.(*Classic)
+	if !ok || c == nil {
+		return paintengine2d.Color{}
+	}
+	if e, ok := c.eng().(TabLabelInkEngine); ok {
+		return e.TabLabelInk(c, st, selected)
+	}
+	if st.Disabled() {
+		return c.Palette().TextMuted
+	}
+	return c.Palette().Text
+}
+
 // DrawBrowserTabOf paints a browser-style tab in any look: the engine's own,
 // else the look's ordinary tab.
 func DrawBrowserTabOf(lk LookAndFeel, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, selected bool, shape TabShape) {

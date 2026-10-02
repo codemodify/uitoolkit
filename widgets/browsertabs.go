@@ -462,7 +462,8 @@ func (t *BrowserTabs) NewTabButton() paintengine2d.Rect { return t.geom().newBtn
 // closeRect is tab slot s's close button.
 func (t *BrowserTabs) closeRect(s paintengine2d.Rect) paintengine2d.Rect {
 	side := min(t.dip(18), s.Dy()-t.dip(4))
-	return paintengine2d.XYWH(s.Max.X-t.dip(6)-side, s.Min.Y+float32(math.Round(float64(s.Dy()-side)*0.5)), side, side)
+	in := style.TabContentInsetOf(t.Look(), s)
+	return paintengine2d.XYWH(s.Max.X-in-t.dip(6)-side, s.Min.Y+float32(math.Round(float64(s.Dy()-side)*0.5)), side, side)
 }
 
 // hasClose reports whether tab i shows its close button now: the selected
@@ -643,10 +644,11 @@ func (t *BrowserTabs) iconRect(i int, s paintengine2d.Rect) paintengine2d.Rect {
 		return paintengine2d.Rect{}
 	}
 	side := min(t.dip(16), s.Dy()-t.dip(8))
-	if side < t.dip(8) || s.Dx() < side+t.dip(28) {
+	in := style.TabContentInsetOf(t.Look(), s)
+	if side < t.dip(8) || s.Dx() < side+in+t.dip(28) {
 		return paintengine2d.Rect{}
 	}
-	x := s.Min.X + t.dip(8)
+	x := s.Min.X + in + t.dip(8)
 	y := s.Min.Y + float32(math.Round(float64(s.Dy()-side)*0.5))
 	return paintengine2d.XYWH(x, y, side, side)
 }
@@ -703,21 +705,20 @@ func (t *BrowserTabs) Paint(ctx *paintengine2d.Context) {
 		if lb == s {
 			style.DrawBrowserTabOf(lk, ctx, r, st, text, sel, t.Shape)
 		} else {
-			// The look centres a tab's label on the tab; to centre it on
-			// the room left of the close button, the tab is painted bare,
-			// then again moved left by half the button's room, clipped to
-			// that room: inside it the face is the same, and the label
-			// lands where it belongs.
+			// A mark or a close button has taken room at one end, so the
+			// label does not belong in the middle of the tab. The face is
+			// painted bare and the word placed in the room that is left.
+			//
+			// It used to be done by painting the whole tab a second time,
+			// shifted, and clipping to that room — which assumed a tab's
+			// face looks the same wherever you put it. A slanted tab
+			// (Window Maker, and most of the older packs) is not like
+			// that, and the second pass painted its flat body over the
+			// tab's own edge: the trailing slant disappeared and stray
+			// diagonals were left across the strip, in every such look.
 			style.DrawBrowserTabOf(lk, ctx, r, st, "", sel, t.Shape)
 			if text != "" {
-				// Centre the word in the room left over, whichever end
-				// took it: a close button on the right, a mark on the
-				// left, or both.
-				shift := ((s.Max.X - lb.Max.X) - (lb.Min.X - s.Min.X)) * 0.5
-				ctx.Save()
-				ctx.ClipRect(paintengine2d.Rect{Min: paintengine2d.Pt(lb.Min.X+t.dip(2), s.Min.Y), Max: lb.Max})
-				style.DrawBrowserTabOf(lk, ctx, s.Translate(paintengine2d.Pt(-shift, 0)), st, text, sel, t.Shape)
-				ctx.Restore()
+				lk.DrawLabel(ctx, lb, text, style.TabLabelInkOf(lk, st, sel), style.AlignCenter)
 			}
 		}
 		t.paintIcon(ctx, i, s, sel)

@@ -1424,25 +1424,45 @@ func (e nextEngine) DrawTabBar(l *Classic, ctx *paintengine2d.Context, b painten
 // DrawTab is an OPENSTEP NSTabView tab: a trapezoid with slanted sides, a
 // white left slope and top, a black right slope over a dark one; the
 // selected tab opens into the pane.
-func (e nextEngine) DrawTab(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, selected bool) {
-	c := nxColors(l)
-	u := nxU(l)
-	b = nxSnap(b)
+// nxTabTop is where a tab's face starts: a tab behind the pane sits two
+// pixels lower than the one in front of it.
+func nxTabTop(l *Classic, b paintengine2d.Rect, selected bool) float32 {
 	top := b.Min.Y + l.S(3)
 	if !selected {
 		top += l.S(2)
 	}
-	top = snap(top)
-	h := b.Max.Y - top
-	// NSTabView's slopes run about half a tab height; they stay inside the
-	// 14px each side the tab strip reserves around a label.
-	slant := snap(h * 0.5)
+	return snap(top)
+}
+
+// nxTabSlant is how far a tab's top edge is drawn in from its foot on each
+// side. NSTabView's slopes run about half a tab height; they stay inside
+// the 14px each side the tab strip reserves around a label.
+func nxTabSlant(l *Classic, b paintengine2d.Rect, top float32) float32 {
+	slant := snap((b.Max.Y - top) * 0.5)
 	if m := snap(l.S(12)); slant > m {
 		slant = m
 	}
 	if slant*2 > b.Dx()-l.S(8) {
 		slant = snap((b.Dx() - l.S(8)) * 0.5)
 	}
+	return slant
+}
+
+// TabContentInset: a mark or a close button on one of these tabs keeps
+// clear of the slope, so it stands on the tab's ink and not on the strip
+// behind it. The selected tab has the taller face and so the wider slope;
+// using it for both keeps every tab in a strip marked alike.
+func (e nextEngine) TabContentInset(l *Classic, b paintengine2d.Rect) float32 {
+	return nxTabSlant(l, b, nxTabTop(l, b, true))
+}
+
+func (e nextEngine) DrawTab(l *Classic, ctx *paintengine2d.Context, b paintengine2d.Rect, st ControlState, label string, selected bool) {
+	c := nxColors(l)
+	u := nxU(l)
+	b = nxSnap(b)
+	top := nxTabTop(l, b, selected)
+	h := b.Max.Y - top
+	slant := nxTabSlant(l, b, top)
 	if h < 4*u || slant < 0 {
 		return
 	}
