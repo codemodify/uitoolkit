@@ -58,11 +58,10 @@
 // installed pack.
 //
 // Starting from a blank sheet is not the only way in, and usually not the
-// best one: [Plans] returns the eight shipped art plans — [Nocturne],
-// [Cassette], [Deck], [Minim], [Marquee], [Lantern], [MinimClassic] and
-// [MinimSilver] — and any of them can be taken as a starting point, renamed
-// and altered. A plan is data all the way down, so an author can keep one
-// pack's chrome and redraw only its keys.
+// best one: [Plans] returns the three shipped art plans — [Nocturne],
+// [Cassette] and [Deck] — and any of them can be taken as a starting point,
+// renamed and altered. A plan is data all the way down, so an author can
+// keep one pack's chrome and redraw only its keys.
 //
 // # Regenerating what ships
 //
@@ -779,5 +778,5 @@ func sortCells(cells []Cell) {
 // Write it somewhere. That is a lot less work than a blank sheet, and it is
 // why the plans are exported at all.
 func Plans() []*Plan {
-	return []*Plan{Nocturne(), Cassette(), Deck(), Minim(), Marquee(), Lantern(), MinimClassic(), MinimSilver()}
+	return []*Plan{Nocturne(), Cassette(), Deck()}
 }

@@ -191,8 +191,8 @@ func TestAShippedPlanCanBeForkedWithoutDisturbingIt(t *testing.T) {
 // point from, so a plan in it that did not load would be a dead end.
 func TestEveryShippedPlanIsAWholeSkin(t *testing.T) {
 	plans := skingen.Plans()
-	if len(plans) != 8 {
-		t.Errorf("Plans() has %d plans, expected the eight that ship", len(plans))
+	if len(plans) != 3 {
+		t.Errorf("Plans() has %d plans, expected the three that ship", len(plans))
 	}
 	dir := t.TempDir()
 	seen := map[string]bool{}
@@ -228,32 +228,6 @@ func TestHexReadsThePaletteNotationThePlansUse(t *testing.T) {
 		got := skingen.Hex(c.in)
 		if got.R != c.r || got.G != c.g || got.B != c.b || got.A != c.a {
 			t.Errorf("Hex(%q) = %v, want %g %g %g %g", c.in, got, c.r, c.g, c.b, c.a)
-		}
-	}
-}
-
-// The pixel alphabet the two panel skins print their displays in is public
-// as a pair: the runes it draws, and the sprite name each one is published
-// under. An app setting a line needs both, and so does anyone drawing a
-// display of their own.
-func TestThePixelFontNamesEveryGlyphItDraws(t *testing.T) {
-	runes := skingen.PixFontRunes()
-	if len(runes) == 0 {
-		t.Fatal("the pixel face draws no runes at all")
-	}
-	if got := skingen.PixFontSprite('A'); got != "font.41" {
-		t.Errorf("PixFontSprite('A') = %q, want font.41", got)
-	}
-
-	cells := map[string]bool{}
-	for _, sh := range skingen.MinimClassic().Sheets {
-		for _, c := range sh.Cells {
-			cells[c.Name] = true
-		}
-	}
-	for _, r := range runes {
-		if !cells[skingen.PixFontSprite(r)] {
-			t.Errorf("%q is in the face but no cell draws %s", r, skingen.PixFontSprite(r))
 		}
 	}
 }

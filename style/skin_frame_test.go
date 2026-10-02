@@ -249,7 +249,7 @@ func TestTheCaptionCaseIsTheSkinsChoice(t *testing.T) {
 // shrink to stand in it rather than growing it back.
 func TestAnAppAsksForItsOwnCaptionHeight(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	for _, pack := range []string{"breeze-night", "win95", "aqua", "marquee", "minim-silver"} {
+	for _, pack := range []string{"breeze-night", "win95", "aqua", "nocturne", "deck"} {
 		p, ok := LoadTheme(pack)
 		if !ok {
 			continue // that engine is not in this build

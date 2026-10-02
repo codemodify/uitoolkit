@@ -68,16 +68,10 @@ them; how to run them is in their repositories.
 
 ### The music player — [media-player-music](https://github.com/codemodify/media-player-music)
 
-![Minim in its three skins, each as the strip, the equaliser and the playlist snapped together](screenshots/minim.webp)
-
-| | |
-|---|---|
-| ![Marquee's cabinet, and folded into its stadium](screenshots/marquee.webp) | ![Lantern in its skin, and with the skin dropped](screenshots/lantern.webp) |
-| **Marquee** — the cabinet, and folded down | **Lantern** — in its skin, and with it dropped |
-
-It is a visual demo of skins and shaped windows and plays nothing at all —
-there is no audio or video dependency anywhere in this toolkit. What the
-toolkit gives it is in [players.md](players.md).
+A visual demo of skins and shaped windows that plays nothing at all — there
+is no audio or video dependency anywhere in this toolkit. The five skins it
+wears went with it; what the toolkit gives it is in
+[players.md](players.md), and screenshots are in its own repository.
 
 ---
 

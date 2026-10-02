@@ -27,15 +27,16 @@ style/skins/<name>/skin.json        skins the toolkit ships (embedded)
 ~/.config/uitoolkit/skins/<name>.uskin   or the same thing as one zip
 ```
 
-Eight skins ship with the toolkit. Three are the format's worked examples:
-**Nocturne**, amber on charcoal, drawn from paths so it is exact at every
-scale; **Cassette**, a six-colour pixel skin with two-pixel bevels that
-exercises the `pixelated` path; and **Deck**, whose window is not a
-rectangle and whose buttons take the pointer only on their ink. Five more
-are worn by the player demos ([docs/players.md](players.md)): **Minim**,
-and the two panels it switches to, **Minim Classic** and **Minim Silver**;
-**Marquee**; and **Lantern**. All eight are generated — see
-[The demo skins](#the-demo-skins).
+Three skins ship with the toolkit, and each is a worked example of the
+format: **Nocturne**, amber on charcoal, drawn from paths so it is exact at
+every scale; **Cassette**, a six-colour pixel skin with two-pixel bevels
+that exercises the `pixelated` path; and **Deck**, whose window is not a
+rectangle and whose buttons take the pointer only on their ink. All three
+are generated — see [The demo skins](#the-demo-skins).
+
+Five more once shipped — Minim, Minim Classic, Minim Silver, Marquee and
+Lantern — worn by the music players that now live in their own repository.
+They went with the applications they were art for.
 
 ## The three rules
 
@@ -552,8 +553,8 @@ to the format: a look that is not a skin, or a skin without that sprite,
 answers false and the app paints its own. That is what keeps a panel drawn
 this way a partial override like everything else.
 
-Minim's two panel skins are built on them (docs/players.md). Their faces
-are pictures of whole windows with the wells and printed labels in them,
+The music player's two panel skins are built on them ([players.md](players.md)).
+Their faces are pictures of whole windows with the wells and printed labels in them,
 and their digits, lamps, thumbs and bitmap capitals are loose sprites the
 player paints itself, where the skin's [fixed layout](#fixed-layouts) says.
 
@@ -658,10 +659,10 @@ art, and `widget.SlotArtRect` the slot's own unrounded rect in a component's
 coordinates: a component's bounds are whole pixels and a slot at 1.75 is not,
 and a key painted into its rounded box would sit half a pixel off its hole.
 
-Minim's two panel skins state three layouts each, `minim.strip`,
-`minim.equaliser` and `minim.playlist`, generated from the same rects the
-faces are drawn round (`skingen/panel`); the player reads
-every rect it uses from the skin and carries none of its own.
+The music player's two panel skins are the worked example: three layouts
+each, `minim.strip`, `minim.equaliser` and `minim.playlist`, generated from
+the same rects the faces are drawn round, so the player reads every rect it
+uses from the skin and carries none of its own.
 
 ## Windows that are not alike
 
@@ -876,10 +877,9 @@ later in the app you left running.
 ### Starting from one of ours
 
 Starting from a blank sheet is not the only way in, and usually not the best
-one. `skingen.Plans()` returns all eight shipped plans — `Nocturne()`,
-`Cassette()`, `Deck()`, `Minim()`, `Marquee()`, `Lantern()`,
-`MinimClassic()` and `MinimSilver()` — as data, freshly built on every call,
-so taking one and changing it cannot disturb the pack it came from:
+one. `skingen.Plans()` returns all three shipped plans — `Nocturne()`,
+`Cassette()` and `Deck()` — as data, freshly built on every call, so taking
+one and changing it cannot disturb the pack it came from:
 
 ```go
 p := skingen.Nocturne()
@@ -894,13 +894,8 @@ replace its `Draw`), or copy the plan's source file out of `skingen/` into
 your own package and edit it as a drawing — it is permissively licensed and
 that is what it is there for. The drawing *idioms* inside those files
 (bevels, gradient fills, the sheet packer) are deliberately unexported: they
-are how these eight packs happen to be drawn, not an API anyone should have
+are how these three packs happen to be drawn, not an API anyone should have
 to live with. Copy the ones you want.
-
-`skingen/panel` is the same idea one level up: the rects of Minim's two panel
-faces — every well, key, slider and label — published as numbers, so a panel
-skin for a player-shaped app starts from a measured layout instead of a ruler
-(see [Fixed layouts](#fixed-layouts)).
 
 ### How this repository uses it
 
@@ -938,55 +933,24 @@ compares byte for byte, so art changed and not committed fails the build.
 | sheet | 520×338 at 1×, 65 sprites | 270×182 at 1×, 55 sprites | 516×212 at 1×, 19 sprites |
 | exercises | nine-slice, tint, scale sets, `middle: none` | nearest sampling at whole multiples, `middle: tile`, exact doubling | `window.shape`, a control cut from its own alpha, a deliberately partial skin |
 
-And the ones the players wear. They are skins for a *particular app* rather
-than worked examples of the format, which is a different job: each is as
-complete as the app it dresses needs and no more, and each of these three
-declares a silhouette the app never mentions.
+The five the music player wears — `minim`, `minim-classic`, `minim-silver`,
+`marquee` and `lantern` — went with it to
+[media-player-music](https://github.com/codemodify/media-player-music), art
+and generators together. They were skins for a *particular app* rather than
+worked examples of the format, which is a different job: each was as
+complete as the app it dressed needed and no more. What they asked of the
+toolkit, and what writing them changed here, is in [players.md](players.md).
 
-| | Minim | Marquee | Lantern |
-| --- | --- | --- | --- |
-| look | a pixel front panel, phosphor green on graphite | brushed steel and glass over a deep blue display | matte charcoal and one indigo light, no gloss anywhere |
-| drawn as | whole pixels on a grid | paths, gradients and a gloss | paths and flat gradients |
-| `pixelated` | yes | no | no |
-| base pack | `win95` | `breeze-night` | `breeze-night` |
-| sheet | 222×190 at 1×, 57 sprites | 600×410 at 1×, 58 sprites | 516×286 at 1×, 48 sprites |
-| `window.shape` | three stretching rects: the window steps in twice and stands on a chin | two: a shallow brow across the top, and a body on a 48-pixel dome | one: the window's own box, swept round by 52 at the bottom left and 10 at the bottom right |
-| exercises | a pixel sheet in a window whose size *is* its design | an app's own shape taking precedence over the look's (the compact mode) | a single rect that is a silhouette because it is rounder than the frame, and a deliberately partial binding |
-
-Minim switches between three skins, and the second two are *panels* rather
-than dressings: pictures of the whole of each window with holes where the
-keys go, which is how a player of that shape was always built. Each is after
-a well-known look of its era, and each is drawn from scratch — the
-proportions and positions are the published facts of the 275×116 format
-and colours sampled as numbers; no bitmap, alphabet or mark of anybody's is
-in them.
-
-| | Minim Classic | Minim Silver |
-| --- | --- | --- |
-| look | the base-skin look of the era: slate-blue bevelled chrome, gold grooves either side of the title, a black display with green segments, grey keys, orange volume, green balance, yellow equaliser faders | the rounded look of the later era: silver chrome, a navy title band, a blue dot-matrix display, glossy round keys, capsule toggles with blue lamps, a tabbed equaliser |
-| drawn as | whole pixels on a grid | paths, gradients and gloss |
-| `pixelated` | yes — the 2× sheet is the 1× doubled | no |
-| base pack | `win95` | `luna` |
-| sheet | 340×879 at 1×, 161 sprites | 340×920 at 1×, 189 sprites |
-| `window.shape` | none: a rectangle, as the original was | one rect the size of the window with a 7-pixel radius on every corner, rounder than the (square) frame, so the desktop shows beyond all four |
-| exercises | `caption.title` (the gap in the groove), a 14-pixel caption, fixed layouts, a pixel panel on one device grid at fractional scales | fixed layouts with hover faces, a window variant (the equaliser's tab), round keys shaped by their art, a path-drawn panel at fractional scales |
-
-Both bind only the frame — the window, the caption, its plate, its keys —
-and the focus ring, and state the player's three layouts. Everything else a
-player opens over them, a menu or a tooltip, is their base pack's, which is
-what the desktop under a player of that era looked like anyway.
-
-Minim, Marquee and Lantern keep out of both top corners, which is the
-constraint a shaped skin has and it is worth stating: a framed caption centres its buttons about
-a fifth of its height down, and which *side* they sit on is the desktop's
-choice unless the skin says otherwise — `style.CaptionButtonsDesktop` is the
-default, a skin's `layout` is consulted only when the user has asked for the
-look's own, and a skin's `buttons` moves them to the side its art has room
-on. None of the demo skins states a side, so each keeps out of both corners:
-a silhouette that bit into a top corner would eat a close button on half the
-desktops it ran on. Minim Silver does round its top corners, by
-seven design pixels, which is less than the room its fifteen-pixel caption
-leaves above and beside a key: the close button is whole on either side.
+One rule they settled is general, and worth stating on its own: **a shaped
+skin should keep out of both top corners.** A framed caption centres its
+buttons about a fifth of its height down, and which *side* they sit on is
+the desktop's choice unless the skin says otherwise —
+`style.CaptionButtonsDesktop` is the default, a skin's `layout` is consulted
+only when the user has asked for the look's own, and a skin's `buttons`
+moves them to the side its art has room on. A silhouette that bit into a top
+corner would eat a close button on half the desktops it ran on. Rounding a
+top corner is fine where the radius is less than the room the caption leaves
+above and beside its buttons.
 
 Deck is the shaped one. Its outline is a full-width shoulder with the title
 plate inlaid in it over a body drawn in on both sides, so the desktop steps
@@ -1024,9 +988,8 @@ go run ./examples/uitoolkit-sample-skinshape -theme deck
 
 ```
 
-A whole application wearing one — switching between `minim`,
-`minim-classic` and `minim-silver` live, all its windows at once — is the
-music player in
+A whole application wearing one — switching between three skins live, all
+its windows at once — is the music player in
 [media-player-music](https://github.com/codemodify/media-player-music); what
 the toolkit does for it is in [players.md](players.md).
 

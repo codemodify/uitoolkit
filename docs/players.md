@@ -10,17 +10,15 @@ with it.
 
 This document is the toolkit's half: what a skinned, shaped, multi-window
 application asks of uitoolkit, what uitoolkit gives it, and what writing one
-changed here. The eight skins are still the toolkit's
-([skins.md](skins.md)), so is the snapping (`rack`), so are the shaped
-windows ([shapes.md](shapes.md)) — the player is what proves they work
-together.
+changed here. The skin format is the toolkit's ([skins.md](skins.md)), so is
+the snapping (`rack`), so are the shaped windows ([shapes.md](shapes.md)) —
+the player is what proved they work together.
 
-![Minim in its three skins — Minim, Minim Classic and Minim Silver — each as the strip, the equaliser and the playlist snapped together](screenshots/minim.webp)
-
-| | |
-|---|---|
-| ![Marquee's cabinet, and folded into its stadium](screenshots/marquee.webp) | ![Lantern and its playlist in its skin, and with the skin dropped](screenshots/lantern.webp) |
-| **Marquee** — the cabinet, and folded down | **Lantern** — in its skin, and with it dropped |
+The five skins those three faces wear — `minim`, `minim-classic`,
+`minim-silver`, `marquee` and `lantern` — went with the application, art and
+generators together, and are no longer in this repository. The toolkit keeps
+the three that are worked examples of the *format*: Nocturne, Cassette and
+Deck. Screenshots of the player in its own skins are in its own repository.
 
 ## It plays nothing, and the art is ours
 
@@ -32,11 +30,11 @@ so where it cannot be missed, in its title bar, on its display and in its
 About box.
 
 No skin, bitmap, icon, font, name or mark belonging to any real player is in
-this repository, as art or as a fixture. The five skins the player wears —
-`minim`, `minim-classic`, `minim-silver`, `marquee` and `lantern` — are
-generated from paths and whole pixels in `skingen` like the other three, and
-that generator is public API, so a skin for a player of somebody else's is
-made the same way ([skins.md](skins.md#writing-one-in-go)).
+this repository, as art or as a fixture, and none ever was: the player's five
+skins were generated from paths and whole pixels in `skingen`, the same way
+the three that remain here are. That generator is public API, so a skin for a
+player of somebody else's is made the same way
+([skins.md](skins.md#writing-one-in-go)).
 
 ## What the toolkit gives it
 

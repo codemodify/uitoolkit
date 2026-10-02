@@ -132,7 +132,7 @@ func TestAWindowGivenARoleWearsItsFrame(t *testing.T) {
 }
 
 func TestAnAppAsksItsWindowForAThinnerCaption(t *testing.T) {
-	for _, pack := range []string{"breeze-night", "win95", "marquee"} {
+	for _, pack := range []string{"breeze-night", "win95", "nocturne"} {
 		t.Run(pack, func(t *testing.T) {
 			r := framedRig(t, pack, 500, 360)
 			own := r.w.geom.caption.Dy()

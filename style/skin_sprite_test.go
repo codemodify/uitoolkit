@@ -11,13 +11,13 @@ import (
 // was given, at every scale, and nowhere else.
 func TestAnAppPaintsASkinSpriteByName(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	p, ok := LoadTheme("minim-classic")
+	p, ok := LoadTheme("deck")
 	if !ok {
-		t.Skipf("the %q pack is not in this build", "minim-classic")
+		t.Skipf("the %q pack is not in this build", "deck")
 	}
-	w, h, ok := SkinSpriteSize(p.Look(), "led.8")
-	if !ok || w != 9 || h != 13 {
-		t.Fatalf("led.8 is %gx%g (%v), want the 9x13 digit", w, h, ok)
+	w, h, ok := SkinSpriteSize(p.Look(), "button.normal")
+	if !ok || w != 72 || h != 36 {
+		t.Fatalf("button.normal is %gx%g (%v), want 72x36", w, h, ok)
 	}
 	for _, scale := range []float32{1, 1.25, 1.5, 1.75, 2} {
 		InvalidateSkinCache()
@@ -26,7 +26,7 @@ func TestAnAppPaintsASkinSpriteByName(t *testing.T) {
 		ctx := paintengine2d.NewContext(img)
 		ctx.Clear(paintengine2d.Color{})
 		b := paintengine2d.XYWH(20, 20, w*scale, h*scale)
-		if !DrawSkinSprite(lk, ctx, b, "led.8", paintengine2d.Color{}) {
+		if !DrawSkinSprite(lk, ctx, b, "button.normal", paintengine2d.Color{}) {
 			t.Fatalf("%gx: led.8 did not paint", scale)
 		}
 		ink, outside := 0, 0
@@ -54,105 +54,32 @@ func TestAnAppPaintsASkinSpriteByName(t *testing.T) {
 		t.Error("an unknown sprite reported that it painted")
 	}
 	plain, _ := LoadTheme("breeze-night")
-	if DrawSkinSprite(plain.Look(), ctx, paintengine2d.XYWH(0, 0, 40, 40), "led.8", paintengine2d.Color{}) {
+	if DrawSkinSprite(plain.Look(), ctx, paintengine2d.XYWH(0, 0, 40, 40), "button.normal", paintengine2d.Color{}) {
 		t.Error("a look that is not a skin painted a sprite")
 	}
-	if _, _, ok := SkinSpriteSize(plain.Look(), "led.8"); ok {
+	if _, _, ok := SkinSpriteSize(plain.Look(), "button.normal"); ok {
 		t.Error("a look that is not a skin has a sprite size")
 	}
 }
 
-// A skin that states a caption shorter than a frame's usual 24 pixels gets
-// the caption it stated, with square buttons stood inside it, rather than a
-// band grown to fit buttons as tall as the caption would have been.
-func TestASkinsShortCaptionIsTheOneItStates(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	for _, c := range []struct {
-		pack    string
-		caption float32
-	}{{"minim-classic", 14}, {"minim-silver", 15}, {"minim", 18}} {
-		p, ok := LoadTheme(c.pack)
-		if !ok {
-			t.Fatalf("%s does not load", c.pack)
-		}
-		for _, scale := range []float32{1, 1.75, 2} {
-			lk := WithScale(p.Look(), scale)
-			d := DecorationOf(lk, DecorationState{Active: true})
-			want := float32(int(c.caption*scale + 0.5))
-			if d.Caption != want {
-				t.Errorf("%s@%gx: caption %g, want %g", c.pack, scale, d.Caption, want)
-			}
-			if d.Button.Y <= 0 || d.ButtonPad.Top+d.Button.Y > d.Caption {
-				t.Errorf("%s@%gx: a %gx%g button %g down does not fit a %g caption",
-					c.pack, scale, d.Button.X, d.Button.Y, d.ButtonPad.Top, d.Caption)
-			}
-		}
-	}
-}
-
-// The caption.title part is a plate under the title, as wide as the title:
-// the band's groove shows either side of the words and stops short of them.
-func TestTheCaptionTitleStandsOnAPlate(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	p, _ := LoadTheme("minim-classic")
-	lk := p.Look()
-	sk := skinFor(lk)
-	if sk == nil || !sk.has("caption.title") {
-		t.Fatal("minim-classic binds no caption.title")
-	}
-	const W, H = 275, 14
-	img := paintengine2d.NewImage(W, H)
-	ctx := paintengine2d.NewContext(img)
-	ctx.Clear(paintengine2d.Color{})
-	band := paintengine2d.XYWH(0, 0, W, H)
-	st := DecorationState{Active: true}
-	skinEngine{}.DrawDecoration(lk, ctx, DecorationFrame{Window: paintengine2d.XYWH(0, 0, W, 40), Caption: band}, st)
-	skinEngine{}.DrawCaptionTitle(lk, ctx, band, "MINIM", st)
-
-	// The groove's cream row is the brightest thing on the band. It runs
-	// across the band well to the left of the title and is gone in the
-	// middle, where the plate is.
-	creamAt := func(x int) bool {
-		for y := 0; y < H; y++ {
-			if r, g, b, _ := img.PremulAt(x, y); r > 240 && g > 220 && b > 140 && b < 200 {
-				return true
-			}
-		}
-		return false
-	}
-	if !creamAt(40) {
-		t.Error("no groove to the left of the title")
-	}
-	if !creamAt(W - 50) {
-		t.Error("no groove to the right of the title")
-	}
-	// The words are set at the caption role's own nine design pixels.
-	tw := BakeFamily(lk.uiFamily, WeightBold, 9, paintengine2d.Color{}).Advance("MINIM")
-	for x := int(W/2 - tw/2); x < int(W/2+tw/2); x++ {
-		if creamAt(x) {
-			t.Fatalf("the groove runs under the title at x=%d", x)
-		}
-	}
-}
-
-// A sprite an app paints has a silhouette as a part's face does: Minim
-// Silver's round keys are discs in square boxes, so their corners are not
-// the key, at every scale; a sprite that fills its box, a sprite the skin
-// does not have and a look that is not a skin all answer nil — the box.
+// A sprite an app paints has a silhouette as a part's face does: Deck's
+// round keys are discs in square boxes, so their corners are not the key,
+// at every scale; a sprite that fills its box, a sprite the skin does not
+// have and a look that is not a skin all answer nil — the box.
 func TestAnAppPaintedSpriteHasItsShape(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	p, ok := LoadTheme("minim-silver")
+	p, ok := LoadTheme("deck")
 	if !ok {
-		t.Skipf("the %q pack is not in this build", "minim-silver")
+		t.Skipf("the %q pack is not in this build", "deck")
 	}
-	w, h, ok := SkinSpriteSize(p.Look(), "key.play")
+	w, h, ok := SkinSpriteSize(p.Look(), "capbtn.normal")
 	if !ok {
-		t.Fatal("no key.play")
+		t.Fatal("no capbtn.normal")
 	}
 	for _, scale := range []float32{1, 1.25, 1.5, 1.75, 2} {
 		lk := WithScale(p.Look(), scale)
 		size := paintengine2d.Pt(w*scale, h*scale)
-		s := SkinSpriteShape(lk, size, paintengine2d.XYWH(0, 0, size.X, size.Y), "key.play")
+		s := SkinSpriteShape(lk, size, paintengine2d.XYWH(0, 0, size.X, size.Y), "capbtn.normal")
 		if s == nil || s.Mask == nil {
 			t.Fatalf("%gx: a round key has no silhouette", scale)
 		}
@@ -174,7 +101,7 @@ func TestAnAppPaintedSpriteHasItsShape(t *testing.T) {
 		t.Error("a sprite the skin does not have has a silhouette")
 	}
 	plain, _ := LoadTheme("breeze-night")
-	if SkinSpriteShape(plain.Look(), full, paintengine2d.XYWH(0, 0, 40, 40), "key.play") != nil {
+	if SkinSpriteShape(plain.Look(), full, paintengine2d.XYWH(0, 0, 40, 40), "capbtn.normal") != nil {
 		t.Error("a look that is not a skin shaped a sprite")
 	}
 }

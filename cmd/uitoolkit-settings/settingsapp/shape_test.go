@@ -26,8 +26,6 @@ func TestThePreviewHasTheSkinsSilhouette(t *testing.T) {
 		// shoulder: beside the body near the foot is outside the window,
 		// the middle is inside.
 		"deck": {{"beside the body", 4, -8, true}, {"beside the body, right", -4, -8, true}, {"the middle", 0.5, 0.5, false}},
-		// Minim Silver is round at all four corners.
-		"minim-silver": {{"the top left corner", 1, 1, true}, {"the bottom right corner", -1, -1, true}, {"the middle", 0.5, 0.5, false}},
 		// A theme whose windows are rectangles paints its corners.
 		"breeze-night": {{"the top left corner", 1, 1, false}, {"the bottom right corner", -1, -1, false}},
 	}
