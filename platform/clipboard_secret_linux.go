@@ -22,19 +22,19 @@ import "os"
 //     ordinary text offer, which is why the timeout is the thing
 //     actually relied on rather than the hint.
 //
-// One honest limit: the X11 owner serves from a Go string, so the copy
-// this process holds while it owns the selection cannot be zeroed. It is
-// dropped on the timeout, on a clear and when the selection is lost —
-// which is as much as a garbage-collected language allows without
-// rewriting the selection service around a byte slice.
+// The value is carried as bytes the whole way down. Both owners keep a
+// copy of their own while they serve the selection — that is what owning
+// one means — and both zero it when the selection is given up, cleared or
+// replaced. Nothing on this path makes a Go string of a secret, which
+// could not be zeroed and would sit in the heap until the collector got
+// to it.
 func clipboardNativeSetSecret(b []byte) {
-	s := string(b)
 	if waylandLive() || (os.Getenv("WAYLAND_DISPLAY") != "" && waylandProbe()) {
-		wlClipSetSecret(s)
+		wlClipSetSecret(b)
 	}
 	if x11Live() || os.Getenv("DISPLAY") != "" {
 		if c, err := x11Get(); err == nil {
-			c.setClipboardSel(s, true)
+			c.setClipboardSelBytes(b, true)
 		}
 	}
 }
@@ -48,4 +48,25 @@ func clipboardNativeClear() {
 			c.clearClipboard()
 		}
 	}
+}
+
+// clipboardNativeGetSecret reads the clipboard as bytes, so a secret put
+// there by another program — a passphrase copied out of a terminal or
+// another password manager — never becomes a Go string in this process.
+//
+// It is the read half of what clipboardNativeSetSecret does for the write
+// half. Both owners hand the bytes over rather than copying them, and
+// zero what they held.
+func clipboardNativeGetSecret() ([]byte, bool) {
+	if waylandLive() || (os.Getenv("WAYLAND_DISPLAY") != "" && waylandProbe()) {
+		if b, ok := wlClipGetBytes(false); ok {
+			return b, true
+		}
+	}
+	if x11Live() || os.Getenv("DISPLAY") != "" {
+		if b, ok := x11ClipGetBytes(false); ok {
+			return b, true
+		}
+	}
+	return nil, false
 }

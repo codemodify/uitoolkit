@@ -13,20 +13,39 @@ package platform
 // Ctrl+V kept pasting what this app copied ten minutes ago. X11 gets this
 // right through SelectionClear; this is the same invariant.
 type clipCache struct {
-	text  string
+	// data is what this process offers while it owns the selection.
+	// Bytes rather than a string so that a passphrase can be zeroed when
+	// the selection is given up, cleared or replaced — a string cannot
+	// be, and the copy would sit in the heap until the collector felt
+	// like it.
+	data  []byte
 	owned bool
 }
 
 // set records text this process is now offering.
-func (c *clipCache) set(s string) {
-	c.text = s
+func (c *clipCache) set(s string) { c.setBytes([]byte(s)) }
+
+// setBytes records bytes this process is now offering. The caller's slice
+// is copied, so it may wipe its own at once; what was held before is
+// zeroed first.
+func (c *clipCache) setBytes(b []byte) {
+	c.wipe()
+	c.data = append([]byte(nil), b...)
 	c.owned = true
+}
+
+// wipe zeroes what is held and lets it go.
+func (c *clipCache) wipe() {
+	for i := range c.data {
+		c.data[i] = 0
+	}
+	c.data = nil
 }
 
 // invalidate drops the cache: the selection is no longer ours
 // (wl_data_source.cancelled, a foreign selection event, or shutdown).
 func (c *clipCache) invalidate() {
-	c.text = ""
+	c.wipe()
 	c.owned = false
 }
 
@@ -35,7 +54,17 @@ func (c *clipCache) get() (string, bool) {
 	if !c.owned {
 		return "", false
 	}
-	return c.text, true
+	return string(c.data), true
+}
+
+// getBytes is get without making a string of it, for the secret path.
+// The returned slice is the cache's own: the caller reads it and does not
+// keep it.
+func (c *clipCache) getBytes() ([]byte, bool) {
+	if !c.owned {
+		return nil, false
+	}
+	return c.data, true
 }
 
 // selectionChanged folds a wl_data_device.selection / primary selection

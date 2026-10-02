@@ -4553,11 +4553,11 @@ func wlDisableTextInput(c *wlConn) {
 // that advertises x-kde-passwordManagerHint is a password. A manager
 // that does not know the type sees an ordinary text offer, which is why
 // the timeout in [ClipboardSetSecret] is the thing actually relied on.
-func wlClipSetSecret(s string) bool { return wlClipSetSel(s, true) }
+func wlClipSetSecret(b []byte) bool { return wlClipSetSel(b, true) }
 
-func wlClipSet(s string) bool { return wlClipSetSel(s, false) }
+func wlClipSet(s string) bool { return wlClipSetSel([]byte(s), false) }
 
-func wlClipSetSel(s string, secret bool) bool {
+func wlClipSetSel(b []byte, secret bool) bool {
 	c, err := wlRetain()
 	if err != nil || c == nil || c.dataDev == nil || c.dataMan == nil {
 		if c != nil {
@@ -4566,9 +4566,9 @@ func wlClipSetSel(s string, secret bool) bool {
 		return false
 	}
 	wlMu.Lock()
-	c.clip.set(s)
+	c.clip.setBytes(b)
 	if !secret {
-		c.prim.set(s)
+		c.prim.setBytes(b)
 	}
 	c.clipKeep = true
 	if c.dataSrc != nil {
@@ -4667,9 +4667,16 @@ func wlClipGet(primary bool) (string, bool) {
 const wlClipboardTimeout = 500 * time.Millisecond
 
 func wlReadFD(c *wlConn, request func(fd int)) (string, bool) {
+	b, ok := wlReadFDBytes(c, request)
+	return string(b), ok
+}
+
+// wlReadFDBytes is wlReadFD without making a string of what it read, so a
+// secret pasted from another program can be wiped by whoever takes it.
+func wlReadFDBytes(c *wlConn, request func(fd int)) ([]byte, bool) {
 	var fds [2]C.int
 	if C.ui_wl_pipe(&fds[0]) != 0 {
-		return "", false
+		return nil, false
 	}
 	request(int(fds[1]))
 	C.ui_wl_close_fd(fds[1])
@@ -4687,9 +4694,42 @@ func wlReadFD(c *wlConn, request func(fd int)) (string, bool) {
 	// an acknowledgement of data the application never received, after
 	// which the source may delete the original.
 	if !how.ok() {
-		return string(out), false
+		return out, false
 	}
-	return string(out), true
+	return out, true
+}
+
+// wlClipGetBytes is wlClipGet without making a string of the selection.
+func wlClipGetBytes(primary bool) ([]byte, bool) {
+	c, err := wlRetain()
+	if err != nil || c == nil {
+		return nil, false
+	}
+	defer c.release()
+	if primary {
+		if b, ok := c.prim.getBytes(); ok {
+			return append([]byte(nil), b...), true
+		}
+		if c.primOffer == nil || c.primMime == "" {
+			return nil, false
+		}
+		return wlReadFDBytes(c, func(fd int) {
+			cm := C.CString(c.primMime)
+			C.ui_wl_prim_receive(c.primOffer, cm, C.int(fd))
+			C.free(unsafe.Pointer(cm))
+		})
+	}
+	if b, ok := c.clip.getBytes(); ok {
+		return append([]byte(nil), b...), true
+	}
+	if c.clipOffer == nil || c.clipMime == "" {
+		return nil, false
+	}
+	return wlReadFDBytes(c, func(fd int) {
+		cm := C.CString(c.clipMime)
+		C.ui_wl_data_receive(c.clipOffer, cm, C.int(fd))
+		C.free(unsafe.Pointer(cm))
+	})
 }
 
 // ReceiveDrop reads the drag dropped on the surface as mime.

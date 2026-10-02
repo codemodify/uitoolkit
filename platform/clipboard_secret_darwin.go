@@ -59,3 +59,7 @@ func clipboardNativeSetSecret(b []byte) {
 }
 
 func clipboardNativeClear() { C.uitk_pb_clear() }
+
+// clipboardNativeGetSecret: no bytes path here yet, so the caller falls
+// back to the ordinary read. See the Linux file for what this is for.
+func clipboardNativeGetSecret() ([]byte, bool) { return nil, false }

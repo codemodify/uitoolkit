@@ -249,6 +249,14 @@ func ClipboardGetSecret() []byte {
 		}
 		held.mu.Unlock()
 	}
+	// Another program's secret: read it as bytes where the backend can,
+	// so a passphrase copied out of a terminal or another password
+	// manager does not become a Go string in this process's heap, which
+	// nothing could then wipe. Where it cannot, the ordinary read is
+	// still better than refusing to paste.
+	if b, ok := clipboardNativeGetSecret(); ok {
+		return b
+	}
 	s := ClipboardGet()
 	if s == "" {
 		return nil

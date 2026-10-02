@@ -1129,7 +1129,11 @@ type x11Conn struct {
 	atomSyncReq     C.Atom
 	atomSyncCounter C.Atom
 
-	clipText string
+	// clipData is the value this process serves while it owns a
+	// selection. It is bytes rather than a string so that a passphrase
+	// can be zeroed when the selection is given up, cleared or times
+	// out — a string cannot be.
+	clipData []byte
 	// clipSecret is set while what we own is a passphrase: PRIMARY is
 	// not taken, the password-manager hint is offered, and the bytes are
 	// wiped when the selection is dropped.
@@ -1146,7 +1150,11 @@ type x11Conn struct {
 	// servicing is set while the background selection servicer runs (no
 	// window loop is left to answer SelectionRequest).
 	servicing bool
-	pasteText string
+	// pasteData is what a paste read back from another client's
+	// selection. Bytes rather than a string so that a secret pasted in
+	// can be zeroed once it has been handed over, which the secret path
+	// does.
+	pasteData []byte
 	pasteDone bool
 	pasteWant C.Atom
 	incrRecv  incrRecvState
@@ -2422,7 +2430,7 @@ func (c *x11Conn) handleSelReq(xe *C.XEvent) {
 		C.ui_send_sel_notify(c.dpy, xe, 0)
 		return
 	}
-	data := c.clipText
+	data := c.clipData
 	switch target {
 	case c.atomTargets:
 		// INCR is a transfer *type*, never a target: advertising it let
@@ -2458,7 +2466,7 @@ func (c *x11Conn) handleSelReq(xe *C.XEvent) {
 		if replyType == c.atomText {
 			replyType = c.atomUTF8
 		}
-		raw := []byte(data)
+		raw := data
 		thr := incrThreshold(c.maxReq)
 		if len(raw) > thr {
 			C.ui_select_prop(c.dpy, req)
@@ -2475,9 +2483,16 @@ func (c *x11Conn) handleSelReq(xe *C.XEvent) {
 			c.keep = true
 			return
 		}
-		ct := C.CString(data)
-		C.ui_change_prop8(c.dpy, req, prop, replyType, ct, C.int(len(data)))
-		C.free(unsafe.Pointer(ct))
+		// The bytes go to XChangeProperty straight out of the Go slice.
+		// C.CString would copy them into a C buffer that free() does not
+		// zero, which for a passphrase is a copy nothing can reach to
+		// wipe; XChangeProperty copies into the server's request buffer
+		// before it returns, so lending it the slice is enough.
+		var ct *C.char
+		if len(raw) > 0 {
+			ct = (*C.char)(unsafe.Pointer(&raw[0]))
+		}
+		C.ui_change_prop8(c.dpy, req, prop, replyType, ct, C.int(len(raw)))
 		C.ui_send_sel_notify(c.dpy, xe, prop)
 	default:
 		C.ui_send_sel_notify(c.dpy, xe, 0)
@@ -2510,7 +2525,7 @@ func (c *x11Conn) handleSelNotify(xe *C.XEvent) {
 	prop := C.ui_sn_property(xe)
 	if prop == 0 {
 		c.pasteDone = true
-		c.pasteText = ""
+		c.wipePasteLocked()
 		return
 	}
 	var data *C.uchar
@@ -2526,12 +2541,13 @@ func (c *x11Conn) handleSelNotify(xe *C.XEvent) {
 	}
 	if data == nil || n == 0 {
 		c.pasteDone = true
-		c.pasteText = ""
+		c.wipePasteLocked()
 		return
 	}
 	defer C.ui_xfree(unsafe.Pointer(data))
 	if fmtb == 8 {
-		c.pasteText = C.GoStringN((*C.char)(unsafe.Pointer(data)), C.int(n))
+		c.wipePasteLocked()
+		c.pasteData = C.GoBytes(unsafe.Pointer(data), C.int(n))
 	}
 	c.pasteDone = true
 }
@@ -2563,7 +2579,11 @@ func (c *x11Conn) handleProperty(xe *C.XEvent) {
 		var done bool
 		c.incrRecv.buf, done = AppendINCRPiece(c.incrRecv.buf, piece)
 		if done {
-			c.pasteText = string(c.incrRecv.buf)
+			c.wipePasteLocked()
+			c.pasteData = append([]byte(nil), c.incrRecv.buf...)
+			for i := range c.incrRecv.buf {
+				c.incrRecv.buf[i] = 0
+			}
 			c.pasteDone = true
 			c.incrRecv = incrRecvState{}
 		}
@@ -2600,20 +2620,27 @@ func (c *x11Conn) handleProperty(xe *C.XEvent) {
 	}
 }
 
-func (c *x11Conn) setClipboard(s string) { c.setClipboardSel(s, false) }
+func (c *x11Conn) setClipboard(s string) { c.setClipboardSelBytes([]byte(s), false) }
+
+// setClipboardSel is the string form, for everything that is not a secret.
+func (c *x11Conn) setClipboardSel(s string, secret bool) {
+	c.setClipboardSelBytes([]byte(s), secret)
+}
 
 // setClipboardSel owns CLIPBOARD, and PRIMARY too unless this is a
 // secret. A passphrase must not go on PRIMARY: that selection is pasted
 // by a middle click anywhere on the desktop, with no Ctrl+V and no
 // intent, and there is no gesture in X11 that undoes it.
-func (c *x11Conn) setClipboardSel(s string, secret bool) {
+func (c *x11Conn) setClipboardSelBytes(b []byte, secret bool) {
 	x11Mu.Lock()
 	defer x11Mu.Unlock()
 	if c.dpy == nil || c.helper == 0 {
 		return
 	}
 	c.wipeClipLocked()
-	c.clipText = s
+	// A copy of the caller's bytes, so the caller may wipe its own at
+	// once; this one is zeroed by wipeClipLocked.
+	c.clipData = append([]byte(nil), b...)
 	c.clipSecret = secret
 	t := c.selectionTimeLocked()
 	c.ownTime = t
@@ -2657,12 +2684,25 @@ func (c *x11Conn) clearClipboard() {
 	C.ui_flush(c.dpy)
 }
 
-// wipeClipLocked drops the served value. A string cannot be zeroed, so
-// what this can do is let go of it at once rather than when the next
-// copy happens to replace it — and say so, which is why the X11 note in
-// [ClipboardSetSecret]'s documentation exists.
+// wipePasteLocked zeroes whatever a paste read back and drops it. A
+// secret pasted from another program — a passphrase copied out of a
+// terminal or another password manager — is in this process's heap like
+// any other paste, and this is the one place that can let go of it.
+func (c *x11Conn) wipePasteLocked() {
+	for i := range c.pasteData {
+		c.pasteData[i] = 0
+	}
+	c.pasteData = nil
+}
+
+// wipeClipLocked zeroes the served value and drops it. It runs when the
+// selection is given up, cleared or replaced, so a passphrase this
+// process served is not left in the heap for the collector.
 func (c *x11Conn) wipeClipLocked() {
-	c.clipText = ""
+	for i := range c.clipData {
+		c.clipData[i] = 0
+	}
+	c.clipData = nil
 	c.clipSecret = false
 }
 
@@ -2736,24 +2776,26 @@ func (c *x11Conn) mayCloseLocked(ok bool) {
 	}
 }
 
-func (c *x11Conn) readSelection(sel C.Atom, timeout time.Duration) (string, bool) {
+// readSelection reads sel into c.pasteData and reports whether it got a
+// whole value. It deliberately returns no string: a secret paste must be
+// able to take the bytes and zero them, and a string of them could not be
+// ([readSelectionString] is the ordinary-text wrapper).
+func (c *x11Conn) readSelection(sel C.Atom, timeout time.Duration) (bool, bool) {
 	x11Mu.Lock()
 	if c.dpy == nil || c.helper == 0 {
 		x11Mu.Unlock()
-		return "", false
+		return false, false
 	}
 	if sel == c.atomClipboard && c.ownClip {
-		s := c.clipText
 		x11Mu.Unlock()
-		return s, true
+		return true, true
 	}
 	if sel == c.atomPrimary && c.ownPrim {
-		s := c.clipText
 		x11Mu.Unlock()
-		return s, true
+		return true, true
 	}
 	c.pasteDone = false
-	c.pasteText = ""
+	c.wipePasteLocked()
 	c.pasteWant = sel
 	c.incrRecv = incrRecvState{}
 	C.ui_convert(c.dpy, c.helper, sel, c.atomUTF8, c.atomProp, c.selectionTimeLocked())
@@ -2770,7 +2812,7 @@ func (c *x11Conn) readSelection(sel C.Atom, timeout time.Duration) (string, bool
 		x11Mu.Lock()
 		if c.dpy == nil {
 			x11Mu.Unlock()
-			return "", false
+			return false, false
 		}
 	}
 	if !c.pasteDone && c.dpy != nil && !c.incrRecv.active {
@@ -2789,14 +2831,13 @@ func (c *x11Conn) readSelection(sel C.Atom, timeout time.Duration) (string, bool
 			x11Mu.Lock()
 			if c.dpy == nil {
 				x11Mu.Unlock()
-				return "", false
+				return false, false
 			}
 		}
 	}
-	s := c.pasteText
 	ok := c.pasteDone
 	x11Mu.Unlock()
-	return s, ok
+	return ok, ok
 }
 
 func x11ClipSet(s string) {
@@ -2805,6 +2846,45 @@ func x11ClipSet(s string) {
 		return
 	}
 	c.setClipboard(s)
+}
+
+// readSelectionString is readSelection for ordinary text.
+func (c *x11Conn) readSelectionString(sel C.Atom, timeout time.Duration) (string, bool) {
+	if _, ok := c.readSelection(sel, timeout); !ok {
+		return "", false
+	}
+	x11Mu.Lock()
+	out := string(c.pasteData)
+	x11Mu.Unlock()
+	return out, true
+}
+
+// x11ClipGetBytes is x11ClipGet without making a string of the selection,
+// and it takes the bytes away from the connection rather than copying
+// them: what a secret paste read is handed to the caller and zeroed here,
+// so the backend is not left holding a second copy of somebody else's
+// passphrase.
+func x11ClipGetBytes(primary bool) ([]byte, bool) {
+	c, err := x11Get()
+	if err != nil {
+		return nil, false
+	}
+	sel := c.atomClipboard
+	if primary {
+		sel = c.atomPrimary
+	}
+	timeout := 250 * time.Millisecond
+	if incrThreshold(c.maxReq) < 1024 {
+		timeout = 2 * time.Second
+	}
+	if _, ok := c.readSelection(sel, timeout); !ok {
+		return nil, false
+	}
+	x11Mu.Lock()
+	out := c.pasteData
+	c.pasteData = nil // handed over, not copied
+	x11Mu.Unlock()
+	return out, len(out) > 0
 }
 
 func x11ClipGet(primary bool) (string, bool) {
@@ -2820,7 +2900,7 @@ func x11ClipGet(primary bool) (string, bool) {
 	if incrThreshold(c.maxReq) < 1024 {
 		timeout = 2 * time.Second
 	}
-	return c.readSelection(sel, timeout)
+	return c.readSelectionString(sel, timeout)
 }
 
 func x11Live() bool {
