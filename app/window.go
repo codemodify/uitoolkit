@@ -1035,8 +1035,18 @@ func (w *Window) dispatch(ev platform.Event) {
 	// and a change is noticed even when the key reaches no widget, which
 	// is the case that matters, because pressing Caps Lock is not a key
 	// any field wants (app/lockkeys.go).
+	//
+	// A focus-in is not one of them. None of the four backends puts
+	// modifiers on it (x11_linux.go, wayland_linux.go, win32_windows.go,
+	// appkit_darwin.go), so its zero said "nothing is pressed" when it
+	// meant "nobody asked" — and the window wrote that down as fact. A
+	// passphrase prompt opened with Caps Lock on read the lock correctly
+	// from the server, then had the focus-in arrive a moment later and
+	// tell every watcher it was off, so the field's mark appeared and
+	// went again before the first keystroke. The lock state is now left
+	// alone by an event that carries no word about it.
 	switch ev.Kind {
-	case platform.EventKeyDown, platform.EventKeyUp, platform.EventFocusIn,
+	case platform.EventKeyDown, platform.EventKeyUp,
 		platform.EventMouseDown, platform.EventMouseUp, platform.EventMouseMove:
 		w.noteLockKeys(ev.Mods)
 	}
