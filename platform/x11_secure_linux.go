@@ -51,6 +51,27 @@ func (s *x11Surface) SetSecureInput(on bool) bool {
 		s.ungrabLocked()
 		return true
 	}
+	// A window that has not been mapped yet cannot be grabbed:
+	// XGrabKeyboard answers GrabNotViewable, which the helper counts the
+	// same as somebody else holding it. A prompt asks for secure input
+	// when its passphrase field takes the focus, which is during the
+	// first layout, and an X11 window is mapped at its first present —
+	// after that. So the first attempt was always made too early, spent a
+	// quarter of a second retrying, held up the first frame and answered
+	// false.
+	//
+	// The wish is recorded instead and the grab taken at the map, where
+	// it can succeed. The answer is "asked for", not "in hand": the
+	// caller reads SecureInputHeld, or hears OnSecureInput, for what is
+	// actually in effect.
+	x11Mu.Lock()
+	if !s.mapped {
+		s.secureWanted = true
+		x11Mu.Unlock()
+		return true
+	}
+	x11Mu.Unlock()
+
 	// Somebody else holding the keyboard is nearly always a menu on its
 	// way down, and a prompt that gave up on the first attempt would
 	// fail exactly when it was opened from one. The lock is dropped
@@ -67,6 +88,17 @@ func (s *x11Surface) SetSecureInput(on bool) bool {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
+}
+
+// SecureInputHeld reports whether the keyboard grab is actually in hand,
+// which is not the same as having asked for it.
+func (s *x11Surface) SecureInputHeld() bool {
+	if s == nil {
+		return false
+	}
+	x11Mu.Lock()
+	defer x11Mu.Unlock()
+	return s.secureHeld
 }
 
 func (s *x11Surface) grabLocked() bool {
@@ -109,4 +141,14 @@ func (s *x11Surface) secureFocusChangedLocked(focused bool) {
 		return
 	}
 	s.ungrabLocked()
+}
+
+// grabIfWantedLocked takes the keyboard for a window that asked for
+// secure input before it was mapped. It runs at the map, with the display
+// lock held.
+func (s *x11Surface) grabIfWantedLocked() {
+	if s == nil || !s.secureWanted || s.secureHeld {
+		return
+	}
+	s.grabLocked()
 }

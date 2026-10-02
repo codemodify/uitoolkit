@@ -68,3 +68,14 @@ func CaptureExclusionAvailable() bool { return captureExclusionAvailable() }
 type LockKeysSurface interface {
 	LockKeys() (caps, num bool)
 }
+
+// SecureInputHeldSurface is a surface that can say whether secure input is
+// actually in effect, as opposed to having been asked for.
+//
+// The two differ on X11, where the keyboard grab follows the focus: it is
+// dropped when the window loses it and retaken when it comes back, and a
+// retake can fail. A prompt that tells a person "the keyboard is held"
+// needs this rather than what SetSecureInput answered once.
+type SecureInputHeldSurface interface {
+	SecureInputHeld() bool
+}

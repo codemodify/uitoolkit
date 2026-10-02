@@ -47,6 +47,13 @@ type Window struct {
 	// whether any event has carried them yet (app/lockkeys.go).
 	lockCaps, lockNum, lockKnown bool
 	onLockKeys                   func(caps, num bool)
+	// secureWanted is the last SetSecureInput request, secureHeld what
+	// is actually in effect, and onSecureInput the window's callback for
+	// changes in the second (app/secure.go).
+	secureWanted  bool
+	secureGot     bool
+	secureHeld    bool
+	onSecureInput func(held bool)
 	// wantFit is WindowOptions.FitContent, waiting for the first layout
 	// with content in it (app/fitcontent.go).
 	wantFit bool
@@ -1049,6 +1056,16 @@ func (w *Window) dispatch(ev platform.Event) {
 	case platform.EventKeyDown, platform.EventKeyUp,
 		platform.EventMouseDown, platform.EventMouseUp, platform.EventMouseMove:
 		w.noteLockKeys(ev.Mods)
+	}
+	// Secure input follows the focus on X11 — the grab is dropped at a
+	// focus-out and retaken at the focus-in, and a retake can fail — so
+	// the focus events are where what is in effect can change without
+	// the application having asked for anything (app/secure.go).
+	if w.secureWanted {
+		switch ev.Kind {
+		case platform.EventFocusIn, platform.EventFocusOut:
+			w.noteSecureInput(w.SecureInputHeld())
+		}
 	}
 	switch ev.Kind {
 	case platform.EventClose:

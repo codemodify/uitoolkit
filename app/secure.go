@@ -42,7 +42,10 @@ func (w *Window) SetSecureInput(on bool) bool {
 	if !ok {
 		return false
 	}
-	return s.SetSecureInput(on)
+	w.secureWanted = on
+	w.secureGot = s.SetSecureInput(on)
+	w.noteSecureInput(on && w.SecureInputHeld())
+	return w.secureGot
 }
 
 // SetExcludeFromCapture asks the desktop to leave this window out of
@@ -131,4 +134,50 @@ func (w *Window) Center() bool {
 	// rather than growing it off-centre from its top-left corner.
 	w.centred = true
 	return true
+}
+
+// SecureInputHeld reports whether secure input is in effect now, which is
+// not the same as what [Window.SetSecureInput] answered when it was asked.
+//
+// On X11 the keyboard grab follows the focus — dropped when the window
+// loses it, retaken when it comes back — and a retake can fail, so a
+// window that held the keyboard a moment ago may not hold it now. A
+// prompt that tells a person their keystrokes are protected should say it
+// from this, and say nothing while it is false.
+//
+// A backend that cannot be asked answers from what it said when it was
+// asked, which is the best it has — an offscreen surface records the
+// request and reports success, so it reads as held.
+func (w *Window) SecureInputHeld() bool {
+	if w == nil || w.Closed() || w.surf == nil {
+		return false
+	}
+	if h, ok := w.surf.(platform.SecureInputHeldSurface); ok {
+		return h.SecureInputHeld()
+	}
+	return w.secureWanted && w.secureGot
+}
+
+// OnSecureInput is called whenever secure input comes into effect or
+// falls out of it — the X11 grab being dropped at a focus-out and retaken
+// at the focus-in, or a retake that failed.
+//
+// It is one callback per window, the way OnLockKeys is: the window's own
+// code, rather than a widget's.
+func (w *Window) OnSecureInput(fn func(held bool)) {
+	if w == nil {
+		return
+	}
+	w.onSecureInput = fn
+}
+
+// noteSecureInput reports a change in what is actually in effect.
+func (w *Window) noteSecureInput(held bool) {
+	if w == nil || held == w.secureHeld {
+		return
+	}
+	w.secureHeld = held
+	if w.onSecureInput != nil {
+		w.onSecureInput(held)
+	}
 }

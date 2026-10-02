@@ -1804,6 +1804,9 @@ func (s *x11Surface) Present(dirty []paintengine2d.Rect) error {
 			if !s.mapped && !s.hidden && s.conn.dpy != nil && s.win != 0 {
 				C.ui_map(s.conn.dpy, s.win)
 				s.mapped = true
+				// A secure-input request made before the window was
+				// mapped is taken now, where it can succeed.
+				s.grabIfWantedLocked()
 			}
 			s.syncPresentedLocked()
 			if s.conn.dpy != nil {
@@ -1837,6 +1840,7 @@ func (s *x11Surface) Present(dirty []paintengine2d.Rect) error {
 		// and what is put into an unmapped one is lost: map first.
 		C.ui_map(s.conn.dpy, s.win)
 		s.mapped = true
+		s.grabIfWantedLocked()
 		defer s.mappedPopupLocked()
 	}
 	for _, r := range dirty {
